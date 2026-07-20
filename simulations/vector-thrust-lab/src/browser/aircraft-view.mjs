@@ -6,14 +6,14 @@ import * as THREE from 'three';
 
 // ---------- 材质 ----------
 const M = {
-  hull:  new THREE.MeshStandardMaterial({ color: 0x7d8ea8, metalness: 0.82, roughness: 0.42 }),
-  dark:  new THREE.MeshStandardMaterial({ color: 0x27334a, metalness: 0.8,  roughness: 0.45 }),
-  wing:  new THREE.MeshStandardMaterial({ color: 0x4a5f85, metalness: 0.72, roughness: 0.4 }),
-  pod:   new THREE.MeshStandardMaterial({ color: 0x1c2740, metalness: 0.9,  roughness: 0.3 }),
-  ring:  new THREE.MeshStandardMaterial({ color: 0x8ea2c0, metalness: 0.95, roughness: 0.25, emissive: 0x0e7490, emissiveIntensity: 0.35 }),
+  hull:  new THREE.MeshStandardMaterial({ color: 0xd9dee7, metalness: 0.75, roughness: 0.38 }),
+  dark:  new THREE.MeshStandardMaterial({ color: 0x646e7d, metalness: 0.8,  roughness: 0.40 }),
+  wing:  new THREE.MeshStandardMaterial({ color: 0xb4bdcc, metalness: 0.65, roughness: 0.35 }),
+  pod:   new THREE.MeshStandardMaterial({ color: 0x646e7d, metalness: 0.9,  roughness: 0.28 }),
+  ring:  new THREE.MeshStandardMaterial({ color: 0xd9dee7, metalness: 0.95, roughness: 0.25, emissive: 0x0e7490, emissiveIntensity: 0.50 }),
   neonC: new THREE.MeshBasicMaterial({ color: 0x22d3ee }),
   neonA: new THREE.MeshBasicMaterial({ color: 0xfbbf24 }),
-  blade: new THREE.MeshStandardMaterial({ color: 0x111a2e, metalness: 0.7, roughness: 0.35 }),
+  blade: new THREE.MeshStandardMaterial({ color: 0x4d5665, metalness: 0.7, roughness: 0.30 }),
 };
 
 function mesh(geo, mat, x=0, y=0, z=0) {
@@ -136,7 +136,7 @@ export function createAircraftView(scene) {
   // 座舱盖
   const canopy = mesh(new THREE.SphereGeometry(0.155, 24, 16), undefined, 0.42, 0, -0.17);
   canopy.scale.set(2.3, 1.05, 0.62);
-  canopy.material = new THREE.MeshStandardMaterial({ color: 0x0a1526, metalness: 1, roughness: 0.06 });
+  canopy.material = new THREE.MeshStandardMaterial({ color: 0x39424e, metalness: 1, roughness: 0.06 });
   aircraft.add(canopy);
 
   // 主翼（平面形状画在 x-y 平面, 沿 z 拉伸厚度 —— 水平机翼）
