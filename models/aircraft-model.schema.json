@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "aircraft-model.schema.json",
+  "title": "纵列双发矢量推力飞行器模型参数集",
+  "type": "object",
+  "required": ["id", "name", "version", "status", "sections"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^PAR-" },
+    "name": { "type": "string" },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "status": {
+      "type": "string",
+      "enum": ["MODEL-DEFAULT", "ASSUMED", "ESTIMATED", "DATASHEET", "BENCH-TESTED", "FLIGHT-IDENTIFIED"]
+    },
+    "notes": { "type": "string" },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["title", "parameters"],
+        "properties": {
+          "title": { "type": "string" },
+          "parameters": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["name", "value", "unit", "description", "source", "confidence"],
+              "properties": {
+                "name": { "type": "string", "pattern": "^[A-Za-z][A-Za-z0-9]*$" },
+                "value": { "type": "number" },
+                "unit": { "type": "string" },
+                "description": { "type": "string" },
+                "source": {
+                  "type": "string",
+                  "enum": ["MODEL-DEFAULT", "ASSUMED", "ESTIMATED", "DATASHEET", "BENCH-TESTED", "FLIGHT-IDENTIFIED"]
+                },
+                "confidence": { "type": "string", "enum": ["low", "medium", "high"] }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,85 @@
+{
+  "id": "PAR-C0-001",
+  "name": "纵列双发矢量推力飞行器 · C0 概念构型模型参数",
+  "version": "0.1.0",
+  "status": "MODEL-DEFAULT",
+  "notes": "全部参数为模型默认值（未经台架标定或飞行验证），适用于 concept-level 六自由度仿真。修改参数后运行 python tools/sync-params.py 重新生成仿真参数文件。",
+  "sections": [
+    {
+      "title": "推进",
+      "parameters": [
+        { "name": "kT",   "value": 2.2e-5,  "unit": "N·s²",   "description": "推力系数 T = kT·ω²",          "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "kQ",   "value": 1.6e-6,  "unit": "N·m·s²", "description": "反扭系数 τ = kQ·ω²",          "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Jp",   "value": 2.0e-4,  "unit": "kg·m²",  "description": "桨+转子转动惯量",              "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "wMax", "value": 900,     "unit": "rad/s",  "description": "最大转速",                     "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "a",    "value": 0.62,    "unit": "m",      "description": "前电机到质心距离",             "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "b",    "value": 0.62,    "unit": "m",      "description": "尾电机到质心距离",             "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "tauM", "value": 0.28,    "unit": "s",      "description": "电机一阶滞后时间常数",         "source": "MODEL-DEFAULT", "confidence": "low" }
+      ]
+    },
+    {
+      "title": "惯量 / 执行机构",
+      "parameters": [
+        { "name": "Ix",   "value": 0.09,                 "unit": "kg·m²", "description": "机体滚转惯量",   "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Iy",   "value": 0.34,                 "unit": "kg·m²", "description": "机体俯仰惯量",   "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Iz",   "value": 0.36,                 "unit": "kg·m²", "description": "机体偏航惯量",   "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "dMax", "value": 0.4363323129985824,   "unit": "rad",   "description": "摆角限幅（25°）", "source": "MODEL-DEFAULT", "confidence": "low" }
+      ]
+    },
+    {
+      "title": "质量 / 气动",
+      "parameters": [
+        { "name": "m",     "value": 2.6,    "unit": "kg",     "description": "质量",                       "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "g",     "value": 9.81,   "unit": "m/s²",   "description": "重力加速度",                 "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "rho",   "value": 1.225,  "unit": "kg/m³",  "description": "空气密度",                   "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Sw",    "value": 0.55,   "unit": "m²",     "description": "机翼面积",                   "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "cbar",  "value": 0.35,   "unit": "m",      "description": "平均气动弦长",               "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "bspan", "value": 2.2,    "unit": "m",      "description": "展长",                       "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "CLa",   "value": 4.6,    "unit": "1/rad",  "description": "升力线斜率",                 "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "CD0",   "value": 0.035,  "unit": "-",      "description": "零升阻力系数",               "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "CDk",   "value": 0.045,  "unit": "-",      "description": "诱导阻力因子",               "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "CYb",   "value": -0.35,  "unit": "1/rad",  "description": "侧力-侧滑导数",              "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Cm0",   "value": 0.011,  "unit": "-",      "description": "机翼配平弯度矩系数",         "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Cma",   "value": -0.4,   "unit": "1/rad",  "description": "俯仰静稳定导数",             "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Cmq",   "value": -9.0,   "unit": "-",      "description": "俯仰阻尼导数",               "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Clb",   "value": -0.09,  "unit": "1/rad",  "description": "横滚静稳定导数",             "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Clp",   "value": -0.5,   "unit": "-",      "description": "滚转阻尼导数",               "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Cnb",   "value": 0.12,   "unit": "1/rad",  "description": "航向静稳定导数",             "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "Cnr",   "value": -0.2,   "unit": "-",      "description": "偏航阻尼导数",               "source": "MODEL-DEFAULT", "confidence": "low" }
+      ]
+    },
+    {
+      "title": "SAS 增稳",
+      "parameters": [
+        { "name": "sasQ",     "value": 0.14,  "unit": "s",     "description": "俯仰角速率反馈增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "sasR",     "value": 0.14,  "unit": "s",     "description": "偏航角速率反馈增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "sasP",     "value": 0.18,  "unit": "s",     "description": "滚转角速率反馈增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "sasTh",    "value": 0.3,   "unit": "-",     "description": "俯仰角比例反馈增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "sasPhi",   "value": 0.4,   "unit": "-",     "description": "滚转角比例反馈增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "sasI",     "value": 0.1,   "unit": "-",     "description": "俯仰积分反馈增益",          "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "sasIPhi",  "value": 0.15,  "unit": "-",     "description": "滚转积分反馈增益",          "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "intThMax", "value": 0.5,   "unit": "rad",   "description": "俯仰积分限幅",              "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "intPhiMax","value": 0.3,   "unit": "rad",   "description": "滚转积分限幅",              "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "dwMax",    "value": 0.7,   "unit": "-",     "description": "SAS 差速指令限幅",          "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "dwUiMax",  "value": 0.55,  "unit": "-",     "description": "界面差速指令幅值",          "source": "MODEL-DEFAULT", "confidence": "low" }
+      ]
+    },
+    {
+      "title": "数值实现",
+      "parameters": [
+        { "name": "maxStep", "value": 0.004,  "unit": "s",    "description": "积分子步长上限",             "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "frameCap","value": 0.05,   "unit": "s",    "description": "帧间隔上限",                 "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "vMin",    "value": 0.5,    "unit": "m/s",  "description": "空速下限（防止低速奇异）",   "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "groundZ", "value": 6.2,    "unit": "m",    "description": "地面约束平面（NED z）",      "source": "MODEL-DEFAULT", "confidence": "low" }
+      ]
+    },
+    {
+      "title": "配平初始条件",
+      "parameters": [
+        { "name": "aTrim",   "value": 0.027925268031909273, "unit": "rad",  "description": "初始配平迎角（1.6°）", "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "vTrim",   "value": 24,                   "unit": "m/s",  "description": "配平速度",              "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "thrTrim", "value": 0.5,                  "unit": "-",    "description": "配平油门",              "source": "MODEL-DEFAULT", "confidence": "low" }
+      ]
+    }
+  ]
+}
