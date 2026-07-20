@@ -61,7 +61,10 @@
         { "name": "intThMax", "value": 0.5,   "unit": "rad",   "description": "俯仰积分限幅",              "source": "MODEL-DEFAULT", "confidence": "low" },
         { "name": "intPhiMax","value": 0.3,   "unit": "rad",   "description": "滚转积分限幅",              "source": "MODEL-DEFAULT", "confidence": "low" },
         { "name": "dwMax",    "value": 0.7,   "unit": "-",     "description": "SAS 差速指令限幅",          "source": "MODEL-DEFAULT", "confidence": "low" },
-        { "name": "dwUiMax",  "value": 0.55,  "unit": "-",     "description": "界面差速指令幅值",          "source": "MODEL-DEFAULT", "confidence": "low" }
+        { "name": "dwUiMax",  "value": 0.55,  "unit": "-",     "description": "界面差速指令幅值",          "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "rateKq",   "value": 1.2,   "unit": "s",     "description": "角速度闭环俯仰增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "rateKr",   "value": 1.2,   "unit": "s",     "description": "角速度闭环偏航增益",        "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "rateKp",   "value": 1.5,   "unit": "s",     "description": "角速度闭环滚转增益",        "source": "MODEL-DEFAULT", "confidence": "low" }
       ]
     },
     {
@@ -70,7 +73,9 @@
         { "name": "maxStep", "value": 0.004,  "unit": "s",    "description": "积分子步长上限",             "source": "MODEL-DEFAULT", "confidence": "low" },
         { "name": "frameCap","value": 0.05,   "unit": "s",    "description": "帧间隔上限",                 "source": "MODEL-DEFAULT", "confidence": "low" },
         { "name": "vMin",    "value": 0.5,    "unit": "m/s",  "description": "空速下限（防止低速奇异）",   "source": "MODEL-DEFAULT", "confidence": "low" },
-        { "name": "groundZ", "value": 6.2,    "unit": "m",    "description": "地面约束平面（NED z）",      "source": "MODEL-DEFAULT", "confidence": "low" }
+        { "name": "groundZ", "value": 6.2,    "unit": "m",    "description": "地面约束平面（NED z）",      "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "rateQMax","value": 1.5707963267948966, "unit": "rad/s", "description": "角速度闭环最大俯仰/偏航目标角速度（90°/s）", "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "ratePMax","value": 3.141592653589793, "unit": "rad/s", "description": "角速度闭环最大滚转目标角速度（180°/s）", "source": "MODEL-DEFAULT", "confidence": "low" }
       ]
     },
     {

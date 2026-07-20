@@ -13,6 +13,7 @@ import { createEffects } from './browser/effects.mjs';
 import { createAircraftView, updateAircraftView } from './browser/aircraft-view.mjs';
 import { createHud } from './browser/hud.mjs';
 import { createControlsUI } from './browser/controls-ui.mjs';
+import { createScope } from './browser/scope.mjs';
 import { createDemo } from './browser/demo.mjs';
 import { createTheme } from './browser/theme.mjs';
 
@@ -27,6 +28,13 @@ const ui = createControlsUI({ sim, P, hooks });
 const demo = createDemo({ sim, P, controls: sceneCtx.controls, ui });
 hooks.stopDemo = demo.stopDemo;
 createTheme({ scene: sceneCtx.scene, bloom: sceneCtx.bloom, lights: sceneCtx.lights, effects });
+
+// ---------- 示波器（角速度波形，按钮开关） ----------
+const scope = createScope(sim);
+document.getElementById('b-scope').addEventListener('click', () => {
+  scope.setVisible(!scope.visible);
+  document.getElementById('b-scope').classList.toggle('active', scope.visible);
+});
 
 // ---------- 初始同步 ----------
 ui.syncFromUI();
@@ -45,6 +53,7 @@ function animate() {
   updateAircraftView(view, sim, P, dt);
   effects.update(dt, sim);
   if (++frame % 3 === 0) hud.sync(getTelemetry(sim));
+  scope.update(performance.now());
   sceneCtx.controls.update();
   sceneCtx.composer.render();
 }

@@ -11,7 +11,7 @@
 
 <div id="header">
   <h1>纵列双发矢量推力飞行器</h1>
-  <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT · CONCEPT-LEVEL 6-DOF FLIGHT DYNAMICS</p>
+  <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT · CONCEPT-LEVEL 6-DOF FLIGHT DYNAMICS · BY LSHANG</p>
 </div>
 
 <div id="ctrl" class="glass">
@@ -39,8 +39,9 @@
     <button class="btn" id="b-yaw">偏航演示</button>
     <button class="btn" id="b-roll">滚转演示</button>
     <button class="btn" id="b-cine">综合演示</button>
-    <button class="btn active" id="b-sas">增稳 SAS：开</button>
+    <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
+    <button class="btn" id="b-hover">锁定水平：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
   </div>
 </div>
@@ -79,12 +80,14 @@
 
 <div id="infoBtn">
   <button class="btn glass" id="b-theme">☀ 浅色</button>
+  <button class="btn glass" id="b-scope">示波器</button>
   <button class="btn glass" id="b-info">ⓘ 模型方程</button>
   <a class="btn glass" href="./docs/index.html" target="_blank" style="text-decoration:none;display:inline-block">📄 理论文档</a>
 </div>
 <div id="modal">
   <div id="modalCard" class="glass">
     <h2>纵列双发矢量推力布局 — 概念级 6-DOF 动力学模型</h2>
+    <p style="color:var(--dim);font-size:11px;margin-top:-4px">作者：LShang</p>
     <p>前电机（+a, 0, 0）正转、绕 z<sub>b</sub> 轴摆动（偏航）；尾电机（−b, 0, 0）反转、绕 y<sub>b</sub> 轴摆动（俯仰）。两电机轴线在零摆角时均过质心。推力 T = k<sub>T</sub>·ω²，反扭矩 τ = k<sub>Q</sub>·ω² + J<sub>p</sub>·ω̇。</p>
     <h3>推力通道六维力 / 力矩（机体系）</h3>
     <div class="formula">F_x = T_f·cosδ_f + T_t·cosδ_t &nbsp;&nbsp; F_y = T_f·sinδ_f &nbsp;&nbsp; F_z = −T_t·sinδ_t</div>
@@ -107,6 +110,11 @@
     </table>
     <button class="btn" id="modalClose">关闭</button>
   </div>
+</div>
+
+<div id="scope" class="glass">
+  <div id="scopeHead"><b>角速度示波器</b><span>实线 ω · 虚线 ω<sub>ref</sub>（闭环）</span></div>
+  <canvas id="scopeCanvas"></canvas>
 </div>
 
 <div id="hint"><b>拖拽</b> 旋转视角 · <b>滚轮</b> 缩放 · <b>右键拖拽</b> 平移</div>

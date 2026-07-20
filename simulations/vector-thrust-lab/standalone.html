@@ -12,7 +12,7 @@
 
 <div id="header">
   <h1>纵列双发矢量推力飞行器</h1>
-  <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT · CONCEPT-LEVEL 6-DOF FLIGHT DYNAMICS</p>
+  <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT · CONCEPT-LEVEL 6-DOF FLIGHT DYNAMICS · BY LSHANG</p>
 </div>
 
 <div id="ctrl" class="glass">
@@ -40,8 +40,9 @@
     <button class="btn" id="b-yaw">偏航演示</button>
     <button class="btn" id="b-roll">滚转演示</button>
     <button class="btn" id="b-cine">综合演示</button>
-    <button class="btn active" id="b-sas">增稳 SAS：开</button>
+    <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
+    <button class="btn" id="b-hover">锁定水平：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
   </div>
 </div>
@@ -80,12 +81,14 @@
 
 <div id="infoBtn">
   <button class="btn glass" id="b-theme">☀ 浅色</button>
+  <button class="btn glass" id="b-scope">示波器</button>
   <button class="btn glass" id="b-info">ⓘ 模型方程</button>
   <a class="btn glass" href="./docs/index.html" target="_blank" style="text-decoration:none;display:inline-block">📄 理论文档</a>
 </div>
 <div id="modal">
   <div id="modalCard" class="glass">
     <h2>纵列双发矢量推力布局 — 概念级 6-DOF 动力学模型</h2>
+    <p style="color:var(--dim);font-size:11px;margin-top:-4px">作者：LShang</p>
     <p>前电机（+a, 0, 0）正转、绕 z<sub>b</sub> 轴摆动（偏航）；尾电机（−b, 0, 0）反转、绕 y<sub>b</sub> 轴摆动（俯仰）。两电机轴线在零摆角时均过质心。推力 T = k<sub>T</sub>·ω²，反扭矩 τ = k<sub>Q</sub>·ω² + J<sub>p</sub>·ω̇。</p>
     <h3>推力通道六维力 / 力矩（机体系）</h3>
     <div class="formula">F_x = T_f·cosδ_f + T_t·cosδ_t &nbsp;&nbsp; F_y = T_f·sinδ_f &nbsp;&nbsp; F_z = −T_t·sinδ_t</div>
@@ -108,6 +111,11 @@
     </table>
     <button class="btn" id="modalClose">关闭</button>
   </div>
+</div>
+
+<div id="scope" class="glass">
+  <div id="scopeHead"><b>角速度示波器</b><span>实线 ω · 虚线 ω<sub>ref</sub>（闭环）</span></div>
+  <canvas id="scopeCanvas"></canvas>
 </div>
 
 <div id="hint"><b>拖拽</b> 旋转视角 · <b>滚轮</b> 缩放 · <b>右键拖拽</b> 平移</div>
@@ -140,6 +148,7 @@ const { createEffects } = __req('src/browser/effects.mjs');
 const { createAircraftView, updateAircraftView } = __req('src/browser/aircraft-view.mjs');
 const { createHud } = __req('src/browser/hud.mjs');
 const { createControlsUI } = __req('src/browser/controls-ui.mjs');
+const { createScope } = __req('src/browser/scope.mjs');
 const { createDemo } = __req('src/browser/demo.mjs');
 const { createTheme } = __req('src/browser/theme.mjs');
 
@@ -154,6 +163,13 @@ const ui = createControlsUI({ sim, P, hooks });
 const demo = createDemo({ sim, P, controls: sceneCtx.controls, ui });
 hooks.stopDemo = demo.stopDemo;
 createTheme({ scene: sceneCtx.scene, bloom: sceneCtx.bloom, lights: sceneCtx.lights, effects });
+
+// ---------- 示波器（角速度波形，按钮开关） ----------
+const scope = createScope(sim);
+document.getElementById('b-scope').addEventListener('click', () => {
+  scope.setVisible(!scope.visible);
+  document.getElementById('b-scope').classList.toggle('active', scope.visible);
+});
 
 // ---------- 初始同步 ----------
 ui.syncFromUI();
@@ -172,6 +188,7 @@ function animate() {
   updateAircraftView(view, sim, P, dt);
   effects.update(dt, sim);
   if (++frame % 3 === 0) hud.sync(getTelemetry(sim));
+  scope.update(performance.now());
   sceneCtx.controls.update();
   sceneCtx.composer.render();
 }
@@ -54808,12 +54825,17 @@ const P = Object.freeze({
   intPhiMax: 0.3,  // 滚转积分限幅 [rad]
   dwMax: 0.7,  // SAS 差速指令限幅 [-]
   dwUiMax: 0.55,  // 界面差速指令幅值 [-]
+  rateKq: 1.2,  // 角速度闭环俯仰增益 [s]
+  rateKr: 1.2,  // 角速度闭环偏航增益 [s]
+  rateKp: 1.5,  // 角速度闭环滚转增益 [s]
 
   // ---- 数值实现 ----
   maxStep: 0.004,  // 积分子步长上限 [s]
   frameCap: 0.05,  // 帧间隔上限 [s]
   vMin: 0.5,  // 空速下限（防止低速奇异） [m/s]
   groundZ: 6.2,  // 地面约束平面（NED z） [m]
+  rateQMax: 1.5707963267948966,  // 角速度闭环最大俯仰/偏航目标角速度（90°/s） [rad/s]
+  ratePMax: 3.141592653589793,  // 角速度闭环最大滚转目标角速度（180°/s） [rad/s]
 
   // ---- 配平初始条件 ----
   aTrim: 0.027925268031909273,  // 初始配平迎角（1.6°） [rad]
@@ -54839,8 +54861,9 @@ function createSimulationState(P) {
       dt: 0,               // 尾摆角指令（俯仰, 绕 y）
       dw: 0,               // 差速指令 -1..1
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
-      sas: true,           // 增稳开关
+      sasMode: 1,          // SAS 模式: 0=关, 1=全SAS(比例+积分+角速率), 2=仅角速率阻尼
       aero: true,          // 气动力开关（false = 仅电机推力）
+      lockXY: false,       // 水平速度锁定（true = 惯性系水平速度持续清零，悬停/VTOL 测试）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -54874,6 +54897,10 @@ function resetFlightState(sim, P) {
   S.quat.x = 0; S.quat.y = Math.sin(a0 / 2); S.quat.z = 0; S.quat.w = Math.cos(a0 / 2);
   S.omega.x = 0; S.omega.y = 0; S.omega.z = 0;
   S.intTh = 0; S.intPhi = 0;
+  if (S.lockXY) {          // 悬停锁定下复位：清零水平速度
+    F.vel.x = 0; F.vel.y = 0;
+    F.vWorld.x = 0; F.vWorld.y = 0;
+  }
 }
 
 return { createSimulationState, resetFlightState };
@@ -54949,8 +54976,15 @@ function physicsStep(sim, P, dt) {
   // ---------- 位置积分（惯性系; 渲染采用载机跟随系） ----------
   const vw = rotateVecByQuat(F.vel, S.quat);
   F.vWorld.x = vw.x; F.vWorld.y = vw.y; F.vWorld.z = vw.z;
-  F.pos.x += F.vWorld.x * dt;
-  F.pos.y += F.vWorld.y * dt;
+  if (S.lockXY) {
+    // 悬停/VTOL 测试：锁定水平位置 —— 水平速度持续清零并反变换回机体系
+    F.vWorld.x = 0; F.vWorld.y = 0;
+    const vb = rotateVecByQuat(F.vWorld, quatInvert(S.quat));
+    F.vel.x = vb.x; F.vel.y = vb.y; F.vel.z = vb.z;
+  } else {
+    F.pos.x += F.vWorld.x * dt;
+    F.pos.y += F.vWorld.y * dt;
+  }
   F.pos.z += F.vWorld.z * dt;
   if (F.pos.z > P.groundZ && F.vWorld.z > 0) {   // 地面约束
     F.pos.z = P.groundZ; F.vWorld.z = 0;
@@ -54982,7 +55016,7 @@ function getTelemetry(sim) {
       quat: { ...S.quat },
       omega: { ...S.omega },
     },
-    flags: { sas: S.sas, aero: S.aero },
+    flags: { sasMode: S.sasMode, sas: S.sasMode > 0, aero: S.aero, lockXY: S.lockXY },
     time: S.time,
   };
 }
@@ -55004,12 +55038,12 @@ function createScene(container) {
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
   renderer.setSize(innerWidth, innerHeight);
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.22;
   container.appendChild(renderer.domElement);
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x04060c);
-  scene.fog = new THREE.Fog(0x04060c, 26, 85);
+  scene.background = new THREE.Color(0x272b33);
+  scene.fog = new THREE.Fog(0x272b33, 30, 120);
 
   const camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 300);
   camera.up.set(0, 0, -1);                 // z 向下 ⇒ “上”是 -z
@@ -55023,18 +55057,18 @@ function createScene(container) {
   controls.autoRotateSpeed = 0.9;
 
   // ---------- 灯光 ----------
-  const amb = new THREE.AmbientLight(0x8fb4dd, 0.55); scene.add(amb);
-  const key = new THREE.DirectionalLight(0xdfeaff, 1.55);
+  const amb = new THREE.AmbientLight(0xe8edf4, 1.3); scene.add(amb);
+  const key = new THREE.DirectionalLight(0xffffff, 1.7);
   key.position.set(6, -8, -12); scene.add(key);
-  const fill = new THREE.DirectionalLight(0x7aa2d8, 0.65);
+  const fill = new THREE.DirectionalLight(0xc9d4e4, 1.0);
   fill.position.set(-6, 8, -4); scene.add(fill);
-  const rimCyan = new THREE.PointLight(0x38bdf8, 55, 40); rimCyan.position.set(-9, 7, 5); scene.add(rimCyan);
-  const rimWarm = new THREE.PointLight(0xf59e0b, 32, 40); rimWarm.position.set(10, 6, 3); scene.add(rimWarm);
+  const rimCyan = new THREE.PointLight(0x38bdf8, 30, 40); rimCyan.position.set(-9, 7, 5); scene.add(rimCyan);
+  const rimWarm = new THREE.PointLight(0xf59e0b, 26, 40); rimWarm.position.set(10, 6, 3); scene.add(rimWarm);
 
   // ---------- 辉光后处理 ----------
   const composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
-  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.55, 0.45, 0.85);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.30, 0.45, 0.85);
   composer.addPass(bloom);
 
   addEventListener('resize', () => {
@@ -55068,19 +55102,62 @@ function createEffects(scene) {
     grid.material.transparent = true; grid.material.opacity = op;
     scene.add(grid);
   }
-  rebuildGrid(0x1d4ed8, 0x12233f, 0.5);
+  rebuildGrid(0x6b7a92, 0x3d4450, 0.55);
 
   // ---------- 星空 ----------
   const stars = (() => {
-    const g = new THREE.BufferGeometry(); const n = 900; const p = new Float32Array(n * 3);
+    const g = new THREE.BufferGeometry(); const n = 600; const p = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const r = 90 + Math.random() * 60, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
       p[i*3] = r * Math.sin(ph) * Math.cos(th); p[i*3+1] = r * Math.sin(ph) * Math.sin(th); p[i*3+2] = r * Math.cos(ph);
     }
     g.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    const s = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9cc8ff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.65, fog: false }));
+    const s = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xb9d6ff, size: 0.5, sizeAttenuation: true, transparent: true, opacity: 0.5, fog: false }));
     scene.add(s); return s;
   })();
+
+  // ---------- 天空穹顶（渐变） + 地平线环（世界系固定，反衬姿态） ----------
+  const SKY_R = 150;
+  const sky = (() => {
+    const g = new THREE.SphereGeometry(SKY_R, 40, 28);
+    const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+    const s = new THREE.Mesh(g, m);
+    s.renderOrder = -1;                    // 最先绘制，不遮挡任何物体
+    scene.add(s); return s;
+  })();
+
+  function paintSky(top, horizonCol, bottom) {
+    const pos = sky.geometry.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const cT = new THREE.Color(top), cH = new THREE.Color(horizonCol), cB = new THREE.Color(bottom);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const t = pos.getZ(i) / SKY_R;       // z 向下：t<0 天顶，t>0 地下
+      if (t < 0) c.lerpColors(cH, cT, Math.min(-t * 1.7, 1));
+      else       c.lerpColors(cH, cB, Math.min( t * 1.7, 1));
+      colors[i*3] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
+    }
+    sky.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  }
+
+  // 地平线环 + 方位刻度（每 30°，每 90° 加长）——辅助判读姿态与航向
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x8a97a8, transparent: true, opacity: 0.75, fog: false });
+  const horizonRing = new THREE.Group();
+  horizonRing.add(new THREE.Mesh(new THREE.TorusGeometry(120, 0.25, 8, 160), ringMat));
+  for (let i = 0; i < 12; i++) {
+    const major = i % 3 === 0;
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, major ? 5 : 2.4), ringMat);
+    const a = i * Math.PI / 6;
+    tick.position.set(120 * Math.cos(a), 120 * Math.sin(a), 0);
+    horizonRing.add(tick);
+  }
+  scene.add(horizonRing);
+
+  function rebuildSky({ top, horizonCol, bottom, ring, ringOp }) {
+    paintSky(top, horizonCol, bottom);
+    ringMat.color.setHex(ring); ringMat.opacity = ringOp;
+  }
+  rebuildSky({ top: 0x171b23, horizonCol: 0x3d4450, bottom: 0x1f232b, ring: 0x8a97a8, ringOp: 0.75 });
 
   // ---------- 气流粒子（速度 ∝ 油门，可视化来流） ----------
   const airGeo = new THREE.BufferGeometry();
@@ -55094,7 +55171,7 @@ function createEffects(scene) {
   }
   airGeo.setAttribute('position', new THREE.BufferAttribute(airPos, 3));
   const air = new THREE.Points(airGeo, new THREE.PointsMaterial({
-    color: 0x67e8f9, size: 0.055, transparent: true, opacity: 0.5,
+    color: 0x7dd3fc, size: 0.055, transparent: true, opacity: 0.5,
     blending: THREE.AdditiveBlending, depthWrite: false }));
   scene.add(air);
 
@@ -55121,7 +55198,7 @@ function createEffects(scene) {
     grid.position.z = Math.max(1.6, 7.5 - F.pos.z);
   }
 
-  return { rebuildGrid, stars, air, update };
+  return { rebuildGrid, rebuildSky, stars, air, update };
 }
 
 return { createEffects };
@@ -55135,14 +55212,14 @@ const THREE = __req('three');
 
 // ---------- 材质 ----------
 const M = {
-  hull:  new THREE.MeshStandardMaterial({ color: 0x7d8ea8, metalness: 0.82, roughness: 0.42 }),
-  dark:  new THREE.MeshStandardMaterial({ color: 0x27334a, metalness: 0.8,  roughness: 0.45 }),
-  wing:  new THREE.MeshStandardMaterial({ color: 0x4a5f85, metalness: 0.72, roughness: 0.4 }),
-  pod:   new THREE.MeshStandardMaterial({ color: 0x1c2740, metalness: 0.9,  roughness: 0.3 }),
-  ring:  new THREE.MeshStandardMaterial({ color: 0x8ea2c0, metalness: 0.95, roughness: 0.25, emissive: 0x0e7490, emissiveIntensity: 0.35 }),
+  hull:  new THREE.MeshStandardMaterial({ color: 0xd9dee7, metalness: 0.75, roughness: 0.38 }),
+  dark:  new THREE.MeshStandardMaterial({ color: 0x646e7d, metalness: 0.8,  roughness: 0.40 }),
+  wing:  new THREE.MeshStandardMaterial({ color: 0xb4bdcc, metalness: 0.65, roughness: 0.35 }),
+  pod:   new THREE.MeshStandardMaterial({ color: 0x646e7d, metalness: 0.9,  roughness: 0.28 }),
+  ring:  new THREE.MeshStandardMaterial({ color: 0xd9dee7, metalness: 0.95, roughness: 0.25, emissive: 0x0e7490, emissiveIntensity: 0.50 }),
   neonC: new THREE.MeshBasicMaterial({ color: 0x22d3ee }),
   neonA: new THREE.MeshBasicMaterial({ color: 0xfbbf24 }),
-  blade: new THREE.MeshStandardMaterial({ color: 0x111a2e, metalness: 0.7, roughness: 0.35 }),
+  blade: new THREE.MeshStandardMaterial({ color: 0x4d5665, metalness: 0.7, roughness: 0.30 }),
 };
 
 function mesh(geo, mat, x=0, y=0, z=0) {
@@ -55265,7 +55342,7 @@ function createAircraftView(scene) {
   // 座舱盖
   const canopy = mesh(new THREE.SphereGeometry(0.155, 24, 16), undefined, 0.42, 0, -0.17);
   canopy.scale.set(2.3, 1.05, 0.62);
-  canopy.material = new THREE.MeshStandardMaterial({ color: 0x0a1526, metalness: 1, roughness: 0.06 });
+  canopy.material = new THREE.MeshStandardMaterial({ color: 0x39424e, metalness: 1, roughness: 0.06 });
   aircraft.add(canopy);
 
   // 主翼（平面形状画在 x-y 平面, 沿 z 拉伸厚度 —— 水平机翼）
@@ -55495,25 +55572,71 @@ function createControlsUI({ sim, P, hooks }) {
   const sliders = { thr: $('s-thr'), dt: $('s-dt'), df: $('s-df'), dw: $('s-dw') };
 
   function syncFromUI() {
+    const rateMode = S.sasMode === 3;
     S.thr = sliders.thr.value / 100;
-    S.dt  = sliders.dt.value * Math.PI / 180;
-    S.df  = sliders.df.value * Math.PI / 180;
-    S.dw  = sliders.dw.value / 100 * P.dwUiMax;      // 差速幅值 ±0.55
+    if (rateMode) {
+      // 角速度闭环模式：滑块 → 目标角速度 (rad/s)
+      S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π rad/s
+      S.df = (sliders.df.value / 25) * P.rateQMax;
+      S.dw = (sliders.dw.value / 30) * P.ratePMax;           // ±2π rad/s
+    } else {
+      // 阻尼/全SAS/关闭模式：滑块 → 摆角指令 / 差速指令
+      S.dt = sliders.dt.value * Math.PI / 180;               // °→rad
+      S.df = sliders.df.value * Math.PI / 180;
+      S.dw = sliders.dw.value / 100 * P.dwUiMax;             // 差速幅值
+    }
     $('v-thr').textContent = `${sliders.thr.value}%`;
-    $('v-dt').textContent  = `${(+sliders.dt.value).toFixed(1)}°`;
-    $('v-df').textContent  = `${(+sliders.df.value).toFixed(1)}°`;
-    $('v-dw').textContent  = `${sliders.dw.value}%`;
+    if (rateMode) {
+      $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°/s`;
+      $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°/s`;
+      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(0)}°/s`;
+    } else {
+      $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
+      $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
+      $('v-dw').textContent = `${sliders.dw.value}%`;
+    }
   }
 
   function pushToUI() {
+    const rateMode = S.sasMode === 3;
     sliders.thr.value = Math.round(S.thr * 100);
-    sliders.dt.value  = (S.dt * 180 / Math.PI).toFixed(1);
-    sliders.df.value  = (S.df * 180 / Math.PI).toFixed(1);
-    sliders.dw.value  = Math.round(S.dw / P.dwUiMax * 100);
+    if (rateMode) {
+      sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
+      sliders.df.value = (S.df / P.rateQMax * 25).toFixed(1);
+      sliders.dw.value = Math.round(S.dw / P.ratePMax * 30);
+    } else {
+      sliders.dt.value = (S.dt * 180 / Math.PI).toFixed(1);
+      sliders.df.value = (S.df * 180 / Math.PI).toFixed(1);
+      sliders.dw.value = Math.round(S.dw / P.dwUiMax * 100);
+    }
     syncFromUI();
   }
 
   for (const k in sliders) sliders[k].addEventListener('input', () => { hooks.stopDemo(); syncFromUI(); });
+
+  // ---- 角速度闭环模式：指令滑块松开自动回中（弹簧摇杆式，目标角速度归零） ----
+  const springAnims = new Map();
+  function cancelSpring(sl) {
+    if (springAnims.has(sl)) { cancelAnimationFrame(springAnims.get(sl)); springAnims.delete(sl); }
+  }
+  function springBack(sl) {
+    cancelSpring(sl);
+    const stepFn = () => {
+      const next = Math.abs(+sl.value) < 0.6 ? 0 : +sl.value * 0.55;
+      sl.value = next;
+      syncFromUI();
+      if (next !== 0) springAnims.set(sl, requestAnimationFrame(stepFn));
+      else springAnims.delete(sl);
+    };
+    springAnims.set(sl, requestAnimationFrame(stepFn));
+  }
+  for (const sl of [sliders.dt, sliders.df, sliders.dw]) {   // 油门不回中
+    sl.addEventListener('pointerdown', () => cancelSpring(sl));
+    const release = () => { if (S.sasMode === 3) springBack(sl); };
+    sl.addEventListener('pointerup', release);
+    sl.addEventListener('touchend', release);
+    sl.addEventListener('keyup', release);
+  }
 
   function resetAll() {
     hooks.stopDemo();
@@ -55523,15 +55646,22 @@ function createControlsUI({ sim, P, hooks }) {
   }
   $('b-reset').addEventListener('click', resetAll);
 
+  const sasLabels = ['增稳 SAS：关', '增稳 SAS：全部', '增稳 SAS：仅角速率', '增稳 SAS：角速度闭环'];
   $('b-sas').addEventListener('click', () => {
-    S.sas = !S.sas;
-    $('b-sas').classList.toggle('active', S.sas);
-    $('b-sas').textContent = S.sas ? '增稳 SAS：开' : '增稳 SAS：关';
+    S.sasMode = (S.sasMode + 1) % 4;
+    $('b-sas').classList.toggle('active', S.sasMode > 0);
+    $('b-sas').textContent = sasLabels[S.sasMode];
+    pushToUI();   // 切换模式时同步滑块映射和显示格式
   });
   $('b-aero').addEventListener('click', () => {
     S.aero = !S.aero;
     $('b-aero').classList.toggle('active', S.aero);
     $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
+  });
+  $('b-hover').addEventListener('click', () => {
+    S.lockXY = !S.lockXY;
+    $('b-hover').classList.toggle('active', S.lockXY);
+    $('b-hover').textContent = S.lockXY ? '锁定水平：开' : '锁定水平：关';
   });
   $('b-info').addEventListener('click', () => $('modal').classList.add('open'));
   $('modalClose').addEventListener('click', () => $('modal').classList.remove('open'));
@@ -55541,6 +55671,136 @@ function createControlsUI({ sim, P, hooks }) {
 }
 
 return { createControlsUI };
+});
+__def('src/browser/scope.mjs', function() {
+// ============================================================
+//  角速度示波器：p/q/r 波形曲线（可开关）
+//  实线 = 实际机体角速度；角速度闭环模式下虚线 = 目标角速度 ω_ref
+// ============================================================
+
+const DEG = Math.PI / 180;
+const COLORS = { p: '#fb7185', q: '#34d399', r: '#818cf8' };   // 与图例一致
+const WINDOW_S = 8;        // 时间窗口（秒）
+const N = 480;             // 环形缓冲点数（≈60Hz 采样）
+const SCALE = Math.PI;     // 纵轴量程 ±π rad/s（±180°/s）
+
+function createScope(sim) {
+  const { S } = sim;
+  const panel = document.getElementById('scope');
+  const canvas = document.getElementById('scopeCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // 高分屏适配
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  const W = 360, H = 150;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.scale(dpr, dpr);
+
+  const buf = {
+    p: new Float32Array(N), q: new Float32Array(N), r: new Float32Array(N),
+    pr: new Float32Array(N), qr: new Float32Array(N), rr: new Float32Array(N),
+  };
+  let head = 0;            // 下一个写入位置
+  let lastDraw = 0;
+  let visible = false;
+
+  // ---- 标题栏拖拽：抓住 #scopeHead 可将面板拖到任意位置 ----
+  const headBar = document.getElementById('scopeHead');
+  let drag = null;
+  headBar.addEventListener('pointerdown', (e) => {
+    const rect = panel.getBoundingClientRect();
+    drag = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+    panel.style.left = rect.left + 'px';
+    panel.style.top = rect.top + 'px';
+    panel.style.bottom = 'auto';
+    headBar.setPointerCapture(e.pointerId);
+  });
+  headBar.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const x = Math.max(0, Math.min(e.clientX - drag.dx, innerWidth - panel.offsetWidth));
+    const y = Math.max(0, Math.min(e.clientY - drag.dy, innerHeight - panel.offsetHeight));
+    panel.style.left = x + 'px';
+    panel.style.top = y + 'px';
+  });
+  const endDrag = () => { drag = null; };
+  headBar.addEventListener('pointerup', endDrag);
+  headBar.addEventListener('pointercancel', endDrag);
+
+  function setVisible(v) {
+    visible = v;
+    panel.classList.toggle('show', v);
+  }
+
+  function pushSample() {
+    buf.p[head] = S.omega.x; buf.q[head] = S.omega.y; buf.r[head] = S.omega.z;
+    buf.pr[head] = S.sasMode === 3 ? S.dw : NaN;   // rate 模式下滑块指令即 ω_ref
+    buf.qr[head] = S.sasMode === 3 ? S.dt : NaN;
+    buf.rr[head] = S.sasMode === 3 ? S.df : NaN;
+    head = (head + 1) % N;
+  }
+
+  function trace(arr, color, dashed) {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = dashed ? 0.55 : 1;
+    ctx.setLineDash(dashed ? [5, 4] : []);
+    ctx.lineWidth = dashed ? 1 : 1.6;
+    ctx.beginPath();
+    let started = false;
+    for (let i = 0; i < N; i++) {
+      const v = arr[(head + i) % N];
+      if (Number.isNaN(v)) { started = false; continue; }
+      const x = (i / (N - 1)) * W;
+      const y = H / 2 - (v / SCALE) * (H / 2 - 8);
+      if (!started) { ctx.moveTo(x, y); started = true; }
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    // 网格：±90°/s 虚线 + 零线
+    ctx.strokeStyle = 'rgba(148,163,184,.25)';
+    ctx.lineWidth = 1;
+    for (const frac of [0.25, 0.75]) {
+      ctx.beginPath(); ctx.moveTo(0, H * frac); ctx.lineTo(W, H * frac); ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(203,213,235,.5)';
+    ctx.beginPath(); ctx.moveTo(0, H / 2); ctx.lineTo(W, H / 2); ctx.stroke();
+    // 量程标注
+    ctx.fillStyle = 'rgba(157,176,204,.9)';
+    ctx.font = '9px Consolas, monospace';
+    ctx.fillText('+180°/s', 4, 11);
+    ctx.fillText('-180°/s', 4, H - 4);
+    // 时间标注
+    ctx.fillText(`${WINDOW_S}s`, W - 20, H - 4);
+    // 目标值虚线（仅角速度闭环模式有数据）
+    trace(buf.pr, COLORS.p, true); trace(buf.qr, COLORS.q, true); trace(buf.rr, COLORS.r, true);
+    // 实际值实线
+    trace(buf.p, COLORS.p, false); trace(buf.q, COLORS.q, false); trace(buf.r, COLORS.r, false);
+    // 当前值读数
+    ctx.font = '10px Consolas, monospace';
+    const cur = [S.omega.x, S.omega.y, S.omega.z];
+    const keys = ['p', 'q', 'r'];
+    for (let i = 0; i < 3; i++) {
+      ctx.fillStyle = COLORS[keys[i]];
+      ctx.fillText(`${keys[i]} ${(cur[i] / DEG).toFixed(0).padStart(4)}`, 44 + i * 62, 11);
+    }
+  }
+
+  function update(now) {
+    if (!visible) return;
+    pushSample();
+    if (now - lastDraw > 33) { draw(); lastDraw = now; }   // 绘制节流 ~30fps
+  }
+
+  return { setVisible, update, get visible() { return visible; } };
+}
+
+return { createScope };
 });
 __def('src/browser/demo.mjs', function() {
 // ============================================================
@@ -55606,10 +55866,12 @@ __def('src/browser/theme.mjs', function() {
 const THREE = __req('three');
 
 const THEMES = {
-  dark:  { bg: 0x04060c, fog: [26, 85], grid: [0x1d4ed8, 0x12233f], gridOp: 0.5,
-           stars: true,  air: 0x67e8f9, bloom: 0.55, amb: 0.55, key: 1.55, fill: 0.65 },
+  dark:  { bg: 0x272b33, fog: [30, 120], grid: [0x6b7a92, 0x3d4450], gridOp: 0.55,
+           stars: true,  air: 0x7dd3fc, bloom: 0.30, amb: 1.3, key: 1.7, fill: 1.0,
+           sky: { top: 0x171b23, horizonCol: 0x3d4450, bottom: 0x1f232b, ring: 0x8a97a8, ringOp: 0.75 } },
   light: { bg: 0xe9eff8, fog: [24, 80], grid: [0x7aa2d8, 0xb9c8dc], gridOp: 0.9,
-           stars: false, air: 0x3b82f6, bloom: 0.30, amb: 0.9,  key: 1.75, fill: 0.85 },
+           stars: false, air: 0x3b82f6, bloom: 0.30, amb: 0.9,  key: 1.75, fill: 0.85,
+           sky: { top: 0x6f9fd6, horizonCol: 0xe4edf7, bottom: 0xc9d5e2, ring: 0x7186a0, ringOp: 0.9 } },
 };
 
 function createTheme({ scene, bloom, lights, effects }) {
@@ -55621,6 +55883,7 @@ function createTheme({ scene, bloom, lights, effects }) {
     scene.fog.color.setHex(t.bg);
     scene.fog.near = t.fog[0]; scene.fog.far = t.fog[1];
     effects.rebuildGrid(t.grid[0], t.grid[1], t.gridOp);
+    effects.rebuildSky(t.sky);
     effects.stars.visible = t.stars;
     effects.air.material.color.setHex(t.air);
     effects.air.material.blending = name === 'light' ? THREE.NormalBlending : THREE.AdditiveBlending;
@@ -55714,6 +55977,12 @@ __def('src/core/control.mjs', function() {
 // ============================================================
 //  SAS 增稳控制：角速率阻尼 + 姿态角比例/积分反馈
 //  → 摆角/差速修正（积分与指令均限幅）
+//
+//  模式（S.sasMode）：
+//    0 = 关闭（直通）
+//    1 = 全 SAS（角速率阻尼 + 姿态比例 + 积分）
+//    2 = 仅角速率阻尼（无姿态/积分）
+//    3 = 角速度闭环（Rate Command：滑块 = 目标角速度）
 // ============================================================
 const { clamp } = __req('src/core/math.mjs');
 
@@ -55723,13 +55992,31 @@ function applySas(sim, P, dt) {
   const { S, F } = sim;
   const theta = F.euler.y, phi = F.euler.x;
   let dtC = S.dt, dfC = S.df, dwC = S.dw;
-  if (S.sas) {
-    // 比例 + 积分（积分消除常值配平误差, 带限幅）
-    S.intTh = clamp(S.intTh + theta * dt, -P.intThMax, P.intThMax);
-    S.intPhi = clamp(S.intPhi + phi * dt, -P.intPhiMax, P.intPhiMax);
-    dtC = clamp(dtC + P.sasQ * S.omega.y + P.sasTh * theta + P.sasI * S.intTh, -P.dMax, P.dMax);
-    dfC = clamp(dfC - P.sasR * S.omega.z, -P.dMax, P.dMax);
-    dwC = clamp(dwC + P.sasP * S.omega.x + P.sasPhi * phi + P.sasIPhi * S.intPhi, -P.dwMax, P.dwMax);
+  if (S.sasMode === 3) {
+    // ---- 角速度闭环：滑块 = ω_ref，P 控制器追踪 ----
+    // 反馈极性：效率为负的通道（俯仰/滚转）取 (ω − ω_ref)；
+    //           效率为正的通道（偏航）取 (ω_ref − ω)。
+    const qRef = S.dt, rRef = S.df, pRef = S.dw;
+    dtC = clamp(P.rateKq * (S.omega.y - qRef), -P.dMax, P.dMax);   // 俯仰 ∂My/∂δ<0
+    dfC = clamp(P.rateKr * (rRef - S.omega.z), -P.dMax, P.dMax);   // 偏航 ∂Mz/∂δ>0
+    dwC = clamp(P.rateKp * (S.omega.x - pRef), -P.dwMax, P.dwMax); // 滚转 ∂Mx/∂Δω<0
+  } else if (S.sasMode >= 1) {
+    // ---- 角速率阻尼（三通道共用，模式 1/2 均生效） ----
+    dtC = dtC + P.sasQ * S.omega.y;                      // 俯仰阻尼
+    dfC = dfC - P.sasR * S.omega.z;                      // 偏航阻尼
+    dwC = dwC + P.sasP * S.omega.x;                      // 滚转阻尼
+
+    if (S.sasMode === 1) {
+      // ---- 全 SAS：附加姿态比例 + 积分（积分消除常值配平误差） ----
+      S.intTh  = clamp(S.intTh  + theta * dt, -P.intThMax,  P.intThMax);
+      S.intPhi = clamp(S.intPhi + phi   * dt, -P.intPhiMax, P.intPhiMax);
+      dtC = dtC + P.sasTh * theta  + P.sasI  * S.intTh;
+      dwC = dwC + P.sasPhi * phi    + P.sasIPhi * S.intPhi;
+    }
+    // 执行限幅
+    dtC = clamp(dtC, -P.dMax, P.dMax);
+    dfC = clamp(dfC, -P.dMax, P.dMax);
+    dwC = clamp(dwC, -P.dwMax, P.dwMax);
   }
   S.dtAct = dtC; S.dfAct = dfC; S.dwAct = dwC;
 }

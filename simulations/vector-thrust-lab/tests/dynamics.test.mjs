@@ -32,7 +32,7 @@ test('长时间积分四元数保持归一化', () => {
 
 test('地面约束：下降触地清零下降速度并钳制位置', () => {
   const sim = createSimulationState(P);
-  sim.S.sas = false; sim.S.thr = 0;
+  sim.S.sasMode = 0; sim.S.thr = 0;
   sim.F.pos.z = P.groundZ + 0.01;
   sim.F.vel = { x: 0, y: 0, z: 5 }; // 机体系向下（单位姿态 ≈ 惯性系向下）
   sim.S.quat = { x: 0, y: 0, z: 0, w: 1 };
@@ -46,7 +46,7 @@ test('地面约束：下降触地清零下降速度并钳制位置', () => {
 
 test('地面约束不拦截上升运动', () => {
   const sim = createSimulationState(P);
-  sim.S.sas = false; sim.S.thr = 0;
+  sim.S.sasMode = 0; sim.S.thr = 0;
   sim.F.pos.z = P.groundZ + 0.01;
   sim.F.vel = { x: 0, y: 0, z: -5 }; // 上升（NED z 减小）
   sim.S.quat = { x: 0, y: 0, z: 0, w: 1 };
@@ -65,8 +65,25 @@ test('配平直飞有界（10 s 内速度与姿态不发散）', () => {
 
 test('气动力关闭时可复现角速度自由积分（无阻尼发散趋势）', () => {
   const sim = createSimulationState(P);
-  sim.S.aero = false; sim.S.sas = false;
+  sim.S.aero = false; sim.S.sasMode = 0;
   sim.S.dt = 0.05; // 常值尾摆 → 持续俯仰力矩
   for (let i = 0; i < 120; i++) stepPhysics(sim, P, 1 / 60);
   assert.ok(Math.abs(sim.S.omega.y) > 0.5, '无阻尼时角速度应持续积累');
+});
+
+test('水平锁定：lockXY 时水平速度与水平位置保持不变，垂向运动不受影响', () => {
+  const sim = createSimulationState(P);
+  sim.S.sasMode = 0; sim.S.aero = false;
+  sim.S.lockXY = true;
+  sim.S.quat = { x: 0, y: 0, z: 0, w: 1 };
+  sim.F.pos.x = 3; sim.F.pos.y = -2;
+  sim.F.vel = { x: 10, y: 5, z: 0 }; // 给定水平速度
+  for (let i = 0; i < 100; i++) stepPhysics(sim, P, 1 / 60);
+  assert.ok(Math.abs(sim.F.vWorld.x) < 1e-9, `vWorld.x=${sim.F.vWorld.x}`);
+  assert.ok(Math.abs(sim.F.vWorld.y) < 1e-9, `vWorld.y=${sim.F.vWorld.y}`);
+  assert.ok(Math.abs(sim.F.vel.x) < 1e-9 && Math.abs(sim.F.vel.y) < 1e-9,
+    `机体系水平速度也应被清零: vel=(${sim.F.vel.x},${sim.F.vel.y})`);
+  assert.equal(sim.F.pos.x, 3);
+  assert.equal(sim.F.pos.y, -2);
+  assert.ok(sim.F.pos.z > 0, '重力下高度应下降（NED z 增大），垂向不受锁定影响');
 });

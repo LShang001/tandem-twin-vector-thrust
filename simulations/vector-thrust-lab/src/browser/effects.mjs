@@ -16,19 +16,62 @@ export function createEffects(scene) {
     grid.material.transparent = true; grid.material.opacity = op;
     scene.add(grid);
   }
-  rebuildGrid(0x1d4ed8, 0x12233f, 0.5);
+  rebuildGrid(0x6b7a92, 0x3d4450, 0.55);
 
   // ---------- 星空 ----------
   const stars = (() => {
-    const g = new THREE.BufferGeometry(); const n = 900; const p = new Float32Array(n * 3);
+    const g = new THREE.BufferGeometry(); const n = 600; const p = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const r = 90 + Math.random() * 60, th = Math.random() * Math.PI * 2, ph = Math.acos(2 * Math.random() - 1);
       p[i*3] = r * Math.sin(ph) * Math.cos(th); p[i*3+1] = r * Math.sin(ph) * Math.sin(th); p[i*3+2] = r * Math.cos(ph);
     }
     g.setAttribute('position', new THREE.BufferAttribute(p, 3));
-    const s = new THREE.Points(g, new THREE.PointsMaterial({ color: 0x9cc8ff, size: 0.55, sizeAttenuation: true, transparent: true, opacity: 0.65, fog: false }));
+    const s = new THREE.Points(g, new THREE.PointsMaterial({ color: 0xb9d6ff, size: 0.5, sizeAttenuation: true, transparent: true, opacity: 0.5, fog: false }));
     scene.add(s); return s;
   })();
+
+  // ---------- 天空穹顶（渐变） + 地平线环（世界系固定，反衬姿态） ----------
+  const SKY_R = 150;
+  const sky = (() => {
+    const g = new THREE.SphereGeometry(SKY_R, 40, 28);
+    const m = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false });
+    const s = new THREE.Mesh(g, m);
+    s.renderOrder = -1;                    // 最先绘制，不遮挡任何物体
+    scene.add(s); return s;
+  })();
+
+  function paintSky(top, horizonCol, bottom) {
+    const pos = sky.geometry.attributes.position;
+    const colors = new Float32Array(pos.count * 3);
+    const cT = new THREE.Color(top), cH = new THREE.Color(horizonCol), cB = new THREE.Color(bottom);
+    const c = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const t = pos.getZ(i) / SKY_R;       // z 向下：t<0 天顶，t>0 地下
+      if (t < 0) c.lerpColors(cH, cT, Math.min(-t * 1.7, 1));
+      else       c.lerpColors(cH, cB, Math.min( t * 1.7, 1));
+      colors[i*3] = c.r; colors[i*3+1] = c.g; colors[i*3+2] = c.b;
+    }
+    sky.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  }
+
+  // 地平线环 + 方位刻度（每 30°，每 90° 加长）——辅助判读姿态与航向
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0x8a97a8, transparent: true, opacity: 0.75, fog: false });
+  const horizonRing = new THREE.Group();
+  horizonRing.add(new THREE.Mesh(new THREE.TorusGeometry(120, 0.25, 8, 160), ringMat));
+  for (let i = 0; i < 12; i++) {
+    const major = i % 3 === 0;
+    const tick = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, major ? 5 : 2.4), ringMat);
+    const a = i * Math.PI / 6;
+    tick.position.set(120 * Math.cos(a), 120 * Math.sin(a), 0);
+    horizonRing.add(tick);
+  }
+  scene.add(horizonRing);
+
+  function rebuildSky({ top, horizonCol, bottom, ring, ringOp }) {
+    paintSky(top, horizonCol, bottom);
+    ringMat.color.setHex(ring); ringMat.opacity = ringOp;
+  }
+  rebuildSky({ top: 0x171b23, horizonCol: 0x3d4450, bottom: 0x1f232b, ring: 0x8a97a8, ringOp: 0.75 });
 
   // ---------- 气流粒子（速度 ∝ 油门，可视化来流） ----------
   const airGeo = new THREE.BufferGeometry();
@@ -42,7 +85,7 @@ export function createEffects(scene) {
   }
   airGeo.setAttribute('position', new THREE.BufferAttribute(airPos, 3));
   const air = new THREE.Points(airGeo, new THREE.PointsMaterial({
-    color: 0x67e8f9, size: 0.055, transparent: true, opacity: 0.5,
+    color: 0x7dd3fc, size: 0.055, transparent: true, opacity: 0.5,
     blending: THREE.AdditiveBlending, depthWrite: false }));
   scene.add(air);
 
@@ -69,5 +112,5 @@ export function createEffects(scene) {
     grid.position.z = Math.max(1.6, 7.5 - F.pos.z);
   }
 
-  return { rebuildGrid, stars, air, update };
+  return { rebuildGrid, rebuildSky, stars, air, update };
 }

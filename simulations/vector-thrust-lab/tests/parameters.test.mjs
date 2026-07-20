@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';
 
-test('全部 46 个参数存在且为有限数', () => {
+test('全部 51 个参数存在且为有限数', () => {
   const keys = [
     'kT', 'kQ', 'Jp', 'wMax', 'a', 'b', 'tauM',
     'Ix', 'Iy', 'Iz', 'dMax',
@@ -11,10 +11,12 @@ test('全部 46 个参数存在且为有限数', () => {
     'CLa', 'CD0', 'CDk', 'CYb', 'Cm0', 'Cma', 'Cmq', 'Clb', 'Clp', 'Cnb', 'Cnr',
     'sasQ', 'sasR', 'sasP', 'sasTh', 'sasPhi', 'sasI', 'sasIPhi',
     'intThMax', 'intPhiMax', 'dwMax', 'dwUiMax',
+    'rateKq', 'rateKr', 'rateKp',
     'maxStep', 'frameCap', 'vMin', 'groundZ',
+    'rateQMax', 'ratePMax',
     'aTrim', 'vTrim', 'thrTrim',
   ];
-  assert.equal(keys.length, 46);
+  assert.equal(keys.length, 51);
   for (const k of keys) {
     assert.ok(Number.isFinite(P[k]), `参数 ${k} 缺失或非有限`);
   }

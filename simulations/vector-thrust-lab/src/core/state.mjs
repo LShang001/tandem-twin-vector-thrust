@@ -12,8 +12,9 @@ export function createSimulationState(P) {
       dt: 0,               // 尾摆角指令（俯仰, 绕 y）
       dw: 0,               // 差速指令 -1..1
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
-      sas: true,           // 增稳开关
+      sasMode: 1,          // SAS 模式: 0=关, 1=全SAS(比例+积分+角速率), 2=仅角速率阻尼
       aero: true,          // 气动力开关（false = 仅电机推力）
+      lockXY: false,       // 水平速度锁定（true = 惯性系水平速度持续清零，悬停/VTOL 测试）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -47,4 +48,8 @@ export function resetFlightState(sim, P) {
   S.quat.x = 0; S.quat.y = Math.sin(a0 / 2); S.quat.z = 0; S.quat.w = Math.cos(a0 / 2);
   S.omega.x = 0; S.omega.y = 0; S.omega.z = 0;
   S.intTh = 0; S.intPhi = 0;
+  if (S.lockXY) {          // 悬停锁定下复位：清零水平速度
+    F.vel.x = 0; F.vel.y = 0;
+    F.vWorld.x = 0; F.vWorld.y = 0;
+  }
 }

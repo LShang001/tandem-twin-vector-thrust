@@ -18,7 +18,7 @@ export function getTelemetry(sim) {
       quat: { ...S.quat },
       omega: { ...S.omega },
     },
-    flags: { sas: S.sas, aero: S.aero },
+    flags: { sasMode: S.sasMode, sas: S.sasMode > 0, aero: S.aero, lockXY: S.lockXY },
     time: S.time,
   };
 }
