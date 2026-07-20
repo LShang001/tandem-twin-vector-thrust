@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>文档中心 · 纵列双发矢量推力飞行器</title>
+<link rel="stylesheet" href="docstyle.css">
+<style>
+  .hub-head{margin:0 0 26px}
+  .hub-head h1{border-bottom:none;margin-bottom:6px;padding-bottom:0}
+  .hub-head p{color:var(--dim);font-size:13px;letter-spacing:.12em}
+  .card{display:block;text-decoration:none;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:20px 24px;margin:14px 0;transition:all .2s;
+    box-shadow:0 8px 30px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04)}
+  .card:hover{border-color:rgba(56,189,248,.55);transform:translateY(-2px);box-shadow:0 12px 36px rgba(0,0,0,.45),0 0 18px rgba(56,189,248,.12)}
+  .card .tag{display:inline-block;font-size:10.5px;letter-spacing:.15em;color:var(--cyan);
+    border:1px solid rgba(56,189,248,.4);border-radius:6px;padding:2px 8px;margin-bottom:8px}
+  .card .tag.pure{color:#fbbf24;border-color:rgba(251,191,36,.4)}
+  .card h2{margin:0 0 6px;font-size:16px;color:#e0f2fe;letter-spacing:.04em}
+  .card p{margin:0;font-size:12.5px;color:var(--dim);line-height:1.7}
+  .sec{font-size:11px;letter-spacing:.25em;color:var(--dim);margin:30px 0 4px}
+</style>
+</head>
+<body>
+<article>
+  <a class="back" href="../index.html">← 返回仿真实验室</a>
+  <div class="hub-head">
+    <h1>纵列双发矢量推力飞行器 · 文档中心</h1>
+    <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT — DOCUMENTATION</p>
+  </div>
+
+  <div class="sec">整机建模</div>
+  <a class="card" href="./modeling.html">
+    <span class="tag">建模文档</span>
+    <h2>理论分析与建模文档</h2>
+    <p>从单电机矢量座到整机六自由度：坐标系与旋转矩阵、推力映射、反扭矩与陀螺效应、六维推力通道方程、气动模型、配平与稳定性分析（含 C_m0 发散案例）、SAS 增稳控制律与数值验证。</p>
+  </a>
+
+  <div class="sec">纯理论数学推导（与仿真实现无关的一般理论）</div>
+  <a class="card" href="./theory/01-attitude-kinematics.html">
+    <span class="tag pure">纯理论 I</span>
+    <h2>旋转与姿态的数学基础</h2>
+    <p>方向余弦矩阵与 SO(3)、反对称算子代数、罗德里格斯公式推导、角速度的左乘/右乘本质、欧拉角与万向锁、四元数代数、姿态运动学方程 q̇ = ½q⊗ω 的严格推导。</p>
+  </a>
+  <a class="card" href="./theory/02-propulsion-modeling.html">
+    <span class="tag pure">纯理论 II</span>
+    <h2>推进系统的物理建模</h2>
+    <p>桨盘动量理论与诱导功率、量纲分析导出 k_T/k_Q 系数、反扭矩的角动量守恒严格推导（τ = k_Q·ω² + J_p·ω̇）、电机电磁动态与一阶滞后的来源、旋转部件陀螺力矩。</p>
+  </a>
+  <a class="card" href="./theory/03-dynamics-allocation-modes.html">
+    <span class="tag pure">纯理论 III</span>
+    <h2>动力学、控制分配与模态分析</h2>
+    <p>牛顿–欧拉方程推导、多矢量推进器的一般力/力矩映射与摆角雅可比、控制分配（伪逆、可达力矩集、奇异性）、小扰动线性化、短周期/长周期/滚转收敛/荷兰滚模态解析、解耦设计条件。</p>
+  </a>
+</article>
+</body>
+</html>

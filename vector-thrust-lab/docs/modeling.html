@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>理论分析与建模文档 · 纵列双发矢量推力飞行器</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="docstyle.css" />
+</head>
+<body><article><a class="back" href="./index.html">← 返回文档中心</a>
+<h1
+id="矢量推力飞行动力学实验室-理论分析与建模文档">矢量推力飞行动力学实验室
+— 理论分析与建模文档</h1>
+<p><strong>对象布局</strong>：纵列双发矢量推力飞行器 ——
+机头前电机（正转，绕 z_b 轴单轴摆动，偏航通道）、机尾电机（反转，绕 y_b
+轴单轴摆动，俯仰通道）、差速控制滚转。本文档给出从单电机矢量座到整机六自由度飞行动力学的完整推导、气动与配平分析、增稳控制律设计及数值验证结果。</p>
+<hr />
+<h2 id="坐标系与符号约定">1. 坐标系与符号约定</h2>
+<table>
+<thead>
+<tr class="header">
+<th>坐标系</th>
+<th>定义</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>惯性系 {I}</td>
+<td>地面参考系，z 向下（NED 约定）</td>
+</tr>
+<tr class="even">
+<td>机体系 {B}</td>
+<td>x_b 指机头，y_b 指右翼，z_b 指向下，原点在质心</td>
+</tr>
+<tr class="odd">
+<td>摆座/电机系 {M}</td>
+<td>随电机摆动，x_m 沿电机轴（推力方向）</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr class="header">
+<th>符号</th>
+<th>含义</th>
+<th>符号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>δ_f</td>
+<td>前电机摆角（绕 z_b，偏航）</td>
+<td>δ_t</td>
+<td>尾电机摆角（绕 y_b，俯仰）</td>
+</tr>
+<tr class="even">
+<td>ω_f, ω_t</td>
+<td>前/尾电机转速</td>
+<td>Δω</td>
+<td>差速指令</td>
+</tr>
+<tr class="odd">
+<td>T = k_T·ω²</td>
+<td>螺旋桨推力</td>
+<td>τ = k_Q·ω² + J_p·ω̇</td>
+<td>传给机体的反扭矩</td>
+</tr>
+<tr class="even">
+<td>a, b</td>
+<td>前/尾电机到质心的距离</td>
+<td>p, q, r</td>
+<td>机体系角速度分量</td>
+</tr>
+<tr class="odd">
+<td>q̄ = ½ρV²</td>
+<td>动压</td>
+<td>α, β</td>
+<td>迎角 / 侧滑角</td>
+</tr>
+</tbody>
+</table>
+<p>约定：两电机轴线在零摆角时均过质心（推力线通过质心，无静态力矩）；前电机为拉力式，尾电机为推进式，旋向相反。</p>
+<h2 id="推力矢量映射">2. 推力矢量映射</h2>
+<p>单轴摆动即绕固定轴的旋转。尾电机绕 y_b 摆 δ_t、前电机绕 z_b 摆
+δ_f，旋转矩阵：</p>
+<pre><code>        ⎡ cosδ  0  sinδ ⎤              ⎡ cosδ  -sinδ  0 ⎤
+R_y(δ) = ⎢  0    1   0   ⎥      R_z(δ) = ⎢ sinδ   cosδ  0 ⎥
+        ⎣ -sinδ 0  cosδ ⎦              ⎣  0      0    1 ⎦</code></pre>
+<p>推力在电机系中沿 x_m，T = [T, 0, 0]ᵀ。投影到机体系：</p>
+<pre><code>尾电机:  F_t = R_y(δ_t)·[T_t,0,0]ᵀ = [T_t·cosδ_t,  0,  -T_t·sinδ_t]ᵀ
+前电机:  F_f = R_z(δ_f)·[T_f,0,0]ᵀ = [T_f·cosδ_f,  T_f·sinδ_f,  0]ᵀ</code></pre>
+<p>对质心的力矩为安装位置矢量与推力的叉乘 <strong>M = r × F</strong>。取
+r_f = [+a, 0, 0]、r_t = [−b, 0, 0]：</p>
+<pre><code>尾电机俯仰力矩:  M_y = -b·T_t·sinδ_t ≈ -b·T_t·δ_t   （小摆角线性化）
+前电机偏航力矩:  M_z = +a·T_f·sinδ_f ≈ +a·T_f·δ_f</code></pre>
+<p>物理图像：零摆角时推力线过质心、力矩为零；摆动后推力线偏转，等效力臂为
+a·sinδ 或 b·sinδ，控制力矩在小摆角范围内与 δ
+近似线性——对控制分配非常友好。</p>
+<h2 id="反扭力矩差速滚转与陀螺效应">3. 反扭力矩、差速滚转与陀螺效应</h2>
+<h3 id="反扭力矩的完整表达">3.1 反扭力矩的完整表达</h3>
+<p>螺旋桨旋转时，真正经电机定子传给机体的是<strong>电磁扭矩</strong>，除气动阻力矩外还包含转子加速惯性项：</p>
+<pre><code>τ = k_Q·ω² + J_p·ω̇</code></pre>
+<p>机动加减速时第二项不可忽略。反扭矩沿各自电机轴，随机座一起摆动：</p>
+<pre><code>前电机（正转）:  M_Qf = R_z(δ_f)·[-τ_f,0,0]ᵀ = [-τ_f·cosδ_f, -τ_f·sinδ_f, 0]ᵀ
+尾电机（反转）:  M_Qt = R_y(δ_t)·[+τ_t,0,0]ᵀ = [+τ_t·cosδ_t,  0, -τ_t·sinδ_t]ᵀ</code></pre>
+<h3 id="滚转控制机理关键">3.2 滚转控制机理（关键）</h3>
+<p>零摆角时前后反扭矩互消（M_x = τ_t − τ_f =
+0）。<strong>差速打破对消产生滚转力矩</strong>——注意机理：前后电机都在纵轴上、推力均过质心，推力差对质心不产生力矩，滚转完全由<strong>反扭矩差</strong>驱动，与共轴直升机扭矩差控制偏航同一原理：</p>
+<pre><code>ΔM_x = k_Q·(ω_t² - ω_f²) + J_p·(ω̇_t - ω̇_f)</code></pre>
+<p>分配律取 ω_f = ω₀√(1+Δω)、ω_t = ω₀√(1−Δω)，保持 ω_f²+ω_t²
+为常数，滚转机动一阶近似下不扰动总推力。</p>
+<h3 id="摆动引入的交叉耦合">3.3 摆动引入的交叉耦合</h3>
+<ul>
+<li>偏航摆动 δ_f → 俯仰扰动 −τ_f·sinδ_f</li>
+<li>俯仰摆动 δ_t → 偏航扰动 −τ_t·sinδ_t</li>
+</ul>
+<p>因 τ ≪
+T·力臂（通常差一个数量级），耦合为二阶小量，且结构已知，可在混控中前馈补偿。</p>
+<h3 id="陀螺力矩">3.4 陀螺力矩</h3>
+<p>双转子角动量（前正后反，沿各自摆座轴）：</p>
+<pre><code>h = J_p·ω_f·[cosδ_f, sinδ_f, 0]ᵀ − J_p·ω_t·[cosδ_t, 0, −sinδ_t]ᵀ</code></pre>
+<p>其对机体的作用 −ω×h
+进入转动方程。双桨反转使零摆角时姿态速率引起的陀螺耦合天然互消，这是该布局的附带红利。</p>
+<h2 id="推力通道六维方程汇总">4. 推力通道六维方程汇总</h2>
+<pre><code>F_x = T_f·cosδ_f + T_t·cosδ_t        M_x = -τ_f·cosδ_f + τ_t·cosδ_t
+F_y = T_f·sinδ_f                      M_y = -b·T_t·sinδ_t - τ_f·sinδ_f
+F_z = -T_t·sinδ_t                     M_z =  a·T_f·sinδ_f - τ_t·sinδ_t</code></pre>
+<p>控制效率矩阵（小摆角，用于混控/分配）：</p>
+<pre><code>∂M_y/∂δ_t = -b·T_t·cosδ_t      ∂M_z/∂δ_f = a·T_f·cosδ_f      ∂M_x/∂Δω ≈ -2·k_Q·ω₀²</code></pre>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>通道</th>
+<th>操纵量</th>
+<th>主控项</th>
+<th>带宽限制</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>俯仰</td>
+<td>尾摆角 δ_t</td>
+<td>−b·T_t·sinδ_t</td>
+<td>舵机</td>
+<td>权限随油门增长</td>
+</tr>
+<tr class="even">
+<td>偏航</td>
+<td>前摆角 δ_f</td>
+<td>+a·T_f·sinδ_f</td>
+<td>舵机</td>
+<td>权限随油门增长</td>
+</tr>
+<tr class="odd">
+<td>滚转</td>
+<td>差速 Δω</td>
+<td>k_Q·(ω_t²−ω_f²)</td>
+<td>电机转速动态</td>
+<td>权限仅为单侧反扭量级，低油门显著衰减</td>
+</tr>
+</tbody>
+</table>
+<h2 id="刚体六自由度动力学">5. 刚体六自由度动力学</h2>
+<h3 id="平动方程机体系">5.1 平动方程（机体系）</h3>
+<pre><code>m·v̇ = F_推力 + F_气动 + m·g_b − m·(ω × v)</code></pre>
+<p>g_b 为重力矢量在机体系中的分量（由姿态四元数变换），ω×v
+为体轴旋转引起的科氏项。</p>
+<h3 id="转动方程含旋转部件">5.2 转动方程（含旋转部件）</h3>
+<pre><code>I·ω̇ = M_推力 + M_气动 − ω×(I·ω) − ω×h_转子</code></pre>
+<p>ω×(I·ω) 是刚体欧拉方程的陀螺耦合项，ω×h_转子
+是双转子角动量的进动项——两者在大角速度机动时不可忽略。</p>
+<h3 id="姿态运动学四元数右乘形式">5.3 姿态运动学：四元数右乘形式</h3>
+<p>机体系角速度对应的姿态微分方程为 <strong>q̇ = ½·q ⊗ ω̃</strong>（ω̃
+为纯四元数，<strong>右乘</strong>）。若误用世界系形式 q̇ = ½·ω̃⊗q
+而代入机体系角速度，小姿态角下近似成立，大姿态角下响应方向错乱——这是数值实现中的常见陷阱。</p>
+<h2 id="气动模型风轴系">6. 气动模型（风轴系）</h2>
+<pre><code>L = q̄·S·C_Lα·α          D = q̄·S·(C_D0 + k·C_L²)          Y = q̄·S·C_Yβ·β</code></pre>
+<pre><code>M_x,a = q̄·S·b̄·(C_lβ·β + C_lp·p̂)      p̂ = p·b̄/(2V)
+M_y,a = q̄·S·c̄·(C_m0 + C_mα·α + C_mq·q̂)   q̂ = q·c̄/(2V)
+M_z,a = q̄·S·b̄·(C_nβ·β + C_nr·r̂)      r̂ = r·b̄/(2V)</code></pre>
+<p><strong>阻尼导数的物理意义</strong>（本项目核心问题）：摆角产生角加速度，角速度若无阻尼确实会无限积分。真实物理中的有界化机制有二：</p>
+<ol type="1">
+<li><strong>气动阻尼</strong>：C_mq / C_lp / C_nr
+提供与角速率成正比的阻尼力矩，α/β 建立后 C_mα
+等静稳定力矩进一步提供恢复——阶跃响应收敛到新的平衡点；</li>
+<li><strong>闭环增稳</strong>：气动阻尼 ∝
+q̄，低速/悬停时趋零，此时姿态稳定完全由 SAS
+承担。本仿真提供”气动力忽略”开关，可复现”角速度自由积分”的裸物理。</li>
+</ol>
+<h2 id="配平与稳定性分析">7. 配平与稳定性分析</h2>
+<h3 id="配平条件">7.1 配平条件</h3>
+<p>巡航配平需同时满足：T = D、L ≈ m·g、合力矩为零。纵向力矩平衡：</p>
+<pre><code>q̄·S·c̄·(C_m0 + C_mα·α_trim) = 0   →   α_trim = −C_m0/C_mα</code></pre>
+<h3 id="c_m0-的必要性一次真实的发散案例">7.2 C_m0
+的必要性：一次真实的发散案例</h3>
+<p>建模过程中实测发现：若 C_m0 =
+0（无配平弯度），飞机从近似配平点出发后<strong>持续俯冲发散</strong>。机理链条：</p>
+<ul>
+<li>配平迎角需由推力矢量持续顶住 C_mα·α 的静稳定力矩；</li>
+<li>所需控制矩 ∝ q̄ 增长，摆座权限固定 → 可保持的 α ∝ 1/q̄ 衰减；</li>
+<li>于是升力 L = q̄·S·C_Lα·α 与速度解耦、恒小于重力；</li>
+<li>短周期稳定性使机头跟随航迹下压，迎角无法重建 → 加速俯冲。</li>
+</ul>
+<p>这正是<strong>控制权限 vs
+静稳定度</strong>的配平问题，与真实飞机一致。解法亦与真实飞机相同：通过机翼弯度/安装角引入
+C_m0，使巡航点气动矩自平衡，增稳系统只承担扰动抑制。取 C_m0 =
+0.011（α_trim ≈ 1.6° @ V ≈ 26 m/s）后全包线稳定。</p>
+<h3 id="数值验证4-ms-步长离线复算">7.3 数值验证（4 ms
+步长，离线复算）</h3>
+<table>
+<thead>
+<tr class="header">
+<th>工况</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>配平直飞</td>
+<td>V → 26.2 m/s，α ≈ 1.3°，θ 微幅振荡有界（长周期模态稳定）</td>
+</tr>
+<tr class="even">
+<td>俯仰阶跃 δ_t=8°（4 s）</td>
+<td>θ 峰值 −4.3°，撤除后收敛回配平</td>
+</tr>
+<tr class="odd">
+<td>滚转阶跃 Δω=25%（4 s）</td>
+<td>φ 峰值 −2.7°，SAS 姿态保持，撤除后回零</td>
+</tr>
+<tr class="even">
+<td>偏航阶跃 δ_f=8°（4 s）</td>
+<td>协调转弯式滚转 φ ≈ 3.9°，航向匀速转动，有界</td>
+</tr>
+</tbody>
+</table>
+<h2 id="sas-增稳控制律">8. SAS 增稳控制律</h2>
+<p>结构：角速率阻尼 +
+姿态角比例/积分反馈（积分消除常值配平误差，带抗饱和限幅）：</p>
+<pre><code>δ_t ← δ_t + k_q·q + k_θ·θ + k_i·∫θ        （俯仰，∂M_y/∂δ_t &lt; 0）
+δ_f ← δ_f − k_r·r                          （偏航，∂M_z/∂δ_f &gt; 0）
+Δω  ← Δω  + k_p·p + k_φ·φ + k_iφ·∫φ       （滚转，∂M_x/∂Δω &lt; 0）</code></pre>
+<p><strong>反馈极性必须按各通道控制效率符号整定</strong>：效率为负的通道（俯仰、滚转）取正号，效率为正的通道（偏航）取负号，否则构成正反馈——调试中曾因此出现姿态发散，符号校验后收敛。执行量经
+±25° 摆角饱和与差速限幅。</p>
+<h2 id="数值实现">9. 数值实现</h2>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>项目</th>
+<th>实现</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>积分器</td>
+<td>显式欧拉，子步长 ≤ 4 ms（滚转通道气动阻尼时间常数约 12
+ms，大步长会数值失稳）</td>
+</tr>
+<tr class="even">
+<td>电机动态</td>
+<td>一阶滞后（τ = 0.28 s）+ ω̇ 前馈进反扭矩</td>
+</tr>
+<tr class="odd">
+<td>地面约束</td>
+<td>高度触地时清零下降速度</td>
+</tr>
+<tr class="even">
+<td>渲染</td>
+<td>载机跟随惯性系：机体始终在画面中心，地面网格与气流粒子按真实速度反衬运动</td>
+</tr>
+</tbody>
+</table>
+<h2 id="主要参数">10. 主要参数</h2>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>参数</th>
+<th>取值</th>
+<th>参数</th>
+<th>取值</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>质量 m</td>
+<td>2.6 kg</td>
+<td>惯量 I_x / I_y / I_z</td>
+<td>0.09 / 0.34 / 0.36 kg·m²</td>
+</tr>
+<tr class="even">
+<td>推力系数 k_T</td>
+<td>2.2×10⁻⁵ N·s²</td>
+<td>反扭系数 k_Q</td>
+<td>1.6×10⁻⁶ N·m·s²</td>
+</tr>
+<tr class="odd">
+<td>最大转速</td>
+<td>900 rad/s</td>
+<td>力臂 a = b</td>
+<td>0.62 m</td>
+</tr>
+<tr class="even">
+<td>机翼面积 S</td>
+<td>0.55 m²</td>
+<td>弦长 c̄ / 展长 b̄</td>
+<td>0.35 / 2.2 m</td>
+</tr>
+<tr class="odd">
+<td>C_Lα / C_D0 / k</td>
+<td>4.6 / 0.035 / 0.045</td>
+<td>C_m0 / C_mα / C_mq</td>
+<td>0.011 / −0.4 / −9.0</td>
+</tr>
+<tr class="even">
+<td>C_Yβ / C_lβ / C_lp</td>
+<td>−0.35 / −0.09 / −0.5</td>
+<td>C_nβ / C_nr</td>
+<td>0.12 / −0.2</td>
+</tr>
+</tbody>
+</table>
+<h2 id="局限与后续方向">11. 局限与后续方向</h2>
+<ul>
+<li>气动模型为线性小迎角模型，未含大迎角失速、非定常效应与螺旋桨滑流干扰；</li>
+<li>滚转权限受单侧反扭量级限制，低油门时滚转能力弱（物理固有，建议大机动工况配合气动舵面）；</li>
+<li>单电机/单舵面失效无余度；</li>
+<li>后续可扩展：控制分配在线优化、LQR/模型预测姿态控制、过渡走廊（悬停—巡航）包线仿真。</li>
+</ul>
+</article></body>
+</html>

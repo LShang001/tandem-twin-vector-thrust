@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纵列双发矢量推力飞行器 · 高保真 6-DOF 飞行动力学仿真</title>
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+<div id="scene"></div>
+
+<div id="header">
+  <h1>纵列双发矢量推力飞行器</h1>
+  <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT · HIGH-FIDELITY 6-DOF FLIGHT DYNAMICS</p>
+</div>
+
+<div id="ctrl" class="glass">
+  <div class="panel-title">控制输入 CONTROL</div>
+  <div class="ctl-group">
+    <div class="slider-row">
+      <div class="slider-head"><label>总油门 ω</label><span class="val" id="v-thr">50%</span></div>
+      <input type="range" id="s-thr" min="0" max="100" value="50">
+    </div>
+    <div class="slider-row">
+      <div class="slider-head"><label>俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）</label><span class="val" id="v-dt">0.0°</span></div>
+      <input type="range" id="s-dt" min="-25" max="25" step="0.1" value="0">
+    </div>
+    <div class="slider-row">
+      <div class="slider-head"><label>偏航摆角 δ<sub>f</sub>（前电机·绕 z）</label><span class="val" id="v-df">0.0°</span></div>
+      <input type="range" id="s-df" min="-25" max="25" step="0.1" value="0">
+    </div>
+    <div class="slider-row">
+      <div class="slider-head"><label>差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
+      <input type="range" id="s-dw" min="-30" max="30" step="0.5" value="0">
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn" id="b-pitch">俯仰演示</button>
+    <button class="btn" id="b-yaw">偏航演示</button>
+    <button class="btn" id="b-roll">滚转演示</button>
+    <button class="btn" id="b-cine">综合演示</button>
+    <button class="btn active" id="b-sas">增稳 SAS：开</button>
+    <button class="btn active" id="b-aero">气动力：开</button>
+    <button class="btn warn wide" id="b-reset">复位 RESET</button>
+  </div>
+</div>
+
+<div id="data" class="glass">
+  <div class="panel-title">实时解算 TELEMETRY</div>
+  <div id="meters"></div>
+  <div class="sub">
+    <div class="kv"><span>前推力 T_f</span><span id="d-tf">--</span></div>
+    <div class="kv"><span>尾推力 T_t</span><span id="d-tt">--</span></div>
+    <div class="kv"><span>前反扭 τ_f</span><span id="d-qf">--</span></div>
+    <div class="kv"><span>尾反扭 τ_t</span><span id="d-qt">--</span></div>
+    <div class="kv"><span>反扭净额 Δτ</span><span id="d-dq">--</span></div>
+    <div class="kv"><span>前转速 ω_f</span><span id="d-wf">--</span></div>
+    <div class="kv"><span>尾转速 ω_t</span><span id="d-wt">--</span></div>
+    <div class="kv"><span>空速 V</span><span id="d-v">--</span></div>
+    <div class="kv"><span>迎角 α</span><span id="d-aoa">--</span></div>
+    <div class="kv"><span>高度 h</span><span id="d-h">--</span></div>
+    <div class="kv"><span>姿态 φ/θ/ψ</span><span id="d-att">--</span></div>
+    <div class="kv"><span>气动俯仰矩</span><span id="d-amy">--</span></div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--thrust)"></i>推力矢量</span>
+    <span><i style="background:var(--react)"></i>反扭矩</span>
+    <span><i style="background:var(--roll)"></i>Mx 滚转</span>
+    <span><i style="background:var(--pitch)"></i>My 俯仰</span>
+    <span><i style="background:var(--yaw)"></i>Mz 偏航</span>
+  </div>
+</div>
+
+<div id="eqbar" class="glass">
+  <div class="eq"><b class="c-roll">M<sub>x</sub></b> = −τ<sub>f</sub>·cosδ<sub>f</sub> + τ<sub>t</sub>·cosδ<sub>t</sub> = <b class="c-roll" id="e-mx">0</b> N·m</div>
+  <div class="eq"><b class="c-pitch">M<sub>y</sub></b> = −b·T<sub>t</sub>·sinδ<sub>t</sub> − τ<sub>f</sub>·sinδ<sub>f</sub> = <b class="c-pitch" id="e-my">0</b> N·m</div>
+  <div class="eq"><b class="c-yaw">M<sub>z</sub></b> = a·T<sub>f</sub>·sinδ<sub>f</sub> − τ<sub>t</sub>·sinδ<sub>t</sub> = <b class="c-yaw" id="e-mz">0</b> N·m</div>
+</div>
+
+<div id="infoBtn">
+  <button class="btn glass" id="b-theme">☀ 浅色</button>
+  <button class="btn glass" id="b-info">ⓘ 模型方程</button>
+  <a class="btn glass" href="./docs/index.html" target="_blank" style="text-decoration:none;display:inline-block">📄 理论文档</a>
+</div>
+<div id="modal">
+  <div id="modalCard" class="glass">
+    <h2>纵列双发矢量推力布局 — 高保真 6-DOF 动力学模型</h2>
+    <p>前电机（+a, 0, 0）正转、绕 z<sub>b</sub> 轴摆动（偏航）；尾电机（−b, 0, 0）反转、绕 y<sub>b</sub> 轴摆动（俯仰）。两电机轴线在零摆角时均过质心。推力 T = k<sub>T</sub>·ω²，反扭矩 τ = k<sub>Q</sub>·ω² + J<sub>p</sub>·ω̇。</p>
+    <h3>推力通道六维力 / 力矩（机体系）</h3>
+    <div class="formula">F_x = T_f·cosδ_f + T_t·cosδ_t &nbsp;&nbsp; F_y = T_f·sinδ_f &nbsp;&nbsp; F_z = −T_t·sinδ_t</div>
+    <div class="formula">M_x = −τ_f·cosδ_f + τ_t·cosδ_t<br>M_y = −b·T_t·sinδ_t − τ_f·sinδ_f<br>M_z =  a·T_f·sinδ_f − τ_t·sinδ_t</div>
+    <h3>刚体动力学方程</h3>
+    <div class="formula">m·v̇ = F<sub>推力</sub> + F<sub>气动</sub> + m·g<sub>b</sub> − m·ω×v</div>
+    <div class="formula">I·ω̇ = M<sub>推力</sub> + M<sub>气动</sub> − ω×(I·ω) − ω×h<sub>转子</sub> &nbsp;&nbsp;·&nbsp;&nbsp; q̇ = ½·q⊗ω<sub>b</sub></div>
+    <h3>气动模型（风轴系, q̄ = ½ρV²）</h3>
+    <div class="formula">L = q̄·S·C<sub>Lα</sub>·α &nbsp;&nbsp; D = q̄·S·(C<sub>D0</sub> + k·C<sub>L</sub>²) &nbsp;&nbsp; Y = q̄·S·C<sub>Yβ</sub>·β</div>
+    <div class="formula">M<sub>x,a</sub> = q̄·S·b·(C<sub>lβ</sub>·β + C<sub>lp</sub>·p̂)<br>M<sub>y,a</sub> = q̄·S·c̄·(C<sub>m0</sub> + C<sub>mα</sub>·α + C<sub>mq</sub>·q̂)<br>M<sub>z,a</sub> = q̄·S·b·(C<sub>nβ</sub>·β + C<sub>nr</sub>·r̂)</div>
+    <p>阻尼导数 C<sub>mq</sub> / C<sub>lp</sub> / C<sub>nr</sub> 提供物理角速率阻尼：摆角阶跃 → 角加速度 → 角速度被气动阻尼衰减、α/β 建立后被静稳定力矩平衡 —— 响应有界，无需任何人工阻尼。低速时气动阻尼 ∝ q̄ 趋零，姿态稳定转由 SAS 闭环承担。</p>
+    <h3>SAS 增稳（角速率 + 姿态角比例/积分反馈, 反馈极性按控制效率符号整定）</h3>
+    <div class="formula">δ_t ← δ_t + k<sub>q</sub>·q + k<sub>θ</sub>·θ + k<sub>i</sub>∫θ&nbsp;&nbsp; δ_f ← δ_f − k<sub>r</sub>·r &nbsp;&nbsp; Δω ← Δω + k<sub>p</sub>·p + k<sub>φ</sub>·φ + k<sub>iφ</sub>∫φ</div>
+    <h3>三通道控制机理</h3>
+    <table>
+      <tr><th>通道</th><th>主控项</th><th>残余耦合（可前馈补偿）</th></tr>
+      <tr><td>俯仰</td><td>−b·T_t·sinδ_t</td><td>偏航摆动 → 俯仰扰动 −τ_f·sinδ_f（二阶小量）</td></tr>
+      <tr><td>偏航</td><td>a·T_f·sinδ_f</td><td>俯仰摆动 → 偏航扰动 −τ_t·sinδ_t（二阶小量）</td></tr>
+      <tr><td>滚转</td><td>k_Q·(ω_t²−ω_f²)</td><td>差速打破反扭对消 —— 共轴直升机的扭矩差原理</td></tr>
+    </table>
+    <button class="btn" id="modalClose">关闭</button>
+  </div>
+</div>
+
+<div id="hint"><b>拖拽</b> 旋转视角 · <b>滚轮</b> 缩放 · <b>右键拖拽</b> 平移</div>
+
+<div id="loader"><div class="spin"></div><p>VECTOR THRUST LAB</p></div>
+
+<script async src="./lib/es-module-shims.min.js"></script>
+<script type="importmap-shim">
+{"imports":{"three":"./lib/three.module.js","three/addons/":"./lib/addons/"}}
+</script>
+<script type="module-shim" src="./js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>纯理论推导（一）：旋转与姿态的数学基础 · 纵列双发矢量推力飞行器</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+</head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1
+id="纯理论推导一旋转与姿态的数学基础">纯理论推导（一）：旋转与姿态的数学基础</h1>
+<blockquote>
+<p>本篇与任何具体仿真实现无关，是刚体姿态描述的一般数学理论：方向余弦矩阵、轴角表示与罗德里格斯公式、SO(3)
+李群与角速度、四元数代数及姿态运动学方程的严格推导。</p>
+</blockquote>
+<hr />
+<h2 id="方向余弦矩阵dcm">1. 方向余弦矩阵（DCM）</h2>
+<p>设两个右手坐标系 {A}、{B}，同一矢量 v 在两系中的坐标 vᴬ、vᴮ
+由方向余弦矩阵 R 联系：vᴬ = R·vᴮ。R 的第 j 列是 {B} 第 j 个基矢量在 {A}
+中的坐标。</p>
+<p><strong>性质</strong>（属于特殊正交群 SO(3)）：</p>
+<pre><code>RᵀR = I          （各列单位正交）
+det R = +1       （右手性, 排除镜像）
+R⁻¹ = Rᵀ         （逆变换 = 转置）</code></pre>
+<p>9 个元素受 6 个独立约束（3 个单位模 + 3 个正交），故姿态恰有 3
+个自由度。乘法对应复合旋转：Rᴬᶜ = Rᴬᴮ·Rᴮᶜ。</p>
+<h2 id="反对称算子">2. 反对称算子 [·]×</h2>
+<p>对任意 a = [a₁, a₂, a₃]ᵀ 定义叉乘矩阵：</p>
+<pre><code>       ⎡  0   -a₃   a₂ ⎤
+[a]× = ⎢  a₃   0   -a₁ ⎥        使  [a]×·b = a × b,  ∀b
+       ⎣ -a₂   a₁   0  ⎦</code></pre>
+<p>常用恒等式（后文反复使用）：</p>
+<pre><code>[a]×ᵀ = −[a]×              [a]×·a = 0
+[a]×² = a·aᵀ − ‖a‖²·I      [a]×³ = −‖a‖²·[a]×
+R·[a]×·Rᵀ = [R·a]×         （R ∈ SO(3)）</code></pre>
+<h2 id="轴角表示与罗德里格斯公式">3. 轴角表示与罗德里格斯公式</h2>
+<p><strong>欧拉旋转定理</strong>：任意姿态改变可由绕某单位轴 n 转过角度
+θ 实现。推导 R(n, θ)：将任意矢量 v 分解为平行于 n 的分量 v∥ = (n·v)n
+与垂直分量 v⊥ = v − (n·v)n。旋转中 v∥ 不变；v⊥ 在垂直平面内转
+θ，其在平面内的正交方向为 n×v（注意 n×v = n×v⊥）。于是：</p>
+<pre><code>v&#39; = v∥ + v⊥·cosθ + (n × v)·sinθ
+   = v·cosθ + n(n·v)(1 − cosθ) + (n × v)·sinθ</code></pre>
+<p>用 [n]× 重写（利用 [n]×² = n·nᵀ − I）：</p>
+<pre><code>┌─────────────────────────────────────────────┐
+│  R(n,θ) = I + sinθ·[n]× + (1−cosθ)·[n]×²   │   ← 罗德里格斯公式
+└─────────────────────────────────────────────┘</code></pre>
+<h2 id="角速度与-so3-的李代数">4. 角速度与 SO(3) 的李代数</h2>
+<p>设刚体姿态随时间变化 R(t)。对 R(t)R(t)ᵀ = I 求导：</p>
+<pre><code>Ṙ·Rᵀ + R·Ṙᵀ = 0   ⟹   Ṙ·Rᵀ 是反对称矩阵</code></pre>
+<p>反对称矩阵必可写成某个矢量的叉乘矩阵，<strong>该矢量即角速度</strong>。定义世界系角速度
+ω_w 与机体系角速度 ω_b：</p>
+<pre><code>Ṙ·Rᵀ = [ω_w]×      ⟹   Ṙ = [ω_w]×·R          （左乘形式）
+Rᵀ·Ṙ = [ω_b]×      ⟹   Ṙ = R·[ω_b]×           （右乘形式）</code></pre>
+<p>两者由 ω_w = R·ω_b 联系（利用 R[a]×Rᵀ = [Ra]×
+立即可证）。<strong>左乘还是右乘不是任意选择，而是由角速度定义在哪个坐标系决定</strong>——这是姿态运动学最根本的事实。</p>
+<p>在小角度 Δt 内，R 的增量由指数映射给出（李群–李代数对应）：</p>
+<pre><code>R(t+Δt) = exp([ω_b·Δt]×)·R(t) ≈ (I + [ω_b·Δt]×)·R(t)</code></pre>
+<h2 id="欧拉角及其奇异性">5. 欧拉角及其奇异性</h2>
+<p>航空常用 3-2-1（偏航-俯仰-滚转）顺序：</p>
+<pre><code>R = R_z(ψ)·R_y(θ)·R_x(φ)</code></pre>
+<p>欧拉角速率与体轴角速度的关系：</p>
+<pre><code>⎡p⎤   ⎡ 1    0        −sinθ      ⎤ ⎡φ̇⎤
+⎢q⎥ = ⎢ 0   cosφ      sinφ·cosθ  ⎥·⎢θ̇⎥
+⎣r⎦   ⎣ 0  −sinφ      cosφ·cosθ  ⎦ ⎣ψ̇⎦</code></pre>
+<p>θ = ±90° 时系数矩阵奇异（万向锁）：φ̇、ψ̇
+不可分辨，姿态描述失效，积分发散。这是欧拉角不能用于大机动姿态积分的数学根源。</p>
+<h2 id="四元数代数">6. 四元数代数</h2>
+<p>四元数 q = q₀ + q₁i + q₂j + q₃k，记作 q = (q₀, v)，乘法规则 i² = j² =
+k² = ijk = −1。展开为：</p>
+<pre><code>p ⊗ q = (p₀q₀ − v_p·v_q,  p₀v_q + q₀v_p + v_p × v_q)</code></pre>
+<p>共轭 q* = (q₀, −v)，范数 ‖q‖² = q⊗q<em>，单位四元数逆 q⁻¹ =
+q</em>。</p>
+<p><strong>旋转公式</strong>：与轴角 (n, θ) 对应的单位四元数为</p>
+<pre><code>q = (cos(θ/2),  n·sin(θ/2))</code></pre>
+<p>矢量 v 的旋转由三明治积给出（纯四元数 ṽ = (0, v)）：</p>
+<pre><code>ṽ&#39; = q ⊗ ṽ ⊗ q*</code></pre>
+<p><em>推导</em>：将 ṽ
+代入乘法规则展开，标量部恒为零，矢量部整理后恰好复现罗德里格斯公式 v’ =
+v·cosθ + n(n·v)(1−cosθ) + (n×v)·sinθ——四元数三明治积与 R(n,θ)
+是同一旋转的两种表述。q 与 −q 表示同一姿态（二重覆盖），这不是缺陷而是
+SO(3) 拓扑的必然。</p>
+<h2 id="姿态运动学方程的严格推导">7. 姿态运动学方程的严格推导</h2>
+<p>对旋转公式 ṽ_w = q ⊗ ṽ_b ⊗ q* 求导（设 ṽ_b 为固连矢量，ṽ̇_b =
+0）：</p>
+<pre><code>ṽ̇_w = q̇ ⊗ ṽ_b ⊗ q* + q ⊗ ṽ_b ⊗ q̇*</code></pre>
+<p>由 q⊗q* = 1 得 q̇⊗q* + q⊗q̇* = 0，即 q⊗q̇* =
+−q̇⊗q*。代入并整理（两次运用乘法规则展开、利用 a×(b×c) = b(a·c) −
+c(a·b)），可得：</p>
+<pre><code>ṽ̇_w = 2·(q̇ ⊗ q*) ⊗ ṽ_w        ⟹   2·q̇⊗q* = (0, ω_w)</code></pre>
+<p>于是：</p>
+<pre><code>┌──────────────────────────────────────────────┐
+│  q̇ = ½·(0, ω_w) ⊗ q   =   ½·q ⊗ (0, ω_b)     │
+└──────────────────────────────────────────────┘</code></pre>
+<p>两式分别对应世界系/机体系角速度，等价关系 ω_w =
+R·ω_b。<strong>数值积分时机体系角速度必须右乘</strong>；若误将 ω_b
+左乘，相当于把体系速率当作世界系速率，小姿态角下误差为二阶小量不易察觉，大姿态角下响应方向完全错乱。</p>
+<p>矩阵形式（右乘、机体系角速度）：</p>
+<pre><code>q̇ = ½·Ω(ω_b)·q,     Ω = ⎡  0   −p   −q   −r ⎤
+                        ⎢  p    0    r   −q ⎥
+                        ⎢  q   −r    0    p ⎥
+                        ⎣  r    q   −p    0 ⎦</code></pre>
+<h2 id="四元数-方向余弦矩阵">8. 四元数 ↔︎ 方向余弦矩阵</h2>
+<pre><code>     ⎡ 1−2(q₂²+q₃²)    2(q₁q₂−q₀q₃)    2(q₁q₃+q₀q₂) ⎤
+R =  ⎢ 2(q₁q₂+q₀q₃)   1−2(q₁²+q₃²)    2(q₂q₃−q₀q₁) ⎥
+     ⎣ 2(q₁q₃−q₀q₂)    2(q₂q₃+q₀q₁)   1−2(q₁²+q₂²) ⎦</code></pre>
+<p>由 R 反解四元数（Shepperd 法，数值稳健）选取 q₀²、q₁²、q₂²、q₃²
+中最大者开方，再由对角/非对角元组合解出其余分量，避免除以小量。</p>
+<h2 id="积分漂移与归一化">9. 积分漂移与归一化</h2>
+<p>数值积分 q ← q + q̇·Δt 使 ‖q‖ 偏离 1，误差随时间线性积累。每步归一化 q
+← q/‖q‖ 即可将漂移控制在步长阶次内；一阶积分的局部误差为
+O(Δt²)，对可视化与控制带宽内的仿真足够。更高精度场合可用指数映射精确解
+q(t+Δt) = q ⊗ (cos(|ω|Δt/2), (ω/|ω|)sin(|ω|Δt/2))，它在 ω
+近似恒定的区间内是无误差的闭式解。</p>
+</article></body>
+</html>
