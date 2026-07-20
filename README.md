@@ -1,5 +1,7 @@
 # 纵列双发矢量推力飞行器
 
+**Tandem Twin Vector-Thrust Aircraft** (`tandem-twin-vector-thrust`)
+
 _纵列双发、正交单轴矢量推力、差速反扭滚转的固定翼飞行器概念项目 —— 方案设计 · 理论推导 · 数学建模 · 仿真验证_
 
 ---
@@ -59,4 +61,4 @@ python -m http.server 8080
 - **文档**：Markdown 为唯一编辑源，HTML 由 `tools/build-docs.py` 生成，禁止手改
 - **参数**：`models/aircraft-model.json` 为唯一事实源，仿真参数文件由 `tools/sync-params.py` 生成
 - **版本**：文件名不含"最终版/v2"等状态词，版本由 Git 标签与基线编号管理
-- **许可证**：本项目当前为私有项目，保留所有权利；`simulations/vector-thrust-lab/vendor/` 内第三方库遵循其各自许可证（Three.js：MIT）
+- **许可证**：本项目采用 [MIT 许可证](LICENSE)；`simulations/vector-thrust-lab/vendor/` 内第三方库遵循其各自许可证（Three.js：MIT）
