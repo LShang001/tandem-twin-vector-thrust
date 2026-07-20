@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>MOD-003 配平与稳定性分析 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="mod-003-配平与稳定性分析">MOD-003 配平与稳定性分析</h1>
+<blockquote>
+<p>定位：在 MOD-001
+整机动力学推导基础上，定量核对纵列双发矢量推力飞行器的纵向配平条件，分析零迎角俯仰力矩
+<code>C_m0</code>
+的补偿需求，并给出小扰动稳定性框架与数值证据。本文档为概念级分析，参数均取自
+<code>models/aircraft-model.json</code>（MODEL-DEFAULT）。</p>
+</blockquote>
+<hr />
+<h2 id="1-配平问题定义">1. 配平问题定义</h2>
+<p>考察<strong>定直平飞</strong>（steady level flight）状态：</p>
+<pre><code>V  = 24 m/s        （配平速度）
+γ  = 0             （航迹倾斜角为零，水平飞行）
+β  = 0             （无侧滑）
+φ  = 0, p = q = r = 0   （无滚转、无角速度）
+δ_f = 0, Δω = 0    （前摆/差速为零）</code></pre>
+<p>此时纵向力与力矩需满足：</p>
+<pre><code>L ≈ m·g            （升力平衡重力）
+T ≈ D              （推力平衡阻力）
+M_y = 0            （俯仰力矩为零）</code></pre>
+<p>代码中配平初始条件由 <code>state.mjs:resetFlightState</code>
+设置：</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>F<span class="op">.</span><span class="at">vel</span><span class="op">.</span><span class="at">x</span> <span class="op">=</span> P<span class="op">.</span><span class="at">vTrim</span> <span class="op">*</span> <span class="fu">cos</span>(P<span class="op">.</span><span class="at">aTrim</span>)<span class="op">;</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>F<span class="op">.</span><span class="at">vel</span><span class="op">.</span><span class="at">z</span> <span class="op">=</span> P<span class="op">.</span><span class="at">vTrim</span> <span class="op">*</span> <span class="fu">sin</span>(P<span class="op">.</span><span class="at">aTrim</span>)<span class="op">;</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>S<span class="op">.</span><span class="at">quat</span>  <span class="op">=</span> (<span class="dv">0</span><span class="op">,</span> <span class="fu">sin</span>(P<span class="op">.</span><span class="at">aTrim</span><span class="op">/</span><span class="dv">2</span>)<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="fu">cos</span>(P<span class="op">.</span><span class="at">aTrim</span><span class="op">/</span><span class="dv">2</span>))<span class="op">;</span></span></code></pre></div>
+<p>其中
+<code>P.vTrim = 24 m/s</code>、<code>P.aTrim = 0.027925268 rad</code>（1.6°）、<code>P.thrTrim = 0.5</code>。</p>
+<hr />
+<h2 id="2-纵向配平推导">2. 纵向配平推导</h2>
+<h3 id="21-升力平衡--迎角">2.1 升力平衡 → 迎角</h3>
+<p>重力：</p>
+<pre><code>W = m·g = 2.6 kg × 9.81 m/s² = 25.506 N</code></pre>
+<p>动压：</p>
+<pre><code>q̄ = ½·ρ·V² = 0.5 × 1.225 kg/m³ × (24 m/s)² = 352.8 Pa</code></pre>
+<p>升力面积项：</p>
+<pre><code>q̄·S_w = 352.8 Pa × 0.55 m² = 194.04 N</code></pre>
+<p>由 <code>L = q̄·S_w·C_L</code> 及平飞
+<code>L = W</code>，得配平升力系数：</p>
+<pre><code>C_L,trim = W / (q̄·S_w) = 25.506 / 194.04 ≈ 0.1314</code></pre>
+<p>本仿真采用线性升力模型 <code>C_L = C_Lα·α</code>，故：</p>
+<pre><code>α_trim, Lift = C_L,trim / C_Lα = 0.1314 / 4.6 ≈ 0.02857 rad ≈ 1.638°</code></pre>
+<h3 id="22-与代码给定-atrim-的核对">2.2 与代码给定 aTrim 的核对</h3>
+<p>代码给定：</p>
+<pre><code>P.aTrim = 0.027925268031909273 rad = 1.600°</code></pre>
+<p>两者偏差：</p>
+<pre><code>Δα = 0.027925 − 0.02857 = −0.00065 rad ≈ −0.038°
+相对偏差 ≈ −2.3 %</code></pre>
+<p>结论：<code>P.aTrim</code> 是将理论升力平衡迎角按 <code>1.6°</code>
+圆整后的结果，偏差在 3% 以内，可视为近似配平。剩余升力残差由 SAS
+俯仰积分器在仿真中逐步吸收。</p>
+<h3 id="23-阻力与推力平衡--油门">2.3 阻力与推力平衡 → 油门</h3>
+<p>在 <code>α_trim = 1.6°</code> 处：</p>
+<pre><code>C_L,trim = C_Lα · P.aTrim = 4.6 × 0.027925 ≈ 0.1285</code></pre>
+<p>阻力系数：</p>
+<pre><code>C_D = C_D0 + C_Dk · C_L²
+    = 0.035 + 0.045 × (0.1285)²
+    ≈ 0.035 + 0.000743
+    ≈ 0.03574</code></pre>
+<p>平飞所需总推力：</p>
+<pre><code>D = q̄·S_w·C_D = 194.04 N × 0.03574 ≈ 6.94 N</code></pre>
+<p>代码配平油门 <code>P.thrTrim = 0.5</code> 对应的电机转速：</p>
+<pre><code>ω₀ = thrTrim · ω_max = 0.5 × 900 rad/s = 450 rad/s</code></pre>
+<p>单发推力：</p>
+<pre><code>T = k_T · ω₀² = 2.2×10⁻⁵ N·s² × (450 rad/s)² = 4.455 N</code></pre>
+<p>双发总推力（Δω = 0）：</p>
+<pre><code>T_total = 2 × 4.455 N = 8.91 N</code></pre>
+<p>推力 − 阻力：</p>
+<pre><code>T_total − D = 8.91 N − 6.94 N = 1.97 N</code></pre>
+<p>即在该配平点，推力约比阻力大
+28%。多余推力将使飞行器加速，直至阻力随速度平方增长而重新平衡。MOD-001
+的离线复算观察到配平后速度上升至约 26.2 m/s，与此近似分析一致。</p>
+<h3 id="24-配平闭合程度总结">2.4 配平闭合程度总结</h3>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>数值</th>
+<th>闭合情况</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>升力平衡所需 α</td>
+<td>1.638°</td>
+<td>与 <code>aTrim=1.600°</code> 偏差 −2.3%，近似闭合</td>
+</tr>
+<tr>
+<td>阻力平衡所需 T</td>
+<td>约 6.94 N</td>
+<td><code>thrTrim=0.5</code> 提供 8.91 N，偏大 28%</td>
+</tr>
+<tr>
+<td>净加速度估算</td>
+<td>1.97 N / 2.6 kg ≈ 0.76 m/s²</td>
+<td>飞行器将缓慢加速</td>
+</tr>
+</tbody>
+</table>
+<p>因此，当前配平参数是<strong>近似配平</strong>：<code>aTrim</code>
+基本满足升力平衡，<code>thrTrim=0.5</code>
+为“留有推力裕度”的近似油门。精确巡航油门应由所需速度对应的阻力反解，并考虑
+SAS 积分项对俯仰/推力的耦合修正。</p>
+<hr />
+<h2 id="3-c_m0-案例零迎角俯仰力矩的配平补偿">3. C_m0
+案例：零迎角俯仰力矩的配平补偿</h2>
+<h3 id="31-问题来源">3.1 问题来源</h3>
+<p>气动模型在零迎角处存在非零俯仰力矩：</p>
+<pre><code>C_m0 = 0.011</code></pre>
+<p>其物理来源为机翼弯度/安装角；在零迎角时产生的气动力矩为：</p>
+<pre><code>M_y,a|_{α=0} = q̄·S_w·c̄·C_m0
+             = 352.8 × 0.55 × 0.35 × 0.011
+             ≈ 0.747 N·m</code></pre>
+<p>该力矩方向为正（机头抬头，绕 +y_b）。若不用尾摆角补偿，飞行器将绕 y_b
+持续抬头，迎角增大；由于
+<code>C_mα = −0.4 &lt; 0</code>（静稳定），最终会在某个正迎角处由
+<code>C_m0 + C_mα·α = 0</code>
+平衡，但此时需要推力矢量或其他控制量维持。</p>
+<h3 id="32-用尾摆角平衡-c_m0-的需求">3.2 用尾摆角平衡 C_m0 的需求</h3>
+<p>尾电机推力对质心的俯仰力矩（小摆角线性化）为：</p>
+<pre><code>M_y,t = −b · T_t · sin(δ_t) ≈ −b · T_t · δ_t</code></pre>
+<p>其中 <code>b = 0.62 m</code>，<code>T_t = 4.455 N</code>（thrTrim=0.5
+时）。令总俯仰力矩为零：</p>
+<pre><code>−b·T_t·sin(δ_t) + q̄·S_w·c̄·C_m0 = 0</code></pre>
+<p>解得：</p>
+<pre><code>sin(δ_t,trim) = (q̄·S_w·c̄·C_m0) / (b·T_t)
+              = 0.747 / (0.62 × 4.455)
+              = 0.747 / 2.762
+              ≈ 0.270</code></pre>
+<pre><code>δ_t,trim ≈ asin(0.270) ≈ 0.274 rad ≈ 15.7°</code></pre>
+<h3 id="33-执行机构裕度">3.3 执行机构裕度</h3>
+<p>摆角限幅：</p>
+<pre><code>δ_max = P.dMax = 0.436 rad = 25°</code></pre>
+<p>所需配平摆角占限幅比例：</p>
+<pre><code>15.7° / 25° ≈ 63 %</code></pre>
+<p>剩余裕度约 37%。因此，在零迎角情况下，仅靠尾电机摆角即可补偿
+<code>C_m0</code>，但会占用超过一半的俯仰控制权限。</p>
+<h3 id="34-与-atrim-的耦合">3.4 与 aTrim 的耦合</h3>
+<p>代码配平迎角 <code>aTrim = 1.6°</code> 接近气动自平衡点：</p>
+<pre><code>α_c = −C_m0 / C_mα = −0.011 / (−0.4) = 0.0275 rad = 1.576°</code></pre>
+<p>在该迎角下：</p>
+<pre><code>C_m0 + C_mα·aTrim ≈ 0.011 − 0.4 × 0.027925 ≈ −1.7×10⁻⁴</code></pre>
+<p>对应的剩余俯仰力矩仅约 <code>−0.012 N·m</code>，所需尾摆角约
+<code>0.24°</code>，几乎为零。这说明 <code>aTrim</code>
+的选取已经让气动俯仰力矩自平衡，SAS 积分器只需吸收扰动残差。SAS
+俯仰积分限幅为
+<code>P.intThMax = 0.5 rad</code>，远小于所需零迎角补偿量，进一步印证：<code>aTrim</code>
+是必要设计，不能单纯依赖积分器抵消 <code>C_m0</code>。</p>
+<hr />
+<h2 id="4-小扰动线性化框架">4. 小扰动线性化框架</h2>
+<h3 id="41-状态与输入定义">4.1 状态与输入定义</h3>
+<p>选取机体坐标系小扰动状态（围绕配平直飞状态）：</p>
+<pre><code>x = [ Δu, Δw, Δq, Δθ, Δv, Δp, Δr, Δφ, Δψ ]^T</code></pre>
+<p>输入为执行机构修正量：</p>
+<pre><code>u = [ Δδ_t, Δδ_f, ΔΔω ]^T</code></pre>
+<p>其中：</p>
+<ul>
+<li>纵向通道：<code>Δu, Δw, Δq, Δθ</code>；输入 <code>Δδ_t</code>。</li>
+<li>横侧向通道：<code>Δv, Δp, Δr, Δφ, Δψ</code>；输入
+<code>Δδ_f</code>（偏航）、<code>ΔΔω</code>（滚转）。</li>
+</ul>
+<h3 id="42-纵向模态定性分析">4.2 纵向模态定性分析</h3>
+<p>纵向力与力矩在配平点附近线性化：</p>
+<pre><code>X = X_u Δu + X_w Δw + X_δt Δδ_t
+Z = Z_u Δu + Z_w Δw + Z_δt Δδ_t
+M = M_u Δu + M_w Δw + M_q Δq + M_δt Δδ_t</code></pre>
+<p>典型固定翼纵向模态：</p>
+<table>
+<thead>
+<tr>
+<th>模态</th>
+<th>主导状态</th>
+<th>稳定条件</th>
+<th>本项目依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>短周期</td>
+<td><code>Δα</code>（或 <code>Δw</code>）、<code>Δq</code></td>
+<td><code>M_α &lt; 0</code>（静稳定）、<code>M_q &lt; 0</code>（阻尼）</td>
+<td><code>C_mα = −0.4 &lt; 0</code>、<code>C_mq = −9.0 &lt; 0</code>，静稳定且阻尼为负</td>
+</tr>
+<tr>
+<td>长周期 / 沉浮</td>
+<td><code>Δu</code>、`</td>
+<td>Δθ`</td>
+<td>推力 − 阻力曲线在配平点附近斜率为负</td>
+</tr>
+</tbody>
+</table>
+<p>结论：短周期模态在所列气动导数下是静稳定且有阻尼的；长周期行为受当前近似油门影响，表现为缓慢速度漂移。</p>
+<h3 id="43-横侧向模态定性分析">4.3 横侧向模态定性分析</h3>
+<p>横侧向力与力矩线性化：</p>
+<pre><code>Y = Y_v Δv + Y_δf Δδ_f
+L = L_v Δv + L_p Δp + L_δω ΔΔω
+N = N_v Δv + N_r Δr + N_δf Δδ_f</code></pre>
+<p>典型固定翼横侧向模态：</p>
+<table>
+<thead>
+<tr>
+<th>模态</th>
+<th>主导状态</th>
+<th>稳定条件</th>
+<th>本项目依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>荷兰滚</td>
+<td><code>Δβ</code>、<code>Δr</code>、<code>Δφ</code> 耦合振荡</td>
+<td><code>C_nβ &gt; 0</code>（航向静稳定）、<code>C_nr &lt; 0</code>（偏航阻尼）</td>
+<td><code>C_nβ = 0.12 &gt; 0</code>、<code>C_nr = −0.2 &lt; 0</code>，航向稳定且有阻尼</td>
+</tr>
+<tr>
+<td>滚转收敛</td>
+<td><code>Δp</code></td>
+<td><code>C_lp &lt; 0</code>（滚转阻尼）</td>
+<td><code>C_lp = −0.5 &lt; 0</code>，滚转运动快速收敛</td>
+</tr>
+<tr>
+<td>螺旋</td>
+<td><code>Δφ</code> 缓慢收敛/发散</td>
+<td><code>C_lβ &lt; 0</code>（横滚静稳定）抑制发散</td>
+<td><code>C_lβ = −0.09 &lt; 0</code>，有利于螺旋模态稳定</td>
+</tr>
+</tbody>
+</table>
+<p>滚转控制特殊性：本布局滚转由双发反扭矩差驱动，控制效率
+<code>∂M_x/∂Δω ≈ −2·k_Q·ω₀²</code> 为负，SAS
+符号已按此整定；低油门时反扭矩差基数减小，滚转权限衰减。</p>
+<h3 id="44-适用边界">4.4 适用边界</h3>
+<p>上述线性化仅在以下条件有效：</p>
+<ul>
+<li>小迎角、小侧滑角、小摆角；</li>
+<li>气动模型为线性，未计入失速、压缩性、螺旋桨滑流干扰；</li>
+<li>推力/阻力平衡近似，长周期分析需配合精确油门；</li>
+<li>无风、理想执行器（无舵机速率饱和、无安装误差）。</li>
+</ul>
+<hr />
+<h2 id="5-数值证据">5. 数值证据</h2>
+<p>回归基线定义于 <code>tests/scenarios.mjs</code>，采用固定 60 Hz
+帧步长驱动 <code>stepPhysics</code>，覆盖三条工况：</p>
+<table>
+<thead>
+<tr>
+<th>工况</th>
+<th>描述</th>
+<th>观察指标</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A：配平直飞 10 s</td>
+<td>无额外指令，从 <code>resetFlightState</code> 出发</td>
+<td>速度、迎角、俯仰角</td>
+<td>速度由 24 m/s 缓慢上升至约 26.2 m/s，姿态角微幅有界</td>
+</tr>
+<tr>
+<td>B：俯仰阶跃 8° / 4 s</td>
+<td><code>δ_t = 8°</code> 持续 240 帧后撤除</td>
+<td>俯仰角 θ、角速率 q</td>
+<td>出现俯仰响应峰值，撤除后回到配平附近</td>
+</tr>
+<tr>
+<td>C：滚转阶跃 0.25·dwUiMax / 4 s</td>
+<td><code>Δω = 0.25 × 0.55 = 0.1375</code> 持续 240 帧后撤除</td>
+<td>滚转角 φ、滚转速率 p</td>
+<td>滚转角达到峰值后，SAS 保持并回零</td>
+</tr>
+</tbody>
+</table>
+<p>上述结果属于<strong>演示性数值检查</strong>，仅在所列工况、MODEL-DEFAULT
+参数、当前线性气动模型与理想执行器假设下观察到响应有界。不能外推为大机动、失速、悬停或全包线稳定结论。详细验证流程与通过准则见
+VER-001。</p>
+<hr />
+<h2 id="6-已知限制与未覆盖项">6. 已知限制与未覆盖项</h2>
+<ol type="1">
+<li><strong>线性气动</strong>：未含大迎角失速、非定常气动力、螺旋桨滑流与机身干扰。</li>
+<li><strong>欧拉角奇异</strong>：<code>eulerFromQuat</code> 在
+<code>theta = ±90°</code>
+附近出现万向锁；代码未做特殊处理，大俯仰机动可能数值不稳定。</li>
+<li><strong>低速 /
+悬停</strong>：气动阻尼随动压下降而趋零，姿态稳定完全依赖
+SAS；滚转权限受单侧反扭限制，过渡走廊未建模。</li>
+<li><strong>理想执行器</strong>：电机为一阶滞后、摆角瞬时到达指令、无舵机带宽与饱和特性。</li>
+<li><strong>无风环境</strong>：未引入大气扰动、阵风或风切变。</li>
+</ol>
+<hr />
+<h2 id="7-交叉引用">7. 交叉引用</h2>
+<ul>
+<li>MOD-001：整机六自由度模型推导、推力矢量映射、SAS 律。</li>
+<li>MOD-002：坐标系、DCM、四元数、欧拉角符号约定（含 theta
+锁定行为）。</li>
+<li>THY-001：旋转与姿态的数学基础。</li>
+<li>VER-001：验证与确认流程、回归基线通过准则。</li>
+<li>GOV-002：变更控制流程（若需修改 theta 符号约定）。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

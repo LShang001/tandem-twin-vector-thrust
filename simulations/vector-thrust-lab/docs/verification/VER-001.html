@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-001 验证确认与模型可信度 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-001-验证确认与模型可信度">VER-001 验证确认与模型可信度</h1>
+<blockquote>
+<p>本篇定义「纵列双发矢量推力飞行器」C0
+概念仿真项目的验证与确认（V&amp;V）框架、当前证据清单、模型可信度分级，以及行为
+/ 参数变更时的证据维护规则。所有证据以
+<code>simulations/vector-thrust-lab</code>
+的现行实现与测试为真值源。</p>
+</blockquote>
+<hr />
+<h2 id="1-vv-框架">1 V&amp;V 框架</h2>
+<h3 id="11-v-模型">1.1 V 模型</h3>
+<pre class="mermaid"><code>accTitle V 模型：纵列双发矢量推力飞行器 C0 验证确认框架
+accDescr 左侧自顶向下将需求分解为配置、模型设计与代码实现；右侧自底向上用单元测试、回归基线、人工检查与页面演示逐层验证。
+
+flowchart LR
+    subgraph Decomp [分解侧：左降]
+        REQ[REQ-001&lt;br/&gt;需求基线]
+        CFG[CFG-000&lt;br/&gt;概念构型基线]
+        MOD1[MOD-001&lt;br/&gt;六自由度模型规范]
+        MOD2[MOD-002&lt;br/&gt;坐标系与符号约定]
+        MOD3[MOD-003&lt;br/&gt;配平与稳定性]
+        CTL1[CTL-001&lt;br/&gt;控制架构与 SAS]
+        CTL2[CTL-002&lt;br/&gt;可控性与失效模式]
+        PROP[PROP-001&lt;br/&gt;推进与摆座模型]
+        CODE[\&quot;src/core/*.mjs\&quot;]
+
+        REQ --&gt; CFG
+        CFG --&gt; MOD1 &amp; CTL1 &amp; PROP
+        MOD1 --&gt; MOD2 &amp; MOD3
+        CTL1 --&gt; CTL2
+        MOD1 &amp; MOD2 &amp; MOD3 &amp; CTL2 &amp; PROP --&gt; CODE
+    end
+
+    subgraph Verif [验证侧：右升]
+        UT[单元测试&lt;br/&gt;40 项断言]
+        RB[回归基线&lt;br/&gt;3 场景]
+        DEMO[页面演示 / 人工检查]
+
+        CODE --&gt;|tests/*.test.mjs| UT
+        UT --&gt;|tests/fixtures/&lt;br/&gt;regression-baseline.json| RB
+        RB --&gt;|tests/scenarios.mjs| DEMO
+        DEMO --&gt;|index.html 交互与 HUD| REQ
+    end
+
+    REQ -.-&gt;|接受准则| DEMO</code></pre>
+<h3 id="12-验证方法四类定义">1.2 验证方法四类定义</h3>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>方法</th>
+<th>定义</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I</td>
+<td>检查 Inspection</td>
+<td>人工审查文档、代码、配置或页面元素，确认实现存在且符合约定</td>
+<td>参数治理、接口契约、代码结构、DOM 元素</td>
+</tr>
+<tr>
+<td>A</td>
+<td>分析 Analysis</td>
+<td>通过数学推导、静态检查或代码走读确认属性（守恒量、符号、边界、稳定性）</td>
+<td>差速平方和不变、阻尼导数符号、子步等价性</td>
+</tr>
+<tr>
+<td>T</td>
+<td>测试 Test</td>
+<td>通过 <code>node --test</code> 自动化测试执行并断言</td>
+<td>单元功能、回归基线、参数完整性</td>
+</tr>
+<tr>
+<td>D</td>
+<td>演示 Demonstration</td>
+<td>通过浏览器运行 Web 仿真并操作 / 观察结果</td>
+<td>滑块响应、HUD 更新、演示序列、开关复位</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-当前证据清单">2 当前证据清单</h2>
+<h3 id="21-单元测试40-项断言">2.1 单元测试（40 项断言）</h3>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>断言数</th>
+<th>测试文件</th>
+<th>覆盖要点</th>
+<th>方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>math</td>
+<td>8</td>
+<td><code>tests/math.test.mjs</code></td>
+<td><code>clamp</code> 边界；<code>rotateVecByQuat</code> 绕 z 旋转 /
+逆旋转还原；<code>quatMultiply</code>
+单位元与结合性；<code>quatInvert</code> /
+<code>quatNormalize</code>；<code>eulerFromQuat</code> 的
+<code>theta = -asin(R13)</code> 约定；重力变换方向一致性</td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>parameters</td>
+<td>6</td>
+<td><code>tests/parameters.test.mjs</code></td>
+<td>46
+键完整且为有限数；关键物理量为正；阻尼导数符号正确；限幅关系自洽；参数对象冻结；摆角
+/ 配平角度弧度换算</td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>control</td>
+<td>6</td>
+<td><code>tests/control.test.mjs</code></td>
+<td>SAS 关闭时指令直通；俯仰 / 偏航 / 滚转三通道极性；执行限幅
+<code>±dMax</code>、<code>±dwMax</code>；积分器限幅并饱和至
+<code>intThMax</code> / <code>intPhiMax</code></td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>propulsion</td>
+<td>6</td>
+<td><code>tests/propulsion.test.mjs</code></td>
+<td><code>T = kT·ω²</code>、<code>τ = kQ·ω²</code>
+稳态关系；差速开方分配保持平方和不变；前摆 /
+尾摆映射符号；零差速反扭对消；电机一阶滞后指数趋近</td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>aerodynamics</td>
+<td>5</td>
+<td><code>tests/aerodynamics.test.mjs</code></td>
+<td>气动开关关闭时贡献归零；正迎角产生升力；<code>Cmq &lt; 0</code>
+俯仰阻尼；侧滑产生侧力与航向/横滚静稳定力矩；空速下限
+<code>vMin = 0.5 m/s</code> 防止低速奇异</td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>dynamics</td>
+<td>6</td>
+<td><code>tests/dynamics.test.mjs</code></td>
+<td><code>stepPhysics</code>
+子步调度与手动子步等价；长时间积分四元数归一化保持；地面约束触地与上升不拦截；配平直飞
+10 s 有界；关闭气动时无阻尼发散趋势</td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>regression</td>
+<td>3</td>
+<td><code>tests/regression.test.mjs</code></td>
+<td>配平直飞、俯仰阶跃、滚转阶跃三个场景与
+<code>regression-baseline.json</code> 逐字段比对，容差
+<code>1e-9</code></td>
+<td>T</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td><strong>40</strong></td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-回归基线场景">2.2 回归基线场景</h3>
+<p>回归场景定义见
+<code>simulations/vector-thrust-lab/tests/scenarios.mjs</code>；基线数据由
+<code>tests/fixtures/generate.mjs</code> 从当前实现采集并存入
+<code>tests/fixtures/regression-baseline.json</code>。</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>运行时长</th>
+<th>输入序列</th>
+<th>记录内容</th>
+<th>比对容差</th>
+<th>关联需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>trim</code></td>
+<td>10 s</td>
+<td>无额外输入，使用 <code>resetFlightState</code> 配平初始条件</td>
+<td>每秒快照 + 最终状态：V、α、φ/θ/ψ、p/q/r、位置、推力 / 力矩</td>
+<td>`max(1e-9,</td>
+<td>expected</td>
+</tr>
+<tr>
+<td><code>pitchStep</code></td>
+<td>8 s</td>
+<td>0–4 s 内 <code>dt = 8°</code>，4 s 后撤除</td>
+<td>同上</td>
+<td>同上</td>
+<td>REQ-CTL-001/002、REQ-SIM-001</td>
+</tr>
+<tr>
+<td><code>rollStep</code></td>
+<td>8 s</td>
+<td>0–4 s 内 <code>dw = 0.25·dwUiMax</code>，4 s 后撤除</td>
+<td>同上</td>
+<td>同上</td>
+<td>REQ-CTL-001/002、REQ-PRP-001</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-参数漂移检测">2.3 参数漂移检测</h3>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>命令</th>
+<th>真值源</th>
+<th>通过条件</th>
+<th>方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数单一事实源</td>
+<td><code>py -3.12 tools/sync-params.py --check</code>（仓库根目录）</td>
+<td><code>models/aircraft-model.json</code></td>
+<td>生成的 <code>src/core/parameters.mjs</code> 与 JSON 一致；46
+键完整；无手工编辑漂移</td>
+<td>I, T</td>
+</tr>
+<tr>
+<td>JSON schema 合规</td>
+<td><code>tools/sync-params.py</code> 解析时校验</td>
+<td><code>models/aircraft-model.schema.json</code></td>
+<td>JSON 解析通过 schema 校验</td>
+<td>I</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-浏览器-e2e-人工检查清单">2.4 浏览器 E2E 人工检查清单</h3>
+<p>按 <code>simulations/vector-thrust-lab/README.md</code>
+中「运行」「结构」「模型边界」章节，结合页面实际元素制定。当前为人工演示检查，尚未接入自动化浏览器测试框架。</p>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>操作</th>
+<th>期望结果</th>
+<th>证据位置</th>
+<th>方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>控制台无错</td>
+<td>启动 <code>启动.bat</code> 或
+<code>python -m http.server 8080</code>，打开页面</td>
+<td>浏览器开发者工具 Console 无 ES Module / 语法 / 运行报错</td>
+<td><code>index.html</code>、<code>src/main.js</code></td>
+<td>D, I</td>
+</tr>
+<tr>
+<td>画布渲染</td>
+<td>页面加载后观察 Three.js 场景</td>
+<td>机体、地面网格、HUD 三维箭头可见并随仿真更新</td>
+<td><code>src/browser/scene.mjs</code></td>
+<td>D</td>
+</tr>
+<tr>
+<td>滑块输入</td>
+<td>拖动油门 / 俯仰 / 偏航 / 差速滑块</td>
+<td>页面遥测与三维机体响应同向，限幅正确</td>
+<td><code>src/browser/controls-ui.mjs</code>、<code>index.html</code></td>
+<td>D</td>
+</tr>
+<tr>
+<td>自动演示</td>
+<td>等待 900 ms 或点击演示按钮</td>
+<td>自动启动综合演示序列，机体做俯仰 / 偏航 / 滚转机动</td>
+<td><code>src/browser/demo.mjs</code>、<code>src/main.js</code></td>
+<td>D</td>
+</tr>
+<tr>
+<td>开关功能</td>
+<td>切换 SAS、气动开关</td>
+<td>关闭 SAS 后机体响应发散趋势增大；关闭气动后仅推力与重力作用</td>
+<td><code>src/browser/controls-ui.mjs</code>、<code>src/core/control.mjs</code>、<code>src/core/aerodynamics.mjs</code></td>
+<td>D, T</td>
+</tr>
+<tr>
+<td>复位功能</td>
+<td>点击 Reset / 复位按钮</td>
+<td>位置、姿态、积分器归零，电机转速 <code>wf/wt</code> 不重置（见
+ASM-009）</td>
+<td><code>src/browser/controls-ui.mjs</code>、<code>src/core/state.mjs</code></td>
+<td>D</td>
+</tr>
+<tr>
+<td>主题切换</td>
+<td>切换深色 / 浅色主题</td>
+<td>页面 CSS 主题变量切换，HUD 与面板可读</td>
+<td><code>src/browser/theme.mjs</code>、<code>css/</code></td>
+<td>D</td>
+</tr>
+<tr>
+<td>方程模态</td>
+<td>点击文档 / 模型按钮</td>
+<td>弹出模型方程与说明模态框，公式渲染完整</td>
+<td><code>index.html</code>、<code>src/browser/docs-modal.mjs</code></td>
+<td>D, I</td>
+</tr>
+<tr>
+<td>文档链接</td>
+<td>点击模态框内文档链接</td>
+<td>跳转到生成的 <code>docs/</code> HTML 页面，链接有效</td>
+<td><code>tools/build-docs.py</code>、<code>docs/</code></td>
+<td>I</td>
+</tr>
+<tr>
+<td>窄屏兼容</td>
+<td>缩小浏览器窗口至 768 px 以下</td>
+<td>控制面板与 HUD 不重叠，布局可滚动或折叠</td>
+<td><code>css/</code>、<code>index.html</code></td>
+<td>D</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-模型可信度分级声明">3 模型可信度分级声明</h2>
+<table>
+<thead>
+<tr>
+<th>可信度等级</th>
+<th>结论</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>可用</strong></td>
+<td>控制律概念研究与通道解耦演示</td>
+<td>40 项单元测试与 3 项回归基线覆盖了所列工况下的数值响应；SAS
+三通道极性与限幅已通过测试锁定</td>
+</tr>
+<tr>
+<td><strong>可用</strong></td>
+<td>教学与 layout 机理可视化</td>
+<td>Web 页面提供实时 6-DOF 动画与
+HUD，方程面板解释模型来源；无飞行硬件风险</td>
+</tr>
+<tr>
+<td><strong>不可用</strong></td>
+<td>性能预测、包线保护设计、任何硬件决策</td>
+<td>全部参数为 <code>MODEL-DEFAULT</code>（置信度
+<code>low</code>），未经验证；执行机构为理想瞬时到位；气动为线性小迎角模型；无失速、无风扰、无传感器
+/ 电调 / 电池模型</td>
+</tr>
+</tbody>
+</table>
+<p>任何将本仿真结果用于采购、制造、试飞或安全论证的行为，须先完成参数状态升级（台架测试、飞行辨识）、高保真气动与执行机构建模，并重新制定验证计划。</p>
+<hr />
+<h2 id="4-证据维护规则">4 证据维护规则</h2>
+<h3 id="41-行为变更">4.1 行为变更</h3>
+<p>若修改以下任一行为保持红线，必须重新采集回归基线并在提交说明中记录原因：</p>
+<ul>
+<li>帧上限 <code>frameCap = 0.05 s</code>、子步上限
+<code>maxStep = 0.004 s</code></li>
+<li>电机时间常数 <code>tauM = 0.28 s</code></li>
+<li>差速开方分配公式</li>
+<li>SAS / 积分 / UI 限幅值</li>
+<li>空速下限 <code>vMin = 0.5 m/s</code></li>
+<li>地面约束条件
+<code>pos.z &gt; 6.2 m &amp;&amp; vWorld.z &gt; 0</code></li>
+<li>四元数右乘 + 每步归一化</li>
+<li>900 ms 自动演示触发</li>
+<li><code>resetAll</code> 不重置电机转速</li>
+<li>渲染几何臂长 <code>±1.78 m</code> 与物理力臂 <code>0.62 m</code>
+的区分</li>
+<li><code>theta = -asin(R13)</code> 的欧拉提取约定</li>
+</ul>
+<p>重采命令（在 <code>simulations/vector-thrust-lab</code> 目录）：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> tests/fixtures/generate.mjs</span></code></pre></div>
+<p>随后提交
+<code>tests/fixtures/regression-baseline.json</code>，提交信息须以
+<code>[regen-baseline]</code> 开头并说明变更动机。</p>
+<h3 id="42-参数变更">4.2 参数变更</h3>
+<ol type="1">
+<li>修改 <code>models/aircraft-model.json</code>；</li>
+<li>运行 <code>py -3.12 tools/sync-params.py</code> 重新生成
+<code>src/core/parameters.mjs</code>；</li>
+<li>运行 <code>py -3.12 tools/sync-params.py --check</code>
+确认无漂移；</li>
+<li>更新本文档及 <a
+href="../registers/parameter-handbook.html"><code>参数数据手册</code></a>
+中的值、单位与状态字段；</li>
+<li>若参数变更导致行为变化，按 4.1 重采回归基线。</li>
+</ol>
+<hr />
+<h2 id="5-测试运行方法">5 测试运行方法</h2>
+<p>在 <code>simulations/vector-thrust-lab</code> 目录执行：</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> tests/</span></code></pre></div>
+<p>或显式列出测试文件：</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> tests/math.test.mjs tests/parameters.test.mjs tests/control.test.mjs tests/propulsion.test.mjs tests/aerodynamics.test.mjs tests/dynamics.test.mjs tests/regression.test.mjs</span></code></pre></div>
+<p>参数漂移检测在仓库根目录执行：</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/sync-params.py <span class="at">--check</span></span></code></pre></div>
+<p>浏览器 E2E 检查需先启动静态服务器：</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulations/vector-thrust-lab</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="ex">python</span> <span class="at">-m</span> http.server 8080</span></code></pre></div>
+<p>然后在浏览器打开 <code>http://localhost:8080</code> 并按 2.4
+节清单逐项检查。</p>
+<hr />
+<h2 id="6-关联文档">6 关联文档</h2>
+<ul>
+<li><a href="../requirements/REQ-001.html">REQ-001</a> —
+需求基线与验证方法映射</li>
+<li><a href="../design/CFG-000.html">CFG-000</a> —
+概念构型与行为保持红线</li>
+<li><a href="../modeling.html">MOD-001</a>
+— 六自由度模型规范</li>
+<li><a href="../modeling/MOD-002.html">MOD-002</a> —
+坐标系与符号约定</li>
+<li><a href="../control/CTL-001.html">CTL-001</a> —
+控制架构与 SAS</li>
+<li><a href="../control/CTL-002.html">CTL-002</a> —
+可控性与失效模式</li>
+<li><a
+href="../propulsion/PROP-001.html">PROP-001</a> —
+推进与摆座模型</li>
+<li><a href="SAFE-001.html">SAFE-001</a> —
+初步安全计划</li>
+<li><a href="../registers/parameter-handbook.html">参数数据手册</a> — 46
+参数全量清单</li>
+<li><a href="../registers/assumptions-log.html">假设与局限日志</a> —
+已知模型假设与局限</li>
+<li><a href="../registers/traceability-matrix.html">模型-代码追溯矩阵</a> —
+模型要素到代码与测试的追溯</li>
+<li><a href="../registers/verification-coverage.html">验证覆盖矩阵</a> —
+需求到证据的覆盖</li>
+<li><a href="../registers/hazard-log.html">危害与失效模式日志</a>
+— 失效模式与缓解措施</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

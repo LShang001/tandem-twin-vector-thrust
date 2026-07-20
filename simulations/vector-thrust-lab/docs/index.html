@@ -28,29 +28,146 @@
     <h1>纵列双发矢量推力飞行器 · 文档中心</h1>
     <p>TANDEM TWIN VECTOR-THRUST AIRCRAFT — DOCUMENTATION</p>
   </div>
-
-  <div class="sec">整机建模</div>
-  <a class="card" href="./modeling.html">
-    <span class="tag">建模文档</span>
-    <h2>理论分析与建模文档</h2>
-    <p>从单电机矢量座到整机六自由度：坐标系与旋转矩阵、推力映射、反扭矩与陀螺效应、六维推力通道方程、气动模型、配平与稳定性分析（含 C_m0 发散案例）、SAS 增稳控制律与数值验证。</p>
+  <div class="sec">项目治理</div>
+  <a class="card" href="./governance/GOV-001.html">
+    <span class="tag">GOV-001</span>
+    <h2>GOV-001 项目范围与术语</h2>
+    <p>项目定位、范围边界、子系统清单、文档体系地图与术语表</p>
   </a>
-
-  <div class="sec">纯理论数学推导（与仿真实现无关的一般理论）</div>
+  <a class="card" href="./governance/GOV-002.html">
+    <span class="tag">GOV-002</span>
+    <h2>GOV-002 信息与配置管理</h2>
+    <p>文档编号规则、参数治理工作流与状态分类、Git 配置管理、行为保持红线</p>
+  </a>
+  <div class="sec">方案设计</div>
+  <a class="card" href="./design/CFG-000.html">
+    <span class="tag">CFG-000</span>
+    <h2>CFG-000 概念构型基线 C0</h2>
+    <p>纵列双发矢量推力布局：总体参数、推进构型、三通道控制机理、已知限制</p>
+  </a>
+  <a class="card" href="./design/CONOPS-001.html">
+    <span class="tag">CONOPS-001</span>
+    <h2>CONOPS-001 运行概念</h2>
+    <p>平台定位、用户角色、运行模式与典型使用场景</p>
+  </a>
+  <div class="sec">需求与验证</div>
+  <a class="card" href="./requirements/REQ-001.html">
+    <span class="tag">REQ-001</span>
+    <h2>REQ-001 需求基线</h2>
+    <p>需求编号规则、功能/性能/接口需求表、验证方法与状态</p>
+  </a>
+  <div class="sec">理论推导</div>
   <a class="card" href="./theory/01-attitude-kinematics.html">
-    <span class="tag pure">纯理论 I</span>
-    <h2>旋转与姿态的数学基础</h2>
-    <p>方向余弦矩阵与 SO(3)、反对称算子代数、罗德里格斯公式推导、角速度的左乘/右乘本质、欧拉角与万向锁、四元数代数、姿态运动学方程 q̇ = ½q⊗ω 的严格推导。</p>
+    <span class="tag pure">THEORY</span>
+    <h2>纯理论推导（一）：旋转与姿态的数学基础</h2>
+    <p>DCM、轴角与罗德里格斯公式、SO(3) 与角速度、四元数代数与姿态运动学</p>
   </a>
   <a class="card" href="./theory/02-propulsion-modeling.html">
-    <span class="tag pure">纯理论 II</span>
-    <h2>推进系统的物理建模</h2>
-    <p>桨盘动量理论与诱导功率、量纲分析导出 k_T/k_Q 系数、反扭矩的角动量守恒严格推导（τ = k_Q·ω² + J_p·ω̇）、电机电磁动态与一阶滞后的来源、旋转部件陀螺力矩。</p>
+    <span class="tag pure">THEORY</span>
+    <h2>纯理论推导（二）：推进系统的物理建模</h2>
+    <p>桨盘动量理论、k_T/k_Q 相似律来源、反扭矩角动量守恒、电机动态与陀螺力矩</p>
   </a>
   <a class="card" href="./theory/03-dynamics-allocation-modes.html">
-    <span class="tag pure">纯理论 III</span>
-    <h2>动力学、控制分配与模态分析</h2>
-    <p>牛顿–欧拉方程推导、多矢量推进器的一般力/力矩映射与摆角雅可比、控制分配（伪逆、可达力矩集、奇异性）、小扰动线性化、短周期/长周期/滚转收敛/荷兰滚模态解析、解耦设计条件。</p>
+    <span class="tag pure">THEORY</span>
+    <h2>纯理论推导（三）：刚体动力学、控制分配与模态分析</h2>
+    <p>牛顿-欧拉方程、控制效能矩阵、权限退化、模态结构与增稳机理</p>
+  </a>
+  <div class="sec">数学建模</div>
+  <a class="card" href="./modeling.html">
+    <span class="tag">理论分析与建模文档</span>
+    <h2>理论分析与建模文档</h2>
+    <p>从单电机矢量座到整机六自由度：推力映射、气动模型、配平分析、SAS 律与演示性数值检查</p>
+  </a>
+  <a class="card" href="./modeling/MOD-002.html">
+    <span class="tag">MOD-002</span>
+    <h2>MOD-002 坐标系与符号约定</h2>
+    <p>代码↔文档接口契约：DCM/四元数/欧拉角实现约定、符号表与代码变量对照</p>
+  </a>
+  <a class="card" href="./modeling/MOD-003.html">
+    <span class="tag">MOD-003</span>
+    <h2>MOD-003 配平与稳定性分析</h2>
+    <p>纵向配平推导与数值核对、C_m0 补偿案例、小扰动模态定性分析</p>
+  </a>
+  <div class="sec">控制与分配</div>
+  <a class="card" href="./control/CTL-001.html">
+    <span class="tag">CTL-001</span>
+    <h2>CTL-001 控制架构与 SAS</h2>
+    <p>控制链总览、三通道 SAS 律、反馈极性整定、差速开方分配</p>
+  </a>
+  <a class="card" href="./control/CTL-002.html">
+    <span class="tag">CTL-002</span>
+    <h2>CTL-002 可控性与失效模式</h2>
+    <p>控制效能矩阵、可控性包线、失效模式登记与改进方向</p>
+  </a>
+  <div class="sec">推进与执行机构</div>
+  <a class="card" href="./propulsion/PROP-001.html">
+    <span class="tag">PROP-001</span>
+    <h2>PROP-001 推进与摆座模型</h2>
+    <p>推力/反扭矩集总模型、一阶滞后、摆座运动学、待标定项与台架计划</p>
+  </a>
+  <div class="sec">验证与确认</div>
+  <a class="card" href="./verification/VER-001.html">
+    <span class="tag">VER-001</span>
+    <h2>VER-001 验证确认与模型可信度</h2>
+    <p>V 模型框架、证据清单、模型可信度分级与证据规则</p>
+  </a>
+  <a class="card" href="./verification/SAFE-001.html">
+    <span class="tag">SAFE-001</span>
+    <h2>SAFE-001 初步安全计划</h2>
+    <p>纯软件仿真范围声明、软件层面风险与缓解、硬件化前瞻议题登记</p>
+  </a>
+  <div class="sec">决策记录</div>
+  <a class="card" href="./decisions/DEC-001.html">
+    <span class="tag">DEC-001</span>
+    <h2>DEC-001 参数单一事实源</h2>
+    <p>ADR：aircraft-model.json + 代码生成 + 漂移检测的决策与备选方案</p>
+  </a>
+  <a class="card" href="./decisions/adr-template.html">
+    <span class="tag">决策记录模板（ADR）</span>
+    <h2>决策记录模板（ADR）</h2>
+    <p>新增决策记录使用的空白模板</p>
+  </a>
+  <div class="sec">参考资料</div>
+  <a class="card" href="./references/reference-register.html">
+    <span class="tag">参考资料注册表</span>
+    <h2>参考资料注册表</h2>
+    <p>第三方依赖与工具链登记（Three.js、es-module-shims、Pandoc 等）</p>
+  </a>
+  <div class="sec">注册表</div>
+  <a class="card" href="./registers/parameter-handbook.html">
+    <span class="tag">参数数据手册</span>
+    <h2>参数数据手册</h2>
+    <p>46 项参数全量手册：值、单位、来源、置信度与代码字段</p>
+  </a>
+  <a class="card" href="./registers/assumptions-log.html">
+    <span class="tag">假设与局限日志</span>
+    <h2>假设与局限日志</h2>
+    <p>ASM-001~014：模型假设、影响评估与解除条件</p>
+  </a>
+  <a class="card" href="./registers/traceability-matrix.html">
+    <span class="tag">模型-代码追溯矩阵</span>
+    <h2>模型-代码追溯矩阵</h2>
+    <p>方程 ↔ 代码位置 ↔ 单元测试 ↔ 回归基线场景</p>
+  </a>
+  <a class="card" href="./registers/requirements-register.html">
+    <span class="tag">需求注册表</span>
+    <h2>需求注册表</h2>
+    <p>REQ-ID、来源、验证方法、状态与证据</p>
+  </a>
+  <a class="card" href="./registers/verification-coverage.html">
+    <span class="tag">验证覆盖矩阵</span>
+    <h2>验证覆盖矩阵</h2>
+    <p>需求 ↔ 验证方法 ↔ 测试证据 ↔ 状态</p>
+  </a>
+  <a class="card" href="./registers/hazard-log.html">
+    <span class="tag">危害与失效模式日志</span>
+    <h2>危害与失效模式日志</h2>
+    <p>HAZ-001~008：失效模式、严重度、检测与缓解</p>
+  </a>
+  <a class="card" href="./registers/test-case-card.html">
+    <span class="tag">工况与试验卡模板</span>
+    <h2>工况与试验卡模板</h2>
+    <p>仿真工况与试验记录的空白模板</p>
   </a>
 </article>
 </body>

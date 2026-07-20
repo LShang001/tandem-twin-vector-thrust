@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>MOD-002 坐标系与符号约定 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="mod-002-坐标系与符号约定">MOD-002 坐标系与符号约定</h1>
+<blockquote>
+<p>定位：代码 ↔︎ 文档的接口契约。凡阅读
+<code>simulations/vector-thrust-lab/src/core</code>
+源码或基于源码进行推导者，以本文档为符号与坐标约定准绳。本文档与
+THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重复推导过程。</p>
+</blockquote>
+<hr />
+<h2 id="1-坐标系定义">1. 坐标系定义</h2>
+<table>
+<thead>
+<tr>
+<th>坐标系</th>
+<th>名称</th>
+<th>原点</th>
+<th>轴向</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>{I}</td>
+<td>惯性系 / 地面系</td>
+<td>起飞点地面</td>
+<td>x 北 / y 东 / z 向下（NED）</td>
+<td>固定于地面；位置积分、地面约束在此系表达</td>
+</tr>
+<tr>
+<td>{B}</td>
+<td>机体系</td>
+<td>质心 CG</td>
+<td>x_b 机头 / y_b 右翼 / z_b 向下</td>
+<td>刚体固连；速度、角速度、力/力矩默认在此系</td>
+</tr>
+<tr>
+<td>{M_f} / {M_t}</td>
+<td>前 / 尾摆座系</td>
+<td>前 / 尾电机中心</td>
+<td>x_m 沿电机轴（推力方向），零摆角时与 x_b 重合</td>
+<td>前座绕 z_b 摆动；尾座绕 y_b 摆动</td>
+</tr>
+</tbody>
+</table>
+<p>坐标系关系图示：</p>
+<pre class="mermaid"><code>graph LR
+    accTitle 坐标系关系
+    accDescr 惯性系 NED、机体系与前后摆座系的层级关系
+    I[&quot;{I} 地面 NED&lt;br/&gt;x北 y东 z下&quot;] --&gt;|&quot;姿态四元数 q&quot;| B[&quot;{B} 机体&lt;br/&gt;x_b前 y_b右 z_b下&quot;]
+    B --&gt;|&quot;前摆角 δ_f 绕 z_b&quot;| Mf[&quot;{M_f} 前摆座&quot;]
+    B --&gt;|&quot;尾摆角 δ_t 绕 y_b&quot;| Mt[&quot;{M_t} 尾摆座&quot;]</code></pre>
+<h3 id="11-关键方向约定">1.1 关键方向约定</h3>
+<ul>
+<li><strong>重力</strong>：在 {I} 中表示为
+<code>{ x:0, y:0, z:+g }</code>，即 z 向下为正。</li>
+<li><strong>高度</strong>：<code>F.pos.z</code> 为 NED
+高度，数值增大代表离地更远；地面平面为
+<code>z = P.groundZ = 6.2 m</code>。</li>
+<li><strong>角度正方向</strong>：右手法则。绕 y_b
+正转使机头下俯（标准航空俯仰正方向），但本仿真欧拉角提取对 theta
+取负号，显示值与实际几何角符号相反（见第 4 节）。</li>
+</ul>
+<hr />
+<h2 id="2-方向余弦矩阵dcm语义">2. 方向余弦矩阵（DCM）语义</h2>
+<h3 id="21-矩阵定义">2.1 矩阵定义</h3>
+<p>DCM <code>R</code> 实现机体基矢到惯性基矢的变换：</p>
+<pre><code>v^I = R · v^B</code></pre>
+<p><code>R</code> 的第 j 列为 {B} 第 j 个基矢量在 {I}
+中的坐标。<code>R ∈ SO(3)</code>，满足
+<code>R^T R = I</code>、<code>det R = +1</code>。</p>
+<h3 id="22-列主序元素编号">2.2 列主序元素编号</h3>
+<p>代码中以 THREE.js / <code>Matrix4</code>
+列主序访问旋转矩阵元素。<code>e[k]</code> 与 <code>R_ij</code>
+的对应关系如下：</p>
+<table>
+<thead>
+<tr>
+<th>数组元素</th>
+<th>数学元素</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>e[0]</code></td>
+<td><code>R_11</code></td>
+<td>机体系 x_b 在惯性系 x 轴投影</td>
+</tr>
+<tr>
+<td><code>e[1]</code></td>
+<td><code>R_21</code></td>
+<td>机体系 x_b 在惯性系 y 轴投影</td>
+</tr>
+<tr>
+<td><code>e[2]</code></td>
+<td><code>R_31</code></td>
+<td>机体系 x_b 在惯性系 z 轴投影</td>
+</tr>
+<tr>
+<td><code>e[3]</code></td>
+<td><code>0</code></td>
+<td>齐次列</td>
+</tr>
+<tr>
+<td><code>e[4]</code></td>
+<td><code>R_12</code></td>
+<td>机体系 y_b 在惯性系 x 轴投影</td>
+</tr>
+<tr>
+<td><code>e[5]</code></td>
+<td><code>R_22</code></td>
+<td>机体系 y_b 在惯性系 y 轴投影</td>
+</tr>
+<tr>
+<td><code>e[6]</code></td>
+<td><code>R_32</code></td>
+<td>机体系 y_b 在惯性系 z 轴投影</td>
+</tr>
+<tr>
+<td><code>e[7]</code></td>
+<td><code>0</code></td>
+<td>齐次列</td>
+</tr>
+<tr>
+<td><code>e[8]</code></td>
+<td><code>R_13</code></td>
+<td>机体系 z_b 在惯性系 x 轴投影</td>
+</tr>
+<tr>
+<td><code>e[9]</code></td>
+<td><code>R_23</code></td>
+<td>机体系 z_b 在惯性系 y 轴投影</td>
+</tr>
+<tr>
+<td><code>e[10]</code></td>
+<td><code>R_33</code></td>
+<td>机体系 z_b 在惯性系 z 轴投影</td>
+</tr>
+<tr>
+<td><code>e[11]</code></td>
+<td><code>0</code></td>
+<td>齐次列</td>
+</tr>
+</tbody>
+</table>
+<p>注：<code>e[12..15]</code> 为平移列（tx, ty, tz,
+1），与姿态无关。</p>
+<hr />
+<h2 id="3-四元数约定">3. 四元数约定</h2>
+<h3 id="31-分量顺序">3.1 分量顺序</h3>
+<p>代码中四元数表示为对象
+<code>{ x, y, z, w }</code>，对应数学记号：</p>
+<pre><code>q = (x, y, z, w) = q_x i + q_y j + q_z k + q_w</code></pre>
+<p>这与 THREE.Quaternion 的 <code>(x, y, z, w)</code> 分量顺序一致。</p>
+<h3 id="32-旋转方向">3.2 旋转方向</h3>
+<p><code>S.quat</code> 表示 <strong>机体 → 惯性</strong>
+的旋转。即对任意固连于机体的矢量
+<code>v^B</code>，其在惯性系中的坐标为：</p>
+<pre><code>v^I = q ⊗ v ⊗ q*</code></pre>
+<p>其中 <code>q*</code> 为共轭，<code>v</code> 视为纯四元数
+<code>(0, v_x, v_y, v_z)</code>。代码实现见
+<code>math.mjs:rotateVecByQuat</code>，与 THREE.Vector3.applyQuaternion
+公式一致。</p>
+<h3 id="33-逆与乘积">3.3 逆与乘积</h3>
+<ul>
+<li>单位四元数逆：<code>q^{-1} = q* = (-x, -y, -z, w)</code>，见
+<code>math.mjs:quatInvert</code>。</li>
+<li>乘积 <code>a ⊗ b</code> 按 THREE.Quaternion.multiply 计算，见
+<code>math.mjs:quatMultiply</code>。</li>
+</ul>
+<h3 id="34-更新方式">3.4 更新方式</h3>
+<p>姿态积分采用显式欧拉、<strong>右乘</strong>机体系角速度：</p>
+<pre><code>Δq = ½ · q ⊗ (0, ω_x, ω_y, ω_z) · dt
+q_{n+1} = normalize(q_n + Δq)</code></pre>
+<p>代码实现：<code>dynamics.mjs:physicsStep</code> 第 60–66
+行。右乘是因为 <code>ω</code>
+定义在机体系；若误用左乘，大姿态角下响应方向将错乱（理论依据见 THY-001
+第 7 节）。</p>
+<h3 id="35-与浏览器层-threequaternion-的对应">3.5 与浏览器层
+THREE.Quaternion 的对应</h3>
+<p><code>S.quat</code> 可直接赋值给
+<code>THREE.Quaternion(x, y, z, w)</code>
+用于渲染；<code>telemetry.flight.quat</code> 亦按此顺序输出给 HUD。</p>
+<hr />
+<h2 id="4-欧拉角提取专节锁定行为">4. 欧拉角提取专节（锁定行为）</h2>
+<h3 id="41-代码公式">4.1 代码公式</h3>
+<p><code>math.mjs:eulerFromQuat</code> 由单位四元数提取三个角度：</p>
+<pre><code>phi   = atan2(R_23, R_33)
+theta = -asin(clamp(R_13, -1, 1))
+psi   = atan2(R_12, R_11)</code></pre>
+<p>其中 <code>R_ij</code> 来自第 2.2
+节列主序元素：<code>R_13 = e[8]</code>、<code>R_23 = e[9]</code>、<code>R_33 = e[10]</code>、<code>R_12 = e[4]</code>、<code>R_11 = e[0]</code>。</p>
+<h3 id="42-theta-的符号约定">4.2 theta 的符号约定</h3>
+<p>上述公式对 theta 取了负号。<strong>这不是标准 3-2-1
+欧拉角</strong>。其工程后果为：</p>
+<ul>
+<li>绕 +y_b 轴正向旋转 <code>+a0</code>（机头下俯）时，代码读出的
+<code>theta = -a0</code>。</li>
+<li>标准航空约定下俯仰正方向应为 <code>+theta</code>；本代码中 HUD
+显示的俯仰角与实际几何角符号相反。</li>
+</ul>
+<p>示例（已固化在 <code>tests/math.test.mjs</code>）：</p>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> a0 <span class="op">=</span> <span class="fl">0.3</span><span class="op">;</span> <span class="co">// rad</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> q <span class="op">=</span> { <span class="dt">x</span><span class="op">:</span><span class="dv">0</span><span class="op">,</span> <span class="dt">y</span><span class="op">:</span><span class="fu">sin</span>(a0<span class="op">/</span><span class="dv">2</span>)<span class="op">,</span> <span class="dt">z</span><span class="op">:</span><span class="dv">0</span><span class="op">,</span> <span class="dt">w</span><span class="op">:</span><span class="fu">cos</span>(a0<span class="op">/</span><span class="dv">2</span>) }<span class="op">;</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> e <span class="op">=</span> <span class="fu">eulerFromQuat</span>(q)<span class="op">;</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co">// e.theta ≈ -0.3, e.phi ≈ 0, e.psi ≈ 0</span></span></code></pre></div>
+<h3 id="43-为何保持锁定">4.3 为何保持锁定</h3>
+<p>该符号约定已深入以下环节，变更会改变闭环行为：</p>
+<ol type="1">
+<li><strong>SAS 增益整定</strong>：<code>control.mjs:applySas</code>
+中俯仰角比例/积分反馈按 <code>theta = F.euler.y</code> 的负号整定；若将
+<code>eulerFromQuat</code> 改为标准符号，SAS
+对俯仰误差的响应极性将反转。</li>
+<li><strong>测试断言</strong>：<code>tests/math.test.mjs</code> 明确断言
+<code>e.theta ≈ -a0</code>。</li>
+<li><strong>HUD 显示</strong>：浏览器层直接显示
+<code>telemetry.flight.euler.y</code>，飞行员/操作者已将负号纳入解读习惯。</li>
+</ol>
+<p>因此，<code>theta = -asin(R_13)</code>
+属于<strong>行为保持红线</strong>。任何修改必须走 GOV-002
+变更流程，并同步重调 SAS、更新测试断言与 HUD 标注。</p>
+<h3 id="44-变更流程">4.4 变更流程</h3>
+<p>如需修正为标准 3-2-1 约定：</p>
+<ol type="1">
+<li>在 <code>math.mjs:eulerFromQuat</code> 中移除 theta 负号；</li>
+<li>在 <code>control.mjs:applySas</code>
+中同步反转俯仰角/积分反馈符号；</li>
+<li>更新 <code>tests/math.test.mjs</code> 断言；</li>
+<li>在浏览器 HUD 中增加过渡标注，提示操作者符号已切换；</li>
+<li>按 GOV-002 提交变更评审与回归测试。</li>
+</ol>
+<hr />
+<h2 id="5-高度与地面基准">5. 高度与地面基准</h2>
+<h3 id="51-高度约定">5.1 高度约定</h3>
+<ul>
+<li>NED 坐标系下 <code>z</code> 向下为正，故 <code>F.pos.z</code>
+增大表示飞行器离地更远。</li>
+<li>起飞/重置时 <code>F.pos.z = 0</code>，即初始位置在地面上方
+<code>P.groundZ</code> 处（见
+<code>state.mjs:resetFlightState</code>）。</li>
+</ul>
+<h3 id="52-地面约束">5.2 地面约束</h3>
+<p>地面平面位于惯性系
+<code>z = P.groundZ = 6.2 m</code>（MODEL-DEFAULT）。触地逻辑在
+<code>dynamics.mjs:physicsStep</code> 第 74–78 行：</p>
+<pre><code>if (F.pos.z &gt; P.groundZ &amp;&amp; F.vWorld.z &gt; 0) {
+    F.pos.z   = P.groundZ;
+    F.vWorld.z = 0;
+    F.vel = R^T(q) · F.vWorld;   // 将世界系速度逆变换回机体系
+}</code></pre>
+<p>约束语义：</p>
+<ul>
+<li>仅当飞行器“钻入地面”（<code>pos.z &gt; groundZ</code>）且仍在向下运动（<code>vWorld.z &gt; 0</code>）时触发；</li>
+<li>钳位高度并清零下降速度；</li>
+<li>通过 <code>rotateVecByQuat(vWorld, quatInvert(q))</code>
+更新机体系速度，数值残差约 <code>1e-6</code>，测试用对应容差断言。</li>
+</ul>
+<hr />
+<h2 id="6-渲染--物理比例声明">6. 渲染 / 物理比例声明</h2>
+<p>可视化模型与物理模型采用<strong>不同的长度比例</strong>，仅保证姿态与摆角语义一致：</p>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>物理值（力学计算使用）</th>
+<th>可视化值（browser 层）</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>前电机力臂</td>
+<td><code>a = 0.62 m</code></td>
+<td>前机臂/电机位置 <code>x = +1.78</code></td>
+<td><code>models/aircraft-model.json</code> /
+<code>aircraft-view.mjs:182</code></td>
+</tr>
+<tr>
+<td>尾电机力臂</td>
+<td><code>b = 0.62 m</code></td>
+<td>尾机臂/电机位置 <code>x = -1.82</code></td>
+<td><code>models/aircraft-model.json</code> /
+<code>aircraft-view.mjs:189</code></td>
+</tr>
+</tbody>
+</table>
+<p>此外，cgRing、推力箭头、力矩箭头、坐标轴等视觉元素仅用于示意力/力矩方向与姿态，不保证几何尺度与物理量一一对应。任何基于截图或视觉尺寸的物理估算必须以
+<code>models/aircraft-model.json</code> 为准。</p>
+<hr />
+<h2 id="7-符号总表">7. 符号总表</h2>
+<h3 id="71-希腊字母">7.1 希腊字母</h3>
+<table>
+<thead>
+<tr>
+<th>符号</th>
+<th>含义</th>
+<th>代码对应</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>α</code></td>
+<td>迎角</td>
+<td><code>sim.aero.alpha</code></td>
+</tr>
+<tr>
+<td><code>β</code></td>
+<td>侧滑角</td>
+<td><code>sim.aero.beta</code></td>
+</tr>
+<tr>
+<td><code>γ</code></td>
+<td>航迹倾斜角</td>
+<td>未单独输出；平飞时 <code>γ ≈ 0</code></td>
+</tr>
+<tr>
+<td><code>δ_f</code></td>
+<td>前电机摆角（偏航主控）</td>
+<td><code>S.df</code>（指令）/ <code>S.dfAct</code>（执行）</td>
+</tr>
+<tr>
+<td><code>δ_t</code></td>
+<td>尾电机摆角（俯仰主控）</td>
+<td><code>S.dt</code>（指令）/ <code>S.dtAct</code>（执行）</td>
+</tr>
+<tr>
+<td><code>Δω</code></td>
+<td>差速指令</td>
+<td><code>S.dw</code>（指令）/ <code>S.dwAct</code>（执行）</td>
+</tr>
+<tr>
+<td><code>θ</code></td>
+<td>俯仰角（代码值，与几何角符号相反）</td>
+<td><code>F.euler.y</code></td>
+</tr>
+<tr>
+<td><code>φ</code></td>
+<td>滚转角</td>
+<td><code>F.euler.x</code></td>
+</tr>
+<tr>
+<td><code>ψ</code></td>
+<td>偏航角</td>
+<td><code>F.euler.z</code></td>
+</tr>
+<tr>
+<td><code>ρ</code></td>
+<td>空气密度</td>
+<td><code>P.rho</code></td>
+</tr>
+<tr>
+<td><code>ω</code></td>
+<td>机体系角速度 <code>[p, q, r]^T</code></td>
+<td><code>S.omega</code></td>
+</tr>
+<tr>
+<td><code>ω_f</code>, <code>ω_t</code></td>
+<td>前/尾电机实际转速</td>
+<td><code>S.wf</code> / <code>S.wt</code></td>
+</tr>
+<tr>
+<td><code>q̄</code></td>
+<td>动压 <code>½ρV²</code></td>
+<td><code>sim.aero.qbar</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-下标约定">7.2 下标约定</h3>
+<table>
+<thead>
+<tr>
+<th>下标</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>f</code></td>
+<td>前电机（front）</td>
+</tr>
+<tr>
+<td><code>t</code></td>
+<td>尾电机（tail）</td>
+</tr>
+<tr>
+<td><code>b</code></td>
+<td>机体系（body）</td>
+</tr>
+<tr>
+<td><code>I</code> / <code>w</code></td>
+<td>惯性系 / 世界系（world，同 {I}）</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>电机摆座系</td>
+</tr>
+<tr>
+<td><code>0</code></td>
+<td>零迎角或配平基准</td>
+</tr>
+<tr>
+<td><code>Trim</code></td>
+<td>配平状态（如 <code>aTrim</code>, <code>vTrim</code>,
+<code>thrTrim</code>）</td>
+</tr>
+<tr>
+<td><code>Max</code></td>
+<td>上限（如 <code>wMax</code>, <code>dMax</code>,
+<code>dwMax</code>）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="73-上下标与算子">7.3 上下标与算子</h3>
+<table>
+<thead>
+<tr>
+<th>记号</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>q*</code> 或 <code>q^{-1}</code></td>
+<td>四元数共轭 / 逆</td>
+</tr>
+<tr>
+<td><code>⊗</code></td>
+<td>四元数乘积</td>
+</tr>
+<tr>
+<td><code>R^T</code></td>
+<td>方向余弦矩阵转置（逆旋转）</td>
+</tr>
+<tr>
+<td><code>[·]×</code></td>
+<td>叉乘矩阵（见 THY-001 第 2 节）</td>
+</tr>
+<tr>
+<td><code>^</code></td>
+<td>无量纲角速率 <code>p̂ = p·b̄/(2V)</code> 等</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-代码变量对照表">8. 代码变量对照表</h2>
+<table>
+<thead>
+<tr>
+<th>文档符号</th>
+<th>含义</th>
+<th><code>src/core</code> 变量</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>V</code></td>
+<td>空速</td>
+<td><code>sim.aero.V</code></td>
+<td><code>Math.hypot(F.vel.x, F.vel.y, F.vel.z)</code>，下限
+<code>P.vMin</code></td>
+</tr>
+<tr>
+<td><code>α</code></td>
+<td>迎角</td>
+<td><code>sim.aero.alpha</code></td>
+<td><code>atan2(F.vel.z, F.vel.x)</code></td>
+</tr>
+<tr>
+<td><code>β</code></td>
+<td>侧滑角</td>
+<td><code>sim.aero.beta</code></td>
+<td><code>asin(clamp(F.vel.y / V, -1, 1))</code></td>
+</tr>
+<tr>
+<td><code>q̄</code></td>
+<td>动压</td>
+<td><code>sim.aero.qbar</code></td>
+<td><code>0.5 * P.rho * V * V</code></td>
+</tr>
+<tr>
+<td><code>φ</code></td>
+<td>滚转角</td>
+<td><code>F.euler.x</code></td>
+<td>由 <code>eulerFromQuat(S.quat)</code> 提取</td>
+</tr>
+<tr>
+<td><code>θ</code></td>
+<td>俯仰角（代码约定）</td>
+<td><code>F.euler.y</code></td>
+<td>与实际几何角符号相反</td>
+</tr>
+<tr>
+<td><code>ψ</code></td>
+<td>偏航角</td>
+<td><code>F.euler.z</code></td>
+<td>由 <code>eulerFromQuat(S.quat)</code> 提取</td>
+</tr>
+<tr>
+<td><code>p</code></td>
+<td>滚转角速率</td>
+<td><code>S.omega.x</code></td>
+<td>机体系 x_b 分量</td>
+</tr>
+<tr>
+<td><code>q</code></td>
+<td>俯仰角速率</td>
+<td><code>S.omega.y</code></td>
+<td>机体系 y_b 分量</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>偏航角速率</td>
+<td><code>S.omega.z</code></td>
+<td>机体系 z_b 分量</td>
+</tr>
+<tr>
+<td><code>u, v, w</code></td>
+<td>机体系速度</td>
+<td><code>F.vel.x, F.vel.y, F.vel.z</code></td>
+<td>分别沿 x_b / y_b / z_b</td>
+</tr>
+<tr>
+<td><code>x, y, z</code></td>
+<td>惯性系位置</td>
+<td><code>F.pos.x, F.pos.y, F.pos.z</code></td>
+<td>NED，z 向下</td>
+</tr>
+<tr>
+<td><code>v^I</code></td>
+<td>惯性系速度</td>
+<td><code>F.vWorld</code></td>
+<td>由 <code>rotateVecByQuat(F.vel, S.quat)</code> 得到</td>
+</tr>
+<tr>
+<td><code>δ_t</code></td>
+<td>尾摆角指令</td>
+<td><code>S.dt</code></td>
+<td>控制输入</td>
+</tr>
+<tr>
+<td><code>δ_t^act</code></td>
+<td>尾摆角执行值</td>
+<td><code>S.dtAct</code></td>
+<td>SAS 修正后</td>
+</tr>
+<tr>
+<td><code>δ_f</code></td>
+<td>前摆角指令</td>
+<td><code>S.df</code></td>
+<td>控制输入</td>
+</tr>
+<tr>
+<td><code>δ_f^act</code></td>
+<td>前摆角执行值</td>
+<td><code>S.dfAct</code></td>
+<td>SAS 修正后</td>
+</tr>
+<tr>
+<td><code>Δω</code></td>
+<td>差速指令</td>
+<td><code>S.dw</code></td>
+<td>控制输入</td>
+</tr>
+<tr>
+<td><code>Δω^act</code></td>
+<td>差速执行值</td>
+<td><code>S.dwAct</code></td>
+<td>SAS 修正后</td>
+</tr>
+<tr>
+<td><code>T_f</code></td>
+<td>前电机推力</td>
+<td><code>sim.dyn.Tf</code></td>
+<td><code>P.kT * S.wf^2</code></td>
+</tr>
+<tr>
+<td><code>T_t</code></td>
+<td>尾电机推力</td>
+<td><code>sim.dyn.Tt</code></td>
+<td><code>P.kT * S.wt^2</code></td>
+</tr>
+<tr>
+<td><code>τ_f</code></td>
+<td>前电机反扭矩</td>
+<td>参与 <code>sim.dyn.Qf</code></td>
+<td><code>P.kQ * S.wf^2 + P.Jp * dWf</code></td>
+</tr>
+<tr>
+<td><code>τ_t</code></td>
+<td>尾电机反扭矩</td>
+<td>参与 <code>sim.dyn.Qt</code></td>
+<td><code>P.kQ * S.wt^2 + P.Jp * dWt</code></td>
+</tr>
+<tr>
+<td><code>F_x^T, F_y^T, F_z^T</code></td>
+<td>推力在机体系分量</td>
+<td><code>sim.dyn.Fx/Fy/Fz</code></td>
+<td>见 <code>propulsion.mjs</code></td>
+</tr>
+<tr>
+<td><code>M_x^T, M_y^T, M_z^T</code></td>
+<td>推力/反扭在机体系力矩</td>
+<td><code>sim.dyn.Mx/My/Mz</code></td>
+<td>见 <code>propulsion.mjs</code></td>
+</tr>
+<tr>
+<td><code>M_x^a, M_y^a, M_z^a</code></td>
+<td>气动力矩</td>
+<td><code>sim.aero.Mx/My/Mz</code></td>
+<td>见 <code>aerodynamics.mjs</code></td>
+</tr>
+<tr>
+<td><code>δ_thr</code></td>
+<td>总油门</td>
+<td><code>S.thr</code></td>
+<td>0..1，配平值 <code>P.thrTrim</code></td>
+</tr>
+<tr>
+<td><code>ω_f, ω_t</code></td>
+<td>实际转速</td>
+<td><code>S.wf, S.wt</code></td>
+<td>一阶滞后于目标转速</td>
+</tr>
+<tr>
+<td><code>∫θ</code></td>
+<td>俯仰积分器</td>
+<td><code>S.intTh</code></td>
+<td>限幅 <code>P.intThMax = 0.5 rad</code></td>
+</tr>
+<tr>
+<td><code>∫φ</code></td>
+<td>滚转积分器</td>
+<td><code>S.intPhi</code></td>
+<td>限幅 <code>P.intPhiMax = 0.3 rad</code></td>
+</tr>
+<tr>
+<td><code>q</code>（姿态四元数）</td>
+<td>机体→惯性旋转</td>
+<td><code>S.quat</code></td>
+<td>分量顺序 <code>(x, y, z, w)</code></td>
+</tr>
+<tr>
+<td><code>h_v</code></td>
+<td>双转子角动量</td>
+<td>局部变量 <code>hv</code> in <code>dynamics.mjs</code></td>
+<td>用于陀螺项</td>
+</tr>
+<tr>
+<td><code>dt_phys</code></td>
+<td>物理积分子步长</td>
+<td>局部 <code>h</code> in <code>stepPhysics</code></td>
+<td><code>h = dt / n</code>,
+<code>n = max(1, ceil(dt / P.maxStep))</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-与-mod-001-的分工说明">9. 与 MOD-001 的分工说明</h2>
+<ul>
+<li><strong>MOD-001</strong>：给出整机六自由度动力学、推力矢量映射、气动模型、SAS
+律的完整推导与物理阐释。</li>
+<li><strong>MOD-002</strong>：聚焦代码接口侧约定——坐标系精确定义、DCM/四元数/欧拉角实现细节、符号表、代码变量映射，以及
+theta 符号这一锁定行为的事实记录。</li>
+</ul>
+<p>两者结合，方可避免“文档公式与源码实现不一致”的歧义。</p>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

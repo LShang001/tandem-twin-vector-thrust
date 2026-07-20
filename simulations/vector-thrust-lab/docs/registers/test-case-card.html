@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>工况与试验卡模板 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="工况与试验卡模板">工况与试验卡（模板）</h1>
+<blockquote>
+<p>本卡用于记录「纵列双发矢量推力飞行器」C0
+仿真项目的每一次仿真试验或验证运行。每次试验前填写本卡，试验后记录结果与结论，并关联需求、假设与失效模式。</p>
+</blockquote>
+<hr />
+<h2 id="1-基本信息">1 基本信息</h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工况 ID</td>
+<td><code>CAS-YYYY-MM-DD-NNN</code>（示例：CAS-2026-07-20-001）</td>
+</tr>
+<tr>
+<td>日期</td>
+<td>YYYY-MM-DD</td>
+</tr>
+<tr>
+<td>试验目的</td>
+<td>简述本次试验要验证或观察的内容</td>
+</tr>
+<tr>
+<td>试验人员</td>
+<td>姓名 / 角色</td>
+</tr>
+<tr>
+<td>模型版本</td>
+<td>Git commit hash：<code>__________________</code></td>
+</tr>
+<tr>
+<td>参数版本</td>
+<td><code>models/aircraft-model.json</code> 版本 /
+状态：<code>__________________</code></td>
+</tr>
+<tr>
+<td>仿真代码版本</td>
+<td><code>simulations/vector-thrust-lab/src/core/</code> 对应
+commit：<code>__________________</code></td>
+</tr>
+<tr>
+<td>回归基线版本</td>
+<td><code>tests/fixtures/regression-baseline.json</code> 对应
+commit：<code>__________________</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-初始条件">2 初始条件</h2>
+<table>
+<thead>
+<tr>
+<th>状态量</th>
+<th>值</th>
+<th>单位</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>位置 <code>pos.x / y / z</code></td>
+<td>0 / 0 / 0</td>
+<td>m</td>
+<td>NED 系，z 向下</td>
+</tr>
+<tr>
+<td>机体系速度 <code>vel.x / y / z</code></td>
+<td><code>vTrim·cos(aTrim)</code> / 0 /
+<code>vTrim·sin(aTrim)</code></td>
+<td>m/s</td>
+<td>默认配平；自定义时填写</td>
+</tr>
+<tr>
+<td>姿态四元数 <code>quat</code></td>
+<td><code>[0, sin(aTrim/2), 0, cos(aTrim/2)]</code></td>
+<td>-</td>
+<td>默认配平平飞</td>
+</tr>
+<tr>
+<td>角速度 <code>omega.x / y / z</code></td>
+<td>0 / 0 / 0</td>
+<td>rad/s</td>
+<td></td>
+</tr>
+<tr>
+<td>油门 <code>thr</code></td>
+<td>0.5</td>
+<td>-</td>
+<td>默认配平油门</td>
+</tr>
+<tr>
+<td>前摆指令 <code>df</code></td>
+<td>0</td>
+<td>rad</td>
+<td></td>
+</tr>
+<tr>
+<td>尾摆指令 <code>dt</code></td>
+<td>0</td>
+<td>rad</td>
+<td></td>
+</tr>
+<tr>
+<td>差速指令 <code>dw</code></td>
+<td>0</td>
+<td>-</td>
+<td></td>
+</tr>
+<tr>
+<td>SAS 开关</td>
+<td>true / false</td>
+<td>-</td>
+<td></td>
+</tr>
+<tr>
+<td>气动开关</td>
+<td>true / false</td>
+<td>-</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-输入序列">3 输入序列</h2>
+<table>
+<thead>
+<tr>
+<th>时间段（s）</th>
+<th>帧索引范围</th>
+<th>通道</th>
+<th>值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.0 – 4.0</td>
+<td>0 – 239</td>
+<td><code>dt</code></td>
+<td><code>8 * π / 180</code></td>
+<td>俯仰阶跃示例</td>
+</tr>
+<tr>
+<td>4.0 – 8.0</td>
+<td>240 – 479</td>
+<td><code>dt</code></td>
+<td>0</td>
+<td>撤除输入</td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-通过判据">4 通过判据</h2>
+<table>
+<thead>
+<tr>
+<th>序号</th>
+<th>判据</th>
+<th>是否通过</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>仿真全程无 Console 报错</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>2</td>
+<td>姿态 / 速度 / 位置数值有界（不发散）</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>3</td>
+<td>特定时刻姿态角满足预期符号 / 范围</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>4</td>
+<td>与回归基线差异在容差内（若适用）</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>5</td>
+<td>与手工解析或参考解一致（若适用）</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-结果记录">5 结果记录</h2>
+<h3 id="51-关键遥测曲线--快照">5.1 关键遥测曲线 / 快照</h3>
+<table>
+<thead>
+<tr>
+<th>时间（s）</th>
+<th>V（m/s）</th>
+<th>α（rad）</th>
+<th>φ（rad）</th>
+<th>θ（rad）</th>
+<th>ψ（rad）</th>
+<th>p / q / r（rad/s）</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-观察到的异常或现象">5.2 观察到的异常或现象</h3>
+<ul>
+<li></li>
+<li></li>
+</ul>
+<h3 id="53-日志--截图--基线差异">5.3 日志 / 截图 / 基线差异</h3>
+<ul>
+<li>截图路径：<code>__________________</code></li>
+<li>Console 日志路径：<code>__________________</code></li>
+<li>与回归基线差异摘要：<code>__________________</code></li>
+</ul>
+<h2 id="6-结论">6 结论</h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>结论</td>
+<td>通过 / 不通过 / 部分通过</td>
+</tr>
+<tr>
+<td>主要发现</td>
+<td>简述试验验证或暴露的问题</td>
+</tr>
+<tr>
+<td>后续行动</td>
+<td>是否需要更新代码、测试、文档或基线</td>
+</tr>
+<tr>
+<td>签字</td>
+<td>试验人员 / 审查人员</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-关联追踪">7 关联追踪</h2>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>ID</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>关联需求</td>
+<td>REQ-_____</td>
+</tr>
+<tr>
+<td>关联假设 / 局限</td>
+<td>ASM-_____</td>
+</tr>
+<tr>
+<td>关联失效模式 / 危害</td>
+<td>HAZ-_____</td>
+</tr>
+<tr>
+<td>关联文档</td>
+<td>__________________</td>
+</tr>
+<tr>
+<td>关联回归场景</td>
+<td><code>trim</code> / <code>pitchStep</code> / <code>rollStep</code> /
+自定义</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="使用说明">使用说明</h2>
+<ol type="1">
+<li>每次新增试验前复制本模板，按顺序编号并填写完整。</li>
+<li>「模型版本」「参数版本」「回归基线版本」应至少记录 Git commit
+hash，确保可追溯。</li>
+<li>输入序列应尽量覆盖阶跃、脉冲、扫频、组合机动等典型模式；必要时引用
+<code>tests/scenarios.mjs</code> 中的已有场景。</li>
+<li>试验结论为「不通过」或「部分通过」时，必须填写后续行动并关联到具体需求、假设或危害。</li>
+</ol>
+<footer class="provenance">源文件 <code>docs/registers/templates/工况与试验卡.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

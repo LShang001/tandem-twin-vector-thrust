@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>参数数据手册 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="参数数据手册">参数数据手册</h1>
+<blockquote>
+<p>本手册为 <code>models/aircraft-model.json</code>
+的人工维护镜像，用于快速查阅、交叉引用与文档化。参数真值源始终以 JSON
+文件为准；若二者冲突，以 JSON 与 <code>tools/sync-params.py</code>
+生成的 <code>src/core/parameters.mjs</code> 为准。参数状态升级流程见 <a
+href="../governance/GOV-002.html">GOV-002</a>。</p>
+</blockquote>
+<hr />
+<h2 id="1-说明">1 说明</h2>
+<ul>
+<li><strong>版本</strong>：<code>0.1.0</code></li>
+<li><strong>模型 ID</strong>：<code>PAR-C0-001</code></li>
+<li><strong>总体状态</strong>：<code>MODEL-DEFAULT</code>（全部参数未经台架标定或飞行验证）</li>
+<li><strong>参数总数</strong>：46</li>
+<li><strong>生成文件</strong>：<code>simulations/vector-thrust-lab/src/core/parameters.mjs</code></li>
+<li><strong>同步命令</strong>：<code>py -3.12 tools/sync-params.py</code>（仓库根目录）</li>
+</ul>
+<p>所有角度的内部单位均为弧度（rad）；界面显示时可视需要转换为度。</p>
+<hr />
+<h2 id="2-推进">2 推进</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-001</td>
+<td><code>kT</code></td>
+<td>2.2e-5</td>
+<td>N·s²</td>
+<td>推力系数 <code>T = kT·ω²</code></td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.kT</code></td>
+<td>推进</td>
+</tr>
+<tr>
+<td>PAR-002</td>
+<td><code>kQ</code></td>
+<td>1.6e-6</td>
+<td>N·m·s²</td>
+<td>反扭系数 <code>τ = kQ·ω²</code></td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.kQ</code></td>
+<td>推进</td>
+</tr>
+<tr>
+<td>PAR-003</td>
+<td><code>Jp</code></td>
+<td>2.0e-4</td>
+<td>kg·m²</td>
+<td>桨 + 转子转动惯量</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Jp</code></td>
+<td>推进 / 动力学</td>
+</tr>
+<tr>
+<td>PAR-004</td>
+<td><code>wMax</code></td>
+<td>900</td>
+<td>rad/s</td>
+<td>最大转速</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.wMax</code></td>
+<td>推进</td>
+</tr>
+<tr>
+<td>PAR-005</td>
+<td><code>a</code></td>
+<td>0.62</td>
+<td>m</td>
+<td>前电机到质心距离</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.a</code></td>
+<td>推进</td>
+</tr>
+<tr>
+<td>PAR-006</td>
+<td><code>b</code></td>
+<td>0.62</td>
+<td>m</td>
+<td>尾电机到质心距离</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.b</code></td>
+<td>推进</td>
+</tr>
+<tr>
+<td>PAR-007</td>
+<td><code>tauM</code></td>
+<td>0.28</td>
+<td>s</td>
+<td>电机一阶滞后时间常数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.tauM</code></td>
+<td>推进</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-惯量--执行机构">3 惯量 / 执行机构</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-008</td>
+<td><code>Ix</code></td>
+<td>0.09</td>
+<td>kg·m²</td>
+<td>机体滚转惯量</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Ix</code></td>
+<td>动力学</td>
+</tr>
+<tr>
+<td>PAR-009</td>
+<td><code>Iy</code></td>
+<td>0.34</td>
+<td>kg·m²</td>
+<td>机体俯仰惯量</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Iy</code></td>
+<td>动力学</td>
+</tr>
+<tr>
+<td>PAR-010</td>
+<td><code>Iz</code></td>
+<td>0.36</td>
+<td>kg·m²</td>
+<td>机体偏航惯量</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Iz</code></td>
+<td>动力学</td>
+</tr>
+<tr>
+<td>PAR-011</td>
+<td><code>dMax</code></td>
+<td>0.4363323129985824</td>
+<td>rad</td>
+<td>摆角限幅（25°）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.dMax</code></td>
+<td>控制 / 推进</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-质量--气动">4 质量 / 气动</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-012</td>
+<td><code>m</code></td>
+<td>2.6</td>
+<td>kg</td>
+<td>质量</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.m</code></td>
+<td>动力学</td>
+</tr>
+<tr>
+<td>PAR-013</td>
+<td><code>g</code></td>
+<td>9.81</td>
+<td>m/s²</td>
+<td>重力加速度</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.g</code></td>
+<td>动力学</td>
+</tr>
+<tr>
+<td>PAR-014</td>
+<td><code>rho</code></td>
+<td>1.225</td>
+<td>kg/m³</td>
+<td>空气密度</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.rho</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-015</td>
+<td><code>Sw</code></td>
+<td>0.55</td>
+<td>m²</td>
+<td>机翼面积</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Sw</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-016</td>
+<td><code>cbar</code></td>
+<td>0.35</td>
+<td>m</td>
+<td>平均气动弦长</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.cbar</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-017</td>
+<td><code>bspan</code></td>
+<td>2.2</td>
+<td>m</td>
+<td>展长</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.bspan</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-018</td>
+<td><code>CLa</code></td>
+<td>4.6</td>
+<td>1/rad</td>
+<td>升力线斜率</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.CLa</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-019</td>
+<td><code>CD0</code></td>
+<td>0.035</td>
+<td>-</td>
+<td>零升阻力系数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.CD0</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-020</td>
+<td><code>CDk</code></td>
+<td>0.045</td>
+<td>-</td>
+<td>诱导阻力因子</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.CDk</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-021</td>
+<td><code>CYb</code></td>
+<td>-0.35</td>
+<td>1/rad</td>
+<td>侧力-侧滑导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.CYb</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-022</td>
+<td><code>Cm0</code></td>
+<td>0.011</td>
+<td>-</td>
+<td>机翼配平弯度矩系数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Cm0</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-023</td>
+<td><code>Cma</code></td>
+<td>-0.4</td>
+<td>1/rad</td>
+<td>俯仰静稳定导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Cma</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-024</td>
+<td><code>Cmq</code></td>
+<td>-9.0</td>
+<td>-</td>
+<td>俯仰阻尼导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Cmq</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-025</td>
+<td><code>Clb</code></td>
+<td>-0.09</td>
+<td>1/rad</td>
+<td>横滚静稳定导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Clb</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-026</td>
+<td><code>Clp</code></td>
+<td>-0.5</td>
+<td>-</td>
+<td>滚转阻尼导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Clp</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-027</td>
+<td><code>Cnb</code></td>
+<td>0.12</td>
+<td>1/rad</td>
+<td>航向静稳定导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Cnb</code></td>
+<td>气动</td>
+</tr>
+<tr>
+<td>PAR-028</td>
+<td><code>Cnr</code></td>
+<td>-0.2</td>
+<td>-</td>
+<td>偏航阻尼导数</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.Cnr</code></td>
+<td>气动</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-sas-增稳">5 SAS 增稳</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-029</td>
+<td><code>sasQ</code></td>
+<td>0.14</td>
+<td>s</td>
+<td>俯仰角速率反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasQ</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-030</td>
+<td><code>sasR</code></td>
+<td>0.14</td>
+<td>s</td>
+<td>偏航角速率反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasR</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-031</td>
+<td><code>sasP</code></td>
+<td>0.18</td>
+<td>s</td>
+<td>滚转角速率反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasP</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-032</td>
+<td><code>sasTh</code></td>
+<td>0.3</td>
+<td>-</td>
+<td>俯仰角比例反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasTh</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-033</td>
+<td><code>sasPhi</code></td>
+<td>0.4</td>
+<td>-</td>
+<td>滚转角比例反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasPhi</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-034</td>
+<td><code>sasI</code></td>
+<td>0.1</td>
+<td>-</td>
+<td>俯仰积分反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasI</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-035</td>
+<td><code>sasIPhi</code></td>
+<td>0.15</td>
+<td>-</td>
+<td>滚转积分反馈增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.sasIPhi</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-036</td>
+<td><code>intThMax</code></td>
+<td>0.5</td>
+<td>rad</td>
+<td>俯仰积分限幅</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.intThMax</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-037</td>
+<td><code>intPhiMax</code></td>
+<td>0.3</td>
+<td>rad</td>
+<td>滚转积分限幅</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.intPhiMax</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-038</td>
+<td><code>dwMax</code></td>
+<td>0.7</td>
+<td>-</td>
+<td>SAS 差速指令限幅</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.dwMax</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-039</td>
+<td><code>dwUiMax</code></td>
+<td>0.55</td>
+<td>-</td>
+<td>界面差速指令幅值</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.dwUiMax</code></td>
+<td>控制 / UI</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6-数值实现">6 数值实现</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-040</td>
+<td><code>maxStep</code></td>
+<td>0.004</td>
+<td>s</td>
+<td>积分子步长上限</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.maxStep</code></td>
+<td>动力学</td>
+</tr>
+<tr>
+<td>PAR-041</td>
+<td><code>frameCap</code></td>
+<td>0.05</td>
+<td>s</td>
+<td>帧间隔上限</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.frameCap</code></td>
+<td>动力学 / UI 主循环</td>
+</tr>
+<tr>
+<td>PAR-042</td>
+<td><code>vMin</code></td>
+<td>0.5</td>
+<td>m/s</td>
+<td>空速下限（防止低速奇异）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.vMin</code></td>
+<td>气动 / 动力学</td>
+</tr>
+<tr>
+<td>PAR-043</td>
+<td><code>groundZ</code></td>
+<td>6.2</td>
+<td>m</td>
+<td>地面约束平面（NED z）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.groundZ</code></td>
+<td>动力学</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-配平初始条件">7 配平初始条件</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-044</td>
+<td><code>aTrim</code></td>
+<td>0.027925268031909273</td>
+<td>rad</td>
+<td>初始配平迎角（1.6°）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.aTrim</code></td>
+<td>状态 / 动力学</td>
+</tr>
+<tr>
+<td>PAR-045</td>
+<td><code>vTrim</code></td>
+<td>24</td>
+<td>m/s</td>
+<td>配平速度</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.vTrim</code></td>
+<td>状态 / 动力学</td>
+</tr>
+<tr>
+<td>PAR-046</td>
+<td><code>thrTrim</code></td>
+<td>0.5</td>
+<td>-</td>
+<td>配平油门</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.thrTrim</code></td>
+<td>状态 / 推进</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-使用说明">8 使用说明</h2>
+<ol type="1">
+<li>如需修改参数，请编辑 <code>models/aircraft-model.json</code>
+后运行同步脚本；禁止直接修改 <code>src/core/parameters.mjs</code>。</li>
+<li>参数从 <code>MODEL-DEFAULT</code> 升级至 <code>ASSUMED</code> /
+<code>ESTIMATED</code> / <code>DATASHEET</code> /
+<code>BENCH-TESTED</code> / <code>FLIGHT-IDENTIFIED</code>
+时，须同步更新本手册的「来源」与「置信度」字段，并按 <a
+href="../governance/GOV-002.html">GOV-002</a>
+记录决策依据。</li>
+<li>本手册未包含参数之间的耦合关系；设计研究时应结合 <a
+href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
+与 <a
+href="assumptions-log.html"><code>假设与局限日志</code></a>
+使用。</li>
+</ol>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

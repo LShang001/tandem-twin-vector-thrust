@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>SAFE-001 初步安全计划 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="safe-001-初步安全计划">SAFE-001 初步安全计划</h1>
+<blockquote>
+<p>本篇为「纵列双发矢量推力飞行器」C0
+概念仿真项目制定初步安全计划。范围限定在软件仿真本身：无飞行硬件、无人员直接暴露、无适航适用性；同时登记未来若向硬件化演进时应前瞻处理的安全议题。</p>
+</blockquote>
+<hr />
+<h2 id="1-范围声明">1 范围声明</h2>
+<ul>
+<li><strong>项目形态</strong>：纯软件 Web 仿真与 Node
+计算层，运行在开发者本地浏览器与测试环境中。</li>
+<li><strong>物理风险</strong>：当前不存在飞行平台、动力系统、螺旋桨、高压电池或任何可运动机械部件，因此无直接人身伤害或财产损毁风险。</li>
+<li><strong>适航与法规</strong>：本仿真不构成任何航空器、无人机系统或地面设备的设计数据，不适用
+CCAR-91/92、FAR/CS 等适航或运行规章。</li>
+<li><strong>安全计划目标</strong>：防止仿真结果被误用于超出其成熟度的工程决策；防止参数、模型与基线腐化导致的误导性输出。</li>
+</ul>
+<hr />
+<h2 id="2-软件层面风险与缓解">2 软件层面风险与缓解</h2>
+<table>
+<thead>
+<tr>
+<th>风险编号</th>
+<th>风险描述</th>
+<th>影响</th>
+<th>当前缓解措施</th>
+<th>残余风险</th>
+<th>关联文档</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SAFE-001</td>
+<td><strong>误导性结果被外推为真实性能或安全承诺</strong></td>
+<td>可能导致未经验证的硬件 / 试飞决策</td>
+<td>成熟度声明见根 README、VER-001 与 CFG-000；所有参数标注
+<code>MODEL-DEFAULT</code> 与 <code>low</code>
+置信度；模型可信度分级明确禁止用于性能预测和硬件决策</td>
+<td>中：仍取决于使用人员是否阅读并遵循成熟度声明</td>
+<td><a href="VER-001.html">VER-001</a>、<a
+href="../design/CFG-000.html">CFG-000</a>、根
+README</td>
+</tr>
+<tr>
+<td>SAFE-002</td>
+<td><strong>参数误用</strong>（绕过单一事实源、手工修改
+<code>parameters.mjs</code>、使用未同步 JSON）</td>
+<td>仿真输入与文档不一致，测试 / 演示结果不可复现</td>
+<td><code>models/aircraft-model.json</code>
+为唯一事实源；<code>tools/sync-params.py</code> 生成
+<code>src/core/parameters.mjs</code>；<code>--check</code>
+漂移检测；<code>parameters.mjs</code> 头部明确标注「请勿手工编辑」</td>
+<td>低： drift 检测可在 CI 中强制执行</td>
+<td><a href="../governance/GOV-002.html">GOV-002</a>、<a
+href="../registers/parameter-handbook.html">参数数据手册</a></td>
+</tr>
+<tr>
+<td>SAFE-003</td>
+<td><strong>回归基线腐化</strong>（未记录原因即重新生成或手工篡改
+baseline）</td>
+<td>有意行为变更被掩盖，后续测试失去「锁定行为」意义</td>
+<td>重采规则写入 VER-001 §4.1；提交信息须以
+<code>[regen-baseline]</code> 开头并说明原因；基线文件纳入版本控制</td>
+<td>低：依赖代码审查执行</td>
+<td><a href="VER-001.html">VER-001</a>、<a
+href="../registers/verification-coverage.html">验证覆盖矩阵</a></td>
+</tr>
+<tr>
+<td>SAFE-004</td>
+<td><strong>理想化假设被忽略</strong>（点质量、瞬时执行机构、线性气动等）</td>
+<td>仿真结论被用于超出假设范围的工况</td>
+<td>所有已知假设与局限登记在 <a
+href="../registers/assumptions-log.html"><code>假设与局限日志</code></a>；模型边界在
+README、MOD-001、VER-001 中重复声明</td>
+<td>中：需使用者主动查阅</td>
+<td><a href="../registers/assumptions-log.html">假设与局限日志</a>、<a
+href="../modeling.html">MOD-001</a></td>
+</tr>
+<tr>
+<td>SAFE-005</td>
+<td><strong>失控保护缺失</strong>（当前无电机失效、饱和、姿态奇异保护逻辑）</td>
+<td>概念研究中未能识别关键失效模式</td>
+<td>失效模式登记在 <a
+href="../registers/hazard-log.html"><code>危害与失效模式日志</code></a>；CTL-002
+专门分析可控性与失效模式</td>
+<td>中：当前为已知缺口，尚未实现保护</td>
+<td><a
+href="../control/CTL-002.html">CTL-002</a>、<a
+href="../registers/hazard-log.html">危害与失效模式日志</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-未来硬件化前瞻议题">3 未来硬件化前瞻议题</h2>
+<p>若本项目从概念仿真向台架测试、样机或飞行平台演进，以下议题须在专用安全计划中展开分析。当前仅作登记，不做展开：</p>
+<ol type="1">
+<li><strong>螺旋桨破片与旋转部件防护</strong>：纵列双桨高速旋转，需评估桨叶失效动能与保护罩
+/ 安全距离。</li>
+<li><strong>锂电热失控与高压安全</strong>：飞行线若采用高功率电池，须制定过充
+/ 过放 / 短路 / 热蔓延预案。</li>
+<li><strong>失控保护与失效安全模式</strong>：单电机失效、通信中断、传感器失效时的安全降落
+/ 迫降策略。</li>
+<li><strong>围栏 /
+系留与地面试车安全</strong>：系留点强度、地面试车区域隔离、紧急停机开关。</li>
+<li><strong>噪声与电磁兼容</strong>：大功率电机与电调对周边设备的电磁干扰及人员听力防护。</li>
+<li><strong>飞行包线与天气限制</strong>：基于真实参数重新建立包线，禁止在大风、结冰或低能见度下试飞。</li>
+</ol>
+<hr />
+<h2 id="4-与-ctl-002-及危害日志的接口">4 与 CTL-002
+及危害日志的接口</h2>
+<ul>
+<li><a href="../control/CTL-002.html">CTL-002</a>
+负责从控制分配角度分析单电机失效、执行机构饱和、姿态奇异等失效模式的可控性后果。</li>
+<li><a
+href="../registers/hazard-log.html"><code>危害与失效模式日志</code></a>
+负责维护仿真语境下的失效模式清单、严重度、检测手段与缓解方向。</li>
+<li>本安全计划仅覆盖软件仿真层面的风险；未来硬件安全计划应引用并扩展
+CTL-002 与危害日志中的失效模式，补充 FMEA / FMECA 与定量风险评估。</li>
+</ul>
+<hr />
+<h2 id="5-责任与审查">5 责任与审查</h2>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>模型维护者</td>
+<td>确保参数单一事实源、重采基线规则、假设日志及时更新</td>
+</tr>
+<tr>
+<td>代码贡献者</td>
+<td>在 PR 中说明是否触及行为保持红线；必要时重采回归基线</td>
+</tr>
+<tr>
+<td>项目负责人</td>
+<td>审批参数状态升级（<code>MODEL-DEFAULT</code> →
+<code>BENCH-TESTED</code> /
+<code>FLIGHT-IDENTIFIED</code>）及模型成熟度变更</td>
+</tr>
+<tr>
+<td>安全审查（未来）</td>
+<td>在硬件化阶段引入独立安全审查，覆盖上述前瞻议题</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/SAFE-001-初步安全计划.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

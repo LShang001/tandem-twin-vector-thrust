@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CFG-000 概念构型基线 C0 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="cfg-000-概念构型基线-c0">CFG-000 概念构型基线 C0</h1>
+<blockquote>
+<p>本篇给出「纵列双发矢量推力飞行器」C0
+概念构型的整机定义：布局、质量特性、推进方式、控制机理、气动参考量与已知边界。参数全部来自
+<code>models/aircraft-model.json</code>，当前来源标记为
+<code>MODEL-DEFAULT</code>。</p>
+</blockquote>
+<hr />
+<h2 id="1-构型概述与布局">1 构型概述与布局</h2>
+<p>本概念机采用<strong>前后纵列双电机 + 正交单轴矢量摆座 +
+反向旋转螺旋桨</strong>构型。机体系约定见 <a
+href="../modeling/MOD-002.html">MOD-002</a>：x
+轴指向前，y 轴指向右，z 轴指向下方（NED 体系），原点在质心。</p>
+<pre class="mermaid"><code>flowchart LR
+    accTitle 纵列双发布局与控制轴示意图
+    accDescr 展示前电机位于机头 +a 处、绕 z_b 摆动主控偏航；尾电机位于机尾 -b 处、绕 y_b 摆动主控俯仰；滚转由双发差速反扭差实现。
+
+    subgraph 侧视图 x-z 平面
+        FM[前电机&lt;br/&gt;拉力式 CW&lt;br/&gt;绕 z_b 摆动]
+        CG((质心))
+        RM[尾电机&lt;br/&gt;推进式 CCW&lt;br/&gt;绕 y_b 摆动]
+        FM -- &quot;a = 0.62 m&quot; --&gt; CG
+        CG -- &quot;b = 0.62 m&quot; --&gt; RM
+    end</code></pre>
+<p>关键几何事实：</p>
+<ul>
+<li>前电机力臂 <code>a = 0.62 m</code>（质心到前电机中心），尾电机力臂
+<code>b = 0.62 m</code>；</li>
+<li>零摆角时两电机推力线均通过质心，静态推力不产生俯仰/偏航力矩；</li>
+<li>渲染几何中电机位置约为
+<code>±1.78 m</code>，<strong>仅用于可视化</strong>，不进入动力学计算（参见
+<a href="../modeling.html">MOD-001</a> 与
+<a
+href="../modeling/MOD-002.html">MOD-002</a>）。</li>
+</ul>
+<hr />
+<h2 id="2-总体参数表">2 总体参数表</h2>
+<p>下表参数全部摘录自 <code>models/aircraft-model.json</code>，来源均为
+<code>MODEL-DEFAULT</code>。</p>
+<h3 id="21-质量与惯量">2.1 质量与惯量</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>数值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>m</td>
+<td>2.6</td>
+<td>kg</td>
+<td>整机质量</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Ix</td>
+<td>0.09</td>
+<td>kg·m²</td>
+<td>滚转惯量</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Iy</td>
+<td>0.34</td>
+<td>kg·m²</td>
+<td>俯仰惯量</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Iz</td>
+<td>0.36</td>
+<td>kg·m²</td>
+<td>偏航惯量</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-几何与执行机构">2.2 几何与执行机构</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>数值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a</td>
+<td>0.62</td>
+<td>m</td>
+<td>前电机到质心距离</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>b</td>
+<td>0.62</td>
+<td>m</td>
+<td>尾电机到质心距离</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>dMax</td>
+<td>0.4363323129985824</td>
+<td>rad</td>
+<td>单轴摆角上限（25°）</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-推进系统">2.3 推进系统</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>数值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>kT</td>
+<td>2.2e-5</td>
+<td>N·s²</td>
+<td>推力系数，T = kT·ω²</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>kQ</td>
+<td>1.6e-6</td>
+<td>N·m·s²</td>
+<td>反扭系数，τ = kQ·ω²</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Jp</td>
+<td>2.0e-4</td>
+<td>kg·m²</td>
+<td>桨 + 转子转动惯量</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>wMax</td>
+<td>900</td>
+<td>rad/s</td>
+<td>最大转速</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>tauM</td>
+<td>0.28</td>
+<td>s</td>
+<td>电机一阶滞后时间常数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-气动参考量与导数">2.4 气动参考量与导数</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>数值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sw</td>
+<td>0.55</td>
+<td>m²</td>
+<td>机翼参考面积</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>cbar</td>
+<td>0.35</td>
+<td>m</td>
+<td>平均气动弦长</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>bspan</td>
+<td>2.2</td>
+<td>m</td>
+<td>翼展</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>CLa</td>
+<td>4.6</td>
+<td>1/rad</td>
+<td>升力线斜率</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>CD0</td>
+<td>0.035</td>
+<td>-</td>
+<td>零升阻力系数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>CDk</td>
+<td>0.045</td>
+<td>-</td>
+<td>诱导阻力因子</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>CYb</td>
+<td>-0.35</td>
+<td>1/rad</td>
+<td>侧力-侧滑导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Cm0</td>
+<td>0.011</td>
+<td>-</td>
+<td>机翼配平弯度矩系数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Cma</td>
+<td>-0.4</td>
+<td>1/rad</td>
+<td>俯仰静稳定导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Cmq</td>
+<td>-9.0</td>
+<td>-</td>
+<td>俯仰阻尼导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Clb</td>
+<td>-0.09</td>
+<td>1/rad</td>
+<td>横滚静稳定导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Clp</td>
+<td>-0.5</td>
+<td>-</td>
+<td>滚转阻尼导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Cnb</td>
+<td>0.12</td>
+<td>1/rad</td>
+<td>航向静稳定导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>Cnr</td>
+<td>-0.2</td>
+<td>-</td>
+<td>偏航阻尼导数</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-环境数值与配平">2.5 环境、数值与配平</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>数值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>g</td>
+<td>9.81</td>
+<td>m/s²</td>
+<td>重力加速度</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>rho</td>
+<td>1.225</td>
+<td>kg/m³</td>
+<td>空气密度（海平面）</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>maxStep</td>
+<td>0.004</td>
+<td>s</td>
+<td>积分子步长上限</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>frameCap</td>
+<td>0.05</td>
+<td>s</td>
+<td>帧间隔上限</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>vMin</td>
+<td>0.5</td>
+<td>m/s</td>
+<td>空速下限（防低速奇异）</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>groundZ</td>
+<td>6.2</td>
+<td>m</td>
+<td>地面约束平面（NED z）</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>aTrim</td>
+<td>0.027925268031909273</td>
+<td>rad</td>
+<td>初始配平迎角（约 1.6°）</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>vTrim</td>
+<td>24</td>
+<td>m/s</td>
+<td>配平速度</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>thrTrim</td>
+<td>0.5</td>
+<td>-</td>
+<td>配平油门</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-推进构型">3 推进构型</h2>
+<h3 id="31-前后电机角色">3.1 前后电机角色</h3>
+<table>
+<thead>
+<tr>
+<th>电机</th>
+<th>安装位置</th>
+<th>旋转方向</th>
+<th>摆轴</th>
+<th>主控通道</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>前电机</td>
+<td>机头 +a</td>
+<td>正转 CW</td>
+<td>绕 z_b 单轴</td>
+<td>偏航</td>
+<td>拉力式</td>
+</tr>
+<tr>
+<td>尾电机</td>
+<td>机尾 -b</td>
+<td>反转 CCW</td>
+<td>绕 y_b 单轴</td>
+<td>俯仰</td>
+<td>推进式</td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-旋向选择理由">3.2 旋向选择理由</h3>
+<p>前电机 CW、尾电机
+CCW，使零差速等转速时两机反扭矩大小相等、方向相反，机体净滚转力矩近似为零。该设计把滚转通道从俯仰/偏航中<strong>解耦</strong>出来，滚转仅由双发差速产生的反扭差驱动，与常规共轴直升机扭矩差原理一致。</p>
+<h3 id="33-摆轴选择逻辑">3.3 摆轴选择逻辑</h3>
+<ul>
+<li><strong>前电机绕 z_b 摆动</strong>：推力在机体 x-y
+平面内偏转，产生侧向力 Fy 与偏航力矩 Mz =
+a·Tf·sinδf，与常规方向舵效应同向；</li>
+<li><strong>尾电机绕 y_b 摆动</strong>：推力在机体 x-z
+平面内偏转，产生垂向力 Fz 与俯仰力矩 My = -b·Tt·sinδt；</li>
+<li>两摆轴正交，使俯仰与偏航主控力矩分别由独立执行机构产生，通道间仅存在二阶耦合项（见
+§4）。</li>
+</ul>
+<hr />
+<h2 id="4-控制机理">4 控制机理</h2>
+<h3 id="41-推力与反扭矩模型">4.1 推力与反扭矩模型</h3>
+<pre><code>Tf = kT · ωf²          Tt = kT · ωt²
+Qf = kQ · ωf² + Jp · ω̇f      Qt = kQ · ωt² + Jp · ω̇t</code></pre>
+<p>差速开方分配（保持 ωf² + ωt² ≈ 2·ω0²，总推力在一阶近似下不变）：</p>
+<pre><code>ω0 = thr · wMax
+ωf = ω0 · sqrt(max(0, 1 + Δω))
+ωt = ω0 · sqrt(max(0, 1 - Δω))</code></pre>
+<h3 id="42-六维力--力矩映射机体系">4.2 六维力 / 力矩映射（机体系）</h3>
+<pre><code>Fx = Tf·cosδf + Tt·cosδt
+Fy = Tf·sinδf
+Fz = -Tt·sinδt
+
+Mx = -Qf·cosδf + Qt·cosδt
+My = -b·Tt·sinδt - Qf·sinδf
+Mz =  a·Tf·sinδf - Qt·sinδt</code></pre>
+<h3 id="43-三通道映射表">4.3 三通道映射表</h3>
+<table>
+<thead>
+<tr>
+<th>通道</th>
+<th>主控输入</th>
+<th>主控力矩项</th>
+<th>控制效率符号</th>
+<th>零位特性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>俯仰</td>
+<td>尾摆角 δt</td>
+<td>My ≈ -b·Tt·sinδt</td>
+<td>∂My/∂δt &lt; 0</td>
+<td>δt=0 时 My=0</td>
+</tr>
+<tr>
+<td>偏航</td>
+<td>前摆角 δf</td>
+<td>Mz ≈ a·Tf·sinδf</td>
+<td>∂Mz/∂δf &gt; 0</td>
+<td>δf=0 时 Mz=0</td>
+</tr>
+<tr>
+<td>滚转</td>
+<td>差速 Δω</td>
+<td>Mx ≈ Qt - Qf（小摆角）</td>
+<td>∂Mx/∂Δω &lt; 0</td>
+<td>Δω=0 时 Mx≈0</td>
+</tr>
+</tbody>
+</table>
+<p>残余耦合：</p>
+<ul>
+<li>偏航摆动 δf 会通过 <code>-Qf·sinδf</code> 向俯仰通道注入扰动；</li>
+<li>俯仰摆动 δt 会通过 <code>-Qt·sinδt</code> 向偏航通道注入扰动；</li>
+<li>上述耦合在小摆角下为二阶小量，可在后续控制分配中以前馈方式补偿（参见
+<a
+href="../control/CTL-002.html">CTL-002</a>）。</li>
+</ul>
+<hr />
+<h2 id="5-气动布局">5 气动布局</h2>
+<p>本阶段采用<strong>线性小迎角气动导数模型</strong>，气动力 /
+力矩由风轴系转换至机体系。详细公式见 <a
+href="../modeling.html">MOD-001</a>。</p>
+<pre><code>V   = max(sqrt(u² + v² + w²), vMin)
+α   = atan2(w, u)
+β   = asin(v / V)
+q̄   = 0.5 · rho · V²
+CL  = CLa · α
+L   = q̄ · Sw · CL
+D   = q̄ · Sw · (CD0 + CDk · CL²)
+Y   = q̄ · Sw · CYb · β</code></pre>
+<p>气动矩：</p>
+<pre><code>pH = p·bspan / (2V) ,  qH = q·cbar / (2V) ,  rH = r·bspan / (2V)
+
+Mx,a = q̄·Sw·bspan·(Clb·β + Clp·pH)
+My,a = q̄·Sw·cbar·(Cm0 + Cma·α + Cmq·qH)
+Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
+<p>当前气动模型仅覆盖小迎角、无侧滑或小刚体角速率范围，未包含失速、非定常效应、螺旋桨滑流及风扰。</p>
+<hr />
+<h2 id="6-已知限制与边界">6 已知限制与边界</h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>限制说明</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>执行机构</td>
+<td>理想执行机构：摆角瞬时到位、无速率限制、无舵机动态</td>
+<td>高频姿态指令下的相位滞后未建模</td>
+</tr>
+<tr>
+<td>转速保护</td>
+<td>差速大开度时单机目标转速可超过 wMax，当前无饱和保护</td>
+<td>大 Δω 下推进模型可能超出物理边界</td>
+</tr>
+<tr>
+<td>滚转效能</td>
+<td>低油门时总推力小，反扭差幅值低，滚转控制能力退化</td>
+<td>低速 / 低油门机动受限</td>
+</tr>
+<tr>
+<td>渲染几何</td>
+<td>三维模型电机位置约 ±1.78 m，与动力学力臂 a=b=0.62 m 不一致</td>
+<td>仅视觉效果，不影响力/力矩计算</td>
+</tr>
+<tr>
+<td>大气模型</td>
+<td>无风、无湍流、无阵风扰动；密度恒定 rho=1.225 kg/m³</td>
+<td>仅适用于平静大气概念研究</td>
+</tr>
+<tr>
+<td>气动模型</td>
+<td>线性小迎角导数；无失速、滑流、非定常气动</td>
+<td>大迎角 / 大侧滑角结果不可信</td>
+</tr>
+<tr>
+<td>硬件范围</td>
+<td>仅软件仿真，无传感器、飞控、结构或台架</td>
+<td>结果不构成飞行性能承诺</td>
+</tr>
+<tr>
+<td>姿态积分</td>
+<td>显式欧拉 + 四元数右乘，子步上限 4 ms</td>
+<td>仅满足概念演示需求，非高保真积分器</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-基线状态声明">7 基线状态声明</h2>
+<ul>
+<li><strong>基线代号</strong>：C0（概念构型基线）。</li>
+<li><strong>参数状态</strong>：全部参数当前为
+<code>MODEL-DEFAULT</code>，未经台架标定或飞行辨识，置信度标记为
+<code>low</code>。</li>
+<li><strong>模型成熟度</strong>：概念级 /
+演示级，用于控制律结构研究、通道机理演示与教学，不用于飞行性能预测。</li>
+<li><strong>变更控制</strong>：任何涉及质量、惯量、力臂、气动导数、推进参数或摆轴定义的变更，须通过
+<a href="../governance/GOV-002.html">GOV-002</a>
+配置管理流程，更新 <code>models/aircraft-model.json</code>，并重新运行
+<code>tools/sync-params.py</code> 与回归测试。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

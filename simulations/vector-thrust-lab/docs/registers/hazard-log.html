@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>危害与失效模式日志 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="危害与失效模式日志">危害与失效模式日志</h1>
+<blockquote>
+<p>本日志登记「纵列双发矢量推力飞行器」C0
+仿真项目已识别的失效模式与软件层面风险。严重度基于「纯软件仿真语境」评定：仅评估对仿真结论可信度、后续设计决策及概念研究的影响，不直接对应真实飞行事故等级。</p>
+</blockquote>
+<hr />
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>失效模式</th>
+<th>原因</th>
+<th>影响（仿真语境）</th>
+<th>严重度</th>
+<th>当前检测手段</th>
+<th>缓解 / 改进方向</th>
+<th>关联</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HAZ-001</td>
+<td><strong>单前电机失效</strong></td>
+<td>前电机停转或失去拉力</td>
+<td>失偏航主控；前电机反扭消失导致反扭失衡，产生持续滚转力矩</td>
+<td>高</td>
+<td>当前模型无电机失效逻辑，可通过手工构造 <code>wf = 0</code>
+场景观察</td>
+<td>增加电机失效保护逻辑；重新设计偏航 / 滚转应急分配；参考 CTL-002
+可控性分析</td>
+<td><a
+href="../control/CTL-002.html">CTL-002</a>、ASM-003</td>
+</tr>
+<tr>
+<td>HAZ-002</td>
+<td><strong>单尾电机失效</strong></td>
+<td>尾电机停转或失去拉力</td>
+<td>失俯仰主控；尾电机反扭消失导致俯仰与滚转耦合扰动</td>
+<td>高</td>
+<td>当前模型无电机失效逻辑，可通过手工构造 <code>wt = 0</code>
+场景观察</td>
+<td>增加电机失效保护；评估尾电机失效后剩余俯仰控制力矩是否足够稳定进近</td>
+<td><a
+href="../control/CTL-002.html">CTL-002</a></td>
+</tr>
+<tr>
+<td>HAZ-003</td>
+<td><strong>差速大开度单机超 <code>wMax</code></strong></td>
+<td>大滚转指令下 <code>sqrt(1±Δω)</code> 使一侧目标转速超过
+<code>wMax</code></td>
+<td>模型仍输出推力，掩盖执行机构物理不可达；低油门侧可能先饱和，滚转效能骤降</td>
+<td>中</td>
+<td>代码审查与参数检查；当前无运行时告警</td>
+<td>在 <code>stepPropulsion</code> 中增加转速限幅与差速重分配；在 UI
+中提示差速可用范围</td>
+<td><a href="parameter-handbook.html">参数数据手册</a>
+PAR-004/038/039、ASM-014</td>
+</tr>
+<tr>
+<td>HAZ-004</td>
+<td><strong>积分器持续饱和</strong></td>
+<td>持续姿态误差使 <code>intTh</code> / <code>intPhi</code>
+达到上限</td>
+<td>SAS 退出线性区，撤销误差后存在大超调与恢复延迟（windup）</td>
+<td>中</td>
+<td><code>control.test.mjs</code> 验证积分限幅至 <code>intThMax</code> /
+<code>intPhiMax</code></td>
+<td>引入抗积分饱和（anti-windup）逻辑；结合执行机构限幅动态调整积分</td>
+<td><a
+href="../control/CTL-001.html">CTL-001</a>、<code>tests/control.test.mjs</code></td>
+</tr>
+<tr>
+<td>HAZ-005</td>
+<td><strong>姿态 ±90° 奇异</strong></td>
+<td>俯仰角接近 ±90° 时 3-2-1 欧拉角万向锁</td>
+<td>欧拉角不连续，<code>eulerFromQuat</code> 输出突变；SAS
+可能基于错误姿态角动作</td>
+<td>中</td>
+<td><code>math.test.mjs</code> 锁定当前 <code>theta = -asin(R13)</code>
+约定；大机动场景需人工观察</td>
+<td>限制自动演示机动范围；或在控制律中改用四元数直接反馈</td>
+<td><a
+href="../theory/01-attitude-kinematics.html">THY-001</a>、ASM-010</td>
+</tr>
+<tr>
+<td>HAZ-006</td>
+<td><strong>误导性结果被外推为真实性能或安全承诺</strong></td>
+<td>使用者忽略 <code>MODEL-DEFAULT</code> 与模型边界</td>
+<td>导致未经验证的硬件、试飞或投资决策</td>
+<td>高</td>
+<td>成熟度声明见根 README、VER-001、CFG-000；参数手册标注置信度</td>
+<td>强化文档与 UI
+成熟度提示；使用前须签署/确认免责声明；禁止用于硬件决策直至参数升级</td>
+<td><a href="../verification/SAFE-001.html">SAFE-001</a>、<a
+href="../verification/VER-001.html">VER-001</a></td>
+</tr>
+<tr>
+<td>HAZ-007</td>
+<td><strong>参数误用</strong></td>
+<td>绕过 <code>aircraft-model.json</code> 直接修改
+<code>parameters.mjs</code>；或使用未经验证的 JSON</td>
+<td>仿真输入与受控文档不一致，结果不可复现</td>
+<td>中</td>
+<td><code>sync-params.py --check</code> 漂移检测；生成文件头部警示</td>
+<td>在 CI 中强制 <code>--check</code>；禁止提交手工修改的
+<code>parameters.mjs</code></td>
+<td><a href="../governance/GOV-002.html">GOV-002</a>、<a
+href="parameter-handbook.html">参数数据手册</a></td>
+</tr>
+<tr>
+<td>HAZ-008</td>
+<td><strong>回归基线腐化</strong></td>
+<td>未记录原因即重新生成或手工篡改 baseline</td>
+<td>行为变更被掩盖，回归测试失去意义</td>
+<td>中</td>
+<td>版本控制 diff；VER-001 规定重采须以 <code>[regen-baseline]</code>
+提交并说明原因</td>
+<td>强制代码审查；自动化检查 PR 是否含 baseline 变更说明</td>
+<td><a
+href="../verification/VER-001.html">VER-001</a>、<a
+href="../verification/SAFE-001.html">SAFE-001</a></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="使用说明">使用说明</h2>
+<ul>
+<li>严重度仅用于概念仿真阶段的风险排序，不代表真实飞行安全等级。</li>
+<li>新增失效模式须经控制分配分析（<a
+href="../control/CTL-002.html">CTL-002</a>）与安全计划（<a
+href="../verification/SAFE-001.html">SAFE-001</a>）评审后按顺序编号加入。</li>
+<li>每条危害的缓解措施应转化为代码变更、测试用例或文档更新；闭环后在本日志中记录完成日期与证据。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/registers/危害与失效模式日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

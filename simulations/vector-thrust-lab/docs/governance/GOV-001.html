@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>GOV-001 项目范围与术语 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="gov-001-项目范围与术语">GOV-001 项目范围与术语</h1>
+<blockquote>
+<p>本篇界定「纵列双发矢量推力飞行器」整机工程项目的治理边界：说明项目定位、目标、包含与不包含的工作范围，罗列当前资产与文档体系，并给出术语与缩略语统一表。本篇不展开技术推导，具体物理与数学内容见
+THY/MOD/CTL 系列文档。</p>
+</blockquote>
+<hr />
+<h2 id="1-项目定位与目标">1. 项目定位与目标</h2>
+<p>本项目是一个<strong>概念级六自由度（6-DOF）飞行器仿真平台</strong>，研究对象为纵列双发布局、矢量推力驱动的固定翼/类多旋翼混合构型：</p>
+<ul>
+<li><strong>前电机</strong>：位于机头，拉力式，正转（CW），绕机体系 z
+轴单轴摆动，承担偏航主控；</li>
+<li><strong>尾电机</strong>：位于机尾，推进式，反转（CCW），绕机体系 y
+轴单轴摆动，承担俯仰主控；</li>
+<li><strong>滚转</strong>：由前后电机转速差速（反扭矩差）控制。</li>
+</ul>
+<p>零摆角时前后推力线均通过质心，物理力臂
+<code>a = b = 0.62 m</code>（注意：渲染几何中电机位置约
+<code>±1.78 m</code>，仅用于可视化，不进入动力学计算）。</p>
+<p>项目目标：</p>
+<ol type="1">
+<li>建立可复现、可追踪的 6-DOF 数学模型与控制律研究平台；</li>
+<li>提供基于 Web
+的交互式仿真演示载体，用于教学、方案迭代与概念验证；</li>
+<li>实践「参数单一事实源 + 生成代码 +
+自动化回归测试」的轻量级研发治理流程。</li>
+</ol>
+<p>项目成熟度声明：<strong>概念级仿真</strong>。所有参数当前均为
+<code>MODEL-DEFAULT</code>，未经过台架标定或飞行辨识；模型仅用于控制律结构研究与可视化演示，不具备高保真飞行预测能力。</p>
+<h2 id="2-范围">2. 范围</h2>
+<h3 id="21-包含范围in-scope">2.1 包含范围（In-Scope）</h3>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仿真实现</td>
+<td>Web 六自由度仿真
+<code>simulations/vector-thrust-lab</code>（Three.js 无构建原生
+ESM）</td>
+</tr>
+<tr>
+<td>理论推导</td>
+<td>旋转与姿态数学、推进系统物理、刚体动力学与控制分配（见
+THY-001~003）</td>
+</tr>
+<tr>
+<td>数学建模</td>
+<td>6-DOF 仿真模型规范、坐标系与符号约定、配平与稳定性分析（见
+MOD-001~003）</td>
+</tr>
+<tr>
+<td>参数治理</td>
+<td><code>models/aircraft-model.json</code> 单一事实源、参数同步工具
+<code>tools/sync-params.py</code></td>
+</tr>
+<tr>
+<td>验证证据</td>
+<td>Node.js 内置测试 runner、40 项断言、3 条回归基线（配平直飞 /
+俯仰阶跃 / 滚转阶跃）</td>
+</tr>
+<tr>
+<td>文档体系</td>
+<td>本清单所列全部治理/设计/需求/理论/建模/控制/推进/验证/决策/参考资料文档</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-不包含范围out-of-scope">2.2 不包含范围（Out-of-Scope）</h3>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>飞行硬件</td>
+<td>不设计、不制造、不采购机体结构、电机、电调、传感器或飞控计算机</td>
+</tr>
+<tr>
+<td>适航与认证</td>
+<td>不涉及民航/军品适航审定、安全关键软件开发流程（如 DO-178C）</td>
+</tr>
+<tr>
+<td>实物制造</td>
+<td>不含机加、复材、总装、台架或外场试验；若未来扩展，应另立项并更新范围</td>
+</tr>
+<tr>
+<td>高保真气动</td>
+<td>当前采用线性导数模型，不含 CFD、风洞或涡格法气动数据库</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-子系统与资产清单">3. 子系统与资产清单</h2>
+<table>
+<thead>
+<tr>
+<th>资产路径</th>
+<th>类型</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>models/aircraft-model.json</code></td>
+<td>参数源</td>
+<td>46 个物理/控制/数值参数，含来源与置信度字段</td>
+</tr>
+<tr>
+<td><code>models/aircraft-model.schema.json</code></td>
+<td>JSON Schema</td>
+<td>参数文件结构校验规则</td>
+</tr>
+<tr>
+<td><code>tools/sync-params.py</code></td>
+<td>Python 工具</td>
+<td>由 JSON 生成 <code>parameters.mjs</code>，支持 <code>--check</code>
+漂移检测</td>
+</tr>
+<tr>
+<td><code>simulations/vector-thrust-lab/</code></td>
+<td>Web 仿真</td>
+<td>Three.js r170，无构建原生 ESM，core 纯计算层 + browser 适配层</td>
+</tr>
+<tr>
+<td><code>simulations/vector-thrust-lab/src/core/</code></td>
+<td>ES 模块</td>
+<td>math/state/control/propulsion/aerodynamics/dynamics/telemetry/parameters</td>
+</tr>
+<tr>
+<td><code>simulations/vector-thrust-lab/src/browser/</code></td>
+<td>ES 模块</td>
+<td>scene/aircraft-view/effects/hud/controls-ui/demo/theme</td>
+</tr>
+<tr>
+<td><code>simulations/vector-thrust-lab/tests/</code></td>
+<td>测试</td>
+<td>7 个 <code>.test.mjs</code> 文件 + <code>fixtures/</code>
+回归基线</td>
+</tr>
+<tr>
+<td><code>docs/</code></td>
+<td>文档</td>
+<td>Markdown 源文件，按 <code>00~09</code> 域组织</td>
+</tr>
+<tr>
+<td><code>vendor/three-r170/</code></td>
+<td>第三方库</td>
+<td>Three.js r170 模块与 import map 适配</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4-文档体系地图">4. 文档体系地图</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>标题</th>
+<th>所属域</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GOV-001</td>
+<td>项目范围与术语</td>
+<td>00-项目治理</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>GOV-002</td>
+<td>信息与配置管理</td>
+<td>00-项目治理</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>CFG-000</td>
+<td>概念构型基线 C0</td>
+<td>01-方案设计</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>CONOPS-001</td>
+<td>运行概念</td>
+<td>01-方案设计</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>REQ-001</td>
+<td>需求基线</td>
+<td>02-需求与验证</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>THY-001</td>
+<td>旋转与姿态数学基础</td>
+<td>03-理论推导</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>THY-002</td>
+<td>推进系统物理建模</td>
+<td>03-理论推导</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>THY-003</td>
+<td>刚体动力学控制分配与模态分析</td>
+<td>03-理论推导</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>MOD-001</td>
+<td>六自由度仿真模型规范</td>
+<td>04-数学建模</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>MOD-002</td>
+<td>坐标系与符号约定</td>
+<td>04-数学建模</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>MOD-003</td>
+<td>配平与稳定性分析</td>
+<td>04-数学建模</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>CTL-001</td>
+<td>控制架构与 SAS</td>
+<td>05-控制与分配</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>CTL-002</td>
+<td>可控性与失效模式</td>
+<td>05-控制与分配</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>PROP-001</td>
+<td>推进与摆座模型</td>
+<td>06-推进与执行机构</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>VER-001</td>
+<td>验证确认与模型可信度</td>
+<td>07-验证与确认</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>SAFE-001</td>
+<td>初步安全计划</td>
+<td>07-验证与确认</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>DEC-001</td>
+<td>参数单一事实源</td>
+<td>09-决策记录</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>模板-决策记录</td>
+<td>决策记录模板</td>
+<td>09-决策记录</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td>参考资料注册表</td>
+<td>参考资料注册表</td>
+<td>08-参考资料</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/参数数据手册</code></td>
+<td>参数数据手册</td>
+<td>registers</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/假设与局限日志</code></td>
+<td>假设与局限日志</td>
+<td>registers</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/模型-代码追溯矩阵</code></td>
+<td>模型-代码追溯矩阵</td>
+<td>registers</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/需求注册表</code></td>
+<td>需求注册表</td>
+<td>registers</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/验证覆盖矩阵</code></td>
+<td>验证覆盖矩阵</td>
+<td>registers</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/危害与失效模式日志</code></td>
+<td>危害与失效模式日志</td>
+<td>registers</td>
+<td>已发布</td>
+</tr>
+<tr>
+<td><code>registers/templates/工况与试验卡</code></td>
+<td>工况与试验卡模板</td>
+<td>registers/templates</td>
+<td>已发布</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-术语与缩略语表">5. 术语与缩略语表</h2>
+<table>
+<thead>
+<tr>
+<th>术语/缩略语</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6-DOF</td>
+<td>六自由度（Three-Degrees-of-Freedom Translation +
+Three-Degrees-of-Freedom Rotation）</td>
+</tr>
+<tr>
+<td>NED</td>
+<td>北东地坐标系（North-East-Down），惯性/世界参考系，x 指北、y 指东、z
+指地</td>
+</tr>
+<tr>
+<td>机体系 {b}</td>
+<td>机体固连坐标系，原点在质心 CG，具体轴向约定见 MOD-002</td>
+</tr>
+<tr>
+<td>CG / 质心</td>
+<td>Center of Gravity，飞行器质量中心，机体系原点</td>
+</tr>
+<tr>
+<td>DCM</td>
+<td>Direction Cosine Matrix，方向余弦矩阵，即 SO(3) 旋转矩阵 R</td>
+</tr>
+<tr>
+<td>四元数</td>
+<td>单位四元数 q = (q0, q1, q2,
+q3)，用于无奇点姿态积分；本项目采用右乘机体系角速度形式</td>
+</tr>
+<tr>
+<td>欧拉角</td>
+<td>航空 3-2-1 顺序（偏航 ψ / 俯仰 θ / 滚转
+φ），仅用于显示与控制反馈提取</td>
+</tr>
+<tr>
+<td>α（迎角）</td>
+<td>Angle of Attack，机体系 x 轴与空速矢量投影夹角</td>
+</tr>
+<tr>
+<td>β（侧滑角）</td>
+<td>Sideslip Angle，空速矢量相对机体对称面的侧向偏角</td>
+</tr>
+<tr>
+<td>q̄（动压）</td>
+<td>动压 <code>q̄ = 0.5·ρ·V²</code>，气动升/阻/力矩计算的基础</td>
+</tr>
+<tr>
+<td>矢量推力</td>
+<td>通过电机整体摆动改变推力方向，产生直接力与控制力矩</td>
+</tr>
+<tr>
+<td>δf / δt</td>
+<td>前/后电机摆角（前 = front，尾 = tail），机体系 y/z 轴旋转</td>
+</tr>
+<tr>
+<td>Δω / 差速</td>
+<td>前后电机转速相对配平的归一化差值，滚转控制通道</td>
+</tr>
+<tr>
+<td>配平（Trim）</td>
+<td>使机体在稳态飞行中合外力与合外力矩为零的状态/参数组合</td>
+</tr>
+<tr>
+<td>反扭矩</td>
+<td>螺旋桨旋转产生的绕机体纵轴反作用力矩，双发反向旋转以部分抵消</td>
+</tr>
+<tr>
+<td>拉力式</td>
+<td>螺旋桨位于机翼/机头前方，拉力驱动气流过翼面</td>
+</tr>
+<tr>
+<td>推进式</td>
+<td>螺旋桨位于机身后方，推动机体前进</td>
+</tr>
+<tr>
+<td>SAS</td>
+<td>Stability Augmentation
+System，增稳系统；本项目为速率+姿态比例+积分反馈</td>
+</tr>
+<tr>
+<td>MODEL-DEFAULT</td>
+<td>参数状态 6 级之一：模型默认值，无标定/验证证据</td>
+</tr>
+<tr>
+<td>ASSUMED</td>
+<td>参数状态 6 级之一：基于工程假设的估计值</td>
+</tr>
+<tr>
+<td>ESTIMATED</td>
+<td>参数状态 6 级之一：基于分析/类比计算得到的估计值</td>
+</tr>
+<tr>
+<td>DATASHEET</td>
+<td>参数状态 6 级之一：来自公开或厂商数据手册</td>
+</tr>
+<tr>
+<td>BENCH-TESTED</td>
+<td>参数状态 6 级之一：经过地面台架测试标定</td>
+</tr>
+<tr>
+<td>FLIGHT-IDENTIFIED</td>
+<td>参数状态 6 级之一：经过飞行试验辨识</td>
+</tr>
+<tr>
+<td>回归基线</td>
+<td><code>tests/fixtures/regression-baseline.json</code>
+记录的标准工况时序输出，容差 1e-9</td>
+</tr>
+<tr>
+<td>行为保持红线</td>
+<td>仿真实现中不可随意改动的数值/算法契约，修改需重采基线并记录原因</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-001-项目范围与术语.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

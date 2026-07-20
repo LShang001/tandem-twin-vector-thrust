@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>模型-代码追溯矩阵 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="模型-代码追溯矩阵">模型-代码追溯矩阵</h1>
+<blockquote>
+<p>本矩阵将 C0 模型的理论要素 / 方程映射到
+<code>simulations/vector-thrust-lab/src/core/</code>
+中的具体实现位置、单元测试及回归基线场景。用于回答「模型中的某条方程在代码哪里被实现、被什么测试覆盖」。</p>
+</blockquote>
+<hr />
+<table>
+<thead>
+<tr>
+<th>模型要素 / 方程</th>
+<th>代码位置 <code>src/core/&lt;file&gt;.mjs</code></th>
+<th>单元测试</th>
+<th>回归基线场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>四元数姿态积分</strong>
+<code>q̇ = ½·q⊗ω_body</code>（右乘）</td>
+<td><code>math.mjs:quatMultiply</code>（30–37）、<code>math.mjs:quatNormalize</code>（39–43）；<code>dynamics.mjs:physicsStep</code>（60–66）</td>
+<td><code>math.test.mjs</code>：乘法单位元、逆元、归一化；<code>dynamics.test.mjs</code>：长时间积分保持归一化、子步调度等价</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>欧拉角提取</strong> 3-2-1 约定
+<code>theta = -asin(R13)</code></td>
+<td><code>math.mjs:eulerFromQuat</code>（48–64）</td>
+<td><code>math.test.mjs</code>：纯俯仰四元数 →
+<code>theta = -a0</code>；重力变换方向一致性</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>重力变换到机体系</strong>
+<code>g_body = R⁻¹·g_ned</code></td>
+<td><code>math.mjs:rotateVecByQuat</code>（12–24）、<code>math.mjs:quatInvert</code>（27）；<code>dynamics.mjs:physicsStep</code>（35）</td>
+<td><code>math.test.mjs</code>：旋转再逆旋转还原；重力变换方向</td>
+<td><code>trim</code></td>
+</tr>
+<tr>
+<td><strong>SAS 三通道反馈</strong> 角速率阻尼 + 姿态比例 +
+积分，输出限幅</td>
+<td><code>control.mjs:applySas</code>（9–22）</td>
+<td><code>control.test.mjs</code>：直通、俯仰 / 偏航 /
+滚转极性、执行限幅、积分限幅</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>差速分配</strong>
+<code>ω_f = ω_0·sqrt(1+Δω)</code>，<code>ω_t = ω_0·sqrt(1-Δω)</code>，平方和近似不变</td>
+<td><code>propulsion.mjs:stepPropulsion</code>（11–14）</td>
+<td><code>propulsion.test.mjs</code>：平方转速和不变</td>
+<td><code>trim</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>电机一阶滞后</strong>
+<code>ω_{k+1} += (ω_t − ω_k)·min(dt/τ_M, 1)</code></td>
+<td><code>propulsion.mjs:stepPropulsion</code>（15–16）</td>
+<td><code>propulsion.test.mjs</code>：一阶滞后指数趋近</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>推力 / 反扭模型</strong>
+<code>T = kT·ω²</code>、<code>τ = kQ·ω²</code>、<code>τ_rot = J_p·ω̇</code></td>
+<td><code>propulsion.mjs:stepPropulsion</code>（21–23）</td>
+<td><code>propulsion.test.mjs</code>：稳态 T/Q 关系</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>推力矢量六维映射</strong>
+<code>Fx/Fy/Fz</code>、<code>Mx/My/Mz</code> 由摆角与转速生成</td>
+<td><code>propulsion.mjs:stepPropulsion</code>（27–33）</td>
+<td><code>propulsion.test.mjs</code>：前摆符号、尾摆符号、零差速
+<code>Mx≈0</code></td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>线性气动 5 项</strong>
+开关、迎角升力、阻尼、侧滑、空速下限</td>
+<td><code>aerodynamics.mjs:computeAero</code>（9–33）</td>
+<td><code>aerodynamics.test.mjs</code>：开关归零、正迎角升力、俯仰阻尼、侧滑、低速奇异</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>子步调度</strong>
+<code>n = ceil(dt/maxStep)</code>、<code>h = dt/n</code></td>
+<td><code>dynamics.mjs:stepPhysics</code>（12–16）</td>
+<td><code>dynamics.test.mjs</code>：子步调度与手动子步等价</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>地面约束</strong>
+<code>pos.z &gt; groundZ &amp;&amp; vWorld.z &gt; 0</code> 时钳位</td>
+<td><code>dynamics.mjs:physicsStep</code>（74–78）</td>
+<td><code>dynamics.test.mjs</code>：触地清零下降速度、上升不被拦截</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code>（标称未触发）</td>
+</tr>
+<tr>
+<td><strong>配平初始化</strong>
+<code>a0 = aTrim</code>、<code>v0 = vTrim</code>、<code>θ0 = a0</code>、平飞航迹</td>
+<td><code>state.mjs:createSimulationState</code>（6–38）、<code>state.mjs:resetFlightState</code>（41–50）</td>
+<td><code>dynamics.test.mjs</code>：配平直飞 10 s 有界</td>
+<td><code>trim</code></td>
+</tr>
+<tr>
+<td><strong>遥测快照</strong> 供 HUD / 浏览器层读取的只读视图</td>
+<td><code>telemetry.mjs:getTelemetry</code>（5–24）</td>
+<td>间接通过浏览器 E2E 检查（VER-001 §2.4）</td>
+<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
+</tr>
+<tr>
+<td><strong>参数单一事实源</strong> 46 参数冻结对象</td>
+<td><code>parameters.mjs:P</code>（6–65）</td>
+<td><code>parameters.test.mjs</code>：46
+键完整、正值、符号、限幅、冻结、弧度换算</td>
+<td>所有场景的输入真值源</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="使用说明">使用说明</h2>
+<ul>
+<li>表格中的行号对应
+<code>simulations/vector-thrust-lab/src/core/</code> 下各文件在 C0
+基线中的位置；若代码重构导致行号变化，应同步更新本矩阵。</li>
+<li>「回归基线场景」为 <code>tests/scenarios.mjs</code> 中定义的
+<code>trim</code>、<code>pitchStep</code>、<code>rollStep</code>；各场景通过
+<code>tests/regression.test.mjs</code> 与
+<code>tests/fixtures/regression-baseline.json</code> 比对。</li>
+<li>若新增模型要素，须在本矩阵中新增一行，并补充对应单元测试或演示检查证据。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/registers/模型-代码追溯矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

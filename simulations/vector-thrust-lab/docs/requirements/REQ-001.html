@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>REQ-001 需求基线 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="req-001-需求基线">REQ-001 需求基线</h1>
+<blockquote>
+<p>本篇建立「纵列双发矢量推力飞行器」仿真项目的需求基线：编号规则、属性定义、功能需求、性能约束、接口需求、验证方法映射与当前满足状态。需求状态以当前代码与测试为证据，不成熟度见
+<a href="../design/CFG-000.html">CFG-000</a> 与 <a
+href="../verification/VER-001.html">VER-001</a>。</p>
+</blockquote>
+<hr />
+<h2 id="1-需求工程方法">1 需求工程方法</h2>
+<h3 id="11-编号规则">1.1 编号规则</h3>
+<p>需求编号格式为：</p>
+<pre><code>REQ-&lt;域&gt;-&lt;三位序号&gt;</code></pre>
+<table>
+<thead>
+<tr>
+<th>域</th>
+<th>代码</th>
+<th>覆盖内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仿真动力学</td>
+<td>SIM</td>
+<td>六自由度积分、子步调度、地面约束</td>
+</tr>
+<tr>
+<td>控制</td>
+<td>CTL</td>
+<td>通道映射、SAS 增稳、执行机构</td>
+</tr>
+<tr>
+<td>推进</td>
+<td>PRP</td>
+<td>推力、反扭、差速分配、电机滞后</td>
+</tr>
+<tr>
+<td>气动</td>
+<td>AER</td>
+<td>线性气动模型、空速下限</td>
+</tr>
+<tr>
+<td>参数治理</td>
+<td>PAR</td>
+<td>单一事实源、漂移检测</td>
+</tr>
+<tr>
+<td>测试验证</td>
+<td>TST</td>
+<td>单元测试、回归基线</td>
+</tr>
+<tr>
+<td>用户界面</td>
+<td>UI</td>
+<td>滑块、HUD、演示、开关</td>
+</tr>
+<tr>
+<td>性能约束</td>
+<td>PERF</td>
+<td>实时性、无构建、零依赖</td>
+</tr>
+<tr>
+<td>接口</td>
+<td>IFC</td>
+<td>JSON schema、生成契约、DOM 契约</td>
+</tr>
+</tbody>
+</table>
+<h3 id="12-需求属性">1.2 需求属性</h3>
+<p>每条需求至少包含以下属性：</p>
+<ul>
+<li><strong>标题</strong>：需求一句话描述；</li>
+<li><strong>来源</strong>：该需求来自何处（如
+CFG-000、CONOPS-001、内部设计决策）；</li>
+<li><strong>优先级</strong>：高 / 中 / 低；</li>
+<li><strong>验证方法</strong>：检查（I）、分析（A）、测试（T）、演示（D）或其组合，映射到
+<a
+href="../verification/VER-001.html">VER-001</a>；</li>
+<li><strong>状态</strong>：已满足 / 部分满足 / 未满足；</li>
+<li><strong>证据</strong>：指向源码模块、测试文件或仿真页面元素。</li>
+</ul>
+<h3 id="13-验证方法映射">1.3 验证方法映射</h3>
+<table>
+<thead>
+<tr>
+<th>代码</th>
+<th>方法</th>
+<th>含义</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>I</td>
+<td>检查 Inspection</td>
+<td>人工审查文档 / 代码 / 配置，确认实现存在且符合约定</td>
+<td>参数治理、接口契约、代码结构</td>
+</tr>
+<tr>
+<td>A</td>
+<td>分析 Analysis</td>
+<td>通过数学推导、静态检查或代码走读确认属性</td>
+<td>守恒量、稳定性、数值边界</td>
+</tr>
+<tr>
+<td>T</td>
+<td>测试 Test</td>
+<td>通过 <code>node --test</code> 自动化测试执行并断言</td>
+<td>单元功能、回归基线</td>
+</tr>
+<tr>
+<td>D</td>
+<td>演示 Demonstration</td>
+<td>通过 Web 仿真页面操作并观察结果</td>
+<td>UI 输入、演示序列、HUD</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-功能需求">2 功能需求</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>标题</th>
+<th>来源</th>
+<th>优先级</th>
+<th>验证方法</th>
+<th>状态</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>REQ-SIM-001</td>
+<td>六自由度刚体动力学积分（平动、转动、四元数姿态）</td>
+<td><a
+href="../modeling.html">MOD-001</a></td>
+<td>高</td>
+<td>T, A</td>
+<td>已满足</td>
+<td><code>src/core/dynamics.mjs</code>；<code>tests/dynamics.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-SIM-002</td>
+<td>积分子步调度，单步长不超过 <code>maxStep = 0.004 s</code></td>
+<td><a
+href="../modeling.html">MOD-001</a></td>
+<td>高</td>
+<td>T, A</td>
+<td>已满足</td>
+<td><code>dynamics.mjs:stepPhysics</code>；<code>tests/dynamics.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-SIM-003</td>
+<td>地面约束平面（NED z = <code>groundZ = 6.2 m</code>）防止穿透</td>
+<td><a
+href="../modeling.html">MOD-001</a></td>
+<td>中</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>dynamics.mjs:physicsStep</code>；<code>tests/dynamics.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-CTL-001</td>
+<td>三通道直接映射：前摆 → 偏航、尾摆 → 俯仰、差速 → 滚转</td>
+<td><a href="../design/CFG-000.html">CFG-000</a></td>
+<td>高</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>src/core/propulsion.mjs</code>；<code>tests/propulsion.test.mjs</code>；页面方程面板</td>
+</tr>
+<tr>
+<td>REQ-CTL-002</td>
+<td>SAS 三通道角速率 / 姿态角 / 积分反馈，输出限幅</td>
+<td><a href="../control/CTL-001.html">CTL-001</a></td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>src/core/control.mjs</code>；<code>tests/control.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-CTL-003</td>
+<td>执行机构速率 / 带宽限幅模型</td>
+<td><a href="../control/CTL-001.html">CTL-001</a></td>
+<td>低</td>
+<td>A</td>
+<td>未满足</td>
+<td>当前为理想执行机构，见 <a
+href="../design/CFG-000.html">CFG-000</a> §6</td>
+</tr>
+<tr>
+<td>REQ-PRP-001</td>
+<td>差速开方分配：<code>ωf = ω0·sqrt(1+Δω)</code>，<code>ωt = ω0·sqrt(1-Δω)</code></td>
+<td><a href="../design/CFG-000.html">CFG-000</a></td>
+<td>高</td>
+<td>T, A</td>
+<td>已满足</td>
+<td><code>propulsion.mjs:stepPropulsion</code>；<code>tests/propulsion.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-PRP-002</td>
+<td>电机一阶滞后模型，时间常数 <code>tauM = 0.28 s</code></td>
+<td><a
+href="../propulsion/PROP-001.html">PROP-001</a></td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>propulsion.mjs:stepPropulsion</code>；<code>tests/propulsion.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-PRP-003</td>
+<td>零差速等转速时反扭矩相互抵消（<code>Mx ≈ 0</code>）</td>
+<td><a href="../design/CFG-000.html">CFG-000</a></td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>propulsion.mjs</code>；<code>tests/propulsion.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-AER-001</td>
+<td>线性小迎角气动模型，空速下限 <code>vMin = 0.5 m/s</code></td>
+<td><a href="../design/CFG-000.html">CFG-000</a></td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>src/core/aerodynamics.mjs</code>；<code>tests/aerodynamics.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-PAR-001</td>
+<td>参数单一事实源
+<code>models/aircraft-model.json</code>，支持漂移检测</td>
+<td><a href="../governance/GOV-002.html">GOV-002</a></td>
+<td>高</td>
+<td>I, T</td>
+<td>已满足</td>
+<td><code>tools/sync-params.py --check</code>；<code>src/core/parameters.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-TST-001</td>
+<td>单元测试覆盖核心模块（math / state / control / propulsion /
+aerodynamics / dynamics）</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>tests/*.test.mjs</code>，约 40 项断言</td>
+</tr>
+<tr>
+<td>REQ-TST-002</td>
+<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃）</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>tests/regression.test.mjs</code>；<code>tests/fixtures/regression-baseline.json</code></td>
+</tr>
+<tr>
+<td>REQ-UI-001</td>
+<td>四通道操纵输入滑块（油门、俯仰摆角、偏航摆角、差速）</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>高</td>
+<td>D, I</td>
+<td>已满足</td>
+<td><code>index.html</code>；<code>src/browser/controls-ui.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-UI-002</td>
+<td>HUD 遥测面板显示推力、反扭、空速、迎角、姿态、气动力矩</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>中</td>
+<td>D, I</td>
+<td>已满足</td>
+<td><code>index.html</code>；<code>src/browser/hud.mjs</code>；<code>src/core/telemetry.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-UI-003</td>
+<td>演示序列：俯仰 / 偏航 / 滚转 / 综合，自动启动综合演示</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>中</td>
+<td>D</td>
+<td>已满足</td>
+<td><code>src/browser/demo.mjs</code>；<code>src/main.js</code></td>
+</tr>
+<tr>
+<td>REQ-UI-004</td>
+<td>复位、SAS 开关、气动力开关功能</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>中</td>
+<td>D, T</td>
+<td>已满足</td>
+<td><code>src/browser/controls-ui.mjs</code>；<code>tests/control.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-UI-005</td>
+<td>文档中心（模型方程模态框）与主题切换</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>低</td>
+<td>D, I</td>
+<td>已满足</td>
+<td><code>index.html</code>；<code>src/browser/theme.mjs</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-性能与约束需求">3 性能与约束需求</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>标题</th>
+<th>来源</th>
+<th>优先级</th>
+<th>验证方法</th>
+<th>状态</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>REQ-PERF-001</td>
+<td>单帧积分时间受 <code>frameCap = 0.05 s</code>
+限制，避免卡顿时积分爆炸</td>
+<td><a href="../design/CFG-000.html">CFG-000</a></td>
+<td>高</td>
+<td>I, D</td>
+<td>已满足</td>
+<td><code>src/main.js</code>；<code>dynamics.mjs:stepPhysics</code></td>
+</tr>
+<tr>
+<td>REQ-PERF-002</td>
+<td>无构建静态部署：纯 HTML/ESM/原生 JS，无需打包工具</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>高</td>
+<td>I</td>
+<td>已满足</td>
+<td>项目目录结构；<code>index.html</code> 直接由 HTTP 服务</td>
+</tr>
+<tr>
+<td>REQ-PERF-003</td>
+<td>零依赖测试：仅使用 Node.js 内置 <code>node:test</code> 与断言</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>高</td>
+<td>I, T</td>
+<td>已满足</td>
+<td><code>tests/*.test.mjs</code>；运行命令
+<code>node --test tests/</code></td>
+</tr>
+<tr>
+<td>REQ-PERF-004</td>
+<td>提供 Windows 批处理 <code>启动.bat</code>，开箱本地运行</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>中</td>
+<td>I, D</td>
+<td>已满足</td>
+<td><code>simulations/vector-thrust-lab/启动.bat</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-接口需求">4 接口需求</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>标题</th>
+<th>来源</th>
+<th>优先级</th>
+<th>验证方法</th>
+<th>状态</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>REQ-IFC-001</td>
+<td><code>models/aircraft-model.json</code> 须符合
+<code>models/aircraft-model.schema.json</code></td>
+<td><a href="../governance/GOV-002.html">GOV-002</a></td>
+<td>高</td>
+<td>I, T</td>
+<td>已满足</td>
+<td>JSON Schema 文件；<code>tools/sync-params.py</code> 解析校验</td>
+</tr>
+<tr>
+<td>REQ-IFC-002</td>
+<td><code>src/core/parameters.mjs</code> 由
+<code>tools/sync-params.py</code> 生成，禁止手改；<code>--check</code>
+可检测漂移</td>
+<td><a href="../governance/GOV-002.html">GOV-002</a></td>
+<td>高</td>
+<td>I, T</td>
+<td>已满足</td>
+<td>生成文件头部注释；<code>sync-params.py --check</code></td>
+</tr>
+<tr>
+<td>REQ-IFC-003</td>
+<td>页面 DOM id 契约（输入滑块、按钮、HUD、模态框）保持向后兼容</td>
+<td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
+<td>中</td>
+<td>I</td>
+<td>已满足</td>
+<td><code>index.html</code>；<code>src/browser/controls-ui.mjs</code>；<code>src/browser/hud.mjs</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-非目标">5 非目标</h2>
+<p>以下工作明确不在 C0 基线范围内，后续若需纳入，应通过 <a
+href="../governance/GOV-002.html">GOV-002</a>
+变更流程并新增需求：</p>
+<ul>
+<li>全包线飞行验证或飞行品质等级评定；</li>
+<li>硬件在环（HIL）仿真、传感器模型、嵌入式飞控代码；</li>
+<li>CFD、风洞或涡格法高保真气动数据库；</li>
+<li>失速 / 深失速 / 尾旋等非线性气动建模；</li>
+<li>自动导航、航迹规划、任务管理系统。</li>
+</ul>
+<hr />
+<h2 id="6-需求状态汇总">6 需求状态汇总</h2>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>数量</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>已满足</td>
+<td>20</td>
+<td>功能、性能、接口、测试需求已在当前代码 / 测试中实现</td>
+</tr>
+<tr>
+<td>部分满足</td>
+<td>0</td>
+<td>-</td>
+</tr>
+<tr>
+<td>未满足</td>
+<td>1</td>
+<td>REQ-CTL-003 执行机构速率 / 带宽限幅，列为已知限制</td>
+</tr>
+</tbody>
+</table>
+<p>未满足需求不代表项目阻塞项，而是记录了从概念仿真向更高成熟度模型演进的已知缺口。详细可信度与验证策略见
+<a
+href="../verification/VER-001.html">VER-001</a>。</p>
+<footer class="provenance">源文件 <code>docs/02-需求与验证/REQ-001-需求基线.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

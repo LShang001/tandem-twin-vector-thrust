@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>参考资料注册表 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="参考资料注册表">参考资料注册表</h1>
+<blockquote>
+<p>本篇登记本项目引用的外部资料、第三方库与工具。条目按编号 REF-nnn
+管理，状态分为「已就位」「计划中」「待补充」。本篇不展开具体技术内容，详细用法与许可信息见各资料自身文档。</p>
+</blockquote>
+<hr />
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>标题</th>
+<th>类型</th>
+<th>位置/链接</th>
+<th>用途</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>REF-001</td>
+<td>Three.js r170</td>
+<td>第三方库</td>
+<td><code>simulations/vector-thrust-lab/vendor/three-r170/</code></td>
+<td>Web 三维渲染核心；MIT 许可，详见 <code>vendor/README.md</code></td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-002</td>
+<td>es-module-shims 1.10.0</td>
+<td>第三方库</td>
+<td><code>simulations/vector-thrust-lab/vendor/three-r170/es-module-shims.min.js</code></td>
+<td>浏览器 import map 与裸模块导入兼容垫片</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-003</td>
+<td>Node.js 内置测试 runner（<code>node:test</code>）</td>
+<td>工具</td>
+<td>Node.js ≥ 18 内置</td>
+<td>运行 <code>node --test tests/*.test.mjs</code>，执行 40
+项断言与回归基线</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-004</td>
+<td>Pandoc</td>
+<td>工具</td>
+<td>需外部安装</td>
+<td>未来由 <code>tools/build-docs.py</code> 调用，将 Markdown 文档构建为
+HTML</td>
+<td>计划中</td>
+</tr>
+<tr>
+<td>REF-101</td>
+<td>刚体动力学教材</td>
+<td>理论参考</td>
+<td>待补充</td>
+<td>刚体姿态运动学与动力学基础</td>
+<td>待补充</td>
+</tr>
+<tr>
+<td>REF-102</td>
+<td>飞行动力学教材</td>
+<td>理论参考</td>
+<td>待补充</td>
+<td>固定翼飞行器稳定性、控制导数与气动建模</td>
+<td>待补充</td>
+</tr>
+<tr>
+<td>REF-103</td>
+<td>多旋翼/矢量推力飞行器文献</td>
+<td>理论参考</td>
+<td>待补充</td>
+<td>双发矢量推力控制分配与执行机构设计</td>
+<td>待补充</td>
+</tr>
+</tbody>
+</table>
+<h2 id="说明">说明</h2>
+<ul>
+<li>工具类条目（REF-001~004）均可在当前仓库或运行环境中直接定位；</li>
+<li>理论参考类条目（REF-101~103）目前尚未完成书目遴选，不编造具体书名、版本或页码；</li>
+<li>未来新增外部资料时，按顺序递增 REF
+编号，并在此表登记用途与状态。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/08-参考资料/参考资料注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

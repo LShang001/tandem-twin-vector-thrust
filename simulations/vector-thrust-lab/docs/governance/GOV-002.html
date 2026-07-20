@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>GOV-002 信息与配置管理 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="gov-002-信息与配置管理">GOV-002 信息与配置管理</h1>
+<blockquote>
+<p>本篇规定项目的源信息格式、文档编号规则、参数治理工作流、配置管理与变更控制要求。本篇回答「信息以什么形式存在、如何追溯、如何变更」，不展开具体物理推导或控制律设计。</p>
+</blockquote>
+<hr />
+<h2 id="1-信息模型">1. 信息模型</h2>
+<p>项目采用三类信息载体，职责分离如下：</p>
+<table>
+<thead>
+<tr>
+<th>载体</th>
+<th>格式</th>
+<th>用途</th>
+<th>生成物示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文档源</td>
+<td>Markdown</td>
+<td>人读的技术文档、决策、参考信息</td>
+<td><code>docs/**/*.md</code></td>
+</tr>
+<tr>
+<td>参数源</td>
+<td>JSON</td>
+<td>单一事实源，含来源/置信度/单位/描述</td>
+<td><code>models/aircraft-model.json</code></td>
+</tr>
+<tr>
+<td>生成物</td>
+<td>JS/ESM/HTML</td>
+<td>由源信息生成，禁止手工编辑</td>
+<td><code>parameters.mjs</code>、<code>docs/*.html</code></td>
+</tr>
+</tbody>
+</table>
+<p>生成物头部必须标注单一事实源与生成工具。例如
+<code>parameters.mjs</code> 顶部包含：</p>
+<pre><code>//  单一事实源：仓库根目录 models/aircraft-model.json
+//  本文件由 tools/sync-params.py 生成 —— 请勿手工编辑</code></pre>
+<p>仿真子系统 <code>simulations/vector-thrust-lab/docs/</code> 下的 HTML
+文件属于构建产物，未来由 <code>tools/build-docs.py</code> 从 Markdown
+源生成；当前为早期手工版本，状态见 §4。</p>
+<h2 id="2-文档编号规则">2. 文档编号规则</h2>
+<h3 id="21-域前缀">2.1 域前缀</h3>
+<table>
+<thead>
+<tr>
+<th>域</th>
+<th>前缀</th>
+<th>目录编号</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>项目治理</td>
+<td>GOV</td>
+<td><code>docs/00-项目治理/</code></td>
+<td>范围、术语、信息与配置管理</td>
+</tr>
+<tr>
+<td>方案设计</td>
+<td>CFG / CONOPS</td>
+<td><code>docs/01-方案设计/</code></td>
+<td>构型基线、运行概念</td>
+</tr>
+<tr>
+<td>需求与验证</td>
+<td>REQ</td>
+<td><code>docs/02-需求与验证/</code></td>
+<td>需求基线</td>
+</tr>
+<tr>
+<td>理论推导</td>
+<td>THY</td>
+<td><code>docs/03-理论推导/</code></td>
+<td>纯数学/物理理论</td>
+</tr>
+<tr>
+<td>数学建模</td>
+<td>MOD</td>
+<td><code>docs/04-数学建模/</code></td>
+<td>模型规范、坐标系、配平稳定性</td>
+</tr>
+<tr>
+<td>控制与分配</td>
+<td>CTL</td>
+<td><code>docs/05-控制与分配/</code></td>
+<td>控制架构、SAS、可控性分析</td>
+</tr>
+<tr>
+<td>推进与执行机构</td>
+<td>PROP</td>
+<td><code>docs/06-推进与执行机构/</code></td>
+<td>推进模型、摆座模型</td>
+</tr>
+<tr>
+<td>验证与确认</td>
+<td>VER / SAFE</td>
+<td><code>docs/07-验证与确认/</code></td>
+<td>V&amp;V、安全计划</td>
+</tr>
+<tr>
+<td>参考资料</td>
+<td>REF</td>
+<td><code>docs/08-参考资料/</code></td>
+<td>参考资料注册表</td>
+</tr>
+<tr>
+<td>决策记录</td>
+<td>DEC</td>
+<td><code>docs/09-决策记录/</code></td>
+<td>ADR、模板</td>
+</tr>
+<tr>
+<td>注册表</td>
+<td>无编号</td>
+<td><code>docs/registers/</code></td>
+<td>参数数据手册、假设日志、追溯矩阵、需求/验证/危害注册表、工况卡模板</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-文件名规则">2.2 文件名规则</h3>
+<pre><code>&lt;ID&gt;-&lt;标题&gt;.md</code></pre>
+<ul>
+<li>ID 由「域前缀-三位序号」组成，如
+<code>GOV-001</code>、<code>THY-003</code>；</li>
+<li>模板与注册表文件可用中文名，不带序号前缀，如
+<code>模板-决策记录.md</code>、``;</li>
+<li>同域内按逻辑顺序递增，不跳跃；重大重构时可保留旧编号并标注「已废弃/已取代」。</li>
+</ul>
+<h2 id="3-参数治理工作流">3. 参数治理工作流</h2>
+<h3 id="31-参数追溯链">3.1 参数追溯链</h3>
+<pre class="mermaid"><code>flowchart LR
+    accTitle 参数单一事实源追溯链
+    accDescr 展示 aircraft-model.json 如何通过 sync-params.py 生成 parameters.mjs，并流向 core 模块与测试基线；--check 形成漂移检测回路。
+
+    JSON[&quot;models/aircraft-model.json\n46 参数 + 来源/置信度&quot;]
+    TOOL[&quot;tools/sync-params.py\n生成 + --check 校验&quot;]
+    PMS[&quot;simulations/.../parameters.mjs\n勿手改&quot;]
+    CORE[&quot;src/core/*\nmath/control/...&quot;]
+    TESTS[&quot;tests/*.test.mjs\n单测断言&quot;]
+    BASE[&quot;tests/fixtures/\nregression-baseline.json&quot;]
+    CI[&quot;CI / 本地提交前\npy -3.12 tools/sync-params.py --check&quot;]
+
+    JSON --&gt;|生成| TOOL
+    TOOL --&gt;|写入| PMS
+    PMS --&gt;|导入| CORE
+    CORE --&gt;|驱动| TESTS
+    CORE --&gt;|驱动| BASE
+    CI --&gt;|比对| TOOL
+    TOOL -.-&gt;|漂移告警| JSON</code></pre>
+<h3 id="32-变更步骤">3.2 变更步骤</h3>
+<ol type="1">
+<li>在 <code>models/aircraft-model.json</code>
+中修改参数值/来源/置信度；</li>
+<li>运行 <code>python tools/sync-params.py</code> 重新生成
+<code>parameters.mjs</code>；</li>
+<li>运行 <code>node --test tests/*.test.mjs</code> 与回归测试；</li>
+<li>若参数变更导致基线漂移，按 §6 行为保持红线流程重采基线；</li>
+<li>提交时一并包含 JSON、mjs、测试基线（如更新）与文档说明。</li>
+</ol>
+<h3 id="33-参数状态分类">3.3 参数状态分类</h3>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+<th>升级条件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MODEL-DEFAULT</td>
+<td>模型默认值，无外部证据</td>
+<td>初始状态</td>
+</tr>
+<tr>
+<td>ASSUMED</td>
+<td>基于经验或粗略假设</td>
+<td>需记录假设来源与理由</td>
+</tr>
+<tr>
+<td>ESTIMATED</td>
+<td>经分析/类比计算得到</td>
+<td>需保留计算过程与输入</td>
+</tr>
+<tr>
+<td>DATASHEET</td>
+<td>来自厂商/公开数据手册</td>
+<td>需记录数据手册编号/链接/版本</td>
+</tr>
+<tr>
+<td>BENCH-TESTED</td>
+<td>经地面台架测试标定</td>
+<td>需将试验记录写入 <code>registers/参数数据手册</code></td>
+</tr>
+<tr>
+<td>FLIGHT-IDENTIFIED</td>
+<td>经飞行试验辨识</td>
+<td>需将飞行数据与辨识方法写入 <code>registers/参数数据手册</code></td>
+</tr>
+</tbody>
+</table>
+<p>降级（如 FLIGHT-IDENTIFIED →
+ESTIMATED）仅在发现原证据存在重大缺陷时执行，需在
+<code>registers/参数数据手册</code> 中说明原因。</p>
+<h2 id="4-配置管理">4. 配置管理</h2>
+<h3 id="41-git-约定">4.1 Git 约定</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主分支</td>
+<td><code>main</code></td>
+</tr>
+<tr>
+<td>提交语言</td>
+<td>中文</td>
+</tr>
+<tr>
+<td>提交信息尾部</td>
+<td>每行结尾加
+<code>Co-Authored-By: Claude Fable 5 &lt;noreply@anthropic.com&gt;</code></td>
+</tr>
+<tr>
+<td>里程碑 tag</td>
+<td><code>v0.1.0-baseline</code> 用于标记概念基线</td>
+</tr>
+<tr>
+<td>阶段提交</td>
+<td>按阶段/主题拆分提交，避免超大 diff</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-行尾与编码">4.2 行尾与编码</h3>
+<ul>
+<li>文本文件默认 LF 行尾，由 <code>.gitattributes</code> 自动处理：</li>
+</ul>
+<pre><code>* text=auto eol=lf</code></pre>
+<ul>
+<li>Windows 批处理文件（<code>.bat</code>、<code>.cmd</code>）强制
+CRLF；</li>
+<li>二进制资产（图片、字体、CAD 文件等）在 <code>.gitattributes</code>
+中显式标注 <code>binary</code>；</li>
+<li>所有源代码与文档采用 UTF-8 无 BOM 编码。</li>
+</ul>
+<h3 id="43-gitignore-规则摘要">4.3 <code>.gitignore</code> 规则摘要</h3>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>忽略模式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本地工具状态</td>
+<td><code>.reasonix/</code></td>
+</tr>
+<tr>
+<td>操作系统文件</td>
+<td><code>Thumbs.db</code>、<code>desktop.ini</code>、<code>.DS_Store</code></td>
+</tr>
+<tr>
+<td>编辑器文件</td>
+<td><code>.vscode/</code>、<code>.idea/</code>、<code>*.swp</code>、<code>*.swo</code></td>
+</tr>
+<tr>
+<td>Python 产物</td>
+<td><code>__pycache__/</code>、<code>*.py[cod]</code>、<code>.venv/</code>、<code>venv/</code></td>
+</tr>
+<tr>
+<td>Node 产物</td>
+<td><code>node_modules/</code></td>
+</tr>
+<tr>
+<td>运行输出</td>
+<td><code>*.log</code>、<code>runs/</code>、<code>tmp/</code>、<code>.tmp/</code></td>
+</tr>
+<tr>
+<td>CAD/CAE 临时文件</td>
+<td><code>*.lock</code>、<code>*.bak</code>、<code>*.tmp</code>、<code>~$*</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="5-变更管理">5. 变更管理</h2>
+<h3 id="51-行为保持红线清单">5.1 行为保持红线清单</h3>
+<p>下列数值/算法契约属于行为保持红线，修改会改变仿真可观测行为。任何有意变更必须：</p>
+<ol type="1">
+<li>更新本清单或相关文档中的对应描述；</li>
+<li>重采回归基线
+<code>tests/fixtures/regression-baseline.json</code>；</li>
+<li>在提交说明中明确记录变更原因与影响。</li>
+</ol>
+<table>
+<thead>
+<tr>
+<th>红线项</th>
+<th>当前值</th>
+<th>所在位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>帧 delta 上限</td>
+<td>0.05 s</td>
+<td><code>frameCap</code></td>
+</tr>
+<tr>
+<td>积分子步上限</td>
+<td>0.004 s</td>
+<td><code>maxStep</code></td>
+</tr>
+<tr>
+<td>电机一阶滞后时间常数</td>
+<td>0.28 s</td>
+<td><code>tauM</code></td>
+</tr>
+<tr>
+<td>差速开方分配</td>
+<td><code>ωf = ω0·sqrt(1+Δω)</code>、<code>ωt = ω0·sqrt(1−Δω)</code></td>
+<td><code>propulsion.mjs</code></td>
+</tr>
+<tr>
+<td>SAS 摆角限幅</td>
+<td>±<code>dMax</code> = ±0.4363 rad（25°）</td>
+<td><code>dMax</code></td>
+</tr>
+<tr>
+<td>SAS 差速限幅</td>
+<td>±0.7</td>
+<td><code>dwMax</code></td>
+</tr>
+<tr>
+<td>积分限幅</td>
+<td>俯仰 <code>intTh</code> ±0.5 rad、滚转 <code>intPhi</code> ±0.3
+rad</td>
+<td><code>intThMax</code>、<code>intPhiMax</code></td>
+</tr>
+<tr>
+<td>UI 差速幅值</td>
+<td>±0.55</td>
+<td><code>dwUiMax</code></td>
+</tr>
+<tr>
+<td>空速下限</td>
+<td>0.5 m/s</td>
+<td><code>vMin</code></td>
+</tr>
+<tr>
+<td>地面约束</td>
+<td><code>pos.z &gt; 6.2</code> 且 <code>vWorld.z &gt; 0</code></td>
+<td><code>groundZ</code> + <code>state.mjs</code></td>
+</tr>
+<tr>
+<td>四元数积分</td>
+<td>显式欧拉右乘 + 每步归一化</td>
+<td><code>math.mjs</code></td>
+</tr>
+<tr>
+<td>自动综合演示</td>
+<td>900 ms 触发</td>
+<td><code>demo.mjs</code></td>
+</tr>
+<tr>
+<td>resetAll 行为</td>
+<td>不重置电机转速</td>
+<td><code>state.mjs</code></td>
+</tr>
+<tr>
+<td>欧拉角提取</td>
+<td><code>theta = −asin(R13)</code> 约定</td>
+<td><code>math.mjs</code>、<code>tests/math.test.mjs</code></td>
+</tr>
+<tr>
+<td>渲染/物理分离</td>
+<td>渲染几何电机位置 ±1.78 m ≠ 物理力臂 0.62 m</td>
+<td><code>aircraft-view.mjs</code> vs
+<code>aircraft-model.json</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-文档变更流程">5.2 文档变更流程</h3>
+<ol type="1">
+<li>修改 Markdown 源文件；</li>
+<li>若文档变更影响交叉引用，同步更新引用处（引用格式：「见 CTL-001
+§3」）；</li>
+<li>若变更涉及行为红线，执行 §5.1 全部步骤；</li>
+<li>本地运行 <code>node --test tests/*.test.mjs</code>
+确认无回归失败；</li>
+<li>按阶段提交，提交信息中文，尾部加 Co-Authored-By 行。</li>
+</ol>
+<h3 id="53-构建产物管理">5.3 构建产物管理</h3>
+<ul>
+<li><code>simulations/vector-thrust-lab/docs/*.html</code>
+为构建产物，未来由 <code>tools/build-docs.py</code> 从 Markdown
+生成；</li>
+<li>当前阶段产物可随源码提交，但应明确标注其「生成物」属性；</li>
+<li>禁止在构建产物中直接做持久化修改，所有修改应在 Markdown
+源中完成并重新构建。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

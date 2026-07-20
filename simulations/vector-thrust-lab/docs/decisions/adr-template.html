@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>决策记录模板（ADR） · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="模板-决策记录">模板 决策记录</h1>
+<h2 id="编号标题">编号/标题</h2>
+<p>DEC-xxx-标题</p>
+<h2 id="状态">状态</h2>
+<p>提议 / 已接受 / 已废弃 / 已取代</p>
+<ul>
+<li>「已取代」时需在下方「关联文档」中注明取代者编号。</li>
+</ul>
+<h2 id="日期">日期</h2>
+<p>YYYY-MM-DD</p>
+<h2 id="背景">背景</h2>
+<ul>
+<li>描述决策前的上下文、问题或约束；</li>
+<li>说明该决策试图解决什么痛点；</li>
+<li>可引用相关需求、问题记录或前期讨论。</li>
+</ul>
+<h2 id="决策">决策</h2>
+<ul>
+<li>明确记录所采纳的方案；</li>
+<li>使用陈述句，避免模糊；</li>
+<li>若涉及架构、接口或文件位置，给出关键路径。</li>
+</ul>
+<h2 id="备选方案">备选方案</h2>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>说明</th>
+<th>采纳/否决理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>方案 A</td>
+<td>……</td>
+<td>……</td>
+</tr>
+<tr>
+<td>方案 B</td>
+<td>……</td>
+<td>……</td>
+</tr>
+</tbody>
+</table>
+<h2 id="后果">后果</h2>
+<h3 id="正面影响">正面影响</h3>
+<ul>
+<li>……</li>
+</ul>
+<h3 id="代价与风险">代价与风险</h3>
+<ul>
+<li>……</li>
+</ul>
+<h2 id="关联文档">关联文档</h2>
+<ul>
+<li>相关决策：DEC-yyy</li>
+<li>相关规范/需求：REQ-zzz §x、MOD-aaa §y</li>
+<li>相关代码/文件：<code>path/to/file.ext</code></li>
+</ul>
+<footer class="provenance">源文件 <code>docs/09-决策记录/模板-决策记录.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CTL-002 可控性与失效模式 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ctl-002-可控性与失效模式">CTL-002 可控性与失效模式</h1>
+<blockquote>
+<p>本文从工程实现角度给出「纵列双发矢量推力飞行器」三通道控制效能矩阵、随工况变化的权限包线、主要失效模式及当前处置。源码依据为
+<code>simulations/vector-thrust-lab/src/core/propulsion.mjs</code> 与
+<code>control.mjs</code>，理论背景见 <a
+href="../theory/03-dynamics-allocation-modes.html">THY-003</a>。危害与失效模式的正式注册表由
+<code>docs/registers/危害与失效模式日志.md</code>
+维护（当前尚未创建）。</p>
+</blockquote>
+<hr />
+<h2 id="1-控制效能矩阵">1 控制效能矩阵</h2>
+<h3 id="11-小角度线性化">1.1 小角度线性化</h3>
+<p>在零摆角附近对 <code>propulsion.mjs</code>
+六维映射做一阶泰勒展开，得到 3 执行变量 × 3 力矩通道的解析控制效率：</p>
+<pre><code>M_x ≈ −2·kQ·ω0²·Δω        （滚转，差速主控）
+M_y ≈ −b·T_t·δ_t           （俯仰，尾摆角主控）
+M_z ≈  a·T_f·δ_f           （偏航，前摆角主控）</code></pre>
+<p>其中
+<code>ω0 = thr·wMax</code>，<code>T_f = T_t = kT·ω0²</code>（零差速稳态）。写成矩阵形式（忽略耦合小量）：</p>
+<pre><code>┌ M_x ┐   ┌ 0        0            −2·kQ·ω0² ┐   ┌ δ_t ┐
+│ M_y │ = │ 0       −b·kT·ω0²      0        │ · │ δ_f │
+└ M_z ┘   └ a·kT·ω0²  0            0        ┘   └ Δω  ┘</code></pre>
+<h3 id="12-代入-model-default-参数">1.2 代入 MODEL-DEFAULT 参数</h3>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>值</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>kT</td>
+<td>2.2×10⁻⁵ N·s²</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>kQ</td>
+<td>1.6×10⁻⁶ N·m·s²</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>a, b</td>
+<td>0.62 m</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>wMax</td>
+<td>900 rad/s</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<p>在 thr=1（ω0=900 rad/s）时：</p>
+<pre><code>∂M_y/∂δ_t = −b·kT·ω0² = −0.62 × 2.2×10⁻⁵ × 900² ≈ −11.1 N·m/rad
+∂M_z/∂δ_f =  a·kT·ω0² =  0.62 × 2.2×10⁻⁵ × 900² ≈ +11.1 N·m/rad
+∂M_x/∂Δω = −2·kQ·ω0² = −2 × 1.6×10⁻⁶ × 900² ≈ −2.59 N·m</code></pre>
+<p>在 thr=0.5（ω0=450 rad/s）时，上述效率均降至全油门的 1/4。</p>
+<h3 id="13-耦合项讨论">1.3 耦合项讨论</h3>
+<p>严格映射中的非对角项（交叉耦合）为：</p>
+<table>
+<thead>
+<tr>
+<th>耦合项</th>
+<th>表达式</th>
+<th>来源</th>
+<th>量级</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>δ_f → M_y</td>
+<td>−Q_f·sinδ_f ≈ −kQ·ω_f²·δ_f</td>
+<td>前反扭随前摆角投影到 y 轴</td>
+<td>τ/(T·b) ≈ 10%</td>
+</tr>
+<tr>
+<td>δ_t → M_z</td>
+<td>−Q_t·sinδ_t ≈ −kQ·ω_t²·δ_t</td>
+<td>尾反扭随尾摆角投影到 z 轴</td>
+<td>τ/(T·a) ≈ 10%</td>
+</tr>
+<tr>
+<td>Δω → M_y, M_z</td>
+<td>二阶小量</td>
+<td>差速改变推力幅值并耦合到摆角方向</td>
+<td>可忽略</td>
+</tr>
+</tbody>
+</table>
+<p>由于 <code>kQ·ω² ≪ kT·ω²·a</code>（反扭-推力臂比约
+0.1），主对角项占主导，直接映射可行。残余耦合可作为未来前馈补偿项登记。</p>
+<hr />
+<h2 id="2-可控性包线分析">2 可控性包线分析</h2>
+<h3 id="21-随油门的权限变化">2.1 随油门的权限变化</h3>
+<table>
+<thead>
+<tr>
+<th>通道</th>
+<th>全油门效率（thr=1）</th>
+<th>半油门效率（thr=0.5）</th>
+<th>退化规律</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>俯仰 ∂M_y/∂δ_t</td>
+<td>−11.1 N·m/rad</td>
+<td>−2.77 N·m/rad</td>
+<td>∝ thr²</td>
+</tr>
+<tr>
+<td>偏航 ∂M_z/∂δ_f</td>
+<td>+11.1 N·m/rad</td>
+<td>+2.77 N·m/rad</td>
+<td>∝ thr²</td>
+</tr>
+<tr>
+<td>滚转 ∂M_x/∂Δω</td>
+<td>−2.59 N·m</td>
+<td>−0.65 N·m</td>
+<td>∝ thr²</td>
+</tr>
+</tbody>
+</table>
+<p>俯仰/偏航仍可用是因为摆角力矩 ∝ T ∝
+ω0²；滚转退化更严重，因为滚转完全依赖单侧反扭，其力矩仅为单侧
+<code>kQ·ω²</code> 量级。</p>
+<h3 id="22-低速悬停场景">2.2 低速/悬停场景</h3>
+<p>本构型<strong>无气动舵面</strong>，俯仰与偏航控制力矩来自推力矢量摆角，与空速无关（只要电机能产生推力）；滚转控制力矩来自差速反扭，亦与空速无关。因此：</p>
+<ul>
+<li>悬停/低速时俯仰、偏航通道仍有效；</li>
+<li>滚转通道在低油门时二次衰减，与空速无关；</li>
+<li>气动阻尼在低速时趋零，姿态稳定更依赖 SAS 角速率反馈。</li>
+</ul>
+<p>但需注意：前飞速度增大后，真实螺旋桨推力会随前进比下降（本项目模型未包含此效应，见
+<a href="../propulsion/PROP-001.html">PROP-001</a>
+§6）。</p>
+<h3 id="23-欧拉角-90-奇异">2.3 欧拉角 ±90° 奇异</h3>
+<p><code>eulerFromQuat</code> 采用 <code>θ = −asin(R13)</code>
+提取俯仰角。当 <code>|R13| → 1</code>（俯仰接近 ±90°）时：</p>
+<ul>
+<li><code>asin</code> 自变量饱和到 ±1，姿态提取仍返回有界值；</li>
+<li>但 <code>phi</code> 与 <code>psi</code> 出现万向节锁（gimbal
+lock），<code>atan2(m23,m33)</code> 与 <code>atan2(m12,m11)</code>
+同时退化；</li>
+<li>SAS 比例通道在 90° 附近的控制方向可能发生 180° 跳变，导致失控。</li>
+</ul>
+<p>当前仿真未针对大俯仰角做专门保护，仅在 <code>math.mjs</code> 中对
+<code>R13</code> 做 <code>clamp(...,−1,1)</code> 防止 NaN。</p>
+<hr />
+<h2 id="3-失效模式表">3 失效模式表</h2>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>影响</th>
+<th>可检测性</th>
+<th>当前处置</th>
+<th>改进方向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单前电机失效</td>
+<td>丧失偏航主控；前反扭消失，尾反扭无对消 → 持续滚转力矩</td>
+<td>仿真内可直接比较 wf/wt 与指令</td>
+<td>无自动处置；依赖操作员切断尾电机或改出</td>
+<td>增加电机转速监控与失效重构逻辑</td>
+</tr>
+<tr>
+<td>单尾电机失效</td>
+<td>丧失俯仰主控；纵向力矩失衡</td>
+<td>同上</td>
+<td>无自动处置</td>
+<td>同上；考虑推力重新分配或应急气动面</td>
+</tr>
+<tr>
+<td>wMax 转速饱和</td>
+<td>差速大开度时 <code>ω_f = ω0·√(1+Δω)</code> 可超过
+wMax；当前无钳制</td>
+<td>当前未检测</td>
+<td>模型如实计算超 wMax 转速，不报错</td>
+<td>增加分配后转速饱和保护 + 告警</td>
+</tr>
+<tr>
+<td>积分器极限幅持续饱和</td>
+<td>SAS 积分项顶在 ±intThMax/±intPhiMax，变为恒定偏置</td>
+<td>可直接读取 intTh/intPhi</td>
+<td>仅依赖限幅，无抗饱和释放</td>
+<td>增加积分抗饱和（conditional integration 或 back-calculation）</td>
+</tr>
+<tr>
+<td>欧拉角 ±90° 奇异</td>
+<td>万向节锁导致滚转/偏航通道方向耦合</td>
+<td>检测 `</td>
+<td>theta</td>
+<td>` 接近 π/2</td>
+</tr>
+<tr>
+<td>传感器失效</td>
+<td>仿真内状态直接可用，无传感器模型</td>
+<td>不适用</td>
+<td>不适用</td>
+<td>增加传感器模型与状态估计器（如卡尔曼滤波）</td>
+</tr>
+</tbody>
+</table>
+<p>上述失效模式的正式登记、风险评级与处置跟踪应在
+<code>docs/registers/危害与失效模式日志.md</code>
+中维护。当前该注册表尚未创建，建议在阶段 9「既有文档勘误」中补齐。</p>
+<hr />
+<h2 id="4-与危害注册表的呼应">4 与危害注册表的呼应</h2>
+<ul>
+<li>失效模式表 §3 所列项目应与
+<code>docs/registers/危害与失效模式日志.md</code> 一一对应；</li>
+<li>该注册表负责记录：危害
+ID、严重度/发生度评级、缓解措施、验证方法、责任人；</li>
+<li>本文仅做技术机理说明，不做项目管理追踪；追踪信息以注册表为准。</li>
+</ul>
+<hr />
+<h2 id="5-改进方向仅登记不实施">5 改进方向（仅登记，不实施）</h2>
+<table>
+<thead>
+<tr>
+<th>方向</th>
+<th>目的</th>
+<th>当前状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>转速饱和保护</td>
+<td>分配后钳制 ω_f、ω_t 至 wMax，输出告警标志</td>
+<td>未实现</td>
+</tr>
+<tr>
+<td>B⁺ 伪逆控制分配</td>
+<td>冗余执行器场景下优化力矩可达集</td>
+<td>当前无冗余，不适用</td>
+</tr>
+<tr>
+<td>速率限制执行器模型</td>
+<td>增加摆角速率/加速度动态，更接近真实舵机</td>
+<td>当前为理想瞬时摆角</td>
+</tr>
+<tr>
+<td>积分抗饱和</td>
+<td>防止持续饱和导致的超大超调</td>
+<td>未实现</td>
+</tr>
+<tr>
+<td>大姿态四元数控制律</td>
+<td>避开欧拉角奇异</td>
+<td>未实现</td>
+</tr>
+</tbody>
+</table>
+<p>这些改进方向属于未来工作，不在本次文档任务范围内实施。</p>
+<hr />
+<h2 id="6-小结">6 小结</h2>
+<ul>
+<li>三通道主控效率对角占优，直接映射控制架构在概念级仿真中可行；</li>
+<li>滚转通道效率最低且随油门平方衰减，是整机可控性瓶颈；</li>
+<li>单电机失效、转速饱和、积分饱和、大俯仰奇异为当前主要失效/退化模式；</li>
+<li>所有参数状态均为
+MODEL-DEFAULT，可控性包线分析为解析估算，需经台架/飞行验证更新。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-002-可控性与失效模式.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>

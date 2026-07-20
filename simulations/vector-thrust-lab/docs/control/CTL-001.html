@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CTL-001 控制架构与 SAS · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ctl-001-控制架构与-sas">CTL-001 控制架构与 SAS</h1>
+<blockquote>
+<p>本文定位「纵列双发矢量推力飞行器」整机控制链的工程实现侧，覆盖从 UI
+操纵输入到六维力/力矩输出的信号流、SAS
+三通道增稳律、反馈极性整定依据及关键限幅。对应源码实现见
+<code>simulations/vector-thrust-lab/src/core/control.mjs</code> 与
+<code>propulsion.mjs</code>，理论背景见 <a
+href="../theory/03-dynamics-allocation-modes.html">THY-003</a>。</p>
+</blockquote>
+<hr />
+<h2 id="1-控制链总览">1 控制链总览</h2>
+<p>整机控制链路如下图所示。操纵输入经 UI 限幅后进入
+SAS（可选），三通道律输出执行指令，再由推进分配映射为六维力/力矩，最后经刚体动力学积分得到状态反馈。</p>
+<pre class="mermaid"><code>flowchart LR
+    accTitle 整机控制链路
+    accDescr 从 UI 操纵输入到动力学状态反馈的完整信号流，标注关键限幅点。
+
+    UI[&quot;UI 滑块输入\nthr / dt / df / dw&quot;]
+    UI_LIM[&quot;UI 限幅\n|dt|,|df|≤dMax\n|dw|≤dwUiMax&quot;]
+    SAS_SW{&quot;SAS 开关\nsas=true/false&quot;}
+    SAS_LAW[&quot;SAS 三通道律\n俯仰/偏航/滚转&quot;]
+    ACT_LIM[&quot;执行限幅\n|dtAct|,|dfAct|≤dMax\n|dwAct|≤dwMax&quot;]
+    PROP[&quot;推进分配\n差速开方 + 六维映射&quot;]
+    DYN[&quot;六自由度动力学\n牛顿–欧拉积分&quot;]
+    STATE[&quot;状态反馈\nφ,θ,ψ / p,q,r&quot;]
+
+    UI --&gt; UI_LIM --&gt; SAS_SW
+    SAS_SW --&gt;|开启| SAS_LAW --&gt; ACT_LIM
+    SAS_SW --&gt;|关闭| ACT_LIM
+    ACT_LIM --&gt; PROP --&gt; DYN --&gt; STATE
+    STATE -.-&gt; SAS_LAW</code></pre>
+<p>链路说明：</p>
+<table>
+<thead>
+<tr>
+<th>节点</th>
+<th>位置/文件</th>
+<th>关键行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UI 滑块</td>
+<td><code>main.js</code> / 浏览器事件</td>
+<td>输出归一化 thr∈[0,1]、dt/df∈[-dMax,dMax]、dw∈[-dwUiMax,dwUiMax]</td>
+</tr>
+<tr>
+<td>SAS 开关</td>
+<td><code>state.mjs</code> 字段 <code>S.sas</code></td>
+<td>关闭时
+<code>dtAct=dt</code>、<code>dfAct=df</code>、<code>dwAct=dw</code>
+直通</td>
+</tr>
+<tr>
+<td>三通道律</td>
+<td><code>control.mjs:applySas</code></td>
+<td>比例/积分/角速率反馈，输出限幅至 ±dMax / ±dwMax</td>
+</tr>
+<tr>
+<td>推进分配</td>
+<td><code>propulsion.mjs:stepPropulsion</code></td>
+<td>差速开方 → 电机一阶滞后 → 六维力/力矩</td>
+</tr>
+<tr>
+<td>状态反馈</td>
+<td><code>dynamics.mjs:physicsStep</code></td>
+<td><code>eulerFromQuat</code> 提取 φ/θ/ψ，<code>S.omega</code>
+直接可用</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-架构声明直接映射而非-b-伪逆优化分配">2 架构声明：直接映射而非
+B⁺ 伪逆优化分配</h2>
+<p>当前实现采用<strong>直接映射 + SAS
+反馈增稳</strong>，未使用控制分配理论中的 Moore–Penrose
+伪逆或加权伪逆。原因如下：</p>
+<ol type="1">
+<li><strong>执行变量与受控力矩近似一一对应</strong>：尾摆角 δ_t
+主控俯仰力矩 M_y，前摆角 δ_f 主控偏航力矩 M_z，差速 Δω 主控滚转力矩
+M_x。三通道主控效率远大于通道间耦合效率（量级由反扭-推力比 τ/(T·力臂)
+决定，见 <a
+href="../theory/03-dynamics-allocation-modes.html">THY-003</a>
+§7）。</li>
+<li><strong>无执行器冗余</strong>：每个力矩通道仅由一个执行变量主控，不存在过驱动系统的自由度优化问题。</li>
+<li><strong>实现简单、可解释性强</strong>：直接映射使 SAS 律可按 SISO
+通道独立整定与调试，符号错误可在单测中逐条锁定。</li>
+</ol>
+<p>当未来增加气动舵面或第三台推进器形成冗余时，再考虑引入 B⁺ / WLS
+在线分配。当前仅登记该方向，不实施（见 <a
+href="CTL-002.html">CTL-002</a> §5）。</p>
+<hr />
+<h2 id="3-三通道控制机理">3 三通道控制机理</h2>
+<table>
+<thead>
+<tr>
+<th>通道</th>
+<th>执行变量</th>
+<th>主控力矩</th>
+<th>效率符号（小角度）</th>
+<th>反馈符号</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>俯仰</td>
+<td>δ_t（尾摆角，绕 y_b）</td>
+<td>M_y ≈ −b·T_t·δ_t</td>
+<td>∂M_y/∂δ_t &lt; 0</td>
+<td>SAS 取正号</td>
+<td>尾推力摆离 x_b 产生低头力矩</td>
+</tr>
+<tr>
+<td>偏航</td>
+<td>δ_f（前摆角，绕 z_b）</td>
+<td>M_z ≈ +a·T_f·δ_f</td>
+<td>∂M_z/∂δ_f &gt; 0</td>
+<td>SAS 取负号</td>
+<td>前推力侧向分量产生偏航力矩</td>
+</tr>
+<tr>
+<td>滚转</td>
+<td>Δω（差速）</td>
+<td>M_x ≈ −2·kQ·ω0²·Δω</td>
+<td>∂M_x/∂Δω &lt; 0</td>
+<td>SAS 取正号</td>
+<td>反扭矩差驱动滚转</td>
+</tr>
+</tbody>
+</table>
+<p>表中效率符号由 <code>propulsion.mjs</code> 六维映射逐项导出，见 <a
+href="../propulsion/PROP-001.html">PROP-001</a>
+§4。</p>
+<hr />
+<h2 id="4-sas-控制律">4 SAS 控制律</h2>
+<h3 id="41-源码公式">4.1 源码公式</h3>
+<p><code>control.mjs:applySas</code> 的完整实现如下（直接摘录）：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>S<span class="op">.</span><span class="at">intTh</span>  <span class="op">=</span> <span class="fu">clamp</span>(S<span class="op">.</span><span class="at">intTh</span>  <span class="op">+</span> theta <span class="op">*</span> dt<span class="op">,</span> <span class="op">-</span>P<span class="op">.</span><span class="at">intThMax</span><span class="op">,</span>  P<span class="op">.</span><span class="at">intThMax</span>)<span class="op">;</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>S<span class="op">.</span><span class="at">intPhi</span> <span class="op">=</span> <span class="fu">clamp</span>(S<span class="op">.</span><span class="at">intPhi</span> <span class="op">+</span> phi   <span class="op">*</span> dt<span class="op">,</span> <span class="op">-</span>P<span class="op">.</span><span class="at">intPhiMax</span><span class="op">,</span> P<span class="op">.</span><span class="at">intPhiMax</span>)<span class="op">;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>dtC <span class="op">=</span> <span class="fu">clamp</span>(dt <span class="op">+</span> P<span class="op">.</span><span class="at">sasQ</span> <span class="op">*</span> S<span class="op">.</span><span class="at">omega</span><span class="op">.</span><span class="at">y</span> <span class="op">+</span> P<span class="op">.</span><span class="at">sasTh</span> <span class="op">*</span> theta <span class="op">+</span> P<span class="op">.</span><span class="at">sasI</span> <span class="op">*</span> S<span class="op">.</span><span class="at">intTh</span><span class="op">,</span>  <span class="op">-</span>P<span class="op">.</span><span class="at">dMax</span><span class="op">,</span> P<span class="op">.</span><span class="at">dMax</span>)<span class="op">;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>dfC <span class="op">=</span> <span class="fu">clamp</span>(df <span class="op">-</span> P<span class="op">.</span><span class="at">sasR</span> <span class="op">*</span> S<span class="op">.</span><span class="at">omega</span><span class="op">.</span><span class="at">z</span><span class="op">,</span>                                      <span class="op">-</span>P<span class="op">.</span><span class="at">dMax</span><span class="op">,</span> P<span class="op">.</span><span class="at">dMax</span>)<span class="op">;</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>dwC <span class="op">=</span> <span class="fu">clamp</span>(dw <span class="op">+</span> P<span class="op">.</span><span class="at">sasP</span> <span class="op">*</span> S<span class="op">.</span><span class="at">omega</span><span class="op">.</span><span class="at">x</span> <span class="op">+</span> P<span class="op">.</span><span class="at">sasPhi</span> <span class="op">*</span> phi   <span class="op">+</span> P<span class="op">.</span><span class="at">sasIPhi</span> <span class="op">*</span> S<span class="op">.</span><span class="at">intPhi</span><span class="op">,</span> <span class="op">-</span>P<span class="op">.</span><span class="at">dwMax</span><span class="op">,</span> P<span class="op">.</span><span class="at">dwMax</span>)<span class="op">;</span></span></code></pre></div>
+<p>用符号表达：</p>
+<pre><code>δ_t,cmd = clamp( δ_t + sasQ·q + sasTh·θ + sasI·∫θ, ±dMax )
+δ_f,cmd = clamp( δ_f − sasR·r,                   ±dMax )
+Δω_cmd  = clamp( Δω  + sasP·p + sasPhi·φ + sasIPhi·∫φ, ±dwMax )
+
+∫θ  ← clamp( ∫θ + θ·dt, ±intThMax  )
+∫φ  ← clamp( ∫φ + φ·dt, ±intPhiMax )</code></pre>
+<h3 id="42-增益表">4.2 增益表</h3>
+<p>全部增益来自 <code>models/aircraft-model.json</code>，状态
+MODEL-DEFAULT，为手工整定值，无系统辨识。</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>值</th>
+<th>单位</th>
+<th>含义</th>
+<th>来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sasQ</td>
+<td>0.14</td>
+<td>s</td>
+<td>俯仰角速率反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>sasR</td>
+<td>0.14</td>
+<td>s</td>
+<td>偏航角速率反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>sasP</td>
+<td>0.18</td>
+<td>s</td>
+<td>滚转角速率反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>sasTh</td>
+<td>0.30</td>
+<td>−</td>
+<td>俯仰角比例反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>sasPhi</td>
+<td>0.40</td>
+<td>−</td>
+<td>滚转角比例反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>sasI</td>
+<td>0.10</td>
+<td>−</td>
+<td>俯仰积分反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>sasIPhi</td>
+<td>0.15</td>
+<td>−</td>
+<td>滚转积分反馈增益</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+</tbody>
+</table>
+<h3 id="43-积分器与指令限幅">4.3 积分器与指令限幅</h3>
+<table>
+<thead>
+<tr>
+<th>限幅项</th>
+<th>值</th>
+<th>单位</th>
+<th>代码位置</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>俯仰积分限幅 intThMax</td>
+<td>0.5</td>
+<td>rad</td>
+<td><code>control.mjs:16</code></td>
+<td>抑制俯仰积分饱和</td>
+</tr>
+<tr>
+<td>滚转积分限幅 intPhiMax</td>
+<td>0.3</td>
+<td>rad</td>
+<td><code>control.mjs:17</code></td>
+<td>抑制滚转积分饱和</td>
+</tr>
+<tr>
+<td>摆角指令限幅 dMax</td>
+<td>0.4363323129985824</td>
+<td>rad（25°）</td>
+<td><code>control.mjs:18,19</code></td>
+<td>尾/前摆角同时限幅</td>
+</tr>
+<tr>
+<td>SAS 差速指令限幅 dwMax</td>
+<td>0.7</td>
+<td>−</td>
+<td><code>control.mjs:19</code></td>
+<td>SAS 输出差速上限</td>
+</tr>
+<tr>
+<td>UI 差速幅值 dwUiMax</td>
+<td>0.55</td>
+<td>−</td>
+<td>UI 输入层</td>
+<td>用户可操作范围</td>
+</tr>
+</tbody>
+</table>
+<p>注意：当前 SAS
+律仅含「积分与指令限幅」，不含抗饱和（anti-windup）逻辑或摆角速率限制。积分器持续饱和时表现为固定偏置输出，详见
+<a href="CTL-002.html">CTL-002</a> §3。</p>
+<hr />
+<h2 id="5-反馈极性整定逻辑">5 反馈极性整定逻辑</h2>
+<p>SAS
+增益符号必须按各通道控制效率符号整定，否则构成正反馈。推导如下：</p>
+<ol type="1">
+<li><p><strong>俯仰通道</strong>：<code>propulsion.mjs:32</code> 给出
+<code>M_y = −b·T_t·sinδ_t − Q_f·sinδ_f</code>。小角度下主项
+<code>−b·T_t·δ_t</code>，效率 ∂M_y/∂δ_t &lt; 0。当 <code>q&gt;0</code>
+或 <code>θ&gt;0</code>（抬头）时，需增大 δ_t 使 M_y 更负（低头恢复），故
+SAS
+律取<strong>正号</strong>：<code>dtC = dt + sasQ·q + ...</code>。</p></li>
+<li><p><strong>偏航通道</strong>：<code>propulsion.mjs:33</code> 给出
+<code>M_z = a·T_f·sinδ_f − Q_t·sinδ_t</code>。小角度下主项
+<code>+a·T_f·δ_f</code>，效率 ∂M_z/∂δ_f &gt; 0。当
+<code>r&gt;0</code>（右偏航）时，需减小 δ_f 使 M_z
+减小（左偏航恢复），故 SAS
+律取<strong>负号</strong>：<code>dfC = df − sasR·r</code>。</p></li>
+<li><p><strong>滚转通道</strong>：差速使
+<code>ω_f = ω0·√(1+Δω)</code>、<code>ω_t = ω0·√(1−Δω)</code>。零摆角稳态下
+<code>M_x = −Q_f + Q_t = −kQ·ω_f² + kQ·ω_t² ≈ −2·kQ·ω0²·Δω</code>，效率
+∂M_x/∂Δω &lt; 0。当 <code>p&gt;0</code> 或
+<code>φ&gt;0</code>（右滚）时，需增大 Δω 使 M_x 更负（左滚恢复），故 SAS
+律取<strong>正号</strong>：<code>dwC = dw + sasP·p + ...</code>。</p></li>
+</ol>
+<p>调试历史上曾因符号错误导致发散；当前极性由
+<code>control.test.mjs</code> 三条极性测试锁定。</p>
+<hr />
+<h2 id="6-欧拉角符号约定依赖">6 欧拉角符号约定依赖</h2>
+<p>姿态提取函数 <code>math.mjs:eulerFromQuat</code> 采用约定：</p>
+<pre><code>θ = −asin(R13)</code></pre>
+<p>其中 <code>R13</code> 为旋转矩阵第 1 行第 3 列（机体系 x 轴在惯性系 z
+轴的投影）。该约定导致：绕机体 +y_b 轴正转 +a0（抬头）读出的俯仰角为
+−a0。<code>tests/math.test.mjs</code> 第 47
+行测试明确锁定此行为，注释指出「SAS 增益即按此约定整定」。</p>
+<p>因此：</p>
+<ul>
+<li>物理上抬头 θ_phys = +a0 时，SAS 见到的
+<code>theta = −a0</code>；</li>
+<li>SAS 俯仰律中 <code>sasTh·theta</code> 为负，使 <code>dtC</code>
+减小，M_y 向正方向变化，产生低头恢复力矩；</li>
+<li>若将 <code>eulerFromQuat</code> 改为
+<code>θ = +asin(R13)</code>，则所有俯仰/偏航/滚转增益符号需同步翻转，否则闭环失稳。</li>
+</ul>
+<p>坐标系与欧拉角提取的完整约定见 <a
+href="../modeling/MOD-002.html">MOD-002</a>。</p>
+<hr />
+<h2 id="7-差速开方分配">7 差速开方分配</h2>
+<h3 id="71-分配律">7.1 分配律</h3>
+<p><code>propulsion.mjs:12–14</code>：</p>
+<pre><code>ω0 = thr · wMax
+ω_f,target = ω0 · √(max(0, 1 + Δω_cmd))
+ω_t,target = ω0 · √(max(0, 1 − Δω_cmd))</code></pre>
+<h3 id="72-平方和不变">7.2 平方和不变</h3>
+<pre><code>ω_f² + ω_t² = ω0²(1+Δω) + ω0²(1−Δω) = 2·ω0²</code></pre>
+<p>因此两电机推力幅值之和
+<code>T_f + T_t = kT(ω_f²+ω_t²) = 2·kT·ω0²</code> 为常数，不随 Δω
+变化。</p>
+<h3 id="73-总推力一阶不变">7.3 总推力一阶不变</h3>
+<p>机体 x 轴推力：</p>
+<pre><code>F_x = T_f·cosδ_f + T_t·cosδ_t</code></pre>
+<p>当 δ_f、δ_t 为小量且 Δω
+独立变化时，<code>cosδ ≈ 1</code>，<code>F_x</code>
+一阶近似不变。该性质由 <code>propulsion.test.mjs</code> 第 27
+行测试锁定。</p>
+<h3 id="74-滚转力矩线性度">7.4 滚转力矩线性度</h3>
+<p>零摆角、稳态（<code>ω̇_f = ω̇_t = 0</code>）时：</p>
+<pre><code>M_x = −Q_f + Q_t
+    = −kQ·ω_f² + kQ·ω_t²
+    = −kQ·ω0²(1+Δω) + kQ·ω0²(1−Δω)
+    = −2·kQ·ω0²·Δω</code></pre>
+<p>故滚转通道在小 Δω 范围内具有理想线性控制效率
+<code>∂M_x/∂Δω = −2·kQ·ω0²</code>。该效率随油门平方衰减：低油门时 ω0
+小，滚转控制能力二次退化，见 <a
+href="CTL-002.html">CTL-002</a> §2。</p>
+<hr />
+<h2 id="8-测试覆盖指针">8 测试覆盖指针</h2>
+<table>
+<thead>
+<tr>
+<th>测试用例</th>
+<th>文件/行</th>
+<th>对应本文条目</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SAS 关闭时指令直通</td>
+<td><code>control.test.mjs:10</code></td>
+<td>§1 控制链、§4.1</td>
+</tr>
+<tr>
+<td>俯仰反馈极性（正 θ/q 增大 dtAct）</td>
+<td><code>control.test.mjs:21</code></td>
+<td>§5</td>
+</tr>
+<tr>
+<td>偏航反馈极性（正 r 减小 dfAct）</td>
+<td><code>control.test.mjs:29</code></td>
+<td>§5</td>
+</tr>
+<tr>
+<td>滚转反馈极性（正 φ/p 增大 dwAct）</td>
+<td><code>control.test.mjs:36</code></td>
+<td>§5</td>
+</tr>
+<tr>
+<td>执行限幅 ±dMax / ±dwMax</td>
+<td><code>control.test.mjs:44</code></td>
+<td>§4.3</td>
+</tr>
+<tr>
+<td>积分器限幅并随时间累积</td>
+<td><code>control.test.mjs:53</code></td>
+<td>§4.1、§4.3</td>
+</tr>
+<tr>
+<td>差速分配保持平方转速和不变</td>
+<td><code>propulsion.test.mjs:27</code></td>
+<td>§7.2</td>
+</tr>
+<tr>
+<td>前/尾摆角符号</td>
+<td><code>propulsion.test.mjs:34,42</code></td>
+<td>§3、§5</td>
+</tr>
+<tr>
+<td>零摆角等转速反扭对消</td>
+<td><code>propulsion.test.mjs:50</code></td>
+<td>§7.4</td>
+</tr>
+<tr>
+<td>eulerFromQuat 约定 θ=−a0</td>
+<td><code>math.test.mjs:47</code></td>
+<td>§6</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-成熟度声明">9 成熟度声明</h2>
+<ul>
+<li>当前 SAS
+为<strong>概念级</strong>直接反馈增稳律，增益为手工整定，未经过系统辨识或飞行验证；</li>
+<li>所列工况下仿真响应有界（见 <a
+href="../modeling.html">MOD-001</a>
+§7.3），不表示全包线稳定；</li>
+<li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+</html>
