@@ -1,0 +1,34 @@
+# ---- 本地工具状态（不属于工程资产）----
+.reasonix/
+
+# ---- 操作系统 ----
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---- 编辑器 ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# ---- Node（未来引入时）----
+node_modules/
+
+# ---- 运行输出与临时文件 ----
+*.log
+runs/
+tmp/
+.tmp/
+
+# ---- CAD/CAE 常见临时与锁文件（未来）----
+*.lock
+*.bak
+*.tmp
+~$*
