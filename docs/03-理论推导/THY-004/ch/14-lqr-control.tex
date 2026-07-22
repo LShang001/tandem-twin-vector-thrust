@@ -141,3 +141,77 @@ INDI（在线$\mathbf{B}_{\mathrm{true}}$） & \textbf{0.40} & \textbf{0.40} & \
 \end{enumerate}
 
 \textbf{结论}：LQR通过$\mathbf{B}|_{\delta=0}$在工作点附近有效利用交叉项，但其离线冻结的增益使其补偿精度随摆角偏离工作点而退化；INDI的在线$\mathbf{B}_{\mathrm{true}}$重构提供了与工作点无关的精确交叉项补偿。在需要持续大摆角机动的应用场景，INDI的耦合鲁棒性优于LQR；在以定点跟踪为主的场景，LQR的最优增益平衡仍具优势。这一互补性提示了"工作点附近LQR + 大机动INDI"的增益调度混合架构作为潜在的发展方向。
+
+\subsection{级联架构：姿态外环与带交叉项补偿的角速度内环}
+\label{sec:cascade}
+
+第\ref{sec:lqr_coupling_limit}节的分析表明，无论是冻结$\mathbf{B}$的LQR还是在线$\mathbf{B}$的INDI，在\textbf{单级全状态反馈直接输出执行器指令}的结构下，交叉项补偿都难以兼顾最优性与工作点鲁棒性。本节提出一种级联控制架构，将姿态控制与角速度控制解耦，使交叉项补偿在内环被专门处理，从而同时获得两种优势。
+
+\subsubsection{架构设计}
+
+级联结构将控制问题按时间尺度分离为两个环：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{外环（姿态环，慢）}：纯比例（或比例-积分）控制，将姿态误差映射为角速度指令
+    \begin{equation}
+        \boldsymbol{\omega}_{\mathrm{ref}} = -\mathbf{K}_p\,\boldsymbol{\varepsilon}_{\mathrm{err}} - \mathbf{K}_i\int\boldsymbol{\varepsilon}_{\mathrm{err}}\,\mathrm{d}t + \boldsymbol{\omega}_{\mathrm{ref}}^{\mathrm{ff}}
+        \label{eq:cascade_outer}
+    \end{equation}
+    外环不直接操作执行器，只生成角速度指令，因此结构极简（纯P/PI），无需考虑执行器动力学与交叉耦合；
+    \item \textbf{内环（角速度环，快）}：将角速度误差映射为虚拟角加速度，再经在线效能矩阵分配为执行器增量
+    \begin{align}
+        \boldsymbol{\nu} &= \mathbf{K}_\omega\left(\boldsymbol{\omega}_{\mathrm{ref}} - \boldsymbol{\omega}\right)
+        \label{eq:cascade_nu}\\
+        \mathbf{u}_{k+1} &= \mathbf{u}_k + \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_k)\,\boldsymbol{\nu}
+        \label{eq:cascade_alloc}
+    \end{align}
+    内环通过在线重构$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$（式\ref{eq:B_true}）实现精确的交叉项补偿——前摆对俯仰的反扭矩耦合$-\tau_f\cos\delta_f$在分配时被显式计入。
+\end{enumerate}
+
+\textbf{设计要点}：与INDI不同，内环的角速度指令跟踪\textbf{不依赖角加速度估计}（$\boldsymbol{\nu}$由角速度误差经比例生成，$\mathbf{B}_{\mathrm{true}}^{-1}$仅作分配而非动态逆），因此规避了INDI的$\dot{\boldsymbol{\omega}}$噪声放大问题；与LQR不同，外环增益$\mathbf{K}_p$仅作用于姿态-角速度运动学（近似积分器），与效能矩阵解耦，因此在线$\mathbf{B}_{\mathrm{true}}$的引入不破坏外环设计。
+
+\subsubsection{仿真验证}
+
+在24\,m/s巡航配平、前摆$\delta_f$阶跃的耦合场景下（同表\ref{tab:lqr_coupling_deg}设置），对比级联架构与LQR、INDI的俯仰耦合抑制能力。结果见表\ref{tab:cascade_coupling}。
+
+\begin{table}[H]
+\centering
+\caption{级联架构与LQR/INDI的俯仰耦合峰值对比（°，5次蒙特卡洛均值）}
+\label{tab:cascade_coupling}
+\small
+\begin{tabular}{l c c}
+\toprule
+\textbf{控制架构} & $\delta_f=10^\circ$ & $\delta_f=25^\circ$ \\
+\midrule
+纯LQR（冻结$\mathbf{B}$，单级全状态反馈） & 1.33 & 2.02 \\
+纯INDI（在线$\mathbf{B}$，单级） & 0.40 & 2.86 \\
+级联P外环 + 在线$\mathbf{B}_{\mathrm{true}}$内环 & \textbf{0.02} & \textbf{0.04} \\
+级联PI外环 + 在线$\mathbf{B}_{\mathrm{true}}$内环 & \textbf{0.02} & \textbf{0.04} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+结果揭示了级联架构的显著优势及其物理根源：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{耦合抑制提升约两个数量级}：级联架构将俯仰耦合峰值从LQR的$1.33$--$2.02^\circ$、INDI的$0.40$--$2.86^\circ$降至$0.02$--$0.04^\circ$。时域上，$\delta_f=25^\circ$阶跃后俯仰角仅有$0.047^\circ$的微小瞬态即恢复，而LQR持续偏离$2.1^\circ$。
+    \item \textbf{优势源于结构解耦而非增益提高}：单级全状态反馈中，交叉项补偿与姿态-角速度耦合动力学相互干扰，补偿力矩被系统动态"淹没"；级联结构将角速度环带宽提高到姿态环之上（时间尺度分离），内环快速抑制耦合扰动，使其无法传播到姿态环。这与第\ref{sec:control}节SAS的级联思想一致，但内环用在线$\mathbf{B}_{\mathrm{true}}$替代了对角近似。
+    \item \textbf{纯P外环存在稳态误差}：由于外环仅比例反馈，常值耦合扰动下姿态存在小稳态偏差（$0.041^\circ$）；引入积分项（级联PI）后稳态误差降至$0.032^\circ$。该稳态误差的量级远小于LQR/INDI的耦合峰值，但对高精度姿态保持场景仍需积分校正。
+    \item \textbf{INDI在大摆角下的异常}：纯INDI在$\delta_f=25^\circ$时耦合峰值（$2.86^\circ$）反超$10^\circ$（$0.40^\circ$），源于其增量指令限幅（$|\Delta\mathbf{u}|\le0.2$）在大摆角扰动下饱和，在线$\mathbf{B}_{\mathrm{true}}$的补偿能力被限幅钳制。级联架构通过提高内环带宽并用完整力矩分配（非增量限幅），避免了这一饱和。
+\end{enumerate}
+
+\subsubsection{与三种"LQR在线B"路径的关系}
+
+在探索LQR交叉项补偿的在线化时，曾评估三种直接路径（详见\texttt{lqr\_online\_b.py}）：
+
+\begin{itemize}
+    \item \textbf{增益调度LQR}：离线多工作点CARE+在线插值。实质是离散逼近，且调度维度随摆角组合增长；
+    \item \textbf{SDRE（在线Riccati）}：每周期在线解CARE（单次仿真1500次求解）。计算量大，且稳定性证明弱于LQR；
+    \item \textbf{LQR外环+在线B分配}：保留离线LQR增益，分配环节用在线$\mathbf{B}_{\mathrm{true}}$求逆。
+\end{itemize}
+
+仿真表明三者均\textbf{未能}显著改善耦合抑制（峰值$1.3$--$2.6^\circ$，与纯LQR相当）。根本原因是它们都保留了\textbf{单级全状态反馈}结构——无论B矩阵如何更新，交叉项补偿仍与姿态-角速度耦合动力学竞争。级联架构的成功恰恰在于\textbf{改变了结构}（时间尺度分离），而非仅更新B矩阵。这一对比说明：\textbf{交叉项补偿的有效性更多取决于控制架构的解耦程度，而非效能矩阵的在线化程度}。
+
+\subsubsection{结论}
+
+级联"姿态P/PI外环 + 在线$\mathbf{B}_{\mathrm{true}}$角速度内环"架构，通过时间尺度分离将交叉项补偿从系统动态中解放出来，在本构型上实现了约两个数量级的耦合抑制改善，且不引入INDI的角加速度估计噪声问题、不依赖LQR的工作点假设。这一架构将第\ref{sec:control}节SAS的级联思想与第\ref{sec:INDI}节的在线效能矩阵相结合，是概念阶段向工程实现过渡的推荐控制结构。其代价是内环需要在线$3\times3$矩阵求逆（与INDI相同的计算量），以及外环积分项的引入。
