@@ -1,0 +1,201 @@
+\section{推力矢量映射：从执行器到机体六维力/力矩}
+\label{sec:mapping}
+
+推力矢量映射是将推进系统的推力与反扭矩（标量）转换为机体系六维力/力矩分量
+（矢量）的桥梁。对于纵列双发正交单轴构型，这一映射具有特殊的简洁性，
+其原因和后果是本节分析的核心。
+
+\subsection{坐标系定义与符号约定}
+
+在进行六维映射之前，必须明确定义各参考系及其转换关系：
+
+\begin{table}[H]
+\centering
+\caption{坐标系定义与符号约定}
+\begin{tabular}{ccl}
+\toprule
+符号 & 名称 & 定义 \\
+\midrule
+$\{\mathcal{I}\}$ & 惯性系 & 地面参考系，NED约定（$z_{\mathcal{I}}$向下），
+                      原点可任意选取 \\
+$\{\mathcal{B}\}$ & 机体系 & $x_b$指机头，$y_b$指右翼，$z_b$向下（右手系完备），
+                      原点在飞行器瞬时质心 \\
+$\{\mathcal{M}_f\}$ & 前电机系 & 与前电机固连，机身坐标系绕$z_b$旋转$\delta_f$后得到 \\
+$\{\mathcal{M}_t\}$ & 尾电机系 & 与尾电机固连，机身坐标系绕$y_b$旋转$\delta_t$后得到 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+约定细节（确保符号的一致性）：
+\begin{itemize}
+    \item 前电机轴线沿$+x_b$方向（拉力式布局），正转（CW从后向前看），
+          旋转矢量方向沿$+x_b$；
+    \item 尾电机轴线沿$-x_b$方向（推进式布局），反转（CCW从后向前看），
+          旋转矢量方向沿$+x_b$（反转意味着在尾电机自身参考系中为CCW，
+          但从机体系看其角动量方向与推力方向相反）；
+    \item 零摆角时两电机推力线均通过质心（CG）：$a$为前电机到CG的机体系$x$距离，
+          前电机机体系位置$[+a, 0, 0]^T$；$b$为尾电机到CG的机体系$x$距离（正值），
+          尾电机机体系位置$[-b, 0, 0]^T$；
+    \item 摆角符号约定：前电机绕$+z_b$的右手旋转为正（$\delta_f > 0$表示推力向右偏）；
+          尾电机绕$+y_b$的右手旋转为正（$\delta_t > 0$表示推力向下偏——在NED框架中即向下）。
+\end{itemize}
+
+\textbf{设计约束}：推力线过质心是保证通道解耦的必要几何条件。若这一条件不严格满足，
+则零摆角推力本身会产生残余力矩，使解耦性退化。在实际飞行中，质心位置会随燃料消耗、
+载荷变化而漂移，因此推力线设计应留有一定的不敏感区容差，或在SAS中引入前馈补偿。
+
+\subsection{摆座运动学与推力方向}
+
+单轴摆动即绕固定轴的旋转。尾电机绕$y_b$摆动$\delta_t$，
+前电机绕$z_b$摆动$\delta_f$。对应的旋转矩阵为：
+\begin{equation}
+    \bm{R}_{y_b}(\delta_t) = \begin{bmatrix}
+        \cos\delta_t & 0 & \sin\delta_t \\
+        0 & 1 & 0 \\
+        -\sin\delta_t & 0 & \cos\delta_t
+    \end{bmatrix}, \qquad
+    \bm{R}_{z_b}(\delta_f) = \begin{bmatrix}
+        \cos\delta_f & -\sin\delta_f & 0 \\
+        \sin\delta_f & \cos\delta_f & 0 \\
+        0 & 0 & 1
+    \end{bmatrix}
+    \label{eq:gimbal_rotations}
+\end{equation}
+
+\textbf{前电机推力方向}（在$\{\mathcal{B}\}$系中的单位矢量）：
+前电机自身推力方向在电机系中为$[1,0,0]^T$（拉力式向前），
+经摆座旋转后在机体系中的方向为：
+\begin{equation}
+    \bm{u}_f = \bm{R}_{z_b}(\delta_f) \cdot [1, 0, 0]^T
+    = [\cos\delta_f, \sin\delta_f, 0]^T
+\end{equation}
+
+\textbf{尾电机对机体的作用力方向}（在$\{\mathcal{B}\}$系中的单位矢量）：
+尾电机自身排气方向在电机系中为$-[1,0,0]^T$（推进式向后）。
+由牛顿第三定律，作用于机体的力与排气方向相反，因此在机体系中的受力方向为：
+\begin{equation}
+    \bm{u}_{F,t} = -\bm{R}_{y_b}(\delta_t) \cdot [-1, 0, 0]^T
+    = [+\cos\delta_t, 0, -\sin\delta_t]^T
+    \label{eq:tail_force_dir}
+\end{equation}
+$\delta_t > 0$时，推力矢量有向下的排气分量，机体受到向上的反作用力（$-z_b$方向），
+经$b$力臂产生抬头（机头向上）力矩。
+
+前电机转轴方向（角动量方向）与推力方向$\bm{u}_f$相同（正转CW，右手定则沿推力方向，
+$\bm{h}_f = J_p \omega_f [\cos\delta_f, \sin\delta_f, 0]^T$）。
+
+尾电机转轴（角动量）方向：尾电机为推进式反转（CCW），
+反转转子的角动量方向在机体系中沿$-\bm{u}_{F,t}$方向
+（即$[-\cos\delta_t, 0, +\sin\delta_t]^T$），
+$\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
+因此尾电机反扭矩$\bm{\tau}_t = \tau_t [+\cos\delta_t, 0, -\sin\delta_t]^T$
+指向机体受力方向$\bm{u}_{F,t}$——因反扭矩与转子旋向相反
+（转子反转CCW，定子受反扭矩CW，即沿$\bm{u}_{F,t}$方向）。
+
+\subsection{六维力/力矩映射的完整推导}
+
+对两台电机分别计算推力矢量与反扭矩矢量的机体系分量，并按力臂生成力矩。
+这是将标量执行器输出（$T_f, T_t, \tau_f, \tau_t$）转换为矢量力/力矩（$F_x, F_y, F_z, M_x, M_y, M_z$）
+的核心变换。
+
+\\input{../fig/03-thrust-mapping.tex}
+
+\textbf{前电机}（机体系位置$\bm{r}_f = [+a, 0, 0]^T$，拉力式，正转CW，反扭矩方向与旋向相反即沿$-\bm{u}_f$方向）：
+\begin{align}
+    \bm{F}_f &= T_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix},
+    \quad
+    \bm{\tau}_f = \tau_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix}
+    \label{eq:front_force} \\
+    \bm{M}_f &= \underbrace{\begin{bmatrix} +a \\ 0 \\ 0 \end{bmatrix} \times \bm{F}_f}_{\text{推力力臂}}
+             - \underbrace{\bm{\tau}_f}_{\text{反扭矩}}
+             = \begin{bmatrix}
+                 -\tau_f \cos\delta_f \\
+                 -\tau_f \sin\delta_f \\
+                 a T_f \sin\delta_f
+               \end{bmatrix}
+    \label{eq:front_moment}
+\end{align}
+各分量的物理含义：
+\begin{itemize}
+    \item $M_{f,x} = -\tau_f \cos\delta_f$：前电机反扭矩在机体系$x$轴的分量，因反扭矩方向沿$-\bm{u}_f$，
+          对滚转轴产生的是负贡献；
+    \item $M_{f,y} = -\tau_f \sin\delta_f$：前摆角使反扭矩在$y$方向产生投影——这是偏航通道
+          （前摆）向俯仰通道的一个二阶耦合；
+    \item $M_{f,z} = a T_f \sin\delta_f$：推力$y$分量经力臂$a$产生偏航力矩——偏航主控力矩。
+\end{itemize}
+
+\textbf{尾电机}（机体系位置$\bm{r}_t = [-b, 0, 0]^T$，推进式，反转CCW，
+反扭矩沿机体受力方向$\bm{u}_{F,t}$——见上文）：
+\begin{align}
+    \bm{F}_t &= T_t \begin{bmatrix} +\cos\delta_t \\ 0 \\ -\sin\delta_t \end{bmatrix}
+    = T_t \bm{u}_{F,t},
+    \quad
+    \bm{\tau}_t = \tau_t \begin{bmatrix} +\cos\delta_t \\ 0 \\ -\sin\delta_t \end{bmatrix}
+    \label{eq:rear_force} \\
+    \bm{M}_t &= \underbrace{\begin{bmatrix} -b \\ 0 \\ 0 \end{bmatrix} \times \bm{F}_t}_{\text{推力力臂}}
+             + \underbrace{\bm{\tau}_t}_{\text{反扭矩}}
+             = \begin{bmatrix}
+                 +\tau_t \cos\delta_t \\
+                 -b T_t \sin\delta_t \\
+                 -\tau_t \sin\delta_t
+               \end{bmatrix}
+    \label{eq:rear_moment}
+\end{align}
+各分量的物理含义：
+\begin{itemize}
+    \item $M_{t,x} = +\tau_t \cos\delta_t$：尾电机反扭矩在机体系$x$轴的分量，因尾电机反转，
+          机体承受的反扭矩沿$\bm{u}_{F,t}$（$+x$向），对滚转轴贡献为正——与前电机的负贡献形成差动对消；
+    \item $M_{t,y} = -b T_t \sin\delta_t$：推力在机体上的$z$向分量（$-T_t\sin\delta_t$，
+          即$\delta_t>0$时受力向上、NED中$z<0$）经力臂$b$产生俯仰力矩。
+          注意：$\delta_t>0$时尾推力受力向上，对质心产生抬头力矩（NED右手系中$M_y<0$为机头向上）；
+    \item $M_{t,z} = -\tau_t \sin\delta_t$：尾摆角使反扭矩在$z$方向产生投影——
+          俯仰通道（尾摆）向偏航通道的一个二阶耦合。
+\end{itemize}
+
+合并前后电机贡献，得到\textbf{机体系六维推力矢量映射}（消去零项后）：
+\begin{equation}
+    \boxed{
+    \begin{aligned}
+        F_x &= T_f \cos\delta_f + T_t \cos\delta_t \\[2pt]
+        F_y &= T_f \sin\delta_f \\[2pt]
+        F_z &= -T_t \sin\delta_t \\[6pt]
+        M_x &= -\tau_f \cos\delta_f + \tau_t \cos\delta_t \\[2pt]
+        M_y &= -b T_t \sin\delta_t - \tau_f \sin\delta_f \\[2pt]
+        M_z &= a T_f \sin\delta_f - \tau_t \sin\delta_t
+    \end{aligned}}
+    \label{eq:six_component}
+\end{equation}
+
+\textbf{符号验证}（小角度展开确认物理直观正确性）：
+\begin{itemize}
+    \item $\delta_f > 0$（前摆右偏）：$F_y \approx T_f \delta_f > 0$（右侧力），
+          $M_z \approx a T_f \delta_f > 0$（机头向右的偏航力矩），符合偏航直觉；
+    \item $\delta_t > 0$（尾摆下偏——排气向下、机体受力向上）：
+          $F_z \approx -T_t \delta_t < 0$（NED中$z<0$为上，即向上的力），
+          $M_y \approx -b T_t \delta_t < 0$（抬头力矩），符合俯仰直觉；
+    \item $\delta_f = \delta_t = 0$且$\tau_f = \tau_t$（等转速、零摆角、反扭对消）：
+          $F_x = T_f + T_t$（前后推力同向叠加），$F_y = F_z = 0$（无侧向/垂向力），
+          $M_x = 0$（反扭对消，无滚转力矩），$M_y = M_z = 0$（无俯仰/偏航力矩）。
+          在此理想状态下，所有控制力矩归零——这正是配平直飞的期望状态。
+\end{itemize}
+
+\textbf{耦合项分析}：式(\ref{eq:six_component})中包含两个交叉耦合项：
+\begin{itemize}
+    \item $M_y$中的$-\tau_f \sin\delta_f$：前摆角使反扭矩在$y$向产生投影，
+          作用于俯仰轴，物理上是偏航摆动通过反扭矩投影对俯仰轴的耦合。
+          量级估算：在典型参数下，该项约为$k_Q \omega_0^2 \cdot \delta_f$，
+          而俯仰主控力矩为$b \cdot k_T \omega_0^2 \cdot \delta_t$。
+          两者之比为$(k_Q / (k_T b)) \cdot (\delta_f/\delta_t)
+          = (C_Q/C_T) \cdot (D/b) \cdot (\delta_f/\delta_t)$；
+    \item $M_z$中的$-\tau_t \sin\delta_t$：尾摆角使反扭矩在$z$向产生投影，
+          作用于偏航轴，物理上是俯仰摆动通过反扭矩投影对偏航轴的耦合。
+          量级同理：为$(k_Q / (k_T a)) \cdot (\delta_t/\delta_f)
+          = (C_Q/C_T) \cdot (D/a) \cdot (\delta_t/\delta_f)$。
+\end{itemize}
+
+对于典型小型UAV螺旋桨参数（$C_Q/C_T \approx 0.15$--$0.25$，$D \approx 0.2$--$0.3$\,m，
+$a, b \approx 0.5$--$1.0$\,m），耦合比约在$3\%$--$15\%$范围——
+在工程上属于可处理量级，但并非完全可忽略。
+
+
+\section{六自由度刚体动力学}

@@ -1,0 +1,56 @@
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Stealth, scale=0.82,
+  config/.style={draw=black!60, fill=black!6, rounded corners=3pt, minimum width=32mm, minimum height=22mm, align=center, font=\footnotesize\sffamily},
+  arrow/.style={->, thick, >={Stealth[length=2mm]}},
+]
+  \node[config, draw=blue!50, fill=blue!5] (a) at (0,0) {
+    \textbf{常规固定翼}\\[2pt]
+    {\small\color{black!30}固定推力方向}\\[2pt]
+    舵面控制 $\cdot$ 需跑道\\[1pt]
+    \textcolor{green!50!black}{巡航效率最高}\\
+    \textcolor{red!60!black}{低速控制弱}\\
+    \textcolor{red!60!black}{无法悬停}
+  };
+
+  \node[config, draw=green!50, fill=green!5] (b) at (5.2,0) {
+    \textbf{四旋翼}\\[2pt]
+    {\small\color{black!30}差速控制}\\[2pt]
+    差速控制 $\cdot$ 悬停\\[1pt]
+    \textcolor{green!50!black}{低速操纵优异}\\
+    \textcolor{red!60!black}{巡航效率低}\\
+    \textcolor{yellow!50!black}{续航受限}
+  };
+
+  \node[config, draw=orange!60, fill=orange!5] (c) at (10.4,0) {
+    \textbf{倾转旋翼}\\[2pt]
+    {\small\color{black!30}推力方向可变}\\[2pt]
+    倾转过渡 $\cdot$ VTOL\\[1pt]
+    \textcolor{green!50!black}{全速域覆盖}\\
+    \textcolor{red!60!black}{机构复杂沉重}\\
+    \textcolor{red!60!black}{过渡控制难}
+  };
+
+  \node[config, draw=red!60, fill=red!3] (d) at (2.6,-6.0) {
+    \textbf{本文构型：纵列双发矢量推力}\\[2pt]
+    {\small\color{red!50}正交摆轴 $\cdot$ 天然解耦}\\[2pt]
+    矢推+差速反扭 $\cdot$ 天然解耦\\[1pt]
+    \textcolor{green!50!black}{全速域可控 $\cdot$ 执行器最少}\\
+    \textcolor{yellow!50!black}{低油门滚转退化}\\
+    \textcolor{green!50!black}{通道天然解耦 $\cdot$ 无在线优化}
+  };
+
+  % 箭头指示本构型的定位
+  \draw[arrow, blue!60, line width=1.2pt] (a.south) -- ++(0,-1.2) node[midway, right, font=\footnotesize, align=center] {无矢推\\需跑道};
+  \draw[arrow, green!60, line width=1.2pt] (b.south) -- ++(0,-1.2) node[midway, right, font=\footnotesize, align=center] {差速控制\\低效巡航};
+  \draw[arrow, orange!60, line width=1.2pt] (c.south) -- ++(0,-1.2) node[midway, right, font=\footnotesize, align=center] {矢推VTOL\\机构复杂};
+
+  % 收敛到本构型
+  \draw[arrow, red!80, line width=1.4pt] (2.6,-3.8) -- (2.6,-5.0) node[midway, right, font=\footnotesize\bfseries, align=center] {融合优势\\规避劣势};
+\end{tikzpicture}
+\caption{纵列双发矢量推力构型在现有构型谱系中的定位。该构型融合了固定翼的巡航效率
+（升力面提供主要升力）、多旋翼的差速滚转机制（反扭矩差动）和倾转旋翼的全速域
+推力矢量控制能力，同时通过正交摆轴的几何设计规避了倾转机构复杂和控制分配在线优化
+的代价。图中定性地展示了各种构型在机械复杂度、巡航效率和低速控制三个维度上的权衡。}
+\label{fig:config_comparison}
+\end{figure}

@@ -1,0 +1,151 @@
+\section{六自由度刚体动力学}
+\label{sec:dynamics}
+
+整机作为刚体在三维空间中的运动由质心平动和绕质心的转动两部分组成。
+本节建立完整的动力学和运动学方程，并讨论数值积分策略。
+
+\subsection{牛顿-欧拉方程}
+
+将飞行器视为刚体（弹性变形在概念设计阶段可忽略），其六自由度动力学由
+牛顿第二定律（平动）和欧拉方程（转动）在机体系中联合描述\cite{stevens2015aircraft}。
+
+\textbf{平动方程}。质心速度$\bm{v} = [u, v, w]^T$定义在机体系中。
+然而牛顿第二定律$m\dot{\bm{v}}_{\mathcal{I}} = \sum \bm{F}$中的加速度是惯性系中的绝对加速度。
+利用动系求导的坐标转换公式，机体系中观测的速度变化率加上因坐标系旋转带来的牵连项
+等于惯性系绝对加速度在机体系的分量：
+\begin{equation}
+    m \left( \dot{\bm{v}} + \bm{\omega} \times \bm{v} \right)
+    = \bm{F}_{\text{推力}} + \bm{F}_{\text{气动}} + m \bm{g}_b
+    \label{eq:newton_body}
+\end{equation}
+其中$\bm{\omega} = [p, q, r]^T$为机体角速度。$\bm{\omega} \times \bm{v}$项
+反映了即使$\bm{v}$在机体系中不变，因机体旋转导致$\bm{v}$在惯性系中的方向改变
+所需的向心加速度。这是机体系中牛顿方程特有的附加项，在惯性系中写牛顿方程则不需要。
+
+\textbf{转动方程}。对机体系原点（质心）取矩，并考虑旋转部件（电机+螺旋桨）
+的角动量效应：
+\begin{equation}
+    \bm{I} \dot{\bm{\omega}} + \bm{\omega} \times (\bm{I} \bm{\omega})
+    + \bm{\omega} \times \bm{h}_{\text{转子}}
+    = \bm{M}_{\text{推力}} + \bm{M}_{\text{气动}}
+    \label{eq:euler_body}
+\end{equation}
+各物理项的含义依次为：
+\begin{itemize}
+    \item $\bm{I} \dot{\bm{\omega}}$：机体角加速度引起的惯性力矩（转动惯量乘角加速度）。
+          对于主轴坐标系，$\bm{I} = \operatorname{diag}(I_x, I_y, I_z)$；
+    \item $\bm{\omega} \times (\bm{I} \bm{\omega})$：因机体角速度矢量与角动量矢量
+          不共线（除非绕主轴旋转）而产生的陀螺进动力矩。这一项引起三轴之间的动态耦合——
+          例如滚转（$p$）和偏航（$r$）均不为零时，机身绕$y$轴产生$(I_x-I_z)pr$的惯性耦合力矩；
+    \item $\bm{\omega} \times \bm{h}_{\text{转子}}$：转子总角动量
+          $\bm{h}_{\text{转子}} = \sum_i J_{p,i} \omega_i \bm{n}_i$
+          因机体旋转产生的陀螺力矩（已在第\ref{sec:propulsion}节详细讨论）。
+          注意此处是$+\bm{\omega} \times \bm{h}$（式\ref{eq:euler_body}左侧），
+          与式(\ref{eq:gyro_moment})的$-\bm{\Omega} \times \bm{h}$看似符号相反，
+          实则为同一物理量在方程两侧的不同表述——左侧是因，右侧是果。
+\end{itemize}
+
+\textbf{重力在机体系的分量}。重力在惯性系中恒为$[0, 0, mg]^T$（NED约定，$z_{\mathcal{I}}$向下）。
+通过姿态旋转矩阵的逆变换（从惯性系到机体系）得：
+\begin{equation}
+    \bm{g}_b = \bm{R}_{\mathcal{I}\mathcal{B}}
+    \begin{bmatrix} 0 \\ 0 \\ mg \end{bmatrix}
+    = \bm{R}_{\mathcal{B}\mathcal{I}}^T
+    \begin{bmatrix} 0 \\ 0 \\ mg \end{bmatrix}
+    \label{eq:gravity_body}
+\end{equation}
+
+\textbf{气动力建模}。在概念级仿真中，气动力可用简化的集总参数模型\cite{beard2012small}：
+动压$q_\infty = \frac{1}{2}\rho V^2$（$V$为空速），迎角$\alpha = \arctan(w/u)$，
+侧滑角$\beta = \arcsin(v/V)$。气动力的完整建模需要气动导数数据库（通常来自CFD或风洞试验），
+不在纯推力矢量分析的范围内。在推力矢量构型的初步分析中，可先忽略气动力以聚焦推力矢量的
+控制特性，随后逐步引入气动项以评估气动-推力矢量的交互效应。
+
+\subsection{姿态运动学：四元数表示}
+
+采用四元数$\bm{q} = [q_0, q_1, q_2, q_3]^T$（标量在前约定）
+描述机体到惯性系的旋转。选择四元数而非欧拉角的主要理由是在$\theta = \pm 90^\circ$处
+欧拉角存在万向锁奇异——3-2-1欧拉角序列在$\theta = \pm 90^\circ$时，
+$\phi$和$\psi$描述同一物理旋转自由度，导致运动学方程退化。
+四元数无此奇异点，对于可能包含大俯仰角的推力矢量构型尤其必要\cite{markley2014fundamentals,kuipers1999quaternions}。
+
+姿态运动学方程（机体系角速度$\bm{\omega}_b = [p, q, r]^T$驱动四元数演化）：
+\begin{equation}
+    \dot{\bm{q}} = \frac{1}{2} \bm{q} \otimes
+    \begin{bmatrix} 0 \\ p \\ q \\ r \end{bmatrix}
+    \label{eq:quaternion_kinematics}
+\end{equation}
+写成矩阵形式（便于数值实现）：
+\begin{equation}
+    \begin{bmatrix} \dot{q}_0 \\ \dot{q}_1 \\ \dot{q}_2 \\ \dot{q}_3 \end{bmatrix}
+    = \frac{1}{2}
+    \begin{bmatrix}
+        0 & -p & -q & -r \\
+        p &  0 &  r & -q \\
+        q & -r &  0 &  p \\
+        r &  q & -p &  0
+    \end{bmatrix}
+    \begin{bmatrix} q_0 \\ q_1 \\ q_2 \\ q_3 \end{bmatrix}
+    \label{eq:quaternion_matrix}
+\end{equation}
+
+四元数到方向余弦矩阵（$\{\mathcal{B}\}\to\{\mathcal{I}\}$）的转换：
+\begin{equation}
+    \bm{R}_{\mathcal{B}\mathcal{I}} =
+    \begin{bmatrix}
+        1-2(q_2^2+q_3^2) & 2(q_1 q_2 - q_0 q_3) & 2(q_1 q_3 + q_0 q_2) \\
+        2(q_1 q_2 + q_0 q_3) & 1-2(q_1^2+q_3^2) & 2(q_2 q_3 - q_0 q_1) \\
+        2(q_1 q_3 - q_0 q_2) & 2(q_2 q_3 + q_0 q_1) & 1-2(q_1^2+q_2^2)
+    \end{bmatrix}
+    \label{eq:dcm_from_quaternion}
+\end{equation}
+
+3-2-1欧拉角（偏航-俯仰-滚转，用于显示和人机界面）从DCM提取：
+\begin{equation}
+    \begin{aligned}
+        \phi &= \operatorname{atan2}(R_{23}, R_{33}) \\
+        \theta &= -\arcsin(R_{13}) \\
+        \psi &= \operatorname{atan2}(R_{12}, R_{11})
+    \end{aligned}
+    \label{eq:euler_from_dcm}
+\end{equation}
+
+\textbf{四元数的数值维护}：每次积分步后，四元数因浮点舍入误差的积累会逐渐偏离单位模长
+（$\|\bm{q}\| \neq 1$）。若不加处理，范数漂移会导致DCM失去正交性，
+进而使坐标变换产生系统性畸变。解决方案是对每一积分子步后的四元数执行归一化：
+$\bm{q} \leftarrow \bm{q} / \|\bm{q}\|$。这是飞行仿真中的标准做法。
+
+\subsection{惯性系位置与速度}
+
+机体系速度经姿态变换到惯性系后积分得到惯性系位置：
+\begin{equation}
+    \dot{\bm{p}}_{\mathcal{I}} = \bm{R}_{\mathcal{B}\mathcal{I}} \bm{v}_{\mathcal{B}}
+    \label{eq:position_integration}
+\end{equation}
+
+\subsection{子步调度与数值稳定性}
+
+对于显式欧拉积分方法，数值稳定性受限于系统最快时间常数的两倍（Nyquist-Shannon型约束
+在数值ODE中的对应物是$\Delta t < 2/\lambda_{\max}$，其中$\lambda_{\max}$为系统特征值的最大实部绝对值）。
+在六自由度飞行仿真中，最快的时间常数通常来自气动阻尼通道或高增益控制回路。
+以滚转通道为例，气动滚转阻尼的时间常数为$\tau_p \approx I_x / (q_\infty S b^2 C_{l_p} / (2V))$，
+在典型参数下可能小至$10$--$20$\,ms。因此要求积分步长$\Delta t \lesssim 4$\,ms以保证
+数值稳定性。
+
+\textbf{子步调度策略}：主循环（渲染+物理）以屏幕刷新率（通常16--17\,ms）或固定频率运行，
+物理积分采用更小的子步。设主循环步长为$\Delta t$，取$n = \lceil \Delta t / \Delta t_{\max} \rceil$
+个子步（$\Delta t_{\max}$通常取4\,ms），每子步以$h = \Delta t / n$逐步积分。
+子步内的计算流程为：
+\begin{enumerate}[label=(\arabic*)]
+    \item 推进系统：根据当前油门与差速指令计算推力$T$与反扭矩$\tau$；
+    \item 推力矢量映射：根据当前摆角计算六维力/力矩分量；
+    \item 欧拉方程积分：$\bm{\omega} \leftarrow \bm{\omega} + h \cdot \dot{\bm{\omega}}$；
+    \item 四元数更新：$\bm{q} \leftarrow \bm{q} + h \cdot \dot{\bm{q}}$，随后归一化；
+    \item 平动速度更新：$\bm{v} \leftarrow \bm{v} + h \cdot \dot{\bm{v}}$；
+    \item 惯性系位置更新：$\bm{p}_{\mathcal{I}} \leftarrow \bm{p}_{\mathcal{I}} + h \cdot \dot{\bm{p}}_{\mathcal{I}}$。
+\end{enumerate}
+主循环步长上限（frame cap）设为$50$\,ms，防止因浏览器标签切换、后台暂停等导致的
+大时间跳跃引起的积分发散。
+
+
+\section{控制分配：通道解耦的几何机理}

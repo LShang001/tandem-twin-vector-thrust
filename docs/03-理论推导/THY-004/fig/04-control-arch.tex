@@ -1,0 +1,60 @@
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Stealth, node distance=8mm and 12mm,
+  box/.style={draw=black!70, fill=black!8, rounded corners=3pt, minimum width=22mm, minimum height=9mm, align=center, font=\footnotesize\sffamily},
+  sbox/.style={draw=black!50, fill=black!4, rounded corners=2pt, minimum width=16mm, minimum height=7mm, align=center, font=\footnotesize\sffamily},
+  arrow/.style={->, thick, >={Stealth[length=2.5mm]}},
+  annot/.style={font=\footnotesize\sffamily},
+  dashbox/.style={draw=black!30, densely dashed, rounded corners=6pt, inner sep=6pt},
+]
+  % ===== 操纵输入（左侧） =====
+  \node[box, fill=blue!8, draw=blue!40] (pilot) {操纵输入\\$\omega_0,\delta_t^{\text{pilot}},\delta_f^{\text{pilot}},\Delta\omega^{\text{pilot}}$};
+  \node[annot, above=0pt of pilot] {操纵手/自主控制器};
+
+  % ===== SAS层 =====
+  \node[box, fill=red!8, draw=red!40, right=of pilot, xshift=4mm] (sas) {SAS 增稳层\\角速率阻尼\\+姿态P+I\\+角速度闭环};
+
+  % ===== 限幅 =====
+  \node[sbox, right=of sas, xshift=4mm] (limit) {指令限幅\\$\pm\delta_{\max},\pm\Delta\omega_{\max}$};
+
+  % ===== 执行器 =====
+  \node[box, fill=green!8, draw=green!50, right=of limit, xshift=4mm] (act) {执行器\\电机一阶\\滞后+摆座};
+
+  % ===== 推力映射 =====
+  \node[box, right=of act, xshift=4mm] (map) {推力矢量\\六维映射\\式(\ref{eq:six_component})};
+
+  % ===== 动力学 =====
+  \node[box, fill=orange!8, draw=orange!60, right=of map, xshift=4mm] (dyn) {六自由度\\刚体动力学\\NE+四元数};
+
+  % ===== 传感器反馈（下方） =====
+  \node[box, fill=black!5, draw=black!40, below=of sas, yshift=-6mm] (sensor) {传感器反馈\\$\bm{\omega}, \bm{q}, \bm{\theta}$};
+
+  % ===== 扰动 =====
+  \node[annot, above=of dyn, yshift=4mm] (dist) {气动扰动/湍流};
+
+  % 前向连接
+  \draw[arrow] (pilot) -- (sas);
+  \draw[arrow] (sas) -- (limit);
+  \draw[arrow] (limit) -- (act);
+  \draw[arrow] (act) -- (map);
+  \draw[arrow] (map) -- (dyn);
+  \draw[arrow] (dist) -- (dyn);
+
+  % 反馈连接
+  \draw[arrow] (dyn.south) -- ++(0,-0.4) -| (sensor.east) node[pos=0.6, annot, right=2pt] {状态};
+  \draw[arrow] (sensor.west) -| (sas.south) node[pos=0.35, annot, below=2pt] {反馈};
+
+  % SAS 虚线框
+  \begin{scope}[on background layer]
+    \node[dashbox, fit=(sas)(sensor), label={[annot] above right:{\textbf{SAS 内环}}}] {};
+  \end{scope}
+
+  % 输出
+  \draw[arrow] (dyn.east) -- ++(0.8,0) node[annot, right] {飞行状态};
+\end{tikzpicture}
+\caption{纵列双发矢量推力构型级联控制架构。三层结构：操纵输入层生成四通道指令，
+SAS增强层通过角速率/姿态反馈修正指令，执行层经物理限幅后驱动电机和摆座。
+控制分配采用对角效能矩阵的直接映射（式\ref{eq:direct_mapping}），无需在线优化求解。
+内环反馈由IMU提供机体角速率和姿态四元数。}
+\label{fig:control_architecture}
+\end{figure}

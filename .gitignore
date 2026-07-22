@@ -32,3 +32,4 @@ tmp/
 *.bak
 *.tmp
 ~$*
+*.pdf

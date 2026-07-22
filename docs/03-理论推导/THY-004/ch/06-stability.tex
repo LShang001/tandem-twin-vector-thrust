@@ -1,0 +1,160 @@
+\section{线性化与稳定性模态分析}
+\label{sec:stability}
+
+线性化是分析飞行器稳定性特性的经典方法。在本节中，我们将非线性六自由度动力学方程
+在工作点附近线性化，得到状态空间模型，并分析纵向和横航向的各个特征模态。
+
+\subsection{小扰动线性化方法}
+
+取配平状态为定直平飞（稳态、水平、无侧滑，$\phi_0 = \beta_0 = 0$，
+$p_0 = q_0 = r_0 = 0$）。总状态向量为（采用分离形式以适应经典模态分析的惯例）：
+\begin{align}
+    \bm{x}_{\text{long}} &= [\Delta u, \Delta w, \Delta q, \Delta \theta]^T \quad \text{（纵向，4阶）} \\
+    \bm{x}_{\text{lat}} &= [\Delta v, \Delta p, \Delta r, \Delta \phi]^T \quad \text{（横航向，4阶）}
+\end{align}
+
+在配平点处对非线性函数$\bm{f}(\bm{x}, \bm{u})$作Taylor展开，
+保留一阶项得到线性状态空间模型（形式上的A/B矩阵）：
+\begin{equation}
+    \Delta \dot{\bm{x}} = \underbrace{\frac{\partial \bm{f}}{\partial \bm{x}}\bigg|_0}_{\bm{A}}
+    \Delta \bm{x} + \underbrace{\frac{\partial \bm{f}}{\partial \bm{u}}\bigg|_0}_{\bm{B}}
+    \Delta \bm{u}
+    \label{eq:linear_state_space}
+\end{equation}
+其中控制输入$\Delta \bm{u} = [\Delta \delta_t, \Delta \delta_f, \Delta \omega]^T$。
+偏导数矩阵的每个元素（稳定导数与控制导数）在概念设计阶段通过有限差分或解析求导获得。
+在高可信度阶段，这些导数应由CFD计算或风洞试验标定。
+
+\subsection{纵向模态的物理本质}
+
+纵向四阶系统（$u, w, q, \theta$）的A矩阵具有如下结构：
+\begin{equation}
+    \bm{A}_{\text{long}} =
+    \begin{bmatrix}
+        X_u & X_w & X_q - w_0 & -g\cos\theta_0 \\
+        Z_u & Z_w & Z_q + u_0 & -g\sin\theta_0 \\
+        M_u & M_w & M_q & 0 \\
+        0 & 0 & 1 & 0
+    \end{bmatrix}
+    \label{eq:longitudinal}
+\end{equation}
+其中各导数的物理含义为：$X_u = (1/m)\partial F_x/\partial u$（速度导数，通常为负——速度增大$\to$阻力增大），
+$Z_w = (1/m)\partial F_z/\partial w$（法向力对$w$的导数，决定升力线斜率），
+$M_q = (1/I_y)\partial M_y/\partial q$（俯仰阻尼导数，恒为负），
+$M_w = (1/I_y)\partial M_y/\partial w$（静安定性导数，$M_w < 0$表示静稳定）。
+
+纵向系统通常呈现经典的两模态结构，这是飞行力学教科书中的标准结论\cite{etkin1982dynamics,stengel2004flight}：
+
+\textbf{短周期模态}（short period mode）：以$w$（迎角）和$q$（俯仰速率）
+为主变量的快速、高阻尼振荡（或两个实根）。典型周期为1--3秒。其近似特征频率
+和阻尼由静稳定导数$M_w$（$C_{m\alpha}$）和俯仰阻尼$M_q$共同决定：
+\begin{equation}
+    \omega_{sp} \approx \sqrt{-M_w \cdot Z_q/u_0}, \quad
+    \zeta_{sp} \approx \frac{-(M_q + M_{\dot{w}} \cdot Z_q)}{2\omega_{sp}}
+\end{equation}
+
+对于纵列双发构型，在SAS闭环下，尾摆的附加俯仰力矩（$\partial M_y / \partial \delta_t = -b T_0$，
+经SAS增益$k_q$转换为有效俯仰阻尼）进一步加速了短周期收敛。
+这相当于在气动阻尼$M_q$的基础上附加了推力矢量阻尼$M_q^{\text{TV}} = k_q \cdot (-b T_0) / I_y$，
+使闭环短周期阻尼显著高于开环阻尼。
+
+\textbf{长周期模态}（phugoid mode）：以$u$（速度）和$\theta$（俯仰角）为主变量的
+缓慢、低阻尼振荡。周期通常在20--60秒。其物理本质是飞行器动能（$\sim mu^2/2$）
+和势能（$mgh$）之间的缓慢交换：飞行器抬头$\to$速度下降$\to$升力减小$\to$低头
+$\to$速度恢复$\to$升力恢复$\to$再次抬头。推力矢量的摆角变化对长周期模态的影响
+通常不显著——长周期主要取决于总能量交换（升阻比和推力-阻力平衡），
+而非快速力矩平衡，而推力矢量主要影响后者。
+
+\textbf{推力矢量对纵向稳定性的贡献}：推力矢量的静稳定效应可通过等效静稳定裕度
+来量化。定义$\partial C_m / \partial \alpha$为全机俯仰力矩系数对迎角的导数。
+对于推力矢量构型，该导数包含气动贡献$C_{m\alpha}^{\text{aero}}$和
+推力矢量贡献$C_{m\alpha}^{\text{TV}}$，后者来源于推力矢量随迎角变化导致的
+力臂效应变化和来流-转速耦合（前进比变化导致的推力变化）。在初步分析中，
+推力矢量的等效静稳定贡献通常为正（增强稳定性），因为低头力矩随迎角增大而增大
+（尾摆推力的法向分量经力臂产生的低头力矩增大）。
+
+\subsection{横航向模态的物理本质}
+
+横航向四阶系统（$v, p, r, \phi$）的A矩阵：
+\begin{equation}
+    \bm{A}_{\text{lat}} =
+    \begin{bmatrix}
+        Y_v & Y_p + w_0 & Y_r - u_0 & g\cos\theta_0 \\
+        L_v & L_p & L_r & 0 \\
+        N_v & N_p & N_r & 0 \\
+        0 & 1 & \tan\theta_0 & 0
+    \end{bmatrix}
+    \label{eq:lateral}
+\end{equation}
+各关键导数：$L_v = (1/I_x)\partial M_x/\partial v$（上反角效应，$L_v < 0$表示正上反角——有利的滚转稳定性），
+$L_p = (1/I_x)\partial M_x/\partial p$（滚转阻尼，恒为负），
+$N_v = (1/I_z)\partial M_z/\partial v$（航向静稳定性，$N_v > 0$为稳定——侧滑产生顺风向偏航力矩），
+$N_r = (1/I_z)\partial M_z/\partial r$（偏航阻尼，恒为负）。
+
+横航向系统呈现三个特征模态（通常为一个快衰减实根、一对共轭复根和一个慢实根）\cite{etkin1982dynamics}：
+
+\textbf{滚转收敛模态}（roll subsidence）：以$p$（滚转速率）为绝对主导的单实根模态。
+近似特征值$\lambda_R \approx L_p < 0$。无控状态下，气动滚转阻尼$C_{l_p}$提供收敛，
+典型时间常数约为$0.5$--$2$秒。纵列双发构型在SAS闭环下，差速反扭提供附加的人工滚转阻尼
+$L_p^{\text{SAS}} = k_p \cdot (-2 k_Q \omega_0^2) / I_x $，进一步缩短收敛时间。
+
+\textbf{荷兰滚模态}（Dutch roll）：$v$（侧滑角）和$r$（偏航速率）的耦合振荡。
+在滚转自由度相对不活跃时（小上反角或无滚转输入），荷兰滚近似为侧滑和偏航的
+二阶振荡系统。其近似特征频率由航向静稳定性$N_v$（$C_{n\beta}$）决定：
+\begin{equation}
+    \omega_{DR} \approx \sqrt{N_v \cdot u_0 / I_z}
+\end{equation}
+荷兰滚的阻尼来源包括偏航阻尼$N_r$和侧力导数$Y_v$的间接贡献。
+一个关键设计准则是：荷兰滚的阻尼必须足够大（通常$\zeta_{DR} > 0.05$--$0.1$），
+否则飞行器在湍流中的偏航-滚转耦合响应将严重影响乘客舒适度（对于载人飞行器）
+或航向保持精度（对于无人机）。
+
+对于纵列双发构型，前摆的偏航力矩$\partial M_z / \partial \delta_f = a T_0$
+经SAS偏航阻尼增益$k_r$转换为有效偏航阻尼$N_r^{\text{SAS}} = -k_r \cdot a T_0 / I_z < 0$，
+显著增强了荷兰滚的阻尼。实际上，推力矢量SAS是荷兰滚阻尼的最有效增强手段之一——
+它直接作用于偏航轴，产生与偏航速率成比例的对抗力矩。
+
+\textbf{螺旋模态}（spiral mode）：$\phi$（滚转角）和$r$（偏航速率）的缓慢耦合发散或收敛。
+近似特征值（在荷兰滚频率远大于螺旋模态频率的假设下）：
+\begin{equation}
+    \lambda_S \approx \frac{g}{u_0} \cdot
+    \frac{L_v N_r - N_v L_r}{L_v N_p - N_v L_p}
+\end{equation}
+螺旋模态的物理：一侧滚转（$\phi$偏转）$\to$升力倾斜$\to$侧向力$\to$侧滑
+$\to$航向静稳定性产生顺风向偏航力矩$\to$偏航加剧了滚转方向（在协调转弯中，
+偏航的外翼速度高于内翼，产生更大的升力，进一步增大滚转角）。
+
+螺旋模态可能随时间缓慢发散（典型的倍幅时间达数十秒至数分钟），
+对飞行员而言是容易觉察和纠正的——与高频率的荷兰滚/短周期发散相比，
+缓慢发散在实际飞行中通常被认为是可接受的。但在自动驾驶仪和导航控制中，
+未抑制的螺旋发散会导致持续的方向漂移，必须通过航向保持控制律来抑制。
+
+\subsection{SAS对模态的影响}
+
+SAS闭环改变了系统矩阵$\bm{A}_{\text{closed}} = \bm{A} + \bm{B}\bm{K}$，
+其中$\bm{K}$为反馈增益矩阵。SAS对各模态的影响可以总结如下：
+
+\begin{itemize}
+    \item \textbf{短周期}：俯仰阻尼增益$k_q$增大俯仰阻尼，提高短周期阻尼比。
+          姿态增益$k_\theta$增大等效静稳定性（类似增加$C_{m\alpha}$的绝对值），
+          提高短周期频率。两者共同作用使短周期从可能欠阻尼（开环$\zeta_{sp} \approx 0.3$--$0.5$）
+          变为良好阻尼（闭环$\zeta_{sp} \approx 0.7$--$1.0$）；
+    \item \textbf{长周期}：SAS对长周期通常影响较小，因为长周期的动力学
+         主要是能量交换而非力矩平衡。但过高的$k_\theta$可能通过迎角-姿态耦合
+         间接影响长周期的阻尼；
+    \item \textbf{荷兰滚}：偏航阻尼增益$k_r$直接改善荷兰滚阻尼。
+          前摆的偏航力矩是荷兰滚阻尼的强有效执行器，因为偏航力矩是荷兰滚振荡中
+          角加速度的直接驱动项；
+    \item \textbf{滚转收敛}：滚转阻尼增益$k_p$和姿态增益$k_\phi$加速滚转收敛。
+          差速反扭的滚转力矩对滚转速率的反馈是SAS滚转阻尼的主要来源
+          （对于无副翼的纯推力矢量构型）；
+    \item \textbf{螺旋模态}：SAS对螺旋模态的影响通过多个通道间接实现。
+          偏航阻尼增益$k_r$对螺旋模态的影响取决于具体的飞行器参数——在某些情况下
+          可能稳定螺旋模态，在其他情况下可能略微降低其稳定性。
+          由于螺旋模态已在开环下基本可接受，SAS对它的影响通常不作为设计约束。
+\end{itemize}
+
+\\input{../fig/05-stability-poles.tex}
+
+
+\section{增稳控制律设计}

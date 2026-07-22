@@ -1,0 +1,39 @@
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Stealth, scale=1.1,
+  stream/.style={draw=black!40, thick},
+  arrow/.style={->, thick, >={Stealth[length=2.5mm]}},
+  annot/.style={font=\footnotesize\sffamily},
+]
+  % 流管上边界
+  \draw[stream] (0,0) .. controls (2.5,1.2) and (3.5,1.2) .. (5.5,0.6);
+  \draw[stream] (0,0) .. controls (2.5,-1.2) and (3.5,-1.2) .. (5.5,-0.6);
+  % 截面0（远前方）
+  \draw[stream, fill=black!5] (-0.1,0) -- (-0.1,-0.6) .. controls (0.5,-0.8) and (0.5,0.8) .. (-0.1,0.6) -- cycle;
+  \draw[<->] (-0.1,0.7) -- node[annot, fill=white] {$A_0$} (-0.1,-0.7);
+  % 桨盘
+  \draw[stream, fill=black!12, line width=1.4pt] (2.5,0.65) -- (2.5,-0.65) node[annot, below=4pt] {桨盘};
+  \draw[<->] (2.5,0.75) -- node[annot, fill=white] {$A$} (2.5,-0.75);
+  % 截面2（远后方）
+  \draw[stream, fill=black!5] (5.6,0) -- (5.6,-0.35) .. controls (5.0,-0.5) and (5.0,0.5) .. (5.6,0.35) -- cycle;
+  % 速度标注
+  \draw[arrow, blue!60!black] (-0.8,0) -- node[annot, above] {$v_0$} (0.3,0);
+  \draw[arrow, blue!60!black] (1.5,0) -- node[annot, above] {$v_p=v_0+v_i$} (3.2,0);
+  \draw[arrow, blue!60!black] (3.8,0) -- node[annot, above] {$v_2=v_0+2v_i$} (5.8,0);
+  % 压强分布示意（定性，盘面下侧）
+  \draw[red!50!black, thick] plot[smooth] coordinates {
+    (-0.5,-0.9) (0.5,-0.85) (1.5,-0.8) (2.3,-0.78) (2.5,-1.3) (2.7,-0.82) (3.5,-0.85) (5,-0.9) (6,-0.92)
+  };
+  \node[annot, red!50!black] at (1.0,-1.15) {$p$分布};
+  \node[annot, red!50!black] at (2.5,-1.5) {$\Delta p = T/A$};
+  % 截面标记
+  \node[annot] at (-0.1,0.9) {截面0};
+  \node[annot] at (5.6,0.55) {截面2};
+  % 流线
+  \draw[stream, densely dotted] (0.2,0.3) .. controls (2.5,1.0) and (3.5,1.0) .. (5.5,0.5);
+  \draw[stream, densely dotted] (0.2,-0.3) .. controls (2.5,-1.0) and (3.5,-1.0) .. (5.5,-0.5);
+\end{tikzpicture}
+\caption{桨盘动量理论控制体模型。理想桨盘为无限薄压强跳变面，流管截面在盘面处收缩。
+盘前后速度连续但压强跳变$\Delta p = T/A$。诱导速度$v_i$使尾流速度达到$v_0+2v_i$。}
+\label{fig:actuator_disk}
+\end{figure}

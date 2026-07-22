@@ -1,0 +1,152 @@
+\section{增稳控制律设计}
+\label{sec:control}
+
+本节基于前文的动力学模型和控制效能分析，设计纵列双发矢量推力构型的增稳与控制律。
+控制律采用级联结构，底层为SAS增稳内环，中层为姿态保持/角速度指令外环，
+顶层为导航/轨迹规划（不在本文范围内）。
+
+\subsection{级联控制架构}
+
+控制架构分为三个明确的功能层次：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{操纵输入层}：人类操纵手（通过遥控器）或上层自主控制器
+          （轨迹规划器/导航控制器）产生四通道操纵输入——
+          油门$\omega_0$（纵向推力）、俯仰指令$\delta_t^{\text{pilot}}$、
+          偏航指令$\delta_f^{\text{pilot}}$、滚转指令$\Delta\omega^{\text{pilot}}$；
+    \item \textbf{SAS增强层}（Stability Augmentation System）：
+          这是内环控制的核心，直接作用于角速率和姿态角反馈。
+          SAS的使命是改善短周期阻尼、抑制大气湍流扰动、
+          消除配平常值误差（通过积分项），并对飞行员操纵输入进行增稳修正；
+    \item \textbf{执行层}：修正后的指令经物理限幅（摆角$\pm\delta_{\max}$，
+          差速$\pm\Delta\omega_{\max}$）和电机动态模型后驱动实际执行器。
+\end{enumerate}
+
+\textbf{架构特征}：当前设计为\textbf{直接映射反馈增稳}，控制分配采用对角效能矩阵的
+直接求逆（式\ref{eq:direct_mapping}），而非伪逆优化或二次规划在线求解。
+这一简化依赖于第\ref{sec:allocation}节证明的通道天然解耦性质，
+在正交摆轴几何约束下是完全合理的——可视为几何设计简化算法的经典案例。
+
+\\input{../fig/04-control-arch.tex}
+
+\subsection{SAS基本增稳律}
+
+三个通道的SAS反馈律以效率符号整定为原则。
+
+\textbf{俯仰通道}（效率为负：$\partial M_y / \partial \delta_t = -b T_t < 0$）：
+\begin{equation}
+    \delta_t^{\text{cmd}} = \delta_t^{\text{pilot}}
+    + k_q q + k_\theta \Delta\theta
+    + k_i^\theta \int \Delta\theta \, dt
+    \label{eq:sas_pitch}
+\end{equation}
+其中$k_q > 0$（效率为负$\to$正反馈使俯仰速率增大$\to$低头力矩增大$\to$抑制抬头速率）；
+$k_\theta > 0$（俯仰角偏离越大$\to$摆角修正越大$\to$恢复力矩越大）；
+积分项$k_i^\theta \int \Delta\theta \, dt$消除配平常值误差（如因推力线不完全过质心
+或气动配平偏差导致的持续非零俯仰角）。
+
+\textbf{偏航通道}（效率为正：$\partial M_z / \partial \delta_f = a T_f > 0$）：
+\begin{equation}
+    \delta_f^{\text{cmd}} = \delta_f^{\text{pilot}}
+    - k_r r
+    \label{eq:sas_yaw}
+\end{equation}
+效率为正意味着正摆角产生正偏航力矩（右偏航），因此偏航阻尼需要\textbf{负}反馈
+（$-k_r r$）——当飞行器向右偏航（$r > 0$），控制律产生负摆角（左偏）
+以产生逆方向的偏航力矩来抑制偏航速率。
+偏航通道通常不包含姿态积分——航向保持是上层导航闭环的职责，
+SAS仅需提供内环阻尼和角速率响应特性的改善。
+
+\textbf{滚转通道}（效率为负：$\partial M_x / \partial \Delta\omega = -2k_Q \omega_0^2 < 0$）：
+\begin{equation}
+    \Delta\omega^{\text{cmd}} = \Delta\omega^{\text{pilot}}
+    + k_p p + k_\phi \Delta\phi
+    + k_i^\phi \int \Delta\phi \, dt
+    \label{eq:sas_roll}
+\end{equation}
+效率为负$\to$正反馈，原理同俯仰通道。
+
+\textbf{增益整定指南}（指导性原则，非标定数值）：
+\begin{itemize}
+    \item \textbf{角速率阻尼增益}（$k_q, k_r, k_p$）：从低值逐步增大，直至角速率阶跃响应
+          的非周期阻尼（过阻尼）或目标阻尼比（0.7--1.0）。过高的角速率阻尼增益
+          会引入高频噪声放大和执行器饱和风险；
+    \item \textbf{姿态比例增益}（$k_\theta, k_\phi$）：通常设定为角速率阻尼增益的
+          $\sim 1/4 \cdot \tau_{\text{姿态}}$量级，其中$\tau_{\text{姿态}}$为目标姿态
+          响应时间常数；
+    \item \textbf{积分增益}（$k_i^\theta, k_i^\phi$）：应足够低，使积分饱和
+          恢复时间$\sim 5$--$10$秒。积分增益过高是诱发PIO（驾驶员诱发振荡）的常见原因。
+\end{itemize}
+
+\subsection{角速度闭环模式（Rate Command）}
+
+角速度闭环模式（Rate Command / Rate CAC）是一种常见的飞行品质增强模式，
+其中操纵杆（或滑块）的偏转直接映射为目标角速度，而非执行器位置指令。
+松手后操纵杆弹簧回中、目标角速度归零、飞行器保持当前姿态（速率归零后的姿态）。
+这种控制模式在遥控飞行器（如穿越机acro模式）和电传飞行器中广泛应用。
+
+采用纯P控制器（比例控制）追踪目标角速率：
+\begin{align}
+    \delta_t^{\text{cmd}} &= k_q^{\text{rate}} (q - q_{\text{ref}}),
+    &&\partial M_y / \partial \delta_t < 0 \Rightarrow (q - q_{\text{ref}})
+    \text{为正时} \delta_t^{\text{cmd}} \text{取正} \\
+    \delta_f^{\text{cmd}} &= k_r^{\text{rate}} (r_{\text{ref}} - r),
+    &&\partial M_z / \partial \delta_f > 0 \Rightarrow (r - r_{\text{ref}})
+    \text{为正时} \delta_f^{\text{cmd}} \text{取负} \\
+    \Delta\omega^{\text{cmd}} &= k_p^{\text{rate}} (p - p_{\text{ref}}),
+    &&\partial M_x / \partial \Delta\omega < 0 \Rightarrow (p - p_{\text{ref}})
+    \text{为正时} \Delta\omega^{\text{cmd}} \text{取正}
+    \label{eq:rate_command}
+\end{align}
+
+\textbf{性能分析}：纯P控制的角速度闭环存在稳态误差——
+为维持非零角速率，需要非零的执行器偏转来克服气动阻尼力矩。
+稳态误差可通过积分项消除，但积分项的引入会降低系统相位裕度，
+在快速机动中可能导致超调和振荡。对于遥控飞行器（操纵手在闭环中），
+适度的稳态误差是可以接受的——操纵手会自然地补偿并通过视觉反馈微调。
+
+角速率闭环的跟踪带宽由P增益和电机响应共同决定。开环传递函数近似为
+$G(s) = k^{\text{rate}} \cdot (\partial M / \partial \delta) \cdot
+(1/(I s + |L_p|)) \cdot (1/(\tau_m s + 1))$，闭环带宽$\sim k^{\text{rate}}
+\cdot |\partial M / \partial \delta| / I$（当电机响应足够快时）。
+
+\subsection{饱和管理与积分器抗饱和}
+
+所有执行器指令须经物理限幅，模拟真实舵机和电机的行程/速率限制：
+\begin{equation}
+    |\delta_t^{\text{cmd}}| \leq \delta_{\max}, \quad
+    |\delta_f^{\text{cmd}}| \leq \delta_{\max}, \quad
+    |\Delta\omega^{\text{cmd}}| \leq \Delta\omega_{\max}
+    \label{eq:actuator_limits}
+\end{equation}
+
+积分器采用独立限幅和条件积分策略：
+\begin{itemize}
+    \item 积分器输出限幅$|\int \theta| \leq I_\theta^{\max}$防止姿态误差长时间持续
+          导致的积分项无限增长（积分饱和，integrator windup）；
+    \item 模式切换时积分器归零——当SAS模式从角速率闭环（mode 3）切换回全SAS（mode 1）时，
+          旧模式下累积的积分值（基于不同误差信号）直接清零，防止在新模式刚启动时产生
+          瞬态冲击（此问题在工程实践中被发现并修复）。
+\end{itemize}
+
+\subsection{差速分配与最大转速保护}
+
+$\Delta\omega^{\text{cmd}}$由式(\ref{eq:diff_def})的平方根分配产生两电机目标转速。
+此分配具有保持$\omega_f^2 + \omega_t^2 = 2\omega_0^2$常数、使一阶近似总推力不变的
+优越性质。
+
+然而在极限工况（高油门+大差速）下，一侧电机的目标转速可能超过最大允许转速$\omega_{\max}$。
+在此情况下，必须施加电机级硬限幅：
+\begin{equation}
+    \omega_f^{\text{target}} \leftarrow \min(\omega_f^{\text{target}}, \omega_{\max}), \quad
+    \omega_t^{\text{target}} \leftarrow \min(\omega_t^{\text{target}}, \omega_{\max})
+    \label{eq:max_clamp}
+\end{equation}
+
+转速硬限幅的副作用是：\textbf{被钳位的电机转速低于目标值，导致平方转速和偏离$2\omega_0^2$，
+总推力低于预期}。此外，由于只有一侧电机被钳位，差速指令的滚转力矩也不再精确等于
+$-2k_Q\omega_0^2\Delta\omega^{\text{cmd}}$。SAS应在遥测中标记$w_{\max}$饱和状态，
+提醒操纵手执行器已达物理极限，当前的控制指令无法被完全执行。
+
+
+\section{讨论：构型优势、局限与扩展路径}

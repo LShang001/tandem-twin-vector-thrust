@@ -1,0 +1,82 @@
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Stealth, scale=0.88,
+  body/.style={draw=black!60, fill=black!6, rounded corners=2pt},
+  arrow/.style={->, thick, >={Stealth[length=3mm]}},
+  darrow/.style={->, thick, densely dashed, >={Stealth[length=2.5mm]}},
+  annot/.style={font=\footnotesize\sffamily},
+  dim/.style={<->, thin, draw=black!40},
+]
+  % 机体
+  \draw[body] (-3.2,-1.6) rectangle (3.2,1.6);
+  \fill (0,0) circle (2pt) node[annot, below right=2pt] {CG};
+  % 坐标轴
+  \draw[arrow] (-3.6,0) -- (3.6,0) node[annot, right] {$x_b$};
+  \draw[arrow] (0,-2.0) -- (0,2.0) node[annot, above] {$y_b$};
+  % z_b 垂直纸面向外
+  \node[annot] at (0.4,0.3) {$\odot\,z_b$};
+  % 前电机力矢量
+  \draw[arrow, red!70!black, line width=1.2pt] (1.8,0) -- ++(35:2.0cm) node[annot, above] {$\bm{T}_f$};
+  \draw[arrow, red!70!black, line width=1.2pt] (1.8,0) -- ++(0:2.0cm);
+  \draw[red!70!black] (2.6,0) arc (0:35:8mm);
+  \node[annot, red!70!black] at (2.95,0.35) {$\delta_f$};
+  % 前电机位置
+  \node[annot] at (1.8,-0.4) {前电机};
+  \fill[red!30] (1.8,0) circle (3pt);
+  % 前摆轴标注
+  \node[annot, blue!60!black] at (1.8,-0.8) {摆轴$z_b$};
+  % 尾电机力矢量
+  \draw[arrow, blue!70!black, line width=1.2pt] (-1.6,0) -- ++(160:2.0cm) node[annot, above left] {$\bm{T}_t$};
+  \draw[arrow, blue!70!black, line width=1.2pt] (-1.6,0) -- ++(180:2.0cm);
+  \draw[blue!70!black] (-2.4,0) arc (180:160:8mm);
+  \node[annot, blue!70!black] at (-2.7,0.25) {$\delta_t$};
+  % 但尾电机在xy平面（俯视图）的力方向始终沿y=-tan(δ_t)方向...
+  % 实际上尾电机绕y_b摆，在xz平面出分量，在xy平面（俯视图）看不到
+  % 所以只显示沿-x_b基准方向
+  \node[annot] at (-1.6,-0.4) {尾电机};
+  \fill[blue!30] (-1.6,0) circle (3pt);
+  % 力臂
+  \draw[dim] (0,-1.2) -- node[annot, fill=white] {$a$} (1.8,-1.2);
+  \draw[dim] (-1.6,-1.2) -- node[annot, fill=white] {$b$} (0,-1.2);
+  % 力矩标注
+  \draw[arrow, teal!60!black] (-0.3,1.5) arc (90:270:3mm and 6mm);
+  \node[annot, teal!60!black] at (0.7,1.3) {$M_z = a T_f \sin\delta_f$};
+  % 反扭矩示意
+  \draw[darrow, orange!80!black] (1.8,0.5) arc (90:-180:4mm);
+  \node[annot, orange!80!black] at (1.1,1.0) {$\tau_f$};
+  \draw[darrow, orange!80!black] (-1.6,0.5) arc (90:270:4mm);
+  \node[annot, orange!80!black] at (-2.5,1.0) {$\tau_t$};
+
+  % ===== 侧视插图（小图） =====
+  \begin{scope}[shift={(7.8,0)}]
+    \draw[body] (-2.0,-1.2) rectangle (2.0,1.2);
+    \fill (0,0) circle (2pt) node[annot, below right=2pt] {CG};
+    \draw[arrow] (-2.4,0) -- (2.4,0) node[annot, right] {$x_b$};
+    \draw[arrow] (0,1.6) -- (0,-1.6) node[annot, below] {$z_b$};
+    \node[annot] at (0.4,-0.3) {$\otimes\,y_b$};
+    % 尾电机在xz平面的力矢量
+    \fill[blue!30] (-1.3,0) circle (3pt);
+    \draw[arrow, blue!70!black, line width=1.2pt] (-1.3,0) -- ++(-20:2.0cm) node[annot, right=-1pt] {$\bm{T}_t$};
+    \draw[arrow, blue!70!black, line width=1.2pt] (-1.3,0) -- ++(0:2.0cm);
+    \draw[blue!70!black] (-0.5,0) arc (0:-20:8mm);
+    \node[annot, blue!70!black] at (-0.2,-0.35) {$\delta_t$};
+    % 前电机
+    \fill[red!30] (1.5,0) circle (3pt);
+    \draw[arrow, red!70!black, line width=1.2pt] (1.5,0) -- ++(0:1.8cm) node[annot, above] {$\bm{T}_f$};
+    \node[annot] at (1.5,0.4) {前};
+    \node[annot] at (-1.3,0.4) {尾};
+    % 力臂
+    \draw[dim] (0,0.9) -- node[annot, fill=white] {$a$} (1.5,0.9);
+    \draw[dim] (-1.3,0.9) -- node[annot, fill=white] {$b$} (0,0.9);
+    % 俯仰力矩
+    \node[annot, teal!60!black] at (0.3,0.9) {$M_y = -b T_t \sin\delta_t$};
+  \end{scope}
+
+  \node[annot] at (3.25,-2.2) {(a) 俯视图：前摆产生偏航力矩};
+  \node[annot] at (10.8,-2.2) {(b) 侧视图：尾摆产生俯仰力矩};
+\end{tikzpicture}
+\caption{推力矢量映射几何关系。前电机推力$\bm{T}_f$经摆角$\delta_f$产生侧向分量$T_f\sin\delta_f$，
+经力臂$a$形成偏航力矩$M_z$；尾电机推力$\bm{T}_t$经摆角$\delta_t$产生垂向分量，经力臂$b$形成俯仰力矩$M_y$。
+反扭矩$\tau_f,\tau_t$的差动控制滚转通道$M_x$。}
+\label{fig:thrust_mapping}
+\end{figure}

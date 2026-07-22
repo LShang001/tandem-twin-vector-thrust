@@ -1,0 +1,67 @@
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[>=Stealth, scale=1.0,
+  annot/.style={font=\footnotesize\sffamily},
+  sp/.style={fill=red!70!black, circle, inner sep=1.8pt, label={[font=\tiny\sffamily, red!70!black, align=center]}},
+  ph/.style={fill=blue!70!black, circle, inner sep=1.8pt, label={[font=\tiny\sffamily, blue!70!black, align=center]}},
+  dr/.style={fill=orange!80!black, circle, inner sep=1.8pt, label={[font=\tiny\sffamily, orange!80!black, align=center]}},
+  rs/.style={fill=teal!70!black, circle, inner sep=1.8pt, label={[font=\tiny\sffamily, teal!70!black, align=center]}},
+  spiral/.style={fill=purple!70!black, circle, inner sep=1.8pt, label={[font=\tiny\sffamily, purple!70!black, align=center]}},
+  arrow/.style={->, thick, >={Stealth[length=2mm]}},
+]
+  % ===== 纵向模态 (s-plane, upper half) =====
+  \draw[->] (-9,0) -- (1.5,0) node[annot, right] {$\Re$};
+  \draw[->] (0,0) -- (0,4.2) node[annot, above] {$\Im$ (rad/s)};
+  \node[annot] at (-7.5,4.5) {\textbf{纵向模态}};
+
+  % 短周期 (开环)
+  \node[sp] (spo) at (-1.8,3.5) {};
+  \node[font=\tiny\sffamily, red!70!black, align=center] at (-1.8,4.0) {短周期（开环）\\$\omega_{sp}\approx2.5,\zeta\approx0.4$};
+  % 短周期 (闭环 SAS)
+  \node[sp] (spc) at (-4.2,2.2) {};
+  \draw[arrow, red!50] (spo) -- (spc);
+  \node[font=\tiny\sffamily, red!70!black, align=center] at (-4.5,2.6) {短周期（SAS闭环）\\阻尼增大、频率略增};
+
+  % 长周期
+  \node[ph] at (-0.15,0.55) {};
+  \node[font=\tiny\sffamily, blue!70!black, align=center] at (0.8,0.7) {长周期\\$\omega_{ph}\approx0.5$\\$\zeta_{ph}\approx0.05$};
+  \node[ph] at (-0.15,-0.55) {};
+
+  % 标注轴
+  \node[annot] at (-6.5,0.3) {$\leftarrow$ 更稳定};
+  \draw[annot] (0.2,3.8) -- (0.6,3.8) node[right, font=\tiny\sffamily] {振荡频率};
+
+  % ===== 横航向模态 (right side) =====
+  \begin{scope}[shift={(8.5,0)}]
+    \draw[->] (-6,0) -- (1.5,0) node[annot, right] {$\Re$};
+    \draw[->] (0,0) -- (0,4.2) node[annot, above] {$\Im$ (rad/s)};
+    \node[annot] at (-5,4.5) {\textbf{横航向模态}};
+
+    % 滚转收敛 (开环)
+    \node[rs] (rso) at (-2.8,0) {};
+    \node[font=\tiny\sffamily, teal!70!black, align=center] at (-2.8,0.4) {滚转收敛\\$\tau\approx1$s};
+    % 滚转收敛 (SAS)
+    \node[rs] (rsc) at (-4.5,0) {};
+    \draw[arrow, teal!50] (rso) -- (rsc);
+    \node[font=\tiny\sffamily, teal!70!black] at (-5.2,0.4) {SAS: 更快收敛};
+
+    % 荷兰滚 (开环)
+    \node[dr] (dro) at (-0.6,3.2) {};
+    \node[font=\tiny\sffamily, orange!80!black, align=center] at (0.2,3.5) {荷兰滚（开环）\\$\omega_{DR}\approx3,\zeta\approx0.15$};
+    % 荷兰滚 (SAS)
+    \node[dr] (drc) at (-3.0,2.5) {};
+    \draw[arrow, orange!50] (dro) -- (drc);
+    \node[font=\tiny\sffamily, orange!80!black] at (-3.8,2.8) {SAS: 阻尼增强};
+
+    % 螺旋模态
+    \node[spiral] at (0.08,0) {};
+    \node[font=\tiny\sffamily, purple!70!black, align=center] at (0.8,-0.35) {螺旋模态\\$\lambda_S\approx\pm0.02$\\缓慢发散/收敛};
+  \end{scope}
+\end{tikzpicture}
+\caption{SAS闭环对飞行模态特征根的影响（定性s平面示意图）。
+上方：纵向模态——短周期（红色）在SAS作用下阻尼比显著提高（$0.4\to0.8$），
+长周期（蓝色）受SAS影响很小。下方：横航向模态——滚转收敛（青色）加速，
+荷兰滚（橙色）阻尼增强，螺旋模态（紫色）靠近虚轴且受SAS影响有限。
+箭头定性指示SAS增益增大时极点的迁移方向。}
+\label{fig:stability_poles}
+\end{figure}
