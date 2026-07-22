@@ -32,13 +32,18 @@ THY-004/
 │   ├── 08-discussion.tex    # 第8章：讨论（优势/局限/对比/验证路径/扩展方向）
 │   └── 09-conclusion.tex    # 第9章：结论
 │
-├── fig/                     # TikZ/PGF 图表源码（独立 .tex，可单独编译预览）
-│   ├── 01-configuration.tex     # 图1：构型布局示意（俯视图+侧视图）
+├── fig/                     # 图表源码与生成资产
+│   ├── 01-configuration.tex     # 图1：LaTeX 包装与图注
+│   ├── 01-configuration.html    # 图1：HTML/SVG 信息图源码
+│   ├── 01-configuration.png     # 图1：1600×1000、约 300 dpi 构建产物
+│   ├── 01-ai-selected-j.png     # 图1：经独立审查选中的 AI 概念底图（非尺度）
+│   ├── 01-web-render.png        # 图1：Web 三维模型无界面渲染层
 │   ├── 02-actuator-disk.tex     # 图2：桨盘动量理论控制体模型
 │   ├── 03-thrust-mapping.tex    # 图3：推力矢量映射几何（双视图）
-│   ├── 04-control-arch.tex      # 图4：控制架构级联框图
-│   ├── 05-stability-poles.tex   # 图5：飞行模态特征根 s 平面示意
-│   └── 06-config-compare.tex    # 图6：四类构型对比定位图
+│   ├── 04-stability-effects.tex # 图4：SAS 增益定性因果图
+│   ├── 05-control-arch.tex      # 图5：控制架构级联框图
+│   ├── 06-config-compare.tex    # 图6：构型机制来源与定位图
+│   └── 07-web-validation.tex    # 图7：Web core 非线性回归响应
 │
 └── ref.bib.tex              # 参考文献（thebibliography 环境，19 篇）
 ```
@@ -48,7 +53,8 @@ THY-004/
 | 要改什么 | 改哪个文件 |
 |----------|-----------|
 | 修改某章内容 | `ch/XX-name.tex` |
-| 修改某张图的绘制 | `fig/XX-name.tex`（TikZ 源码） |
+| 修改图1构型信息图 | `fig/01-configuration.html`，重新截图生成同名 PNG；AI 候选与提示词见 `assets/ai-generated/aircraft-configuration/2026-07-23/` |
+| 修改其他图的绘制 | `fig/XX-name.tex`（TikZ/PGF 源码） |
 | 添加新章节 | `ch/` 下新建 `.tex`，在 `main.tex` 中 `\input` |
 | 添加新图表 | `fig/` 下新建 `.tex`，在对应章节中 `\input{../fig/XX.tex}` |
 | 添加新宏包 | `preamble.tex` |

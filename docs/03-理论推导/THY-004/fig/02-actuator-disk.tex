@@ -1,39 +1,50 @@
 \begin{figure}[H]
 \centering
-\begin{tikzpicture}[>=Stealth, scale=1.1,
-  stream/.style={draw=black!40, thick},
-  arrow/.style={->, thick, >={Stealth[length=2.5mm]}},
-  annot/.style={font=\footnotesize\sffamily},
+\resizebox{0.88\linewidth}{!}{%
+\begin{tikzpicture}[>=Stealth,
+  stream/.style={draw=black!55, line width=0.8pt},
+  streamline/.style={draw=black!35, densely dashed, line width=0.55pt},
+  section/.style={draw=black!65, line width=0.75pt},
+  velocity/.style={->, draw=blue!70!black, line width=1.05pt, >={Stealth[length=2.8mm]}},
+  pressure/.style={draw=red!70!black, line width=1.05pt},
+  annot/.style={font=\footnotesize\sffamily, fill=white, inner sep=1.2pt},
 ]
-  % 流管上边界
-  \draw[stream] (0,0) .. controls (2.5,1.2) and (3.5,1.2) .. (5.5,0.6);
-  \draw[stream] (0,0) .. controls (2.5,-1.2) and (3.5,-1.2) .. (5.5,-0.6);
-  % 截面0（远前方）
-  \draw[stream, fill=black!5] (-0.1,0) -- (-0.1,-0.6) .. controls (0.5,-0.8) and (0.5,0.8) .. (-0.1,0.6) -- cycle;
-  \draw[<->] (-0.1,0.7) -- node[annot, fill=white] {$A_0$} (-0.1,-0.7);
-  % 桨盘
-  \draw[stream, fill=black!12, line width=1.4pt] (2.5,0.65) -- (2.5,-0.65) node[annot, below=4pt] {桨盘};
-  \draw[<->] (2.5,0.75) -- node[annot, fill=white] {$A$} (2.5,-0.75);
-  % 截面2（远后方）
-  \draw[stream, fill=black!5] (5.6,0) -- (5.6,-0.35) .. controls (5.0,-0.5) and (5.0,0.5) .. (5.6,0.35) -- cycle;
-  % 速度标注
-  \draw[arrow, blue!60!black] (-0.8,0) -- node[annot, above] {$v_0$} (0.3,0);
-  \draw[arrow, blue!60!black] (1.5,0) -- node[annot, above] {$v_p=v_0+v_i$} (3.2,0);
-  \draw[arrow, blue!60!black] (3.8,0) -- node[annot, above] {$v_2=v_0+2v_i$} (5.8,0);
-  % 压强分布示意（定性，盘面下侧）
-  \draw[red!50!black, thick] plot[smooth] coordinates {
-    (-0.5,-0.9) (0.5,-0.85) (1.5,-0.8) (2.3,-0.78) (2.5,-1.3) (2.7,-0.82) (3.5,-0.85) (5,-0.9) (6,-0.92)
-  };
-  \node[annot, red!50!black] at (1.0,-1.15) {$p$分布};
-  \node[annot, red!50!black] at (2.5,-1.5) {$\Delta p = T/A$};
-  % 截面标记
-  \node[annot] at (-0.1,0.9) {截面0};
-  \node[annot] at (5.6,0.55) {截面2};
-  % 流线
-  \draw[stream, densely dotted] (0.2,0.3) .. controls (2.5,1.0) and (3.5,1.0) .. (5.5,0.5);
-  \draw[stream, densely dotted] (0.2,-0.3) .. controls (2.5,-1.0) and (3.5,-1.0) .. (5.5,-0.5);
-\end{tikzpicture}
-\caption{桨盘动量理论控制体模型。理想桨盘为无限薄压强跳变面，流管截面在盘面处收缩。
-盘前后速度连续但压强跳变$\Delta p = T/A$。诱导速度$v_i$使尾流速度达到$v_0+2v_i$。}
+  % 流管：速度沿程增加，因此截面积沿程减小
+  \draw[stream] (-0.2,1.35) .. controls (1.7,1.28) and (2.6,1.02) .. (3.2,0.9)
+                .. controls (4.4,0.67) and (5.6,0.57) .. (6.8,0.55);
+  \draw[stream] (-0.2,-1.35) .. controls (1.7,-1.28) and (2.6,-1.02) .. (3.2,-0.9)
+                .. controls (4.4,-0.67) and (5.6,-0.57) .. (6.8,-0.55);
+  \draw[streamline] (-0.2,0.68) .. controls (1.7,0.64) and (2.6,0.51) .. (3.2,0.45)
+                     .. controls (4.4,0.34) and (5.6,0.29) .. (6.8,0.28);
+  \draw[streamline] (-0.2,-0.68) .. controls (1.7,-0.64) and (2.6,-0.51) .. (3.2,-0.45)
+                     .. controls (4.4,-0.34) and (5.6,-0.29) .. (6.8,-0.28);
+
+  % 三个截面
+  \draw[section] (0,1.35) -- (0,-1.35);
+  \draw[section, line width=1.5pt, fill=black!10, fill opacity=.45] (3.2,0.9) -- (3.2,-0.9);
+  \draw[section] (6.6,0.56) -- (6.6,-0.56);
+  \node[annot, above=2pt, align=center] at (0,1.35) {截面0\\$A_0$};
+  \node[annot, above=2pt, align=center] at (3.2,0.9) {桨盘截面1\\$A$};
+  \node[annot, above=2pt, align=center] at (6.6,0.56) {截面2\\$A_2$};
+
+  % 速度箭头，长度随速度增加
+  \draw[velocity] (-0.85,0) -- (0.45,0) node[annot, midway, above=2pt] {$v_0$};
+  \draw[velocity] (2.15,0) -- (3.75,0) node[annot, midway, above=2pt] {$v_p=v_0+v_i$};
+  \draw[velocity] (4.65,0) -- (6.75,0) node[annot, midway, above=2pt] {$v_2=v_0+2v_i$};
+  \node[font=\scriptsize\sffamily, text=black!60, fill=white, inner sep=1pt] at (3.2,-1.16) {无限薄桨盘};
+
+  % 独立压强示意，避免与流管重叠
+  \draw[->, draw=black!55, line width=.55pt] (-0.1,-2.35) -- (7.05,-2.35) node[right, font=\scriptsize\sffamily] {$x$};
+  \draw[->, draw=black!55, line width=.55pt] (-0.1,-2.35) -- (-0.1,-1.30)
+    node[above, font=\scriptsize\sffamily] {$p-p_\infty$};
+  \draw[pressure, dashed] (-0.1,-1.88) -- (7.0,-1.88);
+  \node[font=\scriptsize\sffamily, text=red!70!black, fill=white, inner sep=1pt] at (0.45,-1.73) {$p_\infty$};
+  \draw[pressure] (0,-1.88) .. controls (1.5,-1.9) and (2.55,-2.12) .. (3.18,-2.16);
+  \draw[pressure] (3.2,-1.42) .. controls (4.0,-1.48) and (5.35,-1.75) .. (6.6,-1.88);
+  \draw[pressure, ->] (3.2,-2.16) -- (3.2,-1.42);
+  \node[annot, text=red!70!black, anchor=west] at (3.38,-1.7) {$\Delta p=T/A$};
+\end{tikzpicture}%
+}
+\caption{理想桨盘的流管与压强分布示意。由于$v_0<v_p<v_2$，不可压定常流的流管沿流向收缩（$A_0>A>A_2$）；速度穿过无限薄桨盘时连续，而静压在盘面发生跃变$\Delta p=T/A$，并在远尾流中恢复至环境压强。图中 $x$ 为桨盘局部流向轴，不代表构型主图的相机左右；几何尺寸与箭头长度仅作定性示意。}
 \label{fig:actuator_disk}
 \end{figure}

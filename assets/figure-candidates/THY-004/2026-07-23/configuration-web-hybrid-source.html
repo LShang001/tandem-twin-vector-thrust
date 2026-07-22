@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>纵列双发矢量推力构型 - 混合候选</title>
+<style>
+  :root {
+    --ink:#172033; --muted:#5e6b7f; --line:#d7dde7; --paper:#f7f9fc;
+    --yaw:#0072b2; --pitch:#d55e00; --roll:#009e73;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#e8edf4; color:var(--ink); font-family:"Noto Sans SC","Microsoft YaHei",Arial,sans-serif; }
+  .sheet { width:1600px; min-height:1000px; padding:54px 62px 46px; margin:auto; background:var(--paper); }
+  .topline { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:1px solid var(--line); padding-bottom:22px; }
+  h1 { margin:0; font-size:31px; letter-spacing:.02em; font-weight:750; }
+  .kicker { margin-top:7px; color:var(--muted); font:600 13px/1.4 Arial,sans-serif; letter-spacing:.18em; text-transform:uppercase; }
+  .badge { border:1px solid #c9d5e6; border-radius:999px; padding:9px 15px; color:#50617a; font-size:13px; background:#fff; }
+  .hero { position:relative; height:540px; margin-top:30px; border:1px solid #d0d9e6; border-radius:22px; overflow:hidden; background:linear-gradient(135deg,#fdfefe,#edf2f8); box-shadow:0 14px 34px rgba(41,57,80,.10); }
+  .hero::before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 50% 48%,rgba(255,255,255,.55),rgba(255,255,255,0) 55%); z-index:1; pointer-events:none; }
+  .hero img { position:absolute; width:126%; height:126%; left:-13%; top:-13%; object-fit:cover; object-position:50% 53%; filter:saturate(.92) contrast(1.18) brightness(.94); opacity:.98; }
+  .hero-label { position:absolute; left:28px; top:22px; z-index:3; color:#495a70; font-size:14px; letter-spacing:.08em; font-weight:700; }
+  .hero-label span { display:block; color:#7c8ba1; font-size:11px; letter-spacing:.13em; margin-top:4px; font-weight:600; }
+  .callout { position:absolute; z-index:4; display:flex; align-items:center; gap:9px; padding:9px 13px 9px 9px; border-radius:12px; background:rgba(255,255,255,.93); border:1px solid currentColor; box-shadow:0 7px 16px rgba(31,45,66,.12); font-weight:750; font-size:15px; white-space:nowrap; }
+  .callout i { width:25px; height:25px; display:grid; place-items:center; border-radius:50%; color:#fff; font-style:normal; font-size:13px; }
+  .callout small { display:block; margin-top:2px; font-size:11px; color:var(--muted); font-weight:600; }
+  .c-tail { color:var(--pitch); right:6.5%; top:62%; }
+  .c-tail i { background:var(--pitch); }
+  .c-front { color:var(--yaw); left:10.5%; top:35%; }
+  .c-front i { background:var(--yaw); }
+  .c-cg { color:var(--roll); left:48%; top:47%; }
+  .c-cg i { background:var(--roll); }
+  .view-note { position:absolute; left:28px; bottom:24px; z-index:4; padding:7px 11px; border-radius:999px; background:rgba(255,255,255,.90); border:1px solid #cad5e3; color:#596a80; font-size:11px; font-weight:650; letter-spacing:.04em; }
+  .leader { position:absolute; z-index:3; pointer-events:none; }
+  .leader::before { content:""; display:block; width:100%; height:100%; border-top:2px solid currentColor; transform:rotate(var(--angle)); transform-origin:left center; opacity:.9; }
+  .leader.tail { color:var(--pitch); left:69%; top:64%; width:10%; height:1px; --angle:-16deg; }
+  .leader.front { color:var(--yaw); left:20%; top:37%; width:11%; height:1px; --angle:21deg; }
+  .info-grid { display:grid; grid-template-columns:1.1fr 1fr 1fr 1fr; gap:16px; margin-top:22px; }
+  .info { background:#fff; border:1px solid var(--line); border-radius:16px; padding:18px 20px 17px; min-height:172px; }
+  .info.intro { background:#eef3f9; border-color:#d5dfed; }
+  .info h2 { margin:0 0 12px; font-size:17px; line-height:1.2; }
+  .info p { margin:0; color:var(--muted); font-size:13px; line-height:1.65; }
+  .channel { position:relative; padding-left:43px; }
+  .channel .num { position:absolute; left:0; top:0; width:29px; height:29px; border-radius:50%; color:#fff; display:grid; place-items:center; font-weight:800; }
+  .channel h3 { margin:0 0 7px; font-size:16px; }
+  .channel .eq { font-family:Georgia,"Times New Roman",serif; font-size:19px; margin:12px 0 8px; color:var(--ink); }
+  .channel .why { font-size:12px; color:var(--muted); line-height:1.55; }
+  .yaw .num { background:var(--yaw); } .yaw h3 { color:var(--yaw); }
+  .pitch .num { background:var(--pitch); } .pitch h3 { color:var(--pitch); }
+  .roll .num { background:var(--roll); } .roll h3 { color:var(--roll); }
+  .foot { display:flex; justify-content:space-between; margin-top:18px; color:#708097; font-size:11px; }
+  @media (min-width:2200px) { body { zoom:1.5; } }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <header class="topline">
+    <div><h1>纵列双发正交单轴矢量推力构型</h1><div class="kicker">TANDEM TWIN VECTOR-THRUST AIRCRAFT · MODEL-CONSCIOUS FIGURE</div></div>
+    <div class="badge">Web 三维模型 + 精确矢量标注</div>
+  </header>
+
+  <section class="hero" aria-label="Web 三维构型与标注">
+    <img src="01-web-render.png" alt="Web 三维飞行器模型">
+    <div class="hero-label">01 / 整机构型<span>渲染主体来自 Web vector-thrust-lab</span></div>
+    <div class="callout c-tail"><i>2</i><div>尾发 · 推进式<small>CCW · 绕 y<sub>b</sub> 摆动</small></div></div>
+    <div class="callout c-front"><i>1</i><div>前发 · 拉力式<small>CW · 绕 z<sub>b</sub> 摆动</small></div></div>
+    <div class="callout c-cg"><i>CG</i><div>质心<small>物理力臂：a = b = 0.62 m</small></div></div>
+    <div class="leader tail"></div><div class="leader front"></div>
+    <div class="view-note">当前 Web 相机视角：+x<sub>b</sub> 指向画面左侧</div>
+  </section>
+
+  <section class="info-grid">
+    <article class="info intro"><h2>读图顺序</h2><p>先看上方真实 Web 构型，再看下方三个主控制通道。颜色和编号在两层之间保持一致。渲染位置用于展示，不替代物理力臂。</p></article>
+    <article class="info channel yaw"><div class="num">1</div><h3>前发摆动 · 偏航</h3><div class="eq">δ<sub>f</sub> 绕 z<sub>b</sub> → M<sub>z</sub></div><div class="why">前发侧向推力分量经前部力臂形成偏航主力矩。</div></article>
+    <article class="info channel pitch"><div class="num">2</div><h3>尾发摆动 · 俯仰</h3><div class="eq">δ<sub>t</sub> 绕 y<sub>b</sub> → F<sub>z</sub>&lt;0 → M<sub>y</sub>&lt;0</div><div class="why">正尾摆使机体受力向上，在 NED 约定下对应低头力矩。</div></article>
+    <article class="info channel roll"><div class="num">3</div><h3>差速反扭 · 滚转</h3><div class="eq">ω<sub>f</sub> ≠ ω<sub>t</sub> → M<sub>x</sub></div><div class="why">前后反扭矩不再抵消，净轴向力矩控制滚转。</div></article>
+  </section>
+  <footer class="foot"><span>物理坐标：NED 右手系；颜色为通道标识，不代表量纲大小。</span><span>概念级模型 · MODEL-DEFAULT</span></footer>
+</main>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web 模型正交摆动构型渲染</title>
+<link rel="icon" href="data:,">
+<style>
+  * { box-sizing: border-box; }
+  html, body { width: 1600px; height: 900px; margin: 0; overflow: hidden; }
+  body { background: #ffffff; font-family: "Noto Sans SC", "Microsoft YaHei", Arial, sans-serif; }
+  #stage { position: relative; width: 1600px; height: 900px; background: #ffffff; }
+  canvas { display: block; width: 1600px; height: 900px; }
+</style>
+</head>
+<body>
+<main id="stage" aria-label="Web 模型非零正交摆角构型"></main>
+
+<script async src="/simulations/vector-thrust-lab/vendor/three-r170/es-module-shims.min.js"></script>
+<script type="importmap-shim">
+{"imports":{"three":"/simulations/vector-thrust-lab/vendor/three-r170/three.module.js"}}
+</script>
+<script type="module-shim">
+import * as THREE from 'three';
+import { createAircraftView } from '/simulations/vector-thrust-lab/src/browser/aircraft-view.mjs';
+
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xffffff);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(1600, 900, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.12;
+stage.prepend(renderer.domElement);
+
+const aspect = 1600 / 900;
+const halfHeight = 1.65;
+const camera = new THREE.OrthographicCamera(
+  -halfHeight * aspect, halfHeight * aspect,
+  halfHeight, -halfHeight, 0.1, 100
+);
+camera.up.set(0, 0, -1);
+camera.position.set(5.8, -8.4, -4.2);
+camera.lookAt(0, 0, 0);
+
+scene.add(new THREE.HemisphereLight(0xffffff, 0xcbd5e1, 2.25));
+const key = new THREE.DirectionalLight(0xffffff, 3.0);
+key.position.set(5, -4, -8);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xdbeafe, 1.5);
+fill.position.set(-5, 5, -2);
+scene.add(fill);
+
+const view = createAircraftView(scene);
+const d2r = Math.PI / 180;
+view.front.gimbal.rotation.z = 18 * d2r;
+view.tail.gimbal.rotation.y = 18 * d2r;
+view.front.prop.rotation.x = 0.18;
+view.tail.prop.rotation.x = -0.54;
+
+view.aircraft.traverse((item) => {
+  if (item.material?.isLineDashedMaterial) item.visible = false;
+});
+
+for (const item of [
+  view.thrustF, view.thrustT, view.labTF, view.labTT,
+  view.arcF, view.arcT,
+  view.mArrowX, view.mArrowY, view.mArrowZ,
+  view.labX, view.labY, view.labZ, view.cgRing
+]) item.visible = false;
+
+function axisRod(axis, length, radius, color, position) {
+  const material = new THREE.MeshBasicMaterial({ color });
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, length, 18), material);
+  rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), axis.clone().normalize());
+  rod.position.copy(position);
+  scene.add(rod);
+  return rod;
+}
+
+function line(points, color, opacity = 1, dashed = false) {
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = dashed
+    ? new THREE.LineDashedMaterial({ color, dashSize: 0.10, gapSize: 0.07, transparent: true, opacity })
+    : new THREE.LineBasicMaterial({ color, transparent: opacity < 1, opacity });
+  const out = new THREE.Line(geometry, material);
+  if (dashed) out.computeLineDistances();
+  scene.add(out);
+  return out;
+}
+
+function localShaft(gimbal, color) {
+  const pts = [new THREE.Vector3(-0.67, 0, 0), new THREE.Vector3(0.78, 0, 0)];
+  const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+  const material = new THREE.LineBasicMaterial({ color });
+  const shaft = new THREE.Line(geometry, material);
+  shaft.renderOrder = 10;
+  gimbal.add(shaft);
+}
+
+function arcInPlane(center, plane, startDeg, endDeg, radius, color) {
+  const pts = [];
+  for (let i = 0; i <= 48; i++) {
+    const a = (startDeg + (endDeg - startDeg) * i / 48) * d2r;
+    const p = plane === 'xy'
+      ? new THREE.Vector3(radius * Math.cos(a), radius * Math.sin(a), 0)
+      : new THREE.Vector3(radius * Math.cos(a), 0, radius * Math.sin(a));
+    pts.push(p.add(center));
+  }
+  line(pts, color, 0.95, false);
+}
+
+const cyan = 0x0072b2;
+const orange = 0xd55e00;
+const gray = 0x64748b;
+
+axisRod(new THREE.Vector3(0, 0, 1), 0.80, 0.026, cyan, new THREE.Vector3(1.78, 0, 0));
+axisRod(new THREE.Vector3(0, 1, 0), 0.90, 0.026, orange, new THREE.Vector3(-1.82, 0, 0));
+localShaft(view.front.gimbal, cyan);
+localShaft(view.tail.gimbal, orange);
+
+arcInPlane(new THREE.Vector3(1.78, 0, 0), 'xy', -28, 28, 0.63, cyan);
+arcInPlane(new THREE.Vector3(-1.82, 0, 0), 'xz', -28, 28, 0.63, orange);
+
+line([new THREE.Vector3(1.05, 0, 0), new THREE.Vector3(2.55, 0, 0)], gray, 0.58, true);
+line([new THREE.Vector3(-2.58, 0, 0), new THREE.Vector3(-1.05, 0, 0)], gray, 0.58, true);
+
+renderer.render(scene, camera);
+requestAnimationFrame(() => {
+  renderer.render(scene, camera);
+  window.renderReady = true;
+});
+</script>
+</body>
+</html>

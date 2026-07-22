@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>纵列双发矢量推力构型 - Web 模型校核信息图</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --ink:#172033; --muted:#5e6b7f; --line:#cbd5e1; --paper:#f7f9fc;
+    --yaw:#0072b2; --pitch:#d55e00; --roll:#009e73;
+  }
+  * { box-sizing:border-box; }
+  html, body { width:1600px; height:1000px; margin:0; overflow:hidden; }
+  body { background:var(--paper); color:var(--ink); font-family:"Noto Sans SC","Microsoft YaHei",Arial,sans-serif; }
+  .sheet { width:1600px; height:1000px; padding:42px 52px 28px; background:var(--paper); }
+  .topline { height:68px; display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--line); padding-bottom:14px; }
+  h1 { margin:0; font-size:38px; line-height:1.1; font-weight:750; letter-spacing:0; }
+  .badge { border:1px solid #b9c6d8; border-radius:6px; padding:10px 14px; color:#40536e; font-size:20px; font-weight:700; background:#fff; }
+  .hero { position:relative; height:550px; margin-top:20px; border:1px solid #cbd5e1; border-radius:6px; overflow:hidden; background:#fff; }
+  .hero img { position:absolute; height:118%; width:auto; left:50%; top:-9%; transform:translateX(-50%); object-fit:contain; }
+  .hero-label { position:absolute; left:24px; top:20px; z-index:4; color:#40536e; font-size:22px; letter-spacing:0; font-weight:800; }
+  .callout { position:absolute; z-index:5; display:flex; align-items:center; gap:10px; padding:11px 14px 11px 10px; border-radius:6px; background:rgba(255,255,255,.96); border:2px solid currentColor; box-shadow:0 5px 14px rgba(31,45,66,.10); font-weight:800; font-size:24px; line-height:1.1; white-space:nowrap; }
+  .callout i { width:34px; height:34px; display:grid; place-items:center; border-radius:50%; color:#fff; font-style:normal; font-size:17px; }
+  .callout small { display:block; margin-top:5px; font-size:20px; color:var(--muted); font-weight:650; }
+  .c-front { color:var(--yaw); left:2.2%; top:41%; }
+  .c-front i { background:var(--yaw); }
+  .c-tail { color:var(--pitch); right:2.2%; top:29%; }
+  .c-tail i { background:var(--pitch); }
+  .c-cg { color:var(--roll); left:42%; top:8%; }
+  .c-cg i { width:42px; background:var(--roll); }
+  .leaders { position:absolute; inset:0; z-index:3; width:100%; height:100%; pointer-events:none; }
+  .view-note { position:absolute; left:24px; bottom:18px; z-index:5; padding:8px 11px; border-radius:6px; background:rgba(255,255,255,.94); border:1px solid #b9c6d8; color:#43546b; font-size:20px; font-weight:700; }
+  .view-note small { display:block; margin-top:3px; color:#64748b; font-size:16px; font-weight:650; }
+  .scope-note { position:absolute; right:24px; bottom:18px; z-index:5; color:#64748b; font-size:18px; font-weight:650; }
+  .wing-note { position:absolute; right:14%; top:5%; z-index:5; padding:8px 10px; border-radius:6px; background:rgba(255,255,255,.94); border:1px solid #94a3b8; color:#475569; font-size:20px; line-height:1.2; font-weight:800; text-align:center; }
+  .wing-note small { display:block; margin-top:3px; color:#64748b; font-size:18px; font-weight:650; }
+  .info-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-top:18px; }
+  .info { position:relative; min-height:180px; background:#fff; border:1px solid var(--line); border-radius:6px; padding:20px 22px 18px 76px; }
+  .info .num { position:absolute; left:22px; top:20px; width:40px; height:40px; border-radius:50%; color:#fff; display:grid; place-items:center; font-size:20px; font-weight:850; }
+  .info h3 { margin:0 0 12px; font-size:25px; line-height:1.2; }
+  .info .eq { font-family:Georgia,"Times New Roman",serif; font-size:29px; margin:8px 0 12px; color:var(--ink); }
+  .info .why { margin:0; color:var(--muted); font-size:22px; line-height:1.35; }
+  .yaw .num { background:var(--yaw); } .yaw h3 { color:var(--yaw); }
+  .pitch .num { background:var(--pitch); } .pitch h3 { color:var(--pitch); }
+  .roll .num { background:var(--roll); } .roll h3 { color:var(--roll); }
+  .foot { display:flex; justify-content:space-between; margin-top:14px; color:#64748b; font-size:18px; font-weight:650; }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <header class="topline">
+    <div>
+      <h1>纵列双发正交单轴矢量推力构型</h1>
+    </div>
+    <div class="badge">Web 3D · 非零正交摆角 · 矢量标注</div>
+  </header>
+
+  <section class="hero" aria-label="Web 程序化几何与工程标注">
+    <img src="01-web-orthogonal-deflection.png" alt="前发绕 z_b 偏航、尾发绕 y_b 俯仰的非零正交摆角构型">
+    <div class="hero-label">01 / 构型与主控制通道</div>
+    <div class="callout c-front"><i>1</i><div>前发 · 拉力式<small>转子：CW（沿 +x<sub>b</sub> 观察）</small><small>摆座：绕 z<sub>b</sub> · δ<sub>f</sub> = +18°</small></div></div>
+    <div class="callout c-tail"><i>2</i><div>尾发 · 推进式<small>转子：CCW（沿 +x<sub>b</sub> 观察）</small><small>摆座：绕 y<sub>b</sub> · δ<sub>t</sub> = +18°</small></div></div>
+    <div class="callout c-cg"><i>CG</i><div>质心<small>物理力臂 a = b = 0.62 m</small></div></div>
+
+    <svg class="leaders" viewBox="0 0 1496 550" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <marker id="arrow-blue" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L8,4.5 L0,9 Z" fill="#0072b2"/>
+        </marker>
+        <marker id="arrow-orange" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L8,4.5 L0,9 Z" fill="#d55e00"/>
+        </marker>
+        <marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto">
+          <path d="M0,0 L8,4.5 L0,9 Z" fill="#43546b"/>
+        </marker>
+      </defs>
+      <polyline points="460,354 360,298 300,298" fill="none" stroke="#0072b2" stroke-width="3" marker-start="url(#arrow-blue)"/>
+      <circle cx="460" cy="354" r="6" fill="#fff" stroke="#0072b2" stroke-width="3"/>
+      <line x1="460" y1="318" x2="460" y2="392" stroke="#0072b2" stroke-width="4"/>
+      <text x="474" y="340" fill="#0072b2" stroke="#fff" stroke-width="6" paint-order="stroke" stroke-linejoin="round" font-size="23" font-weight="800">z_b 枢轴</text>
+
+      <polyline points="1018,210 1118,215 1150,215" fill="none" stroke="#d55e00" stroke-width="3" marker-start="url(#arrow-orange)"/>
+      <circle cx="1018" cy="210" r="6" fill="#fff" stroke="#d55e00" stroke-width="3"/>
+      <line x1="988" y1="190" x2="1082" y2="226" stroke="#d55e00" stroke-width="4"/>
+      <text x="1045" y="254" fill="#d55e00" stroke="#fff" stroke-width="6" paint-order="stroke" stroke-linejoin="round" font-size="23" font-weight="800">y_b 枢轴</text>
+
+      <polyline points="748,272 748,142" fill="none" stroke="#009e73" stroke-width="3"/>
+      <circle cx="748" cy="272" r="7" fill="#fff" stroke="#009e73" stroke-width="3"/>
+
+      <line x1="600" y1="502" x2="515" y2="502" stroke="#43546b" stroke-width="3" marker-end="url(#arrow-gray)"/>
+      <text x="538" y="489" fill="#43546b" font-size="24" font-weight="800">+x_b</text>
+      <text x="742" y="512" fill="#43546b" font-size="21" font-weight="800">两摆轴正交：z_b · y_b = 0</text>
+    </svg>
+
+    <div class="view-note">画面左侧为机头与 +x<sub>b</sub><small>灰虚线：零摆角；蓝/橙实线：当前电机轴</small><small>T<sub>f</sub>、T<sub>t</sub> ∥ +x<sub>b</sub>；h<sub>f</sub> ∥ +x<sub>b</sub>，h<sub>t</sub> ∥ −x<sub>b</sub></small></div>
+    <div class="wing-note">单主翼 · 两侧翼尖小翼<small>非独立平尾</small></div>
+    <div class="scope-note">Web 几何非尺度；两摆角均取 +18° 作辨识示意</div>
+  </section>
+
+  <section class="info-grid">
+    <article class="info yaw"><div class="num">1</div><h3>前发摆动 · 偏航主控</h3><div class="eq">δ<sub>f</sub>&gt;0 → F<sub>y</sub>&gt;0 → M<sub>z</sub>&gt;0</div><p class="why">绕 z<sub>b</sub>；侧向分力 × 前部力臂</p></article>
+    <article class="info pitch"><div class="num">2</div><h3>尾发摆动 · 俯仰主控</h3><div class="eq">δ<sub>t</sub>&gt;0 → F<sub>z</sub>&lt;0 → M<sub>y</sub>&lt;0</div><p class="why">绕 y<sub>b</sub>；向上分力 × 尾部力臂</p></article>
+    <article class="info roll"><div class="num">3</div><h3>差速反扭 · 滚转主控</h3><div class="eq">ω<sub>f</sub> ≠ ω<sub>t</sub> → M<sub>x</sub></div><p class="why">净反扭矩控制滚转</p></article>
+  </section>
+  <footer class="foot"><span>权威链：aircraft-model.json → aircraft-view.mjs → Web 3D 快照 → 本图标注</span><span>概念级模型 · MODEL-DEFAULT</span></footer>
+</main>
+</body>
+</html>

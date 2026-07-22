@@ -12,7 +12,7 @@
 \begin{table}[H]
 \centering
 \caption{坐标系定义与符号约定}
-\begin{tabular}{ccl}
+\begin{tabularx}{\textwidth}{c c >{\raggedright\arraybackslash}X}
 \toprule
 符号 & 名称 & 定义 \\
 \midrule
@@ -23,21 +23,20 @@ $\{\mathcal{B}\}$ & 机体系 & $x_b$指机头，$y_b$指右翼，$z_b$向下（
 $\{\mathcal{M}_f\}$ & 前电机系 & 与前电机固连，机身坐标系绕$z_b$旋转$\delta_f$后得到 \\
 $\{\mathcal{M}_t\}$ & 尾电机系 & 与尾电机固连，机身坐标系绕$y_b$旋转$\delta_t$后得到 \\
 \bottomrule
-\end{tabular}
+\end{tabularx}
 \end{table}
 
 约定细节（确保符号的一致性）：
 \begin{itemize}
-    \item 前电机轴线沿$+x_b$方向（拉力式布局），正转（CW从后向前看），
+    \item 前电机的轴线与机体纵轴重合，机体受力方向沿$+x_b$；前转子角动量方向沿$+x_b$；
           旋转矢量方向沿$+x_b$；
-    \item 尾电机轴线沿$-x_b$方向（推进式布局），反转（CCW从后向前看），
-          旋转矢量方向沿$+x_b$（反转意味着在尾电机自身参考系中为CCW，
-          但从机体系看其角动量方向与推力方向相反）；
+    \item 尾电机同样与机体纵轴共线，机体受力方向沿$+x_b$；尾转子反向旋转，
+          零摆角时角动量方向沿$-x_b$，与机体受力方向相反；
     \item 零摆角时两电机推力线均通过质心（CG）：$a$为前电机到CG的机体系$x$距离，
           前电机机体系位置$[+a, 0, 0]^T$；$b$为尾电机到CG的机体系$x$距离（正值），
           尾电机机体系位置$[-b, 0, 0]^T$；
     \item 摆角符号约定：前电机绕$+z_b$的右手旋转为正（$\delta_f > 0$表示推力向右偏）；
-          尾电机绕$+y_b$的右手旋转为正（$\delta_t > 0$表示推力向下偏——在NED框架中即向下）。
+          尾电机绕$+y_b$的右手旋转为正（$\delta_t > 0$表示机体受力向$-z_b$偏，即向上；排气向下）。
 \end{itemize}
 
 \textbf{设计约束}：推力线过质心是保证通道解耦的必要几何条件。若这一条件不严格满足，
@@ -79,7 +78,7 @@ $\{\mathcal{M}_t\}$ & 尾电机系 & 与尾电机固连，机身坐标系绕$y_b
     \label{eq:tail_force_dir}
 \end{equation}
 $\delta_t > 0$时，推力矢量有向下的排气分量，机体受到向上的反作用力（$-z_b$方向），
-经$b$力臂产生抬头（机头向上）力矩。
+该力作用于质心后方，产生$M_y<0$的低头力矩。
 
 前电机转轴方向（角动量方向）与推力方向$\bm{u}_f$相同（正转CW，右手定则沿推力方向，
 $\bm{h}_f = J_p \omega_f [\cos\delta_f, \sin\delta_f, 0]^T$）。
@@ -120,7 +119,7 @@ $\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
     \item $M_{f,x} = -\tau_f \cos\delta_f$：前电机反扭矩在机体系$x$轴的分量，因反扭矩方向沿$-\bm{u}_f$，
           对滚转轴产生的是负贡献；
     \item $M_{f,y} = -\tau_f \sin\delta_f$：前摆角使反扭矩在$y$方向产生投影——这是偏航通道
-          （前摆）向俯仰通道的一个二阶耦合；
+          （前摆）向俯仰通道的一阶小角度耦合；
     \item $M_{f,z} = a T_f \sin\delta_f$：推力$y$分量经力臂$a$产生偏航力矩——偏航主控力矩。
 \end{itemize}
 
@@ -147,9 +146,9 @@ $\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
           机体承受的反扭矩沿$\bm{u}_{F,t}$（$+x$向），对滚转轴贡献为正——与前电机的负贡献形成差动对消；
     \item $M_{t,y} = -b T_t \sin\delta_t$：推力在机体上的$z$向分量（$-T_t\sin\delta_t$，
           即$\delta_t>0$时受力向上、NED中$z<0$）经力臂$b$产生俯仰力矩。
-          注意：$\delta_t>0$时尾推力受力向上，对质心产生抬头力矩（NED右手系中$M_y<0$为机头向上）；
+          注意：$\delta_t>0$时尾推力受力向上，抬升尾部并产生低头力矩；NED右手系中$M_y<0$为机头向下；
     \item $M_{t,z} = -\tau_t \sin\delta_t$：尾摆角使反扭矩在$z$方向产生投影——
-          俯仰通道（尾摆）向偏航通道的一个二阶耦合。
+          俯仰通道（尾摆）向偏航通道的一阶小角度耦合。
 \end{itemize}
 
 合并前后电机贡献，得到\textbf{机体系六维推力矢量映射}（消去零项后）：
@@ -172,11 +171,11 @@ $\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
           $M_z \approx a T_f \delta_f > 0$（机头向右的偏航力矩），符合偏航直觉；
     \item $\delta_t > 0$（尾摆下偏——排气向下、机体受力向上）：
           $F_z \approx -T_t \delta_t < 0$（NED中$z<0$为上，即向上的力），
-          $M_y \approx -b T_t \delta_t < 0$（抬头力矩），符合俯仰直觉；
+          $M_y \approx -b T_t \delta_t < 0$（低头力矩），符合尾部向上受力的俯仰直觉；
     \item $\delta_f = \delta_t = 0$且$\tau_f = \tau_t$（等转速、零摆角、反扭对消）：
           $F_x = T_f + T_t$（前后推力同向叠加），$F_y = F_z = 0$（无侧向/垂向力），
           $M_x = 0$（反扭对消，无滚转力矩），$M_y = M_z = 0$（无俯仰/偏航力矩）。
-          在此理想状态下，所有控制力矩归零——这正是配平直飞的期望状态。
+          在此理想状态下，所有推进控制力矩归零；它是零摆角名义参考，不等同于当前含非零尾摆偏置的24\,m/s纵向配平点。
 \end{itemize}
 
 \textbf{耦合项分析}：式(\ref{eq:six_component})中包含两个交叉耦合项：
@@ -196,6 +195,3 @@ $\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
 对于典型小型UAV螺旋桨参数（$C_Q/C_T \approx 0.15$--$0.25$，$D \approx 0.2$--$0.3$\,m，
 $a, b \approx 0.5$--$1.0$\,m），耦合比约在$3\%$--$15\%$范围——
 在工程上属于可处理量级，但并非完全可忽略。
-
-
-\section{六自由度刚体动力学}

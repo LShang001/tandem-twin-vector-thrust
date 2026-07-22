@@ -1,0 +1,77 @@
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}
+\begin{groupplot}[
+  group style={group size=3 by 1, horizontal sep=0.85cm},
+  width=0.235\linewidth,
+  height=0.235\linewidth,
+  scale only axis,
+  axis line style={black!65},
+  tick style={black!65},
+  tick label style={font=\scriptsize},
+  label style={font=\scriptsize},
+  title style={font=\footnotesize\bfseries, yshift=-1mm},
+  grid=major,
+  grid style={black!10},
+  legend style={font=\scriptsize, draw=none, fill=none, cells={anchor=west}},
+]
+\nextgroupplot[
+  title={(a) 配平空速保持},
+  xlabel={时间 $t$ (s)},
+  ylabel={$V-V_0$ (mm/s)},
+  xmin=0, xmax=10,
+  ymin=-0.025, ymax=0.10,
+  xtick={0,2,4,6,8,10},
+]
+\addplot[blue!75!black, line width=1pt, mark=o, mark size=1.6pt, mark options={fill=white}]
+coordinates {
+  (0,0) (1,-0.002886) (2,-0.007332) (3,-0.011736) (4,-0.014316)
+  (5,-0.013173) (6,-0.006682) (7,0.006248) (8,0.026059)
+  (9,0.052539) (10,0.084902)
+};
+\addplot[black!60, densely dashed, line width=.7pt] coordinates {(0,0) (10,0)};
+
+\nextgroupplot[
+  title={(b) 尾摆增量阶跃},
+  xlabel={时间 $t$ (s)},
+  ylabel={$\Delta\theta$ (deg)},
+  xmin=0, xmax=8,
+  ymin=-2, ymax=8.6,
+  xtick={0,2,4,6,8},
+  legend pos=north east,
+]
+\addplot[orange!85!black, line width=1pt, mark=square*, mark size=1.6pt, mark options={fill=orange!85!black}]
+coordinates {
+  (0,0) (1,2.267627) (2,4.160566) (3,5.462847) (4,6.152504)
+  (5,4.185830) (6,2.122869) (7,0.235931) (8,-1.325350)
+};
+\addlegendentry{姿态响应}
+\addplot[black!65, densely dashed, line width=.8pt, const plot]
+coordinates {(0,8) (4,8) (4,0) (8,0)};
+\addlegendentry{尾摆指令}
+
+\nextgroupplot[
+  title={(c) 差速滚转阶跃},
+  xlabel={时间 $t$ (s)},
+  ylabel={$\phi$ (deg)},
+  xmin=0, xmax=8,
+  ymin=0, ymax=1.3,
+  xtick={0,2,4,6,8},
+]
+\addplot[teal!75!black, line width=1pt, mark=triangle*, mark size=1.8pt, mark options={fill=teal!75!black}]
+coordinates {
+  (0,0) (1,0.320867) (2,0.639922) (3,0.913289) (4,1.143518)
+  (5,1.004600) (6,0.831548) (7,0.672567) (8,0.528356)
+};
+\draw[black!60, densely dashed, line width=.7pt]
+  (axis cs:4,0) -- (axis cs:4,1.3)
+  node[pos=.92, anchor=east, font=\scriptsize, fill=white, inner sep=1pt] {撤除};
+\end{groupplot}
+\end{tikzpicture}
+\caption{Web core标准回归场景的非线性时域响应。数据直接取自
+\texttt{tests/fixtures/}\allowbreak\texttt{regression-baseline.json}：配平空速以$24\ \mathrm{m/s}$为参考；
+俯仰角以$\theta_0=-1.627^\circ$为参考；尾摆和差速指令均在$t=4\ \mathrm{s}$撤除。
+标记为每秒保存的基线样本，连线仅用于辨识趋势。该图验证实现的确定性、通道方向和纵向参考量保持，
+不构成极点、阻尼比或飞行品质验证。}
+\label{fig:web_validation}
+\end{figure}

@@ -1,0 +1,50 @@
+\begin{figure}[H]
+\centering
+\resizebox{0.82\linewidth}{!}{%
+\begin{tikzpicture}[>=Stealth,
+  gain/.style={draw=blue!65!black, fill=blue!5, rounded corners=2pt,
+    minimum width=31mm, minimum height=10mm, align=center, font=\footnotesize\sffamily},
+  deriv/.style={draw=black!60, fill=black!3, rounded corners=2pt,
+    minimum width=43mm, minimum height=10mm, align=center, font=\footnotesize\sffamily},
+  mode/.style={draw=teal!65!black, fill=teal!5, rounded corners=2pt,
+    minimum width=39mm, minimum height=10mm, align=center, font=\footnotesize\sffamily},
+  strong/.style={->, draw=black!75, line width=1pt, >={Stealth[length=2.5mm]}},
+  weak/.style={->, draw=black!45, densely dashed, line width=.75pt, >={Stealth[length=2.2mm]}},
+  note/.style={font=\scriptsize\sffamily, text=black!65, align=center},
+  title/.style={font=\footnotesize\sffamily\bfseries},
+]
+  \node[title] at (0,3.75) {反馈增益};
+  \node[title] at (5.2,3.75) {局部等效作用};
+  \node[title] at (10.6,3.75) {预期主要影响};
+
+  \node[gain] (pitch) at (0,2.35) {$k_q,\ k_\theta$\\俯仰反馈};
+  \node[gain] (yaw)   at (0,.45) {$k_r$\\偏航速率反馈};
+  \node[gain] (roll)  at (0,-1.45) {$k_p,\ k_\phi$\\滚转反馈\\$\partial M_x/\partial\Delta\omega<0$};
+
+  \node[deriv] (pd) at (5.2,2.35) {俯仰阻尼/恢复作用增加\\受$-bT_0$与电机滞后约束};
+  \node[deriv] (yd) at (5.2,.45) {偏航阻尼作用增加\\受$aT_0$与交叉项约束};
+  \node[deriv] (rd) at (5.2,-1.45) {滚转阻尼/恢复作用增加\\效能$\propto\omega_0^2$};
+
+  \node[mode] (sp) at (10.6,2.35) {短周期响应\\阻尼与恢复趋势};
+  \node[mode] (dr) at (10.6,.45) {荷兰滚响应\\偏航阻尼趋势};
+  \node[mode] (rs) at (10.6,-1.45) {滚转收敛\\衰减速度趋势};
+
+  \draw[strong] (pitch) -- (pd); \draw[strong] (pd) -- (sp);
+  \draw[strong] (yaw) -- (yd);   \draw[strong] (yd) -- (dr);
+  \draw[strong] (roll) -- (rd);  \draw[strong] (rd) -- (rs);
+
+  \node[mode, draw=black!45, fill=white] (slow) at (7.9,-3.05)
+    {长周期与螺旋模态\\影响较弱且依参数而定};
+  \draw[weak] (pd.south) to[out=-65,in=160] (slow.west);
+  \draw[weak] (yd.south) to[out=-65,in=115] (slow.north);
+  \draw[weak] (rd.south) to[out=-55,in=25] (slow.east);
+
+  \node[note, anchor=west] at (0,-4.15) {实线：主因果路径};
+  \draw[strong] (2.05,-4.15) -- (3.1,-4.15);
+  \node[note, anchor=west] at (3.45,-4.15) {虚线：弱耦合/工作点相关};
+  \draw[weak] (6.15,-4.15) -- (7.2,-4.15);
+\end{tikzpicture}%
+}
+\caption{SAS增益对局部闭环动力学的定性因果图。实线表示在非零推力、反馈符号正确且执行器未饱和时的主作用路径；虚线表示依赖气动导数和工作点的弱耦合。该图不包含计算极点，不能替代数值Jacobian、特征值与非线性时域验证。}
+\label{fig:stability_effects}
+\end{figure}

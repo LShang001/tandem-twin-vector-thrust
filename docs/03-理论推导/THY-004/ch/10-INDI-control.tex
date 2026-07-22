@@ -1,0 +1,344 @@
+% ===========================================================================
+%  第10章：基于增量非线性动态逆（INDI）的控制律升级方案
+%  REF: Pollack & van Kampen (2023), Jiang et al. (2026)
+% ===========================================================================
+
+\section{基于增量非线性动态逆的控制律升级方案}
+\label{sec:INDI}
+
+第\ref{sec:control}节给出的SAS增稳律以欧拉角域的比例-积分-微分结构为基础，各通道独立设计反馈增益。该方案结构简单、易于整定，但其角速率阻尼项仅对惯性力矩和气动阻尼作线性近似反馈，未显式处理$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$（Coriolis耦合）、$\boldsymbol{\omega}\times\mathbf{h}_{\text{rotor}}$（陀螺力矩）、反扭矩摆角投影交叉项及非线性气动效应。这些未建模动态在摆角较大、角速率较高或工作点远离配平状态时累积为控制扰动，需通过提高反馈增益来压制，而过高的增益又引入执行器饱和和噪声放大风险。
+
+近年来，增量非线性动态逆（Incremental Nonlinear Dynamic Inversion, INDI）在飞行控制领域受到广泛关注\cite{pollack2023robust,wang2019incremental}。与经典NDI要求完整的机载气动模型不同，INDI利用传感器实测的角加速度信号替换了大部分模型依赖项，仅保留控制效能矩阵作为模型输入，从而在保持反馈线性化优点的同时大幅提升了鲁棒性。本节在现有SAS框架基础上，提出基于INDI的内环角速率控制升级方案，以增量指令替代绝对指令，使闭环系统在模型不确定性和外部扰动下具有更强的鲁棒性。
+
+\subsection{NDI与INDI的原理对比}
+
+考虑输入仿射非线性系统
+\begin{equation}
+    \dot{\mathbf{y}} = \boldsymbol{\alpha}(\mathbf{x}) + \mathcal{B}(\mathbf{x})\mathbf{u}
+    \label{eq:indi_system}
+\end{equation}
+其中$\mathbf{y}\in\mathbb{R}^m$为被控输出（本文取机体系角速率$\boldsymbol{\omega}=[p,q,r]^T$），$\mathbf{u}\in\mathbb{R}^m$为控制输入，$\mathcal{B}(\mathbf{x})$为控制效能矩阵，$\boldsymbol{\alpha}(\mathbf{x})$包含了所有与$\mathbf{u}$无关的动力学项（Coriolis力、陀螺力矩、气动阻尼、重力分量等）。
+
+\textbf{经典NDI}直接构造逆映射\cite{stevens2015aircraft}：
+\begin{equation}
+    \mathbf{u} = \hat{\mathcal{B}}^{-1}(\mathbf{x})\left[\boldsymbol{\nu} - \hat{\boldsymbol{\alpha}}(\mathbf{x})\right]
+    \label{eq:ndi_law}
+\end{equation}
+其中$\hat{\boldsymbol{\alpha}}$和$\hat{\mathcal{B}}$为机载模型估计（On-Board Model, OBM），$\boldsymbol{\nu}$为虚拟控制量（期望角加速度）。NDI对消全部非线性后的闭环呈现积分器特性$\dot{\mathbf{y}}=\boldsymbol{\nu}$，但其致命缺陷在于：任何$\hat{\boldsymbol{\alpha}}$中的建模误差（$\boldsymbol{\xi}$）和控制效能误差（$\boldsymbol{\Xi}$）都会直接注入被控输出\cite{pollack2023robust}。对大包线飞行器，气动数据库的构建和调度本身就是一项繁重的工程任务。
+
+\textbf{INDI}在$t-\Delta t$时刻（下标$0$）对式(\ref{eq:indi_system})作一阶Taylor展开\cite{sieberling2010robust,pollack2023robust}：
+\begin{equation}
+    \dot{\mathbf{y}} = \dot{\mathbf{y}}_0 + \underbrace{\frac{\partial[\boldsymbol{\alpha}+\mathcal{B}\mathbf{u}]}{\partial\mathbf{x}}\Big|_0 \Delta\mathbf{x}}_{\text{状态增量贡献}} + \mathcal{B}(\mathbf{x}_0)\Delta\mathbf{u} + \mathbf{R}_1
+    \label{eq:indi_taylor}
+\end{equation}
+
+引入\textbf{时间尺度分离假设}（time-scale separation）：当采样率足够高（$\Delta t$足够小）时，$\Delta\mathbf{x}$的变化相对$\Delta\mathbf{u}$的变化可忽略。在此假设下，状态增量项和Taylor余项$\mathbf{R}_1$被舍弃，式(\ref{eq:indi_taylor})简化为
+\begin{equation}
+    \dot{\mathbf{y}} \approx \dot{\mathbf{y}}_0 + \hat{\mathcal{B}}(\mathbf{x}_0)\Delta\mathbf{u}
+    \label{eq:indi_simplified}
+\end{equation}
+
+由此解得\textbf{INDI标准控制律}：
+\begin{equation}
+    \boxed{\mathbf{u} = \mathbf{u}_0 + \hat{\mathcal{B}}^{-1}(\mathbf{x}_0)\left[\boldsymbol{\nu} - \dot{\mathbf{y}}_0\right]}
+    \label{eq:indi_law}
+\end{equation}
+
+对比式(\ref{eq:ndi_law})和式(\ref{eq:indi_law})可知，INDI的核心优势在于：控制律中不出现$\hat{\boldsymbol{\alpha}}(\mathbf{x})$，所有与状态相关的非线性动力学（无论是否建模）均通过$\dot{\mathbf{y}}_0$（传感器实测角加速度）隐式捕获。唯一需要建模的仅是控制效能矩阵$\hat{\mathcal{B}}$——而该矩阵恰好是本构型第\ref{sec:allocation}节已精确推导的$\mathbf{B}_{\mathrm{full}}$（式\ref{eq:effectiveness_matrix}）。
+
+\subsection{控制效能矩阵的严格建模}
+
+INDI控制律（式\ref{eq:indi_law}）中唯一需要建模的是控制效能矩阵$\hat{\mathcal{B}}$，其定义为力矩对控制输入的Jacobian $\partial\mathbf{M}/\partial\mathbf{u}$。对于本构型，控制输入为$\mathbf{u}=[\Delta\omega,\delta_t,\delta_f]^T$，被控力矩为$\mathbf{M}=[M_x,M_y,M_z]^T$。从第\ref{sec:mapping}节的完整六维映射（式\ref{eq:six_component}）的力矩分量出发：
+
+\begin{equation}
+    \begin{aligned}
+        M_x &= -\tau_f \cos\delta_f + \tau_t \cos\delta_t \\
+        M_y &= -b T_t \sin\delta_t - \tau_f \sin\delta_f \\
+        M_z &= a T_f \sin\delta_f - \tau_t \sin\delta_t
+    \end{aligned}
+    \label{eq:moment_full_nonlinear}
+\end{equation}
+
+其中推力与反扭矩由差速变量$\Delta\omega$参数化（式\ref{eq:diff_def}）：
+\begin{equation}
+    T_f = T_0(1+\Delta\omega), \quad T_t = T_0(1-\Delta\omega), \quad
+    \tau_f = \tau_0(1+\Delta\omega), \quad \tau_t = \tau_0(1-\Delta\omega)
+    \label{eq:diff_thrust_torque}
+\end{equation}
+且$T_0=k_T\omega_0^2$，$\tau_0=k_Q\omega_0^2$，$\omega_0$为基准转速。
+
+\subsubsection{在线Jacobian $\mathbf{B}_{\mathrm{true}}(\mathbf{u})$的推导}
+
+对式(\ref{eq:moment_full_nonlinear})逐项求偏导数，得到在当前工作点$\mathbf{u}_k=[\Delta\omega_k,\delta_{t,k},\delta_{f,k}]^T$处的完整Jacobian：
+
+\begin{equation}
+    \boxed{
+    \mathbf{B}_{\mathrm{true}}(\mathbf{u}_k) =
+    \begin{bmatrix}
+        -\tau_0(\cos\delta_{f,k}+\cos\delta_{t,k}) & +\tau_{t,k}\sin\delta_{t,k} & +\tau_{f,k}\sin\delta_{f,k} \\[6pt]
+        +b T_0\sin\delta_{t,k} - \tau_0\sin\delta_{f,k} & -b T_{t,k}\cos\delta_{t,k} & -\tau_{f,k}\cos\delta_{f,k} \\[6pt]
+        +a T_0\sin\delta_{f,k} + \tau_0\sin\delta_{t,k} & -\tau_{t,k}\cos\delta_{t,k} & +a T_{f,k}\cos\delta_{f,k}
+    \end{bmatrix}
+    }
+    \label{eq:B_true}
+\end{equation}
+
+其中$T_{f,k}=T_0(1+\Delta\omega_k)$，$T_{t,k}=T_0(1-\Delta\omega_k)$，$\tau_{f,k}=\tau_0(1+\Delta\omega_k)$，$\tau_{t,k}=\tau_0(1-\Delta\omega_k)$为当前步的推力和反扭矩值（已在推进系统建模步骤中计算完毕）。
+
+\subsubsection{与线性化效能矩阵的对比}
+
+当$\delta_f=\delta_t=0$时，$\sin\delta=0$、$\cos\delta=1$，式(\ref{eq:B_true})退化为：
+\begin{equation}
+    \mathbf{B}_{\mathrm{true}}(\mathbf{0}) =
+    \begin{bmatrix}
+        -2\tau_0 & 0 & 0 \\
+        0 & -b T_0 & -\tau_0 \\
+        0 & -\tau_0 & a T_0
+    \end{bmatrix}
+    \equiv \mathbf{B}_{\mathrm{full}}(\omega_0)
+    \label{eq:B_at_zero}
+\end{equation}
+即第\ref{sec:allocation}节在线性化假设下推导的$\mathbf{B}_{\mathrm{full}}$（式\ref{eq:effectiveness_matrix}）。因此$\mathbf{B}_{\mathrm{full}}$是$\mathbf{B}_{\mathrm{true}}$在零摆角处的特例，不适用于INDI在大摆角工况下的实际需求。
+
+在极端工况（$\delta_f=\delta_t=25^\circ$，$\Delta\omega=0.5$，即前电机满偏右+尾电机满偏下+满差速）下，两者差异如表\ref{tab:B_comparison}所示：
+
+\begin{table}[H]
+\centering
+\caption{$\mathbf{B}_{\mathrm{full}}$与$\mathbf{B}_{\mathrm{true}}$在MAXDEF工况下的对比}
+\label{tab:B_comparison}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\textwidth}{c c c c}
+\toprule
+\textbf{矩阵元素} & $\mathbf{B}_{\mathrm{full}}(\omega_0)$ & $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$ & \textbf{相对误差} \\
+\midrule
+$B_{11}$（滚转 $\leftarrow \Delta\omega$） & $-2\tau_0$ & $-\tau_0(0.906+0.906)=-1.812\tau_0$ & 9.4\% \\
+$B_{22}$（俯仰 $\leftarrow \delta_t$） & $-b T_0$ & $-b\cdot 0.5T_0\cdot 0.906 = -0.453bT_0$ & \textbf{54.7\%} \\
+$B_{33}$（偏航 $\leftarrow \delta_f$） & $+a T_0$ & $a\cdot 1.5T_0\cdot 0.906 = 1.359aT_0$ & \textbf{35.9\%} \\
+$B_{12}$（滚转 $\leftarrow \delta_t$） & 0（无耦合） & $+\tau_{t,k}\sin\delta_{t,k} \neq 0$ & 新出现 \\
+$B_{13}$（滚转 $\leftarrow \delta_f$） & 0（无耦合） & $+\tau_{f,k}\sin\delta_{f,k} \neq 0$ & 新出现 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+满偏+满差速下，俯仰通道的效能估计误差超过50\%——若INDI使用$\mathbf{B}_{\mathrm{full}}$作为$\hat{\mathcal{B}}$，其逆矩阵会将俯仰指令放大近两倍，严重违反INDI的鲁棒稳定性条件\cite{pollack2023robust}。因此，在实际应用中必须采用在线计算的$\mathbf{B}_{\mathrm{true}}$。
+
+\subsubsection{在线解析求逆}
+
+$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$是$3\times3$实矩阵，其逆可通过伴随矩阵法解析求取。定义各元素为$b_{ij}$（$i,j=1,2,3$分别对应$M_x,M_y,M_z$行和$\Delta\omega,\delta_t,\delta_f$列），行列式为
+
+\begin{equation}
+    \det(\mathbf{B}) = b_{11}(b_{22}b_{33}-b_{23}b_{32}) - b_{12}(b_{21}b_{33}-b_{23}b_{31}) + b_{13}(b_{21}b_{32}-b_{22}b_{31})
+    \label{eq:B_det}
+\end{equation}
+
+伴随矩阵各元素为对应代数余子式。完整计算约需18次乘法+1次除法，在嵌入式MCU上耗时$<1\,\mu$s，不构成实时性瓶颈。由于各元素$b_{ij}$均由当前步已计算的物理量（$\sin/\cos$摆角，$T_f,T_t,\tau_f,\tau_t$）简单组合而成，在线Jacobian的构建本身不引入额外的传感器或模型需求。
+
+\subsection{本构型的INDI控制律 -- 在线Jacobian形式}
+
+将在线Jacobian $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$代入INDI标准形式（式\ref{eq:indi_law}），得到本构型的INDI-SAS增量控制律：
+
+\begin{equation}
+    \boxed{
+    \begin{bmatrix} \Delta\omega \\ \delta_t \\ \delta_f \end{bmatrix}_{k+1}
+    =
+    \begin{bmatrix} \Delta\omega \\ \delta_t \\ \delta_f \end{bmatrix}_{k}
+    +
+    \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_k)
+    \cdot
+    \left(
+    \underbrace{\begin{bmatrix} \nu_p \\ \nu_q \\ \nu_r \end{bmatrix}}_{\text{虚拟角加速度}}
+    -
+    \underbrace{\begin{bmatrix} \dot{p} \\ \dot{q} \\ \dot{r} \end{bmatrix}_{\text{IMU}}}_{\text{实测角加速度}}
+    \right)
+    }
+    \label{eq:indi_our_config}
+\end{equation}
+
+其中虚拟控制量$\boldsymbol{\nu}$由外环角速率误差反馈生成，$\dot{\boldsymbol{\omega}}_{\text{IMU}}$为实测角加速度（获取与滤波方法详见§\ref{sec:accel_estimation}），$\mathbf{u}_k$为上一子步的实际控制输入。
+
+\textbf{$\mathbf{B}_{\mathrm{true}}$的行列式非奇异性}：在正常工作范围内，$\det(\mathbf{B}_{\mathrm{true}})<0$严格成立（$b_{11}<0$且$2\times2$右下子块的行列式$abT_fT_t\cos\delta_f\cos\delta_t-\tau_f\tau_t\cos\delta_f\cos\delta_t>0$，因为$abT_fT_t\gg\tau_f\tau_t$对所有$\omega_0>0$成立）。当$\omega_0\to 0$时行列式趋于零，此时切换回绝对指令SAS模式（见低油门退化讨论）。
+
+\subsubsection{虚拟控制量 $\nu$ 的生成}
+
+外环角速率指令由姿态误差经比例-积分反馈生成（保留第\ref{sec:control}节的SAS外环结构）：
+\begin{align}
+    q_{\text{ref}} &= -k_\theta\Delta\theta - k_i^\theta\int\Delta\theta dt \label{eq:indi_outer_pitch} \\
+    p_{\text{ref}} &= -k_\phi\Delta\phi - k_i^\phi\int\Delta\phi dt \label{eq:indi_outer_roll} \\
+    r_{\text{ref}} &= 0 \quad\text{（SAS内环不保持航向）} \label{eq:indi_outer_yaw}
+\end{align}
+
+内环角速率误差到虚拟角加速度的映射采用纯比例控制：
+\begin{equation}
+    \begin{bmatrix} \nu_p \\ \nu_q \\ \nu_r \end{bmatrix}
+    =
+    \begin{bmatrix} k_p^{\text{rate}} & 0 & 0 \\ 0 & k_q^{\text{rate}} & 0 \\ 0 & 0 & k_r^{\text{rate}} \end{bmatrix}
+    \begin{bmatrix} p_{\text{ref}} - p \\ q_{\text{ref}} - q \\ r_{\text{ref}} - r \end{bmatrix}
+    \label{eq:indi_nu}
+\end{equation}
+
+\subsection{完整INDI-SAS算法}
+\label{sec:indi_algorithm}
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{外环}：由姿态误差和积分项按式(\ref{eq:indi_outer_pitch})--(\ref{eq:indi_outer_yaw})计算目标角速率$p_{\text{ref}},q_{\text{ref}},r_{\text{ref}}$；
+    \item \textbf{内环}：由角速率误差按式(\ref{eq:indi_nu})计算虚拟角加速度$\nu_p,\nu_q,\nu_r$；
+    \item \textbf{在线Jacobian}：由当前步的$\delta_{f,k},\delta_{t,k},\Delta\omega_k$和基值$T_0,\tau_0$，按式(\ref{eq:B_true})构建$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$；
+    \item \textbf{解析求逆}：按式(\ref{eq:B_det})和伴随矩阵法计算$\mathbf{B}_{\mathrm{true}}^{-1}$（若$|\det|<10^{-6}$则回退到绝对指令SAS模式）；
+    \item \textbf{增量指令}：按式(\ref{eq:indi_our_config})计算$\Delta\mathbf{u}$；
+    \item \textbf{指令累积}：$\mathbf{u}_{k+1} = \mathbf{u}_k + \Delta\mathbf{u}$；
+    \item \textbf{硬限幅}：$|\delta_t|\leq\delta_{\max}$，$|\delta_f|\leq\delta_{\max}$，$|\Delta\omega|\leq\Delta\omega_{\max}$；
+    \item \textbf{电机映射}：$\omega_f=\omega_0\sqrt{1+\Delta\omega}$，$\omega_t=\omega_0\sqrt{1-\Delta\omega}$（保持式\ref{eq:diff_def}的平方和不变性质）。
+\end{enumerate}
+
+\subsection{与当前SAS的对比}
+
+\begin{table}[H]
+\centering
+\caption{当前SAS与INDI-SAS的控制律对比}
+\label{tab:sas_vs_indi}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.8cm} *{2}{>{\raggedright\arraybackslash}X}}
+\toprule
+\textbf{维度} & \textbf{当前SAS（绝对指令）} & \textbf{INDI-SAS（增量指令）} \\
+\midrule
+指令形式 & $\delta_t^{\text{cmd}} = \delta_{t0} + k_q q - k_\theta\Delta\theta$（绝对位置） & $\delta_t^{k+1} = \delta_t^k + \Delta\delta_t$（增量叠加） \\
+模型依赖 & 无（纯反馈） & 仅$\hat{\mathbf{B}}$（效能矩阵） \\
+\textbf{陀螺力矩} & 未建模，作为扰动靠反馈抑制 & 通过$\dot{q}_0$隐式对消 \\
+\textbf{Coriolis耦合} & 同上 & 同上 \\
+\textbf{反扭矩交叉项} & 需前馈补偿（第\ref{sec:allocation}节） & 同上 \\
+\textbf{气动阻尼} & 由角速率反馈近似替代 & 同上 \\
+低油门退化 & 增益缩放（手动调度） & $\hat{\mathbf{B}}$自动反映效能变化 \\
+大摆角非线性 & $\sin\delta\approx\delta$近似失效 & $\dot{\boldsymbol{\omega}}_0$含真实非线性响应 \\
+鲁棒性 & 依赖反馈增益裕度 & 理论鲁棒：$\epsilon_{\mathrm{INDI}}$上界与模型误差$\boldsymbol{\xi}$无关\cite{pollack2023robust} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{实现注意事项}
+
+\subsubsection{同步效应}
+
+INDI的特有失效模式是\textbf{同步效应}（synchronization effect）：当控制指令路径和执行器/传感器反馈路径之间存在显著的动力学差异（如执行器滞后、传感器延迟、滤波相位差）时，$\hat{\mathbf{B}}^{-1}(\boldsymbol{\nu}-\dot{\mathbf{y}}_0)$中的减法不能精确对消，导致$\epsilon_{\mathrm{INDI}}$发散\cite{pollack2023robust,grondman2018design}。
+
+\textbf{对策}：在虚拟控制量$\boldsymbol{\nu}$的计算路径中引入与角加速度反馈路径匹配的滤波延迟（Pollack的"匹配策略"或$\mu$-最优增广\cite{pollack2023robust}）。对本构型而言，电机一阶动态$\tau_m$是最主要的反馈路径延迟来源——可在$\boldsymbol{\nu}$通路上串联相同时间常数的低通滤波器以实现粗略匹配。
+
+\subsubsection{低油门退化}
+
+当$\omega_0\to 0$时，$\tau_0\to 0$，$T_0\to 0$，$\hat{\mathbf{B}}^{-1}$趋于奇异。此时应回退到当前SAS模式（绝对指令），或切换至仅依赖气动舵面的备选控制律（若配备）。
+
+\textbf{建议切换逻辑}：当$\omega_0 < 0.15\,\omega_{\max}$（油门低于15\%）时，自动从INDI模式回退到第\ref{sec:control}节的绝对指令SAS模式。该阈值应根据实际台架标定的$\tau_0(\omega_0)$曲线确定。
+
+\subsubsection{角加速度获取与滤波}
+\label{sec:accel_estimation}
+
+本节对INDI控制律中角加速度信号$\dot{p},\dot{q},\dot{r}$的获取与滤波方法进行系统分析。角加速度是INDI区别于NDI的核心反馈量（式\ref{eq:indi_law}中的$\dot{\mathbf{y}}_0$），其信号质量直接决定INDI闭环的鲁棒性和稳定性。当前绝大多数MEMS IMU仅提供角速率（陀螺）和线加速度（加速度计）测量，角加速度需通过间接估计获取。以下从物理原理、数学模型和工程实现三个层面，对六种主流方法进行综合分析。
+
+\paragraph{（1）后向欧拉数值微分}
+
+最直接的方法是陀螺信号的有限差分近似：
+\begin{equation}
+    \dot{\boldsymbol{\omega}}_k \approx \frac{\boldsymbol{\omega}_k - \boldsymbol{\omega}_{k-1}}{\Delta t}
+    \label{eq:bwd_euler}
+\end{equation}
+该方法的频率响应为$H_{\mathrm{diff}}(j\omega) = (1 - e^{-j\omega\Delta t})/\Delta t$。在低频段（$\omega \ll 1/\Delta t$），$H_{\mathrm{diff}}(j\omega) \approx j\omega$近似理想微分；在高频段，幅频特性趋于$2/\Delta t$（而不是理想微分的持续增长），形成自然的低通效应。然而，该低通截止频率$\omega_c \approx 1/\Delta t$极高——在本仿真的子步$h=0.004$\,s下，$\omega_c\approx 250$\,rad/s，远高于飞行器刚体动力学的带宽（通常在$1$--$10$\,rad/s范围内），因此对高频传感器噪声几乎无抑制作用。
+
+后向欧拉的噪声传播特性可通过离散传递函数分析：若陀螺测量噪声方差为$\sigma_\omega^2$，则差分后的角加速度噪声方差为$\sigma_{\dot{\omega}}^2 = 2\sigma_\omega^2/\Delta t^2$——噪声功率随采样率二次增长。对于典型MEMS陀螺（噪声密度$0.01$\,$^\circ$/s/$\sqrt{\text{Hz}}$，带宽$100$\,Hz），在$h=0.004$\,s下的角加速度噪声标准偏差可达$3.5$\,rad/s$^2$量级，足以淹没正常的角加速度信号（典型机动下$p,q,r$的变化率在$0.5$--$5$\,rad/s$^2$范围）。因此，后向欧拉差分在实机应用中几乎不可单独使用，必须配合后续滤波。
+
+\paragraph{（2）互补滤波}
+
+互补滤波（Complementary Filter）的基本思想是利用两个独立信息源在不同频段的互补特性进行融合\cite{jiang2025adaptive}：
+\begin{itemize}
+    \item \textbf{模型预测}（低频通道）：由当前控制输入和已知的简化动力学模型前向预测角加速度。该通道在低频段精确但高频段受未建模动态影响。
+    \item \textbf{数值微分}（高频通道）：由陀螺测量经数值差分获得。该通道在高频段能捕捉快速动态，但低频段受漂移和噪声影响。
+\end{itemize}
+
+互补滤波的频域形式为
+\begin{equation}
+    \hat{\dot{\boldsymbol{\omega}}}(s) = F_{\mathrm{lp}}(s) \cdot \dot{\boldsymbol{\omega}}_{\text{model}}(s) + F_{\mathrm{hp}}(s) \cdot \dot{\boldsymbol{\omega}}_{\text{diff}}(s)
+    \label{eq:comp_filter_freq}
+\end{equation}
+其中$F_{\mathrm{lp}}(s) = \omega_c/(s+\omega_c)$为一阶低通滤波器，$F_{\mathrm{hp}}(s) = s/(s+\omega_c)$为互补高通滤波器，满足$F_{\mathrm{lp}}(s) + F_{\mathrm{hp}}(s) = 1$（无偏条件）。截止频率$\omega_c$是唯一的可调参数：增大$\omega_c$→更多依赖数值微分（响应快但噪声大），减小$\omega_c$→更多依赖模型预测（噪声小但可能引入模型偏差）。
+
+\textbf{自适应互补滤波}（Jiang et al., 2025）\cite{jiang2025adaptive}在上述框架上做了关键改进：将固定的$\omega_c$替换为根据瞬时角速率误差自适应调节的函数
+\begin{equation}
+    \omega_c(t) = \omega_{c,\min} + (\omega_{c,\max} - \omega_{c,\min}) \cdot \tanh\left(\frac{|\boldsymbol{\omega}_{\text{err}}|}{\sigma_\omega}\right)
+    \label{eq:adaptive_cf}
+\end{equation}
+其中$\boldsymbol{\omega}_{\text{err}}$为当前角速率误差（反映了机动剧烈程度），$\sigma_\omega$为归一化尺度参数。快速机动时$\omega_c$自动提高以捕获高频动态，稳态时$\omega_c$降至最低以抑制噪声。仿真结果表明该方案在估计误差、稳定性和瞬态响应方面均优于传统固定增益互补滤波\cite{jiang2025adaptive}。
+
+\paragraph{（3）固定滞后Kalman平滑}
+
+标准Kalman滤波器是因果的（仅使用$k$时刻及之前的观测估计$\hat{\mathbf{x}}_{k|k}$），其估计精度受限于当前时刻的信息量。固定滞后平滑器（Fixed-Lag Smoother）在Kalman框架下引入$N$步延迟，利用"未来"的$N$个观测$\mathbf{y}_{k+1},\ldots,\mathbf{y}_{k+N}$改善对$\mathbf{x}_k$的估计。从概率视角，平滑器计算的是$\hat{\mathbf{x}}_{k|k+N} = \mathbb{E}[\mathbf{x}_k | \mathbf{y}_1,\ldots,\mathbf{y}_{k+N}]$，信息量大于滤波器的$\hat{\mathbf{x}}_{k|k}$。
+
+Lude\~{n}a Cervantes等（2020）\cite{ludena2020flight}首次将固定滞后平滑器应用于INDI的角加速度估计。其状态向量包含角速率和角加速度：
+\begin{equation}
+    \mathbf{x} = [\phi, \theta, p, q, r, \dot{p}, \dot{q}, \dot{r}]^T
+    \label{eq:fixedlag_state}
+\end{equation}
+状态方程以刚体转动动力学为过程模型，观测方程为IMU的陀螺和加速度计输出。固定滞后$N$的选择是性能与延迟之间的trade-off：$N\Delta t$引入了额外的控制延迟，但对于INDI而言，时间尺度分离假设（第\ref{sec:INDI}节式\ref{eq:indi_taylor}）恰好要求$\Delta t$足够小，因此适度的平滑延迟（$N=3$--$5$步）可在不违反时间尺度分离的前提下显著提升角加速度估计精度。
+
+\paragraph{（4）Savitzky-Golay滤波器}
+
+Savitzky-Golay（S-G）滤波器在滑动窗口内对数据点作固定阶数的多项式最小二乘拟合，然后解析求导以同时获得平滑后的角速率和角加速度。其等效FIR滤波器的冲激响应具有解析形式，且多项式拟合天然保留了信号的矩特性。在$2M+1$点窗口、$d$阶多项式下，$k$阶导数的滤波器系数可从Vandermonde矩阵的伪逆解析计算。
+
+S-G滤波器的主要优势在于：单次滤波同时输出平滑角速率和高品质角加速度，且不需要动力学模型。代价是引入$M\Delta t$的群延迟，且窗口长度$M$和多项式阶数$d$需根据飞行器动力学带宽进行离线调优。对于带宽$<5$\,Hz的刚体动力学，典型参数为$M=3$--$5$、$d=2$--$3$。
+
+\paragraph{（5）跟踪微分器}
+
+跟踪微分器（Tracking Differentiator, TD）由韩京清在自抗扰控制（ADRC）理论中提出，其核心是一个非线性二阶系统：
+\begin{equation}
+    \begin{cases}
+        \dot{x}_1 = x_2 \\
+        \dot{x}_2 = -R \cdot \mathrm{sat}\left(x_1 - \omega(t) + \dfrac{x_2|x_2|}{2R},\, \delta\right)
+    \end{cases}
+    \label{eq:tracking_diff}
+\end{equation}
+其中$x_1$跟踪输入信号$\omega(t)$，$x_2$为其微分（即角加速度估计），$R$为加速度因子（决定跟踪速度），$\delta$为线性区宽度。当$R\to\infty$时，$x_1\to\omega(t)$，$x_2\to\dot{\omega}(t)$。有限$R$下，TD在跟踪精度和噪声抑制之间取得平衡。与线性滤波器不同，TD的非线性结构使其对突变信号的响应更快，特别适合捕获INDI所依赖的快速角加速度变化。
+
+Levant精确微分器\cite{levant1998robust}（基于二阶滑模）提供了另一种有限时间收敛的微分方案，其收敛性有严格数学保证，但参数整定相对复杂。
+
+\paragraph{（6）MEMS角加速度计直接测量}
+
+Zhu等（2026）\cite{zhu2026mems}报道了一种基于电化学原理的MEMS角加速度计（Electrochemical Angular Accelerometer, EAA），其灵敏度达$4.5$\,V/(rad/s$^2$)，噪声密度$3.12\times10^{-6}$\,(rad/s$^2$)/$\surd$Hz。该传感器被直接集成到INDI闭环控制中，飞行试验表明：与陀螺微分方案相比，EAA方案具有更快的指令响应和更小的跟踪误差\cite{zhu2026mems}。
+
+MEMS角加速度计的主要优势在于：零延迟、无微分噪声放大、输出可直接作为INDI的$\dot{\mathbf{y}}_0$。当前限制是商用器件的带宽仅约$10$\,Hz（通过补偿电路扩展），对于需要更高带宽的飞行器（如旋翼$1$\,kHz量级的振动耦合），仍需探索新型传感原理（如压电、光学）。
+
+\paragraph{方法对比与选型建议}
+
+\begin{table}[H]
+\centering
+\caption{角加速度估计方法综合对比}
+\label{tab:accel_methods}
+\setlength{\tabcolsep}{3pt}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.2cm} c c c c >{\raggedright\arraybackslash}X}
+\toprule
+\textbf{方法} & \textbf{延迟} & \textbf{噪声抑制} & \textbf{模型依赖} & \textbf{计算量} & \textbf{适用阶段} \\
+\midrule
+后向欧拉（\ref{eq:bwd_euler}） & 零 & 无 & 无 & 极小 & 概念仿真 \\
+S-G滤波 & $M\Delta t$ & 中 & 无 & 小 & HIL初期 \\
+互补滤波（\ref{eq:comp_filter_freq}） & 低 & 中 & 低（简化模型） & 小 & HIL \\
+自适应互补滤波（\ref{eq:adaptive_cf}） & 低 & 高 & 低（简化模型） & 中 & 实机 \\
+固定滞后平滑 & $N\Delta t$ & 高 & 中（动力学模型） & 大 & 实机（有算力） \\
+MEMS角加速度计 & 零 & 极高 & 无 & 极小 & 实机（理想） \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{对本项目的分阶段建议}：
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{概念仿真阶段（当前）}：直接使用子步动力学计算中产生的$\dot{p},\dot{q},\dot{r}$（第\ref{sec:dynamics}节步骤5），等价于无噪声理想传感器。此时无需任何滤波。
+    \item \textbf{HIL验证阶段}：在陀螺输出中加入真实IMU噪声模型（Allan方差），使用S-G滤波器（$M=3$、$d=2$）或自适应互补滤波进行角加速度估计。
+    \item \textbf{实机飞行阶段}：优先考虑自适应互补滤波（Jiang 2025方案）作为软件方案，远期若硬件条件允许则升级至MEMS角加速度计直接测量。
+\end{enumerate}
+
+\subsection{与已有INDI文献的关系}
+
+本方案在以下方面区别于现有INDI应用：
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{平台差异}：现有INDI主要应用于多旋翼\cite{smeur2016incremental}、倾转旋翼eVTOL\cite{schlatter2024longitudinal,bhandari2024design}、常规布局固定翼\cite{grondman2018design}和飞翼\cite{jiang2026enhanced}。本构型的纵列双发正交单轴矢量推力布局在飞行力学和控制分配上与上述平台均有本质差异；
+    \item \textbf{效能矩阵的稀疏性}：本构型的$\mathbf{B}_{\mathrm{full}}$具有天然的对角占优结构（第\ref{sec:allocation}节），使得$\hat{\mathbf{B}}^{-1}$可解析求逆，避免了通用INDI方案中在线矩阵求逆的计算开销；
+    \item \textbf{与SAS的继承性}：本方案的外环姿态误差反馈完全保留现有SAS结构（式\ref{eq:sas_pitch}--\ref{eq:sas_roll}），仅在执行器指令生成层替换为增量形式。这种"增量内环+绝对外环"的混合架构兼顾了INDI的鲁棒性和SAS的易整定性。
+\end{enumerate}

@@ -29,11 +29,11 @@
 以及级联式增稳控制律的设计框架（包含角速率阻尼、姿态比例-积分反馈与角速度闭环模式）。
 文中对控制效能矩阵的对角化性质、耦合项的量级评估、各飞行模态的物理机理和SAS参数整定原则进行了深入分析，
 并系统比较了本构型与传统舵面控制及通用过驱动推力矢量平台的区别。
-全文不绑定具体飞行器物理参数，重在揭示构型本身的动力学本质与控制特性。
+解析推导以一般构型为对象；数值实现采用未经标定的MODEL-DEFAULT参数，本文结论仅适用于概念级建模与仿真。
 }
 \end{center}
 
-\rule{\textwidth}{0.5pt}
+\noindent\rule{\textwidth}{0.5pt}
 
 \tableofcontents
 
@@ -43,30 +43,43 @@
 \input{ch/01-intro.tex}
 
 % ====== 第2章：推进系统建模 ======
+\clearpage
 \input{ch/02-propulsion.tex}
 
 % ====== 第3章：推力矢量映射 ======
+\clearpage
 \input{ch/03-mapping.tex}
 
 % ====== 第4章：六自由度刚体动力学 ======
+\clearpage
 \input{ch/04-dynamics.tex}
 
 % ====== 第5章：控制分配：通道解耦的几何机理 ======
+\clearpage
 \input{ch/05-allocation.tex}
 
 % ====== 第6章：线性化与稳定性模态分析 ======
+\clearpage
 \input{ch/06-stability.tex}
 
 % ====== 第7章：增稳控制律设计 ======
+\clearpage
 \input{ch/07-control.tex}
 
+% ====== 第10章：基于INDI的控制律升级方案 ======
+\clearpage
+\input{ch/10-INDI-control.tex}
+
 % ====== 第8章：讨论 ======
+\clearpage
 \input{ch/08-discussion.tex}
 
 % ====== 第9章：结论 ======
+\clearpage
 \input{ch/09-conclusion.tex}
 
 % ====== 参考文献 ======
+\clearpage
 \input{ref.bib.tex}
 
 \end{document}

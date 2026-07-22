@@ -16,9 +16,17 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo [2/3] xelatex (second pass - cross-references)...
 xelatex -interaction=nonstopmode main.tex >> build.log 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Second pass failed. See build.log
+    exit /b 1
+)
 
 echo [3/3] xelatex (third pass - finalize)...
 xelatex -interaction=nonstopmode main.tex >> build.log 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Third pass failed. See build.log
+    exit /b 1
+)
 
 REM 清理辅助文件（保留 PDF 和 .tex 源文件）
 del /q main.aux main.log main.out main.toc main.synctex.gz 2>nul

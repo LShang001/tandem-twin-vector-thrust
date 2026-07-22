@@ -2,8 +2,8 @@
 \label{sec:allocation}
 
 控制分配（control allocation）是连接控制律输出（期望力矩）与执行器输入（摆角/差速指令）
-的数学环节。本构型在控制分配方面的最显著特征是：正交摆轴的几何设计使效能矩阵退化为对角阵，
-控制分配从欠定优化问题简化为三通道直接映射。
+的数学环节。本构型的正交摆轴使推力力臂主项形成对角结构，因而可用三通道直接映射作为
+低复杂度近似；反扭矩投影形成的交叉项仍需评估或补偿。
 
 \subsection{小角度近似与线性化效能矩阵}
 
@@ -27,7 +27,7 @@
         -\tau_f \delta_f \\
         -\tau_t \delta_t
     \end{bmatrix}
-    }_{\text{交叉耦合（二阶）}}
+    }_{\text{反扭矩投影交叉项}}
     \label{eq:moment_linearized}
 \end{equation}
 
@@ -53,7 +53,7 @@
     \label{eq:differential_roll}
 \end{equation}
 
-合并，得\textbf{线性化控制效能矩阵}：
+在零摆角、等基准转速处，对输入$[\Delta\omega,\delta_t,\delta_f]^T$求完整一阶Jacobian，得到：
 \begin{equation}
     \boxed{
     \begin{bmatrix} M_x \\ M_y \\ M_z \end{bmatrix}
@@ -61,38 +61,42 @@
     \underbrace{
     \begin{bmatrix}
         -2\tau_0 & 0 & 0 \\
-        0 & -b T_0 & 0 \\
-        0 & 0 & a T_0
+        0 & -b T_0 & -\tau_0 \\
+        0 & -\tau_0 & a T_0
     \end{bmatrix}
-    }_{\bm{B}(\omega_0)}
+    }_{\bm{B}_{\mathrm{full}}(\omega_0)}
     \begin{bmatrix} \Delta\omega \\ \delta_t \\ \delta_f \end{bmatrix}
-    +
-    \text{耦合项} + \text{气动项}
+    + \text{气动项}
     }
     \label{eq:effectiveness_matrix}
 \end{equation}
 
-\subsection{对角化效能矩阵的几何根源}
+若忽略相对较小的$\tau_0$交叉项，则得到正文后续直接映射所用的主通道近似矩阵
+$\bm{B}_{\mathrm{main}}=\operatorname{diag}(-2\tau_0,-bT_0,aT_0)$。
 
-效能矩阵$\bm{B}(\omega_0)$为严格对角阵——这是构型几何设计而非数值近似的结果。
-对角线外的零项来自于以下几何约束的精确满足：
+\textbf{适用范围说明}：$\mathbf{B}_{\mathrm{full}}$是在$\delta_f=\delta_t=0$处对非线性力矩映射（式\ref{eq:six_component}）做一阶Taylor展开得到的线性化Jacobian，适用于分析构型的通道解耦机理和控制分配的定性特征。在$\pm 25^\circ$满偏摆角及大差速工况下，该矩阵与真实局部Jacobian的偏差可达50\%以上量级（见第\ref{sec:INDI}节表\ref{tab:B_comparison}）。若将该矩阵用于增量非线性动态逆（INDI）等依赖精确效能矩阵的控制律，需以在线计算的$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$（式\ref{eq:B_true}）替代。
+
+\subsection{主通道近似对角化的几何根源}
+
+推力力臂贡献在$\bm{B}_{\mathrm{main}}$中为对角结构，这是正交摆轴与纵向力臂共同作用的结果；
+完整矩阵$\bm{B}_{\mathrm{full}}$并非严格对角。主通道结构可由以下几何关系解释：
 
 \begin{itemize}
     \item \textbf{前电机绕$z_b$轴摆动}：推力方向的任何变化均限制在$xy$平面内。
           推力$y$分量$T_f \sin\delta_f$经力臂$a$产生偏航力矩$M_z = a T_f \sin\delta_f$。
           由于摆轴为$z_b$，前电机推力不可能产生$z$向分量，因此不可能产生俯仰力矩（$M_y$）
-          ——除了反扭矩投影的二阶耦合$-\tau_f\sin\delta_f$；
+          ——但反扭矩投影仍产生一阶小角度耦合$-\tau_f\delta_f$；
     \item \textbf{尾电机绕$y_b$轴摆动}：推力方向的任何变化均限制在$xz$平面内。
           推力$z$分量$T_t\sin\delta_t$经力臂$b$产生俯仰力矩$M_y = -b T_t\sin\delta_t$。
           由于摆轴为$y_b$，尾电机推力不可能产生$y$向分量，因此不可能产生偏航力矩（$M_z$）
-          ——除了反扭矩投影的二阶耦合$-\tau_t\sin\delta_t$；
+          ——但反扭矩投影仍产生一阶小角度耦合$-\tau_t\delta_t$；
     \item \textbf{差速通道}：仅影响反扭矩$M_x$，在$M_y$和$M_z$中的投影为零
           （反扭矩矢量的$y$和$z$分量分别来自前/尾电机的摆角投影，差速本身不改变摆角）。
 \end{itemize}
 
 这一设计使控制分配问题从通用的$\bm{u} = \bm{B}^+ \bm{M}_{\text{cmd}}$（其中
 $\bm{B}^+$为$3 \times 3n$的伪逆，$3n > 3$，需在线求解）
-退化为简单的\textbf{三通道独立映射}：
+可近似为简单的\textbf{三通道主通道映射}：
 \begin{equation}
     \Delta\omega = -\frac{M_x^{\text{cmd}}}{2\tau_0}, \quad
     \delta_t = -\frac{M_y^{\text{cmd}}}{b T_0}, \quad
@@ -100,12 +104,12 @@ $\bm{B}^+$为$3 \times 3n$的伪逆，$3n > 3$，需在线求解）
     \label{eq:direct_mapping}
 \end{equation}
 
-这是本构型相对于通用矢量推力平台的根本优势——
-用几何设计换取了算法的简洁性\cite{johansen2013control,oppenheimer2010control}。
+式(\ref{eq:direct_mapping})是理论上的低复杂度控制分配候选，并非当前仿真代码中的在线矩阵求逆实现。
+其适用范围受低油门、执行器饱和和交叉项量级限制\cite{johansen2013control,oppenheimer2010control}。
 
 \subsection{耦合项量级评估与补偿策略}
 
-线性化后的交叉耦合项来源于反扭矩在非主控轴方向的投影。一阶（小摆角）近似下：
+线性化后的交叉耦合项来源于反扭矩在非主控轴方向的投影。在小摆角下它们对摆角是一阶项：
 \begin{align}
     \Delta M_y^{\text{耦合}} &= -\tau_f \delta_f
     \approx -k_Q \omega_f^2 \cdot \delta_f
@@ -115,7 +119,7 @@ $\bm{B}^+$为$3 \times 3n$的伪逆，$3n > 3$，需在线求解）
     \label{eq:coupling_yaw}
 \end{align}
 
-\textbf{耦合-主控比}的量级评估。以俯仰通道为例，在典型巡航工况下，
+\textbf{耦合-主控比}的量级评估。以俯仰通道为例，
 主控力矩量级为$b T_f \delta_t \approx b \cdot k_T \omega_0^2 \cdot \delta_t$，
 耦合力矩量级为$\tau_f \delta_f \approx k_Q \omega_0^2 \cdot \delta_f$。在俯仰和偏航
 同时大幅偏转的极限工况，耦合比约为：
@@ -128,17 +132,17 @@ $\bm{B}^+$为$3 \times 3n$的伪逆，$3n > 3$，需在线求解）
 \end{equation}
 
 由量纲分析$k_Q / (k_T b) = (C_Q / C_T) \cdot (D / b)$。
-对于典型小型UAV螺旋桨（$C_Q/C_T \approx 0.15$--$0.25$，$D \approx 0.2$--$0.3$\,m，
-$b \approx 0.5$--$1.0$\,m），$(C_Q/C_T)\cdot(D/b)$在$0.03$--$0.15$范围。
-在正常机动下$\delta_f$和$\delta_t$通常同量级
-（耦合比为$3\%$--$15\%$），在极限情况下若一通道偏转显著大于另一通道，
-耦合比可能升高但仍不超过$20\%$--$30\%$。
+当前MODEL-DEFAULT参数给出$k_Q/(k_Tb)\approx 0.117$；该比值未经台架标定，
+只说明交叉项不能被当作严格为零。实际耦合还随两通道摆角比、转速差与饱和状态变化。
 
 \textbf{工程对策}：
 \begin{enumerate}[label=(\arabic*)]
-    \item \textbf{显式前馈补偿}：在控制律中直接计算耦合项并前馈抵消。
-          由$\Delta \delta_t^{\text{comp}} = +(k_Q \omega_f^2 / (b T_0)) \cdot \delta_f$，
-          在计算俯仰摆角指令时加入此项以抵消偏航摆动的耦合效应；
+    \item \textbf{显式前馈补偿}：在控制律中直接计算耦合项并前馈抵消，例如
+          \begin{equation*}
+              \Delta \delta_t^{\text{comp}}
+              = \frac{k_Q \omega_f^2}{b T_0}\,\delta_f .
+          \end{equation*}
+          该补偿仍需结合符号约定和执行器饱和进行闭环验证；
     \item \textbf{SAS鲁棒性}：设计足够高的SAS反馈增益，使闭环系统对耦合扰动具有足够衰减。
           耦合扰动在闭环下被抑制了$1/(1+GH)$倍，其中$GH$为回路增益；
     \item \textbf{非线性精确映射}：当计算资源允许时，直接使用非线性映射（式\ref{eq:six_component}）
@@ -157,10 +161,11 @@ $b \approx 0.5$--$1.0$\,m），$(C_Q/C_T)\cdot(D/b)$在$0.03$--$0.15$范围。
 \textbf{物理极限}：
 \begin{itemize}
     \item 油门$100\%$：滚转效能最大，机动性最好；
-    \item 油门$50\%$：滚转效能降至$25\%$（因$\propto \omega_0^2 \propto \text{thr}$，实际关系接近$T_0 \propto \text{thr}^{2/3}$量级，但比线性退化更快）；
+    \item 油门$50\%$：在当前代码的$\omega_0=\text{thr}\,\omega_{\max}$映射下，滚转效能降至$25\%$；
     \item 油门$\to 0$：滚转控制失效——在此极限下，从推进系统看飞行器退化为无控刚体。
 \end{itemize}
 
+上述平方关系是当前仿真的油门--转速指令映射假设，并非普适的电机定律。
 这一特性对飞行安全有直接意义：进近着陆段通常为低油门状态，而此时恰恰是滚转控制
 最需要的阶段（侧风修正、对准跑道中心线）。缓解措施包括：
 保持进近油门不低于某个安全阈值（即使这意味着需要更陡的下滑角），
@@ -192,6 +197,3 @@ $b \approx 0.5$--$1.0$\,m），$(C_Q/C_T)\cdot(D/b)$在$0.03$--$0.15$范围。
 在计算资源受限的嵌入式飞控平台上是实质性挑战。本构型通过将执行空间维度
 从$3n$降至3（恰等于控制目标维度），使$\bm{B}$方阵且对角——
 \textbf{直接用几何设计换取算法的零计算开销}。这是构型设计的核心价值主张。
-
-
-\section{线性化与稳定性模态分析}
