@@ -21,15 +21,29 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo [3/3] xelatex (third pass - finalize)...
+echo [3/4] bibtex (bibliography)...
+bibtex main >> build.log 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: BibTeX failed. See build.log
+    exit /b 1
+)
+
+echo [4/5] xelatex (incorporate bibliography)...
 xelatex -interaction=nonstopmode main.tex >> build.log 2>&1
 if %ERRORLEVEL% NEQ 0 (
-    echo ERROR: Third pass failed. See build.log
+    echo ERROR: Post-BibTeX pass failed. See build.log
+    exit /b 1
+)
+
+echo [5/5] xelatex (finalize)...
+xelatex -interaction=nonstopmode main.tex >> build.log 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo ERROR: Final pass failed. See build.log
     exit /b 1
 )
 
 REM 清理辅助文件（保留 PDF 和 .tex 源文件）
-del /q main.aux main.log main.out main.toc main.synctex.gz 2>nul
+del /q main.aux main.log main.out main.toc main.synctex.gz main.bbl main.blg 2>nul
 
 echo.
 echo ============================================
