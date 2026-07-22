@@ -19,7 +19,6 @@ def modes_table(results, trim, P):
     lines.append(r"\midrule")
 
     # 收集已处理的共轭对
-    eigs = np.array([complex(e.real, e.imag) for e in results["modes"]])
     seen_pairs = set()
     for ev in results["modes"]:
         re, im = np.real(ev["eigenvalue"]), np.imag(ev["eigenvalue"])

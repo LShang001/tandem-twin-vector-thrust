@@ -48,14 +48,15 @@ class INDIController:
         """INDI 增量控制律: 使用混合角加速度（模型预测 + 传感器微分融合）"""
         P = self.P
         # 外环: 姿态 → 目标角速率
+        # JS 欧拉约定 phi_dot=-p, theta_dot=-q, 故 q_ref=+k·dtheta (负反馈)
         dtheta = theta - (-self.trim["alpha"]); dphi = phi
         self.int_th += dtheta*dt; self.int_th = np.clip(self.int_th, -P["intThMax"], P["intThMax"])
         self.int_phi += dphi*dt; self.int_phi = np.clip(self.int_phi, -P["intPhiMax"], P["intPhiMax"])
-        p_ref = -P["sasPhi"]*dphi - P["sasIPhi"]*self.int_phi
-        q_ref = -P["sasTh"]*dtheta - P["sasI"]*self.int_th
+        p_ref = 3.0*(P["sasPhi"]*dphi + P["sasIPhi"]*self.int_phi)
+        q_ref = 3.0*(P["sasTh"]*dtheta + P["sasI"]*self.int_th)
         r_ref = 0.0
-        # 内环: 角速率误差 → 虚拟角加速度
-        K_rate = 0.8
+        # 内环: 角速率误差 → 虚拟角加速度（带宽 0.8→3.0, 与 VTOL 版一致）
+        K_rate = 3.0
         nu_p = K_rate*(p_ref - p); nu_q = K_rate*(q_ref - q); nu_r = K_rate*(r_ref - r)
         # 混合角加速度: 模型预测 (低频) + 差分 (高频)
         omega = np.array([p, q, r])
@@ -104,8 +105,8 @@ def simulate(controller, P, trim, T_total=10.0, dt=0.004, disturbance=None):
     """运行一次时域仿真，返回时间序列数据."""
     alpha0 = trim["alpha"]; omega0 = trim["omega0"]; delta_t0 = trim["delta_t"]
     V0 = trim["V"]
-    theta0 = -alpha0
-    c=np.cos(theta0/2); s=np.sin(theta0/2); q0=np.array([c,0,s,0])
+    # 姿态四元数: 绕 +y 转 +α (物理抬头), JS 欧拉读数 theta=-α
+    c=np.cos(alpha0/2); s=np.sin(alpha0/2); q0=np.array([c,0,s,0])
     u0=V0*np.cos(alpha0); w0=V0*np.sin(alpha0)
     v = np.array([u0, 0.0, w0])
     w = np.zeros(3)
@@ -121,19 +122,17 @@ def simulate(controller, P, trim, T_total=10.0, dt=0.004, disturbance=None):
     delta_f_arr=np.zeros(N); delta_t_arr=np.zeros(N); dw_arr=np.zeros(N)
 
     delta_f = 0.0; delta_t = delta_t0; dw = 0.0
-    w_dist = np.zeros(3)  # 扰动角速率
     for i in range(N):
         t = i*dt; t_arr[i] = i*dt
-        # 扰动注入：在指定时刻给角速率施加脉冲
+        # 扰动注入：在指定时刻给本体角速率施加脉冲（作用于被控对象）
         if disturbance and abs(t - disturbance[0]) < dt:
             if disturbance[2] == "pitch":
-                w_dist[1] += np.radians(disturbance[3])  # q 脉冲
+                w[1] += np.radians(disturbance[3])  # q 脉冲
             elif disturbance[2] == "roll":
-                w_dist[0] += disturbance[3]  # p 脉冲
+                w[0] += disturbance[3]  # p 脉冲
             elif disturbance[2] == "yaw":
-                w_dist[2] += np.radians(disturbance[3])
-        w_actual = w + w_dist
-        w_dist *= 0.0  # 脉冲只持续一步
+                w[2] += np.radians(disturbance[3])
+        w_actual = w
         # 推进力/力矩（使用上一步指令）
         Fx, Fy, Fz, Mx, My, Mz = prop.forces(delta_f, delta_t)
         # 控制器

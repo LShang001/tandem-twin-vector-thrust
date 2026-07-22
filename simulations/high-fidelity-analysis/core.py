@@ -48,12 +48,13 @@ def quat_rotate(v, q):
 
 def euler_from_quat(q):
     """3-2-1 Euler 角: phi=roll, theta=pitch, psi=yaw.
-       theta = -arcsin(R13) — 项目约定"""
+       与 JS math.mjs 一致: R13 = 2(q1q3 + q0q2), theta = -arcsin(R13)。
+       注意: 绕 +y 转 +a 的四元数读数为 theta=-a（项目锁定约定, 见 MOD-002）。"""
     q0, q1, q2, q3 = q
-    R13 = 2*(q1*q3 - q0*q2)
-    R23 = 2*(q2*q3 + q0*q1)
+    R13 = 2*(q1*q3 + q0*q2)
+    R23 = 2*(q2*q3 - q0*q1)
     R33 = 1 - 2*(q1*q1 + q2*q2)
-    R12 = 2*(q1*q2 + q0*q3)
+    R12 = 2*(q1*q2 - q0*q3)
     R11 = 1 - 2*(q2*q2 + q3*q3)
     phi = np.arctan2(R23, R33)
     theta = -np.arcsin(np.clip(R13, -1, 1))
@@ -156,8 +157,8 @@ def control_effectiveness(omega0, delta_f, delta_t, dw_cmd, P):
 def dynamics_derivatives(v, w, q, prop, P, Fx, Fy, Fz, Mx, My, Mz, aero):
     """返回速度、角速度、四元数的导数（对标 dynamics.mjs）"""
     aX, aY, aZ, La, Ma, Na = aero
-    # 重力在机体系的分量
-    gb = quat_rotate(np.array([0, 0, -P["g"]]), quat_conj(q))
+    # 重力在机体系的分量 (NED: 惯性系重力为 +z 向下, 与 JS dynamics.mjs 一致)
+    gb = quat_rotate(np.array([0, 0, P["g"]]), quat_conj(q))
     # 平动: v̇ = F/m − ω×v
     m = P["m"]
     vdot = np.array([
@@ -165,15 +166,16 @@ def dynamics_derivatives(v, w, q, prop, P, Fx, Fy, Fz, Mx, My, Mz, aero):
         (Fy + aY) / m + gb[1] - (w[2]*v[0] - w[0]*v[2]),
         (Fz + aZ) / m + gb[2] - (w[0]*v[1] - w[1]*v[0]),
     ])
-    # 转动: I·ω̇ = M − ω×Iω
+    # 转动: I·ω̇ = M − ω×Iω − ω×h转子 (前CW沿+x_b, 尾CCW沿-x_b)
     Ix, Iy, Iz = P["Ix"], P["Iy"], P["Iz"]
     gx = (Iz - Iy) * w[1]*w[2]
     gy = (Ix - Iz) * w[2]*w[0]
     gz = (Iy - Ix) * w[0]*w[1]
+    hx = P["Jp"] * (prop.wf - prop.wt)  # 转子角动量 (沿 x_b)
     wdot = np.array([
         (Mx + La - gx) / Ix,
-        (My + Ma - gy) / Iy,
-        (Mz + Na - gz) / Iz,
+        (My + Ma - gy - w[2]*hx) / Iy,
+        (Mz + Na - gz + w[1]*hx) / Iz,
     ])
     # 四元数运动学: q̇ = ½ q ⊗ [0, ω]
     qdot = 0.5 * quat_multiply(q, np.array([0, w[0], w[1], w[2]]))

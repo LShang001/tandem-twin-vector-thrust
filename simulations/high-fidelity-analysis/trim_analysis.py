@@ -6,7 +6,8 @@ from core import *  # noqa: F403
 
 def trim_longitudinal(V_target, P, verbose=False):
     """纵向配平: 求解 α, ω₀, δ_t 使 Fx=0, Fz=0, My=0.
-       假设 δ_f=0, Δω=0, β=0, 水平飞行 θ=-α."""
+       假设 δ_f=0, Δω=0, β=0, 水平飞行。
+       姿态四元数为绕 +y 转 +α (物理抬头), 按 JS 约定欧拉读数 theta=-α."""
     def residual(x):
         alpha, omega0, delta_t = x
         # 状态
@@ -14,10 +15,9 @@ def trim_longitudinal(V_target, P, verbose=False):
         w = V_target * np.sin(alpha)
         v = np.array([u, 0.0, w])
         wb = np.zeros(3)
-        theta = -alpha
-        # 四元数 (仅俯仰)
-        c = np.cos(theta/2); s = np.sin(theta/2)
-        q = np.array([c, 0, s, 0])  # 绕 y 轴旋转
+        # 四元数 (绕 +y 转 +α = 物理抬头 α)
+        c = np.cos(alpha/2); s = np.sin(alpha/2)
+        q = np.array([c, 0, s, 0])
         # 推进
         wf = omega0; wt = omega0
         Tf = P["kT"]*wf*wf; Tt = P["kT"]*wt*wt
@@ -35,8 +35,8 @@ def trim_longitudinal(V_target, P, verbose=False):
         Cm = P["Cm0"] + P["Cma"]*alpha_a
         aX = -CD*qbar*P["Sw"]; aZ = -CL*qbar*P["Sw"]
         Ma = Cm*qbar*P["Sw"]*P["cbar"]
-        # 重力在机体系
-        gb = quat_rotate(np.array([0,0,-P["g"]]), quat_conj(q))
+        # 重力在机体系 (NED: +z 向下)
+        gb = quat_rotate(np.array([0,0,P["g"]]), quat_conj(q))
         # 残差
         r_Fx = Fx_p + aX + P["m"]*gb[0]
         r_Fz = Fz_p + aZ + P["m"]*gb[2]
@@ -68,9 +68,9 @@ def trim_longitudinal(V_target, P, verbose=False):
 def linearize_at_trim(trim, P):
     """在配平点处对六自由度系统做数值线性化，返回 A(12×12) 矩阵."""
     alpha = trim["alpha"]; omega0 = trim["omega0"]; delta_t = trim["delta_t"]
-    Vt = trim["V"]; theta0 = -alpha
+    Vt = trim["V"]
     u = Vt*np.cos(alpha); w = Vt*np.sin(alpha)
-    c = np.cos(theta0/2); s = np.sin(theta0/2)
+    c = np.cos(alpha/2); s = np.sin(alpha/2)  # 绕 +y 转 +α (物理抬头)
     q0 = np.array([c, 0, s, 0])
     x0 = np.array([u, 0, w, 0, 0, 0, 0, 0, 0, q0[0], q0[1], q0[2], q0[3]])
     # 状态编号: 0-u,1-v,2-w,3-p,4-q,5-r,6-x,7-y,8-z,9-q0,10-q1,11-q2,12-q3
@@ -100,7 +100,7 @@ def linearize_at_trim(trim, P):
         Cn = P["Cnb"]*beta_a+P["Cnr"]*ww[2]*P["bspan"]/(2*V)
         aX=-CD*qbar*P["Sw"]; aY=CY*qbar*P["Sw"]; aZ=-CL*qbar*P["Sw"]
         La=Cl*qbar*P["Sw"]*P["bspan"]; Ma=Cm*qbar*P["Sw"]*P["cbar"]; Na=Cn*qbar*P["Sw"]*P["bspan"]
-        gb = quat_rotate(np.array([0,0,-P["g"]]), quat_conj(qq))
+        gb = quat_rotate(np.array([0,0,P["g"]]), quat_conj(qq))
         m=P["m"]; Ix=P["Ix"]; Iy=P["Iy"]; Iz=P["Iz"]
         vdot = np.array([
             (Fx_p+aX)/m+gb[0]-(ww[1]*vv[2]-ww[2]*vv[1]),

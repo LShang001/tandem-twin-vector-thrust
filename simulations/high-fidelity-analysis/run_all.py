@@ -63,8 +63,8 @@ def main():
     metrics = step_response_metrics(data, 3.0)
     print(f"  峰值: {np.degrees(metrics['peak']):.2f}°, 稳态: {np.degrees(metrics['steady']):.2f}°, "
           f"调节时间: {metrics['settling_s']:.2f}s, 超调: {metrics['overshoot_pct']:.1f}%")
-    # 10s 配平稳定性
-    trim_data = simulate(sas, P, trim, T_total=20, disturbance=None)
+    # 10s 配平稳定性（全新控制器实例, 避免阶跃仿真的积分器残留污染）
+    trim_data = simulate(SASController(P, trim), P, trim, T_total=20, disturbance=None)
     v_start = trim_data["u"][0]
     v_end = np.mean(trim_data["u"][-50:])
     drift_pct = (v_end - v_start) / v_start * 100
