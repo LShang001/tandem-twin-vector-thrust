@@ -36,29 +36,36 @@ export function createHud(box) {
     num.textContent = v.toFixed(2);
   }
 
+  function setText(id, text, optStyle) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    if (optStyle) Object.assign(el.style, optStyle);
+  }
+
   // t = core/telemetry.getTelemetry(sim) 快照
   function sync(t) {
     const dyn = t.forces, aero = t.aero, F = t.flight;
     setMeter('Fx', dyn.Fx); setMeter('Fy', dyn.Fy); setMeter('Fz', dyn.Fz);
     setMeter('Mx', dyn.Mx); setMeter('My', dyn.My); setMeter('Mz', dyn.Mz);
-    $('d-tf').textContent = dyn.Tf.toFixed(1) + ' N';
-    $('d-tt').textContent = dyn.Tt.toFixed(1) + ' N';
-    $('d-qf').textContent = dyn.Qf.toFixed(2) + ' N·m';
-    $('d-qt').textContent = dyn.Qt.toFixed(2) + ' N·m';
+    setText('d-tf', dyn.Tf.toFixed(1) + ' N');
+    setText('d-tt', dyn.Tt.toFixed(1) + ' N');
+    setText('d-qf', dyn.Qf.toFixed(2) + ' N·m');
+    setText('d-qt', dyn.Qt.toFixed(2) + ' N·m');
     const dq = dyn.Qt - dyn.Qf;
-    $('d-dq').textContent = (Math.abs(dq) < 0.02 ? '对消 ✓' : dq.toFixed(2) + ' N·m');
-    $('d-dq').style.color = Math.abs(dq) < 0.02 ? '#34d399' : '#fb7185';
-    $('d-wf').textContent = Math.round(t.rotors.wf) + ' rad/s';
-    $('d-wt').textContent = Math.round(t.rotors.wt) + ' rad/s';
-    $('d-v').textContent = aero.V.toFixed(1) + ' m/s';
-    $('d-aoa').textContent = (aero.alpha * 57.2958).toFixed(1) + '°';
-    $('d-h').textContent = (-F.pos.z).toFixed(1) + ' m';
-    $('d-att').textContent = `${(F.euler.x*57.3).toFixed(0)} / ${(F.euler.y*57.3).toFixed(0)} / ${(F.euler.z*57.3).toFixed(0)}°`;
-    $('d-amy').textContent = t.flags.aero ? aero.My.toFixed(2) + ' N·m' : '已忽略';
-    $('d-amy').style.color = t.flags.aero ? '' : '#f59e0b';
-    $('e-mx').textContent = dyn.Mx.toFixed(2);
-    $('e-my').textContent = dyn.My.toFixed(2);
-    $('e-mz').textContent = dyn.Mz.toFixed(2);
+    setText('d-dq', Math.abs(dq) < 0.02 ? '对消 ✓' : dq.toFixed(2) + ' N·m',
+      { color: Math.abs(dq) < 0.02 ? '#34d399' : '#fb7185' });
+    setText('d-wf', Math.round(t.rotors.wf) + ' rad/s');
+    setText('d-wt', Math.round(t.rotors.wt) + ' rad/s');
+    setText('d-v', aero.V.toFixed(1) + ' m/s');
+    setText('d-aoa', (aero.alpha * 57.2958).toFixed(1) + '°');
+    setText('d-h', (-F.pos.z).toFixed(1) + ' m');
+    setText('d-att', `${(F.euler.x*57.3).toFixed(0)} / ${(F.euler.y*57.3).toFixed(0)} / ${(F.euler.z*57.3).toFixed(0)}°`);
+    setText('d-amy', t.flags.aero ? aero.My.toFixed(2) + ' N·m' : '已忽略',
+      t.flags.aero ? null : { color: '#f59e0b' });
+    setText('e-mx', dyn.Mx.toFixed(2));
+    setText('e-my', dyn.My.toFixed(2));
+    setText('e-mz', dyn.Mz.toFixed(2));
   }
 
   return { sync };

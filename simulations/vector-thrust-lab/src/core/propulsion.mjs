@@ -10,8 +10,8 @@ export function stepPropulsion(sim, P, dt) {
 
   // 差速分配: ω_f²+ω_t² ≈ 常数
   const w0 = S.thr * P.wMax;
-  const wfT = w0 * Math.sqrt(Math.max(0, 1 + dwC));
-  const wtT = w0 * Math.sqrt(Math.max(0, 1 - dwC));
+  const wfT = Math.min(w0 * Math.sqrt(Math.max(0, 1 + dwC)), P.wMax);
+  const wtT = Math.min(w0 * Math.sqrt(Math.max(0, 1 - dwC)), P.wMax);
   S.wf += (wfT - S.wf) * Math.min(dt / P.tauM, 1);
   S.wt += (wtT - S.wt) * Math.min(dt / P.tauM, 1);
   const dWf = (S.wf - sim.prevWf) / Math.max(dt, 1e-4);

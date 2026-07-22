@@ -12,7 +12,8 @@ export function createSimulationState(P) {
       dt: 0,               // 尾摆角指令（俯仰, 绕 y）
       dw: 0,               // 差速指令 -1..1
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
-      sasMode: 1,          // SAS 模式: 0=关, 1=全SAS(比例+积分+角速率), 2=仅角速率阻尼
+      sasMode: 1,          // SAS 模式: 0=关, 1=全SAS, 2=仅角速率阻尼, 3=角速度闭环(滑块=ω_ref)
+      _prevSasMode: 1,     // 上一 SAS 模式（供 control.mjs 检测模式切换）
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平速度锁定（true = 惯性系水平速度持续清零，悬停/VTOL 测试）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）

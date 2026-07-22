@@ -27,6 +27,7 @@ export function createScope(sim) {
     pr: new Float32Array(N), qr: new Float32Array(N), rr: new Float32Array(N),
   };
   let head = 0;            // 下一个写入位置
+  let lastSample = 0;
   let lastDraw = 0;
   let visible = false;
 
@@ -118,7 +119,8 @@ export function createScope(sim) {
 
   function update(now) {
     if (!visible) return;
-    pushSample();
+    // 采样节流 ~60Hz：保证 480 点缓冲在 8s 时间窗口内均匀填满，不受屏幕刷新率影响
+    if (now - lastSample > 16) { pushSample(); lastSample = now; }
     if (now - lastDraw > 33) { draw(); lastDraw = now; }   // 绘制节流 ~30fps
   }
 

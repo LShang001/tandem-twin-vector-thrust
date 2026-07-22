@@ -54861,7 +54861,8 @@ function createSimulationState(P) {
       dt: 0,               // 尾摆角指令（俯仰, 绕 y）
       dw: 0,               // 差速指令 -1..1
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
-      sasMode: 1,          // SAS 模式: 0=关, 1=全SAS(比例+积分+角速率), 2=仅角速率阻尼
+      sasMode: 1,          // SAS 模式: 0=关, 1=全SAS, 2=仅角速率阻尼, 3=角速度闭环(滑块=ω_ref)
+      _prevSasMode: 1,     // 上一 SAS 模式（供 control.mjs 检测模式切换）
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平速度锁定（true = 惯性系水平速度持续清零，悬停/VTOL 测试）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
@@ -55530,29 +55531,36 @@ function createHud(box) {
     num.textContent = v.toFixed(2);
   }
 
+  function setText(id, text, optStyle) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text;
+    if (optStyle) Object.assign(el.style, optStyle);
+  }
+
   // t = core/telemetry.getTelemetry(sim) 快照
   function sync(t) {
     const dyn = t.forces, aero = t.aero, F = t.flight;
     setMeter('Fx', dyn.Fx); setMeter('Fy', dyn.Fy); setMeter('Fz', dyn.Fz);
     setMeter('Mx', dyn.Mx); setMeter('My', dyn.My); setMeter('Mz', dyn.Mz);
-    $('d-tf').textContent = dyn.Tf.toFixed(1) + ' N';
-    $('d-tt').textContent = dyn.Tt.toFixed(1) + ' N';
-    $('d-qf').textContent = dyn.Qf.toFixed(2) + ' N·m';
-    $('d-qt').textContent = dyn.Qt.toFixed(2) + ' N·m';
+    setText('d-tf', dyn.Tf.toFixed(1) + ' N');
+    setText('d-tt', dyn.Tt.toFixed(1) + ' N');
+    setText('d-qf', dyn.Qf.toFixed(2) + ' N·m');
+    setText('d-qt', dyn.Qt.toFixed(2) + ' N·m');
     const dq = dyn.Qt - dyn.Qf;
-    $('d-dq').textContent = (Math.abs(dq) < 0.02 ? '对消 ✓' : dq.toFixed(2) + ' N·m');
-    $('d-dq').style.color = Math.abs(dq) < 0.02 ? '#34d399' : '#fb7185';
-    $('d-wf').textContent = Math.round(t.rotors.wf) + ' rad/s';
-    $('d-wt').textContent = Math.round(t.rotors.wt) + ' rad/s';
-    $('d-v').textContent = aero.V.toFixed(1) + ' m/s';
-    $('d-aoa').textContent = (aero.alpha * 57.2958).toFixed(1) + '°';
-    $('d-h').textContent = (-F.pos.z).toFixed(1) + ' m';
-    $('d-att').textContent = `${(F.euler.x*57.3).toFixed(0)} / ${(F.euler.y*57.3).toFixed(0)} / ${(F.euler.z*57.3).toFixed(0)}°`;
-    $('d-amy').textContent = t.flags.aero ? aero.My.toFixed(2) + ' N·m' : '已忽略';
-    $('d-amy').style.color = t.flags.aero ? '' : '#f59e0b';
-    $('e-mx').textContent = dyn.Mx.toFixed(2);
-    $('e-my').textContent = dyn.My.toFixed(2);
-    $('e-mz').textContent = dyn.Mz.toFixed(2);
+    setText('d-dq', Math.abs(dq) < 0.02 ? '对消 ✓' : dq.toFixed(2) + ' N·m',
+      { color: Math.abs(dq) < 0.02 ? '#34d399' : '#fb7185' });
+    setText('d-wf', Math.round(t.rotors.wf) + ' rad/s');
+    setText('d-wt', Math.round(t.rotors.wt) + ' rad/s');
+    setText('d-v', aero.V.toFixed(1) + ' m/s');
+    setText('d-aoa', (aero.alpha * 57.2958).toFixed(1) + '°');
+    setText('d-h', (-F.pos.z).toFixed(1) + ' m');
+    setText('d-att', `${(F.euler.x*57.3).toFixed(0)} / ${(F.euler.y*57.3).toFixed(0)} / ${(F.euler.z*57.3).toFixed(0)}°`);
+    setText('d-amy', t.flags.aero ? aero.My.toFixed(2) + ' N·m' : '已忽略',
+      t.flags.aero ? null : { color: '#f59e0b' });
+    setText('e-mx', dyn.Mx.toFixed(2));
+    setText('e-my', dyn.My.toFixed(2));
+    setText('e-mz', dyn.Mz.toFixed(2));
   }
 
   return { sync };
@@ -55702,6 +55710,7 @@ function createScope(sim) {
     pr: new Float32Array(N), qr: new Float32Array(N), rr: new Float32Array(N),
   };
   let head = 0;            // 下一个写入位置
+  let lastSample = 0;
   let lastDraw = 0;
   let visible = false;
 
@@ -55793,7 +55802,8 @@ function createScope(sim) {
 
   function update(now) {
     if (!visible) return;
-    pushSample();
+    // 采样节流 ~60Hz：保证 480 点缓冲在 8s 时间窗口内均匀填满，不受屏幕刷新率影响
+    if (now - lastSample > 16) { pushSample(); lastSample = now; }
     if (now - lastDraw > 33) { draw(); lastDraw = now; }   // 绘制节流 ~30fps
   }
 
@@ -55992,6 +56002,11 @@ function applySas(sim, P, dt) {
   const { S, F } = sim;
   const theta = F.euler.y, phi = F.euler.x;
   let dtC = S.dt, dfC = S.df, dwC = S.dw;
+  if (S._prevSasMode !== S.sasMode) {
+    // 模式切换时重置积分器，防止旧累积值在切换回 mode 1 时产生瞬态冲击
+    S.intTh = 0; S.intPhi = 0;
+    S._prevSasMode = S.sasMode;
+  }
   if (S.sasMode === 3) {
     // ---- 角速度闭环：滑块 = ω_ref，P 控制器追踪 ----
     // 反馈极性：效率为负的通道（俯仰/滚转）取 (ω − ω_ref)；
@@ -56036,8 +56051,8 @@ function stepPropulsion(sim, P, dt) {
 
   // 差速分配: ω_f²+ω_t² ≈ 常数
   const w0 = S.thr * P.wMax;
-  const wfT = w0 * Math.sqrt(Math.max(0, 1 + dwC));
-  const wtT = w0 * Math.sqrt(Math.max(0, 1 - dwC));
+  const wfT = Math.min(w0 * Math.sqrt(Math.max(0, 1 + dwC)), P.wMax);
+  const wtT = Math.min(w0 * Math.sqrt(Math.max(0, 1 - dwC)), P.wMax);
   S.wf += (wfT - S.wf) * Math.min(dt / P.tauM, 1);
   S.wt += (wtT - S.wt) * Math.min(dt / P.tauM, 1);
   const dWf = (S.wf - sim.prevWf) / Math.max(dt, 1e-4);

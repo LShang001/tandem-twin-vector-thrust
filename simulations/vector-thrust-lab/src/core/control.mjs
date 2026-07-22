@@ -16,6 +16,11 @@ export function applySas(sim, P, dt) {
   const { S, F } = sim;
   const theta = F.euler.y, phi = F.euler.x;
   let dtC = S.dt, dfC = S.df, dwC = S.dw;
+  if (S._prevSasMode !== S.sasMode) {
+    // 模式切换时重置积分器，防止旧累积值在切换回 mode 1 时产生瞬态冲击
+    S.intTh = 0; S.intPhi = 0;
+    S._prevSasMode = S.sasMode;
+  }
   if (S.sasMode === 3) {
     // ---- 角速度闭环：滑块 = ω_ref，P 控制器追踪 ----
     // 反馈极性：效率为负的通道（俯仰/滚转）取 (ω − ω_ref)；
