@@ -122,7 +122,9 @@
 <code>pos.z &gt; groundZ &amp;&amp; vWorld.z &gt; 0</code> 时钳位</td>
 <td><code>dynamics.mjs:physicsStep</code>（74–78）</td>
 <td><code>dynamics.test.mjs</code>：触地清零下降速度、上升不被拦截</td>
-<td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code>（标称未触发）</td>
+<td><code>trim</code>、<code>rollStep</code>
+标称未触发；<code>pitchStep</code> 从 <code>z=-100 m</code>
+起飞以隔离地面事件</td>
 </tr>
 <tr>
 <td><strong>配平初始化</strong>
@@ -138,10 +140,10 @@
 <td><code>trim</code>、<code>pitchStep</code>、<code>rollStep</code></td>
 </tr>
 <tr>
-<td><strong>参数单一事实源</strong> 46 参数冻结对象</td>
-<td><code>parameters.mjs:P</code>（6–65）</td>
-<td><code>parameters.test.mjs</code>：46
-键完整、正值、符号、限幅、冻结、弧度换算</td>
+<td><strong>参数单一事实源</strong> 52 参数冻结对象</td>
+<td><code>parameters.mjs:P</code></td>
+<td><code>parameters.test.mjs</code>：52
+键完整、正值、符号、限幅、冻结、配平角换算</td>
 <td>所有场景的输入真值源</td>
 </tr>
 </tbody>
@@ -158,5 +160,5 @@
 <code>tests/fixtures/regression-baseline.json</code> 比对。</li>
 <li>若新增模型要素，须在本矩阵中新增一行，并补充对应单元测试或演示检查证据。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/模型-代码追溯矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/模型-代码追溯矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

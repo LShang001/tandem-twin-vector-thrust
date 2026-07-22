@@ -1,0 +1,31 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-105-Enenakpogbe-2024-full-envelope-vectored-thrust",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-105-Enenakpogbe-2024-full-envelope-vectored-thrust\\5eff2925-551e-4c2a-bac8-2bf27d3f179b_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 105110,
+    "word_like_count": 17724,
+    "line_count": 832,
+    "heading_count": 30,
+    "table_row_count": 0,
+    "latex_block_count": 50,
+    "latex_inline_count": 317
+  },
+  "images": {
+    "referenced_count": 31,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "item_count": 33,
+    "type_counts": {}
+  },
+  "status": "ok",
+  "warnings": []
+}

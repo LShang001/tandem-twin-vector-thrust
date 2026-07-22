@@ -1,0 +1,31 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-110-Simplicio-2025-INDI-launcher",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-110-Simplicio-2025-INDI-launcher\\50fa32d3-34c6-43fd-8b55-8496cc60c1c2_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 81750,
+    "word_like_count": 12709,
+    "line_count": 723,
+    "heading_count": 24,
+    "table_row_count": 0,
+    "latex_block_count": 55,
+    "latex_inline_count": 215
+  },
+  "images": {
+    "referenced_count": 32,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "item_count": 25,
+    "type_counts": {}
+  },
+  "status": "ok",
+  "warnings": []
+}

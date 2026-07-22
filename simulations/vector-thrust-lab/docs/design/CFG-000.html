@@ -360,9 +360,9 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 </tr>
 <tr>
 <td>aTrim</td>
-<td>0.027925268031909273</td>
+<td>0.028398718673975386</td>
 <td>rad</td>
-<td>初始配平迎角（约 1.6°）</td>
+<td>24 m/s 纵向配平迎角（约 1.627°）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
@@ -374,9 +374,16 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 </tr>
 <tr>
 <td>thrTrim</td>
-<td>0.5</td>
+<td>0.44135017954583367</td>
 <td>-</td>
-<td>配平油门</td>
+<td>24 m/s 纵向配平油门</td>
+<td>MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>dtTrim</td>
+<td>-0.011344526636733243</td>
+<td>rad</td>
+<td>24 m/s 纵向尾摆配平偏置（约 -0.650°）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 </tbody>
@@ -574,5 +581,5 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 配置管理流程，更新 <code>models/aircraft-model.json</code>，并重新运行
 <code>tools/sync-params.py</code> 与回归测试。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

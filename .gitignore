@@ -1,5 +1,6 @@
 # ---- 本地工具状态（不属于工程资产）----
 .reasonix/
+.claude/skills
 
 # ---- 操作系统 ----
 Thumbs.db
@@ -26,6 +27,7 @@ node_modules/
 runs/
 tmp/
 .tmp/
+.playwright-cli/
 
 # ---- CAD/CAE 常见临时与锁文件（未来）----
 *.lock
@@ -37,3 +39,14 @@ tmp/
 *.out
 *.toc
 *.synctex.gz
+
+# ---- 文献资料：论文 PDF 例外（需追踪）----
+!docs/08-参考资料/papers/**/*.pdf
+
+# ---- MinerU 转换临时文件（不提交）----
+docs/08-参考资料/papers/**/images/
+docs/08-参考资料/papers/**/layout.json
+docs/08-参考资料/papers/**/*_content_list*.json
+docs/08-参考资料/papers/**/*_model.json
+docs/08-参考资料/papers/**/manifest.json
+docs/08-参考资料/papers/**/result.zip

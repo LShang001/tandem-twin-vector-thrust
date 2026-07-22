@@ -275,9 +275,10 @@ href="../control/CTL-001.html">CTL-001</a>）</td>
 <hr />
 <h2 id="4-典型使用场景">4 典型使用场景</h2>
 <h3 id="41-配平直飞观察">4.1 配平直飞观察</h3>
-<p>用户启动页面后保持默认油门 50%，不操作滑块，观察飞行器在 aTrim ≈
-1.6°、vTrim = 24 m/s 附近的近似平飞。用途：验证初始配平条件、观察 SAS
-与气动阻尼如何维持小姿态扰动有界。</p>
+<p>用户启动页面后保持默认油门 44.135%，不操作滑块，观察飞行器在
+<code>aTrim=1.627°</code>、<code>dtTrim=-0.650°</code>、<code>vTrim=24 m/s</code>
+的纵向配平参考点附近飞行。尾摆滑块零位表示相对配平增量为零。用途：验证纵向三方程残差闭合、横航向残差量级以及
+SAS 对小姿态扰动的衰减；该工况不是六自由度全配平。</p>
 <h3 id="42-姿态阶跃响应">4.2 姿态阶跃响应</h3>
 <p>用户手动给出单一摆角阶跃（如 δt = 10°），随后保持不动，观察俯仰角 θ
 与角速率 q 的瞬态。用途：在「气动力开 /
@@ -360,5 +361,5 @@ IMU、GPS、飞控计算机与机载控制律。</li>
 <p>上述任一路径涉及范围、参数来源或安全承诺的变更时，须按 <a
 href="../governance/GOV-002.html">GOV-002</a>
 更新项目范围与基线。</p>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CONOPS-001-运行概念.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CONOPS-001-运行概念.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

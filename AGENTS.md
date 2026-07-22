@@ -1,6 +1,5 @@
 # AGENTS.md — 纵列双发矢量推力飞行器
 
-> AI Agent 入口文件。平台无关（Claude Code / Codex / Cursor / Copilot / Windsurf）。
 > 项目背景见 `README.md`——不在这里重复。
 > 多 Agent 协作、角色定义、交接协议——遇到多 Agent 协作问题或新 Agent 需了解角色时，读 `docs/00-项目治理/GOV-003-多Agent协作规范.md`。
 
@@ -54,17 +53,9 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 
 ## 行为红线
 
-修改以下任一项，必须：重采回归基线 `tests/fixtures/regression-baseline.json`、同步更新文档、提交说明原因。
+修改以下任一项，必须：重采回归基线 `tests/fixtures/regression-baseline.json`、同步更新文档、提交说明原因。完整清单及变更审核流程见 `docs/registers/行为保持红线清单.md`。
 
-- 帧 delta ≤ 0.05 s / 子步 ≤ 0.004 s / 电机 τm = 0.28 s
-- 差速分配公式 `ωf=ω0√(1+Δω), ωt=ω0√(1−Δω)`（保持不变）
-- 四元数积分显式欧拉右乘 + 每步归一化
-- theta = −asin(R₁₃)（欧拉角提取约定）
-- 渲染几何电机位置 ±1.78m ≠ 物理力臂 0.62m（分离设计）
-- SAS 限幅：摆角 ±25°、差速 ±0.7、积分 俯仰 ±0.5 rad / 滚转 ±0.3 rad
-- 空速下限 0.5 m/s、地面 pos.z > 6.2
-
-需要查看完整变更流程与审核步骤时，读 `docs/registers/行为保持红线清单.md`。
+核心红线：帧 delta≤0.05s / 子步≤0.004s / 电机 τm=0.28s、差速公式 ωf=ω0√(1+Δω)（保持不变）、四元数显式欧拉右乘+每步归一化、theta=−asin(R₁₃)、力臂分离（渲染±1.78m≠物理0.62m）、SAS 限幅 ±25°/±0.7（积分俯仰±0.5rad/滚转±0.3rad）、空速下限 0.5m/s、地面 pos.z>6.2。
 
 ## 边界
 
@@ -82,6 +73,7 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 - **文档**：Markdown 为唯一编辑源；编号规则 `域前缀-三位序号-标题.md`；交叉引用 `见 CTL-001 §3`
 - **Git**：中文 commit，尾部 `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>`；main 分支；按阶段拆分
 - **LaTeX**：TikZ 源码存 `fig/`，公式推导后对照 `src/core/` 验证符号一致性
+- **Skill**：创建/修改项目 Skill 时走 `skill-creator-plus` 流程（草稿→清单审查），不裸调 `install_skill`。Skill 存 `.agents/skills/`（Agentskills.io 标准），不存 `.reasonix/skills/`
 
 ## 踩坑记录
 

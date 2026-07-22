@@ -66,13 +66,12 @@ href="../requirements/REQ-001.html">REQ-001</a> REQ-CTL-003</td>
 </tr>
 <tr>
 <td>ASM-003</td>
-<td><strong>无 <code>wMax</code>
-饱和保护</strong>：差速分配后单机目标转速可能超过
-<code>wMax</code>，当前不做限幅与退化处理</td>
+<td><strong><code>wMax</code>
+饱和后不重分配</strong>：高转速侧已硬限幅，但低转速侧仍按原差速下降</td>
 <td>推进、滚转通道安全</td>
-<td>大差速指令下仿真仍输出推力，可能掩盖执行机构不可达事实</td>
-<td>在 <code>stepPropulsion</code> 中增加 <code>min(wMax, ...)</code>
-限制及差速重分配</td>
+<td>高油门大差速时总推力下降；油门 1.0、差速 0.55 时当前模型下降
+27.5%</td>
+<td>增加饱和感知重分配与遥测告警，并验证滚转优先/总推力优先策略</td>
 <td><a
 href="../control/CTL-002.html">CTL-002</a>、<code>src/core/propulsion.mjs</code></td>
 </tr>
@@ -128,12 +127,10 @@ href="../modeling/MOD-002.html">MOD-002</a>、README</td>
 </tr>
 <tr>
 <td>ASM-009</td>
-<td><strong><code>resetAll</code>
-不重置电机转速</strong>：复位按钮清零姿态、位置、积分器，但
-<code>wf/wt</code> 保持当前值</td>
+<td><strong>复位为热配平复位</strong>：完整复位将双电机直接恢复到配平转速，不模拟从静止冷启动</td>
 <td>UI / 状态初始化</td>
-<td>演示不会从 0 转速冷启动；不影响连续仿真的物理一致性</td>
-<td>按需求决定是否增加「全复位」模式；当前为有意设计</td>
+<td>演示起点可重复，但不代表上电启动过程</td>
+<td>若研究启动瞬态，新增独立“冷启动”场景，不复用配平复位</td>
 <td><code>src/core/state.mjs</code>、<a
 href="../verification/VER-001.html">VER-001</a></td>
 </tr>
@@ -183,6 +180,20 @@ href="../propulsion/PROP-001.html">PROP-001</a></td>
 <td><a
 href="../control/CTL-002.html">CTL-002</a>、<code>src/core/propulsion.mjs</code></td>
 </tr>
+<tr>
+<td>ASM-015</td>
+<td><strong>当前仅完成纵向三方程配平</strong>：<code>aTrim</code>、<code>thrTrim</code>、<code>dtTrim</code>
+只闭合
+<code>F_x</code>、<code>F_z</code>、<code>M_y</code>；尾摆反扭投影留下小幅
+<code>M_z</code> 残差</td>
+<td>配平、横航向响应、线性化</td>
+<td>10 s 内纵向参考量保持良好，但仍出现约 0.168° 航向漂移和 0.275 m
+侧移；不能直接作为完整状态 Jacobian 的平衡点</td>
+<td>联立求解前摆、差速、侧滑和滚转姿态，使六分量力 /
+力矩及运动学残差同时闭合</td>
+<td><a href="../modeling/MOD-003.html">MOD-003</a>、<a
+href="../verification/VER-001.html">VER-001</a></td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -195,5 +206,5 @@ href="hazard-log.html"><code>危害与失效模式日志</code></a>、<a
 href="../verification/SAFE-001.html">SAFE-001</a>
 共同构成模型成熟度声明的支撑文件。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

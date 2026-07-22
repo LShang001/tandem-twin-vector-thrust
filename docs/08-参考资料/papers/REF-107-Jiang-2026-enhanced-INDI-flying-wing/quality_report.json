@@ -1,0 +1,31 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-107-Jiang-2026-enhanced-INDI-flying-wing",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-107-Jiang-2026-enhanced-INDI-flying-wing\\99c93cbc-c9c5-4108-abe1-d97081d2ee0e_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 91715,
+    "word_like_count": 14715,
+    "line_count": 735,
+    "heading_count": 29,
+    "table_row_count": 0,
+    "latex_block_count": 58,
+    "latex_inline_count": 121
+  },
+  "images": {
+    "referenced_count": 33,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "item_count": 26,
+    "type_counts": {}
+  },
+  "status": "ok",
+  "warnings": []
+}

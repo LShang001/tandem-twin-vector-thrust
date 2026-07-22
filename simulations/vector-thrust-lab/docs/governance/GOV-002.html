@@ -166,7 +166,7 @@
     accTitle 参数单一事实源追溯链
     accDescr 展示 aircraft-model.json 如何通过 sync-params.py 生成 parameters.mjs，并流向 core 模块与测试基线；--check 形成漂移检测回路。
 
-    JSON[&quot;models/aircraft-model.json\n46 参数 + 来源/置信度&quot;]
+    JSON[&quot;models/aircraft-model.json\n52 参数 + 来源/置信度&quot;]
     TOOL[&quot;tools/sync-params.py\n生成 + --check 校验&quot;]
     PMS[&quot;simulations/.../parameters.mjs\n勿手改&quot;]
     CORE[&quot;src/core/*\nmath/control/...&quot;]
@@ -400,8 +400,8 @@ rad</td>
 <td><code>demo.mjs</code></td>
 </tr>
 <tr>
-<td>resetAll 行为</td>
-<td>不重置电机转速</td>
+<td>完整复位行为</td>
+<td>热配平复位并恢复可重复动态状态</td>
 <td><code>state.mjs</code></td>
 </tr>
 <tr>
@@ -436,5 +436,5 @@ rad</td>
 <li>禁止在构建产物中直接做持久化修改，所有修改应在 Markdown
 源中完成并重新构建。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

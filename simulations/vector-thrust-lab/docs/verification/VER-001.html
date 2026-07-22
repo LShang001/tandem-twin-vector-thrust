@@ -126,7 +126,7 @@ flowchart LR
     end
 
     subgraph Verif [验证侧：右升]
-        UT[单元测试&lt;br/&gt;40 项断言]
+        UT[单元测试&lt;br/&gt;46 项]
         RB[回归基线&lt;br/&gt;3 场景]
         DEMO[页面演示 / 人工检查]
 
@@ -176,7 +176,7 @@ flowchart LR
 </table>
 <hr />
 <h2 id="2-当前证据清单">2 当前证据清单</h2>
-<h3 id="21-单元测试40-项断言">2.1 单元测试（40 项断言）</h3>
+<h3 id="21-单元测试46-项">2.1 单元测试（46 项）</h3>
 <table>
 <thead>
 <tr>
@@ -203,18 +203,17 @@ flowchart LR
 <td>parameters</td>
 <td>6</td>
 <td><code>tests/parameters.test.mjs</code></td>
-<td>46
+<td>52
 键完整且为有限数；关键物理量为正；阻尼导数符号正确；限幅关系自洽；参数对象冻结；摆角
 / 配平角度弧度换算</td>
 <td>T, A</td>
 </tr>
 <tr>
 <td>control</td>
-<td>6</td>
+<td>8</td>
 <td><code>tests/control.test.mjs</code></td>
-<td>SAS 关闭时指令直通；俯仰 / 偏航 / 滚转三通道极性；执行限幅
-<code>±dMax</code>、<code>±dwMax</code>；积分器限幅并饱和至
-<code>intThMax</code> / <code>intPhiMax</code></td>
+<td>SAS 关闭直通；俯仰 / 偏航 /
+滚转反馈运动学；执行限幅；积分器限幅；仅速率与 Rate 模式</td>
 <td>T, A</td>
 </tr>
 <tr>
@@ -230,18 +229,15 @@ flowchart LR
 <td>aerodynamics</td>
 <td>5</td>
 <td><code>tests/aerodynamics.test.mjs</code></td>
-<td>气动开关关闭时贡献归零；正迎角产生升力；<code>Cmq &lt; 0</code>
-俯仰阻尼；侧滑产生侧力与航向/横滚静稳定力矩；空速下限
-<code>vMin = 0.5 m/s</code> 防止低速奇异</td>
+<td>气动开关；升力与阻尼符号；侧滑稳定力矩；零真实空速时动压、力和矩严格为零</td>
 <td>T, A</td>
 </tr>
 <tr>
 <td>dynamics</td>
-<td>6</td>
+<td>9</td>
 <td><code>tests/dynamics.test.mjs</code></td>
-<td><code>stepPhysics</code>
-子步调度与手动子步等价；长时间积分四元数归一化保持；地面约束触地与上升不拦截；配平直飞
-10 s 有界；关闭气动时无阻尼发散趋势</td>
+<td>子步调度、四元数归一化、地面约束、纵向配平参考量保持、全 SAS
+扰动衰减、关闭气动和水平运动学约束</td>
 <td>T, A</td>
 </tr>
 <tr>
@@ -254,8 +250,15 @@ flowchart LR
 <td>T</td>
 </tr>
 <tr>
+<td>state</td>
+<td>1</td>
+<td><code>tests/state.test.mjs</code></td>
+<td>完整热配平复位可重复，并保留模式开关</td>
+<td>T</td>
+</tr>
+<tr>
 <td><strong>合计</strong></td>
-<td><strong>40</strong></td>
+<td><strong>46</strong></td>
 <td>—</td>
 <td>—</td>
 <td>—</td>
@@ -282,7 +285,8 @@ flowchart LR
 <tr>
 <td><code>trim</code></td>
 <td>10 s</td>
-<td>无额外输入，使用 <code>resetFlightState</code> 配平初始条件</td>
+<td>无额外输入，使用 <code>resetSimulationState</code>
+热复位后的纵向配平初始条件</td>
 <td>每秒快照 + 最终状态：V、α、φ/θ/ψ、p/q/r、位置、推力 / 力矩</td>
 <td>`max(1e-9,</td>
 <td>expected</td>
@@ -290,9 +294,10 @@ flowchart LR
 <tr>
 <td><code>pitchStep</code></td>
 <td>8 s</td>
-<td>0–4 s 内 <code>dt = 8°</code>，4 s 后撤除</td>
+<td>初始 NED <code>z = -100 m</code>；0–4 s 内 <code>dt = 8°</code>，4 s
+后撤除</td>
 <td>同上</td>
-<td>同上</td>
+<td>同上；全程不触发地面钳位</td>
 <td>REQ-CTL-001/002、REQ-SIM-001</td>
 </tr>
 <tr>
@@ -321,15 +326,16 @@ flowchart LR
 <td>参数单一事实源</td>
 <td><code>py -3.12 tools/sync-params.py --check</code>（仓库根目录）</td>
 <td><code>models/aircraft-model.json</code></td>
-<td>生成的 <code>src/core/parameters.mjs</code> 与 JSON 一致；46
+<td>生成的 <code>src/core/parameters.mjs</code> 与 JSON 一致；52
 键完整；无手工编辑漂移</td>
 <td>I, T</td>
 </tr>
 <tr>
-<td>JSON schema 合规</td>
-<td><code>tools/sync-params.py</code> 解析时校验</td>
-<td><code>models/aircraft-model.schema.json</code></td>
-<td>JSON 解析通过 schema 校验</td>
+<td>JSON 基础完整性</td>
+<td><code>tools/sync-params.py</code> 解析</td>
+<td><code>models/aircraft-model.json</code></td>
+<td>JSON 可解析、参数名为合法标识符、数值可格式化；当前尚未接入 schema
+与重名检测</td>
 <td>I</td>
 </tr>
 </tbody>
@@ -387,10 +393,9 @@ flowchart LR
 <tr>
 <td>复位功能</td>
 <td>点击 Reset / 复位按钮</td>
-<td>位置、姿态、积分器归零，电机转速 <code>wf/wt</code> 不重置（见
-ASM-009）</td>
+<td>恢复配平位置、姿态、油门、热配平转速、指令、执行量和时间；保留模式开关</td>
 <td><code>src/browser/controls-ui.mjs</code>、<code>src/core/state.mjs</code></td>
-<td>D</td>
+<td>D, T</td>
 </tr>
 <tr>
 <td>主题切换</td>
@@ -436,8 +441,8 @@ ASM-009）</td>
 <tr>
 <td><strong>可用</strong></td>
 <td>控制律概念研究与通道解耦演示</td>
-<td>40 项单元测试与 3 项回归基线覆盖了所列工况下的数值响应；SAS
-三通道极性与限幅已通过测试锁定</td>
+<td>46 项测试与 3 项回归基线覆盖所列工况；SAS
+速率/姿态反馈极性、纵向配平参考量、横航向残差、零空速和完整复位已锁定</td>
 </tr>
 <tr>
 <td><strong>可用</strong></td>
@@ -470,7 +475,7 @@ HUD，方程面板解释模型来源；无飞行硬件风险</td>
 <code>pos.z &gt; 6.2 m &amp;&amp; vWorld.z &gt; 0</code></li>
 <li>四元数右乘 + 每步归一化</li>
 <li>900 ms 自动演示触发</li>
-<li><code>resetAll</code> 不重置电机转速</li>
+<li>完整复位采用热配平转速，不模拟冷启动</li>
 <li>渲染几何臂长 <code>±1.78 m</code> 与物理力臂 <code>0.62 m</code>
 的区分</li>
 <li><code>theta = -asin(R13)</code> 的欧拉提取约定</li>
@@ -530,7 +535,7 @@ href="../propulsion/PROP-001.html">PROP-001</a> —
 推进与摆座模型</li>
 <li><a href="SAFE-001.html">SAFE-001</a> —
 初步安全计划</li>
-<li><a href="../registers/parameter-handbook.html">参数数据手册</a> — 46
+<li><a href="../registers/parameter-handbook.html">参数数据手册</a> — 52
 参数全量清单</li>
 <li><a href="../registers/assumptions-log.html">假设与局限日志</a> —
 已知模型假设与局限</li>
@@ -541,5 +546,5 @@ href="../propulsion/PROP-001.html">PROP-001</a> —
 <li><a href="../registers/hazard-log.html">危害与失效模式日志</a>
 — 失效模式与缓解措施</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

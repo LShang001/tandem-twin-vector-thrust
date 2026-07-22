@@ -546,6 +546,39 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <td><code>P.dwUiMax</code></td>
 <td>控制 / UI</td>
 </tr>
+<tr>
+<td>PAR-047</td>
+<td><code>rateKq</code></td>
+<td>1.2</td>
+<td>s</td>
+<td>角速度闭环俯仰增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.rateKq</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-048</td>
+<td><code>rateKr</code></td>
+<td>1.2</td>
+<td>s</td>
+<td>角速度闭环偏航增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.rateKr</code></td>
+<td>控制</td>
+</tr>
+<tr>
+<td>PAR-049</td>
+<td><code>rateKp</code></td>
+<td>1.5</td>
+<td>s</td>
+<td>角速度闭环滚转增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.rateKp</code></td>
+<td>控制</td>
+</tr>
 </tbody>
 </table>
 <h2 id="6-数值实现">6 数值实现</h2>
@@ -591,7 +624,7 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <td><code>vMin</code></td>
 <td>0.5</td>
 <td>m/s</td>
-<td>空速下限（防止低速奇异）</td>
+<td>侧滑角与无量纲角速率分母保护值；不参与动压</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.vMin</code></td>
@@ -607,6 +640,28 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <td>low</td>
 <td><code>P.groundZ</code></td>
 <td>动力学</td>
+</tr>
+<tr>
+<td>PAR-050</td>
+<td><code>rateQMax</code></td>
+<td>1.5707963267948966</td>
+<td>rad/s</td>
+<td>角速度闭环最大俯仰/偏航参考（90°/s）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.rateQMax</code></td>
+<td>控制 / UI</td>
+</tr>
+<tr>
+<td>PAR-051</td>
+<td><code>ratePMax</code></td>
+<td>3.141592653589793</td>
+<td>rad/s</td>
+<td>角速度闭环最大滚转参考（180°/s）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.ratePMax</code></td>
+<td>控制 / UI</td>
 </tr>
 </tbody>
 </table>
@@ -629,9 +684,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-044</td>
 <td><code>aTrim</code></td>
-<td>0.027925268031909273</td>
+<td>0.028398718673975386</td>
 <td>rad</td>
-<td>初始配平迎角（1.6°）</td>
+<td>24 m/s 纵向三方程配平迎角（1.627°）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.aTrim</code></td>
@@ -651,13 +706,24 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-046</td>
 <td><code>thrTrim</code></td>
-<td>0.5</td>
+<td>0.44135017954583367</td>
 <td>-</td>
-<td>配平油门</td>
+<td>24 m/s 纵向三方程配平油门</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.thrTrim</code></td>
 <td>状态 / 推进</td>
+</tr>
+<tr>
+<td>PAR-052</td>
+<td><code>dtTrim</code></td>
+<td>-0.011344526636733243</td>
+<td>rad</td>
+<td>24 m/s 纵向三方程尾摆配平偏置（-0.650°）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.dtTrim</code></td>
+<td>控制 / 推进</td>
 </tr>
 </tbody>
 </table>
@@ -678,5 +744,5 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>

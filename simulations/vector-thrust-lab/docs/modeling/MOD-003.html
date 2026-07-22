@@ -102,13 +102,14 @@
 </blockquote>
 <hr />
 <h2 id="1-配平问题定义">1. 配平问题定义</h2>
-<p>考察<strong>定直平飞</strong>（steady level flight）状态：</p>
+<p>先考察<strong>纵向定直平飞参考状态</strong>（steady level flight
+reference）：</p>
 <pre><code>V  = 24 m/s        （配平速度）
 γ  = 0             （航迹倾斜角为零，水平飞行）
 β  = 0             （无侧滑）
 φ  = 0, p = q = r = 0   （无滚转、无角速度）
 δ_f = 0, Δω = 0    （前摆/差速为零）</code></pre>
-<p>此时纵向力与力矩需满足：</p>
+<p>此处只联立纵向力与俯仰力矩：</p>
 <pre><code>L ≈ m·g            （升力平衡重力）
 T ≈ D              （推力平衡阻力）
 M_y = 0            （俯仰力矩为零）</code></pre>
@@ -119,82 +120,85 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>F<span class="op">.</span><span class="at">vel</span><span class="op">.</span><span class="at">z</span> <span class="op">=</span> P<span class="op">.</span><span class="at">vTrim</span> <span class="op">*</span> <span class="fu">sin</span>(P<span class="op">.</span><span class="at">aTrim</span>)<span class="op">;</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>S<span class="op">.</span><span class="at">quat</span>  <span class="op">=</span> (<span class="dv">0</span><span class="op">,</span> <span class="fu">sin</span>(P<span class="op">.</span><span class="at">aTrim</span><span class="op">/</span><span class="dv">2</span>)<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="fu">cos</span>(P<span class="op">.</span><span class="at">aTrim</span><span class="op">/</span><span class="dv">2</span>))<span class="op">;</span></span></code></pre></div>
 <p>其中
-<code>P.vTrim = 24 m/s</code>、<code>P.aTrim = 0.027925268 rad</code>（1.6°）、<code>P.thrTrim = 0.5</code>。</p>
+<code>P.vTrim = 24 m/s</code>、<code>P.aTrim = 0.028398719 rad</code>（1.627°）、<code>P.thrTrim = 0.44135018</code>，尾摆配平偏置
+<code>P.dtTrim = -0.011344527 rad</code>（-0.650°）。按照项目锁定的欧拉角提取约定，物理俯仰为
+<code>+aTrim</code> 时 HUD 显示
+<code>theta = -aTrim</code>；二者不能混用。</p>
 <hr />
-<h2 id="2-纵向配平推导">2. 纵向配平推导</h2>
-<h3 id="21-升力平衡--迎角">2.1 升力平衡 → 迎角</h3>
-<p>重力：</p>
-<pre><code>W = m·g = 2.6 kg × 9.81 m/s² = 25.506 N</code></pre>
-<p>动压：</p>
-<pre><code>q̄ = ½·ρ·V² = 0.5 × 1.225 kg/m³ × (24 m/s)² = 352.8 Pa</code></pre>
-<p>升力面积项：</p>
-<pre><code>q̄·S_w = 352.8 Pa × 0.55 m² = 194.04 N</code></pre>
-<p>由 <code>L = q̄·S_w·C_L</code> 及平飞
-<code>L = W</code>，得配平升力系数：</p>
-<pre><code>C_L,trim = W / (q̄·S_w) = 25.506 / 194.04 ≈ 0.1314</code></pre>
-<p>本仿真采用线性升力模型 <code>C_L = C_Lα·α</code>，故：</p>
-<pre><code>α_trim, Lift = C_L,trim / C_Lα = 0.1314 / 4.6 ≈ 0.02857 rad ≈ 1.638°</code></pre>
-<h3 id="22-与代码给定-atrim-的核对">2.2 与代码给定 aTrim 的核对</h3>
-<p>代码给定：</p>
-<pre><code>P.aTrim = 0.027925268031909273 rad = 1.600°</code></pre>
-<p>两者偏差：</p>
-<pre><code>Δα = 0.027925 − 0.02857 = −0.00065 rad ≈ −0.038°
-相对偏差 ≈ −2.3 %</code></pre>
-<p>结论：<code>P.aTrim</code> 是将理论升力平衡迎角按 <code>1.6°</code>
-圆整后的结果，偏差在 3% 以内，可视为近似配平。剩余升力残差由 SAS
-俯仰积分器在仿真中逐步吸收。</p>
-<h3 id="23-阻力与推力平衡--油门">2.3 阻力与推力平衡 → 油门</h3>
-<p>在 <code>α_trim = 1.6°</code> 处：</p>
-<pre><code>C_L,trim = C_Lα · P.aTrim = 4.6 × 0.027925 ≈ 0.1285</code></pre>
-<p>阻力系数：</p>
-<pre><code>C_D = C_D0 + C_Dk · C_L²
-    = 0.035 + 0.045 × (0.1285)²
-    ≈ 0.035 + 0.000743
-    ≈ 0.03574</code></pre>
-<p>平飞所需总推力：</p>
-<pre><code>D = q̄·S_w·C_D = 194.04 N × 0.03574 ≈ 6.94 N</code></pre>
-<p>代码配平油门 <code>P.thrTrim = 0.5</code> 对应的电机转速：</p>
-<pre><code>ω₀ = thrTrim · ω_max = 0.5 × 900 rad/s = 450 rad/s</code></pre>
-<p>单发推力：</p>
-<pre><code>T = k_T · ω₀² = 2.2×10⁻⁵ N·s² × (450 rad/s)² = 4.455 N</code></pre>
-<p>双发总推力（Δω = 0）：</p>
-<pre><code>T_total = 2 × 4.455 N = 8.91 N</code></pre>
-<p>推力 − 阻力：</p>
-<pre><code>T_total − D = 8.91 N − 6.94 N = 1.97 N</code></pre>
-<p>即在该配平点，推力约比阻力大
-28%。多余推力将使飞行器加速，直至阻力随速度平方增长而重新平衡。MOD-001
-的离线复算观察到配平后速度上升至约 26.2 m/s，与此近似分析一致。</p>
-<h3 id="24-配平闭合程度总结">2.4 配平闭合程度总结</h3>
+<h2 id="2-纵向配平求解">2. 纵向配平求解</h2>
+<h3 id="21-联立平衡方程">2.1 联立平衡方程</h3>
+<p>在
+<code>V = 24 m/s</code>、<code>beta = p = q = r = delta_f = Delta omega = 0</code>
+且航迹角为零时，物理俯仰角等于迎角
+<code>alpha</code>。令双发稳态推力相等为
+<code>T = k_T(thr*w_max)^2</code>，未知量取
+<code>[alpha, thr, delta_t]</code>。将推进力、线性气动力和重力全部写入机体系，纵向三方程平衡条件为：</p>
+<pre><code>0 = T(1+cos(delta_t)) + L*sin(alpha) - D*cos(alpha) - m*g*sin(alpha)
+0 = -T*sin(delta_t) - L*cos(alpha) - D*sin(alpha) + m*g*cos(alpha)
+0 = -b*T*sin(delta_t) + qbar*S*cbar*(Cm0 + Cma*alpha)</code></pre>
+<p>其中
+<code>qbar = rho*V^2/2</code>、<code>L = qbar*S*CLa*alpha</code>、<code>D = qbar*S*(CD0 + CDk*(CLa*alpha)^2)</code>。该三方程同时约束纵向力、法向力和俯仰矩，不能用单独的
+<code>L=W</code> 与 <code>T=D</code>
+代替，因为尾摆同时引入垂向推力和俯仰力矩。</p>
+<h3 id="22-数值解与代码参数">2.2 数值解与代码参数</h3>
+<p>使用 <code>models/aircraft-model.json</code> 中的 MODEL-DEFAULT
+参数求解得到：</p>
 <table>
 <thead>
 <tr>
-<th>条件</th>
-<th>数值</th>
-<th>闭合情况</th>
+<th>量</th>
+<th style="text-align: right;">数值</th>
+<th>代码参数</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>升力平衡所需 α</td>
-<td>1.638°</td>
-<td>与 <code>aTrim=1.600°</code> 偏差 −2.3%，近似闭合</td>
+<td>配平迎角 <code>alpha_0</code></td>
+<td style="text-align: right;">0.028398719 rad = 1.62713°</td>
+<td><code>aTrim</code></td>
 </tr>
 <tr>
-<td>阻力平衡所需 T</td>
-<td>约 6.94 N</td>
-<td><code>thrTrim=0.5</code> 提供 8.91 N，偏大 28%</td>
+<td>配平油门</td>
+<td style="text-align: right;">0.44135018</td>
+<td><code>thrTrim</code></td>
 </tr>
 <tr>
-<td>净加速度估算</td>
-<td>1.97 N / 2.6 kg ≈ 0.76 m/s²</td>
-<td>飞行器将缓慢加速</td>
+<td>尾摆配平偏置 <code>delta_t0</code></td>
+<td style="text-align: right;">-0.011344527 rad = -0.64999°</td>
+<td><code>dtTrim</code></td>
+</tr>
+<tr>
+<td>单发转速</td>
+<td style="text-align: right;">397.215 rad/s</td>
+<td><code>thrTrim*wMax</code></td>
+</tr>
+<tr>
+<td>单发推力</td>
+<td style="text-align: right;">3.47116 N</td>
+<td><code>kT*(thrTrim*wMax)^2</code></td>
 </tr>
 </tbody>
 </table>
-<p>因此，当前配平参数是<strong>近似配平</strong>：<code>aTrim</code>
-基本满足升力平衡，<code>thrTrim=0.5</code>
-为“留有推力裕度”的近似油门。精确巡航油门应由所需速度对应的阻力反解，并考虑
-SAS 积分项对俯仰/推力的耦合修正。</p>
+<p>代回上述三式后，<code>F_x</code>、<code>F_z</code>、<code>M_y</code>
+三个残差均小于 <code>6e-11</code>（SI 单位）。这不是六自由度全配平：非零
+<code>dtTrim</code> 使尾电机反扭矩在 <code>z_b</code> 轴留下
+<code>M_z=-Q_t sin(dtTrim)≈+0.00286 N·m</code>
+的一阶残差。当前没有联立求解前摆、差速、侧滑和滚转姿态来同时闭合
+<code>F_y</code>、<code>M_x</code>、<code>M_z</code>。</p>
+<p>在 60 Hz 帧率、4 ms 子步和全 SAS 模式下连续运行 10
+s，回归基线最终空速为 <code>24.000085 m/s</code>、高度漂移
+<code>0.000244 m</code>、显示俯仰角 <code>-1.62696°</code>。同时出现
+<code>phi=-0.05229°</code>、<code>psi=-0.16778°</code> 和侧移
+<code>y=0.27497 m</code>。因此该初值应称为“纵向配平参考点”；它适合验证纵向平衡与控制符号，但不能直接作为完整九状态
+Jacobian 的平衡点。</p>
+<h3 id="23-指令零位与显示角">2.3 指令零位与显示角</h3>
+<p>UI 中尾摆滑块表示相对配平增量，实际执行角为
+<code>delta_t,act = dtTrim + delta_t,UI + delta_t,SAS</code>。因此滑块为零不代表物理尾摆角为零，而代表处于
+<code>dtTrim</code> 配平偏置。全 SAS 的俯仰姿态误差定义为：</p>
+<pre><code>theta_error = theta_display - theta_ref = theta_display + aTrim
+theta_ref = -aTrim</code></pre>
+<p>保持这一显式定义可以避免将物理俯仰 <code>+aTrim</code>、HUD 显示
+<code>-aTrim</code> 和控制器误差混为一谈。</p>
 <hr />
 <h2 id="3-c_m0-案例零迎角俯仰力矩的配平补偿">3. C_m0
 案例：零迎角俯仰力矩的配平补偿</h2>
@@ -213,37 +217,33 @@ SAS 积分项对俯仰/推力的耦合修正。</p>
 <h3 id="32-用尾摆角平衡-c_m0-的需求">3.2 用尾摆角平衡 C_m0 的需求</h3>
 <p>尾电机推力对质心的俯仰力矩（小摆角线性化）为：</p>
 <pre><code>M_y,t = −b · T_t · sin(δ_t) ≈ −b · T_t · δ_t</code></pre>
-<p>其中 <code>b = 0.62 m</code>，<code>T_t = 4.455 N</code>（thrTrim=0.5
-时）。令总俯仰力矩为零：</p>
+<p>其中 <code>b = 0.62 m</code>，<code>T_t = 3.471 N</code>（当前
+<code>thrTrim</code>）。令总俯仰力矩为零：</p>
 <pre><code>−b·T_t·sin(δ_t) + q̄·S_w·c̄·C_m0 = 0</code></pre>
 <p>解得：</p>
 <pre><code>sin(δ_t,trim) = (q̄·S_w·c̄·C_m0) / (b·T_t)
-              = 0.747 / (0.62 × 4.455)
-              = 0.747 / 2.762
-              ≈ 0.270</code></pre>
-<pre><code>δ_t,trim ≈ asin(0.270) ≈ 0.274 rad ≈ 15.7°</code></pre>
+              = 0.747 / (0.62 × 3.471)
+              ≈ 0.347</code></pre>
+<pre><code>δ_t,trim ≈ asin(0.347) ≈ 0.354 rad ≈ 20.3°</code></pre>
 <h3 id="33-执行机构裕度">3.3 执行机构裕度</h3>
 <p>摆角限幅：</p>
 <pre><code>δ_max = P.dMax = 0.436 rad = 25°</code></pre>
 <p>所需配平摆角占限幅比例：</p>
-<pre><code>15.7° / 25° ≈ 63 %</code></pre>
-<p>剩余裕度约 37%。因此，在零迎角情况下，仅靠尾电机摆角即可补偿
-<code>C_m0</code>，但会占用超过一半的俯仰控制权限。</p>
+<pre><code>20.3° / 25° ≈ 81 %</code></pre>
+<p>剩余裕度仅约 19%。因此，在零迎角情况下理论上仍可仅靠尾电机摆角补偿
+<code>C_m0</code>，但会占用大部分俯仰控制权限，且还没有计入扰动和模型不确定性。</p>
 <h3 id="34-与-atrim-的耦合">3.4 与 aTrim 的耦合</h3>
-<p>代码配平迎角 <code>aTrim = 1.6°</code> 接近气动自平衡点：</p>
+<p>代码配平迎角 <code>aTrim = 1.627°</code> 接近气动自平衡点：</p>
 <pre><code>α_c = −C_m0 / C_mα = −0.011 / (−0.4) = 0.0275 rad = 1.576°</code></pre>
 <p>在该迎角下：</p>
-<pre><code>C_m0 + C_mα·aTrim ≈ 0.011 − 0.4 × 0.027925 ≈ −1.7×10⁻⁴</code></pre>
-<p>对应的剩余俯仰力矩仅约 <code>−0.012 N·m</code>，所需尾摆角约
-<code>0.24°</code>，几乎为零。这说明 <code>aTrim</code>
-的选取已经让气动俯仰力矩自平衡，SAS 积分器只需吸收扰动残差。SAS
-俯仰积分限幅为
-<code>P.intThMax = 0.5 rad</code>，远小于所需零迎角补偿量，进一步印证：<code>aTrim</code>
-是必要设计，不能单纯依赖积分器抵消 <code>C_m0</code>。</p>
+<pre><code>C_m0 + C_mα·aTrim ≈ 0.011 − 0.4 × 0.028399 ≈ −3.60×10⁻⁴</code></pre>
+<p>对应气动俯仰矩约为 <code>-0.0244 N·m</code>，由
+<code>dtTrim=-0.650°</code> 产生的正向尾摆力矩精确平衡。SAS
+积分器只处理模型误差和扰动，不承担静态配平职责。</p>
 <hr />
 <h2 id="4-小扰动线性化框架">4. 小扰动线性化框架</h2>
 <h3 id="41-状态与输入定义">4.1 状态与输入定义</h3>
-<p>选取机体坐标系小扰动状态（围绕配平直飞状态）：</p>
+<p>若先求得六自由度全配平，可选取机体坐标系小扰动状态：</p>
 <pre><code>x = [ Δu, Δw, Δq, Δθ, Δv, Δp, Δr, Δφ, Δψ ]^T</code></pre>
 <p>输入为执行机构修正量：</p>
 <pre><code>u = [ Δδ_t, Δδ_f, ΔΔω ]^T</code></pre>
@@ -283,7 +283,8 @@ M = M_u Δu + M_w Δw + M_q Δq + M_δt Δδ_t</code></pre>
 </tr>
 </tbody>
 </table>
-<p>结论：短周期模态在所列气动导数下是静稳定且有阻尼的；长周期行为受当前近似油门影响，表现为缓慢速度漂移。</p>
+<p>结论：导数符号支持短周期静稳定与角速率阻尼，10 s
+纵向参考量保持良好；横航向仍存在可测残差。这既不能替代特征值、参与因子和更长时域验证，也不能把当前纵向工作点直接称为完整线性化平衡点。</p>
 <h3 id="43-横侧向模态定性分析">4.3 横侧向模态定性分析</h3>
 <p>横侧向力与力矩线性化：</p>
 <pre><code>Y = Y_v Δv + Y_δf Δδ_f
@@ -346,22 +347,24 @@ N = N_v Δv + N_r Δr + N_δf Δδ_f</code></pre>
 </thead>
 <tbody>
 <tr>
-<td>A：配平直飞 10 s</td>
-<td>无额外指令，从 <code>resetFlightState</code> 出发</td>
-<td>速度、迎角、俯仰角</td>
-<td>速度由 24 m/s 缓慢上升至约 26.2 m/s，姿态角微幅有界</td>
+<td>A：纵向配平参考 10 s</td>
+<td>无额外输入，从纵向三方程平衡状态出发</td>
+<td><code>V=24.000085 m/s</code>、<code>z=0.000244 m</code>、<code>theta=-1.62696°</code>；<code>phi=-0.05229°</code>、<code>psi=-0.16778°</code>、<code>y=0.27497 m</code></td>
+<td>纵向三残差闭合；横航向残差有界但非零</td>
 </tr>
 <tr>
-<td>B：俯仰阶跃 8° / 4 s</td>
-<td><code>δ_t = 8°</code> 持续 240 帧后撤除</td>
-<td>俯仰角 θ、角速率 q</td>
-<td>出现俯仰响应峰值，撤除后回到配平附近</td>
+<td>B：俯仰增量阶跃 8° / 4 s</td>
+<td>从 NED <code>z=-100 m</code> 开始，<code>delta_t,UI = 8°</code> 持续
+240 帧后撤除</td>
+<td>8 s 时
+<code>V=25.4292 m/s</code>、<code>theta=-2.9525°</code>、<code>q=0.023789 rad/s</code>，全程未触地</td>
+<td>验证自由飞行响应与撤除事件；8 s 内尚未完全回到参考点</td>
 </tr>
 <tr>
 <td>C：滚转阶跃 0.25·dwUiMax / 4 s</td>
-<td><code>Δω = 0.25 × 0.55 = 0.1375</code> 持续 240 帧后撤除</td>
-<td>滚转角 φ、滚转速率 p</td>
-<td>滚转角达到峰值后，SAS 保持并回零</td>
+<td><code>Delta omega = 0.1375</code> 持续 240 帧后撤除</td>
+<td>8 s 时 <code>phi=0.5284°</code>、<code>p=0.002376 rad/s</code></td>
+<td>姿态误差显著衰减；仍非全包线稳定性证明</td>
 </tr>
 </tbody>
 </table>
@@ -376,10 +379,12 @@ VER-001。</p>
 <code>theta = ±90°</code>
 附近出现万向锁；代码未做特殊处理，大俯仰机动可能数值不稳定。</li>
 <li><strong>低速 /
-悬停</strong>：气动阻尼随动压下降而趋零，姿态稳定完全依赖
-SAS；滚转权限受单侧反扭限制，过渡走廊未建模。</li>
+悬停</strong>：真实空速为零时动压与气动力严格为零，姿态稳定完全依赖推进控制；<code>lockXY</code>
+只是外部运动学约束，不构成悬停能力证明。</li>
 <li><strong>理想执行器</strong>：电机为一阶滞后、摆角瞬时到达指令、无舵机带宽与饱和特性。</li>
 <li><strong>无风环境</strong>：未引入大气扰动、阵风或风切变。</li>
+<li><strong>仅纵向配平</strong>：当前参数只闭合
+<code>F_x</code>、<code>F_z</code>、<code>M_y</code>；完整稳定性矩阵前必须继续求解横航向平衡。</li>
 </ol>
 <hr />
 <h2 id="7-交叉引用">7. 交叉引用</h2>
@@ -391,5 +396,5 @@ SAS；滚转权限受单侧反扭限制，过渡走廊未建模。</li>
 <li>VER-001：验证与确认流程、回归基线通过准则。</li>
 <li>GOV-002：变更控制流程（若需修改 theta 符号约定）。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-20 23:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
 </html>
