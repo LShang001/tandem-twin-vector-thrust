@@ -28,7 +28,7 @@
 
 \subsection{四元数域比例-微分姿态控制律}
 
-将姿态控制问题表述为：给定期望四元数$\mathbf{q}_{\text{des}}$和当前角速率$\boldsymbol{\omega}$，求控制力矩$\boldsymbol{\tau}$使$\mathbf{q} \to \mathbf{q}_{\text{des}}$。采用矢量部分的比例反馈\cite{wie2008quaternion,fresk2013full}：
+将姿态控制问题表述为：给定期望四元数$\mathbf{q}_{\text{des}}$和当前角速率$\boldsymbol{\omega}$，求控制力矩$\boldsymbol{\tau}$使$\mathbf{q} \to \mathbf{q}_{\text{des}}$。采用矢量部分的比例反馈\cite{wie1989quaternion,fresk2013full}：
 
 \begin{equation}
     \boxed{\boldsymbol{\tau} = -\mathbf{K}_q \boldsymbol{\varepsilon}_{\text{err}} - \mathbf{K}_\omega \boldsymbol{\omega}}
@@ -49,7 +49,7 @@
     \dot{\eta}_{\text{err}} = -\frac{1}{2}\boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega}
     \label{eq:eta_dot}
 \end{equation}
-（由四元数运动学$\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q}\otimes[0,\boldsymbol{\omega}]^T$和误差四元数定义导出）。因此
+（由四元数运动学$\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q}\otimes[0,\boldsymbol{\omega}]^T$和误差四元数定义导出；相应矢量部分为$\dot{\boldsymbol{\varepsilon}}_{\text{err}}=\frac{1}{2}(\eta_{\text{err}}\boldsymbol{\omega}-\boldsymbol{\varepsilon}_{\text{err}}\times\boldsymbol{\omega})$，在$\eta_{\text{err}}\approx1$的小误差邻域退化为式\ref{eq:lqr_eps_dot}的线性化运动学$\dot{\boldsymbol{\varepsilon}}_{\text{err}}\approx\frac{1}{2}\boldsymbol{\omega}$）。因此
 \begin{align}
     \dot{V} &= -2k_q\dot{\eta}_{\text{err}} + \boldsymbol{\omega}^T \mathbf{I} \dot{\boldsymbol{\omega}} \nonumber \\
             &= k_q \boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega} + \boldsymbol{\omega}^T(\boldsymbol{\tau} - \boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}) \nonumber \\
@@ -108,7 +108,7 @@ $\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理
     \end{bmatrix}
     \label{eq:quat_sas_cmd}
 \end{equation}
-其中$\boldsymbol{\varepsilon}_{\text{err}} = [\varepsilon_{\text{err},1}, \varepsilon_{\text{err},2}, \varepsilon_{\text{err},3}]^T$为误差四元数的矢量部分。该形式的简洁性源于本构型$\mathbf{B}$的对角占优结构——每个通道主要由单一执行器支配。
+其中$\boldsymbol{\varepsilon}_{\text{err}} = [\varepsilon_{\text{err},1}, \varepsilon_{\text{err},2}, \varepsilon_{\text{err},3}]^T$为误差四元数的矢量部分。在手工整定实现（\texttt{controllers.py}的\texttt{QuatSASController}）中，该映射采用$\mathbf{B}$的主通道对角近似（$\Delta\omega=\tau_x/(-2\tau_0)$、$\delta_t=\tau_y/(-bT_0)$、$\delta_f=\tau_z/(aT_0)$），与本章正文给出的完整$\mathbf{B}_{\text{true}}^{-1}$不同——对角近似丢弃反扭矩交叉项换取零求逆开销，第\ref{sec:lqr}节的LQR则完整利用交叉项，这正是表\ref{tab:ctrl_compare}中三者性能梯度的来源之一。
 
 \textbf{与欧拉角SAS的等价性}：在小姿态误差下，$\varepsilon_{\text{err},1} \approx \Delta\phi/2$、$\varepsilon_{\text{err},2} \approx \Delta\theta/2$、$\varepsilon_{\text{err},3} \approx \Delta\psi/2$，代入式(\ref{eq:quat_sas_cmd})并调整增益$k_{q,\cdot} = 2k_{\text{sas},\cdot}$即可恢复第\ref{sec:control}节的欧拉角SAS形式。因此四元数SAS是欧拉角SAS的严格推广——在小信号范围内行为一致，在大姿态机动中自动避免了欧拉角域的所有奇异性问题。
 
