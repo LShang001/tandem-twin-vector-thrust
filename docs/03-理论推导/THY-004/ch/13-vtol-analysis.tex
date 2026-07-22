@@ -1,0 +1,73 @@
+\section{Tail-sitter VTOL模式分析与仿真}
+\label{sec:vtol}
+
+本节探讨将纵列双发正交单轴矢量推力构型以tail-sitter模式应用于垂直起降（VTOL）的可行性。在tail-sitter模式下，飞行器从水平姿态通过俯仰$-90^\circ$变为竖直姿态（机头朝天），两电机推力矢量直接指向下方以提供升力。该模式消除了对气动升力面的依赖——第\ref{sec:allocation}节和第\ref{sec:propulsion}节推导的推力矢量映射和推进模型完全适用，仅需将气动力项设为零。
+
+\subsection{Tail-sitter构型的控制特性}
+
+在tail-sitter悬停姿态（$\theta=-90^\circ$，机体系$+x_b$指向上方）下，构型的控制特性与常规固定翼模式有本质变化：
+
+\begin{itemize}
+    \item \textbf{俯仰/偏航角色互换}：在机体坐标系中，前电机的$z_b$轴摆动（原来的偏航通道）在惯性系中表现为绕竖直轴的旋转——即tail-sitter的偏航；尾电机的$y_b$轴摆动（原来的俯仰通道）在惯性系中仍为俯仰。因此，两个摆座在VTOL模式下的控制功能与固定翼模式一致，无需重新分配。
+    \item \textbf{滚转不变}：差速反扭滚转机制不依赖重力方向，VTOL模式下完全保留。
+    \item \textbf{悬停配平}：忽略气动力后，悬停仅需推力与重力平衡：$T_f+T_t = mg$。在$\delta_f=\delta_t=0$、$\Delta\omega=0$（零差速）的对称状态下，解析解得基准转速
+    \begin{equation}
+        \omega_{0,\text{hover}} = \sqrt{\frac{mg}{2k_T}}
+        \label{eq:hover_omega0}
+    \end{equation}
+    代入MODEL-DEFAULT参数（$m=2.6$\,kg，$k_T=2.2\times10^{-5}$\,N$\cdot$s$^2$）得$\omega_{0,\text{hover}} \approx 761.4$\,rad/s，对应油门约$84.6\%$。
+\end{itemize}
+
+\subsection{四元数控制在VTOL中的必要性}
+
+Tail-sitter悬停时俯仰角$\theta=-90^\circ$恰为3-2-1欧拉角的万向锁奇异点——在此姿态下，滚转$\phi$和偏航$\psi$描述同一物理旋转自由度，任何以欧拉角差值为输入的线性控制律（如第\ref{sec:control}节的SAS）都会在此处退化。第\ref{sec:quat_control}节建立的误差四元数控制律完全规避了这一问题：期望悬停四元数$\mathbf{q}_{\text{hover}}=[0.7071,0,-0.7071,0]^T$是$S^3$流形上的正则点，误差四元数的矢量部分$\boldsymbol{\varepsilon}_{\text{err}}$在悬停点附近线性良好，控制律式(\ref{eq:quat_pd})无奇异性地工作。
+
+从水平姿态到悬停姿态的过渡采用slerp球面线性插值（式\ref{eq:slerp}），保证了过渡路径沿$S^3$大圆弧最短路径行进，且任意中间态均为有效单位四元数。
+
+\subsection{仿真验证}
+
+\subsubsection{垂直起飞}
+
+图\ref{fig:vtol_takeoff}展示了3秒slerp过渡垂直起飞的仿真结果。飞行器从地面静止（$q=[1,0,0,0]^T$，水平姿态）经slerp过渡至悬停姿态。由于姿态动力学存在惯性，实际姿态对slerp参考轨迹产生跟踪滞后：$\|\boldsymbol{\varepsilon}_{\text{err}}\|$在过渡初期由零升至峰值约0.37（对应约$40^\circ$姿态误差），随后缓慢衰减，10\,s末约0.065。俯仰角$\theta$在slerp结束后绕$-90^\circ$做欠阻尼振荡（振幅约$\pm20^\circ$，10\,s末$\theta\approx-82.5^\circ$，尚未完全收敛）。高度曲线反映了姿态振荡的代价：起飞段先爬升约0.7\,m，姿态振荡使推力矢量偏离竖直方向、升力分量不足，高度回落至地面，随后随姿态趋于稳定重新爬升，10\,s末约2.8\,m。该结果表明当前SAS增益在tail-sitter大角度机动下阻尼不足，起飞过渡的增益调度或阻尼增强是后续改进方向。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig-sim/vtol_takeoff.pdf}
+\caption{VTOL tail-sitter 垂直起飞（3s slerp）：上—高度；中—俯仰角 $\theta$（目标$-90^\circ$）；下—四元数误差范数 $\|\varepsilon_{\mathrm{err}}\|$。}
+\label{fig:vtol_takeoff}
+\end{figure}
+
+\subsubsection{悬停保持}
+
+图\ref{fig:vtol_hover}展示了悬停姿态的闭环保持性能。在精确配平转速（式\ref{eq:hover_omega0}，$\omega_0\approx761.4$\,rad/s）和四元数SAS的PD反馈下，俯仰角$\theta$稳定保持在$-90^\circ$（仿真内未见可分辨偏差），8\,s内高度漂移为零。该稳定性验证了误差四元数控制律（式\ref{eq:quat_pd}）在万向锁奇异点附近的有效性——欧拉角SAS在此工况下无法正常工作。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig-sim/vtol_hover_hold.pdf}
+\caption{悬停保持（四元数SAS）：上—俯仰角 $\theta$（闭环稳定于$-90^\circ$）；下—高度。}
+\label{fig:vtol_hover}
+\end{figure}
+
+\subsubsection{四元数SAS与四元数INDI的悬停对比}
+
+在悬停保持工况下施加$3^\circ$初始俯仰偏差，四元数SAS和四元数INDI均能将姿态误差收敛回悬停点（图\ref{fig:vtol_sas_indi}）。两种架构呈现不同的收敛形态：SAS为欠阻尼二阶响应，误差范数在约1.8\,s时先降至$1.5\times10^{-3}$，随后因阻尼不足出现回摆；INDI近似单调衰减，无明显超调。5\,s末两者的$\|\boldsymbol{\varepsilon}_{\text{err}}\|$均收敛至$5\times10^{-3}$量级（对应姿态误差约$0.6^\circ$）。INDI在悬停工况下的优势尚不显著——这是因为悬停时外力扰动为零，INDI的模型鲁棒性优势需在气动扰动或外部风扰下才能充分体现。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig-sim/vtol_sas_vs_indi.pdf}
+\caption{悬停时四元数误差范数对比（$3^\circ$初始俯仰偏差）：四元数SAS（蓝）欠阻尼收敛、有回摆；四元数INDI（红）近似单调衰减。5\,s末两者均收敛至$5\times10^{-3}$量级。}
+\label{fig:vtol_sas_indi}
+\end{figure}
+
+\subsection{VTOl模式的已知局限}
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{油门需求高}：悬停需$84.6\%$油门，推力裕度仅约$15\%$用于机动控制。以当前MODEL-DEFAULT参数，该构型的推重比在悬停点偏弱。
+    \item \textbf{气动面浪费}：在VTOL模式下机翼和舵面不产生有效控制力矩，构型的固定翼设计要素处于闲置状态。
+    \item \textbf{过渡段建模缺失}：当前仿真未建模slerp过渡过程中可能出现的非定常气动效应（即使忽略升力，机翼在过渡段仍会产生显著的阻力力矩）。
+    \item \textbf{前电机垂向分量缺失}：在非纯悬停的倾斜姿态下，前电机仅提供$x_b$-$y_b$平面内的推力——在倾斜前的过渡初期，若前电机仍需提供部分垂向分量，当前构型无法满足。这是tail-sitter模式对本构型的本构性限制。
+\end{enumerate}
+
+\subsection{与固定翼模式的统一控制架构}
+
+将VTOL模式与第\ref{sec:control}--\ref{sec:quat_control}节的固定翼控制律统一于四元数SAS框架下：仅需切换期望四元数$\mathbf{q}_{\text{des}}$（前飞配平$\leftrightarrow$悬停）和油门指令，控制律结构（式\ref{eq:quat_sas_cmd}）和效能矩阵$\mathbf{B}_{\text{true}}$完全不变。这种统一的四元数域姿态控制架构是本构型设计的一个关键工程优势——同一套控制律覆盖常规前飞和tail-sitter VTOL两种飞行模式，仅通过高层指令切换参考姿态。

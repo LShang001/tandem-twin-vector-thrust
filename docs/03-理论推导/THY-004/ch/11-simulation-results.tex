@@ -1,0 +1,64 @@
+\section{数值仿真实验与验证}
+\label{sec:simulation}
+
+基于第\ref{sec:dynamics}节的RK4高精度积分框架和第\ref{sec:INDI}节的INDI控制律方案，使用Python独立实现的六自由度仿真程序（\texttt{simulations/high-fidelity-analysis/}），对配平状态、线性化模态、积分精度和闭环响应进行定量分析与可视化。所有数值结果基于MODEL-DEFAULT参数，未经标定，结论限定为概念级。
+
+\subsection{纵向配平}
+
+在$V=24$\,m/s水平定直飞行条件下，Newton法联立求解纵向三自由度配平：
+
+\input{sim-data/trim_table.tex}
+
+该配平点（$\alpha=1.640^\circ$、$\delta_{t0}=-0.904^\circ$、油门$41.8\%$）与Web JS仿真（$\alpha_0=1.627^\circ$、$\delta_{t0}=-0.650^\circ$）存在小幅差异，来源为Python独立实现的简化气动模型。
+
+\subsection{线性化与模态分析}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig-sim/eigenvalues.pdf}
+\caption{配平点特征值分布。蓝圈：纵向（短周期SP + 长周期Ph）；红方：横航向（荷兰滚DR + 滚转收敛RR + 螺旋Sp）。}
+\label{fig:eigenvalues}
+\end{figure}
+
+\input{sim-data/modes_table.tex}
+
+短周期模态（$f\approx2.6$\,Hz，$\zeta\approx0.84$）由$C_{m\alpha}$和$C_{mq}$支配，具备良好快速衰减；长周期（$f\approx0.05$\,Hz，$\zeta\approx0.35$）偏弱但SAS可改善。横航向：滚转收敛极快（$\tau\approx9.2$\,ms），荷兰滚（$f\approx2.0$\,Hz，$\zeta\approx0.48$）频率偏高——源于较小$I_z$和较大$C_{n\beta}$的组合，螺旋模态缓慢收敛（$\tau\approx8.5$\,s）。
+
+\subsection{数值积分精度：RK4 vs 显式欧拉}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig-sim/rk4_vs_euler.pdf}
+\caption{RK4与显式欧拉的积分误差演化。RK4（$1.5\times10^{-12}$）远优于显式欧拉（$4.0\times10^{-5}$），精度提升$2.6\times10^7$倍。}
+\label{fig:rk4_euler}
+\end{figure}
+
+恒定角速率$\omega=(0,0,1)^T$\,rad/s（纯偏航）、$dt=0.004$\,s、$T=60$\,s条件下，四元数范数偏差：$\lVert q_{\mathrm{Euler}}-q_{\mathrm{theo}}\rVert_2=4.0\times10^{-5}$，$\lVert q_{\mathrm{RK4}}-q_{\mathrm{theo}}\rVert_2=1.5\times10^{-12}$。图\ref{fig:rk4_euler}展示了两者误差随时间的演化趋势。RK4的误差已低于IEEE 754双精度浮点舍入累积效应，在60秒仿真中对姿态传播的影响可视为零，直接验证了第\ref{sec:dynamics}节的理论分析。
+
+\subsection{SAS闭环响应}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig-sim/sas_pitch_step.pdf}
+\caption{SAS俯仰阶跃响应：上—俯仰角 $\theta$，中—俯仰角速率 $q$，下—尾摆指令 $\delta_t$。$t=2$\,s施加5\,deg/s的$q$脉冲。}
+\label{fig:sas_response}
+\end{figure}
+
+$t=2$\,s时施加俯仰角速率脉冲（$\Delta q=5^\circ$/s），姿态偏差在约2秒内衰减至峰值的5\%以内（图\ref{fig:sas_response}），验证了角速率阻尼+姿态PI反馈的有效性。$\delta_t$峰值约$0.3^\circ$远低于$\pm25^\circ$限幅。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig-sim/trim_stability.pdf}
+\caption{配平稳定性：20秒SAS保持。上—前向速度 $u$，下—俯仰角 $\theta$。}
+\label{fig:trim_stability}
+\end{figure}
+
+20秒配平保持（图\ref{fig:trim_stability}）空速漂移$<0.1\%$，表明SAS闭环在配平点附近维持稳定平衡。
+
+\subsection{INDI控制器初步验证}
+
+基于在线Jacobian $\mathbf{B}_{\mathrm{true}}$（式\ref{eq:B_true}）的INDI控制器在零扰动配平保持中表现与SAS相当（12秒速度漂移$<0.1\%$），验证了增量控制架构的配平稳定性。在角速率扰动响应中，INDI表现出比SAS更大幅度的执行器调节——这与INDI理论预测一致：增量控制通过$\mathbf{B}^{-1}$直接映射角加速度误差至执行器增量，对扰动的初始响应更激进。然而，在$\dot{\boldsymbol{\omega}}$估计仅依赖后向欧拉差分的纯传感器方案下，噪声放大效应导致INDI扰动抑制性能不如结构更保守的SAS。这一发现突显了第\ref{sec:INDI}节指出的角加速度滤波（§\ref{sec:accel_estimation}）对INDI实际性能的决定性影响。
+
+\subsection{模型参数敏感性}
+
+上述数值结果对气动导数不确定性敏感。以短周期模态频率为例，若$C_{m\alpha}$偏离MODEL-DEFAULT值$\pm30\%$，短周期频率从2.6\,Hz移至2.2--3.0\,Hz，阻尼比从0.84变为0.72--0.93。该量级变化在常规SAS增益补偿能力之内，但突显了台架标定和CFD验证对飞行品质定量评估的必要性。

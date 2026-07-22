@@ -1,0 +1,133 @@
+\section{基于误差四元数的姿态控制律}
+\label{sec:quat_control}
+
+第\ref{sec:control}节给出的SAS增稳律以欧拉角为反馈变量，在常规飞行包线内工作良好。然而，欧拉角存在两个本构性限制：其一，3-2-1欧拉角序列在$\theta=\pm90^\circ$处出现万向锁（gimbal lock）奇异性——俯仰角接近$\pm90^\circ$时滚转$\phi$和偏航$\psi$描述同一物理自由度，导致运动学方程退化；其二，欧拉角误差的线性叠加（如$\Delta\theta = \theta - \theta_0$）在大角度机动中与实际旋转的几何路径不符，存在"绕远路"（unwinding）现象\cite{markley2014fundamentals}。
+
+本节将SAS和INDI控制律的外环从欧拉角域迁移到四元数域，利用第\ref{sec:dynamics}节已建立的四元数姿态运动学框架，统一姿态误差的表征和控制律的设计。
+
+\subsection{误差四元数}
+
+设当前姿态四元数为$\mathbf{q}$，期望姿态四元数为$\mathbf{q}_{\text{des}}$（均为单位四元数）。定义\textbf{误差四元数}为从当前姿态旋转至期望姿态所需的四元数\cite{markley2014fundamentals,kuipers1999quaternions}：
+
+\begin{equation}
+    \mathbf{q}_{\text{err}} = \mathbf{q}_{\text{des}}^* \otimes \mathbf{q}
+    = \begin{bmatrix} \eta_{\text{err}} \\ \boldsymbol{\varepsilon}_{\text{err}} \end{bmatrix}
+    \label{eq:quat_err}
+\end{equation}
+
+其中$\mathbf{q}_{\text{des}}^* = [q_{\text{des},0}, -q_{\text{des},1}, -q_{\text{des},2}, -q_{\text{des},3}]^T$为$\mathbf{q}_{\text{des}}$的共轭，$\otimes$为四元数乘法。误差四元数的标量部分$\eta_{\text{err}} = \cos(\theta_{\text{err}}/2)$编码了当前姿态与期望姿态之间的总旋转角度$\theta_{\text{err}}$，矢量部分$\boldsymbol{\varepsilon}_{\text{err}} = \mathbf{n}\sin(\theta_{\text{err}}/2)$编码了旋转轴方向$\mathbf{n} \in \mathbb{R}^3$（$\|\mathbf{n}\|=1$）。
+
+\textbf{关键性质}：
+\begin{enumerate}[label=(\arabic*)]
+    \item 当$\mathbf{q} = \mathbf{q}_{\text{des}}$时，$\mathbf{q}_{\text{err}} = [1, 0, 0, 0]^T$，即$\eta_{\text{err}}=1$、$\boldsymbol{\varepsilon}_{\text{err}} = \mathbf{0}$——控制目标退化为\textbf{调节问题}：驱动矢量误差趋零；
+    \item $\eta_{\text{err}}^2 + \|\boldsymbol{\varepsilon}_{\text{err}}\|^2 = 1$始终成立（$\mathbf{q}_{\text{err}}$仍是单位四元数）；
+    \item 在小误差假设下（$\theta_{\text{err}} \ll 1$），$\boldsymbol{\varepsilon}_{\text{err}} \approx \frac{1}{2}[\Delta\phi, \Delta\theta, \Delta\psi]^T$——误差四元数的矢量部分近 似退化为欧拉角误差的半数\cite{fresk2013full}。
+\end{enumerate}
+
+性质(3)意味着：四元数域的比例反馈在正常工作点附近与欧拉角域PD控制等价，但在大姿态误差时自动通过$\sin(\theta_{\text{err}}/2)$的饱和特性避免了欧拉角域的"超调绕远路"问题。
+
+\subsection{四元数域比例-微分姿态控制律}
+
+将姿态控制问题表述为：给定期望四元数$\mathbf{q}_{\text{des}}$和当前角速率$\boldsymbol{\omega}$，求控制力矩$\boldsymbol{\tau}$使$\mathbf{q} \to \mathbf{q}_{\text{des}}$。采用矢量部分的比例反馈\cite{wie2008quaternion,fresk2013full}：
+
+\begin{equation}
+    \boxed{\boldsymbol{\tau} = -\mathbf{K}_q \boldsymbol{\varepsilon}_{\text{err}} - \mathbf{K}_\omega \boldsymbol{\omega}}
+    \label{eq:quat_pd}
+\end{equation}
+
+其中$\mathbf{K}_q = \operatorname{diag}(k_{q,p}, k_{q,q}, k_{q,r})$和$\mathbf{K}_\omega = \operatorname{diag}(k_{\omega,p}, k_{\omega,q}, k_{\omega,r})$分别为姿态比例和角速率阻尼的正定对角增益矩阵。第一项将矢量误差"拉"向零（姿态对齐），第二项提供角速率阻尼（抑制超调）。
+
+\textbf{稳定性分析}：构造Lyapunov候选函数
+\begin{equation}
+    V = 2k_q(1 - \eta_{\text{err}}) + \frac{1}{2}\boldsymbol{\omega}^T \mathbf{I} \boldsymbol{\omega}
+    \label{eq:lyap_quat}
+\end{equation}
+其中$k_q > 0$为标量增益（为简化取$\mathbf{K}_q = k_q\mathbf{I}_3$），$1-\eta_{\text{err}} = 1-\cos(\theta_{\text{err}}/2) \geq 0$当且仅当$\theta_{\text{err}}=0$时取零，故$V \geq 0$且$V=0$仅在$(\mathbf{q}_{\text{err}}=[1,0,0,0]^T, \boldsymbol{\omega}=\mathbf{0})$处成立。
+
+对$V$求时间导数。首先注意到
+\begin{equation}
+    \dot{\eta}_{\text{err}} = -\frac{1}{2}\boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega}
+    \label{eq:eta_dot}
+\end{equation}
+（由四元数运动学$\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q}\otimes[0,\boldsymbol{\omega}]^T$和误差四元数定义导出）。因此
+\begin{align}
+    \dot{V} &= -2k_q\dot{\eta}_{\text{err}} + \boldsymbol{\omega}^T \mathbf{I} \dot{\boldsymbol{\omega}} \nonumber \\
+            &= k_q \boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega} + \boldsymbol{\omega}^T(\boldsymbol{\tau} - \boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}) \nonumber \\
+            &= \boldsymbol{\omega}^T(k_q \boldsymbol{\varepsilon}_{\text{err}} + \boldsymbol{\tau}) \label{eq:Vdot_intermediate}
+\end{align}
+其中利用了$\boldsymbol{\omega}^T(\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega})=0$（混合积为零）。代入控制律$\boldsymbol{\tau} = -k_q\boldsymbol{\varepsilon}_{\text{err}} - k_\omega\boldsymbol{\omega}$：
+\begin{equation}
+    \boxed{\dot{V} = -k_\omega \|\boldsymbol{\omega}\|^2 \leq 0}
+    \label{eq:Vdot_final}
+\end{equation}
+
+$\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理，闭环系统的最大不变集为$\{(\mathbf{q}_{\text{err}}, \boldsymbol{\omega}) : \boldsymbol{\omega}=\mathbf{0}, \boldsymbol{\varepsilon}_{\text{err}}=\mathbf{0}\}$（因为$\boldsymbol{\omega}=\mathbf{0}$且$\dot{\boldsymbol{\omega}}=\mathbf{0}$代入转动方程意味着$\boldsymbol{\tau}=\mathbf{0}$，进而$\boldsymbol{\varepsilon}_{\text{err}}=\mathbf{0}$）。因此闭环系统\textbf{全局渐近稳定}于$\mathbf{q} = \mathbf{q}_{\text{des}}$。
+
+\subsection{参考四元数的生成}
+
+期望四元数$\mathbf{q}_{\text{des}}$由高层指令（飞控模式、导航控制器或操纵手输入）生成。三种典型场景：
+
+\subsubsection{从欧拉角指令生成}
+
+给定期望的3-2-1欧拉角$(\phi_{\text{des}}, \theta_{\text{des}}, \psi_{\text{des}})$：
+\begin{equation}
+    \mathbf{q}_{\text{des}} = \mathbf{q}_z(\psi_{\text{des}}) \otimes \mathbf{q}_y(\theta_{\text{des}}) \otimes \mathbf{q}_x(\phi_{\text{des}})
+    \label{eq:q_from_euler}
+\end{equation}
+其中各轴旋转四元数为$\mathbf{q}_x(\phi)=[\cos\frac{\phi}{2}, \sin\frac{\phi}{2}, 0, 0]^T$、$\mathbf{q}_y(\theta)=[\cos\frac{\theta}{2}, 0, \sin\frac{\theta}{2}, 0]^T$、$\mathbf{q}_z(\psi)=[\cos\frac{\psi}{2}, 0, 0, \sin\frac{\psi}{2}]^T$。该方式适用于常规飞行的SAS增稳模式：期望欧拉角由当前姿态误差经外环PID产生，然后转换为四元数输入式(\ref{eq:quat_pd})。
+
+\subsubsection{Tail-sitter悬停指令}
+
+在VTOL tail-sitter模式（见第\ref{sec:vtol}节）中，悬停姿态为机身竖直向上（机头朝天），对应$\phi=0$、$\theta=-90^\circ$、$\psi=0$（NED系）：
+\begin{equation}
+    \mathbf{q}_{\text{hover}} = \left[\cos\frac{-90^\circ}{2}, 0, \sin\frac{-90^\circ}{2}, 0\right]^T
+    = [0.7071, 0, -0.7071, 0]^T
+    \label{eq:q_hover}
+\end{equation}
+这在欧拉角表示中恰为万向锁奇异点（$\theta=-90^\circ$处$\phi$和$\psi$不可区分），但在四元数域中完全正则——这正是采用四元数控制的核心动机之一。
+
+\subsubsection{姿态过渡：球面线性插值}
+
+从当前期望姿态$\mathbf{q}_{\text{from}}$平滑过渡到目标姿态$\mathbf{q}_{\text{to}}$，采用球面线性插值（slerp）\cite{shoemake1985animating}：
+\begin{equation}
+    \mathbf{q}_{\text{des}}(t) = \frac{\sin[(1-\tau)\Omega]}{\sin\Omega} \mathbf{q}_{\text{from}} + \frac{\sin(\tau\Omega)}{\sin\Omega} \mathbf{q}_{\text{to}}
+    \label{eq:slerp}
+\end{equation}
+其中$\tau = (t - t_0)/(t_1 - t_0) \in [0,1]$为归一化过渡进度，$\Omega = \arccos(\mathbf{q}_{\text{from}}\cdot\mathbf{q}_{\text{to}})$为两四元数间的角度。slerp保证过渡路径在$S^3$单位球面上沿大圆弧最短路径行进，无角速率突变，且任意中间态均为有效单位四元数——这一性质在欧拉角域无等价实现。
+
+\subsection{四元数SAS控制律}
+
+将式(\ref{eq:quat_pd})的力矩指令映射到本构型的三个执行器（差速$\Delta\omega$、尾摆$\delta_t$、前摆$\delta_f$），需要利用效能矩阵$\mathbf{B}$（第\ref{sec:allocation}节）：
+\begin{equation}
+    \begin{bmatrix} \Delta\omega \\ \delta_t \\ \delta_f \end{bmatrix}
+    = \mathbf{B}_{\text{true}}^{-1}(\mathbf{u}_k)
+    \begin{bmatrix}
+        -k_{q,p}\,\varepsilon_{\text{err},1} - k_{\omega,p}\,p \\
+        -k_{q,q}\,\varepsilon_{\text{err},2} - k_{\omega,q}\,q \\
+        -k_{q,r}\,\varepsilon_{\text{err},3} - k_{\omega,r}\,r
+    \end{bmatrix}
+    \label{eq:quat_sas_cmd}
+\end{equation}
+其中$\boldsymbol{\varepsilon}_{\text{err}} = [\varepsilon_{\text{err},1}, \varepsilon_{\text{err},2}, \varepsilon_{\text{err},3}]^T$为误差四元数的矢量部分。该形式的简洁性源于本构型$\mathbf{B}$的对角占优结构——每个通道主要由单一执行器支配。
+
+\textbf{与欧拉角SAS的等价性}：在小姿态误差下，$\varepsilon_{\text{err},1} \approx \Delta\phi/2$、$\varepsilon_{\text{err},2} \approx \Delta\theta/2$、$\varepsilon_{\text{err},3} \approx \Delta\psi/2$，代入式(\ref{eq:quat_sas_cmd})并调整增益$k_{q,\cdot} = 2k_{\text{sas},\cdot}$即可恢复第\ref{sec:control}节的欧拉角SAS形式。因此四元数SAS是欧拉角SAS的严格推广——在小信号范围内行为一致，在大姿态机动中自动避免了欧拉角域的所有奇异性问题。
+
+\subsection{四元数INDI控制律}
+
+将第\ref{sec:INDI}节的INDI框架的外环从欧拉角域迁移到四元数域。外环四元数比例控制器生成期望角速率：
+\begin{equation}
+    \boldsymbol{\omega}_{\text{ref}} = -\mathbf{K}_q^{\text{rate}} \boldsymbol{\varepsilon}_{\text{err}}
+    \label{eq:indi_outer_quat}
+\end{equation}
+内环INDI增量控制律保持不变（式\ref{eq:indi_our_config}），虚拟角加速度$\boldsymbol{\nu}$由角速率误差经比例控制生成：
+\begin{equation}
+    \boldsymbol{\nu} = \mathbf{K}^{\text{rate}}(\boldsymbol{\omega}_{\text{ref}} - \boldsymbol{\omega})
+    \label{eq:indi_inner_quat}
+\end{equation}
+
+这种``四元数外环 + INDI内环''的混合架构同时获得了四元数域的无奇异性（外环）和INDI的模型鲁棒性（内环）。与第\ref{sec:INDI}节的欧拉角-INDI方案相比，优势在于：
+\begin{itemize}
+    \item 外环无奇异性：允许$\pm90^\circ$俯仰（tail-sitter悬停）的稳定控制；
+    \item 误差几何正确：$\boldsymbol{\varepsilon}_{\text{err}}$沿最短旋转路径驱动姿态，无unwinding；
+    \item 内环完全不变：$\mathbf{B}_{\text{true}}$在线Jacobian、增量限幅、角加速度滤波均与第\ref{sec:INDI}节一致。
+\end{itemize}
