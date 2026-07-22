@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';
 
-test('全部 51 个参数存在且为有限数', () => {
+test('全部 52 个参数存在且为有限数', () => {
   const keys = [
     'kT', 'kQ', 'Jp', 'wMax', 'a', 'b', 'tauM',
     'Ix', 'Iy', 'Iz', 'dMax',
@@ -14,9 +14,9 @@ test('全部 51 个参数存在且为有限数', () => {
     'rateKq', 'rateKr', 'rateKp',
     'maxStep', 'frameCap', 'vMin', 'groundZ',
     'rateQMax', 'ratePMax',
-    'aTrim', 'vTrim', 'thrTrim',
+    'aTrim', 'vTrim', 'thrTrim', 'dtTrim',
   ];
-  assert.equal(keys.length, 51);
+  assert.equal(keys.length, 52);
   for (const k of keys) {
     assert.ok(Number.isFinite(P[k]), `参数 ${k} 缺失或非有限`);
   }
@@ -46,5 +46,6 @@ test('参数对象冻结', () => {
 
 test('摆角限幅与配平角度换算正确', () => {
   assert.ok(Math.abs(P.dMax - 25 * Math.PI / 180) < 1e-15);
-  assert.ok(Math.abs(P.aTrim - 1.6 * Math.PI / 180) < 1e-15);
+  assert.ok(Math.abs(P.aTrim - 1.6271267235981473 * Math.PI / 180) < 1e-15);
+  assert.ok(Math.abs(P.dtTrim - (-0.6499934968585572 * Math.PI / 180)) < 1e-15);
 });

@@ -15,7 +15,8 @@ import { clamp } from './math.mjs';
 export function applySas(sim, P, dt) {
   const { S, F } = sim;
   const theta = F.euler.y, phi = F.euler.x;
-  let dtC = S.dt, dfC = S.df, dwC = S.dw;
+  const thetaError = theta + P.aTrim;
+  let dtC = P.dtTrim + S.dt, dfC = S.df, dwC = S.dw;
   if (S._prevSasMode !== S.sasMode) {
     // 模式切换时重置积分器，防止旧累积值在切换回 mode 1 时产生瞬态冲击
     S.intTh = 0; S.intPhi = 0;
@@ -26,7 +27,7 @@ export function applySas(sim, P, dt) {
     // 反馈极性：效率为负的通道（俯仰/滚转）取 (ω − ω_ref)；
     //           效率为正的通道（偏航）取 (ω_ref − ω)。
     const qRef = S.dt, rRef = S.df, pRef = S.dw;
-    dtC = clamp(P.rateKq * (S.omega.y - qRef), -P.dMax, P.dMax);   // 俯仰 ∂My/∂δ<0
+    dtC = P.dtTrim + P.rateKq * (S.omega.y - qRef);               // 俯仰 ∂My/∂δ<0
     dfC = clamp(P.rateKr * (rRef - S.omega.z), -P.dMax, P.dMax);   // 偏航 ∂Mz/∂δ>0
     dwC = clamp(P.rateKp * (S.omega.x - pRef), -P.dwMax, P.dwMax); // 滚转 ∂Mx/∂Δω<0
   } else if (S.sasMode >= 1) {
@@ -37,15 +38,15 @@ export function applySas(sim, P, dt) {
 
     if (S.sasMode === 1) {
       // ---- 全 SAS：附加姿态比例 + 积分（积分消除常值配平误差） ----
-      S.intTh  = clamp(S.intTh  + theta * dt, -P.intThMax,  P.intThMax);
+      S.intTh  = clamp(S.intTh  + thetaError * dt, -P.intThMax,  P.intThMax);
       S.intPhi = clamp(S.intPhi + phi   * dt, -P.intPhiMax, P.intPhiMax);
-      dtC = dtC + P.sasTh * theta  + P.sasI  * S.intTh;
-      dwC = dwC + P.sasPhi * phi    + P.sasIPhi * S.intPhi;
+      dtC = dtC - P.sasTh * thetaError - P.sasI  * S.intTh;
+      dwC = dwC - P.sasPhi * phi       - P.sasIPhi * S.intPhi;
     }
-    // 执行限幅
-    dtC = clamp(dtC, -P.dMax, P.dMax);
-    dfC = clamp(dfC, -P.dMax, P.dMax);
-    dwC = clamp(dwC, -P.dwMax, P.dwMax);
   }
+  // 物理执行限幅对所有模式生效，尾摆限幅包含配平偏置。
+  dtC = clamp(dtC, -P.dMax, P.dMax);
+  dfC = clamp(dfC, -P.dMax, P.dMax);
+  dwC = clamp(dwC, -P.dwMax, P.dwMax);
   S.dtAct = dtC; S.dfAct = dfC; S.dwAct = dwC;
 }

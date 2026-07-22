@@ -1,7 +1,7 @@
 // ============================================================
 //  演示序列：俯仰 / 偏航 / 滚转 / 综合
 // ============================================================
-import { resetFlightState } from '../core/state.mjs';
+import { resetSimulationState } from '../core/state.mjs';
 
 const D2R = Math.PI / 180;
 
@@ -18,9 +18,8 @@ export function createDemo({ sim, P, controls, ui }) {
 
   function startDemo(name) {
     stopDemo();
+    resetSimulationState(sim, P);
     demo = { name, t0: S.time };
-    resetFlightState(sim, P);
-    S.dt = 0; S.df = 0; S.dw = 0;
     demoBtns[name].classList.add('active');
     if (name === 'cine') controls.autoRotate = true;
   }

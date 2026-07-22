@@ -63,10 +63,32 @@ test('配平直飞有界（10 s 内速度与姿态不发散）', () => {
   assert.ok(Math.abs(sim.F.euler.x) < 0.5, `phi=${sim.F.euler.x}`);
 });
 
+test('纵向配平参考 10 s 保持速度、航迹高度与俯仰参考', () => {
+  const sim = createSimulationState(P);
+  sim.S.wf = sim.S.wt = sim.S.thr * P.wMax;
+  sim.prevWf = sim.S.wf; sim.prevWt = sim.S.wt;
+  for (let i = 0; i < 600; i++) stepPhysics(sim, P, 1 / 60);
+  assert.ok(Math.abs(sim.aero.V - P.vTrim) < 0.02, `V=${sim.aero.V}`);
+  assert.ok(Math.abs(sim.F.pos.z) < 0.02, `z=${sim.F.pos.z}`);
+  assert.ok(Math.abs(sim.F.euler.y + P.aTrim) < 2e-3, `theta=${sim.F.euler.y}`);
+  assert.ok(Math.abs(sim.S.intTh) < 0.02, `intTh=${sim.S.intTh}`);
+});
+
+test('全 SAS 使小俯仰姿态扰动衰减', () => {
+  const sim = createSimulationState(P);
+  sim.S.wf = sim.S.wt = sim.S.thr * P.wMax;
+  sim.prevWf = sim.S.wf; sim.prevWt = sim.S.wt;
+  const disturbed = P.aTrim - 3 * Math.PI / 180;
+  sim.S.quat = { x: 0, y: Math.sin(disturbed / 2), z: 0, w: Math.cos(disturbed / 2) };
+  for (let i = 0; i < 300; i++) stepPhysics(sim, P, 1 / 60);
+  assert.ok(Math.abs(sim.F.euler.y + P.aTrim) < 0.5 * Math.PI / 180,
+    `theta=${sim.F.euler.y}`);
+});
+
 test('气动力关闭时可复现角速度自由积分（无阻尼发散趋势）', () => {
   const sim = createSimulationState(P);
   sim.S.aero = false; sim.S.sasMode = 0;
-  sim.S.dt = 0.05; // 常值尾摆 → 持续俯仰力矩
+  sim.S.dt = 0.1; // 常值尾摆增量 → 持续俯仰力矩
   for (let i = 0; i < 120; i++) stepPhysics(sim, P, 1 / 60);
   assert.ok(Math.abs(sim.S.omega.y) > 0.5, '无阻尼时角速度应持续积累');
 });

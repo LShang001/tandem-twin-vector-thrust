@@ -3,16 +3,10 @@
 //  （本文件不是测试，由 regression 测试与 fixtures/generate.mjs 共用）
 // ============================================================
 import { P } from '../src/core/parameters.mjs';
-import { createSimulationState } from '../src/core/state.mjs';
+import { createSimulationState, resetSimulationState } from '../src/core/state.mjs';
 import { stepPhysics } from '../src/core/dynamics.mjs';
 
 const FRAME_DT = 1 / 60;
-
-function initRotors(sim) {
-  sim.S.wf = sim.S.wt = sim.S.thr * P.wMax;
-  sim.prevWf = sim.S.wf; sim.prevWt = sim.S.wt;
-  sim.S.dtAct = sim.S.dt; sim.S.dfAct = sim.S.df; sim.S.dwAct = sim.S.dw;
-}
 
 function snapshot(sim) {
   const { S, F, dyn, aero } = sim;
@@ -26,11 +20,12 @@ function snapshot(sim) {
   };
 }
 
-// 运行一个场景：steps 帧，每帧前调用 control(sim, frameIndex)
+// 运行一个场景：先执行 setup，再按帧调用 control(sim, frameIndex)
 // 每秒（每 60 帧）记录一次快照
-export function runScenario(durationS, control = () => {}) {
+export function runScenario(durationS, control = () => {}, setup = () => {}) {
   const sim = createSimulationState(P);
-  initRotors(sim);
+  resetSimulationState(sim, P);
+  setup(sim);
   const steps = Math.round(durationS / FRAME_DT);
   const samples = [];
   for (let i = 0; i < steps; i++) {
@@ -45,10 +40,12 @@ export function runScenario(durationS, control = () => {}) {
 export const SCENARIOS = {
   // A: 配平直飞 10 s
   trim: () => runScenario(10),
-  // B: 俯仰阶跃 δt=8° 保持 4 s 后撤除，共 8 s
-  pitchStep: () => runScenario(8, (sim, i) => {
-    sim.S.dt = (i < 240) ? 8 * Math.PI / 180 : 0;
-  }),
+  // B: 离地自由飞行俯仰阶跃，δt=8° 保持 4 s 后撤除，共 8 s
+  pitchStep: () => runScenario(
+    8,
+    (sim, i) => { sim.S.dt = (i < 240) ? 8 * Math.PI / 180 : 0; },
+    (sim) => { sim.F.pos.z = -100; }, // 留出离地高度，避免响应混入地面钳位
+  ),
   // C: 滚转阶跃 Δω=25%（UI 幅值内）保持 4 s 后撤除，共 8 s
   rollStep: () => runScenario(8, (sim, i) => {
     sim.S.dw = (i < 240) ? 0.25 * P.dwUiMax : 0;

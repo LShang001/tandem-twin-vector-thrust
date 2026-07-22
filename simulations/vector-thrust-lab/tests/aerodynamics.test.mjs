@@ -53,10 +53,16 @@ test('正侧滑角产生负侧力（CYb<0）与航向静稳定力矩（Cnb>0）'
   assert.ok(sim.aero.Mx < 0, 'Clb<0 → 横滚静稳定');
 });
 
-test('空速下限防止低速奇异', () => {
+test('零真实空速时动压与气动力为零，保护速度仅用于分母', () => {
   const sim = createSimulationState(P);
   sim.F.vel = { x: 0, y: 0, z: 0 };
-  computeAero(sim, P);
-  assert.equal(sim.aero.V, P.vMin);
+  sim.S.omega = { x: 1, y: 1, z: 1 };
+  const force = computeAero(sim, P);
+  assert.equal(sim.aero.V, 0);
+  assert.equal(sim.aero.qbar, 0);
+  assert.ok(Math.abs(force.aX) === 0 && Math.abs(force.Y) === 0 && Math.abs(force.aZ) === 0);
+  assert.ok(Math.abs(sim.aero.Mx) === 0);
+  assert.ok(Math.abs(sim.aero.My) === 0);
+  assert.ok(Math.abs(sim.aero.Mz) === 0);
   assert.ok(Number.isFinite(sim.aero.qbar));
 });

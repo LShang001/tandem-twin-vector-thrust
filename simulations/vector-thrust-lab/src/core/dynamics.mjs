@@ -69,7 +69,7 @@ export function physicsStep(sim, P, dt) {
   const vw = rotateVecByQuat(F.vel, S.quat);
   F.vWorld.x = vw.x; F.vWorld.y = vw.y; F.vWorld.z = vw.z;
   if (S.lockXY) {
-    // 悬停/VTOL 测试：锁定水平位置 —— 水平速度持续清零并反变换回机体系
+    // 运动学水平约束：水平速度持续清零并反变换回机体系（不代表悬停动力学）
     F.vWorld.x = 0; F.vWorld.y = 0;
     const vb = rotateVecByQuat(F.vWorld, quatInvert(S.quat));
     F.vel.x = vb.x; F.vel.y = vb.y; F.vel.z = vb.z;

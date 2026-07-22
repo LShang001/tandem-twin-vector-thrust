@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>纵列双发矢量推力飞行器 · 概念级 6-DOF 飞行动力学仿真</title>
+<link rel="icon" href="data:,">
 <link rel="stylesheet" href="./css/style.css">
 </head>
 <body>
@@ -42,7 +43,7 @@
     <button class="btn" id="b-cine">综合演示</button>
     <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
-    <button class="btn" id="b-hover">锁定水平：关</button>
+    <button class="btn" id="b-hover">水平约束：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
   </div>
 </div>
@@ -174,7 +175,7 @@ document.getElementById('b-scope').addEventListener('click', () => {
 // ---------- 初始同步 ----------
 ui.syncFromUI();
 sim.S.wf = sim.S.wt = sim.S.thr * P.wMax; sim.prevWf = sim.S.wf; sim.prevWt = sim.S.wt;
-sim.S.dtAct = sim.S.dt; sim.S.dfAct = sim.S.df; sim.S.dwAct = sim.S.dw;
+sim.S.dtAct = P.dtTrim; sim.S.dfAct = sim.S.df; sim.S.dwAct = sim.S.dw;
 
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();
@@ -54838,9 +54839,10 @@ const P = Object.freeze({
   ratePMax: 3.141592653589793,  // 角速度闭环最大滚转目标角速度（180°/s） [rad/s]
 
   // ---- 配平初始条件 ----
-  aTrim: 0.027925268031909273,  // 初始配平迎角（1.6°） [rad]
+  aTrim: 0.028398718673975386,  // 24 m/s 纵向三方程配平迎角（1.627°） [rad]
   vTrim: 24,  // 配平速度 [m/s]
-  thrTrim: 0.5,  // 配平油门 [-]
+  thrTrim: 0.44135017954583367,  // 24 m/s 纵向三方程配平油门 [-]
+  dtTrim: -0.011344526636733243,  // 24 m/s 纵向三方程尾摆配平偏置（-0.650°） [rad]
 
 });
 
@@ -54858,13 +54860,13 @@ function createSimulationState(P) {
     S: {
       thr: P.thrTrim,      // 总油门 0..1
       df: 0,               // 前摆角指令（偏航, 绕 z）
-      dt: 0,               // 尾摆角指令（俯仰, 绕 y）
+      dt: 0,               // 尾摆增量指令（俯仰, 绕 y；实际值含 dtTrim）
       dw: 0,               // 差速指令 -1..1
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
       sasMode: 1,          // SAS 模式: 0=关, 1=全SAS, 2=仅角速率阻尼, 3=角速度闭环(滑块=ω_ref)
       _prevSasMode: 1,     // 上一 SAS 模式（供 control.mjs 检测模式切换）
       aero: true,          // 气动力开关（false = 仅电机推力）
-      lockXY: false,       // 水平速度锁定（true = 惯性系水平速度持续清零，悬停/VTOL 测试）
+      lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -54888,7 +54890,7 @@ function createSimulationState(P) {
   return sim;
 }
 
-// 以配平状态初始化（α0 = θ0 = α_trim, 平飞航迹）
+// 以配平状态初始化（物理俯仰 α0；显示约定 theta0=-α0，平飞航迹）
 function resetFlightState(sim, P) {
   const a0 = P.aTrim;
   const { S, F } = sim;
@@ -54898,13 +54900,28 @@ function resetFlightState(sim, P) {
   S.quat.x = 0; S.quat.y = Math.sin(a0 / 2); S.quat.z = 0; S.quat.w = Math.cos(a0 / 2);
   S.omega.x = 0; S.omega.y = 0; S.omega.z = 0;
   S.intTh = 0; S.intPhi = 0;
-  if (S.lockXY) {          // 悬停锁定下复位：清零水平速度
+  if (S.lockXY) {          // 水平约束下复位：清零水平速度
     F.vel.x = 0; F.vel.y = 0;
     F.vWorld.x = 0; F.vWorld.y = 0;
   }
 }
 
-return { createSimulationState, resetFlightState };
+// UI/演示使用的完整动态复位；保留 SAS、气动和水平约束开关。
+function resetSimulationState(sim, P) {
+  const { S, dyn, aero } = sim;
+  S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
+  S.dtAct = P.dtTrim; S.dfAct = 0; S.dwAct = 0;
+  S.time = 0;
+  S._prevSasMode = S.sasMode;
+  const wTrim = P.thrTrim * P.wMax;
+  S.wf = wTrim; S.wt = wTrim;
+  sim.prevWf = wTrim; sim.prevWt = wTrim;
+  Object.assign(dyn, { Fx: 0, Fy: 0, Fz: 0, Mx: 0, My: 0, Mz: 0, Tf: 0, Tt: 0, Qf: 0, Qt: 0 });
+  Object.assign(aero, { V: 0, qbar: 0, alpha: 0, beta: 0, Mx: 0, My: 0, Mz: 0 });
+  resetFlightState(sim, P);
+}
+
+return { createSimulationState, resetFlightState, resetSimulationState };
 });
 __def('src/core/dynamics.mjs', function() {
 // ============================================================
@@ -54978,7 +54995,7 @@ function physicsStep(sim, P, dt) {
   const vw = rotateVecByQuat(F.vel, S.quat);
   F.vWorld.x = vw.x; F.vWorld.y = vw.y; F.vWorld.z = vw.z;
   if (S.lockXY) {
-    // 悬停/VTOL 测试：锁定水平位置 —— 水平速度持续清零并反变换回机体系
+    // 运动学水平约束：水平速度持续清零并反变换回机体系（不代表悬停动力学）
     F.vWorld.x = 0; F.vWorld.y = 0;
     const vb = rotateVecByQuat(F.vWorld, quatInvert(S.quat));
     F.vel.x = vb.x; F.vel.y = vb.y; F.vel.z = vb.z;
@@ -55403,7 +55420,7 @@ function createAircraftView(scene) {
   const thrustF = makeArrow(0x22d3ee); thrustF.position.set(0.5, 0, 0); front.gimbal.add(thrustF);
   const thrustT = makeArrow(0x22d3ee); thrustT.position.set(0.4, 0, 0); tail.gimbal.add(thrustT);
 
-  // ---------- 质心合力矩箭头 Mx/My/Mz ----------
+  // ---------- 质心推进力矩箭头 Mx/My/Mz ----------
   function makeAxisArrow(color, dir) {
     const a = makeArrow(color, 1.25);
     const base = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir.clone().normalize());
@@ -55471,7 +55488,7 @@ function updateAircraftView(view, sim, P, dt) {
   view.arcF.userData.holder.rotation.x += dt * 2.2;
   view.arcT.userData.holder.rotation.x += dt * 2.2;
 
-  // 质心合力矩箭头（含方向翻转）
+  // 质心推进力矩箭头（含方向翻转，不含气动力矩）
   const kM = 0.4;
   const setMArrow = (arr, lab, v) => {
     const s = v >= 0 ? 1 : -1;
@@ -55501,9 +55518,9 @@ const CH = [
   { id: 'Fx', name: 'F_x 纵向力',  color: '#22d3ee', max: 40,  unit: 'N',   bipolar: false },
   { id: 'Fy', name: 'F_y 侧向力',  color: '#22d3ee', max: 10,  unit: 'N',   bipolar: true  },
   { id: 'Fz', name: 'F_z 垂向力',  color: '#22d3ee', max: 10,  unit: 'N',   bipolar: true  },
-  { id: 'Mx', name: 'M_x 滚转力矩', color: '#fb7185', max: 1.6, unit: 'N·m', bipolar: true  },
-  { id: 'My', name: 'M_y 俯仰力矩', color: '#34d399', max: 6,   unit: 'N·m', bipolar: true  },
-  { id: 'Mz', name: 'M_z 偏航力矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
+  { id: 'Mx', name: 'M_x 推进滚转矩', color: '#fb7185', max: 1.6, unit: 'N·m', bipolar: true  },
+  { id: 'My', name: 'M_y 推进俯仰矩', color: '#34d399', max: 6,   unit: 'N·m', bipolar: true  },
+  { id: 'Mz', name: 'M_z 推进偏航矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
 ];
 
 function createHud(box) {
@@ -55572,7 +55589,7 @@ __def('src/browser/controls-ui.mjs', function() {
 // ============================================================
 //  控制面板 UI：滑块 / 开关 / 复位 / 模态框
 // ============================================================
-const { resetFlightState } = __req('src/core/state.mjs');
+const { resetSimulationState } = __req('src/core/state.mjs');
 
 function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
@@ -55584,9 +55601,9 @@ function createControlsUI({ sim, P, hooks }) {
     S.thr = sliders.thr.value / 100;
     if (rateMode) {
       // 角速度闭环模式：滑块 → 目标角速度 (rad/s)
-      S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π rad/s
+      S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π/2 rad/s
       S.df = (sliders.df.value / 25) * P.rateQMax;
-      S.dw = (sliders.dw.value / 30) * P.ratePMax;           // ±2π rad/s
+      S.dw = (sliders.dw.value / 30) * P.ratePMax;           // ±π rad/s
     } else {
       // 阻尼/全SAS/关闭模式：滑块 → 摆角指令 / 差速指令
       S.dt = sliders.dt.value * Math.PI / 180;               // °→rad
@@ -55595,9 +55612,9 @@ function createControlsUI({ sim, P, hooks }) {
     }
     $('v-thr').textContent = `${sliders.thr.value}%`;
     if (rateMode) {
-      $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°/s`;
-      $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°/s`;
-      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(0)}°/s`;
+      $('v-dt').textContent = `${(S.dt * 180 / Math.PI).toFixed(1)}°/s`;
+      $('v-df').textContent = `${(S.df * 180 / Math.PI).toFixed(1)}°/s`;
+      $('v-dw').textContent = `${(S.dw * 180 / Math.PI).toFixed(0)}°/s`;
     } else {
       $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
       $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
@@ -55648,8 +55665,7 @@ function createControlsUI({ sim, P, hooks }) {
 
   function resetAll() {
     hooks.stopDemo();
-    S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
-    resetFlightState(sim, P);
+    resetSimulationState(sim, P);
     pushToUI();
   }
   $('b-reset').addEventListener('click', resetAll);
@@ -55669,7 +55685,7 @@ function createControlsUI({ sim, P, hooks }) {
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;
     $('b-hover').classList.toggle('active', S.lockXY);
-    $('b-hover').textContent = S.lockXY ? '锁定水平：开' : '锁定水平：关';
+    $('b-hover').textContent = S.lockXY ? '水平约束：开' : '水平约束：关';
   });
   $('b-info').addEventListener('click', () => $('modal').classList.add('open'));
   $('modalClose').addEventListener('click', () => $('modal').classList.remove('open'));
@@ -55816,7 +55832,7 @@ __def('src/browser/demo.mjs', function() {
 // ============================================================
 //  演示序列：俯仰 / 偏航 / 滚转 / 综合
 // ============================================================
-const { resetFlightState } = __req('src/core/state.mjs');
+const { resetSimulationState } = __req('src/core/state.mjs');
 
 const D2R = Math.PI / 180;
 
@@ -55833,9 +55849,8 @@ function createDemo({ sim, P, controls, ui }) {
 
   function startDemo(name) {
     stopDemo();
+    resetSimulationState(sim, P);
     demo = { name, t0: S.time };
-    resetFlightState(sim, P);
-    S.dt = 0; S.df = 0; S.dw = 0;
     demoBtns[name].classList.add('active');
     if (name === 'cine') controls.autoRotate = true;
   }
@@ -56001,7 +56016,8 @@ const { clamp } = __req('src/core/math.mjs');
 function applySas(sim, P, dt) {
   const { S, F } = sim;
   const theta = F.euler.y, phi = F.euler.x;
-  let dtC = S.dt, dfC = S.df, dwC = S.dw;
+  const thetaError = theta + P.aTrim;
+  let dtC = P.dtTrim + S.dt, dfC = S.df, dwC = S.dw;
   if (S._prevSasMode !== S.sasMode) {
     // 模式切换时重置积分器，防止旧累积值在切换回 mode 1 时产生瞬态冲击
     S.intTh = 0; S.intPhi = 0;
@@ -56012,7 +56028,7 @@ function applySas(sim, P, dt) {
     // 反馈极性：效率为负的通道（俯仰/滚转）取 (ω − ω_ref)；
     //           效率为正的通道（偏航）取 (ω_ref − ω)。
     const qRef = S.dt, rRef = S.df, pRef = S.dw;
-    dtC = clamp(P.rateKq * (S.omega.y - qRef), -P.dMax, P.dMax);   // 俯仰 ∂My/∂δ<0
+    dtC = P.dtTrim + P.rateKq * (S.omega.y - qRef);               // 俯仰 ∂My/∂δ<0
     dfC = clamp(P.rateKr * (rRef - S.omega.z), -P.dMax, P.dMax);   // 偏航 ∂Mz/∂δ>0
     dwC = clamp(P.rateKp * (S.omega.x - pRef), -P.dwMax, P.dwMax); // 滚转 ∂Mx/∂Δω<0
   } else if (S.sasMode >= 1) {
@@ -56023,16 +56039,16 @@ function applySas(sim, P, dt) {
 
     if (S.sasMode === 1) {
       // ---- 全 SAS：附加姿态比例 + 积分（积分消除常值配平误差） ----
-      S.intTh  = clamp(S.intTh  + theta * dt, -P.intThMax,  P.intThMax);
+      S.intTh  = clamp(S.intTh  + thetaError * dt, -P.intThMax,  P.intThMax);
       S.intPhi = clamp(S.intPhi + phi   * dt, -P.intPhiMax, P.intPhiMax);
-      dtC = dtC + P.sasTh * theta  + P.sasI  * S.intTh;
-      dwC = dwC + P.sasPhi * phi    + P.sasIPhi * S.intPhi;
+      dtC = dtC - P.sasTh * thetaError - P.sasI  * S.intTh;
+      dwC = dwC - P.sasPhi * phi       - P.sasIPhi * S.intPhi;
     }
-    // 执行限幅
-    dtC = clamp(dtC, -P.dMax, P.dMax);
-    dfC = clamp(dfC, -P.dMax, P.dMax);
-    dwC = clamp(dwC, -P.dwMax, P.dwMax);
   }
+  // 物理执行限幅对所有模式生效，尾摆限幅包含配平偏置。
+  dtC = clamp(dtC, -P.dMax, P.dMax);
+  dfC = clamp(dfC, -P.dMax, P.dMax);
+  dwC = clamp(dwC, -P.dwMax, P.dwMax);
   S.dtAct = dtC; S.dfAct = dfC; S.dwAct = dwC;
 }
 
@@ -56089,9 +56105,10 @@ const { clamp } = __req('src/core/math.mjs');
 function computeAero(sim, P) {
   const { S, F, aero } = sim;
   const u = F.vel.x, v = F.vel.y, wv = F.vel.z;
-  const V = Math.max(Math.hypot(u, v, wv), P.vMin);
+  const V = Math.hypot(u, v, wv);
+  const vSafe = Math.max(V, P.vMin);
   const al = Math.atan2(wv, u);                        // 迎角 α
-  const be = Math.asin(clamp(v / V, -1, 1));           // 侧滑角 β
+  const be = Math.asin(clamp(v / vSafe, -1, 1));       // 侧滑角 β
   const qb = 0.5 * P.rho * V * V;                      // 动压
   aero.V = V; aero.qbar = qb; aero.alpha = al; aero.beta = be;
   aero.Mx = 0; aero.My = 0; aero.Mz = 0;
@@ -56104,7 +56121,7 @@ function computeAero(sim, P) {
     aX = L * Math.sin(al) - D * Math.cos(al);
     aZ = -L * Math.cos(al) - D * Math.sin(al);
     // 气动矩: 静稳定项 + 阻尼导数项（无量纲角速率）
-    const pH = S.omega.x * P.bspan / (2 * V), qH = S.omega.y * P.cbar / (2 * V), rH = S.omega.z * P.bspan / (2 * V);
+    const pH = S.omega.x * P.bspan / (2 * vSafe), qH = S.omega.y * P.cbar / (2 * vSafe), rH = S.omega.z * P.bspan / (2 * vSafe);
     aero.Mx = qb * P.Sw * P.bspan * (P.Clb * be + P.Clp * pH);
     aero.My = qb * P.Sw * P.cbar * (P.Cm0 + P.Cma * al + P.Cmq * qH);
     aero.Mz = qb * P.Sw * P.bspan * (P.Cnb * be + P.Cnr * rH);

@@ -81,9 +81,10 @@
     {
       "title": "配平初始条件",
       "parameters": [
-        { "name": "aTrim",   "value": 0.027925268031909273, "unit": "rad",  "description": "初始配平迎角（1.6°）", "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "aTrim",   "value": 0.028398718673975386, "unit": "rad",  "description": "24 m/s 纵向三方程配平迎角（1.627°）", "source": "MODEL-DEFAULT", "confidence": "low" },
         { "name": "vTrim",   "value": 24,                   "unit": "m/s",  "description": "配平速度",              "source": "MODEL-DEFAULT", "confidence": "low" },
-        { "name": "thrTrim", "value": 0.5,                  "unit": "-",    "description": "配平油门",              "source": "MODEL-DEFAULT", "confidence": "low" }
+        { "name": "thrTrim", "value": 0.44135017954583367,  "unit": "-",    "description": "24 m/s 纵向三方程配平油门", "source": "MODEL-DEFAULT", "confidence": "low" },
+        { "name": "dtTrim",  "value": -0.011344526636733243,"unit": "rad",  "description": "24 m/s 纵向三方程尾摆配平偏置（-0.650°）", "source": "MODEL-DEFAULT", "confidence": "low" }
       ]
     }
   ]

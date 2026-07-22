@@ -9,13 +9,13 @@ export function createSimulationState(P) {
     S: {
       thr: P.thrTrim,      // 总油门 0..1
       df: 0,               // 前摆角指令（偏航, 绕 z）
-      dt: 0,               // 尾摆角指令（俯仰, 绕 y）
+      dt: 0,               // 尾摆增量指令（俯仰, 绕 y；实际值含 dtTrim）
       dw: 0,               // 差速指令 -1..1
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
       sasMode: 1,          // SAS 模式: 0=关, 1=全SAS, 2=仅角速率阻尼, 3=角速度闭环(滑块=ω_ref)
       _prevSasMode: 1,     // 上一 SAS 模式（供 control.mjs 检测模式切换）
       aero: true,          // 气动力开关（false = 仅电机推力）
-      lockXY: false,       // 水平速度锁定（true = 惯性系水平速度持续清零，悬停/VTOL 测试）
+      lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -39,7 +39,7 @@ export function createSimulationState(P) {
   return sim;
 }
 
-// 以配平状态初始化（α0 = θ0 = α_trim, 平飞航迹）
+// 以配平状态初始化（物理俯仰 α0；显示约定 theta0=-α0，平飞航迹）
 export function resetFlightState(sim, P) {
   const a0 = P.aTrim;
   const { S, F } = sim;
@@ -49,8 +49,23 @@ export function resetFlightState(sim, P) {
   S.quat.x = 0; S.quat.y = Math.sin(a0 / 2); S.quat.z = 0; S.quat.w = Math.cos(a0 / 2);
   S.omega.x = 0; S.omega.y = 0; S.omega.z = 0;
   S.intTh = 0; S.intPhi = 0;
-  if (S.lockXY) {          // 悬停锁定下复位：清零水平速度
+  if (S.lockXY) {          // 水平约束下复位：清零水平速度
     F.vel.x = 0; F.vel.y = 0;
     F.vWorld.x = 0; F.vWorld.y = 0;
   }
+}
+
+// UI/演示使用的完整动态复位；保留 SAS、气动和水平约束开关。
+export function resetSimulationState(sim, P) {
+  const { S, dyn, aero } = sim;
+  S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
+  S.dtAct = P.dtTrim; S.dfAct = 0; S.dwAct = 0;
+  S.time = 0;
+  S._prevSasMode = S.sasMode;
+  const wTrim = P.thrTrim * P.wMax;
+  S.wf = wTrim; S.wt = wTrim;
+  sim.prevWf = wTrim; sim.prevWt = wTrim;
+  Object.assign(dyn, { Fx: 0, Fy: 0, Fz: 0, Mx: 0, My: 0, Mz: 0, Tf: 0, Tt: 0, Qf: 0, Qt: 0 });
+  Object.assign(aero, { V: 0, qbar: 0, alpha: 0, beta: 0, Mx: 0, My: 0, Mz: 0 });
+  resetFlightState(sim, P);
 }

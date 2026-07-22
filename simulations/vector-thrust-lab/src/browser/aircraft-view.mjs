@@ -196,7 +196,7 @@ export function createAircraftView(scene) {
   const thrustF = makeArrow(0x22d3ee); thrustF.position.set(0.5, 0, 0); front.gimbal.add(thrustF);
   const thrustT = makeArrow(0x22d3ee); thrustT.position.set(0.4, 0, 0); tail.gimbal.add(thrustT);
 
-  // ---------- 质心合力矩箭头 Mx/My/Mz ----------
+  // ---------- 质心推进力矩箭头 Mx/My/Mz ----------
   function makeAxisArrow(color, dir) {
     const a = makeArrow(color, 1.25);
     const base = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1,0,0), dir.clone().normalize());
@@ -264,7 +264,7 @@ export function updateAircraftView(view, sim, P, dt) {
   view.arcF.userData.holder.rotation.x += dt * 2.2;
   view.arcT.userData.holder.rotation.x += dt * 2.2;
 
-  // 质心合力矩箭头（含方向翻转）
+  // 质心推进力矩箭头（含方向翻转，不含气动力矩）
   const kM = 0.4;
   const setMArrow = (arr, lab, v) => {
     const s = v >= 0 ? 1 : -1;

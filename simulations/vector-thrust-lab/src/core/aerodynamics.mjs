@@ -9,9 +9,10 @@ import { clamp } from './math.mjs';
 export function computeAero(sim, P) {
   const { S, F, aero } = sim;
   const u = F.vel.x, v = F.vel.y, wv = F.vel.z;
-  const V = Math.max(Math.hypot(u, v, wv), P.vMin);
+  const V = Math.hypot(u, v, wv);
+  const vSafe = Math.max(V, P.vMin);
   const al = Math.atan2(wv, u);                        // 迎角 α
-  const be = Math.asin(clamp(v / V, -1, 1));           // 侧滑角 β
+  const be = Math.asin(clamp(v / vSafe, -1, 1));       // 侧滑角 β
   const qb = 0.5 * P.rho * V * V;                      // 动压
   aero.V = V; aero.qbar = qb; aero.alpha = al; aero.beta = be;
   aero.Mx = 0; aero.My = 0; aero.Mz = 0;
@@ -24,7 +25,7 @@ export function computeAero(sim, P) {
     aX = L * Math.sin(al) - D * Math.cos(al);
     aZ = -L * Math.cos(al) - D * Math.sin(al);
     // 气动矩: 静稳定项 + 阻尼导数项（无量纲角速率）
-    const pH = S.omega.x * P.bspan / (2 * V), qH = S.omega.y * P.cbar / (2 * V), rH = S.omega.z * P.bspan / (2 * V);
+    const pH = S.omega.x * P.bspan / (2 * vSafe), qH = S.omega.y * P.cbar / (2 * vSafe), rH = S.omega.z * P.bspan / (2 * vSafe);
     aero.Mx = qb * P.Sw * P.bspan * (P.Clb * be + P.Clp * pH);
     aero.My = qb * P.Sw * P.cbar * (P.Cm0 + P.Cma * al + P.Cmq * qH);
     aero.Mz = qb * P.Sw * P.bspan * (P.Cnb * be + P.Cnr * rH);

@@ -39,7 +39,7 @@ document.getElementById('b-scope').addEventListener('click', () => {
 // ---------- 初始同步 ----------
 ui.syncFromUI();
 sim.S.wf = sim.S.wt = sim.S.thr * P.wMax; sim.prevWf = sim.S.wf; sim.prevWt = sim.S.wt;
-sim.S.dtAct = sim.S.dt; sim.S.dfAct = sim.S.df; sim.S.dwAct = sim.S.dw;
+sim.S.dtAct = P.dtTrim; sim.S.dfAct = sim.S.df; sim.S.dwAct = sim.S.dw;
 
 // ---------- 主循环 ----------
 const clock = new THREE.Clock();

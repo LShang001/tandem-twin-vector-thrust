@@ -1,7 +1,7 @@
 // ============================================================
 //  控制面板 UI：滑块 / 开关 / 复位 / 模态框
 // ============================================================
-import { resetFlightState } from '../core/state.mjs';
+import { resetSimulationState } from '../core/state.mjs';
 
 export function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
@@ -13,9 +13,9 @@ export function createControlsUI({ sim, P, hooks }) {
     S.thr = sliders.thr.value / 100;
     if (rateMode) {
       // 角速度闭环模式：滑块 → 目标角速度 (rad/s)
-      S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π rad/s
+      S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π/2 rad/s
       S.df = (sliders.df.value / 25) * P.rateQMax;
-      S.dw = (sliders.dw.value / 30) * P.ratePMax;           // ±2π rad/s
+      S.dw = (sliders.dw.value / 30) * P.ratePMax;           // ±π rad/s
     } else {
       // 阻尼/全SAS/关闭模式：滑块 → 摆角指令 / 差速指令
       S.dt = sliders.dt.value * Math.PI / 180;               // °→rad
@@ -24,9 +24,9 @@ export function createControlsUI({ sim, P, hooks }) {
     }
     $('v-thr').textContent = `${sliders.thr.value}%`;
     if (rateMode) {
-      $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°/s`;
-      $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°/s`;
-      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(0)}°/s`;
+      $('v-dt').textContent = `${(S.dt * 180 / Math.PI).toFixed(1)}°/s`;
+      $('v-df').textContent = `${(S.df * 180 / Math.PI).toFixed(1)}°/s`;
+      $('v-dw').textContent = `${(S.dw * 180 / Math.PI).toFixed(0)}°/s`;
     } else {
       $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
       $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
@@ -77,8 +77,7 @@ export function createControlsUI({ sim, P, hooks }) {
 
   function resetAll() {
     hooks.stopDemo();
-    S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
-    resetFlightState(sim, P);
+    resetSimulationState(sim, P);
     pushToUI();
   }
   $('b-reset').addEventListener('click', resetAll);
@@ -98,7 +97,7 @@ export function createControlsUI({ sim, P, hooks }) {
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;
     $('b-hover').classList.toggle('active', S.lockXY);
-    $('b-hover').textContent = S.lockXY ? '锁定水平：开' : '锁定水平：关';
+    $('b-hover').textContent = S.lockXY ? '水平约束：开' : '水平约束：关';
   });
   $('b-info').addEventListener('click', () => $('modal').classList.add('open'));
   $('modalClose').addEventListener('click', () => $('modal').classList.remove('open'));

@@ -6,9 +6,9 @@ const CH = [
   { id: 'Fx', name: 'F_x 纵向力',  color: '#22d3ee', max: 40,  unit: 'N',   bipolar: false },
   { id: 'Fy', name: 'F_y 侧向力',  color: '#22d3ee', max: 10,  unit: 'N',   bipolar: true  },
   { id: 'Fz', name: 'F_z 垂向力',  color: '#22d3ee', max: 10,  unit: 'N',   bipolar: true  },
-  { id: 'Mx', name: 'M_x 滚转力矩', color: '#fb7185', max: 1.6, unit: 'N·m', bipolar: true  },
-  { id: 'My', name: 'M_y 俯仰力矩', color: '#34d399', max: 6,   unit: 'N·m', bipolar: true  },
-  { id: 'Mz', name: 'M_z 偏航力矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
+  { id: 'Mx', name: 'M_x 推进滚转矩', color: '#fb7185', max: 1.6, unit: 'N·m', bipolar: true  },
+  { id: 'My', name: 'M_y 推进俯仰矩', color: '#34d399', max: 6,   unit: 'N·m', bipolar: true  },
+  { id: 'Mz', name: 'M_z 推进偏航矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
 ];
 
 export function createHud(box) {
