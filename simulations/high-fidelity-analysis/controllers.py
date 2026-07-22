@@ -83,15 +83,24 @@ class QuatLQRController:
         return df_c, dt_c, dw
 
 # ============================================================
-#  四元数 INDI 控制器（v2: 参考速率前馈 + 带宽提升）
+#  四元数 INDI 控制器（v3: 可插拔角加速度估计器）
 # ============================================================
+from estimators import EulerDiffEstimator, AdaptiveComplementaryEstimator
+
 class QuatINDIController:
-    def __init__(self, P, trim=None):
+    def __init__(self, P, trim=None, estimator=None):
         self.P = P
         self.prev_df = 0.0; self.prev_dt = 0.0; self.prev_dw = 0.0
         self.prev_omega = np.zeros(3)
-        self.omega_dot_filt = np.zeros(3)
         self.first = True
+        # 角加速度估计器：默认后向欧拉差分（对执行器模型误差最稳健）。
+        # 自适应互补滤波虽在理想模型下噪声抑制更优，但其模型预测通道
+        # 依赖控制输入先验与实际电机响应的一致性；在电机一阶滞后导致
+        # 增量指令与实际推力存在偏差时，模型通道会引入估计偏差。
+        # 见 sas_vs_indi_coupling.py / compare_estimators.py 实验。
+        if estimator is None:
+            estimator = EulerDiffEstimator(0.004)
+        self.est = estimator
 
     def update(self, q, q_des, omega, omega0, dt, omega_ref=None):
         P = self.P
@@ -102,21 +111,19 @@ class QuatINDIController:
         eps = np.array([q_err[1], q_err[2], q_err[3]])
         # 外环: 四元数比例 → 目标角速率（叠加参考速率前馈）
         w_ref = -1.0 * eps + omega_ref
-        # 内环: 角速率误差 → 虚拟角加速度（带宽 0.8→3.0）
+        # 内环: 角速率误差 → 虚拟角加速度
         K_rate = 3.0
         nu = K_rate * (w_ref - omega)
-        # 角加速度 (混合估计)
-        if self.first:
-            self.omega_dot_filt = np.zeros(3); self.first = False
-        else:
-            raw_dot = (omega - self.prev_omega) / dt
-            alpha = min(dt/0.01, 1.0)
-            self.omega_dot_filt += alpha * (raw_dot - self.omega_dot_filt)
-        self.prev_omega = omega.copy()
+        # 角加速度估计（自适应互补滤波，需提供控制输入先验）
+        if hasattr(self.est, "set_control"):
+            h_rotor = P["Jp"] * (self.prev_dw * omega0)   # 近似转子角动量
+            self.est.set_control(self.prev_df, self.prev_dt, self.prev_dw,
+                                 omega0, h_rotor)
+        omega_dot = self.est.update(omega, dt)
         # 在线 Jacobian + 增量
         B, T0, tau0 = control_effectiveness(omega0, self.prev_df, self.prev_dt, self.prev_dw, P)
         try:
-            du = np.linalg.solve(B, nu - self.omega_dot_filt)
+            du = np.linalg.solve(B, nu - omega_dot)
             if np.any(~np.isfinite(du)):
                 du = np.zeros(3)
             du = np.clip(du, -0.2, 0.2)
