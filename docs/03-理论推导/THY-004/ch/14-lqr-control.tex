@@ -108,3 +108,36 @@ LQR调节器（式\ref{eq:care}）针对定点镇定设计。slerp过渡等大�
 \end{table}
 
 结果印证了系统设计的价值：SAS的对角手工增益回避了效能矩阵的交叉耦合，INDI受角加速度估计带宽限制，而LQR通过CARE一次性最优平衡了跟踪精度、阻尼与执行器代价，并主动利用交叉耦合项。需要强调的是，LQR增益依赖精确的$\mathbf{B}_{\mathrm{true}}$与惯量参数——在MODEL-DEFAULT参数未标定的概念阶段，其优势是结构性的；参数摄动下的鲁棒性对比（LQR vs INDI）是后续工作。
+
+\subsection{交叉项补偿的工作点局限性}
+\label{sec:lqr_coupling_limit}
+
+第\ref{sec:lqr_model}节的线性化在悬停工作点（$\delta_f=\delta_t=\Delta\omega=0$）冻结了效能矩阵$\mathbf{B}_{\mathrm{true}}|_{\delta=0}$（式\ref{eq:B_hover}）。这意味着LQR对交叉项的补偿是\textbf{开环前馈式}的——增益$\mathbf{K}$在离线设计时固化，运行中不随实际摆角更新。当执行器偏转使真实交叉项$-\tau_f\cos\delta_f$偏离设计值$-\tau_0$时，补偿精度退化。这与INDI形成对照：INDI每一步在线重构$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$（式\ref{eq:B_true}），交叉项在任意工作点保持精确。
+
+为量化这一退化，在24\,m/s巡航配平状态下施加前摆$\delta_f$阶跃（产生俯仰耦合$-\tau_f\sin\delta_f$），扫描阶跃幅度，对比三种架构的俯仰耦合抑制能力（陀螺噪声$0.002$\,rad/s，5次蒙特卡洛均值）。结果见表\ref{tab:lqr_coupling_deg}。
+
+\begin{table}[H]
+\centering
+\caption{前摆$\delta_f$阶跃下的俯仰耦合峰值（°，5次蒙特卡洛均值）}
+\label{tab:lqr_coupling_deg}
+\small
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{控制架构} & $\delta_f=5^\circ$ & $10^\circ$ & $15^\circ$ & $20^\circ$ & $25^\circ$ \\
+\midrule
+SAS（对角分配） & 1.23 & 1.63 & 1.95 & 2.18 & 2.36 \\
+LQR（冻结$\mathbf{B}|_{\delta=0}$） & 0.98 & 1.33 & 1.63 & 1.86 & 2.02 \\
+INDI（在线$\mathbf{B}_{\mathrm{true}}$） & \textbf{0.40} & \textbf{0.40} & \textbf{0.35} & \textbf{0.44} & \textbf{0.48} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+结果清晰揭示了三种架构在交叉项处理上的层次与边界：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{LQR的耦合抑制随摆角幅度单调退化}：从$\delta_f=5^\circ$的$0.98^\circ$升至$25^\circ$的$2.02^\circ$，逐渐逼近对角SAS（$2.36^\circ$）。根源是冻结的$\mathbf{B}|_{\delta=0}$在大摆角下与真实$\mathbf{B}_{\mathrm{true}}$的偏差扩大——满偏时$\cos 25^\circ\approx0.906$，交叉项被低估约$9\%$，且主对角项同步失真（见表\ref{tab:B_comparison}）。因此LQR的交叉项优势是\textbf{工作点局部}的。
+    \item \textbf{INDI的耦合抑制对摆角幅度不敏感}：全程稳定在$0.4^\circ$附近，因为其在线Jacobian在每个控制周期精确反映当前摆角下的交叉项。这是INDI相对LQR在大机动工况下的\textbf{结构性优势}——它不依赖工作点假设。
+    \item \textbf{三者梯度与表\ref{tab:ctrl_compare}互补}：表\ref{tab:ctrl_compare}显示LQR在slerp大角度机动的跟踪精度最优（受益于全状态反馈的最优增益平衡），而本表显示INDI在持续大摆角的交叉项补偿最优（受益于在线Jacobian）。两者优势的工况不同：LQR胜在瞬态跟踪品质，INDI胜在工作点变化的耦合鲁棒性。
+\end{enumerate}
+
+\textbf{结论}：LQR通过$\mathbf{B}|_{\delta=0}$在工作点附近有效利用交叉项，但其离线冻结的增益使其补偿精度随摆角偏离工作点而退化；INDI的在线$\mathbf{B}_{\mathrm{true}}$重构提供了与工作点无关的精确交叉项补偿。在需要持续大摆角机动的应用场景，INDI的耦合鲁棒性优于LQR；在以定点跟踪为主的场景，LQR的最优增益平衡仍具优势。这一互补性提示了"工作点附近LQR + 大机动INDI"的增益调度混合架构作为潜在的发展方向。

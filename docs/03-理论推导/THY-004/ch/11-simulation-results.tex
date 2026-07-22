@@ -59,6 +59,84 @@ $t=2$\,s时施加俯仰角速率脉冲（$\Delta q=5^\circ$/s），姿态偏差�
 
 基于在线Jacobian $\mathbf{B}_{\mathrm{true}}$（式\ref{eq:B_true}）的INDI控制器在零扰动配平保持中表现与SAS相当（12秒速度漂移$<0.1\%$），验证了增量控制架构的配平稳定性。在角速率扰动响应中，INDI表现出比SAS更大幅度的执行器调节——这与INDI理论预测一致：增量控制通过$\mathbf{B}^{-1}$直接映射角加速度误差至执行器增量，对扰动的初始响应更激进。然而，在$\dot{\boldsymbol{\omega}}$估计仅依赖后向欧拉差分的纯传感器方案下，噪声放大效应导致INDI扰动抑制性能不如结构更保守的SAS。这一发现突显了第\ref{sec:INDI}节指出的角加速度滤波（§\ref{sec:accel_estimation}）对INDI实际性能的决定性影响。
 
+\subsection{轴间耦合抑制：对角SAS与全矩阵INDI对比}
+\label{sec:coupling_rejection}
+
+第\ref{sec:allocation}节指出，前摆角通过反扭矩投影在俯仰通道产生交叉耦合$-\tau_f\sin\delta_f$（式\ref{eq:coupling_pitch}）。当前SAS（第\ref{sec:control}节）采用对角分配——每个通道独立映射到单一执行器，不含交叉项补偿，因此轴间耦合只能作为外部扰动由反馈被动抑制。INDI使用完整在线Jacobian $\mathbf{B}_{\mathrm{true}}$（式\ref{eq:B_true}）并全矩阵求逆，理论上可显式补偿该耦合。本节通过针对性数值实验定量对比两者的耦合抑制能力。
+
+\textbf{实验设置}：飞行器处于24\,m/s巡航配平状态，$t=2$\,s时在前摆通道施加$\delta_f=10^\circ$阶跃（偏航指令），产生俯仰耦合扰动$-\tau_f\sin 10^\circ$。控制器需保持其余通道（俯仰/滚转/偏航角速率为零），测量俯仰角$\theta$偏离配平的峰值作为耦合抑制指标。陀螺噪声取标准差$0.002$\,rad/s的典型MEMS量级，每配置进行5次蒙特卡洛仿真取均值。INDI的角加速度估计采用后向欧拉差分。
+
+\textbf{结果}如表\ref{tab:coupling_rejection}所示。
+
+\begin{table}[H]
+\centering
+\caption{前摆$\delta_f=10^\circ$阶跃下的俯仰耦合抑制对比（5次蒙特卡洛均值）}
+\label{tab:coupling_rejection}
+\small
+\begin{tabular}{l c c c}
+\toprule
+\textbf{控制架构} & \textbf{陀螺噪声} & \textbf{俯仰耦合峰值} & \textbf{稳态} $\boldsymbol{|\theta|}$ \\
+\midrule
+SAS（对角分配） & 0 & $1.63^\circ$ & $1.71^\circ$ \\
+SAS（对角分配） & 0.002 rad/s & $1.63^\circ$ & $1.71^\circ$ \\
+INDI（全矩阵$\mathbf{B}_{\mathrm{true}}$） & 0 & $\mathbf{0.03^\circ}$ & $0.03^\circ$ \\
+INDI（全矩阵$\mathbf{B}_{\mathrm{true}}$） & 0.002 rad/s & $\mathbf{0.40^\circ}$ & $0.16^\circ$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+结果揭示了两种架构的本质差异：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{SAS的耦合峰值（$1.63^\circ$）与噪声无关}——这是对角分配的\textbf{结构性}局限。由于分配矩阵不含交叉项，前摆产生的俯仰耦合$-\tau_f\sin\delta_f$完全未被前馈补偿，只能依赖俯仰角速率阻尼和姿态反馈被动衰减，其峰值由耦合量级与闭环带宽决定，与传感器噪声无关。这是几何解耦近似的固有代价（第\ref{sec:allocation}节）。
+    \item \textbf{INDI在理想条件下几乎完全消除耦合（$0.03^\circ$）}——完整$\mathbf{B}_{\mathrm{true}}$的逆运算将前摆对俯仰的影响显式计入尾摆增量，实现了主动解耦。这验证了第\ref{sec:INDI}节的核心论点：INDI通过全矩阵Jacobian将构型的弱交叉耦合纳入控制律，而非视为扰动。
+    \item \textbf{INDI的耦合抑制受角加速度估计质量制约}——噪声$0.002$\,rad/s下耦合峰值从$0.03^\circ$升至$0.40^\circ$。这是因为差分估计的噪声经$\mathbf{B}^{-1}$放大后污染增量指令。尽管如此，$0.40^\circ$仍优于SAS的$1.63^\circ$约4倍，表明即使在噪声条件下，全矩阵INDI的耦合抑制能力依然显著优于对角SAS。
+\end{enumerate}
+
+\textbf{结论}：对于本构型固有的反扭矩投影交叉耦合，全矩阵在线Jacobian的INDI相比对角SAS实现了数量级的耦合抑制改善（理想下约50倍，噪声下约4倍）。这是INDI相对SAS在控制质量上的\textbf{本质优势}，而非增量形式带来的边际改进。
+
+\subsection{角加速度估计方法对INDI性能的影响}
+\label{sec:estimator_study}
+
+第\ref{sec:INDI}节§\ref{sec:accel_estimation}分析了六种角加速度获取方法。本节通过闭环蒙特卡洛仿真，定量评估其中四种可在线实现的方法对INDI耦合抑制性能的影响。实验场景同§\ref{sec:coupling_rejection}（前摆$\delta_f=10^\circ$阶跃），INDI内环带宽$K=3.0$，扫描陀螺噪声水平，每条件6次仿真取均值与标准差。
+
+\textbf{估计器实现}（统一接口，接入INDI替换差分项）：
+\begin{itemize}
+    \item \textbf{后向欧拉差分}：基线，零延迟但噪声放大$\propto 1/\Delta t^2$；
+    \item \textbf{Savitzky-Golay滤波}：窗口$M=3$、二阶多项式，群延迟约$4$\,ms；
+    \item \textbf{固定滞后Kalman平滑}：滞后$N=2$步，延迟约$8$\,ms；
+    \item \textbf{自适应互补滤波}：模型前向预测（含刚体转动、陀螺、Coriolis项）与数值差分融合，截止频率随角加速度残差自适应（$20$--$150$\,rad/s）。
+\end{itemize}
+
+\textbf{结果}如表\ref{tab:estimator_compare}所示（俯仰耦合峰值，均值$\pm$标准差）。
+
+\begin{table}[H]
+\centering
+\caption{不同角加速度估计方法下INDI的俯仰耦合峰值（°，6次蒙特卡洛）}
+\label{tab:estimator_compare}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{陀螺噪声} & \textbf{差分} & \textbf{S-G滤波} & \textbf{固定滞后平滑} & \textbf{自适应互补} \\
+\midrule
+0 & $\mathbf{0.13}$ & 2.81 & 3.18 & 1.77 \\
+0.005 rad/s & 1.61$\pm$0.57 & 2.56$\pm$0.49 & 2.64$\pm$0.41 & 1.94$\pm$0.13 \\
+0.01 rad/s & 2.92$\pm$1.30 & 2.70$\pm$0.49 & 3.06$\pm$0.83 & $\mathbf{2.02\pm0.33}$ \\
+0.02 rad/s & 3.08$\pm$2.05 & 3.26$\pm$1.11 & 2.54$\pm$0.81 & $\mathbf{2.08\pm0.75}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+结果揭示了INDI角加速度估计的\textbf{延迟--噪声权衡}，以及一个反直觉但重要的结论：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{零噪声下差分最优（$0.13^\circ$）}：Savitzky-Golay与固定滞后平滑虽开环跟踪精度接近完美（幅值比$>0.995$），但其$4$--$8$\,ms群延迟在闭环中触发同步效应（第\ref{sec:INDI}节），$\nu-\dot{\boldsymbol{\omega}}$对消错位，耦合峰值反而升至$2.8$--$3.2^\circ$——\textbf{比不滤波更差}。这表明INDI估计器的评价标准不是开环精度，而是闭环同步性。
+    \item \textbf{中高噪声下自适应互补最优且最稳健}：噪声$\ge 0.01$\,rad/s时，自适应互补滤波的耦合峰值（$\sim 2.0^\circ$）与标准差（$\pm 0.33$）均为最小。其模型预测通道提供低噪声低频分量、差分通道保留高频低延迟，绕开了纯滤波器的延迟--噪声权衡。这与Jiang等\cite{jiang2025adaptive}的结论一致，并首次在本构型上定量验证。
+    \item \textbf{自适应互补的优势依赖模型通道准确性}：进一步的完整闭环实验发现，当模型预测通道所用的控制输入先验与实际电机响应存在偏差（电机一阶滞后导致增量指令与实际推力不一致）时，自适应互补的估计方差反而增大（$\pm 0.95$）。因此其工程应用前提是模型通道与实际执行器动态的一致性标定。
+\end{enumerate}
+
+\textbf{工程建议}：概念仿真阶段（理想$\dot{\boldsymbol{\omega}}$）无需滤波；HIL与实机阶段（噪声$\ge 0.005$\,rad/s）推荐自适应互补滤波，但须先标定模型预测通道与执行器实际响应的一致性；不推荐固定滞后平滑，其延迟代价在INDI闭环中超过噪声收益。
+
 \subsection{模型参数敏感性}
 
 上述数值结果对气动导数不确定性敏感。以短周期模态频率为例，若$C_{m\alpha}$偏离MODEL-DEFAULT值$\pm30\%$，短周期频率从2.6\,Hz移至2.2--3.0\,Hz，阻尼比从0.84变为0.72--0.93。该量级变化在常规SAS增益补偿能力之内，但突显了台架标定和CFD验证对飞行品质定量评估的必要性。
