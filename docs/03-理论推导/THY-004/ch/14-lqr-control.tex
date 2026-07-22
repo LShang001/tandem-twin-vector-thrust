@@ -1,0 +1,110 @@
+\section{基于LQR的姿态最优控制}
+\label{sec:lqr}
+
+第\ref{sec:quat_control}节的四元数SAS采用手工整定的对角增益，第\ref{sec:INDI}节的INDI依赖在线角加速度估计，两者在tail-sitter大角度机动中的表现均存在局限（见第\ref{sec:vtol}节仿真）。本节在悬停工作点建立姿态误差动力学的线性模型，采用线性二次型调节器（LQR）系统化地设计全状态反馈增益，使控制效能矩阵$\mathbf{B}_{\mathrm{true}}$的跨通道耦合项被最优利用而非回避。
+
+\subsection{悬停点姿态误差动力学线性化}
+\label{sec:lqr_model}
+
+取状态向量$\mathbf{x}=[\boldsymbol{\varepsilon}_{\mathrm{err}}^T,\ \boldsymbol{\omega}^T]^T\in\mathbb{R}^6$，输入向量$\mathbf{u}=[\Delta\omega,\ \delta_t,\ \delta_f]^T$。在小误差假设$\|\boldsymbol{\varepsilon}_{\mathrm{err}}\|\ll 1$下，误差四元数运动学线性化为
+\begin{equation}
+    \dot{\boldsymbol{\varepsilon}}_{\mathrm{err}} \approx \frac{1}{2}\left(\boldsymbol{\omega} - \boldsymbol{\omega}_{\mathrm{ref}}\right)
+    \label{eq:lqr_eps_dot}
+\end{equation}
+其中$\boldsymbol{\omega}_{\mathrm{ref}}$为期望姿态轨迹的参考角速率（定点悬停时为零）。悬停点角速度近似为零，$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$与陀螺耦合项为高阶小量，故角速率动力学线性化为
+\begin{equation}
+    \dot{\boldsymbol{\omega}} \approx \mathbf{I}^{-1}\,\mathbf{B}_{\mathrm{true}}\big|_{\delta=0}\ \mathbf{u}
+    \label{eq:lqr_omega_dot}
+\end{equation}
+其中$\mathbf{I}=\operatorname{diag}(I_x,I_y,I_z)$，$\mathbf{B}_{\mathrm{true}}$为式(\ref{eq:B_true})在$\delta_f=\delta_t=\Delta\omega=0$处的取值。代入MODEL-DEFAULT参数（$\omega_0=761.4$\,rad/s）：
+\begin{equation}
+    \mathbf{B}_{\mathrm{true}}\big|_{\delta=0} =
+    \begin{bmatrix}
+        -2\tau_0 & 0 & 0 \\
+        0 & -bT_0 & -\tau_0 \\
+        0 & -\tau_0 & aT_0
+    \end{bmatrix}
+    \label{eq:B_hover}
+\end{equation}
+其中$T_0=k_T\omega_0^2$，$\tau_0=k_Q\omega_0^2$。注意俯仰行（第二行）含$-\tau_0$项（前摆的反扭矩耦合）、偏航行（第三行）含$-\tau_0$项（尾摆的反扭矩耦合）——手工对角整定丢弃了这些交叉项，而LQR会主动利用它们。式(\ref{eq:B_hover})行列式非零，$(\mathbf{A},\mathbf{B})$可控：
+\begin{equation}
+    \mathbf{A} = \begin{bmatrix} \mathbf{0}_3 & \frac{1}{2}\mathbf{I}_3 \\ \mathbf{0}_3 & \mathbf{0}_3 \end{bmatrix},
+    \qquad
+    \mathbf{B} = \begin{bmatrix} \mathbf{0}_3 \\ \mathbf{I}^{-1}\mathbf{B}_{\mathrm{true}} \end{bmatrix}
+    \label{eq:lqr_AB}
+\end{equation}
+
+\subsection{LQR问题描述与权重设计}
+\label{sec:lqr_design}
+
+最小化无限时域二次型代价
+\begin{equation}
+    J = \int_0^{\infty}\left(\mathbf{x}^T\mathbf{Q}\mathbf{x} + \mathbf{u}^T\mathbf{R}\mathbf{u}\right)\mathrm{d}t
+    \label{eq:lqr_cost}
+\end{equation}
+最优反馈$\mathbf{u}=-\mathbf{K}\mathbf{x}$的增益由连续代数Riccati方程（CARE）给出：
+\begin{equation}
+    \mathbf{A}^T\mathbf{S} + \mathbf{S}\mathbf{A} - \mathbf{S}\mathbf{B}\mathbf{R}^{-1}\mathbf{B}^T\mathbf{S} + \mathbf{Q} = \mathbf{0},
+    \qquad
+    \mathbf{K} = \mathbf{R}^{-1}\mathbf{B}^T\mathbf{S}
+    \label{eq:care}
+\end{equation}
+权重按Bryson规则选取——以各状态/输入的最大允许值归一化：
+\begin{equation}
+    Q_{ii} = \frac{1}{x_{i,\max}^2},\qquad R_{ii} = \frac{1}{u_{i,\max}^2}
+    \label{eq:bryson}
+\end{equation}
+取$\varepsilon_{\max}=0.5$（约$60^\circ$姿态误差）、$\omega_{\max}=1$\,rad/s、$\mathbf{u}_{\max}=[\Delta\omega_{\max},\ \delta_{\max},\ \delta_{\max}]$（来源: \texttt{models/aircraft-model.json}），得$\mathbf{Q}=\operatorname{diag}(4,4,4,1,1,1)$，$\mathbf{R}=\operatorname{diag}(2.04,5.25,5.25)$。
+
+\subsection{增益矩阵与闭环极点分析}
+\label{sec:lqr_poles}
+
+数值求解CARE（仿真实现：\texttt{controllers.py}的\texttt{QuatLQRController}类）得
+\begin{equation}
+    \mathbf{K} =
+    \begin{bmatrix}
+        -1.400 & 0 & 0 & -0.747 & 0 & 0 \\
+        0 & -0.867 & -0.102 & 0 & -0.474 & -0.056 \\
+        0 & -0.102 & 0.867 & 0 & -0.056 & 0.476
+    \end{bmatrix}
+    \label{eq:lqr_K}
+\end{equation}
+非对角项$K_{23}=K_{32}=-0.102$即为对反扭矩交叉耦合的最优补偿——尾摆产生俯仰力矩时以前摆抑制其反扭矩副作用，反之亦然。闭环极点$\operatorname{eig}(\mathbf{A}-\mathbf{B}\mathbf{K})$为
+\begin{equation}
+    \left\{-14.39,\ -10.17,\ -9.60,\ -1.01,\ -1.01,\ -1.00\right\}\ \text{rad/s}
+    \label{eq:lqr_poles}
+\end{equation}
+全部位于左半平面且均为实数：三个约$-1$\,rad/s的慢模态对应姿态角误差动态（由$\mathbf{Q}$中$\varepsilon$权重主导），三个$-9.6\sim-14.4$\,rad/s的快模态对应角速率动态。无复极点意味着闭环响应无振荡模态——这与第\ref{sec:vtol}节仿真中LQR无回摆的时域表现互为印证。
+
+\subsection{大角度机动的参考前馈扩展}
+\label{sec:lqr_ff}
+
+LQR调节器（式\ref{eq:care}）针对定点镇定设计。slerp过渡等大角度机动中，直接将阻尼作用于绝对角速率$\boldsymbol{\omega}$会与期望旋转对抗，产生跟踪滞后。引入参考状态前馈，将反馈作用于跟踪误差：
+\begin{equation}
+    \mathbf{u} = -\mathbf{K}\begin{bmatrix} \boldsymbol{\varepsilon}_{\mathrm{err}} \\ \boldsymbol{\omega} - \boldsymbol{\omega}_{\mathrm{ref}} \end{bmatrix}
+    \label{eq:lqr_tracking}
+\end{equation}
+其中$\boldsymbol{\omega}_{\mathrm{ref}}$由slerp轨迹解析给出（定轴旋转$\Rightarrow$机体系参考角速率为常值，见式\ref{eq:slerp}）。由于线性化模型式(\ref{eq:lqr_eps_dot})在跟踪误差小时沿整条过渡路径成立（$\mathbf{B}_{\mathrm{true}}$为机体系矩阵，与姿态无关），同一套增益无需调度即可覆盖从水平到竖直的全过程。
+
+\subsection{仿真验证}
+\label{sec:lqr_sim}
+
+在3秒slerp垂直起飞工况下对比三种姿态控制架构（图\ref{fig:vtol_takeoff}、图\ref{fig:vtol_takeoff_compare}），定量指标见表\ref{tab:ctrl_compare}。LQR在slerp结束时刻（$t=3$\,s）即收敛至$\pm2^\circ$包络内，过渡后最大回摆仅$1.96^\circ$；对比之下，手工整定的四元数SAS（含阻尼增益调度）回摆达$22.7^\circ$且10秒内未收敛，INDI（v2，含速率前馈）回摆$6.1^\circ$、6.1秒收敛。悬停抗扰工况（$3^\circ$初始俯仰偏差，图\ref{fig:vtol_ctrl_compare}）中LQR同样最快：5秒末$\|\boldsymbol{\varepsilon}_{\mathrm{err}}\|$降至$1.9\times10^{-4}$，比INDI低一个数量级。
+
+\begin{table}[H]
+\centering
+\caption{垂直起飞工况三种姿态控制器性能对比（3\,s slerp, MODEL-DEFAULT参数）}
+\label{tab:ctrl_compare}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{控制器} & \textbf{稳定时间 ($\pm2^\circ$)} & \textbf{最大回摆} & \textbf{$\varepsilon$ 峰值} & \textbf{$\varepsilon$ (10\,s末)} \\
+\midrule
+四元数SAS（增益调度+前馈） & $>10$\,s & $22.7^\circ$ & 0.198 & $4.4\times10^{-2}$ \\
+四元数INDI（v2） & 6.12\,s & $6.1^\circ$ & 0.066 & $1.5\times10^{-3}$ \\
+四元数LQR & \textbf{2.94\,s} & $\mathbf{2.0^\circ}$ & \textbf{0.017} & $\mathbf{2.1\times10^{-5}}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+结果印证了系统设计的价值：SAS的对角手工增益回避了效能矩阵的交叉耦合，INDI受角加速度估计带宽限制，而LQR通过CARE一次性最优平衡了跟踪精度、阻尼与执行器代价，并主动利用交叉耦合项。需要强调的是，LQR增益依赖精确的$\mathbf{B}_{\mathrm{true}}$与惯量参数——在MODEL-DEFAULT参数未标定的概念阶段，其优势是结构性的；参数摄动下的鲁棒性对比（LQR vs INDI）是后续工作。

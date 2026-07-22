@@ -112,14 +112,37 @@ $\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理
 
 \textbf{与欧拉角SAS的等价性}：在小姿态误差下，$\varepsilon_{\text{err},1} \approx \Delta\phi/2$、$\varepsilon_{\text{err},2} \approx \Delta\theta/2$、$\varepsilon_{\text{err},3} \approx \Delta\psi/2$，代入式(\ref{eq:quat_sas_cmd})并调整增益$k_{q,\cdot} = 2k_{\text{sas},\cdot}$即可恢复第\ref{sec:control}节的欧拉角SAS形式。因此四元数SAS是欧拉角SAS的严格推广——在小信号范围内行为一致，在大姿态机动中自动避免了欧拉角域的所有奇异性问题。
 
+\subsection{大角度机动的工程化改进}
+\label{sec:quat_sas_engineering}
+
+基准律式(\ref{eq:quat_pd})在定点悬停附近表现良好，但tail-sitter垂直起飞等$90^\circ$级机动暴露了三个工程问题，相应的改进均已在仿真实现（\texttt{simulations/high-fidelity-analysis/controllers.py}）中验证：
+
+\textbf{(1) 阻尼增益调度}。基准律的角速率阻尼按悬停小信号整定（俯仰通道阻尼比$\zeta\approx0.22$），大角度机动中振荡严重。引入随误差幅值调度的阻尼因子
+\begin{equation}
+    \boldsymbol{\tau} = -\mathbf{K}_q\boldsymbol{\varepsilon}_{\text{err}} - g(\boldsymbol{\varepsilon}_{\text{err}})\,\mathbf{K}_\omega\left(\boldsymbol{\omega} - \boldsymbol{\omega}_{\text{ref}}\right),
+    \qquad
+    g = 1 + 3\min\!\left(\frac{\|\boldsymbol{\varepsilon}_{\text{err}}\|}{0.15},\ 1\right)
+    \label{eq:quat_pd_sched}
+\end{equation}
+$\|\boldsymbol{\varepsilon}_{\text{err}}\|\geq0.15$（约$17^\circ$）时$g=4$（$\zeta\approx0.88$），悬停点$g=1$恢复基准律。由于$g(\cdot)\geq1$有界且仅依赖状态，Lyapunov分析中$\dot{V}=-g\,\boldsymbol{\omega}^T\mathbf{K}_\omega\boldsymbol{\omega}\leq0$仍然成立，稳定性结论不受影响。
+
+\textbf{(2) 参考角速率前馈}。若阻尼作用于绝对角速率$\boldsymbol{\omega}$，机动期间阻尼会与期望旋转对抗、产生大幅跟踪滞后。将阻尼改作用于速率误差$\boldsymbol{\omega}-\boldsymbol{\omega}_{\text{ref}}$（式\ref{eq:quat_pd_sched}），其中$\boldsymbol{\omega}_{\text{ref}}$由slerp轨迹解析给出：slerp为定轴旋转，其机体系参考角速率为常值向量
+\begin{equation}
+    \boldsymbol{\omega}_{\text{ref}} = \frac{\theta_{\text{slerp}}}{T_{\text{slerp}}}\,\hat{\mathbf{n}}_{\text{slerp}}
+    \label{eq:omega_ref_slerp}
+\end{equation}
+$\hat{\mathbf{n}}_{\text{slerp}}$与$\theta_{\text{slerp}}$分别为初始/目标四元数相对旋转的单位转轴与转角。
+
+\textbf{(3) 条件积分抗饱和}。机动期间大姿态误差会使积分项饱和，过渡结束后饱和积分缓慢放电、形成持续力矩偏置（仿真中表现为过渡后姿态缓慢爬离目标）。改为仅当$\|\boldsymbol{\varepsilon}_{\text{err}}\|<0.2$时才积分，机动期间冻结积分器，消除了该伪稳态偏差。
+
 \subsection{四元数INDI控制律}
 
-将第\ref{sec:INDI}节的INDI框架的外环从欧拉角域迁移到四元数域。外环四元数比例控制器生成期望角速率：
+将第\ref{sec:INDI}节的INDI框架的外环从欧拉角域迁移到四元数域。外环四元数比例控制器生成期望角速率，并叠加参考角速率前馈以改善大角度机动跟踪：
 \begin{equation}
-    \boldsymbol{\omega}_{\text{ref}} = -\mathbf{K}_q^{\text{rate}} \boldsymbol{\varepsilon}_{\text{err}}
+    \boldsymbol{\omega}_{\text{ref}} = -\mathbf{K}_q^{\text{rate}} \boldsymbol{\varepsilon}_{\text{err}} + \boldsymbol{\omega}_{\text{ref}}^{\text{slerp}}
     \label{eq:indi_outer_quat}
 \end{equation}
-内环INDI增量控制律保持不变（式\ref{eq:indi_our_config}），虚拟角加速度$\boldsymbol{\nu}$由角速率误差经比例控制生成：
+内环INDI增量控制律保持不变（式\ref{eq:indi_our_config}），虚拟角加速度$\boldsymbol{\nu}$由角速率误差经比例控制生成（带宽增益由$0.8$提升至$3.0$，缩小与SAS直接映射的响应差距）：
 \begin{equation}
     \boldsymbol{\nu} = \mathbf{K}^{\text{rate}}(\boldsymbol{\omega}_{\text{ref}} - \boldsymbol{\omega})
     \label{eq:indi_inner_quat}
