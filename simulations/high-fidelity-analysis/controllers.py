@@ -16,19 +16,27 @@ class QuatSASController:
         self.omega0 = omega0 if omega0 else 400.0  # 允许外部传入
         self.int_eps = np.zeros(3)
 
-    def update(self, q, q_des, omega, dt):
-        """q: 当前姿态, q_des: 期望姿态, omega: [p,q,r]"""
+    def update(self, q, q_des, omega, dt, omega_ref=None):
+        """q: 当前姿态, q_des: 期望姿态, omega: [p,q,r],
+           omega_ref: 参考角速率前馈（slerp 过渡段非零），阻尼作用于速率误差"""
         P = self.P
+        if omega_ref is None:
+            omega_ref = np.zeros(3)
         # 误差四元数: q_err = q_des* ⊗ q
         q_err = quat_multiply(quat_conj(q_des), q)
         eps = np.array([q_err[1], q_err[2], q_err[3]])  # ε
-        # 积分（限幅）
-        self.int_eps += eps * dt
-        self.int_eps = np.clip(self.int_eps, -P["intThMax"], P["intThMax"])
+        # 积分（条件积分抗饱和：大误差机动期间冻结，避免 slerp 段饱和后长期放电偏置）
+        if np.linalg.norm(eps) < 0.2:
+            self.int_eps += eps * dt
+            self.int_eps = np.clip(self.int_eps, -P["intThMax"], P["intThMax"])
         # 四元数 PD 力矩
         K_q = np.array([0.8, 0.6, 0.8])   # 比例增益 (调至与欧拉角 SAS 等价)
         K_w = np.array([0.18, 0.14, 0.14]) # 角速率阻尼增益
-        tau = -K_q * eps - K_w * omega - np.array([0.15, 0.1, 0.0]) * self.int_eps
+        # 阻尼增益调度：大姿态误差时增强阻尼，抑制大角度机动的欠阻尼振荡
+        # (eps=0 时 g=1 恢复基准律; eps>=0.15 (~17°) 时 g=4, 俯仰通道 ζ: 0.22→0.88)
+        g_damp = 1.0 + 3.0 * min(np.linalg.norm(eps) / 0.15, 1.0)
+        tau = (-K_q * eps - g_damp * K_w * (omega - omega_ref)
+               - np.array([0.15, 0.1, 0.0]) * self.int_eps)
         # 效能矩阵逆映射 (简化: 取对角元素)
         omega0 = self.omega0
         tau0 = P["kQ"] * omega0*omega0
@@ -39,28 +47,63 @@ class QuatSASController:
         return df_c, dt_c, dw
 
 # ============================================================
-#  四元数 INDI 控制器
+#  四元数 LQR 控制器（悬停点线性化 + CARE）
+# ============================================================
+class QuatLQRController:
+    """状态 x=[ε(3), ω(3)]，输入 u=[Δω, δt, δf]。
+       线性化误差动力学：ε̇≈½(ω-ω_ref)，ω̇=I⁻¹B·u（悬停点 B 满秩）。
+       权重按 Bryson 规则：Q_ii=1/x_max²，R_ii=1/u_max²。"""
+
+    def __init__(self, P, omega0):
+        from scipy.linalg import solve_continuous_are
+        self.P = P
+        self.omega0 = omega0
+        B, T0, tau0 = control_effectiveness(omega0, 0.0, 0.0, 0.0, P)
+        Iinv = np.diag([1.0/P["Ix"], 1.0/P["Iy"], 1.0/P["Iz"]])
+        A = np.zeros((6, 6)); A[:3, 3:] = 0.5*np.eye(3)
+        Bm = np.zeros((6, 3)); Bm[3:, :] = Iinv @ B
+        x_max = np.array([0.5, 0.5, 0.5, 1.0, 1.0, 1.0])   # ε~0.5(≈60°), ω~1 rad/s
+        u_max = np.array([P["dwMax"], P["dMax"], P["dMax"]])
+        Q = np.diag(1.0/x_max**2); R = np.diag(1.0/u_max**2)
+        S = solve_continuous_are(A, Bm, Q, R)
+        self.K = np.linalg.solve(R, Bm.T @ S)
+        self.A, self.Bm, self.Q, self.R = A, Bm, Q, R  # 供论文导出
+
+    def update(self, q, q_des, omega, dt, omega_ref=None):
+        P = self.P
+        if omega_ref is None:
+            omega_ref = np.zeros(3)
+        q_err = quat_multiply(quat_conj(q_des), q)
+        eps = np.array([q_err[1], q_err[2], q_err[3]])
+        x = np.concatenate([eps, np.asarray(omega) - omega_ref])
+        u = -self.K @ x
+        dw   = np.clip(u[0], -P["dwMax"], P["dwMax"])
+        dt_c = np.clip(u[1], -P["dMax"], P["dMax"])
+        df_c = np.clip(u[2], -P["dMax"], P["dMax"])
+        return df_c, dt_c, dw
+
+# ============================================================
+#  四元数 INDI 控制器（v2: 参考速率前馈 + 带宽提升）
 # ============================================================
 class QuatINDIController:
     def __init__(self, P, trim=None):
         self.P = P
-        self.int_eps = np.zeros(3)
         self.prev_df = 0.0; self.prev_dt = 0.0; self.prev_dw = 0.0
         self.prev_omega = np.zeros(3)
         self.omega_dot_filt = np.zeros(3)
         self.first = True
 
-    def update(self, q, q_des, omega, omega0, dt):
+    def update(self, q, q_des, omega, omega0, dt, omega_ref=None):
         P = self.P
+        if omega_ref is None:
+            omega_ref = np.zeros(3)
         # 误差四元数
         q_err = quat_multiply(quat_conj(q_des), q)
         eps = np.array([q_err[1], q_err[2], q_err[3]])
-        self.int_eps += eps*dt
-        self.int_eps = np.clip(self.int_eps, -P["intThMax"], P["intThMax"])
-        # 外环: 四元数比例 → 目标角速率
-        w_ref = -0.6 * eps
-        # 内环: 角速率误差 → 虚拟角加速度
-        K_rate = 0.8
+        # 外环: 四元数比例 → 目标角速率（叠加参考速率前馈）
+        w_ref = -1.0 * eps + omega_ref
+        # 内环: 角速率误差 → 虚拟角加速度（带宽 0.8→3.0）
+        K_rate = 3.0
         nu = K_rate * (w_ref - omega)
         # 角加速度 (混合估计)
         if self.first:
@@ -110,14 +153,27 @@ def simulate_vtol(controller, P, q_des_target, omega0, T_total=10, dt=0.004,
     df = 0.0; dt_cmd = 0.0; dw = 0.0  # dt_cmd = 尾电机摆角指令 δ_t (勿遮蔽时间步 dt)
     pos_z = 0.0  # NED: z 向下, 初始在地面
 
+    # slerp 参考角速率前馈：定轴旋转 => 机体系参考角速率为常值
+    if slerp_duration > 0 and q_des_initial is not None:
+        dq0 = quat_multiply(quat_conj(quat_norm(np.array(q_des_initial, dtype=float))),
+                            quat_norm(np.array(q_des_target, dtype=float)))
+        if dq0[0] < 0: dq0 = -dq0  # 最短路径
+        ang0 = 2.0 * np.arccos(np.clip(dq0[0], -1, 1))
+        axis0 = dq0[1:4] / max(np.sin(ang0 / 2), 1e-9)
+        omega_ref_slerp = axis0 * ang0 / slerp_duration
+    else:
+        omega_ref_slerp = np.zeros(3)
+
     for i in range(N):
         t = i*dt; t_arr[i] = t
         # slerp 过渡
         if slerp_duration > 0 and t < slerp_duration:
-            tau = min(t / slerp_duration, 1.0)
-            q_des = slerp_quat(q_des_initial, q_des_target, tau)
+            tau_s = min(t / slerp_duration, 1.0)
+            q_des = slerp_quat(q_des_initial, q_des_target, tau_s)
+            omega_ref = omega_ref_slerp
         else:
             q_des = q_des_target
+            omega_ref = np.zeros(3)
         # 推进 (先算力，供控制器用)
         Fx, Fy, Fz, Mx, My, Mz = prop.forces(df, dt_cmd)
         # 气动 (可选关闭)
@@ -126,20 +182,21 @@ def simulate_vtol(controller, P, q_des_target, omega0, T_total=10, dt=0.004,
         else:
             aero = (0,0,0,0,0,0)
         # 控制器
-        if isinstance(controller, QuatSASController):
-            df, dt_cmd, dw = controller.update(q, q_des, w, dt)
-        else:
-            df, dt_cmd, dw = controller.update(q, q_des, w, omega0, dt)
+        if isinstance(controller, QuatINDIController):
+            df, dt_cmd, dw = controller.update(q, q_des, w, omega0, dt, omega_ref)
+        else:  # QuatSASController / QuatLQRController
+            df, dt_cmd, dw = controller.update(q, q_des, w, dt, omega_ref)
         # 推进更新
         prop.update(omega0, dw, dt)
         Fx, Fy, Fz, Mx, My, Mz = prop.forces(df, dt_cmd)
         # RK4 积分
         v, w, q = rk4_step(v, w, q, prop, P, Fx,Fy,Fz,Mx,My,Mz, dt, use_aero=use_aero)
-        # 位置 (惯性系)
+        # 位置 (惯性系, NED: z 向下为正; pos_z = 相对起点的深度)
         vi = quat_rotate(v, q)
-        pos_z -= vi[2] * dt   # vi[2] 为 NED 速度, z 向上为负, 高度=-pos_z
-        if pos_z > 0 and -vi[2] > 0:
-            pos_z = 0; vi[2] = 0
+        pos_z += vi[2] * dt
+        if pos_z > 0 and vi[2] > 0:   # 触地且仍在下降: 钳制并清零下降速度
+            pos_z = 0.0
+            vi[2] = 0.0
             vb = quat_rotate(vi, quat_conj(q))
             v[0] = vb[0]; v[1] = vb[1]; v[2] = vb[2]
         # 记录
