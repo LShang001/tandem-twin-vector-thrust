@@ -1193,9 +1193,15 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     }
   }
 
-  // ---- 舵机输出 ----
-  float pitch_servo = mapFloat(tail_gimbal_deg,  -MAX_CORRECTION, MAX_CORRECTION, 66.67f, 33.33f);
-  float roll_servo  = mapFloat(front_gimbal_deg, -MAX_CORRECTION, MAX_CORRECTION, 33.33f, 66.67f);
+  // ---- 舵机输出 (40:30齿轮比, servo_angle = gimbal_angle × 1.333) ----
+  // 使用齿轮传动映射: 摆座角度(deg) → 舵机角度(deg) → PWM(%)
+  // 包含 TandemVec_ServoModel.h 后可用 gimbalToServoPWM
+  const float GEAR_RATIO = 40.f / 30.f;                       // 从动/主动 = 40/30
+  const float SERVO_RANGE_DEG = 90.f;                         // 舵机±45°总行程90°(待实测校准)
+  float pitch_servo = 50.f + (tail_gimbal_deg * GEAR_RATIO / (SERVO_RANGE_DEG * 0.5f)) * 50.f;
+  float roll_servo  = 50.f + (front_gimbal_deg * GEAR_RATIO / (SERVO_RANGE_DEG * 0.5f)) * 50.f;
+  pitch_servo = constrain(pitch_servo, 0.f, 100.f);
+  roll_servo  = constrain(roll_servo,  0.f, 100.f);
   SetServoPos(pitch_servo, TVC_PITCH_SERVO_PIN);
   SetServoPos(roll_servo,  TVC_ROLL_SERVO_PIN);
   ch2_output = pitch_servo;
