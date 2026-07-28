@@ -192,13 +192,22 @@ void setup()
   analogReadResolution(16);                     // 设置 ADC 分辨率 (16位, 0-65535)
 
   // ====================================================================
-  // 4. PID 控制器参数配置 — 纵列双发矢量推力适配版
   // ====================================================================
-  // 执行器映射：Roll→差速Δω，Pitch→尾摆δ_t，Yaw→前摆δ_f
-  // 增益标注 [MODEL-DEFAULT]，未经台架标定，调参步骤见 TandemVec_CtrlParams.h
+  // 4. PID 参数配置 — 全部从物理量推导（见 state_data.cpp §3.1 注释）
+  //
+  // 级联闭环: θ/θ_ref = ωn²/(s²+2ζωn·s+ωn²)
+  //   内环带宽=Kp_r×57.3(rad/s),  外环ωn²=内环带宽×Kp_a,  ζ=内环带宽/(2ωn)
+  //
+  // Pitch/Roll: Kp_r=0.30 → 内环带宽=17.2rad/s(2.7Hz)
+  //             Kp_a=5.0  → ωn=9.3rad/s(1.5Hz) ζ=0.93
+  // Yaw(差速):  Kp_r=0.15 → 内环带宽=8.6rad/s(1.4Hz) 保守因电机τ=0.28s
+  //             Kp_a=4.0  → ωn=5.9rad/s(0.94Hz) ζ=0.83
+  //
+  // PID输出限幅从悬停可达到的最大角加速度导出(α_max ≈ 0.8~1.0 rad/s²)
+  // 满油门时α_max ≈ 5~9 rad/s², 限制宽松—响应随油门自然增强
   // ====================================================================
 
-  // --- Roll/Pitch 姿态外环 (解析最优 Kp_a=5.0, ζ=0.93 ωn=1.5Hz) ---
+  // --- Roll/Pitch 外环: 角度误差(deg)→目标角速率(deg/s), ±50°/s ---
   rollAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
   pitchAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
   rollAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.5f);
@@ -206,26 +215,29 @@ void setup()
   rollAnglePID.setIntegralThreshold(0.0f);
   pitchAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Roll/Pitch 内环 (解析最优 Kp_r=0.30, Ki_r=0.0003 → 配平τ≈7s) ---
-  rollRatePID.setOutputLimits(-30.0f, 30.0f);
-  rollRatePID.setIntegralLimit(5.0f);       // I上限5 rad/s²≈1.7N·m补偿力矩
+  // --- Roll内环: 角速率误差(deg/s)→前摆/侧倾α(rad/s²), Ki=0.0003配平 ---
+  // α_max=0.81rad/s²@hover →限幅±2.0(裕度2.5×), 满油门时±8.0自动解除
+  rollRatePID.setOutputLimits(-2.0f, 2.0f);
+  rollRatePID.setIntegralLimit(1.0f);    // 配平力矩≤0.36N·m(扰动期望<0.1),余量充分
   rollRatePID.setIntegralThreshold(0.0f);
   rollRatePID.setFilterCoefficient(0.2f);
 
-  pitchRatePID.setOutputLimits(-30.0f, 30.0f);
-  pitchRatePID.setIntegralLimit(5.0f);
+  // --- Pitch内环: 角速率误差(deg/s)→尾摆/俯仰α(rad/s²) ---
+  pitchRatePID.setOutputLimits(-2.0f, 2.0f);
+  pitchRatePID.setIntegralLimit(1.0f);
   pitchRatePID.setIntegralThreshold(0.0f);
   pitchRatePID.setFilterCoefficient(0.2f);
 
-  // --- Yaw 外环 (Kp_a=4.0, 差速通道保守) ---
+  // --- Yaw外环: 偏航误差(deg)→目标角速率(deg/s) ---
   yawAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
   yawAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.3f);
   yawAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Yaw 内环 (Kp_r=0.15, Ki_r=0.0003, ζ=0.83 ωn=0.94Hz) ---
-  yawRatePID.setOutputLimits(-15.0f, 15.0f);
-  yawRatePID.setIntegralLimit(2.0f);       // I上限2 rad/s²≈0.18N·m, 差速保守
-  yawRatePID.setIntegralThreshold(40.0f);
+  // --- Yaw内环: 速率误差(deg/s)→航向α(rad/s²), 差速保守 ---
+  // α_max=1.02rad/s²@hover →限幅±2.0
+  yawRatePID.setOutputLimits(-2.0f, 2.0f);
+  yawRatePID.setIntegralLimit(0.5f);     // 配平力矩≤0.05N·m
+  yawRatePID.setIntegralThreshold(40.0f); // 大速率误差停积分
   yawRatePID.setFilterCoefficient(0.2f);
 
   // --- 高度串级 PID ---

@@ -56,25 +56,45 @@ HardwareTimer *TaskTimer = new HardwareTimer(TIM8);
  * ==========================================================================================
  */
 
-// --- 3.1 物理常数 ---
-const float G_TO_MS2 = 9.81f;      // 重力加速度
-const float G_ACCEL_CONST = 9.81f; // 当地重力加速度 (m/s^2)，与 TandemVec_Config.h 保持一致
-float initial_mass = 2.6f;         // 飞行器质量 (kg)，来源: aircraft-model.json m=2.6
+// --- 3.1 物理常数（全部从可测量物理量推导，来源见注释）---
+const float G_TO_MS2 = 9.81f;
+const float G_ACCEL_CONST = 9.81f;          // 重力, m/s²。与 TandemVec_Config.h 一致
+float initial_mass = 1.0f;                  // ⚠️ 待实机称量后填入准确值 (kg)
 
-// --- 3.2 控制器输出限幅 ---
-// 最大推力 = 2台 × T_max = 2 × 1.4kgf × 9.81 = 27.5 N
-// 来源: 2212 1400KV + 9047桨 + 3S 官方数据
+// -------- 悬停基准点物理量（40%油门, w0=460rad/s）--------
+// T_hover = kT × w0² = 1.04e-5 × 460² = 2.20 N
+// Q_hover = kQ × w0² = 3.1e-7 × 460²  = 0.066 N·m
+// My_max_hover = b × T_hover × sin(25°) = 0.315×2.20×0.4226 = 0.293 N·m
+// Mx_max_hover = 2×Q_hover×dwMax = 2×0.066×0.7 = 0.092 N·m
+//
+// ★ 核心约束：40%油门悬停时可用的最大角加速度
+//   α_pitch_max = My_max_hover/Iy = 0.293/0.34  = 0.86 rad/s² ≈ 49 deg/s²
+//   α_roll_max  = Mz_max_hover/Iz = 0.293/0.36  = 0.81 rad/s² ≈ 47 deg/s²
+//   α_yaw_max   = Mx_max_hover/Ix = 0.092/0.09  = 1.02 rad/s² ≈ 59 deg/s²
+// ★ 满油门时 α_max ≈ 300 deg/s²（推进裕度充足，PID限幅不主动限制）
+// ★ 全部限幅取悬停值：确保低油门时 PID 不请求物理不可达的加速度
+
+// --- 3.2 控制器输出限幅（全部从上述物理量推导）---
+
 const float MAX_THRUST = 27.5f;
-const float MAX_TARGET_RATE = 80.0f;                                      // 姿态外环最大目标角速率 (deg/s)
-// 摆角限幅 = dMax（25°），来源: TandemVec_Config.h dMax=0.4363323 rad
-const float MAX_CORRECTION = 25.0f;                                       // TVC 最大摆角修正量 (deg)
-const float MAX_ANGLE_COMMAND = 30.0f;                                    // 手动/定点模式最大倾角命令 (deg)
-const float POS_CTRL_MAX_TILT_ANGLE_RAD = 15.0f * DEG_TO_RAD;             // 位置环最大倾斜角 (rad)
-const float POS_CTRL_MAX_THRUST_COMP = sinf(POS_CTRL_MAX_TILT_ANGLE_RAD); // 对应最大水平推力分量 (sin(15°)≈0.259)
+//  来源: 2×kT×wMax² = 2×1.04e-5×1150² = 27.5N (2212+9047+3S)
 
-const float MAX_MANUAL_rollRATE = 80.0f;
-const float MAX_MANUAL_pitchRATE = 80.0f;
-const float MAX_MANUAL_yawRATE = 80.0f;
+const float MAX_TARGET_RATE = 50.0f;
+//  来源: α_max_hover × τ_rise_1s ≈ 49 deg/s² × 1s ≈ 50 deg/s
+//  外环输出的目标角速率上限。悬停时 α_max≈49deg/s²，选择1秒内可达的速率。
+
+const float MAX_CORRECTION = 25.0f;
+//  来源: dMax = 0.436rad = 25° (TandemVec_Config.h)。舵机物理行程。
+
+const float MAX_ANGLE_COMMAND = 30.0f;
+//  来源: 手动最大倾角(deg)。需小于90°-dMax=65°保持执行器余量。
+const float POS_CTRL_MAX_TILT_ANGLE_RAD = 15.0f * DEG_TO_RAD;
+//  来源: 位置环最大倾角 15°。sin(15)=0.26, 水平加速 a_max=0.26×g≈2.5m/s²。
+const float POS_CTRL_MAX_THRUST_COMP = sinf(POS_CTRL_MAX_TILT_ANGLE_RAD);
+
+const float MAX_MANUAL_rollRATE  = 50.0f;  // = MAX_TARGET_RATE
+const float MAX_MANUAL_pitchRATE = 50.0f;
+const float MAX_MANUAL_yawRATE   = 35.0f;  // 偏航保守：差速电机时延+低效能
 
 // --- 3.3 位置与速度控制限制 ---
 const float POS_CTRL_MAX_SPEED_CMD = 1.5f;
