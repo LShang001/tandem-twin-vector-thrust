@@ -619,6 +619,17 @@ extern float roll_output;
 extern float pitch_output;
 extern float yaw_output;  // 航向角加速度 alpha_yaw (rad/s²)，遥测用
 extern float throttlePercent;
+
+// ---- 在线参数辨识结果（★ 纯观测，不参与控制回路）----
+// 由 runGNCExecutive 每拍写入，供地面站/黑匣子记录。
+// b = I_nominal / I_actual：>1 表示真实惯量小于名义值，<1 表示大于。
+// 首飞用途：飞几个架次后看 b_est 是否稳定收敛，再人工决定是否调整增益。
+// 详见 include/TandemVec_OnlineID.h 与 AGENTS.md §在线辨识。
+extern float id_b_est[3];      // 惯量比估计 [roll, pitch, yaw]
+extern float id_d_est[3];      // 总扰动估计 (rad/s²)
+extern float id_cg_mm;         // 重心偏移估计 (mm，仅悬停时更新)
+extern bool  id_excited[3];    // 各轴激励是否充分（估计是否在更新）
+extern float id_kp_suggest[3]; // 建议的 Kp_r（= Kp_nominal/√b，仅供参考，未生效）
 extern float ch1_output, ch2_output;
 extern float ch3_output, ch4_output;
 

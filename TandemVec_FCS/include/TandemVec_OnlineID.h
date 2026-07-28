@@ -107,93 +107,117 @@ struct RLS_2Param
 // ============================================================
 struct OnlineID
 {
-    RLS_2Param rls_pitch;  // 俯仰轴
-    RLS_2Param rls_roll;   // 侧倾轴
-    RLS_2Param rls_yaw;    // 偏航轴
+    // 三轴 RLS。索引统一为 [0]=roll(侧倾) [1]=pitch(俯仰) [2]=yaw(航向)，
+    // 与 alpha_cmd/omega/b_est 的下标一致（原先用 rls_pitch 处理 i==0，
+    // 命名与下标错位，易误读，已改为数组）。
+    RLS_2Param rls[3];
 
-    // 辨识结果（平滑滤波后）
-    float b_est[3];      // [pitch, roll, yaw] 惯量比
+    // 辨识结果（轴序 [0]=roll [1]=pitch [2]=yaw，与 rls[] 一致）
+    float b_est[3];      // 惯量比 b = I_nominal / I_actual
     float d_est[3];      // 总扰动 (rad/s²)
     float cg_est_mm;     // CG偏移 (mm), 从 I_term 稳态提取
 
-    // 激励检测
-    float alpha_var[3];  // α_cmd 方差（检测充分激励）
-    float omega_dot[3];  // 上一拍 ω 用于微分
+    // 激励检测与微分状态
+    float alpha_var[3];      // α_cmd 指数移动均方（检测充分激励）
+    float omega_prev_rps[3]; // 上一拍角速率 (rad/s)，用于数值微分
+    bool  primed[3];         // 微分状态是否已建立（首拍跳过伪微分）
 
     int   sample_count;
-    float update_rate_limit; // 参数更新速率限制 (abs change per call)
+    float update_rate_limit; // 每拍参数最大相对变化量
 
-    OnlineID()
-    {
-        b_est[0]=b_est[1]=b_est[2]=1.f;
-        d_est[0]=d_est[1]=d_est[2]=0.f;
-        cg_est_mm=0.f;
-        alpha_var[0]=alpha_var[1]=alpha_var[2]=0.f;
-        omega_dot[0]=omega_dot[1]=omega_dot[2]=0.f;
-        sample_count=0;
-        update_rate_limit=0.05f; // 每拍最多5%变化
-    }
+    OnlineID() { reset(); }
 
     // 主更新函数 — 在内环PID之后、mix之前调用
-    // @param alpha_cmd[3]  命令角加速度 [roll,pitch,yaw] rad/s²
-    // @param omega_now[3]  当前角速率 [roll,pitch,yaw] rad/s
-    // @param i_term_rate[3] 内环积分器 I_term (rad/s²), 用于提取CG偏移
-    // @param dt             步长
-    void step(const float alpha_cmd[3], const float omega_now[3],
-              const float i_term_rate[3], float dt)
+    //
+    // @param alpha_cmd[3]   命令角加速度 [roll,pitch,yaw] rad/s²
+    // @param omega_dps[3]   当前角速率 [roll,pitch,yaw] **deg/s**
+    //                       （与 current_omega_dps_body_filtered 一致；
+    //                        内部转 rad/s 再求导。原版注释要求 rad/s，
+    //                        而固件只有 deg/s，直接传会使 ω̇ 差 57.3 倍
+    //                        并把 b_est 顶到约束边界。）
+    // @param i_term_rate[3] 内环积分项 I_term = ki×integral (rad/s²)
+    //                       用于提取 CG 偏移；轴序同上
+    // @param thr_pct        当前油门百分比 [0,100]，用于悬停门控与推力基准
+    // @param dt             步长 s
+    void step(const float alpha_cmd[3], const float omega_dps[3],
+              const float i_term_rate[3], float thr_pct, float dt)
     {
-        // 角加速度: 陀螺数值微分 (一阶后向差分 + 低通)
+        const float dt_safe = (dt > 1e-5f) ? dt : 1e-5f;
+        const float DEG2RAD = 0.0174532925f;
+
         for (int i = 0; i < 3; ++i) {
-            float wdot = (omega_now[i] - omega_dot[i]) / dt;
-            omega_dot[i] = omega_now[i];
+            // ---- 角加速度：陀螺数值微分（统一到 rad/s²）----
+            const float w_rps = omega_dps[i] * DEG2RAD;
+            float wdot = (w_rps - omega_prev_rps[i]) / dt_safe;
+            omega_prev_rps[i] = w_rps;
 
-            // 激励检测: α_cmd 的指数移动方差
-            float a_abs = fabsf(alpha_cmd[i]);
-            alpha_var[i] = 0.95f * alpha_var[i] + 0.05f * a_abs * a_abs;
+            // 首拍 omega_prev 尚未建立，微分是伪值，跳过（原版会注入巨大冲击）
+            if (!primed[i]) { primed[i] = true; continue; }
 
-            // 只在充分激励时更新RLS
-            // 阈值: α_cmd RMS > 2 rad/s² (约等于 ~7°/s² 的角加速度)
-            if (alpha_var[i] > 4.f) {
-                if (i == 0) rls_pitch.update(wdot, alpha_cmd[i]);
-                else if (i == 1) rls_roll.update(wdot, alpha_cmd[i]);
-                else rls_yaw.update(wdot, alpha_cmd[i]);
-                // 提取更新后的参数至平滑估计
-                switch (i) {
-                    case 0: b_est[i] = rls_pitch.theta_b; d_est[i] = rls_pitch.theta_d; break;
-                    case 1: b_est[i] = rls_roll.theta_b;  d_est[i] = rls_roll.theta_d;  break;
-                    case 2: b_est[i] = rls_yaw.theta_b;   d_est[i] = rls_yaw.theta_d;   break;
-                }
-            }
+            // ---- 激励检测：α_cmd 的指数移动均方 ----
+            alpha_var[i] = 0.95f * alpha_var[i] + 0.05f * alpha_cmd[i] * alpha_cmd[i];
+
+            // 仅在充分激励时更新（α_cmd RMS > 2 rad/s²）。
+            // 激励不足时回归矩阵近奇异，RLS 会把噪声当信号。
+            if (alpha_var[i] <= 4.f) continue;
+
+            // ---- RLS 更新 ----
+            const float b_before = rls[i].theta_b;
+            rls[i].update(wdot, alpha_cmd[i]);
+
+            // ---- 变化率限制：每拍最多变动 update_rate_limit（原版声明未用）----
+            float b_new = rls[i].theta_b;
+            const float max_step = fmaxf(fabsf(b_before), 0.1f) * update_rate_limit;
+            if (b_new > b_before + max_step) b_new = b_before + max_step;
+            if (b_new < b_before - max_step) b_new = b_before - max_step;
+            rls[i].theta_b = b_new;
+
+            // ---- 物理范围硬约束（惯量比不可能超出此范围）----
+            rls[i].theta_b = std::clamp(rls[i].theta_b, 0.3f, 3.0f);
+            if (!std::isfinite(rls[i].theta_b)) rls[i].reset();
+            if (!std::isfinite(rls[i].theta_d)) rls[i].theta_d = 0.f;
+
+            b_est[i] = rls[i].theta_b;
+            d_est[i] = rls[i].theta_d;
         }
 
-        // 从积分器提取CG偏移（悬停稳态，仅俯仰轴）
-        // 积分器 I_term 的量纲 = rad/s²
-        // CG偏移力矩 = I_term × I_nominal
-        // CG偏移 = 力矩 / 推力 / g
-        // 仅在接近悬停时更新（油门40~60%，角速率低）
-        float Iy = kDefaultTandemVecParams.Iy;
-        float T_hover = kDefaultTandemVecParams.kT
-                      * (0.4f * kDefaultTandemVecParams.wMax)
-                      * (0.4f * kDefaultTandemVecParams.wMax);
-        float cg_moment = i_term_rate[1] * Iy;           // N·m
-        float cg_new     = cg_moment / fmaxf(T_hover, 1.f) * 1000.f; // mm
-
-        // 平滑更新
-        cg_est_mm = 0.95f * cg_est_mm + 0.05f * cg_new;
-
-        // 范围硬约束
-        cg_est_mm = std::clamp(cg_est_mm, -20.f, 20.f);
+        // ---- CG 偏移提取（仅俯仰轴，需接近悬停）----
+        // 力矩 = I_term × I_nominal；CG 偏移 = 力矩 / 总推力
+        // 门控：油门 30~70% 且三轴角速率均低于 15 deg/s，否则积分项
+        //       含机动分量，不代表配平力矩。
+        const bool near_hover = (thr_pct > 30.f && thr_pct < 70.f)
+                             && (fabsf(omega_dps[0]) < 15.f)
+                             && (fabsf(omega_dps[1]) < 15.f)
+                             && (fabsf(omega_dps[2]) < 15.f);
+        if (near_hover) {
+            const TandemVecParams& P = kDefaultTandemVecParams;
+            // 用实际油门推算基准推力，而非硬编码 40%
+            const float w0     = (thr_pct / 100.f) * P.wMax;
+            const float T_tot  = 2.0f * P.kT * w0 * w0;      // 双发总推力 N
+            const float cg_mom = i_term_rate[1] * P.Iy;      // N·m
+            const float cg_new = cg_mom / fmaxf(T_tot, 0.5f) * 1000.f;  // mm
+            if (std::isfinite(cg_new))
+                cg_est_mm = 0.95f * cg_est_mm + 0.05f * cg_new;
+            cg_est_mm = std::clamp(cg_est_mm, -20.f, 20.f);
+        }
 
         sample_count++;
     }
 
     void reset()
     {
-        rls_pitch.reset();
-        b_est[0]=b_est[1]=b_est[2]=1.f;
-        d_est[0]=d_est[1]=d_est[2]=0.f;
-        cg_est_mm=0.f;
-        sample_count=0;
+        // 原版只 reset 了 rls_pitch，roll/yaw 的协方差与参数会跨架次残留
+        for (int i = 0; i < 3; ++i) {
+            rls[i].reset();
+            b_est[i] = 1.f;
+            d_est[i] = 0.f;
+            alpha_var[i] = 0.f;
+            omega_prev_rps[i] = 0.f;
+            primed[i] = false;
+        }
+        cg_est_mm = 0.f;
+        sample_count = 0;
+        update_rate_limit = 0.05f;   // 每拍最多 5% 相对变化
     }
 
     // 自适应增益计算: Kp_r ← Kp_r_nominal / sqrt(b)

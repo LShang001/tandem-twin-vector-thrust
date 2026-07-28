@@ -68,14 +68,25 @@ struct ADRC
     float Kd;    // PD微分增益 (rad/s² per deg/s² rate-of-change) — 暂未使用
     float b0;    // 名义控制增益
     float wo;    // ESO带宽 (rad/s)
+    float u_prev; // 上一拍实际施加的控制量 (rad/s²)，供 ESO 正确分离控制与扰动
 
     // @param bandwidth 控制器带宽 ωc (rad/s)
-    // @param eso_bw   ESO带宽 ωo (rad/s)，典型 3~10× ωc
+    // @param eso_bw   ESO带宽 ωo (rad/s)
+    //
+    //   ⚠️ ωo 不可按教科书的 "3~10× ωc" 选取，必须受执行器带宽约束：
+    //      本机电机 τm=0.28s → 执行器带宽 ≈ 1/τm ≈ 3.6 rad/s。
+    //      ωo 显著高于执行器带宽时，ESO 会把执行器滞后误判为扰动
+    //      并过度补偿，闭环发散。
+    //      仿真扫描（test_advanced_theory.cpp L2b，偏差工况）结论：
+    //        ωo ≤ 12 rad/s（≈3× 执行器带宽）稳定；ωo=20 仅在 ωc=4 时稳定；
+    //        ωo=50 在所有 ωc 下发散。
+    //      → 默认取 ωo=8（≈2× 执行器带宽），对 ωc 失调最鲁棒。
+    //
     // @param b0_nom   名义控制增益 (物理逆解后 b0≈1)
-    ADRC(float bandwidth=8.f, float eso_bw=40.f, float b0_nom=1.f)
-        : Kp(bandwidth), Kd(0), b0(b0_nom), wo(eso_bw) {}
+    ADRC(float bandwidth=6.f, float eso_bw=8.f, float b0_nom=1.f)
+        : Kp(bandwidth), Kd(0), b0(b0_nom), wo(eso_bw), u_prev(0.f) {}
 
-    void reset() { eso.reset(); }
+    void reset() { eso.reset(); u_prev = 0.f; }
 
     // 单步控制计算
     // @param y         测量值: ω (deg/s)
@@ -86,7 +97,10 @@ struct ADRC
     float step(float y, float ref, float ref_dot, float dt)
     {
         // 1. ESO估计状态和总扰动
-        eso.update(y, 0, b0, wo, dt);  // 先用上一拍控制量估计
+        //    必须传入上一拍实际施加的控制量：否则 ESO 无法区分
+        //    "自己施加的控制" 与 "外部扰动"，会把正常控制响应全部
+        //    归入 z2，等效于抵消掉控制作用（闭环有效增益被吃掉）。
+        eso.update(y, u_prev, b0, wo, dt);
 
         // 2. PD误差控制
         float err = ref - eso.z1;
@@ -100,8 +114,8 @@ struct ADRC
 
         float alpha = u_deg / 57.29578f;  // deg/s² → rad/s² (PID输出单位)
 
-        // 5. ESO用本拍控制量重新更新z1 (提高估计精度)
-        // 已在step开始时调用update, 此处不重复
+        // 5. 缓存本拍控制量，供下一拍 ESO 使用
+        u_prev = alpha;
 
         return alpha;
     }
