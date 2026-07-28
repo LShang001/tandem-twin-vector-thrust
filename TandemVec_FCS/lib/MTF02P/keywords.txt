@@ -1,0 +1,24 @@
+##################################################
+# MTF02P Library Keywords for Arduino IDE
+#
+# Format: KEYWORD<TAB>TYPE
+#
+# KEYWORD1: Class names (Orange color in default theme)
+# KEYWORD2: Methods and functions (Brown color in default theme)
+# LITERAL1: Constants (Blue color in default theme)
+##################################################
+
+# Class Name
+MTF02P	KEYWORD1
+
+# Methods
+begin	KEYWORD2
+update	KEYWORD2
+getDistance_mm	KEYWORD2
+getSignalStrength	KEYWORD2
+getFlowVelX_cms	KEYWORD2
+getFlowVelY_cms	KEYWORD2
+getFlowQuality	KEYWORD2
+isRangeDataValid	KEYWORD2
+isFlowDataValid	KEYWORD2
+getTimestamp_ms	KEYWORD2

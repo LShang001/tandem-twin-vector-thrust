@@ -1,0 +1,50 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Source code - LF in repo, native on checkout
+*.cpp text
+*.c text
+*.h text
+*.hpp text
+*.ino text
+
+# Config/build files
+*.ini text
+*.json text
+*.md text
+*.txt text
+*.yml text
+*.yaml text
+*.cfg text
+*.properties text
+
+# Shell scripts - always LF
+*.sh text eol=lf
+
+# Windows scripts - always CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary files
+*.bin binary
+*.elf binary
+*.hex binary
+*.o binary
+*.a binary
+*.so binary
+*.dll binary
+*.exe binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.db binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

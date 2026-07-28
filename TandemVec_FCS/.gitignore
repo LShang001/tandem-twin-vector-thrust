@@ -1,0 +1,14 @@
+.pio
+compile_commands.json
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
+.claude/settings.local.json
+
+# AI 工具生成的缓存目录（勿入库；承接 2e969e3 清理，防止再次误提交）
+.codegraph/
+.reasonix/
+
+# 宿主机回归测试编译产物（test_host/ 下源码入库，bin/ 为 g++ 生成的可执行文件）
+test_host/bin/

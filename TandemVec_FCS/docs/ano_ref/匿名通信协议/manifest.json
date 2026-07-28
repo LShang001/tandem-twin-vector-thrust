@@ -1,0 +1,19 @@
+{
+  "status": "done",
+  "title": "匿名通信协议",
+  "source": "D:\\PIO_Projects\\VTVL_ElectricDualRotor_FCS\\docs\\匿名通信协议.pdf",
+  "markdown": "D:\\PIO_Projects\\VTVL_ElectricDualRotor_FCS\\docs\\ano_ref\\匿名通信协议\\匿名通信协议.md",
+  "images": "D:\\PIO_Projects\\VTVL_ElectricDualRotor_FCS\\docs\\ano_ref\\匿名通信协议\\images",
+  "api": "precise",
+  "model": "vlm",
+  "ocr": false,
+  "pages": 26,
+  "data_id": "document_316bdb624bce",
+  "batch_id": "870d8e62-a4d1-4009-bfe9-6526431e454f",
+  "task_id": null,
+  "proxy_bypassed": false,
+  "raw_kept": false,
+  "started_at": "2026-06-28T15:15:51+08:00",
+  "finished_at": "2026-06-28T15:16:21+08:00",
+  "error": null
+}
