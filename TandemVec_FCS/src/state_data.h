@@ -617,7 +617,7 @@ extern float tvcTargetAngle1, tvcTargetAngle2;
 extern float thrust_comp_N, thrust_comp_E;
 extern float roll_output;
 extern float pitch_output;
-extern float yaw_output;
+extern float yaw_output;  // 航向角加速度 alpha_yaw (rad/s²)，遥测用
 extern float throttlePercent;
 extern float ch1_output, ch2_output;
 extern float ch3_output, ch4_output;

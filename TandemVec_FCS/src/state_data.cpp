@@ -350,9 +350,9 @@ float tvcTargetAngle1 = 0.0f, tvcTargetAngle2 = 0.0f; // TVC 通道1/2 目标摆
 float thrust_comp_N = 0.0f, thrust_comp_E = 0.0f; // 北向/东向推力补偿 (sin(tilt))
 
 // 控制输出
-float roll_output = 0.0f;     // 机体Mx轴修正量→差速指令 Δω（VTOL时=世界偏航控制）
+float roll_output = 0.0f;     // 侧倾角加速度 alpha_roll (rad/s²)（mix层再×Iz→Mz→前摆δ_f→侧倾）
 float pitch_output = 0.0f;    // Pitch TVC 修正量 (deg)
-float yaw_output = 0.0f;   // 机体Mz轴修正量→前摆角δ_f (deg)（VTOL时=世界滚转控制）
+float yaw_output = 0.0f;   // 航向角加速度 alpha_yaw (rad/s²)（mix层再×Ix→Mx→差速Δω→航向）
 float throttlePercent = 0.0f; // 油门百分比 (0-100%)
 
 // 执行机构输出百分比 (用于遥测显示)

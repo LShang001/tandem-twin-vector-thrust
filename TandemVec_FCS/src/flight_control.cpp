@@ -245,16 +245,15 @@ void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
   // 判断姿态控制是否激活：需满足解锁、非手动TVC、油门有效三个条件
   bool attitude_control_active = inputs.is_unlocked && !inputs.is_manual_tvc && throttle_active;
 
-  // 姿态角PID积分项控制（仅在姿态模式下启用）
+  // 姿态角PID积分项控制（仅在姿态模式下启用，三轴对称）
   rollAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
   pitchAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
+  yawAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
 
   // 姿态角速度PID积分项控制（姿态控制激活时启用）
   rollRatePID.setIntegralEnable(attitude_control_active);
   pitchRatePID.setIntegralEnable(attitude_control_active);
-
-  // 偏航角速度PID积分项控制（解锁且油门有效时启用）
-  yawRatePID.setIntegralEnable(inputs.is_unlocked && throttle_active);
+  yawRatePID.setIntegralEnable(attitude_control_active);
 
   // --- 垂直速度PID积分项控制 ---
   // 积分项应在以下情况启用：
@@ -1032,7 +1031,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
  * 对应世界偏航（航向旋转）。RC yaw 杆 → 差速 → 航向变化。
  *
  * 姿态模式（ATTITUDE_MODE）：
- *   外环：q_error.z → yawAnglePID → yawRateTarget
+ *   外环：q_error.x → yawAnglePID → yawRateTarget（航向=体轴x分量）
  *   内环：yawRatePID → alpha_yaw（角加速度，rad/s²）→ mix层 × Ix → Mx → 差速
  *
  * 速率模式（RATE_MODE）：
@@ -1055,15 +1054,15 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
       Quaternion q_error = quaternionMultiply(quaternionConjugate(q_current), q_target);
       float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
 
-      float q_vec_norm_z = fabsf(q_error.z);
-      float precise_scale_z;
-      if (q_vec_norm_z > 0.25f)
-        precise_scale_z = 2.0f * atan2f(q_vec_norm_z, fabsf(q_error.w))
-                          / q_vec_norm_z * RAD_TO_DEG;
+      float q_vec_yaw = fabsf(q_error.x);  // 航向=体轴x分量（VTOL绕推力轴旋转）
+      float precise_scale_yaw;
+      if (q_vec_yaw > 0.25f)
+        precise_scale_yaw = 2.0f * atan2f(q_vec_yaw, fabsf(q_error.w))
+                            / q_vec_yaw * RAD_TO_DEG;
       else
-        precise_scale_z = 2.0f * RAD_TO_DEG;
+        precise_scale_yaw = 2.0f * RAD_TO_DEG;
 
-      error_yaw_deg = sign_qw * q_error.x * precise_scale_z;  // 航向=体轴x分量
+      error_yaw_deg = sign_qw * q_error.x * precise_scale_yaw;  // 航向=体轴x分量
 
       yawRateTarget = yawAnglePID.computeWithExternalDerivative(
           error_yaw_deg, 0, -current_omega_dps_body_filtered.x);  // 外部导数取omega.x（航向速率）
@@ -1103,7 +1102,7 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  * @brief 步骤8: 混控输出 — 物理模型逆解控制分配版
  *
  * 控制链底层（上层与飞行器模型完全解耦）：
- *   alpha × I → M_cmd → allocateMoments(FULL_B) → δ_f, δ_t, Δω
+ *   alpha × I → M_cmd → allocateMoments(BTRUE) → δ_f, δ_t, Δω
  *
  * 轴向（VTOL，x_b朝上）：x=航向/差速，y=俯仰/尾摆，z=侧倾/前摆
  * 手动TVC旁路：RC直接映射舵机，跳过控制分配。
@@ -1125,7 +1124,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
 
   if (!inputs.is_unlocked)
   {
-    // 锁定：电机最低，舵机中位
+    // 锁定：电机最低，舵机中位；同时重置 BTRUE 工作点（防看门狗复位后 stale）
+    prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
   }
   else if (inputs.is_manual_tvc)
   {
