@@ -2,6 +2,16 @@
 .reasonix/
 .claude/skills
 
+# ---- 大型二进制资产（不纳入Git版本控制）----
+视频/
+零件打印/
+*.mp4
+*.stl
+*.STEP
+*.step
+*.STP
+*.stp
+
 # ---- 操作系统 ----
 Thumbs.db
 desktop.ini
