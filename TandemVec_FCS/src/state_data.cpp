@@ -93,18 +93,18 @@ const float RC_LOITER_DEADZONE = 25.0f;
  * ==========================================================================================
  */
 
-// --- 4.1 姿态控制 (Roll/Pitch/Yaw) — VTOL 体轴映射，内环输出角加速度 rad/s² ---
-// 上层纯运动学（quaternion误差→角速率→角加速度），下层物理逆解（I×α→M→分配）
-PositionPID rollAnglePID(4.25f, 0.0f * 0.005f, 0.0f);
-// Roll内环: 速率误差(deg/s) → α_roll(rad/s²), Kp单位=(rad/s²)/(deg/s)
-PositionPID rollRatePID(0.30f, 0.05f * 0.005f, 0.0f);
-PositionPID pitchAnglePID(4.25f, 0.0f * 0.005f, 0.0f);
-// Pitch内环: 速率误差(deg/s) → α_pitch(rad/s²)
-PositionPID pitchRatePID(0.30f, 0.05f * 0.005f, 0.0f);
-// Yaw外环
-PositionPID yawAnglePID(3.0f, 0.0f, 0.0f);
-// Yaw内环: 速率误差(deg/s) → α_yaw(rad/s²)，稍保守（差速有电机时延）
-PositionPID yawRatePID(0.15f, 0.02f * 0.005f, 0.0f);
+// --- 4.1 姿态控制 (Roll/Pitch/Yaw) — VTOL 体轴映射 ---
+// 外环：P + I（补偿持续扰动：风/偏重心/配平偏差），单位 deg/s
+// 内环：纯 P（物理逆解层消除稳态力矩误差），输出 rad/s²
+//
+//  Ki值解读：PositionPID 用 ki*error（不乘dt），200Hz 下等效连续增益 = ki × 200
+//  外环 Ki=0.010 → 等效 2.0/s：持续 5°误差 → 1s后 ω_ref 偏置 ~10 deg/s
+PositionPID rollAnglePID(4.25f, 0.015f, 0.0f);
+PositionPID rollRatePID(0.30f, 0.0f, 0.0f);  // 纯P，物理逆解自洽
+PositionPID pitchAnglePID(4.25f, 0.015f, 0.0f);
+PositionPID pitchRatePID(0.30f, 0.0f, 0.0f);  // 纯P
+PositionPID yawAnglePID(3.0f, 0.010f, 0.0f);
+PositionPID yawRatePID(0.15f, 0.0f, 0.0f);    // 纯P，差速通道
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
