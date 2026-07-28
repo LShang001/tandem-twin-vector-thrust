@@ -215,17 +215,17 @@ void setup()
   rollAnglePID.setIntegralThreshold(0.0f);
   pitchAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Roll内环: 速率误差(deg/s)→前摆/侧倾α(rad/s²), Ki=0.0003配平 ---
-  // α_max=0.81@hover→限幅±2.0(2.5×裕度)。>20deg/s误差时停积分(防20°阶跃泛滥)
-  rollRatePID.setOutputLimits(-2.0f, 2.0f);
-  rollRatePID.setIntegralLimit(1.0f);     // I上限1.0 rad/s² ≈ 0.36N·m配平力矩
-  rollRatePID.setIntegralThreshold(20.0f);// ★积分分离: |e|>20deg/s时不积分
+  // --- Roll内环: α限幅—实飞校准起点。从±3.0起步，每次+2.0，振荡回退 ---
+  // I不确定→α_max不确定→不推导具体值→实飞逐次增大直到响应满意
+  rollRatePID.setOutputLimits(-3.0f, 3.0f);    // 保守起点,首飞后调大
+  rollRatePID.setIntegralLimit(2.0f);
+  rollRatePID.setIntegralThreshold(30.0f);
   rollRatePID.setFilterCoefficient(0.2f);
 
   // --- Pitch内环: 同Roll ---
-  pitchRatePID.setOutputLimits(-2.0f, 2.0f);
-  pitchRatePID.setIntegralLimit(1.0f);
-  pitchRatePID.setIntegralThreshold(20.0f);
+  pitchRatePID.setOutputLimits(-3.0f, 3.0f);
+  pitchRatePID.setIntegralLimit(2.0f);
+  pitchRatePID.setIntegralThreshold(30.0f);
   pitchRatePID.setFilterCoefficient(0.2f);
 
   // --- Yaw外环 ---
@@ -233,10 +233,10 @@ void setup()
   yawAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.3f);
   yawAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Yaw内环: 速率误差→航向α(rad/s²), Ki=0.0003, |e|>15deg/s停积分(差速保守) ---
+  // --- Yaw内环: 差速保守。α限幅起点±2.0, 首飞后每次+1.0 ---
   yawRatePID.setOutputLimits(-2.0f, 2.0f);
-  yawRatePID.setIntegralLimit(0.5f);
-  yawRatePID.setIntegralThreshold(15.0f);
+  yawRatePID.setIntegralLimit(1.0f);
+  yawRatePID.setIntegralThreshold(30.0f);
   yawRatePID.setFilterCoefficient(0.2f);
 
   // --- 高度串级 PID ---

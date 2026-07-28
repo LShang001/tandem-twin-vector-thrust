@@ -146,7 +146,7 @@ int main()
     std::printf("%8s %8s %8s %8s %s\n","Kp_a","peak°","final°","settle","趋势");
     for(float ka=2.f;ka<=8.5f;ka+=1.f){
         float kk[3]={ka,ka,4.f};
-        run_full(kk,Kp_r,Ki_r,2.f,20.f,thr,3.f,3.f,q_target,sim_s,dt,out);
+        run_full(kk,Kp_r,Ki_r,20.f,20.f,thr,3.f,3.f,q_target,sim_s,dt,out);
         const char *t=out[0]>25.f?"⚠️过冲":out[2]>4.f?"慢":"✅";
         std::printf("%7.1f %7.1f %7.2f %7.2f %s\n",ka,out[0],out[1],out[2],t);
     }
@@ -160,7 +160,7 @@ int main()
     std::printf("%8s %8s %8s %8s %s\n","Kp_r","peak°","final°","settle","趋势");
     for(float kr=0.10f;kr<=0.55f;kr+=0.05f){
         float kk[3]={kr,kr,0.15f};
-        run_full(Kp_a,kk,Ki_r,2.f,20.f,thr,3.f,3.f,q_target,sim_s,dt,out);
+        run_full(Kp_a,kk,Ki_r,20.f,20.f,thr,3.f,3.f,q_target,sim_s,dt,out);
         const char *t=out[0]>25.f?"⚠️过冲":out[2]>4.f?"慢":"✅";
         std::printf("%7.2f %7.1f %7.2f %7.2f %s\n",kr,out[0],out[1],out[2],t);
     }
@@ -207,7 +207,7 @@ int main()
         int N=(int)(sim_s/dt);RigidBody body;Noise ng;
         PositionPID ang[3]={{Kp_a[0],0,0},{Kp_a[1],0,0},{Kp_a[2],0,0}};
         PositionPID rate[3]={{Kp_r[0],Ki_r[0],0},{Kp_r[1],Ki_r[1],0},{Kp_r[2],Ki_r[2],0}};
-        for(int i=0;i<3;i++){ang[i].setOutputLimits(-50,50);rate[i].setOutputLimits(-2.f,2.f);rate[i].setIntegralLimit(1.f);rate[i].setIntegralThreshold(20.f);}
+        for(int i=0;i<3;i++){ang[i].setOutputLimits(-50,50);rate[i].setOutputLimits(-20.f,20.f);rate[i].setIntegralLimit(5.f);rate[i].setIntegralThreshold(30.f);}
         ComplementaryFilter gf[3]={{0.3f},{0.3f},{0.3f}},aof[3]={{0.85f},{0.85f},{0.85f}},rof[3]={{0.25f},{0.25f},{0.25f}};
         MotorModel mf(P.tauM),mr(P.tauM);PropulsionState ps={0,0,0,0};
         float max_e=0,set_at=99,fin_e=0;
