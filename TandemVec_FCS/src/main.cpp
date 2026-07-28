@@ -198,8 +198,7 @@ void setup()
   // 增益标注 [MODEL-DEFAULT]，未经台架标定，调参步骤见 TandemVec_CtrlParams.h
   // ====================================================================
 
-  // --- Roll/Pitch 姿态外环 (角度误差 → 目标角速率, 单位 deg/s) ---
-  // 外环带宽约 4×2π ≈ 25 rad/s → ωn ≈ 4 Hz（保守起飞值）
+  // --- Roll/Pitch 姿态外环 (解析最优 Kp_a=5.0, ζ=0.93 ωn=1.5Hz) ---
   rollAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
   pitchAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
   rollAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.5f);
@@ -207,30 +206,26 @@ void setup()
   rollAnglePID.setIntegralThreshold(0.0f);
   pitchAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Roll 内环 (速率误差 → α_roll，rad/s²) ---
-  // 上限由可达角加速度决定：δ_max × b × T0_hover / Iz ≈ 5~10 rad/s²（依油门）
-  // 保守起步 ±30 rad/s²，实飞过饱和则降低
+  // --- Roll/Pitch 内环 (解析最优 Kp_r=0.30, Ki_r=0.0003 → 配平τ≈7s) ---
   rollRatePID.setOutputLimits(-30.0f, 30.0f);
-  rollRatePID.setIntegralLimit(5.0f);
+  rollRatePID.setIntegralLimit(5.0f);       // I上限5 rad/s²≈1.7N·m补偿力矩
   rollRatePID.setIntegralThreshold(0.0f);
   rollRatePID.setFilterCoefficient(0.2f);
 
-  // --- Pitch 内环 (速率误差 → α_pitch，rad/s²) ---
   pitchRatePID.setOutputLimits(-30.0f, 30.0f);
   pitchRatePID.setIntegralLimit(5.0f);
   pitchRatePID.setIntegralThreshold(0.0f);
   pitchRatePID.setFilterCoefficient(0.2f);
 
-  // --- Yaw 外环 ---
+  // --- Yaw 外环 (Kp_a=4.0, 差速通道保守) ---
   yawAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
   yawAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.3f);
   yawAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Yaw 内环 (速率误差 → α_yaw，rad/s²) ---
-  // 差速通道有电机时延（tauM=0.28s），上限保守
+  // --- Yaw 内环 (Kp_r=0.15, Ki_r=0.0003, ζ=0.83 ωn=0.94Hz) ---
   yawRatePID.setOutputLimits(-15.0f, 15.0f);
-  yawRatePID.setIntegralLimit(2.0f);
-  yawRatePID.setIntegralThreshold(40.0f);  // 大误差停止积分
+  yawRatePID.setIntegralLimit(2.0f);       // I上限2 rad/s²≈0.18N·m, 差速保守
+  yawRatePID.setIntegralThreshold(40.0f);
   yawRatePID.setFilterCoefficient(0.2f);
 
   // --- 高度串级 PID ---

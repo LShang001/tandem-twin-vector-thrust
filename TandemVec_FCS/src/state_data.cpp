@@ -93,16 +93,23 @@ const float RC_LOITER_DEADZONE = 25.0f;
  * ==========================================================================================
  */
 
-// --- 4.1 姿态控制 (Roll/Pitch/Yaw) — VTOL 体轴映射，内环输出角加速度 rad/s² ---
-// 积分放在内环 —— 仿真验证：PositionPID no-dt约定下外环Ki会因高频累加造
-// 成严重超调(RMS恶化2倍)。内环Ki=0.0002微量积分不会干扰瞬态但在持续扰动
-// 下1~2秒内缓慢建立补偿力矩≈自动配平。等效连续增益=Ki×200=0.04/s。
-PositionPID rollAnglePID(4.25f, 0.0f, 0.0f);
-PositionPID rollRatePID(0.30f, 0.0002f, 0.0f);
-PositionPID pitchAnglePID(4.25f, 0.0f, 0.0f);
-PositionPID pitchRatePID(0.30f, 0.0002f, 0.0f);
-PositionPID yawAnglePID(3.0f, 0.0f, 0.0f);
-PositionPID yawRatePID(0.15f, 0.0001f, 0.0f);
+// --- 4.1 姿态控制 (Roll/Pitch/Yaw) — 解析最优增益 ---
+//
+//  级联P-P闭环=二阶系统: θ/θ_ref=ωn²/(s²+2ζωn·s+ωn²)
+//    ωn² = (Kp_r×57.3) × Kp_a,    2ζωn = Kp_r×57.3
+//
+//  Roll/Pitch: Kp_a=5.0, Kp_r=0.30 → Kp_r_eff=17.2 → ζ=0.93, ωn=9.3(1.5Hz)
+//    (当前=保守偏阻尼值，避免悬停振荡。实飞可增至 Kp_a=5.5 Kp_r=0.30→ζ=0.78)
+//  Yaw: Kp_a=4.0, Kp_r=0.15 → ζ=0.83, ωn=5.9(0.94Hz) (差速通道保守)
+//
+//  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
+//    PositionPID no-dt约定: Ki×200=等效连续增益。0.0003×200=0.06/s
+PositionPID rollAnglePID(5.0f, 0.0f, 0.0f);
+PositionPID rollRatePID(0.30f, 0.0003f, 0.0f);
+PositionPID pitchAnglePID(5.0f, 0.0f, 0.0f);
+PositionPID pitchRatePID(0.30f, 0.0003f, 0.0f);
+PositionPID yawAnglePID(4.0f, 0.0f, 0.0f);
+PositionPID yawRatePID(0.15f, 0.0003f, 0.0f);
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
