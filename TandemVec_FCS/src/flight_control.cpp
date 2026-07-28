@@ -51,7 +51,8 @@ void process_control_inputs(ControlInputs_t &inputs)
   //   > 1500: 已解锁 (Armed) - 允许电机输出
   //   <= 1500: 已锁定 (Disarmed) - 电机锁定
   // 使用 7 点中值滤波去除机械开关抖动
-  inputs.is_unlocked = (isLinkUp || failsafe_in_flight) && (unlockMedian.filter(static_cast<float>(raw_rc_values[4])) > 1500.0f);
+  // 失控保护(failsafe_in_flight)绕过解锁通道阈值判定，避免断链时 1500中值导致的空中锁定
+  inputs.is_unlocked = failsafe_in_flight || (isLinkUp && (unlockMedian.filter(static_cast<float>(raw_rc_values[4])) > 1500.0f));
 
   // 通道 6 (Ignition): 点火开关
   //   > 1500: 允许点火 (点火 MOS 管通电)
@@ -1148,9 +1149,13 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   else
   {
     // ---- 姿态控制模式：物理模型逆解控制分配 ----
-    bool tilt_protect = (fabsf(AHRS_Packet.Roll)  > 45.0f ||
-                         fabsf(AHRS_Packet.Pitch) > 45.0f);
-    if (!tilt_protect)
+    // 倾角保护带迟滞：触发45°，退出40°，避免边界振荡
+    static bool tilt_protected = false;
+    if (!tilt_protected)
+      tilt_protected = (fabsf(AHRS_Packet.Roll) > 45.0f || fabsf(AHRS_Packet.Pitch) > 45.0f);
+    else
+      tilt_protected = !(fabsf(AHRS_Packet.Roll) < 40.0f && fabsf(AHRS_Packet.Pitch) < 40.0f);
+    if (!tilt_protected)
     {
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
       float Mx = P.Ix * outputs.alpha_yaw;   // 体轴x → 航向力矩 → 差速

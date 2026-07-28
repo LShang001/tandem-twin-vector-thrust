@@ -247,7 +247,9 @@ void setup()
   // --- 传感器初始化 ---
   if (!initMagnetometer())
   {
-    Serial8.println("SYSTEM HALTED: Sensor Init Failed.");
+    Serial8.println("WARNING: Magnetometer Init Failed. AUTO modes degraded.");
+    // 磁力计失效时AUTO_POS/GUIDED模式航向不可观测，仅手动飞行可用
+    // LED_yellow已在下面处理，此处仅记录错误
   }
 
   if (initICM42688() != 0)
