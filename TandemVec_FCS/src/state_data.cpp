@@ -10,6 +10,7 @@
  * 不能在多个 .cpp 中包含。current_omega_dps_body_filtered 的定义移至 main.cpp。
  */
 #include "state_data.h"
+#include "TandemVec_Config.h"   // 引入唯一参数源，使 initial_mass 与 P.m 保持同步
 
 /*
  * ==========================================================================================
@@ -59,7 +60,8 @@ HardwareTimer *TaskTimer = new HardwareTimer(TIM8);
 // --- 3.1 物理常数（全部从可测量物理量推导，来源见注释）---
 const float G_TO_MS2 = 9.81f;
 const float G_ACCEL_CONST = 9.81f;          // 重力, m/s²。与 TandemVec_Config.h 一致
-float initial_mass = 1.0f;                  // ⚠️ 待实机称量后填入准确值 (kg)
+float initial_mass = kDefaultTandemVecParams.m;  // 唯一来源：TandemVec_Config.h §质量
+                                                  // 修改质量请改 kDefaultTandemVecParams.m
 
 // -------- 悬停基准点物理量（40%油门, w0=460rad/s）--------
 // T_hover = kT × w0² = 1.04e-5 × 460² = 2.20 N
@@ -376,6 +378,14 @@ float roll_output = 0.0f;     // 侧倾角加速度 alpha_roll (rad/s²)（mix�
 float pitch_output = 0.0f;    // Pitch TVC 修正量 (deg)
 float yaw_output = 0.0f;   // 航向角加速度 alpha_yaw (rad/s²)（mix层再×Ix→Mx→差速Δω→航向）
 float throttlePercent = 0.0f; // 油门百分比 (0-100%)
+
+// ---- 在线参数辨识结果（★ 纯观测，不参与控制回路）----
+// 初值 b=1.0 表示"与名义惯量一致"，激励不足时保持该值。
+float id_b_est[3]      = {1.0f, 1.0f, 1.0f};
+float id_d_est[3]      = {0.0f, 0.0f, 0.0f};
+float id_cg_mm         = 0.0f;
+bool  id_excited[3]    = {false, false, false};
+float id_kp_suggest[3] = {0.0f, 0.0f, 0.0f};
 
 // 执行机构输出百分比 (用于遥测显示)
 float ch1_output = 0.0f, ch2_output = 0.0f; // PA0:前摆舵机(偏航/δ_f), PA1:尾摆舵机(俯仰/δ_t)

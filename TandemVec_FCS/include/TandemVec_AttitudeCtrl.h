@@ -99,9 +99,17 @@ inline void attitudeStep(const Quat4f& q_meas,
 
     // ---- 步骤3：比例输出 ω_ref = 2·kp·[q_err.x, q_err.y, q_err.z] ---
     // 系数2：q_err.vec ≈ (θ/2)·n̂ → 乘2后输出正比于角度误差θ
-    omega_ref[0] = 2.0f * g.kp_roll  * q_err.x;  // roll  (p)
-    omega_ref[1] = 2.0f * g.kp_pitch * q_err.y;  // pitch (q)
-    omega_ref[2] = 2.0f * g.kp_yaw   * q_err.z;  // yaw   (r)
+    //
+    // 注意：本函数采用标准 FRD 内部约定（roll←x, pitch←y, yaw←z）。
+    // CascadeCtrl 内部全链（RateCtrl + 惯量逆解 + 分配）均使用此约定，
+    // 仿真与测试保持一致。
+    //
+    // 实际 VTOL 机体物理映射（x_b 朝上）在 flight_control.cpp 单独处理：
+    //   侧倾（前摆/z_b）← q_error.z   差速（x_b）← q_error.x
+    // 两套约定独立，不混用。
+    omega_ref[0] = 2.0f * g.kp_roll  * q_err.x;  // FRD roll  (p) / VTOL 差速轴
+    omega_ref[1] = 2.0f * g.kp_pitch * q_err.y;  // FRD pitch (q) / VTOL 俯仰轴（相同）
+    omega_ref[2] = 2.0f * g.kp_yaw   * q_err.z;  // FRD yaw   (r) / VTOL 侧倾轴
 
     // ---- 步骤4：各轴限幅 -----------------------------------------
     omega_ref[0] = clamp_f(omega_ref[0], -g.omega_max_roll,  g.omega_max_roll);

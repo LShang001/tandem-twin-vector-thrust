@@ -50,6 +50,44 @@ struct TandemVecParams
     float g;     // m/s²     重力加速度
 };
 
+// ============================================================
+//  ServoConfig — 舵机标定参数（首飞前必须核查，不影响控制算法逻辑）
+//
+//  标定流程：
+//    1. dir_pitch / dir_roll：手动TVC模式，推pitch/roll摇杆观察摆座方向；
+//       若摆向与期望相反，将对应值从 +1.f 改为 -1.f。
+//    2. half_travel_deg：手动TVC模式推满行程（摆座到25°），量舵机实际
+//       转过角度 s_deg；则 half_travel_deg = s_deg / (25/45) ≈ s_deg × 1.8。
+//    3. zero_pitch_pct / zero_roll_pct：摇杆归中时若摆座不在 0°，
+//       调整偏置（正值向正方向偏）直到目视归零。单位：百分比（%）。
+// ============================================================
+struct ServoConfig
+{
+    float teeth_servo;       // 舵机齿轮齿数（当前硬件：30T）
+    float teeth_gimbal;      // 摆座齿轮齿数（当前硬件：40T）
+    float half_travel_deg;   // 舵机半行程（°）。待实机标定，默认 45°。
+
+    // 方向：+1.0f = 正摆角→PWM > 50%；-1.0f = 正摆角→PWM < 50%
+    // 取决于舵臂安装方位，地面通电后手动 TVC 核查
+    float dir_pitch;         // 尾摆（俯仰）舵机方向  ← ⚠️ 待核查
+    float dir_roll;          // 前摆（侧倾）舵机方向  ← ⚠️ 待核查
+
+    // 机械中位偏置（%）：补偿安装误差导致的舵机零点偏移
+    // 调整后摇杆归中时摆座应目视在 0°
+    float zero_pitch_pct;    // 尾摆舵机中位偏置  ← 待标定，初始值 0
+    float zero_roll_pct;     // 前摆舵机中位偏置  ← 待标定，初始值 0
+};
+
+static const ServoConfig kDefaultServoConfig = {
+    /* teeth_servo     */ 30.f,
+    /* teeth_gimbal    */ 40.f,
+    /* half_travel_deg */ 45.f,  // ← 待实机标定
+    /* dir_pitch       */ +1.f,  // ← 待核查
+    /* dir_roll        */ +1.f,  // ← 待核查
+    /* zero_pitch_pct  */  0.f,  // ← 待标定
+    /* zero_roll_pct   */  0.f,  // ← 待标定
+};
+
 // 默认参数（来源：2212 1400KV + 9047桨 + 3S锂电实测/估算，待台架标定精化）
 // 更新记录：kT/kQ/wMax 根据官方推力数据(T_max=1.4kg)重算，20260728
 static const TandemVecParams kDefaultTandemVecParams = {
@@ -69,6 +107,6 @@ static const TandemVecParams kDefaultTandemVecParams = {
     // 控制分配
     /* dwMax */ 0.7f,
     // 质量 / 重力
-    /* m     */ 2.6f,
+    /* m     */ 0.7f,    // kg  实测待精化；原 2.6 为固定翼仿真值，已改为 VTOL 估算值
     /* g     */ 9.81f,
 };

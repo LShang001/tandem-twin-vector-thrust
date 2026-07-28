@@ -8,6 +8,8 @@
 #include "TandemVec_Propulsion.h"
 #include "TandemVec_Config.h"
 #include "TandemVec_ControlAllocation.h"
+// 在线参数辨识（★ 纯观测模式：只估计并遥测，不修改任何增益）
+#include "TandemVec_OnlineID.h"
 
 #include <cmath>
 
@@ -246,10 +248,10 @@ void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
   // 判断姿态控制是否激活：需满足解锁、非手动TVC、油门有效三个条件
   bool attitude_control_active = inputs.is_unlocked && !inputs.is_manual_tvc && throttle_active;
 
-  // 姿态角PID积分项控制（仅在姿态模式下启用，三轴对称）
+  // 姿态角PID积分项控制（Roll/Pitch 角度模式启用；Yaw 不设角度外环，始终不用积分）
   rollAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
   pitchAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
-  yawAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
+  yawAnglePID.setIntegralEnable(false);  // 偏航纯速率控制，角度外环永不启用
 
   // 姿态角速度PID积分项控制（姿态控制激活时启用）
   rollRatePID.setIntegralEnable(attitude_control_active);
@@ -963,7 +965,12 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 
       // VTOL 体轴映射：x_b朝上时 → 侧倾=绕z_b旋转，俯仰=绕y_b旋转，航向=绕x_b旋转
       // Roll（侧倾）取 q_err.z，Pitch 取 q_err.y，Yaw（航向）在 execute_yaw_controller 取 q_err.x
-      float q_vec_norm = sqrtf(q_error.z * q_error.z + q_error.y * q_error.y);
+      // 使用完整四元数向量模长，确保多轴同时存在误差时 atan2 参数正确
+      // 原代码仅用 sqrt(y²+z²)，当偏航误差（x分量）不为零时会低估模长，
+      // 导致进入 atan2 分支的判断偏低，large-angle精确缩放系数偏大
+      float q_vec_norm = sqrtf(q_error.x * q_error.x +
+                               q_error.y * q_error.y +
+                               q_error.z * q_error.z);
       float precise_scale;
       if (q_vec_norm > 0.25f)
       {
@@ -1026,61 +1033,32 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 }
 
 /**
- * @brief 步骤7: 偏航/航向控制器 — VTOL 差速航向版
+ * @brief 步骤7: 偏航/航向控制器 — 纯速率模式
  *
- * VTOL 飞行时机体 x_b 轴朝上，差速 Δω 产生 Mx（绕推力轴），
- * 对应世界偏航（航向旋转）。RC yaw 杆 → 差速 → 航向变化。
+ * 偏航（差速 Δω）始终使用角速率控制，不设角度外环：
+ *   摇杆居中 → yawRateTarget=0 → 内环积分维持当前航向（与多旋翼逻辑相同）
+ *   摇杆偏转 → 按比例旋转，松杆即停
  *
- * 姿态模式（ATTITUDE_MODE）：
- *   外环：q_error.x → yawAnglePID → yawRateTarget（航向=体轴x分量）
- *   内环：yawRatePID → alpha_yaw（角加速度，rad/s²）→ mix层 × Ix → Mx → 差速
- *
- * 速率模式（RATE_MODE）：
- *   RC yaw_raw → yawRateTarget → yawRatePID → alpha_yaw
+ * 与 Roll/Pitch 的角度保持模式不同：差速力矩权限有限（悬停≈0.1N·m），
+ * 航向角外环依赖磁罗盘，可靠性低；纯速率模式更稳健、参数更少。
  */
 void execute_yaw_controller(const ControlInputs_t &inputs,
                              const Quaternion      &q_target,
                              ControlOutputs_t      &outputs)
 {
   bool attitude_ctrl_active = inputs.is_unlocked && !inputs.is_manual_tvc;
-  const float dwMax = kDefaultTandemVecParams.dwMax;
 
   if (attitude_ctrl_active)
   {
-    if (inputs.attitude_mode == ATTITUDE_MODE)
-    {
-      // ---- 偏航外环：q_error.z → yawRateTarget ----
-      Quaternion q_current = {AHRS_Packet.Qw, AHRS_Packet.Qx,
-                              AHRS_Packet.Qy, AHRS_Packet.Qz};
-      Quaternion q_error = quaternionMultiply(quaternionConjugate(q_current), q_target);
-      float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
-
-      float q_vec_yaw = fabsf(q_error.x);  // 航向=体轴x分量（VTOL绕推力轴旋转）
-      float precise_scale_yaw;
-      if (q_vec_yaw > 0.25f)
-        precise_scale_yaw = 2.0f * atan2f(q_vec_yaw, fabsf(q_error.w))
-                            / q_vec_yaw * RAD_TO_DEG;
-      else
-        precise_scale_yaw = 2.0f * RAD_TO_DEG;
-
-      error_yaw_deg = sign_qw * q_error.x * precise_scale_yaw;  // 航向=体轴x分量
-
-      yawRateTarget = yawAnglePID.computeWithExternalDerivative(
-          error_yaw_deg, 0, -current_omega_dps_body_filtered.x);  // 外部导数取omega.x（航向速率）
-      yawRateTarget = constrain(yawRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
-    }
-    else
-    {
-      yawRateTarget = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
-                               -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
-      yawAnglePID.reset();
-      yawRatePID.reset();
-    }
+    // 偏航始终使用速率模式（无论 attitude_mode 开关状态）
+    // 摇杆 → 目标偏航速率，与多旋翼 STABILIZE 模式一致
+    yawRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f,
+                             -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+    yawAnglePID.reset();  // 偏航不使用角度外环
 
     yawRateTarget = yawAngleOutputFilter.filter(yawRateTarget);
 
-    // ---- 偏航内环：速率误差 → 角加速度指令 alpha_yaw (rad/s²) ----
-    // VTOL：航向速率 = 体轴x角速率 → 测 omega.x
+    // 内环：速率误差 → 角加速度指令 alpha_yaw (rad/s²)
     outputs.alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(
         yawRateTarget, current_omega_dps_body_filtered.x);
     outputs.alpha_yaw = yawOutputFilter.filter(outputs.alpha_yaw);
@@ -1089,11 +1067,8 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
   {
     yawAnglePID.reset();
     yawRatePID.reset();
-    yawRateTarget = 0.0f;
-    if (inputs.is_manual_tvc)
-      outputs.alpha_yaw = 0.0f;  // 手动TVC时yaw由mix层RC旁路直接处理
-    else
-      outputs.alpha_yaw = 0.0f;
+    yawRateTarget    = 0.0f;
+    outputs.alpha_yaw = 0.0f;  // 手动TVC由mix层RC旁路处理；锁定时保持零
   }
 
   yaw_output = outputs.alpha_yaw;
@@ -1113,6 +1088,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   const TandemVecParams &P = kDefaultTandemVecParams;
   const float MOTOR_PWM_MIN = 1000.0f;
   const float MOTOR_PWM_MAX = 2000.0f;
+  (void)MOTOR_PWM_MIN; (void)MOTOR_PWM_MAX;  // 保留常量供调试/注释引用，消除编译器警告
 
   // BTRUE 策略需要上一拍执行器状态（INDI 预测器）
   // 首拍全零 → B_true = B_full（零摆角名义点），行为安全
@@ -1120,8 +1096,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
 
   float front_gimbal_deg = 0.0f;
   float tail_gimbal_deg  = 0.0f;
-  float motor1_us        = MOTOR_PWM_MIN;
-  float motor2_us        = MOTOR_PWM_MIN;
+  float motor1_pct       = 0.0f;   // 直接用百分比，避免 us→pct 双重转换
+  float motor2_pct       = 0.0f;
 
   if (!inputs.is_unlocked)
   {
@@ -1139,23 +1115,12 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     float manual_dw = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
                                -P.dwMax, P.dwMax);
     auto diff = allocateDifferential(w0, manual_dw, P);
-    motor1_us = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax,
-                                   MOTOR_PWM_MIN, MOTOR_PWM_MAX),
-                          MOTOR_PWM_MIN, MOTOR_PWM_MAX);
-    motor2_us = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax,
-                                   MOTOR_PWM_MIN, MOTOR_PWM_MAX),
-                          MOTOR_PWM_MIN, MOTOR_PWM_MAX);
+    motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
+    motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
   }
   else
   {
-    // ---- 姿态控制模式：物理模型逆解控制分配 ----
-    // 倾角保护带迟滞：触发45°，退出40°，避免边界振荡
-    static bool tilt_protected = false;
-    if (!tilt_protected)
-      tilt_protected = (fabsf(AHRS_Packet.Roll) > 45.0f || fabsf(AHRS_Packet.Pitch) > 45.0f);
-    else
-      tilt_protected = !(fabsf(AHRS_Packet.Roll) < 40.0f && fabsf(AHRS_Packet.Pitch) < 40.0f);
-    if (!tilt_protected)
+    // ---- 姿态控制模式：物理模型逆解控制分配（无倾角保护，支持大机动）----
     {
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
       float Mx = P.Ix * outputs.alpha_yaw;   // 体轴x → 航向力矩 → 差速
@@ -1164,11 +1129,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
 
       // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
-      // BTRUE：用上一拍执行器实际状态构造当前工作点，在线计算完整 Jacobian 并精确逆解
-      // （首拍 prev_state 全零 → B_true 退降到 B_full，行为安全）
       AllocationInput ai;
       ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0;
-      ai.current_state = prev_prop_state;   // 上一拍：delta_f, delta_t, wf, wt
+      ai.current_state = prev_prop_state;
 
       AllocationOutput ao = allocateMoments(ai, P, AllocationStrategy::BTRUE);
 
@@ -1176,16 +1139,12 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       tail_gimbal_deg  = ao.delta_t * RAD_TO_DEG;
       front_gimbal_deg = ao.delta_f * RAD_TO_DEG;
 
-      // 层3b：差速指令 → 双电机转速 → PWM
+      // 层3b：差速指令 → 双电机转速 → 直接输出百分比（消除 us→pct 双重转换）
       auto diff = allocateDifferential(w0, ao.dw, P);
-      motor1_us = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax,
-                                     MOTOR_PWM_MIN, MOTOR_PWM_MAX),
-                            MOTOR_PWM_MIN, MOTOR_PWM_MAX);
-      motor2_us = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax,
-                                     MOTOR_PWM_MIN, MOTOR_PWM_MAX),
-                            MOTOR_PWM_MIN, MOTOR_PWM_MAX);
+      motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
+      motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
 
-      // 更新 BTRUE 预测器状态（本拍执行器指令 → 下拍工作点）
+      // 更新 BTRUE 预测器状态
       prev_prop_state.delta_f = ao.delta_f;
       prev_prop_state.delta_t = ao.delta_t;
       prev_prop_state.wf      = diff.wf_target;
@@ -1194,31 +1153,20 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   }
 
   // ================================================================
-  // 舵机输出 — 齿轮传动映射 (直观物理量, 待实机标定校准)
+  // 舵机输出 — 齿轮传动 + 标定参数（全部来自 kDefaultServoConfig）
   // ================================================================
-  // 机械参数:
-  //   主动齿(舵机): 30T         从动齿(摆座): 40T
-  //   传动比: 40/30 = 1.333     servo_deg = gimbal_deg × 1.333
-  //   舵机行程: ±45° (0~100% PWM = 1000~2000µs, 待标定)
-  //
-  // 映射公式:
-  //   servo_deg = gimbal_deg × TEETH_GIMBAL / TEETH_SERVO
-  //   servo_pct = 50 + servo_deg / SERVO_HALF_TRAVEL × 50
-  //
-  // 标定值 (实机测量后更新):
-  //   摆座 0°  → 舵机 0°  → PWM 50% = 1500µs
-  //   摆座 25° → 舵机 33.3° → PWM 87% = 1740µs  ← 验证此点
-  //   摆座-25° → 舵机-33.3° → PWM 13% = 1260µs
+  // 修改舵机方向 / 中位 / 行程：编辑 TandemVec_Config.h §ServoConfig
   // ================================================================
-  const float TEETH_SERVO    = 30.f;  // 舵机齿轮齿数
-  const float TEETH_GIMBAL   = 40.f;  // 摆座齿轮齿数
-  const float SERVO_HALF_TRAVEL_DEG = 45.f; // 舵机半行程 (°), 待标定
+  const ServoConfig& SC = kDefaultServoConfig;
+  const float gear = SC.teeth_gimbal / SC.teeth_servo;  // 40/30 = 1.333
 
-  float servo_deg_pitch = tail_gimbal_deg  * (TEETH_GIMBAL / TEETH_SERVO);
-  float servo_deg_roll  = front_gimbal_deg * (TEETH_GIMBAL / TEETH_SERVO);
+  //  有向舵机角(deg) = 摆座角(deg) × 传动比 × 方向符号
+  float servo_deg_pitch = tail_gimbal_deg  * gear * SC.dir_pitch;
+  float servo_deg_roll  = front_gimbal_deg * gear * SC.dir_roll;
 
-  float pitch_servo = 50.f + (servo_deg_pitch / SERVO_HALF_TRAVEL_DEG) * 50.f;
-  float roll_servo  = 50.f + (servo_deg_roll  / SERVO_HALF_TRAVEL_DEG) * 50.f;
+  //  映射到百分比：中位偏置 + 行程归一
+  float pitch_servo = (50.f + SC.zero_pitch_pct) + (servo_deg_pitch / SC.half_travel_deg) * 50.f;
+  float roll_servo  = (50.f + SC.zero_roll_pct ) + (servo_deg_roll  / SC.half_travel_deg) * 50.f;
 
   pitch_servo = constrain(pitch_servo, 0.f, 100.f);
   roll_servo  = constrain(roll_servo,  0.f, 100.f);
@@ -1229,13 +1177,73 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   ch1_output = roll_servo;
 
   // ---- 电机输出 ----
-  float motor1_pct = mapFloat(motor1_us, 1000.0f, 2000.0f, 0.0f, 100.0f);
-  float motor2_pct = mapFloat(motor2_us, 1000.0f, 2000.0f, 0.0f, 100.0f);
   SetServoPos(motor1_pct, MOTOR1_PIN);
   SetServoPos(motor2_pct, MOTOR2_PIN);
   ch3_output = motor1_pct;
   ch4_output = motor2_pct;
 }
+/**
+ * @brief 在线参数辨识更新 — ★ 纯观测模式，不改变任何控制行为
+ *
+ * 作用：估计惯量比 b = I_nominal/I_actual、总扰动 d、重心偏移 CG，
+ *       结果写入 id_* 全局量供地面站与黑匣子记录。
+ *
+ * 【安全性】本函数只读控制器状态，不写任何增益、限幅或输出。
+ *   即使辨识结果完全错误，也不影响飞行 —— 这是"第一步：只观测不闭环"。
+ *   待多架次数据确认 b_est 稳定后，才考虑人工调整增益（第二步）。
+ *
+ * 轴序约定：[0]=roll(侧倾/前摆) [1]=pitch(俯仰/尾摆) [2]=yaw(航向/差速)
+ *   与 outputs.alpha_* 及 current_omega_dps_body_filtered 的 VTOL 映射对应：
+ *   侧倾←omega.z, 俯仰←omega.y, 航向←omega.x
+ */
+static void update_online_identification(const ControlInputs_t &inputs,
+                                         const ControlOutputs_t &outputs)
+{
+  static OnlineID s_online_id;
+  static bool     s_was_unlocked = false;
+
+  // 解锁上升沿：清空跨架次残留（协方差、微分状态、CG 估计）
+  if (inputs.is_unlocked && !s_was_unlocked) s_online_id.reset();
+  s_was_unlocked = inputs.is_unlocked;
+
+  // 仅在姿态控制实际工作时辨识：手动TVC旁路或锁定状态下
+  // alpha_cmd 恒为 0，没有激励，辨识无意义。
+  if (!inputs.is_unlocked || inputs.is_manual_tvc) return;
+
+  // 命令角加速度（内环输出，rad/s²）
+  const float alpha_cmd[3] = { outputs.alpha_roll,
+                               outputs.alpha_pitch,
+                               outputs.alpha_yaw };
+
+  // 实测角速率（deg/s）— OnlineID 内部转 rad/s 再求导
+  // Vector3 分量为 double，需显式转 float（花括号初始化不允许隐式收窄）
+  const float omega_dps[3] = { static_cast<float>(current_omega_dps_body_filtered.z),   // 侧倾
+                               static_cast<float>(current_omega_dps_body_filtered.y),   // 俯仰
+                               static_cast<float>(current_omega_dps_body_filtered.x) }; // 航向
+
+  // 内环积分项 I_term = ki × integral (rad/s²)，用于提取配平力矩→CG偏移
+  const float i_term[3] = { rollRatePID.getKi()  * rollRatePID.getIntegral(),
+                            pitchRatePID.getKi() * pitchRatePID.getIntegral(),
+                            yawRatePID.getKi()   * yawRatePID.getIntegral() };
+
+  s_online_id.step(alpha_cmd, omega_dps, i_term,
+                   outputs.throttle_percent, 0.005f);   // GNC 固定 200Hz
+
+  // ---- 导出遥测（只写 id_* 全局量，不回写控制参数）----
+  for (int i = 0; i < 3; ++i)
+  {
+    id_b_est[i]   = s_online_id.b_est[i];
+    id_d_est[i]   = s_online_id.d_est[i];
+    id_excited[i] = (s_online_id.alpha_var[i] > 4.0f);
+  }
+  id_cg_mm = s_online_id.cg_est_mm;
+
+  // 建议增益（仅供地面站显示与离线复算，**未写回 PID**）
+  id_kp_suggest[0] = s_online_id.adaptKpR(rollRatePID.getKp(),  0);
+  id_kp_suggest[1] = s_online_id.adaptKpR(pitchRatePID.getKp(), 1);
+  id_kp_suggest[2] = s_online_id.adaptKpR(yawRatePID.getKp(),   2);
+}
+
 /**
  * @brief GNC (制导、导航与控制) 核心调度执行器 [频率: 200Hz]
  *
@@ -1292,6 +1300,10 @@ void runGNCExecutive()
 
   // 步骤 8: 将所有计算出的控制量混合，并输出到执行机构
   mix_and_output_commands(controller_inputs, controller_outputs);
+
+  // 步骤 9: 在线参数辨识 — ★ 纯观测，只写 id_* 遥测量，不改任何增益
+  //   放在混控之后：此时 alpha_* 与 throttle_percent 均为本拍最终值。
+  update_online_identification(controller_inputs, controller_outputs);
 
   // --- 3. 清理工作 ---
   // 清除新指令标志，确保每个新指令只被处理一次

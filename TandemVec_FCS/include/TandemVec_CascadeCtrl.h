@@ -139,12 +139,13 @@ struct CascadeCtrl
         }
 
         // 记录角速率是否饱和
+        // omega_ref 已转换为 deg/s，omega_max_* 定义单位为 rad/s，需同步转换后比较
         for (int i = 0; i < 3; ++i) {
-            const float lim[3] = { cp.att.omega_max_roll,
-                                   cp.att.omega_max_pitch,
-                                   cp.att.omega_max_yaw };
-            tel.omega_sat[i] = (tel.omega_ref[i] >=  lim[i]) ||
-                               (tel.omega_ref[i] <= -lim[i]);
+            const float lim_dps[3] = { cp.att.omega_max_roll  * RAD_TO_DEG,
+                                       cp.att.omega_max_pitch * RAD_TO_DEG,
+                                       cp.att.omega_max_yaw   * RAD_TO_DEG };
+            tel.omega_sat[i] = (tel.omega_ref[i] >=  lim_dps[i]) ||
+                               (tel.omega_ref[i] <= -lim_dps[i]);
         }
 
         // ============================================================
