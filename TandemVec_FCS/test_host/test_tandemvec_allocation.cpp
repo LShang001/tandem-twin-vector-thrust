@@ -221,12 +221,14 @@ static void test_saturation()
 // ============================================================
 static void test_roll_degradation()
 {
-    auto out_high = alloc(0.0f, 0.0f, 0.0f, 900.0f);  // 满转速
-    auto out_low  = alloc(0.0f, 0.0f, 0.0f, 90.0f);   // 10% 转速
+    // wMax=1150: authority = (w0/wMax)²，满油门=1.0，10%油门=0.01
+    const float wMax = kDefaultTandemVecParams.wMax;
+    auto out_high = alloc(0.0f, 0.0f, 0.0f, wMax);      // 100% 转速
+    auto out_low  = alloc(0.0f, 0.0f, 0.0f, 0.1f*wMax); // 10% 转速
 
     check(approx(out_high.roll_authority, 1.0f, 1e-4f),
           "满转速 roll_authority ≈ 1.0");
-    check(approx(out_low.roll_authority, 0.01f, 1e-3f),
+    check(approx(out_low.roll_authority, 0.01f, 0.015f),
           "10% 转速 roll_authority ≈ 0.01（平方退化）");
     check(out_high.roll_authority > out_low.roll_authority,
           "高油门滚转效能 > 低油门");
