@@ -379,6 +379,60 @@ static void test_physics_consistency()
 }
 
 // ============================================================
+//  带外部扰动的闭环仿真（验证积分作用消除稳态误差）
+// ============================================================
+static SimResult run_sim_dist(const Quat4f &q_init, const Quat4f &q_target,
+                              float thr_pct, float sim_secs,
+                              float dMx, float dMy, float dMz,
+                              AllocationStrategy stg = AllocationStrategy::FULL_B)
+{
+    const TandemVecParams   &P  = kDefaultTandemVecParams;
+    const CascadeCtrlParams &cp = kDefaultCascadeCtrlParams;
+    const float dt = 0.005f;
+    const int   N  = static_cast<int>(sim_secs / dt);
+
+    CascadeCtrl ctrl; ctrl.reset();
+    BodyState state = { q_init, {0.f, 0.f, 0.f} };
+
+    SimResult res = {};
+    res.err_initial_deg = max_attitude_err_deg(state.q, q_target);
+    float prev_err = res.err_initial_deg;
+    bool  ever_increased = false;
+
+    for (int i = 0; i < N; ++i)
+    {
+        float t = i * dt;
+        CascadeInput ci;
+        ci.q_ref  = q_target;
+        ci.q_meas = state.q;
+        for (int k = 0; k < 3; ++k)
+            ci.omega_meas[k] = state.omega[k] * (180.0f / 3.14159265f);
+        ci.thr = thr_pct / 100.0f;
+
+        CascadeOutput co = ctrl.step(ci, cp, P, stg, dt);
+
+        const AllocationOutput &ao = co.tel.alloc;
+        float w0 = (thr_pct / 100.0f) * P.wMax;
+        auto diff = allocateDifferential(w0, ao.dw, P);
+        PropulsionState ps = { diff.wf_target, diff.wt_target, ao.delta_f, ao.delta_t };
+        SixDOFWrench wr = computeWrench(ps, P);
+        // 叠加常值外部扰动力矩（模拟重心偏移 / 桨扭不对称 / 阵风）
+        float M[3] = { wr.Mx + dMx, wr.My + dMy, wr.Mz + dMz };
+
+        integrate_dynamics(state, M, P, dt);
+
+        float err = max_attitude_err_deg(state.q, q_target);
+        if (err > prev_err + 0.5f && t > 0.2f) ever_increased = true;
+        prev_err = err;
+        if (std::fabs(t - 1.0f) < dt * 0.5f) res.err_1s_deg = err;
+        if (i == N-1)                        res.err_3s_deg = err;
+    }
+    res.converged = (res.err_3s_deg < 2.0f);
+    res.stable    = !ever_increased;
+    return res;
+}
+
+// ============================================================
 //  main
 // ============================================================
 int main()
@@ -397,6 +451,115 @@ int main()
     test_allocation_accuracy();
     test_step_responses();
     test_physics_consistency();
+
+    // ---- Part 4: 差速偏航收敛性 ----
+    std::printf("\n=== Part 4: 差速偏航收敛性 (Ix=0.002 kg·m²，快轴）===\n");
+    {
+        const float D = 3.14159265f / 180.f;
+        Quat4f q0 = {1.f,0.f,0.f,0.f};
+
+        // x轴旋转 = FRD滚转通道 = VTOL差速航向
+        Quat4f q_yaw20 = {cosf(20.f*D/2), sinf(20.f*D/2), 0.f, 0.f};
+        SimResult r = run_sim(q0, q_yaw20, 50.f, 3.f);
+        std::printf("差速偏航+20°: t=1s误差=%.1f°, t=3s误差=%.1f°\n",
+                    r.err_1s_deg, r.err_3s_deg);
+        check(r.converged, "差速偏航+20°：t=3s 误差 < 2°");
+        check(r.err_1s_deg < r.err_initial_deg * 0.5f, "差速偏航：1s内收敛超50%");
+
+        Quat4f q_yaw40 = {cosf(40.f*D/2), sinf(40.f*D/2), 0.f, 0.f};
+        SimResult r2 = run_sim(q0, q_yaw40, 50.f, 5.f);
+        std::printf("差速偏航+40°: t=1s误差=%.1f°, t=5s误差=%.1f°  稳定=%s\n",
+                    r2.err_1s_deg, r2.err_3s_deg, r2.stable?"YES":"NO");
+        check(r2.err_3s_deg < 5.f, "差速偏航+40°：t=5s 误差 < 5°");
+    }
+
+    // ---- Part 5: 三轴联合机动 ----
+    std::printf("\n=== Part 5: 三轴联合机动 ===\n");
+    {
+        const float D = 3.14159265f / 180.f;
+        Quat4f q0 = {1.f,0.f,0.f,0.f};
+
+        // pitch 20° + FRD-yaw(VTOL-roll) 15° + FRD-roll(VTOL-yaw) 10°
+        Quat4f q3 = euler_to_quat(10.f*D, 20.f*D, 15.f*D);
+        SimResult r = run_sim(q0, q3, 50.f, 5.f);
+        std::printf("三轴联合(pitch20+roll15+diff10)°: t=1s误差=%.1f°, t=5s误差=%.1f°\n",
+                    r.err_1s_deg, r.err_3s_deg);
+        check(r.err_3s_deg < 3.f, "三轴联合机动：t=5s 误差 < 3°");
+
+        // 大组合：三轴各30°
+        Quat4f q_big = euler_to_quat(30.f*D, 30.f*D, 30.f*D);
+        SimResult r2 = run_sim(q0, q_big, 50.f, 8.f);
+        std::printf("三轴大机动(各30°): t=1s误差=%.1f°, t=8s误差=%.1f°  稳定=%s\n",
+                    r2.err_1s_deg, r2.err_3s_deg, r2.stable?"YES":"NO");
+        check(r2.err_3s_deg < 5.f, "三轴30°大机动：t=8s 误差 < 5°");
+    }
+
+    // ---- Part 6: 积分抑制稳态扰动 ----
+    std::printf("\n=== Part 6: 积分扰动抑制 ===\n");
+    {
+        const float D = 3.14159265f / 180.f;
+        Quat4f q0 = {1.f,0.f,0.f,0.f};
+        Quat4f q_ref = euler_to_quat(0.f, 15.f*D, 0.f);  // 俯仰15°目标
+
+        // 施加持续俯仰扰动（~10%最大俯仰力矩，模拟重心前移或阵风）
+        const TandemVecParams &P = kDefaultTandemVecParams;
+        float w0_h = 0.5f*P.wMax;
+        float dist_My = 0.08f * P.b * P.kT * w0_h * w0_h;  // 8% 最大俯仰力矩
+
+        // 无扰动基准
+        SimResult r_base = run_sim(q0, q_ref, 50.f, 5.f);
+        // 有扰动
+        SimResult r_dist = run_sim_dist(q0, q_ref, 50.f, 5.f, 0.f, dist_My, 0.f);
+
+        std::printf("扰动大小: My=%.4f N·m\n", dist_My);
+        std::printf("无扰动 t=5s误差: %.2f°\n", r_base.err_3s_deg);
+        std::printf("有扰动 t=5s误差: %.2f°\n", r_dist.err_3s_deg);
+        check(r_dist.err_3s_deg < 3.f, "积分抑制扰动：有8%扰动时 t=5s 误差 < 3°");
+        check(r_dist.err_3s_deg < r_base.err_3s_deg + 2.f,
+              "积分抑制扰动：稳差增量 < 2°（积分有效）");
+    }
+
+    // ---- Part 7: 不同油门适应性 ----
+    std::printf("\n=== Part 7: 不同油门适应性 ===\n");
+    {
+        const float D = 3.14159265f / 180.f;
+        Quat4f q0 = {1.f,0.f,0.f,0.f};
+        Quat4f q_ref = euler_to_quat(0.f, 15.f*D, 0.f);  // 俯仰15°
+
+        SimResult r_lo = run_sim(q0, q_ref, 25.f, 5.f);  // 25% 低油门
+        SimResult r_hi = run_sim(q0, q_ref, 75.f, 3.f);  // 75% 高油门
+
+        std::printf("25%%油门: t=5s误差=%.1f°  稳定=%s\n",
+                    r_lo.err_3s_deg, r_lo.stable?"YES":"NO");
+        std::printf("75%%油门: t=3s误差=%.1f°  稳定=%s\n",
+                    r_hi.err_3s_deg, r_hi.stable?"YES":"NO");
+        check(r_lo.stable,            "25%低油门：系统稳定（无振荡增长）");
+        check(r_hi.stable,            "75%高油门：系统稳定");
+        check(r_lo.err_3s_deg < 5.f, "25%低油门：t=5s 误差 < 5°");
+        check(r_hi.err_3s_deg < 2.f, "75%高油门：t=3s 误差 < 2°（高推力收敛更快）");
+    }
+
+    // ---- Part 8: 极端角度稳定性（倾角保护已关闭） ----
+    std::printf("\n=== Part 8: 极端角度稳定性 ===\n");
+    {
+        const float D = 3.14159265f / 180.f;
+        Quat4f q0 = {1.f,0.f,0.f,0.f};
+
+        // 90° 俯仰（飞机水平侧向）
+        Quat4f q90 = euler_to_quat(0.f, 90.f*D, 0.f);
+        SimResult r90 = run_sim(q0, q90, 50.f, 10.f);
+        std::printf("俯仰步+90°: t=5s误差=%.1f°, t=10s误差=%.1f°  稳定=%s\n",
+                    r90.err_1s_deg, r90.err_3s_deg, r90.stable?"YES":"NO");
+        check(std::isfinite(r90.err_3s_deg), "90°大步：无NaN/Inf（数值稳定）");
+        check(r90.err_3s_deg < 15.f,         "90°大步：t=10s 误差 < 15°");
+
+        // 差速偏航 60°（纯差速通道大角度）
+        Quat4f q_yaw60 = {cosf(60.f*D/2), sinf(60.f*D/2), 0.f, 0.f};
+        SimResult r_y60 = run_sim(q0, q_yaw60, 50.f, 5.f);
+        std::printf("差速偏航+60°: t=1s误差=%.1f°, t=5s误差=%.1f°\n",
+                    r_y60.err_1s_deg, r_y60.err_3s_deg);
+        check(r_y60.err_3s_deg < 5.f, "差速偏航+60°：t=5s 误差 < 5°");
+    }
 
     std::printf("\n");
     if (g_fail == 0)

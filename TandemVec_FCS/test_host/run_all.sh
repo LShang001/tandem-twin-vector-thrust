@@ -55,6 +55,19 @@ run_one "$ROOT/test_host/test_tandemvec_allocation.cpp" ta ""
 run_one "$ROOT/test_host/test_tandemvec_cascade.cpp"    tc ""
 run_one "$ROOT/test_host/test_tandemvec_sim.cpp"        ts ""
 
+# PositionPID v3 回归测试（无 Arduino 依赖，纯平台无关）：
+run_one "$ROOT/test_host/test_position_pid.cpp" pp ""
+
+# 在线辨识（RLS + 自适应增益调度），纯平台无关：
+run_one "$ROOT/test_host/test_online_id.cpp"            oi ""
+
+# 全阶闭环仿真与灵敏度分析。依赖 PositionPID / ComplementaryFilter
+# （后者 include Arduino.h），故需 stub：
+run_one "$ROOT/test_host/test_advanced_theory.cpp"      at  "$STUB_INCLUDE"
+run_one "$ROOT/test_host/test_robustness.cpp"           rb  "$STUB_INCLUDE"
+run_one "$ROOT/test_host/test_qual_analysis.cpp"        qa  "$STUB_INCLUDE"
+run_one "$ROOT/test_host/test_comprehensive_sim.cpp"    cs  "$STUB_INCLUDE"
+
 if [ "$fail" -eq 0 ]; then
   echo "=== 全部宿主机回归测试通过 ==="
   exit 0

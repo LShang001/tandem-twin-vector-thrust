@@ -57,7 +57,7 @@ static void test_attitude_polarity()
     const float kSmallAngle = 0.1f;  // rad，约 5.7°
     float omega[3];
 
-    // 绕 x_b 轴正转 → 期望正滚转速率
+    // 绕 x_b 轴正转 → omega_ref[0] > 0（FRD内部约定；VTOL物理对应差速/航向轴）
     {
         Quat4f qm = {1.f, 0.f, 0.f, 0.f};
         Quat4f qr = {cosf(kSmallAngle/2.f), sinf(kSmallAngle/2.f), 0.f, 0.f};
@@ -67,7 +67,7 @@ static void test_attitude_polarity()
         check(approx(omega[2], 0.f, 0.01f), "外环：滚转误差 → omega_ref[2]≈0");
     }
 
-    // 绕 y_b 轴正转 → 期望正俯仰速率
+    // 绕 y_b 轴正转 → 期望正俯仰速率（VTOL俯仰轴，FRD与VTOL一致）
     {
         Quat4f qm = {1.f, 0.f, 0.f, 0.f};
         Quat4f qr = {cosf(kSmallAngle/2.f), 0.f, sinf(kSmallAngle/2.f), 0.f};
@@ -76,7 +76,7 @@ static void test_attitude_polarity()
         check(omega[1] > 0.f, "外环：俯仰误差+θ → omega_ref[1]>0");
     }
 
-    // 绕 z_b 轴正转 → 期望正偏航速率
+    // 绕 z_b 轴正转 → omega_ref[2] > 0（FRD内部约定；VTOL物理对应侧倾/前摆轴）
     {
         Quat4f qm = {1.f, 0.f, 0.f, 0.f};
         Quat4f qr = {cosf(kSmallAngle/2.f), 0.f, 0.f, sinf(kSmallAngle/2.f)};
@@ -89,10 +89,10 @@ static void test_attitude_polarity()
 static void test_attitude_shortest_path()
 {
     // 目标：绕 z_b 旋转 200° = 等价于 -160°（短路径）
-    // 期望 omega_ref[2] < 0（负偏航速率，走短路径）
+    // 期望 omega_ref[2] < 0（负速率，走短路径）
     const float angle = 200.f * (3.14159265f / 180.f);
     Quat4f qm = {1.f, 0.f, 0.f, 0.f};
-    Quat4f qr = {cosf(angle/2.f), 0.f, 0.f, sinf(angle/2.f)};
+    Quat4f qr = {cosf(angle/2.f), 0.f, 0.f, sinf(angle/2.f)};  // z轴旋转（FRD约定）
     AttitudeCtrlGains g = kDefaultCascadeCtrlParams.att;
     float omega[3];
     attitudeStep(qm, qr, g, omega);
@@ -299,20 +299,37 @@ static void test_cascade_pitch_polarity()
     check(out.delta_t < 0.f,          "俯仰误差 → delta_t < 0（尾摆产生正俯仰力矩）");
 }
 
-static void test_cascade_yaw_polarity()
+static void test_cascade_roll_polarity()
 {
-    // 偏航 +15°：目标比当前向右偏15°
-    // 期望前摆产生正偏航力矩（Mz > 0，δ_f > 0）
+    // 侧倾/前摆 +15°（绕 z_b 旋转 → FRD 偏航通道 → VTOL 侧倾/前摆）
+    // 期望：delta_f > 0（前摆产生侧倾力矩 Mz > 0）
     CascadeCtrl ctrl; ctrl.reset();
     CascadeInput in = makeIdentityInput();
-    const float yaw_err = 15.f * (3.14159265f / 180.f);
-    in.q_ref = {cosf(yaw_err/2.f), 0.f, 0.f, sinf(yaw_err/2.f)};
+    const float roll_err = 15.f * (3.14159265f / 180.f);
+    in.q_ref = {cosf(roll_err/2.f), 0.f, 0.f, sinf(roll_err/2.f)};  // z轴旋转
 
     auto out = ctrl.step(in, 0.005f);
 
-    check(out.tel.omega_ref[2] > 0.f, "偏航误差 → omega_ref_yaw > 0");
-    check(out.tel.M_cmd[2] > 0.f,     "偏航误差 → Mz_cmd > 0");
-    check(out.delta_f > 0.f,          "偏航误差 → delta_f > 0（前摆产生正偏航）");
+    check(out.tel.omega_ref[2] > 0.f, "侧倾误差 → omega_ref[2] > 0");
+    check(out.tel.M_cmd[2] > 0.f,     "侧倾误差 → Mz_cmd > 0");
+    check(out.delta_f > 0.f,          "侧倾误差 → delta_f > 0（前摆产生侧倾力矩）");
+}
+
+static void test_cascade_yaw_differential()
+{
+    // VTOL 差速偏航 +15°（绕 x_b 旋转 → FRD 滚转通道 → VTOL 差速/航向）
+    // 期望：dw > 0（差速反扭产生 Mx > 0 → 航向力矩）
+    CascadeCtrl ctrl; ctrl.reset();
+    CascadeInput in = makeIdentityInput();
+    const float yaw_err = 15.f * (3.14159265f / 180.f);
+    in.q_ref = {cosf(yaw_err/2.f), sinf(yaw_err/2.f), 0.f, 0.f};  // x轴旋转 = VTOL差速航向
+
+    auto out = ctrl.step(in, 0.005f);
+
+    check(out.tel.omega_ref[0] > 0.f, "差速航向误差 → omega_ref[0] > 0");
+    check(out.tel.M_cmd[0] > 0.f,     "差速航向误差 → Mx_cmd > 0");
+    // Mx > 0 → dw < 0：前电机减速/尾电机加速，尾反扭(+x)大于前反扭(-x)，合 Mx > 0
+    check(out.dw < 0.f,               "差速航向误差 → dw < 0（尾电机加速，反扭合力 Mx > 0）");
 }
 
 static void test_cascade_telemetry_finite()
@@ -385,11 +402,14 @@ int main()
     std::printf("\n-- T12：全链俯仰极性 --\n");
     test_cascade_pitch_polarity();
 
-    std::printf("\n-- T13：全链偏航极性 --\n");
-    test_cascade_yaw_polarity();
+    std::printf("\n-- T13：全链侧倾极性（前摆） --\n");
+    test_cascade_roll_polarity();
 
     std::printf("\n-- T14：遥测字段有限性 --\n");
     test_cascade_telemetry_finite();
+
+    std::printf("\n-- T15：全链差速航向极性 --\n");
+    test_cascade_yaw_differential();
 
     std::printf("\n");
     if (g_fail == 0) std::printf("=== 全部通过 ===\n");

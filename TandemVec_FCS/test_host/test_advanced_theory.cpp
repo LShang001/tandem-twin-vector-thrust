@@ -22,6 +22,20 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
+#include <string>
+
+// ---- 断言框架 ----
+static int g_fail = 0;
+
+// ADRC 带宽（可在扫描中调整）：ωc=控制器带宽, ωo=ESO带宽，单位 rad/s
+// 默认值与 TandemVec_ADRC.h 的构造默认一致（ωo 受电机 τm=0.28s 约束，见该文件注释）
+static float g_adrc_wc = 6.f;
+static float g_adrc_wo = 8.f;
+static void check(bool cond, const std::string& name)
+{
+    std::printf(cond ? "[PASS] %s\n" : "[FAIL] %s\n", name.c_str());
+    if (!cond) ++g_fail;
+}
 
 struct Motor{float w,t,ta;Motor(float x=0.28f):w(0),t(0),ta(x){}void set(float wt){t=wt;}float step(float dt){w+=(t-w)*fminf(dt/ta,1.f);return w;}};
 
@@ -30,6 +44,8 @@ struct RigidBody{
   RigidBody(){q={1,0,0,0};om[0]=om[1]=om[2]=0;}
   void step(const float M[3],const TandemVecParams&P,float dt){float p=om[0],qq=om[1],r=om[2];om[0]+=(M[0]-((P.Iz-P.Iy)*qq*r))/P.Ix*dt;om[1]+=(M[1]-((P.Ix-P.Iz)*r*p))/P.Iy*dt;om[2]+=(M[2]-((P.Iy-P.Ix)*p*qq))/P.Iz*dt;float wx=om[0],wy=om[1],wz=om[2];Quat4f dq={-0.5f*(q.x*wx+q.y*wy+q.z*wz),0.5f*(q.w*wx+q.y*wz-q.z*wy),0.5f*(q.w*wy-q.x*wz+q.z*wx),0.5f*(q.w*wz+q.x*wy-q.y*wx)};q.w+=dq.w*dt;q.x+=dq.x*dt;q.y+=dq.y*dt;q.z+=dq.z*dt;q=qNorm(q);}
   float errDeg(const Quat4f&r)const{Quat4f e=qNorm(qMul(qConj(q),r));if(e.w<0){e.w=-e.w;e.x=-e.x;e.y=-e.y;e.z=-e.z;}return 2.f*atan2f(sqrtf(e.x*e.x+e.y*e.y+e.z*e.z),e.w)*57.29578f;}
+  // 带符号俯仰角（单轴俯仰机动时的真实响应量，用于测超调/上升时间）
+  float pitchDeg()const{return 2.f*atan2f(q.y,q.w)*57.29578f;}
 };
 
 // 含舵机模型的完整仿真
@@ -42,7 +58,7 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
   TandemVecParams P=P0; P.Iy*=Iy_scale; P.kT*=kT_scale; P.kQ*=kT_scale;
   float dt=0.005f; int N=(int)(sim_s/dt);
   RigidBody body; Motor mf,mr;
-  ADRC adrc(10.f,50.f,1.f);  // ωc=10, ωo=50, b0=1
+  ADRC adrc(g_adrc_wc,g_adrc_wo,1.f);  // 带宽由全局变量给出，便于扫描
   PositionPID ang(5.f,0,0), rate(0.30f,0.0003f,0);
   ang.setOutputLimits(-50,50);rate.setOutputLimits(-100,100);rate.setIntegralLimit(10.f);rate.setIntegralThreshold(30.f);
   ComplementaryFilter gF(0.3f),aF(0.85f),rF(0.25f);float gf=0;
@@ -54,7 +70,12 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
   ServoState sv_f={0,0}, sv_t={0,0};
   ServoParams sp;
 
-  SimResult r; float pk=0,st=99,fe=0,opk=0;
+  // pk   = 俯仰角响应峰值（用于测超调，非误差幅值）
+  // st   = 进入 ±2% 目标带并保持的时间（标准 settling time，无人为下限）
+  // opk  = 角速率峰值
+  SimResult r; float pk=0,st=-1.f,fe=0,opk=0;
+  const float band=fabsf(target_deg)*0.02f;   // ±2% 稳态带
+  float t_out_of_band=0.f;                    // 最后一次跳出稳态带的时刻
   for(int i=0;i<N;i++){float t=i*dt;
     gf=gF.filter(body.om[1]*57.29578f);
     Quat4f qe=qNorm(qMul(qConj(body.q),qt));float sw=qe.w>=0?1:-1;
@@ -81,35 +102,54 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
     PropulsionState pa={wf,wt,df_act,dt_act};SixDOFWrench w=computeWrench(pa,P);
     float T_tot=P.kT*(wf*wf+wt*wt)*0.5f;float Mt[3]={0,w.My+T_tot*cg_mm*0.001f,0};
     body.step(Mt,P,dt);
-    float e=body.errDeg(qt);if(e>pk)pk=e;if(fabsf(body.om[1])>opk)opk=fabsf(body.om[1]);if(t>2.0f&&e<1.0f&&st>98)st=t;
-    if(i%5==0){r.t.push_back(t);r.theta.push_back(body.errDeg(qt));r.omega.push_back(fabsf(body.om[1])*57.29578f);}
+    // 记录真实俯仰角响应（带符号），而非误差幅值 —— 否则超调不可测
+    float th=body.pitchDeg();
+    if(fabsf(th)>fabsf(pk))pk=th;
+    if(fabsf(body.om[1])>opk)opk=fabsf(body.om[1]);
+    // 稳态时间：最后一次离开 ±2% 目标带的时刻
+    if(fabsf(th-target_deg)>band)t_out_of_band=t;
+    if(i%5==0){r.t.push_back(t);r.theta.push_back(th);r.omega.push_back(fabsf(body.om[1])*57.29578f);}
   }
   fe=body.errDeg(qt);
-  r.peak=pk;r.settle=st<90?st:99;r.final=fe;r.omega_pk=opk*57.29578f;
+  // 若全程未进入稳态带，settle 记为 99（未收敛）
+  st=(t_out_of_band<sim_s-dt*2.f)?t_out_of_band:99.f;
+  r.peak=pk;r.settle=st;r.final=fe;r.omega_pk=opk*57.29578f;
   return r;
 }
 
 // 系统辨识: 从阶跃响应反推二阶传递函数参数
-static void sys_id(const SimResult &d, const char *label)
+struct SysId { float zeta, wn, K, tp, Mp; };
+
+static SysId sys_id(const SimResult &d, const char *label, float target)
 {
   // 从时域数据提取: 峰值时间tp, 超调Mp, 稳态值yss
-  float yss=d.t.size()>0?d.theta.back():0;
-  float ymax=0;int tp_idx=0;
-  for(size_t i=0;i<d.t.size();i++){if(d.theta[i]>ymax){ymax=d.theta[i];tp_idx=(int)i;}}
-  float tp=d.t[tp_idx], Mp=(ymax>0.001f)?(ymax-20.f)/20.f:0; // 相对20°阶跃
+  // 注意 d.theta 现在是带符号的真实俯仰角响应（不是误差幅值）
+  float yss = d.theta.empty() ? 0.f : d.theta.back();
+  float ymax = 0.f; int tp_idx = 0;
+  for (size_t i = 0; i < d.t.size(); i++)
+    if (fabsf(d.theta[i]) > fabsf(ymax)) { ymax = d.theta[i]; tp_idx = (int)i; }
+  float tp = d.t.empty() ? 0.f : d.t[tp_idx];
+
+  // 超调比 Mp = (峰值 − 稳态) / 稳态
+  float Mp = (fabsf(target) > 1e-3f) ? (fabsf(ymax) - fabsf(target)) / fabsf(target) : 0.f;
+  if (Mp < 0.f) Mp = 0.f;
 
   // 二阶系统参数反算
-  float zeta,wn;
-  if(Mp>0.01f){
-    float po=Mp/20.f; // overshoot ratio
-    zeta=-logf(po)/sqrtf(3.14159265f*3.14159265f+logf(po)*logf(po));
-    wn=3.14159265f/(tp*sqrtf(1.f-zeta*zeta));
-  }else{
-    zeta=1.0f; wn=4.f/d.settle; // 临界阻尼近似: ts≈4/(ζωn)
+  float zeta, wn;
+  if (Mp > 0.01f) {
+    // Mp 本身即超调比，直接用（原代码误除以 20，导致 ζ 恒为 1）
+    float lg = logf(Mp);
+    zeta = -lg / sqrtf(3.14159265f*3.14159265f + lg*lg);
+    wn   = (tp > 1e-3f) ? 3.14159265f / (tp * sqrtf(fmaxf(1.f - zeta*zeta, 1e-6f))) : 0.f;
+  } else {
+    // 无超调 → 近似临界阻尼: ts ≈ 4/(ζωn)
+    zeta = 1.0f;
+    wn   = (d.settle > 1e-3f && d.settle < 90.f) ? 4.f / d.settle : 0.f;
   }
-  float K=yss/20.f; // DC gain (should be 1)
+  float K = (fabsf(target) > 1e-3f) ? yss / target : 0.f;  // 直流增益（应≈1）
   printf("  %-20s ζ=%.3f ωn=%.1f K=%.3f tp=%.2fs Mp=%.1f%% settle=%.2fs\n",
-         label,zeta,wn,K,tp,Mp*100,d.settle);
+         label, zeta, wn, K, tp, Mp*100, d.settle);
+  return { zeta, wn, K, tp, Mp };
 }
 
 int main()
@@ -154,7 +194,7 @@ int main()
   printf("%-20s %7.1f  %7.2f  %7.2f  %7.0f\n","PID(当前)",r_pid.peak,r_pid.settle,r_pid.final,r_pid.omega_pk);
 
   auto r_adrc= sim_full(true,  1.5f,0.7f,5.f, 20.f,8.f,true);
-  printf("%-20s %7.1f  %7.2f  %7.2f  %7.0f\n","ADRC(ωc=10,ωo=50)",r_adrc.peak,r_adrc.settle,r_adrc.final,r_adrc.omega_pk);
+  printf("%-20s %7.1f  %7.2f  %7.2f  %7.0f\n","ADRC(wc=6,wo=8)",r_adrc.peak,r_adrc.settle,r_adrc.final,r_adrc.omega_pk);
 
   // Nominal comparison
   auto r_pid0 = sim_full(false, 1.f,1.f,0.f, 20.f,8.f,false);
@@ -163,29 +203,114 @@ int main()
   printf("%-20s %7.1f  %7.2f  %7.2f  %7.0f\n","PID",r_pid0.peak,r_pid0.settle,r_pid0.final,r_pid0.omega_pk);
   printf("%-20s %7.1f  %7.2f  %7.2f  %7.0f\n","ADRC",r_adrc0.peak,r_adrc0.settle,r_adrc0.final,r_adrc0.omega_pk);
 
+  // ═══ L2b: ADRC 带宽稳定区扫描 ═══
+  // 发现: ωo=50 rad/s 在参数偏差 + 电机 τ=0.28s 滞后下闭环发散。
+  // ESO 带宽远高于执行器带宽时，会把执行器滞后误判为扰动并过度补偿。
+  std::printf("\n── L2b: ADRC 带宽稳定区扫描 (偏差工况) ──\n");
+  std::printf("电机 τ=%.2fs → 执行器带宽约 %.1f rad/s\n",
+              kDefaultTandemVecParams.tauM, 1.f/kDefaultTandemVecParams.tauM);
+  std::printf("%-6s %-6s %-9s %-9s %s\n","wc","wo","settle","final°","状态");
+  {
+    const float wcs[4] = {4.f, 6.f, 8.f, 10.f};
+    const float wos[4] = {8.f, 12.f, 20.f, 50.f};
+    float save_wc = g_adrc_wc, save_wo = g_adrc_wo;
+    int n_stable = 0;
+    for (int i = 0; i < 4; i++) for (int j = 0; j < 4; j++) {
+      g_adrc_wc = wcs[i]; g_adrc_wo = wos[j];
+      auto rr = sim_full(true, 1.5f, 0.7f, 5.f, 20.f, 8.f, true);
+      bool ok = (rr.settle < 90.f && rr.final < 2.f);
+      if (ok) n_stable++;
+      std::printf("%-6.0f %-6.0f %-9.2f %-9.2f %s\n",
+                  wcs[i], wos[j], rr.settle, rr.final, ok ? "稳定" : "发散/未收敛");
+    }
+    g_adrc_wc = save_wc; g_adrc_wo = save_wo;
+    check(n_stable > 0, "L2b 存在至少一组稳定的 ADRC 带宽组合");
+  }
+
   // ═══ L3: 系统辨识 ═══
   std::printf("\n── L3: 系统辨识 (从阶跃响应反推传递函数) ──\n");
-  sys_id(r_pid0, "PID名义");
-  sys_id(r_adrc0,"ADRC名义");
-  sys_id(r_pid,  "PID偏差");
-  sys_id(r_adrc, "ADRC偏差");
+  SysId id_pid0  = sys_id(r_pid0, "PID名义",  20.f);
+  SysId id_adrc0 = sys_id(r_adrc0,"ADRC名义", 20.f);
+  SysId id_pid   = sys_id(r_pid,  "PID偏差",  20.f);
+  SysId id_adrc  = sys_id(r_adrc, "ADRC偏差", 20.f);
 
   // ═══ L4: 舵机动态影响 ═══
-  std::printf("\n── L4: 舵机动态对相位裕度的影响 ──\n");
+  std::printf("\n── L4: 舵机动态对响应的影响 ──\n");
   auto r_noservo = sim_full(false, 1.f,1.f,0.f, 20.f,8.f,false);
   auto r_servo   = sim_full(false, 1.f,1.f,0.f, 20.f,8.f,true);
-  printf("无舵机模型: peak=%.1f° settle=%.2fs\n",r_noservo.peak,r_noservo.settle);
-  printf("有舵机(τ=8ms,600°/s): peak=%.1f° settle=%.2fs\n",r_servo.peak,r_servo.settle);
-  printf("舵机引入额外相位滞后: 约%.0f°@%.0fHz (τ=%.0fms)\n",
-         57.3f*0.008f*2.f*3.14159f*2.7f, 2.7f, 8.f);
-  printf("当前内环带宽2.7Hz, 舵机带宽20Hz: 相位裕度损失≈%.0f° (可接受)\n",
-         57.3f*0.008f*2.f*3.14159f*2.7f);
+  printf("无舵机模型: peak=%.2f° settle=%.2fs final_err=%.2f°\n",
+         r_noservo.peak,r_noservo.settle,r_noservo.final);
+  printf("有舵机(τ=8ms,600°/s): peak=%.2f° settle=%.2fs final_err=%.2f°\n",
+         r_servo.peak,r_servo.settle,r_servo.final);
+  // 一阶滞后在闭环穿越频率处引入的相位滞后（解析式，非仿真结果）
+  {
+    const float tau=0.008f;
+    float wc=(id_pid0.wn>1e-3f)?id_pid0.wn:2.f;      // rad/s，取辨识得到的 ωn
+    float lag_deg=atanf(wc*tau)*57.29578f;
+    printf("辨识 ωn=%.1f rad/s (%.1f Hz)，舵机 τ=8ms 引入相位滞后 %.1f°\n",
+           wc, wc/6.2832f, lag_deg);
+    check(lag_deg < 30.f, "L4 舵机相位滞后 < 30°（穿越频率处裕度充足）");
+  }
 
-  std::printf("\n═══════════════════════════════════════════\n");
-  std::printf("结论: (1)Lyapunov严格证明全局渐近稳定\n");
-  std::printf("      (2)参数偏差下ISS(输入-状态稳定)\n");
-  std::printf("      (3)ADRC在模型偏差下性能与PID相当或更优\n");
-  std::printf("      (4)系统辨识可反推真实ζ,ωn校准I和kT\n");
-  std::printf("      (5)舵机τ=8ms在当前带宽下安全(裕度>45°)\n");
-  return 0;
+  // ═══ 断言验证 ═══
+  std::printf("\n── 断言验证 ──\n");
+
+  // B1: 名义参数下两种控制器都必须收敛到目标
+  check(r_pid0.settle < 90.f,  "B1 PID名义：进入±2%稳态带（已收敛）");
+  check(r_adrc0.settle < 90.f, "B1 ADRC名义：进入±2%稳态带（已收敛）");
+  check(r_pid0.final < 1.0f,   "B1 PID名义：最终误差 < 1°");
+  check(r_adrc0.final < 1.0f,  "B1 ADRC名义：最终误差 < 1°");
+
+  // B2: 直流增益应接近 1（响应确实到达指令幅度，而非停在别处）
+  check(fabsf(id_pid0.K  - 1.f) < 0.1f, "B2 PID名义：直流增益 K ≈ 1 (±10%)");
+  check(fabsf(id_adrc0.K - 1.f) < 0.1f, "B2 ADRC名义：直流增益 K ≈ 1 (±10%)");
+
+  // B3: 超调受控（阶跃响应不应剧烈振荡）
+  //   PID（外环P+内环PI，含输出滤波）无超调。
+  //   ADRC 在本机执行器带宽约束下（ωo≤12）阻尼比仅 ζ≈0.35，超调约 31%，
+  //   且降低 ωc 会进一步降低 ζ（ωc=3→ζ=0.288/Mp=39%），无法通过调带宽消除。
+  //   → 这是 ADRC 当前未被选为主控制器的原因之一，阈值如实反映该特性。
+  check(id_pid0.Mp  < 0.30f, "B3 PID名义：超调 < 30%");
+  check(id_adrc0.Mp < 0.40f, "B3 ADRC名义：超调 < 40%（ζ≈0.35，实测约31%）");
+  check(id_pid0.Mp  < id_adrc0.Mp,
+        "B3 PID 超调显著优于 ADRC（当前配置下 PID 更适合作主控制器）");
+
+  // B4: 参数偏差（Iy×1.5, kT×0.7, CG=5mm, 舵机ON）下仍稳定收敛
+  //     这是 Lyapunov/ISS 论断的数值支撑
+  check(r_pid.settle  < 90.f, "B4 PID偏差：仍进入稳态带（ISS 数值验证）");
+  check(r_adrc.settle < 90.f, "B4 ADRC偏差：仍进入稳态带（ISS 数值验证）");
+  check(r_pid.final  < 2.0f,  "B4 PID偏差：最终误差 < 2°");
+  check(r_adrc.final < 2.0f,  "B4 ADRC偏差：最终误差 < 2°");
+
+  // B5: 偏差工况相对名义工况的性能退化必须有界
+  check(r_pid.final <= r_pid0.final + 2.0f,
+        "B5 PID：参数偏差引起的稳差增量 < 2°");
+  check(id_pid.Mp < 0.50f, "B5 PID偏差：超调 < 50%（未失稳）");
+
+  // B6: 舵机动态不应显著恶化响应
+  check(r_servo.settle < 90.f,
+        "B6 含舵机动态仍收敛");
+  check(r_servo.final <= r_noservo.final + 1.0f,
+        "B6 舵机引起的稳差增量 < 1°");
+
+  // B7: 所有指标为有限值（无 NaN/Inf 传播）
+  {
+    bool fin = std::isfinite(r_pid.peak)  && std::isfinite(r_pid.final)
+            && std::isfinite(r_adrc.peak) && std::isfinite(r_adrc.final)
+            && std::isfinite(id_pid.zeta) && std::isfinite(id_pid.wn)
+            && std::isfinite(id_adrc.zeta)&& std::isfinite(id_adrc.wn);
+    check(fin, "B7 全部辨识与响应指标为有限数（无NaN/Inf）");
+  }
+
+  std::printf("\n结论（L1 为解析推导，其余由上述断言数值支撑）:\n");
+  std::printf("  (1) Lyapunov: V̇=−Kp_r_eff‖ω‖²≤0 → 全局渐近稳定（解析）\n");
+  std::printf("  (2) 参数偏差下 ISS —— 由 B4/B5 数值验证\n");
+  std::printf("  (3) PID/ADRC 在偏差下均收敛 —— 由 B4 验证\n");
+  std::printf("  (4) 辨识可反推 ζ,ωn 用于校准 I 和 kT —— 由 B2 验证 K≈1\n");
+  std::printf("  (5) 舵机 τ=8ms 相位滞后有界 —— 由 L4/B6 验证\n");
+
+  std::printf("\n");
+  if (g_fail == 0) std::printf("=== 全部通过 ===\n");
+  else             std::printf("=== %d 项失败 ===\n", g_fail);
+  return g_fail == 0 ? 0 : 1;
 }

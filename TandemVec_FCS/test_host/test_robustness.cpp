@@ -16,8 +16,22 @@
 #include <cstdio>
 #include <cstdlib>
 #include <ctime>
+#include <string>
 
-struct Motor{float w,t,ta;Motor(float x=0.28f):w(0),t(0),ta(x){}void set(float wt){t=wt;}float step(float dt){w+=(t-w)*fminf(dt/ta,1.f);return w;}};
+// ---- 断言框架 ----
+static int g_fail = 0;
+static void check(bool cond, const std::string& name)
+{
+    std::printf(cond ? "[PASS] %s\n" : "[FAIL] %s\n", name.c_str());
+    if (!cond) ++g_fail;
+}
+
+// w0_init 必须为悬停转速：从 w=0 冷启动时前 ~0.3s 推力≈0、控制权限为零，
+// 姿态先自由漂移，会把任何增益都判成发散（真实飞行中电机早已在悬停转速）。
+struct Motor{float w,t,ta;
+  Motor(float w0_init=0.f,float x=0.28f):w(w0_init),t(w0_init),ta(x){}
+  void set(float wt){t=wt;}
+  float step(float dt){w+=(t-w)*fminf(dt/ta,1.f);return w;}};
 
 struct RigidBody{
   Quat4f q;float om[3];
@@ -36,6 +50,16 @@ struct RigidBody{
     Quat4f e=qNorm(qMul(qConj(q),r));if(e.w<0){e.w=-e.w;e.x=-e.x;e.y=-e.y;e.z=-e.z;}
     return 2.f*atan2f(sqrtf(e.x*e.x+e.y*e.y+e.z*e.z),e.w)*57.29578f;
   }
+  // 带符号【俯仰轴误差】(deg)，与控制器 err 同源。
+  // 本台架只闭环俯仰轴，绕推力轴的残余漂移不应计入收敛判据
+  // （Mx=−Qf·cosδf+Qt·cosδt 在 δf≠δt 时非零，且 Ix 仅为 Iy 的 1/10）。
+  float pitchErrDeg(const Quat4f&r)const{
+    Quat4f e=qNorm(qMul(qConj(q),r));
+    float sw=e.w>=0?1.f:-1.f;
+    float v=sqrtf(e.y*e.y+e.z*e.z);
+    float sc=v>0.25f?2.f*atan2f(v,fabsf(e.w))/v*57.29578f:114.59156f;
+    return sw*e.y*sc;
+  }
 };
 
 // 单轴俯仰仿真 (可配置初始角度偏置用于大机动)
@@ -51,7 +75,8 @@ static void sim_large(float target_deg, float init_deg,
   float hi=init_deg*3.14159265f/360.f;
   body.q=qNorm(Quat4f(cosf(hi)*cosf(hi),0,cosf(hi)*sinf(hi),0));
 
-  Motor mf,mr;
+  const float w0_hover=0.4f*P.wMax;
+  Motor mf(w0_hover),mr(w0_hover);   // 从悬停转速起转，非 w=0 冷启动
   PositionPID ang(5.f,0,0),rate(0.30f,0.0003f,0);
   ang.setOutputLimits(-50,50);rate.setOutputLimits(-100,100);
   rate.setIntegralLimit(10.f);rate.setIntegralThreshold(30.f);
@@ -60,7 +85,8 @@ static void sim_large(float target_deg, float init_deg,
   float hr=target_deg*3.14159265f/360.f;
   Quat4f qt=qNorm(Quat4f(cosf(hr)*cosf(hr),0,cosf(hr)*sinf(hr),0));
 
-  float pk=0,st=99,fe=0,om_pk=0;
+  // st 记录"最后一次离开稳态带的时刻"，初值 0 表示全程在带内
+  float pk=0,st=0,fe=0,om_pk=0;
   for(int i=0;i<N;i++){float t=i*dt;
     gf=gF.filter(body.om[1]*57.29578f);
     Quat4f qe=qNorm(qMul(qConj(body.q),qt));float sw=qe.w>=0?1:-1;
@@ -71,13 +97,23 @@ static void sim_large(float target_deg, float init_deg,
     AllocationOutput ao=allocateMoments(ai,P,AllocationStrategy::FULL_B);
     auto df=allocateDifferential(w0,ao.dw,P);mf.set(df.wf_target);mr.set(df.wt_target);
     float wf=mf.step(dt),wt=mr.step(dt);ps={wf,wt,ao.delta_f,ao.delta_t};
-    PropulsionState pa={wf,wt,0,ao.delta_t};SixDOFWrench w=computeWrench(pa,P);
+    // 施加分配器算出的 delta_f（原代码置零，丢弃了抵消反扭耦合的前摆指令）
+    PropulsionState pa={wf,wt,ao.delta_f,ao.delta_t};SixDOFWrench w=computeWrench(pa,P);
     float T_tot=P.kT*(wf*wf+wt*wt)*0.5f;
-    float Mt[3]={0,w.My+T_tot*cg_mm*0.001f,0};body.step(Mt,P,dt);
-    float e=body.errDeg(qt);if(e>pk)pk=e;if(fabsf(body.om[1])>om_pk)om_pk=fabsf(body.om[1]);if(t>2.0f&&e<1.0f&&st>98)st=t;
+    float Mt[3]={w.Mx,w.My+T_tot*cg_mm*0.001f,w.Mz};body.step(Mt,P,dt);
+    // 俯仰轴误差（与控制器同源）→ 实际响应 = 目标 − 误差
+    float e_p=body.pitchErrDeg(qt);
+    float resp=target_deg-e_p;
+    if(fabsf(resp)>fabsf(pk))pk=resp;                       // 峰值（可测超调）
+    if(fabsf(body.om[1])>om_pk)om_pk=fabsf(body.om[1]);
+    // settle：最后一次离开 ±2%|目标| 带的时刻（大机动用 ±2%，回正用绝对 1°）
+    float band=fmaxf(fabsf(target_deg)*0.02f,1.0f);
+    if(fabsf(e_p)>band)st=t;
+    fe=e_p;
   }
-  fe=body.errDeg(qt);
-  out[0]=pk; out[1]=st<90?st:99; out[2]=fe;
+  out[0]=fabsf(pk);
+  out[1]=(st<8.f-dt*2.f)?st:99.f;   // 未进带记 99
+  out[2]=fabsf(fe);
   out[3]=om_pk*57.29578f;
 }
 
@@ -92,35 +128,47 @@ int main()
   // ═══ T1: 大角度阶跃 ═══
   std::printf("── T1: 大角度阶跃 (零初始偏置) ──\n");
   std::printf("%8s %8s %8s %8s %8s\n","目标°","peak°","settle","final°","ωpk°/s");
+  bool  t1_all_settled=true; float t1_worst_final=0.f, t1_worst_ov=0.f;
+  float t1_prev_settle=0.f;  bool  t1_settle_monotonic=true;
   for(float tgt:{10.f,20.f,30.f,45.f,60.f,90.f}){
     sim_large(tgt,0.f, 1.f,1.f,0.f, o);
-    const char* ok=o[0]<=tgt*1.5f?"✅":o[0]<=tgt*2.f?"⚠️":"🔴";
+    float ov=(o[0]-tgt)/tgt;
+    const char* ok=(o[1]<90.f&&ov<0.25f)?"✅":(o[1]<90.f?"⚠️":"🔴");
     std::printf("%7.0f  %7.1f  %7.2f  %7.2f  %7.0f %s\n",tgt,o[0],o[1],o[2],o[3],ok);
+    if(o[1]>90.f)t1_all_settled=false;
+    if(o[2]>t1_worst_final)t1_worst_final=o[2];
+    if(ov>t1_worst_ov)t1_worst_ov=ov;
+    if(o[1]<t1_prev_settle-1e-3f)t1_settle_monotonic=false;
+    t1_prev_settle=o[1];
   }
 
   // ═══ T2: 初始偏置 (从倾斜姿态回正) ═══
   std::printf("\n── T2: 初始30°偏置 → 目标0° (回正) ──\n");
   std::printf("%8s %8s %8s %8s %8s\n","目标°","peak°","settle","final°","ωpk°/s");
+  bool t2_all_settled=true; float t2_worst_final=0.f;
   for(float init:{10.f,20.f,30.f,40.f,50.f}){
     sim_large(0.f,init, 1.f,1.f,0.f, o);
     std::printf("init%.0f  %7.1f  %7.2f  %7.2f  %7.0f %s\n",init,o[0],o[1],o[2],o[3],
               o[1]<5.f?"✅":"⚠️");
+    if(o[1]>90.f)t2_all_settled=false;
+    if(o[2]>t2_worst_final)t2_worst_final=o[2];
   }
 
   // ═══ T3: Monte Carlo 随机参数 ═══
   std::printf("\n── T3: Monte Carlo — I/kT/CG 随机扰动 (100次) ──\n");
   std::printf("扰动范围: I×[0.5,1.5], kT×[0.7,1.3], CG∈[0,10]mm\n");
-  float worst=0,avg_pk=0,avg_st=0; int diverge=0;
+  float worst=0,avg_pk=0,avg_st=0,mc_worst_final=0; int diverge=0;
   for(int n=0;n<100;n++){
     float Is=0.5f+(float)rand()/RAND_MAX;     // [0.5, 1.5]
     float kTs=0.7f+(float)rand()/RAND_MAX*0.6f; // [0.7, 1.3]
     float cg=(float)rand()/RAND_MAX*10.f;      // [0, 10] mm
     sim_large(20.f,0.f, Is,kTs,cg, o);
     avg_pk+=o[0]; avg_st+=o[1]; if(o[0]>worst)worst=o[0];
-    if(o[1]>7.f) diverge++;
+    if(o[2]>mc_worst_final)mc_worst_final=o[2];
+    if(o[1]>90.f) diverge++;   // 未进入稳态带即计为发散
   }
-  std::printf("avg peak=%.1f° avg settle=%.2fs worst peak=%.1f° diverge=%d/100\n",
-              avg_pk/100, avg_st/100, worst, diverge);
+  std::printf("avg peak=%.1f° avg settle=%.2fs worst peak=%.1f° 最大稳差=%.2f° diverge=%d/100\n",
+              avg_pk/100, avg_st/100, worst, mc_worst_final, diverge);
 
   // ═══ T4: 最坏组合工况 ═══
   std::printf("\n── T4: 最坏组合 (I+50%, kT-30%, CG=10mm) ──\n");
@@ -130,15 +178,48 @@ int main()
     {"I↑50%+kT↓30%+CG10mm 45°",1.5f,0.7f,10.f,45.f},
     {"全极限 60°阶跃",0.5f,0.7f,10.f,60.f},
   };
+  bool t4_all_settled=true; float t4_worst_final=0.f, t4_worst_ov=0.f;
   for(auto&c:ws){
     sim_large(c.tgt,0.f, c.Is,c.kTs,c.cg, o);
-    const char* ok=o[1]<6.f?"✅":o[1]<8.f?"⚠️":"🔴";
+    const char* ok=o[1]<6.f?"✅":o[1]<90.f?"⚠️":"🔴";
     std::printf("%-28s peak=%.1f° settle=%.2fs final=%.1f° ωpk=%.0f°/s %s\n",
                 c.n,o[0],o[1],o[2],o[3],ok);
+    if(o[1]>90.f)t4_all_settled=false;
+    if(o[2]>t4_worst_final)t4_worst_final=o[2];
+    float ov=(o[0]-c.tgt)/c.tgt; if(ov>t4_worst_ov)t4_worst_ov=ov;
   }
 
-  std::printf("\n═══════════════════════════════════════════\n");
-  std::printf("结论: 大机动(≤60°)鲁棒。系统误差≤50%%收敛。\n");
-  std::printf("      最坏组合(惯量↓+推力↓+偏重心)仍可控。\n");
-  return 0;
+  // ═══ 断言验证 ═══
+  std::printf("\n── 断言验证 ──\n");
+
+  // R1: 大角度阶跃（10°~90°，倾角保护已移除，须全程可控）
+  check(t1_all_settled,          "R1 大角度阶跃 10~90°：全部进入稳态带");
+  check(t1_worst_final < 1.0f,   "R1 大角度阶跃：最大稳差 < 1°");
+  check(t1_worst_ov   < 0.25f,   "R1 大角度阶跃：最大超调 < 25%");
+  check(t1_settle_monotonic,
+        "R1 收敛时间随目标角单调不减（无异常快收敛，度量自洽）");
+
+  // R2: 从倾斜姿态回正（初始偏置 10~50°）
+  check(t2_all_settled,        "R2 倾斜回正 10~50°：全部进入稳态带");
+  check(t2_worst_final < 1.0f, "R2 倾斜回正：最大稳差 < 1°");
+
+  // R3: Monte Carlo 参数随机扰动 I×[0.5,1.5] kT×[0.7,1.3] CG≤10mm
+  check(diverge == 0,               "R3 Monte Carlo 100 次全部收敛（零发散）");
+  check(mc_worst_final < 1.0f,      "R3 Monte Carlo 最大稳差 < 1°");
+  check(worst < 20.f * 1.25f,       "R3 Monte Carlo 最坏峰值超调 < 25%");
+
+  // R4: 最坏参数组合（惯量/推力/重心同时偏离）
+  check(t4_all_settled,        "R4 最坏组合：全部进入稳态带");
+  check(t4_worst_final < 1.0f, "R4 最坏组合：最大稳差 < 1°");
+  check(t4_worst_ov   < 0.25f, "R4 最坏组合：最大超调 < 25%");
+
+  std::printf("\n结论（均由上述断言支撑）:\n");
+  std::printf("  大机动 10~90° 阶跃与 10~50° 回正全部收敛，稳差 <1°。\n");
+  std::printf("  I±50%%/kT±30%%/CG≤10mm 随机组合 100 次零发散。\n");
+  std::printf("  ⚠️ 单轴俯仰台架，未含气动力与舵机动态；实机大机动仍需渐进验证。\n");
+
+  std::printf("\n");
+  if (g_fail == 0) std::printf("=== 全部通过 ===\n");
+  else             std::printf("=== %d 项失败 ===\n", g_fail);
+  return g_fail == 0 ? 0 : 1;
 }
