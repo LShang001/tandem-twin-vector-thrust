@@ -215,16 +215,16 @@ void setup()
   rollAnglePID.setIntegralThreshold(0.0f);
   pitchAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Roll内环: α限幅—实飞校准起点。从±3.0起步，每次+2.0，振荡回退 ---
-  // I不确定→α_max不确定→不推导具体值→实飞逐次增大直到响应满意
-  rollRatePID.setOutputLimits(-3.0f, 3.0f);    // 保守起点,首飞后调大
-  rollRatePID.setIntegralLimit(2.0f);
+  // --- Roll内环: α限幅设极大→PID输出永不截断→调参所见即所得 ---
+  // 真正的物理限制(电机力矩/转速)在底层自动生效, 不需要软件复刻
+  rollRatePID.setOutputLimits(-100.0f, 100.0f);  // 软件不卡,物理自限
+  rollRatePID.setIntegralLimit(10.0f);
   rollRatePID.setIntegralThreshold(30.0f);
   rollRatePID.setFilterCoefficient(0.2f);
 
   // --- Pitch内环: 同Roll ---
-  pitchRatePID.setOutputLimits(-3.0f, 3.0f);
-  pitchRatePID.setIntegralLimit(2.0f);
+  pitchRatePID.setOutputLimits(-100.0f, 100.0f);
+  pitchRatePID.setIntegralLimit(10.0f);
   pitchRatePID.setIntegralThreshold(30.0f);
   pitchRatePID.setFilterCoefficient(0.2f);
 
@@ -233,9 +233,9 @@ void setup()
   yawAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.3f);
   yawAnglePID.setIntegralThreshold(0.0f);
 
-  // --- Yaw内环: 差速保守。α限幅起点±2.0, 首飞后每次+1.0 ---
-  yawRatePID.setOutputLimits(-2.0f, 2.0f);
-  yawRatePID.setIntegralLimit(1.0f);
+  // --- Yaw内环: 同Roll,α不截断 ---
+  yawRatePID.setOutputLimits(-100.0f, 100.0f);
+  yawRatePID.setIntegralLimit(10.0f);
   yawRatePID.setIntegralThreshold(30.0f);
   yawRatePID.setFilterCoefficient(0.2f);
 
