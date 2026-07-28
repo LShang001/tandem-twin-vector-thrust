@@ -1193,15 +1193,36 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     }
   }
 
-  // ---- 舵机输出 (40:30齿轮比, servo_angle = gimbal_angle × 1.333) ----
-  // 使用齿轮传动映射: 摆座角度(deg) → 舵机角度(deg) → PWM(%)
-  // 包含 TandemVec_ServoModel.h 后可用 gimbalToServoPWM
-  const float GEAR_RATIO = 40.f / 30.f;                       // 从动/主动 = 40/30
-  const float SERVO_RANGE_DEG = 90.f;                         // 舵机±45°总行程90°(待实测校准)
-  float pitch_servo = 50.f + (tail_gimbal_deg * GEAR_RATIO / (SERVO_RANGE_DEG * 0.5f)) * 50.f;
-  float roll_servo  = 50.f + (front_gimbal_deg * GEAR_RATIO / (SERVO_RANGE_DEG * 0.5f)) * 50.f;
+  // ================================================================
+  // 舵机输出 — 齿轮传动映射 (直观物理量, 待实机标定校准)
+  // ================================================================
+  // 机械参数:
+  //   主动齿(舵机): 30T         从动齿(摆座): 40T
+  //   传动比: 40/30 = 1.333     servo_deg = gimbal_deg × 1.333
+  //   舵机行程: ±45° (0~100% PWM = 1000~2000µs, 待标定)
+  //
+  // 映射公式:
+  //   servo_deg = gimbal_deg × TEETH_GIMBAL / TEETH_SERVO
+  //   servo_pct = 50 + servo_deg / SERVO_HALF_TRAVEL × 50
+  //
+  // 标定值 (实机测量后更新):
+  //   摆座 0°  → 舵机 0°  → PWM 50% = 1500µs
+  //   摆座 25° → 舵机 33.3° → PWM 87% = 1740µs  ← 验证此点
+  //   摆座-25° → 舵机-33.3° → PWM 13% = 1260µs
+  // ================================================================
+  const float TEETH_SERVO    = 30.f;  // 舵机齿轮齿数
+  const float TEETH_GIMBAL   = 40.f;  // 摆座齿轮齿数
+  const float SERVO_HALF_TRAVEL_DEG = 45.f; // 舵机半行程 (°), 待标定
+
+  float servo_deg_pitch = tail_gimbal_deg  * (TEETH_GIMBAL / TEETH_SERVO);
+  float servo_deg_roll  = front_gimbal_deg * (TEETH_GIMBAL / TEETH_SERVO);
+
+  float pitch_servo = 50.f + (servo_deg_pitch / SERVO_HALF_TRAVEL_DEG) * 50.f;
+  float roll_servo  = 50.f + (servo_deg_roll  / SERVO_HALF_TRAVEL_DEG) * 50.f;
+
   pitch_servo = constrain(pitch_servo, 0.f, 100.f);
   roll_servo  = constrain(roll_servo,  0.f, 100.f);
+
   SetServoPos(pitch_servo, TVC_PITCH_SERVO_PIN);
   SetServoPos(roll_servo,  TVC_ROLL_SERVO_PIN);
   ch2_output = pitch_servo;
