@@ -28,11 +28,33 @@ pio device monitor
 
 ## 项目概述
 
-基于 PlatformIO 的 STM32H743（480 MHz，Cortex-M7 硬件浮点）共轴双桨 VTVL 推力矢量飞控固件。这是安全关键的嵌入式控制软件，不是普通应用代码。
+基于 PlatformIO 的 STM32H743（480 MHz，Cortex-M7 硬件浮点）**纵列双发矢量推力 VTOL 飞控固件**。这是安全关键的嵌入式控制软件，不是普通应用代码。
 
-- **PlatformIO 环境**：`VTVL_ElectricDualRotor_FCS`
+- **PlatformIO 环境**：`TandemVec_FCS`
 - **板卡**：`weact_mini_h743vitx`，上传协议：`cmsis-dap`
 - **框架**：Arduino on STM32
+- **飞行器构型**：纵列双发（前CW/后CCW），正交单轴摆座（前绕z_b/后绕y_b），差速反扭航向控制
+
+## 控制架构
+
+```
+外环(四元数P) → 内环(PID) → I×α → allocateMoments(BTRUE) → δ_f/δ_t/Δω → 舵机+PWM
+```
+
+核心新增头文件（`include/`）：
+| 文件 | 职责 |
+|------|------|
+| `TandemVec_Config.h` | ★ 飞行器物理参数单一真相源（kT/kQ/wMax/I/a/b/m） |
+| `TandemVec_ControlAllocation.h` | 力矩→执行器分配（4策略：DIRECT/FULL_B/FF/BTRUE） |
+| `TandemVec_Propulsion.h` | 六维推力映射 + 差速分配 + B_true Jacobian |
+| `TandemVec_AttitudeCtrl.h` | 四元数外环（最短路径 + atan2精度） |
+| `TandemVec_RateCtrl.h` | 角速率PID（微分先行 + 条件积分抗饱和） |
+| `TandemVec_CascadeCtrl.h` | 四层级联编排 + 遥测结构体 |
+| `TandemVec_CtrlParams.h` | 增益与限幅集中管理 |
+| `TandemVec_ServoModel.h` | 舵机动态模型（速率/滞后/死区/齿轮传动） |
+| `TandemVec_ADRC.h` | ADRC备选控制器（ESO+PD，替代PID内环） |
+| `TandemVec_OnlineID.h` | 在线RLS参数辨识 + 自适应增益调度 |
+| `PositionPID.h` | v2扩展版PID（2-DOF/反算抗饱和/输出率限/访问器） |
 
 ## 模块化架构
 
@@ -40,24 +62,35 @@ pio device monitor
 
 | 文件 | 职责 |
 |---|---|
-| `src/main.cpp` | 系统初始化、`setup()`、`loop()`、主循环调度、DETA100 探测/接收任务 |
+| `src/main.cpp` | 系统初始化、`setup()`、`loop()`、主循环调度、PID配置 |
 | `src/state_data.h/cpp` | 全局变量声明/定义、枚举、结构体、跨模块共享状态 |
 | `src/math_utils.h` | 纯数学工具函数，`inline` header-only |
 | `src/task_scheduler.h/cpp` | 2 kHz 定时器驱动的任务调度器 |
 | `src/sensor_imu.h/cpp` | ICM42688 IMU、磁力计初始化与数据采集 |
-| `src/sensor_peripheral.h/cpp` | DPS310 气压计、LQS48 光流、角度传感器 |
+| `src/sensor_peripheral.h/cpp` | DPS310 气压计、LQS48 光流 |
 | `src/navigation_task.h/cpp` | EKF 组合导航、垂直/水平 KF、GNSS 处理 |
-| `src/flight_control.h/cpp` | 控制律、PID、TVC、混控输出 |
+| `src/flight_control.h/cpp` | ★ 控制律核心：外环+内环+物理逆解+混控输出 |
 | `src/communication.h/cpp` | CRSF 遥控、MAVLink 遥测、AnoCom 地面站 |
 | `src/deta100_types.h` | DETA100 模块类型定义（可安全多文件包含） |
 
 ## 关键代码约束
 
-- `DETA100_module.h` 含解析实现和内部静态状态，**只能在 `main.cpp` 中包含**，避免多编译单元重复定义。
-- `QuaternionMath.h`、`TVC_Control_*`、`GeoDisplacement.h`、`MAVLink.h` 目前可在对应模块中按需包含；如后续改成含全局实现状态的头，再收紧包含边界。
+- `DETA100_module.h` 含解析实现和内部静态状态，**只能在 `main.cpp` 中包含**。
+- `TVC_Control_Geometric.h` / `TVC_Control_3rdOrder_Poly.h` — 原版TVC几何模型，**已弃用**。控制分配现由 `TandemVec_ControlAllocation.h` 处理。
 - `MAVLink` 和 `AnoCom` 共用 `Serial6`，按互斥使用处理。
 - `lib/MAVLink` 是 vendor tree，不是子模块，不要编辑。
 - `VECTOR3_TYPE_GUARD` 防止 `Vector3` 与 `QuaternionMath.h` 重复定义。
+- `parameters.mjs` 是 sync-params.py 生成产物，**禁止手改**。参数修改须改 `models/aircraft-model.json` → 运行 sync-params.py。
+
+## 宿主机回归测试
+
+```bash
+# 全量运行
+bash test_host/run_all.sh
+
+# 单模块
+g++ -std=c++17 -Iinclude -Itest_host/stub test_host/test_tandemvec_sim.cpp -o test_host/bin/ts && ./test_host/bin/ts
+```
 
 ## 硬件文档与引脚映射
 

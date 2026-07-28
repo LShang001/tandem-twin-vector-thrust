@@ -2,7 +2,21 @@
 
 本文件是本仓库的项目级 `AGENTS.md`。Codex 会在会话启动时读取全局与项目级 `AGENTS.md`，并按从上层目录到当前目录的顺序合并指令；距离被编辑文件更近的 `AGENTS.md` 优先级更高。本文件适用于仓库根目录及其所有子目录，除非子目录内另有更具体的 `AGENTS.md`。
 
-本仓库是基于 PlatformIO 的 STM32H743 共轴双桨 VTVL 推力矢量飞控固件项目。处理本项目时，必须把它视为安全关键的嵌入式控制软件，而不是普通应用代码。
+本仓库是基于 PlatformIO 的 STM32H743 **纵列双发矢量推力 VTOL 飞控固件**项目（从原共轴双桨 VTVL 移植重构）。处理本项目时，必须把它视为安全关键的嵌入式控制软件，而不是普通应用代码。
+
+## 飞行器构型与控制分配
+
+- **纵列双发**：前电机(CW)绕z_b摆动(δ_f, 偏航/侧倾主控)，尾电机(CCW)绕y_b摆动(δ_t, 俯仰主控)
+- **差速航向**：Δω产生Mx(绕推力轴)，VTOL悬停时=世界航向控制
+- **物理逆解**：α→I×α→M_cmd→allocateMoments(BTRUE)→δ_f/δ_t/Δω
+- **执行器映射**：前摆δ_f→PA0(TVC_ROLL), 尾摆δ_t→PA1(TVC_PITCH), Δω→PA2/PA3(前后电机差速)
+- **齿轮传动**：舵机30T/摆座40T = 1.333:1，PWM映射已含齿轮比
+
+## 核心参数
+
+- 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax）和 `src/state_data.cpp`（限幅/质量/推力）
+- PID增益：`src/state_data.cpp` §4.1 + `src/main.cpp` §4（限幅配置）
+- 舵机行程：`SERVO_HALF_TRAVEL_DEG`（`flight_control.cpp` mix函数，默认45°，待标定）
 
 ## 执行总原则
 

@@ -1,16 +1,18 @@
 # TandemVec_FCS
 
-## 共轴双桨推力矢量飞行控制系统 (Rev 5.0)
+## 纵列双发矢量推力 VTOL 飞行控制系统
 
 ### 项目概述
 
-本项目是基于 STM32H743 的共轴双桨 VTVL (Vertical Take-Off and Vertical Landing) 推力矢量飞控固件。飞行器通过两个共轴对转电机提供主推力，利用发动机喷口处的两轴推力矢量控制 (TVC) 舵机实现姿态控制，Yaw 轴通过双电机差速实现偏航。系统支持手动增稳、高度保持、定点悬停和上位机制导四种飞行模式。
+基于 STM32H743 的纵列双发正交单轴矢量推力 + 差速反扭航向控制的固定翼/VTOL 飞控固件。前电机(CW)绕 z_b 摆动控制侧倾/偏航，尾电机(CCW)绕 y_b 摆动控制俯仰，差速 Δω 产生绕推力轴的力矩控制航向。物理逆解层（I×α→M_cmd→BTRUE 在线 Jacobian 控制分配）将上层纯运动学控制器与具体飞行器模型解耦。
 
 - **目标平台**: WeAct MiniSTM32H743VITx (STM32H743VIT6, Cortex-M7 @ 480MHz)
 - **框架**: Arduino on STM32 (ststm32 platform)
-- **构建系统**: PlatformIO
+- **构建系统**: PlatformIO (env: `TandemVec_FCS`)
 - **作者**: LShang
 - **上传协议**: CMSIS-DAP
+- **电机**: 2212 1400KV + 9047桨 + 3S锂电
+- **飞行模式**: MANUAL / AUTO_ALTITUDE / AUTO_POSITION / GUIDED
 
 ---
 
