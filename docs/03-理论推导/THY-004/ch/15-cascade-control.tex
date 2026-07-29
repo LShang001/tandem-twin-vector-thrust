@@ -99,6 +99,64 @@ $\Delta t$为控制周期。内环的两个关键设计：
           从而规避第\ref{sec:estimator_study}节分析的角加速度估计噪声放大问题。
 \end{enumerate}
 
+\begin{remark}[固件实现：串级PID + 在线Jacobian静态非线性控制分配]
+\label{rem:firmware_alloc}
+式(\ref{eq:cascade_alloc_ch})为增量形式（$\mathbf{u}_{k+1}=\mathbf{u}_k+\Delta\mathbf{u}$），
+概念仿真中按此实现。
+固件（\texttt{flight\_control.cpp} \texttt{mix\_and\_output\_commands}）的实际控制链为：
+\begin{equation}
+    \boldsymbol{\alpha}_{\mathrm{cmd}} \xrightarrow{\;\times\,\mathbf{I}\;}
+    \mathbf{M}_{\mathrm{cmd}} \xrightarrow{\;\mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\;}
+    \mathbf{u}_k = [\Delta\omega,\;\delta_t,\;\delta_f]^T
+    \label{eq:cascade_alloc_firmware}
+\end{equation}
+其中$\boldsymbol{\alpha}_{\mathrm{cmd}}$为速率内环（PI）直接输出的角加速度指令，
+$\mathbf{I}=\operatorname{diag}(I_x,I_y,I_z)$为惯量矩阵，
+$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_{k-1})$为在\textbf{上一拍执行器工作点}
+处求值的在线Jacobian。
+
+\textbf{架构定性}：串级PID + 静态非线性控制分配（Static Nonlinear Control
+Allocation）+ 在线Jacobian更新（gain-scheduling）。具体地：
+\begin{itemize}
+    \item \textbf{不是NDI}：没有任何一层显式计算并对消非线性动力学
+          $f(\mathbf{x})$（陀螺力矩$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$、
+          气动力矩、重力梯度矩）。
+          NDI的核心操作$\mathbf{u}=\mathbf{B}^{-1}(\boldsymbol{\nu}-f(\mathbf{x}))$
+          中的$f(\mathbf{x})$项不存在。
+          $\mathbf{I}\cdot\boldsymbol{\alpha}$仅是量纲缩放
+          （角加速度$\to$力矩），不构成动力学逆。
+    \item \textbf{不是INDI}：没有使用IMU实测角加速度$\dot{\boldsymbol{\omega}}$，
+          没有增量累加$\mathbf{u}_k=\mathbf{u}_{k-1}+\Delta\mathbf{u}$。
+    \item \textbf{BTRUE的"上一拍工作点"}：仅指Jacobian在上一拍真实摆角/转速处求值
+          （而非零摆角名义点），这是gain-scheduling的思想——
+          使分配矩阵跟踪工作点变化，但不涉及动态逆或增量修正。
+\end{itemize}
+
+选择此架构的工程理由：
+\begin{enumerate}[label=(\arabic*)]
+    \item 速率PI直接输出$\boldsymbol{\alpha}$，经$\mathbf{I}$缩放后即为力矩量纲，
+          无需维护执行器状态$\mathbf{u}_k$的增量累积历史；
+    \item 规避INDI对$\dot{\boldsymbol{\omega}}_{\mathrm{IMU}}$数值微分的需求，
+          消除高频噪声经$\mathbf{B}^{-1}$放大的路径；
+    \item 未建模非线性（陀螺耦合、气动交叉）由内环PI的积分项
+          作为"慢扰动"逐步补偿，而非显式对消——
+          概念阶段参数不确定度大（$I$约$\pm20\%$，气动系数未标定），
+          显式对消反而可能引入更大误差；
+    \item 在线辨识模块（\texttt{TandemVec\_OnlineID.h}，遗忘因子RLS）
+          监测惯量比$b$与总扰动$d$，
+          自适应增益建议$K_p/\sqrt{b}$已实现但当前为\textbf{纯观测模式}——
+          仅写入遥测量供地面站显示与离线复算，未写回PID增益。
+          待多架次数据确认估计稳定后，再闭环接入。
+\end{enumerate}
+
+生产固件的姿态外环与速率内环均采用\texttt{PositionPID}（位置式PID，v3），
+具备2-DOF设定点加权、反算抗饱和（back-calculation）、微分先行、
+输出变化率限制与NaN防护。当前姿态通道增益配置：
+外环纯P（$K_p=5.0$，$K_i=K_d=0$），内环PI（$K_p=0.30$，$K_i=3\times10^{-4}$，$K_d=0$）。
+\texttt{TandemVec\_AttitudeCtrl.h}中的纯比例几何控制器
+用于宿主机回归测试与算法验证，两者在小角度下行为等价。
+\end{remark}
+
 \subsection{闭环动力学与传递函数分析}
 \label{sec:cascade_tf}
 

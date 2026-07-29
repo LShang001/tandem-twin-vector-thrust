@@ -75,7 +75,7 @@ INDI控制律（式\ref{eq:indi_law}）中唯一需要建模的是控制效能�
     \boxed{
     \mathbf{B}_{\mathrm{true}}(\mathbf{u}_k) =
     \begin{bmatrix}
-        -\tau_0(\cos\delta_{f,k}+\cos\delta_{t,k}) & +\tau_{t,k}\sin\delta_{t,k} & +\tau_{f,k}\sin\delta_{f,k} \\[6pt]
+        -\tau_0(\cos\delta_{f,k}+\cos\delta_{t,k}) & -\tau_{t,k}\sin\delta_{t,k} & +\tau_{f,k}\sin\delta_{f,k} \\[6pt]
         +b T_0\sin\delta_{t,k} - \tau_0\sin\delta_{f,k} & -b T_{t,k}\cos\delta_{t,k} & -\tau_{f,k}\cos\delta_{f,k} \\[6pt]
         +a T_0\sin\delta_{f,k} + \tau_0\sin\delta_{t,k} & -\tau_{t,k}\cos\delta_{t,k} & +a T_{f,k}\cos\delta_{f,k}
     \end{bmatrix}
