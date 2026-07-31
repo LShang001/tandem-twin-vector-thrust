@@ -148,7 +148,7 @@ def control_effectiveness(omega0, delta_f, delta_t, dw_cmd, P):
     st, ct = np.sin(delta_t), np.cos(delta_t)
     B = np.zeros((3,3))
     B[0,0] = -tau0 * (cf + ct)
-    B[0,1] = +taut * st
+    B[0,1] = -taut * st          # ∂Mx/∂δ_t = -Qt·st（反扭耦合，负号）
     B[0,2] = +tauf * sf
     B[1,0] = +P["b"]*T0*st - tau0*sf
     B[1,1] = -P["b"]*Tt*ct
