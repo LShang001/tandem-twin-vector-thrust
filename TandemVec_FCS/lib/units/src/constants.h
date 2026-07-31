@@ -40,8 +40,10 @@ namespace bfs
     static constexpr double BFS_PI_DOUBLE = 3.14159265358979323846264338327950288;
     static constexpr double BFS_2PI_DOUBLE = 2.0 *
                                              3.14159265358979323846264338327950288;
-    /* Gravitational Acceleration */
-    static constexpr float G_MPS2 = 9.79f;
+    /* Gravitational Acceleration (standard, SI definition: 1 lbf = 0.45359237 kg × g0) */
+    /* 标准重力 9.80665 m/s²：仅用于单位换算（lbf/psi/acc）与 EKF 初始化兜底。 */
+    /* 飞行控制应用值见固件 G_ACCEL_CONST（= TandemVec_Config.h g，来源 aircraft-model.json）。 */
+    static constexpr float G_MPS2 = 9.80665f;
 
 } // namespace bfs
 
