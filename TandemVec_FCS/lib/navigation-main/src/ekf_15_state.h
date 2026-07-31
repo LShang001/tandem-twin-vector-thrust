@@ -471,6 +471,9 @@ namespace bfs
       const Eigen::Vector3f safe_ned_vel = SanitizeVectorOrZero(ned_vel);
       const Eigen::Vector3d safe_lla = SanitizeLlaForInit(lla);
 
+      // 缓存初始化地点的 WGS-84 正常重力（供控制律/遥测消费）
+      gravity_mps2_ = ComputeEarthModelTerms(safe_lla(0), safe_lla(2)).gravity_mps2;
+
       // 在 Initialize 函数的开头预分配内存
       // 使用固定数组保存历史状态，避免飞控运行时进行堆分配。
       buf_head_ = 0;
@@ -1301,6 +1304,9 @@ namespace bfs
     inline Eigen::Vector3d lla_rad_m() const { return ins_lla_rad_m_; }
     // 直接获取 EKF 估计的四元数姿态 (FRD 机体系 → NED 导航系)
     inline Eigen::Quaternionf quat() const { return quat_; }
+
+    // 当前 WGS-84 正常重力（Somigliana，随经纬高更新；未初始化时为默认标准值 9.80665）
+    inline double gravity_mps2() const { return gravity_mps2_; }
     inline double lat_rad() const { return ins_lla_rad_m_(0); }
     inline double lon_rad() const { return ins_lla_rad_m_(1); }
     inline double alt_m() const { return ins_lla_rad_m_(2); }
@@ -2257,6 +2263,7 @@ namespace bfs
       const EarthModelTerms mid_terms =
           ComputeEarthModelTerms(lla_mid_rad_m(0), lla_mid_rad_m(2));
       const float gravity_mid_mps2 = static_cast<float>(mid_terms.gravity_mps2);
+      gravity_mps2_ = mid_terms.gravity_mps2; // 缓存当地重力供外部消费（控制律/遥测）
       const Eigen::Vector3f gravity_ned_mid =
           (Eigen::Vector3f() << 0.0f, 0.0f, gravity_mid_mps2).finished();
       const Eigen::Vector3f earth_rate_mid_ned =
@@ -3894,6 +3901,7 @@ namespace bfs
     /* 最近一次通过所有校验的成功导航周期，单位 s。
        用于 ResetHistoryBuffer() 为首快照填充正确的 dt，避免硬编码周期值。 */
     float last_valid_dt_s_ = 0.005f;
+    double gravity_mps2_ = 9.80665; // WGS-84 正常重力缓存（Somigliana）
 
     // ==================================================================
     // 运行期状态变量

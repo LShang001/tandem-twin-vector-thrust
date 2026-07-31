@@ -269,6 +269,7 @@ extern HardwareTimer *TaskTimer;
 // 唯一事实源：TandemVec_Config.h kDefaultTandemVecParams.g（= models/aircraft-model.json §g）
 extern const float G_TO_MS2;      // 1g → m/s² 换算常数（IMU 加表量程换算）
 extern const float G_ACCEL_CONST; // 重力加速度 (m/s²)（推力合成/垂直估计/位置刹车共用）
+extern float ekf_gravity_mps2;    // EKF 当地重力 (Somigliana, 随经纬高)；控制律消费，EKF 未初始化时 = G_ACCEL_CONST
 extern float initial_mass;        // 飞行器初始质量 (kg)
 
 // --- 3.2 控制器输出限幅 ---

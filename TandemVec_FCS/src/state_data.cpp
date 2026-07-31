@@ -62,6 +62,10 @@ HardwareTimer *TaskTimer = new HardwareTimer(TIM8);
 // G_TO_MS2（IMU 1g→m/s² 换算）与 G_ACCEL_CONST（推力合成/垂直估计/位置刹车）均引用之，避免多源漂移。
 const float G_TO_MS2 = kDefaultTandemVecParams.g;
 const float G_ACCEL_CONST = kDefaultTandemVecParams.g;
+
+// EKF 按当前经纬高计算的 WGS-84 当地重力（Somigliana），控制律消费；
+// 初始/未初始化时回退到 G_ACCEL_CONST（模型默认 9.81），由 navigation_task 每次 EKF 输出刷新。
+float ekf_gravity_mps2 = G_ACCEL_CONST;
 float initial_mass = kDefaultTandemVecParams.m;  // 唯一来源：TandemVec_Config.h §质量
                                                   // 修改质量请改 kDefaultTandemVecParams.m
 

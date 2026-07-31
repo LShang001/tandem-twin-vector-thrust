@@ -437,7 +437,8 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
     // 物理模型: F_z = m * (g + a_z)
     // 这里的 target_acceleration_z 要么来自 PID (AUTO模式)，要么来自上位机 (GUIDED模式)
     // 1. 计算所需的垂直推力加速度, 总垂直推力加速度 = 抵消重力(1g) + 运动加速度
-    float total_vertical_accel_required = G_ACCEL_CONST + target_acceleration_z;
+    //    重力项用 EKF 当地值 ekf_gravity_mps2（Somigliana，未初始化时回退 9.81）
+    float total_vertical_accel_required = ekf_gravity_mps2 + target_acceleration_z;
 
     // 2. 计算所需的垂直推力分量 ( F_z = m * a_z )
     float desired_vertical_thrust = initial_mass * total_vertical_accel_required;
@@ -625,11 +626,11 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // --- 物理参数定义 ---
     const float MAX_TILT_DEG = 15.0f;       // 系统允许的最大控制倾角 (度)
     const float BRAKE_SAFETY_FACTOR = 1.4f; // 安全系数：1.4表示预测点比理论极限远40%，增加平滑度
-    // 重力加速度统一使用 G_ACCEL_CONST（= kDefaultTandemVecParams.g，来源 aircraft-model.json）
+    // 重力加速度用 EKF 当地值 ekf_gravity_mps2（= G_ACCEL_CONST 回退，来源 aircraft-model.json）
 
     // 1. 计算当前倾角限制下的最大物理减速度 (m/s^2)
     // a_max 约为 2.62 m/s^2 (在 15度 倾角时)
-    const float a_max = G_ACCEL_CONST * tanf(MAX_TILT_DEG * DEG_TO_RAD);
+    const float a_max = ekf_gravity_mps2 * tanf(MAX_TILT_DEG * DEG_TO_RAD);
 
     if (loiter_state == LOITER_MOVING)
     {
@@ -740,9 +741,9 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // 目标: 构造一个单位推力矢量 T_unit，使得其产生的合力满足 F = m * a。
   //
   // 物理推导 (天向/向上视角):
-  // 1. 抵消重力加速度所需的基准天向加速度 = G_ACCEL_CONST (约 9.81 m/s^2)
+  // 1. 抵消重力加速度所需的基准天向加速度 = ekf_gravity_mps2 (约 9.79~9.81, EKF 当地值)
   // 2. 高度环输出的目标天向加速度增量 = target_accel_z_up_global (向上为正)
-  // 3. 所需的总天向比力 (Total Vertical Specific Force) = G_ACCEL_CONST + target_accel_z_up_global
+  // 3. 所需的总天向比力 (Total Vertical Specific Force) = ekf_gravity_mps2 + target_accel_z_up_global
   //    (注：即使在悬停状态，电机也必须提供 1g 的天向比力)
   //
   // 4. 水平向比力需求即为目标水平加速度: [target_accel_n, target_accel_e]
@@ -752,7 +753,7 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
 
   // 计算三轴合成比力矢量的模长
   // 引入 target_accel_z_up_global 实现了水平环对垂直环动态的实时感知
-  float total_z_force_demand = G_ACCEL_CONST + target_accel_z_up_global;
+  float total_z_force_demand = ekf_gravity_mps2 + target_accel_z_up_global;
   float total_force_norm = sqrtf(target_accel_n * target_accel_n +
                                  target_accel_e * target_accel_e +
                                  total_z_force_demand * total_z_force_demand);
@@ -812,7 +813,8 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
 
     // --- GUIDED模式也必须使用全比力归一化 ---
     // 此时 target_accel_z_up_global 已经被 compute_thrust_control 更新为 guidance_accel_U_cmd
-    float total_z_demand = G_ACCEL_CONST + target_accel_z_up_global;
+    // 重力项用 EKF 当地值 ekf_gravity_mps2（Somigliana，未初始化时回退 9.81）
+    float total_z_demand = ekf_gravity_mps2 + target_accel_z_up_global;
 
     float total_force_norm = sqrtf(target_accel_n * target_accel_n +
                                    target_accel_e * target_accel_e +

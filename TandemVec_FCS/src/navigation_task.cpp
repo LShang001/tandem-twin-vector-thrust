@@ -1341,6 +1341,10 @@ void handleNavigationSystem()
         icm_Roll = AHRS_Packet.Roll;
         icm_Pitch = AHRS_Packet.Pitch;
         icm_Yaw = AHRS_Packet.Heading;
+
+        // 导出 WGS-84 当地重力（Somigliana, 随经纬高）供控制律消费；
+        // 仅在 EKF 初始化分支刷新，未初始化时保持回退值 G_ACCEL_CONST。
+        ekf_gravity_mps2 = static_cast<float>(nav_ekf.gravity_mps2());
       }
 
       // --- 2. 注入位置与速度 (INS_GNSS_Packet) ---
