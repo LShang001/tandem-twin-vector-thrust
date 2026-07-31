@@ -31,6 +31,7 @@
 #endif
 
 #include "convacc.h" // NOLINT
+#include "constants.h" // NOLINT (G_MPS2)
 
 namespace bfs
 {
@@ -85,7 +86,7 @@ namespace bfs
     }
     case LinAccUnit::G:
     {
-      in_val = val * 9.80665f;
+      in_val = val * G_MPS2;
       break;
     }
     }
@@ -125,7 +126,7 @@ namespace bfs
     }
     case LinAccUnit::G:
     {
-      out_val = in_val / 9.80665f;
+      out_val = in_val / G_MPS2;
       break;
     }
     }
