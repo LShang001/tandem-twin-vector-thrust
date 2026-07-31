@@ -44,7 +44,7 @@ static uint8_t can_frame_index = 0;
 //   帧4: EKF速度 VN/VE (m/s)
 //   帧5: 控制输出 throttle%/yaw_output
 //   帧6: 控制输出 roll_output/pitch_output
-//   帧7: 系统状态 roll/pitch (deg)
+//   帧7: 系统状态 roll/pitch (rad, EKF 输出)
 // 系统状态帧 pitch/yaw/height 每 5 个周期追加 (40Hz)
 #define CAN_FRAME_CYCLE       8  // 8 帧一个完整循环
 #define CAN_STATUS_DIVIDER    5  // 系统状态追加帧分频
