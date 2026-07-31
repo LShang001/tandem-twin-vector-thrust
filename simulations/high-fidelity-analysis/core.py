@@ -71,26 +71,31 @@ class Propulsion:
         self.wt = 0.0   # 尾电机转速
         self.prev_wf = 0.0
         self.prev_wt = 0.0
+        self.dwf = 0.0  # 本步转子角加速度（update 缓存，forces 消费）
+        self.dwt = 0.0
 
     def update(self, omega0, dw_cmd, dt):
         """omega0: 基准转速, dw_cmd: 差速指令 [-1,1]"""
         P = self.P
-        wfT = omega0 * np.sqrt(1 + dw_cmd)
-        wtT = omega0 * np.sqrt(1 - dw_cmd)
+        # 与 JS propulsion.mjs 一致：目标转速钳制到 wMax（差速指令可使 sqrt(1±dw) 超 1）
+        wfT = min(omega0 * np.sqrt(1 + dw_cmd), P["wMax"])
+        wtT = min(omega0 * np.sqrt(1 - dw_cmd), P["wMax"])
         alpha = min(dt / P["tauM"], 1.0)
         self.wf += (wfT - self.wf) * alpha
         self.wt += (wtT - self.wt) * alpha
         dwf = (self.wf - self.prev_wf) / max(dt, 1e-4)
         dwt = (self.wt - self.prev_wt) / max(dt, 1e-4)
         self.prev_wf = self.wf; self.prev_wt = self.wt
+        self.dwf = dwf; self.dwt = dwt   # 缓存供 forces() 使用（否则 forces 重算恒为 0）
         return self.wf, self.wt, dwf, dwt
 
     def forces(self, delta_f, delta_t):
         """返回推进力/力矩的机体系分量"""
         P = self.P
         wf, wt = self.wf, self.wt
-        dwf = (wf - self.prev_wf) / 0.004  # 近似
-        dwt = (wt - self.prev_wt) / 0.004
+        # 惯性反扭 Jp·ω̇ 用 update() 缓存的角加速度；
+        # 不能用 (wf - prev_wf)/dt 重算——update() 已把 prev_wf 置为 wf，重算恒为 0。
+        dwf, dwt = self.dwf, self.dwt
         Tf = P["kT"] * wf*wf; Tt = P["kT"] * wt*wt
         Qf = P["kQ"] * wf*wf + P["Jp"] * dwf
         Qt = P["kQ"] * wt*wt + P["Jp"] * dwt
@@ -121,9 +126,11 @@ def aero_forces(vel, omega, P):
     Cl = P["Clb"] * beta + P["Clp"] * p * P["bspan"] / (2*V)
     Cn = P["Cnb"] * beta + P["Cnr"] * r * P["bspan"] / (2*V)
     Sw = P["Sw"]; c = P["cbar"]; b = P["bspan"]
-    aX = -CD * qbar * Sw
-    aY =  CY * qbar * Sw
-    aZ = -CL * qbar * Sw
+    L  = CL * qbar * Sw
+    D  = CD * qbar * Sw
+    aX = L * np.sin(alpha) - D * np.cos(alpha)   # 风轴 → 机体系（对标 aerodynamics.mjs）
+    aY = CY * qbar * Sw
+    aZ = -L * np.cos(alpha) - D * np.sin(alpha)
     La = Cl * qbar * Sw * b
     Ma = Cm * qbar * Sw * c
     Na = Cn * qbar * Sw * b
