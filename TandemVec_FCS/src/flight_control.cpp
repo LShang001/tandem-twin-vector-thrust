@@ -625,11 +625,11 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // --- 物理参数定义 ---
     const float MAX_TILT_DEG = 15.0f;       // 系统允许的最大控制倾角 (度)
     const float BRAKE_SAFETY_FACTOR = 1.4f; // 安全系数：1.4表示预测点比理论极限远40%，增加平滑度
-    const float G_LOCAL = 9.79f;            // 当地重力加速度
+    // 重力加速度统一使用 G_ACCEL_CONST（= kDefaultTandemVecParams.g，来源 aircraft-model.json）
 
     // 1. 计算当前倾角限制下的最大物理减速度 (m/s^2)
     // a_max 约为 2.62 m/s^2 (在 15度 倾角时)
-    const float a_max = G_LOCAL * tanf(MAX_TILT_DEG * DEG_TO_RAD);
+    const float a_max = G_ACCEL_CONST * tanf(MAX_TILT_DEG * DEG_TO_RAD);
 
     if (loiter_state == LOITER_MOVING)
     {

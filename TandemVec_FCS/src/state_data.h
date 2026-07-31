@@ -266,8 +266,9 @@ extern HardwareTimer *TaskTimer;
  */
 
 // --- 3.1 物理常数 ---
-extern const float G_TO_MS2;      // 长沙地区标准重力常数
-extern const float G_ACCEL_CONST; // 当地重力加速度 (m/s^2, 长沙)
+// 唯一事实源：TandemVec_Config.h kDefaultTandemVecParams.g（= models/aircraft-model.json §g）
+extern const float G_TO_MS2;      // 1g → m/s² 换算常数（IMU 加表量程换算）
+extern const float G_ACCEL_CONST; // 重力加速度 (m/s²)（推力合成/垂直估计/位置刹车共用）
 extern float initial_mass;        // 飞行器初始质量 (kg)
 
 // --- 3.2 控制器输出限幅 ---

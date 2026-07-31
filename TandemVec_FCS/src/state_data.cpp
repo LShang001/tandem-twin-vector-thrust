@@ -58,8 +58,10 @@ HardwareTimer *TaskTimer = new HardwareTimer(TIM8);
  */
 
 // --- 3.1 物理常数（全部从可测量物理量推导，来源见注释）---
-const float G_TO_MS2 = 9.81f;
-const float G_ACCEL_CONST = 9.81f;          // 重力, m/s²。与 TandemVec_Config.h 一致
+// 重力加速度唯一事实源：TandemVec_Config.h kDefaultTandemVecParams.g（源自 models/aircraft-model.json）。
+// G_TO_MS2（IMU 1g→m/s² 换算）与 G_ACCEL_CONST（推力合成/垂直估计/位置刹车）均引用之，避免多源漂移。
+const float G_TO_MS2 = kDefaultTandemVecParams.g;
+const float G_ACCEL_CONST = kDefaultTandemVecParams.g;
 float initial_mass = kDefaultTandemVecParams.m;  // 唯一来源：TandemVec_Config.h §质量
                                                   // 修改质量请改 kDefaultTandemVecParams.m
 

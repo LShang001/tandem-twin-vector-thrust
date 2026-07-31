@@ -1202,9 +1202,9 @@ void handleMavlink()
   // ====================================================================
   if (call_count % 5 == 3)
   {
-    int16_t ax = (int16_t)constrain(IMU_Packet.accelerometer_x * 1000.0f / 9.81f, -32767.0f, 32767.0f);
-    int16_t ay = (int16_t)constrain(IMU_Packet.accelerometer_y * 1000.0f / 9.81f, -32767.0f, 32767.0f);
-    int16_t az = (int16_t)constrain(IMU_Packet.accelerometer_z * 1000.0f / 9.81f, -32767.0f, 32767.0f);
+    int16_t ax = (int16_t)constrain(IMU_Packet.accelerometer_x * 1000.0f / G_ACCEL_CONST, -32767.0f, 32767.0f);
+    int16_t ay = (int16_t)constrain(IMU_Packet.accelerometer_y * 1000.0f / G_ACCEL_CONST, -32767.0f, 32767.0f);
+    int16_t az = (int16_t)constrain(IMU_Packet.accelerometer_z * 1000.0f / G_ACCEL_CONST, -32767.0f, 32767.0f);
     int16_t gx = (int16_t)constrain(IMU_Packet.gyroscope_x * 1000.0f, -32767.0f, 32767.0f);
     int16_t gy = (int16_t)constrain(IMU_Packet.gyroscope_y * 1000.0f, -32767.0f, 32767.0f);
     int16_t gz = (int16_t)constrain(IMU_Packet.gyroscope_z * 1000.0f, -32767.0f, 32767.0f);

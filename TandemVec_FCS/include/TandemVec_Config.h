@@ -108,5 +108,5 @@ static const TandemVecParams kDefaultTandemVecParams = {
     /* dwMax */ 0.7f,
     // 质量 / 重力
     /* m     */ 0.7f,    // kg  实测待精化；原 2.6 为固定翼仿真值，已改为 VTOL 估算值
-    /* g     */ 9.81f,
+    /* g     */ 9.81f,   // m/s² 重力加速度 ★ 唯一事实源：G_TO_MS2/G_ACCEL_CONST 均引用此值（源自 models/aircraft-model.json）；改当地值请同步 aircraft-model.json
 };
