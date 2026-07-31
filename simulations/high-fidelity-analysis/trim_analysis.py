@@ -33,7 +33,10 @@ def trim_longitudinal(V_target, P, verbose=False):
         CL = P["CLa"]*alpha_a
         CD = P["CD0"] + P["CDk"]*CL*CL
         Cm = P["Cm0"] + P["Cma"]*alpha_a
-        aX = -CD*qbar*P["Sw"]; aZ = -CL*qbar*P["Sw"]
+        # 风轴 → 机体系投影（对标 core.aero_forces / aerodynamics.mjs）
+        L = CL*qbar*P["Sw"]; D = CD*qbar*P["Sw"]
+        aX = L*np.sin(alpha_a) - D*np.cos(alpha_a)
+        aZ = -L*np.cos(alpha_a) - D*np.sin(alpha_a)
         Ma = Cm*qbar*P["Sw"]*P["cbar"]
         # 重力在机体系 (NED: +z 向下)
         gb = quat_rotate(np.array([0,0,P["g"]]), quat_conj(q))
@@ -98,7 +101,11 @@ def linearize_at_trim(trim, P):
         Cm = P["Cm0"]+P["Cma"]*alpha_a+P["Cmq"]*ww[1]*P["cbar"]/(2*V)
         Cl = P["Clb"]*beta_a+P["Clp"]*ww[0]*P["bspan"]/(2*V)
         Cn = P["Cnb"]*beta_a+P["Cnr"]*ww[2]*P["bspan"]/(2*V)
-        aX=-CD*qbar*P["Sw"]; aY=CY*qbar*P["Sw"]; aZ=-CL*qbar*P["Sw"]
+        # 风轴 → 机体系投影（对标 core.aero_forces / aerodynamics.mjs）
+        L = CL*qbar*P["Sw"]; D = CD*qbar*P["Sw"]
+        aX = L*np.sin(alpha_a) - D*np.cos(alpha_a)
+        aY = CY*qbar*P["Sw"]
+        aZ = -L*np.cos(alpha_a) - D*np.sin(alpha_a)
         La=Cl*qbar*P["Sw"]*P["bspan"]; Ma=Cm*qbar*P["Sw"]*P["cbar"]; Na=Cn*qbar*P["Sw"]*P["bspan"]
         gb = quat_rotate(np.array([0,0,P["g"]]), quat_conj(qq))
         m=P["m"]; Ix=P["Ix"]; Iy=P["Iy"]; Iz=P["Iz"]
