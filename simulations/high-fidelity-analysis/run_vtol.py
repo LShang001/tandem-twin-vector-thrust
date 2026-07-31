@@ -17,7 +17,7 @@ apply_style()
 P = load_params()
 qh = np.array([np.cos(np.pi/4), 0, np.sin(np.pi/4), 0])  # 悬停姿态四元数 (绕+y转+90°=机头朝天, JS读数 theta=-90°)
 q_level = np.array([1.0, 0.0, 0.0, 0.0])                   # 水平姿态
-omega0_trim = np.sqrt(P["m"]*9.81/(2*P["kT"]))   # 精确悬停配平转速
+omega0_trim = np.sqrt(P["m"]*P["g"]/(2*P["kT"]))   # 精确悬停配平转速
 omega0_to = omega0_trim * 1.05                  # 起飞 105% 转速
 print(f"悬停配平 ω0 = {omega0_trim:.1f} rad/s ({omega0_trim/P['wMax']*100:.1f}%)")
 

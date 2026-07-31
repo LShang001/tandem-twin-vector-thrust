@@ -120,8 +120,8 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>F<span class="op">.</span><span class="at">vel</span><span class="op">.</span><span class="at">z</span> <span class="op">=</span> P<span class="op">.</span><span class="at">vTrim</span> <span class="op">*</span> <span class="fu">sin</span>(P<span class="op">.</span><span class="at">aTrim</span>)<span class="op">;</span></span>
 <span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>S<span class="op">.</span><span class="at">quat</span>  <span class="op">=</span> (<span class="dv">0</span><span class="op">,</span> <span class="fu">sin</span>(P<span class="op">.</span><span class="at">aTrim</span><span class="op">/</span><span class="dv">2</span>)<span class="op">,</span> <span class="dv">0</span><span class="op">,</span> <span class="fu">cos</span>(P<span class="op">.</span><span class="at">aTrim</span><span class="op">/</span><span class="dv">2</span>))<span class="op">;</span></span></code></pre></div>
 <p>其中
-<code>P.vTrim = 24 m/s</code>、<code>P.aTrim = 0.028398719 rad</code>（1.627°）、<code>P.thrTrim = 0.44135018</code>，尾摆配平偏置
-<code>P.dtTrim = -0.011344527 rad</code>（-0.650°）。按照项目锁定的欧拉角提取约定，物理俯仰为
+<code>P.vTrim = 24 m/s</code>、<code>P.aTrim = 0.028337971 rad</code>（1.624°）、<code>P.thrTrim = 0.44133603</code>，尾摆配平偏置
+<code>P.dtTrim = -0.010577589 rad</code>（-0.606°）。按照项目锁定的欧拉角提取约定，物理俯仰为
 <code>+aTrim</code> 时 HUD 显示
 <code>theta = -aTrim</code>；二者不能混用。</p>
 <hr />
@@ -154,27 +154,27 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-
 <tbody>
 <tr>
 <td>配平迎角 <code>alpha_0</code></td>
-<td style="text-align: right;">0.028398719 rad = 1.62713°</td>
+<td style="text-align: right;">0.028337971 rad = 1.62365°</td>
 <td><code>aTrim</code></td>
 </tr>
 <tr>
 <td>配平油门</td>
-<td style="text-align: right;">0.44135018</td>
+<td style="text-align: right;">0.44133603</td>
 <td><code>thrTrim</code></td>
 </tr>
 <tr>
 <td>尾摆配平偏置 <code>delta_t0</code></td>
-<td style="text-align: right;">-0.011344527 rad = -0.64999°</td>
+<td style="text-align: right;">-0.010577589 rad = -0.60605°</td>
 <td><code>dtTrim</code></td>
 </tr>
 <tr>
 <td>单发转速</td>
-<td style="text-align: right;">397.215 rad/s</td>
+<td style="text-align: right;">397.202427 rad/s</td>
 <td><code>thrTrim*wMax</code></td>
 </tr>
 <tr>
 <td>单发推力</td>
-<td style="text-align: right;">3.47116 N</td>
+<td style="text-align: right;">3.470935 N</td>
 <td><code>kT*(thrTrim*wMax)^2</code></td>
 </tr>
 </tbody>
@@ -182,7 +182,7 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb3-
 <p>代回上述三式后，<code>F_x</code>、<code>F_z</code>、<code>M_y</code>
 三个残差均小于 <code>6e-11</code>（SI 单位）。这不是六自由度全配平：非零
 <code>dtTrim</code> 使尾电机反扭矩在 <code>z_b</code> 轴留下
-<code>M_z=-Q_t sin(dtTrim)≈+0.00286 N·m</code>
+<code>M_z=-Q_t sin(dtTrim)≈+0.00267 N·m</code>
 的一阶残差。当前没有联立求解前摆、差速、侧滑和滚转姿态来同时闭合
 <code>F_y</code>、<code>M_x</code>、<code>M_z</code>。</p>
 <p>在 60 Hz 帧率、4 ms 子步和全 SAS 模式下连续运行 10
@@ -396,5 +396,5 @@ VER-001。</p>
 <li>VER-001：验证与确认流程、回归基线通过准则。</li>
 <li>GOV-002：变更控制流程（若需修改 theta 符号约定）。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-23 04:09</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
 </html>

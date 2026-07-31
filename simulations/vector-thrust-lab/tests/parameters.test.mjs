@@ -46,6 +46,7 @@ test('参数对象冻结', () => {
 
 test('摆角限幅与配平角度换算正确', () => {
   assert.ok(Math.abs(P.dMax - 25 * Math.PI / 180) < 1e-15);
-  assert.ok(Math.abs(P.aTrim - 1.6271267235981473 * Math.PI / 180) < 1e-15);
-  assert.ok(Math.abs(P.dtTrim - (-0.6499934968585572 * Math.PI / 180)) < 1e-15);
+  // 配平值按 g=9.79 重解（2026-07 长沙/广州当地值），见 aircraft-model.json
+  assert.ok(Math.abs(P.aTrim - 1.623646110235076 * Math.PI / 180) < 1e-15);
+  assert.ok(Math.abs(P.dtTrim - (-0.6060512034046954 * Math.PI / 180)) < 1e-15);
 });

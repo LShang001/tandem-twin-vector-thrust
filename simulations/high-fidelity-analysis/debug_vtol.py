@@ -9,7 +9,7 @@ print('qh:', qh)
 # Gravity in body frame
 gb = quat_rotate(np.array([0,0,P['g']]), quat_conj(qh))
 print('gb (body gravity):', gb)
-print('Expected: approx [-9.81, 0, 0] for nose-up hover')
+print(f'Expected: approx [-{P["g"]:.2f}, 0, 0] for nose-up hover')
 
 # Thrust
 oh=799.4; T=2*P['kT']*oh*oh

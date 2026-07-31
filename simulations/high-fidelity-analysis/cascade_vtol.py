@@ -16,7 +16,7 @@ from estimators import EulerDiffEstimator
 P = load_params(); DT=0.004
 qh = np.array([np.cos(np.pi/4),0,np.sin(np.pi/4),0])   # 悬停（机头朝天）
 q_level = np.array([1.0,0,0,0])
-W0_H = np.sqrt(P["m"]*9.81/(2*P["kT"]))
+W0_H = np.sqrt(P["m"]*P["g"]/(2*P["kT"]))
 U_MAX = np.array([P["dwMax"], P["dMax"], P["dMax"]])
 
 def eps_of(q,q_des):
