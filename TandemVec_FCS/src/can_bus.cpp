@@ -52,6 +52,12 @@ static uint8_t can_frame_index = 0;
 
 // --- 辅助: 发送 2 个 float (8 字节, 恰好填满 CAN 数据区) ---
 static bool sendFloatPair(int id, float a, float b) {
+  // 防护：NaN/Inf 或超出物理可能范围的值不上总线（否则原始位模式
+  // 会被下游误解析）；与 AnoCom anoCtrlSafe 同一策略。
+  if (!isfinite(a) || !isfinite(b) || fabsf(a) > 1.0e6f || fabsf(b) > 1.0e6f) {
+    can_send_error_count++;
+    return false;
+  }
   if (!CAN.beginPacket(id)) {
     can_send_error_count++;
     return false;
