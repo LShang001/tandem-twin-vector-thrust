@@ -36,8 +36,8 @@
 #define CAN_ID_CTRL_OUTPUT   0x120  // 控制输出 throttle/yaw (float32 x2)
 #define CAN_ID_CTRL_OUTPUT_RP 0x121  // 控制输出 roll/pitch (float32 x2)
 #define CAN_ID_CTRL_TARGET   0x122  // 预留: 目标姿态分帧
-#define CAN_ID_SYS_STATUS    0x130  // 系统状态 roll/pitch (float32 x2, deg)
-#define CAN_ID_SYS_HEIGHT    0x131  // 系统状态 yaw/height (float32 x2)
+#define CAN_ID_SYS_STATUS    0x130  // 系统状态 roll/pitch (float32 x2, rad, EKF 输出)
+#define CAN_ID_SYS_HEIGHT    0x131  // 系统状态 yaw/height (float32 x2, yaw: rad [0,2π), height: m)
 
 // 接收 CAN ID 定义 (外部设备 → 本飞控)
 #define CAN_ID_RX_CMD        0x700  // 控制指令分帧起始ID (单帧最多 float32 x2)
