@@ -666,8 +666,8 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // 运行位置环，计算修正速度
     float northError = targetNorth - currentNorth;
     float eastError = targetEast - currentEast;
-    targetVelNorth = northPosPID.computeWithExternalDerivative(northError, 0, -currentVelNorth);
-    targetVelEast = eastPosPID.computeWithExternalDerivative(eastError, 0, -currentVelEast);
+    targetVelNorth = northPosPID.computeWithExternalDerivative(northError, 0, currentVelNorth);
+    targetVelEast = eastPosPID.computeWithExternalDerivative(eastError, 0, currentVelEast);
   }
   else
   {
@@ -984,8 +984,10 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       error_pitch_deg = sign_qw * q_error.y * precise_scale;
 
       // 外环：侧倾外部导数取 omega.z（体轴z = VTOL侧倾速率）
-      rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, -current_omega_dps_body_filtered.z);
-      pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(error_pitch_deg, 0, -current_omega_dps_body_filtered.y);
+      // 传参为 d(input)/dt 语义：input=0 常数，误差导数 = -omega；
+      // computeWithExternalDerivative 内部取 -derivative 作误差导数，故此处传 +omega。
+      rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, current_omega_dps_body_filtered.z);
+      pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(error_pitch_deg, 0, current_omega_dps_body_filtered.y);
 
       // 限制目标角速度在安全范围内
       // 防止PID输出过大导致危险动作
