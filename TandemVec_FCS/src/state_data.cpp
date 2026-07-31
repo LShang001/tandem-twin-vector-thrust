@@ -147,9 +147,9 @@ PositionPID altitudeVelocityPIDController(5.0f, 1.25f * 0.005f, 0.0f / 0.005f);
 PositionPID northPosPID(0.25f, 0.0f * 0.005f, 0.0f);
 // 东向位置环 (纯比例, Kp=0.25)
 PositionPID eastPosPID(0.25f, 0.0f * 0.005f, 0.0f);
-// 北向速度环 (Kp=1.75, Ki=0.00125, Kd=0.01)
+// 北向速度环 (Kp=1.75, Ki=0.00125, Kd=0.05连续域→离散=0.05/0.005=10)
 PositionPID northVelPID(1.75f, 0.25f * 0.005f, 0.05f / 0.005f);
-// 东向速度环 (Kp=1.75, Ki=0.00125, Kd=0.01)
+// 东向速度环 (Kp=1.75, Ki=0.00125, Kd=0.05连续域→离散=0.05/0.005=10)
 PositionPID eastVelPID(1.75f, 0.25f * 0.005f, 0.05f / 0.005f);
 
 /*

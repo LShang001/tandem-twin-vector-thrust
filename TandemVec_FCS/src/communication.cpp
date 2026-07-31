@@ -413,7 +413,7 @@ void handleAnoCom()
     // 控制量 (来自handlePIDControl的输出)
     roll_ctrl_ano = roll_output * 10.0f;         // 滚转控制输出，放大10倍用于显示
     pitch_ctrl_ano = pitch_output * 10.0f;       // 俯仰控制输出，放大10倍
-    yaw_ctrl_ano = yaw_output - 1500.0f;         // 偏航控制输出，相对中位值
+    yaw_ctrl_ano = yaw_output * 10.0f;           // 偏航控制输出（alpha_yaw rad/s²），放大10倍
     throttle_ctrl_ano = throttlePercent * 10.0f; // 油门百分比，放大10倍
 
     // 目标值 (来自控制逻辑)

@@ -152,16 +152,17 @@ void handleCANBus(void) {
       break;
     }
     case 7: {
-      // 系统状态: roll/pitch (deg, AHRS姿态)
-      sendFloatPair(CAN_ID_SYS_STATUS, backup_ahrs_roll, backup_ahrs_pitch);
+      // 系统状态: roll/pitch (rad, EKF 输出 AHRS_Packet，与其他遥测通道一致)
+      sendFloatPair(CAN_ID_SYS_STATUS, AHRS_Packet.Roll, AHRS_Packet.Pitch);
       break;
     }
   }
   can_frame_index++;
 
   // 系统状态追加帧: yaw + height (每 5 个周期, 40Hz)
+  // yaw 单位 rad（[0,2π) EKF 航向），height 单位 m
   if (can_frame_index % CAN_STATUS_DIVIDER == 0) {
-    sendFloatPair(CAN_ID_SYS_HEIGHT, backup_ahrs_yaw, estimated_height);
+    sendFloatPair(CAN_ID_SYS_HEIGHT, AHRS_Packet.Heading, estimated_height);
   }
 }
 
