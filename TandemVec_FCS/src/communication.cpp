@@ -528,7 +528,9 @@ void handleAnoCom()
   {
     AnoCom.sendAltitudeData(alt_bar, alt_add, alt_fu, 1); // `system_id` = 1
     AnoCom.sendFlightMode(flight_mode_ano, flight_sflag_ano, 0, 0, 0); // 飞控模式 + 解锁状态
-    AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, yaw_ctrl_ano, throttle_ctrl_ano);
+    // 参数顺序必须与 AnoComProtocol::sendAttitudeControl(ctrlRol, ctrlPit, ctrlThr, ctrlYaw) 一致：
+    // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
+    AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
   }
   // 发送组3的数据包 (Target Speed, Flight Speed, PWM Output)
   else if (group_index == 2)
