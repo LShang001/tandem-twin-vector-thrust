@@ -1344,7 +1344,32 @@ void handleNavigationSystem()
 
         // 导出 WGS-84 当地重力（Somigliana, 随经纬高）供控制律消费；
         // 仅在 EKF 初始化分支刷新，未初始化时保持回退值 G_ACCEL_CONST。
-        ekf_gravity_mps2 = static_cast<float>(nav_ekf.gravity_mps2());
+        //
+        // 防护（防突变/异常定位数据/噪声）：
+        //   1. 合理性范围检查：WGS-84 正常重力全局范围 9.78~9.83 m/s²，
+        //      加高度/异常余量取 [9.0, 10.5]，范围外（GNSS 野值/重锚定
+        //      导致的 LLA 跳变）整拍丢弃，保持上一有效值；
+        //   2. 一阶低通：重力随位置变化极慢（纬度敏感度 ~5e-3 m/s²/度），
+        //      tau≈1s 低通滤除 LLA 噪声与瞬态跳变，初始化后平滑收敛；
+        //   3. 与回退值偏差限幅 ±0.5 m/s²：防御性兜底，杜绝任何路径
+        //      把异常值灌入控制律。
+        {
+          static const float kGravityAlpha = 0.005f;   // 一阶低通系数（tau≈1s @200Hz）
+          static const float kGravityMin = 9.0f;       // 合理性范围下界
+          static const float kGravityMax = 10.5f;      // 合理性范围上界
+          static const float kGravityDevMax = 0.5f;    // 与回退值最大偏差
+          static float filtered_gravity = G_ACCEL_CONST;
+          const float raw_gravity = static_cast<float>(nav_ekf.gravity_mps2());
+          if (raw_gravity >= kGravityMin && raw_gravity <= kGravityMax)
+          {
+            filtered_gravity += kGravityAlpha * (raw_gravity - filtered_gravity);
+            filtered_gravity = constrain(filtered_gravity,
+                                         G_ACCEL_CONST - kGravityDevMax,
+                                         G_ACCEL_CONST + kGravityDevMax);
+            ekf_gravity_mps2 = filtered_gravity;
+          }
+          // 范围外（异常）丢弃本拍，ekf_gravity_mps2 保持上一有效值
+        }
       }
 
       // --- 2. 注入位置与速度 (INS_GNSS_Packet) ---
