@@ -138,7 +138,8 @@ void handleCANBus(void) {
     }
     case 4: {
       // EKF 速度 VN/VE (m/s, NED系)
-      sendFloatPair(CAN_ID_NAV_VEL, fused_north_vel, fused_east_vel);
+      // 改用 INS_GNSS_Packet（EKF 输出桥）；fused_* 为纯加速度积分无零速更新会漂移，已弃用
+      sendFloatPair(CAN_ID_NAV_VEL, INS_GNSS_Packet.velocity_north, INS_GNSS_Packet.velocity_east);
       break;
     }
     case 5: {

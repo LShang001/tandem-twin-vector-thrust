@@ -27,6 +27,8 @@
 #define CAN_SPI_FREQ         8E6        // SPI2 时钟 8 MHz (Mode0, MSBFIRST)
 
 // 发送 CAN ID 定义 (本飞控 → 外部设备)
+// 字节序约定：float32 以 STM32 原生小端内存布局发送（直接 memcpy 内存字节），
+// 接收端须按小端解析（如大端平台需字节交换）。
 #define CAN_ID_IMU_GYRO      0x100  // 角速度 X/Y (float32 x2, rad/s)
 #define CAN_ID_IMU_ACCEL     0x101  // 角速度Z + 加速度X (float32 x2)
 #define CAN_ID_IMU_ACCEL_YZ  0x102  // 加速度 Y/Z (float32 x2, m/s²)

@@ -338,6 +338,12 @@ void handleAnoCom()
   static uint8_t group_index = 0;               // 当前发送的数据包组索引 (0-3)
   static bool new_cycle_data_collection = true; // 是否需要采集新一轮数据的标志
 
+  // 遥测控制量安全转换：isfinite 防 NaN/Inf（constrain 对 NaN 无效），
+  // 限幅到协议 ±5000 量程，异常值归零仅损坏显示不影响飞行。
+  auto anoCtrlSafe = [](float v) -> float {
+    return (isfinite(v)) ? constrain(v, -5000.0f, 5000.0f) : 0.0f;
+  };
+
   // 静态数据缓存，仅在new_cycle_data_collection为true时更新
   // 惯性传感器数据
   static float acc_x_ano, acc_y_ano, acc_z_ano;
@@ -410,11 +416,11 @@ void handleAnoCom()
     alt_add = vfk_height;           // 2状态垂直KF高度 (与EKF对比用，激光通道空闲)
     alt_fu = estimated_height;      // EKF融合高度 (控制律消费)
 
-    // 控制量 (来自handlePIDControl的输出)
-    roll_ctrl_ano = roll_output * 10.0f;         // 滚转控制输出，放大10倍用于显示
-    pitch_ctrl_ano = pitch_output * 10.0f;       // 俯仰控制输出，放大10倍
-    yaw_ctrl_ano = yaw_output * 10.0f;           // 偏航控制输出（alpha_yaw rad/s²），放大10倍
-    throttle_ctrl_ano = throttlePercent * 10.0f; // 油门百分比，放大10倍
+    // 控制量 (来自handlePIDControl的输出)，经 anoCtrlSafe 限幅 ±5000 + NaN 防护
+    roll_ctrl_ano = anoCtrlSafe(roll_output * 10.0f);         // 滚转控制输出，放大10倍用于显示
+    pitch_ctrl_ano = anoCtrlSafe(pitch_output * 10.0f);       // 俯仰控制输出，放大10倍
+    yaw_ctrl_ano = anoCtrlSafe(yaw_output * 10.0f);           // 偏航控制输出（alpha_yaw rad/s²），放大10倍
+    throttle_ctrl_ano = anoCtrlSafe(throttlePercent * 10.0f); // 油门百分比，放大10倍
 
     // 目标值 (来自控制逻辑)
     target_speed_x_ano = targetVelNorth * 100;           // 水平目标速度X (如果适用)
