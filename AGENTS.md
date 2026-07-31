@@ -1,7 +1,7 @@
 # AGENTS.md — 纵列双发矢量推力飞行器
 
 > 项目背景见 `README.md`——不在这里重复。
-> 多 Agent 协作、角色定义、交接协议——遇到多 Agent 协作问题或新 Agent 需了解角色时，读 `docs/00-项目治理/GOV-003-多Agent协作规范.md`。
+> 多 Agent 协作问题或新 Agent 入场时，读 `docs/00-项目治理/GOV-003-多Agent协作规范.md`。
 
 ---
 
@@ -55,7 +55,14 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 
 修改以下任一项，必须：重采回归基线 `tests/fixtures/regression-baseline.json`、同步更新文档、提交说明原因。完整清单及变更审核流程见 `docs/registers/行为保持红线清单.md`。
 
-核心红线：帧 delta≤0.05s / 子步≤0.004s / 电机 τm=0.28s、差速公式 ωf=ω0√(1+Δω)（保持不变）、四元数RK4积分+每阶段保范投影、theta=−asin(R₁₃)、力臂分离（渲染±1.78m≠物理0.62m）、SAS 限幅 ±25°/±0.7（积分俯仰±0.5rad/滚转±0.3rad）、空速下限 0.5m/s、地面 pos.z>6.2。
+核心红线（逐条对照）：
+- 帧 delta≤0.05s / 子步≤0.004s / 电机 τm=0.28s
+- 差速公式 ωf=ω0√(1+Δω)（保持不变）
+- 四元数RK4积分 + 每阶段保范投影
+- theta=−asin(R₁₃)
+- 力臂分离（渲染±1.78m ≠ 物理0.62m）
+- SAS 限幅 ±25°/±0.7（积分俯仰±0.5rad / 滚转±0.3rad）
+- 空速下限 0.5m/s、地面 pos.z>6.2
 
 ## 边界
 

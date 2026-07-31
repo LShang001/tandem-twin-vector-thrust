@@ -337,9 +337,9 @@ void setup()
   BFS_ADD_TASK(handleNavigationSystem, 5.0f, "Navigation"); // EKF 组合导航 (200Hz, 5ms) - 姿态/位置/速度主滤波器
   BFS_ADD_TASK(handleAnoCom, 5.0f, "AnoCom");               // AnoCom 地面站 (200Hz, 5ms) - 紧邻 EKF, 同帧消费最新输出
 
-  // VerticalKF 当前输出未被下游消费（高度/速度由 EKF 接管），注册已注释以节约 200Hz CPU。
-  // 代码保留，需要时取消注释即可恢复。
-  // BFS_ADD_TASK(handleVerticalEstimation, 5.0f, "VerticalKF"); // 垂直卡尔曼滤波器 (200Hz, 5ms) - 高度/速度融合
+  // VerticalKF 与 EKF 并行运行，输出到独立的 vfk_height/vfk_velocity（不覆盖 EKF 输出），
+  // 仅供地面站遥测对比一致性，不参与控制律。
+  BFS_ADD_TASK(handleVerticalEstimation, 5.0f, "VerticalKF"); // 垂直卡尔曼滤波器 (200Hz, 5ms) - 气压/激光高度融合
   // handleHorizontalEstimation 的输出已不再覆盖 relative/INS 速度 (由 EKF 接管),
   // kf_north/kf_east 纯加速度积分无闭环校正, 注册已注释以节约 200Hz CPU.
   // addTask(handleHorizontalEstimation, 5.0f); // 水平卡尔曼滤波器 - 保留为光流后备

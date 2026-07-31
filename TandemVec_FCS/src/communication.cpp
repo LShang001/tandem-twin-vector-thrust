@@ -407,8 +407,8 @@ void handleAnoCom()
 
     // 高度
     alt_bar = baro_altitude;        // 气压高度 (米)
-    alt_add = flow_data.distance_m; // 附加激光测距高度 (米)
-    alt_fu = estimated_height;      // 使用估计高度
+    alt_add = vfk_height;           // 2状态垂直KF高度 (与EKF对比用，激光通道空闲)
+    alt_fu = estimated_height;      // EKF融合高度 (控制律消费)
 
     // 控制量 (来自handlePIDControl的输出)
     roll_ctrl_ano = roll_output * 10.0f;         // 滚转控制输出，放大10倍用于显示

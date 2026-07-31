@@ -1629,15 +1629,12 @@ void handleVerticalEstimation()
   }
 
   // ========================================================================
-  // 步骤 5: 更新全局状态变量
+  // 步骤 5: 更新独立输出变量（与 EKF 并行运行，不覆盖 estimated_height/velocity）
   // ========================================================================
-  // 程序说明：
-  // 将卡尔曼滤波器输出的最优估计值，更新到全局变量中，
-  // 以便其他模块（如高度控制器）可以使用。
-  estimated_height = vertical_estimator_2state.getHeight();
-  estimated_velocity = vertical_estimator_2state.getVelocity();
-
-  // INS_GNSS_Packet.velocity_down = -estimated_velocity;
+  // 输出到 vfk_* 专用变量，供地面站遥测对比 EKF 与独立 VKF 的一致性。
+  // 控制律仍消费 EKF 输出的 estimated_height / estimated_velocity。
+  vfk_height = vertical_estimator_2state.getHeight();
+  vfk_velocity = vertical_estimator_2state.getVelocity();
 }
 
 void handleHorizontalEstimation()

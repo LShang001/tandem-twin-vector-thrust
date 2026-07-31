@@ -520,6 +520,10 @@ extern float estimated_velocity;
 extern float fused_north_pos, fused_north_vel;
 extern float fused_east_pos, fused_east_vel;
 
+// 2状态垂直KF独立输出（与EKF并行运行，仅供遥测对比，不参与控制）
+extern float vfk_height;   // 垂直KF估计高度 (m, 向上为正)
+extern float vfk_velocity; // 垂直KF估计速度 (m/s, 向上为正)
+
 // 相对位置与起飞点原点：原点为 WGS84 LLA，位置为 NED (Down 为正)
 extern bool is_origin_position_set;
 extern bool is_origin_lla_set;

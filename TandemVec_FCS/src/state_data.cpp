@@ -313,6 +313,10 @@ float estimated_velocity = 0.0f;
 float fused_north_pos = 0.0f, fused_north_vel = 0.0f;
 float fused_east_pos = 0.0f, fused_east_vel = 0.0f;
 
+// 2状态垂直KF独立输出（与EKF并行运行，仅供遥测对比，不参与控制）
+float vfk_height = 0.0f;
+float vfk_velocity = 0.0f;
+
 bool is_origin_position_set = false;
 bool is_origin_lla_set = false;
 float origin_north = 0.0f, origin_east = 0.0f, origin_down = 0.0f;
