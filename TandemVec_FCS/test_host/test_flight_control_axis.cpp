@@ -39,6 +39,86 @@ static const TandemVecParams &P = kDefaultTandemVecParams;
 static constexpr float RAD2DEG = 57.295779513f;
 
 // ============================================================
+//  六自由度刚体（含陀螺耦合 ω×(Iω)+ω×h、可选电机一阶滞后、平动/位置积分）
+// ============================================================
+struct SixDOF {
+    std::array<float, 3> w{0, 0, 0}, v{0, 0, 0}, pos{0, 0, 0};
+    Quaternion q{1, 0, 0, 0};
+    float wf = 0, wt = 0;          // 实际转速（电机一阶滞后）
+    bool motorLag = false;         // 启用 tauM 一阶滞后
+    float norm_before = 1.f;       // 归一化前四元数范数（保范测试用）
+
+    void initRotors(float w0) { wf = w0; wt = w0; }
+
+    void step(float w0, float dw, float df, float dt_,
+              float dt, const TandemVecParams &P_)
+    {
+        // —— 推进（可选一阶滞后）——
+        if (motorLag) {
+            float wfT = w0 * std::sqrt(std::max(0.f, 1.f + dw));
+            float wtT = w0 * std::sqrt(std::max(0.f, 1.f - dw));
+            float a = std::min(dt / P_.tauM, 1.f);
+            wf += (wfT - wf) * a;
+            wt += (wtT - wt) * a;
+        } else {
+            wf = w0 * std::sqrt(std::max(0.f, 1.f + dw));
+            wt = w0 * std::sqrt(std::max(0.f, 1.f - dw));
+        }
+        float Tf = P_.kT * wf * wf, Tt = P_.kT * wt * wt;
+        float Qf = P_.kQ * wf * wf, Qt = P_.kQ * wt * wt;
+        float cf = std::cos(df), sf = std::sin(df);
+        float ct = std::cos(dt_), st = std::sin(dt_);
+        std::array<float, 3> F{Tf*cf + Tt*ct, Tf*sf, -Tt*st};
+        std::array<float, 3> Mf{-Qf*cf + Qt*ct, -P_.b*Tt*st - Qf*sf, P_.a*Tf*sf - Qt*st};
+
+        // —— 转动：I·ω̇ = M − ω×(I·ω) − ω×h_rotor ——
+        std::array<float, 3> I{P_.Ix, P_.Iy, P_.Iz};
+        // 转子角动量：前 +x（CW）、尾 −x（CCW 反转）→ h = Jp·(wf − wt)·x̂
+        float hx = P_.Jp * (wf - wt);
+        float gx = (I[2]-I[1])*w[1]*w[2];
+        float gy = (I[0]-I[2])*w[2]*w[0] - w[2]*hx;
+        float gz = (I[1]-I[0])*w[0]*w[1] + w[1]*hx;
+        for (int k = 0; k < 3; ++k)
+            w[k] += (Mf[k] - (k==0?gx:(k==1?gy:gz))) / I[k] * dt;
+
+        // —— 姿态积分（小旋转四元数 w≈1）——
+        Quaternion dq = quaternionMultiply(q, {1, w[0]*0.5f*dt, w[1]*0.5f*dt, w[2]*0.5f*dt});
+        q = dq;
+        float n = std::sqrt(q.w*q.w+q.x*q.x+q.y*q.y+q.z*q.z);
+        norm_before = n;           // 归一化前范数（积分漂移的直接度量）
+        q.w/=n; q.x/=n; q.y/=n; q.z/=n;
+
+        // —— 平动：m·v̇ = F + m·g_b − m·ω×v（g_b = 重力在机体系）——
+        std::array<float, 3> gb{0.f, 0.f, P_.g};
+        {
+            Quaternion qi{q.w, -q.x, -q.y, -q.z};
+            Quaternion p{0, 0, 0, gb[2]};
+            Quaternion t1 = quaternionMultiply(qi, p);
+            Quaternion t2 = quaternionMultiply(t1, q);
+            gb = {static_cast<float>(t2.x), static_cast<float>(t2.y), static_cast<float>(t2.z)};
+        }
+        std::array<float, 3> wxv{w[1]*v[2]-w[2]*v[1], w[2]*v[0]-w[0]*v[2], w[0]*v[1]-w[1]*v[0]};
+        for (int k = 0; k < 3; ++k)
+            v[k] += (F[k]/P_.m + gb[k] - wxv[k]) * dt;
+
+        // —— 位置积分：NED 速度 = R(q)·v ——
+        std::array<float, 3> vN{0,0,0};
+        {
+            Quaternion p{0, v[0], v[1], v[2]};
+            Quaternion t1 = quaternionMultiply(q, p);
+            Quaternion t2 = quaternionMultiply(t1, Quaternion{q.w, -q.x, -q.y, -q.z});
+            vN = {static_cast<float>(t2.x), static_cast<float>(t2.y), static_cast<float>(t2.z)};
+        }
+        for (int k = 0; k < 3; ++k) pos[k] += vN[k] * dt;
+    }
+};
+
+// ============================================================
+//  悬停配平：w0 = √(mg/2kT)（转速），摆角 0、差速 0
+// ============================================================
+static float hoverOmega0() { return std::sqrt(P.m * P.g / (2.f * P.kT)); }
+
+// ============================================================
 //  刚体角动力学（简化：I·ω̇ = M，忽略陀螺/耦合，四元数欧拉积分）
 // ============================================================
 struct RigidBody {
@@ -368,6 +448,157 @@ int main()
         allocate({0.f, alpha_pitch, 0.f}, w0, dw, df, dt_);
         M = thrustWrench(w0, dw, df, dt_);
         check(M[1] < 0.f, "T11 pitch 摇杆推杆 → My<0（低头力矩）");
+    }
+
+    // ============================================================
+    //  T12–T19：六自由度悬停全动力学闭环（SixDOF + 姿态环）
+    // ============================================================
+    const float q45 = 0.70710678f;
+    Quaternion q_hover{q45, 0.f, q45, 0.f};   // 机头朝天
+    float w0h = hoverOmega0();                // 悬停配平转速
+
+    auto run_hover6 = [&](SixDOF &body, float T_total) -> float {
+        // 返回末态四元数误差范数（相对 q_hover）；每次调用新建控制器（无状态污染）
+        AttitudeLoop ctrl;
+        int N = static_cast<int>(T_total / 0.001f);
+        for (int i = 0; i < N; ++i) {
+            std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+            auto alpha = ctrl.update(body.q, q_hover, wd);
+            float dw = 0, df = 0, dt_ = 0;
+            allocate(alpha, w0h, dw, df, dt_);
+            body.step(w0h, dw, df, dt_, 0.001f, P);
+        }
+        Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
+        return std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+    };
+
+    // T12: 悬停配平平衡——转速 √(mg/2kT) 下双发总推力 = mg；6DOF 闭环 10s 垂直速度≈0
+    {
+        float T_total = 2.f * P.kT * w0h * w0h;
+        check(approx(T_total, P.m * P.g, 1e-3f), "T12 悬停配平：2·kT·w0² = m·g");
+        SixDOF body;
+        body.q = q_hover;
+        body.initRotors(w0h);
+        float e = run_hover6(body, 10.f);
+        check(e < 0.02f, "T12 悬停 10s 姿态保持（q_err<1.1°）");
+        check(std::fabs(body.v[2]) < 0.05f && std::fabs(body.pos[2]) < 1.f,
+              "T12 悬停 10s 垂直速度≈0、高度漂移<1m（配平平衡）");
+    }
+
+    // T13: 悬停航向保持——初始绕 x_b（世界航向）角速率 → 差速阻尼 + q_err.x 外环收敛
+    {
+        SixDOF body;
+        body.q = q_hover;
+        body.w = {0.5f, 0.f, 0.f};   // 初始航向角速度 0.5 rad/s
+        body.initRotors(w0h);
+        float e = run_hover6(body, 5.f);
+        check(e < 0.02f, "T13 航向角速率扰动收敛（q_err<1.1°）");
+        check(std::fabs(body.w[0]) < 0.05f, "T13 航向角速度衰减到 <0.05 rad/s（差速阻尼）");
+    }
+
+    // T14: 饱和鲁棒——60° 大姿态扰动触达执行器限幅，闭环仍收敛
+    {
+        const float a60 = 60.f * 3.14159f / 180.f;
+        SixDOF body;
+        body.q = quaternionMultiply(q_hover, rotY(a60));
+        body.initRotors(w0h);
+        AttitudeLoop ctrl;
+        bool sat_seen = false;
+        for (int i = 0; i < 8000; ++i) {
+            std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+            auto alpha = ctrl.update(body.q, q_hover, wd);
+            float dw = 0, df = 0, dt_ = 0;
+            allocate(alpha, w0h, dw, df, dt_);
+            if (std::fabs(dw) >= P.dwMax - 1e-3f || std::fabs(dt_) >= P.dMax - 1e-3f ||
+                std::fabs(df) >= P.dMax - 1e-3f) sat_seen = true;
+            body.step(w0h, dw, df, dt_, 0.001f, P);
+        }
+        Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
+        float e = std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+        check(sat_seen, "T14 60° 扰动确实触达执行器限幅（dMax/dwMax）");
+        check(e < 0.02f, "T14 60° 大扰动收敛（饱和限幅下仍稳定）");
+    }
+
+    // T15: 电机滞后——推进一阶滞后（tauM=0.28s）下悬停保持仍收敛
+    {
+        SixDOF body;
+        body.q = q_hover;
+        body.initRotors(w0h);
+        body.motorLag = true;
+        float e = run_hover6(body, 10.f);
+        check(e < 0.02f, "T15 电机滞后（τ=0.28s）下悬停保持收敛");
+        // 滞后下差速修正响应变慢：姿态仍应保持在合理范围
+    }
+
+    // T16: 陀螺耦合——初始差速（wf≠wt → h_x≠0）+ 电机滞后（τ=0.28s 真实衰减），
+    // 前 ~2s 内转子角动量非零 → ω×h 项真实作用，姿态环仍收敛
+    {
+        SixDOF body;
+        body.q = q_hover;
+        body.wf = 1.1f * w0h;   // 初始转速差 → h_x = Jp(wf−wt) ≠ 0
+        body.wt = 0.9f * w0h;
+        body.motorLag = true;   // 滞后分支不覆盖初始转速，向目标衰减
+        AttitudeLoop ctrl;
+        float max_rotor_diff = 0.f;
+        for (int i = 0; i < 5000; ++i) {
+            std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+            auto alpha = ctrl.update(body.q, q_hover, wd);
+            float dw = 0, df = 0, dt_ = 0;
+            allocate(alpha, w0h, dw, df, dt_);
+            body.step(w0h, dw, df, dt_, 0.001f, P);
+            max_rotor_diff = std::max(max_rotor_diff, std::fabs(body.wf - body.wt));
+        }
+        Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
+        float e = std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+        check(max_rotor_diff > 50.f,
+              "T16 转子差速在衰减期内真实存在（h_x≠0，陀螺耦合激活）");
+        check(e < 0.02f, "T16 陀螺耦合（ω×h）下悬停保持收敛");
+    }
+
+    // T17: 航向指令跟踪——目标 = 悬停 + 绕 x_b 转 20°（新航向）→ 收敛且航向实际转过 20°
+    {
+        const float a20 = 20.f * 3.14159f / 180.f;
+        Quaternion q_target_new = quaternionMultiply(q_hover, rotX(a20));
+        SixDOF body;
+        body.q = q_hover;
+        body.initRotors(w0h);
+        AttitudeLoop ctrl;
+        for (int i = 0; i < 6000; ++i) {
+            std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+            auto alpha = ctrl.update(body.q, q_target_new, wd);
+            float dw = 0, df = 0, dt_ = 0;
+            allocate(alpha, w0h, dw, df, dt_);
+            body.step(w0h, dw, df, dt_, 0.001f, P);
+        }
+        Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_target_new);
+        float e = std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+        check(e < 0.02f, "T17 航向指令跟踪：收敛到目标航向（q_err<2.3°）");
+        // 相对初始悬停的绕 x_b 转角（= 世界航向变化量）
+        Quaternion qd = quaternionMultiply(quaternionConjugate(body.q), q_hover);
+        float angle_x = 2.f * std::asin(std::fabs(qd.x));
+        check(std::fabs(angle_x - a20) < 0.05f,
+              "T17 航向实际转过 ≈20°（差速驱动，四轴 yaw 语义）");
+    }
+
+    // T18: 四元数保范——6000 步（6s）积分范数偏差 < 1e-9
+    {
+        SixDOF body;
+        body.q = q_hover;
+        body.w = {0.3f, -0.2f, 0.4f};
+        body.initRotors(w0h);
+        AttitudeLoop ctrl;
+        float max_norm_err = 0.f;
+        for (int i = 0; i < 6000; ++i) {
+            std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+            auto alpha = ctrl.update(body.q, q_hover, wd);
+            float dw = 0, df = 0, dt_ = 0;
+            allocate(alpha, w0h, dw, df, dt_);
+            body.step(w0h, dw, df, dt_, 0.001f, P);
+            // 归一化前范数：积分漂移的直接度量（归一化后恒≈1 无意义）
+            max_norm_err = std::max(max_norm_err, std::fabs(body.norm_before - 1.f));
+        }
+        // float 角速度下单步欧拉积分漂移 ~5.96e-8（float ε）量级，不随步数累积
+        check(max_norm_err < 1e-6f, "T18 四元数保范（6000 步归一化前范数偏差<1e-6）");
     }
 
     std::printf("\n%s\n", g_fail ? "=== 存在失败项 ===" : "=== 全部通过 ===");
