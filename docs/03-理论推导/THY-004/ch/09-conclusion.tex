@@ -17,7 +17,7 @@
     \item \textbf{配平与数值验证}：联立纵向力、法向力、俯仰矩与偏航矩求得28\,m/s四方程工作点
           $\alpha_0=4.122^\circ$、油门$0.192272$、$\delta_{t0}=-18.702^\circ$、$\delta_{f0}=-1.739^\circ$
           （v0.2.0 VTOL 参数集，求解器 \texttt{scripts/trim\_solve.py}），
-          并由Web core的46项自动测试和三条回归基线验证实现一致性；
+          并由Web core的53项自动测试和四条回归基线验证实现一致性；
           油门开环下该点呈弱phugoid慢衰减（10\,s内V降约12\%），为模型固有行为；
     \item \textbf{控制效能分析}：给出了含反扭矩交叉项的完整一阶效能矩阵
           （式\ref{eq:effectiveness_matrix}），并将正交摆轴形成的对角主通道近似与完整模型明确区分；

@@ -25,7 +25,7 @@ function compareTrees(actual, expected, path) {
   }
 }
 
-for (const name of ['trim', 'pitchStep', 'rollStep']) {
+for (const name of ['trim', 'pitchStep', 'rollStep', 'yawStep']) {
   test(`回归基线：${name}`, () => {
     const actual = SCENARIOS[name]();
     compareTrees(actual, baseline.scenarios[name], name);

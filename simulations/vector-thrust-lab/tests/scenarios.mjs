@@ -50,4 +50,8 @@ export const SCENARIOS = {
   rollStep: () => runScenario(8, (sim, i) => {
     sim.S.dw = (i < 240) ? 0.25 * P.dwUiMax : 0;
   }),
+  // D: 偏航阶跃 δ_f=8°（绝对前摆指令，配平偏置 dfTrim 之上）保持 4 s 后撤除，共 8 s
+  yawStep: () => runScenario(8, (sim, i) => {
+    sim.S.df = (i < 240) ? 8 * Math.PI / 180 : 0;
+  }),
 };

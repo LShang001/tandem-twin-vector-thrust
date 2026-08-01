@@ -103,6 +103,28 @@ test('角速度闭环模式（sasMode=3）：滑块 = ω_ref，P 控制追零误
   assert.ok(sim3.S.dtAct > 0, '当前角速度大于目标时应产生减速力矩（dtAct>0）');
 });
 
+test('sasMode 切换时积分器清零，防止旧累积值瞬态冲击', () => {
+  const sim = createSimulationState(P);
+  sim.S.sasMode = 1;
+  sim.F.euler.y = 1.0; // 持续大误差 → 积分累积
+  for (let i = 0; i < 1000; i++) applySas(sim, P, DT);
+  assert.ok(Math.abs(sim.S.intTh) > 0.1, '前置：积分器应有累积');
+  // 切到 mode 2 再切回 mode 1：积分器应清零
+  sim.S.sasMode = 2;
+  applySas(sim, P, DT);
+  assert.equal(sim.S.intTh, 0, '切换瞬间积分器清零');
+  assert.equal(sim.S.intPhi, 0);
+  // 模式未变时积分器继续累积（不误清零）
+  sim.S.sasMode = 1; sim.S._prevSasMode = 1;
+  sim.F.euler.y = 0.5;
+  for (let i = 0; i < 100; i++) applySas(sim, P, DT);
+  assert.ok(sim.S.intTh > 0, '模式不变时积分器应继续累积');
+  // 切回 mode 2 再次清零
+  sim.S.sasMode = 2;
+  applySas(sim, P, DT);
+  assert.equal(sim.S.intTh, 0);
+});
+
 test('角速度闭环模式（sasMode=3）：偏航通道，前摆正效率通道取 (rRef−r)', () => {
   const sim = createSimulationState(P);
   sim.S.sasMode = 3;

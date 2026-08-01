@@ -20,8 +20,8 @@ class SASController:
         self.int_th += dtheta * dt
         self.int_th = np.clip(self.int_th, -P["intThMax"], P["intThMax"])
         delta_t = self.trim["delta_t"] + P["sasQ"]*q - P["sasTh"]*dtheta - P["sasI"]*self.int_th
-        # 偏航
-        delta_f = -P["sasR"] * r
+        # 偏航（含 dfTrim 前摆配平偏置，v0.2.0）
+        delta_f = P.get("dfTrim", 0.0) - P["sasR"] * r
         # 滚转
         self.int_phi += dphi * dt
         self.int_phi = np.clip(self.int_phi, -P["intPhiMax"], P["intPhiMax"])

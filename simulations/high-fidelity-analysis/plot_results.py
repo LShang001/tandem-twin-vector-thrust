@@ -15,7 +15,7 @@ os.makedirs(OUT, exist_ok=True)
 apply_style()
 
 P = load_params()
-trim = trim_longitudinal(24, P)
+trim = trim_longitudinal(28, P)
 sas = SASController(P, trim)
 
 # ========== 图1: SAS 俯仰阶跃响应 ==========
@@ -89,23 +89,23 @@ for e, c, n in [(e_long, C_BLUE, 'SP'), (e_lat, C_VERM, 'DR')]:
                     textcoords='offset points', xytext=(7, 3))
 ax.set_xlabel('实部')
 ax.set_ylabel('虚部 [rad/s]')
-ax.set_title('配平点特征值分布（$V$ = 24 m/s）')
+ax.set_title('配平点特征值分布（$V$ = 28 m/s，v0.2.0 参数集）')
 ax.legend(loc='lower left')
 finish(fig, f'{OUT}/eigenvalues.pdf')
 
-# ========== 图4: 配平保持 (20s) ==========
+# ========== 图4: 配平保持 (20s，油门开环 phugoid 慢发散) ==========
 print("图4: 配平保持...")
 # 注意: 必须用全新控制器实例, 避免图1运行残留的积分器状态污染
 sas_fresh = SASController(P, trim)
 data_t = simulate(sas_fresh, P, trim, T_total=20, disturbance=None)
 th_ref = np.degrees(-trim["alpha"])
 fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5.6, 3.4), sharex=True)
-ax1.plot(data_t["t"], (data_t["u"] - data_t["u"][0])*1000, color=C_BLUE)
-ax1.set_ylabel(r'速度偏差 $\Delta u$ [mm/s]')
-ax1.set_title('配平保持：SAS 20 s 配平直飞（$V$ = 24 m/s）')
-ax2.plot(data_t["t"], (np.degrees(data_t["theta"]) - th_ref)*1000, color=C_VERM)
+ax1.plot(data_t["t"], (data_t["u"] - data_t["u"][0])/data_t["u"][0]*100, color=C_BLUE)
+ax1.set_ylabel(r'空速偏差 $\Delta u/u_0$ [%]')
+ax1.set_title('配平保持（油门开环）：phugoid 慢发散（$V$ = 28 m/s，v0.2.0 参数集）')
+ax2.plot(data_t["t"], (np.degrees(data_t["theta"]) - th_ref), color=C_VERM)
 ref_hline(ax2, 0.0)
-ax2.set_ylabel(r'俯仰角偏差 $\Delta\theta$ [$10^{-3}$°]')
+ax2.set_ylabel(r'俯仰角偏差 $\Delta\theta$ [°]')
 ax2.set_xlabel('时间 $t$ [s]')
 finish(fig, f'{OUT}/trim_stability.pdf')
 

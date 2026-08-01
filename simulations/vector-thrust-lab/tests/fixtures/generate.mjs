@@ -8,15 +8,16 @@ import { SCENARIOS } from '../scenarios.mjs';
 
 const baseline = {
   meta: {
-    model: 'PAR-C0-001 v0.1.0',
+    model: 'PAR-C0-001 v0.2.0',
     frameDt: 1 / 60,
     substep: 0.004,
-    note: '由 core 实现采集的行为基线（配平直飞 / 离地自由飞行俯仰阶跃 / 滚转阶跃）',
+    note: '由 core 实现采集的行为基线（配平直飞 / 离地自由飞行俯仰阶跃 / 滚转阶跃 / 偏航阶跃）',
   },
   scenarios: {
     trim: SCENARIOS.trim(),
     pitchStep: SCENARIOS.pitchStep(),
     rollStep: SCENARIOS.rollStep(),
+    yawStep: SCENARIOS.yawStep(),
   },
 };
 
