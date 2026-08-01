@@ -55,6 +55,10 @@ run_one "$ROOT/test_host/test_tandemvec_allocation.cpp" ta ""
 run_one "$ROOT/test_host/test_tandemvec_cascade.cpp"    tc ""
 run_one "$ROOT/test_host/test_tandemvec_sim.cpp"        ts ""
 
+# flight_control.cpp 姿态环闭环仿真（轴序 FRD 修复验证）：
+# 按源码公式独立实现，驱动刚体角动力学 + 推进力矩闭环
+run_one "$ROOT/test_host/test_flight_control_axis.cpp"  fca ""
+
 # PositionPID v3 回归测试（无 Arduino 依赖，纯平台无关）：
 run_one "$ROOT/test_host/test_position_pid.cpp" pp ""
 
