@@ -66,7 +66,7 @@
 <td>Node.js 内置测试 runner（<code>node:test</code>）</td>
 <td>工具</td>
 <td>Node.js ≥ 18 内置</td>
-<td>运行 <code>node --test tests/*.test.mjs</code>，执行 46
+<td>运行 <code>node --test tests/*.test.mjs</code>，执行 51
 项测试与回归基线</td>
 <td>已就位</td>
 </tr>
@@ -74,10 +74,10 @@
 <td>REF-004</td>
 <td>Pandoc</td>
 <td>工具</td>
-<td>需外部安装</td>
-<td>未来由 <code>tools/build-docs.py</code> 调用，将 Markdown 文档构建为
+<td>需外部安装（本机已装 3.9.0.2）</td>
+<td>由 <code>tools/build-docs.py</code> 调用，将 Markdown 文档构建为
 HTML</td>
-<td>计划中</td>
+<td>已就位</td>
 </tr>
 <tr>
 <td>REF-101</td>
@@ -123,14 +123,61 @@ eVTOL (Enenakpogbe et al., Aerospace 2024)</td>
 控制分配；极坐标→笛卡尔线性化技巧；过驱动固定翼矢量推力全包线控制</td>
 <td>已就位</td>
 </tr>
+<tr>
+<td>REF-107</td>
+<td>Enhanced Incremental Nonlinear Dynamic Inversion with Aerodynamic
+Angular Rate Feedback for Autonomous Wing Rock Recovery of a Flying-Wing
+UAV (Jiang et al., 2026)</td>
+<td>论文</td>
+<td><code>papers/REF-107-Jiang-2026-enhanced-INDI-flying-wing/</code></td>
+<td>EINDI 角速率反馈增强；飞翼无人机机翼摇摆抑制</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-108</td>
+<td>Design and Evaluation of Advanced Intelligent Flight Controllers
+(Milz, 2020)</td>
+<td>论文</td>
+<td><code>papers/REF-108-Milz-2020-INDI-reference-controller/</code></td>
+<td>先进智能飞控设计评估；INDI 参考控制器</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-109</td>
+<td>Robust Stability and Performance Analysis of Incremental Dynamic
+Inversion-based Flight Control Laws (Pollack, 2023)</td>
+<td>论文</td>
+<td><code>papers/REF-109-Pollack-2023-INDI-stability/</code></td>
+<td>INDI 控制律鲁棒稳定性与性能分析（F-16 算例）</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-110</td>
+<td>Design and Analysis of a Launcher Flight Control System Based on
+Incremental Nonlinear Dynamic Inversion (Simplicio, 2025)</td>
+<td>论文</td>
+<td><code>papers/REF-110-Simplicio-2025-INDI-launcher/</code></td>
+<td>运载器 INDI 飞控系统设计与分析</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-111</td>
+<td>Robust flight control using Hybrid Incremental Nonlinear Dynamic
+Inversion Control for Tiltrotor UAV (Jeong, 2022)</td>
+<td>论文</td>
+<td><code>papers/REF-111-Jeong-2022-hybrid-INDI-tiltrotor/</code></td>
+<td>倾转旋翼 HINDI 鲁棒飞控；与本项目 VTOL 控制对照</td>
+<td>已就位</td>
+</tr>
 </tbody>
 </table>
 <h2 id="说明">说明</h2>
 <ul>
 <li>工具类条目（REF-001~004）均可在当前仓库或运行环境中直接定位；</li>
 <li>理论参考类条目（REF-101~103）目前尚未完成书目遴选，不编造具体书名、版本或页码；</li>
+<li>REF-106 为预留跳号（无对应资料），不占用；</li>
 <li>未来新增外部资料时，按顺序递增 REF
 编号，并在此表登记用途与状态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/08-参考资料/参考资料注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
+<footer class="provenance">源文件 <code>docs/08-参考资料/参考资料注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:53</footer></article></body>
 </html>

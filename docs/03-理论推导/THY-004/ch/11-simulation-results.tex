@@ -3,28 +3,28 @@
 
 基于第\ref{sec:dynamics}节的RK4高精度积分框架和第\ref{sec:INDI}节的INDI控制律方案，使用Python独立实现的六自由度仿真程序（\texttt{simulations/high-fidelity-analysis/}），对配平状态、线性化模态、积分精度和闭环响应进行定量分析与可视化。
 
-\noindent\textbf{注意（2026-08-01 参数集变更）：}本章数值均基于旧参数集（m=2.6\,kg、kT=2.2e-5、wMax=900、a=b=0.62\,m、24\,m/s 巡航），\texttt{aircraft-model.json} v0.2.0 已回写为 TandemVec\_FCS 实机构型（m=0.7\,kg、kT=1.04e-5、wMax=1150、a=b=0.315\,m，新配平 28\,m/s 四方程，见 \texttt{scripts/trim\_solve.py}）。本章线性化模态/积分精度数值需按新参数集重算后方可作为当前结论引用；推导方法与框架不变。
+\noindent\textbf{注意（2026-08-01 参数集变更）：}本章配平/模态/稳定性数值已按 v0.2.0 VTOL 参数集（m=0.7\,kg、kT=1.04e-5、wMax=1150、a=b=0.315\,m，28\,m/s 四方程配平）重算；积分精度（RK4 vs 欧拉）与构型无关，结论不变。图中曲线若未注明均基于旧参数集 v0.1.0 绘制。
 
 \subsection{纵向配平}
 
-在$V=24$\,m/s水平定直飞行条件下，Newton法联立求解纵向三自由度配平：
+在$V=28$\,m/s水平定直飞行条件下，Newton法联立求解纵向三自由度配平（v0.2.0 VTOL 参数集）：
 
 \input{sim-data/trim_table.tex}
 
-该配平点（$\alpha=1.640^\circ$、$\delta_{t0}=-0.904^\circ$、油门$41.8\%$）与Web JS仿真（$\alpha_0=1.627^\circ$、$\delta_{t0}=-0.650^\circ$）存在小幅差异，来源为Python独立实现的简化气动模型。
+该配平点（$\alpha=4.122^\circ$、$\delta_{t0}=-18.702^\circ$、$\delta_{f0}=-1.739^\circ$、油门$19.2\%$）由Web JS仿真四方程（Fx/Fz/My/Mz）求解（\texttt{scripts/trim\_solve.py}）；Python独立实现的简化气动模型（三方程、$\delta_f=0$）给出$\alpha=4.123^\circ$、$\delta_{t0}=-12.667^\circ$、油门$23.4\%$，差异来自前摆反扭耦合与气动投影细节。
 
 \subsection{线性化与模态分析}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.82\textwidth]{fig-sim/eigenvalues.pdf}
-\caption{配平点特征值分布。蓝圈：纵向（短周期SP + 长周期Ph）；红方：横航向（荷兰滚DR + 滚转收敛RR + 螺旋Sp）。}
+\caption{配平点特征值分布（旧参数集 v0.1.0 绘制）。蓝圈：纵向（短周期SP + 长周期Ph）；红方：横航向（荷兰滚DR + 滚转收敛RR + 螺旋Sp）。}
 \label{fig:eigenvalues}
 \end{figure}
 
 \input{sim-data/modes_table.tex}
 
-短周期模态（$f\approx2.6$\,Hz，$\zeta\approx0.84$）由$C_{m\alpha}$和$C_{mq}$支配，具备良好快速衰减；长周期（$f\approx0.05$\,Hz，$\zeta\approx0.35$）偏弱但SAS可改善。横航向：滚转收敛极快（$\tau\approx9.2$\,ms），荷兰滚（$f\approx2.0$\,Hz，$\zeta\approx0.48$）频率偏高——源于较小$I_z$和较大$C_{n\beta}$的组合，螺旋模态缓慢收敛（$\tau\approx8.5$\,s）。
+短周期模态（$f\approx1.03$\,Hz，$\zeta\approx0.52$）由$C_{m\alpha}$和$C_{mq}$支配，具备良好快速衰减（$\tau\approx0.30$\,s）。长周期（phugoid）特征值$+0.0177$为\textbf{正实根——无油门反馈下慢发散}（发散时间常数约$56$\,s），与Web仿真10\,s内空速衰减约$12\%$一致；这是固定油门开环的固有行为，需油门/速度反馈环改善（SAS仅覆盖姿态）。横航向：滚转收敛极快（$\tau\approx21$\,ms，小惯量$I_x$），荷兰滚（$f\approx1.12$\,Hz，$\zeta\approx0.20$）阻尼偏弱，螺旋模态缓慢收敛（$\tau\approx6.4$\,s）。
 
 \subsection{数值积分精度：RK4 vs 显式欧拉}
 
@@ -51,11 +51,11 @@ $t=2$\,s时施加俯仰角速率脉冲（$\Delta q=5^\circ$/s），姿态偏差�
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.88\textwidth]{fig-sim/trim_stability.pdf}
-\caption{配平稳定性：20秒SAS保持。上—前向速度 $u$，下—俯仰角 $\theta$。}
+\caption{配平稳定性：20秒SAS保持（旧参数集 v0.1.0 绘制）。上—前向速度 $u$，下—俯仰角 $\theta$。}
 \label{fig:trim_stability}
 \end{figure}
 
-20秒配平保持（图\ref{fig:trim_stability}）空速漂移$<0.1\%$，表明SAS闭环在配平点附近维持稳定平衡。
+20秒配平保持（图\ref{fig:trim_stability}，基于旧参数集绘制）空速漂移$<0.1\%$；v0.2.0 参数集下油门开环呈 phugoid 慢发散（10\,s 空速衰减约$12\%$，见图\ref{fig:trim_stability}后述文本与回归基线），需油门反馈环方可维持配平速度。
 
 \subsection{INDI控制器初步验证}
 

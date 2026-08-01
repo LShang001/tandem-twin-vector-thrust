@@ -102,3 +102,53 @@ test('角速度闭环模式（sasMode=3）：滑块 = ω_ref，P 控制追零误
   applySas(sim3, P, DT);
   assert.ok(sim3.S.dtAct > 0, '当前角速度大于目标时应产生减速力矩（dtAct>0）');
 });
+
+test('角速度闭环模式（sasMode=3）：偏航通道，前摆正效率通道取 (rRef−r)', () => {
+  const sim = createSimulationState(P);
+  sim.S.sasMode = 3;
+  sim.S.df = 1.0;   // r_ref = 1 rad/s（目标偏航角速度）
+  sim.S.omega.z = 0; // 当前偏航角速度 = 0
+  applySas(sim, P, DT);
+  // r < r_ref → (rRef−r) > 0 → dfAct > dfTrim → M_z 增大 → ṙ > 0 加速 ✓
+  assert.ok(sim.S.dfAct > P.dfTrim, '当前偏航角速度小于目标时应产生加速修正（dfAct>dfTrim）');
+  assert.ok(Math.abs(sim.S.dfAct) <= P.dMax, '前摆不超限');
+
+  // 当前 = 目标 → 仅保留配平偏置
+  const sim2 = createSimulationState(P);
+  sim2.S.sasMode = 3;
+  sim2.S.df = 1.0; sim2.S.omega.z = 1.0;
+  applySas(sim2, P, DT);
+  assert.ok(Math.abs(sim2.S.dfAct - P.dfTrim) < 1e-9, '零误差时应保留配平偏置');
+
+  // 超调：当前 > 目标 → 需要减速 → dfAct < dfTrim
+  const sim3 = createSimulationState(P);
+  sim3.S.sasMode = 3;
+  sim3.S.df = 1.0; sim3.S.omega.z = 2.0;
+  applySas(sim3, P, DT);
+  assert.ok(sim3.S.dfAct < P.dfTrim, '当前偏航角速度大于目标时应产生减速修正（dfAct<dfTrim）');
+});
+
+test('角速度闭环模式（sasMode=3）：滚转通道，差速效率为负取 (ω−pRef)', () => {
+  const sim = createSimulationState(P);
+  sim.S.sasMode = 3;
+  sim.S.dw = 1.0;   // p_ref = 1 rad/s（目标滚转角速度）
+  sim.S.omega.x = 0; // 当前滚转角速度 = 0
+  applySas(sim, P, DT);
+  // ω < p_ref → (ω−pRef) < 0 → dwAct < 0 → M_x > 0 → ṗ > 0 加速 ✓
+  assert.ok(sim.S.dwAct < 0, '当前滚转角速度小于目标时应产生加速修正（dwAct<0）');
+  assert.ok(Math.abs(sim.S.dwAct) <= P.dwMax, '差速不超限');
+
+  // 当前 = 目标 → 差速修正归零（差速无配平偏置）
+  const sim2 = createSimulationState(P);
+  sim2.S.sasMode = 3;
+  sim2.S.dw = 1.0; sim2.S.omega.x = 1.0;
+  applySas(sim2, P, DT);
+  assert.ok(Math.abs(sim2.S.dwAct) < 1e-9, '零误差时差速修正应为零');
+
+  // 超调：当前 > 目标 → 需要减速 → dwAct > 0
+  const sim3 = createSimulationState(P);
+  sim3.S.sasMode = 3;
+  sim3.S.dw = 1.0; sim3.S.omega.x = 2.0;
+  applySas(sim3, P, DT);
+  assert.ok(sim3.S.dwAct > 0, '当前滚转角速度大于目标时应产生减速修正（dwAct>0）');
+});

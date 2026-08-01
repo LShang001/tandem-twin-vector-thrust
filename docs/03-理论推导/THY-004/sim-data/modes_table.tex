@@ -1,14 +1,18 @@
 \begin{table}[H]
 \centering
-\caption{配平点线化模态特征值 ($V=24\,\text{m/s}$)}
+\caption{配平点线化模态特征值 ($V=28\,\text{m/s}$，v0.2.0 参数集；线性化在三方程近似点 $\delta_f=0$ 处进行，$\delta_f=-1.739^\circ$ 的偏航耦合未计入)}
 \label{tab:modes}
 \small
 \begin{tabularx}{\textwidth}{l c c c c}
 \toprule
 \textbf{模态} & \textbf{特征值} & \textbf{频率 (Hz)} & \textbf{阻尼比} & \textbf{时间常数/周期} \\
 \midrule
-  短周期 (SP) & $-13.718 \pm 8.913i$ & 2.604 & 0.839 & $\tau=0.073$\,s \\
-  长周期 (Ph) & $-0.106 \pm 0.290i$ & 0.049 & 0.344 & $T=21.689$\,s \\
+  短周期 (SP) & $-3.365 \pm 5.509i$ & 1.027 & 0.521 & $\tau=0.297$\,s \\
+  长周期 (Ph) & $+0.0177$ & 0.003 & $-1.000$ & 发散 $\tau=56.5$\,s（油门开环） \\
+  航迹/高度 & $-0.170$ & 0.027 & 1.000 & $\tau=5.87$\,s \\
+  滚转收敛 (RR) & $-47.65$ & 7.584 & 1.000 & $\tau=0.021$\,s \\
+  荷兰滚 (DR) & $-1.425 \pm 6.861i$ & 1.115 & 0.203 & $T=0.916$\,s \\
+  螺旋 (Sp) & $-0.156$ & 0.025 & 1.000 & $\tau=6.43$\,s \\
 \bottomrule
 \end{tabularx}
 \end{table}
