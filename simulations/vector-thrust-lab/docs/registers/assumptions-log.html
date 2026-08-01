@@ -182,15 +182,15 @@ href="../control/CTL-002.html">CTL-002</a>、<code>src/core/propulsion.mjs</code
 </tr>
 <tr>
 <td>ASM-015</td>
-<td><strong>当前仅完成纵向三方程配平</strong>：<code>aTrim</code>、<code>thrTrim</code>、<code>dtTrim</code>
-只闭合
-<code>F_x</code>、<code>F_z</code>、<code>M_y</code>；尾摆反扭投影留下小幅
-<code>M_z</code> 残差</td>
-<td>配平、横航向响应、线性化</td>
-<td>10 s 内纵向参考量保持良好，但仍出现约 0.168° 航向漂移和 0.275 m
-侧移；不能直接作为完整状态 Jacobian 的平衡点</td>
-<td>联立求解前摆、差速、侧滑和滚转姿态，使六分量力 /
-力矩及运动学残差同时闭合</td>
+<td><strong>配平为四方程（v0.2.0）</strong>：<code>aTrim</code>/<code>thrTrim</code>/<code>dtTrim</code>/<code>dfTrim</code>
+闭合
+<code>F_x</code>、<code>F_z</code>、<code>M_y</code>、<code>M_z</code>（前摆配平反扭
+z 分量）；油门开环下配平点呈弱 phugoid 慢发散</td>
+<td>配平、速度保持、线性化</td>
+<td>10 s 内空速衰减约 12%（28→24.7 m/s）、高度下滑 2.2 m、航向漂移约
+2.2°、侧移 4.3 m；姿态由 SAS 保持在配平值 ±0.2°
+内；速度发散需油门反馈环方可抑制</td>
+<td>增加油门/速度反馈环（如总能量控制或速度保持 PID）</td>
 <td><a href="../modeling/MOD-003.html">MOD-003</a>、<a
 href="../verification/VER-001.html">VER-001</a></td>
 </tr>
@@ -206,5 +206,5 @@ href="hazard-log.html"><code>危害与失效模式日志</code></a>、<a
 href="../verification/SAFE-001.html">SAFE-001</a>
 共同构成模型成熟度声明的支撑文件。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 04:11</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 04:45</footer></article></body>
 </html>

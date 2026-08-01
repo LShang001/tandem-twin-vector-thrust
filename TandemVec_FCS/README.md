@@ -4,7 +4,7 @@
 
 ### 项目概述
 
-基于 STM32H743 的纵列双发正交单轴矢量推力 + 差速反扭航向控制的固定翼/VTOL 飞控固件。前电机(CW)绕 z_b 摆动控制侧倾/偏航，尾电机(CCW)绕 y_b 摆动控制俯仰，差速 Δω 产生绕推力轴的力矩控制航向。物理逆解层（I×α→M_cmd→BTRUE 在线 Jacobian 控制分配）将上层纯运动学控制器与具体飞行器模型解耦。
+基于 STM32H743 的纵列双发正交单轴矢量推力 + 差速反扭滚转的固定翼/VTOL 飞控固件（**机体轴序：FRD，z_b 竖直**）。前电机(CW)绕 z_b 摆动 → **偏航**主控（Mz），尾电机(CCW)绕 y_b 摆动 → **俯仰**主控（My），差速 Δω 产生绕 x_b 的反扭力矩 → **滚转**主控（Mx；VTOL 悬停时机体 x 竖直，此时滚转即世界航向）。物理逆解层（I×α→M_cmd→BTRUE 在线 Jacobian 控制分配）将上层纯运动学控制器与具体飞行器模型解耦。
 
 - **目标平台**: WeAct MiniSTM32H743VITx (STM32H743VIT6, Cortex-M7 @ 480MHz)
 - **框架**: Arduino on STM32 (ststm32 platform)
@@ -44,8 +44,8 @@
 
 | 通道 | 引脚 | 定时器 | 功能 | PWM 规格 |
 |------|------|--------|------|----------|
-| SERVO1 | PA0 | TIM2_CH1 | TVC Roll 舵机 | 333Hz, 16bit |
-| SERVO2 | PA1 | TIM2_CH2 | TVC Pitch 舵机 | 333Hz, 16bit |
+| SERVO1 | PA0 | TIM2_CH1 | 前摆舵机（δ_f，偏航通道；代码变量旧名 `TVC_ROLL_SERVO_PIN`/`roll_servo`，FRD 轴序下实为 yaw，待重命名） | 333Hz, 16bit |
+| SERVO2 | PA1 | TIM2_CH2 | 尾摆舵机（δ_t，俯仰通道，`TVC_PITCH_SERVO_PIN`/`pitch_servo`） | 333Hz, 16bit |
 | MOTOR1 | PA2 | TIM2_CH3 | 主电机1 (CW) | 333Hz, 16bit |
 | MOTOR2 | PA3 | TIM2_CH4 | 主电机2 (CCW) | 333Hz, 16bit |
 | SERVO7 | PC8 | TIM3_CH3 | 燃料阀门舵机 | 333Hz, 16bit |
