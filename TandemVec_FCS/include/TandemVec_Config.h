@@ -2,8 +2,9 @@
 //  TandemVec_Config.h — 纵列双发矢量推力飞行器机型参数
 //
 //  本文件是 TandemVec_FCS 飞控的单一参数源头文件。
-//  所有数值均来源于上层项目 models/aircraft-model.json (PAR-C0-001)，
-//  状态 MODEL-DEFAULT，未经台架标定。
+//  数值来源于上层项目 models/aircraft-model.json (PAR-C0-001 v0.2.0，
+//  2026-08-01 已回写本构型值，kT/kQ/wMax/a/b/Ix/Iy/Iz/m 与 JSON 完全一致)，
+//  状态 ESTIMATED（组件级估算/官方数据反推），待台架标定。
 //
 //  修改规则：
 //    ① 不得在本文件以外的地方硬编码任何飞行器参数；

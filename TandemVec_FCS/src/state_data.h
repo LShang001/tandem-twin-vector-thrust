@@ -124,9 +124,9 @@ typedef struct
 typedef struct
 {
   float throttle_percent; // 油门百分比 (0-100)
-  float alpha_roll;       // rad/s²  体轴z角加速度（VTOL侧倾/前摆δ_f）
+  float alpha_roll;       // rad/s²  体轴x角加速度（FRD滚转/差速Δω）
   float alpha_pitch;      // rad/s²  体轴y角加速度（俯仰/尾摆δ_t）
-  float alpha_yaw;        // rad/s²  体轴x角加速度（VTOL航向/差速Δω）
+  float alpha_yaw;        // rad/s²  体轴z角加速度（FRD偏航/前摆δ_f）
 } ControlOutputs_t;
 
 // 任务调度结构体

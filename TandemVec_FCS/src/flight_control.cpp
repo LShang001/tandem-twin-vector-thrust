@@ -965,8 +965,9 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       // 通过选择w分量为正的版本，确保旋转路径最短
       float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
 
-      // VTOL 体轴映射：x_b朝上时 → 侧倾=绕z_b旋转，俯仰=绕y_b旋转，航向=绕x_b旋转
-      // Roll（侧倾）取 q_err.z，Pitch 取 q_err.y，Yaw（航向）在 execute_yaw_controller 取 q_err.x
+      // FRD 体轴映射（z_b 竖直，NED→FRD 标准轴序）：x=滚转、y=俯仰、z=偏航
+      // Roll（滚转）取 q_err.x，Pitch 取 q_err.y，Yaw（航向）在 execute_yaw_controller 取 q_err.z
+      // 与底层控制分配对齐：Mx←差速(roll)、My←尾摆(pitch)、Mz←前摆(yaw)
       // 使用完整四元数向量模长，确保多轴同时存在误差时 atan2 参数正确
       // 原代码仅用 sqrt(y²+z²)，当偏航误差（x分量）不为零时会低估模长，
       // 导致进入 atan2 分支的判断偏低，large-angle精确缩放系数偏大
@@ -982,13 +983,13 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       {
         precise_scale = 2.0f * RAD_TO_DEG;
       }
-      error_roll_deg  = sign_qw * q_error.z * precise_scale;  // 侧倾误差 = 体轴z分量
+      error_roll_deg  = sign_qw * q_error.x * precise_scale;  // 滚转误差 = 体轴x分量
       error_pitch_deg = sign_qw * q_error.y * precise_scale;
 
-      // 外环：侧倾外部导数取 omega.z（体轴z = VTOL侧倾速率）
+      // 外环：滚转外部导数取 omega.x（体轴x = FRD 滚转速率）
       // 传参为 d(input)/dt 语义：input=0 常数，误差导数 = -omega；
       // computeWithExternalDerivative 内部取 -derivative 作误差导数，故此处传 +omega。
-      rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, current_omega_dps_body_filtered.z);
+      rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, current_omega_dps_body_filtered.x);
       pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(error_pitch_deg, 0, current_omega_dps_body_filtered.y);
 
       // 限制目标角速度在安全范围内
@@ -1012,8 +1013,8 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     pitchRateTarget = pitchAngleOutputFilter.filter(pitchRateTarget);
 
     // 内环：角速率误差 → 角加速度指令(rad/s²)
-    // 体轴z=侧倾，体轴y=俯仰，底层控制分配负责物理逆解
-    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, current_omega_dps_body_filtered.z);
+    // FRD 轴序：体轴x=滚转，体轴y=俯仰，底层控制分配负责物理逆解
+    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, current_omega_dps_body_filtered.x);
     outputs.alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, current_omega_dps_body_filtered.y);
     outputs.alpha_roll  = rollOutputFilter.filter(outputs.alpha_roll);
     outputs.alpha_pitch = pitchOutputFilter.filter(outputs.alpha_pitch);
@@ -1063,8 +1064,9 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     yawRateTarget = yawAngleOutputFilter.filter(yawRateTarget);
 
     // 内环：速率误差 → 角加速度指令 alpha_yaw (rad/s²)
+    // FRD 轴序：偏航速率 = 体轴z 角速度
     outputs.alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(
-        yawRateTarget, current_omega_dps_body_filtered.x);
+        yawRateTarget, current_omega_dps_body_filtered.z);
     outputs.alpha_yaw = yawOutputFilter.filter(outputs.alpha_yaw);
   }
   else
@@ -1084,7 +1086,7 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  * 控制链底层（上层与飞行器模型完全解耦）：
  *   alpha × I → M_cmd → allocateMoments(BTRUE) → δ_f, δ_t, Δω
  *
- * 轴向（VTOL，x_b朝上）：x=航向/差速，y=俯仰/尾摆，z=侧倾/前摆
+ * 轴向（FRD，z_b 竖直）：x=滚转/差速，y=俯仰/尾摆，z=偏航/前摆
  * 手动TVC旁路：RC直接映射舵机，跳过控制分配。
  */
 void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs_t &outputs)
@@ -1127,9 +1129,10 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     // ---- 姿态控制模式：物理模型逆解控制分配（无倾角保护，支持大机动）----
     {
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
-      float Mx = P.Ix * outputs.alpha_yaw;   // 体轴x → 航向力矩 → 差速
+      // FRD 轴序：Mx←alpha_roll（差速）、My←alpha_pitch（尾摆）、Mz←alpha_yaw（前摆）
+      float Mx = P.Ix * outputs.alpha_roll;  // 体轴x → 滚转力矩 → 差速
       float My = P.Iy * outputs.alpha_pitch; // 体轴y → 俯仰力矩 → 尾摆
-      float Mz = P.Iz * outputs.alpha_roll;  // 体轴z → 侧倾力矩 → 前摆
+      float Mz = P.Iz * outputs.alpha_yaw;   // 体轴z → 偏航力矩 → 前摆
 
       // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
@@ -1196,9 +1199,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
  *   即使辨识结果完全错误，也不影响飞行 —— 这是"第一步：只观测不闭环"。
  *   待多架次数据确认 b_est 稳定后，才考虑人工调整增益（第二步）。
  *
- * 轴序约定：[0]=roll(侧倾/前摆) [1]=pitch(俯仰/尾摆) [2]=yaw(航向/差速)
- *   与 outputs.alpha_* 及 current_omega_dps_body_filtered 的 VTOL 映射对应：
- *   侧倾←omega.z, 俯仰←omega.y, 航向←omega.x
+ * 轴序约定：[0]=roll(滚转/差速) [1]=pitch(俯仰/尾摆) [2]=yaw(偏航/前摆)
+ *   与 outputs.alpha_* 及 current_omega_dps_body_filtered 的 FRD 映射对应：
+ *   滚转←omega.x, 俯仰←omega.y, 偏航←omega.z
  */
 static void update_online_identification(const ControlInputs_t &inputs,
                                          const ControlOutputs_t &outputs)
@@ -1221,9 +1224,9 @@ static void update_online_identification(const ControlInputs_t &inputs,
 
   // 实测角速率（deg/s）— OnlineID 内部转 rad/s 再求导
   // Vector3 分量为 double，需显式转 float（花括号初始化不允许隐式收窄）
-  const float omega_dps[3] = { static_cast<float>(current_omega_dps_body_filtered.z),   // 侧倾
+  const float omega_dps[3] = { static_cast<float>(current_omega_dps_body_filtered.x),   // 滚转
                                static_cast<float>(current_omega_dps_body_filtered.y),   // 俯仰
-                               static_cast<float>(current_omega_dps_body_filtered.x) }; // 航向
+                               static_cast<float>(current_omega_dps_body_filtered.z) }; // 偏航
 
   // 内环积分项 I_term = ki × integral (rad/s²)，用于提取配平力矩→CG偏移
   const float i_term[3] = { rollRatePID.getKi()  * rollRatePID.getIntegral(),
