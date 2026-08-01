@@ -51,6 +51,7 @@ class LMPCAttitude:
     min ½z'Hz + f'z s.t. |u_k|≤u_max，z=[u_0..u_{N-1}]"""
     def __init__(self, n_iter=400):
         self.n_iter = n_iter
+        self.N = N                      # 预测时域（展开维度）
         self.solve_us = 0.0   # 求解耗时统计
         self._z_warm = np.zeros(3*N)   # warm start（滚动时域连续性）
         # 预计算展开系数：x_k = A^k x0 + Σ_{j<k} A^{k-1-j}B u_j（增广 9 维模型）
@@ -93,8 +94,8 @@ class LMPCAttitude:
                        omega[0], omega[1], omega[2],
                        0.0, 0.0, 0.0])   # 执行器状态 a 初值（稳态 ω̇≈0）
         f = self.L @ x0
-        lo = np.tile(-u_max, N)
-        hi = np.tile(u_max, N)
+        lo = np.tile(-u_max, self.N)
+        hi = np.tile(u_max, self.N)
         z = np.roll(self._z_warm, -3)      # warm start：上一时刻解前移
         z[-3:] = 0.0
         t0 = time.perf_counter()

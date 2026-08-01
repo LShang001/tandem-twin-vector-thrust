@@ -1,0 +1,16 @@
+\begin{table}[H]
+\centering
+\caption{姿态误差范数末值对比（失配仿真 kT×0.8、Iy×1.3、Ix×1.2，4--6\,s）}
+\label{tab:mpc_compare}
+\small
+\begin{tabular}{l c c c}
+\toprule
+\textbf{场景} & \textbf{SAS} & \textbf{LMPC} & \textbf{NMPC} \\
+\midrule
+5° 扰动 & 0.0021 & 0.0033 & 0.0005 \\
+60° 扰动 & 0.0303 & 0.0401 & 0.0052 \\
+航向指令 20° & 0.0192 & 0.0116 & 0.0031 \\
+slerp 过渡 & 0.0053 & 0.1239 & 0.0311 \\
+\bottomrule
+\end{tabular}
+\end{table}
