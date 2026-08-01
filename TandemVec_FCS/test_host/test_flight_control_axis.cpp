@@ -250,6 +250,20 @@ int main()
               "T6 偏航角速率 → alpha_yaw 主导（轴序对齐）");
     }
 
+    // T7: 推力垂直投影——悬停（机头朝天，x_b 竖直）时 R13=±1 而 R33≈0
+    // （cos_tilt 修复依据：推力沿 +x_b，垂直分量 = x 轴投影；原 R33 在悬停时≈0 → 油门×2）
+    {
+        const float q = 0.70710678f;  // cos/sin(45°)
+        Quaternion qh{q, 0.f, q, 0.f};   // 绕 +y 转 90°（机头朝天）
+        float R13 = 2.f * (qh.x * qh.z + qh.y * qh.w);
+        float R33 = 1.f - 2.f * (qh.x * qh.x + qh.y * qh.y);
+        check(approx(R13, 1.f, 1e-3f), "T7 悬停时 R13（x 轴垂直投影）= 1，cos_tilt 无需补偿");
+        check(std::fabs(R33) < 1e-3f, "T7 悬停时 R33（z 轴投影）≈ 0——原公式会钳位 0.5 使油门×2");
+        Quaternion ql{1, 0, 0, 0};       // 水平巡航
+        float R13_l = 2.f * (ql.x * ql.z + ql.y * ql.w);
+        check(approx(R13_l, 0.f, 1e-3f), "T7 水平时 R13≈0（气动升力承担，钳位 0.5 合理）");
+    }
+
     std::printf("\n%s\n", g_fail ? "=== 存在失败项 ===" : "=== 全部通过 ===");
     return g_fail ? 1 : 0;
 }

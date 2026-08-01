@@ -448,11 +448,15 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
     // F_total = F_vertical / cos(tilt_angle)
 
     // 计算倾斜角的余弦值 (cos_tilt)
-    // 使用姿态四元数计算: cos(tilt) = 1 - 2*(x^2 + y^2)
-    // 这是Z轴在导航系垂直轴上的投影长度，比用三角函数cos(roll)*cos(pitch)计算更快更准
-    float qx = AHRS_Packet.Qx;
-    float qy = AHRS_Packet.Qy;
-    float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
+    // 本构型推力沿机体 +x_b（FRD 纵列双发，B 矩阵前摆效率 B[2,2]=a·Tf 证明推力沿 x）。
+    // 垂直分量 = x_b 轴在 NED 垂直方向的投影 R13 = 2(qx·qz + qy·qw)；
+    // 悬停（机头朝天）R13=±1 → 无需补偿；水平巡航 R13≈0 → 钳位 0.5（此时升力由气动承担）。
+    // ⚠️ 原实现用 R33 = 1-2(qx²+qy²)（z 轴投影，多旋翼式"推力沿 -z"假设）：
+    //    悬停时机头朝天、z 轴水平 → R33≈0 → 钳位 0.5 → 油门需求×2（审查 HIGH #1）。
+    float qx = AHRS_Packet.Qx, qy = AHRS_Packet.Qy;
+    float qz = AHRS_Packet.Qz, qw = AHRS_Packet.Qw;
+    float cos_tilt = 2.0f * (qx * qz + qy * qw);  // R13
+    cos_tilt = fabsf(cos_tilt);                    // 机头朝上/朝下方向无关
 
     // 安全保护：限制最大补偿角度，防止倾斜过大时推力暴增导致失控
     // 例如限制在 60度 (cos(60)=0.5)，即推力最多增加到原来的2倍

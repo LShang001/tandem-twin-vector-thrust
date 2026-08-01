@@ -7,10 +7,16 @@
 ## 飞行器构型与控制分配
 
 - **纵列双发**：前电机(CW)绕z_b摆动(δ_f, **偏航主控**)，尾电机(CCW)绕y_b摆动(δ_t, 俯仰主控)
-- **差速滚转**：Δω产生Mx(绕x_b)，VTOL悬停时（x_b竖直）=世界航向控制
+- **差速反扭**：Δω绕推力轴(x_b)产生Mx——**水平巡航=滚转；垂直悬停（x_b竖直）=世界航向**
 - **物理逆解**：α→I×α→M_cmd→allocateMoments(BTRUE)→δ_f/δ_t/Δω
 - **执行器映射**：前摆δ_f→PA0(TVC_ROLL), 尾摆δ_t→PA1(TVC_PITCH), Δω→PA2/PA3(前后电机差速)
 - **齿轮传动**：舵机30T/摆座40T = 1.333:1，PWM映射已含齿轮比
+
+## 已知待办（轴约定遗留）
+
+- **AUTO_POSITION/GUIDED 目标姿态构造**（`constructTiltTargetQuaternion` + `q_yaw_base = eulerToQuaternion(0,0,Heading)`）仍基于"悬停基准 q=[1,0,0,0、推力沿 -z_b]"的多旋翼式假设（航向基准绕机体 z）。本构型悬停基准是**机头朝天（q=绕 y 90°）**：航向基准应为绕机体 x（差速轴），合成公式需结构性改造（q_tilt 与航向的合成不是简单换轴）。影响：AUTO_POSITION/GUIDED 在悬停基准下的目标姿态可能偏差 90°。**修复前不要使用 AUTO_POSITION/GUIDED 悬停模式**；需专用数值验证（四元数合成 + 仿真闭环）后修正。
+- **cos_tilt 已修复**（2026-08-02）：推力沿 +x_b → 垂直投影用 R13 = 2(qx·qz+qy·qw)，原 R33 在悬停时≈0 导致油门×2（审查 HIGH #1）。sensor_peripheral 的 R33 是激光斜距补偿（激光沿 -z_b），**保持正确**。
+- **命名残留**：`servo_deg_roll`/`TVC_ROLL_SERVO_PIN` 实际是前摆（偏航通道），待重命名（不影响功能）。
 
 ## 核心参数
 
