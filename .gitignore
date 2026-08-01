@@ -60,3 +60,6 @@ docs/08-参考资料/papers/**/*_content_list*.json
 docs/08-参考资料/papers/**/*_model.json
 docs/08-参考资料/papers/**/manifest.json
 docs/08-参考资料/papers/**/result.zip
+
+# 分析脚本可视化产物（构建生成，不入库）
+scripts/output/*.png
