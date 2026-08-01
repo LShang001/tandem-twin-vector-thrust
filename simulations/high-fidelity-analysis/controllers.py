@@ -111,8 +111,8 @@ class QuatINDIController:
         eps = np.array([q_err[1], q_err[2], q_err[3]])
         # 外环: 四元数比例 → 目标角速率（叠加参考速率前馈）
         w_ref = -1.0 * eps + omega_ref
-        # 内环: 角速率误差 → 虚拟角加速度
-        K_rate = 3.0
+        # 内环: 角速率误差 → 虚拟角加速度（带宽 6 rad/s，适配 v0.2.0 更快动力学）
+        K_rate = 6.0
         nu = K_rate * (w_ref - omega)
         # 角加速度估计（自适应互补滤波，需提供控制输入先验）
         if hasattr(self.est, "set_control"):
@@ -123,10 +123,16 @@ class QuatINDIController:
         # 在线 Jacobian + 增量
         B, T0, tau0 = control_effectiveness(omega0, self.prev_df, self.prev_dt, self.prev_dw, P)
         try:
-            du = np.linalg.solve(B, nu - omega_dot)
+            # 目标角加速度增量 → 目标力矩增量（×惯量）→ 执行器增量（B⁻¹）
+            # 必须乘 I：真实角加速度增量 = I⁻¹·B·du，缺 I 时各向异性惯量
+            # （Ix=0.0021 vs Iy=Iz=0.022）使滚转通道被放大 ~10 倍 → 正反馈发散
+            M_cmd_delta = np.array([P["Ix"], P["Iy"], P["Iz"]]) * (nu - omega_dot)
+            du = np.linalg.solve(B, M_cmd_delta)
             if np.any(~np.isfinite(du)):
                 du = np.zeros(3)
-            du = np.clip(du, -0.2, 0.2)
+            # 增量限幅：放宽至物理摆角上限（dMax），避免过渡段大误差时
+            # 限幅饱和方向振荡导致平均力矩≈0、姿态停滞（v0.2.0 参数下复现）
+            du = np.clip(du, -P["dMax"], P["dMax"])
         except (np.linalg.LinAlgError, ValueError):
             du = np.zeros(3)
         self.prev_dw += du[0]; self.prev_dt += du[1]; self.prev_df += du[2]

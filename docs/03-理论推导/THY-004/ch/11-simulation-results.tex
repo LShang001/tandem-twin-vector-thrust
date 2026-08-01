@@ -59,7 +59,7 @@ $t=2$\,s时施加俯仰角速率脉冲（$\Delta q=5^\circ$/s），角速率在�
 
 \subsection{INDI控制器初步验证}
 
-\textit{（本小节 INDI 对比基于旧参数集 v0.1.0 仿真，v0.2.0 参数集下 INDI 定量结论待重跑。）}基于在线Jacobian $\mathbf{B}_{\mathrm{true}}$（式\ref{eq:B_true}）的INDI控制器在零扰动配平保持中表现与SAS相当（12秒速度漂移$<0.1\%$），验证了增量控制架构的配平稳定性。在角速率扰动响应中，INDI表现出比SAS更大幅度的执行器调节——这与INDI理论预测一致：增量控制通过$\mathbf{B}^{-1}$直接映射角加速度误差至执行器增量，对扰动的初始响应更激进。然而，在$\dot{\boldsymbol{\omega}}$估计仅依赖后向欧拉差分的纯传感器方案下，噪声放大效应导致INDI扰动抑制性能不如结构更保守的SAS。这一发现突显了第\ref{sec:INDI}节指出的角加速度滤波（§\ref{sec:accel_estimation}）对INDI实际性能的决定性影响。
+\textit{（本小节 INDI 已按 v0.2.0 参数集重跑，并修复了分配中缺失的惯量逆 $\mathbf{I}$——角加速度指令必须先乘惯量转换为力矩增量再经 $\mathbf{B}^{-1}$ 分配，否则各向异性惯量使滚转通道发散。）}基于在线Jacobian $\mathbf{B}_{\mathrm{true}}$（式\ref{eq:B_true}）的INDI控制器在零扰动配平保持中表现与SAS相当（12秒速度漂移$<0.1\%$），验证了增量控制架构的配平稳定性。在扰动抑制对比中，修复惯量逆后的 INDI 累积误差相对 SAS 改善 $76.4\%$（俯仰）与 $98.4\%$（滚转）。在角速率扰动响应中，INDI表现出比SAS更大幅度的执行器调节——这与INDI理论预测一致：增量控制通过$\mathbf{B}^{-1}$直接映射角加速度误差至执行器增量，对扰动的初始响应更激进。然而，在$\dot{\boldsymbol{\omega}}$估计仅依赖后向欧拉差分的纯传感器方案下，噪声放大效应导致INDI扰动抑制性能不如结构更保守的SAS。这一发现突显了第\ref{sec:INDI}节指出的角加速度滤波（§\ref{sec:accel_estimation}）对INDI实际性能的决定性影响。
 
 \subsection{轴间耦合抑制：对角SAS与全矩阵INDI对比}
 \label{sec:coupling_rejection}

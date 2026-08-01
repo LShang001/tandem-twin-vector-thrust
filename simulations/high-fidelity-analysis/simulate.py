@@ -85,9 +85,11 @@ class INDIController:
         nu = np.array([nu_p, nu_q, nu_r])
         delta_u = np.zeros(3)
         try:
-            err = nu - self.omega_dot_filt
+            # 目标角加速度增量 × 惯量 = 目标力矩增量，再经 B⁻¹ 分配
+            # （缺 I 时各向异性惯量使滚转通道被放大 → 发散，v0.2.0 参数下复现）
+            err = np.array([P["Ix"], P["Iy"], P["Iz"]]) * (nu - self.omega_dot_filt)
             delta_u = np.linalg.solve(B, err)
-            delta_u = np.clip(delta_u, -0.2, 0.2)
+            delta_u = np.clip(delta_u, -P["dMax"], P["dMax"])
         except np.linalg.LinAlgError:
             pass
         self.prev_dw += delta_u[0]

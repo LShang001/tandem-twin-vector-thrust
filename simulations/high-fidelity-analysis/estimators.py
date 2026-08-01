@@ -26,8 +26,11 @@ class EulerDiffEstimator:
             self.prev_omega = omega.copy()
             return np.zeros(3)
         raw = (omega - self.prev_omega) / dt
-        alpha = min(dt / self.tau_f, 1.0)
-        self.filt += alpha * (raw - self.filt)
+        if self.tau_f > 0:
+            alpha = min(dt / self.tau_f, 1.0)
+            self.filt += alpha * (raw - self.filt)
+        else:
+            self.filt = raw  # tau_f=0：纯差分，无低通（理想测量场景）
         self.prev_omega = omega.copy()
         return self.filt.copy()
 
@@ -95,7 +98,8 @@ class AdaptiveComplementaryEstimator:
     def _model_dot(self, omega):
         """完整刚体转动模型预测角加速度（不含气动/扰动）"""
         P = self.P
-        B = self.B_of_state(self.df, self.dt_, self.dw, self.omega0)
+        # control_effectiveness 签名: (omega0, df, dt, dw, P) → (B, T0, tau0)
+        B, _, _ = self.B_of_state(self.omega0, self.df, self.dt_, self.dw, P)
         u = np.array([self.dw, self.dt_, self.df])
         M_ctrl = B @ u
         p, q, r = omega

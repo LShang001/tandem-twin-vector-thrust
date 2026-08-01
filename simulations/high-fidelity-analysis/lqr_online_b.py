@@ -38,7 +38,8 @@ class CascadeOnlineB:
         # 在线 B_true 分配（交叉项补偿）
         B,_,_ = control_effectiveness(W0, self.u[2], self.u[1], self.u[0], P)
         try:
-            du = np.linalg.solve(B, nu)
+            # ν 为角加速度指令：×惯量得目标力矩增量，再经 B⁻¹ 分配
+            du = np.linalg.solve(B, np.array([P["Ix"], P["Iy"], P["Iz"]]) * nu)
             du = np.clip(du, -self.du_max, self.du_max)
         except np.linalg.LinAlgError:
             du = np.zeros(3)

@@ -27,7 +27,8 @@ class INDI:
             omega0, self.prev_u[2], self.prev_u[1], self.prev_u[0], P)
         wdot = self.est.update(omega, dt)
         try:
-            du = np.linalg.solve(B, nu - wdot)
+            # ×惯量：角加速度增量 → 力矩增量（缺 I 时滚转通道放大发散）
+            du = np.linalg.solve(B, np.array([P["Ix"], P["Iy"], P["Iz"]]) * (nu - wdot))
             du = np.clip(du, -0.2, 0.2)
         except np.linalg.LinAlgError:
             du = np.zeros(3)

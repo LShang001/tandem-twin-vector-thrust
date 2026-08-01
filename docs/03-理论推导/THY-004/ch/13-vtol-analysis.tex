@@ -57,7 +57,7 @@ Tail-sitter悬停时俯仰角$\theta=-90^\circ$恰为3-2-1欧拉角的万向锁�
 
 \subsubsection{悬停保持}
 
-图\ref{fig:vtol_hover}展示了悬停姿态的闭环保持性能。在精确配平转速（式\ref{eq:hover_omega0}，$\omega_0\approx761.4$\,rad/s）和四元数SAS的PD反馈下，俯仰角$\theta$稳定保持在$-90^\circ$（仿真内未见可分辨偏差），8\,s内高度漂移为零。该稳定性验证了误差四元数控制律（式\ref{eq:quat_pd}）在万向锁奇异点附近的有效性——欧拉角SAS在此工况下无法正常工作。
+图\ref{fig:vtol_hover}展示了悬停姿态的闭环保持性能。在精确配平转速（式\ref{eq:hover_omega0}，$\omega_0\approx574.0$\,rad/s，v0.2.0 参数集）和四元数SAS的PD反馈下，俯仰角$\theta$稳定保持在$-90^\circ$（仿真内未见可分辨偏差），8\,s内高度漂移为零。该稳定性验证了误差四元数控制律（式\ref{eq:quat_pd}）在万向锁奇异点附近的有效性——欧拉角SAS在此工况下无法正常工作。
 
 \begin{figure}[H]
 \centering

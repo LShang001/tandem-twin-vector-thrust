@@ -36,8 +36,8 @@ def main():
     print()
 
     # ========== 1. 配平 ==========
-    print("[1/5] 纵向配平分析 (V=24 m/s)")
-    V_target = 24.0
+    print("[1/5] 纵向配平分析 (V=28 m/s, v0.2.0)")
+    V_target = 28.0
     trim = trim_longitudinal(V_target, P, verbose=True)
     # 写配平表
     (OUT / "trim_table.tex").write_text(trim_table(trim, P), encoding="utf-8")

@@ -28,7 +28,8 @@ class CascadePI:
         w_ref=-self.Kp*e-self.Ki*self.ie+omega_ref
         nu=self.Kw*(w_ref-omega)
         B,_,_=control_effectiveness(W0,self.u[2],self.u[1],self.u[0],P)
-        try: du=np.clip(np.linalg.solve(B,nu),-self.du_max,self.du_max)
+        # ν 为角加速度指令：×惯量得目标力矩增量，再经 B⁻¹ 分配（缺 I 各向异性发散）
+        try: du=np.clip(np.linalg.solve(B,np.array([P["Ix"],P["Iy"],P["Iz"]])*nu),-self.du_max,self.du_max)
         except np.linalg.LinAlgError: du=np.zeros(3)
         self.u=np.clip(self.u+du,-U_MAX,U_MAX)
         return self.u

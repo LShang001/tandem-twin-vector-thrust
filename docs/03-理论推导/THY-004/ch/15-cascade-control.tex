@@ -80,12 +80,16 @@ $\boldsymbol{\omega}_{\mathrm{ref}}^{\mathrm{ff}}$为期望轨迹角速度前馈
                         - \boldsymbol{\omega}\right)
     \label{eq:cascade_nu_ch}\\
     \mathbf{u}_{k+1} &= \mathbf{u}_k
-        + \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_k)\,\boldsymbol{\nu}\,\Delta t
+        + \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_k)\,
+          \mathbf{I}\,\boldsymbol{\nu}\,\Delta t
     \label{eq:cascade_alloc_ch}
 \end{align}
 
 其中$\mathbf{u}=[\Delta\omega,\delta_t,\delta_f]^T$，
 $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$为式(\ref{eq:B_true})的在线Jacobian，
+$\mathbf{I}=\operatorname{diag}(I_x,I_y,I_z)$为惯量矩阵（$\boldsymbol{\nu}$是角加速度指令，
+必须乘惯量转换为目标力矩增量再经$\mathbf{B}^{-1}$分配——缺$\mathbf{I}$时
+各向异性惯量会使快轴通道被放大、慢轴通道衰减，v0.2.0 参数下表现为滚转通道发散），
 $\mathbf{K}_\omega=\operatorname{diag}(k_{\omega,1},k_{\omega,2},k_{\omega,3})$，
 $\Delta t$为控制周期。内环的两个关键设计：
 
@@ -360,26 +364,26 @@ $K_i$的引入主要用于消除常值扰动的稳态误差，但会略微增大
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.82\textwidth]{fig-sim/cascade_time_response.pdf}
-\caption{交叉耦合时域响应（$\delta_f=25^\circ$阶跃@2s）：上—俯仰角$\theta$；中—俯仰角速率$q$；下—尾摆$\delta_t$。级联架构（绿）的$\theta$几乎无可见偏离，LQR（蓝）持续偏离约$2.1^\circ$。}
+\caption{交叉耦合时域响应（$\delta_f=25^\circ$阶跃@2s，v0.2.0 参数集）：上—俯仰角$\theta$；中—俯仰角速率$q$；下—尾摆$\delta_t$。级联架构（绿）的$\theta$几乎无可见偏离，LQR（蓝）持续偏离约$5.9^\circ$。}
 \label{fig:cascade_time}
 \end{figure}
 
-级联架构在阶跃后俯仰角仅有$0.047^\circ$的微小瞬态即恢复，
-尾摆$\delta_t$快速给出补偿；而LQR持续偏离$2.1^\circ$，
+级联架构在阶跃后俯仰角仅有$0.08^\circ$的微小瞬态即恢复，
+尾摆$\delta_t$快速给出补偿；而LQR持续偏离$5.9^\circ$（$\delta_f=25^\circ$），
 INDI因增量饱和出现较大偏差。定量耦合峰值见表\ref{tab:cascade_ch_coupling2}。
 
 \begin{table}[H]
 \centering
-\caption{级联架构与LQR/INDI的俯仰耦合峰值对比（°，5次蒙特卡洛均值）}
+\caption{级联架构与LQR/INDI的俯仰耦合峰值对比（°，5次蒙特卡洛均值，v0.2.0 参数集）}
 \label{tab:cascade_ch_coupling2}
 \small
 \begin{tabular}{l c c}
 \toprule
 \textbf{控制架构} & $\delta_f=10^\circ$ & $\delta_f=25^\circ$ \\
 \midrule
-LQR（冻结$\mathbf{B}$，单级） & 1.33 & 2.02 \\
-INDI（在线$\mathbf{B}$，单级） & 0.40 & 2.86 \\
-\textbf{级联P外环 + 在线$\mathbf{B}_{\mathrm{true}}$内环} & \textbf{0.02} & \textbf{0.04} \\
+LQR（冻结$\mathbf{B}$，单级） & 12.05 & 5.91 \\
+INDI（在线$\mathbf{B}$，单级） & 35.86 & 41.51 \\
+\textbf{级联P外环 + 在线$\mathbf{B}_{\mathrm{true}}$内环} & \textbf{0.06} & \textbf{0.08} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -397,16 +401,16 @@ INDI（在线$\mathbf{B}$，单级） & 0.40 & 2.86 \\
 
 \begin{table}[H]
 \centering
-\caption{不同陀螺噪声下的俯仰耦合峰值（°，4次蒙特卡洛均值）}
+\caption{不同陀螺噪声下的俯仰耦合峰值（°，5次蒙特卡洛均值，v0.2.0 参数集）}
 \label{tab:cascade_noise}
 \small
 \begin{tabular}{l c c c c c}
 \toprule
 \textbf{架构} & 0 & 0.005 & 0.01 & 0.02 & 0.04 rad/s \\
 \midrule
-LQR & 1.33 & 1.33 & 1.33 & 1.32 & 1.32 \\
-INDI & 0.47 & 1.45 & 2.52 & 3.95 & 3.68 \\
-\textbf{级联} & \textbf{0.003} & \textbf{0.047} & \textbf{0.092} & \textbf{0.203} & \textbf{0.450} \\
+LQR & 12.05 & 12.04 & 12.04 & 12.04 & 12.03 \\
+INDI & 36.00 & 36.03 & 37.28 & 33.41 & 28.80 \\
+\textbf{级联} & \textbf{0.05} & \textbf{0.10} & \textbf{0.16} & \textbf{0.24} & \textbf{0.42} \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -415,9 +419,9 @@ INDI & 0.47 & 1.45 & 2.52 & 3.95 & 3.68 \\
 \begin{itemize}
     \item \textbf{LQR}：纯状态反馈不依赖角加速度，耦合峰值与噪声无关（$1.33^\circ$恒定），
           但基线最高——这是结构性局限；
-    \item \textbf{INDI}：随噪声急剧退化（$0.47\to3.68^\circ$），
+    \item \textbf{INDI}：随噪声急剧退化（$36.0\to28.8^\circ$，无噪声时已偏高），
           角加速度差分噪声经$\mathbf{B}^{-1}$放大；
-    \item \textbf{级联}：在全噪声区间最优（$0.003\to0.45^\circ$），
+    \item \textbf{级联}：在全噪声区间最优（$0.05\to0.42^\circ$），
           既无LQR的结构局限，又无INDI的噪声放大——
           这是"结构解耦+无角加速度估计"双重优势的体现。
 \end{itemize}
@@ -444,23 +448,23 @@ INDI & 0.47 & 1.45 & 2.52 & 3.95 & 3.68 \\
 
 在tail-sitter垂直起飞（3秒slerp过渡至$\theta=-90^\circ$）下，
 级联架构的误差四元数外环在万向锁附近保持正则，
-姿态误差峰值$0.028$（约$3^\circ$），远优于SAS的$0.198$，
+姿态误差峰值$0.009$（约$0.5^\circ$），优于SAS的$0.027$与INDI的$0.036$，
 验证了第\ref{sec:cascade_design}节四元数外环的必要性
 （详见表\ref{tab:cascade_ch_vtol2}）。
 
 \begin{table}[H]
 \centering
-\caption{Tail-sitter垂直起飞姿态误差对比（3\,s slerp）}
+\caption{Tail-sitter垂直起飞姿态误差对比（3\,s slerp，v0.2.0 参数集）}
 \label{tab:cascade_ch_vtol2}
 \small
 \begin{tabular}{l c c}
 \toprule
 \textbf{控制架构} & $\|\boldsymbol{\varepsilon}_{\mathrm{err}}\|$峰值 & 末值（10\,s） \\
 \midrule
-SAS（增益调度+前馈） & 0.198 & $4.4\times10^{-2}$ \\
-INDI（v2） & 0.067 & $1.5\times10^{-3}$ \\
-LQR & 0.017 & $2.1\times10^{-5}$ \\
-\textbf{级联（误差四元数外环）} & 0.028 & $3.9\times10^{-3}$ \\
+SAS（增益调度+前馈） & 0.0265 & $4.9\times10^{-4}$ \\
+INDI（v3，含惯量逆） & 0.0355 & $9.1\times10^{-4}$ \\
+LQR & 0.0087 & $9.5\times10^{-6}$ \\
+\textbf{级联（误差四元数外环）} & 0.0087 & $1.4\times10^{-3}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -506,8 +510,8 @@ LQR & 0.017 & $2.1\times10^{-5}$ \\
 传递函数分析表明在线效能矩阵使角速度动力学精确对角化；
 灵敏度与奇异摄动分析给出了时间尺度分离的频域与理论基础；
 离线参数优化揭示了"结构解耦优于增益提高"的整定原则。
-仿真验证覆盖巡航耦合抑制（$0.02$--$0.04^\circ$，约两个数量级改善）、
-宽噪声区间鲁棒性（$0.003$--$0.45^\circ$全程最优）、
+仿真验证覆盖巡航耦合抑制（$0.06$--$0.08^\circ$，约两个数量级改善）、
+宽噪声区间鲁棒性（$0.05$--$0.42^\circ$全程最优）、
 执行器饱和鲁棒性与tail-sitter万向锁有效性。
 该架构规避了INDI的角加速度估计噪声、LQR的工作点漂移、SAS的对角近似三大缺陷，
 是概念阶段向工程实现过渡的推荐控制结构。
