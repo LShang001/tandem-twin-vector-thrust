@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>行为保持红线清单 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="行为保持红线清单">行为保持红线清单</h1>
+<blockquote>
+<p>修改以下任一项会改变仿真可观测行为。所有有意变更必须：</p>
+<ol type="1">
+<li>更新本文档中的对应描述</li>
+<li>重采回归基线
+<code>simulations/vector-thrust-lab/tests/fixtures/regression-baseline.json</code></li>
+<li>在提交说明中明确记录变更原因与影响范围</li>
+</ol>
+</blockquote>
+<hr />
+<h2 id="红线项">红线项</h2>
+<table>
+<thead>
+<tr>
+<th>红线项</th>
+<th>当前值</th>
+<th>所在位置</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>帧 delta 上限</td>
+<td>0.05 s</td>
+<td><code>frameCap</code></td>
+<td>主循环最大时间步长</td>
+</tr>
+<tr>
+<td>积分子步上限</td>
+<td>0.004 s</td>
+<td><code>maxStep</code></td>
+<td>RK4 数值稳定性要求</td>
+</tr>
+<tr>
+<td>电机一阶滞后时间常数</td>
+<td>0.28 s</td>
+<td><code>tauM</code></td>
+<td>电机+桨负载综合响应</td>
+</tr>
+<tr>
+<td>差速开方分配</td>
+<td><code>ωf=ω0√(1+Δω)</code>, <code>ωt=ω0√(1−Δω)</code></td>
+<td><code>propulsion.mjs</code></td>
+<td>保总推力不变的平方和约束</td>
+</tr>
+<tr>
+<td>推力公式</td>
+<td><code>T = kT·ω²</code></td>
+<td><code>propulsion.mjs</code></td>
+<td>平方关系，非其它指数</td>
+</tr>
+<tr>
+<td>反扭矩公式</td>
+<td><code>τ = kQ·ω² + Jp·dω/dt</code></td>
+<td><code>propulsion.mjs</code></td>
+<td>含惯性项</td>
+</tr>
+<tr>
+<td>六维力映射</td>
+<td>见 <code>propulsion.mjs:28-34</code></td>
+<td><code>propulsion.mjs</code></td>
+<td>Fx/Fz/My 符号约定与推导已交叉验证</td>
+</tr>
+<tr>
+<td>SAS 摆角限幅</td>
+<td>±0.4363 rad (25°)</td>
+<td><code>dMax</code></td>
+<td>物理摆座行程限制</td>
+</tr>
+<tr>
+<td>SAS 差速限幅</td>
+<td>±0.7</td>
+<td><code>dwMax</code></td>
+<td>归一化差速范围</td>
+</tr>
+<tr>
+<td>SAS 积分限幅</td>
+<td>俯仰 ±0.5 rad / 滚转 ±0.3 rad</td>
+<td><code>intThMax</code>/<code>intPhiMax</code></td>
+<td>防积分饱和</td>
+</tr>
+<tr>
+<td>UI 差速幅值</td>
+<td>±0.55</td>
+<td><code>dwUiMax</code></td>
+<td>用户界面滑块范围</td>
+</tr>
+<tr>
+<td>四元数积分</td>
+<td>四元数 RK4 积分 + 每阶段保范投影</td>
+<td><code>dynamics.mjs</code></td>
+<td><code>q̇ = ½·q⊗ω</code>，Stage2/3/4 与终值均归一化</td>
+</tr>
+<tr>
+<td>欧拉角提取</td>
+<td><code>theta = -asin(R13)</code></td>
+<td><code>math.mjs</code></td>
+<td>NED 3-2-1 序列</td>
+</tr>
+<tr>
+<td>空速分母保护</td>
+<td>0.5 m/s</td>
+<td><code>vMin</code></td>
+<td>仅保护侧滑角与无量纲角速率分母；动压使用真实空速</td>
+</tr>
+<tr>
+<td>地面约束</td>
+<td><code>pos.z &gt; 6.2</code> 且 <code>vWorld.z &gt; 0</code></td>
+<td><code>groundZ</code> + <code>state.mjs</code></td>
+<td>仅拦截下落，不含地面摩擦</td>
+</tr>
+<tr>
+<td>渲染/物理分离</td>
+<td>渲染几何电机位置 ±1.78m ≠ 物理力臂 0.315m</td>
+<td><code>aircraft-view.mjs</code> vs
+<code>aircraft-model.json</code></td>
+<td>不可将渲染坐标用于动力学计算</td>
+</tr>
+<tr>
+<td>自动综合演示</td>
+<td>900 ms 触发</td>
+<td><code>demo.mjs</code></td>
+<td>超时自动启动演示序列</td>
+</tr>
+<tr>
+<td>完整复位行为</td>
+<td>恢复配平油门/转速/指令/执行量/时间并清零遥测</td>
+<td><code>resetSimulationState</code></td>
+<td>保留 SAS、气动和水平约束模式开关</td>
+</tr>
+<tr>
+<td>配平工作点</td>
+<td><code>V=28 m/s</code>, <code>alpha=4.122°</code>,
+<code>thr=0.192272</code>, <code>delta_t0=-18.702°</code>,
+<code>delta_f0=-1.739°</code></td>
+<td><code>aTrim</code>/<code>vTrim</code>/<code>thrTrim</code>/<code>dtTrim</code>/<code>dfTrim</code></td>
+<td>四方程（Fx/Fz/My/Mz）同时闭合；求解器 scripts/trim_solve.py</td>
+</tr>
+<tr>
+<td>SAS 姿态运动学</td>
+<td><code>theta_dot≈-q</code>, <code>phi_dot≈-p</code></td>
+<td><code>control.mjs</code></td>
+<td>速率项取正，显示姿态 P/I 项取负</td>
+</tr>
+</tbody>
+</table>
+<h2
+id="已验证的约定非红线但修改需注意">已验证的约定（非红线，但修改需注意）</h2>
+<table>
+<thead>
+<tr>
+<th>约定</th>
+<th>详情</th>
+<th>交叉验证来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>尾电机受力方向</td>
+<td><code>[+cosδt, 0, -sinδt]</code>（牛顿第三定律：与排气反向）</td>
+<td><code>propulsion.mjs:28-34</code></td>
+</tr>
+<tr>
+<td>尾电机角动量方向</td>
+<td><code>[-cosδt, 0, +sinδt]</code>（CCW 反转，h_t 沿 -u_F,t）</td>
+<td><code>dynamics.mjs:48-52</code></td>
+</tr>
+<tr>
+<td>前后角动量对消</td>
+<td><code>hv.x = Jp(wf·cf - wt·ct)</code></td>
+<td><code>dynamics.mjs:49</code></td>
+</tr>
+<tr>
+<td>耦合比</td>
+<td><code>(C_Q/C_T)·(D/b)·(δf/δt)</code>，典型 3%-15%</td>
+<td>量纲分析 + aircraft-model.json</td>
+</tr>
+<tr>
+<td>NED M_y 约定</td>
+<td>M_y &gt; 0 = 机头向上，M_y &lt; 0 = 机头向下（+y_b 右手定则）</td>
+<td><code>dynamics.mjs</code> 角加速度与 <code>eulerFromQuat()</code>
+R₁₃/θ 推导</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/registers/行为保持红线清单.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
+</html>

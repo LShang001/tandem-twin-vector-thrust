@@ -473,10 +473,10 @@ HUD，方程面板解释模型来源；无飞行硬件风险</td>
 <li>空速下限 <code>vMin = 0.5 m/s</code></li>
 <li>地面约束条件
 <code>pos.z &gt; 6.2 m &amp;&amp; vWorld.z &gt; 0</code></li>
-<li>四元数右乘 + 每步归一化</li>
+<li>四元数 RK4 积分 + 每阶段保范投影</li>
 <li>900 ms 自动演示触发</li>
 <li>完整复位采用热配平转速，不模拟冷启动</li>
-<li>渲染几何臂长 <code>±1.78 m</code> 与物理力臂 <code>0.62 m</code>
+<li>渲染几何臂长 <code>±1.78 m</code> 与物理力臂 <code>0.315 m</code>
 的区分</li>
 <li><code>theta = -asin(R13)</code> 的欧拉提取约定</li>
 </ul>
@@ -546,5 +546,5 @@ href="../propulsion/PROP-001.html">PROP-001</a> —
 <li><a href="../registers/hazard-log.html">危害与失效模式日志</a>
 — 失效模式与缓解措施</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

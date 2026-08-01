@@ -1,7 +1,9 @@
 \section{数值仿真实验与验证}
 \label{sec:simulation}
 
-基于第\ref{sec:dynamics}节的RK4高精度积分框架和第\ref{sec:INDI}节的INDI控制律方案，使用Python独立实现的六自由度仿真程序（\texttt{simulations/high-fidelity-analysis/}），对配平状态、线性化模态、积分精度和闭环响应进行定量分析与可视化。所有数值结果基于MODEL-DEFAULT参数，未经标定，结论限定为概念级。
+基于第\ref{sec:dynamics}节的RK4高精度积分框架和第\ref{sec:INDI}节的INDI控制律方案，使用Python独立实现的六自由度仿真程序（\texttt{simulations/high-fidelity-analysis/}），对配平状态、线性化模态、积分精度和闭环响应进行定量分析与可视化。
+
+\noindent\textbf{注意（2026-08-01 参数集变更）：}本章数值均基于旧参数集（m=2.6\,kg、kT=2.2e-5、wMax=900、a=b=0.62\,m、24\,m/s 巡航），\texttt{aircraft-model.json} v0.2.0 已回写为 TandemVec\_FCS 实机构型（m=0.7\,kg、kT=1.04e-5、wMax=1150、a=b=0.315\,m，新配平 28\,m/s 四方程，见 \texttt{scripts/trim\_solve.py}）。本章线性化模态/积分精度数值需按新参数集重算后方可作为当前结论引用；推导方法与框架不变。
 
 \subsection{纵向配平}
 

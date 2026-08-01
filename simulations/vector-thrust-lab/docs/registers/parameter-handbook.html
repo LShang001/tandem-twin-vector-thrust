@@ -38,10 +38,11 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <hr />
 <h2 id="1-说明">1 说明</h2>
 <ul>
-<li><strong>版本</strong>：<code>0.1.0</code></li>
+<li><strong>版本</strong>：<code>0.2.0</code></li>
 <li><strong>模型 ID</strong>：<code>PAR-C0-001</code></li>
-<li><strong>总体状态</strong>：<code>MODEL-DEFAULT</code>（全部参数未经台架标定或飞行验证）</li>
-<li><strong>参数总数</strong>：46</li>
+<li><strong>总体状态</strong>：<code>MODEL-DEFAULT</code>（推进/惯量/质量/配平为
+ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
+<li><strong>参数总数</strong>：53</li>
 <li><strong>生成文件</strong>：<code>simulations/vector-thrust-lab/src/core/parameters.mjs</code></li>
 <li><strong>同步命令</strong>：<code>py -3.12 tools/sync-params.py</code>（仓库根目录）</li>
 </ul>
@@ -66,22 +67,23 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-001</td>
 <td><code>kT</code></td>
-<td>2.2e-5</td>
+<td>1.04e-5</td>
 <td>N·s²</td>
-<td>推力系数 <code>T = kT·ω²</code></td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>推力系数 <code>T = kT·ω²</code>（T_max=13.73N@1150rad/s 反推，2212
+1400KV+9047 桨）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.kT</code></td>
 <td>推进</td>
 </tr>
 <tr>
 <td>PAR-002</td>
 <td><code>kQ</code></td>
-<td>1.6e-6</td>
+<td>3.1e-7</td>
 <td>N·m·s²</td>
-<td>反扭系数 <code>τ = kQ·ω²</code></td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>反扭系数 <code>τ = kQ·ω²</code>（kQ/kT≈0.030）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.kQ</code></td>
 <td>推进</td>
 </tr>
@@ -99,33 +101,33 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-004</td>
 <td><code>wMax</code></td>
-<td>900</td>
+<td>1150</td>
 <td>rad/s</td>
-<td>最大转速</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>最大转速（≈11000 RPM，1400KV×11.1V×0.75）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.wMax</code></td>
 <td>推进</td>
 </tr>
 <tr>
 <td>PAR-005</td>
 <td><code>a</code></td>
-<td>0.62</td>
+<td>0.315</td>
 <td>m</td>
-<td>前电机到质心距离</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>前电机到质心距离（总长 63cm，重心居中）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.a</code></td>
 <td>推进</td>
 </tr>
 <tr>
 <td>PAR-006</td>
 <td><code>b</code></td>
-<td>0.62</td>
+<td>0.315</td>
 <td>m</td>
-<td>尾电机到质心距离</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>尾电机到质心距离（总长 63cm，重心居中）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.b</code></td>
 <td>推进</td>
 </tr>
@@ -161,33 +163,33 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-008</td>
 <td><code>Ix</code></td>
-<td>0.09</td>
+<td>0.0021</td>
 <td>kg·m²</td>
-<td>机体滚转惯量</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>机体滚转惯量（绕纵轴=差速航向轴，组件级估算）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.Ix</code></td>
 <td>动力学</td>
 </tr>
 <tr>
 <td>PAR-009</td>
 <td><code>Iy</code></td>
-<td>0.34</td>
+<td>0.022</td>
 <td>kg·m²</td>
-<td>机体俯仰惯量</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>机体俯仰惯量（组件级估算）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.Iy</code></td>
 <td>动力学</td>
 </tr>
 <tr>
 <td>PAR-010</td>
 <td><code>Iz</code></td>
-<td>0.36</td>
+<td>0.022</td>
 <td>kg·m²</td>
-<td>机体偏航惯量</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>机体偏航惯量（组件级估算）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.Iz</code></td>
 <td>动力学</td>
 </tr>
@@ -223,11 +225,11 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-012</td>
 <td><code>m</code></td>
-<td>2.6</td>
+<td>0.7</td>
 <td>kg</td>
-<td>质量</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>质量（2212×2+9047×2+3S+碳管框架 ≈600g，实测待精化）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.m</code></td>
 <td>动力学</td>
 </tr>
@@ -256,9 +258,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-015</td>
 <td><code>Sw</code></td>
-<td>0.55</td>
+<td>0.1</td>
 <td>m²</td>
-<td>机翼面积</td>
+<td>等效机翼面积（VTOL 机身 63cm 长条等效，无独立机翼）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Sw</code></td>
@@ -267,9 +269,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-016</td>
 <td><code>cbar</code></td>
-<td>0.35</td>
+<td>0.15</td>
 <td>m</td>
-<td>平均气动弦长</td>
+<td>平均气动弦长（机身宽度等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.cbar</code></td>
@@ -278,9 +280,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-017</td>
 <td><code>bspan</code></td>
-<td>2.2</td>
+<td>0.63</td>
 <td>m</td>
-<td>展长</td>
+<td>展长（=机身长度，VTOL 构型无翼）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.bspan</code></td>
@@ -289,9 +291,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-018</td>
 <td><code>CLa</code></td>
-<td>4.6</td>
+<td>2.0</td>
 <td>1/rad</td>
-<td>升力线斜率</td>
+<td>升力线斜率（VTOL 机身等效，可配平下限量级）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.CLa</code></td>
@@ -300,9 +302,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-019</td>
 <td><code>CD0</code></td>
-<td>0.035</td>
+<td>0.03</td>
 <td>-</td>
-<td>零升阻力系数</td>
+<td>零升阻力系数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.CD0</code></td>
@@ -311,7 +313,7 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-020</td>
 <td><code>CDk</code></td>
-<td>0.045</td>
+<td>0.05</td>
 <td>-</td>
 <td>诱导阻力因子</td>
 <td>MODEL-DEFAULT</td>
@@ -322,9 +324,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-021</td>
 <td><code>CYb</code></td>
-<td>-0.35</td>
+<td>-0.2</td>
 <td>1/rad</td>
-<td>侧力-侧滑导数</td>
+<td>侧力-侧滑导数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.CYb</code></td>
@@ -333,9 +335,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-022</td>
 <td><code>Cm0</code></td>
-<td>0.011</td>
+<td>0.0</td>
 <td>-</td>
-<td>机翼配平弯度矩系数</td>
+<td>机翼配平弯度矩系数（无翼机身=0）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Cm0</code></td>
@@ -344,9 +346,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-023</td>
 <td><code>Cma</code></td>
-<td>-0.4</td>
+<td>-0.1</td>
 <td>1/rad</td>
-<td>俯仰静稳定导数</td>
+<td>俯仰静稳定导数（细长体弱稳定）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Cma</code></td>
@@ -355,9 +357,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-024</td>
 <td><code>Cmq</code></td>
-<td>-9.0</td>
+<td>-2.0</td>
 <td>-</td>
-<td>俯仰阻尼导数</td>
+<td>俯仰阻尼导数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Cmq</code></td>
@@ -366,9 +368,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-025</td>
 <td><code>Clb</code></td>
-<td>-0.09</td>
+<td>-0.05</td>
 <td>1/rad</td>
-<td>横滚静稳定导数</td>
+<td>横滚静稳定导数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Clb</code></td>
@@ -377,9 +379,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-026</td>
 <td><code>Clp</code></td>
-<td>-0.5</td>
+<td>-0.3</td>
 <td>-</td>
-<td>滚转阻尼导数</td>
+<td>滚转阻尼导数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Clp</code></td>
@@ -388,9 +390,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-027</td>
 <td><code>Cnb</code></td>
-<td>0.12</td>
+<td>0.03</td>
 <td>1/rad</td>
-<td>航向静稳定导数</td>
+<td>航向静稳定导数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Cnb</code></td>
@@ -399,9 +401,9 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-028</td>
 <td><code>Cnr</code></td>
-<td>-0.2</td>
+<td>-0.1</td>
 <td>-</td>
-<td>偏航阻尼导数</td>
+<td>偏航阻尼导数（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.Cnr</code></td>
@@ -684,45 +686,56 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <tr>
 <td>PAR-044</td>
 <td><code>aTrim</code></td>
-<td>0.02833797051080088</td>
+<td>0.07193947820548785</td>
 <td>rad</td>
-<td>24 m/s 纵向三方程配平迎角（1.624°）</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>28 m/s 四方程配平迎角（4.122°）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.aTrim</code></td>
 <td>状态 / 动力学</td>
 </tr>
 <tr>
 <td>PAR-045</td>
 <td><code>vTrim</code></td>
-<td>24</td>
+<td>28</td>
 <td>m/s</td>
-<td>配平速度</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>配平速度（新参数下力矩可配平窗口）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.vTrim</code></td>
 <td>状态 / 动力学</td>
 </tr>
 <tr>
 <td>PAR-046</td>
 <td><code>thrTrim</code></td>
-<td>0.4413360300722355</td>
+<td>0.19227159244727315</td>
 <td>-</td>
-<td>24 m/s 纵向三方程配平油门</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>28 m/s 四方程配平油门</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.thrTrim</code></td>
 <td>状态 / 推进</td>
 </tr>
 <tr>
 <td>PAR-052</td>
 <td><code>dtTrim</code></td>
-<td>-0.010577588935085803</td>
+<td>-0.3264219585497927</td>
 <td>rad</td>
-<td>24 m/s 纵向三方程尾摆配平偏置（-0.606°）</td>
-<td>MODEL-DEFAULT</td>
-<td>low</td>
+<td>28 m/s 四方程尾摆配平偏置（-18.702°）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
 <td><code>P.dtTrim</code></td>
+<td>控制 / 推进</td>
+</tr>
+<tr>
+<td>PAR-053</td>
+<td><code>dfTrim</code></td>
+<td>-0.03034756234765278</td>
+<td>rad</td>
+<td>28 m/s 四方程前摆配平偏置（-1.739°，配平反扭 z 分量）</td>
+<td>ESTIMATED</td>
+<td>medium</td>
+<td><code>P.dfTrim</code></td>
 <td>控制 / 推进</td>
 </tr>
 </tbody>
@@ -744,5 +757,5 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

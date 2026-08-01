@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';
 
-test('全部 52 个参数存在且为有限数', () => {
+test('全部 53 个参数存在且为有限数', () => {
   const keys = [
     'kT', 'kQ', 'Jp', 'wMax', 'a', 'b', 'tauM',
     'Ix', 'Iy', 'Iz', 'dMax',
@@ -14,9 +14,9 @@ test('全部 52 个参数存在且为有限数', () => {
     'rateKq', 'rateKr', 'rateKp',
     'maxStep', 'frameCap', 'vMin', 'groundZ',
     'rateQMax', 'ratePMax',
-    'aTrim', 'vTrim', 'thrTrim', 'dtTrim',
+    'aTrim', 'vTrim', 'thrTrim', 'dtTrim', 'dfTrim',
   ];
-  assert.equal(keys.length, 52);
+  assert.equal(keys.length, 53);
   for (const k of keys) {
     assert.ok(Number.isFinite(P[k]), `参数 ${k} 缺失或非有限`);
   }
@@ -46,7 +46,10 @@ test('参数对象冻结', () => {
 
 test('摆角限幅与配平角度换算正确', () => {
   assert.ok(Math.abs(P.dMax - 25 * Math.PI / 180) < 1e-15);
-  // 配平值按 g=9.79 重解（2026-07 长沙/广州当地值），见 aircraft-model.json
-  assert.ok(Math.abs(P.aTrim - 1.623646110235076 * Math.PI / 180) < 1e-15);
-  assert.ok(Math.abs(P.dtTrim - (-0.6060512034046954 * Math.PI / 180)) < 1e-15);
+  // 28 m/s 纵向三方程配平（VTOL 参数集 v0.2.0，scripts/trim_solve.py 重解）
+  // 来源：models/aircraft-model.json（2026-08-01 回写 TandemVec_FCS 实机构型）
+  assert.ok(Math.abs(P.aTrim - 0.07193947820548785) < 1e-15, 'aTrim（4.122°）');
+  assert.ok(Math.abs(P.dtTrim - (-0.3264219585497927)) < 1e-15, 'dtTrim（-18.702°）');
+  assert.ok(Math.abs(P.dfTrim - (-0.03034756234765278)) < 1e-15, 'dfTrim（-1.739°）');
+  assert.ok(Math.abs(P.thrTrim - 0.19227159244727315) < 1e-15, 'thrTrim');
 });

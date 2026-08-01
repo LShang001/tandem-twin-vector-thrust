@@ -14,7 +14,7 @@ test('SAS 关闭时指令直通', () => {
   sim.F.euler.x = 0.3; sim.F.euler.y = 0.3; sim.S.omega.z = 5; // 扰动不应生效
   applySas(sim, P, DT);
   assert.equal(sim.S.dtAct, P.dtTrim + 0.1);
-  assert.equal(sim.S.dfAct, -0.05);
+  assert.equal(sim.S.dfAct, P.dfTrim - 0.05); // 前摆指令含配平偏置 dfTrim
   assert.equal(sim.S.dwAct, 0.2);
 });
 
@@ -64,8 +64,8 @@ test('仅角速率模式（sasMode=2）：有阻尼反馈，无姿态比例/积�
   sim.S.omega.y = 0.5; sim.F.euler.y = 0.1;
   const prevIntTh = sim.S.intTh;
   applySas(sim, P, DT);
-  // 角速率阻尼生效
-  assert.ok(sim.S.dtAct > 0);
+  // 角速率阻尼生效（增量相对配平偏置为正）
+  assert.ok(sim.S.dtAct > P.dtTrim, `dtAct=${sim.S.dtAct} 应大于配平偏置 ${P.dtTrim}`);
   // 积分器不应累加
   assert.equal(sim.S.intTh, prevIntTh);
   // 反馈仅来自阻尼项（无姿态比例贡献）

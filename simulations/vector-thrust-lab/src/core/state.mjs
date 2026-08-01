@@ -59,7 +59,7 @@ export function resetFlightState(sim, P) {
 export function resetSimulationState(sim, P) {
   const { S, dyn, aero } = sim;
   S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
-  S.dtAct = P.dtTrim; S.dfAct = 0; S.dwAct = 0;
+  S.dtAct = P.dtTrim; S.dfAct = P.dfTrim; S.dwAct = 0;
   S.time = 0;
   S._prevSasMode = S.sasMode;
   const wTrim = P.thrTrim * P.wMax;

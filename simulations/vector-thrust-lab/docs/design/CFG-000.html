@@ -48,13 +48,13 @@ href="../modeling/MOD-002.html">MOD-002</a>：x
         FM[前电机&lt;br/&gt;拉力式 CW&lt;br/&gt;绕 z_b 摆动]
         CG((质心))
         RM[尾电机&lt;br/&gt;推进式 CCW&lt;br/&gt;绕 y_b 摆动]
-        FM -- &quot;a = 0.62 m&quot; --&gt; CG
-        CG -- &quot;b = 0.62 m&quot; --&gt; RM
+        FM -- &quot;a = 0.315 m&quot; --&gt; CG
+        CG -- &quot;b = 0.315 m&quot; --&gt; RM
     end</code></pre>
 <p>关键几何事实：</p>
 <ul>
-<li>前电机力臂 <code>a = 0.62 m</code>（质心到前电机中心），尾电机力臂
-<code>b = 0.62 m</code>；</li>
+<li>前电机力臂 <code>a = 0.315 m</code>（质心到前电机中心），尾电机力臂
+<code>b = 0.315 m</code>（总长 63cm 机身，重心居中）；</li>
 <li>零摆角时两电机推力线均通过质心，静态推力不产生俯仰/偏航力矩；</li>
 <li>渲染几何中电机位置约为
 <code>±1.78 m</code>，<strong>仅用于可视化</strong>，不进入动力学计算（参见
@@ -64,8 +64,9 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 </ul>
 <hr />
 <h2 id="2-总体参数表">2 总体参数表</h2>
-<p>下表参数全部摘录自 <code>models/aircraft-model.json</code>，来源均为
-<code>MODEL-DEFAULT</code>。</p>
+<p>下表参数全部摘录自
+<code>models/aircraft-model.json</code>（v0.2.0：推进/惯量/质量/配平为
+FCS 实机 ESTIMATED 值；气动/SAS 为 MODEL-DEFAULT 概念值）。</p>
 <h3 id="21-质量与惯量">2.1 质量与惯量</h3>
 <table>
 <thead>
@@ -80,31 +81,31 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 <tbody>
 <tr>
 <td>m</td>
-<td>2.6</td>
+<td>0.7</td>
 <td>kg</td>
-<td>整机质量</td>
-<td>MODEL-DEFAULT</td>
+<td>整机质量（≈600g，实测待精化）</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>Ix</td>
-<td>0.09</td>
+<td>0.0021</td>
 <td>kg·m²</td>
 <td>滚转惯量</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>Iy</td>
-<td>0.34</td>
+<td>0.022</td>
 <td>kg·m²</td>
 <td>俯仰惯量</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>Iz</td>
-<td>0.36</td>
+<td>0.022</td>
 <td>kg·m²</td>
 <td>偏航惯量</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 </tbody>
 </table>
@@ -122,17 +123,17 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 <tbody>
 <tr>
 <td>a</td>
-<td>0.62</td>
+<td>0.315</td>
 <td>m</td>
 <td>前电机到质心距离</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>b</td>
-<td>0.62</td>
+<td>0.315</td>
 <td>m</td>
 <td>尾电机到质心距离</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>dMax</td>
@@ -157,17 +158,17 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 <tbody>
 <tr>
 <td>kT</td>
-<td>2.2e-5</td>
+<td>1.04e-5</td>
 <td>N·s²</td>
-<td>推力系数，T = kT·ω²</td>
-<td>MODEL-DEFAULT</td>
+<td>推力系数，T = kT·ω²（T_max=13.73N 反推）</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>kQ</td>
-<td>1.6e-6</td>
+<td>3.1e-7</td>
 <td>N·m·s²</td>
 <td>反扭系数，τ = kQ·ω²</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>Jp</td>
@@ -178,10 +179,10 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 </tr>
 <tr>
 <td>wMax</td>
-<td>900</td>
+<td>1150</td>
 <td>rad/s</td>
-<td>最大转速</td>
-<td>MODEL-DEFAULT</td>
+<td>最大转速（≈11000 RPM）</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>tauM</td>
@@ -206,98 +207,98 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 <tbody>
 <tr>
 <td>Sw</td>
-<td>0.55</td>
+<td>0.1</td>
 <td>m²</td>
-<td>机翼参考面积</td>
+<td>等效机翼面积（VTOL 机身，无独立机翼）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>cbar</td>
-<td>0.35</td>
+<td>0.15</td>
 <td>m</td>
-<td>平均气动弦长</td>
+<td>平均气动弦长（机身宽度等效）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>bspan</td>
-<td>2.2</td>
+<td>0.63</td>
 <td>m</td>
-<td>翼展</td>
+<td>展长（=机身长度）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>CLa</td>
-<td>4.6</td>
+<td>2.0</td>
 <td>1/rad</td>
-<td>升力线斜率</td>
+<td>升力线斜率（机身等效）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>CD0</td>
-<td>0.035</td>
+<td>0.03</td>
 <td>-</td>
 <td>零升阻力系数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>CDk</td>
-<td>0.045</td>
+<td>0.05</td>
 <td>-</td>
 <td>诱导阻力因子</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>CYb</td>
-<td>-0.35</td>
+<td>-0.2</td>
 <td>1/rad</td>
 <td>侧力-侧滑导数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Cm0</td>
-<td>0.011</td>
+<td>0.0</td>
 <td>-</td>
-<td>机翼配平弯度矩系数</td>
+<td>机翼配平弯度矩系数（无翼=0）</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Cma</td>
-<td>-0.4</td>
+<td>-0.1</td>
 <td>1/rad</td>
 <td>俯仰静稳定导数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Cmq</td>
-<td>-9.0</td>
+<td>-2.0</td>
 <td>-</td>
 <td>俯仰阻尼导数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Clb</td>
-<td>-0.09</td>
+<td>-0.05</td>
 <td>1/rad</td>
 <td>横滚静稳定导数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Clp</td>
-<td>-0.5</td>
+<td>-0.3</td>
 <td>-</td>
 <td>滚转阻尼导数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Cnb</td>
-<td>0.12</td>
+<td>0.03</td>
 <td>1/rad</td>
 <td>航向静稳定导数</td>
 <td>MODEL-DEFAULT</td>
 </tr>
 <tr>
 <td>Cnr</td>
-<td>-0.2</td>
+<td>-0.1</td>
 <td>-</td>
 <td>偏航阻尼导数</td>
 <td>MODEL-DEFAULT</td>
@@ -360,31 +361,38 @@ href="../modeling/MOD-002.html">MOD-002</a>）。</li>
 </tr>
 <tr>
 <td>aTrim</td>
-<td>0.02833797051080088</td>
+<td>0.07193947820548785</td>
 <td>rad</td>
-<td>24 m/s 纵向配平迎角（约 1.624°）</td>
-<td>MODEL-DEFAULT</td>
+<td>28 m/s 四方程配平迎角（4.122°）</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>vTrim</td>
-<td>24</td>
+<td>28</td>
 <td>m/s</td>
 <td>配平速度</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>thrTrim</td>
-<td>0.4413360300722355</td>
+<td>0.19227159244727315</td>
 <td>-</td>
-<td>24 m/s 纵向配平油门</td>
-<td>MODEL-DEFAULT</td>
+<td>28 m/s 四方程配平油门</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>dtTrim</td>
-<td>-0.010577588935085803</td>
+<td>-0.3264219585497927</td>
 <td>rad</td>
-<td>24 m/s 纵向尾摆配平偏置（约 -0.606°）</td>
-<td>MODEL-DEFAULT</td>
+<td>28 m/s 四方程尾摆配平偏置（-18.702°）</td>
+<td>ESTIMATED</td>
+</tr>
+<tr>
+<td>dfTrim</td>
+<td>-0.03034756234765278</td>
+<td>rad</td>
+<td>28 m/s 四方程前摆配平偏置（-1.739°）</td>
+<td>ESTIMATED</td>
 </tr>
 </tbody>
 </table>
@@ -542,7 +550,7 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 </tr>
 <tr>
 <td>渲染几何</td>
-<td>三维模型电机位置约 ±1.78 m，与动力学力臂 a=b=0.62 m 不一致</td>
+<td>三维模型电机位置约 ±1.78 m，与动力学力臂 a=b=0.315 m 不一致</td>
 <td>仅视觉效果，不影响力/力矩计算</td>
 </tr>
 <tr>
@@ -562,8 +570,8 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 </tr>
 <tr>
 <td>姿态积分</td>
-<td>显式欧拉 + 四元数右乘，子步上限 4 ms</td>
-<td>仅满足概念演示需求，非高保真积分器</td>
+<td>四元数 RK4 联合积分 + 每阶段保范投影，子步上限 4 ms</td>
+<td>概念级演示精度足够；四阶显式格式，局部截断 O(h⁵)</td>
 </tr>
 </tbody>
 </table>
@@ -581,5 +589,5 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 配置管理流程，更新 <code>models/aircraft-model.json</code>，并重新运行
 <code>tools/sync-params.py</code> 与回归测试。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

@@ -150,7 +150,7 @@ THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重
 高度，数值增大代表离地更远；地面平面为
 <code>z = P.groundZ = 6.2 m</code>。</li>
 <li><strong>角度正方向</strong>：右手法则。绕 y_b
-正转使机头下俯（标准航空俯仰正方向），但本仿真欧拉角提取对 theta
+正转使机头上仰（标准航空俯仰正方向），但本仿真欧拉角提取对 theta
 取负号，显示值与实际几何角符号相反（见第 4 节）。</li>
 </ul>
 <hr />
@@ -262,11 +262,11 @@ THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重
 <code>math.mjs:quatMultiply</code>。</li>
 </ul>
 <h3 id="34-更新方式">3.4 更新方式</h3>
-<p>姿态积分采用显式欧拉、<strong>右乘</strong>机体系角速度：</p>
-<pre><code>Δq = ½ · q ⊗ (0, ω_x, ω_y, ω_z) · dt
-q_{n+1} = normalize(q_n + Δq)</code></pre>
-<p>代码实现：<code>dynamics.mjs:physicsStep</code> 第 60–66
-行。右乘是因为 <code>ω</code>
+<p>姿态积分采用四元数 RK4，<strong>右乘</strong>机体系角速度：</p>
+<pre><code>q̇ = ½ · q ⊗ (0, ω_x, ω_y, ω_z)
+q_{n+1} = normalize(四阶加权组合，每阶段均保范投影)</code></pre>
+<p>代码实现：<code>dynamics.mjs:physicsStep</code> 第 62–63 行（RK4
+联合积分 [v, ω, q]）。右乘是因为 <code>ω</code>
 定义在机体系；若误用左乘，大姿态角下响应方向将错乱（理论依据见 THY-001
 第 7 节）。</p>
 <h3 id="35-与浏览器层-threequaternion-的对应">3.5 与浏览器层
@@ -287,7 +287,7 @@ psi   = atan2(R_12, R_11)</code></pre>
 <p>上述公式对 theta 取了负号。<strong>这不是标准 3-2-1
 欧拉角</strong>。其工程后果为：</p>
 <ul>
-<li>绕 +y_b 轴正向旋转 <code>+a0</code>（机头下俯）时，代码读出的
+<li>绕 +y_b 轴正向旋转 <code>+a0</code>（机头上仰）时，代码读出的
 <code>theta = -a0</code>。</li>
 <li>标准航空约定下俯仰正方向应为 <code>+theta</code>；本代码中 HUD
 显示的俯仰角与实际几何角符号相反。</li>
@@ -364,14 +364,14 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-
 <tbody>
 <tr>
 <td>前电机力臂</td>
-<td><code>a = 0.62 m</code></td>
+<td><code>a = 0.315 m</code></td>
 <td>前机臂/电机位置 <code>x = +1.78</code></td>
 <td><code>models/aircraft-model.json</code> /
 <code>aircraft-view.mjs:182</code></td>
 </tr>
 <tr>
 <td>尾电机力臂</td>
-<td><code>b = 0.62 m</code></td>
+<td><code>b = 0.315 m</code></td>
 <td>尾机臂/电机位置 <code>x = -1.82</code></td>
 <td><code>models/aircraft-model.json</code> /
 <code>aircraft-view.mjs:189</code></td>
@@ -758,5 +758,5 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-
 theta 符号这一锁定行为的事实记录。</li>
 </ul>
 <p>两者结合，方可避免“文档公式与源码实现不一致”的歧义。</p>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

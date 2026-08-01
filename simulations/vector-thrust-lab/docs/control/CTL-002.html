@@ -61,30 +61,30 @@ M_z ≈  a·T_f·δ_f           （偏航，前摆角主控）</code></pre>
 <tbody>
 <tr>
 <td>kT</td>
-<td>2.2×10⁻⁵ N·s²</td>
-<td>MODEL-DEFAULT</td>
+<td>1.04×10⁻⁵ N·s²</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>kQ</td>
-<td>1.6×10⁻⁶ N·m·s²</td>
-<td>MODEL-DEFAULT</td>
+<td>3.1×10⁻⁷ N·m·s²</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>a, b</td>
-<td>0.62 m</td>
-<td>MODEL-DEFAULT</td>
+<td>0.315 m</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>wMax</td>
-<td>900 rad/s</td>
-<td>MODEL-DEFAULT</td>
+<td>1150 rad/s</td>
+<td>ESTIMATED</td>
 </tr>
 </tbody>
 </table>
-<p>在 thr=1（ω0=900 rad/s）时：</p>
-<pre><code>∂M_y/∂δ_t = −b·kT·ω0² = −0.62 × 2.2×10⁻⁵ × 900² ≈ −11.1 N·m/rad
-∂M_z/∂δ_f =  a·kT·ω0² =  0.62 × 2.2×10⁻⁵ × 900² ≈ +11.1 N·m/rad
-∂M_x/∂Δω = −2·kQ·ω0² = −2 × 1.6×10⁻⁶ × 900² ≈ −2.59 N·m</code></pre>
+<p>在 thr=1（ω0=1150 rad/s）时：</p>
+<pre><code>∂M_y/∂δ_t = −b·kT·ω0² = −0.315 × 1.04×10⁻⁵ × 1150² ≈ −4.33 N·m/rad
+∂M_z/∂δ_f =  a·kT·ω0² =  0.315 × 1.04×10⁻⁵ × 1150² ≈ +4.33 N·m/rad
+∂M_x/∂Δω = −2·kQ·ω0² = −2 × 3.1×10⁻⁷ × 1150² ≈ −0.82 N·m</code></pre>
 <p>在 thr=0.5（ω0=450 rad/s）时，上述效率均降至全油门的 1/4。</p>
 <h3 id="13-耦合项讨论">1.3 耦合项讨论</h3>
 <p>严格映射中的非对角项（交叉耦合）为：</p>
@@ -296,5 +296,5 @@ ID、严重度/发生度评级、缓解措施、验证方法、责任人；</li>
 <li>所有参数状态均为
 MODEL-DEFAULT，可控性包线分析为解析估算，需经台架/飞行验证更新。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-002-可控性与失效模式.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-002-可控性与失效模式.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

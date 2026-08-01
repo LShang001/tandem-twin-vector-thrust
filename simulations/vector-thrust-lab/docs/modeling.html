@@ -223,10 +223,15 @@ SAS
 <li>于是升力 L = q̄·S·C_Lα·α 与速度解耦、恒小于重力；</li>
 <li>短周期稳定性使机头跟随航迹下压，迎角无法重建 → 加速俯冲。</li>
 </ul>
-<p>这正是<strong>控制权限 vs 静稳定度</strong>的配平问题。当前通过
-<code>C_m0=0.011</code> 与小幅尾摆偏置共同闭合 24 m/s
-纵向三方程工作点；求解结果为
-<code>alphaTrim=1.62365°</code>、<code>thrTrim=0.441336</code>、<code>dtTrim=-0.60605°</code>。增稳系统只承担相对纵向参考点的扰动抑制，而不替代静态配平；横航向平衡尚未联立求解。</p>
+<p>这正是<strong>控制权限 vs
+静稳定度</strong>的配平问题。当前通过四方程（Fx/Fz/My/Mz）闭合 28 m/s
+巡航工作点（<code>scripts/trim_solve.py</code> 求解，v0.2.0 VTOL
+参数集）；求解结果为
+<code>alphaTrim=4.122°</code>、<code>thrTrim=0.192272</code>、<code>dtTrim=-18.702°</code>、<code>dfTrim=-1.739°</code>（前摆配平尾摆反扭的
+z
+分量）。增稳系统只承担相对配平参考点的扰动抑制，而不替代静态配平。注意：油门开环（thr
+固定）时配平点呈弱 phugoid 慢发散（10 s 内 V 衰减约 12%
+并轻微下滑），属模型固有行为，回归基线已锁定。</p>
 <h3 id="73-演示性数值检查4-ms-步长离线复算">7.3 演示性数值检查（4 ms
 步长，离线复算）</h3>
 <table>
@@ -275,7 +280,8 @@ s 内尚未完全回到纵向参考点，高度状态因机动改变</td>
 <tbody>
 <tr>
 <td>积分器</td>
-<td>显式欧拉，子步长 ≤ 4 ms（滚转通道气动阻尼时间常数约 12
+<td>四元数 RK4 联合积分 [v, ω, q]，子步长 ≤ 4
+ms，每阶段保范投影（滚转通道气动阻尼时间常数约 12
 ms，大步长会数值失稳）</td>
 </tr>
 <tr>
@@ -305,9 +311,9 @@ ms，大步长会数值失稳）</td>
 <tbody>
 <tr>
 <td>质量 m</td>
-<td>2.6 kg</td>
+<td>0.7 kg</td>
 <td>惯量 I_x / I_y / I_z</td>
-<td>0.09 / 0.34 / 0.36 kg·m²</td>
+<td>0.0021 / 0.022 / 0.022 kg·m²</td>
 </tr>
 <tr>
 <td>推力系数 k_T</td>
@@ -323,15 +329,15 @@ ms，大步长会数值失稳）</td>
 </tr>
 <tr>
 <td>最大转速</td>
-<td>900 rad/s</td>
+<td>1150 rad/s</td>
 <td>力臂 a = b</td>
-<td>0.62 m</td>
+<td>0.315 m</td>
 </tr>
 <tr>
-<td>机翼面积 S</td>
-<td>0.55 m²</td>
+<td>等效机翼面积 S</td>
+<td>0.1 m²</td>
 <td>弦长 c̄ / 展长 b̄</td>
-<td>0.35 / 2.2 m</td>
+<td>0.15 / 0.63 m</td>
 </tr>
 <tr>
 <td>C_Lα / C_D0 / k</td>
@@ -358,5 +364,5 @@ MODEL-DEFAULT（概念默认值，未经台架或飞行实测）；全量参数�
 <li>单电机/单舵面失效无余度；</li>
 <li>后续可扩展：控制分配在线优化、LQR/模型预测姿态控制、过渡走廊（悬停—巡航）包线仿真。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-001-六自由度仿真模型规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-001-六自由度仿真模型规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

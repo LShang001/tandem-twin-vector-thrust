@@ -134,17 +134,17 @@ Q = kQ · ω² + Jp · ω̇                （传给机体的反扭矩）</code>
 <tbody>
 <tr>
 <td>kT</td>
-<td>2.2×10⁻⁵</td>
+<td>1.04×10⁻⁵</td>
 <td>N·s²</td>
-<td>推力系数</td>
-<td>MODEL-DEFAULT</td>
+<td>推力系数（T_max=13.73N 反推）</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>kQ</td>
-<td>1.6×10⁻⁶</td>
+<td>3.1×10⁻⁷</td>
 <td>N·m·s²</td>
 <td>反扭系数</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 <tr>
 <td>Jp</td>
@@ -155,18 +155,18 @@ Q = kQ · ω² + Jp · ω̇                （传给机体的反扭矩）</code>
 </tr>
 <tr>
 <td>wMax</td>
-<td>900</td>
+<td>1150</td>
 <td>rad/s</td>
 <td>最大转速</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED</td>
 </tr>
 </tbody>
 </table>
-<p>稳态（<code>ω̇=0</code>）时 <code>Q = kQ·ω²</code>。以 wMax=900 rad/s
+<p>稳态（<code>ω̇=0</code>）时 <code>Q = kQ·ω²</code>。以 wMax=1150 rad/s
 为例：</p>
-<pre><code>T_max = kT · wMax² = 2.2×10⁻⁵ × 900² ≈ 17.8 N
-Q_max = kQ · wMax² = 1.6×10⁻⁶ × 900² ≈ 1.30 N·m</code></pre>
-<p>双发全油门总推力约 35.6 N，对应整机 2.6 kg 约 1.4g 推力裕度。</p>
+<pre><code>T_max = kT · wMax² = 1.04×10⁻⁵ × 1150² ≈ 13.75 N
+Q_max = kQ · wMax² = 3.1×10⁻⁷ × 1150² ≈ 0.41 N·m</code></pre>
+<p>双发全油门总推力约 27.5 N，对应整机 0.7 kg 约 4.0g 推力裕度。</p>
 <h3 id="23-反扭的物理来源">2.3 反扭的物理来源</h3>
 <p>见 <a href="../theory/02-propulsion-modeling.html">THY-002</a>
 §3：真正传给机体的是电机电磁扭矩
@@ -333,8 +333,8 @@ z_b 为 <code>−Q_t·sinδ_t</code>。</li>
 <p>当前实现<strong>无 wMax 饱和保护</strong>：差速大开度时目标转速可超过
 wMax。</p>
 <p>例：thr=1，Δω_cmd=0.55：</p>
-<pre><code>ω_f,target = 900 · √(1+0.55) ≈ 900 · 1.245 ≈ 1121 rad/s  &gt;  wMax
-ω_t,target = 900 · √(1−0.55) ≈ 900 · 0.671 ≈  604 rad/s</code></pre>
+<pre><code>ω_f,target = 1150 · √(1+0.55) ≈ 1150 · 1.245 ≈ 1431 rad/s  &gt;  wMax
+ω_t,target = 1150 · √(1−0.55) ≈ 1150 · 0.671 ≈  771 rad/s</code></pre>
 <p>该超调在当前代码中被如实计算，模型本身不对转速做物理上限截断。这意味着：</p>
 <ul>
 <li>大差速指令下电机模型输出高于额定最大转速；</li>
@@ -501,5 +501,5 @@ MODEL-DEFAULT；</li>
 <li>电机滞后时间常数为单一值，未区分加/减速或不同油门工作点；</li>
 <li>摆座为理想执行器，真实舵机动态需在后续版本中补充。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/06-推进与执行机构/PROP-001-推进与摆座模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/06-推进与执行机构/PROP-001-推进与摆座模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

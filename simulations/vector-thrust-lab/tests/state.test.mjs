@@ -19,7 +19,7 @@ test('完整复位恢复可重复的配平动态状态并保留模式开关', ()
   assert.equal(sim.S.time, 0);
   assert.equal(sim.S.thr, P.thrTrim);
   assert.deepEqual([sim.S.dt, sim.S.df, sim.S.dw], [0, 0, 0]);
-  assert.deepEqual([sim.S.dtAct, sim.S.dfAct, sim.S.dwAct], [P.dtTrim, 0, 0]);
+  assert.deepEqual([sim.S.dtAct, sim.S.dfAct, sim.S.dwAct], [P.dtTrim, P.dfTrim, 0]);
   assert.deepEqual([sim.S.wf, sim.S.wt, sim.prevWf, sim.prevWt], [wTrim, wTrim, wTrim, wTrim]);
   assert.equal(sim.dyn.Fx, 0);
   assert.equal(sim.aero.qbar, 0);

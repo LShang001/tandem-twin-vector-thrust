@@ -102,6 +102,18 @@
 </blockquote>
 <hr />
 <h2 id="1-配平问题定义">1. 配平问题定义</h2>
+<blockquote>
+<p>⚠️ <strong>v0.2.0
+参数集变更（2026-08-01）</strong>：本文档的纵向三方程配平推导基于旧参数集（m=2.6kg、kT=2.2e-5、wMax=900、a=b=0.62m、24
+m/s 巡航）。参数已回写为 TandemVec_FCS
+实机构型（m=0.7kg、kT=1.04e-5、wMax=1150、a=b=0.315m，气动按 VTOL
+机身等效），新配平为 <strong>28 m/s 四方程</strong>（Fx/Fz/My/Mz
+联立，含前摆 dfTrim 配平反扭 z
+分量），结果：<code>aTrim=0.07193947820548785</code>、<code>thrTrim=0.19227159244727315</code>、<code>dtTrim=-0.3264219585497927</code>、<code>dfTrim=-0.03034756234765278</code>，求解器
+<code>scripts/trim_solve.py</code>。下方推导的方程形式仍适用（增补 Mz
+方程与 df 变量即可），具体数值请以
+<code>models/aircraft-model.json</code> 与求解器输出为准。</p>
+</blockquote>
 <p>先考察<strong>纵向定直平飞参考状态</strong>（steady level flight
 reference）：</p>
 <pre><code>V  = 24 m/s        （配平速度）
@@ -396,5 +408,5 @@ VER-001。</p>
 <li>VER-001：验证与确认流程、回归基线通过准则。</li>
 <li>GOV-002：变更控制流程（若需修改 theta 符号约定）。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-07-31 22:35</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-003-配平与稳定性分析.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 03:40</footer></article></body>
 </html>

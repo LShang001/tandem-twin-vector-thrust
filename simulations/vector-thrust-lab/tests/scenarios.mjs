@@ -38,7 +38,7 @@ export function runScenario(durationS, control = () => {}, setup = () => {}) {
 }
 
 export const SCENARIOS = {
-  // A: 配平直飞 10 s
+  // A: 配平直飞 10 s（VTOL 参数集 v0.2.0：12 m/s 巡航配平）
   trim: () => runScenario(10),
   // B: 离地自由飞行俯仰阶跃，δt=8° 保持 4 s 后撤除，共 8 s
   pitchStep: () => runScenario(

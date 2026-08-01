@@ -16,7 +16,7 @@ export function applySas(sim, P, dt) {
   const { S, F } = sim;
   const theta = F.euler.y, phi = F.euler.x;
   const thetaError = theta + P.aTrim;
-  let dtC = P.dtTrim + S.dt, dfC = S.df, dwC = S.dw;
+  let dtC = P.dtTrim + S.dt, dfC = P.dfTrim + S.df, dwC = S.dw;
   if (S._prevSasMode !== S.sasMode) {
     // 模式切换时重置积分器，防止旧累积值在切换回 mode 1 时产生瞬态冲击
     S.intTh = 0; S.intPhi = 0;
@@ -28,7 +28,7 @@ export function applySas(sim, P, dt) {
     //           效率为正的通道（偏航）取 (ω_ref − ω)。
     const qRef = S.dt, rRef = S.df, pRef = S.dw;
     dtC = P.dtTrim + P.rateKq * (S.omega.y - qRef);               // 俯仰 ∂My/∂δ<0
-    dfC = clamp(P.rateKr * (rRef - S.omega.z), -P.dMax, P.dMax);   // 偏航 ∂Mz/∂δ>0
+    dfC = clamp(P.dfTrim + P.rateKr * (rRef - S.omega.z), -P.dMax, P.dMax);   // 偏航 ∂Mz/∂δ>0
     dwC = clamp(P.rateKp * (S.omega.x - pRef), -P.dwMax, P.dwMax); // 滚转 ∂Mx/∂Δω<0
   } else if (S.sasMode >= 1) {
     // ---- 角速率阻尼（三通道共用，模式 1/2 均生效） ----
