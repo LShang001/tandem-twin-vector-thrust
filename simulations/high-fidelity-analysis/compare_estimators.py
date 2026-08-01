@@ -64,7 +64,7 @@ def make(name, dt):
     if name=="差分": return EulerDiffEstimator(dt)
     if name=="S-G":  return SavitzkyGolayEstimator(dt, M=3, d=2)   # 更小窗口减延迟
     if name=="互补": return AdaptiveComplementaryEstimator(dt, P,
-                        lambda df,dt_,dw,w0: control_effectiveness(w0,df,dt_,dw,P)[0])
+                        lambda omega0,df,dt_,dw,P_: control_effectiveness(omega0,df,dt_,dw,P)[0])
     if name=="平滑": return FixedLagSmootherEstimator(dt, N=2, q_proc=200) # 更小N
 names = ["差分","S-G","互补","平滑"]
 

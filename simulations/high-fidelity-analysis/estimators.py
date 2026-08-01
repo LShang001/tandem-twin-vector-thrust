@@ -99,7 +99,9 @@ class AdaptiveComplementaryEstimator:
         """完整刚体转动模型预测角加速度（不含气动/扰动）"""
         P = self.P
         # control_effectiveness 签名: (omega0, df, dt, dw, P) → (B, T0, tau0)
-        B, _, _ = self.B_of_state(self.omega0, self.df, self.dt_, self.dw, P)
+        # 兼容外部传入的 B_of_state 返回单矩阵或三元组
+        B_ret = self.B_of_state(self.omega0, self.df, self.dt_, self.dw, P)
+        B = B_ret[0] if isinstance(B_ret, tuple) else B_ret
         u = np.array([self.dw, self.dt_, self.df])
         M_ctrl = B @ u
         p, q, r = omega
