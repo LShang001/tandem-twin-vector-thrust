@@ -248,10 +248,11 @@ void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
   // 判断姿态控制是否激活：需满足解锁、非手动TVC、油门有效三个条件
   bool attitude_control_active = inputs.is_unlocked && !inputs.is_manual_tvc && throttle_active;
 
-  // 姿态角PID积分项控制（Roll/Pitch 角度模式启用；Yaw 不设角度外环，始终不用积分）
+  // 姿态角PID积分项控制（Roll/Pitch/Yaw 角度模式启用；Yaw 外环保守禁用积分，
+  // 仅比例+微分——避免悬停倾斜误差的积分饱和，与磁航向源解耦）
   rollAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
   pitchAnglePID.setIntegralEnable(attitude_control_active && (inputs.attitude_mode == ATTITUDE_MODE));
-  yawAnglePID.setIntegralEnable(false);  // 偏航纯速率控制，角度外环永不启用
+  yawAnglePID.setIntegralEnable(false);  // Yaw 姿态外环启用但不用积分（2026-08-02 VTOL 构型）
 
   // 姿态角速度PID积分项控制（姿态控制激活时启用）
   rollRatePID.setIntegralEnable(attitude_control_active);
@@ -1050,14 +1051,15 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 }
 
 /**
- * @brief 步骤7: 偏航/航向控制器 — 纯速率模式
+ * @brief 步骤7: 偏航/倾斜控制器 — ATTITUDE_MODE 姿态外环 + RATE_MODE 摇杆速率
  *
- * 偏航（差速 Δω）始终使用角速率控制，不设角度外环：
- *   摇杆居中 → yawRateTarget=0 → 内环积分维持当前航向（与多旋翼逻辑相同）
- *   摇杆偏转 → 按比例旋转，松杆即停
+ * VTOL 悬停构型（x_b 竖直）下，机体 z_b 是水平轴：
+ *   - q_err.x（绕 x_b）= 世界航向误差 → 由 Roll 外环（差速）保持
+ *   - q_err.z（绕 z_b）= 水平倾斜误差 → 本控制器姿态外环（前摆）保持
+ *   （水平巡航构型下 q_err.z = 航向误差，但本项目按 VTOL 构型统一处理）
  *
- * 与 Roll/Pitch 的角度保持模式不同：差速力矩权限有限（悬停≈0.1N·m），
- * 航向角外环依赖磁罗盘，可靠性低；纯速率模式更稳健、参数更少。
+ * ATTITUDE_MODE：q_err.z 姿态外环（与 Roll/Pitch 对称），消除静态倾斜误差；
+ * RATE_MODE：摇杆 → 目标角速率（松杆即停，原行为保留）。
  */
 void execute_yaw_controller(const ControlInputs_t &inputs,
                              const Quaternion      &q_target,
@@ -1067,11 +1069,31 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 
   if (attitude_ctrl_active)
   {
-    // 偏航始终使用速率模式（无论 attitude_mode 开关状态）
-    // 摇杆 → 目标偏航速率，与多旋翼 STABILIZE 模式一致
-    yawRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f,
-                             -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
-    yawAnglePID.reset();  // 偏航不使用角度外环
+    if (inputs.attitude_mode == ATTITUDE_MODE)
+    {
+      // VTOL 悬停构型：q_err.z = 水平倾斜误差 → 姿态外环（前摆通道）
+      Quaternion q_current = {AHRS_Packet.Qw, AHRS_Packet.Qx,
+                              AHRS_Packet.Qy, AHRS_Packet.Qz};
+      Quaternion q_error = quaternionMultiply(quaternionConjugate(q_current), q_target);
+      float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
+      float q_vec_norm = sqrtf(q_error.x * q_error.x +
+                               q_error.y * q_error.y +
+                               q_error.z * q_error.z);
+      float precise_scale = (q_vec_norm > 0.25f)
+          ? 2.0f * atan2f(q_vec_norm, fabsf(q_error.w)) / q_vec_norm * RAD_TO_DEG
+          : 2.0f * RAD_TO_DEG;
+      float error_yaw = sign_qw * q_error.z * precise_scale;
+      yawRateTarget = yawAnglePID.computeWithExternalDerivative(
+          error_yaw, 0.0f, current_omega_dps_body_filtered.z);
+      yawRateTarget = constrain(yawRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
+    }
+    else
+    {
+      // RATE_MODE：摇杆 → 目标偏航速率（松杆即停）
+      yawRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f,
+                               -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+      yawAnglePID.reset();
+    }
 
     yawRateTarget = yawAngleOutputFilter.filter(yawRateTarget);
 

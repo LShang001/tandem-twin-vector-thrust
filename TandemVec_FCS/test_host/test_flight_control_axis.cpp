@@ -84,6 +84,7 @@ static std::array<float, 3> thrustWrench(float w0, float dw, float df, float dt_
 struct AttitudeLoop {
     PositionPID rollAnglePID{1.5f, 0.0f, 0.15f, -100.f, 100.f};
     PositionPID pitchAnglePID{1.5f, 0.0f, 0.15f, -100.f, 100.f};
+    PositionPID yawAnglePID{4.0f, 0.0f, 0.0f, -100.f, 100.f};  // VTOL 悬停：q_err.z 水平倾斜外环（与固件 yawAnglePID kp=4 一致）
     PositionPID rollRatePID{6.0f, 0.0f, 0.0f, -100.f, 100.f};
     PositionPID pitchRatePID{6.0f, 0.0f, 0.0f, -100.f, 100.f};
     PositionPID yawRatePID{6.0f, 0.0f, 0.0f, -100.f, 100.f};
@@ -101,21 +102,23 @@ struct AttitudeLoop {
         float scale = (q_vec_norm > 0.25f)
             ? 2.f * std::atan2(q_vec_norm, std::fabs(q_error.w)) / q_vec_norm * RAD2DEG
             : 2.f * RAD2DEG;
-        // FRD 轴序：roll←q_err.x, pitch←q_err.y（修复后）
+        // FRD 轴序：roll←q_err.x, pitch←q_err.y, yaw←q_err.z（VTOL 悬停：z=水平倾斜）
         float err_roll = sign_qw * q_error.x * scale;
         float err_pitch = sign_qw * q_error.y * scale;
+        float err_yaw = sign_qw * q_error.z * scale;
 
         float rollRateTarget = rollAnglePID.computeWithExternalDerivative(err_roll, 0.f, w_dps[0]);
         float pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(err_pitch, 0.f, w_dps[1]);
+        float yawRateTarget = yawAnglePID.computeWithExternalDerivative(err_yaw, 0.f, w_dps[2]);
         constexpr float MAX_TARGET_RATE = 90.f;  // deg/s
         rollRateTarget = std::clamp(rollRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
         pitchRateTarget = std::clamp(pitchRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
+        yawRateTarget = std::clamp(yawRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
 
         // —— 内环：角速率误差 → 角加速度（flight_control.cpp:1016-1017、1066-1067）——
         float alpha_roll = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, w_dps[0]);
         float alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, w_dps[1]);
-        // 偏航速率环（execute_yaw_controller：摇杆目标=0 → 纯阻尼）
-        float alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(0.f, w_dps[2]);
+        float alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(yawRateTarget, w_dps[2]);
         return {alpha_roll, alpha_pitch, alpha_yaw};
     }
 };
@@ -287,6 +290,55 @@ int main()
         Quaternion v = quaternionMultiply(quaternionMultiply(qb, {0,1,0,0}), {qb.w,-qb.x,-qb.y,-qb.z});
         check(approx(v.x, 0.f, 1e-3f) && approx(v.y, 0.f, 1e-3f) && approx(v.z, -1.f, 1e-3f),
               "T8 航向 0 时机头方向 = NED (0,0,-1)（机头朝天）");
+    }
+
+    // T9: VTOL 悬停构型闭环——目标姿态 = 机头朝天（q_hover），初始绕机体轴扰动 → 收敛
+    // （x_b 竖直：q_err.x = 世界航向误差（差速通道）、q_err.y/z = 倾斜误差（尾摆/前摆通道））
+    {
+        const float q = 0.70710678f;
+        Quaternion q_hover{q, 0.f, q, 0.f};   // 目标：机头朝天
+        auto run_hover = [&](const Quaternion &q0_dist, float T_total = 5.f) -> float {
+            RigidBody body;
+            body.q = quaternionMultiply(q_hover, q0_dist);  // 悬停基态 + 机体轴扰动
+            AttitudeLoop ctrl;
+            float w0 = P.wMax * 0.5f;
+            int N = static_cast<int>(T_total / 0.001f);
+            for (int i = 0; i < N; ++i) {
+                std::array<float, 3> w_dps{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+                auto alpha = ctrl.update(body.q, q_hover, w_dps);
+                float dw = 0, df = 0, dt_ = 0;
+                allocate(alpha, w0, dw, df, dt_);
+                body.step(thrustWrench(w0, dw, df, dt_), 0.001f);
+            }
+            Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
+            return std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+        };
+        const float a5 = 5.f * 3.14159f / 180.f;
+        check(run_hover(rotX(a5)) < 0.02f, "T9 悬停：绕 x（世界航向）5° 扰动收敛", "q_err<1.1°");
+        check(run_hover(rotY(a5)) < 0.02f, "T9 悬停：绕 y（俯仰）5° 扰动收敛", "q_err<1.1°");
+        check(run_hover(rotZ(a5)) < 0.02f, "T9 悬停：绕 z（滚转）5° 扰动收敛", "q_err<1.1°");
+        // 组合扰动（含世界航向误差）
+        Quaternion qc = quaternionMultiply(rotX(a5), quaternionMultiply(rotY(a5), rotZ(a5)));
+        check(run_hover(qc) < 0.02f, "T9 悬停：三轴组合扰动收敛", "q_err<1.1°");
+    }
+
+    // T10: VTOL 悬停油门——cos_tilt 修复后悬停所需总推力 = m·g（R13=1 无补偿）
+    // （修复前 R33≈0 → cos_tilt 钳位 0.5 → 总需求×2 = 2·m·g；
+    //   油门为转速比（P.thr = w/wMax）：悬停 √(mg/2kT·wMax²) ≈ 49.9%，
+    //   修复前 √(2mg/2kT·wMax²) ≈ 70.6%——从 50% 抬到 71%，机动裕量大幅丧失）
+    {
+        const float q = 0.70710678f;
+        Quaternion qh{q, 0.f, q, 0.f};   // 机头朝天
+        float cos_tilt_new = std::fabs(2.f * (qh.x*qh.z + qh.y*qh.w));  // R13
+        float cos_tilt_old = 1.f - 2.f * (qh.x*qh.x + qh.y*qh.y);       // R33
+        float m = P.m, g = P.g;
+        float T_req_new = m * g / std::max(cos_tilt_new, 0.5f);
+        float T_req_old = m * g / std::max(cos_tilt_old, 0.5f);
+        float T_max_total = 2.f * P.kT * P.wMax * P.wMax;   // 双发满推力（MAX_THRUST）
+        check(approx(T_req_new, m*g, 1e-3f), "T10 修复后悬停需求总推力 = m·g（无需补偿）");
+        check(approx(T_req_old, 2.f*m*g, 1e-3f), "T10 修复前悬停需求 = 2·m·g（油门翻倍）");
+        check(T_req_old < T_max_total && T_req_new < T_max_total,
+              "T10 双发满推力可覆盖悬停需求（修复前接近饱和、裕量丧失）");
     }
 
     std::printf("\n%s\n", g_fail ? "=== 存在失败项 ===" : "=== 全部通过 ===");
