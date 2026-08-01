@@ -1011,9 +1011,12 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       pitchRateTarget = constrain(pitchRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
     }
     else
-    { // RATE_MODE
-      // 摇杆直接生成目标角速率
-      rollRateTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE);
+    { // RATE_MODE —— VTOL 悬停构型，四轴式摇杆语义（2026-08-02）
+      // 悬停（机头朝天，x_b=竖直）：摇杆按四轴通道映射：
+      //   yaw 摇杆 → 绕竖直轴 = 绕 x_b（差速/航向）→ rollRateTarget（内环 ω.x）
+      //   pitch 摇杆 → 绕 y_b（尾摆）✓ 不变
+      //   roll 摇杆 → 绕 z_b（前摆/倾斜）→ execute_yaw_controller 里驱动 yawRateTarget（ω.z）
+      rollRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f, MAX_MANUAL_yawRATE, -MAX_MANUAL_yawRATE); // yaw 摇杆→差速（绕 x_b）：右推=航向正转=绕 x_b 负转（x_b=NED −z）
       pitchRateTarget = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_MANUAL_pitchRATE, -MAX_MANUAL_pitchRATE); // 推杆对应低头负角速度，拉杆对应抬头正角速度
       rollAnglePID.reset();
       pitchAnglePID.reset();
@@ -1089,10 +1092,12 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     }
     else
     {
-      // RATE_MODE：摇杆 → 目标偏航速率（松杆即停）
-      yawRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f,
-                               -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+      // RATE_MODE —— VTOL 悬停构型，四轴式摇杆语义（2026-08-02）：
+      // roll 摇杆 → 绕 z_b（悬停时水平轴，前摆通道）→ yawRateTarget（内环 ω.z）
+      yawRateTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f,
+                               -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE); // roll 摇杆→前摆（绕 z_b）
       yawAnglePID.reset();
+      yawRatePID.reset();  // 与 ATTITUDE_MODE 分支一致：RATE_MODE 重设内环
     }
 
     yawRateTarget = yawAngleOutputFilter.filter(yawRateTarget);

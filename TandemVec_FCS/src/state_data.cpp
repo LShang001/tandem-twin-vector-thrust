@@ -99,7 +99,7 @@ const float POS_CTRL_MAX_THRUST_COMP = sinf(POS_CTRL_MAX_TILT_ANGLE_RAD);
 
 const float MAX_MANUAL_rollRATE  = 50.0f;  // = MAX_TARGET_RATE
 const float MAX_MANUAL_pitchRATE = 50.0f;
-const float MAX_MANUAL_yawRATE   = 35.0f;  // 偏航保守：差速电机时延+低效能
+const float MAX_MANUAL_yawRATE   = 35.0f;  // VTOL 悬停：yaw 摇杆→差速（绕 x_b）保守速率；差速电机时延+低效能
 
 // --- 3.3 位置与速度控制限制 ---
 const float POS_CTRL_MAX_SPEED_CMD = 1.5f;

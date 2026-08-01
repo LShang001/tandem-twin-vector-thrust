@@ -341,6 +341,35 @@ int main()
               "T10 双发满推力可覆盖悬停需求（修复前接近饱和、裕量丧失）");
     }
 
+    // T11: RATE_MODE 四轴式摇杆映射链（VTOL 悬停构型，方向符号经数值推导）
+    // 悬停 x_b = NED (0,0,-1)（朝上）：绕 +z_NED 正转=北→东=地图顺时针=航向正；
+    // 绕 +x_b 正转 = 绕 −z_NED 正转 = 航向负 → yaw 右推需 Mx<0（绕 x_b 负转=航向正）
+    // 内环增益用固件实际值（rollRatePID kp=0.30、yawRatePID kp=0.15，state_data.cpp）
+    {
+        float w0 = P.wMax * 0.5f;
+        const float MAX_YAW_RATE = 35.f;   // MAX_MANUAL_yawRATE（差速保守幅值）
+        const float MAX_ROLL_RATE = 50.f;  // MAX_MANUAL_rollRATE
+        // yaw 摇杆右满偏 → rollRateTarget = -35°/s（mapFloat 反号后）→ alpha_roll = 0.30×(-35)
+        float rollRateTarget = -MAX_YAW_RATE;
+        float alpha_roll = 0.30f * (rollRateTarget - 0.0f);
+        float dw, df, dt_;
+        allocate({alpha_roll, 0.f, 0.f}, w0, dw, df, dt_);
+        auto M = thrustWrench(w0, dw, df, dt_);
+        check(M[0] < 0.f, "T11 yaw 摇杆右推 → Mx<0（绕 x_b 负转 = 世界航向正转，四轴 yaw 语义）");
+        // roll 摇杆右满偏 → yawRateTarget = +50°/s → alpha_yaw = 0.15×50 → Mz
+        float yawRateTarget = MAX_ROLL_RATE;
+        float alpha_yaw = 0.15f * (yawRateTarget - 0.0f);
+        allocate({0.f, 0.f, alpha_yaw}, w0, dw, df, dt_);
+        M = thrustWrench(w0, dw, df, dt_);
+        check(M[2] > 0.f, "T11 roll 摇杆右推 → Mz>0（绕 z_b 倾斜力矩）");
+        // pitch 摇杆推杆 → pitchRateTarget 负（低头）→ alpha_pitch = 0.30×(−50) → My<0
+        float pitchRateTarget = -MAX_ROLL_RATE;
+        float alpha_pitch = 0.30f * (pitchRateTarget - 0.0f);
+        allocate({0.f, alpha_pitch, 0.f}, w0, dw, df, dt_);
+        M = thrustWrench(w0, dw, df, dt_);
+        check(M[1] < 0.f, "T11 pitch 摇杆推杆 → My<0（低头力矩）");
+    }
+
     std::printf("\n%s\n", g_fail ? "=== 存在失败项 ===" : "=== 全部通过 ===");
     return g_fail ? 1 : 0;
 }
