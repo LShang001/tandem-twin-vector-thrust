@@ -16,6 +16,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MODEL_JSON = ROOT / "models" / "aircraft-model.json"
+SCHEMA_JSON = ROOT / "models" / "aircraft-model.schema.json"
 TARGET = ROOT / "simulations" / "vector-thrust-lab" / "src" / "core" / "parameters.mjs"
 
 HEADER = """// ============================================================
@@ -24,6 +25,48 @@ HEADER = """// ============================================================
 //  本文件由 tools/sync-params.py 生成 —— 请勿手工编辑
 // ============================================================
 """
+
+
+def validate_model(model: dict) -> None:
+    """对 aircraft-model.json 做轻量结构校验（约束对齐 aircraft-model.schema.json，
+    不引入外部 jsonschema 依赖）。违反约束即抛 ValueError。"""
+    if not isinstance(model, dict):
+        raise ValueError("模型根节点必须是 JSON 对象")
+    for key in ("id", "name", "version", "status", "sections"):
+        if key not in model:
+            raise ValueError(f"缺少顶层必填字段: {key}")
+
+    schema = json.loads(SCHEMA_JSON.read_text(encoding="utf-8"))
+    source_enum = schema["properties"]["status"]["enum"]
+    param_props = schema["properties"]["sections"]["items"]["properties"]["parameters"]["items"]["properties"]
+    p_source_enum = param_props["source"]["enum"]
+    p_conf_enum = param_props["confidence"]["enum"]
+
+    if model["status"] not in source_enum:
+        raise ValueError(f"status 非法: {model['status']!r}（允许: {source_enum}）")
+
+    seen: set[str] = set()
+    total = 0
+    for section in model["sections"]:
+        if not isinstance(section, dict) or "title" not in section or "parameters" not in section:
+            raise ValueError("section 必须包含 title 与 parameters")
+        for p in section["parameters"]:
+            total += 1
+            for key in ("name", "value", "unit", "description", "source", "confidence"):
+                if key not in p:
+                    raise ValueError(f"参数缺少必填字段 {key}: {p.get('name', '<unnamed>')}")
+            name = p["name"]
+            if not name.isidentifier():
+                raise ValueError(f"非法参数名: {name}")
+            if name in seen:
+                raise ValueError(f"参数名重复: {name}（schema additionalProperties 要求全局唯一）")
+            seen.add(name)
+            if not isinstance(p["value"], (int, float)) or isinstance(p["value"], bool):
+                raise ValueError(f"参数 {name} 的 value 必须是数字")
+            if p["source"] not in p_source_enum:
+                raise ValueError(f"参数 {name} 的 source 非法: {p['source']!r}（允许: {p_source_enum}）")
+            if p["confidence"] not in p_conf_enum:
+                raise ValueError(f"参数 {name} 的 confidence 非法: {p['confidence']!r}（允许: {p_conf_enum}）")
 
 
 def js_number(v: float) -> str:
@@ -48,8 +91,13 @@ def render(model: dict) -> str:
     return "".join(lines)
 
 
+def _reject_constant(name: str) -> None:
+    raise ValueError(f"非法 JSON 常量: {name}（NaN/Infinity 禁止进入参数源）")
+
+
 def main() -> int:
-    model = json.loads(MODEL_JSON.read_text(encoding="utf-8"))
+    model = json.loads(MODEL_JSON.read_text(encoding="utf-8"), parse_constant=_reject_constant)
+    validate_model(model)
     content = render(model)
     if "--check" in sys.argv:
         if not TARGET.exists():

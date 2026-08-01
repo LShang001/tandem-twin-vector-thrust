@@ -32,6 +32,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "GOV-001 项目范围与术语", "项目定位、范围边界、子系统清单、文档体系地图与术语表"),
         ("docs/00-项目治理/GOV-002-信息与配置管理.md", "governance/GOV-002.html",
          "GOV-002 信息与配置管理", "文档编号规则、参数治理工作流与状态分类、Git 配置管理、行为保持红线"),
+        ("docs/00-项目治理/GOV-003-多Agent协作规范.md", "governance/GOV-003.html",
+         "GOV-003 多 Agent 协作规范", "多 Agent 协作流程、上下文边界、串行改动约束与 Agent 注册表"),
     ]),
     ("方案设计", [
         ("docs/01-方案设计/CFG-000-概念构型基线C0.md", "design/CFG-000.html",
@@ -87,9 +89,11 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
     ]),
     ("注册表", [
         ("docs/registers/参数数据手册.md", "registers/parameter-handbook.html",
-         "参数数据手册", "46 项参数全量手册：值、单位、来源、置信度与代码字段"),
+         "参数数据手册", "53 项参数全量手册：值、单位、来源、置信度与代码字段"),
         ("docs/registers/假设与局限日志.md", "registers/assumptions-log.html",
-         "假设与局限日志", "ASM-001~014：模型假设、影响评估与解除条件"),
+         "假设与局限日志", "ASM-001~015：模型假设、影响评估与解除条件"),
+        ("docs/registers/行为保持红线清单.md", "registers/behavior-redlines.html",
+         "行为保持红线清单", "修改即需重采回归基线的行为红线项与变更审核流程"),
         ("docs/registers/模型-代码追溯矩阵.md", "registers/traceability-matrix.html",
          "模型-代码追溯矩阵", "方程 ↔ 代码位置 ↔ 单元测试 ↔ 回归基线场景"),
         ("docs/registers/需求注册表.md", "registers/requirements-register.html",

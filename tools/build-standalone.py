@@ -138,8 +138,10 @@ def build_bundle() -> str:
 def build_html(bundle: str) -> str:
     html = (SIM / "index.html").read_text(encoding="utf-8")
     css = (SIM / "css" / "style.css").read_text(encoding="utf-8")
-    html = html.replace('<link rel="stylesheet" href="css/style.css">',
-                        lambda_css := "<style>\n" + css + "\n</style>")
+    css_tag = '<link rel="stylesheet" href="./css/style.css">'
+    if css_tag not in html:
+        raise RuntimeError(f"index.html 中未找到待替换片段：{css_tag}")
+    html = html.replace(css_tag, "<style>\n" + css + "\n</style>")
     for tag in ('<script async src="./vendor/three-r170/es-module-shims.min.js"></script>\n',
                 '<script type="importmap-shim">\n'
                 '{"imports":{"three":"./vendor/three-r170/three.module.js","three/addons/":"./vendor/three-r170/addons/"}}\n'
