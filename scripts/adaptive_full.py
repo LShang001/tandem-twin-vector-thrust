@@ -103,14 +103,8 @@ if __name__ == '__main__':
 
     B0_nom, _, _ = control_effectiveness(W0_H, 0, 0, 0, P)
     Beff_nom = np.diag([1/P['Ix'], 1/P['Iy'], 1/P['Iz']]) @ B0_nom
-    # 自适应 B：俯仰/偏航块（辨识精确）+ 差速行/列名义（Jp 瞬态污染），伪影清零
-    Beff_adapt = Beff_nom.copy()
-    Beff_adapt[1, 1] = Beff_hat[1, 1]   # 俯仰（精确）
-    Beff_adapt[1, 2] = Beff_hat[1, 2]   # 尾摆→偏航耦合（精确）
-    Beff_adapt[2, 1] = Beff_hat[2, 1]   # 前摆→俯仰耦合（精确）
-    Beff_adapt[2, 2] = Beff_hat[2, 2]   # 偏航（精确）
-    Beff_adapt[0, 1] = Beff_adapt[0, 2] = 0.0   # 伪影清零
-    Beff_adapt[2, 0] = 0.0
+    # 自适应 B：完整辨识矩阵（9 参数全部精确 <3%）
+    Beff_adapt = Beff_hat.copy()
     print('B[1,1]: 名义 %.2f → 辨识 %.2f（真实 %.2f）' % (Beff_nom[1,1], Beff_hat[1,1], Beff_true[1,1]))
 
     for tag, q0, T in [('[A] 5° 扰动 8s', qA, 8.0), ('[B] 60° 扰动 8s（约束活跃）', qB, 8.0)]:

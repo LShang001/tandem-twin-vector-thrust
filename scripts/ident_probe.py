@@ -27,7 +27,7 @@ def pulse_segment(ch, amp):
     prop = Propulsion(P_true); prop.wf = prop.wt = W0_H
     prop.prev_wf = prop.prev_wt = W0_H
     w_prev = w.copy()
-    samples = []
+    samples = []          # (wdot_c, dw_eff) 配对记录
     pulse_u = np.zeros(3); pulse_u[ch] = amp   # 记录脉冲指令（循环结束后 u=0）
     if ch == 0:
         pulse_n, warm_n = int(1.5 / DT), int(1.0 / DT)   # 差速：长脉冲（转速稳定）
@@ -39,9 +39,10 @@ def pulse_segment(ch, amp):
             u[ch] = amp
         prop.update(W0_H, u[0], DT)
         Fx, Fy, Fz, Mx, My, Mz = prop.forces(u[2], u[1])
-        v, w, q = rk4_step(v, w, q, prop, P_true, Fx, Fy, Fz, Mx, My, Mz, DT)
+        v, w, q = rk4_step(v, w, q, prop, P_true, Fx, Fy, Fz, Mx, My, Mz, DT, use_aero=False)
         # 采样：脉冲后期（转速稳定/ω 单轴），减陀螺（理论为零，双保险）
-        if pulse_n - warm_n <= i - int(0.5/DT) < pulse_n:
+        k = i - int(0.5/DT)
+        if pulse_n - warm_n <= k < pulse_n and abs(prop.dwf) < 5.0 and abs(prop.dwt) < 5.0:
             wdot = (w - w_prev) / DT
             ww = w
             hx = P['Jp'] * (prop.wf - prop.wt)
@@ -49,10 +50,15 @@ def pulse_segment(ch, amp):
                           (P['Ix']-P['Iz'])*ww[2]*ww[0] - ww[2]*hx,
                           (P['Iy']-P['Ix'])*ww[0]*ww[1] + ww[1]*hx])
             wdot_c = wdot - g / np.array([P['Ix'], P['Iy'], P['Iz']])
-            samples.append(wdot_c)
+            # Jp 反扭瞬态显式修正（dwf 门控下残余已小，双保险；差速激励时 wf 爬升慢）
+            wdot_c[0] -= P['Jp'] * (prop.dwt - prop.dwf) / P['Ix']
+            dw_eff = (prop.wf / W0_H) ** 2 - 1.0     # 与本样本同拍的实测差速
+            samples.append((wdot_c.copy(), dw_eff))
         w_prev = w.copy()
-    dw_eff = (prop.wf / W0_H) ** 2 - 1.0
-    return [dw_eff, pulse_u[1], pulse_u[2]], np.mean(samples, axis=0)
+    # 平均（u 用采样窗口同步的 dw_eff，摆角用脉冲指令）
+    y_avg = np.mean([s[0] for s in samples], axis=0)
+    dw_avg = np.mean([s[1] for s in samples])
+    return [dw_avg, pulse_u[1], pulse_u[2]], y_avg
 
 # 6 个脉冲（3 通道 × ±）
 if __name__ == '__main__':
