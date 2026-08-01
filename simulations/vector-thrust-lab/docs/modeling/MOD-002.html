@@ -153,6 +153,27 @@ THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重
 正转使机头上仰（标准航空俯仰正方向），但本仿真欧拉角提取对 theta
 取负号，显示值与实际几何角符号相反（见第 4 节）。</li>
 </ul>
+<h3 id="12-机身纵轴与-vtol-悬停构型">1.2 机身纵轴与 VTOL 悬停构型</h3>
+<ul>
+<li><strong>机身纵轴 = x_b = 电机推力轴</strong>：前电机在 +x
+端（拉力式）、尾电机在 −x 端（推进式），零摆角时推力线沿 x_b（见
+{M_f}/{M_t} 定义；差速反扭 = 绕电机轴 = 绕 x_b → Mx）。</li>
+<li><strong>水平巡航</strong>：x_b 水平、z_b 向下（与 NED z
+平行）——升力由气动承担，推力沿 x_b 前向。</li>
+<li><strong>VTOL 悬停</strong>：机身竖立、<strong>机头朝天（x_b 竖直，与
+NED −z 对齐）</strong>——推力沿 x_b 竖直向上承担重力；此时机体 z_b
+为水平方向（FRD"下" = 悬停时的水平后方）。</li>
+<li><strong>执行器–力矩映射</strong>（机械布局决定，不随姿态变化）：前摆
+δ_f（绕 z_b）→ Mz（偏航通道）；尾摆 δ_t（绕 y_b）→ My（俯仰通道）；差速
+Δω → Mx（滚转通道）。</li>
+<li><strong>世界轴对应</strong>（同一执行器、不同姿态）：水平巡航时
+Mx=滚转、Mz=偏航；<strong>VTOL 悬停时 x_b 竖直 → Mx（差速）=
+世界航向</strong>、Mz/My 为水平倾斜通道。</li>
+<li>⚠️ <strong>NED 的 z（世界竖直）≠ 机体 z_b</strong>（悬停时 z_b
+水平）。凡"竖直方向"投影必须明确是 NED
+竖直（重力方向）还是机体系轴：推力垂直补偿 cos_tilt 用 R13（x_b 在 NED
+竖直投影）；激光测距斜距补偿用 R33（z_b 投影——激光沿 −z_b 安装）。</li>
+</ul>
 <hr />
 <h2 id="2-方向余弦矩阵dcm语义">2. 方向余弦矩阵（DCM）语义</h2>
 <h3 id="21-矩阵定义">2.1 矩阵定义</h3>
@@ -758,5 +779,5 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-
 theta 符号这一锁定行为的事实记录。</li>
 </ul>
 <p>两者结合，方可避免“文档公式与源码实现不一致”的歧义。</p>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 04:44</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-02 05:11</footer></article></body>
 </html>

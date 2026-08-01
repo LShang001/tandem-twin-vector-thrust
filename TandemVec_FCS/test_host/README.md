@@ -12,7 +12,7 @@
 | `test_altitude_reference.cpp` | `ins_altitude_reference.h` — 气压/GNSS/控制高度参考系转换 | 无 | 8 |
 | `test_gnss_epoch_timing.cpp` | `ins_gnss_epoch_timing.h` — epoch 消费门控、iTOW 到 MCU 时间映射与回绕 | 无 | 20 |
 | `test_vertical_kf.cpp` | `VerticalKF.h` — 三状态垂直卡尔曼滤波器 | Arduino.h 桩 | 16 |
-| `test_flight_control_axis.cpp` | `flight_control.cpp` 姿态环闭环仿真（轴序 FRD 修复验证）：roll←q_err.x/ω.x、pitch←q_err.y/ω.y、yaw←ω.z；刚体角动力学 + 推进力矩闭环收敛、执行器符号与 propulsion.mjs 交叉一致、推力垂直投影 R13（cos_tilt 修复依据） | 无 | 14 |
+| `test_flight_control_axis.cpp` | `flight_control.cpp` 姿态环闭环仿真（轴序 FRD 修复验证）：roll←q_err.x/ω.x、pitch←q_err.y/ω.y、yaw←ω.z；刚体角动力学 + 推进力矩闭环收敛、执行器符号与 propulsion.mjs 交叉一致、推力垂直投影 R13（cos_tilt 修复依据）、VTOL 悬停目标姿态合成（q_hover ⊗ Rx(-Heading)） | 无 | 17 |
 
 测试覆盖：正常输入输出、边界条件（阈值边界、floor/cap、迟滞帧数）、异常路径（NaN/Inf 防御、状态可恢复性）、状态机切换、以及 KF 预测/更新数学与数值稳定性。
 

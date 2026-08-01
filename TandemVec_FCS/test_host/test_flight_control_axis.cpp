@@ -264,6 +264,31 @@ int main()
         check(approx(R13_l, 0.f, 1e-3f), "T7 水平时 R13≈0（气动升力承担，钳位 0.5 合理）");
     }
 
+    // T8: VTOL 悬停构型目标姿态合成——q_target = q_tilt ⊗ q_hover ⊗ Rx(-Heading)
+    // （AUTO_POSITION/GUIDED 目标姿态修复：悬停基准下航向轴 = 机体 x = 差速轴）
+    {
+        const float q = 0.70710678f;
+        Quaternion q_hover{q, 0.f, q, 0.f};          // 绕 NED +y 转 90°（机头朝天）
+        // 场景 A：悬停 + 世界航向 90°，无倾斜（q_tilt 恒等）
+        // 期望 = q_W ⊗ q_hover = (0.5, -0.5, 0.5, 0.5)（绕 NED z 转 90° 的悬停姿态）
+        Quaternion q_yaw = {q, -q, 0.f, 0.f};        // Rx(-90°)
+        Quaternion q_target = quaternionMultiply(quaternionMultiply(q_hover, q_yaw), {1,0,0,0});
+        check(approx(q_target.w, 0.5f, 1e-3f) && approx(q_target.x, -0.5f, 1e-3f) &&
+              approx(q_target.y, 0.5f, 1e-3f) && approx(q_target.z, 0.5f, 1e-3f),
+              "T8 悬停+航向90° 目标姿态 = (0.5,-0.5,0.5,0.5)（绕 NED z 转 90°）");
+        // 对照：原公式（绕机体 z 航向）给出 (0.707,0,0,0.707)——悬停下错误
+        Quaternion q_old = quaternionMultiply({q,0,0,q}, {1,0,0,0});
+        check(!(approx(q_old.w, 0.5f, 1e-3f) && approx(q_old.x, -0.5f, 1e-3f)),
+              "T8 原公式（绕机体 z）≠ 期望——修复必要性确认");
+        // 场景 B：航向 0 → 目标 = q_hover（机头朝天），机头方向 = NED (0,0,-1)
+        Quaternion qb = quaternionMultiply(q_hover, {1,0,0,0});
+        Quaternion qe2 = quaternionMultiply({1,0,0,0}, {qb.w, -qb.x, -qb.y, -qb.z});
+        // x̂_b 在 NED = q ⊗ x̂ ⊗ q⁻¹ 的矢量部分
+        Quaternion v = quaternionMultiply(quaternionMultiply(qb, {0,1,0,0}), {qb.w,-qb.x,-qb.y,-qb.z});
+        check(approx(v.x, 0.f, 1e-3f) && approx(v.y, 0.f, 1e-3f) && approx(v.z, -1.f, 1e-3f),
+              "T8 航向 0 时机头方向 = NED (0,0,-1)（机头朝天）");
+    }
+
     std::printf("\n%s\n", g_fail ? "=== 存在失败项 ===" : "=== 全部通过 ===");
     return g_fail ? 1 : 0;
 }

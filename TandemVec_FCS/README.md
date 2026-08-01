@@ -223,7 +223,7 @@ node tools/dps_profile_runner.js --label 7p735_stop --interval-ms 7.735 --fifo-r
 
 | 坐标系 | 轴定义 | 用途 |
 |--------|--------|------|
-| 机体 FRD | X=前, Y=右, Z=下 | IMU 输出、光流速度、TVC 指令 |
+| 机体 FRD | X=前（机身纵轴=推力轴）, Y=右, Z=下 | IMU 输出、光流速度、TVC 指令；VTOL 悬停时机头朝天（x_b 竖直），差速=世界航向 |
 | 导航 NED | N=北, E=东, D=地 | EKF 状态、GNSS 量测、位置控制 |
 | 传感器 RUB | X=右, Y=上, Z=后 | ICM42688 原始安装方向 |
 

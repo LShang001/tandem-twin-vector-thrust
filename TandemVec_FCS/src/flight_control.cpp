@@ -871,9 +871,17 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
     // thrust_comp_E: 东向推力分量（控制滚转）
     if (constructTiltTargetQuaternion(thrust_comp_N, thrust_comp_E, q_tilt_target))
     {
-      // 计算当前航向的基础四元数（仅偏航，滚转和俯仰为0）
-      // 保持当前航向角，用于后续合成
-      Quaternion q_yaw_base = eulerToQuaternion(0.0f, 0.0f, AHRS_Packet.Heading);
+      // 计算当前航向的基础四元数（仅航向，滚转和俯仰为 0），用于后续合成
+      // —— VTOL 悬停构型（机头朝天，x_b=推力轴=竖直）——
+      // 悬停基态 q_hover = 绕 NED y 转 +90°（机头朝天，x̂_b ∥ NED -z）
+      // 世界航向 W（绕 NED z 正转）在悬停基准下 = 绕机体 x 转 -W
+      //   （x̂_b = -ẑ_NED → 绕 x̂ 转 -W ≡ 绕 NED z 转 +W ✓，差速轴即航向轴）
+      // ⚠️ 原实现 q_yaw_base = eulerToQuaternion(0,0,Heading)（绕机体 z）：
+      //    水平构型（z 竖直）下正确；VTOL 悬停时机体 z 水平，绕 z ≠ 航向
+      //    ——目标姿态偏差 90°（AUTO_POSITION/GUIDED 悬停不可用，2026-08-02 修复）
+      Quaternion q_hover_base = {0.70710678f, 0.0f, 0.70710678f, 0.0f};  // 绕 NED +y 转 90°
+      Quaternion q_yaw_hover = eulerToQuaternion(-AHRS_Packet.Heading, 0.0f, 0.0f);
+      Quaternion q_yaw_base = quaternionMultiply(q_hover_base, q_yaw_hover);
 
       // 将倾斜四元数与航向四元数相乘，得到完整的目标姿态
       q_target = quaternionMultiply(q_tilt_target, q_yaw_base);
@@ -969,7 +977,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       // 通过选择w分量为正的版本，确保旋转路径最短
       float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
 
-      // FRD 体轴映射（z_b 竖直，NED→FRD 标准轴序）：x=滚转、y=俯仰、z=偏航
+      // FRD 体轴映射（x_b=机身纵轴=推力轴，NED→FRD 标准轴序）：x=滚转、y=俯仰、z=偏航
       // Roll（滚转）取 q_err.x，Pitch 取 q_err.y，Yaw（航向）在 execute_yaw_controller 取 q_err.z
       // 与底层控制分配对齐：Mx←差速(roll)、My←尾摆(pitch)、Mz←前摆(yaw)
       // 使用完整四元数向量模长，确保多轴同时存在误差时 atan2 参数正确
@@ -1090,7 +1098,7 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  * 控制链底层（上层与飞行器模型完全解耦）：
  *   alpha × I → M_cmd → allocateMoments(BTRUE) → δ_f, δ_t, Δω
  *
- * 轴向（FRD，z_b 竖直）：x=滚转/差速，y=俯仰/尾摆，z=偏航/前摆
+ * 轴向（FRD，x_b=机身纵轴=推力轴）：x=滚转/差速，y=俯仰/尾摆，z=偏航/前摆
  * 手动TVC旁路：RC直接映射舵机，跳过控制分配。
  */
 void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs_t &outputs)
