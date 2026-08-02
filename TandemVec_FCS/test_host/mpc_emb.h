@@ -196,7 +196,7 @@ public:
         u_out[0] = z_[0]; u_out[1] = z_[1]; u_out[2] = z_[2];
     }
 
-    // FGM 快速梯度法：O(1/k²) 收敛，同等精度迭代数约为 PGD 的 1/4~1/8
+    // FGM 快速梯度法（标准 Nesterov/Beck-Teboulle）：O(1/k²) 收敛
     void updateFGM(const T q[4], const T q_des[4], const T omega[3],
                    T u_out[3], int n_iter = 50) {
         // 误差四元数 → ε（与 update 相同）
@@ -214,29 +214,28 @@ public:
             f[i] = s;
         }
         // warm start
-        for (int i = 0; i < NZ - NU; ++i) { z_[i] = z_[i + NU]; y_[i] = z_[i]; }
-        for (int i = NZ - NU; i < NZ; ++i) { z_[i] = 0; y_[i] = 0; }
-        T beta = 0;
+        for (int i = 0; i < NZ - NU; ++i) z_[i] = z_[i + NU];
+        for (int i = NZ - NU; i < NZ; ++i) z_[i] = 0;
+        T t = 1;
+        T zn[NZ];
         for (int it = 0; it < n_iter; ++it) {
-            // 梯度在 y
+            // 梯度步：zn = proj(z − α∇f(z))
             for (int i = 0; i < NZ; ++i) {
                 T s = 0;
-                for (int j = 0; j < NZ; ++j) s += H_[i][j] * y_[j];
+                for (int j = 0; j < NZ; ++j) s += H_[i][j] * z_[j];
                 T g = s + f[i];
-                T zn = y_[i] - alpha_ * g;
-                y_[i] = zn < lo_[i] ? lo_[i] : (zn > hi_[i] ? hi_[i] : zn);
+                T v = z_[i] - alpha_ * g;
+                zn[i] = v < lo_[i] ? lo_[i] : (v > hi_[i] ? hi_[i] : v);
             }
-            // Nesterov 加速组合
-            T bn = (T)(it + 1) / (T)(it + 4);
+            // Nesterov 动量：z ← zn + β(zn − z_old)
+            T tn = 0.5 * (1 + std::sqrt(1 + 4 * t * t));
+            T beta = (t - 1) / tn;
             for (int i = 0; i < NZ; ++i) {
-                T zn = y_[i] + bn * (y_[i] - z_[i]);
-                z_[i] = zn < lo_[i] ? lo_[i] : (zn > hi_[i] ? hi_[i] : zn);
+                T v = zn[i] + beta * (zn[i] - z_[i]);
+                z_[i] = v < lo_[i] ? lo_[i] : (v > hi_[i] ? hi_[i] : v);
             }
-            beta = bn;
+            t = tn;
         }
-        (void)beta;
-        // 交换（y 为最终迭代点）
-        for (int i = 0; i < NZ; ++i) { T t = z_[i]; z_[i] = y_[i]; y_[i] = t; }
         u_out[0] = z_[0]; u_out[1] = z_[1]; u_out[2] = z_[2];
     }
 
