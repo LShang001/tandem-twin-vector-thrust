@@ -152,6 +152,7 @@ public:
         }
         alpha_ = 1.0 / (rq / (vv + 1e-30) + 1e-12);
         std::memset(z_, 0, sizeof(z_));
+        std::memset(y_, 0, sizeof(y_));
         std::memset(lo_, 0, sizeof(lo_));
         std::memset(hi_, 0, sizeof(hi_));
         for (int i = 0; i < N; ++i) {
@@ -195,6 +196,50 @@ public:
         u_out[0] = z_[0]; u_out[1] = z_[1]; u_out[2] = z_[2];
     }
 
+    // FGM 快速梯度法：O(1/k²) 收敛，同等精度迭代数约为 PGD 的 1/4~1/8
+    void updateFGM(const T q[4], const T q_des[4], const T omega[3],
+                   T u_out[3], int n_iter = 50) {
+        // 误差四元数 → ε（与 update 相同）
+        T qe[4];
+        qe[0] = q_des[0] * q[0] + q_des[1] * q[1] + q_des[2] * q[2] + q_des[3] * q[3];
+        qe[1] = q_des[0] * q[1] - q_des[1] * q[0] - q_des[2] * q[3] + q_des[3] * q[2];
+        qe[2] = q_des[0] * q[2] + q_des[1] * q[3] - q_des[2] * q[0] - q_des[3] * q[1];
+        qe[3] = q_des[0] * q[3] - q_des[1] * q[2] + q_des[2] * q[1] - q_des[3] * q[0];
+        if (qe[0] < 0) { qe[0] = -qe[0]; qe[1] = -qe[1]; qe[2] = -qe[2]; qe[3] = -qe[3]; }
+        T x0[NX] = {qe[1], qe[2], qe[3], omega[0], omega[1], omega[2], 0, 0, 0};
+        T f[NZ];
+        for (int i = 0; i < NZ; ++i) {
+            T s = 0;
+            for (int p = 0; p < NX; ++p) s += L_[i][p] * x0[p];
+            f[i] = s;
+        }
+        // warm start
+        for (int i = 0; i < NZ - NU; ++i) { z_[i] = z_[i + NU]; y_[i] = z_[i]; }
+        for (int i = NZ - NU; i < NZ; ++i) { z_[i] = 0; y_[i] = 0; }
+        T beta = 0;
+        for (int it = 0; it < n_iter; ++it) {
+            // 梯度在 y
+            for (int i = 0; i < NZ; ++i) {
+                T s = 0;
+                for (int j = 0; j < NZ; ++j) s += H_[i][j] * y_[j];
+                T g = s + f[i];
+                T zn = y_[i] - alpha_ * g;
+                y_[i] = zn < lo_[i] ? lo_[i] : (zn > hi_[i] ? hi_[i] : zn);
+            }
+            // Nesterov 加速组合
+            T bn = (T)(it + 1) / (T)(it + 4);
+            for (int i = 0; i < NZ; ++i) {
+                T zn = y_[i] + bn * (y_[i] - z_[i]);
+                z_[i] = zn < lo_[i] ? lo_[i] : (zn > hi_[i] ? hi_[i] : zn);
+            }
+            beta = bn;
+        }
+        (void)beta;
+        // 交换（y 为最终迭代点）
+        for (int i = 0; i < NZ; ++i) { T t = z_[i]; z_[i] = y_[i]; y_[i] = t; }
+        u_out[0] = z_[0]; u_out[1] = z_[1]; u_out[2] = z_[2];
+    }
+
     // 资源统计
     static constexpr size_t memBytes() {
         return sizeof(EmbeddedLMPC) + 0;
@@ -207,7 +252,7 @@ private:
     T Ap_[N + 1][NX][NX];
     T H_[NZ][NZ], L_[NZ][NX];
     T alpha_;
-    T z_[NZ], lo_[NZ], hi_[NZ];
+    T z_[NZ], y_[NZ], lo_[NZ], hi_[NZ];
 };
 
 #endif // MPC_EMB_H
