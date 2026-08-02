@@ -108,7 +108,7 @@ INDI控制律（式\ref{eq:indi_law}）中唯一需要建模的是控制效能�
 \label{tab:B_comparison}
 \setlength{\tabcolsep}{4pt}
 \small
-\begin{tabularx}{\textwidth}{c c c c}
+\begin{tabularx}{\textwidth}{c c c X}
 \toprule
 \textbf{矩阵元素} & $\mathbf{B}_{\mathrm{full}}(\omega_0)$ & $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$ & \textbf{相对误差} \\
 \midrule
@@ -194,7 +194,7 @@ $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$是$3\times3$实矩阵，其逆可通�
 \subsection{外环符号约定与带宽整定}
 \label{sec:indi_outer_sign}
 
-INDI外环将姿态误差映射为参考角速率，其符号必须与项目锁定的欧拉角约定（MOD-002：$\dot\theta=-q$、$\dot\phi=-p$）自洽。在该约定下，正姿态误差需要\textbf{正}的角速率指令才能收敛（$q_{\text{ref}}=+k_\theta\Delta\theta$）——若按常规航空约定$\dot\theta=+q$错误地取$q_{\text{ref}}=-k_\theta\Delta\theta$，级联回路构成正反馈，扰动响应发散。这一点在Python独立复现仿真（\texttt{simulations/high-fidelity-analysis/simulate.py}）的交叉验证中被实证：符号错误的级联INDI在$5^\circ$/s俯仰脉冲后姿态发散至$-40^\circ$以上，修正后扰动有界收敛。
+INDI外环将姿态误差映射为参考角速率，其符号必须与项目锁定的欧拉角约定（MOD-002：$\dot\theta=-q$、$\dot\phi=-p$）自洽。在该约定下，正姿态误差需要\textbf{正}的角速率指令才能收敛（$q_{\text{ref}}=+k_\theta\Delta\theta$）——若按常规航空约定$\dot\theta=+q$错误地取$q_{\text{ref}}=-k_\theta\Delta\theta$，级联回路构成正反馈，扰动响应发散。这一点在Python独立复现仿真（\texttt{simulations/}\allowbreak\texttt{high-fidelity-analysis/}\allowbreak\texttt{simulate.py}）的交叉验证中被实证：符号错误的级联INDI在$5^\circ$/s俯仰脉冲后姿态发散至$-40^\circ$以上，修正后扰动有界收敛。
 
 内环带宽$K^{\text{rate}}$决定INDI对角速率误差的响应速度：$K^{\text{rate}}=0.8$时扰动恢复明显慢于直接映射的SAS（角速率误差积分面积大一个数量级）；提升至$K^{\text{rate}}=3.0$并将外环增益放大3倍后，恢复时间缩短约60\%，同时零扰动配平保持性能不受影响（12\,s速度漂移$<0.001\%$）。带宽提升的代价是对$\dot{\boldsymbol{\omega}}$估计噪声更敏感——这再次凸显§\ref{sec:accel_estimation}角加速度滤波方案对INDI工程化的决定性作用。
 
@@ -262,10 +262,11 @@ INDI的特有失效模式是\textbf{同步效应}（synchronization effect）：
 \end{itemize}
 
 互补滤波的频域形式为
-\begin{equation}
-    \hat{\dot{\boldsymbol{\omega}}}(s) = F_{\mathrm{lp}}(s) \cdot \dot{\boldsymbol{\omega}}_{\text{model}}(s) + F_{\mathrm{hp}}(s) \cdot \dot{\boldsymbol{\omega}}_{\text{diff}}(s)
+\begin{multline}
+    \hat{\dot{\boldsymbol{\omega}}}(s) = F_{\mathrm{lp}}(s) \cdot \dot{\boldsymbol{\omega}}_{\text{model}}(s) \\
+    + F_{\mathrm{hp}}(s) \cdot \dot{\boldsymbol{\omega}}_{\text{diff}}(s)
     \label{eq:comp_filter_freq}
-\end{equation}
+\end{multline}
 其中$F_{\mathrm{lp}}(s) = \omega_c/(s+\omega_c)$为一阶低通滤波器，$F_{\mathrm{hp}}(s) = s/(s+\omega_c)$为互补高通滤波器，满足$F_{\mathrm{lp}}(s) + F_{\mathrm{hp}}(s) = 1$（无偏条件）。截止频率$\omega_c$是唯一的可调参数：增大$\omega_c$→更多依赖数值微分（响应快但噪声大），减小$\omega_c$→更多依赖模型预测（噪声小但可能引入模型偏差）。
 
 \textbf{自适应互补滤波}（Jiang et al., 2025）\cite{jiang2025adaptive}在上述框架上做了关键改进：将固定的$\omega_c$替换为根据瞬时角速率误差自适应调节的函数

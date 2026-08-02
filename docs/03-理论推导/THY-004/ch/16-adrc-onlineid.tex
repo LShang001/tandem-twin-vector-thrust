@@ -256,8 +256,10 @@ $\alpha_{\max}$按$\hat{b}$正比缩放，确保力矩限幅与真实惯量匹�
           但\textbf{未写回PID增益}，不影响任何控制输出。
           安全策略：第一步只观测不闭环，待多架次数据确认估计稳定后，
           再人工决定是否闭环接入（第二步）；
-    \item \textbf{include/算法库}（\texttt{TandemVec\_CascadeCtrl.h}、
-          \texttt{TandemVec\_AttitudeCtrl.h}、\texttt{TandemVec\_RateCtrl.h}）：
+    \item \textbf{include/算法库}（平台无关、无 Arduino 依赖）：\\[2pt]
+          \texttt{TandemVec\_CascadeCtrl.h}、\allowbreak
+          \texttt{TandemVec\_AttitudeCtrl.h}、\allowbreak
+          \texttt{TandemVec\_RateCtrl.h}
           平台无关（无Arduino依赖），用于\texttt{test\_host/}宿主机回归测试
           与算法验证，不是当前生产控制链的组成部分。
           生产链的姿态/速率环由\texttt{IncrementalPID}实例实现，

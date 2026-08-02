@@ -108,14 +108,22 @@ $\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理
     \end{bmatrix}
     \label{eq:quat_sas_cmd}
 \end{equation}
-其中$\boldsymbol{\varepsilon}_{\text{err}} = [\varepsilon_{\text{err},1}, \varepsilon_{\text{err},2}, \varepsilon_{\text{err},3}]^T$为误差四元数的矢量部分。在手工整定实现（\texttt{controllers.py}的\texttt{QuatSASController}）中，该映射采用$\mathbf{B}$的主通道对角近似（$\Delta\omega=\tau_x/(-2\tau_0)$、$\delta_t=\tau_y/(-bT_0)$、$\delta_f=\tau_z/(aT_0)$），与本章正文给出的完整$\mathbf{B}_{\text{true}}^{-1}$不同——对角近似丢弃反扭矩交叉项换取零求逆开销，第\ref{sec:lqr}节的LQR则完整利用交叉项，这正是表\ref{tab:ctrl_compare}中三者性能梯度的来源之一。
+其中 $\boldsymbol{\varepsilon}_{\text{err}} = [\varepsilon_x,\ \varepsilon_y,\ \varepsilon_z]^T$
+为误差四元数的矢量部分（下标对应体轴分量）。在手工整定实现
+（\texttt{controllers.py} 的 \texttt{QuatSASController}）中，该映射采用
+$\mathbf{B}$ 的主通道对角近似（$\Delta\omega=\tau_x/(-2\tau_0)$、
+$\delta_t=\tau_y/(-bT_0)$、$\delta_f=\tau_z/(aT_0)$），与本章正文给出的完整
+$\mathbf{B}_{\text{true}}^{-1}$ 不同——对角近似丢弃反扭矩交叉项换取零求逆开销，
+第\ref{sec:lqr}节的 LQR 则完整利用交叉项，这正是表\ref{tab:ctrl_compare}中
+三者性能梯度的来源之一。
 
 \textbf{与欧拉角SAS的等价性}：在小姿态误差下，$\varepsilon_{\text{err},1} \approx \Delta\phi/2$、$\varepsilon_{\text{err},2} \approx \Delta\theta/2$、$\varepsilon_{\text{err},3} \approx \Delta\psi/2$，代入式(\ref{eq:quat_sas_cmd})并调整增益$k_{q,\cdot} = 2k_{\text{sas},\cdot}$即可恢复第\ref{sec:control}节的欧拉角SAS形式。因此四元数SAS是欧拉角SAS的严格推广——在小信号范围内行为一致，在大姿态机动中自动避免了欧拉角域的所有奇异性问题。
 
 \subsection{大角度机动的工程化改进}
 \label{sec:quat_sas_engineering}
 
-基准律式(\ref{eq:quat_pd})在定点悬停附近表现良好，但tail-sitter垂直起飞等$90^\circ$级机动暴露了三个工程问题，相应的改进均已在仿真实现（\texttt{simulations/high-fidelity-analysis/controllers.py}）中验证：
+基准律式(\ref{eq:quat_pd})在定点悬停附近表现良好，但tail-sitter垂直起飞等$90^\circ$级机动暴露了三个工程问题，
+相应的改进均已在仿真实现（\texttt{simulations/}\allowbreak\texttt{high-fidelity-analysis/}\allowbreak\texttt{controllers.py}）中验证：
 
 \textbf{(1) 阻尼增益调度}。基准律的角速率阻尼按悬停小信号整定（俯仰通道阻尼比$\zeta\approx0.22$），大角度机动中振荡严重。引入随误差幅值调度的阻尼因子
 \begin{equation}

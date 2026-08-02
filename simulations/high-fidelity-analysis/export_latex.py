@@ -12,7 +12,7 @@ def modes_table(results, trim, P):
                  f"{trim['V']:.0f}" r"\,\text{m/s}$)""}")
     lines.append(r"\label{tab:modes}")
     lines.append(r"\small")
-    lines.append(r"\begin{tabularx}{\textwidth}{l c c c c}")
+    lines.append(r"\begin{tabularx}{\textwidth}{l c c c X}")
     lines.append(r"\toprule")
     lines.append(r"\textbf{模态} & \textbf{特征值} & \textbf{频率 (Hz)} & "
                  r"\textbf{阻尼比} & \textbf{时间常数/周期} \\")
