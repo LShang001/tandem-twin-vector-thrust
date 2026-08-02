@@ -9,7 +9,9 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN_DIR="$ROOT/test_host/bin"
+# 输出目录可用环境变量覆盖：MSYS/bash 下 g++ 无法写中文路径（Invalid argument），
+# PowerShell 环境请设 BIN_DIR 到英文路径（如 $env:TEMP\tv_fcs_bin）。
+BIN_DIR="${BIN_DIR:-$ROOT/test_host/bin}"
 mkdir -p "$BIN_DIR"
 
 INCLUDES="-I$ROOT/include -I$ROOT/lib/eigen/src"
@@ -71,6 +73,28 @@ run_one "$ROOT/test_host/test_advanced_theory.cpp"      at  "$STUB_INCLUDE"
 run_one "$ROOT/test_host/test_robustness.cpp"           rb  "$STUB_INCLUDE"
 run_one "$ROOT/test_host/test_qual_analysis.cpp"        qa  "$STUB_INCLUDE"
 run_one "$ROOT/test_host/test_comprehensive_sim.cpp"    cs  "$STUB_INCLUDE"
+
+# 15 状态 EKF 宿主回归（ekf_15_state.h 为 header-only，但依赖 bfs::convang 系列
+# 与 src/ 下的快速协方差块；需 -DEKF_HOST_REGRESSION 打开测试接口、-O2 控制
+# 模板展开段数）：
+echo "---- 编译 ekf15 ----"
+if ! $CXX -std=$STD -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES \
+     $INCLUDES -I$ROOT/src -I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src \
+     "$ROOT/test_host/test_ekf_15state.cpp" \
+     "$ROOT/lib/units/src/convang.cpp" \
+     "$ROOT/lib/units/src/convangacc.cpp" \
+     "$ROOT/lib/units/src/convangvel.cpp" \
+     -o "$BIN_DIR/ekf15$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] ekf15"
+  fail=1
+else
+  echo "---- 运行 ekf15 ----"
+  if ! "$BIN_DIR/ekf15$EXE_SUFFIX"; then
+    echo "[RUN FAIL] ekf15"
+    fail=1
+  fi
+  echo
+fi
 
 if [ "$fail" -eq 0 ]; then
   echo "=== 全部宿主机回归测试通过 ==="

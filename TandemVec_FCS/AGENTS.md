@@ -196,6 +196,23 @@ pio run
 pio test -e test
 ```
 
+宿主机 g++ 平台无关回归（`test_host/run_all.sh`，16 套件含 EKF 15 状态）：
+
+```powershell
+$env:BIN_DIR = "$env:TEMP\tv_fcs_bin"   # 必须覆盖：MSYS bash 的路径转换层对中文路径不可靠
+bash test_host/run_all.sh               # （g++ 链接阶段写中文路径报 Invalid argument）
+```
+
+- `run_all.sh` 涵盖：ins_* 导航辅助、控制分配、级联、姿态环闭环（fca）、PositionPID、在线辨识、全阶仿真、`test_ekf_15state.cpp`（15 状态 EKF，需 `-DEKF_HOST_REGRESSION` + units convang 源，已封装在脚本内）。
+- 直接单跑 EKF 测试（不依赖 bash）：
+  ```powershell
+  g++ -std=c++17 -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES -Isrc -Iinclude `
+    -Ilib/navigation-main/src -Ilib/units/src -Ilib/eigen/src `
+    test_host/test_ekf_15state.cpp lib/units/src/convang.cpp `
+    lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp -o $env:TEMP\ekf15.exe
+  ```
+- EKF 测试的重力输入与 `TandemVec_Config.h` 统一（g=9.79，唯一事实源），勿改回 9.81。
+
 只有在用户明确要求时才执行上传：
 
 ```powershell

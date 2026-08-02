@@ -30,6 +30,7 @@ static SPIClass CAN_SPI(CAN_SPI_MOSI, CAN_SPI_MISO, CAN_SPI_SCK);
 static bool can_initialized = false;
 static uint32_t can_send_error_count = 0;
 static uint32_t can_send_success_count = 0;
+static uint32_t can_rx_frame_count = 0; // 接收帧计数（诊断；预留供 CAN 下行协议实现后接入遥测）
 
 // 轮发帧计数器
 static uint8_t can_frame_index = 0;
@@ -105,8 +106,10 @@ static void pollCanReceive(void) {
     int packetSize = CAN.parsePacket();
     if (packetSize <= 0) break;
 
-    // TODO: 根据 CAN.packetId() 解析控制指令, 将数据拷贝到全局状态。
-    // 当前仅消费帧, 防止 MCP2515 RX 缓冲溢出。
+    // 当前版本 CAN 为纯上行遥测（仅消费帧防 MCP2515 RX 缓冲溢出）。
+    // 下行控制指令解析（按 CAN.packetId()）需等 CAN 下行协议定稿后实现；
+    // 未知帧在此被丢弃，can_rx_frame_count 提供接收量诊断。
+    can_rx_frame_count++;
     while (CAN.available()) {
       (void)CAN.read();
     }

@@ -38,6 +38,31 @@
 #include "GeoDisplacement.h"           // 经纬度位移计算
 #include "MAVLink.h"                   // MAVLink 地面站协议
 
+// ===== 硬件看门狗 (IWDG) =====
+// 主循环卡死（SPI 挂起/死循环/长时间阻塞）时由 IWDG 硬件复位恢复，避免飞行器失控持续。
+// 超时 3.0s（LSI 32kHz ÷ 预分频 256 = 125Hz；reload 374 = 2.99s）。
+// 调试时可定义 BFS_DISABLE_IWDG 关闭（IWDG 一旦启用只能断电复位才能关闭）。
+#ifndef BFS_DISABLE_IWDG
+#include "stm32h7xx_hal_iwdg.h"
+static IWDG_HandleTypeDef s_hiwdg;
+static void initIwdg(void)
+{
+  s_hiwdg.Instance = IWDG1;             // STM32H743 单实例编号 IWDG1
+  s_hiwdg.Init.Prescaler = IWDG_PRESCALER_256; // 32kHz / 256 = 125Hz
+  s_hiwdg.Init.Reload = 374;                   // 125Hz × 2.99s
+  s_hiwdg.Init.Window = IWDG_WINDOW_DISABLE;
+  if (HAL_IWDG_Init(&s_hiwdg) != HAL_OK)
+  {
+    Serial8.println("[IWDG] 初始化失败（无看门狗保护运行）");
+  }
+  else
+  {
+    Serial8.println("[IWDG] 硬件看门狗已启用 (3.0s)");
+  }
+}
+static inline void kickIwdg(void) { HAL_IWDG_Refresh(&s_hiwdg); }
+#endif // BFS_DISABLE_IWDG
+
 #ifndef BFS_DPS310_TASK_INTERVAL_MS
 #define BFS_DPS310_TASK_INTERVAL_MS 7.735f
 #endif
@@ -369,6 +394,11 @@ void setup()
 
   Serial8.println("VTVL_ElectricDualRotor_FC Initialized.");
   Serial8.println("System Setup Complete. Starting main loop...");
+
+#ifndef BFS_DISABLE_IWDG
+  // 所有初始化完成后再启用看门狗（避免长初始化被 IWDG 误复位）
+  initIwdg();
+#endif
 }
 
 /*
@@ -390,7 +420,14 @@ void setup()
 void loop()
 {
   // ====================================================================
-  // 1. CRSF 遥控协议轮询
+  // 1. 看门狗喂狗（主循环每轮刷新；任一任务阻塞 >3s 触发硬件复位）
+  // ====================================================================
+#ifndef BFS_DISABLE_IWDG
+  kickIwdg();
+#endif
+
+  // ====================================================================
+  // 2. CRSF 遥控协议轮询
   // ====================================================================
   // 驱动 CrsfSerial 库的内部状态机，从 Serial1 读取字节并解析 CRSF 帧。
   // 解析成功后会调用 packetChannels() 回调更新 raw_rc_values。
