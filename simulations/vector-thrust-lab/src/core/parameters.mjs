@@ -57,6 +57,12 @@ export const P = Object.freeze({
   // ---- VTOL 悬停控制 ----
   vtolAttKp: 2.5,  // 悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识 [1/s]
 
+  // ---- VTOL 高度保持 ----
+  altKpH: 0.5,  // 定高高度外环增益：目标垂直速度 vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)，h_err = altRef − h。概念级手调值，无系统辨识 [1/s]
+  altKpI: 0.15,  // 定高高度外环积分增益（消除常值扰动/倾斜静差） [1/(s·m)]
+  altKpV: 0.1,  // 定高垂直速度内环增益：thr = thrHover/√cosγ + altKpV·(vZref − vZ)，cosγ 为机体 x 轴竖直分量倾角补偿（T∝thr² 故补偿因子为 1/√cosγ 而非 1/cosγ）。概念级手调值 [-]
+  altVZMax: 1,  // 定高目标垂直速度限幅（与固件 MAX_VERTICAL_SPEED_CMD=1.0 m/s 一致） [m/s]
+
   // ---- 数值实现 ----
   maxStep: 0.004,  // 积分子步长上限 [s]
   frameCap: 0.05,  // 帧间隔上限 [s]

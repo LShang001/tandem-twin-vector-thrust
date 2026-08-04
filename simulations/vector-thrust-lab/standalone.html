@@ -190,6 +190,10 @@
       <div class="slider-head"><label id="lbl-dw">差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
       <input type="range" id="s-dw" min="-30" max="30" step="0.5" value="0">
     </div>
+    <div class="slider-row" id="row-alt" style="display:none">
+      <div class="slider-head"><label>参考高度 h<sub>ref</sub>（定高目标）</label><span class="val" id="v-alt">5.0m</span></div>
+      <input type="range" id="s-alt" min="0" max="20" step="0.5" value="5">
+    </div>
   </div>
   <div class="btn-row">
     <button class="btn" id="b-pitch">俯仰演示</button>
@@ -199,6 +203,7 @@
     <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
     <button class="btn" id="b-vtol">悬停模式：关</button>
+    <button class="btn" id="b-alt" style="display:none">定高：关</button>
     <button class="btn" id="b-hover">水平约束：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
   </div>
@@ -54989,6 +54994,12 @@ const P = Object.freeze({
   // ---- VTOL 悬停控制 ----
   vtolAttKp: 2.5,  // 悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识 [1/s]
 
+  // ---- VTOL 高度保持 ----
+  altKpH: 0.5,  // 定高高度外环增益：目标垂直速度 vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)，h_err = altRef − h。概念级手调值，无系统辨识 [1/s]
+  altKpI: 0.15,  // 定高高度外环积分增益（消除常值扰动/倾斜静差） [1/(s·m)]
+  altKpV: 0.1,  // 定高垂直速度内环增益：thr = thrHover/√cosγ + altKpV·(vZref − vZ)，cosγ 为机体 x 轴竖直分量倾角补偿（T∝thr² 故补偿因子为 1/√cosγ 而非 1/cosγ）。概念级手调值 [-]
+  altVZMax: 1,  // 定高目标垂直速度限幅（与固件 MAX_VERTICAL_SPEED_CMD=1.0 m/s 一致） [m/s]
+
   // ---- 数值实现 ----
   maxStep: 0.004,  // 积分子步长上限 [s]
   frameCap: 0.05,  // 帧间隔上限 [s]
@@ -55038,6 +55049,9 @@ function createSimulationState(P) {
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
       vtolMode: false,     // 构型模式：false=固定翼巡航 / true=VTOL 悬停（机头朝天）
+      altHold: false,      // 定高开关（仅 VTOL 悬停模式生效）
+      altRef: 5,           // 定高参考高度（m，向上为正）
+      intAlt: 0,           // 定高高度外环积分器（m·s）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -55083,6 +55097,8 @@ function resetFlightState(sim, P) {
 function resetSimulationState(sim, P) {
   const { S, dyn, aero } = sim;
   S.vtolMode = false;     // ★ 模式标志（与悬停复位对称）
+  S.altHold = false;      // 定高仅悬停模式有意义，一并清零
+  S.intAlt = 0;
   S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
   S.dtAct = P.dtTrim; S.dfAct = P.dfTrim; S.dwAct = 0;
   S.time = 0;
@@ -55116,6 +55132,9 @@ function resetVtolHoverState(sim, P) {
   S.quat.x = Q_HOVER.x; S.quat.y = Q_HOVER.y; S.quat.z = Q_HOVER.z; S.quat.w = Q_HOVER.w;
   S.lockXY = false;
   S.aero = false;             // ★ 无翼：悬停模式默认关闭气动力
+  S.altHold = false;          // 定高默认关（由 UI 开启）
+  S.altRef = 5;
+  S.intAlt = 0;
   S.time = 0;
   F.vel.x = 0; F.vel.y = 0; F.vel.z = 0;
   F.vWorld.x = 0; F.vWorld.y = 0; F.vWorld.z = 0;
@@ -55903,13 +55922,19 @@ function createControlsUI({ sim, P, hooks }) {
     $('b-vtol').classList.toggle('active', S.vtolMode);
     $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
     $('b-aero').classList.toggle('active', S.aero);
+    // 定高控件仅悬停模式可见
+    $('b-alt').style.display = S.vtolMode ? '' : 'none';
+    $('row-alt').style.display = S.vtolMode ? '' : 'none';
+    $('b-alt').textContent = S.altHold ? '定高：开' : '定高：关';
+    $('b-alt').classList.toggle('active', S.altHold);
+    $('v-alt').textContent = `${(+$('s-alt').value).toFixed(1)}m`;
     if (S.vtolMode) {
       $('b-sas').textContent = S.sasMode === 0 ? '自稳：关（直通）' : '自稳：开（四元数）';
       $('b-sas').classList.toggle('active', S.sasMode > 0);
       // 滑块语义切换为姿态指令（四轴式），标签同步更新
       $('lbl-dt').innerHTML = '俯仰倾斜指令 θ（绕 y<sub>b</sub>）';
       $('lbl-df').innerHTML = '侧倾指令 φ（绕 z<sub>b</sub>）';
-      $('lbl-dw').innerHTML = '航向指令 ψ（绕 x<sub>b</sub>，差速）';
+      $('lbl-dw').innerHTML = '航向角速度 ψ̇（绕 x<sub>b</sub>，差速）';
     } else {
       $('b-sas').textContent = sasLabels[S.sasMode];
       $('b-sas').classList.toggle('active', S.sasMode > 0);
@@ -55923,15 +55948,16 @@ function createControlsUI({ sim, P, hooks }) {
     const rateMode = S.sasMode === 3;
     S.thr = sliders.thr.value / 100;
     if (S.vtolMode) {
-      // 悬停模式：滑块 = 目标姿态角指令（四轴式语义）
-      //   dw → 航向 ψ（绕 x_b=世界竖直轴）、dt → 俯仰倾斜（绕 y_b）、df → 侧倾（绕 z_b）
+      // 悬停模式：滑块 = 目标指令（四轴式语义）
+      //   dw → 航向角速度 ψ̇（°/s，绕 x_b，rate 模式松手回中停转）、
+      //   dt → 俯仰倾斜角（绕 y_b）、df → 侧倾角（绕 z_b）
       S.dt = sliders.dt.value * Math.PI / 180;
       S.df = sliders.df.value * Math.PI / 180;
-      S.dw = sliders.dw.value * Math.PI / 180;
+      S.dw = sliders.dw.value * Math.PI / 180;    // °/s → rad/s
       $('v-thr').textContent = `${sliders.thr.value}%`;
       $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
       $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
-      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(1)}°`;
+      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(1)}°/s`;
       return;
     }
     if (rateMode) {
@@ -55964,8 +55990,7 @@ function createControlsUI({ sim, P, hooks }) {
       sliders.dt.value = (S.dt * 180 / Math.PI).toFixed(1);
       sliders.df.value = (S.df * 180 / Math.PI).toFixed(1);
       sliders.dw.value = (S.dw * 180 / Math.PI).toFixed(1);
-    } else if (rateMode) {
-      sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
+    } else if (rateMode) {      sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
       sliders.df.value = (S.df / P.rateQMax * 25).toFixed(1);
       sliders.dw.value = Math.round(S.dw / P.ratePMax * 30);
     } else {
@@ -55997,7 +56022,10 @@ function createControlsUI({ sim, P, hooks }) {
   }
   for (const sl of [sliders.dt, sliders.df, sliders.dw]) {   // 油门不回中
     sl.addEventListener('pointerdown', () => cancelSpring(sl));
-    const release = () => { if (S.sasMode === 3) springBack(sl); };
+    const release = () => {
+      // 弹簧回中：固定翼角速度闭环（sasMode=3）三滑块；悬停模式仅航向 dw（角速度指令）
+      if (S.sasMode === 3 || (S.vtolMode && S.sasMode !== 0 && sl === sliders.dw)) springBack(sl);
+    };
     sl.addEventListener('pointerup', release);
     sl.addEventListener('touchend', release);
     sl.addEventListener('keyup', release);
@@ -56034,6 +56062,17 @@ function createControlsUI({ sim, P, hooks }) {
       resetVtolHoverState(sim, P);   // ★ 进入悬停：机头朝天 + 无翼（aero=false）
     }
     pushToUI();
+  });
+  // 定高：开/关（仅悬停模式可见）；开启时以滑块设定值为参考高度
+  $('b-alt').addEventListener('click', () => {
+    S.altHold = !S.altHold;
+    S.intAlt = 0;                    // 切换时清积分器，防旧累积瞬态冲击
+    if (S.altHold) S.altRef = +$('s-alt').value;
+    refreshModeUI();
+  });
+  $('s-alt').addEventListener('input', () => {
+    S.altRef = +$('s-alt').value;
+    $('v-alt').textContent = `${S.altRef.toFixed(1)}m`;
   });
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;
@@ -56364,7 +56403,7 @@ __def('src/core/control.mjs', function() {
 // ============================================================
 const { clamp, quat } = __req('src/core/math.mjs');
 const { quatMultiply, quatInvert, quatNormalize } = __req('src/core/math.mjs');
-const { Q_HOVER } = __req('src/core/state.mjs');
+const { Q_HOVER, hoverThrottle } = __req('src/core/state.mjs');
 
 // 反馈极性按各通道控制效率符号整定
 // （∂My/∂δ_t<0, ∂Mx/∂Δω<0 → 正号; ∂Mz/∂δ_f>0 → 负号）
@@ -56372,7 +56411,7 @@ function applySas(sim, P, dt) {
   const { S, F } = sim;
   // VTOL 悬停构型：机头朝天（x_b 竖直），欧拉角在 θ≈90° 奇异，
   // 固定翼 SAS 的欧拉反馈失效 → 走四元数误差级联控制分支。
-  if (S.vtolMode) { applyVtolHover(sim, P); return; }
+  if (S.vtolMode) { applyVtolHover(sim, P, dt); return; }
   const theta = F.euler.y, phi = F.euler.x;
   const thetaError = theta + P.aTrim;
   let dtC = P.dtTrim + S.dt, dfC = P.dfTrim + S.df, dwC = S.dw;
@@ -56416,30 +56455,49 @@ function applySas(sim, P, dt) {
 //     符号经数值验证（见 tests/vtol.test.mjs "控制符号"用例）。
 //
 //  目标姿态：qCmd = Q_HOVER ⊗ 滑块小角度指令（四轴式语义）
-//     dw 滑块 → 航向 ψ（绕 x_b，悬停时 x_b=世界竖直轴）
-//     dt 滑块 → 俯仰倾斜 θ（绕 y_b）
-//     df 滑块 → 侧倾 φ（绕 z_b）
+//     dt 滑块 → 俯仰倾斜 θ（绕 y_b）目标角
+//     df 滑块 → 侧倾 φ（绕 z_b）目标角
+//     dw 滑块 → ★ 航向角速度指令 ψ̇（绕 x_b，rad/s；rate 模式，松手回中停转，
+//        不参与 qCmd —— 航向通道无姿态回中，纯角速度追踪 + 速率阻尼）
 //  机体系误差：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系，小角度 qe.xyz ≈ 误差/2；
 //     ⚠ 勿用 q ⊗ qCmd⁻¹ —— 那是 NED 系表达，悬停时 x/y/z 轴错位）
-//  目标角速度：ωdes = −2·vtolAttKp·qe.xyz（符号：qe.y>0 → dtAct>0 → My<0 → 收敛）
+//  目标角速度（y/z 通道姿态回中）：ωdes.yz = −2·vtolAttKp·qe.yz
 //  角速度内环按通道效率符号（与 sasMode=3 一致）：
 //     尾摆 δt（∂My/∂δt<0）: dtC = rateKq·(ω.y − ωdes.y)
 //     前摆 δf（∂Mz/∂δf>0）: dfC = rateKr·(ωdes.z − ω.z)
-//     差速 Δω（∂Mx/∂Δω<0）: dwC = rateKp·(ω.x − ωdes.x)
+//     差速 Δω（∂Mx/∂Δω<0）: dwC = rateKp·(ω.x − S.dw)（航向：滑块=目标角速度）
 //  悬停基准为 0 摆角（不叠加巡航配平偏置 dtTrim/dfTrim）；
-//  sasMode=0 时直通滑块指令（无自稳），可对比演示。
+//  sasMode=0 时 dt/df 直通滑块摆角（无自稳），dw 仍为角速度指令。
 // ============================================================
-function applyVtolHover(sim, P) {
-  const { S } = sim;
+function applyVtolHover(sim, P, dt) {
+  const { S, F } = sim;
 
-  // 滑块 → 目标姿态小角度指令（先航向后倾斜，小角度下顺序无关）
+  // 滑块 → 目标姿态小角度指令（仅 y/z：俯仰/侧倾；航向为角速度指令不入 qCmd）
   // 四元数构造：绕 x = (sin,0,0,cos)，绕 y = (0,sin,0,cos)，绕 z = (0,0,sin,cos)
-  const h = S.dt * 0.5, f = S.df * 0.5, w = S.dw * 0.5;
+  const h = S.dt * 0.5, f = S.df * 0.5;
   const qLocal = quatMultiply(
-    quatMultiply(quat(Math.sin(w), 0, 0, Math.cos(w)),   // 航向 ψ：绕 x_b（悬停时=世界竖直轴）
-                 quat(0, Math.sin(h), 0, Math.cos(h))),  // 俯仰 θ：绕 y_b
-    quat(0, 0, Math.sin(f), Math.cos(f)));               // 侧倾 φ：绕 z_b
+    quat(0, Math.sin(h), 0, Math.cos(h)),   // 俯仰 θ：绕 y_b
+    quat(0, 0, Math.sin(f), Math.cos(f)));  // 侧倾 φ：绕 z_b
   const qCmd = quatNormalize(quatMultiply(Q_HOVER, qLocal));
+
+  // ---------- 高度保持（S.altHold=true，仅悬停模式） ----------
+  // 独立于姿态自稳（sasMode=0 直通时同样生效）：只接管油门，不触碰摆角。
+  // 串级：高度外环（P+I）→ 目标垂直速度 → 油门内环（P）
+  //   h    = −pos.z       （NED z 向下，高度向上为正）
+  //   vZ   = −vWorld.z    （垂直速度，向上为正）
+  //   vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)
+  //   thr  = thrHover/√cosγ + altKpV·(vZref − vZ)   （cosγ = x̂_b·(−ẑ_NED) 倾角补偿：
+  //          倾斜损失竖直推力分量，且 T∝thr² → 补偿因子 1/√cosγ 而非 1/cosγ）
+  if (S.altHold) {
+    const h = -F.pos.z;
+    const vZ = -F.vWorld.z;
+    const hErr = S.altRef - h;
+    S.intAlt = clamp(S.intAlt + hErr * dt, -1.5, 1.5);   // 积分限幅（派生，±1.5 m·s）
+    const vZref = clamp(P.altKpH * hErr + P.altKpI * S.intAlt, -P.altVZMax, P.altVZMax);
+    const cosG = Math.max(-(2 * (S.quat.x * S.quat.z - S.quat.y * S.quat.w)), 0.5); // −R31
+    const thrBase = hoverThrottle(P) / Math.sqrt(cosG);   // T∝thr² → 1/√cosγ
+    S.thr = clamp(thrBase + P.altKpV * (vZref - vZ), 0, 1);
+  }
 
   if (S.sasMode === 0) {
     // 直通：滑块 = 摆角/差速指令（悬停基准 0，无自稳）
@@ -56452,13 +56510,20 @@ function applyVtolHover(sim, P) {
   // 机体系误差四元数：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系），w<0 取反走最短路径
   const qe = quatNormalize(quatMultiply(quatInvert(qCmd), S.quat));
   const s = qe.w < 0 ? -1 : 1;
-  const wdx = -2 * P.vtolAttKp * s * qe.x;
-  const wdy = -2 * P.vtolAttKp * s * qe.y;
-  const wdz = -2 * P.vtolAttKp * s * qe.z;
 
-  S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
-  S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
-  S.dwAct = clamp(P.rateKp * (S.omega.x - wdx), -P.dwMax, P.dwMax);
+  if (S.sasMode === 0) {
+    // 直通：dt/df 滑块 = 摆角（悬停基准 0，无自稳）；dw 仍为航向角速度指令
+    S.dtAct = clamp(S.dt, -P.dMax, P.dMax);
+    S.dfAct = clamp(S.df, -P.dMax, P.dMax);
+  } else {
+    // y/z 通道姿态回中（qe.x 不用于控制：航向为纯角速度指令）
+    const wdy = -2 * P.vtolAttKp * s * qe.y;
+    const wdz = -2 * P.vtolAttKp * s * qe.z;
+    S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
+    S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
+  }
+  // 航向通道：纯角速度追踪（∂Mx/∂Δω<0 取 (ω.x − ψ̇_cmd)），滑块=目标角速度
+  S.dwAct = clamp(P.rateKp * (S.omega.x - S.dw), -P.dwMax, P.dwMax);
 }
 
 return { applySas };

@@ -27,6 +27,9 @@ export function createSimulationState(P) {
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
       vtolMode: false,     // 构型模式：false=固定翼巡航 / true=VTOL 悬停（机头朝天）
+      altHold: false,      // 定高开关（仅 VTOL 悬停模式生效）
+      altRef: 5,           // 定高参考高度（m，向上为正）
+      intAlt: 0,           // 定高高度外环积分器（m·s）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -72,6 +75,8 @@ export function resetFlightState(sim, P) {
 export function resetSimulationState(sim, P) {
   const { S, dyn, aero } = sim;
   S.vtolMode = false;     // ★ 模式标志（与悬停复位对称）
+  S.altHold = false;      // 定高仅悬停模式有意义，一并清零
+  S.intAlt = 0;
   S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
   S.dtAct = P.dtTrim; S.dfAct = P.dfTrim; S.dwAct = 0;
   S.time = 0;
@@ -105,6 +110,9 @@ export function resetVtolHoverState(sim, P) {
   S.quat.x = Q_HOVER.x; S.quat.y = Q_HOVER.y; S.quat.z = Q_HOVER.z; S.quat.w = Q_HOVER.w;
   S.lockXY = false;
   S.aero = false;             // ★ 无翼：悬停模式默认关闭气动力
+  S.altHold = false;          // 定高默认关（由 UI 开启）
+  S.altRef = 5;
+  S.intAlt = 0;
   S.time = 0;
   F.vel.x = 0; F.vel.y = 0; F.vel.z = 0;
   F.vWorld.x = 0; F.vWorld.y = 0; F.vWorld.z = 0;

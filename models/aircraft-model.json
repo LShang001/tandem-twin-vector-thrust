@@ -375,6 +375,43 @@
       ]
     },
     {
+      "title": "VTOL 高度保持",
+      "parameters": [
+        {
+          "name": "altKpH",
+          "value": 0.5,
+          "unit": "1/s",
+          "description": "定高高度外环增益：目标垂直速度 vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)，h_err = altRef − h。概念级手调值，无系统辨识",
+          "source": "MODEL-DEFAULT",
+          "confidence": "low"
+        },
+        {
+          "name": "altKpI",
+          "value": 0.15,
+          "unit": "1/(s·m)",
+          "description": "定高高度外环积分增益（消除常值扰动/倾斜静差）",
+          "source": "MODEL-DEFAULT",
+          "confidence": "low"
+        },
+        {
+          "name": "altKpV",
+          "value": 0.1,
+          "unit": "-",
+          "description": "定高垂直速度内环增益：thr = thrHover/√cosγ + altKpV·(vZref − vZ)，cosγ 为机体 x 轴竖直分量倾角补偿（T∝thr² 故补偿因子为 1/√cosγ 而非 1/cosγ）。概念级手调值",
+          "source": "MODEL-DEFAULT",
+          "confidence": "low"
+        },
+        {
+          "name": "altVZMax",
+          "value": 1.0,
+          "unit": "m/s",
+          "description": "定高目标垂直速度限幅（与固件 MAX_VERTICAL_SPEED_CMD=1.0 m/s 一致）",
+          "source": "MODEL-DEFAULT",
+          "confidence": "low"
+        }
+      ]
+    },
+    {
       "title": "数值实现",
       "parameters": [
         {

@@ -472,10 +472,11 @@ NED y 转 +90°），机头朝天（x_b → NED −z）。显示约定下
   前摆 δf（∂Mz/∂δf&gt;0）: dfC = rateKr·(ωdes.z − ω.z)
   差速 Δω（∂Mx/∂Δω&lt;0）: dwC = rateKp·(ω.x − ωdes.x)</code></pre>
 <ul>
-<li><strong>滑块语义切换</strong>（悬停模式）：dw → 航向 ψ（绕
-x_b，悬停时 x_b = 世界竖直轴，差速通道）；dt → 俯仰倾斜（绕
-y_b，尾摆）；df → 侧倾（绕 z_b，前摆）。与固件 RATE_MODE
-四轴式摇杆映射一致。</li>
+<li><strong>滑块语义切换</strong>（悬停模式）：dw →
+<strong>航向角速度指令 ψ̇</strong>（°/s，绕 x_b，rate
+模式：松手回中停转、停在当前航向，无姿态回中；与固件 RATE_MODE
+偏航摇杆一致）；dt → 俯仰倾斜目标角（绕 y_b，尾摆）；df → 侧倾目标角（绕
+z_b，前摆）。</li>
 <li><strong>自稳开关</strong>（<code>S.sasMode</code>）：悬停下仅区分
 0/非 0——0 时直通滑块摆角/差速（无自稳，可对比演示"无自稳必倾倒"）；非 0
 时四元数自稳。</li>
@@ -519,6 +520,30 @@ y_b，尾摆）；df → 侧倾（绕 z_b，前摆）。与固件 RATE_MODE
 </table>
 <p>闭环收敛、指令追踪与无自稳对比见 <code>vtol.test.mjs</code>（13
 用例）。</p>
+<h3 id="84-自动定高高度保持可选">8.4 自动定高（高度保持，可选）</h3>
+<blockquote>
+<p>对应源码：<code>control.mjs:applyVtolHover</code>
+末尾高度环；UI「定高」按钮 +
+参考高度滑块（仅悬停模式显示）。固件对应链：<code>altitudePositionPController</code>（高度→目标垂直速度，±1.0
+m/s）+ <code>altitudeVelocityPIDController</code>（垂直速度→油门）。</p>
+</blockquote>
+<p><strong>串级结构</strong>（高度外环 P+I → 目标垂直速度 → 油门内环
+P）：</p>
+<pre><code>h    = −pos.z          （NED z 向下，高度向上为正）
+vZ   = −vWorld.z       （垂直速度，向上为正）
+vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)      h_err = altRef − h
+thr  = thrHover/√cosγ + altKpV·(vZref − vZ)                 cosγ = x̂_b·(−ẑ_NED)</code></pre>
+<ul>
+<li><strong>倾角补偿</strong>：倾斜损失竖直推力分量，且 T∝thr² →
+补偿因子 <strong>1/√cosγ</strong>（非 1/cosγ）；稳态
+<code>T·cosγ = m·g</code> 精确成立（数值验证：倾斜 10° 稳态 thr = 0.503
+≈ thrHover/√cos10° = 0.503）</li>
+<li><strong>参考高度</strong>：<code>S.altRef</code>（UI 滑块 0–20
+m，<strong>拖动实时更新参考高度</strong>，定高开启时生效）；开关切换时清积分器防瞬态</li>
+<li><strong>增益</strong>：<code>altKpH=0.5</code>、<code>altKpI=0.15</code>、<code>altKpV=0.1</code>、<code>altVZMax=1.0</code>（<code>models/aircraft-model.json</code>
+§VTOL 高度保持，MODEL-DEFAULT）；积分限幅 ±1.5 m·s（派生常量）</li>
+<li><strong>边界</strong>：定高与姿态指令可同时使用（倾斜平移时高度保持）；无位置闭环，水平漂移仍为模型固有行为。仿真无传感器模型，高度/垂直速度用真值</li>
+</ul>
 <hr />
 <h2 id="9-测试覆盖指针">9 测试覆盖指针</h2>
 <table>
@@ -607,5 +632,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 03:41</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 04:32</footer></article></body>
 </html>

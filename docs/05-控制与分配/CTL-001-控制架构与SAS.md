@@ -225,7 +225,7 @@ M_x = −Q_f + Q_t
   差速 Δω（∂Mx/∂Δω<0）: dwC = rateKp·(ω.x − ωdes.x)
 ```
 
-- **滑块语义切换**（悬停模式）：dw → 航向 ψ（绕 x_b，悬停时 x_b = 世界竖直轴，差速通道）；dt → 俯仰倾斜（绕 y_b，尾摆）；df → 侧倾（绕 z_b，前摆）。与固件 RATE_MODE 四轴式摇杆映射一致。
+- **滑块语义切换**（悬停模式）：dw → **航向角速度指令 ψ̇**（°/s，绕 x_b，rate 模式：松手回中停转、停在当前航向，无姿态回中；与固件 RATE_MODE 偏航摇杆一致）；dt → 俯仰倾斜目标角（绕 y_b，尾摆）；df → 侧倾目标角（绕 z_b，前摆）。
 - **自稳开关**（`S.sasMode`）：悬停下仅区分 0/非 0——0 时直通滑块摆角/差速（无自稳，可对比演示"无自稳必倾倒"）；非 0 时四元数自稳。
 - **增益**：姿态外环 `vtolAttKp = 2.5`（`models/aircraft-model.json` §VTOL 悬停控制，MODEL-DEFAULT）；内环复用 `rateKq/rateKr/rateKp`。
 - **180° 翻转防御**：`qe.w < 0` 时取反（等价误差），保证走最短旋转路径。
@@ -239,6 +239,24 @@ M_x = −Q_f + Q_t
 | qe.z > 0（绕 z_b 超转=侧倾） | dfAct < 0 | δf<0 → Mz=a·Tf·sinδf < 0 → ṙ<0 | ✓ |
 
 闭环收敛、指令追踪与无自稳对比见 `vtol.test.mjs`（13 用例）。
+
+### 8.4 自动定高（高度保持，可选）
+
+> 对应源码：`control.mjs:applyVtolHover` 末尾高度环；UI「定高」按钮 + 参考高度滑块（仅悬停模式显示）。固件对应链：`altitudePositionPController`（高度→目标垂直速度，±1.0 m/s）+ `altitudeVelocityPIDController`（垂直速度→油门）。
+
+**串级结构**（高度外环 P+I → 目标垂直速度 → 油门内环 P）：
+
+```
+h    = −pos.z          （NED z 向下，高度向上为正）
+vZ   = −vWorld.z       （垂直速度，向上为正）
+vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)      h_err = altRef − h
+thr  = thrHover/√cosγ + altKpV·(vZref − vZ)                 cosγ = x̂_b·(−ẑ_NED)
+```
+
+- **倾角补偿**：倾斜损失竖直推力分量，且 T∝thr² → 补偿因子 **1/√cosγ**（非 1/cosγ）；稳态 `T·cosγ = m·g` 精确成立（数值验证：倾斜 10° 稳态 thr = 0.503 ≈ thrHover/√cos10° = 0.503）
+- **参考高度**：`S.altRef`（UI 滑块 0–20 m，**拖动实时更新参考高度**，定高开启时生效）；开关切换时清积分器防瞬态
+- **增益**：`altKpH=0.5`、`altKpI=0.15`、`altKpV=0.1`、`altVZMax=1.0`（`models/aircraft-model.json` §VTOL 高度保持，MODEL-DEFAULT）；积分限幅 ±1.5 m·s（派生常量）
+- **边界**：定高与姿态指令可同时使用（倾斜平移时高度保持）；无位置闭环，水平漂移仍为模型固有行为。仿真无传感器模型，高度/垂直速度用真值
 
 ---
 

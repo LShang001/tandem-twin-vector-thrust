@@ -42,7 +42,7 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <li><strong>模型 ID</strong>：<code>PAR-C0-001</code></li>
 <li><strong>总体状态</strong>：<code>MODEL-DEFAULT</code>（推进/惯量/质量/配平为
 ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
-<li><strong>参数总数</strong>：54</li>
+<li><strong>参数总数</strong>：58</li>
 <li><strong>生成文件</strong>：<code>simulations/vector-thrust-lab/src/core/parameters.mjs</code></li>
 <li><strong>同步命令</strong>：<code>py -3.12 tools/sync-params.py</code>（仓库根目录）</li>
 </ul>
@@ -770,8 +770,72 @@ ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
 </tr>
 </tbody>
 </table>
+<h2 id="9-vtol-高度保持">9 VTOL 高度保持</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>值</th>
+<th>单位</th>
+<th>说明</th>
+<th>来源</th>
+<th>置信度</th>
+<th>代码字段</th>
+<th>所属模块</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PAR-055</td>
+<td><code>altKpH</code></td>
+<td>0.5</td>
+<td>1/s</td>
+<td>定高高度外环增益（vZref = clamp(altKpH·h_err + altKpI·∫h_err,
+±altVZMax)）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.altKpH</code></td>
+<td>控制（VTOL 定高）</td>
+</tr>
+<tr>
+<td>PAR-056</td>
+<td><code>altKpI</code></td>
+<td>0.15</td>
+<td>1/(s·m)</td>
+<td>定高高度外环积分增益</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.altKpI</code></td>
+<td>控制（VTOL 定高）</td>
+</tr>
+<tr>
+<td>PAR-057</td>
+<td><code>altKpV</code></td>
+<td>0.1</td>
+<td>-</td>
+<td>定高垂直速度内环增益（thr = thrHover/√cosγ + altKpV·(vZref −
+vZ)）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.altKpV</code></td>
+<td>控制（VTOL 定高）</td>
+</tr>
+<tr>
+<td>PAR-058</td>
+<td><code>altVZMax</code></td>
+<td>1.0</td>
+<td>m/s</td>
+<td>定高目标垂直速度限幅（与固件 MAX_VERTICAL_SPEED_CMD 一致）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.altVZMax</code></td>
+<td>控制（VTOL 定高）</td>
+</tr>
+</tbody>
+</table>
 <hr />
-<h2 id="9-使用说明">9 使用说明</h2>
+<h2 id="10-使用说明">10 使用说明</h2>
 <ol type="1">
 <li>如需修改参数，请编辑 <code>models/aircraft-model.json</code>
 后运行同步脚本；禁止直接修改 <code>src/core/parameters.mjs</code>。</li>
@@ -787,5 +851,5 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 03:41</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 04:32</footer></article></body>
 </html>

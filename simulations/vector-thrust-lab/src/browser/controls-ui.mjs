@@ -14,13 +14,19 @@ export function createControlsUI({ sim, P, hooks }) {
     $('b-vtol').classList.toggle('active', S.vtolMode);
     $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
     $('b-aero').classList.toggle('active', S.aero);
+    // 定高控件仅悬停模式可见
+    $('b-alt').style.display = S.vtolMode ? '' : 'none';
+    $('row-alt').style.display = S.vtolMode ? '' : 'none';
+    $('b-alt').textContent = S.altHold ? '定高：开' : '定高：关';
+    $('b-alt').classList.toggle('active', S.altHold);
+    $('v-alt').textContent = `${(+$('s-alt').value).toFixed(1)}m`;
     if (S.vtolMode) {
       $('b-sas').textContent = S.sasMode === 0 ? '自稳：关（直通）' : '自稳：开（四元数）';
       $('b-sas').classList.toggle('active', S.sasMode > 0);
       // 滑块语义切换为姿态指令（四轴式），标签同步更新
       $('lbl-dt').innerHTML = '俯仰倾斜指令 θ（绕 y<sub>b</sub>）';
       $('lbl-df').innerHTML = '侧倾指令 φ（绕 z<sub>b</sub>）';
-      $('lbl-dw').innerHTML = '航向指令 ψ（绕 x<sub>b</sub>，差速）';
+      $('lbl-dw').innerHTML = '航向角速度 ψ̇（绕 x<sub>b</sub>，差速）';
     } else {
       $('b-sas').textContent = sasLabels[S.sasMode];
       $('b-sas').classList.toggle('active', S.sasMode > 0);
@@ -34,15 +40,16 @@ export function createControlsUI({ sim, P, hooks }) {
     const rateMode = S.sasMode === 3;
     S.thr = sliders.thr.value / 100;
     if (S.vtolMode) {
-      // 悬停模式：滑块 = 目标姿态角指令（四轴式语义）
-      //   dw → 航向 ψ（绕 x_b=世界竖直轴）、dt → 俯仰倾斜（绕 y_b）、df → 侧倾（绕 z_b）
+      // 悬停模式：滑块 = 目标指令（四轴式语义）
+      //   dw → 航向角速度 ψ̇（°/s，绕 x_b，rate 模式松手回中停转）、
+      //   dt → 俯仰倾斜角（绕 y_b）、df → 侧倾角（绕 z_b）
       S.dt = sliders.dt.value * Math.PI / 180;
       S.df = sliders.df.value * Math.PI / 180;
-      S.dw = sliders.dw.value * Math.PI / 180;
+      S.dw = sliders.dw.value * Math.PI / 180;    // °/s → rad/s
       $('v-thr').textContent = `${sliders.thr.value}%`;
       $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
       $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
-      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(1)}°`;
+      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(1)}°/s`;
       return;
     }
     if (rateMode) {
@@ -75,8 +82,7 @@ export function createControlsUI({ sim, P, hooks }) {
       sliders.dt.value = (S.dt * 180 / Math.PI).toFixed(1);
       sliders.df.value = (S.df * 180 / Math.PI).toFixed(1);
       sliders.dw.value = (S.dw * 180 / Math.PI).toFixed(1);
-    } else if (rateMode) {
-      sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
+    } else if (rateMode) {      sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
       sliders.df.value = (S.df / P.rateQMax * 25).toFixed(1);
       sliders.dw.value = Math.round(S.dw / P.ratePMax * 30);
     } else {
@@ -108,7 +114,10 @@ export function createControlsUI({ sim, P, hooks }) {
   }
   for (const sl of [sliders.dt, sliders.df, sliders.dw]) {   // 油门不回中
     sl.addEventListener('pointerdown', () => cancelSpring(sl));
-    const release = () => { if (S.sasMode === 3) springBack(sl); };
+    const release = () => {
+      // 弹簧回中：固定翼角速度闭环（sasMode=3）三滑块；悬停模式仅航向 dw（角速度指令）
+      if (S.sasMode === 3 || (S.vtolMode && S.sasMode !== 0 && sl === sliders.dw)) springBack(sl);
+    };
     sl.addEventListener('pointerup', release);
     sl.addEventListener('touchend', release);
     sl.addEventListener('keyup', release);
@@ -145,6 +154,17 @@ export function createControlsUI({ sim, P, hooks }) {
       resetVtolHoverState(sim, P);   // ★ 进入悬停：机头朝天 + 无翼（aero=false）
     }
     pushToUI();
+  });
+  // 定高：开/关（仅悬停模式可见）；开启时以滑块设定值为参考高度
+  $('b-alt').addEventListener('click', () => {
+    S.altHold = !S.altHold;
+    S.intAlt = 0;                    // 切换时清积分器，防旧累积瞬态冲击
+    if (S.altHold) S.altRef = +$('s-alt').value;
+    refreshModeUI();
+  });
+  $('s-alt').addEventListener('input', () => {
+    S.altRef = +$('s-alt').value;
+    $('v-alt').textContent = `${S.altRef.toFixed(1)}m`;
   });
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;

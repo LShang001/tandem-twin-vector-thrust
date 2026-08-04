@@ -86,14 +86,18 @@ test('控制符号：qe.y>0（绕 y_b 超转）→ dtAct>0 → My<0 → 误差�
   assert.ok(My < 0, `My=${My.toFixed(4)} 应为负`);
 });
 
-test('控制符号：qe.x>0（绕 x_b 超转=航向偏移）→ dwAct>0 → Mx<0 → 收敛方向', () => {
+test('控制符号：航向角速度指令 — dwCmd>0 → dwAct<0 → Mx>0 → 绕 x_b 正转（与指令一致）', () => {
   const sim = createSimulationState(P);
   resetVtolHoverState(sim, P);
-  sim.S.quat = quatNormalize(quatMultiply(Q_HOVER,
-    quat(Math.sin(0.05), 0, 0, Math.cos(0.05))));
-  sim.F.euler = eulerFromQuat(sim.S.quat);
+  sim.S.dw = 20 * Math.PI / 180;   // +20°/s 航向角速度指令
   applySas(sim, P, 0.004);
-  assert.ok(sim.S.dwAct > 0, `dwAct=${sim.S.dwAct} 应为正（产生 Mx<0 航向修正）`);
+  assert.ok(sim.S.dwAct < 0, `dwAct=${sim.S.dwAct} 应为负（∂Mx/∂Δω<0 产生正转力矩）`);
+  // 力矩符号链（按差速分配公式推导执行后转速）：Δω<0 → wf<wt → Mx = −Qf+Qt > 0 → ṗ>0 正转
+  const w0 = sim.S.thr * P.wMax;
+  const wf = w0 * Math.sqrt(1 + sim.S.dwAct);
+  const wt = w0 * Math.sqrt(1 - sim.S.dwAct);
+  const Mx = -P.kQ * wf * wf + P.kQ * wt * wt;
+  assert.ok(Mx > 0, `Mx=${Mx.toFixed(5)} 应为正（正转，与 +ψ̇ 指令一致）`);
 });
 
 test('控制符号：qe.z>0（绕 z_b 超转=侧倾）→ dfAct<0 → Mz<0 → 收敛方向', () => {
@@ -133,20 +137,37 @@ test('悬停自稳：俯仰角速度扰动 0.3 rad/s 后 8s 收敛', () => {
   assert.ok(Math.abs(sim.S.omega.y) < 0.15, `残余角速度 ${sim.S.omega.y.toFixed(3)} rad/s 应小`);
 });
 
-test('悬停自稳：航向指令 dw=20° 后 8s 收敛到目标航向（绕 x_b=世界竖直轴）', () => {
-  const psiCmd = 20 * Math.PI / 180;
-  const qCmd = quatNormalize(quatMultiply(Q_HOVER,
-    quat(Math.sin(psiCmd / 2), 0, 0, Math.cos(psiCmd / 2))));
-  const sim = runHover(8, (s) => { s.S.dw = psiCmd; });
-  const err = quatErrAngle(sim.S.quat, qCmd);
-  assert.ok(err < 0.05, `航向指令后误差 ${(err * 57.3).toFixed(2)}° 应 < 2.9°`);
-  // 机体 x 轴应保持竖直（旋转轴不变）；航向用 y_b 水平投影指示：
-  // y_b = R(Q_HOVER)·Rx(ψ)·ŷ = (sinψ, cosψ, 0) → atan2(yb.y, yb.x) = π/2 − ψ
-  const xb = rotateVecByQuat({ x: 1, y: 0, z: 0 }, sim.S.quat);
-  const yb = rotateVecByQuat({ x: 0, y: 1, z: 0 }, sim.S.quat);
-  assert.ok(Math.abs(xb.z + 1) < 0.05, `x_b 应保持竖直（z=${xb.z.toFixed(3)}）`);
-  assert.ok(Math.abs(Math.atan2(yb.y, yb.x) - (Math.PI / 2 - psiCmd)) < 0.08,
-    `y_b 水平投影角 ${Math.atan2(yb.y, yb.x).toFixed(3)} rad 应 ≈ π/2 − ψ`);
+test('航向角速度指令：dw=20°/s → 8s 后 p 收敛到指令值且持续旋转（rate 模式无航向回中）', () => {
+  const psiDot = 20 * Math.PI / 180;
+  const sim = runHover(8, (s) => { s.S.dw = psiDot; });
+  assert.ok(Math.abs(sim.S.omega.x - psiDot) < 0.05,
+    `p=${sim.S.omega.x.toFixed(3)} rad/s 应 ≈ 指令 ${psiDot.toFixed(3)} rad/s`);
+  // 持续旋转：绕 x 累计转过显著角度（rate 模式不回到固定航向）
+  assert.ok(Math.abs(2 * Math.acos(Math.min(1, Math.abs(sim.S.quat.w * Q_HOVER.w + sim.S.quat.y * Q_HOVER.y)))) > 1.0,
+    '8s×20°/s 应累计旋转 > 57°');
+});
+
+test('航向松手回中：旋转中 dw=0 → p 衰减到 0，航向停在当前（角速度阻尼）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.dw = 30 * Math.PI / 180;
+  // 先转 3s（达到角速度）
+  for (let i = 0; i < Math.round(3 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  assert.ok(sim.S.omega.x > 0.2, `前置：p=${sim.S.omega.x.toFixed(3)} 应已旋转`);
+  const quatAtRelease = { ...sim.S.quat };
+  sim.S.dw = 0;                            // 松手：角速度指令归零
+  for (let i = 0; i < Math.round(4 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  assert.ok(Math.abs(sim.S.omega.x) < 0.08, `松手 4s 后 p=${sim.S.omega.x.toFixed(3)} 应 ≈ 0`);
+  // 航向停在松手位置（累计转角小）
+  const dq = quatNormalize(quatMultiply(sim.S.quat, quatInvert(quatAtRelease)));
+  assert.ok(2 * Math.acos(Math.min(1, Math.abs(dq.w))) < 0.3,
+    '松手后继续旋转应 < 17°');
 });
 
 test('悬停自稳：俯仰倾斜指令 dt=10° 后 8s 收敛（绕 y_b 倾斜产生水平推力）', () => {
@@ -218,4 +239,109 @@ test('悬停直通模式（sasMode=0）：滑块摆角/差速直接执行，无�
   assert.equal(sim.S.dtAct, 0.1, '直通：dtAct = 滑块指令（无 dtTrim 偏置）');
   assert.equal(sim.S.dfAct, -0.05, '直通：dfAct = 滑块指令（无 dfTrim 偏置）');
   assert.equal(sim.S.dwAct, 0.3, '直通：dwAct = 滑块指令');
+});
+
+// ---------- 高度保持（自动定高） ----------
+
+test('自动定高：altRef=5m 从初始离地高度爬升并稳定（15s 内误差 <0.3m）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.altHold = true;
+  sim.S.altRef = 5;
+  const steps = Math.round(15 / FRAME_DT);
+  for (let i = 0; i < steps; i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const h = -sim.F.pos.z;
+  assert.ok(Math.abs(h - 5) < 0.3, `15s 后高度 ${h.toFixed(2)}m 应 ≈ 5m`);
+  // 收敛后油门回到悬停配平附近（竖直悬停无倾斜 → cosγ=1）
+  assert.ok(Math.abs(sim.S.thr - hoverThrottle(P)) < 0.05, `油门 ${sim.S.thr.toFixed(3)} 应 ≈ 配平 ${hoverThrottle(P).toFixed(3)}`);
+});
+
+test('自动定高：初始高度偏移（h=2m, ref=5m）爬升收敛', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.F.pos.z = -2;               // 初始高度 2m
+  sim.S.altHold = true;
+  sim.S.altRef = 5;
+  for (let i = 0; i < Math.round(15 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const h = -sim.F.pos.z;
+  assert.ok(Math.abs(h - 5) < 0.3, `15s 后高度 ${h.toFixed(2)}m 应 ≈ 5m（从 2m 爬升）`);
+});
+
+test('自动定高：下降方向（h=8m, ref=5m）收敛', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.F.pos.z = -8;               // 初始高度 8m（高于参考）
+  sim.S.altHold = true;
+  sim.S.altRef = 5;
+  for (let i = 0; i < Math.round(15 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const h = -sim.F.pos.z;
+  assert.ok(Math.abs(h - 5) < 0.3, `15s 后高度 ${h.toFixed(2)}m 应 ≈ 5m（从 8m 下降）`);
+  assert.ok(h < 8, '应下降而非上升');
+});
+
+test('自动定高：直通模式（sasMode=0）下同样生效（独立于姿态自稳）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.sasMode = 0;              // 姿态自稳关（dt/df 直通）
+  sim.S.altHold = true;
+  sim.S.altRef = 5;
+  for (let i = 0; i < Math.round(12 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const h = -sim.F.pos.z;
+  assert.ok(Math.abs(h - 5) < 0.5, `直通+定高 12s 后高度 ${h.toFixed(2)}m 应 ≈ 5m`);
+  assert.ok(Math.abs(sim.S.thr - hoverThrottle(P)) < 0.05, '油门由高度环接管');
+});
+
+test('自动定高：倾角补偿 — 倾斜 10° 稳态时油门 ≈ thrHover/cos10°（竖直推力保持）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.altHold = true;
+  sim.S.altRef = 5;
+  sim.S.dt = 10 * Math.PI / 180;   // 持续俯仰倾斜 10°
+  for (let i = 0; i < Math.round(15 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  // 稳态：竖直推力 = m·g → T·cos10° = m·g，T∝thr² → thr = thrHover/√cos10°
+  const expectedBase = hoverThrottle(P) / Math.sqrt(Math.cos(10 * Math.PI / 180));
+  assert.ok(sim.S.thr > hoverThrottle(P) + 0.003,
+    `倾斜时油门 ${sim.S.thr.toFixed(4)} 应 > 配平 ${hoverThrottle(P).toFixed(4)}（cosγ 补偿）`);
+  assert.ok(Math.abs(sim.S.thr - expectedBase) < 0.02,
+    `稳态油门应 ≈ thrHover/√cos10° = ${expectedBase.toFixed(4)}（实际 ${sim.S.thr.toFixed(4)}）`);
+  // 高度仍保持（竖直推力分量平衡重力）
+  const h = -sim.F.pos.z;
+  assert.ok(Math.abs(h - 5) < 0.5, `倾斜+定高 15s 后高度 ${h.toFixed(2)}m 应 ≈ 5m`);
+});
+
+test('自动定高：积分器限幅且累积方向正确', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.altHold = true;
+  sim.S.altRef = 5;
+  sim.F.pos.z = 100;               // 巨大高度误差（h=-100，需大幅上升）
+  for (let i = 0; i < 1000; i++) applySas(sim, P, 0.004);
+  assert.ok(Math.abs(sim.S.intAlt) <= 1.5 + 1e-12, '积分限幅 ±1.5');
+  // 误差为正（需上升）→ 积分应为正
+  assert.ok(sim.S.intAlt > 0, `intAlt=${sim.S.intAlt.toFixed(3)} 应为正（高度不足需上升）`);
+});
+
+test('定高关闭：油门恢复悬停配平，不参与控制', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.altHold = false;
+  sim.S.thr = 0.8;
+  applySas(sim, P, 0.004);
+  assert.equal(sim.S.thr, 0.8, '定高关闭时控制律不改油门');
+  assert.equal(sim.S.intAlt, 0, '定高关闭时积分器不累积');
 });
