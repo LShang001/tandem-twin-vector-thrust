@@ -56500,22 +56500,13 @@ function applyVtolHover(sim, P, dt) {
   }
 
   if (S.sasMode === 0) {
-    // 直通：滑块 = 摆角/差速指令（悬停基准 0，无自稳）
-    S.dtAct = clamp(S.dt, -P.dMax, P.dMax);
-    S.dfAct = clamp(S.df, -P.dMax, P.dMax);
-    S.dwAct = clamp(S.dw, -P.dwMax, P.dwMax);
-    return;
-  }
-
-  // 机体系误差四元数：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系），w<0 取反走最短路径
-  const qe = quatNormalize(quatMultiply(quatInvert(qCmd), S.quat));
-  const s = qe.w < 0 ? -1 : 1;
-
-  if (S.sasMode === 0) {
     // 直通：dt/df 滑块 = 摆角（悬停基准 0，无自稳）；dw 仍为航向角速度指令
     S.dtAct = clamp(S.dt, -P.dMax, P.dMax);
     S.dfAct = clamp(S.df, -P.dMax, P.dMax);
   } else {
+    // 机体系误差四元数：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系），w<0 取反走最短路径
+    const qe = quatNormalize(quatMultiply(quatInvert(qCmd), S.quat));
+    const s = qe.w < 0 ? -1 : 1;
     // y/z 通道姿态回中（qe.x 不用于控制：航向为纯角速度指令）
     const wdy = -2 * P.vtolAttKp * s * qe.y;
     const wdz = -2 * P.vtolAttKp * s * qe.z;

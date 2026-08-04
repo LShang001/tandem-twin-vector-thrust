@@ -229,16 +229,20 @@ test('悬停最短路径分支：qe.w<0（误差 >180°）时取反走短弧', (
   assert.ok(Math.abs(sim.S.dtAct) <= P.dMax);
 });
 
-test('悬停直通模式（sasMode=0）：滑块摆角/差速直接执行，无配平偏置、无修正', () => {
+test('悬停直通模式（sasMode=0）：dt/df 直通滑块摆角；dw 仍为航向角速度追踪', () => {
   const sim = createSimulationState(P);
   resetVtolHoverState(sim, P);
   sim.S.sasMode = 0;
-  sim.S.dt = 0.1; sim.S.df = -0.05; sim.S.dw = 0.3;
-  sim.S.omega.y = 5; sim.S.omega.x = 5;    // 扰动不应进入输出
+  sim.S.dt = 0.1; sim.S.df = -0.05;
+  sim.S.dw = 20 * Math.PI / 180;   // +20°/s 航向角速度指令
+  sim.S.omega.y = 5; sim.S.omega.x = 0.1;  // 姿态扰动不应进入 dt/df 输出（小幅避免 dw 饱和）
   applySas(sim, P, 0.004);
-  assert.equal(sim.S.dtAct, 0.1, '直通：dtAct = 滑块指令（无 dtTrim 偏置）');
-  assert.equal(sim.S.dfAct, -0.05, '直通：dfAct = 滑块指令（无 dfTrim 偏置）');
-  assert.equal(sim.S.dwAct, 0.3, '直通：dwAct = 滑块指令');
+  assert.equal(sim.S.dtAct, 0.1, '直通：dtAct = 滑块摆角（无 dtTrim 偏置）');
+  assert.equal(sim.S.dfAct, -0.05, '直通：dfAct = 滑块摆角（无 dfTrim 偏置）');
+  // dw：角速度追踪（∂Mx/∂Δω<0 取 (ω.x−ψ̇)），扰动 ω.x 被阻尼而非直通
+  const dwExpected = P.rateKp * (sim.S.omega.x - 20 * Math.PI / 180);
+  assert.ok(Math.abs(sim.S.dwAct - dwExpected) < 1e-12,
+    `直通 dwAct=${sim.S.dwAct.toFixed(4)} 应 = rateKp·(ω.x−ψ̇) = ${dwExpected.toFixed(4)}（含速率阻尼，非纯直通）`);
 });
 
 // ---------- 高度保持（自动定高） ----------
