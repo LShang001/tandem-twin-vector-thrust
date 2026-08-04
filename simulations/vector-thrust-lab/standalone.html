@@ -179,15 +179,15 @@
       <input type="range" id="s-thr" min="0" max="100" value="50">
     </div>
     <div class="slider-row">
-      <div class="slider-head"><label>俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）</label><span class="val" id="v-dt">0.0°</span></div>
+      <div class="slider-head"><label id="lbl-dt">俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）</label><span class="val" id="v-dt">0.0°</span></div>
       <input type="range" id="s-dt" min="-25" max="25" step="0.1" value="0">
     </div>
     <div class="slider-row">
-      <div class="slider-head"><label>偏航摆角 δ<sub>f</sub>（前电机·绕 z）</label><span class="val" id="v-df">0.0°</span></div>
+      <div class="slider-head"><label id="lbl-df">偏航摆角 δ<sub>f</sub>（前电机·绕 z）</label><span class="val" id="v-df">0.0°</span></div>
       <input type="range" id="s-df" min="-25" max="25" step="0.1" value="0">
     </div>
     <div class="slider-row">
-      <div class="slider-head"><label>差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
+      <div class="slider-head"><label id="lbl-dw">差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
       <input type="range" id="s-dw" min="-30" max="30" step="0.5" value="0">
     </div>
   </div>
@@ -198,6 +198,7 @@
     <button class="btn" id="b-cine">综合演示</button>
     <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
+    <button class="btn" id="b-vtol">悬停模式：关</button>
     <button class="btn" id="b-hover">水平约束：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
   </div>
@@ -54985,6 +54986,9 @@ const P = Object.freeze({
   rateKr: 1.2,  // 角速度闭环偏航增益 [s]
   rateKp: 1.5,  // 角速度闭环滚转增益 [s]
 
+  // ---- VTOL 悬停控制 ----
+  vtolAttKp: 2.5,  // 悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识 [1/s]
+
   // ---- 数值实现 ----
   maxStep: 0.004,  // 积分子步长上限 [s]
   frameCap: 0.05,  // 帧间隔上限 [s]
@@ -55010,6 +55014,16 @@ __def('src/core/state.mjs', function() {
 // ============================================================
 const { vec3, quat } = __req('src/core/math.mjs');
 
+// 悬停初始姿态：绕 NED y 转 +90°（机头朝天，x_b → NED −z）
+// 验证：rotateVecByQuat((1,0,0), Q_HOVER) = (0,0,−1)；显示约定下 theta = −90°
+const Q_HOVER = quat(0, Math.SQRT1_2, 0, Math.SQRT1_2);
+
+// 悬停配平油门（物理派生量，非独立参数）：
+// 双发推力平衡重力：2·kT·(thr·wMax)² = m·g → thr = √(m·g / (2·kT·wMax²))
+function hoverThrottle(P) {
+  return Math.sqrt(P.m * P.g / (2 * P.kT * P.wMax * P.wMax));
+}
+
 function createSimulationState(P) {
   const sim = {
     // ---- 运行状态 ----
@@ -55023,6 +55037,7 @@ function createSimulationState(P) {
       _prevSasMode: 1,     // 上一 SAS 模式（供 control.mjs 检测模式切换）
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
+      vtolMode: false,     // 构型模式：false=固定翼巡航 / true=VTOL 悬停（机头朝天）
       wf: 0, wt: 0,        // 实际转速（一阶滞后）
       intTh: 0, intPhi: 0, // SAS 积分器（俯仰/滚转）
       omega: vec3(),       // 机体角速度 [p q r] (rad/s)
@@ -55063,8 +55078,11 @@ function resetFlightState(sim, P) {
 }
 
 // UI/演示使用的完整动态复位；保留 SAS、气动和水平约束开关。
+// 本函数设置 S.vtolMode=false（resetVtolHoverState 对称地设置 true）——
+// 演示/复位按钮从悬停模式出发时会自动退出悬停，保证模式标志与状态一致。
 function resetSimulationState(sim, P) {
   const { S, dyn, aero } = sim;
+  S.vtolMode = false;     // ★ 模式标志（与悬停复位对称）
   S.thr = P.thrTrim; S.dt = 0; S.df = 0; S.dw = 0;
   S.dtAct = P.dtTrim; S.dfAct = P.dfTrim; S.dwAct = 0;
   S.time = 0;
@@ -55077,7 +55095,36 @@ function resetSimulationState(sim, P) {
   resetFlightState(sim, P);
 }
 
-return { createSimulationState, resetFlightState, resetSimulationState };
+// VTOL 悬停模式复位：机头朝天（x_b 竖直），悬停配平油门，速度/角速度/积分清零。
+// ★ 无翼构型：默认关闭气动力（S.aero=false），进入悬停即"关掉机翼"，可手动再开。
+//   （aero 恢复由 UI 层负责：b-vtol 切回巡航时显式 S.aero=true；直接调
+//    resetSimulationState 保持用户当前的 aero 开关状态，与固定翼复位语义一致）
+// 悬停控制律基准为 0 摆角（不叠加巡航配平 dtTrim/dfTrim）。
+// 本函数设置 S.vtolMode=true（resetSimulationState 对称地设置 false）——
+// 任何入口调用复位都会使模式标志与状态一致。
+function resetVtolHoverState(sim, P) {
+  const { S, F, dyn, aero } = sim;
+  const thr = hoverThrottle(P);
+  const w0 = thr * P.wMax;
+  S.vtolMode = true;      // ★ 模式标志（与固定翼复位对称）
+  S.thr = thr; S.dt = 0; S.df = 0; S.dw = 0;
+  S.dtAct = 0; S.dfAct = 0; S.dwAct = 0;
+  S.intTh = 0; S.intPhi = 0;
+  S.wf = w0; S.wt = w0;
+  sim.prevWf = w0; sim.prevWt = w0;
+  S.omega.x = 0; S.omega.y = 0; S.omega.z = 0;
+  S.quat.x = Q_HOVER.x; S.quat.y = Q_HOVER.y; S.quat.z = Q_HOVER.z; S.quat.w = Q_HOVER.w;
+  S.lockXY = false;
+  S.aero = false;             // ★ 无翼：悬停模式默认关闭气动力
+  S.time = 0;
+  F.vel.x = 0; F.vel.y = 0; F.vel.z = 0;
+  F.vWorld.x = 0; F.vWorld.y = 0; F.vWorld.z = 0;
+  F.pos.x = 0; F.pos.y = 0; F.pos.z = 0;
+  Object.assign(dyn, { Fx: 0, Fy: 0, Fz: 0, Mx: 0, My: 0, Mz: 0, Tf: 0, Tt: 0, Qf: 0, Qt: 0 });
+  Object.assign(aero, { V: 0, qbar: 0, alpha: 0, beta: 0, Mx: 0, My: 0, Mz: 0 });
+}
+
+return { Q_HOVER, hoverThrottle, createSimulationState, resetFlightState, resetSimulationState, resetVtolHoverState };
 });
 __def('src/core/dynamics.mjs', function() {
 // ============================================================
@@ -55843,16 +55890,50 @@ __def('src/browser/controls-ui.mjs', function() {
 // ============================================================
 //  控制面板 UI：滑块 / 开关 / 复位 / 模态框
 // ============================================================
-const { resetSimulationState } = __req('src/core/state.mjs');
+const { resetSimulationState, resetVtolHoverState } = __req('src/core/state.mjs');
 
 function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
   const $ = id => document.getElementById(id);
   const sliders = { thr: $('s-thr'), dt: $('s-dt'), df: $('s-df'), dw: $('s-dw') };
 
+  // 模式相关按钮文案统一刷新（模式可能被复位/演示间接切换）
+  function refreshModeUI() {
+    $('b-vtol').textContent = S.vtolMode ? '悬停模式：开' : '悬停模式：关';
+    $('b-vtol').classList.toggle('active', S.vtolMode);
+    $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
+    $('b-aero').classList.toggle('active', S.aero);
+    if (S.vtolMode) {
+      $('b-sas').textContent = S.sasMode === 0 ? '自稳：关（直通）' : '自稳：开（四元数）';
+      $('b-sas').classList.toggle('active', S.sasMode > 0);
+      // 滑块语义切换为姿态指令（四轴式），标签同步更新
+      $('lbl-dt').innerHTML = '俯仰倾斜指令 θ（绕 y<sub>b</sub>）';
+      $('lbl-df').innerHTML = '侧倾指令 φ（绕 z<sub>b</sub>）';
+      $('lbl-dw').innerHTML = '航向指令 ψ（绕 x<sub>b</sub>，差速）';
+    } else {
+      $('b-sas').textContent = sasLabels[S.sasMode];
+      $('b-sas').classList.toggle('active', S.sasMode > 0);
+      $('lbl-dt').innerHTML = '俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）';
+      $('lbl-df').innerHTML = '偏航摆角 δ<sub>f</sub>（前电机·绕 z）';
+      $('lbl-dw').innerHTML = '差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）';
+    }
+  }
+
   function syncFromUI() {
     const rateMode = S.sasMode === 3;
     S.thr = sliders.thr.value / 100;
+    if (S.vtolMode) {
+      // 悬停模式：滑块 = 目标姿态角指令（四轴式语义）
+      //   dw → 航向 ψ（绕 x_b=世界竖直轴）、dt → 俯仰倾斜（绕 y_b）、df → 侧倾（绕 z_b）
+      S.dt = sliders.dt.value * Math.PI / 180;
+      S.df = sliders.df.value * Math.PI / 180;
+      S.dw = sliders.dw.value * Math.PI / 180;
+      $('v-thr').textContent = `${sliders.thr.value}%`;
+      $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
+      $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
+      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(1)}°`;
+      return;
+    }
     if (rateMode) {
       // 角速度闭环模式：滑块 → 目标角速度 (rad/s)
       S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π/2 rad/s
@@ -55879,7 +55960,11 @@ function createControlsUI({ sim, P, hooks }) {
   function pushToUI() {
     const rateMode = S.sasMode === 3;
     sliders.thr.value = Math.round(S.thr * 100);
-    if (rateMode) {
+    if (S.vtolMode) {
+      sliders.dt.value = (S.dt * 180 / Math.PI).toFixed(1);
+      sliders.df.value = (S.df * 180 / Math.PI).toFixed(1);
+      sliders.dw.value = (S.dw * 180 / Math.PI).toFixed(1);
+    } else if (rateMode) {
       sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
       sliders.df.value = (S.df / P.rateQMax * 25).toFixed(1);
       sliders.dw.value = Math.round(S.dw / P.ratePMax * 30);
@@ -55889,6 +55974,7 @@ function createControlsUI({ sim, P, hooks }) {
       sliders.dw.value = Math.round(S.dw / P.dwUiMax * 100);
     }
     syncFromUI();
+    refreshModeUI();
   }
 
   for (const k in sliders) sliders[k].addEventListener('input', () => { hooks.stopDemo(); syncFromUI(); });
@@ -55926,15 +56012,28 @@ function createControlsUI({ sim, P, hooks }) {
 
   const sasLabels = ['增稳 SAS：关', '增稳 SAS：全部', '增稳 SAS：仅角速率', '增稳 SAS：角速度闭环'];
   $('b-sas').addEventListener('click', () => {
-    S.sasMode = (S.sasMode + 1) % 4;
-    $('b-sas').classList.toggle('active', S.sasMode > 0);
-    $('b-sas').textContent = sasLabels[S.sasMode];
+    if (S.vtolMode) {
+      // 悬停模式：自稳仅区分 开/关（四元数自稳 vs 直通）
+      S.sasMode = S.sasMode === 0 ? 1 : 0;
+    } else {
+      S.sasMode = (S.sasMode + 1) % 4;
+    }
+    refreshModeUI();
     pushToUI();   // 切换模式时同步滑块映射和显示格式
   });
   $('b-aero').addEventListener('click', () => {
     S.aero = !S.aero;
-    $('b-aero').classList.toggle('active', S.aero);
-    $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
+    refreshModeUI();
+  });
+  $('b-vtol').addEventListener('click', () => {
+    hooks.stopDemo();
+    if (S.vtolMode) {
+      resetSimulationState(sim, P);  // 切回固定翼巡航（内部 vtolMode=false）
+      S.aero = true;                 // 巡航恢复机翼（气动力开）
+    } else {
+      resetVtolHoverState(sim, P);   // ★ 进入悬停：机头朝天 + 无翼（aero=false）
+    }
+    pushToUI();
   });
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;
@@ -56263,12 +56362,17 @@ __def('src/core/control.mjs', function() {
 //    2 = 仅角速率阻尼（无姿态/积分）
 //    3 = 角速度闭环（Rate Command：滑块 = 目标角速度）
 // ============================================================
-const { clamp } = __req('src/core/math.mjs');
+const { clamp, quat } = __req('src/core/math.mjs');
+const { quatMultiply, quatInvert, quatNormalize } = __req('src/core/math.mjs');
+const { Q_HOVER } = __req('src/core/state.mjs');
 
 // 反馈极性按各通道控制效率符号整定
 // （∂My/∂δ_t<0, ∂Mx/∂Δω<0 → 正号; ∂Mz/∂δ_f>0 → 负号）
 function applySas(sim, P, dt) {
   const { S, F } = sim;
+  // VTOL 悬停构型：机头朝天（x_b 竖直），欧拉角在 θ≈90° 奇异，
+  // 固定翼 SAS 的欧拉反馈失效 → 走四元数误差级联控制分支。
+  if (S.vtolMode) { applyVtolHover(sim, P); return; }
   const theta = F.euler.y, phi = F.euler.x;
   const thetaError = theta + P.aTrim;
   let dtC = P.dtTrim + S.dt, dfC = P.dfTrim + S.df, dwC = S.dw;
@@ -56304,6 +56408,57 @@ function applySas(sim, P, dt) {
   dfC = clamp(dfC, -P.dMax, P.dMax);
   dwC = clamp(dwC, -P.dwMax, P.dwMax);
   S.dtAct = dtC; S.dfAct = dfC; S.dwAct = dwC;
+}
+
+// ============================================================
+//  VTOL 悬停控制：误差四元数姿态外环 + 角速度 P 内环（级联）
+//  —— 与固件 flight_control.cpp 悬停链同构（q_hover ⊗ Rx(-Heading) 语义），
+//     符号经数值验证（见 tests/vtol.test.mjs "控制符号"用例）。
+//
+//  目标姿态：qCmd = Q_HOVER ⊗ 滑块小角度指令（四轴式语义）
+//     dw 滑块 → 航向 ψ（绕 x_b，悬停时 x_b=世界竖直轴）
+//     dt 滑块 → 俯仰倾斜 θ（绕 y_b）
+//     df 滑块 → 侧倾 φ（绕 z_b）
+//  机体系误差：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系，小角度 qe.xyz ≈ 误差/2；
+//     ⚠ 勿用 q ⊗ qCmd⁻¹ —— 那是 NED 系表达，悬停时 x/y/z 轴错位）
+//  目标角速度：ωdes = −2·vtolAttKp·qe.xyz（符号：qe.y>0 → dtAct>0 → My<0 → 收敛）
+//  角速度内环按通道效率符号（与 sasMode=3 一致）：
+//     尾摆 δt（∂My/∂δt<0）: dtC = rateKq·(ω.y − ωdes.y)
+//     前摆 δf（∂Mz/∂δf>0）: dfC = rateKr·(ωdes.z − ω.z)
+//     差速 Δω（∂Mx/∂Δω<0）: dwC = rateKp·(ω.x − ωdes.x)
+//  悬停基准为 0 摆角（不叠加巡航配平偏置 dtTrim/dfTrim）；
+//  sasMode=0 时直通滑块指令（无自稳），可对比演示。
+// ============================================================
+function applyVtolHover(sim, P) {
+  const { S } = sim;
+
+  // 滑块 → 目标姿态小角度指令（先航向后倾斜，小角度下顺序无关）
+  // 四元数构造：绕 x = (sin,0,0,cos)，绕 y = (0,sin,0,cos)，绕 z = (0,0,sin,cos)
+  const h = S.dt * 0.5, f = S.df * 0.5, w = S.dw * 0.5;
+  const qLocal = quatMultiply(
+    quatMultiply(quat(Math.sin(w), 0, 0, Math.cos(w)),   // 航向 ψ：绕 x_b（悬停时=世界竖直轴）
+                 quat(0, Math.sin(h), 0, Math.cos(h))),  // 俯仰 θ：绕 y_b
+    quat(0, 0, Math.sin(f), Math.cos(f)));               // 侧倾 φ：绕 z_b
+  const qCmd = quatNormalize(quatMultiply(Q_HOVER, qLocal));
+
+  if (S.sasMode === 0) {
+    // 直通：滑块 = 摆角/差速指令（悬停基准 0，无自稳）
+    S.dtAct = clamp(S.dt, -P.dMax, P.dMax);
+    S.dfAct = clamp(S.df, -P.dMax, P.dMax);
+    S.dwAct = clamp(S.dw, -P.dwMax, P.dwMax);
+    return;
+  }
+
+  // 机体系误差四元数：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系），w<0 取反走最短路径
+  const qe = quatNormalize(quatMultiply(quatInvert(qCmd), S.quat));
+  const s = qe.w < 0 ? -1 : 1;
+  const wdx = -2 * P.vtolAttKp * s * qe.x;
+  const wdy = -2 * P.vtolAttKp * s * qe.y;
+  const wdz = -2 * P.vtolAttKp * s * qe.z;
+
+  S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
+  S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
+  S.dwAct = clamp(P.rateKp * (S.omega.x - wdx), -P.dwMax, P.dwMax);
 }
 
 return { applySas };

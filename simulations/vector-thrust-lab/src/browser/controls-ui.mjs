@@ -1,16 +1,50 @@
 // ============================================================
 //  控制面板 UI：滑块 / 开关 / 复位 / 模态框
 // ============================================================
-import { resetSimulationState } from '../core/state.mjs';
+import { resetSimulationState, resetVtolHoverState } from '../core/state.mjs';
 
 export function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
   const $ = id => document.getElementById(id);
   const sliders = { thr: $('s-thr'), dt: $('s-dt'), df: $('s-df'), dw: $('s-dw') };
 
+  // 模式相关按钮文案统一刷新（模式可能被复位/演示间接切换）
+  function refreshModeUI() {
+    $('b-vtol').textContent = S.vtolMode ? '悬停模式：开' : '悬停模式：关';
+    $('b-vtol').classList.toggle('active', S.vtolMode);
+    $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
+    $('b-aero').classList.toggle('active', S.aero);
+    if (S.vtolMode) {
+      $('b-sas').textContent = S.sasMode === 0 ? '自稳：关（直通）' : '自稳：开（四元数）';
+      $('b-sas').classList.toggle('active', S.sasMode > 0);
+      // 滑块语义切换为姿态指令（四轴式），标签同步更新
+      $('lbl-dt').innerHTML = '俯仰倾斜指令 θ（绕 y<sub>b</sub>）';
+      $('lbl-df').innerHTML = '侧倾指令 φ（绕 z<sub>b</sub>）';
+      $('lbl-dw').innerHTML = '航向指令 ψ（绕 x<sub>b</sub>，差速）';
+    } else {
+      $('b-sas').textContent = sasLabels[S.sasMode];
+      $('b-sas').classList.toggle('active', S.sasMode > 0);
+      $('lbl-dt').innerHTML = '俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）';
+      $('lbl-df').innerHTML = '偏航摆角 δ<sub>f</sub>（前电机·绕 z）';
+      $('lbl-dw').innerHTML = '差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）';
+    }
+  }
+
   function syncFromUI() {
     const rateMode = S.sasMode === 3;
     S.thr = sliders.thr.value / 100;
+    if (S.vtolMode) {
+      // 悬停模式：滑块 = 目标姿态角指令（四轴式语义）
+      //   dw → 航向 ψ（绕 x_b=世界竖直轴）、dt → 俯仰倾斜（绕 y_b）、df → 侧倾（绕 z_b）
+      S.dt = sliders.dt.value * Math.PI / 180;
+      S.df = sliders.df.value * Math.PI / 180;
+      S.dw = sliders.dw.value * Math.PI / 180;
+      $('v-thr').textContent = `${sliders.thr.value}%`;
+      $('v-dt').textContent = `${(+sliders.dt.value).toFixed(1)}°`;
+      $('v-df').textContent = `${(+sliders.df.value).toFixed(1)}°`;
+      $('v-dw').textContent = `${(+sliders.dw.value).toFixed(1)}°`;
+      return;
+    }
     if (rateMode) {
       // 角速度闭环模式：滑块 → 目标角速度 (rad/s)
       S.dt = (sliders.dt.value / 25) * P.rateQMax;           // ±π/2 rad/s
@@ -37,7 +71,11 @@ export function createControlsUI({ sim, P, hooks }) {
   function pushToUI() {
     const rateMode = S.sasMode === 3;
     sliders.thr.value = Math.round(S.thr * 100);
-    if (rateMode) {
+    if (S.vtolMode) {
+      sliders.dt.value = (S.dt * 180 / Math.PI).toFixed(1);
+      sliders.df.value = (S.df * 180 / Math.PI).toFixed(1);
+      sliders.dw.value = (S.dw * 180 / Math.PI).toFixed(1);
+    } else if (rateMode) {
       sliders.dt.value = (S.dt / P.rateQMax * 25).toFixed(1);
       sliders.df.value = (S.df / P.rateQMax * 25).toFixed(1);
       sliders.dw.value = Math.round(S.dw / P.ratePMax * 30);
@@ -47,6 +85,7 @@ export function createControlsUI({ sim, P, hooks }) {
       sliders.dw.value = Math.round(S.dw / P.dwUiMax * 100);
     }
     syncFromUI();
+    refreshModeUI();
   }
 
   for (const k in sliders) sliders[k].addEventListener('input', () => { hooks.stopDemo(); syncFromUI(); });
@@ -84,15 +123,28 @@ export function createControlsUI({ sim, P, hooks }) {
 
   const sasLabels = ['增稳 SAS：关', '增稳 SAS：全部', '增稳 SAS：仅角速率', '增稳 SAS：角速度闭环'];
   $('b-sas').addEventListener('click', () => {
-    S.sasMode = (S.sasMode + 1) % 4;
-    $('b-sas').classList.toggle('active', S.sasMode > 0);
-    $('b-sas').textContent = sasLabels[S.sasMode];
+    if (S.vtolMode) {
+      // 悬停模式：自稳仅区分 开/关（四元数自稳 vs 直通）
+      S.sasMode = S.sasMode === 0 ? 1 : 0;
+    } else {
+      S.sasMode = (S.sasMode + 1) % 4;
+    }
+    refreshModeUI();
     pushToUI();   // 切换模式时同步滑块映射和显示格式
   });
   $('b-aero').addEventListener('click', () => {
     S.aero = !S.aero;
-    $('b-aero').classList.toggle('active', S.aero);
-    $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
+    refreshModeUI();
+  });
+  $('b-vtol').addEventListener('click', () => {
+    hooks.stopDemo();
+    if (S.vtolMode) {
+      resetSimulationState(sim, P);  // 切回固定翼巡航（内部 vtolMode=false）
+      S.aero = true;                 // 巡航恢复机翼（气动力开）
+    } else {
+      resetVtolHoverState(sim, P);   // ★ 进入悬停：机头朝天 + 无翼（aero=false）
+    }
+    pushToUI();
   });
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;

@@ -362,6 +362,19 @@
       ]
     },
     {
+      "title": "VTOL 悬停控制",
+      "parameters": [
+        {
+          "name": "vtolAttKp",
+          "value": 2.5,
+          "unit": "1/s",
+          "description": "悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识",
+          "source": "MODEL-DEFAULT",
+          "confidence": "low"
+        }
+      ]
+    },
+    {
       "title": "数值实现",
       "parameters": [
         {

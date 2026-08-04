@@ -23,15 +23,15 @@
       <input type="range" id="s-thr" min="0" max="100" value="50">
     </div>
     <div class="slider-row">
-      <div class="slider-head"><label>俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）</label><span class="val" id="v-dt">0.0°</span></div>
+      <div class="slider-head"><label id="lbl-dt">俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）</label><span class="val" id="v-dt">0.0°</span></div>
       <input type="range" id="s-dt" min="-25" max="25" step="0.1" value="0">
     </div>
     <div class="slider-row">
-      <div class="slider-head"><label>偏航摆角 δ<sub>f</sub>（前电机·绕 z）</label><span class="val" id="v-df">0.0°</span></div>
+      <div class="slider-head"><label id="lbl-df">偏航摆角 δ<sub>f</sub>（前电机·绕 z）</label><span class="val" id="v-df">0.0°</span></div>
       <input type="range" id="s-df" min="-25" max="25" step="0.1" value="0">
     </div>
     <div class="slider-row">
-      <div class="slider-head"><label>差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
+      <div class="slider-head"><label id="lbl-dw">差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
       <input type="range" id="s-dw" min="-30" max="30" step="0.5" value="0">
     </div>
   </div>
@@ -42,6 +42,7 @@
     <button class="btn" id="b-cine">综合演示</button>
     <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
+    <button class="btn" id="b-vtol">悬停模式：关</button>
     <button class="btn" id="b-hover">水平约束：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
   </div>

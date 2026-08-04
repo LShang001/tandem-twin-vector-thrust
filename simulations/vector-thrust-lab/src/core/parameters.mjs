@@ -54,6 +54,9 @@ export const P = Object.freeze({
   rateKr: 1.2,  // 角速度闭环偏航增益 [s]
   rateKp: 1.5,  // 角速度闭环滚转增益 [s]
 
+  // ---- VTOL 悬停控制 ----
+  vtolAttKp: 2.5,  // 悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识 [1/s]
+
   // ---- 数值实现 ----
   maxStep: 0.004,  // 积分子步长上限 [s]
   frameCap: 0.05,  // 帧间隔上限 [s]
