@@ -115,8 +115,9 @@ export function createControlsUI({ sim, P, hooks }) {
   for (const sl of [sliders.dt, sliders.df, sliders.dw]) {   // 油门不回中
     sl.addEventListener('pointerdown', () => cancelSpring(sl));
     const release = () => {
-      // 弹簧回中：固定翼角速度闭环（sasMode=3）三滑块；悬停模式仅航向 dw（角速度指令）
-      if (S.sasMode === 3 || (S.vtolMode && S.sasMode !== 0 && sl === sliders.dw)) springBack(sl);
+      // 弹簧回中：固定翼角速度闭环（sasMode=3）与悬停自稳模式（sasMode≠0）三滑块全部回中
+      // （悬停 dt/df=姿态角指令松手归零 → 姿态回竖直；dw=航向角速度指令松手停转）
+      if (S.sasMode === 3 || (S.vtolMode && S.sasMode !== 0)) springBack(sl);
     };
     sl.addEventListener('pointerup', release);
     sl.addEventListener('touchend', release);

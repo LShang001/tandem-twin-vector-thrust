@@ -476,7 +476,11 @@ NED y 转 +90°），机头朝天（x_b → NED −z）。显示约定下
 <strong>航向角速度指令 ψ̇</strong>（°/s，绕 x_b，rate
 模式：松手回中停转、停在当前航向，无姿态回中；与固件 RATE_MODE
 偏航摇杆一致）；dt → 俯仰倾斜目标角（绕 y_b，尾摆）；df → 侧倾目标角（绕
-z_b，前摆）。</li>
+z_b，前摆）。<strong>悬停自稳模式下三滑块均为弹簧回中</strong>（dt/df
+松手归零 → 姿态回竖直，dw 松手停转）；<strong>qCmd
+跟随当前航向</strong>（ψ_est 由 y_b 水平投影提取）——否则航向自由旋转会使
+qe 的 y/z 分量被 cosψ 调制（ψ=90° 倾斜失效、180° 反向，2026-08-05
+复现并修复）。</li>
 <li><strong>自稳开关</strong>（<code>S.sasMode</code>）：悬停下仅区分
 0/非 0——0 时直通滑块摆角/差速（无自稳，可对比演示"无自稳必倾倒"）；非 0
 时四元数自稳。</li>
@@ -632,5 +636,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 04:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 04:53</footer></article></body>
 </html>

@@ -9,7 +9,7 @@
 //    3 = 角速度闭环（Rate Command：滑块 = 目标角速度）
 // ============================================================
 import { clamp, quat } from './math.mjs';
-import { quatMultiply, quatInvert, quatNormalize } from './math.mjs';
+import { quatMultiply, quatInvert, quatNormalize, rotateVecByQuat } from './math.mjs';
 import { Q_HOVER, hoverThrottle } from './state.mjs';
 
 // 反馈极性按各通道控制效率符号整定
@@ -79,13 +79,23 @@ export function applySas(sim, P, dt) {
 function applyVtolHover(sim, P, dt) {
   const { S, F } = sim;
 
-  // 滑块 → 目标姿态小角度指令（仅 y/z：俯仰/侧倾；航向为角速度指令不入 qCmd）
+  // 滑块 → 目标姿态小角度指令（仅 y/z：俯仰/侧倾；航向为角速度指令不入指令角）
   // 四元数构造：绕 x = (sin,0,0,cos)，绕 y = (0,sin,0,cos)，绕 z = (0,0,sin,cos)
   const h = S.dt * 0.5, f = S.df * 0.5;
   const qLocal = quatMultiply(
     quat(0, Math.sin(h), 0, Math.cos(h)),   // 俯仰 θ：绕 y_b
     quat(0, 0, Math.sin(f), Math.cos(f)));  // 侧倾 φ：绕 z_b
-  const qCmd = quatNormalize(quatMultiply(Q_HOVER, qLocal));
+  // ★ qCmd 必须跟随当前航向：航向由角速度指令自由旋转（x 通道无姿态回中），
+  // 若 qCmd 固定，qe = qCmd⁻¹⊗q 的 y/z 分量表达在 qCmd 系，与机体系绕 x 错位 ψ
+  // → qe.y = cosψ·sin(ε/2)，ψ=90° 时倾斜回中失效、180° 时反向发散（复现于 2026-08-05）。
+  // 提取当前航向（机体 y 轴的水平投影方向角；悬停构型 y_b 近似水平，投影角
+  // 对 ψ∈(−π,π] 精确成立，θ/φ 倾斜引入 O(θ·φ) 二阶误差）：
+  // 绕机体 x 转 +ψ → atan2(yb.y, yb.x) = π/2 − ψ（与 vtol.test.mjs 航向用例一致）
+  const yb = rotateVecByQuat({ x: 0, y: 1, z: 0 }, S.quat);
+  const psiEst = Math.PI / 2 - Math.atan2(yb.y, yb.x);
+  const qCmd = quatNormalize(quatMultiply(
+    quatMultiply(Q_HOVER, quat(Math.sin(psiEst / 2), 0, 0, Math.cos(psiEst / 2))),
+    qLocal));
 
   // ---------- 高度保持（S.altHold=true，仅悬停模式） ----------
   // 独立于姿态自稳（sasMode=0 直通时同样生效）：只接管油门，不触碰摆角。

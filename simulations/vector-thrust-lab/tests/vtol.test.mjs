@@ -170,6 +170,56 @@ test('航向松手回中：旋转中 dw=0 → p 衰减到 0，航向停在当前
     '松手后继续旋转应 < 17°');
 });
 
+test('回归：航向旋转 90° 后倾斜指令仍收敛（qCmd 跟随航向，qe 不被 cosψ 调制）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  // 先转航向 90°（30°/s × 3s ≈ 90°）
+  sim.S.dw = 30 * Math.PI / 180;
+  for (let i = 0; i < Math.round(3 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  assert.ok(sim.S.omega.x > 0.4, `前置：p=${sim.S.omega.x.toFixed(3)} 已旋转`);
+  // 松手 + 给俯仰倾斜指令 10°
+  sim.S.dw = 0;
+  sim.S.dt = 10 * Math.PI / 180;
+  for (let i = 0; i < Math.round(8 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  // 目标 = Q_HOVER ⊗ Rx(当前航向) ⊗ Ry(10°)；用 y_b 投影提取当前航向验证
+  const yb = rotateVecByQuat({ x: 0, y: 1, z: 0 }, sim.S.quat);
+  const psiNow = Math.PI / 2 - Math.atan2(yb.y, yb.x);
+  const qCmd = quatNormalize(quatMultiply(
+    quatMultiply(Q_HOVER, quat(Math.sin(psiNow / 2), 0, 0, Math.cos(psiNow / 2))),
+    quat(0, Math.sin(10 * Math.PI / 360), 0, Math.cos(10 * Math.PI / 360))));
+  const err = quatErrAngle(sim.S.quat, qCmd);
+  assert.ok(err < 0.06, `航向 90°+倾斜指令 8s 后误差 ${(err * 57.3).toFixed(2)}° 应 < 3.4°`);
+  // x 轴保持竖直（姿态未失控翻转）
+  const xb = rotateVecByQuat({ x: 1, y: 0, z: 0 }, sim.S.quat);
+  assert.ok(Math.abs(xb.z + 1) < 0.05, `x_b 应保持竖直（z=${xb.z.toFixed(3)}）`);
+});
+
+test('回归：航向旋转 180° 后倾斜指令不反向（qe 符号不再被翻转破坏）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  // 直接构造航向 180° 姿态（绕机体 x 转 180°）+ 倾斜误差 10°
+  sim.S.quat = quatNormalize(quatMultiply(Q_HOVER,
+    quat(Math.sin(Math.PI / 2), 0, 0, Math.cos(Math.PI / 2))));
+  sim.S.dt = 10 * Math.PI / 180;
+  for (let i = 0; i < Math.round(8 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const yb = rotateVecByQuat({ x: 0, y: 1, z: 0 }, sim.S.quat);
+  const psiNow = Math.PI / 2 - Math.atan2(yb.y, yb.x);
+  const qCmd = quatNormalize(quatMultiply(
+    quatMultiply(Q_HOVER, quat(Math.sin(psiNow / 2), 0, 0, Math.cos(psiNow / 2))),
+    quat(0, Math.sin(10 * Math.PI / 360), 0, Math.cos(10 * Math.PI / 360))));
+  const err = quatErrAngle(sim.S.quat, qCmd);
+  assert.ok(err < 0.08, `航向 180°+倾斜指令 8s 后误差 ${(err * 57.3).toFixed(2)}° 应 < 4.6°`);
+});
+
 test('悬停自稳：俯仰倾斜指令 dt=10° 后 8s 收敛（绕 y_b 倾斜产生水平推力）', () => {
   const thCmd = 10 * Math.PI / 180;
   const qCmd = quatNormalize(quatMultiply(Q_HOVER,
