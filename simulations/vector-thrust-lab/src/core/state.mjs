@@ -27,6 +27,7 @@ export function createSimulationState(P) {
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
       vtolMode: false,     // 构型模式：false=固定翼巡航 / true=VTOL 悬停（机头朝天）
+      useBtrue: false,     // B_true 在线 Jacobian 增量分配（仅悬停自稳模式生效）
       altHold: false,      // 定高开关（仅 VTOL 悬停模式生效）
       altRef: 5,           // 定高参考高度（m，向上为正）
       intAlt: 0,           // 定高高度外环积分器（m·s）
@@ -110,6 +111,7 @@ export function resetVtolHoverState(sim, P) {
   S.quat.x = Q_HOVER.x; S.quat.y = Q_HOVER.y; S.quat.z = Q_HOVER.z; S.quat.w = Q_HOVER.w;
   S.lockXY = false;
   S.aero = false;             // ★ 无翼：悬停模式默认关闭气动力
+  S.useBtrue = false;         // B_true 分配默认关（由 UI 开启）
   S.altHold = false;          // 定高默认关（由 UI 开启）
   S.altRef = 5;
   S.intAlt = 0;

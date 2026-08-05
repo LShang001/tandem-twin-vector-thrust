@@ -11,6 +11,7 @@
 import { clamp, quat } from './math.mjs';
 import { quatMultiply, quatInvert, quatNormalize, rotateVecByQuat } from './math.mjs';
 import { Q_HOVER, hoverThrottle } from './state.mjs';
+import { computeBTrue, inv3 } from './control-allocation.mjs';
 
 // 反馈极性按各通道控制效率符号整定
 // （∂My/∂δ_t<0, ∂Mx/∂Δω<0 → 正号; ∂Mz/∂δ_f>0 → 负号）
@@ -127,6 +128,62 @@ function applyVtolHover(sim, P, dt) {
     // y/z 通道姿态回中（qe.x 不用于控制：航向为纯角速度指令）
     const wdy = -2 * P.vtolAttKp * s * qe.y;
     const wdz = -2 * P.vtolAttKp * s * qe.z;
+
+    if (S.useBtrue) {
+      // ---- B_true 在线 Jacobian 增量分配（S.useBtrue=true，对齐 Python INDI）----
+      // 1) 虚拟角加速度 ν = btrueK·(ωdes − ω)（ωdes.x = 航向角速度指令，y/z = 姿态回中）
+      // 2) 模型预测角加速度 ω̇ = (M推进 + M气动 − gyro)/I
+      //    ★ M推进 用当前状态重算（sim.dyn 是上一子步滞后值——applySas 在
+      //      stepPropulsion 之前执行，滞后会导致 ν≡ω̇ 假平衡死锁）
+      // 3) 目标力矩增量 err = I·(ν − ω̇) → Δu = B⁻¹·err → u += Δu（限幅）
+      //    u = [dwAct, dtAct, dfAct]（执行器积分位置；B 列序 [Δdw, Δδt, Δδf]）
+      const nuX = P.btrueK * (S.dw - S.omega.x);
+      const nuY = P.btrueK * (wdy - S.omega.y);
+      const nuZ = P.btrueK * (wdz - S.omega.z);
+      // 推进力矩（当前执行器位置 + 当前转速；瞬态反扭用 prevWf 差分，同 propulsion.mjs）
+      const cf = Math.cos(S.dfAct), sf = Math.sin(S.dfAct);
+      const ct = Math.cos(S.dtAct), st = Math.sin(S.dtAct);
+      const dWf = (S.wf - sim.prevWf) / Math.max(dt, 1e-4);
+      const dWt = (S.wt - sim.prevWt) / Math.max(dt, 1e-4);
+      const Tf = P.kT * S.wf * S.wf, Tt = P.kT * S.wt * S.wt;
+      const Qf = P.kQ * S.wf * S.wf + P.Jp * dWf;
+      const Qt = P.kQ * S.wt * S.wt + P.Jp * dWt;
+      const mProp = {
+        Mx: -Qf * cf + Qt * ct,
+        My: -P.b * Tt * st - Qf * sf,
+        Mz: P.a * Tf * sf - Qt * st,
+      };
+      const hv = {
+        x: P.Jp * (S.wf * cf - S.wt * ct),
+        y: P.Jp * S.wf * sf,
+        z: P.Jp * S.wt * st,
+      };
+      const gx = (P.Iz - P.Iy) * S.omega.y * S.omega.z + (S.omega.y * hv.z - S.omega.z * hv.y);
+      const gy = (P.Ix - P.Iz) * S.omega.z * S.omega.x + (S.omega.z * hv.x - S.omega.x * hv.z);
+      const gz = (P.Iy - P.Ix) * S.omega.x * S.omega.y + (S.omega.x * hv.y - S.omega.y * hv.x);
+      const wdx = (mProp.Mx + sim.aero.Mx - gx) / P.Ix;
+      const wdyM = (mProp.My + sim.aero.My - gy) / P.Iy;
+      const wdzM = (mProp.Mz + sim.aero.Mz - gz) / P.Iz;
+      const errX = P.Ix * (nuX - wdx);
+      const errY = P.Iy * (nuY - wdyM);
+      const errZ = P.Iz * (nuZ - wdzM);
+      const Binv = inv3(computeBTrue(S.thr * P.wMax, S.dfAct, S.dtAct, S.dwAct, P));
+      if (Binv) {
+        const duX = Binv[0][0] * errX + Binv[0][1] * errY + Binv[0][2] * errZ;
+        const duY = Binv[1][0] * errX + Binv[1][1] * errY + Binv[1][2] * errZ;
+        const duZ = Binv[2][0] * errX + Binv[2][1] * errY + Binv[2][2] * errZ;
+        S.dwAct = clamp(S.dwAct + duX, -P.dwMax, P.dwMax);
+        S.dtAct = clamp(S.dtAct + duY, -P.dMax, P.dMax);
+        S.dfAct = clamp(S.dfAct + duZ, -P.dMax, P.dMax);
+      } else {
+        // 奇异（低油门）回退：对角映射
+        S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
+        S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
+        S.dwAct = clamp(P.rateKp * (S.omega.x - S.dw), -P.dwMax, P.dwMax);
+      }
+      return;
+    }
+
     S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
     S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
   }

@@ -258,6 +258,27 @@ thr  = thrHover/√cosγ + altKpV·(vZref − vZ)                 cosγ = x̂_b�
 - **增益**：`altKpH=0.5`、`altKpI=0.15`、`altKpV=0.1`、`altVZMax=1.0`（`models/aircraft-model.json` §VTOL 高度保持，MODEL-DEFAULT）；积分限幅 ±1.5 m·s（派生常量）
 - **边界**：定高与姿态指令可同时使用（倾斜平移时高度保持）；无位置闭环，水平漂移仍为模型固有行为。仿真无传感器模型，高度/垂直速度用真值
 
+### 8.5 B_true 在线 Jacobian 增量分配（可选开关）
+
+> 对应源码：`control-allocation.mjs:computeBTrue/inv3`、`control.mjs:applyVtolHover` B_true 分支；UI「B_true 分配」按钮（仅悬停模式显示）。三端同构：Python `core.control_effectiveness`、固件 `TandemVec_ControlAllocation.h`。
+
+**B 矩阵**：`B = ∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf]`——当前工作点 (ω0, δf, δt, dw) 的解析 Jacobian（ω0 = 当前油门 `S.thr·wMax`，B 随执行器位置在线更新），元素与数值差分逐项一致（`control-allocation.test.mjs`）。
+
+**增量式分配律**（对齐 Python INDI，web 无传感器噪声 → ω̇ 用模型精确值）：
+
+```
+ν   = btrueK·(ωdes − ω)                  （虚拟角加速度；ωdes 与 §8.2 相同）
+ω̇   = (M推进 + M气动 − ω×(I·ω) − ω×h)/I  （★ M推进 用当前执行器位置重算——
+      不能读 sim.dyn（上一子步滞后），滞后会导致 ν≡ω̇ 假平衡死锁，2026-08-05 复现修复）
+err = I·(ν − ω̇)                          （目标力矩增量）
+Δu  = B⁻¹·err  →  u += Δu（限幅）         （u = [dwAct, dtAct, dfAct]，列序 [Δdw, Δδt, Δδf]）
+```
+
+- **效果**：把 δt↔Mz、δf↔My 的交叉耦合经 B⁻¹ 解耦分配（对角映射只补偿主通道）；低油门奇异（det≈0）时回退对角映射
+- **增益**：`btrueK = 60`（§VTOL 悬停控制，MODEL-DEFAULT，量级对齐对角内环等效带宽 rateKq·b·T/Iy ≈ 59）
+- 仅悬停自稳模式生效（sasMode≠0）；直通模式不介入；与定高/航向角速度指令可组合
+- 数值验证：B⁻¹·B = I、Δu 小增量精确复现目标力矩（一阶线性区内）、扰动恢复与对角模式同量级不劣化（`vtol.test.mjs` 5 用例）
+
 ---
 
 ## 9 测试覆盖指针

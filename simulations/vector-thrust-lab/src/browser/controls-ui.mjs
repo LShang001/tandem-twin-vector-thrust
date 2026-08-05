@@ -14,11 +14,14 @@ export function createControlsUI({ sim, P, hooks }) {
     $('b-vtol').classList.toggle('active', S.vtolMode);
     $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
     $('b-aero').classList.toggle('active', S.aero);
-    // 定高控件仅悬停模式可见
+    // 定高/B_true 控件仅悬停模式可见
     $('b-alt').style.display = S.vtolMode ? '' : 'none';
     $('row-alt').style.display = S.vtolMode ? '' : 'none';
+    $('b-btrue').style.display = S.vtolMode ? '' : 'none';
     $('b-alt').textContent = S.altHold ? '定高：开' : '定高：关';
     $('b-alt').classList.toggle('active', S.altHold);
+    $('b-btrue').textContent = S.useBtrue ? 'B_true 分配：开' : 'B_true 分配：关';
+    $('b-btrue').classList.toggle('active', S.useBtrue);
     $('v-alt').textContent = `${(+$('s-alt').value).toFixed(1)}m`;
     if (S.vtolMode) {
       $('b-sas').textContent = S.sasMode === 0 ? '自稳：关（直通）' : '自稳：开（四元数）';
@@ -166,6 +169,11 @@ export function createControlsUI({ sim, P, hooks }) {
   $('s-alt').addEventListener('input', () => {
     S.altRef = +$('s-alt').value;
     $('v-alt').textContent = `${S.altRef.toFixed(1)}m`;
+  });
+  // B_true 在线 Jacobian 增量分配开关（仅悬停模式可见；直通模式下不生效）
+  $('b-btrue').addEventListener('click', () => {
+    S.useBtrue = !S.useBtrue;
+    refreshModeUI();
   });
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;

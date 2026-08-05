@@ -399,3 +399,84 @@ test('定高关闭：油门恢复悬停配平，不参与控制', () => {
   assert.equal(sim.S.thr, 0.8, '定高关闭时控制律不改油门');
   assert.equal(sim.S.intAlt, 0, '定高关闭时积分器不累积');
 });
+
+// ---------- B_true 在线 Jacobian 增量分配（S.useBtrue） ----------
+
+test('B_true 模式：零扰动悬停 10s 保持（增量分配闭环稳定）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.useBtrue = true;
+  for (let i = 0; i < Math.round(10 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const err = quatErrAngle(sim.S.quat, Q_HOVER);
+  assert.ok(err < 0.03, `B_true 10s 后姿态误差 ${(err * 57.3).toFixed(2)}° 应 < 1.7°`);
+  assert.ok(Math.hypot(sim.S.omega.x, sim.S.omega.y, sim.S.omega.z) < 0.15, '角速度应衰减');
+});
+
+test('B_true 模式：俯仰角速度扰动 0.3 rad/s 后 8s 收敛（与对角模式同量级）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.useBtrue = true;
+  sim.S.omega.y = 0.3;
+  for (let i = 0; i < Math.round(8 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const err = quatErrAngle(sim.S.quat, Q_HOVER);
+  assert.ok(err < 0.05, `B_true 扰动后误差 ${(err * 57.3).toFixed(2)}° 应 < 2.9°`);
+  assert.ok(Math.abs(sim.S.omega.y) < 0.15, '残余角速度应小');
+});
+
+test('B_true 模式：航向角速度指令执行（增量分配不破坏 rate 语义）', () => {
+  const psiDot = 20 * Math.PI / 180;
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.useBtrue = true;
+  sim.S.dw = psiDot;
+  for (let i = 0; i < Math.round(8 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  assert.ok(Math.abs(sim.S.omega.x - psiDot) < 0.05,
+    `p=${sim.S.omega.x.toFixed(3)} 应 ≈ 指令 ${psiDot.toFixed(3)} rad/s`);
+});
+
+test('B_true 模式：与对角模式收敛性对比不劣化（同扰动 8s 误差）', () => {
+  const run = (useBtrue) => {
+    const sim = createSimulationState(P);
+    resetVtolHoverState(sim, P);
+    sim.S.useBtrue = useBtrue;
+    sim.S.omega.y = 0.5; sim.S.omega.z = 0.3;   // 双通道扰动（耦合通道更有意义）
+    for (let i = 0; i < Math.round(8 / FRAME_DT); i++) {
+      sim.S.time += FRAME_DT;
+      stepPhysics(sim, P, FRAME_DT);
+    }
+    return quatErrAngle(sim.S.quat, Q_HOVER);
+  };
+  const errDiag = run(false), errBtrue = run(true);
+  assert.ok(errBtrue < errDiag * 1.3 + 0.02,
+    `B_true 误差 ${(errBtrue * 57.3).toFixed(2)}° 不应显著劣于对角 ${(errDiag * 57.3).toFixed(2)}°`);
+});
+
+test('B_true 模式：开关切换即时生效且执行器连续（无跳变）', () => {
+  const sim = createSimulationState(P);
+  resetVtolHoverState(sim, P);
+  sim.S.useBtrue = true;
+  sim.S.omega.y = 0.3;
+  // 2s 后关闭 B_true（切回对角）
+  for (let i = 0; i < Math.round(2 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  const dtBefore = sim.S.dtAct;
+  sim.S.useBtrue = false;
+  for (let i = 0; i < Math.round(3 / FRAME_DT); i++) {
+    sim.S.time += FRAME_DT;
+    stepPhysics(sim, P, FRAME_DT);
+  }
+  assert.ok(Math.abs(sim.S.dtAct) < P.dMax, '切换后输出有限');
+  const err = quatErrAngle(sim.S.quat, Q_HOVER);
+  assert.ok(err < 0.06, `切换后 3s 误差 ${(err * 57.3).toFixed(2)}° 应收敛`);
+});

@@ -203,6 +203,7 @@
     <button class="btn active" id="b-sas">增稳 SAS：全部</button>
     <button class="btn active" id="b-aero">气动力：开</button>
     <button class="btn" id="b-vtol">悬停模式：关</button>
+    <button class="btn" id="b-btrue" style="display:none">B_true 分配：关</button>
     <button class="btn" id="b-alt" style="display:none">定高：关</button>
     <button class="btn" id="b-hover">水平约束：关</button>
     <button class="btn warn wide" id="b-reset">复位 RESET</button>
@@ -54993,6 +54994,7 @@ const P = Object.freeze({
 
   // ---- VTOL 悬停控制 ----
   vtolAttKp: 2.5,  // 悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识 [1/s]
+  btrueK: 60,  // B_true 在线 Jacobian 分配模式的角速度内环增益：虚拟角加速度 ν = btrueK·(ωdes − ω)，经惯量转换为力矩增量 err = I·(ν − ω̇) 后由 B⁻¹ 分配。量级对齐现有内环等效带宽（rateKq·b·T/Iy ≈ 59）。概念级手调值 [rad/s² per rad/s]
 
   // ---- VTOL 高度保持 ----
   altKpH: 0.5,  // 定高高度外环增益：目标垂直速度 vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)，h_err = altRef − h。概念级手调值，无系统辨识 [1/s]
@@ -55049,6 +55051,7 @@ function createSimulationState(P) {
       aero: true,          // 气动力开关（false = 仅电机推力）
       lockXY: false,       // 水平运动学约束（true = 惯性系水平速度持续清零）
       vtolMode: false,     // 构型模式：false=固定翼巡航 / true=VTOL 悬停（机头朝天）
+      useBtrue: false,     // B_true 在线 Jacobian 增量分配（仅悬停自稳模式生效）
       altHold: false,      // 定高开关（仅 VTOL 悬停模式生效）
       altRef: 5,           // 定高参考高度（m，向上为正）
       intAlt: 0,           // 定高高度外环积分器（m·s）
@@ -55132,6 +55135,7 @@ function resetVtolHoverState(sim, P) {
   S.quat.x = Q_HOVER.x; S.quat.y = Q_HOVER.y; S.quat.z = Q_HOVER.z; S.quat.w = Q_HOVER.w;
   S.lockXY = false;
   S.aero = false;             // ★ 无翼：悬停模式默认关闭气动力
+  S.useBtrue = false;         // B_true 分配默认关（由 UI 开启）
   S.altHold = false;          // 定高默认关（由 UI 开启）
   S.altRef = 5;
   S.intAlt = 0;
@@ -55929,11 +55933,14 @@ function createControlsUI({ sim, P, hooks }) {
     $('b-vtol').classList.toggle('active', S.vtolMode);
     $('b-aero').textContent = S.aero ? '气动力：开' : '气动力：忽略';
     $('b-aero').classList.toggle('active', S.aero);
-    // 定高控件仅悬停模式可见
+    // 定高/B_true 控件仅悬停模式可见
     $('b-alt').style.display = S.vtolMode ? '' : 'none';
     $('row-alt').style.display = S.vtolMode ? '' : 'none';
+    $('b-btrue').style.display = S.vtolMode ? '' : 'none';
     $('b-alt').textContent = S.altHold ? '定高：开' : '定高：关';
     $('b-alt').classList.toggle('active', S.altHold);
+    $('b-btrue').textContent = S.useBtrue ? 'B_true 分配：开' : 'B_true 分配：关';
+    $('b-btrue').classList.toggle('active', S.useBtrue);
     $('v-alt').textContent = `${(+$('s-alt').value).toFixed(1)}m`;
     if (S.vtolMode) {
       $('b-sas').textContent = S.sasMode === 0 ? '自稳：关（直通）' : '自稳：开（四元数）';
@@ -56081,6 +56088,11 @@ function createControlsUI({ sim, P, hooks }) {
   $('s-alt').addEventListener('input', () => {
     S.altRef = +$('s-alt').value;
     $('v-alt').textContent = `${S.altRef.toFixed(1)}m`;
+  });
+  // B_true 在线 Jacobian 增量分配开关（仅悬停模式可见；直通模式下不生效）
+  $('b-btrue').addEventListener('click', () => {
+    S.useBtrue = !S.useBtrue;
+    refreshModeUI();
   });
   $('b-hover').addEventListener('click', () => {
     S.lockXY = !S.lockXY;
@@ -56412,6 +56424,7 @@ __def('src/core/control.mjs', function() {
 const { clamp, quat } = __req('src/core/math.mjs');
 const { quatMultiply, quatInvert, quatNormalize, rotateVecByQuat } = __req('src/core/math.mjs');
 const { Q_HOVER, hoverThrottle } = __req('src/core/state.mjs');
+const { computeBTrue, inv3 } = __req('src/core/control-allocation.mjs');
 
 // 反馈极性按各通道控制效率符号整定
 // （∂My/∂δ_t<0, ∂Mx/∂Δω<0 → 正号; ∂Mz/∂δ_f>0 → 负号）
@@ -56528,6 +56541,62 @@ function applyVtolHover(sim, P, dt) {
     // y/z 通道姿态回中（qe.x 不用于控制：航向为纯角速度指令）
     const wdy = -2 * P.vtolAttKp * s * qe.y;
     const wdz = -2 * P.vtolAttKp * s * qe.z;
+
+    if (S.useBtrue) {
+      // ---- B_true 在线 Jacobian 增量分配（S.useBtrue=true，对齐 Python INDI）----
+      // 1) 虚拟角加速度 ν = btrueK·(ωdes − ω)（ωdes.x = 航向角速度指令，y/z = 姿态回中）
+      // 2) 模型预测角加速度 ω̇ = (M推进 + M气动 − gyro)/I
+      //    ★ M推进 用当前状态重算（sim.dyn 是上一子步滞后值——applySas 在
+      //      stepPropulsion 之前执行，滞后会导致 ν≡ω̇ 假平衡死锁）
+      // 3) 目标力矩增量 err = I·(ν − ω̇) → Δu = B⁻¹·err → u += Δu（限幅）
+      //    u = [dwAct, dtAct, dfAct]（执行器积分位置；B 列序 [Δdw, Δδt, Δδf]）
+      const nuX = P.btrueK * (S.dw - S.omega.x);
+      const nuY = P.btrueK * (wdy - S.omega.y);
+      const nuZ = P.btrueK * (wdz - S.omega.z);
+      // 推进力矩（当前执行器位置 + 当前转速；瞬态反扭用 prevWf 差分，同 propulsion.mjs）
+      const cf = Math.cos(S.dfAct), sf = Math.sin(S.dfAct);
+      const ct = Math.cos(S.dtAct), st = Math.sin(S.dtAct);
+      const dWf = (S.wf - sim.prevWf) / Math.max(dt, 1e-4);
+      const dWt = (S.wt - sim.prevWt) / Math.max(dt, 1e-4);
+      const Tf = P.kT * S.wf * S.wf, Tt = P.kT * S.wt * S.wt;
+      const Qf = P.kQ * S.wf * S.wf + P.Jp * dWf;
+      const Qt = P.kQ * S.wt * S.wt + P.Jp * dWt;
+      const mProp = {
+        Mx: -Qf * cf + Qt * ct,
+        My: -P.b * Tt * st - Qf * sf,
+        Mz: P.a * Tf * sf - Qt * st,
+      };
+      const hv = {
+        x: P.Jp * (S.wf * cf - S.wt * ct),
+        y: P.Jp * S.wf * sf,
+        z: P.Jp * S.wt * st,
+      };
+      const gx = (P.Iz - P.Iy) * S.omega.y * S.omega.z + (S.omega.y * hv.z - S.omega.z * hv.y);
+      const gy = (P.Ix - P.Iz) * S.omega.z * S.omega.x + (S.omega.z * hv.x - S.omega.x * hv.z);
+      const gz = (P.Iy - P.Ix) * S.omega.x * S.omega.y + (S.omega.x * hv.y - S.omega.y * hv.x);
+      const wdx = (mProp.Mx + sim.aero.Mx - gx) / P.Ix;
+      const wdyM = (mProp.My + sim.aero.My - gy) / P.Iy;
+      const wdzM = (mProp.Mz + sim.aero.Mz - gz) / P.Iz;
+      const errX = P.Ix * (nuX - wdx);
+      const errY = P.Iy * (nuY - wdyM);
+      const errZ = P.Iz * (nuZ - wdzM);
+      const Binv = inv3(computeBTrue(S.thr * P.wMax, S.dfAct, S.dtAct, S.dwAct, P));
+      if (Binv) {
+        const duX = Binv[0][0] * errX + Binv[0][1] * errY + Binv[0][2] * errZ;
+        const duY = Binv[1][0] * errX + Binv[1][1] * errY + Binv[1][2] * errZ;
+        const duZ = Binv[2][0] * errX + Binv[2][1] * errY + Binv[2][2] * errZ;
+        S.dwAct = clamp(S.dwAct + duX, -P.dwMax, P.dwMax);
+        S.dtAct = clamp(S.dtAct + duY, -P.dMax, P.dMax);
+        S.dfAct = clamp(S.dfAct + duZ, -P.dMax, P.dMax);
+      } else {
+        // 奇异（低油门）回退：对角映射
+        S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
+        S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
+        S.dwAct = clamp(P.rateKp * (S.omega.x - S.dw), -P.dwMax, P.dwMax);
+      }
+      return;
+    }
+
     S.dtAct = clamp(P.rateKq * (S.omega.y - wdy), -P.dMax, P.dMax);
     S.dfAct = clamp(P.rateKr * (wdz - S.omega.z), -P.dMax, P.dMax);
   }
@@ -58873,6 +58942,51 @@ UnrealBloomPass.BlurDirectionY = new Vector2( 0.0, 1.0 );
 
 
 return { UnrealBloomPass };
+});
+__def('src/core/control-allocation.mjs', function() {
+// ============================================================
+//  B_true — 在线控制效能 Jacobian（控制分配）
+//  对齐 Python core.control_effectiveness / 论文 ch/10 / 固件
+//  TandemVec_ControlAllocation.h（三端同构）
+//
+//  B 矩阵：行 = [Mx, My, Mz]（力矩增量），列 = [Δdw, Δδt, Δδf]（执行器增量）
+//  B[i,j] = ∂M_i/∂u_j 在当前工作点 (ω0, δf, δt, dw) 的解析偏导
+//  （ω0 = 当前油门基准转速；Tf/Tt、Qf/Qt 用差速线性化 T0·(1±dw)）
+//
+//  用法（增量式分配，对齐 Python INDI）：
+//    目标角加速度增量 err = I·(ν − ω̇)   →  Δu = B⁻¹·err → u += Δu（限幅）
+// ============================================================
+
+// 3×3 矩阵求逆（伴随矩阵法，det≠0）
+function inv3(m) {
+  const [a, b, c] = m[0], [d, e, f] = m[1], [g, h, i] = m[2];
+  const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-12) return null;   // 奇异（低油门）
+  const inv = 1 / det;
+  return [
+    [(e * i - f * h) * inv, (c * h - b * i) * inv, (b * f - c * e) * inv],
+    [(f * g - d * i) * inv, (a * i - c * g) * inv, (c * d - a * f) * inv],
+    [(d * h - e * g) * inv, (b * g - a * h) * inv, (a * e - b * d) * inv],
+  ];
+}
+
+// 在线 Jacobian：B = ∂[Mx,My,Mz]/∂[dw,δt,δf]（解析偏导，忽略 Jp·ω̇ 瞬态项）
+function computeBTrue(omega0, delta_f, delta_t, dw, P) {
+  const T0 = P.kT * omega0 * omega0;      // 基准推力
+  const tau0 = P.kQ * omega0 * omega0;    // 基准反扭
+  const Tf = T0 * (1 + dw), Tt = T0 * (1 - dw);
+  const tauf = tau0 * (1 + dw), taut = tau0 * (1 - dw);
+  const sf = Math.sin(delta_f), cf = Math.cos(delta_f);
+  const st = Math.sin(delta_t), ct = Math.cos(delta_t);
+  // 行 [Mx, My, Mz] × 列 [dw, dt, df]
+  return [
+    [-tau0 * (cf + ct), -taut * st, tauf * sf],        // Mx
+    [P.b * T0 * st - tau0 * sf, -P.b * Tt * ct, -tauf * cf],  // My
+    [P.a * T0 * sf + tau0 * st, -taut * ct, P.a * Tf * cf],   // Mz
+  ];
+}
+
+return { inv3, computeBTrue };
 });
 __def('vendor/three-r170/addons/shaders/CopyShader.js', function() {
 /**

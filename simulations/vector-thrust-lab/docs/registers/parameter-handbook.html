@@ -42,7 +42,7 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <li><strong>模型 ID</strong>：<code>PAR-C0-001</code></li>
 <li><strong>总体状态</strong>：<code>MODEL-DEFAULT</code>（推进/惯量/质量/配平为
 ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
-<li><strong>参数总数</strong>：58</li>
+<li><strong>参数总数</strong>：59</li>
 <li><strong>生成文件</strong>：<code>simulations/vector-thrust-lab/src/core/parameters.mjs</code></li>
 <li><strong>同步命令</strong>：<code>py -3.12 tools/sync-params.py</code>（仓库根目录）</li>
 </ul>
@@ -832,6 +832,18 @@ vZ)）</td>
 <td><code>P.altVZMax</code></td>
 <td>控制（VTOL 定高）</td>
 </tr>
+<tr>
+<td>PAR-059</td>
+<td><code>btrueK</code></td>
+<td>60</td>
+<td>rad/s² per rad/s</td>
+<td>B_true 增量分配角速度内环增益：ν = btrueK·(ωdes −
+ω)（对齐对角内环等效带宽 rateKq·b·T/Iy ≈ 59）</td>
+<td>MODEL-DEFAULT</td>
+<td>low</td>
+<td><code>P.btrueK</code></td>
+<td>控制（B_true 分配）</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -851,5 +863,5 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 16:24</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:08</footer></article></body>
 </html>
