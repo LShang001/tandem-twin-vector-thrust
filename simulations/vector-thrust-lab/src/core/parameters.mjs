@@ -56,7 +56,7 @@ export const P = Object.freeze({
 
   // ---- VTOL 悬停控制 ----
   vtolAttKp: 2.5,  // 悬停姿态外环增益：目标角速度 ωdes = −2·vtolAttKp·qe.xyz（qe = q⊗qCmd⁻¹ 机体系误差四元数，小角度 qe.xyz ≈ 误差/2）。角速度内环复用 rateKq/rateKr/rateKp（与 sasMode=3 相同通道效率符号）。概念级手调值，无系统辨识 [1/s]
-  btrueK: 60,  // B_true 在线 Jacobian 分配模式的角速度内环增益：虚拟角加速度 ν = btrueK·(ωdes − ω)，经惯量转换为力矩增量 err = I·(ν − ω̇) 后由 B⁻¹ 分配。量级对齐现有内环等效带宽（rateKq·b·T/Iy ≈ 59）。概念级手调值 [rad/s² per rad/s]
+  btrueK: 60,  // B_true 纯控制分配模式的内环力矩增益：M_des = diag(Ix,Iy,Iz)·btrueK·(ωdes − ω)（角速度误差→目标力矩，对角独立），分配层 Δu = B⁻¹·(M_des − M_cur) 转换到执行器。语义 = 角加速度增益（M=I·K·Δω），量级对齐现有对角内环等效带宽（rateKq·b·T/Iy ≈ 59）。概念级手调值 [rad/s² per rad/s]
 
   // ---- VTOL 高度保持 ----
   altKpH: 0.5,  // 定高高度外环增益：目标垂直速度 vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)，h_err = altRef − h。概念级手调值，无系统辨识 [1/s]

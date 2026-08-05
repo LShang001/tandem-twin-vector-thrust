@@ -130,17 +130,22 @@ function applyVtolHover(sim, P, dt) {
     const wdz = -2 * P.vtolAttKp * s * qe.z;
 
     if (S.useBtrue) {
-      // ---- B_true 在线 Jacobian 增量分配（S.useBtrue=true，对齐 Python INDI）----
-      // 1) 虚拟角加速度 ν = btrueK·(ωdes − ω)（ωdes.x = 航向角速度指令，y/z = 姿态回中）
-      // 2) 模型预测角加速度 ω̇ = (M推进 + M气动 − gyro)/I
-      //    ★ M推进 用当前状态重算（sim.dyn 是上一子步滞后值——applySas 在
-      //      stepPropulsion 之前执行，滞后会导致 ν≡ω̇ 假平衡死锁）
-      // 3) 目标力矩增量 err = I·(ν − ω̇) → Δu = B⁻¹·err → u += Δu（限幅）
-      //    u = [dwAct, dtAct, dfAct]（执行器积分位置；B 列序 [Δdw, Δδt, Δδf]）
-      const nuX = P.btrueK * (S.dw - S.omega.x);
-      const nuY = P.btrueK * (wdy - S.omega.y);
-      const nuZ = P.btrueK * (wdz - S.omega.z);
-      // 推进力矩（当前执行器位置 + 当前转速；瞬态反扭用 prevWf 差分，同 propulsion.mjs）
+      // ---- B_true 在线控制分配（S.useBtrue=true）----
+      // 内环：角速度误差 → 目标力矩（每通道独立对角，M = I·K·(ωdes − ω)）
+      //   ωdes.x = 航向角速度指令（rate 模式）、ωdes.y/z = 姿态回中（qe）
+      // 分配层：Δu = B⁻¹·(M_des − M_cur)，u += Δu（限幅）
+      //   M_cur = 当前执行器位置的推进力矩（模型预测，含 Jp 瞬态反扭；
+      //           不含气动/gyro——分配层只负责执行器，外扰由内环闭环抑制）
+      //   B = ∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf] 当前工作点 Jacobian（列序 [Δdw,Δδt,Δδf]）
+      // ★ 非 INDI：无角加速度反演（不需要 ω̇ 估计）；M_cur 用当前状态重算
+      //   （sim.dyn 是上一子步滞后值——applySas 先于 stepPropulsion 执行）
+      const kX = P.Ix * P.btrueK, kY = P.Iy * P.btrueK, kZ = P.Iz * P.btrueK;
+      const mDes = {
+        x: kX * (S.dw - S.omega.x),
+        y: kY * (wdy - S.omega.y),
+        z: kZ * (wdz - S.omega.z),
+      };
+      // 当前执行器力矩（当前摆角 + 当前转速；瞬态反扭用 prevWf 差分，同 propulsion.mjs）
       const cf = Math.cos(S.dfAct), sf = Math.sin(S.dfAct);
       const ct = Math.cos(S.dtAct), st = Math.sin(S.dtAct);
       const dWf = (S.wf - sim.prevWf) / Math.max(dt, 1e-4);
@@ -148,30 +153,17 @@ function applyVtolHover(sim, P, dt) {
       const Tf = P.kT * S.wf * S.wf, Tt = P.kT * S.wt * S.wt;
       const Qf = P.kQ * S.wf * S.wf + P.Jp * dWf;
       const Qt = P.kQ * S.wt * S.wt + P.Jp * dWt;
-      const mProp = {
-        Mx: -Qf * cf + Qt * ct,
-        My: -P.b * Tt * st - Qf * sf,
-        Mz: P.a * Tf * sf - Qt * st,
+      const mCur = {
+        x: -Qf * cf + Qt * ct,
+        y: -P.b * Tt * st - Qf * sf,
+        z: P.a * Tf * sf - Qt * st,
       };
-      const hv = {
-        x: P.Jp * (S.wf * cf - S.wt * ct),
-        y: P.Jp * S.wf * sf,
-        z: P.Jp * S.wt * st,
-      };
-      const gx = (P.Iz - P.Iy) * S.omega.y * S.omega.z + (S.omega.y * hv.z - S.omega.z * hv.y);
-      const gy = (P.Ix - P.Iz) * S.omega.z * S.omega.x + (S.omega.z * hv.x - S.omega.x * hv.z);
-      const gz = (P.Iy - P.Ix) * S.omega.x * S.omega.y + (S.omega.x * hv.y - S.omega.y * hv.x);
-      const wdx = (mProp.Mx + sim.aero.Mx - gx) / P.Ix;
-      const wdyM = (mProp.My + sim.aero.My - gy) / P.Iy;
-      const wdzM = (mProp.Mz + sim.aero.Mz - gz) / P.Iz;
-      const errX = P.Ix * (nuX - wdx);
-      const errY = P.Iy * (nuY - wdyM);
-      const errZ = P.Iz * (nuZ - wdzM);
+      const dM = { x: mDes.x - mCur.x, y: mDes.y - mCur.y, z: mDes.z - mCur.z };
       const Binv = inv3(computeBTrue(S.thr * P.wMax, S.dfAct, S.dtAct, S.dwAct, P));
       if (Binv) {
-        const duX = Binv[0][0] * errX + Binv[0][1] * errY + Binv[0][2] * errZ;
-        const duY = Binv[1][0] * errX + Binv[1][1] * errY + Binv[1][2] * errZ;
-        const duZ = Binv[2][0] * errX + Binv[2][1] * errY + Binv[2][2] * errZ;
+        const duX = Binv[0][0] * dM.x + Binv[0][1] * dM.y + Binv[0][2] * dM.z;
+        const duY = Binv[1][0] * dM.x + Binv[1][1] * dM.y + Binv[1][2] * dM.z;
+        const duZ = Binv[2][0] * dM.x + Binv[2][1] * dM.y + Binv[2][2] * dM.z;
         S.dwAct = clamp(S.dwAct + duX, -P.dwMax, P.dwMax);
         S.dtAct = clamp(S.dtAct + duY, -P.dMax, P.dMax);
         S.dfAct = clamp(S.dfAct + duZ, -P.dMax, P.dMax);

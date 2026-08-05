@@ -548,32 +548,37 @@ m，<strong>拖动实时更新参考高度</strong>，定高开启时生效）�
 §VTOL 高度保持，MODEL-DEFAULT）；积分限幅 ±1.5 m·s（派生常量）</li>
 <li><strong>边界</strong>：定高与姿态指令可同时使用（倾斜平移时高度保持）；无位置闭环，水平漂移仍为模型固有行为。仿真无传感器模型，高度/垂直速度用真值</li>
 </ul>
-<h3 id="85-b_true-在线-jacobian-增量分配可选开关">8.5 B_true 在线
-Jacobian 增量分配（可选开关）</h3>
+<h3 id="85-b_true-在线控制分配可选开关">8.5 B_true
+在线控制分配（可选开关）</h3>
 <blockquote>
 <p>对应源码：<code>control-allocation.mjs:computeBTrue/inv3</code>、<code>control.mjs:applyVtolHover</code>
-B_true 分支；UI「B_true 分配」按钮（仅悬停模式显示）。三端同构：Python
-<code>core.control_effectiveness</code>、固件
+B_true 分支；UI「B_true 分配」按钮（仅悬停模式显示）。B
+矩阵三端同构：Python <code>core.control_effectiveness</code>、固件
 <code>TandemVec_ControlAllocation.h</code>。</p>
 </blockquote>
+<p><strong>定位：纯控制分配层</strong>（非 INDI——无角加速度反演、不需要
+ω̇ 估计）。内环输出目标力矩（每通道独立对角），分配层用 B_true
+把力矩指令转换到执行器：</p>
 <p><strong>B
 矩阵</strong>：<code>B = ∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf]</code>——当前工作点
 (ω0, δf, δt, dw) 的解析 Jacobian（ω0 = 当前油门
 <code>S.thr·wMax</code>，B
 随执行器位置在线更新），元素与数值差分逐项一致（<code>control-allocation.test.mjs</code>）。</p>
-<p><strong>增量式分配律</strong>（对齐 Python INDI，web 无传感器噪声 → ω̇
-用模型精确值）：</p>
-<pre><code>ν   = btrueK·(ωdes − ω)                  （虚拟角加速度；ωdes 与 §8.2 相同）
-ω̇   = (M推进 + M气动 − ω×(I·ω) − ω×h)/I  （★ M推进 用当前执行器位置重算——
-      不能读 sim.dyn（上一子步滞后），滞后会导致 ν≡ω̇ 假平衡死锁，2026-08-05 复现修复）
-err = I·(ν − ω̇)                          （目标力矩增量）
-Δu  = B⁻¹·err  →  u += Δu（限幅）         （u = [dwAct, dtAct, dfAct]，列序 [Δdw, Δδt, Δδf]）</code></pre>
+<p><strong>分配律</strong>：</p>
+<pre><code>M_des = diag(Ix,Iy,Iz)·btrueK·(ωdes − ω)     （内环：角速度误差 → 目标力矩，对角独立）
+M_cur = M推进(u_cur)                           （当前执行器位置的推进力矩，模型预测，
+                                                含 Jp 瞬态反扭；不含气动/gyro——
+                                                分配层只负责执行器，外扰由内环闭环抑制）
+Δu    = B⁻¹·(M_des − M_cur)  →  u += Δu（限幅）  （u = [dwAct, dtAct, dfAct]，列序 [Δdw,Δδt,Δδf]）</code></pre>
 <ul>
-<li><strong>效果</strong>：把 δt↔︎Mz、δf↔︎My 的交叉耦合经 B⁻¹
+<li><strong>★ M_cur 用当前状态重算</strong>（不能读
+<code>sim.dyn</code>——上一子步滞后值，applySas 先于 stepPropulsion
+执行；滞后会导致假平衡死锁，2026-08-05 复现修复）</li>
+<li><strong>效果</strong>：δt↔︎Mz、δf↔︎My 交叉耦合经 B⁻¹
 解耦分配（对角映射只补偿主通道）；低油门奇异（det≈0）时回退对角映射</li>
 <li><strong>增益</strong>：<code>btrueK = 60</code>（§VTOL
-悬停控制，MODEL-DEFAULT，量级对齐对角内环等效带宽 rateKq·b·T/Iy ≈
-59）</li>
+悬停控制，MODEL-DEFAULT，语义 = 角加速度增益
+M=I·K·Δω，量级对齐对角内环等效带宽 rateKq·b·T/Iy ≈ 59）</li>
 <li>仅悬停自稳模式生效（sasMode≠0）；直通模式不介入；与定高/航向角速度指令可组合</li>
 <li>数值验证：B⁻¹·B = I、Δu
 小增量精确复现目标力矩（一阶线性区内）、扰动恢复与对角模式同量级不劣化（<code>vtol.test.mjs</code>
@@ -667,5 +672,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:08</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
 </html>
