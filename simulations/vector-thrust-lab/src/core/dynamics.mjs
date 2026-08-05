@@ -6,11 +6,13 @@
 //
 //  方法：经典四阶显式 Runge-Kutta (RK4)，联合积分 [v, ω, q]
 //  O(h⁵) 局部截断，每子步保范投影消除浮点漂移
+//  ★ 气动在每个 RK4 阶段用中间状态重算（对齐 Python rk4_step 的 aero_forces
+//    逐阶段重算）；推进/转子角动量在子步内恒定（与 Python 一致）
 // ============================================================
 import { eulerFromQuat, quatMultiply, quatNormalize, quatInvert, rotateVecByQuat } from './math.mjs';
 import { applySas } from './control.mjs';
 import { stepPropulsion } from './propulsion.mjs';
-import { computeAero } from './aerodynamics.mjs';
+import { computeAero, computeAeroState } from './aerodynamics.mjs';
 
 // ============================================================
 //  RK4 子步调度
@@ -37,19 +39,14 @@ export function physicsStep(sim, P, h) {
   // ---------- 动力装置（每步一次，更新电机状态） ----------
   const { cf, sf, ct, st } = stepPropulsion(sim, P, h);
 
-  // ---------- 空气动力 ----------
-  const { aX, Y, aZ } = computeAero(sim, P);
+  // ---------- 空气动力（遥测/子步初显示；RK4 内部另行逐阶段重算） ----------
+  computeAero(sim, P);
 
   // ---------- 推进力/力矩（恒定通过本子步；精确公式见 propulsion.mjs） ----------
   const dyn = sim.dyn;
-  const aero = sim.aero;
   const thrustForces = {
     Fx: dyn.Fx, Fy: dyn.Fy, Fz: dyn.Fz,
     Mx: dyn.Mx, My: dyn.My, Mz: dyn.Mz,
-  };
-  const aeroForces = {
-    aX, Y, aZ,
-    Mx: aero.Mx, My: aero.My, Mz: aero.Mz,
   };
 
   // ---------- 转子角动量向量（恒定通过本子步） ----------
@@ -59,8 +56,8 @@ export function physicsStep(sim, P, h) {
     z: P.Jp * S.wt * st,
   };
 
-  // ---------- RK4 联合积分 [v, ω, q] ----------
-  rk4Step(sim, P, h, thrustForces, aeroForces, hv);
+  // ---------- RK4 联合积分 [v, ω, q]（气动逐阶段重算，见 rk4Step） ----------
+  rk4Step(sim, P, h, thrustForces, hv);
 
   // ---------- 位置积分（惯性系；渲染采用载机跟随系） ----------
   const vw = rotateVecByQuat(F.vel, S.quat);
@@ -83,6 +80,7 @@ export function physicsStep(sim, P, h) {
 
 // ============================================================
 //  状态导数: f([v, ω, q], u) → [v̇, ω̇, q̇]
+//  气动由调用方传入（RK4 各阶段用中间状态重算）
 // ============================================================
 function stateDerivatives(v, w, q, P, thrust, aero, hv) {
   // ---------- 重力在机体系中的分量（q 的函数） ----------
@@ -118,34 +116,43 @@ function stateDerivatives(v, w, q, P, thrust, aero, hv) {
 // ============================================================
 //  经典四阶 Runge-Kutta (RK4) — 一步推进 [v, ω, q]
 //  O(h⁵) 局部截断, 稳定域显著优于显式欧拉
+//  ★ 气动在每个 k 阶段用中间状态 (vv, ww) 重算（对齐 Python rk4_step），
+//    推进力/转子角动量恒定通过本子步（与 Python 一致）
 // ============================================================
-function rk4Step(sim, P, h, thrust, aero, hv) {
+function rk4Step(sim, P, h, thrust, hv) {
   const { S, F } = sim;
   const v0 = { x: F.vel.x, y: F.vel.y, z: F.vel.z };
   const w0 = { x: S.omega.x, y: S.omega.y, z: S.omega.z };
   const q0 = { x: S.quat.x, y: S.quat.y, z: S.quat.z, w: S.quat.w };
+  const aeroOn = S.aero;
+
+  // 阶段导数：气动用中间状态重算（wind-axes → 机体系）
+  const f = (v, w, q) => {
+    const a = computeAeroState(v, w, P, aeroOn);
+    return stateDerivatives(v, w, q, P, thrust, a, hv);
+  };
 
   // ---- Stage 1 ----
-  const d1 = stateDerivatives(v0, w0, q0, P, thrust, aero, hv);
+  const d1 = f(v0, w0, q0);
 
   // ---- Stage 2 (中点一次) ----
   const h2 = h * 0.5;
   const v1 = scaleAdd(v0, d1.vDot, h2);
   const w1 = scaleAdd(w0, d1.wDot, h2);
   const q1 = quatNormalize(scaleAddQuat(q0, d1.qDot, h2));
-  const d2 = stateDerivatives(v1, w1, q1, P, thrust, aero, hv);
+  const d2 = f(v1, w1, q1);
 
   // ---- Stage 3 (中点二次) ----
   const v2 = scaleAdd(v0, d2.vDot, h2);
   const w2 = scaleAdd(w0, d2.wDot, h2);
   const q2 = quatNormalize(scaleAddQuat(q0, d2.qDot, h2));
-  const d3 = stateDerivatives(v2, w2, q2, P, thrust, aero, hv);
+  const d3 = f(v2, w2, q2);
 
   // ---- Stage 4 (终点) ----
   const v3 = scaleAdd(v0, d3.vDot, h);
   const w3 = scaleAdd(w0, d3.wDot, h);
   const q3 = quatNormalize(scaleAddQuat(q0, d3.qDot, h));
-  const d4 = stateDerivatives(v3, w3, q3, P, thrust, aero, hv);
+  const d4 = f(v3, w3, q3);
 
   // ---- RK4 加权组合 ----
   const h6 = h / 6;

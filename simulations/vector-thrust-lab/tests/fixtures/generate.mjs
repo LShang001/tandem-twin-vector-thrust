@@ -11,7 +11,7 @@ const baseline = {
     model: 'PAR-C0-001 v0.2.0',
     frameDt: 1 / 60,
     substep: 0.004,
-    note: '由 core 实现采集的行为基线（配平直飞 / 离地自由飞行俯仰阶跃 / 滚转阶跃 / 偏航阶跃）',
+    note: '由 core 实现采集的行为基线（配平直飞 / 离地自由飞行俯仰阶跃 / 滚转阶跃 / 偏航阶跃）。2026-08-05 重采：RK4 各阶段用中间状态重算气动（对齐 Python rk4_step），固定翼数值微变（10s 配平末点 ~0.004m）',
   },
   scenarios: {
     trim: SCENARIOS.trim(),

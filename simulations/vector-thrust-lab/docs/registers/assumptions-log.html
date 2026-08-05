@@ -181,6 +181,20 @@ href="../propulsion/PROP-001.html">PROP-001</a></td>
 href="../control/CTL-002.html">CTL-002</a>、<code>src/core/propulsion.mjs</code></td>
 </tr>
 <tr>
+<td>ASM-016</td>
+<td><strong>Python 转子角动量简化（已修复）</strong>：2026-08-05 前
+high-fidelity-analysis/core.py 仅取
+hx=Jp(wf−wt)（小摆角近似），web/MOD-001 为含摆角投影的三轴完整式——5s
+扰动场景轨迹偏差达 16%（被不稳定模态放大）。已对齐完整式，web↔︎py
+数值一致（浮点极限 1e-14）</td>
+<td>三端一致、论文 ch/11 INDI 数值</td>
+<td>INDI 滚转改善 98.4%→91.7%、俯仰 76.4%→76.3%；论文 ch/11 已同步</td>
+<td>后续新增数值研究须先跑交叉对比（<code>output/playwright/vtol-verify/cross_*.py/.mjs</code>）</td>
+<td><a
+href="../modeling.html">MOD-001</a>、THY-004
+ch/11</td>
+</tr>
+<tr>
 <td>ASM-015</td>
 <td><strong>配平为四方程（v0.2.0）</strong>：<code>aTrim</code>/<code>thrTrim</code>/<code>dtTrim</code>/<code>dfTrim</code>
 闭合
@@ -206,5 +220,5 @@ href="hazard-log.html"><code>危害与失效模式日志</code></a>、<a
 href="../verification/SAFE-001.html">SAFE-001</a>
 共同构成模型成熟度声明的支撑文件。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 04:53</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 16:24</footer></article></body>
 </html>

@@ -73,6 +73,7 @@ class Propulsion:
         self.prev_wt = 0.0
         self.dwf = 0.0  # 本步转子角加速度（update 缓存，forces 消费）
         self.dwt = 0.0
+        self.hv = np.zeros(3)  # 转子角动量（三轴，forces 缓存，对齐 dynamics.mjs hv / MOD-001）
 
     def update(self, omega0, dw_cmd, dt):
         """omega0: 基准转速, dw_cmd: 差速指令 [-1,1]"""
@@ -101,6 +102,13 @@ class Propulsion:
         Qt = P["kQ"] * wt*wt + P["Jp"] * dwt
         cf, sf = np.cos(delta_f), np.sin(delta_f)
         ct, st = np.cos(delta_t), np.sin(delta_t)
+        # 转子角动量（含摆角投影，对齐 dynamics.mjs hv / MOD-001 §5；
+        # 前电机绕 z_b 摆 δf，尾电机绕 y_b 摆 δt，前后转向相反）
+        self.hv = np.array([
+            P["Jp"] * (wf*cf - wt*ct),
+            P["Jp"] * wf*sf,
+            P["Jp"] * wt*st,
+        ])
         Fx = Tf*cf + Tt*ct
         Fy = Tf*sf
         Fz = -Tt*st
@@ -173,16 +181,17 @@ def dynamics_derivatives(v, w, q, prop, P, Fx, Fy, Fz, Mx, My, Mz, aero):
         (Fy + aY) / m + gb[1] - (w[2]*v[0] - w[0]*v[2]),
         (Fz + aZ) / m + gb[2] - (w[0]*v[1] - w[1]*v[0]),
     ])
-    # 转动: I·ω̇ = M − ω×Iω − ω×h转子 (前CW沿+x_b, 尾CCW沿-x_b)
+    # 转动: I·ω̇ = M − ω×Iω − ω×h转子（前CW沿+x_b, 尾CCW沿-x_b，含摆角投影；
+    # h_rotor 由 Propulsion.forces 缓存，对齐 dynamics.mjs hv / MOD-001 §5）
     Ix, Iy, Iz = P["Ix"], P["Iy"], P["Iz"]
-    gx = (Iz - Iy) * w[1]*w[2]
-    gy = (Ix - Iz) * w[2]*w[0]
-    gz = (Iy - Ix) * w[0]*w[1]
-    hx = P["Jp"] * (prop.wf - prop.wt)  # 转子角动量 (沿 x_b)
+    hx, hy, hz = prop.hv
+    gx = (Iz - Iy) * w[1]*w[2] + (w[1]*hz - w[2]*hy)
+    gy = (Ix - Iz) * w[2]*w[0] + (w[2]*hx - w[0]*hz)
+    gz = (Iy - Ix) * w[0]*w[1] + (w[0]*hy - w[1]*hx)
     wdot = np.array([
         (Mx + La - gx) / Ix,
-        (My + Ma - gy - w[2]*hx) / Iy,
-        (Mz + Na - gz + w[1]*hx) / Iz,
+        (My + Ma - gy) / Iy,
+        (Mz + Na - gz) / Iz,
     ])
     # 四元数运动学: q̇ = ½ q ⊗ [0, ω]
     qdot = 0.5 * quat_multiply(q, np.array([0, w[0], w[1], w[2]]))
