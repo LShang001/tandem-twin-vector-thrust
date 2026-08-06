@@ -83,8 +83,8 @@ static const ServoConfig kDefaultServoConfig = {
     /* teeth_servo     */ 30.f,
     /* teeth_gimbal    */ 40.f,
     /* half_travel_deg */ 45.f,  // ← 待实机标定
-    /* dir_pitch       */ +1.f,  // ← 待核查
-    /* dir_roll        */ +1.f,  // ← 待核查
+    /* dir_pitch       */ -1.f,  // 实机核查(2026-08-07)：尾摆舵机方向与假设相反，已反向
+    /* dir_roll        */ -1.f,  // 实机核查(2026-08-07)：前摆舵机方向与假设相反，已反向
     /* zero_pitch_pct  */  0.f,  // ← 待标定
     /* zero_roll_pct   */  0.f,  // ← 待标定
 };
