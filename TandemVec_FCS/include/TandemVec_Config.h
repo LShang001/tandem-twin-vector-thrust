@@ -104,7 +104,7 @@ static const TandemVecParams kDefaultTandemVecParams = {
     /* Ix    */ 0.0021f,   // 绕纵轴(差速航向), r≈14mm电机+电池圆柱
     /* Iy    */ 0.022f,    // 绕y轴(俯仰), 两端电机 m×L²主导
     /* Iz    */ 0.022f,    // 绕z轴(侧倾), 同Iy对称
-    /* dMax  */ 0.4363323f,   // 25° in rad
+    /* dMax  */ 0.2617994f,   // 15° in rad（2026-08-07 实机：TVC 摆角限幅收紧到 15°）
     // 控制分配
     /* dwMax */ 0.7f,
     // 质量 / 重力

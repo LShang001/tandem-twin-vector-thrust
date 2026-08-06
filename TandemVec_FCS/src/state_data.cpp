@@ -88,7 +88,7 @@ const float MAX_TARGET_RATE = 50.0f;
 //  来源: α_max_hover × τ_rise_1s ≈ 49 deg/s² × 1s ≈ 50 deg/s
 //  外环输出的目标角速率上限。悬停时 α_max≈49deg/s²，选择1秒内可达的速率。
 
-const float MAX_CORRECTION = 25.0f;
+const float MAX_CORRECTION = 15.0f;  // 2026-08-07 实机：TVC 摆角限幅收紧到 15°
 //  来源: dMax = 0.436rad = 25° (TandemVec_Config.h)。舵机物理行程。
 
 const float MAX_ANGLE_COMMAND = 30.0f;
