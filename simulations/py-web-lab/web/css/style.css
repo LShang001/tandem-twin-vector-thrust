@@ -156,3 +156,8 @@
 #conn.ok{color:#4caf90}
 #conn.off{color:#e05d5d}
 #engine-tag{font-size:10px;color:var(--dim);margin-left:12px;letter-spacing:.08em}
+/* py-web-lab 关闭后重启指引 */
+#restart-hint{position:fixed;bottom:44px;left:50%;transform:translateX(-50%);z-index:9;
+  background:rgba(20,20,26,.92);border:1px solid var(--warn,#e05d5d);border-radius:8px;
+  padding:10px 16px;font-size:12px;color:var(--fg,#ccc);line-height:1.7;max-width:720px;text-align:center}
+#restart-hint code{background:rgba(255,255,255,.08);padding:1px 6px;border-radius:4px;font-size:11px}

@@ -102,6 +102,12 @@
 
 <div id="hint"><b>拖拽</b> 旋转视角 · <b>滚轮</b> 缩放 · <b>右键拖拽</b> 平移</div>
 
+<div id="restart-hint" style="display:none">
+  <b>服务已停止。</b>重新启动：双击 <code>simulations\py-web-lab\server\start.bat</code>，
+  或终端执行 <code>cd simulations/py-web-lab/server && python -m uvicorn main:app --port 8090</code>，
+  然后刷新本页。
+</div>
+
 <div id="loader"><div class="spin"></div><p>PY-WEB-LAB · CONNECTING</p></div>
 
 <script async src="./vendor/three-r170/es-module-shims.min.js"></script>

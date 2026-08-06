@@ -336,6 +336,7 @@ function connect() {
       connEl.classList.remove('ok');
       connEl.classList.add('off');
       engineTag.textContent = '';
+      document.getElementById('restart-hint').style.display = '';   // 显示重启指引
     } else if (msg.type === 'error') {
       console.error('[py-web-lab]', msg.msg);
       if (msg.cmd === 'step') pending = false;
@@ -347,6 +348,7 @@ function connect() {
       connEl.textContent = '服务已关闭 · 可关闭此页面';
       connEl.classList.remove('ok');
       connEl.classList.add('off');
+      document.getElementById('restart-hint').style.display = '';
       return;   // 用户主动关闭：不重连
     }
     connEl.textContent = '连接断开 · 重连中…';
