@@ -73,8 +73,7 @@ export function resetFlightState(sim, P) {
 // UI/演示使用的完整动态复位；保留 SAS、气动和水平约束开关。
 // 本函数设置 S.vtolMode=false（resetVtolHoverState 对称地设置 true）——
 // 演示/复位按钮从悬停模式出发时会自动退出悬停，保证模式标志与状态一致。
-export function resetSimulationState(sim, P) {
-  const { S, dyn, aero } = sim;
+export function resetSimulationState(sim, P) {  const { S, dyn, aero } = sim;
   S.vtolMode = false;     // ★ 模式标志（与悬停复位对称）
   S.altHold = false;      // 定高仅悬停模式有意义，一并清零
   S.intAlt = 0;
@@ -88,6 +87,35 @@ export function resetSimulationState(sim, P) {
   Object.assign(dyn, { Fx: 0, Fy: 0, Fz: 0, Mx: 0, My: 0, Mz: 0, Tf: 0, Tt: 0, Qf: 0, Qt: 0 });
   Object.assign(aero, { V: 0, qbar: 0, alpha: 0, beta: 0, Mx: 0, My: 0, Mz: 0 });
   resetFlightState(sim, P);
+}
+
+// 轻量复位（UI「复位」按钮）：只复位飞行状态（位置/速度/姿态/角速度/积分器/
+// 执行器基准），★ 保留模式与输入（vtolMode/altHold/useBtrue/sasMode/aero/
+// lockXY/thr/dt/df/dw 滑块指令均不动）。按当前构型分支复位：
+//   悬停 → Q_HOVER 机头朝天静止；巡航 → 配平平飞（含 lockXY 语义）。
+// 电机转速跟随当前油门 S.thr（保留输入）；时间不归零。
+export function resetPoseOnly(sim, P) {
+  const { S, F, dyn, aero } = sim;
+  S.intTh = 0; S.intPhi = 0; S.intAlt = 0;
+  const w0 = S.thr * P.wMax;             // 转速跟随当前油门（保留输入）
+  if (S.vtolMode) {
+    // 悬停基准：机头朝天、静止；执行器回 0 摆角基准（无配平偏置）
+    F.vel.x = 0; F.vel.y = 0; F.vel.z = 0;
+    F.vWorld.x = 0; F.vWorld.y = 0; F.vWorld.z = 0;
+    F.pos.x = 0; F.pos.y = 0; F.pos.z = 0;
+    S.quat.x = Q_HOVER.x; S.quat.y = Q_HOVER.y; S.quat.z = Q_HOVER.z; S.quat.w = Q_HOVER.w;
+    S.omega.x = 0; S.omega.y = 0; S.omega.z = 0;
+    S.dtAct = 0; S.dfAct = 0; S.dwAct = 0;
+  } else {
+    // 巡航基准：配平平飞（resetFlightState 内含 lockXY 分支）
+    resetFlightState(sim, P);
+    S.dtAct = P.dtTrim; S.dfAct = P.dfTrim; S.dwAct = 0;
+  }
+  S.wf = w0; S.wt = w0;
+  sim.prevWf = w0; sim.prevWt = w0;
+  S._prevSasMode = S.sasMode;
+  Object.assign(dyn, { Fx: 0, Fy: 0, Fz: 0, Mx: 0, My: 0, Mz: 0, Tf: 0, Tt: 0, Qf: 0, Qt: 0 });
+  Object.assign(aero, { V: 0, qbar: 0, alpha: 0, beta: 0, Mx: 0, My: 0, Mz: 0 });
 }
 
 // VTOL 悬停模式复位：机头朝天（x_b 竖直），悬停配平油门，速度/角速度/积分清零。

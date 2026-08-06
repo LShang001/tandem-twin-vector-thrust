@@ -1,7 +1,7 @@
 // ============================================================
 //  控制面板 UI：滑块 / 开关 / 复位 / 模态框
 // ============================================================
-import { resetSimulationState, resetVtolHoverState } from '../core/state.mjs';
+import { resetSimulationState, resetVtolHoverState, resetPoseOnly } from '../core/state.mjs';
 
 export function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
@@ -129,7 +129,8 @@ export function createControlsUI({ sim, P, hooks }) {
 
   function resetAll() {
     hooks.stopDemo();
-    resetSimulationState(sim, P);
+    // ★ 轻量复位：只复位位置/姿态/速度，保留模式与输入（悬停/定高/B_true/SAS/滑块）
+    resetPoseOnly(sim, P);
     pushToUI();
   }
   $('b-reset').addEventListener('click', resetAll);
