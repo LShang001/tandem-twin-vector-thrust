@@ -63,8 +63,11 @@ for func, length, payload, valid in frames:
     elif func == 0x05 and length >= 4:   # 高度
         a = struct.unpack('<f', payload[:4])[0]
         print(f'[高度] 气压高度={a:.2f}m')
-    elif func == 0x06 and length >= 1:   # 飞行模式
-        print(f'[飞行模式] 模式字节={payload[0]:#04x} flags={payload[1] if length > 1 else 0:#04x}')
+    elif func == 0x06 and length >= 2:   # 飞行模式 + 解锁标志
+        mode = payload[0]
+        unlock = payload[1]
+        mode_names = {0: 'MANUAL', 1: 'AUTO_POSITION', 2: 'AUTO_ALTITUDE', 3: 'GUIDED'}
+        print(f'[飞行模式] mode={mode}({mode_names.get(mode, "?")}) 解锁={unlock}')
     elif func == 0x0D and length >= 4:   # 电压电流
         v = struct.unpack('<f', payload[:4])[0]
         print(f'[电压电流] 电压={v:.2f}V')

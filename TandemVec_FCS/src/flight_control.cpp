@@ -1144,14 +1144,16 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   float motor1_pct       = 0.0f;   // 直接用百分比，避免 us→pct 双重转换
   float motor2_pct       = 0.0f;
 
-  if (!inputs.is_unlocked)
+  if (!inputs.is_unlocked && !inputs.is_manual_tvc)
   {
-    // 锁定：电机最低，舵机中位；同时重置 BTRUE 工作点（防看门狗复位后 stale）
+    // 全锁定（非手动TVC）：电机最低，舵机中位；同时重置 BTRUE 工作点（防看门狗复位后 stale）
     prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
   }
   else if (inputs.is_manual_tvc)
   {
     // ---- 手动TVC旁路：RC直接控制舵机/差速，用于地面标定 ----
+    // 2026-08-07：锁定状态也可用（地面测试摆座方向）；
+    // ★ 安全约束：锁定状态电机强制最低（油门通道直通不生效）
     tail_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
                                 -MAX_CORRECTION, MAX_CORRECTION);
     front_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
@@ -1162,6 +1164,13 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     auto diff = allocateDifferential(w0, manual_dw, P);
     motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
     motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
+    if (!inputs.is_unlocked)
+    {
+      // 锁定状态：舵机可动（摆向测试），电机绝不转
+      motor1_pct = 0.0f;
+      motor2_pct = 0.0f;
+      prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
+    }
   }
   else
   {
