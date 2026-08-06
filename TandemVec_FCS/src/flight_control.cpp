@@ -1176,6 +1176,25 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   {
     // ---- 姿态控制模式：物理模型逆解控制分配（无倾角保护，支持大机动）----
     {
+#ifdef GYRO_DIRECT_TEST
+      // ================================================================
+      // 陀螺直通测试模式（2026-08-07 调试）：绕过外环姿态环 + B 矩阵分配，
+      // 陀螺角速度 × 负反馈增益 直接驱动执行器，验证三通道反馈方向。
+      //   尾摆(绕y_b): δt = +K·ω_y  （物理 δt>0→My<0，负斜率）
+      //   前摆(绕z_b): δf = -K·ω_z  （物理 δf>0→Mz>0，正斜率）
+      //   差速(绕x_b): Δω = +K·ω_x  （物理 Δω>0→Mx<0，负斜率）
+      // 增益：0.5 deg per (deg/s)，30°/s 时触达 ±15° 摆角限幅
+      const float GYRO_K = 0.5f;
+      const float R2D = 57.29578f;
+      tail_gimbal_deg  = constrain( GYRO_K * icm_gyro_y * R2D, -15.0f, 15.0f);
+      front_gimbal_deg = constrain(-GYRO_K * icm_gyro_z * R2D, -15.0f, 15.0f);
+      float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
+      float dw = constrain( GYRO_K * icm_gyro_x * R2D * 0.05f, -P.dwMax, P.dwMax);
+      auto diff = allocateDifferential(w0, dw, P);
+      motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
+      motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
+      prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
+#else
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
       // FRD 轴序：Mx←alpha_roll（差速）、My←alpha_pitch（尾摆）、Mz←alpha_yaw（前摆）
       float Mx = P.Ix * outputs.alpha_roll;  // 体轴x → 滚转力矩 → 差速
@@ -1204,6 +1223,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       prev_prop_state.delta_t = ao.delta_t;
       prev_prop_state.wf      = diff.wf_target;
       prev_prop_state.wt      = diff.wt_target;
+#endif  // GYRO_DIRECT_TEST
     }
   }
 
