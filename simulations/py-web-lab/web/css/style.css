@@ -151,3 +151,8 @@
     #infoBtn button{padding:7px 9px;font-size:11px}
     #hint{left:10px;bottom:4px;font-size:9px}
   }
+/* py-web-lab 连接状态指示 */
+#conn{font-size:12px;letter-spacing:.1em;margin-left:10px;color:var(--dim);vertical-align:middle}
+#conn.ok{color:#4caf90}
+#conn.off{color:#e05d5d}
+#engine-tag{font-size:10px;color:var(--dim);margin-left:12px;letter-spacing:.08em}

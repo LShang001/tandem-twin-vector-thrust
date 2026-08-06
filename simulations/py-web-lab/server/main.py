@@ -3,7 +3,10 @@
 
 启动：python -m uvicorn main:app --host 127.0.0.1 --port 8090
 （或 ./start.bat；前端 http://127.0.0.1:8090/）
+关闭：页面「关闭服务」按钮（WebSocket shutdown → 进程退出）；
+     或终端 Ctrl+C；或按端口杀进程（Get-NetTCPConnection -LocalPort 8090）
 """
+import os
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket
@@ -24,6 +27,11 @@ async def ws_endpoint(ws: WebSocket):
     try:
         while True:
             msg = await ws.receive_json()
+            if isinstance(msg, dict) and msg.get('cmd') == 'shutdown':
+                # Web 关闭服务：先回确认，再退出进程（uvicorn 单进程模式）
+                await ws.send_json({'type': 'bye', 'msg': 'server shutting down'})
+                await ws.close()
+                os._exit(0)
             resp = protocol.handle(sim, msg)
             if resp is not None:
                 await ws.send_json(resp)

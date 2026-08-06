@@ -187,4 +187,8 @@ def handle(sim, msg):
                 sim.step(h, controllers.apply)
         return state_payload(sim, cmd)
 
+    if cmd == 'shutdown':
+        # 由 main.py 拦截处理（响应后进程退出）；此处兜底不落地
+        return {'type': 'bye', 'msg': 'server shutting down'}
+
     return err(f'unknown cmd: {cmd}')

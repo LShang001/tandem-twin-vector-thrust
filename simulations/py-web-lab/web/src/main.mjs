@@ -40,6 +40,7 @@ let connected = false;
 const connEl = document.getElementById('conn');
 const loaderEl = document.getElementById('loader');
 const engineTag = document.getElementById('engine-tag');
+let userShutdown = false;   // 用户主动关闭服务（不再自动重连）
 
 function send(obj) {
   if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(obj));
@@ -252,6 +253,12 @@ function bindControls() {
     stopDemo();
     send({ cmd: 'reset', mode: 'pose' });
   });
+  // 关闭服务：用户主动关停（页面显示已关闭，不再自动重连）
+  document.getElementById('b-shutdown').addEventListener('click', () => {
+    if (!confirm('关闭仿真服务？\n\n页面将停止工作；重新使用需运行 server\\start.bat。')) return;
+    userShutdown = true;
+    send({ cmd: 'shutdown' });
+  });
   document.getElementById('b-pause').addEventListener('click', () => {
     send({ cmd: 'set', S: { paused: !sim.S.paused } });
   });
@@ -322,6 +329,13 @@ function connect() {
       if (msg.cmd === 'step') pending = false;   // 仅 step 响应复位（review #4）
       refreshModeUI();
       loaderEl.classList.add('done');
+    } else if (msg.type === 'bye') {
+      // 服务已关闭：标记并提示，不再重连
+      userShutdown = true;
+      connEl.textContent = '服务已关闭 · 可关闭此页面';
+      connEl.classList.remove('ok');
+      connEl.classList.add('off');
+      engineTag.textContent = '';
     } else if (msg.type === 'error') {
       console.error('[py-web-lab]', msg.msg);
       if (msg.cmd === 'step') pending = false;
@@ -329,6 +343,12 @@ function connect() {
   };
   ws.onclose = () => {
     connected = false;
+    if (userShutdown) {
+      connEl.textContent = '服务已关闭 · 可关闭此页面';
+      connEl.classList.remove('ok');
+      connEl.classList.add('off');
+      return;   // 用户主动关闭：不重连
+    }
     connEl.textContent = '连接断开 · 重连中…';
     connEl.classList.remove('ok');
     setTimeout(connect, 1500);
