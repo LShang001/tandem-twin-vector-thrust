@@ -92,6 +92,11 @@ function refreshModeUI() {
   document.getElementById('b-alt').classList.toggle('active', S.altHold);
   document.getElementById('b-pause').textContent = S.paused ? '▶ 继续' : '⏸ 暂停';
   document.getElementById('b-pause').classList.toggle('active', S.paused);
+  document.getElementById('b-hover').textContent = `水平约束：${S.lockXY ? '开' : '关'}`;
+  document.getElementById('b-hover').classList.toggle('active', S.lockXY);
+  const ctrlLabel = { sas: 'SAS', indi: 'INDI', lqr: 'LQR', adrc: 'ADRC' };
+  document.getElementById('b-ctrl').textContent = `控制律：${ctrlLabel[S.ctrl] || S.ctrl}`;
+  document.getElementById('b-btrue').style.display = (vtol && S.ctrl === 'sas') ? '' : 'none';  // B_true 仅级联模式
   document.getElementById('row-alt').style.display = (vtol && S.altHold) ? '' : 'none';
   // 滑块语义标签
   document.getElementById('lbl-dt').innerHTML = vtol
@@ -123,17 +128,107 @@ function syncSliders() {
   txt('v-alt', S.altRef.toFixed(1) + 'm');
 }
 
+// ---------- 演示（对齐纯 web 版 demo.mjs，指令经 set 透传服务端） ----------
+let demo = null;   // {name, t0}
+const DEMO_BTNS = { pitch: 'b-pitch', yaw: 'b-yaw', roll: 'b-roll', cine: 'b-cine' };
+
+function stopDemo() {
+  demo = null;
+  for (const k in DEMO_BTNS) document.getElementById(DEMO_BTNS[k]).classList.remove('active');
+}
+
+function startDemo(name) {
+  stopDemo();
+  for (const id of ['s-dt', 's-df', 's-dw']) cancelSpring(document.getElementById(id));
+  send({ cmd: 'reset', mode: 'cruise' });   // 复位到巡航基线
+  demo = { name, t0: null };                // t0 在 reset 生效后取（防竞态）
+  document.getElementById(DEMO_BTNS[name]).classList.add('active');
+}
+
+function demoStep() {
+  if (!demo || !sim.S) return;
+  if (sim.S.paused) return;                 // 暂停时不发指令
+  if (sim.S.vtolMode) { stopDemo(); return; }   // 悬停模式不演示
+  if (demo.t0 === null || sim.S.time < demo.t0 - 1e-6) { demo.t0 = sim.S.time; return; }  // reset 生效后固定 t0（review blocking）
+  const tau = sim.S.time - demo.t0, T = 3.2;
+  const s = Math.sin(2 * Math.PI * tau / T);
+  let set = {};
+  switch (demo.name) {
+    case 'pitch': set.dt = 18 * D2R * s; break;
+    case 'yaw': set.df = 18 * D2R * s; break;
+    case 'roll': set.dw = 0.28 * s; break;
+    case 'cine': {
+      set.thr = 0.55 + 0.25 * Math.min(tau / 6, 1) * (0.5 + 0.5 * Math.sin(tau * 0.5));
+      const seg = tau % 12;
+      set.dt = seg < 4 ? 16 * D2R * Math.sin(Math.PI * seg / 2) : 0;
+      set.df = (seg >= 4 && seg < 8) ? 16 * D2R * Math.sin(Math.PI * (seg - 4) / 2) : 0;
+      set.dw = seg >= 8 ? 0.26 * Math.sin(Math.PI * (seg - 8) / 2) : 0;
+      break;
+    }
+  }
+  send({ cmd: 'set', S: set });
+}
+
 // ---------- 滑块/按钮事件 → 服务端 ----------
+// 回中开关（本地 UI 行为：开=弹簧摇杆松手回 0；关=松手停留）
+let springBackOn = true;
+const springAnims = new Map();
+
+function cancelSpring(sl) {
+  if (springAnims.has(sl)) { cancelAnimationFrame(springAnims.get(sl)); springAnims.delete(sl); }
+}
+
+function springBack(sl) {
+  // 对齐纯 web 版 controls-ui.mjs：每帧 ×0.55 衰减，<0.6 归零
+  // ⚠ 用闭包内部值衰减（不读 sl.value）：避免 syncSliders 把滑块写回服务端
+  //   echo 值导致衰减速率受 RTT 干扰（review should-fix）
+  cancelSpring(sl);
+  let cur = parseFloat(sl.value);
+  const stepFn = () => {
+    cur = Math.abs(cur) < 0.6 ? 0 : cur * 0.55;
+    sl.value = cur;
+    const field = sl === document.getElementById('s-dt') ? 'dt'
+      : sl === document.getElementById('s-df') ? 'df' : 'dw';
+    send({ cmd: 'set', S: { [field]: cur * D2R } });
+    if (cur !== 0) springAnims.set(sl, requestAnimationFrame(stepFn));
+    else springAnims.delete(sl);
+  };
+  springAnims.set(sl, requestAnimationFrame(stepFn));
+}
+
 function bindControls() {
   const bindSlider = (id, fn) => {
     const el = document.getElementById(id);
-    el.addEventListener('input', () => { fn(parseFloat(el.value)); });
+    el.addEventListener('input', () => { stopDemo(); fn(parseFloat(el.value)); });
   };
   bindSlider('s-thr', v => send({ cmd: 'set', S: { thr: v / 100 } }));
   bindSlider('s-dt', v => send({ cmd: 'set', S: { dt: v * D2R } }));
   bindSlider('s-df', v => send({ cmd: 'set', S: { df: v * D2R } }));
   bindSlider('s-dw', v => send({ cmd: 'set', S: { dw: v * D2R } }));
   bindSlider('s-alt', v => send({ cmd: 'set', S: { altRef: v } }));
+
+  for (const k in DEMO_BTNS) {
+    document.getElementById(DEMO_BTNS[k]).addEventListener('click', () => {
+      (demo && demo.name === k) ? stopDemo() : startDemo(k);
+    });
+  }
+
+  // 弹簧回中：固定翼角速度闭环（sasMode=3）与悬停自稳模式（sasMode≠0）三滑块松手回中
+  for (const id of ['s-dt', 's-df', 's-dw']) {
+    const sl = document.getElementById(id);
+    sl.addEventListener('pointerdown', () => cancelSpring(sl));
+    const release = () => {
+      if (!springBackOn) return;
+      const S = sim.S;
+      if (!S) return;
+      if (S.sasMode === 3 || (S.vtolMode && S.sasMode !== 0)) springBack(sl);
+    };
+    sl.addEventListener('pointerup', release);
+    sl.addEventListener('pointercancel', release);   // 拖动被打断也回中
+    sl.addEventListener('touchend', release);
+    sl.addEventListener('touchcancel', release);
+    sl.addEventListener('keyup', release);   // 与纯 web 版一致：键盘调节松键回中（角速度闭环语义）
+  }
 
   document.getElementById('b-sas').addEventListener('click', () => {
     const next = sim.S.vtolMode ? (sim.S.sasMode === 0 ? 1 : 0) : (sim.S.sasMode + 1) % 4;
@@ -143,6 +238,7 @@ function bindControls() {
     send({ cmd: 'set', S: { aero: !sim.S.aero } });
   });
   document.getElementById('b-vtol').addEventListener('click', () => {
+    stopDemo();
     if (!sim.S.vtolMode) send({ cmd: 'reset', mode: 'vtol' });
     else send({ cmd: 'reset', mode: 'cruise' });   // 退出悬停 → 全复位回巡航配平
   });
@@ -153,17 +249,34 @@ function bindControls() {
     send({ cmd: 'set', S: { altHold: !sim.S.altHold, altRef: parseFloat(document.getElementById('s-alt').value) } });
   });
   document.getElementById('b-reset').addEventListener('click', () => {
+    stopDemo();
     send({ cmd: 'reset', mode: 'pose' });
   });
   document.getElementById('b-pause').addEventListener('click', () => {
     send({ cmd: 'set', S: { paused: !sim.S.paused } });
   });
+  document.getElementById('b-spring').addEventListener('click', () => {
+    springBackOn = !springBackOn;
+    document.getElementById('b-spring').textContent = `回中：${springBackOn ? '开' : '关'}`;
+    document.getElementById('b-spring').classList.toggle('active', springBackOn);
+  });
+  document.getElementById('b-hover').addEventListener('click', () => {
+    send({ cmd: 'set', S: { lockXY: !sim.S.lockXY } });
+  });
+  // 控制律切换：巡航 sas→indi；悬停 sas→lqr→adrc
+  const CTRL_LABEL = { sas: 'SAS', indi: 'INDI', lqr: 'LQR', adrc: 'ADRC' };
+  document.getElementById('b-ctrl').addEventListener('click', () => {
+    const cur = sim.S.ctrl || 'sas';
+    const seq = sim.S.vtolMode ? ['sas', 'lqr', 'adrc'] : ['sas', 'indi'];
+    const next = seq[(seq.indexOf(cur) + 1) % seq.length];
+    send({ cmd: 'set', S: { ctrl: next } });
+  });
 }
 
 // ---------- 主循环：帧步进（请求-响应自适应） ----------
 let frame = 0;
-const clock = new THREE.Clock();
 let prevT = 0;
+let lastRender = 0;
 
 function animate(now) {
   requestAnimationFrame(animate);
@@ -176,8 +289,12 @@ function animate(now) {
     lastSent = now;
     send({ cmd: 'step', dt });
   }
-  // 渲染（用最新状态，即使 step 未返回）
-  const dtR = Math.min((now - lastSent) / 1000, 0.05);
+  demoStep();
+  // 渲染用独立时钟（⚠ 不能用 lastSent：服务端快时每帧都发 step，
+  //   now−lastSent 恒为 0 → dt 驱动动画（螺旋桨等）全部冻结，2026-08-06 修复）
+  let dtR = lastRender ? Math.min((now - lastRender) / 1000, 0.05) : 1 / 60;
+  lastRender = now;
+  if (sim.S.paused) dtR = 0;   // 暂停 = 时间冻结，渲染动画（螺旋桨/箭头）同步停
   updateAircraftView(view, sim, sim.P, dtR);
   effects.update(dtR, sim);
   if (++frame % 3 === 0) hud.sync(getTelemetry());
@@ -223,3 +340,10 @@ function connect() {
 bindControls();
 connect();
 requestAnimationFrame(animate);
+
+// 调试钩子（Playwright / 控制台可数值验证：螺旋桨旋转、姿态等）
+window.__pwl = {
+  sim, view,
+  getProps: () => ({ fr: view.front.prop.rotation.x, tr: view.tail.prop.rotation.x }),
+  getState: () => (sim.S ? { ...sim.S } : null),
+};

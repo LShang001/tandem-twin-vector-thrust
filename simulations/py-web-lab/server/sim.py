@@ -43,6 +43,8 @@ class Simulation:
         self.prop = Propulsion(self.P)
         self.prev_wf = 0.0
         self.prev_wt = 0.0
+        self._ctl = None        # 算法控制器实例（INDI/LQR/ADRC）
+        self._ctl_name = None   # 当前实例对应的 ctrl 模式
         self._quat = np.array([1.0, 0.0, 0.0, 0.0])   # (w,x,y,z) 内部表达
         self.reset_full()
 
@@ -55,7 +57,7 @@ class Simulation:
             'aero': True, 'lockXY': False,
             'vtolMode': False, 'useBtrue': False,
             'altHold': False, 'altRef': 5.0, 'intAlt': 0.0,
-            'paused': False,
+            'paused': False, 'ctrl': 'sas',
             'intTh': 0.0, 'intPhi': 0.0,
             'wf': 0.0, 'wt': 0.0,
             'omega': _zero_vec3(),
@@ -68,6 +70,8 @@ class Simulation:
         """全复位：巡航配平（对齐 JS resetSimulationState）"""
         P = self.P
         S = self.S
+        self._ctl = None        # 控制律实例随模式复位（review：防跨模式残留）
+        self._ctl_name = None
         a0 = P['aTrim']
         S.update({
             'vtolMode': False, 'altHold': False, 'intAlt': 0.0,
@@ -75,6 +79,7 @@ class Simulation:
             'dtAct': P['dtTrim'], 'dfAct': P['dfTrim'], 'dwAct': 0.0,
             'intTh': 0.0, 'intPhi': 0.0, 'time': 0.0,
             'aero': True, 'lockXY': False,
+            'ctrl': 'sas' if S.get('ctrl') in ('lqr', 'adrc') else S.get('ctrl', 'sas'),
             '_prevSasMode': S['sasMode'],
         })
         self._quat = np.array([np.cos(a0 / 2), 0.0, np.sin(a0 / 2), 0.0])
@@ -96,6 +101,8 @@ class Simulation:
         """进入悬停：机头朝天 + 无翼 + 悬停配平（对齐 JS resetVtolHoverState）"""
         P = self.P
         S = self.S
+        self._ctl = None        # 控制律实例随模式复位
+        self._ctl_name = None
         thr = hover_throttle(P)
         w0 = thr * P['wMax']
         S.update({
@@ -104,6 +111,7 @@ class Simulation:
             'thr': thr, 'dt': 0.0, 'df': 0.0, 'dw': 0.0,
             'dtAct': 0.0, 'dfAct': 0.0, 'dwAct': 0.0,
             'aero': False, 'lockXY': False, 'time': 0.0,
+            'ctrl': 'sas' if S.get('ctrl') == 'indi' else S.get('ctrl', 'sas'),
         })
         self._quat = Q_HOVER.copy()
         S['quat'] = self._quat_js()
@@ -122,6 +130,8 @@ class Simulation:
         """轻量复位：只复位飞行状态，保留模式与输入（对齐 JS resetPoseOnly）"""
         P = self.P
         S = self.S
+        self._ctl = None        # 控制律实例随复位重建（积分/观测器状态清零）
+        self._ctl_name = None
         S['intTh'] = 0.0; S['intPhi'] = 0.0; S['intAlt'] = 0.0
         w0 = S['thr'] * P['wMax']
         if S['vtolMode']:

@@ -16,7 +16,12 @@
 ```
 
 - **引擎** `server/sim.py`：六自由度动力学 + 推进 + 气动（复用 `high-fidelity-analysis/core.py`，参数同源 `models/aircraft-model.json`）
-- **控制律** `server/controllers.py`：固定翼 SAS（4 模式）+ VTOL 悬停（四元数级联 + 定高 + B_true 分配），逐位对齐 `vector-thrust-lab/src/core/control.mjs`；每步填充 `S.dbg` 调试中间量（qe/ωdes/Δu，CLI 打印用）
+- **控制律** `server/controllers.py`：固定翼 SAS（4 模式）+ VTOL 悬停（四元数级联 + 定高 + B_true 分配），逐位对齐 `vector-thrust-lab/src/core/control.mjs`；每步填充 `S.dbg` 调试中间量（qe/ωdes/Δu，CLI 打印用）。**可插拔控制律**（`S.ctrl`，UI「控制律」按钮切换）：
+  - `sas`：默认（巡航 SAS + 悬停级联）
+  - `indi`：巡航 INDI 增量动态逆（移植 `high-fidelity-analysis/simulate.py:INDIController`，论文 ch/11；外环姿态+内环 K_rate=3+混合角加速度+在线 Jacobian B⁻¹）
+  - `lqr`：悬停 LQR（移植 `controllers.py:QuatLQRController`，论文 ch/14；CARE+Bryson 权重，航向通道追踪角速度指令）
+  - `adrc`：悬停内环 ADRC（移植固件 `TandemVec_ADRC.h`：ESO2+PD，ωc=6/ωo=8/b0 取通道名义增益，论文 ch/16；外环 qe→ω_ref 与级联同构）
+  - 切换自动规范化：进悬停时 indi→sas、回巡航时 lqr/adrc→sas；B_true 仅 sas 模式可用
 - **协议** `server/protocol.py`：JSON 消息（见 §协议），白名单字段带有限性/范围/布尔严格校验（NaN/Inf/越界/未知字段一律拒绝）
 - **CLI** `server/cli.py`：无浏览器调试接口（见 §CLI）
 - **前端** `web/`：渲染模块复用 `vector-thrust-lab/src/browser/`（scene/effects/aircraft-view/hud/scope/theme，零 core 依赖）
@@ -71,6 +76,19 @@ client → server：
 | `{"cmd":"set","S":{"thr":…,"dt":…,"sasMode":…,"paused":…}}` | 白名单字段写入（thr/dt/df/dw/sasMode/aero/lockXY/vtolMode/useBtrue/altHold/altRef/intTh/intPhi/intAlt/paused；NaN/Inf/越界/未知字段拒绝） |
 | `{"cmd":"pulse","omega":{"x":…,"y":…,"z":…}}` | 角速度扰动注入 |
 | `{"cmd":"step","dt":0.016}` | 推进一帧（服务端按 `maxStep` 分子步；`paused=true` 时不推进仅回状态） |
+
+## 前端功能清单（与 standalone 纯 web 版对齐）
+
+| 功能 | 说明 |
+|---|---|
+| 演示按钮 ×4 | 俯仰/偏航/滚转/综合演示（指令由前端按时间序列透传，滑块或模式切换自动停止） |
+| 控制律切换 | 「控制律」按钮：巡航 SAS⇄INDI、悬停 SAS⇄LQR⇄ADRC（回归见 `tests/test_algorithms.py`，6/6 通过） |
+| 弹簧回中 | 悬停自稳（sasMode≠0）与固定翼角速度闭环（sasMode=3）下 dt/df/dw 滑块松手自动回 0（摇杆式）；**「回中」按钮可关闭**（松手停留） |
+| 暂停/继续 | `paused` 字段；暂停时仿真冻结且渲染动画（螺旋桨/箭头）同步停 |
+| 悬停模式 | 机头朝天 + 无翼 + 悬停配平；滑块语义切换（姿态指令/航向角速度） |
+| 定高 / B_true | 悬停模式可用（B_true 需自稳开） |
+| 水平约束 | `lockXY`：水平速度不积分（服务端语义与 JS 版一致） |
+| 复位 RESET | 轻量复位：只复位位置/姿态/速度，保留模式与输入 |
 
 server → client：`{"type":"state","S":{…},"F":{…},"dyn":{…},"aero":{…},"t":…}`（init 附加 `params`）、`{"type":"error","msg":…}`。
 

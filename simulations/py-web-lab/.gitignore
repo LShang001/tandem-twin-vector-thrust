@@ -7,3 +7,4 @@ tests/cross/probe.py
 tests/cross/probe2.py
 tests/cli-test*.json
 .commit-msg
+.commit-msg

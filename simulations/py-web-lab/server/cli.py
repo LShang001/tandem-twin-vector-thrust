@@ -88,6 +88,8 @@ def parse_S(pairs):
             out[k] = v.strip().lower() in ('1', 'true', 'yes', 'on')
         elif k == 'sasMode':
             out[k] = int(v)
+        elif k == 'ctrl':
+            out[k] = v.strip()
         else:
             out[k] = float(v)
     return out

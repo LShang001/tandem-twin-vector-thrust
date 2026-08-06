@@ -47,6 +47,7 @@ S_FIELDS = {
     'df': ('num', -math.pi, math.pi),
     'dw': ('num', -math.pi, math.pi),
     'sasMode': ('int', 0, 3),
+    'ctrl': 'ctrl',          # 控制律：sas/indi/lqr/adrc
     'aero': 'flag', 'lockXY': 'flag', 'vtolMode': 'flag',
     'useBtrue': 'flag', 'altHold': 'flag',
     'altRef': ('num', 0.0, 100.0),
@@ -68,7 +69,7 @@ PARAM_KEYS = [
 ]
 
 STATE_KEYS = ['thr', 'dt', 'df', 'dw', 'dtAct', 'dfAct', 'dwAct',
-              'sasMode', 'aero', 'lockXY', 'vtolMode', 'useBtrue',
+              'sasMode', 'ctrl', 'aero', 'lockXY', 'vtolMode', 'useBtrue',
               'altHold', 'altRef', 'intAlt', 'intTh', 'intPhi',
               'paused', 'wf', 'wt', 'omega', 'quat', 'time']
 
@@ -142,6 +143,10 @@ def handle(sim, msg):
                 spec = S_FIELDS[k]
                 if spec == 'flag':
                     sim.S[k] = _flag(v)
+                elif spec == 'ctrl':
+                    if v not in ('sas', 'indi', 'lqr', 'adrc'):
+                        raise ValueError(f'bad ctrl: {v}')
+                    sim.S[k] = v
                 else:
                     conv, lo, hi = spec
                     if conv == 'int':
