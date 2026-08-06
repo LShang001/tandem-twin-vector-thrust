@@ -30,12 +30,17 @@ export function createControlsUI({ sim, P, hooks }) {
       $('lbl-dt').innerHTML = '俯仰倾斜指令 θ（绕 y<sub>b</sub>）';
       $('lbl-df').innerHTML = '侧倾指令 φ（绕 z<sub>b</sub>）';
       $('lbl-dw').innerHTML = '航向角速度 ψ̇（绕 x<sub>b</sub>，差速）';
+      // ★ 航向角速度滑块范围：±80°/s（巡航差速语义为 ±30%，切换时动态调整）
+      sliders.dw.min = -80; sliders.dw.max = 80;
+      sliders.dw.step = 1;
     } else {
       $('b-sas').textContent = sasLabels[S.sasMode];
       $('b-sas').classList.toggle('active', S.sasMode > 0);
       $('lbl-dt').innerHTML = '俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）';
       $('lbl-df').innerHTML = '偏航摆角 δ<sub>f</sub>（前电机·绕 z）';
       $('lbl-dw').innerHTML = '差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）';
+      sliders.dw.min = -30; sliders.dw.max = 30;
+      sliders.dw.step = 0.5;
     }
   }
 
