@@ -1,0 +1,9 @@
+﻿tests/cross/*.json
+tests/cross/cross/*.json
+tests/pwl-*.png
+tests/cross/debug_py.py
+tests/cross/debug_js.mjs
+tests/cross/probe.py
+tests/cross/probe2.py
+tests/cli-test*.json
+.commit-msg

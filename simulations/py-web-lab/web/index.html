@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>纵列双发矢量推力飞行器 · py-web-lab（Python 引擎版）</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+<div id="scene"></div>
+
+<div id="header">
+  <h1>纵列双发矢量推力飞行器 <span id="conn" class="conn">连接中…</span></h1>
+  <p>TANDEM TWIN VECTOR-THRUST · PY-WEB-LAB · PYTHON 引擎 + WEB 可视化</p>
+</div>
+
+<div id="ctrl" class="glass">
+  <div class="panel-title">控制输入 CONTROL <span id="engine-tag" class="engine-tag"></span></div>
+  <div class="ctl-group">
+    <div class="slider-row">
+      <div class="slider-head"><label>总油门 ω</label><span class="val" id="v-thr">--</span></div>
+      <input type="range" id="s-thr" min="0" max="100" step="0.5" value="19">
+    </div>
+    <div class="slider-row">
+      <div class="slider-head"><label id="lbl-dt">俯仰摆角 δ<sub>t</sub>（尾电机·绕 y）</label><span class="val" id="v-dt">0.0°</span></div>
+      <input type="range" id="s-dt" min="-25" max="25" step="0.1" value="0">
+    </div>
+    <div class="slider-row">
+      <div class="slider-head"><label id="lbl-df">偏航摆角 δ<sub>f</sub>（前电机·绕 z）</label><span class="val" id="v-df">0.0°</span></div>
+      <input type="range" id="s-df" min="-25" max="25" step="0.1" value="0">
+    </div>
+    <div class="slider-row">
+      <div class="slider-head"><label id="lbl-dw">差速 Δω（前 ⊕ / 尾 ⊖ → 滚转）</label><span class="val" id="v-dw">0%</span></div>
+      <input type="range" id="s-dw" min="-30" max="30" step="0.5" value="0">
+    </div>
+    <div class="slider-row" id="row-alt" style="display:none">
+      <div class="slider-head"><label>参考高度 h<sub>ref</sub>（定高目标）</label><span class="val" id="v-alt">5.0m</span></div>
+      <input type="range" id="s-alt" min="0" max="20" step="0.5" value="5">
+    </div>
+  </div>
+  <div class="btn-row">
+    <button class="btn active" id="b-sas">增稳 SAS：全部</button>
+    <button class="btn active" id="b-aero">气动力：开</button>
+    <button class="btn" id="b-vtol">悬停模式：关</button>
+    <button class="btn" id="b-btrue" style="display:none">B_true 分配：关</button>
+    <button class="btn" id="b-alt" style="display:none">定高：关</button>
+    <button class="btn" id="b-pause">⏸ 暂停</button>
+    <button class="btn warn wide" id="b-reset">复位 RESET</button>
+  </div>
+</div>
+
+<div id="data" class="glass">
+  <div class="panel-title">实时解算 TELEMETRY</div>
+  <div id="meters"></div>
+  <div class="sub">
+    <div class="kv"><span>前推力 T_f</span><span id="d-tf">--</span></div>
+    <div class="kv"><span>尾推力 T_t</span><span id="d-tt">--</span></div>
+    <div class="kv"><span>前反扭 τ_f</span><span id="d-qf">--</span></div>
+    <div class="kv"><span>尾反扭 τ_t</span><span id="d-qt">--</span></div>
+    <div class="kv"><span>反扭净额 Δτ</span><span id="d-dq">--</span></div>
+    <div class="kv"><span>前转速 ω_f</span><span id="d-wf">--</span></div>
+    <div class="kv"><span>尾转速 ω_t</span><span id="d-wt">--</span></div>
+    <div class="kv"><span>空速 V</span><span id="d-v">--</span></div>
+    <div class="kv"><span>迎角 α</span><span id="d-aoa">--</span></div>
+    <div class="kv"><span>高度 h</span><span id="d-h">--</span></div>
+    <div class="kv"><span>姿态 φ/θ/ψ</span><span id="d-att">--</span></div>
+    <div class="kv"><span>气动俯仰矩</span><span id="d-amy">--</span></div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--thrust)"></i>推力矢量</span>
+    <span><i style="background:var(--react)"></i>反扭矩</span>
+    <span><i style="background:var(--roll)"></i>Mx 滚转</span>
+    <span><i style="background:var(--pitch)"></i>My 俯仰</span>
+    <span><i style="background:var(--yaw)"></i>Mz 偏航</span>
+  </div>
+</div>
+
+<div id="eqbar" class="glass">
+  <div class="eq"><b class="c-roll">M<sub>x</sub></b> = −τ<sub>f</sub>·cosδ<sub>f</sub> + τ<sub>t</sub>·cosδ<sub>t</sub> = <b class="c-roll" id="e-mx">0</b> N·m</div>
+  <div class="eq"><b class="c-pitch">M<sub>y</sub></b> = −b·T<sub>t</sub>·sinδ<sub>t</sub> − τ<sub>f</sub>·sinδ<sub>f</sub> = <b class="c-pitch" id="e-my">0</b> N·m</div>
+  <div class="eq"><b class="c-yaw">M<sub>z</sub></b> = a·T<sub>f</sub>·sinδ<sub>f</sub> − τ<sub>t</sub>·sinδ<sub>t</sub> = <b class="c-yaw" id="e-mz">0</b> N·m</div>
+</div>
+
+<div id="infoBtn">
+  <button class="btn glass" id="b-theme">☀ 浅色</button>
+  <button class="btn glass" id="b-scope">示波器</button>
+</div>
+
+<div id="scope" class="glass">
+  <div id="scopeHead"><b>角速度示波器</b><span>实线 ω · 虚线 ω<sub>ref</sub>（闭环）</span></div>
+  <canvas id="scopeCanvas"></canvas>
+</div>
+
+<div id="hint"><b>拖拽</b> 旋转视角 · <b>滚轮</b> 缩放 · <b>右键拖拽</b> 平移</div>
+
+<div id="loader"><div class="spin"></div><p>PY-WEB-LAB · CONNECTING</p></div>
+
+<script async src="./vendor/three-r170/es-module-shims.min.js"></script>
+<script type="importmap-shim">
+{"imports":{"three":"./vendor/three-r170/three.module.js","three/addons/":"./vendor/three-r170/addons/"}}
+</script>
+<script type="module-shim" src="./src/main.mjs"></script>
+</body>
+</html>
