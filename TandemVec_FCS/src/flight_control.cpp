@@ -1013,6 +1013,19 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, current_omega_dps_body_filtered.x);
       pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(error_pitch_deg, 0, current_omega_dps_body_filtered.y);
 
+      // ★ 2026-08-07：ATTITUDE_MODE 下 yaw 摇杆 = 航向角速度指令（不做姿态回中）
+      // 悬停构型航向轴 = 机体 x（差速通道），故覆盖 rollRateTarget。
+      // 摇杆离中位时直接用摇杆速率（旁路 q_err.x 外环）；回中位时交还外环
+      // 保持当前航向（q_yaw_base 已跟随实测 Heading，qCmd 恒随自由度，
+      // 避免"qCmd 与机体系错位调制其余通道"的陷阱）。
+      const float yaw_stick_dev = inputs.yaw_raw - 1500.0f;
+      if (fabsf(yaw_stick_dev) > 30.0f)  // 死区 ±30us，防抖动
+      {
+        rollRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f,
+                                  MAX_MANUAL_yawRATE, -MAX_MANUAL_yawRATE);
+        rollAnglePID.reset();  // 摇杆接管期间清外环积分，松杆无跳变
+      }
+
       // 限制目标角速度在安全范围内
       // 防止PID输出过大导致危险动作
       rollRateTarget = constrain(rollRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
