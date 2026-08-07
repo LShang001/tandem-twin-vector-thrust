@@ -13,7 +13,7 @@ _纵列双发、正交单轴矢量推力、差速反扭滚转的固定翼飞行�
 - **滚转**由前后电机差速产生的反扭矩差驱动（共轴直升机扭矩差原理）
 - 零摆角时两推力线均过质心，无静态推力力矩
 
-> ⚠️ **成熟度声明**：项目当前处于**概念设计 — 集总参数建模 — 交互式仿真演示**阶段。仓库内所有参数均为 `MODEL-DEFAULT`（模型默认值，未经台架标定或飞行验证）；仿真结果不构成实际飞行性能或安全承诺。
+> ⚠️ **成熟度声明**：项目已进入**实机飞行验证与调参优化**阶段（2026-08 首飞验证通过）。仿真参数（`models/aircraft-model.json`）仍为 `MODEL-DEFAULT`/`ESTIMATED`（模型默认值，未经台架标定）；固件控制参数已按实机逐轮调整，尚未收敛为最终标定。仿真结果与当前固件参数不构成实际飞行性能或安全承诺。
 
 ## 📁 仓库结构
 
@@ -31,8 +31,14 @@ _纵列双发、正交单轴矢量推力、差速反扭滚转的固定翼飞行�
 | `docs/09-决策记录` | 架构决策记录（ADR） |
 | `docs/registers` | 参数数据手册、假设日志、追溯矩阵等受控注册表 |
 | `models/` | 模型参数单一事实源（JSON + Schema） |
-| `simulations/vector-thrust-lab` | Web 六自由度交互仿真子项目 |
-| `tools/` | 文档构建、参数同步、链接检查脚本 |
+| `TandemVec_FCS/` | STM32H743 飞控固件（纵列双发矢量推力 VTOL 实机版，EKF 组合导航 + TVC 控制分配） |
+| `simulations/vector-thrust-lab` | Web 六自由度交互仿真子项目（standalone 离线版，双击直开） |
+| `simulations/py-web-lab` | Python 引擎 + Web 可视化仿真子项目（统一架构研究版，可插拔控制律 INDI/LQR/ADRC） |
+| `simulations/high-fidelity-analysis` | Python 高保真分析（论文仿真数据/图、先进控制算法研究） |
+| `scripts/` | 控制算法研究脚本（MPC/INDI/在线辨识、配平求解） |
+| `assets/` | 构型候选图与论文配图素材 |
+| `blender-test/` | Blender 三维渲染实验脚本 |
+| `tools/` | 文档构建、standalone 打包、参数同步、链接检查脚本 |
 
 ## 🚀 快速开始
 
@@ -53,6 +59,8 @@ python -m http.server 8080
 ```
 
 详见 [仿真子项目 README](simulations/vector-thrust-lab/README.md)。
+
+其他子项目：飞控固件见 [TandemVec_FCS/README.md](TandemVec_FCS/README.md)，Python+Web 仿真研究版见 [py-web-lab/README.md](simulations/py-web-lab/README.md)。
 
 ## 📐 工程约定
 

@@ -36,9 +36,12 @@
 
 ## 核心参数
 
-- 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax）和 `src/state_data.cpp`（限幅/质量/推力）
-- PID增益：`src/state_data.cpp` §4.1 + `src/main.cpp` §4（限幅配置）
-- 舵机行程：`SERVO_HALF_TRAVEL_DEG`（`flight_control.cpp` mix函数，默认45°，待标定）
+- **控制增益/限幅/滤波 ★ 实机调参唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（2026-08-08 C路径重构：12 个 PID 增益+输出/积分限幅+阈值+微分滤波、7 个控制滤波器 alpha，全部集中于此结构体；static constexpr，**固件与宿主机测试共用同一事实源**——`state_data.cpp` PID 构造、`main.cpp` setup、`flight_control.cpp` initPositionHold 与 `test_host/test_flight_control_axis.cpp` 均读它）。数值域为 PositionPID 实际语义（deg 域）。
+- 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）
+- 差速增益调度/工作点下限/零油门门控：`src/flight_control.cpp` 层2（mix 函数，硬编码公式，改后需跑 `tools/verify_*.py`）
+- 控制链遥测：`src/state_data.h` §4.0b `gnc_tel`（每层中间量：error_deg/omega_ref_dps/alpha_ref/M_cmd/w0_eff/yaw_gain_sched/执行器指令+饱和），CAN/AnoCom/Serial8 均读它
+- ⚠️ CascadeCtrl 半成品架构已于 2026-08-08 **废弃删除**（`TandemVec_AttitudeCtrl/RateCtrl/CascadeCtrl/CtrlParams.h` 已删；浮点四元数工具抽为 `include/Quat4f.h` 供 test_host 使用）。run_all.sh 中 cascade/sim 两测试已停用，待正式删除
+- 舵机行程/方向/中位：`include/TandemVec_Config.h` §ServoConfig `kDefaultServoConfig`（`half_travel_deg` 默认45°待标定、`dir_pitch/dir_roll` 已实机核查、`zero_*_pct` 待标定；mix 函数消费）
 
 ## 执行总原则
 
