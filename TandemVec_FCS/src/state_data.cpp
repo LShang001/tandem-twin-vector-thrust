@@ -178,8 +178,14 @@ PositionPID yawAnglePID(0.8f, 0.0f, 0.0f);   // 差速外环：过阻尼（电�
 //   调度后 Kp 一次整定全域有效，取 0.35：Δω=0.29（限幅 0.7 留 2.4×
 //   余量）、单侧油门偏移 ±6.7%。Ki 0.002（按比例保持 Ti）。
 //   验证：tools/verify_yaw_gain_schedule.py
-//   ⚠ 仍震荡→降 Kp；偏弱→可加到 0.5（Δω=0.41, ±9.4%）。
-PositionPID yawRatePID(0.35f, 0.002f, 0.0f); // 差速内环：配合增益调度
+// ★★ 2026-08-07 第五轮：增益调度后 0.35 仍震荡 → 降到 0.20。
+//   判断：调度已消除“低油门增益爆炸”（全油门 Δω 恒定），残余震荡
+//   是纯带宽问题：差速回路串联 τm=0.28s 电机滞后 + 200Hz 采样、
+//   角速率滤波(α=0.3) 多重相位滞后，实际可用带宽远低于理论 1/τm=3.6。
+//   二阶反解：Kp_r=0.20 → 2ζωn≈降至安全区（对比震荡点 0.35 留 1.75×）。
+//   Ki 同步降 0.001（积分在震荡时额外引入 90° 相位滞后，是震荡推手）。
+//   配合 yawDiffOutputFilter 加强滤波（见下方）抑制高频分量。
+PositionPID yawRatePID(0.20f, 0.001f, 0.0f); // 差速内环：抑震荡
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
@@ -240,7 +246,11 @@ ComplementaryFilter altitude_rate_target_filter(0.3f);                          
 ComplementaryFilter rollSpeedFilter(0.3f), pitchSpeedFilter(0.3f), yawSpeedFilter(0.3f); // 角速率滤波
 ComplementaryFilter rollAngleOutputFilter(0.85f), pitchAngleOutputFilter(0.85f), yawAngleOutputFilter(0.85f); // 姿态外环输出滤波
 ComplementaryFilter rollOutputFilter(0.25f), pitchOutputFilter(0.25f);                   // TVC摆角输出滤波
-ComplementaryFilter yawOutputFilter(0.25f);                                                // 前摆角（偏航）输出滤波（新增）
+// ★ 2026-08-07：yawOutputFilter 作用于 alpha_yaw（=差速通道）。
+//   差速回路串联 τm=0.28s 电机滞后，对高频指令既无响应能力又引入
+//   相位滞后（震荡源）。α 0.25→0.12（截止频约减半）滤掉高频分量，
+//   代价是响应略慢——但本通道本就被电机时常数限制，无实质损失。
+ComplementaryFilter yawOutputFilter(0.12f);                                                // 差速输出滤波（2026-08-07 加强）
 ComplementaryFilter thrustCompN_filter(0.6f), thrustCompE_filter(0.6f);                  // 水平推力补偿滤波
 
 // 反馈传感器滤波
