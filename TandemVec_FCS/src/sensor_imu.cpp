@@ -229,18 +229,21 @@ bool readIMUData()
     // ★ 2026-08-07 实机轴重映射（构型迁移修正）：
     //   旧 VTVL 项目板子安装 = NED 标准（x 水平前 / z 竖直下）；
     //   纵列双发 VTOL 悬停构型约定 x_b=机头(竖直朝天) / z_b=水平后。
-    //   实测静止 acc=(0.00,-0.01,-1.00)g（原映射）→ 传感器 Y(上) 读 +1g
-    //   → 板子平放（Y 轴朝天），而机头竖直朝天 → 机头方向 = 传感器 Y。
-    //     机体X (机头、竖直向上、推力轴) = +传感器Y (上)
-    //     机体Y (右)                   = +传感器X (右)
-    //     机体Z = x_b × y_b            = -传感器Z（即板子前方）
-    //   ★ z 轴必须取负——否则 bX×bY = -bZ 成左手系，会污染 EKF/姿态解算
-    float axBody = ayFilteredRaw;
+    // ★ 与原始 VTVL 实飞存档版完全一致（板子安装未变，响应逻辑必须一致）：
+    //   机体X (前) = -传感器Z (后)
+    //   机体Y (右) = +传感器X (右)
+    //   机体Z (下) = -传感器Y (上)   ← z_b = 推力轴（机头朝天时指向地面）
+    //   手性：bX×bY = (-sZ)×(sX) = -sY = bZ ✓ 右手系
+    //   ⚠️ 关键：此约定下"机头竖直朝天静止"解算为 roll=pitch=0（悬停基态），
+    //      天然避开欧拉奇异点。2026-08-07 曾误改为"x_b 竖直"，导致
+    //      pitch≈+89° 落进万向锁、roll 与 Heading 退化耦合（实测
+    //      roll=-110/Heading=-121，二者和≈-231），打杆与目标姿态关系错乱。
+    float axBody = -azFilteredRaw;
     float ayBody = axFilteredRaw;
-    float azBody = -azFilteredRaw;
-    float gxBody = gyFilteredRaw; // 陀螺仪应用相同的旋转关系
+    float azBody = -ayFilteredRaw;
+    float gxBody = -gzFilteredRaw; // 陀螺仪应用相同的旋转关系
     float gyBody = gxFilteredRaw;
-    float gzBody = -gzFilteredRaw;
+    float gzBody = -gyFilteredRaw;
 
     // EKF使用与IMU_Packet一致的轻微低通后FRD机体系数据，避免平均值和增量路径数据源不一致。
     const float accel_body_x_mps2 = axBody * G_TO_MS2;
@@ -285,18 +288,17 @@ bool readIMUData()
     // ========================================================================
     // 机体FRD系 -> Madgwick算法输入系 (伪NWU/FLU)
     // 这一步是为了适配 Madgwick 算法的内部坐标系定义。
-    // 变换关系（新机体系 x=竖直机头 / y=右 / z=后）：
-    //   算法输入X = +机体Z（"前"取水平后轴反方向的等效）
-    //   算法输入Y = -机体Y（右取反=左）
-    //   算法输入Z = +机体X（上=机头竖直）
-    // 手性：X×Y = z×(-y) = x = Z ✓ 右手系；重力沿 -x 落 -Z ✓
+    // ★ 与原始 VTVL 实飞存档版完全一致：
+    //   算法输入X = +机体X
+    //   算法输入Y = -机体Y
+    //   算法输入Z = -机体Z
 
-    float axForMadgwick = azBody;
+    float axForMadgwick = axBody;
     float ayForMadgwick = -ayBody;
-    float azForMadgwick = axBody;
-    float gxForMadgwick_dps = gzBody;
+    float azForMadgwick = -azBody;
+    float gxForMadgwick_dps = gxBody;
     float gyForMadgwick_dps = -gyBody;
-    float gzForMadgwick_dps = gxBody;
+    float gzForMadgwick_dps = -gzBody;
 
     // ========================================================================
     // 步骤 7: 使用Madgwick算法更新姿态估计
@@ -351,10 +353,9 @@ bool readIMUData()
     // 定义修正四元数，将算法输出转换为 NED->机体 标准
     // 新机体系（x=竖直机头）：静止机头朝天 = 相对 NED 绕 y 转 -90°
     //   （x_b = -z_NED：绕 NED y 轴 -90° 把 x 转到 -z ✓）
-    // body = M·flu（bX=mZ, bY=-mY, bZ=mX）→ M 迹=-1 → 180° 旋转，
-    // 轴 = (1,0,1)/√2 → q = {w=0, x=0.7071, y=0, z=0.7071}
-    // ★ 分量顺序是 {w,x,y,z}（非 x,y,z,w）
-    Quaternion q_FRD_from_FLU = {0.0, 0.70710678, 0.0, 0.70710678};
+    // ★ 与原始 VTVL 实飞存档版完全一致：绕 X 轴旋转 180°
+    // （FLU→FRD：y/z 同时取反，即 q = {w=0, x=1, y=0, z=0}）
+    Quaternion q_FRD_from_FLU = {0.0, 1.0, 0.0, 0.0};
     Quaternion q_NWU_from_NED = {0.0, -1.0, 0.0, 0.0}; // 绕X轴旋转-180度
 
     // 执行转换: q_FRD_from_NED = q_FRD_from_FLU * q_FLU_from_NWU * q_NWU_from_NED

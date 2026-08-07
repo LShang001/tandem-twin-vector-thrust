@@ -449,15 +449,15 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
     // F_total = F_vertical / cos(tilt_angle)
 
     // 计算倾斜角的余弦值 (cos_tilt)
-    // 本构型推力沿机体 +x_b（FRD 纵列双发，B 矩阵前摆效率 B[2,2]=a·Tf 证明推力沿 x）。
-    // 垂直分量 = x_b 轴在 NED 垂直方向的投影 R13 = 2(qx·qz + qy·qw)；
-    // 悬停（机头朝天）R13=±1 → 无需补偿；水平巡航 R13≈0 → 钳位 0.5（此时升力由气动承担）。
-    // ⚠️ 原实现用 R33 = 1-2(qx²+qy²)（z 轴投影，多旋翼式"推力沿 -z"假设）：
-    //    悬停时机头朝天、z 轴水平 → R33≈0 → 钳位 0.5 → 油门需求×2（审查 HIGH #1）。
+    // ★ 与原始 VTVL 实飞存档版一致（2026-08-07 恢复）：
+    // 存档系 z_b = 推力轴（机头朝天时指向地面，推力沿 -z_b 朝上），
+    // 故垂直分量 = z_b 在 NED 垂直方向的投影 R33 = 1-2(qx²+qy²)。
+    // 悬停静止 roll=pitch=0 → q=Rz(Heading) → qx=qy=0 → R33=1 ✓ 无需补偿。
+    // ⚠️ 2026-08-07 曾因误改轴映射（x_b 竖直）而改用 R13，恢复映射后必须回退，
+    //    否则悬停时 R13≈0 → 钳位 0.5 → 油门需求×2。
     float qx = AHRS_Packet.Qx, qy = AHRS_Packet.Qy;
-    float qz = AHRS_Packet.Qz, qw = AHRS_Packet.Qw;
-    float cos_tilt = 2.0f * (qx * qz + qy * qw);  // R13
-    cos_tilt = fabsf(cos_tilt);                    // 机头朝上/朝下方向无关
+    float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);  // R33
+    cos_tilt = fabsf(cos_tilt);                          // 机头朝上/朝下方向无关
 
     // 安全保护：限制最大补偿角度，防止倾斜过大时推力暴增导致失控
     // 例如限制在 60度 (cos(60)=0.5)，即推力最多增加到原来的2倍
@@ -872,17 +872,10 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
     // thrust_comp_E: 东向推力分量（控制滚转）
     if (constructTiltTargetQuaternion(thrust_comp_N, thrust_comp_E, q_tilt_target))
     {
-      // 计算当前航向的基础四元数（仅航向，滚转和俯仰为 0），用于后续合成
-      // —— VTOL 悬停构型（机头朝天，x_b=推力轴=竖直）——
-      // 悬停基态 q_hover = 绕 NED y 转 +90°（机头朝天，x̂_b ∥ NED -z）
-      // 世界航向 W（绕 NED z 正转）在悬停基准下 = 绕机体 x 转 -W
-      //   （x̂_b = -ẑ_NED → 绕 x̂ 转 -W ≡ 绕 NED z 转 +W ✓，差速轴即航向轴）
-      // ⚠️ 原实现 q_yaw_base = eulerToQuaternion(0,0,Heading)（绕机体 z）：
-      //    水平构型（z 竖直）下正确；VTOL 悬停时机体 z 水平，绕 z ≠ 航向
-      //    ——目标姿态偏差 90°（AUTO_POSITION/GUIDED 悬停不可用，2026-08-02 修复）
-      Quaternion q_hover_base = {0.70710678f, 0.0f, 0.70710678f, 0.0f};  // 绕 NED +y 转 90°
-      Quaternion q_yaw_hover = eulerToQuaternion(-AHRS_Packet.Heading, 0.0f, 0.0f);
-      Quaternion q_yaw_base = quaternionMultiply(q_hover_base, q_yaw_hover);
+      // ★ 与原始 VTVL 实飞存档版完全一致（2026-08-07 恢复）：
+      // 存档系 z_b = 推力轴 → 悬停静止 roll=pitch=0，绕 z_b 即世界航向，
+      // 故"保持当前航向"就是标准 Rz(Heading)，无需悬停基态补偿。
+      Quaternion q_yaw_base = eulerToQuaternion(0.0f, 0.0f, AHRS_Packet.Heading);
 
       // 将倾斜四元数与航向四元数相乘，得到完整的目标姿态
       q_target = quaternionMultiply(q_tilt_target, q_yaw_base);
@@ -919,21 +912,14 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
       // 右打摇杆 -> 正值（右滚）
       rollTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_ANGLE_COMMAND, MAX_ANGLE_COMMAND);
 
-      // 构建基础姿态四元数
-      // —— VTOL 悬停构型（机头朝天，x_b=推力轴=竖直），与 AUTO_POSITION 分支同一约定 ——
-      // ⚠️ 原实现 q_yaw_base = eulerToQuaternion(0,0,Heading)（绕 z_b）是水平巡航/多旋翼
-      //    约定：IMU 轴重映射（2026-08-07 sensor_imu）后 AHRS 四元数以 x_b 竖直为基准，
-      //    悬停时目标姿态与实际姿态差 ~90°，内外环全饱和、舵机钉死限幅，
-      //    表现为"姿态模式打杆完全没反应"。
-      // 悬停基态 q_hover = 绕 NED y 转 +90°；世界航向 = 绕机体 x 转 -Heading
-      Quaternion q_hover_base = {0.70710678f, 0.0f, 0.70710678f, 0.0f};  // 绕 NED +y 转 90°
-      Quaternion q_yaw_hover = eulerToQuaternion(-AHRS_Packet.Heading, 0.0f, 0.0f);
-      Quaternion q_yaw_base = quaternionMultiply(q_hover_base, q_yaw_hover);
+      // ★ 与原始 VTVL 实飞存档版完全一致（2026-08-07 恢复）：
+      // 机体系 z_b = 推力轴（机头朝天时指向地面）→ 悬停静止解算 roll=pitch=0，
+      // 故"保持当前航向 + 摇杆倾斜"就是标准 Rz(Heading)⊗Rxy(roll,pitch)，
+      // 无需悬停基态补偿、天然避开欧拉奇异点。
+      Quaternion q_yaw_base = eulerToQuaternion(0.0f, 0.0f, AHRS_Packet.Heading);
 
-      // 构建机体倾斜四元数（四轴式摇杆语义，与 RATE_MODE 一致）：
-      //   pitch 杆 → 绕 y_b（尾摆通道）；roll 杆 → 绕 z_b（前摆通道）
-      // ⚠️ 原实现 eulerToQuaternion(roll, pitch, 0) 绕 x/y 轴，是水平构型约定
-      Quaternion q_tilt_body = eulerToQuaternion(0.0f, pitchTarget * DEG_TO_RAD, rollTarget * DEG_TO_RAD);
+      // 构建机体倾斜四元数（仅滚转/俯仰，无偏航）
+      Quaternion q_tilt_body = eulerToQuaternion(rollTarget * DEG_TO_RAD, pitchTarget * DEG_TO_RAD, 0.0f);
 
       // 合成最终目标姿态四元数
       // 先应用机体倾斜，再应用悬停基态+航向旋转
@@ -1013,18 +999,8 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, current_omega_dps_body_filtered.x);
       pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(error_pitch_deg, 0, current_omega_dps_body_filtered.y);
 
-      // ★ 2026-08-07：ATTITUDE_MODE 下 yaw 摇杆 = 航向角速度指令（不做姿态回中）
-      // 悬停构型航向轴 = 机体 x（差速通道），故覆盖 rollRateTarget。
-      // 摇杆离中位时直接用摇杆速率（旁路 q_err.x 外环）；回中位时交还外环
-      // 保持当前航向（q_yaw_base 已跟随实测 Heading，qCmd 恒随自由度，
-      // 避免"qCmd 与机体系错位调制其余通道"的陷阱）。
-      const float yaw_stick_dev = inputs.yaw_raw - 1500.0f;
-      if (fabsf(yaw_stick_dev) > 30.0f)  // 死区 ±30us，防抖动
-      {
-        rollRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f,
-                                  MAX_MANUAL_yawRATE, -MAX_MANUAL_yawRATE);
-        rollAnglePID.reset();  // 摇杆接管期间清外环积分，松杆无跳变
-      }
+      // ★ yaw 摇杆不在此处处理：存档约定下 yaw 恒为角速度指令，
+      //   由 execute_yaw_controller 统一映射（两种模式一致）。
 
       // 限制目标角速度在安全范围内
       // 防止PID输出过大导致危险动作
@@ -1032,12 +1008,10 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       pitchRateTarget = constrain(pitchRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
     }
     else
-    { // RATE_MODE —— VTOL 悬停构型，四轴式摇杆语义（2026-08-02）
-      // 悬停（机头朝天，x_b=竖直）：摇杆按四轴通道映射：
-      //   yaw 摇杆 → 绕竖直轴 = 绕 x_b（差速/航向）→ rollRateTarget（内环 ω.x）
-      //   pitch 摇杆 → 绕 y_b（尾摆）✓ 不变
-      //   roll 摇杆 → 绕 z_b（前摆/倾斜）→ execute_yaw_controller 里驱动 yawRateTarget（ω.z）
-      rollRateTarget = mapFloat(inputs.yaw_raw, 988.0f, 2012.0f, MAX_MANUAL_yawRATE, -MAX_MANUAL_yawRATE); // yaw 摇杆→差速（绕 x_b）：右推=航向正转=绕 x_b 负转（x_b=NED −z）
+    { // RATE_MODE —— ★ 与原始 VTVL 实飞存档版一致：摇杆直接生成目标角速率
+      //   roll 摇杆 → 绕 x_b（前摆通道）；pitch 摇杆 → 绕 y_b（尾摆通道）
+      //   yaw 摇杆 → 绕 z_b（差速），由 execute_yaw_controller 处理
+      rollRateTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE);
       pitchRateTarget = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_MANUAL_pitchRATE, -MAX_MANUAL_pitchRATE); // 推杆对应低头负角速度，拉杆对应抬头正角速度
       rollAnglePID.reset();
       pitchAnglePID.reset();
@@ -1093,33 +1067,14 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 
   if (attitude_ctrl_active)
   {
-    if (inputs.attitude_mode == ATTITUDE_MODE)
-    {
-      // VTOL 悬停构型：q_err.z = 水平倾斜误差 → 姿态外环（前摆通道）
-      Quaternion q_current = {AHRS_Packet.Qw, AHRS_Packet.Qx,
-                              AHRS_Packet.Qy, AHRS_Packet.Qz};
-      Quaternion q_error = quaternionMultiply(quaternionConjugate(q_current), q_target);
-      float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
-      float q_vec_norm = sqrtf(q_error.x * q_error.x +
-                               q_error.y * q_error.y +
-                               q_error.z * q_error.z);
-      float precise_scale = (q_vec_norm > 0.25f)
-          ? 2.0f * atan2f(q_vec_norm, fabsf(q_error.w)) / q_vec_norm * RAD_TO_DEG
-          : 2.0f * RAD_TO_DEG;
-      float error_yaw = sign_qw * q_error.z * precise_scale;
-      yawRateTarget = yawAnglePID.computeWithExternalDerivative(
-          error_yaw, 0.0f, current_omega_dps_body_filtered.z);
-      yawRateTarget = constrain(yawRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
-    }
-    else
-    {
-      // RATE_MODE —— VTOL 悬停构型，四轴式摇杆语义（2026-08-02）：
-      // roll 摇杆 → 绕 z_b（悬停时水平轴，前摆通道）→ yawRateTarget（内环 ω.z）
-      yawRateTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f,
-                               -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE); // roll 摇杆→前摆（绕 z_b）
-      yawAnglePID.reset();
-      yawRatePID.reset();  // 与 ATTITUDE_MODE 分支一致：RATE_MODE 重设内环
-    }
+    // ★ 与原始 VTVL 实飞存档版完全一致（2026-08-07 恢复）：
+    // 存档系 z_b = 推力轴 → 绕 z_b 即航向（差速通道）。
+    // yaw 摇杆**恒为角速度指令**（ATTITUDE_MODE / RATE_MODE 行为相同）：
+    // 松杆即停、不做航向姿态回中——符合"姿态模式下 yaw 仍控角速度"的要求，
+    // 同时天然避开"航向自由度被释放时 qCmd 与机体系错位"的陷阱。
+    yawRateTarget = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
+                             -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+    yawAnglePID.reset();  // 航向不用姿态外环
 
     yawRateTarget = yawAngleOutputFilter.filter(yawRateTarget);
 
@@ -1218,14 +1173,15 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
 #else
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
-      // FRD 轴序：Mx←alpha_roll（差速）、My←alpha_pitch（尾摆）、Mz←alpha_yaw（前摆）
-      float Mx = P.Ix * outputs.alpha_roll;  // 体轴x → 滚转力矩 → 差速
-      float My = P.Iy * outputs.alpha_pitch; // 体轴y → 俯仰力矩 → 尾摆
-      // ★ 2026-08-07 实机：z_b（=x_b×y_b=-传感器Z，右手系强制）与前摆座
-      // 机械轴反向 → 同一物理力矩在 z_b 上投影符号相反。取负等价于翻转
-      // B 矩阵 Mz 整行（-B₃u=Mz ⟺ B₃u=-Mz），交叉耦合项一并正确。
-      // 尾摆(My)/差速(Mx)不受影响：y_b=+传感器X 未变、x_b=推力轴符合模型。
-      float Mz = -P.Iz * outputs.alpha_yaw;  // 体轴z → 偏航力矩 → 前摆
+      // ★ 2026-08-07 恢复存档映射后的**轴置换**（tools/verify_mix_axes.py 推导）：
+      //   控制律输出在**存档系**（x_b=前, y_b=右, z_b=下=推力轴）：
+      //     alpha_roll 绕 x_b、alpha_pitch 绕 y_b、alpha_yaw 绕 z_b(推力轴)
+      //   分配器 allocateMoments 吃**模型系**（x'=推力轴朝机头, y'=尾摆, z'=前摆）：
+      //     x' = -z_b、y' = +y_b、z' = +x_b（det=+1 纯旋转）
+      //   符号以"实机已验证正确的陀螺直通行为"为锚点反解，勿凭几何直觉：
+      float Mx = -P.Ix * outputs.alpha_yaw;   // Mx'(绕推力轴→差速) ← alpha_yaw(绕 z_b)
+      float My =  P.Iy * outputs.alpha_pitch; // My'(尾摆)          ← alpha_pitch(绕 y_b)
+      float Mz = -P.Iz * outputs.alpha_roll;  // Mz'(前摆)          ← alpha_roll(绕 x_b)
 
       // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;

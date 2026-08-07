@@ -21,14 +21,17 @@
 
 ## 当前约定（含已修复遗留）
 
-- 推力垂直投影用 **R13**（cos_tilt）；R33 是激光斜距补偿（激光沿 −z_b），勿混用。
-- VTOL 悬停目标姿态合成 `q_hover ⊗ Rx(-Heading)`（q_hover = 绕 NED y 转 90° 机头朝天；悬停时航向轴 = 机体 x = 差速轴），勿用"绕机体 z 航向"的多旋翼式假设。
-- 命名残留：`servo_deg_roll`/`TVC_ROLL_SERVO_PIN` 实际是前摆（偏航通道），待重命名（不影响功能）。
+- **机体系 = 原始 VTVL 实飞存档版约定**（`D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版`）：`x_b`=前、`y_b`=右、**`z_b`=下=推力轴**（机头朝天时 z_b 指向地面）。★ 判据：**机头竖直朝天静止解算 roll=pitch=0**（悬停基态），天然避开欧拉奇异点。板子安装与存档一致 → 控制响应逻辑必须与存档一致。
+- 推力垂直投影用 **R33** = `1-2(qx²+qy²)`（z_b 在 NED 垂直方向投影；悬停 roll=pitch=0 → R33=1 无需补偿），与存档一致。**勿改用 R13**（那是"x_b 竖直"错误映射时期的产物）。
+- 目标姿态合成 = 标准 `Rz(Heading) ⊗ Rxy(rollTarget, pitchTarget)`（存档原版），**勿加悬停基态补偿**（`q_hover ⊗ Rx(-Heading)` 是错误映射时期的产物）。
+- 命名残留：`servo_deg_roll`/`TVC_ROLL_SERVO_PIN` 实际是前摆，待重命名（不影响功能）。
 - 调试开关宏陷阱：`#define XXX_TEST 0` 时 `#ifdef XXX_TEST` 仍为真——调试开关判断一律用 `#if`（2026-08-07 `GYRO_DIRECT_TEST` 曾因此常驻生效，姿态环被整体旁路、打杆无响应）。
-- **IMU 轴映射（板子沿用旧 VTVL 安装）**：传感器 RUB 的 **Y 轴朝天 = 机头方向**，故 `bX=+sY`（机头/推力轴）、`bY=+sX`（右）、`bZ=-sZ`。`bZ` 必须取负，否则 `bX×bY=-bZ` 成左手系、污染 EKF 与四元数解算。判据：机头朝天静止时 `acc≈(+1.00, 0, 0)g`（不是 `(0,0,-1)`）。改轴映射后必须同步改步骤 6（Madgwick 输入）与步骤 8（`q_body_from_FLU`）（2026-08-07）。
-- `Quaternion` 结构体分量顺序是 **`{w, x, y, z}`**（`QuaternionMath.h:49`），不是 `(x,y,z,w)`；写常量四元数前先核对，绕 (1,0,1)/√2 转 180° = `{0, 0.7071, 0, 0.7071}`（2026-08-07 曾写错导致姿态基准错位）。
+- **IMU 轴映射（`sensor_imu.cpp` 步骤5，与存档逐字一致，勿改）**：`bX=-sZ`、`bY=+sX`、`bZ=-sY`（传感器 RUB=右/上/后）。手性 `bX×bY=-sY=bZ` ✓。判据：机头朝天静止 `acc≈(0, 0, -1)g` 且 **roll=pitch≈0**。⚠️ 2026-08-07 曾误改为"x_b 竖直"（`bX=+sY`），导致 pitch≈+89° 落进万向锁、roll 与 Heading 退化耦合（实测 roll=-110/Heading=-121，二者和≈-231），打杆与目标姿态关系错乱；连带 Madgwick 输入（步骤6）、`q_body_from_FLU`（步骤8 = `{0,1,0,0}` 绕 X 转 180°）、`cos_tilt`、目标姿态合成、mix 轴置换、PID 换位共 6 处全部被污染。**改轴映射前先问：是否与存档一致？**
+- `Quaternion` 结构体分量顺序是 **`{w, x, y, z}`**（`QuaternionMath.h:49`），不是 `(x,y,z,w)`；写常量四元数前先核对（2026-08-07 曾写错导致姿态基准错位）。
 - 符号/轴排查顺序：**先查轴映射，再查控制律符号**。轴错会让"通道张冠李戴"（绕竖直轴转→前摆动作）伪装成"符号反"，在错轴上翻符号只会掩盖问题（2026-08-07 曾为此翻了 3 轮直通符号）。
-- **前摆通道 `Mz_cmd` 取负**（`flight_control.cpp` 层1）：`z_b = x_b×y_b = -传感器Z`（右手系强制）与前摆座机械轴反向，同一物理力矩在 z_b 上投影符号相反。在 M_cmd 层取负 ⟺ 翻转 B 矩阵 Mz 整行（`-B₃u=Mz`），交叉耦合项一并正确；勿改 `computeEffectMatrix`。尾摆(My)/差速(Mx)不需取负（2026-08-07）。
+- **mix 层轴置换**（`flight_control.cpp` 层1）：控制律在**存档系**（roll 绕 x_b、pitch 绕 y_b、yaw 绕 z_b=推力轴），分配器 `allocateMoments` 吃**模型系**（x'=推力轴朝机头、y'=尾摆、z'=前摆），`x'=-z_b, y'=+y_b, z'=+x_b`（det=+1）。故 `Mx'=-Ix·alpha_yaw`（差速）、`My'=+Iy·alpha_pitch`（尾摆）、`Mz'=-Iz·alpha_roll`（前摆）。符号以"实机已验证的陀螺直通行为"为锚点反解（`tools/verify_mix_axes.py`），勿凭几何直觉、勿改 `computeEffectMatrix`（2026-08-07）。
+- **通道↔执行器对应（存档系）**：roll 通道→**前摆舵机**、pitch 通道→**尾摆舵机**、yaw 通道→**电机差速**。PID 参数须随之匹配：TVC 轴可高带宽（Kp_r=0.25/Kp_a=2.5，ζ≈1.20），差速轴受电机 τm=0.28s 限带必须保守（Kp_r=0.10/Kp_a=0.8，ζ≈1.34）。
+- **摇杆语义（与存档一致）**：ATTITUDE_MODE = roll/pitch 杆控**目标姿态角**、yaw 杆控**航向角速度**（不做航向姿态回中，`execute_yaw_controller` 两种模式统一处理）；RATE_MODE = 三杆全控目标角速度。
 - `include/TVC_Control_Geometric.h` / `TVC_Control_3rdOrder_Poly.h` — 原版 TVC 几何模型，**已弃用**。控制分配现由 `TandemVec_ControlAllocation.h` 处理。
 
 ## 核心参数
