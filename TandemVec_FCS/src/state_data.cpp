@@ -84,9 +84,9 @@ float initial_mass = kDefaultTandemVecParams.m;  // 唯一来源：TandemVec_Con
 const float MAX_THRUST = 27.5f;
 //  来源: 2×kT×wMax² = 2×1.04e-5×1150² = 27.5N (2212+9047+3S)
 
-const float MAX_TARGET_RATE = 50.0f;
-//  来源: α_max_hover × τ_rise_1s ≈ 49 deg/s² × 1s ≈ 50 deg/s
-//  外环输出的目标角速率上限。悬停时 α_max≈49deg/s²，选择1秒内可达的速率。
+// ★ 2026-08-07 对齐原始 VTVL 实飞存档版（存档 MAX_TARGET_RATE=80）：
+//  原 50 按"α_max_hover×τ_rise_1s≈49deg/s²×1s"保守估算，实飞验证值为 80。
+const float MAX_TARGET_RATE = 80.0f;
 
 const float MAX_CORRECTION = 15.0f;  // 2026-08-07 实机：TVC 摆角限幅收紧到 15°
 //  来源: dMax = 0.436rad = 25° (TandemVec_Config.h)。舵机物理行程。
@@ -97,9 +97,12 @@ const float POS_CTRL_MAX_TILT_ANGLE_RAD = 15.0f * DEG_TO_RAD;
 //  来源: 位置环最大倾角 15°。sin(15)=0.26, 水平加速 a_max=0.26×g≈2.5m/s²。
 const float POS_CTRL_MAX_THRUST_COMP = sinf(POS_CTRL_MAX_TILT_ANGLE_RAD);
 
-const float MAX_MANUAL_rollRATE  = 50.0f;  // = MAX_TARGET_RATE
-const float MAX_MANUAL_pitchRATE = 50.0f;
-const float MAX_MANUAL_yawRATE   = 35.0f;  // VTOL 悬停：yaw 摇杆→差速（绕 x_b）保守速率；差速电机时延+低效能
+// ★ 2026-08-07 三轴均对齐存档实飞验证值 80°/s（原 50/50/35）：
+//  yaw 原为 35 是“差速时延+低效能”的保守取值，但实测打杆无反应；
+//  存档实飞用 80°/s（tools/verify_yaw_vs_archive.py 对比）。
+const float MAX_MANUAL_rollRATE  = 80.0f;  // = MAX_TARGET_RATE
+const float MAX_MANUAL_pitchRATE = 80.0f;
+const float MAX_MANUAL_yawRATE   = 80.0f;  // 对齐存档（原 35 过保守）
 
 // --- 3.3 位置与速度控制限制 ---
 const float POS_CTRL_MAX_SPEED_CMD = 1.5f;
@@ -151,7 +154,12 @@ PositionPID yawAnglePID(0.8f, 0.0f, 0.0f);   // 差速外环：过阻尼（电�
 //   积分状态钳位 + 反算抗饱和，iOut 上限 0.002×250=0.5 rad/s²）。
 //   注：低油门下差速物理效能仅 ∝w0²（19% 油门只有 3.6%），
 //   地面低油门 yaw 天然弱是构型固有特性，非参数问题。
-PositionPID yawRatePID(0.25f, 0.002f, 0.0f); // 差速内环：P×2.5 + I×6.7
+// ★ 2026-08-07 存档量级对比（tools/verify_yaw_vs_archive.py）：
+//   存档满打杆 → 单侧油门偏移 ±30.4%（绝对 us 差，与油门无关）；
+//   当前（归一化 Δω 架构，低油门被压缩）Kp=0.25 仅 ±2.2%@50% 油门
+//   → 偏小 13.6×。配合摇杆速率 35→80°/s，Kp_r 0.25→0.6：
+//   50% 油门 Δω=0.49、单侧 ±12.7%；19% 油门触 dwMax 饱和（安全）。
+PositionPID yawRatePID(0.6f, 0.002f, 0.0f); // 差速内环：对齐存档量级
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
