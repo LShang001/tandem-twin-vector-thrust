@@ -1185,6 +1185,27 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
 
       // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
+
+      // ================================================================
+      // ★ 差速回路增益调度（2026-08-07，根治低油门自激震荡）
+      // ----------------------------------------------------------------
+      // 问题：分配层 Δω = Mx/(2·kQ·w0²)，其中 1/w0² 使**回路增益**随油门
+      //   平方反比放大 —— 19% 油门时是 100% 油门的 28×（实测 Kp=0.6 在
+      //   19% 油门下 Δω=3.4，是限幅 0.7 的 5 倍，长期饱和 → 剧烈震荡失控）。
+      //   这也让 PID 无法整定：低油门不震荡的 Kp，高油门就发软。
+      // 方案：令 Mx ×= (w0/w_hover)²，则
+      //   Δω = [Mx·w0²/wh²]/(2·kQ·w0²) = Mx/(2·kQ·wh²)  ← 与 w0 无关。
+      //   全油门回路增益恒定，Kp 一次整定全域有效。
+      // 注：物理力矩仍 ∝w0²（低转速缺反扭权限是**物理限制**，无法绕过），
+      //   但表现从"增益爆炸震荡"变为"输出诚实变弱"，这是可接受的。
+      // 仅作用于差速通道；摆座通道(My/Mz)未出现同类问题，不扩范围。
+      // 验证：tools/verify_yaw_gain_schedule.py
+      // ================================================================
+      const float w_hover = sqrtf(0.5f * P.m * P.g / P.kT);  // 单机悬停转速 ≈574 rad/s
+      float yaw_gain_sched = (w_hover > 1.0f) ? (w0 * w0) / (w_hover * w_hover) : 1.0f;
+      yaw_gain_sched = constrain(yaw_gain_sched, 0.02f, 4.0f); // 防零 / 防高油门过冲
+      Mx *= yaw_gain_sched;
+
       AllocationInput ai;
       ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0;
       ai.current_state = prev_prop_state;
