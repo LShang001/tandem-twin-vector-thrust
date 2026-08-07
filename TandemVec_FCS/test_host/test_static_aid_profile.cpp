@@ -138,6 +138,25 @@ int main()
     check(approx(p.gravity_noise_rad, 0.03f) && approx(p.vel_ne_std_mps, 0.02f),
           "档3: 高置信度长静止稳态");
   }
+  // ---- 帧边界精确值（并入自 static_aid_profile_test.cpp，该文件已删除）----
+  {
+    // frame16：confidence=16/60≈0.267 < 0.35 → 帧门槛过但置信度不足 → 仍档1
+    auto p16 = Icm45686SelectStaticAidProfile(0.267f, 16U, true);
+    check(approx(p16.gravity_noise_rad, 0.18f),
+          "档1: frame16 低置信度不升级（置信度门槛未过）");
+    // frame32：confidence=0.533 ≥ 0.35 且帧 ≥16 → 档2
+    auto p32 = Icm45686SelectStaticAidProfile(0.533f, 32U, true);
+    check(approx(p32.gravity_noise_rad, 0.10f),
+          "档2: frame32 置信度与帧门槛均满足");
+    // frame99：帧 <100 → 即使满置信度仍档2
+    auto p99 = Icm45686SelectStaticAidProfile(1.0f, 99U, true);
+    check(approx(p99.gravity_noise_rad, 0.10f),
+          "档2: frame99（帧<100）满置信度仍不升档3");
+    // frame100：帧 ≥100 且满置信度 → 档3（精确边界）
+    auto p100 = Icm45686SelectStaticAidProfile(1.0f, 100U, true);
+    check(approx(p100.gravity_noise_rad, 0.03f) && approx(p100.vel_ne_std_mps, 0.02f),
+          "档3: frame100 满置信度精确边界");
+  }
   {
     // 超界置信度应被 clamp 到 1.0 后进入档3
     auto p = Icm45686SelectStaticAidProfile(1.5f, 200U, true);

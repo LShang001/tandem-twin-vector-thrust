@@ -137,8 +137,8 @@ static void test_direct_vs_fullb_coupling()
         // FULL_B 产生非零 delta_f（偏航耦合修正）
         check(std::fabs(f.delta_f) > 0.0f,
               "纯俯仰指令 FULL_B delta_f 非零（反扭耦合修正）");
-        check(std::fabs(d.delta_f) < std::fabs(f.delta_f) + 1e-8f,
-              "DIRECT delta_f = 0（无交叉项）");
+        // DIRECT 为对角近似（无交叉项），纯俯仰指令下 delta_f 应精确为 0
+        check(exact(d.delta_f, 0.0f), "DIRECT delta_f = 0（无交叉项，精确）");
     }
 
     // 偏航指令：FULL_B 的 delta_t 应受 τ₀·Mz_cmd 影响（俯仰轴耦合）
@@ -147,8 +147,8 @@ static void test_direct_vs_fullb_coupling()
         auto f = alloc(0.0f, 0.0f, M, w0, AllocationStrategy::FULL_B);
         check(std::fabs(f.delta_t) > 0.0f,
               "纯偏航指令 FULL_B delta_t 非零（反扭耦合修正）");
-        check(std::fabs(d.delta_t) < std::fabs(f.delta_t) + 1e-8f,
-              "DIRECT delta_t = 0（无交叉项）");
+        // DIRECT 为对角近似（无交叉项），纯偏航指令下 delta_t 应精确为 0
+        check(exact(d.delta_t, 0.0f), "DIRECT delta_t = 0（无交叉项，精确）");
     }
 }
 
@@ -201,7 +201,9 @@ static void test_saturation()
     auto out = alloc(0.0f, -huge_My, 0.0f, w0);
     check(out.sat_delta_t, "超大俯仰力矩 → delta_t 饱和");
     check(std::fabs(out.delta_t) == p.dMax, "delta_t 限幅值 = dMax");
-    check(!out.sat_delta_f || true, "偏航通道可能有少量耦合饱和（不要求）");
+    // 俯仰饱和时前摆通道的耦合饱和标记应与输出一致（原为恒真断言，无验证价值）
+    check(!out.sat_delta_f || approx(std::fabs(out.delta_f), p.dMax, 1e-3f),
+          "俯仰饱和：若前摆耦合饱和标记置位则 delta_f 触达 dMax（标记-输出一致）");
 
     // 超大偏航力矩：确保 |Mz_cmd| >> a·T₀·dMax
     float huge_Mz = p.a * T0 * p.dMax * 10.0f;

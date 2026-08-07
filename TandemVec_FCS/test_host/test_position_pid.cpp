@@ -125,8 +125,8 @@ static void test_integral_state_clamp()
     std::printf("  integral=%.1f (上界=%.1f)\n", pid.getIntegral(), bound);
     check(pid.getIntegral() <= bound * 1.001f,
           "P3 积分状态被钳制在 |integralLimit/ki| 内");
-    check(approx(ki * pid.getIntegral(), iLimit, 1e-3f) ||
-          ki * pid.getIntegral() < iLimit,
+    // 弱断言修复：原"approx(...) || < iLimit"中第二条件使断言近乎恒真
+    check(ki * pid.getIntegral() <= iLimit * 1.001f,
           "P3 积分贡献不超过 integralLimit");
 
     // ★ 核心：退饱和后应立即响应，而非先卸积分

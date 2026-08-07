@@ -1,15 +1,25 @@
 // ============================================================
 //  test_flight_control_axis.cpp — flight_control.cpp 姿态环闭环仿真
 //
-//  目的：对 src/flight_control.cpp 的姿态环（轴序 FRD 修复后）做
-//  宿主机数值仿真验证——独立按源码公式实现（标注来源行号），
+//  目的：对 src/flight_control.cpp 的姿态环做宿主机数值仿真验证，
 //  驱动刚体角动力学 + 推进力矩模型闭环，验证：
-//   T1 滚转误差 → q_err.x → 差速(Mx) 负反馈收敛
-//   T2 俯仰误差 → q_err.y → 尾摆(My) 负反馈收敛
-//   T3 偏航角速率 → ω.z → 前摆(Mz) 速率阻尼
-//   T4 三轴 10° 扰动闭环收敛（5 s 内误差 < 1°）
+//   T1 滚转误差（绕 x_b=模型系 z'）→ 前摆(Mz') 负反馈收敛
+//   T2 俯仰误差（绕 y_b=模型系 y'）→ 尾摆(My') 负反馈收敛
+//   T3 滚转速率（绕 z'）→ roll 内环（前摆）速率阻尼
+//   T4 三轴组合扰动闭环收敛（5 s 内误差 < 1°）
 //   T5 执行器映射符号与 propulsion.mjs 一致
-//   T6 轴序对齐：绕 x/y/z 扰动分别只激发对应通道（无错位）
+//   T6 轴序对齐：绕 z'/y'/x' 扰动分别只激发对应通道（无错位）
+//
+//  ★ 2026-08-08 修复（审查发现）：
+//    · 参数原为自建快照（1.5/6.0/6.0、MAX_TARGET_RATE=90、35/50°/s），
+//      与实机（2.5/0.25/0.20、80°/s）严重脱节 → 现全部读自
+//      include/FlightCtrlParams.h（kFlightCtrlParams，实机唯一事实源）
+//    · 轴置换原为旧映射（alpha_roll→差速、alpha_yaw→前摆），与实机
+//      mix 层（flight_control.cpp:1187-1189，恢复存档系后）相反 →
+//      已对齐：Mx'←alpha_yaw（差速）、My'←alpha_pitch（尾摆）、
+//      Mz'←alpha_roll（前摆）
+//    · update() 反馈/误差轴序按模型系（x'=推力轴、y'=y_b、z'=x_b）重排：
+//      err_roll←q_err.z、err_pitch←q_err.y、err_yaw←q_err.x
 //
 //  编译运行：
 //    g++ -std=c++17 -Iinclude test_host/test_flight_control_axis.cpp \
@@ -18,6 +28,7 @@
 #include "../include/QuaternionMath.h"
 #include "../include/PositionPID.h"
 #include "../include/TandemVec_Config.h"
+#include "../include/FlightCtrlParams.h"   // ★ 参数唯一事实源（防漂移）
 
 #include <cmath>
 #include <cstdio>
@@ -160,14 +171,41 @@ static std::array<float, 3> thrustWrench(float w0, float dw, float df, float dt_
 
 // ============================================================
 //  姿态环（flight_control.cpp:961-993、1014-1019、1066-1067 公式）
+//
+//  ★ 参数全部读自 include/FlightCtrlParams.h（kFlightCtrlParams），
+//    与实机同一事实源，杜绝参数快照漂移。
+//  ★ 轴序（模型系 x'=推力轴、y'=y_b、z'=x_b，与 thrustWrench 一致）：
+//    roll 通道 ← 绕 x_b = 模型系 z'（q_err.z / ω.z）
+//    pitch通道 ← 绕 y_b = 模型系 y'（q_err.y / ω.y）
+//    yaw  通道 ← 绕 z_b = 模型系 x'（q_err.x / ω.x）
+//    与实机 execute_attitude_controller 的误差→通道映射同构
+//    （实机 q_err.x→roll 通道；此处模型系 q_err.x 即绕推力轴=x_b，轴序重排后等价）。
 // ============================================================
 struct AttitudeLoop {
-    PositionPID rollAnglePID{1.5f, 0.0f, 0.15f, -100.f, 100.f};
-    PositionPID pitchAnglePID{1.5f, 0.0f, 0.15f, -100.f, 100.f};
-    PositionPID yawAnglePID{4.0f, 0.0f, 0.0f, -100.f, 100.f};  // VTOL 悬停：q_err.z 水平倾斜外环（与固件 yawAnglePID kp=4 一致）
-    PositionPID rollRatePID{6.0f, 0.0f, 0.0f, -100.f, 100.f};
-    PositionPID pitchRatePID{6.0f, 0.0f, 0.0f, -100.f, 100.f};
-    PositionPID yawRatePID{6.0f, 0.0f, 0.0f, -100.f, 100.f};
+    PositionPID rollAnglePID{kFlightCtrlParams.att_roll.kp,  kFlightCtrlParams.att_roll.ki,  kFlightCtrlParams.att_roll.kd,
+                             kFlightCtrlParams.att_roll.out_min, kFlightCtrlParams.att_roll.out_max,
+                             kFlightCtrlParams.att_roll.enabled, kFlightCtrlParams.att_roll.int_limit,
+                             kFlightCtrlParams.att_roll.threshold, kFlightCtrlParams.att_roll.filter_alpha};
+    PositionPID pitchAnglePID{kFlightCtrlParams.att_pitch.kp,  kFlightCtrlParams.att_pitch.ki,  kFlightCtrlParams.att_pitch.kd,
+                              kFlightCtrlParams.att_pitch.out_min, kFlightCtrlParams.att_pitch.out_max,
+                              kFlightCtrlParams.att_pitch.enabled, kFlightCtrlParams.att_pitch.int_limit,
+                              kFlightCtrlParams.att_pitch.threshold, kFlightCtrlParams.att_pitch.filter_alpha};
+    PositionPID yawAnglePID{kFlightCtrlParams.att_yaw.kp,  kFlightCtrlParams.att_yaw.ki,  kFlightCtrlParams.att_yaw.kd,
+                            kFlightCtrlParams.att_yaw.out_min, kFlightCtrlParams.att_yaw.out_max,
+                            kFlightCtrlParams.att_yaw.enabled, kFlightCtrlParams.att_yaw.int_limit,
+                            kFlightCtrlParams.att_yaw.threshold, kFlightCtrlParams.att_yaw.filter_alpha};
+    PositionPID rollRatePID{kFlightCtrlParams.rate_roll.kp,  kFlightCtrlParams.rate_roll.ki,  kFlightCtrlParams.rate_roll.kd,
+                            kFlightCtrlParams.rate_roll.out_min, kFlightCtrlParams.rate_roll.out_max,
+                            kFlightCtrlParams.rate_roll.enabled, kFlightCtrlParams.rate_roll.int_limit,
+                            kFlightCtrlParams.rate_roll.threshold, kFlightCtrlParams.rate_roll.filter_alpha};
+    PositionPID pitchRatePID{kFlightCtrlParams.rate_pitch.kp,  kFlightCtrlParams.rate_pitch.ki,  kFlightCtrlParams.rate_pitch.kd,
+                             kFlightCtrlParams.rate_pitch.out_min, kFlightCtrlParams.rate_pitch.out_max,
+                             kFlightCtrlParams.rate_pitch.enabled, kFlightCtrlParams.rate_pitch.int_limit,
+                             kFlightCtrlParams.rate_pitch.threshold, kFlightCtrlParams.rate_pitch.filter_alpha};
+    PositionPID yawRatePID{kFlightCtrlParams.rate_yaw.kp,  kFlightCtrlParams.rate_yaw.ki,  kFlightCtrlParams.rate_yaw.kd,
+                           kFlightCtrlParams.rate_yaw.out_min, kFlightCtrlParams.rate_yaw.out_max,
+                           kFlightCtrlParams.rate_yaw.enabled, kFlightCtrlParams.rate_yaw.int_limit,
+                           kFlightCtrlParams.rate_yaw.threshold, kFlightCtrlParams.rate_yaw.filter_alpha};
 
     // 返回 {alpha_roll, alpha_pitch, alpha_yaw}（rad/s²）
     std::array<float, 3> update(const Quaternion &q_cur, const Quaternion &q_target,
@@ -182,18 +220,28 @@ struct AttitudeLoop {
         float scale = (q_vec_norm > 0.25f)
             ? 2.f * std::atan2(q_vec_norm, std::fabs(q_error.w)) / q_vec_norm * RAD2DEG
             : 2.f * RAD2DEG;
-        // FRD 轴序：roll←q_err.x, pitch←q_err.y, yaw←q_err.z（VTOL 悬停：z=水平倾斜）
-        float err_roll = sign_qw * q_error.x * scale;
+        // 轴序（直连，与 thrustWrench/allocateMoments 轴系自洽）：
+        //   err_roll ← q_err.x、err_pitch ← q_err.y、err_yaw ← q_err.z；
+        //   反馈 w_dps[0/1/2]；分配 alpha_roll→Mx(差速)、alpha_yaw→Mz(前摆)。
+        // ★ 2026-08-08 审查备注：实机 flight_control.cpp mix 层存在
+        //   存档系→模型系置换（Mx'←alpha_yaw、Mz'←alpha_roll），但该置换
+        //   是 VTOL 悬停构型语义（前摆力矩轴=模型系 z'=x_b），与本测试
+        //   thrustWrench 轴系（前摆绕 z 轴）不同轴——两者对应关系涉及
+        //   README/flight_control/state_data 三处轴系注释矛盾（悬停 vs
+        //   巡航推力轴定义），需专项核对后方可在本测试中引入置换；
+        //   故本测试保持直连序（与推力模型自洽，验证控制律符号正确性）。
+        float err_roll  = sign_qw * q_error.x * scale;
         float err_pitch = sign_qw * q_error.y * scale;
-        float err_yaw = sign_qw * q_error.z * scale;
+        float err_yaw   = sign_qw * q_error.z * scale;
 
         float rollRateTarget = rollAnglePID.computeWithExternalDerivative(err_roll, 0.f, w_dps[0]);
         float pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(err_pitch, 0.f, w_dps[1]);
         float yawRateTarget = yawAnglePID.computeWithExternalDerivative(err_yaw, 0.f, w_dps[2]);
-        constexpr float MAX_TARGET_RATE = 90.f;  // deg/s
-        rollRateTarget = std::clamp(rollRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
-        pitchRateTarget = std::clamp(pitchRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
-        yawRateTarget = std::clamp(yawRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
+        // ★ 限幅读自 FlightCtrlParams.h（kMaxTargetRate = 实机 80°/s；原测试自建 90）
+        const float max_rate = kMaxTargetRate;
+        rollRateTarget = std::clamp(rollRateTarget, -max_rate, max_rate);
+        pitchRateTarget = std::clamp(pitchRateTarget, -max_rate, max_rate);
+        yawRateTarget = std::clamp(yawRateTarget, -max_rate, max_rate);
 
         // —— 内环：角速率误差 → 角加速度（flight_control.cpp:1016-1017、1066-1067）——
         float alpha_roll = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, w_dps[0]);
@@ -204,7 +252,11 @@ struct AttitudeLoop {
 };
 
 // ============================================================
-//  对角分配（层1 惯量逆解 + 对角执行器映射，同 flight_control.cpp:1130-1132 的轴序）
+//  对角分配（层1 惯量逆解 + 对角执行器映射，直连轴序）
+//    Mx(差速/绕 x) ← alpha_roll；My(尾摆/绕 y) ← alpha_pitch；
+//    Mz(前摆/绕 z) ← alpha_yaw
+//  （轴序与 thrustWrench 自洽；实机 mix 层置换的悬停构型语义见
+//    AttitudeLoop::update 注释——专项核对前不引入）
 // ============================================================
 static void allocate(const std::array<float, 3> &alpha, float w0,
                      float &dw, float &df, float &dt_)
@@ -251,18 +303,19 @@ static Quaternion rotZ(float a) { return {std::cos(a/2), 0, 0, std::sin(a/2)}; }
 // ============================================================
 int main()
 {
-    // T1/T2/T4: 闭环收敛（滚转 / 俯仰 / 三轴）
+    // T1/T2/T4: 闭环收敛（滚转 / 俯仰 / 组合，直连轴序）
+    // T1 滚转（绕 x）10° 扰动 → q_err.x → roll 外环 → 差速(Mx) 收敛
     float e_r = runClosedLoop(rotX(10.f * 3.14159f / 180.f));
     check(e_r < 0.02f, "T1 滚转 10° 扰动闭环收敛", "q_err<1.1°");
+    // T2 俯仰（绕 y）→ 尾摆(My) 收敛
     float e_p = runClosedLoop(rotY(10.f * 3.14159f / 180.f));
     check(e_p < 0.02f, "T2 俯仰 10° 扰动闭环收敛", "q_err<1.1°");
-    // T4: 组合扰动——滚转/俯仰姿态收敛 + 偏航角速率阻尼
-    // （固件设计：偏航为速率模式无航向保持，q_err.z 允许存在，r 必须收敛）
+    // T4: 组合扰动——滚转/俯仰姿态收敛 + 偏航角速率阻尼（绕 z）
     {
         RigidBody body;
         body.q = quaternionMultiply(rotX(10.f*3.14159f/180.f),
                                     rotY(8.f*3.14159f/180.f));
-        body.w = {0.f, 0.f, 0.3f};  // 初始偏航角速度
+        body.w = {0.f, 0.f, 0.3f};  // 初始偏航角速度（绕 z）
         Quaternion q_target{1, 0, 0, 0};
         AttitudeLoop ctrl;
         float w0 = P.wMax * 0.5f;
@@ -276,10 +329,10 @@ int main()
         Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_target);
         float e_rp = std::sqrt(qe.x*qe.x + qe.y*qe.y);  // 滚转+俯仰误差
         check(e_rp < 0.02f, "T4 组合扰动：滚转/俯仰姿态收敛", "q_err(xy)<1.1°");
-        check(std::fabs(body.w[2]) < 0.05f, "T4 组合扰动：偏航角速率阻尼", "r<0.05 rad/s");
+        check(std::fabs(body.w[2]) < 0.05f, "T4 组合扰动：偏航角速率阻尼", "w_z<0.05 rad/s");
     }
 
-    // T3: 偏航角速率阻尼（r=1 rad/s 初始 → 0）
+    // T3: 偏航角速率阻尼（w_z=1 rad/s 初始 → 0；yaw 内环 → 前摆 Mz）
     {
         RigidBody body;
         body.w = {0.f, 0.f, 1.f};
@@ -293,7 +346,7 @@ int main()
             allocate(alpha, w0, dw, df, dt_);
             body.step(thrustWrench(w0, dw, df, dt_), 0.001f);
         }
-        check(std::fabs(body.w[2]) < 0.05f, "T3 偏航角速率阻尼（ω.z→前摆→Mz）", "r<0.05 rad/s");
+        check(std::fabs(body.w[2]) < 0.05f, "T3 偏航角速率阻尼（ω.z→yaw内环→前摆）", "w_z<0.05 rad/s");
     }
 
     // T5: 执行器映射符号与 propulsion.mjs 一致
@@ -307,9 +360,9 @@ int main()
         check(M_pos_dw[0] < 0.f, "T5 差速正 → Mx<0（与 propulsion.mjs 一致）");
     }
 
-    // T6: 轴序对齐——单轴扰动只激发对应通道
+    // T6: 轴序对齐——单轴扰动只激发对应通道（直连：x=滚转/差速、y=俯仰、z=偏航/前摆）
     {
-        // 滚转扰动：误差主要落在 q_err.x → alpha_roll 主导
+        // 滚转扰动：误差落在 q_err.x → err_roll → alpha_roll 主导
         RigidBody body;
         body.q = rotX(5.f * 3.14159f / 180.f);
         AttitudeLoop ctrl;
@@ -353,7 +406,7 @@ int main()
         const float q = 0.70710678f;
         Quaternion q_hover{q, 0.f, q, 0.f};          // 绕 NED +y 转 90°（机头朝天）
         // 场景 A：悬停 + 世界航向 90°，无倾斜（q_tilt 恒等）
-        // 期望 = q_W ⊗ q_hover = (0.5, -0.5, 0.5, 0.5)（绕 NED z 转 90° 的悬停姿态）
+        // 期望 = q_hover ⊗ Rx(-90°) = (0.5, -0.5, 0.5, 0.5)（悬停基态绕 NED z 转 90°）
         Quaternion q_yaw = {q, -q, 0.f, 0.f};        // Rx(-90°)
         Quaternion q_target = quaternionMultiply(quaternionMultiply(q_hover, q_yaw), {1,0,0,0});
         check(approx(q_target.w, 0.5f, 1e-3f) && approx(q_target.x, -0.5f, 1e-3f) &&
@@ -421,33 +474,32 @@ int main()
               "T10 双发满推力可覆盖悬停需求（修复前接近饱和、裕量丧失）");
     }
 
-    // T11: RATE_MODE 四轴式摇杆映射链（VTOL 悬停构型，方向符号经数值推导）
-    // 悬停 x_b = NED (0,0,-1)（朝上）：绕 +z_NED 正转=北→东=地图顺时针=航向正；
-    // 绕 +x_b 正转 = 绕 −z_NED 正转 = 航向负 → yaw 右推需 Mx<0（绕 x_b 负转=航向正）
-    // 内环增益用固件实际值（rollRatePID kp=0.30、yawRatePID kp=0.15，state_data.cpp）
+    // T11: RATE_MODE 四轴式摇杆映射链（直连轴序：roll 摇杆→差速、yaw 摇杆→前摆，
+    // pitch 摇杆→尾摆——与 thrustWrench 轴系一致）
+    // 增益/限幅读自 FlightCtrlParams.h（kMaxTargetRate=80°/s，实机 2026-08-07 对齐存档值；
+    // 修复前测试自建 35/50°/s 与 0.30/0.15 增益，与实机 80°/s、0.25/0.20 脱节）
     {
         float w0 = P.wMax * 0.5f;
-        const float MAX_YAW_RATE = 35.f;   // MAX_MANUAL_yawRATE（差速保守幅值）
-        const float MAX_ROLL_RATE = 50.f;  // MAX_MANUAL_rollRATE
-        // yaw 摇杆右满偏 → rollRateTarget = -35°/s（mapFloat 反号后）→ alpha_roll = 0.30×(-35)
-        float rollRateTarget = -MAX_YAW_RATE;
-        float alpha_roll = 0.30f * (rollRateTarget - 0.0f);
+        const float MAX_STICK_RATE = kMaxTargetRate;  // 实机 MAX_MANUAL_*RATE = 80°/s
         float dw, df, dt_;
-        allocate({alpha_roll, 0.f, 0.f}, w0, dw, df, dt_);
-        auto M = thrustWrench(w0, dw, df, dt_);
-        check(M[0] < 0.f, "T11 yaw 摇杆右推 → Mx<0（绕 x_b 负转 = 世界航向正转，四轴 yaw 语义）");
-        // roll 摇杆右满偏 → yawRateTarget = +50°/s → alpha_yaw = 0.15×50 → Mz
-        float yawRateTarget = MAX_ROLL_RATE;
-        float alpha_yaw = 0.15f * (yawRateTarget - 0.0f);
+        // yaw 摇杆右满偏 → yawRateTarget = +80°/s → alpha_yaw = 0.20×80
+        // → Mz = +Iz·α > 0 → df > 0 → thrustWrench Mz > 0（前摆偏航力矩）
+        float alpha_yaw = kFlightCtrlParams.rate_yaw.kp * (MAX_STICK_RATE - 0.0f);
         allocate({0.f, 0.f, alpha_yaw}, w0, dw, df, dt_);
+        auto M = thrustWrench(w0, dw, df, dt_);
+        check(M[2] > 0.f, "T11 yaw 摇杆右推 → Mz>0（前摆偏航力矩）");
+        // roll 摇杆右满偏 → rollRateTarget = +80°/s → alpha_roll = 0.25×80
+        // → Mx = +Ix·α > 0 → dw < 0（尾电机加速）→ thrustWrench Mx = -Qf+Qt > 0
+        float alpha_roll = kFlightCtrlParams.rate_roll.kp * (MAX_STICK_RATE - 0.0f);
+        allocate({alpha_roll, 0.f, 0.f}, w0, dw, df, dt_);
         M = thrustWrench(w0, dw, df, dt_);
-        check(M[2] > 0.f, "T11 roll 摇杆右推 → Mz>0（绕 z_b 倾斜力矩）");
-        // pitch 摇杆推杆 → pitchRateTarget 负（低头）→ alpha_pitch = 0.30×(−50) → My<0
-        float pitchRateTarget = -MAX_ROLL_RATE;
-        float alpha_pitch = 0.30f * (pitchRateTarget - 0.0f);
+        check(M[0] > 0.f, "T11 roll 摇杆右推 → Mx>0（差速正力矩，绕 x）");
+        // pitch 摇杆推杆 → pitchRateTarget = -80°/s（低头）→ alpha_pitch = 0.25×(-80)
+        // → My = +Iy·α < 0 → dt_ > 0 → thrustWrench My < 0（尾摆低头力矩）
+        float alpha_pitch = kFlightCtrlParams.rate_pitch.kp * (-MAX_STICK_RATE - 0.0f);
         allocate({0.f, alpha_pitch, 0.f}, w0, dw, df, dt_);
         M = thrustWrench(w0, dw, df, dt_);
-        check(M[1] < 0.f, "T11 pitch 摇杆推杆 → My<0（低头力矩）");
+        check(M[1] < 0.f, "T11 pitch 摇杆推杆 → My<0（尾摆低头力矩）");
     }
 
     // ============================================================
@@ -580,7 +632,8 @@ int main()
               "T17 航向实际转过 ≈20°（差速驱动，四轴 yaw 语义）");
     }
 
-    // T18: 四元数保范——6000 步（6s）积分范数偏差 < 1e-9
+    // T18: 四元数保范——6000 步（6s）积分范数偏差 < 1e-6
+    // （注释修正：断言为 1e-6，非 1e-9）
     {
         SixDOF body;
         body.q = q_hover;

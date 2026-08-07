@@ -14,7 +14,7 @@
 #include "../include/TandemVec_ControlAllocation.h"
 #include "../include/TandemVec_Propulsion.h"
 #include "../include/TandemVec_Config.h"
-#include "../include/TandemVec_AttitudeCtrl.h"
+#include "../include/Quat4f.h"
 #include "../include/PositionPID.h"
 #include "../include/ComplementaryFilter.h"
 #include <cmath>
@@ -283,10 +283,11 @@ int main()
   std::printf("\n═══════════════════════════════════════════\n");
   std::printf(" 实飞调参参考 (I≈%.4f kg·m² 估算下的仿真)\n",kDefaultTandemVecParams.Iy);
   std::printf("═══════════════════════════════════════════\n");
-  std::printf("固件当前值: Kp_a=%.1f, Kp_r=%.2f（S3 已验证收敛）\n",best_a,best_r);
+  // 注：best_a/best_r 为扫描最优值，非固件当前值（固件值见 include/FlightCtrlParams.h）
+  std::printf("扫描最优值: Kp_a=%.1f, Kp_r=%.2f（S3 已验证收敛）\n",best_a,best_r);
   std::printf("可用区间: S1/S2 扫描显示 Kp_a=1.5~8, Kp_r=0.10~0.50 均收敛，\n");
   std::printf("          稳差与超调对增益不敏感 → 该架构调参裕度宽。\n");
-  std::printf("实飞步骤: 从固件值起飞，若响应偏软增大 Kp_r（每次+0.05），\n");
+  std::printf("实飞步骤: 从固件当前值起飞，若响应偏软增大 Kp_r（每次+0.05），\n");
   std::printf("          若有高频抖动减小 Kp_r 或加强陀螺滤波。\n");
   std::printf("⚠️ 上述结论基于估算惯量 I=%.4f，实飞前应通过在线辨识核实。\n",
               kDefaultTandemVecParams.Iy);
