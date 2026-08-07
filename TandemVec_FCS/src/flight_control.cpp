@@ -1137,8 +1137,12 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     // ★ 安全约束：锁定状态电机强制最低（油门通道直通不生效）
     tail_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
                                 -MAX_CORRECTION, MAX_CORRECTION);
+    // ★ 2026-08-08 前摆(roll)映射取反：自控链路 Mz=-Iz·alpha_roll（负号）+
+    //   分配器 df=Mz/(a·T0)（正系数）→ front 摆角与 alpha_roll 反号；
+    //   手动模式直接映射摆角须与自控最终摆角方向一致（右打摇杆→正摆角）。
+    //   原映射（-MAX,+MAX）绕过负号导致方向相反（用户实测前摆反）。
     front_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
-                                -MAX_CORRECTION, MAX_CORRECTION);
+                                MAX_CORRECTION, -MAX_CORRECTION);
     float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
     float manual_dw = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
                                -P.dwMax, P.dwMax);
