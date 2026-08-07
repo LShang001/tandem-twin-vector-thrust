@@ -1923,7 +1923,34 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
       }
     }
   }
+  else if (strncmp(args, "export", 6) == 0) {
+    // 批量导出帧数据：flash export <startPage> <count>
+    // 每页输出一个二进制帧块（95 字节），帧间无分隔（python 工具按
+    // 固定帧长 + magic 同步解析）。输出为原始字节，非文本。
+    uint32_t startPage, count;
+    if (sscanf(args + 6, "%lu %lu", &startPage, &count) == 2 &&
+        startPage < W25N01GV_TOTAL_PAGES && count > 0) {
+      // 限幅，避免一次导出过多阻塞太久（~1ms/页 @ SPI 25MHz）
+      if (count > 1000) count = 1000;
+      serial.print(F("[DBG] export start="));
+      serial.print(startPage);
+      serial.print(F(" count="));
+      serial.println(count);
+      serial.flush();   // 让提示先发出，再输出二进制
+
+      uint8_t buf[W25N01GV_LOG_FRAME_SIZE];
+      for (uint32_t i = 0; i < count; i++) {
+        uint32_t page = startPage + i;
+        if (flashLog.debugReadPage(page, buf, sizeof(buf))) {
+          serial.write(buf, sizeof(buf));   // 原始帧字节
+        }
+      }
+      serial.println();
+    } else {
+      serial.println(F("[DBG] usage: flash export <startPage> <count>"));
+    }
+  }
   else {
-    serial.println(F("[DBG] flash subcommands: id | erase | stat | dump <page> | test"));
+    serial.println(F("[DBG] flash subcommands: id | erase | stat | dump <page> | test | export <page> <count>"));
   }
 }
