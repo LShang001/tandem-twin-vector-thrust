@@ -38,6 +38,7 @@ struct Vector3
 #include "IMU_AutoCalibrator.h"
 #include "MadgwickAHRS.h"
 #include "StatusLED.h"
+#include "WS2812Status.h"
 #include "AnoComProtocol.h"
 #include "CrsfSerial.h"
 #include "crsf.h"
@@ -296,6 +297,34 @@ extern const float POSITION_DEADZONE;  // 位置控制死区 (m)
 extern const float VELOCITY_DEADZONE;  // 速度控制死区 (m/s)
 extern const float RC_LOITER_DEADZONE; // Loiter模式摇杆死区 (Raw Value)
 
+// ============================================================
+//  4.0 控制参数集中定义（2026-08-08 C路径重构）
+//  ★ 实机调参唯一入口：kFlightCtrlParams（数值 = 运行时生效值）
+//  结构体与实例已抽到 include/FlightCtrlParams.h（纯平台无关，
+//  固件与宿主机测试共用，保证参数不漂移）；本处仅保留遥测结构。
+//  方案：docs/C路径-参数集中与遥测结构化方案.md
+// ============================================================
+#include "FlightCtrlParams.h"
+
+// ============================================================
+//  4.0b 控制链遥测集中（GncTelemetry — 每层中间量，供 CAN/AnoCom/Serial8）
+//  写入点：flight_control.cpp（execute_attitude_controller /
+//  execute_yaw_controller / mix_and_output_commands 尾部）
+// ============================================================
+struct GncTelemetry
+{
+    float error_deg[3];      // 姿态角误差（yaw 恒 0：航向为纯速率指令，无姿态回中）
+    float omega_ref_dps[3];  // 目标角速率（外环输出滤波后，deg/s）
+    float alpha_ref[3];      // 角加速度指令（内环输出滤波后）
+    float M_cmd[3];          // 分配前力矩（差速增益调度后，N·m）
+    float w0_eff;            // 分配工作点（含 w0_floor，rad/s）
+    float yaw_gain_sched;    // 差速回路增益调度系数
+    float delta_f_deg, delta_t_deg, dw;  // 执行器指令（摆角 deg / 差速归一化）
+    bool  alloc_sat[3];      // 分配饱和标记（δ_f/δ_t/Δω）
+};
+
+extern GncTelemetry gnc_tel;
+
 /*
  * ==========================================================================================
  * [4] 控制算法参数与PID实例 (Control Parameters & PID Instances)
@@ -405,6 +434,7 @@ extern Madgwick madgwick; // Madgwick AHRS 互补滤波算法
 
 // 辅助设备
 extern StatusLED statusLed;   // 状态指示灯驱动
+extern WS2812Status ws2812Led; // WS2812 RGB状态灯 (PD15)
 extern AnoComProtocol AnoCom; // 匿名地面站协议
 extern CrsfSerial crsf;       // CRSF遥控协议
 
@@ -608,10 +638,9 @@ extern uint32_t static_start_time;
 extern bool is_static_confirmed;
 
 // --- 7.4 控制目标与输出 ---
+// ★ 2026-08-08 C路径重构：rollRateTarget/pitchRateTarget/yawRateTarget、
+//   error_*_deg、roll/pitch/yaw_output 已收拢进 gnc_tel（见 §4.0b）
 extern float rollTarget, pitchTarget;
-extern float yawRateTarget;
-extern float rollRateTarget, pitchRateTarget;
-extern float error_roll_deg, error_pitch_deg, error_yaw_deg;
 extern float targetNorth, targetEast;
 extern float targetVelNorth, targetVelEast;
 extern float target_altitude;
@@ -621,9 +650,6 @@ extern bool autoAltitudeMode;
 extern float target_accel_z_up_global;
 extern float tvcTargetAngle1, tvcTargetAngle2;
 extern float thrust_comp_N, thrust_comp_E;
-extern float roll_output;
-extern float pitch_output;
-extern float yaw_output;  // 航向角加速度 alpha_yaw (rad/s²)，遥测用
 extern float throttlePercent;
 
 // ---- 在线参数辨识结果（★ 纯观测，不参与控制回路）----

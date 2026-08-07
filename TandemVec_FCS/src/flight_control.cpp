@@ -503,34 +503,33 @@ void initPositionHold()
   // targetEast = 0.0f;
 
   // --- 2. 位置环PID初始化 (输入: m, 输出: m/s) ---
+  // ★ 2026-08-08 C路径重构：限幅/积分/滤波统一读自 kFlightCtrlParams（§4.0）
   northPosPID.reset();
   eastPosPID.reset();
   // 设置位置环输出限幅 (最大目标速度)
-  northPosPID.setOutputLimits(-POS_CTRL_MAX_SPEED_CMD, POS_CTRL_MAX_SPEED_CMD);
-  eastPosPID.setOutputLimits(-POS_CTRL_MAX_SPEED_CMD, POS_CTRL_MAX_SPEED_CMD);
+  northPosPID.setOutputLimits(kFlightCtrlParams.pos_n.out_min, kFlightCtrlParams.pos_n.out_max);
+  eastPosPID.setOutputLimits(kFlightCtrlParams.pos_e.out_min, kFlightCtrlParams.pos_e.out_max);
   // 设置位置环的微分滤波系数
-  northPosPID.setFilterCoefficient(0.5);
-  eastPosPID.setFilterCoefficient(0.5);
+  northPosPID.setFilterCoefficient(kFlightCtrlParams.pos_n.filter_alpha);
+  eastPosPID.setFilterCoefficient(kFlightCtrlParams.pos_e.filter_alpha);
   // 设置积分限幅
-  northPosPID.setIntegralLimit(POS_CTRL_MAX_SPEED_CMD * 0.5);
-  eastPosPID.setIntegralLimit(POS_CTRL_MAX_SPEED_CMD * 0.5);
-  // (其他PID参数如Kp, Ki, Kd在声明时已设置，这里可按需调整)
+  northPosPID.setIntegralLimit(kFlightCtrlParams.pos_n.int_limit);
+  eastPosPID.setIntegralLimit(kFlightCtrlParams.pos_e.int_limit);
 
   // --- 3. 速度环PID初始化 (输入: m/s, 输出: m/s^2) ---
   northVelPID.reset();
   eastVelPID.reset();
 
   // 配置 PID 输出限幅 (现在输出的是物理加速度)
-  northVelPID.setOutputLimits(-MAX_ACCEL_CMD, MAX_ACCEL_CMD);
-  eastVelPID.setOutputLimits(-MAX_ACCEL_CMD, MAX_ACCEL_CMD);
+  northVelPID.setOutputLimits(kFlightCtrlParams.vel_n.out_min, kFlightCtrlParams.vel_n.out_max);
+  eastVelPID.setOutputLimits(kFlightCtrlParams.vel_e.out_min, kFlightCtrlParams.vel_e.out_max);
 
   // 配置积分限幅 (通常设为最大输出的一半或更小)
-  northVelPID.setIntegralLimit(MAX_ACCEL_CMD * 0.5f);
-  eastVelPID.setIntegralLimit(MAX_ACCEL_CMD * 0.5f);
+  northVelPID.setIntegralLimit(kFlightCtrlParams.vel_n.int_limit);
+  eastVelPID.setIntegralLimit(kFlightCtrlParams.vel_e.int_limit);
   // 设置速度环的微分滤波系数
-  northVelPID.setFilterCoefficient(0.5);
-  eastVelPID.setFilterCoefficient(0.5);
-  // (其他PID参数如Kp, Ki, Kd在声明时已设置，这里可按需调整)
+  northVelPID.setFilterCoefficient(kFlightCtrlParams.vel_n.filter_alpha);
+  eastVelPID.setFilterCoefficient(kFlightCtrlParams.vel_e.filter_alpha);
 
   // --- 4. 状态标志与输出初始化 ---
   positionHoldEnabled = true; // 标记已初始化
@@ -990,29 +989,29 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       {
         precise_scale = 2.0f * RAD_TO_DEG;
       }
-      error_roll_deg  = sign_qw * q_error.x * precise_scale;  // 滚转误差 = 体轴x分量
-      error_pitch_deg = sign_qw * q_error.y * precise_scale;
+      gnc_tel.error_deg[0] = sign_qw * q_error.x * precise_scale;  // 滚转误差 = 体轴x分量
+      gnc_tel.error_deg[1] = sign_qw * q_error.y * precise_scale;
 
       // 外环：滚转外部导数取 omega.x（体轴x = FRD 滚转速率）
       // 传参为 d(input)/dt 语义：input=0 常数，误差导数 = -omega；
       // computeWithExternalDerivative 内部取 -derivative 作误差导数，故此处传 +omega。
-      rollRateTarget  = rollAnglePID.computeWithExternalDerivative(error_roll_deg,  0, current_omega_dps_body_filtered.x);
-      pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(error_pitch_deg, 0, current_omega_dps_body_filtered.y);
+      gnc_tel.omega_ref_dps[0] = rollAnglePID.computeWithExternalDerivative(gnc_tel.error_deg[0], 0, current_omega_dps_body_filtered.x);
+      gnc_tel.omega_ref_dps[1] = pitchAnglePID.computeWithExternalDerivative(gnc_tel.error_deg[1], 0, current_omega_dps_body_filtered.y);
 
       // ★ yaw 摇杆不在此处处理：存档约定下 yaw 恒为角速度指令，
       //   由 execute_yaw_controller 统一映射（两种模式一致）。
 
       // 限制目标角速度在安全范围内
       // 防止PID输出过大导致危险动作
-      rollRateTarget = constrain(rollRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
-      pitchRateTarget = constrain(pitchRateTarget, -MAX_TARGET_RATE, MAX_TARGET_RATE);
+      gnc_tel.omega_ref_dps[0] = constrain(gnc_tel.omega_ref_dps[0], -MAX_TARGET_RATE, MAX_TARGET_RATE);
+      gnc_tel.omega_ref_dps[1] = constrain(gnc_tel.omega_ref_dps[1], -MAX_TARGET_RATE, MAX_TARGET_RATE);
     }
     else
     { // RATE_MODE —— ★ 与原始 VTVL 实飞存档版一致：摇杆直接生成目标角速率
       //   roll 摇杆 → 绕 x_b（前摆通道）；pitch 摇杆 → 绕 y_b（尾摆通道）
       //   yaw 摇杆 → 绕 z_b（差速），由 execute_yaw_controller 处理
-      rollRateTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE);
-      pitchRateTarget = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_MANUAL_pitchRATE, -MAX_MANUAL_pitchRATE); // 推杆对应低头负角速度，拉杆对应抬头正角速度
+      gnc_tel.omega_ref_dps[0] = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE);
+      gnc_tel.omega_ref_dps[1] = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_MANUAL_pitchRATE, -MAX_MANUAL_pitchRATE); // 推杆对应低头负角速度，拉杆对应抬头正角速度
       rollAnglePID.reset();
       pitchAnglePID.reset();
       rollRatePID.reset();
@@ -1020,13 +1019,13 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     }
 
     // 滤波目标角速率
-    rollRateTarget = rollAngleOutputFilter.filter(rollRateTarget);
-    pitchRateTarget = pitchAngleOutputFilter.filter(pitchRateTarget);
+    gnc_tel.omega_ref_dps[0] = rollAngleOutputFilter.filter(gnc_tel.omega_ref_dps[0]);
+    gnc_tel.omega_ref_dps[1] = pitchAngleOutputFilter.filter(gnc_tel.omega_ref_dps[1]);
 
     // 内环：角速率误差 → 角加速度指令(rad/s²)
     // FRD 轴序：体轴x=滚转，体轴y=俯仰，底层控制分配负责物理逆解
-    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, current_omega_dps_body_filtered.x);
-    outputs.alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, current_omega_dps_body_filtered.y);
+    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x);
+    outputs.alpha_pitch = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y);
     outputs.alpha_roll  = rollOutputFilter.filter(outputs.alpha_roll);
     outputs.alpha_pitch = pitchOutputFilter.filter(outputs.alpha_pitch);
   }
@@ -1036,16 +1035,16 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     pitchAnglePID.reset();
     rollRatePID.reset();
     pitchRatePID.reset();
-    rollRateTarget = 0.0f;
-    pitchRateTarget = 0.0f;
+    gnc_tel.omega_ref_dps[0] = 0.0f;
+    gnc_tel.omega_ref_dps[1] = 0.0f;
     // 手动TVC：alpha清零，mix层走RC旁路直接控制舵机
     outputs.alpha_roll  = 0.0f;
     outputs.alpha_pitch = 0.0f;
   }
 
-  // 遥测
-  roll_output  = outputs.alpha_roll;
-  pitch_output = outputs.alpha_pitch;
+  // 遥测（★ 2026-08-08 C路径重构：控制链中间量收拢进 gnc_tel §4.0b）
+  gnc_tel.alpha_ref[0] = outputs.alpha_roll;
+  gnc_tel.alpha_ref[1] = outputs.alpha_pitch;
 }
 
 /**
@@ -1072,27 +1071,28 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     // yaw 摇杆**恒为角速度指令**（ATTITUDE_MODE / RATE_MODE 行为相同）：
     // 松杆即停、不做航向姿态回中——符合"姿态模式下 yaw 仍控角速度"的要求，
     // 同时天然避开"航向自由度被释放时 qCmd 与机体系错位"的陷阱。
-    yawRateTarget = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
-                             -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+    gnc_tel.omega_ref_dps[2] = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
+                                        -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
     yawAnglePID.reset();  // 航向不用姿态外环
 
-    yawRateTarget = yawAngleOutputFilter.filter(yawRateTarget);
+    gnc_tel.omega_ref_dps[2] = yawAngleOutputFilter.filter(gnc_tel.omega_ref_dps[2]);
 
     // 内环：速率误差 → 角加速度指令 alpha_yaw (rad/s²)
     // FRD 轴序：偏航速率 = 体轴z 角速度
     outputs.alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(
-        yawRateTarget, current_omega_dps_body_filtered.z);
+        gnc_tel.omega_ref_dps[2], current_omega_dps_body_filtered.z);
     outputs.alpha_yaw = yawOutputFilter.filter(outputs.alpha_yaw);
   }
   else
   {
     yawAnglePID.reset();
     yawRatePID.reset();
-    yawRateTarget    = 0.0f;
+    gnc_tel.omega_ref_dps[2] = 0.0f;
     outputs.alpha_yaw = 0.0f;  // 手动TVC由mix层RC旁路处理；锁定时保持零
   }
 
-  yaw_output = outputs.alpha_yaw;
+  // 遥测（★ 2026-08-08 C路径重构：控制链中间量收拢进 gnc_tel §4.0b）
+  gnc_tel.alpha_ref[2] = outputs.alpha_yaw;
 }
 
 /**
@@ -1270,6 +1270,17 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       prev_prop_state.delta_t = ao.delta_t;
       prev_prop_state.wf      = diff.wf_target;
       prev_prop_state.wt      = diff.wt_target;
+
+      // ★ 2026-08-08 C路径重构：控制链遥测（分配层中间量，供 CAN/AnoCom/Serial8 调参观测）
+      gnc_tel.M_cmd[0] = Mx;  gnc_tel.M_cmd[1] = My;  gnc_tel.M_cmd[2] = Mz;
+      gnc_tel.w0_eff = w0_eff;
+      gnc_tel.yaw_gain_sched = s_yaw_gain_sched;
+      gnc_tel.delta_f_deg = front_gimbal_deg;
+      gnc_tel.delta_t_deg = tail_gimbal_deg;
+      gnc_tel.dw = ao.dw;
+      gnc_tel.alloc_sat[0] = ao.sat_delta_f;
+      gnc_tel.alloc_sat[1] = ao.sat_delta_t;
+      gnc_tel.alloc_sat[2] = ao.sat_dw;
 #endif  // GYRO_DIRECT_TEST
     }
   }

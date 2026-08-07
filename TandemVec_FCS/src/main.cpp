@@ -211,6 +211,7 @@ void setup()
   setup_led();                                  // 配置 LED 和点火引脚 (黄灯/绿灯/点火MOS管)
   setupTimer();                                 // 初始化 TIM8 硬件定时器 (2kHz 任务调度中断)
   statusLed.begin();                            // 初始化状态 LED 驱器 (PWM 呼吸灯/闪烁)
+  ws2812Led.begin();                            // 初始化 WS2812 RGB状态灯 (PD15)
   pinMode(FUEL_PIN, INPUT_PULLUP);              // 燃料液位传感器引脚 (上拉输入)
   analogWriteFrequency(CUSTOM_PWM_FREQUENCY);   // 设置全局 PWM 频率 (333Hz)
   analogWriteResolution(CUSTOM_PWM_RESOLUTION); // 设置全局 PWM 分辨率 (16位)
@@ -232,48 +233,48 @@ void setup()
   // 满油门时α_max ≈ 5~9 rad/s², 限制宽松—响应随油门自然增强
   // ====================================================================
 
-  // --- Roll/Pitch 外环: 角度误差(deg)→目标角速率(deg/s), ±50°/s ---
-  rollAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
-  pitchAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
-  rollAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.5f);
-  pitchAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.5f);
-  rollAnglePID.setIntegralThreshold(0.0f);
-  pitchAnglePID.setIntegralThreshold(0.0f);
+  // --- Roll/Pitch 外环: 角度误差(deg)→目标角速率(deg/s) ---
+  // ★ 2026-08-08 C路径重构：限幅/积分/滤波统一读自 kFlightCtrlParams（§4.0，
+  //   构造已带同值，此处保留调用以显式表达"setup 后生效值"）
+  rollAnglePID.setOutputLimits(kFlightCtrlParams.att_roll.out_min, kFlightCtrlParams.att_roll.out_max);
+  pitchAnglePID.setOutputLimits(kFlightCtrlParams.att_pitch.out_min, kFlightCtrlParams.att_pitch.out_max);
+  rollAnglePID.setIntegralLimit(kFlightCtrlParams.att_roll.int_limit);
+  pitchAnglePID.setIntegralLimit(kFlightCtrlParams.att_pitch.int_limit);
+  rollAnglePID.setIntegralThreshold(kFlightCtrlParams.att_roll.threshold);
+  pitchAnglePID.setIntegralThreshold(kFlightCtrlParams.att_pitch.threshold);
 
   // --- Roll内环: α限幅设极大→PID输出永不截断→调参所见即所得 ---
   // 真正的物理限制(电机力矩/转速)在底层自动生效, 不需要软件复刻
-  rollRatePID.setOutputLimits(-100.0f, 100.0f);  // 软件不卡,物理自限
-  rollRatePID.setIntegralLimit(10.0f);
-  rollRatePID.setIntegralThreshold(30.0f);
-  rollRatePID.setFilterCoefficient(0.2f);
+  rollRatePID.setOutputLimits(kFlightCtrlParams.rate_roll.out_min, kFlightCtrlParams.rate_roll.out_max);
+  rollRatePID.setIntegralLimit(kFlightCtrlParams.rate_roll.int_limit);
+  rollRatePID.setIntegralThreshold(kFlightCtrlParams.rate_roll.threshold);
+  rollRatePID.setFilterCoefficient(kFlightCtrlParams.rate_roll.filter_alpha);
 
   // --- Pitch内环: 同Roll ---
-  pitchRatePID.setOutputLimits(-100.0f, 100.0f);
-  pitchRatePID.setIntegralLimit(10.0f);
-  pitchRatePID.setIntegralThreshold(30.0f);
-  pitchRatePID.setFilterCoefficient(0.2f);
+  pitchRatePID.setOutputLimits(kFlightCtrlParams.rate_pitch.out_min, kFlightCtrlParams.rate_pitch.out_max);
+  pitchRatePID.setIntegralLimit(kFlightCtrlParams.rate_pitch.int_limit);
+  pitchRatePID.setIntegralThreshold(kFlightCtrlParams.rate_pitch.threshold);
+  pitchRatePID.setFilterCoefficient(kFlightCtrlParams.rate_pitch.filter_alpha);
 
-  // --- Yaw外环 ---
-  yawAnglePID.setOutputLimits(-MAX_TARGET_RATE, MAX_TARGET_RATE);
-  yawAnglePID.setIntegralLimit(MAX_TARGET_RATE * 0.3f);
-  yawAnglePID.setIntegralThreshold(0.0f);
+  // --- Yaw外环（未启用 enabled=false，参数随结构体）---
+  yawAnglePID.setOutputLimits(kFlightCtrlParams.att_yaw.out_min, kFlightCtrlParams.att_yaw.out_max);
+  yawAnglePID.setIntegralLimit(kFlightCtrlParams.att_yaw.int_limit);
+  yawAnglePID.setIntegralThreshold(kFlightCtrlParams.att_yaw.threshold);
 
   // --- Yaw内环: 同Roll,α不截断 ---
-  yawRatePID.setOutputLimits(-100.0f, 100.0f);
-  yawRatePID.setIntegralLimit(10.0f);
-  yawRatePID.setIntegralThreshold(30.0f);
-  yawRatePID.setFilterCoefficient(0.2f);
+  yawRatePID.setOutputLimits(kFlightCtrlParams.rate_yaw.out_min, kFlightCtrlParams.rate_yaw.out_max);
+  yawRatePID.setIntegralLimit(kFlightCtrlParams.rate_yaw.int_limit);
+  yawRatePID.setIntegralThreshold(kFlightCtrlParams.rate_yaw.threshold);
+  yawRatePID.setFilterCoefficient(kFlightCtrlParams.rate_yaw.filter_alpha);
 
   // --- 高度串级 PID ---
   // 外环 (高度 -> 目标垂直速度): 纯比例控制, 输出限幅 ±1.0 m/s
-  const float MAX_VERTICAL_SPEED_CMD = 1.0f;
-  altitudePositionPController.setOutputLimits(-MAX_VERTICAL_SPEED_CMD, MAX_VERTICAL_SPEED_CMD);
+  altitudePositionPController.setOutputLimits(kFlightCtrlParams.alt_pos.out_min, kFlightCtrlParams.alt_pos.out_max);
   // 内环 (垂直速度 -> 目标垂直加速度): PID控制
   // 输出限幅: -18.75 ~ +12.5 m/s^2 (不对称: 向下减速能力 > 向上加速能力)
-  const float MAX_CONTROL_ACCEL = 12.5f;
-  altitudeVelocityPIDController.setOutputLimits(-1.5f * MAX_CONTROL_ACCEL, MAX_CONTROL_ACCEL);
-  altitudeVelocityPIDController.setIntegralLimit(MAX_CONTROL_ACCEL * 0.8f);
-  altitudeVelocityPIDController.setFilterCoefficient(0.2f);
+  altitudeVelocityPIDController.setOutputLimits(kFlightCtrlParams.alt_vel.out_min, kFlightCtrlParams.alt_vel.out_max);
+  altitudeVelocityPIDController.setIntegralLimit(kFlightCtrlParams.alt_vel.int_limit);
+  altitudeVelocityPIDController.setFilterCoefficient(kFlightCtrlParams.alt_vel.filter_alpha);
 
   // --- 传感器初始化 ---
   if (!initMagnetometer())

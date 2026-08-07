@@ -1,0 +1,76 @@
+// ============================================================
+//  FlightCtrlParams.h — 实机控制参数唯一事实源（2026-08-08 C 路径重构）
+//
+//  ★ 实机调参唯一入口：kFlightCtrlParams（数值 = 运行时生效值）
+//  方案：docs/C路径-参数集中与遥测结构化方案.md
+//
+//  本头文件为纯平台无关（无 Arduino/Eigen 依赖），固件（state_data.cpp）
+//  与宿主机测试（test_host/test_flight_control_axis.cpp）共用同一实例，
+//  保证测试参数永不与实机漂移。
+//
+//  注意：数值域为 PositionPID 实际语义（deg 域）。
+// ============================================================
+#pragma once
+
+// ============================================================
+//  限幅常量（结构体初值的别名，供 state_data.cpp 保留符号兼容）
+//  —— 调参以本文件为准，state_data.cpp 中的同名常量只是别名
+// ============================================================
+static constexpr float kMaxTargetRate       = 80.0f;   // 姿态外环最大输出（deg/s）
+static constexpr float kPosCtrlMaxSpeedCmd  = 1.5f;    // 位置环最大速度指令（m/s）
+static constexpr float kMaxAccelCmd         = 2.6f;    // 速度环最大加速度指令（m/s²）
+
+// ============================================================
+//  4.0 控制参数集中定义
+// ============================================================
+struct PidTuneParams
+{
+    float kp, ki, kd;        // 增益（PositionPID 构造参数 1-3）
+    float out_min, out_max;  // 输出限幅（构造参数 4-5）
+    float int_limit;         // 积分状态钳位（构造参数 7）
+    float threshold;         // 积分分离阈值（构造参数 8）
+    float filter_alpha;      // 微分滤波系数（构造参数 9）
+    bool  enabled;           // 该环是否参与控制（false = 僵尸参数，仅保留对象兼容）
+};
+
+struct FlightCtrlParams
+{
+    // 姿态串级（deg 域）—— 现状值 2026-08-07 实机收敛
+    PidTuneParams att_roll,  att_pitch,  att_yaw;   // 外环 kp=2.5/2.5/0.8（att_yaw 未启用）
+    PidTuneParams rate_roll, rate_pitch, rate_yaw;  // 内环 kp=0.25/0.25/0.20
+    // 垂直串级
+    PidTuneParams alt_pos, alt_vel;                 // 1.0 | 5.0/0.00625
+    // 水平位置/速度串级
+    PidTuneParams pos_n, pos_e, vel_n, vel_e;       // 0.25 | 1.75/0.00125/Kd=10
+    // 控制滤波器 alpha（ComplementaryFilter 构造参数）
+    float speed_filter_alpha[3];      // 角速率滤波 roll/pitch/yaw（0.3）
+    float angle_out_filter_alpha[3];  // 外环输出滤波（0.85）
+    float output_filter_alpha[3];     // 内环输出滤波（0.25/0.25/0.12，yaw 实机调出）
+};
+
+// ============================================================
+//  默认实例（唯一事实源；static constexpr → 每个 TU 一份只读副本，
+//  固件与宿主机测试各自持有相同数值，无链接问题）
+// ============================================================
+static constexpr FlightCtrlParams kFlightCtrlParams = {
+    // ---- 姿态外环（deg 域）----
+    /* att_roll  */ { 2.5f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
+    /* att_pitch */ { 2.5f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
+    /* att_yaw   */ { 0.8f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, false }, // 未启用（航向=纯速率指令）
+    // ---- 角速率内环 ----
+    /* rate_roll */ { 0.25f,   0.0003f,  0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true },
+    /* rate_pitch*/ { 0.25f,   0.0003f,  0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true },
+    /* rate_yaw  */ { 0.20f,   0.001f,   0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true }, // 差速内环：抑震荡（5轮调参史见 state_data.cpp）
+    // ---- 垂直串级 ----
+    /* alt_pos   */ { 1.0f,    0.0f,     0.0f,   -1.0f,   1.0f,   250.0f, 0.0f, 0.0f, true },
+    /* alt_vel   */ { 5.0f,    0.00625f, 0.0f,   -18.75f, 12.5f,  10.0f,  0.0f, 0.2f, true },
+    // ---- 水平位置/速度串级（Kd=10 = 连续域 0.05/0.005）----
+    /* pos_n     */ { 0.25f,   0.0f,     0.0f,   -kPosCtrlMaxSpeedCmd, kPosCtrlMaxSpeedCmd, kPosCtrlMaxSpeedCmd * 0.5f, 0.0f, 0.5f, true },
+    /* pos_e     */ { 0.25f,   0.0f,     0.0f,   -kPosCtrlMaxSpeedCmd, kPosCtrlMaxSpeedCmd, kPosCtrlMaxSpeedCmd * 0.5f, 0.0f, 0.5f, true },
+    /* vel_n     */ { 1.75f,   0.00125f, 10.0f,  -kMaxAccelCmd, kMaxAccelCmd, kMaxAccelCmd * 0.5f, 0.0f, 0.5f, true },
+    /* vel_e     */ { 1.75f,   0.00125f, 10.0f,  -kMaxAccelCmd, kMaxAccelCmd, kMaxAccelCmd * 0.5f, 0.0f, 0.5f, true },
+    // ---- 控制滤波器 alpha ----
+    /* speed_filter_alpha     */ { 0.3f, 0.3f, 0.3f },
+    /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
+    /* output_filter_alpha    */ { 0.25f, 0.25f, 0.12f },  // yaw=0.12 实机调出（差速抑震荡）
+};

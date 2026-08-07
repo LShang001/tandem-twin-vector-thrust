@@ -86,7 +86,8 @@ const float MAX_THRUST = 27.5f;
 
 // ★ 2026-08-07 对齐原始 VTVL 实飞存档版（存档 MAX_TARGET_RATE=80）：
 //  原 50 按"α_max_hover×τ_rise_1s≈49deg/s²×1s"保守估算，实飞验证值为 80。
-const float MAX_TARGET_RATE = 80.0f;
+// ★ 2026-08-08 C路径重构：值取自 include/FlightCtrlParams.h 别名（唯一事实源）。
+const float MAX_TARGET_RATE = kMaxTargetRate;
 
 const float MAX_CORRECTION = 15.0f;  // 2026-08-07 实机：TVC 摆角限幅收紧到 15°
 //  来源: dMax = 0.436rad = 25° (TandemVec_Config.h)。舵机物理行程。
@@ -105,8 +106,9 @@ const float MAX_MANUAL_pitchRATE = 80.0f;
 const float MAX_MANUAL_yawRATE   = 80.0f;  // 对齐存档（原 35 过保守）
 
 // --- 3.3 位置与速度控制限制 ---
-const float POS_CTRL_MAX_SPEED_CMD = 1.5f;
-const float MAX_ACCEL_CMD = 2.6f;
+// ★ 2026-08-08 C路径重构：值取自 include/FlightCtrlParams.h 别名（唯一事实源）。
+const float POS_CTRL_MAX_SPEED_CMD = kPosCtrlMaxSpeedCmd;
+const float MAX_ACCEL_CMD = kMaxAccelCmd;
 const float MAX_POSITION_ERROR = 5.0f;
 const float MAX_LOITER_SPEED_CMD = 1.5f;
 
@@ -120,6 +122,15 @@ const float RC_LOITER_DEADZONE = 25.0f;
  * [4] 控制算法参数与PID实例
  * ==========================================================================================
  */
+
+// --- 4.0 控制参数唯一事实源（★ 实机调参入口）---
+// 2026-08-08 C路径重构：实例已迁至 include/FlightCtrlParams.h
+// （static constexpr，固件与宿主机测试共用同一数值，参数不漂移）。
+// 本处不再定义 —— 数值改动请改 include/FlightCtrlParams.h。
+// 方案：docs/C路径-参数集中与遥测结构化方案.md
+
+// 控制链遥测（每层中间量，写入点：flight_control.cpp 3 处函数尾部）
+GncTelemetry gnc_tel = {};
 
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — 解析最优增益 ---
 //
@@ -141,11 +152,27 @@ const float RC_LOITER_DEADZONE = 25.0f;
 //   TVC 轴(roll 前摆 / pitch 尾摆): Kp_r=0.25, Kp_a=2.5 → ωn≈5.98, ζ≈1.20
 //   差速轴(yaw): 带宽必须 ≪1/τm=3.57 → Kp_r=0.10, Kp_a=0.8 → ωn≈2.14, ζ≈1.34
 //  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
-PositionPID rollAnglePID(2.5f, 0.0f, 0.0f);   // 前摆外环（舵机快，高带宽）
-PositionPID rollRatePID(0.25f, 0.0003f, 0.0f); // 前摆内环 ζ≈1.20
-PositionPID pitchAnglePID(2.5f, 0.0f, 0.0f);  // 尾摆外环（同前摆）
-PositionPID pitchRatePID(0.25f, 0.0003f, 0.0f); // 尾摆内环 ζ≈1.20
-PositionPID yawAnglePID(0.8f, 0.0f, 0.0f);   // 差速外环：过阻尼（电机滞后限带）
+// ★ 2026-08-08 C路径重构：增益/限幅/滤波全部读自 kFlightCtrlParams（§4.0）
+PositionPID rollAnglePID(kFlightCtrlParams.att_roll.kp, kFlightCtrlParams.att_roll.ki, kFlightCtrlParams.att_roll.kd,
+                         kFlightCtrlParams.att_roll.out_min, kFlightCtrlParams.att_roll.out_max, true,
+                         kFlightCtrlParams.att_roll.int_limit, kFlightCtrlParams.att_roll.threshold,
+                         kFlightCtrlParams.att_roll.filter_alpha);   // 前摆外环（舵机快，高带宽）
+PositionPID rollRatePID(kFlightCtrlParams.rate_roll.kp, kFlightCtrlParams.rate_roll.ki, kFlightCtrlParams.rate_roll.kd,
+                        kFlightCtrlParams.rate_roll.out_min, kFlightCtrlParams.rate_roll.out_max, true,
+                        kFlightCtrlParams.rate_roll.int_limit, kFlightCtrlParams.rate_roll.threshold,
+                        kFlightCtrlParams.rate_roll.filter_alpha);   // 前摆内环 ζ≈1.20
+PositionPID pitchAnglePID(kFlightCtrlParams.att_pitch.kp, kFlightCtrlParams.att_pitch.ki, kFlightCtrlParams.att_pitch.kd,
+                          kFlightCtrlParams.att_pitch.out_min, kFlightCtrlParams.att_pitch.out_max, true,
+                          kFlightCtrlParams.att_pitch.int_limit, kFlightCtrlParams.att_pitch.threshold,
+                          kFlightCtrlParams.att_pitch.filter_alpha); // 尾摆外环（同前摆）
+PositionPID pitchRatePID(kFlightCtrlParams.rate_pitch.kp, kFlightCtrlParams.rate_pitch.ki, kFlightCtrlParams.rate_pitch.kd,
+                         kFlightCtrlParams.rate_pitch.out_min, kFlightCtrlParams.rate_pitch.out_max, true,
+                         kFlightCtrlParams.rate_pitch.int_limit, kFlightCtrlParams.rate_pitch.threshold,
+                         kFlightCtrlParams.rate_pitch.filter_alpha); // 尾摆内环 ζ≈1.20
+PositionPID yawAnglePID(kFlightCtrlParams.att_yaw.kp, kFlightCtrlParams.att_yaw.ki, kFlightCtrlParams.att_yaw.kd,
+                        kFlightCtrlParams.att_yaw.out_min, kFlightCtrlParams.att_yaw.out_max, true,
+                        kFlightCtrlParams.att_yaw.int_limit, kFlightCtrlParams.att_yaw.threshold,
+                        kFlightCtrlParams.att_yaw.filter_alpha);     // 差速外环：未启用（enabled=false，航向=纯速率指令）
 // ★ 2026-08-07 实机：yaw 打杆无反应。量化（tools/verify_yaw_authority.py）：
 //   瓶颈不是 dwMax 限幅（19% 油门满打杆仅用到 0.7 的 35%），
 //   而是 Ix=0.0021 极小（Iy/Ix=10.5×）× Kp_r 偏小 → 力矩指令仅
@@ -185,23 +212,44 @@ PositionPID yawAnglePID(0.8f, 0.0f, 0.0f);   // 差速外环：过阻尼（电�
 //   二阶反解：Kp_r=0.20 → 2ζωn≈降至安全区（对比震荡点 0.35 留 1.75×）。
 //   Ki 同步降 0.001（积分在震荡时额外引入 90° 相位滞后，是震荡推手）。
 //   配合 yawDiffOutputFilter 加强滤波（见下方）抑制高频分量。
-PositionPID yawRatePID(0.20f, 0.001f, 0.0f); // 差速内环：抑震荡
+PositionPID yawRatePID(kFlightCtrlParams.rate_yaw.kp, kFlightCtrlParams.rate_yaw.ki, kFlightCtrlParams.rate_yaw.kd,
+                       kFlightCtrlParams.rate_yaw.out_min, kFlightCtrlParams.rate_yaw.out_max, true,
+                       kFlightCtrlParams.rate_yaw.int_limit, kFlightCtrlParams.rate_yaw.threshold,
+                       kFlightCtrlParams.rate_yaw.filter_alpha);     // 差速内环：抑震荡
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
-PositionPID altitudePositionPController(1.0f, 0.0f, 0.0f);
-// 内环: 垂直速度误差 -> 目标垂直加速度 (Kp=5.0, Ki=0.00625, Kd=0)
-PositionPID altitudeVelocityPIDController(5.0f, 1.25f * 0.005f, 0.0f / 0.005f);
+PositionPID altitudePositionPController(kFlightCtrlParams.alt_pos.kp, kFlightCtrlParams.alt_pos.ki, kFlightCtrlParams.alt_pos.kd,
+                                        kFlightCtrlParams.alt_pos.out_min, kFlightCtrlParams.alt_pos.out_max, true,
+                                        kFlightCtrlParams.alt_pos.int_limit, kFlightCtrlParams.alt_pos.threshold,
+                                        kFlightCtrlParams.alt_pos.filter_alpha);
+// 内环: 垂直速度误差 -> 目标垂直加速度 (Kp=5.0, Ki=0.00625=1.25*0.005, Kd=0)
+PositionPID altitudeVelocityPIDController(kFlightCtrlParams.alt_vel.kp, kFlightCtrlParams.alt_vel.ki, kFlightCtrlParams.alt_vel.kd,
+                                          kFlightCtrlParams.alt_vel.out_min, kFlightCtrlParams.alt_vel.out_max, true,
+                                          kFlightCtrlParams.alt_vel.int_limit, kFlightCtrlParams.alt_vel.threshold,
+                                          kFlightCtrlParams.alt_vel.filter_alpha);
 
 // --- 4.3 水平位置控制 (位置/速度串级PID) ---
 // 北向位置环 (纯比例, Kp=0.25)
-PositionPID northPosPID(0.25f, 0.0f * 0.005f, 0.0f);
+PositionPID northPosPID(kFlightCtrlParams.pos_n.kp, kFlightCtrlParams.pos_n.ki, kFlightCtrlParams.pos_n.kd,
+                        kFlightCtrlParams.pos_n.out_min, kFlightCtrlParams.pos_n.out_max, true,
+                        kFlightCtrlParams.pos_n.int_limit, kFlightCtrlParams.pos_n.threshold,
+                        kFlightCtrlParams.pos_n.filter_alpha);
 // 东向位置环 (纯比例, Kp=0.25)
-PositionPID eastPosPID(0.25f, 0.0f * 0.005f, 0.0f);
-// 北向速度环 (Kp=1.75, Ki=0.00125, Kd=0.05连续域→离散=0.05/0.005=10)
-PositionPID northVelPID(1.75f, 0.25f * 0.005f, 0.05f / 0.005f);
-// 东向速度环 (Kp=1.75, Ki=0.00125, Kd=0.05连续域→离散=0.05/0.005=10)
-PositionPID eastVelPID(1.75f, 0.25f * 0.005f, 0.05f / 0.005f);
+PositionPID eastPosPID(kFlightCtrlParams.pos_e.kp, kFlightCtrlParams.pos_e.ki, kFlightCtrlParams.pos_e.kd,
+                       kFlightCtrlParams.pos_e.out_min, kFlightCtrlParams.pos_e.out_max, true,
+                       kFlightCtrlParams.pos_e.int_limit, kFlightCtrlParams.pos_e.threshold,
+                       kFlightCtrlParams.pos_e.filter_alpha);
+// 北向速度环 (Kp=1.75, Ki=0.00125=0.25*0.005, Kd=10=0.05/0.005 连续域→离散)
+PositionPID northVelPID(kFlightCtrlParams.vel_n.kp, kFlightCtrlParams.vel_n.ki, kFlightCtrlParams.vel_n.kd,
+                        kFlightCtrlParams.vel_n.out_min, kFlightCtrlParams.vel_n.out_max, true,
+                        kFlightCtrlParams.vel_n.int_limit, kFlightCtrlParams.vel_n.threshold,
+                        kFlightCtrlParams.vel_n.filter_alpha);
+// 东向速度环 (Kp=1.75, Ki=0.00125=0.25*0.005, Kd=10=0.05/0.005 连续域→离散)
+PositionPID eastVelPID(kFlightCtrlParams.vel_e.kp, kFlightCtrlParams.vel_e.ki, kFlightCtrlParams.vel_e.kd,
+                       kFlightCtrlParams.vel_e.out_min, kFlightCtrlParams.vel_e.out_max, true,
+                       kFlightCtrlParams.vel_e.int_limit, kFlightCtrlParams.vel_e.threshold,
+                       kFlightCtrlParams.vel_e.filter_alpha);
 
 /*
  * ==========================================================================================
@@ -241,16 +289,21 @@ ComplementaryFilter baro_altitude_filter(0.4f);                                 
 ComplementaryFilter temperature_filter(0.1f);                                      // 温度低通滤波 (alpha=0.1)
 ComplementaryFilter pressure_filter(0.2f);                                         // 气压低通滤波 (alpha=0.2)
 
-// 控制相关滤波
+// 控制相关滤波（★ alpha 唯一来源：kFlightCtrlParams §4.0）
 ComplementaryFilter altitude_rate_target_filter(0.3f);                                   // 垂直速度目标值滤波
-ComplementaryFilter rollSpeedFilter(0.3f), pitchSpeedFilter(0.3f), yawSpeedFilter(0.3f); // 角速率滤波
-ComplementaryFilter rollAngleOutputFilter(0.85f), pitchAngleOutputFilter(0.85f), yawAngleOutputFilter(0.85f); // 姿态外环输出滤波
-ComplementaryFilter rollOutputFilter(0.25f), pitchOutputFilter(0.25f);                   // TVC摆角输出滤波
+ComplementaryFilter rollSpeedFilter(kFlightCtrlParams.speed_filter_alpha[0]),
+                   pitchSpeedFilter(kFlightCtrlParams.speed_filter_alpha[1]),
+                   yawSpeedFilter(kFlightCtrlParams.speed_filter_alpha[2]);              // 角速率滤波
+ComplementaryFilter rollAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alpha[0]),
+                   pitchAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alpha[1]),
+                   yawAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alpha[2]);    // 姿态外环输出滤波
+ComplementaryFilter rollOutputFilter(kFlightCtrlParams.output_filter_alpha[0]),
+                   pitchOutputFilter(kFlightCtrlParams.output_filter_alpha[1]);          // TVC摆角输出滤波
 // ★ 2026-08-07：yawOutputFilter 作用于 alpha_yaw（=差速通道）。
 //   差速回路串联 τm=0.28s 电机滞后，对高频指令既无响应能力又引入
 //   相位滞后（震荡源）。α 0.25→0.12（截止频约减半）滤掉高频分量，
 //   代价是响应略慢——但本通道本就被电机时常数限制，无实质损失。
-ComplementaryFilter yawOutputFilter(0.12f);                                                // 差速输出滤波（2026-08-07 加强）
+ComplementaryFilter yawOutputFilter(kFlightCtrlParams.output_filter_alpha[2]);          // 差速输出滤波（2026-08-07 加强）
 ComplementaryFilter thrustCompN_filter(0.6f), thrustCompE_filter(0.6f);                  // 水平推力补偿滤波
 
 // 反馈传感器滤波
@@ -289,6 +342,7 @@ Madgwick madgwick; // Madgwick AHRS 姿态解算算法
 
 // --- 辅助设备驱动对象 ---
 StatusLED statusLed(LED_green);                 // 状态LED驱动 (绿灯, PE5)
+WS2812Status ws2812Led(WS2812_PIN);             // WS2812 RGB状态灯 (PD15, 单颗板载)
 AnoComProtocol AnoCom(&Serial6);                // 匿名地面站协议驱动 (Serial6)
 CrsfSerial crsf(receiverSerial, CRSF_BAUDRATE); // CRSF遥控协议驱动 (Serial1, 420kbaud)
 
@@ -417,11 +471,10 @@ uint32_t static_start_time = 0;
 bool is_static_confirmed = false;
 
 // --- 7.4 控制目标与输出 ---
+// ★ 2026-08-08 C路径重构：rollRateTarget/pitchRateTarget/yawRateTarget、
+//   error_*_deg、roll/pitch/yaw_output 已收拢进 gnc_tel（§4.0b）
 // 姿态目标 (度)
 float rollTarget = 0.0f, pitchTarget = 0.0f;         // Roll/Pitch 目标角度 (deg)
-float yawRateTarget = 0.0f;                          // Yaw 目标角速率 (deg/s)
-float rollRateTarget = 0.0f, pitchRateTarget = 0.0f; // Roll/Pitch 目标角速率 (deg/s)
-float error_roll_deg = 0.0f, error_pitch_deg = 0.0f, error_yaw_deg = 0.0f; // 姿态角误差 (deg)
 
 // 位置目标 (NED系, 米)
 float targetNorth = 0.0f, targetEast = 0.0f;       // 水平位置目标 (m, NED系)
@@ -438,10 +491,7 @@ float tvcTargetAngle1 = 0.0f, tvcTargetAngle2 = 0.0f; // TVC 通道1/2 目标摆
 // 推力补偿分量 (单位推力矢量的水平分量)
 float thrust_comp_N = 0.0f, thrust_comp_E = 0.0f; // 北向/东向推力补偿 (sin(tilt))
 
-// 控制输出
-float roll_output = 0.0f;     // 滚转角加速度 alpha_roll (rad/s²)（mix层再×Ix→Mx→差速Δω→滚转，FRD 轴序）
-float pitch_output = 0.0f;    // Pitch TVC 修正量 (deg)
-float yaw_output = 0.0f;   // 偏航角加速度 alpha_yaw (rad/s²)（mix层再×Iz→Mz→前摆δ_f→偏航，FRD 轴序）
+// 控制输出（alpha_ref 等控制链中间量见 gnc_tel §4.0b）
 float throttlePercent = 0.0f; // 油门百分比 (0-100%)
 
 // ---- 在线参数辨识结果（★ 纯观测，不参与控制回路）----

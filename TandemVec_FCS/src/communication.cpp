@@ -416,11 +416,12 @@ void handleAnoCom()
     alt_add = vfk_height;           // 2状态垂直KF高度 (与EKF对比用，激光通道空闲)
     alt_fu = estimated_height;      // EKF融合高度 (控制律消费)
 
-    // 控制量 (来自handlePIDControl的输出)，经 anoCtrlSafe 限幅 ±5000 + NaN 防护
-    roll_ctrl_ano = anoCtrlSafe(roll_output * 10.0f);         // 滚转控制输出，放大10倍用于显示
-    pitch_ctrl_ano = anoCtrlSafe(pitch_output * 10.0f);       // 俯仰控制输出，放大10倍
-    yaw_ctrl_ano = anoCtrlSafe(yaw_output * 10.0f);           // 偏航控制输出（alpha_yaw rad/s²），放大10倍
-    throttle_ctrl_ano = anoCtrlSafe(throttlePercent * 10.0f); // 油门百分比，放大10倍
+    // 控制量 (来自 GNC 输出 gnc_tel)，经 anoCtrlSafe 限幅 ±5000 + NaN 防护
+    // ★ 2026-08-08 C路径重构：读取来源收拢为 gnc_tel（缩放系数不变，输出数值不变）
+    roll_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[0] * 10.0f);  // 滚转控制输出，放大10倍用于显示
+    pitch_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[1] * 10.0f); // 俯仰控制输出，放大10倍
+    yaw_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[2] * 10.0f);   // 偏航控制输出（alpha_yaw rad/s²），放大10倍
+    throttle_ctrl_ano = anoCtrlSafe(throttlePercent * 10.0f);    // 油门百分比，放大10倍
 
     // 目标值 (来自控制逻辑)
     target_speed_x_ano = targetVelNorth * 100;           // 水平目标速度X (如果适用)
@@ -428,7 +429,7 @@ void handleAnoCom()
     target_speed_z_ano = target_vertical_velocity * 100; // 目标垂直速度 (m/s)
     target_roll_ano = rollTarget * 100;                  // 目标滚转角 (deg) - 主要用于手动模式记录
     target_pitch_ano = pitchTarget * 100;                // 目标俯仰角 (deg) - 主要用于手动模式记录
-    target_yaw_ano = yawRateTarget * 100;                // 目标偏航角速率 (deg/s)
+    target_yaw_ano = gnc_tel.omega_ref_dps[2] * 100;     // 目标偏航角速率 (deg/s)
 
     // 速度 (来自 EKF 的 INS_GNSS_Packet.velocity_*, NED系)
     // EKF 输出桥已写入 nav_ekf.ned_vel_mps()，无 GNSS 时由 ZUPT/Gravity 静止辅助闭环约束。
@@ -737,10 +738,10 @@ void handleTelemetry()
   Serial8.print(", ");
   Serial8.print(IMU_Packet.accelerometer_z, 2);
   Serial8.print(", ");
-  // 打印姿态欧拉角误差
-  Serial8.print(error_roll_deg, 2);
+  // 打印姿态欧拉角误差（来源 gnc_tel，2026-08-08 C路径重构）
+  Serial8.print(gnc_tel.error_deg[0], 2);
   Serial8.print(", ");
-  Serial8.print(error_pitch_deg, 2);
+  Serial8.print(gnc_tel.error_deg[1], 2);
   Serial8.print(", ");
   // 打印当前时间戳 (毫秒，保留3位小数)
   Serial8.print(micros() / 1000.0f, 3);
@@ -1038,6 +1039,7 @@ void handleStatusLedTask()
 
   // 更新LED
   statusLed.update(is_calibrating, is_armed);
+  ws2812Led.update(is_calibrating, is_armed);   // WS2812 RGB状态灯 (与绿灯并行)
 }
 
 void handleMavlink()
