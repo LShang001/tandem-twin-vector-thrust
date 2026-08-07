@@ -143,7 +143,15 @@ PositionPID rollRatePID(0.25f, 0.0003f, 0.0f); // 前摆内环 ζ≈1.20
 PositionPID pitchAnglePID(2.5f, 0.0f, 0.0f);  // 尾摆外环（同前摆）
 PositionPID pitchRatePID(0.25f, 0.0003f, 0.0f); // 尾摆内环 ζ≈1.20
 PositionPID yawAnglePID(0.8f, 0.0f, 0.0f);   // 差速外环：过阻尼（电机滞后限带）
-PositionPID yawRatePID(0.10f, 0.0003f, 0.0f); // 差速内环 ζ≈1.34（受 τm=0.28s 限带）
+// ★ 2026-08-07 实机：yaw 打杆无反应。量化（tools/verify_yaw_authority.py）：
+//   瓶颈不是 dwMax 限幅（19% 油门满打杆仅用到 0.7 的 35%），
+//   而是 Ix=0.0021 极小（Iy/Ix=10.5×）× Kp_r 偏小 → 力矩指令仅
+//   为 TVC 通道的 1/26。故 Kp_r 0.10→0.25（对齐 TVC），
+//   Ki 0.0003→0.002（×6.7，消除差速静差/反扭不对称；PositionPID 已备
+//   积分状态钳位 + 反算抗饱和，iOut 上限 0.002×250=0.5 rad/s²）。
+//   注：低油门下差速物理效能仅 ∝w0²（19% 油门只有 3.6%），
+//   地面低油门 yaw 天然弱是构型固有特性，非参数问题。
+PositionPID yawRatePID(0.25f, 0.002f, 0.0f); // 差速内环：P×2.5 + I×6.7
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
