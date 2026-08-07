@@ -401,7 +401,7 @@ void setup()
   // addTask(handleOpticalFlow, 1.0f);       // MTF02P 光流处理 (1000Hz) - 与 LQS48 对比测试时启用
   // addTask(handleAnoCom, 5.0f);          // AnoCom - 已移至 EKF 之后紧邻注册 (见状态估计层)
   // addTask(handleAngleSensors, 4.0f);      // TVC 角度传感器 (250Hz) - 需要角度闭环/标定时启用
-  // addTask(handleDataLogging, 5.0f);       // 黑匣子数据记录 (200Hz) - 需要飞行日志时启用
+  BFS_ADD_TASK(handleDataLogging, 5.0f, "DataLog");   // 黑匣子数据记录 (200Hz) - Serial3 CSV + Flash 双写（解锁触发）
   // addTask(handleFlowTelemetry, 20.0f);    // 光流调试打印 (50Hz) - 调光流补偿时启用
 
   Serial8.println("VTVL_ElectricDualRotor_FC Initialized.");

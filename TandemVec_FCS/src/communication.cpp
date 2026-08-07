@@ -8,6 +8,9 @@
 // 通信模块局部定义
 // ========================================================================
 
+// 调试用黑匣子强制记录超时（datalog 命令置位，handleFlashService 超时复位）
+static uint32_t s_dbgLogUntil = 0;
+
 // 串口5发送缓冲区，用于发送给上位机进行轨迹规划的数据
 // 缓冲区大小：1(帧头) + 8个float * 4字节/float + 1(帧尾) = 34字节
 uint8_t serial5Buffer[34];
@@ -999,13 +1002,19 @@ void handleTelemetry()
 
 void handleDataLogging()
 {
+  // 记录使能 = 真实解锁 OR 调试强制（datalog 命令，不受 flight_control 每帧覆盖）
+  // 注意：不能直接改 isDatalogging（flight_control.cpp:89 每帧用 inputs.is_unlocked 覆盖），
+  // 用独立调试标志 + 超时
+  bool dbgLogging = (s_dbgLogUntil != 0 && (int32_t)(millis() - s_dbgLogUntil) < 0);
+  bool loggingActive = isDatalogging || dbgLogging;
+
   static bool wasLogging = false; // 记录上一次调用时的状态
   static uint32_t segmentId = 0;  // 分段编号（从 1 开始）
 
   const unsigned long currentTime = millis();
 
   // —— 检测开始：false → true ——
-  if (isDatalogging && !wasLogging)
+  if (loggingActive && !wasLogging)
   {
     segmentId++;
     // 段开始标记（以 # 开头，避免与 CSV 冲突）
@@ -1027,65 +1036,96 @@ void handleDataLogging()
   }
 
   // —— 正常数据输出 ——
-  if (isDatalogging)
+  if (loggingActive)
   {
     float filteredSensor1Angle, filteredSensor2Angle;
     getFilteredTVCAngles(filteredSensor1Angle, filteredSensor2Angle); // 获取TVC反馈角度
+
+    // 与 CSV 列一一对应的数据快照（也用于 Flash 双写，21 float = 84B payload）
+    float d[21];
+    d[0]  = (float)currentTime;
+    d[1]  = AHRS_Packet.Roll * RAD_TO_DEG;
+    d[2]  = AHRS_Packet.Pitch * RAD_TO_DEG;
+    d[3]  = AHRS_Packet.Heading * RAD_TO_DEG;
+    d[4]  = IMU_Packet.accelerometer_x;
+    d[5]  = IMU_Packet.accelerometer_y;
+    d[6]  = IMU_Packet.accelerometer_z;
+    d[7]  = IMU_Packet.gyroscope_x * RAD_TO_DEG;
+    d[8]  = IMU_Packet.gyroscope_y * RAD_TO_DEG;
+    d[9]  = IMU_Packet.gyroscope_z * RAD_TO_DEG;
+    d[10] = INS_GNSS_Packet.velocity_north;
+    d[11] = INS_GNSS_Packet.velocity_east;
+    d[12] = INS_GNSS_Packet.velocity_down;
+    d[13] = relative_north;
+    d[14] = relative_east;
+    d[15] = relative_down;
+    d[16] = filteredSensor1Angle;
+    d[17] = filteredSensor2Angle;
+    d[18] = receivedValveControl;
+    d[19] = receivedP1;
+    d[20] = receivedP2;
 
     // 依次打印各项数据，以逗号分隔（保持原有顺序与精度）
     Serial3.print(currentTime);
     Serial3.print(",");
     // 姿态欧拉角 (度)
-    Serial3.print(AHRS_Packet.Roll * RAD_TO_DEG, 2);
+    Serial3.print(d[1], 2);
     Serial3.print(",");
-    Serial3.print(AHRS_Packet.Pitch * RAD_TO_DEG, 2);
+    Serial3.print(d[2], 2);
     Serial3.print(",");
-    Serial3.print(AHRS_Packet.Heading * RAD_TO_DEG, 2);
+    Serial3.print(d[3], 2);
     Serial3.print(",");
     // IMU加速度计数据 (m/s^2)
-    Serial3.print(IMU_Packet.accelerometer_x, 4);
+    Serial3.print(d[4], 4);
     Serial3.print(",");
-    Serial3.print(IMU_Packet.accelerometer_y, 4);
+    Serial3.print(d[5], 4);
     Serial3.print(",");
-    Serial3.print(IMU_Packet.accelerometer_z, 4);
+    Serial3.print(d[6], 4);
     Serial3.print(",");
     // IMU陀螺仪数据 (度/秒)
-    Serial3.print(IMU_Packet.gyroscope_x * RAD_TO_DEG, 2);
+    Serial3.print(d[7], 2);
     Serial3.print(",");
-    Serial3.print(IMU_Packet.gyroscope_y * RAD_TO_DEG, 2);
+    Serial3.print(d[8], 2);
     Serial3.print(",");
-    Serial3.print(IMU_Packet.gyroscope_z * RAD_TO_DEG, 2);
+    Serial3.print(d[9], 2);
     Serial3.print(",");
     // INS/GNSS组合导航速度 (NED系, m/s)
-    Serial3.print(INS_GNSS_Packet.velocity_north, 3);
+    Serial3.print(d[10], 3);
     Serial3.print(",");
-    Serial3.print(INS_GNSS_Packet.velocity_east, 3);
+    Serial3.print(d[11], 3);
     Serial3.print(",");
-    Serial3.print(INS_GNSS_Packet.velocity_down, 3);
+    Serial3.print(d[12], 3);
     Serial3.print(",");
     // INS/GNSS组合导航相对位置 (NED系, m)
-    Serial3.print(relative_north, 3);
+    Serial3.print(d[13], 3);
     Serial3.print(",");
-    Serial3.print(relative_east, 3);
+    Serial3.print(d[14], 3);
     Serial3.print(",");
-    Serial3.print(relative_down, 3);
+    Serial3.print(d[15], 3);
     Serial3.print(",");
     // TVC角度传感器反馈 (度)
-    Serial3.print(filteredSensor1Angle, 2);
+    Serial3.print(d[16], 2);
     Serial3.print(",");
-    Serial3.print(filteredSensor2Angle, 2);
+    Serial3.print(d[17], 2);
     Serial3.print(",");
     // 发动机控制器回传数据
-    Serial3.print(receivedValveControl, 2); // 阀门控制量
+    Serial3.print(d[18], 2); // 阀门控制量
     Serial3.print(",");
-    Serial3.print(receivedP1, 2); // 压力1
+    Serial3.print(d[19], 2); // 压力1
     Serial3.print(",");
-    Serial3.print(receivedP2, 2); // 压力2
-    Serial3.println();            // 换行，结束当前行数据
+    Serial3.print(d[20], 2); // 压力2
+    Serial3.println();       // 换行，结束当前行数据
+
+    // Flash 双写：payload 为 84 字节二进制快照（非阻塞，µs 级入环形缓冲）
+    // 注意：仅当 Flash 初始化成功（present）才写，避免无用开销
+    if (flash.isPresent())
+    {
+      flashLog.logPush((const uint8_t *)d);
+    }
   }
 
   // —— 检测结束：true → false ——
-  if (!isDatalogging && wasLogging)
+  if (!loggingActive && wasLogging)
   {
     Serial3.print(F("#LOG_END,segment="));
     Serial3.print(segmentId);
@@ -1098,7 +1138,7 @@ void handleDataLogging()
     }
   }
 
-  wasLogging = isDatalogging; // 更新边沿检测状态
+  wasLogging = loggingActive; // 更新边沿检测状态
 }
 
 // [已迁移至 main.cpp] handleDeta100 (依赖 DETA100_module.h 函数)
@@ -1300,6 +1340,13 @@ void handleStatusLedTask()
  */
 void handleFlashService()
 {
+  // 调试黑匣子强制记录超时自动复位（datalog 命令；不动 isDatalogging，
+  // 它由 flight_control 每帧按真实解锁状态维护）
+  if (s_dbgLogUntil != 0 && (int32_t)(millis() - s_dbgLogUntil) >= 0)
+  {
+    s_dbgLogUntil = 0;
+  }
+
   flashLog.logService();
 }
 
@@ -1629,6 +1676,21 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       }
       else if (strncmp(line, "flash ", 6) == 0) {
         debugFlashCommand(serial, line + 6);
+      }
+      else if (strncmp(line, "datalog", 7) == 0) {
+        // 强制黑匣子记录 N 秒（异步：置位调试标志后返回，超时自动复位）。
+        // 不直接改 isDatalogging（flight_control 每帧覆盖）；handleDataLogging
+        // 用独立调试标志判断。验证 Flash 双写链路用。
+        int secs;
+        if (sscanf(line + 7, "%d", &secs) == 1) {
+          secs = constrain(secs, 1, 60);
+          s_dbgLogUntil = millis() + (unsigned long)secs * 1000;
+          serial.print(F("[DBG] datalog forced ON for "));
+          serial.print(secs);
+          serial.println(F("s (auto-reset)"));
+        } else {
+          serial.println(F("[DBG] usage: datalog <secs>"));
+        }
       }
       else if (strncmp(line, "wsstatic", 8) == 0) {
         int lvl;
