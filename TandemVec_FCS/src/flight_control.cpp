@@ -919,16 +919,24 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
       // 右打摇杆 -> 正值（右滚）
       rollTarget = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_ANGLE_COMMAND, MAX_ANGLE_COMMAND);
 
-      // 构建当前航向的基础四元数（仅偏航，无滚转/俯仰）
-      // 保持当前航向作为基准方向
-      Quaternion q_yaw_base = eulerToQuaternion(0.0f, 0.0f, AHRS_Packet.Heading);
+      // 构建基础姿态四元数
+      // —— VTOL 悬停构型（机头朝天，x_b=推力轴=竖直），与 AUTO_POSITION 分支同一约定 ——
+      // ⚠️ 原实现 q_yaw_base = eulerToQuaternion(0,0,Heading)（绕 z_b）是水平巡航/多旋翼
+      //    约定：IMU 轴重映射（2026-08-07 sensor_imu）后 AHRS 四元数以 x_b 竖直为基准，
+      //    悬停时目标姿态与实际姿态差 ~90°，内外环全饱和、舵机钉死限幅，
+      //    表现为"姿态模式打杆完全没反应"。
+      // 悬停基态 q_hover = 绕 NED y 转 +90°；世界航向 = 绕机体 x 转 -Heading
+      Quaternion q_hover_base = {0.70710678f, 0.0f, 0.70710678f, 0.0f};  // 绕 NED +y 转 90°
+      Quaternion q_yaw_hover = eulerToQuaternion(-AHRS_Packet.Heading, 0.0f, 0.0f);
+      Quaternion q_yaw_base = quaternionMultiply(q_hover_base, q_yaw_hover);
 
-      // 构建机体倾斜四元数（仅滚转/俯仰，无偏航）
-      // 将角度命令转换为弧度后构建四元数
-      Quaternion q_tilt_body = eulerToQuaternion(rollTarget * DEG_TO_RAD, pitchTarget * DEG_TO_RAD, 0.0f);
+      // 构建机体倾斜四元数（四轴式摇杆语义，与 RATE_MODE 一致）：
+      //   pitch 杆 → 绕 y_b（尾摆通道）；roll 杆 → 绕 z_b（前摆通道）
+      // ⚠️ 原实现 eulerToQuaternion(roll, pitch, 0) 绕 x/y 轴，是水平构型约定
+      Quaternion q_tilt_body = eulerToQuaternion(0.0f, pitchTarget * DEG_TO_RAD, rollTarget * DEG_TO_RAD);
 
       // 合成最终目标姿态四元数
-      // 先应用机体倾斜，再应用航向旋转
+      // 先应用机体倾斜，再应用悬停基态+航向旋转
       q_target = quaternionMultiply(q_yaw_base, q_tilt_body);
 
       // 归一化目标四元数，确保数学正确性
@@ -1176,7 +1184,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   {
     // ---- 姿态控制模式：物理模型逆解控制分配（无倾角保护，支持大机动）----
     {
-#ifdef GYRO_DIRECT_TEST
+#if GYRO_DIRECT_TEST
       // ================================================================
       // 陀螺直通测试模式（2026-08-07 调试）：绕过外环姿态环 + B 矩阵分配，
       // 陀螺角速度 × 负反馈增益 直接驱动执行器，验证三通道反馈方向。
@@ -1184,10 +1192,11 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       //   前摆(绕z_b): δf = -K·ω_z  （物理 δf>0→Mz>0，正斜率）
       //   差速(绕x_b): Δω = +K·ω_x  （物理 Δω>0→Mx<0，负斜率）
       // 增益：0.5 deg per (deg/s)，30°/s 时触达 ±15° 摆角限幅
-      const float GYRO_K = 0.5f;
+      // 2026-08-07 实机第4轮：方向全对但超调严重 → 大幅降 P（0.5→0.1）
+      const float GYRO_K = 0.1f;
       const float R2D = 57.29578f;
       tail_gimbal_deg  = constrain( GYRO_K * icm_gyro_y * R2D, -15.0f, 15.0f);
-      front_gimbal_deg = constrain(-GYRO_K * icm_gyro_z * R2D, -15.0f, 15.0f);
+      front_gimbal_deg = constrain( GYRO_K * icm_gyro_z * R2D, -15.0f, 15.0f);
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
       float dw = constrain( GYRO_K * icm_gyro_x * R2D * 0.05f, -P.dwMax, P.dwMax);
       auto diff = allocateDifferential(w0, dw, P);

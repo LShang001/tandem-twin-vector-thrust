@@ -25,7 +25,7 @@
 //       用于验证三通道反馈方向（测试完成后务必改回 0）
 //   0 = 正常姿态控制（BTRUE 分配）
 // ================================================================
-#define GYRO_DIRECT_TEST 1
+#define GYRO_DIRECT_TEST 0
 
 struct TandemVecParams
 {

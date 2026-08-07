@@ -24,6 +24,7 @@
 - 推力垂直投影用 **R13**（cos_tilt）；R33 是激光斜距补偿（激光沿 −z_b），勿混用。
 - VTOL 悬停目标姿态合成 `q_hover ⊗ Rx(-Heading)`（q_hover = 绕 NED y 转 90° 机头朝天；悬停时航向轴 = 机体 x = 差速轴），勿用"绕机体 z 航向"的多旋翼式假设。
 - 命名残留：`servo_deg_roll`/`TVC_ROLL_SERVO_PIN` 实际是前摆（偏航通道），待重命名（不影响功能）。
+- 调试开关宏陷阱：`#define XXX_TEST 0` 时 `#ifdef XXX_TEST` 仍为真——调试开关判断一律用 `#if`（2026-08-07 `GYRO_DIRECT_TEST` 曾因此常驻生效，姿态环被整体旁路、打杆无响应）。
 - `include/TVC_Control_Geometric.h` / `TVC_Control_3rdOrder_Poly.h` — 原版 TVC 几何模型，**已弃用**。控制分配现由 `TandemVec_ControlAllocation.h` 处理。
 
 ## 核心参数

@@ -129,12 +129,19 @@ const float RC_LOITER_DEADZONE = 25.0f;
 //
 //  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
 //    PositionPID no-dt约定: Ki×200=等效连续增益。0.0003×200=0.06/s
-PositionPID rollAnglePID(5.0f, 0.0f, 0.0f);
-PositionPID rollRatePID(0.30f, 0.0003f, 0.0f);
-PositionPID pitchAnglePID(5.0f, 0.0f, 0.0f);
-PositionPID pitchRatePID(0.30f, 0.0003f, 0.0f);
-PositionPID yawAnglePID(4.0f, 0.0f, 0.0f);
-PositionPID yawRatePID(0.15f, 0.0003f, 0.0f);
+// 2026-08-07 实机再整定（差速抑超调 / TVC 加阻尼，按上方二阶公式反解）：
+//  差速轴(roll/Δω, 绕x_b): 被控对象含电机一阶滞后 τm=0.28s，
+//    带宽必须 ≪1/τm → 取 ωn≈1.8, ζ≈1.1（过阻尼无超调）:
+//    Kp_r=0.07 → 2ζωn=4.0; Kp_a=0.8 → ωn=√(4.0×0.8)=1.79, ζ=1.12
+//  TVC轴(pitch尾摆/yaw前摆): 舵机快(333Hz)、无电机滞后，可提高带宽补阻尼，
+//    取 ωn≈4.6, ζ≈0.93: Kp_r=0.15 → 2ζωn=8.6; Kp_a=2.5 → ωn=4.64
+//    （原 0.05/1.0 组合 ζ=0.85 但 ωn 仅 1.7，响应软、等效阻尼不足）
+PositionPID rollAnglePID(0.8f, 0.0f, 0.0f);   // 差速外环：过阻尼设计 ζ≈1.1
+PositionPID rollRatePID(0.07f, 0.0003f, 0.0f); // 差速内环：受 τm=0.28s 电机滞后限带
+PositionPID pitchAnglePID(2.5f, 0.0f, 0.0f);  // 尾摆外环：提高带宽
+PositionPID pitchRatePID(0.15f, 0.0003f, 0.0f); // 尾摆内环：+阻尼 (0.05→0.15)
+PositionPID yawAnglePID(2.0f, 0.0f, 0.0f);   // 前摆外环：略保守于俯仰
+PositionPID yawRatePID(0.13f, 0.0003f, 0.0f); // 前摆内环：+阻尼 (0.03→0.13), ζ≈0.97
 
 // --- 4.2 垂直控制 (高度/速度串级PID) ---
 // 外环: 高度误差 -> 目标垂直速度 (纯比例, Kp=1.0)
