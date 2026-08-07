@@ -109,8 +109,13 @@ static void test_attitude_omega_clamp()
     AttitudeCtrlGains g = kDefaultCascadeCtrlParams.att;
     float omega[3];
     attitudeStep(qm, qr, g, omega);
+    // 不超限幅（原断言）……
     check(std::fabs(omega[1]) <= g.omega_max_pitch + 1e-5f,
-          "外环：大误差时 omega_ref 限幅至 omega_max_pitch");
+          "外环：大误差时 omega_ref 不超 omega_max_pitch");
+    // ……且确实触达限幅（弱断言修复：仅"不超"在 Kp 失效时也会通过）
+    // 90° 误差 → 未限幅输出 = 2·kp_pitch·sin(45°) ≈ 5.66 rad/s >> omega_max_pitch=1.5
+    check(std::fabs(omega[1]) >= g.omega_max_pitch - 1e-5f,
+          "外环：大误差确实触达 omega_max_pitch（限幅生效）");
 }
 
 // ============================================================
@@ -235,25 +240,7 @@ static void test_rate_reset()
 }
 
 // ============================================================
-//  T10：惯量映射
-// ============================================================
-static void test_moment_mapping()
-{
-    const TandemVecParams& p = kDefaultTandemVecParams;
-    // 直接验证公式 M = I·α
-    const float alpha[3] = {2.f, 3.f, 4.f};
-    const float M[3] = {
-        p.Ix * alpha[0],
-        p.Iy * alpha[1],
-        p.Iz * alpha[2]
-    };
-    check(approx(M[0], p.Ix * 2.f), "惯量映射：Mx = Ix·α_roll");
-    check(approx(M[1], p.Iy * 3.f), "惯量映射：My = Iy·α_pitch");
-    check(approx(M[2], p.Iz * 4.f), "惯量映射：Mz = Iz·α_yaw");
-}
-
-// ============================================================
-//  T11–T14：全链 (CascadeCtrl)
+//  T10：惯量映射（全链公共辅助前置）
 // ============================================================
 static CascadeInput makeIdentityInput(float thr = 0.5f)
 {
@@ -265,6 +252,30 @@ static CascadeInput makeIdentityInput(float thr = 0.5f)
     return in;
 }
 
+// ============================================================
+//  T10：惯量映射
+// ============================================================
+static void test_moment_mapping()
+{
+    // 通过 CascadeCtrl 全链遥测验证层3 实现：M_cmd = I·α
+    // （修复前为同义反复：测试自己重算 M=I·α 再断言等于自己，从未调用被测代码）
+    const TandemVecParams& p = kDefaultTandemVecParams;
+    CascadeCtrl ctrl; ctrl.reset();
+    CascadeInput in = makeIdentityInput();
+    in.q_ref = {cosf(0.05f), sinf(0.05f), 0.f, 0.f};  // 绕 x 小误差 → alpha_ref[0] 主导
+    auto out = ctrl.step(in, 0.005f);
+    const auto& tel = out.tel;
+    check(approx(tel.M_cmd[0], p.Ix * tel.alpha_ref[0], 1e-4f),
+          "惯量映射：层3 Mx = Ix·α_roll（全链遥测验证）");
+    check(approx(tel.M_cmd[1], p.Iy * tel.alpha_ref[1], 1e-4f),
+          "惯量映射：层3 My = Iy·α_pitch（全链遥测验证）");
+    check(approx(tel.M_cmd[2], p.Iz * tel.alpha_ref[2], 1e-4f),
+          "惯量映射：层3 Mz = Iz·α_yaw（全链遥测验证）");
+}
+
+// ============================================================
+//  T11–T14：全链 (CascadeCtrl)
+// ============================================================
 static void test_cascade_zero_error()
 {
     CascadeCtrl ctrl; ctrl.reset();
@@ -290,12 +301,9 @@ static void test_cascade_pitch_polarity()
     check(out.tel.omega_ref[1] > 0.f, "俯仰误差 → omega_ref_pitch > 0");
     check(out.tel.alpha_ref[1] > 0.f, "俯仰误差 → alpha_pitch > 0");
     check(out.tel.M_cmd[1] > 0.f,     "俯仰误差 → My_cmd > 0（My = Iy·α，α>0）");
-    // My > 0 → δ_t = -My/(b·T0) < 0? 等等，需要仔细确认…
-    // 实际上，θ仰起时需要负俯仰力矩（低头）才能恢复，因此：
-    // My_cmd > 0 (期望增加俯仰角速率) → 经分配 δ_t < 0
-    // 但这里 q_ref 比 q_meas 更仰，error > 0，omega_ref_pitch > 0，alpha > 0，
-    // M_cmd[1] = Iy * alpha > 0 → 经分配 δ_t = -My/(b*T0) < 0
-    // （因为尾摆效率 ∂My/∂δt = -b*T < 0，正力矩需负摆角）
+    // 极性推导（与分配层约定一致）：尾摆效率 ∂My/∂δt = -b·T₀ < 0，
+    // 期望正俯仰力矩（增大仰角速率）需负摆角 → δ_t < 0。
+    // （符号锚点：实机 GYRO_DIRECT_TEST 直通验证 δt>0→My<0，见 flight_control.cpp）
     check(out.delta_t < 0.f,          "俯仰误差 → delta_t < 0（尾摆产生正俯仰力矩）");
 }
 

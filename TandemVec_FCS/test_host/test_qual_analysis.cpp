@@ -16,7 +16,7 @@
 #include "../include/TandemVec_ControlAllocation.h"
 #include "../include/TandemVec_Propulsion.h"
 #include "../include/TandemVec_Config.h"
-#include "../include/TandemVec_AttitudeCtrl.h"
+#include "../include/Quat4f.h"
 #include "../include/PositionPID.h"
 #include "../include/ComplementaryFilter.h"
 #include <cmath>

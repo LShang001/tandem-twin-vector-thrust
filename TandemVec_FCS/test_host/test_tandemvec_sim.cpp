@@ -157,7 +157,8 @@ static void test_allocation_accuracy()
         float bt_err = std::fmax(std::fmax(std::fabs(bt_wr.Mx - ai.Mx_cmd) / (std::fabs(dMx) + 1e-6f), std::fabs(bt_wr.My - ai.My_cmd) / (std::fabs(dMy) + 1e-6f)), std::fabs(bt_wr.Mz - ai.Mz_cmd) / (std::fabs(dMz) + 1e-6f));
 
         std::printf("δ=25° 满偏增量测试: BTRUE 增量误差=%.1f%%\n", bt_err * 100.0f);
-        check(true, "δ=25° 满偏：BTRUE 在线 Jacobian 计算完成，不崩溃");
+        // 满偏下增量误差大是预期的（超出 FULL_B 线性化范围），但必须为有限值
+        check(std::isfinite(bt_err), "δ=25° 满偏：BTRUE 往返误差有限（无 NaN/Inf）");
         std::printf("  (满偏限幅导致增量误差=%.1f%%，预期之内)\n", bt_err * 100.0f);
     }
 

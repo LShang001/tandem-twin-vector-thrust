@@ -54,8 +54,10 @@ run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 
 # 纵列双发矢量推力飞行器控制分配（纯平台无关头文件，无 Arduino 依赖）：
 run_one "$ROOT/test_host/test_tandemvec_allocation.cpp" ta ""
-run_one "$ROOT/test_host/test_tandemvec_cascade.cpp"    tc ""
-run_one "$ROOT/test_host/test_tandemvec_sim.cpp"        ts ""
+# ★ 2026-08-08 临时停用：CascadeCtrl 半成品架构已废弃（头文件已删），
+#   cascade/sim 两测试待正式删除（回归清理，等并行改动稳定后执行）
+# run_one "$ROOT/test_host/test_tandemvec_cascade.cpp"    tc ""
+# run_one "$ROOT/test_host/test_tandemvec_sim.cpp"        ts ""
 
 # flight_control.cpp 姿态环闭环仿真（轴序 FRD 修复验证）：
 # 按源码公式独立实现，驱动刚体角动力学 + 推进力矩闭环
