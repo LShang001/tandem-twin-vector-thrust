@@ -1104,6 +1104,11 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  * 轴向（FRD，x_b=机身纵轴=推力轴）：x=滚转/差速，y=俯仰/尾摆，z=偏航/前摆
  * 手动TVC旁路：RC直接映射舵机，跳过控制分配。
  */
+// ★ 2026-08-07：差速回路增益调度系数，供在线辨识修正命令量使用。
+// mix 层（步骤8）写入 → update_online_identification（步骤9）读取，
+// 同一 GNC 拍内顺序执行，数据一致。
+static float s_yaw_gain_sched = 1.0f;
+
 void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs_t &outputs)
 {
   const TandemVecParams &P = kDefaultTandemVecParams;
@@ -1205,6 +1210,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       float yaw_gain_sched = (w_hover > 1.0f) ? (w0 * w0) / (w_hover * w_hover) : 1.0f;
       yaw_gain_sched = constrain(yaw_gain_sched, 0.02f, 4.0f); // 防零 / 防高油门过冲
       Mx *= yaw_gain_sched;
+      s_yaw_gain_sched = yaw_gain_sched;  // 导出给在线辨识（步骤9）修正命令量
 
       AllocationInput ai;
       ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0;
@@ -1289,9 +1295,13 @@ static void update_online_identification(const ControlInputs_t &inputs,
   if (!inputs.is_unlocked || inputs.is_manual_tvc) return;
 
   // 命令角加速度（内环输出，rad/s²）
+  // ★ 2026-08-07：差速通道（alpha_yaw → Mx'）在 mix 层被增益调度缩放
+  //   (w0/w_hover)²，实际执行的力矩 ≠ 内环原始输出。辨识必须用**实际
+  //   执行量**，否则会误判"命令了却没达到" → 惯量比 b_est 系统性偏小。
+  //   摆座通道（roll/pitch）未做调度，原样传入。
   const float alpha_cmd[3] = { outputs.alpha_roll,
                                outputs.alpha_pitch,
-                               outputs.alpha_yaw };
+                               outputs.alpha_yaw * s_yaw_gain_sched };
 
   // 实测角速率（deg/s）— OnlineID 内部转 rad/s 再求导
   // Vector3 分量为 double，需显式转 float（花括号初始化不允许隐式收窄）
