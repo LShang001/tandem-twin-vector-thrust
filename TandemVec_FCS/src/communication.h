@@ -154,6 +154,56 @@ void handleCrsf();
 void sendElrsBatteryData();
 
 /**
+ * @brief ELRS 姿态回传任务 (25Hz)
+ *
+ * 将飞控姿态欧拉角映射到 CRSF ATTITUDE 协议字段，遥控器姿态球显示。
+ */
+void sendElrsAttitudeData();
+
+/**
+ * @brief ELRS 气压高度+垂直速度回传任务 (25Hz)
+ *
+ * 将 DPS310 气压高度和 EKF 垂直速度映射到 CRSF BARO_ALTITUDE 字段。
+ */
+void sendElrsBaroAltitudeData();
+
+/**
+ * @brief ELRS 飞行模式回传任务 (10Hz)
+ *
+ * 将当前控制模式名映射到 CRSF FLIGHT_MODE 字段（16 字符）。
+ */
+void sendElrsFlightModeData();
+
+/**
+ * @brief ELRS GNSS 位置回传任务 (10Hz)
+ *
+ * 将 UBX GNSS 定位数据映射到 CRSF GPS 协议字段，遥控器地图/位置显示。
+ */
+void sendElrsGpsData();
+
+/**
+ * @brief ELRS 垂直速度回传任务 (25Hz)
+ *
+ * 将 EKF 垂直速度映射到 CRSF VARIO 协议字段，遥控器变率计显示。
+ */
+void sendElrsVarioData();
+
+/**
+ * @brief ELRS 温度回传任务 (10Hz)
+ *
+ * 将 DPS310 气压计温度映射到 CRSF TEMP 协议字段，遥控器温度显示。
+ */
+void sendElrsTempData();
+
+/**
+ * @brief 电池电压采样任务 (10Hz)
+ *
+ * 从 ADC_BATT (PC5) 读取电池分压电压并换算为真实电压。
+ * 输出全局量 bat_voltage_mv，供 ELRS / AnoCom 遥测共用。
+ */
+void updateBatteryMonitor();
+
+/**
  * @brief Serial8 调试遥测任务 (200Hz)
  *
  * 通过 USB Type-C 串口打印完整的飞行数据 CSV 行：
@@ -198,6 +248,41 @@ void handleGuidanceCommands();
  * - 待机: 呼吸灯效果
  */
 void handleStatusLedTask();
+
+/**
+ * @brief Flash 黑匣子后台写任务（低优先级，100Hz）
+ *
+ * 调 flashLog.logService()，每 tick 最多写 W25N01GV_LOG_MAX_WRITES 帧到 NAND。
+ */
+void handleFlashService();
+
+/**
+ * @brief 调试模式控制台（Serial6 共用）
+ *
+ * 进入方式：Serial6 收到 "DBG\n"（地面站数传协议下该序列不会自然出现）
+ * 退出方式：调试模式下发 "exit"
+ * 命令集：help / ws <r> <g> <b> / wsoff / wsseq [ms] / wsstat / ver / exit
+ */
+void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
+                        uint8_t maxLen, bool &dbgMode);
+
+/**
+ * @brief GPIO 诊断：打印 PD15 (WS2812) 实时寄存器状态
+ * 调试命令 "gpio" 调用
+ */
+void debugGpioDump(HardwareSerial &serial);
+
+/**
+ * @brief TIM4+DMA 诊断：验证 DMA 链路是否真的工作
+ * 调试命令 "tim4" 调用
+ */
+void debugTim4Dump(HardwareSerial &serial);
+
+/**
+ * @brief Flash 调试命令（id/erase/stat/dump/test）
+ * 调试命令 "flash <sub>" 调用
+ */
+void debugFlashCommand(HardwareSerial &serial, char *args);
 
 /**
  * @brief MAVLink 遥测发送任务 (200Hz)

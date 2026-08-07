@@ -1,0 +1,31 @@
+# Syntax Coloring Map For WS2812Driver
+
+# Datatypes (KEYWORD1)
+WS2812Driver	KEYWORD1
+ColorOrder	KEYWORD1
+Mode	KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+WS2812Driver	KEYWORD2
+begin	KEYWORD2
+show	KEYWORD2
+setPixelColor	KEYWORD2
+getPixelColor	KEYWORD2
+fill	KEYWORD2
+clear	KEYWORD2
+setBrightness	KEYWORD2
+getBrightness	KEYWORD2
+numPixels	KEYWORD2
+beginDma	KEYWORD2
+isDmaActive	KEYWORD2
+setMode	KEYWORD2
+getMode	KEYWORD2
+
+# Instances (KEYWORD2)
+
+# Constants (LITERAL1)
+ORDER_GRB	LITERAL1
+ORDER_RGB	LITERAL1
+ORDER_BRG	LITERAL1
+MODE_BITBANG	LITERAL1
+MODE_TIM_DMA	LITERAL1

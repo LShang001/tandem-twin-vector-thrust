@@ -1,0 +1,30 @@
+{
+  "name": "WS2812Driver",
+  "version": "1.0.0",
+  "description": "Cross-platform WS2812/NeoPixel driver for stm32duino (STM32) with STM32H7 TIM+DMA acceleration. Fixes Adafruit NeoPixel's high-pin BSRR bug and the STM32H7 TIM4_CH4 missing-DMA issue.",
+  "keywords": "ws2812, neopixel, led, rgb, stm32, stm32h7, dma, arduino",
+  "authors": [
+    {
+      "name": "TandemVec FCS project",
+      "maintainer": true
+    }
+  ],
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": ["ststm32", "atmelavr", "espressif32", "raspberrypi", "*"],
+  "headers": ["WS2812Driver.h"],
+  "export": {
+    "include": [
+      "src/*",
+      "examples/*",
+      "LICENSE",
+      "README.md"
+    ],
+    "exclude": [
+      ".github"
+    ]
+  },
+  "build": {
+    "srcDir": "src"
+  }
+}

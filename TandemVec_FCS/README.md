@@ -60,7 +60,7 @@
 | Serial3 (USART3) | PD9/PD8 | 1500000 | 黑匣子数据记录 |
 | Serial4 (UART4) | PD0/PD1 | 921600 | DETA100/UBX 共用（上电检测锁定） |
 | Serial5 (UART5) | PD2/PC12 | 921600 | 上位机轨迹规划指令 |
-| Serial6 (USART6) | PC7/PC6 | 921600 | 地面站通信 (MAVLink / AnoCom 互斥) |
+| Serial6 (USART6) | PC7/PC6 | 见 `SERIAL6_BAUDRATE` | 地面站通信 (MAVLink / AnoCom 互斥) |
 | Serial7 (UART7) | PE7/PE8 | 921600 | LQS48 光流传感器 |
 | Serial8 (UART8) | PE0/PE1 | 921600 | USB Type-C 调试输出 |
 
@@ -418,14 +418,14 @@ Yaw控制 (单环):
 
 #### MAVLink (地面站遥测)
 
-- 串口: Serial6, 921600 baud (与 AnoCom 互斥)
+- 串口: Serial6, 波特率见 `SERIAL6_BAUDRATE` (与 AnoCom 互斥)
 - 发送频率: 200Hz
 - 消息类型: HEARTBEAT, ATTITUDE, ATTITUDE_QUATERNION, RAW_IMU, GLOBAL_POSITION_INT, GPS_RAW_INT, BATTERY_STATUS, SYS_STATUS
 - 兼容: Mission Planner, QGroundControl
 
 #### AnoCom (匿名地面站协议)
 
-- 串口: Serial6, 921600 baud (与 MAVLink 互斥, 默认注释)
+- 串口: Serial6, 波特率见 `SERIAL6_BAUDRATE` (与 MAVLink 互斥, 默认注释)
 - 4组轮发: IMU+姿态 / 高度+控制 / 速度+PWM / 位置+GPS
 
 #### 上位机制导协议

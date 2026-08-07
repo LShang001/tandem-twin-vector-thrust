@@ -11,7 +11,7 @@
 | Serial3 | USART3 | 黑匣子数据记录（1.5 Mbaud，高速） |
 | Serial4 | UART4 | DETA100 模块 **或** UBX GNSS，二选一，由上电检测锁定 |
 | Serial5 | UART5 | 上位机轨迹规划接口 + 制导指令接收（921600 baud） |
-| Serial6 | USART6 | AnoCom / MAVLink 地面站通信，互斥使用（921600 baud） |
+| Serial6 | USART6 | AnoCom / MAVLink 地面站通信，互斥使用（**波特率见 `state_data.h` 的 `SERIAL6_BAUDRATE`**，2026-08-07 对齐 2.4G 数传为 2M，随数传模块可调；调试模式入口 "DBG\n"，见 AGENTS.md §调试工具链） |
 | Serial7 | UART7 | 光流传感器接口（921600 baud） |
 | Serial8 | UART8 | USB Type-C 调试输出（921600 baud）；板载 CH343 USB 转串口芯片，数据线直连 PC 即可监视 |
 
@@ -30,12 +30,12 @@
 |------|---------|------|----------|
 | CAN 总线 (MCP2515+TJA1050) | PB12/PB13/PB14/PB15/PD10 | SPI2 | 12.1 |
 | W25N01GV Flash (128MB) | PA15/PC10/PC11/PB2 | SPI3 | 12.2 |
-| WS2812 RGB | PD15 | GPIO | 12.3 |
 | 备用 PWM (S5/S6/S8) | PB0/PB1/PC9 | TIM | 12.4 |
 | 空闲 SPI4 | PE11/PE12/PE13/PE14 | SPI | 12.5 |
 | 未连接 GPIO (10个) | PE2/PE3/PA8/PD11-14/PD4/PB8-9 | — | 12.6 |
 | 扩展连接器 (U12 I2C, U39 GPS等) | — | — | 12.8 |
 
+> **已启用（2026-08-08）**：WS2812 RGB (PD15) 已由 `lib/WS2812Driver/` 驱动（见 12.3），不再属于未使用资源。
 > 💡 开发新功能时先对照 `docs/电路拓扑参考.md` §12 和上表，避免引脚冲突。CAN、Flash 是最高优先级的扩展方向。
 
 ## 立创 EDA Pro Bridge

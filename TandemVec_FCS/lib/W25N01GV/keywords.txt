@@ -1,0 +1,13 @@
+# Syntax Coloring Map For W25N01GV
+W25N01GV	KEYWORD1
+W25N01GVLog	KEYWORD1
+begin	KEYWORD2
+eraseBlock	KEYWORD2
+pageProgram	KEYWORD2
+pageRead	KEYWORD2
+readStatus	KEYWORD2
+waitReady	KEYWORD2
+reset	KEYWORD2
+logPush	KEYWORD2
+logService	KEYWORD2
+format	KEYWORD2

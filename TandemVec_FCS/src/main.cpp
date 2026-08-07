@@ -137,7 +137,7 @@ void setup()
   Serial3.begin(1500000);          // USART3: 黑匣子数据记录 (15Mbaud, 最高速)
   Serial8.begin(921600);           // UART8:  USB Type-C 调试输出 (921600 baud)
   Serial4.begin(921600);           // UART4:  DETA100 IMU/GNSS 模块数据输入 (921600 baud)
-  Serial6.begin(2000000);          // USART6: AnoCom/MAVLink 地面站通信 (2Mbaud, 与 2.4G 数传链路对齐 2026-08-07)
+  Serial6.begin(SERIAL6_BAUDRATE);  // USART6: AnoCom/MAVLink 地面站通信 (波特率见 state_data.h SERIAL6_BAUDRATE)
   Serial5.begin(921600);           // UART5:  上位机轨迹规划接口 (921600 baud)
   setup_transmitter_uart();        // USART2: 发动机控制器/数据转发 (921600 baud)
   opticalFlowSerial.begin(921600); // UART7:  光流传感器 (921600 baud)
@@ -211,7 +211,10 @@ void setup()
   setup_led();                                  // 配置 LED 和点火引脚 (黄灯/绿灯/点火MOS管)
   setupTimer();                                 // 初始化 TIM8 硬件定时器 (2kHz 任务调度中断)
   statusLed.begin();                            // 初始化状态 LED 驱器 (PWM 呼吸灯/闪烁)
+  ws2812Led.beginDma(TIM4, TIM_CHANNEL_4);      // WS2812: 启用 TIM4 DMA 方案 (H7, 失败回落 bitbang)
   ws2812Led.begin();                            // 初始化 WS2812 RGB状态灯 (PD15)
+  flash.begin();                                // 初始化 W25N01GV NAND Flash (SPI3, 读ID+清写保护)
+  flashLog.begin();                             // 初始化 Flash 日志层 (恢复游标)
   pinMode(FUEL_PIN, INPUT_PULLUP);              // 燃料液位传感器引脚 (上拉输入)
   analogWriteFrequency(CUSTOM_PWM_FREQUENCY);   // 设置全局 PWM 频率 (333Hz)
   analogWriteResolution(CUSTOM_PWM_RESOLUTION); // 设置全局 PWM 分辨率 (16位)
@@ -380,9 +383,17 @@ void setup()
   // 串口发送任务排在 GNC 之后，即使偶发阻塞也不影响控制环实时性。
   BFS_ADD_TASK(handleCANBus, 5.0f, "CANBus");                       // CAN 总线发送 (200Hz, 5ms) - 飞控状态广播
   BFS_ADD_TASK(sendElrsBatteryData, 40.0f, "ElrsBattery");      // ELRS 电量回传 (25Hz, 40ms) - 遥控器显示氧压
+  BFS_ADD_TASK(sendElrsAttitudeData, 40.0f, "ElrsAttitude");    // ELRS 姿态回传 (25Hz) - 遥控器姿态球
+  BFS_ADD_TASK(sendElrsBaroAltitudeData, 40.0f, "ElrsBaro");    // ELRS 高度+垂直速度回传 (25Hz) - 遥控器高度显示
+  BFS_ADD_TASK(sendElrsFlightModeData, 100.0f, "ElrsMode");     // ELRS 飞行模式回传 (10Hz) - 遥控器模式名
+  BFS_ADD_TASK(sendElrsGpsData, 100.0f, "ElrsGps");              // ELRS GNSS 位置回传 (10Hz) - 遥控器地图
+  BFS_ADD_TASK(sendElrsVarioData, 40.0f, "ElrsVario");           // ELRS 垂直速度回传 (25Hz) - 遥控器变率计
+  BFS_ADD_TASK(sendElrsTempData, 100.0f, "ElrsTemp");            // ELRS 温度回传 (10Hz) - 遥控器温度
+  BFS_ADD_TASK(updateBatteryMonitor, 100.0f, "BattMon");          // 电池电压采样 (10Hz) - ADC_BATT PC5
   BFS_ADD_TASK(sendPositionVelocityData, 20.0f, "PosVelTx");    // 上位机数据发送 (50Hz, 20ms) - 轨迹规划用
   // addTask(handleMavlink, 5.0f);          // MAVLink 遥测 (200Hz, 5ms) - Mission Planner/QGC (与 AnoCom 二选一)
   BFS_ADD_TASK(handleStatusLedTask, 10.0f, "StatusLed");        // LED 状态指示 (100Hz, 10ms) - 呼吸灯/闪烁
+  BFS_ADD_TASK(handleFlashService, 10.0f, "FlashLog");          // Flash 黑匣子后台写 (100Hz, 每tick≤2页) - 低优先级
   // --- 可选任务 (按需启用) ---
   // addTask(handleElrs, 4.0f);              // ELRS 原始遥控接收 (250Hz) - 测试原始遥控链路时启用
   // addTask(handleCrsf, 4.0f);              // CRSF 通道转发 (250Hz) - 测试通道转发时启用

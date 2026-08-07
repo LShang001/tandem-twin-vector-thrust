@@ -322,6 +322,35 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len)
 
 void handleAnoCom()
 {
+  // ---- 调试模式入口拦截 ----
+  // Serial6 收到 "DBG\n" 进入调试模式，调试模式下所有输入走调试命令
+  // 解释器，不再喂给 AnoCom 协议；发 "EXIT" 退出回正常数传。
+  // 用途：不干扰地面站协议的前提下，提供运行时诊断通道（配合 OpenOCD）。
+  static bool dbg_mode = false;
+  static char dbg_line[64];
+  static uint8_t dbg_line_len = 0;
+
+  if (dbg_mode) {
+    handleDebugConsole(Serial6, dbg_line, &dbg_line_len, sizeof(dbg_line), dbg_mode);
+    return;  // 调试模式下跳过所有正常数传逻辑
+  }
+
+  // 检测进入调试模式：匹配 "DBG\n"
+  while (Serial6.available()) {
+    char c = (char)Serial6.read();
+    if (c == '\n') {
+      if (dbg_line_len == 3 && dbg_line[0] == 'D' && dbg_line[1] == 'B' && dbg_line[2] == 'G') {
+        dbg_mode = true;
+        dbg_line_len = 0;
+        Serial6.println(F("[DBG] Debug mode ON. Type 'help' for commands, 'exit' to quit."));
+        return;
+      }
+      dbg_line_len = 0;  // 非匹配行，丢弃
+    } else if (dbg_line_len < (int)(sizeof(dbg_line) - 1)) {
+      dbg_line[dbg_line_len++] = c;
+    }
+  }
+
   // ---- 上行接收: 消费 Serial6 缓冲区中的上行帧 ----
   // receiveData() 内部 while(available) 读空, 帧校验通过后调用 onAnoRxFrame 回调。
   // 首次调用时注册回调 (静态初始化保证只注册一次)。
@@ -674,6 +703,19 @@ void handleCrsf()
   send_crsf_frame(send_values);
 }
 
+/**
+ * @brief ELRS 电池数据回传任务 (25Hz)
+ *
+ * 将电池电压/电流映射到 CRSF BATTERY_SENSOR 协议字段，遥控器电量显示。
+ * - voltage   = bat_voltage_mv / 100 (协议实际单位 0.1V，EdgeTX precision=1)
+ * - current   = bat_current_ca (0.1A) — 未接入时保持 0
+ * - remaining = 电池剩余百分比 — 需容量监测，未接入时保持 0
+ *
+ * 数据源：ADC_BATT (PC5) 电压采样，见 updateBatteryMonitor()。
+ * 注：2026-08-08 移除原氧压映射（液体火箭项目遗留，不适用于当前电动 VTOL）。
+ * 注：CRSF 协议头注释 "mv*100" 为过时错误注释，EdgeTX/ELRS 实际按 0.1V 解释
+ *     （EdgeTX crossfire.cpp: CS(...,UNIT_VOLTS,1)，precision=1 → 显示值 = 原始值/10）。
+ */
 void sendElrsBatteryData()
 {
   // 非阻塞保护：Serial1 (ELRS) TX 缓冲不足时跳过本帧，避免阻塞控制环。
@@ -687,20 +729,227 @@ void sendElrsBatteryData()
   // 初始化电池数据结构体
   crsf_sensor_battery_t elrsBatteryData;
 
-  // 氧压P1映射到电压字段，大端序转换
-  elrsBatteryData.voltage = htobe16(receivedP1 * 10);
+  // 电压：mV → 0.1V 单位（大端）
+  elrsBatteryData.voltage = htobe16((uint16_t)(bat_voltage_mv / 100.0f));
 
-  // 设置标识电流19.6A
-  elrsBatteryData.current = htobe16(receivedP2 * 10);
+  // 电流：0.1A 单位（大端）
+  elrsBatteryData.current = htobe16((uint16_t)bat_current_ca);
 
-  // 电池剩余容量数据
-  elrsBatteryData.capacity = htobe24(Status_Packet.filter_status.gnss_fix_status * 10);
-
-  // 氧压百分比映射到剩余电量百分比（10MPa）
-  elrsBatteryData.remaining = static_cast<int>(receivedP1 * 10);
+  // 剩余容量/百分比：无容量监测时置 0（避免错误显示）
+  elrsBatteryData.capacity = 0;
+  elrsBatteryData.remaining = 0;
 
   // 打包并发送电池数据包
   crsf.queuePacket(CRSF_FRAMETYPE_BATTERY_SENSOR, &elrsBatteryData, sizeof(elrsBatteryData));
+}
+
+/**
+ * @brief ELRS 姿态回传任务 (25Hz)
+ *
+ * 将飞控姿态欧拉角映射到 CRSF ATTITUDE 协议字段，遥控器姿态球显示。
+ * - pitch = AHRS_Packet.Pitch (rad) → 度 × 100（0.01° 粒度，int16 不溢出）
+ * - roll  = AHRS_Packet.Roll  (rad) → 度 × 100
+ * - yaw   = AHRS_Packet.Heading (rad) → 度 × 100
+ *
+ * 2026-08-08 修改：原发送"弧度×10000"在部分遥控器显示层不做 rad→deg
+ * 转换，屏幕显示弧度数值却标 °。改为直接发送度值（×100）。
+ * 注：EdgeTX 标准解析为 value/10 后按 precision=3 显示（即 ÷10000），
+ *     若遥控器显示数值差 100 倍，需把该传感器精度(precision)改为 2 位。
+ */
+void sendElrsAttitudeData()
+{
+  // 非阻塞保护：ATTITUDE 帧净荷 6 字节 + 帧头/CRC 共 10 字节
+  if (Serial1.availableForWrite() < 16)
+  {
+    elrs_tx_skipped++;
+    return;
+  }
+
+  crsf_sensor_attitude_t attitudeData;
+  attitudeData.pitch = htobe16((int16_t)(AHRS_Packet.Pitch * RAD_TO_DEG * 100.0f));
+  attitudeData.roll  = htobe16((int16_t)(AHRS_Packet.Roll * RAD_TO_DEG * 100.0f));
+  attitudeData.yaw   = htobe16((int16_t)(AHRS_Packet.Heading * RAD_TO_DEG * 100.0f));
+
+  crsf.queuePacket(CRSF_FRAMETYPE_ATTITUDE, &attitudeData, sizeof(attitudeData));
+}
+
+/**
+ * @brief ELRS 气压高度+垂直速度回传任务 (25Hz)
+ *
+ * 将 DPS310 气压高度和 EKF 垂直速度映射到 CRSF BARO_ALTITUDE 字段：
+ * - altitude    = baro_altitude (m) × 10 + 10000dm 基准（高比特位=0 表示分米）
+ * - verticalspd = estimated_velocity (m/s) × 100 (cm/s)
+ */
+void sendElrsBaroAltitudeData()
+{
+  // 非阻塞保护：BARO_ALTITUDE 帧净荷 4 字节 + 帧头/CRC 共 8 字节
+  if (Serial1.availableForWrite() < 12)
+  {
+    elrs_tx_skipped++;
+    return;
+  }
+
+  crsf_sensor_baro_vario_t baroData;
+  // 高度：米 → 分米（+10000 偏移，满足协议格式）
+  int16_t alt_dm = (int16_t)(baro_altitude * 10) + 10000;
+  baroData.altitude = htobe16((uint16_t)alt_dm);
+  // 垂直速度：m/s → cm/s
+  baroData.verticalspd = htobe16((int16_t)(estimated_velocity * 100));
+
+  crsf.queuePacket(CRSF_FRAMETYPE_BARO_ALTITUDE, &baroData, sizeof(baroData));
+}
+
+/**
+ * @brief ELRS 飞行模式回传任务 (10Hz)
+ *
+ * 将当前控制模式名映射到 CRSF FLIGHT_MODE 字段（16 字符）。
+ */
+void sendElrsFlightModeData()
+{
+  // 非阻塞保护：FLIGHT_MODE 帧净荷 16 字节 + 帧头/CRC 共 20 字节
+  if (Serial1.availableForWrite() < 24)
+  {
+    elrs_tx_skipped++;
+    return;
+  }
+
+  // 从遥控器通道6获取当前控制模式
+  ControlMode mode = getControlMode((float)raw_rc_values[6]);
+
+  crsf_flight_mode_t modeData;
+  memset(&modeData, 0, sizeof(modeData));
+
+  // 模式名映射（对应 getControlMode 的枚举）
+  const char *modeName;
+  switch (mode)
+  {
+    case MANUAL:         modeName = "MANUAL"; break;
+    case AUTO_POSITION:  modeName = "POSHOLD"; break;
+    case AUTO_ALTITUDE:  modeName = "ALTHOLD"; break;
+    case GUIDED:         modeName = "GUIDED"; break;
+    default:             modeName = "AUTO"; break;
+  }
+  strncpy(modeData.flight_mode, modeName, sizeof(modeData.flight_mode) - 1);
+
+  crsf.queuePacket(CRSF_FRAMETYPE_FLIGHT_MODE, &modeData, sizeof(modeData));
+}
+
+/**
+ * @brief ELRS GNSS 位置回传任务 (10Hz)
+ *
+ * 将 UBX GNSS 定位数据映射到 CRSF GPS 协议字段，遥控器地图/位置显示：
+ * - latitude/longitude   = 经纬度 × 1e7（1e-7 度分辨率）
+ * - groundspeed          = 北/东速度合成地速 (km/h × 10)
+ * - heading              = 运动方向 (度 × 100)
+ * - altitude             = WGS84 高度 + 1000m 偏移
+ * - satellites           = 参与解算卫星数
+ *
+ * 数据新鲜度：仅当 GNSS 数据新鲜且 3D 定位时发送真实数据，否则发零值。
+ */
+void sendElrsGpsData()
+{
+  // 非阻塞保护：GPS 帧净荷 15 字节 + 帧头/CRC 共 19 字节
+  if (Serial1.availableForWrite() < 24)
+  {
+    elrs_tx_skipped++;
+    return;
+  }
+
+  crsf_sensor_gps_t gpsData = {0};
+
+  // 检查 GNSS 数据新鲜度（复用遥测层同一判定逻辑）
+  const bool gnss_data_fresh = isGnssDataFreshForNav();
+  if (gnss_data_fresh && ubx.fix() >= bfs::Ubx::FIX_3D)
+  {
+    // 经纬度 (度 → 1e-7 度)
+    gpsData.latitude = htobe32((int32_t)(ubx.lat_deg() * 1e7));
+    gpsData.longitude = htobe32((int32_t)(ubx.lon_deg() * 1e7));
+
+    // 地速：北/东速度合成 (m/s → km/h × 10)
+    const float vn = ubx.north_vel_mps(), ve = ubx.east_vel_mps();
+    const float ground_speed_mps = sqrtf(vn * vn + ve * ve);
+    gpsData.groundspeed = htobe16((uint16_t)(ground_speed_mps * 3.6f * 10.0f));
+
+    // 航向：运动方向 (rad → 度 × 100)，NED 系 atan2(east, north)
+    float heading_deg = atan2f(ve, vn) * RAD_TO_DEG;
+    if (heading_deg < 0) heading_deg += 360.0f;
+    gpsData.heading = htobe16((uint16_t)(heading_deg * 100.0f));
+
+    // 高度：WGS84 椭球高 + 1000m 偏移（协议要求）
+    gpsData.altitude = htobe16((uint16_t)(Geodetic_Pos_Packet.height + 1000.0f));
+
+    // 卫星数
+    gpsData.satellites = (uint8_t)ubx.num_sv();
+  }
+  // 数据不新鲜或无 3D 定位时保持全零，遥控器显示无效
+
+  crsf.queuePacket(CRSF_FRAMETYPE_GPS, &gpsData, sizeof(gpsData));
+}
+
+/**
+ * @brief ELRS 垂直速度回传任务 (25Hz)
+ *
+ * 将 EKF 垂直速度映射到 CRSF VARIO 协议字段，遥控器变率计显示。
+ * - verticalspd = estimated_velocity (m/s, 向上为正) × 100 (cm/s)
+ */
+void sendElrsVarioData()
+{
+  // 非阻塞保护：VARIO 帧净荷 2 字节 + 帧头/CRC 共 6 字节
+  if (Serial1.availableForWrite() < 12)
+  {
+    elrs_tx_skipped++;
+    return;
+  }
+
+  crsf_sensor_vario_t varioData;
+  varioData.verticalspd = htobe16((int16_t)(estimated_velocity * 100));
+
+  crsf.queuePacket(CRSF_FRAMETYPE_VARIO, &varioData, sizeof(varioData));
+}
+
+/**
+ * @brief ELRS 温度回传任务 (10Hz)
+ *
+ * 将 DPS310 气压计温度映射到 CRSF TEMP 协议字段，遥控器温度显示。
+ * - source_id    = 0 (FC 本体)
+ * - temperature[0] = temperature × 10 (0.1°C)
+ */
+void sendElrsTempData()
+{
+  // 非阻塞保护：TEMP 帧净荷 41 字节 (1+20×2) + 帧头/CRC 共 45 字节
+  if (Serial1.availableForWrite() < 48)
+  {
+    elrs_tx_skipped++;
+    return;
+  }
+
+  crsf_sensor_temp_t tempData;
+  memset(&tempData, 0, sizeof(tempData));
+  tempData.source_id = 0;  // 0 = FC 包括所有 ESC
+  tempData.temperature[0] = htobe16((int16_t)(temperature * 10.0f));
+
+  crsf.queuePacket(CRSF_FRAMETYPE_TEMP, &tempData, sizeof(tempData));
+}
+
+/**
+ * @brief 电池电压采样任务 (10Hz)
+ *
+ * 从 ADC_BATT (PC5) 读取电池分压电压，换算为电池真实电压 (mV)。
+ * - ADC 16位 (0-65535)，参考 3.3V
+ * - 分压比 BATTERY_DIVIDER_RATIO 需按 PCB 实测标定（默认 1.0）
+ * - 未标定前输出 = ADC 原始电压，量程 0-3.3V
+ *
+ * 输出全局量 bat_voltage_mv，供 ELRS / AnoCom 遥测共用。
+ */
+void updateBatteryMonitor()
+{
+  // ADC 16位采样 → 分压点电压 (V) → 分压比换算 → 电池电压 (mV)
+  int adcValue = analogRead(ADC_BATT_PIN);
+  float dividerVoltage = static_cast<float>(adcValue) * (3.3f / 65535.0f);
+  bat_voltage_mv = dividerVoltage * BATTERY_DIVIDER_RATIO * 1000.0f;
+
+  // 电流采样未接入（ADC_CURR 无传感器），保持 0
+  bat_current_ca = 0.0f;
 }
 
 void handleTelemetry()
@@ -1039,7 +1288,19 @@ void handleStatusLedTask()
 
   // 更新LED
   statusLed.update(is_calibrating, is_armed);
-  ws2812Led.update(is_calibrating, is_armed);   // WS2812 RGB状态灯 (与绿灯并行)
+  ws2812AppStatus.update(is_calibrating, is_armed);   // WS2812 RGB状态灯 (与绿灯并行)
+}
+
+/**
+ * @brief Flash 黑匣子后台写任务（低优先级）
+ *
+ * 每 tick 调用 flashLog.logService()（内部预算 W25N01GV_LOG_MAX_WRITES 帧），
+ * 从 RAM 环形缓冲批量写页到 NAND。页编程 ~0.7ms/页，2 页 = 1.4ms 阻塞，
+ * 对 100Hz 任务（10ms 周期）占 14% —— 可接受（CAN_RX_MAX_PER_TICK 同款预算模式）。
+ */
+void handleFlashService()
+{
+  flashLog.logService();
 }
 
 void handleMavlink()
@@ -1244,5 +1505,363 @@ void handleMavlink()
                                     voltages_ext, 0, 0);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     Serial6.write(buf, len);
+  }
+}
+
+// ========================================================================
+// 调试模式控制台（Serial6 共用，收到 "DBG\n" 进入）
+// ========================================================================
+
+/**
+ * @brief 调试命令解释器（调试模式下替代正常数传逻辑）
+ *
+ * 命令集（\n 结尾）：
+ *   help          列出所有命令
+ *   ws <r> <g> <b> 发送一帧指定颜色 (0-255)
+ *   wsoff          WS2812 熄灭
+ *   wsseq [ms]     自动测试序列 红→绿→蓝→白→灭 (默认 500ms/色)
+ *   ver           版本/启动信息
+ *   exit          退出调试模式，恢复地面站数传
+ *
+ * @param serial  使用的串口（Serial6）
+ * @param line    行缓冲
+ * @param lineLen 行缓冲长度指针
+ * @param maxLen  缓冲最大长度
+ * @param dbgMode 调试模式标志（引用，exit 时置 false）
+ */
+void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
+                        uint8_t maxLen, bool &dbgMode)
+{
+  // ---- 收集一行（\n 结尾）----
+  while (serial.available()) {
+    char c = (char)serial.read();
+    if (c == '\n') {
+      line[*lineLen] = '\0';
+      *lineLen = 0;
+
+      // ---- 解析命令 ----
+      if (strncmp(line, "help", 4) == 0) {
+        serial.println(F("[DBG] Commands:"));
+        serial.println(F("[DBG]   ws <r> <g> <b>   - send color frame (0-255)"));
+        serial.println(F("[DBG]   wsoff             - turn WS2812 off"));
+        serial.println(F("[DBG]   wsseq [ms]        - auto test sequence (default 500)"));
+        serial.println(F("[DBG]   wsstat            - show WS2812 status"));
+        serial.println(F("[DBG]   wsmode <0|1>      - switch driver (0=bitbang 1=tim4_dma)"));
+        serial.println(F("[DBG]   ver               - version info"));
+        serial.println(F("[DBG]   exit              - back to normal telemetry"));
+      }
+      else if (strncmp(line, "ws ", 3) == 0) {
+        int r, g, b;
+        if (sscanf(line + 3, "%d %d %d", &r, &g, &b) == 3) {
+          ws2812Led.setPixelColor(0,
+                                  (uint8_t)constrain(r, 0, 255),
+                                  (uint8_t)constrain(g, 0, 255),
+                                  (uint8_t)constrain(b, 0, 255));
+          ws2812Led.show();
+          serial.print(F("[DBG] WS2812 <- R"));
+          serial.print(r); serial.print(F(" G")); serial.print(g);
+          serial.print(F(" B")); serial.println(b);
+        } else {
+          serial.println(F("[DBG] usage: ws <r> <g> <b>"));
+        }
+      }
+      else if (strncmp(line, "wsoff", 5) == 0) {
+        ws2812Led.clear();
+        ws2812Led.show();
+        serial.println(F("[DBG] WS2812 off"));
+      }
+      else if (strncmp(line, "wsseq", 5) == 0) {
+        uint32_t ms = 500;
+        int ms_arg;
+        if (sscanf(line + 5, "%d", &ms_arg) == 1) ms = (uint32_t)constrain(ms_arg, 50, 5000);
+        serial.print(F("[DBG] sequence, "));
+        serial.print(ms); serial.println(F("ms/color..."));
+        // 自动测试序列：红 → 绿 → 蓝 → 白 → 灭
+        ws2812Led.fill(255, 0, 0); ws2812Led.show(); delay(ms);
+        ws2812Led.fill(0, 255, 0); ws2812Led.show(); delay(ms);
+        ws2812Led.fill(0, 0, 255); ws2812Led.show(); delay(ms);
+        ws2812Led.fill(255, 255, 255); ws2812Led.show(); delay(ms);
+        ws2812Led.clear(); ws2812Led.show();
+        serial.println(F("[DBG] sequence done"));
+      }
+      else if (strcmp(line, "wsstat") == 0) {  // 精确匹配，避免抢 wsstatic 前缀
+        serial.print(F("[DBG] pin="));
+        serial.println(WS2812_PIN);
+        serial.print(F("[DBG] pixels="));
+        serial.println(ws2812Led.numPixels());
+        serial.print(F("[DBG] brightness="));
+        serial.println(ws2812Led.getBrightness());
+        serial.print(F("[DBG] driver="));
+        serial.println((int)ws2812Led.getMode());   // 0=bitbang 1=TIM4_DMA
+        serial.print(F("[DBG] dmaActive="));
+        serial.println(ws2812Led.isDmaActive());
+      }
+      else if (strncmp(line, "wsmode", 6) == 0) {
+        int m;
+        if (sscanf(line + 6, "%d", &m) == 1) {
+          if (m == 0 || m == 1) {
+            ws2812Led.setMode((WS2812Driver::Mode)m);
+            serial.print(F("[DBG] driver switched to "));
+            serial.println(m == 0 ? F("BITBANG") : F("TIM4_DMA"));
+          } else {
+            serial.println(F("[DBG] usage: wsmode <0|1> (0=bitbang 1=tim4_dma)"));
+          }
+        } else {
+          serial.print(F("[DBG] current driver="));
+          serial.println((int)ws2812Led.getMode());
+        }
+      }
+      else if (strncmp(line, "wsfault", 7) == 0) {
+        int f;
+        if (sscanf(line + 7, "%d", &f) == 1) {
+          ws2812AppStatus.setFault(f != 0);
+          serial.print(F("[DBG] fault="));
+          serial.println(f != 0 ? F("ON (red blink)") : F("OFF"));
+        } else {
+          serial.println(F("[DBG] usage: wsfault <0|1>"));
+        }
+      }
+      else if (strncmp(line, "gpio", 4) == 0) {
+        debugGpioDump(serial);
+      }
+      else if (strcmp(line, "tim4") == 0) {
+        debugTim4Dump(serial);
+      }
+      else if (strncmp(line, "flash ", 6) == 0) {
+        debugFlashCommand(serial, line + 6);
+      }
+      else if (strncmp(line, "wsstatic", 8) == 0) {
+        int lvl;
+        if (sscanf(line + 8, "%d", &lvl) == 1) {
+          serial.print(F("[DBG] wsstatic not supported by WS2812Driver lib"));
+          serial.println(F(" (use ws <r> <g> <b> instead)"));
+        } else {
+          serial.println(F("[DBG] usage: wsstatic <0|1>"));
+        }
+      }
+      else if (strncmp(line, "ver", 3) == 0) {
+        serial.println(F("[DBG] TandemVec FCS debug console"));
+        serial.print(F("[DBG] F_CPU="));
+        serial.println(F_CPU);
+      }
+      else if (strncmp(line, "exit", 4) == 0) {
+        serial.println(F("[DBG] Debug mode OFF. Back to telemetry."));
+        dbgMode = false;
+      }
+      else if (*line == '\0') {
+        // 空行忽略
+      }
+      else {
+        serial.print(F("[DBG] unknown: '"));
+        serial.print(line);
+        serial.println(F("' (type 'help')"));
+      }
+    }
+    else if (*lineLen < maxLen - 1) {
+      line[(*lineLen)++] = c;
+    }
+  }
+}
+
+// ========================================================================
+// GPIO 诊断命令（调试模式: gpio）— 读 PD15 实时寄存器状态
+// ========================================================================
+// 注：此函数通过调试控制台追加注册，见 handleDebugConsole 的 "gpio" 分支
+void debugGpioDump(HardwareSerial &serial)
+{
+  // GPIOD 寄存器（H743: AHB4 域）
+  GPIO_TypeDef *gpiob = GPIOB; // 使用 GPIO 宏（框架已映射）
+  GPIO_TypeDef *gpiod = GPIOD;
+  serial.println(F("[DBG] === GPIO PD15 state ==="));
+  serial.print(F("[DBG] GPIOD MODER=0x"));
+  serial.println(gpiod->MODER, HEX);
+  serial.print(F("[DBG] GPIOD ODR=0x"));
+  serial.println(gpiod->ODR, HEX);
+  serial.print(F("[DBG] GPIOD IDR=0x"));
+  serial.println(gpiod->IDR, HEX);
+  serial.print(F("[DBG] GPIOD AFR2=0x"));
+  serial.println(gpiod->AFR[1], HEX);
+  // PD15 位
+  serial.print(F("[DBG] PD15 MODER bits="));
+  serial.println((gpiod->MODER >> 30) & 0x3, DEC);
+  serial.print(F("[DBG] PD15 ODR bit="));
+  serial.println((gpiod->ODR >> 15) & 0x1, DEC);
+  serial.print(F("[DBG] PD15 IDR bit="));
+  serial.println((gpiod->IDR >> 15) & 0x1, DEC);
+  serial.print(F("[DBG] PD15 AFR="));
+  serial.println((gpiod->AFR[1] >> 28) & 0xF, DEC);   // 0-15, TIM4 需要 2
+}
+
+// ========================================================================
+// TIM4 + DMA 寄存器诊断（调试模式: tim4）— 验证 DMA 链路是否真的工作
+// ========================================================================
+void debugTim4Dump(HardwareSerial &serial)
+{
+  serial.println(F("[DBG] === TIM4 + DMA state ==="));
+  serial.print(F("[DBG] PCLK1="));
+  serial.println(HAL_RCC_GetPCLK1Freq());
+  serial.print(F("[DBG] D2CFGR=0x"));
+  serial.println(RCC->D2CFGR, HEX);          // D2PPRE1 字段在 bit4-6
+  serial.print(F("[DBG] D2PPRE1 field=0x"));
+  serial.println((RCC->D2CFGR & RCC_D2CFGR_D2PPRE1) >> 4, HEX);
+  serial.print(F("[DBG] SystemCoreClock="));
+  serial.println(SystemCoreClock);
+  serial.print(F("[DBG] TIM4 CR1=0x"));
+  serial.println(TIM4->CR1, HEX);
+  serial.print(F("[DBG] TIM4 DIER=0x"));
+  serial.println(TIM4->DIER, HEX);           // bit8 UDE 应=1
+  serial.print(F("[DBG] TIM4 ARR=0x"));
+  serial.println(TIM4->ARR, HEX);
+  serial.print(F("[DBG] TIM4 CNT=0x"));
+  serial.println(TIM4->CNT, HEX);            // 应在计数
+  serial.print(F("[DBG] TIM4 CCR4=0x"));
+  serial.println(TIM4->CCR4, HEX);           // DMA 写入目标
+  serial.print(F("[DBG] TIM4 CCMR2=0x"));
+  serial.println(TIM4->CCMR2, HEX);
+  serial.print(F("[DBG] TIM4 CCER=0x"));
+  serial.println(TIM4->CCER, HEX);           // bit12 CC4E 应=1
+  serial.print(F("[DBG] DMA1_S6 NDTR=0x"));
+  serial.println((DMA1_Stream6->NDTR), HEX); // 剩余传输数 (传完=0)
+  serial.print(F("[DBG] DMA1_S6 CR=0x"));
+  serial.println((DMA1_Stream6->CR), HEX);
+  serial.print(F("[DBG] DMAMUX1_Ch6 CCR=0x"));
+  serial.println((DMAMUX1_Channel6->CCR), HEX);  // 应为 32 (TIM4_UP)
+  // 动态观察：读两次 CNT 和 CCR4
+  uint32_t cnt1 = TIM4->CNT;
+  uint32_t ccr1 = TIM4->CCR4;
+  serial.print(F("[DBG] snapshot1 CNT=0x"));
+  serial.println(cnt1, HEX);
+  serial.print(F("[DBG] snapshot1 CCR4=0x"));
+  serial.println(ccr1, HEX);
+  delay(10);
+  serial.print(F("[DBG] snapshot2 CNT=0x"));
+  serial.println(TIM4->CNT, HEX);
+  serial.print(F("[DBG] snapshot2 CCR4=0x"));
+  serial.println(TIM4->CCR4, HEX);
+
+  // ---- DMA buffer 内容（库内部诊断）----
+  serial.print(F("[DBG] dmaBufAddr=0x"));
+  serial.println(ws2812Led.dmaBufAddr(), HEX);
+  serial.print(F("[DBG] dmaBufLen="));
+  serial.println(ws2812Led.dmaBufLen());
+  serial.print(F("[DBG] dmaDstAddr=0x"));
+  serial.println(ws2812Led.dmaDstAddr(), HEX);
+  // 前 8 个字 + 复位后第一个数据字
+  for (uint32_t i = 0; i < 8; i++) {
+    serial.print(F("[DBG] buf["));
+    serial.print(i);
+    serial.print(F("]=0x"));
+    serial.println(ws2812Led.dmaBufAt(i), HEX);
+  }
+  serial.print(F("[DBG] buf[40]=0x"));
+  serial.println(ws2812Led.dmaBufAt(40), HEX);
+  serial.print(F("[DBG] buf[41]=0x"));
+  serial.println(ws2812Led.dmaBufAt(41), HEX);
+}
+
+// ========================================================================
+// Flash 调试命令（调试模式: flash <sub>）
+//   flash id          读 JEDEC ID 验证芯片
+//   flash erase       整片擦除（~2s 阻塞）
+//   flash stat        游标/缓冲占用/坏块/掉帧统计
+//   flash dump <page> 读回一页 hexdump（前 32 字节）
+//   flash test        写读回一致性测试（写 5 帧到当前游标，读回验证）
+// ========================================================================
+void debugFlashCommand(HardwareSerial &serial, char *args)
+{
+  if (strncmp(args, "id", 2) == 0) {
+    serial.print(F("[DBG] Flash JEDEC ID: 0x"));
+    serial.print(flash.manufacturerId(), HEX);
+    serial.print(F(" 0x"));
+    serial.print(flash.deviceId(), HEX);
+    serial.print(F(" 0x"));
+    serial.println(flash.deviceId2(), HEX);
+    serial.print(F("[DBG] present="));
+    serial.println(flash.isPresent() ? F("YES") : F("NO"));
+  }
+  else if (strncmp(args, "erase", 5) == 0) {
+    serial.println(F("[DBG] Erasing whole device... (~2s)"));
+    bool ok = flashLog.format();
+    serial.print(F("[DBG] erase done ok="));
+    serial.println(ok ? F("YES") : F("NO"));
+  }
+  else if (strncmp(args, "stat", 4) == 0) {
+    serial.print(F("[DBG] present="));
+    serial.println(flash.isPresent() ? F("YES") : F("NO"));
+    serial.print(F("[DBG] cursorPage="));
+    serial.println(flashLog.cursorPage());
+    serial.print(F("[DBG] buffered="));
+    serial.println(flashLog.buffered());
+    serial.print(F("[DBG] written="));
+    serial.println(flashLog.written());
+    serial.print(F("[DBG] dropped="));
+    serial.println(flashLog.dropped());
+    serial.print(F("[DBG] busy="));
+    serial.println(flashLog.busy() ? F("YES") : F("NO"));
+    serial.print(F("[DBG] totalPages="));
+    serial.println(W25N01GV_TOTAL_PAGES);
+  }
+  else if (strncmp(args, "dump", 4) == 0) {
+    uint32_t page;
+    if (sscanf(args + 4, "%lu", &page) == 1 && page < W25N01GV_TOTAL_PAGES) {
+      uint8_t buf[64];
+      bool ok = flashLog.debugReadPage(page, buf, sizeof(buf));
+      serial.print(F("[DBG] page "));
+      serial.print(page);
+      serial.print(F(" read ok="));
+      serial.println(ok ? F("YES") : F("NO"));
+      serial.print(F("[DBG] ecc="));
+      serial.println(flash.lastEccStatus());
+      // hexdump first 32 bytes
+      for (uint8_t i = 0; i < 32; i++) {
+        if (buf[i] < 16) serial.print(F("0"));
+        serial.print(buf[i], HEX);
+        serial.print(F(" "));
+        if (i % 16 == 15) serial.println();
+      }
+    } else {
+      serial.println(F("[DBG] usage: flash dump <page>"));
+    }
+  }
+  else if (strncmp(args, "test", 4) == 0) {
+    serial.println(F("[DBG] write-readback test..."));
+    // 写 5 帧（用递增 payload）到当前游标
+    uint8_t payload[W25N01GV_LOG_PAYLOAD];
+    for (int i = 0; i < 5; i++) {
+      for (uint16_t j = 0; j < sizeof(payload); j++) payload[j] = (uint8_t)(i * 31 + j);
+      flashLog.logPush(payload);
+    }
+    serial.print(F("[DBG] pushed 5 frames, buffered="));
+    serial.println(flashLog.buffered());
+    // 手动 service 一次写光（测试用，正常由 handleFlashService 后台写）
+    flashLog.logService();
+    flashLog.logService();
+    flashLog.logService();
+    flashLog.logService();
+    flashLog.logService();
+    serial.print(F("[DBG] after service: written="));
+    serial.println(flashLog.written());
+    serial.print(F("[DBG] buffered="));
+    serial.println(flashLog.buffered());
+    // 读回最后一帧所在页验证 magic
+    if (flashLog.written() > 0) {
+      uint32_t page = flashLog.cursorPage() - 1;
+      uint8_t buf[W25N01GV_LOG_FRAME_SIZE];
+      bool ok = flashLog.debugReadPage(page, buf, sizeof(buf));
+      serial.print(F("[DBG] readback page="));
+      serial.print(page);
+      serial.print(F(" ok="));
+      serial.println(ok ? F("YES") : F("NO"));
+      if (ok) {
+        serial.print(F("[DBG] magic=0x"));
+        serial.print(buf[0], HEX);
+        serial.print(buf[1], HEX);
+        serial.print(F(" seq="));
+        serial.println((uint32_t)buf[2] | ((uint32_t)buf[3] << 8));
+      }
+    }
+  }
+  else {
+    serial.println(F("[DBG] flash subcommands: id | erase | stat | dump <page> | test"));
   }
 }

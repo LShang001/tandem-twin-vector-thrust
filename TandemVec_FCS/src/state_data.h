@@ -38,7 +38,10 @@ struct Vector3
 #include "IMU_AutoCalibrator.h"
 #include "MadgwickAHRS.h"
 #include "StatusLED.h"
-#include "WS2812Status.h"
+#include "WS2812Driver.h"
+#include "Ws2812AppStatus.h"
+#include "W25N01GV.h"
+#include "W25N01GV_log.h"
 #include "AnoComProtocol.h"
 #include "CrsfSerial.h"
 #include "crsf.h"
@@ -185,6 +188,17 @@ extern HardwareSerial &opticalFlowSerial; // 光流
 #define TVC_FEEDBACK_PIN_1 PB0 // [ADC] TVC角度传感器1
 #define TVC_FEEDBACK_PIN_2 PB1 // [ADC] TVC角度传感器2
 #define FUEL_LEVEL_PIN PC9     // [GPIO/ADC] 液位传感器/备用
+#define ADC_BATT_PIN PC5       // [ADC] 电池电压采样 (U40 电池检测连接器 VBAT/ADC)
+#define ADC_CURR_PIN PC3       // [ADC] 电流采样 (未使用)
+#define ADC_EXT_PIN  PC0       // [ADC] 扩展模拟输入 (未使用)
+
+// 电池电压采样分压比（ADC_BATT → 电池电压换算系数）
+// 视觉分析确认（2026-08-08）：VBAT → 10kΩ → ADC_BATT(PC5) → 1kΩ → GND
+//   分压比 = (10k+1k)/1k = 11.0（双模型交叉验证一致）
+//   量程验证：3S 12.6V→1.145V / 4S 16.8V→1.527V / 6S 25.2V→2.29V，均在 ADC 0-3.3V 内
+#ifndef BATTERY_DIVIDER_RATIO
+#define BATTERY_DIVIDER_RATIO 11.0f
+#endif
 
 // 兼容旧代码定义的宏别名
 #define SERVO5_PIN TVC_FEEDBACK_PIN_1
@@ -252,6 +266,11 @@ extern const int SPI_CS;
 // PD14(pin61): TIM5_CH4
 // PB8(pin95):  I2C1_SCL复用, TIM4_CH3
 // PB9(pin96):  I2C1_SDA复用, TIM4_CH4
+
+// --- 2.6b 串口波特率配置（★ 唯一权威源，文档引用此处而非具体数值）---
+// Serial6 波特率随数传模块型号调整（2026-08-07 对齐 2.4G 数传为 2M；
+// 换数传模块时只改这里，main.cpp 用此宏，文档无需同步）
+#define SERIAL6_BAUDRATE 2000000UL   // USART6: AnoCom/MAVLink 地面站通信
 
 // --- 2.7 PWM 与 定时器配置 ---
 #define CUSTOM_PWM_FREQUENCY 333 // PWM频率 (Hz)
@@ -434,7 +453,11 @@ extern Madgwick madgwick; // Madgwick AHRS 互补滤波算法
 
 // 辅助设备
 extern StatusLED statusLed;   // 状态指示灯驱动
-extern WS2812Status ws2812Led; // WS2812 RGB状态灯 (PD15)
+extern WS2812Driver ws2812Led; // WS2812 RGB状态灯 (PD15, 通用库驱动)
+extern Ws2812AppStatus ws2812AppStatus; // WS2812 应用状态机 (呼吸/闪烁)
+extern SPIClass FLASH_SPI;    // Flash 专用 SPI3 实例
+extern W25N01GV flash;        // W25N01GV NAND Flash (SPI3)
+extern W25N01GVLog flashLog;  // Flash 日志层 (环形缓冲+后台写)
 extern AnoComProtocol AnoCom; // 匿名地面站协议
 extern CrsfSerial crsf;       // CRSF遥控协议
 
@@ -523,6 +546,10 @@ extern uint8_t engineDataReceiveIndex;
 extern float receivedP1;
 extern float receivedP2;
 extern float receivedValveControl;
+
+// 电池电压/电流监测（ADC_BATT PC5 采样，供 ELRS/AnoCom 遥测共用）
+extern volatile float bat_voltage_mv;   // 电池电压 (mV)
+extern volatile float bat_current_ca;   // 电池电流 (0.1A，未接电流采样时为 0)
 
 // 遥控器 CRSF 协议数据
 #define CRSF_BUFFER_SIZE 26

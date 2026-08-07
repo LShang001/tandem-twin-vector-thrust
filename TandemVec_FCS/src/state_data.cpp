@@ -342,7 +342,20 @@ Madgwick madgwick; // Madgwick AHRS 姿态解算算法
 
 // --- 辅助设备驱动对象 ---
 StatusLED statusLed(LED_green);                 // 状态LED驱动 (绿灯, PE5)
-WS2812Status ws2812Led(WS2812_PIN);             // WS2812 RGB状态灯 (PD15, 单颗板载)
+
+// WS2812 RGB状态灯 (PD15, 单颗板载) — 通用库 WS2812Driver
+WS2812Driver ws2812Led(WS2812_PIN, 1);
+// 应用状态机（呼吸/闪烁），绑定驱动
+Ws2812AppStatus ws2812AppStatus(ws2812Led);
+
+// W25N01GV NAND Flash (SPI3) — 黑匣子存储
+// 独立 SPIClass 实例（仿 CAN_SPI 模式），与 SPI1(IMU)/SPI2(CAN) 完全隔离。
+// ★ SSEL 传 NC：硬件 NSS 会与手动 CS 控制冲突（NSS=HARD_OUTPUT 时外设自动拉 CS），
+//   且 PA15 默认是 JTAG JTDI。CS 由命令层 digitalWrite 手动控制（软件 NSS）。
+SPIClass FLASH_SPI(FLASH_SPI_MOSI, FLASH_SPI_MISO, FLASH_SPI_SCK);
+W25N01GV flash(FLASH_SPI, FLASH_CS_PIN);
+W25N01GVLog flashLog(flash);
+
 AnoComProtocol AnoCom(&Serial6);                // 匿名地面站协议驱动 (Serial6)
 CrsfSerial crsf(receiverSerial, CRSF_BAUDRATE); // CRSF遥控协议驱动 (Serial1, 420kbaud)
 
@@ -412,6 +425,10 @@ uint8_t engineDataReceiveIndex = 0;                // 当前接收字节索引
 float receivedP1 = 0.0f;                           // 接收的氧压P1数据 (MPa)
 float receivedP2 = 0.0f;                           // 接收的氧压P2数据 (MPa)
 float receivedValveControl = 0.0f;                 // 接收的阀门控制量
+
+// 电池电压/电流监测（ADC_BATT PC5 采样）
+volatile float bat_voltage_mv = 0.0f;              // 电池电压 (mV)
+volatile float bat_current_ca = 0.0f;              // 电池电流 (0.1A)
 
 uint16_t raw_rc_values[RC_INPUT_MAX_CHANNELS] = {0};
 uint16_t raw_rc_count = 0;

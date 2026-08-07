@@ -1,0 +1,12 @@
+{
+  "name": "W25N01GV",
+  "version": "0.1.0",
+  "description": "Winbond W25N01GV 1Gbit SPI NAND Flash driver + sequential log layer for stm32duino. ECC-aware, write-protection handling, bad-block skip, ring-buffer background writes.",
+  "keywords": "w25n01gv, nand, flash, spi, storage, log, blackbox, stm32",
+  "authors": [{"name": "TandemVec FCS project", "maintainer": true}],
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": ["ststm32", "*"],
+  "headers": ["W25N01GV.h", "W25N01GV_log.h"],
+  "build": { "srcDir": "src" }
+}
