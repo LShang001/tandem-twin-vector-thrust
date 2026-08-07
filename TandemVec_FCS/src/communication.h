@@ -250,6 +250,15 @@ void handleGuidanceCommands();
 void handleStatusLedTask();
 
 /**
+ * @brief 调试模式独立任务（200Hz）
+ *
+ * Serial6 收到 "DBG\n" 进入调试模式（handleDebugConsole），"exit" 退出。
+ * 2026-08-08 从 handleAnoCom 移出：调试通道与 AnoCom 遥测解耦，
+ * 避免遥测洪水淹没 DBG 检测。
+ */
+void handleDebugTask();
+
+/**
  * @brief Flash 黑匣子后台写任务（低优先级，100Hz）
  *
  * 调 flashLog.logService()，每 tick 最多写 W25N01GV_LOG_MAX_WRITES 帧到 NAND。

@@ -10,6 +10,12 @@
 
 // 调试用黑匣子强制记录超时（datalog 命令置位，handleFlashService 超时复位）
 static uint32_t s_dbgLogUntil = 0;
+// 诊断计数：logService 调用次数（flash stat 显示，验证后台任务是否在跑）
+static uint32_t s_flashServiceCount = 0;
+// 诊断计数：logPush 调用次数（验证黑匣子产帧是否进入 ring）
+static uint32_t s_flashPushCount = 0;
+// 调试模式标志（文件级，handleDebugTask 置位，handleAnoCom 读取跳过遥测）
+static bool s_dbg_mode = false;
 
 // 串口5发送缓冲区，用于发送给上位机进行轨迹规划的数据
 // 缓冲区大小：1(帧头) + 8个float * 4字节/float + 1(帧尾) = 34字节
@@ -323,35 +329,50 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len)
   }
 }
 
-void handleAnoCom()
+/**
+ * @brief 调试模式任务（200Hz）
+ *
+ * ★ 2026-08-08 重构：DBG 检测放回 handleAnoCom 最前（receiveData 之前），
+ *   否则 AnoCom 的 receiveData 会把 DBG 字节当协议帧头吃掉。
+ *   本任务只在"调试模式已进入"时处理命令；进入检测在 handleAnoCom。
+ */
+void handleDebugTask()
 {
-  // ---- 调试模式入口拦截 ----
-  // Serial6 收到 "DBG\n" 进入调试模式，调试模式下所有输入走调试命令
-  // 解释器，不再喂给 AnoCom 协议；发 "EXIT" 退出回正常数传。
-  // 用途：不干扰地面站协议的前提下，提供运行时诊断通道（配合 OpenOCD）。
-  static bool dbg_mode = false;
   static char dbg_line[64];
   static uint8_t dbg_line_len = 0;
 
-  if (dbg_mode) {
-    handleDebugConsole(Serial6, dbg_line, &dbg_line_len, sizeof(dbg_line), dbg_mode);
-    return;  // 调试模式下跳过所有正常数传逻辑
+  if (s_dbg_mode) {
+    handleDebugConsole(Serial6, dbg_line, &dbg_line_len, sizeof(dbg_line), s_dbg_mode);
+  }
+}
+
+void handleAnoCom()
+{
+  // ---- 调试模式入口检测（必须在 receiveData 之前！）----
+  // 否则 AnoCom 的 receiveData 会把 "DBG\n" 字节当协议帧头（非 0xAB）丢弃。
+  // 进入调试模式后 s_dbg_mode=true，下方跳过所有遥测逻辑。
+  static char dbg_line[64];
+  static uint8_t dbg_line_len = 0;
+  if (!s_dbg_mode) {
+    while (Serial6.available()) {
+      char c = (char)Serial6.read();
+      if (c == '\n') {
+        if (dbg_line_len == 3 && dbg_line[0] == 'D' && dbg_line[1] == 'B' && dbg_line[2] == 'G') {
+          s_dbg_mode = true;
+          dbg_line_len = 0;
+          Serial6.println(F("[DBG] Debug mode ON. Type 'help' for commands, 'exit' to quit."));
+          return;
+        }
+        dbg_line_len = 0;  // 非匹配行，丢弃
+      } else if (dbg_line_len < (int)(sizeof(dbg_line) - 1)) {
+        dbg_line[dbg_line_len++] = c;
+      }
+    }
   }
 
-  // 检测进入调试模式：匹配 "DBG\n"
-  while (Serial6.available()) {
-    char c = (char)Serial6.read();
-    if (c == '\n') {
-      if (dbg_line_len == 3 && dbg_line[0] == 'D' && dbg_line[1] == 'B' && dbg_line[2] == 'G') {
-        dbg_mode = true;
-        dbg_line_len = 0;
-        Serial6.println(F("[DBG] Debug mode ON. Type 'help' for commands, 'exit' to quit."));
-        return;
-      }
-      dbg_line_len = 0;  // 非匹配行，丢弃
-    } else if (dbg_line_len < (int)(sizeof(dbg_line) - 1)) {
-      dbg_line[dbg_line_len++] = c;
-    }
+  // 调试模式下跳过所有遥测逻辑（RX/TX 都由 handleDebugTask 接管）
+  if (s_dbg_mode) {
+    return;
   }
 
   // ---- 上行接收: 消费 Serial6 缓冲区中的上行帧 ----
@@ -1066,6 +1087,10 @@ void handleDataLogging()
     d[20] = receivedP2;
 
     // 依次打印各项数据，以逗号分隔（保持原有顺序与精度）
+    // ★ 调试强制模式（datalog）跳过 Serial3 输出——避免洪水淹没调试串口，
+    //   只写 Flash（验证 Flash 写入链路用）
+    if (!dbgLogging)
+    {
     Serial3.print(currentTime);
     Serial3.print(",");
     // 姿态欧拉角 (度)
@@ -1115,11 +1140,13 @@ void handleDataLogging()
     Serial3.print(",");
     Serial3.print(d[20], 2); // 压力2
     Serial3.println();       // 换行，结束当前行数据
+    }
 
     // Flash 双写：payload 为 84 字节二进制快照（非阻塞，µs 级入环形缓冲）
     // 注意：仅当 Flash 初始化成功（present）才写，避免无用开销
     if (flash.isPresent())
     {
+      s_flashPushCount++;
       flashLog.logPush((const uint8_t *)d);
     }
   }
@@ -1347,6 +1374,7 @@ void handleFlashService()
     s_dbgLogUntil = 0;
   }
 
+  s_flashServiceCount++;
   flashLog.logService();
 }
 
@@ -1852,14 +1880,24 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
     serial.println(flash.isPresent() ? F("YES") : F("NO"));
     serial.print(F("[DBG] cursorPage="));
     serial.println(flashLog.cursorPage());
+    serial.print(F("[DBG] segment="));
+    serial.println(flashLog.segment());
     serial.print(F("[DBG] buffered="));
     serial.println(flashLog.buffered());
     serial.print(F("[DBG] written="));
     serial.println(flashLog.written());
+    serial.print(F("[DBG] pagesWritten="));
+    serial.println(flashLog.pagesWritten());
     serial.print(F("[DBG] dropped="));
     serial.println(flashLog.dropped());
+    serial.print(F("[DBG] badBlocks="));
+    serial.println(flashLog.badBlocks());
     serial.print(F("[DBG] busy="));
     serial.println(flashLog.busy() ? F("YES") : F("NO"));
+    serial.print(F("[DBG] serviceCount="));
+    serial.println(s_flashServiceCount);
+    serial.print(F("[DBG] pushCount="));
+    serial.println(s_flashPushCount);
     serial.print(F("[DBG] totalPages="));
     serial.println(W25N01GV_TOTAL_PAGES);
   }
@@ -1896,19 +1934,23 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
     serial.print(F("[DBG] pushed 5 frames, buffered="));
     serial.println(flashLog.buffered());
     // 手动 service 一次写光（测试用，正常由 handleFlashService 后台写）
-    flashLog.logService();
-    flashLog.logService();
-    flashLog.logService();
-    flashLog.logService();
-    flashLog.logService();
+    for (int s = 0; s < 5; s++) {
+      serial.print(F("[DBG] service#"));
+      serial.print(s);
+      flashLog.logService();
+      serial.print(F(" pages="));
+      serial.print(flashLog.pagesWritten());
+      serial.print(F(" buffered="));
+      serial.println(flashLog.buffered());
+    }
     serial.print(F("[DBG] after service: written="));
     serial.println(flashLog.written());
     serial.print(F("[DBG] buffered="));
     serial.println(flashLog.buffered());
-    // 读回最后一帧所在页验证 magic
+    // 读回最后写入页验证 magic（v2: 页内多帧，检查页首帧）
     if (flashLog.written() > 0) {
       uint32_t page = flashLog.cursorPage() - 1;
-      uint8_t buf[W25N01GV_LOG_FRAME_SIZE];
+      uint8_t buf[W25N01GV_PAGE_SIZE];
       bool ok = flashLog.debugReadPage(page, buf, sizeof(buf));
       serial.print(F("[DBG] readback page="));
       serial.print(page);
@@ -1918,19 +1960,18 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
         serial.print(F("[DBG] magic=0x"));
         serial.print(buf[0], HEX);
         serial.print(buf[1], HEX);
-        serial.print(F(" seq="));
-        serial.println((uint32_t)buf[2] | ((uint32_t)buf[3] << 8));
+        serial.print(F(" type="));
+        serial.println(buf[2], HEX);   // 0x49=I 0x50=P
       }
     }
   }
   else if (strncmp(args, "export", 6) == 0) {
-    // 批量导出帧数据：flash export <startPage> <count>
-    // 每页输出一个二进制帧块（95 字节），帧间无分隔（python 工具按
-    // 固定帧长 + magic 同步解析）。输出为原始字节，非文本。
+    // 批量导出页数据：flash export <startPage> <count>
+    // 每页输出完整 2048B 原始数据（v2 页内打包多帧 I/P 混合），
+    // python 工具按 magic 同步切帧解析。输出为原始字节。
     uint32_t startPage, count;
     if (sscanf(args + 6, "%lu %lu", &startPage, &count) == 2 &&
         startPage < W25N01GV_TOTAL_PAGES && count > 0) {
-      // 限幅，避免一次导出过多阻塞太久（~1ms/页 @ SPI 25MHz）
       if (count > 1000) count = 1000;
       serial.print(F("[DBG] export start="));
       serial.print(startPage);
@@ -1938,11 +1979,11 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
       serial.println(count);
       serial.flush();   // 让提示先发出，再输出二进制
 
-      uint8_t buf[W25N01GV_LOG_FRAME_SIZE];
+      uint8_t buf[W25N01GV_PAGE_SIZE];
       for (uint32_t i = 0; i < count; i++) {
         uint32_t page = startPage + i;
-        if (flashLog.debugReadPage(page, buf, sizeof(buf))) {
-          serial.write(buf, sizeof(buf));   // 原始帧字节
+        if (flashLog.debugReadPage(page, buf, W25N01GV_PAGE_SIZE)) {
+          serial.write(buf, W25N01GV_PAGE_SIZE);   // 整页原始字节
         }
       }
       serial.println();

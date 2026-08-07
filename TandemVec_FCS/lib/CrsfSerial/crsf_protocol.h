@@ -45,8 +45,12 @@ enum
 typedef enum
 {
     CRSF_FRAMETYPE_GPS = 0x02,
+    CRSF_FRAMETYPE_GPS_TIME = 0x03,        // GPS 时间同步 (ELRS 官方补充)
+    CRSF_FRAMETYPE_VARIO = 0x07,           // 垂直速度 cm/s (ELRS 官方补充)
     CRSF_FRAMETYPE_BATTERY_SENSOR = 0x08,
+    CRSF_FRAMETYPE_BARO_ALTITUDE = 0x09,   // 气压高度+垂直速度 (ELRS 官方补充)
     CRSF_FRAMETYPE_AIRSPEED = 0x0A,
+    CRSF_FRAMETYPE_HEARTBEAT = 0x0B,       // 心跳 (ELRS 官方补充)
     CRSF_FRAMETYPE_RPM = 0x0C,
     CRSF_FRAMETYPE_TEMP = 0x0D,
     CRSF_FRAMETYPE_CELLS = 0x0E,
@@ -61,12 +65,17 @@ typedef enum
     CRSF_FRAMETYPE_PARAMETER_SETTINGS_ENTRY = 0x2B,
     CRSF_FRAMETYPE_PARAMETER_READ = 0x2C,
     CRSF_FRAMETYPE_PARAMETER_WRITE = 0x2D,
+    CRSF_FRAMETYPE_ELRS_STATUS = 0x2E,     // ELRS 好坏包计数 (ELRS 官方补充)
     CRSF_FRAMETYPE_COMMAND = 0x32,
-    CRSF_FRAMETYPE_RADIO_ID = 0x3A,
+    CRSF_FRAMETYPE_HANDSET = 0x3A,         // 遥控器时序同步 (ELRS 官方补充)
+    // KISS 协议 (ELRS 官方补充)
+    CRSF_FRAMETYPE_KISS_REQ = 0x78,
+    CRSF_FRAMETYPE_KISS_RESP = 0x79,
     // MSP commands
     CRSF_FRAMETYPE_MSP_REQ = 0x7A,   // response request using msp sequence as command
     CRSF_FRAMETYPE_MSP_RESP = 0x7B,  // reply with 58 byte chunked binary
     CRSF_FRAMETYPE_MSP_WRITE = 0x7C, // write with 8 byte chunked binary (OpenTX outbound telemetry buffer limit)
+    CRSF_FRAMETYPE_ARDUPILOT_RESP = 0x80,  // ArduPilot 响应 (ELRS 官方补充)
 } crsf_frame_type_e;
 
 typedef enum

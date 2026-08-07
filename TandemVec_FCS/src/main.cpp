@@ -349,7 +349,7 @@ void setup()
   // 注释掉的任务为可选功能，按需启用。
 
   // --- 传感器采集层 (高频) ---
-  BFS_ADD_TASK(handleICM42688, 0.5f, "ICM42688");                         // IMU 数据采集 (2kHz, 05ms) - 最高频率，姿态解算基础
+  // BFS_ADD_TASK(handleICM42688, 0.5f, "ICM42688");  // 【临时禁用】诊断 Flash SPI3 与 IMU SPI1 交互（2026-08-08）
   BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz, 贴近128Hz压力输出且保留FIFO余量
   BFS_ADD_TASK(handleLQS48Flow, 2.0f, "LQS48Flow");                       // LQS48 光流传感器 (500Hz, 2ms) - 水平速度/测距
 
@@ -365,6 +365,7 @@ void setup()
   // 减少 EKF→遥测输出的延迟。AnoCom 紧邻 EKF 注册, 同一帧内 EKF 输出立即可用。
   BFS_ADD_TASK(handleNavigationSystem, 5.0f, "Navigation"); // EKF 组合导航 (200Hz, 5ms) - 姿态/位置/速度主滤波器
   BFS_ADD_TASK(handleAnoCom, 5.0f, "AnoCom");               // AnoCom 地面站 (200Hz, 5ms) - 紧邻 EKF, 同帧消费最新输出
+  BFS_ADD_TASK(handleDebugTask, 5.0f, "Debug");              // 调试模式任务 (200Hz) - Serial6 "DBG\n" 入口，与遥测解耦
 
   // VerticalKF 与 EKF 并行运行，输出到独立的 vfk_height/vfk_velocity（不覆盖 EKF 输出），
   // 仅供地面站遥测对比一致性，不参与控制律。
@@ -381,7 +382,7 @@ void setup()
 
   // --- 通信遥测层 (低频) ---
   // 串口发送任务排在 GNC 之后，即使偶发阻塞也不影响控制环实时性。
-  BFS_ADD_TASK(handleCANBus, 5.0f, "CANBus");                       // CAN 总线发送 (200Hz, 5ms) - 飞控状态广播
+  // BFS_ADD_TASK(handleCANBus, 5.0f, "CANBus");  // 【临时禁用】验证 CAN SPI2 OVR 是否为 Flash 卡死根因（2026-08-08）
   BFS_ADD_TASK(sendElrsBatteryData, 40.0f, "ElrsBattery");      // ELRS 电量回传 (25Hz, 40ms) - 遥控器显示氧压
   BFS_ADD_TASK(sendElrsAttitudeData, 40.0f, "ElrsAttitude");    // ELRS 姿态回传 (25Hz) - 遥控器姿态球
   BFS_ADD_TASK(sendElrsBaroAltitudeData, 40.0f, "ElrsBaro");    // ELRS 高度+垂直速度回传 (25Hz) - 遥控器高度显示
@@ -393,7 +394,10 @@ void setup()
   BFS_ADD_TASK(sendPositionVelocityData, 20.0f, "PosVelTx");    // 上位机数据发送 (50Hz, 20ms) - 轨迹规划用
   // addTask(handleMavlink, 5.0f);          // MAVLink 遥测 (200Hz, 5ms) - Mission Planner/QGC (与 AnoCom 二选一)
   BFS_ADD_TASK(handleStatusLedTask, 10.0f, "StatusLed");        // LED 状态指示 (100Hz, 10ms) - 呼吸灯/闪烁
-  BFS_ADD_TASK(handleFlashService, 10.0f, "FlashLog");          // Flash 黑匣子后台写 (100Hz, 每tick≤2页) - 低优先级
+  BFS_ADD_TASK(handleFlashService, 200.0f, "FlashLog");        // Flash 黑匣子后台写 (5Hz, 每tick≤1页=39帧) - 低优先级
+  // 注：200ms 周期写 1 页（2048B 关中断 655µs），每秒 5 次共 3.3ms 关中断，
+  //    对 2kHz 调度/主循环 kickIwdg 完全无压力（实测 50ms 周期会触发 IWDG 复位）。
+  //    ring 48 帧覆盖 200ms 产 40 帧，余量充足。
   // --- 可选任务 (按需启用) ---
   // addTask(handleElrs, 4.0f);              // ELRS 原始遥控接收 (250Hz) - 测试原始遥控链路时启用
   // addTask(handleCrsf, 4.0f);              // CRSF 通道转发 (250Hz) - 测试通道转发时启用
