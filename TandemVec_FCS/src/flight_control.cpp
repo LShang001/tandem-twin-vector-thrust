@@ -1208,7 +1208,11 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       // FRD 轴序：Mx←alpha_roll（差速）、My←alpha_pitch（尾摆）、Mz←alpha_yaw（前摆）
       float Mx = P.Ix * outputs.alpha_roll;  // 体轴x → 滚转力矩 → 差速
       float My = P.Iy * outputs.alpha_pitch; // 体轴y → 俯仰力矩 → 尾摆
-      float Mz = P.Iz * outputs.alpha_yaw;   // 体轴z → 偏航力矩 → 前摆
+      // ★ 2026-08-07 实机：z_b（=x_b×y_b=-传感器Z，右手系强制）与前摆座
+      // 机械轴反向 → 同一物理力矩在 z_b 上投影符号相反。取负等价于翻转
+      // B 矩阵 Mz 整行（-B₃u=Mz ⟺ B₃u=-Mz），交叉耦合项一并正确。
+      // 尾摆(My)/差速(Mx)不受影响：y_b=+传感器X 未变、x_b=推力轴符合模型。
+      float Mz = -P.Iz * outputs.alpha_yaw;  // 体轴z → 偏航力矩 → 前摆
 
       // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
