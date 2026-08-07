@@ -1207,16 +1207,54 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       // 验证：tools/verify_yaw_gain_schedule.py
       // ================================================================
       const float w_hover = sqrtf(0.5f * P.m * P.g / P.kT);  // 单机悬停转速 ≈574 rad/s
-      float yaw_gain_sched = (w_hover > 1.0f) ? (w0 * w0) / (w_hover * w_hover) : 1.0f;
+
+      // ---- w0 工作点下限（2026-08-07，用户提出）----
+      // 正常悬停油门在 40~60% wMax，没必要从 0 油门开始算调度系数与 B 矩阵：
+      // 低油门既飞不起来，又是**数值病态区** —— B 各项 ∝w0²，det ∝w0⁶
+      // （实测 5% 油门 det 比 50% 小 6 个数量级），逆解增益 ∝1/w0² 放大 100×。
+      // 故统一按 0.6·w_hover(≈344 rad/s ≈30% wMax) 工作点计算，
+      // 低于该油门时调度系数与 B 矩阵都"冻结"在这个良态工作点。
+      // 验证：tools/verify_w0_floor.py
+      const float w0_floor = 0.6f * w_hover;
+      const float w0_eff   = fmaxf(w0, w0_floor);
+
+      float yaw_gain_sched = (w_hover > 1.0f) ? (w0_eff * w0_eff) / (w_hover * w_hover) : 1.0f;
       yaw_gain_sched = constrain(yaw_gain_sched, 0.02f, 4.0f); // 防零 / 防高油门过冲
       Mx *= yaw_gain_sched;
       s_yaw_gain_sched = yaw_gain_sched;  // 导出给在线辨识（步骤9）修正命令量
 
       AllocationInput ai;
-      ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0;
+      // ★ B 矩阵工作点用 w0_eff（良态求逆）；
+      //   注意 allocateDifferential 必须用【真实 w0】——它决定实际电机转速，
+      //   若用 w0_eff，零油门时电机会被顶到 30% 转速（安全事故）。
+      ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0_eff;
+
+      // ★ current_state 的转速也必须同步 floor：
+      //   computeEffectMatrix 的第1、2列由 Qt/Tt/Qf/Tf(∝wf²,wt²) 构成，
+      //   若 wf=wt≈0 而 w0=w0_eff，则 B 两列全零 → det=0 → BTRUE 退降
+      //   FULL_B，工作点混用（w0 用 eff、状态用真实）本身也不自洽。
+      //   同步 floor 后 det 恒 ≈1.1e-2（良态），策略不再意外退降。
+      //   验证：tools/verify_floor_consistency.py
       ai.current_state = prev_prop_state;
+      ai.current_state.wf = fmaxf(prev_prop_state.wf, w0_floor);
+      ai.current_state.wt = fmaxf(prev_prop_state.wt, w0_floor);
 
       AllocationOutput ao = allocateMoments(ai, P, AllocationStrategy::BTRUE);
+
+      // ★ 零油门门控（2026-08-07，补 w0 floor 的副作用）
+      //   分配器内部的零推力保护判据是 T0=kT·in.w0² < T0_MIN，改传 w0_eff 后
+      //   该保护永不触发（T0_eff 恒为 1.23N）。电机侧本身仍安全——
+      //   allocateDifferential 用【真实 w0】，w0=0 → wf=wt=0 → 输出 0%；
+      //   但舵机会开始响应姿态误差（原先分配器返回全零、舵机保持中位）。
+      //   故此处按【真实油门】补回门控，保持"零油门→执行器归中"的既有行为。
+      //   阈值 5%：对应双发总推力 0.07N（起飞需 m·g=6.85N），
+      //   不影响任何正常飞行阶段。验证：tools/verify_floor_consistency.py
+      if (outputs.throttle_percent < 5.0f)
+      {
+        ao.delta_f = 0.0f;
+        ao.delta_t = 0.0f;
+        ao.dw      = 0.0f;
+      }
 
       // 层3a：摆角(rad) → 角度(deg)
       tail_gimbal_deg  = ao.delta_t * RAD_TO_DEG;
