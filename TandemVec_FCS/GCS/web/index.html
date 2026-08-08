@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TandemVec GCS · 纵列双发矢量推力飞行器地面站</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="./css/style.css">
+</head>
+<body>
+
+<!-- ══════════ 顶部连接条 ══════════ -->
+<header id="topbar" class="glass">
+  <div class="brand">
+    <div class="brand-mark">T</div>
+    <div>
+      <h1>TandemVec GCS</h1>
+      <p>纵列双发矢量推力飞行器 · 地面站</p>
+    </div>
+  </div>
+  <div class="conn-box">
+    <select id="portSelect" title="串口"></select>
+    <select id="baudSelect" title="波特率">
+      <option value="2000000" selected>2 000 000</option>
+      <option value="921600">921 600</option>
+      <option value="115200">115 200</option>
+    </select>
+    <button id="btnConnect" class="btn primary">连接</button>
+    <div class="link-led" id="linkLed" title="链路状态">●</div>
+    <div class="link-info" id="linkInfo">未连接</div>
+  </div>
+  <nav id="nav">
+    <button class="nav-btn active" data-page="dashboard">仪表盘</button>
+    <button class="nav-btn" data-page="view3d">3D 姿态</button>
+    <button class="nav-btn" data-page="scope">实时曲线</button>
+    <button class="nav-btn" data-page="blackbox">黑匣子</button>
+    <button class="nav-btn" data-page="params">参数</button>
+    <button class="nav-btn" data-page="console">控制台</button>
+  </nav>
+</header>
+
+<!-- ══════════ 告警条 ══════════ -->
+<div id="alarmBar"></div>
+
+<!-- ══════════ 页面容器 ══════════ -->
+<main id="pages">
+
+  <!-- 仪表盘 -->
+  <section class="page active" id="page-dashboard">
+    <div class="dash-grid">
+      <div class="glass panel ai-panel">
+        <div class="panel-title">人工地平线 ATTITUDE</div>
+        <canvas id="cvAttitude" width="360" height="360"></canvas>
+        <div class="att-readout" id="attReadout">--° / --° / --°</div>
+      </div>
+      <div class="glass panel hud-panel">
+        <div class="panel-title">飞行数据 HUD</div>
+        <div class="hud-kv">
+          <div class="kv"><span>空速 V</span><b id="hudSpeed">--</b><i>m/s</i></div>
+          <div class="kv"><span>垂直速度</span><b id="hudVspeed">--</b><i>m/s</i></div>
+          <div class="kv"><span>高度（融合）</span><b id="hudAlt">--</b><i>m</i></div>
+          <div class="kv"><span>相对北 / 东</span><b id="hudPos">--</b><i>m</i></div>
+          <div class="kv"><span>油门</span><b id="hudThr">--</b><i>%</i></div>
+          <div class="kv"><span>电池电压</span><b id="hudBat">--</b><i>V</i></div>
+          <div class="kv"><span>氧压 P1 / P2</span><b id="hudP">--</b><i>MPa</i></div>
+          <div class="kv"><span>目标姿态 R/P</span><b id="hudTar">--</b><i>°</i></div>
+        </div>
+        <div class="status-row" id="statusRow">
+          <div class="status-chip" id="chipMode"><i class="dot"></i><span>模式 --</span></div>
+          <div class="status-chip" id="chipUnlock"><i class="dot"></i><span>锁定</span></div>
+          <div class="status-chip" id="chipGps"><i class="dot"></i><span>GPS --</span></div>
+          <div class="status-chip" id="chipFusion"><i class="dot"></i><span>融合 --</span></div>
+          <div class="status-chip" id="chipDeta"><i class="dot"></i><span>DETA100 --</span></div>
+        </div>
+      </div>
+      <div class="glass panel rc-panel">
+        <div class="panel-title">遥控通道 RC</div>
+        <div id="rcBars"></div>
+      </div>
+      <div class="glass panel tvc-panel">
+        <div class="panel-title">控制输出 CONTROL</div>
+        <div id="ctrlBars"></div>
+      </div>
+      <div class="glass panel gps-panel">
+        <div class="panel-title">GNSS</div>
+        <div class="gps-readout" id="gpsReadout">
+          <div class="kv"><span>定位状态</span><b id="gpsFix">--</b></div>
+          <div class="kv"><span>卫星数</span><b id="gpsSats">--</b></div>
+          <div class="kv"><span>经度</span><b id="gpsLon">--</b></div>
+          <div class="kv"><span>纬度</span><b id="gpsLat">--</b></div>
+          <div class="kv"><span>高度(大地)</span><b id="gpsAlt">--</b></div>
+          <div class="kv"><span>PDOP</span><b id="gpsPdop">--</b></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3D 姿态 -->
+  <section class="page" id="page-view3d">
+    <div class="glass panel v3d-panel">
+      <div class="panel-title">3D 姿态视图 <span class="hint">左键旋转视角 · 滚轮缩放</span></div>
+      <div id="v3dContainer"></div>
+    </div>
+  </section>
+
+  <!-- 实时曲线 -->
+  <section class="page" id="page-scope">
+    <div class="glass panel scope-panel">
+      <div class="scope-head">
+        <div class="panel-title">实时曲线 SCOPE</div>
+        <div class="scope-tools">
+          <select id="scopePreset" title="预设通道组"></select>
+          <label class="ck"><input type="checkbox" id="scopePause"> 暂停</label>
+          <button class="btn small" id="scopeClear">清空</button>
+          <span class="hint" id="scopeInfo"></span>
+        </div>
+      </div>
+      <div id="scopeWrap"></div>
+    </div>
+  </section>
+
+  <!-- 黑匣子 -->
+  <section class="page" id="page-blackbox">
+    <div class="glass panel bb-panel">
+      <div class="bb-head">
+        <div class="panel-title">黑匣子 W25N01GV · 飞行段管理</div>
+        <div class="scope-tools">
+          <button class="btn" id="bbStat">flash stat</button>
+          <button class="btn" id="bbFindseg">列出飞行段</button>
+          <button class="btn primary" id="bbExport">导出最新段</button>
+          <button class="btn" id="bbExit">退出调试模式</button>
+          <span class="hint" id="bbHint"></span>
+        </div>
+      </div>
+      <div class="bb-segments" id="bbSegments"><span class="hint">尚未获取飞行段列表——点击「列出飞行段」</span></div>
+      <div class="bb-body">
+        <div class="bb-left">
+          <div class="bb-cols" id="bbCols"></div>
+          <div class="bb-table-wrap"><table id="bbTable"></table></div>
+        </div>
+        <div class="bb-right">
+          <div class="bb-plot-tabs" id="bbPlotTabs"></div>
+          <div class="bb-plot" id="bbPlot"></div>
+        </div>
+      </div>
+      <div class="bb-actions">
+        <button class="btn" id="bbSaveCsv">导出 CSV</button>
+        <span class="hint" id="bbInfo"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 参数 -->
+  <section class="page" id="page-params">
+    <div class="glass panel pm-panel">
+      <div class="pm-head">
+        <div class="panel-title">控制参数 PARAMETERS <span class="hint">AnoCom 0xE0/0xE1 在线读写（需固件 2026-08-08 后版本）</span></div>
+        <div class="scope-tools">
+          <button class="btn primary" id="pmReadAll">读取全部</button>
+          <button class="btn" id="pmRestore">恢复默认</button>
+          <span class="hint" id="pmInfo"></span>
+        </div>
+      </div>
+      <div id="pmGroups"></div>
+    </div>
+  </section>
+
+  <!-- 控制台 -->
+  <section class="page" id="page-console">
+    <div class="glass panel con-panel">
+      <div class="con-head">
+        <div class="panel-title">调试控制台 DBG <span class="hint">flash stat / findseg / export · datalog · help</span></div>
+        <div class="scope-tools">
+          <button class="btn" id="conEnter">进入调试模式</button>
+          <button class="btn" id="conExit">退出</button>
+          <label class="ck"><input type="checkbox" id="conAutoscroll" checked> 自动滚动</label>
+        </div>
+      </div>
+      <div id="conOut" class="con-out"></div>
+      <div class="con-input">
+        <input id="conLine" placeholder="输入 DBG 命令，Enter 发送…" autocomplete="off">
+        <button class="btn" id="conSend">发送</button>
+      </div>
+    </div>
+    <div class="glass panel rec-panel">
+      <div class="con-head">
+        <div class="panel-title">数据记录 / 回放</div>
+        <div class="scope-tools">
+          <button class="btn primary" id="recStart">● 开始记录</button>
+          <button class="btn" id="recStop">停止</button>
+          <select id="recList"></select>
+          <button class="btn" id="recReplay">回放</button>
+          <button class="btn" id="recStopReplay">停止回放</button>
+        </div>
+      </div>
+      <div class="hint" id="recInfo"></div>
+    </div>
+  </section>
+
+</main>
+
+<div id="loader"><div class="spin"></div><p>TANDEMVEC GCS · CONNECTING</p></div>
+
+<script async src="./vendor/three-r170/es-module-shims.min.js"></script>
+<script type="importmap-shim">
+{"imports":{"three":"./vendor/three-r170/three.module.js","three/addons/":"./vendor/three-r170/addons/"}}
+</script>
+<script type="module-shim" src="./src/main.mjs"></script>
+</body>
+</html>

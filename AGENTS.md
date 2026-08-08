@@ -23,6 +23,10 @@ py -3.12 tools/sync-params.py --check  # 漂移检测
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
 node --test simulations/vector-thrust-lab/tests/propulsion.test.mjs # 单模块
 
+# 上位机 GCS（Python 后端 + Web 前端，AnoCom 协议）
+cd TandemVec_FCS/GCS && py -3.12 -m uvicorn server.main:app --port 8091  # 前端 http://127.0.0.1:8091/
+cd TandemVec_FCS/GCS && py -3.12 -m pytest tests/ -q                     # 无硬件可跑
+
 # 仿真
 cd simulations/vector-thrust-lab && python -m http.server 8080
 
@@ -43,6 +47,9 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 | `simulations/vector-thrust-lab/standalone.html` | 构建产物（build-standalone.py 生成），**禁止手改** |
 | `docs/04-数学建模/MOD-002-坐标系与符号约定.md` | NED 右手系、theta=-asin(R13)、渲染≠物理力臂 |
 | `docs/03-理论推导/THY-004/` | 模块化 LaTeX 工程，编译需要 XeLaTeX ×3 |
+| `TandemVec_FCS/GCS/` | 上位机（Python 后端+Web 前端）。协议/字段缩放以 `GCS/server/anocom.py` 为 PC 侧唯一实现（与固件逐字节对齐）；参数表 = 固件 `src/ano_params.cpp` 注册表 + `GCS/server/params.py` 显示元数据（按名称匹配） |
+| `TandemVec_FCS/src/ano_params.cpp` | 固件参数在线读写（117 参数，AnoCom 0xE0/0xE1）。参数 ID 顺序变更需同步 `GCS/server/params.py::expected_names()` 校验 |
+| `TandemVec_FCS/include/FlightCtrlParams.h` | 固件参数唯一事实源：`kFlightCtrlParamsDefaults`（出厂默认，static constexpr）+ 固件分支 `kFlightCtrlParams`（可变实例，0xE1 写入） |
 
 ## 原则
 
@@ -94,6 +101,10 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 - 四元数**双覆盖/最短路径**：`Ry(200°)⁻¹ ≡ Ry(+160°)`，qe.w<0 取反后沿短弧修正；测试断言方向前必须先做 S³ 几何推导，勿直觉判断（来源：2026-08-04，断言曾写反）
 - 悬停构型下 3-2-1 欧拉显示退化：机头朝天（θ≈−90°）时绕 x 转 20° 显示为 θ=−70°/φ=90°（奇异重新分配），**勿用欧拉显示判断悬停姿态**，以四元数为准（来源：2026-08-04 视觉验证）
 - `quat(x,y,z,w)` 分量顺序：绕 x 转 = `(sin,0,0,cos)`、绕 z = `(0,0,sin,cos)`——x/z 分量写反是隐蔽笔误，测试三通道符号用例可防（来源：2026-08-04）
+- **黑匣子 P 帧只含 21 个差分增量**（第 22 槽被帧尾 CRC 占用）——解析按 21 增量，末通道（p2）保持最近 I 帧参考值；曾按 22 增量解析致 p2 被 CRC 字节污染（固件 buildPFrame 循环越界，2026-08-08 修正，`flash_export.py`/GCS 同步；来源：2026-08-08 上位机开发）
+- **黑匣子 S 帧 236B 定长**：9B 头（magic+type+seg+tms）+ 通道名表 ≤224B（pad 0x00）+ 1B 预留 + CRC 2B；导出切帧按定长 236B，勿按变长 `\0` 搜索（来源：2026-08-08）
+- **AnoCom 0x0D 帧占用约定**：`fc_voltage/fc_current` 承载氧压 P1/P2（非电压电流）；`bat_voltage=12.6` 为占位常量无真实采样；0x20 帧传 `raw_rc_values`（us，非协议注释的 0.01%）（来源：2026-08-08 GCS 字段对齐）
+- **DBG 控制台与 AnoCom 遥测互斥**：发 `DBG\n` 后固件停止遥测轮发（handleAnoCom 短路），`exit` 恢复；上位机黑匣子流程必须先进 DBG 再发 `flash export`，且 export 输出含 `[DBG] export start=.. count=..` 文本行需剥离后再按 2048B/页收集（来源：2026-08-08）
 
 ## 知识沉淀协议
 

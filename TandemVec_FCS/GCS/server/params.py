@@ -1,0 +1,146 @@
+# -*- coding: utf-8 -*-
+"""
+params.py — 参数显示元数据（分组/单位/范围/说明）
+
+★ 名称与固件 ano_params.cpp 注册表严格同名（att_roll.kp 等）——
+  上位机先经 0xE0 CMD 0x03 拉取固件 E2 信息帧（ID→名称/类型），
+  再用本表按名称补充分组/单位/范围；未命中名称自动落入"其他"组。
+  固件参数 ID 顺序变更不影响本表（按名称匹配）。
+"""
+import re
+
+# 环 → 分组/显示名/单位说明
+PID_GROUPS = [
+    ('att_roll', '姿态外环（deg 域）', 'Roll 外环：姿态角误差 → 目标角速率'),
+    ('att_pitch', '姿态外环（deg 域）', 'Pitch 外环：姿态角误差 → 目标角速率'),
+    ('att_yaw', '姿态外环（deg 域）', 'Yaw 外环：未启用（航向=纯速率指令）'),
+    ('rate_roll', '角速率内环', 'Roll 内环：速率误差 → 前摆角指令'),
+    ('rate_pitch', '角速率内环', 'Pitch 内环：速率误差 → 尾摆角指令'),
+    ('rate_yaw', '角速率内环', 'Yaw 内环（差速）：速率误差 → Δω'),
+    ('alt_pos', '垂直串级', '高度外环：高度误差 → 目标垂直速度'),
+    ('alt_vel', '垂直串级', '垂直速度内环 → 目标垂直加速度'),
+    ('pos_n', '水平位置环', '北向位置外环 → 目标北向速度'),
+    ('pos_e', '水平位置环', '东向位置外环 → 目标东向速度'),
+    ('vel_n', '水平速度环', '北向速度内环 → 目标北向加速度'),
+    ('vel_e', '水平速度环', '东向速度内环 → 目标东向加速度'),
+]
+
+FILTER_GROUPS = [
+    ('speed_filter_alpha', '角速率滤波', '内环输入角速率滤波 alpha'),
+    ('angle_out_filter_alpha', '外环输出滤波', '姿态外环输出滤波 alpha'),
+    ('output_filter_alpha', '内环输出滤波', '内环输出（执行器指令）滤波 alpha'),
+]
+
+# 字段 → 元数据（单位/范围/步进/说明）
+# ★ 参数名 ≤20B（协议 PAR_NAME 定长）：filter_alpha 的线上名 = "{loop}.falpha"
+FIELD_META = {
+    'kp': dict(unit='', min=0.0, max=100.0, step=0.01, desc='比例增益'),
+    'ki': dict(unit='', min=0.0, max=1.0, step=0.0001, desc='积分增益（200Hz 隐含 dt）'),
+    'kd': dict(unit='', min=0.0, max=100.0, step=0.01, desc='微分增益'),
+    'out_min': dict(unit='', min=-1000.0, max=0.0, step=0.1, desc='输出下限'),
+    'out_max': dict(unit='', min=0.0, max=1000.0, step=0.1, desc='输出上限'),
+    'int_limit': dict(unit='', min=0.0, max=1000.0, step=1.0, desc='积分状态钳位'),
+    'threshold': dict(unit='', min=0.0, max=1000.0, step=0.1, desc='积分分离阈值'),
+    'filter_alpha': dict(unit='', min=0.0, max=1.0, step=0.01, desc='微分滤波系数', wire_name='falpha'),
+    'enabled': dict(unit='', min=0.0, max=1.0, step=1.0, desc='环是否参与控制（只读）', readonly=True),
+}
+
+# 滤波数组 → 线上短名（固件 ALPHA_ENTRY，≤20B）
+FILTER_WIRE = {
+    'speed_filter_alpha': 'spd_alpha',
+    'angle_out_filter_alpha': 'ang_alpha',
+    'output_filter_alpha': 'out_alpha',
+}
+
+# 按环的输出单位修正
+RATE_UNIT = 'deg/s'   # 姿态外环 out_min/out_max
+ACC_UNIT = 'm/s²'     # 速度内环
+VEL_UNIT = 'm/s'      # 位置环 out
+THR_UNIT = 'm/s'      # alt_pos out（垂直速度目标）
+
+
+def _loop_out_unit(loop):
+    if loop.startswith('att_'):
+        return RATE_UNIT
+    if loop.startswith('rate_'):
+        return ''           # alpha_ref 归一化指令
+    if loop.startswith('alt_pos'):
+        return VEL_UNIT
+    if loop.startswith('alt_vel'):
+        return ACC_UNIT
+    if loop.startswith('pos_'):
+        return VEL_UNIT
+    if loop.startswith('vel_'):
+        return ACC_UNIT
+    return ''
+
+
+def build_meta():
+    """生成 {name: meta} 完整元数据表（117 参数，name = 线上名）"""
+    meta = {}
+    for loop, group, desc in PID_GROUPS:
+        for field, fm in FIELD_META.items():
+            wire = fm.get('wire_name', field)
+            name = f'{loop}.{wire}'
+            m = dict(fm)
+            m['name'] = name
+            m['group'] = group
+            m['loop'] = loop
+            m['field'] = field
+            m['type'] = 'uint8' if field == 'enabled' else 'float'
+            m['desc'] = desc + ' · ' + m['desc']
+            if field in ('out_min', 'out_max'):
+                m['unit'] = _loop_out_unit(loop)
+            meta[name] = m
+    for arr, group, desc in FILTER_GROUPS:
+        wire = FILTER_WIRE.get(arr, arr)
+        for i in range(3):
+            name = f'{wire}[{i}]'
+            meta[name] = dict(name=name, group=group, loop=arr, field=str(i),
+                              unit='', min=0.0, max=1.0, step=0.01,
+                              desc=f'{desc}（通道 {i}）', type='float')
+    return meta
+
+
+META = build_meta()
+
+
+def group_order():
+    """分组显示顺序（前端按此渲染分组头）"""
+    order = []
+    for _, g, _ in PID_GROUPS:
+        if g not in order:
+            order.append(g)
+    for _, g, _ in FILTER_GROUPS:
+        if g not in order:
+            order.append(g)
+    order.append('其他')
+    return order
+
+
+def meta_for(name):
+    """按名称取元数据；未命中返回 None（落入前端"其他"组）"""
+    return META.get(name)
+
+
+def is_float_name(name):
+    m = meta_for(name)
+    if m:
+        return m['type'] == 'float'
+    # 未知参数按 float 猜测（固件 E2 会给出真实类型，前端以固件为准）
+    return True
+
+
+# 固件注册表同序参数名列表（校验用：保证 117 个线上名与固件一致）
+def expected_names():
+    """按固件 ano_params.cpp 注册表顺序返回 117 个线上参数名（跨实现校验）"""
+    names = []
+    for loop, _, _ in PID_GROUPS:
+        for field, _ in FIELD_META.items():
+            wire = FIELD_META[field].get('wire_name', field)
+            names.append(f'{loop}.{wire}')
+    for arr, _, _ in FILTER_GROUPS:
+        wire = FILTER_WIRE.get(arr, arr)
+        for i in range(3):
+            names.append(f'{wire}[{i}]')
+    return names

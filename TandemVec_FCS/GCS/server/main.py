@@ -1,0 +1,631 @@
+# -*- coding: utf-8 -*-
+"""
+main.py — GCS 服务入口：FastAPI + WebSocket + pyserial
+
+启动：python -m uvicorn main:app --host 127.0.0.1 --port 8091
+前端：http://127.0.0.1:8091/
+
+架构：
+  串口读线程 → queue.Queue → asyncio 任务（切帧/解码/聚合/广播）
+  WS 客户端消息 → 串口写（AnoCom 命令帧 / DBG 控制台命令）
+
+模式：telemetry（AnoCom 遥测，默认）| dbg（调试控制台，黑匣子流程）。
+DBG 模式与遥测互斥（固件行为），进入 DBG 后固件停止遥测轮发。
+"""
+import asyncio
+import json
+import logging
+import os
+import queue
+import threading
+import time
+from pathlib import Path
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+# 相对导入（python -m uvicorn server.main:app）；直接运行本文件时回退绝对导入
+try:
+    from . import anocom
+    from . import blackbox as bb
+    from . import params as pm
+    from .datalog import CsvRecorder, ReplaySource, list_recordings
+    from .serial_link import SerialLink, list_ports
+except ImportError:
+    import anocom
+    import blackbox as bb
+    import params as pm
+    from datalog import CsvRecorder, ReplaySource, list_recordings
+    from serial_link import SerialLink, list_ports
+
+log = logging.getLogger('gcs')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
+
+ROOT = Path(__file__).resolve().parent.parent
+WEB_DIR = ROOT / 'web'
+OUTPUT_DIR = ROOT / 'output'
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+DEFAULT_BAUD = 2000000      # = 固件 SERIAL6_BAUDRATE
+TELEMETRY_PERIOD = 0.05     # 遥测推送节流 20Hz
+PARAM_WRITE_TIMEOUT = 2.0   # 参数写入校验帧超时
+
+app = FastAPI(title='TandemVec GCS', version='0.2.0')
+
+
+class GCS:
+    """全局状态机：串口 + 模式 + 遥测聚合 + 参数客户端 + 记录/回放"""
+
+    def __init__(self):
+        self.link = None
+        self.mode = 'telemetry'          # telemetry | dbg
+        self.dbgs = None
+        self.tele_buf = bytearray()      # AnoCom 原始流缓冲
+        self.snap = {}                   # 最新遥测快照（键 = datalog.RECORD_FIELDS + 附加）
+        self.recorder = None
+        self.replay = None               # ReplaySource（回放中）
+        self.replay_task = None
+        self.param_names = {}            # id → {name, type}
+        self.param_values = {}           # id → value
+        self.param_count_seen = None     # 固件回传的参数个数（0xE0 CMD 0x01）
+        self.param_pending = {}          # id → (sc, ac, 时间) 等待校验帧
+        self.rx_q = queue.Queue()
+        self.ws_clients = set()
+        self._loop = None
+        self._stat_buf = []
+        self._flash_export_cb = None
+        self._stat_cb = None
+        self._consumer_thread = None
+        self._consumer_stop = threading.Event()
+
+    # ---------------- 串口 ----------------
+    def connect(self, port, baud, consume_thread: bool = True):
+        self.disconnect()
+        self.link = SerialLink(port, baud, self._on_rx)
+        self.link.connect()
+        self.tele_buf.clear()
+        self.snap = {}
+        self.mode = 'telemetry'
+        self.dbgs = bb.DbgSession(self.link.write)
+        self.recorder = None
+        self.param_names = {}
+        self.param_values = {}
+        if consume_thread:
+            self._start_consumer()
+
+    def _start_consumer(self):
+        """独立消费线程：持续从 rx_q 取字节流并处理（与读线程解耦，
+        保证参数响应帧不被遥测积压淹没——asyncio 消费吞吐不足会丢参数）"""
+        if self._consumer_thread and self._consumer_thread.is_alive():
+            return
+        self._consumer_stop.clear()
+        self._consumer_thread = threading.Thread(target=self._consumer_loop,
+                                                 daemon=True, name='gcs-rx-consumer')
+        self._consumer_thread.start()
+        log.info('rx consumer 已启动')
+
+    def _consumer_loop(self):
+        log.info('rx consumer 循环开始')
+        while not self._consumer_stop.is_set():
+            try:
+                kind, payload = self.rx_q.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            try:
+                if kind == 'link_down':
+                    log.warning('link_down：读线程异常退出')
+                    self.disconnect()
+                    self.send_all({'type': 'conn', 'status': 'disconnected', 'reason': 'link_down'})
+                elif kind == 'rx':
+                    if self.mode == 'dbg' and self.dbgs:
+                        _on_dbg_rx(payload)
+                    else:
+                        _on_telemetry_rx(payload)
+            except Exception:
+                log.warning('rx consumer error', exc_info=True)
+        log.info('rx consumer 循环退出')
+
+    def disconnect(self):
+        self._consumer_stop.set()
+        if self._consumer_thread:
+            self._consumer_thread.join(timeout=2.0)
+            self._consumer_thread = None
+        if self.link:
+            self.link.close()
+            self.link = None
+        self.tele_buf.clear()
+        self.mode = 'telemetry'
+
+    def connect_fake(self, replay: list, consume_thread: bool = False):
+        """测试专用：注入模拟串口字节流（FakeSerialLink，不依赖 pyserial/硬件）
+        consume_thread=False：测试自行驱动消费（_drain），避免线程竞态"""
+        from serial_link import FakeSerialLink
+        self.disconnect()
+        self.link = FakeSerialLink(replay=replay, on_data=self._on_rx)
+        self.link.connect()
+        self.tele_buf.clear()
+        self.snap = {}
+        self.mode = 'telemetry'
+        self.dbgs = bb.DbgSession(self.link.write)
+        self.param_names = {}
+        self.param_values = {}
+        if consume_thread:
+            self._start_consumer()
+
+    def write(self, data: bytes):
+        if self.link and self.link.is_open:
+            self.link.write(data)
+
+    # ---------------- 串口读线程 → 队列 ----------------
+    def _on_rx(self, chunk):
+        if chunk:
+            self.rx_q.put(('rx', chunk))
+        else:
+            self.rx_q.put(('link_down', None))
+
+    # ---------------- 模式与命令 ----------------
+    def dbg_enter(self):
+        if not (self.link and self.link.is_open) or not self.dbgs:
+            return False
+        self.mode = 'dbg'
+        self.tele_buf.clear()
+        # 清空 rx 队列残留（进入 DBG 前固件仍在发遥测字节，
+        # 残留会混入 DBG 文本输出）
+        while not self.rx_q.empty():
+            try:
+                self.rx_q.get_nowait()
+            except queue.Empty:
+                break
+        # 导出场景吞吐优先：读粒度提大（遥测恢复时还原）
+        try:
+            self.link.set_read_size(8192)
+        except Exception:
+            pass
+        self.dbgs.enter()
+        return True
+
+    def dbg_exit(self):
+        if not self.dbgs:
+            return False
+        self.dbgs.exit()
+        self.mode = 'telemetry'
+        try:
+            self.link.set_read_size(1024)
+        except Exception:
+            pass
+        return True
+
+    def dbg_cmd(self, line: str):
+        if self.dbgs:
+            self.dbgs.send_cmd(line)
+
+    # ---------------- WS 广播 ----------------
+    def send_all(self, obj: dict):
+        if not self.ws_clients:
+            return
+        text = json.dumps(obj, ensure_ascii=False)
+        for ws in list(self.ws_clients):
+            try:
+                asyncio.run_coroutine_threadsafe(ws.send_text(text), self._loop)
+            except Exception:
+                pass
+
+
+g = GCS()
+
+
+# ========================================================================
+#  串口数据处理（由 GCS._consumer_loop 独立线程驱动）
+# ========================================================================
+
+
+def _on_dbg_rx(chunk: bytes):
+    """DBG 模式：文本行推送 + flash export 原始字节收集"""
+    g.dbgs.feed(chunk)
+    text = g.dbgs.drain_text()
+    if text:
+        _emit_dbg_text(text)
+
+
+def _emit_dbg_text(text: str):
+    for line in text.split('\n'):
+        if line.strip():
+            g.send_all({'type': 'dbg_out', 'line': line})
+
+
+def _on_telemetry_rx(chunk: bytes):
+    g.tele_buf.extend(chunk)
+    frames = anocom.find_frames(bytes(g.tele_buf))
+    if frames:
+        g.tele_buf.clear()
+    changed = False
+    for f in frames:
+        # ---- 参数/设备帧先分流（decode_frame 无对应解码器）----
+        if f.func == anocom.FUNC_DATA_CHECK:
+            _on_param_check(f)
+            continue
+        if f.func == anocom.FUNC_PARAM_INFO:
+            _on_param_info(f)
+            continue
+        if f.func == anocom.FUNC_PARAM_WRITE_READ:
+            # 0xE1 均为读值回传（上位机写入请求不会触发固件回 0xE1）
+            if len(f.payload) >= 2:
+                _on_param_value(f.payload[0] | (f.payload[1] << 8), f.payload)
+            continue
+        if f.func == anocom.FUNC_PARAM_CMD:
+            _on_param_cmd(f)
+            continue
+        if f.func == anocom.FUNC_DEVICE_INFO:
+            dec = anocom.decode_device_info(f.payload)
+            if dec:
+                g.send_all({'type': 'device_info', **dec})
+            continue
+        # ---- 遥测帧 ----
+        dec = anocom.decode_frame(f)
+        if not dec:
+            continue
+        g.snap.update(dec)
+        changed = True
+    if changed:
+        g.snap['t_ms'] = time.time() * 1000
+        if g.recorder and g.recorder.active and not g.replay:
+            g.recorder.write(g.snap)
+        # 20Hz 节流推送
+        now = time.time()
+        last = getattr(g, '_last_tele_push', 0)
+        if now - last >= TELEMETRY_PERIOD:
+            g._last_tele_push = now
+            g.send_all({'type': 'telemetry', 'data': g.snap})
+
+
+# ---------------- 参数响应处理 ----------------
+def _on_param_info(f: anocom.Frame):
+    """E2 信息帧：payload = [ID u16, TYPE u8, NAME 20B]"""
+    p = f.payload
+    if len(p) < 23:
+        return
+    pid = p[0] | (p[1] << 8)
+    ptype = p[2]
+    name = p[3:23].split(b'\x00')[0].decode('ascii', errors='replace')
+    g.param_names[pid] = {'name': name, 'type': 'float' if ptype == anocom.ANO_FLOAT else 'uint8'}
+
+
+def _on_param_value(pid: int, payload: bytes):
+    """E1 值回传：payload = [ID u16, PAR_VAL]
+    ★ 类型按 payload 长度判断（float=6B / uint8=3B），不依赖 E2 信息帧到达时序
+    —— 若等 name_info，E1 先到时 uint8 值会被误判 float 而丢失（enabled 全缺 bug）"""
+    is_float = len(payload) >= 6
+    if len(payload) < 3:
+        return
+    val = anocom.parse_param_value(payload, is_float)
+    if val is not None:
+        g.param_values[pid] = val
+    name = g.param_names.get(pid, {}).get('name', f'id{pid}')
+    g.send_all({'type': 'param_value', 'id': pid, 'name': name, 'value': val})
+
+
+def _on_param_cmd(f: anocom.Frame):
+    """0xE0 回传帧（参数个数等）"""
+    p = f.payload
+    if p and p[0] == 0x01 and len(p) >= 5:
+        count = p[1] | (p[2] << 8) | (p[3] << 16) | (p[4] << 24)
+        g.param_count_seen = count
+        g.send_all({'type': 'param_count', 'count': count})
+
+
+def _on_param_check(f: anocom.Frame):
+    """0x00 校验帧：匹配参数写入确认"""
+    p = f.payload
+    if len(p) < 3:
+        return
+    id_get, sc_get, ac_get = p[0], p[1], p[2]
+    for pid, (exp_sc, exp_ac, t0) in list(g.param_pending.items()):
+        if id_get == anocom.FUNC_PARAM_WRITE_READ and exp_sc == sc_get and exp_ac == ac_get:
+            g.param_pending.pop(pid, None)
+            g.send_all({'type': 'param_written', 'id': pid, 'ok': True})
+            return
+
+
+# ========================================================================
+#  WebSocket 消息处理
+# ========================================================================
+
+async def handle_ws_message(ws: WebSocket, msg: dict):
+    cmd = msg.get('cmd')
+    if cmd == 'list_ports':
+        await ws.send_json({'type': 'ports', 'ports': list_ports()})
+
+    elif cmd == 'connect':
+        port, baud = msg.get('port'), int(msg.get('baud') or DEFAULT_BAUD)
+        try:
+            await asyncio.to_thread(g.connect, port, baud)
+        except Exception as exc:
+            await ws.send_json({'type': 'conn', 'status': 'error', 'reason': str(exc)})
+            return
+        await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud})
+        log.info('connected %s @ %d', port, baud)
+
+    elif cmd == 'disconnect':
+        g.disconnect()
+        await ws.send_json({'type': 'conn', 'status': 'disconnected'})
+
+    elif cmd == 'device_info':
+        # 0xE0 CMD 0x00 读设备信息 → 固件回 0xE3（新旧固件均支持）
+        g.write(anocom.encode_frame(anocom.FUNC_PARAM_CMD, bytes([0x00, 0, 0, 0, 0])))
+
+    elif cmd == 'dbg_enter':
+        if not g.dbg_enter():
+            await ws.send_json({'type': 'log', 'level': 'warn', 'msg': '未连接串口，无法进入调试模式'})
+        else:
+            await ws.send_json({'type': 'dbg_mode', 'on': True})
+
+    elif cmd == 'dbg_exit':
+        g.dbg_exit()
+        await ws.send_json({'type': 'dbg_mode', 'on': False})
+
+    elif cmd == 'dbg_cmd':
+        if g.mode == 'dbg':
+            g.dbg_cmd(str(msg.get('line', '')))
+
+    elif cmd == 'flash_stat':
+        await _dbg_ensure()
+        g.dbg_cmd('flash stat')
+
+    elif cmd == 'flash_findseg':
+        await _dbg_ensure()
+        g.dbg_cmd('flash findseg')
+
+    elif cmd == 'flash_export':
+        await _dbg_ensure()
+        start = int(msg.get('start', 0))
+        count = int(msg.get('count', 2048))
+        await _flash_export_chunked_async(ws, start, count)
+
+    elif cmd == 'param_read_all':
+        await _param_read_all(ws)
+
+    elif cmd == 'param_read':
+        pid = int(msg.get('id', 0))
+        g.write(anocom.cmd_read_param_info(pid))
+        g.write(anocom.cmd_read_param_value(pid))
+
+    elif cmd == 'param_write':
+        pid = int(msg.get('id', 0))
+        value = msg.get('value')
+        name_info = g.param_names.get(pid, {})
+        is_float = name_info.get('type') == 'float' if name_info else True
+        frame = anocom.cmd_write_param(pid, value, is_float)
+        # 记录期望校验（回传帧 SC/AC 需与发送帧一致）
+        body = frame[:-2]
+        g.param_pending[pid] = (anocom.sum_check(body), anocom.add_check(body), time.time())
+        g.write(frame)
+        await ws.send_json({'type': 'param_written_pending', 'id': pid})
+
+    elif cmd == 'param_restore':
+        g.write(anocom.cmd_param_restore_defaults())
+
+    elif cmd == 'param_save':
+        g.write(anocom.cmd_param_save())
+
+    elif cmd == 'record_start':
+        fn = str(msg.get('file') or f'rec_{time.strftime("%Y%m%d_%H%M%S")}.csv')
+        g.recorder = CsvRecorder(str(OUTPUT_DIR / fn))
+        g.recorder.start()
+        await ws.send_json({'type': 'record_state', 'on': True, 'file': fn})
+
+    elif cmd == 'record_stop':
+        if g.recorder:
+            g.recorder.stop()
+        await ws.send_json({'type': 'record_state', 'on': False})
+
+    elif cmd == 'list_recordings':
+        await ws.send_json({'type': 'recordings', 'files': list_recordings(str(OUTPUT_DIR))})
+
+    elif cmd == 'replay_start':
+        fn = str(msg.get('file', ''))
+        path = OUTPUT_DIR / fn
+        if not path.exists():
+            await ws.send_json({'type': 'log', 'level': 'error', 'msg': f'文件不存在: {fn}'})
+            return
+        g.replay = ReplaySource(str(path))
+        g.replay.open()
+        if g.replay_task:
+            g.replay_task.cancel()
+        g.replay_task = asyncio.create_task(_replay_loop(ws))
+        await ws.send_json({'type': 'replay_state', 'on': True, 'file': fn})
+
+    elif cmd == 'replay_stop':
+        if g.replay_task:
+            g.replay_task.cancel()
+            g.replay_task = None
+        g.replay = None
+        await ws.send_json({'type': 'replay_state', 'on': False})
+
+
+async def _replay_loop(ws: WebSocket):
+    """按 CSV 时间戳节奏回放遥测快照"""
+    t_last = None
+    t0 = time.time()
+    while g.replay:
+        row = g.replay.next_row()
+        if row is None:
+            g.send_all({'type': 'replay_state', 'on': False})
+            g.replay = None
+            return
+        t_now = row.get('t_ms')
+        if t_last is not None and t_now is not None:
+            dt = (t_now - t_last) / 1000.0
+            if dt > 0:
+                await asyncio.sleep(max(0.0, dt * 0.5))  # 半速回放，便于观察
+        t_last = t_now
+        g.snap = {k: v for k, v in row.items() if v is not None}
+        await asyncio.sleep(TELEMETRY_PERIOD)
+        g.send_all({'type': 'telemetry', 'data': g.snap, 'replay': True})
+
+
+async def _dbg_ensure():
+    """确保处于 DBG 模式（不在则进入并等固件切换完成）"""
+    if g.mode != 'dbg':
+        g.dbg_enter()
+        await asyncio.sleep(0.4)   # 固件 200Hz 检测 DBG\n + 串口回程
+    g.send_all({'type': 'dbg_mode', 'on': True})
+
+
+def _on_findseg_text(text: str):
+    """解析 flash findseg 输出行：[DBG] seg=<n> page=<p> tms=<t>"""
+    segs = []
+    for line in text.split('\n'):
+        import re
+        sm = re.search(r'seg=(\d+)', line)
+        pm_ = re.search(r'page=(\d+)', line)
+        tm = re.search(r'tms=(\d+)', line)
+        if sm:
+            segs.append({'num': int(sm.group(1)),
+                         'page': int(pm_.group(1)) if pm_ else 0,
+                         'tms': int(tm.group(1)) if tm else 0})
+    if segs:
+        g.send_all({'type': 'flash_segments', 'segments': segs})
+
+
+async def _flash_export_chunked_async(ws: WebSocket, start: int, count: int):
+    """分片导出：DAP-Link VCP 2M 下大流量丢字节（实测 32 页+ 必丢），
+    小片（4 页）约 80% 完整；每片按 n×2048B 长度校验，不足重试 3 次。
+    消费线程负责 feed（DBG 模式 _on_dbg_rx），本函数仅等待完成标志。"""
+    CHUNK = 4
+    total = bytearray()
+    page, remaining = start, count
+    while remaining > 0:
+        n = min(remaining, CHUNK)
+        got = None
+        for attempt in range(3):
+            done = threading.Event()
+            piece = []
+            g.dbgs.start_export(page, n, lambda raw, p=piece, d=done: (p.append(raw), d.set()))
+            await asyncio.to_thread(done.wait, 5 + n * 0.02)
+            if piece and len(piece[0]) == n * 2048:
+                got = piece[0]
+                break
+        if got is None:
+            g.send_all({'type': 'log', 'level': 'warn',
+                        'msg': f'片 {page}..{page + n - 1} 导出失败（链路丢包，3 次重试后放弃）'})
+            break
+        total.extend(got)
+        page += n
+        remaining -= n
+        g.send_all({'type': 'flash_progress', 'done': len(total) // 2048})
+    if total:
+        _on_flash_export_done(bytes(total))
+    else:
+        g.send_all({'type': 'log', 'level': 'warn', 'msg': '导出失败：无数据'})
+
+
+def _on_flash_export_done(raw: bytes):
+    """export 完成：切帧解析 → 段/行/列 → 前端"""
+    frames = bb.extract_frames(bytes(raw))
+    g.send_all({'type': 'flash_progress', 'done': len(raw) // 2048})
+    if not frames:
+        g.send_all({'type': 'log', 'level': 'warn', 'msg': '导出数据无有效帧'})
+        return
+    rows, segments, columns = bb.decode_frames(frames)
+    # 抽样预览（前端绘图/表格用，最多 3000 行）
+    step = max(1, len(rows) // 3000)
+    preview = [[r[0], r[1]] + [round(v, 4) for v in r[2]] + [r[3]] for r in rows[::step]]
+    g.send_all({'type': 'flash_done',
+                'rows': preview,
+                'row_count': len(rows),
+                'sample_step': step,
+                'columns': columns,
+                'segments': segments})
+
+
+async def _param_read_all(ws: WebSocket):
+    """拉取固件全部 117 参数（逐 ID 发送 + 等待该 ID 双全，超时重试。
+    ★ 2M 速率下 USB 串口偶发丢字节（固件 CRC 失败静默丢弃）——
+      批量灌发会系统性丢参数，必须逐 ID 确认）"""
+    if not (g.link and g.link.is_open):
+        return
+    g.param_names = {}
+    g.param_values = {}
+    failed = []
+    for pid in range(117):
+        if not await _param_read_single_async(pid):
+            failed.append(pid)
+    # 补拉循环
+    for _rnd in range(3):
+        if not failed:
+            break
+        failed = [pid for pid in failed if not await _param_read_single_async(pid)]
+    await ws.send_json({'type': 'log',
+                        'msg': f'参数读取完成：{117 - len(failed)}/117' +
+                               (f'（失败 {failed}）' if failed else '')})
+
+
+async def _param_read_single_async(pid, timeout=1.5, tries=3):
+    for _attempt in range(tries):
+        g.write(anocom.cmd_read_param_info(pid))
+        g.write(anocom.cmd_read_param_value(pid))
+        deadline = asyncio.get_running_loop().time() + timeout
+        while asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.05)
+            if pid in g.param_names and pid in g.param_values:
+                return True
+    return False
+
+
+# ========================================================================
+#  WebSocket 端点
+# ========================================================================
+
+@app.websocket('/ws')
+async def ws_endpoint(ws: WebSocket):
+    await ws.accept()
+    g.ws_clients.add(ws)
+    g._loop = asyncio.get_running_loop()
+    try:
+        # 连接状态快照
+        if g.link and g.link.is_open:
+            await ws.send_json({'type': 'conn', 'status': 'connected',
+                                'port': g.link.port, 'baud': g.link.baud})
+        while True:
+            msg = await ws.receive_json()
+            try:
+                await handle_ws_message(ws, msg)
+            except Exception as exc:
+                log.warning('cmd %r failed: %r', msg.get('cmd'), exc)
+                await ws.send_json({'type': 'log', 'level': 'error', 'msg': str(exc)})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        g.ws_clients.discard(ws)
+
+
+@app.get('/download/{name}')
+def download(name: str):
+    """下载 output/ 下的 CSV（记录或黑匣子导出）"""
+    safe = Path(name).name
+    p = OUTPUT_DIR / safe
+    if not p.exists():
+        return JSONResponse({'error': 'not found'}, status_code=404)
+    return FileResponse(str(p), filename=safe)
+
+
+# 静态前端（开发阶段禁用缓存：浏览器刷新即取最新 JS，避免改代码后白屏）
+app.mount('/', StaticFiles(directory=str(WEB_DIR), html=True), name='web')
+
+
+@app.middleware('http')
+async def no_cache_middleware(request, call_next):
+    resp = await call_next(request)
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
+
+
+@app.on_event('startup')
+async def startup():
+    log.info('GCS 后端启动完成，前端 http://127.0.0.1:8091/')
+
+
+if __name__ == '__main__':
+    import uvicorn
+    uvicorn.run(app, host='127.0.0.1', port=8091)
