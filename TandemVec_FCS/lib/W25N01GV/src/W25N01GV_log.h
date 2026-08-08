@@ -67,9 +67,16 @@
 #define W25N01GV_LOG_MAGIC1       0x55
 #define W25N01GV_LOG_TYPE_I       0x49   // 'I'
 #define W25N01GV_LOG_TYPE_P       0x50   // 'P'
+#define W25N01GV_LOG_TYPE_S       0x53   // 'S': flight segment start
+#define W25N01GV_LOG_TYPE_E       0x45   // 'E': flight segment end
 
 #define W25N01GV_LOG_IFRAME_SIZE  95     // 2+1+2+4+84+2
 #define W25N01GV_LOG_PFRAME_SIZE  51     // 2+1+2+2+42+2
+#define W25N01GV_LOG_EFRAME_SIZE  15     // 2+1+2+4+4+2
+// 通道名表最大长度（S 帧内 ASCII，21 通道名约 160B）
+#define W25N01GV_LOG_CHNAME_MAX   160
+// S 帧最大 = magic2+type1+seg2+t_ms4+names160+\0+crc2 = 172
+#define W25N01GV_LOG_SFRAME_MAX   (W25N01GV_LOG_CHNAME_MAX + 12)
 
 // delta quantization: (cur-prev)*100 stored as int16
 #define W25N01GV_LOG_DELTA_SCALE  100
@@ -104,6 +111,17 @@ public:
    * @return true if accepted (false if ring full -> frame dropped)
    */
   bool logPush(const uint8_t *payload);
+
+  /**
+   * @brief Push flight-segment start (S frame) — arm edge
+   * Embeds channel names for self-description (export tool reads them).
+   */
+  bool logFlightSegmentStart(uint16_t segNum, const char *chNames);
+
+  /**
+   * @brief Push flight-segment end (E frame) — disarm edge
+   */
+  bool logFlightSegmentEnd(uint16_t segNum, uint32_t durMs, uint32_t frames);
 
   /**
    * @brief Service write queue: pack ring frames into pages, write to NAND
@@ -147,7 +165,7 @@ private:
   W25N01GV &_flash;
 
   // ring buffer of raw frames (I or P, variable length 51/95)
-  uint8_t _ring[W25N01GV_LOG_MAX_FRAMES][W25N01GV_LOG_IFRAME_SIZE];
+  uint8_t _ring[W25N01GV_LOG_MAX_FRAMES][W25N01GV_LOG_SFRAME_MAX];
   uint16_t _ringLen[W25N01GV_LOG_MAX_FRAMES];
   uint16_t _head, _tail, _buffered;
 
@@ -174,6 +192,9 @@ private:
   // helpers
   void buildIFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq);
   void buildPFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq);
+  void buildSFrame(uint8_t *dst, uint16_t segNum, const char *chNames);
+  void buildEFrame(uint8_t *dst, uint16_t segNum, uint32_t durMs, uint32_t frames);
+  bool pushRawFrame(const uint8_t *frame, uint16_t len);
   bool isBlockBad(uint32_t page) const;
   void markBlockBad(uint32_t page);
   void scanBadBlocks();

@@ -252,24 +252,33 @@ bool W25N01GVLog::begin(bool erase)
   return true;
 }
 
-bool W25N01GVLog::logPush(const uint8_t *payload)
+bool W25N01GVLog::pushRawFrame(const uint8_t *frame, uint16_t len)
 {
   if (_buffered >= W25N01GV_LOG_MAX_FRAMES) {
     _dropped++;
     return false;
   }
+  memcpy(_ring[_head], frame, len);
+  _ringLen[_head] = len;
+  _head = (uint16_t)((_head + 1) % W25N01GV_LOG_MAX_FRAMES);
+  _buffered++;
+  _lastPushMs = millis();
+  return true;
+}
 
+bool W25N01GVLog::logPush(const uint8_t *payload)
+{
   // ★ 全局帧序号（跨段/环形覆盖不重置）——导出 CSV 的 seq 列全局唯一
   uint32_t seq = _globalSeq++;
 
-  uint8_t *slot = _ring[_head];
+  uint8_t slot[W25N01GV_LOG_SFRAME_MAX];
 
   if ((_frameCount % W25N01GV_LOG_I_INTERVAL) == 0) {
     buildIFrame(slot, payload, seq);
-    _ringLen[_head] = W25N01GV_LOG_IFRAME_SIZE;
+    if (!pushRawFrame(slot, W25N01GV_LOG_IFRAME_SIZE)) return false;
   } else {
     buildPFrame(slot, payload, seq);
-    _ringLen[_head] = W25N01GV_LOG_PFRAME_SIZE;
+    if (!pushRawFrame(slot, W25N01GV_LOG_PFRAME_SIZE)) return false;
   }
   _frameCount++;
 
@@ -278,9 +287,74 @@ bool W25N01GVLog::logPush(const uint8_t *payload)
   _prevTms = millis();
   _lastPushMs = _prevTms;
 
-  _head = (uint16_t)((_head + 1) % W25N01GV_LOG_MAX_FRAMES);
-  _buffered++;
   return true;
+}
+
+// ---------------------------------------------------------------
+// flight segment control frames (S / E)
+// ---------------------------------------------------------------
+void W25N01GVLog::buildSFrame(uint8_t *dst, uint16_t segNum, const char *chNames)
+{
+  memset(dst, 0xFF, W25N01GV_LOG_SFRAME_MAX);
+  dst[0] = W25N01GV_LOG_MAGIC0;
+  dst[1] = W25N01GV_LOG_MAGIC1;
+  dst[2] = W25N01GV_LOG_TYPE_S;
+  dst[3] = (uint8_t)(segNum & 0xFF);
+  dst[4] = (uint8_t)((segNum >> 8) & 0xFF);
+  uint32_t t = millis();
+  dst[5] = (uint8_t)(t & 0xFF);
+  dst[6] = (uint8_t)((t >> 8) & 0xFF);
+  dst[7] = (uint8_t)((t >> 16) & 0xFF);
+  dst[8] = (uint8_t)((t >> 24) & 0xFF);
+  // 通道名表（ASCII，截断到 CHNAME_MAX，CRC 按实际长度算）
+  uint16_t len = 0;
+  if (chNames) {
+    len = (uint16_t)strlen(chNames);
+    if (len > W25N01GV_LOG_CHNAME_MAX) len = W25N01GV_LOG_CHNAME_MAX;
+    memcpy(dst + 9, chNames, len);
+  }
+  dst[9 + len] = '\0';
+  // 帧总长 = 10 + len(名) + 1(\0) + 2(crc)
+  uint16_t crc = crc16_ccitt(dst, 10 + len);
+  dst[10 + len] = (uint8_t)(crc & 0xFF);
+  dst[11 + len] = (uint8_t)((crc >> 8) & 0xFF);
+}
+
+void W25N01GVLog::buildEFrame(uint8_t *dst, uint16_t segNum, uint32_t durMs, uint32_t frames)
+{
+  memset(dst, 0xFF, W25N01GV_LOG_EFRAME_SIZE);
+  dst[0] = W25N01GV_LOG_MAGIC0;
+  dst[1] = W25N01GV_LOG_MAGIC1;
+  dst[2] = W25N01GV_LOG_TYPE_E;
+  dst[3] = (uint8_t)(segNum & 0xFF);
+  dst[4] = (uint8_t)((segNum >> 8) & 0xFF);
+  dst[5] = (uint8_t)(durMs & 0xFF);
+  dst[6] = (uint8_t)((durMs >> 8) & 0xFF);
+  dst[7] = (uint8_t)((durMs >> 16) & 0xFF);
+  dst[8] = (uint8_t)((durMs >> 24) & 0xFF);
+  dst[9] = (uint8_t)(frames & 0xFF);
+  dst[10] = (uint8_t)((frames >> 8) & 0xFF);
+  dst[11] = (uint8_t)((frames >> 16) & 0xFF);
+  dst[12] = (uint8_t)((frames >> 24) & 0xFF);
+  uint16_t crc = crc16_ccitt(dst, W25N01GV_LOG_EFRAME_SIZE - 2);
+  dst[13] = (uint8_t)(crc & 0xFF);
+  dst[14] = (uint8_t)((crc >> 8) & 0xFF);
+}
+
+bool W25N01GVLog::logFlightSegmentStart(uint16_t segNum, const char *chNames)
+{
+  uint8_t slot[W25N01GV_LOG_SFRAME_MAX];
+  buildSFrame(slot, segNum, chNames);
+  uint16_t len = (uint16_t)(12 + strlen(chNames));
+  if (len > W25N01GV_LOG_SFRAME_MAX) len = W25N01GV_LOG_SFRAME_MAX;
+  return pushRawFrame(slot, len);
+}
+
+bool W25N01GVLog::logFlightSegmentEnd(uint16_t segNum, uint32_t durMs, uint32_t frames)
+{
+  uint8_t slot[W25N01GV_LOG_EFRAME_SIZE];
+  buildEFrame(slot, segNum, durMs, frames);
+  return pushRawFrame(slot, W25N01GV_LOG_EFRAME_SIZE);
 }
 
 void W25N01GVLog::advanceCursor()

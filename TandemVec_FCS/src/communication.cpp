@@ -22,6 +22,65 @@ static bool s_dbg_mode = false;
 volatile bool s_flashWriting = false;
 volatile uint32_t s_flashWritingUntil = 0;
 
+// ========================================================================
+// 黑匣子通道表（★ 唯一事实源：增删/换通道只改这里）
+//   - handleDataLogging 遍历此表组装 payload（Flash）+ CSV 列
+//   - S 帧通道名表由此生成（导出工具自描述列名）
+// ========================================================================
+struct BlackboxChannel {
+  const char *name;       // CSV 列名 / S 帧通道名
+  float (*get)(void);     // 数据源（返回原始值）
+  float scale;            // 缩放（如 RAD_TO_DEG；最终值 = 原始值 × scale）
+};
+
+static float bbCurrentTime() { return (float)millis(); }
+static float bbRoll()  { return AHRS_Packet.Roll; }
+static float bbPitch() { return AHRS_Packet.Pitch; }
+static float bbHeading(){ return AHRS_Packet.Heading; }
+static float bbAx() { return IMU_Packet.accelerometer_x; }
+static float bbAy() { return IMU_Packet.accelerometer_y; }
+static float bbAz() { return IMU_Packet.accelerometer_z; }
+static float bbGx() { return IMU_Packet.gyroscope_x; }
+static float bbGy() { return IMU_Packet.gyroscope_y; }
+static float bbGz() { return IMU_Packet.gyroscope_z; }
+static float bbVn() { return INS_GNSS_Packet.velocity_north; }
+static float bbVe() { return INS_GNSS_Packet.velocity_east; }
+static float bbVd() { return INS_GNSS_Packet.velocity_down; }
+static float bbRn() { return relative_north; }
+static float bbRe() { return relative_east; }
+static float bbRd() { return relative_down; }
+static float bbTvc1() { float a, b; getFilteredTVCAngles(a, b); return a; }
+static float bbTvc2() { float a, b; getFilteredTVCAngles(a, b); return b; }
+static float bbValve() { return receivedValveControl; }
+static float bbP1() { return receivedP1; }
+static float bbP2() { return receivedP2; }
+
+// 21 通道（与 Serial3 CSV 历史列一致）。加一行 = 加一个通道。
+static const BlackboxChannel kBbChannels[] = {
+  {"t_ms",       bbCurrentTime, 1.0f},
+  {"roll_deg",   bbRoll,   RAD_TO_DEG},
+  {"pitch_deg",  bbPitch,  RAD_TO_DEG},
+  {"heading_deg",bbHeading,RAD_TO_DEG},
+  {"accel_x_ms2",bbAx,     1.0f},
+  {"accel_y_ms2",bbAy,     1.0f},
+  {"accel_z_ms2",bbAz,     1.0f},
+  {"gyro_x_dps", bbGx,     RAD_TO_DEG},
+  {"gyro_y_dps", bbGy,     RAD_TO_DEG},
+  {"gyro_z_dps", bbGz,     RAD_TO_DEG},
+  {"vel_n_ms",   bbVn,     1.0f},
+  {"vel_e_ms",   bbVe,     1.0f},
+  {"vel_d_ms",   bbVd,     1.0f},
+  {"rel_n_m",    bbRn,     1.0f},
+  {"rel_e_m",    bbRe,     1.0f},
+  {"rel_d_m",    bbRd,     1.0f},
+  {"tvc1_deg",   bbTvc1,   1.0f},
+  {"tvc2_deg",   bbTvc2,   1.0f},
+  {"valve_ctrl", bbValve,  1.0f},
+  {"p1",         bbP1,     1.0f},
+  {"p2",         bbP2,     1.0f},
+};
+#define BB_CHANNEL_COUNT (sizeof(kBbChannels) / sizeof(kBbChannels[0]))
+
 // 串口5发送缓冲区，用于发送给上位机进行轨迹规划的数据
 // 缓冲区大小：1(帧头) + 8个float * 4字节/float + 1(帧尾) = 34字节
 uint8_t serial5Buffer[34];
@@ -1035,120 +1094,62 @@ void handleDataLogging()
   bool loggingActive = isDatalogging || dbgLogging;
 
   static bool wasLogging = false; // 记录上一次调用时的状态
-  static uint32_t segmentId = 0;  // 分段编号（从 1 开始）
+  static uint32_t segmentId = 0;  // 飞行段编号（从 1 开始）
+  static uint32_t segmentStartTms = 0;
 
   const unsigned long currentTime = millis();
 
-  // —— 检测开始：false → true ——
+  // —— 检测开始：false → true（飞行段开始）——
   if (loggingActive && !wasLogging)
   {
     segmentId++;
-    // 段开始标记（以 # 开头，避免与 CSV 冲突）
+    segmentStartTms = currentTime;
+
+    // Serial3 段头 + 列名（从通道表生成）
     Serial3.print(F("#LOG_START,segment="));
     Serial3.print(segmentId);
     Serial3.print(F(",t_ms="));
     Serial3.println(currentTime);
+    Serial3.print(F("#FIELDS,"));
+    for (uint8_t i = 0; i < BB_CHANNEL_COUNT; i++) {
+      if (i) Serial3.print(F(","));
+      Serial3.print(kBbChannels[i].name);
+    }
+    Serial3.println();
 
-    // 可选：打印列名头（仅本段第一次，方便后处理）
-    Serial3.println(F(
-        "t_ms,"
-        "roll_deg,pitch_deg,heading_deg,"
-        "accel_x_ms2,accel_y_ms2,accel_z_ms2,"
-        "gyro_x_dps,gyro_y_dps,gyro_z_dps,"
-        "vel_n_ms,vel_e_ms,vel_d_ms,"
-        "rel_n_m,rel_e_m,rel_d_m,"
-        "tvc1_deg,tvc2_deg,"
-        "valve_ctrl,p1,p2"));
+    // Flash S 帧（飞行段头 + 通道名自描述）
+    if (flash.isPresent()) {
+      static char chNames[W25N01GV_LOG_CHNAME_MAX + 1];
+      uint16_t pos = 0;
+      for (uint8_t i = 0; i < BB_CHANNEL_COUNT && pos < W25N01GV_LOG_CHNAME_MAX; i++) {
+        const char *n = kBbChannels[i].name;
+        while (*n && pos < W25N01GV_LOG_CHNAME_MAX) chNames[pos++] = *n++;
+        if (i < BB_CHANNEL_COUNT - 1 && pos < W25N01GV_LOG_CHNAME_MAX) chNames[pos++] = ',';
+      }
+      chNames[pos] = '\0';
+      flashLog.logFlightSegmentStart((uint16_t)segmentId, chNames);
+    }
   }
 
   // —— 正常数据输出 ——
   if (loggingActive)
   {
-    float filteredSensor1Angle, filteredSensor2Angle;
-    getFilteredTVCAngles(filteredSensor1Angle, filteredSensor2Angle); // 获取TVC反馈角度
-
-    // 与 CSV 列一一对应的数据快照（也用于 Flash 双写，21 float = 84B payload）
-    float d[21];
-    d[0]  = (float)currentTime;
-    d[1]  = AHRS_Packet.Roll * RAD_TO_DEG;
-    d[2]  = AHRS_Packet.Pitch * RAD_TO_DEG;
-    d[3]  = AHRS_Packet.Heading * RAD_TO_DEG;
-    d[4]  = IMU_Packet.accelerometer_x;
-    d[5]  = IMU_Packet.accelerometer_y;
-    d[6]  = IMU_Packet.accelerometer_z;
-    d[7]  = IMU_Packet.gyroscope_x * RAD_TO_DEG;
-    d[8]  = IMU_Packet.gyroscope_y * RAD_TO_DEG;
-    d[9]  = IMU_Packet.gyroscope_z * RAD_TO_DEG;
-    d[10] = INS_GNSS_Packet.velocity_north;
-    d[11] = INS_GNSS_Packet.velocity_east;
-    d[12] = INS_GNSS_Packet.velocity_down;
-    d[13] = relative_north;
-    d[14] = relative_east;
-    d[15] = relative_down;
-    d[16] = filteredSensor1Angle;
-    d[17] = filteredSensor2Angle;
-    d[18] = receivedValveControl;
-    d[19] = receivedP1;
-    d[20] = receivedP2;
-
-    // 依次打印各项数据，以逗号分隔（保持原有顺序与精度）
-    // ★ 调试强制模式（datalog）跳过 Serial3 输出——避免洪水淹没调试串口，
-    //   只写 Flash（验证 Flash 写入链路用）
-    if (!dbgLogging)
-    {
-    Serial3.print(currentTime);
-    Serial3.print(",");
-    // 姿态欧拉角 (度)
-    Serial3.print(d[1], 2);
-    Serial3.print(",");
-    Serial3.print(d[2], 2);
-    Serial3.print(",");
-    Serial3.print(d[3], 2);
-    Serial3.print(",");
-    // IMU加速度计数据 (m/s^2)
-    Serial3.print(d[4], 4);
-    Serial3.print(",");
-    Serial3.print(d[5], 4);
-    Serial3.print(",");
-    Serial3.print(d[6], 4);
-    Serial3.print(",");
-    // IMU陀螺仪数据 (度/秒)
-    Serial3.print(d[7], 2);
-    Serial3.print(",");
-    Serial3.print(d[8], 2);
-    Serial3.print(",");
-    Serial3.print(d[9], 2);
-    Serial3.print(",");
-    // INS/GNSS组合导航速度 (NED系, m/s)
-    Serial3.print(d[10], 3);
-    Serial3.print(",");
-    Serial3.print(d[11], 3);
-    Serial3.print(",");
-    Serial3.print(d[12], 3);
-    Serial3.print(",");
-    // INS/GNSS组合导航相对位置 (NED系, m)
-    Serial3.print(d[13], 3);
-    Serial3.print(",");
-    Serial3.print(d[14], 3);
-    Serial3.print(",");
-    Serial3.print(d[15], 3);
-    Serial3.print(",");
-    // TVC角度传感器反馈 (度)
-    Serial3.print(d[16], 2);
-    Serial3.print(",");
-    Serial3.print(d[17], 2);
-    Serial3.print(",");
-    // 发动机控制器回传数据
-    Serial3.print(d[18], 2); // 阀门控制量
-    Serial3.print(",");
-    Serial3.print(d[19], 2); // 压力1
-    Serial3.print(",");
-    Serial3.print(d[20], 2); // 压力2
-    Serial3.println();       // 换行，结束当前行数据
+    // 通道表遍历：组装 payload（Flash 双写）+ Serial3 CSV（非调试强制模式）
+    static float d[BB_CHANNEL_COUNT];   // static: 避免大栈
+    for (uint8_t i = 0; i < BB_CHANNEL_COUNT; i++) {
+      d[i] = kBbChannels[i].get() * kBbChannels[i].scale;
     }
 
-    // Flash 双写：payload 为 84 字节二进制快照（非阻塞，µs 级入环形缓冲）
-    // 注意：仅当 Flash 初始化成功（present）才写，避免无用开销
+    if (!dbgLogging)   // 调试强制模式跳过 Serial3（避免洪水）
+    {
+      for (uint8_t i = 0; i < BB_CHANNEL_COUNT; i++) {
+        if (i) Serial3.print(F(","));
+        Serial3.print(d[i], 3);
+      }
+      Serial3.println();
+    }
+
+    // Flash 双写（非阻塞入 ring）
     if (flash.isPresent())
     {
       s_flashPushCount++;
@@ -1156,17 +1157,20 @@ void handleDataLogging()
     }
   }
 
-  // —— 检测结束：true → false ——
+  // —— 检测结束：true → false（飞行段结束）——
   if (!loggingActive && wasLogging)
   {
     Serial3.print(F("#LOG_END,segment="));
     Serial3.print(segmentId);
     Serial3.print(F(",t_ms="));
     Serial3.println(currentTime);
-    // 打印十个空行，以便于后续的数据解析
-    for (int i = 0; i < 10; i++)
-    {
-      Serial3.println();
+    for (int i = 0; i < 10; i++) Serial3.println();
+
+    // Flash E 帧（飞行段尾）
+    if (flash.isPresent()) {
+      flashLog.logFlightSegmentEnd((uint16_t)segmentId,
+                                   (uint32_t)(currentTime - segmentStartTms),
+                                   0);   // 帧数由导出工具统计
     }
   }
 
