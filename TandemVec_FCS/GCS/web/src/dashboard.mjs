@@ -47,7 +47,7 @@ export function activate() {
     return { bar, key, opts };
   });
 
-  bus.addEventListener('telemetry', onTelemetry);
+  bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
   bus.addEventListener('page', onPage);
   onTelemetry(state.snap);
 }

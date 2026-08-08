@@ -49,7 +49,34 @@ export function activate() {
   });
   bus.addEventListener('conn', (e) => { if (e.detail.status === 'connected') refreshRecordings(); });
 
+  // ---- 链路监听（hex）----
+  $('hexToggle').addEventListener('click', () => {
+    send({ cmd: hexOn ? 'hex_off' : 'hex_on' });
+  });
+  $('hexClear').addEventListener('click', () => { $('hexOut').textContent = ''; });
+  bus.addEventListener('hex-state', (e) => {
+    hexOn = !!e.detail.on;
+    $('hexToggle').textContent = hexOn ? '停止监听' : '开始监听';
+    $('hexToggle').classList.toggle('primary', hexOn);
+    if (hexOn) pushHex('--- 监听开始：等待串口字节…（无输出 = 链路无数据） ---');
+  });
+  bus.addEventListener('rx-hex', (e) => {
+    const m = e.detail;
+    pushHex(`${m.hex}\n  |${m.ascii}|`);
+  });
+
   refreshRecordings();
+}
+
+let hexOn = false;
+const HEX_MAX_CHARS = 20000;
+function pushHex(text) {
+  const out = $('hexOut');
+  out.textContent += (out.textContent ? '\n' : '') + text;
+  if (out.textContent.length > HEX_MAX_CHARS) {
+    out.textContent = out.textContent.slice(-HEX_MAX_CHARS / 2);
+  }
+  out.scrollTop = out.scrollHeight;
 }
 
 function sendLine() {

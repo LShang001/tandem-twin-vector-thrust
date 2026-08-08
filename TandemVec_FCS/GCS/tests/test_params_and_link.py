@@ -113,6 +113,58 @@ def test_telemetry_aggregation():
     assert abs(s['p1_mpa'] - 15.2) < 1e-6
     assert s['gps_sats'] == 12 and s['gps_fix'] == 3
     assert s['rc3'] == 1002
+    # 链路统计：12 帧全解码、无 CRC 失败、遥测时间戳已更新
+    assert m.g.stat_frames == 12 and m.g.stat_bad == 0
+    assert m.g.stat_bytes == sum(len(f) for f in _make_telemetry_frames())
+    assert m.g.last_tele_ts is not None
+    m.g.disconnect()
+
+
+def test_half_frame_retained_across_chunks():
+    """块尾半帧必须保留到下一拼接（旧实现整体 clear 会丢半帧）"""
+    m = _reset_g()
+    frame = anocom.encode_frame(anocom.FUNC_ATTITUDE_EULER,
+        struct.pack('<3hB', 1250, -300, 9000, 0x81))
+    cut = len(frame) - 3
+    m.g.connect_fake([frame[:cut], frame[cut:]])
+    _drain()
+    assert abs(m.g.snap['roll_deg'] - 12.5) < 1e-6   # 半帧拼接后成功解码
+    assert len(m.g.tele_buf) == 0                    # 消费干净无残留
+    m.g.disconnect()
+
+
+def test_garbage_stream_bounded():
+    """乱码流（错波特率场景）：缓冲有界不膨胀、统计照常累计——防 O(n²) 卡死"""
+    m = _reset_g()
+    garbage = bytes((i * 37 + 11) & 0xFF for i in range(20000))
+    garbage = garbage.replace(b'\xab', b'\xaa')      # 剔除帧头字节，保证无帧
+    m.g.connect_fake([garbage[:9000], garbage[9000:18000], garbage[18000:]])
+    _drain()
+    assert len(m.g.tele_buf) <= m.TELE_BUF_CAP
+    assert m.g.stat_frames == 0
+    assert m.g.stat_bytes == len(garbage)
+    assert m.g.snap == {}                            # 无有效帧 → 快照为空
+    m.g.disconnect()
+
+
+def test_realworld_chunking_brutal():
+    """真实串口形态：12 帧拼成整流 + 前置垃圾 + 任意断点切块 → 全部解码。
+    模拟 2M VCP 实际到包方式（多块拼帧、块间任意撕裂、帧间夹垃圾）"""
+    m = _reset_g()
+    blob = b''.join(_make_telemetry_frames())
+    garbage = b'\x00\xff\x13\x37\xaa'                # 帧间垃圾（无 AB 头）
+    stream = garbage + blob
+    # 任意断点切块（7 / 100 / 33 / 剩余），制造跨块半帧
+    chunks = [stream[:7], stream[7:107], stream[107:140], stream[140:]]
+    m.g.connect_fake(chunks)
+    _drain()
+    s = m.g.snap
+    assert abs(s['roll_deg'] - 12.5) < 1e-6          # 组0
+    assert s['flight_mode'] == 1                     # 组1
+    assert abs(s['vel_n_ms'] - 1.0) < 1e-6           # 组2
+    assert s['gps_sats'] == 12                       # 组3
+    assert m.g.stat_frames == 12                     # 12 帧无一丢失
+    assert m.g.stat_tele == 12                       # 全部计入遥测帧统计
     m.g.disconnect()
 
 

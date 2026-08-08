@@ -19,6 +19,10 @@
     </div>
   </div>
   <div class="conn-box">
+    <div class="svc-box" title="后端服务状态（本页与后端的 WebSocket 链路）">
+      <div class="link-led off" id="svcLed">●</div>
+      <div class="link-info" id="svcInfo">后端连接中…</div>
+    </div>
     <select id="portSelect" title="串口"></select>
     <select id="baudSelect" title="波特率">
       <option value="2000000" selected>2 000 000</option>
@@ -26,8 +30,9 @@
       <option value="115200">115 200</option>
     </select>
     <button id="btnConnect" class="btn primary">连接</button>
-    <div class="link-led" id="linkLed" title="链路状态">●</div>
+    <div class="link-led" id="linkLed" title="串口链路状态">●</div>
     <div class="link-info" id="linkInfo">未连接</div>
+    <div class="link-stat" id="linkStat" title="链路健康：接收速率 · 完整帧率 · CRC失败率"></div>
   </div>
   <nav id="nav">
     <button class="nav-btn active" data-page="dashboard">仪表盘</button>
@@ -181,6 +186,16 @@
         <input id="conLine" placeholder="输入 DBG 命令，Enter 发送…" autocomplete="off">
         <button class="btn" id="conSend">发送</button>
       </div>
+    </div>
+    <div class="glass panel hex-panel">
+      <div class="con-head">
+        <div class="panel-title">链路监听 HEX <span class="hint">原始字节监视——"没数据"排障：无字节 / 乱码 / DBG 文本 / AB 帧 一眼可分</span></div>
+        <div class="scope-tools">
+          <button class="btn" id="hexToggle">开始监听</button>
+          <button class="btn small" id="hexClear">清空</button>
+        </div>
+      </div>
+      <pre id="hexOut" class="hex-out"></pre>
     </div>
     <div class="glass panel rec-panel">
       <div class="con-head">

@@ -50,8 +50,13 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 DEFAULT_BAUD = 2000000      # = 固件 SERIAL6_BAUDRATE
 TELEMETRY_PERIOD = 0.05     # 遥测推送节流 20Hz
 PARAM_WRITE_TIMEOUT = 2.0   # 参数写入校验帧超时
+TELE_BUF_CAP = 8192         # 无完整帧时遥测缓冲上限（防乱码流 O(n²) 膨胀卡死）
+STAT_PERIOD = 1.0           # 链路统计推送周期
+START_TS = time.time()      # 后端启动时间（/api/status 用）
+HEX_FLUSH_PERIOD = 0.35     # hex 监听推送节流
+HEX_FLUSH_MAX = 512         # 单次 hex 推送最大字节
 
-app = FastAPI(title='TandemVec GCS', version='0.2.0')
+app = FastAPI(title='TandemVec GCS', version='0.3.0')
 
 
 class GCS:
@@ -78,6 +83,23 @@ class GCS:
         self._stat_cb = None
         self._consumer_thread = None
         self._consumer_stop = threading.Event()
+        # ---- 链路统计（消费线程累加，_stat_loop 周期取差值广播）----
+        self.stat_bytes = 0            # 累计接收字节
+        self.stat_frames = 0           # 累计完整帧
+        self.stat_bad = 0              # 累计 CRC 失败帧
+        self.stat_tele = 0             # 累计解出遥测字段的帧（区别于参数/设备响应帧）
+        self.last_tele_ts = None       # 最近一次解码出遥测字段的时间
+        # ---- hex 监听（链路原始字节监视，排障用）----
+        self.hex_watch = False
+        self._hex_buf = bytearray()
+        self._hex_last_flush = 0.0
+
+    def reset_stats(self):
+        self.stat_bytes = 0
+        self.stat_frames = 0
+        self.stat_bad = 0
+        self.stat_tele = 0
+        self.last_tele_ts = None
 
     # ---------------- 串口 ----------------
     def connect(self, port, baud, consume_thread: bool = True):
@@ -91,6 +113,14 @@ class GCS:
         self.recorder = None
         self.param_names = {}
         self.param_values = {}
+        self.reset_stats()
+        # ★ 防"固件卡在 DBG 模式无遥测"：连接后自动发 exit——
+        #   若固件处于调试模式则退出恢复遥测轮发；若本就在遥测模式，
+        #   固件 DBG 入口检测会把这行非帧字节当无效行丢弃，无副作用。
+        try:
+            self.link.write(b'exit\n')
+        except Exception:
+            pass
         if consume_thread:
             self._start_consumer()
 
@@ -115,9 +145,13 @@ class GCS:
             try:
                 if kind == 'link_down':
                     log.warning('link_down：读线程异常退出')
-                    self.disconnect()
+                    # ★ 勿调 disconnect()：那会 join 消费线程自身（RuntimeError
+                    #   被静默吞掉、断线通知丢失）。只关链路、清状态。
+                    self._close_link()
                     self.send_all({'type': 'conn', 'status': 'disconnected', 'reason': 'link_down'})
                 elif kind == 'rx':
+                    if self.hex_watch:
+                        self._hex_feed(payload)
                     if self.mode == 'dbg' and self.dbgs:
                         _on_dbg_rx(payload)
                     else:
@@ -126,16 +160,35 @@ class GCS:
                 log.warning('rx consumer error', exc_info=True)
         log.info('rx consumer 循环退出')
 
-    def disconnect(self):
-        self._consumer_stop.set()
-        if self._consumer_thread:
-            self._consumer_thread.join(timeout=2.0)
-            self._consumer_thread = None
+    def _hex_feed(self, payload: bytes):
+        """hex 监听：累积原始字节，节流推送 hex+ASCII 转储（排障用，
+        让"完全没数据 / 乱码 / DBG 文本 / AnoCom 帧"一眼可分）"""
+        self._hex_buf.extend(payload)
+        now = time.time()
+        if len(self._hex_buf) >= HEX_FLUSH_MAX or now - self._hex_last_flush >= HEX_FLUSH_PERIOD:
+            chunk = bytes(self._hex_buf[:HEX_FLUSH_MAX])
+            del self._hex_buf[:HEX_FLUSH_MAX]
+            self._hex_last_flush = now
+            hexs = ' '.join(f'{b:02x}' for b in chunk)
+            asc = ''.join(chr(b) if 32 <= b < 127 else '·' for b in chunk)
+            self.send_all({'type': 'rx_hex', 'hex': hexs, 'ascii': asc, 'n': len(chunk)})
+
+    def _close_link(self):
+        """仅关闭串口链路并复位模式/缓冲（不碰消费线程，线程内安全）"""
         if self.link:
             self.link.close()
             self.link = None
         self.tele_buf.clear()
         self.mode = 'telemetry'
+
+    def disconnect(self):
+        self._consumer_stop.set()
+        if self._consumer_thread and self._consumer_thread.is_alive():
+            # 消费线程自身调用时跳过 join（防 join 当前线程）
+            if threading.current_thread() is not self._consumer_thread:
+                self._consumer_thread.join(timeout=2.0)
+            self._consumer_thread = None
+        self._close_link()
 
     def connect_fake(self, replay: list, consume_thread: bool = False):
         """测试专用：注入模拟串口字节流（FakeSerialLink，不依赖 pyserial/硬件）
@@ -150,6 +203,7 @@ class GCS:
         self.dbgs = bb.DbgSession(self.link.write)
         self.param_names = {}
         self.param_values = {}
+        self.reset_stats()
         if consume_thread:
             self._start_consumer()
 
@@ -235,10 +289,27 @@ def _emit_dbg_text(text: str):
 
 
 def _on_telemetry_rx(chunk: bytes):
+    g.stat_bytes += len(chunk)
     g.tele_buf.extend(chunk)
-    frames = anocom.find_frames(bytes(g.tele_buf))
+    # ★ 2026-08-08 卡顿根因修复：旧实现 find_frames 全缓冲扫描 + 找到帧才
+    #   整体 clear——错波特率/固件卡 DBG 发文本时缓冲无限膨胀，每块都对
+    #   全缓冲 O(n) 扫描 + bytes() 拷贝，整体 O(n²) 退化至上位机卡死；
+    #   且整体 clear 会把块尾半帧一并丢弃。现改为：只切完整帧、只删已消费
+    #   前缀、半帧留尾；无帧且超上限时按垃圾流裁尾。
+    frames, consumed = anocom.extract_frames(bytes(g.tele_buf))
+    if consumed:
+        del g.tele_buf[:consumed]
+    elif len(g.tele_buf) > TELE_BUF_CAP:
+        idx = g.tele_buf.rfind(bytes([anocom.FRAME_HEAD]))
+        if idx > 0:
+            del g.tele_buf[:idx]
+        elif idx < 0:
+            g.tele_buf.clear()
+        else:
+            del g.tele_buf[1:]   # idx == 0：帧头在起点但组不成帧，丢弃帧头字节
     if frames:
-        g.tele_buf.clear()
+        g.stat_frames += len(frames)
+        g.stat_bad += sum(1 for f in frames if not f.valid)
     changed = False
     for f in frames:
         # ---- 参数/设备帧先分流（decode_frame 无对应解码器）----
@@ -265,9 +336,11 @@ def _on_telemetry_rx(chunk: bytes):
         dec = anocom.decode_frame(f)
         if not dec:
             continue
+        g.stat_tele += 1
         g.snap.update(dec)
         changed = True
     if changed:
+        g.last_tele_ts = time.time()
         g.snap['t_ms'] = time.time() * 1000
         if g.recorder and g.recorder.active and not g.replay:
             g.recorder.write(g.snap)
@@ -277,6 +350,29 @@ def _on_telemetry_rx(chunk: bytes):
         if now - last >= TELEMETRY_PERIOD:
             g._last_tele_push = now
             g.send_all({'type': 'telemetry', 'data': g.snap})
+
+
+async def _stat_loop():
+    """1Hz 链路健康统计广播：字节率/帧率/CRC 失败率/遥测帧率/停滞时长。
+    前端据此区分"未连接 / 固件不发 / 乱码 / CRC 灭 / 只有响应帧无遥测"。"""
+    prev = (0, 0, 0, 0)
+    while True:
+        await asyncio.sleep(STAT_PERIOD)
+        cur = (g.stat_bytes, g.stat_frames, g.stat_bad, g.stat_tele)
+        connected = bool(g.link and g.link.is_open)
+        tele_age = (time.time() - g.last_tele_ts) if g.last_tele_ts is not None else None
+        g.send_all({
+            'type': 'link_stat',
+            'connected': connected,
+            'mode': g.mode,
+            'bytes_s': cur[0] - prev[0],
+            'frames_s': cur[1] - prev[1],
+            'bad_s': cur[2] - prev[2],
+            'tele_s': cur[3] - prev[3],
+            'tele_age_s': round(tele_age, 1) if tele_age is not None else None,
+            'fields': len(g.snap),
+        })
+        prev = cur
 
 
 # ---------------- 参数响应处理 ----------------
@@ -335,6 +431,15 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
     cmd = msg.get('cmd')
     if cmd == 'list_ports':
         await ws.send_json({'type': 'ports', 'ports': list_ports()})
+
+    elif cmd == 'hex_on':
+        g.hex_watch = True
+        g._hex_buf.clear()
+        await ws.send_json({'type': 'hex_state', 'on': True})
+
+    elif cmd == 'hex_off':
+        g.hex_watch = False
+        await ws.send_json({'type': 'hex_state', 'on': False})
 
     elif cmd == 'connect':
         port, baud = msg.get('port'), int(msg.get('baud') or DEFAULT_BAUD)
@@ -583,6 +688,8 @@ async def ws_endpoint(ws: WebSocket):
     g.ws_clients.add(ws)
     g._loop = asyncio.get_running_loop()
     try:
+        # 版本握手：前端据此发现"新页面配旧后端"（进程残留）并提示重启
+        await ws.send_json({'type': 'hello', 'version': app.version})
         # 连接状态快照
         if g.link and g.link.is_open:
             await ws.send_json({'type': 'conn', 'status': 'connected',
@@ -598,6 +705,29 @@ async def ws_endpoint(ws: WebSocket):
         pass
     finally:
         g.ws_clients.discard(ws)
+
+
+@app.get('/api/status')
+def api_status():
+    """后端服务状态总览（前端顶栏/外部探活用）"""
+    return {
+        'ok': True,
+        'version': app.version,
+        'uptime_s': round(time.time() - START_TS, 1),
+        'ws_clients': len(g.ws_clients),
+        'serial': {
+            'connected': bool(g.link and g.link.is_open),
+            'port': g.link.port if g.link else None,
+            'baud': g.link.baud if g.link else None,
+            'mode': g.mode,
+        },
+        'stats': {
+            'bytes_total': g.stat_bytes,
+            'frames_total': g.stat_frames,
+            'crc_bad_total': g.stat_bad,
+            'tele_age_s': round(time.time() - g.last_tele_ts, 1) if g.last_tele_ts else None,
+        },
+    }
 
 
 @app.get('/download/{name}')
@@ -623,7 +753,9 @@ async def no_cache_middleware(request, call_next):
 
 @app.on_event('startup')
 async def startup():
-    log.info('GCS 后端启动完成，前端 http://127.0.0.1:8091/')
+    g._loop = asyncio.get_running_loop()
+    asyncio.create_task(_stat_loop())
+    log.info('GCS 后端启动完成（状态接口 /api/status）')
 
 
 if __name__ == '__main__':

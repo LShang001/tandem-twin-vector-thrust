@@ -87,27 +87,39 @@ def encode_frame(func: int, payload: bytes, dst: int = GND_ADDR) -> bytes:
     return body + bytes([sum_check(body), add_check(body)])
 
 
-def find_frames(buf: bytes):
-    """逐字节扫描 AB 05 FF 帧头切帧；返回 Frame 列表（校验不过的标 valid=False）"""
+def extract_frames(buf: bytes):
+    """逐字节扫描 AB 05 FF 帧头切帧；返回 (frames, consumed)。
+
+    consumed = 最后一个完整帧的结束偏移。调用方 del buf[:consumed] 即可
+    保留尾部半帧——流式场景下避免整体清空缓冲导致半帧丢失，也避免
+    缓冲无限膨胀后反复全量扫描的 O(n²) 退化（错波特率/DBG 文本流场景
+    曾致上位机卡死）。帧头匹配但长度不足（半帧）时停在原地等下一块。"""
     frames = []
     i = 0
     n = len(buf)
-    while i < n - 7:
+    consumed = 0
+    while i + 8 <= n:  # 最小帧 = 6B 头 + 0 数据 + 2B 校验
         if buf[i] == FRAME_HEAD and buf[i + 1] == LOCAL_ADDR and buf[i + 2] == GND_ADDR:
             func = buf[i + 3]
             length = buf[i + 4] | (buf[i + 5] << 8)
-            if i + 6 + length + 2 <= n:
+            end = i + 6 + length + 2
+            if end <= n:
                 payload = buf[i + 6:i + 6 + length]
-                sc, ac = buf[i + 6 + length], buf[i + 7 + length]
+                sc, ac = buf[end - 2], buf[end - 1]
                 body = buf[i:i + 6 + length]
                 valid = (sum_check(body) == sc and add_check(body) == ac)
                 frames.append(Frame(func, payload, sc, ac, valid))
-                i += 6 + length + 2
+                i = end
+                consumed = end
                 continue
-            i += 1
-        else:
-            i += 1
-    return frames
+            break  # 半帧：保留在缓冲尾部，等后续字节
+        i += 1
+    return frames, consumed
+
+
+def find_frames(buf: bytes):
+    """兼容包装：逐字节扫描 AB 05 FF 帧头切帧；返回 Frame 列表（校验不过的标 valid=False）"""
+    return extract_frames(buf)[0]
 
 
 # ========================================================================

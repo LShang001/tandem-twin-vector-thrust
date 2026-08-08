@@ -6,6 +6,7 @@ import { fmt, fmtInt } from './widget.mjs';
 export const bus = new EventTarget();
 
 const ws = { sock: null, retry: 0 };
+const BACKEND_VERSION = '0.3.0';   // 前端期望的后端版本（hello 握手比对）
 export const state = {
   connected: false,
   mode: 'telemetry',        // telemetry | dbg
@@ -27,7 +28,11 @@ export function emit(type, detail) {
 function connectWs() {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   ws.sock = new WebSocket(`${proto}://${location.host}/ws`);
-  ws.sock.onopen = () => { ws.retry = 0; emit('ws-open'); };
+  ws.sock.onopen = () => {
+    ws.retry = 0;
+    setSvcState(true);
+    emit('ws-open');
+  };
   ws.sock.onmessage = (ev) => {
     let msg;
     try { msg = JSON.parse(ev.data); } catch { return; }
@@ -35,16 +40,33 @@ function connectWs() {
   };
   ws.sock.onclose = () => {
     ws.sock = null;
+    setSvcState(false);
     emit('ws-close');
     setTimeout(connectWs, Math.min(4000, 500 * (++ws.retry)));
   };
   ws.sock.onerror = () => { try { ws.sock.close(); } catch {} };
 }
 
+// 后端服务状态指示（顶栏 svcLed/svcInfo）：WS 通 = 后端活
+function setSvcState(up) {
+  const led = $('svcLed'), info = $('svcInfo');
+  if (!led || !info) return;
+  led.className = 'link-led ' + (up ? 'on' : 'off');
+  info.textContent = up ? '后端已连接' : '后端断开，重连中…';
+}
+
 function handleMsg(msg) {
   switch (msg.type) {
+    case 'hello':
+      // ★ 版本握手：旧后端进程残留时前端是新的、后端是旧的——醒目提示重启
+      if (msg.version !== BACKEND_VERSION) {
+        $('svcInfo').textContent = `后端版本过旧 v${msg.version || '?'}（需 v${BACKEND_VERSION}）——请重启 start.bat`;
+        flashAlarm('err', `后端进程是旧版 v${msg.version || '?'}，界面是新版 v${BACKEND_VERSION}——请完全关闭并用 start.bat 重启`);
+      }
+      break;
     case 'conn':
       state.connected = msg.status === 'connected';
+      if (state.connected) connectTs = Date.now();
       emit('conn', msg);
       break;
     case 'ports':
@@ -91,6 +113,54 @@ function handleMsg(msg) {
     case 'log':
       emit('log', msg);
       break;
+    case 'link_stat':
+      renderLinkStat(msg);
+      break;
+    case 'rx_hex':
+      emit('rx-hex', msg);
+      break;
+    case 'hex_state':
+      emit('hex-state', msg);
+      break;
+  }
+}
+
+// ---------------- 链路健康（1Hz 后端统计） ----------------
+let stallAlarmed = false;
+let connectTs = 0;
+function renderLinkStat(m) {
+  const el = $('linkStat');
+  if (!m.connected) { el.textContent = ''; el.className = 'link-stat'; stallAlarmed = false; return; }
+  const kb = (m.bytes_s / 1024).toFixed(1);
+  const bad = m.bad_s > 0 ? `<span class="bad"> · CRC✗${m.bad_s}/s</span>` : '';
+  // 遥测停滞判定：连接且遥测模式下，超过 3s 没解出遥测字段（给 4s 连接宽限）
+  const grace = Date.now() - connectTs < 4000;
+  const stall = !grace && m.mode === 'telemetry' &&
+    (m.tele_age_s === null ? true : m.tele_age_s > 3);
+  if (stall) {
+    // 四级诊断：无字节 / 有字节无帧 / 帧 CRC 灭 / 有响应帧但无遥测帧
+    let txt;
+    if (m.bytes_s === 0 && m.frames_s === 0) {
+      txt = '⚠ 串口无字节到达 — 固件遥测未发送（检查固件运行状态/接线；控制台开「链路监听」确认）';
+    } else if (m.frames_s === 0) {
+      txt = `⚠ ${m.bytes_s} B/s 流入但切不出完整帧 — 波特率不匹配或乱码`;
+    } else if (m.bad_s >= m.frames_s * 0.5) {
+      txt = `⚠ ${m.frames_s} 帧/s 但 CRC 失败 ${m.bad_s}/s — 链路丢字节严重（VCP 带宽），换数传口或降波特率`;
+    } else {
+      txt = `⚠ 有协议帧（${m.frames_s}/s）但遥测帧为 0 — 固件遥测轮发未运行（或刚响应过命令）`;
+    }
+    el.textContent = txt;
+    el.className = 'link-stat stall';
+    if (!stallAlarmed) {
+      stallAlarmed = true;
+      flashAlarm('warn', txt.replace(/^⚠ /, ''));
+    }
+  } else {
+    stallAlarmed = false;
+    el.innerHTML = m.mode === 'dbg'
+      ? `DBG 模式 · ${kb} kB/s`
+      : `▼${kb} kB/s · ${m.tele_s} 遥测帧/s · ${m.fields} 字段${bad}`;
+    el.className = 'link-stat';
   }
 }
 
@@ -207,6 +277,40 @@ bus.addEventListener('telemetry', (e) => checkAlarms(e.detail));
 bus.addEventListener('ws-open', refreshPorts);
 bus.addEventListener('ws-open', () => { if (state.connected) refreshPorts(); });
 
+// 各页面模块激活（懒加载 + 失败重试）
+// ★ 2026-08-08 双重修复：
+//   1) 监听器必须先于 switchPage('dashboard') 注册——后注册会漏掉初始页
+//      事件，首屏 activate 永不执行（曾致首屏全 "--"，点导航才偶然恢复）；
+//   2) es-module-shims 初始化完成前触发动态 import() 会静默失败——
+//      必须带重试，且连续失败要告警而不是无声死亡。
+const PAGE_LOADERS = {
+  dashboard: () => import('./dashboard.mjs'),
+  view3d: () => import('./view3d.mjs'),
+  scope: () => import('./scope.mjs'),
+  blackbox: () => import('./blackbox.mjs'),
+  params: () => import('./params.mjs'),
+  console: () => import('./console.mjs'),
+};
+const _pageLoaded = new Set();
+async function loadPageModule(name, attempt = 0) {
+  if (_pageLoaded.has(name)) return;
+  const loaderFn = PAGE_LOADERS[name];
+  if (!loaderFn) return;
+  try {
+    const mod = await loaderFn();
+    _pageLoaded.add(name);
+    if (mod.activate) mod.activate();
+  } catch (err) {
+    if (attempt < 8) {   // shim 未就绪：退避重试（最长 ~4s）
+      setTimeout(() => loadPageModule(name, attempt + 1), 400 + attempt * 100);
+    } else {
+      console.error(`页面模块 ${name} 加载失败`, err);
+      flashAlarm('err', `页面模块 ${name} 加载失败：${(err && err.message) || err}`);
+    }
+  }
+}
+bus.addEventListener('page', (e) => { loadPageModule(e.detail); });
+
 document.querySelectorAll('.nav-btn').forEach(b =>
   b.addEventListener('click', () => switchPage(b.dataset.page)));
 
@@ -223,20 +327,5 @@ if (document.readyState === 'complete') {
 } else {
   window.addEventListener('load', () => loader.classList.add('hide'), { once: true });
 }
-
-// 各页面模块注册（懒加载）
-async function loadPageModule(name) {
-  const mods = {
-    dashboard: () => import('./dashboard.mjs'),
-    view3d: () => import('./view3d.mjs'),
-    scope: () => import('./scope.mjs'),
-    blackbox: () => import('./blackbox.mjs'),
-    params: () => import('./params.mjs'),
-    console: () => import('./console.mjs'),
-  };
-  const m = mods[name];
-  if (m) { const mod = await m(); if (mod.activate) mod.activate(); }
-}
-bus.addEventListener('page', (e) => { loadPageModule(e.detail); });
 
 export { fmt };

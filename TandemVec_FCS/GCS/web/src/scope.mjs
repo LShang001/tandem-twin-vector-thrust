@@ -57,6 +57,7 @@ const MAX_CARDS = 4;
 
 let cards = [];              // {key,label,color,hist:[...],el,canvas,ctx,lastV}
 let paused = false;
+let pageVisible = true;        // 页面不可见时停止重绘（scope 在后台白烧 CPU）
 let initialized = false;
 
 export function activate() {
@@ -72,8 +73,9 @@ export function activate() {
   $('scopeInfo').textContent = `窗口 ${WIN_SEC}s · ${Object.keys(PRESETS).length} 组预设`;
 
   buildCards(presetSel.value);
-  bus.addEventListener('telemetry', onTelemetry);
-  setInterval(() => cards.forEach(drawCard), 100);
+  bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
+  bus.addEventListener('page', (e) => { pageVisible = (e.detail === 'scope'); });
+  setInterval(() => { if (pageVisible) cards.forEach(drawCard); }, 100);
 }
 
 function buildCards(presetName) {
@@ -109,7 +111,9 @@ function onTelemetry(s) {
       const v = s[key];
       if (v === undefined || v === null || Number.isNaN(v)) { card.hist[i].push(null); return; }
       card.hist[i].push([t, v]);
-      if (card.hist[i].length > HISTORY) card.hist[i].shift();
+      // ★ 不用 shift()（O(n) 每点搬移，20Hz×12 通道会持续卡顿）——
+      //   超 1.5×HISTORY 才截断一次，摊还 O(1)
+      if (card.hist[i].length > HISTORY * 1.5) card.hist[i] = card.hist[i].slice(-HISTORY);
     });
   }
 }
