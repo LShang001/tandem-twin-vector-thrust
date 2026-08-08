@@ -116,8 +116,8 @@ def test_telemetry_aggregation():
     assert s['gps_sats'] == 12 and s['gps_fix'] == 3
     assert s['rc3'] == 1002
     # 执行器输出帧（0x40）：摆角 deg / 电机 % / 差速 / 饱和标记
-    assert abs(s['tvc_front_deg'] - (-12.3)) < 1e-6
-    assert abs(s['tvc_rear_deg'] - 8.55) < 1e-6
+    assert abs(s['tvc_upper_deg'] - (-12.3)) < 1e-6
+    assert abs(s['tvc_lower_deg'] - 8.55) < 1e-6
     assert abs(s['motor_front_pct'] - 62.4) < 1e-6
     assert abs(s['motor_rear_pct'] - 58.7) < 1e-6
     assert abs(s['dw'] - 0.49) < 1e-6
@@ -228,3 +228,17 @@ def test_datalog_recorder_roundtrip(tmp_path):
     assert row1['unlocked'] == 1.0
     assert r.next_row()['rc3'] == 1498.0
     r.close()
+
+
+def test_param_name_to_id_mapping():
+    """名字→ID 解析：expected_names 下标 = 固件注册序 = 参数 ID。
+    ★ 27/28/36 为实机在线验证值（2026-08-09）——防参数表重排/改名漂移"""
+    names = pm.expected_names()
+    assert names.index('rate_roll.kp') == 27
+    assert names.index('rate_roll.ki') == 28
+    assert names.index('rate_pitch.kp') == 36
+    assert names.index('rate_pitch.ki') == 37
+    assert names.index('att_roll.kp') == 0
+    assert names.index('att_pitch.kp') == 9
+    assert names.index('rate_roll.kd') == 29
+    assert len(names) == 117

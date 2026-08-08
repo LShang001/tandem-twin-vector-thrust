@@ -172,7 +172,7 @@ function drawPlot(cv, tab) {
     accel: [['accel_x_ms2', 'ax', '#ff5d6c'], ['accel_y_ms2', 'ay', '#3ea6ff'], ['accel_z_ms2', 'az', '#29d3a2']],
     gyro: [['gyro_x_dps', 'p', '#ff5d6c'], ['gyro_y_dps', 'q', '#3ea6ff'], ['gyro_z_dps', 'r', '#29d3a2']],
     velocity: [['vel_n_ms', '北', '#ff5d6c'], ['vel_e_ms', '东', '#3ea6ff'], ['vel_d_ms', '下', '#29d3a2']],
-    tvc: [['tvc1_deg', '前摆', '#ff5d6c'], ['tvc2_deg', '尾摆', '#3ea6ff'], ['p1', 'P1', '#29d3a2'], ['valve_ctrl', '阀门', '#ffb547']],
+    tvc: [['tvc1_deg', '上摆', '#ff5d6c'], ['tvc2_deg', '下摆', '#3ea6ff'], ['p1', 'P1', '#29d3a2'], ['valve_ctrl', '阀门', '#ffb547']],
   };
   const chans = groups[tab] || [];
 

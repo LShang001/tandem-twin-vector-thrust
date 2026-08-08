@@ -53,8 +53,8 @@ export function activate() {
   actWrap.innerHTML = '';
   const actDefs = [
     // [标签, 快照key, 量程, 居中(±量程), 配色]
-    ['前摆 δf °', 'tvc_front_deg', { min: -15, max: 15 }, true, 'linear-gradient(90deg,#ff5d6c,#ffb547)'],
-    ['尾摆 δt °', 'tvc_rear_deg', { min: -15, max: 15 }, true, 'linear-gradient(90deg,#3ea6ff,#29d3a2)'],
+    ['上摆 δf °', 'tvc_upper_deg', { min: -15, max: 15 }, true, 'linear-gradient(90deg,#ff5d6c,#ffb547)'],
+    ['下摆 δt °', 'tvc_lower_deg', { min: -15, max: 15 }, true, 'linear-gradient(90deg,#3ea6ff,#29d3a2)'],
     ['前电机 %', 'motor_front_pct', { min: 0, max: 100 }, false, 'linear-gradient(90deg,#ffb547,#ff5d6c)'],
     ['尾电机 %', 'motor_rear_pct', { min: 0, max: 100 }, false, 'linear-gradient(90deg,#29d3a2,#3ea6ff)'],
     ['差速 Δω', 'dw', { min: -1, max: 1 }, true, 'linear-gradient(90deg,#b48cff,#ff5d6c)'],
@@ -124,7 +124,7 @@ function onTelemetry(s) {
   }
 
   // 执行器（0x40 帧）：TVC 矢量仪表 + 条 + 饱和标记
-  const df = val(s, 'tvc_front_deg'), dt = val(s, 'tvc_rear_deg');
+  const df = val(s, 'tvc_upper_deg'), dt = val(s, 'tvc_lower_deg');
   const mf = val(s, 'motor_front_pct'), mt = val(s, 'motor_rear_pct');
   drawTvcDial($('cvTvcFront'), df, mf, { color: '#ffb547' });
   drawTvcDial($('cvTvcRear'), dt, mt, { color: '#3ea6ff' });

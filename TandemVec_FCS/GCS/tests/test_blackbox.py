@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
 import blackbox as bb
 
 MAGIC = bb.MAGIC
-N_F = 22  # float 通道数
+N_F = 13  # float 通道数（★2026-08-09 固件通道表裁剪 22→13）
 
 
 def mk_frame(typ: int, body: bytes) -> bytes:
@@ -61,8 +61,9 @@ def test_crc16_reference():
 def test_extract_frames_sync():
     """magic 同步切帧：前缀垃圾 + 各类型帧 + 尾部垃圾"""
     vals = [1.5 + i for i in range(N_F)]
+    sf_names = [f'c{i}' for i in range(N_F)]   # S 帧名数须与帧通道数一致
     stream = (b'\x00\xFF' * 3
-              + mk_s_frame(2, 1000, ['roll_deg', 'pitch_deg', 't_ms'])
+              + mk_s_frame(2, 1000, sf_names)
               + mk_i_frame(0, 1000, vals)
               + mk_p_frame(1, 5, [10] * (N_F - 1))
               + mk_e_frame(2, 5000, 100)
@@ -83,7 +84,7 @@ def test_extract_frames_corrupt_crc_dropped():
 
 def test_decode_single_segment():
     """I + P 差分还原 + S/E 段元数据"""
-    cols = ['t_ms', 'roll_deg', 'pitch_deg', 'heading_deg'] + [f'ch{i}' for i in range(4, N_F + 1)]
+    cols = ['t_ms', 'roll_deg', 'pitch_deg', 'heading_deg'] + [f'ch{i}' for i in range(4, N_F)]
     stream = (
         mk_s_frame(1, 5000, cols)
         + mk_i_frame(0, 5000, [5000, 10.0, -5.0, 90.0] + [0.0] * (N_F - 4))
@@ -107,11 +108,24 @@ def test_decode_single_segment():
 
 
 def test_decode_missing_s_frame_uses_default_cols():
-    """无 S 帧时回退默认 22 列"""
+    """无 S 帧时回退默认 13 列（当前固件通道表）"""
     frames = bb.extract_frames(mk_i_frame(0, 1000, [1.0] * N_F))
     rows, segments, columns = bb.decode_frames(frames)
     assert columns == bb.DEFAULT_COLS.split(',')
+    assert len(columns) == N_F and len(rows) == 1
+
+
+def test_s_frame_prescan_sets_channel_count():
+    """全量预扫描：S 帧给出权威通道数（旧 22 通道数据也能解析）"""
+    old22 = [f'ch{i}' for i in range(22)]
+    # 22 通道 I 帧（绕过 mk_i_frame 的 13 通道断言）
+    body = struct.pack('<H', 0) + struct.pack('<I', 9000) + struct.pack('<22f', *([9000, 1.0] + [0.0] * 20))
+    i22 = mk_frame(bb.TYPE_I, body)
+    stream = mk_s_frame(3, 9000, old22) + i22
+    frames = bb.extract_frames(stream)
+    rows, segments, columns = bb.decode_frames(frames)
     assert len(columns) == 22 and len(rows) == 1
+    assert rows[0][2][0] == 9000
 
 
 def test_dbg_session_export_strips_header():

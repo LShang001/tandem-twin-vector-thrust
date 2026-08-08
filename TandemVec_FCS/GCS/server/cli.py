@@ -395,13 +395,22 @@ def cmd_record(a):
         os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
         m.g.recorder = CsvRecorder(path)
         m.g.recorder.start()
-        print(f'● 记录中 → {path}（Ctrl+C 停止）')
-        try:
-            while True:
+        if a.duration > 0:
+            # ★ 2026-08-09：定时记录（飞行场景：起记录→飞→到点自动停）
+            print(f'● 记录中 → {path}（{a.duration}s 后自动停止）')
+            t_end = time.time() + a.duration
+            while time.time() < t_end:
                 drain(0.2)
-        except KeyboardInterrupt:
             m.g.recorder.stop()
-            print(f'\n■ 已停止，共写入 {path}')
+            print(f'■ 已停止，共写入 {path}')
+        else:
+            print(f'● 记录中 → {path}（Ctrl+C 停止）')
+            try:
+                while True:
+                    drain(0.2)
+            except KeyboardInterrupt:
+                m.g.recorder.stop()
+                print(f'\n■ 已停止，共写入 {path}')
     elif a.action == 'stop':
         if m.g.recorder:
             m.g.recorder.stop()
@@ -482,6 +491,8 @@ def main():
     p = sub.add_parser('record', help='遥测记录')
     p.add_argument('action', choices=['start', 'stop'])
     p.add_argument('-o', '--out')
+    p.add_argument('-d', '--duration', type=float, default=0,
+                   help='记录秒数（0=直到 Ctrl+C；飞行场景建议给时长自动停止）')
     p.set_defaults(fn=cmd_record)
 
     p = sub.add_parser('sniff', help='帧监控')

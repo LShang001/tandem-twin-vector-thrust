@@ -44,8 +44,8 @@ const PRESETS = {
     ['target_yaw_rate_dps', 'Y速率', '#29d3a2'],
   ],
   '执行器 ACT': [
-    ['tvc_front_deg', 'δf °', '#ffb547'],
-    ['tvc_rear_deg', 'δt °', '#3ea6ff'],
+    ['tvc_upper_deg', 'δf °', '#ffb547'],
+    ['tvc_lower_deg', 'δt °', '#3ea6ff'],
     ['motor_front_pct', '前推%', '#ff5d6c'],
     ['motor_rear_pct', '尾推%', '#29d3a2'],
   ],

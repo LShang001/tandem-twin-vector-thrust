@@ -234,7 +234,7 @@ def decode_attitude_control(p: bytes) -> dict:
 
 
 def decode_actuator(p: bytes) -> dict:
-    """0x40（本工程自定义）: 前/尾摆角 int16 (÷100 → deg)，前/尾电机 u16 (÷10 → %)，
+    """0x40（本工程自定义）: 前/下摆角 int16 (÷100 → deg)，前/尾电机 u16 (÷10 → %)，
     差速 int16 (÷1000，归一化 Δω)，饱和标记 u8（bit0 δf / bit1 δt / bit2 Δω），预留 u8
     —— mix 输出级统一捕获，锁定/手动/自动全模式有效"""
     if len(p) < 11:
@@ -243,7 +243,7 @@ def decode_actuator(p: bytes) -> dict:
     m1, m2 = struct.unpack('<2H', p[4:8])
     sat = p[10]
     return {
-        'tvc_front_deg': tf / 100.0, 'tvc_rear_deg': tr / 100.0,
+        'tvc_upper_deg': tf / 100.0, 'tvc_lower_deg': tr / 100.0,
         'motor_front_pct': m1 / 10.0, 'motor_rear_pct': m2 / 10.0,
         'dw': dw / 1000.0,
         'sat_df': bool(sat & 0x01), 'sat_dt': bool(sat & 0x02), 'sat_dw': bool(sat & 0x04),

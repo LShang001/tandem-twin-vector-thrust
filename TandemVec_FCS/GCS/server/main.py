@@ -280,6 +280,9 @@ def _on_dbg_rx(chunk: bytes):
     text = g.dbgs.drain_text()
     if text:
         _emit_dbg_text(text)
+        # ★ 2026-08-09 修复回归：findseg 输出解析从未被接线（黑匣子页
+        #   「列出飞行段」静默失效）；此处补上 → flash_segments 广播
+        _on_findseg_text(text)
 
 
 def _emit_dbg_text(text: str):
@@ -491,15 +494,25 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         await _param_read_all(ws)
 
     elif cmd == 'param_read':
-        pid = int(msg.get('id', 0))
+        pid, name = _param_id_of(msg)
+        if pid is None:
+            await ws.send_json({'type': 'log', 'level': 'error',
+                                'msg': f'未知参数名: {name}'})
+            return
         g.write(anocom.cmd_read_param_info(pid))
         g.write(anocom.cmd_read_param_value(pid))
 
     elif cmd == 'param_write':
-        pid = int(msg.get('id', 0))
+        pid, name = _param_id_of(msg)
+        if pid is None:
+            await ws.send_json({'type': 'log', 'level': 'error',
+                                'msg': f'未知参数名: {name}'})
+            return
         value = msg.get('value')
         name_info = g.param_names.get(pid, {})
-        is_float = name_info.get('type') == 'float' if name_info else True
+        # ★ 2026-08-09：名字寻址时类型按 params.py 元数据（未读 E2 也能写对 float/uint8）
+        is_float = (name_info.get('type') == 'float' if name_info
+                    else pm.is_float_name(name or ''))
         frame = anocom.cmd_write_param(pid, value, is_float)
         # 记录期望校验（回传帧 SC/AC 需与发送帧一致）
         body = frame[:-2]
@@ -642,6 +655,19 @@ def _on_flash_export_done(raw: bytes):
                 'sample_step': step,
                 'columns': columns,
                 'segments': segments})
+
+
+def _param_id_of(msg: dict):
+    """param_read/param_write 参数寻址：name 优先（expected_names 下标 = 固件注册序
+    = 参数 ID），无 name 时按 id。返回 (pid, name)；未知名字返回 (None, name)。
+    ★ 2026-08-09：按名字寻址避免 ID 猜错（曾把 rate_roll.ki 当 rate_pitch.kp 写）"""
+    name = msg.get('name')
+    if name:
+        try:
+            return pm.expected_names().index(name), name
+        except ValueError:
+            return None, name
+    return int(msg.get('id', 0)), None
 
 
 async def _param_read_all(ws: WebSocket):
