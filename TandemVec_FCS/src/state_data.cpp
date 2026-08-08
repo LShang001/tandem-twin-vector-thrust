@@ -24,7 +24,7 @@ HardwareSerial Serial2(PD6, PD5);  // USART2: 发动机控制器 / 数据转发 
 HardwareSerial Serial3(PD9, PD8);  // USART3: 黑匣子数据记录 (高速) [1500000 baud]
 HardwareSerial Serial4(PD0, PD1);  // UART4:  DETA100 IMU/GNSS模块 (输入) [921600 baud]
 HardwareSerial Serial5(PD2, PC12); // UART5:  上位机轨迹规划接口 [921600 baud]
-HardwareSerial Serial6(PC7, PC6);  // USART6: AnoCom地面站通信 (数传) [921600 baud]
+HardwareSerial Serial6(PC7, PC6);  // USART6: AnoCom地面站通信 (数传) [波特率见 state_data.h SERIAL6_BAUDRATE]
 HardwareSerial Serial7(PE7, PE8);  // UART7:  光流传感器接口 [921600 baud]
 HardwareSerial Serial8(PE0, PE1);  // UART8:  USB Type-C 调试输出 [921600 baud]
 
