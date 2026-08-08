@@ -10,7 +10,7 @@ flash_export.py — 从 W25N01GV 黑匣子导出并解析飞行数据 (v2: I/P �
   python flash_export.py <COM口> --auto --segment 2       # 只导出飞行段 2
 
 帧格式 v2:
-  I: magic(2)+type(1)=0x49+seq(2)+t_ms(4)+21xfloat(84)+crc16(2) = 95B
+  I: magic(2)+type(1)=0x49+seq(2)+t_ms(4)+22xfloat(88)+crc16(2) = 99B
   P: magic(2)+type(1)=0x50+seq(2)+dt_ms(2)+21xint16(42)+crc16(2) = 51B
   S: magic(2)+type(1)=0x53+seg(2)+t_ms(4)+通道名表(\\0结尾)+crc16(2) 变长
   E: magic(2)+type(1)=0x45+seg(2)+dur_ms(4)+frames(4)+crc16(2) = 15B
@@ -29,11 +29,11 @@ TYPE_I = 0x49
 TYPE_P = 0x50
 TYPE_S = 0x53
 TYPE_E = 0x45
-IFRAME_SIZE = 95
+IFRAME_SIZE = 99
 PFRAME_SIZE = 51
 EFRAME_SIZE = 15
-SFRAME_MAX = 172   # 与固件 W25N01GV_LOG_SFRAME_MAX 一致（通道名 160 + 头 12）
-PAYLOAD_LEN = 84          # 21 floats
+SFRAME_MAX = 236   # 与固件 W25N01GV_LOG_SFRAME_MAX 一致（通道名 224 + 头 12）
+PAYLOAD_LEN = 88          # 22 floats
 DELTA_SCALE = 100
 
 
@@ -84,15 +84,12 @@ def extract_frames(data: bytes):
                     frames.append((TYPE_E, f))
                     i += EFRAME_SIZE
                     continue
-            if t == TYPE_S and i + 13 <= n:
-                end = data.find(b'\x00', i+9, i + SFRAME_MAX)
-                if end > 0 and end + 3 <= n:
-                    flen = end - i + 3
-                    f = data[i:i+flen]
-                    if crc16(f[:-2]) == struct.unpack('<H', f[-2:])[0]:
-                        frames.append((TYPE_S, f))
-                        i += flen
-                        continue
+            if t == TYPE_S and i + SFRAME_MAX <= n:
+                f = data[i:i+SFRAME_MAX]
+                if crc16(f[:-2]) == struct.unpack('<H', f[-2:])[0]:
+                    frames.append((TYPE_S, f))
+                    i += SFRAME_MAX
+                    continue
             i += 1
         else:
             i += 1
@@ -102,7 +99,8 @@ def extract_frames(data: bytes):
 def decode_frames(frames):
     """I/P 差分还原 + S/E 段切分。返回 (rows, segments, columns)。"""
     rows = []
-    ref = [0.0] * 21
+    N_F = PAYLOAD_LEN // 4   # float 通道数
+    ref = [0.0] * N_F
     ref_t = 0
     cur_seg = 0
     columns = None
@@ -131,15 +129,15 @@ def decode_frames(frames):
                     sg['frames'] = frames_cnt
         elif typ == TYPE_I:
             t_ms = struct.unpack('<I', f[5:9])[0]
-            vals = list(struct.unpack('<21f', f[9:9+PAYLOAD_LEN]))
+            vals = list(struct.unpack(f'<{N_F}f', f[9:9+PAYLOAD_LEN]))
             ref = vals
             ref_t = t_ms
             rows.append((seq, t_ms, vals, cur_seg))
         elif typ == TYPE_P:
             dt = struct.unpack('<h', f[5:7])[0]
             t_ms = ref_t + dt
-            deltas = struct.unpack('<21h', f[7:7+42])
-            vals = [ref[i] + deltas[i] / DELTA_SCALE for i in range(21)]
+            deltas = struct.unpack(f'<{N_F}h', f[7:7+N_F*2])
+            vals = [ref[i] + deltas[i] / DELTA_SCALE for i in range(N_F)]
             ref = vals
             ref_t = t_ms
             rows.append((seq, t_ms, vals, cur_seg))

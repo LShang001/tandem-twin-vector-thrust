@@ -53,7 +53,7 @@
 //   （128MB ≈ 5-10 小时 @200Hz）。
 #define W25N01GV_LOG_PACK_PAGE  1
 #ifndef W25N01GV_LOG_PAYLOAD
-#define W25N01GV_LOG_PAYLOAD      84     // bytes of user payload (21 floats)
+#define W25N01GV_LOG_PAYLOAD      88     // bytes of user payload (22 floats, 含 gnss_sats)
 #endif
 #ifndef W25N01GV_LOG_I_INTERVAL
 #define W25N01GV_LOG_I_INTERVAL   32     // one I-frame every N frames
@@ -70,12 +70,12 @@
 #define W25N01GV_LOG_TYPE_S       0x53   // 'S': flight segment start
 #define W25N01GV_LOG_TYPE_E       0x45   // 'E': flight segment end
 
-#define W25N01GV_LOG_IFRAME_SIZE  95     // 2+1+2+4+84+2
+#define W25N01GV_LOG_IFRAME_SIZE  99     // 2+1+2+4+88+2
 #define W25N01GV_LOG_PFRAME_SIZE  51     // 2+1+2+2+42+2
 #define W25N01GV_LOG_EFRAME_SIZE  15     // 2+1+2+4+4+2
-// 通道名表最大长度（S 帧内 ASCII，21 通道名约 160B）
-#define W25N01GV_LOG_CHNAME_MAX   160
-// S 帧最大 = magic2+type1+seg2+t_ms4+names160+\0+crc2 = 172
+// 通道名表最大长度（S 帧内 ASCII，22 通道名 202B）
+#define W25N01GV_LOG_CHNAME_MAX   224
+// S 帧最大 = 头 9 + 通道名 224 + CRC 2 = 235
 #define W25N01GV_LOG_SFRAME_MAX   (W25N01GV_LOG_CHNAME_MAX + 12)
 
 // delta quantization: (cur-prev)*100 stored as int16

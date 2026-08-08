@@ -295,7 +295,9 @@ bool W25N01GVLog::logPush(const uint8_t *payload)
 // ---------------------------------------------------------------
 void W25N01GVLog::buildSFrame(uint8_t *dst, uint16_t segNum, const char *chNames)
 {
-  memset(dst, 0xFF, W25N01GV_LOG_SFRAME_MAX);
+  // ★ 固定长度 S 帧（W25N01GV_LOG_SFRAME_MAX）：通道名 pad 0x00，
+  //   工具端按固定长度切分（不依赖变长 \0 搜索，避免误命中 I/P 帧数据）
+  memset(dst, 0x00, W25N01GV_LOG_SFRAME_MAX);
   dst[0] = W25N01GV_LOG_MAGIC0;
   dst[1] = W25N01GV_LOG_MAGIC1;
   dst[2] = W25N01GV_LOG_TYPE_S;
@@ -306,18 +308,17 @@ void W25N01GVLog::buildSFrame(uint8_t *dst, uint16_t segNum, const char *chNames
   dst[6] = (uint8_t)((t >> 8) & 0xFF);
   dst[7] = (uint8_t)((t >> 16) & 0xFF);
   dst[8] = (uint8_t)((t >> 24) & 0xFF);
-  // 通道名表（ASCII，截断到 CHNAME_MAX，CRC 按实际长度算）
+  // 通道名表（ASCII，截断到 CHNAME_MAX，剩余 pad 0x00）
   uint16_t len = 0;
   if (chNames) {
     len = (uint16_t)strlen(chNames);
     if (len > W25N01GV_LOG_CHNAME_MAX) len = W25N01GV_LOG_CHNAME_MAX;
     memcpy(dst + 9, chNames, len);
   }
-  dst[9 + len] = '\0';
-  // 帧总长 = 10 + len(名) + 1(\0) + 2(crc)
-  uint16_t crc = crc16_ccitt(dst, 10 + len);
-  dst[10 + len] = (uint8_t)(crc & 0xFF);
-  dst[11 + len] = (uint8_t)((crc >> 8) & 0xFF);
+  // 帧尾 CRC（固定位置：SFRAME_MAX-2）
+  uint16_t crc = crc16_ccitt(dst, W25N01GV_LOG_SFRAME_MAX - 2);
+  dst[W25N01GV_LOG_SFRAME_MAX - 2] = (uint8_t)(crc & 0xFF);
+  dst[W25N01GV_LOG_SFRAME_MAX - 1] = (uint8_t)((crc >> 8) & 0xFF);
 }
 
 void W25N01GVLog::buildEFrame(uint8_t *dst, uint16_t segNum, uint32_t durMs, uint32_t frames)
@@ -345,9 +346,7 @@ bool W25N01GVLog::logFlightSegmentStart(uint16_t segNum, const char *chNames)
 {
   uint8_t slot[W25N01GV_LOG_SFRAME_MAX];
   buildSFrame(slot, segNum, chNames);
-  uint16_t len = (uint16_t)(12 + strlen(chNames));
-  if (len > W25N01GV_LOG_SFRAME_MAX) len = W25N01GV_LOG_SFRAME_MAX;
-  return pushRawFrame(slot, len);
+  return pushRawFrame(slot, W25N01GV_LOG_SFRAME_MAX);   // 固定长度
 }
 
 bool W25N01GVLog::logFlightSegmentEnd(uint16_t segNum, uint32_t durMs, uint32_t frames)

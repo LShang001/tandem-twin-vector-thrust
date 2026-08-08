@@ -54,6 +54,7 @@ static float bbTvc2() { float a, b; getFilteredTVCAngles(a, b); return b; }
 static float bbValve() { return receivedValveControl; }
 static float bbP1() { return receivedP1; }
 static float bbP2() { return receivedP2; }
+static float bbSats() { return (float)raw_rc_values[2]; }   // RC 油门通道（演示自定义通道）
 
 // 21 通道（与 Serial3 CSV 历史列一致）。加一行 = 加一个通道。
 static const BlackboxChannel kBbChannels[] = {
@@ -78,6 +79,7 @@ static const BlackboxChannel kBbChannels[] = {
   {"valve_ctrl", bbValve,  1.0f},
   {"p1",         bbP1,     1.0f},
   {"p2",         bbP2,     1.0f},
+  {"rc_throttle", bbSats,  1.0f},  // ★ 自定义通道示例：RC 油门杆位
 };
 #define BB_CHANNEL_COUNT (sizeof(kBbChannels) / sizeof(kBbChannels[0]))
 

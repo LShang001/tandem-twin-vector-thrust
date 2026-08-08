@@ -5,20 +5,13 @@ plot_blackbox.py — 黑匣子 CSV 可视化（飞行数据分析）
 
 用法:
   python plot_blackbox.py <csv文件> [-o 输出目录]
-  （CSV 由 tools/flash_export.py 导出）
 
-图表：
-  1. 姿态角（roll/pitch/heading）
-  2. 加速度（三轴，含重力偏置）
-  3. 角速度（三轴）
-  4. 速度（NED）
-  5. 相对位置（NED，水平轨迹）
-  6. TVC 舵机角度 + 发动机压力
+★ 自适应列名：CSV 列名来自 S 帧通道名表（通道自定义后列名可变）。
+  按列名前缀分组绘制——缺列自动跳过，新增通道自动纳入"其他"图。
 
-依赖: pip install matplotlib
+依赖: pip install matplotlib pandas
 """
 
-import sys
 import os
 import argparse
 
@@ -27,8 +20,36 @@ matplotlib.use('Agg')   # 无显示环境
 import matplotlib.pyplot as plt
 import pandas as pd
 
+# 标准分组：前缀 → (图文件名, 标题, y轴单位)
+GROUPS = [
+    ("roll_deg", "attitude", "Attitude (roll/pitch/heading)", "deg"),
+    ("pitch_deg", None, None, None),
+    ("heading_deg", None, None, None),
+    ("accel_", "accel", "Acceleration (m/s²)", "m/s²"),
+    ("gyro_", "gyro", "Angular rate (deg/s)", "deg/s"),
+    ("vel_", "velocity", "Velocity NED (m/s)", "m/s"),
+    ("rel_", None, None, None),   # rel_ 三轴由水平轨迹图覆盖
+    ("tvc", "tvc", "TVC servo angles (deg)", "deg"),
+]
+
+
+def plot_group(df, t, cols, fname, title, ylabel, outdir, base):
+    """绘制一组列；缺列返回 False。"""
+    if not cols:
+        return False
+    fig, ax = plt.subplots(figsize=(12, 5))
+    for c in cols:
+        ax.plot(t, df[c], label=c)
+    if fname == "accel" and "accel_z_ms2" in cols:
+        ax.axhline(-9.81, color='r', ls='--', lw=0.8, label='-g (static)')
+    ax.set_xlabel('t (s)'); ax.set_ylabel(ylabel)
+    ax.set_title(title); ax.legend(); ax.grid(True)
+    fig.tight_layout(); fig.savefig(f"{outdir}/{base}_{fname}.png"); plt.close(fig)
+    return True
+
+
 def main():
-    ap = argparse.ArgumentParser(description="Blackbox CSV plotter")
+    ap = argparse.ArgumentParser(description="Blackbox CSV plotter (adaptive columns)")
     ap.add_argument("csv", help="导出 CSV 文件")
     ap.add_argument("-o", "--outdir", default="output",
                     help="图表输出目录 (默认 output)")
@@ -38,63 +59,50 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
     base = os.path.splitext(os.path.basename(args.csv))[0]
 
+    if 't_ms' not in df.columns:
+        print(f"错误：CSV 缺少 t_ms 列（列: {list(df.columns)[:8]}...）")
+        return
     t = (df['t_ms'] - df['t_ms'].iloc[0]) / 1000.0   # 秒
 
-    # 1. 姿态
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(t, df['roll_deg'], label='roll')
-    ax.plot(t, df['pitch_deg'], label='pitch')
-    ax.plot(t, df['heading_deg'], label='heading')
-    ax.set_xlabel('t (s)'); ax.set_ylabel('deg')
-    ax.set_title('Attitude'); ax.legend(); ax.grid(True)
-    fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_attitude.png"); plt.close(fig)
+    plotted = []
+    used_cols = set()
 
-    # 2. 加速度
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(t, df['accel_x_ms2'], label='ax')
-    ax.plot(t, df['accel_y_ms2'], label='ay')
-    ax.plot(t, df['accel_z_ms2'], label='az')
-    ax.axhline(-9.81, color='r', ls='--', lw=0.8, label='-g (static)')
-    ax.set_xlabel('t (s)'); ax.set_ylabel('m/s²')
-    ax.set_title('Acceleration'); ax.legend(); ax.grid(True)
-    fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_accel.png"); plt.close(fig)
+    # 标准组
+    for prefix, fname, title, ylabel in GROUPS:
+        if fname is None:
+            continue
+        cols = [c for c in df.columns if c.startswith(prefix) and c != 't_ms']
+        if plot_group(df, t, cols, fname, title, ylabel, args.outdir, base):
+            plotted.append(fname)
+            used_cols.update(cols)
 
-    # 3. 角速度
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(t, df['gyro_x_dps'], label='gx')
-    ax.plot(t, df['gyro_y_dps'], label='gy')
-    ax.plot(t, df['gyro_z_dps'], label='gz')
-    ax.set_xlabel('t (s)'); ax.set_ylabel('deg/s')
-    ax.set_title('Angular rate'); ax.legend(); ax.grid(True)
-    fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_gyro.png"); plt.close(fig)
+    # 水平轨迹（rel_e vs rel_n）
+    if 'rel_e_m' in df.columns and 'rel_n_m' in df.columns:
+        fig, ax = plt.subplots(figsize=(8, 8))
+        ax.plot(df['rel_e_m'], df['rel_n_m'], marker='.', ms=1, lw=0.5)
+        ax.plot(df['rel_e_m'].iloc[0], df['rel_n_m'].iloc[0], 'go', label='start')
+        ax.plot(df['rel_e_m'].iloc[-1], df['rel_n_m'].iloc[-1], 'ro', label='end')
+        ax.set_xlabel('East (m)'); ax.set_ylabel('North (m)')
+        ax.set_title('Horizontal track'); ax.legend(); ax.grid(True); ax.axis('equal')
+        fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_track.png"); plt.close(fig)
+        plotted.append('track')
+        used_cols.update(['rel_e_m', 'rel_n_m'])
 
-    # 4. 速度
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(t, df['vel_n_ms'], label='vn')
-    ax.plot(t, df['vel_e_ms'], label='ve')
-    ax.plot(t, df['vel_d_ms'], label='vd')
-    ax.set_xlabel('t (s)'); ax.set_ylabel('m/s')
-    ax.set_title('Velocity (NED)'); ax.legend(); ax.grid(True)
-    fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_velocity.png"); plt.close(fig)
+    # 其他未归类通道（自定义新增的自动画出来）
+    others = [c for c in df.columns if c not in used_cols and c not in ('t_ms', 'seq')]
+    if others:
+        fig, ax = plt.subplots(figsize=(12, 5))
+        for c in others:
+            ax.plot(t, df[c], label=c)
+        ax.set_xlabel('t (s)'); ax.set_ylabel('value')
+        ax.set_title('Other channels'); ax.legend(); ax.grid(True)
+        fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_others.png"); plt.close(fig)
+        plotted.append('others')
 
-    # 5. 水平轨迹
-    fig, ax = plt.subplots(figsize=(8, 8))
-    ax.plot(df['rel_e_m'], df['rel_n_m'], marker='.', ms=1, lw=0.5)
-    ax.plot(df['rel_e_m'].iloc[0], df['rel_n_m'].iloc[0], 'go', label='start')
-    ax.plot(df['rel_e_m'].iloc[-1], df['rel_n_m'].iloc[-1], 'ro', label='end')
-    ax.set_xlabel('East (m)'); ax.set_ylabel('North (m)')
-    ax.set_title('Horizontal track'); ax.legend(); ax.grid(True); ax.axis('equal')
-    fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_track.png"); plt.close(fig)
+    print(f"已生成 {len(plotted)} 张图: {', '.join(plotted)}")
+    if not plotted:
+        print("（无可用列，检查 CSV 内容）")
 
-    # 6. TVC + 压力
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.plot(t, df['tvc1_deg'], label='tvc1')
-    ax.plot(t, df['tvc2_deg'], label='tvc2')
-    ax.set_xlabel('t (s)'); ax.set_ylabel('deg')
-    ax.set_title('TVC servo angles'); ax.legend(); ax.grid(True)
-    fig.tight_layout(); fig.savefig(f"{args.outdir}/{base}_tvc.png"); plt.close(fig)
-
-    print(f"已生成 {args.outdir}/{base}_*.png (6 张图)")
 
 if __name__ == "__main__":
     main()
