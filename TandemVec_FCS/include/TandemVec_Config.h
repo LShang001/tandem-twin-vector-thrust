@@ -78,21 +78,21 @@ struct ServoConfig
 
     // 方向：+1.0f = 正摆角→PWM > 50%；-1.0f = 正摆角→PWM < 50%
     // 取决于舵臂安装方位，地面通电后手动 TVC 核查
-    float dir_pitch;         // 尾摆（俯仰）舵机方向  ← ⚠️ 待核查
-    float dir_roll;          // 前摆（侧倾）舵机方向  ← ⚠️ 待核查
+    float dir_pitch;         // 下摆（俯仰）舵机方向  ← ⚠️ 待核查
+    float dir_roll;          // 上摆（侧倾）舵机方向  ← ⚠️ 待核查
 
     // 机械中位偏置（%）：补偿安装误差导致的舵机零点偏移
     // 调整后摇杆归中时摆座应目视在 0°
-    float zero_pitch_pct;    // 尾摆舵机中位偏置  ← 待标定，初始值 0
-    float zero_roll_pct;     // 前摆舵机中位偏置  ← 待标定，初始值 0
+    float zero_pitch_pct;    // 下摆舵机中位偏置  ← 待标定，初始值 0
+    float zero_roll_pct;     // 上摆舵机中位偏置  ← 待标定，初始值 0
 };
 
 static const ServoConfig kDefaultServoConfig = {
     /* teeth_servo     */ 30.f,
     /* teeth_gimbal    */ 40.f,
     /* half_travel_deg */ 45.f,  // ← 待实机标定
-    /* dir_pitch       */ -1.f,  // 实机核查(2026-08-07)：尾摆舵机方向与假设相反，已反向
-    /* dir_roll        */ -1.f,  // 实机核查(2026-08-07)：前摆舵机方向与假设相反，已反向
+    /* dir_pitch       */ -1.f,  // 实机核查(2026-08-07)：下摆舵机方向与假设相反，已反向
+    /* dir_roll        */ -1.f,  // 实机核查(2026-08-07)：上摆舵机方向与假设相反，已反向
     /* zero_pitch_pct  */  0.f,  // ← 待标定
     /* zero_roll_pct   */  0.f,  // ← 待标定
 };
@@ -102,7 +102,7 @@ static const ServoConfig kDefaultServoConfig = {
 static const TandemVecParams kDefaultTandemVecParams = {
     // 推进
     /* kT    */ 1.04e-5f,  // N·s²，由 T_max=13.73N @1150rad/s 反推
-    /* kQ    */ 3.1e-7f,   // N·m·s²，kQ/kT≈0.030（9047桨 D=0.229m，CQ/CT≈0.13）
+    /* kQ    */ 2.8e-7f,   // N·m·s²，kQ/kT≈0.027（2026-08-09 实机两轮：3.1→2.6 后 yaw 手感好但有效增益压边界自激，回退至 2.8；见 models/aircraft-model.json）
     /* Jp    */ 2.0e-4f,   // kg·m²，桨+转子惯量，待测
     /* wMax  */ 1150.0f,   // rad/s，≈11000RPM，1400KV×11.1V×0.75（带桨负载）
     /* a     */ 0.315f,    // m，前电机到质心距离（总长63cm，重心居中）

@@ -25,7 +25,7 @@ W25N01GVLog::W25N01GVLog(W25N01GV &flash)
     _prevTms(0), _frameCount(0), _lastPushMs(0),
     _cursorPage(0), _segment(0),
     _written(0), _dropped(0), _pagesWritten(0), _globalSeq(0), _serviceBusy(false),
-    _badBlocks(0)
+    _badBlocks(0), _segNameProvider(nullptr)
 {
   memset(_prevPayload, 0, sizeof(_prevPayload));
   memset(_badMap, 0, sizeof(_badMap));
@@ -116,15 +116,15 @@ void W25N01GVLog::buildPFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq
   dst[5] = (uint8_t)(dt & 0xFF);
   dst[6] = (uint8_t)((dt >> 8) & 0xFF);
 
-  // delta payload: 21 x int16 = 42 B (quantized *100)
+  // delta payload: N-1 x int16（13 通道 = 24B，quantized *100）
   // ★ 2026-08-08 修正：循环写 22 个增量会把最后 2B 写到 CRC 槽位（dst[49..50]），
-  //   被下方 crc 覆盖 → 实际存储恒为 21 个增量。此处显式收敛到 21：
-  //   第 22 通道（p2）不参与差分，解码端保持最近 I 帧参考值。
-  //   帧长/布局不变（51B），与既有导出工具兼容。
+  //   被下方 crc 覆盖 → 实际存储恒为 21 个增量。此处显式收敛：
+  //   末通道不参与差分，解码端保持最近 I 帧参考值。
+  //   （2026-08-09 通道裁剪 13 后 N_DELTAS=12，由帧尺寸常量推导，无硬编码）
   // ★ 用 memcpy 逐元素读 float——payload/_prevPayload 是 uint8_t 数组，
   //   直接 (const float*) 强转会非对齐访问 → ARM HardFault（2026-08-08 实测复位）
   uint8_t *dp = dst + 7;
-  const uint16_t N_DELTAS = (W25N01GV_LOG_PFRAME_SIZE - 9) / 2;   // 21
+  const uint16_t N_DELTAS = (W25N01GV_LOG_PFRAME_SIZE - 9) / 2;   // 12 @13 通道
   float cur_f, prev_f;
   for (uint16_t i = 0; i < N_DELTAS; i++) {
     memcpy(&cur_f, payload + i * 4, 4);
@@ -164,7 +164,18 @@ bool W25N01GVLog::writeSegmentHeader(uint16_t seg, uint32_t startTms)
   uint32_t page = segmentStartPage(seg);
   if (isBlockBad(page)) return false;
   if (!_flash.eraseBlock(page)) return false;         // segment header block
-  if (!_flash.pageProgram(page, hdr, W25N01GV_LOG_SEG_HDR_SIZE)) {
+
+  // ★ 2026-08-09 修复：S 帧拼进段起始页（header 16B + S 帧 236B 一次编程）。
+  //   旧实现 S 帧随解锁游标写入（远离段头），导出从段头页开始读不到通道名，
+  //   解析只能兜底默认列 → 通道数变化后旧/新数据无法自描述。
+  uint8_t block[W25N01GV_LOG_SEG_HDR_SIZE + W25N01GV_LOG_SFRAME_MAX];
+  memcpy(block, hdr, W25N01GV_LOG_SEG_HDR_SIZE);
+  uint16_t total = W25N01GV_LOG_SEG_HDR_SIZE;
+  if (_segNameProvider) {
+    buildSFrame(block + total, seg, _segNameProvider());
+    total += W25N01GV_LOG_SFRAME_MAX;
+  }
+  if (!_flash.pageProgram(page, block, total)) {
     markBlockBad(page);
     return false;
   }

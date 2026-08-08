@@ -4,6 +4,7 @@
 #include "sensor_peripheral.h"
 #include "MAVLink.h"
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
+#include "task_scheduler.h" // 调度统计 DBG `tasks` 命令
 
 // IWDG 喂狗（main.cpp 暴露）：flash export 大页数导出阻塞任务 >3s 时
 // 循环内喂狗，防看门狗复位打断导出（2026-08-08）
@@ -25,6 +26,14 @@ static uint32_t s_flashServiceCount = 0;
 static uint32_t s_flashPushCount = 0;
 // 调试模式标志（文件级，handleDebugTask 置位，handleAnoCom 读取跳过遥测）
 static bool s_dbg_mode = false;
+
+/**
+ * @brief 查询当前是否处于 DBG 调试模式（供任务调度器画像输出门控）
+ */
+bool isDebugModeActive()
+{
+  return s_dbg_mode;
+}
 // Flash 写页互斥标志（logService 写页时置位，CAN 任务跳过避免 SPI 冲突）
 // ★ 2026-08-08：Flash 2048B 写页关中断 655µs 会让 CAN 任务延迟 → MCP2515
 //   超时触发 reset → SPI2 transfer 卡死（OVR）→ 主循环冻结。互斥后消除。
@@ -46,51 +55,57 @@ static float bbCurrentTime() { return (float)millis(); }
 static float bbRoll()  { return AHRS_Packet.Roll; }
 static float bbPitch() { return AHRS_Packet.Pitch; }
 static float bbHeading(){ return AHRS_Packet.Heading; }
-static float bbAx() { return IMU_Packet.accelerometer_x; }
-static float bbAy() { return IMU_Packet.accelerometer_y; }
-static float bbAz() { return IMU_Packet.accelerometer_z; }
 static float bbGx() { return IMU_Packet.gyroscope_x; }
 static float bbGy() { return IMU_Packet.gyroscope_y; }
 static float bbGz() { return IMU_Packet.gyroscope_z; }
-static float bbVn() { return INS_GNSS_Packet.velocity_north; }
-static float bbVe() { return INS_GNSS_Packet.velocity_east; }
-static float bbVd() { return INS_GNSS_Packet.velocity_down; }
-static float bbRn() { return relative_north; }
-static float bbRe() { return relative_east; }
-static float bbRd() { return relative_down; }
-static float bbTvc1() { float a, b; getFilteredTVCAngles(a, b); return a; }
-static float bbTvc2() { float a, b; getFilteredTVCAngles(a, b); return b; }
-static float bbValve() { return receivedValveControl; }
-static float bbP1() { return receivedP1; }
-static float bbP2() { return receivedP2; }
-static float bbSats() { return (float)raw_rc_values[2]; }   // RC 油门通道（演示自定义通道）
+// ★ 2026-08-09 通道裁剪：摆角改录【指令值】（传感器反馈 SERVO6 死通道弃用）、
+// 新增差速指令/目标姿态（超调与 yaw 执行器分析直接可用）
+static float bbTvc1() { return g_tvc_upper_deg; }    // 上摆指令 deg（滚转）
+static float bbTvc2() { return g_tvc_lower_deg; }    // 下摆指令 deg（俯仰）
+static float bbDw()   { return gnc_tel.dw; }         // 差速指令 Δω（yaw 执行器）
+static float bbTarR() { return rollTarget; }         // 目标滚转角 deg
+static float bbTarP() { return pitchTarget; }        // 目标俯仰角 deg
+static float bbSats() { return (float)raw_rc_values[2]; }   // RC 油门杆位
 
-// 21 通道（与 Serial3 CSV 历史列一致）。加一行 = 加一个通道。
+// ★ 2026-08-09 通道裁剪：13 核心通道（姿态/角速率/执行器指令/油门/目标姿态）。
+// 移除 accel×3、vel×3、rel×3、valve、p1、p2（氧压/阀门/位置/速度非调参核心）。
+// 加一行 = 加一个通道；改通道数需同步 GCS/server/blackbox.py（S 帧动态推导，无需改尺寸）。
 static const BlackboxChannel kBbChannels[] = {
-  {"t_ms",       bbCurrentTime, 1.0f},
-  {"roll_deg",   bbRoll,   RAD_TO_DEG},
-  {"pitch_deg",  bbPitch,  RAD_TO_DEG},
-  {"heading_deg",bbHeading,RAD_TO_DEG},
-  {"accel_x_ms2",bbAx,     1.0f},
-  {"accel_y_ms2",bbAy,     1.0f},
-  {"accel_z_ms2",bbAz,     1.0f},
-  {"gyro_x_dps", bbGx,     RAD_TO_DEG},
-  {"gyro_y_dps", bbGy,     RAD_TO_DEG},
-  {"gyro_z_dps", bbGz,     RAD_TO_DEG},
-  {"vel_n_ms",   bbVn,     1.0f},
-  {"vel_e_ms",   bbVe,     1.0f},
-  {"vel_d_ms",   bbVd,     1.0f},
-  {"rel_n_m",    bbRn,     1.0f},
-  {"rel_e_m",    bbRe,     1.0f},
-  {"rel_d_m",    bbRd,     1.0f},
-  {"tvc1_deg",   bbTvc1,   1.0f},
-  {"tvc2_deg",   bbTvc2,   1.0f},
-  {"valve_ctrl", bbValve,  1.0f},
-  {"p1",         bbP1,     1.0f},
-  {"p2",         bbP2,     1.0f},
-  {"rc_throttle", bbSats,  1.0f},  // ★ 自定义通道示例：RC 油门杆位
+  {"t_ms",            bbCurrentTime, 1.0f},
+  {"roll_deg",        bbRoll,   RAD_TO_DEG},
+  {"pitch_deg",       bbPitch,  RAD_TO_DEG},
+  {"heading_deg",     bbHeading,RAD_TO_DEG},
+  {"gyro_x_dps",      bbGx,     RAD_TO_DEG},
+  {"gyro_y_dps",      bbGy,     RAD_TO_DEG},
+  {"gyro_z_dps",      bbGz,     RAD_TO_DEG},
+  {"tvc1_deg",        bbTvc1,   1.0f},   // 上摆指令 deg（滚转）
+  {"tvc2_deg",        bbTvc2,   1.0f},   // 下摆指令 deg（俯仰）
+  {"dw",              bbDw,     1.0f},   // 差速指令 Δω（yaw 执行器）
+  {"rc_throttle",     bbSats,   1.0f},   // RC 油门杆位
+  {"target_roll_deg", bbTarR,   1.0f},   // 目标滚转（超调分析）
+  {"target_pitch_deg",bbTarP,   1.0f},   // 目标俯仰（超调分析）
 };
 #define BB_CHANNEL_COUNT (sizeof(kBbChannels) / sizeof(kBbChannels[0]))
+
+// ★ 2026-08-09：段通道名提供者——S 帧随段头写入段起始页
+// （flashLog.setSegmentNameProvider 注册；旧 logFlightSegmentStart 随解锁
+//   游标写入、远离段头，导出读不到通道名的缺陷由此修复）
+const char *bbSegmentNames()
+{
+  static char s_names[W25N01GV_LOG_CHNAME_MAX + 1];
+  static bool s_built = false;
+  if (!s_built) {
+    uint16_t pos = 0;
+    for (uint8_t i = 0; i < BB_CHANNEL_COUNT && pos < W25N01GV_LOG_CHNAME_MAX; i++) {
+      const char *n = kBbChannels[i].name;
+      while (*n && pos < W25N01GV_LOG_CHNAME_MAX) s_names[pos++] = *n++;
+      if (i < BB_CHANNEL_COUNT - 1 && pos < W25N01GV_LOG_CHNAME_MAX) s_names[pos++] = ',';
+    }
+    s_names[pos] = '\0';
+    s_built = true;
+  }
+  return s_names;
+}
 
 // 串口5发送缓冲区，用于发送给上位机进行轨迹规划的数据
 // 缓冲区大小：1(帧头) + 8个float * 4字节/float + 1(帧尾) = 34字节
@@ -641,8 +656,8 @@ void handleAnoCom()
     pwm_ch8_ano = raw_rc_values[7]; // TVC手动通道
 
     // 执行器输出（0x40 帧，本工程自定义）：mix 输出级统一捕获，全模式有效
-    tvc_front_ano = g_tvc_front_deg;   // 前摆座角指令 deg（偏航主控）
-    tvc_rear_ano = g_tvc_rear_deg;     // 尾摆座角指令 deg（俯仰主控）
+    tvc_front_ano = g_tvc_upper_deg;   // 上摆座角指令 deg（偏航主控）
+    tvc_rear_ano = g_tvc_lower_deg;     // 下摆座角指令 deg（俯仰主控）
     mot_front_ano = ch3_output;        // 前电机输出 %
     mot_rear_ano = ch4_output;         // 尾电机输出 %
     dw_ano = gnc_tel.dw;               // 差速 Δω（归一化）
@@ -735,7 +750,7 @@ void handleAnoCom()
     AnoCom.sendFlightSpeed(vel_north_ano * 100, vel_east_ano * 100, vel_down_ano * 100); // NED速度
     AnoCom.sendPWMOutput(pwm_ch1_ano, pwm_ch2_ano, pwm_ch3_ano, pwm_ch4_ano,
                          pwm_ch5_ano, pwm_ch6_ano, pwm_ch7_ano, pwm_ch8_ano);
-    // 执行器输出帧（0x40，本工程自定义 12B）：前/尾摆角 deg×100 int16、
+    // 执行器输出帧（0x40，本工程自定义 12B）：前/下摆角 deg×100 int16、
     // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
     {
       uint8_t act[12];
@@ -1203,18 +1218,8 @@ void handleDataLogging()
     }
     Serial3.println();
 
-    // Flash S 帧（飞行段头 + 通道名自描述）
-    if (flash.isPresent()) {
-      static char chNames[W25N01GV_LOG_CHNAME_MAX + 1];
-      uint16_t pos = 0;
-      for (uint8_t i = 0; i < BB_CHANNEL_COUNT && pos < W25N01GV_LOG_CHNAME_MAX; i++) {
-        const char *n = kBbChannels[i].name;
-        while (*n && pos < W25N01GV_LOG_CHNAME_MAX) chNames[pos++] = *n++;
-        if (i < BB_CHANNEL_COUNT - 1 && pos < W25N01GV_LOG_CHNAME_MAX) chNames[pos++] = ',';
-      }
-      chNames[pos] = '\0';
-      flashLog.logFlightSegmentStart((uint16_t)segmentId, chNames);
-    }
+    // ★ 2026-08-09：Flash S 帧改由段头写入自动携带（setSegmentNameProvider，
+    //   随段头拼进段起始页）——此处不再单独写（旧实现写游标位、远离段头）
   }
 
   // —— 正常数据输出 ——
@@ -1750,6 +1755,7 @@ void handleMavlink()
  *   ws <r> <g> <b> 发送一帧指定颜色 (0-255)
  *   wsoff          WS2812 熄灭
  *   wsseq [ms]     自动测试序列 红→绿→蓝→白→灭 (默认 500ms/色)
+ *   tasks          任务调度统计（实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷；打印后清零）
  *   ver           版本/启动信息
  *   exit          退出调试模式，恢复地面站数传
  *
@@ -1777,6 +1783,8 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   wsseq [ms]        - auto test sequence (default 500)"));
         serial.println(F("[DBG]   wsstat            - show WS2812 status"));
         serial.println(F("[DBG]   wsmode <0|1>      - switch driver (0=bitbang 1=tim4_dma)"));
+        serial.println(F("[DBG]   tasks             - task schedule stats (Hz/抖动/迟到/负荷, 打印后清零)"));
+        serial.println(F("[DBG]   id                - online ID: b=I名义/I实际, 激励, 建议Kp (飞完标定动作后读)"));
         serial.println(F("[DBG]   ver               - version info"));
         serial.println(F("[DBG]   exit              - back to normal telemetry"));
       }
@@ -1883,6 +1891,33 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         } else {
           serial.println(F("[DBG] usage: wsstatic <0|1>"));
         }
+      }
+      else if (strncmp(line, "tasks", 5) == 0) {
+        // 任务调度统计：实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷（打印后清零）
+        schedulerStatsPrint(serial);
+      }
+      else if (strcmp(line, "id") == 0) {
+        // 在线辨识（纯观测）：b=I名义/I实际、扰动d、激励标志、建议Kp、CG偏移
+        // 飞完标定动作后读取：b<1 → 实际惯量>名义（或集总增益偏小）→ 按建议Kp调整
+        serial.println(F("[DBG] == 在线辨识 =="));
+        serial.println(F("[DBG] 轴  b=I名义/I实际   d(rad/s²)  激励  建议Kp"));
+        const char *axes[3] = {"R", "P", "Y"};
+        for (int i = 0; i < 3; i++)
+        {
+          serial.print(F("[DBG] "));
+          serial.print(axes[i]);
+          serial.print(F("   "));
+          serial.print(id_b_est[i], 4);
+          serial.print(F("        "));
+          serial.print(id_d_est[i], 3);
+          serial.print(F("     "));
+          serial.print(id_excited[i] ? F("是") : F("否"));
+          serial.print(F("    "));
+          serial.println(id_kp_suggest[i], 4);
+        }
+        serial.print(F("[DBG] CG偏移="));
+        serial.print(id_cg_mm, 1);
+        serial.println(F("mm"));
       }
       else if (strncmp(line, "ver", 3) == 0) {
         serial.println(F("[DBG] TandemVec FCS debug console"));

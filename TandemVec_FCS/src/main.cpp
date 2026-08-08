@@ -219,6 +219,7 @@ void setup()
   ws2812Led.begin();                            // 初始化 WS2812 RGB状态灯 (PD15)
   flash.begin();                                // 初始化 W25N01GV NAND Flash (SPI3, 读ID+清写保护)
   flashLog.begin();                             // 初始化 Flash 日志层 (恢复游标)
+  flashLog.setSegmentNameProvider(bbSegmentNames); // ★ 2026-08-09：S 帧随段头写入（通道名自描述）
   pinMode(FUEL_PIN, INPUT_PULLUP);              // 燃料液位传感器引脚 (上拉输入)
   analogWriteFrequency(CUSTOM_PWM_FREQUENCY);   // 设置全局 PWM 频率 (333Hz)
   analogWriteResolution(CUSTOM_PWM_RESOLUTION); // 设置全局 PWM 分辨率 (16位)

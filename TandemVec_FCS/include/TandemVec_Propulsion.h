@@ -37,8 +37,8 @@ struct PropulsionState
 {
     float wf;       // rad/s   前电机当前转速
     float wt;       // rad/s   尾电机当前转速
-    float delta_f;  // rad     前摆角（绕 z_b，偏航）
-    float delta_t;  // rad     尾摆角（绕 y_b，俯仰）
+    float delta_f;  // rad     上摆角（★控制语义=滚转/侧倾，2026-08-07 轴置换；物理公式为巡航读法 Mz=a·Tf·sδf）
+    float delta_t;  // rad     下摆角（绕 y_b，俯仰）
 };
 
 // 机体系六维力/力矩
@@ -76,8 +76,8 @@ struct EffectMatrix
 //   Fy =  Tf·sδf
 //   Fz = -Tt·sδt
 //   Mx = -Qf·cδf + Qt·cδt        // 反扭矩差（前负后正，因前 CW 后 CCW）
-//   My = -b·Tt·sδt - Qf·sδf      // 尾摆主控 + 前摆反扭耦合
-//   Mz =  a·Tf·sδf - Qt·sδt      // 前摆主控 + 尾摆反扭耦合
+//   My = -b·Tt·sδt - Qf·sδf      // 下摆主控 + 上摆反扭耦合
+//   Mz =  a·Tf·sδf - Qt·sδt      // 上摆主控 + 下摆反扭耦合
 inline SixDOFWrench computeWrench(const PropulsionState& s, const TandemVecParams& p)
 {
     const float Tf = p.kT * s.wf * s.wf;
@@ -133,11 +133,11 @@ inline DiffAllocResult allocateDifferential(float w0, float dw, const TandemVecP
 //   row 1  ∂My/∂[Δω,δ_t,δ_f]:
 //     ∂My/∂Δω  =  b·kT·w0²·st - kQ·w0²·sf  // 尾推力摆角+前反扭摆角
 //     ∂My/∂δ_t  = -b·Tt·ct                  // 俯仰主控
-//     ∂My/∂δ_f  = -Qf·cf                    // 前摆反扭耦合到俯仰
+//     ∂My/∂δ_f  = -Qf·cf                    // 上摆反扭耦合到俯仰
 //
 //   row 2  ∂Mz/∂[Δω,δ_t,δ_f]:
 //     ∂Mz/∂Δω  =  kT·w0²·a·sf + kQ·w0²·st  // 前推力摆角+尾反扭摆角
-//     ∂Mz/∂δ_t  = -Qt·ct                    // 尾摆反扭耦合到偏航
+//     ∂Mz/∂δ_t  = -Qt·ct                    // 下摆反扭耦合到偏航
 //     ∂Mz/∂δ_f  =  a·Tf·cf                  // 偏航主控
 //
 // 验证：在 δ_f=δ_t=0（sf=st=0，cf=ct=1）、wf=wt=w0 时退化为：

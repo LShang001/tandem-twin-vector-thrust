@@ -60,6 +60,23 @@ void linkDownCallback();
 void elrsLinkStatsCallback(crsfLinkStatistics_t *ls);
 
 /**
+ * @brief 查询当前是否处于 DBG 调试模式
+ *
+ * 供任务调度器（BFS_TASK_PROFILE）门控画像输出——仅 DBG 模式下
+ * 才向 Serial6 打印任务统计表，避免文本污染正常 AnoCom 遥测流。
+ */
+bool isDebugModeActive();
+
+/**
+ * @brief 黑匣子段通道名提供者（main.cpp 注册给 flashLog）
+ *
+ * 返回逗号分隔的通道名字符串——writeSegmentHeader 写段起始页时
+ * 用它把 S 帧拼进段头同页（2026-08-09 修复：S 帧此前随解锁游标写入，
+ * 远离段头导致导出读不到通道名）。
+ */
+const char *bbSegmentNames();
+
+/**
  * @brief 解析发动机控制器数据帧
  *
  * 校验帧头 (0xA5)、长度、校验和，通过 memcpy 小端序解析三个 float：

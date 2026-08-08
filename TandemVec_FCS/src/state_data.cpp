@@ -148,31 +148,31 @@ GncTelemetry gnc_tel = {};
 //  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
 //    PositionPID no-dt约定: Ki×200=等效连续增益。0.0003×200=0.06/s
 // ★ 2026-08-07 恢复存档轴映射后的通道↔执行器对应（参数随之换位）：
-//   roll 通道(绕 x_b) → 前摆舵机（舵机快 333Hz，可高带宽）
-//   pitch通道(绕 y_b) → 尾摆舵机（同上）
+//   roll 通道(绕 x_b) → 上摆舵机（舵机快 333Hz，可高带宽）
+//   pitch通道(绕 y_b) → 下摆舵机（同上）
 //   yaw  通道(绕 z_b=推力轴) → 电机差速（含 τm=0.28s 滞后，必须限带）
-//   —— 之前（x_b 竖直错误映射时期）roll=差速、yaw=前摆，恢复后正好互换。
+//   —— 之前（x_b 竖直错误映射时期）roll=差速、yaw=上摆，恢复后正好互换。
 // 二阶反解（2ζωn=Kp_r·…, ωn=√(2ζωn·Kp_a)）：
-//   TVC 轴(roll 前摆 / pitch 尾摆): Kp_r=0.25, Kp_a=2.5 → ωn≈5.98, ζ≈1.20
+//   TVC 轴(roll 上摆 / pitch 下摆): Kp_r=0.25, Kp_a=2.5 → ωn≈5.98, ζ≈1.20
 //   差速轴(yaw): 带宽必须 ≪1/τm=3.57 → Kp_r=0.10, Kp_a=0.8 → ωn≈2.14, ζ≈1.34
 //  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
 // ★ 2026-08-08 C路径重构：增益/限幅/滤波全部读自 kFlightCtrlParams（§4.0）
 PositionPID rollAnglePID(kFlightCtrlParams.att_roll.kp, kFlightCtrlParams.att_roll.ki, kFlightCtrlParams.att_roll.kd,
                          kFlightCtrlParams.att_roll.out_min, kFlightCtrlParams.att_roll.out_max, true,
                          kFlightCtrlParams.att_roll.int_limit, kFlightCtrlParams.att_roll.threshold,
-                         kFlightCtrlParams.att_roll.filter_alpha);   // 前摆外环（舵机快，高带宽）
+                         kFlightCtrlParams.att_roll.filter_alpha);   // 上摆外环（舵机快，高带宽）
 PositionPID rollRatePID(kFlightCtrlParams.rate_roll.kp, kFlightCtrlParams.rate_roll.ki, kFlightCtrlParams.rate_roll.kd,
                         kFlightCtrlParams.rate_roll.out_min, kFlightCtrlParams.rate_roll.out_max, true,
                         kFlightCtrlParams.rate_roll.int_limit, kFlightCtrlParams.rate_roll.threshold,
-                        kFlightCtrlParams.rate_roll.filter_alpha);   // 前摆内环 ζ≈1.20
+                        kFlightCtrlParams.rate_roll.filter_alpha);   // 上摆内环 ζ≈1.20
 PositionPID pitchAnglePID(kFlightCtrlParams.att_pitch.kp, kFlightCtrlParams.att_pitch.ki, kFlightCtrlParams.att_pitch.kd,
                           kFlightCtrlParams.att_pitch.out_min, kFlightCtrlParams.att_pitch.out_max, true,
                           kFlightCtrlParams.att_pitch.int_limit, kFlightCtrlParams.att_pitch.threshold,
-                          kFlightCtrlParams.att_pitch.filter_alpha); // 尾摆外环（同前摆）
+                          kFlightCtrlParams.att_pitch.filter_alpha); // 下摆外环（同上摆）
 PositionPID pitchRatePID(kFlightCtrlParams.rate_pitch.kp, kFlightCtrlParams.rate_pitch.ki, kFlightCtrlParams.rate_pitch.kd,
                          kFlightCtrlParams.rate_pitch.out_min, kFlightCtrlParams.rate_pitch.out_max, true,
                          kFlightCtrlParams.rate_pitch.int_limit, kFlightCtrlParams.rate_pitch.threshold,
-                         kFlightCtrlParams.rate_pitch.filter_alpha); // 尾摆内环 ζ≈1.20
+                         kFlightCtrlParams.rate_pitch.filter_alpha); // 下摆内环 ζ≈1.20
 PositionPID yawAnglePID(kFlightCtrlParams.att_yaw.kp, kFlightCtrlParams.att_yaw.ki, kFlightCtrlParams.att_yaw.kd,
                         kFlightCtrlParams.att_yaw.out_min, kFlightCtrlParams.att_yaw.out_max, true,
                         kFlightCtrlParams.att_yaw.int_limit, kFlightCtrlParams.att_yaw.threshold,
@@ -524,11 +524,11 @@ bool  id_excited[3]    = {false, false, false};
 float id_kp_suggest[3] = {0.0f, 0.0f, 0.0f};
 
 // 执行机构输出百分比 (用于遥测显示)
-float ch1_output = 0.0f, ch2_output = 0.0f; // PA0:前摆舵机(偏航/δ_f), PA1:尾摆舵机(俯仰/δ_t)
+float ch1_output = 0.0f, ch2_output = 0.0f; // PA0:上摆舵机(滚转/δ_f), PA1:下摆舵机(俯仰/δ_t)  ★2026-08-07轴置换
 float ch3_output = 0.0f, ch4_output = 0.0f; // 主电机1/2 输出百分比
 // 执行器指令（物理量纲，全模式有效）——AnoCom 0x40 执行器帧
-float g_tvc_front_deg = 0.0f;   // 前摆座角指令 deg（偏航主控）
-float g_tvc_rear_deg  = 0.0f;   // 尾摆座角指令 deg（俯仰主控）
+float g_tvc_upper_deg = 0.0f;   // 上摆座角指令 deg（滚转主控，★2026-08-07 轴置换）
+float g_tvc_lower_deg  = 0.0f;   // 下摆座角指令 deg（俯仰主控）
 
 // 当前飞行模式 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)
 ControlMode g_current_flight_mode = MANUAL;

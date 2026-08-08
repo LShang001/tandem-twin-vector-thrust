@@ -53,7 +53,7 @@
 //   （128MB ≈ 5-10 小时 @200Hz）。
 #define W25N01GV_LOG_PACK_PAGE  1
 #ifndef W25N01GV_LOG_PAYLOAD
-#define W25N01GV_LOG_PAYLOAD      88     // bytes of user payload (22 floats, 含 gnss_sats)
+#define W25N01GV_LOG_PAYLOAD      52     // bytes of user payload (13 floats, ★2026-08-09 通道裁剪后同步)
 #endif
 #ifndef W25N01GV_LOG_I_INTERVAL
 #define W25N01GV_LOG_I_INTERVAL   32     // one I-frame every N frames
@@ -70,10 +70,10 @@
 #define W25N01GV_LOG_TYPE_S       0x53   // 'S': flight segment start
 #define W25N01GV_LOG_TYPE_E       0x45   // 'E': flight segment end
 
-#define W25N01GV_LOG_IFRAME_SIZE  99     // 2+1+2+4+88+2
-#define W25N01GV_LOG_PFRAME_SIZE  51     // 2+1+2+2+42+2
+#define W25N01GV_LOG_IFRAME_SIZE  63     // 2+1+2+4+52+2 (13 floats)
+#define W25N01GV_LOG_PFRAME_SIZE  33     // 2+1+2+2+24+2 (12 deltas)
 #define W25N01GV_LOG_EFRAME_SIZE  15     // 2+1+2+4+4+2
-// 通道名表最大长度（S 帧内 ASCII，22 通道名 202B）
+// 通道名表最大长度（S 帧内 ASCII，13 通道名 ~120B，留余量）
 #define W25N01GV_LOG_CHNAME_MAX   224
 // S 帧最大 = 头 9 + 通道名 224 + CRC 2 = 235
 #define W25N01GV_LOG_SFRAME_MAX   (W25N01GV_LOG_CHNAME_MAX + 12)
@@ -117,6 +117,17 @@ public:
    * Embeds channel names for self-description (export tool reads them).
    */
   bool logFlightSegmentStart(uint16_t segNum, const char *chNames);
+
+  /**
+   * @brief 注册段通道名提供者（★2026-08-09）
+   *
+   * 注册后，writeSegmentHeader 写段起始页时自动把 S 帧（通道名表）
+   * 拼进同一页（header 16B + S 帧 236B）——S 帧永远跟随段头，
+   * 导出从段头页即可读到通道名（旧实现随解锁游标写入，远离段头）。
+   * 回调返回通道名字符串（逗号分隔，\0 结尾）。
+   */
+  typedef const char *(*SegmentNameProvider)();
+  void setSegmentNameProvider(SegmentNameProvider p) { _segNameProvider = p; }
 
   /**
    * @brief Push flight-segment end (E frame) — disarm edge
@@ -181,6 +192,7 @@ private:
   uint32_t _written, _dropped, _pagesWritten;
   uint32_t _globalSeq;     // ★ 全局帧序号（跨段/环形覆盖不重置，CSV 追踪唯一）
   bool _serviceBusy;
+  SegmentNameProvider _segNameProvider;   // ★ 2026-08-09 段通道名提供者（S 帧随段头写入）
 
   // bad-block bitmap: 1 bit per block (1024 blocks -> 128 B)
   uint8_t _badMap[W25N01GV_BLOCK_COUNT / 8];

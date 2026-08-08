@@ -978,7 +978,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 
       // FRD 体轴映射（x_b=机身纵轴=推力轴，NED→FRD 标准轴序）：x=滚转、y=俯仰、z=偏航
       // Roll（滚转）取 q_err.x，Pitch 取 q_err.y，Yaw（航向）在 execute_yaw_controller 取 q_err.z
-      // 与底层控制分配对齐：Mx←差速(roll)、My←尾摆(pitch)、Mz←前摆(yaw)
+      // 与底层控制分配对齐（悬停构型语义，★2026-08-07 轴置换）：Mx'(差速)←yaw、My(下摆)←pitch、Mz'(上摆)←roll
       // 使用完整四元数向量模长，确保多轴同时存在误差时 atan2 参数正确
       // 原代码仅用 sqrt(y²+z²)，当偏航误差（x分量）不为零时会低估模长，
       // 导致进入 atan2 分支的判断偏低，large-angle精确缩放系数偏大
@@ -1013,7 +1013,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     }
     else
     { // RATE_MODE —— ★ 与原始 VTVL 实飞存档版一致：摇杆直接生成目标角速率
-      //   roll 摇杆 → 绕 x_b（前摆通道）；pitch 摇杆 → 绕 y_b（尾摆通道）
+      //   roll 摇杆 → 绕 x_b（上摆通道）；pitch 摇杆 → 绕 y_b（下摆通道）
       //   yaw 摇杆 → 绕 z_b（差速），由 execute_yaw_controller 处理
       gnc_tel.omega_ref_dps[0] = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE);
       gnc_tel.omega_ref_dps[1] = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_MANUAL_pitchRATE, -MAX_MANUAL_pitchRATE); // 推杆对应低头负角速度，拉杆对应抬头正角速度
@@ -1057,7 +1057,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
  *
  * VTOL 悬停构型（x_b 竖直）下，机体 z_b 是水平轴：
  *   - q_err.x（绕 x_b）= 世界航向误差 → 由 Roll 外环（差速）保持
- *   - q_err.z（绕 z_b）= 水平倾斜误差 → 本控制器姿态外环（前摆）保持
+ *   - q_err.z（绕 z_b）= 水平倾斜误差 → 本控制器姿态外环（上摆）保持
  *   （水平巡航构型下 q_err.z = 航向误差，但本项目按 VTOL 构型统一处理）
  *
  * ATTITUDE_MODE：q_err.z 姿态外环（与 Roll/Pitch 对称），消除静态倾斜误差；
@@ -1106,7 +1106,8 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  * 控制链底层（上层与飞行器模型完全解耦）：
  *   alpha × I → M_cmd → allocateMoments(BTRUE) → δ_f, δ_t, Δω
  *
- * 轴向（FRD，x_b=机身纵轴=推力轴）：x=滚转/差速，y=俯仰/尾摆，z=偏航/前摆
+ * 轴向（FRD，★2026-08-07 轴置换）：x_b=前→滚转/上摆δ_f，y_b=右→俯仰/下摆δ_t，
+ * z_b=下=推力轴→偏航/差速Δω（旧注释"上摆=偏航/差速=滚转"已废止）
  * 手动TVC旁路：RC直接映射舵机，跳过控制分配。
  */
 // ★ 2026-08-07：差速回路增益调度系数，供在线辨识修正命令量使用。
@@ -1125,8 +1126,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   // 首拍全零 → B_true = B_full（零摆角名义点），行为安全
   static PropulsionState prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
 
-  float front_gimbal_deg = 0.0f;
-  float tail_gimbal_deg  = 0.0f;
+  float upper_gimbal_deg = 0.0f;
+  float lower_gimbal_deg  = 0.0f;
   float motor1_pct       = 0.0f;   // 直接用百分比，避免 us→pct 双重转换
   float motor2_pct       = 0.0f;
 
@@ -1143,13 +1144,13 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     // ---- 手动TVC旁路：RC直接控制舵机/差速，用于地面标定 ----
     // 2026-08-07：锁定状态也可用（地面测试摆座方向）；
     // ★ 安全约束：锁定状态电机强制最低（油门通道直通不生效）
-    tail_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
+    lower_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
                                 -MAX_CORRECTION, MAX_CORRECTION);
-    // ★ 2026-08-08 前摆(roll)映射取反：自控链路 Mz=-Iz·alpha_roll（负号）+
+    // ★ 2026-08-08 上摆(roll)映射取反：自控链路 Mz=-Iz·alpha_roll（负号）+
     //   分配器 df=Mz/(a·T0)（正系数）→ front 摆角与 alpha_roll 反号；
     //   手动模式直接映射摆角须与自控最终摆角方向一致（右打摇杆→正摆角）。
-    //   原映射（-MAX,+MAX）绕过负号导致方向相反（用户实测前摆反）。
-    front_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
+    //   原映射（-MAX,+MAX）绕过负号导致方向相反（用户实测上摆反）。
+    upper_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
                                 MAX_CORRECTION, -MAX_CORRECTION);
     float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
     float manual_dw = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
@@ -1176,15 +1177,15 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       // ================================================================
       // 陀螺直通测试模式（2026-08-07 调试）：绕过外环姿态环 + B 矩阵分配，
       // 陀螺角速度 × 负反馈增益 直接驱动执行器，验证三通道反馈方向。
-      //   尾摆(绕y_b): δt = +K·ω_y  （物理 δt>0→My<0，负斜率）
-      //   前摆(绕z_b): δf = -K·ω_z  （物理 δf>0→Mz>0，正斜率）
+      //   下摆(绕y_b): δt = +K·ω_y  （物理 δt>0→My<0，负斜率）
+      //   上摆(绕z_b): δf = -K·ω_z  （物理 δf>0→Mz>0，正斜率）
       //   差速(绕x_b): Δω = +K·ω_x  （物理 Δω>0→Mx<0，负斜率）
       // 增益：0.5 deg per (deg/s)，30°/s 时触达 ±15° 摆角限幅
       // 2026-08-07 实机第4轮：方向全对但超调严重 → 大幅降 P（0.5→0.1）
       const float GYRO_K = 0.1f;
       const float R2D = 57.29578f;
-      tail_gimbal_deg  = constrain( GYRO_K * icm_gyro_y * R2D, -15.0f, 15.0f);
-      front_gimbal_deg = constrain( GYRO_K * icm_gyro_z * R2D, -15.0f, 15.0f);
+      lower_gimbal_deg  = constrain( GYRO_K * icm_gyro_y * R2D, -15.0f, 15.0f);
+      upper_gimbal_deg = constrain( GYRO_K * icm_gyro_z * R2D, -15.0f, 15.0f);
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
       float dw = constrain( GYRO_K * icm_gyro_x * R2D * 0.05f, -P.dwMax, P.dwMax);
       auto diff = allocateDifferential(w0, dw, P);
@@ -1196,30 +1197,33 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       // ★ 2026-08-07 恢复存档映射后的**轴置换**（tools/verify_mix_axes.py 推导）：
       //   控制律输出在**存档系**（x_b=前, y_b=右, z_b=下=推力轴）：
       //     alpha_roll 绕 x_b、alpha_pitch 绕 y_b、alpha_yaw 绕 z_b(推力轴)
-      //   分配器 allocateMoments 吃**模型系**（x'=推力轴朝机头, y'=尾摆, z'=前摆）：
+      //   分配器 allocateMoments 吃**模型系**（x'=推力轴朝机头, y'=下摆, z'=上摆）：
       //     x' = -z_b、y' = +y_b、z' = +x_b（det=+1 纯旋转）
       //   符号以"实机已验证正确的陀螺直通行为"为锚点反解，勿凭几何直觉：
       float Mx = -P.Ix * outputs.alpha_yaw;   // Mx'(绕推力轴→差速) ← alpha_yaw(绕 z_b)
-      float My =  P.Iy * outputs.alpha_pitch; // My'(尾摆)          ← alpha_pitch(绕 y_b)
-      float Mz = -P.Iz * outputs.alpha_roll;  // Mz'(前摆)          ← alpha_roll(绕 x_b)
+      float My =  P.Iy * outputs.alpha_pitch; // My'(下摆)          ← alpha_pitch(绕 y_b)
+      float Mz = -P.Iz * outputs.alpha_roll;  // Mz'(上摆)          ← alpha_roll(绕 x_b)
 
       // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
 
       // ================================================================
-      // ★ 差速回路增益调度（2026-08-07，根治低油门自激震荡）
+      // ★ 差速回路增益调度（2026-08-07 根治低油门自激震荡；2026-08-09 封顶+观测器）
       // ----------------------------------------------------------------
-      // 问题：分配层 Δω = Mx/(2·kQ·w0²)，其中 1/w0² 使**回路增益**随油门
-      //   平方反比放大 —— 19% 油门时是 100% 油门的 28×（实测 Kp=0.6 在
-      //   19% 油门下 Δω=3.4，是限幅 0.7 的 5 倍，长期饱和 → 剧烈震荡失控）。
-      //   这也让 PID 无法整定：低油门不震荡的 Kp，高油门就发软。
-      // 方案：令 Mx ×= (w0/w_hover)²，则
-      //   Δω = [Mx·w0²/wh²]/(2·kQ·w0²) = Mx/(2·kQ·wh²)  ← 与 w0 无关。
-      //   全油门回路增益恒定，Kp 一次整定全域有效。
-      // 注：物理力矩仍 ∝w0²（低转速缺反扭权限是**物理限制**，无法绕过），
-      //   但表现从"增益爆炸震荡"变为"输出诚实变弱"，这是可接受的。
+      // 问题1（2026-08-07）：分配层 Δω = Mx/(2·kQ·w0²) 的 1/w0² 使**指令**随
+      //   油门平方反比放大（19% 油门 Δω=3.4 长期饱和 → 剧烈震荡）。
+      //   方案：Mx ×= (w0/wh)² → Δω = Mx/(2·kQ·wh²) 与 w0 无关，指令有界。
+      // 问题2（2026-08-09 封顶）：物理力矩 τ = -2kQ·w0²·Δω = -Mx·(w0/wh)²
+      //   仍随油门放大 → 稳态有效增益 = kp·(w0/wh)²，抖油门 70% 时 ×1.97
+      //   越过震荡点 0.35。封顶 1.0 后稳态恒增益。
+      // 问题3（2026-08-09 观测器，★根因）：封顶后仍震荡——分配器用【指令
+      //   油门】w0 而物理力矩用【实际转速】（τm 滞后）→ 油门释放瞬间
+      //   w0_actual/w0_cmd ≈ 1.33 → 有效增益 kp·(w0_act/w0_cmd)² 瞬态 0.25→0.44，
+      //   越过 0.35 震荡点约 160ms → 激发 yaw 振铃（数值仿真验证）。
+      //   修复：τm 一阶观测器估计实际转速，B 矩阵工作点/调度/current_state
+      //   全部改用观测值 → 瞬态下 w0_est ≈ w0_actual，有效增益恒 ≈ kp。
+      //   观测器为开环状态估计无稳定性问题；τm 误差 ±50% 时 excursion 1.76×→~1.2×。
       // 仅作用于差速通道；摆座通道(My/Mz)未出现同类问题，不扩范围。
-      // 验证：tools/verify_yaw_gain_schedule.py
       // ================================================================
       const float w_hover = sqrtf(0.5f * P.m * P.g / P.kT);  // 单机悬停转速 ≈574 rad/s
 
@@ -1229,30 +1233,41 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       // （实测 5% 油门 det 比 50% 小 6 个数量级），逆解增益 ∝1/w0² 放大 100×。
       // 故统一按 0.6·w_hover(≈344 rad/s ≈30% wMax) 工作点计算，
       // 低于该油门时调度系数与 B 矩阵都"冻结"在这个良态工作点。
-      // 验证：tools/verify_w0_floor.py
       const float w0_floor = 0.6f * w_hover;
-      const float w0_eff   = fmaxf(w0, w0_floor);
+
+      // ---- 电机一阶滞后观测器（★2026-08-09 油门瞬态增益失配根因修复）----
+      // 指令转速经 τm=0.28s 滞后才达到，分配器若用指令值，油门瞬态下
+      // 有效增益 = kp·(w0_actual/w0_cmd)² 会先衰减后过冲（释放瞬间 1.76×）。
+      // 观测器以同一 τm 追上一拍指令（prev_prop_state = 上一拍分配输出），
+      // 悬停稳态 w0_est = w0_cmd（行为与旧版一致），瞬态下 w0_est ≈ 实际。
+      static float s_wf_est = 0.0f, s_wt_est = 0.0f;
+      s_wf_est += (prev_prop_state.wf - s_wf_est) * (0.005f / P.tauM);  // GNC 200Hz 固定步长
+      s_wt_est += (prev_prop_state.wt - s_wt_est) * (0.005f / P.tauM);
+      const float w0_est = sqrtf(0.5f * (s_wf_est * s_wf_est + s_wt_est * s_wt_est));
+      const float w0_eff   = fmaxf(w0_est, w0_floor);
 
       float yaw_gain_sched = (w_hover > 1.0f) ? (w0_eff * w0_eff) / (w_hover * w_hover) : 1.0f;
-      yaw_gain_sched = constrain(yaw_gain_sched, 0.02f, 4.0f); // 防零 / 防高油门过冲
+      yaw_gain_sched = fminf(yaw_gain_sched, 1.0f);   // ★ 2026-08-09 封顶：高油门不再放大增益
       Mx *= yaw_gain_sched;
       s_yaw_gain_sched = yaw_gain_sched;  // 导出给在线辨识（步骤9）修正命令量
 
       AllocationInput ai;
-      // ★ B 矩阵工作点用 w0_eff（良态求逆）；
-      //   注意 allocateDifferential 必须用【真实 w0】——它决定实际电机转速，
-      //   若用 w0_eff，零油门时电机会被顶到 30% 转速（安全事故）。
-      ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0_eff;
+      // ★ B 矩阵工作点用 w0_eff（观测转速 + 良态下限）；
+      //   注意 allocateDifferential 必须用【真实指令 w0】——它决定实际电机转速，
+      //   若用 w0_eff/观测值，零油门时电机会被顶到 30% 转速（安全事故）。
+      ai.Mx_cmd = Mx;  ai.My_cmd = My;  ai.Mz_cmd = Mz;  ai.w0 = w0;
 
-      // ★ current_state 的转速也必须同步 floor：
+      // ★ current_state 的转速用【观测实际转速】并同步 floor：
       //   computeEffectMatrix 的第1、2列由 Qt/Tt/Qf/Tf(∝wf²,wt²) 构成，
       //   若 wf=wt≈0 而 w0=w0_eff，则 B 两列全零 → det=0 → BTRUE 退降
       //   FULL_B，工作点混用（w0 用 eff、状态用真实）本身也不自洽。
       //   同步 floor 后 det 恒 ≈1.1e-2（良态），策略不再意外退降。
+      //   （2026-08-09：旧版用 prev_prop_state 指令值 → 油门瞬态 B 与实际
+      //   力矩失配；观测器后 B 与实际转速同步）
       //   验证：tools/verify_floor_consistency.py
       ai.current_state = prev_prop_state;
-      ai.current_state.wf = fmaxf(prev_prop_state.wf, w0_floor);
-      ai.current_state.wt = fmaxf(prev_prop_state.wt, w0_floor);
+      ai.current_state.wf = fmaxf(s_wf_est, w0_floor);   // ★ 2026-08-09 用观测实际转速（瞬态增益失配修复）
+      ai.current_state.wt = fmaxf(s_wt_est, w0_floor);
 
       AllocationOutput ao = allocateMoments(ai, P, AllocationStrategy::BTRUE);
 
@@ -1272,8 +1287,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       }
 
       // 层3a：摆角(rad) → 角度(deg)
-      tail_gimbal_deg  = ao.delta_t * RAD_TO_DEG;
-      front_gimbal_deg = ao.delta_f * RAD_TO_DEG;
+      lower_gimbal_deg  = ao.delta_t * RAD_TO_DEG;
+      upper_gimbal_deg = ao.delta_f * RAD_TO_DEG;
 
       // 层3b：差速指令 → 双电机转速 → 直接输出百分比（消除 us→pct 双重转换）
       auto diff = allocateDifferential(w0, ao.dw, P);
@@ -1290,8 +1305,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       gnc_tel.M_cmd[0] = Mx;  gnc_tel.M_cmd[1] = My;  gnc_tel.M_cmd[2] = Mz;
       gnc_tel.w0_eff = w0_eff;
       gnc_tel.yaw_gain_sched = s_yaw_gain_sched;
-      gnc_tel.delta_f_deg = front_gimbal_deg;
-      gnc_tel.delta_t_deg = tail_gimbal_deg;
+      gnc_tel.delta_f_deg = upper_gimbal_deg;
+      gnc_tel.delta_t_deg = lower_gimbal_deg;
       gnc_tel.dw = ao.dw;
       gnc_tel.alloc_sat[0] = ao.sat_delta_f;
       gnc_tel.alloc_sat[1] = ao.sat_delta_t;
@@ -1309,8 +1324,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   const float gear = SC.teeth_gimbal / SC.teeth_servo;  // 40/30 = 1.333
 
   //  有向舵机角(deg) = 摆座角(deg) × 传动比 × 方向符号
-  float servo_deg_pitch = tail_gimbal_deg  * gear * SC.dir_pitch;
-  float servo_deg_roll  = front_gimbal_deg * gear * SC.dir_roll;
+  float servo_deg_pitch = lower_gimbal_deg  * gear * SC.dir_pitch;
+  float servo_deg_roll  = upper_gimbal_deg * gear * SC.dir_roll;
 
   //  映射到百分比：中位偏置 + 行程归一
   float pitch_servo = (50.f + SC.zero_pitch_pct) + (servo_deg_pitch / SC.half_travel_deg) * 50.f;
@@ -1331,8 +1346,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   ch4_output = motor2_pct;
 
   // 执行器指令物理量纲（全模式统一捕获）→ AnoCom 0x40 帧 / 上位机 TVC 显示
-  g_tvc_front_deg = front_gimbal_deg;
-  g_tvc_rear_deg  = tail_gimbal_deg;
+  g_tvc_upper_deg = upper_gimbal_deg;
+  g_tvc_lower_deg  = lower_gimbal_deg;
 }
 /**
  * @brief 在线参数辨识更新 — ★ 纯观测模式，不改变任何控制行为
@@ -1344,7 +1359,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
  *   即使辨识结果完全错误，也不影响飞行 —— 这是"第一步：只观测不闭环"。
  *   待多架次数据确认 b_est 稳定后，才考虑人工调整增益（第二步）。
  *
- * 轴序约定：[0]=roll(滚转/差速) [1]=pitch(俯仰/尾摆) [2]=yaw(偏航/前摆)
+ * 轴序约定：[0]=roll(滚转/差速) [1]=pitch(俯仰/下摆) [2]=yaw(偏航/上摆)
  *   与 outputs.alpha_* 及 current_omega_dps_body_filtered 的 FRD 映射对应：
  *   滚转←omega.x, 俯仰←omega.y, 偏航←omega.z
  */
@@ -1451,7 +1466,7 @@ void runGNCExecutive()
   // 步骤 6: 执行Roll/Pitch姿态控制器，计算TVC舵机修正量
   execute_attitude_controller(controller_inputs, q_target_attitude, controller_outputs);
 
-  // 步骤 7: 执行偏航控制器 → 前摆角 δ_f（纵列双发适配：原差速输出改为前摆角）
+  // 步骤 7: 执行偏航控制器 → 上摆角 δ_f（纵列双发适配：原差速输出改为上摆角）
   execute_yaw_controller(controller_inputs, q_target_attitude, controller_outputs);
 
   // 步骤 8: 将所有计算出的控制量混合，并输出到执行机构

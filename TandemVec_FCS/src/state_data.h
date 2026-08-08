@@ -124,13 +124,15 @@ typedef struct
 
 // 控制输出结构体
 // 内环 PID 输出角加速度(rad/s²)，底层控制分配根据物理模型逆解执行器指令
-// 轴向：alpha_roll=体轴z（侧倾），alpha_pitch=体轴y（俯仰），alpha_yaw=体轴x（VTOL航向）
+// 轴向（★ 2026-08-07 轴置换后，旧注释"上摆=偏航/差速=滚转"已废止；
+// 锚点=手动模式摇杆直通实机验证）：alpha_roll=体轴x→上摆δ_f，
+// alpha_pitch=体轴y→下摆δ_t，alpha_yaw=体轴z→差速Δω
 typedef struct
 {
   float throttle_percent; // 油门百分比 (0-100)
-  float alpha_roll;       // rad/s²  体轴x角加速度（FRD滚转/差速Δω）
-  float alpha_pitch;      // rad/s²  体轴y角加速度（俯仰/尾摆δ_t）
-  float alpha_yaw;        // rad/s²  体轴z角加速度（FRD偏航/前摆δ_f）
+  float alpha_roll;       // rad/s²  体轴x角加速度（滚转/上摆δ_f）
+  float alpha_pitch;      // rad/s²  体轴y角加速度（俯仰/下摆δ_t）
+  float alpha_yaw;        // rad/s²  体轴z角加速度（偏航/差速Δω）
 } ControlOutputs_t;
 
 // 任务调度结构体
@@ -360,12 +362,14 @@ extern GncTelemetry gnc_tel;
 extern FlightCtrlParams kFlightCtrlParams;
 void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 9 控制滤波器
 
-// --- 4.1 姿态控制 (Roll/Pitch/Yaw) — VTOL 体轴映射 ---
-// VTOL（x_b朝上）：Roll=体轴z（侧倾），Pitch=体轴y（俯仰），Yaw=体轴x（航向）
-extern PositionPID rollAnglePID;  // Roll外环: q_err.z → 目标侧倾速率 (deg/s)
-extern PositionPID rollRatePID;   // Roll内环: 体轴z速率误差 → 前摆角δ_f (deg)
-extern PositionPID pitchAnglePID; // Pitch外环: q_err.y → 目标俯仰速率
-extern PositionPID pitchRatePID;  // Pitch内环: 体轴y速率误差 → 尾摆角δ_t (deg)
+// --- 4.1 姿态控制 (Roll/Pitch/Yaw) — FRD 体轴映射（x_b=前/y_b=右/z_b=下）---
+// ★ 2026-08-07 轴置换后执行器分配（旧注释"VTOL x_b朝上/Roll=体轴z"已废止；
+// 锚点=手动模式摇杆直通实机验证）：Roll=体轴x→上摆δ_f，Pitch=体轴y→下摆δ_t，
+// Yaw=体轴z→差速Δω
+extern PositionPID rollAnglePID;  // Roll外环: error_deg[0] → 目标滚转速率
+extern PositionPID rollRatePID;   // Roll内环: 体轴x速率误差 → 上摆角δ_f (deg)
+extern PositionPID pitchAnglePID; // Pitch外环: error_deg[1] → 目标俯仰速率
+extern PositionPID pitchRatePID;  // Pitch内环: 体轴y速率误差 → 下摆角δ_t (deg)
 extern PositionPID yawAnglePID;   // Yaw外环: q_err.x → 目标航向速率
 extern PositionPID yawRatePID;    // Yaw内环: 体轴x速率误差 → 差速Δω [-0.7,+0.7]（航向）
 
@@ -704,9 +708,9 @@ extern float ch3_output, ch4_output;
 
 // 执行器指令（物理量纲，全模式有效：mix 输出级统一写入）——
 // 供 AnoCom 0x40 执行器帧（上位机 TVC 摆角/推力实时显示）。
-// 摆角 deg：+ = 有向摆角（前摆绕 z_b 偏航主控 / 尾摆绕 y_b 俯仰主控），限幅 ±MAX_CORRECTION
-extern float g_tvc_front_deg;   // 前摆座角指令 deg（偏航）
-extern float g_tvc_rear_deg;    // 尾摆座角指令 deg（俯仰）
+// 摆角 deg：+ = 有向摆角（★2026-08-07 轴置换：上摆=滚转执行器 / 下摆=俯仰执行器），限幅 ±MAX_CORRECTION
+extern float g_tvc_upper_deg;   // 上摆座角指令 deg（滚转）
+extern float g_tvc_lower_deg;    // 下摆座角指令 deg（俯仰）
 
 // 当前飞行模式 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)
 extern ControlMode g_current_flight_mode;

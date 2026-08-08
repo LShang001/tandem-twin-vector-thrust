@@ -19,6 +19,103 @@
 #define BFS_PROFILE_SERIAL Serial8
 #endif
 
+// DBG 模式访问器（communication.cpp 定义）：画像输出仅 DBG 模式下打印，
+// 避免 [TASK]/[LOOP] 文本污染正常 AnoCom 遥测流。
+bool isDebugModeActive();
+
+// ====================================================================
+// 任务调度统计（常开累积，DBG `tasks` 命令消费）
+// 每次执行累积：次数 / 耗时 / 相邻执行间隔 / 迟到次数；`tasks` 打印后清零。
+// 开销：每任务每次执行约 20-30 周期（480MHz 下可忽略）。
+// ====================================================================
+struct TaskStats
+{
+  uint32_t run_count;          // 窗口内执行次数
+  uint64_t exec_sum_us;        // 执行总耗时
+  uint32_t exec_max_us;        // 单次最大耗时
+  uint32_t last_run_us;        // 上次执行 micros()
+  uint32_t gap_sum_us;         // 相邻执行间隔累计
+  uint32_t gap_max_us;         // 最大执行间隔（抖动上界）
+  uint32_t gap_min_us;         // 最小执行间隔（抖动下界）
+  uint32_t late_count;         // 迟到次数（间隔 > 1.5×名义周期 = 漏拍）
+  uint32_t nominal_period_us;  // 名义周期
+};
+static TaskStats s_stats[MAX_TASKS] = {};
+static uint32_t s_stats_window_start_us = 0;  // 观测窗口起点
+static uint32_t s_loop_max_pass_us = 0;       // taskExecutor 单轮最大耗时
+
+void schedulerStatsReset()
+{
+  memset(s_stats, 0, sizeof(s_stats));
+  for (uint8_t i = 0; i < taskCount; i++)
+  {
+    s_stats[i].nominal_period_us = tasks[i].interval * 500U; // tick=0.5ms
+    s_stats[i].gap_min_us = 0xFFFFFFFFu;
+    s_stats[i].last_run_us = micros();
+  }
+  s_stats_window_start_us = micros();
+  s_loop_max_pass_us = 0;
+}
+
+void schedulerStatsPrint(Print &out)
+{
+  const uint32_t window_us = micros() - s_stats_window_start_us;
+  const uint32_t window_ms = window_us / 1000U;
+  uint64_t total_exec_us = 0;
+
+  out.println(F("[DBG] == 任务调度统计 =="));
+  out.println(F("[DBG] 名称         名义Hz 实际Hz 平均us 最大us 间隔min 间隔avg 间隔max 迟到 负荷%"));
+  for (uint8_t i = 0; i < taskCount; i++)
+  {
+    const TaskStats &st = s_stats[i];
+    if (st.run_count == 0)
+    {
+      continue;
+    }
+    const char *name = tasks[i].name != nullptr ? tasks[i].name : "-";
+    const uint32_t nominal_hz = st.nominal_period_us > 0 ? 1000000U / st.nominal_period_us : 0U;
+    const uint32_t actual_hz = window_ms > 0 ? st.run_count * 1000U / window_ms : 0U;
+    const uint32_t avg_us = st.run_count > 0 ? static_cast<uint32_t>(st.exec_sum_us / st.run_count) : 0U;
+    const uint32_t avg_gap = st.run_count > 0 ? st.gap_sum_us / st.run_count : 0U;
+    const float load_pct = window_us > 0 ? static_cast<float>(st.exec_sum_us) * 100.0f / static_cast<float>(window_us) : 0.0f;
+    total_exec_us += st.exec_sum_us;
+
+    out.print(F("[DBG] "));
+    out.print(name);
+    for (uint8_t pad = static_cast<uint8_t>(strlen(name)); pad < 12; pad++)
+    {
+      out.print(' ');
+    }
+    out.print(nominal_hz);
+    out.print(F("   "));
+    out.print(actual_hz);
+    out.print(F("   "));
+    out.print(avg_us);
+    out.print(F("   "));
+    out.print(st.exec_max_us);
+    out.print(F("   "));
+    out.print(st.gap_min_us);
+    out.print(F("   "));
+    out.print(avg_gap);
+    out.print(F("   "));
+    out.print(st.gap_max_us);
+    out.print(F("   "));
+    out.print(st.late_count);
+    out.print(F("   "));
+    out.print(load_pct, 1);
+    out.println();
+  }
+  const float cpu_pct = window_us > 0 ? static_cast<float>(total_exec_us) * 100.0f / static_cast<float>(window_us) : 0.0f;
+  out.print(F("[DBG] LOOP 窗口="));
+  out.print(window_ms);
+  out.print(F("ms CPU="));
+  out.print(cpu_pct, 1);
+  out.print(F("% 最大单轮="));
+  out.print(s_loop_max_pass_us);
+  out.println(F("us"));
+  schedulerStatsReset();
+}
+
 /**
  * @brief 定时器中断回调函数 (Timer Callback Function)
  *
@@ -73,6 +170,7 @@ void setupTimer()
   TaskTimer->setOverflow(2000, HERTZ_FORMAT); // 设置溢出频率为 2000Hz (2kHz)
   TaskTimer->attachInterrupt(timerCallback);  // 将 timerCallback 附加到溢出中断
   TaskTimer->resume();                        // 启动定时器，开始产生中断
+  schedulerStatsReset();                      // 调度统计观测窗口起点（任务随后注册）
 }
 
 /**
@@ -112,6 +210,10 @@ bool addTaskNamed(void (*function)(), float interval, const char *name)
   tasks[taskCount].lastRunTime = 0; // 初始化上次执行时间为 0 (首次执行在 interval 后)
   tasks[taskCount].enabled = true;  // 默认启用该任务
   tasks[taskCount].flag = false;    // 初始标志位为 false (等待定时器置位)
+  // 调度统计基线（首个间隔≈名义周期，不污染抖动统计）
+  s_stats[taskCount].nominal_period_us = static_cast<uint32_t>(interval * 1000.0f);
+  s_stats[taskCount].gap_min_us = 0xFFFFFFFFu;
+  s_stats[taskCount].last_run_us = micros();
   taskCount++;                      // 已注册任务计数递增
 
   return true; // 任务添加成功
@@ -138,6 +240,7 @@ bool addTask(void (*function)(), float interval)
  */
 void taskExecutor()
 {
+  const uint32_t t_pass0 = micros(); // 单轮耗时统计起点
 #ifdef BFS_TASK_PROFILE
   // 每 2 秒输出一次各任务执行耗时统计, 用于分析延迟瓶颈。
   static uint32_t s_profile_last_ms = 0;
@@ -162,12 +265,39 @@ void taskExecutor()
 
     if (should_run)
     {
-#ifdef BFS_TASK_PROFILE
+      TaskStats &st = s_stats[i];
       const uint32_t t0 = micros();
-#endif
+      // 间隔统计在执行前采样：任务内部可能触发 reset（DBG `tasks` 命令
+      // 在 Debug 任务内处理），若任务返回后再算 gap，t0 早于 reset 时刻
+      // → 无符号下溢 → 巨大间隔（实测 4294961991us）
+      const uint32_t gap = t0 - st.last_run_us;
+      st.last_run_us = t0;
+      st.gap_sum_us += gap;
+      if (gap > st.gap_max_us)
+      {
+        st.gap_max_us = gap;
+      }
+      if (gap < st.gap_min_us)
+      {
+        st.gap_min_us = gap;
+      }
+      if (st.nominal_period_us > 0 && gap > (st.nominal_period_us * 3) / 2)
+      {
+        st.late_count++;
+      }
+
       tasks[i].function();
+      const uint32_t t1 = micros();
+      const uint32_t exec_us = t1 - t0;
+      st.run_count++;
+      st.exec_sum_us += exec_us;
+      if (exec_us > st.exec_max_us)
+      {
+        st.exec_max_us = exec_us;
+      }
+
 #ifdef BFS_TASK_PROFILE
-      const uint32_t elapsed = micros() - t0;
+      const uint32_t elapsed = t1 - t0;
 
       // 累计统计
       if (elapsed > s_task_max_us[i]) s_task_max_us[i] = elapsed;
@@ -177,9 +307,16 @@ void taskExecutor()
     }
   }
 
+  // 单轮最大耗时（主循环一个完整 pass 的执行时间，含所有到期任务）
+  const uint32_t pass_us = micros() - t_pass0;
+  if (pass_us > s_loop_max_pass_us)
+  {
+    s_loop_max_pass_us = pass_us;
+  }
+
 #ifdef BFS_TASK_PROFILE
-  // 周期性打印
-  if (now_ms - s_profile_last_ms >= 2000)
+  // 周期性打印（仅 DBG 模式，避免污染遥测流）
+  if (isDebugModeActive() && now_ms - s_profile_last_ms >= 2000)
   {
     const uint32_t window_ms = now_ms - s_profile_last_ms;
     s_profile_last_ms = now_ms;

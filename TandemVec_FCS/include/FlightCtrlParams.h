@@ -65,13 +65,17 @@ struct FlightCtrlParams
 // ============================================================
 static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ---- 姿态外环（deg 域）----
-    /* att_roll  */ { 2.5f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
-    /* att_pitch */ { 2.5f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
+    // ★ 2026-08-09：内环定稿 0.30 后外环小幅回调 2.5→2.3（提串级阻尼 ζ，
+    // 降角度超调；若仍偏冲下一步 2.2）
+    /* att_roll  */ { 2.3f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
+    /* att_pitch */ { 2.3f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
     /* att_yaw   */ { 0.8f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, false }, // 未启用（航向=纯速率指令）
     // ---- 角速率内环 ----
-    /* rate_roll */ { 0.25f,   0.0003f,  0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true },
-    /* rate_pitch*/ { 0.25f,   0.0003f,  0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true },
-    /* rate_yaw  */ { 0.20f,   0.001f,   0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true }, // 差速内环：抑震荡（5轮调参史见 state_data.cpp）
+    // ★ 2026-08-09 定稿：0.30 在线降 0.28 实测"几乎不超调"（RAM 写验证后固化）。
+    // 轨迹：0.25→0.30→0.33→0.45(震荡)→0.36(震荡)→0.33→0.30→0.28(RAM确认)
+    /* rate_roll */ { 0.28f,   0.0003f,  0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true },
+    /* rate_pitch*/ { 0.28f,   0.0003f,  0.0f,   -100.0f, 100.0f, 10.0f, 30.0f, 0.2f, true },
+    /* rate_yaw  */ { 0.22f,   0.001f,   0.0f,   -100.0f, 100.0f, 20.0f, 60.0f, 0.2f, true }, // 差速内环：2026-08-09 限幅10→20（d_yaw=7.36 已占74%）、分离阈值30→60（yaw 环慢，误差久滞>30° 致机动期间积分挂起）；0.22 稳定点
     // ---- 垂直串级 ----
     /* alt_pos   */ { 1.0f,    0.0f,     0.0f,   -1.0f,   1.0f,   250.0f, 0.0f, 0.0f, true },
     /* alt_vel   */ { 5.0f,    0.00625f, 0.0f,   -18.75f, 12.5f,  10.0f,  0.0f, 0.2f, true },
@@ -83,7 +87,7 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ---- 控制滤波器 alpha ----
     /* speed_filter_alpha     */ { 0.3f, 0.3f, 0.3f },
     /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
-    /* output_filter_alpha    */ { 0.25f, 0.25f, 0.12f },  // yaw=0.12 实机调出（差速抑震荡）
+    /* output_filter_alpha    */ { 0.30f, 0.30f, 0.12f },  // roll/pitch 2026-08-09 内环提升：0.25→0.30；yaw=0.12 实机调出（差速抑震荡）
 };
 
 #ifdef TANDEMVEC_FIRMWARE

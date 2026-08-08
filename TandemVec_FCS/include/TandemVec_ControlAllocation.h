@@ -52,8 +52,8 @@ struct AllocationInput
 struct AllocationOutput
 {
     // 执行器指令（已限幅）
-    float delta_f;  // rad   前摆角（偏航）
-    float delta_t;  // rad   尾摆角（俯仰）
+    float delta_f;  // rad   上摆角（滚转执行器，★2026-08-07 轴置换）
+    float delta_t;  // rad   下摆角（俯仰）
     float dw;       //  -    差速指令 Δω ∈ [-dwMax, +dwMax]
 
     // 饱和标记（任意为 true 表示有通道已触达物理极限）
