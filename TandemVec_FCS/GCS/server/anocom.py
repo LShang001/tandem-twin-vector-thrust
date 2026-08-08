@@ -33,6 +33,7 @@ FUNC_EXT_MODULE = 0x0E
 FUNC_PWM_OUTPUT = 0x20
 FUNC_ATTITUDE_CONTROL = 0x21
 FUNC_GPS_INFO1 = 0x30
+FUNC_ACTUATOR_OUT = 0x40      # 本工程自定义：执行器输出（TVC 摆角/电机推力/差速）
 FUNC_PARAM_CMD = 0xE0
 FUNC_PARAM_WRITE_READ = 0xE1
 FUNC_PARAM_INFO = 0xE2
@@ -43,8 +44,8 @@ FUNC_NAMES = {
     0x04: '姿态四元数', 0x05: '高度数据', 0x06: '飞行模式', 0x07: '飞行速度',
     0x08: '位置偏移', 0x09: '风速估计', 0x0A: '目标姿态', 0x0B: '目标速度',
     0x0C: '回航信息', 0x0D: '电压电流', 0x0E: '外接模块状态', 0x20: 'PWM输出',
-    0x21: '姿态控制输出', 0x30: 'GPS信息1', 0xE0: '参数命令', 0xE1: '参数读写',
-    0xE2: '参数信息', 0xE3: '设备信息',
+    0x21: '姿态控制输出', 0x30: 'GPS信息1', 0x40: '执行器输出', 0xE0: '参数命令',
+    0xE1: '参数读写', 0xE2: '参数信息', 0xE3: '设备信息',
 }
 
 # 参数类型（与固件 AnoDataType 枚举一致，E2 信息帧 PAR_TYPE）
@@ -232,6 +233,23 @@ def decode_attitude_control(p: bytes) -> dict:
             'ctrl_thr_pct': t / 10.0, 'ctrl_yaw': y / 10.0}
 
 
+def decode_actuator(p: bytes) -> dict:
+    """0x40（本工程自定义）: 前/尾摆角 int16 (÷100 → deg)，前/尾电机 u16 (÷10 → %)，
+    差速 int16 (÷1000，归一化 Δω)，饱和标记 u8（bit0 δf / bit1 δt / bit2 Δω），预留 u8
+    —— mix 输出级统一捕获，锁定/手动/自动全模式有效"""
+    if len(p) < 11:
+        return {}
+    tf, tr, dw = struct.unpack('<3h', p[0:2] + p[2:4] + p[8:10])
+    m1, m2 = struct.unpack('<2H', p[4:8])
+    sat = p[10]
+    return {
+        'tvc_front_deg': tf / 100.0, 'tvc_rear_deg': tr / 100.0,
+        'motor_front_pct': m1 / 10.0, 'motor_rear_pct': m2 / 10.0,
+        'dw': dw / 1000.0,
+        'sat_df': bool(sat & 0x01), 'sat_dt': bool(sat & 0x02), 'sat_dw': bool(sat & 0x04),
+    }
+
+
 def decode_gps(p: bytes) -> dict:
     """0x30: fix u8, sats u8, lng/lat int32 (÷1e7), alt int32 (÷100),
     n/e/d 速度 int16 (÷100), pdop/vacc/sacc u8 (÷10)"""
@@ -270,6 +288,7 @@ DECODERS = {
     FUNC_VOLT_CURR: decode_volt_curr,
     FUNC_PWM_OUTPUT: decode_pwm,
     FUNC_ATTITUDE_CONTROL: decode_attitude_control,
+    FUNC_ACTUATOR_OUT: decode_actuator,
     FUNC_GPS_INFO1: decode_gps,
     FUNC_DEVICE_INFO: decode_device_info,
 }

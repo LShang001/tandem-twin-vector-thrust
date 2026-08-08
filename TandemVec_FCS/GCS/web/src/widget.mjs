@@ -114,6 +114,74 @@ export function drawAttitude(cv, rollDeg, pitchDeg, headingDeg) {
 }
 
 // ============================================================
+//  TVC 摆角仪表（canvas）— 箭头方向 = 摆角（±15°），长度 = 推力 %
+// ============================================================
+const TVC_LIMIT_DEG = 15;            // 摆角限幅（固件 MAX_CORRECTION/GYRO_K ±15°）
+export function drawTvcDial(cv, angleDeg, thrustPct, { color = '#3ea6ff' } = {}) {
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.width, H = cv.height;
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const w = W / dpr, h = H / dpr;
+  const cx = w / 2, cy = h - 18;      // 枢轴：电机位置
+  const R = Math.min(w, h) * 0.62;    // 摆角弧半径
+
+  ctx.clearRect(0, 0, w, h);
+  const a = (deg) => (deg - 90) * Math.PI / 180;   // 0°=竖直向上，+顺时（画面右）
+
+  // ±限幅弧 + 刻度
+  ctx.strokeStyle = 'rgba(120,160,255,0.30)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, R, a(-TVC_LIMIT_DEG), a(TVC_LIMIT_DEG)); ctx.stroke();
+  ctx.strokeStyle = 'rgba(120,160,255,0.5)';
+  ctx.lineWidth = 1;
+  for (let d = -TVC_LIMIT_DEG; d <= TVC_LIMIT_DEG; d += 5) {
+    ctx.beginPath();
+    ctx.moveTo(cx + (R - 5) * Math.cos(a(d)), cy + (R - 5) * Math.sin(a(d)));
+    ctx.lineTo(cx + R * Math.cos(a(d)), cy + R * Math.sin(a(d)));
+    ctx.stroke();
+  }
+
+  const has = angleDeg !== undefined && angleDeg !== null && !Number.isNaN(angleDeg);
+  const thrust = (thrustPct === undefined || thrustPct === null || Number.isNaN(thrustPct)) ? 0 : Math.max(0, Math.min(100, thrustPct));
+
+  // 中位虚线（竖直推力）
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(125,140,163,0.5)';
+  ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - R * 0.98); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // 推力矢量箭头：方向 = 摆角，长度 ∝ 推力（0% 时仅留短柄）
+  const ang = a(has ? Math.max(-TVC_LIMIT_DEG, Math.min(TVC_LIMIT_DEG, angleDeg)) : 0);
+  const L = 14 + thrust / 100 * (R * 0.86);
+  const x0 = cx + 9 * Math.cos(ang), y0 = cy + 9 * Math.sin(ang);
+  const x1 = cx + L * Math.cos(ang), y1 = cy + L * Math.sin(ang);
+  ctx.save();
+  ctx.shadowColor = color; ctx.shadowBlur = 8;
+  ctx.strokeStyle = has ? color : 'rgba(125,140,163,0.35)';
+  ctx.fillStyle = has ? color : 'rgba(125,140,163,0.35)';
+  ctx.lineWidth = 3; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x1 + 9 * Math.cos(ang), y1 + 9 * Math.sin(ang));
+  ctx.lineTo(x1 + 4 * Math.cos(ang + 2.6), y1 + 4 * Math.sin(ang + 2.6));
+  ctx.lineTo(x1 + 4 * Math.cos(ang - 2.6), y1 + 4 * Math.sin(ang - 2.6));
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // 电机（枢轴圆）
+  ctx.fillStyle = '#0f1520'; ctx.strokeStyle = 'rgba(120,160,255,0.5)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+
+  // 当前摆角在弧上的位置点
+  if (has) {
+    ctx.fillStyle = '#ffd34d';
+    ctx.beginPath(); ctx.arc(cx + R * Math.cos(ang), cy + R * Math.sin(ang), 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// ============================================================
 //  条形指示（RC 通道 / 控制输出）
 // ============================================================
 export function barRow(label, el, { center = false, color = '' } = {}) {

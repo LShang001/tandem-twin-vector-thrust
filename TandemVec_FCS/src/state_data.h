@@ -702,6 +702,12 @@ extern float id_kp_suggest[3]; // 建议的 Kp_r（= Kp_nominal/√b，仅供参
 extern float ch1_output, ch2_output;
 extern float ch3_output, ch4_output;
 
+// 执行器指令（物理量纲，全模式有效：mix 输出级统一写入）——
+// 供 AnoCom 0x40 执行器帧（上位机 TVC 摆角/推力实时显示）。
+// 摆角 deg：+ = 有向摆角（前摆绕 z_b 偏航主控 / 尾摆绕 y_b 俯仰主控），限幅 ±MAX_CORRECTION
+extern float g_tvc_front_deg;   // 前摆座角指令 deg（偏航）
+extern float g_tvc_rear_deg;    // 尾摆座角指令 deg（俯仰）
+
 // 当前飞行模式 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)
 extern ControlMode g_current_flight_mode;
 // 当前解锁状态 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)

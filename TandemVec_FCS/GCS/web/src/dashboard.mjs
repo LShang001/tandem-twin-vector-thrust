@@ -2,7 +2,7 @@
 //  dashboard.mjs — 仪表盘：人工地平线 + HUD + RC/控制条 + GNSS
 // ============================================================
 import { bus, state } from './main.mjs';
-import { drawAttitude, barRow, fmt, fmtInt, val } from './widget.mjs';
+import { drawAttitude, drawTvcDial, barRow, fmt, fmtInt, val } from './widget.mjs';
 
 const $ = (id) => document.getElementById(id);
 const MODE_NAMES = ['MANUAL', 'AUTO_POS', 'AUTO_ALT', 'GUIDED'];
@@ -16,6 +16,7 @@ const CHIP_ORDER = [
 
 let rcBars = [];
 let ctrlBars = [];
+let actBars = [];
 let initializing = false;
 
 export function activate() {
@@ -47,6 +48,24 @@ export function activate() {
     return { bar, key, opts };
   });
 
+  // 执行器条（0x40 帧：TVC 摆角 / 电机推力 / 差速）
+  const actWrap = $('actBars');
+  actWrap.innerHTML = '';
+  const actDefs = [
+    // [标签, 快照key, 量程, 居中(±量程), 配色]
+    ['前摆 δf °', 'tvc_front_deg', { min: -15, max: 15 }, true, 'linear-gradient(90deg,#ff5d6c,#ffb547)'],
+    ['尾摆 δt °', 'tvc_rear_deg', { min: -15, max: 15 }, true, 'linear-gradient(90deg,#3ea6ff,#29d3a2)'],
+    ['前电机 %', 'motor_front_pct', { min: 0, max: 100 }, false, 'linear-gradient(90deg,#ffb547,#ff5d6c)'],
+    ['尾电机 %', 'motor_rear_pct', { min: 0, max: 100 }, false, 'linear-gradient(90deg,#29d3a2,#3ea6ff)'],
+    ['差速 Δω', 'dw', { min: -1, max: 1 }, true, 'linear-gradient(90deg,#b48cff,#ff5d6c)'],
+  ];
+  actBars = actDefs.map(([label, key, opts, center, color]) => {
+    const el = document.createElement('div');
+    actWrap.appendChild(el);
+    const bar = barRow(label, el, { center, color });
+    return { bar, key, opts };
+  });
+
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
   bus.addEventListener('page', onPage);
   onTelemetry(state.snap);
@@ -72,8 +91,6 @@ function onTelemetry(s) {
   $('hudPos').textContent = (rn !== undefined && re !== undefined) ? `${fmt(rn, 1)} / ${fmt(re, 1)}` : '--';
   $('hudThr').textContent = fmt(val(s, 'ctrl_thr_pct'));
   $('hudBat').textContent = fmt(val(s, 'bat_voltage_v', 0), 2);
-  const p1 = val(s, 'p1_mpa'), p2 = val(s, 'p2_mpa');
-  $('hudP').textContent = (p1 !== undefined && p2 !== undefined) ? `${fmt(p1, 3)} / ${fmt(p2, 3)}` : '--';
   const tr = val(s, 'target_roll_deg'), tp = val(s, 'target_pitch_deg');
   $('hudTar').textContent = (tr !== undefined && tp !== undefined) ? `${fmt(tr, 1)} / ${fmt(tp, 1)}` : '--';
 
@@ -104,6 +121,27 @@ function onTelemetry(s) {
   // 控制条
   for (const { bar, key, opts } of ctrlBars) {
     bar.set(val(s, key), opts);
+  }
+
+  // 执行器（0x40 帧）：TVC 矢量仪表 + 条 + 饱和标记
+  const df = val(s, 'tvc_front_deg'), dt = val(s, 'tvc_rear_deg');
+  const mf = val(s, 'motor_front_pct'), mt = val(s, 'motor_rear_pct');
+  drawTvcDial($('cvTvcFront'), df, mf, { color: '#ffb547' });
+  drawTvcDial($('cvTvcRear'), dt, mt, { color: '#3ea6ff' });
+  $('tvcFrontText').textContent = (df !== undefined && mf !== undefined)
+    ? `δf ${fmt(df, 1)}° · ${fmtInt(mf)}%` : 'δf --° · --%';
+  $('tvcRearText').textContent = (dt !== undefined && mt !== undefined)
+    ? `δt ${fmt(dt, 1)}° · ${fmtInt(mt)}%` : 'δt --° · --%';
+  for (const { bar, key, opts } of actBars) {
+    bar.set(val(s, key), opts);
+  }
+  const sats = [
+    ['satDf', 'sat_df'], ['satDt', 'sat_dt'], ['satDw', 'sat_dw'],
+  ];
+  for (const [id, key] of sats) {
+    const el = $(id);
+    if (s[key] === undefined) el.className = 'status-chip';
+    else el.className = 'status-chip ' + (s[key] ? 'bad' : 'ok');
   }
 
   // GNSS

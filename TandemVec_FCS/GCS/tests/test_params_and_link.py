@@ -81,10 +81,12 @@ def _make_telemetry_frames():
     frames.append(anocom.encode_frame(anocom.FUNC_FLIGHT_MODE, bytes([1, 1, 0, 0, 0])))
     frames.append(anocom.encode_frame(anocom.FUNC_ATTITUDE_CONTROL,
         struct.pack('<4h', 100, -200, 500, 30)))
-    # 组2：目标速度 + 飞行速度 + PWM
+    # 组2：目标速度 + 飞行速度 + PWM + 执行器输出(0x40)
     frames.append(anocom.encode_frame(anocom.FUNC_TARGET_SPEED, struct.pack('<3h', 0, 0, 0)))
     frames.append(anocom.encode_frame(anocom.FUNC_FLIGHT_SPEED, struct.pack('<3h', 100, -50, 250)))
     frames.append(anocom.encode_frame(anocom.FUNC_PWM_OUTPUT, struct.pack('<8H', *range(1000, 1008))))
+    frames.append(anocom.encode_frame(anocom.FUNC_ACTUATOR_OUT,
+        struct.pack('<hh2HhBB', -1230, 855, 624, 587, 490, 0x05, 0)))
     # 组3：位置 + 电压电流(压力) + GPS
     frames.append(anocom.encode_frame(anocom.FUNC_POS_OFFSET, struct.pack('<3i', 10000, -20000, 32500)))
     frames.append(anocom.encode_frame(anocom.FUNC_VOLT_CURR, struct.pack('<5H', 1260, 1680, 1520, 1480, 0)))
@@ -113,8 +115,15 @@ def test_telemetry_aggregation():
     assert abs(s['p1_mpa'] - 15.2) < 1e-6
     assert s['gps_sats'] == 12 and s['gps_fix'] == 3
     assert s['rc3'] == 1002
-    # 链路统计：12 帧全解码、无 CRC 失败、遥测时间戳已更新
-    assert m.g.stat_frames == 12 and m.g.stat_bad == 0
+    # 执行器输出帧（0x40）：摆角 deg / 电机 % / 差速 / 饱和标记
+    assert abs(s['tvc_front_deg'] - (-12.3)) < 1e-6
+    assert abs(s['tvc_rear_deg'] - 8.55) < 1e-6
+    assert abs(s['motor_front_pct'] - 62.4) < 1e-6
+    assert abs(s['motor_rear_pct'] - 58.7) < 1e-6
+    assert abs(s['dw'] - 0.49) < 1e-6
+    assert s['sat_df'] is True and s['sat_dt'] is False and s['sat_dw'] is True
+    # 链路统计：13 帧全解码、无 CRC 失败、遥测时间戳已更新
+    assert m.g.stat_frames == 13 and m.g.stat_bad == 0
     assert m.g.stat_bytes == sum(len(f) for f in _make_telemetry_frames())
     assert m.g.last_tele_ts is not None
     m.g.disconnect()
@@ -163,8 +172,8 @@ def test_realworld_chunking_brutal():
     assert s['flight_mode'] == 1                     # 组1
     assert abs(s['vel_n_ms'] - 1.0) < 1e-6           # 组2
     assert s['gps_sats'] == 12                       # 组3
-    assert m.g.stat_frames == 12                     # 12 帧无一丢失
-    assert m.g.stat_tele == 12                       # 全部计入遥测帧统计
+    assert m.g.stat_frames == 13                     # 13 帧无一丢失
+    assert m.g.stat_tele == 13                       # 全部计入遥测帧统计
     m.g.disconnect()
 
 

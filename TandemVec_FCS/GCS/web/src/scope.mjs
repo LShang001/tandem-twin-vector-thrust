@@ -43,10 +43,14 @@ const PRESETS = {
     ['target_pitch_deg', 'P目标', '#3ea6ff'],
     ['target_yaw_rate_dps', 'Y速率', '#29d3a2'],
   ],
-  '气压/压力': [
+  '执行器 ACT': [
+    ['tvc_front_deg', 'δf °', '#ffb547'],
+    ['tvc_rear_deg', 'δt °', '#3ea6ff'],
+    ['motor_front_pct', '前推%', '#ff5d6c'],
+    ['motor_rear_pct', '尾推%', '#29d3a2'],
+  ],
+  '高度/电压': [
     ['alt_bar_m', '气压高 m', '#ff5d6c'],
-    ['p1_mpa', 'P1', '#3ea6ff'],
-    ['p2_mpa', 'P2', '#29d3a2'],
     ['bat_voltage_v', '电压 V', '#ffb547'],
   ],
 };

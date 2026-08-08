@@ -526,6 +526,9 @@ float id_kp_suggest[3] = {0.0f, 0.0f, 0.0f};
 // 执行机构输出百分比 (用于遥测显示)
 float ch1_output = 0.0f, ch2_output = 0.0f; // PA0:前摆舵机(偏航/δ_f), PA1:尾摆舵机(俯仰/δ_t)
 float ch3_output = 0.0f, ch4_output = 0.0f; // 主电机1/2 输出百分比
+// 执行器指令（物理量纲，全模式有效）——AnoCom 0x40 执行器帧
+float g_tvc_front_deg = 0.0f;   // 前摆座角指令 deg（偏航主控）
+float g_tvc_rear_deg  = 0.0f;   // 尾摆座角指令 deg（俯仰主控）
 
 // 当前飞行模式 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)
 ControlMode g_current_flight_mode = MANUAL;
