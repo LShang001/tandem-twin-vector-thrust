@@ -317,10 +317,11 @@ public:
 
     /**
      * @brief 注册通用上行帧回调
-     * @param cb 回调函数, 参数为 (功能码, DATA指针, DATA长度)
-     * @note parseData 在校验通过后调用此回调, 通信模块可在此处理任意功能码
+     * @param cb 回调函数, 参数为 (功能码, DATA指针, DATA长度, 和校验SC, 附加校验AC)
+     * @note parseData 在校验通过后调用此回调, 通信模块可在此处理任意功能码。
+     *       SC/AC 为源帧的校验值, 供安全协议（0xE0/0xE1 参数帧）回传 0x00 校验帧使用。
      */
-    void setRxCallback(void (*cb)(uint8_t, uint8_t *, uint16_t));
+    void setRxCallback(void (*cb)(uint8_t, uint8_t *, uint16_t, uint8_t, uint8_t));
     // ... 注册其他数据接收回调函数
 
     // ---- 上行通信：发送校验帧/设备信息/参数信息 ----

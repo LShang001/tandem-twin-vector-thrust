@@ -3,6 +3,7 @@
 > 状态：✅ 已实施（2026-08-08，pio run 双环境编译通过、test_host/run_all.sh 全绿、数值逐项核对一致）
 > 触发：CascadeCtrl 对比分析后，用户选择 C 路径（借鉴新架构的"参数集中 + 遥测可观测"设计，不替换控制律）
 > 关联：`docs/cascade-ctrl-接入规划.md`（B 路径规划，C 是其低风险前置）、`include/TandemVec_CtrlParams.h`（警示注释）
+> ⚠️ 文中所引 CascadeCtrl 半成品架构（`TandemVec_CtrlParams/AttitudeCtrl/RateCtrl/CascadeCtrl.h`）已于 2026-08-08 废弃删除；本文作为 C 路径实施记录保留，参数/遥测集中成果仍在（`include/FlightCtrlParams.h` + `GncTelemetry`）。
 > 核心约束：**控制律行为零变化**——不触碰任何数值、时序、滤波、调度、分配逻辑。
 
 ---

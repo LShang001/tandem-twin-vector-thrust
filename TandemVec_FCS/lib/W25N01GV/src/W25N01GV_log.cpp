@@ -117,11 +117,16 @@ void W25N01GVLog::buildPFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq
   dst[6] = (uint8_t)((dt >> 8) & 0xFF);
 
   // delta payload: 21 x int16 = 42 B (quantized *100)
+  // ★ 2026-08-08 修正：循环写 22 个增量会把最后 2B 写到 CRC 槽位（dst[49..50]），
+  //   被下方 crc 覆盖 → 实际存储恒为 21 个增量。此处显式收敛到 21：
+  //   第 22 通道（p2）不参与差分，解码端保持最近 I 帧参考值。
+  //   帧长/布局不变（51B），与既有导出工具兼容。
   // ★ 用 memcpy 逐元素读 float——payload/_prevPayload 是 uint8_t 数组，
   //   直接 (const float*) 强转会非对齐访问 → ARM HardFault（2026-08-08 实测复位）
   uint8_t *dp = dst + 7;
+  const uint16_t N_DELTAS = (W25N01GV_LOG_PFRAME_SIZE - 9) / 2;   // 21
   float cur_f, prev_f;
-  for (uint8_t i = 0; i < W25N01GV_LOG_PAYLOAD / 4; i++) {
+  for (uint16_t i = 0; i < N_DELTAS; i++) {
     memcpy(&cur_f, payload + i * 4, 4);
     memcpy(&prev_f, _prevPayload + i * 4, 4);
     int32_t d = (int32_t)((cur_f - prev_f) * W25N01GV_LOG_DELTA_SCALE);

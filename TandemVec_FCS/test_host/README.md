@@ -13,8 +13,6 @@
 | `test_gnss_epoch_timing.cpp` | `ins_gnss_epoch_timing.h` — epoch 消费门控、iTOW 到 MCU 时间映射与回绕 | 无 | 20 |
 | `test_vertical_kf.cpp` | `VerticalKF.h` — 三状态垂直卡尔曼滤波器 | Arduino.h 桩 | 16 |
 | `test_tandemvec_allocation.cpp` | `TandemVec_ControlAllocation.h` — 控制分配（DIRECT/FULL_B/FF/BTRUE、极性、饱和、往返一致、差速平方和） | 无 | 39 |
-| `test_tandemvec_cascade.cpp` | `TandemVec_CascadeCtrl.h` — 级联控制律（四元数外环/内环/全链，未接入固件、仅供宿主机验证） | 无 | 20 |
-| `test_tandemvec_sim.cpp` | 分配精度 + CascadeCtrl 闭环步响应 + 物理参数一致性 | 无 | 12 |
 | `test_flight_control_axis.cpp` | `flight_control.cpp` 姿态环闭环仿真（直连轴序，与 thrustWrench 自洽）：roll←q_err.x/ω.x、pitch←q_err.y/ω.y、yaw←q_err.z/ω.z；**参数读自 include/FlightCtrlParams.h（kFlightCtrlParams，实机唯一事实源，防漂移）**；刚体角动力学 + 推进力矩闭环收敛、执行器符号与 propulsion.mjs 交叉一致、推力垂直投影 R13（cos_tilt）、目标姿态合成、四轴式摇杆映射、六自由度悬停全动力学（配平平衡/航向保持/饱和/电机滞后/陀螺耦合/航向指令跟踪/保范） | 无 | 38 |
 | `test_position_pid.cpp` | `PositionPID.h` — v3 回归（P1–P12：基础响应/积分钳位/抗饱和/无扰切换/NaN 防护等） | 无 | 45 |
 | `test_online_id.cpp` | `TandemVec_OnlineID.h` — 在线辨识（RLS + 自适应增益调度） | 无 | 17 |

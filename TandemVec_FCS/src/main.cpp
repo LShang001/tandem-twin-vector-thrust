@@ -60,7 +60,10 @@ static void initIwdg(void)
     Serial8.println("[IWDG] 硬件看门狗已启用 (3.0s)");
   }
 }
-static inline void kickIwdg(void) { HAL_IWDG_Refresh(&s_hiwdg); }
+// 喂狗需暴露给通信模块：flash export 大页数导出会阻塞任务 >3s，
+// 主循环无法喂狗 → IWDG 复位打断导出（2026-08-08 实测 256 页超时复位）。
+// 非 static：communication.cpp extern 声明后于 export 循环内喂狗。
+void kickIwdg(void) { HAL_IWDG_Refresh(&s_hiwdg); }
 #endif // BFS_DISABLE_IWDG
 
 #ifndef BFS_DPS310_TASK_INTERVAL_MS

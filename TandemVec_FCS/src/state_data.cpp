@@ -124,10 +124,14 @@ const float RC_LOITER_DEADZONE = 25.0f;
  */
 
 // --- 4.0 控制参数唯一事实源（★ 实机调参入口）---
-// 2026-08-08 C路径重构：实例已迁至 include/FlightCtrlParams.h
-// （static constexpr，固件与宿主机测试共用同一数值，参数不漂移）。
-// 本处不再定义 —— 数值改动请改 include/FlightCtrlParams.h。
+// 2026-08-08 C路径重构：出厂默认值迁至 include/FlightCtrlParams.h
+// （kFlightCtrlParamsDefaults，static constexpr，固件与宿主机测试共用同一数值）。
+// 本处定义固件运行时可变实例（以默认值初始化），上位机经 AnoCom 0xE1
+// 在线写入后调用 applyFlightCtrlParams()（定义于本文件末尾，须在全部
+// PID/滤波器对象定义之后）同步到各实例。
+// 数值改动请改 include/FlightCtrlParams.h（默认值）。
 // 方案：docs/C路径-参数集中与遥测结构化方案.md
+FlightCtrlParams kFlightCtrlParams = kFlightCtrlParamsDefaults;
 
 // 控制链遥测（每层中间量，写入点：flight_control.cpp 3 处函数尾部）
 GncTelemetry gnc_tel = {};
@@ -567,3 +571,51 @@ uint8_t INS_GNSS_Data[INS_GNSS_TYPE_LEN];         // INS/GNSS 原始帧缓冲区
 uint8_t Geodetic_Pos_Data[GEODETIC_POS_TYPE_LEN]; // 大地坐标原始帧缓冲区 (40字节)
 uint8_t Status_Data[STATUS_TYPE_LEN];             // 系统状态原始帧缓冲区 (12字节)
 uint8_t Fd_data[256];                             // 通用帧接收缓冲区
+
+/*
+ * ==========================================================================================
+ * 控制参数应用（须在所有 PID/滤波器对象定义之后，故置于文件末尾）
+ * ==========================================================================================
+ */
+
+// 同步 kFlightCtrlParams → 12 个 PositionPID + 9 个控制滤波器
+// （保留各 PID 积分/滤波状态：仅改参数，无扰切换）
+// 供上位机 AnoCom 0xE1 参数写入回调调用（见 ano_params.cpp）
+void applyFlightCtrlParams()
+{
+    // 单个 PID 环同步（enabled=false 会清积分，与构造函数语义一致）
+    auto applyPid = [](PositionPID &pid, const PidTuneParams &p)
+    {
+        pid.setParams(p.kp, p.ki, p.kd);
+        pid.setOutputLimits(p.out_min, p.out_max);
+        pid.setIntegralLimit(p.int_limit);
+        pid.setIntegralThreshold(p.threshold);
+        pid.setFilterCoefficient(p.filter_alpha);
+        pid.setIntegralEnable(p.enabled);
+    };
+    // 姿态串级（外环 + 内环）
+    applyPid(rollAnglePID,  kFlightCtrlParams.att_roll);
+    applyPid(rollRatePID,   kFlightCtrlParams.rate_roll);
+    applyPid(pitchAnglePID, kFlightCtrlParams.att_pitch);
+    applyPid(pitchRatePID,  kFlightCtrlParams.rate_pitch);
+    applyPid(yawAnglePID,   kFlightCtrlParams.att_yaw);
+    applyPid(yawRatePID,    kFlightCtrlParams.rate_yaw);
+    // 垂直串级
+    applyPid(altitudePositionPController,   kFlightCtrlParams.alt_pos);
+    applyPid(altitudeVelocityPIDController, kFlightCtrlParams.alt_vel);
+    // 水平位置/速度串级
+    applyPid(northPosPID, kFlightCtrlParams.pos_n);
+    applyPid(eastPosPID,  kFlightCtrlParams.pos_e);
+    applyPid(northVelPID, kFlightCtrlParams.vel_n);
+    applyPid(eastVelPID,  kFlightCtrlParams.vel_e);
+    // 控制滤波器 alpha（保留滤波状态）
+    rollSpeedFilter.setAlpha(kFlightCtrlParams.speed_filter_alpha[0]);
+    pitchSpeedFilter.setAlpha(kFlightCtrlParams.speed_filter_alpha[1]);
+    yawSpeedFilter.setAlpha(kFlightCtrlParams.speed_filter_alpha[2]);
+    rollAngleOutputFilter.setAlpha(kFlightCtrlParams.angle_out_filter_alpha[0]);
+    pitchAngleOutputFilter.setAlpha(kFlightCtrlParams.angle_out_filter_alpha[1]);
+    yawAngleOutputFilter.setAlpha(kFlightCtrlParams.angle_out_filter_alpha[2]);
+    rollOutputFilter.setAlpha(kFlightCtrlParams.output_filter_alpha[0]);
+    pitchOutputFilter.setAlpha(kFlightCtrlParams.output_filter_alpha[1]);
+    yawOutputFilter.setAlpha(kFlightCtrlParams.output_filter_alpha[2]);
+}

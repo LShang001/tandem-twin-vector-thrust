@@ -350,6 +350,16 @@ extern GncTelemetry gnc_tel;
  * ==========================================================================================
  */
 
+// ============================================================
+//  4.0a 控制参数运行时实例（★ 实机调参唯一入口）
+//  固件侧（-DTANDEMVEC_FIRMWARE）为可变唯一实例，定义于 state_data.cpp，
+//  以 kFlightCtrlParamsDefaults（出厂默认值）初始化；
+//  上位机可经 AnoCom 0xE1 在线写入，写入后由 applyFlightCtrlParams()
+//  同步到全部 PID/滤波器实例（无扰，保留控制状态）。
+// ============================================================
+extern FlightCtrlParams kFlightCtrlParams;
+void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 9 控制滤波器
+
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — VTOL 体轴映射 ---
 // VTOL（x_b朝上）：Roll=体轴z（侧倾），Pitch=体轴y（俯仰），Yaw=体轴x（航向）
 extern PositionPID rollAnglePID;  // Roll外环: q_err.z → 目标侧倾速率 (deg/s)

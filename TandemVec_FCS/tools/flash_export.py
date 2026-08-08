@@ -136,8 +136,12 @@ def decode_frames(frames):
         elif typ == TYPE_P:
             dt = struct.unpack('<h', f[5:7])[0]
             t_ms = ref_t + dt
-            deltas = struct.unpack(f'<{N_F}h', f[7:7+N_F*2])
-            vals = [ref[i] + deltas[i] / DELTA_SCALE for i in range(N_F)]
+            # ★ 2026-08-08 修正：P 帧实际携带 21 个增量（第 22 槽被帧尾 CRC 占用，
+            #   固件 buildPFrame 曾越界写入后被 CRC 覆盖）。按 21 个解析，
+            #   第 22 通道（p2）保持最近参考值——原 22 增量解析会令 p2 被 CRC 字节污染。
+            deltas = struct.unpack(f'<{N_F - 1}h', f[7:7 + (N_F - 1) * 2])
+            vals = [ref[i] + deltas[i] / DELTA_SCALE for i in range(N_F - 1)]
+            vals.append(ref[N_F - 1])   # 末通道不差分
             ref = vals
             ref_t = t_ms
             rows.append((seq, t_ms, vals, cur_seg))

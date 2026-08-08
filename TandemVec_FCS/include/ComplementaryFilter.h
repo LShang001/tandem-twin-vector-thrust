@@ -65,6 +65,17 @@ public:
     {
         lastFilteredValue = 0;
     }
+
+    /**
+     * @brief 运行时更新滤波系数（供上位机在线调参）。
+     *
+     * 只更新 alpha，保留当前滤波状态 lastFilteredValue（无扰切换，
+     * 调参瞬间输出不跳变）。
+     */
+    void setAlpha(float filterCoefficient)
+    {
+        alpha = constrain(filterCoefficient, 0.0f, 1.0f);
+    }
 };
 
 #endif

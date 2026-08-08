@@ -1,7 +1,8 @@
 // ============================================================
 //  FlightCtrlParams.h — 实机控制参数唯一事实源（2026-08-08 C 路径重构）
 //
-//  ★ 实机调参唯一入口：kFlightCtrlParams（数值 = 运行时生效值）
+//  ★ 实机调参唯一入口：kFlightCtrlParams（数值 = 运行时生效值，固件侧可变，
+//    支持上位机 AnoCom 0xE1 在线写入；出厂默认值 = kFlightCtrlParamsDefaults）
 //  方案：docs/C路径-参数集中与遥测结构化方案.md
 //
 //  本头文件为纯平台无关（无 Arduino/Eigen 依赖），固件（state_data.cpp）
@@ -49,10 +50,20 @@ struct FlightCtrlParams
 };
 
 // ============================================================
-//  默认实例（唯一事实源；static constexpr → 每个 TU 一份只读副本，
-//  固件与宿主机测试各自持有相同数值，无链接问题）
+//  默认实例（唯一事实源）
+//
+//  ★ 出厂默认值：kFlightCtrlParamsDefaults（static constexpr 只读，
+//    每个 TU 一份副本，固件/宿主机测试各自持有相同数值，无链接问题）
+//
+//  ★ 运行时生效值（固件侧可变）：
+//    - 固件编译（-DTANDEMVEC_FIRMWARE，platformio.ini build_flags）：
+//      kFlightCtrlParams 为 extern 声明，由 state_data.cpp 定义唯一可变
+//      实例（以默认值初始化），上位机可经 AnoCom 0xE1 在线写入；
+//    - 宿主机测试（test_host，单文件编译无链接）：
+//      kFlightCtrlParams 保持 static constexpr 只读副本，测试参数永不与
+//      出厂值漂移。
 // ============================================================
-static constexpr FlightCtrlParams kFlightCtrlParams = {
+static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ---- 姿态外环（deg 域）----
     /* att_roll  */ { 2.5f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
     /* att_pitch */ { 2.5f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
@@ -74,3 +85,11 @@ static constexpr FlightCtrlParams kFlightCtrlParams = {
     /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
     /* output_filter_alpha    */ { 0.25f, 0.25f, 0.12f },  // yaw=0.12 实机调出（差速抑震荡）
 };
+
+#ifdef TANDEMVEC_FIRMWARE
+// 固件：运行时可变唯一实例（state_data.cpp 定义，默认值 = kFlightCtrlParamsDefaults）
+extern FlightCtrlParams kFlightCtrlParams;
+#else
+// 宿主机测试：只读副本（单文件编译，无链接）
+static constexpr FlightCtrlParams kFlightCtrlParams = kFlightCtrlParamsDefaults;
+#endif

@@ -3,6 +3,15 @@
 #include "navigation_task.h"
 #include "sensor_peripheral.h"
 #include "MAVLink.h"
+#include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
+
+// IWDG 喂狗（main.cpp 暴露）：flash export 大页数导出阻塞任务 >3s 时
+// 循环内喂狗，防看门狗复位打断导出（2026-08-08）
+#ifdef BFS_DISABLE_IWDG
+static inline void kickIwdg(void) {}
+#else
+void kickIwdg(void);
+#endif
 
 // ========================================================================
 // 通信模块局部定义
@@ -356,27 +365,30 @@ static uint32_t ano_rx_device_info_sent = 0;
 /**
  * @brief AnoCom 上行帧回调 (由 AnoComProtocol::parseData 在校验通过后调用)
  *
- * 第一层只处理两个安全协议相关的功能码:
+ * 安全协议 + 参数读写（2026-08-08 完整实现）：
  *   - 收到需要回传校验的帧 (0xE0 参数命令 / 0xE1 参数写入) → 回传 0x00 校验帧
+ *     （scGet/acGet 为源帧真实校验值，取代原占位恒 0 —— parseData 回调
+ *     签名扩展后由 AnoComProtocol 传入）
  *   - 收到 0xE0 读取设备信息命令 → 返回 0xE3 设备信息帧
+ *   - 其余参数命令（0xE0 CMD 0x01/0x02/0x03/0x10）与 0xE1 参数写入
+ *     → anoParamsHandleRx（ano_params.cpp，注册表 117 参数 + apply）
  *
- * 本回调不执行任何控制逻辑, 不修改控制参数, 不影响飞控行为。
+ * 本回调不执行任何控制逻辑, 不影响飞控行为。
  * 回调中的 TX 发送带 availableForWrite 非阻塞保护, 避免阻塞控制环。
  */
-static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len)
+static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
+                         uint8_t rxSumCheck, uint8_t rxAddCheck)
 {
   ano_rx_total++;
 
   // 需要回传校验帧的功能码 (安全协议要求: 参数写入/命令控制类帧必须返回 0x00 校验帧)
-  // 第一层暂不对所有命令帧回传, 只对参数类帧回传 (0xE0/0xE1)
   if (funcCode == ANO_FUNC_PARAM_CMD || funcCode == ANO_FUNC_PARAM_WRITE_READ)
   {
-    // 校验值填 0: parseData 回调签名未传递原始校验值, 地面站会判定校验失败并重试。
-    // 第一层为占位实现, 参数读写功能需后续层补全完整校验值传递后再可用。
+    // 回传源帧真实校验值（SC_GET/AC_GET），地面站据此确认通信完成
     // TX 非阻塞保护: 缓冲不足时跳过回传, 避免阻塞控制环
     if (Serial6.availableForWrite() >= 12) // 0x00 校验帧 = 8 帧开销 + 3 DATA + 1 余量
     {
-      AnoCom.sendDataCheck(funcCode, 0, 0);
+      AnoCom.sendDataCheck(funcCode, rxSumCheck, rxAddCheck);
       ano_rx_check_sent++;
     }
 
@@ -391,6 +403,11 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len)
                               ANO_BL_VERSION, ANO_PT_VERSION, ANO_DEVICE_NAME);
         ano_rx_device_info_sent++;
       }
+    }
+    else
+    {
+      // 其余参数命令 / 参数写入 → 注册表读写（ano_params.cpp）
+      anoParamsHandleRx(AnoCom, funcCode, data, len);
     }
   }
 }
@@ -417,11 +434,24 @@ void handleAnoCom()
   // ---- 调试模式入口检测（必须在 receiveData 之前！）----
   // 否则 AnoCom 的 receiveData 会把 "DBG\n" 字节当协议帧头（非 0xAB）丢弃。
   // 进入调试模式后 s_dbg_mode=true，下方跳过所有遥测逻辑。
+  //
+  // ★ 2026-08-08 修复（上行帧被吞 bug）：检测必须用 peek 且遇 AnoCom 帧头
+  //   （0xAB）立即停止消费——原实现 while(available) 无条件 read() 会把
+  //   AnoCom 上行帧字节（0xAB 0x05 0xFF 0xE0...）当 DBG 字符读掉丢弃，
+  //   导致 0xE0/0xE1 参数帧永远到不了 receiveData 回调（旧固件参数占位
+  //   因此从未真正生效；遥测为下行不受影响）。peek 不消费字节，帧完整
+  //   留给下方 receiveData 解析。
   static char dbg_line[64];
   static uint8_t dbg_line_len = 0;
   if (!s_dbg_mode) {
     while (Serial6.available()) {
-      char c = (char)Serial6.read();
+      int c = Serial6.peek();
+      if (c == ANO_FRAME_HEAD) {
+        // AnoCom 帧头：停止消费，未匹配的 DBG 行丢弃
+        dbg_line_len = 0;
+        break;
+      }
+      Serial6.read();   // 非帧头字节才消费
       if (c == '\n') {
         if (dbg_line_len == 3 && dbg_line[0] == 'D' && dbg_line[1] == 'B' && dbg_line[2] == 'G') {
           s_dbg_mode = true;
@@ -431,7 +461,7 @@ void handleAnoCom()
         }
         dbg_line_len = 0;  // 非匹配行，丢弃
       } else if (dbg_line_len < (int)(sizeof(dbg_line) - 1)) {
-        dbg_line[dbg_line_len++] = c;
+        dbg_line[dbg_line_len++] = (char)c;
       }
     }
   }
@@ -2041,9 +2071,30 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
 
       static uint8_t buf[W25N01GV_PAGE_SIZE];   // static: 避免栈溢出
       for (uint32_t i = 0; i < count; i++) {
+        // ★★ 2026-08-08 流控修复（v2）：PC（USB 串口）实际吞吐 ~125KB/s <
+        //    固件 2M 发送速率，整页 serial.write(2048) 会阻塞在满 TX 缓冲
+        //    （缓冲仅 1024B），阻塞期间无法喂狗 → IWDG 3s 复位打断导出。
+        //    v1 用 availableForWrite()>=2048 等待条件恒假（缓冲 1024），
+        //    固件死循环——现改为分块写：每块 ≤ 当前可用空间（不阻塞），
+        //    等待/块间均喂狗。
         uint32_t page = startPage + i;
-        if (flashLog.debugReadPage(page, buf, W25N01GV_PAGE_SIZE)) {
-          serial.write(buf, W25N01GV_PAGE_SIZE);   // 整页原始字节
+        if (!flashLog.debugReadPage(page, buf, W25N01GV_PAGE_SIZE)) {
+          continue;
+        }
+        uint8_t *p = buf;
+        uint16_t remain = W25N01GV_PAGE_SIZE;
+        while (remain > 0) {
+          int freeSpace = serial.availableForWrite();
+          if (freeSpace <= 0) {
+            kickIwdg();
+            delay(1);
+            continue;
+          }
+          uint16_t n = (remain < (uint16_t)freeSpace) ? remain : (uint16_t)freeSpace;
+          serial.write(p, n);   // n ≤ 可用空间 → 非阻塞
+          p += n;
+          remain -= n;
+          kickIwdg();
         }
       }
       serial.println();

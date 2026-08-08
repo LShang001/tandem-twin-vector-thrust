@@ -2,7 +2,9 @@
 
 // 全局指针，供 parseData 回调访问通信模块的发送能力。
 // 在 communication.cpp 的 handleAnoCom 中通过 setRxCallback() 赋值。
-static void (*g_ano_rx_callback)(uint8_t funcCode, uint8_t *data, uint16_t len) = nullptr;
+// 末两参为源帧的 SC/AC 校验值（安全协议回传 0x00 校验帧用）。
+static void (*g_ano_rx_callback)(uint8_t funcCode, uint8_t *data, uint16_t len,
+                                 uint8_t rxSumCheck, uint8_t rxAddCheck) = nullptr;
 
 AnoComProtocol::AnoComProtocol(Stream *serial)
 {
@@ -126,16 +128,14 @@ void AnoComProtocol::parseData(uint8_t *data, uint16_t len)
 
     // 数据解析
     uint8_t funcCode = data[3];
-    // 保存源帧的校验值，供安全协议回传使用
+    // 保存源帧的校验值，供安全协议回传使用（0xE0/0xE1 参数帧 → 0x00 校验帧）
     uint8_t rxSumCheck = data[len - 2];
     uint8_t rxAddCheck = data[len - 1];
-    (void)rxSumCheck; // 第一层暂未使用, 后续完整安全协议需传递给回调
-    (void)rxAddCheck;
 
     // 通用上行回调：通信模块可在此处理任意功能码
     if (g_ano_rx_callback)
     {
-        g_ano_rx_callback(funcCode, &data[6], len - 8);
+        g_ano_rx_callback(funcCode, &data[6], len - 8, rxSumCheck, rxAddCheck);
     }
 
     switch (funcCode)
@@ -609,7 +609,7 @@ void AnoComProtocol::sendDeviceInfo(uint8_t devId, int16_t hwVer, int16_t swVer,
     }
     sendData(ANO_GND_STATION_ADDR, ANO_FUNC_DEVICE_INFO, data, idx);
 }
-void AnoComProtocol::setRxCallback(void (*cb)(uint8_t, uint8_t *, uint16_t))
+void AnoComProtocol::setRxCallback(void (*cb)(uint8_t, uint8_t *, uint16_t, uint8_t, uint8_t))
 {
     g_ano_rx_callback = cb;
 }
