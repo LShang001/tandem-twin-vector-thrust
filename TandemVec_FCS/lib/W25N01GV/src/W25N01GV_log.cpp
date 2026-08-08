@@ -22,7 +22,7 @@ static uint16_t crc16_ccitt(const uint8_t *data, uint16_t len)
 W25N01GVLog::W25N01GVLog(W25N01GV &flash)
   : _flash(flash),
     _head(0), _tail(0), _buffered(0),
-    _prevTms(0), _frameCount(0),
+    _prevTms(0), _frameCount(0), _lastPushMs(0),
     _cursorPage(0), _segment(0),
     _written(0), _dropped(0), _pagesWritten(0), _serviceBusy(false),
     _badBlocks(0)
@@ -246,6 +246,7 @@ bool W25N01GVLog::begin(bool erase)
   _pagesWritten = 0;
   _frameCount = 0;
   _prevTms = millis();
+  _lastPushMs = _prevTms;
   memset(_prevPayload, 0, sizeof(_prevPayload));
   _serviceBusy = false;
   return true;
@@ -273,6 +274,7 @@ bool W25N01GVLog::logPush(const uint8_t *payload)
   // update delta reference
   memcpy(_prevPayload, payload, W25N01GV_LOG_PAYLOAD);
   _prevTms = millis();
+  _lastPushMs = _prevTms;
 
   _head = (uint16_t)((_head + 1) % W25N01GV_LOG_MAX_FRAMES);
   _buffered++;
@@ -302,9 +304,9 @@ void W25N01GVLog::advanceCursor()
 
 void W25N01GVLog::flushPage()
 {
-  // 从 ring 取帧打包进一页
-  uint16_t used = 0;
 #if W25N01GV_LOG_PACK_PAGE
+  // ★ 打包到页满或 ring 空（攒页判断在 logService 做）
+  uint16_t used = 0;
   while (_buffered > 0 && used + _ringLen[_tail] <= W25N01GV_LOG_PAGE_DATA) {
     memcpy(_pageBuf + used, _ring[_tail], _ringLen[_tail]);
     used += _ringLen[_tail];
@@ -312,8 +314,10 @@ void W25N01GVLog::flushPage()
     _buffered--;
     _written++;
   }
+  if (used == 0) return;   // 无数据（防御）
 #else
   // ★ 每页 1 帧（稳定模式，见 W25N01GV_LOG_PACK_PAGE 注释）
+  uint16_t used = 0;
   if (_buffered > 0) {
     memcpy(_pageBuf, _ring[_tail], _ringLen[_tail]);
     used = _ringLen[_tail];
@@ -337,6 +341,10 @@ void W25N01GVLog::flushPage()
   }
 
   _serviceBusy = true;
+  // ★ D-Cache 维护：H743 上 SPI 外设经 AHB 直读 SRAM（不经 CPU cache），
+  //   CPU 刚写入的页数据若还在 cache 里，SPI 会读到旧值。
+  //   每页写入前 Clean 页 buffer（2048B 大页必须，v1 小页碰巧没事）。
+  SCB_CleanDCache_by_Addr((uint32_t*)_pageBuf, W25N01GV_LOG_PAGE_DATA);
   // 每页 1 帧时只写实际帧长（2048B 传输不稳定，95/51B 稳定）
   uint16_t writeLen = W25N01GV_LOG_PACK_PAGE ? W25N01GV_LOG_PAGE_DATA : used;
   bool ok = _flash.pageProgram(_cursorPage, _pageBuf, writeLen);
@@ -358,6 +366,15 @@ void W25N01GVLog::logService()
   uint16_t budget = W25N01GV_LOG_MAX_WRITES;
   uint32_t t0 = millis();
   while (budget-- > 0 && _buffered > 0) {
+    // ★ 攒页判断：ring 占用 ≥ 半页（~20 帧）或 ring 满或空闲>200ms 才写，
+    //   否则等攒够再打包（页利用率高）。空闲冲刷保证记录停止后残余帧落盘。
+#if W25N01GV_LOG_PACK_PAGE
+    uint16_t halfPage = W25N01GV_LOG_PAGE_DATA / 2 / W25N01GV_LOG_PFRAME_SIZE;  // ~20
+    bool idle = (int32_t)(millis() - _lastPushMs) > 200;
+    if (_buffered < halfPage && _buffered < W25N01GV_LOG_MAX_FRAMES && !idle) {
+      break;   // 未攒够、ring 未满、非空闲 → 等
+    }
+#endif
     flushPage();
     // ★ 保护：单次 service 总耗时上限（页编程+擦除可能 100ms 级，
     //   防止异常时拖死主循环触发 IWDG）

@@ -41,17 +41,17 @@
 
 // ---- tunables ----
 #ifndef W25N01GV_LOG_MAX_FRAMES
-#define W25N01GV_LOG_MAX_FRAMES   48     // ring buffer depth (frames)
+#define W25N01GV_LOG_MAX_FRAMES   96     // ring buffer depth（攒页模式需 ≥ 一页量 39 + 余量）
 #endif
 #ifndef W25N01GV_LOG_MAX_WRITES
 #define W25N01GV_LOG_MAX_WRITES   2      // max pages written per service tick
 #endif
-// ★ 2026-08-08: 页内打包关闭（每页 1 帧）——大页 2048B 传输在 stm32duino
-//   SPI 层不稳定（HAL_SPI_Transmit 长传输 + 中断交互会卡死主循环）。
-//   每页 1 帧（I 95B / P 51B）写入稳定（v1 验证过 95B 传输可靠）。
-//   代价：页利用率低（I 帧 4.6% / P 帧 2.5%），容量约 8-16 分钟@200Hz。
-//   后续可换 SPI DMA 恢复打包。
-#define W25N01GV_LOG_PACK_PAGE  0
+// ★ 页内打包：v2 调试时曾关闭（每页 1 帧），因当时误判"大页 SPI 传输
+//   不稳定"卡死主循环。后定位真正根因是非对齐 float 访问 HardFault
+//   （buildPFrame 的 (const float*) 强转，已用 memcpy 修复）。
+//   重新启用打包：每页 2048B 填满 ~39 帧（I/P 混合），容量 ×40
+//   （128MB ≈ 5-10 小时 @200Hz）。
+#define W25N01GV_LOG_PACK_PAGE  1
 #ifndef W25N01GV_LOG_PAYLOAD
 #define W25N01GV_LOG_PAYLOAD      84     // bytes of user payload (21 floats)
 #endif
@@ -155,6 +155,7 @@ private:
   uint8_t  _prevPayload[W25N01GV_LOG_PAYLOAD];  // reference for delta
   uint32_t _prevTms;
   uint16_t _frameCount;    // since last I-frame
+  uint32_t _lastPushMs;    // 最近一次 logPush 时间（空闲冲刷判断）
 
   // storage state
   uint32_t _cursorPage;    // next page to write (absolute)
@@ -166,8 +167,8 @@ private:
   uint8_t _badMap[W25N01GV_BLOCK_COUNT / 8];
   uint16_t _badBlocks;
 
-  // page assembly buffer
-  uint8_t _pageBuf[W25N01GV_LOG_PAGE_DATA];
+  // page assembly buffer（★ 32 字节对齐——D-Cache 行大小，SCB_CleanDCache 要求）
+  alignas(32) uint8_t _pageBuf[W25N01GV_LOG_PAGE_DATA];
 
   // helpers
   void buildIFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq);
