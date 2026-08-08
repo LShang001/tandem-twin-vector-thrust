@@ -117,6 +117,18 @@ static uint32_t ano_tx_skipped = 0;
 static uint32_t elrs_tx_skipped = 0;
 static uint32_t posvel_tx_skipped = 0;
 
+// ===== ELRS 链路状态（2026-08-08 灯效扩展）=====
+// ELRS 链路质量 LQ (0-100)：onPacketLinkStatistics 回调更新，
+// 供 100Hz 灯效任务做弱信号渐进预警（早于库内 300ms 断链判定）。
+static volatile float s_elrs_lq = 100.0f;
+// 是否曾经建立过遥控链路：区分"上电无信号"(NO_RECEIVER) 与
+// "地面断链"(LINK_DOWN) 两种灯效。链路恢复后保持 true。
+static bool s_ever_linked = false;
+// LQ 弱信号预警阈值：低于此值亮橙色慢闪（ELRS 500Hz 包率下 LQ 掉得快）
+static const float ELRS_LQ_WARN_THRESHOLD = 40.0f;
+// 低压告警阈值 (mV)：3S LiPo 满电 12.6V，11.1V 以下提示（按电池配置可调）
+static const float LED_LOW_VOLTAGE_MV = 11100.0f;
+
 void packetChannels()
 {
   // 获取遥控通道值并存储到 raw_rc_values 数组
@@ -126,11 +138,26 @@ void packetChannels()
   }
 }
 
+/**
+ * @brief ELRS 链路质量统计回调（LQ/RSSI，ELRS 接收机 0x14 帧）
+ *
+ * 库解析后回调，固件只取 uplink LQ 供灯效弱信号预警。
+ * 其余字段（RSSI/SNR/TX power）暂未使用，结构体指针可直接扩展。
+ */
+void elrsLinkStatsCallback(crsfLinkStatistics_t *ls)
+{
+  if (ls)
+  {
+    s_elrs_lq = ls->uplink_Link_quality;
+  }
+}
+
 void linkUpCallback()
 {
   Serial8.println("Link is up!");
   isLinkUp = true; // 设置链接状态为正常
   failsafe_in_flight = false;  // 链路恢复，清除失控保护标志
+  s_ever_linked = true;  // 记录"曾建立链路"（区分上电无信号/断链灯效）
 }
 
 void linkDownCallback()
@@ -515,6 +542,9 @@ void handleAnoCom()
   // PWM控制量
   static float pwm_ch1_ano, pwm_ch2_ano, pwm_ch3_ano, pwm_ch4_ano;
   static float pwm_ch5_ano, pwm_ch6_ano, pwm_ch7_ano, pwm_ch8_ano;
+  // 执行器输出（0x40 帧）
+  static float tvc_front_ano, tvc_rear_ano, mot_front_ano, mot_rear_ano, dw_ano;
+  static uint8_t act_sat_ano;
   // 位置偏移数据 (cm)
   static float pos_north_cm_ano, pos_east_cm_ano, pos_down_cm_ano;
   // GNSS传感器信息
@@ -610,6 +640,16 @@ void handleAnoCom()
     pwm_ch7_ano = raw_rc_values[6]; // 模式通道
     pwm_ch8_ano = raw_rc_values[7]; // TVC手动通道
 
+    // 执行器输出（0x40 帧，本工程自定义）：mix 输出级统一捕获，全模式有效
+    tvc_front_ano = g_tvc_front_deg;   // 前摆座角指令 deg（偏航主控）
+    tvc_rear_ano = g_tvc_rear_deg;     // 尾摆座角指令 deg（俯仰主控）
+    mot_front_ano = ch3_output;        // 前电机输出 %
+    mot_rear_ano = ch4_output;         // 尾电机输出 %
+    dw_ano = gnc_tel.dw;               // 差速 Δω（归一化）
+    act_sat_ano = (gnc_tel.alloc_sat[0] ? 0x01 : 0) |
+                  (gnc_tel.alloc_sat[1] ? 0x02 : 0) |
+                  (gnc_tel.alloc_sat[2] ? 0x04 : 0);
+
     // 位置 (来自全局计算的相对位置)，转换为厘米
     pos_north_cm_ano = relative_north * 100.0f;
     pos_east_cm_ano = relative_east * 100.0f;
@@ -688,13 +728,27 @@ void handleAnoCom()
     // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
     AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
   }
-  // 发送组3的数据包 (Target Speed, Flight Speed, PWM Output)
+  // 发送组3的数据包 (Target Speed, Flight Speed, PWM Output, Actuator Output)
   else if (group_index == 2)
   {
     AnoCom.sendTargetSpeed(target_speed_x_ano, target_speed_y_ano, target_speed_z_ano);
     AnoCom.sendFlightSpeed(vel_north_ano * 100, vel_east_ano * 100, vel_down_ano * 100); // NED速度
     AnoCom.sendPWMOutput(pwm_ch1_ano, pwm_ch2_ano, pwm_ch3_ano, pwm_ch4_ano,
                          pwm_ch5_ano, pwm_ch6_ano, pwm_ch7_ano, pwm_ch8_ano);
+    // 执行器输出帧（0x40，本工程自定义 12B）：前/尾摆角 deg×100 int16、
+    // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
+    {
+      uint8_t act[12];
+      auto put16 = [](uint8_t *p, int32_t v) { p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF; };
+      put16(act + 0, (int16_t)(tvc_front_ano * 100.0f));
+      put16(act + 2, (int16_t)(tvc_rear_ano * 100.0f));
+      put16(act + 4, (uint16_t)constrain(mot_front_ano * 10.0f, 0.0f, 1000.0f));
+      put16(act + 6, (uint16_t)constrain(mot_rear_ano * 10.0f, 0.0f, 1000.0f));
+      put16(act + 8, (int16_t)constrain(dw_ano * 1000.0f, -32768.0f, 32767.0f));
+      act[10] = act_sat_ano;
+      act[11] = 0;
+      AnoCom.sendData(ANO_GND_STATION_ADDR, 0x40, act, 12);
+    }
   }
   // 发送组4的数据包 (Position Offset, Voltage/Current (used for pressure), GPS Info)
   else if (group_index == 3)
@@ -1388,15 +1442,70 @@ void handleGuidanceCommands()
 
 void handleStatusLedTask()
 {
-  // 获取解锁状态
-  bool is_armed = (raw_rc_values[4] > 1500);
+  // ========================================================================
+  // 业务状态组装（2026-08-08 扩展）— 优先级（高→低）：
+  //   FAILSAFE(空中失控) > CALIBRATING > NO_RECEIVER(上电无信号)
+  //   > LINK_DOWN(地面断链) > LOW_LQ(弱信号) > LOW_VOLTAGE(低压)
+  //   > ARMED_*(解锁+飞行模式) > STANDBY(待机)
+  // 故障(FAULT)由 Ws2812AppStatus.setFault 内部覆盖（wsfault 调试命令），
+  // 不在此判定。判定用 GNC 真实解锁状态 g_is_unlocked（与电机行为一致）。
+  // ========================================================================
+  FcsLedState state;
 
-  // 获取校准状态
+  bool is_armed = g_is_unlocked;
   bool is_calibrating = imuCalibrator.isCalibrating();
 
+  if (!isLinkUp && failsafe_in_flight)
+  {
+    state = FcsLedState::FAILSAFE;        // 空中失控：红 SOS 双闪
+  }
+  else if (is_calibrating)
+  {
+    state = FcsLedState::CALIBRATING;     // IMU 校准：黄快闪
+  }
+  else if (!isLinkUp && !s_ever_linked)
+  {
+    state = FcsLedState::NO_RECEIVER;     // 上电无信号/未对频：红慢闪
+  }
+  else if (!isLinkUp)
+  {
+    state = FcsLedState::LINK_DOWN;       // 地面断链：品红慢闪
+  }
+  else if (s_elrs_lq < ELRS_LQ_WARN_THRESHOLD)
+  {
+    state = FcsLedState::LOW_LQ;          // 弱信号：橙慢闪
+  }
+  else if (bat_voltage_mv > 0 && bat_voltage_mv < LED_LOW_VOLTAGE_MV)
+  {
+    state = FcsLedState::LOW_VOLTAGE;     // 低压：红慢呼吸
+  }
+  else if (is_armed)
+  {
+    // 解锁：按飞行模式区分色相（分档与 math_utils.h::getControlMode 一致）
+    const float mode_ch = raw_rc_values[6];
+    if (mode_ch < 1300)
+    {
+      state = FcsLedState::ARMED_MANUAL;  // 手动：绿呼吸
+    }
+    else if (mode_ch < 1650)
+    {
+      state = FcsLedState::ARMED_ALT;     // 高度保持：青呼吸
+    }
+    else
+    {
+      // 高档：轨迹规划(点火+>1750) = 制导，否则定点
+      state = trajectoryPlanningStarted ? FcsLedState::ARMED_GUIDED  // 制导：紫呼吸
+                                        : FcsLedState::ARMED_POS;     // 定点：白呼吸
+    }
+  }
+  else
+  {
+    state = FcsLedState::STANDBY;         // 待机：蓝呼吸
+  }
+
   // 更新LED
-  statusLed.update(is_calibrating, is_armed);
-  ws2812AppStatus.update(is_calibrating, is_armed);   // WS2812 RGB状态灯 (与绿灯并行)
+  statusLed.update(is_calibrating, is_armed);   // 单色绿灯（与 RGB 并行）
+  ws2812AppStatus.update(state, millis());      // WS2812 RGB 模式状态灯
 }
 
 /**

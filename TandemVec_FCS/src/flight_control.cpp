@@ -65,7 +65,12 @@ void process_control_inputs(ControlInputs_t &inputs)
   // 通道 8 (TVC Manual): TVC 手动/自动切换开关
   //   < 1200: 手动 TVC 模式 (摇杆直接控制舵机，旁路姿态控制器)
   //   >= 1200: 自动 TVC 模式 (姿态控制器输出舵机角度)
-  inputs.is_manual_tvc = (raw_rc_values[7] < 1200);
+  // ★ 2026-08-08 上电/断链安全门控：无链路时强制自动分支（isLinkUp=false）。
+  //   根因：raw_rc_values 初始化全 0 → CH8=0<1200 → is_manual_tvc=true →
+  //   手动 TVC 旁路分支把舵机钳到满偏 ±15°（PWM 72%/28%），直到首帧通道
+  //   数据到达。门控后无链时落入全锁定分支（舵机 1500us 中位 + 电机停）。
+  //   链路正常时手动 TVC 标定功能不受影响；断链后同样兜底。
+  inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] < 1200);
 
   // 通道 9 (Attitude Mode): 姿态控制模式选择
   //   < 1500: 角度模式 (ATTITUDE_MODE) - 摇杆控制目标角度
@@ -1129,6 +1134,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   {
     // 全锁定（非手动TVC）：电机最低，舵机中位；同时重置 BTRUE 工作点（防看门狗复位后 stale）
     prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
+    // 差速/饱和标记同步（AnoCom 0x40 帧全模式显示）
+    gnc_tel.dw = 0.0f;
+    gnc_tel.alloc_sat[0] = gnc_tel.alloc_sat[1] = gnc_tel.alloc_sat[2] = false;
   }
   else if (inputs.is_manual_tvc)
   {
@@ -1149,6 +1157,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     auto diff = allocateDifferential(w0, manual_dw, P);
     motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
     motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
+    // 差速/饱和标记同步（AnoCom 0x40 帧全模式显示）
+    gnc_tel.dw = manual_dw;
+    gnc_tel.alloc_sat[0] = gnc_tel.alloc_sat[1] = gnc_tel.alloc_sat[2] = false;
     if (!inputs.is_unlocked)
     {
       // 锁定状态：舵机可动（摆向测试），电机绝不转
@@ -1318,6 +1329,10 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   SetServoPos(motor2_pct, MOTOR2_PIN);
   ch3_output = motor1_pct;
   ch4_output = motor2_pct;
+
+  // 执行器指令物理量纲（全模式统一捕获）→ AnoCom 0x40 帧 / 上位机 TVC 显示
+  g_tvc_front_deg = front_gimbal_deg;
+  g_tvc_rear_deg  = tail_gimbal_deg;
 }
 /**
  * @brief 在线参数辨识更新 — ★ 纯观测模式，不改变任何控制行为

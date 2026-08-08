@@ -52,6 +52,10 @@ run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 # 平台相关算法（依赖 Arduino.h，通过 test_host/stub/Arduino.h 桩在宿主机编译）：
 run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 
+# WS2812 RGB 灯效状态机（FcsLedState 模式/颜色/节奏/BOOT 序列，
+# 通过 stub 的 WS2812Driver mock 记录像素断言）：
+run_one "$ROOT/test_host/test_led_status.cpp"          led "$STUB_INCLUDE"
+
 # 纵列双发矢量推力飞行器控制分配（纯平台无关头文件，无 Arduino 依赖）：
 run_one "$ROOT/test_host/test_tandemvec_allocation.cpp" ta ""
 

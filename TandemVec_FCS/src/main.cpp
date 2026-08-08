@@ -207,6 +207,7 @@ void setup()
   crsf.onPacketChannels = &packetChannels; // 注册通道数据回调 (接收到通道值时调用)
   crsf.onLinkUp = &linkUpCallback;         // 注册链路建立回调
   crsf.onLinkDown = &linkDownCallback;     // 注册链路断开回调 (触发失控保护)
+  crsf.onPacketLinkStatistics = &elrsLinkStatsCallback; // 注册链路质量回调 (LQ, 弱信号灯效)
 
   // ====================================================================
   // 3. 硬件外设初始化

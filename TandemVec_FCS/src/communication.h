@@ -52,6 +52,14 @@ void linkUpCallback();
 void linkDownCallback();
 
 /**
+ * @brief CRSF 链路质量统计回调 (ELRS LQ/RSSI)
+ *
+ * ELRS 接收机 0x14 帧（LINK_STATISTICS）解析后触发，固件取 uplink LQ
+ * 供 100Hz 灯效任务做弱信号渐进预警（早于 300ms 断链判定）。
+ */
+void elrsLinkStatsCallback(crsfLinkStatistics_t *ls);
+
+/**
  * @brief 解析发动机控制器数据帧
  *
  * 校验帧头 (0xA5)、长度、校验和，通过 memcpy 小端序解析三个 float：
