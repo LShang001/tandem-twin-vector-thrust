@@ -23,8 +23,9 @@ py -3.12 tools/sync-params.py --check  # 漂移检测
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
 node --test simulations/vector-thrust-lab/tests/propulsion.test.mjs # 单模块
 
-# 上位机 GCS（Python 后端 + Web 前端，AnoCom 协议）
-cd TandemVec_FCS/GCS && py -3.12 -m uvicorn server.main:app --port 8091  # 前端 http://127.0.0.1:8091/
+# 上位机 GCS（Python 后端 + Web 前端 + pywebview 桌面窗口，AnoCom 协议）
+cd TandemVec_FCS/GCS && py -3.12 app.py               # 桌面窗口模式（后端自动拉起，关窗即停；--browser 回退浏览器）
+cd TandemVec_FCS/GCS && py -3.12 -m uvicorn server.main:app --port 8091  # 无窗口纯后端，前端 http://127.0.0.1:8091/
 cd TandemVec_FCS/GCS && py -3.12 -m pytest tests/ -q                     # 无硬件可跑
 
 # 仿真
@@ -105,6 +106,10 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 - **黑匣子 S 帧 236B 定长**：9B 头（magic+type+seg+tms）+ 通道名表 ≤224B（pad 0x00）+ 1B 预留 + CRC 2B；导出切帧按定长 236B，勿按变长 `\0` 搜索（来源：2026-08-08）
 - **AnoCom 0x0D 帧占用约定**：`fc_voltage/fc_current` 承载氧压 P1/P2（非电压电流）；`bat_voltage=12.6` 为占位常量无真实采样；0x20 帧传 `raw_rc_values`（us，非协议注释的 0.01%）（来源：2026-08-08 GCS 字段对齐）
 - **DBG 控制台与 AnoCom 遥测互斥**：发 `DBG\n` 后固件停止遥测轮发（handleAnoCom 短路），`exit` 恢复；上位机黑匣子流程必须先进 DBG 再发 `flash export`，且 export 输出含 `[DBG] export start=.. count=..` 文本行需剥离后再按 2048B/页收集（来源：2026-08-08）
+- **GCS 遥测缓冲 O(n²) 卡死**：`find_frames` 全缓冲扫描 + 找到帧才整体 clear——固件卡 DBG 发文本流/错波特率乱码时 `tele_buf` 无限膨胀，每块都全量扫描 + `bytes()` 拷贝，退化 O(n²) 至上位机完全冻结；且整体 clear 会丢块尾半帧。修复范式：`anocom.extract_frames` 返回已消费偏移只删前缀、半帧留尾、无帧且超 `TELE_BUF_CAP=8192` 按垃圾流裁尾；连接后自动发 `exit\n` 恢复卡死的 DBG 态（遥测态下固件会丢弃该无效行，无副作用）（来源：2026-08-08 上位机卡死排查）
+- **GCS 3D 视图 NED→Three 必须是相似变换 P·R·v**：嵌套 groupBasis（固定 P：Three_x=NED_y / Three_y=−NED_z / Three_z=−NED_x，det=1 真旋转）+ groupBody（q_ned，欧拉 'ZYX' 合成 = 标准 3-2-1）；旧实现 `M=P·R` 缺 Pᵀ 致轴向错乱、模型"诡异"。改姿态显示代码后必须用 node + vendored three 数值验证（机头/右翼/机腹三轴 × 零姿态/航向90/俯仰30/滚转90/垂直爬升）（来源：2026-08-08 view3d 重写，验证 8/8）
+- **改 GCS 后端后必须杀掉旧进程再启动**：8091 旧 uvicorn 残留 + 前端 no-store = "界面全新、后端逻辑全旧"，用户看到的就是没数据且所有新修复无效。曾因此误诊半天——固件 2093 帧/3s 全有效、问题 100% 在残留进程。防护：`app.py` 启动时检测端口占用→查 `/api/status` 版本不符自动 taskkill 重启；WS `hello` 握手前端比对版本（`BACKEND_VERSION` 与 `main.py app.version` 必须同步改）（来源：2026-08-08 三轮"没数据"终定位）
+- **GCS 前端事件总线 = CustomEvent，载荷在 `e.detail`**：`bus.addEventListener('telemetry', onTelemetry)` 直接收事件对象，`s.roll_deg` 恒 undefined → 页面全 "--"。三个页面曾全中。同时两个启动坑：`'page'` 监听器必须先于初始 `switchPage` 注册（否则首屏 activate 永不执行）；es-module-shims 初始化前动态 `import()` 静默失败需重试+告警。验证前端修复必须过真实 WebView2 窗口（pywebview evaluate_js 采样 DOM），Python WS 客户端验证不到渲染层（来源：2026-08-08 页面不刷新终定位）
 
 ## 知识沉淀协议
 

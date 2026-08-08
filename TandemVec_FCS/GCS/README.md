@@ -8,21 +8,25 @@
 # 依赖（首次）
 py -3.12 -m pip install -r requirements.txt
 
-# 启动（start.bat 等价：自动开浏览器 http://127.0.0.1:8091/）
+# 启动（start.bat 等价）：后端自动拉起 + 原生窗口自动打开，关窗即停服务
 cd TandemVec_FCS/GCS
-py -3.12 -m uvicorn server.main:app --host 127.0.0.1 --port 8091
+py -3.12 app.py
+# 备选：--browser 强制浏览器模式；--port 8092 换端口
+# 无窗口纯后端：py -3.12 -m uvicorn server.main:app --host 127.0.0.1 --port 8091
 ```
+
+顶栏状态从左到右：**后端服务灯**（页面与后端的 WS 链路，断开自动重连）→ 串口连接区 → **链路健康**（字节率/帧率/CRC 失败率；遥测停滞时直接提示病因）。服务总览接口：`GET /api/status`。
 
 ## 功能一览
 
 | 页面 | 功能 |
 |------|------|
 | 仪表盘 | 人工地平线（横滚/俯仰/航向）、HUD（速度/高度/油门/电压/氧压）、模式/解锁/GPS/融合状态灯、RC 8 通道条、控制输出条、GNSS 详情、告警条（低压/星数/解锁变化） |
-| 3D 姿态 | Three.js 纵列双发构型简模（前摆座绕 z / 尾摆座绕 y / 差速反桨），姿态同步 + 旋翼转速动画 |
+| 3D 姿态 | Three.js 几何体姿态块（六面异色长方体：红=前/亮蓝=机背/深灰=机腹 + 前向箭头 + 机背立柱 + 地平网格 + 指北箭头），NED→Three 严格相似变换（node 数值验证 8 项） |
 | 实时曲线 | 8 组预设通道（姿态/角速率/加速度/速度/位置/控制量/TVC/压力），滚动窗口 20s、暂停/清空 |
 | 黑匣子 | `flash stat/findseg/export` 飞行段列表 → 段导出 → 表格预览 + 分组绘图（姿态/加速度/角速率/速度/水平轨迹/TVC）+ CSV 导出 |
 | 参数 | AnoCom 0xE0/0xE1 在线读写 117 参数（12 PID 环 × 9 字段 + 9 滤波 alpha），名称/类型自 E2 信息帧，分组/范围本地元数据，校验帧确认写入，恢复默认 |
-| 控制台 | DBG 交互终端（`help/flash*/datalog/ws*/ver`）+ 实时遥测 CSV 记录 + 回放 |
+| 控制台 | DBG 交互终端（`help/flash*/datalog/ws*/ver`）+ **链路监听 HEX**（原始字节 hex/ASCII 转储，"没数据"排障：无字节/乱码/DBG 文本/AB 帧 一眼可分）+ 实时遥测 CSV 记录 + 回放 |
 
 ## 连接与模式
 
@@ -51,8 +55,9 @@ cd TandemVec_FCS/GCS && py -3.12 -m pytest tests/ -q
 
 ```
 GCS/
+├── app.py              # 桌面启动器（后端线程 + pywebview 原生窗口，关窗停服务；缺失回退浏览器）
 ├── server/
-│   ├── main.py         # FastAPI 入口 + WS 分发 + 串口编排（遥测/DBG 双模式）
+│   ├── main.py         # FastAPI 入口 + WS 分发 + 串口编排（遥测/DBG 双模式）+ /api/status
 │   ├── serial_link.py  # 串口抽象（pyserial / FakeSerialLink 测试注入）
 │   ├── anocom.py       # AnoCom 编解码（与固件逐字节对齐）
 │   ├── blackbox.py     # W25N01GV 黑匣子解析 + DBG 会话（export 剥离文本行）
