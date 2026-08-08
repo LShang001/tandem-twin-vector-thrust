@@ -91,6 +91,8 @@
 - **DWT CYCCNT 时序等待在 -O3 + 关中断下会死锁**（飞控整个卡死）：Cortex-M7 需 `dwt_access(true)` 解锁 LAR（`SrcWrapper/src/stm32/dwt.c`），且 -O3 内联下计数行为不稳。**改用纯 NOP 循环延时最可靠**。
 - **H7 RCC 寄存器与 F4 不同**：`RCC_CFGR_PPRE1` 在 H743 不存在，用 `RCC_D2CFGR_D2PPRE1`；APB1 timer clock = APB1×2（APB1 分频≠1 时）；DMAMUX1 无独立时钟使能位，与 DMA1 共享 AHB1 时钟（`__HAL_RCC_DMA1_CLK_ENABLE` 即可）。
 - **PWM+DMA 两个必踩**：① `ARR = clk/800000-1`（不是 /800，漏零则 16 位 ARR 溢出截断，PWM 频率全错）；② DMA 传输完成回调里必须关外设请求使能位（TIM_UDE 等），否则残留请求卡死 DMA 状态机、下帧启动 HAL_BUSY → 灯闪。
+- **★ 非对齐 float/int 访问 HardFault（ARM 通用）**：`uint8_t` 数组强转 `(const float*)`/`(int32_t*)` 读，地址未 4 字节对齐 → Cortex-M7 HardFault → **复位循环**。现象是"板子复位后看起来正常"（复位后跑正常代码，OpenOCD 抓到假象），极难定位——**用逐步打印缩小范围**（如 push#0 ok → push#1 卡），修复用 `memcpy` 逐元素拷贝（来源：2026-08-08 W25N01GV v2 P 帧差分调试，耗时最长的一次）。
+- **调试命令可靠性**：`DBG\n` 检测必须在串口协议解析（receiveData）**之前**，否则命令字节被协议帧头逻辑吃掉。调试模式下 Flash 写页要与 CAN 互斥（`s_flashWriting`），否则 MCP2515 超时 reset 卡死 SPI2。
 - **重构教训**：所有模式共用的资源（引脚掩码）必须在**构造函数**初始化，不能放在某个模式的 begin 里（DMA 模式跳过 bitbang begin → 掩码恒 0）。
 
 ## 模块化架构
