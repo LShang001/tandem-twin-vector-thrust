@@ -161,6 +161,7 @@ private:
   uint32_t _cursorPage;    // next page to write (absolute)
   uint16_t _segment;       // current segment number (0..SEG_COUNT-1)
   uint32_t _written, _dropped, _pagesWritten;
+  uint32_t _globalSeq;     // ★ 全局帧序号（跨段/环形覆盖不重置，CSV 追踪唯一）
   bool _serviceBusy;
 
   // bad-block bitmap: 1 bit per block (1024 blocks -> 128 B)

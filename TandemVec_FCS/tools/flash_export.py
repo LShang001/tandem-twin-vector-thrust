@@ -118,6 +118,8 @@ def main():
     ap.add_argument("-b", "--baud", type=int, default=2000000,
                     help="波特率 (默认 2000000 = SERIAL6_BAUDRATE)")
     ap.add_argument("-o", "--out", default="blackbox_export.csv")
+    ap.add_argument("--auto", action="store_true",
+                    help="自动定位最新数据（flash stat 读 cursorPage，从其后导出 count 页）")
     args = ap.parse_args()
 
     ser = serial.Serial(args.port, args.baud, timeout=0.5)
@@ -127,6 +129,26 @@ def main():
     ser.write(b'DBG\n')
     time.sleep(0.3)
     ser.read(8192)
+
+    if args.auto:
+        # 读 cursorPage，从 (cursorPage - count) 导出最新数据
+        ser.write(b'flash stat\n')
+        time.sleep(0.5)
+        stat = ser.read(8192).decode('utf-8', errors='replace')
+        cursor = 0
+        for line in stat.split('\n'):
+            if 'cursorPage=' in line:
+                try:
+                    cursor = int(line.split('cursorPage=')[1].strip())
+                except ValueError:
+                    pass
+        if cursor == 0:
+            print("无法获取 cursorPage，退回手动模式")
+        else:
+            args.start_page = max(0, cursor - args.count)
+            print(f"[auto] cursorPage={cursor}, 导出 page {args.start_page}..{cursor}")
+        time.sleep(0.2)
+        ser.reset_input_buffer()
 
     cmd = f"flash export {args.start_page} {args.count}\n".encode()
     ser.write(cmd)

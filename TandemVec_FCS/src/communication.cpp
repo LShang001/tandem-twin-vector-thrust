@@ -1987,6 +1987,38 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
       }
     }
   }
+  else if (strncmp(args, "findseg", 7) == 0) {
+    // 扫描所有段头，返回最新有效段的起始页（导出工具自动定位用）
+    // 输出格式: [DBG] seg=<n> page=<startPage> tms=<startTms>
+    uint8_t hdr[W25N01GV_LOG_SEG_HDR_SIZE];
+    int16_t lastSeg = -1;
+    uint32_t lastPage = 0, lastTms = 0;
+    uint16_t segCount = W25N01GV_BLOCK_COUNT / W25N01GV_LOG_SEG_BLOCKS;
+    for (uint16_t s = 0; s < segCount; s++) {
+      uint32_t page = (uint32_t)s * W25N01GV_LOG_SEG_BLOCKS * W25N01GV_PAGES_PER_BLOCK;
+      if (flashLog.debugReadPage(page, hdr, sizeof(hdr)) &&
+          hdr[0] == W25N01GV_LOG_MAGIC0 && hdr[1] == W25N01GV_LOG_MAGIC1) {
+        // 段头校验（简单：只查 magic + seg 匹配）
+        uint16_t sSeg = (uint16_t)hdr[2] | ((uint16_t)hdr[3] << 8);
+        if ((sSeg % segCount) == s) {
+          lastSeg = (int16_t)s;
+          lastPage = page;
+          lastTms = (uint32_t)hdr[4] | ((uint32_t)hdr[5] << 8) |
+                    ((uint32_t)hdr[6] << 16) | ((uint32_t)hdr[7] << 24);
+        }
+      }
+    }
+    if (lastSeg >= 0) {
+      serial.print(F("[DBG] seg="));
+      serial.print(lastSeg);
+      serial.print(F(" page="));
+      serial.print(lastPage);
+      serial.print(F(" tms="));
+      serial.println(lastTms);
+    } else {
+      serial.println(F("[DBG] no segments"));
+    }
+  }
   else if (strncmp(args, "export", 6) == 0) {
     // 批量导出页数据：flash export <startPage> <count>
     // 每页输出完整 2048B 原始数据（v2 页内打包多帧 I/P 混合），

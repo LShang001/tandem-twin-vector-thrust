@@ -24,7 +24,7 @@ W25N01GVLog::W25N01GVLog(W25N01GV &flash)
     _head(0), _tail(0), _buffered(0),
     _prevTms(0), _frameCount(0), _lastPushMs(0),
     _cursorPage(0), _segment(0),
-    _written(0), _dropped(0), _pagesWritten(0), _serviceBusy(false),
+    _written(0), _dropped(0), _pagesWritten(0), _globalSeq(0), _serviceBusy(false),
     _badBlocks(0)
 {
   memset(_prevPayload, 0, sizeof(_prevPayload));
@@ -259,7 +259,9 @@ bool W25N01GVLog::logPush(const uint8_t *payload)
     return false;
   }
 
-  uint32_t seq = _written + (uint32_t)_buffered;
+  // ★ 全局帧序号（跨段/环形覆盖不重置）——导出 CSV 的 seq 列全局唯一
+  uint32_t seq = _globalSeq++;
+
   uint8_t *slot = _ring[_head];
 
   if ((_frameCount % W25N01GV_LOG_I_INTERVAL) == 0) {
