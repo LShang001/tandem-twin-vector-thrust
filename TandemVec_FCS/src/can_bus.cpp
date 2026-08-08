@@ -120,6 +120,12 @@ static void pollCanReceive(void) {
 void handleCANBus(void) {
   if (!can_initialized) return;
 
+  // ★ Flash 写页互斥：写页 + 50ms 窗口内跳过 CAN（避免 MCP2515 超时
+  //   reset → SPI2 OVR 卡死）。见 communication.cpp s_flashWriting 注释。
+  extern volatile bool s_flashWriting;
+  extern volatile uint32_t s_flashWritingUntil;
+  if (s_flashWriting || (int32_t)(millis() - s_flashWritingUntil) < 0) return;
+
   // 先处理接收 (在发送之前, 避免发送阻塞延迟接收)
   pollCanReceive();
 

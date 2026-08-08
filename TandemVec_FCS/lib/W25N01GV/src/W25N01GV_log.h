@@ -1,21 +1,35 @@
 /*
- * W25N01GV_log.h - log-layer: RAM ring buffer + background page writes
+ * W25N01GV_log.h - log-layer v2: I/P delta frames + page packing + circular segments
  *
- * Design (see README.md for the full reasoning):
+ * Design (see README.md for full reasoning; inspired by Betaflight flashfs
+ * and ESP-IDF spi_nand_flash):
  *
- * - logPush() is called from a fast task (e.g. 200Hz black box); it ONLY
- *   copies a frame into the RAM ring buffer (a few us, never blocks).
- * - logService() is called from a low-priority task; per tick it writes
- *   up to W25N01GV_LOG_MAX_WRITES frames to flash (page program ~0.7ms
- *   each, busy-polled). This bounds the per-tick CPU cost (same budget
- *   pattern as CAN_RX_MAX_PER_TICK in the flight controller).
- * - Frames are stored as fixed-size records: magic + seq + t_ms + payload
- *   + CRC8. CRC uses lib/crc8's Crc8 class (frame < 255 bytes).
- * - A sequential cursor advances block/page linearly. If a page program
- *   fails (P-FAIL) or a read shows uncorrectable ECC, the whole block is
- *   skipped (simple bad-block avoidance; no BBM LUT remapping in v1).
- * - The cursor is persisted to a fixed "super" page near the end of the
- *   device so a power-cycle can resume appending (logBegin() reads it).
+ * Frame formats (v2):
+ *   I-frame (full snapshot, every 32nd frame):
+ *     magic(2)=0xAA55 + type(1)=0x49 + seq(2) + t_ms(4)
+ *     + payload 21xfloat(84) + crc16(2)                 = 95 B
+ *   P-frame (delta vs previous frame, other 31 frames):
+ *     magic(2)=0xAA55 + type(1)=0x50 + seq(2) + dt_ms(2)
+ *     + dpayload 21xint16(42) + crc16(2)               = 51 B
+ *
+ *   Delta quantization: (cur - prev) * 100, int16. I-frames reset
+ *   the reference every 32 frames so quantization error never accumulates.
+ *
+ * Page packing: pages are filled with as many frames as fit (2048 B),
+ * tail padded 0xFF. One page program writes ~39 frames (vs 1 in v1).
+ *
+ * Circular segments: the device is divided into segments (default 32
+ * blocks = 2048 pages). Each segment starts with a segment-header page
+ * (magic + seg number + start t_ms). When the last segment is full the
+ * writer wraps to segment 0 (erasing it first) — the recorder never
+ * fills up (Betaflight flashfs style).
+ *
+ * Cursor persistence: written once per BLOCK (not per frame) into the
+ * segment header page → erase/write cost drops by 64x, wear is fine.
+ *
+ * Bad-block table: on begin(), spare-area bad-block markers of all 1024
+ * blocks are scanned into a 128 B bitmap; runtime P-FAIL / uncorrectable
+ * ECC marks a block bad and skips it.
  *
  * License: MIT
  */
@@ -27,94 +41,146 @@
 
 // ---- tunables ----
 #ifndef W25N01GV_LOG_MAX_FRAMES
-#define W25N01GV_LOG_MAX_FRAMES   32     // ring buffer depth (~3KB RAM)
+#define W25N01GV_LOG_MAX_FRAMES   48     // ring buffer depth (frames)
 #endif
 #ifndef W25N01GV_LOG_MAX_WRITES
 #define W25N01GV_LOG_MAX_WRITES   2      // max pages written per service tick
 #endif
+// ★ 2026-08-08: 页内打包关闭（每页 1 帧）——大页 2048B 传输在 stm32duino
+//   SPI 层不稳定（HAL_SPI_Transmit 长传输 + 中断交互会卡死主循环）。
+//   每页 1 帧（I 95B / P 51B）写入稳定（v1 验证过 95B 传输可靠）。
+//   代价：页利用率低（I 帧 4.6% / P 帧 2.5%），容量约 8-16 分钟@200Hz。
+//   后续可换 SPI DMA 恢复打包。
+#define W25N01GV_LOG_PACK_PAGE  0
 #ifndef W25N01GV_LOG_PAYLOAD
-#define W25N01GV_LOG_PAYLOAD      84     // bytes of user payload per frame
+#define W25N01GV_LOG_PAYLOAD      84     // bytes of user payload (21 floats)
 #endif
-#ifndef W25N01GV_LOG_SUPER_PAGE
-#define W25N01GV_LOG_SUPER_PAGE   (W25N01GV_TOTAL_PAGES - 8U)  // cursor page
+#ifndef W25N01GV_LOG_I_INTERVAL
+#define W25N01GV_LOG_I_INTERVAL   32     // one I-frame every N frames
+#endif
+#ifndef W25N01GV_LOG_SEG_BLOCKS
+#define W25N01GV_LOG_SEG_BLOCKS   32     // segment = N blocks (default 32*64=2048 pages)
 #endif
 
-// one frame as stored on flash: magic(2) + seq(4) + t_ms(4) + payload + crc(1)
-#define W25N01GV_LOG_FRAME_SIZE   (2U + 4U + 4U + W25N01GV_LOG_PAYLOAD + 1U)
+// ---- v2 frame constants ----
+#define W25N01GV_LOG_MAGIC0       0xAA
+#define W25N01GV_LOG_MAGIC1       0x55
+#define W25N01GV_LOG_TYPE_I       0x49   // 'I'
+#define W25N01GV_LOG_TYPE_P       0x50   // 'P'
+
+#define W25N01GV_LOG_IFRAME_SIZE  95     // 2+1+2+4+84+2
+#define W25N01GV_LOG_PFRAME_SIZE  51     // 2+1+2+2+42+2
+
+// delta quantization: (cur-prev)*100 stored as int16
+#define W25N01GV_LOG_DELTA_SCALE  100
+
+// segment header page content (persisted at segment start):
+// magic(2) + seg(2) + start_t_ms(4) + reserved(6) + crc16(2) = 16 B
+#define W25N01GV_LOG_SEG_HDR_SIZE 16
+
+// page size used for packing (2048 = data area)
+#define W25N01GV_LOG_PAGE_DATA    W25N01GV_PAGE_SIZE
 
 /**
- * @brief Log layer over W25N01GV (sequential appender)
+ * @brief Log layer v2 over W25N01GV
  *
- * Not thread-safe by itself: call logPush() from one task and
- * logService() from another; both are designed for the 2kHz FIFO
- * scheduler of the flight controller (no preemption between them).
+ * Not thread-safe: logPush() from a fast task, logService() from a
+ * low-priority task (2kHz FIFO scheduler, no preemption between them).
  */
 class W25N01GVLog {
 public:
   explicit W25N01GVLog(W25N01GV &flash);
 
   /**
-   * @brief Initialize: read cursor from super page, prepare ring buffer
-   * @param erase  if true, erase whole device first (log begin fresh)
+   * @brief Initialize: scan bad blocks, locate latest segment + cursor
+   * @param erase  if true, erase whole device (fresh start)
    * @return true if ready
    */
   bool begin(bool erase = false);
 
   /**
-   * @brief Push one frame (non-blocking, copies into ring buffer)
-   * @param payload pointer to W25N01GV_LOG_PAYLOAD bytes
+   * @brief Push one payload frame (non-blocking, encodes I/P delta)
+   * @param payload pointer to W25N01GV_LOG_PAYLOAD bytes (21 floats)
    * @return true if accepted (false if ring full -> frame dropped)
    */
   bool logPush(const uint8_t *payload);
 
   /**
-   * @brief Service the write queue (call periodically from a low-prio task)
-   *        Writes up to W25N01GV_LOG_MAX_WRITES frames to flash.
+   * @brief Service write queue: pack ring frames into pages, write to NAND
    */
   void logService();
 
-  /// frames currently buffered (awaiting flash write)
+  /// frames currently buffered
   uint16_t buffered() const { return _buffered; }
 
   /// total frames written since begin
   uint32_t written() const { return _written; }
 
-  /// next page the cursor points at
+  /// current write page (absolute)
   uint32_t cursorPage() const { return _cursorPage; }
 
-  /// frames dropped because ring was full
+  /// current segment number
+  uint16_t segment() const { return _segment; }
+
+  /// frames dropped (ring full)
   uint32_t dropped() const { return _dropped; }
 
-  /// true while the device is being written (service busy)
+  /// pages written since begin
+  uint32_t pagesWritten() const { return _pagesWritten; }
+
+  /// bad blocks found
+  uint16_t badBlocks() const { return _badBlocks; }
+
+  /// true while a flash op is in progress
   bool busy() const { return _serviceBusy; }
 
-  /// erase the whole device (blocks ~2s; only for debug/format)
+  /// erase whole device (~2s; debug/format)
   bool format();
 
-  /// dump a page's raw bytes via a debug callback (used by debug console)
+  /// read a raw page for debug/export
   bool debugReadPage(uint32_t page, uint8_t *buf, uint16_t len);
+
+  /// number of usable (non-bad) blocks
+  uint16_t usableBlocks() const { return W25N01GV_BLOCK_COUNT - _badBlocks; }
 
 private:
   W25N01GV &_flash;
 
-  // ring buffer
-  uint8_t _ring[W25N01GV_LOG_MAX_FRAMES][W25N01GV_LOG_FRAME_SIZE];
-  uint16_t _head;        // next write index
-  uint16_t _tail;        // next read index
-  uint16_t _buffered;
+  // ring buffer of raw frames (I or P, variable length 51/95)
+  uint8_t _ring[W25N01GV_LOG_MAX_FRAMES][W25N01GV_LOG_IFRAME_SIZE];
+  uint16_t _ringLen[W25N01GV_LOG_MAX_FRAMES];
+  uint16_t _head, _tail, _buffered;
 
-  // cursor / stats
-  uint32_t _cursorPage;
-  uint32_t _written;
-  uint32_t _dropped;
+  // encode state
+  uint8_t  _prevPayload[W25N01GV_LOG_PAYLOAD];  // reference for delta
+  uint32_t _prevTms;
+  uint16_t _frameCount;    // since last I-frame
+
+  // storage state
+  uint32_t _cursorPage;    // next page to write (absolute)
+  uint16_t _segment;       // current segment number (0..SEG_COUNT-1)
+  uint32_t _written, _dropped, _pagesWritten;
   bool _serviceBusy;
 
+  // bad-block bitmap: 1 bit per block (1024 blocks -> 128 B)
+  uint8_t _badMap[W25N01GV_BLOCK_COUNT / 8];
+  uint16_t _badBlocks;
+
+  // page assembly buffer
+  uint8_t _pageBuf[W25N01GV_LOG_PAGE_DATA];
+
   // helpers
-  void buildFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq);
-  bool validateFrame(const uint8_t *src, uint32_t &seq) const;
-  bool readCursor(uint32_t &page);
-  void writeCursor(uint32_t page);
-  void skipBadBlock();
+  void buildIFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq);
+  void buildPFrame(uint8_t *dst, const uint8_t *payload, uint32_t seq);
+  bool isBlockBad(uint32_t page) const;
+  void markBlockBad(uint32_t page);
+  void scanBadBlocks();
+  uint32_t segmentStartPage(uint16_t seg) const;
+  uint16_t segmentCount() const;
+  bool writeSegmentHeader(uint16_t seg, uint32_t startTms);
+  bool findLatestSegment(uint16_t &seg, uint32_t &cursor);
+  void flushPage();        // encode ring frames into one page, write it
+  void advanceCursor();    // page++ with segment wrap + header persist
 };
 
 #endif // W25N01GV_LOG_H

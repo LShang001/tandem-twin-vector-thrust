@@ -116,6 +116,9 @@ public:
   /// true after begin() detected the chip
   bool isPresent() const { return _present; }
 
+  /// 最近一次 pageProgram 的错误类型（0=成功, 1=busy超时, 2=P-FAIL, 3=参数错误）
+  uint8_t lastProgError() const { return _lastProgErr; }
+
   /// read current SR3 status byte
   uint8_t readStatus();
 
@@ -147,6 +150,16 @@ public:
   /// true if the last pageRead had uncorrectable ECC error
   bool lastEccUncorrectable() const { return (_lastEcc == W25N_SR3_ECC_UNCORRECTABLE); }
 
+  /**
+   * @brief Read spare-area bytes of a page (bad-block markers live there)
+   *
+   * Uses Read From Cache with column = 2048 (spare area start).
+   * @param pageAddr page address
+   * @param data     output buffer
+   * @param len      bytes to read (max W25N01GV_SPARE_SIZE)
+   */
+  bool readSpare(uint32_t pageAddr, uint8_t *data, uint16_t len);
+
   /// reset the device
   void reset();
 
@@ -156,12 +169,14 @@ private:
   uint8_t _manId, _devId, _devId2;
   bool _present;
   uint8_t _lastEcc;
+  uint8_t _lastProgErr;   // 最近一次 pageProgram 错误类型
 
   void select() { digitalWrite(_cs, LOW); }
   void deselect() { digitalWrite(_cs, HIGH); }
   void writeEnable();
   uint8_t readReg(uint8_t regAddr);
   void writeReg(uint8_t regAddr, uint8_t val);
+
 };
 
 #endif // W25N01GV_H

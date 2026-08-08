@@ -16,6 +16,11 @@ static uint32_t s_flashServiceCount = 0;
 static uint32_t s_flashPushCount = 0;
 // 调试模式标志（文件级，handleDebugTask 置位，handleAnoCom 读取跳过遥测）
 static bool s_dbg_mode = false;
+// Flash 写页互斥标志（logService 写页时置位，CAN 任务跳过避免 SPI 冲突）
+// ★ 2026-08-08：Flash 2048B 写页关中断 655µs 会让 CAN 任务延迟 → MCP2515
+//   超时触发 reset → SPI2 transfer 卡死（OVR）→ 主循环冻结。互斥后消除。
+volatile bool s_flashWriting = false;
+volatile uint32_t s_flashWritingUntil = 0;
 
 // 串口5发送缓冲区，用于发送给上位机进行轨迹规划的数据
 // 缓冲区大小：1(帧头) + 8个float * 4字节/float + 1(帧尾) = 34字节
@@ -1375,7 +1380,12 @@ void handleFlashService()
   }
 
   s_flashServiceCount++;
+  // ★ Flash 写页互斥：写页 + 之后 50ms 跳过 CAN（MCP2515 需足够时间恢复，
+  //   否则超时 reset → SPI2 OVR 卡死）。每 200ms 写 1 页，跳 50ms CAN 可接受。
+  s_flashWriting = true;
   flashLog.logService();
+  s_flashWritingUntil = millis() + 50;
+  s_flashWriting = false;
 }
 
 void handleMavlink()
@@ -1925,23 +1935,35 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
   }
   else if (strncmp(args, "test", 4) == 0) {
     serial.println(F("[DBG] write-readback test..."));
+    serial.flush();
     // 写 5 帧（用递增 payload）到当前游标
     uint8_t payload[W25N01GV_LOG_PAYLOAD];
     for (int i = 0; i < 5; i++) {
       for (uint16_t j = 0; j < sizeof(payload); j++) payload[j] = (uint8_t)(i * 31 + j);
+      serial.print(F("[DBG] push#"));
+      serial.println(i);
+      serial.flush();
       flashLog.logPush(payload);
+      serial.print(F("[DBG] pushed ok, buffered="));
+      serial.println(flashLog.buffered());
+      serial.flush();
     }
     serial.print(F("[DBG] pushed 5 frames, buffered="));
     serial.println(flashLog.buffered());
+    serial.flush();
     // 手动 service 一次写光（测试用，正常由 handleFlashService 后台写）
     for (int s = 0; s < 5; s++) {
       serial.print(F("[DBG] service#"));
       serial.print(s);
+      serial.flush();
       flashLog.logService();
       serial.print(F(" pages="));
       serial.print(flashLog.pagesWritten());
       serial.print(F(" buffered="));
-      serial.println(flashLog.buffered());
+      serial.print(flashLog.buffered());
+      serial.print(F(" progErr="));
+      serial.println(flash.lastProgError());
+      serial.flush();
     }
     serial.print(F("[DBG] after service: written="));
     serial.println(flashLog.written());
@@ -1950,7 +1972,7 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
     // 读回最后写入页验证 magic（v2: 页内多帧，检查页首帧）
     if (flashLog.written() > 0) {
       uint32_t page = flashLog.cursorPage() - 1;
-      uint8_t buf[W25N01GV_PAGE_SIZE];
+      static uint8_t buf[W25N01GV_PAGE_SIZE];   // static: 避免栈溢出
       bool ok = flashLog.debugReadPage(page, buf, sizeof(buf));
       serial.print(F("[DBG] readback page="));
       serial.print(page);
@@ -1979,7 +2001,7 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
       serial.println(count);
       serial.flush();   // 让提示先发出，再输出二进制
 
-      uint8_t buf[W25N01GV_PAGE_SIZE];
+      static uint8_t buf[W25N01GV_PAGE_SIZE];   // static: 避免栈溢出
       for (uint32_t i = 0; i < count; i++) {
         uint32_t page = startPage + i;
         if (flashLog.debugReadPage(page, buf, W25N01GV_PAGE_SIZE)) {

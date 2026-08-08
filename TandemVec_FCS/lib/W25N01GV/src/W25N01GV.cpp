@@ -8,7 +8,7 @@
 
 W25N01GV::W25N01GV(SPIClass &bus, uint8_t csPin)
   : _bus(bus), _cs(csPin),
-    _manId(0), _devId(0), _devId2(0), _present(false), _lastEcc(0)
+    _manId(0), _devId(0), _devId2(0), _present(false), _lastEcc(0), _lastProgErr(0)
 {
 }
 
@@ -137,18 +137,20 @@ bool W25N01GV::eraseBlock(uint32_t pageAddr)
 
 bool W25N01GV::pageProgram(uint32_t pageAddr, const uint8_t *data, uint16_t len)
 {
-  if (pageAddr >= W25N01GV_TOTAL_PAGES) return false;
-  if (len == 0 || len > W25N01GV_PAGE_SIZE) return false;
-  if (!waitReady(100)) return false;
+  _lastProgErr = 0;
+  if (pageAddr >= W25N01GV_TOTAL_PAGES) { _lastProgErr = 3; return false; }
+  if (len == 0 || len > W25N01GV_PAGE_SIZE) { _lastProgErr = 3; return false; }
+  if (!waitReady(100)) { _lastProgErr = 1; return false; }
 
   // ---- 1. program data load (0x02, column 0) into cache ----
+  // 全程 noInterrupts（HAL SPI 阻塞传输，655µs @25MHz 对 2kHz 调度可接受）
   {
     uint8_t cmdbuf[3] = {W25N_CMD_PROG_DATA_LOAD, 0x00, 0x00};
     writeEnable();
     noInterrupts();
     select();
     _bus.transfer(cmdbuf, sizeof(cmdbuf));
-    _bus.transfer((void*)data, nullptr, len);   // tx only, don't corrupt data
+    _bus.transfer((void*)data, nullptr, len);   // tx only
     deselect();
     interrupts();
   }
@@ -169,10 +171,51 @@ bool W25N01GV::pageProgram(uint32_t pageAddr, const uint8_t *data, uint16_t len)
     interrupts();
   }
 
-  if (!waitReady(100)) return false;   // page program ~0.7ms
+  if (!waitReady(100)) { _lastProgErr = 1; return false; }   // page program ~0.7ms
 
   uint8_t st = readStatus();
-  return !(st & W25N_SR3_PFAIL);
+  if (st & W25N_SR3_PFAIL) { _lastProgErr = 2; return false; }
+  return true;
+}
+
+bool W25N01GV::readSpare(uint32_t pageAddr, uint8_t *data, uint16_t len)
+{
+  if (pageAddr >= W25N01GV_TOTAL_PAGES) return false;
+  if (len == 0 || len > W25N01GV_SPARE_SIZE) return false;
+  if (!waitReady(100)) return false;
+
+  // 1. page data read (0x13): flash page -> internal cache
+  {
+    uint8_t buf[4] = {
+      W25N_CMD_PAGE_DATA_READ,
+      0x00,
+      (uint8_t)((pageAddr >> 8) & 0xFF),
+      (uint8_t)(pageAddr & 0xFF)
+    };
+    noInterrupts();
+    select();
+    _bus.transfer(buf, sizeof(buf));
+    deselect();
+    interrupts();
+  }
+  if (!waitReady(100)) return false;
+
+  // 2. read from cache at column 2048 (spare area)
+  {
+    uint8_t cmdbuf[4] = {
+      W25N_CMD_READ,
+      (uint8_t)((W25N01GV_PAGE_SIZE >> 8) & 0xFF),   // 0x08
+      (uint8_t)(W25N01GV_PAGE_SIZE & 0xFF),          // 0x00
+      0x00   // dummy
+    };
+    noInterrupts();
+    select();
+    _bus.transfer(cmdbuf, sizeof(cmdbuf));
+    _bus.transfer(nullptr, data, len);
+    deselect();
+    interrupts();
+  }
+  return true;
 }
 
 bool W25N01GV::pageRead(uint32_t pageAddr, uint8_t *data, uint16_t len)
