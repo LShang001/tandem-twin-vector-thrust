@@ -182,3 +182,33 @@ def test_vars_list_and_value_frames():
     fr = anocom.extract_frames(f)[0][0]
     assert fr.func == 0xF2 and fr.valid and len(fr.payload) == 6
     assert struct.unpack('<Hf', fr.payload) == (5, 184.5)
+
+
+def test_mavlink_param_shortname_uniqueness():
+    """MAVLink param_id 短名算法（与固件 mavlink_bridge.cpp 一致）：121 参数 ≤15B 全唯一
+    ——直接截断有冲突（att_pitch.out_min/out_max 都变 out_m），靠 field 缩写消除"""
+    import params as pm
+    FIELD_SHORT = {'out_min': 'omin', 'out_max': 'omax', 'int_limit': 'ilim',
+                   'threshold': 'thr', 'enabled': 'en'}
+    SPECIAL = {'inertia_comp_mask': 'inertia_mask'}
+
+    def mav_name(name, limit=15):
+        if name in SPECIAL:
+            return SPECIAL[name]
+        if '.' in name:
+            loop, field = name.split('.', 1)
+            field = FIELD_SHORT.get(field, field)
+            cand = f'{loop}.{field}'
+        else:
+            cand = name
+        return cand[:limit] if len(cand) > limit else cand
+
+    names = list(pm.expected_names())
+    assert len(names) == 121
+    shorts = [mav_name(n) for n in names]
+    assert len(shorts) == len(set(shorts)), '短名重复'
+    assert all(len(s) <= 15 for s in shorts), '超 15B'
+    # 抽查缩写生效
+    assert mav_name('att_pitch.out_min') == 'att_pitch.omin'
+    assert mav_name('inertia_comp_mask') == 'inertia_mask'
+    assert mav_name('att_roll.kp') == 'att_roll.kp'

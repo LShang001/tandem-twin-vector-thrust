@@ -151,6 +151,66 @@ static bool anoParamDeserialize(uint16_t id, const uint8_t *val, uint16_t len)
     return true;
 }
 
+// ==================================================================
+//  MAVLink 参数桥统一 float 接口（2026-08-10，mavlink_bridge.cpp 复用）
+// ==================================================================
+uint16_t anoParamCount()
+{
+    return ANO_PARAMS_COUNT;
+}
+
+const char *anoParamNameAt(uint16_t id)
+{
+    const AnoParamEntry *e = anoParamAt(id);
+    return e ? e->name : nullptr;
+}
+
+int16_t anoParamIdByName(const char *name)
+{
+    if (!name)
+        return -1;
+    for (uint16_t i = 0; i < ANO_PARAMS_COUNT; i++)
+    {
+        // ★ MAVLink param_id 是截断 15B 的名称——按前缀匹配即可
+        // （截断唯一性已核实：int_lim vs thresho 第 2 字符即不同）
+        if (strncmp(kAnoParams[i].name, name, 16) == 0)
+            return (int16_t)i;
+    }
+    return -1;
+}
+
+bool anoParamReadFloat(uint16_t id, float *out)
+{
+    const AnoParamEntry *e = anoParamAt(id);
+    if (!e || !out)
+        return false;
+    if (e->type == ANO_FLOAT)
+    {
+        *out = *e->fptr;
+        return true;
+    }
+    *out = (*e->bptr) ? 1.0f : 0.0f;  // ANO_UINT8 → float
+    return true;
+}
+
+bool anoParamWriteFloat(uint16_t id, float value)
+{
+    const AnoParamEntry *e = anoParamAt(id);
+    if (!e)
+        return false;
+    if (e->type == ANO_FLOAT)
+    {
+        *e->fptr = value;
+    }
+    else
+    {
+        // ANO_UINT8：0.0→false，其余→true（钳制语义，MAV_PARAM_TYPE_REAL32 来源）
+        *e->bptr = (value != 0.0f);
+    }
+    applyFlightCtrlParams();  // 无扰同步到全部 PID/滤波器实例
+    return true;
+}
+
 bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
                        const uint8_t *data, uint16_t len)
 {

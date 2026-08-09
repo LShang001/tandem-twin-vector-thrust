@@ -28,6 +28,7 @@
 #include "ubx_config.h"        // UBX 接收机自动配置（2026-08-09）
 #include "flight_control.h"    // 飞行控制
 #include "communication.h"     // 通信与遥测
+#include "mavlink_bridge.h"    // MAVLink 双向（STATUSTEXT 事件桥接，2026-08-10）
 #include "can_bus.h"           // CAN 总线通信
 
 // ===== 仅 main.cpp 使用的实现型头文件 =====
@@ -55,10 +56,12 @@ static void initIwdg(void)
   if (HAL_IWDG_Init(&s_hiwdg) != HAL_OK)
   {
     Serial8.println("[IWDG] 初始化失败（无看门狗保护运行）");
+    mavlinkSendStatustext(MAV_SEVERITY_CRITICAL, "IWDG init failed (no watchdog!)");
   }
   else
   {
     Serial8.println("[IWDG] 硬件看门狗已启用 (3.0s)");
+    mavlinkSendStatustext(MAV_SEVERITY_INFO, "IWDG watchdog enabled (3.0s)");
   }
 }
 // 喂狗需暴露给通信模块：flash export 大页数导出会阻塞任务 >3s，
@@ -121,6 +124,7 @@ void handleDeta100()
   {
     deta100_online = false;
     Serial8.println("[DETA100] Offline! Timeout detected.");
+    mavlinkSendStatustext(MAV_SEVERITY_WARNING, "DETA100 offline (timeout)");
   }
 }
 

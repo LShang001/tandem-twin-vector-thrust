@@ -5,6 +5,7 @@
 #include "MAVLink.h"
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
 #include "ano_vars.h"     // 通用变量上报（0xF2 值帧 / 0xF3 清单 / DBG vars）
+#include "mavlink_bridge.h" // MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）
 #include "task_scheduler.h" // 调度统计 DBG `tasks` 命令
 #include "ubx_config.h"      // UBX 接收机自动配置（DBG `ubxcfg`）
 
@@ -499,7 +500,11 @@ void handleAnoCom()
   //   留给下方 receiveData 解析。
   static char dbg_line[64];
   static uint8_t dbg_line_len = 0;
-  if (!s_dbg_mode) {
+  // ★ 2026-08-10 MAVLink 双向扩展：mavlink 模式下跳过 DBG 扫描——
+  //   QGC 上行帧（0xFD 开头）会被扫描器当 DBG 行逐字节吃掉（静默丢弃全部
+  //   PARAM_REQUEST/COMMAND）。proto 切换本身在 DBG 模式完成，mavlink 模式
+  //   不需要再进 DBG（重启回 anocom）。
+  if (!s_dbg_mode && !s_mav_active) {
     while (Serial6.available()) {
       int c = Serial6.peek();
       if (c == ANO_FRAME_HEAD) {
@@ -528,9 +533,20 @@ void handleAnoCom()
   }
 
   // ---- 遥测协议切换（DBG `proto` 命令）----
-  // MAVLink v2 模式：纯遥测下行（QGC/MP 可连），AnoCom 上行帧解析/参数链路
-  // 随之停用（MAVLink 帧会被 AnoCom 解析器当噪声丢弃，无害）。切换不重烧。
+  // MAVLink v2 模式：遥测下行 + 上行命令（QGC/MP 可连，参数读写/命令/STATUSTEXT
+  // 双向——2026-08-10 双向扩展）。AnoCom 上行帧解析/参数链路随之停用。
+  // 切换不重烧。
   if (s_mav_active) {
+    // 上行：逐字节喂 mavlink_parse_char（MAVLINK_COMM_0 静态零初始化即用）
+    while (Serial6.available()) {
+      uint8_t c = (uint8_t)Serial6.read();
+      mavlink_message_t msg;
+      mavlink_status_t status;
+      if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status) == MAVLINK_FRAMING_OK)
+      {
+        mavlinkHandleRx(msg);
+      }
+    }
     mavlinkSendTelemetry();
     return;
   }
@@ -1848,6 +1864,12 @@ static void mavlinkSendTelemetry()
       vec_idx++;
     }
   }
+
+  // ====================================================================
+  // MAVLink 双向桥（2026-08-10）：PARAM_VALUE 广播（每拍 1 条）、
+  // STATUSTEXT 队列（内部 1Hz 节流）、重启挂起执行
+  // ====================================================================
+  mavlinkBridgeTick();
 }
 
 /**

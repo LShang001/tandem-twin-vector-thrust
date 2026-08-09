@@ -37,3 +37,24 @@
  */
 bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
                        const uint8_t *data, uint16_t len);
+
+// ---- MAVLink 参数桥统一 float 接口（2026-08-10，供 mavlink_bridge.cpp 复用）----
+// 参数表 = 同一 kAnoParams 注册表（121 项，顺序即 ID 0..120）。
+// u8（enabled/inertia_comp_mask）统一转 float 0.0/1.0 上报；写后调
+// applyFlightCtrlParams() 无扰同步。★ MAVLink param_id char[16] 限制：
+// 线上名 >16B 时按截断 15B 匹配（唯一性已核实，见 docs/mavlink-ref/参数服务）。
+
+// 参数总数（= ANO_PARAMS_COUNT）
+uint16_t anoParamCount();
+
+// 参数线上名（≤20B，MAVLink 侧截断 15B 使用）
+const char *anoParamNameAt(uint16_t id);
+
+// 按线上名查 ID（返回 -1 未找到；MAVLink 用截断名匹配）
+int16_t anoParamIdByName(const char *name);
+
+// 读参数值（统一 float；无效 ID 返回 0 且 ok=false）
+bool anoParamReadFloat(uint16_t id, float *out);
+
+// 写参数值（统一 float；写后 applyFlightCtrlParams；无效 ID/类型不匹配返回 false）
+bool anoParamWriteFloat(uint16_t id, float value);

@@ -12,6 +12,7 @@
 #include "TandemVec_OnlineID.h"
 // 惯量逆解交叉耦合前馈（★2026-08-10 通用层：ω×(I·ω) + ω×h，仿真同构）
 #include "InertiaDecoupling.h"
+#include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
 
@@ -162,6 +163,7 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
                                     Geodetic_Pos_Packet.height);
       is_origin_lla_set = true;
       Serial8.println("[Arm] Home Point set from DETA100.");
+      mavlinkSendStatustext(MAV_SEVERITY_INFO, "Armed - Home Point set");
     }
     else if (nav_system_initialized)
     {
@@ -174,6 +176,7 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
     else
     {
       Serial8.println("[Arm] EKF not initialized, defer Home Point to EKF init.");
+      mavlinkSendStatustext(MAV_SEVERITY_WARNING, "Armed - EKF not ready, HP deferred");
     }
     // 气压计只保留起飞点相对高度语义，不再混入激光测距离地高度。
     if (resetBaroAltitudeReference())
