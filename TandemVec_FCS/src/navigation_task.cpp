@@ -729,6 +729,8 @@ void handleNavigationSystem()
 
   bfs::UbxEpoch gnss_epoch;
   const bool has_gnss_epoch = ubx.PopEpoch(&gnss_epoch);
+  // 注：NMEA 兜底已内聚进库（2026-08-09）——kAuto 模式下 UBX 失效时库内自动
+  // 合成 NMEA epoch 入同一队列，导航层无感（见 lib/ublox-main Ubx::TryPushNmeaEpoch）。
   const bool perform_measurement_update =
       InsGnssShouldConsumeEpoch(has_gnss_epoch, false);
   float gnss_measurement_age_s = BFS_NAVIGATION_GNSS_DELAY_S;

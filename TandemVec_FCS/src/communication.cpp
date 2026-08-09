@@ -5,6 +5,7 @@
 #include "MAVLink.h"
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
 #include "task_scheduler.h" // 调度统计 DBG `tasks` 命令
+#include "ubx_config.h"      // UBX 接收机自动配置（DBG `ubxcfg`）
 
 // IWDG 喂狗（main.cpp 暴露）：flash export 大页数导出阻塞任务 >3s 时
 // 循环内喂狗，防看门狗复位打断导出（2026-08-08）
@@ -1783,9 +1784,29 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   wsseq [ms]        - auto test sequence (default 500)"));
         serial.println(F("[DBG]   wsstat            - show WS2812 status"));
         serial.println(F("[DBG]   wsmode <0|1>      - switch driver (0=bitbang 1=tim4_dma)"));
+        serial.println(F("[DBG]   wsfault <0|1>     - fault LED mode (red blink)"));
+        serial.println(F("[DBG]   gpio              - dump GPIO registers"));
+        serial.println(F("[DBG]   tim4              - dump TIM4 DMA status"));
         serial.println(F("[DBG]   tasks             - task schedule stats (Hz/抖动/迟到/负荷, 打印后清零)"));
         serial.println(F("[DBG]   id                - online ID: b=I名义/I实际, 激励, 建议Kp (飞完标定动作后读)"));
         serial.println(F("[DBG]   ver               - version info"));
+        serial.println(F("[DBG]   gpsproto [ubx|nmea|auto] [baud] - GNSS 解析协议查看/切换"));
+        serial.println(F("[DBG]   nmea              - NMEA 备用链路状态（fix/sv/pdop/句统计）"));
+        serial.println(F("[DBG]   ubxcfg            - UBX 接收机自动配置（重跑）"));
+        serial.println(F("[DBG]   ubxcfg status     - 上次配置结果"));
+        serial.println(F("[DBG]   ubxcfg rst        - GNSS 软复位"));
+        serial.println(F("[DBG]   ubxcfg nmea       - 重跑（输出 UBX+NMEA 混合）"));
+        serial.println(F("[DBG]   ubxcfg msg <句> <rate|off> - 消息速率（NMEA 句/UBX 诊断消息）"));
+        serial.println(F("[DBG]   ubxcfg core <on|off> - GGA+RMC+GSA 一键开关"));
+        serial.println(F("[DBG]   ubxcfg nav5 <dyn 2|4|fix 0|1|2|elev 0-90|pdop 0-100> - 导航引擎"));
+        serial.println(F("[DBG]   ubxcfg itfm <on|off> - CW 干扰检测"));
+        serial.println(F("[DBG]   ubxcfg ant         - 天线状态查询（短路/开路）"));
+        serial.println(F("[DBG]   ubxcfg nmver <23|40|41|410|411> - NMEA 版本"));
+        serial.println(F("[DBG]   ubxcfg nmtalker <gp|gl|gn|ga|gb|none> - 主 talker"));
+        serial.println(F("[DBG]   ubxcfg nmfilter <on|off> - NMEA 输出滤波"));
+        serial.println(F("[DBG]   ubxcfg proto <ubx|nmea|both> - 串口输出协议掩码"));
+        serial.println(F("[DBG]   datalog <secs>    - force blackbox logging N seconds"));
+        serial.println(F("[DBG]   flash <export|...> - blackbox flash ops"));
         serial.println(F("[DBG]   exit              - back to normal telemetry"));
       }
       else if (strncmp(line, "ws ", 3) == 0) {
@@ -1895,6 +1916,422 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       else if (strncmp(line, "tasks", 5) == 0) {
         // 任务调度统计：实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷（打印后清零）
         schedulerStatsPrint(serial);
+      }
+      else if (strncmp(line, "ubxcfg", 6) == 0) {
+        // UBX 接收机自动配置（重跑 / 状态查询 / 固化）
+        //   ubxcfg          — 重跑配置（921600, 10Hz, 不固化）
+        //   ubxcfg save     — 重跑并固化到接收机闪存
+        //   ubxcfg status   — 打印上次配置结果
+        if (strcmp(line, "ubxcfg status") == 0)
+        {
+          const UbxCfgResult &r = ubxLastCfgResult();
+          serial.println(F("[DBG] == UBX 配置结果 =="));
+          serial.print(F("[DBG] detect="));
+          serial.print(r.detected ? F("YES") : F("NO"));
+          serial.print(F(" baud="));
+          serial.println(r.detected ? r.found_baud : 0);
+          serial.print(F("[DBG] prt="));
+          serial.print(r.prt_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" rate="));
+          serial.print(r.rate_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" msg="));
+          serial.print(r.msg_pvt_ok ? F("OK") : F("FAIL"));
+          serial.print(F("/"));
+          serial.print(r.msg_eoe_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" nav5="));
+          serial.print(r.nav5_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" gnss="));
+          serial.print(r.gnss_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" sbas="));
+          serial.print(r.sbas_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" save="));
+          serial.print(r.save_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" verify="));
+          serial.print(r.verify_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" 帧="));
+          serial.print(r.cfg_frames_sent);
+          serial.print(F(" ack="));
+          serial.println(r.cfg_acks_received);
+        }
+        else if (strcmp(line, "ubxcfg rst") == 0)
+        {
+          serial.println(F("[DBG] UBX GNSS 软复位..."));
+          ubxResetReceiver(Serial6);
+        }
+        else if (strncmp(line, "ubxcfg msg ", 11) == 0) {
+          // 消息输出速率（CFG-MSG）：NMEA 句（class 0xF0）或 UBX 诊断消息（class 0x01）
+          //   ubxcfg msg <gga|rmc|gsa|gsv|vtg|gll|zda|gns|gst|grs|gbs|dtm|txt|vlw|pvt|eoe|dop|sat|status|svin|timegps> <rate|off>
+          char name[8] = {0};
+          int rate = 0;
+          const int n = sscanf(line + 11, "%7s %d", name, &rate);
+          uint8_t final_rate = 0;
+          bool rate_ok = true;
+          if (n == 1 && strcmp(name, "off") == 0)
+          {
+            final_rate = 0;  // off = rate 0
+          }
+          else if (n == 2 && rate >= 0 && rate <= 127)
+          {
+            final_rate = (uint8_t)rate;
+          }
+          else
+          {
+            rate_ok = false;
+          }
+          if (rate_ok)
+          {
+            static const struct { const char *n; uint8_t cls; uint8_t id; } kMsgs[] = {
+              // NMEA 句（class 0xF0）
+              {"gga", 0xF0, UBX_NMEA_GGA}, {"gll", 0xF0, UBX_NMEA_GLL},
+              {"gsa", 0xF0, UBX_NMEA_GSA}, {"gsv", 0xF0, UBX_NMEA_GSV},
+              {"rmc", 0xF0, UBX_NMEA_RMC}, {"vtg", 0xF0, UBX_NMEA_VTG},
+              {"grs", 0xF0, UBX_NMEA_GRS}, {"gst", 0xF0, UBX_NMEA_GST},
+              {"zda", 0xF0, UBX_NMEA_ZDA}, {"gbs", 0xF0, UBX_NMEA_GBS},
+              {"dtm", 0xF0, UBX_NMEA_DTM}, {"gns", 0xF0, UBX_NMEA_GNS},
+              {"vlw", 0xF0, UBX_NMEA_VLW}, {"txt", 0xF0, UBX_NMEA_TXT},
+              // UBX 诊断消息（class 0x01；诊断定位质量用）
+              {"pvt", 0x01, 0x07}, {"eoe", 0x01, 0x61}, {"dop", 0x01, 0x04},
+              {"sat", 0x01, 0x35}, {"status", 0x01, 0x03}, {"svin", 0x01, 0x3B},
+              {"timegps", 0x01, 0x20},
+            };
+            int cls = -1, id = -1;
+            for (const auto &m : kMsgs)
+            {
+              if (strcmp(m.n, name) == 0) { cls = m.cls; id = m.id; break; }
+            }
+            if (cls < 0)
+            {
+              serial.println(F("[DBG] usage: ubxcfg msg <gga|rmc|gsa|gsv|vtg|gll|zda|gns|gst|grs|gbs|dtm|txt|vlw|pvt|eoe|dop|sat|status|svin|timegps> <rate|off>"));
+            }
+            else
+            {
+              serial.print(F("[DBG] msg "));
+              serial.print(name);
+              serial.print(F(" rate="));
+              serial.println(final_rate);
+              ubxMsgRateConfig(Serial6, (uint8_t)cls, (uint8_t)id, final_rate);
+            }
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg msg <gga|rmc|gsa|gsv|vtg|gll|zda|gns|gst|grs|gbs|dtm|txt|vlw|pvt|eoe|dop|sat|status|svin|timegps> <rate|off>"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg core", 11) == 0) {
+          // 一键最小 NMEA 集：GGA+RMC+GSA 开/关（1Hz）
+          if (strcmp(line, "ubxcfg core on") == 0)
+          {
+            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GGA, 1);
+            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_RMC, 1);
+            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GSA, 1);
+            serial.println(F("[DBG] NMEA core (GGA/RMC/GSA) @1Hz ON"));
+          }
+          else if (strcmp(line, "ubxcfg core off") == 0)
+          {
+            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GGA, 0);
+            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_RMC, 0);
+            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GSA, 0);
+            serial.println(F("[DBG] NMEA core (GGA/RMC/GSA) OFF"));
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg core <on|off>"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg nmver ", 13) == 0) {
+          // NMEA 版本（CFG-NMEA）：23=2.3 / 40=4.0 / 41=4.1 / 410=4.10 / 411=4.11
+          int v = 0;
+          if (sscanf(line + 13, "%d", &v) == 1)
+          {
+            uint8_t enc = 0;
+            if (v == 23) enc = 0x23;
+            else if (v == 40) enc = 0x40;
+            else if (v == 41) enc = 0x41;
+            else if (v == 410) enc = 0x4A;
+            else if (v == 411) enc = 0x4B;
+            if (enc == 0)
+            {
+              serial.println(F("[DBG] usage: ubxcfg nmver <23|40|41|410|411>"));
+            }
+            else
+            {
+              serial.print(F("[DBG] NMEA version="));
+              serial.println(v);
+              ubxNmeaVersionConfig(Serial6, enc);
+            }
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg nmver <23|40|41|410|411>"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg nmtalker ", 16) == 0) {
+          // 主 talker ID（CFG-NMEA）：none=不覆盖默认
+          const char *t = line + 16;
+          uint8_t tid = 0;
+          if (strcmp(t, "gp") == 0) tid = NMEA_TALKER_GP;
+          else if (strcmp(t, "gl") == 0) tid = NMEA_TALKER_GL;
+          else if (strcmp(t, "gn") == 0) tid = NMEA_TALKER_GN;
+          else if (strcmp(t, "ga") == 0) tid = NMEA_TALKER_GA;
+          else if (strcmp(t, "gb") == 0) tid = NMEA_TALKER_GB;
+          else if (strcmp(t, "none") == 0) tid = NMEA_TALKER_DEFAULT;
+          if (tid == NMEA_TALKER_DEFAULT && strcmp(t, "none") != 0)
+          {
+            serial.println(F("[DBG] usage: ubxcfg nmtalker <gp|gl|gn|ga|gb|none>"));
+          }
+          else
+          {
+            serial.print(F("[DBG] NMEA main talker="));
+            serial.println(t);
+            ubxNmeaTalkerConfig(Serial6, tid);
+          }
+        }
+        else if (strncmp(line, "ubxcfg nmfilter ", 16) == 0) {
+          // NMEA 输出滤波（CFG-NMEA）：off=全量输出，on=位置/时间/日期变化才输出
+          const char *f = line + 16;
+          if (strcmp(f, "on") == 0)
+          {
+            ubxNmeaFilterConfig(Serial6, NMEA_FILTER_POS | NMEA_FILTER_MSK |
+                                           NMEA_FILTER_TIME | NMEA_FILTER_DATE);
+            serial.println(F("[DBG] NMEA filter ON (pos/msk/time/date)"));
+          }
+          else if (strcmp(f, "off") == 0)
+          {
+            ubxNmeaFilterConfig(Serial6, 0);
+            serial.println(F("[DBG] NMEA filter OFF (full output)"));
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg nmfilter <on|off>"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg nav5", 11) == 0) {
+          // 导航引擎参数（CFG-NAV5 读改写，mask 按需置位；2026-08-09 修复原 mask 错位）
+          //   ubxcfg nav5 dyn <2|4>     — 动态模型（2=Airborne<2g, 4=Airborne<4g）
+          //   ubxcfg nav5 fix <0|1|2>   — 定位模式（0=2D, 1=3D, 2=auto）
+          //   ubxcfg nav5 elev <0-90>   — 最低仰角（城市峡谷抬高滤多径）
+          //   ubxcfg nav5 pdop <0-100>  — pDOP 定位门限（单位 0.1，如 50=5.0）
+          int v = -1;
+          int arg = -1;
+          if (sscanf(line + 11, "dyn %d", &v) == 1 && (v == 2 || v == 4))
+          {
+            serial.print(F("[DBG] NAV5 dynModel=Airborne<"));
+            serial.print(v);
+            serial.println(F("g"));
+            ubxNav5Config(Serial6, v, -1, -1, -1);
+          }
+          else if (sscanf(line + 11, "fix %d", &v) == 1 && v >= 0 && v <= 2)
+          {
+            serial.print(F("[DBG] NAV5 fixMode="));
+            serial.println(v);
+            ubxNav5Config(Serial6, 0, v, -1, -1);
+          }
+          else if (sscanf(line + 11, "elev %d", &v) == 1 && v >= 0 && v <= 90)
+          {
+            serial.print(F("[DBG] NAV5 minElev="));
+            serial.println(v);
+            ubxNav5Config(Serial6, 0, -1, v, -1);
+          }
+          else if (sscanf(line + 11, "pdop %d", &arg) == 1 && arg >= 0 && arg <= 100)
+          {
+            serial.print(F("[DBG] NAV5 pDOP thresh="));
+            serial.print(arg);
+            serial.println(F(" (x0.1)"));
+            ubxNav5Config(Serial6, 0, -1, -1, arg);
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg nav5 <dyn 2|4|fix 0|1|2|elev 0-90|pdop 0-100>"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg itfm", 11) == 0) {
+          // CW 干扰检测（CFG-ITFM）：城市/图传频段干扰导致定位漂移时诊断用
+          if (strcmp(line, "ubxcfg itfm on") == 0)
+          {
+            ubxItfmConfig(Serial6, true);
+            serial.println(F("[DBG] ITFM interference detection ON"));
+          }
+          else if (strcmp(line, "ubxcfg itfm off") == 0)
+          {
+            ubxItfmConfig(Serial6, false);
+            serial.println(F("[DBG] ITFM interference detection OFF"));
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg itfm <on|off>"));
+          }
+        }
+        else if (strcmp(line, "ubxcfg ant") == 0) {
+          // 天线状态查询（CFG-ANT 纯读）：status 低2位 0=INIT 1=UNKNOWN 2=OK 3=SHORT/OPEN
+          uint8_t ant[4];
+          if (ubxAntStatusQuery(Serial6, ant))
+          {
+            const uint8_t st = ant[2] & 0x03;
+            serial.print(F("[DBG] antenna: "));
+            serial.println(st == 0 ? F("INIT") : st == 1 ? F("UNKNOWN")
+                            : st == 2 ? F("OK") : F("SHORT/OPEN"));
+            serial.print(F("[DBG]   config=0x"));
+            serial.print(ant[0], HEX);
+            serial.print(ant[1], HEX);
+            serial.print(F(" status=0x"));
+            serial.print(ant[2], HEX);
+            serial.println(ant[3], HEX);
+          }
+          else
+          {
+            serial.println(F("[DBG] antenna: no CFG-ANT response (unsupported?)"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg proto ", 13) == 0) {
+          // 串口输出协议掩码（CFG-PRT）：ubx=UBX-only, nmea=NMEA-only, both=UBX+NMEA
+          const char *p = line + 13;
+          uint8_t mask = 0;
+          if (strcmp(p, "ubx") == 0) mask = 1;
+          else if (strcmp(p, "nmea") == 0) mask = 2;
+          else if (strcmp(p, "both") == 0) mask = 3;
+          if (mask == 0)
+          {
+            serial.println(F("[DBG] usage: ubxcfg proto <ubx|nmea|both>"));
+          }
+          else
+          {
+            serial.print(F("[DBG] outProtoMask="));
+            serial.println(mask);
+            ubxProtoOutputConfig(Serial6, mask);
+          }
+        }
+        else
+        {
+          // ubxcfg         — 默认配置重跑（UBX-only, 921600, 10Hz, 不固化）
+          // ubxcfg save    — 重跑并固化到接收机闪存
+          // ubxcfg nmea    — 重跑（输出 UBX+NMEA 混合，调试观测用）
+          const bool persist = (strcmp(line, "ubxcfg save") == 0);
+          const bool nmea = (strcmp(line, "ubxcfg nmea") == 0);
+          serial.println(F("[DBG] UBX 自动配置运行中..."));
+          UbxConfigOptions o = kUbxDefaultCfg;
+          o.persist = persist;
+          o.nmea_out = nmea;
+          ubxAutoConfig(Serial6, &o);
+          serial.println(F("[DBG] 配置完成，用 'ubxcfg status' 查看"));
+        }
+      }
+      else if (strcmp(line, "gpsproto") == 0 || strncmp(line, "gpsproto ", 9) == 0) {
+        // GNSS 协议模式查看/切换（库内双协议，2026-08-09）
+        //   gpsproto                    — 查看当前协议 + NMEA 备用链路状态
+        //   gpsproto <ubx|nmea|auto>    — 切换解析协议（不碰串口波特率）
+        //   gpsproto <ubx|nmea|auto> <baud> — 切换并同步重设串口波特率
+        char proto[8] = {0};
+        int32_t baud = 0;
+        const int n = sscanf(line, "gpsproto %7s %ld", proto, &baud);
+        if (n == 1 || n == 2)
+        {
+          bfs::Ubx::GpsProtocol p = bfs::Ubx::GpsProtocol::kAuto;
+          bool valid_proto = true;
+          if (strcmp(proto, "ubx") == 0)
+            p = bfs::Ubx::GpsProtocol::kUbx;
+          else if (strcmp(proto, "nmea") == 0)
+            p = bfs::Ubx::GpsProtocol::kNmea;
+          else if (strcmp(proto, "auto") == 0)
+            p = bfs::Ubx::GpsProtocol::kAuto;
+          else
+            valid_proto = false;
+          if (!valid_proto)
+          {
+            serial.println(F("[DBG] usage: gpsproto <ubx|nmea|auto> [baud]"));
+          }
+          else if (n == 2 && baud > 0)
+          {
+            ubx.SwitchProtocol(p, baud);
+            serial.print(F("[DBG] protocol="));
+            serial.print(proto);
+            serial.print(F(" baud="));
+            serial.println(baud);
+          }
+          else
+          {
+            ubx.SetProtocol(p);
+            serial.print(F("[DBG] protocol="));
+            serial.println(proto);
+          }
+        }
+        else
+        {
+          // n==0：无参数，显示当前协议与 NMEA 状态
+          const char *pname =
+              (ubx.protocol() == bfs::Ubx::GpsProtocol::kUbx)   ? "UBX"
+              : (ubx.protocol() == bfs::Ubx::GpsProtocol::kNmea) ? "NMEA"
+                                                                 : "AUTO";
+          const uint32_t age_ms = (ubx.nmea_last_fix_ms() != 0)
+                                      ? (millis() - ubx.nmea_last_fix_ms())
+                                      : 0;
+          serial.print(F("[DBG] protocol="));
+          serial.println(pname);
+          serial.print(F("[DBG] nmea_valid="));
+          serial.print(ubx.nmea_valid() ? F("YES") : F("NO"));
+          serial.print(F(" fix="));
+          serial.print(ubx.nmea_fix());
+          serial.print(F(" sv="));
+          serial.print(ubx.nmea_num_sv());
+          serial.print(F(" hdop="));
+          serial.print(ubx.nmea_hdop());
+          serial.print(F(" pdop="));
+          serial.print(ubx.nmea_pdop());
+          serial.print(F(" vdop="));
+          serial.print(ubx.nmea_vdop());
+          serial.print(F(" age_ms="));
+          serial.print(age_ms);
+          serial.print(F(" sent="));
+          serial.print(ubx.nmea_sentence_count());
+          serial.print(F(" (gga="));
+          serial.print(ubx.nmea_gga_count());
+          serial.print(F(" rmc="));
+          serial.print(ubx.nmea_rmc_count());
+          serial.print(F(" gsa="));
+          serial.print(ubx.nmea_gsa_count());
+          serial.print(F(" unk="));
+          serial.print(ubx.nmea_unknown_count());
+          serial.print(F(") bad_ck="));
+          serial.print(ubx.nmea_bad_checksum_count());
+          serial.print(F(" ovf="));
+          serial.print(ubx.nmea_overflow_count());
+          serial.print(F(" fused="));
+          serial.print(ubx.nmea_epoch_count());
+          serial.print(F(" backoff_ms="));
+          serial.print(ubx.nmea_ubx_backoff_ms());
+          serial.print(F(" fix_to="));
+          serial.println(ubx.nmea_fix_timeout_ms());
+        }
+      }
+      else if (strcmp(line, "nmea") == 0) {
+        // NMEA 备用链路状态快捷查看（同 gpsproto 无参的 NMEA 部分）
+        const uint32_t age_ms =
+            (ubx.nmea_last_fix_ms() != 0) ? (millis() - ubx.nmea_last_fix_ms()) : 0;
+        serial.print(F("[DBG] == NMEA 备用 GNSS =="));
+        serial.println(ubx.nmea_valid() ? F(" (valid)") : F(" (no fix)"));
+        serial.print(F("[DBG] fix="));
+        serial.print(ubx.nmea_fix());
+        serial.print(F(" sv="));
+        serial.print(ubx.nmea_num_sv());
+        serial.print(F(" hdop="));
+        serial.print(ubx.nmea_hdop());
+        serial.print(F(" age_ms="));
+        serial.print(age_ms);
+        serial.print(F(" sentences="));
+        serial.print(ubx.nmea_sentence_count());
+        serial.print(F(" bad_ck="));
+        serial.print(ubx.nmea_bad_checksum_count());
+        serial.print(F(" fused="));
+        serial.println(ubx.nmea_epoch_count());
+        serial.print(F("[DBG] lat="));
+        serial.print(ubx.nmea_lat_rad() * RAD_TO_DEG, 7);
+        serial.print(F(" lon="));
+        serial.print(ubx.nmea_lon_rad() * RAD_TO_DEG, 7);
+        serial.print(F(" alt="));
+        serial.print(ubx.nmea_alt_wgs84_m());
+        serial.print(F(" vn="));
+        serial.print(ubx.nmea_vel_n_mps());
+        serial.print(F(" ve="));
+        serial.println(ubx.nmea_vel_e_mps());
       }
       else if (strcmp(line, "id") == 0) {
         // 在线辨识（纯观测）：b=I名义/I实际、扰动d、激励标志、建议Kp、CG偏移

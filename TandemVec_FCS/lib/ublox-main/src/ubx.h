@@ -8,7 +8,10 @@
  *   2. 新增 BeginConfigured()，只做通信探测、不重复调用 HardwareSerial::begin()，
  *      适配 ESP32-P4 等“引脚映射须由上层先指定”的平台；
  *   3. 新增大量链路健康统计计数器（校验失败/超长/EOE 缺 PVT/iTOW 不匹配/队列溢出等）；
- *   4. 新增 pvt_pdop()，仅凭 NAV-PVT 即可拿到 pDOP，无需额外开 NAV-DOP。
+ *   4. 新增 pvt_pdop()，仅凭 NAV-PVT 即可拿到 pDOP，无需额外开 NAV-DOP；
+ *   5. 新增 NMEA 双协议支持（2026-08-09）：GpsProtocol 枚举（kUbx/kNmea/kAuto）、
+ *      SetProtocol/SwitchProtocol 独立切换，内置 MicroNMEA 2.0.6（MIT）解析 GGA/RMC，
+ *      NMEA 快照合成 UbxEpoch 入同一队列，kAuto 下 UBX 优先、失效后自动兜底。
  * 保留以下原始 MIT 版权声明仅为遵守许可证要求。
  *
  * 原始版权声明（MIT License）：
@@ -41,6 +44,7 @@
 #endif
 #include "ubx_defs.h" // NOLINT  —— Class 常量与 U1/I2/X4 类型别名
 #include "ubx_nav.h"  // NOLINT  —— 各 UBX-NAV 消息结构体
+#include "minmea.h"   // NOLINT —— NMEA 备用解析（GGA/RMC），MIT 许可
 
 namespace bfs
 {
@@ -94,6 +98,21 @@ namespace bfs
       FIX_RTK_FLOAT = 5,  // 3D + RTK 浮点解（分米级）
       FIX_RTK_FIXED = 6   // 3D + RTK 固定解（厘米级）
     };
+    /*
+     * 协议模式（2026-08-09 双协议支持）：
+     *   kUbx  — 纯 UBX（默认，向后兼容）
+     *   kNmea — 纯 NMEA（接收机仅输出 NMEA 句，如 GGA/RMC）
+     *   kAuto — 双流解析：UBX 优先，UBX 失效（nmea_ubx_backoff 窗口内无 UBX
+     *            epoch）后自动用 NMEA 快照合成 epoch 兜底；两种源的 epoch
+     *            混在同一队列，上层 PopEpoch 无感。
+     * 切换解析模式不碰串口波特率；需要一并改波特率用 SwitchProtocol()。
+     */
+    enum class GpsProtocol : uint8_t
+    {
+      kUbx = 0,
+      kNmea = 1,
+      kAuto = 2
+    };
     // 默认构造：未绑定串口，使用前须先 Config(bus)。构造即 Reset 清零所有状态。
     Ubx() { Reset(); }
     // 带串口构造：直接绑定 HardwareSerial 总线指针。
@@ -134,6 +153,59 @@ namespace bfs
     bool Pump(size_t max_bytes, uint32_t receive_time_us);
     /* 从固定队列取出最早的一帧完整 epoch；队列空或入参为空时返回 false。 */
     bool PopEpoch(UbxEpoch *epoch);
+    /*
+     * 字节旁路回调：解析器从串口读入的每个字节都会镜像到该回调（若已注册）。
+     * 用途：与 NMEA 等非 UBX 协议共享同一根串口——UBX 泵按字节预算读空缓冲时，
+     * 把每个字节同步镜像给第二个解析器，避免两个解析器竞争读串口互相偷字节。
+     * 注意：DETA100 模式下 ubx.Pump 不运行，回调不会被触发，NMEA 也无需工作。
+     */
+    using UbxByteTapFn = void (*)(uint8_t byte, void *context);
+    void SetByteTap(UbxByteTapFn fn, void *context)
+    {
+      byte_tap_fn_ = fn;
+      byte_tap_ctx_ = context;
+    }
+
+    /* ======================= 协议模式与 NMEA 配置（2026-08-09） ======================= */
+    /* 切换解析协议（kUbx/kNmea/kAuto）。不改变串口波特率。 */
+    void SetProtocol(GpsProtocol protocol) { protocol_ = protocol; }
+    /*
+     * 切换协议并同步重设串口波特率（serial.begin）。
+     * 用于"独立切换"场景：NMEA 接收机常见 9600/38400/115200，与 UBX 的
+     * 921600 不同，切换时必须一并 begin。返回 false 表示未绑定串口。
+     */
+    bool SwitchProtocol(GpsProtocol protocol, int32_t baud);
+    inline GpsProtocol protocol() const { return protocol_; }
+    /* NMEA 快照新鲜度超时【ms】：超过视为链路失效（GGA/RMC 标称 1Hz，默认 3000）。 */
+    void SetNmeaFixTimeoutMs(uint32_t ms) { nmea_fix_timeout_ms_ = ms; }
+    inline uint32_t nmea_fix_timeout_ms() const { return nmea_fix_timeout_ms_; }
+    /* kAuto 下 UBX 失效判定窗口【ms】：该窗口内收过 UBX epoch 则跳过 NMEA 合成，
+     * 避免混合输出时同一接收机的位置被双通道重复融合（默认 300）。 */
+    void SetNmeaUbxBackoffMs(uint32_t ms) { nmea_ubx_backoff_ms_ = ms; }
+    inline uint32_t nmea_ubx_backoff_ms() const { return nmea_ubx_backoff_ms_; }
+
+    /* ---- NMEA 链路状态（诊断用；kNmea/kAuto 模式有效）---- */
+    inline bool nmea_valid() const { return nmea_snapshot_valid_; }          // 快照是否有效
+    inline int8_t nmea_fix() const { return nmea_snapshot_fix_; }            // 映射定位类型（Fix 枚举）
+    inline int8_t nmea_num_sv() const { return nmea_snapshot_sv_; }          // 参与解算卫星数
+    inline float nmea_hdop() const { return nmea_snapshot_hdop_; }           // 水平精度因子（GGA）
+    inline float nmea_pdop() const { return nmea_snapshot_pdop_; }           // 位置精度因子（GSA，0=未提供）
+    inline float nmea_vdop() const { return nmea_snapshot_vdop_; }           // 垂直精度因子（GSA，0=未提供）
+    inline uint32_t nmea_last_fix_ms() const { return nmea_last_fix_ms_; }   // 最近有效 fix 的 MCU 时间
+    inline uint32_t nmea_sentence_count() const { return nmea_sentence_count_; }      // 完整句子数
+    inline uint32_t nmea_bad_checksum_count() const { return nmea_bad_checksum_count_; }  // 校验失败数
+    inline uint32_t nmea_overflow_count() const { return nmea_overflow_count_; }  // 超长残句丢弃数
+    inline uint32_t nmea_gga_count() const { return nmea_gga_count_; }       // GGA 句数（校验通过）
+    inline uint32_t nmea_rmc_count() const { return nmea_rmc_count_; }       // RMC 句数
+    inline uint32_t nmea_gsa_count() const { return nmea_gsa_count_; }       // GSA 句数
+    inline uint32_t nmea_unknown_count() const { return nmea_unknown_count_; }  // 未处理句子数
+    inline uint32_t nmea_fix_count() const { return nmea_fix_count_; }       // 有效定位句次数
+    inline uint32_t nmea_epoch_count() const { return nmea_epoch_count_; }   // 合成并入队的 NMEA epoch 数
+    inline double nmea_lat_rad() const { return nmea_snapshot_lat_rad_; }    // 纬度【rad】
+    inline double nmea_lon_rad() const { return nmea_snapshot_lon_rad_; }    // 经度【rad】
+    inline float nmea_alt_wgs84_m() const { return nmea_snapshot_alt_wgs84_m_; }  // 椭球高【m】
+    inline float nmea_vel_n_mps() const { return nmea_snapshot_vel_n_mps_; } // 北向速度【m/s】
+    inline float nmea_vel_e_mps() const { return nmea_snapshot_vel_e_mps_; } // 东向速度【m/s】
 
     /* ======================= 数据输出（getter） ======================= */
     /* 以下 getter 返回“最近一次成功解析历元”的数据，已完成单位换算。 */
@@ -257,8 +329,9 @@ namespace bfs
     inline uint32_t svin_num_obs() const { return svin_num_obs_; }      // 使用的观测次数
 
   private:
-    /* 解析串口字节流，组完一帧通过校验的 UBX 报文返回 true。max_bytes=0 表示不限单次字节预算。 */
-    bool ParseMsg(size_t max_bytes = 0);
+    /* 阻塞式读字节直到组完一帧有效 UBX 报文（BeginConfigured/Read 路径用；
+     * 不带字节预算，读空串口返回 false）。Pump 路径走 ProcessUbxByte 逐字节分派。 */
+    bool ParseMsg();
     /* 处理一帧有效报文：分发到对应 NAV 缓存。queue_output 为 true 时，完整历元会被推入队列。 */
     bool HandleValidMessage(bool queue_output);
     /* 把各 NAV 缓存里的原始整数换算成物理量，填入下方各数据成员。 */
@@ -267,12 +340,75 @@ namespace bfs
     UbxEpoch MakeEpoch() const;
     /* 把一帧 epoch 压入环形队列；队列满时丢最旧帧并累加 queue_overflow_count_。 */
     void PushEpoch(const UbxEpoch &epoch);
+    /* 单字节推进 UBX 状态机；组完一帧且校验通过返回 true（由 Pump 调 HandleValidMessage）。 */
+    bool ProcessUbxByte(uint8_t c);
+    /* 单字节喂 NMEA 句子切分器；完整句子交给 nmeaParseSentence。 */
+    void nmeaProcessByte(uint8_t b);
+    /* 解析一帧完整 NMEA 句子（校验通过后按 GGA/RMC 分发刷新快照）。 */
+    void nmeaParseSentence(const char *sentence);
+    /* GGA 有效句：刷新位置/精度/高程快照。 */
+    void nmeaUpdateSnapshotFromGga(const struct minmea_sentence_gga &gga);
+    /* RMC 有效句：刷新速度/时间快照。 */
+    void nmeaUpdateSnapshotFromRmc(const struct minmea_sentence_rmc &rmc);
+    /* GSA 句：刷新 PDOP/VDOP 快照。is_combined=true 表示主 talker（GN=组合解）优先。 */
+    void nmeaUpdateSnapshotFromGsa(const struct minmea_sentence_gsa &gsa,
+                                   bool is_combined);
+    /* NMEA 快照 → UbxEpoch（换算逻辑经宿主机回归测试验证，tools/nmea-host-test）。 */
+    UbxEpoch MakeNmeaEpoch() const;
+    /* kAuto/kNmea 下的 NMEA 兜底合成：快照新鲜 + 伪 tow 去重 +（kAuto 还需 UBX 失效）→ 入队。 */
+    bool TryPushNmeaEpoch();
+    /* 清空 NMEA 解析状态与快照（Reset 调用；不改变协议模式与配置）。 */
+    void ResetNmea();
 
     /* ---- 通信 ---- */
     HardwareSerial *bus_ = nullptr;                      // GNSS 串口总线指针
+    UbxByteTapFn byte_tap_fn_ = nullptr;                 // 字节镜像回调（外部调试/分析用）
+    void *byte_tap_ctx_ = nullptr;                       // 回调上下文透传
     int16_t comm_timeout_count_ = 0;                     // Begin 探测时的轮询计数
     static const int16_t COMM_TIMEOUT_TRIES_ = 1000;     // 探测最大轮询次数
     static const int16_t COMM_TIMEOUT_DELAY_MS_ = 10;    // 每轮探测无数据时的等待【ms】
+
+    /* ---- 协议模式与 NMEA 解析（2026-08-09，minmea MIT）---- */
+    GpsProtocol protocol_ = GpsProtocol::kUbx;           // 当前协议模式（默认纯 UBX）
+    // minmea 解析完整句子（$..*CK），字节流由内部切分器组装。NMEA 最长句子约 82 字节。
+    static constexpr uint8_t kNmeaSentenceBufLen = 96;
+    char nmea_sentence_[kNmeaSentenceBufLen];            // 完整句子缓冲
+    uint8_t nmea_sentence_len_ = 0;                      // 缓冲内有效字节数
+    bool nmea_in_sentence_ = false;                      // 是否在句子收集状态
+    uint32_t nmea_fix_timeout_ms_ = 3000;                // NMEA 快照新鲜度超时
+    uint32_t nmea_ubx_backoff_ms_ = 300;                 // kAuto 下 UBX 失效判定窗口
+    // NMEA epoch 合成最小间隔（GGA/RMC 双句 1Hz 流 → 合成率 1Hz）
+    static constexpr uint32_t kNmeaEpochMinIntervalUs = 800000;
+    bool nmea_ubx_seen_ = false;                         // 是否收到过 UBX epoch（backoff 前提）
+    uint32_t last_ubx_epoch_us_ = 0;                     // 最近 UBX epoch 入队时刻【us】（kAuto 闸门）
+    bool nmea_epoch_seen_ = false;                       // 是否合成过 NMEA epoch（节流前提）
+    uint32_t nmea_last_epoch_us_ = 0;                    // 最近 NMEA epoch 合成时刻【us】（节流）
+    // NMEA 有效 fix 快照（只在有效句刷新；无效句保留上一快照）
+    bool nmea_snapshot_valid_ = false;
+    bool nmea_snapshot_alt_valid_ = false;
+    int8_t nmea_snapshot_fix_ = 0;                       // 映射定位类型（Fix 枚举，GGA quality 映射）
+    int8_t nmea_snapshot_sv_ = 0;
+    float nmea_snapshot_hdop_ = 0.0f;
+    float nmea_snapshot_pdop_ = 0.0f;                    // 位置精度因子（GSA；0=未提供→合成不缩放）
+    float nmea_snapshot_vdop_ = 0.0f;                    // 垂直精度因子（GSA）
+    double nmea_snapshot_lat_rad_ = 0.0;
+    double nmea_snapshot_lon_rad_ = 0.0;
+    float nmea_snapshot_alt_wgs84_m_ = 0.0f;
+    float nmea_snapshot_alt_msl_m_ = 0.0f;
+    float nmea_snapshot_vel_n_mps_ = 0.0f;
+    float nmea_snapshot_vel_e_mps_ = 0.0f;
+    uint32_t nmea_snapshot_tow_ms_ = 0;                  // UTC 时间-of-day 伪 tow（毫秒）
+    uint32_t nmea_last_fused_tow_ms_ = 0;                // 已合成消费的伪 tow（本地去重）
+    uint32_t nmea_last_fix_ms_ = 0;                      // 最近有效 fix 的 MCU 时间【ms】
+    uint32_t nmea_sentence_count_ = 0;                   // 完整句子数（含无效）
+    uint32_t nmea_bad_checksum_count_ = 0;               // 校验失败句子数
+    uint32_t nmea_overflow_count_ = 0;                   // 超长残句丢弃数
+    uint32_t nmea_gga_count_ = 0;                        // GGA 句数（校验通过）
+    uint32_t nmea_rmc_count_ = 0;                        // RMC 句数
+    uint32_t nmea_gsa_count_ = 0;                        // GSA 句数
+    uint32_t nmea_unknown_count_ = 0;                    // 未处理句子数
+    uint32_t nmea_fix_count_ = 0;                        // 有效定位句次数
+    uint32_t nmea_epoch_count_ = 0;                      // 合成并入队的 NMEA epoch 数
 
     /* ---- 解析参数与状态机 ---- */
     static constexpr size_t UBX_MAX_PAYLOAD_ = 1024;     // 支持的最大 payload 字节数（超过即判为异常丢弃）

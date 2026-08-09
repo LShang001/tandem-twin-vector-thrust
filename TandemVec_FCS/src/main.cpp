@@ -25,6 +25,7 @@
 #include "sensor_imu.h"        // IMU 传感器
 #include "sensor_peripheral.h" // 外设传感器
 #include "navigation_task.h"   // 导航与状态估计
+#include "ubx_config.h"        // UBX 接收机自动配置（2026-08-09）
 #include "flight_control.h"    // 飞行控制
 #include "communication.h"     // 通信与遥测
 #include "can_bus.h"           // CAN 总线通信
@@ -146,6 +147,10 @@ void setup()
   opticalFlowSerial.begin(921600); // UART7:  光流传感器 (921600 baud)
 
   ubx.Config(&gpsSerialPort); // 将 Serial4 绑定到 UBX 协议解析器 (默认路径，DETA100 检测通过后切换)
+  // GNSS 双协议（2026-08-09 库内实现）：kAuto = UBX 优先 + NMEA 兜底。
+  // 接收机仅 NMEA 输出（UBX 配置失败/非 u-blox 模块）时自动用 NMEA 合成 epoch。
+  // 运行时用 DBG `gpsproto` 查看/切换（含波特率）。
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kAuto);
 
   // ====================================================================
   // 1.5 DETA100 上电自动检测
@@ -198,6 +203,40 @@ void setup()
       deta100_detect_done = true;
       Serial8.println("[DETA100] Not detected. Using internal IMU+EKF+UBX data source.");
     }
+  }
+
+  // ====================================================================
+  // 1.6 UBX 接收机自动配置（★2026-08-09，仅 INTERNAL 路径）
+  // ====================================================================
+  // Serial4 与 DETA100 共用——仅在确认 INTERNAL（无 DETA100）时配置接收机：
+  // 波特率探测（含出厂默认 9600 NMEA）→ CFG-PRT 切 921600 → CFG-RATE 10Hz →
+  // CFG-MSG NAV-PVT/NAV-EOE → 回读校验。失败不阻塞（回退"已预配置"模式）。
+  // 目标值见下方常量；详见 src/ubx_config.cpp 与 docs/reference/sparkfun-ublox-gnss。
+  if (nav_data_source == NavDataSource::INTERNAL)
+  {
+    const uint32_t GPS_TARGET_BAUD = 921600UL;
+    const uint16_t GPS_NAV_RATE_MS = 100;    // 10Hz
+    const uint8_t  GPS_AIRBORNE_G = 0;       // 0=不改动态模型（如需: 2/4 = Airborne<2g/<4g）
+    Serial8.println("[UBXCFG] Auto-configuring GNSS receiver...");
+    UbxConfigOptions cfg_opt = kUbxDefaultCfg;
+    cfg_opt.target_baud = GPS_TARGET_BAUD;
+    cfg_opt.nav_rate_ms = GPS_NAV_RATE_MS;
+    cfg_opt.airborne_g = GPS_AIRBORNE_G;
+    const UbxCfgResult cfg = ubxAutoConfig(gpsSerialPort, &cfg_opt);
+    Serial8.print("[UBXCFG] detect=");
+    Serial8.print(cfg.detected ? "YES" : "NO");
+    Serial8.print(" baud=");
+    Serial8.print(cfg.detected ? cfg.found_baud : 0);
+    Serial8.print(" prt=");
+    Serial8.print(cfg.prt_ok ? "OK" : "FAIL");
+    Serial8.print(" rate=");
+    Serial8.print(cfg.rate_ok ? "OK" : "FAIL");
+    Serial8.print(" msg=");
+    Serial8.print(cfg.msg_pvt_ok ? "OK" : "FAIL");
+    Serial8.print("/");
+    Serial8.print(cfg.msg_eoe_ok ? "OK" : "FAIL");
+    Serial8.print(" verify=");
+    Serial8.println(cfg.verify_ok ? "OK" : "FAIL");
   }
 
   // ====================================================================

@@ -15,6 +15,36 @@
 
 uBlox 生产标准和高精度的 GPS 接收机。这些接收机具有高灵敏度、极短的捕获时间以及小巧的外形尺寸。UBX 是一种 uBlox 二进制格式，用于高效地从接收机检索数据。
 
+# 双协议支持 (Dual Protocol, 2026-08-09 本地扩展)
+
+本库除 UBX 外还内置 NMEA 解析（minmea，MIT 许可，见 `LICENSE.minmea`），
+支持在 `kUbx` / `kNmea` / `kAuto` 三种协议模式下独立切换：
+
+```C++
+ubx.SetProtocol(bfs::Ubx::GpsProtocol::kAuto);   // UBX 优先，失效后 NMEA 兜底
+ubx.SwitchProtocol(bfs::Ubx::GpsProtocol::kNmea, 38400);  // 切换并重设串口波特率
+```
+
+- **kUbx**（默认）：纯 UBX，行为与旧版一致
+- **kNmea**：纯 NMEA——解析 GGA/RMC/GSA，快照合成 `UbxEpoch` 入同一队列，
+  导航层（`PopEpoch`）无感
+- **kAuto**：双流并行，UBX epoch 优先；UBX 失效超过
+  `SetNmeaUbxBackoffMs()`（默认 300ms）后自动用 NMEA 快照兜底合成
+
+NMEA 合成语义（供上层理解精度边界）：
+- 数据来源 GGA（位置/高程/HDOP/fix）+ RMC（对地速度/航向）+ GSA（PDOP/VDOP，
+  GN 组合解优先）；`pvt_tow_ms == eoe_tow_ms` = UTC 时间-of-day 伪 tow
+- 秒键去重 + 800ms 合成节流：GGA/RMC 双句 1Hz 流 → 1Hz epoch，位置最新、
+  速度滞后 ≤1s（NMEA 流固有限制）；`spd_acc_mps` 取 3.0 使缺失的垂直速度
+  只作弱约束
+- `horz_acc_m` = HDOP × 2.5（C/A 码 UERE 保守估计）；`pvt_pdop` 来自 GSA
+  （0 = 未提供，动态权重不缩放）
+- 已知限制：RMC 尾部 `,,A`（u-blox 真实输出）会使官方 `minmea_parse_rmc`
+  失败——本库自实现解析（`minmea_scan` 截断到 date 字段）
+
+回归测试：`TandemVec_FCS/tools/nmea-host-test`（g++，66 项断言，覆盖三模式/
+分片/串扰/混合流/跨日/缺省字段/坏校验/溢出恢复）。
+
 # 安装 (Installation)
 
 ## Arduino

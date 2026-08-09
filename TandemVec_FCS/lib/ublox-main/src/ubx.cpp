@@ -28,6 +28,7 @@
 #include "core/core.h"
 #endif
 #include <cstring>     // memcpy / memset
+#include <math.h>      // cosf / sinf（NMEA 速度分解）
 #include "ubx.h"
 #include "ubx_defs.h" // NOLINT
 #include "ubx_nav.h"  // NOLINT
@@ -175,6 +176,8 @@ namespace bfs
     }
     epoch_queue_head_ = 0;
     epoch_queue_count_ = 0;
+    // --- NMEA 解析状态与快照（协议模式与配置保持不变）---
+    ResetNmea();
   }
 
   // 标准初始化：自己设波特率并清空发送缓冲，再做通信探测。
@@ -243,19 +246,44 @@ namespace bfs
     pump_receive_time_us_ = receive_time_us;
     const uint32_t before_count = queued_epoch_count_;  // 记录入队前的累计计数，用于判断本次是否新入队
     const uint32_t before_bytes = rx_byte_count_;       // 记录入队前的累计字节，用于核算本次预算用量
+    // 协议分派（2026-08-09 双协议）：kNmea 跳过 UBX 状态机，kUbx 跳过 NMEA，kAuto 双流并行。
+    const bool ubx_enabled = (protocol_ != GpsProtocol::kNmea);
+    const bool nmea_enabled = (protocol_ != GpsProtocol::kUbx);
     while (bus_->available() &&
            (max_bytes == 0U ||
             (rx_byte_count_ - before_bytes) < max_bytes))
     {
-      // 计算本次调用剩余可用字节预算，传给 ParseMsg 限制其单次读取量。
-      const size_t remaining_budget =
-          (max_bytes == 0U)
-              ? 0U
-              : (max_bytes - static_cast<size_t>(rx_byte_count_ - before_bytes));
-      if (ParseMsg(remaining_budget))
+      const int raw_byte = bus_->read();
+      if (raw_byte < 0)
       {
-        HandleValidMessage(true);  // queue_output=true：完整历元入队
+        break;  // 读到 -1：当前无更多可读字节
       }
+      const uint8_t b = static_cast<uint8_t>(raw_byte);
+      rx_byte_count_++;
+      if (ubx_enabled)
+      {
+        if (ProcessUbxByte(b))
+        {
+          if (HandleValidMessage(true))  // 完整历元入队
+          {
+            nmea_ubx_seen_ = true;      // kAuto 闸门：标记见过 UBX epoch
+            last_ubx_epoch_us_ = micros();  // 记录最近 UBX epoch 时刻
+          }
+        }
+      }
+      if (nmea_enabled)
+      {
+        nmeaProcessByte(b);  // NMEA 解析（有效句刷新快照）
+      }
+      if (byte_tap_fn_)
+      {
+        byte_tap_fn_(b, byte_tap_ctx_);  // 字节镜像：外部调试/分析用
+      }
+    }
+    // NMEA 兜底合成：kNmea 直接按快照合成；kAuto 需 UBX 失效窗口（内部判断）。
+    if (nmea_enabled)
+    {
+      TryPushNmeaEpoch();
     }
     return queued_epoch_count_ != before_count;  // 本次是否至少入队了一个新 epoch
   }
@@ -459,6 +487,343 @@ namespace bfs
     latest_epoch_receive_time_us_ = epoch.receive_time_us;
     epoch_queue_count_++;
     queued_epoch_count_++;
+  }
+
+  /* ======================= 协议切换与 NMEA 解析（2026-08-09） ======================= */
+
+  // 切换协议并同步重设串口波特率（serial.begin）。未绑定串口或波特率非法时
+  // 仅切换协议并返回 false（防止负值/零值波特率把 UART 配置成非法状态）。
+  bool Ubx::SwitchProtocol(GpsProtocol protocol, int32_t baud)
+  {
+    protocol_ = protocol;
+    if (bus_ == nullptr || baud <= 0)
+    {
+      return false;
+    }
+    bus_->begin(baud);
+    bus_->flush();
+    return true;
+  }
+
+  // 单字节喂 NMEA 句子切分器：'$' 起始、'\r'/'\n' 结束、超长/串扰 '$' 重新同步。
+  // 完整句子（含 *CK 校验）交给 nmeaParseSentence。
+  void Ubx::nmeaProcessByte(uint8_t b)
+  {
+    if (!nmea_in_sentence_)
+    {
+      if (b == '$')
+      {
+        nmea_in_sentence_ = true;
+        nmea_sentence_len_ = 0;
+        nmea_sentence_[nmea_sentence_len_++] = static_cast<char>(b);  // '$' 入缓冲
+      }
+      return;
+    }
+    if (b == '\r' || b == '\n')
+    {
+      // 句子结束：交给解析（切分器只负责组句，校验/有效性由 nmeaParseSentence 判定）
+      nmea_in_sentence_ = false;
+      if (nmea_sentence_len_ > 0)
+      {
+        nmea_sentence_[nmea_sentence_len_] = '\0';
+        nmeaParseSentence(nmea_sentence_);
+      }
+      return;
+    }
+    if (b == '$')
+    {
+      // 串扰/残留：重新同步到新句子起点
+      nmea_sentence_len_ = 0;
+      nmea_sentence_[nmea_sentence_len_++] = static_cast<char>(b);
+      return;
+    }
+    if (nmea_sentence_len_ >= (sizeof(nmea_sentence_) - 1))
+    {
+      nmea_in_sentence_ = false;  // 超长残句：丢弃（防溢出）
+      nmea_overflow_count_++;
+      return;
+    }
+    nmea_sentence_[nmea_sentence_len_++] = static_cast<char>(b);
+  }
+
+  // 解析一帧完整 NMEA 句子：先过 minmea_check（格式+校验和），再按句子类型分发。
+  void Ubx::nmeaParseSentence(const char *sentence)
+  {
+    nmea_sentence_count_++;
+    if (nmea_sentence_len_ <= 4)
+    {
+      return;  // 空句/残句（如仅 "$"）：不构成坏校验，静默忽略
+    }
+    if (!minmea_check(sentence, false))
+    {
+      nmea_bad_checksum_count_++;
+      return;
+    }
+    switch (minmea_sentence_id(sentence, false))
+    {
+      case MINMEA_SENTENCE_GGA:
+      {
+        nmea_gga_count_++;
+        struct minmea_sentence_gga gga;
+        if (minmea_parse_gga(&gga, sentence) && gga.fix_quality >= 1)
+        {
+          nmeaUpdateSnapshotFromGga(gga);
+        }
+        break;
+      }
+      case MINMEA_SENTENCE_RMC:
+      {
+        // 注意：不用官方 minmea_parse_rmc——u-blox 等真实接收机的 RMC 尾部为
+        // `,,A`（variation 空 + FAA mode 'A'），官方格式 "tTcfdfdffDfd" 会把
+        // 'A' 当 variation 方向字符而 parse_error（'A' 不在 N/E/S/W 中），整句丢弃。
+        // 本库只用到 date 之前的字段，自实现时截断尾部（NMEA 2.3 后字段皆可选）。
+        nmea_rmc_count_++;
+        char valid = '\0';
+        int lat_dir = 0;
+        int lon_dir = 0;
+        struct minmea_sentence_rmc rmc = {};
+        if (minmea_scan(sentence, "tTcfdfdffD", &rmc.type, &rmc.time, &valid,
+                        &rmc.latitude, &lat_dir, &rmc.longitude, &lon_dir,
+                        &rmc.speed, &rmc.course, &rmc.date) &&
+            memcmp(rmc.type.sentence_id, "RMC", 3) == 0)
+        {
+          rmc.valid = (valid == 'A');
+          rmc.latitude.value *= lat_dir;
+          rmc.longitude.value *= lon_dir;
+          if (rmc.valid)
+          {
+            nmeaUpdateSnapshotFromRmc(rmc);
+          }
+        }
+        break;
+      }
+      case MINMEA_SENTENCE_GSA:
+      {
+        // 多星座接收机（u-blox M8/M9/M10）每个星座各输出一条 GSA（GPGSA/GLGSA…），
+        // 只有主 talker GN（组合解）的 PDOP 才是整体位置解的几何质量。
+        // 单星座接收机只有一条 GSA（talker=GP 等），作兜底采用。
+        nmea_gsa_count_++;
+        struct minmea_sentence_gsa gsa;
+        char talker[3] = {0};
+        const bool got_talker = minmea_talker_id(talker, sentence);
+        if (minmea_parse_gsa(&gsa, sentence))
+        {
+          nmeaUpdateSnapshotFromGsa(gsa, got_talker && talker[0] == 'G' && talker[1] == 'N');
+        }
+        break;
+      }
+      default:
+        nmea_unknown_count_++;  // 其它句子（GSV/VTG/GLL…）本库不处理
+        break;
+    }
+  }
+
+  // GGA 有效句（fix_quality>=1）：刷新位置/精度/高程快照。
+  void Ubx::nmeaUpdateSnapshotFromGga(const struct minmea_sentence_gga &gga)
+  {
+    const float lat_deg = minmea_tocoord(&gga.latitude);
+    const float lon_deg = minmea_tocoord(&gga.longitude);
+    const float hdop = minmea_tofloat(&gga.hdop);
+    const float alt_msl_m = minmea_tofloat(&gga.altitude);
+    const float geoid_m = minmea_tofloat(&gga.height);
+    if (isnan(lat_deg) || isnan(lon_deg) || isnan(alt_msl_m))
+    {
+      return;  // 坐标/高程缺省（空字段）：本句不足以刷新位置快照
+    }
+    // GGA quality → Fix 枚举（quality 3=PPS 罕见，按 3D 保守处理）：
+    //   1=GPS → FIX_3D；2=DGPS → FIX_DGNSS；4=RTK Fixed → FIX_RTK_FIXED；5=RTK Float → FIX_RTK_FLOAT
+    int8_t fix = FIX_3D;
+    if (gga.fix_quality == 2)
+    {
+      fix = FIX_DGNSS;
+    }
+    else if (gga.fix_quality == 4)
+    {
+      fix = FIX_RTK_FIXED;
+    }
+    else if (gga.fix_quality == 5)
+    {
+      fix = FIX_RTK_FLOAT;
+    }
+
+    nmea_snapshot_fix_ = fix;
+    nmea_snapshot_sv_ = static_cast<int8_t>(gga.satellites_tracked);
+    // HDOP 为 float（minmea 精度高于 MicroNMEA 的十分之一整数）。
+    nmea_snapshot_hdop_ = hdop;
+    nmea_snapshot_lat_rad_ = static_cast<double>(lat_deg) * DEG_TO_RAD;
+    nmea_snapshot_lon_rad_ = static_cast<double>(lon_deg) * DEG_TO_RAD;
+    // 高程：GGA 给 MSL 高 + 大地水准面高 → WGS84 椭球高 = MSL + geoid。
+    nmea_snapshot_alt_valid_ = true;
+    nmea_snapshot_alt_msl_m_ = alt_msl_m;
+    nmea_snapshot_alt_wgs84_m_ = alt_msl_m + (isnan(geoid_m) ? 0.0f : geoid_m);
+    // UTC 时间-of-day → 伪 tow【ms】（含百分秒精度；跨日回绕由下游周内差处理兜底）。
+    nmea_snapshot_tow_ms_ =
+        ((static_cast<uint32_t>(gga.time.hours) * 3600U +
+          static_cast<uint32_t>(gga.time.minutes) * 60U +
+          static_cast<uint32_t>(gga.time.seconds)) *
+         1000U) +
+        static_cast<uint32_t>(gga.time.microseconds) / 1000U;
+
+    nmea_snapshot_valid_ = true;
+    nmea_fix_count_++;
+    nmea_last_fix_ms_ = millis();
+  }
+
+  // RMC 有效句（valid=true）：刷新速度/时间快照（位置 RMC 也带，但以 GGA 为准）。
+  void Ubx::nmeaUpdateSnapshotFromRmc(const struct minmea_sentence_rmc &rmc)
+  {
+    const float spd_knots = minmea_tofloat(&rmc.speed);
+    const float course_deg = minmea_tofloat(&rmc.course);
+    if (isnan(spd_knots) || isnan(course_deg))
+    {
+      return;  // 速度/航向缺省：不足以刷新速度快照
+    }
+    // 对地速度（knots）→ m/s；航向（度，自北顺时针）→ NED 分量。
+    // 垂直速度 NMEA 不报告，保持 0（合成 epoch 时 down_vel=0 作弱约束，见 MakeNmeaEpoch）。
+    const float spd_mps = spd_knots * 0.514444f;
+    const float course_rad = course_deg * DEG_TO_RAD;
+    nmea_snapshot_vel_n_mps_ = spd_mps * cosf(course_rad);
+    nmea_snapshot_vel_e_mps_ = spd_mps * sinf(course_rad);
+    nmea_snapshot_tow_ms_ =
+        ((static_cast<uint32_t>(rmc.time.hours) * 3600U +
+          static_cast<uint32_t>(rmc.time.minutes) * 60U +
+          static_cast<uint32_t>(rmc.time.seconds)) *
+         1000U) +
+        static_cast<uint32_t>(rmc.time.microseconds) / 1000U;
+
+    nmea_snapshot_valid_ = true;
+    nmea_fix_count_++;
+    nmea_last_fix_ms_ = millis();
+  }
+
+  // NMEA 快照 → UbxEpoch。换算逻辑经宿主机回归测试验证（tools/nmea-host-test）。
+  UbxEpoch Ubx::MakeNmeaEpoch() const
+  {
+    UbxEpoch epoch = {};
+    epoch.pvt_tow_ms = nmea_snapshot_tow_ms_;
+    epoch.eoe_tow_ms = nmea_snapshot_tow_ms_;
+    epoch.receive_time_us = micros();
+    epoch.gps_tow_s = static_cast<double>(nmea_snapshot_tow_ms_) * 1e-3;
+    epoch.fix = nmea_snapshot_fix_;
+    epoch.num_sv = nmea_snapshot_sv_;
+    epoch.lat_deg = nmea_snapshot_lat_rad_ * RAD_TO_DEG;
+    epoch.lon_deg = nmea_snapshot_lon_rad_ * RAD_TO_DEG;
+    epoch.lat_rad = nmea_snapshot_lat_rad_;
+    epoch.lon_rad = nmea_snapshot_lon_rad_;
+    epoch.alt_wgs84_m = nmea_snapshot_alt_wgs84_m_;
+    epoch.alt_msl_m = nmea_snapshot_alt_msl_m_;
+    epoch.north_vel_mps = nmea_snapshot_vel_n_mps_;
+    epoch.east_vel_mps = nmea_snapshot_vel_e_mps_;
+    epoch.down_vel_mps = 0.0f;  // NMEA 无垂直速度
+    // 精度估计（保守且诚实，由下游动态权重与 NIS 门控兜底）：
+    // - 水平位置：HDOP × UERE（C/A 码单频 ≈2.5m/HDOP 单位）
+    // - 垂直/速度精度：0 → 下游按 h_acc×1.5 回退
+    // - spd_acc 取动态权重上限 3.0：让 down_vel=0 只作弱约束（若取 0.3 会强拉垂直速度，
+    //   爬升阶段垂直通道被 0 观测拉向地平）；水平速度信任度偏保守但诚实
+    epoch.horz_acc_m = nmea_snapshot_hdop_ * 2.5f;
+    epoch.vert_acc_m = 0.0f;
+    epoch.spd_acc_mps = 3.0f;
+    // PDOP 来自 GSA（组合解优先，见 nmeaUpdateSnapshotFromGsa）；0=未提供 → 动态权重不缩放
+    epoch.pvt_pdop = nmea_snapshot_pdop_;
+    return epoch;
+  }
+
+  // GSA 句：刷新 PDOP/VDOP 快照（用于合成 epoch 的 pvt_pdop，激活动态权重 DOP 缩放）。
+  // 多星座接收机每星座各输出一条 GSA——is_combined（talker=GN，组合解）优先覆盖；
+  // 单星座 GSA 仅在尚无任何 PDOP 时兜底（防 GPGSA 覆盖 GNGSA 的组合值）。
+  void Ubx::nmeaUpdateSnapshotFromGsa(const struct minmea_sentence_gsa &gsa,
+                                      bool is_combined)
+  {
+    const float pdop = minmea_tofloat(&gsa.pdop);
+    const float vdop = minmea_tofloat(&gsa.vdop);
+    if (isnan(pdop) || pdop <= 0.0f)
+    {
+      return;  // 未提供或无效
+    }
+    if (!is_combined && nmea_snapshot_pdop_ > 0.0f)
+    {
+      return;  // 已有组合解 PDOP，单星座 GSA 不覆盖
+    }
+    nmea_snapshot_pdop_ = pdop;
+    nmea_snapshot_vdop_ = isnan(vdop) ? 0.0f : vdop;
+  }
+
+  // NMEA 兜底合成入队：kNmea 直接合成；kAuto 需 UBX 失效窗口（防混合输出双通道重复融合）。
+  // 合成节流语义（2026-08-09 实测校准）：
+  //   - 秒键去重：快照伪 tow 未跨秒 → 不合成（防无新句时重复合成同一快照）
+  //   - 800ms 节流：GGA/RMC 分属两句、时戳错开（u-blox 同秒、部分模块跨秒），
+  //     双句若都触发合成会 2Hz 重复融合同一位置；节流后合成率 = 1Hz，
+  //     且合成时刻快照已合并最近 GGA（位置）+ 最近 RMC（速度滞后 ≤1s）
+  bool Ubx::TryPushNmeaEpoch()
+  {
+    if (!nmea_snapshot_valid_)
+    {
+      return false;
+    }
+    if (millis() - nmea_last_fix_ms_ > nmea_fix_timeout_ms_)
+    {
+      return false;  // 链路失效（超时无有效句）
+    }
+    if (nmea_snapshot_tow_ms_ / 1000U == nmea_last_fused_tow_ms_ / 1000U)
+    {
+      return false;  // 同秒去重：无新句重复合成同一快照 / 同秒双句只合成一次
+    }
+    if (nmea_epoch_seen_ &&
+        (micros() - nmea_last_epoch_us_) < kNmeaEpochMinIntervalUs)
+    {
+      return false;  // 800ms 合成节流：GGA+RMC 双句只产生 1Hz epoch
+    }
+    if (!nmea_snapshot_alt_valid_)
+    {
+      return false;  // 无 GGA 高程：位置融合缺少垂直信息，拒绝合成（宁缺毋滥）
+    }
+    if (protocol_ == GpsProtocol::kAuto && nmea_ubx_seen_ &&
+        (micros() - last_ubx_epoch_us_) < (nmea_ubx_backoff_ms_ * 1000U))
+    {
+      return false;  // UBX 链路存活：避免同一接收机的位置被 UBX+NMEA 双通道重复融合
+    }
+    nmea_last_fused_tow_ms_ = nmea_snapshot_tow_ms_;
+    nmea_epoch_seen_ = true;  // 先置标志再记时刻：micros()==0 时 `!=0` 判断会失效
+    nmea_last_epoch_us_ = micros();
+    PushEpoch(MakeNmeaEpoch());
+    nmea_epoch_count_++;
+    return true;
+  }
+
+  // 清空 NMEA 解析状态与快照（Reset 调用；不改变协议模式与配置）。
+  void Ubx::ResetNmea()
+  {
+    nmea_sentence_len_ = 0;
+    nmea_in_sentence_ = false;
+    nmea_snapshot_valid_ = false;
+    nmea_snapshot_alt_valid_ = false;
+    nmea_snapshot_fix_ = 0;
+    nmea_snapshot_sv_ = 0;
+    nmea_snapshot_hdop_ = 0.0f;
+    nmea_snapshot_pdop_ = 0.0f;
+    nmea_snapshot_vdop_ = 0.0f;
+    nmea_snapshot_lat_rad_ = 0.0;
+    nmea_snapshot_lon_rad_ = 0.0;
+    nmea_snapshot_alt_wgs84_m_ = 0.0f;
+    nmea_snapshot_alt_msl_m_ = 0.0f;
+    nmea_snapshot_vel_n_mps_ = 0.0f;
+    nmea_snapshot_vel_e_mps_ = 0.0f;
+    nmea_snapshot_tow_ms_ = 0;
+    nmea_last_fused_tow_ms_ = 0;
+    nmea_last_fix_ms_ = 0;
+    nmea_sentence_count_ = 0;
+    nmea_bad_checksum_count_ = 0;
+    nmea_overflow_count_ = 0;
+    nmea_gga_count_ = 0;
+    nmea_rmc_count_ = 0;
+    nmea_gsa_count_ = 0;
+    nmea_unknown_count_ = 0;
+    nmea_fix_count_ = 0;
+    nmea_epoch_count_ = 0;
+    nmea_ubx_seen_ = false;
+    last_ubx_epoch_us_ = 0;
+    nmea_epoch_seen_ = false;
+    nmea_last_epoch_us_ = 0;
   }
 
   // 把各 NAV 缓存里的原始整数按协议缩放因子换算成物理量，写入各数据成员（即各 getter 的返回源）。
@@ -752,92 +1117,105 @@ namespace bfs
   // UBX 报文解析状态机：从串口逐字节喂入，按 [同步字×2][Class][ID][Len×2][Payload][CK_A][CK_B]
   // 推进 parser_state_。组完整帧且校验通过返回 true（数据在 rx_msg_）；否则继续读，读空/达预算返回 false。
   // parser_state_ 跨调用保留，因此支持把一帧拆到多次调用里解析（配合 Pump 的字节预算）。
-  bool Ubx::ParseMsg(size_t max_bytes)
+  // 阻塞式读字节直到组完一帧有效 UBX 报文（BeginConfigured/Read 路径用）。
+  // 不带字节预算、不触发字节镜像（tap 仅 Pump 路径生效）。
+  bool Ubx::ParseMsg()
   {
-    size_t bytes_read = 0;  // 本次调用已消费字节数，用于执行 max_bytes 预算
-    while (bus_->available() && (max_bytes == 0U || bytes_read < max_bytes))
+    while (bus_->available())
     {
       const int raw_byte = bus_->read();
       if (raw_byte < 0)
       {
         break;  // 读到 -1：当前无更多可读字节
       }
-      c_ = static_cast<uint8_t>(raw_byte);
       rx_byte_count_++;
-      bytes_read++;
-      /* 阶段 1：同步字 0xB5 0x62。任一字节不匹配即把状态机重置回 0 重新找帧头。 */
-      if (parser_state_ < sizeof(UBX_HEADER_))
+      if (ProcessUbxByte(static_cast<uint8_t>(raw_byte)))
       {
-        if (c_ == UBX_HEADER_[parser_state_])
-        {
-          parser_state_++;
-        }
-        else
-        {
-          parser_state_ = 0;
-        }
-        /* 阶段 2：Class 字节 */
-      }
-      else if (parser_state_ == UBX_CLS_POS_)
-      {
-        rx_msg_.cls = c_;
-        parser_state_++;
-        /* 阶段 3：ID 字节 */
-      }
-      else if (parser_state_ == UBX_ID_POS_)
-      {
-        rx_msg_.id = c_;
-        parser_state_++;
-        /* 阶段 4：长度低字节（小端，先低后高），暂存到 len_ */
-      }
-      else if (parser_state_ == UBX_LEN_POS_LSB_)
-      {
-        len_ = c_;
-        parser_state_++;
-      }
-      /* 阶段 5：长度高字节，与 len_ 合成 16 位 payload 长度 */
-      else if (parser_state_ == UBX_LEN_POS_MSB_)
-      {
-        rx_msg_.len = static_cast<uint16_t>(c_) << 8 | len_;
-        parser_state_++;
-        /* 防溢出：payload 超过接收缓冲容量则丢弃整帧并复位状态机。 */
-        if (rx_msg_.len > UBX_MAX_PAYLOAD_)
-        {
-          oversize_msg_count_++;
-          parser_state_ = 0;
-        }
-        /* 阶段 6：payload 主体，按偏移写入 rx_msg_.payload。 */
-      }
-      else if (parser_state_ < (static_cast<size_t>(rx_msg_.len) + UBX_HEADER_LEN_))
-      {
-        rx_msg_.payload[parser_state_ - UBX_HEADER_LEN_] = c_;
-        parser_state_++;
-        /* 阶段 7：校验和第一字节 CK_A，先暂存。 */
-      }
-      else if (parser_state_ == (static_cast<size_t>(rx_msg_.len) + UBX_HEADER_LEN_))
-      {
-        chk_rx_ = c_;
-        parser_state_++;
-      }
-      /* 阶段 8：校验和第二字节 CK_B。此时本地重算校验并与收到的比对。 */
-      else
-      {
-        // 校验范围：从 rx_msg_.cls 起，长度 = payload 长度 + (Class+ID+Len 共 4 字节)。
-        // UBX_CHK_OFFSET_ = 头长6 - 同步字2 = 4，正是 cls..len 这段需纳入校验的字节数。
-        chk_cmp_rx_ =
-            chksum_rx_.Compute(reinterpret_cast<const uint8_t *>(&rx_msg_),
-                               rx_msg_.len + UBX_CHK_OFFSET_);
-        parser_state_ = 0;  // 无论校验成败，本帧结束，状态机复位准备下一帧。
-        /* 比对本地校验(高字节 sum1<<8 | 低字节 sum0) 与收到的 (CK_B<<8 | CK_A)。 */
-        if (chk_cmp_rx_ == (static_cast<uint16_t>(c_) << 8 | chk_rx_))
-        {
-          valid_msg_count_++;
-          return true;  // 一帧有效报文就绪，交给 HandleValidMessage。
-        }
-        checksum_fail_count_++;  // 校验失败：丢弃本帧（应保持为 0，非 0 多为接线/波特率问题）。
+        return true;  // 一帧有效报文就绪
       }
     }
-    return false;  // 串口读空或达到字节预算，尚未组成完整有效帧。
+    return false;  // 串口读空，尚未组成完整有效帧
+  }
+
+  // 单字节推进 UBX 解析状态机：按 [同步字×2][Class][ID][Len×2][Payload][CK_A][CK_B]
+  // 逐字节推进 parser_state_。组完一帧且校验通过返回 true（数据在 rx_msg_，
+  // 由 Pump 调 HandleValidMessage 分发）；否则返回 false。
+  // parser_state_ 跨调用保留，因此支持把一帧拆到多次调用里解析（配合 Pump 的字节预算）。
+  bool Ubx::ProcessUbxByte(uint8_t c)
+  {
+    c_ = c;
+    /* 阶段 1：同步字 0xB5 0x62。任一字节不匹配即把状态机重置回 0 重新找帧头。 */
+    if (parser_state_ < sizeof(UBX_HEADER_))
+    {
+      if (c_ == UBX_HEADER_[parser_state_])
+      {
+        parser_state_++;
+      }
+      else
+      {
+        parser_state_ = 0;
+      }
+      /* 阶段 2：Class 字节 */
+    }
+    else if (parser_state_ == UBX_CLS_POS_)
+    {
+      rx_msg_.cls = c_;
+      parser_state_++;
+      /* 阶段 3：ID 字节 */
+    }
+    else if (parser_state_ == UBX_ID_POS_)
+    {
+      rx_msg_.id = c_;
+      parser_state_++;
+      /* 阶段 4：长度低字节（小端，先低后高），暂存到 len_ */
+    }
+    else if (parser_state_ == UBX_LEN_POS_LSB_)
+    {
+      len_ = c_;
+      parser_state_++;
+    }
+    /* 阶段 5：长度高字节，与 len_ 合成 16 位 payload 长度 */
+    else if (parser_state_ == UBX_LEN_POS_MSB_)
+    {
+      rx_msg_.len = static_cast<uint16_t>(c_) << 8 | len_;
+      parser_state_++;
+      /* 防溢出：payload 超过接收缓冲容量则丢弃整帧并复位状态机。 */
+      if (rx_msg_.len > UBX_MAX_PAYLOAD_)
+      {
+        oversize_msg_count_++;
+        parser_state_ = 0;
+      }
+      /* 阶段 6：payload 主体，按偏移写入 rx_msg_.payload。 */
+    }
+    else if (parser_state_ < (static_cast<size_t>(rx_msg_.len) + UBX_HEADER_LEN_))
+    {
+      rx_msg_.payload[parser_state_ - UBX_HEADER_LEN_] = c_;
+      parser_state_++;
+      /* 阶段 7：校验和第一字节 CK_A，先暂存。 */
+    }
+    else if (parser_state_ == (static_cast<size_t>(rx_msg_.len) + UBX_HEADER_LEN_))
+    {
+      chk_rx_ = c_;
+      parser_state_++;
+    }
+    /* 阶段 8：校验和第二字节 CK_B。此时本地重算校验并与收到的比对。 */
+    else
+    {
+      // 校验范围：从 rx_msg_.cls 起，长度 = payload 长度 + (Class+ID+Len 共 4 字节)。
+      // UBX_CHK_OFFSET_ = 头长6 - 同步字2 = 4，正是 cls..len 这段需纳入校验的字节数。
+      chk_cmp_rx_ =
+          chksum_rx_.Compute(reinterpret_cast<const uint8_t *>(&rx_msg_),
+                             rx_msg_.len + UBX_CHK_OFFSET_);
+      parser_state_ = 0;  // 无论校验成败，本帧结束，状态机复位准备下一帧。
+      /* 比对本地校验(高字节 sum1<<8 | 低字节 sum0) 与收到的 (CK_B<<8 | CK_A)。 */
+      if (chk_cmp_rx_ == (static_cast<uint16_t>(c_) << 8 | chk_rx_))
+      {
+        valid_msg_count_++;
+        return true;  // 一帧有效报文就绪，交给 HandleValidMessage。
+      }
+      checksum_fail_count_++;  // 校验失败：丢弃本帧（应保持为 0，非 0 多为接线/波特率问题）。
+    }
+    return false;  // 本字节未组完整帧。
   }
 
 } // namespace bfs
