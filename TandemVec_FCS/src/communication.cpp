@@ -4,6 +4,7 @@
 #include "sensor_peripheral.h"
 #include "MAVLink.h"
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
+#include "ano_vars.h"     // 通用变量上报（0xF2 值帧 / 0xF3 清单 / DBG vars）
 #include "task_scheduler.h" // 调度统计 DBG `tasks` 命令
 #include "ubx_config.h"      // UBX 接收机自动配置（DBG `ubxcfg`）
 
@@ -27,6 +28,12 @@ static uint32_t s_flashServiceCount = 0;
 static uint32_t s_flashPushCount = 0;
 // 调试模式标志（文件级，handleDebugTask 置位，handleAnoCom 读取跳过遥测）
 static bool s_dbg_mode = false;
+// 遥测协议切换标志（DBG `proto` 命令置位）：false=AnoCom（GCS 默认）/
+// true=MAVLink v2（QGC/MP 可连）。运行时切换不重烧。
+static bool s_mav_active = false;
+
+// MAVLink 遥测发送（定义在 handleMavlink 处，handleAnoCom 的 proto 切换先调用）
+static void mavlinkSendTelemetry();
 
 /**
  * @brief 查询当前是否处于 DBG 调试模式（供任务调度器画像输出门控）
@@ -453,6 +460,12 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
       anoParamsHandleRx(AnoCom, funcCode, data, len);
     }
   }
+
+  // 0xF3 变量清单请求（AnoVars，只读不回 0x00 校验帧——仿 0xE2 语义）
+  if (funcCode == 0xF3)
+  {
+    anoVarsHandleRx(AnoCom, funcCode, data, len);
+  }
 }
 
 /**
@@ -514,6 +527,14 @@ void handleAnoCom()
     return;
   }
 
+  // ---- 遥测协议切换（DBG `proto` 命令）----
+  // MAVLink v2 模式：纯遥测下行（QGC/MP 可连），AnoCom 上行帧解析/参数链路
+  // 随之停用（MAVLink 帧会被 AnoCom 解析器当噪声丢弃，无害）。切换不重烧。
+  if (s_mav_active) {
+    mavlinkSendTelemetry();
+    return;
+  }
+
   // ---- 上行接收: 消费 Serial6 缓冲区中的上行帧 ----
   // receiveData() 内部 while(available) 读空, 帧校验通过后调用 onAnoRxFrame 回调。
   // 首次调用时注册回调 (静态初始化保证只注册一次)。
@@ -524,6 +545,26 @@ void handleAnoCom()
     rx_callback_registered = true;
   }
   AnoCom.receiveData();
+  // ★ 2026-08-10 上行自愈：_rxIndex 半帧冻结（available()=0 时退出循环，
+  //   _rxIndex 卡 1-7 → 后续帧头错位永凑不齐 → 上行哑火，下行照发）。
+  //   冻结 >100ms 强制复位——正常半帧间隙（CLI 连续发帧）远小于此。
+  {
+    static uint32_t rx_stall_since = 0;
+    if (AnoCom.rxStalled())
+    {
+      if (rx_stall_since == 0)
+        rx_stall_since = millis();
+      else if (millis() - rx_stall_since > 100)
+      {
+        AnoCom.rxReset();
+        rx_stall_since = 0;
+      }
+    }
+    else
+    {
+      rx_stall_since = 0;
+    }
+  }
 
   // ---- 下行发送 (原有逻辑) ----
   // 静态变量，用于跟踪当前发送的数据组索引和是否开始新一轮数据采集
@@ -782,6 +823,15 @@ void handleAnoCom()
   {
     group_index = 0;
     new_cycle_data_collection = true;
+  }
+
+  // ---- 0xF2 变量值帧（AnoVars 通用变量上报）----
+  // 独立于 4 组循环：live-read watch 集合变量（最新值），自带节流（1-200Hz）
+  // 与 availableForWrite 保护——不连带影响组2 发送（组2 已有 5 帧 ≈100B）。
+  // watch 为空时零开销返回。50Hz 默认下 16 变量轮转 = 每变量 ~3Hz。
+  if (Serial6.availableForWrite() >= 16) // 0xF2 帧 = 8 开销 + 6 DATA + 余量
+  {
+    anoVarsSendTick(AnoCom);
   }
 }
 
@@ -1536,7 +1586,15 @@ void handleFlashService()
   s_flashWriting = false;
 }
 
-void handleMavlink()
+/**
+ * @brief MAVLink 遥测发送（200Hz 时基，内部分频 1/20/40Hz）
+ *
+ * 2026-08-10 重构：主体抽为可复用函数——DBG `proto mavlink` 切换后由
+ * handleAnoCom 调用（运行时协议切换，不重烧）；handleMavlink 任务注册
+ * 时（main.cpp 注释行）仅在 s_mav_active 下发送（双保险防双发）。
+ * 新增 NAMED_VALUE_FLOAT（watch 变量，QGC 曲线）+ DEBUG_VECT（3 元素向量）。
+ */
+static void mavlinkSendTelemetry()
 {
   static uint32_t call_count = 0; // uint32 防止 200Hz 下快速溢出
   call_count++;
@@ -1739,6 +1797,70 @@ void handleMavlink()
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     Serial6.write(buf, len);
   }
+
+  // ====================================================================
+  // NAMED_VALUE_FLOAT (40Hz) — AnoVars watch 变量轮转（QGC 曲线）
+  // ====================================================================
+  // 与 AnoCom 0xF2 共用同一 watch 集合（DBG `vars add` 配置），MAVLink 侧
+  // 独立轮转索引。名称截断 9 字符（协议 char[10]）。空 watch 时零开销。
+  if (call_count % 5 == 2 && !anoVarWatchEmpty())
+  {
+    static uint8_t mav_var_idx = 0;
+    uint16_t id = g_ano_var_watch.ids[mav_var_idx % g_ano_var_watch.count];
+    const AnoVarEntry *e = anoVarAt(id);
+    if (e)
+    {
+      char nm[ANO_VARS_MAV_NAME_LEN];
+      anoVarCopyName(nm, sizeof(nm), e->name);
+      float v = anoVarGetValue(*e);
+      mavlink_msg_named_value_float_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                                         millis(), nm, v);
+      uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+      Serial6.write(buf, len);
+      mav_var_idx++;
+    }
+  }
+
+  // ====================================================================
+  // DEBUG_VECT (40Hz) — 3 元素向量轮转（M_ff / alpha_ref / error_deg）
+  // ====================================================================
+  // 按注册表名称查 ID（抗表序重排）。向量不在 watch 集合中也能发。
+  if (call_count % 5 == 4)
+  {
+    static const char *kVecNames[][4] = {
+        {"M_ff", "m_ff_x", "m_ff_y", "m_ff_z"},
+        {"alpha_ref", "alpha_ref_x", "alpha_ref_y", "alpha_ref_z"},
+        {"error", "error_roll_deg", "error_pitch_deg", "error_yaw_deg"},
+    };
+    static const int kVEC_COUNT = 3;
+    static uint8_t vec_idx = 0;
+    const char *const *v = kVecNames[vec_idx % kVEC_COUNT];
+    int16_t ids[3] = {anoVarIdByName(v[1]), anoVarIdByName(v[2]), anoVarIdByName(v[3])};
+    if (ids[0] >= 0 && ids[1] >= 0 && ids[2] >= 0)
+    {
+      float vec[3] = {anoVarGetValue(kAnoVars[ids[0]]),
+                      anoVarGetValue(kAnoVars[ids[1]]),
+                      anoVarGetValue(kAnoVars[ids[2]])};
+      mavlink_msg_debug_vect_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                                  (const char *)v[0], millis(), vec[0], vec[1], vec[2]);
+      uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+      Serial6.write(buf, len);
+      vec_idx++;
+    }
+  }
+}
+
+/**
+ * @brief MAVLink 任务包装（main.cpp 可选注册；与 AnoCom 二选一）
+ *
+ * 2026-08-10：仅在 DBG `proto mavlink` 切换后发送（s_mav_active），
+ * 避免任务注册时与 AnoCom 混发双协议。
+ */
+void handleMavlink()
+{
+  if (!s_mav_active)
+    return;
+  mavlinkSendTelemetry();
 }
 
 // ========================================================================
@@ -1804,6 +1926,12 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   ubxcfg proto <ubx|nmea|both> - 串口输出协议掩码"));
         serial.println(F("[DBG]   datalog <secs>    - force blackbox logging N seconds"));
         serial.println(F("[DBG]   flash <export|...> - blackbox flash ops"));
+        serial.println(F("[DBG]   vars              - 变量上报状态（通用变量注册表，2026-08-10）"));
+        serial.println(F("[DBG]   vars list         - 全部注册变量（名称/类型/ID）"));
+        serial.println(F("[DBG]   vars add <name>   - 加入上报集合（≤16；0xF2 帧 + MAVLink 曲线）"));
+        serial.println(F("[DBG]   vars remove <name>/clear - 移出/清空"));
+        serial.println(F("[DBG]   vars rate <hz>    - 上报频率 1-200Hz（默认 50）"));
+        serial.println(F("[DBG]   proto <anocom|mavlink> - 遥测协议运行时切换（GCS↔QGC/MP）"));
         serial.println(F("[DBG]   exit              - back to normal telemetry"));
       }
       else if (strncmp(line, "ws ", 3) == 0) {
@@ -2385,6 +2513,28 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.flush();
         delay(300);
         NVIC_SystemReset();
+      }
+      else if (strncmp(line, "vars", 4) == 0) {
+        // ★2026-08-10 通用变量上报：list/add <name>/remove <name>/clear/rate <hz>
+        // 配置 watch 集合后 exit 恢复遥测，0xF2 值帧自动轮发（AnoVars）
+        anoVarsDebugCommand(serial, line + 4);
+      }
+      else if (strncmp(line, "proto", 5) == 0) {
+        // ★2026-08-10 遥测协议运行时切换（不重烧）：anocom=AnoCom（GCS 默认）/
+        // mavlink=MAVLink v2（QGC/MP 可连）。上行解析随协议切换禁用。
+        const char *arg = line + 5;
+        while (*arg == ' ') arg++;
+        if (strncmp(arg, "mavlink", 7) == 0) {
+          s_mav_active = true;
+          serial.println(F("[DBG] proto: MAVLink v2 (QGC/MP 可连；AnoCom 遥测暂停)"));
+        } else if (strncmp(arg, "anocom", 6) == 0) {
+          s_mav_active = false;
+          serial.println(F("[DBG] proto: AnoCom（GCS 遥测恢复）"));
+        } else {
+          serial.print(F("[DBG] proto: 当前="));
+          serial.println(s_mav_active ? F("mavlink") : F("anocom"));
+          serial.println(F("[DBG] proto: 用法 proto mavlink|anocom"));
+        }
       }
       else if (*line == '\0') {
         // 空行忽略

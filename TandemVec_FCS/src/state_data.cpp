@@ -439,6 +439,11 @@ float receivedValveControl = 0.0f;                 // 接收的阀门控制量
 volatile float bat_voltage_mv = 0.0f;              // 电池电压 (mV)
 volatile float bat_current_ca = 0.0f;              // 电池电流 (0.1A)
 
+// τm 一阶观测器转速估计（flight_control.cpp mix 层更新，2026-08-10 暴露为全局
+// 供 AnoVars 通用变量上报——观测值 = 实际转速实时估计，调差速增益调试神器）
+float g_wf_est = 0.0f;                             // 前电机观测转速 (rad/s)
+float g_wt_est = 0.0f;                             // 尾电机观测转速 (rad/s)
+
 uint16_t raw_rc_values[RC_INPUT_MAX_CHANNELS] = {0};
 uint16_t raw_rc_count = 0;
 

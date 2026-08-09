@@ -49,6 +49,10 @@ run_one "$ROOT/test_host/test_static_detector.cpp"     sd  ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 
+# 通用变量注册表 AnoVars（include/AnoVars.h，纯平台无关——注册表遍历/
+# 各类型→float 序列化/名称截断/watch 集合上限/rate 钳制/越界容错）：
+run_one "$ROOT/test_host/test_ano_vars.cpp"            av  ""
+
 # 平台相关算法（依赖 Arduino.h，通过 test_host/stub/Arduino.h 桩在宿主机编译）：
 run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 

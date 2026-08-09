@@ -1262,10 +1262,11 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       // 观测器以同一 τm 追上一拍指令（prev_prop_state = 上一拍分配输出），
       // 悬停稳态 w0_est = w0_cmd（行为与旧版一致），瞬态下 w0_est ≈ 实际。
       // ★ 2026-08-10 上移至层1 之前：转子陀螺前馈项需要观测转速。
-      static float s_wf_est = 0.0f, s_wt_est = 0.0f;
-      s_wf_est += (prev_prop_state.wf - s_wf_est) * (0.005f / P.tauM);  // GNC 200Hz 固定步长
-      s_wt_est += (prev_prop_state.wt - s_wt_est) * (0.005f / P.tauM);
-      const float w0_est = sqrtf(0.5f * (s_wf_est * s_wf_est + s_wt_est * s_wt_est));
+      // 观测器状态 = 全局 g_wf_est/g_wt_est（2026-08-10 由 file-static 暴露，
+      // 供 AnoVars 通用变量上报——w_est 是调差速增益的关键观测量）
+      g_wf_est += (prev_prop_state.wf - g_wf_est) * (0.005f / P.tauM);  // GNC 200Hz 固定步长
+      g_wt_est += (prev_prop_state.wt - g_wt_est) * (0.005f / P.tauM);
+      const float w0_est = sqrtf(0.5f * (g_wf_est * g_wf_est + g_wt_est * g_wt_est));
       const float w0_eff   = fmaxf(w0_est, w0_floor);
 
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
@@ -1298,8 +1299,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
         // 转子角动量：前后转子反向（前 CW 后 CCW），净角动量沿推力轴=
         // 机体系 x 分量（仿真 hv.x = Jp·(wf·cf − wt·ct) 同构；摆角小 cos≈1）
         const float h_rotor[3] = {
-            P.Jp * (s_wf_est * cosf(prev_prop_state.delta_f) -
-                    s_wt_est * cosf(prev_prop_state.delta_t)),
+            P.Jp * (g_wf_est * cosf(prev_prop_state.delta_f) -
+                    g_wt_est * cosf(prev_prop_state.delta_t)),
             0.0f, 0.0f };
         const InertiaCompResult ff = computeInertiaCompensation(
             omega_body, P.Ix, P.Iy, P.Iz, h_rotor,
@@ -1358,8 +1359,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       //   力矩失配；观测器后 B 与实际转速同步）
       //   验证：tools/verify_floor_consistency.py
       ai.current_state = prev_prop_state;
-      ai.current_state.wf = fmaxf(s_wf_est, w0_floor);   // ★ 2026-08-09 用观测实际转速（瞬态增益失配修复）
-      ai.current_state.wt = fmaxf(s_wt_est, w0_floor);
+      ai.current_state.wf = fmaxf(g_wf_est, w0_floor);   // ★ 2026-08-09 用观测实际转速（瞬态增益失配修复）
+      ai.current_state.wt = fmaxf(g_wt_est, w0_floor);
 
       AllocationOutput ao = allocateMoments(ai, P, AllocationStrategy::BTRUE);
 

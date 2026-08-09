@@ -567,6 +567,11 @@ extern float receivedValveControl;
 extern volatile float bat_voltage_mv;   // 电池电压 (mV)
 extern volatile float bat_current_ca;   // 电池电流 (0.1A，未接电流采样时为 0)
 
+// τm 一阶观测器转速估计（flight_control.cpp mix 层更新；2026-08-10 暴露为全局
+// 供 AnoVars 通用变量上报——观测值 = 实际转速实时估计）
+extern float g_wf_est;   // 前电机观测转速 (rad/s)
+extern float g_wt_est;   // 尾电机观测转速 (rad/s)
+
 // 遥控器 CRSF 协议数据
 #define CRSF_BUFFER_SIZE 26
 #define RC_INPUT_MAX_CHANNELS 16

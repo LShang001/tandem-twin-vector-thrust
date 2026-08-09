@@ -362,7 +362,16 @@ private:
     uint8_t _rxIndex;                        // 接收缓冲区索引
     bool _dataReceived;                      // 数据接收标志
 
-    // 计算和校验
+public:
+    // ★ 2026-08-10 上行自愈：半帧冻结检测/复位。
+    //   receiveData 在 available()=0 时退出，_rxIndex 若卡在 1-7（收到过 0xAB
+    //   但帧未凑齐），后续新帧的帧头被当普通字节错位累积、长度字段读错、
+    //   永远凑不齐 → 上行永久哑火（下行 0xF2 照发，实测 DBG 进出/噪声可触发）。
+    //   调用方（handleAnoCom）周期检查，stall >100ms 强制复位。
+    bool rxStalled() const { return _rxIndex != 0; }
+    void rxReset() { _rxIndex = 0; }
+
+private:
     uint8_t calculateSumCheck(uint8_t *data, uint16_t len);
     uint8_t calculateAddCheck(uint8_t *data, uint16_t len);
 
