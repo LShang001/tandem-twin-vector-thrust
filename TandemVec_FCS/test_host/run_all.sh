@@ -59,6 +59,9 @@ run_one "$ROOT/test_host/test_led_status.cpp"          led "$STUB_INCLUDE"
 # 纵列双发矢量推力飞行器控制分配（纯平台无关头文件，无 Arduino 依赖）：
 run_one "$ROOT/test_host/test_tandemvec_allocation.cpp" ta ""
 
+# ★2026-08-10 AirframeModel 通用框架四旋翼 demo（换机型=填数据，验证跨机型）：
+run_one "$ROOT/test_host/test_airframe_generic.cpp"       ag ""
+
 # 惯量逆解交叉耦合前馈（★2026-08-10 通用层，ω×(I·ω)+ω×h，仿真同构；
 # 含 ω×h 符号回归与理想刚体闭环对照）：
 run_one "$ROOT/test_host/test_inertia_decoupling.cpp"    id ""
