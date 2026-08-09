@@ -17,6 +17,7 @@ import json
 import logging
 import os
 import queue
+import struct
 import threading
 import time
 from pathlib import Path
@@ -75,6 +76,10 @@ class GCS:
         self.param_values = {}           # id → value
         self.param_count_seen = None     # 固件回传的参数个数（0xE0 CMD 0x01）
         self.param_pending = {}          # id → (sc, ac, 时间) 等待校验帧
+        self.vars_meta = {}              # 变量 id → {name, type}（0xF3 清单，AnoVars）
+        self.vars_meta_ready = False     # 清单是否已拉全
+        self.vars_count_seen = None      # 固件回传的变量个数（0xF3 CMD 0x01）
+        self.vars_samples = {}           # 变量名 → 最近值环形样本（watch 统计用）
         self.rx_q = queue.Queue()
         self.ws_clients = set()
         self._loop = None
@@ -113,6 +118,8 @@ class GCS:
         self.recorder = None
         self.param_names = {}
         self.param_values = {}
+        self.vars_meta = {}
+        self.vars_meta_ready = False
         self.reset_stats()
         # ★ 防"固件卡在 DBG 模式无遥测"：连接后自动发 exit——
         #   若固件处于调试模式则退出恢复遥测轮发；若本就在遥测模式，
@@ -203,6 +210,8 @@ class GCS:
         self.dbgs = bb.DbgSession(self.link.write)
         self.param_names = {}
         self.param_values = {}
+        self.vars_meta = {}
+        self.vars_meta_ready = False
         self.reset_stats()
         if consume_thread:
             self._start_consumer()
@@ -335,6 +344,13 @@ def _on_telemetry_rx(chunk: bytes):
             if dec:
                 g.send_all({'type': 'device_info', **dec})
             continue
+        # ---- AnoVars 通用变量帧（2026-08-10）----
+        if f.func == anocom.FUNC_VARS_LIST:
+            _on_vars_list(f)
+            continue
+        if f.func == anocom.FUNC_VARS_VALUE:
+            _on_vars_value(f)
+            continue
         # ---- 遥测帧 ----
         dec = anocom.decode_frame(f)
         if not dec:
@@ -424,6 +440,45 @@ def _on_param_check(f: anocom.Frame):
             g.param_pending.pop(pid, None)
             g.send_all({'type': 'param_written', 'id': pid, 'ok': True})
             return
+
+
+def _on_vars_list(f: anocom.Frame):
+    """0xF3 变量清单应答：CMD 0x01 个数 / CMD 0x02 变量信息 [id u16, type u8, name 16B]"""
+    p = f.payload
+    if not p:
+        return
+    if p[0] == 0x01 and len(p) >= 3:
+        count = p[1] | (p[2] << 8)
+        g.vars_count_seen = count
+        g.send_all({'type': 'vars_count', 'count': count})
+        return
+    if p[0] == 0x02 and len(p) >= 20:  # [0x02, id u16, type u8, name 16B] = 20B
+        vid = p[1] | (p[2] << 8)
+        vtype = p[3]
+        name = p[4:20].split(b'\x00')[0].decode('ascii', errors='replace')
+        g.vars_meta[vid] = {'name': name, 'type': 'float' if vtype == 0 else f'u{vtype}'}
+        g.send_all({'type': 'vars_info', 'id': vid, 'name': name, 'type': vtype})
+
+
+def _on_vars_value(f: anocom.Frame):
+    """0xF2 变量值帧 [id u16 LE] + [float LE]：查 vars_meta 映射名称进快照
+    （字段名 vars_<name>，随 20Hz telemetry 推送 + record 落盘）。
+    清单未拉全时仍可推（名退化为 vars_idN）——CLI vars watch 会先拉清单。"""
+    p = f.payload
+    if len(p) < 6:
+        return
+    vid = p[0] | (p[1] << 8)
+    val = struct.unpack('<f', p[2:6])[0]
+    meta = g.vars_meta.get(vid)
+    if meta:
+        key = 'vars_' + meta['name']
+    else:
+        key = f'vars_id{vid}'
+    g.snap[key] = val
+    # 记录样本（watch 统计用）——轻量环形，最多 256 个
+    samples = g.vars_samples.setdefault(key, [])
+    if len(samples) < 256:
+        samples.append(val)
 
 
 # ========================================================================

@@ -101,6 +101,10 @@ function handleMsg(msg) {
     case 'param_written_pending':
       emit(msg.type, msg);
       break;
+    case 'vars_count':
+    case 'vars_info':
+      emit(msg.type, msg);
+      break;
     case 'record_state':
       emit('record-state', msg);
       break;

@@ -17,6 +17,7 @@ const CHIP_ORDER = [
 let rcBars = [];
 let ctrlBars = [];
 let actBars = [];
+let varsRows = {};      // 变量名 → {nameEl, valEl, seen}
 let initializing = false;
 
 export function activate() {
@@ -69,6 +70,34 @@ export function activate() {
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
   bus.addEventListener('page', onPage);
   onTelemetry(state.snap);
+}
+
+// 变量面板：telemetry 快照里 vars_ 前缀键动态渲染（上限 16 行，超出滚动）
+function renderVars(s) {
+  const body = $('varsBody');
+  const empty = $('varsEmpty');
+  let found = 0;
+  for (const [k, v] of Object.entries(s)) {
+    if (!k.startsWith('vars_') || v === undefined) continue;
+    const name = k.slice(5);
+    found++;
+    let row = varsRows[name];
+    if (!row) {
+      const div = document.createElement('div');
+      div.className = 'vars-row';
+      const nm = document.createElement('span');
+      nm.className = 'vars-name';
+      nm.textContent = name;
+      const vl = document.createElement('span');
+      vl.className = 'vars-val';
+      div.append(nm, vl);
+      body.appendChild(div);
+      row = { nameEl: nm, valEl: vl };
+      varsRows[name] = row;
+    }
+    row.valEl.textContent = (typeof v === 'number') ? v.toFixed(4) : String(v);
+  }
+  if (empty) empty.style.display = found ? 'none' : '';
 }
 
 function onPage(e) {
@@ -151,6 +180,9 @@ function onTelemetry(s) {
   $('gpsLat').textContent = fmt(s.gps_lat, 6);
   $('gpsAlt').textContent = fmt(s.gps_alt_m, 1);
   $('gpsPdop').textContent = fmt(s.gps_pdop, 1);
+
+  // 变量面板（vars_ 前缀动态行）
+  renderVars(s);
 }
 
 // 立即渲染一次（页面加载时）

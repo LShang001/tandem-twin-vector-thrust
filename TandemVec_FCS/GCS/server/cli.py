@@ -660,6 +660,132 @@ def cmd_record(a):
             print('（无活动记录）')
 
 
+def _vars_pull_meta(quiet=False):
+    """拉取固件变量清单（0xF3 count + 逐个 info）填充 g.vars_meta。
+    返回 count 或 None（失败）。
+    ★ DBG 残留时序：上会话 exit 可能被断开吞掉，固件留 DBG（handleAnoCom
+    直接 return，0xF3 无人处理）——失败时自动发 exit 恢复遥测再重试。"""
+    count = None
+    for attempt in range(4):
+        if attempt > 0:
+            # 首轮失败 → 强制退出 DBG 再试（幂等：固件已退出则无副作用）
+            m.g.write(b'exit\n')
+            time.sleep(0.4)
+        m.g.write(anocom.cmd_vars_count())
+        drain(0.5)
+        count = getattr(m.g, 'vars_count_seen', None)
+        if count:
+            break
+    if not count:
+        if not quiet:
+            print('✗ 未收到变量个数应答——固件处于 DBG 模式？先执行: cli.py dbg off 后重试')
+        return None
+    m.g.vars_meta.clear()
+    for vid in range(count):
+        m.g.write(anocom.cmd_vars_info(vid))
+        drain(0.12)
+    return count
+
+
+def cmd_vars(a):
+    """AnoVars 通用变量上报（固件任意内部变量注册表，2026-08-10）：
+      list              拉取固件变量清单（0xF3）打印表格
+      watch <name>...   配置上报集合（DBG vars add）+ 收集 0xF2 值流（默认 5s）
+      add <name>...     加入上报集合（DBG vars add，≤16）
+      remove <name>     移出上报集合（DBG vars remove）
+      clear             清空上报集合
+      rate <hz>         上报频率 1-200Hz（默认 50；N 个变量时每个 = rate/N Hz）
+      status            固件侧 watch 状态（DBG vars）
+    示例: cli.py --port COM10 vars watch wf_est alpha_ref_x -t 5 --json
+    """
+    require_connected()
+    import json as _json
+
+    if a.action == 'list':
+        count = _vars_pull_meta()
+        if count is None:
+            return
+        meta = m.g.vars_meta
+        if a.json:
+            print(_json.dumps({'ok': True, 'count': count,
+                               'vars': [{'id': i, **meta.get(i, {'name': f'id{i}', 'type': '?'})}
+                                        for i in range(count)]}, ensure_ascii=False))
+        else:
+            print(f'固件变量清单（{count} 个）：')
+            for i in range(count):
+                info = meta.get(i, {})
+                print(f'  {i:3d}  {info.get("name", "?"):16s} {info.get("type", "?")}')
+        return
+
+    if a.action == 'watch':
+        if not a.names:
+            print('✗ 用法: vars watch <name>... [-t 秒] [--json]')
+            return
+        # ★ 先拉清单（0xF3 → vars_meta）——0xF2 解码需 id→名称映射，
+        #   否则值帧进 snap 的名字退化为 vars_idN
+        _vars_pull_meta(quiet=True)
+        # 配置：DBG 清空 + 逐个 add（exit 自动恢复遥测）
+        _dbg_mode(True)
+        time.sleep(0.4)
+        m.g.dbg_cmd('vars clear')
+        for name in a.names:
+            m.g.dbg_cmd(f'vars add {name}')
+        for ln in _dbg_collect(1.0):
+            if '[DBG] vars' in ln:
+                print(ln)
+        _dbg_mode(False)
+        time.sleep(0.3)
+        # 收集 0xF2 值流（drain → _on_telemetry_rx 自动解析进 snap）
+        t_end = time.time() + a.t
+        while time.time() < t_end:
+            drain(0.1)
+        # 输出：最新值 + 样本统计（g.vars_samples 由 _on_vars_value 累积）
+        rows = []
+        for name in a.names:
+            key = 'vars_' + name
+            latest = m.g.snap.get(key)
+            samples = m.g.vars_samples.get(key, [])
+            row = {'name': name, 'latest': latest,
+                   'samples': len(samples),
+                   'min': min(samples) if samples else None,
+                   'max': max(samples) if samples else None}
+            rows.append(row)
+        if a.json:
+            print(_json.dumps({'ok': True, 'duration': a.t, 'vars': rows}, ensure_ascii=False))
+        else:
+            for r in rows:
+                if r['latest'] is None:
+                    print(f'✗ {r["name"]}: 未收到 0xF2 值（检查名称拼写/固件版本）')
+                else:
+                    print(f'  {r["name"]:16s} = {r["latest"]:+.4f}  '
+                          f'[{r["samples"]} 样本 min={r["min"]:+.4f} max={r["max"]:+.4f}]')
+        return
+
+    # ---- DBG 配置类（add/remove/clear/rate/status）----
+    _dbg_mode(True)
+    time.sleep(0.4)
+    if a.action == 'add':
+        for name in a.names:
+            m.g.dbg_cmd(f'vars add {name}')
+    elif a.action == 'remove':
+        for name in a.names:
+            m.g.dbg_cmd(f'vars remove {name}')
+    elif a.action == 'clear':
+        m.g.dbg_cmd('vars clear')
+    elif a.action == 'rate':
+        # rate <hz> 的 hz 会被 names 贪婪收集（nargs='*'），从 names[0] 取
+        hz = int(float(a.names[0])) if a.names else 0
+        if hz < 1 or hz > 200:
+            print('✗ 用法: vars rate <hz>（1-200）')
+            return
+        m.g.dbg_cmd(f'vars rate {hz}')
+    else:  # status
+        m.g.dbg_cmd('vars')
+    for ln in _dbg_collect(1.2):
+        print(ln)
+    _dbg_mode(False)
+
+
 def cmd_sniff(a):
     """帧监控（原 tools/sniff_*.py + parse_anocom.py 散脚本并入）。
     主题:
@@ -884,6 +1010,13 @@ def main():
     p.add_argument('-d', '--duration', type=float, default=0,
                    help='记录秒数（0=直到 Ctrl+C；飞行场景建议给时长自动停止）')
     p.set_defaults(fn=cmd_record)
+
+    p = sub.add_parser('vars', help='通用变量上报（list/watch/add/remove/clear/rate/status）')
+    p.add_argument('action', choices=['list', 'watch', 'add', 'remove', 'clear', 'rate', 'status'])
+    p.add_argument('names', nargs='*', help='变量名（watch/add/remove）')
+    p.add_argument('value', nargs='?', type=float, help='rate 频率 1-200Hz')
+    p.add_argument('-t', type=float, default=5.0, help='watch 收集秒数（默认 5）')
+    p.set_defaults(fn=cmd_vars)
 
     p = sub.add_parser('sniff', help='帧监控（主题: rc/att/axes/euler/raw/all）')
     p.add_argument('theme', nargs='?', default='all',

@@ -55,6 +55,9 @@ def _reset_g():
     m.g.param_names = {}
     m.g.param_values = {}
     m.g.param_pending = {}
+    m.g.vars_meta = {}
+    m.g.vars_count_seen = None
+    m.g.vars_samples = {}
     m.g.tele_buf.clear()
     return m
 
@@ -98,6 +101,17 @@ def _make_telemetry_frames():
     frames.append(anocom.encode_frame(anocom.FUNC_GPS_INFO1,
         bytes([3, 12]) + struct.pack('<2i', 116407325, 39904823) +
         struct.pack('<i', 4500) + struct.pack('<3h', 100, 200, 300) + bytes([15, 20, 25])))
+    # AnoVars：0xF3 清单（count=3 + 变量信息）+ 0xF2 值帧
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_LIST, bytes([0x01, 3, 0])))
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_LIST,
+        bytes([0x02, 0, 0, 0]) + b'wf_est' + b'\x00' * 11))
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_LIST,
+        bytes([0x02, 1, 0, 0]) + b'alpha_ref_x' + b'\x00' * 6))
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_LIST,
+        bytes([0x02, 2, 0, 1]) + b'u8_var' + b'\x00' * 10))
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_VALUE, struct.pack('<Hf', 0, 184.5)))
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_VALUE, struct.pack('<Hf', 1, -2.25)))
+    frames.append(anocom.encode_frame(anocom.FUNC_VARS_VALUE, struct.pack('<Hf', 2, 99.0)))
     return frames
 
 
@@ -128,8 +142,15 @@ def test_telemetry_aggregation():
     assert abs(s['motor_rear_pct'] - 58.7) < 1e-6
     assert abs(s['dw'] - 0.49) < 1e-6
     assert s['sat_df'] is True and s['sat_dt'] is False and s['sat_dw'] is True
-    # 链路统计：14 帧全解码（+0x40 遥控帧）、无 CRC 失败、遥测时间戳已更新
-    assert m.g.stat_frames == 14 and m.g.stat_bad == 0
+    # AnoVars 变量帧：0xF3 清单映射 + 0xF2 值进快照（vars_ 前缀）
+    assert m.g.vars_count_seen == 3
+    assert m.g.vars_meta[0]['name'] == 'wf_est'
+    assert abs(s['vars_wf_est'] - 184.5) < 1e-6
+    assert abs(s['vars_alpha_ref_x'] - (-2.25)) < 1e-6
+    assert abs(s['vars_u8_var'] - 99.0) < 1e-6
+    assert m.g.vars_samples['vars_wf_est'][-1] == 184.5
+    # 链路统计：21 帧全解码（+0xF2/0xF3 变量帧）、无 CRC 失败、遥测时间戳已更新
+    assert m.g.stat_frames == 21 and m.g.stat_bad == 0
     assert m.g.stat_bytes == sum(len(f) for f in _make_telemetry_frames())
     assert m.g.last_tele_ts is not None
     m.g.disconnect()
@@ -178,8 +199,8 @@ def test_realworld_chunking_brutal():
     assert s['flight_mode'] == 1                     # 组1
     assert abs(s['vel_n_ms'] - 1.0) < 1e-6           # 组2
     assert s['gps_sats'] == 12                       # 组3
-    assert m.g.stat_frames == 14                     # 14 帧（+0x40 遥控帧）无一丢失
-    assert m.g.stat_tele == 14                       # 全部计入遥测帧统计
+    assert m.g.stat_frames == 21                     # 21 帧（+0xF2/0xF3 变量帧）无一丢失
+    assert m.g.stat_tele == 14                       # 遥测帧计数（变量帧走专用回调不计 tele）
     m.g.disconnect()
 
 

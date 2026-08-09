@@ -155,3 +155,30 @@ def test_decode_device_info():
     dec = anocom.decode_device_info(payload)
     assert dec['dev_id'] == 0x05 and dec['sw_ver'] == 5
     assert dec['dev_name'] == 'VTVL_DualRotor_FCS'
+
+
+def test_vars_command_frames():
+    """0xF3 清单请求帧构造（AnoVars）"""
+    f = anocom.cmd_vars_count()
+    assert f[3] == 0xF3 and f[4] == 1 and f[6] == 0x01
+    f = anocom.cmd_vars_info(7)
+    assert f[3] == 0xF3 and f[4] == 3
+    assert f[6] == 0x02 and f[7] == 7 and f[8] == 0
+
+
+def test_vars_list_and_value_frames():
+    """0xF3 清单应答 + 0xF2 值帧（与固件 ano_vars.cpp 字节对齐）"""
+    # 固件 0xF3 应答 CMD 0x01: [0x01, count u16 LE]
+    payload = bytes([0x01, 47, 0])
+    f = anocom.encode_frame(anocom.FUNC_VARS_LIST, payload)
+    assert anocom.extract_frames(f)[0][0].valid
+    # 固件 0xF3 应答 CMD 0x02: [0x02, id u16, type u8, name 16B]
+    payload = bytes([0x02, 5, 0, 0]) + b'wf_est' + b'\x00' * 11
+    f = anocom.encode_frame(anocom.FUNC_VARS_LIST, payload)
+    assert anocom.extract_frames(f)[0][0].valid
+    # 0xF2 值帧: [id u16 LE] + [float LE] = 6B
+    payload = struct.pack('<Hf', 5, 184.5)
+    f = anocom.encode_frame(anocom.FUNC_VARS_VALUE, payload)
+    fr = anocom.extract_frames(f)[0][0]
+    assert fr.func == 0xF2 and fr.valid and len(fr.payload) == 6
+    assert struct.unpack('<Hf', fr.payload) == (5, 184.5)

@@ -97,9 +97,9 @@
         </div>
       </div>
 
-      <!-- 执行器输出（AnoCom 0x40 自定义帧：TVC 摆角 + 电机推力 + 差速 + 饱和标记） -->
+      <!-- 执行器输出（AnoCom 0xF1 自定义帧：TVC 摆角 + 电机推力 + 差速 + 饱和标记） -->
       <div class="glass panel act-panel">
-        <div class="panel-title">执行器 ACTUATOR <span class="hint">0x40 帧 · 摆角限幅 ±15° · 箭头方向=摆角，长度=推力</span></div>
+        <div class="panel-title">执行器 ACTUATOR <span class="hint">0xF1 帧 · 摆角限幅 ±15° · 箭头方向=摆角，长度=推力</span></div>
         <div class="act-body">
           <div class="act-dials">
             <div class="act-dial">
@@ -117,6 +117,14 @@
             <div class="status-chip" id="satDt"><i class="dot"></i><span>δt 饱和</span></div>
             <div class="status-chip" id="satDw"><i class="dot"></i><span>Δω 饱和</span></div>
           </div>
+        </div>
+      </div>
+
+      <!-- 通用变量监视（AnoCom 0xF2 帧，AnoVars——CLI: vars watch <name> 配置上报集合） -->
+      <div class="glass panel vars-panel">
+        <div class="panel-title">变量监视 VARS <span class="hint">0xF2 帧 · CLI vars watch 配置 · 上限 16</span></div>
+        <div class="vars-body" id="varsBody">
+          <div class="vars-empty" id="varsEmpty">无上报变量 — 用 CLI 配置:<br><code>tvc-cli vars watch wf_est alpha_ref_x</code></div>
         </div>
       </div>
     </div>

@@ -35,6 +35,8 @@ FUNC_ATTITUDE_CONTROL = 0x21
 FUNC_GPS_INFO1 = 0x30
 FUNC_RC_DATA = 0x40            # 遥控器数据（手册定义：10×int16 us）
 FUNC_ACTUATOR_OUT = 0xF1       # 本工程自定义（手册灵活格式帧）：执行器输出（TVC 摆角/电机推力/差速）
+FUNC_VARS_VALUE = 0xF2         # 本工程自定义（手册灵活格式帧）：通用变量值帧 [id u16 LE] + [float LE]
+FUNC_VARS_LIST = 0xF3          # 本工程自定义（手册灵活格式帧）：变量清单请求/应答（仿 0xE0/0xE2）
 FUNC_PARAM_CMD = 0xE0
 FUNC_PARAM_WRITE_READ = 0xE1
 FUNC_PARAM_INFO = 0xE2
@@ -46,7 +48,8 @@ FUNC_NAMES = {
     0x08: '位置偏移', 0x09: '风速估计', 0x0A: '目标姿态', 0x0B: '目标速度',
     0x0C: '回航信息', 0x0D: '电压电流', 0x0E: '外接模块状态', 0x20: 'PWM输出',
     0x21: '姿态控制输出', 0x30: 'GPS信息1', 0x40: '遥控器数据', 0xF1: '执行器输出',
-    0xE0: '参数命令', 0xE1: '参数读写', 0xE2: '参数信息', 0xE3: '设备信息',
+    0xF2: '变量值', 0xF3: '变量清单', 0xE0: '参数命令', 0xE1: '参数读写',
+    0xE2: '参数信息', 0xE3: '设备信息',
 }
 
 # 参数类型（与固件 AnoDataType 枚举一致，E2 信息帧 PAR_TYPE）
@@ -344,6 +347,16 @@ def cmd_param_restore_defaults() -> bytes:
 def cmd_param_save() -> bytes:
     """0xE0 CMD 0x10 VAL=0xAB 保存（固件无持久化，仅确认）"""
     return encode_frame(FUNC_PARAM_CMD, bytes([0x10, 0xAB, 0x00]))
+
+
+def cmd_vars_count() -> bytes:
+    """0xF3 CMD 0x01 读变量个数（AnoVars 清单）"""
+    return encode_frame(FUNC_VARS_LIST, bytes([0x01]))
+
+
+def cmd_vars_info(var_id: int) -> bytes:
+    """0xF3 CMD 0x02 读变量信息（id u16 → 回 [id, type u8, name 16B]）"""
+    return encode_frame(FUNC_VARS_LIST, bytes([0x02, var_id & 0xFF, (var_id >> 8) & 0xFF]))
 
 
 def cmd_write_param(param_id: int, value, is_float: bool = True) -> bytes:
