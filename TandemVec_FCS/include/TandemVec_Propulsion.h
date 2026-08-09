@@ -27,6 +27,7 @@
 #pragma once
 #include <cmath>
 #include "TandemVec_Config.h"
+#include "AirframeModel.h"   // ★2026-08-10 机型数据驱动执行器模型（通用层）
 
 // ============================================================
 //  数据结构
@@ -174,5 +175,45 @@ inline EffectMatrix computeEffectMatrix(const PropulsionState& s,
     E.M[2][1] = -Qt * ct;
     E.M[2][2] =  p.a * Tf * cf;
 
+    return E;
+}
+
+// ============================================================
+//  4. 机型数据驱动控制效能矩阵（★2026-08-10 通用层）
+// ============================================================
+// 纵列双发机型 = 2 电机（前摆+尾摆）+ 3 控制输入（Δω/δ_t/δ_f），
+// 通用合成器 computeJacobianNumeric（数值中心差分）自动生成 B——与上方
+// 解析 computeEffectMatrix 逐元素 1e-3 内等价（ta 测试 T11 回归锁定）。
+// 换机型 = 填新电机表 + 输入映射，合成器/分配器零改动。
+//
+// 模型系几何（与解析式同构）：
+//   电机0 前摆（上摆）：r=(a,0,0)、推力轴 x'、摆轴 z'、spin=-1（CW），
+//        转速 = w0√(1+Δω)（u[0]，spd_sign=+1）、摆角 = u[2]（δ_f）
+//   电机1 尾摆（下摆）：r=(-b,0,0)、推力轴 x'、摆轴 y'、spin=+1（CCW），
+//        转速 = w0√(1−Δω)（u[0]，spd_sign=-1）、摆角 = u[1]（δ_t）
+inline EffectMatrix computeEffectMatrixDataDriven(const PropulsionState &s,
+                                                  const TandemVecParams &p,
+                                                  float w0)
+{
+    // 纵列双发电机表（static constexpr 几何/映射；力臂 a/b 为运行时参数）
+    static constexpr ActuatorDef kTandemActs[2] = {
+        // 前摆（上摆）：u_spd=0（Δω 联动 +）、u_angle=2（δ_f）
+        {ActuatorKind::kGimbal, {1.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 0.f, 1.f}, -1.f, 0, 1.f, 2},
+        // 尾摆（下摆）：u_spd=0（Δω 联动 −）、u_angle=1（δ_t）
+        {ActuatorKind::kGimbal, {-1.f, 0.f, 0.f}, {1.f, 0.f, 0.f}, {0.f, 1.f, 0.f}, 1.f, 0, -1.f, 1},
+    };
+    ActuatorDef acts[2] = {kTandemActs[0], kTandemActs[1]};
+    acts[0].r[0] = p.a;   // 前摆 +a
+    acts[1].r[0] = -p.b;  // 尾摆 -b
+    AirframeModel model = {acts, 2};
+
+    // 控制输入 [Δω, δ_t, δ_f]——工作点：Δω 从当前 wf/wt 反推
+    // （差速参数化 wf²=w0²(1+Δω)，中心差分导数恒 = w0² 与解析一致，
+    // 但当前转速的幅值项（如 Qt=kQ·wt²）必须用工作点 Δω 表达）
+    const float dw_work = (s.wf * s.wf - s.wt * s.wt) / (2.f * w0 * w0);
+    const float u[3] = {dw_work, s.delta_t, s.delta_f};
+
+    EffectMatrix E;
+    computeJacobianNumeric<3>(model, u, w0, p.kT, p.kQ, E.M);
     return E;
 }

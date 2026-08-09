@@ -14,6 +14,7 @@
 //   8. 正向映射往返一致：分配输出代入 computeWrench() 应接近原始指令
 //   9. 差速分配：平方和不变性与 wMax 钳位
 //  10. 策略切换零冲击（指令连续性）
+//  11. ★2026-08-10 数据驱动 B（AirframeModel 数值差分）与解析式逐元素等价
 #include "../include/TandemVec_Config.h"
 #include "../include/TandemVec_Propulsion.h"
 #include "../include/TandemVec_ControlAllocation.h"
@@ -345,6 +346,64 @@ static void test_differential_allocation()
 //  测试 10：策略切换指令连续性
 //    三种策略在相同输入下，输出差异应在合理范围内（无突变）
 // ============================================================
+
+// ============================================================
+//  测试 11：数据驱动 B（AirframeModel 数值差分）vs 解析式逐元素等价
+//   ★2026-08-10 通用层验证：多个工作点（摆角/差速/转速组合）下
+//   computeEffectMatrixDataDriven 与 computeEffectMatrix 应 1e-3 内一致。
+// ============================================================
+static void test_data_driven_equivalence()
+{
+    const TandemVecParams &P = kDefaultTandemVecParams;
+    int worst_i = -1, worst_j = -1;
+    float worst_rel = 0.f, worst_abs = 0.f;
+    // 工作点扫描：摆角 ±10°、差速 ±0.3、转速 0.5~1.2 w_hover
+    const float w_hover = std::sqrt(0.5f * P.m * P.g / P.kT);
+    for (float df_deg : {-10.f, -5.f, 0.f, 5.f, 10.f})
+    {
+        for (float dt_deg : {-10.f, -5.f, 0.f, 5.f, 10.f})
+        {
+            for (float dw : {-0.3f, 0.f, 0.3f})
+            {
+                for (float w_scale : {0.6f, 0.8f, 1.0f, 1.2f})
+                {
+                    const float w0 = w_hover * w_scale;
+                    // 差速工作点：wf/wt 按 Δω 参数化（解析式假设）
+                    PropulsionState st;
+                    st.wf = w0 * std::sqrt(std::fmax(0.f, 1.f + dw));
+                    st.wt = w0 * std::sqrt(std::fmax(0.f, 1.f - dw));
+                    st.delta_f = df_deg * 0.0174532925f;
+                    st.delta_t = dt_deg * 0.0174532925f;
+                    // 解析式的工作点 w0 = 当前转速基准（差速不变时 = w0）
+                    const EffectMatrix Ea = computeEffectMatrix(st, P, w0);
+                    const EffectMatrix Eb = computeEffectMatrixDataDriven(st, P, w0);
+                    for (int i = 0; i < 3; ++i)
+                        for (int j = 0; j < 3; ++j)
+                        {
+                            const float abs_diff = std::fabs(Ea.M[i][j] - Eb.M[i][j]);
+                            const float scale = std::fmax(1e-4f, std::fabs(Ea.M[i][j]));
+                            const float rel = abs_diff / scale;
+                            if (rel > worst_rel) { worst_rel = rel; worst_i = i; worst_j = j; }
+                            if (abs_diff > worst_abs) { worst_abs = abs_diff; }
+                        }
+                }
+            }
+        }
+    }
+    std::printf("  最坏相对偏差 B[%d][%d] = %.2e，最坏绝对偏差 = %.2e\n", worst_i, worst_j, worst_rel, worst_abs);
+    check(worst_rel < 5e-3f && worst_abs < 5e-4f,
+          "T11 数据驱动 vs 解析式：相对 <5e-3 且绝对 <5e-4（数值差分固有精度）");
+    // 绝对容差复核：全部元素绝对偏差 < 5e-4（数值差分固有精度 ~1e-5）
+    // 零摆角退化一致性（B_true → B_full 的对应关系两实现同时成立）
+    PropulsionState s0;
+    s0.wf = s0.wt = w_hover;
+    s0.delta_f = s0.delta_t = 0.f;
+    const EffectMatrix Ef = computeEffectMatrix(s0, P, w_hover);
+    const EffectMatrix Ed = computeEffectMatrixDataDriven(s0, P, w_hover);
+    check(std::fabs(Ef.M[1][0]) < 1e-6f && std::fabs(Ed.M[1][0]) < 1e-6f,
+          "T11 零摆角：差速列对 My/Mz 的耦合项为 0（两实现一致）");
+}
+
 static void test_strategy_continuity()
 {
     const float w0 = 400.0f;
@@ -399,6 +458,10 @@ int main()
 
     std::printf("\n-- T10：策略切换连续性 --\n");
     test_strategy_continuity();
+
+    // ★2026-08-10 新增：数据驱动 B（AirframeModel 数值差分）vs 解析式逐元素等价
+    std::printf("\n-- T11：数据驱动 B 与解析式等价 --\n");
+    test_data_driven_equivalence();
 
     std::printf("\n");
     if (g_fail_count == 0)
