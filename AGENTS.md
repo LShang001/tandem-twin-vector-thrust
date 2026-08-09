@@ -46,13 +46,10 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 | 路径 | 为什么必须知道 |
 |------|---------------|
 | `models/aircraft-model.json` | ★ 唯一参数源，52 参数。所有参数值以此为准，不可在代码中硬编码 |
-| `simulations/vector-thrust-lab/src/core/` | 纯计算层，零 Three.js/DOM 依赖，Node 可单独测试 |
-| `simulations/vector-thrust-lab/src/core/parameters.mjs` | sync-params.py 生成，**禁止手改** |
-| `simulations/vector-thrust-lab/standalone.html` | 构建产物（build-standalone.py 生成），**禁止手改** |
+| `simulations/vector-thrust-lab/src/core/` | 纯计算层，零 Three.js/DOM 依赖，Node 可单独测试；`parameters.mjs` 由 sync-params.py 生成**禁止手改** |
 | `docs/04-数学建模/MOD-002-坐标系与符号约定.md` | NED 右手系、theta=-asin(R13)、渲染≠物理力臂 |
 | `docs/03-理论推导/THY-004/` | 模块化 LaTeX 工程，编译需要 XeLaTeX ×3 |
-| `TandemVec_FCS/GCS/` | 上位机（Python 后端+Web 前端）。协议/字段缩放以 `GCS/server/anocom.py` 为 PC 侧唯一实现（与固件逐字节对齐）；参数表 = 固件 `src/ano_params.cpp` 注册表 + `GCS/server/params.py` 显示元数据（按名称匹配） |
-| `TandemVec_FCS/src/ano_params.cpp` | 固件参数在线读写（117 参数，AnoCom 0xE0/0xE1）。参数 ID 顺序变更需同步 `GCS/server/params.py::expected_names()` 校验 |
+| `TandemVec_FCS/GCS/` | 上位机。协议/字段缩放以 `GCS/server/anocom.py` 为 PC 侧唯一实现（与固件逐字节对齐）；**参数链路 = 固件 `src/ano_params.cpp` 注册表（ID 顺序变更须同步 `GCS/server/params.py::expected_names()` 校验）** |
 | `TandemVec_FCS/include/FlightCtrlParams.h` | 固件参数唯一事实源：`kFlightCtrlParamsDefaults`（出厂默认，static constexpr）+ 固件分支 `kFlightCtrlParams`（可变实例，0xE1 写入） |
 
 ## 原则
@@ -105,17 +102,15 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 - 四元数**双覆盖/最短路径**：`Ry(200°)⁻¹ ≡ Ry(+160°)`，qe.w<0 取反后沿短弧修正；测试断言方向前必须先做 S³ 几何推导，勿直觉判断（来源：2026-08-04，断言曾写反）
 - 悬停构型下 3-2-1 欧拉显示退化：机头朝天（θ≈−90°）时绕 x 转 20° 显示为 θ=−70°/φ=90°（奇异重新分配），**勿用欧拉显示判断悬停姿态**，以四元数为准（来源：2026-08-04 视觉验证）
 - `quat(x,y,z,w)` 分量顺序：绕 x 转 = `(sin,0,0,cos)`、绕 z = `(0,0,sin,cos)`——x/z 分量写反是隐蔽笔误，测试三通道符号用例可防（来源：2026-08-04）
-- **黑匣子 P 帧只含 21 个差分增量**（第 22 槽被帧尾 CRC 占用）——解析按 21 增量，末通道（p2）保持最近 I 帧参考值；曾按 22 增量解析致 p2 被 CRC 字节污染（固件 buildPFrame 循环越界，2026-08-08 修正，`flash_export.py`/GCS 同步；来源：2026-08-08 上位机开发）
-- **黑匣子 S 帧 236B 定长**：9B 头（magic+type+seg+tms）+ 通道名表 ≤224B（pad 0x00）+ 1B 预留 + CRC 2B；导出切帧按定长 236B，勿按变长 `\0` 搜索（来源：2026-08-08）
+- **黑匣子帧格式**：**P 帧只含 21 个差分增量**（第 22 槽被帧尾 CRC 占用）——解析按 21 增量，末通道（p2）保持最近 I 帧参考值（曾按 22 增量致 p2 被 CRC 污染）；**S 帧 236B 定长**（9B 头 + 通道名表 ≤224B pad + 1B 预留 + CRC 2B）——导出切帧按定长 236B，勿按变长 `\0` 搜索（来源：2026-08-08）
 - **AnoCom 0x0D 帧占用约定**：`fc_voltage/fc_current` 承载氧压 P1/P2（非电压电流）；`bat_voltage=12.6` 为占位常量无真实采样；0x20 帧传 `raw_rc_values`（us，非协议注释的 0.01%）（来源：2026-08-08 GCS 字段对齐）
 - **AnoCom 0x40 执行器帧（本工程自定义，12B）**：前/尾摆角 int16 ×100→deg、前/尾电机 u16 ×10→%、差速 Δω int16 ×1000（归一化）、饱和标记 u8（bit0 δf / bit1 δt / bit2 Δω）+ 预留 u8；**mix 输出级统一捕获（`g_tvc_front_deg`/`g_tvc_rear_deg`/`ch3_output`/`ch4_output`/`gnc_tel.dw`/`alloc_sat`），锁定/手动/自动全模式有效**；摆角限幅 ±15°（MAX_CORRECTION/GYRO_K），上位机仪表量程即 ±15°。无硬件渲染验证：写 `GCS/output/*.csv`（含 0x40 字段）→ WS 发 `replay_start` → IAB 浏览器视口加高截图 + PIL 像素采样（来源：2026-08-09 TVC 面板）
 - **执行器轴映射（2026-08-07 轴置换）**：固件实际 **上摆=滚转 / 下摆=俯仰 / 差速=偏航**（alpha_roll 体轴x→δf、alpha_pitch 体轴y→δt、alpha_yaw 体轴z→Δω；悬停构型语义，机头朝天时前电机=最高点=上摆）；旧描述"前摆=偏航、差速反扭滚转"为**巡航读法**（物理公式 Mz=a·Tf·sδf 在巡航系即偏航力矩，悬停系即侧倾力矩），2026-08-09 已统一文档。锚点=手动模式摇杆直通实机验证（roll_raw→上摆、pitch_raw→下摆）。**写任何轴/执行器注释前先查 mix 层 1202-1204 行，勿凭概念名或旧注释**（来源：2026-08-09 文档统一）
 - **差速增益调度（flight_control.cpp 层2）**：有效回路增益 = kp·(w0_actual/w0_used)²。三层坑：①Δω 指令 1/w0² 低油门爆炸（2026-08-07 调度 (w0/wh)² 修复）；②物理力矩仍 ∝w0² → 稳态有效增益随油门放大（2026-08-09 封顶 1.0 修复）；③**瞬态失配才是抖油门震荡根因**——分配器用指令油门而力矩用实际转速（τm 滞后），油门释放瞬间 w0_actual/w0_cmd≈1.33 → 有效增益瞬态 0.25→0.44 越震荡点 0.35 约 160ms。**修复：τm 一阶观测器（w_est += (w_cmd−w_est)·dt/τm），B 矩阵工作点/调度/current_state 全部用观测值**。调差速相关增益前先算有效增益随油门/瞬态的变化（来源：2026-08-09 抖油门震荡三层定位）
 - **黑匣子读取工具 `GCS/server/bb_tool.py`**：`--list`/`--latest`/`--seg N`/`--analyze`/`--pages N`（默认 512 页≈4 分钟飞行，全量 2048 页要 8-15 分钟）。驱动后端 DBG 导出链路。**2026-08-09 修复**：① `_on_findseg_text` 定义了但从未被接线（黑匣子页「列出飞行段」静默失效）→ `_on_dbg_rx` 补调用；② DbgSession 导出中断后卡 collecting → enter/exit 复位；③ **S 帧落点缺陷**：S 帧随解锁游标写入（远离段头），导出从段头页读不到通道名——修复=段头写入时把 S 帧拼进段起始页（`setSegmentNameProvider` 回调，header 16B+S 帧 236B 一次编程）；④ 解析器动态化：默认 13 通道（当前固件通道表）+ S 帧预扫描取权威通道数 + 零帧回退 22。**通道表 22→13**（去 accel/vel/位置/氧压/阀门，摆角改录指令值，新增 Δω/目标姿态）——改通道数时解析器无需再动（S 帧自描述）。**导出完整性影响差分参考链**（缺页 → 通道值漂移，曾把上摆 ±15° 读出 25°）——分析前用完整导出（来源：2026-08-09）
 - **数字滤波相位滞后边界（2026-08-09 实测）**：本机飞控下有**物理减震底座** + 执行机构（伺服/电机 τm）天然低通——数字滤波的噪声收益接近于零，只加滞后。实测滞后 4.2°@1Hz（单级 α=0.3）稳、6.9°（级联 0.3+0.4）触发内环振铃。**最终配置：滤波近全关**——gyro 一级 α=0.4、二级 α=0.99（直通）、输出滤波 0.9；yaw 输出 0.12 为旧震荡时代产物（增益调度+观测器修复后过时）。教训：**动滤波前先确认振动是否已被物理隔离；滞后是实打实的裕度杀手，噪声收益要量化后才有资格换滞后**（来源：2026-08-09 滤波大审计）
-- **DBG 控制台与 AnoCom 遥测互斥**：发 `DBG\n` 后固件停止遥测轮发（handleAnoCom 短路），`exit` 恢复；上位机黑匣子流程必须先进 DBG 再发 `flash export`，且 export 输出含 `[DBG] export start=.. count=..` 文本行需剥离后再按 2048B/页收集（来源：2026-08-08）
-- **GCS 遥测缓冲 O(n²) 卡死**：`find_frames` 全缓冲扫描 + 找到帧才整体 clear——固件卡 DBG 发文本流/错波特率乱码时 `tele_buf` 无限膨胀，每块都全量扫描 + `bytes()` 拷贝，退化 O(n²) 至上位机完全冻结；且整体 clear 会丢块尾半帧。修复范式：`anocom.extract_frames` 返回已消费偏移只删前缀、半帧留尾、无帧且超 `TELE_BUF_CAP=8192` 按垃圾流裁尾；连接后自动发 `exit\n` 恢复卡死的 DBG 态（遥测态下固件会丢弃该无效行，无副作用）（来源：2026-08-08 上位机卡死排查）
-- **GCS 3D 视图 NED→Three 必须是相似变换 P·R·v**：嵌套 groupBasis（固定 P：Three_x=NED_y / Three_y=−NED_z / Three_z=−NED_x，det=1 真旋转）+ groupBody（q_ned，欧拉 'ZYX' 合成 = 标准 3-2-1）；旧实现 `M=P·R` 缺 Pᵀ 致轴向错乱、模型"诡异"。改姿态显示代码后必须用 node + vendored three 数值验证（机头/右翼/机腹三轴 × 零姿态/航向90/俯仰30/滚转90/垂直爬升）（来源：2026-08-08 view3d 重写，验证 8/8）
+- **GCS 串口链路两坑（2026-08-08）**：① **DBG 与遥测互斥**——发 `DBG\n` 后固件停遥测轮发（handleAnoCom 短路），`exit` 恢复；黑匣子流程必须先 DBG 再 `flash export`，export 输出含 `[DBG] export start=..` 文本行需剥离后按 2048B/页收集。② **遥测缓冲 O(n²) 卡死**——`find_frames` 全缓冲扫描+整体 clear 在垃圾流下无限膨胀；修复范式：`anocom.extract_frames` 返回已消费偏移只删前缀、半帧留尾、超 `TELE_BUF_CAP=8192` 按垃圾流裁尾；连接后自动发 `exit\n` 恢复卡死 DBG 态（遥测态下固件丢弃该行，无副作用）。
+- **GCS 3D 视图 NED→Three 必须是相似变换 P·R·v**（groupBasis 固定 P：Three_x=NED_y / Three_y=−NED_z / Three_z=−NED_x，det=1）+ groupBody（q_ned 欧拉 'ZYX'）；旧实现 `M=P·R` 缺 Pᵀ 致轴向错乱。改姿态显示后必须 node + vendored three 数值验证（三轴 × 5 姿态，8/8）（来源：2026-08-08 view3d 重写）
 - **改 GCS 后端后必须杀掉旧进程再启动**：8091 旧 uvicorn 残留 + 前端 no-store = "界面全新、后端逻辑全旧"，用户看到的就是没数据且所有新修复无效。曾因此误诊半天——固件 2093 帧/3s 全有效、问题 100% 在残留进程。防护：`app.py` 启动时检测端口占用→查 `/api/status` 版本不符自动 taskkill 重启；WS `hello` 握手前端比对版本（`BACKEND_VERSION` 与 `main.py app.version` 必须同步改）（来源：2026-08-08 三轮"没数据"终定位）
 - **GCS 前端事件总线 = CustomEvent，载荷在 `e.detail`**：`bus.addEventListener('telemetry', onTelemetry)` 直接收事件对象，`s.roll_deg` 恒 undefined → 页面全 "--"。三个页面曾全中。同时两个启动坑：`'page'` 监听器必须先于初始 `switchPage` 注册（否则首屏 activate 永不执行）；es-module-shims 初始化前动态 `import()` 静默失败需重试+告警。验证前端修复必须过真实 WebView2 窗口（pywebview evaluate_js 采样 DOM），Python WS 客户端验证不到渲染层（来源：2026-08-08 页面不刷新终定位）
 - **PLATFORMIO_BUILD_DIR 隔离目录必须用纯 ASCII 路径**：`D:/纵列双发矢量推力飞行器/.pio-build-nmea` 中中文路径让 ld.exe `cannot open output file firmware.elf`（对象编译正常、仅链接失败），换 `D:/pio-build-nmea` 即成功；默认 `.pio/build` 在中文路径下工作正常，勿据此误判（来源：2026-08-09 NMEA 集成构建）

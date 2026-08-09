@@ -1075,9 +1075,12 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
  * @brief 步骤7: 偏航/倾斜控制器 — ATTITUDE_MODE 姿态外环 + RATE_MODE 摇杆速率
  *
  * VTOL 悬停构型（x_b 竖直）下，机体 z_b 是水平轴：
- *   - q_err.x（绕 x_b）= 世界航向误差 → 由 Roll 外环（差速）保持
- *   - q_err.z（绕 z_b）= 水平倾斜误差 → 本控制器姿态外环（上摆）保持
+ *   - q_err.x（绕 x_b）→ Roll 外环（execute_attitude_controller）→ 上摆 δ_f
+ *     （绕模型系 z'=+x_b 的力矩——悬停时绕竖直轴的误差，见步骤6/8 轴置换）
+ *   - q_err.z（绕 z_b）→ 本控制器（yaw hold）→ 差速 Δω（绕模型系 x'=-z_b 的力矩）
  *   （水平巡航构型下 q_err.z = 航向误差，但本项目按 VTOL 构型统一处理）
+ *   ★ 2026-08-09 修正：旧注释"q_err.x→差速、q_err.z→上摆"为轴置换前语义，
+ *   与步骤6（1016-1023）和步骤8（1250-1252）实码矛盾——已按实码统一。
  *
  * ATTITUDE_MODE：q_err.z 姿态外环（与 Roll/Pitch 对称），消除静态倾斜误差；
  * RATE_MODE：摇杆 → 目标角速率（松杆即停，原行为保留）。

@@ -4,17 +4,17 @@
 
 ## 坐标系统一约定（2026-08-02 钉死，全仓引用）
 
-- **机体系 FRD**：`x_b` = 机身纵轴 = **电机推力轴**（前电机 +x 端拉力式、尾电机 −x 端推进式）；`y_b` 右；`z_b` 下（垂直于纵轴）。
-- **执行器–力矩映射（机械布局，不随姿态变）**：前摆 δ_f（绕 z_b）→ Mz 偏航通道；尾摆 δ_t（绕 y_b）→ My 俯仰通道；差速 Δω → Mx 滚转通道。
+- **机体系 FRD**：`x_b` = 机身纵轴（前电机 +x 端拉力式、尾电机 −x 端推进式）；`y_b` 右；`z_b` 下（垂直于纵轴）。**★ 电机推力轴 = z_b**（悬停构型机头朝天：z_b 竖直指地、x_b 水平——2026-08-07 轴置换后实码语义，见 mix 层 1250 行；旧"x_b=推力轴"描述错误，2026-08-09 修正）。
+- **执行器–力矩映射（2026-08-07 轴置换后，悬停构型语义；★权威 = mix 层 `flight_control.cpp` 1202-1252 行）**：**上摆 δ_f（前电机，机头朝天时在最高点）→ 滚转主控**（alpha_roll 体轴 x → Mz'）；**下摆 δ_t（尾电机）→ 俯仰主控**（alpha_pitch 体轴 y → My'）；**差速 Δω → 偏航主控**（alpha_yaw 体轴 z → Mx'）。旧描述"前摆=偏航、差速反扭滚转"为**巡航读法**（物理公式 Mz=a·Tf·sδf 在巡航系即偏航力矩、悬停系即侧倾力矩），已废止——写任何轴/执行器注释前先查 mix 层实码，勿凭概念名或旧注释。
 - **VTOL 悬停构型**：机头朝天（x_b 竖直 ∥ NED −z）——差速（绕 x_b）= **世界航向**；z_b 悬停时水平。
-- **RATE_MODE 摇杆映射（四轴式，悬停构型）**：yaw 摇杆 → 差速（绕 x_b，保守幅值 MAX_MANUAL_yawRATE=35°/s）；roll 摇杆 → 前摆（绕 z_b 倾斜，MAX_MANUAL_rollRATE）；pitch 摇杆 → 尾摆（绕 y_b）。ATTITUDE_MODE 姿态环同为四轴语义（q_err.x→差速、q_err.y→尾摆、q_err.z→前摆）。
+- **RATE_MODE 摇杆映射（四轴式，悬停构型）**：yaw 摇杆 → 差速（绕 z_b，保守幅值 MAX_MANUAL_yawRATE=35°/s）；roll 摇杆 → 上摆（前摆，MAX_MANUAL_rollRATE）；pitch 摇杆 → 下摆（尾摆，绕 y_b）。ATTITUDE_MODE 姿态环（2026-08-07 轴置换后，★以 `flight_control.cpp` 1016-1023 行为准）：**q_err.x→上摆（roll 外环）、q_err.y→下摆（pitch 外环）、q_err.z→差速（yaw hold 外环）**——旧"q_err.x→差速"为置换前语义。
 - ⚠️ **NED z（世界竖直）≠ 机体 z_b**：推力垂直补偿用 R13（x_b 投影）；激光斜距用 R33（激光沿 −z_b）。
 - 详细推导见 `docs/04-数学建模/MOD-002` §1.2。
 
 ## 飞行器构型与控制分配
 
-- **纵列双发**：前电机(CW)绕z_b摆动(δ_f, **偏航主控**)，尾电机(CCW)绕y_b摆动(δ_t, 俯仰主控)
-- **差速反扭**：Δω绕推力轴(x_b)产生Mx——**水平巡航=滚转；垂直悬停（x_b竖直）=世界航向**
+- **纵列双发（悬停构型语义，2026-08-07 轴置换）**：前电机(CW)最高点=**上摆 δ_f，滚转主控**；尾电机(CCW)最低点=**下摆 δ_t，俯仰主控**
+- **差速偏航**：Δω（alpha_yaw 绕推力轴 x_b）→ Mx'——**悬停/巡航统一 = 偏航主控**（旧"水平巡航=滚转"读法已废止，同公式在不同姿态系下的不同解读）
 - **物理逆解**：α→I×α→M_cmd→allocateMoments(BTRUE)→δ_f/δ_t/Δω
 - **执行器映射**：前摆δ_f→PA0(TVC_ROLL), 尾摆δ_t→PA1(TVC_PITCH), Δω→PA2/PA3(前后电机差速)
 - **齿轮传动**：舵机30T/摆座40T = 1.333:1，PWM映射已含齿轮比
@@ -30,7 +30,7 @@
 - `Quaternion` 结构体分量顺序是 **`{w, x, y, z}`**（`QuaternionMath.h:49`），不是 `(x,y,z,w)`；写常量四元数前先核对（2026-08-07 曾写错导致姿态基准错位）。
 - 符号/轴排查顺序：**先查轴映射，再查控制律符号**。轴错会让"通道张冠李戴"（绕竖直轴转→前摆动作）伪装成"符号反"，在错轴上翻符号只会掩盖问题（2026-08-07 曾为此翻了 3 轮直通符号）。
 - **mix 层轴置换**（`flight_control.cpp` 层1）：控制律在**存档系**（roll 绕 x_b、pitch 绕 y_b、yaw 绕 z_b=推力轴），分配器 `allocateMoments` 吃**模型系**（x'=推力轴朝机头、y'=尾摆、z'=前摆），`x'=-z_b, y'=+y_b, z'=+x_b`（det=+1）。故 `Mx'=-Ix·alpha_yaw`（差速）、`My'=+Iy·alpha_pitch`（尾摆）、`Mz'=-Iz·alpha_roll`（前摆）。符号以"实机已验证的陀螺直通行为"为锚点反解（`tools/verify_mix_axes.py`），勿凭几何直觉、勿改 `computeEffectMatrix`（2026-08-07）。
-- **通道↔执行器对应（存档系）**：roll 通道→**前摆舵机**、pitch 通道→**尾摆舵机**、yaw 通道→**电机差速**。PID 参数须随之匹配：TVC 轴可高带宽（Kp_r=0.25/Kp_a=2.5，ζ≈1.20），差速轴受电机 τm=0.28s 限带必须保守（Kp_r=0.10/Kp_a=0.8，ζ≈1.34）。
+- **通道↔执行器对应（2026-08-07 轴置换后）**：roll 通道→**上摆（前摆 δ_f）**、pitch 通道→**下摆（尾摆 δ_t）**、yaw 通道→**电机差速 Δω**。PID 参数原则：TVC 轴可高带宽、差速轴受电机 τm=0.28s 限带必须保守（**当前数值以 `include/FlightCtrlParams.h` kFlightCtrlParams 为唯一事实源，勿在此处维护数值**）。
 - **摇杆语义（与存档一致）**：ATTITUDE_MODE = roll/pitch 杆控**目标姿态角**、yaw 杆控**航向角速度**（不做航向姿态回中，`execute_yaw_controller` 两种模式统一处理）；RATE_MODE = 三杆全控目标角速度。
 - `include/TVC_Control_Geometric.h` / `TVC_Control_3rdOrder_Poly.h` — 原版 TVC 几何模型，**已弃用**。控制分配现由 `TandemVec_ControlAllocation.h` 处理。
 
@@ -79,23 +79,17 @@
 - **Serial6 (USART6) 波特率 = `state_data.h` 的 `SERIAL6_BAUDRATE` 宏**（当前 2,000,000，2026-08-07 与 2.4G 数传对齐）——换数传模块时只改宏；抓串口前先查宏值，波特率不匹配会全乱码（来源：2026-08-08 WS2812 调试）。
 - **调试串口**：Serial6 收到 `"DBG\n"` 进入调试模式（`handleDebugConsole`），`exit` 退出；命令 `help/ws <r g b>/wsoff/wsseq/wsstat/wsmode <0|1>/wsfault <0|1>/gpio/tim4/ver`。地面站帧头 0xAB 与 "DBG\n" 不冲突。详细命令表见 `docs/memory/2026-08-08-WS2812驱动调试.md`。
 
-## WS2812 / 踩坑记录（2026-08-08）
+## WS2812 / 硬件踩坑记录（2026-08-08，通用教训保留，细节见 docs/memory/2026-08-08-WS2812驱动调试.md）
 
-- **★ W25N01GV NAND Flash (SPI3) 已点亮**（2026-08-08）：驱动 `lib/W25N01GV/`（命令层 + 日志层：RAM 环形缓冲/后台批量写/游标持久化/坏块跳过）。JEDEC ID 0xEF/0xAA/0x21 验证通过，写读回+掉电恢复+续写全通。调试命令 `flash id|erase|stat|dump|test`。
-- **★ SPI 硬件 NSS 与手动 CS 冲突**：`SPIClass(mosi,miso,sclk,ssel)` 传 ssel 引脚 → `SPI_NSS_HARD_OUTPUT` + `pinmap_pinout` 覆盖 GPIO 配置 → 读 ID 全 0x6E。**SSEL 必须传 NC（软件 NSS）**，CS 由驱动 `digitalWrite` 手动控制（来源：2026-08-08 W25N01GV 点亮调试）。
-- **★ WS2812 (PD15) 已点亮，通用库化完成**：驱动 = `lib/WS2812Driver/`（跨平台库：stm32duino BSRR bitbang + STM32H7 TIM_UP DMA + 通用 fallback）。应用状态机在 `include/Ws2812AppStatus.h`。状态：待机蓝呼吸/解锁绿闪/校准黄闪/故障红闪。
-- **★ STM_GPIO_PIN(pn) 返回位掩码（1<<pin），不是位编号**（PinNamesTypes.h）：写 `1<<STM_GPIO_PIN(pn)` 是 UB，掩码/GPIO_Pin 变垃圾值 → HAL_GPIO_Init 配错引脚、AFR 不写 → 灯不亮。**直接用返回值**（来源：2026-08-08 库化重构定位出）。
-- **DMA1_Stream6_IRQHandler 是 weak→Default_Handler**（startup），项目无强定义；`HAL_DMA_Start_IT` 不使能 NVIC → 中断/回调永不触发。**用 HAL_DMA_Start + PollForTransfer（轮询）**最稳（来源：2026-08-08）。
-- **H743 TIM4 独缺 CH4 的 DMAMUX 请求**（只有 CH1/2/3/UP）：PD15=TIM4_CH4 上 `HAL_TIM_PWM_Start_DMA(CH4)` 硬件不触发。绕道用 TIM4_UP 的 DMA 写 `&TIM4->CCR4`，详见 `docs/memory/2026-08-08-WS2812驱动调试.md` §1。
-- **Adafruit NeoPixel 库在 stm32duino 上高位引脚（PD8-15/PE8-15）不可用**：库用 `volatile uint8_t*` 写 BSRR，只能操作 GPIO 0-7（来源：2026-08-08，PD15 灯不亮定位出）。本项目 WS2812 必须自实现驱动。
-- **DWT CYCCNT 时序等待在 -O3 + 关中断下会死锁**（飞控整个卡死）：Cortex-M7 需 `dwt_access(true)` 解锁 LAR（`SrcWrapper/src/stm32/dwt.c`），且 -O3 内联下计数行为不稳。**改用纯 NOP 循环延时最可靠**。
-- **H7 RCC 寄存器与 F4 不同**：`RCC_CFGR_PPRE1` 在 H743 不存在，用 `RCC_D2CFGR_D2PPRE1`；APB1 timer clock = APB1×2（APB1 分频≠1 时）；DMAMUX1 无独立时钟使能位，与 DMA1 共享 AHB1 时钟（`__HAL_RCC_DMA1_CLK_ENABLE` 即可）。
-- **PWM+DMA 两个必踩**：① `ARR = clk/800000-1`（不是 /800，漏零则 16 位 ARR 溢出截断，PWM 频率全错）；② DMA 传输完成回调里必须关外设请求使能位（TIM_UDE 等），否则残留请求卡死 DMA 状态机、下帧启动 HAL_BUSY → 灯闪。
-- **★ 非对齐 float/int 访问 HardFault（ARM 通用）**：`uint8_t` 数组强转 `(const float*)`/`(int32_t*)` 读，地址未 4 字节对齐 → Cortex-M7 HardFault → **复位循环**。现象是"板子复位后看起来正常"（复位后跑正常代码，OpenOCD 抓到假象），极难定位——**用逐步打印缩小范围**（如 push#0 ok → push#1 卡），修复用 `memcpy` 逐元素拷贝（来源：2026-08-08 W25N01GV v2 P 帧差分调试，耗时最长的一次）。
-- **调试命令可靠性**：`DBG\n` 检测必须在串口协议解析（receiveData）**之前**，否则命令字节被协议帧头逻辑吃掉。调试模式下 Flash 写页要与 CAN 互斥（`s_flashWriting`），否则 MCP2515 超时 reset 卡死 SPI2。
-- **★ 变长帧在混合帧流里靠定界符搜索不可靠**（2026-08-08 W25N01GV S 帧）：变长 S 帧靠 `\0` 搜索切分，**I/P 帧 payload 里的 0x00 字节误命中** → CRC 错 → 帧丢失（时有时无）。**修复：固定长度 + pad**（CRC 固定位置），工具按固定长度切分。通用教训：协议帧格式优先固定长度，或用帧内长度字段。
-- **通道名表等"按内容长度变化"的字段要留余量**（2026-08-08）：22 通道名 202B，CHNAME_MAX 160→224 逐级加大——截断症状隐蔽（名字尾部变 "r" 等残缺）。长度上限按实际最大内容 + 余量定。
-- **重构教训**：所有模式共用的资源（引脚掩码）必须在**构造函数**初始化，不能放在某个模式的 begin 里（DMA 模式跳过 bitbang begin → 掩码恒 0）。
+- **★ W25N01GV NAND Flash (SPI3) 已点亮**：驱动 `lib/W25N01GV/`（RAM 环形缓冲/后台批量写/游标持久化/坏块跳过），调试命令 `flash id|erase|stat|dump|test`。
+- **★ SPI 硬件 NSS 与手动 CS 冲突**：`SPIClass(mosi,miso,sclk,ssel)` 传 ssel 引脚 → 硬件 NSS 覆盖 GPIO 配置 → 读 ID 全 0x6E。**SSEL 必须传 NC（软件 NSS）**，CS 手动 `digitalWrite`。
+- **★ WS2812 (PD15) 已点亮并库化**：`lib/WS2812Driver/`（BSRR bitbang + TIM_UP DMA + fallback），应用状态机 `include/Ws2812AppStatus.h`（待机蓝/解锁绿/校准黄/故障红）。
+- **★ 非对齐 float/int 访问 HardFault（ARM 通用）**：`uint8_t` 数组强转 `(const float*)` 读，地址未 4 字节对齐 → HardFault → **复位循环**（现象"复位后正常"，OpenOCD 抓假象，极难定位）。修复用 `memcpy` 逐元素拷贝。
+- **★ 变长帧在混合帧流里靠定界符搜索不可靠**：payload 里的 0x00 误命中 `\0` 定界 → CRC 错 → 时有时无丢帧。**修复：固定长度 + pad**（CRC 固定位置）。通用教训：协议帧优先定长或帧内长度字段。
+- **PWM+DMA 两个必踩**：① `ARR = clk/800000-1`（漏零则 16 位 ARR 溢出，频率全错）；② DMA 完成回调里必须关外设请求使能位（TIM_UDE 等），否则残留请求卡死 DMA 状态机、下帧 HAL_BUSY。
+- **DMA1_Stream6_IRQHandler 是 weak→Default_Handler**（startup 无强定义），`HAL_DMA_Start_IT` 不使能 NVIC → 中断永不触发。**用 HAL_DMA_Start + PollForTransfer**。
+- **调试命令可靠性**：`DBG\n` 检测必须在串口协议解析（receiveData）**之前**；调试模式下 Flash 写页与 CAN 互斥（`s_flashWriting`），否则 MCP2515 超时 reset 卡死 SPI2。
+- **重构教训**：所有模式共用的资源（引脚掩码）必须在**构造函数**初始化，不能放在某个模式的 begin 里。
 
 ## 模块化架构
 
