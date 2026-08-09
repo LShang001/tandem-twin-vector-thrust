@@ -48,7 +48,7 @@ export function activate() {
     return { bar, key, opts };
   });
 
-  // 执行器条（0x40 帧：TVC 摆角 / 电机推力 / 差速）
+  // 执行器条（0xF1 帧：TVC 摆角 / 电机推力 / 差速）
   const actWrap = $('actBars');
   actWrap.innerHTML = '';
   const actDefs = [
@@ -123,7 +123,7 @@ function onTelemetry(s) {
     bar.set(val(s, key), opts);
   }
 
-  // 执行器（0x40 帧）：TVC 矢量仪表 + 条 + 饱和标记
+  // 执行器（0xF1 帧）：TVC 矢量仪表 + 条 + 饱和标记
   const df = val(s, 'tvc_upper_deg'), dt = val(s, 'tvc_lower_deg');
   const mf = val(s, 'motor_front_pct'), mt = val(s, 'motor_rear_pct');
   drawTvcDial($('cvTvcFront'), df, mf, { color: '#ffb547' });

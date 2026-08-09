@@ -469,6 +469,24 @@ void AnoComProtocol::sendPWMOutput(uint16_t pwm1, uint16_t pwm2, uint16_t pwm3, 
     sendData(ANO_GND_STATION_ADDR, ANO_FUNC_PWM_OUTPUT, data, 16);
 }
 
+/**
+ * @brief 发送遥控器数据 (ID: 0x40, 手册定义)
+ *
+ * 手册 0x40：ROL/PIT/THR/YAW/AUX1-6 共 10×int16，范围 1000-2000 us。
+ * 2026-08-10 数据归位：0x40 恢复手册遥控帧（原本工程自定义执行器帧迁至 0xF1）。
+ */
+void AnoComProtocol::sendRCData(const uint16_t *rc)
+{
+    uint8_t data[20];
+    for (int i = 0; i < 10; i++)
+    {
+        uint16_t v = rc ? rc[i] : 0;
+        data[i * 2] = v & 0xFF;
+        data[i * 2 + 1] = (v >> 8) & 0xFF;
+    }
+    sendData(ANO_GND_STATION_ADDR, ANO_FUNC_RC_DATA, data, 20);
+}
+
 void AnoComProtocol::sendAttitudeControl(int16_t ctrlRol, int16_t ctrlPit, int16_t ctrlThr, int16_t ctrlYaw)
 {
     uint8_t data[8];

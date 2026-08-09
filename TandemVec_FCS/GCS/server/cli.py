@@ -736,12 +736,12 @@ def _sniff_report(theme, counters, samples, raw_data, euler_vals):
         if anocom.FUNC_FLIGHT_MODE in samples:
             d = samples[anocom.FUNC_FLIGHT_MODE]
             print(f'模式帧: mode={d["flight_mode"]} 解锁={d["unlocked"]}')
-        if anocom.FUNC_PWM_OUTPUT in samples:
-            d = samples[anocom.FUNC_PWM_OUTPUT]
+        if anocom.FUNC_RC_DATA in samples:
+            d = samples[anocom.FUNC_RC_DATA]
             for i in range(1, 9):
                 print(f'  CH{i}: {d[f"rc{i}"]}')
         else:
-            print('未收到 0x20 输出帧')
+            print('未收到 0x40 遥控帧')
         return
     if theme == 'att':
         if anocom.FUNC_ATTITUDE_EULER in samples:
@@ -809,7 +809,7 @@ def cmd_stick(a):
                 continue
             if f.func == anocom.FUNC_FLIGHT_MODE:
                 mode, unlock = d['flight_mode'], d['unlocked']
-            elif f.func == anocom.FUNC_PWM_OUTPUT:
+            elif f.func == anocom.FUNC_RC_DATA:
                 ch = d
             elif f.func == anocom.FUNC_ATTITUDE_CONTROL and now - last > 0.7:
                 chs = ' '.join(f'{ch[f"rc{i}"]:5d}' for i in range(1, 9)) if ch else '?'

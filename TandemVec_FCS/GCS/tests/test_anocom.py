@@ -95,12 +95,20 @@ def test_decode_gps_scale():
     assert dec['gps_pdop'] == 1.5 and dec['gps_sacc'] == 2.0 and dec['gps_vacc'] == 2.5
 
 
-def test_decode_pwm_rc_raw():
-    """0x20：8×u16 raw_rc_values"""
-    payload = struct.pack('<8H', *range(1000, 1008))
+def test_decode_pwm_output():
+    """0x20（2026-08-10 数据归位后）：8×u16 PWM 控制量 0.01% 油门（电机输出）"""
+    payload = struct.pack('<8H', 5000, 4500, 0, 0, 0, 0, 0, 0)
     f = anocom.encode_frame(anocom.FUNC_PWM_OUTPUT, payload)
     dec = anocom.decode_frame(anocom.find_frames(f)[0])
-    assert dec['rc1'] == 1000 and dec['rc8'] == 1007
+    assert dec['motor_pwm1'] == 5000 and dec['motor_pwm2'] == 4500
+
+
+def test_decode_rc_manual():
+    """0x40（手册遥控帧，2026-08-10 数据归位）：10×int16 us，字段名 rc1-10（前端 RC 条零改动）"""
+    payload = struct.pack('<10h', *range(1000, 1010))
+    f = anocom.encode_frame(anocom.FUNC_RC_DATA, payload)
+    dec = anocom.decode_frame(anocom.find_frames(f)[0])
+    assert dec['rc1'] == 1000 and dec['rc3'] == 1002 and dec['rc10'] == 1009
 
 
 def test_decode_attitude_control():

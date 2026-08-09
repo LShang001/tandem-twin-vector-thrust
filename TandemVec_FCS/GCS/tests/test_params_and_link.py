@@ -82,10 +82,14 @@ def _make_telemetry_frames():
     frames.append(anocom.encode_frame(anocom.FUNC_FLIGHT_MODE, bytes([1, 1, 0, 0, 0])))
     frames.append(anocom.encode_frame(anocom.FUNC_ATTITUDE_CONTROL,
         struct.pack('<4h', 100, -200, 500, 30)))
-    # 组2：目标速度 + 飞行速度 + PWM + 执行器输出(0x40)
+    # 组2：目标速度 + 飞行速度 + PWM(电机输出) + RC遥控(0x40) + 执行器输出(0xF1)
     frames.append(anocom.encode_frame(anocom.FUNC_TARGET_SPEED, struct.pack('<3h', 0, 0, 0)))
     frames.append(anocom.encode_frame(anocom.FUNC_FLIGHT_SPEED, struct.pack('<3h', 100, -50, 250)))
-    frames.append(anocom.encode_frame(anocom.FUNC_PWM_OUTPUT, struct.pack('<8H', *range(1000, 1008))))
+    # 0x20 手册语义：PWM 控制量 0.01% 油门（ch3_output/ch4_output ×100）
+    frames.append(anocom.encode_frame(anocom.FUNC_PWM_OUTPUT, struct.pack('<8H', 5000, 4500, 0, 0, 0, 0, 0, 0)))
+    # 0x40 手册语义：遥控器数据 10×int16 us（RC 通道显示数据源）
+    frames.append(anocom.encode_frame(anocom.FUNC_RC_DATA, struct.pack('<10h', *range(1000, 1010))))
+    # 0xF1 本工程自定义执行器帧：摆角×100 / 电机×10 / 差速×1000 / 饱和 / 预留
     frames.append(anocom.encode_frame(anocom.FUNC_ACTUATOR_OUT,
         struct.pack('<hh2HhBB', -1230, 855, 624, 587, 490, 0x05, 0)))
     # 组3：位置 + 电压电流(压力) + GPS
@@ -115,16 +119,17 @@ def test_telemetry_aggregation():
     assert abs(s['rel_n_m'] - 100.0) < 1e-6 and s['rel_h_m'] == 325.0
     assert abs(s['p1_mpa'] - 15.2) < 1e-6
     assert s['gps_sats'] == 12 and s['gps_fix'] == 3
-    assert s['rc3'] == 1002
-    # 执行器输出帧（0x40）：摆角 deg / 电机 % / 差速 / 饱和标记
+    assert s['rc3'] == 1002          # 0x40 遥控帧（原 0x20 承载）
+    assert s['motor_pwm1'] == 5000 and s['motor_pwm2'] == 4500   # 0x20 电机输出 0.01%
+    # 执行器输出帧（0xF1，原 0x40）：摆角 deg / 电机 % / 差速 / 饱和标记
     assert abs(s['tvc_upper_deg'] - (-12.3)) < 1e-6
     assert abs(s['tvc_lower_deg'] - 8.55) < 1e-6
     assert abs(s['motor_front_pct'] - 62.4) < 1e-6
     assert abs(s['motor_rear_pct'] - 58.7) < 1e-6
     assert abs(s['dw'] - 0.49) < 1e-6
     assert s['sat_df'] is True and s['sat_dt'] is False and s['sat_dw'] is True
-    # 链路统计：13 帧全解码、无 CRC 失败、遥测时间戳已更新
-    assert m.g.stat_frames == 13 and m.g.stat_bad == 0
+    # 链路统计：14 帧全解码（+0x40 遥控帧）、无 CRC 失败、遥测时间戳已更新
+    assert m.g.stat_frames == 14 and m.g.stat_bad == 0
     assert m.g.stat_bytes == sum(len(f) for f in _make_telemetry_frames())
     assert m.g.last_tele_ts is not None
     m.g.disconnect()
@@ -173,8 +178,8 @@ def test_realworld_chunking_brutal():
     assert s['flight_mode'] == 1                     # 组1
     assert abs(s['vel_n_ms'] - 1.0) < 1e-6           # 组2
     assert s['gps_sats'] == 12                       # 组3
-    assert m.g.stat_frames == 13                     # 13 帧无一丢失
-    assert m.g.stat_tele == 13                       # 全部计入遥测帧统计
+    assert m.g.stat_frames == 14                     # 14 帧（+0x40 遥控帧）无一丢失
+    assert m.g.stat_tele == 14                       # 全部计入遥测帧统计
     m.g.disconnect()
 
 

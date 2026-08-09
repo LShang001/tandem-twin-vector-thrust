@@ -555,10 +555,7 @@ void handleAnoCom()
   static float target_roll_ano, target_pitch_ano, target_yaw_ano;
   // 飞行速度数据 (NED)
   static float vel_north_ano, vel_east_ano, vel_down_ano;
-  // PWM控制量
-  static float pwm_ch1_ano, pwm_ch2_ano, pwm_ch3_ano, pwm_ch4_ano;
-  static float pwm_ch5_ano, pwm_ch6_ano, pwm_ch7_ano, pwm_ch8_ano;
-  // 执行器输出（0x40 帧）
+  // 执行器输出（0xF1 帧，2026-08-10 起）
   static float tvc_front_ano, tvc_rear_ano, mot_front_ano, mot_rear_ano, dw_ano;
   static uint8_t act_sat_ano;
   // 位置偏移数据 (cm)
@@ -646,17 +643,7 @@ void handleAnoCom()
       gps_vel_down_ano = 0;
     }
 
-    // PWM输出 (来自遥控器原始值，或CRSF发送前的最终值)
-    pwm_ch1_ano = raw_rc_values[0];
-    pwm_ch2_ano = raw_rc_values[1];
-    pwm_ch3_ano = raw_rc_values[2]; // 油门通道
-    pwm_ch4_ano = raw_rc_values[3];
-    pwm_ch5_ano = raw_rc_values[4]; // 解锁通道
-    pwm_ch6_ano = raw_rc_values[5]; // 点火通道
-    pwm_ch7_ano = raw_rc_values[6]; // 模式通道
-    pwm_ch8_ano = raw_rc_values[7]; // TVC手动通道
-
-    // 执行器输出（0x40 帧，本工程自定义）：mix 输出级统一捕获，全模式有效
+    // 执行器输出（0x40 帧）
     tvc_front_ano = g_tvc_upper_deg;   // 上摆座角指令 deg（偏航主控）
     tvc_rear_ano = g_tvc_lower_deg;     // 下摆座角指令 deg（俯仰主控）
     mot_front_ano = ch3_output;        // 前电机输出 %
@@ -706,8 +693,11 @@ void handleAnoCom()
     oxygen_pressureP1_ano = receivedP1;
     oxygen_pressureP2_ano = receivedP2;
 
-    bat_voltage = 12.6;
-    bat_current = 16.8;
+    // 电池电压/电流（0x0D 帧 bat 字段）：
+    // ★ 2026-08-10 数据归位：用 updateBatteryMonitor 的真实 ADC 采样（原占位常量
+    //   12.6/16.8 让官方上位机显示假电压）；电流无采样传感器（bat_current_ca=0）
+    bat_voltage = bat_voltage_mv / 1000.0f;
+    bat_current = bat_current_ca / 10.0f;   // ca 单位 0.1A → A；恒 0（未接入电流采样）
     fc_voltage = oxygen_pressureP1_ano;
     fc_current = oxygen_pressureP2_ano;
 
@@ -721,8 +711,9 @@ void handleAnoCom()
 
   // 根据当前组索引，发送对应的数据包
   // 非阻塞保护：发送前检查 Serial6 TX 缓冲剩余空间，不足时跳过本帧发送。
-  // 每组最多 3 个包，最大单包 31 字节（GPSInfo1），保守上限 100 字节。
-  if (Serial6.availableForWrite() < 100)
+  // 2026-08-10 数据归位后组2 最多 5 包（TargetSpeed+FlightSpeed+PWM+RC+执行器0xF1）≈ 100B，
+  // 组3 最大单包 31 字节（GPSInfo1）；保守上限 130 字节。
+  if (Serial6.availableForWrite() < 130)
   {
     ano_tx_skipped++;
     return;
@@ -744,14 +735,20 @@ void handleAnoCom()
     // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
     AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
   }
-  // 发送组3的数据包 (Target Speed, Flight Speed, PWM Output, Actuator Output)
+  // 发送组3的数据包 (Target Speed, Flight Speed, PWM Output, RC Data, Actuator Output)
   else if (group_index == 2)
   {
     AnoCom.sendTargetSpeed(target_speed_x_ano, target_speed_y_ano, target_speed_z_ano);
     AnoCom.sendFlightSpeed(vel_north_ano * 100, vel_east_ano * 100, vel_down_ano * 100); // NED速度
-    AnoCom.sendPWMOutput(pwm_ch1_ano, pwm_ch2_ano, pwm_ch3_ano, pwm_ch4_ano,
-                         pwm_ch5_ano, pwm_ch6_ano, pwm_ch7_ano, pwm_ch8_ano);
-    // 执行器输出帧（0x40，本工程自定义 12B）：前/下摆角 deg×100 int16、
+    // ★ 2026-08-10 数据归位（手册合规）：0x20 恢复手册语义 = PWM 控制量（0.01% 油门）。
+    //   ch3_output/ch4_output 为 mix 输出级电机指令 % → ×100 → 0-10000；官方上位机油门条恢复。
+    AnoCom.sendPWMOutput((uint16_t)constrain(ch3_output * 100.0f, 0.0f, 10000.0f),
+                         (uint16_t)constrain(ch4_output * 100.0f, 0.0f, 10000.0f),
+                         0, 0, 0, 0, 0, 0);
+    // ★ 2026-08-10 数据归位：0x40 恢复手册遥控器数据帧（10×int16 us，1000-2000）
+    //   —— RC 通道显示数据源（原 0x20 承载）；无遥控时 raw_rc 全 0（手册：0=无通信）
+    AnoCom.sendRCData(raw_rc_values);
+    // 执行器输出帧迁至 0xF1（手册用户自定义帧，2026-08-10 起）：前/下摆角 deg×100 int16、
     // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
     {
       uint8_t act[12];
@@ -763,7 +760,7 @@ void handleAnoCom()
       put16(act + 8, (int16_t)constrain(dw_ano * 1000.0f, -32768.0f, 32767.0f));
       act[10] = act_sat_ano;
       act[11] = 0;
-      AnoCom.sendData(ANO_GND_STATION_ADDR, 0x40, act, 12);
+      AnoCom.sendData(ANO_GND_STATION_ADDR, ANO_FUNC_FLEX_DATA_START, act, 12);
     }
   }
   // 发送组4的数据包 (Position Offset, Voltage/Current (used for pressure), GPS Info)

@@ -42,6 +42,7 @@
 // 飞控控制量输出类
 #define ANO_FUNC_PWM_OUTPUT 0x20       // PWM 控制量输出 (8 个 PWM 通道)
 #define ANO_FUNC_ATTITUDE_CONTROL 0x21 // 姿态控制量输出 (横滚、俯仰、油门、航向)
+#define ANO_FUNC_RC_DATA 0x40          // 遥控器数据 (10 通道, 1000-2000 us, 手册定义)
 
 // 飞控接收信息类
 #define ANO_FUNC_GPS_INFO1 0x30          // GPS 传感器信息 1 (定位状态、星数、经纬度、高度、速度、精度)
@@ -280,6 +281,15 @@ public:
      * @param pwm8 PWM 通道 8, 范围 0-10000, 单位 0.01%
      */
     void sendPWMOutput(uint16_t pwm1, uint16_t pwm2, uint16_t pwm3, uint16_t pwm4, uint16_t pwm5, uint16_t pwm6, uint16_t pwm7, uint16_t pwm8);
+
+    /**
+     * @brief 发送遥控器数据 (ID: 0x40, 手册定义)
+     *
+     * 手册 0x40：THR/YAW/ROL/PIT/AUX1-6 共 10 通道，数据范围 1000-2000 us，
+     * 0 表示无通信/失控。本工程遥控走 ELRS/CRSF，raw_rc_values 即真实输入。
+     * @param rc 10 通道原始值 (us)
+     */
+    void sendRCData(const uint16_t *rc);
 
     /**
      * @brief 发送姿态控制量 (ID: 0x21)

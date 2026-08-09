@@ -33,7 +33,8 @@ FUNC_EXT_MODULE = 0x0E
 FUNC_PWM_OUTPUT = 0x20
 FUNC_ATTITUDE_CONTROL = 0x21
 FUNC_GPS_INFO1 = 0x30
-FUNC_ACTUATOR_OUT = 0x40      # 本工程自定义：执行器输出（TVC 摆角/电机推力/差速）
+FUNC_RC_DATA = 0x40            # 遥控器数据（手册定义：10×int16 us）
+FUNC_ACTUATOR_OUT = 0xF1       # 本工程自定义（手册灵活格式帧）：执行器输出（TVC 摆角/电机推力/差速）
 FUNC_PARAM_CMD = 0xE0
 FUNC_PARAM_WRITE_READ = 0xE1
 FUNC_PARAM_INFO = 0xE2
@@ -44,8 +45,8 @@ FUNC_NAMES = {
     0x04: '姿态四元数', 0x05: '高度数据', 0x06: '飞行模式', 0x07: '飞行速度',
     0x08: '位置偏移', 0x09: '风速估计', 0x0A: '目标姿态', 0x0B: '目标速度',
     0x0C: '回航信息', 0x0D: '电压电流', 0x0E: '外接模块状态', 0x20: 'PWM输出',
-    0x21: '姿态控制输出', 0x30: 'GPS信息1', 0x40: '执行器输出', 0xE0: '参数命令',
-    0xE1: '参数读写', 0xE2: '参数信息', 0xE3: '设备信息',
+    0x21: '姿态控制输出', 0x30: 'GPS信息1', 0x40: '遥控器数据', 0xF1: '执行器输出',
+    0xE0: '参数命令', 0xE1: '参数读写', 0xE2: '参数信息', 0xE3: '设备信息',
 }
 
 # 参数类型（与固件 AnoDataType 枚举一致，E2 信息帧 PAR_TYPE）
@@ -216,11 +217,21 @@ def decode_volt_curr(p: bytes) -> dict:
 
 
 def decode_pwm(p: bytes) -> dict:
-    """0x20: 8×u16 —— 固件实际传 raw_rc_values[0..7]（RC 通道原始值）
-    ch4=解锁 / ch5=点火 / ch6=模式 / ch7=TVC 手动（固件通道约定见 communication.cpp）"""
+    """0x20: 8×u16 PWM 控制量（0.01% 油门，手册语义）——固件 2026-08-10 起传
+    ch3_output/ch4_output 电机输出 %×100 → 0-10000，其余通道 0"""
     if len(p) < 16:
         return {}
     vals = struct.unpack('<8H', p[0:16])
+    return {f'motor_pwm{i + 1}': int(v) for i, v in enumerate(vals)}
+
+
+def decode_rc(p: bytes) -> dict:
+    """0x40: 10×int16 遥控器数据（手册：THR/YAW/ROL/PIT/AUX1-6，1000-2000 us，0=无通信）
+    ★ 2026-08-10 数据归位：0x40 恢复手册遥控帧，RC 通道显示数据源（原 0x20 承载）；
+    字段名 rc1-10 保持与旧 decode_pwm 输出一致，前端 RC 条零改动"""
+    if len(p) < 20:
+        return {}
+    vals = struct.unpack('<10h', p[0:20])
     return {f'rc{i + 1}': int(v) for i, v in enumerate(vals)}
 
 
@@ -234,9 +245,9 @@ def decode_attitude_control(p: bytes) -> dict:
 
 
 def decode_actuator(p: bytes) -> dict:
-    """0x40（本工程自定义）: 前/下摆角 int16 (÷100 → deg)，前/尾电机 u16 (÷10 → %)，
+    """0xF1（本工程自定义，手册灵活格式帧）: 前/下摆角 int16 (÷100 → deg)，前/尾电机 u16 (÷10 → %)，
     差速 int16 (÷1000，归一化 Δω)，饱和标记 u8（bit0 δf / bit1 δt / bit2 Δω），预留 u8
-    —— mix 输出级统一捕获，锁定/手动/自动全模式有效"""
+    —— mix 输出级统一捕获，锁定/手动/自动全模式有效。2026-08-10 由 0x40 迁入"""
     if len(p) < 11:
         return {}
     tf, tr, dw = struct.unpack('<3h', p[0:2] + p[2:4] + p[8:10])
@@ -291,6 +302,7 @@ DECODERS = {
     FUNC_VOLT_CURR: decode_volt_curr,
     FUNC_PWM_OUTPUT: decode_pwm,
     FUNC_ATTITUDE_CONTROL: decode_attitude_control,
+    FUNC_RC_DATA: decode_rc,
     FUNC_ACTUATOR_OUT: decode_actuator,
     FUNC_GPS_INFO1: decode_gps,
     FUNC_DEVICE_INFO: decode_device_info,
