@@ -427,6 +427,7 @@ extern ComplementaryFilter pressure_filter;
 // 控制相关滤波
 extern ComplementaryFilter altitude_rate_target_filter;
 extern ComplementaryFilter rollSpeedFilter, pitchSpeedFilter, yawSpeedFilter;
+extern ComplementaryFilter rollSpeedFilter2, pitchSpeedFilter2, yawSpeedFilter2;   // ★ 2026-08-09 二级滤波（级联二阶）
 extern ComplementaryFilter rollAngleOutputFilter, pitchAngleOutputFilter, yawAngleOutputFilter;
 extern ComplementaryFilter rollOutputFilter, pitchOutputFilter, yawOutputFilter;
 extern ComplementaryFilter thrustCompN_filter, thrustCompE_filter;

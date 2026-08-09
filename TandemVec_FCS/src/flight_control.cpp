@@ -389,7 +389,7 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
 
         // 外环：计算高度误差 -> 目标垂直速度
         float altitude_error = target_altitude - current_altitude_for_control;
-        float raw_target_vertical_velocity = altitudePositionPController.compute(altitude_error, 0);
+        float raw_target_vertical_velocity = altitudePositionPController.compute(altitude_error, 0, 0.005f);
         // 目标垂直速度进行滤波，使指令变化更平滑
         target_vertical_velocity = altitude_rate_target_filter.filter(raw_target_vertical_velocity);
 
@@ -435,7 +435,7 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
       // --- 内环：计算速度误差 -> 目标垂直加速度 (Target Acceleration) ---
       // PID控制器的输出物理含义为“期望加速度(m/s^2)”
       // 这里的 target_acceleration_z 是相对于悬停状态的增量加速度
-      target_acceleration_z = altitudeVelocityPIDController.computeDerivativeOnMeasurement(target_vertical_velocity, currentVerticalVelocity);
+      target_acceleration_z = altitudeVelocityPIDController.computeDerivativeOnMeasurement(target_vertical_velocity, currentVerticalVelocity, 0.005f);
     }
 
     // --- 3. 动力合成与物理模型逆解 (所有自动模式通用) ---
@@ -676,8 +676,8 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // 运行位置环，计算修正速度
     float northError = targetNorth - currentNorth;
     float eastError = targetEast - currentEast;
-    targetVelNorth = northPosPID.computeWithExternalDerivative(northError, 0, currentVelNorth);
-    targetVelEast = eastPosPID.computeWithExternalDerivative(eastError, 0, currentVelEast);
+    targetVelNorth = northPosPID.computeWithExternalDerivative(northError, 0, currentVelNorth, 0.005f);
+    targetVelEast = eastPosPID.computeWithExternalDerivative(eastError, 0, currentVelEast, 0.005f);
   }
   else
   {
@@ -729,8 +729,8 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // --- 4. 核心优化：速度环 -> 输出物理加速度 (Target Acceleration) ---
   // 物理意义: Kp * (V_target - V_current) = 期望的加速度 (m/s^2)
   // 这里的 PID 输出直接就是 a_x 和 a_y
-  float target_accel_n = northVelPID.computeDerivativeOnMeasurement(targetVelNorth, currentVelNorth);
-  float target_accel_e = eastVelPID.computeDerivativeOnMeasurement(targetVelEast, currentVelEast);
+  float target_accel_n = northVelPID.computeDerivativeOnMeasurement(targetVelNorth, currentVelNorth, 0.005f);
+  float target_accel_e = eastVelPID.computeDerivativeOnMeasurement(targetVelEast, currentVelEast, 0.005f);
 
   // --- 5. 加速度矢量圆形限幅 ---
   // 避免 "方形限幅" (即 N 和 E 分别限幅) 导致斜向加速时总加速度过大
@@ -946,14 +946,33 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
   }
 }
 
+// ★ 2026-08-09 yaw 航向锁（ratchet hold）状态：
+//   摇杆偏离 → 角速度指令（原行为）+ 持续刷新保持参考（回中即锁当时航向）；
+//   摇杆回中 → 航向短弧误差 × att_yaw.kp → 速率指令。
+//   解锁瞬间参考 = 当前航向（防旧参考导致起飞猛转）。
+static bool  s_yaw_hold_armed = false;
+static float s_yaw_hold_ref_rad = 0.0f;
+
 void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion &q_target, ControlOutputs_t &outputs)
 {
   // 获取当前角速率
   Vector3 current_omega_rps_body = {icm_gyro_x, icm_gyro_y, icm_gyro_z};
+  // ★ 2026-08-09 陀螺动态零偏补偿："飘"根因修复——EKF 实时估计的零偏
+  //   （温度漂移 0.2-0.4°/s，初值不确定度 0.4°/s）此前只用于日志，控制
+  //   用静态校准原始值 → 速率模式持续旋转（每分钟 12-24°）。补偿后速率
+  //   反馈与 EKF 姿态同一参考系。仅 EKF 初始化后补偿（收敛前估计不可靠）。
+  if (nav_system_initialized)
+  {
+    const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
+    current_omega_rps_body.x -= gb(0);
+    current_omega_rps_body.y -= gb(1);
+    current_omega_rps_body.z -= gb(2);
+  }
+  // 滤波链（2026-08-09 审计后近全关：α1=0.4 / 二级直通——物理减震底座已隔离振动）
   current_omega_dps_body_filtered = {
-      rollSpeedFilter.filter(current_omega_rps_body.x * RAD_TO_DEG),
-      pitchSpeedFilter.filter(current_omega_rps_body.y * RAD_TO_DEG),
-      yawSpeedFilter.filter(current_omega_rps_body.z * RAD_TO_DEG)};
+      rollSpeedFilter2.filter(rollSpeedFilter.filter(current_omega_rps_body.x * RAD_TO_DEG)),
+      pitchSpeedFilter2.filter(pitchSpeedFilter.filter(current_omega_rps_body.y * RAD_TO_DEG)),
+      yawSpeedFilter2.filter(yawSpeedFilter.filter(current_omega_rps_body.z * RAD_TO_DEG))};
 
   bool is_attitude_control_active = inputs.is_unlocked && !inputs.is_manual_tvc;
   if (is_attitude_control_active)
@@ -1000,8 +1019,8 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       // 外环：滚转外部导数取 omega.x（体轴x = FRD 滚转速率）
       // 传参为 d(input)/dt 语义：input=0 常数，误差导数 = -omega；
       // computeWithExternalDerivative 内部取 -derivative 作误差导数，故此处传 +omega。
-      gnc_tel.omega_ref_dps[0] = rollAnglePID.computeWithExternalDerivative(gnc_tel.error_deg[0], 0, current_omega_dps_body_filtered.x);
-      gnc_tel.omega_ref_dps[1] = pitchAnglePID.computeWithExternalDerivative(gnc_tel.error_deg[1], 0, current_omega_dps_body_filtered.y);
+      gnc_tel.omega_ref_dps[0] = rollAnglePID.computeWithExternalDerivative(gnc_tel.error_deg[0], 0, current_omega_dps_body_filtered.x, 0.005f);
+      gnc_tel.omega_ref_dps[1] = pitchAnglePID.computeWithExternalDerivative(gnc_tel.error_deg[1], 0, current_omega_dps_body_filtered.y, 0.005f);
 
       // ★ yaw 摇杆不在此处处理：存档约定下 yaw 恒为角速度指令，
       //   由 execute_yaw_controller 统一映射（两种模式一致）。
@@ -1029,8 +1048,8 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 
     // 内环：角速率误差 → 角加速度指令(rad/s²)
     // FRD 轴序：体轴x=滚转，体轴y=俯仰，底层控制分配负责物理逆解
-    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x);
-    outputs.alpha_pitch = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y);
+    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x, 0.005f);
+    outputs.alpha_pitch = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
     outputs.alpha_roll  = rollOutputFilter.filter(outputs.alpha_roll);
     outputs.alpha_pitch = pitchOutputFilter.filter(outputs.alpha_pitch);
   }
@@ -1074,18 +1093,46 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     // ★ 与原始 VTVL 实飞存档版完全一致（2026-08-07 恢复）：
     // 存档系 z_b = 推力轴 → 绕 z_b 即航向（差速通道）。
     // yaw 摇杆**恒为角速度指令**（ATTITUDE_MODE / RATE_MODE 行为相同）：
-    // 松杆即停、不做航向姿态回中——符合"姿态模式下 yaw 仍控角速度"的要求，
-    // 同时天然避开"航向自由度被释放时 qCmd 与机体系错位"的陷阱。
-    gnc_tel.omega_ref_dps[2] = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
-                                        -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
-    yawAnglePID.reset();  // 航向不用姿态外环
+    // 摇杆偏离 = 角速度指令；回中 = 锁航向（★2026-08-09 ratchet hold，
+    // 短弧误差 × att_yaw.kp，限幅 att_yaw.int_limit）。
+    // 存档版"松杆即停"由航向锁替代——安全上更优（回中不漂）。
+    // 解锁瞬间参考 = 当前航向。
+    if (inputs.is_unlocked && !s_yaw_hold_armed)
+    {
+      s_yaw_hold_ref_rad = AHRS_Packet.Heading;
+      s_yaw_hold_armed = true;
+    }
+    if (!inputs.is_unlocked)
+    {
+      s_yaw_hold_armed = false;
+    }
+    const float yaw_stick_us = inputs.yaw_raw - 1500.0f;
+    const float YAW_STICK_DEADBAND_US = 40.0f;   // 回中死区（杆位抖动）
+    if (fabsf(yaw_stick_us) > YAW_STICK_DEADBAND_US)
+    {
+      gnc_tel.omega_ref_dps[2] = mapFloat(yaw_stick_us, -512.0f, 512.0f,
+                                          -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+      s_yaw_hold_ref_rad = AHRS_Packet.Heading;  // 持续刷新：回中即锁当时航向
+    }
+    else
+    {
+      // 回中：航向短弧误差（ref−current，与 roll/pitch 误差约定一致）→ 速率指令
+      float yaw_err = s_yaw_hold_ref_rad - AHRS_Packet.Heading;
+      while (yaw_err > M_PI)  yaw_err -= 2.0f * (float)M_PI;
+      while (yaw_err < -M_PI) yaw_err += 2.0f * (float)M_PI;
+      gnc_tel.omega_ref_dps[2] = constrain(
+          kFlightCtrlParams.att_yaw.kp * yaw_err * RAD_TO_DEG,
+          -kFlightCtrlParams.att_yaw.int_limit,
+           kFlightCtrlParams.att_yaw.int_limit);
+    }
+    yawAnglePID.reset();  // 航向不用 PID 外环（自定义 hold 逻辑，增益取自 att_yaw 参数）
 
     gnc_tel.omega_ref_dps[2] = yawAngleOutputFilter.filter(gnc_tel.omega_ref_dps[2]);
 
     // 内环：速率误差 → 角加速度指令 alpha_yaw (rad/s²)
     // FRD 轴序：偏航速率 = 体轴z 角速度
     outputs.alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(
-        gnc_tel.omega_ref_dps[2], current_omega_dps_body_filtered.z);
+        gnc_tel.omega_ref_dps[2], current_omega_dps_body_filtered.z, 0.005f);
     outputs.alpha_yaw = yawOutputFilter.filter(outputs.alpha_yaw);
   }
   else

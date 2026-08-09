@@ -298,6 +298,11 @@ ComplementaryFilter altitude_rate_target_filter(0.3f);                          
 ComplementaryFilter rollSpeedFilter(kFlightCtrlParams.speed_filter_alpha[0]),
                    pitchSpeedFilter(kFlightCtrlParams.speed_filter_alpha[1]),
                    yawSpeedFilter(kFlightCtrlParams.speed_filter_alpha[2]);              // 角速率滤波
+// ★ 2026-08-09 二级滤波（级联二阶）：一阶 α=0.3 对 30-60Hz 桨振动残差 4.7°/s，
+//   级联第二级 α=0.4 后残差 0.6°/s（-8×），1Hz 滞后仅 +2.7°（振动分析见黑匣子）
+ComplementaryFilter rollSpeedFilter2(kFlightCtrlParams.speed_filter_alpha2[0]),
+                   pitchSpeedFilter2(kFlightCtrlParams.speed_filter_alpha2[1]),
+                   yawSpeedFilter2(kFlightCtrlParams.speed_filter_alpha2[2]);
 ComplementaryFilter rollAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alpha[0]),
                    pitchAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alpha[1]),
                    yawAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alpha[2]);    // 姿态外环输出滤波
@@ -615,6 +620,9 @@ void applyFlightCtrlParams()
     rollSpeedFilter.setAlpha(kFlightCtrlParams.speed_filter_alpha[0]);
     pitchSpeedFilter.setAlpha(kFlightCtrlParams.speed_filter_alpha[1]);
     yawSpeedFilter.setAlpha(kFlightCtrlParams.speed_filter_alpha[2]);
+    rollSpeedFilter2.setAlpha(kFlightCtrlParams.speed_filter_alpha2[0]);
+    pitchSpeedFilter2.setAlpha(kFlightCtrlParams.speed_filter_alpha2[1]);
+    yawSpeedFilter2.setAlpha(kFlightCtrlParams.speed_filter_alpha2[2]);
     rollAngleOutputFilter.setAlpha(kFlightCtrlParams.angle_out_filter_alpha[0]);
     pitchAngleOutputFilter.setAlpha(kFlightCtrlParams.angle_out_filter_alpha[1]);
     yawAngleOutputFilter.setAlpha(kFlightCtrlParams.angle_out_filter_alpha[2]);

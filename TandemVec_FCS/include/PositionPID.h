@@ -19,7 +19,8 @@
 //    5. 新增 NaN/Inf 防护 —— 单个非有限输入曾会永久污染积分器与微分滤波器，
 //       此后输出恒为 NaN 且无法自愈；现拦截并冻结该拍，计数供遥测。
 //
-//  积分约定: integral_ += error（不乘 dt），dt 由固定调用周期(200Hz)隐含在 Ki。
+//  积分约定: integral_ += error*dt（dt 显式传入，秒）——Ki 为连续域增益，
+//  与调用频率解耦（2026-08-09 重构；旧约定 Ki 隐含 200Hz，参数随频率漂移）。
 //            原 setDtScaling(bool) 因接口拿不到 dt 恒为死代码，已删除。
 //
 //  行为兼容性: v1/v2 默认配置下（Kb=0、rateLimit=0、b=1、c=0）仅
@@ -99,8 +100,9 @@ public:
     void setOutputRateLimit(float maxStep) { outputRateLimit_ = (maxStep < 0.f) ? 0.f : maxStep; }
 
     // —— 积分约定说明（无 dt 缩放开关）——
-    //  本类的 compute 系列接口不接收 dt，积分按 integral_ += error 累加，
-    //  dt 由固定调用周期（GNC 200Hz）隐含在 Ki 中。
+    //  compute 系列接口接收 dt（秒），积分按 integral_ += error*dt 累加——
+    //  Ki 为连续域增益（与调用频率解耦）。微分滤波 alpha 仍为每拍系数
+    //  （kd 全轴为 0，当前无实际影响）。
     //  曾有 setDtScaling(bool) 声称可切到 integral_ += error*dt，但接口拿不到
     //  dt，实现恒等于非缩放分支（死代码），已删除以免误用。
     //  若确需标准离散积分，应新增接受 dt 的 compute 重载，而非布尔开关。
@@ -180,39 +182,39 @@ public:
     //   也在末尾无条件赋值 —— 若不在入口拦截，一个 NaN 输入会同时污染
     //   微分滤波器与误差历史，即使 computePID2DOF 内部有防护也无法挽回。
 
-    float compute(float setpoint, float input)
+    float compute(float setpoint, float input, float dt)
     {
         if (!isFiniteF(setpoint) || !isFiniteF(input)) { ++nonFiniteCount_; return lastOutput_; }
         float error = setpoint - input;
         float derivative = error - previousError_;
         float filteredDerivative = filterDerivative(derivative);
-        float output = computePID2DOF(error, derivative, filteredDerivative, setpoint, input);
+        float output = computePID2DOF(error, derivative, filteredDerivative, setpoint, input, dt);
         previousError_ = error;
         previousInput_ = input;
         return applyRateLimit(output);
     }
 
-    float computeWithExternalDerivative(float setpoint, float input, float derivative)
+    float computeWithExternalDerivative(float setpoint, float input, float derivative, float dt)
     {
         if (!isFiniteF(setpoint) || !isFiniteF(input) || !isFiniteF(derivative))
         { ++nonFiniteCount_; return lastOutput_; }
         float error = setpoint - input;
         // derivative 是 d(input)/dt → 误差导数 = -derivative
         float filteredDerivative = filterDerivative(-derivative);
-        float output = computePID2DOF(error, -derivative, filteredDerivative, setpoint, input);
+        float output = computePID2DOF(error, -derivative, filteredDerivative, setpoint, input, dt);
         previousError_ = error;
         previousInput_ = input;
         return applyRateLimit(output);
     }
 
-    float computeDerivativeOnMeasurement(float setpoint, float input)
+    float computeDerivativeOnMeasurement(float setpoint, float input, float dt)
     {
         if (!isFiniteF(setpoint) || !isFiniteF(input)) { ++nonFiniteCount_; return lastOutput_; }
         float error = setpoint - input;
         // 微分先行: 使用 -Δinput
         float derivative = previousInput_ - input;
         float filteredDerivative = filterDerivative(derivative);
-        float output = computePID2DOF(error, derivative, filteredDerivative, setpoint, input);
+        float output = computePID2DOF(error, derivative, filteredDerivative, setpoint, input, dt);
         previousError_ = error;
         previousInput_ = input;
         return applyRateLimit(output);
@@ -232,7 +234,7 @@ private:
     //  2-DOF PID 核心计算 + 反算抗饱和
     // ================================================================
     float computePID2DOF(float error, float rawDerivative, float filteredDerivative,
-                         float setpoint, float input)
+                         float setpoint, float input, float dt)
     {
         // ★ NaN/Inf 防护（安全关键）
         // 传感器毛刺或除零一旦产生 NaN，integral_ += NaN 会永久污染积分器：
@@ -257,7 +259,7 @@ private:
         {
             if (integralThreshold_ <= 0.0f || std::fabs(error) < integralThreshold_)
             {
-                integral_ += error;  // dt 由固定调用周期(200Hz)隐含在 Ki 中
+                integral_ += error * dt;  // ★2026-08-09 dt 显式传入：Ki 为连续域增益（参数不再隐含 200Hz）
             }
             // ★ 钳制【积分状态本身】，而非仅钳制其输出贡献。
             //   原实现只做 iOut=constrain(ki*integral)，integral_ 可无限增长：

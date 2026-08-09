@@ -96,6 +96,8 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     ALPHA_ENTRY("ang_alpha", angle_out_filter_alpha, 2),
     ALPHA_ENTRY("out_alpha", output_filter_alpha, 0), ALPHA_ENTRY("out_alpha", output_filter_alpha, 1),
     ALPHA_ENTRY("out_alpha", output_filter_alpha, 2),
+    ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 0), ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 1),
+    ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 2),   // ★ 2026-08-09 二级滤波（级联二阶，抑 30-60Hz 桨振动）
 };
 static_assert(sizeof(kAnoParams) / sizeof(kAnoParams[0]) == ANO_PARAMS_COUNT,
               "ano_params: 注册表数量与 ANO_PARAMS_COUNT 不一致");
