@@ -18,6 +18,8 @@ cli.py — GCS 命令行调试接口（复用 server.main 处理链路，行为�
   py -3.12 server/cli.py --port COM10 flash export --start 8 --count 32 -o seg.csv
   py -3.12 server/cli.py --port COM10 record start -o rec.csv   # 遥测记录（Ctrl+C 停）
   py -3.12 server/cli.py --port COM10 sniff -t 3        # 帧监控
+  py -3.12 server/cli.py --port COM10 link            # 链路健康检查（2M 间歇丢帧诊断）
+  py -3.12 server/cli.py --port COM10 dbg "ws 255 0 0"  # DBG 任意命令（ws/wsstat/wsstatic/reset/tasks/...）
   py -3.12 server/cli.py --port COM10 raw --hex 414205ff03070000   # 发送原始帧
   # 两步式（先 connect 保持会话——注意 CLI 进程退出即断开，建议直接用 --port）
 """
@@ -188,6 +190,86 @@ def cmd_param(a):
         m.g.write(anocom.cmd_param_restore_defaults())
         drain(0.5)
         print('✓ 已发送恢复默认（RAM 生效，重启回默认）')
+
+
+def cmd_link(a):
+    """链路健康检查（2M 间歇丢帧诊断）：
+    1. 遥测帧率统计（1s 采样）
+    2. 0xE0 0x01/0x02/0x03 参数命令成功率（各 5 次，按处理后状态检测）
+    3. 0xE1 写确认率（读当前值写回，不改值）
+    用法: cli.py --port COM10 link
+    """
+    require_connected()
+    m.g.write(b'exit\n')   # 清 DBG 残留（handleAnoCom 短路会吞参数帧）
+    time.sleep(0.3)
+    # 清空 rx_q 积压（旧遥测在 FIFO 前段会淹没响应帧，导致成功率误判为 0）
+    while True:
+        try:
+            m.g.rx_q.get_nowait()
+        except queue.Empty:
+            break
+
+    # ---- 1. 遥测帧率统计 ----
+    g0 = m.g.stat_frames
+    t0 = time.time()
+    while time.time() - t0 < 1.0:
+        drain(0.1)
+    frames = m.g.stat_frames - g0
+    print(f'遥测帧率: {frames}/s，坏帧累计: {m.g.stat_bad}')
+
+    # ---- 2. 参数命令成功率（字节流跨块累积检测响应帧头，每轮最多 3 发重试） ----
+    def probe(frame, target_byte, tries=3):
+        for _ in range(tries):
+            m.g.write(frame)
+            buf = b''
+            deadline = time.time() + 0.6
+            while time.time() < deadline:
+                try:
+                    kind, payload = m.g.rx_q.get(timeout=0.05)
+                except queue.Empty:
+                    continue
+                if kind == 'rx':
+                    buf += payload
+                    if b'\xab\x05\xff' + bytes([target_byte]) in buf:
+                        return True
+        return False
+
+    tests = [
+        ('0x01 参数数量', anocom.cmd_read_param_count(), anocom.FUNC_PARAM_CMD),
+        ('0x02 读值', anocom.cmd_read_param_value(0), anocom.FUNC_PARAM_WRITE_READ),
+        ('0x03 读信息', anocom.cmd_read_param_info(0), anocom.FUNC_PARAM_INFO),
+    ]
+    for name, frame, target in tests:
+        ok = sum(1 for _ in range(5) if probe(frame, target))
+        print(f'{name} 成功率: {ok}/5（每轮最多 3 发）')
+
+    # ---- 3. 写确认率（读当前值写回，不改值） ----
+    val = None
+    if _param_read_single(0):
+        val = m.g.param_values.get(0)
+    if val is not None:
+        ok_w = 0
+        for _ in range(5):
+            m.g.param_pending.clear()
+            frame = anocom.cmd_write_param(0, val)
+            body = frame[:-2]
+            m.g.param_pending[0] = (anocom.sum_check(body), anocom.add_check(body), time.time())
+            m.g.write(frame)
+            deadline = time.time() + 0.8
+            while time.time() < deadline:
+                drain(0.05)
+                if 0 not in m.g.param_pending:
+                    ok_w += 1
+                    break
+        print(f'写确认率（值写回）: {ok_w}/5')
+    else:
+        print('写确认率: 读参考值失败，跳过')
+
+    # ---- 结论 ----
+    if frames > 50:
+        print('结论: 遥测正常；成功率低 = 2M 间歇丢帧（CLI param 已重试兜底）')
+    else:
+        print('结论: 遥测异常（<50 帧/s）——检查波特率/接线，或固件处于 DBG 模式（cli.py dbg off）')
 
 
 def _param_read_single(pid, timeout=1.5, tries=3):
@@ -467,6 +549,9 @@ def main():
     sub = ap.add_subparsers(dest='cmd', required=True)
 
     sub.add_parser('ports', help='枚举串口')
+
+    p = sub.add_parser('link', help='链路健康检查（遥测帧率 + 参数命令成功率）')
+    p.set_defaults(fn=cmd_link)
 
     p = sub.add_parser('connect', help='连接串口')
     p.add_argument('port')

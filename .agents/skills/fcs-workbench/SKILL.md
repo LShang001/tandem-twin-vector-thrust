@@ -65,6 +65,24 @@ py -3.12 server/cli.py --port COM10 param restore
 
 进 DBG 模式遥测会暂停（互斥），诊断完必须发 `exit`（后端 `dbg_exit`）恢复。
 
+### 链路/串口诊断（2026-08-10 集成进 CLI）
+
+```bash
+# 链路健康检查：遥测帧率 + 参数命令成功率 + 写确认率（2M 间歇丢帧诊断）
+py -3.12 server/cli.py --port COM10 link
+# DBG 任意命令（统一入口，自动进/出调试模式）
+py -3.12 server/cli.py --port COM10 dbg "ws 255 0 0"     # WS2812 直接点亮
+py -3.12 server/cli.py --port COM10 dbg "wsstat"          # WS2812 驱动状态
+py -3.12 server/cli.py --port COM10 dbg "wsstatic 1"      # 静态电平（硬件诊断，回读 ODR/IDR）
+py -3.12 server/cli.py --port COM10 dbg "reset"           # 软复位单片机
+py -3.12 server/cli.py --port COM10 dbg "tasks"           # 任务调度统计
+```
+
+- **参数链路不通时先 `cli.py dbg off`**（DBG 模式下 handleAnoCom 短路，参数帧不处理）
+- CLI param get/set 已带 3 轮重试（2M USB 偶发丢帧，CRC 失败固件静默丢弃）
+- 手动 TVC 开关（CH8）：**>1750 高位=手动 TVC 演示，默认低位=飞控自稳**（2026-08-10 反逻辑）
+- 锁定状态（任何模式）：摇杆直通舵机摆动，电机绝不转（地面标定摆座方向）
+
 ### GNSS 双协议联调（2026-08-09 库级）
 
 固件默认 `ubx.SetProtocol(kAuto)`（UBX 优先 + 失效兜底 NMEA）。GNSS 出问题时的排查顺序：

@@ -72,7 +72,10 @@ void process_control_inputs(ControlInputs_t &inputs)
   //   手动 TVC 旁路分支把舵机钳到满偏 ±15°（PWM 72%/28%），直到首帧通道
   //   数据到达。门控后无链时落入全锁定分支（舵机 1500us 中位 + 电机停）。
   //   链路正常时手动 TVC 标定功能不受影响；断链后同样兜底。
-  inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] < 1200);
+  // ★2026-08-10 手动TVC开关反逻辑（用户需求）：低位（默认）= 飞控自稳介入，
+//   仅高位（>1750）才是手动 TVC 演示/标定模式——避免忘记打回自动导致意外手动旁路。
+//   上电无信号 raw_rc 全 0 → 低位 → is_manual_tvc=false → 锁定分支兜底（安全）。
+inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
 
   // 通道 9 (Attitude Mode): 姿态控制模式选择
   //   < 1500: 角度模式 (ATTITUDE_MODE) - 摇杆控制目标角度
@@ -1183,25 +1186,31 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   float motor1_pct       = 0.0f;   // 直接用百分比，避免 us→pct 双重转换
   float motor2_pct       = 0.0f;
 
-  if (!inputs.is_unlocked && !inputs.is_manual_tvc)
+  if (!inputs.is_unlocked)
   {
-    // 全锁定（非手动TVC）：电机最低，舵机中位；同时重置 BTRUE 工作点（防看门狗复位后 stale）
-    prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
-    // 差速/饱和标记同步（AnoCom 0x40 帧全模式显示）
-    gnc_tel.dw = 0.0f;
-    gnc_tel.alloc_sat[0] = gnc_tel.alloc_sat[1] = gnc_tel.alloc_sat[2] = false;
-  }
-  else if (inputs.is_manual_tvc)
-  {
-    // ---- 手动TVC旁路：RC直接控制舵机/差速，用于地面标定 ----
-    // 2026-08-07：锁定状态也可用（地面测试摆座方向）；
-    // ★ 安全约束：锁定状态电机强制最低（油门通道直通不生效）
+    // ★2026-08-10 锁定状态（任何模式）：摇杆直通舵机摆动（地面标定摆座方向），
+    //   电机绝不转——原逻辑仅手动TVC模式锁定可摆、自动模式锁定舵机中位，
+    //   用户需求改为锁定即可摆，不必切手动 TVC。安全红线保持：锁定电机强制最低。
     lower_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
                                 -MAX_CORRECTION, MAX_CORRECTION);
     // ★ 2026-08-08 上摆(roll)映射取反：自控链路 Mz=-Iz·alpha_roll（负号）+
     //   分配器 df=Mz/(a·T0)（正系数）→ front 摆角与 alpha_roll 反号；
-    //   手动模式直接映射摆角须与自控最终摆角方向一致（右打摇杆→正摆角）。
-    //   原映射（-MAX,+MAX）绕过负号导致方向相反（用户实测上摆反）。
+    //   手动直通映射须与自控最终摆角方向一致（右打摇杆→正摆角）。
+    upper_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
+                                MAX_CORRECTION, -MAX_CORRECTION);
+    motor1_pct = 0.0f;
+    motor2_pct = 0.0f;
+    // 差速/饱和标记同步（AnoCom 0x40 帧全模式显示）；重置 BTRUE 工作点（防 stale）
+    gnc_tel.dw = 0.0f;
+    gnc_tel.alloc_sat[0] = gnc_tel.alloc_sat[1] = gnc_tel.alloc_sat[2] = false;
+    prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
+  }
+  else if (inputs.is_manual_tvc)
+  {
+    // ---- 解锁 + 手动TVC（CH8 高位）：RC 直接控制舵机/差速，用于演示/地面标定 ----
+    // ★2026-08-10 开关反逻辑后此分支仅在解锁 + 高位时进入（锁定已在上方处理）
+    lower_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
+                                -MAX_CORRECTION, MAX_CORRECTION);
     upper_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
                                 MAX_CORRECTION, -MAX_CORRECTION);
     float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
@@ -1213,13 +1222,6 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
     // 差速/饱和标记同步（AnoCom 0x40 帧全模式显示）
     gnc_tel.dw = manual_dw;
     gnc_tel.alloc_sat[0] = gnc_tel.alloc_sat[1] = gnc_tel.alloc_sat[2] = false;
-    if (!inputs.is_unlocked)
-    {
-      // 锁定状态：舵机可动（摆向测试），电机绝不转
-      motor1_pct = 0.0f;
-      motor2_pct = 0.0f;
-      prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
-    }
   }
   else
   {
