@@ -608,9 +608,11 @@ def _on_findseg_text(text: str):
 
 async def _flash_export_chunked_async(ws: WebSocket, start: int, count: int):
     """分片导出：DAP-Link VCP 2M 下大流量丢字节（实测 32 页+ 必丢），
-    小片（4 页）约 80% 完整；每片按 n×2048B 长度校验，不足重试 3 次。
-    消费线程负责 feed（DBG 模式 _on_dbg_rx），本函数仅等待完成标志。"""
-    CHUNK = 4
+    分片 16 页（32KB）摊薄每片固定开销（命令往返+状态机 ~0.5-1s），
+    超时 2s+0.02s/页（8KB 实际 65ms 即传完，5s 基数是浪费）。
+    ★ 2026-08-09 优化：CHUNK 4→16、超时 5→2s——512 页导出从 5-10 分钟降到 ~1 分钟。
+    每片按 n×2048B 长度校验，不足重试 3 次。消费线程负责 feed，本函数仅等待完成标志。"""
+    CHUNK = 16
     total = bytearray()
     page, remaining = start, count
     while remaining > 0:
@@ -620,7 +622,7 @@ async def _flash_export_chunked_async(ws: WebSocket, start: int, count: int):
             done = threading.Event()
             piece = []
             g.dbgs.start_export(page, n, lambda raw, p=piece, d=done: (p.append(raw), d.set()))
-            await asyncio.to_thread(done.wait, 5 + n * 0.02)
+            await asyncio.to_thread(done.wait, 2 + n * 0.02)
             if piece and len(piece[0]) == n * 2048:
                 got = piece[0]
                 break

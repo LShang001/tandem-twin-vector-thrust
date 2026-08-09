@@ -11,13 +11,14 @@ import params as pm
 
 
 def test_param_count_matches_firmware():
-    """参数总数 = 12 环 × 9 字段 + 9 滤波 alpha = 117（与固件 ANO_PARAMS_COUNT 一致）"""
+    """参数总数 = 12 环 × 9 字段 + 12 滤波 alpha = 120（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波）"""
     names = pm.expected_names()
-    assert len(names) == 117
-    assert len(set(names)) == 117
+    assert len(names) == 120
+    assert names.index('rate_pitch.kd') == 38
+    assert len(set(names)) == 120
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
-    assert names[-1] == 'out_alpha[2]'
+    assert names[-1] == 'spd2_alpha[2]'
     assert 'att_roll.falpha' in names
     assert all(len(n) <= 20 for n in names), [n for n in names if len(n) > 20]
 
@@ -241,4 +242,5 @@ def test_param_name_to_id_mapping():
     assert names.index('att_roll.kp') == 0
     assert names.index('att_pitch.kp') == 9
     assert names.index('rate_roll.kd') == 29
-    assert len(names) == 117
+    assert len(names) == 120
+    assert names.index('rate_pitch.kd') == 38

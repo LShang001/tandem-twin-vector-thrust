@@ -29,13 +29,14 @@ FILTER_GROUPS = [
     ('speed_filter_alpha', '角速率滤波', '内环输入角速率滤波 alpha'),
     ('angle_out_filter_alpha', '外环输出滤波', '姿态外环输出滤波 alpha'),
     ('output_filter_alpha', '内环输出滤波', '内环输出（执行器指令）滤波 alpha'),
+    ('speed_filter_alpha2', '角速率滤波2', '二级滤波 alpha（级联二阶，抑 30-60Hz 桨振动；2026-08-09）'),
 ]
 
 # 字段 → 元数据（单位/范围/步进/说明）
 # ★ 参数名 ≤20B（协议 PAR_NAME 定长）：filter_alpha 的线上名 = "{loop}.falpha"
 FIELD_META = {
     'kp': dict(unit='', min=0.0, max=100.0, step=0.01, desc='比例增益'),
-    'ki': dict(unit='', min=0.0, max=1.0, step=0.0001, desc='积分增益（200Hz 隐含 dt）'),
+    'ki': dict(unit='', min=0.0, max=2.0, step=0.01, desc='积分增益（连续域，dt 显式传入）'),
     'kd': dict(unit='', min=0.0, max=100.0, step=0.01, desc='微分增益'),
     'out_min': dict(unit='', min=-1000.0, max=0.0, step=0.1, desc='输出下限'),
     'out_max': dict(unit='', min=0.0, max=1000.0, step=0.1, desc='输出上限'),
@@ -50,6 +51,7 @@ FILTER_WIRE = {
     'speed_filter_alpha': 'spd_alpha',
     'angle_out_filter_alpha': 'ang_alpha',
     'output_filter_alpha': 'out_alpha',
+    'speed_filter_alpha2': 'spd2_alpha',
 }
 
 # 按环的输出单位修正
