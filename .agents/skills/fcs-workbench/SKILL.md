@@ -103,6 +103,27 @@ py -3.12 server/cli.py --port COM10 dbg "tasks"           # 任务调度统计
 - 手动 TVC 开关（CH8）：**>1750 高位=手动 TVC 演示，默认低位=飞控自稳**（2026-08-10 反逻辑）
 - 锁定状态（任何模式）：摇杆直通舵机摆动，电机绝不转（地面标定摆座方向）
 
+### 通用变量上报（AnoVars，2026-08-10）
+
+固件任意内部变量（控制中间量/传感器/状态）注册后多协议上报——**加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏**，预注册 47 个（gnc_tel 全字段/w_est 观测器/EKF/辨识/电压）：
+
+```bash
+# 拉取固件变量清单（0xF3，名称/类型/ID 表格）
+tools/tvc-cli.cmd --port COM10 vars list
+# 一键监视：配置上报集合 + 收集 5s 值流 + 统计（--json 结构化）
+tools/tvc-cli.cmd --port COM10 vars watch wf_est alpha_ref_x -t 5 --json
+# 配置类（走 DBG 通道，自动进出调试模式）
+tools/tvc-cli.cmd --port COM10 vars add wf_est      # 加入上报集合（≤16）
+tools/tvc-cli.cmd --port COM10 vars rate 100        # 频率 1-200Hz（N 变量时每个=rate/N Hz）
+tools/tvc-cli.cmd --port COM10 vars status          # 当前上报集合
+tools/tvc-cli.cmd --port COM10 vars clear
+# DBG 直连同款命令：dbg "vars list" / dbg "vars add wf_est"
+```
+
+- **0xF2 值帧**（AnoCom 灵活帧，GCS 快照字段 `vars_<name>`，前端"变量监视"面板自动渲染）
+- **MAVLink 调试通道**：`dbg "proto mavlink"` 运行时切换 Serial6 协议（QGC/MP 可连，曲线用 NAMED_VALUE_FLOAT；3D 向量用 DEBUG_VECT）；`dbg "proto anocom"` 切回 GCS——**不重烧**，AnoCom 参数/变量链路在 MAVLink 模式停用
+- 三坑：注册表定义必须 `extern` + 不带数组大小（否则 segfault）；volatile 变量注册需 `const volatile float*`；0xF3 应答 20B（见 AGENTS.md）
+
 ### GNSS 双协议联调（2026-08-09 库级）
 
 固件默认 `ubx.SetProtocol(kAuto)`（UBX 优先 + 失效兜底 NMEA）。GNSS 出问题时的排查顺序：
