@@ -199,14 +199,25 @@ def cmd_param(a):
             info = m.g.param_names.get(pid, {})
             val = m.g.param_values.get(pid)
             meta = pm.meta_for(info.get('name', '')) or {}
-            print(f'id={pid}  name={info.get("name", "?")}  type={info.get("type", "?")}  '
-                  f'value={val}  group={meta.get("group", "?")}  unit={meta.get("unit", "")}')
+            if getattr(a, 'json', False):
+                import json as _json
+                print(_json.dumps({'ok': True, 'id': pid, 'name': info.get('name', '?'),
+                                   'type': info.get('type', '?'), 'value': val,
+                                   'group': meta.get('group', '?'),
+                                   'unit': meta.get('unit', '')}, ensure_ascii=False))
+            else:
+                print(f'id={pid}  name={info.get("name", "?")}  type={info.get("type", "?")}  '
+                      f'value={val}  group={meta.get("group", "?")}  unit={meta.get("unit", "")}')
         else:
-            print('✗ 读取 id=%d 超时（3 轮重试）——可能是固件处于 DBG 模式（参数链路暂停）或串口丢帧。先执行: cli.py dbg off' % pid)
+            if getattr(a, 'json', False):
+                import json as _json
+                print(_json.dumps({'ok': False, 'id': pid, 'error': 'read timeout'}, ensure_ascii=False))
+            else:
+                print('✗ 读取 id=%d 超时（3 轮重试）——可能是固件处于 DBG 模式（参数链路暂停）或串口丢帧。先执行: cli.py dbg off' % pid)
     elif a.action == 'set':
-        _param_set(a.spec, a.value, 'set')
+        _param_set(a.spec, a.value, 'set', use_json=getattr(a, 'json', False))
     elif a.action == 'verify':
-        _param_set(a.spec, a.value, 'verify')
+        _param_set(a.spec, a.value, 'verify', use_json=getattr(a, 'json', False))
     elif a.action == 'restore':
         m.g.write(anocom.cmd_param_restore_defaults())
         drain(0.5)
@@ -222,7 +233,7 @@ def _val_close(a, b, is_float=True, tol=1e-4):
     return int(round(float(a))) == int(round(float(b)))
 
 
-def _param_set(spec, value, mode):
+def _param_set(spec, value, mode, use_json=False):
     """写参数。★ 2026-08-10：0x00 校验帧在 2M 间歇丢帧下偶发丢失（假阴性——
     写入实际生效但确认帧没抓到）。set 与 verify 都加写后读回验证：
       set    确认帧 或 读回相符 任一即判成功（读回更权威）
@@ -245,7 +256,8 @@ def _param_set(spec, value, mode):
     if mode == 'verify':
         if _param_read_single(pid):
             before = m.g.param_values.get(pid)
-        print(f'写前读回: id={pid} ({name}) = {before}')
+        if not use_json:
+            print(f'写前读回: id={pid} ({name}) = {before}')
 
     # 写入 + 等 0x00 校验帧：2M 下 USB 串口偶发丢帧（CRC 失败固件静默丢弃）→ 重试 3 轮
     ok = False
@@ -273,22 +285,59 @@ def _param_set(spec, value, mode):
 
     if mode == 'verify':
         good = _val_close(after, value, is_float)
-        print(f'写后读回: id={pid} ({name}) = {after}')
-        if good:
-            print(f'✓ 写入生效: {before} → {after}（目标 {value}）')
+        if use_json:
+            import json as _json
+            print(_json.dumps({'ok': good, 'mode': 'verify', 'id': pid, 'name': name,
+                               'before': before, 'after': after, 'target': value},
+                              ensure_ascii=False))
         else:
-            print(f'✗ 写入未生效: {before} → {after}（目标 {value}）——'
-                  f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
+            print(f'写后读回: id={pid} ({name}) = {after}')
+            if good:
+                print(f'✓ 写入生效: {before} → {after}（目标 {value}）')
+            else:
+                print(f'✗ 写入未生效: {before} → {after}（目标 {value}）——'
+                      f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
     else:
-        if ok and after is not None and _val_close(after, value, is_float):
+        verified = after is not None and _val_close(after, value, is_float)
+        success = ok or verified
+        if use_json:
+            import json as _json
+            print(_json.dumps({'ok': success, 'mode': 'set', 'id': pid, 'name': name,
+                               'value': value, 'ack': ok, 'readback': after,
+                               'verified': verified}, ensure_ascii=False))
+        elif ok and verified:
             print(f'✓ 写入 id={pid} ({name}) = {value}：确认帧 + 读回 {after} 双确认')
-        elif after is not None and _val_close(after, value, is_float):
+        elif verified:
             print(f'✓ 写入 id={pid} ({name}) = {value}：确认帧未到但读回 {after}（2M 丢帧假阴性，写入实际生效）')
         elif ok:
             print(f'✓ 写入 id={pid} ({name}) = {value}：确认帧确认（读回 {after} 超时）')
         else:
             print(f'✗ 写入 id={pid} ({name}) = {value}：确认帧未到且读回 {after}——'
                   f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
+
+
+def cmd_diag(a):
+    """一键系统诊断：固件版本 + 任务调度 + GNSS 协议 + 链路健康（走 dbg 通道）"""
+    require_connected()
+    if m.g.mode != 'dbg':
+        _dbg_mode(True)
+        time.sleep(0.4)
+    # 清掉进入 DBG 模式前残留的二进制遥测帧（否则混入文本输出变乱码）
+    try:
+        while True:
+            m.g.rx_q.get_nowait()
+    except queue.Empty:
+        pass
+    for cmd in ('ver', 'tasks', 'gpsproto'):
+        m.g.dbg_cmd(cmd)
+        out = list(_dbg_collect(1.2))
+        print(f'--- {cmd} ---')
+        for ln in out:
+            print(ln)
+    print('--- link ---')
+    _dbg_mode(False)          # 链路检查需要 AnoCom 遥测，退出 DBG 模式
+    time.sleep(0.5)
+    cmd_link(a)
 
 
 def cmd_link(a):
@@ -787,9 +836,13 @@ def main():
     # 全局自动连接：每条命令独立进程，提供 --port 则命令前后自动 连接/断开
     ap.add_argument('--port', help='自动连接串口（如 COM10），命令结束自动断开')
     ap.add_argument('--baud', type=int, default=DEFAULT_BAUD)
+    ap.add_argument('--json', action='store_true', help='JSON 结构化输出（Agent 调用友好）')
     sub = ap.add_subparsers(dest='cmd', required=True)
 
-    sub.add_parser('ports', help='枚举串口')
+    sub.add_parser('ports', help='枚举串口').set_defaults(fn=cmd_ports)
+
+    p = sub.add_parser('diag', help='一键系统诊断（link + tasks + gpsproto + ver）')
+    p.set_defaults(fn=cmd_diag)
 
     p = sub.add_parser('link', help='链路健康检查（遥测帧率 + 参数命令成功率）')
     p.set_defaults(fn=cmd_link)

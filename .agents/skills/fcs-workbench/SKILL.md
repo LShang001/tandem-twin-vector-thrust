@@ -21,6 +21,26 @@ compatibility: Requires Windows + Python 3.12 + 飞控固件（AnoCom 0xE0/0xE1 
 
 ## 核心命令
 
+### 快捷入口（2026-08-10）
+
+```bash
+# tools/tvc-cli.cmd 封装：少敲路径（任何目录可调，默认 COM10）
+tools/tvc-cli.cmd --port COM10 param get att_yaw.kp
+tools/tvc-cli.cmd diag                  # 一键诊断（见下）
+# --json 全局开关：结构化输出（Agent 脚本解析友好，值在 value/ok 字段）
+tools/tvc-cli.cmd --port COM10 --json param get att_yaw.kp
+tools/tvc-cli.cmd --port COM10 --json param set att_yaw.kp 1.1   # {"ok":true,"ack":true,"readback":...}
+tools/tvc-cli.cmd --port COM10 --json param verify att_yaw.kp 1.1  # before→after 三态
+```
+
+### 一键系统诊断（diag，2026-08-10 新增）
+
+```bash
+tools/tvc-cli.cmd --port COM10 diag
+# 输出：ver（固件版本/时钟）→ tasks（22 任务调度全表 + CPU%）→ gpsproto（GNSS 协议状态）
+#       → link（遥测帧率 + 参数命令成功率 5/5）——发现问题直接提示修复，DBG 自动进出
+```
+
 ### 参数在线读写（优先 CLI，名字寻址）
 
 ```bash
