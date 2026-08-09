@@ -82,7 +82,8 @@ def test_decode_speed_upward_positive():
 
 
 def test_decode_gps_scale():
-    """0x30：经纬度 ÷1e7、高度 ÷100、精度 ÷10"""
+    """0x30：经纬度 ÷1e7、高度 ÷100、精度 ÷10
+    手册字节序 p[20]=PDOP p[21]=SACC p[22]=VACC（固件调用处 sacc/vacc 双交换后字节流恰与手册一致）"""
     payload = bytes([3, 12]) + struct.pack('<2i', 1164073250, 399048230) + \
         struct.pack('<i', 4500) + struct.pack('<3h', 100, 200, 300) + bytes([15, 20, 25])
     f = anocom.encode_frame(anocom.FUNC_GPS_INFO1, payload)
@@ -91,7 +92,7 @@ def test_decode_gps_scale():
     assert abs(dec['gps_lon'] - 116.407325) < 1e-9
     assert abs(dec['gps_lat'] - 39.904823) < 1e-9
     assert dec['gps_alt_m'] == 45.0
-    assert dec['gps_pdop'] == 1.5 and dec['gps_vacc'] == 2.0
+    assert dec['gps_pdop'] == 1.5 and dec['gps_sacc'] == 2.0 and dec['gps_vacc'] == 2.5
 
 
 def test_decode_pwm_rc_raw():

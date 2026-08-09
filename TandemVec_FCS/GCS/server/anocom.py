@@ -252,18 +252,21 @@ def decode_actuator(p: bytes) -> dict:
 
 def decode_gps(p: bytes) -> dict:
     """0x30: fix u8, sats u8, lng/lat int32 (÷1e7), alt int32 (÷100),
-    n/e/d 速度 int16 (÷100), pdop/vacc/sacc u8 (÷10)"""
+    n/e/d 速度 int16 (÷100), pdop/sacc/vacc u8 (÷10)
+    ★ 字节位置按手册：p[21]=SACC(速度精度)、p[22]=VACC(垂直精度)。
+    固件 sendGPSInfo1 的形参顺序为 (pdop, vacc, sacc) 且调用处实参 (sacc, vacc)
+    双交换——字节流恰好与手册一致，仅两侧变量命名与实际内容相反"""
     if len(p) < 23:
         return {}
     fix, sats = p[0], p[1]
     lng, lat = struct.unpack('<2i', p[2:10])
     alt = struct.unpack('<i', p[10:14])[0]
     vn, ve, vd = struct.unpack('<3h', p[14:20])
-    pdop, vacc, sacc = p[20], p[21], p[22]
+    pdop, sacc, vacc = p[20], p[21], p[22]
     return {'gps_fix': fix, 'gps_sats': sats, 'gps_lon': lng / 1e7, 'gps_lat': lat / 1e7,
             'gps_alt_m': alt / 100.0, 'gps_vel_n': vn / 100.0, 'gps_vel_e': ve / 100.0,
-            'gps_vel_d': vd / 100.0, 'gps_pdop': pdop / 10.0, 'gps_vacc': vacc / 10.0,
-            'gps_sacc': sacc / 10.0}
+            'gps_vel_d': vd / 100.0, 'gps_pdop': pdop / 10.0, 'gps_sacc': sacc / 10.0,
+            'gps_vacc': vacc / 10.0}
 
 
 def decode_device_info(p: bytes) -> dict:
@@ -307,8 +310,8 @@ def decode_frame(f: Frame) -> dict:
 # ========================================================================
 
 def cmd_read_param_count() -> bytes:
-    """0xE0 CMD 0x01 读参数个数"""
-    return encode_frame(FUNC_PARAM_CMD, bytes([0x01, 0, 0, 0, 0]))
+    """0xE0 CMD 0x01 读参数个数（手册：CMD u8 + VAL u16，VAL 无意义置 0）"""
+    return encode_frame(FUNC_PARAM_CMD, bytes([0x01, 0x00, 0x00]))
 
 
 def cmd_read_param_value(param_id: int) -> bytes:
@@ -322,13 +325,13 @@ def cmd_read_param_info(param_id: int) -> bytes:
 
 
 def cmd_param_restore_defaults() -> bytes:
-    """0xE0 CMD 0x10 VAL=0xAA 恢复默认"""
-    return encode_frame(FUNC_PARAM_CMD, bytes([0x10, 0xAA]))
+    """0xE0 CMD 0x10 VAL=0xAA 恢复默认（手册：VAL 为 U16，0xAA 低字节）"""
+    return encode_frame(FUNC_PARAM_CMD, bytes([0x10, 0xAA, 0x00]))
 
 
 def cmd_param_save() -> bytes:
     """0xE0 CMD 0x10 VAL=0xAB 保存（固件无持久化，仅确认）"""
-    return encode_frame(FUNC_PARAM_CMD, bytes([0x10, 0xAB]))
+    return encode_frame(FUNC_PARAM_CMD, bytes([0x10, 0xAB, 0x00]))
 
 
 def cmd_write_param(param_id: int, value, is_float: bool = True) -> bytes:
