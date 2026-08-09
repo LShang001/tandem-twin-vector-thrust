@@ -75,7 +75,7 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ★ 2026-08-09：2.5→2.3（提阻尼）→2.2（再降一档，先稳）
     /* att_roll  */ { 2.6f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
     /* att_pitch */ { 2.6f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
-    /* att_yaw   */ { 1.0f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true }, // ★2026-08-09 航向锁启用（ratchet hold：摇杆=角速度、回中=锁航向；0.8→1.0 更利落）
+    /* att_yaw   */ { 1.0f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true }, // ★2026-08-09 航向锁启用（ratchet hold）；2026-08-10 1.2 实测发散回退 1.0（差速通道 τm 限带，角度环 kp>1 极限环振荡）
     // ---- 角速率内环 ----
     // ★ 2026-08-09 定稿：0.30 在线降 0.28 实测"几乎不超调"（RAM 写验证后固化）；
     // 随后 0.28→0.26 再降一档（先稳后冲，滤波升级换来的余量）

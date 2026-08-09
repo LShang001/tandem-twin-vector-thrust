@@ -1905,10 +1905,27 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         }
       }
       else if (strncmp(line, "wsstatic", 8) == 0) {
+        // ★2026-08-10 静态电平测试：绕过 WS2812 协议强制引脚电平，
+        // 区分 GPIO 输出故障 vs LED/接线硬件故障（协议故障灯无反应，
+        // 静态电平可验证引脚驱动能力）
         int lvl;
         if (sscanf(line + 8, "%d", &lvl) == 1) {
-          serial.print(F("[DBG] wsstatic not supported by WS2812Driver lib"));
-          serial.println(F(" (use ws <r> <g> <b> instead)"));
+          ws2812Led.setStaticLevel(lvl != 0);
+          serial.print(F("[DBG] PD15 static level="));
+          serial.println(lvl != 0 ? F("HIGH") : F("LOW"));
+          // ★寄存器级验证：读回 GPIOD ODR/IDR/MODER——确认输出电平真实写入
+          //   ODR bit15=1 → 输出已拉高；IDR bit15 反映引脚实际电平
+          //   （外部短路/断开时 IDR 与 ODR 不一致 → 硬件问题实锤）
+          GPIO_TypeDef *gpd = GPIOD;
+          serial.print(F("[DBG] GPIOD ODR=0x"));
+          serial.println(gpd->ODR, HEX);
+          serial.print(F("[DBG] GPIOD IDR=0x"));
+          serial.println(gpd->IDR, HEX);
+          serial.print(F("[DBG] GPIOD MODER=0x"));
+          serial.println(gpd->MODER, HEX);
+          serial.print(F("[DBG] PD15 mask=0x"));
+          serial.println(0x8000, HEX);
+          serial.println(F("[DBG] 期望 ODR/IDR bit15=1（HIGH）/0（LOW）。恢复: wsmode 1 或 ws <r> <g> <b>"));
         } else {
           serial.println(F("[DBG] usage: wsstatic <0|1>"));
         }
@@ -2364,6 +2381,13 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       else if (strncmp(line, "exit", 4) == 0) {
         serial.println(F("[DBG] Debug mode OFF. Back to telemetry."));
         dbgMode = false;
+      }
+      else if (strncmp(line, "reset", 5) == 0) {
+        // ★2026-08-10 软件复位（用户要求）：DBG 模式软重启单片机
+        serial.println(F("[DBG] Software reset in 300ms..."));
+        serial.flush();
+        delay(300);
+        NVIC_SystemReset();
       }
       else if (*line == '\0') {
         // 空行忽略

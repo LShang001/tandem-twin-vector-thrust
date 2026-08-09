@@ -7,7 +7,7 @@ cli.py — GCS 命令行调试接口（复用 server.main 处理链路，行为�
   py -3.12 server/cli.py ports                          # 枚举串口
   py -3.12 server/cli.py --port COM10 telemetry -n 5    # 自动连接并收集 5 个遥测快照
   py -3.12 server/cli.py --port COM10 device            # 设备/固件版本探测（0xE3 + 参数个数）
-  py -3.12 server/cli.py --port COM10 param list        # 读取全部 117 参数（表格）
+  py -3.12 server/cli.py --port COM10 param list        # 读取全部参数（表格）
   py -3.12 server/cli.py --port COM10 param get 0       # 读单个参数（ID 或名称 att_roll.kp）
   py -3.12 server/cli.py --port COM10 param set att_roll.kp 2.6   # 写参数（等 0x00 校验帧）
   py -3.12 server/cli.py --port COM10 param restore     # 恢复出厂默认
@@ -148,35 +148,42 @@ def cmd_param(a):
         _param_list(a)
     elif a.action == 'get':
         pid = _param_id_of(a.spec)
-        m.g.write(anocom.cmd_read_param_info(pid))
-        m.g.write(anocom.cmd_read_param_value(pid))
-        drain(1.0)
-        info = m.g.param_names.get(pid, {})
-        val = m.g.param_values.get(pid)
-        meta = pm.meta_for(info.get('name', '')) or {}
-        print(f'id={pid}  name={info.get("name", "?")}  type={info.get("type", "?")}  '
-              f'value={val}  group={meta.get("group", "?")}  unit={meta.get("unit", "")}')
+        if _param_read_single(pid):
+            info = m.g.param_names.get(pid, {})
+            val = m.g.param_values.get(pid)
+            meta = pm.meta_for(info.get('name', '')) or {}
+            print(f'id={pid}  name={info.get("name", "?")}  type={info.get("type", "?")}  '
+                  f'value={val}  group={meta.get("group", "?")}  unit={meta.get("unit", "")}')
+        else:
+            print('✗ 读取 id=%d 超时（3 轮重试）——可能是固件处于 DBG 模式（参数链路暂停）或串口丢帧。先执行: cli.py dbg off' % pid)
     elif a.action == 'set':
         pid = _param_id_of(a.spec)
         value = a.value
-        # 先取名称/类型（E2），确认 float/uint8
-        m.g.write(anocom.cmd_read_param_info(pid))
-        drain(0.5)
-        info = m.g.param_names.get(pid, {})
-        is_float = info.get('type') == 'float' if info else True
-        frame = anocom.cmd_write_param(pid, value, is_float)
-        body = frame[:-2]
-        m.g.param_pending[pid] = (anocom.sum_check(body), anocom.add_check(body), time.time())
-        m.g.write(frame)
-        # 等待 0x00 校验帧（_on_param_check 弹出 pending）
-        deadline = time.time() + 2.0
-        ok = False
-        while time.time() < deadline:
-            drain(0.1)
-            if pid not in m.g.param_pending:
-                ok = True
+        # 先取名称/类型（E2），确认 float/uint8——重试（丢帧/时序）
+        info = {}
+        for _ in range(3):
+            m.g.write(anocom.cmd_read_param_info(pid))
+            drain(0.4)
+            if pid in m.g.param_names:
+                info = m.g.param_names.get(pid, {})
                 break
-        print(f'写入 id={pid} ({info.get("name", "?")}) = {value}: ' + ('✓ 校验帧确认' if ok else '✗ 超时无确认'))
+        is_float = info.get('type') == 'float' if info else True
+        # 写入 + 等 0x00 校验帧：2M 下 USB 串口偶发丢帧（CRC 失败固件静默丢弃）→ 重试 3 轮
+        ok = False
+        for attempt in range(3):
+            frame = anocom.cmd_write_param(pid, value, is_float)
+            body = frame[:-2]
+            m.g.param_pending[pid] = (anocom.sum_check(body), anocom.add_check(body), time.time())
+            m.g.write(frame)
+            deadline = time.time() + 1.5
+            while time.time() < deadline:
+                drain(0.1)
+                if pid not in m.g.param_pending:
+                    ok = True
+                    break
+            if ok:
+                break
+        print(f'写入 id={pid} ({info.get("name", "?")}) = {value}: ' + ('✓ 校验帧确认' if ok else '✗ 超时无确认（3 轮）——可能是固件处于 DBG 模式（参数链路暂停），先执行: cli.py dbg off'))
     elif a.action == 'restore':
         m.g.write(anocom.cmd_param_restore_defaults())
         drain(0.5)
@@ -203,15 +210,19 @@ def _param_read_single(pid, timeout=1.5, tries=3):
 
 
 def _param_list(a):
-    """逐 ID 同步读取（2M 速率下 USB 串口偶发丢字节 → 失败补拉循环）"""
+    """逐 ID 同步读取（2M 速率下 USB 串口偶发丢字节 → 失败补拉循环）。
+    参数数量动态获取（0xE0 0x01），避免固件注册表扩容后硬编码漂移。"""
     m.g.param_names = {}
     m.g.param_values = {}
+    m.g.write(anocom.cmd_read_param_count())
+    drain(0.5)
+    count = getattr(m.g, 'param_count_seen', 0) or 121   # 回退 = 当前固件注册表数量
     failed = []
-    for pid in range(117):
+    for pid in range(count):
         if not _param_read_single(pid):
             failed.append(pid)
         if pid % 20 == 0:
-            print(f'…{pid + 1}/117（失败 {len(failed)}）', end='\r', flush=True)
+            print(f'…{pid + 1}/{count}（失败 {len(failed)}）', end='\r', flush=True)
     # 补拉循环：只重读失败 ID，直到全收或轮次耗尽
     for rnd in range(3):
         if not failed:

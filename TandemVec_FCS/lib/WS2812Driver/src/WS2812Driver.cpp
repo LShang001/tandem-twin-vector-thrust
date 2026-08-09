@@ -266,6 +266,17 @@ void WS2812Driver::setMode(Mode m)
   }
 }
 
+// ★2026-08-10 静态电平测试：强制数据引脚输出固定电平（绕过 WS2812 协议）。
+// 先切 bitbang 确保引脚为 GPIO 输出，再写 BSRR。
+void WS2812Driver::setStaticLevel(bool high)
+{
+  if (_mode != MODE_BITBANG)
+  {
+    setMode(MODE_BITBANG);
+  }
+  _port->BSRR = high ? _setMask : _resetMask;
+}
+
 WS2812Driver::Mode WS2812Driver::getMode() const
 {
   return _mode;

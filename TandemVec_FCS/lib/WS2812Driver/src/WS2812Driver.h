@@ -140,6 +140,13 @@ public:
   /// current transmission mode
   Mode getMode() const;
 
+  /*
+   * ★2026-08-10 静态电平测试：绕过 WS2812 协议，强制数据引脚输出固定电平。
+   * 用于区分"GPIO 输出故障"与"LED/接线硬件故障"——协议故障时 LED 无反应，
+   * 静态电平（高/低）可直接验证引脚驱动能力。会切换到 bitbang（GPIO 输出）。
+   */
+  void setStaticLevel(bool high);
+
   // ---- debug helpers (used by the FCS debug console) ----
 
   /// DMA buffer address (0 if DMA not ready) — for register-level debugging
