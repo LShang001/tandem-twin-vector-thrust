@@ -44,10 +44,42 @@ py -3.12 server/cli.py --port COM10 param restore
 |------|------|
 | `tasks` | 任务调度统计（实际/名义 Hz、耗时、间隔抖动、迟到、CPU%）——打印后清零，连发两次得两个窗口 |
 | `id` | 在线辨识：b=I名义/I实际、扰动 d、激励标志、建议 Kp（角速度模式大幅方波激励后才更新） |
+| `gpsproto` | GNSS 解析协议状态（kUbx/kNmea/kAuto + NMEA fix/sv/hdop/pdop/句分布/溢出/配置） |
+| `gpsproto <ubx\|nmea\|auto> [baud]` | 切换解析协议（可选带波特率重设） |
+| `nmea` | NMEA 备用链路详情（位置/速度/PDOP） |
+| `ubxcfg` / `ubxcfg save` / `ubxcfg nmea` | UBX 接收机自动配置（重跑 / 固化 / UBX+NMEA 混合输出） |
+| `ubxcfg status` / `ubxcfg rst` | 上次配置结果 / GNSS 软复位 |
+| `ubxcfg msg <句> <rate\|off>` | 接收机消息速率（NMEA 句 gga/rmc/gsa/gsv/vtg/gll/zda/gns/gst/... + UBX 诊断消息 pvt/eoe/dop/sat/status/svin/timegps） |
+| `ubxcfg core <on\|off>` | GGA+RMC+GSA 一键开关（最小 NMEA 集） |
+| `ubxcfg nav5 <dyn 2\|4\|fix 0\|1\|2\|elev 0-90\|pdop 0-100>` | 导航引擎：动态模型/定位模式/最低仰角/pDOP 门限（2026-08-09 修复 mask 错位，此前 Airborne 从未生效） |
+| `ubxcfg itfm <on\|off>` | CW 干扰检测（城市/图传频段干扰导致漂移时诊断） |
+| `ubxcfg ant` | 天线状态查询（短路/开路，CFG-ANT） |
+| `ubxcfg nmver <23\|40\|41\|410\|411>` | NMEA 版本（CFG-NMEA，北斗/伽利略需 4.10+） |
+| `ubxcfg nmtalker <gp\|gl\|gn\|ga\|gb\|none>` | 主 talker ID（多星座组合解=GN） |
+| `ubxcfg nmfilter <on\|off>` | NMEA 输出滤波（变化才输出） |
+| `ubxcfg proto <ubx\|nmea\|both>` | 串口输出协议掩码（接收机侧独立切换） |
 | `ver` | 固件版本/时钟 |
-| `ws <r> <g> <b>` / `wsseq` | WS2812 灯效测试 |
+| `ws <r> <g> <b>` / `wsseq` / `wsstat` / `wsmode` / `wsfault` | WS2812 灯效测试/驱动状态 |
+| `gpio` / `tim4` | GPIO 寄存器 / TIM4 DMA 状态 |
+| `flash export` / `datalog <secs>` | 黑匣子导出 / 强制记录 |
 
 进 DBG 模式遥测会暂停（互斥），诊断完必须发 `exit`（后端 `dbg_exit`）恢复。
+
+### GNSS 双协议联调（2026-08-09 库级）
+
+固件默认 `ubx.SetProtocol(kAuto)`（UBX 优先 + 失效兜底 NMEA）。GNSS 出问题时的排查顺序：
+
+```bash
+gpsproto                 # 1) 解析侧状态：protocol/fix/sv/pdop/句分布
+ubxcfg status            # 2) 接收机配置结果（prt/rate/msg/nav5/gnss/sbas/verify）
+ubxcfg core on           # 3) 接收机开 NMEA 输出（GGA+RMC+GSA @1Hz，双协议备份）
+ubxcfg proto both        #    （或单独看纯 NMEA 流：ubxcfg proto nmea + gpsproto nmea）
+```
+
+- **kAuto 双保险场景**：UBX 配置失败/非 u-blox 模块 → `ubxcfg proto nmea` + `gpsproto nmea 38400` 转纯 NMEA（波特率按模块实际）
+- **NMEA 流验证**：`nmea` 看位置/速度是否刷新；`gpsproto` 的 `sent(gga/rmc/gsa/unk)` 分布看句子是否在收、`bad_ck` 看波特率/接线
+- **DETA100 模式无 NMEA**：Serial4 被 DETA100 独占，`ubx.Pump` 不运行、NMEA tap 自动失效（正常）
+- 接收机侧配置只改 RAM——固化用 `ubxcfg save`
 
 ### 黑匣子（`server/bb_tool.py`，经后端导出链路）
 
@@ -57,7 +89,7 @@ py -3.12 server/bb_tool.py --latest --analyze  # 导出最新段 → output/blac
 py -3.12 server/bb_tool.py --seg 2 --pages 512 # 指定段/页数
 ```
 
-- 默认 512 页（≈4 分钟飞行数据）；**全量 2048 页要 8-15 分钟**，先小页数确认再放大（踩坑 #4）
+- 默认 512 页（≈8 分钟飞行数据，约 40s 导出）；**全量 2048 页约 2.5-3 分钟**（2026-08-09 分片优化后，旧版 8-15 分钟）
 - 通道自描述（S 帧随段头写入），当前 13 核心通道：姿态/角速率/摆角指令(tvc1/2)/差速 dw/油门/目标姿态
 - `--analyze` 检测 roll/pitch 阶跃-保持超调（≥3° 阶跃）；**超调分析需要角度模式飞行数据**（角速度模式无姿态阶跃，踩坑 #5）
 
@@ -104,9 +136,11 @@ py -3.12 server/cli.py --port COM10 record start -d 90 -o output/flight1.csv
 5. **超调分析要角度模式数据**：角速度模式姿态不受指令约束
 6. **在线 20Hz 量不了超调**：黑匣子 200Hz 是定量分析硬需求；在线记录只做兜底/趋势
 7. **在线辨识 b 是集总测量**（惯量+执行器滞后混合）：不可反推 I_实际=I_名义/b 直接改惯量；建议 Kp 取当前值与建议值之间的保守值
-8. **复验编译用隔离构建目录**：`PLATFORMIO_BUILD_DIR=".pio/build-tvc" pio run`（多 Agent 并发冲突）
+8. **复验编译用隔离构建目录**：`PLATFORMIO_BUILD_DIR=".pio/build-tvc" pio run`（多 Agent 并发冲突）——**目录路径必须纯 ASCII**（`D:/pio-build-nmea`），中文路径会让 ld.exe `cannot open output file`（对象编译正常、仅链接失败，2026-08-09）
 9. **黑匣子 tvc2 是摆角指令**（2026-08-09 后）：旧的 SERVO6 角度传感器反馈通道已弃（死通道）
 10. **串口互斥**：CLI 与后端不能同时开 COM；CLI 操作完或后端重启都要先确认端口释放
+11. **数字滤波相位滞后是裕度杀手**（2026-08-09 实测）：本机有物理减震底座，振动已被隔离——滤波只加滞后（4.2°@1Hz 稳 / 6.9° 振铃）。当前滤波近全关（α1=0.4/二级直通/输出 0.9）。调滤波前先确认振动源是否物理隔离，噪声收益要量化后再换滞后
+12. **GNSS NMEA 解析三坑**（2026-08-09 库级集成）：① 解析器用 minmea（MIT）——MicroNMEA 是 LGPL 2.1（商业闭源静态链接有传染约束）；② u-blox 真实 RMC 尾部 `,,A` 会让官方 `minmea_parse_rmc` 失败（库内已自实现）；③ `gpsproto` 里 `sent(gga/rmc/gsa)` 分布全 0 = 波特率不对或接收机没开 NMEA 输出（`ubxcfg core on`）
 
 ## 数据源选择
 
