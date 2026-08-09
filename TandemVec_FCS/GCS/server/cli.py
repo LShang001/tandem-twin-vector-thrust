@@ -17,7 +17,9 @@ cli.py — GCS 命令行调试接口（复用 server.main 处理链路，行为�
   py -3.12 server/cli.py --port COM10 flash export --latest -o seg.csv   # 最新段导出解析
   py -3.12 server/cli.py --port COM10 flash export --start 8 --count 32 -o seg.csv
   py -3.12 server/cli.py --port COM10 record start -o rec.csv   # 遥测记录（Ctrl+C 停）
-  py -3.12 server/cli.py --port COM10 sniff -t 3        # 帧监控
+  py -3.12 server/cli.py --port COM10 sniff -t 3        # 帧监控（主题: rc/att/axes/euler/raw/all）
+  py -3.12 server/cli.py --port COM10 stick -t 10       # 打杆诊断（模式/8通道/控制输出实时）
+  py -3.12 server/cli.py baudscan --port COM10          # 波特率扫描（帧头 0x00 间隔规律性评分）
   py -3.12 server/cli.py --port COM10 link            # 链路健康检查（2M 间歇丢帧诊断）
   py -3.12 server/cli.py --port COM10 dbg "ws 255 0 0"  # DBG 任意命令（ws/wsstat/wsstatic/reset/tasks/...）
   py -3.12 server/cli.py --port COM10 raw --hex 414205ff03070000   # 发送原始帧
@@ -69,6 +71,49 @@ def cmd_ports(_):
     from serial_link import list_ports
     for p in list_ports():
         print(f'{p["port"]:<6} {p["desc"]}  [{p["hwid"]}]')
+
+
+# ========================================================================
+#  波特率扫描（原 tools/scan_baud.py + probe_2m.py + probe_com10.py）
+#  原理：AnoCom 遥测帧头 0x00 在正确波特率下应显著成簇——统计 0x00
+#  间隔众数占比作为规律性评分；错误波特率下字节流近似噪声，0x00 间隔分散。
+#  注意：本命令自开串口（逐波特率重开），不依赖 --port 的预连接，
+#  main() 中 auto_conn 对 baudscan 跳过。
+# ========================================================================
+def cmd_baudscan(a):
+    import serial as _serial
+    if not a.port:
+        print('✗ baudscan 需要串口: cli.py baudscan --port COM10 [--dur 2] [--bauds 9600,...,2000000]')
+        sys.exit(1)
+    bauds = [int(b) for b in a.bauds.split(',')]
+    results = []
+    for baud in bauds:
+        try:
+            s = _serial.Serial(a.port, baud, timeout=0.3)
+        except Exception as e:
+            print(f'{baud:>8}: 打开失败 {e}')
+            continue
+        time.sleep(0.5)
+        s.reset_input_buffer()
+        data = b''
+        t0 = time.time()
+        while time.time() - t0 < a.dur:
+            chunk = s.read(8192)
+            if chunk:
+                data += chunk
+        s.close()
+        if len(data) < 50:
+            print(f'{baud:>8}: {len(data)} 字节（几乎无数据）')
+            continue
+        pos0 = [i for i, b in enumerate(data) if b == 0x00]
+        gaps = [pos0[i + 1] - pos0[i] for i in range(len(pos0) - 1)] if len(pos0) > 1 else []
+        mode = Counter(gaps).most_common(3) if gaps else []
+        score = mode[0][1] / max(len(gaps), 1) if mode else 0
+        results.append((score, baud, len(data), mode))
+        print(f'{baud:>8}: {len(data)} 字节, 0x00×{len(pos0)}, 间隔众数 {mode[:2]}, 规律性 {score:.2f}')
+    results.sort(reverse=True)
+    if results:
+        print(f'\n最可能波特率: {results[0][1]}（规律性 {results[0][0]:.2f}）')
 
 
 def cmd_connect(a):
@@ -159,37 +204,91 @@ def cmd_param(a):
         else:
             print('✗ 读取 id=%d 超时（3 轮重试）——可能是固件处于 DBG 模式（参数链路暂停）或串口丢帧。先执行: cli.py dbg off' % pid)
     elif a.action == 'set':
-        pid = _param_id_of(a.spec)
-        value = a.value
-        # 先取名称/类型（E2），确认 float/uint8——重试（丢帧/时序）
-        info = {}
-        for _ in range(3):
-            m.g.write(anocom.cmd_read_param_info(pid))
-            drain(0.4)
-            if pid in m.g.param_names:
-                info = m.g.param_names.get(pid, {})
-                break
-        is_float = info.get('type') == 'float' if info else True
-        # 写入 + 等 0x00 校验帧：2M 下 USB 串口偶发丢帧（CRC 失败固件静默丢弃）→ 重试 3 轮
-        ok = False
-        for attempt in range(3):
-            frame = anocom.cmd_write_param(pid, value, is_float)
-            body = frame[:-2]
-            m.g.param_pending[pid] = (anocom.sum_check(body), anocom.add_check(body), time.time())
-            m.g.write(frame)
-            deadline = time.time() + 1.5
-            while time.time() < deadline:
-                drain(0.1)
-                if pid not in m.g.param_pending:
-                    ok = True
-                    break
-            if ok:
-                break
-        print(f'写入 id={pid} ({info.get("name", "?")}) = {value}: ' + ('✓ 校验帧确认' if ok else '✗ 超时无确认（3 轮）——可能是固件处于 DBG 模式（参数链路暂停），先执行: cli.py dbg off'))
+        _param_set(a.spec, a.value, 'set')
+    elif a.action == 'verify':
+        _param_set(a.spec, a.value, 'verify')
     elif a.action == 'restore':
         m.g.write(anocom.cmd_param_restore_defaults())
         drain(0.5)
         print('✓ 已发送恢复默认（RAM 生效，重启回默认）')
+
+
+def _val_close(a, b, is_float=True, tol=1e-4):
+    """写后读回比对：float 用相对容差（0.1%），整型按类型精度（u8/u16 取整）。"""
+    if a is None or b is None:
+        return False
+    if is_float:
+        return abs(float(a) - float(b)) <= tol * max(1.0, abs(float(b)))
+    return int(round(float(a))) == int(round(float(b)))
+
+
+def _param_set(spec, value, mode):
+    """写参数。★ 2026-08-10：0x00 校验帧在 2M 间歇丢帧下偶发丢失（假阴性——
+    写入实际生效但确认帧没抓到）。set 与 verify 都加写后读回验证：
+      set    确认帧 或 读回相符 任一即判成功（读回更权威）
+      verify 写前读 → 写 → 写后读 三态报告（链路诊断）
+    """
+    pid = _param_id_of(spec)
+    # 先取名称/类型（E2），确认 float/uint8——重试（丢帧/时序）
+    info = {}
+    for _ in range(3):
+        m.g.write(anocom.cmd_read_param_info(pid))
+        drain(0.4)
+        if pid in m.g.param_names:
+            info = m.g.param_names.get(pid, {})
+            break
+    is_float = info.get('type') == 'float' if info else True
+    name = info.get('name', '?')
+
+    # 写前读回（verify 模式必做；set 模式顺带检查当前值）
+    before = None
+    if mode == 'verify':
+        if _param_read_single(pid):
+            before = m.g.param_values.get(pid)
+        print(f'写前读回: id={pid} ({name}) = {before}')
+
+    # 写入 + 等 0x00 校验帧：2M 下 USB 串口偶发丢帧（CRC 失败固件静默丢弃）→ 重试 3 轮
+    ok = False
+    for attempt in range(3):
+        frame = anocom.cmd_write_param(pid, value, is_float)
+        body = frame[:-2]
+        m.g.param_pending[pid] = (anocom.sum_check(body), anocom.add_check(body), time.time())
+        m.g.write(frame)
+        deadline = time.time() + 1.5
+        while time.time() < deadline:
+            drain(0.1)
+            if pid not in m.g.param_pending:
+                ok = True
+                break
+        if ok:
+            break
+
+    # 写后读回验证（读回比确认帧更权威——确认帧丢了不代表写入失败）
+    after = None
+    for _ in range(3):
+        if _param_read_single(pid):
+            after = m.g.param_values.get(pid)
+            if after is not None:
+                break
+
+    if mode == 'verify':
+        good = _val_close(after, value, is_float)
+        print(f'写后读回: id={pid} ({name}) = {after}')
+        if good:
+            print(f'✓ 写入生效: {before} → {after}（目标 {value}）')
+        else:
+            print(f'✗ 写入未生效: {before} → {after}（目标 {value}）——'
+                  f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
+    else:
+        if ok and after is not None and _val_close(after, value, is_float):
+            print(f'✓ 写入 id={pid} ({name}) = {value}：确认帧 + 读回 {after} 双确认')
+        elif after is not None and _val_close(after, value, is_float):
+            print(f'✓ 写入 id={pid} ({name}) = {value}：确认帧未到但读回 {after}（2M 丢帧假阴性，写入实际生效）')
+        elif ok:
+            print(f'✓ 写入 id={pid} ({name}) = {value}：确认帧确认（读回 {after} 超时）')
+        else:
+            print(f'✗ 写入 id={pid} ({name}) = {value}：确认帧未到且读回 {after}——'
+                  f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
 
 
 def cmd_link(a):
@@ -513,21 +612,163 @@ def cmd_record(a):
 
 
 def cmd_sniff(a):
+    """帧监控（原 tools/sniff_*.py + parse_anocom.py 散脚本并入）。
+    主题:
+      rc    0x06 模式/解锁 + 0x20 8 通道
+      att   0x03 欧拉 + 0x21 控制输出
+      axes  0x01 IMU 加速度/陀螺 + 0x03 欧拉（轴方向测试）
+      euler 0x03 欧拉角统计（均值/标准差/范围——欧拉奇异检验）
+      raw   原始字节统计（高频字节/帧头候选）
+      all   全部遥测帧计数 + 最新值
+    """
     require_connected()
-    counter = Counter()
+    print(f'帧监控 {a.t}s（主题: {a.theme}）…')
+    buf = bytearray()
+    counters = Counter()
     samples = {}
-    print(f'帧监控 {a.t}s …')
-    deadline = time.time() + a.t
-    while time.time() < deadline:
-        drain(0.2)
-        # 直接扫串口原始缓冲不可行（消费在 _on_telemetry_rx）→ 统计已处理帧：
-        # 在 telemetry 快照上统计字段来源
-        if m.g.snap:
-            counter['telemetry_snapshot'] += 1
-            samples = dict(m.g.snap)
-    print('收到遥测快照:', counter.get('telemetry_snapshot', 0))
+    raw_data = b''
+    euler_vals = []
+    t_end = time.time() + a.t
+    while time.time() < t_end:
+        try:
+            kind, payload = m.g.rx_q.get(timeout=0.05)
+        except queue.Empty:
+            continue
+        if kind != 'rx':
+            continue
+        if a.theme == 'raw':
+            raw_data += payload
+            continue
+        buf += payload
+        frames, consumed = anocom.extract_frames(buf)
+        if consumed:
+            del buf[:consumed]
+        for f in frames:
+            if not f.valid:
+                counters['bad'] += 1
+                continue
+            counters[f.func] += 1
+            d = anocom.decode_frame(f)
+            if d:
+                samples[f.func] = d
+                if a.theme == 'euler' and f.func == anocom.FUNC_ATTITUDE_EULER:
+                    euler_vals.append((d['roll_deg'], d['pitch_deg'], d['heading_deg']))
+    _sniff_report(a.theme, counters, samples, raw_data, euler_vals)
+
+
+def _sniff_report(theme, counters, samples, raw_data, euler_vals):
+    if theme == 'raw':
+        if not raw_data:
+            print('未收到任何字节（检查波特率/接线）')
+            return
+        cnt = Counter(raw_data)
+        print(f'收到 {len(raw_data)} 字节')
+        print('高频字节:', [(f'0x{b:02X}', n) for b, n in cnt.most_common(8)])
+        pairs = Counter()
+        for i in range(len(raw_data) - 1):
+            if raw_data[i] == 0x00:
+                pairs[raw_data[i + 1]] += 1
+        print('0x00 后字节分布 top8:', [(f'0x{b:02X}', n) for b, n in pairs.most_common(8)])
+        print('帧头候选:', {f'0x{h:02X}': raw_data.count(bytes([h])) for h in (0xAA, 0xA5, 0xFD, 0xC8, 0x55, 0x7E)})
+        print('前 60 字节:', raw_data[:60].hex(' '))
+        return
+    if theme == 'euler':
+        if not euler_vals:
+            print('未收到 0x03 欧拉帧')
+            return
+        import statistics as st
+        for idx, name in enumerate(('roll', 'pitch', 'Heading')):
+            col = [v[idx] for v in euler_vals]
+            print(f'{name:8s}: 均值={st.mean(col):+8.2f}  标准差={st.pstdev(col):6.2f}  '
+                  f'范围=[{min(col):+.2f}, {max(col):+.2f}]')
+        print(f'样本数 {len(euler_vals)}')
+        return
+    if theme == 'rc':
+        if anocom.FUNC_FLIGHT_MODE in samples:
+            d = samples[anocom.FUNC_FLIGHT_MODE]
+            print(f'模式帧: mode={d["flight_mode"]} 解锁={d["unlocked"]}')
+        if anocom.FUNC_PWM_OUTPUT in samples:
+            d = samples[anocom.FUNC_PWM_OUTPUT]
+            for i in range(1, 9):
+                print(f'  CH{i}: {d[f"rc{i}"]}')
+        else:
+            print('未收到 0x20 输出帧')
+        return
+    if theme == 'att':
+        if anocom.FUNC_ATTITUDE_EULER in samples:
+            d = samples[anocom.FUNC_ATTITUDE_EULER]
+            print(f'欧拉: roll={d["roll_deg"]:+.2f} pitch={d["pitch_deg"]:+.2f} heading={d["heading_deg"]:+.2f}')
+        if anocom.FUNC_ATTITUDE_CONTROL in samples:
+            d = samples[anocom.FUNC_ATTITUDE_CONTROL]
+            print(f'控制输出: roll={d["ctrl_roll"]:+.1f} pitch={d["ctrl_pitch"]:+.1f} '
+                  f'thr={d["ctrl_thr_pct"]:+.1f} yaw={d["ctrl_yaw"]:+.1f}')
+        return
+    if theme == 'axes':
+        if anocom.FUNC_IMU_DATA in samples:
+            d = samples[anocom.FUNC_IMU_DATA]
+            print(f'acc(g): x={d["acc_x_ms2"] / 9.81:+.3f} y={d["acc_y_ms2"] / 9.81:+.3f} z={d["acc_z_ms2"] / 9.81:+.3f}'
+                  f' | gyro(dps): x={d["gyro_x_dps"]:+.3f} y={d["gyro_y_dps"]:+.3f} z={d["gyro_z_dps"]:+.3f}')
+        if anocom.FUNC_ATTITUDE_EULER in samples:
+            d = samples[anocom.FUNC_ATTITUDE_EULER]
+            print(f'欧拉: roll={d["roll_deg"]:+.1f} pitch={d["pitch_deg"]:+.1f} heading={d["heading_deg"]:+.1f}')
+        return
+    # all：计数 + 最新快照
+    if not counters:
+        print('未收到任何帧（检查波特率/接线，或固件处于 DBG 模式: cli.py dbg off）')
+        return
+    total = sum(n for k, n in counters.items() if k != 'bad')
+    print(f'收到 {total} 帧（坏帧 {counters.get("bad", 0)}）:')
+    for func, n in sorted(counters.items()):
+        if func == 'bad':
+            continue
+        name = anocom.FUNC_NAMES.get(func, hex(func))
+        print(f'  0x{func:02X} {name:<20} ×{n}')
     if samples:
-        print('最新字段数:', len(samples))
+        print('最新快照:')
+        for func, d in samples.items():
+            name = anocom.FUNC_NAMES.get(func, hex(func))
+            print(f'  0x{func:02X} {name}: ' + ' '.join(f'{k}={v:.3g}' for k, v in d.items()))
+
+
+def cmd_stick(a):
+    """打杆诊断（原 tools/diag_stick.py）：实时打印 模式/解锁 + 8 通道 + 控制输出。
+    用法: cli.py --port COM10 stick -t 10 —— 期间请打杆（CH1滚转/CH2俯仰/CH4偏航）"""
+    require_connected()
+    print(f'开始采集 {a.t}s —— 请打杆（CH1滚转/CH2俯仰/CH4偏航）…')
+    buf = bytearray()
+    last = 0.0
+    ch = {}
+    mode = unlock = None
+    t_end = time.time() + a.t
+    while time.time() < t_end:
+        try:
+            kind, payload = m.g.rx_q.get(timeout=0.05)
+        except queue.Empty:
+            continue
+        if kind != 'rx':
+            continue
+        buf += payload
+        frames, consumed = anocom.extract_frames(buf)
+        if consumed:
+            del buf[:consumed]
+        now = time.time()
+        for f in frames:
+            if not f.valid:
+                continue
+            d = anocom.decode_frame(f)
+            if not d:
+                continue
+            if f.func == anocom.FUNC_FLIGHT_MODE:
+                mode, unlock = d['flight_mode'], d['unlocked']
+            elif f.func == anocom.FUNC_PWM_OUTPUT:
+                ch = d
+            elif f.func == anocom.FUNC_ATTITUDE_CONTROL and now - last > 0.7:
+                chs = ' '.join(f'{ch[f"rc{i}"]:5d}' for i in range(1, 9)) if ch else '?'
+                print(f'mode={mode} 解锁={unlock} | CH1-8: {chs} | '
+                      f'控制输出(r/p/t/y): {d["ctrl_roll"]:6.1f} {d["ctrl_pitch"]:6.1f} '
+                      f'{d["ctrl_thr_pct"]:6.1f} {d["ctrl_yaw"]:6.1f}')
+                last = now
+    print('采集结束')
 
 
 def cmd_raw(a):
@@ -566,7 +807,7 @@ def main():
     sub.add_parser('device', help='探测设备/固件版本').set_defaults(fn=cmd_device)
 
     p = sub.add_parser('param', help='参数读写')
-    p.add_argument('action', choices=['list', 'get', 'set', 'restore'])
+    p.add_argument('action', choices=['list', 'get', 'set', 'verify', 'restore'])
     p.add_argument('spec', nargs='?', help='参数 ID 或名称（att_roll.kp）')
     p.add_argument('value', nargs='?', type=float, help='写入值')
     p.set_defaults(fn=cmd_param)
@@ -591,16 +832,30 @@ def main():
                    help='记录秒数（0=直到 Ctrl+C；飞行场景建议给时长自动停止）')
     p.set_defaults(fn=cmd_record)
 
-    p = sub.add_parser('sniff', help='帧监控')
+    p = sub.add_parser('sniff', help='帧监控（主题: rc/att/axes/euler/raw/all）')
+    p.add_argument('theme', nargs='?', default='all',
+                   choices=['all', 'rc', 'att', 'axes', 'euler', 'raw'],
+                   help='监控主题（默认 all 全部帧计数）')
     p.add_argument('-t', type=float, default=3.0)
     p.set_defaults(fn=cmd_sniff)
+
+    p = sub.add_parser('stick', help='打杆诊断（模式/通道/控制输出实时）')
+    p.add_argument('-t', type=float, default=10.0)
+    p.set_defaults(fn=cmd_stick)
+
+    p = sub.add_parser('baudscan', help='波特率扫描（帧头 0x00 间隔规律性评分）')
+    p.add_argument('--dur', type=float, default=2.0, help='每个波特率采集秒数')
+    p.add_argument('--bauds', default='9600,19200,38400,57600,115200,230400,460800,921600,2000000',
+                   help='候选波特率（逗号分隔）')
+    p.set_defaults(fn=cmd_baudscan)
 
     p = sub.add_parser('raw', help='发送原始帧（hex）')
     p.add_argument('hex')
     p.set_defaults(fn=cmd_raw)
 
     a = ap.parse_args()
-    auto_conn = a.port is not None
+    # baudscan 自开串口逐波特率扫描，跳过预连接（否则串口被占用打不开）
+    auto_conn = a.port is not None and a.cmd != 'baudscan'
     if auto_conn:
         # CLI 自消费（drain/_param_read_single），不启动后端消费线程——
         # 否则 DBG 文本/参数响应会被消费线程取走，CLI 读不到

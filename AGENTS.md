@@ -31,6 +31,14 @@ cd TandemVec_FCS/GCS && py -3.12 app.py               # 桌面窗口模式（后
 cd TandemVec_FCS/GCS && py -3.12 -m uvicorn server.main:app --port 8091  # 无窗口纯后端，前端 http://127.0.0.1:8091/
 cd TandemVec_FCS/GCS && py -3.12 -m pytest tests/ -q                     # 无硬件可跑
 
+# 串口调试统一入口（所有散脚本已并入，见 TandemVec_FCS/tools/README.md）
+cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 param get att_yaw.kp  # 在线读参数
+cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 param set att_yaw.kp 1.1  # 写参数（写后读回验证，确认帧假阴性兜底）
+cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 link          # 链路健康检查
+cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 sniff euler   # 帧监控主题 rc/att/axes/euler/raw/all
+cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 stick         # 打杆诊断（模式/通道/控制输出）
+cd TandemVec_FCS/GCS && py -3.12 server/cli.py baudscan --port COM10      # 波特率扫描（跳过预连接）
+
 # 仿真
 cd simulations/vector-thrust-lab && python -m http.server 8080
 
