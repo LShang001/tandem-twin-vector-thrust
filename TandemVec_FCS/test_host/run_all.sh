@@ -59,6 +59,10 @@ run_one "$ROOT/test_host/test_led_status.cpp"          led "$STUB_INCLUDE"
 # 纵列双发矢量推力飞行器控制分配（纯平台无关头文件，无 Arduino 依赖）：
 run_one "$ROOT/test_host/test_tandemvec_allocation.cpp" ta ""
 
+# 惯量逆解交叉耦合前馈（★2026-08-10 通用层，ω×(I·ω)+ω×h，仿真同构；
+# 含 ω×h 符号回归与理想刚体闭环对照）：
+run_one "$ROOT/test_host/test_inertia_decoupling.cpp"    id ""
+
 # flight_control.cpp 姿态环闭环仿真（轴序 FRD 修复验证）：
 # 按源码公式独立实现，驱动刚体角动力学 + 推进力矩闭环
 run_one "$ROOT/test_host/test_flight_control_axis.cpp"  fca ""

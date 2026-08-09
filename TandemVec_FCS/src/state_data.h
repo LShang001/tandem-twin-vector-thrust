@@ -338,6 +338,7 @@ struct GncTelemetry
     float omega_ref_dps[3];  // 目标角速率（外环输出滤波后，deg/s）
     float alpha_ref[3];      // 角加速度指令（内环输出滤波后）
     float M_cmd[3];          // 分配前力矩（差速增益调度后，N·m）
+    float M_ff[3];           // ★2026-08-10 交叉耦合前馈力矩（模型系分量，N·m；惯性解耦诊断）
     float w0_eff;            // 分配工作点（含 w0_floor，rad/s）
     float yaw_gain_sched;    // 差速回路增益调度系数
     float delta_f_deg, delta_t_deg, dw;  // 执行器指令（摆角 deg / 差速归一化）

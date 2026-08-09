@@ -10,6 +10,8 @@
 #include "TandemVec_ControlAllocation.h"
 // 在线参数辨识（★ 纯观测模式：只估计并遥测，不修改任何增益）
 #include "TandemVec_OnlineID.h"
+// 惯量逆解交叉耦合前馈（★2026-08-10 通用层：ω×(I·ω) + ω×h，仿真同构）
+#include "InertiaDecoupling.h"
 
 #include <cmath>
 
@@ -1243,6 +1245,27 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
       prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
 #else
+      // ---- w0 工作点：悬停转速与下限（2026-08-07，用户提出）----
+      // 正常悬停油门在 40~60% wMax，没必要从 0 油门开始算调度系数与 B 矩阵：
+      // 低油门既飞不起来，又是**数值病态区** —— B 各项 ∝w0²，det ∝w0⁶
+      // （实测 5% 油门 det 比 50% 小 6 个数量级），逆解增益 ∝1/w0² 放大 100×。
+      // 故统一按 0.6·w_hover(≈344 rad/s ≈30% wMax) 工作点计算，
+      // 低于该油门时调度系数与 B 矩阵都"冻结"在这个良态工作点。
+      const float w_hover = sqrtf(0.5f * P.m * P.g / P.kT);  // 单机悬停转速 ≈574 rad/s
+      const float w0_floor = 0.6f * w_hover;
+
+      // ---- 电机一阶滞后观测器（★2026-08-09 油门瞬态增益失配根因修复）----
+      // 指令转速经 τm=0.28s 滞后才达到，分配器若用指令值，油门瞬态下
+      // 有效增益 = kp·(w0_actual/w0_cmd)² 会先衰减后过冲（释放瞬间 1.76×）。
+      // 观测器以同一 τm 追上一拍指令（prev_prop_state = 上一拍分配输出），
+      // 悬停稳态 w0_est = w0_cmd（行为与旧版一致），瞬态下 w0_est ≈ 实际。
+      // ★ 2026-08-10 上移至层1 之前：转子陀螺前馈项需要观测转速。
+      static float s_wf_est = 0.0f, s_wt_est = 0.0f;
+      s_wf_est += (prev_prop_state.wf - s_wf_est) * (0.005f / P.tauM);  // GNC 200Hz 固定步长
+      s_wt_est += (prev_prop_state.wt - s_wt_est) * (0.005f / P.tauM);
+      const float w0_est = sqrtf(0.5f * (s_wf_est * s_wf_est + s_wt_est * s_wt_est));
+      const float w0_eff   = fmaxf(w0_est, w0_floor);
+
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
       // ★ 2026-08-07 恢复存档映射后的**轴置换**（tools/verify_mix_axes.py 推导）：
       //   控制律输出在**存档系**（x_b=前, y_b=右, z_b=下=推力轴）：
@@ -1253,8 +1276,45 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       float Mx = -P.Ix * outputs.alpha_yaw;   // Mx'(绕推力轴→差速) ← alpha_yaw(绕 z_b)
       float My =  P.Iy * outputs.alpha_pitch; // My'(下摆)          ← alpha_pitch(绕 y_b)
       float Mz = -P.Iz * outputs.alpha_roll;  // Mz'(上摆)          ← alpha_roll(绕 x_b)
+      // ★ 2026-08-10 交叉耦合前馈（通用层，仿真 dynamics.mjs 同构）：
+      //   完整刚体动力学 M = I·α + ω×(I·ω) + ω×h。前馈在**机体系**按物理轴计算，
+      //   再经轴置换 R（M_x'=-M_z, M_y'=+M_y, M_z'=+M_x，verify_frame_map）进模型系，
+      //   与 I·α 同坐标系相加后一起过差速增益调度。
+      //   使能掩码 kFlightCtrlParams.inertia_comp_mask（默认全开；0xE1 在线可关做 A/B）。
+      if (inertiaCompEnabled(kFlightCtrlParams.inertia_comp_mask))
+      {
+        // 角速度：与 execute_attitude_controller 相同的偏置补偿（EKF 零偏，
+        // 前馈为确定性补偿，必须与姿态环同一参考系、且用滤波前原始值）
+        float omega_body[3] = { icm_gyro_x, icm_gyro_y, icm_gyro_z };
+        if (nav_system_initialized)
+        {
+          const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
+          omega_body[0] -= gb(0);
+          omega_body[1] -= gb(1);
+          omega_body[2] -= gb(2);
+        }
+        // 转子角动量：前后转子反向（前 CW 后 CCW），净角动量沿推力轴=
+        // 机体系 x 分量（仿真 hv.x = Jp·(wf·cf − wt·ct) 同构；摆角小 cos≈1）
+        const float h_rotor[3] = {
+            P.Jp * (s_wf_est * cosf(prev_prop_state.delta_f) -
+                    s_wt_est * cosf(prev_prop_state.delta_t)),
+            0.0f, 0.0f };
+        const InertiaCompResult ff = computeInertiaCompensation(
+            omega_body, P.Ix, P.Iy, P.Iz, h_rotor,
+            kFlightCtrlParams.inertia_comp_mask);
+        Mx += -ff.Mz_ff;   // 机体系 → 模型系
+        My += +ff.My_ff;
+        Mz += +ff.Mx_ff;
+        gnc_tel.M_ff[0] = -ff.Mz_ff;  // 模型系分量（诊断遥测）
+        gnc_tel.M_ff[1] = +ff.My_ff;
+        gnc_tel.M_ff[2] = +ff.Mx_ff;
+      }
+      else
+      {
+        gnc_tel.M_ff[0] = gnc_tel.M_ff[1] = gnc_tel.M_ff[2] = 0.0f;
+      }
 
-      // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（FULL_B含反扭耦合补偿）
+      // 层2：控制分配 — M_cmd → δ_f, δ_t, Δω（BTRUE 含反扭耦合补偿）
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
 
       // ================================================================
@@ -1275,26 +1335,6 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       //   观测器为开环状态估计无稳定性问题；τm 误差 ±50% 时 excursion 1.76×→~1.2×。
       // 仅作用于差速通道；摆座通道(My/Mz)未出现同类问题，不扩范围。
       // ================================================================
-      const float w_hover = sqrtf(0.5f * P.m * P.g / P.kT);  // 单机悬停转速 ≈574 rad/s
-
-      // ---- w0 工作点下限（2026-08-07，用户提出）----
-      // 正常悬停油门在 40~60% wMax，没必要从 0 油门开始算调度系数与 B 矩阵：
-      // 低油门既飞不起来，又是**数值病态区** —— B 各项 ∝w0²，det ∝w0⁶
-      // （实测 5% 油门 det 比 50% 小 6 个数量级），逆解增益 ∝1/w0² 放大 100×。
-      // 故统一按 0.6·w_hover(≈344 rad/s ≈30% wMax) 工作点计算，
-      // 低于该油门时调度系数与 B 矩阵都"冻结"在这个良态工作点。
-      const float w0_floor = 0.6f * w_hover;
-
-      // ---- 电机一阶滞后观测器（★2026-08-09 油门瞬态增益失配根因修复）----
-      // 指令转速经 τm=0.28s 滞后才达到，分配器若用指令值，油门瞬态下
-      // 有效增益 = kp·(w0_actual/w0_cmd)² 会先衰减后过冲（释放瞬间 1.76×）。
-      // 观测器以同一 τm 追上一拍指令（prev_prop_state = 上一拍分配输出），
-      // 悬停稳态 w0_est = w0_cmd（行为与旧版一致），瞬态下 w0_est ≈ 实际。
-      static float s_wf_est = 0.0f, s_wt_est = 0.0f;
-      s_wf_est += (prev_prop_state.wf - s_wf_est) * (0.005f / P.tauM);  // GNC 200Hz 固定步长
-      s_wt_est += (prev_prop_state.wt - s_wt_est) * (0.005f / P.tauM);
-      const float w0_est = sqrtf(0.5f * (s_wf_est * s_wf_est + s_wt_est * s_wt_est));
-      const float w0_eff   = fmaxf(w0_est, w0_floor);
 
       float yaw_gain_sched = (w_hover > 1.0f) ? (w0_eff * w0_eff) / (w_hover * w_hover) : 1.0f;
       yaw_gain_sched = fminf(yaw_gain_sched, 1.0f);   // ★ 2026-08-09 封顶：高油门不再放大增益

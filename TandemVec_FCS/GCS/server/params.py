@@ -101,6 +101,11 @@ def build_meta():
             meta[name] = dict(name=name, group=group, loop=arr, field=str(i),
                               unit='', min=0.0, max=1.0, step=0.01,
                               desc=f'{desc}（通道 {i}）', type='float')
+    # ★ 2026-08-10 惯量逆解交叉耦合前馈使能掩码（标量；A/B 在线开关）
+    meta['inertia_comp_mask'] = dict(name='inertia_comp_mask', group='其他', loop='',
+                                     field='', unit='', min=0, max=3, step=1,
+                                     type='uint8',
+                                     desc='惯量逆解前馈掩码（bit0 陀螺耦合 / bit1 转子陀螺；0=全关）')
     return meta
 
 
@@ -133,9 +138,9 @@ def is_float_name(name):
     return True
 
 
-# 固件注册表同序参数名列表（校验用：保证 117 个线上名与固件一致）
+# 固件注册表同序参数名列表（校验用：保证 121 个线上名与固件一致）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回 117 个线上参数名（跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回 121 个线上参数名（跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():
@@ -145,4 +150,6 @@ def expected_names():
         wire = FILTER_WIRE.get(arr, arr)
         for i in range(3):
             names.append(f'{wire}[{i}]')
+    # ★ 2026-08-10 标量控制架构参数（固件 ano_params.cpp 注册表尾部同序）
+    names.append('inertia_comp_mask')
     return names

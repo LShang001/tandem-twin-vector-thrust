@@ -8,6 +8,8 @@
 //  本头文件为纯平台无关（无 Arduino/Eigen 依赖），固件（state_data.cpp）
 //  与宿主机测试（test_host/test_flight_control_axis.cpp）共用同一实例，
 //  保证测试参数永不与实机漂移。
+#pragma once
+#include <cstdint>  // uint8_t（inertia_comp_mask，2026-08-10）
 //
 //  注意：数值域为 PositionPID 实际语义（deg 域）。
 // ============================================================
@@ -48,6 +50,10 @@ struct FlightCtrlParams
     float speed_filter_alpha2[3];     // 二级滤波（0.99≈直通——★2026-08-09 实测：物理减震底座已隔离振动，数字滤波只加滞后；留参数便于将来复测）
     float angle_out_filter_alpha[3];  // 外环输出滤波（0.85）
     float output_filter_alpha[3];     // 内环输出滤波（0.9——2026-08-09 极端测试确认：执行机构本身滤高频，滞后纯负收益；yaw 旧 0.12 抑震荡为过时产物）
+    // ★ 2026-08-10 惯量逆解交叉耦合前馈使能掩码（InertiaDecoupling.h）：
+    //   bit0=ω×(I·ω) 陀螺耦合、bit1=ω×h 转子陀螺项。默认全开——悬停 ω≈0 交叉项≈0
+    //   无副作用；实机 A/B 或异常时可在线置 0 关闭（0xE1 写入）。
+    uint8_t inertia_comp_mask;         // 前馈使能掩码（默认 0x03）
 };
 
 // ============================================================
@@ -92,6 +98,7 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* speed_filter_alpha2    */ { 0.99f, 0.99f, 0.99f },
     /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
     /* output_filter_alpha    */ { 0.9f, 0.9f, 0.9f },
+    /* inertia_comp_mask      */ 0x03,   // ★2026-08-10 前馈全开（陀螺耦合+转子陀螺）
 };
 
 #ifdef TANDEMVEC_FIRMWARE

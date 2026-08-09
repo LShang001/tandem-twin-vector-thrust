@@ -96,6 +96,8 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     ALPHA_ENTRY("ang_alpha", angle_out_filter_alpha, 2),
     ALPHA_ENTRY("out_alpha", output_filter_alpha, 0), ALPHA_ENTRY("out_alpha", output_filter_alpha, 1),
     ALPHA_ENTRY("out_alpha", output_filter_alpha, 2),
+    // ★ 2026-08-10 惯量逆解交叉耦合前馈使能掩码（bit0 陀螺耦合 / bit1 转子陀螺；0=全关，在线 A/B）
+    { "inertia_comp_mask", ANO_UINT8, nullptr, &kFlightCtrlParams.inertia_comp_mask },
     ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 0), ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 1),
     ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 2),   // ★ 2026-08-09 二级滤波（级联二阶，抑 30-60Hz 桨振动）
 };
