@@ -50,27 +50,27 @@ static void test_basic_pid()
     {
         PositionPID pid(2.0f, 0.0f, 0.0f);
         pid.setOutputLimits(-1000.f, 1000.f);
-        float out = pid.compute(10.f, 4.f);   // error = 6
+        float out = pid.compute(10.f, 4.f, 0.005f);   // error = 6
         check(approx(out, 12.0f), "P1 纯P：output = kp×error");
     }
 
-    // 纯 I：无 dt 约定 → 每拍累加 error
+    // 纯 I：★2026-08-09 dt 显式 → 连续域积分 integral += err×dt
+    //   dt=0.005、error=2、4 拍 → integral = 2×0.005×4 = 0.04 → out = 0.5×0.04 = 0.02
     {
         PositionPID pid(0.0f, 0.5f, 0.0f);
         pid.setOutputLimits(-1000.f, 1000.f);
         pid.setIntegralLimit(1000.f);
         float out = 0.f;
-        for (int i = 0; i < 4; ++i) out = pid.compute(2.f, 0.f);  // error=2 每拍
-        // integral = 2×4 = 8 → out = 0.5×8 = 4
-        check(approx(out, 4.0f), "P1 纯I：4拍后 output = ki×Σerror");
-        check(approx(pid.getIntegral(), 8.0f), "P1 积分状态累加正确");
+        for (int i = 0; i < 4; ++i) out = pid.compute(2.f, 0.f, 0.005f);  // error=2 每拍
+        check(approx(out, 0.02f), "P1 纯I：4拍后 output = ki×Σerr×dt = 0.02");
+        check(approx(pid.getIntegral(), 0.04f), "P1 积分状态 = Σerr×dt = 0.04");
     }
 
     // 纯 D（微分先行）：输出 = kd × (prev_input − input)
     {
         PositionPID pid(0.0f, 0.0f, 1.0f, -1000.f, 1000.f, true, 250.f, 0.f, 1.0f);
-        pid.computeDerivativeOnMeasurement(0.f, 0.f);   // 建立 prev_input=0
-        float out = pid.computeDerivativeOnMeasurement(0.f, 3.f);
+        pid.computeDerivativeOnMeasurement(0.f, 0.f, 0.005f);   // 建立 prev_input=0
+        float out = pid.computeDerivativeOnMeasurement(0.f, 3.f, 0.005f);
         // derivative = prev_input − input = 0 − 3 = −3
         check(approx(out, -3.0f), "P1 纯D微分先行：output = kd×(−Δinput)");
     }
@@ -89,19 +89,19 @@ static void test_integral_threshold()
     pid.setIntegralThreshold(5.0f);   // |error| ≥ 5 时冻结积分
 
     // 大误差：不累积
-    for (int i = 0; i < 10; ++i) pid.compute(20.f, 0.f);   // error=20 > 5
+    for (int i = 0; i < 10; ++i) pid.compute(20.f, 0.f, 0.005f);   // error=20 > 5
     check(approx(pid.getIntegral(), 0.0f), "P2 误差超阈值时积分冻结");
 
     // 小误差：正常累积
-    for (int i = 0; i < 3; ++i) pid.compute(2.f, 0.f);     // error=2 < 5
-    check(approx(pid.getIntegral(), 6.0f), "P2 误差低于阈值时积分累积");
+    for (int i = 0; i < 3; ++i) pid.compute(2.f, 0.f, 0.005f);     // error=2 < 5
+    check(approx(pid.getIntegral(), 0.03f), "P2 误差低于阈值时积分累积（Σerr×dt=2×0.005×3）");
 
     // 阈值为 0 → 不分离，始终累积
     PositionPID pid2(0.0f, 1.0f, 0.0f);
     pid2.setOutputLimits(-1e6f, 1e6f);
     pid2.setIntegralLimit(1e6f);
     pid2.setIntegralThreshold(0.0f);
-    for (int i = 0; i < 5; ++i) pid2.compute(100.f, 0.f);
+    for (int i = 0; i < 5; ++i) pid2.compute(100.f, 0.f, 0.005f);
     check(pid2.getIntegral() > 0.f, "P2 阈值=0 时不分离（始终累积）");
 }
 
@@ -119,7 +119,7 @@ static void test_integral_state_clamp()
     pid.setIntegralLimit(iLimit);
 
     // 持续大误差 1 秒（200拍 × 50 deg/s）
-    for (int i = 0; i < 200; ++i) pid.compute(50.f, 0.f);
+    for (int i = 0; i < 200; ++i) pid.compute(50.f, 0.f, 0.005f);
 
     const float bound = iLimit / ki;   // = 33333
     std::printf("  integral=%.1f (上界=%.1f)\n", pid.getIntegral(), bound);
@@ -142,18 +142,19 @@ static void test_integral_state_clamp()
 
         // 驱动到饱和
         for (int i = 0; i < 20; ++i) {
-            p_no.compute(50.f, 0.f);
-            p_cl.compute(50.f, 0.f);
+            p_no.compute(50.f, 0.f, 0.005f);
+            p_cl.compute(50.f, 0.f, 0.005f);
         }
 
         // 反向：p_no 理论上与 p_cl 相同（同一实现），但上界=5 保证快速恢复
         int f_cl = -1;
         for (int i = 0; i < 30; ++i) {
-            float o = p_cl.compute(-50.f, 0.f);
+            float o = p_cl.compute(-50.f, 0.f, 0.005f);
             if (o < 0.f && f_cl < 0) { f_cl = i; }
         }
         std::printf("  integralLimit/ki=5：%d 拍后输出转负\n", f_cl);
-        check(f_cl >= 0 && f_cl < 10,
+        // ★连续域：退饱和 = iLimit/(ki·err·dt) = 5/(1×50×0.005) = 20 拍（旧离散语义 0.1 拍）
+        check(f_cl >= 0 && f_cl < 25,
               "P3 积分状态钳位后退饱和迅速（iLimit/ki=5 → <10拍）");
     }
 }
@@ -168,14 +169,14 @@ static void test_output_limits()
     PositionPID pid(100.0f, 0.0f, 0.0f);
     pid.setOutputLimits(-25.f, 25.f);
 
-    check(approx(pid.compute(10.f, 0.f), 25.0f),  "P4 正向饱和至 outputMax");
-    check(approx(pid.compute(-10.f, 0.f), -25.0f), "P4 负向饱和至 outputMin");
+    check(approx(pid.compute(10.f, 0.f, 0.005f), 25.0f),  "P4 正向饱和至 outputMax");
+    check(approx(pid.compute(-10.f, 0.f, 0.005f), -25.0f), "P4 负向饱和至 outputMin");
 
     // 非对称限幅
     PositionPID pid2(100.0f, 0.0f, 0.0f);
     pid2.setOutputLimits(0.f, 50.f);
-    check(approx(pid2.compute(-10.f, 0.f), 0.0f), "P4 非对称限幅下界生效");
-    check(approx(pid2.compute(10.f, 0.f), 50.0f), "P4 非对称限幅上界生效");
+    check(approx(pid2.compute(-10.f, 0.f, 0.005f), 0.0f), "P4 非对称限幅下界生效");
+    check(approx(pid2.compute(10.f, 0.f, 0.005f), 50.0f), "P4 非对称限幅上界生效");
 }
 
 // ============================================================
@@ -190,31 +191,31 @@ static void test_output_rate_limit()
     pid.setOutputRateLimit(5.0f);      // 每拍最多变 5
 
     // 阶跃指令：期望输出 100，但每拍只能爬 5
-    float o1 = pid.compute(10.f, 0.f);
+    float o1 = pid.compute(10.f, 0.f, 0.005f);
     check(approx(o1, 5.0f), "P5 首拍输出被限速至 +5（原实现返回100）");
 
-    float o2 = pid.compute(10.f, 0.f);
+    float o2 = pid.compute(10.f, 0.f, 0.005f);
     check(approx(o2, 10.0f), "P5 次拍继续爬升至 10");
 
     // 爬满 20 拍应达到 100
-    for (int i = 0; i < 30; ++i) pid.compute(10.f, 0.f);
+    for (int i = 0; i < 30; ++i) pid.compute(10.f, 0.f, 0.005f);
     check(approx(pid.getLastOutput(), 100.0f), "P5 持续爬升最终到达目标值");
 
     // 反向阶跃同样受限
-    float d1 = pid.compute(-10.f, 0.f);
+    float d1 = pid.compute(-10.f, 0.f, 0.005f);
     check(approx(d1, 95.0f), "P5 反向阶跃每拍降幅同样受限");
 
     // rateLimit=0 → 禁用
     PositionPID pid2(10.0f, 0.0f, 0.0f);
     pid2.setOutputLimits(-1000.f, 1000.f);
     pid2.setOutputRateLimit(0.0f);
-    check(approx(pid2.compute(10.f, 0.f), 100.0f), "P5 rateLimit=0 时禁用限速");
+    check(approx(pid2.compute(10.f, 0.f, 0.005f), 100.0f), "P5 rateLimit=0 时禁用限速");
 
     // 限速后仍须满足输出限幅
     PositionPID pid3(10.0f, 0.0f, 0.0f);
     pid3.setOutputLimits(-3.f, 3.f);
     pid3.setOutputRateLimit(100.0f);
-    check(std::fabs(pid3.compute(10.f, 0.f)) <= 3.0f,
+    check(std::fabs(pid3.compute(10.f, 0.f, 0.005f)) <= 3.0f,
           "P5 限速不会把输出推出 [min,max]");
 }
 
@@ -240,8 +241,8 @@ static void test_back_calculation_antiwindup()
     PositionPID no_aw  = build(0.0f);
     PositionPID with_aw = build(1.0f);
     for (int i = 0; i < 300; ++i) {
-        no_aw.compute(50.f, 0.f);
-        with_aw.compute(50.f, 0.f);
+        no_aw.compute(50.f, 0.f, 0.005f);
+        with_aw.compute(50.f, 0.f, 0.005f);
     }
     std::printf("  Kb=0: integral=%.0f ; Kb=1: integral=%.0f\n",
                 no_aw.getIntegral(), with_aw.getIntegral());
@@ -256,7 +257,7 @@ static void test_back_calculation_antiwindup()
     PositionPID zero_ki(1.0f, 0.0f, 0.0f);
     zero_ki.setOutputLimits(-1.f, 1.f);
     zero_ki.setAntiWindup(1.0f);
-    float o = zero_ki.compute(100.f, 0.f);
+    float o = zero_ki.compute(100.f, 0.f, 0.005f);
     check(std::isfinite(o) && std::isfinite(zero_ki.getIntegral()),
           "P6 ki=0 时抗饱和不触发除零");
 }
@@ -294,10 +295,10 @@ static void test_bumpless_transfer()
     pid.setIntegralEnable(false);
     float in = 0.f;
     for (int i = 0; i < 4; ++i) { in += 1.5f;
-        pid.computeDerivativeOnMeasurement(10.f, in); }
+        pid.computeDerivativeOnMeasurement(10.f, in, 0.005f); }
     // 稳定输入 3 拍：D → 0
     for (int i = 0; i < 3; ++i)
-        pid.computeDerivativeOnMeasurement(10.f, in);  // in 不再变化
+        pid.computeDerivativeOnMeasurement(10.f, in, 0.005f);  // in 不再变化
 
     const float out_at_switch = pid.getLastOutput();
     const float prevErr   = pid.getPreviousError();
@@ -316,7 +317,7 @@ static void test_bumpless_transfer()
           "P7 bumpless 公式含 D 项：P+I+D 精确重建切换时输出");
 
     // D 已稳定→0，切换后跳变应仅为固有积分增量 ki×|error|
-    const float after = pid.computeDerivativeOnMeasurement(10.f, in);
+    const float after = pid.computeDerivativeOnMeasurement(10.f, in, 0.005f);
     const float jump  = std::fabs(after - out_at_switch);
     const float expected = ki * std::fabs(10.f - in);
     std::printf("  切换后首拍=%.4f 跳变=%.4f 期望≈%.4f (ki×|e|)\n",
@@ -341,7 +342,7 @@ static void test_setpoint_weighting()
         PositionPID pid(2.0f, 0.f, 0.f);
         pid.setOutputLimits(-1000.f, 1000.f);
         pid.setSetpointWeight(1.0f, 0.0f);
-        check(approx(pid.compute(10.f, 0.f), 20.0f), "P8 b=1：标准P（kp×error）");
+        check(approx(pid.compute(10.f, 0.f, 0.005f), 20.0f), "P8 b=1：标准P（kp×error）");
     }
 
     // b=0.5：pOut = kp×(0.5×sp − 0.5×in)... 实为 kp×(b×sp+(1−b)×in − in)
@@ -350,7 +351,7 @@ static void test_setpoint_weighting()
         pid.setOutputLimits(-1000.f, 1000.f);
         pid.setSetpointWeight(0.5f, 0.0f);
         // spWeighted = 0.5×10 + 0.5×0 = 5 → pOut = 2×(5−0) = 10
-        check(approx(pid.compute(10.f, 0.f), 10.0f), "P8 b=0.5：设定点响应减半（抑超调）");
+        check(approx(pid.compute(10.f, 0.f, 0.005f), 10.0f), "P8 b=0.5：设定点响应减半（抑超调）");
     }
 
     // b=0：P 项对设定点完全不响应（纯反馈）
@@ -358,7 +359,7 @@ static void test_setpoint_weighting()
         PositionPID pid(2.0f, 0.f, 0.f);
         pid.setOutputLimits(-1000.f, 1000.f);
         pid.setSetpointWeight(0.0f, 0.0f);
-        check(approx(pid.compute(10.f, 0.f), 0.0f), "P8 b=0：P项不响应设定点");
+        check(approx(pid.compute(10.f, 0.f, 0.005f), 0.0f), "P8 b=0：P项不响应设定点");
     }
 
     // 权重范围钳制
@@ -366,7 +367,7 @@ static void test_setpoint_weighting()
         PositionPID pid(2.0f, 0.f, 0.f);
         pid.setOutputLimits(-1000.f, 1000.f);
         pid.setSetpointWeight(5.0f, -3.0f);   // 越界
-        float o = pid.compute(10.f, 0.f);
+        float o = pid.compute(10.f, 0.f, 0.005f);
         check(approx(o, 20.0f), "P8 权重越界被钳制到 [0,1]");
     }
 }
@@ -385,36 +386,36 @@ static void test_nan_protection()
     PositionPID pid(2.0f, 0.5f, 0.1f);
     pid.setOutputLimits(-1000.f, 1000.f);
     pid.setIntegralLimit(1000.f);
-    for (int i = 0; i < 5; ++i) pid.compute(10.f, 5.f);
+    for (int i = 0; i < 5; ++i) pid.compute(10.f, 5.f, 0.005f);
     const float good_out = pid.getLastOutput();
     const float good_int = pid.getIntegral();
 
     // 注入 NaN setpoint
-    float o_nan = pid.compute(nan_v, 5.f);
+    float o_nan = pid.compute(nan_v, 5.f, 0.005f);
     check(std::isfinite(o_nan), "P9 NaN 设定点：输出仍有限");
     check(approx(o_nan, good_out), "P9 NaN 设定点：冻结为上一拍输出");
     check(approx(pid.getIntegral(), good_int), "P9 NaN 设定点：积分状态未被污染");
 
     // 注入 NaN input
-    float o_nan2 = pid.compute(10.f, nan_v);
+    float o_nan2 = pid.compute(10.f, nan_v, 0.005f);
     check(std::isfinite(o_nan2) && std::isfinite(pid.getIntegral()),
           "P9 NaN 测量值：状态未被污染");
 
     // 注入 Inf
-    pid.compute(inf_v, 5.f);
+    pid.compute(inf_v, 5.f, 0.005f);
     check(std::isfinite(pid.getIntegral()), "P9 Inf 输入：积分状态保持有限");
 
     // 外部导数接口
-    pid.computeWithExternalDerivative(10.f, 5.f, nan_v);
+    pid.computeWithExternalDerivative(10.f, 5.f, nan_v, 0.005f);
     check(std::isfinite(pid.getIntegral()), "P9 NaN 外部导数：状态未被污染");
 
     // 微分先行接口
-    pid.computeDerivativeOnMeasurement(nan_v, 5.f);
+    pid.computeDerivativeOnMeasurement(nan_v, 5.f, 0.005f);
     check(std::isfinite(pid.getIntegral()), "P9 NaN 微分先行接口：状态未被污染");
 
     // ★ 关键：故障后恢复正常输入，控制器应继续正常工作
     float recovered = 0.f;
-    for (int i = 0; i < 5; ++i) recovered = pid.compute(10.f, 5.f);
+    for (int i = 0; i < 5; ++i) recovered = pid.compute(10.f, 5.f, 0.005f);
     check(std::isfinite(recovered) && std::fabs(recovered) > 1e-6f,
           "P9 非有限输入后能自愈（原实现将永久输出 NaN）");
 
@@ -438,14 +439,14 @@ static void test_interface_consistency()
     b.setOutputLimits(-1000.f, 1000.f);
     c.setOutputLimits(-1000.f, 1000.f);
 
-    float oa = a.compute(8.f, 2.f);
-    float ob = b.computeWithExternalDerivative(8.f, 2.f, 0.f);
-    float oc = c.computeDerivativeOnMeasurement(8.f, 2.f);
+    float oa = a.compute(8.f, 2.f, 0.005f);
+    float ob = b.computeWithExternalDerivative(8.f, 2.f, 0.f, 0.005f);
+    float oc = c.computeDerivativeOnMeasurement(8.f, 2.f, 0.005f);
     check(approx(oa, ob) && approx(ob, oc), "P10 纯P时三接口输出一致");
 
     // 外部导数接口：derivative 是 d(input)/dt，正值应产生负 D 贡献
     PositionPID d(0.f, 0.f, 2.0f, -1000.f, 1000.f, true, 250.f, 0.f, 1.0f);
-    float od = d.computeWithExternalDerivative(0.f, 0.f, 5.0f);
+    float od = d.computeWithExternalDerivative(0.f, 0.f, 5.0f, 0.005f);
     check(od < 0.f, "P10 外部导数为正 → D项为负（阻尼作用）");
 }
 
@@ -459,7 +460,7 @@ static void test_reset()
     PositionPID pid(2.0f, 0.5f, 1.0f);
     pid.setOutputLimits(-1000.f, 1000.f);
     pid.setIntegralLimit(1000.f);
-    for (int i = 0; i < 10; ++i) pid.compute(10.f, 3.f);
+    for (int i = 0; i < 10; ++i) pid.compute(10.f, 3.f, 0.005f);
 
     check(std::fabs(pid.getIntegral()) > 1e-6f, "P11 reset前积分非零（前提）");
     check(std::fabs(pid.getLastOutput()) > 1e-6f, "P11 reset前输出非零（前提）");
@@ -473,7 +474,7 @@ static void test_reset()
     PositionPID fresh(2.0f, 0.5f, 1.0f);
     fresh.setOutputLimits(-1000.f, 1000.f);
     fresh.setIntegralLimit(1000.f);
-    check(approx(pid.compute(10.f, 3.f), fresh.compute(10.f, 3.f)),
+    check(approx(pid.compute(10.f, 3.f, 0.005f), fresh.compute(10.f, 3.f, 0.005f)),
           "P11 reset 后行为等同全新实例");
 }
 
@@ -487,16 +488,16 @@ static void test_derivative_filter()
     // coefficient=1 → 无滤波（直通）
     {
         PositionPID pid(0.f, 0.f, 1.0f, -1000.f, 1000.f, true, 250.f, 0.f, 1.0f);
-        pid.computeDerivativeOnMeasurement(0.f, 0.f);
-        float o = pid.computeDerivativeOnMeasurement(0.f, 10.f);
+        pid.computeDerivativeOnMeasurement(0.f, 0.f, 0.005f);
+        float o = pid.computeDerivativeOnMeasurement(0.f, 10.f, 0.005f);
         check(approx(o, -10.0f), "P12 系数=1：微分直通无滤波");
     }
 
     // coefficient=0.2 → 强滤波，首拍响应被显著衰减
     {
         PositionPID pid(0.f, 0.f, 1.0f, -1000.f, 1000.f, true, 250.f, 0.f, 0.2f);
-        pid.computeDerivativeOnMeasurement(0.f, 0.f);
-        float o = pid.computeDerivativeOnMeasurement(0.f, 10.f);
+        pid.computeDerivativeOnMeasurement(0.f, 0.f, 0.005f);
+        float o = pid.computeDerivativeOnMeasurement(0.f, 10.f, 0.005f);
         std::printf("  系数0.2 首拍微分输出=%.2f (无滤波应为-10)\n", o);
         check(std::fabs(o) < 10.0f, "P12 系数<1：微分被低通衰减");
         check(std::fabs(o) > 0.f,   "P12 滤波后仍有响应（非完全阻断）");
@@ -505,8 +506,8 @@ static void test_derivative_filter()
     // coefficient<=0 被钳制为 1（避免完全阻断微分）
     {
         PositionPID pid(0.f, 0.f, 1.0f, -1000.f, 1000.f, true, 250.f, 0.f, 0.0f);
-        pid.computeDerivativeOnMeasurement(0.f, 0.f);
-        float o = pid.computeDerivativeOnMeasurement(0.f, 10.f);
+        pid.computeDerivativeOnMeasurement(0.f, 0.f, 0.005f);
+        float o = pid.computeDerivativeOnMeasurement(0.f, 10.f, 0.005f);
         check(approx(o, -10.0f), "P12 系数≤0 被钳制为1（不阻断微分）");
     }
 }

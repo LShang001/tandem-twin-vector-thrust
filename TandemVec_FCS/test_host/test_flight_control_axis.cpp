@@ -234,9 +234,9 @@ struct AttitudeLoop {
         float err_pitch = sign_qw * q_error.y * scale;
         float err_yaw   = sign_qw * q_error.z * scale;
 
-        float rollRateTarget = rollAnglePID.computeWithExternalDerivative(err_roll, 0.f, w_dps[0]);
-        float pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(err_pitch, 0.f, w_dps[1]);
-        float yawRateTarget = yawAnglePID.computeWithExternalDerivative(err_yaw, 0.f, w_dps[2]);
+        float rollRateTarget = rollAnglePID.computeWithExternalDerivative(err_roll, 0.f, w_dps[0], 0.005f);
+        float pitchRateTarget = pitchAnglePID.computeWithExternalDerivative(err_pitch, 0.f, w_dps[1], 0.005f);
+        float yawRateTarget = yawAnglePID.computeWithExternalDerivative(err_yaw, 0.f, w_dps[2], 0.005f);
         // ★ 限幅读自 FlightCtrlParams.h（kMaxTargetRate = 实机 80°/s；原测试自建 90）
         const float max_rate = kMaxTargetRate;
         rollRateTarget = std::clamp(rollRateTarget, -max_rate, max_rate);
@@ -244,9 +244,9 @@ struct AttitudeLoop {
         yawRateTarget = std::clamp(yawRateTarget, -max_rate, max_rate);
 
         // —— 内环：角速率误差 → 角加速度（flight_control.cpp:1016-1017、1066-1067）——
-        float alpha_roll = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, w_dps[0]);
-        float alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, w_dps[1]);
-        float alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(yawRateTarget, w_dps[2]);
+        float alpha_roll = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, w_dps[0], 0.005f);
+        float alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, w_dps[1], 0.005f);
+        float alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(yawRateTarget, w_dps[2], 0.005f);
         return {alpha_roll, alpha_pitch, alpha_yaw};
     }
 };
@@ -604,7 +604,10 @@ int main()
         float e = std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
         check(max_rotor_diff > 50.f,
               "T16 转子差速在衰减期内真实存在（h_x≠0，陀螺耦合激活）");
-        check(e < 0.02f, "T16 陀螺耦合（ω×h）下悬停保持收敛");
+        
+        // ★ 2026-08-10 遗留：e44dcf5（PositionPID dt 重构）后本测试从未编译通过，
+//   恢复编译后此断言未达（实测 e≈0.14，待专项核对 fca 陀螺耦合复刻与固件一致性）
+        check(e < 0.02f, "T16 陀螺耦合（ω×h）下悬停保持收敛（遗留待核）");
     }
 
     // T17: 航向指令跟踪——目标 = 悬停 + 绕 x_b 转 20°（新航向）→ 收敛且航向实际转过 20°

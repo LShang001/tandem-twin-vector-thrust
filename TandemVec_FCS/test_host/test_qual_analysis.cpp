@@ -96,8 +96,8 @@ static void run_full(const float Kp_a[3], const float Kp_r[3], const float Ki_r[
 
         float wr[3], al[3];
         float d[3]={gfv[2],gfv[1],gfv[0]};  // VTOL axis order
-        for(int j=0;j<3;j++){wr[j]=aof[j].filter(constrain(ang[j].computeWithExternalDerivative(ed[j],0,-d[j]),-50.f,50.f));}
-        for(int j=0;j<3;j++){al[j]=rof[j].filter(constrain(rate[j].computeDerivativeOnMeasurement(wr[j],d[j]),-alpha_max,alpha_max));}
+        for(int j=0;j<3;j++){wr[j]=aof[j].filter(constrain(ang[j].computeWithExternalDerivative(ed[j],0,-d[j], 0.005f),-50.f,50.f));}
+        for(int j=0;j<3;j++){al[j]=rof[j].filter(constrain(rate[j].computeDerivativeOnMeasurement(wr[j],d[j], 0.005f),-alpha_max,alpha_max));}
 
         float M[3]={P.Ix*al[2],P.Iy*al[1],P.Iz*al[0]};
         float w0=(thr/100.f)*P.wMax;
@@ -160,7 +160,7 @@ int main()
     //   （摇杆居中 → yawRateTarget=0 → 内环积分维持当前航向）。
     //   若给偏航加角度外环，差速通道受电机 τm=0.28s（带宽仅 3.6 rad/s）限制，
     //   Kp_a[2]>1 会产生极限环振荡 —— 这也是固件不设偏航外环的原因之一。
-    float Kp_a[3]={5.0f,5.0f,0.0f}, Kp_r[3]={0.30f,0.30f,0.15f}, Ki_r[3]={0.0003f,0.0003f,0.0003f};
+    float Kp_a[3]={5.0f,5.0f,0.0f}, Kp_r[3]={0.30f,0.30f,0.15f}, Ki_r[3]={0.06f,0.06f,0.06f};  // ★2026-08-10 连续域（旧离散 0.0003×200；e44dcf5 dt 重构）;;
     float s1_settle_at1=0.f, s1_settle_at3=0.f, s1_worst_final_ok=0.f;
     bool  s1_low_fails=false, s1_all_ok_above1=true;
     for(float am=0.5f;am<=6.5f;am+=0.5f){
@@ -297,8 +297,8 @@ int main()
             {float v=sqrtf(qe.z*qe.z+qe.y*qe.y);float s=(v>0.25f)?2.f*atan2f(v,fabsf(qe.w))/v*57.29578f:114.59156f;ed[0]=sw*qe.z*s;ed[1]=sw*qe.y*s;}
             {float v=fabsf(qe.x);float s=(v>0.25f)?2.f*atan2f(v,fabsf(qe.w))/v*57.29578f:114.59156f;ed[2]=sw*qe.x*s;}
             float wr[3],al[3],dd[3]={gfv[2],gfv[1],gfv[0]};
-            for(int j=0;j<3;j++)wr[j]=aof[j].filter(constrain(ang[j].computeWithExternalDerivative(ed[j],0,-dd[j]),-50.f,50.f));
-            for(int j=0;j<3;j++)al[j]=rof[j].filter(constrain(rate[j].computeDerivativeOnMeasurement(wr[j],dd[j]),-2.f,2.f));
+            for(int j=0;j<3;j++)wr[j]=aof[j].filter(constrain(ang[j].computeWithExternalDerivative(ed[j],0,-dd[j], 0.005f),-50.f,50.f));
+            for(int j=0;j<3;j++)al[j]=rof[j].filter(constrain(rate[j].computeDerivativeOnMeasurement(wr[j],dd[j], 0.005f),-2.f,2.f));
             float M[3]={P.Ix*al[2],P.Iy*al[1],P.Iz*al[0]};
             float w0=(thr/100.f)*P.wMax;AllocationInput ai={M[0],M[1],M[2],w0,ps};
             AllocationOutput ao=allocateMoments(ai,P,AllocationStrategy::BTRUE);

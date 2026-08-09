@@ -80,13 +80,13 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
     gf=gF.filter(body.om[1]*57.29578f);
     Quat4f qe=qNorm(qMul(qConj(body.q),qt));float sw=qe.w>=0?1:-1;
     float v=sqrtf(qe.z*qe.z+qe.y*qe.y),sc=v>0.25f?2*atan2f(v,fabsf(qe.w))/v*57.29578f:114.59156f;
-    float err=sw*qe.y*sc,wref=aF.filter(constrain(ang.computeWithExternalDerivative(err,0,-gf),-50.f,50.f));
+    float err=sw*qe.y*sc,wref=aF.filter(constrain(ang.computeWithExternalDerivative(err,0,-gf, 0.005f),-50.f,50.f));
 
     float alpha;
     if(use_adrc){
       alpha=adrc.step(gf,wref,0,dt);  // ADRC替代内环PID
     }else{
-      alpha=rF.filter(constrain(rate.computeDerivativeOnMeasurement(wref,gf),-100.f,100.f));
+      alpha=rF.filter(constrain(rate.computeDerivativeOnMeasurement(wref,gf, 0.005f),-100.f,100.f));
     }
 
     float M_cmd=P.Iy*alpha,w0=0.4f*P.wMax;
