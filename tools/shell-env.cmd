@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 rem Restore full PATH for ZCode agent shell (sandbox keeps only ZCode tools + npm).
 rem Usage: call tools\shell-env.cmd && git status
 rem NOTE: keep this file pure ASCII - cmd.exe parses .cmd with GBK codepage,

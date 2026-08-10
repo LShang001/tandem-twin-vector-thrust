@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 rem ============================================================
 rem  py-web-lab launcher
 rem  ? starts Python server in its own window (title: py-web-lab)
