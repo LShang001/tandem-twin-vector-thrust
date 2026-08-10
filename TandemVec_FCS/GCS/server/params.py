@@ -44,6 +44,10 @@ FIELD_META = {
     'threshold': dict(unit='', min=0.0, max=1000.0, step=0.1, desc='积分分离阈值'),
     'filter_alpha': dict(unit='', min=0.0, max=1.0, step=0.01, desc='微分滤波系数', wire_name='falpha'),
     'enabled': dict(unit='', min=0.0, max=1.0, step=1.0, desc='环是否参与控制（只读）', readonly=True),
+    # ---- FPV 摇杆曲线（★2026-08-11 RATE_MODE 接入，Betaflight 三参数模型）----
+    'rc_rate': dict(unit='', min=0.0, max=2.5, step=0.01, desc='全局灵敏度（满杆基准 200°/s）'),
+    'rc_expo': dict(unit='', min=0.0, max=1.0, step=0.01, desc='输入中心曲线（压中心斜率）'),
+    'rc_super': dict(unit='', min=0.0, max=0.99, step=0.01, desc='输出边缘曲线（双曲增益，<1 防极点）'),
 }
 
 # 滤波数组 → 线上短名（固件 ALPHA_ENTRY，≤20B）
@@ -101,6 +105,21 @@ def build_meta():
             meta[name] = dict(name=name, group=group, loop=arr, field=str(i),
                               unit='', min=0.0, max=1.0, step=0.01,
                               desc=f'{desc}（通道 {i}）', type='float')
+    # ★ 2026-08-11 FPV 摇杆曲线（RATE_MODE，Betaflight 三参数模型）
+    rc_desc = {'rc_rate': '全局灵敏度（满杆基准 200°/s）',
+               'rc_expo': '输入中心曲线（压中心斜率）',
+               'rc_super': '输出边缘曲线（双曲增益）'}
+    for arr, group in (('rc_expo', '摇杆曲线'), ('rc_super', '摇杆曲线')):
+        for i in range(3):
+            name = f'{arr}[{i}]'
+            fm = FIELD_META[arr]
+            meta[name] = dict(name=name, group=group, loop=arr, field=str(i),
+                              unit='', min=fm['min'], max=fm['max'], step=fm['step'],
+                              desc=f"{rc_desc[arr]}（{'roll/pitch/yaw'[i]} 通道）", type='float')
+    fm = FIELD_META['rc_rate']
+    meta['rc_rate'] = dict(name='rc_rate', group='摇杆曲线', loop='rc_rate', field='rate',
+                           unit='', min=fm['min'], max=fm['max'], step=fm['step'],
+                           desc=rc_desc['rc_rate'], type='float')
     # ★ 2026-08-10 惯量逆解交叉耦合前馈使能掩码（标量；A/B 在线开关）
     meta['inertia_comp_mask'] = dict(name='inertia_comp_mask', group='其他', loop='',
                                      field='', unit='', min=0, max=3, step=1,
@@ -144,6 +163,8 @@ def expected_names():
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():
+            if field.startswith('rc_'):
+                continue  # ★ 2026-08-11 FPV 摇杆曲线字段不随 PID 环展开（尾部独立注册）
             wire = FIELD_META[field].get('wire_name', field)
             names.append(f'{loop}.{wire}')
     # ★ 固件注册表尾部顺序（ano_params.cpp:99-103）：前 3 组滤波(108-116) →
@@ -160,4 +181,10 @@ def expected_names():
     wire2 = FILTER_WIRE.get('speed_filter_alpha2', 'speed_filter_alpha2')
     for i in range(3):
         names.append(f'{wire2}[{i}]')
+    # ★ 2026-08-11 FPV 摇杆曲线（固件 ano_params.cpp 尾部同序，id 121-127）
+    names.append('rc_rate')
+    for i in range(3):
+        names.append(f'rc_expo[{i}]')
+    for i in range(3):
+        names.append(f'rc_super[{i}]')
     return names

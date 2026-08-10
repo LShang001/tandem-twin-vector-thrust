@@ -204,7 +204,7 @@ def test_mavlink_param_shortname_uniqueness():
         return cand[:limit] if len(cand) > limit else cand
 
     names = list(pm.expected_names())
-    assert len(names) == 121
+    assert len(names) == 128
     shorts = [mav_name(n) for n in names]
     assert len(shorts) == len(set(shorts)), '短名重复'
     assert all(len(s) <= 15 for s in shorts), '超 15B'

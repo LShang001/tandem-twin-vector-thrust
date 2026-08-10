@@ -54,6 +54,15 @@ struct FlightCtrlParams
     //   bit0=ω×(I·ω) 陀螺耦合、bit1=ω×h 转子陀螺项。默认全开——悬停 ω≈0 交叉项≈0
     //   无副作用；实机 A/B 或异常时可在线置 0 关闭（0xE1 写入）。
     uint8_t inertia_comp_mask;         // 前馈使能掩码（默认 0x03）
+
+    // ---- FPV 摇杆曲线（★2026-08-11 接入 RATE_MODE，Betaflight 三参数模型）----
+    //   rc_rate  全局灵敏度（0-2.5）——线性缩放整条曲线，满杆基准 200°/s
+    //   rc_expo  输入侧中心曲线（0-1）——压中心斜率（默认 0.2）
+    //   rc_super 输出侧边缘曲线（0-1，双曲增益）——默认 roll/pitch 0.7、yaw 0.55
+    //   RATE_MODE：omega_ref = rcRateCurve(rc, rc_rate, expo, super, 最大角速率)
+    float rc_rate;                    // 全局灵敏度（默认 1.0）
+    float rc_expo[3];                 // 每轴 expo（roll/pitch/yaw，默认 0.2）
+    float rc_super[3];                // 每轴 super（默认 0.7/0.7/0.55）
 };
 
 // ============================================================
@@ -100,6 +109,12 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
     /* output_filter_alpha    */ { 0.9f, 0.9f, 0.9f },
     /* inertia_comp_mask      */ 0x03,   // ★2026-08-10 前馈全开（陀螺耦合+转子陀螺）
+    // ---- FPV 摇杆曲线（★2026-08-11 RATE_MODE 接入）----
+    //   默认：rc_rate=1.0（满杆基准 200°/s）；expo 全轴 0.2；super roll/pitch 0.7、
+    //   yaw 0.55（Betaflight 标准）。实机手感调整走 0xE1 在线写（param set rc_super[0] 0.8）
+    /* rc_rate               */ 1.0f,
+    /* rc_expo[3]            */ { 0.2f, 0.2f, 0.2f },
+    /* rc_super[3]           */ { 0.7f, 0.7f, 0.55f },
 };
 
 #ifdef TANDEMVEC_FIRMWARE

@@ -53,6 +53,10 @@ run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 # 各类型→float 序列化/名称截断/watch 集合上限/rate 钳制/越界容错）：
 run_one "$ROOT/test_host/test_ano_vars.cpp"            av  ""
 
+# FPV 摇杆曲线 RcCurve（include/RcCurve.h，纯平台无关——expo 中心压低/super 边缘
+# 双曲放大/rc_rate 线性缩放/死区/限幅/极点保护，Betaflight 三参数模型）：
+run_one "$ROOT/test_host/test_rc_curve.cpp"            rc  ""
+
 # AnoComProtocol 打包回归（★2026-08-10 COMM-001：buildFrame 长度保护/校验
 # 单循环边拷边算/组模式合并 write 字节流等价。多文件编译 + stub Stream）：
 echo "---- 编译 ap ----"

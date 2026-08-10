@@ -107,6 +107,11 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     PID_U8("inertia_comp_mask", kFlightCtrlParams.inertia_comp_mask),
     ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 0), ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 1),
     ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 2),   // ★ 2026-08-09 二级滤波（级联二阶，抑 30-60Hz 桨振动）
+    // ---- FPV 摇杆曲线（★2026-08-11 RATE_MODE 接入，Betaflight 三参数模型）----
+    //   尾部追加保持既有 ID 不变；参数名 rc_rate / rc_expo[0..2] / rc_super[0..2]
+    { "rc_rate", ANO_FLOAT, &kFlightCtrlParams.rc_rate, nullptr, nullptr },
+    ALPHA_ENTRY("rc_expo", rc_expo, 0), ALPHA_ENTRY("rc_expo", rc_expo, 1), ALPHA_ENTRY("rc_expo", rc_expo, 2),
+    ALPHA_ENTRY("rc_super", rc_super, 0), ALPHA_ENTRY("rc_super", rc_super, 1), ALPHA_ENTRY("rc_super", rc_super, 2),
 };
 static_assert(sizeof(kAnoParams) / sizeof(kAnoParams[0]) == ANO_PARAMS_COUNT,
               "ano_params: 注册表数量与 ANO_PARAMS_COUNT 不一致");

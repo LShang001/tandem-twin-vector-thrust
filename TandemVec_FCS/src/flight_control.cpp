@@ -12,6 +12,7 @@
 #include "TandemVec_OnlineID.h"
 // 惯量逆解交叉耦合前馈（★2026-08-10 通用层：ω×(I·ω) + ω×h，仿真同构）
 #include "InertiaDecoupling.h"
+#include "RcCurve.h"    // FPV 摇杆曲线（RATE_MODE，★2026-08-11）
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
@@ -1049,11 +1050,19 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       gnc_tel.omega_ref_dps[1] = constrain(gnc_tel.omega_ref_dps[1], -MAX_TARGET_RATE, MAX_TARGET_RATE);
     }
     else
-    { // RATE_MODE —— ★ 与原始 VTVL 实飞存档版一致：摇杆直接生成目标角速率
+    { // RATE_MODE —— 摇杆直接生成目标角速率（★2026-08-11 FPV 摇杆曲线接入）
       //   roll 摇杆 → 绕 x_b（上摆通道）；pitch 摇杆 → 绕 y_b（下摆通道）
       //   yaw 摇杆 → 绕 z_b（差速），由 execute_yaw_controller 处理
-      gnc_tel.omega_ref_dps[0] = mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -MAX_MANUAL_rollRATE, MAX_MANUAL_rollRATE);
-      gnc_tel.omega_ref_dps[1] = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_MANUAL_pitchRATE, -MAX_MANUAL_pitchRATE); // 推杆对应低头负角速度，拉杆对应抬头正角速度
+      //   曲线：归一化 → 死区 → expo（中心）→ rc_rate（灵敏度）→ super（边缘）
+      //   满杆角速度 = rcRate×200/(1−super)，默认 roll/pitch 667°/s、yaw 444°/s
+      gnc_tel.omega_ref_dps[0] = rcRateCurve(
+          rcNormFromUs(inputs.roll_raw),
+          kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[0],
+          kFlightCtrlParams.rc_super[0], MAX_MANUAL_rollRATE);
+      gnc_tel.omega_ref_dps[1] = -rcRateCurve(
+          rcNormFromUs(inputs.pitch_raw),
+          kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[1],
+          kFlightCtrlParams.rc_super[1], MAX_MANUAL_pitchRATE); // 推杆=低头负角速度（取反）
       rollAnglePID.reset();
       pitchAnglePID.reset();
       rollRatePID.reset();
@@ -1135,8 +1144,11 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     const float YAW_STICK_DEADBAND_US = 40.0f;   // 回中死区（杆位抖动）
     if (fabsf(yaw_stick_us) > YAW_STICK_DEADBAND_US)
     {
-      gnc_tel.omega_ref_dps[2] = mapFloat(yaw_stick_us, -512.0f, 512.0f,
-                                          -MAX_MANUAL_yawRATE, MAX_MANUAL_yawRATE);
+      // ★ 2026-08-11 FPV 摇杆曲线接入（yaw 通道，expo/super 独立参数）
+      gnc_tel.omega_ref_dps[2] = rcRateCurve(
+          yaw_stick_us / 512.0f,
+          kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[2],
+          kFlightCtrlParams.rc_super[2], MAX_MANUAL_yawRATE);
       s_yaw_hold_ref_rad = AHRS_Packet.Heading;  // 持续刷新：回中即锁当时航向
     }
     else

@@ -11,17 +11,19 @@ import params as pm
 
 
 def test_param_count_matches_firmware():
-    """参数总数 = 12 环 × 9 字段 + 12 滤波 alpha = 121（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波+1 前馈掩码）"""
+    """参数总数 = 12 环 × 9 字段 + 12 滤波 alpha = 128（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波+1 前馈掩码；★2026-08-11 +7 FPV 摇杆曲线）"""
     names = pm.expected_names()
-    assert len(names) == 121
+    assert len(names) == 128
     assert names.index('rate_pitch.kd') == 38
-    assert len(set(names)) == 121
+    assert len(set(names)) == 128
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
     # ★ 2026-08-10 全面审查修复：尾部顺序对齐固件注册表
-    #   （inertia_comp_mask@117 → spd2_alpha[0..2]@118-120）
-    assert names[-1] == 'spd2_alpha[2]'
+    #   （inertia_comp_mask@117 → spd2_alpha[0..2]@118-120 → ★2026-08-11 rc 曲线@121-127）
+    assert names[-1] == 'rc_super[2]'
     assert names[117] == 'inertia_comp_mask'
+    assert names[121:128] == ['rc_rate', 'rc_expo[0]', 'rc_expo[1]', 'rc_expo[2]',
+                              'rc_super[0]', 'rc_super[1]', 'rc_super[2]']
     assert 'att_roll.falpha' in names
     assert all(len(n) <= 20 for n in names), [n for n in names if len(n) > 20]
 
@@ -271,5 +273,5 @@ def test_param_name_to_id_mapping():
     assert names.index('att_roll.kp') == 0
     assert names.index('att_pitch.kp') == 9
     assert names.index('rate_roll.kd') == 29
-    assert len(names) == 121
+    assert len(names) == 128
     assert names.index('rate_pitch.kd') == 38
