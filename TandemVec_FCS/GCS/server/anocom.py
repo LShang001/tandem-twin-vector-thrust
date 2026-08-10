@@ -360,11 +360,14 @@ def cmd_vars_info(var_id: int) -> bytes:
 
 
 def cmd_write_param(param_id: int, value, is_float: bool = True) -> bytes:
-    """0xE1 参数写入：ID u16 LE + PAR_VAL（float LE 4B / uint8 1B）"""
+    """0xE1 参数写入：ID u16 LE + PAR_VAL（float LE 4B / uint8 1B）
+    ★ 2026-08-11 全面审查修复遗漏面：uint8 参数按 0-255 值打包（原 `1 if value
+    else 0` bool 语义）——固件侧 u8ptr 支持掩码 0-255 后，PC 侧打包没跟上，
+    `param set inertia_comp_mask 3` 会被压成 1（enabled 0/1 语义仍兼容）"""
     if is_float:
         payload = struct.pack('<Hf', param_id & 0xFFFF, float(value))
     else:
-        payload = struct.pack('<HB', param_id & 0xFFFF, 1 if value else 0)
+        payload = struct.pack('<HB', param_id & 0xFFFF, int(round(value)) & 0xFF)
     return encode_frame(FUNC_PARAM_WRITE_READ, payload)
 
 
