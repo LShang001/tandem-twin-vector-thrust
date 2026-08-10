@@ -1057,7 +1057,11 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     // 内环：角速率误差 → 角加速度指令(rad/s²)
     // FRD 轴序：体轴x=滚转，体轴y=俯仰，底层控制分配负责物理逆解
     outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x, 0.005f);
-    outputs.alpha_pitch = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
+    // ★ 2026-08-10 通读修复：原误用 rollRatePID（复制粘贴）——pitchRatePID.compute
+    //   从未被调用 → pitch 积分恒 0、且 roll/pitch 共享同一 PID 实例的积分状态互相污染；
+    //   在线辨识 i_term[1]=pitchRatePID.getIntegral() 因此恒 0（pitch CG/配平力矩辨识失效）。
+    //   kp 相同（0.28）掩盖了比例项错误，实机调参稳定期未被发现。修复后 pitch 积分独立。
+    outputs.alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
     outputs.alpha_roll  = rollOutputFilter.filter(outputs.alpha_roll);
     outputs.alpha_pitch = pitchOutputFilter.filter(outputs.alpha_pitch);
   }
