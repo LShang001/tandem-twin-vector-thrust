@@ -53,6 +53,24 @@ run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 # 各类型→float 序列化/名称截断/watch 集合上限/rate 钳制/越界容错）：
 run_one "$ROOT/test_host/test_ano_vars.cpp"            av  ""
 
+# AnoComProtocol 打包回归（★2026-08-10 COMM-001：buildFrame 长度保护/校验
+# 单循环边拷边算/组模式合并 write 字节流等价。多文件编译 + stub Stream）：
+echo "---- 编译 ap ----"
+if ! $CXX -std=$STD $INCLUDES $STUB_INCLUDE -I$ROOT/lib/AnoComProtocol \
+     "$ROOT/test_host/test_anocom_packing.cpp" \
+     "$ROOT/lib/AnoComProtocol/AnoComProtocol.cpp" \
+     -o "$BIN_DIR/ap$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] ap"
+  fail=1
+else
+  echo "---- 运行 ap ----"
+  if ! "$BIN_DIR/ap$EXE_SUFFIX"; then
+    echo "[RUN FAIL] ap"
+    fail=1
+  fi
+  echo
+fi
+
 # 平台相关算法（依赖 Arduino.h，通过 test_host/stub/Arduino.h 桩在宿主机编译）：
 run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 

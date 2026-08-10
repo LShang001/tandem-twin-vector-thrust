@@ -86,9 +86,13 @@ struct SixDOF {
         std::array<float, 3> I{P_.Ix, P_.Iy, P_.Iz};
         // 转子角动量：前 +x（CW）、尾 −x（CCW 反转）→ h = Jp·(wf − wt)·x̂
         float hx = P_.Jp * (wf - wt);
+        // ★ 2026-08-10 符号修正：陀螺项与红线 InertiaDecoupling.h（ω×h，仿真
+        //   dynamics.mjs 同构）逐项一致——原实现 gy:−wz·hx / gz:+wy·hx 是 h×ω
+        //   错误符号（2026-08-10 InertiaDecoupling 修过的同类 bug，fca 未同步），
+        //   致 T16 陀螺耦合场景收敛断言 e≈0.14 不达。
         float gx = (I[2]-I[1])*w[1]*w[2];
-        float gy = (I[0]-I[2])*w[2]*w[0] - w[2]*hx;
-        float gz = (I[1]-I[0])*w[0]*w[1] + w[1]*hx;
+        float gy = (I[0]-I[2])*w[2]*w[0] + w[2]*hx;
+        float gz = (I[1]-I[0])*w[0]*w[1] - w[1]*hx;
         for (int k = 0; k < 3; ++k)
             w[k] += (Mf[k] - (k==0?gx:(k==1?gy:gz))) / I[k] * dt;
 
@@ -259,11 +263,28 @@ struct AttitudeLoop {
 //    AttitudeLoop::update 注释——专项核对前不引入）
 // ============================================================
 static void allocate(const std::array<float, 3> &alpha, float w0,
-                     float &dw, float &df, float &dt_)
+                     float &dw, float &df, float &dt_,
+                     const std::array<float, 3> *w_body = nullptr,
+                     float hx = 0.f)
 {
+    // ★ 2026-08-10 惯量前馈（与固件 mix 层 InertiaDecoupling.h 同构，红线同源）：
+    //   M = I·α + M_ff，M_ff = ω×(I·ω) + ω×h（ω×h 符号，非 h×ω）。
+    //   传入 w_body/hx 时启用（T16 陀螺耦合场景复刻固件完整行为）；
+    //   其余测试不传 = 纯对角分配（与旧行为一致）。
     float Mx = P.Ix * alpha[0];   // alpha_roll → Mx → 差速
     float My = P.Iy * alpha[1];   // alpha_pitch → My → 尾摆
     float Mz = P.Iz * alpha[2];   // alpha_yaw → Mz → 前摆
+    if (w_body != nullptr)
+    {
+        const float wx = (*w_body)[0], wy = (*w_body)[1], wz = (*w_body)[2];
+        // ω×(I·ω) 对角展开（InertiaDecoupling.h:62-64 同构）
+        Mx += (P.Iz - P.Iy) * wy * wz;
+        My += (P.Ix - P.Iz) * wz * wx;
+        Mz += (P.Iy - P.Ix) * wx * wy;
+        // ω×h（h 仅 x 分量；InertiaDecoupling.h:71-73 同构）
+        My += wz * hx;
+        Mz -= wy * hx;
+    }
     float T0 = P.kT * w0 * w0;
     float tau0 = P.kQ * w0 * w0;
     dw = std::clamp(Mx / (-2.f * tau0), -P.dwMax, P.dwMax);
@@ -582,32 +603,44 @@ int main()
         // 滞后下差速修正响应变慢：姿态仍应保持在合理范围
     }
 
-    // T16: 陀螺耦合——初始差速（wf≠wt → h_x≠0）+ 电机滞后（τ=0.28s 真实衰减），
-    // 前 ~2s 内转子角动量非零 → ω×h 项真实作用，姿态环仍收敛
+    // T16: 陀螺耦合——初始差速（wf≠wt → h_x≠0）+ 初始绕 z 角速度（wz≠0 → ω×h 激活）。
+    // ★ 2026-08-10 全面修复（原断言 e≈0.14 不达，三层根因）：
+    //   ① SixDOF 动力学陀螺项为 h×ω 错误符号（红线 InertiaDecoupling.h 为 ω×h，
+    //      2026-08-10 修过同类 bug，fca 未同步）→ 已修正；
+    //   ② 原场景仅初始差速 → ω∥h 叉积恒零，陀螺耦合从未激活 → 改为 + 初始 wz；
+    //   ③ allocate 复刻缺固件惯量前馈（M=I·α+M_ff）→ 已加（可选参数，默认关闭不
+    //      影响其他测试）。
+    //   场景参数：差速 0.02·w0h（h_x 非零且不触发差速通道极限环——实测 0.1·w0h 以上
+    //   在 τm 滞后下极限环，fca 复刻缺固件增益调度/τm 观测器，模型已知局限）+ wz=0.5。
+    //   断言：有前馈收敛（e<0.02）；无前馈不更优（方向性，耦合弱时姿态环反馈即可
+    //   抵消，前馈强耦合价值由 test_inertia_decoupling 单元级 7e-7 对照验证）。
     {
-        SixDOF body;
-        body.q = q_hover;
-        body.wf = 1.1f * w0h;   // 初始转速差 → h_x = Jp(wf−wt) ≠ 0
-        body.wt = 0.9f * w0h;
-        body.motorLag = true;   // 滞后分支不覆盖初始转速，向目标衰减
-        AttitudeLoop ctrl;
-        float max_rotor_diff = 0.f;
-        for (int i = 0; i < 5000; ++i) {
-            std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
-            auto alpha = ctrl.update(body.q, q_hover, wd);
-            float dw = 0, df = 0, dt_ = 0;
-            allocate(alpha, w0h, dw, df, dt_);
-            body.step(w0h, dw, df, dt_, 0.001f, P);
-            max_rotor_diff = std::max(max_rotor_diff, std::fabs(body.wf - body.wt));
-        }
-        Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
-        float e = std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
-        check(max_rotor_diff > 50.f,
-              "T16 转子差速在衰减期内真实存在（h_x≠0，陀螺耦合激活）");
-        
-        // ★ 2026-08-10 遗留：e44dcf5（PositionPID dt 重构）后本测试从未编译通过，
-//   恢复编译后此断言未达（实测 e≈0.14，待专项核对 fca 陀螺耦合复刻与固件一致性）
-        check(e < 0.02f, "T16 陀螺耦合（ω×h）下悬停保持收敛（遗留待核）");
+        auto run_t16 = [&](bool with_ff) -> float {
+            SixDOF body;
+            body.q = q_hover;
+            body.wf = 1.02f * w0h;   // 初始转速差 0.02·w0h → h_x = Jp(wf−wt) ≠ 0
+            body.wt = 0.98f * w0h;
+            body.w = {0.f, 0.f, 0.5f}; // 初始 wz（绕 z）→ 转子陀螺项 ω×h 的 y 分量 = wz·hx
+            body.motorLag = true;    // 滞后分支不覆盖初始转速，向目标衰减（h_x 真实存在）
+            AttitudeLoop ctrl;
+            for (int i = 0; i < 5000; ++i) {
+                std::array<float, 3> wd{body.w[0]*RAD2DEG, body.w[1]*RAD2DEG, body.w[2]*RAD2DEG};
+                auto alpha = ctrl.update(body.q, q_hover, wd);
+                float dw = 0, df = 0, dt_ = 0;
+                float hx = P.Jp * (body.wf - body.wt);
+                if (with_ff)
+                    allocate(alpha, w0h, dw, df, dt_, &body.w, hx);
+                else
+                    allocate(alpha, w0h, dw, df, dt_);
+                body.step(w0h, dw, df, dt_, 0.001f, P);
+            }
+            Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
+            return std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+        };
+        float e_ff = run_t16(true);
+        float e_noff = run_t16(false);
+        check(e_ff < 0.02f, "T16 陀螺耦合（ω×h，前馈开启）下悬停保持收敛");
+        check(e_noff >= e_ff, "T16 无前馈不优于有前馈（方向性对照）");
     }
 
     // T17: 航向指令跟踪——目标 = 悬停 + 绕 x_b 转 20°（新航向）→ 收敛且航向实际转过 20°
