@@ -96,7 +96,9 @@ static void anoVarsHandleList(AnoComProtocol &ano, const uint8_t *data, uint16_t
 {
     if (len < 1)
         return;
-    uint8_t tx[1 + 2 + 16];
+    // ★ 2026-08-10 越界修复：变量信息帧 = CMD(1) + ID(2) + TYPE(1) + NAME(16) = 20B，
+    //   原数组 1+2+16=19B 致 memset(&tx[4],0,16) 越界写 1 字节（编译 -Warray-bounds 坐实）
+    uint8_t tx[1 + 2 + 1 + 16];
     if (data[0] == 0x01) // 读变量个数
     {
         tx[0] = 0x01;
