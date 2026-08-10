@@ -1057,7 +1057,23 @@ def main():
         # CLI 自消费（drain/_param_read_single），不启动后端消费线程——
         # 否则 DBG 文本/参数响应会被消费线程取走，CLI 读不到
         m.g.connect(a.port, a.baud, consume_thread=False)
-        time.sleep(0.4)   # 等串口稳定 + 遥测首帧
+        # ★ 2026-08-11 串口问题根治：等待遥测就绪（固件回到遥测分支、上行可处理）
+        #   根因：固件若残留 DBG 模式（上会话异常退出），connect 的 exit\n 需要
+        #   handleDebugTask 处理后 handleAnoCom 才恢复遥测——首请求必超时。
+        #   方案：等 stat_tele>0（收到有效遥测帧）且 <2s；期间自动补发 exit 重试。
+        ready = False
+        t0 = time.time()
+        while time.time() - t0 < 2.0:
+            drain(0.2)
+            if m.g.stat_tele > 0:
+                ready = True
+                break
+            m.g.write(b'exit\n')   # 幂等：固件已退出则无副作用
+        if not ready:
+            print('⚠ 未等到遥测帧——固件可能卡死（DBG 残留/上行冻结）；'
+                  '可物理断电重启或重插 USB。继续尝试命令…')
+        # 等待遥测就绪后给固件 0.2s 消化缓冲，再进命令
+        time.sleep(0.2)
     try:
         a.fn(a)
     except KeyboardInterrupt:
