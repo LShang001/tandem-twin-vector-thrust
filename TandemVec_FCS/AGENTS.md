@@ -7,9 +7,11 @@
 - **机体系 FRD**：`x_b` = 机身纵轴（前电机 +x 端拉力式、尾电机 −x 端推进式）；`y_b` 右；`z_b` 下（垂直于纵轴）。**★ 电机推力轴 = z_b**（悬停构型机头朝天：z_b 竖直指地、x_b 水平——2026-08-07 轴置换后实码语义，见 mix 层 1250 行；旧"x_b=推力轴"描述错误，2026-08-09 修正）。
 - **执行器–力矩映射（2026-08-07 轴置换后，悬停构型语义；★权威 = mix 层 `flight_control.cpp` 1202-1252 行）**：**上摆 δ_f（前电机，机头朝天时在最高点）→ 滚转主控**（alpha_roll 体轴 x → Mz'）；**下摆 δ_t（尾电机）→ 俯仰主控**（alpha_pitch 体轴 y → My'）；**差速 Δω → 偏航主控**（alpha_yaw 体轴 z → Mx'）。旧描述"前摆=偏航、差速反扭滚转"为**巡航读法**（物理公式 Mz=a·Tf·sδf 在巡航系即偏航力矩、悬停系即侧倾力矩），已废止——写任何轴/执行器注释前先查 mix 层实码，勿凭概念名或旧注释。
 - **VTOL 悬停构型**：机头朝天（x_b 竖直 ∥ NED −z）——差速（绕 x_b）= **世界航向**；z_b 悬停时水平。
-- **RATE_MODE 摇杆映射（四轴式，悬停构型）**：yaw 摇杆 → 差速（绕 z_b，保守幅值 MAX_MANUAL_yawRATE=35°/s）；roll 摇杆 → 上摆（前摆，MAX_MANUAL_rollRATE）；pitch 摇杆 → 下摆（尾摆，绕 y_b）。ATTITUDE_MODE 姿态环（2026-08-07 轴置换后，★以 `flight_control.cpp` 1016-1023 行为准）：**q_err.x→上摆（roll 外环）、q_err.y→下摆（pitch 外环）、q_err.z→差速（yaw hold 外环）**——旧"q_err.x→差速"为置换前语义。
+- **RATE_MODE 摇杆映射（四轴式，悬停构型，★2026-08-11 FPV 摇杆曲线接入）**：三轴均经 `RcCurve.h` 曲线（归一化→死区→expo→rc_rate→super→限幅），参数 `rc_rate/rc_expo[3]/rc_super[3]`（FlightCtrlParams.h，在线可调）；默认 rc_rate=0.5/expo=0.25/super 0.7·0.7·0.55 → 满杆 roll/pitch 333°/s、yaw 222°/s（限幅 MAX_MANUAL_*RATE=600°/s，2026-08-11 由 80 解耦提高——旧值 35/50/80 全部过时）。roll 摇杆 → 上摆（前摆）；pitch 摇杆 → 下摆（尾摆）。ATTITUDE_MODE 姿态环（2026-08-07 轴置换后，★以 `flight_control.cpp` 1016-1023 行为准）：**q_err.x→上摆（roll 外环）、q_err.y→下摆（pitch 外环）、q_err.z→差速（yaw hold 外环）**——旧"q_err.x→差速"为置换前语义。
 - ⚠️ **NED z（世界竖直）≠ 机体 z_b**：推力垂直补偿用 R13（x_b 投影）；激光斜距用 R33（激光沿 −z_b）。
 - 详细推导见 `docs/04-数学建模/MOD-002` §1.2。
+- ★ 通用变量上报（AnoVars：0xF2 值帧/0xF3 清单/MAVLink NAMED_VALUE_FLOAT/DBG vars 命令）与 MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）见项目根 `AGENTS.md` 踩坑记录；加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏。
+- ★ 编码统一（2026-08-11）：批处理内容必须 ASCII（cmd 用启动代码页解析、chcp 不救文件解析），中文输出走 Python（PYTHONUTF8=1）；详见根 `docs/registers/踩坑记录-AGENTS.md`。
 
 ## 飞行器构型与控制分配
 
@@ -36,7 +38,7 @@
 
 ## 核心参数
 
-- **控制增益/限幅/滤波 ★ 实机调参唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（2026-08-08 C路径重构：12 个 PID 增益+输出/积分限幅+阈值+微分滤波、7 个控制滤波器 alpha，全部集中于此结构体；static constexpr，**固件与宿主机测试共用同一事实源**——`state_data.cpp` PID 构造、`main.cpp` setup、`flight_control.cpp` initPositionHold 与 `test_host/test_flight_control_axis.cpp` 均读它）。数值域为 PositionPID 实际语义（deg 域）。
+- **控制增益/限幅/滤波 ★ 实机调参唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（2026-08-08 C路径重构 + 2026-08-11 扩到 128 参数：12 环 PID 增益/限幅/阈值/滤波 + 滤波数组 + inertia_comp_mask + FPV 摇杆曲线 7 参数（rc_rate/rc_expo[3]/rc_super[3]），全部集中于此结构体；static constexpr，**固件与宿主机测试共用同一事实源**——`state_data.cpp` PID 构造、`main.cpp` setup、`flight_control.cpp` initPositionHold 与 `test_host/test_flight_control_axis.cpp` 均读它）。数值域为 PositionPID 实际语义（deg 域）。
 - 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）
 - 差速增益调度/工作点下限/零油门门控：`src/flight_control.cpp` 层2（mix 函数，硬编码公式，改后需跑 `tools/verify_*.py`）
 - 控制链遥测：`src/state_data.h` §4.0b `gnc_tel`（每层中间量：error_deg/omega_ref_dps/alpha_ref/M_cmd/w0_eff/yaw_gain_sched/执行器指令+饱和），CAN/AnoCom/Serial8 均读它
@@ -63,7 +65,7 @@
 - **OpenOCD 定位卡死**：`openocd -s <scripts> -f cfg -c "reset run; sleep 2000; halt"` 读 PC，再用 `arm-none-eabi-addr2line -e firmware.elf -f -p <PC>` 映射回源码函数——几分钟定位"卡在哪个函数"，不用猜。
 - **★ xPack OpenOCD 的 stdout 输出会被吞**（`reg`/`mdw`/`mrw` 的结果进不了 stdout，脚本里 echo 也部分丢失）：遇到输出异常，**放弃 OpenOCD 读寄存器，改用固件内调试命令打印**（如 `gpio`/`tim4`）——固件自己读寄存器从串口输出，100% 可靠。
 - **DAPLink 通信紊乱恢复**：OpenOCD 反复连接后出现 `CMSIS-DAP command mismatch` / `init failed` → **物理拔插 DAPLink USB 线**即可恢复（软件复位无效）。
-- **python 串口脚本**（比 pio device monitor 灵活）：`python -c "import serial; ser=serial.Serial('COM10',2000000); ser.write(b'DBG\n'); print(ser.read(4096).decode('utf-8','replace'))"`——可编程、可发二进制、可扫波特率。注意 Serial6 波特率以 `SERIAL6_BAUDRATE` 宏为准（当前 2M）。
+- **python 串口脚本**（比 pio device monitor 灵活）：`python -c "import serial; ser=serial.Serial('COM10',921600); ser.write(b'DBG\n'); print(ser.read(4096).decode('utf-8','replace'))"`——可编程、可发二进制、可扫波特率。注意 Serial6 波特率以 `SERIAL6_BAUDRATE` 宏为准（当前 921600，2026-08-10 COMM-001 由 2M 降频——VCP 丢帧 ~15%）。
 - **跨平台编译验证**：库要支持多平台时，在 /tmp 建独立 PlatformIO 项目（仅库 + 最小 main.cpp），用目标板 env（如 genericSTM32F407）编译——**无硬件也能验证编译层**，不污染主项目。
 - **分层验证外设不亮**：①GPIO 配置（MODER/AFR）→ ②静态电平输出 → ③协议时序（寄存器/示波器）→ ④供电接线。每层有明确通过判据，避免在错误层反复试。
 
@@ -76,7 +78,7 @@
 
 - 电路权威参考：`docs/电路拓扑参考.md`（2026-06-30 经 EDA 实测修正），包含全部 52 个 MCU 引脚映射、传感器型号、连接器定义和未使用硬件资源清单。修改任何引脚相关代码前必须先对照该文档。
 - 串口分配总览、已验证硬件事实、未使用硬件资源表：**修改串口/引脚/传感器驱动代码或排查通信问题前**，读 `.agents/docs/hardware-reference.md`。
-- **Serial6 (USART6) 波特率 = `state_data.h` 的 `SERIAL6_BAUDRATE` 宏**（当前 2,000,000，2026-08-07 与 2.4G 数传对齐）——换数传模块时只改宏；抓串口前先查宏值，波特率不匹配会全乱码（来源：2026-08-08 WS2812 调试）。
+- **Serial6 (USART6) 波特率 = `state_data.h` 的 `SERIAL6_BAUDRATE` 宏**（当前 921,600，★2026-08-10 COMM-001 由 2M 降频：VCP 下 2M 丢帧 ~15%，921600 位时间翻倍、带宽余量仍 87%；2.4G 数传需重新对齐）——换数传模块时只改宏；抓串口前先查宏值，波特率不匹配会全乱码（来源：2026-08-08 WS2812 调试；2026-08-10 COMM-001 优化）。
 - **调试串口**：Serial6 收到 `"DBG\n"` 进入调试模式（`handleDebugConsole`），`exit` 退出；命令 `help/ws <r g b>/wsoff/wsseq/wsstat/wsmode <0|1>/wsfault <0|1>/gpio/tim4/ver`。地面站帧头 0xAB 与 "DBG\n" 不冲突。详细命令表见 `docs/memory/2026-08-08-WS2812驱动调试.md`。
 
 ## WS2812 / 硬件踩坑记录（2026-08-08，通用教训保留，细节见 docs/memory/2026-08-08-WS2812驱动调试.md）
@@ -134,7 +136,7 @@
 ```powershell
 pio run                    # 编译固件
 pio test -e test           # 宿主机回归测试
-bash test_host/run_all.sh  # 宿主机 g++ 平台无关回归（16 套件含 EKF 15 状态）
+bash test_host/run_all.sh  # 宿主机 g++ 平台无关回归（18+ 套件：EKF 15 状态/控制分配/垂直KF/灯效/AnoVars 注册表/FPV 摇杆曲线 RcCurve 等——以脚本实际为准）
 ```
 
 - `run_all.sh` 需要 `$env:BIN_DIR = "$env:TEMP\tv_fcs_bin"`：**必须覆盖**，MSYS bash 的路径转换层对中文路径不可靠（g++ 链接阶段写中文路径报 Invalid argument）。EKF 测试（`test_ekf_15state.cpp`，需 `-DEKF_HOST_REGRESSION` + units convang 源）已封装在脚本内。

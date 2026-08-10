@@ -124,6 +124,23 @@ tools/tvc-cli.cmd --port COM10 vars clear
 - **MAVLink 调试通道**：`dbg "proto mavlink"` 运行时切换 Serial6 协议（QGC/MP 可连，曲线用 NAMED_VALUE_FLOAT；3D 向量用 DEBUG_VECT）；`dbg "proto anocom"` 切回 GCS——**不重烧**，AnoCom 参数/变量链路在 MAVLink 模式停用
 - 三坑：注册表定义必须 `extern` + 不带数组大小（否则 segfault）；volatile 变量注册需 `const volatile float*`；0xF3 应答 20B（见 AGENTS.md）
 
+### FPV 摇杆曲线调参（RATE_MODE，2026-08-11）
+
+Betaflight 三参数模型（`include/RcCurve.h`）：rc_rate（全局灵敏度）/ rc_expo[3]（中心曲线）/ rc_super[3]（边缘双曲曲线）。默认 0.5 / 0.25 / 0.7·0.7·0.55 → 满杆 roll/pitch 333°/s、yaw 222°/s（限幅 600）。
+
+```bash
+# 在线调参（不重烧，写后读回双确认）
+tools/tvc-cli.cmd --port COM10 param set rc_rate 0.6
+tools/tvc-cli.cmd --port COM10 param set rc_expo[0] 0.3      # roll 中心更细腻
+tools/tvc-cli.cmd --port COM10 param set rc_super[0] 0.8     # roll 边缘更暴力
+tools/tvc-cli.cmd --port COM10 --json param verify rc_super[2] 0.55
+# 曲线图对照：项目根 rc-curve.png（默认参数渲染）
+```
+
+- 满杆角速度 = rc_rate×200/(1−super)：默认 333/222°/s；rc_rate=1.0 时 667°/s（触 600 限幅兜底）
+- ⚠️ RATE_MODE 满杆从存档 80°/s 变 333°/s——实机先从低杆量逐步体验（中心区 ±25% 杆仅 22°/s）
+- 编码约定：批处理内容必须 ASCII（cmd 用启动代码页解析，chcp 不救文件解析）；中文输出走 Python（PYTHONUTF8=1）
+
 ### GNSS 双协议联调（2026-08-09 库级）
 
 固件默认 `ubx.SetProtocol(kAuto)`（UBX 优先 + 失效兜底 NMEA）。GNSS 出问题时的排查顺序：
