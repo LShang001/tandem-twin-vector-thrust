@@ -23,7 +23,7 @@ async def main():
     uri = 'ws://127.0.0.1:8091/ws'
     async with websockets.connect(uri, max_queue=0) as ws:
         await ws.recv()
-        await ws.send('{"cmd":"connect","port":"COM10","baud":2000000}')
+        await ws.send('{"cmd":"connect","port":"COM10","baud":921600}')
         await asyncio.sleep(3)
         await ws.send('{"cmd":"dbg_enter"}')
         await asyncio.sleep(1)

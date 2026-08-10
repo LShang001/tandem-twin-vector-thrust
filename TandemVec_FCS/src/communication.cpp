@@ -582,10 +582,12 @@ void handleAnoCom()
     }
   }
 
-  // ---- 下行发送 (原有逻辑) ----
-  // 静态变量，用于跟踪当前发送的数据组索引和是否开始新一轮数据采集
-  static uint8_t group_index = 0;               // 当前发送的数据包组索引 (0-3)
-  static bool new_cycle_data_collection = true; // 是否需要采集新一轮数据的标志
+  // ---- 下行发送（★ 2026-08-10 COMM-001 B1/B2 双环重构）----
+  // 200Hz tick 分档：快环（IMU/欧拉/目标姿态/控制量/执行器）100Hz 奇数 tick；
+  // 慢环（位置 50Hz / RC 25Hz / 显示帧 25Hz / GPS·氧压 10Hz）偶数 tick 按余数错开，
+  // 快/慢环永不碰撞。同 tick 多帧用组模式（beginGroup/endGroup）合并单次 write（COMM-001 A3）。
+  // 快变字段每 tick 采集（陈旧度 ≤5ms），慢变字段在各自档位 tick 采集。
+  static uint32_t s_tele_tick = 0;
 
   // 遥测控制量安全转换：isfinite 防 NaN/Inf（constrain 对 NaN 无效），
   // 限幅到协议 ±5000 量程，异常值归零仅损坏显示不影响飞行。
@@ -593,256 +595,167 @@ void handleAnoCom()
     return (isfinite(v)) ? constrain(v, -5000.0f, 5000.0f) : 0.0f;
   };
 
-  // 静态数据缓存，仅在new_cycle_data_collection为true时更新
-  // 惯性传感器数据
-  static float acc_x_ano, acc_y_ano, acc_z_ano;
-  static float gyr_x_ano, gyr_y_ano, gyr_z_ano;
-  // 姿态信息 (欧拉角)
-  static float roll_ano, pitch_ano, yaw_ano;
-  static uint8_t fusionSta = 0; // 初始化为 0 (未初始化)
-  // 高度数据
-  static float alt_bar, alt_add, alt_fu;
-  // 姿态控制量
-  static float roll_ctrl_ano, pitch_ctrl_ano, yaw_ctrl_ano;
-  // 油门控制量
-  static float throttle_ctrl_ano;
-  // 目标速度数据
-  static float target_speed_x_ano, target_speed_y_ano, target_speed_z_ano;
-  // 目标姿态数据
-  static float target_roll_ano, target_pitch_ano, target_yaw_ano;
-  // 飞行速度数据 (NED)
-  static float vel_north_ano, vel_east_ano, vel_down_ano;
-  // 执行器输出（0xF1 帧，2026-08-10 起）
-  static float tvc_front_ano, tvc_rear_ano, mot_front_ano, mot_rear_ano, dw_ano;
-  static uint8_t act_sat_ano;
-  // 位置偏移数据 (cm)
-  static float pos_north_cm_ano, pos_east_cm_ano, pos_down_cm_ano;
-  // GNSS传感器信息
-  static int8_t gnss_fix_type_ano;
-  static uint8_t gps_num_sat_ano; // 卫星数
-  static float gps_longitude_deg_ano, gps_latitude_deg_ano, gps_height_msl_ano;
-  static float gps_vel_north_ano, gps_vel_east_ano, gps_vel_down_ano;
-  static float gps_speed_acc_ano, gps_v_acc_ano, gps_pdop_ano;
-  // 发动机氧压传感器数据
-  static float oxygen_pressureP1_ano, oxygen_pressureP2_ano;
-  static float bat_voltage, bat_current, fc_voltage, fc_current;
-  static uint16_t power_state = 0; // 初始化为 0 (无故障)
-  // 飞控模式遥测 (0x06 帧字段)
-  static uint8_t flight_mode_ano = 0;  // MODE: 0=MANUAL,1=AUTO_POSITION,2=AUTO_ALTITUDE,3=GUIDED
-  static uint8_t flight_sflag_ano = 0; // SFLAG: 0=锁定, 1=解锁
+  // ---- 快环字段采集（每 tick，陈旧度 ≤5ms）----
+  // IMU (来自DETA100的IMU_Packet)
+  const float acc_x_ano = IMU_Packet.accelerometer_x;          // m/s^2
+  const float acc_y_ano = IMU_Packet.accelerometer_y;          // m/s^2
+  const float acc_z_ano = IMU_Packet.accelerometer_z;          // m/s^2
+  const float gyr_x_ano = IMU_Packet.gyroscope_x * RAD_TO_DEG; // deg/s
+  const float gyr_y_ano = IMU_Packet.gyroscope_y * RAD_TO_DEG; // deg/s
+  const float gyr_z_ano = IMU_Packet.gyroscope_z * RAD_TO_DEG; // deg/s
 
-  // 仅在新循环开始时（即发送完一组4个包后），才重新获取所有需要发送的数据
-  if (new_cycle_data_collection)
+  // AHRS 姿态（DETA100）
+  const float roll_ano = AHRS_Packet.Roll * RAD_TO_DEG;
+  const float pitch_ano = AHRS_Packet.Pitch * RAD_TO_DEG;
+  // 航向 0-2π → -π~π 以便显示
+  const float yaw_ano = (AHRS_Packet.Heading > M_PI)
+                            ? (AHRS_Packet.Heading - 2 * M_PI) * RAD_TO_DEG
+                            : AHRS_Packet.Heading * RAD_TO_DEG; // deg
+  uint8_t fusionSta = nav_system_initialized; // EKF初始化融合状态
+  // 编码数据源信息到 fusionSta 高位: bit7=DETA100在线, bit6=数据源类型(0=内置,1=DETA100)
+  if (deta100_online)
+    fusionSta |= 0x80;
+  if (nav_data_source == NavDataSource::DETA100)
+    fusionSta |= 0x40;
+
+  // 控制量 (GNC 输出 gnc_tel)，经 anoCtrlSafe 限幅 ±5000 + NaN 防护
+  const float roll_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[0] * 10.0f);  // 滚转控制输出 ×10 显示
+  const float pitch_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[1] * 10.0f); // 俯仰控制输出 ×10
+  const float yaw_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[2] * 10.0f);   // 偏航控制输出 ×10
+  const float throttle_ctrl_ano = anoCtrlSafe(throttlePercent * 10.0f);   // 油门百分比 ×10
+
+  // 目标值（来自控制逻辑）
+  const float target_speed_x_ano = targetVelNorth * 100;           // 水平目标速度X
+  const float target_speed_y_ano = targetVelEast * 100;            // 水平目标速度Y
+  const float target_speed_z_ano = target_vertical_velocity * 100; // 目标垂直速度
+  const float target_roll_ano = rollTarget * 100;                  // 目标滚转角 (deg)
+  const float target_pitch_ano = pitchTarget * 100;                // 目标俯仰角 (deg)
+  const float target_yaw_ano = gnc_tel.omega_ref_dps[2] * 100;     // 目标偏航角速率 (deg/s)
+
+  // 执行器输出（0xF1 帧）
+  const float tvc_front_ano = g_tvc_upper_deg;   // 上摆座角指令 deg
+  const float tvc_rear_ano = g_tvc_lower_deg;    // 下摆座角指令 deg
+  const float mot_front_ano = ch3_output;        // 前电机输出 %
+  const float mot_rear_ano = ch4_output;         // 尾电机输出 %
+  const float dw_ano = gnc_tel.dw;               // 差速 Δω（归一化）
+  const uint8_t act_sat_ano = (gnc_tel.alloc_sat[0] ? 0x01 : 0) |
+                              (gnc_tel.alloc_sat[1] ? 0x02 : 0) |
+                              (gnc_tel.alloc_sat[2] ? 0x04 : 0);
+
+  // ---- tick 分档判定 ----
+  const uint32_t t = s_tele_tick++;
+  const bool fast_tick = (t % 2 == 1);       // 快环 100Hz（奇数 tick）
+  const bool pos_tick  = (t % 4 == 2);       // 位置 50Hz
+  const bool rc_tick   = (t % 8 == 4);       // RC 25Hz
+  const bool disp_tick = (t % 8 == 6);       // 显示帧 25Hz（高度/模式/速度/PWM/目标速度）
+  const bool gps_tick  = (t % 20 == 10);     // GPS/氧压 10Hz
+
+  if (fast_tick || pos_tick || rc_tick || disp_tick || gps_tick)
   {
-    const bool gnss_data_fresh_for_telemetry = isGnssDataFreshForNav();
-    const bool gnss_instant_valid_for_telemetry =
-        (ubx.fix() >= bfs::Ubx::FIX_3D) && gnss_data_fresh_for_telemetry;
-
-    // === 从全局变量或传感器数据包中采集当前时刻的数据 ===
-    // IMU (来自DETA100的IMU_Packet)
-    acc_x_ano = IMU_Packet.accelerometer_x;          // m/s^2
-    acc_y_ano = IMU_Packet.accelerometer_y;          // m/s^2
-    acc_z_ano = IMU_Packet.accelerometer_z;          // m/s^2
-    gyr_x_ano = IMU_Packet.gyroscope_x * RAD_TO_DEG; // deg/s
-    gyr_y_ano = IMU_Packet.gyroscope_y * RAD_TO_DEG; // deg/s
-    gyr_z_ano = IMU_Packet.gyroscope_z * RAD_TO_DEG; // deg/s
-
-    // AHRS (来自DETA100的AHRS_Packet)
-    roll_ano = AHRS_Packet.Roll * RAD_TO_DEG;
-    pitch_ano = AHRS_Packet.Pitch * RAD_TO_DEG;
-    // 将航向角从0-2π范围转换为-π~π范围，以便显示
-    yaw_ano = (AHRS_Packet.Heading > M_PI) ? (AHRS_Packet.Heading - 2 * M_PI) * RAD_TO_DEG : AHRS_Packet.Heading * RAD_TO_DEG; // deg
-
-    fusionSta = nav_system_initialized; // EKF初始化融合状态
-    // 编码数据源信息到 fusionSta 高位: bit7=DETA100在线, bit6=数据源类型(0=内置,1=DETA100)
-    if (deta100_online)
-      fusionSta |= 0x80;
-    if (nav_data_source == NavDataSource::DETA100)
-      fusionSta |= 0x40;
-
-    // 高度
-    alt_bar = baro_altitude;        // 气压高度 (米)
-    alt_add = vfk_height;           // 2状态垂直KF高度 (与EKF对比用，激光通道空闲)
-    alt_fu = estimated_height;      // EKF融合高度 (控制律消费)
-
-    // 控制量 (来自 GNC 输出 gnc_tel)，经 anoCtrlSafe 限幅 ±5000 + NaN 防护
-    // ★ 2026-08-08 C路径重构：读取来源收拢为 gnc_tel（缩放系数不变，输出数值不变）
-    roll_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[0] * 10.0f);  // 滚转控制输出，放大10倍用于显示
-    pitch_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[1] * 10.0f); // 俯仰控制输出，放大10倍
-    yaw_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[2] * 10.0f);   // 偏航控制输出（alpha_yaw rad/s²），放大10倍
-    throttle_ctrl_ano = anoCtrlSafe(throttlePercent * 10.0f);    // 油门百分比，放大10倍
-
-    // 目标值 (来自控制逻辑)
-    target_speed_x_ano = targetVelNorth * 100;           // 水平目标速度X (如果适用)
-    target_speed_y_ano = targetVelEast * 100;            // 水平目标速度Y (如果适用)
-    target_speed_z_ano = target_vertical_velocity * 100; // 目标垂直速度 (m/s)
-    target_roll_ano = rollTarget * 100;                  // 目标滚转角 (deg) - 主要用于手动模式记录
-    target_pitch_ano = pitchTarget * 100;                // 目标俯仰角 (deg) - 主要用于手动模式记录
-    target_yaw_ano = gnc_tel.omega_ref_dps[2] * 100;     // 目标偏航角速率 (deg/s)
-
-    // 速度 (来自 EKF 的 INS_GNSS_Packet.velocity_*, NED系)
-    // EKF 输出桥已写入 nav_ekf.ned_vel_mps()，无 GNSS 时由 ZUPT/Gravity 静止辅助闭环约束。
-    // 不再使用 fused_north_vel/fused_east_vel（kf_north/kf_east 纯加速度积分，无零速更新会漂移）。
-    vel_north_ano = INS_GNSS_Packet.velocity_north; // m/s
-    vel_east_ano = INS_GNSS_Packet.velocity_east;   // m/s
-    vel_down_ano = -INS_GNSS_Packet.velocity_down;  // m/s (取反为向上为正)
-
-    if (gnss_instant_valid_for_telemetry)
+    // 非阻塞保护：按本 tick 最大组需求检查 TX 缓冲，不足跳过本 tick 发送。
+    // 快环 5 帧 ≈86B、显示帧 5 帧 ≈100B（含 8B/帧开销）；保守 120B 上限。
+    if (Serial6.availableForWrite() < 120)
     {
-      gps_vel_north_ano = ubx.north_vel_mps(); // m/s
-      gps_vel_east_ano = ubx.east_vel_mps();   // m/s
-      gps_vel_down_ano = -ubx.down_vel_mps();  // m/s (取反为向上为正)
+      ano_tx_skipped++;
     }
     else
     {
-      gps_vel_north_ano = 0;
-      gps_vel_east_ano = 0;
-      gps_vel_down_ano = 0;
+      AnoCom.beginGroup();   // 组模式：同 tick 多帧合并单次 write（COMM-001 A3）
+
+      // ---- 快环 100Hz：IMU + 欧拉 + 目标姿态 + 控制量 + 执行器 ----
+      if (fast_tick)
+      {
+        AnoCom.sendIMUData(acc_x_ano, acc_y_ano, acc_z_ano, gyr_x_ano, gyr_y_ano, gyr_z_ano, 0);
+        AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
+        AnoCom.sendTargetAttitude(target_roll_ano, target_pitch_ano, target_yaw_ano);
+        // 参数顺序必须与 AnoComProtocol::sendAttitudeControl(ctrlRol, ctrlPit, ctrlThr, ctrlYaw) 一致：
+        // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
+        AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
+        // 执行器输出帧（手册用户自定义帧 0xF1）：前/下摆角 deg×100 int16、
+        // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
+        {
+          uint8_t act[12];
+          auto put16 = [](uint8_t *p, int32_t v) { p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF; };
+          put16(act + 0, (int16_t)(tvc_front_ano * 100.0f));
+          put16(act + 2, (int16_t)(tvc_rear_ano * 100.0f));
+          put16(act + 4, (uint16_t)constrain(mot_front_ano * 10.0f, 0.0f, 1000.0f));
+          put16(act + 6, (uint16_t)constrain(mot_rear_ano * 10.0f, 0.0f, 1000.0f));
+          put16(act + 8, (int16_t)constrain(dw_ano * 1000.0f, -32768.0f, 32767.0f));
+          act[10] = act_sat_ano;
+          act[11] = 0;
+          AnoCom.sendData(ANO_GND_STATION_ADDR, ANO_FUNC_FLEX_DATA_START, act, 12);
+        }
+      }
+
+      // ---- 位置 50Hz（快速飞行轨迹分析）----
+      if (pos_tick)
+      {
+        AnoCom.sendPosOffset(relative_north * 100.0f, relative_east * 100.0f,
+                             -relative_down * 100.0f); // 取反为高度 (cm)
+      }
+
+      // ---- RC 25Hz（遥控器数据帧，无遥控时 raw_rc 全 0）----
+      if (rc_tick)
+      {
+        AnoCom.sendRCData(raw_rc_values);
+      }
+
+      // ---- 显示帧 25Hz：高度 + 模式 + 速度 + PWM + 目标速度 ----
+      if (disp_tick)
+      {
+        // 高度：气压 / 2状态垂直KF / EKF融合（与 EKF 对比用，激光通道空闲）
+        AnoCom.sendAltitudeData(baro_altitude, vfk_height, estimated_height, 1);
+        // 飞控模式 + 解锁状态（GNC 判定结果，与飞控实际状态一致）
+        AnoCom.sendFlightMode(static_cast<uint8_t>(g_current_flight_mode),
+                              g_is_unlocked ? 1 : 0, 0, 0, 0);
+        // NED 速度（EKF 输出，向上为正；无 GNSS 时 ZUPT/Gravity 闭环约束）
+        AnoCom.sendFlightSpeed(INS_GNSS_Packet.velocity_north * 100,
+                               INS_GNSS_Packet.velocity_east * 100,
+                               -INS_GNSS_Packet.velocity_down * 100);
+        // 0x20 手册语义 = PWM 控制量（0.01% 油门）：mix 输出级电机指令 % → ×100
+        AnoCom.sendPWMOutput((uint16_t)constrain(ch3_output * 100.0f, 0.0f, 10000.0f),
+                             (uint16_t)constrain(ch4_output * 100.0f, 0.0f, 10000.0f),
+                             0, 0, 0, 0, 0, 0);
+        AnoCom.sendTargetSpeed(target_speed_x_ano, target_speed_y_ano, target_speed_z_ano);
+      }
+
+      // ---- GPS/氧压 10Hz（数据源本身 10Hz，发高频是重复旧值）----
+      if (gps_tick)
+      {
+        const bool gnss_data_fresh = isGnssDataFreshForNav();
+        const bool gnss_valid = (ubx.fix() >= bfs::Ubx::FIX_3D) && gnss_data_fresh;
+        // GNSS 信息（DETA100 Status/Geodetic + UBX 解析值）
+        int8_t fix_type = Status_Packet.filter_status.gnss_fix_status;
+        uint8_t num_sat = 0;
+        float lon = 0, lat = 0, h_msl = 0, vn = 0, ve = 0, vd = 0, pdop = 0, vacc = 0, sacc = 0;
+        if (gnss_data_fresh)
+        {
+          num_sat = ubx.num_sv();
+          lon = ubx.lon_deg();
+          lat = ubx.lat_deg();
+          h_msl = Geodetic_Pos_Packet.height;
+          pdop = ubx.pdop();
+          sacc = ubx.spd_acc_mps();
+          vacc = Geodetic_Pos_Packet.vAcc;
+        }
+        if (gnss_valid)
+        {
+          vn = ubx.north_vel_mps();  // m/s
+          ve = ubx.east_vel_mps();   // m/s
+          vd = -ubx.down_vel_mps();  // 取反为向上为正
+        }
+        AnoCom.sendGPSInfo1(fix_type, num_sat, lon, lat, h_msl, vn, ve, vd, pdop, vacc, sacc);
+        // 氧压（发动机控制器回传，经 0x0D 电压/电流通道承载）+ 电池电压（真实 ADC 采样）
+        AnoCom.sendVoltCurr(bat_voltage_mv / 1000.0f, bat_current_ca / 10.0f,
+                            receivedP1, receivedP2, 0);
+      }
+
+      AnoCom.endGroup();   // 组缓冲一次 write
     }
-
-    // 执行器输出（0x40 帧）
-    tvc_front_ano = g_tvc_upper_deg;   // 上摆座角指令 deg（偏航主控）
-    tvc_rear_ano = g_tvc_lower_deg;     // 下摆座角指令 deg（俯仰主控）
-    mot_front_ano = ch3_output;        // 前电机输出 %
-    mot_rear_ano = ch4_output;         // 尾电机输出 %
-    dw_ano = gnc_tel.dw;               // 差速 Δω（归一化）
-    act_sat_ano = (gnc_tel.alloc_sat[0] ? 0x01 : 0) |
-                  (gnc_tel.alloc_sat[1] ? 0x02 : 0) |
-                  (gnc_tel.alloc_sat[2] ? 0x04 : 0);
-
-    // 位置 (来自全局计算的相对位置)，转换为厘米
-    pos_north_cm_ano = relative_north * 100.0f;
-    pos_east_cm_ano = relative_east * 100.0f;
-    pos_down_cm_ano = -relative_down * 100.0f; // 取反为高度
-
-    // 使用 UBX 原始计算值
-    // pos_north_cm_ano = ubx_relative_north * 100.0f;
-    // pos_east_cm_ano = ubx_relative_east * 100.0f;
-    // AnoCom 高度通常向上为正，NED Down 向下为正，所以取反
-    // pos_down_cm_ano = -ubx_relative_down * 100.0f;
-
-    // GNSS信息 (来自DETA100的Status_Packet和Geodetic_Pos_Packet)
-    gnss_fix_type_ano = Status_Packet.filter_status.gnss_fix_status;
-    // gnss_fix_type_ano = ubx.fix();
-    if (gnss_data_fresh_for_telemetry)
-    {
-      gps_num_sat_ano = ubx.num_sv();                  // 使用UBX解析出来的卫星数
-      gps_longitude_deg_ano = ubx.lon_deg();           // 度
-      gps_latitude_deg_ano = ubx.lat_deg();            // 度
-      gps_height_msl_ano = Geodetic_Pos_Packet.height; // 大地高 (米)
-      gps_pdop_ano = ubx.pdop();                       // 位置精度因子
-      gps_speed_acc_ano = ubx.spd_acc_mps();           // 速度精度 (米/秒)
-      gps_v_acc_ano = Geodetic_Pos_Packet.vAcc;        // 垂直精度 (米)
-    }
-    else
-    {
-      // GNSS串口断流后，UBX对象仍保留最后一帧缓存；地面站遥测必须清零，避免误判仍有卫导。
-      gps_num_sat_ano = 0;
-      gps_longitude_deg_ano = 0.0f;
-      gps_latitude_deg_ano = 0.0f;
-      gps_height_msl_ano = 0.0f;
-      gps_pdop_ano = 0.0f;
-      gps_speed_acc_ano = 0.0f;
-      gps_v_acc_ano = 0.0f;
-    }
-
-    // 发动机氧压数据 (来自发动机控制器回传)
-    oxygen_pressureP1_ano = receivedP1;
-    oxygen_pressureP2_ano = receivedP2;
-
-    // 电池电压/电流（0x0D 帧 bat 字段）：
-    // ★ 2026-08-10 数据归位：用 updateBatteryMonitor 的真实 ADC 采样（原占位常量
-    //   12.6/16.8 让官方上位机显示假电压）；电流无采样传感器（bat_current_ca=0）
-    bat_voltage = bat_voltage_mv / 1000.0f;
-    bat_current = bat_current_ca / 10.0f;   // ca 单位 0.1A → A；恒 0（未接入电流采样）
-    fc_voltage = oxygen_pressureP1_ano;
-    fc_current = oxygen_pressureP2_ano;
-
-    // 飞控模式与解锁状态 (供 0x06 飞控运行模式帧)
-    // 使用 GNC 的判定结果 (滤波 + 链路状态), 而非原始 RC 值, 确保与飞控实际状态一致
-    flight_mode_ano = static_cast<uint8_t>(g_current_flight_mode);
-    flight_sflag_ano = g_is_unlocked ? 1 : 0;
-
-    new_cycle_data_collection = false; // 数据采集完成，清除标志
-  }
-
-  // 根据当前组索引，发送对应的数据包
-  // 非阻塞保护：发送前检查 Serial6 TX 缓冲剩余空间，不足时跳过本帧发送。
-  // 2026-08-10 数据归位后组2 最多 5 包（TargetSpeed+FlightSpeed+PWM+RC+执行器0xF1）≈ 100B，
-  // 组3 最大单包 31 字节（GPSInfo1）；保守上限 130 字节。
-  if (Serial6.availableForWrite() < 130)
-  {
-    ano_tx_skipped++;
-    return;
-  }
-
-  // 发送组1的数据包 (IMU, Euler Angles, Target Attitude)
-  if (group_index == 0)
-  {
-    AnoCom.sendIMUData(acc_x_ano, acc_y_ano, acc_z_ano, gyr_x_ano, gyr_y_ano, gyr_z_ano, 0);
-    AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
-    AnoCom.sendTargetAttitude(target_roll_ano, target_pitch_ano, target_yaw_ano);
-  }
-  // 发送组2的数据包 (Altitude, Flight Mode, Attitude Control Output)
-  else if (group_index == 1)
-  {
-    AnoCom.sendAltitudeData(alt_bar, alt_add, alt_fu, 1); // `system_id` = 1
-    AnoCom.sendFlightMode(flight_mode_ano, flight_sflag_ano, 0, 0, 0); // 飞控模式 + 解锁状态
-    // 参数顺序必须与 AnoComProtocol::sendAttitudeControl(ctrlRol, ctrlPit, ctrlThr, ctrlYaw) 一致：
-    // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
-    AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
-  }
-  // 发送组3的数据包 (Target Speed, Flight Speed, PWM Output, RC Data, Actuator Output)
-  else if (group_index == 2)
-  {
-    AnoCom.sendTargetSpeed(target_speed_x_ano, target_speed_y_ano, target_speed_z_ano);
-    AnoCom.sendFlightSpeed(vel_north_ano * 100, vel_east_ano * 100, vel_down_ano * 100); // NED速度
-    // ★ 2026-08-10 数据归位（手册合规）：0x20 恢复手册语义 = PWM 控制量（0.01% 油门）。
-    //   ch3_output/ch4_output 为 mix 输出级电机指令 % → ×100 → 0-10000；官方上位机油门条恢复。
-    AnoCom.sendPWMOutput((uint16_t)constrain(ch3_output * 100.0f, 0.0f, 10000.0f),
-                         (uint16_t)constrain(ch4_output * 100.0f, 0.0f, 10000.0f),
-                         0, 0, 0, 0, 0, 0);
-    // ★ 2026-08-10 数据归位：0x40 恢复手册遥控器数据帧（10×int16 us，1000-2000）
-    //   —— RC 通道显示数据源（原 0x20 承载）；无遥控时 raw_rc 全 0（手册：0=无通信）
-    AnoCom.sendRCData(raw_rc_values);
-    // 执行器输出帧迁至 0xF1（手册用户自定义帧，2026-08-10 起）：前/下摆角 deg×100 int16、
-    // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
-    {
-      uint8_t act[12];
-      auto put16 = [](uint8_t *p, int32_t v) { p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF; };
-      put16(act + 0, (int16_t)(tvc_front_ano * 100.0f));
-      put16(act + 2, (int16_t)(tvc_rear_ano * 100.0f));
-      put16(act + 4, (uint16_t)constrain(mot_front_ano * 10.0f, 0.0f, 1000.0f));
-      put16(act + 6, (uint16_t)constrain(mot_rear_ano * 10.0f, 0.0f, 1000.0f));
-      put16(act + 8, (int16_t)constrain(dw_ano * 1000.0f, -32768.0f, 32767.0f));
-      act[10] = act_sat_ano;
-      act[11] = 0;
-      AnoCom.sendData(ANO_GND_STATION_ADDR, ANO_FUNC_FLEX_DATA_START, act, 12);
-    }
-  }
-  // 发送组4的数据包 (Position Offset, Voltage/Current (used for pressure), GPS Info)
-  else if (group_index == 3)
-  {
-    AnoCom.sendPosOffset(pos_north_cm_ano, pos_east_cm_ano, pos_down_cm_ano);           // 位置(cm)
-    AnoCom.sendVoltCurr(bat_voltage, bat_current, fc_voltage, fc_current, power_state); // 用电压电流通道传压力
-    AnoCom.sendGPSInfo1(gnss_fix_type_ano, gps_num_sat_ano,
-                        gps_longitude_deg_ano, gps_latitude_deg_ano, gps_height_msl_ano,
-                        gps_vel_north_ano, gps_vel_east_ano, gps_vel_down_ano, // 使用GPS的NED速度
-                        gps_pdop_ano, gps_speed_acc_ano, gps_v_acc_ano);
-  }
-
-  // 增加组计数器，准备发送下一组数据
-  group_index++;
-
-  // 如果已发送完所有4组数据，则重置组计数器，并设置标志以便在下一轮开始时重新采集数据
-  if (group_index >= 4)
-  {
-    group_index = 0;
-    new_cycle_data_collection = true;
   }
 
   // ---- 0xF2 变量值帧（AnoVars 通用变量上报）----
-  // 独立于 4 组循环：live-read watch 集合变量（最新值），自带节流（1-200Hz）
+  // 独立于双环发送：live-read watch 集合变量（最新值），自带节流（1-200Hz）
   // 与 availableForWrite 保护——不连带影响组2 发送（组2 已有 5 帧 ≈100B）。
   // watch 为空时零开销返回。50Hz 默认下 16 变量轮转 = 每变量 ~3Hz。
   if (Serial6.availableForWrite() >= 16) // 0xF2 帧 = 8 开销 + 6 DATA + 余量

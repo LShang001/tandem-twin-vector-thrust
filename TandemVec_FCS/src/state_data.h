@@ -270,9 +270,10 @@ extern const int SPI_CS;
 // PB9(pin96):  I2C1_SDA复用, TIM4_CH4
 
 // --- 2.6b 串口波特率配置（★ 唯一权威源，文档引用此处而非具体数值）---
-// Serial6 波特率随数传模块型号调整（2026-08-07 对齐 2.4G 数传为 2M；
+// Serial6 波特率随数传模块型号调整（2026-08-10 COMM-001：2M→921600——2M 在
+// DAP-Link VCP 丢帧 ~15%，921600 位时间翻倍显著降丢帧；带宽余量仍 87%；
 // 换数传模块时只改这里，main.cpp 用此宏，文档无需同步）
-#define SERIAL6_BAUDRATE 2000000UL   // USART6: AnoCom/MAVLink 地面站通信
+#define SERIAL6_BAUDRATE 921600UL   // USART6: AnoCom/MAVLink 地面站通信
 
 // --- 2.7 PWM 与 定时器配置 ---
 #define CUSTOM_PWM_FREQUENCY 333 // PWM频率 (Hz)

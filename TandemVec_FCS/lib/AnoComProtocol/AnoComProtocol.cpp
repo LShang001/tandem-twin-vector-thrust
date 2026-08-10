@@ -11,6 +11,8 @@ AnoComProtocol::AnoComProtocol(Stream *serial)
     _serial = serial;
     _rxIndex = 0;
     _dataReceived = false;
+    _groupLen = 0;
+    _groupActive = false;
 
     // 初始化灵活格式帧数据数量
     for (int i = 0; i < 10; i++)
@@ -36,25 +38,81 @@ void AnoComProtocol::begin(long baudRate)
  */
 void AnoComProtocol::sendData(uint8_t destAddr, uint8_t funcCode, uint8_t *data, uint16_t len)
 {
-    // 创建一个缓冲区，用于组装完整的数据帧
-    uint8_t txBuffer[ANO_MAX_DATA_LEN + 8];
+    if (_groupActive)
+    {
+        // 组模式：拼入组缓冲，endGroup() 时一次 write
+        if (_groupLen + len + 8 > sizeof(_groupBuf))
+        {
+            // 组缓冲满：先 flush 已有帧再入组（防御，正常组远小于 256B）
+            _serial->write(_groupBuf, _groupLen);
+            _groupLen = 0;
+        }
+        _groupLen += buildFrame(_groupBuf, _groupLen, destAddr, funcCode, data, len);
+    }
+    else
+    {
+        uint8_t txBuffer[ANO_MAX_DATA_LEN + 8];
+        uint16_t flen = buildFrame(txBuffer, 0, destAddr, funcCode, data, len);
+        _serial->write(txBuffer, flen);
+    }
+}
 
-    // 组装数据帧的固定部分
-    txBuffer[0] = ANO_FRAME_HEAD; // 帧头，标识数据帧的开始
-    txBuffer[1] = ANO_LOCAL_ADDR; // 源地址，发送设备的地址
-    txBuffer[2] = destAddr;       // 目标地址，接收设备的地址
-    txBuffer[3] = funcCode;       // 功能码，表示数据帧的功能或用途
-    // 数据长度，分为低字节和高字节
-    txBuffer[4] = len & 0xFF;        // 低字节
-    txBuffer[5] = (len >> 8) & 0xFF; // 高字节
-    // 数据部分，从缓冲区的第6个字节开始，复制len长度的数据
-    memcpy(&txBuffer[6], data, len);
-    // 校验和，确保数据的完整性
-    txBuffer[6 + len] = calculateSumCheck(txBuffer, len + 6); // 校验和1
-    txBuffer[7 + len] = calculateAddCheck(txBuffer, len + 6); // 校验和2
+// ★ 2026-08-10 组帧模式（COMM-001 A3）：begin/end 配对使用，
+//   组内多帧合并单次 write（通信侧 5 帧 → 1 次写，写竞争窗口缩小）。
+void AnoComProtocol::beginGroup()
+{
+    _groupLen = 0;
+    _groupActive = true;
+}
 
-    // 通过串口发送组装好的数据帧
-    _serial->write(txBuffer, len + 8);
+void AnoComProtocol::endGroup()
+{
+    if (_groupLen > 0)
+    {
+        _serial->write(_groupBuf, _groupLen);
+        _groupLen = 0;
+    }
+    _groupActive = false;
+}
+
+// ★ 2026-08-10 组帧（COMM-001 A2/A3）：与 sendData 同组装逻辑（含长度保护/校验算法），
+//   但不写串口——调用方拼多帧进同一缓冲后单次 write。
+//   校验单循环边拷边算（COMM-001 A2）：sum/add 同步累加，替代两遍独立遍历。
+uint16_t AnoComProtocol::buildFrame(uint8_t *buf, uint16_t off, uint8_t destAddr,
+                                    uint8_t funcCode, const uint8_t *data, uint16_t len)
+{
+    // ★ 长度保护（COMM-001 A1）：超 ANO_MAX_DATA_LEN 截断，防栈缓冲/外部缓冲越界写
+    if (len > ANO_MAX_DATA_LEN)
+    {
+        len = ANO_MAX_DATA_LEN;
+    }
+
+    buf[off + 0] = ANO_FRAME_HEAD;
+    buf[off + 1] = ANO_LOCAL_ADDR;
+    buf[off + 2] = destAddr;
+    buf[off + 3] = funcCode;
+    buf[off + 4] = len & 0xFF;
+    buf[off + 5] = (len >> 8) & 0xFF;
+
+    // 校验单循环：头 6 字节 + 数据区边拷边算（sum=和校验, add=附加校验，与
+    // calculateSumCheck/calculateAddCheck 两遍遍历结果逐字节一致）
+    uint8_t sum = 0, add = 0;
+    for (uint16_t i = 0; i < 6; i++)
+    {
+        sum += buf[off + i];
+        add += sum;
+    }
+    for (uint16_t i = 0; i < len; i++)
+    {
+        uint8_t b = data[i];
+        buf[off + 6 + i] = b;
+        sum += b;
+        add += sum;
+    }
+    buf[off + 6 + len] = sum;
+    buf[off + 7 + len] = add;
+
+    return len + 8;
 }
 
 void AnoComProtocol::receiveData()

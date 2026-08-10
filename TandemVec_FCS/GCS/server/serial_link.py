@@ -29,11 +29,12 @@ def list_ports():
 
 class SerialLink:
     """pyserial 连接；读线程把字节流回调给 on_data（线程安全：回调内勿阻塞）
-    ★ read_size 取小（1024）：AnoCom 200Hz×12 帧 ≈2400 帧/s，chunk 越小
-      解码耗时越短，消费吞吐须远超产生速率——否则参数响应帧在队列中
-      排队超时 → 客户端重发风暴 → 固件 RX 缓冲溢出（实测 2M 下根因）"""
+    ★ read_size 取小（256）：AnoCom 快环 100Hz + 慢环 ≈210 帧/s，chunk 越小
+      解码耗时越短 + 攒批延迟越低（921600 下 256B ≈ 28ms 流量，1024B 要攒
+      111ms 才回调一次——COMM-001 C 层）；消费吞吐须远超产生速率——否则
+      参数响应帧在队列中排队超时 → 客户端重发风暴 → 固件 RX 缓冲溢出"""
 
-    def __init__(self, port, baud, on_data, read_size=1024):
+    def __init__(self, port, baud, on_data, read_size=256):
         self.port = port
         self.baud = baud
         self.on_data = on_data
@@ -101,7 +102,7 @@ class SerialLink:
 class FakeSerialLink:
     """测试用串口：可预置回放字节流 + 捕获写入字节"""
 
-    def __init__(self, port='FAKE', baud=2000000, on_data=None, replay=None):
+    def __init__(self, port='FAKE', baud=921600, on_data=None, replay=None):
         self.port = port
         self.baud = baud
         self.on_data = on_data

@@ -41,7 +41,7 @@ import blackbox as bb
 import params as pm
 from datalog import CsvRecorder
 
-DEFAULT_BAUD = 2000000
+DEFAULT_BAUD = 921600   # ★ 2026-08-10 COMM-001：2M→921600（VCP 丢帧 ~15% 显著下降，带宽余量仍 87%）
 
 
 # ========================================================================

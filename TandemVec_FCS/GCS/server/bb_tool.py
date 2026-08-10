@@ -91,7 +91,7 @@ class BbTool:
                     connected = _field(msg, 'status') == 'connected'
                     break
             if not connected:
-                await ws.send('{"cmd":"connect","port":"COM10","baud":2000000}')
+                await ws.send('{"cmd":"connect","port":"COM10","baud":921600}')
                 await asyncio.sleep(3)
             await ws.send('{"cmd":"dbg_enter"}')
             await asyncio.sleep(1)

@@ -48,8 +48,8 @@ WEB_DIR = ROOT / 'web'
 OUTPUT_DIR = ROOT / 'output'
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-DEFAULT_BAUD = 2000000      # = 固件 SERIAL6_BAUDRATE
-TELEMETRY_PERIOD = 0.05     # 遥测推送节流 20Hz
+DEFAULT_BAUD = 921600      # = 固件 SERIAL6_BAUDRATE（★ 2026-08-10 COMM-001：2M→921600）
+TELEMETRY_PERIOD = 0.02    # 遥测推送节流 50Hz（★ COMM-001：20Hz→50Hz 跟上快环 100Hz）
 PARAM_WRITE_TIMEOUT = 2.0   # 参数写入校验帧超时
 TELE_BUF_CAP = 8192         # 无完整帧时遥测缓冲上限（防乱码流 O(n²) 膨胀卡死）
 STAT_PERIOD = 1.0           # 链路统计推送周期

@@ -131,6 +131,19 @@ public:
     // 发送数据帧
     void sendData(uint8_t destAddr, uint8_t funcCode, uint8_t *data, uint16_t len);
 
+    // ★ 2026-08-10 组帧模式（COMM-001 A3）：beginGroup() 后所有 sendXxx 帧
+    //   拼入内部缓冲不写串口，endGroup() 一次 write——组内多帧合并单次写，
+    //   减少 write 调用/写竞争窗口。组缓冲满时自动先 flush 再入组（防御）。
+    //   用法：beginGroup() → sendXxx()×N → endGroup()。
+    void beginGroup();
+    void endGroup();
+
+    // ★ 2026-08-10 组帧（COMM-001 A2/A3）：把一帧组装进外部缓冲并返回帧长
+    //   （含 8B 开销），不写串口。len 超过 ANO_MAX_DATA_LEN 时截断。
+    //   校验算法与 sendData 逐字节一致（单循环边拷边算）。
+    uint16_t buildFrame(uint8_t *buf, uint16_t off, uint8_t destAddr, uint8_t funcCode,
+                        const uint8_t *data, uint16_t len);
+
     // 接收数据帧
     void receiveData();
 
@@ -360,6 +373,10 @@ private:
     Stream *_serial;                         // 串口对象
     uint8_t _rxBuffer[ANO_MAX_DATA_LEN + 8]; // 接收缓冲区
     uint8_t _rxIndex;                        // 接收缓冲区索引
+    // ★ 2026-08-10 组帧模式（COMM-001 A3）：组缓冲 + 状态（beginGroup/endGroup 管理）
+    uint8_t _groupBuf[256];                  // 组缓冲（快环 ~72B / 慢环 ~114B，256 足够）
+    uint16_t _groupLen;                      // 组缓冲已用字节
+    bool _groupActive;                       // 组模式激活标志
     bool _dataReceived;                      // 数据接收标志
 
 public:
