@@ -435,7 +435,14 @@ def _on_param_check(f: anocom.Frame):
     if len(p) < 3:
         return
     id_get, sc_get, ac_get = p[0], p[1], p[2]
+    now = time.time()
+    # ★ 2026-08-10 全面审查修复：校验帧丢失（2M 丢帧/固件 DBG）时条目永不清理——
+    #   顺带清理超时条目（PARAM_WRITE_TIMEOUT 此前定义但从未使用）
     for pid, (exp_sc, exp_ac, t0) in list(g.param_pending.items()):
+        if now - t0 > PARAM_WRITE_TIMEOUT:
+            g.param_pending.pop(pid, None)
+            g.send_all({'type': 'param_written', 'id': pid, 'ok': False})
+            continue
         if id_get == anocom.FUNC_PARAM_WRITE_READ and exp_sc == sc_get and exp_ac == ac_get:
             g.param_pending.pop(pid, None)
             g.send_all({'type': 'param_written', 'id': pid, 'ok': True})
@@ -612,6 +619,10 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         if g.replay_task:
             g.replay_task.cancel()
             g.replay_task = None
+        # ★ 2026-08-10 全面审查修复：关闭文件句柄（原实现置 None 不 close，
+        #   反复开始/停止回放泄漏句柄，Windows 下记录文件被占用无法覆盖）
+        if g.replay:
+            g.replay.close()
         g.replay = None
         await ws.send_json({'type': 'replay_state', 'on': False})
 
@@ -736,7 +747,10 @@ async def _param_read_all(ws: WebSocket):
     g.param_names = {}
     g.param_values = {}
     failed = []
-    for pid in range(117):
+    # ★ 2026-08-10 全面审查修复：硬编码 117 → 动态（固件实际 121，
+    #   0xE0 CMD 0x01 已应答过则用之，否则回退 121）
+    total = g.param_count_seen or 121
+    for pid in range(total):
         if not await _param_read_single_async(pid):
             failed.append(pid)
     # 补拉循环
@@ -745,7 +759,7 @@ async def _param_read_all(ws: WebSocket):
             break
         failed = [pid for pid in failed if not await _param_read_single_async(pid)]
     await ws.send_json({'type': 'log',
-                        'msg': f'参数读取完成：{117 - len(failed)}/117' +
+                        'msg': f'参数读取完成：{total - len(failed)}/{total}' +
                                (f'（失败 {failed}）' if failed else '')})
 
 

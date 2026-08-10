@@ -63,12 +63,19 @@ export function activate() {
 
 function onPage(e) {
   pageVisible = (e.detail === 'view3d');
-  if (pageVisible) syncPose();
+  if (pageVisible) {
+    syncPose();
+    // ★ 2026-08-10 全面审查修复：切回 3D 页时重调 resize（隐藏期间 resize 被跳过）
+    onResize();
+  }
 }
 
 function onResize() {
   const c = document.getElementById('v3dContainer');
   if (!c || !renderer) return;
+  // ★ 2026-08-10 全面审查修复：页面隐藏（display:none）时 clientWidth/Height 为 0，
+  //   aspect=NaN、canvas 变 0×0——切回 3D 页永久空白。0 尺寸跳过 + 页面激活时重调。
+  if (c.clientWidth === 0 || c.clientHeight === 0) return;
   camera.aspect = c.clientWidth / c.clientHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(c.clientWidth, c.clientHeight);

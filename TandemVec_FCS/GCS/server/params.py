@@ -146,10 +146,18 @@ def expected_names():
         for field, _ in FIELD_META.items():
             wire = FIELD_META[field].get('wire_name', field)
             names.append(f'{loop}.{wire}')
+    # ★ 固件注册表尾部顺序（ano_params.cpp:99-103）：前 3 组滤波(108-116) →
+    #   inertia_comp_mask(117) → spd2_alpha[0..2](118-120)。2026-08-10 全面
+    #   审查修复：原实现把 spd2_alpha 排 117-119、mask 排 120——名字→ID 映射
+    #   错位，`param set inertia_comp_mask 1` 会静默写进 spd2_alpha[2]（高危）
     for arr, _, _ in FILTER_GROUPS:
+        if arr == 'speed_filter_alpha2':
+            continue  # spd2_alpha 在 mask 之后（固件注册表顺序）
         wire = FILTER_WIRE.get(arr, arr)
         for i in range(3):
             names.append(f'{wire}[{i}]')
-    # ★ 2026-08-10 标量控制架构参数（固件 ano_params.cpp 注册表尾部同序）
     names.append('inertia_comp_mask')
+    wire2 = FILTER_WIRE.get('speed_filter_alpha2', 'speed_filter_alpha2')
+    for i in range(3):
+        names.append(f'{wire2}[{i}]')
     return names

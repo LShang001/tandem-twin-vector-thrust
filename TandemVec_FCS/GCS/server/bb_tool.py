@@ -136,6 +136,11 @@ class BbTool:
             step = done.get('sample_step', 1)
             print(f'完成: {row_count} 行 (抽样 step={step}, 预览 {len(rows)} 行), '
                   f'{len(columns)} 通道')
+            # ★ 2026-08-10 全面审查修复：明确警告 CSV 是抽样预览（长段丢 15/16 数据，
+            #   超调/频谱分析精度大幅下降）——全量分析请用黑匣子分段参数或减段时长
+            if step > 1:
+                print(f'⚠ CSV 仅含抽样预览（step={step}，实际 {row_count} 行 → 写出 '
+                      f'{len(rows)} 行）——定量分析（超调/频谱）精度受限，建议分段导出')
 
             out = args.out or (OUTPUT_DIR / f'blackbox_seg{seg["num"]}.csv')
             out.parent.mkdir(exist_ok=True)

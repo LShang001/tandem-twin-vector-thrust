@@ -208,6 +208,7 @@ class DbgSession:
         self._export_buf = bytearray()
         self._export_total = 0        # 期望总页数
         self._export_done = None      # 回调 on_export(bytes)
+        self._header_line = bytearray()  # ★ 2026-08-10 G5 修复：export start 行跨块残片缓冲
 
     # ---- 模式切换 ----
     def enter(self):
@@ -224,6 +225,7 @@ class DbgSession:
         self._export_state = 'idle'
         self._export_buf = bytearray()
         self._export_done = None
+        self._header_line = bytearray()   # ★ 2026-08-10 G5 修复：export start 行跨块残片缓冲
 
     def send_cmd(self, line: str):
         self._write((line + '\n').encode('ascii', errors='ignore'))
@@ -246,19 +248,27 @@ class DbgSession:
             # 等待 "[DBG] export start=.. count=..\n" 行尾——必须精确匹配该行，
             # 否则 findseg 等前一命令的迟到文本行（也含 \n）会被误当行尾，
             # 导致页数据起点错位、收集长度永远对不齐而超时
+            # ★ 2026-08-10 G5 修复：跨块半行缓存——原实现行首残片直接丢弃，
+            #   export start 行被块边界切开时整行丢失 → 导出间歇失败误判丢包
+            self._header_line += chunk
             idx = 0
             pos = -1
             while True:
-                nl = chunk.find(b'\n', idx)
+                nl = self._header_line.find(b'\n', idx)
                 if nl < 0:
                     break
-                if b'export start=' in chunk[idx:nl]:
+                if b'export start=' in self._header_line[idx:nl]:
                     pos = nl
                     break
                 idx = nl + 1
             if pos < 0:
+                # 只保留最后一个未完成行（防残片无限增长）
+                last_nl = self._header_line.rfind(b'\n')
+                if last_nl >= 0:
+                    self._header_line = self._header_line[last_nl + 1:]
                 return
-            rest = chunk[pos + 1:]
+            rest = self._header_line[pos + 1:]
+            self._header_line = bytearray()
             self._export_state = 'collecting'
             if rest:
                 self.feed(rest)

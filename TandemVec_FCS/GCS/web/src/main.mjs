@@ -96,7 +96,22 @@ function handleMsg(msg) {
       emit('flash-progress', msg);
       break;
     case 'param_count':
+      state.paramCount = msg.count;
+      emit('param_count', msg);
+      break;
+    case 'param_info':
+      // ★ 2026-08-10 全面审查修复：param_info/param_value 必须落 state
+      //   （原实现只 emit——params.mjs 唯一数据源 state.paramValues 永空，
+      //   参数页死锁为空）
+      if (msg.name !== undefined) (state.paramMeta[msg.id] ??= {}).name = msg.name;
+      if (msg.type !== undefined) (state.paramMeta[msg.id] ??= {}).type = msg.type;
+      emit('param_info', msg);
+      break;
     case 'param_value':
+      state.paramValues[msg.id] = msg.value;
+      if (msg.name !== undefined) (state.paramMeta[msg.id] ??= {}).name = msg.name;
+      emit('param_value', msg);
+      break;
     case 'param_written':
     case 'param_written_pending':
       emit(msg.type, msg);

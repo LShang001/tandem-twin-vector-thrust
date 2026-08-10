@@ -18,7 +18,10 @@ def test_param_count_matches_firmware():
     assert len(set(names)) == 121
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
-    assert names[-1] == 'inertia_comp_mask'
+    # ★ 2026-08-10 全面审查修复：尾部顺序对齐固件注册表
+    #   （inertia_comp_mask@117 → spd2_alpha[0..2]@118-120）
+    assert names[-1] == 'spd2_alpha[2]'
+    assert names[117] == 'inertia_comp_mask'
     assert 'att_roll.falpha' in names
     assert all(len(n) <= 20 for n in names), [n for n in names if len(n) > 20]
 

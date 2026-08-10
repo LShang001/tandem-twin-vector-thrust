@@ -56,6 +56,11 @@ def drain(duration=0.5):
             continue
         if kind == 'rx':
             m._on_telemetry_rx(payload)
+        elif kind == 'link_down':
+            # ★ 2026-08-10 全面审查修复：CLI 断线感知（原实现静默丢弃，
+            #   拔线后命令只能空等超时且串口句柄残留到进程退出）
+            print('\n✗ 串口连接已断开（link_down）')
+            return
 
 
 def require_connected():
@@ -524,6 +529,9 @@ def cmd_dbg(a):
         m.g.dbg_cmd(a.cmdline)
         for ln in _dbg_collect(1.5):
             print(ln)
+        # ★ 2026-08-10 全面审查修复：命令执行完自动退出 DBG（原实现固件留调试模式，
+        #   遥测停发直到下次连接）——cmdline=on 分支保留在 DBG（用户显式要求）
+        _dbg_mode(False)
 
 
 def cmd_flash(a):
@@ -537,12 +545,15 @@ def cmd_flash(a):
         m.g.dbg_cmd('flash stat')
         for ln in _dbg_collect(1.5):
             print(ln)
+        _dbg_mode(False)
     elif a.action == 'findseg':
         m.g.dbg_cmd('flash findseg')
         for ln in _dbg_collect(1.5):
             print(ln)
+        _dbg_mode(False)
     elif a.action == 'export':
         _flash_export(a)
+        _dbg_mode(False)
 
 
 def _flash_export(a):

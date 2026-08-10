@@ -44,7 +44,7 @@ export function drawAttitude(cv, rollDeg, pitchDeg, headingDeg) {
   // 天地
   ctx.fillStyle = '#123a5e';
   ctx.beginPath();
-  ctx.rect(-w, -h, 2 * w, dy);
+  ctx.rect(-w, -h, 2 * w, dy + h);   // ★ 2026-08-10 全面审查修复：原高度缺 +h，天空色永不显示
   ctx.fill();
   ctx.fillStyle = '#3d2f1f';
   ctx.beginPath();
