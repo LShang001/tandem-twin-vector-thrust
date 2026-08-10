@@ -98,12 +98,17 @@ const float POS_CTRL_MAX_TILT_ANGLE_RAD = 15.0f * DEG_TO_RAD;
 //  来源: 位置环最大倾角 15°。sin(15)=0.26, 水平加速 a_max=0.26×g≈2.5m/s²。
 const float POS_CTRL_MAX_THRUST_COMP = sinf(POS_CTRL_MAX_TILT_ANGLE_RAD);
 
-// ★ 2026-08-07 三轴均对齐存档实飞验证值 80°/s（原 50/50/35）：
-//  yaw 原为 35 是“差速时延+低效能”的保守取值，但实测打杆无反应；
-//  存档实飞用 80°/s（tools/verify_yaw_vs_archive.py 对比）。
-const float MAX_MANUAL_rollRATE  = 80.0f;  // = MAX_TARGET_RATE
-const float MAX_MANUAL_pitchRATE = 80.0f;
-const float MAX_MANUAL_yawRATE   = 80.0f;  // 对齐存档（原 35 过保守）
+// ★ 2026-08-11 FPV 摇杆曲线接入后重定：RATE_MODE 手动打杆限幅 80 → 600°/s。
+//   原 80 复用姿态外环 kMaxTargetRate（存档实飞验证值），但 RATE_MODE 是纯手动
+//   角速度通道，不应受姿态环限幅约束——80°/s 会让 FPV 曲线在 ~半杆就被削平
+//   （默认曲线半杆 97°/s 已超限），满杆暴力手感出不来。
+//   600 = 默认参数满杆理论值 533°/s（rc_rate 0.8×200/(1−0.7)）之上留 12% 余量，
+//   曲线完整呈现；rc_rate 上调到 1.0 时理论 667°/s 触限——限幅仍是安全网
+//   （super 双曲 + rc_rate 调高时指令会爆炸，不可完全禁用）。
+//   ⚠️ 行为变化：满杆角速度 = 存档实飞 80°/s 的 7.5 倍，实机先从低杆量逐步体验。
+const float MAX_MANUAL_rollRATE  = 600.0f;
+const float MAX_MANUAL_pitchRATE = 600.0f;
+const float MAX_MANUAL_yawRATE   = 600.0f;
 
 // --- 3.3 位置与速度控制限制 ---
 // ★ 2026-08-08 C路径重构：值取自 include/FlightCtrlParams.h 别名（唯一事实源）。

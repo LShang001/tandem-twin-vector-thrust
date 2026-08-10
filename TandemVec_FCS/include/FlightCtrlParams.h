@@ -111,7 +111,7 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* inertia_comp_mask      */ 0x03,   // ★2026-08-10 前馈全开（陀螺耦合+转子陀螺）
     // ---- FPV 摇杆曲线（★2026-08-11 RATE_MODE 接入）----
     //   默认：rc_rate=0.8（★2026-08-11 用户指定——满杆基准 160°/s；×super 后
-    //   roll/pitch 理论 533°/s 但被 MAX_MANUAL_rollRATE=450 限幅、yaw 356°/s）；
+    //   roll/pitch 理论 533°/s、yaw 356°/s，均不触 MAX_MANUAL_*RATE=600 限幅）；
     //   expo 全轴 0.2；super roll/pitch 0.7、yaw 0.55。实机手感调整走 0xE1 在线写
     /* rc_rate               */ 0.8f,
     /* rc_expo[3]            */ { 0.2f, 0.2f, 0.2f },
