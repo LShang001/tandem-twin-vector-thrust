@@ -127,10 +127,13 @@ $M_z=aT_f\sin\delta_f$ 在巡航系即偏航力矩、悬停系即侧倾力矩—
 第\ref{sec:control}节设计级联式增稳控制律框架，给出各通道SAS律的整定原则；
 第\ref{sec:discussion}节系统讨论构型的优势、已知局限、设计权衡及扩展方向。
 
-在上述基础理论主线之外，第\ref{sec:INDI}、\ref{sec:quat_control}、\ref{sec:lqr}节分别给出INDI、
-误差四元数与LQR三种进阶控制律方案，第\ref{sec:cascade_chapter}节在综合三者局限的基础上提出
-级联姿态-角速度控制架构，第\ref{sec:simulation}、\ref{sec:vtol}节给出数值仿真与
-Tail-sitter VTOL模式的专门分析。这些章节在文档编排上位于第\ref{sec:control}节之后、
-第\ref{sec:discussion}节之前，章节序号保留为第10--15章——这是为保证已发表的交叉引用
-（如"见CTL-001 §3"、"第\ref{sec:INDI}节"）在文档扩展过程中保持稳定而采取的编号冻结策略，
-阅读时可将其视为紧随第\ref{sec:control}节的深化内容，再统一回到第\ref{sec:discussion}节的讨论。
+在基础主线之上，本文以\textbf{主算法优先}的叙事组织控制部分：
+第\ref{sec:quat_control}节建立误差四元数姿态表示（主算法外环的理论基础），
+第\ref{sec:vtol}节给出 Tail-sitter 悬停应用场景，
+第\ref{sec:cascade_chapter}节提出\textbf{级联姿态-角速度控制架构}——
+本文的\textbf{主算法}（NDI 式：模型逆 + 前馈对消 + 在线效能矩阵分配，已实机上线），
+第\ref{sec:simulation}节对主算法进行数值仿真验证；
+其后第\ref{sec:INDI}、\ref{sec:lqr}节及自抗扰（第\ref{sec:online_id}章相关）、
+模型预测控制（第\ref{sec:mpc}章）为\textbf{扩展/对比方案}，
+以主算法为基准讨论其增强潜力与适用边界，最后回到第\ref{sec:discussion}节的讨论与
+第\ref{sec:conclusion}节的结论。

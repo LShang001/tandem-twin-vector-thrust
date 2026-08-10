@@ -202,7 +202,7 @@ M_x = −Q_f + Q_t
 
 ## 8 VTOL 悬停控制模式（机头朝天，无翼）
 
-> 对应源码：`control.mjs:applyVtolHover`、`state.mjs:Q_HOVER/resetVtolHoverState/hoverThrottle`；固件同构实现见 `TandemVec_FCS/src/flight_control.cpp`（`q_hover ⊗ Rx(-Heading)` 悬停链）。UI 按钮「悬停模式」切换 `S.vtolMode`。
+> 对应源码：`control.mjs:applyVtolHover`、`state.mjs:Q_HOVER/resetVtolHoverState/hoverThrottle`。UI 按钮「悬停模式」切换 `S.vtolMode`。固件侧实现为**统一四元数姿态控制链**（无独立"悬停链"），与本节的对应关系见 §8.6 固件实现对照。
 
 ### 8.1 构型与初始化
 
@@ -238,11 +238,11 @@ M_x = −Q_f + Q_t
 | qe.x > 0（绕 x_b 超转=航向偏移） | dwAct > 0 | Δω>0 → Mx=−2·kQ·ω0²·Δω < 0 → ṗ<0 | ✓ |
 | qe.z > 0（绕 z_b 超转=侧倾） | dfAct < 0 | δf<0 → Mz=a·Tf·sinδf < 0 → ṙ<0 | ✓ |
 
-闭环收敛、指令追踪与无自稳对比见 `vtol.test.mjs`（13 用例）。
+闭环收敛、指令追踪与无自稳对比见 `vtol.test.mjs`（31 用例，含定高、B_true 子组；2026-08-11 实测 91 项全绿）。
 
 ### 8.4 自动定高（高度保持，可选）
 
-> 对应源码：`control.mjs:applyVtolHover` 末尾高度环；UI「定高」按钮 + 参考高度滑块（仅悬停模式显示）。固件对应链：`altitudePositionPController`（高度→目标垂直速度，±1.0 m/s）+ `altitudeVelocityPIDController`（垂直速度→油门）。
+> 对应源码：`control.mjs:applyVtolHover` 末尾高度环；UI「定高」按钮 + 参考高度滑块（仅悬停模式显示）。固件对应链：`altitudePositionPController`（高度→目标垂直速度，限幅 ±`MAX_TARGET_ALTITUDE_RATE`=1.0 m/s）+ `altitudeVelocityPIDController`（垂直速度→垂直加速度指令，再经推力合成输出油门，含 R33 倾角补偿与 MAX_THRUST 限幅）。
 
 **串级结构**（高度外环 P+I → 目标垂直速度 → 油门内环 P）：
 
@@ -282,6 +282,39 @@ M_cur = M推进(u_cur)                           （当前执行器位置的推�
 - 仅悬停自稳模式生效（sasMode≠0）；直通模式不介入；与定高/航向角速度指令可组合
 - 数值验证：B⁻¹·B = I、Δu 小增量精确复现目标力矩（一阶线性区内）、扰动恢复与对角模式同量级不劣化（`vtol.test.mjs` 5 用例）
 
+### 8.6 固件实现对照（TandemVec_FCS，2026-08-10 实机链）
+
+> 本节对照 `TandemVec_FCS/src/flight_control.cpp`（约 1610 行）现行实现，供仿真↔固件互译。固件无独立"悬停链"——所有姿态模式共用同一四元数控制链，悬停只是目标姿态不同（机头朝天）。
+
+**控制链**（`runGNCExecutive` 调度，200 Hz）：
+
+```
+q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w<0 取反，同 §8.2 约定）
+→ 外环 rollAnglePID/pitchAnglePID       （角→角速率；kp=2.8（deg 域），输出限幅 ±MAX_TARGET_RATE=80°/s）
+→ 内环 rollRatePID/pitchRatePID         （角速率→角加速度 alpha_roll/alpha_pitch；kp=0.28，derivative-on-measurement）
+→ 惯量逆解前馈 M_ff = I·α_ref + ω×(I·ω) + ω×h_rotor   （InertiaDecoupling.h；inertia_comp_mask=0x03 全开，
+                                                         位0=陀螺耦合、位1=转子陀螺；0xE1 可在线关闭）
+→ BTRUE 在线分配（TandemVec_ControlAllocation.h）      （工作点 w0_eff=√(0.5·(wf_est²+wt_est²))，
+                                                        下限 0.6·w_hover；分配器与力矩同用观测转速）
+→ mix 层轴置换 + 输出（L1310-1312）：Mx′=−Ix·α_yaw / My′=+Iy·α_pitch / Mz′=−Iz·α_roll
+  执行器：下摆 δ_t（pitch）、上摆 δ_f（roll）、差速 allocateDifferential(w0, Δω)（yaw）
+```
+
+**与仿真律的关键差异**（同构但非逐位等价）：
+
+| 环节 | 仿真（本节 §8） | 固件 |
+|---|---|---|
+| 姿态外环 | 纯比例 `ωdes=−2·vtolAttKp·qe.xyz`（vtolAttKp=2.5） | PID（att kp=2.8 deg 域、Ki=0、积分限幅 40°/s、输出限幅 ±80°/s） |
+| 角速率内环 | rateKq/rateKr/rateKp（1.2/1.2/1.5） | rate kp=0.28/0.28/0.20 + ki=0.1，限幅 100°/s²，阈值 60 |
+| 差速增益调度 | 无（概念级） | `(w0_eff/w_hover)²` 封顶 1.0，仅乘 Mx 通道（2026-08-07~09 三层修复：1/w0² 指令爆炸→封顶 1.0→τm 观测器） |
+| 转速信号 | 电机模型真值 S.wf/S.wt | **τm 一阶观测器** `g_wf_est += (wf−g_wf_est)·(0.005/τm)`（GNC 200Hz 步长），B 矩阵/调度/当前状态全部用观测值 |
+| yaw 航向 | 无航向锁（ψ̇ 指令松手停转） | ratchet hold：解锁上升沿锁航向；摇杆偏离 40 μs 死区→恒角速度；回中→att_yaw.kp×短弧误差→限幅 ±24°/s |
+| FPV 曲线 | 无（滑块线性） | RATE_MODE 走 Betaflight 三参数曲线 rcRateCurve（rc_rate=0.5/expo=0.25/super 0.7·0.7·0.55，满杆 roll/pitch 333°/s、yaw 222°/s，上限 600°/s） |
+
+**模式与门控**（state_data.h + flight_control.cpp）：CH7 模式开关（<1300 MANUAL / 1300-1650 AUTO_ALTITUDE / >1650 AUTO_POSITION/GUIDED，GUIDED 超时 500 ms 强制 MANUAL）；姿态子模式 CH9 切换 ATTITUDE_MODE/RATE_MODE；手动 TVC 旁路 `is_manual_tvc = isLinkUp && CH8>1750`（**isLinkUp 门控兜底**——上电无信号时 raw_rc 全 0 曾致开关误判、舵机钳满偏，见 AGENTS.md 踩坑记录）。姿态控制器门控 `is_attitude_control_active = is_unlocked && !is_manual_tvc`；锁定态摆角直通 + 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。
+
+**摆角限幅**：固件 dMax=±15°（`TandemVec_Config.h` 0.2618 rad + `state_data.cpp` MAX_CORRECTION=15），仿真 `P.dMax`=±25° 未回写——悬停模式摆角基准为 0 不受配平偏置影响，但巡航配平（dtTrim=−18.702°）超出固件限幅，见 MOD-003 §3.2 与假设日志 ASM-017。
+
 ---
 
 ## 9 测试覆盖指针
@@ -306,6 +339,6 @@ M_cur = M推进(u_cur)                           （当前执行器位置的推�
 
 ## 10 成熟度声明
 
-- 当前 SAS 为**概念级**直接反馈增稳律，增益为手工整定，未经过系统辨识或飞行验证；
+- 当前 SAS 为**概念级**直接反馈增稳律，增益为手工整定，未经过系统辨识或飞行验证（固件侧已于 2026-08 实机首飞验证并进入逐轮调参阶段，控制参数唯一事实源为 `TandemVec_FCS/include/FlightCtrlParams.h`，见 §8.6）；
 - 所列工况下仿真响应有界（见 [MOD-001](../04-数学建模/MOD-001-六自由度仿真模型规范.md) §7.3），不表示全包线稳定；
 - 限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。

@@ -80,49 +80,59 @@
 \clearpage
 \input{ch/07-control.tex}
 
-% ====== 第10章：基于INDI的控制律升级方案 ======
-% ★ 2026-08-11 编号修复：输入顺序 1-7 → 10-17 → 8 → 9（进阶章节编号冻结，
-%   讨论/结论收尾），用 \setcounter 使 PDF 编号与逻辑编号一致
-\clearpage
-\setcounter{section}{9}
-\input{ch/10-INDI-control.tex}
+% ★ 2026-08-11 全面重构：主算法优先叙事（1-7 基础 → 8-9 外环理论/VTOL 应用 →
+%   → 10 主算法级联 → 11 验证 → 12-15 扩展方案对比 → 16-17 收尾）。
+%   输入顺序 ch01-07 → ch12 → ch13 → ch15 → ch11 → ch10 → ch14 → ch16 → ch17
+%   → ch08 → ch09；每章前 \setcounter 使 PDF 编号 = 逻辑编号。
 
-% ====== 第11章：数值仿真实验与验证 ======
-\clearpage
-\input{ch/11-simulation-results.tex}
-
-% ====== 第12章：基于误差四元数的姿态控制律 ======
-\clearpage
-\input{ch/12-quaternion-control.tex}
-
-% ====== 第13章：Tail-sitter VTOL 模式分析 ======
-\clearpage
-\input{ch/13-vtol-analysis.tex}
-
-% ====== 第14章：基于LQR的姿态最优控制 ======
-\clearpage
-\input{ch/14-lqr-control.tex}
-
-% ====== 第15章：级联姿态-角速度控制架构 ======
-\clearpage
-\input{ch/15-cascade-control.tex}
-
-% ====== 第16章：自抗扰控制与在线参数辨识 ======
-\clearpage
-\input{ch/16-adrc-onlineid.tex}
-
-% ====== 第17章：模型预测控制 ======
-\clearpage
-\input{ch/17-mpc-control.tex}
-
-% ====== 第8章：讨论 ======
-% ★ 2026-08-11 编号修复：讨论/结论回拨到 8/9（正文按逻辑编号引用）
+% ====== 第8章：误差四元数控制（主算法外环理论基础） ======
 \clearpage
 \setcounter{section}{7}
+\input{ch/12-quaternion-control.tex}
+
+% ====== 第9章：Tail-sitter VTOL 模式分析（主算法悬停应用） ======
+\clearpage
+\setcounter{section}{8}
+\input{ch/13-vtol-analysis.tex}
+
+% ====== 第10章：级联姿态-角速度控制架构（★主算法） ======
+\clearpage
+\setcounter{section}{9}
+\input{ch/15-cascade-control.tex}
+
+% ====== 第11章：数值仿真实验与验证（主算法验证） ======
+\clearpage
+\setcounter{section}{10}
+\input{ch/11-simulation-results.tex}
+
+% ====== 第12章：基于INDI的控制律升级方案（扩展①） ======
+\clearpage
+\setcounter{section}{11}
+\input{ch/10-INDI-control.tex}
+
+% ====== 第13章：基于LQR的姿态最优控制（扩展②） ======
+\clearpage
+\setcounter{section}{12}
+\input{ch/14-lqr-control.tex}
+
+% ====== 第14章：自抗扰控制与在线参数辨识（扩展③） ======
+\clearpage
+\setcounter{section}{13}
+\input{ch/16-adrc-onlineid.tex}
+
+% ====== 第15章：模型预测控制（扩展④） ======
+\clearpage
+\setcounter{section}{14}
+\input{ch/17-mpc-control.tex}
+
+% ====== 第16章：讨论 ======
+\clearpage
+\setcounter{section}{15}
 \input{ch/08-discussion.tex}
 
-% ====== 第9章：结论 ======
+% ====== 第17章：结论 ======
 \clearpage
+\setcounter{section}{16}
 \input{ch/09-conclusion.tex}
 
 % ====== 参考文献（BibTeX）======

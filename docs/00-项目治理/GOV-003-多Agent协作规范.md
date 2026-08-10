@@ -24,7 +24,7 @@
 
 **工作准则**：
 - core 层（`src/core/`）零外部依赖：不 import Three.js、不访问 DOM，可在 Node 纯计算环境运行
-- 修改前后必须跑 `node --test tests/`
+- 修改前后必须跑 `node --test "tests/*.test.mjs"`（Windows 上目录参数会解析失败，必须用通配符/显式文件列表）
 - 修改行为红线项（见 AGENTS.md）必须先确认、重采基线、文档同步
 - 源码注释用中文
 
