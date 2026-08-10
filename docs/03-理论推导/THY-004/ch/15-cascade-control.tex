@@ -12,8 +12,31 @@
 三者在处理本构型固有的反扭矩投影交叉耦合时各有局限：
 SAS的对角分配结构性放弃交叉项，INDI受角加速度估计噪声与增量饱和制约，
 LQR的冻结效能矩阵随工作点漂移而退化。
-本章提出一种级联姿态-角速度控制架构，通过时间尺度分离将姿态控制与交叉项补偿解耦，
-并给出完整的设计思想、数学理论、参数整定方法与仿真验证。
+
+本章提出并系统阐述\textbf{级联姿态-角速度控制架构}——这也是实机飞控（2026-08 状态）
+最终采用的架构。与前三者的根本区别在于\textbf{时间尺度分离}：将控制问题分解为
+带宽分离的两个回路，姿态环（慢）只负责姿态误差调节、角速度环（快）承担
+交叉项补偿，使耦合扰动在姿态环"察觉"之前即被消除。
+
+\textbf{实机架构总览（五层控制链路，\texttt{flight\_control.cpp}）}：
+\begin{equation}
+    \underbrace{\mathbf{q}_{\mathrm{target}}}_{\text{1. ref attitude}}
+    \;\xrightarrow{\;\mathbf{q}_{\mathrm{err}}=\mathbf{q}^{-1}\otimes\mathbf{q}_{\mathrm{target}}\;}
+    \underbrace{\boldsymbol{\omega}_{\mathrm{ref}}}_{\text{2. quat geometric outer loop}}
+    \;\xrightarrow{\;\text{速率PI}\;}
+    \underbrace{\boldsymbol{\alpha}_{\mathrm{cmd}}}_{\text{3. angular accel cmd}}
+    \;\xrightarrow{\;\mathbf{M}=\mathbf{I}\boldsymbol{\alpha}+\mathbf{M}_{\mathrm{ff}}\;}
+    \underbrace{\mathbf{M}_{\mathrm{cmd}}}_{\text{4. inertia inverse + FF}}
+    \;\xrightarrow{\;\mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\;}
+    \underbrace{[\Delta\omega,\delta_t,\delta_f]}_{\text{5. online B alloc}}
+    \label{eq:cascade_chain}
+\end{equation}
+五层各自职能单一、参数独立，这正是"用几何换算法简洁、用结构换性能"设计哲学的
+控制侧体现。本章按此链路组织：§\ref{sec:cascade_design}给出控制律设计
+（含惯量逆解前馈与工作点管理），§\ref{sec:cascade_tf}--\ref{sec:cascade_sp}
+给出线性化/灵敏度/奇异摄动理论，§\ref{sec:cascade_tuning}给出离线整定，
+§\ref{sec:cascade_sim}给出仿真验证，最后§\ref{sec:cascade_implementation}
+给出实机实现状态与工程教训。
 
 \subsection{设计思想：时间尺度分离与功能解耦}
 \label{sec:cascade_philosophy}
@@ -46,119 +69,202 @@ LQR的冻结效能矩阵随工作点漂移而退化。
 \subsection{控制律设计}
 \label{sec:cascade_design}
 
-\subsubsection{外环：误差四元数比例-积分控制}
+\subsubsection{外环：误差四元数几何控制与精确角度提取}
 
 姿态反馈采用第\ref{sec:quat_control}节的误差四元数，
 以规避欧拉角在$\theta=\pm90^\circ$处的万向锁奇异性。
-设当前姿态四元数$\mathbf{q}$、期望姿态$\mathbf{q}_{\mathrm{des}}$，
-误差四元数$\mathbf{q}_{\mathrm{err}}=\mathbf{q}_{\mathrm{des}}^{*}\otimes\mathbf{q}$
+设当前姿态四元数$\mathbf{q}$、期望姿态$\mathbf{q}_{\mathrm{target}}$，
+误差四元数$\mathbf{q}_{\mathrm{err}}=\mathbf{q}_{\mathrm{target}}^{*}\otimes\mathbf{q}$
 的矢量部分$\boldsymbol{\varepsilon}_{\mathrm{err}}\in\mathbb{R}^3$编码姿态误差。
-外环将其映射为角速度指令：
+实机（\texttt{flight\_control.cpp} \texttt{execute\_attitude\_controller}）的
+外环实现分三步：
 
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{短弧归一化}：$\mathrm{sign}(q_w)$ 取反使 $\eta_{\mathrm{err}}\geq0$
+          ——四元数双覆盖（$\mathbf{q}$ 与 $-\mathbf{q}$ 同姿态）下确保沿最短路径旋转；
+    \item \textbf{精确角度提取}（非小角度近似）：
+          \begin{equation}
+              \varepsilon_i = \mathrm{sign}(q_w)\cdot q_{v,i}\cdot
+              \frac{2\arctan(\|\mathbf{q}_v\|/|q_w|)}{\|\mathbf{q}_v\|}
+              \label{eq:cascade_angle_extract}
+          \end{equation}
+          多轴同时存在误差时 $\|\mathbf{q}_v\|$ 取\textbf{全模长}（非单轴投影），
+          避免偏航误差分量使滚转/俯仰的 atan2 判断偏低；
+    \item \textbf{通道映射}（悬停构型语义）：$\varepsilon_x\to$上摆（滚转）、
+          $\varepsilon_y\to$下摆（俯仰）、$\varepsilon_z\to$航向（差速，见§\ref{sec:cascade_yaw}）。
+\end{enumerate}
+
+角速度指令由姿态误差经比例控制生成（实机为纯 P，$K_i=K_d=0$）：
 \begin{equation}
     \boxed{
     \boldsymbol{\omega}_{\mathrm{ref}}
     = -\mathbf{K}_p\,\boldsymbol{\varepsilon}_{\mathrm{err}}
-      - \mathbf{K}_i\int\boldsymbol{\varepsilon}_{\mathrm{err}}\,\mathrm{d}t
-      + \boldsymbol{\omega}_{\mathrm{ref}}^{\mathrm{ff}}
     }
     \label{eq:cascade_outer_ch}
 \end{equation}
-
-其中$\mathbf{K}_p=\operatorname{diag}(k_{p,1},k_{p,2},k_{p,3})$、
-$\mathbf{K}_i=\operatorname{diag}(k_{i,1},k_{i,2},k_{i,3})$为正定对角增益矩阵，
-$\boldsymbol{\omega}_{\mathrm{ref}}^{\mathrm{ff}}$为期望轨迹角速度前馈。
+其中$\mathbf{K}_p=\operatorname{diag}(k_{p,1},k_{p,2},k_{p,3})$（实机 2.8/2.8，deg 域）。
 在小姿态误差下$\boldsymbol{\varepsilon}_{\mathrm{err}}\approx\frac{1}{2}\Delta$姿态角，
-故$K_p$的物理意义是姿态回正的特征角速率。
+$K_p$的物理意义是姿态回正的特征角速率（实机 $\approx80$°/s 输出限幅）。
 
-\subsubsection{内环：角速度环与在线效能矩阵分配}
+\subsubsection{内环：角速度环输出角加速度指令}
 
-内环将角速度误差映射为虚拟角加速度，再经在线效能矩阵分配为执行器增量：
-
-\begin{align}
-    \boldsymbol{\nu} &= \mathbf{K}_\omega\left(\boldsymbol{\omega}_{\mathrm{ref}}
+内环将角速度误差映射为\textbf{角加速度指令}（非力矩/舵量——经惯量逆解才是物理量）：
+\begin{equation}
+    \boldsymbol{\nu} = \mathbf{K}_\omega\left(\boldsymbol{\omega}_{\mathrm{ref}}
                         - \boldsymbol{\omega}\right)
-    \label{eq:cascade_nu_ch}\\
-    \mathbf{u}_{k+1} &= \mathbf{u}_k
+    \label{eq:cascade_nu_ch}
+\end{equation}
+实机为速率 PI（$K_p=0.28$、$K_i=0.1$，积分抗饱和/微分先行，\texttt{PositionPID}）。
+积分项对未建模的慢扰动（气动交叉/重心偏置）提供稳态消除——
+这是"反馈兜底"哲学的体现：显式对消（§\ref{sec:cascade_ff}）处理已知项，
+积分项处理未知项。
+
+\subsubsection{惯量逆解与交叉耦合前馈（NDI 式 $f(\mathbf{x})$ 对消）}
+\label{sec:cascade_ff}
+
+角加速度指令经惯量矩阵成为期望力矩，并叠加\textbf{显式前馈对消项}：
+\begin{equation}
+    \boxed{
+    \mathbf{M}_{\mathrm{cmd}} = \mathbf{I}\boldsymbol{\nu}
+    + \underbrace{\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})
+      + \boldsymbol{\omega}\times\mathbf{h}_{\mathrm{rotor}}}_{\text{前馈 }
+      \mathbf{M}_{\mathrm{ff}}}
+    }
+    \label{eq:cascade_ff}
+\end{equation}
+其中$\mathbf{h}_{\mathrm{rotor}}=J_p(w_f\hat{n}_f + w_t\hat{n}_t)$为前后转子的净角动量
+（反向旋转部分抵消，悬停时沿推力轴）。
+前馈项即 NDI 公式 $\mathbf{u}=\mathbf{B}^{-1}(\boldsymbol{\nu}-f(\mathbf{x}))$
+中的 $f(\mathbf{x})$ 项（陀螺耦合与转子陀螺）——\textbf{显式计算并补偿已知非线性}，
+而非让反馈环"扛"。
+实机（\texttt{InertiaDecoupling.h}，2026-08-10 接入）以掩码控制（默认全开，
+可在线 A/B 关闭）；前馈在机体系按物理轴计算、经轴置换进入模型系后与
+$\mathbf{I}\boldsymbol{\nu}$ 同坐标系相加。
+气动与重力项未显式对消（模型不确定度大），由内环积分项兜底。
+
+\subsubsection{在线效能矩阵分配（绝对指令形式，NDI 而非 INDI）}
+\label{sec:cascade_alloc}
+
+力矩指令经\textbf{在线 Jacobian 逆}分配为执行器指令：
+\begin{equation}
+    \mathbf{u}_k = \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\,
+                   \mathbf{M}_{\mathrm{cmd}},
+    \qquad \mathbf{u} = [\Delta\omega,\;\delta_t,\;\delta_f]^T
+    \label{eq:cascade_alloc_firmware}
+\end{equation}
+$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_{k-1})$ 为在\textbf{上一拍执行器工作点}
+处求值的在线 Jacobian（式\ref{eq:B_true}）——非零摆角名义点，
+使分配矩阵跟踪工作点变化（gain-scheduling 思想）。
+概念仿真中曾考察\textbf{增量变体}（$\mathbf{u}_{k+1}=\mathbf{u}_k+\Delta\mathbf{u}$，
+INDI 风格）：
+\begin{equation}
+    \mathbf{u}_{k+1} = \mathbf{u}_k
         + \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_k)\,
           \mathbf{I}\,\boldsymbol{\nu}\,\Delta t
     \label{eq:cascade_alloc_ch}
-\end{align}
+\end{equation}
+实机未采用增量形式（理由见下"架构定性"）——本式仅用于与 NDI 绝对形式的
+理论对比（第\ref{sec:cascade_tf}节连续化分析）与 INDI 方案（第\ref{sec:INDI}章）的
+联系。
 
-其中$\mathbf{u}=[\Delta\omega,\delta_t,\delta_f]^T$，
-$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$为式(\ref{eq:B_true})的在线Jacobian，
-$\mathbf{I}=\operatorname{diag}(I_x,I_y,I_z)$为惯量矩阵（$\boldsymbol{\nu}$是角加速度指令，
-必须乘惯量转换为目标力矩增量再经$\mathbf{B}^{-1}$分配——缺$\mathbf{I}$时
-各向异性惯量会使快轴通道被放大、慢轴通道衰减，v0.2.0 参数下表现为滚转通道发散），
-$\mathbf{K}_\omega=\operatorname{diag}(k_{\omega,1},k_{\omega,2},k_{\omega,3})$，
-$\Delta t$为控制周期。内环的两个关键设计：
-
+\textbf{★ 架构定性（2026-08-11 精确归类）}：本架构是\textbf{NDI（非线性动态逆）}，
+\textbf{不是 INDI（增量 NDI）}——判别依据是两条硬性特征：
 \begin{enumerate}[label=(\arabic*)]
-    \item \textbf{交叉项精确补偿}：$\mathbf{B}_{\mathrm{true}}^{-1}$的非对角元
-          将前摆对俯仰的反扭矩耦合$-\tau_f\cos\delta_f$、
-          尾摆对偏航的耦合$-\tau_t\cos\delta_t$显式计入分配，
-          实现任意工作点下的精确解耦；
-    \item \textbf{无角加速度估计}：$\boldsymbol{\nu}$由角速度误差经比例生成，
-          $\mathbf{B}_{\mathrm{true}}^{-1}$仅作静态分配而非动态逆，
-          从而规避第\ref{sec:estimator_study}节分析的角加速度估计噪声放大问题。
+    \item \textbf{绝对指令形式}：$\mathbf{u}_k$ 由力矩直接分配得到，
+          无增量累加 $\mathbf{u}_{k+1}=\mathbf{u}_k+\Delta\mathbf{u}$；
+    \item \textbf{无实测角加速度}：$\boldsymbol{\nu}$ 由角速度误差经比例/积分生成，
+          $\mathbf{B}_{\mathrm{true}}^{-1}$ 作静态分配而非动态逆，
+          不使用 IMU 差分 $\dot{\boldsymbol{\omega}}_{\mathrm{IMU}}$。
+\end{enumerate}
+INDI 的核心卖点（对模型误差鲁棒）在实机中由\textbf{τm 观测器 + 反馈积分}替代实现
+（见§\ref{sec:cascade_workpoint}）：观测器追踪实际转速使 B 矩阵工作点逼近真实，
+积分项吸收残余模型误差——以绝对指令的简单性与可预测性换取同等工程效果，
+同时规避 INDI 的角加速度噪声放大路径。
+
+\subsubsection{工作点管理：τm 观测器、增益调度与良态化}
+\label{sec:cascade_workpoint}
+
+实机分配层有三项工作点管理（均为 2026-08 抖油门震荡三层定位的产物）：
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{τm 一阶观测器}（\texttt{flight\_control.cpp} 层1 之前）：
+          \begin{equation}
+              w_{\mathrm{est}} \mathrel{+}=
+              (w_{\mathrm{cmd}} - w_{\mathrm{est}})\cdot\frac{\Delta t}{\tau_m}
+              \label{eq:cascade_obs}
+          \end{equation}
+          电机指令转速经 $\tau_m=0.28$\,s 滞后才达到，分配器若用指令油门，
+          油门瞬态下有效增益 $k_p(w_{\mathrm{actual}}/w_{\mathrm{used}})^2$
+          先衰减后过冲（释放瞬间 $\approx1.33$ 倍、越震荡点约 160\,ms）——
+          B 矩阵工作点/调度/状态全部改用\textbf{观测转速}，瞬态有效增益恒 $\approx k_p$；
+    \item \textbf{差速增益调度}：$\Delta\omega$ 指令按 $1/w_0^2$ 归一化在低油门爆炸
+          （2026-08-07），物理力矩仍 $\propto w_0^2$ 稳态增益随油门放大（2026-08-09
+          封顶 1.0）——最终调度 $g_s = \min((w_{0,\mathrm{eff}}/w_{\mathrm{hover}})^2,\,1.0)$，
+          详见第\ref{sec:allocation}章增益调度段；
+    \item \textbf{良态工作点下限与零油门门控}：B 各项 $\propto w_0^2$、det $\propto w_0^6$，
+          低油门为数值病态区（5\% 油门 det 比 50\% 小 6 个数量级）——
+          工作点按 $w_{0,\mathrm{floor}}=0.6\,w_{\mathrm{hover}}$ 冻结；
+          零油门（$<$5\%）强制执行器归中（防 B 良态化后舵机对姿态误差误响应）。
 \end{enumerate}
 
-\begin{remark}[固件实现：串级PID + 在线Jacobian静态非线性控制分配]
-\label{rem:firmware_alloc}
-式(\ref{eq:cascade_alloc_ch})为增量形式（$\mathbf{u}_{k+1}=\mathbf{u}_k+\Delta\mathbf{u}$），
-概念仿真中按此实现。
-固件（\texttt{flight\_control.cpp} \texttt{mix\_and\_output\_commands}）的实际控制链为：
+\subsubsection{航向通道：ratchet hold（摇杆恒角速度 + 回中锁航向）}
+\label{sec:cascade_yaw}
+
+悬停/巡航的航向通道\textbf{不做姿态回中}——航向摇杆恒为角速度指令
+（与 RATE\_MODE 语义一致，见第\ref{sec:rc_curve}节摇杆曲线），回中时以
+\textbf{航向短弧误差}锁住当时航向：
 \begin{equation}
-    \boldsymbol{\alpha}_{\mathrm{cmd}} \xrightarrow{\;\times\,\mathbf{I}\;}
+    \omega_{\mathrm{ref},z} =
+    \begin{cases}
+        \mathrm{map}(\text{航向摇杆}, \pm512\text{us}, \pm\omega_{\max,z}), & |\text{杆量}| > 40\text{us} \\
+        \mathrm{clip}\!\left(k_p^{\mathrm{yaw}}\cdot\Delta\psi_{\mathrm{short}}, \pm 60^\circ/\mathrm{s}\right), & \text{回中}
+    \end{cases}
+    \label{eq:cascade_yaw_hold}
+\end{equation}
+其中 $\Delta\psi_{\mathrm{short}}\in(-\pi,\pi]$ 为参考航向的短弧误差（回绕归一化），
+实机 $k_p^{\mathrm{yaw}}=5.0$；解锁瞬间参考重置为当前航向防起飞猛转。
+该设计绕开四元数航向回中在悬停万向锁附近的欧拉表示退化，且满足
+"摇杆恒角速度 + 松杆即停（锁航向）"的操纵习惯（2026-08-09 实机 ratchet hold）。
+
+\subsubsection{人机接口：FPV 摇杆曲线}
+
+RATE\_MODE 与航向通道的杆量到角速率映射采用 Betaflight 三参数模型
+（rcRate/rcExpo/rcSuper，公式与默认参数见第\ref{sec:rc_curve}节）——
+外环与分配层完全不感知曲线形状，曲线只改变 $\boldsymbol{\omega}_{\mathrm{ref}}$ 的来源
+（摇杆经曲线 vs 姿态误差经 $K_p$），体现"人机接口与控制律解耦"的模块化设计。
+
+\begin{remark}[固件实现：NDI 式级联（绝对指令 + 在线 B + 工作点观测）]
+\label{rem:firmware_alloc}
+实机控制链即式(\ref{eq:cascade_chain})五层：
+\begin{equation}
+    \boldsymbol{\alpha}_{\mathrm{cmd}} \xrightarrow{\;\times\,\mathbf{I}\;+\;\mathbf{M}_{\mathrm{ff}}\;}
     \mathbf{M}_{\mathrm{cmd}} \xrightarrow{\;\mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\;}
     \mathbf{u}_k = [\Delta\omega,\;\delta_t,\;\delta_f]^T
-    \label{eq:cascade_alloc_firmware}
+    \label{eq:cascade_alloc_firmware2}
 \end{equation}
 其中$\boldsymbol{\alpha}_{\mathrm{cmd}}$为速率内环（PI）直接输出的角加速度指令，
 $\mathbf{I}=\operatorname{diag}(I_x,I_y,I_z)$为惯量矩阵，
 $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_{k-1})$为在\textbf{上一拍执行器工作点}
 处求值的在线Jacobian。
 
-\textbf{架构定性}：串级PID + 静态非线性控制分配（Static Nonlinear Control
-Allocation）+ 在线Jacobian更新（gain-scheduling）。具体地：
-\begin{itemize}
-    \item \textbf{NDI 式显式对消的演进}：本章初稿写作时没有任何一层显式计算并对消非线性动力学
-          $f(\mathbf{x})$（陀螺力矩$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$、
-          气动力矩、重力梯度矩）。2026-08-10 固件已新增惯量逆解交叉耦合前馈
-          （\texttt{InertiaDecoupling.h}：$M_{\mathrm{ff}}=\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})+\boldsymbol{\omega}\times\mathbf{h}$，
-          掩码控制、默认开启可 A/B 关闭）——NDI 的 $f(\mathbf{x})$ 项在陀螺/转子陀螺通道
-          已被显式对消，气动与重力项仍由内环扰动抑制；
-          $\mathbf{I}\cdot\boldsymbol{\alpha}$由量纲缩放升级为含前馈的完整力矩指令。
-    \item \textbf{不是INDI}：没有使用IMU实测角加速度$\dot{\boldsymbol{\omega}}$，
-          没有增量累加$\mathbf{u}_k=\mathbf{u}_{k-1}+\Delta\mathbf{u}$。
-    \item \textbf{BTRUE的"上一拍工作点"}：仅指Jacobian在上一拍真实摆角/转速处求值
-          （而非零摆角名义点），这是gain-scheduling的思想——
-          使分配矩阵跟踪工作点变化，但不涉及动态逆或增量修正。
-\end{itemize}
-
-选择此架构的工程理由：
+\textbf{工程理由（为什么实机选 NDI 式而非 INDI）}：
 \begin{enumerate}[label=(\arabic*)]
-    \item 速率PI直接输出$\boldsymbol{\alpha}$，经$\mathbf{I}$缩放后即为力矩量纲，
+    \item 速率PI直接输出$\boldsymbol{\alpha}$，经$\mathbf{I}$缩放即为力矩量纲，
           无需维护执行器状态$\mathbf{u}_k$的增量累积历史；
     \item 规避INDI对$\dot{\boldsymbol{\omega}}_{\mathrm{IMU}}$数值微分的需求，
-          消除高频噪声经$\mathbf{B}^{-1}$放大的路径；
-    \item 未建模非线性（陀螺耦合、气动交叉）由内环PI的积分项
-          作为"慢扰动"逐步补偿，而非显式对消——
-          概念阶段参数不确定度大（$I$约$\pm20\%$，气动系数未标定），
-          显式对消反而可能引入更大误差；
+          消除高频噪声经$\mathbf{B}^{-1}$放大的路径（第\ref{sec:estimator_study}节）；
+    \item 未建模非线性（气动交叉等）由内环PI的积分项作为"慢扰动"补偿，
+          而非显式对消——概念阶段参数不确定度大，显式对消反而可能引入更大误差；
     \item 在线辨识模块（\texttt{TandemVec\_OnlineID.h}，遗忘因子RLS）
-          监测惯量比$b$与总扰动$d$，
-          自适应增益建议$K_p/\sqrt{b}$已实现但当前为\textbf{纯观测模式}——
+          监测惯量比$b$与总扰动$d$（实测 $b\approx0.35/0.36/0.90$、$d_{\mathrm{yaw}}\approx-7.36$，
+          见第\ref{sec:online_id}章），自适应增益建议$K_p/\sqrt{b}$为\textbf{纯观测模式}——
           仅写入遥测量供地面站显示与离线复算，未写回PID增益。
-          待多架次数据确认估计稳定后，再闭环接入。
 \end{enumerate}
 
-生产固件的姿态外环与速率内环均采用\texttt{PositionPID}（位置式PID，v3），
-具备2-DOF设定点加权、反算抗饱和（back-calculation）、微分先行、
-输出变化率限制与NaN防护。当前姿态通道增益配置（2026-08 实机调参态）：
-外环纯P（$K_p=2.8$，$K_i=K_d=0$），内环PI（$K_p=0.28$，$K_i=0.1$，$K_d=0$）。
-\texttt{TVC\_Control\_Geometric.h}中的纯比例几何控制器
-用于宿主机回归测试与算法验证，两者在小角度下行为等价。
+\textbf{实机配置（2026-08 调参态）}：姿态外环 PositionPID 纯P（$K_p=2.8/2.8$，
+四元数精确角度提取输入）；速率内环 PI（$K_p=0.28$、$K_i=0.1$）；
+惯量前馈掩码全开（可 A/B）；工作点 $w_{0,\mathrm{floor}}=0.6\,w_{\mathrm{hover}}$
++ 增益调度封顶 1.0 + 零油门门控；航向 ratchet hold（$k_p^{\mathrm{yaw}}=5.0$）。
+RATE\_MODE 满杆角速率 333°/s（限幅 600，2026-08-11 由 80 解耦——见第\ref{sec:rc_curve}节）。
 \end{remark}
 
 \subsection{闭环动力学与传递函数分析}
@@ -517,3 +623,57 @@ LQR & 0.0087 & $9.5\times10^{-6}$ \\
 是概念阶段向工程实现过渡的推荐控制结构。
 严格Lyapunov稳定性证明、参数摄动下的解析鲁棒界与硬件在环验证，
 是后续工作需要补强的方向。
+
+\subsection{实机实现状态与工程教训（2026-08）}
+\label{sec:cascade_implementation}
+
+本章架构已于 2026-08 在实机飞控（STM32H743）上线，本节记录实现状态与
+调试中沉淀的工程教训——这些教训验证了本章理论分析的正确性，也补充了
+理论未覆盖的工程细节。
+
+\subsubsection{实现状态}
+
+\begin{itemize}
+    \item \textbf{五层链路全线上}：参考姿态生成（三模式）→ 四元数几何外环
+          （精确角度提取 + 短弧）→ 速率 PI → 惯量逆解 + 前馈 → 在线 B 分配；
+    \item \textbf{垂直/水平位置环已接入}：定高（位置 P + 速度 PI + 油门杆=高度率指令 +
+          GUIDED 加速度直通）、定点（Loiter 状态机 + 物理刹车预测 + 位置/速度串级），
+          与姿态五层链路级联；
+    \item \textbf{FPV 摇杆曲线}（RATE\_MODE）：三参数模型实装，默认满杆
+          roll/pitch 333°/s、yaw 222°/s（第\ref{sec:rc_curve}节）；
+    \item \textbf{在线辨识}：RLS 纯观测模式，实测 $b\approx0.35/0.36/0.90$、
+          $d_{\mathrm{yaw}}\approx-7.36$（电机不对称 17\%）、$k_Q/k_T\approx0.027$
+          （三轮标定）——未闭环（第\ref{sec:online_id}章）。
+\end{itemize}
+
+\subsubsection{工程教训（理论未覆盖的实践修正）}
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{限幅必须解耦}：RATE\_MODE 限幅最初复用姿态外环 80°/s
+          （$k_{\mathrm{MaxTargetRate}}$）——曲线在约半杆即被削平，满杆暴力手感
+          完全消失。2026-08-11 独立为 600°/s（曲线理论值 333°/s 之上留余量），
+          限幅从"姿态环约束"变为"曲线之上的安全网"（第\ref{sec:rc_curve}节）；
+    \item \textbf{工作点观测是分配器的生命线}：τm 观测器未接入前，油门瞬态下
+          B 矩阵工作点与实际转速失配，有效增益瞬态越震荡点约 160\,ms
+          激发 yaw 振铃——观测器接入后瞬态增益恒 $\approx k_p$
+          （2026-08-09 三层定位，第\ref{sec:allocation}章）；
+    \item \textbf{通道积分独立性}：2026-08-10 通读发现 pitch 内环误用 roll 的
+          PID 实例（复制粘贴 bug）——pitch 积分恒 0 且双通道积分互相污染，
+          实机表现为"pitch 一直飘、积分无法消除"；修复后积分独立。
+          教训：同构三通道代码逐一核对实例名，勿因参数相同想当然；
+    \item \textbf{数值病态区必须显式规避}：B 各项 $\propto w_0^2$、det $\propto w_0^6$，
+          低油门工作点冻结（$0.6\,w_{\mathrm{hover}}$）+ 零油门门控是实机可飞的前提，
+          纯理论推导不会暴露此问题。
+\end{enumerate}
+
+\subsubsection{与 NDI/INDI 的定位关系（2026-08-11 精确归类）}
+
+本架构为\textbf{NDI 式}（绝对指令 + 模型逆 + 前馈对消 + 在线 B + 工作点观测），
+\textbf{非 INDI}（无增量累加、无实测角加速度）。三条实现路径（SAS/INDI/LQR）
+的教训与本章架构的定位：
+\begin{itemize}
+    \item SAS：对角分配结构性放弃交叉项——本架构以在线 B 精确补偿；
+    \item INDI：增量形式对模型误差鲁棒，但依赖实测角加速度（噪声放大）——
+          本架构以 τm 观测器 + 反馈积分替代实现同等工程效果；
+    \item LQR：冻结 B 随工作点漂移——本架构以在线 B + 工作点观测消除漂移。
+\end{itemize}

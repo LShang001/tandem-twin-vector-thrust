@@ -105,6 +105,57 @@ $G(s) = k^{\text{rate}} \cdot (\partial M / \partial \delta) \cdot
 (1/(I s + |L_p|)) \cdot (1/(\tau_m s + 1))$，闭环带宽$\sim k^{\text{rate}}
 \cdot |\partial M / \partial \delta| / I$（当电机响应足够快时）。
 
+\subsection{摇杆曲线：Rate Command 的人机接口（FPV 风格，2026-08-11 实机）}
+\label{sec:rc_curve}
+
+Rate Command 模式（第\ref{eq:rate_command}节）的操纵手感完全由"杆量到目标角速率"的映射决定。
+本构型实机采用穿越机（Betaflight）风格的\textbf{三参数模型}，曲线函数见 \texttt{include/RcCurve.h}：
+\begin{equation}
+    \underbrace{\text{rcCmd} = \text{rc}\left[\text{expo}\cdot\text{rc}^2 + (1-\text{expo})\right]}_{\text{expo: input center curve}}
+    \qquad
+    \underbrace{\omega_{\text{ref}} = \frac{\text{rcCmd}\cdot\text{rcRate}\cdot 200}{1 - |\text{rcCmd}|\cdot\text{super}}}_{\text{rcRate: gain, super: edge curve}}
+    \label{eq:rc_curve}
+\end{equation}
+其中 rc 为归一化杆量（$[-1,1]$，死区 $\pm0.02$ 归零），
+$\text{rcRate}\in[0,2.5]$ 为全局灵敏度（满杆基准 200°/s），
+$\text{expo}\in[0,1]$ 压低中心斜率（rc=0 处增益 $1-\text{expo}$、满杆增益恰为 1），
+$\text{super}\in[0,1)$ 以双曲增益 $1/(1-|\text{rcCmd}|\cdot\text{super})$ 放大边缘——
+增益在 rc=0 处为 1、随杆量单调上升，满杆达 $1/(1-\text{super})$ 倍。
+三参数分工互补：\textbf{expo 定中心细腻度、rcRate 定满杆基准、super 定中间过渡曲率}。
+
+\textbf{默认参数与满杆角速率（实机 2026-08-11）}：
+rcRate$=0.5$、expo$=0.25$、super$=0.7/0.7/0.55$（roll/pitch/yaw 独立），
+满杆角速率 $=\text{rcRate}\times 200/(1-\text{super})$：
+roll/pitch 约 333°/s、yaw 约 222°/s（yaw 特意更低防自旋过冲）。
+表\ref{tab:rc_curve_points}给出曲线特征点（1/4/1/2/3/4 杆与满杆），
+可见中心区（$\pm25\%$ 杆）仅 22°/s（细腻悬停），
+3/4 杆后急剧上扬至满杆 333°/s（暴力翻滚）——
+这正是穿越机"细腻中心 + 暴力边缘"手感的数学来源。
+
+\begin{table}[H]
+\centering
+\caption{摇杆曲线特征点（默认参数：rcRate=0.5、expo=0.25、super=0.7/0.55，单位 °/s）}
+\label{tab:rc_curve_points}
+\begin{tabular}{l c c c c}
+\toprule
+杆量 & 1/4 & 1/2 & 3/4 & 满杆 \\
+\midrule
+Roll/Pitch & 22 & 57 & 125 & 333 \\
+Yaw & 21 & 52 & 106 & 222 \\
+线性参考 & 40 & 80 & 120 & 160 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{实机限幅解耦教训}：初版 RATE\_MODE 限幅复用姿态外环的 80°/s
+（$k_{\text{MaxTargetRate}}$），曲线在约半杆（默认参数 57°/s）即被削平——
+满杆暴力手感完全被限幅吞掉。2026-08-11 将 RATE\_MODE 限幅独立为 600°/s
+（默认曲线理论值 333°/s 之上留余量）：限幅从"姿态环约束"解耦为"曲线之上的安全网"——
+rcRate 上调到 1.0 时满杆 667°/s 触限兜底，
+但 super 双曲在 rcRate 极端（如 2.5）时理论指令可达数千 °/s，限幅不可完全移除。
+实机注意：满杆角速率从存档验证的 80°/s 提升到 333°/s（4 倍以上），
+调试须从低杆量逐步体验（曲线中心区保持细腻）。
+
 \subsection{饱和管理与积分器抗饱和}
 
 所有执行器指令须经物理限幅，模拟真实舵机和电机的行程/速率限制：
