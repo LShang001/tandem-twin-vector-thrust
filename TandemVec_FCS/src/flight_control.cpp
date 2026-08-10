@@ -1206,7 +1206,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   const float MOTOR_PWM_MAX = 2000.0f;
   (void)MOTOR_PWM_MIN; (void)MOTOR_PWM_MAX;  // 保留常量供调试/注释引用，消除编译器警告
 
-  // BTRUE 策略需要上一拍执行器状态（INDI 预测器）
+  // BTRUE 策略需要上一拍执行器状态（★2026-08-11 术语修正：这是"上一拍工作点
+  //  Jacobian"（绝对指令形式，准线性/增益调度），不是 INDI——无增量累加、
+  //  不用实测角加速度；本固件为 NDI 式架构：模型逆 + 前馈对消 + 在线 B）
   // 首拍全零 → B_true = B_full（零摆角名义点），行为安全
   static PropulsionState prev_prop_state = {0.0f, 0.0f, 0.0f, 0.0f};
 
