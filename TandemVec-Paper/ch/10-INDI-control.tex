@@ -6,133 +6,51 @@
 \section{基于增量非线性动态逆的控制律升级方案}
 \label{sec:INDI}
 
-第\ref{sec:control}节给出的SAS增稳律以欧拉角域的比例-积分-微分结构为基础，各通道独立设计反馈增益。该方案结构简单、易于整定，但其角速率阻尼项仅对惯性力矩和气动阻尼作线性近似反馈，未显式处理$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$（Coriolis耦合）、$\boldsymbol{\omega}\times\mathbf{h}_{\text{rotor}}$（陀螺力矩）、反扭矩摆角投影交叉项及非线性气动效应。这些未建模动态在摆角较大、角速率较高或工作点远离配平状态时累积为控制扰动，需通过提高反馈增益来压制，而过高的增益又引入执行器饱和和噪声放大风险。
+主算法（第\ref{sec:cascade_chapter}章）采用 NDI 式级联架构：
+模型逆 + 前馈对消 + 在线效能矩阵分配。本章讨论其\textbf{扩展变体}——
+增量非线性动态逆（INDI）：以增量指令替代绝对指令、以传感器实测角加速度
+替换大部分模型依赖项，作为对主算法的鲁棒性增强候选方案。
 
-近年来，增量非线性动态逆（Incremental Nonlinear Dynamic Inversion, INDI）在飞行控制领域受到广泛关注\cite{pollack2023robust,wang2019incremental}。与经典NDI要求完整的机载气动模型不同，INDI利用传感器实测的角加速度信号替换了大部分模型依赖项，仅保留控制效能矩阵作为模型输入，从而在保持反馈线性化优点的同时大幅提升了鲁棒性。本节在现有SAS框架基础上，提出基于INDI的内环角速率控制升级方案，以增量指令替代绝对指令，使闭环系统在模型不确定性和外部扰动下具有更强的鲁棒性。
+\subsection{NDI 与 INDI 的原理对比}
 
-\subsection{NDI与INDI的原理对比}
-
-考虑输入仿射非线性系统
-\begin{equation}
-    \dot{\mathbf{y}} = \boldsymbol{\alpha}(\mathbf{x}) + \mathcal{B}(\mathbf{x})\mathbf{u}
-    \label{eq:indi_system}
-\end{equation}
-其中$\mathbf{y}\in\mathbb{R}^m$为被控输出（本文取机体系角速率$\boldsymbol{\omega}=[p,q,r]^T$），$\mathbf{u}\in\mathbb{R}^m$为控制输入，$\mathcal{B}(\mathbf{x})$为控制效能矩阵，$\boldsymbol{\alpha}(\mathbf{x})$包含了所有与$\mathbf{u}$无关的动力学项（Coriolis力、陀螺力矩、气动阻尼、重力分量等）。
-
-\textbf{经典NDI}直接构造逆映射\cite{stevens2015aircraft}：
-\begin{equation}
-    \mathbf{u} = \hat{\mathcal{B}}^{-1}(\mathbf{x})\left[\boldsymbol{\nu} - \hat{\boldsymbol{\alpha}}(\mathbf{x})\right]
-    \label{eq:ndi_law}
-\end{equation}
-其中$\hat{\boldsymbol{\alpha}}$和$\hat{\mathcal{B}}$为机载模型估计（On-Board Model, OBM），$\boldsymbol{\nu}$为虚拟控制量（期望角加速度）。NDI对消全部非线性后的闭环呈现积分器特性$\dot{\mathbf{y}}=\boldsymbol{\nu}$，但其致命缺陷在于：任何$\hat{\boldsymbol{\alpha}}$中的建模误差（$\boldsymbol{\xi}$）和控制效能误差（$\boldsymbol{\Xi}$）都会直接注入被控输出\cite{pollack2023robust}。对大包线飞行器，气动数据库的构建和调度本身就是一项繁重的工程任务。
-
-\textbf{INDI}在$t-\Delta t$时刻（下标$0$）对式(\ref{eq:indi_system})作一阶Taylor展开\cite{sieberling2010robust,pollack2023robust}：
+主算法的 NDI 控制律（式\ref{eq:ndi_law}，见第\ref{sec:cascade_Btrue}章）为
+$\mathbf{u} = \hat{\mathcal{B}}^{-1}(\mathbf{x})[\boldsymbol{\nu} -
+\hat{\boldsymbol{\alpha}}(\mathbf{x})]$，需完整机载模型 $\hat{\boldsymbol{\alpha}}$。
+INDI 在 $t-\Delta t$ 时刻（下标 $0$）对系统
+$\dot{\mathbf{y}} = \boldsymbol{\alpha}(\mathbf{x}) + \mathcal{B}(\mathbf{x})\mathbf{u}$
+（$\mathbf{y}=\boldsymbol{\omega}$）作一阶 Taylor 展开\cite{sieberling2010robust,pollack2023robust}：
 \begin{equation}
     \dot{\mathbf{y}} = \dot{\mathbf{y}}_0 + \underbrace{\frac{\partial[\boldsymbol{\alpha}+\mathcal{B}\mathbf{u}]}{\partial\mathbf{x}}\Big|_0 \Delta\mathbf{x}}_{\text{状态增量贡献}} + \mathcal{B}(\mathbf{x}_0)\Delta\mathbf{u} + \mathbf{R}_1
     \label{eq:indi_taylor}
 \end{equation}
 
-引入\textbf{时间尺度分离假设}（time-scale separation）：当采样率足够高（$\Delta t$足够小）时，$\Delta\mathbf{x}$的变化相对$\Delta\mathbf{u}$的变化可忽略。在此假设下，状态增量项和Taylor余项$\mathbf{R}_1$被舍弃，式(\ref{eq:indi_taylor})简化为
+引入\textbf{时间尺度分离假设}（采样率足够高时 $\Delta\mathbf{x}$ 变化相对
+$\Delta\mathbf{u}$ 可忽略），舍弃状态增量项与余项，得
 \begin{equation}
     \dot{\mathbf{y}} \approx \dot{\mathbf{y}}_0 + \hat{\mathcal{B}}(\mathbf{x}_0)\Delta\mathbf{u}
     \label{eq:indi_simplified}
 \end{equation}
 
-由此解得\textbf{INDI标准控制律}：
+由此解得\textbf{INDI 标准控制律}：
 \begin{equation}
     \boxed{\mathbf{u} = \mathbf{u}_0 + \hat{\mathcal{B}}^{-1}(\mathbf{x}_0)\left[\boldsymbol{\nu} - \dot{\mathbf{y}}_0\right]}
     \label{eq:indi_law}
 \end{equation}
 
-对比式(\ref{eq:ndi_law})和式(\ref{eq:indi_law})可知，INDI的核心优势在于：控制律中不出现$\hat{\boldsymbol{\alpha}}(\mathbf{x})$，所有与状态相关的非线性动力学（无论是否建模）均通过$\dot{\mathbf{y}}_0$（传感器实测角加速度）隐式捕获。唯一需要建模的仅是控制效能矩阵$\hat{\mathcal{B}}$——而该矩阵恰好是本构型第\ref{sec:allocation}节已精确推导的$\mathbf{B}_{\mathrm{full}}$（式\ref{eq:effectiveness_matrix}）。
+对比式(\ref{eq:ndi_law})与式(\ref{eq:indi_law})：INDI 控制律中\textbf{不出现}
+$\hat{\boldsymbol{\alpha}}(\mathbf{x})$——所有与状态相关的非线性动力学
+（无论是否建模）均通过 $\dot{\mathbf{y}}_0$（传感器实测角加速度）隐式捕获，
+唯一需要建模的仅是控制效能矩阵 $\hat{\mathcal{B}}$（即主算法的
+$\mathbf{B}_{\mathrm{true}}$，推导见第\ref{sec:cascade_Btrue}章）。
 
-\subsection{控制效能矩阵的严格建模}
+\subsection{INDI 的效能矩阵依赖}
 
-INDI控制律（式\ref{eq:indi_law}）中唯一需要建模的是控制效能矩阵$\hat{\mathcal{B}}$，其定义为力矩对控制输入的Jacobian $\partial\mathbf{M}/\partial\mathbf{u}$。对于本构型，控制输入为$\mathbf{u}=[\Delta\omega,\delta_t,\delta_f]^T$，被控力矩为$\mathbf{M}=[M_x,M_y,M_z]^T$。从第\ref{sec:mapping}节的完整六维映射（式\ref{eq:six_component}）的力矩分量出发：
-
-\begin{equation}
-    \begin{aligned}
-        M_x &= -\tau_f \cos\delta_f + \tau_t \cos\delta_t \\
-        M_y &= -b T_t \sin\delta_t - \tau_f \sin\delta_f \\
-        M_z &= a T_f \sin\delta_f - \tau_t \sin\delta_t
-    \end{aligned}
-    \label{eq:moment_full_nonlinear}
-\end{equation}
-
-其中推力与反扭矩由差速变量$\Delta\omega$参数化（式\ref{eq:diff_def}）：
-\begin{equation}
-    T_f = T_0(1+\Delta\omega), \quad T_t = T_0(1-\Delta\omega), \quad
-    \tau_f = \tau_0(1+\Delta\omega), \quad \tau_t = \tau_0(1-\Delta\omega)
-    \label{eq:diff_thrust_torque}
-\end{equation}
-且$T_0=k_T\omega_0^2$，$\tau_0=k_Q\omega_0^2$，$\omega_0$为基准转速。
-
-\subsubsection{在线Jacobian $\mathbf{B}_{\mathrm{true}}(\mathbf{u})$的推导}
-
-对式(\ref{eq:moment_full_nonlinear})逐项求偏导数，得到在当前工作点$\mathbf{u}_k=[\Delta\omega_k,\delta_{t,k},\delta_{f,k}]^T$处的完整Jacobian：
-
-\begin{equation}
-    \boxed{
-    \mathbf{B}_{\mathrm{true}}(\mathbf{u}_k) =
-    \begin{bmatrix}
-        -\tau_0(\cos\delta_{f,k}+\cos\delta_{t,k}) & -\tau_{t,k}\sin\delta_{t,k} & +\tau_{f,k}\sin\delta_{f,k} \\[6pt]
-        +b T_0\sin\delta_{t,k} - \tau_0\sin\delta_{f,k} & -b T_{t,k}\cos\delta_{t,k} & -\tau_{f,k}\cos\delta_{f,k} \\[6pt]
-        +a T_0\sin\delta_{f,k} + \tau_0\sin\delta_{t,k} & -\tau_{t,k}\cos\delta_{t,k} & +a T_{f,k}\cos\delta_{f,k}
-    \end{bmatrix}
-    }
-    \label{eq:B_true}
-\end{equation}
-
-其中$T_{f,k}=T_0(1+\Delta\omega_k)$，$T_{t,k}=T_0(1-\Delta\omega_k)$，$\tau_{f,k}=\tau_0(1+\Delta\omega_k)$，$\tau_{t,k}=\tau_0(1-\Delta\omega_k)$为当前步的推力和反扭矩值（已在推进系统建模步骤中计算完毕）。
-
-\subsubsection{与线性化效能矩阵的对比}
-
-当$\delta_f=\delta_t=0$时，$\sin\delta=0$、$\cos\delta=1$，式(\ref{eq:B_true})退化为：
-\begin{equation}
-    \mathbf{B}_{\mathrm{true}}(\mathbf{0}) =
-    \begin{bmatrix}
-        -2\tau_0 & 0 & 0 \\
-        0 & -b T_0 & -\tau_0 \\
-        0 & -\tau_0 & a T_0
-    \end{bmatrix}
-    \equiv \mathbf{B}_{\mathrm{full}}(\omega_0)
-    \label{eq:B_at_zero}
-\end{equation}
-即第\ref{sec:allocation}节在线性化假设下推导的$\mathbf{B}_{\mathrm{full}}$（式\ref{eq:effectiveness_matrix}）。因此$\mathbf{B}_{\mathrm{full}}$是$\mathbf{B}_{\mathrm{true}}$在零摆角处的特例，不适用于INDI在大摆角工况下的实际需求。
-
-在极端工况（$\delta_f=\delta_t=15^\circ$，$\Delta\omega=0.5$，即前电机满偏右+尾电机满偏下+大半差速）下，两者差异如表\ref{tab:B_comparison}所示：
-
-\begin{table}[H]
-\centering
-\caption{$\mathbf{B}_{\mathrm{full}}$与$\mathbf{B}_{\mathrm{true}}$在MAXDEF工况下的对比}
-\label{tab:B_comparison}
-\setlength{\tabcolsep}{4pt}
-\small
-\begin{tabularx}{\textwidth}{c c c X}
-\toprule
-\textbf{矩阵元素} & $\mathbf{B}_{\mathrm{full}}(\omega_0)$ & $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$ & \textbf{相对误差} \\
-\midrule
-$B_{11}$（滚转 $\leftarrow \Delta\omega$） & $-2\tau_0$ & $-\tau_0(0.906+0.906)=-1.812\tau_0$ & 9.4\% \\
-$B_{22}$（俯仰 $\leftarrow \delta_t$） & $-b T_0$ & $-b\cdot 0.5T_0\cdot 0.906 = -0.453bT_0$ & \textbf{54.7\%} \\
-$B_{33}$（偏航 $\leftarrow \delta_f$） & $+a T_0$ & $a\cdot 1.5T_0\cdot 0.906 = 1.359aT_0$ & \textbf{35.9\%} \\
-$B_{12}$（滚转 $\leftarrow \delta_t$） & 0（无耦合） & $+\tau_{t,k}\sin\delta_{t,k} \neq 0$ & 新出现 \\
-$B_{13}$（滚转 $\leftarrow \delta_f$） & 0（无耦合） & $+\tau_{f,k}\sin\delta_{f,k} \neq 0$ & 新出现 \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-满偏+满差速下，俯仰通道的效能估计误差超过50\%——若INDI使用$\mathbf{B}_{\mathrm{full}}$作为$\hat{\mathcal{B}}$，其逆矩阵会将俯仰指令放大近两倍，严重违反INDI的鲁棒稳定性条件\cite{pollack2023robust}。因此，在实际应用中必须采用在线计算的$\mathbf{B}_{\mathrm{true}}$。
-
-\subsubsection{在线解析求逆}
-
-$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$是$3\times3$实矩阵，其逆可通过伴随矩阵法解析求取。定义各元素为$b_{ij}$（$i,j=1,2,3$分别对应$M_x,M_y,M_z$行和$\Delta\omega,\delta_t,\delta_f$列），行列式为
-
-\begin{equation}
-    \det(\mathbf{B}) = b_{11}(b_{22}b_{33}-b_{23}b_{32}) - b_{12}(b_{21}b_{33}-b_{23}b_{31}) + b_{13}(b_{21}b_{32}-b_{22}b_{31})
-    \label{eq:B_det}
-\end{equation}
-
-伴随矩阵各元素为对应代数余子式。完整计算约需18次乘法+1次除法，在嵌入式MCU上耗时$<1\,\mu$s，不构成实时性瓶颈。由于各元素$b_{ij}$均由当前步已计算的物理量（$\sin/\cos$摆角，$T_f,T_t,\tau_f,\tau_t$）简单组合而成，在线Jacobian的构建本身不引入额外的传感器或模型需求。
+INDI 控制律（式\ref{eq:indi_law}）使用的效能矩阵即主算法的在线
+Jacobian $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$（式\ref{eq:B_true}，
+第\ref{sec:cascade_Btrue}章推导）——包括其大摆角必要性论证、解析求逆与
+奇异保护（第\ref{sec:cascade_Btrue}章表\ref{tab:B_comparison}）：
+大摆角下 $\mathbf{B}_{\mathrm{full}}$ 的俯仰效能误差超过 50\%，
+INDI 若使用冻结矩阵求逆会将指令放大近两倍，必须采用在线 $\mathbf{B}_{\mathrm{true}}$。
 
 \subsection{本构型的INDI控制律 -- 在线Jacobian形式}
 

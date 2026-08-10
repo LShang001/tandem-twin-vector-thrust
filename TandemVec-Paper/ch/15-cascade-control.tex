@@ -142,6 +142,110 @@ $K_p$的物理意义是姿态回正的特征角速率（实机 $\approx80$°/s �
 $\mathbf{I}\boldsymbol{\nu}$ 同坐标系相加。
 气动与重力项未显式对消（模型不确定度大），由内环积分项兜底。
 
+\subsubsection{NDI 理论基础：模型逆与在线效能矩阵}
+
+第\ref{sec:cascade_ff}节的前馈对消源于经典\textbf{非线性动态逆（NDI）}。考虑
+输入仿射非线性系统 $\dot{\boldsymbol{\omega}} = \boldsymbol{\alpha}(\mathbf{x}) +
+\mathcal{B}(\mathbf{x})\mathbf{u}$（$\boldsymbol{\alpha}$ 含 Coriolis 力、陀螺力矩、
+气动阻尼等与 $\mathbf{u}$ 无关的动力学项），NDI 直接构造逆映射\cite{stevens2015aircraft}：
+\begin{equation}
+    \mathbf{u} = \hat{\mathcal{B}}^{-1}(\mathbf{x})\left[\boldsymbol{\nu}
+        - \hat{\boldsymbol{\alpha}}(\mathbf{x})\right]
+    \label{eq:ndi_law}
+\end{equation}
+其中 $\hat{\boldsymbol{\alpha}}$、$\hat{\mathcal{B}}$ 为机载模型估计，$\boldsymbol{\nu}$
+为虚拟控制量（期望角加速度）。式(\ref{eq:cascade_ff})正是本构型 NDI 的实现：
+$\boldsymbol{\nu}$ 来自速率内环、$\mathbf{I}\boldsymbol{\nu}$ 为惯量逆、
+前馈 $\mathbf{M}_{\mathrm{ff}}$ 对消 $\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})
++\boldsymbol{\omega}\times\mathbf{h}$（$\boldsymbol{\alpha}$ 中可精确建模的部分），
+$\mathbf{B}_{\mathrm{true}}^{-1}$ 为效能矩阵逆——NDI 对消后的闭环呈
+$\dot{\boldsymbol{\omega}}\approx\boldsymbol{\nu}$ 的积分器特性。
+
+\subsubsection{在线效能矩阵的严格建模（B\_true 矩阵）}
+\label{sec:cascade_Btrue}
+
+NDI 控制律中唯一需要建模的是控制效能矩阵
+$\mathbf{B}=\partial\mathbf{M}/\partial\mathbf{u}$。对本构型，
+控制输入 $\mathbf{u}=[\Delta\omega,\delta_t,\delta_f]^T$，被控力矩
+$\mathbf{M}=[M_x,M_y,M_z]^T$，从第\ref{sec:mapping}节的完整六维映射
+（式\ref{eq:six_component}）的力矩分量出发：
+\begin{equation}
+    \begin{aligned}
+        M_x &= -\tau_f \cos\delta_f + \tau_t \cos\delta_t \\
+        M_y &= -b T_t \sin\delta_t - \tau_f \sin\delta_f \\
+        M_z &= a T_f \sin\delta_f - \tau_t \sin\delta_t
+    \end{aligned}
+    \label{eq:moment_full_nonlinear}
+\end{equation}
+其中推力与反扭矩由差速变量 $\Delta\omega$ 参数化（式\ref{eq:diff_def}）：
+\begin{equation}
+    T_f = T_0(1+\Delta\omega), \quad T_t = T_0(1-\Delta\omega), \quad
+    \tau_f = \tau_0(1+\Delta\omega), \quad \tau_t = \tau_0(1-\Delta\omega)
+    \label{eq:diff_thrust_torque}
+\end{equation}
+且 $T_0=k_T\omega_0^2$、$\tau_0=k_Q\omega_0^2$。
+
+对式(\ref{eq:moment_full_nonlinear})逐项求偏导，得到\textbf{在线 Jacobian}
+（在当前工作点 $\mathbf{u}_k=[\Delta\omega_k,\delta_{t,k},\delta_{f,k}]^T$ 处）：
+\begin{equation}
+    \boxed{
+    \mathbf{B}_{\mathrm{true}}(\mathbf{u}_k) =
+    \begin{bmatrix}
+        -\tau_0(\cos\delta_{f,k}+\cos\delta_{t,k}) & -\tau_{t,k}\sin\delta_{t,k} & +\tau_{f,k}\sin\delta_{f,k} \\[6pt]
+        +b T_0\sin\delta_{t,k} - \tau_0\sin\delta_{f,k} & -b T_{t,k}\cos\delta_{t,k} & -\tau_{f,k}\cos\delta_{f,k} \\[6pt]
+        +a T_0\sin\delta_{f,k} + \tau_0\sin\delta_{t,k} & -\tau_{t,k}\cos\delta_{t,k} & +a T_{f,k}\cos\delta_{f,k}
+    \end{bmatrix}
+    }
+    \label{eq:B_true}
+\end{equation}
+其中 $T_{f,k}=T_0(1+\Delta\omega_k)$ 等为当前步推力和反扭矩。
+
+当 $\delta_f=\delta_t=0$ 时式(\ref{eq:B_true})退化为第\ref{sec:allocation}节的
+线性化矩阵（式\ref{eq:effectiveness_matrix}）：
+\begin{equation}
+    \mathbf{B}_{\mathrm{true}}(\mathbf{0}) =
+    \begin{bmatrix}
+        -2\tau_0 & 0 & 0 \\
+        0 & -b T_0 & -\tau_0 \\
+        0 & -\tau_0 & a T_0
+    \end{bmatrix}
+    \equiv \mathbf{B}_{\mathrm{full}}(\omega_0)
+    \label{eq:B_at_zero}
+\end{equation}
+即 $\mathbf{B}_{\mathrm{full}}$ 是 $\mathbf{B}_{\mathrm{true}}$ 的零摆角特例。
+大摆角工况下两者差异显著（表\ref{tab:B_comparison}）——俯仰通道效能估计误差
+超过 50\%，若用冻结 $\mathbf{B}_{\mathrm{full}}$ 求逆，俯仰指令会被放大近两倍：
+\textbf{这正是实机必须采用在线 $\mathbf{B}_{\mathrm{true}}$ 的理论依据}。
+
+\begin{table}[H]
+\centering
+\caption{$\mathbf{B}_{\mathrm{full}}$与$\mathbf{B}_{\mathrm{true}}$在MAXDEF工况下的对比
+（$\delta_f=\delta_t=15^\circ$、$\Delta\omega=0.5$）}
+\label{tab:B_comparison}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabularx}{\textwidth}{c c c X}
+\toprule
+\textbf{矩阵元素} & $\mathbf{B}_{\mathrm{full}}(\omega_0)$ & $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$ & \textbf{相对误差} \\
+\midrule
+$B_{11}$（滚转 $\leftarrow \Delta\omega$） & $-2\tau_0$ & $-\tau_0(0.906+0.906)=-1.812\tau_0$ & 9.4\% \\
+$B_{22}$（俯仰 $\leftarrow \delta_t$） & $-b T_0$ & $-b\cdot 0.5T_0\cdot 0.906 = -0.453bT_0$ & \textbf{54.7\%} \\
+$B_{33}$（偏航 $\leftarrow \delta_f$） & $+a T_0$ & $a\cdot 1.5T_0\cdot 0.906 = 1.359aT_0$ & \textbf{35.9\%} \\
+$B_{12}$（滚转 $\leftarrow \delta_t$） & 0（无耦合） & $+\tau_{t,k}\sin\delta_{t,k} \neq 0$ & 新出现 \\
+$B_{13}$（滚转 $\leftarrow \delta_f$） & 0（无耦合） & $+\tau_{f,k}\sin\delta_{f,k} \neq 0$ & 新出现 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+$\mathbf{B}_{\mathrm{true}}$ 的逆经伴随矩阵法解析求取（行列式
+\begin{equation}
+    \det(\mathbf{B}) = b_{11}(b_{22}b_{33}-b_{23}b_{32}) - b_{12}(b_{21}b_{33}-b_{23}b_{31}) + b_{13}(b_{21}b_{32}-b_{22}b_{31})
+    \label{eq:B_det}
+\end{equation}
+元素 $b_{ij}$ 为当前步物理量的简单组合，嵌入式耗时 $<1\,\mu$s 不构成瓶颈）；正常工作范围内 $\det(\mathbf{B}_{\mathrm{true}})>0$
+严格成立，$\omega_0\to0$ 时趋于奇异——由第\ref{sec:cascade_workpoint}节的
+良态工作点下限与零油门门控兜底。
+
 \subsubsection{在线效能矩阵分配（绝对指令形式，NDI 而非 INDI）}
 \label{sec:cascade_alloc}
 
