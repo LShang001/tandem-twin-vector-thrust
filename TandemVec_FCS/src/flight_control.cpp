@@ -807,6 +807,14 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
 {
   if (mode == AUTO_POSITION)
   {
+    // ★ 2026-08-10 全面审查修复：每次从其他模式切入 AUTO_POSITION 时重新锁当前点。
+    //   handlePositionControl 内部的复位分支（L565）不可达——函数只在 AUTO_POSITION
+    //   被调用，内部 currentMode 恒为 AUTO_POSITION，positionHoldEnabled 永不复位，
+    //   目标点残留 → 从手动/定高切回定点时飞行器自动飞回旧悬停点（无操纵自主机动）。
+    static ControlMode s_prev_mode = MANUAL;
+    if (s_prev_mode != AUTO_POSITION)
+      positionHoldEnabled = false;  // 触发 handlePositionControl 内重新 init + 锁当前点
+    s_prev_mode = mode;
     handlePositionControl(inputs.roll_raw, inputs.pitch_raw);
     // `handlePositionControl` 更新全局的 thrust_comp_N/E
   }
@@ -915,8 +923,10 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
       // 将遥控器摇杆值（988-2012）映射为姿态角命令（-MAX_ANGLE_COMMAND 到 +MAX_ANGLE_COMMAND）
 
       // 俯仰角目标值：遥控器前后摇杆控制
-      // 前推摇杆 -> 负值（机头下俯）
-      // 后拉摇杆 -> 正值（机头上仰）
+      // ★ 2026-08-10 全面审查修复：注释与代码符号统一（此前注释"前推→负值"与代码
+      //   相反——代码 988→+MAX 在 θ̇≈−q 约定下即低头，实机行为正确，注释是回归诱因）
+      // 前推摇杆 -> 正值（机头下俯，θ̇≈−q 下 q>0=低头）
+      // 后拉摇杆 -> 负值（机头上仰）
       pitchTarget = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, MAX_ANGLE_COMMAND, -MAX_ANGLE_COMMAND);
 
       // 滚转角目标值：遥控器左右摇杆控制

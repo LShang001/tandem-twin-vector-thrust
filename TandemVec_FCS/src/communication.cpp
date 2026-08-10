@@ -653,8 +653,10 @@ void handleAnoCom()
   if (fast_tick || pos_tick || rc_tick || disp_tick || gps_tick)
   {
     // 非阻塞保护：按本 tick 最大组需求检查 TX 缓冲，不足跳过本 tick 发送。
-    // 快环 5 帧 ≈86B、显示帧 5 帧 ≈100B（含 8B/帧开销）；保守 120B 上限。
-    if (Serial6.availableForWrite() < 120)
+    // ★ 2026-08-10 全面审查修复：最坏组（t≡30 同拍）= RC(20) + disp(86) +
+    //   pos(20) + gps(31) + volt(18) ≈ 175B——原守卫 120B 在余量 120-174 时
+    //   阻塞写 ~1.9ms（占 5ms 主循环 38%）。保守上限提到 190。
+    if (Serial6.availableForWrite() < 190)
     {
       ano_tx_skipped++;
     }
@@ -722,29 +724,62 @@ void handleAnoCom()
       // ---- GPS/氧压 10Hz（数据源本身 10Hz，发高频是重复旧值）----
       if (gps_tick)
       {
-        const bool gnss_data_fresh = isGnssDataFreshForNav();
-        const bool gnss_valid = (ubx.fix() >= bfs::Ubx::FIX_3D) && gnss_data_fresh;
-        // GNSS 信息（DETA100 Status/Geodetic + UBX 解析值）
-        int8_t fix_type = Status_Packet.filter_status.gnss_fix_status;
+        // ★ 2026-08-10 全面审查修复：GPS 遥测数据源按 nav_data_source 分流——
+        //   原实现两模式共用 DETA100 包（Status/Geodetic）+ ubx 缓存：
+        //   INTERNAL 模式 fix/h_msl/vacc 恒 0（DETA100 包不写），
+        //   DETA100 模式 isGnssDataFreshForNav 恒 false（ubx.Pump 停）→ 全 0
+        const bool deta100_gnss = (nav_data_source == NavDataSource::DETA100) && deta100_online;
+        const bool gnss_data_fresh = deta100_gnss ? deta100_online : isGnssDataFreshForNav();
+        // GNSS 信息（按数据源取字段）
+        int8_t fix_type = 0;
         uint8_t num_sat = 0;
         float lon = 0, lat = 0, h_msl = 0, vn = 0, ve = 0, vd = 0, pdop = 0, vacc = 0, sacc = 0;
-        if (gnss_data_fresh)
+        if (deta100_gnss)
         {
+          fix_type = Status_Packet.filter_status.gnss_fix_status;
+          lon = (float)(Geodetic_Pos_Packet.longitude * RAD_TO_DEG);
+          lat = (float)(Geodetic_Pos_Packet.latitude * RAD_TO_DEG);
+          h_msl = (float)Geodetic_Pos_Packet.height;
+          vacc = Geodetic_Pos_Packet.vAcc;
+          // DETA100 无星数/PDOP/精度 API → 用 ubx 最后有效缓存（尽力而为）
+          num_sat = ubx.num_sv();
+          pdop = ubx.pdop();
+          sacc = ubx.spd_acc_mps();
+        }
+        else if (gnss_data_fresh)
+        {
+          fix_type = (int8_t)ubx.fix();
           num_sat = ubx.num_sv();
           lon = ubx.lon_deg();
           lat = ubx.lat_deg();
-          h_msl = Geodetic_Pos_Packet.height;
+          h_msl = ubx.alt_msl_m();
           pdop = ubx.pdop();
           sacc = ubx.spd_acc_mps();
-          vacc = Geodetic_Pos_Packet.vAcc;
+          // ubx 无垂直精度 API；vacc 保持 0（Geodetic_Pos_Packet 为 DETA100 专用，INTERNAL 下不写）
         }
+        const bool gnss_valid = deta100_gnss
+                                    ? (fix_type >= 3)  // DETA100 GPSFixType 3D
+                                    : ((ubx.fix() >= bfs::Ubx::FIX_3D) && gnss_data_fresh);
         if (gnss_valid)
         {
-          vn = ubx.north_vel_mps();  // m/s
-          ve = ubx.east_vel_mps();   // m/s
-          vd = -ubx.down_vel_mps();  // 取反为向上为正
+          if (deta100_gnss)
+          {
+            // DETA100 无独立速度包：用 EKF 融合输出（实时，语义为"导航速度"）
+            vn = (float)INS_GNSS_Packet.velocity_north;
+            ve = (float)INS_GNSS_Packet.velocity_east;
+            vd = (float)(-INS_GNSS_Packet.velocity_down);  // 取反为向上为正
+          }
+          else
+          {
+            vn = ubx.north_vel_mps();  // m/s
+            ve = ubx.east_vel_mps();   // m/s
+            vd = -ubx.down_vel_mps();  // 取反为向上为正
+          }
         }
-        AnoCom.sendGPSInfo1(fix_type, num_sat, lon, lat, h_msl, vn, ve, vd, pdop, vacc, sacc);
+        // ★ 2026-08-10 全面审查修复：实参交换为 (pdop, sacc, vacc)——此前传 (vacc, sacc)，
+        //   使 data[21]=垂直精度、data[22]=速度精度，与手册 p[21]=SACC/p[22]=VACC 相反；
+        //   GCS 解码标签因此也反（变量名与内容互换，前端未消费故未暴露）
+        AnoCom.sendGPSInfo1(fix_type, num_sat, lon, lat, h_msl, vn, ve, vd, pdop, sacc, vacc);
         // 氧压（发动机控制器回传，经 0x0D 电压/电流通道承载）+ 电池电压（真实 ADC 采样）
         AnoCom.sendVoltCurr(bat_voltage_mv / 1000.0f, bat_current_ca / 10.0f,
                             receivedP1, receivedP2, 0);
@@ -1528,6 +1563,10 @@ static void mavlinkSendTelemetry()
   static uint32_t call_count = 0; // uint32 防止 200Hz 下快速溢出
   call_count++;
 
+  // ★ 2026-08-10 全面审查修复：TX 余量门控（与 AnoCom/mavSend 策略一致）——
+  //   原实现 11 处直写无保护，QGC 侧拥塞时 Serial6.write 阻塞主循环
+  if (Serial6.availableForWrite() < 64) return;
+
   mavlink_message_t msg;
   uint8_t buf[MAVLINK_MAX_PACKET_LEN];
 
@@ -1631,9 +1670,21 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   if (call_count % 10 == 2)
   {
-    int32_t lat = (int32_t)(Geodetic_Pos_Packet.latitude * 180.0 / M_PI * 1e7);
-    int32_t lon = (int32_t)(Geodetic_Pos_Packet.longitude * 180.0 / M_PI * 1e7);
-    int32_t alt_ellipsoid = (int32_t)(Geodetic_Pos_Packet.height * 1000.0f);
+    // ★ 2026-08-10 全面审查修复：GLOBAL_POSITION_INT 数据源按 nav_data_source 分流
+    //   （原实现恒取 DETA100 包——INTERNAL 模式下经纬高恒 0/0）
+    int32_t lat, lon, alt_ellipsoid;
+    if ((nav_data_source == NavDataSource::DETA100) && deta100_online)
+    {
+      lat = (int32_t)(Geodetic_Pos_Packet.latitude * 180.0 / M_PI * 1e7);
+      lon = (int32_t)(Geodetic_Pos_Packet.longitude * 180.0 / M_PI * 1e7);
+      alt_ellipsoid = (int32_t)(Geodetic_Pos_Packet.height * 1000.0f);
+    }
+    else
+    {
+      lat = (int32_t)(ubx.lat_deg() * 1e7);
+      lon = (int32_t)(ubx.lon_deg() * 1e7);
+      alt_ellipsoid = (int32_t)(ubx.alt_msl_m() * 1000.0f);
+    }
     int32_t relative_alt = (int32_t)(estimated_height * 1000.0f);
 
     int16_t vx = (int16_t)constrain(INS_GNSS_Packet.velocity_north * 100.0f, -32767.0f, 32767.0f);
@@ -1892,7 +1943,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       else if (strncmp(line, "wsseq", 5) == 0) {
         uint32_t ms = 500;
         int ms_arg;
-        if (sscanf(line + 5, "%d", &ms_arg) == 1) ms = (uint32_t)constrain(ms_arg, 50, 5000);
+        // ★ 2026-08-10 全面审查修复：上限 5000 → 150——4×delay 串行阻塞主循环，\n        //   ms≥800 时总阻塞 >IWDG 2.99s 触发硬件复位（默认 500ms 也逼近窗口）\n        if (sscanf(line + 5, "%d", &ms_arg) == 1) ms = (uint32_t)constrain(ms_arg, 50, 150);
         serial.print(F("[DBG] sequence, "));
         serial.print(ms); serial.println(F("ms/color..."));
         // 自动测试序列：红 → 绿 → 蓝 → 白 → 灭
@@ -2033,7 +2084,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         else if (strcmp(line, "ubxcfg rst") == 0)
         {
           serial.println(F("[DBG] UBX GNSS 软复位..."));
-          ubxResetReceiver(Serial6);
+          ubxResetReceiver(gpsSerialPort);
         }
         else if (strncmp(line, "ubxcfg msg ", 11) == 0) {
           // 消息输出速率（CFG-MSG）：NMEA 句（class 0xF0）或 UBX 诊断消息（class 0x01）
@@ -2086,7 +2137,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
               serial.print(name);
               serial.print(F(" rate="));
               serial.println(final_rate);
-              ubxMsgRateConfig(Serial6, (uint8_t)cls, (uint8_t)id, final_rate);
+              ubxMsgRateConfig(gpsSerialPort, (uint8_t)cls, (uint8_t)id, final_rate);
             }
           }
           else
@@ -2098,16 +2149,16 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
           // 一键最小 NMEA 集：GGA+RMC+GSA 开/关（1Hz）
           if (strcmp(line, "ubxcfg core on") == 0)
           {
-            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GGA, 1);
-            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_RMC, 1);
-            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GSA, 1);
+            ubxMsgRateConfig(gpsSerialPort, 0xF0, UBX_NMEA_GGA, 1);
+            ubxMsgRateConfig(gpsSerialPort, 0xF0, UBX_NMEA_RMC, 1);
+            ubxMsgRateConfig(gpsSerialPort, 0xF0, UBX_NMEA_GSA, 1);
             serial.println(F("[DBG] NMEA core (GGA/RMC/GSA) @1Hz ON"));
           }
           else if (strcmp(line, "ubxcfg core off") == 0)
           {
-            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GGA, 0);
-            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_RMC, 0);
-            ubxMsgRateConfig(Serial6, 0xF0, UBX_NMEA_GSA, 0);
+            ubxMsgRateConfig(gpsSerialPort, 0xF0, UBX_NMEA_GGA, 0);
+            ubxMsgRateConfig(gpsSerialPort, 0xF0, UBX_NMEA_RMC, 0);
+            ubxMsgRateConfig(gpsSerialPort, 0xF0, UBX_NMEA_GSA, 0);
             serial.println(F("[DBG] NMEA core (GGA/RMC/GSA) OFF"));
           }
           else
@@ -2134,7 +2185,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
             {
               serial.print(F("[DBG] NMEA version="));
               serial.println(v);
-              ubxNmeaVersionConfig(Serial6, enc);
+              ubxNmeaVersionConfig(gpsSerialPort, enc);
             }
           }
           else
@@ -2160,7 +2211,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
           {
             serial.print(F("[DBG] NMEA main talker="));
             serial.println(t);
-            ubxNmeaTalkerConfig(Serial6, tid);
+            ubxNmeaTalkerConfig(gpsSerialPort, tid);
           }
         }
         else if (strncmp(line, "ubxcfg nmfilter ", 16) == 0) {
@@ -2168,13 +2219,13 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
           const char *f = line + 16;
           if (strcmp(f, "on") == 0)
           {
-            ubxNmeaFilterConfig(Serial6, NMEA_FILTER_POS | NMEA_FILTER_MSK |
+            ubxNmeaFilterConfig(gpsSerialPort, NMEA_FILTER_POS | NMEA_FILTER_MSK |
                                            NMEA_FILTER_TIME | NMEA_FILTER_DATE);
             serial.println(F("[DBG] NMEA filter ON (pos/msk/time/date)"));
           }
           else if (strcmp(f, "off") == 0)
           {
-            ubxNmeaFilterConfig(Serial6, 0);
+            ubxNmeaFilterConfig(gpsSerialPort, 0);
             serial.println(F("[DBG] NMEA filter OFF (full output)"));
           }
           else
@@ -2195,26 +2246,26 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
             serial.print(F("[DBG] NAV5 dynModel=Airborne<"));
             serial.print(v);
             serial.println(F("g"));
-            ubxNav5Config(Serial6, v, -1, -1, -1);
+            ubxNav5Config(gpsSerialPort, v, -1, -1, -1);
           }
           else if (sscanf(line + 11, "fix %d", &v) == 1 && v >= 0 && v <= 2)
           {
             serial.print(F("[DBG] NAV5 fixMode="));
             serial.println(v);
-            ubxNav5Config(Serial6, 0, v, -1, -1);
+            ubxNav5Config(gpsSerialPort, 0, v, -1, -1);
           }
           else if (sscanf(line + 11, "elev %d", &v) == 1 && v >= 0 && v <= 90)
           {
             serial.print(F("[DBG] NAV5 minElev="));
             serial.println(v);
-            ubxNav5Config(Serial6, 0, -1, v, -1);
+            ubxNav5Config(gpsSerialPort, 0, -1, v, -1);
           }
           else if (sscanf(line + 11, "pdop %d", &arg) == 1 && arg >= 0 && arg <= 100)
           {
             serial.print(F("[DBG] NAV5 pDOP thresh="));
             serial.print(arg);
             serial.println(F(" (x0.1)"));
-            ubxNav5Config(Serial6, 0, -1, -1, arg);
+            ubxNav5Config(gpsSerialPort, 0, -1, -1, arg);
           }
           else
           {
@@ -2225,12 +2276,12 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
           // CW 干扰检测（CFG-ITFM）：城市/图传频段干扰导致定位漂移时诊断用
           if (strcmp(line, "ubxcfg itfm on") == 0)
           {
-            ubxItfmConfig(Serial6, true);
+            ubxItfmConfig(gpsSerialPort, true);
             serial.println(F("[DBG] ITFM interference detection ON"));
           }
           else if (strcmp(line, "ubxcfg itfm off") == 0)
           {
-            ubxItfmConfig(Serial6, false);
+            ubxItfmConfig(gpsSerialPort, false);
             serial.println(F("[DBG] ITFM interference detection OFF"));
           }
           else
@@ -2241,7 +2292,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         else if (strcmp(line, "ubxcfg ant") == 0) {
           // 天线状态查询（CFG-ANT 纯读）：status 低2位 0=INIT 1=UNKNOWN 2=OK 3=SHORT/OPEN
           uint8_t ant[4];
-          if (ubxAntStatusQuery(Serial6, ant))
+          if (ubxAntStatusQuery(gpsSerialPort, ant))
           {
             const uint8_t st = ant[2] & 0x03;
             serial.print(F("[DBG] antenna: "));
@@ -2274,7 +2325,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
           {
             serial.print(F("[DBG] outProtoMask="));
             serial.println(mask);
-            ubxProtoOutputConfig(Serial6, mask);
+            ubxProtoOutputConfig(gpsSerialPort, mask);
           }
         }
         else
@@ -2288,7 +2339,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
           UbxConfigOptions o = kUbxDefaultCfg;
           o.persist = persist;
           o.nmea_out = nmea;
-          ubxAutoConfig(Serial6, &o);
+          ubxAutoConfig(gpsSerialPort, &o);
           serial.println(F("[DBG] 配置完成，用 'ubxcfg status' 查看"));
         }
       }

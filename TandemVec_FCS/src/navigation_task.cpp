@@ -191,18 +191,10 @@ static bool gnssEpochPassesFullQuality(const bfs::UbxEpoch &epoch)
       epoch.horz_acc_m, epoch.vert_acc_m, epoch.spd_acc_mps,
       epoch.pvt_pdop, kGnssDwCfg);
 
-  gnss_status.has_obs = true;
-  gnss_status.last_obs_fix_type = static_cast<float>(epoch.fix);
-  gnss_status.last_obs_num_sv = static_cast<float>(epoch.num_sv);
-  gnss_status.last_obs_h_acc_m = epoch.horz_acc_m;
-  gnss_status.last_obs_v_acc_m = epoch.vert_acc_m;
-  gnss_status.last_obs_s_acc_mps = epoch.spd_acc_mps;
-  gnss_status.last_obs_p_dop = epoch.pvt_pdop;
-  gnss_status.last_obs_vel_n_mps = epoch.north_vel_mps;
-  gnss_status.last_obs_vel_e_mps = epoch.east_vel_mps;
-  gnss_status.last_obs_vel_d_mps = epoch.down_vel_mps;
-  gnss_status.last_obs_lla_rad_m = Eigen::Vector3d(
-      epoch.lat_rad, epoch.lon_rad, static_cast<double>(epoch.alt_wgs84_m));
+  // ★ 2026-08-10 全面审查修复：gnss_status 快照已移至本函数全部质量检查
+  //   通过后（return true 前）——原实现在检查前写 has_obs/last_obs_*，
+  //   被拒 epoch（tow 不匹配/重复 iTOW/h_acc 不达标）也留下 3D fix 快照，
+  //   地面站显示 fix 而 EKF 实际未融合该帧
 
   if (epoch.pvt_tow_ms != epoch.eoe_tow_ms)
   {
@@ -225,6 +217,19 @@ static bool gnssEpochPassesFullQuality(const bfs::UbxEpoch &epoch)
   }
 
   gnss_status.fix3d_count++;
+  // ★ 2026-08-10 全面审查修复：快照只反映通过全部质量检查的 epoch
+  gnss_status.has_obs = true;
+  gnss_status.last_obs_fix_type = static_cast<float>(epoch.fix);
+  gnss_status.last_obs_num_sv = static_cast<float>(epoch.num_sv);
+  gnss_status.last_obs_h_acc_m = epoch.horz_acc_m;
+  gnss_status.last_obs_v_acc_m = epoch.vert_acc_m;
+  gnss_status.last_obs_s_acc_mps = epoch.spd_acc_mps;
+  gnss_status.last_obs_p_dop = epoch.pvt_pdop;
+  gnss_status.last_obs_vel_n_mps = epoch.north_vel_mps;
+  gnss_status.last_obs_vel_e_mps = epoch.east_vel_mps;
+  gnss_status.last_obs_vel_d_mps = epoch.down_vel_mps;
+  gnss_status.last_obs_lla_rad_m = Eigen::Vector3d(
+      epoch.lat_rad, epoch.lon_rad, static_cast<double>(epoch.alt_wgs84_m));
   return true;
 }
 

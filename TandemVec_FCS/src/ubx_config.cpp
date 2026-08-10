@@ -258,18 +258,24 @@ static bool _cfg_nav5_rw(HardwareSerial &serial, int dyn_model, int fix_mode,
   }
   if (fix_mode >= 0)
   {
-    mask |= 0x0002;                    // bit1 = fixMode
-    cur[3] = (uint8_t)fix_mode;
+    // ★ 2026-08-10 全面审查修复（M8 协议 UBX-13003221）：fixMode 在 bit2/byte4
+    //   （原 bit1/byte3 实为 minElev 位，配置静默无效）
+    mask |= 0x0004;                    // bit2 = fixMode
+    cur[4] = (uint8_t)fix_mode;
   }
   if (min_elev >= 0)
   {
-    mask |= 0x0010;                    // bit4 = minElev
-    cur[12] = (uint8_t)min_elev;
+    // ★ 2026-08-10 全面审查修复：minElev 在 bit1/byte3（原 bit4/byte12 实为 cnoThreshold 位）
+    mask |= 0x0002;                    // bit1 = minElev
+    cur[3] = (uint8_t)min_elev;
   }
   if (pdop_thresh >= 0)
   {
-    mask |= 0x0020;                    // bit5 = pDOP
-    cur[13] = (uint8_t)pdop_thresh;
+    // ★ 2026-08-10 全面审查修复：pDOP 在 bit14/byte16-17 u16 LE（原 bit5/byte13
+    //   实为 minPosTimeout 位；单位 0.1）
+    mask |= 0x4000;                    // bit14 = pDOP
+    cur[16] = (uint8_t)(pdop_thresh & 0xFF);
+    cur[17] = (uint8_t)((pdop_thresh >> 8) & 0xFF);
   }
   cur[0] = (uint8_t)(mask & 0xFF);
   cur[1] = (uint8_t)(mask >> 8);
@@ -329,7 +335,9 @@ static bool _cfg_sbas(HardwareSerial &serial)
 static void _cfg_save(HardwareSerial &serial)
 {
   uint8_t p[13] = {0};
-  p[4] = 0x1F;
+  // ★ 2026-08-10 全面审查修复：0x1F→0x3F 补 senConf(bit5)——原 0x1F 不含
+  //   senConf，CFG-GNSS 星座配置无法固化（掉电丢失且"已固化"快路径不再重配）
+  p[4] = 0x3F;
   _ubx_send(serial, 0x06, 0x09, p, 13);
 }
 

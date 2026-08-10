@@ -21,18 +21,24 @@ struct AnoParamEntry
     uint8_t type;       // AnoDataType（ANO_FLOAT=8 / ANO_UINT8=0）
     float *fptr;        // float 字段指针（type==ANO_FLOAT）
     uint8_t *bptr;      // bool 字段指针（type==ANO_UINT8，存 0/1）
+    uint8_t *u8ptr;     // ★ 2026-08-10 全面审查修复：uint8 值字段指针（0-255 语义，
+                        //   区别于 bptr 的 bool 语义）——inertia_comp_mask 双位掩码
+                        //   此前被 bool 化（0xE1 写 2/3 被拒、MAVLink 钳 0/1），
+                        //   A/B 测试无法恢复默认 0x03
 };
 
 #define PID_FLOAT(loop, field) \
-    { #loop "." #field, ANO_FLOAT, &kFlightCtrlParams.loop.field, nullptr }
+    { #loop "." #field, ANO_FLOAT, &kFlightCtrlParams.loop.field, nullptr, nullptr }
 #define PID_ENABLED(loop) \
-    { #loop ".enabled", ANO_UINT8, nullptr, (uint8_t *)&kFlightCtrlParams.loop.enabled }
+    { #loop ".enabled", ANO_UINT8, nullptr, (uint8_t *)&kFlightCtrlParams.loop.enabled, nullptr }
 // ★ 参数名 ≤20B（协议 PAR_NAME 定长 20B，超限被截断导致上位机按名匹配失败）：
 //   filter_alpha → falpha；滤波数组用短名
 #define PID_ALPHA(loop) \
-    { #loop ".falpha", ANO_FLOAT, &kFlightCtrlParams.loop.filter_alpha, nullptr }
+    { #loop ".falpha", ANO_FLOAT, &kFlightCtrlParams.loop.filter_alpha, nullptr, nullptr }
 #define ALPHA_ENTRY(name, field, idx) \
-    { name "[" #idx "]", ANO_FLOAT, &kFlightCtrlParams.field[idx], nullptr }
+    { name "[" #idx "]", ANO_FLOAT, &kFlightCtrlParams.field[idx], nullptr, nullptr }
+#define PID_U8(name, var) \
+    { name, ANO_UINT8, nullptr, nullptr, &(var) }
 
 // 参数注册表（顺序即参数 ID，0..ANO_PARAMS_COUNT-1）
 // ★ 与上位机 GCS/server/params.py 的分组/单位元数据按名称匹配，勿改命名
@@ -97,7 +103,8 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     ALPHA_ENTRY("out_alpha", output_filter_alpha, 0), ALPHA_ENTRY("out_alpha", output_filter_alpha, 1),
     ALPHA_ENTRY("out_alpha", output_filter_alpha, 2),
     // ★ 2026-08-10 惯量逆解交叉耦合前馈使能掩码（bit0 陀螺耦合 / bit1 转子陀螺；0=全关，在线 A/B）
-    { "inertia_comp_mask", ANO_UINT8, nullptr, &kFlightCtrlParams.inertia_comp_mask },
+    // 2026-08-10 全面审查修复：bptr(bool) → u8ptr(0-255)——双位掩码此前无法写 2/3、无法恢复 0x03
+    PID_U8("inertia_comp_mask", kFlightCtrlParams.inertia_comp_mask),
     ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 0), ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 1),
     ALPHA_ENTRY("spd2_alpha", speed_filter_alpha2, 2),   // ★ 2026-08-09 二级滤波（级联二阶，抑 30-60Hz 桨振动）
 };
@@ -127,7 +134,7 @@ static uint16_t anoParamSerialize(uint16_t id, uint8_t *out, uint16_t maxLen)
     }
     if (maxLen < 1)
         return 0;
-    out[0] = (*e->bptr) ? 1 : 0;
+    out[0] = e->u8ptr ? *e->u8ptr : ((*e->bptr) ? 1 : 0);  // u8ptr 优先（0-255 值）
     return 1;
 }
 
@@ -144,8 +151,15 @@ static bool anoParamDeserialize(uint16_t id, const uint8_t *val, uint16_t len)
         memcpy(e->fptr, val, 4);
         return true;
     }
-    // ANO_UINT8（enabled）
-    if (len != 1 || val[0] > 1)
+    // ANO_UINT8：u8ptr（0-255 值，如 inertia_comp_mask）/ bptr（bool，enabled）
+    if (len != 1)
+        return false;
+    if (e->u8ptr)
+    {
+        *e->u8ptr = val[0];   // ★ 2026-08-10 修复：掩码可写 0-255（此前 bool 化拒绝 2/3）
+        return true;
+    }
+    if (val[0] > 1)
         return false;
     *e->bptr = val[0] ? true : false;
     return true;
@@ -189,7 +203,7 @@ bool anoParamReadFloat(uint16_t id, float *out)
         *out = *e->fptr;
         return true;
     }
-    *out = (*e->bptr) ? 1.0f : 0.0f;  // ANO_UINT8 → float
+    *out = e->u8ptr ? (float)(*e->u8ptr) : ((*e->bptr) ? 1.0f : 0.0f);  // ANO_UINT8 → float
     return true;
 }
 
@@ -204,8 +218,16 @@ bool anoParamWriteFloat(uint16_t id, float value)
     }
     else
     {
-        // ANO_UINT8：0.0→false，其余→true（钳制语义，MAV_PARAM_TYPE_REAL32 来源）
-        *e->bptr = (value != 0.0f);
+        if (e->u8ptr)
+        {
+            // ★ 2026-08-10 修复：掩码按 0-255 值写入（此前钳 0/1 无法恢复 0x03）
+            *e->u8ptr = (uint8_t)constrain(value, 0.0f, 255.0f);
+        }
+        else
+        {
+            // ANO_UINT8：0.0→false，其余→true（钳制语义，MAV_PARAM_TYPE_REAL32 来源）
+            *e->bptr = (value != 0.0f);
+        }
     }
     applyFlightCtrlParams();  // 无扰同步到全部 PID/滤波器实例
     return true;
