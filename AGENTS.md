@@ -53,7 +53,7 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 
 | 路径 | 为什么必须知道 |
 |------|---------------|
-| `models/aircraft-model.json` | ★ 唯一参数源，52 参数。所有参数值以此为准，不可在代码中硬编码 |
+| `models/aircraft-model.json` | ★ 唯一参数源，59 参数。所有参数值以此为准，不可在代码中硬编码 |
 | `simulations/vector-thrust-lab/src/core/` | 纯计算层，零 Three.js/DOM 依赖，Node 可单独测试；`parameters.mjs` 由 sync-params.py 生成**禁止手改** |
 | `docs/04-数学建模/MOD-002-坐标系与符号约定.md` | NED 右手系、theta=-asin(R13)、渲染≠物理力臂 |
 | `TandemVec-Paper/` | 独立 LaTeX 论文工程（纵列双发矢量推力飞行器：构型原理、动力学建模与控制特性分析），编译需要 XeLaTeX ×5（build.bat） |
@@ -79,7 +79,7 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 - 四元数RK4积分 + 每阶段保范投影
 - theta=−asin(R₁₃)
 - 力臂分离（渲染±1.78m ≠ 物理0.315m）
-- SAS 限幅 ±25°/±0.7（积分俯仰±0.5rad / 滚转±0.3rad）
+- SAS 限幅 ±25°/±0.7（仿真值；固件实机摆角 2026-08-07 已收紧 ±15°，仿真未回写——积分俯仰±0.5rad / 滚转±0.3rad）
 - 空速下限 0.5m/s、地面 pos.z>6.2
 
 ## 边界
