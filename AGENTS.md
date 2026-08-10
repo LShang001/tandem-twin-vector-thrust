@@ -43,7 +43,7 @@ cd TandemVec_FCS/GCS && py -3.12 server/cli.py baudscan --port COM10      # 波�
 cd simulations/vector-thrust-lab && python -m http.server 8080
 
 # LaTeX（修改 ch/*.tex 后编译验证）
-cd docs/03-理论推导/THY-004 && build.bat
+cd TandemVec-Paper && build.bat
 
 # 文档构建
 py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
@@ -56,7 +56,7 @@ py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 | `models/aircraft-model.json` | ★ 唯一参数源，52 参数。所有参数值以此为准，不可在代码中硬编码 |
 | `simulations/vector-thrust-lab/src/core/` | 纯计算层，零 Three.js/DOM 依赖，Node 可单独测试；`parameters.mjs` 由 sync-params.py 生成**禁止手改** |
 | `docs/04-数学建模/MOD-002-坐标系与符号约定.md` | NED 右手系、theta=-asin(R13)、渲染≠物理力臂 |
-| `docs/03-理论推导/THY-004/` | 模块化 LaTeX 工程，编译需要 XeLaTeX ×3 |
+| `TandemVec-Paper/` | 独立 LaTeX 论文工程（纵列双发矢量推力飞行器：构型原理、动力学建模与控制特性分析），编译需要 XeLaTeX ×5（build.bat） |
 | `TandemVec_FCS/GCS/` | 上位机。协议/字段缩放以 `GCS/server/anocom.py` 为 PC 侧唯一实现（与固件逐字节对齐）；**参数链路 = 固件 `src/ano_params.cpp` 注册表（ID 顺序变更须同步 `GCS/server/params.py::expected_names()` 校验）** |
 | `TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md` | 官方协议手册（MinerU 转换 26 页）+ **本工程差异对照表**（0x40/0x20/0x0D/0x30 占用约定；0xE0-0xE3 参数链路已验证逐项一致） |
 | `TandemVec_FCS/include/FlightCtrlParams.h` | 固件参数唯一事实源：`kFlightCtrlParamsDefaults`（出厂默认，static constexpr）+ 固件分支 `kFlightCtrlParams`（可变实例，0xE1 写入） |
