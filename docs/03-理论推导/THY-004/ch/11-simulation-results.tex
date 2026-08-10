@@ -1,4 +1,5 @@
 \section{数值仿真实验与验证}
+\label{sec:simulation_results}
 \label{sec:simulation}
 
 基于第\ref{sec:dynamics}节的RK4高精度积分框架和第\ref{sec:INDI}节的INDI控制律方案，使用Python独立实现的六自由度仿真程序（\texttt{simulations/high-fidelity-analysis/}），对配平状态、线性化模态、积分精度和闭环响应进行定量分析与可视化。
@@ -6,6 +7,7 @@
 \noindent\textbf{注意（2026-08-01 参数集变更）：}本章配平/模态/稳定性数值与图（配平表、模态表、特征值分布、SAS 阶跃、配平保持）均已按 v0.2.0 VTOL 参数集（m=0.7\,kg、kT=1.04e-5、wMax=1150、a=b=0.315\,m，28\,m/s 四方程配平）重算重绘；积分精度（RK4 vs 欧拉）与构型无关，结论不变。其余章节（VTOL 控制、级联/INDI）的图仍基于旧参数集 v0.1.0 绘制。
 
 \subsection{纵向配平}
+\label{sec:trim}
 
 在$V=28$\,m/s水平定直飞行条件下，Newton法联立求解纵向三自由度配平（v0.2.0 VTOL 参数集）：
 
@@ -66,7 +68,7 @@ $t=2$\,s时施加俯仰角速率脉冲（$\Delta q=5^\circ$/s），角速率在�
 
 第\ref{sec:allocation}节指出，前摆角通过反扭矩投影在俯仰通道产生交叉耦合$-\tau_f\sin\delta_f$（式\ref{eq:coupling_pitch}）。当前SAS（第\ref{sec:control}节）采用对角分配——每个通道独立映射到单一执行器，不含交叉项补偿，因此轴间耦合只能作为外部扰动由反馈被动抑制。INDI使用完整在线Jacobian $\mathbf{B}_{\mathrm{true}}$（式\ref{eq:B_true}）并全矩阵求逆，理论上可显式补偿该耦合。本节通过针对性数值实验定量对比两者的耦合抑制能力。
 
-\textbf{实验设置}：飞行器处于24\,m/s巡航配平状态，$t=2$\,s时在前摆通道施加$\delta_f=10^\circ$阶跃（偏航指令），产生俯仰耦合扰动$-\tau_f\sin 10^\circ$。控制器需保持其余通道（俯仰/滚转/偏航角速率为零），测量俯仰角$\theta$偏离配平的峰值作为耦合抑制指标。陀螺噪声取标准差$0.002$\,rad/s的典型MEMS量级，每配置进行5次蒙特卡洛仿真取均值。INDI的角加速度估计采用后向欧拉差分。
+\textbf{实验设置}：飞行器处于28\,m/s巡航配平状态（24\,m/s 配平尾摆需 $-40.5^\circ$ 超限，不可达），$t=2$\,s时在前摆（上摆，悬停语义下为滚转通道）施加$\delta_f=10^\circ$阶跃，产生俯仰耦合扰动$-\tau_f\sin 10^\circ$。控制器需保持其余通道（俯仰/滚转/偏航角速率为零），测量俯仰角$\theta$偏离配平的峰值作为耦合抑制指标。陀螺噪声取标准差$0.002$\,rad/s的典型MEMS量级，每配置进行5次蒙特卡洛仿真取均值。INDI的角加速度估计采用后向欧拉差分。
 
 \textbf{结果}如表\ref{tab:coupling_rejection}所示。
 
@@ -141,4 +143,22 @@ INDI（全矩阵$\mathbf{B}_{\mathrm{true}}$） & 0.002 rad/s & $\mathbf{0.40^\c
 
 \subsection{模型参数敏感性}
 
-上述数值结果对气动导数不确定性敏感。以短周期模态频率为例，若$C_{m\alpha}$偏离MODEL-DEFAULT值$\pm30\%$，短周期频率从2.6\,Hz移至2.2--3.0\,Hz，阻尼比从0.84变为0.72--0.93。该量级变化在常规SAS增益补偿能力之内，但突显了台架标定和CFD验证对飞行品质定量评估的必要性。
+上述数值结果对气动导数不确定性敏感。以短周期模态频率为例，若$C_{m\alpha}$偏离MODEL-DEFAULT值$\pm30\%$，短周期频率按$\sqrt{1\pm0.3}$缩放，从1.03\,Hz移至0.86--1.19\,Hz，阻尼比相应变为0.44--0.60（按同缩放近似）。该量级变化在常规SAS增益补偿能力之内，但突显了台架标定和CFD验证对飞行品质定量评估的必要性。
+
+\subsection{实机初步验证（2026-08）}
+本文写作时（v0.2.0 参数集，MODEL-DEFAULT 未标定）仿真结论仍属概念级；
+2026-08 起项目进入实机首飞验证阶段，以下成果为本章结论提供了初步锚点：
+\begin{itemize}
+    \item \textbf{执行器轴语义实机锚定}：手动模式摇杆直通验证——roll\_raw$\to$上摆（前摆）、
+          pitch\_raw$\to$下摆（尾摆），确认悬停构型语义（第\ref{sec:axis_semantics}节）；
+    \item \textbf{kQ 实机标定}：差速/反扭矩比经三轮调参收敛于 $k_Q/k_T\approx0.027$
+          （0.030$\to$0.025$\to$0.027），支撑第\ref{sec:mapping}章反扭矩模型的量级锚定；
+    \item \textbf{差速增益调度与 $\tau_m$ 观测器}：抖油门震荡三层定位（第\ref{sec:allocation}章增益调度段），
+          实机验证有效增益公式与观测器修复的有效性；
+    \item \textbf{滤波滞后边界}：物理减震底座下数字滤波近全关（滞后 $4.2^\circ$@1Hz 稳 / $6.9^\circ$ 振铃），
+          与第\ref{sec:accel_estimation}节角加速度滤波的群延迟讨论互相印证；
+    \item \textbf{在线辨识首测}：角速度模式方波激励测得 $b=0.35/0.36/0.90$、
+          $d_{\text{yaw}}=-7.36$（电机不对称 17\%），验证第\ref{sec:online_id}节 RLS 辨识链路。
+\end{itemize}
+上述实机数据全部来自非标定状态（MODEL-DEFAULT 参数 + 实机逐轮调整），
+其意义在于验证本文理论框架的符号/结构正确性，而非定量预测飞行品质。

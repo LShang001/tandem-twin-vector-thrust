@@ -122,13 +122,13 @@ $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_{k-1})$为在\textbf{上一拍执行器�
 \textbf{架构定性}：串级PID + 静态非线性控制分配（Static Nonlinear Control
 Allocation）+ 在线Jacobian更新（gain-scheduling）。具体地：
 \begin{itemize}
-    \item \textbf{不是NDI}：没有任何一层显式计算并对消非线性动力学
+    \item \textbf{NDI 式显式对消的演进}：本章初稿写作时没有任何一层显式计算并对消非线性动力学
           $f(\mathbf{x})$（陀螺力矩$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$、
-          气动力矩、重力梯度矩）。
-          NDI的核心操作$\mathbf{u}=\mathbf{B}^{-1}(\boldsymbol{\nu}-f(\mathbf{x}))$
-          中的$f(\mathbf{x})$项不存在。
-          $\mathbf{I}\cdot\boldsymbol{\alpha}$仅是量纲缩放
-          （角加速度$\to$力矩），不构成动力学逆。
+          气动力矩、重力梯度矩）。2026-08-10 固件已新增惯量逆解交叉耦合前馈
+          （\texttt{InertiaDecoupling.h}：$M_{\mathrm{ff}}=\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})+\boldsymbol{\omega}\times\mathbf{h}$，
+          掩码控制、默认开启可 A/B 关闭）——NDI 的 $f(\mathbf{x})$ 项在陀螺/转子陀螺通道
+          已被显式对消，气动与重力项仍由内环扰动抑制；
+          $\mathbf{I}\cdot\boldsymbol{\alpha}$由量纲缩放升级为含前馈的完整力矩指令。
     \item \textbf{不是INDI}：没有使用IMU实测角加速度$\dot{\boldsymbol{\omega}}$，
           没有增量累加$\mathbf{u}_k=\mathbf{u}_{k-1}+\Delta\mathbf{u}$。
     \item \textbf{BTRUE的"上一拍工作点"}：仅指Jacobian在上一拍真实摆角/转速处求值
@@ -155,9 +155,9 @@ Allocation）+ 在线Jacobian更新（gain-scheduling）。具体地：
 
 生产固件的姿态外环与速率内环均采用\texttt{PositionPID}（位置式PID，v3），
 具备2-DOF设定点加权、反算抗饱和（back-calculation）、微分先行、
-输出变化率限制与NaN防护。当前姿态通道增益配置：
-外环纯P（$K_p=5.0$，$K_i=K_d=0$），内环PI（$K_p=0.30$，$K_i=3\times10^{-4}$，$K_d=0$）。
-\texttt{TandemVec\_AttitudeCtrl.h}中的纯比例几何控制器
+输出变化率限制与NaN防护。当前姿态通道增益配置（2026-08 实机调参态）：
+外环纯P（$K_p=2.8$，$K_i=K_d=0$），内环PI（$K_p=0.28$，$K_i=0.1$，$K_d=0$）。
+\texttt{TVC\_Control\_Geometric.h}中的纯比例几何控制器
 用于宿主机回归测试与算法验证，两者在小角度下行为等价。
 \end{remark}
 
@@ -233,8 +233,8 @@ $\boldsymbol{\omega}\approx\boldsymbol{\omega}_{\mathrm{ref}}$，
     }
     \label{eq:tss_condition_ch}
 \end{equation}
-仿真采用$K_p=2.0$、$K_\omega=8.0$、$I_y=0.085$\,kg$\cdot$m$^2$，
-得$\omega_{\mathrm{BW},o}\approx1$\,rad/s、$\omega_{\mathrm{BW},i}\approx94$\,rad/s，
+仿真采用$K_p=2.0$、$K_\omega=8.0$、$I_y=0.022$\,kg$\cdot$m$^2$（aircraft-model.json 现行值；早期 0.085 为旧值），
+得$\omega_{\mathrm{BW},o}\approx1$\,rad/s、$\omega_{\mathrm{BW},i}\approx364$\,rad/s，
 分离比约94倍——远超下限，这解释了为何级联架构的耦合抑制如此彻底：
 内环几乎是"瞬时"地完成角速度跟踪，外环根本"看不到"交叉耦合的瞬态。
 
@@ -374,7 +374,7 @@ INDI因增量饱和出现较大偏差。定量耦合峰值见表\ref{tab:cascade
 
 \begin{table}[H]
 \centering
-\caption{级联架构与LQR/INDI的俯仰耦合峰值对比（°，5次蒙特卡洛均值，v0.2.0 参数集）}
+\caption{级联架构与LQR/INDI的俯仰耦合峰值对比（°，5次蒙特卡洛均值，v0.2.0 参数集）\protect\footnote{本表数值与第\ref{sec:lqr_coupling_limit}章表\ref{tab:lqr_coupling_deg}存在量级差异（同实验不同噪声注入等级/配平口径），跨章对比以各自实验设置为准。}}
 \label{tab:cascade_ch_coupling2}
 \small
 \begin{tabular}{l c c}
@@ -417,7 +417,7 @@ INDI & 36.00 & 36.03 & 37.28 & 33.41 & 28.80 \\
 
 结果揭示三架构的噪声特性差异：
 \begin{itemize}
-    \item \textbf{LQR}：纯状态反馈不依赖角加速度，耦合峰值与噪声无关（$1.33^\circ$恒定），
+    \item \textbf{LQR}：纯状态反馈不依赖角加速度，耦合峰值与噪声无关（无噪声基线$1.33^\circ$恒定；噪声注入下见表\ref{tab:cascade_ch_coupling2}），
           但基线最高——这是结构性局限；
     \item \textbf{INDI}：随噪声急剧退化（$36.0\to28.8^\circ$，无噪声时已偏高），
           角加速度差分噪声经$\mathbf{B}^{-1}$放大；

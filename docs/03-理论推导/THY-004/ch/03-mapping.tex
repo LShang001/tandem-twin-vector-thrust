@@ -103,10 +103,10 @@ $\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
 \begin{align}
     \bm{F}_f &= T_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix},
     \quad
-    \bm{\tau}_f = \tau_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix}
+    \bm{\tau}_f = -\tau_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix}
     \label{eq:front_force} \\
     \bm{M}_f &= \underbrace{\begin{bmatrix} +a \\ 0 \\ 0 \end{bmatrix} \times \bm{F}_f}_{\text{推力力臂}}
-             - \underbrace{\bm{\tau}_f}_{\text{反扭矩}}
+             + \underbrace{\bm{\tau}_f}_{\text{反扭矩}}
              = \begin{bmatrix}
                  -\tau_f \cos\delta_f \\
                  -\tau_f \sin\delta_f \\
@@ -175,7 +175,7 @@ $\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
     \item $\delta_f = \delta_t = 0$且$\tau_f = \tau_t$（等转速、零摆角、反扭对消）：
           $F_x = T_f + T_t$（前后推力同向叠加），$F_y = F_z = 0$（无侧向/垂向力），
           $M_x = 0$（反扭对消，无滚转力矩），$M_y = M_z = 0$（无俯仰/偏航力矩）。
-          在此理想状态下，所有推进控制力矩归零；它是零摆角名义参考，不等同于当前含非零尾摆偏置的24\,m/s纵向配平点。
+          在此理想状态下，所有推进控制力矩归零；它是零摆角名义参考，不等同于当前含非零尾摆偏置的28\,m/s纵向配平点（第\ref{sec:trim}节，v0.2.0 参数集）。
 \end{itemize}
 
 \textbf{耦合项分析}：式(\ref{eq:six_component})中包含两个交叉耦合项：

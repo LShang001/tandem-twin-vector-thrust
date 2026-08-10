@@ -59,8 +59,8 @@ $f$为包含模型误差$\Delta b\cdot u$、交叉耦合与外扰的总扰动。
     \beta_3 = \omega_o^3
     \label{eq:eso_continuous}
 \end{equation}
-其中$\hat{x}_1\to\omega$（角速度估计），$\hat{x}_2\to\dot\omega$（角加速度估计），
-$\hat{x}_3\to f$（总扰动估计）。
+其中$\hat{x}_1\to\omega$（角速度估计），$\hat{x}_2\to f$（总扰动估计），
+$\hat{x}_3\to\dot f$（扰动导数估计）——角加速度估计应为$\hat{x}_2 + b_0 u$。
 误差动力学特征多项式为$(s+\omega_o)^3$，观测误差以$\omega_o$为带宽指数收敛。
 
 \subsubsection{固件简化：二阶ESO}
@@ -106,7 +106,7 @@ Euler离散化（控制周期$\Delta t$）：
 （悬停定点时为零）。$-z_2/b_0$项实现对总扰动的实时对消。
 
 闭环特征多项式$s+\omega_c$（一阶），带宽$\omega_c$决定跟踪速度。
-推荐整定：$\omega_c=6$\,rad/s，$\omega_o=8$\,rad/s（$\omega_o/\omega_c\approx1.3$）。
+推荐整定：$\omega_c=4$\,rad/s，$\omega_o=8$\,rad/s（满足下文$\omega_c\leq\omega_o/2$准则）。
 
 % ---------------------------------------------------------------------------
 \subsection{ADRC稳定性约束}
@@ -122,10 +122,11 @@ ESO带宽$\omega_o$受执行器带宽$\omega_{\mathrm{act}}\approx1/\tau_m$约�
           ESO试图估计超出执行器响应能力的快变扰动，产生正反馈。
 \end{itemize}
 工程准则：$\omega_o\leq3\omega_{\mathrm{act}}$，$\omega_c\leq\omega_o/2$。
-固件默认$\omega_o=8$、$\omega_c=6$满足此约束。
+固件默认$\omega_o=8$、$\omega_c=6$略超$\omega_o/2$准则（工程折中，实机以稳定性裕度验证为准）。
 
 % ---------------------------------------------------------------------------
 \subsection{遗忘因子递推最小二乘（RLS）}
+\label{sec:online_id}
 \label{sec:rls}
 
 \subsubsection{辨识模型}
@@ -182,6 +183,16 @@ RLS在激励不足时协方差矩阵退化（"协方差爆炸"或"参数漂移"�
 物理意义：悬停稳态下控制指令接近零，此时辨识无信息量，
 仅在机动（阶跃、振荡、扰动）期间更新。
 
+\textbf{角速度模式方波激励协议（2026-08 实机）}：为满足激励检测，
+实机辨识采用角速度模式大幅方波指令（$\alpha$ RMS $>2$\,rad/s$^2$ 才更新，每轴 15--20\,s），
+落地后经 DBG \texttt{id} 命令读取 $b$、$d$ 与建议 $K_p$。
+注意事项：$b$ 是激励频率下的集总测量（含执行器滞后衰减），
+不可反推惯量（$I_{\text{actual}}=I_{\text{nom}}/b$ 仅当执行器理想时成立），
+建议 $K_p$ 只能当方向不能当数值。
+观测通道：2026-08-10 起固件通用变量上报（AnoVars）可在线监视
+$w_{\text{est}}$、$id\_b\_*$、$id\_k\_*$、$yaw\_gain\_sched$ 等中间量，
+实现"第一步只观测不闭环"的安全接入流程。
+
 \subsubsection{参数更新限幅与安全防护}
 
 为防止异常观测（传感器故障、碰撞）导致参数跳变：
@@ -208,8 +219,8 @@ RLS在激励不足时协方差矩阵退化（"协方差爆炸"或"参数漂移"�
     \label{eq:gain_scheduling}
 \end{equation}
 物理依据：内环闭环带宽$\omega_{\mathrm{BW}}=K_p/I$。
-若真实惯量$I_{\mathrm{true}}=\hat{b}\cdot I_{\mathrm{nom}}$，
-则$K_p/\sqrt{\hat{b}}$使带宽按$\sqrt{\hat{b}}$缩放——
+按辨识定义$\hat{b}=I_{\mathrm{nom}}/I_{\mathrm{true}}$（固件约定），真实惯量$I_{\mathrm{true}}=I_{\mathrm{nom}}/\hat{b}$；
+将增益取为$K_p/\sqrt{\hat{b}}$使带宽按$1/\sqrt{\hat{b}}=\sqrt{I_{\mathrm{true}}/I_{\mathrm{nom}}}$缩放——
 惯量增大时降低增益避免过冲，惯量减小时提高增益维持响应速度。
 $\alpha_{\max}$按$\hat{b}$正比缩放，确保力矩限幅与真实惯量匹配。
 
@@ -257,13 +268,13 @@ $\alpha_{\max}$按$\hat{b}$正比缩放，确保力矩限幅与真实惯量匹�
           安全策略：第一步只观测不闭环，待多架次数据确认估计稳定后，
           再人工决定是否闭环接入（第二步）；
     \item \textbf{include/算法库}（平台无关、无 Arduino 依赖）：\\[2pt]
-          \texttt{TandemVec\_CascadeCtrl.h}、\allowbreak
-          \texttt{TandemVec\_AttitudeCtrl.h}、\allowbreak
-          \texttt{TandemVec\_RateCtrl.h}
+          \texttt{TVC\_Control\_Geometric.h}、\allowbreak
+          \texttt{TandemVec\_ADRC.h}、\allowbreak
+          \texttt{TandemVec\_OnlineID.h}
           平台无关（无Arduino依赖），用于\texttt{test\_host/}宿主机回归测试
-          与算法验证，不是当前生产控制链的组成部分。
-          生产链的姿态/速率环由\texttt{IncrementalPID}实例实现，
-          两者在小角度下行为等价，但生产PID额外提供积分项与微分滤波。
+          与算法验证；生产链的姿态/速率环由\texttt{PositionPID}实例实现
+          （位置式PID，v3：2-DOF设定点加权、反算抗饱和、微分先行、
+          输出变化率限制与NaN防护）。
 \end{itemize}
 
 % ---------------------------------------------------------------------------

@@ -54,7 +54,7 @@
     Q_{ii} = \frac{1}{x_{i,\max}^2},\qquad R_{ii} = \frac{1}{u_{i,\max}^2}
     \label{eq:bryson}
 \end{equation}
-取$\varepsilon_{\max}=0.5$（约$60^\circ$姿态误差）、$\omega_{\max}=1$\,rad/s、$\mathbf{u}_{\max}=[\Delta\omega_{\max},\ \delta_{\max},\ \delta_{\max}]$（来源: \texttt{models/aircraft-model.json}），得$\mathbf{Q}=\operatorname{diag}(4,4,4,1,1,1)$，$\mathbf{R}=\operatorname{diag}(2.04,5.25,5.25)$。
+取$\varepsilon_{\max}=0.5$（约$60^\circ$姿态误差）、$\omega_{\max}=1$\,rad/s、$\mathbf{u}_{\max}=[\Delta\omega_{\max},\ \delta_{\max},\ \delta_{\max}]$（来源: \texttt{models/aircraft-model.json}），得$\mathbf{Q}=\operatorname{diag}(4,4,4,1,1,1)$，$\mathbf{R}=\operatorname{diag}(2.04,14.59,14.59)$（$\delta_{\max}=15^\circ$，2026-08-07 限幅收紧；早期 25° 口径的 R=diag(2.04,5.25,5.25) 与相应 K 矩阵、闭环极点为历史数据，待按 15° 重算）。
 
 \subsection{增益矩阵与闭环极点分析}
 \label{sec:lqr_poles}

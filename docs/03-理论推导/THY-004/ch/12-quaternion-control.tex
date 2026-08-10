@@ -1,7 +1,7 @@
 \section{基于误差四元数的姿态控制律}
 \label{sec:quat_control}
 
-第\ref{sec:control}节给出的SAS增稳律以欧拉角为反馈变量，在常规飞行包线内工作良好。然而，欧拉角存在两个本构性限制：其一，3-2-1欧拉角序列在$\theta=\pm90^\circ$处出现万向锁（gimbal lock）奇异性——俯仰角接近$\pm90^\circ$时滚转$\phi$和偏航$\psi$描述同一物理自由度，导致运动学方程退化；其二，欧拉角误差的线性叠加（如$\Delta\theta = \theta - \theta_0$）在大角度机动中与实际旋转的几何路径不符，存在"绕远路"（unwinding）现象\cite{markley2014fundamentals}。
+第\ref{sec:control}节给出的SAS增稳律以欧拉角为反馈变量，在常规飞行包线内工作良好。然而，欧拉角存在两个本构性限制：其一，3-2-1欧拉角序列在$\theta=\pm90^\circ$处出现万向锁（gimbal lock）奇异性——俯仰角接近$\pm90^\circ$时滚转$\phi$和偏航$\psi$描述同一物理自由度，导致运动学方程退化；其二，欧拉角误差的线性叠加（如$\Delta\theta = \theta - \theta_0$）在大角度机动中与实际旋转的几何路径不符（真正的"绕远路"unwinding 是四元数双覆盖的专有名词，见下节）。
 
 本节将SAS和INDI控制律的外环从欧拉角域迁移到四元数域，利用第\ref{sec:dynamics}节已建立的四元数姿态运动学框架，统一姿态误差的表征和控制律的设计。
 
@@ -49,7 +49,7 @@
     \dot{\eta}_{\text{err}} = -\frac{1}{2}\boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega}
     \label{eq:eta_dot}
 \end{equation}
-（由四元数运动学$\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q}\otimes[0,\boldsymbol{\omega}]^T$和误差四元数定义导出；相应矢量部分为$\dot{\boldsymbol{\varepsilon}}_{\text{err}}=\frac{1}{2}(\eta_{\text{err}}\boldsymbol{\omega}-\boldsymbol{\varepsilon}_{\text{err}}\times\boldsymbol{\omega})$，在$\eta_{\text{err}}\approx1$的小误差邻域退化为式\ref{eq:lqr_eps_dot}的线性化运动学$\dot{\boldsymbol{\varepsilon}}_{\text{err}}\approx\frac{1}{2}\boldsymbol{\omega}$）。因此
+（由四元数运动学$\dot{\mathbf{q}} = \frac{1}{2}\mathbf{q}\otimes[0,\boldsymbol{\omega}]^T$和误差四元数定义导出；相应矢量部分为$\dot{\boldsymbol{\varepsilon}}_{\text{err}}=\frac{1}{2}(\eta_{\text{err}}\boldsymbol{\omega}+\boldsymbol{\varepsilon}_{\text{err}}\times\boldsymbol{\omega})$，在$\eta_{\text{err}}\approx1$的小误差邻域退化为式\ref{eq:lqr_eps_dot}的线性化运动学$\dot{\boldsymbol{\varepsilon}}_{\text{err}}\approx\frac{1}{2}\boldsymbol{\omega}$）。因此
 \begin{align}
     \dot{V} &= -2k_q\dot{\eta}_{\text{err}} + \boldsymbol{\omega}^T \mathbf{I} \dot{\boldsymbol{\omega}} \nonumber \\
             &= k_q \boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega} + \boldsymbol{\omega}^T(\boldsymbol{\tau} - \boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}) \nonumber \\
@@ -61,7 +61,7 @@
     \label{eq:Vdot_final}
 \end{equation}
 
-$\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理，闭环系统的最大不变集为$\{(\mathbf{q}_{\text{err}}, \boldsymbol{\omega}) : \boldsymbol{\omega}=\mathbf{0}, \boldsymbol{\varepsilon}_{\text{err}}=\mathbf{0}\}$（因为$\boldsymbol{\omega}=\mathbf{0}$且$\dot{\boldsymbol{\omega}}=\mathbf{0}$代入转动方程意味着$\boldsymbol{\tau}=\mathbf{0}$，进而$\boldsymbol{\varepsilon}_{\text{err}}=\mathbf{0}$）。因此闭环系统\textbf{全局渐近稳定}于$\mathbf{q} = \mathbf{q}_{\text{des}}$。
+$\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理，闭环系统的最大不变集为$\{(\mathbf{q}_{\text{err}}, \boldsymbol{\omega}) : \boldsymbol{\omega}=\mathbf{0}, \boldsymbol{\varepsilon}_{\text{err}}=\mathbf{0}\}$（因为$\boldsymbol{\omega}=\mathbf{0}$且$\dot{\boldsymbol{\omega}}=\mathbf{0}$代入转动方程意味着$\boldsymbol{\tau}=\mathbf{0}$，进而$\boldsymbol{\varepsilon}_{\text{err}}=\mathbf{0}$）。因此经\textbf{短弧归一化}（$\varepsilon$分量取反使$\eta\geq0$）后闭环系统全局渐近稳定于$\mathbf{q} = \mathbf{q}_{\text{des}}$。
 
 \subsection{参考四元数的生成}
 
@@ -81,10 +81,20 @@ $\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理
 在VTOL tail-sitter模式（见第\ref{sec:vtol}节）中，悬停姿态为机身竖直向上（机头朝天），对应$\phi=0$、$\theta=-90^\circ$、$\psi=0$（NED系）：
 \begin{equation}
     \mathbf{q}_{\text{hover}} = \left[\cos\frac{-90^\circ}{2}, 0, \sin\frac{-90^\circ}{2}, 0\right]^T
-    = [0.7071, 0, -0.7071, 0]^T
+    = [0.7071, 0, +0.7071, 0]^T
     \label{eq:q_hover}
 \end{equation}
 这在欧拉角表示中恰为万向锁奇异点（$\theta=-90^\circ$处$\phi$和$\psi$不可区分），但在四元数域中完全正则——这正是采用四元数控制的核心动机之一。
+
+\textbf{悬停航向自由度的参考跟随（2026-08-05 表达系陷阱修复范式）}：误差四元数
+$\mathbf{q}_{\text{err}}=\mathbf{q}_{\text{cmd}}^{-1}\otimes\mathbf{q}$严格表达在
+$\mathbf{q}_{\text{cmd}}$ 系，仅当 $\mathbf{q}_{\text{cmd}}\approx\mathbf{q}$（误差小）时一阶等价机体系。
+若某通道不做姿态回中——如悬停航向为纯角速度指令（自由漂移）——$\mathbf{q}_{\text{cmd}}$ 与机体系
+绕该轴自由错位，其余通道的误差分量被 $\cos\psi$ 调制（$\psi=90^\circ$ 时失效、$180^\circ$ 时反向）。
+修复范式：\textbf{让 $\mathbf{q}_{\text{cmd}}$ 跟随被释放的自由度}——悬停航向估计
+$\psi_{\text{est}} = \pi/2 - \operatorname{atan2}(\mathbf{y}_b\cdot\mathbf{y},\ \mathbf{y}_b\cdot\mathbf{x})$
+（$\mathbf{y}_b$ 为机体 y 轴 NED 表达），将 $\psi_{\text{est}}$ 注入参考四元数生成，
+保证 $\mathbf{q}_{\text{err}}$ 恒小。实机调试中悬停航向指令 $19^\circ$ 不收敛即由此定位（2026-08-04）。
 
 \subsubsection{姿态过渡：球面线性插值}
 
@@ -93,7 +103,7 @@ $\dot{V}=0$意味着$\boldsymbol{\omega}=\mathbf{0}$。由LaSalle不变性原理
     \mathbf{q}_{\text{des}}(t) = \frac{\sin[(1-\tau)\Omega]}{\sin\Omega} \mathbf{q}_{\text{from}} + \frac{\sin(\tau\Omega)}{\sin\Omega} \mathbf{q}_{\text{to}}
     \label{eq:slerp}
 \end{equation}
-其中$\tau = (t - t_0)/(t_1 - t_0) \in [0,1]$为归一化过渡进度，$\Omega = \arccos(\mathbf{q}_{\text{from}}\cdot\mathbf{q}_{\text{to}})$为两四元数间的角度。slerp保证过渡路径在$S^3$单位球面上沿大圆弧最短路径行进，无角速率突变，且任意中间态均为有效单位四元数——这一性质在欧拉角域无等价实现。
+其中$\tau = (t - t_0)/(t_1 - t_0) \in [0,1]$为归一化过渡进度，$\Omega = \arccos(|\mathbf{q}_{\text{from}}\cdot\mathbf{q}_{\text{to}}|)$（点积为负时先对$\mathbf{q}_{\text{to}}$取反，沿短弧插值）为两四元数间的角度。slerp保证过渡路径在$S^3$单位球面上沿大圆弧最短路径行进，无角速率突变，且任意中间态均为有效单位四元数——这一性质在欧拉角域无等价实现。
 
 \subsection{四元数SAS控制律}
 
@@ -150,7 +160,7 @@ $\hat{\mathbf{n}}_{\text{slerp}}$与$\theta_{\text{slerp}}$分别为初始/目�
     \boldsymbol{\omega}_{\text{ref}} = -\mathbf{K}_q^{\text{rate}} \boldsymbol{\varepsilon}_{\text{err}} + \boldsymbol{\omega}_{\text{ref}}^{\text{slerp}}
     \label{eq:indi_outer_quat}
 \end{equation}
-内环INDI增量控制律保持不变（式\ref{eq:indi_our_config}），虚拟角加速度$\boldsymbol{\nu}$由角速率误差经比例控制生成（带宽增益由$0.8$提升至$3.0$，缩小与SAS直接映射的响应差距）：
+内环INDI增量控制律保持不变（式\ref{eq:indi_our_config}），虚拟角加速度$\boldsymbol{\nu}$由角速率误差经比例控制生成（带宽增益由$0.8$提升至$3.0$，早期仿真口径；现行控制器为$K^{\text{rate}}=6.0$，缩小与SAS直接映射的响应差距）：
 \begin{equation}
     \boldsymbol{\nu} = \mathbf{K}^{\text{rate}}(\boldsymbol{\omega}_{\text{ref}} - \boldsymbol{\omega})
     \label{eq:indi_inner_quat}

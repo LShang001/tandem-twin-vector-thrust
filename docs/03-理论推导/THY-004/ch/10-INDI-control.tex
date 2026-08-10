@@ -100,7 +100,7 @@ INDI控制律（式\ref{eq:indi_law}）中唯一需要建模的是控制效能�
 \end{equation}
 即第\ref{sec:allocation}节在线性化假设下推导的$\mathbf{B}_{\mathrm{full}}$（式\ref{eq:effectiveness_matrix}）。因此$\mathbf{B}_{\mathrm{full}}$是$\mathbf{B}_{\mathrm{true}}$在零摆角处的特例，不适用于INDI在大摆角工况下的实际需求。
 
-在极端工况（$\delta_f=\delta_t=25^\circ$，$\Delta\omega=0.5$，即前电机满偏右+尾电机满偏下+满差速）下，两者差异如表\ref{tab:B_comparison}所示：
+在极端工况（$\delta_f=\delta_t=15^\circ$，$\Delta\omega=0.5$，即前电机满偏右+尾电机满偏下+大半差速）下，两者差异如表\ref{tab:B_comparison}所示：
 
 \begin{table}[H]
 \centering
@@ -157,14 +157,14 @@ $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$是$3\times3$实矩阵，其逆可通�
 
 其中虚拟控制量$\boldsymbol{\nu}$由外环角速率误差反馈生成，$\dot{\boldsymbol{\omega}}_{\text{IMU}}$为实测角加速度（获取与滤波方法详见§\ref{sec:accel_estimation}），$\mathbf{u}_k$为上一子步的实际控制输入。
 
-\textbf{$\mathbf{B}_{\mathrm{true}}$的行列式非奇异性}：在正常工作范围内，$\det(\mathbf{B}_{\mathrm{true}})<0$严格成立（$b_{11}<0$且$2\times2$右下子块的行列式$abT_fT_t\cos\delta_f\cos\delta_t-\tau_f\tau_t\cos\delta_f\cos\delta_t>0$，因为$abT_fT_t\gg\tau_f\tau_t$对所有$\omega_0>0$成立）。当$\omega_0\to 0$时行列式趋于零，此时切换回绝对指令SAS模式（见低油门退化讨论）。
+\textbf{$\mathbf{B}_{\mathrm{true}}$的行列式非奇异性}：在正常工作范围内，$\det(\mathbf{B}_{\mathrm{true}})>0$严格成立（$b_{11}<0$且$2\times2$右下子块的行列式$-(abT_fT_t+\tau_f\tau_t)\cos\delta_f\cos\delta_t<0$，因为$abT_fT_t\gg\tau_f\tau_t$对所有$\omega_0>0$成立）。当$\omega_0\to 0$时行列式趋于零，此时切换回绝对指令SAS模式（见低油门退化讨论）。
 
 \subsubsection{虚拟控制量 $\nu$ 的生成}
 
 外环角速率指令由姿态误差经比例-积分反馈生成（保留第\ref{sec:control}节的SAS外环结构）：
 \begin{align}
-    q_{\text{ref}} &= -k_\theta\Delta\theta - k_i^\theta\int\Delta\theta dt \label{eq:indi_outer_pitch} \\
-    p_{\text{ref}} &= -k_\phi\Delta\phi - k_i^\phi\int\Delta\phi dt \label{eq:indi_outer_roll} \\
+    q_{\text{ref}} &= +k_\theta\Delta\theta - k_i^\theta\int\Delta\theta dt \label{eq:indi_outer_pitch} \\
+    p_{\text{ref}} &= +k_\phi\Delta\phi - k_i^\phi\int\Delta\phi dt \label{eq:indi_outer_roll} \\
     r_{\text{ref}} &= 0 \quad\text{（SAS内环不保持航向）} \label{eq:indi_outer_yaw}
 \end{align}
 
@@ -196,7 +196,7 @@ $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$是$3\times3$实矩阵，其逆可通�
 
 INDI外环将姿态误差映射为参考角速率，其符号必须与项目锁定的欧拉角约定（MOD-002：$\dot\theta=-q$、$\dot\phi=-p$）自洽。在该约定下，正姿态误差需要\textbf{正}的角速率指令才能收敛（$q_{\text{ref}}=+k_\theta\Delta\theta$）——若按常规航空约定$\dot\theta=+q$错误地取$q_{\text{ref}}=-k_\theta\Delta\theta$，级联回路构成正反馈，扰动响应发散。这一点在Python独立复现仿真（\texttt{simulations/}\allowbreak\texttt{high-fidelity-analysis/}\allowbreak\texttt{simulate.py}）的交叉验证中被实证：符号错误的级联INDI在$5^\circ$/s俯仰脉冲后姿态发散至$-40^\circ$以上，修正后扰动有界收敛。
 
-内环带宽$K^{\text{rate}}$决定INDI对角速率误差的响应速度：$K^{\text{rate}}=0.8$时扰动恢复明显慢于直接映射的SAS（角速率误差积分面积大一个数量级）；提升至$K^{\text{rate}}=3.0$并将外环增益放大3倍后，恢复时间缩短约60\%，同时零扰动配平保持性能不受影响（12\,s速度漂移$<0.001\%$）。带宽提升的代价是对$\dot{\boldsymbol{\omega}}$估计噪声更敏感——这再次凸显§\ref{sec:accel_estimation}角加速度滤波方案对INDI工程化的决定性作用。
+内环带宽$K^{\text{rate}}$决定INDI对角速率误差的响应速度：$K^{\text{rate}}=0.8$时扰动恢复明显慢于直接映射的SAS（角速率误差积分面积大一个数量级）；提升至$K^{\text{rate}}=3.0$（早期仿真设定；现行控制器 \texttt{controllers.py} 为 $K^{\text{rate}}=6.0$）并将外环增益放大3倍后，恢复时间缩短约60\%，同时零扰动配平保持性能不受影响（12\,s速度漂移$<0.1\%$，与第\ref{sec:simulation_results}章口径一致）。带宽提升的代价是对$\dot{\boldsymbol{\omega}}$估计噪声更敏感——这再次凸显§\ref{sec:accel_estimation}角加速度滤波方案对INDI工程化的决定性作用。
 
 \subsection{与当前SAS的对比}
 
