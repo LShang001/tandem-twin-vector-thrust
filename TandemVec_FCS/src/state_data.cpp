@@ -90,7 +90,8 @@ const float MAX_THRUST = 27.5f;
 const float MAX_TARGET_RATE = kMaxTargetRate;
 
 const float MAX_CORRECTION = 15.0f;  // 2026-08-07 实机：TVC 摆角限幅收紧到 15°
-//  来源: dMax = 0.436rad = 25° (TandemVec_Config.h)。舵机物理行程。
+//  来源: TandemVec_Config.h dMax = 0.2618rad = 15°。舵机物理行程。
+//  （仿真 aircraft-model.json 的 dMax 仍为 25°，未随固件回写——见 docs 行为保持红线清单）
 
 const float MAX_ANGLE_COMMAND = 30.0f;
 //  来源: 手动最大倾角(deg)。需小于90°-dMax=65°保持执行器余量。
@@ -102,9 +103,9 @@ const float POS_CTRL_MAX_THRUST_COMP = sinf(POS_CTRL_MAX_TILT_ANGLE_RAD);
 //   原 80 复用姿态外环 kMaxTargetRate（存档实飞验证值），但 RATE_MODE 是纯手动
 //   角速度通道，不应受姿态环限幅约束——80°/s 会让 FPV 曲线在 ~半杆就被削平
 //   （默认曲线半杆 97°/s 已超限），满杆暴力手感出不来。
-//   600 = 默认参数满杆理论值 533°/s（rc_rate 0.8×200/(1−0.7)）之上留 12% 余量，
-//   曲线完整呈现；rc_rate 上调到 1.0 时理论 667°/s 触限——限幅仍是安全网
-//   （super 双曲 + rc_rate 调高时指令会爆炸，不可完全禁用）。
+//   600 = 默认参数满杆理论值之上留充足余量：rc_rate=0.5 → 基准 100°/s，×super 0.7 后
+//   roll/pitch 理论 333°/s、yaw 222°/s（2026-08-11 用户指定默认），距 600 有 ≥80% 余量；
+//   rc_rate 调高时指令会增长（super 双曲 + rc_rate 调高时指令会爆炸，不可完全禁用）。
 //   ⚠️ 行为变化：满杆角速度 = 存档实飞 80°/s 的 7.5 倍，实机先从低杆量逐步体验。
 const float MAX_MANUAL_rollRATE  = 600.0f;
 const float MAX_MANUAL_pitchRATE = 600.0f;

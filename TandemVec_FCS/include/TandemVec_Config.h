@@ -47,7 +47,7 @@ struct TandemVecParams
     float Ix;    // kg·m²    机体滚转惯量（绕纵轴=差速航向轴）
     float Iy;    // kg·m²    机体俯仰惯量
     float Iz;    // kg·m²    机体偏航/侧倾惯量
-    float dMax;  // rad      摆角限幅（±25°）
+    float dMax;  // rad      摆角限幅（±15°，2026-08-07 实机由 25° 收紧；仿真 aircraft-model.json 仍为 25° 未回写）
 
     // ===== 控制分配专用 =======================================
     // 来源: models/aircraft-model.json §SAS 增稳
