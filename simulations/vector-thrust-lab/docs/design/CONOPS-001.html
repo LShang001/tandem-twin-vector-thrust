@@ -111,7 +111,9 @@ href="../control/CTL-001.html">CTL-001</a> / <a
 href="../control/CTL-002.html">CTL-002</a>）提供可复现的数值试验环境；</li>
 <li><strong>教学演示工具</strong>：通过交互式三维可视化展示纵列双发、正交单轴摆座、差速反扭滚转等非常规布局的机理。</li>
 </ul>
-<p>平台当前为<strong>纯软件仿真</strong>，不包含任何飞行硬件、传感器模型或真实嵌入式控制代码。</p>
+<p>平台当前为<strong>纯软件仿真</strong>，不包含任何飞行硬件、传感器模型或真实嵌入式控制代码（实机飞控固件为独立工程
+<code>TandemVec_FCS</code>，2026-08 已实机首飞验证，见 <a
+href="../governance/GOV-001.html">GOV-001</a> §2）。</p>
 <hr />
 <h2 id="2-用户角色">2 用户角色</h2>
 <table>
@@ -161,22 +163,29 @@ href="../control/CTL-002.html">CTL-002</a>）提供可复现的数值试验环�
 <td>俯仰摆角 δt</td>
 <td><code>s-dt</code> / <code>v-dt</code></td>
 <td>-25° ~ +25°</td>
-<td>尾电机绕 y_b 摆动</td>
+<td>尾电机绕 y_b 摆动（相对配平增量；sasMode=3 角速度闭环时为目标角速率
+±90°/s）</td>
 </tr>
 <tr>
 <td>偏航摆角 δf</td>
 <td><code>s-df</code> / <code>v-df</code></td>
 <td>-25° ~ +25°</td>
-<td>前电机绕 z_b 摆动</td>
+<td>前电机绕 z_b 摆动（相对配平增量；sasMode=3 时同 δt）</td>
 </tr>
 <tr>
 <td>差速 Δω</td>
 <td><code>s-dw</code> / <code>v-dw</code></td>
 <td>-30% ~ +30%（UI）</td>
-<td>映射为 ±dwUiMax（±0.55）的差速指令</td>
+<td>差速指令 <code>S.dw = ±0.30·dwUiMax ≈ ±0.165</code>（⚠ 非 ±dwUiMax
+全量程；sasMode=3 时为目标角速率 ±180°/s）</td>
 </tr>
 </tbody>
 </table>
+<p>**悬停模式（<code>b-vtol</code>
+开启，机头朝天）**下滑块语义切换为四轴式：<code>dw</code> →
+航向角速度指令 ±80°/s（绕 x_b，松手回中停转）；<code>dt</code> →
+俯仰倾斜目标角（绕 y_b）；<code>df</code> → 侧倾目标角（绕
+z_b）。自稳开启（sasMode≠0）时三滑块弹簧回中。</p>
 <h3 id="32-功能开关">3.2 功能开关</h3>
 <table>
 <thead>
@@ -192,20 +201,42 @@ href="../control/CTL-002.html">CTL-002</a>）提供可复现的数值试验环�
 <td>增稳 SAS</td>
 <td><code>b-sas</code></td>
 <td>开</td>
-<td>启用角速率 / 姿态角 / 积分反馈（见 <a
+<td>巡航：循环切换 0=直通 / 1=全 SAS / 2=仅角速率 /
+3=角速度闭环（弹簧回中）；悬停：0=直通（无自稳）/ 非 0=四元数自稳（见 <a
 href="../control/CTL-001.html">CTL-001</a>）</td>
 </tr>
 <tr>
 <td>气动力</td>
 <td><code>b-aero</code></td>
 <td>开</td>
-<td>启用线性气动模型；关闭后仅保留推力与重力</td>
+<td>启用线性气动模型；关闭后仅保留推力与重力；进入悬停模式默认关闭</td>
+</tr>
+<tr>
+<td>悬停模式</td>
+<td><code>b-vtol</code></td>
+<td>关</td>
+<td>切换到悬停构型（机头朝天、四元数级联控制），UI 显示定高/B_true
+控件与参考高度滑块</td>
+</tr>
+<tr>
+<td>自动定高</td>
+<td><code>b-alt</code></td>
+<td>关</td>
+<td>仅悬停模式可见；高度外环 + 垂直速度内环，参考高度滑块实时更新（0–20
+m）</td>
+</tr>
+<tr>
+<td>B_true 分配</td>
+<td><code>b-btrue</code></td>
+<td>关</td>
+<td>仅悬停模式可见；内环输出目标力矩经在线 Jacobian B⁻¹
+解耦分配到执行器</td>
 </tr>
 <tr>
 <td>复位</td>
 <td><code>b-reset</code></td>
 <td>-</td>
-<td>状态回到配平初始条件（vTrim / aTrim / thrTrim）</td>
+<td>轻量复位：只复位位置/姿态/速度，保留模式与输入</td>
 </tr>
 </tbody>
 </table>
@@ -292,6 +323,14 @@ SAS 对小姿态扰动的衰减；该工况油门开环，弱 phugoid
 或关闭气动力、降低油门后施加滚转差速，观察低油门下滚转效能退化及开环不稳定趋势。用途：识别
 C0 构型的控制边界，为后续失效模式分析（<a
 href="../control/CTL-002.html">CTL-002</a>）提供感性认识。</p>
+<h3 id="45-悬停自稳与定高演示">4.5 悬停自稳与定高演示</h3>
+<p>用户点击「悬停模式」进入机头朝天构型（气动默认关闭，油门自动取悬停配平
+≈49.9%），三滑块变为姿态/角速度指令。可组合验证：①
+无自稳（sasMode=0）下松手必倾倒——对比演示"无自稳必倒"；②
+自稳开启后三滑块弹簧回中，姿态恢复竖直、航向松手停转；③
+开启定高后拖动参考高度滑块，观察高度收敛（±1.0 m/s 垂直速度限幅）；④
+开启 B_true 分配对比对角映射的扰动恢复。悬停模式与定高/B_true 的机理见
+<a href="../control/CTL-001.html">CTL-001</a> §8。</p>
 <hr />
 <h2 id="5-运行环境">5 运行环境</h2>
 <h3 id="51-启动方式">5.1 启动方式</h3>
@@ -328,39 +367,46 @@ import map 安全策略而失败。</p>
 </tr>
 <tr>
 <td>Node.js</td>
-<td>用于运行 <code>node --test tests/</code> 单元与回归测试</td>
+<td>用于运行 <code>node --test "tests/*.test.mjs"</code>
+单元与回归测试</td>
 </tr>
 </tbody>
 </table>
 <h3 id="53-自动化测试">5.3 自动化测试</h3>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulations/vector-thrust-lab</span>
-<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> tests/</span></code></pre></div>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> <span class="st">&quot;tests/*.test.mjs&quot;</span></span></code></pre></div>
 <p>测试覆盖核心模块：数学工具、状态初始化、SAS
-增稳、推进系统、气动力、六自由度积分及三条回归基线（配平直飞 / 俯仰阶跃
-/ 滚转阶跃）。</p>
+增稳、推进系统、气动力、六自由度积分、悬停级联/定高/B_true（<code>vtol.test.mjs</code>、<code>control-allocation.test.mjs</code>）及四条回归基线（配平直飞
+/ 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）。2026-08-11 实测 91 项全绿。</p>
 <hr />
 <h2 id="6-约束与未来扩展">6 约束与未来扩展</h2>
 <h3 id="61-当前约束">6.1 当前约束</h3>
 <ul>
-<li>仅软件仿真，无飞行硬件；</li>
-<li>参数全部为 <code>MODEL-DEFAULT</code>，未经验证；</li>
+<li>本仿真域为纯软件，无传感器 / 电调 / 电池模型（实机固件为独立工程
+<code>TandemVec_FCS</code>，2026-08 已实机首飞验证）；</li>
+<li>推进/惯量/质量/配平参数为 ESTIMATED（实机回写），气动与 SAS 为
+<code>MODEL-DEFAULT</code> 未经验证；摆角限幅仿真 ±25° 与固件 ±15°
+存在分歧（见 <a
+href="../registers/behavior-redlines.html">行为保持红线清单</a>）；</li>
 <li>气动为线性小迎角模型，不覆盖失速与大机动；</li>
 <li>执行机构为理想模型，无舵机速率 / 带宽限制；</li>
 <li>无传感器噪声、无通信延迟、无嵌入式软件。</li>
 </ul>
 <h3 id="62-未来扩展方向仅登记不展开">6.2
 未来扩展方向（仅登记，不展开）</h3>
-<p>未来若从仿真向实物迭代，潜在路径包括：</p>
+<p>仿真域内的潜在扩展路径：</p>
 <ol type="1">
-<li><strong>台架试验</strong>：电机 + 电调 + 六分量天平，标定
-kT、kQ、Jp、tauM；</li>
-<li><strong>系留飞行</strong>：验证三通道响应与 SAS 参数整定；</li>
-<li><strong>自由飞原型</strong>：引入
-IMU、GPS、飞控计算机与机载控制律。</li>
+<li><strong>台架试验数据回填</strong>：电机 + 电调 + 六分量天平，标定
+kT、kQ、Jp、tauM（仿真参数从 ESTIMATED 升级为 BENCH-TESTED）；</li>
+<li><strong>过渡走廊仿真</strong>：悬停—巡航过渡包线研究（固件侧已实机飞行，可回灌辨识数据）；</li>
+<li><strong>控制分配在线优化</strong>：B⁺ / WLS
+冗余分配、失效重构。</li>
 </ol>
-<p>上述任一路径涉及范围、参数来源或安全承诺的变更时，须按 <a
-href="../governance/GOV-002.html">GOV-002</a>
+<p>固件/上位机侧的演进（TandemVec_FCS 工程）不归本运行概念管辖，见
+<code>TandemVec_FCS/README.md</code> 与
+<code>TandemVec_FCS/docs/</code>。上述任一路径涉及范围、参数来源或安全承诺的变更时，须按
+<a href="../governance/GOV-002.html">GOV-002</a>
 更新项目范围与基线。</p>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CONOPS-001-运行概念.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CONOPS-001-运行概念.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

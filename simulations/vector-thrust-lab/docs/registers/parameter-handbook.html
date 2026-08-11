@@ -41,10 +41,17 @@ href="../governance/GOV-002.html">GOV-002</a>。</p>
 <li><strong>版本</strong>：<code>0.2.0</code></li>
 <li><strong>模型 ID</strong>：<code>PAR-C0-001</code></li>
 <li><strong>总体状态</strong>：<code>MODEL-DEFAULT</code>（推进/惯量/质量/配平为
-ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
+ESTIMATED 组件估算并回写固件实机构型值，待台架标定；气动与 SAS
+为概念值）</li>
 <li><strong>参数总数</strong>：59</li>
 <li><strong>生成文件</strong>：<code>simulations/vector-thrust-lab/src/core/parameters.mjs</code></li>
 <li><strong>同步命令</strong>：<code>py -3.12 tools/sync-params.py</code>（仓库根目录）</li>
+<li><strong>固件对照</strong>：机型参数（kT/kQ/wMax/a/b/Ix/Iy/Iz/m/dMax/dwMax/tauM）以
+<code>TandemVec_FCS/include/TandemVec_Config.h</code>
+为固件侧镜像；控制参数（姿态/角速率 PID、滤波、惯量前馈掩码、FPV
+摇杆曲线）以 <code>TandemVec_FCS/include/FlightCtrlParams.h</code>
+为固件唯一事实源（GCS 在线读写 128 参数全链路）。<strong>仿真参数 ≠
+固件参数</strong>：仿真侧为概念级模型，固件侧为实机调参产物，两者共享机型参数但控制参数各自独立。</li>
 </ul>
 <p>所有角度的内部单位均为弧度（rad）；界面显示时可视需要转换为度。</p>
 <hr />
@@ -79,9 +86,11 @@ ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
 <tr>
 <td>PAR-002</td>
 <td><code>kQ</code></td>
-<td>3.1e-7</td>
+<td>2.8e-7</td>
 <td>N·m·s²</td>
-<td>反扭系数 <code>τ = kQ·ω²</code>（kQ/kT≈0.030）</td>
+<td>反扭系数 <code>τ = kQ·ω²</code>（kQ/kT≈0.027；2026-08-09
+实机两轮：3.1→2.6 有效增益压边界自激→回退 2.8，与固件
+<code>TandemVec_Config.h</code> 一致）</td>
 <td>ESTIMATED</td>
 <td>medium</td>
 <td><code>P.kQ</code></td>
@@ -198,7 +207,11 @@ ESTIMATED 组件估算，待台架标定；气动与 SAS 为概念值）</li>
 <td><code>dMax</code></td>
 <td>0.4363323129985824</td>
 <td>rad</td>
-<td>摆角限幅（25°）</td>
+<td>摆角限幅（25°）。⚠️ <strong>仿真/固件分歧</strong>：固件实机
+2026-08-07 已收紧为 15°（0.2618 rad，<code>TandemVec_Config.h</code>
+dMax + <code>state_data.cpp</code>
+MAX_CORRECTION=15），本仿真参数尚未回写，仍为
+25°——引用摆角裕度结论时注意区分（见行为保持红线清单）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.dMax</code></td>
@@ -826,7 +839,8 @@ vZ)）</td>
 <td><code>altVZMax</code></td>
 <td>1.0</td>
 <td>m/s</td>
-<td>定高目标垂直速度限幅（与固件 MAX_VERTICAL_SPEED_CMD 一致）</td>
+<td>定高目标垂直速度限幅（固件侧对应常量
+<code>MAX_TARGET_ALTITUDE_RATE=1.0</code>，<code>state_data.cpp</code>）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.altVZMax</code></td>
@@ -863,5 +877,5 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

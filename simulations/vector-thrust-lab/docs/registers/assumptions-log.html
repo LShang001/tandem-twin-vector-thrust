@@ -191,7 +191,7 @@ hx=Jp(wf−wt)（小摆角近似），web/MOD-001 为含摆角投影的三轴完
 <td>INDI 滚转改善 98.4%→91.7%、俯仰 76.4%→76.3%；论文 ch/11 已同步</td>
 <td>后续新增数值研究须先跑交叉对比（<code>output/playwright/vtol-verify/cross_*.py/.mjs</code>）</td>
 <td><a
-href="../modeling.html">MOD-001</a>、THY-004
+href="../modeling.html">MOD-001</a>、TandemVec-Paper
 ch/11</td>
 </tr>
 <tr>
@@ -201,12 +201,30 @@ ch/11</td>
 <code>F_x</code>、<code>F_z</code>、<code>M_y</code>、<code>M_z</code>（前摆配平反扭
 z 分量）；油门开环下配平点呈弱 phugoid 慢发散</td>
 <td>配平、速度保持、线性化</td>
-<td>10 s 内空速衰减约 12%（28→24.7 m/s）、高度下滑 2.2 m、航向漂移约
-2.2°、侧移 4.3 m；姿态由 SAS 保持在配平值 ±0.2°
-内；速度发散需油门反馈环方可抑制</td>
+<td>按 2026-08-05 重采基线实测：10 s 内空速衰减约 12%（28→24.60
+m/s）、高度下滑 1.75 m（NED z）、航向漂移 4.1°、侧移 −7.8 m；姿态由 SAS
+保持在配平值附近（θ 偏移约 0.45°，φ 漂移
+0.69°）；速度发散需油门反馈环方可抑制</td>
 <td>增加油门/速度反馈环（如总能量控制或速度保持 PID）</td>
 <td><a href="../modeling/MOD-003.html">MOD-003</a>、<a
 href="../verification/VER-001.html">VER-001</a></td>
+</tr>
+<tr>
+<td>ASM-017</td>
+<td><strong>仿真/固件摆角限幅分歧（2026-08-07
+起）</strong>：固件实机已将 TVC 摆角限幅由 25° 收紧至
+15°（<code>TandemVec_Config.h</code>
+dMax=0.2618、<code>state_data.cpp</code> MAX_CORRECTION=15），而
+<code>aircraft-model.json</code> dMax 仍为 25° 未回写</td>
+<td>控制、推进、实机对照</td>
+<td>仿真摆角裕度比实机大 10°：仿真中可用的摆角范围（含配平偏置
+dtTrim=−18.702°
+之上的增量裕度）在实机上会提前触限；凡涉及摆角裕度、配平摆角占限幅比例的结论，外推实机前必须按
+15° 重算</td>
+<td>将 dMax 回写为 0.2618 rad
+并重采回归基线（红线变更流程），或至少在引用前标注分歧</td>
+<td><a href="parameter-handbook.html">参数数据手册</a> PAR-011、<a
+href="behavior-redlines.html">行为保持红线清单</a>、<code>TandemVec_FCS/include/TandemVec_Config.h</code></td>
 </tr>
 </tbody>
 </table>
@@ -220,5 +238,5 @@ href="hazard-log.html"><code>危害与失效模式日志</code></a>、<a
 href="../verification/SAFE-001.html">SAFE-001</a>
 共同构成模型成熟度声明的支撑文件。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

@@ -100,6 +100,12 @@ id="矢量推力飞行动力学实验室--理论分析与建模文档">矢量推
 </tbody>
 </table>
 <p>约定：两电机轴线在零摆角时均过质心（推力线通过质心，无静态力矩）；前电机为拉力式，尾电机为推进式，旋向相反。</p>
+<blockquote>
+<p><strong>通道语义说明</strong>：本文六维映射为机体系表达（δ_f→M_z、δ_t→M_y、Δω→M_x），不随姿态变化；同一执行器在不同姿态对应不同世界轴——悬停构型（机头朝天、x_b
+竖直）下 δ_f（上摆）=滚转主控、δ_t（下摆）=俯仰主控、差速=偏航主控，见
+<a href="control/CTL-001.html">CTL-001 §8</a> 与
+AGENTS.md「执行器轴映射」踩坑记录。</p>
+</blockquote>
 <h2 id="2-推力矢量映射">2. 推力矢量映射</h2>
 <p>单轴摆动即绕固定轴的旋转。尾电机绕 y_b 摆 δ_t、前电机绕 z_b 摆
 δ_f，旋转矩阵：</p>
@@ -213,9 +219,10 @@ SAS
 <h3 id="71-配平条件">7.1 配平条件</h3>
 <p>巡航配平需同时满足：T = D、L ≈ m·g、合力矩为零。纵向力矩平衡：</p>
 <pre><code>q̄·S·c̄·(C_m0 + C_mα·α_trim) = 0   →   α_trim = −C_m0/C_mα</code></pre>
-<h3 id="72-c_m0-的必要性一次真实的发散案例">7.2 C_m0
-的必要性：一次真实的发散案例</h3>
-<p>建模过程中实测发现：若 C_m0 =
+<h3 id="72-配平问题的本质控制权限-vs-静稳定度">7.2
+配平问题的本质：控制权限 vs 静稳定度</h3>
+<p>建模过程中曾实测发现（旧气动参数 C_m0=0.011、C_mα=−0.4 时期）：若
+C_m0 =
 0（无配平弯度），飞机从近似配平点出发后<strong>持续俯冲发散</strong>。机理链条：</p>
 <ul>
 <li>配平迎角需由推力矢量持续顶住 C_mα·α 的静稳定力矩；</li>
@@ -224,39 +231,48 @@ SAS
 <li>短周期稳定性使机头跟随航迹下压，迎角无法重建 → 加速俯冲。</li>
 </ul>
 <p>这正是<strong>控制权限 vs
-静稳定度</strong>的配平问题。当前通过四方程（Fx/Fz/My/Mz）闭合 28 m/s
-巡航工作点（<code>scripts/trim_solve.py</code> 求解，v0.2.0 VTOL
-参数集）；求解结果为
+静稳定度</strong>的配平问题，与具体参数无关的结构性结论。当前 v0.2.0
+参数集（Cm0=0.0、Cma=−0.1 弱静稳定、VTOL
+机身等效气动）下，由<strong>四方程</strong>（Fx/Fz/My/Mz）闭合 28 m/s
+巡航工作点（<code>scripts/trim_solve.py</code> 求解），求解结果为
 <code>alphaTrim=4.122°</code>、<code>thrTrim=0.192272</code>、<code>dtTrim=-18.702°</code>、<code>dfTrim=-1.739°</code>（前摆配平尾摆反扭的
 z
 分量）。增稳系统只承担相对配平参考点的扰动抑制，而不替代静态配平。注意：油门开环（thr
-固定）时配平点呈弱 phugoid 慢发散（10 s 内 V 衰减约 12%
-并轻微下滑），属模型固有行为，回归基线已锁定。</p>
-<h3 id="73-演示性数值检查4-ms-步长离线复算">7.3 演示性数值检查（4 ms
-步长，离线复算）</h3>
+固定）时配平点呈弱 phugoid 慢发散（10 s 内 V 衰减约 12%、下滑 1.75
+m，回归基线已锁定）。</p>
+<h3 id="73-演示性数值检查4-ms-步长回归基线实测">7.3 演示性数值检查（4 ms
+步长，回归基线实测）</h3>
 <table>
 <thead>
 <tr>
 <th>工况</th>
-<th>结果</th>
+<th>结果（2026-08-05 重采基线）</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>配平直飞 10 s</td>
-<td><code>V=24.000085 m/s</code>，<code>z=0.000244 m</code>，显示
-<code>theta=-1.62696°</code></td>
+<td><code>V=24.5955 m/s</code>（自 28 起 phugoid
+衰减），<code>z=1.7475 m</code>，显示
+<code>theta=-4.569°</code>，<code>phi=0.690°</code>、<code>psi=4.113°</code>、<code>y=-7.838 m</code></td>
 </tr>
 <tr>
-<td>俯仰增量阶跃 8°（4 s 后撤除，共 8 s）</td>
+<td>俯仰增量阶跃 8°（4 s 后撤除，共 8 s，从 NED z=−100 m
+起飞隔离地面）</td>
 <td>终值
-<code>V=25.4292 m/s</code>、<code>theta=-2.9525°</code>、<code>q=0.023789 rad/s</code>；8
+<code>V=29.0659 m/s</code>、<code>theta=-4.747°</code>、<code>q=0.03720 rad/s</code>、<code>z=-75.2 m</code>；8
 s 内尚未完全回到纵向参考点，高度状态因机动改变</td>
 </tr>
 <tr>
 <td>滚转阶跃 <code>Delta omega=0.1375</code>（4 s 后撤除，共 8 s）</td>
 <td>终值
-<code>phi=0.5284°</code>、<code>p=0.002376 rad/s</code>；姿态误差显著衰减</td>
+<code>V=25.6709 m/s</code>、<code>phi=-0.797°</code>、<code>psi=8.676°</code>、<code>p=0.00254 rad/s</code>；姿态误差显著衰减，偏航漂移来自差速-滚转-侧滑耦合</td>
+</tr>
+<tr>
+<td>偏航阶跃 <code>delta_f=8°</code>（4 s 后撤除，共 8 s）</td>
+<td>终值
+<code>V=25.5144 m/s</code>、<code>psi=-38.3°</code>、<code>theta=-11.9°</code>、<code>p=-0.106 rad/s</code>；机动中下降触地（<code>z=6.2 m</code>
+地面钳位生效）</td>
 </tr>
 </tbody>
 </table>
@@ -268,7 +284,8 @@ s 内尚未完全回到纵向参考点，高度状态因机动改变</td>
 Δω  ← Δω  + k_p·p − k_φ·φ − k_iφ·∫φ       （phi_dot≈−p）</code></pre>
 <p><strong>反馈极性必须同时检查控制效率与姿态运动学</strong>：俯仰、滚转的角速率阻尼项取正号，但在锁定的显示约定下
 <code>theta_dot≈−q</code>、<code>phi_dot≈−p</code>，姿态 P/I
-项必须取负号。执行量经 ±25° 摆角和 ±0.7 差速限幅。</p>
+项必须取负号。执行量经 ±25° 摆角和 ±0.7
+差速限幅（仿真值；固件实机摆角已收紧为 ±15°，见 §10 注记）。</p>
 <h2 id="9-数值实现">9. 数值实现</h2>
 <table>
 <thead>
@@ -311,52 +328,58 @@ ms，大步长会数值失稳）</td>
 <tbody>
 <tr>
 <td>质量 m</td>
-<td>0.7 kg</td>
+<td>0.7 kg（ESTIMATED）</td>
 <td>惯量 I_x / I_y / I_z</td>
-<td>0.0021 / 0.022 / 0.022 kg·m²</td>
+<td>0.0021 / 0.022 / 0.022 kg·m²（ESTIMATED）</td>
 </tr>
 <tr>
 <td>推力系数 k_T</td>
-<td>2.2×10⁻⁵ N·s²</td>
+<td>1.04×10⁻⁵ N·s²（ESTIMATED）</td>
 <td>反扭系数 k_Q</td>
-<td>1.6×10⁻⁶ N·m·s²</td>
+<td>2.8×10⁻⁷ N·m·s²（ESTIMATED，2026-08-09 实机标定回写）</td>
 </tr>
 <tr>
 <td>旋翼惯量 J_p</td>
-<td>2.0×10⁻⁴ kg·m²</td>
+<td>2.0×10⁻⁴ kg·m²（MODEL-DEFAULT）</td>
 <td>电机时间常数 τ_m</td>
-<td>0.28 s</td>
+<td>0.28 s（MODEL-DEFAULT）</td>
 </tr>
 <tr>
 <td>最大转速</td>
-<td>1150 rad/s</td>
+<td>1150 rad/s（ESTIMATED）</td>
 <td>力臂 a = b</td>
-<td>0.315 m</td>
+<td>0.315 m（ESTIMATED）</td>
 </tr>
 <tr>
 <td>等效机翼面积 S</td>
-<td>0.1 m²</td>
+<td>0.1 m²（MODEL-DEFAULT）</td>
 <td>弦长 c̄ / 展长 b̄</td>
-<td>0.15 / 0.63 m</td>
+<td>0.15 / 0.63 m（MODEL-DEFAULT）</td>
 </tr>
 <tr>
-<td>C_Lα / C_D0 / k</td>
-<td>4.6 / 0.035 / 0.045</td>
+<td>C_Lα / C_D0 / C_Dk</td>
+<td>2.0 / 0.03 / 0.05（MODEL-DEFAULT）</td>
 <td>C_m0 / C_mα / C_mq</td>
-<td>0.011 / −0.4 / −9.0</td>
+<td>0.0 / −0.1 / −2.0（MODEL-DEFAULT）</td>
 </tr>
 <tr>
 <td>C_Yβ / C_lβ / C_lp</td>
-<td>−0.35 / −0.09 / −0.5</td>
+<td>−0.2 / −0.05 / −0.3（MODEL-DEFAULT）</td>
 <td>C_nβ / C_nr</td>
-<td>0.12 / −0.2</td>
+<td>0.03 / −0.1（MODEL-DEFAULT）</td>
 </tr>
 </tbody>
 </table>
 <p>全部参数的单一事实源为
-<code>models/aircraft-model.json</code>（含单位、来源与置信度），当前状态均为
-MODEL-DEFAULT（概念默认值，未经台架或飞行实测）；全量参数手册见
-<code>docs/registers/参数数据手册.md</code>。</p>
+<code>models/aircraft-model.json</code>（含单位、来源与置信度）；推进/惯量/质量/配平已回写为
+TandemVec_FCS 实机构型值（ESTIMATED，置信度
+medium，待台架标定），气动/SAS 为 MODEL-DEFAULT 概念值（置信度
+low）；全量参数手册见
+<code>docs/registers/参数数据手册.md</code>。摆角限幅 <code>dMax</code>
+仿真为 ±25°，<strong>固件实机 2026-08-07 已收紧为
+±15°</strong>（仿真参数未回写，见 <a
+href="registers/behavior-redlines.html">行为保持红线清单</a> 与假设日志
+ASM-017）。</p>
 <h2 id="11-局限与后续方向">11. 局限与后续方向</h2>
 <ul>
 <li>气动模型为线性小迎角模型，未含大迎角失速、非定常效应与螺旋桨滑流干扰；</li>
@@ -364,5 +387,5 @@ MODEL-DEFAULT（概念默认值，未经台架或飞行实测）；全量参数�
 <li>单电机/单舵面失效无余度；</li>
 <li>后续可扩展：控制分配在线优化、LQR/模型预测姿态控制、过渡走廊（悬停—巡航）包线仿真。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-001-六自由度仿真模型规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-001-六自由度仿真模型规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

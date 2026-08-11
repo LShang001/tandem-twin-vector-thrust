@@ -90,6 +90,44 @@ href="../design/CFG-000.html">CFG-000</a> §6</td>
 <td>未满足</td>
 </tr>
 <tr>
+<td>REQ-VTL-001</td>
+<td>悬停四元数级联姿态自稳</td>
+<td>T, D</td>
+<td><code>src/core/control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code>（悬停配平/收敛/扰动恢复/无自稳对比）；悬停模式按钮</td>
+<td>已满足</td>
+</tr>
+<tr>
+<td>REQ-VTL-002</td>
+<td>悬停自稳开关语义与 180° 最短路径</td>
+<td>T</td>
+<td><code>tests/vtol.test.mjs</code>（qe
+符号/三通道收敛）；<code>tests/math.test.mjs</code> 四元数双覆盖</td>
+<td>已满足</td>
+</tr>
+<tr>
+<td>REQ-VTL-003</td>
+<td>自动定高（高度外环 + 垂直速度内环 + 倾角补偿）</td>
+<td>T</td>
+<td><code>control.mjs</code>
+高度环；<code>tests/vtol.test.mjs</code>（定高收敛/积分限幅/关闭恢复悬停配平）</td>
+<td>已满足</td>
+</tr>
+<tr>
+<td>REQ-VTL-004</td>
+<td>B_true 在线控制分配</td>
+<td>T</td>
+<td><code>src/core/control-allocation.mjs</code>；<code>tests/control-allocation.test.mjs</code>（B⁻¹·B=I、解析↔︎数值差分）；<code>tests/vtol.test.mjs</code>（B_true
+5 用例）</td>
+<td>已满足</td>
+</tr>
+<tr>
+<td>REQ-VTL-005</td>
+<td>悬停航向角速度指令模式</td>
+<td>T, D</td>
+<td><code>control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code>（航向角速度指令执行）；悬停滑块语义切换</td>
+<td>已满足</td>
+</tr>
+<tr>
 <td>REQ-PRP-001</td>
 <td>差速开方分配：<code>ωf = ω0·sqrt(1+Δω)</code>，<code>ωt = ω0·sqrt(1-Δω)</code></td>
 <td>T, A</td>
@@ -130,15 +168,17 @@ href="parameter-handbook.html"><code>参数数据手册</code></a></td>
 <td>REQ-TST-001</td>
 <td>单元测试覆盖核心模块</td>
 <td>T</td>
-<td><code>tests/*.test.mjs</code>，53
-项；<code>node --test tests/</code></td>
+<td><code>tests/*.test.mjs</code>，91 项（2026-08-11
+<code>node --test</code>
+实测）；<code>node --test "tests/*.test.mjs"</code></td>
 <td>已满足</td>
 </tr>
 <tr>
 <td>REQ-TST-002</td>
-<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃）</td>
+<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）</td>
 <td>T</td>
-<td><code>tests/regression.test.mjs</code>；<code>tests/fixtures/regression-baseline.json</code></td>
+<td><code>tests/regression.test.mjs</code>；<code>tests/fixtures/regression-baseline.json</code>（4
+场景）</td>
 <td>已满足</td>
 </tr>
 <tr>
@@ -271,8 +311,9 @@ href="parameter-handbook.html"><code>参数数据手册</code></a></td>
 <tbody>
 <tr>
 <td>已满足</td>
-<td>24</td>
-<td>功能、性能、接口、测试需求已有代码 / 测试 / 检查证据</td>
+<td>29</td>
+<td>功能、性能、接口、测试需求已有代码 / 测试 / 检查证据（含
+VTL-001~005）</td>
 </tr>
 <tr>
 <td>部分满足</td>
@@ -295,5 +336,5 @@ href="assumptions-log.html"><code>假设与局限日志</code></a> ASM-002</td>
 <li>未满足需求转为已满足时，须经代码 / 测试审查，并更新 <a
 href="../requirements/REQ-001.html">REQ-001</a>。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/验证覆盖矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/验证覆盖矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

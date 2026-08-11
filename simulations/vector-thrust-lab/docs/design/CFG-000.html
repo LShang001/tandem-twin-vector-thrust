@@ -31,8 +31,8 @@
 <blockquote>
 <p>本篇给出「纵列双发矢量推力飞行器」C0
 概念构型的整机定义：布局、质量特性、推进方式、控制机理、气动参考量与已知边界。参数全部来自
-<code>models/aircraft-model.json</code>，当前来源标记为
-<code>MODEL-DEFAULT</code>。</p>
+<code>models/aircraft-model.json</code>；推进/惯量/质量/配平为 ESTIMATED
+实机回写值，气动/SAS 为 MODEL-DEFAULT 概念值。</p>
 </blockquote>
 <hr />
 <h2 id="1-构型概述与布局">1 构型概述与布局</h2>
@@ -165,9 +165,10 @@ FCS 实机 ESTIMATED 值；气动/SAS 为 MODEL-DEFAULT 概念值）。</p>
 </tr>
 <tr>
 <td>kQ</td>
-<td>3.1e-7</td>
+<td>2.8e-7</td>
 <td>N·m·s²</td>
-<td>反扭系数，τ = kQ·ω²</td>
+<td>反扭系数，τ = kQ·ω²（kQ/kT≈0.027；2026-08-09
+实机调参回写，与固件一致）</td>
 <td>ESTIMATED</td>
 </tr>
 <tr>
@@ -429,6 +430,13 @@ FCS 实机 ESTIMATED 值；气动/SAS 为 MODEL-DEFAULT 概念值）。</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>通道语义</strong>：表中"主控通道"为巡航（机头水平）构型下的世界轴读法（机体系力矩
+Mz/My/Mx）。悬停构型（机头朝天）下同一执行器对应不同世界轴：上摆
+δ_f=滚转主控、下摆 δ_t=俯仰主控、差速 Δω=偏航主控——见
+AGENTS.md「执行器轴映射」与 <a
+href="../control/CTL-001.html">CTL-001 §8</a>。</p>
+</blockquote>
 <h3 id="32-旋向选择理由">3.2 旋向选择理由</h3>
 <p>前电机 CW、尾电机
 CCW，使零差速等转速时两机反扭矩大小相等、方向相反，机体净滚转力矩近似为零。该设计把滚转通道从俯仰/偏航中<strong>解耦</strong>出来，滚转仅由双发差速产生的反扭差驱动，与常规共轴直升机扭矩差原理一致。</p>
@@ -565,8 +573,9 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 </tr>
 <tr>
 <td>硬件范围</td>
-<td>仅软件仿真，无传感器、飞控、结构或台架</td>
-<td>结果不构成飞行性能承诺</td>
+<td>仿真域不含传感器、飞控、结构或台架模型（实机固件
+<code>TandemVec_FCS</code> 为独立工程，2026-08 已首飞）</td>
+<td>仿真结果不构成飞行性能承诺</td>
 </tr>
 <tr>
 <td>姿态积分</td>
@@ -579,9 +588,14 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 <h2 id="7-基线状态声明">7 基线状态声明</h2>
 <ul>
 <li><strong>基线代号</strong>：C0（概念构型基线）。</li>
-<li><strong>参数状态</strong>：全部参数当前为
-<code>MODEL-DEFAULT</code>，未经台架标定或飞行辨识，置信度标记为
-<code>low</code>。</li>
+<li><strong>参数状态</strong>：推进/惯量/质量/配平为
+ESTIMATED（2026-08-01 回写 TandemVec_FCS 实机构型值，置信度
+<code>medium</code>，待台架标定）；气动与 SAS 为
+<code>MODEL-DEFAULT</code>（置信度 <code>low</code>）。⚠️ 摆角限幅 dMax
+仿真仍为 25°，固件实机已收紧为 15°（见 <a
+href="../registers/behavior-redlines.html">行为保持红线清单</a> 与 <a
+href="../registers/assumptions-log.html">假设与局限日志</a>
+ASM-017）。</li>
 <li><strong>模型成熟度</strong>：概念级 /
 演示级，用于控制律结构研究、通道机理演示与教学，不用于飞行性能预测。</li>
 <li><strong>变更控制</strong>：任何涉及质量、惯量、力臂、气动导数、推进参数或摆轴定义的变更，须通过
@@ -589,5 +603,5 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 配置管理流程，更新 <code>models/aircraft-model.json</code>，并重新运行
 <code>tools/sync-params.py</code> 与回归测试。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

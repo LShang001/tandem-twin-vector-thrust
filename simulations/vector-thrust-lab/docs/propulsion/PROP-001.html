@@ -141,9 +141,10 @@ Q = kQ · ω² + Jp · ω̇                （传给机体的反扭矩）</code>
 </tr>
 <tr>
 <td>kQ</td>
-<td>3.1×10⁻⁷</td>
+<td>2.8×10⁻⁷</td>
 <td>N·m·s²</td>
-<td>反扭系数</td>
+<td>反扭系数（kQ/kT≈0.027；2026-08-09 实机两轮调参后回写，与固件
+<code>TandemVec_Config.h</code> 一致）</td>
 <td>ESTIMATED</td>
 </tr>
 <tr>
@@ -165,7 +166,7 @@ Q = kQ · ω² + Jp · ω̇                （传给机体的反扭矩）</code>
 <p>稳态（<code>ω̇=0</code>）时 <code>Q = kQ·ω²</code>。以 wMax=1150 rad/s
 为例：</p>
 <pre><code>T_max = kT · wMax² = 1.04×10⁻⁵ × 1150² ≈ 13.75 N
-Q_max = kQ · wMax² = 3.1×10⁻⁷ × 1150² ≈ 0.41 N·m</code></pre>
+Q_max = kQ · wMax² = 2.8×10⁻⁷ × 1150² ≈ 0.37 N·m</code></pre>
 <p>双发全油门总推力约 27.5 N，对应整机 0.7 kg 约 4.0g 推力裕度。</p>
 <h3 id="23-反扭的物理来源">2.3 反扭的物理来源</h3>
 <p>见 <a href="../theory/02-propulsion-modeling.html">THY-002</a>
@@ -404,12 +405,12 @@ wMax。</p>
 <tbody>
 <tr>
 <td>kT</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED（实机反推，待台架精化）</td>
 <td>稳态推力-转速最小二乘拟合：<code>T = kT·ω²</code></td>
 </tr>
 <tr>
 <td>kQ</td>
-<td>MODEL-DEFAULT</td>
+<td>ESTIMATED（2026-08-09 实机两轮调参回写，待台架精化）</td>
 <td>扭矩台/扭力传感器稳态测量：<code>Q = kQ·ω²</code></td>
 </tr>
 <tr>
@@ -495,11 +496,12 @@ Jp</strong>：影响滚转通道效率与机动耦合，优先级中。</li>
 <hr />
 <h2 id="10-成熟度声明">10 成熟度声明</h2>
 <ul>
-<li>推进模型为<strong>概念级集总模型</strong>，所有参数状态
-MODEL-DEFAULT；</li>
+<li>推进模型为<strong>概念级集总模型</strong>，kT/kQ
+已回写固件实机构型值（ESTIMATED，置信度 medium，2026-08-09
+实机调参验证），Jp/tauM 仍为 MODEL-DEFAULT；</li>
 <li>推力/反扭系数未经验证，前进比效应缺失，高速前飞预测置信度低；</li>
 <li>电机滞后时间常数为单一值，未区分加/减速或不同油门工作点；</li>
 <li>摆座为理想执行器，真实舵机动态需在后续版本中补充。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/06-推进与执行机构/PROP-001-推进与摆座模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/06-推进与执行机构/PROP-001-推进与摆座模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

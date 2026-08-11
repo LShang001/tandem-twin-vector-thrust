@@ -35,9 +35,12 @@
 <hr />
 <h2 id="1-范围声明">1 范围声明</h2>
 <ul>
-<li><strong>项目形态</strong>：纯软件 Web 仿真与 Node
-计算层，运行在开发者本地浏览器与测试环境中。</li>
-<li><strong>物理风险</strong>：当前不存在飞行平台、动力系统、螺旋桨、高压电池或任何可运动机械部件，因此无直接人身伤害或财产损毁风险。</li>
+<li><strong>项目形态</strong>：本安全计划管辖<strong>仿真域</strong>（纯软件
+Web 仿真与 Node 计算层，运行在开发者本地浏览器与测试环境中）。⚠️
+项目整体已演进：<code>TandemVec_FCS</code> 飞控固件已于 2026-08
+完成<strong>实机首飞验证</strong>并进入调参阶段——实机相关安全议题（螺旋桨防护、锂电、失控保护等）由固件工程侧另行管理，本文仅登记衔接点（见
+§3），不替代固件侧安全文档（<code>TandemVec_FCS/docs/</code>、<code>TandemVec_FCS/README.md</code>）。</li>
+<li><strong>物理风险</strong>：仿真域当前不存在飞行平台、动力系统、螺旋桨、高压电池或任何可运动机械部件，因此无直接人身伤害或财产损毁风险。</li>
 <li><strong>适航与法规</strong>：本仿真不构成任何航空器、无人机系统或地面设备的设计数据，不适用
 CCAR-91/92、FAR/CS 等适航或运行规章。</li>
 <li><strong>安全计划目标</strong>：防止仿真结果被误用于超出其成熟度的工程决策；防止参数、模型与基线腐化导致的误导性输出。</li>
@@ -60,9 +63,10 @@ CCAR-91/92、FAR/CS 等适航或运行规章。</li>
 <td>SAFE-001</td>
 <td><strong>误导性结果被外推为真实性能或安全承诺</strong></td>
 <td>可能导致未经验证的硬件 / 试飞决策</td>
-<td>成熟度声明见根 README、VER-001 与 CFG-000；所有参数标注
-<code>MODEL-DEFAULT</code> 与 <code>low</code>
-置信度；模型可信度分级明确禁止用于性能预测和硬件决策</td>
+<td>成熟度声明见根 README、VER-001 与
+CFG-000；参数标注来源与置信度（推进/惯量/质量/配平 ESTIMATED，气动/SAS
+MODEL-DEFAULT +
+<code>low</code>）；模型可信度分级明确禁止用于性能预测和硬件决策；仿真/固件摆角限幅分歧（25°/15°）已在红线清单与假设日志登记</td>
 <td>中：仍取决于使用人员是否阅读并遵循成熟度声明</td>
 <td><a href="VER-001.html">VER-001</a>、<a
 href="../design/CFG-000.html">CFG-000</a>、根
@@ -118,20 +122,31 @@ href="../registers/hazard-log.html">危害与失效模式日志</a></td>
 </tbody>
 </table>
 <hr />
-<h2 id="3-未来硬件化前瞻议题">3 未来硬件化前瞻议题</h2>
-<p>若本项目从概念仿真向台架测试、样机或飞行平台演进，以下议题须在专用安全计划中展开分析。当前仅作登记，不做展开：</p>
+<h2 id="3-实机阶段前瞻议题已进入实机2026-08-首飞验证通过">3
+实机阶段前瞻议题（已进入实机，2026-08 首飞验证通过）</h2>
+<p>本项目已从概念仿真演进到实机阶段（<code>TandemVec_FCS</code>，2026-08
+首飞通过，进入调参优化）。以下议题须在固件工程侧的安全计划中展开分析，本文仅登记衔接点：</p>
 <ol type="1">
-<li><strong>螺旋桨破片与旋转部件防护</strong>：纵列双桨高速旋转，需评估桨叶失效动能与保护罩
-/ 安全距离。</li>
-<li><strong>锂电热失控与高压安全</strong>：飞行线若采用高功率电池，须制定过充
-/ 过放 / 短路 / 热蔓延预案。</li>
-<li><strong>失控保护与失效安全模式</strong>：单电机失效、通信中断、传感器失效时的安全降落
-/ 迫降策略。</li>
+<li><strong>螺旋桨破片与旋转部件防护</strong>：纵列双桨高速旋转（wMax=1150
+rad/s），需评估桨叶失效动能与保护罩 /
+安全距离——实机测试场地须隔离人员。</li>
+<li><strong>锂电热失控与高压安全</strong>：3S 锂电，须制定过充 / 过放 /
+短路 / 热蔓延预案。</li>
+<li><strong>失控保护与失效安全模式</strong>：固件已实现
+<code>isLinkUp</code>
+链路门控（上电无信号时防止开关误判、舵机钳满偏）、解锁逻辑、GUIDED 超时
+500 ms 强制 MANUAL 等；单电机失效、通信中断、传感器失效时的安全降落 /
+迫降策略仍在评估。</li>
 <li><strong>围栏 /
 系留与地面试车安全</strong>：系留点强度、地面试车区域隔离、紧急停机开关。</li>
 <li><strong>噪声与电磁兼容</strong>：大功率电机与电调对周边设备的电磁干扰及人员听力防护。</li>
 <li><strong>飞行包线与天气限制</strong>：基于真实参数重新建立包线，禁止在大风、结冰或低能见度下试飞。</li>
+<li><strong>调参安全</strong>：在线写参数（0xE1）与滤波/增益调整须遵守固件侧实机调参流程（见
+<code>TandemVec_FCS/docs/</code> 与 AGENTS.md
+踩坑记录：滤波滞后硬预算、有效增益随油门/瞬态变化）。</li>
 </ol>
+<p>仿真侧对本节的贡献：模型配平（MOD-003）、可控性/失效模式（CTL-002）与危害日志可作为实机风险评估的机理基础，但<strong>所有数值结论在引用前必须按实机限幅（摆角
+±15°）与实机参数重新核验</strong>。</p>
 <hr />
 <h2 id="4-与-ctl-002-及危害日志的接口">4 与 CTL-002
 及危害日志的接口</h2>
@@ -174,5 +189,5 @@ CTL-002 与危害日志中的失效模式，补充 FMEA / FMECA 与定量风险�
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/SAFE-001-初步安全计划.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/SAFE-001-初步安全计划.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

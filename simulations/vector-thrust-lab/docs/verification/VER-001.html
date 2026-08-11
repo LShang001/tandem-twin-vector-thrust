@@ -126,8 +126,8 @@ flowchart LR
     end
 
     subgraph Verif [验证侧：右升]
-        UT[单元测试&lt;br/&gt;46 项]
-        RB[回归基线&lt;br/&gt;3 场景]
+        UT[单元测试&lt;br/&gt;91 项]
+        RB[回归基线&lt;br/&gt;4 场景]
         DEMO[页面演示 / 人工检查]
 
         CODE --&gt;|tests/*.test.mjs| UT
@@ -176,7 +176,8 @@ flowchart LR
 </table>
 <hr />
 <h2 id="2-当前证据清单">2 当前证据清单</h2>
-<h3 id="21-单元测试46-项">2.1 单元测试（46 项）</h3>
+<h3 id="21-单元测试91-项2026-08-11-node---test-实测">2.1 单元测试（91
+项，2026-08-11 <code>node --test</code> 实测）</h3>
 <table>
 <thead>
 <tr>
@@ -203,17 +204,18 @@ flowchart LR
 <td>parameters</td>
 <td>6</td>
 <td><code>tests/parameters.test.mjs</code></td>
-<td>52
+<td>59
 键完整且为有限数；关键物理量为正；阻尼导数符号正确；限幅关系自洽；参数对象冻结；摆角
 / 配平角度弧度换算</td>
 <td>T, A</td>
 </tr>
 <tr>
 <td>control</td>
-<td>8</td>
+<td>11</td>
 <td><code>tests/control.test.mjs</code></td>
 <td>SAS 关闭直通；俯仰 / 偏航 /
-滚转反馈运动学；执行限幅；积分器限幅；仅速率与 Rate 模式</td>
+滚转反馈运动学；执行限幅；积分器限幅；仅速率与 Rate
+模式；弹簧回中语义</td>
 <td>T, A</td>
 </tr>
 <tr>
@@ -241,24 +243,48 @@ flowchart LR
 <td>T, A</td>
 </tr>
 <tr>
+<td>control-allocation</td>
+<td>5</td>
+<td><code>tests/control-allocation.test.mjs</code></td>
+<td>B_true 解析 Jacobian ↔︎ 数值差分逐项一致；B⁻¹·B =
+I；奇异回退；增量分配小量精确复现</td>
+<td>T, A</td>
+</tr>
+<tr>
+<td>vtol</td>
+<td>31</td>
+<td><code>tests/vtol.test.mjs</code></td>
+<td>悬停配平平衡 / Q_HOVER 方向；三通道控制符号；收敛 / 扰动恢复 /
+指令追踪 / 无自稳对比；180° 最短路径；定高收敛与积分限幅；B_true 5
+用例；开关切换连续性</td>
+<td>T, A</td>
+</tr>
+<tr>
 <td>regression</td>
-<td>3</td>
+<td>1</td>
 <td><code>tests/regression.test.mjs</code></td>
-<td>配平直飞、俯仰阶跃、滚转阶跃三个场景与
+<td>四个场景（配平直飞、俯仰阶跃、滚转阶跃、偏航阶跃）与
 <code>regression-baseline.json</code> 逐字段比对，容差
 <code>1e-9</code></td>
 <td>T</td>
 </tr>
 <tr>
 <td>state</td>
-<td>1</td>
+<td>3</td>
 <td><code>tests/state.test.mjs</code></td>
-<td>完整热配平复位可重复，并保留模式开关</td>
+<td>完整热配平复位可重复；轻量复位保留模式与输入；模式开关保留</td>
+<td>T</td>
+</tr>
+<tr>
+<td>telemetry</td>
+<td>3</td>
+<td><code>tests/telemetry.test.mjs</code></td>
+<td>遥测快照只读视图字段完整性</td>
 <td>T</td>
 </tr>
 <tr>
 <td><strong>合计</strong></td>
-<td><strong>46</strong></td>
+<td><strong>91</strong></td>
 <td>—</td>
 <td>—</td>
 <td>—</td>
@@ -286,7 +312,7 @@ flowchart LR
 <td><code>trim</code></td>
 <td>10 s</td>
 <td>无额外输入，使用 <code>resetSimulationState</code>
-热复位后的纵向配平初始条件</td>
+热复位后的四方程配平初始条件（28 m/s）</td>
 <td>每秒快照 + 最终状态：V、α、φ/θ/ψ、p/q/r、位置、推力 / 力矩</td>
 <td>`max(1e-9,</td>
 <td>expected</td>
@@ -308,6 +334,15 @@ flowchart LR
 <td>同上</td>
 <td>REQ-CTL-001/002、REQ-PRP-001</td>
 </tr>
+<tr>
+<td><code>yawStep</code></td>
+<td>8 s</td>
+<td>0–4 s 内 <code>df = 8°</code>（绝对前摆指令，配平偏置 dfTrim
+之上），4 s 后撤除</td>
+<td>同上</td>
+<td>同上；机动下降触地（地面钳位生效，<code>z=6.2 m</code>）</td>
+<td>REQ-CTL-001/002、REQ-SIM-003</td>
+</tr>
 </tbody>
 </table>
 <h3 id="23-参数漂移检测">2.3 参数漂移检测</h3>
@@ -326,7 +361,7 @@ flowchart LR
 <td>参数单一事实源</td>
 <td><code>py -3.12 tools/sync-params.py --check</code>（仓库根目录）</td>
 <td><code>models/aircraft-model.json</code></td>
-<td>生成的 <code>src/core/parameters.mjs</code> 与 JSON 一致；52
+<td>生成的 <code>src/core/parameters.mjs</code> 与 JSON 一致；59
 键完整；无手工编辑漂移</td>
 <td>I, T</td>
 </tr>
@@ -441,8 +476,9 @@ flowchart LR
 <tr>
 <td><strong>可用</strong></td>
 <td>控制律概念研究与通道解耦演示</td>
-<td>46 项测试与 3 项回归基线覆盖所列工况；SAS
-速率/姿态反馈极性、纵向配平参考量、横航向残差、零空速和完整复位已锁定</td>
+<td>91 项测试与 4 项回归基线覆盖所列工况；SAS
+速率/姿态反馈极性、纵向配平参考量、横航向残差、零空速、悬停自稳/定高/B_true
+和完整复位已锁定</td>
 </tr>
 <tr>
 <td><strong>可用</strong></td>
@@ -453,9 +489,12 @@ HUD，方程面板解释模型来源；无飞行硬件风险</td>
 <tr>
 <td><strong>不可用</strong></td>
 <td>性能预测、包线保护设计、任何硬件决策</td>
-<td>全部参数为 <code>MODEL-DEFAULT</code>（置信度
-<code>low</code>），未经验证；执行机构为理想瞬时到位；气动为线性小迎角模型；无失速、无风扰、无传感器
-/ 电调 / 电池模型</td>
+<td>气动/SAS 参数为 <code>MODEL-DEFAULT</code>（置信度
+<code>low</code>），未经验证；推进/惯量/质量为 ESTIMATED
+实机回写（置信度
+<code>medium</code>，待台架精化）；执行机构为理想瞬时到位；气动为线性小迎角模型；无失速、无风扰、无传感器
+/ 电调 / 电池模型；仿真/固件摆角限幅存在分歧（25° vs 15°，见
+ASM-017）</td>
 </tr>
 </tbody>
 </table>
@@ -469,15 +508,17 @@ HUD，方程面板解释模型来源；无飞行硬件风险</td>
 <code>maxStep = 0.004 s</code></li>
 <li>电机时间常数 <code>tauM = 0.28 s</code></li>
 <li>差速开方分配公式</li>
-<li>SAS / 积分 / UI 限幅值</li>
+<li>SAS / 积分 / UI 限幅值（摆角限幅仿真 ±25°；⚠ 固件实机已收紧为
+±15°，2026-08-07，仿真参数未回写——回写须重采基线并更新 <a
+href="../registers/behavior-redlines.html">行为保持红线清单</a>）</li>
 <li>空速下限 <code>vMin = 0.5 m/s</code></li>
 <li>地面约束条件
 <code>pos.z &gt; 6.2 m &amp;&amp; vWorld.z &gt; 0</code></li>
 <li>四元数 RK4 积分 + 每阶段保范投影</li>
 <li>900 ms 自动演示触发</li>
 <li>完整复位采用热配平转速，不模拟冷启动</li>
-<li>渲染几何臂长 <code>±1.78 m</code> 与物理力臂 <code>0.315 m</code>
-的区分</li>
+<li>渲染几何臂长（前 +1.78 m / 尾 −1.82 m）与物理力臂
+<code>0.315 m</code> 的区分</li>
 <li><code>theta = -asin(R13)</code> 的欧拉提取约定</li>
 </ul>
 <p>重采命令（在 <code>simulations/vector-thrust-lab</code> 目录）：</p>
@@ -502,10 +543,14 @@ href="../registers/parameter-handbook.html"><code>参数数据手册</code></a>
 <h2 id="5-测试运行方法">5 测试运行方法</h2>
 <p>在 <code>simulations/vector-thrust-lab</code> 目录执行：</p>
 <div class="sourceCode" id="cb3"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> tests/</span></code></pre></div>
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> <span class="st">&quot;tests/*.test.mjs&quot;</span></span></code></pre></div>
 <p>或显式列出测试文件：</p>
 <div class="sourceCode" id="cb4"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> tests/math.test.mjs tests/parameters.test.mjs tests/control.test.mjs tests/propulsion.test.mjs tests/aerodynamics.test.mjs tests/dynamics.test.mjs tests/regression.test.mjs</span></code></pre></div>
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> tests/math.test.mjs tests/parameters.test.mjs tests/control.test.mjs tests/propulsion.test.mjs tests/aerodynamics.test.mjs tests/dynamics.test.mjs tests/control-allocation.test.mjs tests/vtol.test.mjs tests/regression.test.mjs tests/state.test.mjs tests/telemetry.test.mjs</span></code></pre></div>
+<blockquote>
+<p>注：Windows 下 <code>node --test tests/</code>
+目录参数会解析失败（Node 24 实测），必须使用通配符或显式文件列表。</p>
+</blockquote>
 <p>参数漂移检测在仓库根目录执行：</p>
 <div class="sourceCode" id="cb5"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/sync-params.py <span class="at">--check</span></span></code></pre></div>
@@ -535,7 +580,7 @@ href="../propulsion/PROP-001.html">PROP-001</a> —
 推进与摆座模型</li>
 <li><a href="SAFE-001.html">SAFE-001</a> —
 初步安全计划</li>
-<li><a href="../registers/parameter-handbook.html">参数数据手册</a> — 52
+<li><a href="../registers/parameter-handbook.html">参数数据手册</a> — 59
 参数全量清单</li>
 <li><a href="../registers/assumptions-log.html">假设与局限日志</a> —
 已知模型假设与局限</li>
@@ -546,5 +591,5 @@ href="../propulsion/PROP-001.html">PROP-001</a> —
 <li><a href="../registers/hazard-log.html">危害与失效模式日志</a>
 — 失效模式与缓解措施</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

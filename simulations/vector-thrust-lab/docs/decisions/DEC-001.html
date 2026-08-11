@@ -106,8 +106,9 @@ JSON 源。</li>
 <li>改参数后必须运行 <code>python tools/sync-params.py</code>（或
 <code>py -3.12 tools/sync-params.py</code>），否则生成物与源不一致；</li>
 <li>参数变更若影响行为红线，需同步重采回归基线并在提交说明中记录原因；</li>
-<li>当前全部参数状态为
-<code>MODEL-DEFAULT</code>，模型仍处于概念级，不可因治理改进而误判为高保真。</li>
+<li>推进/惯量/质量/配平参数已于 2026-08-01
+回写固件实机构型值（ESTIMATED），气动/SAS 仍为
+<code>MODEL-DEFAULT</code>——参数治理已覆盖实机回写场景，但模型仍处于概念级，不可因治理改进而误判为高保真。</li>
 </ul>
 <h2 id="关联文档">关联文档</h2>
 <ul>
@@ -116,5 +117,5 @@ JSON 源。</li>
 <li><code>tools/sync-params.py</code></li>
 <li><code>models/aircraft-model.json</code></li>
 </ul>
-<footer class="provenance">源文件 <code>docs/09-决策记录/DEC-001-参数单一事实源.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/09-决策记录/DEC-001-参数单一事实源.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

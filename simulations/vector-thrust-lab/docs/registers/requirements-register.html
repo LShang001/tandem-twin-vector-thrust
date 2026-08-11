@@ -107,6 +107,57 @@ href="../modeling.html">MOD-001</a></td>
 href="../design/CFG-000.html">CFG-000</a> §6</td>
 </tr>
 <tr>
+<td>REQ-VTL-001</td>
+<td>悬停四元数级联姿态自稳</td>
+<td>功能</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>src/core/control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-VTL-002</td>
+<td>悬停自稳开关语义与 180° 最短路径</td>
+<td>功能</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.2</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-VTL-003</td>
+<td>自动定高（高度外环 P+I + 垂直速度内环 + 倾角补偿）</td>
+<td>功能</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.4</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>control.mjs</code>
+高度环；<code>tests/vtol.test.mjs</code>（定高子组）</td>
+</tr>
+<tr>
+<td>REQ-VTL-004</td>
+<td>B_true 在线控制分配</td>
+<td>功能</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.5</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>src/core/control-allocation.mjs</code>；<code>tests/control-allocation.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-VTL-005</td>
+<td>悬停航向角速度指令模式</td>
+<td>功能</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.2</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code></td>
+</tr>
+<tr>
 <td>REQ-PRP-001</td>
 <td>差速开方分配</td>
 <td>功能</td>
@@ -159,11 +210,11 @@ href="../propulsion/PROP-001.html">PROP-001</a></td>
 <td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
 <td>T</td>
 <td>已满足</td>
-<td><code>tests/*.test.mjs</code>，53 项</td>
+<td><code>tests/*.test.mjs</code>，91 项（2026-08-11 实测）</td>
 </tr>
 <tr>
 <td>REQ-TST-002</td>
-<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃）</td>
+<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）</td>
 <td>测试</td>
 <td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
 <td>T</td>
@@ -297,5 +348,5 @@ href="../governance/GOV-002.html">GOV-002</a>
 href="../requirements/REQ-001.html">REQ-001</a>
 无冲突、无遗漏。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/需求注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/需求注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

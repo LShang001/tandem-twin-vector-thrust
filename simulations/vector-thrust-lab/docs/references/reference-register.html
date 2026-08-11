@@ -66,8 +66,8 @@
 <td>Node.js 内置测试 runner（<code>node:test</code>）</td>
 <td>工具</td>
 <td>Node.js ≥ 18 内置</td>
-<td>运行 <code>node --test tests/*.test.mjs</code>，执行 53
-项测试与回归基线</td>
+<td>运行 <code>node --test "tests/*.test.mjs"</code>，执行 91 项测试与 4
+条回归基线</td>
 <td>已就位</td>
 </tr>
 <tr>
@@ -169,6 +169,68 @@ Inversion Control for Tiltrotor UAV (Jeong, 2022)</td>
 <td>倾转旋翼 HINDI 鲁棒飞控；与本项目 VTOL 控制对照</td>
 <td>已就位</td>
 </tr>
+<tr>
+<td>REF-112</td>
+<td>AnoCom 官方通信协议手册（MinerU 转换 26 页 + 本工程差异对照表）</td>
+<td>协议文档</td>
+<td><code>TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md</code>、<code>TandemVec_FCS/docs/ano_ref/</code></td>
+<td>遥测/参数/黑匣子帧格式与占用约定（0x40/0x20/0x0D/0x30、0xE0-0xE3
+参数链路）；GCS 协议实现唯一参照</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-113</td>
+<td>ExpressLRS（ELRS）官方源码</td>
+<td>第三方库</td>
+<td><code>TandemVec_FCS/docs/reference/elrs-official/</code></td>
+<td>CRSF
+遥测协议（<code>crsf_protocol.h</code>/<code>telemetry_protocol.h</code>）与接收机配置参考</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-114</td>
+<td>EdgeTX 官方源码</td>
+<td>第三方库</td>
+<td><code>TandemVec_FCS/docs/reference/edgetx-official/</code></td>
+<td>CRSF 遥测传感器解析（<code>radio/src/telemetry/crossfire.cpp</code>
+等）</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-115</td>
+<td>SparkFun u-blox Arduino 库</td>
+<td>第三方库</td>
+<td><code>docs/reference/sparkfun-ublox-gnss/</code></td>
+<td>UBX
+协议（CFG-MSG/CFG-NAV5/CFG-PRT/CFG-NMEA）实现参考；<code>ubxcfg</code>
+扩展对照来源</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-116</td>
+<td>MAVLink 协议</td>
+<td>协议文档</td>
+<td><code>TandemVec_FCS/docs/mavlink-ref/</code></td>
+<td>NAMED_VALUE_FLOAT / DEBUG_VECT / 参数与命令服务；固件 DBG
+<code>proto mavlink</code> 运行时切换</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-117</td>
+<td>minmea NMEA 解析库（MIT）</td>
+<td>第三方库</td>
+<td><code>TandemVec_FCS/lib/ublox-main/</code>（集成）</td>
+<td>GNSS NMEA 句解析与 epoch 合成（MicroNMEA 因 LGPL 弃用）</td>
+<td>已就位</td>
+</tr>
+<tr>
+<td>REF-118</td>
+<td>匿名通信协议（原始 PDF）</td>
+<td>协议文档</td>
+<td><code>TandemVec_FCS/docs/匿名通信协议.pdf</code></td>
+<td>AnoCom 原始手册底稿；与 PROTOCOL-001 转换版对照</td>
+<td>已就位</td>
+</tr>
 </tbody>
 </table>
 <h2 id="说明">说明</h2>
@@ -179,5 +241,5 @@ Inversion Control for Tiltrotor UAV (Jeong, 2022)</td>
 <li>未来新增外部资料时，按顺序递增 REF
 编号，并在此表登记用途与状态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/08-参考资料/参考资料注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/08-参考资料/参考资料注册表.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

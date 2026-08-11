@@ -58,6 +58,11 @@ href="../verification/VER-001.html">VER-001</a>。</p>
 <td>通道映射、SAS 增稳、执行机构</td>
 </tr>
 <tr>
+<td>悬停控制</td>
+<td>VTL</td>
+<td>四元数级联自稳、自动定高、B_true 分配、航向角速度指令</td>
+</tr>
+<tr>
 <td>推进</td>
 <td>PRP</td>
 <td>推力、反扭、差速分配、电机滞后</td>
@@ -218,6 +223,67 @@ href="../modeling.html">MOD-001</a></td>
 href="../design/CFG-000.html">CFG-000</a> §6</td>
 </tr>
 <tr>
+<td>REQ-VTL-001</td>
+<td>悬停构型（机头朝天）四元数级联姿态自稳：误差四元数
+<code>qe = qCmd⁻¹⊗q</code>、外环
+<code>ωdes=−2·vtolAttKp·qe</code>、内环按通道效率符号</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8</td>
+<td>高</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>src/core/control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code>；悬停模式按钮</td>
+</tr>
+<tr>
+<td>REQ-VTL-002</td>
+<td>悬停自稳开关语义：sasMode=0 直通（无自稳必倒演示）、非 0
+四元数自稳；180° 翻转最短路径防御（qe.w&lt;0 取反）</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.2</td>
+<td>高</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code></td>
+</tr>
+<tr>
+<td>REQ-VTL-003</td>
+<td>自动定高（可选）：高度外环 P+I → 目标垂直速度（限幅 ±altVZMax=1.0
+m/s）→ 垂直速度内环油门，含 1/√cosγ 倾角补偿与积分限幅</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.4</td>
+<td>中</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>control.mjs:applyVtolHover</code>
+高度环；<code>tests/vtol.test.mjs</code>（定高子组）；定高按钮 +
+参考高度滑块</td>
+</tr>
+<tr>
+<td>REQ-VTL-004</td>
+<td>B_true 在线控制分配（可选）：内环目标力矩
+<code>M_des=diag(I)·btrueK·(ωdes−ω)</code>，分配层
+<code>Δu=B⁻¹·(M_des−M_cur)</code>（M_cur
+当前状态重算），奇异回退对角映射</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.5</td>
+<td>中</td>
+<td>T</td>
+<td>已满足</td>
+<td><code>src/core/control-allocation.mjs</code>；<code>tests/control-allocation.test.mjs</code>；<code>tests/vtol.test.mjs</code>（B_true
+子组）</td>
+</tr>
+<tr>
+<td>REQ-VTL-005</td>
+<td>悬停航向角速度指令模式：dw 滑块 → 绕 x_b 角速度指令（±80°/s），qCmd
+跟随当前航向（ψ_est 提取），松手停转</td>
+<td><a href="../control/CTL-001.html">CTL-001</a>
+§8.2</td>
+<td>中</td>
+<td>T, D</td>
+<td>已满足</td>
+<td><code>control.mjs:applyVtolHover</code>；<code>tests/vtol.test.mjs</code>；悬停滑块语义切换</td>
+</tr>
+<tr>
 <td>REQ-PRP-001</td>
 <td>差速开方分配：<code>ωf = ω0·sqrt(1+Δω)</code>，<code>ωt = ω0·sqrt(1-Δω)</code></td>
 <td><a href="../design/CFG-000.html">CFG-000</a></td>
@@ -267,16 +333,17 @@ href="../propulsion/PROP-001.html">PROP-001</a></td>
 <tr>
 <td>REQ-TST-001</td>
 <td>单元测试覆盖核心模块（math / state / control / propulsion /
-aerodynamics / dynamics）</td>
+aerodynamics / dynamics / telemetry / control-allocation / vtol）</td>
 <td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
 <td>高</td>
 <td>T</td>
 <td>已满足</td>
-<td><code>tests/*.test.mjs</code>，46 项</td>
+<td><code>tests/*.test.mjs</code>，91 项（2026-08-11
+<code>node --test</code> 实测）</td>
 </tr>
 <tr>
 <td>REQ-TST-002</td>
-<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃）</td>
+<td>回归基线比对（配平直飞 / 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）</td>
 <td><a href="../design/CONOPS-001.html">CONOPS-001</a></td>
 <td>高</td>
 <td>T</td>
@@ -434,12 +501,13 @@ aerodynamics / dynamics）</td>
 </table>
 <hr />
 <h2 id="5-非目标">5 非目标</h2>
-<p>以下工作明确不在 C0 基线范围内，后续若需纳入，应通过 <a
+<p>以下工作明确不在本仿真域（C0 基线）范围内，后续若需纳入，应通过 <a
 href="../governance/GOV-002.html">GOV-002</a>
 变更流程并新增需求：</p>
 <ul>
 <li>全包线飞行验证或飞行品质等级评定；</li>
-<li>硬件在环（HIL）仿真、传感器模型、嵌入式飞控代码；</li>
+<li>硬件在环（HIL）仿真、传感器模型、嵌入式飞控代码——<strong>注</strong>：嵌入式飞控（<code>TandemVec_FCS</code>）与上位机（<code>TandemVec_FCS/GCS</code>）为独立工程，已实机首飞验证（2026-08），不归本仿真需求管辖，其文档见
+<code>TandemVec_FCS/docs/</code>；</li>
 <li>CFD、风洞或涡格法高保真气动数据库；</li>
 <li>失速 / 深失速 / 尾旋等非线性气动建模；</li>
 <li>自动导航、航迹规划、任务管理系统。</li>
@@ -457,8 +525,9 @@ href="../governance/GOV-002.html">GOV-002</a>
 <tbody>
 <tr>
 <td>已满足</td>
-<td>20</td>
-<td>功能、性能、接口、测试需求已在当前代码 / 测试中实现</td>
+<td>29</td>
+<td>功能、性能、接口、测试需求已在当前代码 / 测试中实现（含
+VTL-001~005）</td>
 </tr>
 <tr>
 <td>部分满足</td>
@@ -475,5 +544,5 @@ href="../governance/GOV-002.html">GOV-002</a>
 <p>未满足需求不代表项目阻塞项，而是记录了从概念仿真向更高成熟度模型演进的已知缺口。详细可信度与验证策略见
 <a
 href="../verification/VER-001.html">VER-001</a>。</p>
-<footer class="provenance">源文件 <code>docs/02-需求与验证/REQ-001-需求基线.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/02-需求与验证/REQ-001-需求基线.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

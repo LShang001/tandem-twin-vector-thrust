@@ -150,7 +150,8 @@ Code、Codex、Cursor、Windsurf 等任何支持多 Agent 的 AI 编程工具。
 <ul>
 <li>core 层（<code>src/core/</code>）零外部依赖：不 import
 Three.js、不访问 DOM，可在 Node 纯计算环境运行</li>
-<li>修改前后必须跑 <code>node --test tests/</code></li>
+<li>修改前后必须跑 <code>node --test "tests/*.test.mjs"</code>（Windows
+上目录参数会解析失败，必须用通配符/显式文件列表）</li>
 <li>修改行为红线项（见 AGENTS.md）必须先确认、重采基线、文档同步</li>
 <li>源码注释用中文</li>
 </ul>
@@ -166,7 +167,8 @@ Three.js、不访问 DOM，可在 Node 纯计算环境运行</li>
 <ul>
 <li><code>docs/</code> 下全部 Markdown 技术文档的撰写与版本迭代</li>
 <li>THY 系列（理论推导）、MOD 系列（数学建模）的公式推导</li>
-<li><code>docs/03-理论推导/THY-004/</code> 模块化 LaTeX 工程的维护</li>
+<li><code>TandemVec-Paper/</code> 顶层独立 LaTeX
+论文工程的维护（2026-08-11 迁出 docs/03-理论推导/THY-004）</li>
 <li>文档中所有公式必须与 <code>src/core/</code> 仿真代码实现一致</li>
 </ul>
 <p><strong>工作准则</strong>：</p>
@@ -407,5 +409,5 @@ class="sourceCode json"><code class="sourceCode json"><span id="cb4-1"><a href="
 <p>本文件（GOV-003）是<strong>完整规范</strong>，包含 Agent
 角色定义、工作流、交接协议。 两者互补：AGENTS.md 快速上手，GOV-003
 深度参考。</p>
-<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-003-多Agent协作规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-003-多Agent协作规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>

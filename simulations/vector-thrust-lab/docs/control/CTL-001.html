@@ -441,9 +441,10 @@ href="CTL-002.html">CTL-002</a> §2。</p>
 <h2 id="8-vtol-悬停控制模式机头朝天无翼">8 VTOL
 悬停控制模式（机头朝天，无翼）</h2>
 <blockquote>
-<p>对应源码：<code>control.mjs:applyVtolHover</code>、<code>state.mjs:Q_HOVER/resetVtolHoverState/hoverThrottle</code>；固件同构实现见
-<code>TandemVec_FCS/src/flight_control.cpp</code>（<code>q_hover ⊗ Rx(-Heading)</code>
-悬停链）。UI 按钮「悬停模式」切换 <code>S.vtolMode</code>。</p>
+<p>对应源码：<code>control.mjs:applyVtolHover</code>、<code>state.mjs:Q_HOVER/resetVtolHoverState/hoverThrottle</code>。UI
+按钮「悬停模式」切换
+<code>S.vtolMode</code>。固件侧实现为<strong>统一四元数姿态控制链</strong>（无独立"悬停链"），与本节的对应关系见
+§8.6 固件实现对照。</p>
 </blockquote>
 <h3 id="81-构型与初始化">8.1 构型与初始化</h3>
 <ul>
@@ -522,14 +523,16 @@ qe 的 y/z 分量被 cosψ 调制（ψ=90° 倾斜失效、180° 反向，2026-0
 </tr>
 </tbody>
 </table>
-<p>闭环收敛、指令追踪与无自稳对比见 <code>vtol.test.mjs</code>（13
-用例）。</p>
+<p>闭环收敛、指令追踪与无自稳对比见 <code>vtol.test.mjs</code>（31
+用例，含定高、B_true 子组；2026-08-11 实测 91 项全绿）。</p>
 <h3 id="84-自动定高高度保持可选">8.4 自动定高（高度保持，可选）</h3>
 <blockquote>
 <p>对应源码：<code>control.mjs:applyVtolHover</code>
 末尾高度环；UI「定高」按钮 +
-参考高度滑块（仅悬停模式显示）。固件对应链：<code>altitudePositionPController</code>（高度→目标垂直速度，±1.0
-m/s）+ <code>altitudeVelocityPIDController</code>（垂直速度→油门）。</p>
+参考高度滑块（仅悬停模式显示）。固件对应链：<code>altitudePositionPController</code>（高度→目标垂直速度，限幅
+±<code>MAX_TARGET_ALTITUDE_RATE</code>=1.0 m/s）+
+<code>altitudeVelocityPIDController</code>（垂直速度→垂直加速度指令，再经推力合成输出油门，含
+R33 倾角补偿与 MAX_THRUST 限幅）。</p>
 </blockquote>
 <p><strong>串级结构</strong>（高度外环 P+I → 目标垂直速度 → 油门内环
 P）：</p>
@@ -584,6 +587,86 @@ M=I·K·Δω，量级对齐对角内环等效带宽 rateKq·b·T/Iy ≈ 59）</l
 小增量精确复现目标力矩（一阶线性区内）、扰动恢复与对角模式同量级不劣化（<code>vtol.test.mjs</code>
 5 用例）</li>
 </ul>
+<h3 id="86-固件实现对照tandemvec_fcs2026-08-10-实机链">8.6
+固件实现对照（TandemVec_FCS，2026-08-10 实机链）</h3>
+<blockquote>
+<p>本节对照 <code>TandemVec_FCS/src/flight_control.cpp</code>（约 1610
+行）现行实现，供仿真↔︎固件互译。固件无独立"悬停链"——所有姿态模式共用同一四元数控制链，悬停只是目标姿态不同（机头朝天）。</p>
+</blockquote>
+<p><strong>控制链</strong>（<code>runGNCExecutive</code> 调度，200
+Hz）：</p>
+<pre><code>q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w&lt;0 取反，同 §8.2 约定）
+→ 外环 rollAnglePID/pitchAnglePID       （角→角速率；kp=2.8（deg 域），输出限幅 ±MAX_TARGET_RATE=80°/s）
+→ 内环 rollRatePID/pitchRatePID         （角速率→角加速度 alpha_roll/alpha_pitch；kp=0.28，derivative-on-measurement）
+→ 惯量逆解前馈 M_ff = I·α_ref + ω×(I·ω) + ω×h_rotor   （InertiaDecoupling.h；inertia_comp_mask=0x03 全开，
+                                                         位0=陀螺耦合、位1=转子陀螺；0xE1 可在线关闭）
+→ BTRUE 在线分配（TandemVec_ControlAllocation.h）      （工作点 w0_eff=√(0.5·(wf_est²+wt_est²))，
+                                                        下限 0.6·w_hover；分配器与力矩同用观测转速）
+→ mix 层轴置换 + 输出（L1310-1312）：Mx′=−Ix·α_yaw / My′=+Iy·α_pitch / Mz′=−Iz·α_roll
+  执行器：下摆 δ_t（pitch）、上摆 δ_f（roll）、差速 allocateDifferential(w0, Δω)（yaw）</code></pre>
+<p><strong>与仿真律的关键差异</strong>（同构但非逐位等价）：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>仿真（本节 §8）</th>
+<th>固件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>姿态外环</td>
+<td>纯比例 <code>ωdes=−2·vtolAttKp·qe.xyz</code>（vtolAttKp=2.5）</td>
+<td>PID（att kp=2.8 deg 域、Ki=0、积分限幅 40°/s、输出限幅 ±80°/s）</td>
+</tr>
+<tr>
+<td>角速率内环</td>
+<td>rateKq/rateKr/rateKp（1.2/1.2/1.5）</td>
+<td>rate kp=0.28/0.28/0.20 + ki=0.1，限幅 100°/s²，阈值 60</td>
+</tr>
+<tr>
+<td>差速增益调度</td>
+<td>无（概念级）</td>
+<td><code>(w0_eff/w_hover)²</code> 封顶 1.0，仅乘 Mx 通道（2026-08-07~09
+三层修复：1/w0² 指令爆炸→封顶 1.0→τm 观测器）</td>
+</tr>
+<tr>
+<td>转速信号</td>
+<td>电机模型真值 S.wf/S.wt</td>
+<td><strong>τm 一阶观测器</strong>
+<code>g_wf_est += (wf−g_wf_est)·(0.005/τm)</code>（GNC 200Hz 步长），B
+矩阵/调度/当前状态全部用观测值</td>
+</tr>
+<tr>
+<td>yaw 航向</td>
+<td>无航向锁（ψ̇ 指令松手停转）</td>
+<td>ratchet hold：解锁上升沿锁航向；摇杆偏离 40 μs
+死区→恒角速度；回中→att_yaw.kp×短弧误差→限幅 ±24°/s</td>
+</tr>
+<tr>
+<td>FPV 曲线</td>
+<td>无（滑块线性）</td>
+<td>RATE_MODE 走 Betaflight 三参数曲线
+rcRateCurve（rc_rate=0.5/expo=0.25/super 0.7·0.7·0.55，满杆 roll/pitch
+333°/s、yaw 222°/s，上限 600°/s）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>模式与门控</strong>（state_data.h + flight_control.cpp）：CH7
+模式开关（&lt;1300 MANUAL / 1300-1650 AUTO_ALTITUDE / &gt;1650
+AUTO_POSITION/GUIDED，GUIDED 超时 500 ms 强制 MANUAL）；姿态子模式 CH9
+切换 ATTITUDE_MODE/RATE_MODE；手动 TVC 旁路
+<code>is_manual_tvc = isLinkUp &amp;&amp; CH8&gt;1750</code>（<strong>isLinkUp
+门控兜底</strong>——上电无信号时 raw_rc 全 0 曾致开关误判、舵机钳满偏，见
+AGENTS.md 踩坑记录）。姿态控制器门控
+<code>is_attitude_control_active = is_unlocked &amp;&amp; !is_manual_tvc</code>；锁定态摆角直通
++ 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。</p>
+<p><strong>摆角限幅</strong>：固件
+dMax=±15°（<code>TandemVec_Config.h</code> 0.2618 rad +
+<code>state_data.cpp</code> MAX_CORRECTION=15），仿真
+<code>P.dMax</code>=±25° 未回写——悬停模式摆角基准为 0
+不受配平偏置影响，但巡航配平（dtTrim=−18.702°）超出固件限幅，见 MOD-003
+§3.2 与假设日志 ASM-017。</p>
 <hr />
 <h2 id="9-测试覆盖指针">9 测试覆盖指针</h2>
 <table>
@@ -666,11 +749,13 @@ M=I·K·Δω，量级对齐对角内环等效带宽 rateKq·b·T/Iy ≈ 59）</l
 <h2 id="10-成熟度声明">10 成熟度声明</h2>
 <ul>
 <li>当前 SAS
-为<strong>概念级</strong>直接反馈增稳律，增益为手工整定，未经过系统辨识或飞行验证；</li>
+为<strong>概念级</strong>直接反馈增稳律，增益为手工整定，未经过系统辨识或飞行验证（固件侧已于
+2026-08 实机首飞验证并进入逐轮调参阶段，控制参数唯一事实源为
+<code>TandemVec_FCS/include/FlightCtrlParams.h</code>，见 §8.6）；</li>
 <li>所列工况下仿真响应有界（见 <a
 href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-05 23:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
 </html>
