@@ -68,10 +68,10 @@ coordinates {
   node[pos=.92, anchor=east, font=\scriptsize, fill=white, inner sep=1pt] {撤除};
 \end{groupplot}
 \end{tikzpicture}
-\caption{Web core标准回归场景的非线性时域响应。数据直接取自
-\texttt{tests/fixtures/}\allowbreak\texttt{regression-baseline.json}：配平空速以$28\ \mathrm{m/s}$为参考；
-俯仰角以$\theta_0=-4.122^\circ$为参考；尾摆和差速指令均在$t=4\ \mathrm{s}$撤除。
-标记为每秒保存的基线样本，连线仅用于辨识趋势。该图验证实现的确定性、通道方向和纵向参考量保持，
-其中差速在固件悬停操纵语义中对应偏航；该图不构成极点、阻尼比或飞行品质验证。}
+\caption{早期Web基线场景的归档非线性时域响应。配平空速以$28\ \mathrm{m/s}$为参考，
+俯仰角以$\theta_0=-4.122^\circ$为参考，尾摆和差速指令均在$t=4\ \mathrm{s}$撤除。
+标记为每秒保存的历史样本，连线仅用于辨识趋势；这些坐标当前未由
+\texttt{regression-baseline.json}自动生成，且工作点超出固件尾摆限幅，故只支持历史模型的
+通道方向检查，不构成当前极点、阻尼比、固件性能或飞行品质验证。}
 \label{fig:web_validation}
 \end{figure}

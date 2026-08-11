@@ -1,46 +1,177 @@
-% ===========================================================================
-%  附录 B：LQR
-% ===========================================================================
-
-\section{局部线性二次型调节器}
+\section{基于LQR的姿态最优控制}
 \label{sec:lqr}
 
-线性二次型调节器（LQR）可在固定工作点对姿态误差、角速度和执行器代价进行系统化权衡。
-令小角度状态为
-$\bm x=[\bm e_R^T,\Delta\bm\omega^T]^T$，则局部模型可写为
-\begin{equation}
-\dot{\bm x}=\bm A\bm x+\bm B\Delta\bm u,
-\qquad
-\bm B=
-\begin{bmatrix}\bm0\\\bm I^{-1}\bm B_M\end{bmatrix}.
-\label{eq:lqr_model}
-\end{equation}
-小误差下 $\dot{\bm e}_R\approx\Delta\bm\omega$；非零参考角速度时还会出现坐标运输项，
-不能直接沿用定点模型。
+本节在悬停工作点建立姿态误差动力学的线性模型，并用线性二次型调节器（LQR）
+系统化设计全状态反馈增益。这里的“最优”严格限定于给定线性模型、二次型权重和无约束假设，
+不表示相对第\ref{sec:quat_control}节SAS或第\ref{sec:INDI}节INDI的普适性能最优。
+本节后半保留历史脚本结果，以说明离线冻结效能矩阵的局限。
 
-对代价函数
-\begin{equation}
-J=\int_0^\infty
-(\bm x^T\bm Q\bm x+\Delta\bm u^T\bm R\Delta\bm u)\,\mathrm dt,
-\label{eq:lqr_cost}
-\end{equation}
-连续代数 Riccati 方程为
-\begin{equation}
-\bm A^T\bm P+\bm P\bm A-
-\bm P\bm B\bm R^{-1}\bm B^T\bm P+\bm Q=\bm0,
-\qquad
-\bm K=\bm R^{-1}\bm B^T\bm P.
-\label{eq:care}
-\end{equation}
-控制增量为 $\Delta\bm u=-\bm K\bm x$。矩阵 $\bm Q$、$\bm R$ 的选择具有物理含义，
-必须结合姿态单位、角速度单位和执行器量纲归一化；仅给出“最优”而不报告权重和工作点
-不具可复现性。
+\subsection{悬停点姿态误差动力学线性化}
+\label{sec:lqr_model}
 
-冻结 $\bm B_M$ 的 LQR 只在设计点附近有效。摆角、转速、气动导数和电池状态变化会改变
-实际闭环矩阵；增益调度可以在多个工作点插值，但仍需验证插值区间和共同 Lyapunov 性质。
-此外，标准 LQR 不直接处理 $\pm15^\circ$ 摆角和电机转速约束，实际实现需要抗饱和、
-约束分配或改用 MPC。
+取状态向量$\mathbf{x}=[\boldsymbol{\varepsilon}_{\mathrm{err}}^T,\ \boldsymbol{\omega}^T]^T\in\mathbb{R}^6$，输入向量$\mathbf{u}=[\Delta\omega,\ \delta_t,\ \delta_f]^T$。在小误差假设$\|\boldsymbol{\varepsilon}_{\mathrm{err}}\|\ll 1$下，误差四元数运动学线性化为
+\begin{equation}
+    \dot{\boldsymbol{\varepsilon}}_{\mathrm{err}} \approx -\frac{1}{2}\left(\boldsymbol{\omega} - \boldsymbol{\omega}_{\mathrm{ref}}\right)
+    \label{eq:lqr_eps_dot}
+\end{equation}
+其中$\boldsymbol{\omega}_{\mathrm{ref}}$为期望姿态轨迹的参考角速率（定点悬停时为零）。悬停点角速度近似为零，$\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}$与陀螺耦合项为高阶小量，故角速率动力学线性化为
+\begin{equation}
+    \dot{\boldsymbol{\omega}}^F \approx
+    \mathbf{I}_F^{-1}\mathbf{R}_{F\leftarrow P}
+    \mathbf{B}_{\mathrm{true}}^P\big|_{\delta=0}\ \mathbf{u}
+    \label{eq:lqr_omega_dot}
+\end{equation}
+其中$\mathbf R_{F\leftarrow P}=\mathbf R_{P\leftarrow F}^{T}$。
+$\mathbf B_{\mathrm{true}}^P$表达在推进模型系，而$\mathbf I_F$和四元数误差表达在固件任务系；
+轴置换不可省略。零摆角的模型系矩阵为：
+\begin{equation}
+    \mathbf{B}_{\mathrm{true}}\big|_{\delta=0} =
+    \begin{bmatrix}
+        -2\tau_0 & 0 & 0 \\
+        0 & -bT_0 & -\tau_0 \\
+        0 & -\tau_0 & aT_0
+    \end{bmatrix}
+    \label{eq:B_hover}
+\end{equation}
+其中$T_0=k_T\omega_0^2$，$\tau_0=k_Q\omega_0^2$。在推进模型系中，第二行
+$M_{y'}$含上摆反扭矩耦合$-\tau_0$，第三行$M_{z'}$含下摆反扭矩耦合$-\tau_0$；
+经轴置换后，$M_{y'}$和$M_{z'}$分别映射到任务系俯仰和滚转。它们都不是任务系偏航主通道。
+式(\ref{eq:B_hover})行列式非零，因而该零摆角局部模型可控：
+\begin{equation}
+    \mathbf{A} = \begin{bmatrix} \mathbf{0}_3 & -\frac{1}{2}\mathbf{I}_3 \\ \mathbf{0}_3 & \mathbf{0}_3 \end{bmatrix},
+    \qquad
+    \mathbf{B} = \begin{bmatrix} \mathbf{0}_3 \\ \mathbf I_F^{-1}\mathbf R_{F\leftarrow P}\mathbf B_{\mathrm{true}}^P \end{bmatrix}
+    \label{eq:lqr_AB}
+\end{equation}
 
-当前 LQR 脚本的一处分支遗漏惯量因子，使其与其他控制器的量纲不一致；
-现有数值因此只用于暴露脚本问题，不进入主结论。修复后应按\cref{sec:simulation}的统一验证协议
-重新生成数据。
+\subsection{LQR问题描述与权重设计}
+\label{sec:lqr_design}
+
+最小化无限时域二次型代价
+\begin{equation}
+    J = \int_0^{\infty}\left(\mathbf{x}^T\mathbf{Q}\mathbf{x} + \mathbf{u}^T\mathbf{R}\mathbf{u}\right)\mathrm{d}t
+    \label{eq:lqr_cost}
+\end{equation}
+最优反馈$\mathbf{u}=-\mathbf{K}\mathbf{x}$的增益由连续代数Riccati方程（CARE）给出
+\cite{stengel2004flight}：
+\begin{equation}
+    \mathbf{A}^T\mathbf{S} + \mathbf{S}\mathbf{A} - \mathbf{S}\mathbf{B}\mathbf{R}^{-1}\mathbf{B}^T\mathbf{S} + \mathbf{Q} = \mathbf{0},
+    \qquad
+    \mathbf{K} = \mathbf{R}^{-1}\mathbf{B}^T\mathbf{S}
+    \label{eq:care}
+\end{equation}
+权重按Bryson规则选取——以各状态/输入的最大允许值归一化：
+\begin{equation}
+    Q_{ii} = \frac{1}{x_{i,\max}^2},\qquad R_{ii} = \frac{1}{u_{i,\max}^2}
+    \label{eq:bryson}
+\end{equation}
+取$\varepsilon_{\max}=0.5$、$\omega_{\max}=1$\,rad/s并按Bryson规则归一化。
+当前\texttt{aircraft-model.json}仍保存Web限幅$\delta_{\max}=25^\circ$，固件限幅为$15^\circ$；
+二者不能混成同一$\mathbf R$。下述$\mathbf K$、极点和图表均为历史Web口径，
+尚未按新的误差方向、轴置换与固件$15^\circ$约束重新求解CARE。
+
+\subsection{增益矩阵与闭环极点分析}
+\label{sec:lqr_poles}
+
+数值求解CARE（仿真实现：\texttt{controllers.py}的\texttt{QuatLQRController}类）得
+\begin{equation}
+    \mathbf{K} =
+    \begin{bmatrix}
+        -1.400 & 0 & 0 & -0.747 & 0 & 0 \\
+        0 & -0.867 & -0.102 & 0 & -0.474 & -0.056 \\
+        0 & -0.102 & 0.867 & 0 & -0.056 & 0.476
+    \end{bmatrix}
+    \label{eq:lqr_K}
+\end{equation}
+历史增益中的非对角项$K_{23}=K_{32}=-0.102$反映了该旧模型对两摆反扭矩交叉项的利用。
+由于该增益尚未按当前轴置换和$15^\circ$限幅重算，不能直接赋予现行固件的通道含义。
+历史闭环极点$\operatorname{eig}(\mathbf{A}-\mathbf{B}\mathbf{K})$为
+\begin{equation}
+    \left\{-14.39,\ -10.17,\ -9.60,\ -1.01,\ -1.01,\ -1.00\right\}\ \text{rad/s}
+    \label{eq:lqr_poles}
+\end{equation}
+全部位于左半平面且均为实数：三个约$-1$\,rad/s的慢模态对应姿态误差动态，
+三个$-9.6\sim-14.4$\,rad/s的快模态对应角速率动态。该结论仅说明历史无约束线性模型
+没有复极点；非线性、限幅和工作点变化仍可产生回摆或耦合。
+
+\subsection{大角度机动的参考前馈扩展}
+\label{sec:lqr_ff}
+
+LQR调节器（式\ref{eq:care}）针对定点镇定设计。slerp过渡等大角度机动中，直接将阻尼作用于绝对角速率$\boldsymbol{\omega}$会与期望旋转对抗，产生跟踪滞后。引入参考状态前馈，将反馈作用于跟踪误差：
+\begin{equation}
+    \mathbf{u} = -\mathbf{K}\begin{bmatrix} \boldsymbol{\varepsilon}_{\mathrm{err}} \\ \boldsymbol{\omega} - \boldsymbol{\omega}_{\mathrm{ref}} \end{bmatrix}
+    \label{eq:lqr_tracking}
+\end{equation}
+其中$\boldsymbol\omega_{\mathrm{ref}}$由slerp轨迹给出。只有在跟踪误差始终较小、
+无执行器饱和且模型与实际工作点匹配时，同一局部增益才可能沿过渡路径使用；
+$\mathbf B_{\mathrm{true}}$表达在推进模型系，不能据“与姿态无关”省略任务轴置换。
+
+\subsection{历史仿真输出与证据边界}
+\label{sec:lqr_sim}
+
+历史3秒slerp工况的三种姿态控制器输出见图\ref{fig:vtol_takeoff}、
+图\ref{fig:vtol_takeoff_compare}和表\ref{tab:ctrl_compare}。旧脚本报告的LQR、INDI与SAS
+回摆分别约为$1.96^\circ$、$6.1^\circ$和$22.7^\circ$。这些数字在旧口径内部可复算，
+但控制器定义、误差方向、轴置换和限幅并未对齐，只能作为历史样本，不能支持性能排序。
+
+\begin{table}[H]
+\centering
+\caption{历史Web口径的垂直起飞控制器对比（未按当前固件重新求解）}
+\label{tab:ctrl_compare}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{控制器} & \textbf{稳定时间 ($\pm2^\circ$)} & \textbf{最大回摆} & \textbf{$\varepsilon$ 峰值} & \textbf{$\varepsilon$ (10\,s末)} \\
+\midrule
+四元数SAS（增益调度+前馈） & $>10$\,s & $22.7^\circ$ & 0.198 & $4.4\times10^{-2}$ \\
+四元数INDI（v2） & 6.12\,s & $6.1^\circ$ & 0.066 & $1.5\times10^{-3}$ \\
+四元数LQR & \textbf{2.94\,s} & $\mathbf{2.0^\circ}$ & \textbf{0.017} & $\mathbf{2.1\times10^{-5}}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+该表只记录历史脚本输出。控制器定义、误差方向、轴置换和限幅不一致，
+不能据此宣称LQR、INDI或SAS的相对优劣。LQR增益还依赖工作点、效能矩阵与惯量参数；
+正式比较必须按同一当前模型重新求解并重跑。
+
+\subsection{交叉项补偿的工作点局限性}
+\label{sec:lqr_coupling_limit}
+
+第\ref{sec:lqr_model}节在悬停点冻结效能矩阵。LQR仍是闭环状态反馈，
+其局限是增益离线固化且不随实际摆角更新；当执行器偏离设计点时，补偿精度会变化。
+在线Jacobian也只是局部线性化，不能称为任意工作点“精确”反演。
+
+历史脚本在24\,m/s巡航配平状态下施加上摆（前电机摆座）$\delta_f$阶跃，
+其反扭矩投影产生模型$M_{y'}$交叉项$-\tau_f\sin\delta_f$。脚本扫描摆角并加入
+$0.002$\,rad/s陀螺噪声，每点取5次运行均值，结果见表\ref{tab:lqr_coupling_deg}。
+
+\begin{table}[H]
+\centering
+\caption{历史脚本的前摆阶跃耦合峰值；$20^\circ$与$25^\circ$超出固件限幅}
+\label{tab:lqr_coupling_deg}
+\small
+\begin{tabular}{l c c c c c}
+\toprule
+\textbf{控制架构} & $\delta_f=5^\circ$ & $10^\circ$ & $15^\circ$ & $20^\circ$ & $25^\circ$ \\
+\midrule
+SAS（对角分配） & 1.23 & 1.63 & 1.95 & 2.18 & 2.36 \\
+LQR（冻结$\mathbf{B}|_{\delta=0}$） & 0.98 & 1.33 & 1.63 & 1.86 & 2.02 \\
+INDI（在线$\mathbf{B}_{\mathrm{true}}$） & \textbf{0.40} & \textbf{0.40} & \textbf{0.35} & \textbf{0.44} & \textbf{0.48} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+该历史表只能支持以下口径内观察：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item 旧LQR列随摆角增大而上升，与冻结$\mathbf B|_{\delta=0}$的局部性质一致；
+    \item 旧INDI列在该扫描中约为$0.35^\circ$--$0.48^\circ$，但在线Jacobian仍只是
+          当前点的一阶导数，不能称为非线性映射的精确逆；
+    \item $20^\circ$与$25^\circ$超过固件限幅，且三种控制器未按当前数据流统一，
+          因而这些点只能展示旧模型趋势。
+\end{enumerate}
+
+\textbf{本节结论}：LQR能够在指定线性工作点和权重下系统地利用交叉项，
+但冻结增益会随工作点偏移而失配；在线Jacobian能够更新局部效能，却仍受增量同步、
+角加速度估计、饱和和模型误差影响。两类方法的当前优劣尚无统一实验结论。
+第\ref{sec:cascade_chapter}节据此讨论在线效能矩阵与级联PI的工程组合。

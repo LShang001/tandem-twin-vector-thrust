@@ -1,109 +1,205 @@
-% ===========================================================================
-%  数值验证、代码回归与证据分级
-% ===========================================================================
-
-\section{数值验证、代码回归与证据分级}
+\section{数值仿真实验与验证}
+\label{sec:simulation_results}
 \label{sec:simulation}
 
-本节把解析检查、Web 核心回归、高保真 Python 脚本和实机证据分开报告。
-这种分级是必要的：自动测试通过只能说明既定软件行为未发生回归，数值脚本运行成功只能说明
-给定模型和初值下获得了一个输出；二者都不能替代参数标定或飞行品质试验。
+本章将可复验的配平、模态和积分结果，与历史高保真控制器脚本输出分层报告。
+自动测试通过只说明既定软件行为未回归，脚本运行成功只说明给定模型与初值产生了输出；
+二者都不能替代参数标定或固件闭环试验。当前控制器脚本尚未逐式对齐固件，
+故其表格保留作方法审计和后续复现实验基线，不作为控制器性能排名。
 
-\subsection{模型快照与可复现性条件}
-\label{sec:model_snapshot}
-
-数值计算读取参数源
-\texttt{models/\allowbreak aircraft-model.json} 的 0.2.0 参数集，状态标记为
-\texttt{MODEL-DEFAULT}。本次审查时该文件的 SHA-256 前后缀为
-\texttt{78f7...1ba7}。复验环境为 Python 3.12.10、NumPy 2.4.3、
-SciPy 1.17.1 和 Matplotlib 3.10.8。现有 Python 脚本只读取参数值，输出文件中未自动记录
-模型哈希、代码提交、依赖版本、随机种子或控制器配置；脚本中的 ``v0.2.0'' 是硬编码文本。
-因此，下述结果只对应本次受控复验，不视为已经建立的长期可追溯数据产品。
-
-\subsection{配平与模态结果}
+\subsection{纵向配平}
 \label{sec:trim}
 
-当前工程包含两种约束不同的配平求解器。高保真分析的三方程求解得到
-$\alpha_0=4.123^\circ$、$\delta_{t0}=-12.667^\circ$、
-$\omega_0=268.6\,\mathrm{rad/s}$ 和油门 $23.4\%$。
-独立的四方程求解器 \texttt{scripts/trim\_solve.py} 在 $28\,\mathrm{m/s}$ 得到
-$\alpha_0=4.1220^\circ$、油门 $0.192272969$、
-$\delta_{t0}=-18.7348^\circ$ 和 $\delta_{f0}=-1.5731^\circ$。
-两组结果没有使用同一组平衡约束，不能混成一个“唯一配平点”。尤其是四方程解的尾摆角
-超出固件 $\pm15^\circ$ 限幅，因而不是当前实机可执行的巡航配平状态。
+在$V=28$\,m/s条件下，工程中存在约束不同的三方程与四方程配平求解：
 
-在三方程工作点附近，数值 Jacobian 给出的纵向极点为
-\begin{equation}
--3.36475\pm5.50870\mathrm{i},\quad -0.170257,\quad +0.0176657,
-\label{eq:longitudinal_poles}
-\end{equation}
-横航向极点为
-\begin{equation}
--47.6525,\quad -1.42462\pm6.86086\mathrm{i},\quad -0.155526.
-\label{eq:lateral_poles}
-\end{equation}
-式\eqref{eq:longitudinal_poles}中的正实根说明该 MODEL-DEFAULT 工作点存在慢发散趋势。
-20\,s 开环复验的末端空速相对变化为 $+2.234\%$；早期稿件中的 ``下降约 30\%''
-不能由当前脚本重现，已不再作为结论。
+\input{sim-data/trim_table.tex}
 
-\subsection{数值积分与软件回归}
+当前三方程复验得到$\alpha=4.123^\circ$、$\delta_{t0}=-12.667^\circ$、
+$\omega_0=268.6$\,rad/s和油门约23.4\%。四方程脚本
+\texttt{scripts/trim\_solve.py}得到$\alpha=4.1220^\circ$、油门$0.192272969$、
+$\delta_{t0}=-18.7348^\circ$、$\delta_{f0}=-1.5731^\circ$。
+两组结果闭合条件不同，不能合并为“唯一配平点”；四方程尾摆还超出固件$\pm15^\circ$限幅，
+只可用于检查方程闭合与参数趋势。
 
-相同初值下，当前积分对照脚本得到 RK4 误差 $1.4979\times10^{-12}$，
-显式 Euler 误差 $3.99999\times10^{-5}$。Web 核心采用帧间隔不超过
-$0.05\,\mathrm{s}$、物理子步不超过 $0.004\,\mathrm{s}$ 的 RK4，并在每个阶段重算气动力和
-投影四元数到单位球面。Node 回归套件本次审查共通过 91 项测试。该结果支持数值实现一致性，
-但误差值取决于对照问题，不能被外推为真实飞行轨迹精度。
+\subsection{线性化与模态分析}
 
-\input{fig/07-web-validation.tex}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig-sim/eigenvalues.pdf}
+\caption{配平点特征值分布（v0.2.0 参数集，$V=28$\,m/s）。蓝圈：纵向（短周期SP + 长周期Ph正实根）；红方：横航向（荷兰滚DR + 滚转收敛RR + 螺旋Sp）。}
+\label{fig:eigenvalues}
+\end{figure}
 
-\subsection{控制器对比脚本的复验审计}
+\input{sim-data/modes_table.tex}
+
+短周期模态（$f\approx1.03$\,Hz，$\zeta\approx0.52$）由MODEL-DEFAULT的
+$C_{m\alpha}$和$C_{mq}$共同决定。长周期特征值$+0.0176657$为正实根，表示三方程
+局部模型的慢发散趋势（时间尺度约56\,s）；它不能与约束不同的四方程Web初值轨迹直接互证。
+横航向极点可用于解释该简化工作点的时间尺度，但气动导数、惯量和执行器动态尚未标定，
+不能据此判定实机阻尼等级。
+
+\subsection{数值积分精度：RK4 vs 显式欧拉}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{fig-sim/rk4_vs_euler.pdf}
+\caption{RK4与显式欧拉的积分误差演化。RK4（$1.5\times10^{-12}$）远优于显式欧拉（$4.0\times10^{-5}$），精度提升$2.6\times10^7$倍。}
+\label{fig:rk4_euler}
+\end{figure}
+
+恒定角速率$\omega=(0,0,1)^T$\,rad/s、$dt=0.004$\,s、$T=60$\,s条件下，
+四元数状态误差分别为$\lVert q_{\mathrm{Euler}}-q_{\mathrm{theo}}\rVert_2=3.99999\times10^{-5}$
+和$\lVert q_{\mathrm{RK4}}-q_{\mathrm{theo}}\rVert_2=1.4979\times10^{-12}$。
+它们不是单纯的四元数范数偏差，也不能无依据地宣称低于IEEE 754累积舍入；
+该结果只验证这一对照问题中的离散精度。
+
+\subsection{历史Web SAS闭环样本}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig-sim/sas_pitch_step.pdf}
+\caption{SAS俯仰阶跃响应：上—俯仰角 $\theta$，中—俯仰角速率 $q$，下—尾摆指令 $\delta_t$。$t=2$\,s施加5\,deg/s的$q$脉冲。}
+\label{fig:sas_response}
+\end{figure}
+
+图\ref{fig:sas_response}保留早期Web$\pm25^\circ$模型在$5^\circ$/s脉冲下的输出。
+其基准尾摆约$-18.7^\circ$，已超出固件$\pm15^\circ$限幅；因此曲线只说明历史Web算法在
+该不可执行工作点上的确定性响应，不能作为当前固件SAS或首飞性能验证。
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.88\textwidth]{fig-sim/trim_stability.pdf}
+\caption{历史配平保持脚本输出。原图曾标注20秒空速下降约30\%，但当前复验为$+2.234\%$；
+该图在重建统一数据管线前只作审计留档，不作为当前模态或控制性能证据。}
+\label{fig:trim_stability}
+\end{figure}
+
+当前脚本复验的20\,s开环空速相对变化为$+2.234\%$，与图中历史“下降30\%”标注不一致。
+在图表由同一运行清单重建前，不再用该图佐证正极点或姿态增稳效果。
+
+\subsection{历史INDI脚本结果的实现审计}
+
+历史脚本曾报告俯仰与滚转累积误差改善，但当前审计发现其算法与固件并不同构：
+脚本采用相反方向的四元数误差、$\bm u_k=\bm u_{k-1}+\Delta\bm u_k$增量累加、
+固定工作点和$\pm25^\circ$限幅；固件采用绝对分配、电机模型观测器、增益调度、
+惯量前馈和$\pm15^\circ$限幅。因此本节保留的百分数只描述历史脚本输出，
+不再表述为当前INDI或固件闭环的性能验证。
+
+\subsection{轴间耦合抑制历史对比的审计}
 \label{sec:coupling_rejection}
 
-现有控制器对比脚本可以运行，但其算法与固件主控制器不同。脚本使用
-$\bm q_d^{-1}\otimes\bm q$ 的误差方向、累加式
-$\bm u_k=\bm u_{k-1}+\Delta\bm u_k$、固定的 $0.441\omega_{\max}$ 工作点和
-$\pm25^\circ$ 仿真摆角限幅；固件则使用
-$\bm q^{-1}\otimes\bm q_d$、每拍绝对分配
-$\bm u_k=\bm B_k^{-1}\bm M_{\mathrm{cmd}}$、电机一阶观测、差速增益调度、
-惯量前馈和 $\pm15^\circ$ 摆角限幅。因此，这些脚本的输出不能表述为固件控制律验证。
+第\ref{sec:allocation}节的反扭矩投影说明全矩阵分配具有主动补偿交叉项的潜力。
+下述实验可用于展示这一机理，但不能代表当前固件：Web默认SAS、脚本INDI和固件BTRUE
+分别采用不同状态、误差方向与分配方式。
 
-\begin{table}[tbp]
+\textbf{历史实验设置}：\texttt{sas\_vs\_indi\_coupling.py}实际使用24\,m/s、单位四元数和
+固定$0.441\omega_{\max}$工作点，并非28\,m/s四方程配平。脚本在前摆施加$10^\circ$阶跃，
+用俯仰角峰值作为耦合指标；表中“5次Monte Carlo均值”缺少当前代码可追溯的种子与逐次输出。
+
+\textbf{结果}如表\ref{tab:coupling_rejection}所示。
+
+\begin{table}[H]
 \centering
-\caption{当前控制器脚本复验结果及其证据状态}
+\caption{前摆$\delta_f=10^\circ$阶跃下的历史脚本输出（非固件性能数据）}
+\label{tab:coupling_rejection}
 \small
-\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.0cm}
->{\centering\arraybackslash}p{2.0cm}>{\centering\arraybackslash}p{2.0cm}
->{\raggedright\arraybackslash}X}
+\begin{tabular}{l c c c}
 \toprule
-\textbf{脚本控制器} & \textbf{$10^\circ$耦合峰值} & \textbf{$25^\circ$耦合峰值} & \textbf{审计结论}\\
+\textbf{控制架构} & \textbf{陀螺噪声} & \textbf{俯仰耦合峰值} & \textbf{稳态} $\boldsymbol{|\theta|}$ \\
 \midrule
-LQR & $4.73^\circ$ & $47.44^\circ$ & 冻结工作点；其中一处分支漏乘惯量，量纲比较不成立\\
-脚本 INDI & $39.42^\circ$ & $39.34^\circ$ & 增量实现；角加速度估计与固件数据流不同\\
-级联、冻结 $B$ & $0.02^\circ$ & $0.16^\circ$ & 理想脚本结果，不含固件观测器、调度和限幅\\
-级联、在线 $B$ & $0.04^\circ$ & $0.19^\circ$ & 理想脚本结果，不能作为实机性能数据\\
+SAS（对角分配） & 0 & $1.63^\circ$ & $1.71^\circ$ \\
+SAS（对角分配） & 0.002 rad/s & $1.63^\circ$ & $1.71^\circ$ \\
+INDI（全矩阵$\mathbf{B}_{\mathrm{true}}$） & 0 & $\mathbf{0.03^\circ}$ & $0.03^\circ$ \\
+INDI（全矩阵$\mathbf{B}_{\mathrm{true}}$） & 0.002 rad/s & $\mathbf{0.40^\circ}$ & $0.16^\circ$ \\
 \bottomrule
-\end{tabularx}
-\label{tab:controller_script_audit}
+\end{tabular}
 \end{table}
 
-噪声扫描同样显示强烈的实现依赖性：级联脚本的耦合峰值随噪声标准差增加为
-$0.036^\circ$、$0.069^\circ$、$0.120^\circ$、$0.226^\circ$ 和 $0.440^\circ$，
-而脚本 INDI 的相应结果在 $38.7^\circ$--$53.7^\circ$ 之间。该脚本实际使用 4 个随机种子，
-不是早期正文所写的 5 次 Monte Carlo。由于控制器定义、工作点与执行器模型均未统一，
-本文不再据这些数值给出“两个数量级改善”或控制器优劣排序。
+在该历史脚本内部，结果呈现如下趋势：
 
-\subsection{实机证据的可支持范围}
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{SAS的耦合峰值（$1.63^\circ$）与噪声无关}——这是对角分配的\textbf{结构性}局限。由于分配矩阵不含交叉项，前摆产生的俯仰耦合$-\tau_f\sin\delta_f$完全未被前馈补偿，只能依赖俯仰角速率阻尼和姿态反馈被动衰减，其峰值由耦合量级与闭环带宽决定，与传感器噪声无关。这是几何解耦近似的固有代价（第\ref{sec:allocation}节）。
+    \item \textbf{历史理想脚本中的主动解耦趋势}：全矩阵逆把交叉项纳入分配，表中峰值较小；
+          这说明方法机理值得复验，但不能单独验证INDI或固件性能；
+    \item \textbf{角加速度估计敏感性}：历史表中加入噪声后峰值增大，符合差分噪声经矩阵逆
+          进入增量指令的机理；由于试验条件不统一，不再据数值倍数宣称优于SAS。
+\end{enumerate}
 
-项目状态记录表明 2026 年 8 月已完成初步首飞，并通过手动模式摇杆直通确认
-上摆、下摆和差速的方向语义。固件宿主机测试还锁定了推进映射、局部效能矩阵和惯量前馈
-的符号。然而，当前论文工程没有纳入带时间戳的原始飞行日志、试验矩阵、参数快照、
-统计样本或不确定度分析。因此，实机证据在本文中只用于支持“控制链已部署”和
-“执行器方向已确认”，不用于报告超调、调节时间、稳定裕度、抗扰性能或全包线可控性。
+\textbf{证据边界}：表中差异同时包含控制算法、工作点、误差方向、执行器动态和限幅差异，
+不能归因于INDI本身，也不能支持“数量级改善”或控制器优劣排序。正式比较必须共享同一植物、
+初值、约束、随机种子和数据导出管线。
 
-\subsection{验证缺口}
+\subsection{角加速度估计器历史对比的审计}
+\label{sec:estimator_study}
 
-若要把控制性能从概念证据提升为学术上可复核的定量结论，后续数据管线至少需要在每次运行
-自动保存代码提交、模型哈希、依赖版本、控制器参数、初始条件、限幅、随机种子和原始时序；
-仿真控制器必须逐式对齐固件的误差方向、绝对分配、观测器、调度与前馈；实机试验则需要
-预注册工况和评价指标，并报告重复次数及离散程度。完成这些条件之前，本文只保留
-可由当前源码和本次复验直接支持的数值。
+第\ref{sec:INDI}节§\ref{sec:accel_estimation}讨论了角加速度获取方法。
+历史正文把\texttt{compare\_estimators.py}描述为“每条件6次Monte Carlo”，但当前代码每个条件
+只以默认seed 0调用一次，无法生成表中的均值与标准差。因此以下表格保留为历史数据审计对象，
+而不是当前可复现统计结果。
+
+\textbf{估计器实现}（统一接口，接入INDI替换差分项）：
+\begin{itemize}
+    \item \textbf{后向差分}：只使用当前与上一采样点，但不是“零延迟”；微分会放大高频噪声；
+    \item \textbf{Savitzky-Golay滤波}：半窗$M=3$、二阶多项式，中心窗群延迟为
+          $M\Delta t=12$\,ms，而不是4\,ms；
+    \item \textbf{Kalman滤波实现}：类名含“FixedLagSmoother”，但当前历史缓存未用于回溯平滑，
+          实际代码是普通Kalman滤波，不能按$N=2$报告固定滞后平滑性能；
+    \item \textbf{自适应互补滤波}：模型前向预测（含刚体转动、陀螺、Coriolis项）与数值差分融合，截止频率随角加速度残差自适应（$20$--$150$\,rad/s）。
+\end{itemize}
+
+\textbf{结果}如表\ref{tab:estimator_compare}所示（俯仰耦合峰值，均值$\pm$标准差）。
+
+\begin{table}[H]
+\centering
+\caption{不同角加速度估计方法下的历史脚本表格（统计生成链当前不可复现）}
+\label{tab:estimator_compare}
+\small
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{陀螺噪声} & \textbf{差分} & \textbf{S-G滤波} & \textbf{固定滞后平滑} & \textbf{自适应互补} \\
+\midrule
+0 & $\mathbf{0.13}$ & 2.81 & 3.18 & 1.77 \\
+0.005 rad/s & 1.61$\pm$0.57 & 2.56$\pm$0.49 & 2.64$\pm$0.41 & 1.94$\pm$0.13 \\
+0.01 rad/s & 2.92$\pm$1.30 & 2.70$\pm$0.49 & 3.06$\pm$0.83 & $\mathbf{2.02\pm0.33}$ \\
+0.02 rad/s & 3.08$\pm$2.05 & 3.26$\pm$1.11 & 2.54$\pm$0.81 & $\mathbf{2.08\pm0.75}$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+历史表格提示延迟--噪声权衡，但具体排序还不能复验：
+
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{零噪声历史趋势}：表中差分项较小，但S--G的实际中心窗延迟为12\,ms，
+          所谓固定滞后实现也未执行回溯平滑；因此原先把$2.8$--$3.2^\circ$完全归因于
+          “4--8\,ms同步效应”的解释需要重做。
+    \item \textbf{历史表中的中高噪声趋势}：自适应互补项在表中较低，但其均值、标准差和
+          截止频率实现尚未由同一代码链重建，不能称为“首次在本构型定量验证”或最优结论；
+    \item \textbf{自适应互补的优势依赖模型通道准确性}：进一步的完整闭环实验发现，当模型预测通道所用的控制输入先验与实际电机响应存在偏差（电机一阶滞后导致增量指令与实际推力不一致）时，自适应互补的估计方差反而增大（$\pm 0.95$）。因此其工程应用前提是模型通道与实际执行器动态的一致性标定。
+\end{enumerate}
+
+\textbf{工程含义}：选择估计器前应先重建可重复的噪声、延迟与执行器同步试验，
+报告采样率、滤波相位、随机种子和原始时序。当前证据不足以推荐某一方案用于HIL或实机。
+
+\subsection{模型参数敏感性}
+
+上述数值结果对气动导数不确定性敏感。若仅把$C_{m\alpha}$按$\pm30\%$缩放并用
+$\sqrt{1\pm0.3}$估计频率变化，只能得到启发式量级，不能同时推断阻尼比；
+正式敏感性分析应对完整模型重新配平、重新线性化，并报告极点与参与因子的变化。
+
+\subsection{实机初步验证（2026-08）}
+本文写作时（v0.2.0 参数集，MODEL-DEFAULT 未标定）仿真结论仍属概念级；
+2026-08起项目记录进入实机首飞阶段，以下条目用于说明部署状态与待归档证据：
+\begin{itemize}
+    \item \textbf{轴语义}：手动直通确认\texttt{roll\_raw}$\to$上摆、
+          \texttt{pitch\_raw}$\to$下摆（第\ref{sec:axis_semantics}节）；
+    \item \textbf{$k_Q/k_T$}：三轮调参记录收敛到约0.027，但不是独立推力--扭矩台架标定；
+    \item \textbf{差速工作点}：接入$\tau_m$开环模型估计后，项目记录中的抖油门振铃减弱；
+          仍需原始阶跃日志和重复试验量化；
+    \item \textbf{滤波边界}：物理减震下记录$4.2^\circ$@1\,Hz稳定、$6.9^\circ$振铃，
+          但尚未形成当前闭环的相位裕度证据；
+    \item \textbf{在线辨识}：方波激励记录$b=0.35/0.36/0.90$、
+          $d_{\text{yaw}}=-7.36$；单位、参数快照和重复次数尚未归档，且这些集总读数
+          不能直接换算为电机不对称百分比。
+\end{itemize}
+这些非标定记录只支持控制链部署和轴方向语义；在补齐原始日志、时间戳、参数快照、
+单位和重复次数前，不能定量验证滤波、辨识、抗扰或飞行品质。

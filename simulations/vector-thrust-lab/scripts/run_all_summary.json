@@ -1,0 +1,64 @@
+{
+  "timestamp": "2026-08-11T20:45:57.284757",
+  "scripts": [
+    {
+      "script": "cascade_closedform.py",
+      "exit": 0,
+      "key_lines": [
+        "[3] 符号 vs 数值特征多项式一致性:",
+        "⟹ 全通过 ✓"
+      ]
+    },
+    {
+      "script": "robust_lmi_analysis.py",
+      "exit": 0,
+      "key_lines": [
+        "⟹ 标称二次稳定: 是 ✓",
+        "γ̄ = 0.9682"
+      ]
+    },
+    {
+      "script": "robust_montecarlo.py",
+      "exit": 0,
+      "key_lines": [
+        "LMI 保守度 = γ̄ / 真实界 = 0.9682 / 1.0000 = 0.9682",
+        "★ γ̄ 内 5000 样本失稳率 = 0.0000%"
+      ]
+    },
+    {
+      "script": "phase_margin_analysis.py",
+      "exit": 0,
+      "key_lines": [
+        "相位裕度 PM = 62.49°",
+        "★ 差速通道连续 PM = 5.98°"
+      ]
+    },
+    {
+      "script": "pm_sensitivity.py",
+      "exit": 0,
+      "key_lines": [
+        "目的：厘清固件/仿真/旧论文三方带宽量纲后，给出 PM(K) 依赖曲线",
+        "旧论文 K_ω/I = 364 rad/s（Hermes 已声明废止）",
+        "旧论文     364.00      34.98     84.2     18.9    -13.1  临界🛑",
+        "固件等效模型 PM=22.5°、仿真模型 PM=6.0° 均落在同一量级"
+      ]
+    },
+    {
+      "script": "pm_observer_compensation.py",
+      "exit": 0,
+      "key_lines": [
+        "t= 0.06s  w_ratio=1.655  K_eff=  164.3  PM=  -4.6°  【失稳窗口】",
+        "t= 0.08s  w_ratio=1.609  K_eff=  155.4  PM=  -4.0°  【失稳窗口】",
+        "t= 0.10s  w_ratio=1.567  K_eff=  147.3  PM=  -3.4°  【失稳窗口】",
+        "t= 0.15s  w_ratio=1.473  K_eff=  130.3  PM=  -2.2°  【失稳窗口】"
+      ]
+    },
+    {
+      "script": "pm_2d_sweep.py",
+      "exit": 0,
+      "key_lines": [
+        "[0] 交叉核查：二维脚本 PM(α=0.4, τm=0.28) = 5.98°"
+      ]
+    }
+  ]
+}

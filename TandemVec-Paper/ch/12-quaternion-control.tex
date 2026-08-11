@@ -1,87 +1,212 @@
-% ===========================================================================
-%  四元数姿态误差
-% ===========================================================================
-
-\section{四元数姿态误差与大姿态控制}
+\section{基于误差四元数的姿态控制律}
 \label{sec:quat_control}
 
-\subsection{误差定义必须与乘法方向一致}
+第\ref{sec:control}节给出的SAS增稳律以欧拉角为反馈变量，在常规飞行包线内工作良好。然而，欧拉角存在两个本构性限制：其一，3-2-1欧拉角序列在$\theta=\pm90^\circ$处出现万向锁（gimbal lock）奇异性——俯仰角接近$\pm90^\circ$时滚转$\phi$和偏航$\psi$描述同一物理自由度，导致运动学方程退化；其二，欧拉角误差的线性叠加（如$\Delta\theta = \theta - \theta_0$）在大角度机动中与实际旋转的几何路径不符（真正的"绕远路"unwinding 是四元数双覆盖的专有名词，见下节）。
 
-四元数避免 3--2--1 欧拉角在 $\theta=\pm90^\circ$ 处的参数奇异，适合垂直姿态和
-大角度指令\cite{kuipers1999quaternions,markley2014fundamentals,fresk2013full}。
-但“四元数控制”并不自动消除符号错误；必须同时规定四元数表示的旋转方向、乘法顺序和
-角速度所在坐标系。
+本节将SAS和INDI控制律的外环从欧拉角域迁移到四元数域，利用第\ref{sec:dynamics}节已建立的四元数姿态运动学框架，统一姿态误差的表征和控制律的设计。
 
-固件采用标量在前的单位四元数，并定义
+\subsection{误差四元数}
+
+设当前姿态四元数为$\mathbf q$，期望姿态四元数为$\mathbf q_{\mathrm{des}}$。
+与当前固件一致，定义从当前姿态旋至期望姿态的误差四元数为
+\cite{markley2014fundamentals,kuipers1999quaternions}：
+
 \begin{equation}
-\bm q_e=\bm q^{-1}\otimes\bm q_d
-=\begin{bmatrix}\eta_e&\bm\epsilon_e^T\end{bmatrix}^{T}.
-\label{eq:quat_err}
+    \mathbf{q}_{\text{err}} = \mathbf{q}^{*} \otimes \mathbf{q}_{\text{des}}
+    = \begin{bmatrix} \eta_{\text{err}} \\ \boldsymbol{\varepsilon}_{\text{err}} \end{bmatrix}
+    \label{eq:quat_err}
 \end{equation}
-该误差表示从当前姿态到目标姿态的短弧旋转，并与固件中的正反馈符号组合使用。
-Web 垂直模式当前使用相反乘法顺序
-$\bm q_d^{-1}\otimes\bm q$，随后在外环加入负号。两种约定在各自闭环中都可能成立，
-但它们的矢量部分通常互为相反方向且表达坐标不同，不能从一个实现复制误差公式、
-再从另一个实现复制控制增益。
 
-\subsection{短弧旋转向量}
+其中$\mathbf q^*$为当前姿态四元数的共轭，$\otimes$为四元数乘法。
+标量部分$\eta_{\mathrm{err}}=\cos(\theta_{\mathrm{err}}/2)$编码总旋转角，矢量部分
+$\boldsymbol\varepsilon_{\mathrm{err}}=\mathbf n\sin(\theta_{\mathrm{err}}/2)$编码当前姿态系中的旋转轴。
 
-单位四元数具有双覆盖：$\bm q_e$ 与 $-\bm q_e$ 表示同一姿态。固件取
-$s_e=\operatorname{sgn}(\eta_e)$，并由
+\textbf{关键性质}：
+\begin{enumerate}[label=(\arabic*)]
+    \item 当$\mathbf{q} = \mathbf{q}_{\text{des}}$时，$\mathbf{q}_{\text{err}} = [1, 0, 0, 0]^T$，即$\eta_{\text{err}}=1$、$\boldsymbol{\varepsilon}_{\text{err}} = \mathbf{0}$——控制目标退化为\textbf{调节问题}：驱动矢量误差趋零；
+    \item $\eta_{\text{err}}^2 + \|\boldsymbol{\varepsilon}_{\text{err}}\|^2 = 1$始终成立（$\mathbf{q}_{\text{err}}$仍是单位四元数）；
+    \item 在小误差假设下（$\theta_{\text{err}} \ll 1$），$\boldsymbol{\varepsilon}_{\text{err}} \approx \frac{1}{2}[\Delta\phi, \Delta\theta, \Delta\psi]^T$——误差四元数的矢量部分近似退化为局部旋转向量的半数\cite{fresk2013full}。
+\end{enumerate}
+
+性质(3)意味着：四元数域的比例反馈在正常工作点附近与欧拉角域PD控制等价，但在大姿态误差时自动通过$\sin(\theta_{\text{err}}/2)$的饱和特性避免了欧拉角域的"超调绕远路"问题。
+
+\subsection{四元数域比例-微分姿态控制律}
+
+将姿态控制问题表述为：给定期望四元数$\mathbf{q}_{\text{des}}$和当前角速率$\boldsymbol{\omega}$，求控制力矩$\boldsymbol{\tau}$使$\mathbf{q} \to \mathbf{q}_{\text{des}}$。采用矢量部分的比例反馈\cite{wie1989quaternion,fresk2013full}：
+
 \begin{equation}
-\bm e_R=s_e
-\frac{2\operatorname{atan2}(\|\bm\epsilon_e\|,|\eta_e|)}
-{\|\bm\epsilon_e\|}\bm\epsilon_e
-\label{eq:quat_rotation_vector}
+    \boxed{\boldsymbol{\tau} = \mathbf{K}_q \boldsymbol{\varepsilon}_{\text{err}} - \mathbf{K}_\omega \boldsymbol{\omega}}
+    \label{eq:quat_pd}
 \end{equation}
-提取短弧旋转向量；小误差时 $\bm e_R\approx2s_e\bm\epsilon_e$。
-使用全向量模长而不是逐轴模长，能够在多轴误差同时存在时保持统一的轴角尺度。
-固件的分段阈值和 deg/rad 换算见式\eqref{eq:firmware_rotation_vector}。
 
-\subsection{级联外环}
+其中$\mathbf{K}_q = \operatorname{diag}(k_{q,p}, k_{q,q}, k_{q,r})$和$\mathbf{K}_\omega = \operatorname{diag}(k_{\omega,p}, k_{\omega,q}, k_{\omega,r})$分别为姿态比例和角速率阻尼的正定对角增益矩阵。第一项将矢量误差"拉"向零（姿态对齐），第二项提供角速率阻尼（抑制超调）。
 
-对静止目标或缓慢变化目标，常用外环形式为
+\textbf{稳定性分析}：构造Lyapunov候选函数
 \begin{equation}
-\bm\omega_{\mathrm{ref}}
-=\bm K_R\bm e_R,
-\label{eq:quat_pd}
+    V = 2k_q(1 - \eta_{\text{err}}) + \frac{1}{2}\boldsymbol{\omega}^T \mathbf{I} \boldsymbol{\omega}
+    \label{eq:lyap_quat}
 \end{equation}
-并由角速度内环跟踪。若目标姿态随时间变化，还应把参考角速度按一致坐标变换后前馈，
-而不能把定点调节公式直接用于快速轨迹。固件滚转/俯仰使用式\eqref{eq:quat_pd}的比例形式，
-偏航回中则使用包络航向误差，不使用 $q_{e,z}$ 的同构外环。
+其中$k_q > 0$为标量增益（为简化取$\mathbf{K}_q = k_q\mathbf{I}_3$），$1-\eta_{\text{err}} = 1-\cos(\theta_{\text{err}}/2) \geq 0$当且仅当$\theta_{\text{err}}=0$时取零，故$V \geq 0$且$V=0$仅在$(\mathbf{q}_{\text{err}}=[1,0,0,0]^T, \boldsymbol{\omega}=\mathbf{0})$处成立。
 
-短弧选择会在 $180^\circ$ 误差附近引入切换面，而 $\mathrm{SO}(3)$ 的拓扑也阻止连续静态反馈
-在所有姿态上实现单一全局渐近稳定平衡。因此，本文只把该控制律称为避免欧拉角奇异的
-短弧局部调节器，不声称已经证明全局渐近稳定\cite{wie1989quaternion}。
-
-\subsection{参考轨迹插值}
-
-若两个单位四元数 $\bm q_0$、$\bm q_1$ 的内积为
-$c=\bm q_0^T\bm q_1$，先在 $c<0$ 时取 $\bm q_1\leftarrow-\bm q_1$，
-再用球面线性插值
+对$V$求时间导数。首先注意到
 \begin{equation}
-\operatorname{slerp}(\bm q_0,\bm q_1;s)=
-\frac{\sin[(1-s)\Omega]}{\sin\Omega}\bm q_0+
-\frac{\sin(s\Omega)}{\sin\Omega}\bm q_1,
-\qquad \Omega=\arccos c,
-\label{eq:slerp}
+    \dot{\eta}_{\text{err}} = \frac{1}{2}\boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega}
+    \label{eq:eta_dot}
 \end{equation}
-可生成角速度较平滑的姿态参考。该公式只定义几何路径；执行器能否跟踪还取决于
-路径时标、角速度/角加速度限制、推力裕度和控制分配。早期脚本把 slerp 跟踪成功等同于
-转捩能力，超出了当前证据范围。
+（由固定参考下的误差运动学导出；相应矢量部分为
+$\dot{\boldsymbol\varepsilon}_{\mathrm{err}}
+=-\tfrac12(\eta_{\mathrm{err}}\boldsymbol\omega-
+\boldsymbol\varepsilon_{\mathrm{err}}\times\boldsymbol\omega)$，小误差邻域退化为
+$\dot{\boldsymbol\varepsilon}_{\mathrm{err}}\approx-\boldsymbol\omega/2$）。因此
+\begin{align}
+    \dot{V} &= -2k_q\dot{\eta}_{\text{err}} + \boldsymbol{\omega}^T \mathbf{I} \dot{\boldsymbol{\omega}} \nonumber \\
+            &= -k_q \boldsymbol{\varepsilon}_{\text{err}}^T \boldsymbol{\omega} + \boldsymbol{\omega}^T(\boldsymbol{\tau} - \boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}) \nonumber \\
+            &= \boldsymbol{\omega}^T(-k_q \boldsymbol{\varepsilon}_{\text{err}} + \boldsymbol{\tau}) \label{eq:Vdot_intermediate}
+\end{align}
+其中利用了$\boldsymbol{\omega}^T(\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega})=0$。
+代入控制律$\boldsymbol\tau=k_q\boldsymbol\varepsilon_{\mathrm{err}}-k_\omega\boldsymbol\omega$：
+\begin{equation}
+    \boxed{\dot{V} = -k_\omega \|\boldsymbol{\omega}\|^2 \leq 0}
+    \label{eq:Vdot_final}
+\end{equation}
 
-\subsection{数值与实现检查}
+$\dot V=0$意味着$\boldsymbol\omega=\mathbf0$。短弧处理必须在$\eta_{\mathrm{err}}<0$时将
+\textbf{整个}$\mathbf q_{\mathrm{err}}$乘以$-1$，不能只翻转矢量部分。
+由于$SO(3)$的拓扑限制，连续静态反馈不能实现全局渐近稳定；带短弧符号选择的混合实现可在
+排除$180^\circ$不连续集合后给出局部或几乎全局结论，且仍受饱和与离散实现限制。
 
-四元数积分采用\cref{eq:quaternion_kinematics,eq:rk4}，每个 RK4 中间阶段先投影到单位球面，
-并在最终组合后再次归一化。验证四元数控制时至少应检查单位范数、误差乘法顺序、
-短弧符号、角速度坐标、目标速率前馈和 $180^\circ$ 邻域的切换行为。
-当前 Node 测试能够锁定 Web 约定，固件宿主机测试能够锁定固件约定；二者尚未由同一组
-端到端轨迹测试证明等价。
+\subsection{参考四元数的生成}
 
-\subsection{工程适用域}
+期望四元数$\mathbf{q}_{\text{des}}$由高层指令（飞控模式、导航控制器或操纵手输入）生成。三种典型场景：
+
+\subsubsection{从欧拉角指令生成}
+
+给定采用标准主动旋转约定的3-2-1欧拉角
+$(\phi_{\text{des}}, \theta_{\text{des}}, \psi_{\text{des}})$：
+\begin{equation}
+    \mathbf{q}_{\text{des}} = \mathbf{q}_z(\psi_{\text{des}}) \otimes \mathbf{q}_y(\theta_{\text{des}}) \otimes \mathbf{q}_x(\phi_{\text{des}})
+    \label{eq:q_from_euler}
+\end{equation}
+其中各轴旋转四元数为$\mathbf{q}_x(\phi)=[\cos\frac{\phi}{2}, \sin\frac{\phi}{2}, 0, 0]^T$、$\mathbf{q}_y(\theta)=[\cos\frac{\theta}{2}, 0, \sin\frac{\theta}{2}, 0]^T$、$\mathbf{q}_z(\psi)=[\cos\frac{\psi}{2}, 0, 0, \sin\frac{\psi}{2}]^T$。
+该生成式不能直接接收第\ref{sec:dynamics}节的Web兼容显示角：当前显示量
+$\theta=-\arcsin(R_{13})$与标准主动俯仰角符号不同。工程实现应从任务定义直接生成
+四元数，或先完成显式符号转换，不能用同名变量暗中混接两套约定。
+
+\subsubsection{Tail-sitter悬停指令}
+
+在VTOL tail-sitter模式（见第\ref{sec:vtol}节）中，悬停姿态为机身竖直向上（机头朝天）。
+当前Web状态常量要求机体$+x_b$旋至NED的$-z$方向；其四元数和兼容显示角分别为：
+\begin{equation}
+    \mathbf{q}_{\text{hover}}
+    = \left[\cos\frac{90^\circ}{2}, 0, \sin\frac{90^\circ}{2}, 0\right]^T
+    = [0.7071, 0, +0.7071, 0]^T,\qquad \theta_{\text{display}}=-90^\circ .
+    \label{eq:q_hover}
+\end{equation}
+正号由\texttt{state.mjs::Q\_HOVER}及\texttt{vtol.test.mjs}共同锁定。
+式(\ref{eq:q_hover})中的$+90^\circ$是主动旋转生成角，$-90^\circ$是项目兼容显示值；
+两者描述同一姿态而不是两个相反姿态。该显示角位于欧拉参数化奇异点，但四元数状态完全正则。
+
+\textbf{悬停航向自由度的参考跟随（2026-08-05 表达系陷阱修复范式）}：误差四元数
+$\mathbf q_{\text{err}}=\mathbf q^{-1}\otimes\mathbf q_{\text{cmd}}$按本文约定表达在当前姿态系。
+若某通道不做姿态回中——如悬停航向为纯角速度指令（自由漂移）——$\mathbf{q}_{\text{cmd}}$ 与机体系
+绕该轴自由错位，其余通道的误差分量被 $\cos\psi$ 调制（$\psi=90^\circ$ 时失效、$180^\circ$ 时反向）。
+修复范式：\textbf{让 $\mathbf{q}_{\text{cmd}}$ 跟随被释放的自由度}——悬停航向估计
+$\psi_{\text{est}} = \pi/2 - \operatorname{atan2}(\mathbf{y}_b\cdot\mathbf{y},\ \mathbf{y}_b\cdot\mathbf{x})$
+（$\mathbf{y}_b$ 为机体 y 轴 NED 表达），将 $\psi_{\text{est}}$ 注入参考四元数生成，
+避免 $\mathbf{q}_{\text{err}}$ 因释放轴的累计偏差而系统性增大。实机调试中悬停航向指令
+$19^\circ$ 不收敛即由此定位（2026-08-04）。
+
+\subsubsection{姿态过渡：球面线性插值}
+
+从当前期望姿态$\mathbf{q}_{\text{from}}$平滑过渡到目标姿态$\mathbf{q}_{\text{to}}$，采用球面线性插值（slerp）\cite{shoemake1985animating}：
+\begin{equation}
+    \mathbf{q}_{\text{des}}(t) = \frac{\sin[(1-\tau)\Omega]}{\sin\Omega} \mathbf{q}_{\text{from}} + \frac{\sin(\tau\Omega)}{\sin\Omega} \mathbf{q}_{\text{to}}
+    \label{eq:slerp}
+\end{equation}
+其中$\tau=(t-t_0)/(t_1-t_0)$，$\Omega=\arccos(|\mathbf q_{\text{from}}\cdot\mathbf q_{\text{to}}|)$。
+slerp在区间内部给出恒定角速度的大圆短弧，但线性$\tau(t)$会在起止时刻从零速率切换到
+非零速率；要连续角速度或角加速度，还需采用缓入缓出时间标度。
+
+\subsection{四元数SAS控制律}
+
+将式(\ref{eq:quat_pd})的力矩指令映射到本构型的三个执行器（差速$\Delta\omega$、尾摆$\delta_t$、前摆$\delta_f$），需要利用效能矩阵$\mathbf{B}$（第\ref{sec:allocation}节）：
+\begin{equation}
+    \begin{bmatrix} \Delta\omega \\ \delta_t \\ \delta_f \end{bmatrix}
+    = \mathbf{B}_{\text{true}}^{-1}(\mathbf{u}_k)
+    \begin{bmatrix}
+        k_{q,p}\,\varepsilon_{\text{err},1} - k_{\omega,p}\,p \\
+        k_{q,q}\,\varepsilon_{\text{err},2} - k_{\omega,q}\,q \\
+        k_{q,r}\,\varepsilon_{\text{err},3} - k_{\omega,r}\,r
+    \end{bmatrix}
+    \label{eq:quat_sas_cmd}
+\end{equation}
+其中$\boldsymbol\varepsilon_{\mathrm{err}}=[\varepsilon_x,\varepsilon_y,\varepsilon_z]^T$
+对应固件任务系体轴。进入推进分配矩阵前，力矩须先经
+式(\ref{eq:frame_permutation})变换到$\{P\}$系；为突出控制律结构，式
+(\ref{eq:quat_sas_cmd})未显式写出该置换。历史手工整定原型
+\path{controllers.py}中的\path{QuatSASController}采用
+$\mathbf{B}$ 的主通道对角近似（$\Delta\omega=\tau_x/(-2\tau_0)$、
+$\delta_t=\tau_y/(-bT_0)$、$\delta_f=\tau_z/(aT_0)$），与本章正文给出的完整
+$\mathbf{B}_{\text{true}}^{-1}$不同。该历史原型还未执行$\eta_{\mathrm{err}}<0$时的整四元数翻转，
+故其输出不能证明“无unwinding”或不同控制器的性能梯度。
+
+\textbf{与欧拉角SAS的局部关系}：在小姿态误差下，
+$\varepsilon_{\text{err},1}\approx\Delta\phi/2$、
+$\varepsilon_{\text{err},2}\approx\Delta\theta/2$、
+$\varepsilon_{\text{err},3}\approx\Delta\psi/2$。代入式(\ref{eq:quat_sas_cmd})并取
+$k_{q,\cdot}=2k_{\text{sas},\cdot}$，可恢复第\ref{sec:control}节的欧拉角SAS小信号形式。
+因此两者在局部一阶意义下等价；四元数表示避免了姿态参数化本身的欧拉角奇异性，
+但闭环性能仍受误差定义、短弧选择、执行器饱和和模型失配约束。
+
+\subsection{大角度机动的工程化改进}
 \label{sec:quat_sas_engineering}
 
-误差四元数解决的是姿态表示问题，不解决执行器权限、控制分配奇异、模型不确定性或
-积分饱和。对本构型，垂直姿态下仍必须同时验证推重比、$\pm15^\circ$ 固件摆角、
-差速低油门退化和电机 $0.28\,\mathrm{s}$ 动态。故四元数外环是必要的表示层改进，
-不是全包线控制可行性的充分条件。
+基准律式(\ref{eq:quat_pd})给出当前固件误差定义下的理论形式。历史仿真脚本
+\texttt{controllers.py}采用相反的误差四元数
+$\widetilde{\mathbf q}_{\mathrm{err}}=\mathbf q_{\mathrm{des}}^*\otimes\mathbf q$，
+故其恢复项符号为负。该脚本在tail-sitter垂直起飞等$90^\circ$级机动中采用了以下三项
+工程策略；这些结果用于说明策略作用，不等同于当前固件已逐项实现：
+
+\textbf{(1) 阻尼增益调度}。基准律的角速率阻尼按悬停小信号整定（俯仰通道阻尼比$\zeta\approx0.22$），大角度机动中振荡严重。引入随误差幅值调度的阻尼因子
+\begin{equation}
+    \boldsymbol{\tau} = -\mathbf{K}_q\widetilde{\boldsymbol{\varepsilon}}_{\text{err}} - g(\widetilde{\boldsymbol{\varepsilon}}_{\text{err}})\,\mathbf{K}_\omega\left(\boldsymbol{\omega} - \boldsymbol{\omega}_{\text{ref}}\right),
+    \qquad
+    g = 1 + 3\min\!\left(\frac{\|\widetilde{\boldsymbol{\varepsilon}}_{\text{err}}\|}{0.15},\ 1\right)
+    \label{eq:quat_pd_sched}
+\end{equation}
+$\|\widetilde{\boldsymbol{\varepsilon}}_{\text{err}}\|\geq0.15$时$g=4$，悬停点$g=1$。
+加入非零$\boldsymbol\omega_{\mathrm{ref}}$后，定点调节的Lyapunov推导不再直接成立；
+跟踪证明还需参考角加速度、误差运动学和执行器饱和项，因此这里只把$g$作为历史仿真原型策略。
+
+\textbf{(2) 参考角速率前馈}。若阻尼作用于绝对角速率$\boldsymbol{\omega}$，机动期间阻尼会与期望旋转对抗、产生大幅跟踪滞后。将阻尼改作用于速率误差$\boldsymbol{\omega}-\boldsymbol{\omega}_{\text{ref}}$（式\ref{eq:quat_pd_sched}），其中$\boldsymbol{\omega}_{\text{ref}}$由slerp轨迹解析给出：slerp为定轴旋转，其机体系参考角速率为常值向量
+\begin{equation}
+    \boldsymbol{\omega}_{\text{ref}} = \frac{\theta_{\text{slerp}}}{T_{\text{slerp}}}\,\hat{\mathbf{n}}_{\text{slerp}}
+    \label{eq:omega_ref_slerp}
+\end{equation}
+$\hat{\mathbf{n}}_{\text{slerp}}$与$\theta_{\text{slerp}}$分别为初始/目标四元数相对旋转的单位转轴与转角。
+
+\textbf{(3) 条件积分抗饱和}。机动期间大姿态误差会使积分项饱和，过渡结束后饱和积分缓慢放电、形成持续力矩偏置（仿真中表现为过渡后姿态缓慢爬离目标）。历史脚本改为仅当$\|\widetilde{\boldsymbol{\varepsilon}}_{\text{err}}\|<0.2$时积分，机动期间冻结积分器，从而消除了该脚本中的伪稳态偏差。
+
+\subsection{四元数INDI控制律}
+
+将第\ref{sec:INDI}节的INDI框架的外环从欧拉角域迁移到四元数域。外环四元数比例控制器生成期望角速率，并叠加参考角速率前馈以改善大角度机动跟踪：
+\begin{equation}
+    \boldsymbol{\omega}_{\text{ref}} = \mathbf{K}_q^{\text{rate}} \boldsymbol{\varepsilon}_{\text{err}} + \boldsymbol{\omega}_{\text{ref}}^{\text{slerp}}
+    \label{eq:indi_outer_quat}
+\end{equation}
+内环INDI增量控制律保持不变（式\ref{eq:indi_our_config}），虚拟角加速度$\boldsymbol{\nu}$由角速率误差经比例控制生成（带宽增益由$0.8$提升至$3.0$，早期仿真口径；现行控制器为$K^{\text{rate}}=6.0$，缩小与SAS直接映射的响应差距）：
+\begin{equation}
+    \boldsymbol{\nu} = \mathbf{K}^{\text{rate}}(\boldsymbol{\omega}_{\text{ref}} - \boldsymbol{\omega})
+    \label{eq:indi_inner_quat}
+\end{equation}
+
+“四元数外环+INDI内环”可把无欧拉参数化奇异的姿态误差与增量内环组合，
+但并不自动继承INDI文献中的全部鲁棒性条件。其潜在结构特点为：
+\begin{itemize}
+    \item 外环无奇异性：允许$\pm90^\circ$俯仰（tail-sitter悬停）的稳定控制；
+    \item 误差几何正确：只有实现整四元数短弧翻转后，$\boldsymbol{\varepsilon}_{\text{err}}$
+          才沿短弧驱动姿态并避免unwinding；历史\texttt{controllers.py}原型尚未满足该条件；
+    \item 若与第\ref{sec:INDI}节的历史INDI原型组合，内环仍使用在线Jacobian、
+          执行器增量和角加速度滤波；当前固件则采用第\ref{sec:cascade_chapter}节的
+          角速度PI与绝对BTRUE分配，二者不应混称。
+\end{itemize}

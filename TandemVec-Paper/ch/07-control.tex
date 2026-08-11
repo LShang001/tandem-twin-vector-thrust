@@ -1,88 +1,208 @@
-% ===========================================================================
-%  控制设计约束与 Web 基线
-% ===========================================================================
-
-\section{控制设计约束与 Web 基线控制器}
+\section{增稳控制律设计}
 \label{sec:control}
 
-\subsection{两套控制实现的角色}
+本节基于前文模型说明Web交互仿真的基线SAS与固件Rate模式的人机接口。
+两者共享推进方程，但不是同一控制器：Web前飞基线采用模型轴直接反馈，固件采用
+误差四元数外环、角速度PI、惯量与陀螺前馈以及绝对BTRUE分配。固件主链在
+第\ref{sec:cascade_chapter}节单独推导，本节的Web响应不替代固件性能证据。
 
-工程中同时存在 Web 交互仿真控制器和飞控固件控制器。Web 控制器用于构型可视化、
-确定性回归和概念交互；固件控制器用于 200\,Hz 实时闭环。二者共享推进方程和部分参数，
-但当前并非同一算法：Web 垂直模式使用
-$\bm q_d^{-1}\otimes\bm q$ 的误差方向和累加式局部分配，固件使用
-$\bm q^{-1}\otimes\bm q_d$ 和绝对力矩分配。本文因此只把本节算法称为“Web 基线”，
-不以其结果替代\cref{sec:cascade_chapter}的固件验证。
+\subsection{级联控制架构}
 
-\subsection{前飞基线 SAS}
+控制架构分为三个明确的功能层次：
 
-Web 前飞模式在推进模型系中使用角速率阻尼与两个姿态保持项。令
-$p',q',r'$ 表示该模型系的角速度，则
-\begin{align}
-\delta_t^{\mathrm{cmd}}
-&=\delta_{t0}+k_q q'-k_\theta(\theta-\theta_0)-k_{I\theta}\!\int(\theta-\theta_0)\,\mathrm dt,
-\label{eq:sas_pitch}\\
-\delta_f^{\mathrm{cmd}}
-&=\delta_{f0}-k_r r',
-\label{eq:sas_yaw}\\
-\Delta\omega^{\mathrm{cmd}}
-&=k_p p'-k_\phi\phi-k_{I\phi}\!\int\phi\,\mathrm dt.
-\label{eq:sas_roll}
-\end{align}
-式\eqref{eq:sas_pitch}--\eqref{eq:sas_roll}的符号由
-$\partial M_{y'}/\partial\delta_t<0$、
-$\partial M_{z'}/\partial\delta_f>0$ 和
-$\partial M_{x'}/\partial\Delta\omega<0$ 决定。
-这里的变量名称沿用 Web 模型轴，不能直接替换成固件悬停滚转/俯仰/偏航名称。
+\begin{enumerate}[label=(\arabic*)]
+    \item \textbf{操纵输入层}：人类操纵手（通过遥控器）或上层自主控制器
+          （轨迹规划器/导航控制器）产生四通道操纵输入——
+          油门$\omega_0$（纵向推力）和三个姿态/角速度目标。Web前飞模型轴把
+          $\delta_t$、$\delta_f$、$\Delta\omega$分别关联到$M_{y'}$、$M_{z'}$、$M_{x'}$；
+          固件悬停任务语义则为下摆俯仰、上摆滚转、差速偏航；
+    \item \textbf{SAS增强层}（Stability Augmentation System）：
+          这是内环控制的核心，直接作用于角速率和姿态角反馈。
+          SAS的使命是改善短周期阻尼、抑制大气湍流扰动、
+          消除配平常值误差（通过积分项），并对飞行员操纵输入进行增稳修正；
+    \item \textbf{执行层}：修正后的指令经物理限幅（摆角$\pm\delta_{\max}$，
+          差速$\pm\Delta\omega_{\max}$）和电机动态模型后驱动实际执行器。
+\end{enumerate}
 
-角速度命令模式把用户输入解释为模型角速度参考：
-\begin{equation}
-\begin{aligned}
-\delta_t^{\mathrm{cmd}}&=\delta_{t0}+k_q(q'-q'_{\mathrm{ref}}),\\
-\delta_f^{\mathrm{cmd}}&=\delta_{f0}+k_r(r'_{\mathrm{ref}}-r'),\\
-\Delta\omega^{\mathrm{cmd}}&=k_p(p'-p'_{\mathrm{ref}}).
-\end{aligned}
-\label{eq:rate_command}
-\end{equation}
-该控制器主要用于检查通道方向、限幅和回归样本，不包含固件的 EKF 零偏补偿、速率 PI、
-惯量前馈、电机观测器和差速调度。
-
-\subsection{固件 Rate 模式的摇杆曲线}
-\label{sec:rc_curve}
-
-固件 Rate 模式先把 PWM 摇杆归一化到 $r\in[-1,1]$，在
-$|r|<0.02$ 时置零，再计算
-\begin{equation}
-r_e=r\left[e r^2+(1-e)\right],\qquad
-\omega_{\mathrm{ref}}=
-\operatorname{sat}_{\omega_{\max}}
-\left(\frac{200\,R\,r_e}{1-S|r_e|}\right),
-\label{eq:rc_curve}
-\end{equation}
-其中 $R$ 为 \texttt{rc\_rate}，$e$ 为 \texttt{rc\_expo}，$S$ 为
-\texttt{rc\_super}。默认值为 $R=0.5$、$e=0.25$，滚转/俯仰的
-$S=0.7$，偏航的 $S=0.55$。默认理论满杆速率分别为约
-$333\,\mathrm{deg/s}$ 和 $222\,\mathrm{deg/s}$，并受独立的
-$600\,\mathrm{deg/s}$ 安全上限约束。该曲线只生成角速度参考，不改变底层执行器分配。
-
-\subsection{限幅、抗饱和与模式切换}
-
-Web 参数源使用
-\begin{equation}
-|\delta_f|,|\delta_t|\leq25^\circ,qquad
-|\Delta\omega|\leq0.7,
-\label{eq:actuator_limits}
-\end{equation}
-固件则将摆角收紧到 $15^\circ$。积分状态在 Web 模式切换时清零，并按参数源钳位；
-固件 PI 还使用积分分离和输出限幅。独立钳位不是严格的多输入抗饱和方案：当多个通道同时饱和时，
-期望力矩方向可能改变。后续若加入舵面或更多执行器，应采用显式约束控制分配
-\cite{johansen2013control}。
+\textbf{架构特征}：Web默认前飞SAS采用执行器域直接反馈，另有\texttt{useBtrue}可选分支。
+当前固件已经实现“期望力矩$\to\bm B_{\mathrm{true}}^{-1}\to$执行器”的在线绝对分配。
+式(\ref{eq:direct_mapping})只是零摆角主通道近似，不能概括所有当前实现。
 
 \input{fig/05-control-arch.tex}
 
-\subsection{基线的使用边界}
+\subsection{Web前飞SAS基本增稳律}
 
-\cref{fig:web_validation}锁定的是 Web 基线在特定初值和参数下的确定性轨迹。
-它能够发现符号翻转、参数漂移和积分器行为变化，但不能回答固件闭环是否稳定。
-在比较任何新控制器之前，应先统一四元数误差方向、坐标映射、执行器动态、限幅、
-工作点和评价指标；当前高保真脚本尚未满足这一条件。
+三个通道的SAS反馈律以效率符号整定为原则。
+
+\textbf{俯仰通道}（效率为负：$\partial M_y / \partial \delta_t = -b T_t < 0$）：
+\begin{equation}
+    \delta_t^{\text{cmd}} = \delta_{t0}+\delta_t^{\text{pilot}}
+    + k_q q - k_\theta \Delta\theta
+    - k_i^\theta \int \Delta\theta \, dt,\qquad
+    \Delta\theta=\theta-\theta_0=\theta+\alpha_0
+    \label{eq:sas_pitch}
+\end{equation}
+早期Web轨迹使用约$-18.7^\circ$尾摆偏置和$\theta_0=-\alpha_0=-4.122^\circ$。
+当前四方程复验为$\delta_{t0}=-18.7348^\circ$、$\delta_{f0}=-1.5731^\circ$；
+尾摆超过固件$\pm15^\circ$限幅，故该工作点不能作为实机可执行配平。
+角速率项取正是因为$\partial M_{y'}/\partial\delta_t<0$；姿态项取负还依赖项目显示角运动学，
+只依据控制效率而忽略姿态运动学会把姿态环接成正反馈。
+
+\textbf{偏航通道}（效率为正：$\partial M_z / \partial \delta_f = a T_f > 0$）：
+\begin{equation}
+    \delta_f^{\text{cmd}} = \delta_f^{\text{pilot}}
+    - k_r r
+    \label{eq:sas_yaw}
+\end{equation}
+效率为正意味着正摆角产生正偏航力矩（右偏航），因此偏航阻尼需要\textbf{负}反馈
+（$-k_r r$）——当飞行器向右偏航（$r > 0$），控制律产生负摆角（左偏）
+以产生逆方向的偏航力矩来抑制偏航速率。
+偏航通道通常不包含姿态积分——航向保持是上层导航闭环的职责，
+SAS仅需提供内环阻尼和角速率响应特性的改善。
+
+\textbf{滚转通道}（效率为负：$\partial M_x / \partial \Delta\omega = -2k_Q \omega_0^2 < 0$）：
+\begin{equation}
+    \Delta\omega^{\text{cmd}} = \Delta\omega^{\text{pilot}}
+    + k_p p - k_\phi \Delta\phi
+    - k_i^\phi \int \Delta\phi \, dt
+    \label{eq:sas_roll}
+\end{equation}
+角速率项由负控制效率决定为正号；显示角满足$\dot\phi\approx-p$，因此姿态比例和积分项取负号。
+
+\textbf{增益整定指南}（指导性原则，不能替代闭环极点、裕度与非线性仿真验证）：
+\begin{itemize}
+    \item \textbf{角速率阻尼增益}（$k_q, k_r, k_p$）：从低值逐步增大，并结合响应速度、超调、稳定裕度和饱和占空比确定工作范围。过高的角速率阻尼增益
+          会引入高频噪声放大和执行器饱和风险；
+    \item \textbf{姿态比例增益}（$k_\theta, k_\phi$）：在内环角速率响应已经验证后逐步加入，避免外环带宽逼近内环；
+    \item \textbf{积分增益}（$k_i^\theta, k_i^\phi$）：仅用于消除慢变配平误差，并通过长时饱和和模式切换测试确定上限。
+\end{itemize}
+
+\subsection{角速度闭环模式（Rate Command）}
+
+角速度闭环模式（Rate Command / Rate CAC）是一种常见的飞行品质增强模式，
+其中操纵杆（或滑块）的偏转直接映射为目标角速度，而非执行器位置指令。
+松手后操纵杆弹簧回中、目标角速度归零；纯速率模式只抑制角速度，不保证姿态自动回到某一参考值。
+这种控制模式在遥控飞行器（如穿越机acro模式）和电传飞行器中广泛应用。
+
+Web基线采用纯P控制器追踪模型轴角速率；固件Rate模式采用PI并输出角加速度指令：
+\begin{align}
+    \delta_t^{\text{cmd}} &= \delta_{t0}+k_q^{\text{rate}} (q - q_{\text{ref}}),
+    &&\partial M_y / \partial \delta_t < 0 \Rightarrow (q - q_{\text{ref}})
+    \text{为正时} \delta_t^{\text{cmd}} \text{取正} \\
+    \delta_f^{\text{cmd}} &= k_r^{\text{rate}} (r_{\text{ref}} - r),
+    &&\partial M_z / \partial \delta_f > 0 \Rightarrow (r - r_{\text{ref}})
+    \text{为正时} \delta_f^{\text{cmd}} \text{取负} \\
+    \Delta\omega^{\text{cmd}} &= k_p^{\text{rate}} (p - p_{\text{ref}}),
+    &&\partial M_x / \partial \Delta\omega < 0 \Rightarrow (p - p_{\text{ref}})
+    \text{为正时} \Delta\omega^{\text{cmd}} \text{取正}
+    \label{eq:rate_command}
+\end{align}
+
+\textbf{Web基线性能分析}：纯P角速度闭环存在稳态误差——
+为维持非零角速率，需要非零的执行器偏转来克服气动阻尼力矩。
+稳态误差可通过积分项消除，但积分项的引入会降低系统相位裕度，
+在快速机动中可能导致超调和振荡。对于遥控飞行器（操纵手在闭环中），
+适度的稳态误差是可以接受的——操纵手会自然地补偿并通过视觉反馈微调。
+
+粗略单轴模型可写成
+\begin{equation}
+G(s)=k^{\mathrm{rate}}\frac{\partial M}{\partial\delta}
+\frac{1}{Is+|L_p|}\,G_a(s),
+\end{equation}
+其中$G_a(s)$为执行器动态。差速通道可近似取$G_a(s)=1/(\tau_m s+1)$，
+摆座通道则应使用舵机动态，不能把电机一阶环节统一串到三个通道。
+
+\subsection{摇杆曲线：Rate Command 的人机接口（FPV 风格，2026-08-11 实机）}
+\label{sec:rc_curve}
+
+Rate Command 模式（式\ref{eq:rate_command}）的操纵手感由“杆量到目标角速率”的映射决定。
+本构型实机采用穿越机（Betaflight）风格的\textbf{三参数模型}，曲线函数见 \texttt{include/RcCurve.h}：
+\begin{equation}
+\begin{aligned}
+    \mathrm{rcCmd}&=\mathrm{rc}\left[\mathrm{expo}\,\mathrm{rc}^2+(1-\mathrm{expo})\right],\\
+    \omega_{\mathrm{ref}}&=
+    \frac{200\,\mathrm{rcRate}\,\mathrm{rcCmd}}
+    {1-|\mathrm{rcCmd}|\,\mathrm{super}} .
+\end{aligned}
+    \label{eq:rc_curve}
+\end{equation}
+其中 rc 为归一化杆量（$[-1,1]$，死区 $\pm0.02$ 归零），
+$\text{rcRate}\in[0,2.5]$ 为全局灵敏度（满杆基准 200°/s），
+$\text{expo}\in[0,1]$ 压低中心斜率（rc=0 处增益 $1-\text{expo}$、满杆增益恰为 1），
+$\text{super}\in[0,1)$ 以双曲增益 $1/(1-|\text{rcCmd}|\cdot\text{super})$ 放大边缘——
+增益在 rc=0 处为 1、随杆量单调上升，满杆达 $1/(1-\text{super})$ 倍。
+三参数分工互补：\textbf{expo 定中心细腻度、rcRate 定满杆基准、super 定中间过渡曲率}。
+
+\textbf{默认参数与满杆角速率（实机 2026-08-11）}：
+rcRate$=0.5$、expo$=0.25$、super$=0.7/0.7/0.55$（roll/pitch/yaw 独立），
+满杆角速率 $=\text{rcRate}\times 200/(1-\text{super})$：
+roll/pitch 约 333°/s、yaw 约 222°/s（yaw 特意更低防自旋过冲）。
+表\ref{tab:rc_curve_points}给出曲线特征点（1/4/1/2/3/4 杆与满杆），
+可见中心区（$\pm25\%$ 杆）仅 22°/s（细腻悬停），
+3/4杆后上升至满杆333°/s，形成“中心细腻、边缘高机动角速率”的操纵特性。
+
+\begin{table}[H]
+\centering
+\caption{摇杆曲线特征点（默认参数：rcRate=0.5、expo=0.25、super=0.7/0.55，单位 °/s）}
+\label{tab:rc_curve_points}
+\begin{tabular}{l c c c c}
+\toprule
+杆量 & 1/4 & 1/2 & 3/4 & 满杆 \\
+\midrule
+Roll/Pitch & 22 & 57 & 125 & 333 \\
+Yaw & 21 & 52 & 106 & 222 \\
+旧线性$160^\circ$/s参考 & 40 & 80 & 120 & 160 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表中“旧线性参考”是历史界面把满杆固定映射为$160^\circ$/s的对照线，
+不是将当前$\mathrm{rcRate}=0.5$代入式(\ref{eq:rc_curve})后再令
+$\mathrm{expo}=\mathrm{super}=0$的结果；后者满杆应为$100^\circ$/s。
+将两种基准分开，可以避免把操纵曲线形状变化误读为单纯的满杆倍率变化。
+
+\textbf{实机限幅解耦教训}：初版速率模式复用了姿态外环
+$k_{\text{MaxTargetRate}}=80^\circ/\mathrm{s}$ 的限幅，导致默认曲线在约半杆
+（$57^\circ/\mathrm{s}$）即被截断，高杆量区失去预期的非线性增益。2026-08-11
+固件将速率模式限幅独立设为$600^\circ/\mathrm{s}$，使其成为曲线输出之后的保护边界。
+默认满杆指令为$333^\circ/\mathrm{s}$；若将\texttt{rc\_rate}提高到1.0，
+满杆理论值$667^\circ/\mathrm{s}$会触发该边界。由于超速率项在极端参数下仍可产生更高指令，
+该限幅不能取消。相较存档参数，默认满杆指令提高超过4倍，实机调参应从低杆量开始逐步扩展。
+
+\subsection{饱和管理与积分器抗饱和}
+
+所有执行器指令须经幅值限幅。下式只模拟摆角、差速的行程边界，不包含舵机速率限制：
+\begin{equation}
+    |\delta_t^{\text{cmd}}| \leq \delta_{\max}, \quad
+    |\delta_f^{\text{cmd}}| \leq \delta_{\max}, \quad
+    |\Delta\omega^{\text{cmd}}| \leq \Delta\omega_{\max}
+    \label{eq:actuator_limits}
+\end{equation}
+
+当前实现采用积分状态独立限幅，并在模式切换时复位：
+\begin{itemize}
+    \item 积分器输出限幅$|\int \theta| \leq I_\theta^{\max}$防止姿态误差长时间持续
+          导致的积分项无限增长（积分饱和，integrator windup）；
+    \item 模式切换时积分器归零——当SAS模式从角速率闭环（mode 3）切换回全SAS（mode 1）时，
+          旧模式下累积的积分值（基于不同误差信号）直接清零，防止在新模式刚启动时产生
+          瞬态冲击。
+\end{itemize}
+当前代码没有基于执行器饱和方向冻结积分、回算或条件积分逻辑，因此不应将其描述为完整的抗饱和器。
+
+\subsection{差速分配与最大转速保护}
+
+$\Delta\omega^{\text{cmd}}$由式(\ref{eq:diff_def})的平方根分配产生两电机目标转速。
+未触发单机转速钳位时，该参数化严格保持$\omega_f^2+\omega_t^2=2\omega_0^2$；
+在稳态二次推力模型下总推力相应保持。电机瞬态滞后和单侧钳位会破坏这一性质。
+
+然而在极限工况（高油门+大差速）下，一侧电机的目标转速可能超过最大允许转速$\omega_{\max}$。
+在此情况下，必须施加电机级硬限幅：
+\begin{equation}
+    \omega_f^{\text{target}} \leftarrow \min(\omega_f^{\text{target}}, \omega_{\max}), \quad
+    \omega_t^{\text{target}} \leftarrow \min(\omega_t^{\text{target}}, \omega_{\max})
+    \label{eq:max_clamp}
+\end{equation}
+
+单侧转速钳位会使平方转速和偏离$2\omega_0^2$，从而降低总推力；
+模型$x'$轴力矩也不再等于$-2k_Q\omega_0^2\Delta\omega^{\text{cmd}}$。
+遥测必须标记$w_{\max}$饱和，提示操纵手当前指令已超出执行器能力。

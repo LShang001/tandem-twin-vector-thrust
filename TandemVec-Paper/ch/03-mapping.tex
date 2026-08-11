@@ -1,76 +1,192 @@
-% ===========================================================================
-%  六维推进映射
-% ===========================================================================
-
-\section{正交摆座的六维力与力矩映射}
+\section{推力矢量映射：从执行器到机体六维力/力矩}
 \label{sec:mapping}
 
-\subsection{推进模型系与几何}
+推力矢量映射是将推进系统的推力与反扭矩（标量）转换为推进模型系六维力/力矩分量
+（矢量）的桥梁。对于纵列双发正交单轴构型，这一映射具有特殊的简洁性，
+其原因和后果是本节分析的核心。
 
-本节全部公式写在推进模型系 $\{P\}$ 中。$x'$ 沿名义推力轴，前推进器位于
-$\bm r_f=[a,0,0]^T$，尾推进器位于 $\bm r_t=[-b,0,0]^T$。
-前摆绕 $z'$ 轴，尾摆绕 $y'$ 轴，因而单位推力方向分别为
+\subsection{坐标系定义与符号约定}
+
+在进行六维映射之前，必须明确定义各参考系及其转换关系：
+
+\begin{table}[H]
+\centering
+\caption{坐标系定义与符号约定}
+\begin{tabularx}{\textwidth}{c c >{\raggedright\arraybackslash}X}
+\toprule
+符号 & 名称 & 定义 \\
+\midrule
+$\{\mathcal{I}\}$ & 惯性系 & 地面参考系，NED约定（$z_{\mathcal{I}}$向下），
+                      原点可任意选取 \\
+$\{P\}$ & 推进模型系 & $x'$沿名义推力轴，$y'$、$z'$按右手系完备，原点在瞬时质心；
+                      Web与固件推进模块均在此系表达正向映射 \\
+$\{F\}$ & 飞控任务系 & 固件采用的FRD轴；与$\{P\}$的关系见式(\ref{eq:frame_permutation}) \\
+$\{\mathcal{M}_f\}$ & 前电机系 & 与前电机固连，由$\{P\}$系绕$z'$旋转$\delta_f$后得到 \\
+$\{\mathcal{M}_t\}$ & 尾电机系 & 与尾电机固连，由$\{P\}$系绕$y'$旋转$\delta_t$后得到 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+约定细节（确保符号的一致性）：
+\begin{itemize}
+    \item 前、尾电机的名义推力方向均沿$+x'$；前、尾转子的有符号角动量方向相反；
+    \item 零摆角时两电机推力线均通过质心（CG）：$a$为前电机到CG的$x'$向距离，
+          前电机位置$[+a, 0, 0]^T$；$b$为尾电机到CG的$x'$向距离（正值），
+          尾电机位置$[-b, 0, 0]^T$；
+    \item 摆角符号约定：前电机绕$+z'$的右手旋转为正；尾电机绕$+y'$的右手旋转为正。
+\end{itemize}
+
+\textbf{设计约束}：推力线过质心是保证通道解耦的必要几何条件。若这一条件不严格满足，
+则零摆角推力本身会产生残余力矩，使解耦性退化。对本电动验证机，质心变化主要来自
+电池、载荷、机翼模块和装配公差，而不是燃料消耗；推力线设计应留有容差，并由在线辨识
+或控制前馈补偿剩余偏置。
+
+\subsection{摆座运动学与推力方向}
+
+单轴摆动即绕固定轴的旋转。尾电机绕$y'$摆动$\delta_t$，
+前电机绕$z'$摆动$\delta_f$。对应的旋转矩阵为：
 \begin{equation}
-\bm n_f=
-\begin{bmatrix}\cos\delta_f&\sin\delta_f&0\end{bmatrix}^{T},
-\qquad
-\bm n_t=
-\begin{bmatrix}\cos\delta_t&0&-\sin\delta_t\end{bmatrix}^{T}.
-\label{eq:gimbal_rotations}
+    \bm{R}_{y'}(\delta_t) = \begin{bmatrix}
+        \cos\delta_t & 0 & \sin\delta_t \\
+        0 & 1 & 0 \\
+        -\sin\delta_t & 0 & \cos\delta_t
+    \end{bmatrix}, \qquad
+    \bm{R}_{z'}(\delta_f) = \begin{bmatrix}
+        \cos\delta_f & -\sin\delta_f & 0 \\
+        \sin\delta_f & \cos\delta_f & 0 \\
+        0 & 0 & 1
+    \end{bmatrix}
+    \label{eq:gimbal_rotations}
 \end{equation}
-这里的“前/尾”是几何位置，“上摆/下摆”是实机悬停构型名称；滚转、俯仰和偏航
-只在指定飞控坐标系后使用。
 
-两台推进器对机体的力为 $\bm F_f=T_f\bm n_f$ 和
-$\bm F_t=T_t\bm n_t$。令前桨为 CW、尾桨为 CCW，并以 $Q_f,Q_t\geq0$ 表示
-反扭矩幅值，则反扭矩矢量分别为 $-Q_f\bm n_f$ 与 $+Q_t\bm n_t$。
-每台推进器的总力矩满足
+\textbf{前电机推力方向}（在$\{P\}$系中的单位矢量）：
+前电机自身推力方向在电机系中为$[1,0,0]^T$（拉力式向前），
+经摆座旋转后在推进模型系中的方向为：
 \begin{equation}
-\bm M_i=\bm r_i\times\bm F_i+\bm Q_i.
-\label{eq:propulsor_moment}
+    \bm{u}_f = \bm{R}_{z'}(\delta_f) \cdot [1, 0, 0]^T
+    = [\cos\delta_f, \sin\delta_f, 0]^T
 \end{equation}
 
-\subsection{完整六维映射}
-
-将两台推进器的贡献相加，得到
+\textbf{尾电机对机体的作用力方向}（在$\{P\}$系中的单位矢量）：
+尾电机自身排气方向在电机系中为$-[1,0,0]^T$（推进式向后）。
+由牛顿第三定律，作用于机体的力与排气方向相反，因此在机体系中的受力方向为：
 \begin{equation}
-\boxed{
-\begin{aligned}
-F_{x'} &=T_f\cos\delta_f+T_t\cos\delta_t,\\
-F_{y'} &=T_f\sin\delta_f,\\
-F_{z'} &=-T_t\sin\delta_t,\\
-M_{x'} &=-Q_f\cos\delta_f+Q_t\cos\delta_t,\\
-M_{y'} &=-bT_t\sin\delta_t-Q_f\sin\delta_f,\\
-M_{z'} &= aT_f\sin\delta_f-Q_t\sin\delta_t.
-\end{aligned}}
-\label{eq:six_component}
+    \bm{u}_{F,t} = -\bm{R}_{y'}(\delta_t) \cdot [-1, 0, 0]^T
+    = [+\cos\delta_t, 0, -\sin\delta_t]^T
+    \label{eq:tail_force_dir}
 \end{equation}
-式\eqref{eq:six_component}与固件 \texttt{TandemVec\_Propulsion.h::computeWrench}
-逐项对应。数据驱动实现还用 Rodrigues 公式从电机几何表生成推力方向，并以中心差分构造
-Jacobian；宿主机回归要求其与解析矩阵逐元素相符。
+$\delta_t > 0$时，推进模型系中的机体受力具有$-z'$分量；该力作用于质心后方，
+产生$M_{y'}<0$。这里的$-z'$是推进模型分量，不等同于NED惯性系的“向上”；
+只有给定飞行姿态并完成坐标变换后，才能判断该力在地理竖直方向上的投影。
 
-\subsection{主效能与交叉项}
+令$s_f=+1$、$s_t=-1$表示相对于各自正推力轴的有符号旋向。于是
+$\bm{h}_f=s_fJ_p\omega_f[\cos\delta_f,\sin\delta_f,0]^T$。
+尾电机反向旋转，其角动量方向在$\{P\}$系中沿$-\bm{u}_{F,t}$方向
+（即$[-\cos\delta_t, 0, +\sin\delta_t]^T$），
+$\bm{h}_t = J_p \omega_t [-\cos\delta_t, 0, +\sin\delta_t]^T$。
+因此尾电机稳态反扭矩$\bm{\tau}_t=\tau_t[+\cos\delta_t,0,-\sin\delta_t]^T$
+指向$\bm{u}_{F,t}$。采用$s_i$后，CW/CCW必须先说明观察方向，不能单靠文字决定符号。
 
-在 $\delta_f=\delta_t=0$、$\omega_f=\omega_t=\omega_0$ 附近，
-三个主效能为
-\begin{equation}
-\Delta\omega\rightarrow M_{x'},\qquad
-\delta_t\rightarrow M_{y'},\qquad
-\delta_f\rightarrow M_{z'}.
-\label{eq:model_primary_channels}
-\end{equation}
-但式\eqref{eq:six_component}同时给出两个一阶反扭矩投影：
-$-Q_f\delta_f$ 进入 $M_{y'}$，$-Q_t\delta_t$ 进入 $M_{z'}$。
-差速在非零摆角处也通过推力和反扭矩幅值改变其余力矩。因此，“正交摆轴”只保证
-推力力臂主项的几何分离，不保证有限摆角处的完整 Jacobian 对角化。
+\subsection{六维力/力矩映射的完整推导}
 
-\subsection{符号检查与飞控语义}
-
-当 $\delta_f>0$ 时，$F_{y'}>0$ 且推力力臂主项 $M_{z'}>0$；
-当 $\delta_t>0$ 时，$F_{z'}<0$ 且 $M_{y'}<0$。零摆角、等转速时
-$M_{x'}=M_{y'}=M_{z'}=0$。这些检查只验证推进模型系的物理符号。
-固件中的滚转/俯仰/偏航通道还需通过\cref{eq:frame_permutation,eq:firmware_axis_command}
-转换并叠加标定符号。实机确认后的控制语义为上摆滚转、下摆俯仰、差速偏航，
-不再用“前摆偏航、差速滚转”作为固件描述。
+对两台电机分别计算推力矢量与反扭矩矢量的$\{P\}$系分量，并按力臂生成力矩。
+这是将标量执行器输出（$T_f, T_t, \tau_f, \tau_t$）转换为矢量力/力矩（$F_x, F_y, F_z, M_x, M_y, M_z$）
+的核心变换。
 
 \input{fig/03-thrust-mapping.tex}
+
+\textbf{前电机}（$\{P\}$系位置$\bm{r}_f=[+a,0,0]^T$，反扭矩沿$-\bm{u}_f$方向）：
+\begin{align}
+    \bm{F}_f &= T_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix},
+    \quad
+    \bm{\tau}_f = -\tau_f \begin{bmatrix} \cos\delta_f \\ \sin\delta_f \\ 0 \end{bmatrix}
+    \label{eq:front_force} \\
+    \bm{M}_f &= \underbrace{\begin{bmatrix} +a \\ 0 \\ 0 \end{bmatrix} \times \bm{F}_f}_{\text{推力力臂}}
+             + \underbrace{\bm{\tau}_f}_{\text{反扭矩}}
+             = \begin{bmatrix}
+                 -\tau_f \cos\delta_f \\
+                 -\tau_f \sin\delta_f \\
+                 a T_f \sin\delta_f
+               \end{bmatrix}
+    \label{eq:front_moment}
+\end{align}
+各分量的物理含义：
+\begin{itemize}
+    \item $M_{f,x'}=-\tau_f\cos\delta_f$：前电机反扭矩在模型$x'$轴的分量；
+    \item $M_{f,y'} = -\tau_f \sin\delta_f$：上摆（前电机摆座）使反扭矩在模型$y'$轴
+          产生投影，是$\delta_f$主控$M_{z'}$时伴随的交叉项；经轴置换后$M_{y'}$对应任务系俯仰；
+    \item $M_{f,z'}=aT_f\sin\delta_f$：推力$y'$分量经力臂$a$产生模型$z'$主力矩。
+\end{itemize}
+
+\textbf{尾电机}（推进模型系位置$\bm{r}_t = [-b, 0, 0]^T$，推进式，反向旋转，
+反扭矩沿机体受力方向$\bm{u}_{F,t}$——见上文）：
+\begin{align}
+    \bm{F}_t &= T_t \begin{bmatrix} +\cos\delta_t \\ 0 \\ -\sin\delta_t \end{bmatrix}
+    = T_t \bm{u}_{F,t},
+    \quad
+    \bm{\tau}_t = \tau_t \begin{bmatrix} +\cos\delta_t \\ 0 \\ -\sin\delta_t \end{bmatrix}
+    \label{eq:rear_force} \\
+    \bm{M}_t &= \underbrace{\begin{bmatrix} -b \\ 0 \\ 0 \end{bmatrix} \times \bm{F}_t}_{\text{推力力臂}}
+             + \underbrace{\bm{\tau}_t}_{\text{反扭矩}}
+             = \begin{bmatrix}
+                 +\tau_t \cos\delta_t \\
+                 -b T_t \sin\delta_t \\
+                 -\tau_t \sin\delta_t
+               \end{bmatrix}
+    \label{eq:rear_moment}
+\end{align}
+各分量的物理含义：
+\begin{itemize}
+    \item $M_{t,x'}=+\tau_t\cos\delta_t$：尾电机反扭矩在模型$x'$轴的分量，
+          与前电机的负贡献形成差动对消；
+    \item $M_{t,y'} = -b T_t \sin\delta_t$：推进模型系$z'$向分量
+          $-T_t\sin\delta_t$经力臂$b$产生模型$y'$轴力矩。其在具体姿态下是抬升尾部
+          还是产生其他惯性系分量，取决于$\{P\}$系到NED惯性系的姿态变换；
+    \item $M_{t,z'} = -\tau_t \sin\delta_t$：下摆（尾电机摆座）使反扭矩在模型$z'$轴
+          产生投影，是$\delta_t$主控$M_{y'}$时伴随的交叉项；经轴置换后$M_{z'}$对应任务系滚转。
+\end{itemize}
+
+合并前后电机贡献，得到\textbf{推进模型系六维推力矢量映射}（消去零项后）：
+\begin{equation}
+    \boxed{
+    \begin{aligned}
+        F_{x'} &= T_f \cos\delta_f + T_t \cos\delta_t \\[2pt]
+        F_{y'} &= T_f \sin\delta_f \\[2pt]
+        F_{z'} &= -T_t \sin\delta_t \\[6pt]
+        M_{x'} &= -\tau_f \cos\delta_f + \tau_t \cos\delta_t \\[2pt]
+        M_{y'} &= -b T_t \sin\delta_t - \tau_f \sin\delta_f \\[2pt]
+        M_{z'} &= a T_f \sin\delta_f - \tau_t \sin\delta_t
+    \end{aligned}}
+    \label{eq:six_component}
+\end{equation}
+
+\textbf{符号验证}（小角度展开确认物理直观正确性）：
+\begin{itemize}
+    \item $\delta_f > 0$：$F_{y'}\approx T_f\delta_f>0$，
+          $M_{z'}\approx aT_f\delta_f>0$，对应模型$z'$主力矩；
+    \item $\delta_t > 0$（尾摆下偏——排气向下、机体受力向上）：
+          $F_{z'}\approx -T_t\delta_t<0$，
+          $M_{y'}\approx -bT_t\delta_t<0$，对应模型$y'$主力矩；
+    \item $\delta_f = \delta_t = 0$且$\tau_f = \tau_t$（等转速、零摆角、反扭对消）：
+          $F_{x'}=T_f+T_t$（前后推力同向叠加），$F_{y'}=F_{z'}=0$，
+          $M_{x'}=M_{y'}=M_{z'}=0$。
+          在此理想状态下，所有推进控制力矩归零；它是零摆角名义参考，不等同于当前含非零尾摆偏置的28\,m/s纵向配平点（第\ref{sec:trim}节，v0.2.0 参数集）。
+\end{itemize}
+
+\textbf{耦合项分析}：式(\ref{eq:six_component})中包含两个交叉耦合项：
+\begin{itemize}
+    \item $M_{y'}$中的$-\tau_f \sin\delta_f$：上摆角使反扭矩在$y'$向产生投影，
+          形成模型$z'$主通道对模型$y'$轴的耦合。
+          量级估算：在典型参数下，该项约为$k_Q \omega_0^2 \cdot \delta_f$，
+          而俯仰主控力矩为$b \cdot k_T \omega_0^2 \cdot \delta_t$。
+          两者之比为$(k_Q / (k_T b)) \cdot (\delta_f/\delta_t)
+          = (C_Q/C_T) \cdot (D/b) \cdot (\delta_f/\delta_t)$；
+    \item $M_{z'}$中的$-\tau_t \sin\delta_t$：下摆角使反扭矩在$z'$向产生投影，
+          形成模型$y'$主通道对模型$z'$轴的耦合。
+          量级同理：为$(k_Q / (k_T a)) \cdot (\delta_t/\delta_f)
+          = (C_Q/C_T) \cdot (D/a) \cdot (\delta_t/\delta_f)$。
+\end{itemize}
+
+当前项目参数为$a=b=0.315$\,m，且$k_Q/(k_Tb)\approx0.08547$。
+该数值来自\texttt{models/aircraft-model.json}中的集总系数，属于MODEL-DEFAULT/ESTIMATED证据，
+尚未通过独立推力--扭矩台架标定；它只说明交叉项不能当作零，不构成全包线误差百分数。
