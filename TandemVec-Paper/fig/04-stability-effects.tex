@@ -17,24 +17,24 @@
   \node[title] at (5.2,3.75) {局部等效作用};
   \node[title] at (10.6,3.75) {预期主要影响};
 
-  \node[gain] (pitch) at (0,2.35) {$k_q,\ k_\theta$\\俯仰反馈};
-  \node[gain] (yaw)   at (0,.45) {$k_r$\\偏航速率反馈};
-  \node[gain] (roll)  at (0,-1.45) {$k_p,\ k_\phi$\\滚转反馈\\$\partial M_x/\partial\Delta\omega<0$};
+  \node[gain] (pitch) at (0,2.35) {下摆反馈\\固件俯仰通道};
+  \node[gain] (yaw)   at (0,.45) {上摆反馈\\固件滚转通道};
+  \node[gain] (roll)  at (0,-1.45) {差速反馈\\固件偏航通道};
 
-  \node[deriv] (pd) at (5.2,2.35) {俯仰阻尼/恢复作用增加\\受$-bT_0$与电机滞后约束};
-  \node[deriv] (yd) at (5.2,.45) {偏航阻尼作用增加\\受$aT_0$与交叉项约束};
-  \node[deriv] (rd) at (5.2,-1.45) {滚转阻尼/恢复作用增加\\效能$\propto\omega_0^2$};
+  \node[deriv] (pd) at (5.2,2.35) {$M_{y'}$ 阻尼/恢复增加\\受$-bT_0$与饱和约束};
+  \node[deriv] (yd) at (5.2,.45) {$M_{z'}$ 阻尼/恢复增加\\受$aT_0$与交叉项约束};
+  \node[deriv] (rd) at (5.2,-1.45) {$M_{x'}$ 阻尼增加\\效能$\propto\omega_0^2$};
 
-  \node[mode] (sp) at (10.6,2.35) {短周期响应\\阻尼与恢复趋势};
-  \node[mode] (dr) at (10.6,.45) {荷兰滚响应\\偏航阻尼趋势};
-  \node[mode] (rs) at (10.6,-1.45) {滚转收敛\\衰减速度趋势};
+  \node[mode] (sp) at (10.6,2.35) {纵向局部响应\\短周期趋势};
+  \node[mode] (dr) at (10.6,.45) {横向局部响应\\特征向量决定模态};
+  \node[mode] (rs) at (10.6,-1.45) {轴向局部响应\\低油门权限退化};
 
   \draw[strong] (pitch) -- (pd); \draw[strong] (pd) -- (sp);
   \draw[strong] (yaw) -- (yd);   \draw[strong] (yd) -- (dr);
   \draw[strong] (roll) -- (rd);  \draw[strong] (rd) -- (rs);
 
   \node[mode, draw=black!45, fill=white] (slow) at (7.9,-3.05)
-    {长周期与螺旋模态\\影响较弱且依参数而定};
+    {慢模态与交叉耦合\\依工作点和气动参数而定};
   \draw[weak] (pd.south) to[out=-65,in=160] (slow.west);
   \draw[weak] (yd.south) to[out=-65,in=115] (slow.north);
   \draw[weak] (rd.south) to[out=-55,in=25] (slow.east);

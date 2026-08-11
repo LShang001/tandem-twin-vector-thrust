@@ -1,301 +1,52 @@
 % ===========================================================================
-%  第16章：自抗扰控制与在线辨识
+%  附录 C：ADRC 与在线辨识
 % ===========================================================================
 
-\section{自抗扰控制与在线参数辨识}
-\label{sec:adrc_onlineid}
+\section{自抗扰控制与在线辨识接口}
+\label{sec:adrc_online_id}
 
-第\ref{sec:cascade_chapter}章的级联架构以PID内环+在线$\mathbf{B}_{\mathrm{true}}$分配
-为核心控制路径。固件另提供两条辅助路径以增强鲁棒性：
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{自抗扰控制（ADRC）}：以扩张状态观测器（ESO）实时估计并补偿
-          总扰动（模型误差+外扰+交叉耦合），作为速率内环的PID替代方案；
-    \item \textbf{在线参数辨识（OnlineID）}：以遗忘因子递推最小二乘（RLS）
-          在线估计惯量比与总扰动，驱动自适应增益调度。
-\end{enumerate}
-本章给出两者的数学推导、离散化实现与稳定性约束，
-与固件\texttt{TandemVec\_ADRC.h}和\texttt{TandemVec\_OnlineID.h}一一对应。
+\subsection{ADRC 的适配形式}
 
-% ---------------------------------------------------------------------------
-\subsection{二阶扩张状态观测器}
-\label{sec:eso2}
-
-\subsubsection{被控对象模型}
-
-对单轴角速度动力学，将惯量不确定性、交叉耦合与外扰统一归入"总扰动"$f$：
+对单个局部角速度通道，可把模型写成
 \begin{equation}
-    \dot{\omega} = b_0\,u + f
-    \label{eq:adrc_plant}
+\dot\omega=b_0u+d(\bm x,t),
+\label{eq:adrc_plant}
 \end{equation}
-其中$u$为控制输入（角加速度指令，rad/s$^2$），
-$b_0$为标称控制增益（默认$b_0=1$，即$u$与$\dot\omega$同量纲），
-$f$为包含模型误差$\Delta b\cdot u$、交叉耦合与外扰的总扰动。
-将$f$扩充为第三个状态$x_3=f$（假设$\dot f\approx0$），得到扩张状态空间：
-\begin{equation}
-    \begin{cases}
-        \dot{x}_1 = x_2 + b_0\,u \\
-        \dot{x}_2 = x_3 \\
-        \dot{x}_3 \approx 0
-    \end{cases}
-    \qquad
-    y = x_1 = \omega
-    \label{eq:eso_plant}
-\end{equation}
+其中 $b_0$ 是名义控制效能，$d$ 汇总气动力矩、耦合、参数误差和外扰。
+扩张状态观测器把 $d$ 作为附加状态估计，再用
+$u=(\nu-\hat d)/b_0$ 补偿。ADRC 的优势是把多类不确定性统一为“总扰动”，
+但其带宽选择仍受传感器噪声、采样率和执行器动态约束\cite{han2009adrc}。
 
-\subsubsection{ESO结构与带宽参数化}
+对本平台，$b_0$ 随 $\omega_0^2$、摆角和工作点变化，三轴还存在
+式\eqref{eq:B_true}的交叉项。逐轴 ADRC 只能在局部主通道占优时使用；若忽略矩阵耦合，
+ESO 可能把确定性的执行器交叉项当作扰动。更一致的方案是先用局部矩阵分配，再对分配后的
+角速度通道估计剩余扰动。
 
-采用Gao (2006)的带宽参数化形式，观测器增益由单一参数$\omega_o$（观测器带宽）决定：
-\begin{equation}
-    \boxed{
-    \begin{aligned}
-        \dot{\hat{x}}_1 &= \hat{x}_2 + b_0\,u + \beta_1(y - \hat{x}_1) \\
-        \dot{\hat{x}}_2 &= \hat{x}_3 + \beta_2(y - \hat{x}_1) \\
-        \dot{\hat{x}}_3 &= \beta_3(y - \hat{x}_1)
-    \end{aligned}
-    }
-    \qquad
-    \beta_1 = 3\omega_o,\quad
-    \beta_2 = 3\omega_o^2,\quad
-    \beta_3 = \omega_o^3
-    \label{eq:eso_continuous}
-\end{equation}
-其中$\hat{x}_1\to\omega$（角速度估计），$\hat{x}_2\to f$（总扰动估计），
-$\hat{x}_3\to\dot f$（扰动导数估计）——角加速度估计应为$\hat{x}_2 + b_0 u$。
-误差动力学特征多项式为$(s+\omega_o)^3$，观测误差以$\omega_o$为带宽指数收敛。
-
-\subsubsection{固件简化：二阶ESO}
-
-固件\texttt{TandemVec\_ADRC.h}采用二阶ESO（仅估计$\omega$和$f$，不单独估计$\dot\omega$），
-适用于控制律仅需扰动补偿而不需角加速度估计的场景：
-\begin{equation}
-    \boxed{
-    \begin{aligned}
-        \dot{z}_1 &= z_2 - 2\omega_o\,e + b_0\,u \\
-        \dot{z}_2 &= -\omega_o^2\,e
-    \end{aligned}
-    }
-    \qquad e = z_1 - y
-    \label{eq:eso2_continuous}
-\end{equation}
-其中$z_1\to\omega$，$z_2\to f$（总扰动）。
-误差动力学特征多项式$(s+\omega_o)^2$，增益$\beta_1=2\omega_o$、$\beta_2=\omega_o^2$。
-
-Euler离散化（控制周期$\Delta t$）：
-\begin{equation}
-    \begin{aligned}
-        z_1 &\mathrel{+}= (z_2 - 2\omega_o\,e + b_0\,u)\,\Delta t \\
-        z_2 &\mathrel{+}= (-\omega_o^2\,e)\,\Delta t
-    \end{aligned}
-    \label{eq:eso2_discrete}
-\end{equation}
-
-\textbf{实现要点}：ESO中的$u$必须取\textbf{上一拍实际输出}$u_{k-1}$而非当前指令$u_k$。
-若用当前指令，ESO会将控制效果误判为扰动并加以对消，导致闭环失效。
-
-\subsubsection{ADRC控制律}
-
-基于ESO估计的PD控制+扰动对消：
-\begin{equation}
-    \boxed{
-    u = \frac{1}{b_0}\left(\dot{\omega}_{\mathrm{ref}}
-        + K_p(\omega_{\mathrm{ref}} - z_1) - z_2\right)
-    }
-    \label{eq:adrc_law}
-\end{equation}
-其中$K_p=\omega_c$（控制器带宽），$\dot{\omega}_{\mathrm{ref}}$为参考轨迹微分
-（悬停定点时为零）。$-z_2/b_0$项实现对总扰动的实时对消。
-
-闭环特征多项式$s+\omega_c$（一阶），带宽$\omega_c$决定跟踪速度。
-推荐整定：$\omega_c=4$\,rad/s，$\omega_o=8$\,rad/s（满足下文$\omega_c\leq\omega_o/2$准则）。
-
-% ---------------------------------------------------------------------------
-\subsection{ADRC稳定性约束}
-\label{sec:adrc_stability}
-
-ESO带宽$\omega_o$受执行器带宽$\omega_{\mathrm{act}}\approx1/\tau_m$约束。
-对本构型$\tau_m=0.28$\,s，$\omega_{\mathrm{act}}\approx3.6$\,rad/s。
-仿真扫频结果：
-\begin{itemize}
-    \item $\omega_o\leq12$\,rad/s（$\approx3.3\times\omega_{\mathrm{act}}$）：
-          全$\omega_c\in[2,20]$区间稳定；
-    \item $\omega_o=50$\,rad/s：所有$\omega_c$均发散——
-          ESO试图估计超出执行器响应能力的快变扰动，产生正反馈。
-\end{itemize}
-工程准则：$\omega_o\leq3\omega_{\mathrm{act}}$，$\omega_c\leq\omega_o/2$。
-固件默认$\omega_o=8$、$\omega_c=6$略超$\omega_o/2$准则（工程折中，实机以稳定性裕度验证为准）。
-
-% ---------------------------------------------------------------------------
-\subsection{遗忘因子递推最小二乘（RLS）}
+\subsection{递推最小二乘在线辨识}
 \label{sec:online_id}
 \label{sec:rls}
 
-\subsubsection{辨识模型}
+对离散回归 $y_k=\bm\varphi_k^T\bm\theta+\varepsilon_k$，带遗忘因子
+$\lambda\in(0,1]$ 的递推最小二乘为
+\begin{align}
+\bm K_k&=\frac{\bm P_{k-1}\bm\varphi_k}
+{\lambda+\bm\varphi_k^T\bm P_{k-1}\bm\varphi_k},\\
+\hat{\bm\theta}_k&=\hat{\bm\theta}_{k-1}
++\bm K_k(y_k-\bm\varphi_k^T\hat{\bm\theta}_{k-1}),\\
+\bm P_k&=\lambda^{-1}
+(\bm I-\bm K_k\bm\varphi_k^T)\bm P_{k-1}.
+\label{eq:rls}
+\end{align}
+在线辨识必须满足持续激励、信号同步和约束投影。若角加速度由噪声微分得到、执行器状态只用
+指令近似，辨识结果会同时吸收传感器噪声和电机滞后，不能直接解释为真实惯量或气动导数。
 
-对式(\ref{eq:adrc_plant})的离散化，以角加速度为观测量：
-\begin{equation}
-    y_k = \boldsymbol{\varphi}_k^T\,\boldsymbol{\theta} + \varepsilon_k
-    \label{eq:rls_model}
-\end{equation}
-其中：
-\begin{itemize}
-    \item $y_k = \dot\omega_k$：由陀螺仪数值微分获得的实际角加速度（rad/s$^2$）；
-    \item $\boldsymbol{\varphi}_k = [\alpha_{\mathrm{cmd},k},\;1]^T$：回归向量；
-    \item $\boldsymbol{\theta} = [b,\;d]^T$：待估参数——
-          $b$为实际惯量比（$I_{\mathrm{true}}/I_{\mathrm{nom}}$的倒数），
-          $d$为常值扰动（含重心偏移、稳态耦合）；
-    \item $\varepsilon_k$：测量噪声与未建模动态。
-\end{itemize}
+固件已具备控制中间量和通用变量遥测，可用于记录角速度参考、角加速度指令、期望力矩、
+执行器状态、饱和标记和电机模型观测值。正式辨识应保存原始时序、在线参数快照和置信区间，
+并用独立试验段验证预测误差。早期稿件中的单次在线辨识数值缺少这些配套信息，
+因此不再作为已标定参数引用。
 
-\subsubsection{RLS递推方程}
+\subsection{与主控制器的关系}
 
-带遗忘因子$\lambda\in(0,1]$的标准RLS：
-\begin{equation}
-    \boxed{
-    \begin{aligned}
-        \hat{y}_k &= \boldsymbol{\varphi}_k^T\,\hat{\boldsymbol{\theta}}_{k-1} \\
-        e_k &= y_k - \hat{y}_k \\
-        \mathbf{S}_k &= \mathbf{P}_{k-1}\,\boldsymbol{\varphi}_k \\
-        \mathbf{K}_k &= \frac{\mathbf{S}_k}{\lambda + \boldsymbol{\varphi}_k^T\,\mathbf{S}_k} \\
-        \hat{\boldsymbol{\theta}}_k &= \hat{\boldsymbol{\theta}}_{k-1}
-            + \mathbf{K}_k\,e_k \\
-        \mathbf{P}_k &= \frac{1}{\lambda}
-            \left(\mathbf{I} - \mathbf{K}_k\,\boldsymbol{\varphi}_k^T\right)
-            \mathbf{P}_{k-1}
-    \end{aligned}
-    }
-    \label{eq:rls_update}
-\end{equation}
-初始条件：$\hat{\boldsymbol{\theta}}_0=[1,0]^T$（标称惯量、零扰动），
-$\mathbf{P}_0=100\,\mathbf{I}_2$（高初始不确定性）。
-遗忘因子$\lambda=0.99$：等效窗口约$1/(1-\lambda)=100$步（200\,Hz下约0.5\,s），
-使估计跟踪慢时变参数（如燃油消耗、载荷变化）而不过度响应噪声。
-
-\subsubsection{激励充分性检测}
-
-RLS在激励不足时协方差矩阵退化（"协方差爆炸"或"参数漂移"）。
-固件采用指数移动均方值检测激励水平：
-\begin{equation}
-    \sigma_k^2 = 0.95\,\sigma_{k-1}^2 + 0.05\,\alpha_{\mathrm{cmd},k}^2
-    \label{eq:excitation}
-\end{equation}
-当$\sigma_k^2\leq4.0$（即RMS$<2$\,rad/s$^2$）时跳过更新，
-保持$\hat{\boldsymbol{\theta}}$和$\mathbf{P}$不变。
-物理意义：悬停稳态下控制指令接近零，此时辨识无信息量，
-仅在机动（阶跃、振荡、扰动）期间更新。
-
-\textbf{角速度模式方波激励协议（2026-08 实机）}：为满足激励检测，
-实机辨识采用角速度模式大幅方波指令（$\alpha$ RMS $>2$\,rad/s$^2$ 才更新，每轴 15--20\,s），
-落地后经 DBG \texttt{id} 命令读取 $b$、$d$ 与建议 $K_p$。
-注意事项：$b$ 是激励频率下的集总测量（含执行器滞后衰减），
-不可反推惯量（$I_{\text{actual}}=I_{\text{nom}}/b$ 仅当执行器理想时成立），
-建议 $K_p$ 只能当方向不能当数值。
-观测通道：2026-08-10 起固件通用变量上报（AnoVars）可在线监视
-$w_{\text{est}}$、$id\_b\_*$、$id\_k\_*$、$yaw\_gain\_sched$ 等中间量，
-实现"第一步只观测不闭环"的安全接入流程。
-
-\textbf{实机辨识首测结果（2026-08-09）}：角速度模式方波激励下测得
-$b\approx 0.35/0.36/0.90$（roll/pitch/yaw）、$d_{\text{yaw}}\approx -7.36$——
-yaw 通道扰动为负值且量级显著，对应\textbf{前后电机不对称约 17\%}（ESC 校准前的
-推力/反扭差异，与推进系统标定直接相关）；
-差速/反扭矩比经三轮调参收敛于 $k_Q/k_T\approx 0.027$（0.030$\to$0.025$\to$0.027），
-为第\ref{sec:mapping}章反扭矩模型提供实机量级锚定。
-注意：$b$ 为激励频率下的集总测量（含执行器 $\tau_m$ 滞后衰减），
-不可直接反推惯量（$I_{\text{actual}}=I_{\text{nom}}/b$ 仅执行器理想时成立）。
-
-\subsubsection{参数更新限幅与安全防护}
-
-为防止异常观测（传感器故障、碰撞）导致参数跳变：
-\begin{equation}
-    |\hat{b}_k - \hat{b}_{k-1}|
-    \leq \max(|\hat{b}_{k-1}|,\;0.1)\times r_{\lim}
-    \label{eq:rate_limit}
-\end{equation}
-其中$r_{\lim}=0.05$（每步最大变化5\%）。
-硬约束：$\hat{b}\in[0.3,\;3.0]$，超出范围或检测到NaN时触发完全重置
-（$\hat{\boldsymbol{\theta}}\leftarrow[1,0]^T$，$\mathbf{P}\leftarrow100\mathbf{I}$）。
-
-% ---------------------------------------------------------------------------
-\subsection{自适应增益调度}
-\label{sec:adaptive_scheduling}
-
-辨识得到的惯量比$\hat{b}$驱动速率内环增益调度：
-\begin{equation}
-    \boxed{
-    K_p^{\mathrm{adapt}} = \frac{K_p^{\mathrm{nom}}}{\sqrt{\hat{b}}},
-    \qquad
-    \alpha_{\max}^{\mathrm{adapt}} = \alpha_{\max}^{\mathrm{nom}}\cdot\hat{b}
-    }
-    \label{eq:gain_scheduling}
-\end{equation}
-物理依据：内环闭环带宽$\omega_{\mathrm{BW}}=K_p/I$。
-按辨识定义$\hat{b}=I_{\mathrm{nom}}/I_{\mathrm{true}}$（固件约定），真实惯量$I_{\mathrm{true}}=I_{\mathrm{nom}}/\hat{b}$；
-将增益取为$K_p/\sqrt{\hat{b}}$使带宽按$1/\sqrt{\hat{b}}=\sqrt{I_{\mathrm{true}}/I_{\mathrm{nom}}}$缩放——
-惯量增大时降低增益避免过冲，惯量减小时提高增益维持响应速度。
-$\alpha_{\max}$按$\hat{b}$正比缩放，确保力矩限幅与真实惯量匹配。
-
-% ---------------------------------------------------------------------------
-\subsection{重心偏移在线提取}
-\label{sec:cg_extraction}
-
-俯仰通道的常值扰动$d_{\mathrm{pitch}}$主要来源是重心（CG）偏离标称位置。
-在近悬停工况下（油门30\%--70\%，三轴角速率$<15$\,deg/s），
-俯仰积分项$I_{\mathrm{pitch}}$（rad/s）稳态时恰好补偿CG偏移产生的常值力矩：
-\begin{equation}
-    M_{\mathrm{CG}} = I_y\cdot K_i\cdot I_{\mathrm{pitch}}
-    \label{eq:cg_moment}
-\end{equation}
-设总推力$T_{\mathrm{tot}}=2k_T\omega_0^2$，CG偏移量（mm）为：
-\begin{equation}
-    \Delta x_{\mathrm{CG}} = \frac{M_{\mathrm{CG}}}{T_{\mathrm{tot}}}\times1000
-    \label{eq:cg_offset}
-\end{equation}
-固件以低通滤波（$\alpha=0.05$）平滑估计值，限幅$\pm20$\,mm，
-供遥测监视和后续配平补偿使用（当前为观测模式，不自动修正控制律）。
-
-% ---------------------------------------------------------------------------
-\subsection{与级联架构的集成关系}
-\label{sec:adrc_integration}
-
-固件中ADRC与OnlineID的角色定位：
-\begin{itemize}
-    \item \textbf{主路径}（\texttt{flight\_control.cpp}）：
-          \texttt{PositionPID}（位置式PID v3）姿态外环（纯P）+
-          \texttt{PositionPID}速率内环（PI）+
-          静态非线性控制分配（$\mathbf{M}=\mathbf{I}\boldsymbol{\alpha}$，
-          \texttt{allocateMoments} BTRUE策略，上一拍工作点Jacobian
-          = gain-scheduling，非NDI/INDI）；
-    \item \textbf{ADRC}（\texttt{TandemVec\_ADRC.h}）：
-          已完成实现与宿主机验证，\textbf{未接入生产控制链}。
-          作为速率内环的PID替代方案储备，
-          待需要常值扰动无积分对消能力时评估接入；
-    \item \textbf{OnlineID}（\texttt{TandemVec\_OnlineID.h}）：
-          已接入生产链但为\textbf{纯观测模式}——
-          每拍调用\texttt{step()}估计$\hat{b}$、$\hat{d}$、$\Delta x_{\mathrm{CG}}$，
-          结果写入\texttt{id\_*}全局遥测量供地面站与黑匣子记录。
-          自适应增益建议$K_p/\sqrt{\hat{b}}$已计算（\texttt{id\_kp\_suggest}），
-          但\textbf{未写回PID增益}，不影响任何控制输出。
-          安全策略：第一步只观测不闭环，待多架次数据确认估计稳定后，
-          再人工决定是否闭环接入（第二步）；
-    \item \textbf{include/算法库}（平台无关、无 Arduino 依赖）：\\[2pt]
-          \texttt{TVC\_Control\_Geometric.h}、\allowbreak
-          \texttt{TandemVec\_ADRC.h}、\allowbreak
-          \texttt{TandemVec\_OnlineID.h}
-          平台无关（无Arduino依赖），用于\texttt{test\_host/}宿主机回归测试
-          与算法验证；生产链的姿态/速率环由\texttt{PositionPID}实例实现
-          （位置式PID，v3：2-DOF设定点加权、反算抗饱和、微分先行、
-          输出变化率限制与NaN防护）。
-\end{itemize}
-
-% ---------------------------------------------------------------------------
-\subsection{参考文献}
-
-\begin{itemize}
-    \item Han, J. (2009). \textit{From PID to Active Disturbance Rejection Control}.
-          IEEE Trans. Industrial Electronics, 56(3), 900--906.
-    \item Gao, Z. (2006). \textit{Scaling and Bandwidth-Parameterization based
-          Controller Tuning}. Proc. ACC, 6--pp.
-    \item Åström, K.J. \& Wittenmark, B. (1995). \textit{Adaptive Control}.
-          2nd ed., Addison-Wesley.
-    \item Ljung, L. (1999). \textit{System Identification: Theory for the User}.
-          2nd ed., Prentice Hall.
-\end{itemize}
+当前生产链仍是速率 PI、惯量前馈和局部效能逆；ADRC 不是已部署主控制器。
+在线辨识可以为 $k_T$、$k_Q$、$\tau_m$、通道增益或扰动力矩提供更新依据，
+但参数写回控制器之前必须设置物理范围、变化率限制和异常回退。辨识可用不等于闭环自适应安全。

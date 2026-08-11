@@ -1,104 +1,56 @@
-\section{模块化无翼/有翼垂起形态的VTOL分析与仿真}
+% ===========================================================================
+%  垂直姿态与模式边界
+% ===========================================================================
+
+\section{垂直姿态工作点与模式边界}
 \label{sec:vtol}
 
-本节探讨纵列双发正交单轴矢量推力平台在不同升力形态下实现垂直起降（VTOL）的局部可行性。
-这里的“可行性”仅指在给定集总参数、推力裕度和姿态控制律下的局部动力学响应，
-不等同于已经完成无翼机体的气动外形、结构强度、散热、能源和安全性设计。
-其中，tail-sitter是本文采用的一个具体姿态方案：飞行器从水平姿态通过俯仰$-90^\circ$变为竖直姿态（机头朝天），
-两电机推力在惯性系中提供主要竖直升力。
-在无翼形态下，气动升力不再是悬停的必要条件，推进器承担主要升力和姿态控制；
-在有翼形态下，机翼可在前飞阶段逐步承担升力，但垂起段仍主要依靠推进器。
-第\ref{sec:allocation}节和第\ref{sec:propulsion}节推导的推力矢量映射和推进模型对两种形态均适用，
-但质量、惯量、推重比和气动参数应按式(\ref{eq:configuration_params})分别标定。
+\subsection{名义悬停条件}
 
-\subsection{Tail-sitter构型的控制特性}
+当名义推力轴与重力方向相反、两摆角为零、两电机等速且忽略气动载荷时，
+悬停平衡满足
+\begin{equation}
+2k_T\omega_h^2=mg,qquad
+\omega_h=\sqrt{\frac{mg}{2k_T}}.
+\label{eq:hover_omega0}
+\end{equation}
+按当前参数源，$\omega_h\approx574\,\mathrm{rad/s}$，约为
+$\omega_{\max}$ 的 $50\%$。这个数值依赖估算的 $k_T$ 和质量，只表示名义推重平衡，
+未计入电池压降、地效、桨间干扰和结构遮挡。纵列双旋翼的相互干扰可能随间距和非平行姿态
+显著变化\cite{zhu2025experimental}，需要独立台架或 CFD 数据修正。
 
-在tail-sitter悬停姿态（$\theta=-90^\circ$，机体系$+x_b$指向上方）下，
-构型的控制特性与有翼前飞形态有本质变化；但其核心推进器、摆座和差速通道仍保持不变：
+零摆角时，前后反向旋转使轴向反扭矩在等速条件下相抵。小姿态误差由上摆、下摆和差速产生
+三个主力矩；其固件操纵语义见\cref{sec:axis_semantics}。悬停总推力主要由基准转速给出，
+姿态分配则改变摆角和差速。只有在未发生电机钳位时，差速参数化才保持转速平方和不变。
 
-\begin{itemize}
-    \item \textbf{通道语义按悬停构型重读}：在机体坐标系中，前电机摆座绕$z_b$轴摆动（\textbf{上摆=滚转主控}）在悬停构型下产生绕横轴的侧倾力矩；尾电机摆座绕$y_b$轴摆动（\textbf{下摆=俯仰主控}）仍为俯仰。两摆座控制功能与固定翼模式一致，无需重新分配（通道命名见第\ref{sec:axis_semantics}节）。
-    \item \textbf{差速=偏航主控}：前后电机反扭矩差产生绕推力轴（机身纵轴）的力矩，悬停构型下即偏航——该机制不依赖重力方向，VTOL模式下完全保留。
-\item \textbf{航向锁（ratchet hold，实机 2026-08-09）}：悬停航向不做姿态回中（摇杆恒为角速度指令），
-回中时以\textbf{航向短弧误差} $\Delta\psi\in(-\pi,\pi]$ 经比例增益（$k_p^{\text{yaw}}=5.0$，限幅 60°/s）
-生成角速率指令锁住当时航向——"松杆即停"由航向锁替代（存档版为自由漂移），
-解锁瞬间参考重置为当前航向防起飞猛转。
-该实现绕开了第\ref{sec:quat_control}章的四元数航向回中（悬停万向锁附近欧拉表示退化），
-是工程上规避欧拉奇异 + 满足"摇杆恒角速度"操作习惯的折中。
-    \item \textbf{悬停配平}：忽略气动力后，悬停仅需推力与重力平衡：$T_f+T_t = mg$。在$\delta_f=\delta_t=0$、$\Delta\omega=0$（零差速）的对称状态下，解析解得基准转速
-    \begin{equation}
-        \omega_{0,\text{hover}} = \sqrt{\frac{mg}{2k_T}}
-        \label{eq:hover_omega0}
-    \end{equation}
-    代入VTOL参数集（$m=0.7$\,kg，$k_T=1.04\times10^{-5}$\,N$\cdot$s$^2$，v0.2.0）得$\omega_{0,\text{hover}} \approx 574.0$\,rad/s，对应油门约$49.9\%$。
-\end{itemize}
+\subsection{姿态表示与航向通道}
 
-\subsection{四元数控制在VTOL中的必要性}
+垂直姿态接近 3--2--1 欧拉角的奇异区域，因此主闭环使用四元数误差。
+固件滚转/俯仰外环由短弧旋转向量生成角速度参考，偏航摇杆则采用角速度命令和回中航向保持。
+该非对称设计符合当前操纵需求，但意味着理论分析不能把三轴都当作相同的四元数比例环。
+目标姿态轨迹若通过式\eqref{eq:slerp}生成，还需同时给出目标角速度、路径时间和推力参考，
+否则姿态路径本身不能确定垂直速度或高度响应。
 
-Tail-sitter悬停时俯仰角$\theta=-90^\circ$恰为3-2-1欧拉角的万向锁奇异点——在此姿态下，滚转$\phi$和偏航$\psi$描述同一物理旋转自由度，任何以欧拉角差值为输入的线性控制律（如第\ref{sec:control}节的SAS）都会在此处退化。第\ref{sec:quat_control}节建立的误差四元数控制律完全规避了这一问题：期望悬停四元数$\mathbf{q}_{\text{hover}}=[0.7071,0,+0.7071,0]^T$是$S^3$流形上的正则点，误差四元数的矢量部分$\boldsymbol{\varepsilon}_{\text{err}}$在悬停点附近线性良好，控制律式(\ref{eq:quat_pd})无奇异性地工作。
+\subsection{高度保持的模型边界}
 
-从水平姿态到悬停姿态的过渡采用slerp球面线性插值（式\ref{eq:slerp}），保证了过渡路径沿$S^3$大圆弧最短路径行进，且任意中间态均为有效单位四元数。
+Web 垂直模式包含高度--垂直速度级联，并用倾角余弦补偿基准油门。
+这一路径与固件的位置/速度环不是逐行等价实现，且 Web 模型使用 $\pm25^\circ$ 摆角。
+因此，Web 悬停轨迹只能验证概念模型中的力方向和数值闭环，不能作为固件高度保持性能。
+真实悬停还需要垂直速度估计、推力标定、电压补偿、地效和风扰试验。
 
-\subsection{仿真验证}
+\subsection{过渡问题不属于当前验证域}
 
-\subsubsection{垂直起飞}
+从悬停到前飞的连续过渡同时改变重力投影、气动导数、推力方向、配平输入和可用控制权限。
+现有脚本采用固定 MODEL-DEFAULT 气动参数和理想化姿态插值，没有建立随迎角、空速和构型变化的
+气动数据库，也没有与固件的绝对分配、观测器和限幅对齐。因此，本文不把现有 slerp 图或
+单次垂起仿真称为“完整转捩验证”。tail-sitter 和倾转旋翼文献中的 INDI、增益调度与
+约束控制方法可为后续研究提供方法参考\cite{smeur2016incremental,schlatter2024longitudinal,bhandari2024design}，
+但必须针对本构型重新辨识和验证。
 
-图\ref{fig:vtol_takeoff}展示了3秒slerp过渡垂直起飞的仿真结果（姿态控制采用第\ref{sec:lqr}节的LQR）。飞行器从地面静止（$q=[1,0,0,0]^T$，水平姿态）经slerp过渡至悬停姿态。$\|\boldsymbol{\varepsilon}_{\text{err}}\|$在过渡初期因姿态惯性产生跟踪滞后（峰值约0.02，对应约$2^\circ$姿态误差），过渡结束后平滑收敛；俯仰角$\theta$紧密跟踪参考轨迹，无可见超调。高度曲线显示：过渡初期推力矢量接近水平、升力分量不足，飞行器在地面保持；俯仰到位后（约3\,s）开始稳定爬升，10\,s末约28.5\,m。
+\subsection{可发表的后续验证设计}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.88\textwidth]{fig-sim/vtol_takeoff.pdf}
-\caption{VTOL tail-sitter 垂直起飞（3s slerp，LQR姿态控制）：上—高度；中—俯仰角 $\theta$ 与参考轨迹（目标$-90^\circ$）；下—四元数误差范数 $\|\varepsilon_{\mathrm{err}}\|$。}
-\label{fig:vtol_takeoff}
-\end{figure}
-
-三种姿态控制架构的起飞跟踪对比见图\ref{fig:vtol_takeoff_compare}，定量指标见第\ref{sec:lqr}节表\ref{tab:ctrl_compare}。手工整定的四元数SAS（含第\ref{sec:quat_sas_engineering}节的增益调度与前馈改进）在slerp结束后出现约$23^\circ$的欠阻尼回摆，10秒内未收敛；四元数INDI（v2）回摆约$6^\circ$、6.1秒收敛；LQR回摆不足$2^\circ$、在slerp结束时刻即收敛。该对比清晰区分了三类设计方法——手工对角整定、增量模型逆、最优全状态反馈——在大角度机动工况下的性能梯度。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.88\textwidth]{fig-sim/vtol_takeoff_compare.pdf}
-\caption{垂直起飞姿态跟踪对比（3s slerp）：上—俯仰角 $\theta$；下—四元数误差范数。四元数SAS（蓝）欠阻尼回摆；四元数INDI（橙）回摆较小；四元数LQR（绿）跟踪紧密且无回摆。}
-\label{fig:vtol_takeoff_compare}
-\end{figure}
-
-\subsubsection{悬停保持}
-
-图\ref{fig:vtol_hover}展示了悬停姿态的闭环保持性能。在精确配平转速（式\ref{eq:hover_omega0}，$\omega_0\approx574.0$\,rad/s，v0.2.0 参数集）和四元数SAS的PD反馈下，俯仰角$\theta$稳定保持在$-90^\circ$（仿真内未见可分辨偏差），8\,s内高度漂移为零。该稳定性验证了误差四元数控制律（式\ref{eq:quat_pd}）在万向锁奇异点附近的有效性——欧拉角SAS在此工况下无法正常工作。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.88\textwidth]{fig-sim/vtol_hover_hold.pdf}
-\caption{悬停保持（四元数SAS）：上—俯仰角 $\theta$（闭环稳定于$-90^\circ$）；下—高度。}
-\label{fig:vtol_hover}
-\end{figure}
-
-\subsubsection{三种控制器的悬停抗扰对比}
-
-在悬停保持工况下施加$3^\circ$初始俯仰偏差，三种控制器均能将姿态误差收敛回悬停点（图\ref{fig:vtol_ctrl_compare}），但收敛形态差异显著：SAS为欠阻尼二阶响应，误差范数在约1.9\,s时先降至$1.5\times10^{-3}$，随后因阻尼不足出现回摆；INDI近似单调衰减，无明显超调；LQR收敛最快且全程平滑，5\,s末$\|\boldsymbol{\varepsilon}_{\text{err}}\|$降至$1.9\times10^{-4}$，比INDI（$1.5\times10^{-3}$）低近一个数量级。INDI在悬停工况下的优势尚不显著——这是因为悬停时外力扰动为零，INDI的模型鲁棒性优势需在气动扰动或外部风扰下才能充分体现。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.82\textwidth]{fig-sim/vtol_ctrl_compare.pdf}
-\caption{悬停抗扰对比（$3^\circ$初始俯仰偏差）：四元数SAS（蓝）欠阻尼收敛、有回摆；四元数INDI（橙）近似单调衰减；四元数LQR（绿）收敛最快。}
-\label{fig:vtol_ctrl_compare}
-\end{figure}
-
-\subsection{VTOL模式的已知局限}
-
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{油门需求高}：按上节对称悬停解，悬停需约$49.9\%$油门（$\omega_{0,\text{hover}}\approx574$\,rad/s，v0.2.0 参数集），推力裕度约$50\%$用于机动控制；早期文档中"84.6\% 油门"为旧参数集残留值，已废弃。以当前 MODEL-DEFAULT（未标定）参数，该构型的推重比在悬停点偏弱。
-    \item \textbf{有翼模块在垂起段的利用率低}：在垂起模式下，机翼和舵面通常不承担主要升力与姿态控制，
-          但这不是无翼形态的缺点，而是有翼模块为前飞效率换取的质量和阻力代价。
-    \item \textbf{形态/姿态过渡建模缺失}：当前仿真未建模有翼/无翼参数切换及slerp过渡中的非定常气动效应，
-          机翼在过渡段可能产生显著的阻力和力矩。
-    \item \textbf{前电机垂向分量缺失}：在非纯悬停的倾斜姿态下，前电机仅提供$x_b$-$y_b$平面内的推力——在倾斜前的过渡初期，若前电机仍需提供部分垂向分量，当前构型无法满足。这是tail-sitter模式对本构型的本构性限制。
-\end{enumerate}
-
-\subsection{不同形态的统一控制架构}
-
-将有翼前飞、无翼垂起和有翼垂起统一于四元数姿态控制和在线效能矩阵框架下：
-高层根据形态和任务切换期望四元数$\mathbf{q}_{\text{des}}$、推力指令、气动模型参数和控制权限调度；
-核心控制律（例如第\ref{sec:cascade_chapter}节的误差四元数外环与$\mathbf{B}_{\text{true}}$内环）保持不变。
-双推进器和摆座提供跨形态的基础控制，机翼在有翼前飞段增加气动升力和舵面控制，
-无翼形态则由推进器承担主要平动与姿态控制。形态切换必须同步处理质量/惯量变化、配平变化、
-控制权重变化和执行器限幅，不能只切换一个模式标志。
+后续悬停试验应冻结质量、质心、惯量、$k_T$、$k_Q$、$\tau_m$、控制参数和固件提交，
+以固定初始姿态、油门和扰动重复运行，并报告姿态误差峰值、调节时间、稳态误差、执行器饱和率、
+电机转速观测误差和电池电压。过渡试验则需在空速--迎角--倾角网格上定义通过准则，
+同时检查配平可行性和控制分配条件数。在这些数据到位前，当前实机首飞只支持
+“垂直姿态控制链已部署并完成初步飞行验证”，不支持全包线性能主张。

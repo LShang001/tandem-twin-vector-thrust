@@ -1,210 +1,109 @@
-\section{控制分配：通道解耦的几何机理}
+% ===========================================================================
+%  控制效能与分配
+% ===========================================================================
+
+\section{控制效能矩阵与执行器分配}
 \label{sec:allocation}
 
-控制分配（control allocation）是连接控制律输出（期望力矩）与执行器输入（摆角/差速指令）
-的数学环节。本构型的正交摆轴使推力力臂主项形成对角结构，因而可用三通道直接映射作为
-低复杂度近似；反扭矩投影形成的交叉项仍需评估或补偿。
+\subsection{零摆角线性化}
 
-\subsection{小角度近似与线性化效能矩阵}
-
-在小摆角近似下（$\sin\delta \approx \delta$，$\cos\delta \approx 1$，$\delta \ll 1$），
-并假设前后推力近似相等（$T_f \approx T_t \approx T_0$），式(\ref{eq:six_component})
-中的力矩方程线性化为：
+定义执行器向量
+$\bm u=[\Delta\omega,\delta_t,\delta_f]^T$，推进模型系力矩向量
+$\bm M^P=[M_{x'},M_{y'},M_{z'}]^T$。在
+$\delta_f=\delta_t=0$、$\omega_f=\omega_t=\omega_0$ 处对
+式\eqref{eq:six_component}线性化，得到
 \begin{equation}
-    \begin{bmatrix} M_x \\ M_y \\ M_z \end{bmatrix}
-    \approx
-    \underbrace{
-    \begin{bmatrix}
-        -k_Q \omega_f^2 + k_Q \omega_t^2 \\
-        -b T_t \delta_t \\
-        a T_f \delta_f
-    \end{bmatrix}
-    }_{\text{主控通道}}
-    +
-    \underbrace{
-    \begin{bmatrix}
-        0 \\
-        -\tau_f \delta_f \\
-        -\tau_t \delta_t
-    \end{bmatrix}
-    }_{\text{反扭矩投影交叉项}}
-    \label{eq:moment_linearized}
+\Delta\bm M^P=\bm B_{\mathrm{full}}\Delta\bm u,
+\qquad
+\bm B_{\mathrm{full}}=
+\begin{bmatrix}
+-2Q_0&0&0\\
+0&-bT_0&-Q_0\\
+0&-Q_0&aT_0
+\end{bmatrix},
+\label{eq:effectiveness_matrix}
 \end{equation}
+其中 $T_0=k_T\omega_0^2$、$Q_0=k_Q\omega_0^2$。
+矩阵主对角线对应差速、下摆和上摆的三个主通道，$2\times2$ 子块中的
+$-Q_0$ 是反扭矩摆角投影。将该矩阵称为“完全对角”会遗漏物理交叉项。
 
-\textbf{差速变量的参数化}：定义差速变量$\Delta\omega$，使两电机目标转速为：
+忽略交叉项时，直接分配为
 \begin{equation}
-    \omega_f^{\text{target}} = \omega_0 \sqrt{1 + \Delta\omega}, \quad
-    \omega_t^{\text{target}} = \omega_0 \sqrt{1 - \Delta\omega}
-    \label{eq:diff_def}
+\Delta\omega=-\frac{M_{x'}^{\mathrm{cmd}}}{2Q_0},\qquad
+\delta_t=-\frac{M_{y'}^{\mathrm{cmd}}}{bT_0},\qquad
+\delta_f=\frac{M_{z'}^{\mathrm{cmd}}}{aT_0}.
+\label{eq:direct_mapping}
 \end{equation}
-其中$\omega_0$为基准转速（由油门决定），$\Delta\omega \in [-1, 1]$为归一化差速指令。
-此分配方案的物理精妙之处在于：$\omega_f^2 + \omega_t^2 = 2\omega_0^2$严格不变——
-\textbf{在任何差速指令下，两电机转速平方之和为常数}。由$T \propto \omega^2$，
-一阶近似下总推力保持不变，差速仅影响扭矩差而不影响总推力。
-这一性质使操纵手的油门-滚转解耦直观感受得以保证：推油门只变化总推力，
-滚转指令只变化差速，两者在推力一阶近似下独立。
+固件的 \texttt{FULL\_B} 模式保留 $2\times2$ 子块并解析求逆，
+\texttt{DIRECT\_WITH\_FF} 则以一次前馈近似补偿两个 $Q_0$ 项。
 
-令基准反扭矩$\tau_0 = k_Q \omega_0^2$，滚转力矩的差速分量为：
+\subsection{有限工作点的真实 Jacobian}
+
+在任意局部工作点，固件使用
+$\bm B_{\mathrm{true}}=\partial\bm M^P/\partial\bm u$：
 \begin{equation}
-    \Delta M_x^{\text{差速}} = k_Q (\omega_t^2 - \omega_f^2)
-    = k_Q (\omega_0^2(1-\Delta\omega) - \omega_0^2(1+\Delta\omega))
-    = -2 k_Q \omega_0^2 \Delta\omega
-    = -2 \tau_0 \Delta\omega
-    \label{eq:differential_roll}
+\boxed{
+\bm B_{\mathrm{true}}=
+\begin{bmatrix}
+-k_Q\omega_0^2(c_f+c_t) & -Q_t s_t & Q_f s_f\\
+b k_T\omega_0^2s_t-k_Q\omega_0^2s_f & -bT_t c_t & -Q_f c_f\\
+a k_T\omega_0^2s_f+k_Q\omega_0^2s_t & -Q_t c_t & aT_f c_f
+\end{bmatrix}}
+\label{eq:B_true}
 \end{equation}
+其中 $s_f=\sin\delta_f$、$c_f=\cos\delta_f$，尾摆角同理。
+式\eqref{eq:B_true}与 \texttt{computeEffectMatrix} 的字面实现一致；
+当两摆角为零且两转速等于 $\omega_0$ 时，它退化为式\eqref{eq:effectiveness_matrix}。
 
-在零摆角、等基准转速处，对输入$[\Delta\omega,\delta_t,\delta_f]^T$求完整一阶Jacobian，得到：
+固件另有数据驱动版本：两台物理电机只出现一次，差速通过
+$\omega_0\sqrt{1\pm\Delta\omega}$ 同时连接到两台电机，摆角分别连接到对应摆座；
+通用正向映射以中心差分生成 Jacobian。该结构避免把差速误建模成一台额外执行器。
+
+\subsection{绝对指令分配与近奇异退化}
+
+当前固件的 BTRUE 策略计算
 \begin{equation}
-    \boxed{
-    \begin{bmatrix} M_x \\ M_y \\ M_z \end{bmatrix}
-    =
-    \underbrace{
-    \begin{bmatrix}
-        -2\tau_0 & 0 & 0 \\
-        0 & -b T_0 & -\tau_0 \\
-        0 & -\tau_0 & a T_0
-    \end{bmatrix}
-    }_{\bm{B}_{\mathrm{full}}(\omega_0)}
-    \begin{bmatrix} \Delta\omega \\ \delta_t \\ \delta_f \end{bmatrix}
-    + \text{气动项}
-    }
-    \label{eq:effectiveness_matrix}
+\bm u_k=\bm B_{\mathrm{true}}^{-1}(\hat{\bm x}_{a,k-1})
+\bm M_{\mathrm{cmd},k}^{P},
+\label{eq:absolute_allocation}
 \end{equation}
+其中 $\hat{\bm x}_{a,k-1}$ 是上一拍摆角和模型观测转速构成的执行器工作点。
+式\eqref{eq:absolute_allocation}给出绝对指令，不是
+$\bm u_k=\bm u_{k-1}+\Delta\bm u_k$ 的增量律。分配器用三阶伴随矩阵求逆；
+若 $|\det\bm B|<10^{-8}$，则退化到式\eqref{eq:effectiveness_matrix}的解析逆。
 
-若忽略相对较小的$\tau_0$交叉项，则得到正文后续直接映射所用的主通道近似矩阵
-$\bm{B}_{\mathrm{main}}=\operatorname{diag}(-2\tau_0,-bT_0,aT_0)$。
+\subsection{低油门、工作点不一致与饱和}
+\label{sec:allocation_low_throttle}
 
-\textbf{适用范围说明}：$\mathbf{B}_{\mathrm{full}}$是在$\delta_f=\delta_t=0$处对非线性力矩映射（式\ref{eq:six_component}）做一阶Taylor展开得到的线性化Jacobian，适用于分析构型的通道解耦机理和控制分配的定性特征。在$\pm 25^\circ$满偏摆角及大差速工况下，该矩阵与真实局部Jacobian的偏差可达50\%以上量级（见第\ref{sec:INDI}节表\ref{tab:B_comparison}）。若将该矩阵用于增量非线性动态逆（INDI）等依赖精确效能矩阵的控制律，需以在线计算的$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$（式\ref{eq:B_true}）替代。
+式\eqref{eq:effectiveness_matrix}的全部元素均与 $\omega_0^2$ 同阶，故低油门时
+$\bm B^{-1}$ 按 $1/\omega_0^2$ 放大。推进模型系 $x'$ 通道在固件中对应悬停差速偏航，
+其力矩在进入分配器前按式\eqref{eq:yaw_gain_schedule}调度。电机一阶观测器用于缓解
+指令转速与实际响应的瞬态失配，但它不是转速测量。
 
-\subsection{主通道近似对角化的几何根源}
+当前实现还存在需要明确记录的工作点不对称：式\eqref{eq:B_true}第一列使用
+输入结构的 \texttt{w0} 字段中保存指令基准转速，而摆角两列中的 $T_f,T_t,Q_f,Q_t$
+使用经下限处理的观测状态转速。该事实不影响解析式本身，却限制了
+“在线矩阵完全代表实际工作点”的表述。
 
-推力力臂贡献在$\bm{B}_{\mathrm{main}}$中为对角结构，这是正交摆轴与纵向力臂共同作用的结果；
-完整矩阵$\bm{B}_{\mathrm{full}}$并非严格对角。主通道结构可由以下几何关系解释：
-
-\begin{itemize}
-    \item \textbf{前电机绕$z_b$轴摆动}：推力方向的任何变化均限制在$xy$平面内。
-          推力$y$分量$T_f \sin\delta_f$经力臂$a$产生偏航力矩$M_z = a T_f \sin\delta_f$。
-          由于摆轴为$z_b$，前电机推力不可能产生$z$向分量，因此不可能产生俯仰力矩（$M_y$）
-          ——但反扭矩投影仍产生一阶小角度耦合$-\tau_f\delta_f$；
-    \item \textbf{尾电机绕$y_b$轴摆动}：推力方向的任何变化均限制在$xz$平面内。
-          推力$z$分量$T_t\sin\delta_t$经力臂$b$产生俯仰力矩$M_y = -b T_t\sin\delta_t$。
-          由于摆轴为$y_b$，尾电机推力不可能产生$y$向分量，因此不可能产生偏航力矩（$M_z$）
-          ——但反扭矩投影仍产生一阶小角度耦合$-\tau_t\delta_t$；
-    \item \textbf{差速通道}：仅影响反扭矩$M_x$，在$M_y$和$M_z$中的投影为零
-          （反扭矩矢量的$y$和$z$分量分别来自前/尾电机的摆角投影，差速本身不改变摆角）。
-\end{itemize}
-
-这一设计使控制分配问题从通用的$\bm{u} = \bm{B}^+ \bm{M}_{\text{cmd}}$（其中
-$\bm{B}^+$为$3 \times 3n$的伪逆，$3n > 3$，需在线求解）
-可近似为简单的\textbf{三通道主通道映射}：
+最终指令满足
 \begin{equation}
-    \Delta\omega = -\frac{M_x^{\text{cmd}}}{2\tau_0}, \quad
-    \delta_t = -\frac{M_y^{\text{cmd}}}{b T_0}, \quad
-    \delta_f = \frac{M_z^{\text{cmd}}}{a T_0}
-    \label{eq:direct_mapping}
+|\delta_f|,|\delta_t|\leq\delta_{\max},\qquad
+|\Delta\omega|\leq0.7,
+\label{eq:allocation_limits}
 \end{equation}
+其中固件 $\delta_{\max}=15^\circ$，Web 模型 $\delta_{\max}=25^\circ$。
+若单侧转速达到 $\omega_{\max}$，分配器会钳位电机目标，
+从而破坏式\eqref{eq:diff_def}的总推力保持性质。当前分配是在独立限幅后输出，
+没有求解带权约束优化问题；饱和时的力矩误差需要通过遥测和后续抗饱和设计处理。
 
-式(\ref{eq:direct_mapping})是理论上的低复杂度控制分配候选，并非当前仿真代码中的在线矩阵求逆实现。
-其适用范围受低油门、执行器饱和和交叉项量级限制\cite{johansen2013control,oppenheimer2010control}。
+\subsection{可控性解释的边界}
 
-\subsection{耦合项量级评估与补偿策略}
-
-线性化后的交叉耦合项来源于反扭矩在非主控轴方向的投影。在小摆角下它们对摆角是一阶项：
-\begin{align}
-    \Delta M_y^{\text{耦合}} &= -\tau_f \delta_f
-    \approx -k_Q \omega_f^2 \cdot \delta_f
-    \label{eq:coupling_pitch} \\
-    \Delta M_z^{\text{耦合}} &= -\tau_t \delta_t
-    \approx -k_Q \omega_t^2 \cdot \delta_t
-    \label{eq:coupling_yaw}
-\end{align}
-
-\textbf{耦合-主控比}的量级评估。以俯仰通道为例，
-主控力矩量级为$b T_f \delta_t \approx b \cdot k_T \omega_0^2 \cdot \delta_t$，
-耦合力矩量级为$\tau_f \delta_f \approx k_Q \omega_0^2 \cdot \delta_f$。在俯仰和偏航
-同时大幅偏转的极限工况，耦合比约为：
+只要 $T_0,Q_0,a,b$ 非零，零摆角矩阵的行列式为
 \begin{equation}
-    \frac{\text{耦合}}{\text{主控}}
-    = \frac{k_Q \omega_0^2 \delta_f}{b \cdot k_T \omega_0^2 \delta_t}
-    = \frac{k_Q}{k_T b} \cdot \frac{\delta_f}{\delta_t}
-    = \frac{C_Q}{C_T} \cdot \frac{D}{b} \cdot \frac{\delta_f}{\delta_t}
-    \label{eq:coupling_ratio}
+\det\bm B_{\mathrm{full}}
+=2Q_0\left(abT_0^2+Q_0^2\right)>0.
+\label{eq:B_det}
 \end{equation}
-
-由量纲分析$k_Q / (k_T b) = (C_Q / C_T) \cdot (D / b)$。
-当前MODEL-DEFAULT参数给出$k_Q/(k_Tb)\approx 0.086$（$k_Q/k_T\approx0.027$、$b=0.315$\,m，2026-08-09 实机三轮调参锚定；早期 0.117 为旧参数残留）；该比值未经完整台架标定，
-只说明交叉项不能被当作严格为零。实际耦合还随两通道摆角比、转速差与饱和状态变化。
-
-\textbf{工程对策}：
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{显式前馈补偿}：在控制律中直接计算耦合项并前馈抵消，例如
-          \begin{equation*}
-              \Delta \delta_t^{\text{comp}}
-              = \frac{k_Q \omega_f^2}{b T_0}\,\delta_f .
-          \end{equation*}
-          该补偿仍需结合符号约定和执行器饱和进行闭环验证；
-    \item \textbf{SAS鲁棒性}：设计足够高的SAS反馈增益，使闭环系统对耦合扰动具有足够衰减。
-          耦合扰动在闭环下被抑制了$1/(1+GH)$倍，其中$GH$为回路增益；
-    \item \textbf{非线性精确映射}：当计算资源允许时，直接使用非线性映射（式\ref{eq:six_component}）
-          配合牛顿迭代求解$\delta_f, \delta_t, \Delta\omega$，精确消除耦合项的影响。
-          此方法在摆角$>15^\circ$的大机动中是必要的，因为$\sin\delta \approx \delta$
-          的近似精度开始退化（$15^\circ$时$\sin\delta/\delta \approx 0.989$，
-          误差约$1.1\%$；$25^\circ$时约$3.1\%$；$45^\circ$时已达$10\%$）。
-\end{enumerate}
-
-\subsection{低油门差速控制退化与增益调度}
-
-差速效能$\partial M_x / \partial \Delta\omega = -2 k_Q \omega_0^2 \propto T_0$——
-\textbf{差速控制力矩的大小与总推力成正比}（悬停构型语义下该通道为偏航主控）。这是差速反扭力矩机制的物理固有特性，
-无法通过控制律增益来补偿（因为即使增益无穷大，执行器输出已饱和）。
-
-\textbf{物理极限}：
-\begin{itemize}
-    \item 油门$100\%$：滚转效能最大，机动性最好；
-    \item 油门$50\%$：在当前代码的$\omega_0=\text{thr}\,\omega_{\max}$映射下，滚转效能降至$25\%$；
-    \item 油门$\to 0$：滚转控制失效——在此极限下，从推进系统看飞行器退化为无控刚体。
-\end{itemize}
-
-上述平方关系是当前仿真的油门--转速指令映射假设，并非普适的电机定律。
-这一特性对飞行安全有直接意义：进近着陆段通常为低油门状态，而此时恰恰是滚转控制
-最需要的阶段（侧风修正、对准跑道中心线）。缓解措施包括：
-保持进近油门不低于某个安全阈值（即使这意味着需要更陡的下滑角），
-或引入气动副翼作为低油门的差速控制补充（但这增加了构型复杂度）。
-
-\textbf{增益调度与瞬态失配（2026-08-09 实机三层定位）}：有效回路增益恒为
-$k_p\cdot\left(w_{0,\text{actual}}/w_{0,\text{used}}\right)^2$——分配器与力矩
-均按转速平方缩放，油门变化即增益变化。三层坑与修复：
-① 低油门 $\Delta\omega$ 指令按 $1/w_0^2$ 归一化时爆炸（调度改为 $(w_0/w_h)^2$）；
-② 物理力矩仍 $\propto w_0^2$，稳态有效增益随油门放大（调度封顶 1.0）；
-③ \textbf{瞬态失配才是抖油门震荡根因}——分配器用指令油门而力矩用实际转速（电机 $\tau_m$ 滞后），
-油门释放瞬间 $w_{0,\text{actual}}/w_{0,\text{cmd}}\approx1.33$，有效增益瞬态越过震荡点约 160\,ms。
-修复范式：$\tau_m$ 一阶观测器 $w_{\text{est}} \mathrel{+}= (w_{\text{cmd}}-w_{\text{est}})\cdot\Delta t/\tau_m$，
-B 矩阵工作点、调度与增量状态全部改用观测转速（$w_{0,\text{eff}}$，见第\ref{sec:vtol}节实机锚点）。
-\subsection{与通用过驱动推力矢量平台的对比}
-
-通用多推进器矢量推力平台的设计空间可以是过驱动（over-actuated）或全驱动（fully-actuated）。
-对于$n$个推进器、每个推进器具有2自由度万向节的情况，执行空间维数为$3n$
-（$n$个推进器$\times$ 3维力矢量），映射到6维力/力矩空间。
-当$3n > 6$（即$n \ge 3$）时形成过驱动系统\cite{ding2018modeling}。
-
-过驱动系统的控制分配是一个经典的欠定问题：
-给定期望力矩$\bm{M}_{\text{cmd}} \in \mathbb{R}^3$（或期望六维力/力矩$\in \mathbb{R}^6$），
-求执行器输入$\bm{u} \in \mathbb{R}^{3n}$，使$\bm{B}\bm{u} = \bm{M}_{\text{cmd}}$。
-由于$3n > 3$（或$>6$），方程有无穷多解。需要在解空间中选取“最优”解，
-通常通过求解以下优化问题之一\cite{johansen2013control}：
-\begin{itemize}
-    \item \textbf{最小二范数（伪逆）}：$\min_{\bm{u}} \|\bm{u}\|^2$ s.t. $\bm{B}\bm{u} = \bm{M}_{\text{cmd}}$。
-          解为$\bm{u} = \bm{B}^T(\bm{B}\bm{B}^T)^{-1}\bm{M}_{\text{cmd}}$。简单但未考虑执行器限幅；
-    \item \textbf{加权伪逆}：$\min_{\bm{u}} \bm{u}^T\bm{W}\bm{u}$ s.t. $\bm{B}\bm{u} = \bm{M}_{\text{cmd}}$。
-          通过权重矩阵$\bm{W}$引入不同执行器优先级（如优先使用大推力电机、保护接近饱和的执行器）；
-    \item \textbf{二次规划}：$\min_{\bm{u}} \|\bm{W}_u(\bm{u} - \bm{u}_p)\|^2$ s.t.
-          $\bm{B}\bm{u} = \bm{M}_{\text{cmd}}$且$\bm{u}_{\min} \le \bm{u} \le \bm{u}_{\max}$。
-          在满足等式和不等式约束的前提下最小化与标称输入的偏差。
-\end{itemize}
-
-\sloppy
-在线求解这些优化问题需要迭代算法（如active-set法或内点法），
-在计算资源受限的嵌入式飞控平台上是实质性挑战。本构型通过将执行空间维度
-从$3n$降至$3$（恰等于控制目标维度），使$\bm{B}$方阵且对角——
-\textbf{直接用几何设计换取算法的零计算开销}。这是构型设计的核心价值主张。
-\fussy
+这说明名义点的三个模型力矩可由三个输入局部独立控制。它不证明存在足够的控制裕度，
+也不覆盖零油门、执行器饱和、单发失效、气动舵面加入或大角度转捩。学术上更准确的结论是
+“名义工作点局部满秩”，而不是“全包线完全解耦”。

@@ -1,247 +1,55 @@
-\section{模型预测控制：理论与算法体系}
+% ===========================================================================
+%  附录 D：MPC
+% ===========================================================================
+
+\section{模型预测控制的约束接口}
 \label{sec:mpc}
 
-\noindent\textbf{本章要点：}在悬停构型（机头朝天，$x_b$=推力轴=竖直）下，给出模型预测控制（MPC\cite{rawlings2020model}）从理论形式化、线性化设计、非线性扩展、在线辨识到嵌入式求解的完整算法体系，并给出与 SAS/INDI/级联/LQR 的仿真对比实验。全部数值基于 \texttt{scripts/mpc\_proto.py}、\texttt{mpc\_adv.py}、\texttt{ident\_probe.py} 可复现。
+模型预测控制（MPC）能够在有限预测时域内显式处理摆角、差速、转速和状态约束，
+适合研究本构型的饱和管理和过渡轨迹；其效果依赖预测模型、状态估计和实时求解器
+\cite{mayne2000constrained,rawlings2020model,kang2009control}。
 
-\subsection{MPC 控制问题形式化}
-\label{sec:mpc_problem}
+\subsection{离散预测模型}
 
-姿态控制对象为悬停点附近的六自由度转动动力学：
-
+以状态 $\bm x=[\bm p_N^T,\bm v_P^T,\bm q^T,\bm\omega^T,
+\omega_f,\omega_t]^T$ 和输入
+$\bm u=[\omega_0,\Delta\omega,\delta_t,\delta_f]^T$ 为例，
+离散模型应由\cref{eq:newton_body,eq:euler_body,eq:quaternion_kinematics,eq:motor_lag}
+共同构成：
 \begin{equation}
-    \dot{q} = \tfrac{1}{2}\, q \otimes \begin{bmatrix} 0 \\ \boldsymbol{\omega} \end{bmatrix},
-    \qquad
-    \mathbf{I}\,\dot{\boldsymbol{\omega}}
-        = \boldsymbol{M}(\mathbf{u}, w_f, w_t) - \boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega}) - \boldsymbol{\omega}\times\mathbf{h}_r,
-    \label{eq:mpc_dynamics}
+\bm x_{k+1}=\bm f_d(\bm x_k,\bm u_k;\bm p).
+\label{eq:mpc_dynamics}
 \end{equation}
+式\eqref{eq:mpc_dynamics}必须保留
+$\bm\omega\times(\bm I\bm\omega)$、$\bm\omega\times\bm h_r$、
+电机一阶动态和四元数单位范数处理。只用 $\bm M=\bm I\bm\nu$ 再次除以惯量，
+或忽略 $\tau_m$ 计算控制带宽，都会产生量纲或时间尺度错误。
 
-其中 $\mathbf{u} = [\Delta\omega,\ \delta_t,\ \delta_f]^T$ 为执行器指令（差速、尾摆、前摆），
-$\mathbf{h}_r = J_p(w_f - w_t)\,\hat{x}_b$ 为前后转子角动量差（前 $+x$、尾 $-x$），
-$\boldsymbol{M}$ 为推进力矩（式\eqref{eq:moment_full_nonlinear}，$w_f/w_t$ 受一阶滞后 $\tau_m$ 驱动）。
+\subsection{有限时域优化}
 
-MPC 在每个控制周期求解有限时域最优控制问题：
-
+典型目标可写为
 \begin{equation}
-    \min_{\mathbf{u}_0,\dots,\mathbf{u}_{N-1}}\;
-    \sum_{k=0}^{N-1}\Big[\mathbf{x}_k^T\mathbf{Q}\mathbf{x}_k + \mathbf{u}_k^T\mathbf{R}\mathbf{u}_k\Big]
-    + \mathbf{x}_N^T\mathbf{Q}_N\mathbf{x}_N
-    \ \text{s.t.}\
-    \mathbf{x}_{k+1}=f(\mathbf{x}_k,\mathbf{u}_k),\quad
-    |\mathbf{u}_k|\le\mathbf{u}_{\max},
-    \label{eq:mpc_ocp}
+\min_{\bm u_{0:N-1}}
+\sum_{k=0}^{N-1}
+\left(\|\bm e_{R,k}\|_{\bm Q_R}^2
++\|\bm\omega_k-\bm\omega_{d,k}\|_{\bm Q_\omega}^2
++\|\Delta\bm u_k\|_{\bm R}^2\right)
++\|\bm x_N-\bm x_{d,N}\|_{\bm P}^2,
+\label{eq:mpc_ocp}
 \end{equation}
+约束至少包括固件 $\pm15^\circ$ 摆角、$\pm0.7$ 差速、
+$0\leq\omega_i\leq\omega_{\max}$、输入变化率、最低推力和四元数范数。
+若研究转捩，还需加入高度、空速、迎角和推力裕度约束。
 
-其中 $\mathbf{x}=[\boldsymbol{\varepsilon};\,\boldsymbol{\omega}]$（误差四元数矢量分量与角速度），
-$\mathbf{Q}=\operatorname{diag}(4,4,4,1,1,1)$、$\mathbf{R}=0.1\,\mathbf{I}_3$ 为权矩阵，
-$\mathbf{u}_{\max}=[\Delta\omega_{\max}, \delta_{\max}, \delta_{\max}]$ 为执行器限幅。
-求解后仅施加首步 $\mathbf{u}_0$，下周期滚动重解（receding horizon）。
+线性时变 MPC 可在每拍围绕当前工作点离散化；非线性 MPC 则直接使用
+式\eqref{eq:mpc_dynamics}。\texttt{acados} 提供面向嵌入式最优控制的代码生成框架
+\cite{verschueren2022acados}，\texttt{TinyMPC} 展示了资源受限微控制器上的凸 MPC 实现
+\cite{cassel2024tinympc}。这些工具说明实时求解具有可行路径，但不能替代本项目的
+最坏执行时间、数值失败回退和闭环稳定性验证。
 
-\textbf{两个工程化关键}（仿真中反复验证，见第\ref{sec:mpc_sim}节）：
-\begin{enumerate}
-    \item \textbf{预测时域必须覆盖主导时间常数}。本构型电机一阶滞后 $\tau_m=0.28$\,s，
-          若预测时域 $N\Delta t < \tau_m$，MPC 窗口内控制效果被滞后完全吞噬，
-          最优解趋近零（控制器"认为控制无效"），闭环发散。需 $N\Delta t > 2\tau_m$；
-    \item \textbf{滞后必须增广进预测状态}（$\dot{\boldsymbol{a}} = (\mathbf{B}_c\mathbf{u}-\boldsymbol{a})/\tau_m$，
-          $\boldsymbol{a}$ 为实际角加速度），而非简单地缩小输入增益——缩小增益同时缩小
-          QP 线性项，最优解反而变小。
-\end{enumerate}
+\subsection{当前结论边界}
 
-\subsection{线性 MPC（LMPC）：展开式 QP 与一阶求解}
-\label{sec:lmpc}
-
-悬停点线性化（$\boldsymbol{\omega}=0$、$\mathbf{u}=0$）给出离散线性模型
-$\mathbf{x}_{k+1} = \mathbf{A}\mathbf{x}_k + \mathbf{B}\mathbf{u}_k$，
-其中 $\mathbf{B} = \operatorname{diag}(\mathbf{I}^{-1})\mathbf{B}_{\mathrm{true}}$（含执行器滞后增广）。
-问题\eqref{eq:mpc_ocp}化为展开式（condensed）二次规划\eqref{eq:mpc_qp}：
-
-\begin{equation}
-    \min_{\mathbf{z}}\ \tfrac{1}{2}\,\mathbf{z}^T\mathbf{H}\mathbf{z} + \mathbf{f}^T\mathbf{z}
-    \ \text{s.t.}\ \mathbf{z}_{\min}\le\mathbf{z}\le\mathbf{z}_{\max},
-    \label{eq:mpc_qp}
-\end{equation}
-
-其中 $\mathbf{z}=[\mathbf{u}_0;\dots;\mathbf{u}_{N-1}]\in\mathbb{R}^{3N}$，
-$\mathbf{H}$ 由预测矩阵 $\mathbf{A}^k\mathbf{B}$ 的 Gram 型求和构造，
-$\mathbf{f}$ 为初始状态 $\mathbf{x}_0$ 的线性函数。框约束 QP 采用\textbf{梯度投影法}求解：
-
-\begin{equation}
-    \mathbf{z}^{k+1} = \operatorname{clip}\!\big(\mathbf{z}^{k} - \alpha(\mathbf{H}\mathbf{z}^k+\mathbf{f}),\ \mathbf{z}_{\min},\mathbf{z}_{\max}\big),
-    \qquad \alpha = 1/\lambda_{\max}(\mathbf{H}),
-    \label{eq:pgd}
-\end{equation}
-
-配合滚动时域的 warm start（上周期解平移作初值）。该方法为嵌入式一阶方法
-（TinyMPC\cite{cassel2024tinympc} 同类），$N=30$ 时 $H\in\mathbb{R}^{90\times90}$，
-Python 原型单步 $<2$\,ms，嵌入式 C 实现预计 $<0.2$\,ms @ 200\,Hz。
-
-\textbf{快速梯度法（FGM）}：投影梯度法收敛率为 $O(1/k)$（次线性），
-可用 Nesterov 动量加速至 $O(1/k^2)$（Beck--Teboulle 形式）：
-
-\begin{align}
-    \mathbf{z}_{k+1} &= \operatorname{clip}\!\big(\mathbf{z}_k - \alpha\nabla f(\mathbf{z}_k),
-        \ \mathbf{z}_{\min},\mathbf{z}_{\max}\big),
-    \label{eq:fgm_step}\\
-    t_{k+1} &= \tfrac{1}{2}\Big(1+\sqrt{1+4t_k^2}\Big),\qquad
-    \mathbf{z}_{k+1} \leftarrow \mathbf{z}_{k+1}
-        + \frac{t_k-1}{t_{k+1}}\big(\mathbf{z}_{k+1}-\mathbf{z}_k\big),
-    \label{eq:fgm}
-\end{align}
-
-即"梯度步 + 外推动量"。该加速对框约束 QP 保持收敛性\cite{mayne2000constrained}。
-实测收敛轨迹见图\ref{fig:mpc_fgm}：FGM-25 的目标函数余量
-（$6.7\times10^{-3}$）低于同迭代 PGD-25（$8.4\times10^{-3}$），且仅需
-PGD-400 的 $1/16$ 计算量。嵌入式 C 基准（STM32H743 同构，$g++$\,-O2，
-6DOF 全动力学闭环：电机滞后+平动+陀螺）见表\ref{tab:mpc_embedded}：
-FGM-10 单步 $0.019$\,ms——$200$\,Hz 控制周期仅占 $0.38\%$ CPU，内存 46.6\,KB
-（float）。该余量为执行器/滤波器/通信留出充足预算。
-
-\subsection{非线性 MPC（NMPC）：完整预测模型}
-\label{sec:nmpc}
-
-NMPC 直接用非线性预测模型\eqref{eq:mpc_dynamics}（四元数运动学保范积分、
-陀螺耦合 $\boldsymbol{\omega}\times\mathbf{I}\boldsymbol{\omega}+\boldsymbol{\omega}\times\mathbf{h}_r$、
-推进一阶滞后与非线性 $\boldsymbol{M}$），代价函数同\eqref{eq:mpc_ocp}，
-采用 SLSQP 滚动求解（原型；嵌入式需 RTI 实时迭代或代码生成）。
-四元数积分须使用小旋转四元数 $\mathbf{q}\otimes[1;\ \boldsymbol{\omega}\Delta t/2]$——
-若误用纯虚四元数 $[0;\boldsymbol{\omega}\Delta t/2]$，归一化后姿态翻转，预测完全失效
-（该数值陷阱在 \texttt{test\_host} 固件仿真与 NMPC 原型中均复现并修复）。
-
-NMPC 的预测模型越完整，对参数失配的鲁棒性越强（见\ref{sec:mpc_sim}节实验）：
-非线性预测使模型误差的传播被预测--反馈环路吸收，而线性化模型的误差直接进入增益。
-
-\subsection{自适应 MPC：在线辨识 B\_eff}
-\label{sec:mpc_adapt}
-
-模型参数（$k_T,k_Q,\mathbf{I}$）未标定是实机化的主要障碍。第\ref{sec:rls}节的
-遗忘因子 RLS 面向执行器偏移/惯量比的慢速学习；本章面向 MPC 预测模型的
-\textbf{悬停点激励辨识}——两者互补：RLS 提供慢趋势，激励辨识提供
-精确 $\mathbf{B}_{\mathrm{eff}}$。
-本章验证以下辨识理论：
-
-\textbf{可辨识性}：转动方程 $\dot{\boldsymbol{\omega}} = \mathbf{I}^{-1}[\boldsymbol{M}-\boldsymbol{g}]$
-中 $\boldsymbol{M}\propto k_T w^2, k_Q w^2$——物理参数只能以组合
-$\mathbf{B}_{\mathrm{eff}}=\mathbf{I}^{-1}\mathbf{B}_{\mathrm{true}}$ 出现，
-单独辨识 $k_T/k_Q/\mathbf{I}$ 不可行（非线性最小二乘在流形上漂移，误差 40--300\%）。
-$\mathbf{B}_{\mathrm{eff}}$（9 参数）才是可辨识对象。
-
-\textbf{单轴脉冲定理}：陀螺项 $\boldsymbol{g}=\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})+
-\boldsymbol{\omega}\times\mathbf{h}_r$ 为三轴交叉乘积——单轴转动时恒为零。
-因此对每个执行器通道独立施加脉冲激励（差速长脉冲 1.5\,s 使转速稳定、摆角短脉冲 0.4\,s 限制角速度积累），
-采样窗口内 $\dot{\boldsymbol{\omega}}=\mathbf{I}^{-1}\boldsymbol{M}$ 干净可辨。
-辨识实验须在\textbf{无气动/慢速条件}下进行（悬停下落产生的动压会以气动力矩形式污染测量，
-本构型悬停时气动贡献本就微小，实机辨识取慢速/无风段即可）。
-
-\textbf{批处理最小二乘}：6 个稳态脉冲点（3 通道 $\times\pm$）合并
-$\hat{\mathbf{B}}_{\mathrm{eff}} = \arg\min \|\mathbf{Y}-\mathbf{U}\mathbf{B}^T\|_F$，
-其中 $\mathbf{U}$ 用\textbf{滞后实现值}（实际转速反推 $\Delta\omega_{\mathrm{eff}}=(w_f/w_0)^2-1$）
-而非指令值（指令与响应错位 $\tau_m$ 导致回归严重偏差）。
-辨识段后的 $\hat{\mathbf{B}}_{\mathrm{eff}}$ 直接更新 LMPC 展开系数 / NMPC 校正项
-（$\dot{\boldsymbol{\omega}}_{\mathrm{pred}} \leftarrow \boldsymbol{f}_{\mathrm{NL}}(\theta)
-+ (\hat{\mathbf{B}}-\bar{\mathbf{B}})\mathbf{u}$）。
-
-\subsection{仿真实验与可视化}
-\label{sec:mpc_sim}
-
-全部实验在悬停构型（机头朝天）下进行，失配仿真（真实 $k_T\times0.8$、$I_y\times1.3$、$I_x\times1.2$
-用于第\ref{sec:mpc_adapt}节自适应验证；其余为名义参数）。三场景收敛对比见图\ref{fig:mpc_scenarios}，
-过渡跟踪见图\ref{fig:mpc_transition}，预测时域效应见图\ref{fig:mpc_horizon}，
-辨识结果见图\ref{fig:mpc_ident}，自适应闭环见图\ref{fig:mpc_adapt}：
-\begin{figure}[H]
-\centering
-\includegraphics[width=\textwidth]{fig-mpc/mpc_scenarios.pdf}
-\caption{三场景收敛对比（SAS / LMPC / NMPC）：5° 扰动、60° 扰动（约束活跃）、航向指令 20°。}
-\label{fig:mpc_scenarios}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.78\textwidth]{fig-mpc/mpc_transition.pdf}
-\caption{VTOL 过渡（水平$\to$悬停 slerp 3\,s）跟踪误差。NMPC 在约束与过渡场景均最优。}
-\label{fig:mpc_transition}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.78\textwidth]{fig-mpc/mpc_horizon.pdf}
-\caption{预测时域效应：$N\Delta t=0.1$\,s $<\tau_m$ 时 MPC 输出趋零（不收敛）；
-$0.6$\,s $>2\tau_m$ 时收敛。}
-\label{fig:mpc_horizon}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.78\textwidth]{fig-mpc/mpc_fgm.pdf}
-\caption{FGM vs PGD 收敛轨迹（$N=30$ 展开式 QP，目标函数余量）。
-FGM-25 余量 $6.7\times10^{-3}$ 低于 PGD-25 的 $8.4\times10^{-3}$；
-FGM-10 单步 $0.019$\,ms（STM32H743 同构）。}
-\label{fig:mpc_fgm}
-\end{figure}
-
-\begin{table}[H]
-\centering
-\caption{嵌入式 LMPC 求解器基准（STM32H743 @480MHz 同构 g++ -O2，
-6DOF 全动力学闭环：电机滞后+平动+陀螺；5° 扰动 3\,s）}
-\label{tab:mpc_embedded}
-\small
-\begin{tabular}{l c c c c}
-\toprule
-\textbf{求解器} & \textbf{迭代} & \textbf{单步耗时} & \textbf{@200Hz 占用} & \textbf{eps 末值} \\
-\midrule
-PGD & 400 & 1.07\,ms & 21.4\% & 0.0088 \\
-PGD & 100 & 0.26\,ms & 5.3\% & 0.0093 \\
-PGD & 25 & 0.065\,ms & 1.3\% & 0.0101 \\
-\textbf{FGM} & \textbf{25} & \textbf{0.045\,ms} & \textbf{0.9\%} & \textbf{0.0097} \\
-\textbf{FGM} & \textbf{10} & \textbf{0.019\,ms} & \textbf{0.4\%} & \textbf{0.0108} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.82\textwidth]{fig-mpc/mpc_ident.pdf}
-\caption{B\_eff 辨识结果与真实值对比（9 参数误差 $<3\%$）。}
-\label{fig:mpc_ident}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.78\textwidth]{fig-mpc/mpc_adapt_closedloop.pdf}
-\caption{模型失配下 60° 扰动闭环：自适应 LMPC（辨识 B\_eff）优于名义模型。}
-\label{fig:mpc_adapt}
-\end{figure}
-
-\input{sim-data/mpc_compare.tex}
-
-\subsection{算法体系对比与讨论}
-\label{sec:mpc_discussion}
-
-六种算法的综合对比见表\ref{tab:mpc_algo_compare}：
-
-\begin{table}[H]
-\centering
-\caption{控制算法体系对比（悬停构型，VTOL 参数集 v0.2.0）}
-\label{tab:mpc_algo_compare}
-\footnotesize
-\setlength{\tabcolsep}{3.5pt}
-\begin{tabular}{l c c c c}
-\toprule
-\textbf{算法} & \textbf{模型依赖} & \textbf{约束处理} & \textbf{计算量} & \textbf{失配鲁棒性} \\
-\midrule
-SAS（PD+阻尼） & 增益映射 & 后验限幅 & $\sim\mu$s & 中 \\
-INDI（在线 B） & 在线 Jacobian & 增量限幅 & 10--50$\mu$s & 需惯量修正 \\
-级联 P+在线 B & 在线 Jacobian & 增量限幅 & $\sim$10$\mu$s & 好（耦合最优） \\
-LQR & 悬停点线性化 & 无 & $\sim\mu$s & 好（状态反馈） \\
-LMPC & 线性+滞后增广 & \textbf{显式预测} & \textbf{0.02--0.05 ms（FGM）} & \textbf{好（反馈鲁棒）} \\
-NMPC & \textbf{非线性全模型} & \textbf{显式预测} & 10--30 ms（原型） & \textbf{最优（实验）} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\textbf{结论与工程路径}：NMPC 在约束活跃与过渡场景显著优于传统方法（60° 扰动
-末值误差：名义 NMPC $0.0052$、自适应 NMPC $0.0046$，均优于 SAS 的 $0.0303$，
-约一个数量级）；其代价是求解实时性与模型依赖。
-自适应辨识（开环脉冲 + 批处理 LS）可在 $<15$\,s 内将 $\mathbf{B}_{\mathrm{eff}}$ 九参数
-辨识至 $<3\%$ 误差，作为 NMPC/LMPC 的模型更新源。嵌入式落地建议：
-TinyMPC 类一阶求解器（MIT 许可）用于 LMPC @ 200\,Hz；NMPC 采用 RTI 或代码生成
-（acados\cite{verschueren2022acados}），先从仿真侧过渡轨迹研究开始，台架标定后逐步上实机。
+当前工程没有与固件逐式对齐、带运行清单和最坏时延测试的 MPC 实现，
+因此本文不报告 MPC 性能数字，也不称其为已完成控制器。其最现实的近期用途是作为离线
+约束轨迹和分配基准，与级联控制器在相同模型和限制下比较；只有在求解失败策略、
+HIL 时序和实机安全门控完成后，才适合进入在线飞行验证。

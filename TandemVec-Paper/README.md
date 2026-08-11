@@ -1,109 +1,62 @@
-# 纵列双发矢量推力飞行器：构型原理、动力学建模与控制特性分析
+# 纵列双发矢量推力飞行器论文工程
 
-> TandemVec-Paper ｜ 纵列双发矢量推力飞行器 LaTeX 论文工程（独立顶层，2026-08-11 由 docs/03-理论推导/THY-004 迁出）
+本文档工程用于生成《纵列双发矢量推力飞行器：构型、动力学建模与控制验证》。正文以构型、非线性建模、局部稳定性、固件控制算法和分级验证为主线；INDI、LQR、ADRC 与 MPC 作为方法附录，不作为已部署控制器或实机性能结论。
 
-## 编译
+## 构建
 
-```bash
-# Windows（双击运行或命令行）
+在 Windows PowerShell 或命令提示符中运行：
+
+```bat
+cd TandemVec-Paper
 build.bat
-
-# 或手动
-xelatex main.tex    # ×3（交叉引用需要三次）
 ```
 
-## 目录结构
+`build.bat` 执行 XeLaTeX、BibTeX8 和三次后续 XeLaTeX，共五遍。脚本会在最终轮检查未定义引用、未定义交叉引用和缺失字形；输出文件为 `main.pdf`。清理辅助文件使用：
 
-```
-TandemVec-Paper/
-├── main.tex                 # ★ 主入口文件（\input 组装所有部件）
-├── preamble.tex             # 导言区（文档类、宏包、定理环境、TikZ 库）
-├── build.bat                # Windows 一键编译脚本
-├── README.md                # 本文件
-│
-├── ch/                      # 章节内容（独立 .tex，可单独修改）
-│   ├── 01-intro.tex         # 第1章：引言（背景、构型分类、本文结构）
-│   ├── 02-propulsion.tex    # 第2章：推进系统建模（动量理论、叶素理论、反扭矩、电机动态、陀螺效应）
-│   ├── 03-mapping.tex       # 第3章：推力矢量映射（坐标系、摆座运动学、六维映射）
-│   ├── 04-dynamics.tex      # 第4章：六自由度刚体动力学（牛-欧方程、四元数、积分策略）
-│   ├── 05-allocation.tex    # 第5章：控制分配（效能矩阵、解耦机理、耦合评估）
-│   ├── 06-stability.tex     # 第6章：稳定性模态分析（线性化、纵向/横航向模态、SAS影响）
-│   ├── 07-control.tex       # 第7章：增稳控制律设计（SAS律、角速度闭环、饱和管理）
-│   ├── 08-discussion.tex    # 第8章：讨论（优势/局限/对比/验证路径/扩展方向）
-│   └── 09-conclusion.tex    # 第9章：结论
-│
-├── fig/                     # 图表源码与生成资产
-│   ├── 01-configuration.tex     # 图1：LaTeX 包装与图注
-│   ├── 01-configuration.html    # 图1：HTML/SVG 信息图源码
-│   ├── 01-configuration.png     # 图1：1600×1000、约 300 dpi 构建产物
-│   ├── 01-ai-selected-j.png     # 图1：经独立审查选中的 AI 概念底图（非尺度）
-│   ├── 01-web-render.png        # 图1：Web 三维模型无界面渲染层
-│   ├── 02-actuator-disk.tex     # 图2：桨盘动量理论控制体模型
-│   ├── 03-thrust-mapping.tex    # 图3：推力矢量映射几何（双视图）
-│   ├── 04-stability-effects.tex # 图4：SAS 增益定性因果图
-│   ├── 05-control-arch.tex      # 图5：控制架构级联框图
-│   ├── 06-config-compare.tex    # 图6：构型机制来源与定位图
-│   └── 07-web-validation.tex    # 图7：Web core 非线性回归响应
-│
-└── ref.bib.tex              # 参考文献（thebibliography 环境，19 篇）
+```bat
+build.bat clean
 ```
 
-## 迭代指南
+## 论文结构
 
-| 要改什么 | 改哪个文件 |
-|----------|-----------|
-| 修改某章内容 | `ch/XX-name.tex` |
-| 修改图1构型信息图 | `fig/01-configuration.html`，重新截图生成同名 PNG；AI 候选与提示词见 `assets/ai-generated/aircraft-configuration/2026-07-23/` |
-| 修改其他图的绘制 | `fig/XX-name.tex`（TikZ/PGF 源码） |
-| 添加新章节 | `ch/` 下新建 `.tex`，在 `main.tex` 中 `\input` |
-| 添加新图表 | `fig/` 下新建 `.tex`，在对应章节中 `\input{../fig/XX.tex}` |
-| 添加新宏包 | `preamble.tex` |
-| 添加新参考文献 | `ref.bib.tex` |
-| 修改标题/作者 | `main.tex` |
+正文按下列顺序由 `main.tex` 组装：
 
-## TikZ 图表单独预览
+1. 引言与构型约定
+2. 推进系统建模
+3. 六维推力矢量映射
+4. 六自由度刚体动力学
+5. 控制效能与分配
+6. 局部稳定性分析
+7. 基线增稳控制
+8. 误差四元数控制
+9. 垂直姿态与模式边界
+10. 固件级联姿态--角速度控制
+11. 数值验证、代码回归与证据分级
+12. 讨论
+13. 结论
 
-每个 `fig/*.tex` 文件可在独立文档中编译预览：
+正文之后依次放置 INDI、LQR、ADRC/在线辨识和 MPC 方法附录，参考文献固定在全文最后。
 
-```latex
-\documentclass{standalone}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,shapes,positioning,calc,patterns,angles,quotes,3d,backgrounds,fit}
-\usepackage{amsmath}
-\begin{document}
-\input{fig/01-configuration.tex}
-\end{document}
-```
+## 关键文件
 
-## 技术栈
+- `main.tex`：题名、中英文摘要、章节顺序、附录和参考文献入口。
+- `preamble.tex`：文档类、数学/图表宏包、GB/T 7714 数字顺序制和 PDF 元数据。
+- `ch/*.tex`：各章与方法附录。
+- `fig/*.tex`：TikZ/PGF 图形源码。
+- `ref.bib`：BibTeX 文献数据库。
+- `build.bat`：五遍完整构建与错误检查。
 
-- **编译器**：XeLaTeX（UTF-8 + 中文 ctex）
-- **图表**：TikZ/PGF（无外部图片依赖，纯矢量）
-- **数学**：amsmath + mathtools + bm
-- **超链接**：hyperref + cleveref
-- **参考文献**：thebibliography 手动环境
+## 一致性约束
 
-## 勘误记录
+- 推进模型、动力学和控制公式需与 `simulations/vector-thrust-lab/src/core/` 及固件实现交叉核对。
+- 固件悬停操纵语义统一为：上摆控制滚转、下摆控制俯仰、差速控制偏航。
+- `models/aircraft-model.json` 是 Web 仿真参数源；其中 `MODEL-DEFAULT` 参数尚未完成台架标定。
+- Web 仿真摆角限幅为 `±25°`，当前飞控固件限幅为 `±15°`，两者不得混写。
+- 参考文献通过 `\cite{...}` 与 `ref.bib` 管理，不在章节内部手写参考文献列表。
+- 参考文献必须位于正文和全部附录之后。
 
-### 2026-07-20 — 推力矢量映射符号修正（与仿真代码交叉验证）
+## 图稿说明
 
-以 `simulations/vector-thrust-lab/src/core/propulsion.mjs` 为参考，修正以下错误：
+图 1 使用 `fig/01-web-orthogonal-deflection.png` 的程序化几何快照；该图仅用于说明正交摆动平面，不代表尺度、配平或标定状态。模型系几何力矩与固件操纵通道之间的轴置换，以正文的坐标变换和固件映射式为准。
 
-| 位置 | 原内容 | 修正 | 依据 |
-|------|--------|------|------|
-| §3 尾电机受力方向 | `[-cosδ_t, 0, sinδ_t]^T`（排气方向） | `[+cosδ_t, 0, -sinδ_t]^T`（牛顿第三定律：对机体作用力与排气反向） | `dyn.Fz = -Tt * st` |
-| §3 尾电机角动量 | `[+cosδ_t, 0, -sinδ_t]^T` | `[-cosδ_t, 0, +sinδ_t]^T`（反转转子，h_t 沿机体受力反方向） | `hv.x = -Jp * wt * ct` |
-| §3 F_x 公式 | `T_f cosδ_f - T_t cosδ_t` | `T_f cosδ_f + T_t cosδ_t` | `dyn.Fx = Tf*cf + Tt*ct` |
-| §3 F_z 公式 | `T_t sinδ_t` | `-T_t sinδ_t`（δ_t>0 → 受力向上 → F_z<0） | `dyn.Fz = -Tt*st` |
-| §2 陀螺轴线 | q 致前转子陀螺力矩沿 `+y_b` | `+z_b`（pitch→yaw coupling，非 pitch axis） | `M_gyro = -Ω×h` 推导 |
-| §3,§5 耦合比 | `(D/b)·(δ_f/δ_t)`，估值 20%–60% | 增加 `C_Q/C_T` 因子，修正估值 3%–15% | `k_Q/k_T = (C_Q/C_T)·D` |
-| §8 引用 | `ducard2009modeling`/`kim2004nonlinear`（年份不匹配） | `ducard2008modeling`/`kim2003nonlinear` | 原文发表年 |
-| preamble | `subcaption`, `longtable`, `tabularx`, `listings` 等未引用包 | 移除 | 全文 `\cite` 扫描 |
-
-完整推导交叉验证见 `propulsion.mjs:28–34`、`dynamics.mjs:48–52`、`control.mjs`。
-
-## 旧版
-
-历史单体文件 `THY-004-纵列双发矢量推力飞行器构型原理与技术分析.tex`（旧版，已模块化拆分）（及同名 PDF）
-已于 2026-07-22 删除，历史版本可从 Git 提交记录（`593fbd0`）中恢复。
-后续迭代一律以本目录的分拆版本为准。
+修改任一章节、公式、图稿或参考文献后，必须重新运行 `build.bat`，并检查 `main.log` 中不存在 `Overfull`、`Missing character`、未定义引用或未定义交叉引用。

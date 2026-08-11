@@ -1,783 +1,178 @@
 % ===========================================================================
-%  第15章：级联姿态-角速度控制架构
+%  固件实现对应的级联姿态-角速度控制
 % ===========================================================================
 
-\section{级联姿态-角速度控制架构：解耦设计与交叉项补偿}
+\section{固件实现对应的级联姿态--角速度控制}
 \label{sec:cascade_chapter}
 
-前文分别发展了三种姿态控制架构：第\ref{sec:control}节的级联SAS（对角分配）、
-第\ref{sec:INDI}节的INDI（在线效能矩阵+角加速度反馈）、
-第\ref{sec:lqr}节的LQR（工作点最优全状态反馈）。
-第\ref{sec:coupling_rejection}节与第\ref{sec:lqr_coupling_limit}节的耦合抑制对比表明，
-三者在处理本构型固有的反扭矩投影交叉耦合时各有局限：
-SAS的对角分配结构性放弃交叉项，INDI受角加速度估计噪声与增量饱和制约，
-LQR的冻结效能矩阵随工作点漂移而退化。
-
-本章提出并系统阐述\textbf{级联姿态-角速度控制架构}——这也是实机飞控（2026-08 状态）
-最终采用的架构。与前三者的根本区别在于\textbf{时间尺度分离}：将控制问题分解为
-带宽分离的两个回路，姿态环（慢）只负责姿态误差调节、角速度环（快）承担
-交叉项补偿，使耦合扰动在姿态环"察觉"之前即被消除。
-
-\textbf{实机架构总览（五层控制链路，\texttt{flight\_control.cpp}）}：
+本节不从理想控制器结构反推实现，而以飞控固件的实际数据流为基准建立数学描述。
+对应实现集中在 \path{TandemVec_FCS/src/flight_control.cpp}、
+\path{include/TandemVec_ControlAllocation.h}、
+\path{include/TandemVec_Propulsion.h} 和
+\path{include/InertiaDecoupling.h}。控制器由姿态误差外环、角速度内环、
+惯量与陀螺项前馈、工作点相关控制分配和执行器约束五部分构成：
 \begin{equation}
-    \underbrace{\mathbf{q}_{\mathrm{target}}}_{\text{1. ref attitude}}
-    \;\xrightarrow{\;\mathbf{q}_{\mathrm{err}}=\mathbf{q}^{-1}\otimes\mathbf{q}_{\mathrm{target}}\;}
-    \underbrace{\boldsymbol{\omega}_{\mathrm{ref}}}_{\text{2. quat geometric outer loop}}
-    \;\xrightarrow{\;\text{速率PI}\;}
-    \underbrace{\boldsymbol{\alpha}_{\mathrm{cmd}}}_{\text{3. angular accel cmd}}
-    \;\xrightarrow{\;\mathbf{M}=\mathbf{I}\boldsymbol{\alpha}+\mathbf{M}_{\mathrm{ff}}\;}
-    \underbrace{\mathbf{M}_{\mathrm{cmd}}}_{\text{4. inertia inverse + FF}}
-    \;\xrightarrow{\;\mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\;}
-    \underbrace{[\Delta\omega,\delta_t,\delta_f]}_{\text{5. online B alloc}}
-    \label{eq:cascade_chain}
+\begin{aligned}
+\bm q_d,\bm q
+&\longrightarrow \bm e_R
+\longrightarrow \bm\omega_{\mathrm{ref}}
+\longrightarrow \bm\alpha_{\mathrm{cmd}},\\
+\bm\alpha_{\mathrm{cmd}},\bm\omega,\hat{\bm h}_r
+&\longrightarrow \bm M_{\mathrm{cmd}}^{P}
+\longrightarrow \bm u
+=\begin{bmatrix}\Delta\omega&\delta_t&\delta_f\end{bmatrix}^{\!T}.
+\end{aligned}
+\label{eq:cascade_chain}
 \end{equation}
-五层各自职能单一、参数独立，这正是"用几何换算法简洁、用结构换性能"设计哲学的
-控制侧体现。本章按此链路组织：§\ref{sec:cascade_design}给出控制律设计
-（含惯量逆解前馈与工作点管理），§\ref{sec:cascade_tf}--\ref{sec:cascade_sp}
-给出线性化/灵敏度/奇异摄动理论，§\ref{sec:cascade_tuning}给出离线整定，
-§\ref{sec:cascade_sim}给出仿真验证，最后§\ref{sec:cascade_implementation}
-给出实机实现状态与工程教训。
+该实现输出的是绝对执行器指令，未使用实测角加速度构造控制增量。因此，本文将其称为
+\textbf{带局部非线性逆分配的级联控制}或\textbf{NDI 型架构}，而不将其归类为
+增量非线性动态逆（INDI）。这一术语边界与 INDI 文献中“角加速度反馈和执行器增量”
+的基本定义一致\cite{sieberling2010robust,smeur2016incremental,pollack2023robust}。
 
-\subsection{设计思想：时间尺度分离与功能解耦}
-\label{sec:cascade_philosophy}
+\subsection{姿态误差与外环}
+\label{sec:cascade_attitude}
 
-单级控制架构的根本困难在于：姿态误差动力学、角速度动力学与执行器交叉耦合
-被压缩在同一个反馈回路中，控制律必须同时兼顾跟踪品质、稳定性与耦合补偿，
-三者相互掣肘。第\ref{sec:lqr_coupling_limit}节的仿真表明，即使将LQR的效能矩阵
-在线化（增益调度、SDRE或在线分配），只要保留单级全状态反馈结构，
-交叉项补偿就难以突破$1^\circ$量级——补偿力矩被姿态-角速度耦合动态"淹没"。
-
-级联架构的设计思想是\textbf{用时间尺度分离换取功能解耦}：
-将控制问题分解为两个带宽分离的回路，每个回路只承担单一职能。
-
-\begin{itemize}
-    \item \textbf{外环（姿态环，慢环）}：仅负责姿态误差的调节，输出角速度指令。
-          由于不直接操作执行器，外环无需考虑效能矩阵、执行器饱和与交叉耦合，
-          可采用极简的纯比例（P）或比例-积分（PI）结构；
-    \item \textbf{内环（角速度环，快环）}：仅负责跟踪角速度指令，输出执行器指令。
-          由于角速度环带宽显著高于姿态环（时间尺度分离假设），
-          内环可在姿态还未来得及响应前快速抑制交叉耦合扰动，
-          使其无法经角速度-姿态积分传播到姿态环。
-\end{itemize}
-
-这一思想的物理本质是：\textbf{交叉耦合的抑制速度必须快于它影响姿态的速度}。
-在单级架构中，补偿力矩与耦合扰动同时作用于同一动力学，无法形成时间尺度上的先后；
-级联架构则通过内环的高带宽，使耦合扰动在姿态环"察觉"之前即被消除。
-这与第\ref{sec:control}节SAS的级联思想一脉相承，但内环用在线效能矩阵
-替代了对角近似，从而把几何解耦升级为精确解耦。
-
-\subsection{控制律设计}
-\label{sec:cascade_design}
-
-\subsubsection{外环：误差四元数几何控制与精确角度提取}
-
-姿态反馈采用第\ref{sec:quat_control}节的误差四元数，
-以规避欧拉角在$\theta=\pm90^\circ$处的万向锁奇异性。
-设当前姿态四元数$\mathbf{q}$、期望姿态$\mathbf{q}_{\mathrm{target}}$，
-误差四元数$\mathbf{q}_{\mathrm{err}}=\mathbf{q}_{\mathrm{target}}^{*}\otimes\mathbf{q}$
-的矢量部分$\boldsymbol{\varepsilon}_{\mathrm{err}}\in\mathbb{R}^3$编码姿态误差。
-实机（\texttt{flight\_control.cpp} \texttt{execute\_attitude\_controller}）的
-外环实现分三步：
-
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{短弧归一化}：$\mathrm{sign}(q_w)$ 取反使 $\eta_{\mathrm{err}}\geq0$
-          ——四元数双覆盖（$\mathbf{q}$ 与 $-\mathbf{q}$ 同姿态）下确保沿最短路径旋转；
-    \item \textbf{精确角度提取}（非小角度近似）：
-          \begin{equation}
-              \varepsilon_i = \mathrm{sign}(q_w)\cdot q_{v,i}\cdot
-              \frac{2\arctan(\|\mathbf{q}_v\|/|q_w|)}{\|\mathbf{q}_v\|}
-              \label{eq:cascade_angle_extract}
-          \end{equation}
-          多轴同时存在误差时 $\|\mathbf{q}_v\|$ 取\textbf{全模长}（非单轴投影），
-          避免偏航误差分量使滚转/俯仰的 atan2 判断偏低；
-    \item \textbf{通道映射}（悬停构型语义）：$\varepsilon_x\to$上摆（滚转）、
-          $\varepsilon_y\to$下摆（俯仰）、$\varepsilon_z\to$航向（差速，见§\ref{sec:cascade_yaw}）。
-\end{enumerate}
-
-角速度指令由姿态误差经比例控制生成（实机为纯 P，$K_i=K_d=0$）：
+固件使用当前姿态四元数左逆乘目标姿态四元数：
 \begin{equation}
-    \boxed{
-    \boldsymbol{\omega}_{\mathrm{ref}}
-    = -\mathbf{K}_p\,\boldsymbol{\varepsilon}_{\mathrm{err}}
-    }
-    \label{eq:cascade_outer_ch}
+\bm q_e=\bm q^{-1}\otimes\bm q_d
+=\begin{bmatrix}\eta_e&\bm\epsilon_e^T\end{bmatrix}^{T}.
+\label{eq:firmware_qerror}
 \end{equation}
-其中$\mathbf{K}_p=\operatorname{diag}(k_{p,1},k_{p,2},k_{p,3})$（实机 2.8/2.8，deg 域）。
-在小姿态误差下$\boldsymbol{\varepsilon}_{\mathrm{err}}\approx\frac{1}{2}\Delta$姿态角，
-$K_p$的物理意义是姿态回正的特征角速率（实机 $\approx80$°/s 输出限幅）。
-
-\subsubsection{内环：角速度环输出角加速度指令}
-
-内环将角速度误差映射为\textbf{角加速度指令}（非力矩/舵量——经惯量逆解才是物理量）：
+由于 $\bm q_e$ 与 $-\bm q_e$ 表示同一姿态，控制器以
+$s_e=\operatorname{sgn}(\eta_e)$ 选择短弧。当 $\|\bm\epsilon_e\|$ 足够大时，
+固件从轴角关系提取旋转向量；小误差区则采用其一阶近似：
 \begin{equation}
-    \boldsymbol{\nu} = \mathbf{K}_\omega\left(\boldsymbol{\omega}_{\mathrm{ref}}
-                        - \boldsymbol{\omega}\right)
-    \label{eq:cascade_nu_ch}
+\bm e_R=
+\begin{cases}
+s_e\dfrac{2\operatorname{atan2}(\|\bm\epsilon_e\|,|\eta_e|)}
+{\|\bm\epsilon_e\|}\bm\epsilon_e,
+&\|\bm\epsilon_e\|>0.25,\\[8pt]
+2s_e\bm\epsilon_e,&\|\bm\epsilon_e\|\leq0.25.
+\end{cases}
+\label{eq:firmware_rotation_vector}
 \end{equation}
-实机为速率 PI（$K_p=0.28$、$K_i=0.1$，积分抗饱和/微分先行，\texttt{PositionPID}）。
-积分项对未建模的慢扰动（气动交叉/重心偏置）提供稳态消除——
-这是"反馈兜底"哲学的体现：显式对消（§\ref{sec:cascade_ff}）处理已知项，
-积分项处理未知项。
+这里的阈值是实现选择，不是稳定性证明所需的理论常数。滚转和俯仰姿态环采用比例控制，
+将 $\bm e_R$ 的相应分量变为角速度参考并限制在 $\pm80\,\mathrm{deg/s}$。
+偏航通道采用摇杆棘轮式航向保持：摇杆离开死区时给出角速度参考并持续刷新航向基准，
+回中后以包络到 $[-\pi,\pi]$ 的航向误差生成角速度参考。因此，固件并不是三个完全同构的
+四元数比例外环，论文中的稳定性表述也只适用于滚转/俯仰短弧调节，不扩展为
+$\mathrm{SO}(3)$ 上的全局渐近稳定结论\cite{wie1989quaternion,markley2014fundamentals}。
 
-\subsubsection{惯量逆解与交叉耦合前馈（NDI 式 $f(\mathbf{x})$ 对消）}
-\label{sec:cascade_ff}
+\subsection{角速度内环与惯量前馈}
+\label{sec:cascade_rate}
 
-角加速度指令经惯量矩阵成为期望力矩，并叠加\textbf{显式前馈对消项}：
+角速度反馈在扣除导航 EKF 的陀螺零偏后进入两级低通链。三个速率通道均使用 PI 控制器，
+其输出语义为角加速度指令：
 \begin{equation}
-    \boxed{
-    \mathbf{M}_{\mathrm{cmd}} = \mathbf{I}\boldsymbol{\nu}
-    + \underbrace{\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})
-      + \boldsymbol{\omega}\times\mathbf{h}_{\mathrm{rotor}}}_{\text{前馈 }
-      \mathbf{M}_{\mathrm{ff}}}
-    }
-    \label{eq:cascade_ff}
+\bm\alpha_{\mathrm{cmd}}=
+\bm K_{p,\omega}(\bm\omega_{\mathrm{ref}}-\bm\omega)
++\bm K_{i,\omega}\int(\bm\omega_{\mathrm{ref}}-\bm\omega)\,\mathrm dt,
+\label{eq:firmware_rate_pi}
 \end{equation}
-其中$\mathbf{h}_{\mathrm{rotor}}=J_p(w_f\hat{n}_f + w_t\hat{n}_t)$为前后转子的净角动量
-（反向旋转部分抵消，悬停时沿推力轴）。
-前馈项即 NDI 公式 $\mathbf{u}=\mathbf{B}^{-1}(\boldsymbol{\nu}-f(\mathbf{x}))$
-中的 $f(\mathbf{x})$ 项（陀螺耦合与转子陀螺）——\textbf{显式计算并补偿已知非线性}，
-而非让反馈环"扛"。
-实机（\texttt{InertiaDecoupling.h}，2026-08-10 接入）以掩码控制（默认全开，
-可在线 A/B 关闭）；前馈在机体系按物理轴计算、经轴置换进入模型系后与
-$\mathbf{I}\boldsymbol{\nu}$ 同坐标系相加。
-气动与重力项未显式对消（模型不确定度大），由内环积分项兜底。
+并带有输出限幅、积分分离和积分状态钳位。固件出厂默认值定义于
+固件参数头文件；运行时参数可由上位机在线写入，所以默认值只能作为可复现的
+初始化快照，不能替代每次飞行日志中的实际参数。
 
-\subsubsection{NDI 理论基础：模型逆与在线效能矩阵}
-
-第\ref{sec:cascade_ff}节的前馈对消源于经典\textbf{非线性动态逆（NDI）}。考虑
-输入仿射非线性系统 $\dot{\boldsymbol{\omega}} = \boldsymbol{\alpha}(\mathbf{x}) +
-\mathcal{B}(\mathbf{x})\mathbf{u}$（$\boldsymbol{\alpha}$ 含 Coriolis 力、陀螺力矩、
-气动阻尼等与 $\mathbf{u}$ 无关的动力学项），NDI 直接构造逆映射\cite{stevens2015aircraft}：
+在推进模型系 $\{P\}$ 中，固件把三个角加速度通道转换为力矩主项：
 \begin{equation}
-    \mathbf{u} = \hat{\mathcal{B}}^{-1}(\mathbf{x})\left[\boldsymbol{\nu}
-        - \hat{\boldsymbol{\alpha}}(\mathbf{x})\right]
-    \label{eq:ndi_law}
+\bm M_I^{P}=
+\begin{bmatrix}
+-I_{x'}\alpha_{\mathrm{yaw}}\\
+ I_{y'}\alpha_{\mathrm{pitch}}\\
+-I_{z'}\alpha_{\mathrm{roll}}
+\end{bmatrix}.
+\label{eq:firmware_axis_command}
 \end{equation}
-其中 $\hat{\boldsymbol{\alpha}}$、$\hat{\mathcal{B}}$ 为机载模型估计，$\boldsymbol{\nu}$
-为虚拟控制量（期望角加速度）。式(\ref{eq:cascade_ff})正是本构型 NDI 的实现：
-$\boldsymbol{\nu}$ 来自速率内环、$\mathbf{I}\boldsymbol{\nu}$ 为惯量逆、
-前馈 $\mathbf{M}_{\mathrm{ff}}$ 对消 $\boldsymbol{\omega}\times(\mathbf{I}\boldsymbol{\omega})
-+\boldsymbol{\omega}\times\mathbf{h}$（$\boldsymbol{\alpha}$ 中可精确建模的部分），
-$\mathbf{B}_{\mathrm{true}}^{-1}$ 为效能矩阵逆——NDI 对消后的闭环呈
-$\dot{\boldsymbol{\omega}}\approx\boldsymbol{\nu}$ 的积分器特性。
+式\eqref{eq:firmware_axis_command}是传感器安装、悬停操纵语义和舵机方向共同作用后的
+\textbf{实现映射}，不应被误写为单纯的坐标旋转。它对应实机确认的
+上摆 $\delta_f$ 控制滚转、下摆 $\delta_t$ 控制俯仰、差速 $\Delta\omega$ 控制偏航。
 
-\subsubsection{在线效能矩阵的严格建模（B\_true 矩阵）}
-\label{sec:cascade_Btrue}
-
-NDI 控制律中唯一需要建模的是控制效能矩阵
-$\mathbf{B}=\partial\mathbf{M}/\partial\mathbf{u}$。对本构型，
-控制输入 $\mathbf{u}=[\Delta\omega,\delta_t,\delta_f]^T$，被控力矩
-$\mathbf{M}=[M_x,M_y,M_z]^T$，从第\ref{sec:mapping}节的完整六维映射
-（式\ref{eq:six_component}）的力矩分量出发：
+对角惯量刚体的已知耦合和转子角动量项按
 \begin{equation}
-    \begin{aligned}
-        M_x &= -\tau_f \cos\delta_f + \tau_t \cos\delta_t \\
-        M_y &= -b T_t \sin\delta_t - \tau_f \sin\delta_f \\
-        M_z &= a T_f \sin\delta_f - \tau_t \sin\delta_t
-    \end{aligned}
-    \label{eq:moment_full_nonlinear}
+\bm M_{\mathrm{ff}}^{F}
+=\bm\omega\times(\bm I\bm\omega)
++\bm\omega\times\hat{\bm h}_r
+\label{eq:inertia_ff}
 \end{equation}
-其中推力与反扭矩由差速变量 $\Delta\omega$ 参数化（式\ref{eq:diff_def}）：
-\begin{equation}
-    T_f = T_0(1+\Delta\omega), \quad T_t = T_0(1-\Delta\omega), \quad
-    \tau_f = \tau_0(1+\Delta\omega), \quad \tau_t = \tau_0(1-\Delta\omega)
-    \label{eq:diff_thrust_torque}
-\end{equation}
-且 $T_0=k_T\omega_0^2$、$\tau_0=k_Q\omega_0^2$。
+计算，其中
+$\hat{\bm h}_r=[J_p(\hat\omega_f\cos\delta_f-
+\hat\omega_t\cos\delta_t),0,0]^T$。固件随后执行
+$[M_{x'},M_{y'},M_{z'}]_{\mathrm{ff}}^T=
+[-M_z^F,M_y^F,M_x^F]^T$，并与式\eqref{eq:firmware_axis_command}相加。
+气动力矩、质心偏置和执行器误差没有被完整模型逆直接对消，而由速率环积分与在线辨识链路
+逐步吸收。因此，“完整 NDI”或“全部非线性已被消除”均不是当前实现能够支持的表述。
 
-对式(\ref{eq:moment_full_nonlinear})逐项求偏导，得到\textbf{在线 Jacobian}
-（在当前工作点 $\mathbf{u}_k=[\Delta\omega_k,\delta_{t,k},\delta_{f,k}]^T$ 处）：
-\begin{equation}
-    \boxed{
-    \mathbf{B}_{\mathrm{true}}(\mathbf{u}_k) =
-    \begin{bmatrix}
-        -\tau_0(\cos\delta_{f,k}+\cos\delta_{t,k}) & -\tau_{t,k}\sin\delta_{t,k} & +\tau_{f,k}\sin\delta_{f,k} \\[6pt]
-        +b T_0\sin\delta_{t,k} - \tau_0\sin\delta_{f,k} & -b T_{t,k}\cos\delta_{t,k} & -\tau_{f,k}\cos\delta_{f,k} \\[6pt]
-        +a T_0\sin\delta_{f,k} + \tau_0\sin\delta_{t,k} & -\tau_{t,k}\cos\delta_{t,k} & +a T_{f,k}\cos\delta_{f,k}
-    \end{bmatrix}
-    }
-    \label{eq:B_true}
-\end{equation}
-其中 $T_{f,k}=T_0(1+\Delta\omega_k)$ 等为当前步推力和反扭矩。
-
-当 $\delta_f=\delta_t=0$ 时式(\ref{eq:B_true})退化为第\ref{sec:allocation}节的
-线性化矩阵（式\ref{eq:effectiveness_matrix}）：
-\begin{equation}
-    \mathbf{B}_{\mathrm{true}}(\mathbf{0}) =
-    \begin{bmatrix}
-        -2\tau_0 & 0 & 0 \\
-        0 & -b T_0 & -\tau_0 \\
-        0 & -\tau_0 & a T_0
-    \end{bmatrix}
-    \equiv \mathbf{B}_{\mathrm{full}}(\omega_0)
-    \label{eq:B_at_zero}
-\end{equation}
-即 $\mathbf{B}_{\mathrm{full}}$ 是 $\mathbf{B}_{\mathrm{true}}$ 的零摆角特例。
-大摆角工况下两者差异显著（表\ref{tab:B_comparison}）——俯仰通道效能估计误差
-超过 50\%，若用冻结 $\mathbf{B}_{\mathrm{full}}$ 求逆，俯仰指令会被放大近两倍：
-\textbf{这正是实机必须采用在线 $\mathbf{B}_{\mathrm{true}}$ 的理论依据}。
-
-\begin{table}[H]
-\centering
-\caption{$\mathbf{B}_{\mathrm{full}}$与$\mathbf{B}_{\mathrm{true}}$在MAXDEF工况下的对比
-（$\delta_f=\delta_t=15^\circ$、$\Delta\omega=0.5$）}
-\label{tab:B_comparison}
-\setlength{\tabcolsep}{4pt}
-\small
-\begin{tabularx}{\textwidth}{c c c X}
-\toprule
-\textbf{矩阵元素} & $\mathbf{B}_{\mathrm{full}}(\omega_0)$ & $\mathbf{B}_{\mathrm{true}}(\mathbf{u}_k)$ & \textbf{相对误差} \\
-\midrule
-$B_{11}$（滚转 $\leftarrow \Delta\omega$） & $-2\tau_0$ & $-\tau_0(0.906+0.906)=-1.812\tau_0$ & 9.4\% \\
-$B_{22}$（俯仰 $\leftarrow \delta_t$） & $-b T_0$ & $-b\cdot 0.5T_0\cdot 0.906 = -0.453bT_0$ & \textbf{54.7\%} \\
-$B_{33}$（偏航 $\leftarrow \delta_f$） & $+a T_0$ & $a\cdot 1.5T_0\cdot 0.906 = 1.359aT_0$ & \textbf{35.9\%} \\
-$B_{12}$（滚转 $\leftarrow \delta_t$） & 0（无耦合） & $+\tau_{t,k}\sin\delta_{t,k} \neq 0$ & 新出现 \\
-$B_{13}$（滚转 $\leftarrow \delta_f$） & 0（无耦合） & $+\tau_{f,k}\sin\delta_{f,k} \neq 0$ & 新出现 \\
-\bottomrule
-\end{tabularx}
-\end{table}
-
-$\mathbf{B}_{\mathrm{true}}$ 的逆经伴随矩阵法解析求取（行列式
-\begin{equation}
-    \det(\mathbf{B}) = b_{11}(b_{22}b_{33}-b_{23}b_{32}) - b_{12}(b_{21}b_{33}-b_{23}b_{31}) + b_{13}(b_{21}b_{32}-b_{22}b_{31})
-    \label{eq:B_det}
-\end{equation}
-元素 $b_{ij}$ 为当前步物理量的简单组合，嵌入式耗时 $<1\,\mu$s 不构成瓶颈）；正常工作范围内 $\det(\mathbf{B}_{\mathrm{true}})>0$
-严格成立，$\omega_0\to0$ 时趋于奇异——由第\ref{sec:cascade_workpoint}节的
-良态工作点下限与零油门门控兜底。
-
-\subsubsection{在线效能矩阵分配（绝对指令形式，NDI 而非 INDI）}
-\label{sec:cascade_alloc}
-
-力矩指令经\textbf{在线 Jacobian 逆}分配为执行器指令：
-\begin{equation}
-    \mathbf{u}_k = \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\,
-                   \mathbf{M}_{\mathrm{cmd}},
-    \qquad \mathbf{u} = [\Delta\omega,\;\delta_t,\;\delta_f]^T
-    \label{eq:cascade_alloc_firmware}
-\end{equation}
-$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_{k-1})$ 为在\textbf{上一拍执行器工作点}
-处求值的在线 Jacobian（式\ref{eq:B_true}）——非零摆角名义点，
-使分配矩阵跟踪工作点变化（gain-scheduling 思想）。
-概念仿真中曾考察\textbf{增量变体}（$\mathbf{u}_{k+1}=\mathbf{u}_k+\Delta\mathbf{u}$，
-INDI 风格）：
-\begin{equation}
-    \mathbf{u}_{k+1} = \mathbf{u}_k
-        + \mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_k)\,
-          \mathbf{I}\,\boldsymbol{\nu}\,\Delta t
-    \label{eq:cascade_alloc_ch}
-\end{equation}
-实机未采用增量形式（理由见下"架构定性"）——本式仅用于与 NDI 绝对形式的
-理论对比（第\ref{sec:cascade_tf}节连续化分析）与 INDI 方案（第\ref{sec:INDI}章）的
-联系。
-
-\textbf{★ 架构定性（2026-08-11 精确归类）}：本架构是\textbf{NDI（非线性动态逆）}，
-\textbf{不是 INDI（增量 NDI）}——判别依据是两条硬性特征：
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{绝对指令形式}：$\mathbf{u}_k$ 由力矩直接分配得到，
-          无增量累加 $\mathbf{u}_{k+1}=\mathbf{u}_k+\Delta\mathbf{u}$；
-    \item \textbf{无实测角加速度}：$\boldsymbol{\nu}$ 由角速度误差经比例/积分生成，
-          $\mathbf{B}_{\mathrm{true}}^{-1}$ 作静态分配而非动态逆，
-          不使用 IMU 差分 $\dot{\boldsymbol{\omega}}_{\mathrm{IMU}}$。
-\end{enumerate}
-INDI 的核心卖点（对模型误差鲁棒）在实机中由\textbf{τm 观测器 + 反馈积分}替代实现
-（见§\ref{sec:cascade_workpoint}）：观测器追踪实际转速使 B 矩阵工作点逼近真实，
-积分项吸收残余模型误差——以绝对指令的简单性与可预测性换取同等工程效果，
-同时规避 INDI 的角加速度噪声放大路径。
-
-\subsubsection{工作点管理：τm 观测器、增益调度与良态化}
+\subsection{电机观测、低油门调度与工作点}
 \label{sec:cascade_workpoint}
 
-实机分配层有三项工作点管理（均为 2026-08 抖油门震荡三层定位的产物）：
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{τm 一阶观测器}（\texttt{flight\_control.cpp} 层1 之前）：
-          \begin{equation}
-              w_{\mathrm{est}} \mathrel{+}=
-              (w_{\mathrm{cmd}} - w_{\mathrm{est}})\cdot\frac{\Delta t}{\tau_m}
-              \label{eq:cascade_obs}
-          \end{equation}
-          电机指令转速经 $\tau_m=0.28$\,s 滞后才达到，分配器若用指令油门，
-          油门瞬态下有效增益 $k_p(w_{\mathrm{actual}}/w_{\mathrm{used}})^2$
-          先衰减后过冲（释放瞬间 $\approx1.33$ 倍、越震荡点约 160\,ms）——
-          B 矩阵工作点/调度/状态全部改用\textbf{观测转速}，瞬态有效增益恒 $\approx k_p$；
-    \item \textbf{差速增益调度}：$\Delta\omega$ 指令按 $1/w_0^2$ 归一化在低油门爆炸
-          （2026-08-07），物理力矩仍 $\propto w_0^2$ 稳态增益随油门放大（2026-08-09
-          封顶 1.0）——最终调度 $g_s = \min((w_{0,\mathrm{eff}}/w_{\mathrm{hover}})^2,\,1.0)$，
-          详见第\ref{sec:allocation}章增益调度段；
-    \item \textbf{良态工作点下限与零油门门控}：B 各项 $\propto w_0^2$、det $\propto w_0^6$，
-          低油门为数值病态区（5\% 油门 det 比 50\% 小 6 个数量级）——
-          工作点按 $w_{0,\mathrm{floor}}=0.6\,w_{\mathrm{hover}}$ 冻结；
-          零油门（$<$5\%）强制执行器归中（防 B 良态化后舵机对姿态误差误响应）。
-\end{enumerate}
-
-\subsubsection{航向通道：ratchet hold（摇杆恒角速度 + 回中锁航向）}
-\label{sec:cascade_yaw}
-
-悬停/巡航的航向通道\textbf{不做姿态回中}——航向摇杆恒为角速度指令
-（与 RATE\_MODE 语义一致，见第\ref{sec:rc_curve}节摇杆曲线），回中时以
-\textbf{航向短弧误差}锁住当时航向：
+电机以时间常数 $\tau_m=0.28\,\mathrm{s}$ 的一阶模型估计实际转速：
 \begin{equation}
-    \omega_{\mathrm{ref},z} =
-    \begin{cases}
-        \mathrm{map}(\text{航向摇杆}, \pm512\text{us}, \pm\omega_{\max,z}), & |\text{杆量}| > 40\text{us} \\
-        \mathrm{clip}\!\left(k_p^{\mathrm{yaw}}\cdot\Delta\psi_{\mathrm{short}}, \pm 60^\circ/\mathrm{s}\right), & \text{回中}
-    \end{cases}
-    \label{eq:cascade_yaw_hold}
+\hat\omega_{i,k}=\hat\omega_{i,k-1}
++\frac{\Delta t}{\tau_m}
+(\omega_{i,k-1}^{\mathrm{cmd}}-\hat\omega_{i,k-1}),
+\qquad i\in\{f,t\},\quad \Delta t=0.005\,\mathrm{s}.
+\label{eq:motor_observer}
 \end{equation}
-其中 $\Delta\psi_{\mathrm{short}}\in(-\pi,\pi]$ 为参考航向的短弧误差（回绕归一化），
-实机 $k_p^{\mathrm{yaw}}=5.0$；解锁瞬间参考重置为当前航向防起飞猛转。
-该设计绕开四元数航向回中在悬停万向锁附近的欧拉表示退化，且满足
-"摇杆恒角速度 + 松杆即停（锁航向）"的操纵习惯（2026-08-09 实机 ratchet hold）。
-
-\subsubsection{人机接口：FPV 摇杆曲线}
-
-RATE\_MODE 与航向通道的杆量到角速率映射采用 Betaflight 三参数模型
-（rcRate/rcExpo/rcSuper，公式与默认参数见第\ref{sec:rc_curve}节）——
-外环与分配层完全不感知曲线形状，曲线只改变 $\boldsymbol{\omega}_{\mathrm{ref}}$ 的来源
-（摇杆经曲线 vs 姿态误差经 $K_p$），体现"人机接口与控制律解耦"的模块化设计。
-
-\begin{remark}[固件实现：NDI 式级联（绝对指令 + 在线 B + 工作点观测）]
-\label{rem:firmware_alloc}
-实机控制链即式(\ref{eq:cascade_chain})五层：
+由此定义
+$\hat\omega_0=\sqrt{(\hat\omega_f^2+\hat\omega_t^2)/2}$ 和
+$\omega_{\mathrm{eff}}=\max(\hat\omega_0,0.6\omega_h)$，其中
+$\omega_h=\sqrt{mg/(2k_T)}$。差速主力矩再乘以
 \begin{equation}
-    \boldsymbol{\alpha}_{\mathrm{cmd}} \xrightarrow{\;\times\,\mathbf{I}\;+\;\mathbf{M}_{\mathrm{ff}}\;}
-    \mathbf{M}_{\mathrm{cmd}} \xrightarrow{\;\mathbf{B}_{\mathrm{true}}^{-1}(\mathbf{u}_{k-1})\;}
-    \mathbf{u}_k = [\Delta\omega,\;\delta_t,\;\delta_f]^T
-    \label{eq:cascade_alloc_firmware2}
+\gamma_\omega=
+\min\left[\left(\frac{\omega_{\mathrm{eff}}}{\omega_h}\right)^2,1\right],
+\label{eq:yaw_gain_schedule}
 \end{equation}
-其中$\boldsymbol{\alpha}_{\mathrm{cmd}}$为速率内环（PI）直接输出的角加速度指令，
-$\mathbf{I}=\operatorname{diag}(I_x,I_y,I_z)$为惯量矩阵，
-$\mathbf{B}_{\mathrm{true}}(\mathbf{u}_{k-1})$为在\textbf{上一拍执行器工作点}
-处求值的在线Jacobian。
+用于限制低油门区域的 $1/\omega_0^2$ 逆解放大。该调度只作用于模型系 $x'$ 力矩，
+即悬停操纵语义中的差速偏航通道。
 
-\textbf{工程理由（为什么实机选 NDI 式而非 INDI）}：
-\begin{enumerate}[label=(\arabic*)]
-    \item 速率PI直接输出$\boldsymbol{\alpha}$，经$\mathbf{I}$缩放即为力矩量纲，
-          无需维护执行器状态$\mathbf{u}_k$的增量累积历史；
-    \item 规避INDI对$\dot{\boldsymbol{\omega}}_{\mathrm{IMU}}$数值微分的需求，
-          消除高频噪声经$\mathbf{B}^{-1}$放大的路径（第\ref{sec:estimator_study}节）；
-    \item 未建模非线性（气动交叉等）由内环PI的积分项作为"慢扰动"补偿，
-          而非显式对消——概念阶段参数不确定度大，显式对消反而可能引入更大误差；
-    \item 在线辨识模块（\texttt{TandemVec\_OnlineID.h}，遗忘因子RLS）
-          监测惯量比$b$与总扰动$d$（实测 $b\approx0.35/0.36/0.90$、$d_{\mathrm{yaw}}\approx-7.36$，
-          见第\ref{sec:online_id}章），自适应增益建议$K_p/\sqrt{b}$为\textbf{纯观测模式}——
-          仅写入遥测量供地面站显示与离线复算，未写回PID增益。
-\end{enumerate}
+需要记录一项实现细节：当前代码把 $\omega_{\mathrm{cmd}}$ 写入
+\texttt{AllocationInput.w0}，同时把经下限处理的 $\hat\omega_f,\hat\omega_t$
+写入 \texttt{current\_state}。因此，效能矩阵第一列使用的基准转速与其余列使用的
+状态转速并非在所有瞬态下严格同源。源码注释中“$B$ 矩阵全部使用
+$\omega_{\mathrm{eff}}$”的说法与实际赋值不完全一致。本文按实际赋值描述该算法，
+并将这项工作点不对称列为后续固件回归与实机辨识的验证事项，而不据注释宣称其已被消除。
 
-\textbf{实机配置（2026-08 调参态）}：姿态外环 PositionPID 纯P（$K_p=2.8/2.8$，
-四元数精确角度提取输入）；速率内环 PI（$K_p=0.28$、$K_i=0.1$）；
-惯量前馈掩码全开（可 A/B）；工作点 $w_{0,\mathrm{floor}}=0.6\,w_{\mathrm{hover}}$
-+ 增益调度封顶 1.0 + 零油门门控；航向 ratchet hold（$k_p^{\mathrm{yaw}}=5.0$）。
-RATE\_MODE 满杆角速率 333°/s（限幅 600，2026-08-11 由 80 解耦——见第\ref{sec:rc_curve}节）。
-\end{remark}
+\subsection{局部效能逆与约束}
+\label{sec:cascade_Btrue}
 
-\subsection{闭环动力学与传递函数分析}
-\label{sec:cascade_tf}
-
-为定量理解级联架构的解耦机理，对内外环分别建立线性化闭环模型。
-在小姿态误差与单通道近似下，误差四元数运动学为
-$\dot{\boldsymbol{\varepsilon}}\approx\frac{1}{2}(\boldsymbol{\omega}-\boldsymbol{\omega}_{\mathrm{ref}})$，
-角速度动力学（忽略交叉项与未建模动态）为
-$\dot{\boldsymbol{\omega}}=\mathbf{I}^{-1}\mathbf{B}_{\mathrm{true}}\mathbf{u}$。
-
-\subsubsection{内环闭环}
-
-将内环分配（式\ref{eq:cascade_alloc_ch}）连续化，
-$\dot{\mathbf{u}}\approx\mathbf{B}_{\mathrm{true}}^{-1}\mathbf{K}_\omega
-(\boldsymbol{\omega}_{\mathrm{ref}}-\boldsymbol{\omega})$，
-代入角速度动力学：
+分配器在上一控制拍的摆角和转速估计处计算
+$\bm B_{\mathrm{true}}=\partial\bm M^P/\partial\bm u$，矩阵表达式见
+\cref{eq:B_true}。在 $|\det\bm B_{\mathrm{true}}|\geq10^{-8}$ 时，
+固件用伴随矩阵求三阶逆；近奇异时退化到零摆角线性矩阵 $\bm B_{\mathrm{full}}$。
+所得绝对指令分别约束为
 \begin{equation}
-    \dot{\boldsymbol{\omega}}
-    = \mathbf{I}^{-1}\mathbf{B}_{\mathrm{true}}\mathbf{B}_{\mathrm{true}}^{-1}
-      \mathbf{K}_\omega(\boldsymbol{\omega}_{\mathrm{ref}}-\boldsymbol{\omega})
-    = \mathbf{I}^{-1}\mathbf{K}_\omega(\boldsymbol{\omega}_{\mathrm{ref}}-\boldsymbol{\omega})
-    \label{eq:cascade_inner_dot}
+|\delta_f|,|\delta_t|\leq\delta_{\max},\qquad
+|\Delta\omega|\leq\Delta\omega_{\max}.
+\label{eq:firmware_limits}
 \end{equation}
-这里体现了在线$\mathbf{B}_{\mathrm{true}}$的关键作用：
-$\mathbf{B}_{\mathrm{true}}\mathbf{B}_{\mathrm{true}}^{-1}=\mathbf{I}$使角速度动力学
-\textbf{精确对角化}——这正是交叉项补偿的数学本质。
-每个角速度通道成为独立一阶系统，闭环传递函数为
-\begin{equation}
-    G_i(s) = \frac{\omega_i(s)}{\omega_{\mathrm{ref},i}(s)}
-    = \frac{k_{\omega,i}/I_i}{s + k_{\omega,i}/I_i}
-    = \frac{1}{\tau_i s + 1},\qquad
-    \tau_i = \frac{I_i}{k_{\omega,i}}
-    \label{eq:cascade_inner_tf}
-\end{equation}
-内环带宽$\omega_{\mathrm{BW},i}=k_{\omega,i}/I_i$。
-值得注意的是：若用冻结$\mathbf{B}|_{\delta=0}$替代在线$\mathbf{B}_{\mathrm{true}}$，
-则$\mathbf{B}\mathbf{B}_0^{-1}\neq\mathbf{I}$，交叉项残余
-$(\mathbf{I}-\mathbf{B}\mathbf{B}_0^{-1})$随摆角增大，
-这正是LQR工作点退化的传递函数解释。
+实机固件的摆角限幅为 $\pm15^\circ$，而 Web 仿真参数源仍为
+$\pm25^\circ$。此外，真实油门低于 $5\%$ 时，固件将两摆角与差速指令归零；
+电机转速输出仍使用真实油门，而不是用于数值良态化的转速下限。这个门控保证了
+零油门时执行器回中，但也说明低油门线性化不能被解释为可用飞行控制权限。
 
-\subsubsection{外环闭环}
-
-在时间尺度分离假设下（$\tau_i$远小于外环时间常数），内环近似单位增益
-$\boldsymbol{\omega}\approx\boldsymbol{\omega}_{\mathrm{ref}}$，
-代入外环（式\ref{eq:cascade_outer_ch}，取纯比例$\mathbf{K}_i=0$）：
-\begin{equation}
-    \dot{\boldsymbol{\varepsilon}}
-    \approx \frac{1}{2}\boldsymbol{\omega}_{\mathrm{ref}}
-    = -\frac{1}{2}\mathbf{K}_p\boldsymbol{\varepsilon}
-    \label{eq:cascade_outer_dot}
-\end{equation}
-外环同样对角化，各通道为一阶系统，闭环传递函数
-\begin{equation}
-    G_o(s) = \frac{\varepsilon_i(s)}{\varepsilon_{\mathrm{cmd},i}(s)}
-    = \frac{1}{\tau_o s + 1},\qquad
-    \tau_o = \frac{2}{k_{p,i}}
-    \label{eq:cascade_outer_tf}
-\end{equation}
-外环带宽$\omega_{\mathrm{BW},o}=k_{p,i}/2$。
-加入积分项后外环成为二阶系统，可消除常值扰动的稳态误差。
-
-\subsubsection{时间尺度分离条件}
-
-级联架构成立的前提是内环远快于外环。由式(\ref{eq:cascade_inner_tf})
-与式(\ref{eq:cascade_outer_tf})，要求
-\begin{equation}
-    \boxed{
-    \frac{\omega_{\mathrm{BW},i}}{\omega_{\mathrm{BW},o}}
-    = \frac{k_{\omega,i}/I_i}{k_{p,i}/2}
-    = \frac{2k_{\omega,i}}{I_i k_{p,i}} \gtrsim 3\text{--}5
-    }
-    \label{eq:tss_condition_ch}
-\end{equation}
-仿真采用$K_p=2.0$、$K_\omega=8.0$、$I_y=0.022$\,kg$\cdot$m$^2$（aircraft-model.json 现行值；早期 0.085 为旧值），
-得$\omega_{\mathrm{BW},o}\approx1$\,rad/s、$\omega_{\mathrm{BW},i}\approx364$\,rad/s，
-分离比约94倍——远超下限，这解释了为何级联架构的耦合抑制如此彻底：
-内环几乎是"瞬时"地完成角速度跟踪，外环根本"看不到"交叉耦合的瞬态。
-
-\subsection{灵敏度函数与鲁棒性分析}
-\label{sec:cascade_sensitivity}
-
-\subsubsection{扰动灵敏度}
-
-设内环存在交叉耦合扰动$\mathbf{d}$（如反扭矩投影），
-角速度动力学为$\dot{\boldsymbol{\omega}}=\mathbf{I}^{-1}\mathbf{B}\mathbf{u}+\mathbf{d}$。
-以内环参考$\boldsymbol{\omega}_{\mathrm{ref}}$为输入、扰动$\mathbf{d}$为扰动源，
-角速度输出的扰动灵敏度函数为
-\begin{equation}
-    S_d(s) = \frac{\omega(s)}{d(s)} = \frac{1}{s + k_{\omega}/I}
-    = \frac{\tau_i}{\tau_i s + 1}\cdot\frac{1}{\tau_i}\cdot\frac{1}{1}
-    \label{eq:cascade_sens}
-\end{equation}
-其幅值$|S_d(j\omega)|$在低频段约为$1/(k_\omega/I)$——
-内环增益$k_\omega$越大，对耦合扰动的抑制越强。
-这从频域解释了为何提高内环带宽是耦合抑制的关键。
-
-\subsubsection{对模型误差的鲁棒性}
-
-在线$\mathbf{B}_{\mathrm{true}}$依赖模型参数（$k_T,k_Q,a,b$）。
-设真实效能矩阵$\tilde{\mathbf{B}}=(\mathbf{I}+\boldsymbol{\Delta})\mathbf{B}_{\mathrm{true}}$，
-$\boldsymbol{\Delta}$为乘性模型误差。则式(\ref{eq:cascade_inner_dot})变为
-\begin{equation}
-    \dot{\boldsymbol{\omega}}
-    = \mathbf{I}^{-1}(\mathbf{I}+\boldsymbol{\Delta})
-      \mathbf{K}_\omega(\boldsymbol{\omega}_{\mathrm{ref}}-\boldsymbol{\omega})
-    \label{eq:cascade_model_err}
-\end{equation}
-交叉项残余为$\mathbf{I}^{-1}\boldsymbol{\Delta}\mathbf{K}_\omega
-(\boldsymbol{\omega}_{\mathrm{ref}}-\boldsymbol{\omega})$。
-由于$\mathbf{B}_{\mathrm{true}}$的元素由当前推力/摆角\textbf{在线测量}计算
-（而非依赖标定常数），$\boldsymbol{\Delta}$主要来自参数摄动，
-其量级由第\ref{sec:verification}节的台架标定精度决定。
-在MODEL-DEFAULT参数下，若$k_T,k_Q$标定误差$\pm10\%$，
-则$\|\boldsymbol{\Delta}\|\sim0.1$，交叉项残余约为标称耦合的$10\%$——
-仍远优于对角SAS的$100\%$不补偿。
-
-\subsection{奇异摄动与稳定性}
-\label{sec:cascade_sp}
-
-时间尺度分离的严格理论基础是奇异摄动（singular perturbation）理论。
-引入小参数$\epsilon=\tau_i/\tau_o$，将内外环写成奇异摄动标准形：
-\begin{align}
-    \dot{\boldsymbol{\varepsilon}} &= \frac{1}{2}\boldsymbol{\omega}
-    \label{eq:sp_slow}\\
-    \epsilon\dot{\boldsymbol{\omega}} &= \frac{\tau_o}{I}\mathbf{K}_\omega
-    \left(-\mathbf{K}_p\boldsymbol{\varepsilon}-\boldsymbol{\omega}\right)
-    \label{eq:sp_fast}
-\end{align}
-其中$\boldsymbol{\varepsilon}$为慢变量、$\boldsymbol{\omega}$为快变量。
-当$\epsilon\to0$时，快子系统在边界层内指数稳定于拟稳态
-$\boldsymbol{\omega}=-\mathbf{K}_p\boldsymbol{\varepsilon}$，
-慢子系统退化为$\dot{\boldsymbol{\varepsilon}}=-\frac{1}{2}\mathbf{K}_p\boldsymbol{\varepsilon}$。
-由Tikhonov定理，当快子系统在边界层内指数稳定时，
-原系统的解在$O(\epsilon)$误差内逼近退化系统——
-这为时间尺度分离的近似提供了严格的误差界：
-\textbf{内外环分离比越大（$\epsilon$越小），解耦近似越精确}。
-
-需要强调：本架构的工程稳定性已由大量时域仿真间接确认，
-但严格的Lyapunov稳定性证明与增益裕度评估仍是后续工作。
-上述奇异摄动分析给出了近似的理论基础，但不构成完备证明。
-
-\subsection{控制参数优化与离线整定}
-\label{sec:cascade_tuning}
-
-级联架构有三个待整定增益（$K_p,K_i,K_\omega$）。
-本节给出离线最优参数搜索方法。
-
-\subsubsection{多目标代价函数}
-
-参数整定的目标是在耦合抑制、跟踪速度与执行器代价间取得平衡。
-定义复合代价函数
-\begin{equation}
-    J(\mathbf{g}) = w_1\,\theta_{\mathrm{peak}} + w_2\,t_{\mathrm{settle}}
-    + w_3\,\bar{u}
-    \label{eq:cascade_cost}
-\end{equation}
-其中$\mathbf{g}=[K_p,K_i,K_\omega]^T$，
-$\theta_{\mathrm{peak}}$为耦合扰动下的俯仰峰值，
-$t_{\mathrm{settle}}$为调节时间（回到峰值$10\%$内），
-$\bar{u}$为控制能量（执行器指令幅值均值），
-$w_1,w_2,w_3$为权重。
-
-\subsubsection{网格搜索与精化}
-
-采用两阶段离线搜索：
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{粗网格}：在$K_p\in[1,3]$、$K_i\in[0,1]$、$K_\omega\in[4,12]$
-          上逐点仿真评估$J$；
-    \item \textbf{精化}：在最优点附近细分网格，重复搜索至收敛。
-\end{enumerate}
-仿真发现$J$曲面在低增益区平缓（图\ref{fig:cascade_param_opt}），
-最优解为$K_p\approx1.0$、$K_i\approx0$、$K_\omega\approx4.0$。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.9\textwidth]{fig-sim/cascade_param_opt.pdf}
-\caption{级联参数优化的代价曲面（左：复合代价$J$；右：耦合峰值）。红星为网格搜索最优点。}
-\label{fig:cascade_param_opt}
-\end{figure}
-
-\subsubsection{整定原则的物理理解}
-
-离线优化揭示了一个反直觉但有物理依据的结论：
-\textbf{在本架构下，较低增益即可实现优良耦合抑制}。
-这与直觉（高增益抑制扰动）看似矛盾，根源在于级联架构的解耦本质——
-交叉项补偿由在线$\mathbf{B}_{\mathrm{true}}$的\textbf{结构}保证，
-而非由增益大小保证。$K_\omega$只需满足时间尺度分离（式\ref{eq:tss_condition_ch}），
-过高的$K_\omega$反而放大角速度噪声并增加执行器代价。
-然而，过低的$K_\omega$会牺牲噪声鲁棒性（见第\ref{sec:cascade_sim}节），
-故整定应在"结构解耦"与"噪声鲁棒"间折中。
-$K_i$的引入主要用于消除常值扰动的稳态误差，但会略微增大耦合峰值
-（积分项的慢放电与耦合瞬态叠加），故在耦合抑制优先的场景可取$K_i=0$。
-
-\subsection{仿真验证与可视化}
-\label{sec:cascade_sim}
-
-\subsubsection{交叉耦合时域响应}
-
-在代表性有翼前飞/无翼推进形态的局部配平状态下，施加前摆$\delta_f=25^\circ$阶跃的耦合场景下，
-图\ref{fig:cascade_time}对比了LQR、INDI与级联架构的三通道时域响应。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.82\textwidth]{fig-sim/cascade_time_response.pdf}
-\caption{交叉耦合时域响应（$\delta_f=25^\circ$阶跃@2s，v0.2.0 参数集）：上—俯仰角$\theta$；中—俯仰角速率$q$；下—尾摆$\delta_t$。级联架构（绿）的$\theta$几乎无可见偏离，LQR（蓝）持续偏离约$5.9^\circ$。}
-\label{fig:cascade_time}
-\end{figure}
-
-级联架构在阶跃后俯仰角仅有$0.08^\circ$的微小瞬态即恢复，
-尾摆$\delta_t$快速给出补偿；而LQR持续偏离$5.9^\circ$（$\delta_f=25^\circ$），
-INDI因增量饱和出现较大偏差。定量耦合峰值见表\ref{tab:cascade_ch_coupling2}。
-
-\begin{table}[H]
-\centering
-\caption{级联架构与LQR/INDI的俯仰耦合峰值对比（°，5次蒙特卡洛均值，v0.2.0 参数集）\protect\footnote{本表数值与第\ref{sec:lqr_coupling_limit}章表\ref{tab:lqr_coupling_deg}存在量级差异（同实验不同噪声注入等级/配平口径），跨章对比以各自实验设置为准。}}
-\label{tab:cascade_ch_coupling2}
-\small
-\begin{tabular}{l c c}
-\toprule
-\textbf{控制架构} & $\delta_f=10^\circ$ & $\delta_f=25^\circ$ \\
-\midrule
-LQR（冻结$\mathbf{B}$，单级） & 12.05 & 5.91 \\
-INDI（在线$\mathbf{B}$，单级） & 35.86 & 41.51 \\
-\textbf{级联P外环 + 在线$\mathbf{B}_{\mathrm{true}}$内环} & \textbf{0.06} & \textbf{0.08} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsubsection{噪声鲁棒性}
-
-扫描陀螺噪声标准差，对比三架构的耦合峰值（图\ref{fig:cascade_noise}）。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.72\textwidth]{fig-sim/cascade_noise_robust.pdf}
-\caption{噪声鲁棒性：耦合峰值随陀螺噪声标准差变化（对数纵轴）。级联架构在全噪声区间最优；INDI随噪声急剧退化；LQR几乎不受噪声影响但基线最高。}
-\label{fig:cascade_noise}
-\end{figure}
-
-\begin{table}[H]
-\centering
-\caption{不同陀螺噪声下的俯仰耦合峰值（°，5次蒙特卡洛均值，v0.2.0 参数集）}
-\label{tab:cascade_noise}
-\small
-\begin{tabular}{l c c c c c}
-\toprule
-\textbf{架构} & 0 & 0.005 & 0.01 & 0.02 & 0.04 rad/s \\
-\midrule
-LQR & 12.05 & 12.04 & 12.04 & 12.04 & 12.03 \\
-INDI & 36.00 & 36.03 & 37.28 & 33.41 & 28.80 \\
-\textbf{级联} & \textbf{0.05} & \textbf{0.10} & \textbf{0.16} & \textbf{0.24} & \textbf{0.42} \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-结果揭示三架构的噪声特性差异：
-\begin{itemize}
-    \item \textbf{LQR}：纯状态反馈不依赖角加速度，耦合峰值与噪声无关（无噪声基线$1.33^\circ$恒定；噪声注入下见表\ref{tab:cascade_ch_coupling2}），
-          但基线最高——这是结构性局限；
-    \item \textbf{INDI}：随噪声急剧退化（$36.0\to28.8^\circ$，无噪声时已偏高），
-          角加速度差分噪声经$\mathbf{B}^{-1}$放大；
-    \item \textbf{级联}：在全噪声区间最优（$0.05\to0.42^\circ$），
-          既无LQR的结构局限，又无INDI的噪声放大——
-          这是"结构解耦+无角加速度估计"双重优势的体现。
-\end{itemize}
-
-\subsubsection{执行器速率饱和}
-
-扫描内环增量限幅$\Delta u_{\max}$，评估执行器速率饱和对耦合抑制的影响
-（图\ref{fig:cascade_sat}）。
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.68\textwidth]{fig-sim/cascade_saturation.pdf}
-\caption{执行器速率饱和的影响：级联架构的耦合峰值在$\Delta u_{\max}\ge0.1$时几乎不随限幅变化（约$0.035^\circ$），表明其对执行器速率饱和具有鲁棒性。}
-\label{fig:cascade_sat}
-\end{figure}
-
-级联架构在$\Delta u_{\max}\ge0.1$的宽范围内耦合峰值稳定于$0.035^\circ$，
-即使较严的速率限幅也不显著退化。这与INDI形成对照
-（INDI在$\delta_f=25^\circ$因增量限幅饱和而反超）——
-根源在于级联内环用完整力矩分配（$\mathbf{B}^{-1}\nu$）而非受限的增量指令，
-补偿力矩在时间尺度分离下分摊到高频小增量，不易触发饱和。
-
-\subsubsection{Tail-sitter大姿态角验证}
-
-在tail-sitter垂直起飞（3秒slerp过渡至$\theta=-90^\circ$）下，
-级联架构的误差四元数外环在万向锁附近保持正则，
-姿态误差峰值$0.009$（约$0.5^\circ$），优于SAS的$0.027$与INDI的$0.036$，
-验证了第\ref{sec:cascade_design}节四元数外环的必要性
-（详见表\ref{tab:cascade_ch_vtol2}）。
-
-\begin{table}[H]
-\centering
-\caption{Tail-sitter垂直起飞姿态误差对比（3\,s slerp，v0.2.0 参数集）}
-\label{tab:cascade_ch_vtol2}
-\small
-\begin{tabular}{l c c}
-\toprule
-\textbf{控制架构} & $\|\boldsymbol{\varepsilon}_{\mathrm{err}}\|$峰值 & 末值（10\,s） \\
-\midrule
-SAS（增益调度+前馈） & 0.0265 & $4.9\times10^{-4}$ \\
-INDI（v3，含惯量逆） & 0.0355 & $9.1\times10^{-4}$ \\
-LQR & 0.0087 & $9.5\times10^{-6}$ \\
-\textbf{级联（误差四元数外环）} & 0.0087 & $1.4\times10^{-3}$ \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{分析讨论}
-\label{sec:cascade_analysis}
-
-\subsubsection{三种"LQR在线B"路径的失败教训}
-
-曾系统评估三种LQR交叉项补偿在线化的直接路径
-（增益调度LQR、SDRE在线Riccati、LQR外环+在线B分配）。
-仿真表明三者的耦合抑制均未能显著改善（峰值$1.3$--$2.6^\circ$）。
-根本原因是它们都保留\textbf{单级全状态反馈}结构——
-无论效能矩阵如何更新，交叉项补偿仍与姿态-角速度耦合动态竞争。
-这一失败从反面印证了级联架构的核心论点：
-\textbf{交叉项补偿的有效性更多取决于控制架构的解耦程度，
-而非效能矩阵的在线化程度}。
-
-\subsubsection{架构的适用边界}
-
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{时间尺度分离}：内环带宽须足够高。执行器响应迟缓时解耦退化；
-    \item \textbf{低油门退化}：$\omega_0\to0$时$\mathbf{B}_{\mathrm{true}}$奇异，
-          需回退对角分配或舵面控制；
-    \item \textbf{执行器饱和}：大幅扰动下摆角/差速限幅仍会使补偿失能，
-          尽管级联的完整力矩分配比INDI的增量限幅更耐饱和。
-\end{enumerate}
-
-\subsubsection{与其他架构的定位关系}
-
-\begin{itemize}
-    \item 定点跟踪品质为主、工作点变化小：LQR的最优增益平衡有优势；
-    \item 需强未建模动态对消且能提供高质量角加速度：INDI更合适；
-    \item 需工作点鲁棒的交叉项补偿、规避角加速度估计噪声、宽噪声区间稳定：
-          \textbf{级联架构是首选}。
-\end{itemize}
-
-\subsection{结论}
-\label{sec:cascade_conclusion}
-
-本章提出的级联姿态-角速度控制架构，通过时间尺度分离将姿态调节
-（外环，误差四元数P/PI）与交叉项补偿（内环，在线$\mathbf{B}_{\mathrm{true}}$分配）解耦。
-传递函数分析表明在线效能矩阵使角速度动力学精确对角化；
-灵敏度与奇异摄动分析给出了时间尺度分离的频域与理论基础；
-离线参数优化揭示了"结构解耦优于增益提高"的整定原则。
-仿真验证覆盖巡航耦合抑制（$0.06$--$0.08^\circ$，约两个数量级改善）、
-宽噪声区间鲁棒性（$0.05$--$0.42^\circ$全程最优）、
-执行器饱和鲁棒性与tail-sitter万向锁有效性。
-该架构规避了INDI的角加速度估计噪声、LQR的工作点漂移、SAS的对角近似三大缺陷，
-是概念阶段向工程实现过渡的推荐控制结构。
-严格Lyapunov稳定性证明、参数摄动下的解析鲁棒界与硬件在环验证，
-是后续工作需要补强的方向。
-
-\subsection{实机实现状态与工程教训（2026-08）}
+\subsection{实现对应关系与证据边界}
 \label{sec:cascade_implementation}
 
-本章架构已于 2026-08 在实机飞控（STM32H743）上线，本节记录实现状态与
-调试中沉淀的工程教训——这些教训验证了本章理论分析的正确性，也补充了
-理论未覆盖的工程细节。
+\begin{table}[tbp]
+\centering
+\caption{论文控制环节与固件实现的对应关系}
+\small
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{2.8cm}
+>{\raggedright\arraybackslash}X>{\raggedright\arraybackslash}p{3.2cm}}
+\toprule
+\textbf{论文环节} & \textbf{固件事实源} & \textbf{当前验证边界}\\
+\midrule
+姿态误差与短弧 & \texttt{execute\_attitude\_controller}，
+$\bm q^{-1}\otimes\bm q_d$ & 宿主机与首飞方向验证；无全局稳定性证明\\
+速率 PI & \texttt{PositionPID} 与 \texttt{FlightCtrlParams.h} & 默认参数可复现；运行时值需飞行日志\\
+惯量/陀螺前馈 & \texttt{InertiaDecoupling.h} & 宿主机符号回归；参数仍待标定\\
+局部效能矩阵 & \texttt{computeEffectMatrix} 与 \texttt{allocateMoments} & 解析式与数值 Jacobian 回归；瞬态工作点仍有不对称\\
+执行器方向与限幅 & \texttt{mix\_and\_output\_commands} & 上摆/下摆/差速方向经实机确认；全包线权限未验证\\
+\bottomrule
+\end{tabularx}
+\label{tab:firmware_traceability}
+\end{table}
 
-\subsubsection{实现状态}
-
-\begin{itemize}
-    \item \textbf{五层链路全线上}：参考姿态生成（三模式）→ 四元数几何外环
-          （精确角度提取 + 短弧）→ 速率 PI → 惯量逆解 + 前馈 → 在线 B 分配；
-    \item \textbf{垂直/水平位置环已接入}：定高（位置 P + 速度 PI + 油门杆=高度率指令 +
-          GUIDED 加速度直通）、定点（Loiter 状态机 + 物理刹车预测 + 位置/速度串级），
-          与姿态五层链路级联；
-    \item \textbf{FPV 摇杆曲线}（RATE\_MODE）：三参数模型实装，默认满杆
-          roll/pitch 333°/s、yaw 222°/s（第\ref{sec:rc_curve}节）；
-    \item \textbf{在线辨识}：RLS 纯观测模式，实测 $b\approx0.35/0.36/0.90$、
-          $d_{\mathrm{yaw}}\approx-7.36$（电机不对称 17\%）、$k_Q/k_T\approx0.027$
-          （三轮标定）——未闭环（第\ref{sec:online_id}章）。
-\end{itemize}
-
-\subsubsection{工程教训（理论未覆盖的实践修正）}
-
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{限幅必须解耦}：RATE\_MODE 限幅最初复用姿态外环 80°/s
-          （$k_{\mathrm{MaxTargetRate}}$）——曲线在约半杆即被削平，满杆暴力手感
-          完全消失。2026-08-11 独立为 600°/s（曲线理论值 333°/s 之上留余量），
-          限幅从"姿态环约束"变为"曲线之上的安全网"（第\ref{sec:rc_curve}节）；
-    \item \textbf{工作点观测是分配器的生命线}：τm 观测器未接入前，油门瞬态下
-          B 矩阵工作点与实际转速失配，有效增益瞬态越震荡点约 160\,ms
-          激发 yaw 振铃——观测器接入后瞬态增益恒 $\approx k_p$
-          （2026-08-09 三层定位，第\ref{sec:allocation}章）；
-    \item \textbf{通道积分独立性}：2026-08-10 通读发现 pitch 内环误用 roll 的
-          PID 实例（复制粘贴 bug）——pitch 积分恒 0 且双通道积分互相污染，
-          实机表现为"pitch 一直飘、积分无法消除"；修复后积分独立。
-          教训：同构三通道代码逐一核对实例名，勿因参数相同想当然；
-    \item \textbf{数值病态区必须显式规避}：B 各项 $\propto w_0^2$、det $\propto w_0^6$，
-          低油门工作点冻结（$0.6\,w_{\mathrm{hover}}$）+ 零油门门控是实机可飞的前提，
-          纯理论推导不会暴露此问题。
-\end{enumerate}
-
-\subsubsection{与 NDI/INDI 的定位关系（2026-08-11 精确归类）}
-
-本架构为\textbf{NDI 式}（绝对指令 + 模型逆 + 前馈对消 + 在线 B + 工作点观测），
-\textbf{非 INDI}（无增量累加、无实测角加速度）。三条实现路径（SAS/INDI/LQR）
-的教训与本章架构的定位：
-\begin{itemize}
-    \item SAS：对角分配结构性放弃交叉项——本架构以在线 B 精确补偿；
-    \item INDI：增量形式对模型误差鲁棒，但依赖实测角加速度（噪声放大）——
-          本架构以 τm 观测器 + 反馈积分替代实现同等工程效果；
-    \item LQR：冻结 B 随工作点漂移——本架构以在线 B + 工作点观测消除漂移。
-\end{itemize}
+该对应关系支持“算法已在固件中实现”和“执行器方向已由实机锚定”两类结论，
+但不能单独支持模型参数准确、控制器满足给定飞行品质、转捩走廊可行或故障状态安全。
+这些更强结论必须由带参数清单和时间同步日志的台架、HIL 与飞行试验分别验证。

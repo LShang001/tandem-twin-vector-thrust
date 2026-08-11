@@ -1,141 +1,129 @@
 % ===========================================================================
-%  纵列双发矢量推力飞行器：构型原理、动力学建模与控制特性分析
-%  Tandem Twin Vector-Thrust Aircraft:
-%  Configuration Principle, Dynamic Modeling, and Control Characteristics
-% ===========================================================================
-%  主入口文件 — 组装导言区、章节和参考文献
-%  编译：xelatex main.tex（或 lualatex）
-%  编码：UTF-8
+%  纵列双发矢量推力飞行器：构型、建模、控制与验证边界
+%  主入口文件；正文结论之后为方法附录，参考文献固定在全文末尾。
 % ===========================================================================
 
 \input{preamble.tex}
 
-\title{\textbf{纵列双发矢量推力飞行器：\\构型原理、动力学建模与控制特性分析}}
+\title{\textbf{纵列双发矢量推力飞行器：\\构型、动力学建模与控制验证}}
 \author{LShang}
-\date{\today}
+\date{2026年8月}
 
 \begin{document}
 
 \begin{titlepage}
-\maketitle
-\thispagestyle{empty}
+\centering
+{\zihao{2}\bfseries 纵列双发矢量推力飞行器：\par}
+\vspace{0.5em}
+{\zihao{2}\bfseries 构型、动力学建模与控制验证\par}
+\vspace{1.2em}
+{\Large Tandem Twin Vector-Thrust Aircraft:\par}
+\vspace{0.3em}
+{\Large Configuration, Dynamic Modeling, and Control Validation\par}
+\vspace{1.8em}
+{\large LShang\par}
+\vspace{0.5em}
+{\large 2026年8月\par}
 
-\begin{center}
-\rule{0.6\textwidth}{0.5pt}\\[6pt]
-{\small
-\textbf{摘要}：本文系统阐述一种模块化、多形态飞行器构型——纵列双发正交单轴矢量推力布局的理论基础。
-该构型以前后纵列双电机、正交单轴摆座、反向旋转螺旋桨及差速反扭力矩控制为核心特征，
-可根据任务安装机翼形成固定翼巡航形态，也可在无机翼或弱气动升力形态下依靠双推进器矢量推力实现垂直起降、悬停与低速多轴式机动。
-本文从第一性原理出发，完整推导推进系统的集总参数模型（基于桨盘动量理论、叶素理论与量纲分析的相似律）、
-推力矢量到机体系的六自由度力/力矩映射（含摆座运动学、力臂生成与耦合项分离）、
-适用于有翼、无翼和过渡形态的整机六自由度刚体动力学方程（牛顿-欧拉方程与四元数姿态运动学）、
-以及级联式增稳控制律的设计框架（包含误差四元数姿态外环、角速度内环与在线效能矩阵补偿）。
-文中对控制效能矩阵的对角化性质、耦合项的量级评估、各飞行模态的物理机理和SAS参数整定原则进行了深入分析，
-并系统比较了本构型与传统舵面控制及通用过驱动推力矢量平台的区别。
-在此基础上，本文进一步给出INDI、误差四元数、LQR三种进阶控制律，
-并通过耦合抑制对比实验揭示三者在交叉项处理上的局限；
-最终提出级联姿态-角速度控制架构——以误差四元数姿态外环与在线效能矩阵角速度内环解耦设计，
-在巡航与tail-sitter工况下实现了数量级的交叉耦合抑制改善。
-解析推导以一般构型为对象；数值实现采用未经标定的MODEL-DEFAULT参数，本文结论仅适用于概念级建模与仿真。
-}
-\end{center}
+\vfill
+\begin{minipage}{0.92\textwidth}
+\textbf{摘要：}
+本文研究一种由纵列双电机、正交单轴摆座和反向旋转螺旋桨构成的矢量推力飞行器。
+针对理论模型坐标、飞控传感器坐标和悬停操纵语义容易混用的问题，本文首先给出三者之间的
+轴置换关系；随后从桨盘动量理论、推力与反扭矩相似律出发，建立执行器到机体六维力/力矩的
+非线性映射，并将其嵌入采用四元数运动学的六自由度刚体模型。在控制层，本文以误差四元数
+外环、角速度PI内环、惯量与陀螺项前馈以及工作点相关效能矩阵分配组成的绝对指令架构为
+主方法。该架构属于非线性动态逆式控制，而非依赖实测角加速度的增量非线性动态逆。
+现有证据表明，模型能够复现28\,m/s局部配平、开环慢发散模态和执行器交叉耦合机理；
+宿主机回归测试与初步飞行试验则分别约束数值实现和执行器方向。需要强调的是，仿真采用的
+MODEL-DEFAULT参数尚未完成台架标定，仿真摆角限幅为$\pm25^\circ$，而固件限幅为
+$\pm15^\circ$；因此本文的定量结果用于概念验证，不构成全包线性能或转捩能力证明。
 
-\noindent\rule{\textwidth}{0.5pt}
+\vspace{0.6em}
+\noindent\textbf{关键词：}纵列双发；推力矢量；六自由度动力学；控制分配；误差四元数；非线性动态逆
+
+\vspace{1.2em}
+\textbf{Abstract:}
+This study investigates a tandem twin-motor vector-thrust aircraft equipped with two orthogonal
+single-axis gimbals and counter-rotating propellers. A frame transformation is first established to
+separate the analytical propulsion frame, the flight-control sensor frame, and the hover-control
+semantics. A nonlinear six-component force and moment map is then derived from actuator-disk
+momentum theory and propeller similarity laws and embedded in a six-degree-of-freedom rigid-body
+model with quaternion kinematics. The primary controller combines a quaternion-error attitude loop,
+a PI body-rate loop, inertia and gyroscopic feedforward, and an operating-point-dependent control-
+effectiveness allocation. The implemented controller is an absolute-command nonlinear-dynamic-
+inversion-type architecture rather than incremental nonlinear dynamic inversion, because it does not
+use measured angular acceleration or accumulate actuator increments. The current evidence supports
+local trim, modal, coupling-mechanism, software-regression, and actuator-direction claims. Quantitative
+performance remains conceptual: the MODEL-DEFAULT parameters are not fully identified, and the
+simulation and firmware use different gimbal limits of $\pm25^\circ$ and $\pm15^\circ$, respectively.
+
+\vspace{0.6em}
+\noindent\textbf{Keywords:} tandem propulsion; thrust vectoring; six-degree-of-freedom dynamics;
+control allocation; quaternion error; nonlinear dynamic inversion
+\end{minipage}
 \end{titlepage}
 
-% ---------- 目录 ----------
+\clearpage
+\section*{图形摘要}
+\addcontentsline{toc}{section}{图形摘要}
+\begin{figure}[H]
+\centering
+\input{fig/00-graphical-abstract.tex}
+\caption*{从构型几何到模型、控制与分级证据的研究主线。图中“已验证”仅指对应层级，
+不表示参数标定、转捩包线或全状态飞行品质已经完成验证。}
+\end{figure}
+
+\clearpage
 \pagenumbering{roman}
 \tableofcontents
 \thispagestyle{plain}
 \clearpage
 
-% ---------- 正文 ----------
 \pagenumbering{arabic}
 \setcounter{page}{1}
 
-% ====== 第1章：引言 ======
+% ============================== 正文主线 ==============================
 \input{ch/01-intro.tex}
-
-% ====== 第2章：推进系统建模 ======
 \clearpage
 \input{ch/02-propulsion.tex}
-
-% ====== 第3章：推力矢量映射 ======
 \clearpage
 \input{ch/03-mapping.tex}
-
-% ====== 第4章：六自由度刚体动力学 ======
 \clearpage
 \input{ch/04-dynamics.tex}
-
-% ====== 第5章：控制分配：通道解耦的几何机理 ======
 \clearpage
 \input{ch/05-allocation.tex}
-
-% ====== 第6章：线性化与稳定性模态分析 ======
 \clearpage
 \input{ch/06-stability.tex}
-
-% ====== 第7章：增稳控制律设计 ======
 \clearpage
 \input{ch/07-control.tex}
-
-% ★ 2026-08-11 全面重构：主算法优先叙事（1-7 基础 → 8-9 外环理论/VTOL 应用 →
-%   → 10 主算法级联 → 11 验证 → 12-15 扩展方案对比 → 16-17 收尾）。
-%   输入顺序 ch01-07 → ch12 → ch13 → ch15 → ch11 → ch10 → ch14 → ch16 → ch17
-%   → ch08 → ch09；每章前 \setcounter 使 PDF 编号 = 逻辑编号。
-
-% ====== 第8章：误差四元数控制（主算法外环理论基础） ======
 \clearpage
-\setcounter{section}{7}
 \input{ch/12-quaternion-control.tex}
-
-% ====== 第9章：Tail-sitter VTOL 模式分析（主算法悬停应用） ======
 \clearpage
-\setcounter{section}{8}
 \input{ch/13-vtol-analysis.tex}
-
-% ====== 第10章：级联姿态-角速度控制架构（★主算法） ======
 \clearpage
-\setcounter{section}{9}
 \input{ch/15-cascade-control.tex}
-
-% ====== 第11章：数值仿真实验与验证（主算法验证） ======
 \clearpage
-\setcounter{section}{10}
 \input{ch/11-simulation-results.tex}
-
-% ====== 第12章：基于INDI的控制律升级方案（扩展①） ======
 \clearpage
-\setcounter{section}{11}
-\input{ch/10-INDI-control.tex}
-
-% ====== 第13章：基于LQR的姿态最优控制（扩展②） ======
-\clearpage
-\setcounter{section}{12}
-\input{ch/14-lqr-control.tex}
-
-% ====== 第14章：自抗扰控制与在线参数辨识（扩展③） ======
-\clearpage
-\setcounter{section}{13}
-\input{ch/16-adrc-onlineid.tex}
-
-% ====== 第15章：模型预测控制（扩展④） ======
-\clearpage
-\setcounter{section}{14}
-\input{ch/17-mpc-control.tex}
-
-% ====== 第16章：讨论 ======
-\clearpage
-\setcounter{section}{15}
 \input{ch/08-discussion.tex}
-
-% ====== 第17章：结论 ======
 \clearpage
-\setcounter{section}{16}
 \input{ch/09-conclusion.tex}
 
-% ====== 参考文献（BibTeX）======
+% ============================== 方法附录 ==============================
+\FloatBarrier
+\clearpage
+\appendix
+\input{ch/10-INDI-control.tex}
+\clearpage
+\input{ch/14-lqr-control.tex}
+\clearpage
+\input{ch/16-adrc-onlineid.tex}
+\clearpage
+\input{ch/17-mpc-control.tex}
+
+% 参考文献必须位于全文（含附录）最后。
+\FloatBarrier
 \clearpage
 \addcontentsline{toc}{section}{参考文献}
 \bibliography{ref}

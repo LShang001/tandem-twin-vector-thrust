@@ -1,0 +1,40 @@
+\resizebox{0.98\linewidth}{!}{%
+\begin{tikzpicture}[
+    font=\small,
+    node distance=0.75cm,
+    box/.style={draw,rounded corners=2pt,align=center,text width=3.15cm,
+                minimum height=1.65cm,inner sep=6pt,line width=0.7pt},
+    arrow/.style={-{Stealth[length=2.6mm]},line width=0.9pt},
+    note/.style={align=center,font=\footnotesize,text width=3.15cm}
+]
+\node[box,fill=blue!7,draw=blue!55!black] (geometry) {
+  \textbf{构型与坐标}\\
+  纵列双发 + 正交单轴摆座\\
+  模型系 $\leftrightarrow$ 飞控FRD系
+};
+\node[box,fill=green!7,draw=green!45!black,right=of geometry] (model) {
+  \textbf{非线性模型}\\
+  $\mathbf{W}(\mathbf{u})=[\mathbf{F};\mathbf{M}]$\\
+  四元数六自由度动力学
+};
+\node[box,fill=orange!9,draw=orange!70!black,right=of model] (control) {
+  \textbf{主控制架构}\\
+  误差四元数 + 速率PI\\
+  前馈对消 + 在线效能矩阵
+};
+\node[box,fill=gray!8,draw=black!65,right=of control] (evidence) {
+  \textbf{分级验证}\\
+  解析 / 回归 / MODEL-DEFAULT\\
+  初步实机方向与链路锚定
+};
+
+\draw[arrow] (geometry) -- (model);
+\draw[arrow] (model) -- (control);
+\draw[arrow] (control) -- (evidence);
+
+\node[note,below=0.45cm of geometry] {明确轴置换后再讨论\\“滚转/俯仰/偏航”};
+\node[note,below=0.45cm of model] {参数来源可追溯，\\仿真与固件限幅分离};
+\node[note,below=0.45cm of control] {绝对指令NDI式，\\不等同于INDI};
+\node[note,below=0.45cm of evidence] {不把局部首飞锚点\\外推为全包线验证};
+\end{tikzpicture}%
+}

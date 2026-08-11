@@ -57,7 +57,7 @@
   </header>
 
   <section class="hero" aria-label="Web 程序化几何与工程标注">
-    <img src="01-web-orthogonal-deflection.png" alt="前发绕 z_b 偏航、尾发绕 y_b 俯仰的非零正交摆角构型">
+    <img src="01-web-orthogonal-deflection.png" alt="上摆与下摆采用正交单轴摆座的非零摆角构型">
     <div class="hero-label">01 / 构型与主控制通道</div>
     <div class="callout c-front"><i>1</i><div>前发 · 拉力式<small>转子：CW（沿 +x<sub>b</sub> 观察）</small><small>摆座：绕 z<sub>b</sub> · δ<sub>f</sub> = +18°</small></div></div>
     <div class="callout c-tail"><i>2</i><div>尾发 · 推进式<small>转子：CCW（沿 +x<sub>b</sub> 观察）</small><small>摆座：绕 y<sub>b</sub> · δ<sub>t</sub> = +18°</small></div></div>
@@ -99,11 +99,11 @@
   </section>
 
   <section class="info-grid">
-    <article class="info yaw"><div class="num">1</div><h3>前发摆动 · 偏航主控</h3><div class="eq">δ<sub>f</sub>&gt;0 → F<sub>y</sub>&gt;0 → M<sub>z</sub>&gt;0</div><p class="why">绕 z<sub>b</sub>；侧向分力 × 前部力臂</p></article>
-    <article class="info pitch"><div class="num">2</div><h3>尾发摆动 · 俯仰主控</h3><div class="eq">δ<sub>t</sub>&gt;0 → F<sub>z</sub>&lt;0 → M<sub>y</sub>&lt;0</div><p class="why">绕 y<sub>b</sub>；向上分力 × 尾部力臂</p></article>
-    <article class="info roll"><div class="num">3</div><h3>差速反扭 · 滚转主控</h3><div class="eq">ω<sub>f</sub> ≠ ω<sub>t</sub> → M<sub>x</sub></div><p class="why">净反扭矩控制滚转</p></article>
+    <article class="info yaw"><div class="num">1</div><h3>上摆 δ<sub>f</sub> · 固件滚转</h3><div class="eq">模型 M<sub>z′</sub> → FRD 滚转通道</div><p class="why">轴置换后采用悬停实机语义</p></article>
+    <article class="info pitch"><div class="num">2</div><h3>下摆 δ<sub>t</sub> · 固件俯仰</h3><div class="eq">模型 M<sub>y′</sub> → FRD 俯仰通道</div><p class="why">模型系与固件通道同轴对应</p></article>
+    <article class="info roll"><div class="num">3</div><h3>差速 Δω · 固件偏航</h3><div class="eq">模型 M<sub>x′</sub> → FRD 偏航通道</div><p class="why">反扭矩差经轴置换进入偏航通道</p></article>
   </section>
-  <footer class="foot"><span>权威链：aircraft-model.json → aircraft-view.mjs → Web 3D 快照 → 本图标注</span><span>概念级模型 · MODEL-DEFAULT</span></footer>
+  <footer class="foot"><span>权威链：aircraft-model.json → aircraft-view.mjs → 固件轴映射 → 本图标注</span><span>概念级模型 · MODEL-DEFAULT</span></footer>
 </main>
 </body>
 </html>
