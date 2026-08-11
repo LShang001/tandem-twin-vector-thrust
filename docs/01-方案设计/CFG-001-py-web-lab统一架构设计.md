@@ -1,6 +1,6 @@
 # CFG-001 py-web-lab 统一架构设计（Python 仿真引擎 + Web 交互可视化）
 
-> 状态：草案待评审
+> 状态：**已实现**（`simulations/py-web-lab/`，2026-08 落地；本文保留为设计文档，实现演进以代码为准）
 > 域：01-方案设计
 > 关联：[CFG-000](CFG-000-概念构型基线C0.md)、[GOV-002](../00-项目治理/GOV-002-信息与配置管理.md)、`simulations/high-fidelity-analysis/core.py`、`simulations/vector-thrust-lab/`
 > 所有参数值来源: `models/aircraft-model.json`（唯一事实源）
