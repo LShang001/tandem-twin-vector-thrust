@@ -30,7 +30,9 @@ int main()
     check(near(kFlightCtrlParams.rate_yaw.kp * ControlUnits::kRadPerDeg, 0.20f),
           "yaw Kp 迁移保持等效物理增益");
     check(near(kFlightCtrlParams.rate_roll.ki * ControlUnits::kRadPerDeg, 0.10f),
-          "Ki 迁移保持等效物理增益");
+          "roll/pitch Ki 迁移保持等效物理增益");
+    check(near(kFlightCtrlParams.rate_yaw.ki * ControlUnits::kRadPerDeg, 0.075f),
+          "yaw Ki 保守下调25%");
     check(near(kFlightCtrlParams.rate_roll.out_max * ControlUnits::kRadPerDeg, 100.0f),
           "输出限幅迁移保持 rad/s² 物理上限");
     check(near(kFlightCtrlParams.rate_roll.int_limit * ControlUnits::kRadPerDeg, 20.0f),

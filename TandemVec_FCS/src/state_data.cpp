@@ -159,7 +159,8 @@ GncTelemetry gnc_tel = {};
 //   yaw  通道(绕 z_b=推力轴) → 电机差速（含 τm=0.28s 滞后，必须限带）
 //   —— 之前（x_b 竖直错误映射时期）roll=差速、yaw=上摆，恢复后正好互换。
 // 二阶反解（2ζωn=Kp_r，ωn=√(Kp_r·Kp_a)）直接使用统一后的 Kp_r。
-//  积分: 现役 Ki=5.729578 s⁻²（角度域），roll/pitch Ti=Kp/Ki≈2.8s；
+//  积分: roll/pitch Ki=5.729578 s⁻²、Ti≈2.8s；yaw Ki=4.297184 s⁻²、
+//  Ti≈2.67s（2026-08-12 下调25%）；
 //  用于消除 CG 偏移/推力不对称/风偏引起的速率环静差。
 // ★ 2026-08-08 C路径重构：增益/限幅/滤波全部读自 kFlightCtrlParams（§4.0）
 PositionPID rollAnglePID(kFlightCtrlParams.att_roll.kp, kFlightCtrlParams.att_roll.ki, kFlightCtrlParams.att_roll.kd,

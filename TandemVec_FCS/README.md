@@ -365,7 +365,7 @@ node tools/dps_profile_runner.js --label 7p735_stop --interval-ms 7.735 --fifo-r
 
 Yaw控制 (ratchet hold + 速率内环):
   RC/航向误差 → 目标角速率 → 角速率内环 → deg/s²→rad/s² → BTRUE分配 → 电机差速
-                              (Kp=11.459156 s^-1, Ki=5.729578 s^-2)
+                              (Kp=11.459156 s^-1, Ki=4.297184 s^-2)
 
 高度控制 (串级):
   目标高度 → 高度外环 → 速度内环 → 油门%
