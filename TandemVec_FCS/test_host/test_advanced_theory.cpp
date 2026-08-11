@@ -15,8 +15,10 @@
 #include "../include/TandemVec_Config.h"
 #include "../include/Quat4f.h"
 #include "../include/TandemVec_ADRC.h"
+#include "../include/ControlUnits.h"
 #include "../include/TandemVec_ServoModel.h"
 #include "../include/PositionPID.h"
+#include "../include/FlightCtrlParams.h"
 #include "../include/ComplementaryFilter.h"
 #include <cmath>
 #include <cstdio>
@@ -59,8 +61,12 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
   float dt=0.005f; int N=(int)(sim_s/dt);
   RigidBody body; Motor mf,mr;
   ADRC adrc(g_adrc_wc,g_adrc_wo,1.f);  // 带宽由全局变量给出，便于扫描
-  PositionPID ang(5.f,0,0), rate(0.30f,0.0003f,0);
-  ang.setOutputLimits(-50,50);rate.setOutputLimits(-100,100);rate.setIntegralLimit(10.f);rate.setIntegralThreshold(30.f);
+  PositionPID ang(kFlightCtrlParams.att_pitch.kp,0,0),
+              rate(kFlightCtrlParams.rate_pitch.kp,kFlightCtrlParams.rate_pitch.ki,0);
+  ang.setOutputLimits(kFlightCtrlParams.att_pitch.out_min,kFlightCtrlParams.att_pitch.out_max);
+  rate.setOutputLimits(kFlightCtrlParams.rate_pitch.out_min,kFlightCtrlParams.rate_pitch.out_max);
+  rate.setIntegralLimit(kFlightCtrlParams.rate_pitch.int_limit);
+  rate.setIntegralThreshold(kFlightCtrlParams.rate_pitch.threshold);
   ComplementaryFilter gF(0.3f),aF(0.85f),rF(0.25f);float gf=0;
   PropulsionState ps={0,0,0,0};
   float hr=target_deg*3.14159265f/360.f;
@@ -84,9 +90,10 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
 
     float alpha;
     if(use_adrc){
-      alpha=adrc.step(gf,wref,0,dt);  // ADRC替代内环PID
+      alpha=ControlUnits::dps2ToRadps2(adrc.step(gf,wref,0,dt));  // ADRC角度域→物理域
     }else{
-      alpha=rF.filter(constrain(rate.computeDerivativeOnMeasurement(wref,gf, 0.005f),-100.f,100.f));
+      float alpha_dps2=rF.filter(rate.computeDerivativeOnMeasurement(wref,gf, 0.005f));
+      alpha=ControlUnits::dps2ToRadps2(alpha_dps2);
     }
 
     float M_cmd=P.Iy*alpha,w0=0.4f*P.wMax;

@@ -353,19 +353,19 @@ node tools/dps_profile_runner.js --label 7p735_stop --interval-ms 7.735 --fifo-r
 | CH5 | Arm/Disarm | > 1500 解锁 (含7点中值去抖) |
 | CH6 | Ignition | > 1500 点火使能 (含5点中值去抖) |
 | CH7 | Flight Mode | 三档: <1300 Manual / 1300-1650 AltHold / >1650 PosHold |
-| CH8 | TVC Manual | < 1200 手动TVC (摇杆直驱舵机, 旁路控制器) |
+| CH8 | TVC Manual | > 1750 手动TVC (摇杆直驱舵机, 旁路控制器) |
 | CH9 | Attitude Mode | < 1500 角度模式 / ≥ 1500 角速率模式 |
 
 #### PID 控制器结构
 
 ```
 姿态控制 (Roll/Pitch 串级):
-  RC输入 → 角度外环 → 角速率内环 → TVC摆角 → 舵机
-            (Kp=4.25)   (Kp=0.25, Ki=0.0004)
+  RC输入 → 角度外环 → 角速率内环 → deg/s²→rad/s² → BTRUE分配 → TVC摆角
+            (Kp=2.8)    (Kp=16.042818 s^-1, Ki=5.729578 s^-2)
 
-Yaw控制 (单环):
-  RC输入 → 角速率环 → 电机差速 PWM
-            (Kp=3.8, Ki=0.15)
+Yaw控制 (ratchet hold + 速率内环):
+  RC/航向误差 → 目标角速率 → 角速率内环 → deg/s²→rad/s² → BTRUE分配 → 电机差速
+                              (Kp=11.459156 s^-1, Ki=5.729578 s^-2)
 
 高度控制 (串级):
   目标高度 → 高度外环 → 速度内环 → 油门%
@@ -381,7 +381,8 @@ Yaw控制 (单环):
 | 参数 | 值 | 说明 |
 |------|-----|------|
 | MAX_TARGET_RATE | 80°/s | 姿态外环最大输出 |
-| MAX_CORRECTION | 10° | TVC 最大摆角 |
+| MAX_MANUAL_*RATE | 600°/s | RATE_MODE 曲线输出上限 |
+| dMax | 15° | 实机 TVC 最大摆角 |
 | MAX_ANGLE_COMMAND | 30° | 最大倾角指令 |
 | MAX_TILT (位置环) | 15° | 位置环最大倾斜 |
 | MAX_SPEED (位置环) | 1.5 m/s | 最大水平速度 |

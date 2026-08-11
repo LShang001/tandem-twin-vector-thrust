@@ -44,18 +44,18 @@ print('     （Mx 被有意缩小 = 设计意图；B⁻¹ 保证另两轴精确�
 print('\n' + '=' * 64)
 print('【2】TVC 内环增益 vs 15° 摆角限幅')
 print('=' * 64)
-KP_TVC, RATE_MAX = 0.25, 80.0
+KP_TVC, RATE_MAX = 16.042818, 80.0  # ATTITUDE_MODE 外环角速率限幅；非 RATE_MODE 满杆
 # 尾摆：My→dt 主通道
 g_dt = abs(Binv[1, 1])
 alpha_sat = dMax / (g_dt * Iy)              # 触发限幅的 alpha
-err_sat = alpha_sat / KP_TVC                 # 触发限幅的角速率误差
+err_sat = np.degrees(alpha_sat) / KP_TVC     # deg/s² ÷ s⁻¹ = deg/s
 print(f'  尾摆 My→dt 增益={g_dt:.2f} rad/(N·m)   Iy={Iy}')
 print(f'  触发 15° 限幅: alpha={alpha_sat:.2f} rad/s²  →  角速率误差={err_sat:.1f}°/s')
-print(f'  摇杆满打 = {RATE_MAX:.0f}°/s  →  饱和倍数 {RATE_MAX/err_sat:.1f}×')
-alpha_full = KP_TVC * RATE_MAX
+print(f'  姿态外环限幅 = {RATE_MAX:.0f}°/s  →  饱和倍数 {RATE_MAX/err_sat:.1f}×')
+alpha_full = np.radians(KP_TVC * RATE_MAX)
 dt_full = g_dt * Iy * alpha_full
-print(f'  满打杆需摆角 {np.degrees(dt_full):.0f}°（物理仅 15°）')
-print(f'  → 线性区仅占摇杆行程 {err_sat/RATE_MAX*100:.0f}%，其余为饱和/bang-bang')
+print(f'  该参考需摆角 {np.degrees(dt_full):.0f}°（物理仅 15°）')
+print(f'  → 姿态外环参考范围的线性区占比 {err_sat/RATE_MAX*100:.0f}%，其余为饱和/bang-bang')
 alpha_max = dMax / (g_dt * Iy)
 print(f'  15° 摆角可达最大角加速度 = {np.degrees(alpha_max):.0f}°/s²')
 print(f'  → 从 0 加速到 {RATE_MAX:.0f}°/s 需 {RATE_MAX/np.degrees(alpha_max):.2f}s（可达，属加速期饱和）')
@@ -63,10 +63,10 @@ print(f'  → 从 0 加速到 {RATE_MAX:.0f}°/s 需 {RATE_MAX/np.degrees(alpha_
 print('\n' + '=' * 64)
 print('【3】差速通道限幅余量（调度后）')
 print('=' * 64)
-KP_YAW = 0.20
+KP_YAW = 11.459156
 denom_h = 2.0 * kQ * w_hover ** 2
-dw_full = Ix * KP_YAW * RATE_MAX / denom_h
-print(f'  满打杆 Δω={dw_full:.3f}（限幅 {dwMax}）余量 {dwMax/dw_full:.1f}×')
-err_sat_yaw = dwMax * denom_h / (Ix * KP_YAW)
+dw_full = Ix * np.radians(KP_YAW * RATE_MAX) / denom_h
+print(f'  80°/s 参考下 Δω={dw_full:.3f}（限幅 {dwMax}）余量 {dwMax/dw_full:.1f}×')
+err_sat_yaw = np.degrees(dwMax * denom_h / Ix) / KP_YAW
 print(f'  触发 dwMax 需角速率误差 {err_sat_yaw:.0f}°/s → 线性区覆盖'
-      f' {min(err_sat_yaw/RATE_MAX*100, 100):.0f}% 摇杆行程 ✓')
+      f' {min(err_sat_yaw/RATE_MAX*100, 100):.0f}% 姿态外环参考范围 ✓')

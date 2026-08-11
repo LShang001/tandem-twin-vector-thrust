@@ -123,16 +123,17 @@ typedef struct
 } ControlInputs_t;
 
 // 控制输出结构体
-// 内环 PID 输出角加速度(rad/s²)，底层控制分配根据物理模型逆解执行器指令
+// 速率 PID 在角度域输出 deg/s²；写入本结构前统一转换为 rad/s²，
+// 底层控制分配只接收 SI 制角加速度并根据物理模型逆解执行器指令。
 // 轴向（★ 2026-08-07 轴置换后，旧注释"上摆=偏航/差速=滚转"已废止；
 // 锚点=手动模式摇杆直通实机验证）：alpha_roll=体轴x→上摆δ_f，
 // alpha_pitch=体轴y→下摆δ_t，alpha_yaw=体轴z→差速Δω
 typedef struct
 {
   float throttle_percent; // 油门百分比 (0-100)
-  float alpha_roll;       // rad/s²  体轴x角加速度（滚转/上摆δ_f）
-  float alpha_pitch;      // rad/s²  体轴y角加速度（俯仰/下摆δ_t）
-  float alpha_yaw;        // rad/s²  体轴z角加速度（偏航/差速Δω）
+  float alpha_roll_radps2;  // rad/s²  体轴x角加速度（滚转/上摆δ_f）
+  float alpha_pitch_radps2; // rad/s²  体轴y角加速度（俯仰/下摆δ_t）
+  float alpha_yaw_radps2;   // rad/s²  体轴z角加速度（偏航/差速Δω）
 } ControlOutputs_t;
 
 // 任务调度结构体
@@ -337,7 +338,8 @@ struct GncTelemetry
 {
     float error_deg[3];      // 姿态角误差（yaw 恒 0：航向为纯速率指令，无姿态回中）
     float omega_ref_dps[3];  // 目标角速率（外环输出滤波后，deg/s）
-    float alpha_ref[3];      // 角加速度指令（内环输出滤波后）
+    float alpha_ref_dps2[3];   // 角度域角加速度指令（内环输出滤波后，deg/s²）
+    float alpha_ref_radps2[3]; // 物理域角加速度指令（惯量逆解输入，rad/s²）
     float M_cmd[3];          // 分配前力矩（差速增益调度后，N·m）
     float M_ff[3];           // ★2026-08-10 交叉耦合前馈力矩（模型系分量，N·m；惯性解耦诊断）
     float w0_eff;            // 分配工作点（含 w0_floor，rad/s）

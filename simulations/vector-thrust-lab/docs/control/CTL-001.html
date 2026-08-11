@@ -597,7 +597,8 @@ M=I·K·Δω，量级对齐对角内环等效带宽 rateKq·b·T/Iy ≈ 59）</l
 Hz）：</p>
 <pre><code>q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w&lt;0 取反，同 §8.2 约定）
 → 外环 rollAnglePID/pitchAnglePID       （角→角速率；kp=2.8（deg 域），输出限幅 ±MAX_TARGET_RATE=80°/s）
-→ 内环 rollRatePID/pitchRatePID         （角速率→角加速度 alpha_roll/alpha_pitch；kp=0.28，derivative-on-measurement）
+→ 内环 rollRatePID/pitchRatePID         （deg/s→deg/s²；kp=16.042818 s⁻¹，derivative-on-measurement）
+→ 物理边界乘 π/180                    （deg/s²→rad/s²；只在 ControlOutputs_t 入口转换）
 → 惯量逆解前馈 M_ff = I·α_ref + ω×(I·ω) + ω×h_rotor   （InertiaDecoupling.h；inertia_comp_mask=0x03 全开，
                                                          位0=陀螺耦合、位1=转子陀螺；0xE1 可在线关闭）
 → BTRUE 在线分配（TandemVec_ControlAllocation.h）      （工作点 w0_eff=√(0.5·(wf_est²+wt_est²))，
@@ -622,7 +623,10 @@ Hz）：</p>
 <tr>
 <td>角速率内环</td>
 <td>rateKq/rateKr/rateKp（1.2/1.2/1.5）</td>
-<td>rate kp=0.28/0.28/0.20 + ki=0.1，限幅 100°/s²，阈值 60</td>
+<td>输入 <code>deg/s</code>、输出 <code>deg/s²</code>；roll/pitch
+<code>kp=16.042818 s⁻¹</code>、yaw
+<code>kp=11.459156 s⁻¹</code>、<code>ki=5.729578 s⁻²</code>，输出限幅
+±5729.578 deg/s²，积分分离阈值 60 deg/s</td>
 </tr>
 <tr>
 <td>差速增益调度</td>
@@ -757,5 +761,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 21:06</footer></article></body>
 </html>

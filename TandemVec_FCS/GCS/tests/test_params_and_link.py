@@ -46,6 +46,12 @@ def test_meta_ranges():
     assert m['group'] == '姿态外环（deg 域）' and m['type'] == 'float'
     assert pm.META['att_yaw.enabled']['type'] == 'uint8'
     assert pm.META['att_roll.out_max']['unit'] == 'deg/s'
+    assert pm.META['rate_roll.kp']['unit'] == 's⁻¹'
+    assert pm.META['rate_roll.ki']['unit'] == 's⁻²'
+    assert pm.META['rate_roll.out_max']['unit'] == 'deg/s²'
+    assert pm.META['rate_roll.int_limit']['unit'] == 'deg/s²'
+    assert pm.META['rate_roll.threshold']['unit'] == 'deg/s'
+    assert pm.META['rate_roll.ki']['max'] >= 5.729578
     assert pm.META['att_roll.falpha']['group'] == '姿态外环（deg 域）'
     assert pm.META['out_alpha[2]']['group'] == '内环输出滤波'
 

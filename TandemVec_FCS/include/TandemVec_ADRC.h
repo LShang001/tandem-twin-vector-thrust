@@ -41,17 +41,16 @@ struct ESO2
 
     // 单步观测器更新
     // @param y    测量值 (ω, deg/s)
-    // @param u    控制量 (α_ref, rad/s² → 内部转为deg/s²)
+    // @param u_dps2 控制量 (α_ref, deg/s²)
     // @param b0   名义控制增益
     // @param wo   观测器带宽 (rad/s)
     // @param dt   步长 (s)
-    void update(float y, float u, float b0, float wo, float dt)
+    void update(float y, float u_dps2, float b0, float wo, float dt)
     {
         float e = z1 - y;                         // 观测误差
-        float u_deg = u * 57.29578f;              // rad/s²→deg/s²
 
         // ESO dynamics (Euler discretization)
-        z1 += (z2 - 2.f*wo*e + b0*u_deg) * dt;   // ω̇ = f + b0*u − β1*e
+        z1 += (z2 - 2.f*wo*e + b0*u_dps2) * dt;  // ω̇ = f + b0*u − β1*e
         z2 += (-wo*wo*e) * dt;                    // ḟ = −β2*e
     }
 
@@ -64,11 +63,11 @@ struct ESO2
 struct ADRC
 {
     ESO2 eso;
-    float Kp;    // PD比例增益 (rad/s² per deg/s error)
-    float Kd;    // PD微分增益 (rad/s² per deg/s² rate-of-change) — 暂未使用
+    float Kp;    // PD比例增益 (deg/s² per deg/s error = 1/s)
+    float Kd;    // PD微分增益（暂未使用）
     float b0;    // 名义控制增益
     float wo;    // ESO带宽 (rad/s)
-    float u_prev; // 上一拍实际施加的控制量 (rad/s²)，供 ESO 正确分离控制与扰动
+    float u_prev_dps2; // 上一拍实际施加的控制量 (deg/s²)，供 ESO 正确分离控制与扰动
 
     // @param bandwidth 控制器带宽 ωc (rad/s)
     // @param eso_bw   ESO带宽 ωo (rad/s)
@@ -84,23 +83,23 @@ struct ADRC
     //
     // @param b0_nom   名义控制增益 (物理逆解后 b0≈1)
     ADRC(float bandwidth=6.f, float eso_bw=8.f, float b0_nom=1.f)
-        : Kp(bandwidth), Kd(0), b0(b0_nom), wo(eso_bw), u_prev(0.f) {}
+        : Kp(bandwidth), Kd(0), b0(b0_nom), wo(eso_bw), u_prev_dps2(0.f) {}
 
-    void reset() { eso.reset(); u_prev = 0.f; }
+    void reset() { eso.reset(); u_prev_dps2 = 0.f; }
 
     // 单步控制计算
     // @param y         测量值: ω (deg/s)
     // @param ref       参考值: ω_ref (deg/s)
     // @param ref_dot   参考微分: ω̇_ref (deg/s²) — 外部提供或设为0
     // @param dt        步长 (s)
-    // @return          控制量 α_ref (rad/s²)
+    // @return          控制量 α_ref (deg/s²)；物理层边界再转 rad/s²
     float step(float y, float ref, float ref_dot, float dt)
     {
         // 1. ESO估计状态和总扰动
         //    必须传入上一拍实际施加的控制量：否则 ESO 无法区分
         //    "自己施加的控制" 与 "外部扰动"，会把正常控制响应全部
         //    归入 z2，等效于抵消掉控制作用（闭环有效增益被吃掉）。
-        eso.update(y, u_prev, b0, wo, dt);
+        eso.update(y, u_prev_dps2, b0, wo, dt);
 
         // 2. PD误差控制
         float err = ref - eso.z1;
@@ -112,11 +111,9 @@ struct ADRC
         if (u_deg >  5000.f) u_deg =  5000.f;
         if (u_deg < -5000.f) u_deg = -5000.f;
 
-        float alpha = u_deg / 57.29578f;  // deg/s² → rad/s² (PID输出单位)
-
         // 5. 缓存本拍控制量，供下一拍 ESO 使用
-        u_prev = alpha;
+        u_prev_dps2 = u_deg;
 
-        return alpha;
+        return u_deg;
     }
 };

@@ -4,7 +4,7 @@ description: 纵列双发矢量推力飞行器飞控联调工作台——固件�
 license: MIT
 metadata:
   author: LShang001
-  version: 1.0.0
+  version: 1.0.1
 compatibility: Requires Windows + Python 3.12 + 飞控固件（AnoCom 0xE0/0xE1 参数链路、DBG 控制台、W25N01GV 黑匣子）
 ---
 
@@ -47,7 +47,7 @@ tools/tvc-cli.cmd --port COM10 diag
 # 读（含 id/名称/类型/分组）
 py -3.12 server/cli.py --port COM10 param get rate_roll.kp
 # 写（0x00 校验帧确认，成功打 ✓）
-py -3.12 server/cli.py --port COM10 param set rate_roll.kp 0.28
+py -3.12 server/cli.py --port COM10 param set rate_roll.kp 16.042818
 # 列表 / 恢复默认（RAM 生效）
 py -3.12 server/cli.py --port COM10 param list
 py -3.12 server/cli.py --port COM10 param restore
@@ -55,7 +55,8 @@ py -3.12 server/cli.py --port COM10 param restore
 
 - **必须按名字寻址，绝不猜参数 ID**（曾把 id=28 rate_roll.ki 当 rate_pitch.kp 写过，踩坑 #2）
 - 名字→ID 映射 = `GCS/server/params.py::expected_names()` 下标，有守护测试锁定（rate_roll.kp=27、rate_pitch.kp=36、att_pitch.kp=9）
-- 后端运行中也可写（名字寻址 WS）：`{"cmd":"param_write","name":"rate_roll.kp","value":0.28}`
+- 后端运行中也可写（名字寻址 WS）：`{"cmd":"param_write","name":"rate_roll.kp","value":16.042818}`
+- **速率环已统一为角度域**：输入 `deg/s`、输出 `deg/s²`；roll/pitch `kp=16.042818 s⁻¹`、yaw `kp=11.459156 s⁻¹`。迁移前 `0.28/0.20` 不能再写入，否则物理增益降低 57.3 倍。
 - **在线写只改 RAM**——重启/断电回烧录值；确认好手感后必须同步改 `include/FlightCtrlParams.h` 并重烧固化（调参唯一固化入口，踩坑 #3）
 
 ### DBG 诊断（后端运行中，经 WS dbg_cmd）
@@ -105,13 +106,13 @@ py -3.12 server/cli.py --port COM10 dbg "tasks"           # 任务调度统计
 
 ### 通用变量上报（AnoVars，2026-08-10）
 
-固件任意内部变量（控制中间量/传感器/状态）注册后多协议上报——**加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏**，预注册 47 个（gnc_tel 全字段/w_est 观测器/EKF/辨识/电压）：
+固件任意内部变量（控制中间量/传感器/状态）注册后多协议上报——**加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏**，预注册 49 个（gnc_tel 全字段/w_est 观测器/EKF/辨识/电压）：
 
 ```bash
 # 拉取固件变量清单（0xF3，名称/类型/ID 表格）
 tools/tvc-cli.cmd --port COM10 vars list
 # 一键监视：配置上报集合 + 收集 5s 值流 + 统计（--json 结构化）
-tools/tvc-cli.cmd --port COM10 vars watch wf_est alpha_ref_x -t 5 --json
+tools/tvc-cli.cmd --port COM10 vars watch wf_est adps2_x -t 5 --json
 # 配置类（走 DBG 通道，自动进出调试模式）
 tools/tvc-cli.cmd --port COM10 vars add wf_est      # 加入上报集合（≤16）
 tools/tvc-cli.cmd --port COM10 vars rate 100        # 频率 1-200Hz（N 变量时每个=rate/N Hz）
@@ -193,7 +194,7 @@ py -3.12 server/cli.py --port COM10 record start -d 90 -o output/flight1.csv
 
 ### 2. 超调实测
 
-角度模式（CH9 < 1500）阶跃 10-20°、保持 2s × 每轴 3-5 次 → `bb_tool --latest --analyze` → 读超调百分比。理论参考：串级 ζ = ½√(ω_r/kp_a)，内环 kp=0.28 时 ~0.9（几乎不超调）。
+角度模式（CH9 < 1500）阶跃 10-20°、保持 2s × 每轴 3-5 次 → `bb_tool --latest --analyze` → 读超调百分比。简化 P-P 模型中 `2ζω_n=Kp_r`、`ω_n²=Kp_r Kp_a`；现行 `Kp_r` 已直接是 `s⁻¹`，不再乘 57.3。该模型不含 PI、滤波、饱和和执行器动态，只能作为调参方向参考。
 
 ### 3. 震荡定位
 

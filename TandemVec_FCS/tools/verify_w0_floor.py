@@ -9,6 +9,7 @@
 """
 import numpy as np
 import sys
+import math
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
 from core import load_params, control_effectiveness
 
@@ -17,7 +18,7 @@ kT, kQ, wMax = P['kT'], P['kQ'], P['wMax']
 Ix, dwMax = P['Ix'], P['dwMax']
 m, g = P['m'], P['g']
 w_hover = (0.5 * m * g / kT) ** 0.5
-KP_YAW, RATE = 0.20, 80.0
+KP_YAW, RATE = 11.459156, 80.0
 
 print(f'w_hover={w_hover:.0f} rad/s = {w_hover/wMax*100:.0f}% wMax')
 print(f'（正常悬停油门区间约 40~60% wMax）\n')
@@ -44,7 +45,8 @@ for floor in (0.0, 0.4, 0.5, 0.6, 0.7):
         w0 = thr * wMax
         w0_eff = max(w0, w0_floor)
         sched = min(max((w0_eff / w_hover) ** 2, 0.02), 4.0)
-        Mx_cmd = Ix * KP_YAW * RATE * sched
+        alpha_radps2 = KP_YAW * RATE * math.pi / 180.0
+        Mx_cmd = Ix * alpha_radps2 * sched
         # 分配器用 w0_eff 计算效能
         dw = Mx_cmd / (2 * kQ * w0_eff ** 2)
         dw = min(dw, dwMax)
@@ -53,7 +55,7 @@ for floor in (0.0, 0.4, 0.5, 0.6, 0.7):
         print(f'    {thr*100:5.0f}% {w0_eff:8.0f} {sched:7.3f} {dw:7.3f} {Mx_phys:12.5f}')
 
 print('\n=== 结论 ===')
-print('  floor=0（当前）：低油门 sched→0.02 仍在缩放，B 矩阵在病态区计算')
+print('  floor=0（历史对照）：低油门 sched→0.02，B 矩阵在低效能区计算')
 print('  floor=0.6：≤30% wMax 油门统一按 344 rad/s 工作点算')
 print('    · 调度系数下限 0.36（不再趋零）')
 print('    · B 矩阵在良态工作点求逆（det 大 2 个数量级、cond 更小）')

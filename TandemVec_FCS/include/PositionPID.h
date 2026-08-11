@@ -14,7 +14,7 @@
 //    2. 积分状态无界 —— integralLimit_ 只钳制 iOut 而非 integral_ 本身，
 //       200Hz/Ki=3e-4 下 1s 即累积到 1e4，退饱和迟滞可达数秒。
 //    3. 无扰切换未扣除 D 项 —— dNow 是恒 0 的死表达式且从未被使用。
-//    4. 反算抗饱和量纲错误 —— excess(输出量) 与 integral_(误差·拍) 差一个 ki_，
+//    4. 反算抗饱和量纲错误 —— excess(输出量) 与 integral_(误差·秒) 差一个 ki_，
 //       Ki=3e-4 时回退量被低估约 3000 倍，功能几乎无效。
 //    5. 新增 NaN/Inf 防护 —— 单个非有限输入曾会永久污染积分器与微分滤波器，
 //       此后输出恒为 NaN 且无法自愈；现拦截并冻结该拍，计数供遥测。
@@ -92,7 +92,7 @@ public:
 
     // —— 反算抗饱和增益 ——
     //  Kb: 反算增益 (0=禁用, 典型 0.5~2.0×Kp/Ki)
-    //  当输出被限幅截断时, integral_ −= Kb×(unclamped−clamped)
+    //  当输出被限幅截断时, integral_ −= Kb×(unclamped−clamped)/Ki
     void setAntiWindup(float kb) { antiWindupKb_ = (kb < 0.f) ? 0.f : kb; }
 
     // —— 输出变化率限制 ——
@@ -275,8 +275,9 @@ private:
         }
 
         // —— D项: 2-DOF 设定点加权 ——
-        // 标准(微分先行): dOut = kd * (c*d(setpoint)/dt − d(input)/dt)
-        // c=0 (default): 纯微分先行, D只作用于测量值
+        // 当前为每拍差分（未除以 dt）：dOut = kd * (c*Δsetpoint − Δinput)。
+        // c=0 (default): 纯微分先行, D只作用于测量值。若未来改为
+        // 连续时间导数，必须同步迁移所有非零 kd 参数及其单位元数据。
         // c=1: D作用于误差
         float dOut = kd_ * (setpointWeightC_ * rawDerivative + (1.f - setpointWeightC_) * filteredDerivative);
 
@@ -290,7 +291,7 @@ private:
         // —— 反算抗饱和 (back-calculation) ——
         // 输出被限幅时，按超出量回退积分，使下一拍能立刻退出饱和。
         //
-        // 量纲修正: excess 的单位是【输出量】，integral_ 的单位是【误差·拍】，
+        // 量纲修正: excess 的单位是【输出量】，integral_ 的单位是【误差·秒】，
         //   两者相差一个 ki_。原实现 integral_ -= Kb*excess 直接混用单位，
         //   在 ki_=0.0003 时回退量被低估约 3000 倍，抗饱和几乎无效。
         //   正确形式: integral_ -= Kb * excess / ki_

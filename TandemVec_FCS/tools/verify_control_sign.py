@@ -1,70 +1,94 @@
 # -*- coding: utf-8 -*-
-"""数值推链：机头上仰 10° → 固件控制链 → 舵机指令 → 修正力矩方向
-复刻固件公式：eulerToQuaternion(Z-Y'-X'') / q_error = q_current^-1 ⊗ q_target
-/ 外环 P / 内环 P / My = Iy*alpha / 分配 dt / 舵机 PWM / 物理 My(δt)"""
+"""Numerically verify the pitch feedback sign from attitude error to torque."""
+
 import math
+import sys
 
-def euler_to_quat(roll, pitch, yaw):
-    cr, sr = math.cos(roll/2), math.sin(roll/2)
-    cp, sp = math.cos(pitch/2), math.sin(pitch/2)
-    cy, sy = math.cos(yaw/2), math.sin(yaw/2)
-    return (cr*cp*cy + sr*sp*sy, sr*cp*cy - cr*sp*sy,
-            cr*sp*cy + sr*cp*sy, cr*cp*sy - sr*sp*cx0(0)) if False else None
 
-def e2q(r, p, y):
-    cr, sr = math.cos(r/2), math.sin(r/2)
-    cp, sp = math.cos(p/2), math.sin(p/2)
-    cy, sy = math.cos(y/2), math.sin(y/2)
-    w = cr*cp*cy + sr*sp*sy
-    x = sr*cp*cy - cr*sp*sy
-    y_ = cr*sp*cy + sr*cp*sy
-    z = cr*cp*sy - sr*sp*cy
-    return (x, y_, z, w)
+def e2q(roll, pitch, yaw):
+    cr, sr = math.cos(roll / 2), math.sin(roll / 2)
+    cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
+    cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
+    return (
+        sr * cp * cy - cr * sp * sy,
+        cr * sp * cy + sr * cp * sy,
+        cr * cp * sy - sr * sp * cy,
+        cr * cp * cy + sr * sp * sy,
+    )
 
-def conj(q): return (-q[0], -q[1], -q[2], q[3])
+
+def conj(q):
+    return (-q[0], -q[1], -q[2], q[3])
+
 
 def qmul(a, b):
-    return (a[3]*b[0]+a[0]*b[3]+a[1]*b[2]-a[2]*b[1],
-            a[3]*b[1]-a[0]*b[2]+a[1]*b[3]+a[2]*b[0],
-            a[3]*b[2]+a[0]*b[1]-a[1]*b[0]+a[2]*b[3],
-            a[3]*b[3]-a[0]*b[0]-a[1]*b[1]-a[2]*b[2])
+    return (
+        a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+        a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+        a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+        a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+    )
 
-DEG = math.pi/180
 
-# 1. 机头上仰 10°（roll=0, pitch=+10°, yaw=0）
-q_cur = e2q(0, 10*DEG, 0)
-q_tgt = (0.0, 0.0, 0.0, 1.0)  # 水平
+DEG = math.pi / 180.0
+
+# Current attitude: pitch +10 deg; target: level.
+q_cur = e2q(0.0, 10.0 * DEG, 0.0)
+q_tgt = (0.0, 0.0, 0.0, 1.0)
 q_err = qmul(conj(q_cur), q_tgt)
-sign = 1.0 if q_err[3] >= 0 else -1.0
-vn = math.sqrt(q_err[0]**2 + q_err[1]**2 + q_err[2]**2)
-scale = 2*math.atan2(vn, abs(q_err[3]))/vn*180/math.pi if vn > 0.25 else 2*180/math.pi
+sign = 1.0 if q_err[3] >= 0.0 else -1.0
+vn = math.sqrt(q_err[0] ** 2 + q_err[1] ** 2 + q_err[2] ** 2)
+scale = 2.0 * math.atan2(vn, abs(q_err[3])) / vn / DEG if vn > 0.25 else 2.0 / DEG
 err_pitch = sign * q_err[1] * scale
 err_roll = sign * q_err[0] * scale
-print(f'q_cur(抬头10°) = {q_cur}')
-print(f'q_err = {q_err}  err_pitch={err_pitch:+.2f}°  err_roll={err_roll:+.2f}°')
+print(f'q_cur(pitch +10 deg) = {q_cur}')
+print(f'q_err = {q_err}  err_pitch={err_pitch:+.2f} deg  err_roll={err_roll:+.2f} deg')
 
-# 2. 外环 P（Kp_pitchAngle>0）：error 正 → 目标角速度正
-KpA = 6.0  # 示意正增益
-rate_tgt = KpA * err_pitch
-print(f'外环 pitchRateTarget = {rate_tgt:+.3f} °/s')
+# Controller domain: deg, deg/s, deg/s^2.
+kp_angle = 2.8
+rate_target_dps = kp_angle * err_pitch
+print(f'outer pitch rate target = {rate_target_dps:+.3f} deg/s')
 
-# 3. 内环 P（Kp_rate>0，ω≈0）：alpha 正
-KpR = 3.0
-alpha_pitch = KpR * (rate_tgt - 0.0)
-print(f'内环 alpha_pitch = {alpha_pitch:+.3f} rad/s²')
+kp_rate = 16.042818
+alpha_pitch_dps2 = kp_rate * rate_target_dps
+alpha_pitch_radps2 = alpha_pitch_dps2 * DEG
+print(
+    f'inner alpha_pitch = {alpha_pitch_dps2:+.3f} deg/s^2 '
+    f'= {alpha_pitch_radps2:+.3f} rad/s^2'
+)
 
-# 4. My = Iy * alpha
-Iy = 0.14
-My = Iy * alpha_pitch
-print(f'My = Iy*alpha = {My:+.5f} N·m  → {"抬头力矩(更抬头=正反馈!)" if My > 0 else "低头力矩(修正✓)"}')
+# Physical boundary and BTRUE pitch main channel.
+iy = 0.022
+my_cmd = iy * alpha_pitch_radps2
+print(f'My_cmd = Iy*alpha = {my_cmd:+.5f} N*m')
 
-# 5. 分配：BTRUE 主通道 dt ≈ My 同号 → 舵机正摆
-dt = My * 0.3  # 示意正增益
-print(f'分配 dt = {dt:+.5f} rad = {dt*180/math.pi:+.2f}°')
+# At zero gimbal angle, dMy/d(delta_t) = -b*T0.
+b_arm = 0.315
+kt = 1.04e-5
+w_hover = 574.0
+t0 = kt * w_hover * w_hover
+delta_t = my_cmd / (-b_arm * t0)
+print(f'delta_t = My/(-b*T0) = {delta_t:+.5f} rad = {delta_t/DEG:+.2f} deg')
 
-# 6. 舵机 PWM：dt>0 → servo_deg>0 → pct>50 → 脉宽>1500us
-print(f'舵机指令脉宽 = {1500 + dt*180/math.pi*1.333/45*500:+.0f} us (中位1500)')
+# Flight-tested servo direction: dir_pitch=-1.
+gear = 40.0 / 30.0
+dir_pitch = -1.0
+servo_deg = delta_t / DEG * gear * dir_pitch
+pulse_us = 1500.0 + servo_deg / 45.0 * 500.0
+print(f'servo pulse = {pulse_us:.0f} us (center 1500, dir_pitch=-1)')
 
-# 7. 物理：δt>0 → My_phys = -0.00233 N·m/deg × dt_deg（负斜率！）
-My_phys = -0.00233 * (dt*180/math.pi)
-print(f'物理响应 My_phys(δt=+{dt*180/math.pi:.2f}°) = {My_phys:+.5f} N·m → {"低头修正 ✓ 负反馈" if My_phys < 0 else "抬头=正反馈 ✗"}')
+my_physical = -b_arm * t0 * delta_t
+negative_feedback = (
+    err_pitch < 0.0
+    and alpha_pitch_radps2 < 0.0
+    and my_cmd < 0.0
+    and delta_t > 0.0
+    and pulse_us < 1500.0
+    and my_physical < 0.0
+)
+print(
+    f'My_physical = {my_physical:+.5f} N*m -> '
+    f'{"negative feedback PASS" if negative_feedback else "sign chain FAIL"}'
+)
+if not negative_feedback:
+    sys.exit(1)

@@ -145,23 +145,22 @@ GncTelemetry gnc_tel = {};
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — 解析最优增益 ---
 //
 //  级联P-P闭环=二阶系统: θ/θ_ref=ωn²/(s²+2ζωn·s+ωn²)
-//    ωn² = (Kp_r×57.3) × Kp_a,    2ζωn = Kp_r×57.3
+//    ωn² = Kp_r × Kp_a,    2ζωn = Kp_r
+//  其中 Kp_r 已是统一角度域增益（s⁻¹），不再额外乘 180/pi。
 //
-//  Roll/Pitch: Kp_a=5.0, Kp_r=0.30 → Kp_r_eff=17.2 → ζ=0.93, ωn=9.3(1.5Hz)
-//    (当前=保守偏阻尼值，避免悬停振荡。实飞可增至 Kp_a=5.5 Kp_r=0.30→ζ=0.78)
-//  Yaw: Kp_a=4.0, Kp_r=0.15 → ζ=0.83, ωn=5.9(0.94Hz) (差速通道保守)
+//  当前 Roll/Pitch: Kp_a=2.8, Kp_r=16.043 s⁻¹；Yaw: Kp_a=5.0,
+//  Kp_r=11.459 s⁻¹。这些数值与迁移前 0.28/0.20 的实际控制行为严格等价。
 //
-//  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
-//    PositionPID no-dt约定: Ki×200=等效连续增益。0.0003×200=0.06/s
+//  历史积分值 Ki=0.0003 曾隐含 200Hz；2026-08-09 改为显式 dt 后先换为
+//  连续域 0.06，2026-08-11 再随角度域迁移乘 180/pi。当前值只看 FlightCtrlParams.h。
 // ★ 2026-08-07 恢复存档轴映射后的通道↔执行器对应（参数随之换位）：
 //   roll 通道(绕 x_b) → 上摆舵机（舵机快 333Hz，可高带宽）
 //   pitch通道(绕 y_b) → 下摆舵机（同上）
 //   yaw  通道(绕 z_b=推力轴) → 电机差速（含 τm=0.28s 滞后，必须限带）
 //   —— 之前（x_b 竖直错误映射时期）roll=差速、yaw=上摆，恢复后正好互换。
-// 二阶反解（2ζωn=Kp_r·…, ωn=√(2ζωn·Kp_a)）：
-//   TVC 轴(roll 上摆 / pitch 下摆): Kp_r=0.25, Kp_a=2.5 → ωn≈5.98, ζ≈1.20
-//   差速轴(yaw): 带宽必须 ≪1/τm=3.57 → Kp_r=0.10, Kp_a=0.8 → ωn≈2.14, ζ≈1.34
-//  积分: Ki=0.0003(内环) → 不干扰ζ, 配平τ≈7s → 消CG偏移/推力不对称/风偏静差
+// 二阶反解（2ζωn=Kp_r，ωn=√(Kp_r·Kp_a)）直接使用统一后的 Kp_r。
+//  积分: 现役 Ki=5.729578 s⁻²（角度域），roll/pitch Ti=Kp/Ki≈2.8s；
+//  用于消除 CG 偏移/推力不对称/风偏引起的速率环静差。
 // ★ 2026-08-08 C路径重构：增益/限幅/滤波全部读自 kFlightCtrlParams（§4.0）
 PositionPID rollAnglePID(kFlightCtrlParams.att_roll.kp, kFlightCtrlParams.att_roll.ki, kFlightCtrlParams.att_roll.kd,
                          kFlightCtrlParams.att_roll.out_min, kFlightCtrlParams.att_roll.out_max, true,
@@ -183,12 +182,15 @@ PositionPID yawAnglePID(kFlightCtrlParams.att_yaw.kp, kFlightCtrlParams.att_yaw.
                         kFlightCtrlParams.att_yaw.out_min, kFlightCtrlParams.att_yaw.out_max, true,
                         kFlightCtrlParams.att_yaw.int_limit, kFlightCtrlParams.att_yaw.threshold,
                         kFlightCtrlParams.att_yaw.filter_alpha);     // 差速外环：未启用（enabled=false，航向=纯速率指令）
+// 以下为 2026-08-07 迁移前混合域调参史；其中 Kp/Ki 数值不得直接写入当前固件，
+// 当前角度域等价值需乘 180/pi。量化脚本已同步为新单位。
 // ★ 2026-08-07 实机：yaw 打杆无反应。量化（tools/verify_yaw_authority.py）：
 //   瓶颈不是 dwMax 限幅（19% 油门满打杆仅用到 0.7 的 35%），
 //   而是 Ix=0.0021 极小（Iy/Ix=10.5×）× Kp_r 偏小 → 力矩指令仅
 //   为 TVC 通道的 1/26。故 Kp_r 0.10→0.25（对齐 TVC），
 //   Ki 0.0003→0.002（×6.7，消除差速静差/反扭不对称；PositionPID 已备
-//   积分状态钳位 + 反算抗饱和，iOut 上限 0.002×250=0.5 rad/s²）。
+//   积分状态钳位 + 反算抗饱和；此处 0.5 rad/s² 是迁移前物理等价值，
+//   当前控制器内部统一使用 deg/s²）。
 //   注：低油门下差速物理效能仅 ∝w0²（19% 油门只有 3.6%），
 //   地面低油门 yaw 天然弱是构型固有特性，非参数问题。
 // ★ 2026-08-07 存档量级对比（tools/verify_yaw_vs_archive.py）：
@@ -528,7 +530,7 @@ float tvcTargetAngle1 = 0.0f, tvcTargetAngle2 = 0.0f; // TVC 通道1/2 目标摆
 // 推力补偿分量 (单位推力矢量的水平分量)
 float thrust_comp_N = 0.0f, thrust_comp_E = 0.0f; // 北向/东向推力补偿 (sin(tilt))
 
-// 控制输出（alpha_ref 等控制链中间量见 gnc_tel §4.0b）
+// 控制输出（alpha_ref_dps2/radps2 等控制链中间量见 gnc_tel §4.0b）
 float throttlePercent = 0.0f; // 油门百分比 (0-100%)
 
 // ---- 在线参数辨识结果（★ 纯观测，不参与控制回路）----

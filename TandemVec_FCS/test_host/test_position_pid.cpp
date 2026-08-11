@@ -112,8 +112,8 @@ static void test_integral_state_clamp()
 {
     std::printf("\n-- P3: 积分状态钳位 (v3修复#2) --\n");
 
-    const float ki = 0.0003f;      // 与固件 rollRatePID 一致
-    const float iLimit = 10.0f;    // 固件设定
+    const float ki = 0.0003f;      // 小 Ki 的历史回归样例，用于放大状态钳位问题
+    const float iLimit = 10.0f;    // 测试专用限幅，不代表现役飞控参数
     PositionPID pid(0.0f, ki, 0.0f);
     pid.setOutputLimits(-100.f, 100.f);
     pid.setIntegralLimit(iLimit);

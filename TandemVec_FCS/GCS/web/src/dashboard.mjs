@@ -35,10 +35,10 @@ export function activate() {
   const ctrlWrap = $('ctrlBars');
   ctrlWrap.innerHTML = '';
   const ctrlDefs = [
-    ['α_roll (rad/s²)', 'ctrl_roll', { min: -10, max: 10 }],
-    ['α_pitch', 'ctrl_pitch', { min: -10, max: 10 }],
+    ['α_roll (deg/s²)', 'ctrl_roll_dps2', { min: -600, max: 600 }],
+    ['α_pitch (deg/s²)', 'ctrl_pitch_dps2', { min: -600, max: 600 }],
     ['油门 %', 'ctrl_thr_pct', { min: 0, max: 100 }],
-    ['α_yaw (差速)', 'ctrl_yaw', { min: -10, max: 10 }],
+    ['α_yaw (deg/s², 差速)', 'ctrl_yaw_dps2', { min: -600, max: 600 }],
     ['目标 R', 'target_roll_deg', { min: -45, max: 45 }],
     ['目标 P', 'target_pitch_deg', { min: -45, max: 45 }],
   ];

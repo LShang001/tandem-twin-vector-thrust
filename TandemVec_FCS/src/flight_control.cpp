@@ -13,6 +13,7 @@
 // 惯量逆解交叉耦合前馈（★2026-08-10 通用层：ω×(I·ω) + ω×h，仿真同构）
 #include "InertiaDecoupling.h"
 #include "RcCurve.h"    // FPV 摇杆曲线（RATE_MODE，★2026-08-11）
+#include "ControlUnits.h"
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
@@ -1054,7 +1055,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       //   roll 摇杆 → 绕 x_b（上摆通道）；pitch 摇杆 → 绕 y_b（下摆通道）
       //   yaw 摇杆 → 绕 z_b（差速），由 execute_yaw_controller 处理
       //   曲线：归一化 → 死区 → expo（中心）→ rc_rate（灵敏度）→ super（边缘）
-      //   满杆角速度 = rcRate×200/(1−super)，默认 roll/pitch 667°/s、yaw 444°/s
+      //   满杆角速度 = rcRate×200/(1−super)，默认 roll/pitch 333°/s、yaw 222°/s
       gnc_tel.omega_ref_dps[0] = rcRateCurve(
           rcNormFromUs(inputs.roll_raw),
           kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[0],
@@ -1073,16 +1074,20 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     gnc_tel.omega_ref_dps[0] = rollAngleOutputFilter.filter(gnc_tel.omega_ref_dps[0]);
     gnc_tel.omega_ref_dps[1] = pitchAngleOutputFilter.filter(gnc_tel.omega_ref_dps[1]);
 
-    // 内环：角速率误差 → 角加速度指令(rad/s²)
-    // FRD 轴序：体轴x=滚转，体轴y=俯仰，底层控制分配负责物理逆解
-    outputs.alpha_roll  = rollRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x, 0.005f);
+    // 内环统一角度域：角速率误差(deg/s) → 角加速度指令(deg/s²)。
+    // 仅在写入 ControlOutputs 时转换为 rad/s²，供惯量逆解使用。
+    gnc_tel.alpha_ref_dps2[0] = rollRatePID.computeDerivativeOnMeasurement(
+        gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x, 0.005f);
     // ★ 2026-08-10 通读修复：原误用 rollRatePID（复制粘贴）——pitchRatePID.compute
     //   从未被调用 → pitch 积分恒 0、且 roll/pitch 共享同一 PID 实例的积分状态互相污染；
     //   在线辨识 i_term[1]=pitchRatePID.getIntegral() 因此恒 0（pitch CG/配平力矩辨识失效）。
-    //   kp 相同（0.28）掩盖了比例项错误，实机调参稳定期未被发现。修复后 pitch 积分独立。
-    outputs.alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
-    outputs.alpha_roll  = rollOutputFilter.filter(outputs.alpha_roll);
-    outputs.alpha_pitch = pitchOutputFilter.filter(outputs.alpha_pitch);
+      //   迁移前 kp 相同（0.28）掩盖了比例项错误，实机调参稳定期未被发现。修复后 pitch 积分独立。
+    gnc_tel.alpha_ref_dps2[1] = pitchRatePID.computeDerivativeOnMeasurement(
+        gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
+    gnc_tel.alpha_ref_dps2[0] = rollOutputFilter.filter(gnc_tel.alpha_ref_dps2[0]);
+    gnc_tel.alpha_ref_dps2[1] = pitchOutputFilter.filter(gnc_tel.alpha_ref_dps2[1]);
+    outputs.alpha_roll_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[0]);
+    outputs.alpha_pitch_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[1]);
   }
   else
   { // 姿态控制未激活（手动TVC旁路）
@@ -1093,13 +1098,15 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     gnc_tel.omega_ref_dps[0] = 0.0f;
     gnc_tel.omega_ref_dps[1] = 0.0f;
     // 手动TVC：alpha清零，mix层走RC旁路直接控制舵机
-    outputs.alpha_roll  = 0.0f;
-    outputs.alpha_pitch = 0.0f;
+    gnc_tel.alpha_ref_dps2[0] = 0.0f;
+    gnc_tel.alpha_ref_dps2[1] = 0.0f;
+    outputs.alpha_roll_radps2  = 0.0f;
+    outputs.alpha_pitch_radps2 = 0.0f;
   }
 
   // 遥测（★ 2026-08-08 C路径重构：控制链中间量收拢进 gnc_tel §4.0b）
-  gnc_tel.alpha_ref[0] = outputs.alpha_roll;
-  gnc_tel.alpha_ref[1] = outputs.alpha_pitch;
+  gnc_tel.alpha_ref_radps2[0] = outputs.alpha_roll_radps2;
+  gnc_tel.alpha_ref_radps2[1] = outputs.alpha_pitch_radps2;
 }
 
 /**
@@ -1166,22 +1173,23 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 
     gnc_tel.omega_ref_dps[2] = yawAngleOutputFilter.filter(gnc_tel.omega_ref_dps[2]);
 
-    // 内环：速率误差 → 角加速度指令 alpha_yaw (rad/s²)
-    // FRD 轴序：偏航速率 = 体轴z 角速度
-    outputs.alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(
+    // 内环统一角度域：速率误差(deg/s) → 角加速度指令(deg/s²)。
+    gnc_tel.alpha_ref_dps2[2] = yawRatePID.computeDerivativeOnMeasurement(
         gnc_tel.omega_ref_dps[2], current_omega_dps_body_filtered.z, 0.005f);
-    outputs.alpha_yaw = yawOutputFilter.filter(outputs.alpha_yaw);
+    gnc_tel.alpha_ref_dps2[2] = yawOutputFilter.filter(gnc_tel.alpha_ref_dps2[2]);
+    outputs.alpha_yaw_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[2]);
   }
   else
   {
     yawAnglePID.reset();
     yawRatePID.reset();
     gnc_tel.omega_ref_dps[2] = 0.0f;
-    outputs.alpha_yaw = 0.0f;  // 手动TVC由mix层RC旁路处理；锁定时保持零
+    gnc_tel.alpha_ref_dps2[2] = 0.0f;
+    outputs.alpha_yaw_radps2 = 0.0f;  // 手动TVC由mix层RC旁路处理；锁定时保持零
   }
 
   // 遥测（★ 2026-08-08 C路径重构：控制链中间量收拢进 gnc_tel §4.0b）
-  gnc_tel.alpha_ref[2] = outputs.alpha_yaw;
+  gnc_tel.alpha_ref_radps2[2] = outputs.alpha_yaw_radps2;
 }
 
 /**
@@ -1307,9 +1315,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       //   分配器 allocateMoments 吃**模型系**（x'=推力轴朝机头, y'=下摆, z'=上摆）：
       //     x' = -z_b、y' = +y_b、z' = +x_b（det=+1 纯旋转）
       //   符号以"实机已验证正确的陀螺直通行为"为锚点反解，勿凭几何直觉：
-      float Mx = -P.Ix * outputs.alpha_yaw;   // Mx'(绕推力轴→差速) ← alpha_yaw(绕 z_b)
-      float My =  P.Iy * outputs.alpha_pitch; // My'(下摆)          ← alpha_pitch(绕 y_b)
-      float Mz = -P.Iz * outputs.alpha_roll;  // Mz'(上摆)          ← alpha_roll(绕 x_b)
+      float Mx = -P.Ix * outputs.alpha_yaw_radps2;   // Mx'(绕推力轴→差速) ← alpha_yaw(绕 z_b)
+      float My =  P.Iy * outputs.alpha_pitch_radps2; // My'(下摆)          ← alpha_pitch(绕 y_b)
+      float Mz = -P.Iz * outputs.alpha_roll_radps2;  // Mz'(上摆)          ← alpha_roll(绕 x_b)
       // ★ 2026-08-10 交叉耦合前馈（通用层，仿真 dynamics.mjs 同构）：
       //   完整刚体动力学 M = I·α + ω×(I·ω) + ω×h。前馈在**机体系**按物理轴计算，
       //   再经轴置换 R（M_x'=-M_z, M_y'=+M_y, M_z'=+M_x，verify_frame_map）进模型系，
@@ -1483,7 +1491,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
  *   即使辨识结果完全错误，也不影响飞行 —— 这是"第一步：只观测不闭环"。
  *   待多架次数据确认 b_est 稳定后，才考虑人工调整增益（第二步）。
  *
- * 轴序约定：[0]=roll(滚转/差速) [1]=pitch(俯仰/下摆) [2]=yaw(偏航/上摆)
+  * 轴序约定：[0]=roll(滚转/上摆) [1]=pitch(俯仰/下摆) [2]=yaw(偏航/差速)
  *   与 outputs.alpha_* 及 current_omega_dps_body_filtered 的 FRD 映射对应：
  *   滚转←omega.x, 俯仰←omega.y, 偏航←omega.z
  */
@@ -1506,9 +1514,9 @@ static void update_online_identification(const ControlInputs_t &inputs,
   //   (w0/w_hover)²，实际执行的力矩 ≠ 内环原始输出。辨识必须用**实际
   //   执行量**，否则会误判"命令了却没达到" → 惯量比 b_est 系统性偏小。
   //   摆座通道（roll/pitch）未做调度，原样传入。
-  const float alpha_cmd[3] = { outputs.alpha_roll,
-                               outputs.alpha_pitch,
-                               outputs.alpha_yaw * s_yaw_gain_sched };
+  const float alpha_cmd[3] = { outputs.alpha_roll_radps2,
+                               outputs.alpha_pitch_radps2,
+                               outputs.alpha_yaw_radps2 * s_yaw_gain_sched };
 
   // 实测角速率（deg/s）— OnlineID 内部转 rad/s 再求导
   // Vector3 分量为 double，需显式转 float（花括号初始化不允许隐式收窄）
@@ -1517,9 +1525,10 @@ static void update_online_identification(const ControlInputs_t &inputs,
                                static_cast<float>(current_omega_dps_body_filtered.z) }; // 偏航
 
   // 内环积分项 I_term = ki × integral (rad/s²)，用于提取配平力矩→CG偏移
-  const float i_term[3] = { rollRatePID.getKi()  * rollRatePID.getIntegral(),
-                            pitchRatePID.getKi() * pitchRatePID.getIntegral(),
-                            yawRatePID.getKi()   * yawRatePID.getIntegral() };
+  const float i_term[3] = {
+      ControlUnits::dps2ToRadps2(rollRatePID.getKi()  * rollRatePID.getIntegral()),
+      ControlUnits::dps2ToRadps2(pitchRatePID.getKi() * pitchRatePID.getIntegral()),
+      ControlUnits::dps2ToRadps2(yawRatePID.getKi()   * yawRatePID.getIntegral()) };
 
   s_online_id.step(alpha_cmd, omega_dps, i_term,
                    outputs.throttle_percent, 0.005f);   // GNC 固定 200Hz

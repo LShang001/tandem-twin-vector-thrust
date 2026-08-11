@@ -13,10 +13,10 @@ import re
 PID_GROUPS = [
     ('att_roll', '姿态外环（deg 域）', 'Roll 外环：姿态角误差 → 目标角速率'),
     ('att_pitch', '姿态外环（deg 域）', 'Pitch 外环：姿态角误差 → 目标角速率'),
-    ('att_yaw', '姿态外环（deg 域）', 'Yaw 外环：未启用（航向=纯速率指令）'),
-    ('rate_roll', '角速率内环', 'Roll 内环：速率误差 → 上摆角指令'),
-    ('rate_pitch', '角速率内环', 'Pitch 内环：速率误差 → 下摆角指令'),
-    ('rate_yaw', '角速率内环', 'Yaw 内环（差速）：速率误差 → Δω'),
+    ('att_yaw', '姿态外环（deg 域）', 'Yaw 外环：ratchet hold（打杆恒速，回中锁航向）'),
+    ('rate_roll', '角速率内环（deg 域）', 'Roll 内环：速率误差 → 虚拟角加速度'),
+    ('rate_pitch', '角速率内环（deg 域）', 'Pitch 内环：速率误差 → 虚拟角加速度'),
+    ('rate_yaw', '角速率内环（deg 域）', 'Yaw 内环（差速）：速率误差 → 虚拟角加速度'),
     ('alt_pos', '垂直串级', '高度外环：高度误差 → 目标垂直速度'),
     ('alt_vel', '垂直串级', '垂直速度内环 → 目标垂直加速度'),
     ('pos_n', '水平位置环', '北向位置外环 → 目标北向速度'),
@@ -37,10 +37,10 @@ FILTER_GROUPS = [
 FIELD_META = {
     'kp': dict(unit='', min=0.0, max=100.0, step=0.01, desc='比例增益'),
     'ki': dict(unit='', min=0.0, max=2.0, step=0.01, desc='积分增益（连续域，dt 显式传入）'),
-    'kd': dict(unit='', min=0.0, max=100.0, step=0.01, desc='微分增益'),
+    'kd': dict(unit='', min=0.0, max=100.0, step=0.01, desc='微分增益（作用于每拍差分，未除以 dt）'),
     'out_min': dict(unit='', min=-1000.0, max=0.0, step=0.1, desc='输出下限'),
     'out_max': dict(unit='', min=0.0, max=1000.0, step=0.1, desc='输出上限'),
-    'int_limit': dict(unit='', min=0.0, max=1000.0, step=1.0, desc='积分状态钳位'),
+    'int_limit': dict(unit='', min=0.0, max=1000.0, step=1.0, desc='积分项输出上限（内部反推状态界）'),
     'threshold': dict(unit='', min=0.0, max=1000.0, step=0.1, desc='积分分离阈值'),
     'filter_alpha': dict(unit='', min=0.0, max=1.0, step=0.01, desc='微分滤波系数', wire_name='falpha'),
     'enabled': dict(unit='', min=0.0, max=1.0, step=1.0, desc='环是否参与控制（只读）', readonly=True),
@@ -60,6 +60,7 @@ FILTER_WIRE = {
 
 # 按环的输出单位修正
 RATE_UNIT = 'deg/s'   # 姿态外环 out_min/out_max
+ANG_ACC_UNIT = 'deg/s²'  # 角速率内环 out_min/out_max/int_limit
 ACC_UNIT = 'm/s²'     # 速度内环
 VEL_UNIT = 'm/s'      # 位置环 out
 THR_UNIT = 'm/s'      # alt_pos out（垂直速度目标）
@@ -69,7 +70,7 @@ def _loop_out_unit(loop):
     if loop.startswith('att_'):
         return RATE_UNIT
     if loop.startswith('rate_'):
-        return ''           # alpha_ref 归一化指令
+        return ANG_ACC_UNIT
     if loop.startswith('alt_pos'):
         return VEL_UNIT
     if loop.startswith('alt_vel'):
@@ -97,6 +98,27 @@ def build_meta():
             m['desc'] = desc + ' · ' + m['desc']
             if field in ('out_min', 'out_max'):
                 m['unit'] = _loop_out_unit(loop)
+            if loop.startswith('rate_'):
+                if field == 'kp':
+                    m['unit'] = 's⁻¹'
+                elif field == 'ki':
+                    m['unit'] = 's⁻²'
+                    m['max'] = 100.0
+                elif field == 'kd':
+                    # PositionPID 的速率环 D 项仍按每拍差分计算，未除以 dt；
+                    # 因此当前参数量纲与 kp 相同。kd 默认为 0，后续若改为
+                    # 真正的时间导数实现，必须同时迁移数值与此元数据。
+                    m['unit'] = 's⁻¹'
+                elif field == 'int_limit':
+                    m['unit'] = ANG_ACC_UNIT
+                    m['max'] = 10000.0
+                    m['desc'] = desc + ' · 积分输出贡献 |ki·∫e dt| 的限幅'
+                elif field == 'threshold':
+                    m['unit'] = RATE_UNIT
+                elif field == 'out_min':
+                    m['min'] = -10000.0
+                elif field == 'out_max':
+                    m['max'] = 10000.0
             meta[name] = m
     for arr, group, desc in FILTER_GROUPS:
         wire = FILTER_WIRE.get(arr, arr)

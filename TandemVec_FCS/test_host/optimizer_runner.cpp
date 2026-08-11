@@ -6,6 +6,7 @@
 #include "../include/TandemVec_Config.h"
 #include "../include/Quat4f.h"
 #include "../include/PositionPID.h"
+#include "../include/ControlUnits.h"
 #include "../include/ComplementaryFilter.h"
 #include <cmath>
 #include <cstdio>
@@ -18,7 +19,9 @@ int main(int argc,char**argv){
   float Kpa=atof(argv[1]),Kpr=atof(argv[2]),Ki=atof(argv[3]),sep=atof(argv[4]);
   const auto&P=kDefaultTandemVecParams;
   Body b;Motor mf,mr;PositionPID ang(Kpa,0,0),rate(Kpr,Ki,0);
-  ang.setOutputLimits(-50,50);rate.setOutputLimits(-100,100);rate.setIntegralLimit(10.f);rate.setIntegralThreshold(sep);
+  ang.setOutputLimits(-50,50);
+  rate.setOutputLimits(-ControlUnits::radps2ToDps2(100.f),ControlUnits::radps2ToDps2(100.f));
+  rate.setIntegralLimit(ControlUnits::radps2ToDps2(10.f));rate.setIntegralThreshold(sep);
   ComplementaryFilter gF(0.3f),aF(0.85f),rF(0.25f);float gf=0;
   PropulsionState ps={0,0,0,0};
   float hr=10*3.14159265f/180.f;
@@ -28,9 +31,9 @@ int main(int argc,char**argv){
     gf=gF.filter(b.o[1]*57.29578f+((float)rand()/RAND_MAX-0.5f)*0.01f);
     Quat4f qe=qNorm(qMul(qConj(b.q),qt));float sw=qe.w>=0?1:-1;
     float v=sqrtf(qe.z*qe.z+qe.y*qe.y),sc=v>0.25f?2*atan2f(v,fabsf(qe.w))/v*57.29578f:114.59156f;
-    float err=sw*qe.y*sc,wref=aF.filter(constrain(ang.computeWithExternalDerivative(err,0,-gf),-50.f,50.f));
-    float al=rF.filter(constrain(rate.computeDerivativeOnMeasurement(wref,gf),-100.f,100.f));
-    float M=P.Iy*al,w0=0.4f*P.wMax;AllocationInput ai={0,M,0,w0,ps};
+    float err=sw*qe.y*sc,wref=aF.filter(constrain(ang.computeWithExternalDerivative(err,0,-gf,0.005f),-50.f,50.f));
+    float alpha_dps2=rF.filter(rate.computeDerivativeOnMeasurement(wref,gf,0.005f));
+    float M=P.Iy*ControlUnits::dps2ToRadps2(alpha_dps2),w0=0.4f*P.wMax;AllocationInput ai={0,M,0,w0,ps};
     AllocationOutput ao=allocateMoments(ai,P,AllocationStrategy::FULL_B);
     auto df=allocateDifferential(w0,ao.dw,P);mf.set(df.wf_target);mr.set(df.wt_target);
     float wf=mf.step(0.005f),wt=mr.step(0.005f);ps={wf,wt,ao.delta_f,ao.delta_t};

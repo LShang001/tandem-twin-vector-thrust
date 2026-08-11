@@ -10,14 +10,14 @@
 - **RATE_MODE 摇杆映射（四轴式，悬停构型，★2026-08-11 FPV 摇杆曲线接入）**：三轴均经 `RcCurve.h` 曲线（归一化→死区→expo→rc_rate→super→限幅），参数 `rc_rate/rc_expo[3]/rc_super[3]`（FlightCtrlParams.h，在线可调）；默认 rc_rate=0.5/expo=0.25/super 0.7·0.7·0.55 → 满杆 roll/pitch 333°/s、yaw 222°/s（限幅 MAX_MANUAL_*RATE=600°/s，2026-08-11 由 80 解耦提高——旧值 35/50/80 全部过时）。roll 摇杆 → 上摆（前摆）；pitch 摇杆 → 下摆（尾摆）。ATTITUDE_MODE 姿态环（2026-08-07 轴置换后，★以 `flight_control.cpp` 1016-1023 行为准）：**q_err.x→上摆（roll 外环）、q_err.y→下摆（pitch 外环）、q_err.z→差速（yaw hold 外环）**——旧"q_err.x→差速"为置换前语义。
 - ⚠️ **NED z（世界竖直）≠ 机体 z_b**：推力垂直补偿用 R13（x_b 投影）；激光斜距用 R33（激光沿 −z_b）。
 - 详细推导见 `docs/04-数学建模/MOD-002` §1.2。
-- ★ 通用变量上报（AnoVars：0xF2 值帧/0xF3 清单/MAVLink NAMED_VALUE_FLOAT/DBG vars 命令）与 MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）见项目根 `AGENTS.md` 踩坑记录；加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏。
+- ★ 通用变量上报（AnoVars：0xF2 值帧/0xF3 清单/MAVLink NAMED_VALUE_FLOAT/DBG vars 命令）与 MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）见项目根 `AGENTS.md` 踩坑记录；加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏。MAVLink 名称只有 9 个可见字符，新增变量须检查截断后唯一。
 - ★ 编码统一（2026-08-11）：批处理内容必须 ASCII（cmd 用启动代码页解析、chcp 不救文件解析），中文输出走 Python（PYTHONUTF8=1）；详见根 `docs/registers/踩坑记录-AGENTS.md`。
 
 ## 飞行器构型与控制分配
 
 - **纵列双发（悬停构型语义，2026-08-07 轴置换）**：前电机(CW)最高点=**上摆 δ_f，滚转主控**；尾电机(CCW)最低点=**下摆 δ_t，俯仰主控**
 - **差速偏航**：Δω（alpha_yaw 绕推力轴 x_b）→ Mx'——**悬停/巡航统一 = 偏航主控**（旧"水平巡航=滚转"读法已废止，同公式在不同姿态系下的不同解读）
-- **物理逆解**：α→I×α→M_cmd→allocateMoments(BTRUE)→δ_f/δ_t/Δω
+- **物理逆解**：速率 PID 在角度域输出 α(deg/s²) → `ControlUnits::dps2ToRadps2` → I×α(rad/s²) → M_cmd → allocateMoments(BTRUE) → δ_f/δ_t/Δω
 - **执行器映射**：前摆δ_f→PA0(TVC_ROLL), 尾摆δ_t→PA1(TVC_PITCH), Δω→PA2/PA3(前后电机差速)
 - **齿轮传动**：舵机30T/摆座40T = 1.333:1，PWM映射已含齿轮比
 
@@ -38,10 +38,10 @@
 
 ## 核心参数
 
-- **控制增益/限幅/滤波 ★ 实机调参唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（2026-08-08 C路径重构 + 2026-08-11 扩到 128 参数：12 环 PID 增益/限幅/阈值/滤波 + 滤波数组 + inertia_comp_mask + FPV 摇杆曲线 7 参数（rc_rate/rc_expo[3]/rc_super[3]），全部集中于此结构体；static constexpr，**固件与宿主机测试共用同一事实源**——`state_data.cpp` PID 构造、`main.cpp` setup、`flight_control.cpp` initPositionHold 与 `test_host/test_flight_control_axis.cpp` 均读它）。数值域为 PositionPID 实际语义（deg 域）。
+- **控制增益/限幅/滤波 ★ 实机调参唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（2026-08-08 C路径重构 + 2026-08-11 扩到 128 参数：12 环 PID 增益/限幅/阈值/滤波 + 滤波数组 + inertia_comp_mask + FPV 摇杆曲线 7 参数（rc_rate/rc_expo[3]/rc_super[3]），全部集中于此结构体；static constexpr，**固件与宿主机测试共用同一事实源**——`state_data.cpp` PID 构造、`main.cpp` setup、`flight_control.cpp` initPositionHold 与 `test_host/test_flight_control_axis.cpp` 均读它）。速率环输入 `deg/s`、输出 `deg/s²`：`kp` 为 `s⁻¹`，`ki` 为 `s⁻²`，输出/I项限幅为 `deg/s²`，积分分离阈值为 `deg/s`；旧参数 `0.28/0.20/0.10` 不得导入。
 - 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）
 - 差速增益调度/工作点下限/零油门门控：`src/flight_control.cpp` 层2（mix 函数，硬编码公式，改后需跑 `tools/verify_*.py`）
-- 控制链遥测：`src/state_data.h` §4.0b `gnc_tel`（每层中间量：error_deg/omega_ref_dps/alpha_ref/M_cmd/w0_eff/yaw_gain_sched/执行器指令+饱和），CAN/AnoCom/Serial8 均读它
+- 控制链遥测：`src/state_data.h` §4.0b `gnc_tel`（每层中间量：error_deg/omega_ref_dps/alpha_ref_dps2/alpha_ref_radps2/M_cmd/w0_eff/yaw_gain_sched/执行器指令+饱和）。0x21/CAN/旧 `alpha_ref_*` 保持物理域 `rad/s²`；`adps2_x/y/z` 为角度域 `deg/s²`。
 - ⚠️ CascadeCtrl 半成品架构已于 2026-08-08 **废弃删除**（`TandemVec_AttitudeCtrl/RateCtrl/CascadeCtrl/CtrlParams.h` 已删；浮点四元数工具抽为 `include/Quat4f.h` 供 test_host 使用；`test_tandemvec_cascade/sim.cpp` 两测试已随架构一并删除，run_all.sh 仅保留 allocation 测试）
 - 舵机行程/方向/中位：`include/TandemVec_Config.h` §ServoConfig `kDefaultServoConfig`（`half_travel_deg` 默认45°待标定、`dir_pitch/dir_roll` 已实机核查、`zero_*_pct` 待标定；mix 函数消费）
 

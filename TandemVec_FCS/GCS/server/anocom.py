@@ -7,6 +7,7 @@ anocom.py — AnoCom（匿名地面站协议）编解码
   - SC = 逐字节和 & 0xFF；AC = 累加和 & 0xFF（sum += b; add += sum）
   - 遥测字段缩放与 src/communication.cpp 发送实现一致（见各解码函数注释）
 """
+import math
 import struct
 from dataclasses import dataclass
 
@@ -239,12 +240,23 @@ def decode_rc(p: bytes) -> dict:
 
 
 def decode_attitude_control(p: bytes) -> dict:
-    """0x21: 4×int16 (÷10)；roll/pitch/yaw = alpha_ref×10（rad/s²），thr = 油门%×10"""
+    """0x21 保持线缆协议为 rad/s²，同时派生 deg/s² 供人机界面显示。"""
     if len(p) < 8:
         return {}
     r, p_, t, y = struct.unpack('<4h', p[0:8])
-    return {'ctrl_roll': r / 10.0, 'ctrl_pitch': p_ / 10.0,
-            'ctrl_thr_pct': t / 10.0, 'ctrl_yaw': y / 10.0}
+    roll_radps2, pitch_radps2, yaw_radps2 = r / 10.0, p_ / 10.0, y / 10.0
+    rad_to_deg = 180.0 / math.pi
+    return {
+        # 兼容字段：既有日志和 API 始终保持 rad/s²。
+        'ctrl_roll': roll_radps2,
+        'ctrl_pitch': pitch_radps2,
+        'ctrl_yaw': yaw_radps2,
+        'ctrl_thr_pct': t / 10.0,
+        # 默认人机显示字段：与固件速率控制器角度域一致。
+        'ctrl_roll_dps2': roll_radps2 * rad_to_deg,
+        'ctrl_pitch_dps2': pitch_radps2 * rad_to_deg,
+        'ctrl_yaw_dps2': yaw_radps2 * rad_to_deg,
+    }
 
 
 def decode_actuator(p: bytes) -> dict:

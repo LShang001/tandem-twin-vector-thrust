@@ -19,6 +19,7 @@ RECORD_FIELDS = [
     'alt_bar_m', 'alt_fu_m',
     'flight_mode', 'unlocked',
     'ctrl_roll', 'ctrl_pitch', 'ctrl_thr_pct', 'ctrl_yaw',
+    'ctrl_roll_dps2', 'ctrl_pitch_dps2', 'ctrl_yaw_dps2',
     'target_roll_deg', 'target_pitch_deg', 'target_yaw_rate_dps',
     'rc1', 'rc2', 'rc3', 'rc4', 'rc5', 'rc6', 'rc7', 'rc8',
     'p1_mpa', 'p2_mpa', 'bat_voltage_v',

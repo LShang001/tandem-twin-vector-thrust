@@ -159,12 +159,12 @@ void handleCANBus(void) {
     }
     case 5: {
       // 控制输出: 油门% + yaw输出（alpha_ref 来源 gnc_tel，2026-08-08 C路径重构）
-      sendFloatPair(CAN_ID_CTRL_OUTPUT, throttlePercent, gnc_tel.alpha_ref[2]);
+      sendFloatPair(CAN_ID_CTRL_OUTPUT, throttlePercent, gnc_tel.alpha_ref_radps2[2]);
       break;
     }
     case 6: {
       // 控制输出: roll输出 + pitch输出
-      sendFloatPair(CAN_ID_CTRL_OUTPUT_RP, gnc_tel.alpha_ref[0], gnc_tel.alpha_ref[1]);
+      sendFloatPair(CAN_ID_CTRL_OUTPUT_RP, gnc_tel.alpha_ref_radps2[0], gnc_tel.alpha_ref_radps2[1]);
       break;
     }
     case 7: {

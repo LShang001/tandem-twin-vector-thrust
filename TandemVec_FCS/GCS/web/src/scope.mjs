@@ -33,10 +33,10 @@ const PRESETS = {
     ['rel_h_m', '高 m', '#29d3a2'],
   ],
   '控制量 CTRL': [
-    ['ctrl_roll', 'αr', '#ff5d6c'],
-    ['ctrl_pitch', 'αp', '#3ea6ff'],
+    ['ctrl_roll_dps2', 'αr °/s²', '#ff5d6c'],
+    ['ctrl_pitch_dps2', 'αp °/s²', '#3ea6ff'],
     ['ctrl_thr_pct', '油门%', '#29d3a2'],
-    ['ctrl_yaw', 'αy', '#ffb547'],
+    ['ctrl_yaw_dps2', 'αy °/s²', '#ffb547'],
   ],
   'TVC 目标': [
     ['target_roll_deg', 'R目标', '#ff5d6c'],

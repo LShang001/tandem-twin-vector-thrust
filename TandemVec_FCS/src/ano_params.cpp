@@ -304,6 +304,7 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
                 applyFlightCtrlParams();
             }
             // 0xAB 保存：本工程参数无持久化（RAM 运行期值，重启回默认），
+            // 因此 2026-08-11 速率环量纲迁移无需处理旧 Flash 参数；
             // 仅回校验帧确认已接收（校验帧由 onAnoRxFrame 统一回传）
             return true;
 

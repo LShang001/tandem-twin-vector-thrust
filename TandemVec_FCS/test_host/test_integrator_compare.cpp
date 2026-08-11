@@ -9,12 +9,13 @@
 //        -o test_host/bin/ic && ./test_host/bin/ic
 // ============================================================
 #include "../include/TandemVec_Config.h"
+#include "../include/ControlUnits.h"
 #include <cmath>
 #include <cstdio>
 #include <initializer_list>
 
 // ============================================================
-//  极简 PID（积分带 dt 缩放）
+//  极简 PID（与现役 PositionPID 一致：积分显式乘 dt）
 // ============================================================
 struct MiniPID {
     float kp, ki, kd;
@@ -28,10 +29,9 @@ struct MiniPID {
     void reset() { integral = 0; prev_err = 0; prev_meas = 0; }
 
     // 标准位置式 (用于外环)
-    // 与 PositionPID 一致：integral+=err逐帧累加，int_max约束ki*integral(输出贡献)
-    // 不乘/除dt，隐含于200Hz frame rate
-    float step_pos(float err, float /*dt*/) {
-        integral += err;
+    // int_max 约束 ki*integral 的输出贡献。
+    float step_pos(float err, float dt) {
+        integral += err * dt;
         float i_out = ki * integral;
         if (i_out >  int_max) i_out =  int_max;
         if (i_out < -int_max) i_out = -int_max;
@@ -44,9 +44,9 @@ struct MiniPID {
     }
 
     // 微分先行 (与 PositionPID::computeDerivativeOnMeasurement 一致)
-    float step_dom(float setpoint, float meas, float /*dt*/) {
+    float step_dom(float setpoint, float meas, float dt) {
         float err = setpoint - meas;
-        integral += err;
+        integral += err * dt;
         float i_out = ki * integral;
         if (i_out >  int_max) i_out =  int_max;
         if (i_out < -int_max) i_out = -int_max;
@@ -62,17 +62,17 @@ struct MiniPID {
 
 // ============================================================
 //  单轴（俯仰）闭环仿真
-//  omega_meas (rad/s) 输入到控制器，alpha (rad/s²) 输出
-//  物理层：力矩 M = I × alpha，角加速 ω̇ = (M + M_disturb) / I
+//  控制器域：角度 deg、角速率 deg/s、角加速度 deg/s²。
+//  物理边界：alpha 统一转 rad/s²，再执行 M = I × alpha。
 // ============================================================
 struct Config {
-    MiniPID outer;  // 角度误差(rad) → 目标角速率(rad/s)
-    MiniPID inner;  // 角速率误差(rad/s) → 角加速度(rad/s²)
+    MiniPID outer;  // 角度误差(deg) → 目标角速率(deg/s)
+    MiniPID inner;  // 角速率误差(deg/s) → 角加速度(deg/s²)
     const char *name;
 
     Config(const char *n, float op, float oi, float ip, float ii)
-        : outer(op, oi, 0, 2.0f, 0.7f),     // outer I_limit=0.7 rad/s (≈40°/s), P+D≤2.0
-          inner(ip, ii, 0, 30.0f, 5.0f),    // inner I_limit=5 rad/s², P+D≤30
+        : outer(op, oi, 0, 80.0f, 40.0f),
+          inner(ip, ii, 0, ControlUnits::radps2ToDps2(100.0f), ControlUnits::radps2ToDps2(20.0f)),
           name(n) {}
     void reset() { outer.reset(); inner.reset(); }
 };
@@ -94,20 +94,22 @@ static Result run(Config &cfg, float target_rad, float disturbance_Nm,
 
     for (int i = 0; i < N; ++i) {
         float t = i * dt;
-        float err = target_rad - theta;
+        float err = (target_rad - theta) * ControlUnits::kDegPerRad;
 
         // 外环: 角度误差 → 目标角速率
-        float omega_ref = cfg.outer.step_pos(err, dt);
+        float omega_ref_dps = cfg.outer.step_pos(err, dt);
 
         // 内环: 角速率误差 → 角加速度
-        float alpha_ref = cfg.inner.step_dom(omega_ref, omega, dt);
+        float alpha_ref_dps2 = cfg.inner.step_dom(
+            omega_ref_dps, omega * ControlUnits::kDegPerRad, dt);
+        float alpha_ref_radps2 = ControlUnits::dps2ToRadps2(alpha_ref_dps2);
 
         // 物理层
-        float M_cmd = inertia * alpha_ref;
+        float M_cmd = inertia * alpha_ref_radps2;
         float M_act = M_cmd + disturbance_Nm;  // 实际力矩(含持续扰动)
         float alpha = M_act / inertia;
 
-        if (fabsf(alpha_ref) >= 29.9f) sat_c++;
+        if (fabsf(alpha_ref_dps2) >= ControlUnits::radps2ToDps2(29.9f)) sat_c++;
         omega += alpha * dt;
         theta += omega * dt;
 
@@ -118,12 +120,13 @@ static Result run(Config &cfg, float target_rad, float disturbance_Nm,
             if (e > max_final) max_final = e;
         }
         if (theta > max_theta) max_theta = theta;
-        if (settle_at < 0 && t > 0.5f && fabsf(err) < target_rad * 0.02f) settle_at = i;
+        const float target_deg = target_rad * ControlUnits::kDegPerRad;
+        if (settle_at < 0 && t > 0.5f && fabsf(err) < target_deg * 0.02f) settle_at = i;
     }
     Result r;
-    r.rms_err       = sqrtf(rms_sum / rms_n) * 57.29578f;  // rad→deg
-    r.max_err_final = max_final * 57.29578f;
-    r.overshoot     = (max_theta - target_rad) * 57.29578f;
+    r.rms_err       = sqrtf(rms_sum / rms_n);  // err 已是 deg
+    r.max_err_final = max_final;
+    r.overshoot     = (max_theta - target_rad) * ControlUnits::kDegPerRad;
     r.settle_2pct   = settle_at >= 0 ? settle_at * dt : 99;
     r.inner_sat     = sat_c;
     return r;
@@ -134,29 +137,24 @@ static Result run(Config &cfg, float target_rad, float disturbance_Nm,
 // ============================================================
 int main()
 {
-    std::printf("=== 积分位置对比：外环 vs 内环 — 单轴俯仰 2秒仿真 ===\n\n");
-    std::printf("参数: Iy=0.34 kg·m², dt=0.005s, 阶跃+15°, 扰动=0.03 N·m\n\n");
+    std::printf("=== 积分位置对比：外环 vs 内环 — 单轴俯仰 3秒仿真 ===\n\n");
+    std::printf("参数: Iy=%.4f kg·m², dt=0.005s, 阶跃+15°, 扰动=0.01 N·m\n\n",
+                kDefaultTandemVecParams.Iy);
 
     // 功率比解释：随扰动力矩产生的力矩需被外环
-    // Outer P=4.25 rad/s/rad → 1°误差=0.0175rad → ω_ref=0.074 rad/s
-    // Inner P=0.30 rad/s²/(rad/s) → 最终 M=0.34×0.074×0.30=0.0075 N·m 不够对抗0.03N·m
-    // → 需积分补充。外环积分 Ki=0.015 → 每帧增加0.015×err×dt≈5×10⁻⁶，1秒后≈0.01rad/s→…→最终补偿
+    // 增益取现役俯仰回路：外环 Kp=2.8 s^-1，内环 Kp=16.042818 s^-1。
 
-    float Iy = 0.34f, dt = 0.005f, sim_s = 3.0f;
+    float Iy = kDefaultTandemVecParams.Iy, dt = 0.005f, sim_s = 3.0f;
     float target = 15.0f * 3.14159265f/180.f;
     float disturb = 0.01f;  // ~3% 最大力矩
 
-    // 增益统一为物理合理值（换算到 rad/s 量纲）
-    // 外环 Kp=4.25 rad/s/rad, Ki_continuous=0.015×(rad/s)/rad → 每次积分 inc=Ki*err*dt
-    // 内环 Kp=0.30 rad/s²/(rad/s), Ki_continuous=0.00025×(rad/s²)/(rad/s)→每次积分 inc=Ki*err*dt
-    //
-    // 统一用 Ki×err×dt 形式
+    // 外环积分值 0.5 s^-2 仅用于对照；内环 Ki=5.729578 s^-2 为现役值。
 
     Config configs[] = {
-        {"A:外环积(当前)", 4.25f, 0.015f,  0.30f, 0.0f     },
-        {"B:内环积(原版)", 4.25f, 0.0f,    0.30f, 0.00025f },
-        {"C:双积分",       4.25f, 0.015f,  0.30f, 0.00025f },
-        {"D:纯P(对照)",    4.25f, 0.0f,    0.30f, 0.0f     },
+        {"A:外环积(对照)", 2.8f, 0.5f,  16.042818f, 0.0f      },
+        {"B:内环积(现役)", 2.8f, 0.0f,  16.042818f, 5.729578f },
+        {"C:双积分",       2.8f, 0.5f,  16.042818f, 5.729578f },
+        {"D:纯P(对照)",    2.8f, 0.0f,  16.042818f, 0.0f      },
     };
 
     std::printf("%-20s %8s %8s %8s %8s %s\n",
@@ -189,19 +187,13 @@ int main()
     }
 
     std::printf("\n=== 仿真结论 ===\n\n");
-    std::printf("关键发现（与预期相反）：\n\n");
-    std::printf("1. 外环积分(Ki=0.015)严重恶化响应 —— RMS误差是纯P的2倍\n");
-    std::printf("     根因：PositionPID不用dt，200Hz下Ki=0.015等效连续增益=3.0/s\n");
-    std::printf("     收剑后积分'余量'继续推过目标→超调→振荡→稳态恶化\n\n");
-    std::printf("2. 内环积分(Ki=0.00025)表现接近纯P —— 等效连续增益=0.05/s\n");
-    std::printf("     增益过小，有意义但不足以明显影响阶跃响应\n\n");
-    std::printf("3. 双积分配置最差 —— 内外环各自积分相互干涉\n\n");
-    std::printf("4. 纯P在所有工况下稳态误差最小 —— 不意外，因为无积分无超调\n");
-    std::printf("     但在真实飞行中(持续风/偏重心)，纯P必有静差\n\n");
-    std::printf(">>> 最终建议：保留内环微量积分(Ki≈0.0002)，外环不加积分 <<<\n");
-    std::printf("    理由：内环Ki足够小不会扰乱瞬态响应，但能在持续扰动下\n");
-    std::printf("         缓慢建立补偿力矩。等效于一个'自动配平'功能。\n");
-    std::printf("         外环积分在此frame rate下过于激进，不推荐。\n");
+    std::printf("关键发现：\n\n");
+    std::printf("1. 所有控制量均在角度域计算，进入惯量模型前只转换一次到 SI。\n");
+    std::printf("2. Ki 使用显式 dt 的连续域定义，结果不再依赖 200Hz 隐式缩放。\n");
+    std::printf("3. 在该理想刚体对照中，现役内环 Ki=5.729578 s^-2 的持续扰动误差最小。\n");
+    std::printf("4. 候选外环积分与双积分都未优于现役内环积分，不支持引入外环 Ki。\n\n");
+    std::printf(">>> 建议：保留现役内环积分，外环 Ki 保持 0 <<<\n");
+    std::printf("    边界：此台架未含电机/舅机动态、噪声和分配饱和，只能证明该理想模型中的相对趋势。\n");
 
     return 0;
 }

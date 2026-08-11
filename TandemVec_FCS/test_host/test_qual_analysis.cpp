@@ -18,6 +18,8 @@
 #include "../include/TandemVec_Config.h"
 #include "../include/Quat4f.h"
 #include "../include/PositionPID.h"
+#include "../include/ControlUnits.h"
+#include "../include/FlightCtrlParams.h"
 #include "../include/ComplementaryFilter.h"
 #include <cmath>
 #include <cstdio>
@@ -60,7 +62,7 @@ struct RigidBody {
 // 全阶仿真 (与 flight_control.cpp 同构)
 // 返回: {max_err_deg, final_err_deg, settle_s, max_omega_dps}
 static void run_full(const float Kp_a[3], const float Kp_r[3], const float Ki_r[3],
-                     float alpha_max, float int_sep, float thr, float cg_mm, float asym_pct,
+                     float alpha_max_radps2, float int_sep, float thr, float cg_mm, float asym_pct,
                      const Quat4f &q_tgt, float sim_s, float dt,
                      float out[4])
 {
@@ -71,8 +73,9 @@ static void run_full(const float Kp_a[3], const float Kp_r[3], const float Ki_r[
     PositionPID rate[3]={{Kp_r[0],Ki_r[0],0},{Kp_r[1],Ki_r[1],0},{Kp_r[2],Ki_r[2],0}};
     for(int i=0;i<3;i++){
         ang[i].setOutputLimits(-50,50);
-        rate[i].setOutputLimits(-alpha_max,alpha_max);
-        rate[i].setIntegralLimit(alpha_max*0.5f);
+        const float alpha_max_dps2=ControlUnits::radps2ToDps2(alpha_max_radps2);
+        rate[i].setOutputLimits(-alpha_max_dps2,alpha_max_dps2);
+        rate[i].setIntegralLimit(alpha_max_dps2*0.5f);
         rate[i].setIntegralThreshold(int_sep);
     }
     ComplementaryFilter gf[3]={{0.3f},{0.3f},{0.3f}}, aof[3]={{0.85f},{0.85f},{0.85f}}, rof[3]={{0.25f},{0.25f},{0.25f}};
@@ -97,7 +100,10 @@ static void run_full(const float Kp_a[3], const float Kp_r[3], const float Ki_r[
         float wr[3], al[3];
         float d[3]={gfv[2],gfv[1],gfv[0]};  // VTOL axis order
         for(int j=0;j<3;j++){wr[j]=aof[j].filter(constrain(ang[j].computeWithExternalDerivative(ed[j],0,-d[j], 0.005f),-50.f,50.f));}
-        for(int j=0;j<3;j++){al[j]=rof[j].filter(constrain(rate[j].computeDerivativeOnMeasurement(wr[j],d[j], 0.005f),-alpha_max,alpha_max));}
+        for(int j=0;j<3;j++){
+            const float alpha_dps2=rof[j].filter(rate[j].computeDerivativeOnMeasurement(wr[j],d[j],0.005f));
+            al[j]=ControlUnits::dps2ToRadps2(alpha_dps2);
+        }
 
         float M[3]={P.Ix*al[2],P.Iy*al[1],P.Iz*al[0]};
         float w0=(thr/100.f)*P.wMax;
@@ -155,12 +161,14 @@ int main()
     // ════════════════════════════════════════════════════════
     std::printf("═══ 灵敏度1: α_max限幅 (α_max=0.5~6.0 rad/s²) ═══\n");
     std::printf("%8s %8s %8s %8s %s\n","α_max","peak°","final°","settle","趋势");
-    // 增益与固件 (state_data.cpp §4.1) 对齐。
-    // ★ Kp_a[2]=0：固件偏航已改为【纯速率控制】，无角度外环
-    //   （摇杆居中 → yawRateTarget=0 → 内环积分维持当前航向）。
-    //   若给偏航加角度外环，差速通道受电机 τm=0.28s（带宽仅 3.6 rad/s）限制，
-    //   Kp_a[2]>1 会产生极限环振荡 —— 这也是固件不设偏航外环的原因之一。
-    float Kp_a[3]={5.0f,5.0f,0.0f}, Kp_r[3]={0.30f,0.30f,0.15f}, Ki_r[3]={0.06f,0.06f,0.06f};  // ★2026-08-10 连续域（旧离散 0.0003×200；e44dcf5 dt 重构）;;
+    // Roll/Pitch 增益直接读取现役参数。该测试目标只有俯仰，yaw 外环置零以隔离
+    // 差速通道，不用于评价现役 ratchet-hold 航向外环。
+    const float old_to_angle=ControlUnits::kDegPerRad;
+    float Kp_a[3]={kFlightCtrlParams.att_roll.kp,kFlightCtrlParams.att_pitch.kp,0.0f};
+    float Kp_r[3]={kFlightCtrlParams.rate_roll.kp,kFlightCtrlParams.rate_pitch.kp,
+                   kFlightCtrlParams.rate_yaw.kp};
+    float Ki_r[3]={kFlightCtrlParams.rate_roll.ki,kFlightCtrlParams.rate_pitch.ki,
+                   kFlightCtrlParams.rate_yaw.ki};
     float s1_settle_at1=0.f, s1_settle_at3=0.f, s1_worst_final_ok=0.f;
     bool  s1_low_fails=false, s1_all_ok_above1=true;
     for(float am=0.5f;am<=6.5f;am+=0.5f){
@@ -177,8 +185,8 @@ int main()
     }
     std::printf("→ α_max=0.5 力矩权限不足→失控; α_max≥1.0 均收敛\n");
     std::printf("→ α_max 1.0→3.0 收敛 %.2fs→%.2fs (限幅主导区)\n",s1_settle_at1,s1_settle_at3);
-    std::printf("→ α_max>3.5 收敛时间趋于平台(~0.78s), 继续增大无收益\n");
-    std::printf("→ 固件设 ±100 (不截断PID), 由物理饱和自然限制\n\n");
+    std::printf("→ α_max>3.5 后收敛时间趋于平台，继续增大收益很小\n");
+    std::printf("→ 现役输出限幅等效 ±100 rad/s²，由执行器物理饱和进一步限制\n\n");
 
     // ════════════════════════════════════════════════════════
     //  分析2: Kp_a — 外环增益对响应的影响
@@ -188,7 +196,7 @@ int main()
     bool  s2_all_settled=true; float s2_worst_final=0.f, s2_worst_peak=0.f;
     float s2_settle_min=1e9f, s2_settle_max=0.f;
     for(float ka=2.f;ka<=8.5f;ka+=1.f){
-        float kk[3]={ka,ka,0.f};   // 偏航外环保持 0（固件为纯速率控制）
+        float kk[3]={ka,ka,0.f};   // 本俯仰扫描隔离 yaw，不评价 ratchet-hold 外环
         run_full(kk,Kp_r,Ki_r,20.f,20.f,thr,3.f,3.f,q_target,sim_s,dt,out);
         const char *t=(out[2]>90.f)?"⚠️":(out[2]>4.f?"慢":"✅");
         std::printf("%7.1f %7.1f %7.2f %7.2f %s\n",ka,out[0],out[1],out[2],t);
@@ -206,12 +214,13 @@ int main()
     // ════════════════════════════════════════════════════════
     //  分析3: Kp_r — 内环增益
     // ════════════════════════════════════════════════════════
-    std::printf("═══ 灵敏度3: Kp_r(内环)扫描, α_max=2.0 ═══\n");
+    std::printf("═══ 灵敏度3: Kp_r(内环, s^-1)扫描, α_max=2.0 rad/s² ═══\n");
     std::printf("%8s %8s %8s %8s %s\n","Kp_r","peak°","final°","settle","趋势");
     bool  s3_all_settled=true; float s3_worst_final=0.f;
     float s3_settle_min=1e9f, s3_settle_max=0.f;
-    for(float kr=0.10f;kr<=0.55f;kr+=0.05f){
-        float kk[3]={kr,kr,0.15f};
+    for(float kr_old=0.10f;kr_old<=0.55f;kr_old+=0.05f){
+        const float kr=kr_old*old_to_angle;
+        float kk[3]={kr,kr,0.15f*old_to_angle};
         run_full(Kp_a,kk,Ki_r,20.f,20.f,thr,3.f,3.f,q_target,sim_s,dt,out);
         const char *t=(out[2]>90.f)?"⚠️":(out[2]>4.f?"慢":"✅");
         std::printf("%7.2f %7.1f %7.2f %7.2f %s\n",kr,out[0],out[1],out[2],t);
@@ -220,10 +229,10 @@ int main()
         if(out[2]<s3_settle_min)s3_settle_min=out[2];
         if(out[2]>s3_settle_max)s3_settle_max=out[2];
     }
-    std::printf("→ Kp_r=0.10~0.50 全部收敛，收敛时间 %.2f~%.2fs\n",
+    std::printf("→ Kp_r=5.73~28.65 s^-1 全部收敛，收敛时间 %.2f~%.2fs\n",
                 s3_settle_min,s3_settle_max);
-    std::printf("→ 稳差均 <%.2f°；Kp_r≥0.20 后收敛时间趋于平台\n",s3_worst_final+0.01f);
-    std::printf("→ 固件取 0.30（平台区内，留噪声余量）\n\n");
+    std::printf("→ 稳差均 <%.2f°；Kp_r≥11.46 s^-1 后收敛时间趋于平台\n",s3_worst_final+0.01f);
+    std::printf("→ 现役 Kp_r=%.2f s^-1 位于平台区内\n\n",kFlightCtrlParams.rate_pitch.kp);
 
     // ════════════════════════════════════════════════════════
     //  分析4: 积分分离阈值 — 防 saturation 的关键
@@ -233,7 +242,8 @@ int main()
     bool  s4_all_settled=true;
     float s4_best_settle=1e9f, s4_edge_settle=0.f, s4_mid_worst_final=0.f;
     float s4_settle_min=1e9f, s4_settle_max=0.f, s4_worst_final=0.f;
-    for(float sp: {0.f,5.f,10.f,15.f,20.f,30.f,50.f,9999.f}){
+    float s4_current_settle=99.f;
+    for(float sp: {0.f,5.f,10.f,15.f,20.f,30.f,50.f,60.f,9999.f}){
         run_full(Kp_a,Kp_r,Ki_r,2.f,sp,thr,3.f,3.f,q_target,sim_s,dt,out);
         bool mid=(sp>=5.f&&sp<=30.f);           // 原推荐区间
         const char *t=(out[2]>90.f)?"⚠️未收敛":"✅收敛";
@@ -242,6 +252,7 @@ int main()
         if(out[2]<s4_settle_min)s4_settle_min=out[2];
         if(out[2]>s4_settle_max)s4_settle_max=out[2];
         if(out[1]>s4_worst_final)s4_worst_final=out[1];
+        if(fabsf(sp-kFlightCtrlParams.rate_pitch.threshold)<0.1f)s4_current_settle=out[2];
         if(mid){
             if(out[2]<s4_best_settle)s4_best_settle=out[2];
             if(out[1]>s4_mid_worst_final)s4_mid_worst_final=out[1];
@@ -251,11 +262,13 @@ int main()
     }
     std::printf("→ 全部阈值(0~9999)均收敛：%.2f~%.2fs，最大稳差 %.2f°\n",
                 s4_settle_min,s4_settle_max,s4_worst_final);
-    std::printf("→ ★ PositionPID v3 加入【积分状态钳位】后，积分分离的收益被大幅吸收：\n");
-    std::printf("   钳位前 sep=0/50/9999 因 windup 收敛需 ~5.0s，现已降至 %.2fs。\n",
+    std::printf("→ 积分状态钳位限制幅值，但阈值仍明显影响瞬态：\n");
+    std::printf("   中间区间 5~30deg/s 更快；0/50/60/9999deg/s 约 %.2fs 量级。\n",
                 s4_edge_settle);
     std::printf("   两道防线互补：钳位限制积分幅值上界，分离抑制阶跃期间的累积。\n");
-    std::printf("→ 固件取 30 deg/s；由上表可见该参数现已非临界（性能对其不敏感）。\n\n");
+    std::printf("→ 现役阈值 %.0f deg/s 在该台架中 %.2fs 收敛；保持现值以维持实机行为，\n",
+                kFlightCtrlParams.rate_pitch.threshold,s4_current_settle);
+    std::printf("   20/30deg/s 只能作为后续系留 A/B 候选，不能据此直接回写。\n\n");
 
     // ════════════════════════════════════════════════════════
     //  分析5: 模型参数偏差鲁棒性
@@ -285,7 +298,7 @@ int main()
         int N=(int)(sim_s/dt);RigidBody body;Noise ng;
         PositionPID ang[3]={{Kp_a[0],0,0},{Kp_a[1],0,0},{Kp_a[2],0,0}};
         PositionPID rate[3]={{Kp_r[0],Ki_r[0],0},{Kp_r[1],Ki_r[1],0},{Kp_r[2],Ki_r[2],0}};
-        for(int i=0;i<3;i++){ang[i].setOutputLimits(-50,50);rate[i].setOutputLimits(-20.f,20.f);rate[i].setIntegralLimit(5.f);rate[i].setIntegralThreshold(30.f);}
+        for(int i=0;i<3;i++){ang[i].setOutputLimits(-50,50);rate[i].setOutputLimits(-ControlUnits::radps2ToDps2(20.f),ControlUnits::radps2ToDps2(20.f));rate[i].setIntegralLimit(ControlUnits::radps2ToDps2(5.f));rate[i].setIntegralThreshold(30.f);}
         ComplementaryFilter gf[3]={{0.3f},{0.3f},{0.3f}},aof[3]={{0.85f},{0.85f},{0.85f}},rof[3]={{0.25f},{0.25f},{0.25f}};
         const float w0h=(thr/100.f)*P.wMax;
         MotorModel mf(w0h,P.tauM),mr(w0h,P.tauM);PropulsionState ps={0,0,0,0};
@@ -298,7 +311,12 @@ int main()
             {float v=fabsf(qe.x);float s=(v>0.25f)?2.f*atan2f(v,fabsf(qe.w))/v*57.29578f:114.59156f;ed[2]=sw*qe.x*s;}
             float wr[3],al[3],dd[3]={gfv[2],gfv[1],gfv[0]};
             for(int j=0;j<3;j++)wr[j]=aof[j].filter(constrain(ang[j].computeWithExternalDerivative(ed[j],0,-dd[j], 0.005f),-50.f,50.f));
-            for(int j=0;j<3;j++)al[j]=rof[j].filter(constrain(rate[j].computeDerivativeOnMeasurement(wr[j],dd[j], 0.005f),-2.f,2.f));
+            for(int j=0;j<3;j++){
+                const float alpha_dps2=constrain(
+                    rof[j].filter(rate[j].computeDerivativeOnMeasurement(wr[j],dd[j],0.005f)),
+                    -ControlUnits::radps2ToDps2(2.f),ControlUnits::radps2ToDps2(2.f));
+                al[j]=ControlUnits::dps2ToRadps2(alpha_dps2);
+            }
             float M[3]={P.Ix*al[2],P.Iy*al[1],P.Iz*al[0]};
             float w0=(thr/100.f)*P.wMax;AllocationInput ai={M[0],M[1],M[2],w0,ps};
             AllocationOutput ao=allocateMoments(ai,P,AllocationStrategy::BTRUE);
@@ -308,7 +326,7 @@ int main()
             SixDOFWrench wrn=computeWrench(pa,P);
             float T_tot=P.kT*(wf*wf*sqrtf(asym)+wt*wt)*0.5f,M_tot[3]={wrn.Mx,wrn.My+T_tot*0.003f,wrn.Mz};
             float hv[3]={P.Jp*(wf-wt),0,0};body.step(M_tot,hv,P,dt);
-            // 同 run_full：误差只计有角度环的两轴（偏航为纯速率控制）
+            // 同 run_full：本测试只评价有角度目标的 roll/pitch 两轴。
             float e=sqrtf(ed[0]*ed[0]+ed[1]*ed[1]);if(e>max_e)max_e=e;
             if(e>0.4f)set_at=t;if(i==N-1)fin_e=e;   // 无人为时间下限
         }
@@ -344,18 +362,17 @@ int main()
     check(s2_worst_peak<20.f*1.25f, "Q2 Kp_a 扫描最大超调 < 25%");
 
     // Q3: 内环 Kp_r 同样有宽裕度
-    check(s3_all_settled,      "Q3 Kp_r=0.10~0.50 全部进入稳态带");
+    check(s3_all_settled,      "Q3 Kp_r=5.73~28.65 s^-1 全部进入稳态带");
     check(s3_worst_final<1.0f, "Q3 Kp_r 扫描最大稳差 < 1°");
 
     // Q4: 积分分离阈值
-    //   PositionPID v3 加入积分状态钳位后，windup 已被幅值上界限制，
-    //   分离阈值不再是临界参数 —— 故断言"全域收敛且性能不敏感"，
-    //   而非旧断言"中间区快于极端值"（该前提建立在钳位缺失的行为上）。
+    //   现役 Ki 下阈值仍影响瞬态，因此只约束全域有界和现役值稳定，
+    //   不再使用“收敛时间不敏感”的错误断言。
     check(s4_all_settled,           "Q4 各积分分离阈值(0~9999)均进入稳态带");
     check(s4_mid_worst_final<0.5f,  "Q4 分离阈值 5~30deg/s：稳差 < 0.5°");
     check(s4_worst_final<0.5f,      "Q4 全部阈值稳差 < 0.5°");
-    check(s4_settle_max - s4_settle_min < 1.0f,
-          "Q4 收敛时间对分离阈值不敏感（散布 < 1s，钳位已吸收 windup）");
+    check(s4_current_settle < 5.0f,
+          "Q4 现役 60deg/s 阈值在 5s 内进入稳态带");
 
     // Q5: 模型参数偏差鲁棒性 —— 物理逆解架构的核心论断
     check(s5_all_settled,        "Q5 惯量±30%/kT±20%/力臂±10%：全部进入稳态带");
@@ -378,20 +395,20 @@ int main()
     std::printf("  无振荡 → α_max += 0.5, 重复\n");
     std::printf("  有振荡 → 回退0.5 → 锁定α_max\n");
     std::printf("  (定性预期: α_max最优值在1.5~3.0之间)\n\n");
-    std::printf("Step 3 [系留]: 积分分离阈值调优\n");
-    std::printf("  从20 deg/s开始\n");
+    std::printf("Step 3 [系留]: 积分分离阈值 A/B（不随本次迁移改值）\n");
+    std::printf("  现役60 deg/s为基线；20/30 deg/s仅作候选，每次单独验证\n");
     std::printf("  悬停中施加偏心力矩(挂小重物):\n");
     std::printf("    观察是否在~3s内自动配平 → 是:阈值OK\n");
-    std::printf("    配平太慢(>5s) → 增大阈值到30\n");
-    std::printf("    阶跃超调增加 → 减小阈值到10\n\n");
+    std::printf("    同时比较配平时间、阶跃超调和饱和占空比，再决定是否固化\n\n");
     std::printf("Step 4 [自由飞]: Kp微调(非必需)\n");
-    std::printf("  灵敏度2/3 显示 Kp_a=2~8、Kp_r=0.10~0.50 全部稳定\n");
+    std::printf("  灵敏度2/3 显示 Kp_a=2~8、Kp_r=5.73~28.65 s^-1 全部稳定\n");
     std::printf("  仅当飞行品质明显偏软或偏硬时微调\n");
-    std::printf("  Kp_a: 每次±1 (改变响应'锐度', 固件当前 5.0)\n");
-    std::printf("  Kp_r: 每次±0.05 (固件当前 0.30, 噪声变大则退回)\n\n");
-    std::printf("⚠️ 偏航为纯速率控制(无角度外环): 差速受电机 τm=%.2fs 限制,\n",
+    std::printf("  Kp_a: 每次±0.2 (改变响应'锐度', 固件当前 %.1f)\n",
+                kFlightCtrlParams.att_pitch.kp);
+    std::printf("  Kp_r: 每次约±2.86 s^-1（从当前固件值起调，噪声变大则退回）\n\n");
+    std::printf("⚠️ 本扫描未覆盖 ratchet-hold 航向外环；差速受电机 τm=%.2fs 限制,\n",
                 kDefaultTandemVecParams.tauM);
-    std::printf("   带宽仅 %.1f rad/s, 加角度外环会产生极限环振荡。\n",
+    std::printf("   执行器带宽约 %.1f rad/s，航向闭环须单独验证相位裕度。\n",
                 1.f/kDefaultTandemVecParams.tauM);
     std::printf("⚠️ 本台架无气动力/舵机动态; 惯量 I=%.4f 为估算值。\n",
                 kDefaultTandemVecParams.Iy);

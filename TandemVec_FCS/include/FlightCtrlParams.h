@@ -11,7 +11,8 @@
 #pragma once
 #include <cstdint>  // uint8_t（inertia_comp_mask，2026-08-10）
 //
-//  注意：数值域为 PositionPID 实际语义（deg 域）。
+//  注意：姿态/速率控制器统一采用角度域：deg、deg/s、deg/s²。
+//  进入惯量逆解前由 ControlUnits.h 唯一转换为 rad/s²。
 // ============================================================
 #pragma once
 
@@ -30,7 +31,7 @@ struct PidTuneParams
 {
     float kp, ki, kd;        // 增益（PositionPID 构造参数 1-3）
     float out_min, out_max;  // 输出限幅（构造参数 4-5）
-    float int_limit;         // 积分状态钳位（构造参数 7）
+    float int_limit;         // 积分项输出上限 |ki·∫e dt|（内部反推状态界，构造参数 7）
     float threshold;         // 积分分离阈值（构造参数 8）
     float filter_alpha;      // 微分滤波系数（构造参数 9）
     bool  enabled;           // 该环是否参与控制（false = 僵尸参数，仅保留对象兼容）
@@ -38,9 +39,11 @@ struct PidTuneParams
 
 struct FlightCtrlParams
 {
-    // 姿态串级（deg 域）—— ★2026-08-09 dt 重构：Ki 为连续域（旧离散值×200）；终值 0.30/2.6/60/20 已实机确认
+    // 姿态串级（角度域）—— ★2026-08-09 dt 重构：Ki 为连续域（旧离散值×200）
     PidTuneParams att_roll,  att_pitch,  att_yaw;   // 外环 kp=2.5/2.5/0.8（att_yaw 未启用）
-    PidTuneParams rate_roll, rate_pitch, rate_yaw;  // 内环 kp=0.25/0.25/0.20
+    // 内环：输入 deg/s，输出 deg/s²；kp 单位 1/s，ki 单位 1/s²。
+    // kd 当前作用于每拍 Δomega（未除 dt），数值单位仍为 1/s；现役值均为 0。
+    PidTuneParams rate_roll, rate_pitch, rate_yaw;
     // 垂直串级
     PidTuneParams alt_pos, alt_vel;                 // 1.0 | 5.0/0.00625
     // 水平位置/速度串级
@@ -86,12 +89,13 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* att_roll  */ { 2.8f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
     /* att_pitch */ { 2.8f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true  },
     /* att_yaw   */ { 5.0f,    0.0f,     0.0f,   -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true }, // ★2026-08-09 航向锁启用（ratchet hold）；2026-08-10 1.2 实测发散回退 1.0；★2026-08-10 5.0 实机验证稳定（τm 观测器+增益调度修复后限带边界大幅放宽），随 COMM-001 固化
-    // ---- 角速率内环 ----
-    // ★ 2026-08-09 定稿：0.30 在线降 0.28 实测"几乎不超调"（RAM 写验证后固化）；
-    // 随后 0.28→0.26 再降一档（先稳后冲，滤波升级换来的余量）
-    /* rate_roll */ { 0.28f,   0.1f,     0.0f,   -100.0f, 100.0f, 20.0f, 60.0f, 0.2f, true },
-    /* rate_pitch*/ { 0.28f,   0.1f,     0.0f,   -100.0f, 100.0f, 20.0f, 60.0f, 0.2f, true },
-    /* rate_yaw  */ { 0.20f,   0.1f,     0.0f,   -100.0f, 100.0f, 20.0f, 60.0f, 0.2f, true }, // 差速内环：ki 0.1（=旧 0.0005；ESC 校准后不对称消除，弃 0.2）；限幅 20/阈值 60（2026-08-09）；★2026-08-10 0.22→0.20（配合 att_yaw 5.0，有效增益 1.0 实机稳定，COMM-001 固化）
+    // ---- 角速率内环（2026-08-11 量纲迁移：deg/s → deg/s²）----
+    // 数值由旧混合域参数整体乘 180/pi，进入物理层再乘 pi/180，控制行为严格等价：
+    //   roll/pitch: 0.28 → 16.042818；yaw: 0.20 → 11.459156；ki: 0.10 → 5.729578。
+    // 输出/积分限幅同乘 180/pi；积分分离阈值仍是 deg/s，不变。
+    /* rate_roll */ { 16.042818f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true },
+    /* rate_pitch*/ { 16.042818f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true },
+    /* rate_yaw  */ { 11.459156f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true },
     // ---- 垂直串级 ----
     /* alt_pos   */ { 1.0f,    0.0f,     0.0f,   -1.0f,   1.0f,   250.0f, 0.0f, 0.0f, true },
     /* alt_vel   */ { 5.0f,    1.25f,    0.0f,   -18.75f, 12.5f,  10.0f,  0.0f, 0.2f, true },

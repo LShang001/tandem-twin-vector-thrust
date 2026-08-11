@@ -120,6 +120,9 @@ def test_decode_attitude_control():
     assert dec['ctrl_pitch'] == -20.0
     assert dec['ctrl_thr_pct'] == 50.0
     assert dec['ctrl_yaw'] == 3.0
+    assert abs(dec['ctrl_roll_dps2'] - 572.957795) < 1e-5
+    assert abs(dec['ctrl_pitch_dps2'] + 1145.91559) < 1e-5
+    assert abs(dec['ctrl_yaw_dps2'] - 171.8873385) < 1e-5
 
 
 def test_param_command_frames():

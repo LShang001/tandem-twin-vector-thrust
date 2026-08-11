@@ -707,7 +707,7 @@ def cmd_vars(a):
       clear             清空上报集合
       rate <hz>         上报频率 1-200Hz（默认 50；N 个变量时每个 = rate/N Hz）
       status            固件侧 watch 状态（DBG vars）
-    示例: cli.py --port COM10 vars watch wf_est alpha_ref_x -t 5 --json
+    示例: cli.py --port COM10 vars watch wf_est adps2_x -t 5 --json
     """
     require_connected()
     import json as _json
@@ -886,8 +886,9 @@ def _sniff_report(theme, counters, samples, raw_data, euler_vals):
             print(f'欧拉: roll={d["roll_deg"]:+.2f} pitch={d["pitch_deg"]:+.2f} heading={d["heading_deg"]:+.2f}')
         if anocom.FUNC_ATTITUDE_CONTROL in samples:
             d = samples[anocom.FUNC_ATTITUDE_CONTROL]
-            print(f'控制输出: roll={d["ctrl_roll"]:+.1f} pitch={d["ctrl_pitch"]:+.1f} '
-                  f'thr={d["ctrl_thr_pct"]:+.1f} yaw={d["ctrl_yaw"]:+.1f}')
+            print(f'控制输出(deg/s²): roll={d["ctrl_roll_dps2"]:+.1f} '
+                  f'pitch={d["ctrl_pitch_dps2"]:+.1f} thr={d["ctrl_thr_pct"]:+.1f}% '
+                  f'yaw={d["ctrl_yaw_dps2"]:+.1f}')
         return
     if theme == 'axes':
         if anocom.FUNC_IMU_DATA in samples:
@@ -951,8 +952,9 @@ def cmd_stick(a):
             elif f.func == anocom.FUNC_ATTITUDE_CONTROL and now - last > 0.7:
                 chs = ' '.join(f'{ch[f"rc{i}"]:5d}' for i in range(1, 9)) if ch else '?'
                 print(f'mode={mode} 解锁={unlock} | CH1-8: {chs} | '
-                      f'控制输出(r/p/t/y): {d["ctrl_roll"]:6.1f} {d["ctrl_pitch"]:6.1f} '
-                      f'{d["ctrl_thr_pct"]:6.1f} {d["ctrl_yaw"]:6.1f}')
+                      f'控制输出(deg/s² r/p/y): {d["ctrl_roll_dps2"]:7.1f} '
+                      f'{d["ctrl_pitch_dps2"]:7.1f} {d["ctrl_yaw_dps2"]:7.1f} '
+                      f'油门={d["ctrl_thr_pct"]:5.1f}%')
                 last = now
     print('采集结束')
 

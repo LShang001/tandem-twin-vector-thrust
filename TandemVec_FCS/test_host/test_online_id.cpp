@@ -9,6 +9,7 @@
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #include "../include/TandemVec_OnlineID.h"
 #include "../include/TandemVec_Config.h"
+#include "../include/ControlUnits.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -37,7 +38,8 @@ static IdResult run_identification(float b_true, float noise_amp, int n_steps = 
         for (int k = 0; k < 150; k++) {
             float err  = target - theta;
             float wref = 5.0f * constrain(err, -10.f, 10.f);
-            float alpha_cmd = 0.30f * (wref - omega * 57.3f);
+            float alpha_dps2 = 17.188734f * (wref - omega * ControlUnits::kDegPerRad);
+            float alpha_cmd = ControlUnits::dps2ToRadps2(alpha_dps2);
             float wdot = b_true * alpha_cmd
                        + ((float)std::rand()/RAND_MAX - 0.5f) * noise_amp;
             omega += wdot * dt;
@@ -69,7 +71,8 @@ int main()
         for (int k = 0; k < 150; k++) {
             float err = target - theta;
             float wref = 5.0f * constrain(err, -10.f, 10.f);  // 外环P
-            float alpha_cmd = 0.30f * (wref - omega * 57.3f); // 内环P (deg/s→rad/s²)
+            float alpha_dps2 = 17.188734f * (wref - omega * ControlUnits::kDegPerRad);
+            float alpha_cmd = ControlUnits::dps2ToRadps2(alpha_dps2); // 物理边界: deg/s²→rad/s²
             // 真实物理: ω̇ = b_true × α_cmd + 噪声
             float wdot = b_true * alpha_cmd + ((float)rand()/RAND_MAX-0.5f)*0.5f;
             omega += wdot * dt;
@@ -93,7 +96,7 @@ int main()
     printf("扰动项 d_est=%.3f (应≈0)\n\n", rls.theta_d);
 
     printf("=== 自适应增益调度演示 ===\n");
-    float Kp_nominal = 0.30f;
+    float Kp_nominal = 17.188734f;
     float Kp_adapted = Kp_nominal / sqrtf(fmaxf(rls.theta_b, 0.3f));
     printf("b=%.3f → Kp_r: %.3f → %.3f (增益补偿%.0f%%)\n",
            rls.theta_b, Kp_nominal, Kp_adapted,
@@ -166,21 +169,21 @@ int main()
     {
         OnlineID id;
         id.b_est[0] = 0.667f;   // 真实惯量偏大
-        float kp_up = id.adaptKpR(0.30f, 0);
+        float kp_up = id.adaptKpR(Kp_nominal, 0);
         id.b_est[0] = 1.429f;   // 真实惯量偏小
-        float kp_dn = id.adaptKpR(0.30f, 0);
+        float kp_dn = id.adaptKpR(Kp_nominal, 0);
         printf("  b=0.667 → Kp=%.4f ; b=1.429 → Kp=%.4f\n", kp_up, kp_dn);
-        check(kp_up > 0.30f, "A7 惯量偏大(b<1) → Kp 上调");
-        check(kp_dn < 0.30f, "A7 惯量偏小(b>1) → Kp 下调");
+        check(kp_up > Kp_nominal, "A7 惯量偏大(b<1) → Kp 上调");
+        check(kp_dn < Kp_nominal, "A7 惯量偏小(b>1) → Kp 下调");
     }
 
     // A8: 自适应约束边界（b 被硬约束在 [0.3, 3.0]）
     {
         OnlineID id;
         id.b_est[1] = 100.0f;   // 病态估计
-        float kp = id.adaptKpR(0.30f, 1);
+        float kp = id.adaptKpR(Kp_nominal, 1);
         id.b_est[1] = -5.0f;    // 非物理负值
-        float kp2 = id.adaptKpR(0.30f, 1);
+        float kp2 = id.adaptKpR(Kp_nominal, 1);
         check(std::isfinite(kp) && kp > 0.f,  "A8 b过大时 Kp 仍有限且为正");
         check(std::isfinite(kp2) && kp2 > 0.f, "A8 b为负时 Kp 仍有限且为正（约束生效）");
     }

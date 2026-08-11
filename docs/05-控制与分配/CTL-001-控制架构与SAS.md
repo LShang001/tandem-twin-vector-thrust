@@ -291,7 +291,8 @@ M_cur = M推进(u_cur)                           （当前执行器位置的推�
 ```
 q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w<0 取反，同 §8.2 约定）
 → 外环 rollAnglePID/pitchAnglePID       （角→角速率；kp=2.8（deg 域），输出限幅 ±MAX_TARGET_RATE=80°/s）
-→ 内环 rollRatePID/pitchRatePID         （角速率→角加速度 alpha_roll/alpha_pitch；kp=0.28，derivative-on-measurement）
+→ 内环 rollRatePID/pitchRatePID         （deg/s→deg/s²；kp=16.042818 s⁻¹，derivative-on-measurement）
+→ 物理边界乘 π/180                    （deg/s²→rad/s²；只在 ControlOutputs_t 入口转换）
 → 惯量逆解前馈 M_ff = I·α_ref + ω×(I·ω) + ω×h_rotor   （InertiaDecoupling.h；inertia_comp_mask=0x03 全开，
                                                          位0=陀螺耦合、位1=转子陀螺；0xE1 可在线关闭）
 → BTRUE 在线分配（TandemVec_ControlAllocation.h）      （工作点 w0_eff=√(0.5·(wf_est²+wt_est²))，
@@ -305,7 +306,7 @@ q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w<0 取反�
 | 环节 | 仿真（本节 §8） | 固件 |
 |---|---|---|
 | 姿态外环 | 纯比例 `ωdes=−2·vtolAttKp·qe.xyz`（vtolAttKp=2.5） | PID（att kp=2.8 deg 域、Ki=0、积分限幅 40°/s、输出限幅 ±80°/s） |
-| 角速率内环 | rateKq/rateKr/rateKp（1.2/1.2/1.5） | rate kp=0.28/0.28/0.20 + ki=0.1，限幅 100°/s²，阈值 60 |
+| 角速率内环 | rateKq/rateKr/rateKp（1.2/1.2/1.5） | 输入 `deg/s`、输出 `deg/s²`；roll/pitch `kp=16.042818 s⁻¹`、yaw `kp=11.459156 s⁻¹`、`ki=5.729578 s⁻²`，输出限幅 ±5729.578 deg/s²，积分分离阈值 60 deg/s |
 | 差速增益调度 | 无（概念级） | `(w0_eff/w_hover)²` 封顶 1.0，仅乘 Mx 通道（2026-08-07~09 三层修复：1/w0² 指令爆炸→封顶 1.0→τm 观测器） |
 | 转速信号 | 电机模型真值 S.wf/S.wt | **τm 一阶观测器** `g_wf_est += (wf−g_wf_est)·(0.005/τm)`（GNC 200Hz 步长），B 矩阵/调度/当前状态全部用观测值 |
 | yaw 航向 | 无航向锁（ψ̇ 指令松手停转） | ratchet hold：解锁上升沿锁航向；摇杆偏离 40 μs 死区→恒角速度；回中→att_yaw.kp×短弧误差→限幅 ±24°/s |

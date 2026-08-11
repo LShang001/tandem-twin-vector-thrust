@@ -619,9 +619,10 @@ void handleAnoCom()
     fusionSta |= 0x40;
 
   // 控制量 (GNC 输出 gnc_tel)，经 anoCtrlSafe 限幅 ±5000 + NaN 防护
-  const float roll_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[0] * 10.0f);  // 滚转控制输出 ×10 显示
-  const float pitch_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[1] * 10.0f); // 俯仰控制输出 ×10
-  const float yaw_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref[2] * 10.0f);   // 偏航控制输出 ×10
+  // 0x21 保持既有物理域协议：alpha_ref_radps2 ×10，避免破坏官方上位机兼容和量程。
+  const float roll_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref_radps2[0] * 10.0f);
+  const float pitch_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref_radps2[1] * 10.0f);
+  const float yaw_ctrl_ano = anoCtrlSafe(gnc_tel.alpha_ref_radps2[2] * 10.0f);
   const float throttle_ctrl_ano = anoCtrlSafe(throttlePercent * 10.0f);   // 油门百分比 ×10
 
   // 目标值（来自控制逻辑）

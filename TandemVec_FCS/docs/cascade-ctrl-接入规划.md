@@ -7,6 +7,7 @@
 > ② `TandemVec_AttitudeCtrl/RateCtrl/CascadeCtrl/CtrlParams.h` 已从仓库删除，
 > 浮点四元数工具抽为 `include/Quat4f.h`。
 > 本文档保留作为决策链记录（触发问题：CtrlParams.h 声称唯一调参入口却未编译进固件）。
+> **2026-08-11 补记**：现役 PositionPID 速率环已迁移为 `deg/s → deg/s²`，`kp` 直接使用 `s⁻¹`；本文 `0.25/0.20` 等均为迁移前历史值，不得用于当前参数导入。
 >
 > 原始状态（2026-08-08 起草）：规划草案
 > 关联：`include/TandemVec_CtrlParams.h`（警示注释）、`include/TandemVec_CascadeCtrl.h`、
@@ -67,7 +68,7 @@
 | 8 | 角速率滤波 | `roll/pitch/yawSpeedFilter`（α=0.3） | 无 | 外层保留 |
 | 9 | 在线辨识联动 | `s_yaw_gain_sched` 导出修正 alpha_cmd（`TandemVec_OnlineID.h` 步骤9） | 无 | 保留现状 |
 | 10 | 输出滤波 | `yawDiffOutputFilter`（加强滤波抑震荡） | 无 | 外层保留 |
-| 11 | 单位约定 | PositionPID 工作于 deg 域（error_deg） | AttitudeCtrl 输出 rad/s→CascadeCtrl 内转 deg/s，RateCtrl 按 deg/s | 接口转换处核对 ±RAD_TO_DEG |
+| 11 | 单位约定 | PositionPID 输入 deg/s、输出 deg/s²，物理边界转 rad/s² | 已删除的 CascadeCtrl 曾在接口内换算 | 历史规划，不再实施 |
 | 12 | 四元数分量顺序 | `QuaternionMath.h` double `[w,x,y,z]` | `Quat4f` float `[w,x,y,z]` | 赋值处核对顺序 |
 
 ## 5 分阶段实施步骤
@@ -98,6 +99,6 @@
 ## 8 待决策项
 
 1. **CascadeCtrl 层 3/4 处置**：保持"仅供 test_host 全链仿真"，还是把现有层 3/4 逻辑（轴置换+调度+floor+门控）反哺进 CascadeCtrl 后整体使用？
-2. **接入起点参数**：`TandemVec_CtrlParams.h` 默认值直接采用实机当前值（2.5/0.25/0.8/0.20 等）——建议采用，避免接入瞬间行为跳变。
+2. **接入起点参数（历史）**：当时建议采用 2.5/0.25/0.8/0.20 等迁移前值；该方案已废弃，当前参数必须读取 `FlightCtrlParams.h`。
 3. **yaw 直通接口形态**：CascadeCtrl 增加 `yaw_rate_direct` 输入标志（外环旁路），还是外部把 ω_ref.z 直接覆写后仍走内环？
 4. **高度/位置环**：是否同步迁移（PositionPID 对象）到新参数体系，还是暂时保留 state_data.cpp 定义？

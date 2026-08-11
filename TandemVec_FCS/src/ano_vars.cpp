@@ -27,9 +27,10 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("omega_ref_roll",  gnc_tel.omega_ref_dps[0]),
     ANO_VAR_FLOAT("omega_ref_pitch", gnc_tel.omega_ref_dps[1]),
     ANO_VAR_FLOAT("omega_ref_yaw",   gnc_tel.omega_ref_dps[2]),
-    ANO_VAR_FLOAT("alpha_ref_x",     gnc_tel.alpha_ref[0]),
-    ANO_VAR_FLOAT("alpha_ref_y",     gnc_tel.alpha_ref[1]),
-    ANO_VAR_FLOAT("alpha_ref_z",     gnc_tel.alpha_ref[2]),
+    // 兼容既有变量名：alpha_ref_* 始终为物理域 rad/s²。
+    ANO_VAR_FLOAT("alpha_ref_x",     gnc_tel.alpha_ref_radps2[0]),
+    ANO_VAR_FLOAT("alpha_ref_y",     gnc_tel.alpha_ref_radps2[1]),
+    ANO_VAR_FLOAT("alpha_ref_z",     gnc_tel.alpha_ref_radps2[2]),
     ANO_VAR_FLOAT("m_cmd_x",         gnc_tel.M_cmd[0]),
     ANO_VAR_FLOAT("m_cmd_y",         gnc_tel.M_cmd[1]),
     ANO_VAR_FLOAT("m_cmd_z",         gnc_tel.M_cmd[2]),
@@ -71,6 +72,12 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("ekf_vel_n",       INS_GNSS_Packet.velocity_north),
     ANO_VAR_FLOAT("ekf_vel_e",       INS_GNSS_Packet.velocity_east),
     ANO_VAR_FLOAT("ekf_vel_d",       INS_GNSS_Packet.velocity_down),
+    // 角度域调参观测量追加在表尾，保持既有变量 ID 不变。
+    // 名称同时满足 AnoCom 16B 与 MAVLink NAMED_VALUE_FLOAT 9 字符上限；
+    // 三轴在 MAVLink 中必须保持唯一，不能用会同截断为 alpha_dps 的长前缀。
+    ANO_VAR_FLOAT("adps2_x",          gnc_tel.alpha_ref_dps2[0]),
+    ANO_VAR_FLOAT("adps2_y",          gnc_tel.alpha_ref_dps2[1]),
+    ANO_VAR_FLOAT("adps2_z",          gnc_tel.alpha_ref_dps2[2]),
 };
 static_assert(sizeof(kAnoVars) / sizeof(kAnoVars[0]) <= ANO_VARS_MAX_COUNT,
               "ano_vars: 注册表超上限");

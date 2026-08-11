@@ -83,6 +83,12 @@ int main()
     char mav[10];
     anoVarCopyName(mav, sizeof(mav), "alpha_ref_x");
     CHECK(strlen(mav) == 9 && strcmp(mav, "alpha_ref") == 0, "MAVLink 名称截断 9 字符");
+    char mav_x[10], mav_y[10], mav_z[10];
+    anoVarCopyName(mav_x, sizeof(mav_x), "adps2_x");
+    anoVarCopyName(mav_y, sizeof(mav_y), "adps2_y");
+    anoVarCopyName(mav_z, sizeof(mav_z), "adps2_z");
+    CHECK(strcmp(mav_x, mav_y) != 0 && strcmp(mav_x, mav_z) != 0 && strcmp(mav_y, mav_z) != 0,
+          "MAVLink 角度域三轴变量名截断后仍唯一");
 
     // ---- 3. watch 集合 ----
     anoVarWatchClear();

@@ -9,6 +9,7 @@
 //        -o test_host/bin/sw && ./test_host/bin/sw
 // ============================================================
 #include "../include/TandemVec_Config.h"
+#include "../include/ControlUnits.h"
 #include <cmath>
 #include <cstdio>
 #include <initializer_list>
@@ -26,17 +27,17 @@ struct MiniPID {
           out_max(om), int_max(im) {}
     void reset() { integral=prev_err=prev_meas=0; }
 
-    float step_pos(float err, float) {
-        integral += err;
+    float step_pos(float err, float dt) {
+        integral += err * dt;
         float io = ki*integral; if(io>int_max)io=int_max; if(io<-int_max)io=-int_max;
         float d = err-prev_err; prev_err=err;
         float out = kp*err + io + kd*d;
         if(out>out_max)out=out_max; if(out<-out_max)out=-out_max;
         return out;
     }
-    float step_dom(float sp, float meas, float) {
+    float step_dom(float sp, float meas, float dt) {
         float err = sp-meas;
-        integral += err;
+        integral += err * dt;
         float io = ki*integral; if(io>int_max)io=int_max; if(io<-int_max)io=-int_max;
         float d = -(meas-prev_meas); prev_meas=meas; prev_err=err;
         float out = kp*err + io + kd*d;
@@ -58,8 +59,10 @@ static Trace simulate(float ki_outer, float ki_inner,
                       float target_rad, float disturb_Nm,
                       float I, float dt, float sim_s)
 {
-    MiniPID outer(4.25f, ki_outer, 0, 2.0f, 0.7f);   // ±2 rad/s, I_limit=0.7
-    MiniPID inner(0.30f, ki_inner, 0, 30.0f, 5.0f);   // ±30 rad/s², I_limit=5
+    MiniPID outer(2.8f, ki_outer, 0, 80.0f, 40.0f);
+    MiniPID inner(16.042818f, ki_inner, 0,
+                  ControlUnits::radps2ToDps2(100.0f),
+                  ControlUnits::radps2ToDps2(20.0f));
 
     int N=(int)(sim_s/dt);
     float theta=0, omega=0;
@@ -68,10 +71,11 @@ static Trace simulate(float ki_outer, float ki_inner,
     float rms_sum=0, max_ss=0;
 
     for(int i=0;i<N;++i){
-        float t=i*dt, err=target_rad-theta;
+        float t=i*dt;
+        float err=(target_rad-theta)*ControlUnits::kDegPerRad;
         float wref = outer.step_pos(err, dt);
-        float aref = inner.step_dom(wref, omega, dt);
-        float Mcmd = I*aref;
+        float aref_dps2 = inner.step_dom(wref, omega*ControlUnits::kDegPerRad, dt);
+        float Mcmd = I*ControlUnits::dps2ToRadps2(aref_dps2);
         omega += (Mcmd+disturb_Nm)/I * dt;
         theta += omega*dt;
         if(theta>max_theta)max_theta=theta;
@@ -82,15 +86,14 @@ static Trace simulate(float ki_outer, float ki_inner,
             rms_sum+=ae*ae; rms_n++;
             if(ae>max_ss)max_ss=ae;
         }
-        if(settle_at<0 && t>0.3f && fabsf(err)<target_rad*0.02f)settle_at=i;
+        if(settle_at<0 && t>0.3f && fabsf(err)<target_rad*ControlUnits::kDegPerRad*0.02f)settle_at=i;
     }
 
     float final_e = fabsf(target_rad-theta);
-    float D2=57.29578f;
     Trace tr;
-    tr.rms_err_deg     = rms_n>0? sqrtf(rms_sum/rms_n)*D2 : 99;
-    tr.max_ss_err_deg  = max_ss*D2;
-    tr.overshoot_deg   = (max_theta-target_rad)*D2;
+    tr.rms_err_deg     = rms_n>0? sqrtf(rms_sum/rms_n) : 99;
+    tr.max_ss_err_deg  = max_ss;
+    tr.overshoot_deg   = (max_theta-target_rad)*ControlUnits::kDegPerRad;
     tr.settle_2pct_s   = settle_at>=0? settle_at*dt : 99;
     tr.unstable        = final_e > target_rad*0.5f;
     return tr;
@@ -110,7 +113,7 @@ static float score(const Trace &t, float best_rms, float best_settle) {
 // ============================================================
 int main()
 {
-    const float Iy=0.34f, dt=0.005f, sim_s=4.0f;
+    const float Iy=kDefaultTandemVecParams.Iy, dt=0.005f, sim_s=4.0f;
     const float target = 15.f*3.14159265f/180.f;
     const float disturb=0.01f;
 
@@ -124,9 +127,9 @@ int main()
 
     // 预扫描更新 best_rms / best_settle 归一化基准
     // 外环Ki扫描范围
-    float ki_outer_vals[] = {0, 0.001f, 0.002f, 0.005f, 0.008f,  0.010f, 0.015f, 0.020f, 0.030f};
+    float ki_outer_vals[] = {0, 0.1f, 0.25f, 0.5f, 1.0f, 2.0f};
     // 内环Ki扫描范围
-    float ki_inner_vals[] = {0, 0.00005f, 0.0001f, 0.0002f, 0.0005f, 0.001f, 0.002f, 0.005f};
+    float ki_inner_vals[] = {0, 1.145916f, 2.291831f, 3.437747f, 5.729578f, 8.594367f, 11.459156f};
 
     // Round 1: 纯外环积分扫描（内环Ki=0）
     std::printf("──────── 外环积分扫描 (内环Ki=0) ────────\n");
@@ -158,8 +161,8 @@ int main()
     std::printf("\n──────── 双积分关键组合 ────────\n");
     std::printf("%8s %8s  %8s  %8s  %8s  %8s\n","Ki_out","Ki_in","RMS(°)","settle","超调(°)","分数");
     float best_both_score=999, best_both_ko=0, best_both_ki=0;
-    float test_ko[] = {0.001f, 0.002f, 0.005f};
-    float test_ki[] = {0.0001f, 0.0002f, 0.0005f};
+    float test_ko[] = {0.1f, 0.5f, 1.0f};
+    float test_ki[] = {2.291831f, 5.729578f, 8.594367f};
     for(float ko:test_ko) for(float ki:test_ki){
         auto t = simulate(ko,ki, target,disturb, Iy,dt,sim_s);
         float s = score(t, best_rms, best_settle);
@@ -195,7 +198,7 @@ int main()
 
     std::printf("\n>>> 裁决: ");
     if(best_in_score <= best_out_score && best_in_score <= best_both_score)
-        std::printf("内环积分(Ki=%.5f)最优 — 微量积分不干扰瞬态+自动配平\n", best_in_ki);
+        std::printf("内环积分(Ki=%.5f s^-2)最优 — 持续扰动下自动配平\n", best_in_ki);
     else if(best_out_score <= best_in_score && best_out_score <= best_both_score)
         std::printf("外环积分(Ki=%.4f)最优\n", best_out_ki);
     else

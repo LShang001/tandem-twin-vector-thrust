@@ -12,8 +12,9 @@
 //
 //  ★ 2026-08-08 修复（审查发现）：
 //    · 参数原为自建快照（1.5/6.0/6.0、MAX_TARGET_RATE=90、35/50°/s），
-//      与实机（2.5/0.25/0.20、80°/s）严重脱节 → 现全部读自
+//      与当时实机（2.5/0.25/0.20、80°/s；迁移前混合域）严重脱节 → 现全部读自
 //      include/FlightCtrlParams.h（kFlightCtrlParams，实机唯一事实源）
+//    · 2026-08-11 速率 PID 迁移为 deg/s→deg/s²，测试在惯量逆解边界转 rad/s²。
 //    · 轴置换原为旧映射（alpha_roll→差速、alpha_yaw→前摆），与实机
 //      mix 层（flight_control.cpp:1187-1189，恢复存档系后）相反 →
 //      已对齐：Mx'←alpha_yaw（差速）、My'←alpha_pitch（尾摆）、
@@ -29,6 +30,7 @@
 #include "../include/PositionPID.h"
 #include "../include/TandemVec_Config.h"
 #include "../include/FlightCtrlParams.h"   // ★ 参数唯一事实源（防漂移）
+#include "../include/ControlUnits.h"
 
 #include <cmath>
 #include <cstdio>
@@ -211,7 +213,7 @@ struct AttitudeLoop {
                            kFlightCtrlParams.rate_yaw.enabled, kFlightCtrlParams.rate_yaw.int_limit,
                            kFlightCtrlParams.rate_yaw.threshold, kFlightCtrlParams.rate_yaw.filter_alpha};
 
-    // 返回 {alpha_roll, alpha_pitch, alpha_yaw}（rad/s²）
+    // 返回 {alpha_roll, alpha_pitch, alpha_yaw}（rad/s²）；PID 内部统一为 deg/s²。
     std::array<float, 3> update(const Quaternion &q_cur, const Quaternion &q_target,
                                 const std::array<float, 3> &w_dps)
     {
@@ -248,10 +250,12 @@ struct AttitudeLoop {
         yawRateTarget = std::clamp(yawRateTarget, -max_rate, max_rate);
 
         // —— 内环：角速率误差 → 角加速度（flight_control.cpp:1016-1017、1066-1067）——
-        float alpha_roll = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, w_dps[0], 0.005f);
-        float alpha_pitch = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, w_dps[1], 0.005f);
-        float alpha_yaw = yawRatePID.computeDerivativeOnMeasurement(yawRateTarget, w_dps[2], 0.005f);
-        return {alpha_roll, alpha_pitch, alpha_yaw};
+        float alpha_roll_dps2 = rollRatePID.computeDerivativeOnMeasurement(rollRateTarget, w_dps[0], 0.005f);
+        float alpha_pitch_dps2 = pitchRatePID.computeDerivativeOnMeasurement(pitchRateTarget, w_dps[1], 0.005f);
+        float alpha_yaw_dps2 = yawRatePID.computeDerivativeOnMeasurement(yawRateTarget, w_dps[2], 0.005f);
+        return {ControlUnits::dps2ToRadps2(alpha_roll_dps2),
+                ControlUnits::dps2ToRadps2(alpha_pitch_dps2),
+                ControlUnits::dps2ToRadps2(alpha_yaw_dps2)};
     }
 };
 
@@ -495,29 +499,31 @@ int main()
               "T10 双发满推力可覆盖悬停需求（修复前接近饱和、裕量丧失）");
     }
 
-    // T11: RATE_MODE 四轴式摇杆映射链（直连轴序：roll 摇杆→差速、yaw 摇杆→前摆，
-    // pitch 摇杆→尾摆——与 thrustWrench 轴系一致）
-    // 增益/限幅读自 FlightCtrlParams.h（kMaxTargetRate=80°/s，实机 2026-08-07 对齐存档值；
-    // 修复前测试自建 35/50°/s 与 0.30/0.15 增益，与实机 80°/s、0.25/0.20 脱节）
+    // T11: 80°/s 小信号轴向符号链（本测试 thrustWrench 采用直连模型轴序）。
+    // 增益读自 FlightCtrlParams.h；当前 RATE_MODE 实际还会经过 RcCurve，满杆上限为600°/s，
+    // 因此本项只验证分配符号，不声称复刻满杆手感。
     {
         float w0 = P.wMax * 0.5f;
         const float MAX_STICK_RATE = kMaxTargetRate;  // 实机 MAX_MANUAL_*RATE = 80°/s
         float dw, df, dt_;
-        // yaw 摇杆右满偏 → yawRateTarget = +80°/s → alpha_yaw = 0.20×80
+        // yaw 目标 +80°/s → alpha_yaw = 11.459156×80 deg/s²，再转 rad/s²
         // → Mz = +Iz·α > 0 → df > 0 → thrustWrench Mz > 0（前摆偏航力矩）
-        float alpha_yaw = kFlightCtrlParams.rate_yaw.kp * (MAX_STICK_RATE - 0.0f);
+        float alpha_yaw = ControlUnits::dps2ToRadps2(
+            kFlightCtrlParams.rate_yaw.kp * (MAX_STICK_RATE - 0.0f));
         allocate({0.f, 0.f, alpha_yaw}, w0, dw, df, dt_);
         auto M = thrustWrench(w0, dw, df, dt_);
         check(M[2] > 0.f, "T11 yaw 摇杆右推 → Mz>0（前摆偏航力矩）");
-        // roll 摇杆右满偏 → rollRateTarget = +80°/s → alpha_roll = 0.25×80
+        // roll 目标 +80°/s → alpha_roll = 16.042818×80 deg/s²，再转 rad/s²
         // → Mx = +Ix·α > 0 → dw < 0（尾电机加速）→ thrustWrench Mx = -Qf+Qt > 0
-        float alpha_roll = kFlightCtrlParams.rate_roll.kp * (MAX_STICK_RATE - 0.0f);
+        float alpha_roll = ControlUnits::dps2ToRadps2(
+            kFlightCtrlParams.rate_roll.kp * (MAX_STICK_RATE - 0.0f));
         allocate({alpha_roll, 0.f, 0.f}, w0, dw, df, dt_);
         M = thrustWrench(w0, dw, df, dt_);
         check(M[0] > 0.f, "T11 roll 摇杆右推 → Mx>0（差速正力矩，绕 x）");
-        // pitch 摇杆推杆 → pitchRateTarget = -80°/s（低头）→ alpha_pitch = 0.25×(-80)
+        // pitch 目标 -80°/s（低头）→ alpha_pitch = 16.042818×(-80) deg/s²，再转 rad/s²
         // → My = +Iy·α < 0 → dt_ > 0 → thrustWrench My < 0（尾摆低头力矩）
-        float alpha_pitch = kFlightCtrlParams.rate_pitch.kp * (-MAX_STICK_RATE - 0.0f);
+        float alpha_pitch = ControlUnits::dps2ToRadps2(
+            kFlightCtrlParams.rate_pitch.kp * (-MAX_STICK_RATE - 0.0f));
         allocate({0.f, alpha_pitch, 0.f}, w0, dw, df, dt_);
         M = thrustWrench(w0, dw, df, dt_);
         check(M[1] < 0.f, "T11 pitch 摇杆推杆 → My<0（尾摆低头力矩）");

@@ -5,6 +5,7 @@
 > 关联：`docs/cascade-ctrl-接入规划.md`（B 路径规划，C 是其低风险前置）、`include/TandemVec_CtrlParams.h`（警示注释）
 > ⚠️ 文中所引 CascadeCtrl 半成品架构（`TandemVec_CtrlParams/AttitudeCtrl/RateCtrl/CascadeCtrl.h`）已于 2026-08-08 废弃删除；本文作为 C 路径实施记录保留，参数/遥测集中成果仍在（`include/FlightCtrlParams.h` + `GncTelemetry`）。
 > 核心约束：**控制律行为零变化**——不触碰任何数值、时序、滤波、调度、分配逻辑。
+> **2026-08-11 量纲迁移更新**：速率 PID 已统一为 `deg/s → deg/s²`，在惯量逆解边界转 `rad/s²`。迁移同步缩放增益和限幅，故物理控制行为保持不变；本文中的 `0.25/0.20` 等数值仅是迁移前历史口径。
 
 ---
 
@@ -47,23 +48,24 @@
 
 ### 4.1 参数结构体（新建，语义按 PositionPID 实际参数）
 
-> ⚠️ 不复用 `TandemVec_CtrlParams.h` 的类型：其 `alpha_max/int_max` 数值域（rad/s²）与 PositionPID 实际语义（deg 域、误差·拍域）不同，硬套会引入 57 倍类错误（见 cascade-ctrl-接入规划 §2）。
+> ⚠️ 不复用已删除的 `TandemVec_CtrlParams.h` 类型。现役 `PidTuneParams` 的速率环输出/I项限幅为 `deg/s²`，积分状态按 `error×dt` 累积；只有物理边界使用 `rad/s²`。
 
 ```cpp
 // state_data.h 新增
 struct PidTuneParams {
     float kp, ki, kd;        // 构造参数（值=现状字面量）
     float out_min, out_max;  // 输出限幅（PositionPID 构造参数 5/6；姿态环现状 ±100）
-    float int_limit;         // 积分状态钳位（构造参数 7；现状 250）
+    float int_limit;         // 积分项输出上限 |ki·∫e dt|（内部反推状态界）
     float threshold;         // 积分分离阈值（构造参数 8；现状 0）
     float filter_alpha;      // 微分滤波系数（构造参数 9；现状 0=直通）
     bool  enabled;           // 该环是否参与控制（yawAnglePID=false，显式标记僵尸参数）
 };
 
 struct FlightCtrlParams {
-    // 姿态串级（6 环）——现状值（2026-08-07 实机收敛值）
-    PidTuneParams att_roll,  att_pitch,  att_yaw;    // 2.5/0/0 | 2.5/0/0 | 0.8/0/0(enabled=false)
-    PidTuneParams rate_roll, rate_pitch, rate_yaw;   // 0.25/0.0003/0 | 0.25/0.0003/0 | 0.20/0.001/0
+    // 姿态串级（6 环）——当前值以 FlightCtrlParams.h 为准
+    PidTuneParams att_roll,  att_pitch,  att_yaw;
+    // rate 输入 deg/s、输出 deg/s²；现役 kp=16.042818/16.042818/11.459156 s^-1
+    PidTuneParams rate_roll, rate_pitch, rate_yaw;
     // 垂直（2 环）——现状值
     PidTuneParams alt_pos, alt_vel;                  // 1.0/0/0 | 5.0/0.00625/0
     // 水平位置/速度（4 环）——现状值（运行时配置见 §4.3）
@@ -88,7 +90,8 @@ struct GncTelemetry {
     float error_deg[3];       // error_roll/pitch/yaw_deg（yaw 恒 0，无姿态回中）
     float omega_ref_dps[3];   // roll/pitchRateTarget + yawRateTarget（含滤波后）
     // 内环
-    float alpha_ref[3];       // outputs.alpha_roll/pitch/yaw（输出滤波后）
+    float alpha_ref_dps2[3];   // PID/输出滤波后的角度域指令（deg/s²）
+    float alpha_ref_radps2[3]; // 惯量逆解与兼容遥测使用的物理域指令（rad/s²）
     // 分配层（mix 层，调度后）
     float M_cmd[3];           // Mx/My/Mz（增益调度后、allocateMoments 前）
     float w0_eff;             // 工作点（含 w0_floor）
@@ -102,12 +105,12 @@ extern GncTelemetry gnc_tel;  // state_data.cpp 定义（初值全 0）
 ```
 
 **写入点**（3 处，全部"只读现有计算值"，不改任何计算）：
-1. `execute_attitude_controller` 尾部：`error_deg[0/1]`、`omega_ref_dps[0/1]`、`alpha_ref[0/1]`
-2. `execute_yaw_controller` 尾部：`error_deg[2]`、`omega_ref_dps[2]`、`alpha_ref[2]`
+1. `execute_attitude_controller` 尾部：`error_deg[0/1]`、`omega_ref_dps[0/1]`、`alpha_ref_dps2[0/1]`、`alpha_ref_radps2[0/1]`
+2. `execute_yaw_controller` 尾部：`error_deg[2]`、`omega_ref_dps[2]`、`alpha_ref_dps2[2]`、`alpha_ref_radps2[2]`
 3. `mix_and_output_commands` 尾部：`M_cmd`、`w0_eff`、`yaw_gain_sched`、`delta_f/t`、`dw`、`alloc_sat`
 
 **消费方改造**（数值不变，只换读取来源；缩放系数原地保留）：
-- `can_bus.cpp:156,161`：`yaw_output→gnc_tel.alpha_ref[2]`，`roll_output→gnc_tel.alpha_ref[0]`，`pitch_output→gnc_tel.alpha_ref[1]`
+- `can_bus.cpp` / AnoCom 0x21：继续读取 `gnc_tel.alpha_ref_radps2[]`，保持既有 `rad/s²` 协议兼容
 - `communication.cpp:420-422`：同上三处
 - `communication.cpp:431`：`yawRateTarget→gnc_tel.omega_ref_dps[2]`
 - `communication.cpp:741-743`：`error_roll_deg→gnc_tel.error_deg[0]`，`error_pitch_deg→gnc_tel.error_deg[1]`

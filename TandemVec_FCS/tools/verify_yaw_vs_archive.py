@@ -8,18 +8,21 @@
   百分比        = us / 1000 × 100%           (PWM 1000~2000 → 0~100%)
 
 当前链路：
-  alpha_yaw = Kp(0.25) × error(35°/s)        ← rad/s²
+  alpha_yaw = Kp(11.459156 s⁻¹) × error(222.22°/s) ← FPV 曲线满杆，deg/s²
   Mx'       = Ix × alpha
-  Δω        = Mx' / (2·kQ·w0²)   [限幅 dwMax]
+  w0_eff    = max(w0, 0.6·w_hover)，s=min((w0_eff/w_hover)²,1)
+  Δω        = (s·Mx') / (2·kQ·w0_eff²)   [限幅 dwMax]
   ωf/ωt     = w0·√(1±Δω)                     ← 归一化，随油门缩放
   百分比    = ω / wMax × 100%
 """
 import sys
+import math
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
 from core import load_params
 
 P = load_params()
-kQ, wMax, Ix, dwMax = P['kQ'], P['wMax'], P['Ix'], P['dwMax']
+kQ, kT, wMax, Ix, dwMax = P['kQ'], P['kT'], P['wMax'], P['Ix'], P['dwMax']
+w_hover = (0.5 * P['m'] * P['g'] / kT) ** 0.5
 
 # ---------- 存档 ----------
 ARC_RATE, ARC_KP = 80.0, 3.8
@@ -31,16 +34,18 @@ print(f'  → 单侧油门偏移 ±{arc_pct:.1f}%   双侧转速差 {2*arc_pct:.
 print(f'  ★ 与油门无关（绝对 us 差），低油门时权限同样充足')
 
 # ---------- 当前 ----------
-CUR_RATE, CUR_KP = 35.0, 0.25
+CUR_RATE, CUR_KP = 0.5 * 200.0 / (1.0 - 0.55), 11.459156
 print(f'\n=== 当前实现（满打杆 error={CUR_RATE:.0f}°/s × Kp={CUR_KP}）===')
-alpha = CUR_KP * CUR_RATE
+alpha = CUR_KP * CUR_RATE * math.pi / 180.0
 Mx = Ix * alpha
 print(f'  alpha={alpha:.2f} rad/s²  Mx={Mx:.5f} N·m')
 print(f'  {"油门":>6} {"Δω":>8} {"限幅":>5} {"ωf%":>7} {"ωt%":>7} {"单侧偏移":>9}')
 rows = {}
 for thr in (0.19, 0.30, 0.50, 0.70):
     w0 = thr * wMax
-    dw_raw = Mx / (2.0 * kQ * w0 * w0)
+    w0_eff = max(w0, 0.6 * w_hover)
+    sched = min((w0_eff / w_hover) ** 2, 1.0)
+    dw_raw = sched * Mx / (2.0 * kQ * w0_eff * w0_eff)
     dw = max(-dwMax, min(dwMax, dw_raw))
     sat = 'YES' if abs(dw_raw) > dwMax else '-'
     wf = w0 * (1.0 + dw) ** 0.5
@@ -56,16 +61,6 @@ for thr in (0.19, 0.50):
     ratio = arc_pct / rows[thr]
     print(f'  {thr*100:.0f}% 油门：当前 ±{rows[thr]:.1f}%  vs  存档 ±{arc_pct:.1f}%'
           f'  → 偏小 {ratio:.1f}×')
-print(f'\n  两项差异来源：')
-print(f'    1. 摇杆满打速率 {CUR_RATE:.0f}°/s vs 存档 {ARC_RATE:.0f}°/s = {ARC_RATE/CUR_RATE:.1f}×')
-print(f'    2. 通道增益（Kp + 归一化架构）')
-print(f'\n  建议：MAX_MANUAL_yawRATE 35→80（对齐存档），Kp_r 0.25→0.6')
-alpha2 = 0.6 * 80.0
-Mx2 = Ix * alpha2
-for thr in (0.19, 0.50):
-    w0 = thr * wMax
-    dw = max(-dwMax, min(dwMax, Mx2 / (2.0 * kQ * w0 * w0)))
-    wf, wt = w0 * (1 + dw) ** 0.5, w0 * (1 - dw) ** 0.5
-    dev = ((wf - w0) + (w0 - wt)) / 2 / wMax * 100
-    print(f'    改后 {thr*100:.0f}% 油门：Δω={dw:.3f}{" [饱和]" if abs(Mx2/(2*kQ*w0*w0))>dwMax else ""}'
-          f'  单侧 ±{dev:.1f}%（存档 ±{arc_pct:.1f}%）')
+print(f'\n  差异来源：存档直接加减 PWM；当前链路是角加速度→力矩→')
+print('  BTRUE 分配，并含 w0 floor、上限 1.0 的增益调度和归一化差速。')
+print(f'  当前参数：yaw Kp={CUR_KP:.6f} s^-1，FPV 曲线满杆={CUR_RATE:.1f}°/s。')

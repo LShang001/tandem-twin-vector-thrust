@@ -57,6 +57,9 @@ run_one "$ROOT/test_host/test_ano_vars.cpp"            av  ""
 # 双曲放大/rc_rate 线性缩放/死区/限幅/极点保护，Betaflight 三参数模型）：
 run_one "$ROOT/test_host/test_rc_curve.cpp"            rc  ""
 
+# 控制器角度域与物理 SI 域边界（deg/s² ↔ rad/s²），含旧/新 PID 动态等价性：
+run_one "$ROOT/test_host/test_control_units.cpp"        cu  "$STUB_INCLUDE"
+
 # AnoComProtocol 打包回归（★2026-08-10 COMM-001：buildFrame 长度保护/校验
 # 单循环边拷边算/组模式合并 write 字节流等价。多文件编译 + stub Stream）：
 echo "---- 编译 ap ----"
