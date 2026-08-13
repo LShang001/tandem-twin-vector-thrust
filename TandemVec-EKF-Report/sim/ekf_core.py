@@ -205,6 +205,21 @@ class Ekf15:
         self.time_since_gnss = 0.0
         self.gnss_reacquire_timer = 0.0
         self.hist = []                  # 快照历史（延迟回放）
+        # ---- 可调门限/系数（默认=固件现值，行为保持；opt 研究用于扫描）----
+        self.nis_gnss = cfg.get("nis_gnss", 30.0)
+        self.nis_zupt = cfg.get("nis_zupt", 1000.0)
+        self.nis_grav = cfg.get("nis_grav", 18.0)
+        self.nis_sg = cfg.get("nis_sg", 24.0)
+        self.nis_yaw = cfg.get("nis_yaw", 12.0)
+        self.zupt_res_rej = cfg.get("zupt_res_rej", 5.5)
+        self.vel_res_rej = cfg.get("vel_res_rej", 8.0)
+        self.reacq_r_infl = cfg.get("reacq_r_infl",
+                                     [4.0, 4.0, 16.0, 0.25, 0.25, 0.49])
+        self.reacq_nis2 = cfg.get("reacq_nis2", 80.0)
+        self.outage_start = cfg.get("outage_start", 2.0)
+        self.outage_cap = cfg.get("outage_cap", 4.0)
+        self.outage_rate = cfg.get("outage_rate",
+                                   [1.44, 1.44, 3.24, 0.1225, 0.1225, 0.25])
 
     # ---- 初始化 ----
     def initialize(self, accel, gyro, lla, vel=None):
@@ -314,6 +329,10 @@ class Ekf15:
         # 姿态自旋项用真实去偏角速度
         g_body = (dtheta1 + dtheta2) / dt
         F[6:9, 6:9] = -skew(g_body)
+        # 可选：切断航向-速度耦合（航向由双矢量/磁量测负责，
+        # 弱可观耦合在 VTOL 过渡期会把 GNSS 速度噪声放大为航向踢动）
+        if self.cfg.get("decouple_yaw_vel", False):
+            F[3:6, 8] = 0.0
         # 离散化
         dt_f = dt
         Phi = np.eye(15) + F * dt_f + 0.5 * (F * dt_f) @ (F * dt_f)
@@ -338,8 +357,10 @@ class Ekf15:
                 self.hist.pop(0)
         # 失联膨胀
         self.time_since_gnss += dt
-        if self.time_since_gnss >= 2.0:
+        if self.time_since_gnss >= self.outage_start:
             self.grow_outage_cov(dt)
+        # 重捕获窗口计时（固件 TimeUpdate 内递减）
+        self.gnss_reacquire_timer = max(0.0, self.gnss_reacquire_timer - dt)
         self.prev_dtheta = dtheta
         self.prev_dv = dv
 
@@ -392,11 +413,11 @@ class Ekf15:
 
     def grow_outage_cov(self, dt):
         """GNSS 失联协方差膨胀（对照固件 GrowGnssOutageCovariance）"""
-        scale = min(self.time_since_gnss / 2.0, 4.0)
-        pos_ne = (1.2**2) * dt * scale
-        pos_d = (1.8**2) * dt * scale
-        vel_ne = (0.35**2) * dt * scale
-        vel_d = (0.50**2) * dt * scale
+        scale = min(self.time_since_gnss / 2.0, self.outage_cap)
+        pos_ne = self.outage_rate[0] * dt * scale
+        pos_d = self.outage_rate[2] * dt * scale
+        vel_ne = self.outage_rate[3] * dt * scale
+        vel_d = self.outage_rate[5] * dt * scale
         for i in (0, 1):
             self.P[i, i] += pos_ne
         self.P[2, 2] += pos_d
@@ -483,19 +504,19 @@ class Ekf15:
         # NIS 门控（固件 GNSS_NIS_REJECT_THRESHOLD=30）
         nis = y @ np.linalg.solve(S, y)
         use_conservative = False
-        if nis > 30.0:
+        if nis > self.nis_gnss:
             # 重捕获：残差物理合理时用膨胀 R 低增益
-            if self.time_since_gnss >= 2.0 or self.gnss_reacquire_timer > 0:
+            if self.time_since_gnss >= self.outage_start or self.gnss_reacquire_timer > 0:
                 R2 = R.copy()
-                R2[0, 0] += 2.0**2
-                R2[1, 1] += 2.0**2
-                R2[2, 2] += 4.0**2
-                R2[3, 3] += 0.5**2
-                R2[4, 4] += 0.5**2
-                R2[5, 5] += 0.7**2
+                R2[0, 0] += self.reacq_r_infl[0]
+                R2[1, 1] += self.reacq_r_infl[1]
+                R2[2, 2] += self.reacq_r_infl[2]
+                R2[3, 3] += self.reacq_r_infl[3]
+                R2[4, 4] += self.reacq_r_infl[4]
+                R2[5, 5] += self.reacq_r_infl[5]
                 S2 = H @ self.P @ H.T + R2
                 nis2 = y @ np.linalg.solve(S2, y)
-                if nis2 <= 80.0:
+                if nis2 <= self.reacq_nis2:
                     S = S2
                     R = R2
                     use_conservative = True
@@ -546,13 +567,13 @@ class Ekf15:
         #   零速观测（|z|<0.30）时残差 >5.5 m/s 拒绝——防误静止确认把高速运动强拉为零；
         #   通用残差 >8.0 m/s 拒绝——数米每秒级残差交给 GNSS 主更新而非辅助接口。
         zero_vel_obs = np.linalg.norm(z_vel) < 0.30
-        if zero_vel_obs and np.linalg.norm(y) > 5.5:
+        if zero_vel_obs and np.linalg.norm(y) > self.zupt_res_rej:
             return {"fused": False, "nis": float("nan"), "rejected": "zero_vel_residual"}
-        if np.linalg.norm(y) > 8.0:
+        if np.linalg.norm(y) > self.vel_res_rej:
             return {"fused": False, "nis": float("nan"), "rejected": "velocity_residual"}
         S = H @ self.P @ H.T + R
         nis = y @ np.linalg.solve(S, y)
-        if nis > 1000.0:
+        if nis > self.nis_zupt:
             return {"fused": False, "nis": nis}
         K = self.P @ H.T @ np.linalg.solve(S, np.eye(3))
         I15 = np.eye(15)
@@ -577,7 +598,7 @@ class Ekf15:
         R = noise_rad**2 * np.eye(3)
         S = H @ self.P @ H.T + R
         nis = y @ np.linalg.solve(S, y)
-        if nis > 18.0:
+        if nis > self.nis_grav:
             return {"fused": False, "nis": nis}
         K = self.P @ H.T @ np.linalg.solve(S, np.eye(3))
         I15 = np.eye(15)
@@ -598,7 +619,7 @@ class Ekf15:
         R = np.diag(noise**2)
         S = H @ self.P @ H.T + R
         nis = y @ np.linalg.solve(S, y)
-        if nis > 24.0:
+        if nis > self.nis_sg:
             return {"fused": False, "nis": nis}
         # 仅更新零偏子块（对照固件 2989-2998 行）
         Pbg = self.P[12:15, 12:15]
@@ -622,7 +643,7 @@ class Ekf15:
         R = np.array([[noise_rad**2]])
         S = self.P[8, 8] + R[0, 0]
         nis = y * y / S
-        if nis > 12.0:
+        if nis > self.nis_yaw:
             return {"fused": False, "nis": nis}
         K = self.P @ H.T / S
         I15 = np.eye(15)

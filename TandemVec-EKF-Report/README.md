@@ -28,6 +28,23 @@ cd sim && py -3.12 run_scenarios.py
 
 输出：`sim-data/summary.json` + `fig/*.png`（6 个场景）。
 
+### 优化研究（2026-08-13 新增，`sim/opt/`）
+
+算法与参数优化研究框架（见《优化研究-算法与参数优化研究报告.md》）：
+
+```bash
+cd sim/opt
+py -3.12 run_baseline.py --seeds 20   # 基线蒙特卡洛（8 场景 × N 种子）
+py -3.12 run_sweep.py all             # 18 项参数扫描（分组：gnss/qnoise/static/outage）
+py -3.12 run_variants.py              # 13 组算法变体 A/B
+py -3.12 make_digest.py               # 生成数据摘要 sim-data/opt/digest.md
+
+cd ../hifi && py -3.12 run_scenes_opt.py  # 高保真固件闭环变体验证（5 场景 × 9 配置）
+```
+
+研究产出：`sim-data/opt/{baseline_mc,sweep_*,variants,hifi_variants}.json`。
+固件已实施修改：GNSS 速度静态门控、P0 航向 π→0.2、ZUPT NIS 1000→16.3。
+
 ## 编译
 
 ```bash
