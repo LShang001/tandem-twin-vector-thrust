@@ -1,4 +1,4 @@
-﻿#ifdef BFS_NAV_PROFILE
+#ifdef BFS_NAV_PROFILE
 #include <stdint.h>
 void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #define BFS_NAVIGATION_EMBEDDED_PROFILE_ENABLED 1
@@ -881,14 +881,18 @@ void handleNavigationSystem()
       nav_ekf.accel_std_mps2(0.25f);             // 设为 0.15~0.2 以抵抗震动
 
       // 3. 初始状态不确定度 (参考 esp32-ins-gnss-fusion)
-      //    init_heading_err_std 之前设 0.1 (~5.7度) 过小, 告诉 EKF "初始航向很准",
-      //    导致 P 矩阵初始协方差远小于实际不确定性, 辅助量测的修正被压制。
-      //    无磁力计时航向完全不可观, 应设为 pi。
-      //    同时补充缺失的 init_att/accel_bias/gyro_bias 初始不确定度。
+      //    ★ 2026-08-13 优化研究修正（原 π，仿真实证"航向弱可观踢动"机制）：
+      //    ① 本机 TiltCompass 用伪磁场 (30,0,40) 做确定性航向初始化（见 694 行），
+      //      初始航向实际是"伪磁系下的确定航向"，π 的语义与之一致性矛盾（原 LOW-7）；
+      //    ② 仿真证明 P0(8,8)=π 时，大比力水平分量（VTOL 过渡/转弯）会把 GNSS
+      //      速度噪声放大为 ±10-25°/epoch 的航向踢动（K[8,v] ∝ f_x·P(8,8)/Q_a），
+      //      继而 GNSS 联合更新被 NIS 拒绝、位置/速度永久失锁（闭环悬停 5 场景
+      //      全崩，位置误差 2.5-6.7km）；P0=0.2 rad 后闭环姿态误差 55-170°→5-17°。
+      //    init_heading_err_std 0.2 rad（≈11.5°）与确定性伪磁初始化语义一致。
       nav_ekf.init_pos_err_std_m(2.0f);            // 初始位置不确定度 2m
       nav_ekf.init_vel_err_std_mps(0.08f);         // 初始速度不确定度 0.08 m/s
       nav_ekf.init_att_err_std_rad(0.08f);         // 初始姿态 (roll/pitch) 不确定度 ~4.6度
-      nav_ekf.init_heading_err_std_rad(3.14159f);  // 初始航向不确定度 pi (无磁力计, 航向完全未知)
+      nav_ekf.init_heading_err_std_rad(0.2f);      // 初始航向不确定度 0.2 rad (~11.5度，伪磁确定性初始化语义)
       nav_ekf.init_accel_bias_std_mps2(0.196f);    // 初始加速度零偏不确定度 0.02g
       nav_ekf.init_gyro_bias_std_radps(0.00698f);  // 初始陀螺零偏不确定度 0.4度/s
 
@@ -1144,6 +1148,23 @@ void handleNavigationSystem()
 
       // 使用本导航帧弹出的 epoch 快照，避免 UBX 解析缓存被后续串口字节覆盖。
       meas_lla << gnss_epoch.lat_rad, gnss_epoch.lon_rad, static_cast<double>(gnss_epoch.alt_wgs84_m);
+
+      // ★ 2026-08-13 静态门控（仿真实证 F1）：水平巡航恒速时 |a|≈g、|ω|≈0、
+      //   Δa≈0，静止检测器会误确认静止 → 下面把 GNSS 速度强制为 0 → 6 维联合
+      //   更新 NIS 爆炸 → 位置一并被拒 → 位置纯惯导漂移（仿真 120s 漂 330m）。
+      //   修复：GNSS 速度模长超过门限时强制退出静止（仅退出不进入——非对称，
+      //   避免 GNSS 噪声妨碍真静止确认）。详见 TandemVec-EKF-Report 优化研究报告。
+      if (is_static_confirmed)
+      {
+        const float gnss_speed_mps =
+            std::sqrt(gnss_epoch.north_vel_mps * gnss_epoch.north_vel_mps +
+                      gnss_epoch.east_vel_mps * gnss_epoch.east_vel_mps);
+        if (gnss_speed_mps > 1.5f)
+        {
+          Icm45686StaticDetectorReset(static_det);
+          is_static_confirmed = false;
+        }
+      }
 
       if (is_static_confirmed)
       {

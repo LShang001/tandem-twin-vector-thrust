@@ -3709,8 +3709,15 @@ namespace bfs
     static constexpr float GNSS_OUTAGE_POS_D_GROWTH_MPS = 1.8f;
     static constexpr float GNSS_OUTAGE_VEL_NE_GROWTH_MPS2 = 0.35f;
     static constexpr float GNSS_OUTAGE_VEL_D_GROWTH_MPS2 = 0.50f;
-    // 3维速度量测NIS门限；ZUPT需要容纳短时惯导漂移，只拒绝数米每秒级明显速度跳点。
-    static constexpr float VELOCITY_NIS_REJECT_THRESHOLD = 1000.0f;
+    // 3维速度量测NIS门限。
+    // ★ 2026-08-13 优化研究修正（原 1000.0，χ²(3) 99.9%≈16.3）：
+    //   原值下 NIS 门控统计失效（任何真实速度残差都不会触发），仅靠
+    //   物理残差门（8/5.5 m/s）兜底。仿真证明：物理残差门失效场景
+    //   （如误静止巡航，EKF 速度估计已被拉偏到 1.5m/s 门限内）NIS=16.3
+    //   能把位置误差从 225m 压回 0.55m，而 NIS=1000 完全无防护；
+    //   配合固件残差自适应（>1.5 m/s 拒绝）无行为回归。
+    //   详见 TandemVec-EKF-Report 优化研究报告。
+    static constexpr float VELOCITY_NIS_REJECT_THRESHOLD = 16.3f;
     // 速度辅助接口的物理残差门限；容纳静止确认后的较大惯导漂移，只拒绝十几米每秒级荒谬跳点。
     static constexpr float VELOCITY_RESIDUAL_REJECT_MPS = 8.0f;
     // 零速修正专用门限；误静止确认时不允许把高速运动强行拉成静止。
