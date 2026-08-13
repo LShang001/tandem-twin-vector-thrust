@@ -1,0 +1,126 @@
+% ===========================================================================
+%  附录 C  符号表
+% ===========================================================================
+\section{符号与缩略语总表}
+\label{app:notation}
+
+本附录汇总全文使用的数学符号、坐标系与缩略语，作为审阅与检索的总索引。
+全部记号与固件代码注释保持一致。
+
+\subsection{符号约定}
+
+\begin{table}[H]
+\centering
+\caption{数学符号总表}
+\label{tab:notation-math}
+\small
+\begin{tabularx}{\textwidth}{@{}C{2.6cm}L{5.4cm}X@{}}
+\toprule
+\textbf{符号} & \textbf{含义} & \textbf{单位} \\
+\midrule
+$n$ / $b$ & 导航系 NED / 机体系 FRD & — \\
+$\m{C}_b^n$ & 机体系到导航系的方向余弦矩阵 & — \\
+$\m{C}_n^b = (\m{C}_b^n)\T$ & 导航系到机体系的方向余弦矩阵 & — \\
+$q = [q_w,\ \vp{q}_v]$ & 单位四元数（机体系到导航系） & — \\
+$\Exp(\cdot)$ / $\Log(\cdot)$ & 旋转矢量与四元数互转的指数/对数映射 & — \\
+$\sk{\vp{v}}$ & 斜对称算子 & — \\
+$\vp{p}^n$ / $\delta\vp{p}^n$ & NED 位置 / 位置误差 & m \\
+$\vp{v}^n$ / $\delta\vp{v}^n$ & NED 速度 / 速度误差 & m/s \\
+$\delta\vp{\beta}^b$ & 体系右乘姿态误差角 & rad \\
+$\vp{b}_a$ / $\delta\vp{b}_a$ & 加速度计零偏 / 零偏误差 & m/s² \\
+$\vp{b}_g$ / $\delta\vp{b}_g$ & 陀螺零偏 / 零偏误差 & rad/s \\
+$\varphi,\ \lambda,\ h$ & 纬度、经度、椭球高 & rad, rad, m \\
+$R_N,\ R_M,\ R_{mean}$ & 卯酉/子午圈曲率半径、平均半径 & m \\
+$g,\ g_0$ & 当地重力、Somigliana 参考重力 & m/s² \\
+$\omega_e$ & 地球自转角速率 & rad/s \\
+$\vp{\omega}_{ie}^n,\ \vp{\omega}_{en}^n$ & 地球自转、传输速率（NED 投影） & rad/s \\
+$\vp{f}^b$ & 机体系比力（去偏后） & m/s² \\
+$\vp{\omega}_{ib}^b$ & 机体系角速度（去偏后） & rad/s \\
+$\m{F},\ \bm{\Phi},\ \m{G}_s$ & 连续/离散状态转移矩阵、噪声输入矩阵 & — \\
+$\m{Q}_c,\ \m{Q}_d,\ \m{R}_w$ & 连续/离散过程噪声、IMU 噪声谱密度 & — \\
+$\m{P},\ \m{S},\ \m{K},\ \m{R}$ & 协方差、新息协方差、卡尔曼增益、量测噪声 & — \\
+$NIS$ & 归一化新息平方 & — \\
+$\tau_a,\ \tau_g$ & 加计/陀螺零偏相关时间常数 & s \\
+$\sigma_{aw},\ \sigma_{gw}$ & 加计/陀螺白噪声标准差 & — \\
+$dt,\ f_{nav}$ & 导航周期、导航频率（200 Hz） & s, Hz \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{坐标系与轴约定}
+
+\begin{itemize}
+  \item \textbf{NED}：$x$ 北、$y$ 东、$z$ 地（向地心，向下为正），右手系。
+    位置误差第三分量 $\delta p_D = -\delta h$；
+  \item \textbf{FRD}：$x$ 前、$y$ 右、$z$ 腹（向下为正），右手系。比力
+    静止水平时 $\vp{f}^b = (0,\ 0,\ -g)$；
+  \item \textbf{欧拉角序}：$[\psi,\ \theta,\ \phi]$（Yaw-Pitch-Roll，
+    ZYX Tait-Bryan），与固件 \code{quat2angle} 一致；
+  \item \textbf{姿态误差定义}：$q = q_{nom}\otimes\Exp(\delta\vp{\beta}^b)$
+    （体系右乘）。
+\end{itemize}
+
+\subsection{缩略语}
+
+\begin{table}[H]
+\centering
+\caption{缩略语总表}
+\label{tab:notation-acro}
+\small
+\begin{tabularx}{\textwidth}{@{}L{3.4cm}X@{}}
+\toprule
+\textbf{缩略语} & \textbf{全称} \\
+\midrule
+EKF & Extended Kalman Filter（扩展卡尔曼滤波）\\
+ES-EKF & Error-State Extended Kalman Filter（误差状态扩展卡尔曼滤波）\\
+SINS & Strapdown Inertial Navigation System（捷联惯导系统）\\
+GNSS & Global Navigation Satellite System \\
+IMU & Inertial Measurement Unit（惯性测量单元）\\
+NED / FRD & North-East-Down / Front-Right-Down \\
+LLA & Latitude-Longitude-Altitude（经纬高）\\
+DCM & Direction Cosine Matrix（方向余弦矩阵）\\
+VRW / ARW & Velocity / Angle Random Walk（速度/角度随机游走）\\
+BI & Bias Instability（零偏不稳定性）\\
+ZUPT & Zero-Velocity Update（零速修正）\\
+NIS & Normalized Innovation Squared（归一化新息平方）\\
+STM & State Transition Matrix（状态转移矩阵）\\
+PSD & Positive Semi-Definite（半正定）/ Power Spectral Density（功率谱密度，按语境）\\
+pDOP & Position Dilution of Precision（位置精度因子）\\
+iTOW & GPS Time of Week（GPS 周内秒）\\
+AHRS & Attitude and Heading Reference System（航姿参考系统）\\
+RTK & Real-Time Kinematic（实时动态差分定位）\\
+KF & Kalman Filter（卡尔曼滤波）\\
+VTOL & Vertical Take-Off and Landing（垂直起降）\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{全篇引用文件索引}
+
+\cref{tab:notation-files} 汇总正文引用的固件文件及其在报告中的首次引用位置。
+
+\begin{table}[H]
+\centering
+\caption{固件文件引用索引}
+\label{tab:notation-files}
+\small
+\begin{tabularx}{\textwidth}{@{}L{6.4cm}C{2.4cm}X@{}}
+\toprule
+\textbf{文件} & \textbf{规模} & \textbf{报告引用章节} \\
+\midrule
+\file{lib/navigation-main/src/ekf\_15\_state.h} & 3968 行 & 5, 6, 8 章 \\
+\file{src/navigation\_task.cpp} & 1769 行 & 7, 9 章 \\
+\file{include/VerticalKF\_2State.h} & 311 行 & 9.6 节 \\
+\file{include/HorizontalKF.h} & 245 行 & 9.7 节 \\
+\file{include/ins\_gnss\_dynamic\_weight.h} & 125 行 & 9.3 节 \\
+\file{include/ins\_gnss\_epoch\_timing.h} & 94 行 & 8.5 节 \\
+\file{include/ins\_static\_detector.h} & 259 行 & 7.1 节 \\
+\file{include/ins\_static\_aid\_profile.h} & 161 行 & 7.2--7.5 节 \\
+\file{include/ins\_altitude\_reference.h} & 37 行 & 6.7 节 \\
+\file{lib/navigation-main/src/earth\_model.h} & — & 3 章 \\
+\file{lib/navigation-main/src/transforms.h} & — & 2, 3 章 \\
+\file{lib/navigation-main/src/utils.h} & — & 2 章 \\
+\file{lib/units/src/units.h} & — & 3 章 \\
+\bottomrule
+\end{tabularx}
+\end{table}

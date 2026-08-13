@@ -1,0 +1,95 @@
+{
+  "E1_H1": {
+    "bug_backup_deg": 21.269854057212356,
+    "fix_backup_deg": 30.004999999999992,
+    "bug_corr_deg": 81.2698540565653,
+    "fix_corr_deg": 90.00499999935292
+  },
+  "E2_H2": {
+    "theta0": {
+      "eff_bug": 1.0,
+      "eff_fix": 1.0,
+      "roll_bug": 0.0,
+      "roll_fix": 0.0
+    },
+    "theta30": {
+      "eff_bug": 0.8660254037844387,
+      "eff_fix": 1.0,
+      "roll_bug": 0.4999999999999999,
+      "roll_fix": 0.0
+    },
+    "theta45": {
+      "eff_bug": 0.7071067811865476,
+      "eff_fix": 1.0000000000000002,
+      "roll_bug": 0.7071067811865475,
+      "roll_fix": 0.0
+    },
+    "theta60": {
+      "eff_bug": 0.5000000000000001,
+      "eff_fix": 1.0,
+      "roll_bug": 0.8660254037844386,
+      "roll_fix": 0.0
+    },
+    "theta85": {
+      "eff_bug": 0.08715574274765814,
+      "eff_fix": 1.0,
+      "roll_bug": 0.9961946980917455,
+      "roll_fix": 0.0
+    }
+  },
+  "E3_tier": {
+    "bugA": {
+      "Zupt": 10,
+      "Gravity": 5,
+      "StaticGyro": 5,
+      "None": 20
+    },
+    "fixA": {
+      "Zupt": 10,
+      "Gravity": 5,
+      "StaticGyro": 5,
+      "None": 20
+    },
+    "bugB": {
+      "Zupt": 0,
+      "Gravity": 5,
+      "StaticGyro": 0,
+      "None": 35
+    },
+    "fixB": {
+      "Zupt": 10,
+      "Gravity": 5,
+      "StaticGyro": 5,
+      "None": 20
+    },
+    "tierA_bug": {
+      "1": 1,
+      "2": 39,
+      "3": 0
+    },
+    "tierA_fix": {
+      "1": 16,
+      "2": 24,
+      "3": 0
+    }
+  },
+  "E4_epoch": {
+    "future_bug": null,
+    "future_fix": "invalid",
+    "stale_bug": null,
+    "stale_fix": "invalid"
+  },
+  "E5_dualvec": {
+    "bug_yaw_deg": -4.579365475745769,
+    "bug_corr_deg": -91.58730951491556,
+    "bug_n": 2,
+    "fix_n": 0
+  },
+  "E6_overflow": {
+    "true_dv": 1.0,
+    "bug_dv": 0.64,
+    "fix_dv": 1.0,
+    "bug_dt": 0.32,
+    "fix_dt": 0.5
+  }
+}

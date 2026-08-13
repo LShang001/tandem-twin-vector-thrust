@@ -1,0 +1,67 @@
+{
+  "s1": {
+    "ba_final_mg": [
+      -305.44,
+      -62.86,
+      127.85
+    ],
+    "bg_final_degh": [
+      607.83,
+      -515.173,
+      893.984
+    ],
+    "att_sigma_final_deg": [
+      0.314,
+      0.352,
+      2.429
+    ],
+    "bg_sigma_final_degh": [
+      30.508,
+      30.508,
+      30.508
+    ]
+  },
+  "s2": {
+    "pos_ne_steady_rmse_m": 0.327,
+    "pos_d_steady_rmse_m": 0.25,
+    "vel_steady_rmse_mps": 0.076,
+    "pos_sigma_steady_m": [
+      [
+        0.175,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.175,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        0.275
+      ]
+    ],
+    "nis_accept_rate": 1.0
+  },
+  "s3": {
+    "pos_drift_peak_m": 103.2,
+    "pos_sigma_peak_m": 169.32,
+    "reacq_pos_rmse_10s_m": 0.237
+  },
+  "s4": {
+    "ideal_pos_ne_rmse_m": 0.147,
+    "delay_replay_pos_ne_rmse_m": 0.064,
+    "wrong_time_pos_ne_rmse_m": 0.108
+  },
+  "s5": {
+    "ekf_yaw_rmse_deg": 1.366,
+    "pure_yaw_rmse_deg": 1.561,
+    "yaw_meas_count": 789
+  },
+  "s6": {
+    "nis_mean": 2.79,
+    "outlier_reject_frac": 0.08,
+    "nis_max": 222.4
+  }
+}

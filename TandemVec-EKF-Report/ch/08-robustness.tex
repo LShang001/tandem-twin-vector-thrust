@@ -1,0 +1,310 @@
+% ===========================================================================
+%  第 8 章 鲁棒性机制
+% ===========================================================================
+\section{鲁棒性与故障防御机制}
+
+嵌入式组合导航的工程性集中体现在鲁棒性机制上。本章分析固件中构成``防御纵深''
+的六类机制：NIS 门控、物理残差门限、GNSS 失联协方差膨胀、低增益重捕获、GNSS
+延迟回放重传播与输入合法性防御，并给出各自的数学模型。
+
+\subsection{NIS 门控}
+
+\subsubsection{统计基础}
+
+新息统计量 \cref{eq:nis} 在滤波模型正确（$\m{P}$、$\m{R}$ 一致）时服从中心卡方
+分布：
+\begin{equation}
+  NIS \sim \chi^2_m,
+  \label{eq:nis-dist}
+\end{equation}
+其中 $m$ 为量测维数。当量测为野值或模型失配时，$NIS$ 显著偏离其分布均值
+$m$。以阈值 $T$ 门控等价于在卡方分布上进行假设检验：
+\begin{equation}
+  \text{接受 } H_0 \text{（正常量测）} \iff NIS \le T.
+  \label{eq:nis-test}
+\end{equation}
+各量测门限及其对应的卡方分位数见 \cref{tab:nis-thresholds}。
+
+\begin{table}[H]
+\centering
+\caption{NIS 门限与卡方分位数}
+\label{tab:nis-thresholds}
+\small
+\begin{tabularx}{\textwidth}{@{}L{4.6cm}C{2.2cm}C{2.6cm}C{2.6cm}X@{}}
+\toprule
+\textbf{量测} & \textbf{维数} & \textbf{门限} & $\chi^2_m$ 99.9\% & \textbf{设计意图} \\
+\midrule
+GNSS 位置/速度 & 6 & 30 & $\approx22.5$ & 拒绝明显跳点，留机动容差 \\
+GNSS 重捕获 & 6 & 80 & — & 膨胀 R 下的宽松门限 \\
+速度（ZUPT） & 3 & 1000 & $\approx16.3$ & 容纳短时惯导漂移 \\
+重力方向 & 3 & 18 & $\approx16.3$ & 拒绝方向突变 \\
+姿态（AHRS） & 3 & 18 & $\approx16.3$ & 拒绝姿态跳变 \\
+标量航向 & 1 & 12 & $\approx10.8$ & 拒绝航向跳变 \\
+静止陀螺 & 3 & 24 & $\approx16.3$ & 拒绝零偏跳变 \\
+气压高度 & 1 & 16 & $\approx15.1$ & 4$\sigma$ 等效 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{remark}
+ZUPT 门限 1000 远超 $\chi^2(3)$ 的统计合理范围，这是刻意的设计取舍：静止辅助
+的首要目标是可用性而非统计最优，门限只拦截``荒谬''残差（十几米/秒级），
+正常漂移（分米/秒级）全部放行（\file{ekf\_15\_state.h} 第 3699--3700 行注释）。
+\end{remark}
+
+\subsubsection{门控失败模式的边界}
+
+NIS 门控依赖 $\m{P}$ 与 $\m{R}$ 的一致性。固件注释（第 898--900 行）指出了
+一个重要边界：\textbf{失联膨胀后的 $\m{P}$ 可能很大，十几米级假位置台阶也会
+得到很小的 NIS}。因此仅靠 NIS 无法拦截失联后的假重捕获，需要第 8.3--8.4 节的
+物理残差检查与低增益融合配合。
+
+\subsection{物理残差门限}
+
+在各量测入口设置与统计无关的物理门限，作为 NIS 之前的硬拦截：
+\begin{itemize}
+  \item GNSS 重捕获残差合理性（第 8.4 节）；
+  \item ZUPT 零速残差 5.5\,m/s、通用速度残差 8\,m/s（第 6.2 节）；
+  \item 姿态残差 0.8\,rad、航向残差 1.0\,rad（第 6.4--6.5 节）；
+  \item 静止陀螺残差 0.05\,rad/s（第 6.6 节）；
+  \item 气压高度残差 50\,m（第 6.7 节）。
+\end{itemize}
+物理门限的语义是``量测与状态偏差不可能这么大''，独立于噪声统计，在 R 矩阵
+被错误配置或 P 矩阵异常时仍然有效。
+
+\subsection{GNSS 失联协方差膨胀}
+
+GNSS 失联后，位置/速度误差不仅由 IMU 白噪声传播，还包含模型未建模的
+机动、加速度计零偏残差等缓慢累积项，实际增长快于 $\Phi P\Phi\T + Q$ 的预测。
+固件 \code{GrowGnssOutageCovariance}（第 1727--1754 行）按经验增长率对可观测
+子块膨胀：
+\begin{equation}
+  P_{ii} \leftarrow P_{ii} + \sigma_i^2\,dt\,\min\left(
+    \frac{t_{outage}}{t_{min}},\ 4\right),
+  \label{eq:outage-growth}
+\end{equation}
+其中增长率为
+\begin{equation}
+  \sigma_{pNE} = 1.2\,\text{m/s},\quad
+  \sigma_{pD} = 1.8\,\text{m/s},\quad
+  \sigma_{vNE} = 0.35\,\text{m/s}^2,\quad
+  \sigma_{vD} = 0.50\,\text{m/s}^2,
+  \label{eq:outage-rates}
+\end{equation}
+$t_{min} = 2$\,s 为失联下限，比例因子封顶 4。只有 $t_{outage} \ge 2$\,s 才触发。
+膨胀只作用于位置与速度对角线，\textbf{不触碰姿态与零偏}（第 1735 行注释）——
+姿态由静止辅助/重力量测持续约束，无需也不应因 GNSS 失联而膨胀。
+
+\begin{remark}
+膨胀的工程目的有二：一是使失联后 $\m{P}$ 反映真实的增长不确定度，避免滤波
+``过度自信''；二是为第 8.4 节的重捕获提供合理的门控基线——膨胀后的
+$\m{S} = H\m{P}H\T + \m{R}$ 增大，使合理残差通过 NIS 门限的概率提高。
+\end{remark}
+
+\subsection{低增益重捕获}
+
+\subsubsection{问题}
+
+长时间失联后的首帧 GNSS 与惯导位置可能相差数米至数十米。若直接以正常
+$\m{R}$ 融合，残差经过膨胀后的 $\m{P}$ 得到较小 NIS 而通过门限，单帧跳变
+注入状态；若以正常 NIS 门限拒绝，又会导致位置永远无法重新收敛。
+
+\subsubsection{两级检查}
+
+固件 \code{MeasurementUpdateDetailed} 第 900--949 行实现两级检查：
+\begin{enumerate}
+  \item \textbf{残差物理合理性}（\code{IsGnssReacquisitionResidualPlausible}，
+    第 1591--1618 行）：位置残差须同时满足绝对上限与``接收机自报精度相称''
+    的相对门限：
+    \begin{equation}
+      \|\vp{y}_{p,NE}\| \le \min\left(25,\ \max(6,\ 3\sigma_{pNE})\right),
+      \qquad
+      |y_{p,D}| \le \min\left(35,\ \max(8,\ 3\sigma_{pD})\right),
+      \label{eq:reacq-pos-gate}
+    \end{equation}
+    速度残差须满足 $\|\vp{y}_{v,NE}\| \le 6$\,m/s、$|y_{v,D}| \le 5$\,m/s；
+  \item \textbf{膨胀 R 下的 NIS}：\code{BuildConservativeGnssReacquisitionNoise}
+    （第 1620--1644 行）构造
+    \begin{equation}
+      \m{R}_{reacq} = \m{R} + \diag\left(2^2,\ 2^2,\ 4^2,\ 0.5^2,\ 0.5^2,\ 0.7^2\right),
+      \label{eq:reacq-R}
+    \end{equation}
+    若 $\m{R}_{reacq}$ 下的 NIS $\le 80$（重捕获宽松门限），则采用膨胀 R 低增益
+    融合；否则拒绝。
+\end{enumerate}
+融合后设置 \code{gnss\_reacquire\_timer\_s}=6\,s 的窗口，窗口内继续使用膨胀 R
+（第 1000--1003 行），使位置/速度平缓收敛而不是单帧跳变。
+
+\begin{remark}
+重捕获门限与常值门限（30 vs.\ 80）的差别正是``低增益''语义：同一个残差，在
+正常 $\m{R}$ 下 NIS$>$30 被拒，在膨胀 $\m{R}$ 下 NIS$<$80 被放行但增益
+$K = \m{P}H\T(H\m{P}H\T+\m{R}_{reacq})\inv$ 显著减小，实现渐进收敛。
+\end{remark}
+
+\subsubsection{重捕获门限参数汇总}
+
+\cref{tab:reacq-params} 汇总固件 GNSS 重捕获路径的全部参数
+（\file{ekf\_15\_state.h} 第 3676--3697 行），供调参与评审对照。
+
+\begin{table}[H]
+\centering
+\caption{GNSS 失联/重捕获参数汇总}
+\label{tab:reacq-params}
+\small
+\begin{tabularx}{\textwidth}{@{}L{6.2cm}C{2.6cm}X@{}}
+\toprule
+\textbf{参数} & \textbf{值} & \textbf{含义} \\
+\midrule
+\code{GNSS\_NIS\_REJECT\_THRESHOLD} & 30 & 正常融合 NIS 门限（$\chi^2_6$）\\
+\code{GNSS\_REACQUIRE\_MIN\_OUTAGE\_S} & 2.0 s & 触发重捕获的最短失联时长 \\
+\code{GNSS\_REACQUIRE\_WINDOW\_S} & 6.0 s & 重捕获后膨胀 R 保持窗口 \\
+\code{GNSS\_REACQUIRE\_NIS\_REJECT\_THRESHOLD} & 80 & 膨胀 R 下的重捕获 NIS 门限 \\
+\code{GNSS\_REACQUIRE\_MAX\_POS\_NE\_RESIDUAL\_M} & 25 m & 水平位置残差绝对上限 \\
+\code{GNSS\_REACQUIRE\_MAX\_POS\_D\_RESIDUAL\_M} & 35 m & 垂直位置残差绝对上限 \\
+\code{GNSS\_REACQUIRE\_MAX\_VEL\_NE\_RESIDUAL\_MPS} & 6 m/s & 水平速度残差上限 \\
+\code{GNSS\_REACQUIRE\_MAX\_VEL\_D\_RESIDUAL\_MPS} & 5 m/s & 垂直速度残差上限 \\
+\code{GNSS\_REACQUIRE\_RESIDUAL\_SIGMA\_GATE} & 3.0 & 残差与接收机精度的相称门限（$\sigma$）\\
+\code{GNSS\_REACQUIRE\_MIN\_POS\_NE\_RESIDUAL\_GATE\_M} & 6 m & 相称门限的绝对下界 \\
+\code{GNSS\_REACQUIRE\_MIN\_POS\_D\_RESIDUAL\_GATE\_M} & 8 m & 相称门限的绝对下界 \\
+\code{GNSS\_REACQUIRE\_POS\_NE\_EXTRA\_STD\_M} & 2.0 m & 膨胀 R 的位置水平附加噪声 \\
+\code{GNSS\_REACQUIRE\_POS\_D\_EXTRA\_STD\_M} & 4.0 m & 膨胀 R 的位置垂直附加噪声 \\
+\code{GNSS\_REACQUIRE\_VEL\_NE\_EXTRA\_STD\_MPS} & 0.5 m/s & 膨胀 R 的速度水平附加噪声 \\
+\code{GNSS\_REACQUIRE\_VEL\_D\_EXTRA\_STD\_MPS} & 0.7 m/s & 膨胀 R 的速度垂直附加噪声 \\
+\code{GNSS\_OUTAGE\_TIME\_CAP\_S} & 60 s & 失联计时上限 \\
+\code{GNSS\_OUTAGE\_POS\_NE\_GROWTH\_MPS} & 1.2 m/s & 失联位置协方差增长率 \\
+\code{GNSS\_OUTAGE\_POS\_D\_GROWTH\_MPS} & 1.8 m/s & 失联位置协方差增长率 \\
+\code{GNSS\_OUTAGE\_VEL\_NE\_GROWTH\_MPS2} & 0.35 m/s² & 失联速度协方差增长率 \\
+\code{GNSS\_OUTAGE\_VEL\_D\_GROWTH\_MPS2} & 0.50 m/s² & 失联速度协方差增长率 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\textbf{设计逻辑}：\code{MIN\_POS\_NE\_RESIDUAL\_GATE\_M}=6\,m 与
+\code{MIN\_POS\_D\_RESIDUAL\_GATE\_M}=8\,m 保证即使接收机自报精度极好
+（如 RTK 0.1\,m），重捕获相称门限也不会低于物理合理下界；\code{MAX\_POS\_*\_RESIDUAL}
+提供绝对上限防止假信号（多路径、接收机错误）被接纳；膨胀附加噪声（2/4\,m、
+0.5/0.7\,m/s）使低增益融合的收敛时间常数在 1--3\,s 量级（第 10.4 节 S3
+实测 10\,s 内恢复至 0.237\,m）。
+
+\subsection{GNSS 延迟回放重传播}
+
+\subsubsection{问题}
+
+GNSS 观测（如 u-blox UBX-NAV-PVT）对应的是\textbf{接收机导航历元时刻}的状态，
+而非 MCU 收到串口字节的时刻。两者相差 $\Delta_{delay} = 15$\,ms
+（\code{BFS\_NAVIGATION\_GNSS\_DELAY\_S}，第 165--181 行），包含串口传输
+（921600\,baud 约 1\,ms）、接收机内部排队与 MCU 调度抖动。若在当前时刻直接融合
+15\,ms 前的量测，会引入时间失配误差。
+
+\subsubsection{快照与重传播}
+
+固件维护 64 格环形历史缓冲（200\,Hz 下覆盖 320\,ms，第 3658--3666 行），
+每步 \code{TimeUpdate} 后记录完整快照 \code{InsSnapshot}
+（位置/速度/姿态/零偏/协方差/IMU 增量，第 3261--3277 行）。GNSS 量测到达时
+（\code{MeasurementUpdateDetailed} 第 840--861 行）：
+\begin{enumerate}
+  \item 按量测年龄 $t_{age}$ 反向累计快照真实 $dt$ 找到最匹配的历史时刻
+    （\code{GetDelayedSnapshotIndexByAge}，第 3500--3555 行）；
+  \item 恢复到该时刻状态（\code{RestoreSnapshot}，第 3557--3571 行）；
+  \item 执行卡尔曼更新；
+  \item 将更新后的状态写入该历史快照，然后重放之后所有 IMU 增量推进到当前
+    （\code{RepropagateFromDelayedSnapshot}，第 3573--3635 行），重放路径复用
+    同一机械编排内核（第 2213 行注释）。
+\end{enumerate}
+
+\subsubsection{量测年龄计算}
+
+量测年龄由 \file{ins\_gnss\_epoch\_timing.h} 计算：以最近两帧 iTOW 差
+（经 GPS 周回绕保护 \code{InsGnssTowDeltaMs}，第 32--48 行）为参考，把
+epoch 的 \code{receive\_time\_us} 回溯到观测历元：
+\begin{equation}
+  t_{meas} = t_{receive} - t_{delay,base} + \Delta t_{tow},
+  \qquad
+  t_{age} = t_{now} - t_{meas},
+  \label{eq:epoch-age}
+\end{equation}
+其中 $\Delta t_{tow}$ 为当前 epoch 相对参考 epoch 的 iTOW 差
+（第 50--83 行）。iTOW 跳变超过 $\pm10$\,s 时认为参考失效，退回本帧接收时刻
+（第 63--66 行）。
+
+\begin{remark}
+延迟回放对 200\,Hz 高机动飞行器意义重大：15\,ms 内 1\,rad/s 的角速度变化即
+1.5\,mrad 的姿态误差，若不做时间对齐，该误差将作为量测偏差注入滤波器。
+第 10 章第 10.5 节仿真定量对比了延迟回放与当前时刻直接融合的误差差异。
+\end{remark}
+
+\subsubsection{延迟失配误差的量化模型}
+
+设 GNSS 量测相对当前时刻滞后 $t_{age}$。若不回放而在当前时刻直接融合，等效于
+将量测
+\begin{equation}
+  \vp{z}(t - t_{age}) = \vp{z}(t) - \dot{\vp{z}}(t)\,t_{age}
+    + \mathcal{O}(t_{age}^2)
+  \label{eq:delay-bias}
+\end{equation}
+当作 $\vp{z}(t)$ 使用，引入的\textbf{时变偏差}为
+\begin{equation}
+  \vp{b}_{delay} = \dot{\vp{z}}(t)\,t_{age}
+  = \begin{bmatrix} \vp{v}^n \\ \dot{\vp{v}}^n \end{bmatrix}\,t_{age}.
+  \label{eq:delay-bias-vec}
+\end{equation}
+对位置通道，偏差 $\|\vp{v}\|\,t_{age}$；对速度通道，偏差
+$\|\dot{\vp{v}}\|\,t_{age} = \|a^n\|\,t_{age}$。若该偏差超过量测噪声的若干倍，
+将在滤波中表现为持续偏差而非随机噪声，导致估计出现\textbf{有偏的收敛}。
+
+以固件配置为例：$t_{age} = 15$\,ms、巡航 $v = 8$\,m/s 时位置通道偏差
+$= 0.12$\,m；机动 $a = 2$\,m/s$^2$ 时速度通道偏差 $= 0.03$\,m/s。
+在 R 地板 $\sigma_p = 2$\,m、$\sigma_v = 0.15$\,m/s 的配置下，位置偏差
+$0.12$\,m 远小于 $\sigma_p$ 可忽略，但速度偏差 $0.03$\,m/s 已达
+$\sigma_v$ 的 20\%——在急加速阶段（$a$ 更大）偏差可超过 $\sigma_v$，造成
+速度估计的瞬时有偏。
+
+延迟回放将量测\textbf{对齐到其观测历元}后融合，消除了 \cref{eq:delay-bias-vec}
+的一阶偏差（残余为历史快照时间量化误差 $\le dt/2 = 2.5$\,ms 对应的二阶项）。
+第 10 章第 10.5 节的三路对照定量展示了该收益。
+
+\subsubsection{快照时间量化误差}
+
+\code{GetDelayedSnapshotIndexByAge} 按快照 $dt$ 反向累计选择最匹配的历史状态，
+其时间对齐误差 $|\Delta t_{align}| \le dt/2$（快照离散）。该误差引入的姿态偏差
+$\le \|\vp{\omega}\|\,dt/2$、位置偏差 $\le \|\vp{v}\|\,dt/2$。200\,Hz 下
+$dt/2 = 2.5$\,ms，对 $1$\,rad/s 机动为 $2.5$\,mrad——比不回放的 15\,ms
+偏差小 6 倍，且属于随机量化误差而非系统性偏差，可被滤波的 $\m{P}$ 吸收。
+
+\subsection{重锚定（Reset Position/Velocity to GNSS）}
+
+无 GNSS 时以假原点启动后首次获得真实 GNSS，位置可能相差数百公里，任何门控
+都无法放行。固件提供 \code{ResetPositionVelocityToGnss}（第 1262--1281 行）：
+只重锚定绝对位置与 NED 速度（并重置对应协方差块），\textbf{不重置姿态、零偏
+与协方差的姿态/零偏部分}，避免几百公里级假原点残差被 GNSS 门控永久拒绝
+（第 1256--1260 行注释）。\file{navigation\_task.cpp} 的
+\code{reanchorNavigationToGnss}（第 254--295 行）在此基础上将最多 150\,ms 的
+位置按 GNSS 速度外推到当前时刻，并保持起飞原点相对关系不变
+（反向平移已积累的相对位移恢复真实起飞点，第 276--285 行）。
+
+\subsection{输入合法性防御}
+
+固件在全部外部输入入口设置数值防御（\file{ekf\_15\_state.h} 第 1471--1725 行）：
+\begin{itemize}
+  \item \textbf{有限性检查}：所有向量/矩阵输入经 \code{IsFiniteVector} /
+    \code{IsFiniteMatrix} 检查，拒绝 NaN/Inf（第 1521--1548 行）；
+  \item \textbf{噪声合法性}：\code{IsValidNoiseStd} 要求有限且为正，非法配置
+    \textbf{保持上一可信值}（setter 语义，第 233--311 行）；
+  \item \textbf{物理合理性}：\code{IsPlausibleImuSample} 拒绝超过传感器量程
+    很多的有限坏帧（加速度 $>$120\,m/s²、角速度 $>$40\,rad/s，第 1713--1719 行）；
+  \item \textbf{时间步合法性}：\code{IsValidTimeStep} 拒绝 $>0.1$\,s 的异常
+    时间步（第 1721--1725 行），防止反向积分或长步长污染状态与延迟缓冲；
+  \item \textbf{LLA 合法性}：\code{IsValidLlaForEarthModel} 拒绝近极点、
+    超范围经纬高（第 1689--1711 行）；
+  \item \textbf{坏磁/坏加计兜底}：初始化时坏磁力计用机头朝北默认值、坏加计用
+    静止重力默认值（\code{Sanitize*}，第 1646--1687 行）。
+\end{itemize}
+这些防御在传感器瞬时异常（掉电毛刺、总线干扰）时把``坏一帧''隔离为``丢一帧''，
+是组合导航数值安全的第一道防线。
+
+\subsection{数值稳定化总述}
+
+第 5.8 节的协方差稳定化、第 6 章各量测的 LDLT 求逆与 Joseph 更新、第 8.7 节的
+输入防御，构成三层数值防护：输入层防污染、更新层防反演病态、协方差层防 PSD
+退化。固件在 200\,Hz 热路径上通过 Gershgorin 快速判据与稳定化分频
+（divider=8）将完整特征分解的执行频率控制在 25\,Hz，兼顾数值安全与实时性。

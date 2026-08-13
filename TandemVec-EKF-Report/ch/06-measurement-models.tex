@@ -1,0 +1,388 @@
+% ===========================================================================
+%  第 6 章 量测模型
+% ===========================================================================
+\section{量测模型}
+
+本章推导主滤波器全部量测更新的观测模型：观测矩阵 $\m{H}$、观测噪声 $\m{R}$、
+新息定义与门控阈值。每种量测均与固件实现逐行对照。\cref{tab:meas-summary}
+预先汇总各量测的维度、观测状态与固件位置。
+
+\begin{table}[H]
+\centering
+\caption{主滤波器量测汇总}
+\label{tab:meas-summary}
+\small
+\begin{tabularx}{\textwidth}{@{}L{3.2cm}C{1.6cm}C{4.4cm}X@{}}
+\toprule
+\textbf{量测} & \textbf{维数} & \textbf{观测误差状态} & \textbf{固件入口} \\
+\midrule
+GNSS 位置/速度 & 6 & $\delta\vp{p}^n,\ \delta\vp{v}^n$ & \code{MeasurementUpdateDetailed} \\
+速度（ZUPT） & 3 & $\delta\vp{v}^n$ & \code{MeasurementUpdateVelocity} \\
+重力方向 & 3 & $\delta\vp{\beta}^b$（roll/pitch） & \code{MeasurementUpdateGravity} \\
+姿态（AHRS） & 3 & $\delta\vp{\beta}^b$ & \code{MeasurementUpdateAttitude} \\
+标量航向 & 1 & $\delta\beta_D$ & \code{MeasurementUpdateYaw} \\
+静止陀螺 & 3 & $\delta\vp{b}_g$ & \code{MeasurementUpdateStaticGyro} \\
+气压高度 & 1 & $\delta p_D$ & \code{MeasurementUpdateBaroAltitude} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{GNSS 位置/速度量测}
+
+\subsubsection{观测模型}
+
+GNSS 位置（LLA 转换 NED）与速度构成六维量测
+\begin{equation}
+  \vp{z}_{gps} = \begin{bmatrix} \vp{p}^n_{gps} \\ \vp{v}^n_{gps} \end{bmatrix}
+  = \begin{bmatrix} \vp{p}^n \\ \vp{v}^n \end{bmatrix}
+    + \begin{bmatrix} \vp{w}_p \\ \vp{w}_v \end{bmatrix},
+  \label{eq:gnss-meas}
+\end{equation}
+观测矩阵为
+\begin{equation}
+  \m{H}_{gps} = \begin{bmatrix} \m{I}_6 & \m{0}_{6\times9} \end{bmatrix},
+  \label{eq:H-gnss}
+\end{equation}
+即前六个误差状态（位置+速度）被直接观测。固件 \code{Initialize} 第 505--506 行
+一次性写入 \code{h\_.block(0,0,6,6) = I6}。
+
+\subsubsection{新息}
+
+位置新息以 LLA 差经 \cref{eq:lla2ned} 转换（第 876--877 行）：
+\begin{equation}
+  \vp{y}_{gps}(0{:}3) = \code{lla2ned}(\vp{p}_{gps}^{lla},\ \vp{p}_{pred}^{lla},
+    RAD),
+  \label{eq:y-gnss-pos}
+\end{equation}
+速度新息直接求差（第 883 行）：
+\begin{equation}
+  \vp{y}_{gps}(3{:}6) = \vp{v}^n_{gps} - \vp{v}^n_{pred}.
+  \label{eq:y-gnss-vel}
+\end{equation}
+
+\subsubsection{观测噪声}
+
+\code{UpdateGnssNoiseMatrix}（第 3246--3259 行）构造
+\begin{equation}
+  \m{R}_{gps} = \diag\left(\sigma_{pNE}^2,\ \sigma_{pNE}^2,\ \sigma_{pD}^2,\
+    \sigma_{vNE}^2,\ \sigma_{vNE}^2,\ \sigma_{vD}^2\right),
+  \label{eq:R-gnss}
+\end{equation}
+其中 $\sigma_{pNE}$、$\sigma_{pD}$、$\sigma_{vNE}$、$\sigma_{vD}$ 由外部按
+GNSS 动态权重设置（第 9 章第 9.3 节），固件初始化分支还施加了精度下限
+（h\_acc 下限 0.15\,m、v\_acc 下限 0.25\,m、spd\_acc 下限 0.05\,m/s，
+\file{navigation\_task.cpp} 第 881--888 行），防止接收机报出异常小噪声导致
+``抽搐''。
+
+\subsubsection{NIS 门控}
+
+新息统计量
+\begin{equation}
+  NIS = \vp{y}\T\m{S}\inv\vp{y}
+  \label{eq:nis}
+\end{equation}
+服从卡方分布（自由度=量测维数）。固件阈值 \code{GNSS\_NIS\_REJECT\_THRESHOLD=30}
+对应 $\chi^2(6)$ 的 99.9\% 以上分位数。超过阈值且不满足重捕获条件时拒绝该帧
+（第 924--948 行）；重捕获的低增益路径见第 8.3 节。
+
+\subsection{速度量测（ZUPT）}
+
+\subsubsection{观测模型}
+
+零速修正量测为 $\vp{z}_{vel} = \vp{0}$（或外部速度约束），观测
+$\delta\vp{v}^n$：
+\begin{equation}
+  \m{H}_{vel} = \begin{bmatrix} \m{0}_{3\times3} & \m{I}_3 &
+    \m{0}_{3\times9} \end{bmatrix},
+  \qquad
+  \m{R}_{vel} = \diag(\sigma_{vNE}^2,\ \sigma_{vNE}^2,\ \sigma_{vD}^2).
+  \label{eq:H-R-vel}
+\end{equation}
+
+\subsubsection{残差防御}
+
+\code{ApplyVelocityUpdateDetailed}（第 2673--2767 行）设置两道残差门限：
+\begin{itemize}
+  \item 零速观测（$\|\vp{z}_{vel}\| < 0.30$\,m/s）时，若新息模长
+    $>\code{ZERO\_VELOCITY\_RESIDUAL\_REJECT\_MPS}=5.5$\,m/s，直接拒绝——
+    防止误静止确认时把高速运动强行拉成静止；
+  \item 通用新息模长 $>\code{VELOCITY\_RESIDUAL\_REJECT\_MPS}=8$\,m/s 拒绝——
+    数米/秒级残差应交给 GNSS 主更新而非辅助速度接口。
+\end{itemize}
+NIS 门限 \code{VELOCITY\_NIS\_REJECT\_THRESHOLD=1000} 远大于
+$\chi^2(3)$ 的 99.9\% 分位数（$\approx16.3$），其设计意图是：ZUPT 需要容纳短时
+惯导漂移，只拒绝十几米每秒级的荒谬跳点（第 3699--3700 行注释）。
+
+\subsubsection{快速路径}
+
+\code{BFS\_NAVIGATION\_EMBEDDED\_FAST\_STATIC\_AID\_UPDATE} 开启时（默认关闭），
+利用 $H$ 仅观测速度块的结构，以子块 $S_{vel} = P_{vv} + R_{vel}$、
+$K = P[:,v]\m{S}\inv$ 更新，协方差用 $P \leftarrow P - K\m{S}K\T$ 等效形式
+（第 2712--2735 行），数学上与完整 Joseph 形式等价（因 $H$ 只作用于速度子块）。
+
+\subsection{重力方向量测}
+
+\subsubsection{观测模型}
+
+在低动态/静止时，加速度计测得比力方向近似为重力反方向，可作为
+roll/pitch 的姿态约束。观测为机体系去偏比力方向
+\begin{equation}
+  \vp{z}_{grav} = \frac{\vp{f}^b - \vp{b}_a}{\|\vp{f}^b - \vp{b}_a\|}
+  \in \mathbb{S}^2.
+  \label{eq:z-gravity}
+\end{equation}
+固件第 2799--2805 行先扣除当前零偏估计再取方向（而非直接用原始读数），
+其原因是：若继续用原始比力方向，水平加速度零偏会被误解释为倾角，并通过姿态-
+零偏交叉协方差污染陀螺零偏，长静止时表现为 yaw 慢性漂移（第 2790--2798 行注释）。
+
+\subsubsection{观测矩阵推导}
+
+预测方向为
+\begin{equation}
+  \vp{z}_{pred} = \m{C}_n^b\,\vp{g}_{sf}^n,
+  \qquad
+  \vp{g}_{sf}^n = \begin{bmatrix} 0 & 0 & -1 \end{bmatrix}\T.
+  \label{eq:z-grav-pred}
+\end{equation}
+由 \cref{eq:att-err-def}，真实机体系到 NED 的旋转矩阵为
+$\m{C}_b^n = \m{C}_{b,nom}^n\,\Exp(\delta\vp{\beta}^b)$，故
+$\m{C}_n^b = \Exp(-\delta\vp{\beta}^b)\,\m{C}_{n,nom}^b$，于是
+\begin{equation}
+  \vp{z}_{pred}(\delta\vp{\beta}^b)
+  = \Exp(-\delta\vp{\beta}^b)\,\m{C}_{n,nom}^b\,\vp{g}_{sf}^n.
+  \label{eq:z-grav-pert}
+\end{equation}
+利用 $\Exp(-\delta\vp{\beta})\approx \m{I} - \sk{\delta\vp{\beta}}$ 一阶展开
+\begin{equation}
+  \vp{z}_{pred}(\delta\vp{\beta}^b)
+  \approx \vp{z}_{nom} + \sk{\vp{z}_{nom}}\,\delta\vp{\beta}^b,
+  \label{eq:z-grav-lin}
+\end{equation}
+其中用到 $\sk{\vp{z}_{nom}}\,\delta\vp{\beta} = \vp{z}_{nom}\cross\delta\vp{\beta}
+= -\delta\vp{\beta}\cross\vp{z}_{nom} = -\sk{\delta\vp{\beta}}\vp{z}_{nom}$。
+因此观测矩阵
+\begin{equation}
+  \m{H}_{grav} = \begin{bmatrix} \m{0}_{3\times6} & \sk{\vp{z}_{nom}} &
+    \m{0}_{3\times6} \end{bmatrix}.
+  \label{eq:H-gravity}
+\end{equation}
+固件第 2808--2822 行按 \cref{eq:H-gravity} 实现
+\code{h\_grav\_att = Skew(predicted\_dir)}，并在注释中记录了一个重要历史修正：
+早期实现漏乘右端 $\m{C}_b^n$（即把体系误差当成导航系误差线性化），水平时
+$\m{C}_b^n\approx\m{I}$ 不暴露，有倾角时 $H$ 误差达 $\mathcal{O}(\sin\,
+tilt)$。
+
+\subsubsection{噪声与门控}
+
+观测噪声 $\m{R}_{grav} = \sigma_{dir}^2\m{I}_3$，$\sigma_{dir}$ 为重力方向噪声
+（近似等价于姿态角噪声），由静止辅助档位动态给定（第 7 章）。
+NIS 门限 \code{GRAVITY\_NIS\_REJECT\_THRESHOLD=18}（$\chi^2(3)$ 99.9\%
+$\approx16.3$），拒绝方向突变以避免机动加速度被当成重力。
+
+\subsection{姿态量测（AHRS）}
+
+\subsubsection{观测模型}
+
+无 GNSS 时以备用 AHRS（Madgwick）姿态作为量测约束 EKF 姿态漂移。量测为
+$[\psi,\ \theta,\ \phi]$（YPR 序），观测 $\delta\vp{\beta}^b$：
+\begin{equation}
+  \m{H}_{att} = \begin{bmatrix} \m{0}_{3\times6} & \m{I}_3 &
+    \m{0}_{3\times6} \end{bmatrix}.
+  \label{eq:H-att}
+\end{equation}
+\subsubsection{四元数误差新息}
+
+固件不直接对欧拉角求差，而是将量测转四元数后取对数映射
+（第 3035--3055 行）：
+\begin{equation}
+  q_{err} = q_{nom}^{-1} \otimes q_{meas}, \qquad
+  \vp{y}_{att} = \Log(q_{err}).
+  \label{eq:y-att}
+\end{equation}
+对数映射在 $0.5$\,rad 级修正时避免 $2\vp{q}_v$ 一阶近似低估修正量
+（第 3047 行注释）。物理残差门限
+\code{ATTITUDE\_RESIDUAL\_REJECT\_RAD}=0.8\,rad（$\approx45°$）拒绝 AHRS
+大角度跳变；NIS 门限 \code{ATTITUDE\_NIS\_REJECT\_THRESHOLD}=18。
+
+\subsubsection{动态噪声}
+
+固件在无 GNSS 运动分支（\file{navigation\_task.cpp} 第 1073--1081 行）按
+加速度模长偏差动态调整 roll/pitch 噪声：
+\begin{equation}
+  \sigma_{rp}(\Delta a) = \text{lerp}\left(\Delta a;\ 0.3,\ 2.0;\ 0.04,\ 0.30\right),
+  \label{eq:att-noise-dyn}
+\end{equation}
+其中 $\Delta a = \left|\,\|\vp{f}^b\| - g\,\right|$。加速度偏差越大，对 AHRS
+的信任越低。yaw 噪声固定为 $\pi$（rad），等效``忽略 AHRS 的 yaw 量测''——因为
+无磁力计时 Madgwick 的 yaw 纯陀螺积分会漂移，强行喂入 EKF 会反向污染零偏估计
+（第 1077--1081 行注释）。
+
+\subsection{标量航向量测}
+
+\subsubsection{观测模型}
+
+标量航向量测（双矢量法/磁航向/双天线航向）观测 $\delta\beta_D$：
+\begin{equation}
+  \m{H}_{yaw} = \begin{bmatrix} \m{0}_{1\times8} & 1 &
+    \m{0}_{1\times6} \end{bmatrix}.
+  \label{eq:H-yaw}
+\end{equation}
+新息采用角度环绕（第 3106 行）：
+\begin{equation}
+  y_{yaw} = \operatorname{wrap}_{\pi}\left(\psi_{meas} - \psi_{pred}\right).
+  \label{eq:y-yaw}
+\end{equation}
+固件注释强调 \code{WrapAngleRad} 用 \code{fmod}+单次归位代替不定次
+\code{while} 循环，耗时确定且对极端大角度不会卡死（第 1763 行）。
+
+\subsubsection{稀疏更新}
+
+利用 $H$ 仅有一列非零，标量更新退化为（第 3113--3141 行）
+\begin{align}
+  S &= P_{88} + r, &
+  K &= \m{P}H\T / S, &
+  \dx &= K\,y_{yaw},
+  \label{eq:yaw-scalar-update}
+\end{align}
+协方差仍用 Joseph 形式。该稀疏化使航向量测可在 200\,Hz 高频调用。NIS 门限
+\code{YAW\_NIS\_REJECT\_THRESHOLD}=12（$\chi^2(1)$ 99.9\% $\approx10.8$），
+物理残差门限 \code{YAW\_RESIDUAL\_REJECT\_RAD}=1.0\,rad（$\approx57°$）。
+
+\subsection{静止陀螺零偏量测}
+
+\subsubsection{观测模型}
+
+静止时原始陀螺读数由两部分组成：
+\begin{equation}
+  \vp{\omega}_{ib}^b = \m{C}_n^b\left(\vp{\omega}_{ie}^n
+    + \vp{\omega}_{en}^n\right) + \vp{b}_g.
+  \label{eq:static-gyro-model}
+\end{equation}
+以三轴陀螺读数直接作为零偏量测，观测 $\delta\vp{b}_g$：
+\begin{equation}
+  \m{H}_{sgyro} = \begin{bmatrix} \m{0}_{3\times12} & \m{I}_3 \end{bmatrix},
+  \qquad
+  \m{R}_{sgyro} = \diag\left(\sigma_{gx}^2,\ \sigma_{gy}^2,\ \sigma_{gz}^2\right).
+  \label{eq:H-R-sgyro}
+\end{equation}
+固件第 2938--2949 行按 \cref{eq:static-gyro-model} 构造预测值并求残差。
+
+\subsubsection{零偏子块更新}
+
+\cref{eq:static-gyro-model} 只观测零偏，固件\textbf{故意}只更新零偏三维子块
+（第 2989--2998 行）：
+\begin{align}
+  \m{K}_{bg} &= \m{P}_{bg}\m{S}_{sgyro}\inv, &
+  \vp{b}_g &\leftarrow \vp{b}_g + \m{K}_{bg}\vp{y}, \label{eq:sg-bias-update} \\
+  \m{P}_{bg} &\leftarrow \left(\m{I}-\m{K}_{bg}\right)\m{P}_{bg}
+    \left(\m{I}-\m{K}_{bg}\right)\T + \m{K}_{bg}\m{R}\m{K}_{bg}\T,
+  \label{eq:sg-cov-update}
+\end{align}
+交叉协方差 $\m{P}_{[:12],\,12:15}$ 按同一右乘因子缩放。注释（第 2981--2987 行）
+说明设计动机：若用完整 $K = \m{P}H\T\m{S}\inv$，会经姿态-零偏交叉协方差直接改
+姿态，与 Gravity 的 roll/pitch 闭环互相拉扯——硬件 5 分钟样本证明短时 yaw 好看
+但长时回退。姿态漂移只会在后续传播中因零偏更准而停止扩大，roll/pitch 仍由
+Gravity 低频对齐。
+
+\subsubsection{噪声与门控}
+
+静止陀螺量测单位是 rad/s，固件为它设置了独立于全局下限
+\code{MIN\_MEASUREMENT\_NOISE\_STD}=0.01 的 \code{MIN\_STATIC\_GYRO\_MEASUREMENT\_NOISE\_STD}=
+$10^{-5}$（第 1494--1499 行），因为 0.01\,rad/s 的噪声下限对
+0.002--0.004\,rad/s 量级的实测调参完全失效。运行配置噪声
+$10^{-4}$\,rad/s（\file{navigation\_task.cpp} 第 1054 行）。物理残差门限
+\code{STATIC\_GYRO\_RESIDUAL\_REJECT\_RADPS}=0.05\,rad/s，NIS 门限
+\code{STATIC\_GYRO\_NIS\_REJECT\_THRESHOLD}=24。
+
+\subsection{气压高度量测}
+
+\subsubsection{观测模型}
+
+气压高度量测对标 GNSS 位置 D 分量，观测 $\delta p_D$：
+\begin{equation}
+  \m{H}_{baro} = \begin{bmatrix} 0 & 0 & 1 & \m{0}_{1\times12} \end{bmatrix}.
+  \label{eq:H-baro}
+\end{equation}
+新息为（第 3200--3205 行）
+\begin{equation}
+  y_{baro} = \left[\code{lla2ned}(\vp{p}_{baro}^{lla},\ \vp{p}_{pred}^{lla})\right]_D.
+  \label{eq:y-baro}
+\end{equation}
+当 baro 高于 EKF 时 $y<0$（NED-D 为负=向上），经 $K\,y$ 修正后高度增加。
+
+\subsubsection{基准与门控}
+
+气压计对外值是起飞点向上的相对高度，进入绝对 LLA EKF 前需用 Home 高度恢复
+为绝对观测（\file{ins\_altitude\_reference.h} 的
+\code{InsComputeAbsoluteBaroAltitude}，\file{navigation\_task.cpp} 第
+1222--1225 行）。物理残差门限 \code{BARO\_ALTITUDE\_RESIDUAL\_REJECT\_M}=50\,m
+（拒绝 QNH 突变），NIS 门限 \code{BARO\_ALTITUDE\_NIS\_REJECT\_THRESHOLD}=16
+（$\chi^2(1)$ 99.99\% $\approx15.1$，第 3719 行注释）。
+
+\begin{remark}
+气压高度量测无零偏状态：若 QNH 与标准大气压偏差较大（数米至数十米），会与
+GNSS 绝对高度基准冲突（第 3150--3152 行注释）。该接口默认由宏
+\code{BFS\_EKF\_BARO\_ALTITUDE\_UPDATE} 关闭，仅在 GNSS 不可用时启用。
+\end{remark}
+
+\subsection{量测更新的信息论视角}
+
+本节从信息论角度统一理解各量测的贡献，为第 10 章参数敏感性结论提供理论
+支撑。卡尔曼滤波的协方差更新可等价表达为\textbf{信息形式}
+\cite{crassidis2011}：
+\begin{equation}
+  \m{P}_{k|k}\inv = \m{P}_{k|k-1}\inv + \m{H}\T\m{R}\inv\m{H}.
+  \label{eq:info-form}
+\end{equation}
+\cref{eq:info-form} 表明：每次量测更新向状态添加的信息量为
+\begin{equation}
+  \Delta\m{I} = \m{H}\T\m{R}\inv\m{H}
+  \in \mathbb{R}^{15\times15},
+  \label{eq:info-gain}
+\end{equation}
+即信息增益由观测矩阵 $\m{H}$（确定\textbf{哪些}状态组合被观测）与
+$\m{R}\inv$（确定\textbf{权重}）共同决定。这一视角直接解释了各量测的可观性
+差异：
+
+\begin{itemize}
+  \item \textbf{GNSS}：$\m{H}_{gps} = [\m{I}_6\ \m{0}]$ 只对位置/速度加信息，
+    姿态/零偏的信息经 $\m{F}$ 的传播耦合间接获得（第 5.4 节可观测性分析）。
+    位置通道的信息率
+    \begin{equation}
+      \frac{dI_p}{dt} = f_{gps}\,\frac{1}{\sigma_p^2}
+      \label{eq:info-rate-pos}
+    \end{equation}
+    随 GNSS 频率 $f_{gps}$ 与精度 $1/\sigma_p^2$ 线性增长——这正是
+    第 10.7 节``GNSS R 主导位置精度''的定量表达；
+  \item \textbf{静止陀螺}：$\m{H}_{sgyro}$ 直接对 $\delta\vp{b}_g$ 加信息，
+    其信息率 $1/\sigma_{gyro}^2$ 远高于经传播耦合的间接路径，故在长静止下
+    陀螺零偏收敛最快（第 10.2 节 S1）；
+  \item \textbf{重力方向}：$\m{H}_{grav} = \sk{\vp{z}_{nom}}$ 的秩为 2
+    （$\sk{\vp{v}}$ 对 $\vp{v}$ 的零空间为一维），故单次重力量测对
+    roll/pitch 加信息而对 yaw 不加——信息论意义上的``重力不可观 yaw''；
+  \item \textbf{航向}：标量 $\m{H}_{yaw}$ 只加 $\delta\beta_D$ 的信息，
+    是唯一直接约束 yaw 的量测，其信息率 $f_{yaw}/\sigma_\psi^2$ 决定航向
+    收敛速率。
+\end{itemize}
+
+\subsubsection{多量测融合的信息守恒}
+
+对同一时刻的多个量测（如 ZUPT + Gravity + StaticGyro），信息形式保证
+融合次序不影响结果：
+\begin{equation}
+  \m{P}_{k|k}\inv = \m{P}_{k|k-1}\inv + \sum_j \m{H}_j\T\m{R}_j\inv\m{H}_j.
+  \label{eq:info-sum}
+\end{equation}
+固件虽以序列形式（先 Gravity 后 ZUPT，第 7.3 节）执行，但每一步都重新线性化
+并更新 $\m{P}$，在精确算术下等价于一次多量测批处理。序列形式的工程优势是
+可以\textbf{逐量测门控}（某量测被 NIS 拒绝不影响其他量测），这是批处理
+形式无法直接提供的。
+
+\subsubsection{信息增益与可观测性格拉姆矩阵}
+
+将 \cref{eq:info-form} 沿时间累积并叠加 $\m{F}$ 的传播，可观测性格拉姆矩阵
+\cref{eq:gramian} 与信息矩阵的\textbf{可观子空间}一一对应：$\m{W}_O$ 的
+零空间即信息永不累积的状态方向。第 5.4 节的静止可观测性分析可由此重新表述：
+静止量测组合 $\{\m{H}_{vel},\ \m{H}_{grav},\ \m{H}_{sgyro}\}$ 的信息累积
+在 $\delta\beta_D$ 方向始终为零，故 $\sigma_\psi$ 不收敛——信息论与可观测性
+两种语言指向同一结论。

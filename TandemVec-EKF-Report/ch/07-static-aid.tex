@@ -1,0 +1,205 @@
+% ===========================================================================
+%  第 7 章 静止辅助与调度
+% ===========================================================================
+\section{静止检测与辅助量测调度}
+
+无 GNSS（或 GNSS 不可信）时，主滤波器的可用性依赖静止辅助：零速修正
+（ZUPT）、重力方向与静止陀螺零偏。这些量测的有效性以\textbf{可靠的静止判定}
+为前提。本章分析固件的统一静止检测器（\file{ins\_static\_detector.h}）与
+静止辅助强度调度（\file{ins\_static\_aid\_profile.h}）的数学模型。
+
+\subsection{静止检测器}
+
+\subsubsection{候选判定（阈值检查）}
+
+每帧对机体系比力 $\vp{f}^b$ 与角速度 $\vp{\omega}^b$ 检查四个条件
+（\file{ins\_static\_detector.h} 第 120--148 行）：
+\begin{align}
+  \left|\|\vp{f}^b\| - g\right| &< \Delta a_{lim} &
+    &\text{（加速度模长接近重力）} \label{eq:static-a} \\
+  \|\vp{\omega}^b\| &< \omega_{lim} &
+    &\text{（角速度足够小）} \label{eq:static-w} \\
+  \|\Delta\vp{f}^b\| &< \Delta a_{frame} &
+    &\text{（相邻帧加速度变化小）} \label{eq:static-da} \\
+  \|\Delta\vp{\omega}^b\| &< \Delta\omega_{frame} &
+    &\text{（相邻帧角速度变化小）} \label{eq:static-dw}
+\end{align}
+运行配置（\file{navigation\_task.cpp} 第 712--714 行）为
+$\Delta a_{lim} = 0.3$\,m/s²（9.5--10.1 区间）、$\omega_{lim} = 0.01$\,rad/s、
+$\Delta a_{frame} = 0.5$\,m/s²、$\Delta\omega_{frame} = 0.05$\,rad/s。
+四个条件同时满足时置为``瞬时静止候选''。
+
+\subsubsection{迟滞状态机}
+
+瞬时候选须连续满足 \code{enter\_min\_frames}=20 帧（约 100\,ms，运行配置）才
+``确认静止''；确认后须连续不满足 \code{exit\_min\_frames}=5 帧才退出（第
+161--207 行）。迟滞（hysteresis）机制避免单帧噪声引起状态反复切换；进入帧数
+小于退出帧数（20 vs.\ 5）的设计使 ZUPT 更早启动（运动停止后速度积分误差更小），
+代价是误判概率略增——固件注释（第 715--718 行）明确记录了这一权衡。
+
+\subsubsection{置信度评分}
+
+确认静止后，按四项指标（第 209--258 行）计算 $[0,1]$ 置信度：
+\begin{align}
+  s_a &= 1 - \frac{\Delta a_{err}}{\Delta a_{tol}},
+  \qquad s_\omega = 1 - \frac{\|\vp{\omega}^b\|}{\omega_{thr}},
+  \qquad s_{\Delta a} = 1 - \frac{\|\Delta\vp{f}^b\|}{\Delta a_{thr}},
+  \qquad s_{\Delta\omega} = 1 - \frac{\|\Delta\vp{\omega}^b\|}{\Delta\omega_{thr}},
+  \label{eq:conf-scores}
+\end{align}
+各分项低于 0 时截断为 0。原始置信度为四项最小值（保守取最差指标）：
+\begin{equation}
+  c_{raw} = \min\left(s_a,\ s_\omega,\ s_{\Delta a},\ s_{\Delta\omega}\right),
+  \label{eq:conf-raw}
+\end{equation}
+再与\textbf{驻留时长分}取最小：
+\begin{equation}
+  c = \begin{cases}
+    \min\left(c_{raw},\ \dfrac{N_{dwell}}{60}\right), & N_{dwell} < 60\ \text{帧}, \\
+    c_{raw}, & N_{dwell} \ge 60\ \text{帧},
+  \end{cases}
+  \label{eq:conf-dwell}
+\end{equation}
+其中 $N_{dwell}$ 为连续确认静止帧数。60 帧（300\,ms）驻留时长分使置信度在进入
+静止后平滑爬升，避免刚确认静止就施加强约束。
+
+\begin{remark}
+置信度 $\le0.9$ 时驻留分 $N/60$ 起主导作用（300\,ms 满档），置信度越高、
+静止越久，辅助量测强度越大——这正是第 7.2 节三档调度的输入。
+\end{remark}
+
+\subsection{静止辅助强度三档调度}
+
+\code{Icm45686SelectStaticAidProfile}（\file{ins\_static\_aid\_profile.h} 第
+129--161 行）按置信度与驻留时长选择三档，\cref{tab:aid-tiers} 汇总。
+
+\begin{table}[H]
+\centering
+\caption{静止辅助三档调度参数}
+\label{tab:aid-tiers}
+\small
+\begin{tabularx}{\textwidth}{@{}C{2.2cm}L{4.4cm}C{2.8cm}C{2.8cm}X@{}}
+\toprule
+\textbf{档位} & \textbf{进入条件} & \textbf{gravity 噪声 (rad)} & \textbf{ZUPT 速度噪声 (m/s)} & \textbf{策略} \\
+\midrule
+1 & $c<0.35$ 或 $N_{dwell}<16$ & 0.18 & 0.18 (NE) / 0.24 (D) & 轻修正，优先 Gravity \\
+2 & $c<0.80$ 或 $N_{dwell}<100$ 或协方差不健康 & 0.10 & 0.10 / 0.14 & 中等修正 \\
+3 & 高置信长静止 & 0.03 & 0.02 / 0.04 & 强收敛，几乎锁死速度 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+档位 1 的 \code{prefer\_gravity\_first=true} 使进入静止恢复窗口时先尝试重力方向
+辅助再 ZUPT——先调平再零速，避免姿态误差通过 ZUPT 残差污染加速度零偏
+（第 85--87 行注释）。
+
+\subsection{辅助量测分频调度}
+
+固件在 200\,Hz 导航帧内按分频与相位调度三类静止辅助（\file{navigation\_task.cpp}
+第 967--1061 行）：
+\begin{equation}
+  \text{ZUPT:}\quad f_{zupt} = \frac{200}{d_{zupt}}\,\text{Hz}, \qquad
+  \text{Gravity:}\quad f_{grav} = \frac{200}{d_{grav}}\,\text{Hz}, \qquad
+  \text{StaticGyro:}\quad f_{sg} = \frac{200}{d_{sg}}\,\text{Hz},
+  \label{eq:aid-freq}
+\end{equation}
+其中分频因子随静止时长与置信度递增（\code{deep\_rlx} 档：
+$d_{zupt}=16,\ d_{grav}=32,\ d_{sg}=32$，即 12.5/6.25/6.25\,Hz；\code{relaxed}
+档：25/12.5/12.5\,Hz；过渡档：50/25/25\,Hz）。相位错开
+（\code{zupt\_phase=0,\ gravity\_phase=1,\ sg\_phase=3}）保证同帧至多执行一种
+辅助量测。
+
+\subsection{ZUPT 噪声自适应}
+
+\code{Icm45686AdaptZuptNoiseForResidual}（第 102--127 行）按当前速度残差
+$r = \|\vp{v}^n\|$ 软缩放 ZUPT 噪声：
+\begin{equation}
+  \sigma_{zupt}(r) = \begin{cases}
+    1.0\,\sigma_0, & r \le 0.20, \\
+    \left(1 + 5(r - 0.20)\right)\sigma_0, & 0.20 < r \le 0.60, \\
+    \left(3 + 5(r - 0.60)\right)\sigma_0, & 0.60 < r \le 1.5, \\
+    \text{跳过}, & r > 1.5,
+  \end{cases}
+  \label{eq:zupt-adaptive}
+\end{equation}
+封顶倍率 6.0。$r > 1.5$\,m/s 通常表示静止误判或状态异常，此时跳过速度量测而非
+强行融合（第 108--109 行注释）。该软融合策略避免``静止确认''边界处把刚停稳的
+残速硬拉到零。
+
+\subsection{相位碰撞检测}
+
+\code{Icm45686StaticAidPhasesCanCollide}（第 54--71 行）用数论方法预防
+``ZUPT 与 Gravity 同帧到期''的调度冲突：设两分频为 $d_z$、$d_g$，相位为
+$p_z$、$p_g$，由中国剩余定理，两者在某一帧同期的充要条件为
+\begin{equation}
+  (p_z - p_g) \bmod \gcd(d_z, d_g) = 0.
+  \label{eq:phase-collision}
+\end{equation}
+若成立，Gravity 每次到期都会被优先的 ZUPT 抢占，严重时长期
+\code{gravity\_fuse=0}（第 61--63 行注释）。该函数用于主机测试与编译期断言，
+在配置阶段就捕获此类错误。
+
+\subsection{静止检测的误判概率分析}
+
+静止检测的``确认''与``退出''帧数构成统计假设检验。设单帧瞬时静止候选判定
+\cref{eq:static-a}--\cref{eq:static-dw} 在真静止下通过概率为 $p_{pass}$
+（由传感器噪声与阈值决定），则在真静止时\textbf{漏报}（$N$ 帧内未确认）概率为
+\begin{equation}
+  P_{FN} = 1 - p_{pass}^{N_{enter}},
+  \label{eq:static-fn}
+\end{equation}
+其中 $N_{enter} = 20$（运行配置）。对高斯噪声，$p_{pass}$ 由
+$\|\vp{f}^b\|$ 落在 $[g-\Delta a_{lim},\ g+\Delta a_{lim}]$ 与
+$\|\vp{\omega}^b\| < \omega_{lim}$ 的联合概率给出。以加计噪声
+$\sigma_{aw} = 0.25$\,m/s$^2$（单轴）计，模长分布
+$\|\vp{f}^b\| \approx \mathcal{N}(g,\ 3\sigma_{aw}^2)$（三轴独立近似），
+则
+\begin{equation}
+  p_{pass} \approx \operatorname{erf}\left(\frac{\Delta a_{lim}}
+    {\sigma_{aw}\sqrt{6}}\right)
+  = \operatorname{erf}\left(\frac{0.3}{0.25\sqrt{6}}\right)
+  \approx 0.86,
+  \label{eq:static-pass-prob}
+\end{equation}
+故真静止下 $20$ 帧确认的漏报概率
+\begin{equation}
+  P_{FN} \approx 1 - 0.86^{20} \approx 0.05,
+  \label{eq:static-fn-num}
+\end{equation}
+即约 5\% 的概率在 100\,ms 内未能确认（需再等下一轮候选）。这是``快速进入''
+（20 帧）与``低漏报''之间的权衡：若沿用旧 50 帧，漏报概率降至
+$1 - 0.86^{50} \approx 0.05\%$，但确认延迟 250\,ms 使运动停止后 ZUPT 更晚
+启动、速度积分误差更大（第 715--718 行注释记录了这一取舍）。
+
+\textbf{误报}（非静止被确认）由 ZUPT 与重力方向的\textbf{软融合}兜底：
+第 7.4 节的残差自适应（$r>1.5$\,m/s 跳过）与第 6.2 节的
+\code{ZERO\_VELOCITY\_RESIDUAL\_REJECT\_MPS}=5.5\,m/s 硬门限共同防止误静止
+把运动状态强拉为零。固件第 6.2 节的零速观测判定
+（$\|\vp{z}_{vel}\| < 0.30$\,m/s）进一步将``零速假设''限定在低速度域。
+
+\subsection{可观测性分析}
+
+静止辅助的组合可观性决定零偏可收敛的程度，这是第 10 章仿真的理论基础：
+\begin{itemize}
+  \item \textbf{ZUPT}（$\vp{v}^n = 0$ 量测）经 $\m{F}_{v b_a} = -\m{C}_b^n$ 与
+    $\m{F}_{v\beta}$ 的耦合，可观 $\delta\vp{b}_a$ 与 $\delta\vp{\beta}^b$ 的
+    特定组合；但纯静止时重力方向 $\vp{g}_{sf}^n$ 无法区分水平倾角误差
+    $\delta\beta_{N/E}$ 与水平加速度零偏 $\delta b_{a,N/E}$（两者对速度误差的
+    贡献同向），故\textbf{水平加速度零偏在纯静止下不可观}——只能由 GNSS 运动
+    激励或已知机动解耦；
+  \item \textbf{Gravity} 量测提供 $\delta\beta_{N/E}$ 的直接约束，配合 ZUPT
+    可将水平零偏-倾角组合中的倾角部分收敛，但对 $\delta\vp{b}_a$ 的水平分量
+    仍无独立约束；
+  \item \textbf{StaticGyro} 直接观测 $\delta\vp{b}_g$（三轴均可观），配合
+    Gravity 的 roll/pitch 对齐与 ZUPT 的速度约束，在长静止下可使陀螺零偏收敛
+    至 $10^{-4}$\,rad/s 量级（第 10 章第 10.2 节仿真验证）；
+  \item \textbf{yaw} 在无磁、无 GNSS、纯静止下不可观（初始协方差
+    $\pi$ 保持），需双矢量航向或磁航向量测闭合（第 8 章第 8.6 节）。
+\end{itemize}
+
+\begin{remark}
+固件对静止辅助频率的降频设计（过渡 50\,Hz $\rightarrow$ 深松弛 12.5\,Hz）本质
+是在``零偏收敛速率''与``量测引入的扰动''之间取平衡：高频量测加快收敛但将
+单帧传感器噪声更多地注入零偏估计，长静止下信噪比高时降低频率无损收敛质量并
+显著节约 CPU（第 991--1002 行注释）。
+\end{remark}

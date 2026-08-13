@@ -1,0 +1,23 @@
+{
+  "V9_H1_ahrs_yaw": {
+    "full_converged": true,
+    "downg_diverged": true,
+    "full_final_deg": 29.999999999999993,
+    "downg_peak_deg": 146.89896542045275
+  },
+  "V11_M4_dualvec_static": {
+    "pass_rate": 0.089385,
+    "yaw_std_deg": 145.37751304915395,
+    "n_passed": 17877
+  },
+  "V12_M1_overflow_dt": {
+    "n64_ratio": 1.0,
+    "n80_ratio": 0.8,
+    "n100_ratio": 0.64,
+    "n200_ratio": 0.32
+  },
+  "V13_MED11_ahrs_gate": {
+    "ahrs_pass": 0.3305,
+    "dualvec_pass": 0.082
+  }
+}

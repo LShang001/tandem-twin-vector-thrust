@@ -1,0 +1,35 @@
+{
+  "R1_H1_fixed": {
+    "backup_deg": 30.004999999999992,
+    "ok": true
+  },
+  "R2_H2_fixed": {
+    "ok": true,
+    "eff30": 1.0000000000000002
+  },
+  "R3_tier_fixed": {
+    "tier1_frames": 16,
+    "low_zupt": 10,
+    "ideal": {
+      "Zupt": 10,
+      "Gravity": 5,
+      "StaticGyro": 5,
+      "None": 20
+    },
+    "ok": true
+  },
+  "R4_epoch_fixed": {
+    "future": "invalid",
+    "stale": "invalid",
+    "normal": 0.01,
+    "ok": true
+  },
+  "R5_dualvec_fixed": {
+    "n": 0,
+    "ok": true
+  },
+  "R6_overflow_fixed": {
+    "fix_dv": 1.0,
+    "ok": true
+  }
+}

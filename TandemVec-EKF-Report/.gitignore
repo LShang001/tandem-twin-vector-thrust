@@ -1,0 +1,9 @@
+# LaTeX 构建产物（源码 .tex 才入版本控制，与 TandemVec-Paper 惯例一致）
+*.pdf
+*.log
+*.aux
+*.out
+*.toc
+*.bbl
+*.blg
+*.synctex.gz

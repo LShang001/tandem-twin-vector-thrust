@@ -1,0 +1,187 @@
+% ===========================================================================
+%  附录 A  15 状态系统矩阵 F 的完整显式展开
+% ===========================================================================
+\section{15 状态系统矩阵 F 的完整显式展开}
+\label{app:F-matrix}
+
+本附录将第 5 章的 $\m{F}$ 矩阵（\cref{eq:F-matrix}）按完整
+\code{BFS\_NAVIGATION\_EMBEDDED\_FULL\_F\_MATRIX} 配置逐元素展开，并与固件
+\file{ekf\_15\_state.h} 的赋值语句一一对应，作为实现级审阅与数值核对的总表。
+
+\subsection{记号}
+
+沿用第 5 章记号：$v_N, v_E, v_D$ 为 NED 速度；$\varphi$ 为纬度；$h$ 为椭球高；
+$R_M, R_N$ 为子午/卯酉圈曲率半径；$f_x, f_y, f_z$ 为机体系去偏比力分量；
+$\omega_x, \omega_y, \omega_z$ 为机体系去偏角速度；$g$ 为当地重力；$\tau_a,
+\tau_g$ 为零偏时间常数。设
+\begin{equation}
+  r_{mh} = R_M + h, \qquad r_{nh} = R_N + h, \qquad
+  t_\varphi = \tan\varphi, \qquad s_\varphi = \sin\varphi, \qquad
+  c_\varphi = \cos\varphi.
+  \label{eq:app-shorthand}
+\end{equation}
+
+\subsection{完整 F 矩阵}
+
+按误差状态顺序 $\left[\delta\vp{p}^n,\ \delta\vp{v}^n,\ \delta\vp{\beta}^b,\
+\delta\vp{b}_a,\ \delta\vp{b}_g\right]$，$\m{F} \in \mathbb{R}^{15\times15}$
+非零元素如下。
+
+\subsubsection{行 1--3（位置误差动力学 $\delta\dot{\vp{p}}^n$）}
+
+\begin{align}
+  F(1,1) &= -\frac{v_D}{r_{mh}}, &
+  F(1,2) &= 0, &
+  F(1,3) &= \frac{v_N}{r_{mh}}, \label{eq:app-F-p1} \\
+  F(2,1) &= \frac{v_E\,t_\varphi}{r_{nh}}, &
+  F(2,2) &= -\frac{v_D + v_N t_\varphi}{r_{nh}}, &
+  F(2,3) &= \frac{v_E}{r_{nh}}, \label{eq:app-F-p2} \\
+  F(3,4) &= 1, \label{eq:app-F-p3} \\
+  F(3,5) &= 1, \quad F(3,6) = 1, \label{eq:app-F-p3b}
+\end{align}
+其中 $F(1,1)$--$F(2,3)$ 为位置自耦合 $\m{F}_{pp}$（对照 \cref{eq:Fpp}），
+$F(3,4)$--$F(3,6)$ 为位置-速度单位阵（对照第 5.3.1 节）。固件写入位置：
+\cref{eq:app-F-p1}--\cref{eq:app-F-p2} 见第 2371--2380 行，\cref{eq:app-F-p3b}
+见第 2155 行。
+
+\subsubsection{行 4--6（速度误差动力学 $\delta\dot{\vp{v}}^n$）}
+
+\begin{align}
+  F(4,4) &= \frac{v_D}{r_{mh}}, &
+  F(4,5) &= -2\left(\omega_e s_\varphi + \frac{v_E t_\varphi}{r_{nh}}\right), &
+  F(4,6) &= \frac{v_N}{r_{mh}}, \label{eq:app-F-v1} \\
+  F(5,4) &= 2\omega_e s_\varphi + \frac{v_E t_\varphi}{r_{nh}}, &
+  F(5,5) &= \frac{v_D + v_N t_\varphi}{r_{nh}}, &
+  F(5,6) &= 2\omega_e c_\varphi + \frac{v_E}{r_{nh}}, \label{eq:app-F-v2} \\
+  F(6,4) &= -\frac{2 v_N}{r_{mh}}, &
+  F(6,5) &= -2\left(\omega_e c_\varphi + \frac{v_E}{r_{nh}}\right), &
+  F(6,6) &= 0, \label{eq:app-F-v3} \\
+  F(6,3) &= \frac{2g}{R_{mean}}, \label{eq:app-F-v4}
+\end{align}
+其中 \cref{eq:app-F-v1}--\cref{eq:app-F-v3} 为 $\m{F}_{vv}$
+（对照 \cref{eq:Fvv}），\cref{eq:app-F-v4} 为高度通道重力梯度
+（对照 \cref{eq:f52}）。姿态耦合块为
+\begin{equation}
+  \begin{bmatrix}
+    F(4,7) & F(4,8) & F(4,9) \\
+    F(5,7) & F(5,8) & F(5,9) \\
+    F(6,7) & F(6,8) & F(6,9)
+  \end{bmatrix}
+  = -\sk{\m{C}_b^n\vp{f}^b},
+  \label{eq:app-F-vb}
+\end{equation}
+加计零偏块为
+\begin{equation}
+  \begin{bmatrix}
+    F(4,10) & F(4,11) & F(4,12) \\
+    F(5,10) & F(5,11) & F(5,12) \\
+    F(6,10) & F(6,11) & F(6,12)
+  \end{bmatrix}
+  = -\m{C}_b^n.
+  \label{eq:app-F-vba}
+\end{equation}
+固件写入位置：\cref{eq:app-F-v1}--\cref{eq:app-F-v3} 见第 2352--2366 行，
+\cref{eq:app-F-v4} 见第 2322 行，\cref{eq:app-F-vb} 见第 2323 行，
+\cref{eq:app-F-vba} 见第 2324 行。
+
+\subsubsection{行 7--9（姿态误差动力学 $\delta\dot{\vp{\beta}}^b$）}
+
+姿态-速度传输速率块（对照 \cref{eq:Fbv}）：
+\begin{equation}
+  \begin{bmatrix}
+    F(7,4) & F(7,5) & F(7,6) \\
+    F(8,4) & F(8,5) & F(8,6) \\
+    F(9,4) & F(9,5) & F(9,6)
+  \end{bmatrix}
+  = -\m{C}_n^b\,\m{M},
+  \qquad
+  \m{M} =
+  \begin{bmatrix}
+    0 & \dfrac{1}{r_{nh}} & 0 \\[1.2ex]
+    -\dfrac{1}{r_{mh}} & 0 & 0 \\[1.2ex]
+    0 & -\dfrac{t_\varphi}{r_{nh}} & 0
+  \end{bmatrix}.
+  \label{eq:app-F-bv}
+\end{equation}
+姿态自旋块（对照 \cref{eq:Fbb}）：
+\begin{equation}
+  \begin{bmatrix}
+    F(7,7) & F(7,8) & F(7,9) \\
+    F(8,7) & F(8,8) & F(8,9) \\
+    F(9,7) & F(9,8) & F(9,9)
+  \end{bmatrix}
+  = -\sk{\vp{\omega}_{ib}^b}
+  = \begin{bmatrix}
+    0 & \omega_z & -\omega_y \\
+    -\omega_z & 0 & \omega_x \\
+    \omega_y & -\omega_x & 0
+  \end{bmatrix}.
+  \label{eq:app-F-bb}
+\end{equation}
+姿态-陀螺零偏块（对照 \cref{eq:Fbbg}）：
+\begin{equation}
+  F(7,13) = F(8,14) = F(9,15) = -1.
+  \label{eq:app-F-bbg}
+\end{equation}
+固件写入位置：\cref{eq:app-F-bv} 见第 2397--2401 行，\cref{eq:app-F-bb}
+见第 2325 行，\cref{eq:app-F-bbg} 见第 2156 行。
+
+\subsubsection{行 10--15（零偏误差动力学）}
+
+\begin{equation}
+  F(10,10) = F(11,11) = F(12,12) = -\frac{1}{\tau_a}, \qquad
+  F(13,13) = F(14,14) = F(15,15) = -\frac{1}{\tau_g}.
+  \label{eq:app-F-bias}
+\end{equation}
+固件第 2157--2158 行写入。其余元素为零。
+
+\subsection{数值示例}
+
+\cref{tab:app-F-num} 给出一组典型巡航状态的 $\m{F}$ 数值（NED 速度
+$(5,\ 1,\ 0)$\,m/s，$\varphi = 28.2°$，$h = 50$\,m，比力
+$\m{C}_b^n\vp{f}^b = (0,\ 0,\ g)$，角速度零）。
+
+\begin{table}[H]
+\centering
+\caption{典型巡航状态下的 F 矩阵非零块数值示例}
+\label{tab:app-F-num}
+\small
+\begin{tabularx}{\textwidth}{@{}L{3.4cm}X@{}}
+\toprule
+\textbf{块} & \textbf{数值} \\
+\midrule
+$R_M + h$, $R_N + h$ & 6356842.6 m, 6388388.6 m \\
+$\m{F}_{pp}$ 行 1 & $\begin{bmatrix} 0 & 0 & 7.87\times10^{-7} \end{bmatrix}$ \\
+$\m{F}_{pp}$ 行 2 & $\begin{bmatrix} 8.51\times10^{-8} & -9.12\times10^{-7} & 1.57\times10^{-7} \end{bmatrix}$ \\
+$\m{F}_{vv}$ 行 1 & $\begin{bmatrix} 0 & -8.65\times10^{-5} & 7.87\times10^{-7} \end{bmatrix}$ \\
+$\m{F}_{vv}$ 行 2 & $\begin{bmatrix} 8.65\times10^{-5} & -9.12\times10^{-7} & 1.31\times10^{-4} \end{bmatrix}$ \\
+$\m{F}_{vv}$ 行 3 & $\begin{bmatrix} -1.57\times10^{-6} & -1.31\times10^{-4} & 0 \end{bmatrix}$ \\
+重力梯度 $F(6,3)$ & $3.08\times10^{-6}$\,s$^{-2}$ \\
+零偏衰减 $1/\tau_a$, $1/\tau_g$ & 0.01, 0.00556 s$^{-1}$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{remark}
+数值上 $\m{F}$ 的非对角项均 $\le 10^{-4}$ 量级，远小于 $\m{F}_{v\beta}$
+与 $\m{F}_{\beta\beta}$ 的动态项（由比力与角速度决定）。这正是固件注释
+``短时飞行简化 F 矩阵升级收益 $<$0.1°''的量化依据——\cref{eq:app-F-v1}--
+\cref{eq:app-F-v3} 与 \cref{eq:app-F-p1}--\cref{eq:app-F-p2} 的相对贡献
+在 $\|F_{dynamic}\|\,dt \sim 10^{-3}$ 尺度上可忽略。
+\end{remark}
+
+\subsection{简化 F 与完整 F 的行为对比}
+
+在二阶状态转移 $\bm{\Phi} \approx \m{I} + \m{F}dt + \frac12\m{F}^2dt^2$ 中，
+简化版（去掉 $\m{F}_{vv}$、$\m{F}_{pp}$、$\m{F}_{\beta v}$）的截断影响：
+\begin{itemize}
+  \item $\m{F}_{vv}$ 缺失：丢失速度误差间的哥氏耦合，其对速度方差的影响为
+    $\mathcal{O}(\|F_{vv}\|^2 dt^2)$，在 $dt=5$\,ms、$\|F_{vv}\|\le10^{-4}$
+    时 $\sim10^{-15}$，可忽略；
+  \item $\m{F}_{pp}$ 缺失：丢失位置自耦合，同理 $\sim10^{-15}$；
+  \item $\m{F}_{\beta v}$ 缺失：丢失传输速率对姿态的耦合。对飞行器
+    （$v \le 30$\,m/s）$\|F_{\beta v}\|\sim v/R \sim 5\times10^{-6}$，
+    $dt$ 内贡献 $\sim2.5\times10^{-8}$\,rad，远低于 MEMS 陀螺噪声量级。
+\end{itemize}
+因此固件默认开启完整 $\m{F}$ 矩阵的成本可忽略且提升有限，注释中的边界描述
+（长航时/高速收益明显）在物理上成立。

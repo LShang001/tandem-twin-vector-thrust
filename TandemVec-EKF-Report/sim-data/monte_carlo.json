@@ -1,0 +1,9 @@
+{
+  "n_runs": 30,
+  "pos_ne_rmse_mean_m": 0.2592882200758502,
+  "pos_d_rmse_mean_m": 0.24141897638028684,
+  "vel_rmse_mean_mps": 0.07285857756117958,
+  "pos_3sigma_coverage": 0.99771813820822,
+  "vel_3sigma_coverage": 0.9999833305550926,
+  "pos_rmse_p95_m": 0.44126736507901276
+}

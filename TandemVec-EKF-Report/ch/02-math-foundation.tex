@@ -1,0 +1,389 @@
+% ===========================================================================
+%  第 2 章 数学基础
+% ===========================================================================
+\section{数学基础}
+
+本章建立全篇共用的数学工具与记号约定，包括坐标系、姿态参数化、矢量代数算子、
+随机过程模型、非线性系统离散化与线性化，以及误差状态卡尔曼滤波的一般框架。
+后续各章直接引用本章定义而不重复推导。
+
+\subsection{坐标系约定}
+
+本报告与固件采用完全一致的坐标系约定，可归纳为三个层次：
+\begin{enumerate}
+  \item \textbf{导航系 NED}（North-East-Down，记为 $n$ 系）：以起飞点为原点
+    （或地心地固系投影点），$x$ 轴指向北、$y$ 轴指向东、$z$ 轴指向地心方向
+    （向下为正），构成右手正交系；
+  \item \textbf{机体系 FRD}（Front-Right-Down，记为 $b$ 系）：固连于机体，
+    $x$ 轴指向前方、$y$ 轴指向右翼、$z$ 轴指向机腹（向下为正），右手正交系；
+  \item \textbf{地心惯性系} 与 \textbf{地心地固系（ECEF）}：用于地球自转与
+    WGS-84 椭球几何，第 3 章给出其与本报告直接相关的投影关系。
+\end{enumerate}
+
+\begin{definition}[方向余弦矩阵]
+设 $\vp{r}^n \in \mathbb{R}^3$ 为导航系坐标，$\vp{r}^b \in \mathbb{R}^3$ 为
+机体系坐标，则
+\begin{equation}
+  \vp{r}^n = \m{C}_b^n\, \vp{r}^b, \qquad
+  \vp{r}^b = \m{C}_n^b\, \vp{r}^n,
+  \label{eq:dcm-def}
+\end{equation}
+其中 $\m{C}_b^n = (\m{C}_n^b)\T$ 为正交旋转矩阵（$\det = +1$）。固件中以
+\code{t\_b2ned} 缓存 $\m{C}_b^n$（见 \file{ekf\_15\_state.h} 第 3912 行注释）。
+\end{definition}
+
+需要特别说明 NED 系中``地''（Down）分量与习惯``高度''的关系：若 $h$ 为 WGS-84
+椭球高（向上为正），则 NED 位置误差第三分量 $\delta p_D = -\delta h$。这一符号
+约定贯穿第 5 章误差状态与第 6 章量测模型的全部分析，与固件注释
+``NED的D向下为正，D误差增大等价高度降低''（\file{ekf\_15\_state.h} 第 2320 行）
+一致。
+
+\subsection{四元数与旋转矢量}
+
+\subsubsection{四元数代数}
+
+\begin{definition}[单位四元数]
+单位四元数
+\begin{equation}
+  q = \begin{bmatrix} q_w \\ \vp{q}_v \end{bmatrix}
+    \in \mathbb{H},\qquad \|q\|^2 = q_w^2 + \vp{q}_v^\top \vp{q}_v = 1
+  \label{eq:quat-def}
+\end{equation}
+参数化从机体系到导航系的旋转，其与轴角 $\left(\vp{u},\,\phi\right)$ 的关系为
+$q_w = \cos(\phi/2)$，$\vp{q}_v = \vp{u}\sin(\phi/2)$。
+\end{definition}
+
+四元数乘法（Hamilton 积）定义为
+\begin{equation}
+  q \otimes p =
+  \begin{bmatrix}
+    q_w p_w - \vp{q}_v^\top\vp{p}_v \\
+    q_w \vp{p}_v + p_w \vp{q}_v + \vp{q}_v \cross \vp{p}_v
+  \end{bmatrix},
+  \label{eq:quat-prod}
+\end{equation}
+其对应旋转的合成次序为 $R(q\otimes p) = R(q)\,R(p)$。共轭为
+$q^{*} = \begin{bmatrix} q_w & -\vp{q}_v^\top \end{bmatrix}\T$。固件使用
+\code{Eigen::Quaternionf} 存储，分量顺序为 (w,x,y,z)（见
+\file{ekf\_15\_state.h} 第 1448--1467 行）。
+
+\subsubsection{旋转矢量与指数映射}
+
+\begin{definition}[旋转矢量]
+旋转矢量 $\dtheta = \vp{u}\,\phi \in \mathbb{R}^3$ 以轴角形式描述一次旋转：
+方向为旋转轴、模长为旋转角。由旋转矢量到四元数的\textbf{指数映射}为
+\begin{equation}
+  q = \Exp(\dtheta) =
+  \begin{bmatrix}
+    \cos\left(\tfrac{\|\dtheta\|}{2}\right) \\
+    \vp{u}\sin\left(\tfrac{\|\dtheta\|}{2}\right)
+  \end{bmatrix},
+  \qquad \vp{u} = \dtheta / \|\dtheta\|.
+  \label{eq:exp-map}
+\end{equation}
+其逆映射（对数映射）为
+\begin{equation}
+  \dtheta = \Log(q) = 2\,\arccos(q_w)\,\frac{\vp{q}_v}{\|\vp{q}_v\|},
+  \label{eq:log-map}
+\end{equation}
+当 $\|\vp{q}_v\|$ 极小（$<10^{-6}$）时固件退化为一阶近似
+$\Log(q) \approx 2\vp{q}_v$（\file{ekf\_15\_state.h} 第 1778--1801 行
+\code{BuildDeltaQuatFromRotationVector}）。
+\end{definition}
+
+指数映射在误差状态滤波中承担两个关键角色：一是 IMU 角增量对四元数的推进
+（第 4 章），二是姿态误差状态向全量姿态的注入（第 5 章第 5.5 节）。用指数映射
+而非小角度一阶近似，可在单次大修正（如 AHRS 量测给出 $0.5$\,rad 级误差）时避免
+修正量被低估。
+
+\subsubsection{旋转的小角度一阶展开}
+
+设 $\m{R} \in SO(3)$，微旋转 $\Exp(\dtheta)$ 作用于 $\m{R}$ 右侧，则
+\begin{equation}
+  \m{R}\,\Exp(\dtheta) \approx \m{R}\left(\m{I}_3 + \sk{\dtheta}\right)
+  = \m{R} + \m{R}\,\sk{\dtheta},
+  \label{eq:small-rotation}
+\end{equation}
+其中 $\sk{\cdot}$ 为斜对称算子（见第 2.3 节）。对任意矢量 $\vp{v}$，
+\begin{equation}
+  \m{R}\sk{\dtheta}\vp{v}
+  = \m{R}(\dtheta \cross \vp{v})
+  = (\m{R}\dtheta) \cross (\m{R}\vp{v})
+  = \sk{\m{R}\dtheta}\,\m{R}\vp{v},
+  \label{eq:skew-rot-commute}
+\end{equation}
+由此得到斜对称算子与旋转矩阵的交换律
+\begin{equation}
+  \m{R}\,\sk{\dtheta}\,\m{R}^\top = \sk{\m{R}\dtheta}.
+  \label{eq:skew-rot}
+\end{equation}
+\cref{eq:skew-rot} 是第 6 章重力方向量测观测矩阵推导（
+$H_{att} = \sk{\m{C}_b^n\,\vp{g}_{sf}^n}$）的核心工具。
+
+\subsection{斜对称算子}
+
+\begin{definition}[斜对称算子]
+对任意 $\vp{v} = \begin{bmatrix} v_1 & v_2 & v_3 \end{bmatrix}\T$，
+\begin{equation}
+  \sk{\vp{v}} \triangleq
+  \begin{bmatrix}
+    0 & -v_3 & v_2 \\
+    v_3 & 0 & -v_1 \\
+    -v_2 & v_1 & 0
+  \end{bmatrix},
+  \qquad
+  \sk{\vp{v}}\,\vp{w} = \vp{v} \cross \vp{w}.
+  \label{eq:skew-def}
+\end{equation}
+其性质包括：$\sk{\vp{v}}\T = -\sk{\vp{v}}$；$\sk{\alpha\vp{v} + \beta\vp{w}}
+= \alpha\sk{\vp{v}} + \beta\sk{\vp{w}}$（线性）；以及 Jacobi 恒等式
+$\sk{\vp{v}}\sk{\vp{w}} - \sk{\vp{w}}\sk{\vp{v}}
+= \sk{\sk{\vp{v}}\vp{w}}$。
+\end{definition}
+
+\subsection{随机过程模型}
+
+\subsubsection{高斯白噪声与谱密度}
+
+本报告采用连续时间高斯白噪声模型描述 IMU 与量测传感器的随机误差。设
+$\vp{w}(t)$ 为零均值白噪声，其功率谱密度（PSD）为 $\m{Q}_c$，则
+\begin{equation}
+  \E{\vp{w}(t)\vp{w}(t')\T} = \m{Q}_c\,\delta(t - t'),
+  \label{eq:white-noise}
+\end{equation}
+其中 $\delta(\cdot)$ 为 Dirac 函数。白噪声通过线性时不变系统
+$\dot{\vp{x}} = \m{A}\vp{x} + \m{G}\vp{w}$ 后，其稳态协方差
+$\m{P}_{\infty}$ 满足 Lyapunov 方程
+\begin{equation}
+  \m{A}\m{P}_{\infty} + \m{P}_{\infty}\m{A}\T + \m{G}\m{Q}_c\m{G}^\top = \m{0}.
+  \label{eq:lyapunov}
+\end{equation}
+
+\subsubsection{一阶高斯-马尔可夫过程}
+
+固件将加速度计与陀螺的零偏建模为一阶高斯-马尔可夫（Gauss-Markov）过程：
+\begin{equation}
+  \dot{\vp{b}}(t) = -\frac{1}{\tau}\,\vp{b}(t) + \vp{w}_b(t),
+  \qquad
+  \E{\vp{w}_b(t)\vp{w}_b(t')\T} = \m{Q}_b\,\delta(t-t'),
+  \label{eq:gm-process}
+\end{equation}
+其中 $\tau$ 为相关时间常数。其稳态方差与驱动噪声谱密度满足
+\begin{equation}
+  \sigma_b^2 = \frac{\tau}{2}\,q_b,
+  \qquad\text{即}\qquad
+  q_b = \frac{2\sigma_b^2}{\tau},
+  \label{eq:gm-variance}
+\end{equation}
+这正是固件初始化过程噪声矩阵时采用的形式
+（\file{ekf\_15\_state.h} 第 523--530 行）：
+\begin{equation}
+  rw_{b} = \frac{2\,\sigma_{b}^2}{\tau}\,\m{I}_3,
+  \label{eq:gm-rw}
+\end{equation}
+其中 $\sigma_b$ 对应固件的 \code{accel\_markov\_bias\_std\_mps2} 与
+\code{gyro\_markov\_bias\_std\_radps}，$\tau$ 对应 \code{accel\_tau\_s}（100\,s）
+与 \code{gyro\_tau\_s}（180\,s，固件运行配置）。
+
+\begin{remark}
+一阶高斯-马尔可夫过程在误差状态中体现为对角衰减块
+$\m{F}_{b} = -\m{I}_3/\tau$（第 5 章第 5.3 节），其含义是零偏误差以时间常数
+$\tau$ 向零回归，同时被驱动噪声持续激励。$\tau$ 越大，零偏变化越慢，长时稳定性
+越好但短时修正越保守——固件将陀螺 $\tau$ 设为 180\,s 即取这一权衡
+（\file{navigation\_task.cpp} 第 851 行）。
+\end{remark}
+
+\subsubsection{随机过程的离散化}
+
+对一阶高斯-马尔可夫过程 \cref{eq:gm-process}，在采样间隔 $dt$ 内精确离散化为
+\begin{equation}
+  \vp{b}_k = e^{-dt/\tau}\,\vp{b}_{k-1} + \vp{w}_{d,k},
+  \qquad
+  \E{\vp{w}_{d,k}\vp{w}_{d,k}\T} = q_b\,\frac{\tau}{2}
+    \left(1 - e^{-2dt/\tau}\right)\m{I}_3.
+  \label{eq:gm-discrete}
+\end{equation}
+对误差状态滤波，零偏误差的离散递推由 $\bm{\Phi}$ 的零偏块
+$\bm{\Phi}_{bb} = e^{-\m{I}_3 dt/\tau} \approx \left(1 - dt/\tau\right)\m{I}_3$
+（二阶展开含 $\frac12(dt/\tau)^2$ 修正）与 $\m{Q}_d$ 的零偏块共同实现。
+当 $dt \ll \tau$（固件 5\,ms vs.\ 100--180\,s）时，\cref{eq:gm-discrete} 的
+驱动噪声方差近似为
+\begin{equation}
+  q_b\,\frac{\tau}{2}\left(1 - e^{-2dt/\tau}\right)
+  \approx q_b\,dt\left(1 - \frac{dt}{\tau}\right)
+  \approx \frac{2\sigma_b^2}{\tau}\,dt,
+  \label{eq:gm-discrete-approx}
+\end{equation}
+即固件快速路径采用的对角注入形式 $\frac{2\sigma_b^2}{\tau}dt$（第 5.5.3 节）。
+
+\subsubsection{IMU 误差参数的 Allan 方差对应}
+
+MEMS IMU 数据手册以 Allan 方差给出随机误差参数，与本节谱密度的对应关系为
+\cite{Groves2013,Titterton2014}：
+\begin{itemize}
+  \item \textbf{角度随机游走}（ARW）：陀螺白噪声 $\sigma_{gw}$ 对应的
+    功率谱密度 $q_g = \sigma_{gw}^2$，Allan 方差在 $\tau=1$\,s 处取
+    $ARW = \sigma_{gw}\,\text{rad}/\sqrt{\text{s}}$；
+  \item \textbf{零偏不稳定性}（BI）：高斯-马尔可夫驱动噪声的稳态
+    $BI = \sigma_B$，谱密度 $q_b = 2\sigma_B^2/\tau$（\cref{eq:gm-rw}）；
+  \item \textbf{速率随机游走}（RRW）：陀螺零偏的长期漂移，在本模型中由
+    高斯-马尔可夫过程的时间常数 $\tau_g$ 截断（纯积分随机游走是
+    $\tau \to \infty$ 的极限情形）。
+\end{itemize}
+固件将陀螺零偏建模为 $\tau_g = 180$\,s 的一阶高斯-马尔可夫而非纯随机游走，
+正是为了在长时间静止场景下让零偏误差保持有界，避免 P 矩阵因持续激励而过度
+膨胀。
+
+\subsubsection{卡方分布与 NIS 门限的统计推导}
+
+设 $\vp{y} \sim \mathcal{N}(\m{0},\ \m{S})$（$\m{S}$ 正定），则二次型
+\begin{equation}
+  NIS = \vp{y}\T\m{S}\inv\vp{y} = \sum_{i=1}^{m} \left(\frac{y_i'}{\sigma_i}\right)^2
+  \label{eq:nis-chi2}
+\end{equation}
+服从自由度为 $m$ 的中心卡方分布 $\chi^2_m$，其中 $y_i'$ 为白化后的独立
+标准正态分量。其均值与方差为
+\begin{equation}
+  \E{NIS} = m, \qquad \operatorname{Var}(NIS) = 2m.
+  \label{eq:nis-moments}
+\end{equation}
+对 $m$ 维量测，99\%/99.9\%/99.99\% 分位数（$\alpha = 0.01/0.001/0.0001$）
+由正则化不完全伽马函数定义：
+\begin{equation}
+  P(\chi^2_m \le T) = \frac{\gamma(m/2,\ T/2)}{\Gamma(m/2)} = 1 - \alpha.
+  \label{eq:chi2-quantile}
+\end{equation}
+固件各量测门限的选取（第 8.1 节 \cref{tab:nis-thresholds}）围绕 99.9\% 分位数
+设计：GNSS（$m=6$）取 30（99.9\% $\approx22.5$，留机动容差）；重力/姿态
+（$m=3$）取 18（99.9\% $\approx16.3$）；航向/气压（$m=1$）取 12/16（99.9\%
+$\approx10.8$、99.99\% $\approx15.1$）。门限略高于统计值是为高动态机动下模型
+线性化误差留裕量。
+
+当滤波模型与实际噪声不一致时，$NIS$ 偏离 $\chi^2_m$：量测噪声被低估
+（$\m{R}$ 过小）时 $NIS$ 偏大，易误拒；被高估时 $NIS$ 偏小，门控灵敏度下降。
+第 10 章第 10.3 节通过正常帧 $NIS$ 均值（2.79）验证了固件配置的 $R$ 与仿真
+噪声基本一致（略保守）。
+
+\subsection{非线性系统离散化与线性化}
+
+\subsubsection{系统模型}
+
+考虑连续时间非线性系统与量测：
+\begin{align}
+  \dot{\vp{x}}(t) &= \vp{f}\big(\vp{x}(t),\,\vp{u}(t)\big) + \m{G}\vp{w}(t),
+  \label{eq:cont-sys} \\
+  \vp{z}_k &= \vp{h}(\vp{x}_k) + \vp{v}_k,
+  \label{eq:meas-sys}
+\end{align}
+其中 $\vp{w}$、$\vp{v}$ 为零均值白噪声，协方差（PSD）分别为 $\m{Q}_c$、$\m{R}_k$，
+互不相关。误差状态滤波器以标称轨迹 $\bar{\vp{x}}$ 线性化：
+\begin{equation}
+  \delta\dot{\vp{x}} \triangleq \dot{\vp{x}} - \dot{\bar{\vp{x}}}
+  \approx \underbrace{\left.\frac{\partial \vp{f}}{\partial \vp{x}}\right|_{\bar{\vp{x}}}
+  }_{\m{F}}\,\delta\vp{x} + \m{G}\vp{w}.
+  \label{eq:error-sys}
+\end{equation}
+
+\subsubsection{状态转移矩阵离散化}
+
+连续系统 \cref{eq:error-sys} 的离散化状态转移矩阵（STM）为矩阵指数：
+\begin{equation}
+  \bm{\Phi}(t_k,\,t_{k-1}) = e^{\m{F}\,dt}
+  = \m{I}_n + \m{F}\,dt + \frac{1}{2}\m{F}^2\,dt^2 + \frac{1}{6}\m{F}^3\,dt^3 + \cdots
+  \label{eq:matrix-exp}
+\end{equation}
+固件默认采用\textbf{二阶截断}
+\begin{equation}
+  \bm{\Phi} \approx \m{I}_{15} + \m{F}\,dt + \frac{1}{2}\,\m{F}^2\,dt^2,
+  \label{eq:phi-second}
+\end{equation}
+并以编译宏 \code{BFS\_NAVIGATION\_EMBEDDED\_FAST\_FIRST\_ORDER\_PHI} 提供一阶
+退化路径 $\bm{\Phi} \approx \m{I} + \m{F}\,dt$（\file{ekf\_15\_state.h} 第
+2404--2426 行）。在 $dt = 5$\,ms、IMU 带宽以内的动态下，二阶截断误差为
+$\mathcal{O}((\m{F}dt)^3)$，其中 $\|\m{F}\|\,dt \sim 10^{-3}$ 量级
+（$\m{F}$ 的最大元素为角速度项 $\sim 10^0$\,rad/s），截断误差可以忽略。
+
+\subsubsection{过程噪声离散化}
+
+连续过程噪声 $\m{G}\m{Q}_c\m{G}^\top$ 需离散化为
+\begin{equation}
+  \m{Q}_d = \int_{t_{k-1}}^{t_k} \bm{\Phi}(t_k,\,s)\,\m{G}\m{Q}_c\m{G}^\top
+  \bm{\Phi}(t_k,\,s)\T\,ds.
+  \label{eq:qd-def}
+\end{equation}
+常见的零阶保持近似为 $\m{Q}_d \approx \m{G}\m{Q}_c\m{G}^\top dt$。固件采用更高精度的
+\textbf{Simpson 积分}近似（\file{ekf\_15\_state.h} 第 2592--2596 行）：
+\begin{equation}
+  \m{Q}_d \approx \frac{dt}{6}\left(
+    \m{Q}_c + 4\,\bm{\Phi}_{\frac12}\m{Q}_c\bm{\Phi}_{\frac12}^\top
+    + \bm{\Phi}\m{Q}_c\bm{\Phi}^\top
+  \right),
+  \label{eq:simpson-qd}
+\end{equation}
+其中 $\bm{\Phi}_{\frac12} = \m{I} + \frac{dt}{2}\m{F} +
+\frac12\left(\frac{dt}{2}\m{F}\right)^2$ 为半周期 STM。与一阶近似相比，
+\cref{eq:simpson-qd} 对 $\m{F}$ 的耦合项（如速度误差块与姿态误差块之间的交叉）
+保留了二阶以上的贡献，在强机动下避免过程噪声欠估计导致的滤波器过度自信。
+
+\begin{remark}
+当 $\m{G}$ 为恒定矩阵且 $\m{Q}_c$ 为块对角时，固件利用
+$\m{C}_b^n\,\sigma^2\m{I}\,\m{C}_n^b = \sigma^2\m{I}$ 的正交不变性，将
+$\m{G}\m{Q}_c\m{G}^\top$ 的稠密乘法化简为四个对角块直写
+（\file{ekf\_15\_state.h} 第 2558--2578 行
+\code{Icm45686StructuredContinuousQc}），在数学上与原式严格等价，仅省去稀疏
+矩阵的无效乘法。
+\end{remark}
+
+\subsection{误差状态卡尔曼滤波}
+
+\subsubsection{架构选择：误差状态 vs. 全状态}
+
+本报告分析的对象——固件 \code{Ekf15State}——属于\textbf{误差状态扩展卡尔曼滤波}
+（Error-State EKF, ES-EKF）\cite{Sola2017}。其思想是：将滤波状态拆分为
+\begin{equation}
+  \underbrace{\vp{x}_{full}}_{\text{全量状态}}
+  = \underbrace{\bar{\vp{x}}}_{\text{标称/积分状态}}
+  \oplus \underbrace{\dx}_{\text{误差状态}},
+  \label{eq:state-split}
+\end{equation}
+其中标称状态由确定性动力学（捷联惯导编排）以高频率推进，误差状态则由线性化的
+卡尔曼滤波估计并反馈注入。这一架构的优势在于：
+\begin{itemize}
+  \item \textbf{线性化点精确}：误差状态在零附近，一阶展开误差远小于全状态在
+    大动态范围内线性化；
+  \item \textbf{姿态误差维度紧凑}：姿态用 3 维旋转矢量而非 4 维四元数（带归一化
+    约束），避免了四元数协方差的奇异性；
+  \item \textbf{数值稳定}：误差状态量级小，协方差矩阵的条件数受控。
+\end{itemize}
+
+\subsubsection{标准递推}
+
+设误差状态 $\dx \in \mathbb{R}^{n}$、协方差 $\m{P}$，则滤波递推为
+\begin{align}
+  \textbf{预测:}\quad
+  \dx_{k|k-1} &= \bm{\Phi}_{k-1}\,\dx_{k-1|k-1}, &
+  \m{P}_{k|k-1} &= \bm{\Phi}_{k-1}\m{P}_{k-1|k-1}\bm{\Phi}_{k-1}\T + \m{Q}_d,
+  \label{eq:es-predict} \\
+  \textbf{新息:}\quad
+  \vp{y}_k &= \vp{z}_k - \vp{h}(\bar{\vp{x}}_{k|k-1}), &
+  \m{S}_k &= \m{H}_k\m{P}_{k|k-1}\m{H}_k\T + \m{R}_k,
+  \label{eq:es-innovation} \\
+  \textbf{增益:}\quad
+  \m{K}_k &= \m{P}_{k|k-1}\m{H}_k\T\m{S}_k\inv,
+  \label{eq:es-gain} \\
+  \textbf{更新:}\quad
+  \dx_{k|k} &= \m{K}_k\vp{y}_k, &
+  \m{P}_{k|k} &= \left(\m{I} - \m{K}_k\m{H}_k\right)\m{P}_{k|k-1}
+    \left(\m{I} - \m{K}_k\m{H}_k\right)\T + \m{K}_k\m{R}_k\m{K}_k\T,
+  \label{eq:es-update}
+\end{align}
+其中 \cref{eq:es-update} 的协方差更新采用\textbf{Joseph 形式}，保证数值上的
+对称正定性。误差状态 $\dx_{k|k}$ 通过第 5.5 节的注入运算写回全量状态后清零。
+
+\begin{remark}
+Joseph 形式相对标准形式 $\m{P} = (\m{I}-\m{K}\m{H})\m{P}$ 增加约
+$2n^2 m$ 次乘法，但在浮点运算中能够抵消舍入误差导致的负特征值，是嵌入式高维
+滤波的工程惯例。固件在所有量测更新路径（GNSS/速度/重力/姿态/航向/气压高度）
+中统一使用 Joseph 形式（见第 6 章各节），仅静止陀螺量测因只更新零偏子块而采用
+子块化的等效形式（第 6.6 节）。
+\end{remark}

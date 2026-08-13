@@ -1,0 +1,114 @@
+% ===========================================================================
+%  纵列双发矢量推力飞行器固件 EKF 组合导航：理论与算法分析设计报告
+%  主入口文件
+% ===========================================================================
+\input{preamble.tex}
+
+\title{\textbf{纵列双发矢量推力飞行器固件 EKF 组合导航：\\理论与算法分析设计报告}}
+\author{LShang}
+\date{2026年8月}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+{\zihao{1}\bfseries 纵列双发矢量推力飞行器固件\par}
+\vspace{0.4em}
+{\zihao{1}\bfseries EKF 组合导航\par}
+\vspace{1.0em}
+{\zihao{2}\bfseries 理论与算法分析设计报告\par}
+\vspace{1.6em}
+{\Large Theory and Algorithm Analysis \& Design Report of the\par}
+\vspace{0.3em}
+{\Large Onboard EKF Integrated Navigation System\par}
+\vspace{2.2em}
+{\large LShang\par}
+\vspace{0.5em}
+{\large 2026年8月\par}
+
+\vfill
+\begin{minipage}{0.94\textwidth}
+\textbf{摘要：}
+本报告对纵列双发矢量推力飞行器飞控固件中的 EKF 组合导航系统进行系统的理论与
+算法分析。该系统以 15 状态误差状态扩展卡尔曼滤波器为核心，融合 IMU 捷联惯导
+解算、GNSS 位置/速度量测以及静止辅助量测（零速修正、重力方向、静止陀螺零偏、
+姿态与航向量测），并辅以独立运行的垂直/水平卡尔曼滤波器与双矢量航向融合。
+报告沿``坐标系与随机过程基础 $\rightarrow$ 地球模型 $\rightarrow$ 捷联编排
+$\rightarrow$ 误差状态线性化 $\rightarrow$ 量测模型 $\rightarrow$ 鲁棒性机制
+$\rightarrow$ 任务集成''的技术主线，逐项给出与固件源码逐行对照的公式推导、
+算法设计与实现分析，包括双子样圆锥/划摇补偿、GNSS 延迟回放重传播、NIS 门控、
+失联协方差膨胀与低增益重捕获、动态 GNSS 噪声加权等工程化机制的数学模型。
+报告最后基于固件真实参数构建独立数值仿真，设计六个场景（静基座零偏收敛、
+GNSS 融合、失联重捕获、延迟回放、双矢量航向、NIS 野值门控），验证滤波器行为
+并给出定量分析，其中静基座水平加速度零偏的可观性限制、失联期位置漂移增长
+等结论直接指导固件参数设计与使用边界。
+
+\vspace{0.6em}
+\noindent\textbf{关键词：}误差状态 EKF；捷联惯导；GNSS 组合导航；双子样圆锥补偿；
+静止辅助；NIS 门控；GNSS 延迟回放
+
+\vspace{1.4em}
+\textbf{Abstract:}
+This report presents a systematic theoretical and algorithmic analysis of the
+EKF integrated navigation system in the flight-control firmware of a tandem
+twin-engine vector-thrust aircraft. The system is built around a 15-state
+error-state extended Kalman filter that fuses strapdown inertial navigation,
+GNSS position/velocity measurements, and static-aid measurements (zero-velocity
+update, gravity direction, static gyro bias, attitude and heading), supported by
+independently running vertical/horizontal Kalman filters and dual-vector heading
+fusion. Along the technical thread of \emph{coordinate systems and stochastic
+models} $\rightarrow$ \emph{earth model} $\rightarrow$ \emph{strapdown
+mechanization} $\rightarrow$ \emph{error-state linearization} $\rightarrow$
+\emph{measurement models} $\rightarrow$ \emph{robustness mechanisms}
+$\rightarrow$ \emph{task integration}, the report provides line-by-line
+code-correlated derivations, algorithm design, and implementation analysis,
+covering two-sample coning/sculling compensation, GNSS delay replay with
+re-propagation, NIS gating, outage covariance inflation with low-gain
+re-acquisition, and dynamic GNSS noise weighting. An independent numerical
+simulation with firmware-real parameters is developed, and six scenarios are
+designed to validate filter behavior quantitatively, including observability
+limits of the horizontal accelerometer bias during pure static conditions and
+position drift growth during GNSS outage.
+
+\vspace{0.6em}
+\noindent\textbf{Keywords:} error-state EKF; strapdown inertial navigation;
+GNSS/INS integration; two-sample coning compensation; static aiding; NIS
+gating; GNSS delay replay
+\end{minipage}
+\end{titlepage}
+
+\clearpage
+\pagenumbering{roman}
+\tableofcontents
+\thispagestyle{plain}
+
+\clearpage
+\pagenumbering{arabic}
+
+% ===========================================================================
+%  正文
+% ===========================================================================
+\input{ch/01-intro.tex}
+\input{ch/02-math-foundation.tex}
+\input{ch/03-earth-model.tex}
+\input{ch/04-sins-mechanization.tex}
+\input{ch/05-ekf-15state.tex}
+\input{ch/06-measurement-models.tex}
+\input{ch/07-static-aid.tex}
+\input{ch/08-robustness.tex}
+\input{ch/09-integration.tex}
+\input{ch/10-simulation.tex}
+\input{ch/11-conclusion.tex}
+
+\appendix
+\input{ch/A-F-matrix.tex}
+\input{ch/B-covariance.tex}
+\input{ch/C-notation.tex}
+
+% ===========================================================================
+%  参考文献
+% ===========================================================================
+\clearpage
+\bibliography{ref}
+
+\end{document}

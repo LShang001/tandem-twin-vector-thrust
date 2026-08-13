@@ -1,0 +1,275 @@
+% ===========================================================================
+%  第 9 章 任务集成
+% ===========================================================================
+\section{导航任务集成}
+
+主滤波器与辅助模块通过 200\,Hz 导航任务 \code{handleNavigationSystem}
+（\file{navigation\_task.cpp} 第 532--1490 行）集成。本章分析任务的完整
+数据流：IMU 采集与双子样组装（已在第 4.9 节）、GNSS 历元队列消费、动态权重
+配置、重锚定、输出桥接，以及独立垂直/水平滤波器与双矢量航向融合。
+
+\subsection{任务状态机}
+
+导航任务分两大阶段（第 791--1201 行）：
+\begin{enumerate}
+  \item \textbf{初始化阶段}（\code{!nav\_system\_initialized}）：
+    仅在静止确认后初始化（第 795 行）。有 GNSS 时用真实经纬高，无 GNSS 时用
+    长沙附近假原点（28.2°N, 112.9°E, 50\,m，第 830--838 行）。初始化完成
+    即设原点并置 \code{nav\_initialized\_with\_fake\_origin} 标志；
+  \item \textbf{运行阶段}：
+    \begin{enumerate}
+      \item 时间更新：始终执行（双子样优先）；
+      \item 静止辅助（静止时）或 AHRS 姿态量测（无 GNSS 运动时）；
+      \item GNSS 位置/速度更新（有 GNSS 时），含双矢量航向预融合；
+      \item AHRS 航向偏置慢速校正；
+      \item 输出桥接与遥测注入。
+    \end{enumerate}
+\end{enumerate}
+
+\subsection{GNSS 历元队列与质量检查}
+
+UBX 解析器以``历元''（epoch）为单位队列化 GNSS 观测（\code{UbxEpoch}）。
+每帧弹出至多一个 epoch（第 735--736 行），经质量检查分级：
+\begin{itemize}
+  \item \textbf{全质量}（\code{gnssEpochPassesFullQuality}，第 186--234 行）：
+    动态权重最小门限通过（fix$\ge$3D、$sv\ge3$、$h\_acc>0$）、iTOW 与 EOE 匹配、
+    无重复 iTOW。只有通过全质量检查的 epoch 才更新 \code{gnss\_status} 快照
+    （2026-08-10 修复：原实现检查前写快照，被拒帧也留下 3D fix 快照，导致地面站
+    显示 fix 而 EKF 实际未融合）；
+  \item \textbf{降级}（\code{gnssEpochQualifiesForDowngrade}，第 236--252 行）：
+    3D fix 但精度/卫星数略差，只融合速度、位置噪声放大为近似关闭
+    （\code{applyDowngradedGnssUpdate}，第 297--324 行：$\sigma_p = 10^4$\,m
+    等价于关闭位置融合，避免弱 GNSS 位置拉偏原点）。
+\end{itemize}
+
+\subsection{GNSS 动态权重 R}
+
+\code{Icm45686ComputeGnssDynamicWeights}（\file{ins\_gnss\_dynamic\_weight.h}）
+把接收机自报精度经 clamp 与 pDOP 缩放映射为 EKF 量测噪声：
+\begin{equation}
+  \sigma_{eff} = \eta_{pdop}\,\operatorname{clamp}_{(floor,\ cap)}
+    \left(\sigma_{rx}\right),
+  \qquad
+  \eta_{pdop} = \begin{cases}
+    pDOP / pDOP_{ref}, & pDOP > pDOP_{ref}, \\
+    1, & \text{否则},
+  \end{cases}
+  \label{eq:gnss-dynamic-weight}
+\end{equation}
+其中 $pDOP_{ref} = 2.0$。floor/cap 配置
+（\code{kGnssDwCfg}，\file{navigation\_task.cpp} 第 171--181 行）见
+\cref{tab:gnss-dw}。v\_acc 或 s\_acc 未报告（$\le0$）时用 $h\_acc\times1.5$
+回退（第 90--93 行）。与旧``硬门限一刀切''不同，该方案只做连续衰减不丢弃
+完整帧，EKF 内部 NIS 门控仍作为最后防线（第 17--18 行注释）。
+
+\begin{table}[H]
+\centering
+\caption{GNSS 动态权重配置（\code{kGnssDwCfg}）}
+\label{tab:gnss-dw}
+\small
+\begin{tabularx}{\textwidth}{@{}L{5.2cm}L{4.6cm}X@{}}
+\toprule
+\textbf{通道} & \textbf{floor / cap} & \textbf{说明} \\
+\midrule
+水平位置 $\sigma_{pNE}$ & 2.0 / 30 m & pDOP 缩放 \\
+垂直位置 $\sigma_{pD}$ & 3.0 / 50 m & 垂直精度通常低于水平 \\
+水平速度 $\sigma_{vNE}$ & 0.15 / 3.0 m/s & — \\
+垂直速度 $\sigma_{vD}$ & 0.25 / 3.0 m/s & — \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{remark}
+动态权重的核心价值在于把``接收机当前时刻的质量''连续编码进 R：卫星数下降、
+pDOP 恶化时 R 增大、融合权重自动降低，而不是在阈值处硬切换。这在弱信号
+环境下避免了滤波增益的跳变。
+\end{remark}
+
+\subsection{重锚定逻辑}
+
+首次 GNSS 重锚定的判定（\file{ins\_gnss\_epoch\_timing.h}
+\code{InsGnssShouldReanchor}，第 18--30 行）要求同时满足：
+\begin{itemize}
+  \item 有 epoch 且通过全质量检查；
+  \item 时间映射有效且量测年龄 $\le$ 150\,ms（\code{GNSS\_FIRST\_REANCHOR\_MAX\_AGE\_S}）；
+  \item 初始化时用了假原点且尚无真实锚点。
+\end{itemize}
+满足后执行 \code{reanchorNavigationToGnss}（第 8.6 节）。DETA100 外置导航
+在线时，同样以首次 3D fix 的 LLA 重设原点（第 1278--1314 行）。
+
+\subsection{输出桥接：EKF / 备用 AHRS / DETA100}
+
+输出桥接策略（第 1257--1422 行）：
+\begin{itemize}
+  \item \textbf{DETA100 在线}：直接透传其姿态/位置，EKF 后台预测作为无缝备份
+    （第 1262--1327 行）；EKF 结果不覆盖全局变量，仅同步 \code{icm\_*} 辅助
+    变量；
+  \item \textbf{内置 EKF 模式}：EKF 始终作为唯一姿态输出源
+    （\code{use\_ekf\_attitude\_output=true}），不按 GNSS 状态回退到 Madgwick
+    ——无 GNSS 时靠静止辅助与 AHRS 姿态量测持续闭环修正（第 1330--1345 行）；
+  \item \textbf{EKF 未初始化}：用备用 AHRS（Madgwick）填充，避免飞控读到空值
+    （第 1412--1422 行）。
+\end{itemize}
+桥接同时导出 WGS-84 当地重力（Somigliana，低通 $\tau\approx1$\,s、范围检查
+[9.0, 10.5]、与回退值偏差限幅 $\pm0.5$）供控制律消费（第 1352--1379 行）。
+
+\begin{remark}
+\textbf{AHRS 航向偏置慢校正}（第 1177--1200 行）是切换连续性的关键：GNSS 有效
+时以每帧不超过 $\pm0.0025$\,rad（200\,Hz 下约 28.6\,°/s）的步长把备用 AHRS
+的 yaw 偏置向 EKF 对齐。GNSS 丢失后 AHRS 接管时航向基准已对齐，避免硬切换
+跳变。DETA100 在线时同样用其航向校正备用 AHRS。
+\end{remark}
+
+\subsection{独立垂直滤波器（VerticalKF\_2State）}
+
+\subsubsection{模型}
+
+2 状态（高度+速度）卡尔曼滤波，状态 $x = [h,\ v]\T$：
+\begin{equation}
+  x_k = \underbrace{\begin{bmatrix} 1 & dt \\ 0 & 1 \end{bmatrix}}_{\m{F}}
+    x_{k-1} + \underbrace{\begin{bmatrix} \tfrac12 dt^2 \\ dt \end{bmatrix}}_{\m{G}}
+    a_{z,k} + \vp{w}_k,
+  \label{eq:vkf-model}
+\end{equation}
+观测矩阵 $H = [1,\ 0]$（观测高度）。过程噪声
+$\m{Q} = \diag(q_{pos},\ q_{vel})$（\file{VerticalKF\_2State.h} 第 154--157 行）。
+该模型移除加速度零偏状态，适用于零偏小且稳定、或动态激励不足的场景
+（第 12--23 行注释）。
+
+\subsubsection{鲁棒性特性}
+
+垂直 KF 保留四类鲁棒性（第 119--311 行）：
+\begin{itemize}
+  \item 输入加速度饱和 $\pm20$\,m/s²（\code{max\_input\_accel}）；
+  \item 量测 N-sigma 门控（默认 3$\sigma$，$y^2 > n^2 S$ 拒绝）；
+  \item Joseph 形式协方差更新；
+  \item 协方差对角限制 $P_{hh}\in[10^{-6}, 100]$、$P_{vv}\in[10^{-4}, 25]$。
+\end{itemize}
+
+\subsubsection{任务集成}
+
+\code{handleVerticalEstimation}（第 1583--1674 行）将机体系比力旋转到 NED、
+去重力后取天向分量作为预测输入；更新按优先级选择激光测距（暂时禁用，第
+1645 行）或气压计（降采样至 50\,Hz，第 1658--1664 行）。输出写入
+\code{vfk\_height/vfk\_velocity} 供地面站对比 EKF 与独立 VKF 的一致性；控制律
+仍消费 EKF 输出（第 1667--1673 行注释）。
+
+\subsubsection{稳态行为与带宽分析}
+
+垂直 KF 在恒定采样率下存在解析稳态解。令
+$\m{Q} = \diag(0,\ q_v)$（速度过程噪声为主），位置观测频率 $f$、噪声
+$\sigma_h$。稳态卡尔曼增益 $\m{K}_\infty = [K_1,\ K_2]\T$ 由离散代数黎卡提
+方程求解，其闭环特性可用等效\textbf{二阶低通}刻画：
+\begin{equation}
+  \frac{\hat{h}(s)}{h(s)} = \frac{\omega_n^2}{s^2 + 2\zeta\omega_n s + \omega_n^2},
+  \qquad
+  \frac{\hat{v}(s)}{h(s)} = \frac{\omega_n^2 s}{s^2 + 2\zeta\omega_n s + \omega_n^2}.
+  \label{eq:vkf-transfer}
+\end{equation}
+其中自然频率与阻尼比近似为
+\begin{equation}
+  \omega_n \approx \sqrt{\frac{K_1 f}{dt}},\qquad
+  \zeta \approx \frac{K_2 + K_1}{2\sqrt{K_1}},
+  \label{eq:vkf-bandwidth}
+\end{equation}
+增益 $K_1$、$K_2$ 随 $q_v/\sigma_h^2$ 增大而增大。工程含义：
+\begin{itemize}
+  \item $q_v$ 大（加速度不可信/振动强）时 $\omega_n$ 升高、带宽增大，估计
+    更跟踪传感器但噪声大；$q_v$ 小则更平滑但滞后大；
+  \item 位置观测噪声 $\sigma_h$ 增大时增益下降、带宽收窄——与
+    \cref{eq:info-rate-pos} 的信息论结论一致；
+  \item 速度估计是高度估计的\textbf{微分输出}（\cref{eq:vkf-transfer} 第二式
+    的 $s$ 因子），故其高频噪声放大——这正是固件对气压计差分速度加
+    \code{estimatedVerticalVelocityFilter} 低通的原因（第 1577--1579 行）。
+\end{itemize}
+固件的协方差限制 $P_{hh}\le100$、$P_{vv}\le25$ 等效于约束增益上限，防止
+滤波器在低噪声观测下变得过于``尖锐''。
+
+\subsubsection{与主滤波器 EKF 的关系}
+
+垂直 KF 与主 EKF 并行运行、不互相耦合：EKF 的垂直通道（$\delta p_D$、
+$\delta v_D$、$\delta b_{a,D}$ 的 3 状态）提供带零偏估计的高精度垂直解，垂直
+KF 的 2 状态模型（无零偏）作为独立备份。两者差异（\code{vfk\_*} vs.\
+\code{estimated\_*}）可作为 EKF 垂直通道健康度的在线诊断：若长期偏差超过
+阈值，提示 EKF 垂直零偏收敛异常或气压计基准漂移。
+
+\subsection{独立水平滤波器（HorizontalKF）}
+
+\subsubsection{模型}
+
+北/东各一轴 2 状态滤波器，状态 $x = [p,\ v]\T$，观测为\textbf{速度}
+（$H = [0,\ 1]$）——与垂直 KF 的``观测位置''不同，位置由速度积分得出
+（\file{HorizontalKF.h} 第 14--25 行注释）。预测输入为 NED 水平加速度
+（旋转+去重力），观测为光流速度（旋转到 NED，第 1734--1736 行）。
+观测噪声动态增加：$\sigma_{flow} = \sigma_0 + 0.1\,\|\vp{v}_{flow}\|$
+（\file{navigation\_task.cpp} 第 1743--1745 行），速度越快光流越抖。
+
+\subsubsection{光流速度的机体系到 NED 旋转}
+
+光流传感器输出机体平面内的平移速度 $(\dot{x}_b,\ \dot{y}_b)$
+（已做旋转补偿）。旋转到 NED 需当前航向 $\psi$：
+\begin{equation}
+  \begin{bmatrix} v_N \\ v_E \end{bmatrix}
+  = \underbrace{\begin{bmatrix} \cos\psi & -\sin\psi \\
+      \sin\psi & \cos\psi \end{bmatrix}}_{\m{R}_z(\psi)}
+    \begin{bmatrix} \dot{x}_b \\ \dot{y}_b \end{bmatrix}.
+  \label{eq:flow-rot}
+\end{equation}
+固件 \code{bodyToNed}（第 1736 行）按 \cref{eq:flow-rot} 实现，航向取自
+EKF/AHRS 输出（\code{AHRS\_Packet.Heading}）。\cref{eq:flow-rot} 对航向误差
+的敏感性为
+\begin{equation}
+  \frac{\partial}{\partial\psi}\left[\m{R}_z(\psi)\vp{v}_b\right]
+  = \m{R}_z(\psi + \tfrac{\pi}{2})\vp{v}_b,
+  \qquad
+  \left\|\delta\vp{v}^{ned}\right\| \le \|\vp{v}_b\|\,\delta\psi,
+  \label{eq:flow-yaw-sens}
+\end{equation}
+即 8\,m/s 巡航下 $1°$ 航向误差引入 0.14\,m/s 的速度量测偏差——水平 KF 的
+精度上限由航向精度决定，这解释了为什么双矢量航向融合（第 9.8 节）对光流
+定位系统至关重要。
+
+\subsubsection{水平 KF 的任务角色与漂移特性}
+
+水平 KF 的位置通道无绝对观测（只有速度），故位置为\textbf{随机游走}：
+\begin{equation}
+  P_{pp}(t) \approx P_{pp}(0) + q_{vel}^2\,t
+  \qquad\text{（速度白噪声积分）},
+  \label{eq:hkf-drift}
+\end{equation}
+其方差随 $t$ 线性增长。固件将水平 KF 定位为\textbf{光流融合后备}而非主链路
+（第 1758--1768 行注释），正是为了避免该漂移污染 EKF 的 relative 输出。
+\code{AUTO\_POSITION} 模式可切换使用 \code{fused\_north/east}，适用于短时
+光流定位（定点悬停），但长期使用需光流+高度持续有效以抑制漂移。
+
+\subsubsection{无 GNSS 时的水平备份价值}
+
+在 GNSS 丢失且光流有效时，水平 KF 输出
+$(\hat p_N,\ \hat v_N,\ \hat p_E,\ \hat v_E)$ 提供短时水平位置保持能力
+（配合垂直 KF 的高度保持），使飞行器在 GNSS 恢复前维持粗略定点。其精度
+受 \cref{eq:hkf-drift} 限制（分钟级漂移米级），与 EKF 的绝对位置形成互补：
+EKF 负责 GNSS 可用时的精度，水平 KF 负责 GNSS 短暂丢失时的可用性。
+
+\subsection{双矢量航向融合}
+
+\code{handleDualVectorYawFusion}（第 382--503 行）利用 GPS 地速矢量与光流机体
+速度矢量几何解算真实航向：
+\begin{equation}
+  \psi_{est} = \underbrace{\operatorname{atan2}(v_{E,gps},\ v_{N,gps})}_{\text{航迹角}}
+    - \underbrace{\operatorname{atan2}(v_{y,flow},\ v_{x,flow})}_{\text{侧滑角}},
+  \label{eq:dual-vector-yaw}
+\end{equation}
+其物理依据是：航迹角 = 真实航向 + 侧滑角。三道防御门控：
+\begin{itemize}
+  \item \textbf{低速保护}：$v < 1.0$\,m/s 跳过（atan2 对噪声敏感）；
+  \item \textbf{大机动保护}：$|\omega_z| > 0.35$\,rad/s 跳过（时间同步误差与
+    安装臂效应在转弯时放大）；
+  \item \textbf{尺度一致性}：$|v_{flow}/v_{gps} - 1| > 0.35$ 跳过（光流高度
+    可能有误，如飞过障碍物上方）。
+\end{itemize}
+动态噪声模型（第 478--487 行）：
+\begin{equation}
+  \sigma_{yaw}(v) = \max\left(\frac{0.08}{v - 1.0 + 1.0},\ 0.03\right),
+  \label{eq:yaw-dyn-noise}
+\end{equation}
+飞得越快解算越准、EKF 越信任。融合通过第 6.5 节的标量航向更新入口执行。

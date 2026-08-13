@@ -1,0 +1,42 @@
+\begin{figure}[H]
+\centering
+\resizebox{0.94\linewidth}{!}{%
+\begin{tikzpicture}[>=Stealth,
+  node distance=8mm and 5.5mm,
+  box/.style={draw=black!65, fill=black!5, rounded corners=2pt, minimum width=22mm, minimum height=14mm, text width=20mm, align=center, font=\footnotesize\sffamily, inner sep=2.5pt},
+  smallbox/.style={draw=black!55, fill=black!3, rounded corners=2pt, minimum width=18mm, minimum height=12mm, text width=16mm, align=center, font=\footnotesize\sffamily, inner sep=2pt},
+  arrow/.style={->, draw=black!75, line width=.8pt, >={Stealth[length=2.4mm]}},
+  feedback/.style={->, draw=blue!65!black, line width=.8pt, >={Stealth[length=2.4mm]}},
+  disturbance/.style={->, densely dashed, draw=orange!80!black, line width=.8pt, >={Stealth[length=2.4mm]}},
+  group/.style={draw=red!45!black, densely dashed, rounded corners=4pt, fill=red!3, inner sep=4mm},
+  annot/.style={font=\scriptsize\sffamily, fill=white, inner sep=1pt},
+]
+  \node[box, draw=blue!55!black, fill=blue!5] (input) {操纵/上层指令\\$\omega_0,\delta_t$\\$\delta_f,\Delta\omega$};
+  \node[box, draw=red!55!black, fill=red!5, minimum width=25mm, text width=23mm, right=of input] (sas) {SAS增稳控制\\角速率阻尼\\姿态$P+I$/速率闭环};
+  \node[smallbox, right=of sas] (limit) {物理限幅\\$\delta_{\max}$\\$\Delta\omega_{\max}$};
+  \node[box, draw=green!45!black, fill=green!5, minimum width=24mm, text width=22mm, right=of limit] (act) {执行器模型\\电机一阶滞后\\摆角/差速理想瞬时};
+  \node[box, minimum width=24mm, text width=22mm, right=of act] (map) {非线性六维\\推力映射\\$\bm F_b,\bm M_b$};
+  \node[box, draw=orange!65!black, fill=orange!6, minimum width=24mm, text width=22mm, right=of map] (plant) {六自由度对象\\Newton--Euler\\四元数运动学};
+
+  \draw[arrow] (input) -- (sas);
+  \draw[arrow] (sas) -- (limit);
+  \draw[arrow] (limit) -- (act);
+  \draw[arrow] (act) -- (map);
+  \draw[arrow] (map) -- (plant);
+  \draw[arrow] (plant.east) -- ++(.8,0) node[annot, right=1pt] {飞行状态};
+
+  \node[smallbox, draw=blue!45!black, fill=blue!4, minimum width=22mm, text width=20mm, below=14mm of plant] (sensor) {理想状态反馈\\$p,q,r,\phi,\theta$};
+  \draw[feedback] (plant.south) -- node[annot, right] {真实状态} (sensor.north);
+  \draw[feedback] (sensor.west) -- ++(-.65,0) |- node[annot, pos=.32, below] {测量反馈} (sas.south);
+
+  \node[font=\footnotesize\sffamily, text=orange!80!black, above=10mm of plant] (dist) {气动扰动与外力矩};
+  \draw[disturbance] (dist) -- (plant.north);
+
+  \begin{scope}[on background layer]
+    \node[group, fit=(sas)(sensor), label={[font=\footnotesize\sffamily\bfseries, text=red!55!black]below:SAS闭环}] {};
+  \end{scope}
+\end{tikzpicture}%
+}
+\caption{依据Web主循环重绘的级联控制架构。主信号依次经过SAS、物理限幅、执行器模型、六维映射和刚体动力学；当前实现只有电机转速一阶滞后，摆角与差速按理想瞬时指令处理。蓝色回路是当前代码直接使用的理想状态反馈，不代表已实现IMU或状态估计器；其中 $\theta$ 遵循现行显示符号约定。}
+\label{fig:control_architecture}
+\end{figure}

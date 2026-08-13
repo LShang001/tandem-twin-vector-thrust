@@ -1,0 +1,222 @@
+% ===========================================================================
+%  第 3 章 地球模型
+% ===========================================================================
+\section{地球模型与大地参考}
+
+捷联惯导在地理坐标系（NED）中积分时，需要地球的几何与物理参数：曲率半径
+（用于经纬高变化率）、正常重力（用于比力到线加速度的分解）、地球自转与导航系
+转动（用于角速度补偿）。固件将地球模型集中封装在 \file{earth\_model.h} 与
+\file{ekf\_15\_state.h} 的 \code{ComputeEarthModelTerms} /
+\code{ComputeLlaRateGeometryTerms} 中，并采用 \code{double} 中间量以保证
+绝对位置精度（\file{ekf\_15\_state.h} 第 3961 行注释说明 float32 在
+$\sim113°$ 经度处约 0.75\,m 一跳）。本章给出这些模型的完整推导。
+
+\subsection{WGS-84 椭球几何}
+
+WGS-84 地球椭球以长半轴 $a_e = 6378137.0$\,m 与第一偏心率平方
+$e^2 = 6.69437999014\times10^{-3}$ 定义。设纬度为 $\varphi$（弧度）、椭球高为
+$h$，则椭球面上一点的\textbf{卯酉圈曲率半径}（prime vertical, 沿东西向）与
+\textbf{子午圈曲率半径}（meridional, 沿南北向）为
+\begin{align}
+  R_N &= \frac{a_e}{\sqrt{1 - e^2\sin^2\varphi}},
+  \label{eq:rn} \\
+  R_M &= \frac{a_e\,(1 - e^2)}
+    {\left(1 - e^2\sin^2\varphi\right)^{3/2}}.
+  \label{eq:rm}
+\end{align}
+固件实现 \code{ComputeLlaRateGeometryTerms}（\file{ekf\_15\_state.h} 第
+2047--2061 行）与 \code{ComputeEarthModelTerms}（第 2063--2103 行）均按
+\cref{eq:rn}--\cref{eq:rm} 计算，并缓存 $\sin\varphi$、$\cos\varphi$、
+$\tan\varphi$ 及平均半径
+\begin{equation}
+  R_{mean} = \sqrt{R_N R_M}.
+  \label{eq:mean-radius}
+\end{equation}
+
+\cref{tab:wgs84} 汇总 WGS-84 椭球与重力参数及其在固件中的对应宏/常量。
+
+\begin{table}[H]
+\centering
+\caption{WGS-84 椭球与地球物理参数（固件 \file{earth\_model.h} / \file{constants.h}）}
+\label{tab:wgs84}
+\small
+\begin{tabularx}{\textwidth}{@{}L{5.4cm}C{3.4cm}C{3.4cm}X@{}}
+\toprule
+\textbf{参数} & \textbf{符号} & \textbf{数值} & \textbf{固件宏/常量} \\
+\midrule
+长半轴 & $a_e$ & 6378137.0 m & \code{SEMI\_MAJOR\_AXIS\_LENGTH\_M} \\
+第一偏心率平方 & $e^2$ & $6.69437999014\times10^{-3}$ & \code{ECC2} \\
+地球自转角速率 & $\omega_e$ & $7.2921151467\times10^{-5}$ rad/s & \code{WE\_RADPS} \\
+赤道正常重力 & $\gamma_e$ & 9.780318 m/s² & \code{Somigliana} 系数 \\
+椭球重力扁率项 & $\beta$ & $5.3024\times10^{-3}$ & \code{Somigliana} 系数 \\
+重力二阶项 & $\beta_2$ & $-5.898\times10^{-6}$ & \code{Somigliana} 系数 \\
+标准重力 & $g_0$ & 9.80665 m/s² & \code{G\_MPS2}（回退值）\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{remark}
+纬度接近极点时 $\cos\varphi \to 0$，固件以 \code{MAX\_ABS\_ALT\_M=1e5} 与
+\code{MIN\_COS\_LAT=1e-3} 限制输入范围（\file{ekf\_15\_state.h} 第
+1689--1711 行），避免 $\tan\varphi$ 与 $1/\cos\varphi$ 溢出；运行期对
+$\cos\varphi$ 再次做绝对值下界保护（第 2071--2074 行）。
+\end{remark}
+
+\subsection{重力异常的讨论}
+
+\cref{eq:somigliana} 的 Somigliana 公式描述\textbf{正常重力}（参考椭球面
+上的理论值），与实测重力（含大地水准面起伏、地壳密度异常）存在偏差——即
+\textbf{重力异常}。对飞行器导航：
+\begin{itemize}
+  \item 重力异常的空间尺度在数十公里以上，幅度约 $10^{-3}$--$10^{-2}$\,m/s$^2$
+    量级（山区更显著），其对短时飞行的姿态估计影响可忽略，但对长航时高精度
+    惯导（如惯性导航系统连续数十分钟）会产生可积累的位置误差；
+  \item 本飞行器为近地低速 VTOL（飞行范围 $<$公里级、航时 $<$30\,min），
+    重力异常误差远小于 GNSS 观测噪声与 MEMS 零偏误差，正常重力模型
+    \cref{eq:somigliana}--\cref{eq:gravity-alt} 已足够；
+  \item 固件第 1352--1379 行对导出重力做低通滤波并限幅
+    $[9.0,\ 10.5]$\,m/s$^2$，正是针对异常定位数据/重锚定瞬态的保护，而非
+    重力异常本身。
+\end{itemize}
+
+\subsection{Somigliana 正常重力}
+
+NED 系下的重力矢量沿地向（+D）。其模长随纬度与高度变化，固件采用
+WGS-84/GRS-80 的 Somigliana 闭式：
+\begin{equation}
+  g_0(\varphi) = 9.780318\left(1 + 5.3024\times10^{-3}\,\sin^2\varphi
+    - 5.898\times10^{-6}\,\sin^2 2\varphi\right),
+  \label{eq:somigliana}
+\end{equation}
+再以\textbf{反平方形式}修正高度：
+\begin{equation}
+  g(h) = \frac{g_0}{\left(1 + h/R_{mean}\right)^2}.
+  \label{eq:gravity-alt}
+\end{equation}
+\cref{eq:gravity-alt} 在 $h\ll R_{mean}$ 时展开为 $g \approx g_0(1 - 2h/R_{mean})$；
+对 $h<0$（低于椭球面）必须采用 $(1+h/R)^{-2}$ 而非 $(1+h/R)$ 形式，否则符号错误。
+固件在 \file{ekf\_15\_state.h} 第 2084--2097 行实现了 \cref{eq:somigliana}--
+\cref{eq:gravity-alt}，并在注释中特别说明与 \file{earth\_model.h} 的
+\code{normalgravity\_mps2()} 保持一致。纬度敏感性：$\partial g/\partial\varphi
+\sim 5\times10^{-3}$\,m/s$^2$/度，故 \file{navigation\_task.cpp} 第 1364 行对
+导出重力做 $\tau\approx1$\,s 低通滤波以抑制 LLA 噪声。
+
+\subsection{地球自转与导航系转动}
+
+\subsubsection{地球自转在 NED 系的投影}
+
+地球自转角速率 $\omega_e = 7.2921151467\times10^{-5}$\,rad/s 在 NED 系
+（$x$ 北、$y$ 东、$z$ 地）的投影为
+\begin{equation}
+  \vp{\omega}_{ie}^n = \begin{bmatrix}
+    \omega_e\cos\varphi \\ 0 \\ -\omega_e\sin\varphi
+  \end{bmatrix}.
+  \label{eq:earth-rate-ned}
+\end{equation}
+固件 \code{ComputeEarthModelTerms} 第 2099--2101 行即按 \cref{eq:earth-rate-ned}
+缓存 \code{earth\_rate\_ned\_radps}。
+
+\subsubsection{导航系转动（传输速率）}
+
+NED 导航系相对地球的转动角速率（transport rate）由速度与曲率半径决定：
+\begin{equation}
+  \vp{\omega}_{en}^n = \begin{bmatrix}
+    \dfrac{v_E}{R_N + h} \\[1ex]
+    -\dfrac{v_N}{R_M + h} \\[1ex]
+    -\dfrac{v_E\tan\varphi}{R_N + h}
+  \end{bmatrix}.
+  \label{eq:nav-rate}
+\end{equation}
+固件 \code{ComputeNavRateFromTerms}（\file{ekf\_15\_state.h} 第 2131--2141 行）
+按 \cref{eq:nav-rate} 实现。惯导解算中需要同时补偿两项：
+\begin{itemize}
+  \item \textbf{角速度补偿}：陀螺在机体系测得相对惯性系的角速度，减去导航系
+    相对惯性系转动在机体系的投影后才是相对 NED 的姿态变化率：
+    \begin{equation}
+      \vp{\omega}_{nb}^b = \vp{\omega}_{ib}^b
+        - \m{C}_n^b\left(\vp{\omega}_{ie}^n + \vp{\omega}_{en}^n\right);
+      \label{eq:omega-nb}
+    \end{equation}
+  \item \textbf{科氏/向心加速度补偿}：比力方程中
+    \begin{equation}
+      \dot{\vp{v}}^n = \m{C}_b^n\vp{f}^b + \vp{g}^n
+        - \left(2\vp{\omega}_{ie}^n + \vp{\omega}_{en}^n\right)\cross\vp{v}^n.
+      \label{eq:coriolis}
+    \end{equation}
+\end{itemize}
+固件 \code{PropagateStateFromIncrements} 中第 2269--2276 行分别实现
+\cref{eq:omega-nb} 的导航系旋转增量（\code{nav\_frame\_delta\_theta\_rad}）与
+\cref{eq:coriolis} 的科氏加速度（\code{coriolis\_accel\_mid\_ned}）。
+
+\begin{remark}
+\textbf{静止初始化时的地球自转分离}：\file{ekf\_15\_state.h} 第 613--622 行在
+\code{Initialize()} 中先按 \cref{eq:omega-nb} 计算静止时陀螺应测得的物理角速度
+$\m{C}_n^b(\vp{\omega}_{ie}^n + \vp{\omega}_{en}^n)$，再将其从静止读数中分离
+得到陀螺零偏：
+\begin{equation}
+  \vp{b}_g = \vp{\omega}_{ib,0}^b - \m{C}_n^b\left(\vp{\omega}_{ie}^n
+    + \vp{\omega}_{en}^n\right).
+  \label{eq:init-gyro-bias}
+\end{equation}
+若直接把完整静止读数当零偏扣掉，后续传播中又补偿导航系转动，就会在无 GNSS
+静止/低动态时产生慢姿态漂移（固件注释明确记录了这一坑）。
+\end{remark}
+
+\subsection{经纬高（LLA）运动学}
+
+NED 速度到经纬高变化率的几何关系为
+\begin{equation}
+  \dot{\varphi} = \frac{v_N}{R_M + h},
+  \qquad
+  \dot{\lambda} = \frac{v_E}{(R_N + h)\cos\varphi},
+  \qquad
+  \dot{h} = -v_D.
+  \label{eq:lla-rate}
+\end{equation}
+固件 \code{ComputeLlaRateFromTerms}（\file{ekf\_15\_state.h} 第 2105--2129 行）
+按 \cref{eq:lla-rate} 实现，其中高度微分取 $\dot{h} = -v_D$ 与 NED 地向为正的
+约定一致。\file{ekf\_15\_state.h} 第 2303--2307 行在位置推进中使用\textbf{速度
+中点}计算 LLA 变化率（梯形积分），并保持 \code{double} 中间量。
+
+\subsection{LLA 到 NED 的新息换算}
+
+GNSS 位置量测以经纬高给出，而误差状态的前三维是 NED 位置误差。量测更新时需将
+``GNSS LLA 相对预测 LLA''的差转换为 NED 位移。固件使用库函数
+\code{lla2ned(gnss\_lla, pred\_lla, RAD)}（\file{ekf\_15\_state.h} 第 876--877
+行）。对局部小范围，其一阶形式为
+\begin{equation}
+  \vp{y}_{pos}^n = \begin{bmatrix}
+    (R_M + h)(\varphi_{gps} - \varphi_{pred}) \\
+    (R_N + h)\cos\varphi_{pred}\,(\lambda_{gps} - \lambda_{pred}) \\
+    -(h_{gps} - h_{pred})
+  \end{bmatrix}.
+  \label{eq:lla2ned}
+\end{equation}
+固件注释（第 871--875 行）强调：\code{gnss\_lla} 与 \code{hist\_lla} 均以弧度
+传入，若误按角度解释，新息会被缩小 $\pi/180$ 倍且旋转矩阵建在错误纬度上。
+
+\subsection{误差状态地球模型项汇总}
+
+\cref{tab:earth-terms} 汇总了误差状态线性化（第 5 章）与传播（第 4 章）所需的地球
+模型项及其在固件中的位置。
+
+\begin{table}[H]
+\centering
+\caption{地球模型项与固件位置对照}
+\label{tab:earth-terms}
+\small
+\begin{tabularx}{\textwidth}{@{}L{4.6cm}L{5.4cm}X@{}}
+\toprule
+\textbf{地球模型项} & \textbf{表达式} & \textbf{固件位置} \\
+\midrule
+卯酉圈曲率半径 & \cref{eq:rn} & \code{ComputeLlaRateGeometryTerms} / \code{ComputeEarthModelTerms} \\
+子午圈曲率半径 & \cref{eq:rm} & 同上 \\
+平均半径 & \cref{eq:mean-radius} & \code{ComputeEarthModelTerms}（重力高度修正、重力梯度）\\
+正常重力 & \cref{eq:somigliana}--\cref{eq:gravity-alt} & 第 2084--2097 行 \\
+地球自转 NED 投影 & \cref{eq:earth-rate-ned} & 第 2099--2101 行 \\
+传输速率 & \cref{eq:nav-rate} & \code{ComputeNavRateFromTerms} \\
+LLA 变化率 & \cref{eq:lla-rate} & \code{ComputeLlaRateFromTerms} \\
+重力梯度 $\partial g/\partial h$ & $2g/R_{mean}$（见 \cref{eq:f52}）& 第 2322 行 $F(5,2)$ \\
+\bottomrule
+\end{tabularx}
+\end{table}

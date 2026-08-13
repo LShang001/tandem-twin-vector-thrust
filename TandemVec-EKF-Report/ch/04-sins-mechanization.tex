@@ -1,0 +1,338 @@
+% ===========================================================================
+%  第 4 章 捷联惯导编排
+% ===========================================================================
+\section{捷联惯导编排}
+
+本章推导固件 \code{PropagateStateFromIncrements}（\file{ekf\_15\_state.h} 第
+2204--2621 行）中的全部机械编排数学：姿态、速度、位置的离散递推，双子样圆锥
+/划摇补偿，重力/科氏力中点补偿，以及导航系转动补偿。该函数同时是普通单子样
+时间更新（\code{TimeUpdate}）、双子样时间更新（\code{TimeUpdateTwoSample}）与
+GNSS 延迟回放重传播的统一内核（\file{ekf\_15\_state.h} 第 2213--2215 行注释）。
+
+\subsection{连续时间机械编排方程}
+
+以比力 $\vp{f}^b$ 与角速度 $\vp{\omega}_{ib}^b$ 为输入，连续时间捷联方程为
+\begin{align}
+  \dot{\m{C}}_b^n &= \m{C}_b^n\,\sk{\vp{\omega}_{nb}^b},
+  \label{eq:att-cont} \\
+  \dot{\vp{v}}^n &= \m{C}_b^n\vp{f}^b + \vp{g}^n
+    - \left(2\vp{\omega}_{ie}^n + \vp{\omega}_{en}^n\right)\cross\vp{v}^n,
+  \label{eq:vel-cont} \\
+  \dot{\vp{p}}_{lla} &= \vp{f}_{geo}(\vp{v}^n),
+  \label{eq:pos-cont}
+\end{align}
+其中 $\vp{\omega}_{nb}^b = \vp{\omega}_{ib}^b - \m{C}_n^b(\vp{\omega}_{ie}^n
++ \vp{\omega}_{en}^n)$ 见 \cref{eq:omega-nb}。\cref{eq:vel-cont} 中
+$-\left(2\vp{\omega}_{ie}^n + \vp{\omega}_{en}^n\right)\cross\vp{v}^n$ 为科氏
+与向心加速度。
+
+\subsection{双子样增量定义}
+
+设一个导航周期 $dt$ 内 IMU 输出两个子样增量：
+\begin{equation}
+  \Delta\vp{\theta}_1,\ \Delta\vp{\theta}_2 \in \mathbb{R}^3
+  \quad(\text{角增量, rad}), \qquad
+  \Delta\vp{v}_1,\ \Delta\vp{v}_2 \in \mathbb{R}^3
+  \quad(\text{速度增量, m/s}),
+  \label{eq:two-sample}
+\end{equation}
+分别对应前、后半周期。固件 \code{TimeUpdateTwoSample} 先将各子样减去零偏
+（第 716--723 行）：
+\begin{equation}
+  \Delta\tilde{\vp{\theta}}_i = \Delta\vp{\theta}_i - \vp{b}_g\,\frac{dt}{2},
+  \qquad
+  \Delta\tilde{\vp{v}}_i = \Delta\vp{v}_i - \vp{b}_a\,\frac{dt}{2},
+  \qquad i = 1,2.
+  \label{eq:bias-correction}
+\end{equation}
+再以平均值作为等效 IMU 读数：
+\begin{equation}
+  \tilde{\vp{\omega}}_{ib}^b = \frac{\Delta\tilde{\vp{\theta}}_1
+    + \Delta\tilde{\vp{\theta}}_2}{dt}, \qquad
+  \tilde{\vp{f}}^b = \frac{\Delta\tilde{\vp{v}}_1
+    + \Delta\tilde{\vp{v}}_2}{dt}.
+  \label{eq:avg-increments}
+\end{equation}
+
+\subsection{圆锥补偿（Coning）}
+
+\subsubsection{问题的物理来源}
+
+刚体在振动环境下绕两个正交轴同时施加不同频率的角振动时，即使振动角速度均值为
+零，合成的姿态仍会沿第三个轴产生净漂移——这一现象称为\textbf{圆锥效应}
+（coning effect）。对单子样积分，若直接以 $\Delta\vp{\theta} =
+\Delta\vp{\theta}_1 + \Delta\vp{\theta}_2$ 推进四元数，会漏掉子样间的姿态旋转
+耦合。双子样圆锥补偿项的标准形式为
+\begin{equation}
+  \Delta\vp{\theta}_{coning} = \frac{2}{3}\,\Delta\vp{\theta}_1
+    \cross \Delta\vp{\theta}_2.
+  \label{eq:coning-2s}
+\end{equation}
+固件 \code{PropagateStateFromIncrements} 第 2218--2223 行在双子样路径使用
+\cref{eq:coning-2s}；单子样路径则采用\textbf{流式}（streaming）修正
+\begin{equation}
+  \Delta\vp{\theta}_{coning,1s} = \frac{1}{12}\,\vp{\theta}_{prev}
+    \cross \Delta\vp{\theta},
+  \label{eq:coning-1s}
+\end{equation}
+其中 $\vp{\theta}_{prev}$ 为上一导航周期的角增量（第 2619--2620 行更新）。
+修正后的等效旋转矢量为
+\begin{equation}
+  \vp{\theta}_{coning} = \Delta\vp{\theta}
+    + \frac{2}{3}\,\Delta\vp{\theta}_1\cross\Delta\vp{\theta}_2
+  \qquad(\text{双子样}).
+  \label{eq:theta-coning}
+\end{equation}
+
+\subsubsection{二阶精度的说明}
+
+对双子样算法，设子样间隔 $dt/2$ 内角速度按线性变化，则
+\cref{eq:coning-2s} 使等效旋转矢量达到 $dt^3$ 阶精度（相对单子样 $dt$ 阶），
+与 Savage 的双子样圆锥算法一致 \cite{Savage1998}。
+
+\subsubsection{经典圆锥运动的解析解}
+
+为量化圆锥补偿的必要性，考虑经典圆锥运动：机体绕导航系两个正交轴以同频率
+$\Omega$ 振动，角速度为
+\begin{equation}
+  \vp{\omega}(t) = \begin{bmatrix}
+    a\Omega\cos(\Omega t) \\ b\Omega\sin(\Omega t) \\ 0
+  \end{bmatrix},
+  \label{eq:coning-motion}
+\end{equation}
+其中 $a$、$b$ 为振动幅值（小量）。该运动合成的姿态会绕第三轴（$z$）以
+恒定角速率\textbf{锥漂移}：
+\begin{equation}
+  \dot{\psi}_{coning} = \frac{ab\,\Omega}{2},
+  \label{eq:coning-rate}
+\end{equation}
+其物理根源是振动轴间的旋转耦合在均值意义上不可交换。
+
+推导：由 \cref{eq:coning-motion}，在一个周期内
+\begin{equation}
+  \int_0^{2\pi/\Omega} \vp{\omega}\,dt = \m{0},
+  \label{eq:coning-zero-mean}
+\end{equation}
+平均角速度为零，但姿态变化由四元数（非线性）积分决定。将旋转矢量微分方程
+\begin{equation}
+  \dot{\vp{\theta}} = \vp{\omega}
+    + \frac{1}{2}\vp{\theta}\cross\vp{\omega}
+    + \frac{1}{\theta^2}\left(1 - \frac{\theta\sin\theta}{2(1-\cos\theta)}\right)
+      \vp{\theta}\cross(\vp{\theta}\cross\vp{\omega})
+  \label{eq:rotation-vector-dyn}
+\end{equation}
+取二阶近似并代入 \cref{eq:coning-motion}，对时间平均得
+\begin{equation}
+  \dot{\vp{\theta}}_{avg} = \frac{1}{2}\,
+  \overline{\vp{\theta}\cross\vp{\omega}} = \frac{ab\,\Omega}{2}\,\hat{\vp{z}},
+  \label{eq:coning-drift-derivation}
+\end{equation}
+即 \cref{eq:coning-rate}。该漂移不被平均角速度捕获，必须通过子样间的
+叉积项 \cref{eq:coning-2s} 显式补偿。
+
+\subsubsection{双子样补偿的误差分析}
+
+对 \cref{eq:coning-motion} 在 $dt$ 内取双子样，精确锥漂移
+$\dot{\psi} = ab\Omega/2$，双子样算法 \cref{eq:theta-coning} 的等效旋转矢量
+误差为
+\begin{equation}
+  \delta\psi_{2s} \sim \frac{ab\,\Omega^3\,dt^2}{12}
+  \qquad\text{（相对误差 } \mathcal{O}(\Omega^2 dt^2)\text{）},
+  \label{eq:coning-2s-error}
+\end{equation}
+单子样（无补偿）的误差为
+\begin{equation}
+  \delta\psi_{1s} \sim \frac{ab\,\Omega^2\,dt}{4}
+  \qquad\text{（相对误差 } \mathcal{O}(\Omega\,dt)\text{）}.
+  \label{eq:coning-1s-error}
+\end{equation}
+两者比值 $\sim \Omega\,dt/3$。以典型共轴飞行器振动频率 $\Omega = 2\pi\times
+80$\,rad/s（共轴双桨主桨频）、$dt = 5$\,ms 计：
+\begin{equation}
+  \frac{\delta\psi_{1s}}{\delta\psi_{2s}} \sim \frac{\Omega\,dt}{3}
+  = \frac{2\pi\times80\times0.005}{3} \approx 0.84,
+  \label{eq:coning-ratio-num}
+\end{equation}
+即单子样误差约为双子样的 84\%，双子样补偿将锥漂移误差降低约 16\%。
+对更高频振动（$>$100\,Hz，桨叶通过频率），双子样的优势更显著。这正是固件在
+共轴双桨强振动环境下优先使用双子样路径（\file{navigation\_task.cpp} 第
+673--677 行）的定量依据。
+
+\subsection{划摇效应的解析模型}
+
+\subsubsection{划摇运动定义}
+
+划摇效应与圆锥对偶：机体绕 $x$ 轴角振动、沿 $y$ 轴线振动，且两者相位相差
+$\pi/2$ 时，比力在 $z$ 轴产生均值非零的净速度增量。典型划摇运动为
+\begin{equation}
+  \vp{\omega}(t) = \begin{bmatrix} A\omega\cos(\omega t) \\ 0 \\ 0 \end{bmatrix},
+  \qquad
+  \vp{f}(t) = \begin{bmatrix} 0 \\ B\omega\sin(\omega t) \\ 0 \end{bmatrix}.
+  \label{eq:sculling-motion}
+\end{equation}
+其产生的净速度增量为
+\begin{equation}
+  \Delta v_z = \frac{AB\,\omega}{2}\,T
+  \qquad\text{（$T$ 为积分时长）},
+  \label{eq:sculling-rate}
+\end{equation}
+即线振动与角振动的耦合在均值意义下产生恒定比力偏差。
+
+\subsubsection{数值量级}
+
+以共轴双桨飞行器为背景：$A = 0.05$\,rad（$\approx3°$ 摆角振动）、
+$B = 0.02$\,m/s（机体微线振动幅值）、$\omega = 2\pi\times80$\,rad/s，则
+\cref{eq:sculling-rate} 的等效比力偏差
+\begin{equation}
+  \Delta \bar{f} = \frac{AB\,\omega}{2} = \frac{0.05\times0.02\times
+    2\pi\times80}{2} \approx 0.25\ \text{m/s}^2,
+  \label{eq:sculling-num}
+\end{equation}
+与固件加计白噪声 $\sigma_{aw} = 0.25$\,m/s$^2$ 同量级！若不补偿，该偏差作为
+持续比力误差在 $t$ 秒内积累 $0.25\,t$\,m/s 的速度误差与 $\frac12\times
+0.25\,t^2$ 的位置误差（$10$\,s 即 $12.5$\,m）。双子样划摇补偿
+\cref{eq:sculling-2s} 将该偏差降至
+\begin{equation}
+  \delta(\Delta v)_{2s} \sim \frac{AB\,\omega^3\,dt^2}{12}
+  \approx 0.026\ \text{m/s per}\ dt,
+  \label{eq:sculling-2s-error}
+\end{equation}
+三个数量级削减。该分析解释了为何振动环境下的捷联解算必须显式补偿划摇——
+其等效比力偏差可与传感器白噪声相当，且是\textbf{持续定向}的（不可被滤波
+白化），只能靠算法消除。
+
+\begin{remark}
+\cref{eq:coning-ratio-num} 的评估基于固定 $dt$。若导航周期抖动（调度延迟），
+$dt$ 增大则单子样误差按 $dt$ 线性恶化而双子样按 $dt^2$ 恶化，双子样的鲁棒性
+优势在高频振动 + 调度抖动叠加时更为明显。
+\end{remark}
+
+\subsection{划摇补偿（Sculling）}
+
+速度增量在机体振动与旋转耦合下产生的非线性误差称为\textbf{划摇效应}
+（sculling effect）——陀螺角振动与加计线振动异相时，比力积分产生线性化无法
+解释的净速度误差。双子样划摇补偿为
+\begin{equation}
+  \Delta\vp{v}_{scull} = \frac{1}{2}\,\Delta\vp{\theta}\cross\Delta\vp{v}
+    + \frac{2}{3}\left(\Delta\vp{\theta}_1\cross\Delta\vp{v}_2
+    + \Delta\vp{v}_1\cross\Delta\vp{\theta}_2\right),
+  \label{eq:sculling-2s}
+\end{equation}
+单子样流式版本为
+\begin{equation}
+  \Delta\vp{v}_{scull,1s} = \frac{1}{2}\,\Delta\vp{\theta}\cross\Delta\vp{v}
+    + \frac{1}{12}\left(\vp{\theta}_{prev}\cross\Delta\vp{v}
+    + \Delta\vp{v}_{prev}\cross\Delta\vp{\theta}\right).
+  \label{eq:sculling-1s}
+\end{equation}
+固件第 2224--2235 行实现 \cref{eq:sculling-2s}--\cref{eq:sculling-1s}。
+
+\subsection{姿态推进}
+
+姿态推进分三步（固件第 2237--2293 行）：
+\begin{enumerate}
+  \item \textbf{半周期等效旋转}用于计算中点姿态矩阵（供速度推进使用）：
+    \begin{equation}
+      q_{mid} = q_{k-1}\otimes\Exp\left(\frac{1}{2}\vp{\theta}_{coning}\right);
+      \label{eq:quat-mid}
+    \end{equation}
+  \item \textbf{导航系转动补偿}：
+    \begin{equation}
+      \Delta\vp{\theta}_{nav}^n = -\left(\vp{\omega}_{ie}^n
+        + \vp{\omega}_{en}^n\right)dt,
+      \qquad
+      q_{nav} = \Exp\left(\Delta\vp{\theta}_{nav}^n\right);
+      \label{eq:nav-rotation}
+    \end{equation}
+  \item \textbf{合成推进}（导航系旋转左乘、机体旋转右乘，符合旋转合成次序）：
+    \begin{equation}
+      q_k = \left(q_{nav} \otimes q_{k-1} \otimes
+        \Exp(\vp{\theta}_{coning})\right)_{norm},
+      \label{eq:quat-propagate}
+    \end{equation}
+    并约定 $q_w < 0$ 时整体取反以保持唯一表示（第 2289--2293 行）。
+\end{enumerate}
+
+\begin{remark}
+\cref{eq:quat-propagate} 的左右次序不可颠倒：$q_{nav}$ 描述 NED 导航系相对
+惯性系的旋转，应先作用；$\Exp(\vp{\theta}_{coning})$ 描述机体相对 NED 的旋转，
+应后作用。两者次序颠倒将引入 $\mathcal{O}(\omega\,dt)$ 的姿态误差。
+\end{remark}
+
+\subsection{速度推进}
+
+速度推进使用\textbf{中点姿态}（第 2242--2245 行）旋转划摇补偿后的比力增量，
+并叠加中点重力与科氏加速度（第 2260--2300 行）：
+\begin{equation}
+  \Delta\vp{v}^n = \m{C}_{b,mid}^n\,\Delta\vp{v}_{scull}
+    + dt\left(\vp{g}_{mid}^n + \vp{a}_{coriolis,mid}^n\right),
+  \label{eq:vel-propagate}
+\end{equation}
+其中
+\begin{equation}
+  \vp{g}_{mid}^n = \begin{bmatrix} 0 \\ 0 \\ g(\varphi_{mid}, h_{mid}) \end{bmatrix},
+  \qquad
+  \vp{a}_{coriolis,mid}^n = -\left(2\vp{\omega}_{ie}^n
+    + \vp{\omega}_{en}^n\right)\cross\vp{v}_{k-1}^n.
+  \label{eq:mid-terms}
+\end{equation}
+中点位置按前一时刻 LLA 变化率推进半周期：
+\begin{equation}
+  \vp{p}_{lla,mid} = \vp{p}_{lla,k-1}
+    + \frac{dt}{2}\,\vp{f}_{geo}\left(\vp{v}_{k-1}^n\right).
+  \label{eq:lla-mid}
+\end{equation}
+速度最终更新为
+\begin{equation}
+  \vp{v}_k^n = \vp{v}_{k-1}^n + \Delta\vp{v}^n.
+  \label{eq:vel-update}
+\end{equation}
+
+\subsection{位置推进}
+
+位置推进采用\textbf{速度中点}（梯形积分，第 2303--2307 行）：
+\begin{equation}
+  \vp{v}_{mid}^n = \vp{v}_{k-1}^n + \frac{1}{2}\Delta\vp{v}^n,
+  \qquad
+  \vp{p}_{lla,k} = \vp{p}_{lla,k-1}
+    + dt\,\vp{f}_{geo}\left(\vp{v}_{mid}^n\right),
+  \label{eq:pos-propagate}
+\end{equation}
+其中 $\vp{f}_{geo}$ 由 \cref{eq:lla-rate} 给出。相较 Euler 积分（用端点速度），
+中点法将位置积分误差从 $\mathcal{O}(dt)$ 降至 $\mathcal{O}(dt^2)$。
+
+\subsection{单子样与双子样的统一}
+
+\code{TimeUpdate}（单子样）通过将第二子样置零复用同一内核
+（第 2187--2202 行）：
+\begin{equation}
+  \Delta\vp{\theta}_2 = \Delta\vp{v}_2 = \vp{0},
+  \qquad
+  \vp{\theta}_{coning,1s} = \Delta\vp{\theta}
+    + \frac{1}{12}\vp{\theta}_{prev}\cross\Delta\vp{\theta}.
+  \label{eq:single-sample-reduce}
+\end{equation}
+在无高频振动（静止/低动态）场景下，圆锥项趋近于零，两条路径行为一致；在强振动
+环境下，双子样路径因 \cref{eq:coning-2s} 与 \cref{eq:sculling-2s} 的
+$dt^3$ 阶补偿而显著更优。固件在导航任务中优先使用双子样（\file{navigation\_task.cpp}
+第 673--677 行判断子样计数与时间跨度有效性）。
+
+\subsection{IMU 数据降采样与双子样组装}
+
+\file{navigation\_task.cpp} 第 581--681 行实现 IMU 中断数据到双子样增量的组装：
+\begin{enumerate}
+  \item 200\,Hz 导航周期内，IMU 中断以更高频率（如 1\,kHz）累积角增量
+    $\Delta\vp{\theta}_{i}$ 与速度增量 $\Delta\vp{v}_{i}$；
+  \item 以导航周期中点为界，将样本分配到 $\Delta\vp{\theta}_1/\Delta\vp{v}_1$
+    （前半）与 $\Delta\vp{\theta}_2/\Delta\vp{v}_2$（后半）；
+  \item 单个样本跨越中点时按时间比例拆分（第 662--669 行），避免采样抖动破坏
+    双子样半周期定义。
+\end{enumerate}
+该组装保证了 \cref{eq:coning-2s} 中两个子样严格对应导航周期的前后半段，是圆锥
+补偿精度的前提。
+
+\begin{remark}
+导航周期 $dt$ 取 IMU 增量累计的真实时间跨度（\code{nav\_update\_dt\_s}，第
+679--681 行）而非主循环标称 5\,ms，并将该 $dt$ 同时用于 GNSS 延迟回放的快照
+时间对齐，避免调度抖动引入比例误差。
+\end{remark}

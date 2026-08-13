@@ -1,0 +1,179 @@
+% ===========================================================================
+%  附录 B  协方差传播的详细推导
+% ===========================================================================
+\section{协方差传播的详细推导}
+\label{app:covariance}
+
+本附录给出第 5.5 节协方差传播的完整数学推导：从连续时间误差动力学的谱密度
+到离散过程噪声 $\m{Q}_d$，再到 $\m{P}$ 递推与 Joseph 更新，并给出一个
+一维标量验证算例。
+
+\subsection{连续过程噪声的构造}
+
+\subsubsection{噪声输入矩阵与谱密度}
+
+由 \cref{eq:Gs} 与 \cref{eq:Rw}，连续过程噪声协方差矩阵
+$\m{Q}_c = \m{G}_s\m{R}_w\m{G}_s\T \in \mathbb{R}^{15\times15}$ 的块结构为
+\begin{equation}
+  \m{Q}_c = \begin{bmatrix}
+    \m{0} & \m{0} & \m{0} & \m{0} & \m{0} \\
+    \m{0} & \sigma_{aw}^2\m{I}_3 & \m{0} & \m{0} & \m{0} \\
+    \m{0} & \m{0} & \sigma_{gw}^2\m{I}_3 & \m{0} & \m{0} \\
+    \m{0} & \m{0} & \m{0} & \frac{2\sigma_{aB}^2}{\tau_a}\m{I}_3 & \m{0} \\
+    \m{0} & \m{0} & \m{0} & \m{0} & \frac{2\sigma_{gB}^2}{\tau_g}\m{I}_3
+  \end{bmatrix},
+  \label{eq:app-Qc}
+\end{equation}
+其中利用了 $\m{C}_b^n\,\sigma^2\m{I}\,\m{C}_n^b = \sigma^2\m{I}$ 的正交不变性
+（第 2.6 节备注）：速度块被比力旋转 $\m{C}_b^n$ 后其噪声方差不变。这一性质使
+\cref{eq:app-Qc} 与固件 \code{Icm45686StructuredContinuousQc}（第 2571--
+2578 行）完全等价。
+
+\subsubsection{谱密度的物理含义}
+
+各谱密度项与 IMU 数据手册中的 Allan 方差参数对应
+\cite{Groves2013,Titterton2014}：
+\begin{itemize}
+  \item $\sigma_{aw}$：\textbf{速度随机游走}（Velocity Random Walk, VRW）
+    的方差，量纲 $(\text{m/s}^2)^2\cdot\text{s}$。对固件默认 0.25\,m/s$^2$，
+    等效 VRW $= 0.25\,\text{m/s}^2/\sqrt{\text{Hz}}$；
+  \item $\sigma_{gw}$：\textbf{角度随机游走}（Angle Random Walk, ARW）。
+    固件运行值 0.0015\,rad/s 对应 ARW $= 0.0015\,\text{rad}/\sqrt{\text{s}}
+    \approx 0.086\,°/\!\sqrt{\text{h}}$；
+  \item $\frac{2\sigma_B^2}{\tau}$：\textbf{零偏不稳定性}（Bias Instability,
+    BI）的驱动谱密度，由高斯-马尔可夫过程稳态方差关系
+    \cref{eq:gm-variance} 反推。
+\end{itemize}
+
+\subsection{离散过程噪声的推导}
+
+\subsubsection{连续时间黎卡提积分}
+
+离散过程噪声定义为
+\begin{equation}
+  \m{Q}_d = \int_{t_{k-1}}^{t_k}
+    \bm{\Phi}(t_k, s)\,\m{Q}_c\,\bm{\Phi}(t_k, s)\T\,ds,
+  \label{eq:app-Qd-def}
+\end{equation}
+其中 $\bm{\Phi}(t_k, s) = e^{\m{F}(t_k - s)}$。该积分刻画``在 $[t_{k-1}, t_k]$
+内任意时刻注入的过程噪声经状态转移传播到 $t_k$ 后的总协方差''。
+
+\subsubsection{Simpson 积分近似}
+
+对 \cref{eq:app-Qd-def} 在 $s \in [t_{k-1}, t_k]$ 上以三节点 Simpson 公式
+近似，节点 $s_0 = t_{k-1}$（$\bm{\Phi} = \m{I}$）、$s_1 = t_{k-1} +
+\frac{dt}{2}$（$\bm{\Phi} = \bm{\Phi}_{\frac12}$）、$s_2 = t_k$
+（$\bm{\Phi} = \bm{\Phi}$），得
+\begin{equation}
+  \m{Q}_d \approx \frac{dt}{6}\left(
+    \m{Q}_c + 4\,\bm{\Phi}_{\frac12}\m{Q}_c\bm{\Phi}_{\frac12}\T
+    + \bm{\Phi}\m{Q}_c\bm{\Phi}\T
+  \right),
+  \label{eq:app-simpson}
+\end{equation}
+即 \cref{eq:simpson-qd}。与被积函数为常数的零阶保持
+$\m{Q}_d^{ZOH} = \m{Q}_c\,dt$ 相比，Simpson 形式的误差为
+$\mathcal{O}(dt^5)$（对被积函数三阶可导），而 ZOH 的误差为
+$\mathcal{O}(dt^2)$。
+
+\subsubsection{一维验证算例}
+
+考虑标量系统 $\dot{x} = fx + gw$，$q_c = g^2\sigma_w^2$。解析离散化
+\cref{eq:app-Qd-def} 为
+\begin{equation}
+  q_d^{exact} = q_c\,\frac{e^{2fdt} - 1}{2f}.
+  \label{eq:app-qd-exact}
+\end{equation}
+取 $f = 1$\,s$^{-1}$（模拟姿态自旋量级）、$dt = 5$\,ms、$q_c = 1$：
+\begin{equation}
+  q_d^{exact} = \frac{e^{0.01} - 1}{2} = 5.0251\times10^{-3},
+  \label{eq:app-qd-num}
+\end{equation}
+Simpson 近似（$\Phi = e^{fdt} \approx 1 + fdt + \frac12 f^2 dt^2$）：
+\begin{equation}
+  q_d^{simpson} = \frac{dt}{6}\left(1 + 4\Phi_{\frac12}^2 + \Phi^2\right)q_c
+  = 5.0251\times10^{-3},
+  \label{eq:app-qd-simpson-num}
+\end{equation}
+零阶保持：
+\begin{equation}
+  q_d^{ZOH} = q_c\,dt = 5.0000\times10^{-3}.
+  \label{eq:app-qd-zoh-num}
+\end{equation}
+相对精确值，Simpson 误差 $<10^{-7}$，ZOH 误差 $0.5\%$。对 15 维系统，
+$\m{F}$ 的耦合块使 ZOH 误差经交叉项放大，Simpson 的精度优势在长航时/强机动
+下更显著。
+
+\subsection{P 矩阵递推}
+
+\subsubsection{传播}
+
+由 \cref{eq:es-predict}，协方差传播为
+\begin{equation}
+  \m{P}_{k|k-1} = \bm{\Phi}\m{P}_{k-1|k-1}\bm{\Phi}\T + \m{Q}_d.
+  \label{eq:app-p-prop}
+\end{equation}
+\cref{eq:app-p-prop} 保持对称性（若 $\m{P}$ 对称、$\m{Q}_d$ 对称），但在
+浮点运算中对称性会被舍入破坏，故固件在传播后调用
+\code{StabilizeCovariance} 做对称化与 PSD 检查（第 5.8 节）。
+
+\subsubsection{Joseph 更新的代数等价}
+
+标准卡尔曼协方差更新
+\begin{equation}
+  \m{P}_{k|k} = \left(\m{I} - \m{K}\m{H}\right)\m{P}_{k|k-1}
+  \label{eq:app-joseph-std}
+\end{equation}
+与 Joseph 形式
+\begin{equation}
+  \m{P}_{k|k} = \left(\m{I}-\m{K}\m{H}\right)\m{P}_{k|k-1}
+    \left(\m{I}-\m{K}\m{H}\right)\T + \m{K}\m{R}\m{K}\T
+  \label{eq:app-joseph}
+\end{equation}
+在精确算术下等价，证明如下。由增益定义 $\m{K} = \m{P}\m{H}\T\m{S}\inv$，
+\begin{equation}
+  \left(\m{I}-\m{K}\m{H}\right)\m{P}\m{H}\T
+  = \m{P}\m{H}\T - \m{K}\m{H}\m{P}\m{H}\T
+  = \m{P}\m{H}\T - \m{K}(\m{S} - \m{R})
+  = \m{K}\m{R},
+  \label{eq:app-joseph-key}
+\end{equation}
+其中第二步用到 $\m{S} = \m{H}\m{P}\m{H}\T + \m{R}$ 与 $\m{K}\m{S} =
+\m{P}\m{H}\T$。于是展开 \cref{eq:app-joseph}：
+\begin{multline}
+  \left(\m{I}-\m{K}\m{H}\right)\m{P}\left(\m{I}-\m{K}\m{H}\right)\T
+  + \m{K}\m{R}\m{K}\T \\
+  = \left(\m{I}-\m{K}\m{H}\right)\m{P}
+    - \left(\m{I}-\m{K}\m{H}\right)\m{P}\m{H}\T\m{K}\T
+  + \m{K}\m{R}\m{K}\T \\
+  = \left(\m{I}-\m{K}\m{H}\right)\m{P}
+    - \m{K}\m{R}\m{K}\T + \m{K}\m{R}\m{K}\T
+  = \left(\m{I}-\m{K}\m{H}\right)\m{P}.
+  \label{eq:app-joseph-eq}
+\end{multline}
+\cref{eq:app-joseph-key} 表明两项抵消，证毕。浮点下 Joseph 形式的两项并不
+精确抵消，其显式的双二次型结构使 $\m{P}$ 保持对称正定，代价是约 $2n^2m$
+次额外乘法（$n=15,\ m\le6$ 时 $\le 2700$ 次，200\,Hz 下开销可接受）。
+
+\subsection{失联协方差膨胀的一致性}
+
+第 8.3 节的经验膨胀
+\begin{equation}
+  P_{ii} \leftarrow P_{ii} + \sigma_i^2\,dt\,s(t_{outage}),
+  \label{eq:app-growth}
+\end{equation}
+可理解为在过程噪声中对不可观状态（绝对位置/速度）附加了等效白噪声
+$\sigma_i^2 s(t_{outage})$，其中 $s(t) = \min(t/2,\ 4)$ 是随失联时间增长的
+强度因子。其含义是：失联越久，``未建模误差''（机动、零偏残差、温度漂移）的
+等效强度越大，需要更大的协方差来保持滤波一致性与门控的通过率。膨胀只作用于
+GNSS 可观的 6 个状态（位置+速度），保持姿态/零偏的协方差不被无谓放大——
+因为姿态由 Gravity/静止陀螺持续约束、零偏由 ZUPT/StaticGyro 持续约束，膨胀
+它们反而会降低滤波精度。
+
+\subsection{稳定化分频的统计解释}
+
+固件将完整稳定化以分频 8 执行（25\,Hz，第 5.8 节）。由于多数帧经 Gershgorin
+下界即判定 PSD，分频只推迟``完整检查''的执行频率，不改变数学语义；仅在异常帧
+（有限值检查失败、对角线越界）时立即触发完整路径。这等价于``低优先级背景任务
++ 异常抢占''的实时调度策略，在统计上不影响滤波器输出分布（异常帧占比
+$\ll1/8$ 时完整检查的实际执行频率仍由异常事件驱动）。
