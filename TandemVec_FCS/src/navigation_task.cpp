@@ -307,8 +307,16 @@ static bool applyDowngradedGnssUpdate(const bfs::UbxEpoch &epoch,
   nav_ekf.gnss_vel_ne_std_mps(epoch.spd_acc_mps);
   nav_ekf.gnss_vel_d_std_mps(epoch.spd_acc_mps);
 
+  // ★ 2026-08-12 审查修复：原实现把 nav_ekf.lla_rad_m()（EKF 自身当前估计）
+  // 当作"GNSS 位置量测"，位置新息变成"EKF 当前 vs EKF 重放快照"的自差≈0，
+  // 是语义错误（R=1e4 下当前影响小，但未来调低 R 会形成假位置融合）。
+  // 改传 epoch 的真实 LLA，与全质量路径（本文件 1116 行）一致；
+  // 位置融合关闭仍由 R=1e4 保证（防止弱位置拉偏原点），语义不再依赖"自差=0"。
+  const Eigen::Vector3d gnss_lla_rad(
+      epoch.lat_rad, epoch.lon_rad, static_cast<double>(epoch.alt_wgs84_m));
+
   const bfs::MeasurementUpdateResult result =
-      nav_ekf.MeasurementUpdateDetailed(gnss_vel_ned, nav_ekf.lla_rad_m(),
+      nav_ekf.MeasurementUpdateDetailed(gnss_vel_ned, gnss_lla_rad,
                                         dt_s, measurement_age_s);
   gnss_status.last_test_ratio = result.test_ratio;
   gnss_status.fix3d_count++;  // 降级帧也是有效 3D fix
@@ -316,7 +324,11 @@ static bool applyDowngradedGnssUpdate(const bfs::UbxEpoch &epoch,
 
   // 降级融合后也执行 AHRS yaw 慢对齐
   {
-    float yaw_err = wrapAnglePi(nav_ekf.yaw_rad() - (backup_ahrs_yaw - ahrs_yaw_correction_rad));
+    // ★ 2026-08-12 审查修复：backup_ahrs_yaw 在数据源处已叠加校正量
+    // （sensor_imu.cpp:406 backup_ahrs_yaw = wrap(yaw + ahrs_yaw_correction_rad)），
+    // 原式再减 ahrs_yaw_correction_rad 会双重抵消，使 yaw_err = EKF - raw 与校正量无关，
+    // 闭环退化为开环积分器，长降级下校正量持续缠绕。此处与全质量路径（本文件 1183 行）统一。
+    float yaw_err = wrapAnglePi(nav_ekf.yaw_rad() - backup_ahrs_yaw);
     yaw_err = constrain(yaw_err, -0.0025f, 0.0025f /* ~28.6 deg/s @200Hz */);
     ahrs_yaw_correction_rad = wrapAnglePi(ahrs_yaw_correction_rad + yaw_err);
   }
@@ -400,6 +412,15 @@ void handleDualVectorYawFusion()
   const float MIN_NOISE_RAD = 0.03f;  // 最小噪声 (~1.7度)，防止过拟合
 
   // ========================= 1. 状态预检查 =========================
+
+  // ★ 2026-08-12 审查修复：静止时 GNSS 速度纯噪声（多径可达 0.5-1 m/s），
+  // 若仍用原始 GNSS 速度解算航迹角，会把噪声航向当真实航向融合（静止+噪声下
+  // 约 9% 帧穿过三道门控、航向噪声 σ≈145°）。静止时位置更新已强制速度=0
+  // （本文件 1118-1123 行），航向融合应同步跳过，避免与"静止即零速"语义矛盾。
+  if (static_det.confirmed_static)
+  {
+    return;
+  }
 
   // 检查 GPS 状态：必须是新鲜的 3D Fix，不能使用UBX缓存中的旧速度矢量修正航向。
   if (!isGnssInstantValidForNav())
@@ -676,9 +697,14 @@ void handleNavigationSystem()
       ((delta_theta_1_rad + delta_theta_2_rad).allFinite()) &&
       ((delta_v_1_mps + delta_v_2_mps).allFinite());
   // EKF 传播和 GNSS 延迟回放统一使用本帧实际消费的 IMU 时间跨度，避免调度抖动带来比例误差。
-  const float nav_update_dt_s = (local_delta_time_sum_s > 0.0001f && local_delta_time_sum_s <= 0.1f)
-                                    ? local_delta_time_sum_s
-                                    : dt_s;
+  // ★ 2026-08-12 审查修复：缓冲溢出时（任务卡顿 >32ms）imu_delta_time_sum_s 只含前 64 样本，
+  // 直接使用会低估传播 dt（卡顿 64-100ms 时低估 20-36%），使速度/姿态积分欠量。
+  // 改为以"本帧消费的真实时间跨度"为准：双子样路径用缓冲内时间（增量与时间同源自洽），
+  // 溢出/降级路径用 micros 差分（覆盖全部样本时间）。
+  const float nav_update_dt_s =
+      (use_two_sample_imu)
+          ? local_delta_time_sum_s
+          : dt_s;  // 单样本/溢出路径：micros 差分覆盖全部样本，已含卡顿时长
   aid_tracker.BeginFrame(nav_update_dt_s);
 
   // 获取磁力计数据 (用于初始化航向)
@@ -957,7 +983,11 @@ void handleNavigationSystem()
     //
     const float accel_norm_error = fabsf(accel_norm - G_ACCEL_CONST);
     const bool accel_gravity_trusted = (accel_norm_error < 2.0f);
-    const bool angular_rate_quiet = (imu_gyro_radps.norm() < 1.2f); // 约 69 deg/s
+    // ★ 2026-08-13 升级修复：原 1.2 rad/s(≈69°/s) 门限近乎恒真——剧烈机动时
+    //   Madgwick roll/pitch 本身不准，作为 EKF 姿态量测等于周期灌入低质量姿态。
+    //   收紧到 0.5 rad/s(≈28°/s)，与双矢量航向 20°/s 门限一致量级，仅在平缓
+    //   运动下用 AHRS 约束姿态漂移。
+    const bool angular_rate_quiet = (imu_gyro_radps.norm() < 0.5f); // ≈28 deg/s
 
     // ========================================================================
     // 静止辅助：分频调度 + 置信度自适应（ins_static_aid_profile.h）
@@ -1412,13 +1442,20 @@ void handleNavigationSystem()
   else
   {
     // --- EKF 未初始化时，用后台 AHRS 填充 AHRS_Packet，避免飞控读到空值 ---
-    AHRS_Packet.Qw = backup_ahrs_Qw;
-    AHRS_Packet.Qx = backup_ahrs_Qx;
-    AHRS_Packet.Qy = backup_ahrs_Qy;
-    AHRS_Packet.Qz = backup_ahrs_Qz;
-    AHRS_Packet.Roll = backup_ahrs_roll;
-    AHRS_Packet.Pitch = backup_ahrs_pitch;
-    AHRS_Packet.Heading = wrapAngleTwoPi(backup_ahrs_yaw);
+    // ★ 2026-08-13 升级修复：DETA100 直出模式下 DETA100 的 DataUnpacking() 已写入
+    //   AHRS_Packet，此分支原不检查 use_deta100_output，会逐帧用 Madgwick 值覆盖
+    //   DETA100 输出，使直出通道在 EKF 尚未初始化（静止检测未通过）期间失效。
+    //   加 !use_deta100_output 隔离，仅内置 EKF 模式用备份填充。
+    if (!use_deta100_output)
+    {
+      AHRS_Packet.Qw = backup_ahrs_Qw;
+      AHRS_Packet.Qx = backup_ahrs_Qx;
+      AHRS_Packet.Qy = backup_ahrs_Qy;
+      AHRS_Packet.Qz = backup_ahrs_Qz;
+      AHRS_Packet.Roll = backup_ahrs_roll;
+      AHRS_Packet.Pitch = backup_ahrs_pitch;
+      AHRS_Packet.Heading = wrapAngleTwoPi(backup_ahrs_yaw);
+    }
   }
 
   if (nav_system_initialized && is_origin_lla_set)
@@ -1434,7 +1471,10 @@ void handleNavigationSystem()
   // --- 注入 GNSS 原始状态 (覆盖 DETA100 的 Geodetic_Pos & Status) ---
   // 无论 EKF 是否初始化，只要有 GPS 数据就应该更新这些包，以便地面站看到卫星状态
   // 精度因子来自GNSS接收机缓存；GNSS超时后必须清零，避免地面站显示“无fix但仍有旧精度”。
-  if (gnss_status.has_obs)
+  // ★ 2026-08-13 升级修复：hAcc/vAcc 与下方 fix 类型一致加 gnss_data_fresh_for_nav
+  //   门控——原实现 has_obs 超时后从不清零，GNSS 断电后地面站仍显示最后一次通过
+  //   质量帧的旧精度（与注释"必须清零"矛盾）。
+  if (gnss_status.has_obs && gnss_data_fresh_for_nav)
   {
     Geodetic_Pos_Packet.hAcc = gnss_status.last_obs_h_acc_m; // 最近一帧 GNSS 水平精度
     Geodetic_Pos_Packet.vAcc = gnss_status.last_obs_v_acc_m; // 最近一帧 GNSS 垂直精度
@@ -1470,7 +1510,8 @@ void handleNavigationSystem()
   if (millis() - _ekf_last >= 60000) { // 60秒一次, 基本静默
     _ekf_last = millis();
     Serial8.print("[EKF] avg=");
-    Serial8.print(_ekf_time_sum / _ekf_time_cnt);
+    // ★ 2026-08-13 升级修复：原整型除法把 60s 平均耗时截断为整数微秒（诊断精度损失）。
+    Serial8.print(static_cast<float>(_ekf_time_sum) / static_cast<float>(_ekf_time_cnt));
     Serial8.print("us cnt=");
     Serial8.print(_ekf_time_cnt);
     Serial8.print(" SG=");

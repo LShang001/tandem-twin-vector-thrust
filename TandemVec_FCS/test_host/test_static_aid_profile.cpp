@@ -51,11 +51,14 @@ int main()
 
   // ---- Icm45686SelectStaticAidAction ----
   using A = Icm45686StaticAidAction;
-  // prefer_gravity_first 模式：只看 gravity，忽略其余
+  // prefer_gravity_first 模式：gravity 到期优先 Gravity；未到期回落 Zupt/StaticGyro，
+  // 不再饿死其它辅助（2026-08-12 审查修复）。
   check(Icm45686SelectStaticAidAction(true, true, true, true) == A::Gravity,
         "prefer_gravity_first 且 gravity_due → Gravity");
-  check(Icm45686SelectStaticAidAction(true, false, true, true) == A::None,
-        "prefer_gravity_first 且 gravity 未到期 → None (即使 zupt 到期)");
+  check(Icm45686SelectStaticAidAction(true, false, true, true) == A::Zupt,
+        "prefer_gravity_first 且 gravity 未到期 → 回落 Zupt (不再饿死)");
+  check(Icm45686SelectStaticAidAction(false, false, true, true) == A::StaticGyro,
+        "prefer_gravity_first 且 gravity/zupt 未到期 → 回落 StaticGyro");
   // 普通模式优先级：Zupt > Gravity > StaticGyro > None
   check(Icm45686SelectStaticAidAction(true, true, true, false) == A::Zupt,
         "zupt 优先于 gravity/static_gyro");
@@ -118,7 +121,7 @@ int main()
   }
   {
     auto p = Icm45686SelectStaticAidProfile(0.50f, 10U, true);
-    check(approx(p.gravity_noise_rad, 0.18f), "档1: frames<16");
+    check(approx(p.gravity_noise_rad, 0.18f), "档1: frames<36");
   }
   {
     auto p = Icm45686SelectStaticAidProfile(0.50f, 50U, true);
@@ -140,14 +143,18 @@ int main()
   }
   // ---- 帧边界精确值（并入自 static_aid_profile_test.cpp，该文件已删除）----
   {
-    // frame16：confidence=16/60≈0.267 < 0.35 → 帧门槛过但置信度不足 → 仍档1
+    // frame16：confidence=16/60≈0.267 < 0.35 → 置信度不足 → 仍档1
     auto p16 = Icm45686SelectStaticAidProfile(0.267f, 16U, true);
     check(approx(p16.gravity_noise_rad, 0.18f),
           "档1: frame16 低置信度不升级（置信度门槛未过）");
-    // frame32：confidence=0.533 ≥ 0.35 且帧 ≥16 → 档2
+    // frame32：confidence=0.533 ≥ 0.35 但帧 32 < 36（2026-08-12 门槛 16→36）→ 仍档1
     auto p32 = Icm45686SelectStaticAidProfile(0.533f, 32U, true);
-    check(approx(p32.gravity_noise_rad, 0.10f),
-          "档2: frame32 置信度与帧门槛均满足");
+    check(approx(p32.gravity_noise_rad, 0.18f),
+          "档1: frame32 帧门槛未过（36）仍档1");
+    // frame36：confidence=0.533 ≥ 0.35 且帧 ≥36 → 档2（精确边界）
+    auto p36 = Icm45686SelectStaticAidProfile(0.533f, 36U, true);
+    check(approx(p36.gravity_noise_rad, 0.10f),
+          "档2: frame36 置信度与帧门槛均满足");
     // frame99：帧 <100 → 即使满置信度仍档2
     auto p99 = Icm45686SelectStaticAidProfile(1.0f, 99U, true);
     check(approx(p99.gravity_noise_rad, 0.10f),

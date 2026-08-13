@@ -83,9 +83,20 @@ constexpr Icm45686StaticAidAction Icm45686SelectStaticAidAction(
     bool prefer_gravity_first)
 {
   // 档位 1 先调平再零速，避免姿态误差通过 ZUPT 残差污染加速度零偏。
+  // ★ 2026-08-12 审查修复：原实现 gravity 未到期时直接返回 None，
+  // 会连 ZUPT/StaticGyro 一起饿死（弱约束窗口内约 87.5% 帧无辅助动作）。
+  // 改为 gravity 到期时优先 Gravity，未到期时正常执行 ZUPT/StaticGyro。
   if (prefer_gravity_first) {
-    return gravity_due ? Icm45686StaticAidAction::Gravity
-                       : Icm45686StaticAidAction::None;
+    if (gravity_due) {
+      return Icm45686StaticAidAction::Gravity;
+    }
+    if (zupt_due) {
+      return Icm45686StaticAidAction::Zupt;
+    }
+    if (static_gyro_due) {
+      return Icm45686StaticAidAction::StaticGyro;
+    }
+    return Icm45686StaticAidAction::None;
   }
   if (zupt_due) {
     return Icm45686StaticAidAction::Zupt;
@@ -135,12 +146,14 @@ constexpr Icm45686StaticAidProfile Icm45686SelectStaticAidProfile(
   const float confidence = Icm45686Clamp01(static_confidence);
 
   /*
-   * 档位 1：刚确认静止或静止置信度偏低
-   * - 量测噪声偏大，只做“轻柔修正”
-   * - 优先尝试重力方向辅助，先把姿态拉稳，再逐渐引入更强的 ZUPT
+   * 档位 1：刚确认静止，弱约束窗口。
+   * ★ 2026-08-12 审查修复：confirmed_static_frames 从确认当帧的
+   * enter_min_frames（固件配置 20）起计，原帧门槛 16 恒不成立导致弱约束窗口
+   * 实际只有 1 帧（5ms），与"确认后 80ms 弱约束"注释意图不符。改为
+   * < 36（= 20 + 16，即确认后 16 帧 ≈ 80ms）。
    */
   // 档位 1：刚确认静止，帧门槛 32→16（80ms），减少弱约束窗口。
-  if (confidence < 0.35f || confirmed_static_frames < 16U) {
+  if (confidence < 0.35f || confirmed_static_frames < 36U) {
     return {0.18f, 0.18f, 0.24f, true};
   }
 

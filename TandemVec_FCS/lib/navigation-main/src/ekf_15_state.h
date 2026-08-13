@@ -2235,8 +2235,6 @@ namespace bfs
                       previous_delta_v_mps_.cross(delta_theta_rad)));
 
       const Eigen::Quaternionf quat_prev = quat_;
-      // 上一时刻的机体系到NED方向余弦矩阵在类里已缓存，直接复用可少一次 quat2dcm()。
-      const Eigen::Matrix3f t_b2ned_prev = t_b2ned;
       const Eigen::Vector3f vel_prev_ned = ins_ned_vel_mps_;
       const Eigen::Vector3d lla_prev_rad_m = ins_lla_rad_m_;
       const Eigen::Quaternionf delta_quat_mid =
@@ -2294,8 +2292,13 @@ namespace bfs
 
       MarkEulerAnglesDirty();
       t_b2ned = quat2dcm(quat_).transpose();
+      // ★ 2026-08-13 升级修复：速度增量绕【中点姿态】旋转，与 F 矩阵线性化点
+      //   （F(V,Φ)/F(V,b_a) 用的 t_b2ned_mid）一致。原实现用 t_b2ned_prev（上时刻
+      //   姿态），名义积分与协方差线性化点不一致；ω=2 rad/s 时速度增量偏差 0.005 m/s、
+      //   ω=10 rad/s 时 0.025 m/s，高动态下经姿态-速度耦合累积。t_b2ned_mid 已在
+      //   上文计算，零额外开销。
       const Eigen::Vector3f delta_v_ned =
-          t_b2ned_prev * sculling_delta_v_body_mps +
+          t_b2ned_mid * sculling_delta_v_body_mps +
           dt_s * (gravity_ned_mid + coriolis_accel_mid_ned);
       ins_ned_vel_mps_ = vel_prev_ned + delta_v_ned;
 
@@ -3126,7 +3129,18 @@ namespace bfs
       }
 
       Eigen::Matrix<float, 1, 15> h_yaw = Eigen::Matrix<float, 1, 15>::Zero();
-      h_yaw(0, 8) = 1.0f;
+      /*
+       * ★ 2026-08-12 审查修复：标量航向观测的是"真航向"（世界垂直轴），
+       * 其误差在机体系的分量 = C_b^n 第三行（t_b2ned = C_b^n，NED 地轴在机体系的分量）。
+       * 水平时 C_b^n(2,:) = [0,0,1] 退化为仅观测 δβ_z（与原实现一致）；
+       * 大俯仰（VTOL 悬停/过渡，θ→90°）时真航向轴接近机体 x 轴，若不投影，
+       * 航向修正会被错误注入横滚轴（有效 yaw 修正降至 ~sin(θ) 且引入额外 roll 变化）。
+       * 推导：欧拉 yaw 旋转轴 = NED z，其在机体系 = C_n^b e_z = C_b^n(2,:)^T，
+       * 故 δψ = C_b^n(2,:) · δβ^b。
+       */
+      h_yaw(0, 6) = t_b2ned(2, 0);
+      h_yaw(0, 7) = t_b2ned(2, 1);
+      h_yaw(0, 8) = t_b2ned(2, 2);
       Eigen::Matrix<float, 15, 1> k = p_ * h_yaw.transpose() / s;
       Eigen::Matrix<float, 15, 15> identity = Eigen::Matrix<float, 15, 15>::Identity();
       p_ = (identity - k * h_yaw) * p_ * (identity - k * h_yaw).transpose() +
