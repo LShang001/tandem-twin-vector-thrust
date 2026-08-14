@@ -8,6 +8,7 @@
 #include "mavlink_bridge.h" // MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）
 #include "task_scheduler.h" // 调度统计 DBG `tasks` 命令
 #include "ubx_config.h"      // UBX 接收机自动配置（DBG `ubxcfg`）
+#include "MagCalStore.h"     // 磁力计标定持久化（DBG `magcal` 命令）
 
 // IWDG 喂狗（main.cpp 暴露）：flash export 大页数导出阻塞任务 >3s 时
 // 循环内喂狗，防看门狗复位打断导出（2026-08-08）
@@ -1471,7 +1472,8 @@ void handleStatusLedTask()
   FcsLedState state;
 
   bool is_armed = g_is_unlocked;
-  bool is_calibrating = imuCalibrator.isCalibrating();
+  // IMU 自动校准 或 磁力计引导校准 进行中 → 黄快闪（CALIBRATING）
+  bool is_calibrating = imuCalibrator.isCalibrating() || magSensor.guideActive();
 
   if (!isLinkUp && failsafe_in_flight)
   {
@@ -1913,6 +1915,11 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   ubxcfg proto <ubx|nmea|both> - 串口输出协议掩码"));
         serial.println(F("[DBG]   datalog <secs>    - force blackbox logging N seconds"));
         serial.println(F("[DBG]   flash <export|...> - blackbox flash ops"));
+        serial.println(F("[DBG]   magcal            - 磁力计椭球标定状态（型号/采样/参数/引导进度）"));
+        serial.println(F("[DBG]   magcal guided     - 大疆式两圈引导校准（水平一圈→机头朝下一圈，自动拟合）"));
+        serial.println(F("[DBG]   magcal start|stop - 自由采集：开始/停止采样（绕三轴缓慢旋转 ≥30 样本）"));
+        serial.println(F("[DBG]   magcal fit        - 椭球拟合（硬铁+软铁），质量门通过自动应用"));
+        serial.println(F("[DBG]   magcal save|load|clear|erase - 标定持久化（内部Flash）/加载/清空"));
         serial.println(F("[DBG]   vars              - 变量上报状态（通用变量注册表，2026-08-10）"));
         serial.println(F("[DBG]   vars list         - 全部注册变量（名称/类型/ID）"));
         serial.println(F("[DBG]   vars add <name>   - 加入上报集合（≤16；0xF2 帧 + MAVLink 曲线）"));
@@ -2000,6 +2007,9 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       }
       else if (strncmp(line, "flash ", 6) == 0) {
         debugFlashCommand(serial, line + 6);
+      }
+      else if (strncmp(line, "magcal", 6) == 0) {
+        debugMagCalCommand(serial, line + 6);
       }
       else if (strncmp(line, "datalog", 7) == 0) {
         // 强制黑匣子记录 N 秒（异步：置位调试标志后返回，超时自动复位）。
@@ -2844,4 +2854,304 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
   else {
     serial.println(F("[DBG] flash subcommands: id | erase | stat | dump <page> | test | export <page> <count>"));
   }
+}
+
+// ========================================================================
+// 磁力计椭球标定调试命令（调试模式: magcal <sub>）
+//   magcal               状态：型号/采样数/当前参数/上次拟合质量/引导进度
+//   magcal guided        大疆式两圈引导校准（水平一圈 → 机头朝下一圈，
+//                        自动拟合应用；黄灯快闪 = 校准进行中）
+//   magcal start|stop    自由采集：开始/停止采样（绕三轴缓慢旋转 ≥30 样本）
+//   magcal fit           椭球拟合（硬铁+软铁），质量门全过自动应用
+//   magcal save          当前标定写入内部 Flash（bank2 末扇区，阻塞 ~1-2s）
+//   magcal load          从内部 Flash 重新加载
+//   magcal clear         清空 RAM 标定（恢复未标定直通）
+//   magcal erase         擦除 Flash 存储扇区（清空持久化标定）
+//
+// 标定流程（地面上、电机未解锁时执行）：
+//   引导式（推荐）：magcal guided → ①水平绕竖直轴转一圈（≥315°）
+//                 → ②机头朝下再转一圈 → 自动拟合应用 → magcal save
+//   自由式：magcal start → 绕三轴缓慢全姿态旋转（每个姿态停留片刻）
+//         → magcal 查样本数（≥30，建议 100+）→ magcal fit → magcal save
+// ========================================================================
+static magcal::MagCalStats s_lastMagCalFitStats;
+static bool s_hasMagCalFit = false;
+
+static const char *magCalStageName(magcal::GuideStage st)
+{
+    switch (st)
+    {
+    case magcal::GuideStage::HORIZONTAL: return "水平旋转(第1圈)";
+    case magcal::GuideStage::NOSE_DOWN:  return "机头朝下(第2圈)";
+    case magcal::GuideStage::DONE:       return "两圈完成";
+    case magcal::GuideStage::FAILED:     return "拟合未过质量门";
+    case magcal::GuideStage::IDLE:
+    default:                             return "未启动";
+    }
+}
+
+static void magCalPrintParams(HardwareSerial &serial, const magcal::MagCalParams &p)
+{
+    serial.print(F("[DBG]   bias(uT) = ("));
+    serial.print(p.hardIron[0], 2);
+    serial.print(F(", "));
+    serial.print(p.hardIron[1], 2);
+    serial.print(F(", "));
+    serial.print(p.hardIron[2], 2);
+    serial.println(F(")"));
+    serial.print(F("[DBG]   softIron M = ["));
+    for (int i = 0; i < 3; i++)
+    {
+        if (i > 0)
+            serial.print(F("                    "));
+        serial.print(p.softIron[i][0], 4);
+        serial.print(F(", "));
+        serial.print(p.softIron[i][1], 4);
+        serial.print(F(", "));
+        serial.print(p.softIron[i][2], 4);
+        serial.println(i < 2 ? F(";") : F("]"));
+    }
+    serial.print(F("[DBG]   scale = "));
+    serial.println(p.scale, 2);
+}
+
+static void magCalPrintStats(HardwareSerial &serial, const magcal::MagCalStats &st)
+{
+    serial.print(F("[DBG]   samples = "));
+    serial.println(st.count);
+    serial.print(F("[DBG]   residualRms = "));
+    serial.println(st.residualRms, 4);
+    serial.print(F("[DBG]   eigRatio (Q) = "));
+    serial.println(st.eigRatio, 3);
+    serial.print(F("[DBG]   coverageRatio = "));
+    serial.println(st.coverageRatio, 5);
+    serial.print(F("[DBG]   fieldMag (raw) = "));
+    serial.print(st.fieldMagUt, 1);
+    serial.println(F(" uT"));
+}
+
+void debugMagCalCommand(HardwareSerial &serial, char *args)
+{
+    // 解锁态保护：采样/写入只允许在地面未解锁时进行
+    const bool armed = (raw_rc_values[4] > 1500);
+
+    if (strlen(args) == 0 || strcmp(args, "status") == 0)
+    {
+        serial.print(F("[DBG] MagCal: chip="));
+        serial.print(magSensor.chipName());
+        serial.print(F(" collecting="));
+        serial.print(magSensor.calCollecting() ? F("YES") : F("NO"));
+        serial.print(F(" samples="));
+        serial.print(magSensor.calSampleCount());
+        serial.print(F(" cal="));
+        serial.println(magSensor.calValid() ? F("VALID") : F("NONE"));
+
+        // 引导校准进度
+        if (magSensor.guideActive() || magSensor.guideStage() != magcal::GuideStage::IDLE)
+        {
+            serial.print(F("[DBG]   guided: "));
+            serial.print(magCalStageName(magSensor.guideStage()));
+            if (magSensor.guideStage() == magcal::GuideStage::HORIZONTAL ||
+                magSensor.guideStage() == magcal::GuideStage::NOSE_DOWN)
+            {
+                serial.print(F(" 扇区="));
+                serial.print(magSensor.guideSectorsDone());
+                serial.print(F("/8  样本="));
+                serial.println(magSensor.calSampleCount());
+            }
+            else
+            {
+                serial.println();
+            }
+            if (magSensor.guideResultReady())
+            {
+                // 引导拟合结果就绪：同步给 save 链路（保证 `magcal save` 可用）
+                s_lastMagCalFitStats = magSensor.guideFitStats();
+                s_hasMagCalFit = true;
+                if (magSensor.guideFitOk())
+                {
+                    serial.println(F("[DBG]   guided fit: PASS, applied"));
+                    magCalPrintStats(serial, magSensor.guideFitStats());
+                    serial.println(F("[DBG]   -> `magcal save` 持久化"));
+                }
+                else
+                {
+                    serial.println(F("[DBG]   guided fit: REJECTED（质量门未过）"));
+                    magCalPrintStats(serial, magSensor.guideFitStats());
+                    serial.println(F("[DBG]   -> 远离磁干扰源，`magcal guided` 重试"));
+                }
+            }
+        }
+
+        if (magSensor.calSampleCount() > 0)
+        {
+            float mn[3], mx[3];
+            magSensor.calSampleMinMax(mn, mx);
+            serial.print(F("[DBG]   sample range x["));
+            serial.print(mn[0], 1);
+            serial.print(F(", "));
+            serial.print(mx[0], 1);
+            serial.print(F("] y["));
+            serial.print(mn[1], 1);
+            serial.print(F(", "));
+            serial.print(mx[1], 1);
+            serial.print(F("] z["));
+            serial.print(mn[2], 1);
+            serial.print(F(", "));
+            serial.print(mx[2], 1);
+            serial.println(F("] uT"));
+        }
+        if (magSensor.calValid())
+        {
+            magCalPrintParams(serial, magSensor.calParams());
+        }
+        if (s_hasMagCalFit)
+        {
+            serial.println(F("[DBG]   last fit:"));
+            magCalPrintStats(serial, s_lastMagCalFitStats);
+        }
+        serial.print(F("[DBG]   qmc overflow/dor/reinit = "));
+        serial.print(magSensor.overflowCount());
+        serial.print(F("/"));
+        serial.print(magSensor.dorCount());
+        serial.print(F("/"));
+        serial.println(magSensor.reinitCount());
+    }
+    else if (strcmp(args, "guided") == 0)
+    {
+        if (armed)
+        {
+            serial.println(F("[DBG] MagCal guided: refuse while armed (disarm first)"));
+            return;
+        }
+        if (!magSensor.guideStart())
+        {
+            serial.println(F("[DBG] MagCal guided: no magnetometer present"));
+            return;
+        }
+        serial.println(F("[DBG] MagCal guided: START（黄灯快闪 = 校准进行中）"));
+        serial.println(F("[DBG]   ① 水平拿机，绕竖直轴匀速转一圈（≥315° 自动进入下一步）"));
+        serial.println(F("[DBG]   ② 机头朝下，再绕竖直轴转一圈"));
+        serial.println(F("[DBG]   两圈完成自动椭球拟合并应用；`magcal` 查看结果/进度"));
+        serial.println(F("[DBG]   `magcal stop` 中止；`magcal save` 持久化"));
+    }
+    else if (strcmp(args, "start") == 0)
+    {
+        if (armed)
+        {
+            serial.println(F("[DBG] MagCal: refuse start while armed (disarm first)"));
+            return;
+        }
+        magSensor.guideStop(); // 与引导模式互斥
+        if (magSensor.calStart())
+        {
+            serial.println(F("[DBG] MagCal: collecting... rotate slowly around all 3 axes"));
+            serial.println(F("[DBG]   (keep rotating, check `magcal` for sample count >= 30)"));
+        }
+        else
+        {
+            serial.println(F("[DBG] MagCal: no magnetometer present"));
+        }
+    }
+    else if (strcmp(args, "stop") == 0)
+    {
+        magSensor.calStop();
+        magSensor.guideStop();
+        serial.print(F("[DBG] MagCal: stopped, samples="));
+        serial.println(magSensor.calSampleCount());
+    }
+    else if (strcmp(args, "fit") == 0)
+    {
+        magSensor.guideStop(); // 与引导模式互斥
+        if (magSensor.calSampleCount() < magcal::MagCalCollector::kMinSamples)
+        {
+            serial.print(F("[DBG] MagCal fit: too few samples ("));
+            serial.print(magSensor.calSampleCount());
+            serial.print(F(" < "));
+            serial.print(magcal::MagCalCollector::kMinSamples);
+            serial.println(F("), keep rotating"));
+            return;
+        }
+        magcal::MagCalParams p;
+        magcal::MagCalStats st;
+        p.identity();
+        if (magSensor.calFit(p, st))
+        {
+            magSensor.setCal(p);
+            s_lastMagCalFitStats = st;
+            s_hasMagCalFit = true;
+            serial.println(F("[DBG] MagCal fit: PASS, applied. Params:"));
+            magCalPrintParams(serial, p);
+            serial.println(F("[DBG]   quality:"));
+            magCalPrintStats(serial, st);
+            serial.println(F("[DBG]   -> `magcal save` to persist, `magcal stop` to end collection"));
+        }
+        else
+        {
+            s_lastMagCalFitStats = st;
+            s_hasMagCalFit = true;
+            serial.println(F("[DBG] MagCal fit: REJECTED (quality gate failed). Diagnostics:"));
+            magCalPrintStats(serial, st);
+            serial.println(F("[DBG]   hints: rotate full 3D sphere / more samples / away from"));
+            serial.println(F("[DBG]          magnetic interference (motors, tools, metal desk)"));
+        }
+    }
+    else if (strcmp(args, "save") == 0)
+    {
+        if (!magSensor.calValid())
+        {
+            serial.println(F("[DBG] MagCal save: no valid calibration, run `magcal fit` first"));
+            return;
+        }
+        if (armed)
+        {
+            serial.println(F("[DBG] MagCal save: refuse while armed (disarm first)"));
+            return;
+        }
+        if (!s_hasMagCalFit)
+        {
+            serial.println(F("[DBG] MagCal save: run `magcal fit` in this session first"));
+            return;
+        }
+        serial.println(F("[DBG] MagCal save: erasing + programming internal flash sector (~1-2s)..."));
+        serial.flush();
+        const bool ok = magcal::storeSave(magSensor.calParams(),
+                                          s_lastMagCalFitStats.count,
+                                          s_lastMagCalFitStats.residualRms);
+        serial.println(ok ? F("[DBG] MagCal save: OK (verified readback)") : F("[DBG] MagCal save: FAILED"));
+    }
+    else if (strcmp(args, "load") == 0)
+    {
+        magcal::MagCalParams p;
+        p.identity();
+        if (magcal::storeLoad(p) && magSensor.setCal(p))
+        {
+            serial.println(F("[DBG] MagCal load: OK. Params:"));
+            magCalPrintParams(serial, p);
+        }
+        else
+        {
+            serial.println(F("[DBG] MagCal load: no valid record in flash"));
+        }
+    }
+    else if (strcmp(args, "clear") == 0)
+    {
+        magSensor.calClear();
+        serial.println(F("[DBG] MagCal: RAM calibration cleared (uncalibrated pass-through)"));
+    }
+    else if (strcmp(args, "erase") == 0)
+    {
+        if (armed)
+        {
+            serial.println(F("[DBG] MagCal erase: refuse while armed (disarm first)"));
+            return;
+        }
+        serial.println(F("[DBG] MagCal erase: erasing config sector..."));
+        serial.flush();
+        serial.println(magcal::storeErase() ? F("[DBG] MagCal erase: OK") : F("[DBG] MagCal erase: FAILED"));
+    }
+    else
+    {
+        serial.println(F("[DBG] magcal subcommands: [status] | guided | start | stop | fit | save | load | clear | erase"));
+    }
 }

@@ -319,6 +319,12 @@ void debugTim4Dump(HardwareSerial &serial);
 void debugFlashCommand(HardwareSerial &serial, char *args);
 
 /**
+ * @brief 磁力计椭球标定调试命令（status/start/stop/fit/save/load/clear/erase）
+ * 调试命令 "magcal <sub>" 调用
+ */
+void debugMagCalCommand(HardwareSerial &serial, char *args);
+
+/**
  * @brief MAVLink 遥测发送任务 (200Hz)
  *
  * 通过 Serial6 发送 MAVLink 协议数据包，兼容 Mission Planner / QGC：
