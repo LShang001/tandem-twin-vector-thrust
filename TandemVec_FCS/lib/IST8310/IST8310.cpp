@@ -132,31 +132,24 @@ bool IST8310::update()
     // ====================================================================
     case IST_STATE_READING:
     {
-        // 1. (可选) 检查 DRDY
-        // 虽然时间到了，但为了保险，检查 STAT1 寄存器的 Bit 0
-        uint8_t status;
-        if (!read_reg(IST8310_REG_STAT1, status))
+        // 1. 突发读取 7 字节：STAT1 + DATAXL..DATAZH（寄存器 0x02~0x08 连续，
+        //    地址指针自动递增）。相比"先读状态再读数据"的两事务方案：
+        //    - 状态与数据来自同一次快照，不存在中间被更新的一致性问题
+        //    - I2C 事务从 2 次降为 1 次，读路径负载降低
+        uint8_t buf[7];
+        if (read_bytes(IST8310_REG_STAT1, buf, 7))
         {
-            // I2C 错误，重置状态机
-            _state = IST_STATE_IDLE;
-            return false;
-        }
+            // 2. 校验 DRDY (STAT1 Bit0)
+            if ((buf[0] & 0x01) == 0)
+            {
+                // 极少数情况：时间到了但数据还没好，继续等下一轮
+                return false;
+            }
 
-        if ((status & 0x01) == 0)
-        {
-            // 极少数情况：时间到了但数据还没好，继续等
-            // 或者设置一个超时强制重置
-            return false;
-        }
-
-        // 2. 突发读取 6 字节 (X_L, X_H, Y_L, Y_H, Z_L, Z_H)
-        uint8_t buf[6];
-        if (read_bytes(IST8310_REG_DATA_XL, buf, 6))
-        {
-            // 3. 组装数据 (Little Endian)
-            int16_t raw_x = (int16_t)(buf[1] << 8 | buf[0]);
-            int16_t raw_y = (int16_t)(buf[3] << 8 | buf[2]);
-            int16_t raw_z = (int16_t)(buf[5] << 8 | buf[4]);
+            // 3. 组装数据 (Little Endian, 16 位二进制补码)
+            int16_t raw_x = (int16_t)(uint16_t)((buf[2] << 8) | buf[1]);
+            int16_t raw_y = (int16_t)(uint16_t)((buf[4] << 8) | buf[3]);
+            int16_t raw_z = (int16_t)(uint16_t)((buf[6] << 8) | buf[5]);
 
             // 4. 转换为物理单位 (uT)
             _data.x = raw_x * IST8310_SENSITIVITY_UT;

@@ -78,6 +78,18 @@ else
   echo
 fi
 
+# 磁力计解析/轴对齐数学层（lib/MagSensor/MagMath.h 纯平台无关——
+# IST8310/QMC5883L 灵敏度与解码、芯片系→FRD 旋转矩阵、TiltCompass 北向判据）：
+run_one "$ROOT/test_host/test_mag_parse.cpp"           mp  "-I$ROOT/lib/MagSensor -I$ROOT/lib/navigation-main/src"
+
+# 磁力计椭球标定数学层（lib/MagCal/MagCalMath.h 纯平台无关——
+# CRC32/Jacobi/线性代数工具/合成椭球拟合恢复精度/质量门拒绝路径）：
+run_one "$ROOT/test_host/test_mag_cal.cpp"             mc  "-I$ROOT/lib/MagCal"
+
+# 大疆式两圈引导校准状态机（lib/MagCal/MagCalGuide.h 纯平台无关——
+# 姿态/旋转/扇区覆盖判定、两阶段自动切换、门限拒绝路径）：
+run_one "$ROOT/test_host/test_mag_guide.cpp"          mg  "-I$ROOT/lib/MagCal"
+
 # 平台相关算法（依赖 Arduino.h，通过 test_host/stub/Arduino.h 桩在宿主机编译）：
 run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 
