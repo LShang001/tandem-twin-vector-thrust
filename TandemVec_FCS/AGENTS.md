@@ -80,6 +80,8 @@
 - 串口分配总览、已验证硬件事实、未使用硬件资源表：**修改串口/引脚/传感器驱动代码或排查通信问题前**，读 `.agents/docs/hardware-reference.md`。
 - **Serial6 (USART6) 波特率 = `state_data.h` 的 `SERIAL6_BAUDRATE` 宏**（当前 921,600，★2026-08-10 COMM-001 由 2M 降频：VCP 下 2M 丢帧 ~15%，921600 位时间翻倍、带宽余量仍 87%；2.4G 数传需重新对齐）——换数传模块时只改宏；抓串口前先查宏值，波特率不匹配会全乱码（来源：2026-08-08 WS2812 调试；2026-08-10 COMM-001 优化）。
 - **调试串口**：Serial6 收到 `"DBG\n"` 进入调试模式（`handleDebugConsole`），`exit` 退出；命令 `help/ws <r g b>/wsoff/wsseq/wsstat/wsmode <0|1>/wsfault <0|1>/gpio/tim4/ver`。地面站帧头 0xAB 与 "DBG\n" 不冲突。详细命令表见 `docs/memory/2026-08-08-WS2812驱动调试.md`。
+- **磁力计椭球标定（DBG `magcal`，2026-08-15）**：`magcal start`（绕三轴旋转采样本 ≥30）→ `magcal fit`（9 参数椭球拟合，质量门：正定/覆盖度/残差≤15%，通过自动应用）→ `magcal save`（写入**内部 Flash bank2 末扇区 0x081E0000**，magic+CRC，上电自动加载）。★ 该扇区为标定专用：**固件内禁止引入 EEPROM.h/stm32duino EEPROM 仿真**（同用末扇区，冲突），黑匣子 W25N01GV 全盘归 flashLog 环形覆盖、不可借页。标定在**芯片系**进行（与轴映射解耦），应用顺序 raw→标定→轴映射→FRD；解锁态（`raw_rc_values[4]>1500`）拒绝 start/save。数学层 `lib/MagCal/MagCalMath.h` 纯平台无关（宿主机 `test_mag_cal.cpp` 回归：合成椭球恢复精度 ~1uT@0.2uT 噪声）。
+- **大疆式两圈引导校准（DBG `magcal guided`，2026-08-15）**：阶段1 水平旋转 → 阶段2 机头朝下旋转，各 ≥315°（磁方位 45°×8 扇区覆盖 ≥7）自动切换；判定输入 FRD 加速度/陀螺 + 姿态门（|acc|∈[0.85g,1.15g]、主导轴≥0.7|acc|、主导转速 0.3-6 rad/s、次轴<0.45×主导），两圈完成自动椭球拟合+应用。状态机 `lib/MagCal/MagCalGuide.h` 纯平台无关（宿主机 `test_mag_guide.cpp`）；灯效复用 CALIBRATING 黄快闪（`handleStatusLedTask` 的 is_calibrating 已并入 guideActive）；`magcal stop` 中止、`magcal fit`/`magcal start` 与引导互斥。
 
 ## WS2812 / 硬件踩坑记录（2026-08-08，通用教训保留，细节见 docs/memory/2026-08-08-WS2812驱动调试.md）
 
