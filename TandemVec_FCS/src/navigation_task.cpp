@@ -708,11 +708,10 @@ void handleNavigationSystem()
   aid_tracker.BeginFrame(nav_update_dt_s);
 
   // 获取磁力计数据 (用于初始化航向)
-  // IST8310_Vector mag_raw = compass.get_data();
-  // 坐标系对齐：将 IST8310 原始坐标系旋转到机体 FRD
-  // 假设安装方向与之前 Madgwick 代码一致：
-  // mx_frd = -my_raw, my_frd = -mx_raw, mz_frd = mz_raw
-  // mag_ut << -mag_raw.y, -mag_raw.x, mag_raw.z;
+  // ★ 真实磁力计路径（芯片系→FRD 对齐与硬铁偏置由 MagSensor 统一完成）：
+  //     MagSample m = magSensor.sampleFRD();
+  //     if (m.seq > 0) { mag_ut << m.x, m.y, m.z; }   // 机体 FRD, uT
+  // 当前未启用：使用伪磁场矢量完成确定性航向初始化（见 EKF 初始化注释）。
 
   // 强制磁场矢量指向正北 (X轴)，Z轴分量是为了模拟地磁倾角(Dip Angle)，防止奇异值
   // 这里的 {50, 0, 0} 代表磁力线完全水平指向前方

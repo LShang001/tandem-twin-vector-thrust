@@ -46,7 +46,7 @@ struct Vector3
 #include "CrsfSerial.h"
 #include "crsf.h"
 #include "common_rc.h"
-#include "IST8310.h"
+#include "MagSensor.h"
 #include "Dps310.h"
 #include "ICM42688.h"
 #include "LQS48_Flow.h"
@@ -461,7 +461,7 @@ extern IMU_AutoCalibrator imuCalibrator;
  * [6] 传感器与驱动对象 (Sensor Objects & Drivers)
  * ==========================================================================================
  */
-extern IST8310 compass;                   // 磁力计
+extern MagSensor magSensor;               // 磁力计统一管理 (IST8310/QMC5883L 自动探测, Wire1)
 extern Dps310 Dps310Sensor;               // 气压计
 extern ICM42688 IMU;                      // 板载IMU (SPI, 10MHz)
 extern MTF02P opticalFlowSensor;          // 光流传感器 (MTF02P)

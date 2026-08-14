@@ -2,7 +2,9 @@
  * @file sensor_imu.h
  * @brief IMU 传感器模块：初始化、数据采集与预处理
  *
- * 本模块负责板载 ICM42688 六轴惯性测量单元和 IST8310 磁力计的初始化与数据采集。
+ * 本模块负责板载 ICM42688 六轴惯性测量单元和磁力计的初始化与数据采集。
+ * 磁力计通过 MagSensor 统一管理层自动探测（IST8310@0x0E 优先，其次 QMC5883L@0x0D），
+ * 输出统一对齐到机体 FRD 系。
  * 数据处理流程：
  *   1. 读取原始传感器数据 (加速度g、角速度dps)
  *   2. IMU 自动校准（零偏补偿）
@@ -16,12 +18,13 @@
 #include "state_data.h"
 
 /**
- * @brief 初始化 IST8310 磁力计
+ * @brief 初始化磁力计（IST8310 / QMC5883L 自动探测）
  *
- * 启动 I2C 总线 (Wire1, 400kHz) 并初始化 IST8310 磁力计驱动。
+ * 启动 I2C 总线 (Wire1, 400kHz) 并通过 MagSensor 自动探测磁力计型号：
+ * 优先 IST8310 (0x0E，本机默认硬件)，未命中则尝试 QMC5883L (0x0D)。
  * 磁力计通过 I2C 总线 (PB7-SDA, PB6-SCL) 连接。
  *
- * @return true 初始化成功, false 未检测到传感器
+ * @return true 初始化成功, false 未检测到任何受支持的磁力计
  */
 bool initMagnetometer();
 

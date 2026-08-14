@@ -349,7 +349,7 @@ IMU_AutoCalibrator imuCalibrator;
  * ==========================================================================================
  */
 // --- 硬件传感器驱动对象 ---
-IST8310 compass;                     // IST8310 磁力计驱动 (I2C, Wire1)
+MagSensor magSensor;                  // 磁力计统一管理 (IST8310/QMC5883L 自动探测, I2C Wire1)
 Dps310 Dps310Sensor;                 // DPS310 气压计驱动 (I2C, IIC2, 0x77)
 ICM42688 IMU(SPI, SPI_CS, 10000000); // ICM42688 六轴IMU驱动 (SPI, CS=PA4, 10MHz)
 MTF02P opticalFlowSensor;            // MTF02P 光流传感器驱动 (Serial7)

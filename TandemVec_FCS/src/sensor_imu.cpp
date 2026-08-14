@@ -1,11 +1,19 @@
 #include "sensor_imu.h"
 #include "math_utils.h"
 #include "QuaternionMath.h"
+#include "MagCalStore.h" // 标定参数内部 Flash 持久化（上电加载）
 
 namespace
 {
   constexpr uint32_t ICM42688_INIT_SAMPLE_TIMEOUT_MS = 20; // 单个初始化样本等待超时，避免IMU异常时卡死setup
   constexpr int ICM42688_INIT_DATA_TIMEOUT_ERROR = -1001;  // 自定义错误码：初始化阶段等待数据超时
+
+  // ★ 磁力计馈入 Madgwick 的总开关（当前关闭，与既有"临时禁用磁力计"行为一致）。
+  // 启用前必须完成：① 对应芯片轴映射上板标定（MagMath.h 常量表）；
+  //                ② 椭球标定（DBG 命令 `magcal start/fit/save`，见 communication.cpp）。
+  // 磁力计轮询不受此开关影响（见步骤 7），样本始终保持新鲜，
+  // 供遥测 / EKF 初始化使用；本开关只决定是否馈入姿态解算。
+  constexpr bool kMagFeedMadgwick = false;
 }
 
 bool initMagnetometer()
@@ -19,16 +27,38 @@ bool initMagnetometer()
   Wire1.setClock(400000); // 400kHz Fast Mode
   Serial8.println("[Init] I2C Bus (Wire1) Started at 400kHz");
 
-  // 2. 初始化传感器驱动
-  //    传入 &Wire1 指针，指定使用 PB7/PB6 端口
-  if (!compass.begin(&Wire1))
+  // 2. 自动探测磁力计（IST8310@0x0E 优先，其次 QMC5883L@0x0D）
+  //    轴对齐与硬铁偏置统一在 MagSensor 层完成，上层只看到机体 FRD 数据。
+  if (!magSensor.begin(&Wire1))
   {
-    Serial8.println("[Error] IST8310 Not Found!");
+    Serial8.println("[Error] Magnetometer Not Found!");
+    Serial8.println("[Error] Probed: IST8310 (0x0E), QMC5883L (0x0D).");
     Serial8.println("[Error] Please check wiring (SDA/SCL) and Power.");
     return false;
   }
 
-  Serial8.println("[Init] IST8310 Setup Finished Successfully.");
+  Serial8.print("[Init] Magnetometer: ");
+  Serial8.print(magSensor.chipName());
+  Serial8.println(" Setup Finished Successfully.");
+
+  // 3. 从内部 Flash 加载上次椭球标定（magic/版本/CRC 校验通过才应用；
+  //    失败静默保持未标定直通，不影响飞行）
+  magcal::MagCalParams storedCal;
+  storedCal.identity();
+  if (magcal::storeLoad(storedCal) && magSensor.setCal(storedCal))
+  {
+    Serial8.print("[Init] MagCal loaded from flash: bias=(");
+    Serial8.print(storedCal.hardIron[0], 1);
+    Serial8.print(", ");
+    Serial8.print(storedCal.hardIron[1], 1);
+    Serial8.print(", ");
+    Serial8.print(storedCal.hardIron[2], 1);
+    Serial8.println(") uT");
+  }
+  else
+  {
+    Serial8.println("[Init] MagCal: no valid stored calibration (uncalibrated pass-through).");
+  }
   Serial8.println("----------------------------------------");
 
   return true;
@@ -303,31 +333,63 @@ bool readIMUData()
     // ========================================================================
     // 步骤 7: 使用Madgwick算法更新姿态估计
     // ========================================================================
-    // if (compass.update())
-    if (false) // 临时禁用磁力计
+    // 7.1 磁力计非阻塞轮询（无论是否馈入姿态解算都保持采样新鲜）：
+    //     驱动内部 FSM 限速，绝大多数调用只做一次 micros() 比较（~微秒级）；
+    //     I2C 事务仅在采样点发生（IST8310 约每 7ms、QMC5883L 约每 10ms 一次突发读）。
+    //     输出已由 MagSensor 层完成椭球标定（若有效）并对齐到机体 FRD。
+    if (magSensor.isPresent())
     {
-      // 1. 读取 IST8310 原始数据 (单位: uT)
-      IST8310_Vector mag_raw = compass.get_data();
+      magSensor.update();
+    }
 
-      // 2. 执行坐标系映射 (关键步骤！！！)
-      // 目标：将数据对齐到 IMU 的 "前-左-上" 坐标系
-      double mx_flu = -mag_raw.y; // 芯片Y指向后，取反变成前
-      double my_flu = -mag_raw.x; // 芯片X指向右，取反变成左
-      double mz_flu = mag_raw.z;  // 芯片Z指向上，保持不变
+    // 7.1b 大疆式两圈引导校准状态机（DBG `magcal guided`；判定帧率 = IMU 帧率）
+    if (magSensor.guideActive())
+    {
+      // SI 单位转换：g → m/s²、dps → rad/s（axBody/gxBody 为机体系 FRD）
+      const float accFrd[3] = {axBody * G_TO_MS2, ayBody * G_TO_MS2, azBody * G_TO_MS2};
+      const float gyrFrd[3] = {gxBody * DEG_TO_RAD, gyBody * DEG_TO_RAD, gzBody * DEG_TO_RAD};
+      magSensor.guideUpdate(accFrd, gyrFrd, micros());
+    }
 
-      // 3. 传入 Madgwick 算法
-      // 注意：ax, ay, az, gx, gy, gz 已经是 "前-左-上" 了
-      madgwick.update(
-          gxForMadgwick_dps,
-          gyForMadgwick_dps,
-          gzForMadgwick_dps,
-          axForMadgwick,
-          ayForMadgwick,
-          azForMadgwick,
-          mx_flu,
-          my_flu,
-          mz_flu,
-          deltaTimeSecs);
+    if (kMagFeedMadgwick)
+    {
+      // 7.2 磁力计馈入路径（开关 kMagFeedMadgwick，见文件头）
+      if (magSensor.fresh())
+      {
+        // 1. 读取统一 FRD 样本 (单位: uT)
+        MagSample mag_frd = magSensor.sampleFRD();
+
+        // 2. 执行坐标系映射：机体 FRD(前右下) -> Madgwick 输入系 (前左上)
+        //    即 (x, -y, -z)，与下方加速度计/陀螺仪的 FLU 转换约定一致。
+        double mx_flu = mag_frd.x;
+        double my_flu = -mag_frd.y;
+        double mz_flu = -mag_frd.z;
+
+        // 3. 传入 Madgwick 算法
+        madgwick.update(
+            gxForMadgwick_dps,
+            gyForMadgwick_dps,
+            gzForMadgwick_dps,
+            axForMadgwick,
+            ayForMadgwick,
+            azForMadgwick,
+            mx_flu,
+            my_flu,
+            mz_flu,
+            deltaTimeSecs);
+      }
+      else
+      {
+        // 尚无有效磁样本：回退纯 IMU
+        madgwick.updateIMU(
+            gxForMadgwick_dps,
+            gyForMadgwick_dps,
+            gzForMadgwick_dps,
+            axForMadgwick,
+            ayForMadgwick,
+            azForMadgwick,
+            deltaTimeSecs);
+      }
     }
     else
     {
