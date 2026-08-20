@@ -161,7 +161,7 @@ pio device monitor
 | `src/math_utils.h` | 纯数学工具函数，`inline` header-only |
 | `src/task_scheduler.h/cpp` | 2kHz 定时器驱动的协作式任务调度器 |
 | `src/sensor_imu.h/cpp` | ICM42688 IMU、磁力计初始化与数据采集 |
-| `src/sensor_peripheral.h/cpp` | DPS310 气压计、LQS48 光流、角度传感器 |
+| `src/sensor_peripheral.h/cpp` | DPS310 气压计、光流传感器自动识别（LQS48 / MTF02P）、角度传感器 |
 | `src/navigation_task.h/cpp` | EKF 组合导航、垂直/水平 KF、GNSS 处理 |
 | `src/flight_control.h/cpp` | 控制律、PID、TVC、混控输出 |
 | `src/communication.h/cpp` | CRSF 遥控、MAVLink 遥测、AnoCom 地面站 |
@@ -187,7 +187,8 @@ loop()
 | 任务函数 | 频率 | 间隔 | 层级 |
 |----------|------|------|------|
 | `handleICM42688` | 2kHz | 0.5ms | 传感器采集 |
-| `handleLQS48Flow` | 500Hz | 2ms | 传感器采集 |
+| `handleOpticalFlowSensor` | 500Hz | 2ms | UART7 光流自动识别+采集（LQS48 / MTF02P Micolink / MTF02P AUTO 版 MAVLink APM） |
+| `handleMTF02PFlow` | 由识别结果自动调用 | — | MTF02P Micolink 数据处理（仅识别到 Micolink 输出时运行） |
 | `handleDPS310` | 约129Hz | 7.735ms | 传感器采集 |
 | `handleDeta100` | 200Hz | 5ms | DETA100 数据源，仅检测到模块时注册 |
 | `handleNavigationSystem` | 200Hz | 5ms | 状态估计 |

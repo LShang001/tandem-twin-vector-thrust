@@ -79,13 +79,39 @@ void getFilteredTVCAngles(float &angle1, float &angle2);
 void handleAngleSensors();
 
 /**
- * @brief MTF02P 光流传感器数据处理
+ * @brief UART7 光流传感器自动识别与调度任务 (500Hz)
  *
- * 处理 MTF02P 光流传感器的完整数据流：
+ * 上电后自动在 LQS48 (921600/115200) 与 MTF-02P (115200) 之间扫描：
+ *   - LQS48: 0xFA 0xAA 自定义协议
+ *   - MTF-02P Micolink: 0xEF 自定义协议
+ *   - MTF-02P AUTO 版: 主动发送 ArduPilot 风格 MAVLink 心跳，解析 MAVLink
+ *     OPTICAL_FLOW / DISTANCE_SENSOR 消息
+ * 识别成功后锁定传感器类型，并分发到对应处理函数。该任务替换原先固定注册的
+ * handleLQS48Flow，作为光流数据输入的唯一切入点。
+ */
+void handleOpticalFlowSensor();
+
+// ---- 光流自动识别诊断信息（DBG `flow` 命令使用）----
+uint8_t flowSensorGetDetectPhase();
+uint32_t flowSensorGetDetectLoopCount();
+uint32_t flowSensorGetMavFlowFrames();
+uint32_t flowSensorGetMavDistFrames();
+uint32_t flowSensorGetMspFlowFrames();
+uint32_t flowSensorGetMspRangeFrames();
+uint32_t flowSensorGetUartRxAvailSum();
+uint32_t flowSensorGetUartRxReadSum();
+void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms);
+
+/**
+ * @brief MTF02P (Micolink 协议) 光流传感器数据处理
+ *
+ * 处理 MTF02P Micolink 数据流：
  * 1. 高度处理: 斜距 -> 四元数倾斜补偿 -> 垂直高度 -> 中值+低通滤波
  * 2. 速度处理: 归一化光流速度 -> 实际速度 -> IMU旋转补偿 -> 纯平移速度 -> 滤波
+ *
+ * 任务名与 LQS48 通道（handleLQS48Flow）严格区分，便于调度表/日志辨识传感器。
  */
-void handleOpticalFlow();
+void handleMTF02PFlow();
 
 /**
  * @brief LQS48 光流传感器数据处理 (500Hz)
@@ -103,7 +129,7 @@ void handleLQS48Flow();
  * 输出 CSV 字段: 时间, 斜距, 原始速度XY, 测距有效, 倾斜因子, 高度,
  *                 光流有效, IMU角速度XY, 旋转补偿XY, 平移速度XY
  */
-void handleFlowTelemetry();
+void handleMTF02PFlowTelemetry();
 
 /**
  * @brief LQS48 光流遥测调试任务 (50Hz)

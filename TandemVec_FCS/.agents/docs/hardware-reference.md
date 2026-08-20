@@ -12,7 +12,7 @@
 | Serial4 | UART4 | DETA100 模块 **或** UBX GNSS，二选一，由上电检测锁定 |
 | Serial5 | UART5 | 上位机轨迹规划接口 + 制导指令接收（921600 baud） |
 | Serial6 | USART6 | AnoCom / MAVLink 地面站通信，互斥使用（**波特率见 `state_data.h` 的 `SERIAL6_BAUDRATE`**，2026-08-07 对齐 2.4G 数传为 2M，随数传模块可调；调试模式入口 "DBG\n"，见 AGENTS.md §调试工具链） |
-| Serial7 | UART7 | 光流传感器接口（921600 baud） |
+| Serial7 | UART7 | 光流传感器接口（自动识别：LQS48@921600 / MTF02P@115200） |
 | Serial8 | UART8 | USB Type-C 调试输出（921600 baud）；板载 CH343 USB 转串口芯片，数据线直连 PC 即可监视 |
 
 ## 已验证关键事实（不得随意修改）

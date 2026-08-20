@@ -105,7 +105,21 @@ struct OpticalFlowData
   float velocity_y_mps;  // 旋转补偿后的Y轴速度 (m/s, Body Frame)
   uint8_t flow_quality;  // 光流信号质量
   bool is_flow_valid;    // 光流数据有效标志
-  uint32_t timestamp_ms; // 时间戳
+  uint32_t timestamp_ms; // 传感器时间戳
+  uint32_t last_update_ms; // 最近一次收到有效光流帧的系统时刻 (millis, 用于超时失效)
+};
+
+// 光流数据最大允许陈旧时间：超过该值仍未收到新帧，导航融合应视为光流失效。
+constexpr uint32_t kFlowDataStaleTimeoutMs = 300U;
+
+// 光流传感器类型（UART7 自动识别结果；加新传感器时扩展此枚举与检测状态机）
+enum FlowSensorType : uint8_t
+{
+  FLOW_SENSOR_NONE = 0,          // 未识别到传感器
+  FLOW_SENSOR_LQS48 = 1,         // LQ-S48 自定义协议 @921600（也兼容 115200）
+  FLOW_SENSOR_MTF02P_MICOLINK = 2, // MTF-02P Micolink 协议 @115200
+  FLOW_SENSOR_MTF02P_MAVLINK_APM = 3, // MTF-02P AUTO/AUTO 版，识别 ArduPilot 后走 MAVLink APM 输出
+  FLOW_SENSOR_MTF02P_MSP = 4       // MTF-02P AUTO 版在 INAV/MSP 模式下输出 MSP2 OPTICALFLOW/RANGEFINDER
 };
 
 // 控制输入结构体 (遥控器与开关量)
@@ -464,8 +478,8 @@ extern IMU_AutoCalibrator imuCalibrator;
 extern MagSensor magSensor;               // 磁力计统一管理 (IST8310/QMC5883L 自动探测, Wire1)
 extern Dps310 Dps310Sensor;               // 气压计
 extern ICM42688 IMU;                      // 板载IMU (SPI, 10MHz)
-extern MTF02P opticalFlowSensor;          // 光流传感器 (MTF02P)
-extern LQS48_Flow opticalFlowSensorLQS48; // 光流传感器 (LQS48)
+extern MTF02P mtf02pSensor;          // 光流传感器 (MTF02P)
+extern LQS48_Flow lqs48Sensor; // 光流传感器 (LQS48)
 
 // 姿态解算算法
 extern Madgwick madgwick; // Madgwick AHRS 互补滤波算法
@@ -549,6 +563,15 @@ extern float ekf_accel_bias_z_mps2;  // EKF 估计 Z 轴加表零偏 (机体系 
 
 // 光流全局数据实例
 extern volatile OpticalFlowData flow_data;
+
+// UART7 光流传感器自动识别状态
+extern volatile FlowSensorType active_flow_sensor; // 当前锁定的光流传感器类型
+extern volatile uint32_t flow_sensor_baud;         // 当前 UART7 实际波特率
+
+// 室内无 GNSS 时光流速度融合 EKF 的统计（导航任务更新，DBG `flow` 查看）
+extern volatile uint32_t g_flow_fusion_attempts;
+extern volatile uint32_t g_flow_fusion_fused;
+extern volatile uint32_t g_flow_fusion_rejected;
 
 /*
  * ==========================================================================================

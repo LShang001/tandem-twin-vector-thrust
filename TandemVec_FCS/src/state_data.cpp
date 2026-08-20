@@ -352,8 +352,8 @@ IMU_AutoCalibrator imuCalibrator;
 MagSensor magSensor;                  // 磁力计统一管理 (IST8310/QMC5883L 自动探测, I2C Wire1)
 Dps310 Dps310Sensor;                 // DPS310 气压计驱动 (I2C, IIC2, 0x77)
 ICM42688 IMU(SPI, SPI_CS, 10000000); // ICM42688 六轴IMU驱动 (SPI, CS=PA4, 10MHz)
-MTF02P opticalFlowSensor;            // MTF02P 光流传感器驱动 (Serial7)
-LQS48_Flow opticalFlowSensorLQS48;   // LQS48 光流传感器驱动 (Serial7)
+MTF02P mtf02pSensor;            // MTF02P 光流传感器驱动 (Serial7)
+LQS48_Flow lqs48Sensor;   // LQS48 光流传感器驱动 (Serial7)
 
 // --- 算法对象 ---
 Madgwick madgwick; // Madgwick AHRS 姿态解算算法
@@ -435,6 +435,14 @@ float baro_ekf_test_ratio = 0.0f;
 bool baro_ekf_fused = false;
 
 volatile OpticalFlowData flow_data = {0};
+
+// UART7 光流传感器自动识别状态（默认未识别，由 sensor_peripheral.cpp 的检测状态机锁定）
+volatile FlowSensorType active_flow_sensor = FLOW_SENSOR_NONE;
+volatile uint32_t flow_sensor_baud = 0;
+
+volatile uint32_t g_flow_fusion_attempts = 0;
+volatile uint32_t g_flow_fusion_fused = 0;
+volatile uint32_t g_flow_fusion_rejected = 0;
 
 // 通信协议数据
 // 发动机控制器通信

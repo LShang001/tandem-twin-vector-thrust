@@ -356,8 +356,9 @@ void setup()
     Serial8.println("Onboard DPS310 initialized successfully.");
   }
 
-  opticalFlowSensorLQS48.begin(opticalFlowSerial);
-  Serial8.println("LQS48 Optical Flow Sensor Initialized.");
+  lqs48Sensor.begin(opticalFlowSerial);
+  mtf02pSensor.begin(opticalFlowSerial);
+  Serial8.println("Optical Flow Sensor UART7 Initialized (auto-detect: LQS48 / MTF02P).");
 
   // ====================================================================
   // 5.5 CAN 总线初始化 (MCP2515 on SPI2)
@@ -397,7 +398,7 @@ void setup()
   // --- 传感器采集层 (高频) ---
   BFS_ADD_TASK(handleICM42688, 0.5f, "ICM42688");                         // IMU 数据采集 (2kHz, 05ms) - 最高频率，姿态解算基础
   BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz, 贴近128Hz压力输出且保留FIFO余量
-  BFS_ADD_TASK(handleLQS48Flow, 2.0f, "LQS48Flow");                       // LQS48 光流传感器 (500Hz, 2ms) - 水平速度/测距
+  BFS_ADD_TASK(handleOpticalFlowSensor, 2.0f, "OpticalFlow");            // UART7 光流自动识别+采集 (500Hz, 2ms) - LQS48/MTF02P
 
   // --- DETA100 数据源 (仅当检测到 DETA100 时注册) ---
   // 必须在状态估计层之前注册，确保同周期内 handleNavigationSystem 读到本周期最新的 DETA100 数据。
@@ -447,11 +448,11 @@ void setup()
   // addTask(handleElrs, 4.0f);              // ELRS 原始遥控接收 (250Hz) - 测试原始遥控链路时启用
   // addTask(handleCrsf, 4.0f);              // CRSF 通道转发 (250Hz) - 测试通道转发时启用
   // addTask(handleTelemetry, 5.0f);         // Serial8 调试遥测 (200Hz) - 需要额外调试输出时启用
-  // addTask(handleOpticalFlow, 1.0f);       // MTF02P 光流处理 (1000Hz) - 与 LQS48 对比测试时启用
+  // addTask(handleMTF02PFlow, 1.0f);       // MTF02P 光流处理 (1000Hz) - 与 LQS48 对比测试时启用
   // addTask(handleAnoCom, 5.0f);          // AnoCom - 已移至 EKF 之后紧邻注册 (见状态估计层)
   // addTask(handleAngleSensors, 4.0f);      // TVC 角度传感器 (250Hz) - 需要角度闭环/标定时启用
   BFS_ADD_TASK(handleDataLogging, 5.0f, "DataLog");   // 黑匣子数据记录 (200Hz) - Serial3 CSV + Flash 双写（解锁触发）
-  // addTask(handleFlowTelemetry, 20.0f);    // 光流调试打印 (50Hz) - 调光流补偿时启用
+  // addTask(handleMTF02PFlowTelemetry, 20.0f); // MTF02P 光流调试打印 (50Hz) - 调光流补偿时启用
 
   Serial8.println("VTVL_ElectricDualRotor_FC Initialized.");
   Serial8.println("System Setup Complete. Starting main loop...");

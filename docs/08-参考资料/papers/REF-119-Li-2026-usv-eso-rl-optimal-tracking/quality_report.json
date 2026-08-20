@@ -1,0 +1,31 @@
+{
+  "output_dir": "C:\\Users\\12631\\AppData\\Local\\Temp\\jai-usv-md",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "C:\\Users\\12631\\AppData\\Local\\Temp\\jai-usv-md\\fe6d0a79-18e7-460a-8139-894506f60d5e_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 85629,
+    "word_like_count": 13778,
+    "line_count": 895,
+    "heading_count": 18,
+    "table_row_count": 0,
+    "latex_block_count": 99,
+    "latex_inline_count": 245
+  },
+  "images": {
+    "referenced_count": 31,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "item_count": 11,
+    "type_counts": {}
+  },
+  "status": "ok",
+  "warnings": []
+}

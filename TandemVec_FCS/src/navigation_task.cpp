@@ -426,8 +426,13 @@ void handleDualVectorYawFusion()
   if (!isGnssInstantValidForNav())
     return;
 
-  // 检查 光流 状态 (必须有效)
+  // 检查 光流 状态 (必须有效且新鲜)
   if (!flow_data.is_flow_valid)
+    return;
+
+  // 光流数据陈旧保护：超过 kFlowDataStaleTimeoutMs 未收到新帧时，
+  // 不再用旧速度参与航向融合，避免传感器停流后继续污染 EKF。
+  if ((millis() - flow_data.last_update_ms) > kFlowDataStaleTimeoutMs)
     return;
 
   // ========================= 2. 数据获取与预处理 =========================
@@ -548,6 +553,79 @@ void updateUbxRelativePosition()
   ubx_relative_north = (float)ned_pos(0);
   ubx_relative_east = (float)ned_pos(1);
   ubx_relative_down = (float)ned_pos(2);
+}
+
+// ----------------------------------------------------------------------
+// 室内无 GNSS 光流速度融合（NED）
+// 仅在：导航已初始化、GNSS 无效、非静止确认、光流数据有效且新鲜时执行。
+// 光流采样约 50Hz，而导航调度 200Hz；用 last_update_ms 门控，保证每个
+// 新光流样本只融合一次，避免重复注入同一观测。
+// ----------------------------------------------------------------------
+static void handleIndoorOpticalFlowVelocityFusion()
+{
+  static uint32_t s_last_fused_flow_update_ms = 0;
+
+  if (!nav_system_initialized)
+  {
+    return;
+  }
+  if (isGnssInstantValidForNav())
+  {
+    return;
+  }
+  if (static_det.confirmed_static)
+  {
+    return;
+  }
+  if (!flow_data.is_flow_valid)
+  {
+    return;
+  }
+  if ((millis() - flow_data.last_update_ms) > kFlowDataStaleTimeoutMs)
+  {
+    return;
+  }
+  if (flow_data.last_update_ms == s_last_fused_flow_update_ms)
+  {
+    return; // 本光流样本已经融合过，等待下一个新样本
+  }
+  s_last_fused_flow_update_ms = flow_data.last_update_ms;
+
+  // 光流速度在机体 FRD 下，绕当前 EKF 航向旋转到 NED。室内无磁强计/无 GNSS 时，
+  // 航向仍由 EKF 陀螺积分维持，短时可用；长时间航向漂移会导致 NED 分量旋转误差。
+  const float yaw_rad = nav_ekf.yaw_rad();
+  float vel_north = 0.0f;
+  float vel_east = 0.0f;
+  bodyToNed(flow_data.velocity_x_mps, flow_data.velocity_y_mps,
+            yaw_rad, vel_north, vel_east);
+
+  // 动态噪声：速度越大光流通常越抖；质量低时进一步降信任。
+  const float speed_mps = sqrtf(vel_north * vel_north + vel_east * vel_east);
+  float noise_mps = kf_h_r_vel_base + 0.10f * speed_mps;
+  if (flow_data.flow_quality < 50)
+  {
+    noise_mps += 0.20f;
+  }
+  noise_mps = constrain(noise_mps, 0.10f, 2.0f);
+
+  // 光流不观测垂直通道：D 分量用 EKF 当前值，噪声放大，等价于抵消垂直分量的影响。
+  const Eigen::Vector3f measured_vel_ned(
+      vel_north, vel_east, nav_ekf.ned_vel_mps()(2));
+  const float down_noise_mps = 5.0f;
+
+  const bfs::MeasurementUpdateResult result =
+      nav_ekf.MeasurementUpdateVelocityDetailed(measured_vel_ned,
+                                                 noise_mps,
+                                                 down_noise_mps);
+  g_flow_fusion_attempts++;
+  if (result.fused)
+  {
+    g_flow_fusion_fused++;
+  }
+  else if (result.attempted)
+  {
+    g_flow_fusion_rejected++;
+  }
 }
 
 void handleNavigationSystem()
@@ -1224,6 +1302,13 @@ void handleNavigationSystem()
                                 gnss_measurement_age_s);
     }
 
+    // 无 GNSS 且非静止时，用光流速度约束 EKF 水平速度。
+    // 这是室内无 GPS 悬停/定点的主要速度观测源；EKF 积分得到相对位置。
+    if (!gnss_instant_valid_for_nav)
+    {
+      handleIndoorOpticalFlowVelocityFusion();
+    }
+
     if (gnss_full_quality_for_nav)
     {
       // 只有新鲜GNSS有效时，才按导航周期慢速校正后台 AHRS 航向偏置。
@@ -1593,8 +1678,9 @@ void updateEstimatedVerticalVelocity()
 
     float raw_estimated_velocity = 0.0f;
 
-    // 条件2: 检查激光测距是否有效且在合理范围内
-    if (flow_data.is_range_valid && flow_data.distance_m > 0.05f)
+    // 条件2: 检查激光测距是否有效、在合理范围内且数据新鲜
+    if (flow_data.is_range_valid && flow_data.distance_m > 0.08f &&
+        (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs)
     {
       // --- 优先级2: 使用激光高度进行差分 ---
       if (is_first_run_flow_vel)
@@ -1782,7 +1868,8 @@ void handleHorizontalEstimation()
 
   // 检查光流数据有效性 (使用去旋转后的纯平移速度 flow_data.velocity_x/y_mps)
   // 并且高度不能太低 (例如 > 5cm)，否则光流数据不可靠
-  if (flow_data.is_flow_valid && estimated_height > 0.05f)
+  if (flow_data.is_flow_valid && estimated_height > 0.05f &&
+      (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs)
   {
     // 立即清除标志位，防止同一个数据在下个循环被重复使用
     flow_data.is_flow_valid = false;

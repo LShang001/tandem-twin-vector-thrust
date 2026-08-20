@@ -92,9 +92,25 @@ typedef struct
 } MicolinkPayloadRangeSensor_t;
 #pragma pack()
 
+// 协议格式锁定：0x51 payload 按手册固定为 20 字节，布局必须有 pack(1) 保证。
+static_assert(sizeof(MicolinkPayloadRangeSensor_t) == 20,
+              "Micolink 0x51 payload size must be 20 bytes");
+
 // -----------------------------------------------------------------------------
 // MTF-02P 传感器库主类
 // -----------------------------------------------------------------------------
+/**
+ * @brief MTF02P 链路统计结构体
+ *
+ * 用于监控串口链路质量和协议解析状态。
+ */
+typedef struct
+{
+    uint32_t valid_frames;        // 校验通过的有效帧数
+    uint32_t checksum_errors;     // 校验失败的帧数
+    uint32_t payload_len_errors;  // 0x51 消息 payload 长度异常的帧数
+    uint32_t lost_frames;         // 由 seq 不连续检测到的丢帧数量
+} MTF02P_Stats_t;
 
 /**
  * @brief 用于与MTF-02P传感器通信的主类。
@@ -140,7 +156,25 @@ public:
     /** @brief 获取最新的光流质量。 @return uint8_t 光流质量值，越大越可信。 */
     uint8_t getFlowQuality();
 
-    /** @brief 检查最新的测距数据是否有效。 @return bool 如果tof_status为1且距离值大于0，返回true。 */
+    /** @brief 获取 ToF 测距精度或置信度。 @return uint8_t 精度值。 */
+    uint8_t getPrecision();
+
+    /** @brief 获取 ToF 测距状态原始值。 @return uint8_t 1 表示数据可用。 */
+    uint8_t getTofStatus();
+
+    /** @brief 获取光流状态原始值。 @return uint8_t 1 表示数据可用。 */
+    uint8_t getFlowStatus();
+
+    /** @brief 获取当前帧的包序列号。 @return uint8_t 0~255 循环。 */
+    uint8_t getSequence();
+
+    /** @brief 获取当前帧的设备 ID。 @return uint8_t dev_id。 */
+    uint8_t getDeviceId();
+
+    /** @brief 获取当前帧的系统 ID。 @return uint8_t sys_id。 */
+    uint8_t getSystemId();
+
+    /** @brief 检查最新的测距数据是否有效。 @return bool 如果 tof_status==1 且 distance>=10mm，返回 true。 */
     bool isRangeDataValid();
 
     /** @brief 检查最新的光流数据是否有效。 @return bool 如果flow_status为1，返回true。 */
@@ -148,6 +182,14 @@ public:
 
     /** @brief 获取传感器发送的内部时间戳。 @return uint32_t 时间戳，单位为毫秒(ms)。 */
     uint32_t getTimestamp_ms();
+
+    // --- 链路统计API ---
+
+    /** @brief 获取链路统计信息。 @return MTF02P_Stats_t 统计结构体副本。 */
+    MTF02P_Stats_t getStatistics();
+
+    /** @brief 重置链路统计信息。 */
+    void resetStatistics();
 
 private:
     /**
@@ -160,6 +202,9 @@ private:
     Stream *_port;                            // 指向用户传入的串口对象的指针
     MicolinkMsg_t _msg;                       // 用于状态机解析的内部消息帧结构体
     MicolinkPayloadRangeSensor_t _sensorData; // 存储最新解析出的、有效传感器数据的结构体
+    MTF02P_Stats_t _stats;                    // 链路统计信息
+    uint8_t _last_seq;                        // 上一帧序列号，用于丢帧检测
+    bool _has_last_seq;                       // 是否已收到过有效序列号
 };
 
 #endif // MTF02P_h

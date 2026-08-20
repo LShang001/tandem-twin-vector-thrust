@@ -24,10 +24,12 @@ MTF02P::MTF02P()
 {
     // 将串口指针初始化为空，表示尚未通过begin()方法进行配置
     _port = nullptr;
-    // 将状态机状态置为0 (等待帧头)
-    _msg.status = 0;
-    // 将负载计数器清零
-    _msg.payload_cnt = 0;
+    // 清零协议解析状态、传感器数据和链路统计
+    memset(&_msg, 0, sizeof(_msg));
+    memset(&_sensorData, 0, sizeof(_sensorData));
+    memset(&_stats, 0, sizeof(_stats));
+    _last_seq = 0;
+    _has_last_seq = false; // 尚未收到有效序列号，首帧不计算丢帧
 }
 
 /**
@@ -62,19 +64,58 @@ bool MTF02P::update()
         uint8_t data = _port->read();
 
         // 将读取到的字节喂给状态机进行解析
-        if (_parse_char(data))
+        if (!_parse_char(data))
         {
-            // 如果_parse_char返回true，表示一帧数据接收完毕且校验正确
-            // 检查消息ID是否是我们关心的传感器数据
-            if (_msg.msg_id == MICOLINK_MSG_ID_RANGE_SENSOR)
+            continue; // 尚未完成一帧或校验失败
+        }
+
+        // _parse_char 返回 true 表示收到一帧校验通过的完整数据
+        _stats.valid_frames++;
+
+        // 只处理测距/光流传感器消息（0x51）
+        if (_msg.msg_id != MICOLINK_MSG_ID_RANGE_SENSOR)
+        {
+            continue;
+        }
+
+        // 防御性检查：0x51 payload 至少有当前结构体大小（未来扩展可更长）。
+        // 复制时固定取当前结构体大小，避免 memcpy 越界写入 _sensorData。
+        if (_msg.len < sizeof(_sensorData))
+        {
+            _stats.payload_len_errors++;
+            memset(&_sensorData, 0, sizeof(_sensorData)); // 使旧数据失效，避免上层消费过期值
+            continue;
+        }
+
+        // 使用memcpy将payload字节流安全地转换为结构体。
+        // 头文件中已使用 #pragma pack(1) 保证 _sensorData 与协议布局一致。
+        memcpy(&_sensorData, _msg.payload, sizeof(_sensorData));
+
+        // 基于包序列号检测串口链路丢帧（0~255 循环）
+        if (_has_last_seq)
+        {
+            uint8_t expected = _last_seq + 1U;
+            if (_msg.seq != expected)
             {
-                // 使用memcpy将payload字节流安全地转换为结构体
-                // 这是安全且正确的做法，因为我们在头文件中使用了 #pragma pack(1)
-                // 来保证_sensorData结构体的内存布局与payload字节流完全一致。
-                memcpy(&_sensorData, _msg.payload, _msg.len);
-                return true; // 成功接收到新数据，通知主程序
+                uint8_t lost_count;
+                if (_msg.seq > expected)
+                {
+                    lost_count = _msg.seq - expected;
+                }
+                else
+                {
+                    lost_count = static_cast<uint8_t>((256 - expected) + _msg.seq);
+                }
+                _stats.lost_frames += lost_count;
             }
         }
+        else
+        {
+            _has_last_seq = true;
+        }
+        _last_seq = _msg.seq;
+
+        return true; // 成功接收到新数据，通知主程序
     }
 
     // 如果循环结束仍未解析出完整数据帧，则返回false
@@ -134,11 +175,13 @@ bool MTF02P::_parse_char(uint8_t data)
         if (_msg.len > MICOLINK_MAX_PAYLOAD_LEN)
         {
             // 负载长度超出定义的最大值，判定为错误帧，重置状态机
+            _msg.payload_cnt = 0;
             _msg.status = 0;
         }
         else if (_msg.len == 0)
         {
             // 负载长度为0，直接跳到等待校验和的状态
+            _msg.payload_cnt = 0;
             _msg.status = 7;
         }
         else
@@ -155,6 +198,7 @@ bool MTF02P::_parse_char(uint8_t data)
         if (_msg.payload_cnt == _msg.len)
         {
             // 负载数据接收完毕，转移到下一状态
+            _msg.payload_cnt = 0;
             _msg.status++;
         }
         break;
@@ -162,6 +206,7 @@ bool MTF02P::_parse_char(uint8_t data)
     case 7:                   // 状态7: 接收并校验
         _msg.checksum = data; // 这是接收到的原始校验和
         _msg.status = 0;      // 无论校验是否成功，都重置状态机以准备接收下一帧
+        _msg.payload_cnt = 0;
 
         // 比较动态计算的校验和与接收到的校验和
         if (_msg.running_checksum == _msg.checksum)
@@ -169,12 +214,15 @@ bool MTF02P::_parse_char(uint8_t data)
             // 校验成功！返回true，通知上层函数
             return true;
         }
-        // 如果校验失败，函数将继续执行到末尾并返回false
+
+        // 校验失败，累计错误帧数用于链路诊断
+        _stats.checksum_errors++;
         break;
 
     default: // 异常状态处理
         // 如果因未知原因进入了未定义的状态，强制重置状态机
         _msg.status = 0;
+        _msg.payload_cnt = 0;
         break;
     }
 
@@ -192,14 +240,32 @@ int16_t MTF02P::getFlowVelX_cms() { return _sensorData.flow_vel_x; }
 int16_t MTF02P::getFlowVelY_cms() { return _sensorData.flow_vel_y; }
 uint8_t MTF02P::getFlowQuality() { return _sensorData.flow_quality; }
 uint32_t MTF02P::getTimestamp_ms() { return _sensorData.time_ms; }
+uint8_t MTF02P::getPrecision() { return _sensorData.precision; }
+uint8_t MTF02P::getTofStatus() { return _sensorData.tof_status; }
+uint8_t MTF02P::getFlowStatus() { return _sensorData.flow_status; }
+uint8_t MTF02P::getSequence() { return _msg.seq; }
+uint8_t MTF02P::getDeviceId() { return _msg.dev_id; }
+uint8_t MTF02P::getSystemId() { return _msg.sys_id; }
+
+MTF02P_Stats_t MTF02P::getStatistics()
+{
+    return _stats;
+}
+
+void MTF02P::resetStatistics()
+{
+    memset(&_stats, 0, sizeof(_stats));
+    _last_seq = 0;
+    _has_last_seq = false;
+}
 
 /**
  * @brief 检查最新的测距数据是否有效。
  * @details 根据协议文档，tof_status为1表示数据可用。
- *          同时，距离值为0也表示数据不可用。因此我们检查两个条件。
- * @return bool 如果数据有效，返回true。
+ *          同时，距离值最小有效值为10mm，0表示数据不可用。
+ * @return bool 如果 tof_status==1 且 distance>=10mm，返回true。
  */
-bool MTF02P::isRangeDataValid() { return (_sensorData.tof_status == 1 && _sensorData.distance > 0); }
+bool MTF02P::isRangeDataValid() { return (_sensorData.tof_status == 1 && _sensorData.distance >= 10U); }
 
 /**
  * @brief 检查最新的光流数据是否有效。

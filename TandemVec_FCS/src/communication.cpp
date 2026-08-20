@@ -1898,6 +1898,8 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   tasks             - task schedule stats (Hz/抖动/迟到/负荷, 打印后清零)"));
         serial.println(F("[DBG]   id                - online ID: b=I名义/I实际, 激励, 建议Kp (飞完标定动作后读)"));
         serial.println(F("[DBG]   ver               - version info"));
+        serial.println(F("[DBG]   flow              - optical flow sensor auto-detect status"));
+        serial.println(F("[DBG]   flowdump <ms>     - dump UART7 flow bytes (115200, max 2000ms)"));
         serial.println(F("[DBG]   gpsproto [ubx|nmea|auto] [baud] - GNSS 解析协议查看/切换"));
         serial.println(F("[DBG]   nmea              - NMEA 备用链路状态（fix/sv/pdop/句统计）"));
         serial.println(F("[DBG]   ubxcfg            - UBX 接收机自动配置（重跑）"));
@@ -1998,6 +2000,43 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         } else {
           serial.println(F("[DBG] usage: wsfault <0|1>"));
         }
+      }
+      else if (strncmp(line, "flowdump", 8) == 0) {
+        int ms = 1000;
+        sscanf(line + 8, "%d", &ms);
+        flowSensorDebugDump(serial, (uint32_t)constrain(ms, 50, 2000));
+      }
+      else if (strcmp(line, "flow") == 0) {
+        // ★2026-08-XX 光流传感器自动识别状态（LQS48 / MTF02P Micolink / MTF02P MAVLink-APM）
+        serial.println(F("[DBG] OpticalFlow:"));
+        const char *flow_name = "None";
+        switch (active_flow_sensor) {
+          case FLOW_SENSOR_LQS48: flow_name = "LQS48"; break;
+          case FLOW_SENSOR_MTF02P_MICOLINK: flow_name = "MTF02P-Micolink"; break;
+          case FLOW_SENSOR_MTF02P_MAVLINK_APM: flow_name = "MTF02P-MAVLink-APM"; break;
+          case FLOW_SENSOR_MTF02P_MSP: flow_name = "MTF02P-MSP"; break;
+          case FLOW_SENSOR_NONE: default: flow_name = "None"; break;
+        }
+        serial.print(F("  sensor=")); serial.println(flow_name);
+        serial.print(F("  baud=")); serial.println(flow_sensor_baud);
+        serial.print(F("  detect_phase=")); serial.println(flowSensorGetDetectPhase());
+        serial.print(F("  detect_loop=")); serial.println(flowSensorGetDetectLoopCount());
+        serial.print(F("  mav_flow_frames=")); serial.println(flowSensorGetMavFlowFrames());
+        serial.print(F("  mav_dist_frames=")); serial.println(flowSensorGetMavDistFrames());
+        serial.print(F("  msp_flow_frames=")); serial.println(flowSensorGetMspFlowFrames());
+        serial.print(F("  msp_range_frames=")); serial.println(flowSensorGetMspRangeFrames());
+        serial.print(F("  uart_rx_avail_sum=")); serial.println(flowSensorGetUartRxAvailSum());
+        serial.print(F("  uart_rx_read_sum=")); serial.println(flowSensorGetUartRxReadSum());
+        serial.print(F("  vx=")); serial.print(flow_data.velocity_x_mps, 3);
+        serial.print(F(" vy=")); serial.print(flow_data.velocity_y_mps, 3);
+        serial.print(F(" h=")); serial.println(flow_data.distance_m, 3);
+        serial.print(F("  flow_valid=")); serial.print(flow_data.is_flow_valid);
+        serial.print(F(" range_valid=")); serial.println(flow_data.is_range_valid);
+        serial.print(F("  flow_q=")); serial.println((int)flow_data.flow_quality);
+        serial.print(F("  age_ms=")); serial.println(millis() - flow_data.last_update_ms);
+        serial.print(F("  ekf_flow_attempts=")); serial.println(g_flow_fusion_attempts);
+        serial.print(F("  ekf_flow_fused=")); serial.println(g_flow_fusion_fused);
+        serial.print(F("  ekf_flow_rejected=")); serial.println(g_flow_fusion_rejected);
       }
       else if (strncmp(line, "gpio", 4) == 0) {
         debugGpioDump(serial);
