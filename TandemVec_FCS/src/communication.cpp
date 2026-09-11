@@ -1547,9 +1547,16 @@ void handleFlashService()
   s_flashServiceCount++;
   // ★ Flash 写页互斥：写页 + 之后 50ms 跳过 CAN（MCP2515 需足够时间恢复，
   //   否则超时 reset → SPI2 OVR 卡死）。每 200ms 写 1 页，跳 50ms CAN 可接受。
+  //   ★ 2026-09-01 修复（BLOCKER）：原实现每 tick（100Hz）无条件刷新互斥窗口
+  //   → 50ms 窗口永不过期 → handleCANBus 的跳过条件恒真 → CAN 遥测永久关闭。
+  //   仅在实际写了页（pagesWritten 变化）时才刷新窗口。
+  const uint32_t pagesBefore = flashLog.pagesWritten();
   s_flashWriting = true;
   flashLog.logService();
-  s_flashWritingUntil = millis() + 50;
+  if (flashLog.pagesWritten() != pagesBefore)
+  {
+    s_flashWritingUntil = millis() + 50;
+  }
   s_flashWriting = false;
 }
 
