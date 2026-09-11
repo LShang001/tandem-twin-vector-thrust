@@ -1718,8 +1718,10 @@ void updateEstimatedVerticalVelocity()
     float raw_estimated_velocity = 0.0f;
 
     // 条件2: 检查激光测距是否有效、在合理范围内且数据新鲜
+    // ★ 2026-09-01 修复：测距消费用测距通道新鲜度 last_range_update_ms
+    //   （原误用速度通道 last_update_ms——流活距死时陈旧距离会冒充新鲜）
     if (flow_data.is_range_valid && flow_data.distance_m > 0.08f &&
-        (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs)
+        (millis() - flow_data.last_range_update_ms) <= kFlowDataStaleTimeoutMs)
     {
       // --- 优先级2: 使用激光高度进行差分 ---
       if (is_first_run_flow_vel)

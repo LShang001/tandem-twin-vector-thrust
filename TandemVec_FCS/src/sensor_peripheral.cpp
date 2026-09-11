@@ -726,6 +726,12 @@ namespace
         flow_data.distance_m = flowDistanceFilter.filter(flow_data.distance_m);
         flow_data.is_range_valid = true;
         flow_data.range_quality = flow.quality;
+        flow_data.last_range_update_ms = millis();
+      }
+      else
+      {
+        // ★ 2026-09-01 修复：测距掉 0 清标志（LQS48/MSP 路径本就清，MAVLink 漏了）
+        flow_data.is_range_valid = false;
       }
 
       flow_data.timestamp_ms = millis();
@@ -753,9 +759,18 @@ namespace
         flow_data.distance_m = flowDistanceFilter.filter(flow_data.distance_m);
         flow_data.is_range_valid = true;
         flow_data.range_quality = dist.signal_quality;
+        // ★ 2026-09-01 修复：有效帧才刷测距通道新鲜度（无效帧不代表有可用新数据）
+        flow_data.last_range_update_ms = millis();
+      }
+      else
+      {
+        // ★ 2026-09-01 修复：无效测距帧清标志且不刷新鲜度——原实现无条件刷新
+        //   且从不清标志，传感器持续发无效帧时陈旧距离永久冒充新鲜（300ms 清扫失效）
+        flow_data.is_range_valid = false;
       }
 
-      flow_data.last_update_ms = millis();
+      // 测距消息只刷新测距通道新鲜度；last_update_ms 是光流速度通道专属，
+      // 否则 OPTICAL_FLOW 停流后冻结速度会被 EKF 融合当新测量反复注入。
       s_mav_dist_frames++;
     }
   }
@@ -978,8 +993,16 @@ void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms)
   uint8_t sample_count = 0;
 
   const uint32_t start_ms = millis();
+#ifdef BFS_DISABLE_IWDG
+  // 无看门狗构建（test/宿主）：无需喂狗
+#else
+  extern void kickIwdg(void);  // ★ 2026-09-01 修复：dump 最长 2s 阻塞 vs 3.0s IWDG，循环内喂狗
+#endif
   while (millis() - start_ms < duration_ms)
   {
+#ifndef BFS_DISABLE_IWDG
+    kickIwdg();
+#endif
     while (opticalFlowSerial.available() > 0)
     {
       const uint8_t byte = opticalFlowSerial.read();

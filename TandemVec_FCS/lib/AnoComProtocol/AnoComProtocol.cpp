@@ -41,7 +41,27 @@ void AnoComProtocol::sendData(uint8_t destAddr, uint8_t funcCode, uint8_t *data,
     if (_groupActive)
     {
         // 组模式：拼入组缓冲，endGroup() 时一次 write
-        if (_groupLen + len + 8 > sizeof(_groupBuf))
+        // ★ 2026-09-01 修复：len 先截断再判组缓冲——buildFrame 会把 len>256 截成 256，
+        //   帧全长 264B > _groupBuf(256B)，原实现在临界余量下仍追加 → 越界写。
+        if (len > ANO_MAX_DATA_LEN)
+        {
+            len = ANO_MAX_DATA_LEN;
+        }
+        const uint16_t frame_len = (uint16_t)(len + 8);
+        if (frame_len > sizeof(_groupBuf))
+        {
+            // 单帧装不下组缓冲：flush 已有组，直发该帧
+            if (_groupLen > 0)
+            {
+                _serial->write(_groupBuf, _groupLen);
+                _groupLen = 0;
+            }
+            uint8_t txBuffer[ANO_MAX_DATA_LEN + 8];
+            uint16_t flen = buildFrame(txBuffer, 0, destAddr, funcCode, data, len);
+            _serial->write(txBuffer, flen);
+            return;
+        }
+        if (_groupLen + frame_len > sizeof(_groupBuf))
         {
             // 组缓冲满：先 flush 已有帧再入组（防御，正常组远小于 256B）
             _serial->write(_groupBuf, _groupLen);

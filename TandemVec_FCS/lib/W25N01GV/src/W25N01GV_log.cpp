@@ -6,6 +6,15 @@
 
 #include "W25N01GV_log.h"
 
+// ★ 2026-09-01 修复：format() 全片擦除最坏达分钟级（坏块多时每块 waitReady 超时），
+// 块循环内喂狗防 IWDG 3.0s 复位（main.cpp 暴露；BFS_DISABLE_IWDG 时为 no-op）
+#ifdef BFS_DISABLE_IWDG
+static inline void logKickIwdg(void) {}
+#else
+void kickIwdg(void);
+#define logKickIwdg() kickIwdg()
+#endif
+
 // CRC-16/CCITT (poly 0x1021, init 0xFFFF) — simple bitwise impl
 static uint16_t crc16_ccitt(const uint8_t *data, uint16_t len)
 {
@@ -478,6 +487,7 @@ void W25N01GVLog::logService()
 bool W25N01GVLog::format()
 {
   for (uint32_t block = 0; block < W25N01GV_BLOCK_COUNT; block++) {
+    logKickIwdg();  // ★ 2026-09-01 修复：每块喂狗（坏块超时路径可达 100ms+）
     if (isBlockBad(block * W25N01GV_PAGES_PER_BLOCK)) continue;
     _flash.eraseBlock(block * W25N01GV_PAGES_PER_BLOCK);
   }

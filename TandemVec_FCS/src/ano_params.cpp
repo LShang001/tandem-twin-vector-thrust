@@ -153,7 +153,12 @@ static bool anoParamDeserialize(uint16_t id, const uint8_t *val, uint16_t len)
     {
         if (len != 4)
             return false;
-        memcpy(e->fptr, val, 4);
+        float v;
+    memcpy(&v, val, 4);
+    // ★ 2026-09-01 修复：拒绝 NaN/Inf——异常增益经 applyFlightCtrlParams() 会传播进控制输出
+    if (!isfinite(v))
+        return false;
+    memcpy(e->fptr, val, 4);
         return true;
     }
     // ANO_UINT8：u8ptr（0-255 值，如 inertia_comp_mask）/ bptr（bool，enabled）
@@ -217,6 +222,8 @@ bool anoParamWriteFloat(uint16_t id, float value)
     const AnoParamEntry *e = anoParamAt(id);
     if (!e)
         return false;
+    if (!isfinite(value))
+        return false;  // ★ 2026-09-01 修复：拒绝 NaN/Inf（MAVLink PARAM_SET 路径）
     if (e->type == ANO_FLOAT)
     {
         *e->fptr = value;

@@ -372,7 +372,8 @@ public:
 private:
     Stream *_serial;                         // 串口对象
     uint8_t _rxBuffer[ANO_MAX_DATA_LEN + 8]; // 接收缓冲区
-    uint8_t _rxIndex;                        // 接收缓冲区索引
+    uint16_t _rxIndex;                       // 接收缓冲区索引（uint16：缓冲 264B 超 uint8 量程，
+                                             //  8 位时溢出保护恒不触发——2026-09-01 修复）
     // ★ 2026-08-10 组帧模式（COMM-001 A3）：组缓冲 + 状态（beginGroup/endGroup 管理）
     uint8_t _groupBuf[256];                  // 组缓冲（快环 ~72B / 慢环 ~114B，256 足够）
     uint16_t _groupLen;                      // 组缓冲已用字节
