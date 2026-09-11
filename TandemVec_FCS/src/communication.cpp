@@ -505,7 +505,9 @@ void handleAnoCom()
   //   QGC 上行帧（0xFD 开头）会被扫描器当 DBG 行逐字节吃掉（静默丢弃全部
   //   PARAM_REQUEST/COMMAND）。proto 切换本身在 DBG 模式完成，mavlink 模式
   //   不需要再进 DBG（重启回 anocom）。
-  if (!s_dbg_mode && !s_mav_active) {
+  // ★ 2026-09-01 修复（MAJOR）：叠加 rxStalled 门控——AnoCom 帧跨 tick 分片时
+  //   续帧字节不是 0xAB，会被扫描器当 DBG 文本吞掉（帧毁 + _rxIndex 卡死）。
+  if (!s_dbg_mode && !s_mav_active && !AnoCom.rxStalled()) {
     while (Serial6.available()) {
       int c = Serial6.peek();
       if (c == ANO_FRAME_HEAD) {
@@ -2718,10 +2720,16 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
     serial.println(flash.isPresent() ? F("YES") : F("NO"));
   }
   else if (strncmp(args, "erase", 5) == 0) {
-    serial.println(F("[DBG] Erasing whole device... (~2s)"));
-    bool ok = flashLog.format();
-    serial.print(F("[DBG] erase done ok="));
-    serial.println(ok ? F("YES") : F("NO"));
+    // ★ 2026-09-01 修复（MAJOR）：整片擦除阻塞数秒（坏块多时可达分钟级），
+    //   解锁态执行 = 调度器停摆 → IWDG 复位。地面未解锁才允许。
+    if (g_is_unlocked) {
+      serial.println(F("[DBG] erase refused while UNLOCKED (blocks scheduler, ground use only)"));
+    } else {
+      serial.println(F("[DBG] Erasing whole device... (~2s, worst minutes with many bad blocks)"));
+      bool ok = flashLog.format();
+      serial.print(F("[DBG] erase done ok="));
+      serial.println(ok ? F("YES") : F("NO"));
+    }
   }
   else if (strncmp(args, "stat", 4) == 0) {
     serial.print(F("[DBG] present="));
@@ -2772,6 +2780,10 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
     }
   }
   else if (strncmp(args, "test", 4) == 0) {
+      // ★ 2026-09-01 修复：写读回测含页编程，解锁态拒绝（同 erase）
+      if (g_is_unlocked) {
+        serial.println(F("[DBG] test refused while UNLOCKED (page program stalls scheduler)"));
+      } else {
     serial.println(F("[DBG] write-readback test..."));
     serial.flush();
     // 写 5 帧（用递增 payload）到当前游标
@@ -2824,6 +2836,7 @@ void debugFlashCommand(HardwareSerial &serial, char *args)
         serial.println(buf[2], HEX);   // 0x49=I 0x50=P
       }
     }
+      }  // else (!unlocked)
   }
   else if (strncmp(args, "findseg", 7) == 0) {
     // 扫描所有段头，返回最新有效段的起始页（导出工具自动定位用）
