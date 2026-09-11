@@ -2004,7 +2004,12 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       else if (strncmp(line, "flowdump", 8) == 0) {
         int ms = 1000;
         sscanf(line + 8, "%d", &ms);
-        flowSensorDebugDump(serial, (uint32_t)constrain(ms, 50, 2000));
+        // flowdump 在调度器内阻塞最长 2s 并独占 UART7，解锁状态下拒绝执行。
+        if (g_is_unlocked) {
+          serial.println(F("[DBG] flowdump refused while UNLOCKED (blocks scheduler, ground use only)"));
+        } else {
+          flowSensorDebugDump(serial, (uint32_t)constrain(ms, 50, 2000));
+        }
       }
       else if (strcmp(line, "flow") == 0) {
         // ★2026-08-XX 光流传感器自动识别状态（LQS48 / MTF02P Micolink / MTF02P MAVLink-APM）
@@ -2034,9 +2039,11 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         serial.print(F(" range_valid=")); serial.println(flow_data.is_range_valid);
         serial.print(F("  flow_q=")); serial.println((int)flow_data.flow_quality);
         serial.print(F("  age_ms=")); serial.println(millis() - flow_data.last_update_ms);
+        serial.print(F("  range_age_ms=")); serial.println(millis() - flow_data.last_range_update_ms);
         serial.print(F("  ekf_flow_attempts=")); serial.println(g_flow_fusion_attempts);
         serial.print(F("  ekf_flow_fused=")); serial.println(g_flow_fusion_fused);
         serial.print(F("  ekf_flow_rejected=")); serial.println(g_flow_fusion_rejected);
+        serial.print(F("  ekf_flow_reanchors=")); serial.println(g_flow_fusion_reanchors);
       }
       else if (strncmp(line, "gpio", 4) == 0) {
         debugGpioDump(serial);

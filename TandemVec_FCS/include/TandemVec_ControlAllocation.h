@@ -63,7 +63,7 @@ struct AllocationOutput
 
     // 滚转通道效能（归一化，0=完全失效，1=额定全效）
     // roll_authority = (2·kQ·w0²) / (2·kQ·wMax²)
-    // 低于 ~0.1 时滚转控制显著退化（见 THY-004 §5.4）
+    // 低于 ~0.1 时滚转控制显著退化（见 TandemVec-Paper ch/05-allocation.tex）
     float roll_authority;
 
     // 所使用的策略（原样回传，便于日志/遥测）
@@ -125,7 +125,7 @@ inline AllocationOutput allocateMoments(const AllocationInput& in,
         //   δ_t = -My_cmd / (b·T₀)        （俯仰，效率 -b·T₀）
         //   δ_f =  Mz_cmd / (a·T₀)        （偏航，效率 +a·T₀）
         //
-        // THY-004 §5 eq:direct_mapping
+        // TandemVec-Paper ch/05-allocation.tex eq:direct_mapping
         dw = (tau0 > T0_MIN) ? (-in.Mx_cmd / (2.0f * tau0)) : 0.0f;
         dt = -in.My_cmd / (p.b * T0);
         df =  in.Mz_cmd / (p.a * T0);

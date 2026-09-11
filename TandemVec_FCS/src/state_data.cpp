@@ -443,6 +443,7 @@ volatile uint32_t flow_sensor_baud = 0;
 volatile uint32_t g_flow_fusion_attempts = 0;
 volatile uint32_t g_flow_fusion_fused = 0;
 volatile uint32_t g_flow_fusion_rejected = 0;
+volatile uint32_t g_flow_fusion_reanchors = 0;
 
 // 通信协议数据
 // 发动机控制器通信

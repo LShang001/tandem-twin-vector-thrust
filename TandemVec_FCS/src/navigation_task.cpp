@@ -560,10 +560,16 @@ void updateUbxRelativePosition()
 // 仅在：导航已初始化、GNSS 无效、非静止确认、光流数据有效且新鲜时执行。
 // 光流采样约 50Hz，而导航调度 200Hz；用 last_update_ms 门控，保证每个
 // 新光流样本只融合一次，避免重复注入同一观测。
+//
+// ★ 2026-08-21 失锁重锚：底层速度更新走 MeasurementUpdateAidingVelocityDetailed
+//   （豁免 ZUPT 零速守卫——悬停时近零测量是合法观测，漂移超 5.5m/s 后旧接口
+//   会永久硬拒）。若光流量测连续 50 次被拒（≈1s @50Hz，EKF 速度漂移超门或
+//   P 坍缩），把水平速度重锚到光流测量值，速度协方差抬回 0.5m/s 量级。
 // ----------------------------------------------------------------------
 static void handleIndoorOpticalFlowVelocityFusion()
 {
   static uint32_t s_last_fused_flow_update_ms = 0;
+  static uint32_t s_consecutive_rejects = 0;
 
   if (!nav_system_initialized)
   {
@@ -591,13 +597,19 @@ static void handleIndoorOpticalFlowVelocityFusion()
   }
   s_last_fused_flow_update_ms = flow_data.last_update_ms;
 
-  // 光流速度在机体 FRD 下，绕当前 EKF 航向旋转到 NED。室内无磁强计/无 GNSS 时，
-  // 航向仍由 EKF 陀螺积分维持，短时可用；长时间航向漂移会导致 NED 分量旋转误差。
-  const float yaw_rad = nav_ekf.yaw_rad();
-  float vel_north = 0.0f;
-  float vel_east = 0.0f;
-  bodyToNed(flow_data.velocity_x_mps, flow_data.velocity_y_mps,
-            yaw_rad, vel_north, vel_east);
+  // 光流速度在机体 FRD 下，经 EKF 全姿态四元数旋转到 NED（C_b2n = quat2dcm(q)^T，
+  // 与库内 t_b2ned 同一约定）。机体系 Z 分量光流不可观，置 0 引入的误差
+  // ≈ v_z·sin(tilt)，室内小垂直速度下可忽略。
+  // 室内无磁/无 GNSS 时航向由 EKF 陀螺积分维持，长时间航向漂移仍会使
+  // NED 分量产生旋转误差。
+  const Eigen::Matrix3f c_b2ned = bfs::quat2dcm(nav_ekf.quat()).transpose();
+  // volatile 先拷到本地：单点读取，也避免 volatile 无法绑定 Eigen 常量引用。
+  const float flow_vx_mps = flow_data.velocity_x_mps;
+  const float flow_vy_mps = flow_data.velocity_y_mps;
+  const Eigen::Vector3f vel_body(flow_vx_mps, flow_vy_mps, 0.0f);
+  const Eigen::Vector3f vel_ned = c_b2ned * vel_body;
+  const float vel_north = vel_ned(0);
+  const float vel_east = vel_ned(1);
 
   // 动态噪声：速度越大光流通常越抖；质量低时进一步降信任。
   const float speed_mps = sqrtf(vel_north * vel_north + vel_east * vel_east);
@@ -608,23 +620,33 @@ static void handleIndoorOpticalFlowVelocityFusion()
   }
   noise_mps = constrain(noise_mps, 0.10f, 2.0f);
 
-  // 光流不观测垂直通道：D 分量用 EKF 当前值，噪声放大，等价于抵消垂直分量的影响。
+  // 光流不观测垂直通道：D 分量用 EKF 当前值 + 极大噪声（1e3），该通道 K≈0，
+  // 状态与协方差都不受无信息压缩，数值上等价于纯 N/E 二维更新。
   const Eigen::Vector3f measured_vel_ned(
       vel_north, vel_east, nav_ekf.ned_vel_mps()(2));
-  const float down_noise_mps = 5.0f;
+  const float down_noise_mps = 1000.0f;
 
   const bfs::MeasurementUpdateResult result =
-      nav_ekf.MeasurementUpdateVelocityDetailed(measured_vel_ned,
-                                                 noise_mps,
-                                                 down_noise_mps);
+      nav_ekf.MeasurementUpdateAidingVelocityDetailed(measured_vel_ned,
+                                                      noise_mps,
+                                                      down_noise_mps);
   g_flow_fusion_attempts++;
   if (result.fused)
   {
     g_flow_fusion_fused++;
+    s_consecutive_rejects = 0;
   }
   else if (result.attempted)
   {
     g_flow_fusion_rejected++;
+    s_consecutive_rejects++;
+    if (s_consecutive_rejects >= 50U)
+    {
+      // 失锁恢复：水平速度重置到光流测量；垂直保持 EKF 当前值（光流不可观）。
+      nav_ekf.ResetVelocityToExternal(measured_vel_ned, 0.5f);
+      s_consecutive_rejects = 0;
+      g_flow_fusion_reanchors++;
+    }
   }
 }
 
@@ -823,6 +845,23 @@ void handleNavigationSystem()
     static_det_configured = true;
   }
   Icm45686StaticDetectorUpdate(imu_accel_mps2, imu_gyro_radps, static_det);
+  // ★ 2026-08-21 光流静止出口：检测器原有唯一出口是 GNSS 速度>1.5m/s（见下方
+  //   GNSS 分支），室内无 GNSS 时恒速平飞会误确认静止 → ZUPT 钉零速度 → 光流
+  //   融合又被 confirmed_static 门控自我禁用（唯一能证伪静止的传感器被静止假设
+  //   关掉）。这里用新鲜有效的光流速度做第二出口：模长>1m/s 期间持续按住复位，
+  //   检测器无法积累确认帧（与 GNSS 出口同构：只出不进，非对称；光流静止噪声
+  //   ≪1m/s，不误挡真静止确认）。
+  if (flow_data.is_flow_valid &&
+      (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs)
+  {
+    const float flow_speed_mps =
+        sqrtf(flow_data.velocity_x_mps * flow_data.velocity_x_mps +
+              flow_data.velocity_y_mps * flow_data.velocity_y_mps);
+    if (flow_speed_mps > 1.0f)
+    {
+      Icm45686StaticDetectorReset(static_det);
+    }
+  }
   bool is_static_confirmed = static_det.confirmed_static;
   const float static_confidence = static_det.confidence;
 
@@ -1868,11 +1907,15 @@ void handleHorizontalEstimation()
 
   // 检查光流数据有效性 (使用去旋转后的纯平移速度 flow_data.velocity_x/y_mps)
   // 并且高度不能太低 (例如 > 5cm)，否则光流数据不可靠
+  // ★ 2026-08-21 判重改用 last_update_ms 时间戳，不再清 is_flow_valid——
+  //   该标志由传感器任务写入、多个消费者共享（EKF 光流融合/双矢量航向），
+  //   清标志会让同帧其他消费者丢数据。
+  static uint32_t s_last_consumed_flow_update_ms = 0;
   if (flow_data.is_flow_valid && estimated_height > 0.05f &&
-      (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs)
+      (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs &&
+      flow_data.last_update_ms != s_last_consumed_flow_update_ms)
   {
-    // 立即清除标志位，防止同一个数据在下个循环被重复使用
-    flow_data.is_flow_valid = false;
+    s_last_consumed_flow_update_ms = flow_data.last_update_ms;
 
     // 4.1 获取机体坐标系下的光流速度
     float flow_vel_body_x = flow_data.velocity_x_mps;

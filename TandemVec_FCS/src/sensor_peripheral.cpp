@@ -282,8 +282,8 @@ namespace
   uint8_t s_msp_cmd_l = 0;
   uint8_t s_msp_size_h = 0;
   uint8_t s_msp_size_l = 0;
-  uint8_t s_msp_size = 0;
-  uint8_t s_msp_payload_idx = 0;
+  uint16_t s_msp_size = 0; // MSPv2 长度字段是 16bit，超 255 的帧必须能正确拒绝
+  uint16_t s_msp_payload_idx = 0;
   uint8_t s_msp_payload[32] = {0};
   uint8_t s_msp_crc = 0;
   uint16_t s_msp_msg_id = 0;
@@ -292,6 +292,7 @@ namespace
   uint32_t s_msp_range_frame_count = 0;
   int32_t s_msp_distance_mm = -1;    // 最近一次激光测距结果（负值=无效）
   uint8_t s_msp_range_quality = 0;
+  uint32_t s_msp_range_last_ms = 0;  // 最近一次收到测距帧的系统时刻（缓存过期判定）
   uint32_t s_msp_flow_last_ms = 0;
   bool s_msp_has_flow_last = false;
 
@@ -377,7 +378,13 @@ namespace
     int32_t distance_mm_raw = 0;
     memcpy(&distance_mm_raw, &s_msp_payload[1], sizeof(distance_mm_raw));
     s_msp_distance_mm = (distance_mm_raw >= 0) ? distance_mm_raw : -1;
+    s_msp_range_last_ms = millis();
     s_msp_range_frame_count++;
+
+    // 测距帧是测距通道的存活证据（链路重识别判定用双通道取新），
+    // 不刷新 last_update_ms——那是光流（速度）通道专属新鲜度，
+    // 否则光流帧停流后冻结速度会被 EKF 融合当新测量反复注入。
+    flow_data.last_range_update_ms = s_msp_range_last_ms;
 
     if (active_flow_sensor != FLOW_SENSOR_MTF02P_MSP)
     {
@@ -412,6 +419,14 @@ namespace
     if (active_flow_sensor != FLOW_SENSOR_MTF02P_MSP)
     {
       flowSensorLock(FLOW_SENSOR_MTF02P_MSP, FLOW_MTF02P_BAUD);
+    }
+
+    // 测距缓存过期：激光帧停流后不得永远沿用最后一次斜距（高度变化会让
+    // 速度刻度全错），超过光流陈旧窗后退回 estimated_height 反投影路径。
+    if (s_msp_distance_mm >= 0 &&
+        (now_ms - s_msp_range_last_ms) > kFlowDataStaleTimeoutMs)
+    {
+      s_msp_distance_mm = -1;
     }
 
     if (dt_s > 0.001f && dt_s < 1.0f)
@@ -454,6 +469,8 @@ namespace
         flow_data.distance_m = flowDistanceFilter.filter(flow_data.distance_m);
         flow_data.is_range_valid = true;
         flow_data.range_quality = s_msp_range_quality;
+        // 距离来自测距帧缓存：新鲜度沿用测距帧时刻，不按本光流帧刷新。
+        flow_data.last_range_update_ms = s_msp_range_last_ms;
       }
       else
       {
@@ -567,7 +584,7 @@ namespace
     case MspFlowState::WAIT_SIZE_H:
       s_msp_size_h = byte;
       s_msp_crc = flowSensorMspCrc8Update(s_msp_crc, byte);
-      s_msp_size = static_cast<uint8_t>(s_msp_size_l | (static_cast<uint16_t>(s_msp_size_h) << 8));
+      s_msp_size = static_cast<uint16_t>(s_msp_size_l | (static_cast<uint16_t>(s_msp_size_h) << 8));
       s_msp_msg_id = static_cast<uint16_t>(s_msp_cmd_l | (static_cast<uint16_t>(s_msp_cmd_h) << 8));
       if (s_msp_size > sizeof(s_msp_payload))
       {
@@ -635,6 +652,7 @@ namespace
     flow_data.flow_quality = 0;
     flow_data.range_quality = 0;
     flow_data.last_update_ms = millis();
+    flow_data.last_range_update_ms = millis();
 
     flowDistanceFilter.initialize(0.0f);
     flowVelXFilter.initialize(0.0f);
@@ -765,10 +783,19 @@ namespace
     flow_data.distance_m = 0.0f;
     flow_data.flow_quality = 0;
     flow_data.range_quality = 0;
+    flow_data.last_update_ms = 0;
+    flow_data.last_range_update_ms = 0;
 
     flowDistanceFilter.initialize(0.0f);
     flowVelXFilter.initialize(0.0f);
     flowVelYFilter.initialize(0.0f);
+
+    // MSP 解析器与测距缓存一并复位，避免跨会话残留（旧 dt 基准/旧斜距）。
+    flowSensorResetMspParser();
+    s_msp_distance_mm = -1;
+    s_msp_range_last_ms = 0;
+    s_msp_flow_last_ms = 0;
+    s_msp_has_flow_last = false;
 
     s_detect_phase = FlowDetectPhase::LQS48_921600;
     s_phase_start_ms = 0;
@@ -937,6 +964,9 @@ void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms)
   }
 
   // MTF-02P 固定在 115200；flowdump 强制切到该波特率抓样本。
+  // 记住原波特率，dump 结束复原——否则已锁定的 921600 传感器要靠 1.5s
+  // 无帧超时 + 一轮重扫（最长 ~2.8s）才能恢复，光流空窗合计 4-5s。
+  const uint32_t prev_baud = flow_sensor_baud;
   flowSensorConfigureUart(115200);
   s_flow_dbg_pause = true;
 
@@ -966,6 +996,15 @@ void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms)
   }
 
   s_flow_dbg_pause = false;
+
+  // 复原 dump 前的波特率，并把双通道存活时刻刷新到当前：dump 本身最长 2s 已
+  // 超过 1.5s 无帧重识别窗口，不刷新的话锁定的传感器会被立刻误判掉线。
+  if (prev_baud != 0 && prev_baud != 115200)
+  {
+    flowSensorConfigureUart(prev_baud);
+  }
+  flow_data.last_update_ms = millis();
+  flow_data.last_range_update_ms = millis();
 
   out.println(F("[DBG] flowdump @115200:"));
   out.print(F("  total=")); out.println(total);
@@ -1255,6 +1294,7 @@ void handleMTF02PFlow()
       flow_data.distance_m = flowDistanceMedianFilter.filter(vertical_height_m);
       flow_data.distance_m = flowDistanceFilter.filter(flow_data.distance_m);
       flow_data.range_quality = mtf02pSensor.getSignalStrength();
+      flow_data.last_range_update_ms = millis();
 
       // --- 状态估计更新 ---
       // updateEstimatedVerticalVelocity(); // 更新垂直速度估计值
@@ -1363,6 +1403,7 @@ void handleLQS48Flow()
       flow_data.distance_m = raw_dist * fabsf(tilt_cos);
       flow_data.is_range_valid = true;
       flow_data.range_quality = raw_data.quality;
+      flow_data.last_range_update_ms = millis();
     }
     else
     {
@@ -1464,11 +1505,28 @@ void handleOpticalFlowSensor()
 
   const uint32_t now_ms = millis();
 
-  // 已识别状态下若长时间无有效帧（断线或传感器被换掉），返回自动识别流程。
+  // 链路存活 = 光流帧或测距帧任一新鲜（两通道独立计时；MSP/MAVLink 的测距与
+  // 光流是独立帧，单通道停流不应误判整链断线，也不应让冻结数据冒充新鲜）。
+  const uint32_t flow_age_ms = now_ms - flow_data.last_update_ms;
+  const uint32_t range_age_ms = now_ms - flow_data.last_range_update_ms;
   if (active_flow_sensor != FLOW_SENSOR_NONE &&
-      now_ms - flow_data.last_update_ms > FLOW_DETECT_STALE_MS)
+      flow_age_ms > FLOW_DETECT_STALE_MS && range_age_ms > FLOW_DETECT_STALE_MS)
   {
     flowSensorRestartDetection();
+  }
+
+  // 通道级陈旧清扫：某通道停流超过陈旧窗后清对应有效标志，
+  // 防止冻结的速度/距离被下游消费者（EKF 融合/垂直速度差分）当新鲜值使用。
+  if (active_flow_sensor != FLOW_SENSOR_NONE)
+  {
+    if (flow_age_ms > kFlowDataStaleTimeoutMs && flow_data.is_flow_valid)
+    {
+      flow_data.is_flow_valid = false;
+    }
+    if (range_age_ms > kFlowDataStaleTimeoutMs && flow_data.is_range_valid)
+    {
+      flow_data.is_range_valid = false;
+    }
   }
 
   if (active_flow_sensor == FLOW_SENSOR_NONE)

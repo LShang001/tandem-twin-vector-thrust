@@ -1,12 +1,15 @@
 // ============================================================
 //  TandemVec_Propulsion.h — 推进正向映射、差速分配与控制效能矩阵
 //
+//  论文引用约定：下文 "TandemVec-Paper ch/NN-*.tex" 指论文工程对应章，
+//  2026-08-11 由 docs/03-理论推导/THY-004 迁出（原 §3→ch03、§5→ch05）。
+//
 //  本文件实现三件事：
 //
 //  1. computeWrench()
 //     推进状态 (wf, wt, δ_f, δ_t) → 机体系六维力/力矩
 //     直接对应 propulsion.mjs 的 dyn.Fx/My/Mz… 计算逻辑，
-//     符号约定与 THY-004 §3 六维映射式（eq:six_component）完全一致。
+//     符号约定与 TandemVec-Paper ch/03-mapping.tex 六维映射式（eq:six_component）完全一致。
 //
 //  2. allocateDifferential()
 //     差速指令 Δω → (ωf_target, ωt_target)
@@ -14,7 +17,7 @@
 //
 //  3. computeEffectMatrix()
 //     在当前工作点计算 ∂M/∂[Δω, δ_t, δ_f] 的真实 Jacobian B_true。
-//     与 THY-004 §5 线性化效能矩阵（eq:effectiveness_matrix）的差异：
+//     与 TandemVec-Paper ch/05-allocation.tex 线性化效能矩阵（eq:effectiveness_matrix）的差异：
 //       - B_true 依赖实际 wf/wt/δ_f/δ_t，在大摆角/非对称转速时更准；
 //       - B_full 仅在 δ_f=δ_t=0、wf=wt=w₀ 处有效；
 //       - B_true 退化到 B_full 的条件：δ_f=δ_t=0 且 wf=wt=w₀。
@@ -72,7 +75,7 @@ struct EffectMatrix
 // 需要瞬态精度时，调用方须在外部将 Qf/Qt 加上 Jp·dω/dt 后传入；
 // 当前版本与 propulsion.mjs 稳态行为一致。
 //
-// 符号来源（THY-004 §3 eq:six_component）：
+// 符号来源（TandemVec-Paper ch/03-mapping.tex eq:six_component）：
 //   Fx =  Tf·cδf + Tt·cδt
 //   Fy =  Tf·sδf
 //   Fz = -Tt·sδt
@@ -105,7 +108,7 @@ inline SixDOFWrench computeWrench(const PropulsionState& s, const TandemVecParam
 // 高油门+大差速时一侧可能超过 wMax，此时施加钳位并置饱和标记。
 // 钳位后 ωf² + ωt² < 2ω₀²，总推力低于预期——调用方应通过遥测通知操纵手。
 //
-// 来源：THY-004 §5 eq:diff_def，与 propulsion.mjs:13-14 逻辑完全一致。
+// 来源：TandemVec-Paper ch/05-allocation.tex eq:diff_def，与 propulsion.mjs:13-14 逻辑完全一致。
 inline DiffAllocResult allocateDifferential(float w0, float dw, const TandemVecParams& p)
 {
     DiffAllocResult r;
@@ -145,7 +148,7 @@ inline DiffAllocResult allocateDifferential(float w0, float dw, const TandemVecP
 //   B_true|₀ = [[-2kQ·w0², 0,     0    ],
 //               [0,         -b·Tt, -Qf  ],
 //               [0,         -Qt,   a·Tf ]]
-// 与 THY-004 §5 B_full 一致（T0=Tt=Tf，τ0=Qt=Qf）。
+// 与 TandemVec-Paper ch/05-allocation.tex B_full 一致（T0=Tt=Tf，τ0=Qt=Qf）。
 inline EffectMatrix computeEffectMatrix(const PropulsionState& s,
                                         const TandemVecParams& p,
                                         float w0)

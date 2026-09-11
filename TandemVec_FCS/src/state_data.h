@@ -106,7 +106,10 @@ struct OpticalFlowData
   uint8_t flow_quality;  // 光流信号质量
   bool is_flow_valid;    // 光流数据有效标志
   uint32_t timestamp_ms; // 传感器时间戳
-  uint32_t last_update_ms; // 最近一次收到有效光流帧的系统时刻 (millis, 用于超时失效)
+  uint32_t last_update_ms; // 最近一次收到光流（速度）帧的系统时刻 (millis, 用于超时失效)
+  // 测距通道独立新鲜度：MSP/MAVLink 的测距与光流是独立帧，单通道停流时
+  // 不得让另一通道的冻结数据冒充新鲜（2026-08-21 双通道拆分校正）。
+  uint32_t last_range_update_ms; // 最近一次写入 distance_m 的系统时刻
 };
 
 // 光流数据最大允许陈旧时间：超过该值仍未收到新帧，导航融合应视为光流失效。
@@ -572,6 +575,7 @@ extern volatile uint32_t flow_sensor_baud;         // 当前 UART7 实际波特�
 extern volatile uint32_t g_flow_fusion_attempts;
 extern volatile uint32_t g_flow_fusion_fused;
 extern volatile uint32_t g_flow_fusion_rejected;
+extern volatile uint32_t g_flow_fusion_reanchors; // 连续拒绝触发的速度重锚次数
 
 /*
  * ==========================================================================================

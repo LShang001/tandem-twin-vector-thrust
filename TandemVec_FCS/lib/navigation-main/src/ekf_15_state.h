@@ -1057,6 +1057,41 @@ namespace bfs
     }
 
     /**
+     * @brief 外部测速源（光流等持续测速辅助）速度量测更新。
+     *
+     * 与 MeasurementUpdateVelocityDetailed（ZUPT 导向）的区别仅在下层守卫：
+     * ① 不做"近零测量 + 大残差"的零速观测拒绝——持续测速源的近零测量（悬停）
+     *    是合法观测，EKF 速度漂移超过 5.5 m/s 后仍应允许被拉回；
+     * ② 物理残差门放宽到 AIDING_VELOCITY_RESIDUAL_REJECT_MPS，一致性主要由
+     *    NIS 门控把关（与 ZUPT 路径同一门限）。
+     * 垂直通道不可观时请把 D 分量填当前估计值并给大噪声（如 1e3 m/s），
+     * 此时该通道 K≈0，等价于只做 N/E 二维更新。
+     */
+    MeasurementUpdateResult MeasurementUpdateAidingVelocityDetailed(
+        const Eigen::Vector3f &measured_vel_ned,
+        const float vel_ne_std_mps,
+        const float vel_d_std_mps)
+    {
+      MeasurementUpdateResult result;
+      if (!IsFiniteVector(measured_vel_ned) ||
+          !IsValidNoiseStd(vel_ne_std_mps) ||
+          !IsValidNoiseStd(vel_d_std_mps))
+        {
+          return result;
+        }
+      result.input_valid = true;
+      result = ApplyVelocityUpdateDetailed(measured_vel_ned,
+                                           vel_ne_std_mps,
+                                           vel_d_std_mps,
+                                           false /*zupt_style_guards*/);
+      if (result.fused)
+      {
+        RecordVelocityUpdateOnLatestSnapshot(measured_vel_ned, vel_ne_std_mps, vel_d_std_mps);
+      }
+      return result;
+    }
+
+    /**
      * @brief 加速度重力方向量测更新，用于无 GNSS 时约束横滚和俯仰。
      *
      * 原始 TimeUpdate 只是用加速度递推速度/位置，不会持续用重力方向修正姿态。
@@ -1277,6 +1312,28 @@ namespace bfs
       time_since_gnss_update_s_ = 0.0f;
       gnss_reacquire_timer_s_ = 0.0f;
 
+      ResetHistoryBuffer();
+    }
+
+    /**
+     * @brief 仅把速度态重置到外部测速源（光流失锁重锚等），位置/姿态不动。
+     *
+     * 用于速度通道失锁恢复：上层连续多帧量测被 NIS/残差门拒绝时，把速度
+     * 直接重置到当前测量值，同时把速度协方差块抬到 vel_std_mps 量级，
+     * 使后续量测能通过 NIS 门控重新进入闭环。历史缓冲一并清空——速度
+     * 不连续后，延迟回放所基于的旧状态序列已失效。
+     */
+    void ResetVelocityToExternal(const Eigen::Vector3f &vel_ned,
+                                 const float vel_std_mps)
+    {
+      if (!IsFiniteVector(vel_ned) || !IsValidNoiseStd(vel_std_mps))
+      {
+        return;
+      }
+      ins_ned_vel_mps_ = vel_ned;
+      p_.block(3, 3, 3, 3) = vel_std_mps * vel_std_mps *
+                             Eigen::Matrix3f::Identity();
+      StabilizeCovariance();
       ResetHistoryBuffer();
     }
 
@@ -2676,9 +2733,12 @@ namespace bfs
     MeasurementUpdateResult ApplyVelocityUpdateDetailed(
         const Eigen::Vector3f &measured_vel_ned,
         const float vel_ne_std_mps,
-        const float vel_d_std_mps)
+        const float vel_d_std_mps,
+        const bool zupt_style_guards = true)
     {
       // 纯速度量测的实际卡尔曼更新；公开接口和延迟重放共用，避免两套逻辑漂移。
+      // zupt_style_guards=true（ZUPT 导向）：近零测量 + 大残差直接拒绝，残差门 8 m/s；
+      // =false（持续测速源导向，如光流）：近零测量是合法观测，残差门放宽，NIS 主门控。
       MeasurementUpdateResult result;
       result.input_valid = true;
       result.attempted = true;
@@ -2691,15 +2751,21 @@ namespace bfs
 
       Eigen::Vector3f y_vel = measured_vel_ned - ins_ned_vel_mps_;
       result.innovation_norm = y_vel.norm();
-      const bool zero_velocity_observation = measured_vel_ned.norm() < ZERO_VELOCITY_MEAS_NORM_MPS;
+      const bool zero_velocity_observation =
+          zupt_style_guards &&
+          measured_vel_ned.norm() < ZERO_VELOCITY_MEAS_NORM_MPS;
       if (zero_velocity_observation && y_vel.norm() > ZERO_VELOCITY_RESIDUAL_REJECT_MPS)
       {
         // ZUPT只应在上层静止确认可靠时使用；若误触发时当前速度已达数m/s，底层直接拒绝。
         return result;
       }
-      if (y_vel.norm() > VELOCITY_RESIDUAL_REJECT_MPS)
+      const float residual_reject_mps =
+          zupt_style_guards ? VELOCITY_RESIDUAL_REJECT_MPS
+                            : AIDING_VELOCITY_RESIDUAL_REJECT_MPS;
+      if (y_vel.norm() > residual_reject_mps)
       {
-        // 该接口主要用于ZUPT/辅助速度约束，数米每秒级残差应交给GNSS主更新而不是强行融合。
+        // ZUPT 路径：数米每秒级残差应交给GNSS主更新而不是强行融合。
+        // 测速源路径：宽门只挡数值荒谬跳点，一致性由下方 NIS 门控负责。
         return result;
       }
 #if BFS_NAVIGATION_EMBEDDED_FAST_STATIC_AID_UPDATE
@@ -3723,6 +3789,9 @@ namespace bfs
     // 零速修正专用门限；误静止确认时不允许把高速运动强行拉成静止。
     static constexpr float ZERO_VELOCITY_MEAS_NORM_MPS = 0.30f;
     static constexpr float ZERO_VELOCITY_RESIDUAL_REJECT_MPS = 5.5f;
+    // 持续测速源（光流等）的物理残差门限；ZUPT 门会挡住失锁恢复，这里放宽到
+    // 只挡数值荒谬跳点，一致性交给 NIS 门控；更大失锁由上层重锚恢复。
+    static constexpr float AIDING_VELOCITY_RESIDUAL_REJECT_MPS = 30.0f;
     // 3维重力方向量测NIS门限；拒绝方向突变，避免机动加速度被当成重力。
     static constexpr float GRAVITY_NIS_REJECT_THRESHOLD = 18.0f;
     // 静止角速度量测门限；用于三轴陀螺零偏闭环，只允许小残差修正。

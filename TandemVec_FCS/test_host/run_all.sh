@@ -146,6 +146,27 @@ else
   echo
 fi
 
+# EKF 测速源辅助接口回归（aiding 速度更新豁免零速守卫 + 失锁重锚，
+# 2026-08-21 室内光流速度融合配套；依赖同 ekf15）：
+echo "---- 编译 aidvel ----"
+if ! $CXX -std=$STD -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES \
+     $INCLUDES -I$ROOT/src -I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src \
+     "$ROOT/test_host/test_ekf_aiding_velocity.cpp" \
+     "$ROOT/lib/units/src/convang.cpp" \
+     "$ROOT/lib/units/src/convangacc.cpp" \
+     "$ROOT/lib/units/src/convangvel.cpp" \
+     -o "$BIN_DIR/aidvel$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] aidvel"
+  fail=1
+else
+  echo "---- 运行 aidvel ----"
+  if ! "$BIN_DIR/aidvel$EXE_SUFFIX"; then
+    echo "[RUN FAIL] aidvel"
+    fail=1
+  fi
+  echo
+fi
+
 if [ "$fail" -eq 0 ]; then
   echo "=== 全部宿主机回归测试通过 ==="
   exit 0
