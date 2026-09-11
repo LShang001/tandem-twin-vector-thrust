@@ -674,7 +674,9 @@ namespace
     s_last_heartbeat_ms = now_ms;
 
     mavlink_message_t msg;
-    mavlink_msg_heartbeat_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+    // ★ 2026-09-01 修复：COMM_2——与 flowSensorPumpMavlink 解析通道一致，
+    //   不污染 Serial6 GCS 遥测的 COMM_0 帧序号
+    mavlink_msg_heartbeat_pack_chan(1, MAV_COMP_ID_AUTOPILOT1, MAVLINK_COMM_2, &msg,
                                MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_ARDUPILOTMEGA,
                                MAV_MODE_FLAG_MANUAL_INPUT_ENABLED, 0, MAV_STATE_ACTIVE);
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];

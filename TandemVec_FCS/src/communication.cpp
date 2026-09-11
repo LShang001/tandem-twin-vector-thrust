@@ -682,8 +682,9 @@ void handleAnoCom()
         {
           uint8_t act[12];
           auto put16 = [](uint8_t *p, int32_t v) { p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF; };
-          put16(act + 0, (int16_t)(tvc_front_ano * 100.0f));
-          put16(act + 2, (int16_t)(tvc_rear_ano * 100.0f));
+          // ★ 2026-09-01 修复：与 0x21 同策略补 NaN 防护（anoCtrlSafe 限幅 ±5000 + isfinite）
+          put16(act + 0, (int16_t)anoCtrlSafe(tvc_front_ano * 100.0f));
+          put16(act + 2, (int16_t)anoCtrlSafe(tvc_rear_ano * 100.0f));
           put16(act + 4, (uint16_t)constrain(mot_front_ano * 10.0f, 0.0f, 1000.0f));
           put16(act + 6, (uint16_t)constrain(mot_rear_ano * 10.0f, 0.0f, 1000.0f));
           put16(act + 8, (int16_t)constrain(dw_ano * 1000.0f, -32768.0f, 32767.0f));
@@ -973,7 +974,8 @@ void sendElrsAttitudeData()
   crsf_sensor_attitude_t attitudeData;
   attitudeData.pitch = htobe16((int16_t)(AHRS_Packet.Pitch * RAD_TO_DEG * 100.0f));
   attitudeData.roll  = htobe16((int16_t)(AHRS_Packet.Roll * RAD_TO_DEG * 100.0f));
-  attitudeData.yaw   = htobe16((int16_t)(AHRS_Packet.Heading * RAD_TO_DEG * 100.0f));
+  // ★ 2026-09-01 修复：航向先绕 [-180,180) 再 ×100（0..2π×100=36000 超 int16 溢出）
+  attitudeData.yaw   = htobe16((int16_t)(wrapAnglePi(AHRS_Packet.Heading) * RAD_TO_DEG * 100.0f));
 
   crsf.queuePacket(CRSF_FRAMETYPE_ATTITUDE, &attitudeData, sizeof(attitudeData));
 }
@@ -1577,7 +1579,8 @@ static void mavlinkSendTelemetry()
 
   // ★ 2026-08-10 全面审查修复：TX 余量门控（与 AnoCom/mavSend 策略一致）——
   //   原实现 11 处直写无保护，QGC 侧拥塞时 Serial6.write 阻塞主循环
-  if (Serial6.availableForWrite() < 64) return;
+  // ★ 2026-09-01 修复：门限按最坏并发组（≈164B）定 200B，避免多帧同拍中途阻塞 200Hz 任务
+  if (Serial6.availableForWrite() < 200) return;
 
   mavlink_message_t msg;
   uint8_t buf[MAVLINK_MAX_PACKET_LEN];
@@ -1776,8 +1779,9 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   if (call_count % 200 == 5)
   {
-    uint16_t voltages[10] = {0};
-    voltages[0] = 12600;
+    uint16_t voltages[10];
+    std::fill_n(voltages, 10, UINT16_MAX);  // ★ 2026-09-01 修复：空槽协议要求 UINT16_MAX（0 会被误读 0V 电芯）
+    voltages[0] = (uint16_t)constrain((float)bat_voltage_mv, 0.0f, 65535.0f); // 真实 ADC（原硬编码 12600）
     uint16_t voltages_ext[4] = {0};
 
     mavlink_msg_battery_status_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
@@ -1803,6 +1807,7 @@ static void mavlinkSendTelemetry()
     if (e)
     {
       char nm[ANO_VARS_MAV_NAME_LEN];
+      memset(nm, 0, sizeof(nm));  // ★ 2026-09-01 修复：防未初始化栈字节上线（pack 拷全 10B）
       anoVarCopyName(nm, sizeof(nm), e->name);
       float v = anoVarGetValue(*e);
       mavlink_msg_named_value_float_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
@@ -1833,8 +1838,11 @@ static void mavlinkSendTelemetry()
       float vec[3] = {anoVarGetValue(kAnoVars[ids[0]]),
                       anoVarGetValue(kAnoVars[ids[1]]),
                       anoVarGetValue(kAnoVars[ids[2]])};
+      // ★ 2026-09-01 修复：name 字段 char[10] 全拷，短字面量直接传会越界读 rodata
+      char name10[10] = {0};
+      strncpy(name10, v[0], 10);
       mavlink_msg_debug_vect_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
-                                  (const char *)v[0], millis(), vec[0], vec[1], vec[2]);
+                                  name10, millis(), vec[0], vec[1], vec[2]);
       uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
       Serial6.write(buf, len);
       vec_idx++;
