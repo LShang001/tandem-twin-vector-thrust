@@ -1,3 +1,27 @@
+/**
+ * @file    icm45686_ins_fast_covariance_blocks.h
+ * @module  固件/基础设施（EKF 15 状态协方差传播的块展开加速，header-only）
+ * @brief   按 F 矩阵已知稀疏结构直接展开 (F·dt)·P 与结构化过程噪声 Qc
+ * @details 输入：15×15 协方差 P、各耦合块（3×3）、时间步 dt_s、噪声标准差；
+ *          处理：不构造稠密 F，而按“位置←速度 / 速度←姿态、加计零偏、重力-高度 /
+ *                姿态←姿态、陀螺零偏 / 零偏 Markov”逐块左乘；Qc 用 Gs·Rw·Gsᵀ 的解析等价式；
+ *          输出：`(F·dt)·P` 的左乘结果 fs_p（调用方仍需 `P += fs_p + fs_pᵀ + Q`）
+ *          或 15×15 连续过程噪声 Qc。
+ *          不变量：与稠密实现**数学等价**，不引入新近似（块稀疏结构即 F 的结构）。
+ * @theory  一阶协方差传播 P_{k+1} = (I + F·dt)·P_k·(I + F·dt)ᵀ + Q_d
+ *          ≈ P + (F·dt)·P + P·(F·dt)ᵀ + Q_d；
+ *          连续噪声离散化 Q_d = ∫ Φ·G·Q_c·Gᵀ·Φᵀ dτ（一阶近似 = G·Q_c·Gᵀ·dt）。
+ * @ref     REF-121 §2.2.1 (2.2.4d) p.33（KF 协方差预测方程）；
+ *          REF-120 §9.6（捷联误差方程 F 的分块结构）；@ref src/ekf_15_state.h（状态编号约定）
+ * @frame   状态向量按 [位置(0-2) 速度(3-5) 姿态失准角(6-8) 加计零偏(9-11) 陀螺零偏(12-14)]
+ *          排列；姿态为体轴右乘误差 δβ（见 AGENTS.md 导航踩坑记录）
+ * @units   P 各块单位随状态量纲（m²、m²/s²、rad²、m²/s⁴…）；dt_s 秒；标准差 m/s²、rad/s
+ * @note    ① 只有 `BFS_NAVIGATION_EMBEDDED_FULL_F_MATRIX` 打开时才叠加 vel-vel、pos-pos、
+ *             att-vel 三个额外耦合块——默认嵌入式路径不启用；
+ *          ② Qc 的等价性依赖“速度噪声通道里 C 为正交阵 ⇒ C·σ²I·Cᵀ = σ²I”，
+ *             改 Gs/Rw 结构前必须重新核对该假设（见 Icm45686StructuredContinuousQc 注释）。
+ * @see     lib/navigation-main/src/ekf_15_state.h（消费方）、docs/08-参考资料 notes
+ */
 #pragma once
 
 #include "Eigen/Dense"

@@ -1,18 +1,37 @@
-// ============================================================
-//  TandemVec_ControlAllocation.h — 力矩指令 → 执行器指令的控制分配
-//
-//  四种策略（AllocationStrategy）：
-//
-//  DIRECT         对角近似 B_main，O(1)，忽略反扭交叉项。
-//  FULL_B         B_full 在 δ=0, wf=wt=w0 处的线性化 3×3 逆（2×2 子块解析逆，
-//                 Mx 行仍解耦）。覆盖范围：小到中等摆角（±5°—±15°）。
-//  DIRECT_WITH_FF 主通道 + 一阶前馈耦合补偿（FULL_B 的低阶近似）。
-//  BTRUE          在当前真实工作点 (δ_f, δ_t, wf, wt) 计算完整 Jacobian
-//                 B_true(u_k)，再做 3×3 完整 Cramer 逆。
-//                 适用场景：大摆角（>±15°）、高精度轨迹跟踪、INDI 内层。
-//                 需要在 AllocationInput 中填入 current_state。
-//                 近奇异保护：|det(B)| < DET_MIN 时自动退降到 FULL_B。
-// ============================================================
+/**
+ * @file    TandemVec_ControlAllocation.h
+ * @module  固件/控制（控制分配层：力矩指令 → 执行器指令）
+ * @brief   把期望力矩 [Mx',My',Mz'] 分配到 [Δω, δ_t, δ_f]，四种策略可选
+ * @details 输入：AllocationInput（期望力矩、基准转速 w0、BTRUE 用的当前工作点）；
+ *          处理：按策略求 B 的逆/近似逆；BTRUE 用 computeEffectMatrix 的
+ *          3×3 完整 Cramer 逆；输出限幅到 dMax/dwMax 并按通道置饱和标记。
+ *          被 flight_control.cpp 的 mix 层调用（策略固定 BTRUE）。
+ *
+ * 四种策略（AllocationStrategy）：
+ *
+ *  DIRECT         对角近似 B_main，O(1)，忽略反扭交叉项。
+ *  FULL_B         B_full 在 δ=0, wf=wt=w0 处的线性化 3×3 逆（2×2 子块解析逆，
+ *                 Mx 行仍解耦）。覆盖范围：小到中等摆角（±5°—±15°）。
+ *  DIRECT_WITH_FF 主通道 + 一阶前馈耦合补偿（FULL_B 的低阶近似）。
+ *  BTRUE          在当前真实工作点 (δ_f, δ_t, wf, wt) 计算完整 Jacobian
+ *                 B_true(u_k)，再做 3×3 完整 Cramer 逆。
+ *                 适用场景：大摆角（>±15°）、高精度轨迹跟踪、INDI 内层。
+ *                 需要在 AllocationInput 中填入 current_state。
+ *                 近奇异保护：|det(B)| < DET_MIN 时自动退降到 FULL_B。
+ *
+ * @theory  控制分配 u = B⁻¹·M_cmd（无冗余时为精确逆；有冗余才是 B⁺ 伪逆）
+ * @ref     THY-003 §3（控制分配、伪逆与奇异性）；见 TandemVec-Paper/ch/05-allocation.tex
+ *          (eq:effectiveness_matrix、eq:Btrue_allocation、eq:direct_mapping)；
+ *          CTL-001 §2（本构型为何不用 B⁺ 优化分配）
+ * @frame   模型系（x'=推力轴朝机头、y'=右、z'=上摆轴）。⚠️ 与固件存档系差一个
+ *          纯旋转置换 x'=−z_b、y'=+y_b、z'=+x_b：本文件的"Mx' 滚转"在固件里
+ *          服务的是差速/偏航通道，"Mz' 偏航"才是上摆/滚转通道，轴名不得混读。
+ * @units   M [N·m]，w0/wf/wt [rad/s]，δ [rad]，Δω 无量纲，kT [N·s²]，kQ [N·m·s²]
+ * @redline 执行器轴映射（列序 [Δω, δ_t, δ_f] 与符号）、限幅 dMax/dwMax
+ * @note    ★ 本机 3 控制输入 × 3 力矩通道，B 为方阵：B⁻¹ 是"精确逆"而非伪逆；
+ *          只有 |det| 过小（零油门/极端摆角）才退降。
+ * @test    test_host/test_tandemvec_allocation.cpp（T10 策略连续性、T11 解析↔数值）
+ */
 #pragma once
 #include <cmath>
 #include <cstdint>
@@ -78,16 +97,23 @@ static inline float clampf(float v, float lo, float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-// ============================================================
-//  主函数：控制分配
-// ============================================================
-// @param in       期望力矩 + 工作点
-// @param p        机型参数（kT/kQ/a/b/dMax/dwMax/wMax）
-// @param strategy 分配策略
-// @return         限幅后的执行器指令及诊断信息
-//
-// 调用频率：200 Hz（与 GNC 主循环同频）。
-// 计算复杂度：DIRECT/FF = O(1)；FULL_B = O(1)（2×2 解析逆，无迭代）。
+/**
+ * @brief 控制分配主函数：期望力矩 → 限幅后的执行器指令
+ * @param[in] in       期望力矩 [N·m] + 基准转速 w0 [rad/s] + BTRUE 工作点
+ * @param[in] p        机型参数（kT/kQ/a/b/dMax/dwMax/wMax）
+ * @param[in] strategy 分配策略（固件固定用 BTRUE）
+ * @return 限幅后的 δ_f/δ_t [rad]、Δω（无量纲）、饱和标记、滚转权限、所用策略
+ * @formula 各策略闭式解见分支注释；BTRUE 为 u = B_true⁻¹·M_cmd
+ *          （|det| < 1e-8 时退降到 FULL_B）
+ * @ref THY-003 §3；见 TandemVec-Paper/ch/05-allocation.tex (eq:Btrue_allocation)
+ * @pre  w0 ≥ 0；BTRUE 时 in.current_state 必须是"上一拍实际执行器状态"
+ *       （固件传 τm 观测转速 + 上一拍摆角/差速）
+ * @post |δ| ≤ dMax、|Δω| ≤ dwMax；饱和标记 = 限幅前后是否不等
+ * @note ① T0 < T0_MIN（≈零油门）时直接返回全零：无推力时任何分配都无意义；
+ *       ② BTRUE 的 B 由 computeEffectMatrix(current_state, p, w0) 给出，
+ *          w0 只决定差速列的幅值项，摆角列的 T/Q 用 current_state 的 wf/wt；
+ *       ③ 调用频率 200 Hz，全程无迭代、无动态分配（结构体按值返回）。
+ */
 inline AllocationOutput allocateMoments(const AllocationInput& in,
                                         const TandemVecParams& p,
                                         AllocationStrategy strategy)
@@ -121,11 +147,12 @@ inline AllocationOutput allocateMoments(const AllocationInput& in,
     {
         // ===== DIRECT：对角近似 B_main = diag(-2τ₀, -b·T₀, a·T₀) =====
         //
-        //   Δω = -Mx_cmd / (2·τ₀)        （滚转，效率 -2τ₀）
-        //   δ_t = -My_cmd / (b·T₀)        （俯仰，效率 -b·T₀）
-        //   δ_f =  Mz_cmd / (a·T₀)        （偏航，效率 +a·T₀）
+        // 公式（模型系，主通道）：Δω = -Mx_cmd/(2·τ₀)（滚转，效率 -2τ₀）；
+        //   δ_t = -My_cmd/(b·T₀)（俯仰，效率 -b·T₀）；
+        //   δ_f = Mz_cmd/(a·T₀)（模型系偏航，效率 +a·T₀）。
+        // 固件轴名换算见文件头 @frame：Mz'(模型系偏航) = 上摆/滚转通道。
         //
-        // TandemVec-Paper ch/05-allocation.tex eq:direct_mapping
+        // @ref TandemVec-Paper ch/05-allocation.tex eq:direct_mapping
         dw = (tau0 > T0_MIN) ? (-in.Mx_cmd / (2.0f * tau0)) : 0.0f;
         dt = -in.My_cmd / (p.b * T0);
         df =  in.Mz_cmd / (p.a * T0);
@@ -163,13 +190,12 @@ inline AllocationOutput allocateMoments(const AllocationInput& in,
         // ===== BTRUE：在当前工作点计算完整 Jacobian B_true，3×3 Cramer 逆 =====
         //
         // B_true = computeEffectMatrix(current_state, p, w0)
-        //   行→[Mx, My, Mz]，列→[Δω, δ_t, δ_f]
+        //   行→[Mx', My', Mz']，列→[Δω, δ_t, δ_f]（模型系）
         //
-        // u = B_true⁻¹ × M_cmd（Cramer 法则，完全通用，无轴假设）
-        //   [Δω ]   C^T   [Mx_cmd]
-        //   [δ_t] = ─── × [My_cmd]
-        //   [δ_f]   det   [Mz_cmd]
-        //
+        // 公式：u = B_true⁻¹ · M_cmd（Cramer 法则，完全通用，无轴假设），
+        //   即 [Δω, δ_t, δ_f]ᵀ = adj(B)/det(B) · [Mx', My', Mz']ᵀ。
+        // 引用：@ref THY-003 §3.2（线性化分配与逆）、@ref TandemVec-Paper/ch/05-allocation.tex
+        //   (eq:Btrue_allocation)。
         // 近奇异保护：|det| < DET_MIN 时退降到 FULL_B，保证安全。
         const float DET_MIN = 1.0e-8f;
 

@@ -1,15 +1,22 @@
-/*
- * Ws2812AppStatus.h - 飞控应用层状态机（依赖 WS2812Driver 通用库）
- *
- * 与 StatusLED (PE5 单色绿灯) 并行运行，提供 RGB 状态指示。
- * 2026-08-08 扩展：FcsLedState 模式状态机覆盖——
- *   BOOT 上电自检 / FAULT 故障 / FAILSAFE 空中失控 / CALIBRATING 校准 /
- *   NO_RECEIVER 上电无信号 / LINK_DOWN 地面断链 / LOW_LQ 弱信号 /
- *   LOW_VOLTAGE 低压 / ARMED_* 解锁按飞行模式呼吸 / STANDBY 待机
- *
- * 设计：本类只负责"效果渲染"（状态 → 颜色/节奏），状态判定在
- * communication.cpp::handleStatusLedTask 组装（业务优先级）。
- * 像素驱动由通用库 WS2812Driver 负责（bitbang / H7 DMA 双方案）。
+/**
+ * @file    Ws2812AppStatus.h
+ * @module  固件/基础设施（RGB 状态灯应用层状态机，PD15 WS2812）
+ * @brief   把飞控业务状态映射为 RGB 颜色与节奏（效果渲染层）
+ * @details 输入：`FcsLedState`（由 communication.cpp handleStatusLedTask 按业务优先级
+ *          组装）+ 周期节拍；
+ *          处理：状态 → 颜色/呼吸/闪烁相位累加；
+ *          输出：WS2812 像素缓冲（真正刷新由 WS2812Driver 负责）。
+ *          覆盖状态：BOOT / FAULT / FAILSAFE / CALIBRATING / NO_RECEIVER / LINK_DOWN /
+ *          LOW_LQ / LOW_VOLTAGE / ARMED_* / STANDBY。
+ *          不变量：本类不做状态判定，只做渲染；像素驱动 bitbang 与 H7 DMA 两套方案共用本层。
+ * @theory  N/A（灯效渲染）
+ * @ref     docs/memory/2026-08-08-WS2812驱动调试.md（DMA/ARR 踩坑）、AGENTS.md 硬件踩坑记录
+ * @frame   N/A
+ * @units   RGB 0-255；节奏单位 ms/Hz
+ * @note    与 StatusLED（PE5 单色）并行运行；`setFault()` 可覆盖为故障态（DBG `wsfault`）。
+ *          上电无信号（NO_RECEIVER）与地面断链（LINK_DOWN）必须区分——判据是
+ *          “是否曾经建立过链路”（communication.cpp `s_ever_linked`）。
+ * @see     include/StatusLED.h、lib/WS2812Driver、src/communication.cpp（handleStatusLedTask）
  */
 
 #ifndef WS2812_APP_STATUS_H

@@ -1,3 +1,21 @@
+/**
+ * @file    ins_gnss_dynamic_weight.h
+ * @module  固件/导航（GNSS 量测噪声调度）
+ * @brief   按接收机精度、pDOP 与卫星数计算 EKF 的 GNSS 量测噪声 R
+ * @details 输入：fix 类型、卫星数、h/v/s 精度、pDOP、配置；处理：最小门限
+ *          过滤无效帧 → 精度 clamp 到 [floor, cap] → pDOP 超过参考值时按比例
+ *          放大（只放大不缩小）→ 输出四通道标准差；输出：R 与最小门限结果。
+ * @theory  R 应按量测的实际噪声水平给定：几何变差/精度下降时放大 R，
+ *          使滤波器降低对该帧的信任；NIS 门控仍作为最后防线
+ *          @ref REF-121 §2.2.1 p.33（R 的物理含义）、§7.3.1 p.255（NIS/FDI）
+ * @frame   N/A（NED 水平/垂直通道噪声）
+ * @units   m、m/s、无量纲（pDOP）
+ * @note    本工程 R 地板（2/3/0.15/0.25 m）**不可收紧**——实测收紧后接受率暴跌
+ *          （见 TandemVec_FCS/AGENTS.md EKF 踩坑记录）；v_acc/s_acc 未报告时
+ *          用 h_acc×1.5 回退，避免误伤。
+ * @see     `kGnssDwCfg`、`gnssEpochPassesFullQuality()`、`applyDowngradedGnssUpdate()`
+ */
+
 #pragma once
 
 #include <cmath>
@@ -19,16 +37,10 @@
  * - v_acc 或 s_acc = 0 时用 h_acc * 1.5 作为回退估计，避免 receiver 未报告
  *   速度/垂直精度时噪声地板误伤。
  *
- * 使用方式：
- *   Icm45686GnssDynamicWeightConfig cfg = {};
- *   cfg.floor_pos_ne_m = 2.0f;
- *   // ... 其余按需求填充 ...
- *   auto result = Icm45686ComputeGnssDynamicWeights(fix, num_sv,
- *                                                    h_acc, v_acc, s_acc, p_dop, cfg);
- *   if (result.passed_minimum) {
- *       nav.gnss_pos_ne_std_m(result.eff_pos_ne_std_m);
- *       // ...
- *   }
+ * 使用方式：先用配置结构体填好位置/速度的噪声地板、天花板、pDOP 参考值与
+ * 最小卫星数，再把 fix、卫星数、h/v/s 精度和 pDOP 一起传入；若返回结果的
+ * passed_minimum 为真，就把四个 eff_* 标准差写入 EKF 的 GNSS 量测噪声 R，
+ * 否则丢弃本帧（EKF 的 NIS 门控仍作为最后防线）。
  */
 
 struct Icm45686GnssDynamicWeightConfig {

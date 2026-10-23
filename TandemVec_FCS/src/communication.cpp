@@ -1,3 +1,27 @@
+/**
+ * @file    communication.cpp
+ * @module  固件/通信（AnoCom 遥测、CRSF/ELRS、MAVLink、黑匣子、DBG 控制台）
+ * @brief   实现地面站/遥控/黑匣子各链路的收发、帧组包与调试命令解释
+ * @details 输入：各串口字节流（Serial1 CRSF、Serial6 AnoCom/MAVLink、Serial5 上位机、
+ *          Serial3 黑匣子、Serial2 发动机）；
+ *          处理：帧同步→校验→字段缩放→全局状态；下行按 200Hz tick 双环分档组帧；
+ *          输出：AnoCom/MAVLink/CRSF/Serial5/Serial3 字节流与 DBG 文本。
+ *          不变量：协议帧格式/字段缩放/命令编号零改动（`AnoComProtocol` 组包）；
+ *          所有下行写串口前查 availableForWrite，缓冲不足整帧跳过（绝不阻塞控制环）。
+ * @theory  N/A（协议实现与链路调度，非理论模型）
+ * @ref     PROTOCOL-001 §1（帧格式 AB|src|dst|func|len(LE)|data|SC|AC）；
+ *          PROTOCOL-001 §一.2（0x00 校验帧）、§六（0xF1~0xFA 灵活格式帧）、
+ *          PROTOCOL-001 §四（0xE0~0xE3 参数链路）；COMM-001 §3（频率表）、§4（双环/组模式）；
+ *          GCS-001 §2（参数在线读写）；AGENTS.md 踩坑记录（遥测双环、AnoVars 三坑、MAVLink 切换）
+ * @frame   协议帧本身与坐标系无关 N/A；帧内位置/速度为 NED（北/东/地向），
+ *          姿态字段由弧度转角度后发送（见各 sendXxx 调用点的换算注释）
+ * @units   帧内缩放逐帧标注：0x01 加计 cm/s²、陀螺 32768↔2000 deg/s；0x03 度×100；
+ *          0x05/0x08/0x0B/0x30 速度 cm/s、位置 cm；0x21 角加速度 rad/s²×10；0xF1 见发送块
+ * @note    MAVLink 与 AnoCom 共用 Serial6，靠 `s_mav_active`（DBG `proto`）保证互斥；
+ *          同一 tick 多帧必须走 `AnoComProtocol::beginGroup/endGroup` 合并成单次 write。
+ * @see     src/state_data.h（SERIAL6_BAUDRATE 唯一波特率源）、src/ano_params.cpp、
+ *          src/ano_vars.cpp、src/mavlink_bridge.cpp、test_host/test_anocom_packing.cpp
+ */
 #include "communication.h"
 #include "math_utils.h"
 #include "navigation_task.h"
@@ -154,6 +178,12 @@ static const float ELRS_LQ_WARN_THRESHOLD = 40.0f;
 // 低压告警阈值 (mV)：3S LiPo 满电 12.6V，11.1V 以下提示（按电池配置可调）
 static const float LED_LOW_VOLTAGE_MV = 11100.0f;
 
+/**
+ * @brief CRSF 通道回调：把 16 通道 PWM(988-2012) 拷入 `raw_rc_values`
+ *
+ * @note 上电无信号时 `raw_rc_values` 全 0，任何 `raw_rc[x] < 阈值` 的开关判定都会
+ *       误触发低档分支；同类判定必须用 `isLinkUp` 门控（见 AGENTS.md 踩坑记录）。
+ */
 void packetChannels()
 {
   // 获取遥控通道值并存储到 raw_rc_values 数组
@@ -185,6 +215,17 @@ void linkUpCallback()
   s_ever_linked = true;  // 记录"曾建立链路"（区分上电无信号/断链灯效）
 }
 
+/**
+ * @brief CRSF 断链回调（失控保护）：按“地面/飞行”两种语境改写通道值
+ *
+ * 判据：`raw_rc_values[4] > 1500`（解锁开关）且 `raw_rc_values[2] > 1100`（油门）
+ * → 视为飞行中失控：保持解锁(1500)、滚转/俯仰/偏航摇杆（CH1/CH2/CH4）归中、
+ * 模式开关（CH7）落 AUTO_ALTITUDE 中档(1500)，由自动高度+姿态自稳接管；
+ * 其余通道压最低 988。
+ * 地面状态则全部回锁定值（988），电机不转。
+ * @note `failsafe_in_flight` 同时供灯效（FAILSAFE 红 SOS）判定；链路恢复时由
+ *       `linkUpCallback()` 清除。
+ */
 void linkDownCallback()
 {
   Serial8.println("Link is down! Failsafe activated.");
@@ -224,6 +265,16 @@ void linkDownCallback()
   }
 }
 
+/**
+ * @brief 解析发动机控制器回传帧（15 字节定长）
+ *
+ * 帧格式：`0xA5 | LEN(0x0C=12) | payload 3×float32(小端) | SUM`
+ * - SUM = 从 LEN 字节累加到最后一个 payload 字节（uint8 回绕）
+ * - payload：receivedP1（氧压 1）、receivedP2（氧压 2）、receivedValveControl（阀门）
+ * - 本项目为电动 VTOL：氧压字段被 0x0D 遥测复用为辅助读数，阀门字段不参与控制。
+ * @note 长度字段与帧长必须在 `receiveEngineData()` 的分帧状态机里先对齐，
+ *       本函数只做“帧头+LEN+校验”复核，不负责重新同步。
+ */
 void processReceivedEngineData()
 {
   // 检查帧头 (0xA5) 和有效载荷长度字段
@@ -255,6 +306,13 @@ void processReceivedEngineData()
   // else { Serial8.println("Engine data frame header/len error!"); } // 可选的调试信息
 }
 
+/**
+ * @brief 从 Serial2 收满一帧发动机数据后交给解析函数（由 handleCrsf 250Hz 调用）
+ *
+ * 状态机：首字节必须是 0xA5 才入缓冲；收满 `ENGINE_FRAME_LEN`(15) 即解析并复位索引。
+ * @note 逐字节读、非阻塞（`while(available())`），残帧不会跨 tick 保留——发动机控制器
+ *       以固定周期整帧发送，丢帧只是丢一拍读数，不会错位解析。
+ */
 void receiveEngineData()
 {
   while (transmitterSerial.available()) // 检查串口是否有数据
@@ -284,6 +342,17 @@ void receiveEngineData()
   }
 }
 
+/**
+ * @brief 组一帧 CRSF RC_CHANNELS_PACKED 并写入 Serial2（转发给发动机/下游设备）
+ *
+ * 帧结构 26B：`0xC8 | LEN(=24) | TYPE(0x16) | payload 22B | CRC8-DVB-S2`
+ * - 每通道 11 bit，PWM 988-2012 → CRSF 172-1811：`raw = (pwm-988)*1638/1024 + 172`
+ * - 位打包用 64 位累加器，低字节先出（CRSF 自定义大端位序，勿改）
+ * - CRC 覆盖 TYPE+payload（`crc8_dvb_s2_buf(&buf[2], 23)`）
+ * @param[in] channels 16 通道 PWM 值（单位 µs，超界被 constrain 到 988/2012）
+ * @return true = 写入字节数等于帧长；false = 串口未写完（下游丢一帧）
+ * @ref CRSF 协议（ELRS 侧解析）语义见 docs/elrs-telemetry-research.md
+ */
 bool send_crsf_frame(uint16_t channels[RC_INPUT_MAX_CHANNELS])
 {
   // 定义CRSF帧结构相关常量
@@ -423,10 +492,19 @@ static uint32_t ano_rx_device_info_sent = 0;
  *     签名扩展后由 AnoComProtocol 传入）
  *   - 收到 0xE0 读取设备信息命令 → 返回 0xE3 设备信息帧
  *   - 其余参数命令（0xE0 CMD 0x01/0x02/0x03/0x10）与 0xE1 参数写入
- *     → anoParamsHandleRx（ano_params.cpp，注册表 117 参数 + apply）
+ *     → anoParamsHandleRx（ano_params.cpp，注册表 ANO_PARAMS_COUNT 项 + apply）
  *
  * 本回调不执行任何控制逻辑, 不影响飞控行为。
  * 回调中的 TX 发送带 availableForWrite 非阻塞保护, 避免阻塞控制环。
+ *
+ * 回传帧字段（官方手册定义，逐字节不变）：
+ * - 0x00 校验帧：DATA = `ID_GET(1B) | SC_GET(1B) | AC_GET(1B)`，把源帧的功能码与
+ *   两个校验字节原样回传，上位机比对成功才算本次写入完成。@ref PROTOCOL-001 §一.2.1
+ * - 0xE3 设备信息：DATA = `DEV_ID u8 | HW_VER i16 | SW_VER i16 | BL_VER i16 |
+ *   PT_VER i16 | DEV_NAME nB`（本机 29B：1+8+20）。@ref PROTOCOL-001 §四.4
+ * - 0xF3 变量清单：只读、不回校验帧（仿 0xE2 语义），由 `anoVarsHandleRx` 应答。
+ *   应答帧 20B = CMD(1)+ID(2)+TYPE(1)+NAME(16)。@ref AGENTS.md 踩坑记录（AnoVars 三坑③）
+ * - 0xF2 为下行值帧，无上行分支。
  */
 static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
                          uint8_t rxSumCheck, uint8_t rxAddCheck)
@@ -487,6 +565,37 @@ void handleDebugTask()
   }
 }
 
+/**
+ * @brief AnoCom 遥测/参数主任务（200Hz = 5ms，分组双环 + 单次 write）
+ * @param 无（使用全局传感器/导航/控制状态，就地采集快照）
+ * @return 无
+ * @details 每次调用分三步：
+ *          ① DBG 入口检测（必须在 receiveData 之前，见函数内注释）；
+ *          ② 上行：`AnoCom.receiveData()` → `onAnoRxFrame()` 回调（参数/变量/校验帧）；
+ *          ③ 下行：按 tick 取模分档组帧，同一 tick 的全部帧在
+ *          `AnoComProtocol::beginGroup/endGroup` 之间累积，**一次 write**。
+ *
+ *          频率表（t = 200Hz tick 计数器，COMM-001 §3 与本实现的唯一对照）：
+ *          | 档位 | 频率 | 判定 | 功能码 |
+ *          |------|------|------|--------|
+ *          | 快环 | 100Hz | t%2==1（奇数 tick） | 0x01 0x03 0x0A 0x21 0xF1 |
+ *          | 位置 | 50Hz  | t%4==2 | 0x08 |
+ *          | 遥控 | 25Hz  | t%8==4 | 0x40 |
+ *          | 显示 | 25Hz  | t%8==6 | 0x05 0x06 0x07 0x20 0x0B |
+ *          | GNSS/氧压 | 10Hz | t%20==10 | 0x30 0x0D |
+ *          偶数 tick 的余数 2/4/6/10 互不相等 → 慢环各档永不碰撞；快环占奇数 tick，
+ *          与全部偶数档天然错开。0xF2 AnoVars 值帧在双环之外独立节流。
+ * @note   ① 快变字段（IMU/姿态/控制量/执行器）在函数开头**每 tick 采集**，陈旧度 ≤5ms；
+ *            慢变字段在各档位分支内读取（GNSS 数据源本身 10Hz，提频只是重复旧值）。
+ *         ② 发送前查 `Serial6.availableForWrite() < 190`（最坏同拍组 ≈175B）——
+ *            不足则整拍跳过并计数 `ano_tx_skipped`，避免阻塞 5ms 控制周期。
+ *         ③ 浮点安全：所有控制量经 `anoCtrlSafe`（isfinite + ±5000 限幅）后才缩放，
+ *            因为 `constrain()` 对 NaN 无效。
+ *         ④ 参数已按 0xE1 写入并 `applyFlightCtrlParams()` 的实例值发送，遥测即生效值。
+ * @ref    COMM-001 §3（目标频率表）、§4 A3（组模式）、§4 B1/B2（双环与采集新鲜度）；
+ *          PROTOCOL-001 §一.1（帧格式/小端）；AGENTS.md 踩坑记录（遥测双环结构）
+ * @test   test_host/test_anocom_packing.cpp（组模式单次 write 与字节流等价）
+ */
 void handleAnoCom()
 {
   // ---- 调试模式入口检测（必须在 receiveData 之前！）----
@@ -671,11 +780,22 @@ void handleAnoCom()
       // ---- 快环 100Hz：IMU + 欧拉 + 目标姿态 + 控制量 + 执行器 ----
       if (fast_tick)
       {
+        // 0x01 惯性传感器数据（13B）：ACC int16×3 [cm/s²] + GYR int16×3
+        // （32768↔2000 deg/s，组包处 ×16.384）+ SHOCK u8。@ref PROTOCOL-001 §二.1.1
         AnoCom.sendIMUData(acc_x_ano, acc_y_ano, acc_z_ano, gyr_x_ano, gyr_y_ano, gyr_z_ano, 0);
+        // 0x03 飞控姿态欧拉角（7B）：ROL/PIT/YAW int16 ×100 [deg] + FUSION_STA u8。
+        // FUSION_STA 为固件自定义位域：bit7=DETA100 在线、bit6=数据源=DETA100、
+        // 低 6 位=nav_system_initialized（EKF 融合状态）。@ref PROTOCOL-001 §二.1.3
         AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
+        // 0x0A 目标姿态（6B）：3×int16 ×100。★ 第 3 字段在官方手册是目标航向角，
+        // 本工程承载的是目标航向**角速率** [deg/s]（航向为纯速率指令，无角度回中），
+        // GCS 侧 decode_target_attitude 同口径；字节/缩放不变。@ref PROTOCOL-001 §二.1.9
         AnoCom.sendTargetAttitude(target_roll_ano, target_pitch_ano, target_yaw_ano);
         // 参数顺序必须与 AnoComProtocol::sendAttitudeControl(ctrlRol, ctrlPit, ctrlThr, ctrlYaw) 一致：
         // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
+        // 0x21 姿态控制量（8B）：4×int16，统一 ±5000 量程。本工程语义为
+        // alpha_ref_radps2×10 [rad/s²]（角加速度指令）+ thr%×10，非官方“控制量”。
+        // @ref PROTOCOL-001 §二.2.2 + 本工程差异对照表（0x21 行）
         AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
         // 执行器输出帧（手册用户自定义帧 0xF1）：前/下摆角 deg×100 int16、
         // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
@@ -786,6 +906,9 @@ void handleAnoCom()
         //   GCS 解码标签因此也反（变量名与内容互换，前端未消费故未暴露）
         AnoCom.sendGPSInfo1(fix_type, num_sat, lon, lat, h_msl, vn, ve, vd, pdop, sacc, vacc);
         // 氧压（发动机控制器回传，经 0x0D 电压/电流通道承载）+ 电池电压（真实 ADC 采样）
+        // 0x0D 电压电流（10B）：5×u16 = bat_V×100、bat_A×100、fc_V×100、fc_A×100、flags。
+        // ★ 本工程 fc 两字段被占用为发动机氧压 P1/P2（`receivedP1/P2`，官方上位机忽略），
+        // 电池侧为真实 ADC 采样值。@ref PROTOCOL-001 §二.1.13 + 差异对照表（0x0D 行）
         AnoCom.sendVoltCurr(bat_voltage_mv / 1000.0f, bat_current_ca / 10.0f,
                             receivedP1, receivedP2, 0);
       }
@@ -804,6 +927,14 @@ void handleAnoCom()
   }
 }
 
+/**
+ * @brief CRSF 原始遥控接收任务（250Hz，可选注册）
+ *
+ * 从 Serial1 读一批字节 → `crsf_parse()`；成功则清空接收缓冲并退出，
+ * 失败最多重试 `MAX_PARSE_ATTEMPTS`(3) 次后清缓冲等下一帧。
+ * @note 现役链路走 `crsf.loop()`（库内状态机，见 main.cpp loop），本函数仅用于
+ *       排查原始字节流；两者同时注册会争抢 Serial1 字节。
+ */
 void handleElrs()
 {
   static uint8_t parse_buffer[CRSF_BUFFER_SIZE]; // 静态缓冲区，用于存储串口读取的数据
@@ -857,6 +988,16 @@ void handleElrs()
   }
 }
 
+/**
+ * @brief CRSF 通道转发任务（250Hz，可选注册）：接收发动机数据并回发 16 通道帧
+ *
+ * 通道改写规则（其余通道原样转发）：
+ * - CH3 油门：`throttlePercent`(0-100) 线性映射回 988-2012
+ * - CH5 解锁：`fuelOK` 为假时强制 1000（燃料联锁，即使遥控器已解锁）
+ * - CH7 实验模式：固定 1000
+ * @note 本任务与 `handleElrs()` 都消费 Serial1，现役配置两者均未注册
+ *       （main.cpp 注册段注释），只保留用于台架联调。
+ */
 void handleCrsf()
 {
   // (如果启用) 接收来自发动机控制器的数据
@@ -1159,6 +1300,14 @@ void updateBatteryMonitor()
   bat_current_ca = 0.0f;
 }
 
+/**
+ * @brief Serial8 调试遥测任务（200Hz，可选注册）：打印单行 CSV
+ *
+ * 列：roll_deg, pitch_deg, heading_deg, qw, qx, qy, qz, gx, gy, gz(dps),
+ *     ax, ay, az(m/s²), error_roll_deg, error_pitch_deg, t_ms
+ * @note 属于“人读”通道，行宽固定但无帧头；量产飞行时不要注册（会与
+ *       DBG 控制台争 Serial8，且 200Hz 文本流占满 USB 缓冲）。
+ */
 void handleTelemetry()
 {
   float filteredSensor1Angle, filteredSensor2Angle;
@@ -1204,6 +1353,17 @@ void handleTelemetry()
   Serial8.println(); // 换行
 }
 
+/**
+ * @brief 黑匣子记录任务（200Hz）：通道表 → Serial3 CSV + Flash 环形缓冲双写
+ *
+ * 数据源 = `kBbChannels[]`（唯一事实源，13 通道：姿态/角速率/执行器指令/油门/目标姿态）。
+ * 边沿语义：`loggingActive` 上升沿开段（`#LOG_START` + `#FIELDS` 列名），下降沿写
+ * `#LOG_END` 与 Flash E 帧。`loggingActive = isDatalogging || dbgLogging`，其中
+ * `dbgLogging` 由 DBG `datalog <s>` 强制置位并带超时——不能直接改 `isDatalogging`，
+ * 它每帧被 flight_control 按真实解锁状态覆盖。
+ * @note Flash 侧只 `logPush()` 入环形缓冲（非阻塞），真正写 NAND 在
+ *       `handleFlashService()`；`kbBc*` 通道数改动需同步 GCS `blackbox.py` 的 S 帧推导。
+ */
 void handleDataLogging()
 {
   // 记录使能 = 真实解锁 OR 调试强制（datalog 命令，不受 flight_control 每帧覆盖）
@@ -1288,6 +1448,15 @@ void handleDataLogging()
 
 // [已迁移至 main.cpp] handleDeta100 (依赖 DETA100_module.h 函数)
 
+/**
+ * @brief 上位机轨迹规划数据发送（50Hz）：Serial5 34 字节帧
+ *
+ * 帧结构：`0xAA | 8×float32(本机小端) | 0x55`，float 依次为
+ *  `[0] 轨迹规划开始标志(0/1)`、`[1] t_s`、`[2] north_m`、`[3] east_m`、
+ *  `[4] -estimated_height`(向上为正)、`[5] vn`、`[6] ve`、`[7] -estimated_velocity`。
+ * @note 位置为相对起飞点 NED，速度第 3 分量取反成“向上为正”——上位机若按 NED
+ *       直读会把升降读反；缩放 1.0（SI 单位，无 ×100 缩放）。
+ */
 void sendPositionVelocityData()
 {
   // 1. 准备8个float类型的数据
@@ -1320,14 +1489,9 @@ void sendPositionVelocityData()
   serial5Buffer[0] = 0xAA;         // 帧头
   serial5Buffer[1 + 8 * 4] = 0x55; // 帧尾，位于所有数据之后 (索引33)
 
-  // 3. 将每个float数据转换为大端字节序并填充到缓冲区
-  // for (int i = 0; i < 8; i++)
-  // {
-  //   // 数据从缓冲区的第1个字节开始存放 (索引1)，每个float占4字节
-  //   floatToBigEndianBytes(data_to_send[i], &serial5Buffer[1 + i * 4]);
-  // }
-
   // 3. 将每个float数据直接填充到缓冲区
+  //    字节序 = STM32 原生小端（memcpy 直拷内存字节）；早期 floatToBigEndianBytes
+  //    大端版本已废止，上位机（GCS/server 轨迹接口、Serial5 解析脚本）须按小端解码。
   for (int i = 0; i < 8; i++)
   {
     // 数据从缓冲区的第1个字节开始存放 (索引1)，每个float占4字节
@@ -1344,6 +1508,19 @@ void sendPositionVelocityData()
   Serial5.write(serial5Buffer, 34);
 }
 
+/**
+ * @brief 制导指令接收任务（500Hz）：Serial5 14 字节帧 → 三轴加速度指令
+ *
+ * 帧结构：`0xAA | 3×float32(小端) | 0x55`，float 依次为 `acc_U`(天向)、
+ * `acc_E`(东向)、`acc_N`(北向)，单位 m/s²。字段位置沿用历史 `throttle/tilt_E/tilt_N`
+ * 布局，**改语义不改字节**（上位机侧仍按位置 0-3/4-7/8-11 解析）。
+ * @param 无（就地更新 `guidance_accel_*_cmd`、`new_guidance_command_received`、
+ *        `last_guidance_command_millis`）
+ * @note ① 单次最多消费 `MAX_BYTES_PER_LOOP`(64) 字节，防串口积压拖住主循环；
+ *       ② 安全门：三个分量都要 `isfinite` 且 XY < 10 m/s²、Z < 10 m/s²，
+ *          不合法整帧丢弃（不写全局、不刷新时间戳）；
+ *       ③ 帧尾校验失败时若当前字节又是 0xAA 则原地重同步，否则回找帧头。
+ */
 void handleGuidanceCommands()
 {
   // --- 静态状态保持 (Static State Persistence) ---
@@ -1427,11 +1604,8 @@ void handleGuidanceCommands()
           new_guidance_command_received = true;
           last_guidance_command_millis = millis();
 
-          // (可选) 调试输出
-          // Serial8.print("Cmd Acc: ");
-          // Serial8.print(guidance_accel_U_cmd); Serial8.print(" ");
-          // Serial8.print(guidance_accel_E_cmd); Serial8.print(" ");
-          // Serial8.println(guidance_accel_N_cmd);
+          // 诊断：需要观测指令逐帧值时用 DBG 命令读 guidance_accel_*_cmd，
+          // 不要在 500Hz 任务内打印（Serial8 阻塞会挤占控制环时间片）。
         }
         else
         {
@@ -1463,6 +1637,16 @@ void handleGuidanceCommands()
   }
 }
 
+/**
+ * @brief 状态灯任务（100Hz）：把业务状态映射为 LED 效果
+ *
+ * 判定优先级（高→低）：FAILSAFE（空中失控）> CALIBRATING（IMU/磁力计校准）
+ * > NO_RECEIVER（上电无信号）> LINK_DOWN（地面断链）> LOW_LQ（弱信号）
+ * > LOW_VOLTAGE（低压）> ARMED_*（解锁按飞行模式）> STANDBY。
+ * 故障态（FAULT）由 `Ws2812AppStatus.setFault` 内部覆盖，不在此判定。
+ * @note 解锁判定用 GNC 真实状态 `g_is_unlocked`（与电机行为一致），不用遥控通道，
+ *       避免上电通道抖动导致灯色与实际旋翼状态不符。
+ */
 void handleStatusLedTask()
 {
   // ========================================================================
@@ -1539,6 +1723,14 @@ void handleStatusLedTask()
  * 从 RAM 环形缓冲批量写页到 NAND。页编程 ~0.7ms/页，2 页 = 1.4ms 阻塞，
  * 对 100Hz 任务（10ms 周期）占 14% —— 可接受（CAN_RX_MAX_PER_TICK 同款预算模式）。
  */
+/**
+ * @brief Flash 黑匣子后台写任务（100Hz）：把环形缓冲落盘到 W25N01GV
+ *
+ * 与 CAN 的互斥：写页期间置 `s_flashWriting`，并在**实际写了页**之后把
+ * `s_flashWritingUntil` 推到 `now+50ms`，`handleCANBus()` 在这段时间内直接返回。
+ * @note 每 tick 刷新窗口 = 窗口永不过期 → CAN 遥测被永久关闭（2026-09-01 BLOCKER），
+ *       因此只能用 pagesWritten() 变化来判定“真的写过”。
+ */
 void handleFlashService()
 {
   // 调试黑匣子强制记录超时自动复位（datalog 命令；不动 isDatalogging，
@@ -1565,12 +1757,25 @@ void handleFlashService()
 }
 
 /**
- * @brief MAVLink 遥测发送（200Hz 时基，内部分频 1/20/40Hz）
+ * @brief MAVLink 遥测发送（200Hz 时基，内部按 call_count 分频）
+ *
+ * @details 分频表（以 200Hz 调用为基准）：
+ *          | 消息 | 分频 | 频率 |
+ *          |------|------|------|
+ *          | HEARTBEAT / SYS_STATUS / BATTERY_STATUS | %200 | 1Hz |
+ *          | ATTITUDE / ATTITUDE_QUATERNION / RAW_IMU | %5 | 40Hz |
+ *          | GLOBAL_POSITION_INT / VFR_HUD / RC_CHANNELS_RAW | %10 | 20Hz |
+ *          | NAMED_VALUE_FLOAT（AnoVars watch 轮转） | %5 | 40Hz |
+ *          | DEBUG_VECT（M_ff / alpha_ref / error 三向量轮转） | %5 | 40Hz |
+ *          单位：姿态 rad、IMU 原始值按 mG/mrad/s×1000 定点、位置 1e-7deg/mm。
  *
  * 2026-08-10 重构：主体抽为可复用函数——DBG `proto mavlink` 切换后由
  * handleAnoCom 调用（运行时协议切换，不重烧）；handleMavlink 任务注册
  * 时（main.cpp 注释行）仅在 s_mav_active 下发送（双保险防双发）。
  * 新增 NAMED_VALUE_FLOAT（watch 变量，QGC 曲线）+ DEBUG_VECT（3 元素向量）。
+ * @note 整函数入口先查一次 `availableForWrite() < 200`（最坏并发组 ≈164B）——
+ *       不足则整拍不发，避免多帧中途阻塞 200Hz 任务。
+ * @ref  docs/mavlink-ref/（各消息字段与枚举）；AGENTS.md 踩坑记录（MAVLink 切换）
  */
 static void mavlinkSendTelemetry()
 {
@@ -1876,20 +2081,28 @@ void handleMavlink()
 /**
  * @brief 调试命令解释器（调试模式下替代正常数传逻辑）
  *
- * 命令集（\n 结尾）：
- *   help          列出所有命令
- *   ws <r> <g> <b> 发送一帧指定颜色 (0-255)
- *   wsoff          WS2812 熄灭
- *   wsseq [ms]     自动测试序列 红→绿→蓝→白→灭 (默认 500ms/色)
- *   tasks          任务调度统计（实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷；打印后清零）
- *   ver           版本/启动信息
- *   exit          退出调试模式，恢复地面站数传
- *
+ * 进入/退出：Serial6 收到 `DBG\n` 进入（handleAnoCom 首部检测），`exit` 退出。
+ * 命令集（以 `help` 输出为准）：
+ *   help                 列出全部命令
+ *   ver                  版本/启动信息
+ *   ws / wsoff / wsseq / wsstat / wsmode / wsfault  WS2812 颜色与灯效诊断
+ *   gpio / tim4          PD15 与 TIM4+DMA 寄存器级诊断
+ *   tasks                任务调度统计（打印后清零，形成观测窗口）
+ *   proto <anocom|mavlink> 遥测协议运行时切换（AnoCom ↔ MAVLink，互斥）
+ *   vars <list|add|remove|clear|rate|status>   AnoVars 上报集合
+ *   ubxcfg ...           GNSS 接收机配置（波特率/消息/协议掩码/NMEA）
+ *   gpsproto [ubx|nmea|auto] [baud]  解析协议查看/切换
+ *   flow / flowdump      光流自动识别诊断
+ *   flash <id|erase|stat|dump|test>   黑匣子 Flash 诊断
+ *   magcal <...>         磁力计椭球标定（start/fit/save/guided 等）
+ *   exit                 退出调试模式，恢复地面站数传
  * @param serial  使用的串口（Serial6）
  * @param line    行缓冲
  * @param lineLen 行缓冲长度指针
  * @param maxLen  缓冲最大长度
  * @param dbgMode 调试模式标志（引用，exit 时置 false）
+ * @note 阻塞型命令（wsseq/flash 导出）会长时间占住主循环：`wsseq` 单色上限被压到
+ *       150ms 以免累积超过 IWDG 3.0s 窗口；flash export 在循环内主动 `kickIwdg()`。
  */
 void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
                         uint8_t maxLen, bool &dbgMode)
@@ -1970,7 +2183,11 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
       else if (strncmp(line, "wsseq", 5) == 0) {
         uint32_t ms = 500;
         int ms_arg;
-        // ★ 2026-08-10 全面审查修复：上限 5000 → 150——4×delay 串行阻塞主循环，\n        //   ms≥800 时总阻塞 >IWDG 2.99s 触发硬件复位（默认 500ms 也逼近窗口）\n        if (sscanf(line + 5, "%d", &ms_arg) == 1) ms = (uint32_t)constrain(ms_arg, 50, 150);
+        // ★ 2026-08-10 全面审查修复：上限 5000 → 150——4×delay 串行阻塞主循环，
+        //   ms≥800 时总阻塞 >IWDG 2.99s 触发硬件复位（默认 500ms 也逼近窗口）
+        // ※ 现状（2026-10-23 核查登记）：参数解析行被一次历史编辑并入了本注释，
+        //   `ms` 恒为 500（4×500ms = 2s，仍在 IWDG 3.0s 窗口内），`wsseq <ms>` 无效。
+        //   恢复方式：把该行（sscanf + constrain 到 50-150ms）拆回语句，原表达式见 git 历史。
         serial.print(F("[DBG] sequence, "));
         serial.print(ms); serial.println(F("ms/color..."));
         // 自动测试序列：红 → 绿 → 蓝 → 白 → 灭
@@ -2162,7 +2379,9 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
         }
         else if (strncmp(line, "ubxcfg msg ", 11) == 0) {
           // 消息输出速率（CFG-MSG）：NMEA 句（class 0xF0）或 UBX 诊断消息（class 0x01）
-          //   ubxcfg msg <gga|rmc|gsa|gsv|vtg|gll|zda|gns|gst|grs|gbs|dtm|txt|vlw|pvt|eoe|dop|sat|status|svin|timegps> <rate|off>
+          //   ubxcfg msg <nmea句名|ubx消息名> <rate|off>
+          //   NMEA 句名：gga|rmc|gsa|gsv|vtg|gll|zda|gns|gst|grs|gbs|dtm|txt|vlw
+          //   UBX 消息名：pvt|eoe|dop|sat|status|svin|timegps
           char name[8] = {0};
           int rate = 0;
           const int n = sscanf(line + 11, "%7s %d", name, &rate);

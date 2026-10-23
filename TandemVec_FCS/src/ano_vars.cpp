@@ -1,15 +1,27 @@
-// ============================================================
-//  ano_vars.cpp — 通用变量注册表 + 多协议上报（见 ano_vars.h）
-//
-//  预注册变量 = 控制/状态链路高价值中间量。加变量 = kAnoVars 加一行宏
-//  （宏展开表顺序即变量 ID，与 ano_params 同模式）。
-//
-//  上报链路：
-//    0xF2 值帧（AnoCom 灵活帧）：[id u16 LE] + [float LE] = 6B，watch 集合轮发
-//    0xF3 清单帧：GCS 发 [0x01]→回 count；发 [0x02,id]→回 [id,type,name 16B]
-//    DBG vars 命令：list/add/remove/clear/rate/status
-//    MAVLink NAMED_VALUE_FLOAT/DEBUG_VECT：见 communication.cpp mavlinkSendTelemetry
-// ============================================================
+/**
+ * @file    ano_vars.cpp
+ * @module  固件/通信（AnoVars 通用变量上报，固件侧注册表与发送）
+ * @brief   定义 kAnoVars 注册表，实现 0xF2 值帧节流轮发、0xF3 清单应答、DBG 命令
+ * @details 预注册变量 = 控制/状态链路高价值中间量。加变量 = kAnoVars 加一行宏
+ *          （宏展开表顺序即变量 ID，与 ano_params 同模式）。
+ *          上报链路：
+ *            0xF2 值帧（AnoCom 灵活帧）：`[id u16 LE] + [float LE]` = 6B DATA，watch 轮转
+ *            0xF3 清单帧：GCS 发 `[0x01]`→回 count；`[0x02,id]`→回 `[0x02,id,type,name16]`
+ *            DBG vars 命令：list/add/remove/clear/rate/status
+ *            MAVLink NAMED_VALUE_FLOAT/DEBUG_VECT：见 communication.cpp mavlinkSendTelemetry
+ *          不变量：名称 ≤16B（0xF3 PAR_NAME 定长 16B）；变量 ID = 表下标；
+ *          每 `200/rate` tick 发一帧、watch 内变量轮转（N 个变量各 rate/N Hz）。
+ * @theory  N/A（诊断遥测，非理论模型）
+ * @ref     PROTOCOL-001 §六（灵活格式帧语义）、AGENTS.md 踩坑记录（AnoVars 三坑）
+ * @frame   透传变量原始坐标系（gnc_tel 为机体系/模型系，EKF 速度为 NED，见各项命名）
+ * @units   统一 float32 无缩放；角度/角加速度单位见变量名（_deg / adps2 / alpha_ref）
+ * @note    ★ 三坑（host segfault 三层定位，改本文件前必读）：
+ *          ① 注册表定义必须 `extern` 且**不带数组大小**——带 ANO_VARS_MAX_COUNT 会让
+ *             sizeof 按 64 计、ANO_VARS_COUNT 虚高，遍历到空项 name=nullptr 直接崩；
+ *          ② volatile 变量（bat_voltage_mv）取址需 `const volatile float *`（见 AnoVars.h）；
+ *          ③ 0xF3 变量信息应答固定 20B = CMD(1)+ID(2)+TYPE(1)+NAME(16)，缓冲少 1B 会越界。
+ * @see     src/ano_vars.h、include/AnoVars.h、test_host/test_ano_vars.cpp
+ */
 #include "ano_vars.h"
 #include "AnoComProtocol.h"
 #include "state_data.h"
@@ -38,6 +50,18 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("m_ff_y",          gnc_tel.M_ff[1]),
     ANO_VAR_FLOAT("m_ff_z",          gnc_tel.M_ff[2]),
     ANO_VAR_FLOAT("w0_eff",          gnc_tel.w0_eff),
+    ANO_VAR_FLOAT("vib_acc_g",       gnc_tel.vib_accel_rms_g),
+    ANO_VAR_FLOAT("vib_gyro_dps",    gnc_tel.vib_gyro_rms_dps),
+    ANO_VAR_FLOAT("vib_std",         gnc_tel.vib_accel_std_suggest),
+    ANO_VAR_FLOAT("imu_temp",        imu_die_temp_c),
+    ANO_VAR_FLOAT("btemp",           gnc_tel.bias_temp_slope_dps_c),
+    ANO_VAR_FLOAT("bj_acc",          gnc_tel.bias_jump_accel_delta),
+    ANO_VAR_FLOAT("bj_gyro",         gnc_tel.bias_jump_gyro_delta),
+    ANO_VAR_FLOAT("bdrift_a",        gnc_tel.bias_drift_accel_rate),
+    ANO_VAR_FLOAT("bdrift_g",        gnc_tel.bias_drift_gyro_rate),
+    ANO_VAR_FLOAT("gnss_dly_tau",    gnss_status.auto_delay_tau_s),
+    ANO_VAR_FLOAT("gnss_dly_res",    gnss_status.auto_delay_residual_mps),
+    ANO_VAR_FLOAT("gnss_dly_sharp",  gnss_status.auto_delay_sharpness),
     ANO_VAR_FLOAT("yaw_gain_sched",  gnc_tel.yaw_gain_sched),
     ANO_VAR_FLOAT("delta_f_deg",     gnc_tel.delta_f_deg),
     ANO_VAR_FLOAT("delta_t_deg",     gnc_tel.delta_t_deg),
@@ -45,6 +69,11 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_BOOL("alloc_sat_df",     gnc_tel.alloc_sat[0]),
     ANO_VAR_BOOL("alloc_sat_dt",     gnc_tel.alloc_sat[1]),
     ANO_VAR_BOOL("alloc_sat_dw",     gnc_tel.alloc_sat[2]),
+    // ---- 执行器故障检测（2026-10，只读诊断；ActuatorFaultMonitor）----
+    // 名称 ≤9 字符，避免 MAVLink 截断冲突。
+    ANO_VAR_BOOL("afm_sjam",         g_actuator_servo_jam),
+    ANO_VAR_BOOL("afm_tloss",        g_actuator_thrust_loss),
+    ANO_VAR_BOOL("afm_desc",         g_actuator_controlled_descent_request),
     // ---- τm 观测器（flight_control.cpp 暴露为全局，用户点名观测量）----
     ANO_VAR_FLOAT("wf_est",          g_wf_est),
     ANO_VAR_FLOAT("wt_est",          g_wt_est),

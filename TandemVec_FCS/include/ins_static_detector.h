@@ -1,3 +1,24 @@
+/**
+ * @file    ins_static_detector.h
+ * @module  固件/导航（静止检测）
+ * @brief   用加速度模长/角速度模长/相邻帧变化 + 迟滞状态机判定“确认静止”
+ * @details 输入：机体系比力与角速度；处理：四个阈值瞬时判据 → 连续
+ *          enter_min_frames 帧确认静止、连续 exit_min_frames 帧退出（迟滞）→
+ *          四路评分取最小值并与驻留评分取小得置信度 [0,1]；
+ *          输出：confirmed_static、confidence、诊断量。
+ *          纯 struct + inline，无 Arduino/ESP-IDF 依赖，宿主可测。
+ * @theory  零速检测是 ZUPT 的前提：静止 ⇔ |f^b|≈g 且 |ω^b|≈0 且短时变化小
+ *          @ref REF-120 §9.9.3 p.336（静基座条件下 f≈-g、ω≈0 的对准假设）；
+ *          ZUPT 观测方程与 R 自适应 @ref REF-121 §8.2.3 p.291
+ * @frame   机体系 FRD，比力 m/s²、角速度 rad/s
+ * @units   m/s²、rad/s、帧（200 Hz 导航下 1 帧 = 5 ms）；阈值平方项单位 m⁴/s⁴、rad²/s²
+ * @note    阈值/帧数由调用方在 setup 阶段配置（本工程 9.5~10.1 m/s²、0.01 rad/s、
+ *          Δa 0.5 m/s²、Δω 0.05 rad/s、进 20 帧/出 5 帧）；驻留评分按 60 帧
+ *          （300 ms）爬满。**本检测器不能区分恒速平飞与静止**，必须由 GNSS/光流
+ *          速度等外部信息做退出出口（见 `handleNavigationSystem()` 两处 Reset）。
+ * @see     `ins_static_aid_profile.h`、`handleNavigationSystem()`
+ */
+
 #pragma once
 
 #include "Eigen/Dense"

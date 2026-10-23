@@ -1,3 +1,28 @@
+/**
+ * @file    sensor_peripheral.cpp
+ * @module  固件/传感器外设（DPS310 气压计、UART7 光流、TVC 角度传感器）
+ * @brief   实现气压高度、光流自动识别/速度解算、TVC 角度读取与滤波
+ *
+ * @details 三块实现：
+ *          ① DPS310（IIC2，地址 0x77）：温度 1Hz/OSR×4、压力 128Hz/OSR×2 连续测量，
+ *             任务周期由 main.cpp `BFS_DPS310_TASK_INTERVAL_MS`（7.735ms）控制，
+ *             FIFO 溢出/通信异常才清 FIFO，无新数据不清；
+ *          ② UART7 光流：上电按相位扫描 921600/115200 与四种协议（LQS48 0xFA 0xAA、
+ *             MTF-02P Micolink 0xEF、MSPv2、MAVLink-APM 心跳+OPTICAL_FLOW/DISTANCE_SENSOR），
+ *             识别后锁定类型与波特率；测距帧只刷新测距通道时间戳；
+ *          ③ TVC 角度：ADC 读取 + 互补滤波，传感器 2 取反对齐安装方向。
+ * @theory  N/A（外设驱动与几何补偿，非教材模型）；速度解算的几何关系见
+ *          sensor_peripheral.h 的 @theory 段（H=S·cos(tilt)、V_trans=V_total−V_rot）
+ * @ref     AGENTS.md 踩坑记录（光流双新鲜度通道，2026-08-21）；AGENTS.md 硬件与串口；
+ *          PROTOCOL-001 §二.3.2/§二.3.4（0x31/0x34 语义对应）；COMM-001 §3（任务频率表）
+ * @frame   机体系 FRD 内做倾斜/旋转补偿，输出速度由导航侧转 NED；TVC 为摆座机械角
+ * @units   高度 m、速度 m/s、光流角 rad、dt s、气压 Pa、温度 °C、距离 m/cm
+ * @note    ① 所有任务函数在 200-500Hz 内执行，禁止阻塞等待（串口读用 available() 循环）；
+ *          ② DBG `flowdump <ms>` 期间暂停自动识别（`s_flow_dbg_pause`），避免抢 RX 字节；
+ *          ③ MSPv2 长度字段是 16bit，超 255 的帧必须能正确拒绝（s_msp_size）。
+ * @see     src/sensor_peripheral.h、src/state_data.h（OpticalFlowData）、
+ *          test_host/dps310_fifo_policy_test.cpp
+ */
 #include "sensor_peripheral.h"
 #include "math_utils.h"
 #include "Dps310FifoPolicy.h"
@@ -1051,6 +1076,13 @@ void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms)
   out.println();
 }
 
+/**
+ * @brief 初始化 DPS310：软复位 → 读系数 → 连续测量（温度 1Hz/OSR×4，压力 128Hz/OSR×2）
+ * @return 0 成功；-1002 = 初始化阶段等待首帧数据超时（`DPS310_INIT_DATA_TIMEOUT_ERROR`）
+ * @pre  IIC2 已 begin，地址选择脚 PE15 已拉高（地址 0x77）
+ * @note 上电前先软复位传感器（寄存器 0x0C←0x09）：固件重刷只复位 MCU，DPS310 可能残留
+ *       上一次的命令测量状态。失败不阻塞系统，主流程降级为“无气压计”运行。
+ */
 int initDPS310()
 {
   pinMode(DPS310_ADDR_SEL, OUTPUT);
@@ -1157,6 +1189,14 @@ int initDPS310()
   return 0;
 }
 
+/**
+ * @brief 读一帧 DPS310 结果 → 滤波 → 计算相对起飞点气压高度
+ * @return true = 本拍拿到新数据并更新 `baro_altitude`；false = 无新数据或读失败
+ * @details 顺序固定：先滤波（气压/温度）再算高度，避免非线性气压-高度关系放大噪声；
+ *          `baro_altitude_offset` 由 `resetBaroAltitudeReference()` 在解锁时置零。
+ * @note 发布的是**相对起飞点**高度；进 EKF 前必须加 `origin_alt_m` 还原绝对高度
+ *       （见 AGENTS.md 模块化架构：不得直接把相对值传给气压观测）。
+ */
 bool readDPS310Data()
 {
   // 获取最新的温度和压力
@@ -1192,6 +1232,11 @@ bool readDPS310Data()
   }
 }
 
+/**
+ * @brief 把当前气压高度设为相对零点（解锁时调用，使后续高度以起飞点为 0 m）
+ * @return true = 压力/温度有效且零点已重置；false = 输入无效（保留旧零点）
+ * @note 只改气压高度参考，不动压力/温度原始值与导航绝对位置。
+ */
 bool resetBaroAltitudeReference()
 {
   const float absolute_altitude_m =
@@ -1208,6 +1253,13 @@ bool resetBaroAltitudeReference()
   return true;
 }
 
+/**
+ * @brief DPS310 任务入口（周期见 main.cpp `BFS_DPS310_TASK_INTERVAL_MS`）
+ *
+ * 失败处理：仅当失败原因是 FIFO 溢出或通信异常时清 FIFO；“暂无新数据”不清
+ * （清 FIFO 会丢已采样本，反而降低 128Hz 有效吞吐）。
+ * @note 周期 7.735ms 由分数 tick 机制表达（见 task_scheduler_interval.h）。
+ */
 void handleDPS310()
 {
   dps310_read_success = readDPS310Data(); // 读取并处理DPS310数据
@@ -1237,6 +1289,12 @@ void handleDPS310()
 #endif
 }
 
+/**
+ * @brief 读取两路 TVC 角度传感器并做互补滤波
+ * @param[out] angle1 通道 1 角度 [deg]（摆座机械角）
+ * @param[out] angle2 通道 2 角度 [deg]（原始读数取反以对齐安装方向）
+ * @note 传感器 2 取反是**安装方向补偿**，不是符号错误；改安装方向必须同步此取反。
+ */
 void getFilteredTVCAngles(float &angle1, float &angle2)
 {
   // 读取TVC角度传感器的原始模拟值并转换为角度
@@ -1521,6 +1579,16 @@ void handleLQS48Flow()
 // -----------------------------------------------------------------------------
 // UART7 光流传感器统一调度入口
 // -----------------------------------------------------------------------------
+/**
+ * @brief UART7 光流自动识别与分发任务（500Hz，光流数据唯一入口）
+ *
+ * 状态机：按 `FlowDetectPhase` 依次尝试 LQS48@921600 → MTF-02P MSP@115200 →
+ * Micolink@115200 → MAVLink-APM@115200 → LQS48@115200 → Micolink@921600；
+ * 识别成功后锁定类型与波特率，之后只调用对应处理函数。
+ * 失锁重识别：已锁定传感器连续 `FLOW_DETECT_STALE_MS`(1500ms) 双通道都无新帧 → 重新扫描。
+ * @note 本任务替换了原先固定注册的 `handleLQS48Flow`；新增传感器协议时扩展
+ *       `FlowSensorType` 与检测相位表，并保持“测距帧不刷新速度时间戳”这条约束。
+ */
 void handleOpticalFlowSensor()
 {
   if (s_flow_dbg_pause)

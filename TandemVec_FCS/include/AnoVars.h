@@ -1,17 +1,27 @@
 /**
- * @file AnoVars.h
- * @brief 通用变量注册表 + 上报集合（平台无关，host 可测）
+ * @file    AnoVars.h
+ * @module  固件/通信（AnoVars 通用变量上报，平台无关层）
+ * @brief   定义变量注册表结构、类型枚举与 watch 集合操作（host 可测）
  *
- * 设计目标：让固件任意内部变量（控制中间量/传感器/状态）注册后即可多协议上报：
- *   - AnoCom 0xF2 值帧（[id u16 LE] + [float LE]，watch 集合轮发）
- *   - AnoCom 0xF3 清单帧（仿 0xE0/0xE2：count + [id, type, name 16B]）
- *   - MAVLink NAMED_VALUE_FLOAT / DEBUG_VECT（QGC/MP 通道，复用同一 watch 集合）
- *   - DBG `vars` 命令（配置上报集合）
- *
- * 与 ano_params.cpp 同模式：注册表 = 宏展开静态表（顺序即变量 ID），
- * 加变量 = 注册表加一行宏。名称 ≤16 字符（0xF3 帧 PAR_NAME 定长 16B）。
- * 本头文件零 Arduino 依赖（仅 <cstdint>/<cstring>），host 测试可自行
- * 定义 kAnoVars 表直接编译验证序列化/上限/名称约束。
+ * @details 设计目标：让固件任意内部变量（控制中间量/传感器/状态）注册后即可多协议上报：
+ *            - AnoCom 0xF2 值帧（[id u16 LE] + [float LE]，watch 集合轮发）
+ *            - AnoCom 0xF3 清单帧（仿 0xE0/0xE2：count + [id, type, name 16B]，应答 20B）
+ *            - MAVLink NAMED_VALUE_FLOAT / DEBUG_VECT（QGC/MP 通道，复用同一 watch 集合）
+ *            - DBG `vars` 命令（配置上报集合）
+ *          输入：注册表项（名称 + 类型 + 指针）；处理：统一转 float / 定长名称拷贝；
+ *          输出：watch 集合增删与取值。注册表本体在 src/ano_vars.cpp。
+ *          不变量：名称 ≤16 字符（0xF3 帧 PAR_NAME 定长 16B）；watch ≤16 个；
+ *          速率钳制 1-200Hz；ID = 注册表下标。
+ * @theory  N/A（诊断遥测基础设施）
+ * @ref     PROTOCOL-001 §六（0xF1~0xFA 灵活格式帧）、AGENTS.md 踩坑记录（AnoVars 三坑）
+ * @frame   N/A（透传变量自身语义）
+ * @units   全部对外统一 float32；u32 超过 2^24 有精度损失（见 anoVarGetValue 注释）
+ * @note    ★ 三坑（改本文件/注册表前必读）：
+ *          ① 注册表定义必须 `extern` 且**不带数组大小**——否则 sizeof 虚高、
+ *             ANO_VARS_COUNT 遍历到空项 name=nullptr 会 segfault（host 实测）；
+ *          ② volatile 变量（如 bat_voltage_mv）取址必须落到 `const volatile float *`；
+ *          ③ 0xF3 变量信息应答固定 20B，少一字节即越界写。
+ * @see     src/ano_vars.cpp、src/ano_vars.h、test_host/test_ano_vars.cpp
  */
 #pragma once
 #include <cstdint>

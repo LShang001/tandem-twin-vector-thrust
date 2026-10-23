@@ -1,3 +1,19 @@
+/**
+ * @file    TVC_Control_Geometric.h
+ * @module  固件/控制（历史 TVC 推杆几何模型，已弃用）
+ * @brief   由两个喷管目标摆角反解推杆长度 r1/r2，再线性映射为舵机控制量
+ * @details 输入：S1/S2 目标摆角 [deg]；处理：用 8 个几何常数（mm）按余弦定理
+ *          展开 r² 表达式求 r1/r2，再按 28.274 mm/100 控制量线性映射；
+ *          输出：两路控制量（0–100，中位 50）。
+ *          ⚠️ 本模型已弃用：现行链路由 TandemVec_ControlAllocation.h 分配摆角、
+ *          flight_control.cpp 层3 换算 PWM；保留仅为几何标定对照。
+ * @theory  平面连杆余弦定理（几何推导，非动力学）
+ * @ref     CTL-001 §2（本构型不用该模型；分配链见 THY-003 §3）
+ * @frame   N/A（喷管/推杆平面几何，坐标系已在常数中固化）
+ * @units   角度 deg（内部转 rad）；长度 mm；控制量 0–100；与 PWM 的对应见 ServoConfig
+ * @note    ★ r² 表达式为负时退回零位长度（几何包络外），这是**静默兜底**：
+ *          标定时若发现某角度恒返回 50，说明该角度已超出连杆可达范围。
+ */
 #ifndef TVC_CONTROL_GEOMETRIC_H
 #define TVC_CONTROL_GEOMETRIC_H
 
@@ -5,14 +21,17 @@
 #include <cmath>
 
 /**
- * 基于几何建模的TVC控制量计算函数（使用原始公式）
- * 输入两个喷管目标姿态角（单位：度），计算对应的推杆长度 r1、r2（单位：mm），
- * 再根据标定的比例关系将推杆长度映射为控制量 s1_control、s2_control（范围：-50 ~ 150）。
- *
- * @param s1_angle S1通道喷管目标摆角（单位：度），对应姿态角 δ₁
- * @param s2_angle S2通道喷管目标摆角（单位：度），对应姿态角 δ₂
- * @param s1_control 输出参数：S1控制量 
- * @param s2_control 输出参数：S2控制量
+ * @brief 由喷管目标摆角反解推杆长度并映射为两路控制量（历史几何模型）
+ * @param[in]  s1_angle   S1 通道喷管目标摆角 [deg]，对应 δ₁
+ * @param[in]  s2_angle   S2 通道喷管目标摆角 [deg]，对应 δ₂
+ * @param[out] s1_control S1 控制量（0–100，中位 50）
+ * @param[out] s2_control S2 控制量（0–100，中位 50）
+ * @formula r₁² = l₁² + l₂² − 2·[s₁(s₃cosδ₂ − d₂sinδ₂)
+ *            + (s₂ − d₁)(d₂cosδ₁cosδ₂ + s₃cosδ₁sinδ₂)]（r₂ 同理换 δ₁）
+ *          控制量 = 50 + (r − 224.8) / (28.274/100)
+ * @ref  CTL-001 §2（本项目不用该模型；几何式为余弦定理展开，无文献式号）
+ * @pre  摆角在连杆可达包络内；r² < 0 时退回零位长度 224.8 mm
+ * @note 原名与签名保留，勿改动（历史标定脚本仍按此签名复算）
  */
 inline void calculateTVCControlGeometric(float s1_angle, float s2_angle, float &s1_control, float &s2_control)
 {

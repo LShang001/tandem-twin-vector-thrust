@@ -1,3 +1,22 @@
+/**
+ * @file    VerticalKF_2State.h
+ * @module  固件/导航（二状态垂直卡尔曼滤波）
+ * @brief   只用高度/垂速两状态融合 IMU 垂直加速度与气压高度（鲁棒版）
+ * @details 输入：天向线性加速度、高度量测及噪声；处理：[h,v] 预测 →
+ *          N-sigma 残差门限 → Joseph 形式更新 → 对称化 + 对角限幅；
+ *          输出：高度与垂速。相比三状态版去掉零偏状态：IMU 已校准、
+ *          长时间静止/匀速时零偏不可观，多估一个状态反而更易发散。
+ * @theory  KF 五方程与 Joseph 形式 @ref REF-121 §2.2.1 (2.2.4a–e) p.33–34、
+ *          §2.2.4 p.42–43；高度通道需外部高度反馈才稳定
+ *          @ref REF-120 §7.5 p.190–191
+ * @frame   高度“向上为正”，与 NED 的 D 分量反号（调用方翻转）
+ * @units   m、m/s、m/s²、s
+ * @note    Q 为简化对角模型（q_pos、q_vel 直接加在对角），不是连续模型离散化；
+ *          `measurement_outlier_gate_sq_` 默认 25.0 对应 5σ（平方值），
+ *          不是 3σ——阅读门限时以平方值为准。
+ * @see     `VerticalKF.h`、`handleVerticalEstimation()`
+ */
+
 #pragma once
 
 #include <Arduino.h>
@@ -62,7 +81,7 @@ public:
         q_vel_variance_ = 0.0f;
 
         // 初始化鲁棒性增强参数的默认值
-        measurement_outlier_gate_sq_ = 25.0f; // 默认3-sigma门限 (3*3=9)
+        measurement_outlier_gate_sq_ = 25.0f; // 默认 5-sigma 门限的平方 (5*5=25，非 3σ)
         max_input_accel_ = 20.0f;             // 默认最大输入加速度 ±20 m/s^2 (约 ±2g)
         S_min_ = 1e-9f;                       // 增益计算中S的最小值，防除零
 

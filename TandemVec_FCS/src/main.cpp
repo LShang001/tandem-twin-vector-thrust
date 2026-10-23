@@ -1,21 +1,30 @@
-﻿/*
- * ==========================================================================================
- * Coaxial_TVC_Drone_FCS - 共轴双桨推力矢量飞行控制系统 (模块化重构版)
- * ==========================================================================================
+/**
+ * @file    main.cpp
+ * @module  固件/基础设施（初始化、任务注册与主循环）
+ * @brief   组装全部子系统：串口/传感器/滤波器/调度器初始化，然后跑主循环
  *
- * 版本：Rev 5.0 - Modular Architecture
- * 架构师/作者：LShang
- *
- * 模块化架构：
- *   state_data.h/cpp    - 全局变量声明/定义、枚举/结构体
- *   math_utils.h        - 纯数学工具函数 (inline header-only)
- *   task_scheduler.h/cpp - 任务调度器
- *   sensor_imu.h/cpp     - IMU 传感器采集与预处理
- *   sensor_peripheral.h/cpp - 外设传感器 (气压计、光流、角度传感器)
- *   navigation_task.h/cpp - 导航与状态估计 (EKF、垂直/水平KF)
- *   flight_control.h/cpp - 飞行控制律 (PID、TVC、混控)
- *   communication.h/cpp  - 通信与遥测 (CRSF、MAVLink、ANO)
- *   main.cpp             - 系统初始化与主循环 (本文件)
+ * @details 输入：上电复位；Serial4 上的 DETA100 探测结果决定 `nav_data_source`；
+ *          处理：setup() 按“串口 → DETA100/UBX 数据源锁定 → CRSF → 外设 → PID/滤波器 →
+ *                任务注册 → IWDG”顺序初始化；loop() 每轮喂狗 → `crsf.loop()` →
+ *                `ubx.Pump()`（仅 INTERNAL 数据源）→ `taskExecutor()`；
+ *          输出：调度器任务表 + 200Hz 起的各周期任务（频率表见任务注册段）。
+ *          不变量：任务按注册顺序 FIFO 执行，GNC 必须排在耗时的串口发送任务之前；
+ *          DETA100 与 UBX 共用 Serial4，二者只能有一个在解析。
+ * @theory  N/A（系统集成层）；PID 增益的级联推导见 state_data.cpp 与本文件 §4 注释
+ * @ref     COMM-001 §3（200Hz 任务节奏与频率表）；GCS-001 §1（kFlightCtrlParams 可变实例）；
+ *          AGENTS.md 硬性代码边界（NavDataSource 上电锁定后不可更改、条件注册顺序）；
+ *          AGENTS.md 硬件与串口（SERIAL6_BAUDRATE、IWDG）
+ * @frame   N/A（本文件不做坐标变换）；初始化参数坐标语义见各模块头文件
+ * @units   时间 ms（任务间隔、看门狗）、µs（micros 时基）；其余见各任务注释
+ * @note    ★ DETA100 与 UBX 帧头不同（0xFC vs 0xB5），探测窗口内按帧轮换喂各自解析器，
+ *          否则同一次读空循环会互相窃取字节、把另一方的数据当非法帧头丢弃。
+ * @note    沿革：原工程名 Coaxial_TVC_Drone_FCS（Rev 5.0 Modular Architecture，作者 LShang），
+ *          2026 年演进为纵列双发矢量推力构型，文件名沿用。模块分工：
+ *          state_data（全局状态）/ math_utils（纯数学）/ task_scheduler（调度）/
+ *          sensor_imu（IMU）/ sensor_peripheral（气压计/光流/角度）/ navigation_task（EKF/KF）/
+ *          flight_control（控制律与混控）/ communication（通信遥测）/ ubx_config（GNSS 配置）。
+ * @see     src/task_scheduler.cpp、src/communication.cpp、src/navigation_task.cpp、
+ *          README.md（模块化架构总览）
  */
 
 // ===== 模块化头文件 =====
@@ -394,6 +403,19 @@ void setup()
   // 上行接收的 TX 回传同样有保护，不会阻塞后续 GNC。
   // 间隔参数单位为毫秒，会被转换为 2kHz 定时器滴答数。
   // 注释掉的任务为可选功能，按需启用。
+  //
+  // 频率总表（名义周期 → 与调度器/COMM-001 对照）：
+  //   2 kHz  = 0.5ms  handleICM42688（IMU 采样 + 姿态解算，最高频）
+  //   ~129 Hz = 7.735ms handleDPS310（分数 tick，见 task_scheduler_interval.h）
+  //   500 Hz = 2ms    handleOpticalFlowSensor、handleGuidanceCommands
+  //   200 Hz = 5ms    handleDeta100 / handleNavigationSystem / handleAnoCom /
+  //                   handleDebugTask / handleVerticalEstimation / runGNCExecutive /
+  //                   handleCANBus / handleDataLogging
+  //   100 Hz = 10ms   handleStatusLedTask、handleFlashService
+  //   50 Hz  = 20ms   sendPositionVelocityData
+  //   25 Hz  = 40ms   sendElrsBattery/Attitude/BaroAltitude/Vario
+  //   10 Hz  = 100ms  sendElrsFlightMode/Gps/Temp、updateBatteryMonitor
+  // 注：AnoCom 内部再按 tick 取模分成 100/50/25/10Hz 多档（COMM-001 双环）。
 
   // --- 传感器采集层 (高频) ---
   BFS_ADD_TASK(handleICM42688, 0.5f, "ICM42688");                         // IMU 数据采集 (2kHz, 05ms) - 最高频率，姿态解算基础

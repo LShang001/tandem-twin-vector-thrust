@@ -1,16 +1,18 @@
-/*
- * 15 状态误差状态卡尔曼滤波器 (Ekf15State)
- * =========================================
- *
- * 本文件是本导航库的核心，实现了完整的捷联惯导解算 (Strapdown INS) +
- * GNSS 组合导航 + 多种辅助量测的 15 状态扩展卡尔曼滤波器。
- *
- * 15 维误差状态向量定义（按 x_ 中的索引顺序）：
- *   0-2：   NED 位置误差 (m)
- *   3-5：   NED 速度误差 (m/s)
- *   6-8：   FRD 姿态误差角 (rad) —— 等效旋转向量 (error-state / 乘性四元数)
- *   9-11：  加速度计零偏误差 (m/s²)
- *   12-14： 陀螺零偏误差 (rad/s)
+/**
+ * @file    ekf_15_state.h
+ * @module  固件/导航（15 状态误差状态卡尔曼滤波 ESKF）
+ * @brief   实现捷联惯导 + GNSS 组合导航 + 多类辅助量测的 15 状态 ESKF
+ * @details 输入：IMU 增量/原始量测、GNSS 位置速度、气压高度、航向、重力方向、
+ *          静止陀螺；处理：四元数姿态推进 + 速度/位置积分（含圆锥/划摇补偿）
+ *          → 误差状态协方差传播 → 各量测的 NIS 门控 + Joseph 更新 → 误差注入；
+ *          输出：姿态四元数、NED 速度、LLA 位置、加计/陀螺零偏与诊断结果。
+ *          不变量：状态 15 维；四元数每步归一化且 w≥0；稳定化后的 P 对称半正定。
+ *          15 维误差状态向量（按 x_ 中的索引顺序）：
+ *            0–2：  NED 位置误差 [m]
+ *            3–5：  NED 速度误差 [m/s]
+ *            6–8：  体系姿态误差角 δβ [rad]（乘性四元数/等效旋转向量）
+ *            9–11： 加速度计零偏误差 [m/s²]
+ *            12–14：陀螺零偏误差 [rad/s]
  *
  * 核心功能层级：
  * ┌─────────────────────────────────────────────────────────────┐
@@ -36,26 +38,38 @@
  * │  DISABLE_GNSS_DELAY_REPLAY   PROFILE_ENABLED                 │
  * └─────────────────────────────────────────────────────────────┘
  *
- * 坐标系约定（与库内其它文件统一）：
- * - 机体系 FRD (前-右-下)，导航系 NED (北-东-地)
- * - 欧拉角序 [Yaw, Pitch, Roll]（ZYX Tait-Bryan）
- * - LLA 内部以 rad/m 存储，NED 速度 m/s
- *
- * GNSS 延迟回放机制：
- * - 每个 TimeUpdate 后记录完整状态快照 (InsSnapshot) 到环形缓冲。
- * - GNSS 量测到达时，按 GNSS_DELAY_S 从缓冲中找到对应的历史时刻状态，
- *   恢复到该时刻 → 执行卡尔曼更新 → 重放后续 IMU 输入推进到当前时刻。
- * - 缓冲大小 64 格，在 200 Hz 下可覆盖 320 ms 历史，远超 15 ms 典型延迟。
- * - 纯惯导测试可设 DISABLE_GNSS_DELAY_REPLAY=1 将缓冲缩为 1 格。
- *
- * 本文件在 2024-2026 年间经过大量本地重构，包括但不限于：
- * - GNSS 延迟回放（环缓冲 + 重传播）
- * - NIS/残差门控 (ZUPT / Gravity / Attitude / Yaw / StaticGyro)
- * - 协方差稳定化 (Gershgorin + LDLT + 特征值投影)
- * - 双子样 TimeUpdate + 快速传播路径
- * - 静止陀螺零偏专用量测 (StaticGyro bias-only update)
- * - GNSS 重捕获低增益融合 + 失联膨胀
- * - 主机回归测试接缝 (EKF_HOST_REGRESSION)
+ * @theory  KF 五方程 (2.2.4a–e) @ref REF-121 §2.2.1 p.33–34；
+ *          序贯处理/子集更新 @ref REF-121 §3.3 p.84–86；
+ *          EKF 线性化 @ref REF-121 §6.2.3 p.207–213；
+ *          NIS/χ² 门控 @ref REF-121 §7.3.1 p.255–259；
+ *          Joseph 形式选用 @ref REF-121 §2.2.4 p.42–43；
+ *          比力方程 @ref REF-120 §7.4 (7.4.6) p.189；
+ *          速度算法与旋转效应/划摇 @ref REF-120 §9.6 (9.6.9)(9.6.17)(9.6.19)
+ *          p.298–299、(9.6.25) p.301；
+ *          等效旋转矢量与圆锥补偿 @ref REF-120 §9.3 (9.3.30) p.274；
+ *          捷联误差模型 @ref REF-120 §9.8.1 (9.8.3)(9.8.4) p.317–322、
+ *          §9.8.2 (9.8.13)
+ * @frame   机体系 FRD（前-右-下）→ 导航系 NED（北-东-地）；LLA(WGS-84 椭球)；
+ *          欧拉角序 [Yaw, Pitch, Roll]（ZYX Tait-Bryan）
+ * @units   SI：位置 m、速度 m/s、角度 rad、角速度 rad/s、加速度 m/s²、时间 s
+ * @redline 四元数右乘传播与逐步保范投影、theta=−asin(R13)、单步 dt 上限
+ *          （见 docs/registers/行为保持红线清单.md；本文件 MAX_TIME_UPDATE_DT_S
+ *          = 0.1 s 为运行期门限，比红线更严）
+ * @note    误差状态方向：x 表示“真值 − 名义估计”，注入方式为
+ *          vel += x(3:5)、quat ← quat⊗Exp(x(6:8))、bias += x(9:14)。
+ *          等价变换：秦书 δ = 计算值 − 真值，本固件 δ = 真值 − 估计，故速度
+ *          与传输率相关项相差一次取反；体轴姿态误差 δβ 与秦书导航系失准角
+ *          φ 的关系为 φ = C^n_b·δβ（一阶等价）。详见 GOV-004 §6.3。
+ * @note    GNSS 延迟回放：每个 TimeUpdate 记录完整状态快照 (InsSnapshot) 到
+ *          64 格环形缓冲（200 Hz 覆盖 320 ms），GNSS 到达时按真实年龄恢复历史
+ *          状态 → 更新 → 重放后续 IMU 输入。纯惯导压测可把
+ *          BFS_NAVIGATION_EMBEDDED_DISABLE_GNSS_DELAY_REPLAY 置 1（缓冲缩为
+ *          1 格），此时要求延迟快照的 GNSS 更新会被拒绝，勿当正常配置使用。
+ * @note    2024–2026 本地重构要点：GNSS 延迟回放、NIS/残差门控、协方差稳定化
+ *          （Gershgorin + LDLT + 特征值投影）、双子样传播、静止陀螺零偏量测、
+ *          GNSS 重捕获低增益融合/失联膨胀、主机回归接缝 EKF_HOST_REGRESSION。
+ * @see     navigation.h、docs/04-数学建模/代码理论核查/FW-EKF-代码理论核查.md、
+ *          TandemVec_FCS/test_host/test_ekf_15state.cpp、test_ekf_aiding_velocity.cpp
  */
 
 #ifndef NAVIGATION_SRC_EKF_15_STATE_H_ // NOLINT
@@ -183,6 +197,25 @@
 namespace bfs
 {
 
+  /*
+   * ── 状态与误差定义（本滤波器的符号约定）──────────────────────────────
+   * 名义状态：LLA 位置、NED 速度、姿态四元数 q（机体系→导航系）、加计零偏、
+   * 陀螺零偏。误差状态 x 按 [δp, δv, δβ, δb_a, δb_g] 排列，共 15 维。
+   *
+   * 方向约定（读代码前必看）：
+   *   本滤波器取“真值 − 名义估计”为误差状态方向，故注入时一律做加法：
+   *   位置按 Rm/Rn/cos(lat) 比例尺加到 LLA；速度直接相加；姿态为体系右乘
+   *   q_true = q_est ⊗ Exp(δβ)；加计/陀螺零偏直接相加。
+   *
+   * 与教材的等价变换：
+   *   秦书 (REF-120) 的速度误差 δV = 计算值 − 真值，本固件 δv = 真值 − 估计，
+   *   两者相差一次取反；秦书的导航系失准角 φ 定义为 (I−[φ]×)C^n_b，与本固件
+   *   体系误差的关系为 φ = C^n_b·δβ（一阶等价）。因此 F 矩阵各块“看起来符号
+   *   不同”不等于实现错误，须按上述映射换算后再比较（见 FW-EKF 核查记录）。
+   *
+   * 单位：δp 为 NED 位移 [m]（不是弧度）；δβ 为旋转矢量 [rad]。
+   * ─────────────────────────────────────────────────────────────────────
+   */
   class Ekf15State
   {
     // 历史状态快照，用于 GNSS 延迟量测后的状态重传播。
@@ -448,17 +481,25 @@ namespace bfs
     }
 
     /**
-     * @brief 初始化 EKF 状态 (Initialization)
-     *
-     * 在系统启动时调用一次。负责构建初始的状态向量 x 和协方差矩阵 P，
-     * 并设定过程噪声 Q 和观测噪声 R 的参数。
-     * 同时执行初始对准（Alignment）：利用加速度计和磁力计确定初始姿态。
-     *
-     * @param accel   初始加速度计读数 (用于计算 Roll/Pitch 和初始化零偏)
-     * @param gyro    初始陀螺仪读数 (用于初始化陀螺仪零偏)
-     * @param mag     初始磁力计读数 (用于计算 Yaw)
-     * @param ned_vel 初始速度 (通常为 0，除非是空中对准)
-     * @param lla     初始位置 (纬度, 经度, 高度)
+     * @brief 初始化 EKF 状态：静基座对准 + 初始协方差 P0 + 噪声模型 Rw/R
+     * @param[in] accel   初始机体系 FRD 加速度计读数 [m/s²]（调平用）
+     * @param[in] gyro    初始机体系 FRD 陀螺读数 [rad/s]（估初始零偏用）
+     * @param[in] mag     初始磁力计读数（定航向；无磁时传伪磁向量）
+     * @param[in] ned_vel 初始 NED 速度 [m/s]（通常为零，空中对准时非零）
+     * @param[in] lla     初始位置 (纬度 rad, 经度 rad, 椭球高 m)
+     * @return 无；就地初始化名义状态、P0、Rw/R 与 Fs 静态块
+     * @formula 初始姿态 = TiltCompass(accel, mag) 的欧拉角转四元数；
+     *          P0 为分块对角（位置/速度/水平姿态/航向/加计零偏/陀螺零偏）；
+     *          Rw 含加计/陀螺白噪声与零偏 Markov 驱动噪声 2σ²/τ；
+     *          初始陀螺零偏 = ω_gyro − C^b_n(ω_ie+ω_en)（扣除地球自转与运输率）
+     * @ref REF-120 §9.9.1 p.323–324（粗对准）；REF-121 §2.2.1 p.33（Q/R 定义）；
+     *      REF-121 §2.2.5 p.44–46（初始 P0 的选取）
+     * @pre 载体静止（否则调平被线加速度污染）；输入经 Sanitize* 兜底处理
+     * @post |q|=1；P0 对称正定；h_ 的 6×6 位置/速度块为单位阵
+     * @note 陀螺零偏初值不取原始读数：静止时陀螺仍测到地球自转，若整段当零偏
+     *       扣除，会在无 GNSS 静止/低动态时产生慢姿态漂移（见实现注释）。
+     * @test test_host/test_ekf_15state.cpp T1（初始姿态/速度/位置）；
+     *       test_host/test_ekf_bias_static.cpp（0.2 rad 初始航向不确定度）
      */
     void Initialize(const Eigen::Vector3f &accel, const Eigen::Vector3f &gyro,
                     const Eigen::Vector3f &mag, const Eigen::Vector3f &ned_vel,
@@ -501,6 +542,9 @@ namespace bfs
        * H 矩阵描述了观测值 (GNSS) 与状态值 (INS) 之间的线性关系。
        * 标准观测为 [Pos_N, Pos_E, Pos_D, Vel_N, Vel_E, Vel_D]，
        * 因此必须映射完整 6 维位置和速度误差。
+       * @formula H = [I₆ 0₆ₓ₉]，即 z = Hx+v 只观测位置(0–2)与速度(3–5)误差；
+       *          位置新息用 lla2ned 换算成米，速度新息直接相减
+       * @ref REF-121 §2.2.1 (2.2.4b–c) p.33；REF-120 §9.8.1 (9.8.3) p.317–322
        */
       h_.setZero();
       h_.block(0, 0, 6, 6) = Eigen::Matrix<float, 6, 6>::Identity();
@@ -519,7 +563,8 @@ namespace bfs
                               Eigen::Matrix<float, 3, 3>::Identity();
 
       /* 加速度计零偏随机游走 (Bias Instability) */
-      /* 公式来源于一阶高斯-马尔可夫过程的方差方程 */
+      /* 公式来源于一阶高斯-马尔可夫过程的方差方程：驱动噪声方差 2σ²/τ
+       * @ref REF-121 §2.2.1 p.33（过程噪声 ΓQΓ^T 的构造） */
       rw_.block(6, 6, 3, 3) = 2.0f * accel_markov_bias_std_mps2_ *
                               accel_markov_bias_std_mps2_ / accel_tau_s_ *
                               Eigen::Matrix<float, 3, 3>::Identity();
@@ -623,14 +668,20 @@ namespace bfs
     }
 
     /**
-     * @brief 执行时间更新 (预测步骤)
-     *
-     * 利用 IMU 数据进行捷联惯导解算 (Strapdown INS Mechanics)，推算下一时刻的状态。
-     * 同时基于误差状态运动学方程，预测协方差矩阵 P 的变化。
-     *
-     * @param accel 原始加速度计读数 (m/s^2)
-     * @param gyro  原始陀螺仪读数 (rad/s)
-     * @param dt_s  时间间隔 (秒)
+     * @brief 单子样时间更新（预测）：捷联惯导递推 + 误差协方差传播
+     * @param[in] accel 机体系 FRD 原始加速度计读数 [m/s²]
+     * @param[in] gyro  机体系 FRD 原始陀螺仪读数 [rad/s]
+     * @param[in] dt_s  导航周期 [s]，须满足 0 < dt_s ≤ MAX_TIME_UPDATE_DT_S
+     * @return 无；就地更新姿态/速度/LLA/协方差，并写入延迟回放环形缓冲
+     * @formula v←v+C^n_b(f−b_a)Δt−(2ω_ie+ω_en)×vΔt+gΔt；
+     *          P←ΦPΦ^T+Q_d，Φ 为 F 的离散化（见 PropagateStateFromIncrements()）
+     * @ref REF-121 §2.2.1 (2.2.4a)(2.2.4d) p.33；
+     *      REF-120 §7.4 (7.4.6) p.189（比力方程）
+     * @pre accel/gyro 有限且未超物理门限（IsPlausibleImuSample），dt 有效
+     * @post 每步四元数归一化、P 稳定化；输入异常时整帧丢弃且不改状态
+     * @note 单子样路径只做“上一子样 × 本子样”的 1/12 流式圆锥/划摇修正，
+     *       精度低于 TimeUpdateTwoSample()，仅在只有单帧增量时使用。
+     * @test test_host/test_ekf_15state.cpp T2/T3（静止传播 100/200 步）
      */
     void TimeUpdate(const Eigen::Vector3f &accel, const Eigen::Vector3f &gyro,
                     const float dt_s)
@@ -680,13 +731,19 @@ namespace bfs
     }
 
     /**
-     * @brief 使用同一导航周期内的两个IMU子样增量进行预测。
-     *
-     * @param delta_theta_1_rad 前半周期原始机体系角增量(rad)。
-     * @param delta_theta_2_rad 后半周期原始机体系角增量(rad)。
-     * @param delta_v_1_mps 前半周期原始机体系速度增量(m/s)。
-     * @param delta_v_2_mps 后半周期原始机体系速度增量(m/s)。
-     * @param dt_s 两个子样合计的导航周期时间。
+     * @brief 双子样时间更新：两个等分子样增量做圆锥/划摇补偿后传播
+     * @param[in] delta_theta_1_rad 前半周期机体系角增量 [rad]
+     * @param[in] delta_theta_2_rad 后半周期机体系角增量 [rad]
+     * @param[in] delta_v_1_mps     前半周期机体系速度增量 [m/s]
+     * @param[in] delta_v_2_mps     后半周期机体系速度增量 [m/s]
+     * @param[in] dt_s              两子样合计的导航周期 [s]
+     * @return 无；就地更新状态并与单子样路径共用同一传播内核
+     * @formula 等效旋转矢量 Φ = Δθ1+Δθ2+(2/3)Δθ1×Δθ2；
+     *          速度划摇 ΔV_scul = (2/3)(Δθ1×ΔV2+ΔV1×Δθ2)
+     * @ref REF-120 §9.3 (9.3.30) p.274；REF-120 §9.6 (9.6.25) p.301
+     * @pre 两个子样时间等分；零偏在本函数内按 half_dt 扣除
+     * @post 历史快照保存“原始增量”（未扣零偏），供延迟回放按当时零偏重算
+     * @test test_host/test_ekf_15state.cpp T7（旋转效应不双计，v_E 期望 0.000124999）
      */
     void TimeUpdateTwoSample(const Eigen::Vector3f &delta_theta_1_rad,
                              const Eigen::Vector3f &delta_theta_2_rad,
@@ -789,12 +846,14 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的 GNSS 位置/速度量测更新。
+     * @brief 带诊断结果的 GNSS 位置/速度量测更新（三参数兼容重载）
      *
      * 该接口与 MeasurementUpdate() 使用完全相同的滤波数学，但会返回输入有效性、
      * 是否进入 EKF、是否真正通过 NIS 门控并完成融合。上层 VOFA/AidSource 诊断必须
      * 使用这个结果，不能在调用后无条件标记 GNSS fused。四参数重载允许上层传入
      * 当前 epoch 映射后的真实观测年龄；三参数版本保留固定延迟兼容路径。
+     * @formula 见五参数实现（KF 五方程 + Joseph + NIS 门控 + 3+3 子集回退）
+     * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34；REF-121 §7.3.1 p.255–259
      */
     MeasurementUpdateResult MeasurementUpdateDetailed(const Eigen::Vector3f &gnss_vel,
                                                        const Eigen::Vector3d &gnss_lla,
@@ -813,6 +872,24 @@ namespace bfs
                                        measurement_age_s, true);
     }
 
+    /**
+     * @brief GNSS 位置/速度 6 维量测更新（含延迟回放、NIS 门控与子集回退）
+     * @param[in] gnss_vel  GNSS NED 速度 [m/s]
+     * @param[in] gnss_lla  GNSS 位置 (纬度 rad, 经度 rad, 椭球高 m)
+     * @param[in] dt_avg_s  EKF 平均周期 [s]（仅用于输入有效性校验）
+     * @param[in] measurement_age_s GNSS 观测年龄 [s]，0 表示当前时刻
+     * @param[in] require_delayed_snapshot 是否强制要求命中历史快照
+     * @return MeasurementUpdateResult（input_valid/attempted/fused/subset_* 与 NIS）
+     * @formula y = [lla2ned(gnss,hist); gnss_vel−hist_vel]；S = HPH^T+R；
+     *          K = PH^T S^-1；x = Ky；P = (I−KH)P(I−KH)^T+KRK^T；NIS = y^T S^-1 y
+     * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34（五方程与 Joseph 形式）；
+     *      REF-121 §7.3.1 p.255–259（χ² 门控）；REF-121 §3.3 p.84–86（子集/序贯）
+     * @pre gnss_vel 有限、LLA 有效（非极点、|h|≤100 km）、age ≥ 0
+     * @post 无论是否融合，恢复过的历史快照都会重传播回当前时刻
+     * @note 联合 NIS 门限 30（χ²(6,0.999)≈22.46 的保守值）；拒绝后按 3+3 位置/
+     *       速度子集重检（χ²(3) 门限 25.90/16.27），只更新通过的子集。
+     * @test test_host/test_ekf_15state.cpp T4/T9–T11（收敛、子集隔离、软重锚）
+     */
     MeasurementUpdateResult MeasurementUpdateDetailed(const Eigen::Vector3f &gnss_vel,
                                                        const Eigen::Vector3d &gnss_lla,
                                                        const float dt_avg_s,
@@ -921,7 +998,10 @@ namespace bfs
       result.test_ratio = std::isfinite(nis_value)
                               ? nis_value / GNSS_NIS_REJECT_THRESHOLD
                               : 0.0f;
-      if (nis_value > GNSS_NIS_REJECT_THRESHOLD)
+      bool joint_update_allowed =
+          (nis_value <= GNSS_NIS_REJECT_THRESHOLD);
+
+      if (!joint_update_allowed)
       {
         Eigen::Matrix<float, 6, 6> conservative_noise;
         const bool use_conservative_reacquisition =
@@ -936,53 +1016,85 @@ namespace bfs
           result.test_ratio = std::isfinite(nis_value)
                                   ? nis_value / GNSS_REACQUIRE_NIS_REJECT_THRESHOLD
                                   : 0.0f;
+          joint_update_allowed = true;
         }
         else
         {
-          // GNSS新息远超当前协方差可解释范围且不满足重捕获条件时判为离群值。
-          if (can_repropagate)
+          // P0-1：联合门拒绝后，分别检验 3D 位置/3D 速度子集。
+          // 只更新通过 χ²(3) 的子集，避免“速度坏把位置陪葬”。
+          const GnssSubsetResult subset =
+              ApplyGnssSubsetFallback(gnss_vel, gnss_update_noise);
+          result.subset_position = subset.pos_fused;
+          result.subset_velocity = subset.vel_fused;
+          result.nis_pos3 = subset.nis_pos;
+          result.nis_vel3 = subset.nis_vel;
+
+          if (subset.pos_fused || subset.vel_fused)
           {
-            RepropagateFromDelayedSnapshot(hist_idx);
+            result.fused = true;
+            if (subset.vel_fused)
+            {
+              gnss_vel_reject_streak_ = 0;
+            }
+            else if (++gnss_vel_reject_streak_ >= 10U)
+            {
+              // 速度子集连续 10 次被拒：膨胀 P_vv（软重锚，不重置速度/历史）。
+              InflateVelocityCovariance(2.0f);
+              gnss_vel_reject_streak_ = 0;
+            }
           }
-          return result;
+          else
+          {
+            // 位置/速度子集都不通过：按离群值处理，返回前恢复历史并重传播。
+            if (can_repropagate)
+            {
+              RepropagateFromDelayedSnapshot(hist_idx);
+            }
+            if (++gnss_vel_reject_streak_ >= 10U)
+            {
+              InflateVelocityCovariance(2.0f);
+              gnss_vel_reject_streak_ = 0;
+            }
+            return result;
+          }
         }
       }
 
-      // ----------------------------------------------------------------------
-      // [步骤 3] 计算卡尔曼增益 (Kalman Gain)
-      // 公式: K = P * H^T * S^-1
-      // ----------------------------------------------------------------------
-      /*
-       * 卡尔曼增益决定了我们多大程度上相信“观测值”(GPS)，以及多大程度上相信“预测值”(INS)。
-       * 如果 S (观测不确定性) 很大，K 就会变小。
-       */
-      k_ = p_ * h_.transpose() * s_inv;
+      if (joint_update_allowed)
+      {
+        // ------------------------------------------------------------------
+        // [步骤 3] 计算卡尔曼增益 (Kalman Gain)
+        // 公式: K = P * H^T * S^-1
+        // ------------------------------------------------------------------
+        k_ = p_ * h_.transpose() * s_inv;
 
-      // ----------------------------------------------------------------------
-      // [步骤 4] 更新状态协方差矩阵 P (Covariance Update)
-      // 使用 "Joseph Form" (约瑟夫形式) 以保证数值稳定性和对称性
-      // 公式: P = (I - KH) * P * (I - KH)^T + K * R * K^T
-      // ----------------------------------------------------------------------
-      /*
-       * 相比简单的 P = (I - KH)P，Joseph 形式虽然计算量稍大，
-       * 但能保证 P 矩阵始终是对称正定的，防止滤波器发散。
-       */
-      p_ = (Eigen::Matrix<float, 15, 15>::Identity() - k_ * h_) * p_ *
-               (Eigen::Matrix<float, 15, 15>::Identity() - k_ * h_).transpose() +
-           k_ * gnss_update_noise * k_.transpose();
-      StabilizeCovariance();
+        // P1-5：航向 consider（近似 Schmidt）。
+        // 过渡/大倾斜时 F(v,β) 的比力方向变化大，P(8,v) 会让 GNSS 速度新息
+        // 经 K(8,v) 把航向拉偏；此时把 K 的航向行清零，速度/位置/水平姿态
+        // 仍正常修正。默认关闭，由上层按飞行相位置位（见 notes/06 §6）。
+        // 理论依据：秦永元等《卡尔曼滤波与组合导航原理（第3版）》§8.2.3 p.291：
+        // 间接法阻尼必须利用外来信息，航向弱可观时不能靠速度新息“造”观测。
+        if (gnss_consider_heading_)
+        {
+          k_.row(8).setZero();
+        }
 
-      // ----------------------------------------------------------------------
-      // [步骤 5] 计算误差状态向量 (Error State Calculation)
-      // 公式: dx = K * y
-      // ----------------------------------------------------------------------
-      /*
-       * x_ 在这里存储的是“误差状态” (delta state)，而不是全量状态。
-       * 包含了：位置误差、速度误差、姿态误差、加速度零偏误差、陀螺仪零偏误差。
-       */
-      x_ = k_ * y_;
+        // ------------------------------------------------------------------
+        // [步骤 4] 更新状态协方差矩阵 P
+        // 使用 Joseph Form 保证数值稳定性和对称性。
+        // ------------------------------------------------------------------
+        p_ = (Eigen::Matrix<float, 15, 15>::Identity() - k_ * h_) * p_ *
+                 (Eigen::Matrix<float, 15, 15>::Identity() - k_ * h_).transpose() +
+             k_ * gnss_update_noise * k_.transpose();
+        StabilizeCovariance();
 
-      InjectErrorState();
+        // ------------------------------------------------------------------
+        // [步骤 5] 计算误差状态向量 dx = K * y 并注入
+        // ------------------------------------------------------------------
+        x_ = k_ * y_;
+        InjectErrorState();
+        result.fused = true;
+      }
 
       if (can_repropagate)
       {
@@ -1027,10 +1139,14 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的速度量测更新。
+     * @brief 带诊断结果的速度量测更新（ZUPT 导向）
      *
      * 与 MeasurementUpdateVelocity() 使用同一套滤波数学，但额外返回输入是否有效、
      * 是否尝试融合、新息模长和门控比，方便上层 AidSource 统计或串口诊断。
+     * @formula H=[0 I₃ 0]，S=P_vv+R，K=P[:,v]S^-1，x=K(z−v)，Joseph 更新 P；
+     *          ZUPT 守卫：|z|<0.30 m/s 且 |残差|>5.5 m/s 时直接拒绝
+     * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34；§7.3.1 p.255–259（NIS 16.3）
+     * @test test_host/test_ekf_15state.cpp T6
      */
     MeasurementUpdateResult MeasurementUpdateVelocityDetailed(
         const Eigen::Vector3f &measured_vel_ned,
@@ -1066,6 +1182,11 @@ namespace bfs
      *    NIS 门控把关（与 ZUPT 路径同一门限）。
      * 垂直通道不可观时请把 D 分量填当前估计值并给大噪声（如 1e3 m/s），
      * 此时该通道 K≈0，等价于只做 N/E 二维更新。
+     * @formula 与 ZUPT 同式（H=[0 I₃ 0] + Joseph + NIS 16.3），但物理残差门放宽到
+     *          30 m/s 并豁免“近零测量”守卫，使悬停/失锁恢复时仍可融合
+     * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34；§7.3.1 p.255–259
+     * @note 失锁重锚由 ResetVelocityToExternal() 完成，本接口不直接改速度态。
+     * @test test_host/test_ekf_aiding_velocity.cpp T1–T7
      */
     MeasurementUpdateResult MeasurementUpdateAidingVelocityDetailed(
         const Eigen::Vector3f &measured_vel_ned,
@@ -1111,10 +1232,15 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的重力方向量测更新。
+     * @brief 带诊断结果的重力方向量测更新
      *
      * 返回值用于区分“输入无效”“进入 EKF 但被门控拒绝”和“实际融合成功”，
      * 便于后续把静止辅助调度和组合导航观测状态从测试程序抽到库层。
+     * @formula z = (f_b−b_a)/|f_b−b_a|，h(x)=C^b_n·(0,0,−1)，
+     *          H_att = +[h]×（体系右乘误差线性化），S=H P_att H^T+R，NIS 门限 18
+     * @ref REF-120 §9.8.2 (9.8.13) p.317–322（姿态误差与矢量观测的线性化）；
+     *      REF-121 §7.3.1 p.255–259
+     * @test test_host/test_ekf_bias_static.cpp（静止重力约束零偏）
      */
     MeasurementUpdateResult MeasurementUpdateGravityDetailed(
         const Eigen::Vector3f &measured_accel_mps2,
@@ -1155,6 +1281,17 @@ namespace bfs
           .fused;
     }
 
+    void ReanchorVelocityCovariance(const float add_std_mps)
+    {
+      InflateVelocityCovariance(add_std_mps);
+    }
+
+    void ReanchorBiasCovariance(const float add_accel_std_mps2,
+                                const float add_gyro_std_radps)
+    {
+      InflateBiasCovariance(add_accel_std_mps2, add_gyro_std_radps);
+    }
+
     bool MeasurementUpdateStaticGyro(const Eigen::Vector3f &measured_gyro_radps,
                                      const Eigen::Vector3f &gyro_noise_radps)
     {
@@ -1164,11 +1301,18 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的静止角速度量测更新。
+     * @brief 带诊断结果的静止角速度量测更新（bias-only 三轴零偏闭环）
      *
      * 该量测只应由上层静止检测确认后调用。它使用三轴静止角速度残差估计 gyro_bias，
      * 但不直接回写姿态误差；roll/pitch 的绝对方向仍由 Gravity 量测负责，yaw 在无磁/
      * 无 GNSS 航向时不当作绝对可观状态，只尽量阻止零偏继续积分成漂移。
+     * @formula z = ω_ib^b（原始陀螺），h(x)=C^b_n(ω_ie^n+ω_en^n)+b_g；
+     *          残差门 0.05 rad/s，仅更新 b_g 与交叉协方差，NIS 门限 24
+     * @ref REF-121 §8.2.3 p.291（间接法阻尼必须利用外来信息：静止确认来自上层
+     *      检测器而非滤波器自身）；REF-121 §7.3.1 p.255–259（NIS）
+     * @note 2026-10 追加：throttlePercent>=3% 时上层跳过本融合，避免把电机出力
+     *       当成零角速率估计零偏（见 src/navigation_task.cpp）。
+     * @test test_host/test_ekf_bias_static.cpp（静止零偏收敛）
      */
     MeasurementUpdateResult MeasurementUpdateStaticGyroDetailed(
         const Eigen::Vector3f &measured_gyro_radps,
@@ -1219,10 +1363,15 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的姿态量测更新。
+     * @brief 带诊断结果的姿态量测更新
      *
      * 姿态量测通常来自 Madgwick/Mahony/外部 AHRS。详细结果可以输出姿态残差、
      * NIS 门控比，并作为低动态姿态辅助是否过强的调参依据。
+     * @formula y = Log(q̂^-1⊗q_meas)（四元数对数映射），H=[0 I₃ 0]，
+     *          R=diag(σ_rp²,σ_rp²,σ_yaw²)，NIS 门限 18，残差门 0.8 rad
+     * @ref REF-120 §9.2.2 p.256–258（四元数与姿态阵）；REF-120 §9.8.2 (9.8.13)
+     *      （体系姿态误差线性化）
+     * @test test_host/test_ekf_15state.cpp T8
      */
     MeasurementUpdateResult MeasurementUpdateAttitudeDetailed(
         const Eigen::Vector3f &measured_ypr_rad,
@@ -1264,10 +1413,16 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的标量航向量测更新。
+     * @brief 带诊断结果的标量航向量测更新
      *
      * 后续接 EKF-GSF yaw、双天线航向或磁航向时，上层可以直接用该结果统计航向
      * 观测的接受率、残差和门控比。
+     * @formula y = Wrap(z − ψ)，H = C^b_n 的第三行（真航向轴在体系的分量），
+     *          S = P(8,8)+R，NIS 门限 12，残差门限 1.0 rad
+     * @ref REF-120 §9.8.2 (9.8.13) p.317–322；REF-121 §7.3.1 p.255–259
+     * @note H 取 t_b2ned(2,:) 而非 [0,0,1]：大俯仰（VTOL 悬停/过渡）时真航向轴
+     *       接近机体 x 轴，不投影会把航向修正错误注入横滚（2026-08-12 审查修复）。
+     * @test test_host/test_ekf_15state.cpp T8；test_ekf_bias_static.cpp
      */
     MeasurementUpdateResult MeasurementUpdateYawDetailed(
         const float measured_yaw_rad,
@@ -1361,6 +1516,38 @@ namespace bfs
     inline Eigen::Vector3d lla_rad_m() const { return ins_lla_rad_m_; }
     // 直接获取 EKF 估计的四元数姿态 (FRD 机体系 → NED 导航系)
     inline Eigen::Quaternionf quat() const { return quat_; }
+
+    /* P1-5：设置 GNSS 更新是否把航向作为 consider 状态。
+       默认 false（原行为）；上层按飞行相位置位，避免在过渡/大倾斜段
+       让 GNSS 速度新息经 P(8,v) 把航向拉偏。 */
+    inline void set_gnss_consider_heading(const bool enable)
+    {
+      gnss_consider_heading_ = enable;
+    }
+    inline bool gnss_consider_heading() const { return gnss_consider_heading_; }
+    inline uint32_t gnss_velocity_reanchor_count() const
+    {
+      return gnss_vel_reanchor_count_;
+    }
+
+#ifdef EKF_HOST_REGRESSION
+    /* 宿主机回归专用：直接设置姿态/协方差，构造 P(8,v) 非零的航向 consider 用例。
+       生产固件不编译这些接口（EKF_HOST_REGRESSION 仅 host 测试定义）。 */
+    inline void set_quaternion_for_test(const Eigen::Quaternionf &q)
+    {
+      quat_ = q.normalized();
+      t_b2ned = quat2dcm(quat_).transpose();
+      MarkEulerAnglesDirty();
+    }
+    inline void set_covariance_for_test(const int r, const int c, const float v)
+    {
+      if (r >= 0 && r < 15 && c >= 0 && c < 15)
+      {
+        p_(r, c) = v;
+        p_(c, r) = v;
+      }
+    }
+#endif
 
     // 当前 WGS-84 正常重力（Somigliana，随经纬高更新；未初始化时为默认标准值 9.80665）
     inline double gravity_mps2() const { return gravity_mps2_; }
@@ -1561,6 +1748,117 @@ namespace bfs
       return IsValidNoiseStd(std_value(0)) &&
              IsValidNoiseStd(std_value(1)) &&
              IsValidNoiseStd(std_value(2));
+    }
+
+    /* P0-1：GNSS 6 维联合 NIS 拒绝后的 3+3 子集回退结果。 */
+    struct GnssSubsetResult
+    {
+      bool pos_fused = false;
+      bool vel_fused = false;
+      float nis_pos = 0.0f;
+      float nis_vel = 0.0f;
+    };
+
+    /*
+     * P0-1：联合 NIS 拒绝后，分别检验位置 3 维/速度 3 维子集。
+     * 只更新通过 χ²(3) 的子集；位置先更新，速度残差随后按新状态重算。
+     * 理论依据：秦永元等《卡尔曼滤波与组合导航原理（第3版）》§7.3.1 p.255
+     * （系统级 χ² 故障检测与隔离）、§3.3 p.84–86（序贯处理等价性）。
+     * 阈值取 χ²(3)：位置 25.90（1e-5）、速度 16.27（1e-3），与仿真 B 套件同量级。
+     * @ref REF-121 §3.3.1 (3.3.2a–c) p.84–86（序贯处理的子集等价性）；
+     *      REF-121 §7.3.1 p.255–259（系统级 χ² 故障检测与隔离）
+     * @test test_host/test_ekf_15state.cpp T9–T11（速度坏/位置坏/双坏）
+     */
+    GnssSubsetResult ApplyGnssSubsetFallback(
+        const Eigen::Vector3f &gnss_vel_ned,
+        const Eigen::Matrix<float, 6, 6> &measurement_noise)
+    {
+      constexpr float kPosNisLimit = 25.90f;
+      constexpr float kVelNisLimit = 16.27f;
+      GnssSubsetResult out;
+
+      // ---- 位置子集 ----
+      Eigen::Matrix<float, 3, 15> hp = Eigen::Matrix<float, 3, 15>::Zero();
+      hp.block<3, 3>(0, 0).setIdentity();
+      const Eigen::Matrix3f rp = measurement_noise.block<3, 3>(0, 0);
+      const Eigen::Vector3f yp = y_.segment<3>(0);
+      const Eigen::Matrix3f sp = hp * p_ * hp.transpose() + rp;
+      const Eigen::Matrix3f sp_inv = sp.inverse();
+      out.nis_pos = yp.dot(sp_inv * yp);
+      if (std::isfinite(out.nis_pos) && out.nis_pos <= kPosNisLimit)
+      {
+        Eigen::Matrix<float, 15, 3> kp = p_ * hp.transpose() * sp_inv;
+        if (gnss_consider_heading_)
+        {
+          kp.row(8).setZero();
+        }
+        const Eigen::Matrix<float, 15, 15> i15 =
+            Eigen::Matrix<float, 15, 15>::Identity();
+        p_ = (i15 - kp * hp) * p_ * (i15 - kp * hp).transpose() +
+             kp * rp * kp.transpose();
+        StabilizeCovariance();
+        x_ = kp * yp;
+        InjectErrorState();
+        out.pos_fused = true;
+      }
+
+      // ---- 速度子集：位置更新后重算残差 ----
+      Eigen::Matrix<float, 3, 15> hv = Eigen::Matrix<float, 3, 15>::Zero();
+      hv.block<3, 3>(0, 3).setIdentity();
+      const Eigen::Matrix3f rv = measurement_noise.block<3, 3>(3, 3);
+      const Eigen::Vector3f yv = gnss_vel_ned - ins_ned_vel_mps_;
+      const Eigen::Matrix3f sv = hv * p_ * hv.transpose() + rv;
+      const Eigen::Matrix3f sv_inv = sv.inverse();
+      out.nis_vel = yv.dot(sv_inv * yv);
+      if (std::isfinite(out.nis_vel) && out.nis_vel <= kVelNisLimit)
+      {
+        Eigen::Matrix<float, 15, 3> kv = p_ * hv.transpose() * sv_inv;
+        if (gnss_consider_heading_)
+        {
+          kv.row(8).setZero();
+        }
+        const Eigen::Matrix<float, 15, 15> i15 =
+            Eigen::Matrix<float, 15, 15>::Identity();
+        p_ = (i15 - kv * hv) * p_ * (i15 - kv * hv).transpose() +
+             kv * rv * kv.transpose();
+        StabilizeCovariance();
+        x_ = kv * yv;
+        InjectErrorState();
+        out.vel_fused = true;
+      }
+      return out;
+    }
+
+    /* P0-1 软重锚：连续速度子集被拒后膨胀 P_vv，让速度重新进入 NIS 门控。
+       不清速度态、不清历史；只增加速度不确定度，避免硬重置的航向踢动。 */
+    void InflateVelocityCovariance(const float add_std_mps)
+    {
+      if (!IsValidNoiseStd(add_std_mps))
+      {
+        return;
+      }
+      p_.block<3, 3>(3, 3) += add_std_mps * add_std_mps *
+                              Eigen::Matrix3f::Identity();
+      StabilizeCovariance();
+      ++gnss_vel_reanchor_count_;
+    }
+
+    /* 失锁恢复后的零偏软重锚：只增加零偏协方差，不直接改零偏状态。
+       让恢复后的 GNSS/机动重新获得修正零偏的增益，而不是把零偏锁死。 */
+    void InflateBiasCovariance(const float add_accel_std_mps2,
+                               const float add_gyro_std_radps)
+    {
+      if (IsValidNoiseStd(add_accel_std_mps2) && add_accel_std_mps2 > 0.0f)
+      {
+        p_.block<3, 3>(9, 9) += add_accel_std_mps2 * add_accel_std_mps2 *
+                                Eigen::Matrix3f::Identity();
+      }
+      if (IsValidNoiseStd(add_gyro_std_radps) && add_gyro_std_radps > 0.0f)
+      {
+        p_.block<3, 3>(12, 12) += add_gyro_std_radps * add_gyro_std_radps *
+                                  Eigen::Matrix3f::Identity();
+      }
+      StabilizeCovariance();
     }
 
     static Eigen::Vector3f ClampStaticGyroNoiseStd(const Eigen::Vector3f &std_value)
@@ -1781,6 +2079,15 @@ namespace bfs
       return std::isfinite(dt_s) && (dt_s > 0.0f) && (dt_s <= MAX_TIME_UPDATE_DT_S);
     }
 
+    /**
+     * @brief GNSS 长时间失联时按时间膨胀位置/速度协方差（只动可观块）
+     * @param[in] dt_s 本步时间 [s]
+     * @formula P_ii += (growth_rate)²·Δt·min(t_outage/T_outage, 4)，i∈{N,E,D} 位置与速度
+     * @ref REF-121 §2.2.1 (2.2.4d) p.33（协方差传播）；REF-121 §3.5 p.87–93
+     *      （模型/噪声失配导致 P 过度自信时的抑制思路）
+     * @note 这是工程近似而非严格的过程噪声标定：失联期真实误差增长快于 IMU 白噪声
+     *       模型，膨胀让重捕获帧的 K 不过小；上限 4 倍避免无界放大。
+     */
     void GrowGnssOutageCovariance(const float dt_s)
     {
       if (time_since_gnss_update_s_ < GNSS_REACQUIRE_MIN_OUTAGE_S)
@@ -1832,6 +2139,15 @@ namespace bfs
       return angle_rad;
     }
 
+    /**
+     * @brief 旋转矢量 → 增量四元数（指数映射，小角退化为一阶近似）
+     * @param[in] delta_theta_rad 旋转矢量 [rad]
+     * @return 单位四元数 Exp(δθ)
+     * @formula Exp(φ)=[cos(|φ|/2), sin(|φ|/2)·φ/|φ|]；|φ|<1e-6 时取 [1, φ/2]
+     * @ref REF-120 §9.2.4 p.262（四元数微分方程的毕卡/指数解）
+     * @note IMU 传播（角增量）与误差状态注入（姿态修正量）共用同一映射；
+     *       用完整指数映射而非一阶 2q 近似，避免大倾角修正被低估。
+     */
     static Eigen::Quaternionf BuildDeltaQuatFromRotationVector(const Eigen::Vector3f &delta_theta_rad)
     {
       const float delta_angle_rad = delta_theta_rad.norm();
@@ -1857,6 +2173,20 @@ namespace bfs
       return delta_quat.normalized();
     }
 
+    /**
+     * @brief 协方差数值稳定化：对称化 + Gershgorin 快速判据 + LDLT/特征值投影
+     * @return 无；就地修正 p_（对称、对角下限、负特征值投影）
+     * @formula P ← ½(P+P^T)；Gershgorin 下界 λ_min ≥ min_i(P_ii − Σ_{j≠i}|P_ij|)；
+     *          不满足时做 LDLT 正定检查，仍失败则特征值投影到非负下限
+     * @ref REF-121 §2.2.4 p.42–43（Joseph 形式的数值必要性：简单式会使 P 失去
+     *      非负定性甚至对称性）；REF-121 §3.5 p.87–93（数值发散与抑制）
+     * @pre p_ 为 15×15 对称阵（Joseph 更新后理论上对称，浮点舍入可能破坏）
+     * @post 对角线 ≥ MIN_COVARIANCE_EIGENVALUE；非有限元素被置为 0/下限
+     * @note 常规路径先做 Gershgorin（O(n²)）快速判据：下界非负即已证明 PSD，直接
+     *       返回；只有可疑时才做 LDLT，最后才做特征分解，避免 200 Hz 热路径上
+     *       每步 15×15 特征分解。FAST_STABILIZE 进一步把完整检查降频。
+     * @test test_host/test_ekf_15state.cpp T2/T3（P 对称、对角为正、增长有界）
+     */
     void StabilizeCovariance()
     {
       propagation_stabilize_skip_count_ = 0U;
@@ -2117,6 +2447,19 @@ namespace bfs
       return terms;
     }
 
+    /**
+     * @brief 一次性缓存地球模型项（sin/cos/tan、Rn、Rm、R̄、g、ω_ie^n）
+     * @param[in] lat_rad 大地纬度 [rad]
+     * @param[in] alt_m   WGS-84 椭球高 [m]
+     * @return EarthModelTerms（各量与 earth_model.h 同名函数一致）
+     * @formula g₀=9.780318(1+5.3024e-3 sin²φ−5.898e-6 sin²2φ)；g=g₀/(1+h/R̄)²；
+     *          Rn=a/√(1−e²sin²φ)；Rm=a(1−e²)/(1−e²sin²φ)^(3/2)；ω_ie^n=[ω_e cosφ,0,−ω_e sinφ]
+     * @ref REF-120 §7.2.4 (7.2.17)(7.2.18) p.178；REF-120 §7.2.1 表 7.2.1
+     * @deviation 与 earth_model.h::normalgravity_mps2() 同用级数式，与 (7.2.17)
+     *            Somigliana 闭式差约 1e-5 m/s²（见 earth_model.h 文件头 @deviation）。
+     * @note 本函数是“每帧一次”的缓存路径：一次三角运算算齐后续 F 矩阵、重力、
+     *       地球自转率所需全部几何量，避免传播内核重复调用三角函数。
+     */
     static EarthModelTerms ComputeEarthModelTerms(const double lat_rad,
                                                   const double alt_m)
     {
@@ -2159,6 +2502,14 @@ namespace bfs
       return terms;
     }
 
+    /**
+     * @brief 由 NED 速度与完整地球模型项计算 LLA 变化率
+     * @param[in] ned_vel NED 速度 [m/s]；terms 为 ComputeEarthModelTerms() 的缓存
+     * @return [dφ/dt, dλ/dt, dh/dt]，前两项 rad/s，末项 m/s
+     * @formula dφ/dt=v_N/(Rm+h)；dλ/dt=v_E/((Rn+h)cosφ)；dh/dt=−v_D
+     * @ref REF-120 §9.7 p.304–313（位置算法）；§9.8.1 (9.8.5a–c) p.317–322
+     * @note cosφ 用 1e-9 保护，避免极点附近除零（正常飞行纬度不触发）。
+     */
     static Eigen::Vector3d ComputeLlaRateFromTerms(const Eigen::Vector3d &ned_vel,
                                                    const EarthModelTerms &terms)
     {
@@ -2172,6 +2523,15 @@ namespace bfs
       return lla_dot;
     }
 
+    /**
+     * @brief LlaRateGeometryTerms 重载：只用上一时刻的曲率半径与 cosφ（轻量路径）
+     * @param[in] ned_vel NED 速度 [m/s]；terms 为 ComputeLlaRateGeometryTerms() 缓存
+     * @return [dφ/dt, dλ/dt, dh/dt]
+     * @formula 与 EarthModelTerms 重载同式，但不需要重力/地球自转项
+     * @ref REF-120 §9.7 p.304–313；§9.8.1 (9.8.5a–c) p.317–322
+     * @note 传播内核先用本重载求“上一时刻 LLA 率”外推到中点，再算完整地球模型，
+     *       避免每帧多做一遍重力/自转计算。
+     */
     static Eigen::Vector3d ComputeLlaRateFromTerms(const Eigen::Vector3d &ned_vel,
                                                    const LlaRateGeometryTerms &terms)
     {
@@ -2185,6 +2545,14 @@ namespace bfs
       return lla_dot;
     }
 
+    /**
+     * @brief 由 NED 速度与地球模型项计算导航系运输率 ω_en^n
+     * @param[in] ned_vel NED 速度 [m/s]；terms 为 ComputeEarthModelTerms() 缓存
+     * @return ω_en^n [rad/s]
+     * @formula ω_en^n=[v_E/(Rn+h), −v_N/(Rm+h), −v_E·tanφ/(Rn+h)]
+     * @ref REF-120 §7.4 (7.4.6) p.189；§9.8.1 p.317–318（传输率项）
+     * @note 与 earth_model.h::navrate() 同式；本缓存版复用已算好的 Rn/Rm/tanφ。
+     */
     static Eigen::Vector3d ComputeNavRateFromTerms(const Eigen::Vector3d &ned_vel,
                                                    const EarthModelTerms &terms)
     {
@@ -2197,6 +2565,13 @@ namespace bfs
       return nav_rate;
     }
 
+    /**
+     * @brief 重建 Fs 中不随样本变化的静态块（其余动态块在传播步覆盖）
+     * @formula F(P,V)=I₃；F(β,b_g)=−I₃；F(b_a,b_a)=−(1/τ_a)I₃；
+     *          F(b_g,b_g)=−(1/τ_g)I₃
+     * @ref REF-120 §9.8.1 (9.8.3) p.317–322（误差方程）；REF-121 §2.2.1
+     *      (2.2.4d) p.33（Φ 的构造来源）
+     */
     inline void RefreshStateTransitionStaticBlocks()
     {
       /*
@@ -2270,23 +2645,56 @@ namespace bfs
       // 统一的捷联惯导预测：普通 TimeUpdate、双子样 TimeUpdate 和 GNSS 延迟重传播都走同一套动力学。
       ins_accel_mps2_ = avg_accel_mps2;
       ins_gyro_radps_ = avg_gyro_radps;
-      Eigen::Vector3f delta_theta_rad = delta_theta_1_rad + delta_theta_2_rad;
-      Eigen::Vector3f delta_v_body_mps = delta_v_1_mps + delta_v_2_mps;
+      // ── [公式 1] 等效旋转矢量（圆锥补偿）────────────────────────────────
+      // 公式：Φ = Δθ1 + Δθ2 + (2/3)·Δθ1×Δθ2（双子样）；单子样用
+      //       Φ = Δθ + (1/12)·Δθ_prev×Δθ 的流式修正。
+      // 符号：Δθ1/Δθ2 为前后子样角增量 [rad]；× 为矢量叉积。
+      // 来源：@ref REF-120 §9.3.3 (9.3.30) p.274（角速度直线假设下的二子样解）
+      // 实现：`coning_delta_theta_rad` 的二元表达式，随后经指数映射转四元数。
+      // 等价变换：无（秦书为导航系表述，旋转矢量本身与坐标系无关）。
+      // 数值证据：@test test_host/test_ekf_15state.cpp T7（含圆锥项的传播残差）；
+      //           notes/01 §2 复核：10 Hz 划桨运动 5 ms 周期下系数残差 0.12%。
+      // ─────────────────────────────────────────────────────────────────────
+      const Eigen::Vector3f delta_theta_rad = delta_theta_1_rad + delta_theta_2_rad;
+      const Eigen::Vector3f delta_v_body_mps = delta_v_1_mps + delta_v_2_mps;
       const Eigen::Vector3f coning_delta_theta_rad =
           use_two_sample
               ? (delta_theta_rad +
                  (2.0f / 3.0f) * delta_theta_1_rad.cross(delta_theta_2_rad))
               : (delta_theta_rad +
                  (1.0f / 12.0f) * previous_delta_theta_rad_.cross(delta_theta_rad));
+      // ── [公式 2] 划摇（sculling）补偿 ────────────────────────────────────
+      // 公式：ΔV_scul = (2/3)(Δθ1×ΔV2 + ΔV1×Δθ2)（双子样）；
+      //       单子样用 (1/12)(Δθ_prev×ΔV + ΔV_prev×Δθ) 的流式形式。
+      // 符号：ΔV1/ΔV2 为前后子样速度增量 [m/s]；叉积顺序不可交换。
+      // 来源：@ref REF-120 §9.6.2 (9.6.25) p.301；最优系数 2/3 见 §9.6.3 p.303
+      // 实现：`sculling_delta_v_body_mps` 的二元表达式。
+      // 等价变换：秦书 (9.6.25) 写作 (2/3)[ΔV1×Δθ2 − ΔV2×Δθ1]，利用
+      //   a×b = −b×a 恒等可化为本式 (2/3)(Δθ1×ΔV2 + ΔV1×Δθ2)，两式相同。
+      // 数值证据：notes/01 §2 复核——10 Hz 划桨运动 5 ms 周期残差 0.12%。
+      // ─────────────────────────────────────────────────────────────────────
+      // ── [公式 3] 速度更新与旋转效应（2026-10 P0-0 修复点）────────────────
+      // 公式：本增量随后用【中点姿态】C^n_b(mid) 旋转：
+      //       ΔV^n = C^n_b(mid)·ΔV_sf + Δt·(g^n − (2ω_ie+ω_en)×V^n)
+      // 来源：@ref REF-120 §9.6.1 (9.6.9) p.298（V_m=V_{m−1}+C^n_b(m−1)ΔV_sf,m+
+      //       ΔV_g/cor）；(9.6.17) ΔV_rot=½Δθ×ΔV p.298；(9.6.19)
+      //       ΔV_sf=ΔV+ΔV_rot+ΔV_scul p.299。
+      // 实现：`delta_v_ned = t_b2ned_mid * sculling_delta_v_body_mps + ...`。
+      // 等价变换（历史缺陷已修）：(9.6.17) 的旋转补偿是配合【区间起始姿态】
+      //   C^n_b(m−1) 使用的；本实现改用中点姿态，已包含 0.5Δθ 的旋转效应，
+      //   故不能再叠加 0.5Δθ×ΔV，否则每步多算 ~½|ω×f|Δt²
+      //   （ω=2 rad/s、|f|≈10 m/s²、dt=5 ms 时 2.5e-2 m/s²）。
+      //   2026-10 P0-0 删除两处 0.5Δθ×ΔV 后，T7 由 0.000250008 修正到
+      //   0.000125005（期望 0.000124999）。
+      // 数值证据：@test test_host/test_ekf_15state.cpp T7。
+      // ─────────────────────────────────────────────────────────────────────
       const Eigen::Vector3f sculling_delta_v_body_mps =
           use_two_sample
               ? (delta_v_body_mps +
-                 0.5f * delta_theta_rad.cross(delta_v_body_mps) +
                  (2.0f / 3.0f) *
                      (delta_theta_1_rad.cross(delta_v_2_mps) +
                       delta_v_1_mps.cross(delta_theta_2_rad)))
               : (delta_v_body_mps +
-                 0.5f * delta_theta_rad.cross(delta_v_body_mps) +
                  (1.0f / 12.0f) *
                      (previous_delta_theta_rad_.cross(delta_v_body_mps) +
                       previous_delta_v_mps_.cross(delta_theta_rad)));
@@ -2327,6 +2735,17 @@ namespace bfs
           ComputeNavRateFromTerms(vel_prev_ned.cast<double>(), mid_terms).cast<float>();
       const Eigen::Vector3f coriolis_accel_mid_ned =
           -((2.0f * earth_rate_mid_ned + nav_rate_mid_ned).cross(vel_prev_ned));
+      // ── [公式 4] 导航系旋转与四元数推进 ────────────────────────────────
+      // 公式：q_k = Exp(−(ω_ie+ω_en)·Δt) ⊗ q_{k−1} ⊗ Exp(Φ)
+      // 符号：ω_ie/ω_en 为 NED 系下的地球自转率与运输率 [rad/s]；Φ 为等效旋转矢量。
+      // 来源：@ref REF-120 §9.2.4 p.262（四元数微分方程的毕卡/指数解）、
+      //       §9.8.2 (9.8.13)（姿态误差方程中的 ω_in 项）。
+      // 实现：`nav_frame_delta_quat`（左乘导航系旋转）与 `delta_quat_`（右乘体系
+      //       旋转）的乘积，最后归一化。
+      // 等价变换：秦书以 ω_nb^b 更新，本式把导航系旋转拆成左乘，避免显式求
+      //       ω_nb^b = ω_ib^b − C^b_n ω_in^n；一阶等价，二阶差 O(Δt²)。
+      // 数值证据：@test test_host/test_ekf_15state.cpp T2（静止 100 步姿态保持）。
+      // ─────────────────────────────────────────────────────────────────────
       const Eigen::Vector3f nav_frame_delta_theta_rad =
           -(earth_rate_mid_ned + nav_rate_mid_ned) * dt_s;
 #if BFS_NAVIGATION_EMBEDDED_PROFILE_ENABLED
@@ -2377,6 +2796,23 @@ namespace bfs
     !BFS_NAVIGATION_EMBEDDED_STRUCTURED_SIMPSON_QC
       gs_.setZero();
 #endif
+      // ── [公式 5] 连续时间误差状态雅可比 F（15×15）──────────────────────
+      // 状态顺序 [δp, δv, δβ, δb_a, δb_g]，δ = 真值 − 估计。
+      // 非零块：
+      //   F(P,V) = I₃；F(P,P) 为 LLA 变化率的曲率/高度自耦合（FULL_F_MATRIX）；
+      //   F(V,V) = 哥氏项 + 传输率项（FULL_F_MATRIX）；F(V,β) = −C^n_b[f^b]×；
+      //   F(V,b_a) = −C^n_b；F(V,D) = 2g/R̄（高度通道重力梯度）；
+      //   F(β,β) = −[ω^b]×；F(β,V) = −C^b_n·∂ω_en/∂v（FULL_F_MATRIX）；
+      //   F(β,b_g) = −I₃；F(b_a,b_a) = −(1/τ_a)I₃；F(b_g,b_g) = −(1/τ_g)I₃。
+      // 符号：f^b 比力 [m/s²]；ω^b 去偏角速度 [rad/s]；g 当地重力 [m/s²]。
+      // 来源：@ref REF-120 §9.8.1 (9.8.3)(9.8.4) p.317–322（速度/位置误差方程）、
+      //       §9.8.2 (9.8.13)（姿态误差方程）。
+      // 实现：本函数 `fs_` 的块赋值；静态块在 RefreshStateTransitionStaticBlocks()。
+      // 等价变换：秦书 φ 为导航系失准角且 δ = 计算−真值；本项目 δβ = C^b_n·φ、
+      //       δ = 真值−估计，故 F(V,β)、F(β,V) 各含一次坐标旋转并相差一次取反，
+      //       换算后与 (9.8.3)(9.8.13) 逐块一致（见 FW-EKF 核查矩阵 A-12/A-13）。
+      // 数值证据：@test test_host/test_ekf_15state.cpp T4/T9–T11（F 传播下的收敛）。
+      // ─────────────────────────────────────────────────────────────────────
       // NED的D向下为正，D误差增大等价高度降低，重力下向加速度随之增大。
       const float mean_radius_mid_m = static_cast<float>(mid_terms.mean_radius_m);
       fs_(5, 2) = 2.0f * gravity_mid_mps2 / mean_radius_mid_m;
@@ -2445,15 +2881,14 @@ namespace bfs
       // 体系误差角的动力学包含 transport rate 项：
       //   δβ̇^b ⊃ -C^b_n · δω_en^n = -C^b_n · M · δv^n
       // 其中 M 是 transport rate 雅可比：
-      //   M = [0,        1/(Rn+h),   0        ]
-      //       [-1/(Rm+h), 0,          0        ]
-      //       [0,        -tanφ/(Rn+h), 0       ]
+      //   M 的三行依次为 (0, 1/(Rn+h), 0)、(−1/(Rm+h), 0, 0)、
+      //   (0, −tanφ/(Rn+h), 0)，即 NED 下的 ∂ω_en/∂v。
       // 因此 F(β, V) = -C^b_n · M = -(t_b2ned^T) · M。
       //
       // 对照：KF-GINS 使用导航系误差（左乘 q = Exp(δφ^n) * q），其 F(Φ,V) = +M（无旋转）。
       // 当姿态水平（C^b_n = I）时，两者差一个负号：F(β,V) = -M vs F(φ,V) = +M。
       //
-      // t_b2ned = C^n_b（body→nav），t_b2ned^T = C^b_n（nav→body）。
+      // t_b2ned ≡ C^n_b（body→nav），其转置 ≡ C^b_n（nav→body）。
       Eigen::Matrix3f transport_jacobian = Eigen::Matrix3f::Zero();
       transport_jacobian(0, 1) = 1.0f / rnh;
       transport_jacobian(1, 0) = -1.0f / rmh;
@@ -2461,6 +2896,14 @@ namespace bfs
       fs_.block<3, 3>(6, 3) = -t_b2ned_mid.transpose() * transport_jacobian;
 #endif // BFS_NAVIGATION_EMBEDDED_FULL_F_MATRIX
 
+      // ── [公式 6] 连续 F → 离散 Φ ────────────────────────────────────────
+      // 公式：Φ ≈ I + F·Δt + ½(F·Δt)²；FAST_FIRST_ORDER_PHI 时退化为 I + F·Δt。
+      // 来源：@ref REF-121 §2.2.1 (2.2.4d) p.33（P_{k/k−1}=ΦPΦ^T+ΓQΓ^T）。
+      // 实现：`phi_` 的二元/三元赋值；主路径二阶，5 ms 周期下二阶项量级 (FΔt)²。
+      // @approx 一阶路径省一次 15×15 乘法，仅供静止 bring-up/性能压测，不得用于
+      //          高动态或飞控闭环（需重新验证协方差一致性）。
+      // 数值证据：@test test_host/test_ekf_15state.cpp T2/T3（P 增长有界）。
+      // ─────────────────────────────────────────────────────────────────────
       const Eigen::Matrix<float, 15, 15> fs_dt = fs_ * dt_s;
 #if BFS_NAVIGATION_EMBEDDED_FAST_FIRST_ORDER_PHI
       /*
@@ -2610,6 +3053,19 @@ namespace bfs
       p_ += q_;
 #endif
 #else
+      // ── [公式 7] 离散过程噪声 Qd ────────────────────────────────────────
+      // 公式：Qd = ∫₀^Δt Φ(τ)·Gs·Rw·Gs^T·Φ(τ)^T dτ，用 Simpson 三点近似：
+      //       Qd ≈ (Δt/6)[Qc + 4Φ(Δt/2)QcΦ(Δt/2)^T + Φ(Δt)QcΦ(Δt)^T]。
+      // 符号：Qc = Gs·Rw·Gs^T 为连续谱密度阵；Rw 由加计/陀螺白噪声与零偏
+      //       Markov 驱动噪声组成（见 Initialize() 步骤 2）。
+      // 来源：@ref REF-121 §2.2.1 (2.2.4d) p.33（ΓQΓ^T 项）。
+      // 实现：`qc_d` 与 `phi_half_d`/`phi_full_d` 的 Simpson 组合；
+      //       FAST_PROPAGATION 路径直接注入 4 个 3×3 对角块。
+      // 等价变换：Gs 各块为 ±C^n_b 或 ±I，正交性使 C^n_b(σ²I)C^b_n = σ²I，
+      //       故结构化路径与稠密 Gs·Rw·Gs^T 完全等价（见
+      //       Icm45686StructuredContinuousQc 的实现注释）。
+      // 数值证据：@test test_host/test_ekf_15state.cpp T2/T3（200 步 P 有界、对称）。
+      // ─────────────────────────────────────────────────────────────────────
       // 离散过程噪声必须自身保持正半定；使用二阶状态转移的Simpson积分近似
       // Qd = ∫ Phi(t) G Rw G^T Phi(t)^T dt，比零阶保持更接近高频子步传播。
       const Eigen::Matrix<double, 15, 15> identity_d =
@@ -2680,6 +3136,20 @@ namespace bfs
       previous_delta_v_mps_ = use_two_sample ? delta_v_2_mps : delta_v_body_mps;
     }
 
+    /**
+     * @brief 把 15 维误差状态 x_ 注入全量状态（名义状态 ⊕ 误差），随后清零 x_
+     * @return 无；就地更新 LLA、NED 速度、四元数、加计/陀螺零偏与 t_b2ned
+     * @formula δL = δp_N/(Rm+h)，δλ = δp_E/((Rn+h)cos L)，δh = −δp_D；
+     *          v ← v + δv；q ← q⊗Exp(δβ)（体系右乘指数映射）；
+     *          b_a ← b_a + δb_a；b_g ← b_g + δb_g
+     * @ref REF-120 §9.8.1 (9.8.5a–c) p.321–322（位置误差→LLA 的换算）；
+     *      REF-121 §6.2.3 (6.2.38) p.207–213（EKF 状态更新 X̂=Xⁿ+ΔX̂）
+     * @pre x_ 为本次量测/传播得到的误差估计；纬度不靠近极点（cos L 保护见实现）
+     * @post x_ 全零；quat_ 归一化且 w≥0；欧拉角标记为脏（下次读取时重算）
+     * @note 位置误差用【更新前】的纬度/高度算比例尺，三分量同源，避免分量顺序
+     *       引入二阶耦合；姿态用指数映射而非一阶 2q 近似，允许一次修正较大倾角。
+     * @test test_host/test_ekf_15state.cpp T4/T6（GNSS/ZUPT 注入后收敛）
+     */
     void InjectErrorState()
     {
       const double lat_before_rad = ins_lla_rad_m_(0);
@@ -2882,9 +3352,9 @@ namespace bfs
        *   predicted_dir(δβ) = (I - [δβ×]) · predicted_dir_nom
        *                     = predicted_dir_nom + [predicted_dir_nom×] · δβ
        * 因此 H 对体系姿态误差的雅可比为
-       *   H_att = +Skew(predicted_dir) = +Skew(t_ned2b · g_sf_ned)
+       *   H_att ← +Skew(predicted_dir)，等价于 +Skew(t_ned2b · g_sf_ned)
        * 利用恒等式 Skew(R·v) = R·Skew(v)·R^T，等价于
-       *   H_att = t_ned2b · Skew(g_sf_ned) · t_b2ned
+       *   等价写法：H_att ← t_ned2b · Skew(g_sf_ned) · t_b2ned
        * 早期实现漏乘右端 t_b2ned（= t_ned2b^T），相当于把体系误差当成导航系误差
        * 来线性化：水平时 t_b2ned≈I 不暴露，有倾角时 H 误差达 O(sin tilt)。
        */
@@ -3054,6 +3524,8 @@ namespace bfs
        * - p_bg 用标准 Kalman/Joseph 形式收缩；
        * - 与其它状态的交叉协方差按同一个右乘因子缩放，保持矩阵一致；
        * - 不把残差直接写入姿态，姿态只会在后续 IMU 传播中因零偏更准而停止继续漂移。
+       * @ref REF-121 §8.2.3 p.291（间接法阻尼/校正必须区分状态通道，避免伪观测）；
+       *      REF-121 §7.3.1 p.255–259（量测有效性）
        */
       const Eigen::Matrix3f p_bg = p_.block<3, 3>(12, 12);
       const Eigen::Matrix3f k_bg = p_bg * s_gyro_inv;
@@ -3244,7 +3716,13 @@ namespace bfs
     }
 
     /**
-     * @brief 带诊断结果的气压高度标量量测更新。
+     * @brief 带诊断结果的气压高度标量量测更新
+     * @formula y = lla2ned(baro_lla, est_lla)·e_D，H=[0,0,1,0…]，S=P(2,2)+R，
+     *          NIS 门限 16（χ²(1,0.9999)≈15.1），硬残差门 50 m
+     * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34；REF-120 §9.8.1 (9.8.5c) p.321
+     * @note baro 高度必须是绝对椭球高（origin_alt_m + baro_altitude）；直接把
+     *       相对高度传入会与 GNSS 高度基准产生常值冲突（见 TandemVec_FCS/AGENTS.md）。
+     * @test test_host/test_ekf_bias_static.cpp（含 baro 路径）
      */
     MeasurementUpdateResult MeasurementUpdateBaroAltitudeDetailed(
         const float baro_altitude_m,
@@ -3323,6 +3801,15 @@ namespace bfs
     }
 
   public:
+    /**
+     * @brief 重建 6×6 GNSS 观测噪声阵 R（位置 3 + 速度 3，各自 N/E 与 D 分离）
+     * @formula R = diag(σ_pne², σ_pne², σ_pd², σ_vne², σ_vne², σ_vd²)
+     * @ref REF-121 §2.2.1 p.33–34（R 正定是增益求逆前提）；R 地板见
+     *      MIN_MEASUREMENT_NOISE_STD
+     * @note 每个标准差先经 ClampMeasurementNoiseStd() 加地板：接收机自报精度可能
+     *       给出极小值，R 近似奇异会让 S 求逆放大舍入误差。地板值（2/3/0.15/0.25）
+     *       经实测不可收紧（收紧会显著降低 GNSS 接受率，见 AGENTS.md 踩坑记录）。
+     */
     void UpdateGnssNoiseMatrix()
     {
       r_.setZero();
@@ -3577,6 +4064,17 @@ namespace bfs
       }
     }
 
+    /**
+     * @brief 按真实年龄在环形缓冲中查找最匹配的历史快照下标
+     * @param[in] delay_s 期望回溯时间 [s]
+     * @param[out] idx 命中的快照下标；失败时不改写
+     * @return true=找到（累计 dt 达到 delay_s）；false=缓冲不足/dt 异常
+     * @formula 从最新槽位反向累加 snapshot.dt_s，取 |ΣΔt − delay_s| 最小者
+     * @ref REF-121 §2.2.1 p.33（量测应作用于其对应时刻的状态）；
+     *      AGENTS.md 踩坑记录（GNSS 延迟补偿）
+     * @note 用历史快照的真实 dt 累计而不是“单帧 dt × 步数”，以适配飞控任务
+     *       调度抖动；累计不足或遇到非法 dt 时返回 false，由调用方决定降级。
+     */
     bool GetDelayedSnapshotIndexByAge(const float delay_s, int *idx) const
     {
       // 按快照dt反向累计真实时间，而不是用单帧dt估计步数，适应飞控任务调度抖动。
@@ -3634,6 +4132,13 @@ namespace bfs
       return true;
     }
 
+    /**
+     * @brief 恢复历史快照到当前状态（姿态/速度/LLA/零偏/P/上一增量）
+     * @param[in] snapshot 环形缓冲中的历史快照
+     * @ref REF-121 §2.2.1 p.33（量测在其对应时刻进行）；
+     *      REF-121 §6.2.3 p.207–213（EKF 状态可被重置后继续线性化）
+     * @post quat_ 归一化、t_b2ned 重建、P 稳定化；不影响历史缓冲本身
+     */
     void RestoreSnapshot(const InsSnapshot &snapshot)
     {
       // 回到 GNSS 量测实际对应的历史时刻，再执行卡尔曼更新。
@@ -3650,6 +4155,16 @@ namespace bfs
       StabilizeCovariance();
     }
 
+    /**
+     * @brief 从历史快照重放到当前时刻（延迟量测更新后的状态/协方差重建）
+     * @param[in] hist_idx 历史快照下标
+     * @formula 逐槽重放：双子样槽用原始增量+当前零偏重算圆锥/划摇并传播；
+     *          单子样槽用保存的 accel/gyro 输入；每槽后重放该步非 GNSS 量测事件
+     * @ref REF-121 §3.3 p.84–86（量测顺序与状态重放的一致性）；
+     *      AGENTS.md 踩坑记录（GNSS 延迟回放）
+     * @note 重放会把槽位内容覆盖为新状态，但保留 has_*_update 事件与原始增量，
+     *       以便同一历史帧在后续 GNSS 到达时再次重放；dt 非法的槽位跳过。
+     */
     void RepropagateFromDelayedSnapshot(const int hist_idx)
     {
       // 历史时刻完成量测修正后，重放之后的 IMU 输入，把状态重新推进到当前时刻。
@@ -3983,6 +4498,17 @@ namespace bfs
     /* 距上次 GNSS 成功融合的累计时间，单位 s。
        用于触发失联重捕获逻辑（> GNSS_REACQUIRE_MIN_OUTAGE_S 时激活低增益融合窗口）。 */
     float time_since_gnss_update_s_ = 0.0f;
+
+    /* P1-5：GNSS 更新中是否把航向作为 consider 状态（不修正航向）。
+       默认 false = 原行为；上层仅在过渡/大倾斜/大比力相位置 true。
+       数学依据见 notes/06：F(v,β) 在比力方向恒定时不含航向信息，
+       速度新息经 P(8,v) 灌入航向会形成伪观测/踢动。 */
+    bool gnss_consider_heading_ = false;
+
+    /* P0-1：连续速度子集被拒计数与软重锚次数。
+       连续 N 次速度子集被拒后膨胀 P_vv（不清速度/历史），让速度重新进入闭环。 */
+    uint8_t gnss_vel_reject_streak_ = 0;
+    uint32_t gnss_vel_reanchor_count_ = 0;
 
     /* GNSS 重捕获保守融合窗口的剩余计时，单位 s。
        一次成功重捕获后设置窗口宽度，窗口内继续使用膨胀 R 防止后续帧再被普通门限拒绝。 */

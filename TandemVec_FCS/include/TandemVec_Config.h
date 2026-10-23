@@ -1,29 +1,45 @@
-// ============================================================
-//  TandemVec_Config.h — 纵列双发矢量推力飞行器机型参数
-//
-//  本文件是 TandemVec_FCS 飞控的单一参数源头文件。
-//  数值来源于上层项目 models/aircraft-model.json (PAR-C0-001 v0.2.0，
-//  2026-08-01 已回写本构型值，kT/kQ/wMax/a/b/Ix/Iy/Iz/m 与 JSON 完全一致)，
-//  状态 ESTIMATED（组件级估算/官方数据反推），待台架标定。
-//
-//  修改规则：
-//    ① 不得在本文件以外的地方硬编码任何飞行器参数；
-//    ② 上层 aircraft-model.json 发生变化时同步更新本文件，
-//       并在 commit 说明中注明来源版本；
-//    ③ 非运行时可变量（标定系数）单独存入 EEPROM/FLASH，
-//       通过 override 机制覆盖此处默认值。
-//
-//  使用方式：
-//    TandemVecParams p = kDefaultTandemVecParams;
-//    // 如有标定值：p.kT = calibrated_kT;
-// ============================================================
+/**
+ * @file    TandemVec_Config.h
+ * @module  固件/控制（机型参数与舵机标定的单一事实源）
+ * @brief   纵列双发矢量推力飞行器的机型参数（推进/惯量/限幅/舵机标定）
+ * @details 输入：无（编译期常量表）；输出：kT/kQ/Jp/wMax/a/b/tauM/Ix/Iy/Iz/
+ *          dMax/dwMax/m/g 与 ServoConfig。被推进映射、控制分配、mix 层、
+ *          宿主机测试共同读取；固件侧不得在别处硬编码飞行器参数。
+ *
+ * 数值来源于上层项目 models/aircraft-model.json (PAR-C0-001 v0.2.0，
+ * 2026-08-01 已回写本构型值，kT/kQ/wMax/a/b/Ix/Iy/Iz/m 与 JSON 完全一致)，
+ * 状态 ESTIMATED（组件级估算/官方数据反推），待台架标定。
+ *
+ * 修改规则：
+ *   ① 不得在本文件以外的地方硬编码任何飞行器参数；
+ *   ② 上层 aircraft-model.json 发生变化时同步更新本文件，
+ *      并在 commit 说明中注明来源版本；
+ *   ③ 非运行时可变量（标定系数）单独存入 EEPROM/FLASH，
+ *      通过 override 机制覆盖此处默认值。
+ *
+ * 使用方式：先取 TandemVecParams p = kDefaultTandemVecParams；若已有标定值
+ * 再按字段覆盖（例如 p.kT）。
+ *
+ * @theory  T = kT·ω²、τ = kQ·ω²（+ Jp·ω̇）、电机一阶滞后 τm
+ * @ref     THY-002 §2（kT/kQ 来源）、§4（τm 一阶滞后）、§6（集总模型）；
+ *          见 PROP-001 §2–§3、§8（待标定项）
+ * @frame   参数本身无坐标系；力臂 a/b 沿模型系 x'（前后电机），惯量按机体系主轴
+ * @units   SI：N·s²、N·m·s²、kg·m²、rad/s、m、s、kg、m/s²、rad
+ * @note    ★ dMax 有**两套口径**，不得混写：本固件 dMax = 15°（0.2617994 rad，
+ *          2026-08-07 实机收紧）；仿真 aircraft-model.json 仍为 25°（未回写）。
+ *          仿真 SAS 限幅"±25°/±0.7" 是仿真值，固件实机摆角是 ±15°，
+ *          dwMax = 0.7 两边相同。
+ * @see     models/aircraft-model.json、FlightCtrlParams.h（控制增益，另一事实源）
+ * @test    test_host/test_tandemvec_allocation.cpp、test_airframe_generic.cpp
+ */
 #pragma once
 
 // ================================================================
 // 调试开关：陀螺直通测试模式（2026-08-07）
-//   1 = 绕过姿态外环 + B 矩阵分配，陀螺×负反馈增益直驱执行器，
-//       用于验证三通道反馈方向（测试完成后务必改回 0）
-//   0 = 正常姿态控制（BTRUE 分配）
+//   置 1：绕过姿态外环 + B 矩阵分配，陀螺×负反馈增益直驱执行器，
+//         用于验证三通道反馈方向（测试完成后务必改回 0）
+//   置 0：正常姿态控制（BTRUE 分配）
+//   注意：判断一律用 #if，不要用 #ifdef（宏已定义，ifdef 恒真）
 // ================================================================
 #define GYRO_DIRECT_TEST 0
 
@@ -102,7 +118,8 @@ static const ServoConfig kDefaultServoConfig = {
 static const TandemVecParams kDefaultTandemVecParams = {
     // 推进
     /* kT    */ 1.04e-5f,  // N·s²，由 T_max=13.73N @1150rad/s 反推
-    /* kQ    */ 2.8e-7f,   // N·m·s²，kQ/kT≈0.027（2026-08-09 实机两轮：3.1→2.6 后 yaw 手感好但有效增益压边界自激，回退至 2.8；见 models/aircraft-model.json）
+    /* kQ    */ 2.8e-7f,   // N·m·s²，kQ/kT≈0.027（2026-08-09 实机两轮：3.1→2.6 后 yaw 手感好
+                           //   但有效增益压边界自激，回退至 2.8；见 models/aircraft-model.json）
     /* Jp    */ 2.0e-4f,   // kg·m²，桨+转子惯量，待测
     /* wMax  */ 1150.0f,   // rad/s，≈11000RPM，1400KV×11.1V×0.75（带桨负载）
     /* a     */ 0.315f,    // m，前电机到质心距离（总长63cm，重心居中）
@@ -117,5 +134,6 @@ static const TandemVecParams kDefaultTandemVecParams = {
     /* dwMax */ 0.7f,
     // 质量 / 重力
     /* m     */ 0.7f,    // kg  实测待精化；原 2.6 为固定翼仿真值，已改为 VTOL 估算值
-    /* g     */ 9.79f,   // m/s² 重力加速度 ★ 唯一事实源：G_TO_MS2/G_ACCEL_CONST 均引用此值（源自 models/aircraft-model.json，长沙/广州当地值近似 9.79）
+    /* g     */ 9.79f,   // m/s² 重力加速度 ★ 唯一事实源：G_TO_MS2/G_ACCEL_CONST 均引用此值
+                         //   （源自 models/aircraft-model.json，长沙/广州当地值近似 9.79）
 };

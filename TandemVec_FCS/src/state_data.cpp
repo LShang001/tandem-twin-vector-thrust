@@ -1,13 +1,29 @@
 /**
- * @file state_data.cpp
- * @brief 全局状态数据定义 — 所有跨模块共享变量的唯一定义点
+ * @file    state_data.cpp
+ * @module  固件/基础设施（全局状态中枢：变量定义与 PID/滤波器实例）
+ * @brief   定义全部跨模块共享变量、控制参数实例、滤波器与遥测结构
  *
  * 本文件定义 state_data.h 中声明的所有全局变量。
  * 每个变量只在此文件中定义一次，避免多重定义错误。
  * 所有变量按功能分区组织，与 state_data.h 的声明顺序一一对应。
  *
- * 注意: Vector3 类型由 QuaternionMath.h 提供，但该头文件包含非 inline 函数定义，
- * 不能在多个 .cpp 中包含。current_omega_dps_body_filtered 的定义移至 main.cpp。
+ * @details 输入：`include/FlightCtrlParams.h`（`kFlightCtrlParamsDefaults` 出厂默认）；
+ *          处理：按分区定义串口/引脚/总线对象 → 物理常数与限幅 → `kFlightCtrlParams`
+ *                可变实例 → 12 个 PID 与滤波器的构造 → 传感器对象 → 标志位 → 遥测缓存；
+ *          输出：各 .cpp 直接消费的全局符号；`applyFlightCtrlParams()` 负责把在线写入的
+ *                参数无扰同步到全部 PID/滤波器（保留积分与滤波状态）。
+ *          不变量：参数值只能来自 FlightCtrlParams.h（本文件不写裸数值）；
+ *          IMU/EKF 输出单位为 FRD/NED，遥测域换算在各消费方完成。
+ * @theory  N/A（数据定义层）；增益/限幅的物理来源见 `include/FlightCtrlParams.h` 的推导注释
+ * @ref     docs/C路径-参数集中与遥测结构化方案.md §4（参数集中与实例化）；
+ *          models/aircraft-model.json（g/kT 等模型参数唯一源，经 TandemVec_Config.h 引入）；
+ *          AGENTS.md 踩坑记录（速率环量纲 2026-08-11）
+ * @frame   IMU/角速率/角加速度 = FRD 机体系；位置/速度 = NED；
+ *          姿态欧拉角 rad（theta = -asin(R13)，见 MOD-002 §3）；执行器为摆座 deg / 差速 Δω
+ * @units   SI（m、m/s、m/s²、rad、rad/s）；遥测域另有 deg/s、deg/s²、µs（PWM）
+ * @note    Vector3 类型由 QuaternionMath.h 提供，但该头文件包含非 inline 函数定义，
+ *          不能在多个 .cpp 中包含。current_omega_dps_body_filtered 的定义移至 main.cpp。
+ * @see     src/state_data.h、include/FlightCtrlParams.h、src/flight_control.cpp（遥测写入点）
  */
 #include "state_data.h"
 #include "TandemVec_Config.h"   // 引入唯一参数源，使 initial_mass 与 P.m 保持同步
@@ -70,11 +86,11 @@ float initial_mass = kDefaultTandemVecParams.m;  // 唯一来源：TandemVec_Con
                                                   // 修改质量请改 kDefaultTandemVecParams.m
 
 // -------- 悬停基准点物理量（40%油门, w0=460rad/s）--------
-// T_hover = kT × w0² = 1.04e-5 × 460² = 2.20 N
-// My_max_hover = b × T_hover × sin(25°) = 0.315×2.20×0.4226 = 0.293 N·m
+// 公式 T_hover = kT × w0² = 1.04e-5 × 460² = 2.20 N
+// 公式 My_max_hover = b × T_hover × sin(25°) = 0.315×2.20×0.4226 = 0.293 N·m
 //
 // ★ I为组件级别估算(I≈0.022), 未实测, 不确定度较大
-//   α_max = My_max/I — 既依赖I又依赖kT, 两者都不精确
+//   公式 α_max = My_max/I — 既依赖I又依赖kT, 两者都不精确
 //   → 不从此推导PID限幅的具体数值
 //   → 从保守起点开始, 实飞逐次增大α限幅, 直到响应满意或振荡
 //   → 最终的α限幅值就是系统的标定结果, 隐含了真实惯性和推力的校准
@@ -145,11 +161,11 @@ GncTelemetry gnc_tel = {};
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — 解析最优增益 ---
 //
 //  级联P-P闭环=二阶系统: θ/θ_ref=ωn²/(s²+2ζωn·s+ωn²)
-//    ωn² = Kp_r × Kp_a,    2ζωn = Kp_r
+//  公式 ωn² = Kp_r × Kp_a,    2ζωn = Kp_r
 //  其中 Kp_r 已是统一角度域增益（s⁻¹），不再额外乘 180/pi。
 //
 //  当前 Roll/Pitch: Kp_a=2.8, Kp_r=16.043 s⁻¹；Yaw: Kp_a=5.0,
-//  Kp_r=11.459 s⁻¹。这些数值与迁移前 0.28/0.20 的实际控制行为严格等价。
+//  现值 Kp_r=11.459 s⁻¹。这些数值与迁移前 0.28/0.20 的实际控制行为严格等价。
 //
 //  历史积分值 Ki=0.0003 曾隐含 200Hz；2026-08-09 改为显式 dt 后先换为
 //  连续域 0.06，2026-08-11 再随角度域迁移乘 180/pi。当前值只看 FlightCtrlParams.h。
@@ -423,6 +439,7 @@ volatile float imu_delta_time_sum_s = 0.0f;
 volatile int imu_delta_sample_count = 0;
 volatile bool imu_delta_overflow = false;
 
+float imu_die_temp_c = 0.0f;
 float temperature_raw = 0.0f, pressure_raw = 0.0f;
 float temperature = 0.0f, pressure = 0.0f;
 float baro_altitude_raw = 0.0f, baro_altitude = 0.0f;
@@ -563,6 +580,11 @@ ControlMode g_current_flight_mode = MANUAL;
 // 当前解锁状态 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)
 bool g_is_unlocked = false;
 
+// 执行器故障监测只读标志（2026-10）
+bool g_actuator_servo_jam = false;
+bool g_actuator_thrust_loss = false;
+bool g_actuator_controlled_descent_request = false;
+
 /*
  * ==========================================================================================
  * [8] 任务调度系统
@@ -609,9 +631,17 @@ uint8_t Fd_data[256];                             // 通用帧接收缓冲区
  * ==========================================================================================
  */
 
-// 同步 kFlightCtrlParams → 12 个 PositionPID + 9 个控制滤波器
-// （保留各 PID 积分/滤波状态：仅改参数，无扰切换）
-// 供上位机 AnoCom 0xE1 参数写入回调调用（见 ano_params.cpp）
+/**
+ * @brief 把 `kFlightCtrlParams` 同步到 12 个 PositionPID 与 12 个控制滤波器（无扰）
+ *
+ * @details 调用点：AnoCom 0xE1 写入成功后（ano_params.cpp）、0xE0 CMD 0x10/0xAA 恢复默认后、
+ *          MAVLink PARAM_SET 后。同步内容 = kp/ki/kd、输出限幅、积分限幅、积分分离阈值、
+ *          微分滤波 alpha、积分使能（enabled=false 时清积分，与构造语义一致）。
+ * @note ① 只改参数、不重置 PID 内部状态，因此在线调参不会造成控制输出跳变；
+ *       ② 必须定义在全部 PID/滤波器对象之后（文件末尾），否则构造顺序竞争；
+ *       ③ 本函数不做范围校验——合法性由调用方（ano_param 反序列化/MAVLink 写入）保证。
+ * @ref GCS-001 §2（在线读写与无扰同步）；docs/C路径-参数集中与遥测结构化方案.md §4.3
+ */
 void applyFlightCtrlParams()
 {
     // 单个 PID 环同步（enabled=false 会清积分，与构造函数语义一致）

@@ -1,3 +1,22 @@
+/**
+ * @file    HorizontalKF.h
+ * @module  固件/导航（水平单轴卡尔曼滤波）
+ * @brief   以“速度观测”修正的北向/东向单轴 KF，输出速度与积分位移
+ * @details 输入：NED 该轴线性加速度、光流速度量测及噪声；处理：[p,v] 预测
+ *          （手动展开 FPFᵀ 省算力）→ 4σ 残差门限 → K 以 H=[0,1] 求取 →
+ *          Joseph 形式更新 → 对称化 + 对角限幅；输出：位移与速度。
+ *          北向与东向各实例化一个对象，两轴独立。
+ * @theory  KF 五方程与 Joseph 形式 @ref REF-121 §2.2.1 (2.2.4a–e) p.33–34、
+ *          §2.2.4 p.42–43；光流速度作为机体速度观测、投影到导航系
+ *          @ref REF-121 §8.2.3 p.291（外部速度信息用于阻尼）
+ * @frame   NED 水平两轴（North/East）；输入加速度须已旋转到 NED
+ * @units   m、m/s、m/s²、s
+ * @note    没有绝对位置观测，位置状态是随机游走，长时间会漂移——短时悬停/
+ *          光流定位够用，不能当长时位置基准。控制律消费 EKF 输出，
+ *          本类输出 `fused_*` 只作对照/后备（见 `handleHorizontalEstimation()`）。
+ * @see     `handleHorizontalEstimation()`、`VerticalKF_2State.h`
+ */
+
 #pragma once
 
 #include <Arduino.h>

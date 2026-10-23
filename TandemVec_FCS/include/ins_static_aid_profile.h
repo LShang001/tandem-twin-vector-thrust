@@ -1,3 +1,24 @@
+/**
+ * @file    ins_static_aid_profile.h
+ * @module  固件/导航（静止辅助强度调度）
+ * @brief   把“静止置信度/驻留时长”映射为 ZUPT/重力/静止陀螺的量测噪声与动作选择
+ * @details 输入：静止置信度、确认帧数、协方差健康、各辅助到期标志、外部速度参照；
+ *          处理：三档强度（弱约束→稳态→长静止升级）→ 分频动作仲裁（同帧优先
+ *          ZUPT）→ ZUPT 残差自适应放大 → 无外部参照时噪声封底/停用；
+ *          输出：`Icm45686StaticAidProfile` 与动作枚举。
+ *          纯 constexpr/inline，无平台依赖，宿主 g++ 可测。
+ * @theory  零速修正（ZUPT）把静止时的速度真值 0 作为量测；
+ *          间接法滤波的阻尼必须来自其它导航系统的外来信息，不能用自身信息
+ *          @ref REF-121 §8.2.3 p.291；
+ *          系统级 FDI 的门限/χ² 思想 @ref REF-121 §7.3.1 p.255
+ * @frame   机体系/NED 速度模长（标量门限），本文件不涉及矩阵运算
+ * @units   速度 m/s，角度 rad，帧数无量纲（200 Hz 下 1 帧 = 5 ms）
+ * @note    ZUPT 残差 >1.5 m/s 直接跳过（已不是“刚停稳残速”）；
+ *          无外部参照 >0.75 m/s 立即拒绝、3 s 噪声封顶 0.30 m/s、30 s 停用。
+ *          分频相位须避免 ZUPT/Gravity 公共解长期互相抢占（见 `*CanCollide`）。
+ * @see     `ins_static_detector.h`、`handleNavigationSystem()` 静止辅助段
+ */
+
 #pragma once
 
 #include <stdint.h>
@@ -171,4 +192,80 @@ constexpr Icm45686StaticAidProfile Icm45686SelectStaticAidProfile(
    * 档位 3：高置信度长静止稳态 — vel_ne_std 收紧到 0.02m/s, 静止收敛稳态下几乎锁死速度态
    */
   return {0.03f, 0.02f, 0.04f, false};
+}
+
+/*
+ * ZUPT 外部参照门控（2026-10 P0-3）
+ * =================================
+ * 理论依据：
+ *   秦永元、张洪钺、汪叔华《卡尔曼滤波与组合导航原理（第3版）》，
+ *   西北工业大学出版社 2015，§8.2.3 p.291：间接法滤波中，要实现对某一导航
+ *   系统的阻尼，必须利用来自其他导航系统的外来信息，而不能利用自身信息作为
+ *   阻尼；§7.3.1 p.255：系统级 FDI 用 χ² 检验。
+ * 工程含义：ZUPT 的残差/速度来自 EKF 自身，失联时没有外部参照可推翻"静止"
+ * 假设；因此用 GNSS/光流的新鲜度作为结构门控，而不是继续调 NIS。
+ *   - 有 GNSS/光流：完全放行（不改变原行为）；
+ *   - 无外部参照且 |v_ekf|>0.75 m/s：立即拒绝 ZUPT（不等 3 s，防速度先被拉零）；
+ *   - 无外部参照 ≥3 s：ZUPT 噪声封顶 0.30 m/s；
+ *   - 无外部参照 ≥30 s：完全停用 ZUPT（保留 Gravity/StaticGyro）。
+ * 0.75 m/s 是"真静止残速"与"慢速巡航"的折中；真静止时速度估计应接近 0。
+ */
+struct Icm45686ZuptExtRefGuard {
+  float no_ext_ref_s = 0.0f;
+  bool cap_noise = false;
+  bool disable_zupt = false;
+};
+
+constexpr float Icm45686ZuptExtRefCapS = 3.0f;
+constexpr float Icm45686ZuptExtRefDisableS = 30.0f;
+constexpr float Icm45686ZuptExtRefNoiseFloorMps = 0.30f;
+constexpr float Icm45686ZuptExtRefSpeedVetoMps = 0.75f;
+
+inline Icm45686ZuptExtRefGuard Icm45686UpdateZuptExtRefGuard(
+    Icm45686ZuptExtRefGuard guard,
+    bool external_velocity_reference,
+    float dt_s)
+{
+  if (external_velocity_reference) {
+    guard.no_ext_ref_s = 0.0f;
+    guard.cap_noise = false;
+    guard.disable_zupt = false;
+    return guard;
+  }
+  if (dt_s > 0.0f) {
+    guard.no_ext_ref_s += dt_s;
+  }
+  guard.cap_noise = (guard.no_ext_ref_s >= Icm45686ZuptExtRefCapS);
+  guard.disable_zupt = (guard.no_ext_ref_s >= Icm45686ZuptExtRefDisableS);
+  return guard;
+}
+
+inline bool Icm45686ZuptExternalRefAllowsFusion(
+    const Icm45686ZuptExtRefGuard &guard,
+    float speed_mps)
+{
+  if (guard.disable_zupt) {
+    return false;
+  }
+  if (guard.no_ext_ref_s > 0.0f &&
+      speed_mps > Icm45686ZuptExtRefSpeedVetoMps) {
+    // 无外部参照且估计仍在明显运动：立即拒绝，避免 ZUPT 先把 1 m/s 拉零。
+    return false;
+  }
+  return true;
+}
+
+inline void Icm45686ApplyZuptExtRefNoiseFloor(
+    Icm45686StaticAidProfile &profile,
+    const Icm45686ZuptExtRefGuard &guard)
+{
+  if (!guard.cap_noise) {
+    return;
+  }
+  if (profile.vel_ne_std_mps < Icm45686ZuptExtRefNoiseFloorMps) {
+    profile.vel_ne_std_mps = Icm45686ZuptExtRefNoiseFloorMps;
+  }
+  if (profile.vel_d_std_mps < Icm45686ZuptExtRefNoiseFloorMps) {
+    profile.vel_d_std_mps = Icm45686ZuptExtRefNoiseFloorMps;
+  }
 }

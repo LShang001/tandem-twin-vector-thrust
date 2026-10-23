@@ -1,12 +1,33 @@
-// ============================================================
-//  ano_params.cpp — AnoCom 参数在线读写实现（见 ano_params.h）
-//
-//  参数表 = kFlightCtrlParams 全部字段，宏展开生成 117 项：
-//    PID_FLOAT(loop, field)  → { "loop.field", ANO_FLOAT,  &kFlightCtrlParams.loop.field }
-//    PID_ENABLED(loop)       → { "loop.enabled", ANO_UINT8, (uint8_t*)&kFlightCtrlParams.loop.enabled }
-//    ALPHA_ENTRY(name, arr,i)→ { "name[i]", ANO_FLOAT, &kFlightCtrlParams.name[i] }
-//  名称/类型单一事实源：上位机经 0xE0 CMD 0x03 拉取 E2 信息帧获取。
-// ============================================================
+/**
+ * @file    ano_params.cpp
+ * @module  固件/通信（AnoCom 参数在线读写 + MAVLink 参数桥）
+ * @brief   参数注册表（kFlightCtrlParams 字段镜像）与 0xE0/0xE1 帧处理
+ *
+ * @details 参数表 = kFlightCtrlParams 全部字段，宏展开逐项生成（名称/类型/字段地址）：
+ *          `PID_FLOAT(loop, field)`   → 名称 "loop.field"、ANO_FLOAT、字段地址
+ *          `PID_ALPHA(loop)`          → 名称 "loop.falpha"、ANO_FLOAT（≤20B 短名）
+ *          `PID_ENABLED(loop)`        → 名称 "loop.enabled"、ANO_UINT8、bool 指针
+ *          `ALPHA_ENTRY(name, arr,i)` → 名称 "name[i]"、ANO_FLOAT、数组元素地址
+ *          `PID_U8(name, var)`        → 名称 name、ANO_UINT8、u8 指针（0-255 语义）
+ *          名称/类型单一事实源：上位机经 0xE0 CMD 0x03 拉取 E2 信息帧获取。
+ *          处理流程：0xE0 命令分派（00 设备信息由上层应答 / 01 个数 / 02 读值 /
+ *          03 读信息 / 10 恢复默认或保存）与 0xE1 写入（类型+长度严格校验 → 写注册表
+ *          → `applyFlightCtrlParams()`）。
+ *          不变量：**参数 ID = 注册表下标**，顺序与 GCS/server/params.py::expected_names()
+ *          逐项一致（跨区域只读核对，见核查记录 FW-INFRA 矩阵 A-xx）；越界 ID 一律返回
+ *          nullptr/false，不写内存。
+ * @theory  N/A（协议实现，非理论模型）
+ * @ref     PROTOCOL-001 §四.1/§四.2（0xE0 参数命令表、0xE1 PAR_ID+PAR_VAL）、
+ *          §四.3（0xE2 PAR_NAME 定长 20B）；GCS-001 §2（在线读写方案）；
+ *          AGENTS.md 关键路径（注册表 ID 顺序须同步 params.py）
+ * @frame   N/A
+ * @units   PAR_VAL 为原值二进制（float32/uint8），缩放由上位机按 E2 的 PAR_TYPE 决定；
+ *          各参数物理单位见 include/FlightCtrlParams.h
+ * @note    ① 浮点写入拒绝 NaN/Inf（否则会经 apply 传播进控制输出）；
+ *          ② `inertia_comp_mask` 是 0-255 掩码而非 bool，故用 u8 指针（2026-08-10 修复）；
+ *          ③ 0xAB 保存无持久化：参数只活到重启，量纲迁移因此无需处理旧 Flash 值。
+ * @see     src/ano_params.h、include/FlightCtrlParams.h、src/mavlink_bridge.cpp
+ */
 #include "ano_params.h"
 #include "FlightCtrlParams.h"
 #include "state_data.h"   // applyFlightCtrlParams()
@@ -42,6 +63,8 @@ struct AnoParamEntry
 
 // 参数注册表（顺序即参数 ID，0..ANO_PARAMS_COUNT-1）
 // ★ 与上位机 GCS/server/params.py 的分组/单位元数据按名称匹配，勿改命名
+// ★★ 顺序 = 协议：ID 由下标决定，追加新参数只能加在表尾（保持既有 ID 不变）；
+//    末尾 rc_rate/rc_expo[3]/rc_super[3] 即为 2026-08-11 追加且未移动任何旧 ID。
 static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     // ---- 姿态外环 ----
     PID_FLOAT(att_roll, kp), PID_FLOAT(att_roll, ki), PID_FLOAT(att_roll, kd),
@@ -116,7 +139,10 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
 static_assert(sizeof(kAnoParams) / sizeof(kAnoParams[0]) == ANO_PARAMS_COUNT,
               "ano_params: 注册表数量与 ANO_PARAMS_COUNT 不一致");
 
-// 参数 ID → 表项（越界返回 nullptr）
+/**
+ * @brief 参数 ID → 注册表项（越界返回 nullptr，调用方必须判空）
+ * @param[in] id 参数 ID（= 注册表下标，u16 但有效范围 0..ANO_PARAMS_COUNT-1）
+ */
 static const AnoParamEntry *anoParamAt(uint16_t id)
 {
     if (id >= ANO_PARAMS_COUNT)
@@ -124,7 +150,15 @@ static const AnoParamEntry *anoParamAt(uint16_t id)
     return &kAnoParams[id];
 }
 
-// 序列化单个参数值到 PAR_VAL（返回字节数，0 = 无效 ID）
+/**
+ * @brief 序列化一个参数的 PAR_VAL 字节（0xE1 应答体）
+ * @param[in]  id    参数 ID
+ * @param[out] out   目标缓冲
+ * @param[in]  maxLen 目标缓冲剩余字节
+ * @return 写入字节数（float=4 / uint8=1；无效 ID 或缓冲不足返回 0）
+ * @note 直接 memcpy 内存字节 = 小端，与上位机 `struct.unpack('<f')` 对齐；
+ *       u8 字段优先取 u8ptr（0-255），否则按 bool 归一到 0/1。
+ */
 static uint16_t anoParamSerialize(uint16_t id, uint8_t *out, uint16_t maxLen)
 {
     const AnoParamEntry *e = anoParamAt(id);
@@ -143,7 +177,15 @@ static uint16_t anoParamSerialize(uint16_t id, uint8_t *out, uint16_t maxLen)
     return 1;
 }
 
-// 写入单个参数（长度须与类型严格匹配；无效 ID/长度返回 false 且不应用）
+/**
+ * @brief 反序列化 0xE1 的 PAR_VAL 并写入注册表（*不*负责 apply）
+ * @param[in] id  参数 ID
+ * @param[in] val PAR_VAL 字节
+ * @param[in] len PAR_VAL 长度（float 必须 4、uint8 必须 1，否则整帧拒绝）
+ * @return true = 已写入控制参数实例；false = 无效 ID/长度/非有限值
+ * @note 拒绝 NaN/Inf：异常增益会经 applyFlightCtrlParams() 直接传播到控制输出；
+ *       调用方在 true 之后必须调 `applyFlightCtrlParams()` 才能影响 PID/滤波器。
+ */
 static bool anoParamDeserialize(uint16_t id, const uint8_t *val, uint16_t len)
 {
     const AnoParamEntry *e = anoParamAt(id);

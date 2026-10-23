@@ -1,25 +1,38 @@
 /**
- * @file navigation_task.h
- * @brief 导航与状态估计模块：EKF组合导航、垂直/水平KF、GNSS处理
+ * @file    navigation_task.h
+ * @module  固件/导航（状态估计任务入口）
+ * @brief   声明 EKF 组合导航、垂直/水平 KF、双矢量航向与 GNSS 数据有效性接口
+ * @details 输入：IMU/GNSS/气压/激光/光流/磁（经 `state_data.h` 全局量）；
+ *          处理：`handleNavigationSystem()` 主状态机（初始化→预测→辅助量测→
+ *          GNSS 更新→输出桥），以及并行的 `handleVerticalEstimation()` /
+ *          `handleHorizontalEstimation()` 独立滤波器；
+ *          输出：`AHRS_Packet`、`INS_GNSS_Packet`、`Geodetic_Pos_Packet`、
+ *          `estimated_height/velocity`、`relative_*`。
+ *          不变量：EKF 初始化前只用后台 AHRS 填充姿态；DETA100 直出模式跳过
+ *          EKF 输出桥；GNSS 新鲜度与质量门限分离（fresh / instant / output）。
  *
- * 本模块实现飞控系统的状态估计核心，包含多层级数据融合：
- *
- *   1. EKF 15状态扩展卡尔曼滤波器 (主导航滤波器)
- *      - 状态: 四元数姿态(4) + NED速度(3) + NED位置(3) + 陀螺零偏(3) + 加速度零偏(3)
- *      - 预测: IMU 双子样积分
- *      - 更新: GNSS位置/速度、AHRS姿态量测、双矢量航向融合、ZUPT零速修正
- *
- *   2. 垂直卡尔曼滤波器 (2状态: 高度+速度)
- *      - 预测: IMU 垂直加速度
- *      - 更新: 激光测距高度 / 气压计高度 (按优先级切换)
- *
- *   3. 水平卡尔曼滤波器 (2轴各2状态: 位置+速度)
- *      - 预测: NED系水平加速度
- *      - 更新: 光流速度 (旋转到NED系)
- *
- *   4. 双矢量航向融合
- *      - 利用 GPS 地速矢量 + 光流机体速度矢量 几何解算真实航向
- *      - 作为 EKF 的航向量测输入，修正陀螺积分漂移
+ *          滤波器组成（与实现一致的描述）：
+ *          1) EKF 误差状态 **15 维**：位置(3)+速度(3)+失准角(3)+陀螺零偏(3)+
+ *             加计零偏(3)；名义姿态四元数(4) 在库内单独维护，不占误差状态。
+ *             预测：IMU 双子样增量；更新：GNSS 位置/速度、双矢量航向、ZUPT、
+ *             重力方向、静止陀螺、AHRS 姿态、气压高度。
+ *          2) 垂直 KF（2 状态：高度+速度）：预测用 IMU 天向加速度，更新**只用
+ *             气压高度**（激光分支已 `if (0)` 禁用），输出 `vfk_*` 供遥测对照。
+ *          3) 水平 KF（两轴各 2 状态：位置+速度）：预测用 NED 水平加速度，
+ *             更新用光流速度；输出 `fused_*` 仅作后备，**不再覆盖** EKF 的
+ *             `relative_*` 与 `INS_GNSS_Packet` 速度。
+ * @theory  15 状态 ESKF（位置/速度/失准角/加计零偏/陀螺零偏）
+ *          @ref REF-121 §2.2.1 p.33（KF 五方程）、§8.2.3 p.291（组合导航阻尼）；
+ *          比力方程与速度/位置编排 @ref REF-120 §7.4 (7.4.6) p.189、§9.6 p.298；
+ *          零速修正 @ref REF-120 §9.9.3 p.336（静基座观测条件）；
+ *          姿态角约定 theta=-asin(R13) @ref MOD-002 §3
+ * @frame   NED 导航系 / FRD 机体系；LLA 用 WGS84 弧度
+ * @units   rad、rad/s、m、m/s、m/s²、ms（时间戳）、µs（`micros()`）
+ * @redline 四元数 RK4/双子样姿态更新、theta=-asin(R13)、ZUPT 门限与
+ *          GNSS R 地板（见行为保持红线清单与 EKF 踩坑记录）
+ * @note    水平/垂直 KF 是独立并行估计器：控制律消费 EKF 输出，
+ *          `vfk_*`/`fused_*` 仅作遥测对照与后备，勿反向覆盖 EKF 状态。
+ * @see     `navigation_task.cpp`、`sensor_imu.h`、`lib/navigation-main/src/ekf_15_state.h`
  */
 #pragma once
 #include "state_data.h"
@@ -107,7 +120,8 @@ void updateUbxRelativePosition();
  *
  * 导航系统状态机，包含：
  * 1. IMU 数据降采样和双子样积分准备
- * 2. 统一静止检测 (加速度模长+角速度+相邻帧变化, 连续50帧≈250ms)
+ * 2. 统一静止检测 (加速度模长+角速度+相邻帧变化，进 20 帧≈100ms / 出 5 帧；
+ *    GNSS 速度>0.8 m/s 或光流速度>1 m/s 可推翻，只出不进)
  * 3. EKF 初始化 (静止确认后，支持有/无 GNSS 两种模式)
  * 4. EKF 运行阶段:
  *    - 时间更新(预测): 始终执行
@@ -137,7 +151,8 @@ void updateEstimatedVerticalVelocity();
  *
  * 2状态垂直KF (高度+速度)，融合 IMU 垂直加速度和高度传感器：
  * - 预测: 机体系加速度旋转到NED系，去重力，取天向分量
- * - 更新: 激光测距高度 (优先) / 气压计高度 (降采样到50Hz)
+ * - 更新: 气压计高度（50Hz 降采样）；激光测距分支当前被 `if (0)` 禁用，
+ *   保留代码与 `LASER_NOISE_STD` 以便恢复
  * - 输出: estimated_height, estimated_velocity
  */
 void handleVerticalEstimation();
@@ -149,6 +164,7 @@ void handleVerticalEstimation();
  * - 预测: NED系北向/东向加速度
  * - 更新: 光流纯平移速度旋转到NED系 (动态噪声: 速度越快噪声越大)
  * - 输出: fused_north_pos/vel, fused_east_pos/vel
- * - 无GNSS时覆盖 relative_north/east 和 INS_GNSS_Packet 速度
+ * - 注意: 该输出仅作光流定位后备/遥测对照，**不再覆盖** EKF 的
+ *   `relative_north/east` 与 `INS_GNSS_Packet` 速度（纯加速度积分会漂移）
  */
 void handleHorizontalEstimation();

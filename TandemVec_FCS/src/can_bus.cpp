@@ -1,6 +1,7 @@
 /**
- * @file can_bus.cpp
- * @brief CAN 总线通信实现
+ * @file    can_bus.cpp
+ * @module  固件/通信（CAN 总线：MCP2515 + TJA1050）
+ * @brief   实现 500Kbps CAN 状态广播与主循环轮询接收
  *
  * 基于 MCP2515 (SPI2) + TJA1050 实现 CAN 通信：
  * - 200Hz 周期轮发飞控状态数据 (IMU/导航/控制/系统)
@@ -9,11 +10,17 @@
  * SPI2 引脚: SCK=PB13, MISO=PB14, MOSI=PB15
  * MCP2515: CS=PB12, INT=PD10
  *
- * @note arduino-CAN 库已修改: MCP2515.cpp 新增 setSPI() 支持自定义 SPI 实例,
- *       所有 SPI.begin/transfer/transaction 改为 _spi->xxx, 默认指向全局 SPI。
- *       SPI2 通过 setSPI(CAN_SPI) 注入, 与 SPI1 (ICM42688 IMU) 完全隔离。
- *
- * 详见 docs/电路拓扑参考.md §12.1
+ * @details 8 帧轮发周期（CAN_FRAME_CYCLE=8，每帧 2×float32）：
+ *          0=陀螺 X/Y、1=陀螺 Z+加计 X、2=加计 Y/Z、3=EKF 位置 N/E、4=EKF 速度 VN/VE、
+ *          5=油门%+yaw 角加速度、6=roll/pitch 角加速度、7=EKF 姿态 roll/pitch；
+ *          另有 CAN_ID_SYS_HEIGHT 每 5 周期追加（40Hz，航向 rad + 高度 m）。
+ * @theory  N/A（总线驱动与状态搬运，无理论模型）
+ * @ref     docs/电路拓扑参考.md §12.1；docs/C路径-参数集中与遥测结构化方案.md §3
+ * @frame   IMU/角加速度=FRD 机体系；位置/速度=NED；姿态角 rad（yaw [0,2π)）
+ * @units   float32 物理量直传（rad/s、m/s²、m、m/s、%、rad/s²），无定点缩放
+ * @note    arduino-CAN 库已修改: MCP2515.cpp 新增 setSPI() 支持自定义 SPI 实例,
+ *          所有 SPI.begin/transfer/transaction 改为 _spi->xxx, 默认指向全局 SPI。
+ *          SPI2 通过 setSPI(CAN_SPI) 注入, 与 SPI1 (ICM42688 IMU) 完全隔离。
  */
 
 #include "can_bus.h"

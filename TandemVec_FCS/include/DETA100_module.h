@@ -1,18 +1,29 @@
 /**
- * @file DETA100_MODULE.h
- * @brief DETA100 惯性导航模块驱动程序
+ * @file    DETA100_module.h
+ * @module  固件/传感器外设（DETA100 惯性导航模块驱动，实现型头文件）
+ * @brief   实现 DETA100 串口协议的帧同步、CRC 校验与各数据包解包
  *
  * 本文件实现了与 DETA100 惯性导航模块的串口通信协议解析。
  * DETA100 模块提供 AHRS 姿态、INS/GNSS 组合导航、大地坐标位置和系统状态数据。
  *
- * 串口配置: Serial4, 921600 波特率
  * 协议格式: [帧头0xFC(1B)] [类型(1B)] [长度(1B)] [数据(N B)] [CRC8(1B)] [CRC16(2B)] [帧尾0xFD(1B)]
  *
- * 注意: 本文件包含函数实现（非 inline），只能在 main.cpp 中包含，
- * 不能被多个 .cpp 文件包含，否则会导致链接重复定义错误。
- *
+ * @details 输入：Serial4（921600）字节流；
+ *          处理：帧头搜索（0xFC）→ 类型/长度 → CRC8(头部) + CRC16(载荷) 双校验 →
+ *                DataUnpacking 按类型解包到 IMU/AHRS/INS_GNSS/Geodetic_Pos/Status；
+ *          输出：全局数据包 + `Data_of_*` 就绪标志（由 main.cpp handleDeta100 消费）。
+ *          不变量：帧定界由长度字段决定，不靠 0xFD 搜索（载荷可能包含 0xFD）。
+ * @theory  N/A（驱动/协议解析，非理论模型）
+ * @ref     PROTOCOL-001 §二.3（0x30 GPS 帧字段与本模块 Geodetic/Status 的对应）；
+ *          src/deta100_types.h（协议常量与数据包定义）；AGENTS.md 硬性代码边界
+ *          （本文件只能在 main.cpp 中包含）
+ * @frame   模块内部为 NED/FRD（IMU 机体系）；大地坐标为经纬高（rad/m），
+ *          进入 EKF 前由 navigation_task 转 WGS84/相对起飞点
+ * @units   角速度 rad/s、加速度 m/s²、姿态 rad、经纬 rad、高度 m、时间戳 µs
+ * @note    ★ 含函数实现与内部静态解析状态（非 inline），只能在 main.cpp 中包含，
+ *          多 .cpp 包含会导致链接重复定义；其他模块经 state_data.h 使用其类型。
  * @version 2.0
- * @date [2025.4.29]
+ * @date    2025-04-29
  */
 
  #include "MedianFilter.h"
@@ -167,21 +178,6 @@
      }
      return converter.d; // 返回转换得到的双精度浮点数
  }
- 
-//  /**
-//   * @brief 解析时间戳
-//   * @param data 指向时间戳数据的指针
-//   * @return uint32_t 解析后的时间戳（微秒）
-//   */
-//  uint32_t parseTimestamp(const uint8_t *data)
-//  {
-//      uint32_t timestamp = 0;
-//      for (int i = 0; i < 4; i++)
-//      {
-//          timestamp |= (uint32_t)data[i] << (i * 8); // 逐字节拼接为32位时间戳
-//      }
-//      return timestamp; // 返回解析后的时间戳
-//  }
  
 /**
  * @brief 解析8字节小端序时间戳（微秒）

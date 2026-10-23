@@ -1,12 +1,24 @@
-// ============================================================
-//  ubx_config.cpp — u-blox UBX 接收机自动配置实现（扩展版）
-//
-//  参考：SparkFun u-blox GNSS Arduino Library v2.2.29。
-//  功能：波特率探测（目标优先/已固化快路径）→ CFG-PRT（波特率/协议掩码）
-//  → CFG-RATE → CFG-MSG（NAV-PVT/NAV-EOE/任意消息）→ CFG-NAV5（动态模型，
-//  读改写）→ CFG-GNSS（星座使能，读改写）→ CFG-SBAS → CFG-CFG（固化）
-//  → 回读校验；另含 CFG-RST 软复位。全部走经典 CFG-* 消息（M8/M9/M10 兼容）。
-// ============================================================
+/**
+ * @file    ubx_config.cpp
+ * @module  固件/通信（GNSS 接收机 UBX 配置）
+ * @brief   实现 UBX 接收机自动配置、消息速率/NMEA 选项与 CFG-RST 软复位
+ *
+ * @details 参考：SparkFun u-blox GNSS Arduino Library v2.2.29。
+ *          功能：波特率探测（目标优先/已固化快路径）→ CFG-PRT（波特率/协议掩码）
+ *          → CFG-RATE → CFG-MSG（NAV-PVT/NAV-EOE/任意消息）→ CFG-NAV5（动态模型，
+ *          读改写）→ CFG-GNSS（星座使能，读改写）→ CFG-SBAS → CFG-CFG（固化）
+ *          → 回读校验；另含 CFG-RST 软复位。全部走经典 CFG-* 消息（M8/M9/M10 兼容）。
+ * @theory  N/A（外设配置协议，非理论模型）
+ * @ref     docs/reference/sparkfun-ublox-gnss；UBX 帧格式见本文件 `_ubx_send()` 注释
+ * @frame   N/A
+ * @units   波特率 bps、探测/ACK 超时 ms、NAV5 参数按 u-blox 协议整数单位
+ * @note    ① UBX 帧：`B5 62 | cls | id | lenL lenH | payload | CK_A CK_B`，
+ *            校验为逐字节 sum0/sum1（与 AnoCom 的双校验算法不同，勿混用）；
+ *          ② 探测窗口 300ms/档、ACK 超时 500ms，必须用 uint32_t 保存
+ *            （曾误用 uint8_t 导致 300/500ms 被截断成 44/244ms）；
+ *          ③ 配置函数是阻塞调用（约 1-4s），只能出现在 setup 或 DBG 命令中，
+ *            绝不可放进 200Hz 任务。
+ */
 #include "ubx_config.h"
 
 // 探测窗口/ACK 超时（uint32_t：此前误用 uint8_t 把 300/500ms 截断成 44/244ms）

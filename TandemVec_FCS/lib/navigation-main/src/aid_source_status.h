@@ -1,27 +1,21 @@
-/*
- * 组合导航观测源状态管理
- * ======================
- *
- * 统一记录各类辅助观测源的生命周期与诊断状态，是整个 EKF 辅助融合链路
- * 的"统计记账层"。本模块与传感器、串口协议、Arduino/Eigen/VOFA 完全解耦，
- * 可独立用于主机回归测试。
- *
- * 管理的观测源类型（AidSource 枚举）：
- * - StaticZupt (ZUPT)：静止零速量测，约束速度漂移和加速度零偏。
- * - Gravity：         重力方向量测，约束 roll/pitch 和横向零偏。
- * - Attitude：        外部 AHRS/Madgwick roll/pitch 姿态辅助。
- * - Gnss：            GNSS 位置 + 速度 6 维组合量测。
- * - YawGsf：          GNSS 速度辅助 / 双天线航向估计。
- * - StaticGyro：      静止角速度量测，只约束陀螺零偏，不直接注入姿态。
- *
- * 核心设计：
- * - AidSourceStatusTracker 按观测源维度维护 6 组 AidSourceStatus，
- *   每组包含瞬时标志（本帧是否可用、是否融合、是否拒绝）和累计计数器
- *   （累计尝试/融合/拒绝/超时/重置次数、距上次成功融合的龄期）。
- * - 每个导航帧开始时 BeginFrame(dt_s) 清除瞬时标志、推进 age_s；
- *   随后各量测更新路径逐步填充；帧末 VOFA/AidSource 诊断消费。
- * - MeasurementUpdateResult 是 Ekf15State 各 Detailed 量测接口的标准返回值，
- *   区分"输入无效"、"进入 EKF 但被门控拒绝"和"实际融合成功"三种情况。
+/**
+ * @file    aid_source_status.h
+ * @module  固件/导航（辅助观测源生命周期与诊断）
+ * @brief   记录各类辅助观测源的可用性、融合尝试、门控结果与龄期
+ * @details 输入：每帧的观测源事件（是否可用/质量是否通过/是否尝试/是否融合/
+ *          是否拒绝/是否超时/是否触发重置）；处理：BeginFrame() 清瞬时标志并
+ *          推进 age_s，RecordAttempt() 累计计数，RecordTimeout()/RecordReset()
+ *          记异常；输出：AidSourceStatus 快照与 AgeForOutput()，供遥测/VOFA
+ *          诊断消费。与 Arduino、Eigen、串口协议完全解耦，可宿主机回归。
+ *          不变量：瞬时标志仅本帧有效；累计计数与 age_s 跨帧保留。
+ * @theory  NIS/χ² 量测有效性检验与系统级故障检测 @ref REF-121 §7.3.1 p.255–259；
+ *          间接法中“阻尼必须利用外来信息”@ref REF-121 §8.2.3 p.291
+ *          （解释为何 GNSS/ZUPT 的 rejected 计数必须与外部参照一起解读）
+ * @frame   N/A（纯诊断记账层，不解释任何坐标系）
+ * @units   age_s、dt_s 单位 s；innovation_norm 与 test_ratio 无量纲/随量测维度
+ * @note    本层只记账、不做门控决策：fused/rejected 必须来自 EKF 的
+ *          MeasurementUpdateResult，禁止上层“调用成功即标记 fused”。
+ * @see     ekf_15_state.h::MeasurementUpdateResult、src/navigation_task.cpp
  */
 
 #ifndef NAVIGATION_SRC_AID_SOURCE_STATUS_H_ // NOLINT
@@ -91,6 +85,10 @@ struct MeasurementUpdateResult
   bool input_valid = false;         // 输入量测和噪声参数是否有限且物理有效
   bool attempted = false;           // 是否实际进入了 EKF 更新流程
   bool fused = false;               // 是否完成了状态/协方差更新
+  bool subset_position = false;     // P0-1：仅位置子集更新是否融合
+  bool subset_velocity = false;     // P0-1：仅速度子集更新是否融合
+  float nis_pos3 = 0.0f;            // P0-1：3 维位置子集 NIS
+  float nis_vel3 = 0.0f;            // P0-1：3 维速度子集 NIS
   float innovation_norm = 0.0f;     // 新息模长，便于上层记录
   float test_ratio = 0.0f;          // NIS/门限归一化比值，不可得时为 0
 };
@@ -165,12 +163,14 @@ public:
     entry.quality_passed = false;
   }
 
-  /*
-   * 标记观测源可用，并设置质量检查结果。
-   *
-   * quality_passed = true 表示原始数据通过了本层质量筛选
-   * （如 GNSS fix>=3、SV>=9、hAcc<6m 等），允许进入 EKF 量测更新。
-   * quality_passed = false 时仅设置 rejected 标志，不累加 reject_count。
+  /**
+   * @brief 标记观测源可用并设置本层质量检查结果
+   * @param[in] source 观测源
+   * @param[in] quality_passed 原始数据是否通过本层质量筛选（如 GNSS fix>=3、
+   *            SV>=9、hAcc<6 m）
+   * @note quality_passed 为 false 时只置 rejected 标志、不累加 reject_count：
+   *       “本帧有观测但暂不允许进 EKF”不属于 EKF 门控拒绝，二者混计会让
+   *       拒绝率失去诊断意义。
    */
   void MarkAvailable(const AidSource source, const bool quality_passed)
   {

@@ -1,6 +1,7 @@
 /**
- * @file sensor_peripheral.h
- * @brief 外设传感器模块：气压计、光流传感器、TVC角度传感器
+ * @file    sensor_peripheral.h
+ * @module  固件/传感器外设（DPS310 气压计、UART7 光流、TVC 角度传感器）
+ * @brief   声明非 IMU 外设的初始化、周期任务与诊断查询接口
  *
  * 本模块负责所有非 IMU 的外设传感器驱动和数据处理：
  *   - DPS310 气压计: 温度/气压采集、海拔高度计算、滤波
@@ -8,11 +9,26 @@
  *   - LQS48 光流传感器: 高精度光流+激光测距、融合高度速度解算
  *   - TVC 角度传感器: ADC 读取、滤波、TVC 闭环反馈
  *
- * 光流速度解算物理模型：
- *   - 垂直高度: H = S * |cos(tilt)| (倾斜补偿)
- *   - 总视在速度: V_total = ω_flow * H (光流角速度 * 高度)
- *   - 旋转补偿: V_rot = H * ω_imu (IMU 角速度引起的视在速度)
- *   - 纯平移速度: V_trans = V_total - V_rot
+ * @details 输入：IIC2（DPS310）、UART7（光流，自动识别 LQS48 / MTF-02P MSP / Micolink /
+ *          MAVLink-APM）、ADC（TVC 角度）；
+ *          处理：按各自协议分帧 → 倾斜/旋转补偿 → 中值+低通滤波 → 写全局状态；
+ *          输出：baro_altitude、flow_data（速度与测距两通道）、TVC 反馈角。
+ * @theory  光流速度解算（几何投影，非线性动力学，非教材公式）：
+ *          - 垂直高度: H = S·|cos(tilt)|（倾斜补偿，S=斜距）
+ *          - 总视在速度: V_total = ω_flow·H（光流角速度 × 高度）
+ *          - 旋转补偿: V_rot = H·ω_imu（IMU 角速度引起的视在速度）
+ *          - 纯平移速度: V_trans = V_total − V_rot
+ *          N/A 教材出处；实现自洽性见本文件与 src/sensor_peripheral.cpp 的同名注释。
+ * @ref     AGENTS.md 踩坑记录（光流速度/测距两条独立新鲜度通道，2026-08-21）；
+ *          AGENTS.md 硬件与串口（UART7 自动识别）；PROTOCOL-001 §二.3.2/§二.3.4
+ *          （0x31 原始光流 / 0x34 通用测距语义，与本模块通道划分对应）
+ * @frame   高度/速度先在机体系（FRD）做补偿，输出给 EKF 前由导航侧转 NED；
+ *          TVC 角度为摆座系机械角（deg）
+ * @units   高度 m、速度 m/s、光流角增量 rad、时间 dt s、角度 deg、气压 Pa、温度 °C
+ * @note    ★ 光流速度与测距是**两条独立新鲜度通道**：测距帧不得刷新
+ *          `flow_data.last_update_ms`（速度通道专属），否则光流停流后冻结速度会被
+ *          EKF 当新测量反复融合；测距用 `flow_data.last_range_update_ms`。
+ * @see     src/sensor_peripheral.cpp、src/state_data.h（OpticalFlowData/flow_data）
  */
 #pragma once
 #include "state_data.h"

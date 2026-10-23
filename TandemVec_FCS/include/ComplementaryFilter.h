@@ -1,4 +1,20 @@
-// ComplementaryFilter.h
+/**
+ * @file    ComplementaryFilter.h
+ * @module  固件/传感器（一阶互补滤波）
+ * @brief   对单路标量传感器做一阶互补（指数）低通，可在线改系数
+ * @details 输入：新采样值；处理：y ← α·x + (1−α)·y（递归一阶低通）；
+ *          输出：滤波值。`initialize()` 用首帧值避免从 0 爬升；
+ *          `setAlpha()` 只改系数、保留状态（调参无扰）。
+ * @theory  一阶低通/互补滤波：α 与时间常数满足 α = dt/(τ+dt)；
+ *          高频噪声衰减、低频保持，用于加速度计/陀螺的采样前平滑
+ *          @ref REF-121 §2.2.1 p.33（量测预处理的低通形式）
+ * @frame   N/A（标量通道，无坐标系）
+ * @units   无量纲（输入输出同单位；本工程加速度 g、角速度 dps）
+ * @note    α 越接近 1 越信任新值（响应快、抑制弱）；本工程在
+ *          `initICM42688()` 用静止均值初始化，避免上电阶跃。
+ * @see     `sensor_imu.cpp` 的 `accelXFilter` 等、`initICM42688()`
+ */
+
 #ifndef ComplementaryFilter_h
 #define ComplementaryFilter_h
 

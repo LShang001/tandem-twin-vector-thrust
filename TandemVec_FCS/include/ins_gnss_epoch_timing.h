@@ -1,3 +1,21 @@
+/**
+ * @file    ins_gnss_epoch_timing.h
+ * @module  固件/导航（GNSS 历元时间映射）
+ * @brief   把 PVT 的 GPS 周内时（iTOW）映射到本地 micros() 时基并求量测年龄
+ * @details 输入：本帧 iTOW/接收时刻、参考帧 iTOW/接收时刻、固定输出延时；
+ *          处理：iTOW 差按半周折叠（防周翻转）→ 用参考帧接收时刻换算本地时刻
+ *          → 年龄 = 本地现在 − 映射时刻（uint32 模运算）；输出：映射结果与年龄。
+ *          不变量：映射只依赖同一队列内的少量 epoch，超过 10 s 视为参考失效。
+ * @theory  GNSS 量测相对 IMU 传播存在固定/可变延时，量测年龄用于回放对齐；
+ *          回放点必须与状态历史同一时基 @ref REF-121 §8.2.3 p.291
+ *          （组合导航中量测与状态时间同步是滤波一致性的前提）
+ * @frame   N/A（时间标量）
+ * @units   iTOW/接收时刻 ms/µs，年龄 s；GPS 周 = 604800000 ms
+ * @note    micros() 回绕（~71.6 min）时映射结果可能“略负”，必须强转 uint32
+ *          后交给模运算求年龄，不能判无效——否则回绕点附近会退化为固定延时。
+ * @see     `handleNavigationSystem()` 时间映射段、`InsGnssEpochAgeSeconds()`
+ */
+
 #pragma once
 
 #include <cstdint>

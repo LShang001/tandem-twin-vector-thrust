@@ -1,31 +1,37 @@
-// ============================================================
-//  TandemVec_ADRC.h — 自抗扰控制 (Active Disturbance Rejection Control)
-//
-//  二阶 ESO (扩张状态观测器) + PD 控制器
-//
-//  理论:
-//    被控对象:  ω̇ = b0·u + f     (f=总扰动:模型误差+外扰+耦合)
-//    扩张状态:  x1=ω, x2=f
-//    ESO估计:   z1→ω, z2→f
-//    控制律:    u = (ω̇_ref + Kp·(ω_ref−z1) − z2) / b0
-//
-//  参数物理含义 (带宽参数化):
-//    ωo = ESO带宽 (rad/s) — 越大观测越快, 但噪声敏感
-//    ωc = 控制器带宽 (rad/s) — 闭环响应速度
-//    b0 = 名义控制增益 — 对于I×α逆解后的系统, b0=1
-//
-//    ESO增益: β1=2ωo, β2=ωo²
-//    PD增益:  Kp=ωc,  Kd=1 (隐含在ω̇_ref中, 此处简化为PD)
-//
-//  与PID的关键区别:
-//    PID: 对误差的历史(P+I+D)做线性组合
-//    ADRC: 实时估计总扰动→前馈补偿→剩余用PD处理
-//    → 模型不确定下的鲁棒性显著优于PID（尤其I/kT/a/b未知时）
-//
-//  参考文献:
-//    Han, J. (2009). "From PID to Active Disturbance Rejection Control."
-//    Gao, Z. (2006). "Scaling and bandwidth-parameterization based controller tuning."
-// ============================================================
+/**
+ * @file    TandemVec_ADRC.h
+ * @module  固件/控制（自抗扰控制候选模块，尚未接入生产控制链）
+ * @brief   二阶 ESO（扩张状态观测器）+ PD 的 ADRC 速率环实现（角度域）
+ * @details 输入：ω [deg/s]、ω_ref [deg/s]、ω̇_ref [deg/s²]、dt；
+ *          处理：ESO 估计 z1→ω、z2→总扰动，控制律
+ *          u = (ω̇_ref + Kp(ω_ref−z1) − z2)/b0；输出：α_ref [deg/s²]。
+ *          ⚠️ 现行代码未接线：flight_control.cpp 不含本文件，速率环仍用 PI。
+ *
+ * 理论:
+ *   被控对象: ω̇ = b0·u + f（f=总扰动：模型误差+外扰+耦合）
+ *   扩张状态: x1=ω、x2=f
+ *   ESO 估计: z1→ω、z2→f
+ *   控制律: u = (ω̇_ref + Kp·(ω_ref−z1) − z2) / b0
+ *
+ * 参数物理含义（带宽参数化）:
+ *   ωo = ESO 带宽 [rad/s]，越大观测越快但噪声敏感
+ *   ωc = 控制器带宽 [rad/s]，决定闭环响应速度
+ *   b0 = 名义控制增益，对 I×α 逆解后的系统 b0 ≈ 1
+ *   ESO 增益 β1=2ωo、β2=ωo²；PD 增益 Kp=ωc（Kd 暂未使用）
+ *
+ * @theory  二阶 ESO + 扰动对消的 PD 控制（Gao 带宽参数化）
+ * @ref     THY-003 §1.2（转速环被控对象）；见 TandemVec-Paper/ch/16-adrc-onlineid.tex
+ *          (eq:adrc_plant、eq:eso2_continuous、eq:eso2_discrete、eq:adrc_law)
+ * @frame   N/A（单轴标量；轴由调用方决定）
+ * @units   输入 ω/ω_ref [deg/s]、ref_dot [deg/s²]、输出 α [deg/s²]；
+ *          ωo/ωc [rad/s]、dt [s]
+ * @note    ① 控制量 u 必须回传给 ESO 用**上一拍实际值**，否则 ESO 会把控制
+ *          效果当扰动抵消（闭环增益被吃掉）。
+ *        ② ωo 受执行器带宽约束：τm=0.28 s → ω_act≈3.6 rad/s，默认 ωo=8；
+ *          仿真扫描 ωo≤12 稳定、ωo=50 全发散（仅该模型的口径，不是普适定律）。
+ *        ③ 本模块没有实机验证，不得作为现有速率的替代证据。
+ * @test    test_host/test_advanced_theory.cpp（L2b 偏差工况扫描）
+ */
 #pragma once
 #include <cmath>
 

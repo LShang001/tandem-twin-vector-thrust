@@ -1,11 +1,32 @@
 /**
- * @file state_data.h
- * @brief 全局状态数据中枢 — 所有跨模块共享的类型定义与变量声明
+ * @file    state_data.h
+ * @module  固件/基础设施（全局状态中枢：类型定义与跨模块变量声明）
+ * @brief   集中声明全部跨模块共享的状态、配置常量、外设对象与遥测结构
  *
  * 本头文件集中管理飞控系统中所有跨模块共享的：
  *   - 枚举类型 (ControlMode, LoiterState 等)
- *   - 结构体类型 (ControlInputs_t, ControlOutputs_t, OpticalFlowData, Task)
+ *   - 结构体类型 (ControlInputs_t, ControlOutputs_t, OpticalFlowData, Task, GncTelemetry)
  *   - 全局变量的 extern 声明
+ *
+ * @details 输入：无（纯声明）；处理：按“硬件资源 → 物理常数/限幅 → 控制参数与 PID →
+ *          滤波器 → 传感器/外设对象 → 系统标志 → 遥测/缓冲区”分区组织；
+ *          输出：被各 .cpp 包含后直接访问的全局符号。
+ *          不变量：每个变量只在 state_data.cpp 定义一次；本文件不含函数实现；
+ *          声明顺序与 state_data.cpp 的分区顺序一一对应。
+ * @theory  N/A（数据聚合层）；真值语义见各字段行尾注释与 docs/C路径方案 §4
+ * @ref     docs/C路径-参数集中与遥测结构化方案.md §4（FlightCtrlParams/GncTelemetry）；
+ *          COMM-001 §3（SERIAL6_BAUDRATE=921600 与 200Hz 任务节奏）；
+ *          AGENTS.md 踩坑记录（光流双新鲜度通道、上电无信号 raw_rc 全 0）
+ * @frame   以注释逐字段标注：IMU/角速率=FRD 机体系，位置/速度=NED，
+ *          姿态内部 rad（欧拉角约定见 MOD-002），
+ *          执行器为摆座机械角 deg / 差速归一化 Δω
+ * @units   SI：m、m/s、m/s²、rad、rad/s、rad/s²；角度遥测域另有 deg/s、deg/s²（字段名带 _deg/_dps）；
+ *          时间 ms（millis）或 µs（micros）；PWM µs（988-2012）
+ * @note    ★ 两条易错约束：
+ *          ① `SERIAL6_BAUDRATE` 是地面站波特率唯一事实源，改波特率只改这一处；
+ *          ② 光流速度与测距是两条独立新鲜度通道（`last_update_ms` vs
+ *             `last_range_update_ms`），测距帧不得刷新速度通道时间戳。
+ * @see     src/state_data.cpp、src/communication.cpp、include/FlightCtrlParams.h
  *
  * 设计原则：
  *   - 所有变量只在 state_data.cpp 中定义一次
@@ -96,6 +117,17 @@ enum VerticalLoiterState
 };
 
 // 光流传感器数据结构
+/**
+ * @brief 光流传感器共享状态（速度与测距两条独立新鲜度通道）
+ *
+ * 写入点：sensor_peripheral.cpp 各协议处理函数；消费方：navigation_task（EKF 融合）。
+ * @note ★ `last_update_ms` 只由**光流（速度）帧**刷新，`last_range_update_ms` 只由
+ *       **测距帧**刷新——若测距帧刷新速度时间戳，光流停流后冻结速度会被 EKF 当新测量
+ *       反复融合；导航侧按时间戳判重，时间戳在走就每次都融。
+ * @ref AGENTS.md 踩坑记录（光流速度/测距两条独立新鲜度通道，2026-08-21）
+ * @ref PROTOCOL-001 §二.3.2（0x31 原始光流）/§二.3.4（0x34 通用测距）字段语义
+ * @units 高度/速度 m、m/s（机体系）；时间 millis
+ */
 struct OpticalFlowData
 {
   float distance_m;      // 倾斜补偿后的高度 (m)
@@ -143,8 +175,8 @@ typedef struct
 // 速率 PID 在角度域输出 deg/s²；写入本结构前统一转换为 rad/s²，
 // 底层控制分配只接收 SI 制角加速度并根据物理模型逆解执行器指令。
 // 轴向（★ 2026-08-07 轴置换后，旧注释"上摆=偏航/差速=滚转"已废止；
-// 锚点=手动模式摇杆直通实机验证）：alpha_roll=体轴x→上摆δ_f，
-// alpha_pitch=体轴y→下摆δ_t，alpha_yaw=体轴z→差速Δω
+// 锚点 = 手动模式摇杆直通实机验证）：alpha_roll→体轴x→上摆δ_f，
+// alpha_pitch→体轴y→下摆δ_t，alpha_yaw→体轴z→差速Δω
 typedef struct
 {
   float throttle_percent; // 油门百分比 (0-100)
@@ -154,6 +186,14 @@ typedef struct
 } ControlOutputs_t;
 
 // 任务调度结构体
+/**
+ * @brief 调度器任务表项（tasks[] 元素，见 src/task_scheduler.cpp）
+ * @note `interval` 的单位是**定时器 tick（0.5ms）**而非 ms；注册接口收 ms 后换算。
+ *       `BFS_TASK_FRACTIONAL_INTERVALS` 打开时另存 Q8 目标间隔与小数误差，
+ *       用于 7.735ms 这类非整数 tick 周期（见 task_scheduler_interval.h）。
+ *       `flag` 由 TIM8 ISR 置位、主循环清除，故必须 volatile。
+ * @ref COMM-001 §3（200Hz 任务节奏）
+ */
 struct Task
 {
   void (*function)();   // 任务函数指针
@@ -291,6 +331,7 @@ extern const int SPI_CS;
 // Serial6 波特率随数传模块型号调整（2026-08-10 COMM-001：2M→921600——2M 在
 // DAP-Link VCP 丢帧 ~15%，921600 位时间翻倍显著降丢帧；带宽余量仍 87%；
 // 换数传模块时只改这里，main.cpp 用此宏，文档无需同步）
+// @ref COMM-001 §2 决策 D1（波特率 2M→921600）、§3（≈11.5KB/s，921600 利用率 ~12.5%）
 #define SERIAL6_BAUDRATE 921600UL   // USART6: AnoCom/MAVLink 地面站通信
 
 // --- 2.7 PWM 与 定时器配置 ---
@@ -363,6 +404,23 @@ struct GncTelemetry
     float yaw_gain_sched;    // 差速回路增益调度系数
     float delta_f_deg, delta_t_deg, dw;  // 执行器指令（摆角 deg / 差速归一化）
     bool  alloc_sat[3];      // 分配饱和标记（δ_f/δ_t/Δω）
+    // 在线振动估计（只读诊断；自适应 EKF 需显式开关）
+    float vib_accel_rms_g;      // 高通加速度 RMS (g)
+    float vib_gyro_rms_dps;     // 高通陀螺 RMS (dps)
+    float vib_accel_std_suggest;// 建议 accel_std (m/s²)
+    bool  vib_high;             // 高振动标志
+    // 零偏跳变监控（只告警，不直接回滚）
+    float bias_jump_accel_delta; // 加计零偏相对慢基线偏差 (m/s²)
+    float bias_jump_gyro_delta;  // 陀螺零偏相对慢基线偏差 (rad/s)
+    uint16_t bias_jump_count;    // 累计确认跳变次数
+    bool  bias_jump_hold;        // 跳变后冻结零偏修正（安全保持）
+    bool  bias_slow_drift;       // 慢漂移告警（温漂等）
+    float bias_drift_accel_rate; // 加计慢漂移率 (m/s²/s)
+    float bias_drift_gyro_rate;  // 陀螺慢漂移率 (rad/s²)
+    // 温度-零偏诊断（只估计，不直接补偿）
+    float bias_temp_slope_dps_c; // 陀螺零偏温度斜率 (dps/°C)
+    float bias_temp_span_c;
+    float bias_temp_confidence;
 };
 
 extern GncTelemetry gnc_tel;
@@ -385,8 +443,8 @@ void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 9 控�
 
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — FRD 体轴映射（x_b=前/y_b=右/z_b=下）---
 // ★ 2026-08-07 轴置换后执行器分配（旧注释"VTOL x_b朝上/Roll=体轴z"已废止；
-// 锚点=手动模式摇杆直通实机验证）：Roll=体轴x→上摆δ_f，Pitch=体轴y→下摆δ_t，
-// Yaw=体轴z→差速Δω
+// 锚点 = 手动模式摇杆直通实机验证）：Roll→体轴x→上摆δ_f，Pitch→体轴y→下摆δ_t，
+// Yaw→体轴z→差速Δω
 extern PositionPID rollAnglePID;  // Roll外环: error_deg[0] → 目标滚转速率
 extern PositionPID rollRatePID;   // Roll内环: 体轴x速率误差 → 上摆角δ_f (deg)
 extern PositionPID pitchAnglePID; // Pitch外环: error_deg[1] → 目标俯仰速率
@@ -553,6 +611,7 @@ struct Vector3;
 extern Vector3 current_omega_dps_body_filtered;
 
 // 气压计数据：高度统一为起飞点向上为正的相对高度 (m)
+extern float imu_die_temp_c;               // ICM42688 芯片温度 (°C)，1 Hz 更新
 extern float temperature_raw, pressure_raw;
 extern float temperature, pressure;
 extern float baro_altitude_raw, baro_altitude;
@@ -709,6 +768,12 @@ struct GnssRuntimeStatus
   float last_test_ratio = 0.0f;              // 最近一次 EKF GNSS 门控比
   float last_measurement_age_s = 0.0f;       // 最近 epoch 映射到 MCU 时间轴后的真实回放年龄
   uint32_t time_mapping_invalid_count = 0;   // epoch 缺少本地接收时间，退回固定延迟的次数
+  // 无 PPS 批处理延时估计（默认关闭，仅诊断；不改变 age）
+  bool auto_delay_valid = false;
+  uint32_t auto_delay_last_ms = 0;
+  float auto_delay_tau_s = 0.0f;
+  float auto_delay_residual_mps = 0.0f;
+  float auto_delay_sharpness = 0.0f;
 };
 extern GnssRuntimeStatus gnss_status;
 extern bfs::AidSourceStatusTracker aid_tracker;
@@ -753,6 +818,12 @@ extern float g_tvc_lower_deg;    // 下摆座角指令 deg（俯仰）
 extern ControlMode g_current_flight_mode;
 // 当前解锁状态 (由 runGNCExecutive 写入, 供 handleAnoCom 遥测发送)
 extern bool g_is_unlocked;
+
+// 执行器故障监测（2026-10，ActuatorFaultMonitor.h）
+// 只读诊断标志：不直接改变控制输出；后续故障重构由控制层消费。
+extern bool g_actuator_servo_jam;
+extern bool g_actuator_thrust_loss;
+extern bool g_actuator_controlled_descent_request;
 
 /*
  * ==========================================================================================

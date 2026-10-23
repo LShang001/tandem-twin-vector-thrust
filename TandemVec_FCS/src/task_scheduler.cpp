@@ -1,14 +1,29 @@
 /**
- * @file task_scheduler.cpp
- * @brief 轻量级实时任务调度器实现
+ * @file    task_scheduler.cpp
+ * @module  固件/基础设施（任务调度器：TIM8 2kHz 时基）
+ * @brief   实现标志位式协作调度、任务注册与调度统计
  *
  * 本文件实现了一个基于硬件定时器中断的协作式任务调度系统。
  * 核心设计思想：定时器中断只负责设置标志位，实际任务在主循环中执行，
  * 避免在中断上下文中执行耗时操作（如串口通信、浮点运算）。
  *
- * 时间基准：TIM8 硬件定时器，2kHz (05ms 周期)
+ * 时间基准：TIM8 硬件定时器，2kHz（0.5ms 周期）
  * 最大任务数：MAX_TASKS = 30
- * 调度精度：05ms (一个定时器滴答)
+ * 调度精度：0.5ms（一个定时器滴答）
+ *
+ * @details 输入：`addTaskNamed()` 注册表、`BFS_TASK_FRACTIONAL_INTERVALS` 下的 Q8 目标间隔；
+ *          处理：ISR 累加 tick → 到期置 flag 并更新 lastRunTime（可选按 Q8 误差累积
+ *                在 N/N+1 tick 间抖动，见 task_scheduler_interval.h）→ 主循环执行；
+ *          输出：任务执行计数、耗时、间隔抖动、迟到计数、CPU 负荷（常开累积，
+ *                DBG `tasks` 打印后清零，形成观测窗口）。
+ *          不变量：先清 flag 再执行（执行期间新到期请求不丢）；标志读改写临界区用
+ *          `noInterrupts()/interrupts()` 保护；count 为 uint32 溢出周期约 248 天。
+ * @theory  N/A（调度基础设施）
+ * @ref     COMM-001 §3（200Hz 节奏）、GOV-004 §5（L1 文档要求）
+ * @frame   N/A
+ * @units   间隔 ms、tick = 0.5ms、耗时 µs、频率 Hz、负荷 %
+ * @note    统计口径即“软超时”：间隔 > 1.5×名义周期记一次迟到（漏拍）。硬件看门狗
+ *          （IWDG 3.0s）在 main.cpp，本文件不涉及。
  */
 #include "task_scheduler.h"
 #include "task_scheduler_interval.h"

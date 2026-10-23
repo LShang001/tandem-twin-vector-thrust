@@ -1,6 +1,21 @@
-// 用于根据WGS84经纬度计算高精度的北东位移。
-// 此库提供了高精度的WGS84椭球坐标转换和ENU坐标计算功能，适用于需要精确位置测量的应用。
-// 注意：本库不包含GPS数据处理功能，仅用于计算位置偏移。
+/**
+ * @file    GeoDisplacement.h
+ * @module  固件/导航（WGS84 局部位移换算）
+ * @brief   把两组 WGS84 经纬高换算为相对参考点的东/北/天位移
+ * @details 输入：参考点与当前点 LLA（度、米）；处理：LLA→ECEF（WGS84 椭球）→
+ *          差分 → 按参考点经纬度的旋转矩阵转 ENU；输出：{East, North, Up} [m]。
+ *          全部 inline，可被多编译单元包含而不重定义。
+ * @theory  WGS84 椭球 LLA↔ECEF 与 ECEF→ENU 的刚体旋转
+ *          @ref REF-120 §7.2.1/§7.2.2 p.174–178（大地坐标与地球模型）；
+ *          ENU 与项目 NED 的轴向差异见 @ref MOD-002 §1（东/北互换、天/地反号）
+ * @frame   WGS84 大地坐标 → ECEF（地心地固）→ ENU（东-北-天）
+ * @units   角度输入为度，输出为 m；椭球常量 a=6378137 m、f=1/298.257223563
+ * @note    本文件用 ENU（东-北-天），与飞控 NED 不同：调用方必须显式换轴
+ *          （north=−? 不，north=North、east=East、down=−Up），不得直接把
+ *          ENU.Up 当 NED 的 z 使用。跨日期线/极区未做特殊处理。
+ * @see     `handleNavigationSystem()` 的 `bfs::lla2ned` 路径（库内为 NED）
+ */
+
 #ifndef GEO_DISPLACEMENT_H
 #define GEO_DISPLACEMENT_H
 

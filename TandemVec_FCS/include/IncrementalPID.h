@@ -1,12 +1,28 @@
+/**
+ * @file    IncrementalPID.h
+ * @module  固件/控制（增量式 PID，历史实现）
+ * @brief   增量式 PID：Δu(k) 递推后累加成绝对输出，带输出限幅
+ * @details 输入：设定值与反馈值（同一单位）；处理：一阶/二阶误差差分 → Δu；
+ *          输出：u(k) = u(k−1) + Δu(k)，钳到 [out_min, out_max] 并回写历史。
+ *          与 PositionPID（位置式 v3）并存：本类无积分状态、无微分滤波、
+ *          无抗饱和，仅用于不需要这些特性的历史调用点；新代码优先 PositionPID。
+ * @theory  增量式 PID 递推式（数字控制标准形式，非本项目理论推导）：
+ *          Δu(k) = Kp·Δe(k) + Ki·e(k) + Kd·Δ²e(k)
+ * @frame   N/A（标量控制器，输入输出同一物理量纲）
+ * @units   由调用方决定：本项目姿态环用 deg / deg/s / deg/s²；
+ *          Ki 隐含采样周期（离散增益），换调用频率必须重算
+ * @note   ① 采样周期不出现在公式里：Ki/Kd 已把 Ts 吸收进去，改 200 Hz → 其他
+ *          频率时增益必须按频率重新整定（与 PositionPID 的连续域 Ki 不同）。
+ *        ② reset() 只清误差历史，不清 last_output_（绝对输出保持上一拍），
+ *          这是增量式的固有语义：重置后输出不会跳回 0。
+ * @see     PositionPID.h（位置式，连续域 Ki，带无扰切换/抗饱和/NaN 防护）
+ */
 #ifndef INCREMENTAL_PID_H
 #define INCREMENTAL_PID_H
 
 /**
- * 增量式PID控制器类
- * 提供增量式PID控制算法的实现，包括PID参数设置、输出限幅设置和PID控制器状态重置等功能
- * @param kp 比例系数
- * @param ki 积分系数
- * @param kd 微分系数
+ * @brief 增量式 PID 控制器（构造时给增益，输出按拍累加）
+ * @note 构造参数 kp/ki/kd 的物理量纲由调用方决定；默认输出限幅 0–100。
  */
 class IncrementalPID
 {
@@ -82,10 +98,17 @@ void IncrementalPID::reset()
 }
 
 /**
- * 计算增量式PID控制器输出
- * @param setpoint 设定值
- * @param input 反馈值
- * @return PID输出量u(k)
+ * @brief 单步增量式 PID 计算
+ * @param[in] setpoint 设定值（与 input 同量纲）
+ * @param[in] input    反馈值
+ * @return 累积后的绝对输出 u(k)，已限幅到 [out_min_, out_max_]
+ * @formula Δu(k) = Kp·Δe(k) + Ki·e(k) + Kd·Δ²e(k)；
+ *          u(k) = clamp(u(k−1) + Δu(k), out_min, out_max)
+ * @pre  kp/ki/kd 已按采样频率整定（离散增益，隐含 Ts）
+ * @post 历史误差 e(k−1)/e(k−2) 与 last_output_ 均更新为本拍值
+ * @note  Ki 项直接取当前误差 e(k)（非误差差分），因此稳态需要持续误差才维持
+ *        输出增量——这与位置式 PID 的积分状态等价，但没有任何积分限幅，
+ *        长时间大误差会靠输出限幅兜底（可能残留积分）。
  */
 float IncrementalPID::compute(float setpoint, float input)
 {

@@ -1,12 +1,11 @@
-#pragma once
-
-#include <cmath>
-#include <cstdint>
-
-/*
- * AirframeModel.h — 机型数据驱动的执行器模型与控制效能矩阵（2026-08-10）
- * =====================================================================
- * 通用层抽象：任何多电机飞行器 = 电机几何表 + 控制输入映射 + 动力学参数。
+/**
+ * @file    AirframeModel.h
+ * @module  固件/控制（机型数据驱动执行器模型与控制效能矩阵，通用层，2026-08-10）
+ * @brief   任意多电机飞行器 = 电机几何表 + 输入映射，正向映射与数值 Jacobian 通用
+ * @details 输入：ActuatorDef 表（几何/推力基向/摆轴/旋向/输入索引）、控制输入 u[]、
+ *          工作点 w0、kT/kQ；处理：computeWrenchGeneric 逐电机叠加 r×F + Q，
+ *          computeJacobianNumeric 中心差分生成 3×N 效率矩阵；
+ *          输出：模型系六维力/力矩 [N, N·m] 或 B 矩阵。
  *
  * 核心设计（2026-08-10 二次迭代修正）：
  *   执行器（ActuatorDef）= 物理电机（kRotor 固定 / kGimbal 摆座）；
@@ -15,16 +14,23 @@
  *   ——差速 Δω 是两电机的"联动转速输入"（w=w0√(1±Δω)），不是独立执行器，
  *     避免把同一电机建模两次（初版双重计数 bug，T11 等价测试抓出）。
  *
- * 坐标系：模型系（x'=推力轴朝机头、y'=右、z'=上摆轴；纵列双发约定，
- * 与 TandemVec_Propulsion.h computeWrench 一致）。
- *
- * 用法：
- *   - 正向映射 computeWrenchGeneric：u → 模型系六维力/力矩
- *   - 数值中心差分 Jacobian computeJacobianNumeric：∂M/∂u（机型无关，
- *     任意电机/输入映射自动正确——换机型 = 填几何+映射表，不写算法）
- *   - 与解析 computeEffectMatrix 逐元素 1e-3 内等价
- *     （test_tandemvec_allocation T11 回归锁定）
+ * @theory  推进力/力矩映射 F_i = T_i·n_i，M_i = r_i×F_i + s_i·Q_i·n_i；
+ *          数值中心差分 Jacobian B = ∂M/∂u
+ * @ref     THY-003 §2（多矢量推进器一般映射、摆角雅可比）；
+ *          见 TandemVec-Paper/ch/03-mapping.tex (eq:six_component)、
+ *          ch/05-allocation.tex (eq:Btrue_allocation)
+ * @frame   模型系（x'=推力轴朝机头、y'=右、z'=上摆轴；纵列双发约定，
+ *          与 TandemVec_Propulsion.h computeWrench 一致）
+ * @units   位置 m、推力基向单位向量、摆角 rad、转速 rad/s、kT [N·s²]、
+ *          kQ [N·m·s²]、力 N、力矩 N·m
+ * @note    换机型 = 填几何 + 映射表，不写算法；数值差分步长 h=1e-4 相对、
+ *          按 max(1,|u|) 自适应，密度受 float 精度限制（相对误差 ~1e-3）。
+ * @test    test_host/test_airframe_generic.cpp、test_host/test_tandemvec_allocation.cpp T11
  */
+#pragma once
+
+#include <cmath>
+#include <cstdint>
 
 // 电机类型
 enum class ActuatorKind : uint8_t

@@ -1,16 +1,21 @@
 /**
- * @file QuaternionMath.h
- * @brief 四元数和三维向量数学运算库
- * @author LShang
- * @date 2025/05/31
- *
- * 本文件包含了用于VTVL火箭飞控系统的四元数和向量运算函数。
- * 主要用于姿态控制、坐标变换和旋转计算。
- *
- * 坐标系约定：
- * - 机体坐标系 (B系, FRD): +X前方, +Y右方, +Z下方
- * - 导航坐标系 (N系, NED): +X北方, +Y东方, +Z下方
- * - 四元数表示从源坐标系到目标坐标系的旋转
+ * @file    QuaternionMath.h
+ * @module  固件/姿态数学（四元数与三维向量）
+ * @brief   提供 double 四元数/向量运算、四元数↔欧拉角、对齐旋转与纯倾斜目标姿态
+ * @details 输入：四元数 q（分量序 [w,x,y,z]）、向量、欧拉角；处理：Hamilton 乘积、
+ *          共轭、归一化、旋转向量、欧拉角互转（3-2-1，Z-Y'-X''）、由推力方向构造
+ *          纯倾斜目标姿态；输出：四元数/欧拉角/向量。
+ *          不变量：所有输出四元数经 `normalizeQuaternion()` 保范；旋转方向为
+ *          “从源系到目标系”，右乘 `q ⊗ Exp(φ)` 表示在源系内叠加旋转。
+ * @theory  四元数乘法与共轭 @ref REF-120 §9.2.1 (9.2.2)(9.2.5) p.253；
+ *          四元数与姿态阵的关系、欧拉角提取 @ref REF-120 §9.2.2 p.256；
+ *          3-2-1 顺序与 theta = -asin(R13) @ref MOD-002 §3（本项目锁定约定）
+ * @frame   机体系 FRD → 导航系 NED（q_N_from_B）；输入向量所在系由参数名显式标注
+ * @units   角度内部 rad，四元数/向量无量纲
+ * @note    分量顺序是 [w,x,y,z]（结构体首成员 w），写常量四元数前必须先核对
+ *          （TandemVec_FCS/AGENTS.md 踩坑记录）；`quaternionToEuler()` 在
+ *          |sin_pitch|→1 时置 yaw=0 处理万向锁，与参考系无关。
+ * @see     `sensor_imu.cpp`、`navigation_task.cpp`、`Quat4f.h`（float 版）
  */
 
 #ifndef QUATERNION_MATH_H
@@ -23,9 +28,8 @@
 // 常量定义 (QuaternionMath.h)
 // ========================================================================
 
-// DEG_TO_RAD 和 RAD_TO_DEG 已在 Arduino.h (或其依赖) 中通过 PI 定义
-// const double DEG_TO_RAD = PI / 180.0f;
-// const double RAD_TO_DEG = 180.0f / PI;
+// DEG_TO_RAD / RAD_TO_DEG 不在此处声明：Arduino.h（及其依赖）已基于 PI 提供，
+// 重复定义会与库头冲突；本文件只使用这两个宏，不自行定义。
 
 // ========================================================================
 // 数据结构定义 (QuaternionMath.h)
@@ -317,20 +321,8 @@ inline Quaternion computeAlignQuaternion(const Vector3 &v_from_unit, const Vecto
   q_align.y = unit_rotation_axis.y * sin_half_angle_val_times_2_qw;
   q_align.z = unit_rotation_axis.z * sin_half_angle_val_times_2_qw;
 
-  // 最终归一化四元数，确保数值精度 (理论上已是单位，但浮点运算可能引入微小误差)
-  // double q_mag_sq = q_align.w * q_align.w + q_align.x * q_align.x + q_align.y * q_align.y + q_align.z * q_align.z;
-  // if (q_mag_sq > 1e-9f)
-  // {
-  //   double q_mag_inv = 1.0f / sqrtf(q_mag_sq);
-  //   q_align.w *= q_mag_inv;
-  //   q_align.x *= q_mag_inv;
-  //   q_align.y *= q_mag_inv;
-  //   q_align.z *= q_mag_inv;
-  // }
-  // else
-  // { // 理论上不应发生，除非v_from和v_to已对齐 (已在开头处理)
-  //   return {1.0f, 0.0f, 0.0f, 0.0f};
-  // }
+  // 说明：q_align 由半角公式构造，理论上已是单位四元数；早期版本在此再做一次
+  // 手工保范，现统一交给 normalizeQuaternion()，避免两处逻辑分叉。
   return normalizeQuaternion(q_align); // 使用独立的归一化函数
 }
 
@@ -406,6 +398,11 @@ inline Quaternion eulerToQuaternion(double roll_rad, double pitch_rad, double ya
  * @param[out] roll_rad 计算出的滚转角 (φ)，单位：弧度
  * @param[out] pitch_rad 计算出的俯仰角 (θ)，单位：弧度
  * @param[out] yaw_rad 计算出的偏航角 (ψ)，单位：弧度
+ * @formula pitch = asin(2(wy-xz))；等价于 theta = -asin(R13)，其中 R13 = 2(xz+wy)
+ * @ref MOD-002 §3（本项目锁定的 theta = -asin(R13) 约定）；REF-120 §9.2.2 p.256
+ * @note 等价变换：R13 = 2(xz+wy)，故 -asin(R13) = asin(-R13) = asin(2(wy-xz))，
+ *       与下方 `sin_pitch = 2.0*(w*y - x*z)` 逐字一致。**不可**改成 asin(R13)，
+ *       否则俯仰符号整体翻转（行为红线）。sin_pitch 已钳位到 [-1,1] 防 NaN。
  */
 inline void quaternionToEuler(const Quaternion &q_N_to_B, float &roll_rad, float &pitch_rad, float &yaw_rad)
 {

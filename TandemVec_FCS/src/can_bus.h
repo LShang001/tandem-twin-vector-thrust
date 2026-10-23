@@ -1,20 +1,22 @@
 /**
- * @file can_bus.h
- * @brief CAN 总线通信模块
- *
- * 基于 MCP2515 (SPI2) + TJA1050 实现 CAN 2.0B 通信：
- * - 500 Kbps, 8 MHz 晶振, SPI2 (PB13/PB14/PB15), CS=PB12, INT=PD10
- * - 200Hz 周期轮发飞控状态数据 (IMU/导航/控制/系统)
- * - 主循环轮询接收 CAN 帧（不在中断中操作 SPI2）
- *
- * CAN ID 分配 (标准帧 11-bit):
- *   0x100~0x10F: IMU 原始数据
- *   0x110~0x11F: EKF 导航状态
- *   0x120~0x12F: 控制指令/输出
- *   0x130~0x13F: 系统状态
- *   0x700~0x7FF: 接收帧 (控制指令/参数/心跳)
- *
- * 详见 docs/电路拓扑参考.md §12.1
+ * @file    can_bus.h
+ * @module  固件/通信（CAN 总线：MCP2515 + TJA1050）
+ * @brief   声明 CAN 总线初始化、200Hz 状态广播任务与诊断查询接口
+ * @details 输入：无（发送侧只读全局状态）；
+ *          处理：初始化时注入独立 SPI2 实例并 500Kbps 建链；任务内先轮询接收、
+ *                再按 8 帧轮发 1 帧（每帧 2×float32 = 8B 满载）；
+ *          输出：11-bit 标准帧状态广播。
+ *          不变量：帧内 float 为本机小端内存布局；接收只消费不解析（下行协议未定稿）。
+ * @theory  N/A（总线驱动与外设配置）
+ * @ref     docs/电路拓扑参考.md §12.1（引脚/SPI2/MCP2515 连接）、
+ *          docs/C路径-参数集中与遥测结构化方案.md §3（消费方与缩放）
+ * @frame   IMU/角速率/角加速度字段为 FRD 机体系；位置/速度为 NED 导航系；
+ *          姿态角 roll/pitch 为 rad，yaw 为 [0,2π) rad
+ * @units   float32 物理量直传（rad/s、m/s²、m、m/s、%），不做定点缩放；
+ *          `CAN_ID_CTRL_OUTPUT` 的 yaw 分量为角加速度 rad/s²（gnc_tel 物理域）
+ * @note    Flash 写页期间（`s_flashWriting` 与 50ms 窗口）整任务跳过，
+ *          否则 MCP2515 超时 reset 会卡死 SPI2；详见 can_bus.cpp。
+ * @see     src/can_bus.cpp、src/state_data.h（gnc_tel/icm_* 数据源）
  */
 
 #pragma once

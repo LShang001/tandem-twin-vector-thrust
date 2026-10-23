@@ -1,4 +1,19 @@
-// MedianFilter.h
+/**
+ * @file    MedianFilter.h
+ * @module  固件/基础设施（滑动中值滤波，纯平台无关）
+ * @brief   固定窗口中值滤波：快速选择求中值，用于解锁/点火/燃料等开关量去抖
+ * @details 输入：逐拍采样值；处理：环形窗口写入 → 拷贝到临时数组（不动原窗口）→
+ *          QuickSelect 求中值；输出：窗口中值。
+ *          不变量：窗口大小必须为奇数，实例化时分配；未填满时用已有样本的中值，
+ *          不返回 0（避免上电瞬间误判低档）。
+ * @theory  N/A（信号处理工具，非飞行模型）
+ * @ref     src/state_data.cpp（unlockMedian/ignitionMedian/fuelMedianFilter 实例与窗口选择）
+ * @frame   N/A
+ * @units   与输入同单位（本工程用于 µs 级 PWM 与 m 级距离）
+ * @note    开销 O(W)（W=窗口长度），复制到 tempArray 是为避免破坏环形缓冲区顺序；
+ *          窗口建议 3-15，过大在 200Hz 任务中会累积成可观测延迟。
+ * @see     src/state_data.h（MedianFilter 实例声明）
+ */
 #ifndef MEDIAN_FILTER_H
 #define MEDIAN_FILTER_H
 

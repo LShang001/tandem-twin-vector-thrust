@@ -1,12 +1,14 @@
-/*
- * 本文件基于 Bolder Flight Systems navigation 库深度重构而来。
- * 原始项目：https://github.com/bolderflight/navigation
- * 当前版本与原始代码已有重大差异。
- *
- * 组合导航/EKF 算法库 —— 统一入口头文件
- * =========================================
- *
- * 本文件是 navigation-main 库的顶层汇聚头文件。库内各模块的职责如下：
+/**
+ * @file    navigation.h
+ * @module  固件/导航（组合导航库统一入口）
+ * @brief   汇聚导航库各模块头文件并说明调用序列、编译宏与坐标约定
+ * @details 输入：无（聚合头）；处理：依次包含 aid_source_status / constants /
+ *          ekf_15_state / earth_model / transforms / tilt_compass / utils；
+ *          输出：bfs 命名空间下的完整导航 API（Ekf15State 为核心）。
+ *          本文件基于 Bolder Flight Systems navigation 库深度重构而来
+ *          （原始项目 https://github.com/bolderflight/navigation），当前版本
+ *          与上游已有重大差异：15 状态 ESKF、GNSS 延迟回放、多类辅助量测。
+ *          模块职责如下：
  *
  *   constants.h          WGS-84 椭球几何参数、地球自转角速度、引力常数。
  *                        这些是地球物理计算的数值基础，全库共享。
@@ -51,12 +53,14 @@
  *                        - GNSS 失联/重捕获协方差膨胀
  *                        - 主机回归测试接缝 (EKF_HOST_REGRESSION)
  *
- * 坐标系约定（全库统一）：
- * - 机体系：FRD (前-右-下, Front-Right-Down)
- * - 导航系：NED (北-东-地, North-East-Down)
- * - 大地坐标：LLA (纬度, 经度, WGS-84 椭球高)，角度单位默认 RAD（弧度）；
- *   全库所有带 AngPosUnit 参数的函数默认值统一为 RAD，传度数需显式指定 DEG
- * - 欧拉角顺序：[Yaw, Pitch, Roll]（ZYX Tait-Bryan 约定，绕 Z→Y→X 旋转）
+ * @theory  15 状态误差状态方程与量测更新（KF 五方程）@ref REF-121 §2.2.1 p.33–34、
+ *          EKF 线性化 @ref REF-121 §6.2.3 p.207–213；捷联速度/位置算法
+ *          @ref REF-120 §9.6 p.296–303、§9.7 p.304–313；误差模型
+ *          @ref REF-120 §9.8 p.317–322；坐标系与符号 @ref MOD-002 §2–§3
+ * @frame   机体系 FRD（前-右-下）/ 导航系 NED（北-东-地）/ LLA(WGS-84 椭球)
+ * @units   SI；角度默认 rad（带 AngPosUnit 参数的函数可用 DEG 显式指定）；
+ *          LLA=(纬度 rad, 经度 rad, 椭球高 m)；速度 m/s、角速度 rad/s
+ * @note    欧拉角顺序 [Yaw, Pitch, Roll]（ZYX Tait-Bryan，绕 Z→Y→X 旋转）。
  *
  * 编译宏控制（由 platformio.ini 的 -D 在编译期传入，实现性能/精度权衡）：
  *
@@ -83,32 +87,19 @@
  *     BFS_NAVIGATION_EMBEDDED_PROFILE_ENABLED    传播分段计时
  *     EKF_HOST_REGRESSION                        暴露协方差/状态转移矩阵供 g++ 测试
  *
- * 使用示例（典型 200 Hz INS + GNSS 组合导航调用流程）：
- *
- *   #include "navigation.h"
- *
- *   bfs::Ekf15State ekf;
- *
- *   // 1. 设置传感器噪声参数
- *   ekf.accel_std_mps2(accel_noise);
- *   ekf.gyro_std_radps(gyro_noise);
- *   // ... 其他噪声参数 ...
- *
- *   // 2. 静基座初始对准 + 状态/协方差初始化
- *   ekf.Initialize(static_accel, static_gyro, pseudo_mag,
- *                  Eigen::Vector3f::Zero(), kOriginLlaRadM);
- *
- *   // 3. 主循环：每导航周期一次
- *   ekf.TimeUpdateTwoSample(delta_theta_1, delta_theta_2,
- *                           delta_v_1, delta_v_2, dt_s);
- *   //    IMU 传播后立即融合 GNSS（如果当前周期有新 epoch）
- *   auto result = ekf.MeasurementUpdateDetailed(gnss_vel, gnss_lla, dt_s);
- *   //    静止辅助
- *   ekf.MeasurementUpdateVelocityDetailed(Vector3f::Zero(), 0.08f, 0.10f);
- *   //    读取 EKF 状态用于控制和输出
- *   auto vel = ekf.ned_vel_mps();
- *   auto pos = ekf.lla_rad_m();
- *   auto att = ekf.quat();
+ * @note    典型调用序列（200 Hz INS + GNSS）：
+ *          ① 设置传感器噪声与初始协方差（accel_std_mps2 / gyro_std_radps /
+ *             init_*_std_* 等 setter）；
+ *          ② Initialize(静止加速度, 静止陀螺, 伪磁或磁力计, 初始速度, 原点 LLA)
+ *             完成静基座对准并填充初始协方差；
+ *          ③ 每导航周期先 TimeUpdateTwoSample(Δθ1, Δθ2, Δv1, Δv2, dt)；
+ *          ④ GNSS epoch 到达时调 MeasurementUpdateDetailed(gnss_vel, gnss_lla,
+ *             dt_avg)，静止确认后调 MeasurementUpdateVelocityDetailed 做 ZUPT；
+ *          ⑤ 用 ned_vel_mps()/lla_rad_m()/quat() 读取状态供控制与遥测。
+ * @redline 四元数右乘姿态传播与逐步保范投影、theta=−asin(R13)、子步 ≤0.004 s
+ *          （见 docs/registers/行为保持红线清单.md）
+ * @see     docs/04-数学建模/代码理论核查/FW-EKF-代码理论核查.md、
+ *          TandemVec_FCS/test_host/test_ekf_15state.cpp
  */
 
 #ifndef NAVIGATION_SRC_NAVIGATION_H_ // NOLINT

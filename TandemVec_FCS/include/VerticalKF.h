@@ -1,3 +1,24 @@
+/**
+ * @file    VerticalKF.h
+ * @module  固件/导航（三状态垂直卡尔曼滤波）
+ * @brief   融合垂直加速度与高度观测，估计高度、垂速与加计零偏（鲁棒版）
+ * @details 输入：去重力后的天向线性加速度、高度量测及其噪声；处理：三状态
+ *          [h,v,b_a] 预测 → N-sigma 残差门限 → Joseph 形式协方差更新 →
+ *          对称化 + 对角限幅；输出：高度/垂速/零偏。
+ *          不变量：协方差始终对称、对角在 [P_min,P_max]；S 有下限防除零。
+ * @theory  线性卡尔曼五方程 x⁻=Fx、P⁻=FPFᵀ+Q、K=P⁻HᵀS⁻¹、x=x⁻+Ky、
+ *          P=(I−KH)P⁻(I−KH)ᵀ+KRKᵀ @ref REF-121 §2.2.1 (2.2.4a–e) p.33–34、
+ *          §2.2.4 p.42–43（Joseph 形式的数值稳定性）；
+ *          纯惯导高度通道不稳定、必须引入气压/无线电高度反馈
+ *          @ref REF-120 §7.5 (7.5.2) p.190–191
+ * @frame   高度“向上为正”（非 NED 的 D 向下），调用方负责符号翻转
+ * @units   m、m/s、m/s²、s；过程噪声 m/s² 与 m/s²/√Hz
+ * @note    Q 的离散形式（0.25dt⁴σ_a²、0.5dt³σ_a²、dt²σ_a²、dtσ_b²）来自
+ *          加速度白噪声驱动的连续模型离散化；门限按标准化残差平方比较
+ *          （`y² > gate²·S`），gate 是 σ 倍数而非方差。
+ * @see     `VerticalKF_2State.h`（去掉零偏的简化版）、`handleVerticalEstimation()`
+ */
+
 #pragma once
 
 #include <Arduino.h>

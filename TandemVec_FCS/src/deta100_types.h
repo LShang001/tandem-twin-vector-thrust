@@ -1,17 +1,24 @@
 /**
- * @file deta100_types.h
- * @brief DETA100 惯性导航模块的纯类型定义（枚举、结构体、类）
+ * @file    deta100_types.h
+ * @module  固件/传感器外设（DETA100 协议纯类型定义）
+ * @brief   DETA100 模块的枚举、数据包结构与位域定义（无实现、可多处包含）
  *
  * 本文件从 DETA100_module.h 中提取了所有纯类型定义，不包含任何变量定义或函数实现，
  * 因此可以被多个 .cpp 文件安全包含而不会产生链接重复定义错误。
  *
- * 包含内容：
- *   - 协议常量（帧头/帧尾、数据类型标识、数据长度）
- *   - GPS 定位状态枚举 (GPSFixType)
- *   - 数据包结构体（IMU/AHRS/INS_GNSS/GeodeticPos/Status）
- *   - 系统状态和滤波器状态位域结构体
- *
- * 协议格式：[帧头(1B)] [类型(1B)] [长度(1B)] [数据(N B)] [CRC8(1B)] [CRC16(2B)] [帧尾(1B)]
+ * @details 输入：无；处理：只定义协议常量与 POD 结构；输出：供 DETA100 解析器与
+ *          state_data.h 使用的类型（全局数据包实例在 state_data.cpp 定义）。
+ *          不变量：结构体布局必须与模块协议逐字节对齐（解析器按字段偏移整块 memcpy），
+ *          改动字段顺序 = 改协议解析。
+ * @theory  N/A（协议类型定义）
+ * @ref     PROTOCOL-001 §二.3（0x30 GPS 帧字段与 INS_GNSS/GeodeticPos 的语义对应）；
+ *          src/icm45686_ins_fast_covariance_blocks.h（EKF 状态编号）；AGENTS.md 硬性代码边界
+ * @frame   IMU 机体系 FRD（加速度/角速度）；大地坐标经纬 rad、高 m；
+ *          姿态四元数与欧拉角为该模块自解算结果（rad），进 EKF 前按项目约定对齐
+ * @units   加速度 m/s²、角速度 rad/s、姿态 rad、经纬 rad、高度 m、时间戳 µs
+ * @note    协议格式：[帧头(1B)] [类型(1B)] [长度(1B)] [数据(N B)] [CRC8(1B)]
+ *          [CRC16(2B)] [帧尾(1B)]；帧头 0xFC、帧尾 0xFD。
+ * @see     src/DETA100_module.h、src/state_data.h
  */
 #pragma once
 

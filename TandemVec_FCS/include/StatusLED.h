@@ -1,11 +1,18 @@
-/*
- * StatusLED.h - 智能状态指示灯控制模块
- * 
- * 功能：
- * 根据无人机当前状态控制 LED 的闪烁模式：
- * 1. 待机/锁定状态 (Standby): 呼吸灯效果 (Breathing)
- * 2. 解锁/飞行状态 (Armed): 慢闪 (1Hz)
- * 3. 校准状态 (Calibrating): 快闪 (10Hz)
+/**
+ * @file    StatusLED.h
+ * @module  固件/基础设施（单色状态灯驱动，PE5 绿灯）
+ * @brief   封装单色 LED 的呼吸/慢闪/快闪三种效果，供灯效任务调用
+ * @details 输入：点灯模式（待机呼吸 / 解锁慢闪 1Hz / 校准快闪 10Hz）；
+ *          处理：模式 → 相位累加 → 占空比；
+ *          输出：GPIO 电平（PE5）。
+ *          不变量：非阻塞——闪烁全部用相位累加实现，任务内禁止 delay()。
+ * @theory  N/A（外设驱动）
+ * @ref     docs/电路拓扑参考.md（指示灯引脚）、AGENTS.md 踩坑记录（上电无信号需门控）
+ * @frame   N/A
+ * @units   闪烁频率 Hz；相位为调用次数计数（无物理单位）
+ * @note    与 RGB 状态灯（Ws2812AppStatus，PD15）并行：单色灯只表“运行/校准/故障”，
+ *          细节状态由 WS2812 呈现；优先级判定在 communication.cpp handleStatusLedTask。
+ * @see     include/Ws2812AppStatus.h、src/communication.cpp（handleStatusLedTask）
  */
 
 #ifndef STATUS_LED_H

@@ -1,3 +1,23 @@
+/**
+ * @file    ubx_config.h
+ * @module  固件/通信（GNSS 接收机 UBX 配置）
+ * @brief   声明 u-blox 接收机自动配置（CFG-PRT/RATE/MSG/NAV5/GNSS/SBAS/CFG）接口
+ * @details 输入：绑定到 Serial4 的接收机（出厂可能仍是 9600 + NMEA）；
+ *          处理：波特率探测 → CFG-PRT 切 921600 与协议掩码 → CFG-RATE 10Hz →
+ *                CFG-MSG 使能 NAV-PVT/NAV-EOE →（可选）CFG-NAV5 动态模型、CFG-GNSS 星座、
+ *                CFG-SBAS、CFG-CFG 固化 → 回读 CFG-PRT 校验；
+ *          输出：UbxCfgResult 各项成败（每步独立，失败不阻塞后续）。
+ *          不变量：只发经典 CFG-* 消息（M8/M9/M10 兼容）；不改变解析库行为。
+ * @theory  N/A（外设配置，非理论模型）
+ * @ref     docs/reference/sparkfun-ublox-gnss（SparkFun u-blox GNSS Library v2.2.29 参考）、
+ *          PROTOCOL-001 §二.3.1（0x30 GPS 帧的 FIX/SACC/VACC 语义取自 UBX NAV-PVT）
+ * @frame   N/A（配置消息不含本项目坐标语义）
+ * @units   波特率 bps、导航周期 ms、仰角/精度门限为协议整数单位（见各参数注释）
+ * @note    Serial4 与 DETA100 共用——仅 `NavDataSource::INTERNAL` 路径才调用本模块；
+ *          DETA100 模式下配置帧会把模块字节流打断。
+ * @see     src/ubx_config.cpp、src/main.cpp（setup §1.6 调用点）、src/communication.cpp
+ *          （DBG `ubxcfg`/`gpsproto` 命令）
+ */
 #pragma once
 #include <Arduino.h>
 
@@ -42,13 +62,13 @@ struct UbxConfigOptions
 
 // 默认配置选项（main.cpp / DBG 使用）
 static const UbxConfigOptions kUbxDefaultCfg = {
-  /* target_baud */ 921600UL,
-  /* nav_rate_ms */ 100,
-  /* airborne_g  */ 0,
-  /* gnss_mask   */ 0,
-  /* sbas_enable */ false,
-  /* nmea_out    */ false,
-  /* persist     */ false,
+  /* target_baud: 目标波特率 */ 921600UL,
+  /* nav_rate_ms: 导航周期 100ms=10Hz */ 100,
+  /* airborne_g:  动态模型 0=不改 */ 0,
+  /* gnss_mask:   星座掩码 0=不改 */ 0,
+  /* sbas_enable: SBAS 差分增强 */ false,
+  /* nmea_out:    false=仅 UBX 输出 */ false,
+  /* persist:     CFG-CFG 固化到接收机闪存 */ false,
 };
 
 /**

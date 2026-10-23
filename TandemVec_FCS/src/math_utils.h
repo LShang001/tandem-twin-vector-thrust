@@ -1,9 +1,21 @@
 /**
- * @file math_utils.h
- * @brief 纯数学/工具函数集合 (header-only, inline)
- *
- * 本文件包含不依赖任何全局状态的纯工具函数。
- * 所有函数标记为 inline，可被多个 .cpp 文件安全包含。
+ * @file    math_utils.h
+ * @module  固件/控制与传感器辅助（纯工具函数）
+ * @brief   提供角度归一、插值/映射、舵机 PWM、模式判定与二维坐标旋转等内联工具
+ * @details 输入→处理→输出：各函数互相独立、header-only、全部 inline，可被多个
+ *          .cpp 安全包含；不持有全局状态，但会读取 `state_data.h` 中的
+ *          `raw_rc_values`/`trajectoryPlanningStarted` 等全局量。
+ *          不变量：所有带范围的函数都先限幅再计算；角度统一 rad。
+ * @theory  二维航向旋转（北东 ↔ 机体前后右）：
+ *          [x_b,y_b]ᵀ = R(−ψ)·[x_n,y_n]ᵀ，R(ψ) 为绕 z 轴旋转
+ *          @ref MOD-002 §2（DCM 语义与列主序元素编号）；
+ *          角度归一化到主值区间 @ref REF-120 §9.2.5 p.264（四元数规范化同源
+ *          的“多值角取主值”处理）
+ * @frame   NED（北东地）↔ 机体系 FRD（前右下），仅用航向 ψ 的平面旋转
+ * @units   角度 rad（函数名带 `_deg` 的例外）；PWM µs；时间 ms（`millis()`）
+ * @note    `SetServoPos()`/`setPulseWidth()` 直接写硬件 PWM，属执行器通路，
+ *          改动 PWM 范围/频率须对照 `TandemVec_Config.h` 与行为红线清单。
+ * @see     `navigation_task.cpp`、`flight_control.cpp`、`sensor_imu.cpp`
  */
 #pragma once
 

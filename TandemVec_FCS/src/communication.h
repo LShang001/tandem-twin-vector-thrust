@@ -1,28 +1,21 @@
 /**
- * @file communication.h
- * @brief 通信与遥测模块：CRSF遥控、MAVLink遥测、ANO地面站、上位机通信
- *
- * 本模块负责飞控系统的所有对外通信：
- *
- *   遥控链路:
- *   - CRSF/ELRS 协议: 420kbaud, 16通道遥控输入, 链路状态回调
- *   - 失控保护: 链路断开时通道归中/归零
- *
- *   遥测链路:
- *   - MAVLink: 兼容 Mission Planner/QGC, HEARTBEAT/ATTITUDE/GPS/IMU/BATTERY
- *   - AnoCom: 匿名地面站协议, 4组分时发送 (IMU+姿态/高度+控制/速度+PWM/位置+GPS)
- *
- *   上位机通信:
- *   - Serial5: 轨迹规划接口, 34字节帧 (8个float位置+速度数据)
- *   - Serial5: 制导指令接收, 14字节帧 (3个float三轴加速度指令)
- *
- *   发动机通信:
- *   - Serial2: 发动机控制器数据收发, 15字节帧 (3个float氧压+阀门数据)
- *
- *   数据记录:
- *   - Serial3: 黑匣子高速数据记录, CSV格式, 1.5Mbaud
- *
- *   注意: MAVLink 和 AnoCom 共用 Serial6，互斥使用。
+ * @file    communication.h
+ * @module  固件/通信（AnoCom 遥测、CRSF/ELRS、MAVLink、黑匣子、DBG 控制台）
+ * @brief   声明全部对外通信链路与调试控制台的入口函数
+ * @details 本头文件按链路分组声明：
+ *          遥控：CRSF/ELRS 输入回调、通道转发、ELRS 回传传感器（电池/姿态/高度/模式/GNSS/变率/温度）；
+ *          遥测：AnoCom（200Hz 双环）与 MAVLink（DBG `proto` 二选一）、Serial5 上位机、
+ *          Serial3/SD 黑匣子、Serial2 发动机；
+ *          调试：DBG 控制台及其子命令（WS2812/GPIO/TIM4/Flash/MagCal/任务统计）。
+ *          不变量：所有下行发送前查 availableForWrite，缓冲不足整帧跳过，绝不阻塞控制环。
+ * @theory  N/A（链路与协议声明，无理论模型）
+ * @ref     PROTOCOL-001 §一~§六（AnoCom 帧格式与功能码）；COMM-001 §3（频率表）、
+ *          §4（双环/组模式）；GCS-001 §2（0xE0/0xE1 参数读写）；AGENTS.md 踩坑记录
+ * @frame   协议帧与坐标系无关 N/A；帧内位置/速度为 NED，姿态字段按协议转角度
+ * @units   帧内缩放见各帧发送点；函数参数注释里只写物理量单位（µs/deg/rad/s²）
+ * @note    MAVLink 和 AnoCom 共用 Serial6，按互斥使用（`s_mav_active` 标志保证）；
+ *          Serial6 波特率唯一来源为 state_data.h 的 `SERIAL6_BAUDRATE`（921600）。
+ * @see     src/communication.cpp、src/ano_params.h、src/ano_vars.h、src/mavlink_bridge.h
  */
 #pragma once
 #include "state_data.h"
@@ -127,23 +120,26 @@ void setup_transmitter_uart();
 void setup_led();
 
 /**
- * @brief 匿名地面站通信任务 (200Hz, 双向)
+ * @brief 匿名地面站通信任务 (200Hz, 双向；★2026-08-10 COMM-001 双环结构)
  *
  * 上行接收 (第一层):
  * - 每次调用开头执行 receiveData() 消费 Serial6 上行字节 (单轮上限 256 字节)
  * - 校验通过的帧触发 onAnoRxFrame 回调
- * - 对参数类帧 (0xE0/0xE1) 回传 0x00 校验帧 (安全协议, 占位实现)
- * - 对 0xE0 读取设备信息命令返回 0xE3 设备信息帧
+ * - 对参数类帧 (0xE0/0xE1) 回传 0x00 校验帧 (真实 SC/AC)
+ * - 对 0xE0 读取设备信息命令返回 0xE3 设备信息帧；0xF3 回变量清单
  * - 回传 TX 发送带 availableForWrite 非阻塞保护, 不执行任何控制逻辑
  *
- * 下行发送: 4 组分时发送机制，每 4 个调用周期完成一轮:
- * - 组0: IMU数据 + 姿态欧拉角 + 目标姿态
- * - 组1: 高度数据 + 飞控模式 + 姿态控制量
- * - 组2: 目标速度 + 飞行速度 + PWM输出
- * - 组3: 位置偏移 + 电压电流(氧压) + GPS信息
+ * 下行发送: 200Hz tick 取模分档（详见 communication.cpp handleAnoCom 的 L1 文档）:
+ * - 快环 100Hz (奇数 tick): 0x01 IMU + 0x03 欧拉 + 0x0A 目标姿态 + 0x21 控制量 + 0xF1 执行器
+ * - 位置 50Hz (t%4==2): 0x08 位置偏移
+ * - 遥控 25Hz (t%8==4): 0x40 遥控器数据
+ * - 显示 25Hz (t%8==6): 0x05 高度 + 0x06 模式 + 0x07 速度 + 0x20 PWM + 0x0B 目标速度
+ * - GNSS/氧压 10Hz (t%20==10): 0x30 GPS + 0x0D 电压电流(含氧压占用)
+ * - 同 tick 多帧用组模式 (beginGroup/endGroup) 合并为单次 write
  *
- * 下行发送前检查 Serial6 TX 缓冲空间，不足时跳过本帧。
- * 数据在新周期开始时一次性采集，避免发送过程中数据不一致。
+ * @note 旧描述"4 组分时轮发 50Hz"已废止（COMM-001 决策 D3/D4）——帧格式与缩放零改动，
+ *       只改发送频率与组包方式；快变字段每 tick 采集（陈旧度 ≤5ms）。
+ * @ref   COMM-001 §3（频率表）、§4 A3/B1/B2；AGENTS.md 踩坑记录（遥测双环结构）
  */
 void handleAnoCom();
 

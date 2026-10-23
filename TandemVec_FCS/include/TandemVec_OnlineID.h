@@ -1,32 +1,41 @@
-// ============================================================
-//  TandemVec_OnlineID.h — 在线系统参数辨识 + 自适应增益调度
-//
-//  辨识模型（利用物理逆解层）:
-//    在物理逆解 I·α→M→分配 架构下，α_cmd 即为期望角加速度。
-//    实际角加速度 α_actual = ω̇（陀螺数值微分）
-//    关系: α_actual = b × α_cmd + d
-//      其中 b = I_nominal / I_actual （惯量比）
-//            d = 总扰动（CG偏移 + 推力不对称 + 风）
-//
-//  三层辨识:
-//    L1: b(惯量比) — 从 α 和 ω̇ 的高速数据中递推最小二乘(RLS)
-//    L2: CG_offset — 从悬停稳态积分器 I_term 中提取配平力矩
-//    L3: kT_bias — 从悬停油门 vs 推力关系标定
-//
-//  自适应调度:
-//    识别到 b 更新 → 更新 Kp_r ← Kp_r_nominal / sqrt(b)
-//    识别到 CG_offset → 前馈补偿 α_trim ← M_trim / I_nominal
-//    识别到 kT_bias → 更新 MAX_THRUST 和油门映射
-//
-//  安全性:
-//    - 只在充分激励条件下更新（ω̇ 方差 > 阈值）
-//    - 更新率限制（每参数每2秒最多调整10%）
-//    - 参数范围硬约束（b ∈ [0.3, 3.0], CG ∈ [-20, 20]mm）
-//
-//  参考文献:
-//    Åström, K.J. & Wittenmark, B. (1995). Adaptive Control.
-//    Ljung, L. (1999). System Identification: Theory for the User.
-// ============================================================
+/**
+ * @file    TandemVec_OnlineID.h
+ * @module  固件/控制（在线参数辨识，纯观测；不写回增益）
+ * @brief   遗忘因子 RLS 在线估计惯量比 b 与总扰动 d，并从内环积分项提取 CG 偏移
+ * @details 输入：α_cmd（本拍命令角加速度）、ω（deg/s，内部转 rad/s 再微分）、
+ *          i_term（内环积分项）、油门%、dt；处理：三轴 FFRLS + 激励门控 +
+ *          变化率/范围约束 + 悬停门控的 CG 提取；输出：b_est/d_est/cg_est_mm
+ *          与"建议 Kp"（仅供地面站，**不回写控制参数**）。
+ *
+ * 辨识模型（利用物理逆解层）:
+ *   在物理逆解 I·α→M→分配 架构下，α_cmd 即为期望角加速度。
+ *   实际角加速度 α_actual = ω̇（陀螺数值微分）
+ *   关系: α_actual = b × α_cmd + d
+ *     其中 b = I_nominal / I_actual（惯量比，激励频率下的集总量）
+ *          d = 总扰动（CG偏移 + 推力不对称 + 风）
+ *
+ * 三层辨识:
+ *   L1: b（惯量比）— 从 α 与 ω̇ 的高速数据递推最小二乘（FFRLS）
+ *   L2: CG_offset — 从悬停稳态积分器 I_term 提取配平力矩
+ *   L3: kT_bias — 从悬停油门 vs 推力关系标定（当前未接入）
+ *
+ * 参考增益（只显示，不闭环）:
+ *   b 更新 → 建议 Kp_r = Kp_nominal / sqrt(b)（量级方向参考，不是数值）
+ *   CG_offset → 未来可做 α_trim ← M_trim / I_nominal 前馈（未实施）
+ *
+ * 安全性:
+ *   - 只在充分激励条件下更新（σ² > 4，即 α_cmd RMS > 2 rad/s²）
+ *   - 更新率限制（每拍相对变化 ≤ 5%）
+ *   - 参数范围硬约束（b ∈ [0.3, 3.0]，CG ∈ [−20, 20] mm）
+ *
+ * @theory  带遗忘因子的递推最小二乘（FFRLS）
+ * @ref     THY-003 §1.2（I·ω̇ = M − ω×Iω，惯量比来源）；
+ *          见 TandemVec-Paper/ch/16-adrc-onlineid.tex (eq:rls_model、eq:rls_update、
+ *          eq:excitation、eq:gain_scheduling)；AGENTS.md（只观测不闭环的接入流程）
+ * @frame   N/A（逐轴独立辨识；轴序 [0]=roll [1]=pitch [2]=yaw，与 α/ω 下标一致）
+ * @units   α [rad/s²]、ω 传入 deg/s（内部 ×π/180）、dt s、油门 %、CG mm
+ * @test    test_host/test_online_id.cpp
+ */
 #pragma once
 #include <cmath>
 #include <algorithm>
@@ -35,10 +44,9 @@
 // ============================================================
 //  遗忘因子递推最小二乘 (FFRLS)
 // ============================================================
-//  模型: y = φᵀθ + ε
-//    y = α_actual (测量: ω̇)
-//    φ = [α_cmd, 1]ᵀ (回归向量: 命令+常数偏移)
-//    θ = [b, d]ᵀ (参数: 惯量比 + 总扰动)
+//  公式模型：y = φᵀθ + ε（单轴标量回归）
+//  其中 y = α_actual（测量 ω̇）；φ = [α_cmd, 1]ᵀ（回归向量）；
+//  θ = [b, d]ᵀ（惯量比 + 总扰动）。
 struct RLS_2Param
 {
     // 协方差矩阵 P (2×2, 对称存储)

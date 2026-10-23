@@ -1,11 +1,19 @@
 /**
- * TVC控制量计算函数(3阶多项式回归版本)
- * 根据两个摆角输入，计算对应的两个控制量输出
- *
- * @param s1_angle S1摆角输入(度)
- * @param s2_angle S2摆角输入(度)
- * @param s1_control 输出参数: S1控制量
- * @param s2_control 输出参数: S2控制量
+ * @file    TVC_Control_3rdOrder_Poly.h
+ * @module  固件/控制（历史 TVC 舵机标定模型，已弃用）
+ * @brief   用 3 阶多项式回归把两个摆角映射为两路舵机控制量（0–100）
+ * @details 输入：S1/S2 目标摆角 [deg]；处理：9 项多项式特征（含交叉项）
+ *          分别对 S1/S2 控制量做线性组合；输出：两路控制量（无量纲 0–100）。
+ *          ⚠️ 本模型已弃用：现行控制分配走 TandemVec_ControlAllocation.h，
+ *          舵机映射走 flight_control.cpp 的层3（ServoConfig 齿轮比 + 标定）。
+ *          保留文件仅为对照历史标定数据，**不得接入控制链**。
+ * @theory  台架/试飞数据拟合的经验多项式（无物理推导）
+ * @ref     CTL-001 §2（本构型不用该模型；分配链理论见 THY-003 §3）
+ * @frame   N/A（摆角→控制量的标量映射，坐标系已在标定数据中固化）
+ * @units   输入 deg；输出控制量 0–100（≈PWM 百分比）
+ * @note    ★ 9 个系数来自旧共轴构型的回归，系数含义与当前纵列布局无关；
+ *          重新标定请改 ServoConfig（half_travel_deg / zero_*_pct / dir_*），
+ *          不要复活本多项式。
  */
 inline void calculateTVCControl(float s1_angle, float s2_angle, float &s1_control, float &s2_control)
 {

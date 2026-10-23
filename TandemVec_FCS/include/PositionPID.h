@@ -1,32 +1,49 @@
-// ============================================================
-//  PositionPID.h — 位置式PID控制器类 (v3)
-//
-//  v2 特性:
-//    · 访问器: getKp/Ki/Kd, getIntegral, getLastOutput  (遥测+自适应)
-//    · 2-DOF 设定点加权: setSetpointWeight(b,c)  (跟踪vs抗扰解耦)
-//    · 反算抗饱和: back-calculation anti-windup  (比条件积分更快恢复)
-//    · 输出变化率限制: setOutputRateLimit(max_step)  (防阶跃冲击)
-//    · 无扰切换: setIntegralEnable(true)时不跳变 (bumpless transfer)
-//
-//  v3 修复（均为原实现中的功能性缺陷，见各处 ★ 注释）:
-//    1. 输出变化率限制失效 —— computePID2DOF 提前写 lastOutput_，
-//       导致 applyRateLimit 中 delta 恒为 0，限速永不触发。
-//    2. 积分状态无界 —— integralLimit_ 只钳制 iOut 而非 integral_ 本身，
-//       200Hz/Ki=3e-4 下 1s 即累积到 1e4，退饱和迟滞可达数秒。
-//    3. 无扰切换未扣除 D 项 —— dNow 是恒 0 的死表达式且从未被使用。
-//    4. 反算抗饱和量纲错误 —— excess(输出量) 与 integral_(误差·秒) 差一个 ki_，
-//       Ki=3e-4 时回退量被低估约 3000 倍，功能几乎无效。
-//    5. 新增 NaN/Inf 防护 —— 单个非有限输入曾会永久污染积分器与微分滤波器，
-//       此后输出恒为 NaN 且无法自愈；现拦截并冻结该拍，计数供遥测。
-//
-//  积分约定: integral_ += error*dt（dt 显式传入，秒）——Ki 为连续域增益，
-//  与调用频率解耦（2026-08-09 重构；旧约定 Ki 隐含 200Hz，参数随频率漂移）。
-//            原 setDtScaling(bool) 因接口拿不到 dt 恒为死代码，已删除。
-//
-//  行为兼容性: v1/v2 默认配置下（Kb=0、rateLimit=0、b=1、c=0）仅
-//    "积分状态钳位"会改变现役行为 —— 稳态输出不变，饱和恢复更快。
-//    回归测试见 test_host/test_position_pid.cpp
-// ============================================================
+/**
+ * @file    PositionPID.h
+ * @module  固件/控制（位置式 PID v3，平台无关，可宿主机回归）
+ * @brief   位置式 PID：2-DOF 设定点加权 + 积分状态钳位 + 反算抗饱和 + NaN 防护
+ * @details 输入：setpoint / input / dt（秒）；处理：P（b 加权）+ I（积分分离、
+ *          状态钳位）+ D（c 加权、微分先行、一阶滤波）→ 输出限幅 → 可选
+ *          输出变化率限制；输出：控制量（量纲由调用方决定）。
+ *          被 12 个控制环复用（姿态/速率/垂直/水平），固件与宿主机测试共用。
+ *
+ * v2 特性:
+ *   · 访问器: getKp/Ki/Kd, getIntegral, getLastOutput  (遥测+自适应)
+ *   · 2-DOF 设定点加权: setSetpointWeight(b,c)  (跟踪vs抗扰解耦)
+ *   · 反算抗饱和: back-calculation anti-windup  (比条件积分更快恢复)
+ *   · 输出变化率限制: setOutputRateLimit(max_step)  (防阶跃冲击)
+ *   · 无扰切换: setIntegralEnable(true)时不跳变 (bumpless transfer)
+ *
+ * v3 修复（均为原实现中的功能性缺陷，见各处 ★ 注释）:
+ *   1. 输出变化率限制失效 —— computePID2DOF 提前写 lastOutput_，
+ *      导致 applyRateLimit 中 delta 恒为 0，限速永不触发。
+ *   2. 积分状态无界 —— integralLimit_ 只钳制 iOut 而非 integral_ 本身，
+ *      200Hz/Ki=3e-4 下 1s 即累积到 1e4，退饱和迟滞可达数秒。
+ *   3. 无扰切换未扣除 D 项 —— dNow 是恒 0 的死表达式且从未被使用。
+ *   4. 反算抗饱和量纲错误 —— excess(输出量) 与 integral_(误差·秒) 差一个 ki_，
+ *      Ki=3e-4 时回退量被低估约 3000 倍，功能几乎无效。
+ *   5. 新增 NaN/Inf 防护 —— 单个非有限输入曾会永久污染积分器与微分滤波器，
+ *      此后输出恒为 NaN 且无法自愈；现拦截并冻结该拍，计数供遥测。
+ *
+ * 积分约定: integral_ += error*dt（dt 显式传入，秒）——Ki 为连续域增益，
+ * 与调用频率解耦（2026-08-09 重构；旧约定 Ki 隐含 200Hz，参数随频率漂移）。
+ *          原 setDtScaling(bool) 因接口拿不到 dt 恒为死代码，已删除。
+ *
+ * 行为兼容性: v1/v2 默认配置下（Kb=0、rateLimit=0、b=1、c=0）仅
+ *   "积分状态钳位"会改变现役行为 —— 稳态输出不变，饱和恢复更快。
+ *   回归测试见 test_host/test_position_pid.cpp
+ *
+ * @theory  2-DOF 位置式 PID（设定点加权 b/c、反算抗饱和、微分先行）@ref REF-121 §2.2.1
+ *          （标准离散 PID/状态空间形式对照）；本项目实现约定另见
+ *          @ref TandemVec-Paper/ch/07-control.tex (eq:sas_pitch–eq:sas_roll)
+ * @frame   N/A（标量控制器；坐标系语义由调用方决定）
+ * @units   dt 秒；Ki 连续域（1/s 量纲，与输入输出单位组合决定）；
+ *          Kd 作用于"每拍差分（未除 dt）"的微分值，kd≠0 时量纲隐含调用频率
+ * @note    ★ D 项不是连续域微分：dOut = kd·(c·Δsp − Δinput) 用的是每拍差分，
+ *          未除以 dt。速率环 kd 全 0 时无影响；若将来调非零，必须连同单位/
+ *          参数迁移一起处理（速率环需 ×180/π 才与角度域一致）。
+ * @test    test_host/test_position_pid.cpp
+ */
 #ifndef POSITION_PID_H
 #define POSITION_PID_H
 
@@ -275,10 +292,9 @@ private:
         }
 
         // —— D项: 2-DOF 设定点加权 ——
-        // 当前为每拍差分（未除以 dt）：dOut = kd * (c*Δsetpoint − Δinput)。
-        // c=0 (default): 纯微分先行, D只作用于测量值。若未来改为
-        // 连续时间导数，必须同步迁移所有非零 kd 参数及其单位元数据。
-        // c=1: D作用于误差
+        // 当前为每拍差分（未除以 dt）。c=0（默认）时纯微分先行，D 只作用于
+        // 测量值的每拍差分；c=1 时 D 作用于误差。若未来改为连续时间导数，
+        // 必须同步迁移所有非零 kd 参数及其单位元数据。
         float dOut = kd_ * (setpointWeightC_ * rawDerivative + (1.f - setpointWeightC_) * filteredDerivative);
 
         // —— 总输出 ——

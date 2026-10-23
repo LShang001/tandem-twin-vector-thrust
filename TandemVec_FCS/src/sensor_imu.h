@@ -1,18 +1,24 @@
 /**
- * @file sensor_imu.h
- * @brief IMU 传感器模块：初始化、数据采集与预处理
- *
- * 本模块负责板载 ICM42688 六轴惯性测量单元和磁力计的初始化与数据采集。
- * 磁力计通过 MagSensor 统一管理层自动探测（IST8310@0x0E 优先，其次 QMC5883L@0x0D），
- * 输出统一对齐到机体 FRD 系。
- * 数据处理流程：
- *   1. 读取原始传感器数据 (加速度g、角速度dps)
- *   2. IMU 自动校准（零偏补偿）
- *   3. 低通滤波降噪
- *   4. 坐标系变换 (传感器系RUB -> 机体系FRD -> Madgwick系FLU)
- *   5. Madgwick AHRS 姿态解算
- *   6. 四元数坐标系修正 (FLU/NWU -> FRD/NED)
- *   7. 打包到 IMU_Packet 和 AHRS_Packet 全局数据结构
+ * @file    sensor_imu.h
+ * @module  固件/传感器（IMU 与磁力计）
+ * @brief   声明 ICM42688 六轴 IMU、磁力计的初始化与高频数据采集接口
+ * @details 输入：SPI/I2C 原始寄存器数据；处理：`initICM42688()` 配置滤波/量程并
+ *          采集静止均值初始化滤波器，`readIMUData()` 完成校准→低通→RUB→FRD→
+ *          增量累加→FLU 适配→Madgwick→四元数修正→打包；
+ *          输出：`IMU_Packet`（FRD, rad/s, m/s²）、`backup_ahrs_*`、
+ *          `imu_delta_*` 双子样增量缓冲。磁力计经 MagSensor 统一探测并对齐 FRD。
+ * @theory  坐标变换 RUB→FRD→FLU 与四元数右乘修正 q_FRD_from_NED =
+ *          q_FRD_from_FLU ⊗ q_FLU_from_NWU ⊗ q_NWU_from_NED
+ *          @ref REF-120 §9.2.2 p.256（四元数与姿态阵）、@ref MOD-002 §3（分量序与右乘）；
+ *          Madgwick 为梯度下降姿态滤波（工程实现，非秦书算法）
+ * @frame   传感器 RUB → 机体系 FRD → Madgwick 输入 FLU/NWU → 输出 FRD/NED
+ * @units   加速度 g（原始）/m/s²（输出），角速度 dps（原始）/rad/s（输出），
+ *          时间 µs（时间戳）/s（积分步长），温度 °C
+ * @redline 传感器轴映射（`bX=-sZ`、`bY=+sX`、`bZ=-sY`）——2026-08-07 轴置换的
+ *          实机锚点，改前必须与实飞存档版逐字对照（见 TandemVec_FCS/AGENTS.md）
+ * @note    本模块只维护 `backup_ahrs_*` 后台变量；`AHRS_Packet` 由导航输出桥统一
+ *          写入，别在此处直接覆盖。磁力计馈入 Madgwick 的开关默认关闭。
+ * @see     `sensor_imu.cpp`、`navigation_task.cpp`、`TandemVec_FCS/AGENTS.md`
  */
 #pragma once
 #include "state_data.h"
@@ -54,7 +60,8 @@ int initICM42688();
  * 8. Madgwick AHRS 姿态更新 (6轴/9轴模式)
  * 9. 四元数坐标系修正: FLU/NWU -> FRD/NED
  * 10. 欧拉角提取和航向偏置修正
- * 11. 打包到 IMU_Packet 和 AHRS_Packet
+ * 11. 打包到 IMU_Packet（FRD, rad/s, m/s²）与 backup_ahrs_* 后台变量；
+ *     AHRS_Packet 由 navigation_task.cpp 的输出桥统一写入
  *
  * @return true 数据读取和处理成功, false 无新数据
  */

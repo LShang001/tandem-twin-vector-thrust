@@ -1,3 +1,37 @@
+/**
+ * @file    navigation_task.cpp
+ * @module  固件/导航（EKF 组合导航任务实现）
+ * @brief   实现 200 Hz 导航状态机：IMU 双子样预测、静止/ZUPT/重力/AHRS 辅助、
+ *          GNSS 位置速度更新、双矢量航向、气压高度、光流速度与输出桥
+ * @details 输入：IMU 平均比力与角速度、双子样增量、UBX epoch 队列、DPS310 相对高度、
+ *          光流速度/测距、磁力计（当前为伪磁常量）、DETA100（可选直出）；
+ *          处理：取数（关中断快照）→ 静止检测 → EKF 初始化/预测 →
+ *          静止辅助或 AHRS 姿态 → GNSS 全质量/降级更新或首次重锚 →
+ *          光流速度 → 气压高度 → 输出桥（EKF→全局状态）；
+ *          输出：`AHRS_Packet`/`INS_GNSS_Packet`/`Geodetic_Pos_Packet`/
+ *          `relative_*`/`estimated_height`/`estimated_velocity` 与 `gnc_tel` 诊断。
+ *          不变量：GNSS 只用本帧出队 epoch 快照；静止确认由外部速度可推翻；
+ *          EKF 是唯一姿态输出源（DETA100 直出与未初始化两情形除外）。
+ * @theory  姿态四元数右乘更新 q⊗Exp(ωΔt) @ref REF-120 §9.2 (9.2.14) p.268；
+ *          比力方程 V̇ⁿ=Cⁿ_b f^b−(2ω_ie+ω_en)×Vⁿ+gⁿ @ref REF-120 §7.4 (7.4.6) p.189；
+ *          双子样速度增量（旋转/划摇补偿）@ref REF-120 §9.6 (9.6.9)(9.6.17)(9.6.19) p.298–299；
+ *          位置速率 L̇=V_N/(R_m+h) 等 @ref REF-120 §7.2/§8.1；
+ *          KF 五方程与 Joseph 形式 @ref REF-121 §2.2.1 p.33–34、§2.2.4 p.42–43；
+ *          NIS 门控/系统级 FDI @ref REF-121 §7.3.1 p.255–259；
+ *          组合导航阻尼须用外来信息 @ref REF-121 §8.2.3 p.291；
+ *          初始对准与航向可观性 @ref REF-120 §9.9 p.322–338；
+ *          3-2-1 欧拉角 theta=-asin(R13) @ref MOD-002 §3
+ * @frame   NED（北东地）/ FRD（前右下）；LLA 为 WGS84 弧度；机体系加速度为比力
+ * @units   rad、rad/s、m、m/s、m/s²、s/ms/µs（时间）、°C、uT
+ * @redline 四元数/双子样姿态更新、theta=-asin(R13)、ZUPT 与静止退出门限、
+ *          GNSS R 地板、光流速度/测距双新鲜度通道、static gyro 的 throttle≥3% 跳过
+ *          （逐条见行为保持红线清单与 TandemVec_FCS/AGENTS.md 踩坑记录）
+ * @note    本文件是导航算法的主要“事实源”，但 EKF 内部方程在
+ *          `lib/navigation-main/src/ekf_15_state.h`（fw-ekf 区域）。
+ *          修改门限/参数前先读 AGENTS.md 的 EKF 踩坑记录与核查报告。
+ * @see     `navigation_task.h`、`FW-NAV-代码理论核查.md`、`docs/04-数学建模/代码理论核查/`
+ */
+
 #ifdef BFS_NAV_PROFILE
 #include <stdint.h>
 void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
@@ -13,6 +47,12 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 
 #include "ins_gnss_dynamic_weight.h"
 #include "ins_gnss_epoch_timing.h"
+#include "ins_gnss_delay_auto.h"
+#include "ins_vibration_adaptive.h"
+#include "ins_inertial_reference.h"
+#include "ins_bias_jump_monitor.h"
+#include "ins_bias_temp_observer.h"
+#include "ins_bias_temp_table.h"
 #include "ins_altitude_reference.h"
 #include "ins_static_detector.h"
 #include "ins_static_aid_profile.h"
@@ -183,6 +223,17 @@ static constexpr Icm45686GnssDynamicWeightConfig kGnssDwCfg{
 static Icm45686StaticDetector static_det;
 static constexpr float GNSS_FIRST_REANCHOR_MAX_AGE_S = 0.15f;
 
+/**
+ * @brief 判断一个 UBX epoch 是否通过全部质量门限，并只在此刻刷新 GNSS 快照
+ * @details 输入：出队 epoch；处理：pvt/eoe iTOW 一致性 → 重复 iTOW 判重 →
+ *          动态权重最小门限 → 写 `gnss_status.last_obs_*`；输出：是否可用于
+ *          全质量融合。不变量：快照只反映通过全部检查的 epoch，避免地面站
+ *          显示 fix 而 EKF 实际拒收（2026-08-10 审查修复）。
+ * @param[in] epoch 本帧出队的 UBX 历元（iTOW、fix、精度、LLA、NED 速度）
+ * @return true 通过全部门限；false 任一检查失败（同时登记对应计数器）
+ * @note 最小门限是 fix≥3D、卫星数≥3、h_acc>0，精度本身不丢弃、只作为 R 权重。
+ * @see `Icm45686ComputeGnssDynamicWeights()`、`applyDowngradedGnssUpdate()`
+ */
 static bool gnssEpochPassesFullQuality(const bfs::UbxEpoch &epoch)
 {
   // 动态权重：最小门限仅需 fix>=3D + sv>=3 + h_acc>0，接收机精度直接作为 R
@@ -233,6 +284,15 @@ static bool gnssEpochPassesFullQuality(const bfs::UbxEpoch &epoch)
   return true;
 }
 
+/**
+ * @brief 判断 epoch 是否满足“只融速度、位置降权”的降级门限
+ * @details 输入：epoch；处理：iTOW 一致性与重复判重 → fix≥3D、卫星数、
+ *          速度精度与 pDOP 门限；输出：是否可走降级路径。
+ * @param[in] epoch 本帧 UBX 历元
+ * @return true 可降级融合；false 完全不融合
+ * @note 降级门限比全质量门限宽松（位置精度不参与），但速度精度必须可信。
+ * @see `gnssEpochPassesFullQuality()`、`applyDowngradedGnssUpdate()`
+ */
 static bool gnssEpochQualifiesForDowngrade(const bfs::UbxEpoch &epoch)
 {
   if (epoch.pvt_tow_ms != epoch.eoe_tow_ms)
@@ -251,6 +311,19 @@ static bool gnssEpochQualifiesForDowngrade(const bfs::UbxEpoch &epoch)
          (epoch.pvt_pdop <= 0.0f || epoch.pvt_pdop < GNSS_MAX_PDOP);
 }
 
+/**
+ * @brief 用首次真实 GNSS 把 EKF 位置/速度硬重锚到真值，并恢复真实起飞点
+ * @details 输入：GNSS 速度、GNSS LLA、量测年龄；处理：按速度把 LLA 外推到当前
+ *          时刻 → `ResetPositionVelocityToGnss()` → 若解锁过则用重锚前后相对
+ *          位移反推真实起飞点并重设原点 → 否则把原点设为当前点；
+ *          输出：EKF 位置/速度、`relative_*`、导航原点。
+ *          不变量：只改位置/速度与原点，姿态与 IMU 零偏保持连续。
+ * @param[in] gnss_vel_ned      本帧 GNSS 速度 [m/s]（NED）
+ * @param[in] gnss_lla          本帧 GNSS 位置（WGS84 弧度 + 椭球高 m）
+ * @param[in] measurement_age_s 量测年龄 [s]，用于把位置外推到当前时刻
+ * @note 无 GNSS 假原点启动后的“首次真实锚定”专用；普通帧走残差门控更新。
+ * @see `InsGnssShouldReanchor()`、`setNavigationOriginFromLlaRad()`
+ */
 static void reanchorNavigationToGnss(const Eigen::Vector3f &gnss_vel_ned,
                                      const Eigen::Vector3d &gnss_lla,
                                      const float measurement_age_s)
@@ -294,6 +367,21 @@ static void reanchorNavigationToGnss(const Eigen::Vector3f &gnss_vel_ned,
   is_origin_lla_set = true;
 }
 
+/**
+ * @brief 边缘 GNSS 解（仅速度可靠、位置不可信）的降级融合
+ * @details 输入：epoch、步长、量测年龄；处理：把位置 R 放大到 1e4（等价关闭
+ *          位置融合，防止弱位置把原点拉偏）→ 速度 R 用接收机 spd_acc →
+ *          `MeasurementUpdateDetailed()` → 慢速校正后台 AHRS 航向偏置；
+ *          输出：EKF 速度更新结果与 `gnss_status.last_test_ratio`。
+ *          不变量：位置量测使用 epoch 的真实 LLA，不能用 EKF 自身估计当量测。
+ * @formula R_pos = 1e4，R_vel = spd_acc；K→0 仅对位置通道生效
+ * @ref REF-121 §2.2.1 p.33（量测噪声 R 的物理含义与降权处理）；
+ *          航向弱可观时不要用速度新息“造”航向观测 @ref REF-121 §8.2.3 p.291
+ * @frame NED / WGS84
+ * @units m、m/s、s
+ * @note 降级帧也计为有效 3D fix（`fix3d_count++`），但不刷新全质量快照。
+ * @see `gnssEpochQualifiesForDowngrade()`
+ */
 static bool applyDowngradedGnssUpdate(const bfs::UbxEpoch &epoch,
                                       float dt_s,
                                       float measurement_age_s)
@@ -310,7 +398,7 @@ static bool applyDowngradedGnssUpdate(const bfs::UbxEpoch &epoch,
   // ★ 2026-08-12 审查修复：原实现把 nav_ekf.lla_rad_m()（EKF 自身当前估计）
   // 当作"GNSS 位置量测"，位置新息变成"EKF 当前 vs EKF 重放快照"的自差≈0，
   // 是语义错误（R=1e4 下当前影响小，但未来调低 R 会形成假位置融合）。
-  // 改传 epoch 的真实 LLA，与全质量路径（本文件 1116 行）一致；
+  // 改传 epoch 的真实 LLA，与全质量路径（`MeasurementUpdateDetailed()` 调用点）一致；
   // 位置融合关闭仍由 R=1e4 保证（防止弱位置拉偏原点），语义不再依赖"自差=0"。
   const Eigen::Vector3d gnss_lla_rad(
       epoch.lat_rad, epoch.lon_rad, static_cast<double>(epoch.alt_wgs84_m));
@@ -327,7 +415,8 @@ static bool applyDowngradedGnssUpdate(const bfs::UbxEpoch &epoch,
     // ★ 2026-08-12 审查修复：backup_ahrs_yaw 在数据源处已叠加校正量
     // （sensor_imu.cpp:406 backup_ahrs_yaw = wrap(yaw + ahrs_yaw_correction_rad)），
     // 原式再减 ahrs_yaw_correction_rad 会双重抵消，使 yaw_err = EKF - raw 与校正量无关，
-    // 闭环退化为开环积分器，长降级下校正量持续缠绕。此处与全质量路径（本文件 1183 行）统一。
+    // 闭环退化为开环积分器，长降级下校正量持续缠绕。此处与全质量路径的
+    // AHRS 慢校正段统一。
     float yaw_err = wrapAnglePi(nav_ekf.yaw_rad() - backup_ahrs_yaw);
     yaw_err = constrain(yaw_err, -0.0025f, 0.0025f /* ~28.6 deg/s @200Hz */);
     ahrs_yaw_correction_rad = wrapAnglePi(ahrs_yaw_correction_rad + yaw_err);
@@ -391,6 +480,27 @@ void setNavigationOriginFromLlaRad(const double lat_rad, const double lon_rad, c
   origin_alt_m = alt_m;
 }
 
+/**
+ * @brief 双矢量航向观测：由 GNSS 航迹角与光流侧滑角反解机头航向并送入 EKF
+ * @details 输入：本帧 GNSS 速度快照（NED）、光流机体速度（FRD）、滤波后角速度；
+ *          处理：静止/GNSS 不新鲜/光流不新鲜直接跳过 → 三道门控（低速、大机动、
+ *          尺度一致性）→ 航向 = 航迹角 − 侧滑角 → 动态 R → 标量航向更新；
+ *          输出：EKF 航向量测（无返回值，失败静默跳过）。
+ *          不变量：只用“同一历元”的 GNSS 速度快照与新鲜光流；航向是相对真北的
+ *          绝对观测，但仅在速度方向与机头存在确定几何关系时成立。
+ *
+ * @formula ψ = atan2(v_E,v_N) − atan2(v_y^b,v_x^b)，σ_ψ = max(σ_min, σ_0/(v−v_min+1))
+ * @ref REF-120 §9.8.14 p.320–322（航迹角/侧滑角几何与航向弱可观性：失准角
+ *          通过比力水平分量进入速度观测）；双矢量定姿思想 @ref REF-120 §9.9.1 p.323
+ * @frame v^{n} 为 NED，v^{b} 为机体 FRD，ψ 为绕 NED z 轴的航向角
+ * @units rad、m/s、rad/s
+ * @approx 忽略风（真空速≠地速时侧滑角含风致偏差）与光流安装臂效应；
+ *          偏航角速度门限 0.35 rad/s 用于压制时间不同步误差。
+ * @deviation 本观测把“GNSS 航迹 − 光流侧滑”当绝对航向：悬停/匀速直线时航迹角
+ *          退化、侧滑角≈0，此时观测退化为“航向≈航迹角”，只在有速度时成立；
+ *          这不是磁航向，也不是秦书意义的罗经对准。
+ * @test 仿真 SC4 过渡段 kick、test_host 航向相关回归（见核查记录）
+ */
 void handleDualVectorYawFusion()
 {
   // ========================= 参数配置 (Tuning) =========================
@@ -416,7 +526,8 @@ void handleDualVectorYawFusion()
   // ★ 2026-08-12 审查修复：静止时 GNSS 速度纯噪声（多径可达 0.5-1 m/s），
   // 若仍用原始 GNSS 速度解算航迹角，会把噪声航向当真实航向融合（静止+噪声下
   // 约 9% 帧穿过三道门控、航向噪声 σ≈145°）。静止时位置更新已强制速度=0
-  // （本文件 1118-1123 行），航向融合应同步跳过，避免与"静止即零速"语义矛盾。
+  // （`is_static_confirmed` 分支的 meas_vel_ned 置零段），航向融合应同步跳过，
+  // 避免与"静止即零速"语义矛盾。
   if (static_det.confirmed_static)
   {
     return;
@@ -519,13 +630,8 @@ void handleDualVectorYawFusion()
   const bfs::MeasurementUpdateResult result = nav_ekf.MeasurementUpdateYawDetailed(estimated_yaw, dynamic_noise);
   aid_tracker.RecordAttempt(bfs::AidSource::YawGsf, result);
 
-  // (可选) 调试输出，用于在地面站观察融合效果
-  // Serial8.print("Fusion: Yaw_Est=");
-  // Serial8.print(estimated_yaw * RAD_TO_DEG);
-  // Serial8.print(" EKF_Yaw=");
-  // Serial8.print(nav_ekf.yaw_rad() * RAD_TO_DEG);
-  // Serial8.print(" Noise=");
-  // Serial8.println(dynamic_noise);
+  // 调试建议：需要观察融合效果时用 DBG vars / 0xF2 上报 estimated_yaw 与
+  // dynamic_noise，不要在 200 Hz 路径里加串口打印（会破坏导航时序）。
 }
 
 void updateUbxRelativePosition()
@@ -566,6 +672,24 @@ void updateUbxRelativePosition()
 //   会永久硬拒）。若光流量测连续 50 次被拒（≈1s @50Hz，EKF 速度漂移超门或
 //   P 坍缩），把水平速度重锚到光流测量值，速度协方差抬回 0.5m/s 量级。
 // ----------------------------------------------------------------------
+/**
+ * @brief 室内无 GNSS 时的光流速度融合（含失锁重锚）
+ * @details 输入：光流机体速度 FRD、EKF 姿态四元数、当前垂直速度；
+ *          处理：新鲜度判重（每个光流样本只融合一次）→ 用 C_b2n 旋转到 NED →
+ *          水平两轴动态 R、垂直通道 R=1e3 近似关闭 → 走豁免 ZUPT 守卫的
+ *          辅助速度接口 → 连续 50 次被拒时把水平速度重锚到光流值并抬 P；
+ *          输出：EKF 速度更新（失败计数/重锚计数进 `g_flow_fusion_*`）。
+ *          不变量：垂直通道不可观，不参与修正；本函数不进入静止确认分支。
+ * @formula v^n = C_b^n·[v_x^b, v_y^b, 0]^T，C_b^n = (C_n^b)^T = quat2dcm(q)^T
+ * @ref REF-120 §7.4 (7.4.6) p.189（速度量测的坐标变换与 R 建模）；
+ *          EKF 量测更新/NIS 门控 @ref REF-121 §2.2.1 p.33–34、§7.3.1 p.255
+ * @frame 光流 FRD → NED；水平可视、垂向不可观
+ * @units m/s、m/s²、rad
+ * @approx 光流 z 分量取 0，误差 ≈ v_z·sin(tilt)，室内小垂速下可忽略。
+ * @deviation 光流速度失锁重锚是 2026-08-21 加的恢复路径（豁免 ZUPT 零速守卫），
+ *          与 ZUPT 路径行为不同；重锚会改变速度状态，故用连续拒绝计数而非单帧触发。
+ * @test test_host/test_ekf_aiding_velocity.cpp（16 断言，fw-tests 区域）
+ */
 static void handleIndoorOpticalFlowVelocityFusion()
 {
   static uint32_t s_last_fused_flow_update_ms = 0;
@@ -650,6 +774,35 @@ static void handleIndoorOpticalFlowVelocityFusion()
   }
 }
 
+#if BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE
+static InsGnssDelayAutoEstimator s_gnss_delay_auto;
+static uint32_t s_gnss_delay_auto_last_ms = 0;
+static InsInertialReference s_ins_ref;
+static InsBiasJumpMonitor s_bias_jump_monitor;
+static uint32_t s_bias_jump_hold_until_ms = 0;
+static InsBiasTempObserver s_bias_temp_observer;
+static InsBiasTempTable s_bias_temp_table;
+static uint32_t s_bias_temp_table_last_ms = 0;
+#endif
+static InsVibrationEstimator s_vib_estimator;
+static uint32_t s_vib_gnss_bad_until_ms = 0;
+
+/**
+ * @brief 导航主任务（200 Hz）：取 IMU → 静止检测 → EKF 初始化/预测 →
+ *        静止/AHRS 辅助 → GNSS/光流/气压量测 → 输出桥
+ * @details 完整时序见文件头 `@details`。本函数在 200 Hz 调度 tick 内调用，
+ *          禁止阻塞（不可加 `delay()`/长串口打印）；所有共享量在取数时关中断
+ *          快照，量测更新使用本帧出队 epoch，避免跨历元混用。
+ *          不变量：
+ *          1) 时间更新每帧必做；量测更新按质量门限条件执行；
+ *          2) 静止确认可被 GNSS/光流速度推翻（只出不进，非对称）；
+ *          3) GNSS 联合更新失败时，子集更新与 `consider_heading` 只在本次生效；
+ *          4) 输出桥的 `relative_*`/`estimated_*` 与控制接口单位一致（m、m/s）。
+ * @note 关键数值（静止进 20 帧/出 5 帧、GNSS 退出门限 0.8 m/s、气压 25 Hz、
+ *       振动 Q 回退 0.25）改动前必须走行为红线流程并重采回归基线。
+ * @see `handleVerticalEstimation()`、`handleHorizontalEstimation()`、
+ *      `handleDualVectorYawFusion()`、`handleIndoorOpticalFlowVelocityFusion()`
+ */
 void handleNavigationSystem()
 {
   // EKF 总耗时测量 + 零偏诊断
@@ -750,6 +903,15 @@ void handleNavigationSystem()
   // 使用 IMU 数据降采样后的平均值
   imu_accel_mps2 << local_acc_sum_x * scale, local_acc_sum_y * scale, local_acc_sum_z * scale;
   imu_gyro_radps << local_gyro_sum_x * scale, local_gyro_sum_y * scale, local_gyro_sum_z * scale;
+
+  {
+    const InsVibrationEstimate vib =
+        s_vib_estimator.Update(imu_accel_mps2, imu_gyro_radps, dt_s);
+    gnc_tel.vib_accel_rms_g = vib.accel_rms_g;
+    gnc_tel.vib_gyro_rms_dps = vib.gyro_rms_dps;
+    gnc_tel.vib_accel_std_suggest = vib.accel_std_suggest;
+    gnc_tel.vib_high = vib.high_vibration;
+  }
   const float first_sample_target_dt_s = 0.5f * local_delta_time_sum_s;
   float accumulated_delta_time_s = 0.0f;
   for (int idx = 0; idx < local_delta_count; ++idx)
@@ -807,11 +969,28 @@ void handleNavigationSystem()
           : dt_s;  // 单样本/溢出路径：micros 差分覆盖全部样本，已含卡顿时长
   aid_tracker.BeginFrame(nav_update_dt_s);
 
+  // ★ 2026-10 P0-3：ZUPT 外部参照门控。
+  //   理论依据：秦永元、张洪钺、汪叔华《卡尔曼滤波与组合导航原理（第3版）》，
+  //   西北工业大学出版社 2015，§8.2.3 p.291：“在间接法滤波中，要实现对某一
+  //   导航系统的阻尼，必须利用来自其他导航系统的外来信息，而不能利用自身
+  //   信息作为阻尼”；§7.3.1 p.255 系统级 FDI 用 χ² 检验。
+  //   失联/无光流时，静止检测仍可能误确认；同时 P_vv 被膨胀后 NIS 门限失效，
+  //   ZUPT 会把慢速巡航（尤其 1.0–1.5 m/s）速度拉零。这里按"是否存在外部速度
+  //   参照"做结构门控：无外部参照且 |v|>0.75 m/s 立即拒绝 ZUPT；无参照 3 s 后
+  //   噪声封顶 0.30 m/s；无参照 30 s 后停用 ZUPT，仅保留 Gravity/StaticGyro。
+  //   详见 ins_static_aid_profile.h。
+  static Icm45686ZuptExtRefGuard s_zupt_ext_ref_guard;
+  const bool has_external_velocity_reference =
+      isGnssDataFreshForNav() ||
+      (flow_data.is_flow_valid &&
+       (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs);
+  s_zupt_ext_ref_guard = Icm45686UpdateZuptExtRefGuard(
+      s_zupt_ext_ref_guard, has_external_velocity_reference, nav_update_dt_s);
+
   // 获取磁力计数据 (用于初始化航向)
-  // ★ 真实磁力计路径（芯片系→FRD 对齐与硬铁偏置由 MagSensor 统一完成）：
-  //     MagSample m = magSensor.sampleFRD();
-  //     if (m.seq > 0) { mag_ut << m.x, m.y, m.z; }   // 机体 FRD, uT
-  // 当前未启用：使用伪磁场矢量完成确定性航向初始化（见 EKF 初始化注释）。
+  // 真实磁力计路径：MagSensor 已完成芯片系→FRD 对齐与硬铁偏置，
+  // 可用 sampleFRD() 取机体 FRD 三轴（uT）后填入 mag_ut。
+  // 当前未启用：以伪磁场矢量完成确定性航向初始化（语义见 EKF 初始化注释）。
 
   // 强制磁场矢量指向正北 (X轴)，Z轴分量是为了模拟地磁倾角(Dip Angle)，防止奇异值
   // 这里的 {50, 0, 0} 代表磁力线完全水平指向前方
@@ -898,6 +1077,19 @@ void handleNavigationSystem()
     {
       gnss_time_mapping_valid = true;
       gnss_measurement_age_s = InsGnssEpochAgeSeconds(time_mapping, micros());
+#if BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE && BFS_NAVIGATION_GNSS_DELAY_AUTO_APPLY
+      // 仅在估计有效、曲线尖锐、与先验偏差合理时替换固定 15 ms。
+      const uint32_t now_auto_apply_ms = millis();
+      if (gnss_status.auto_delay_valid &&
+          !gnc_tel.vib_high &&
+          (now_auto_apply_ms - gnss_status.auto_delay_last_ms) <= 5000U &&
+          gnss_status.auto_delay_sharpness >= 0.003f &&
+          std::fabs(gnss_status.auto_delay_tau_s -
+                    BFS_NAVIGATION_GNSS_DELAY_S) <= 0.10f)
+      {
+        gnss_measurement_age_s = gnss_status.auto_delay_tau_s;
+      }
+#endif
       gnss_status.last_measurement_age_s = gnss_measurement_age_s;
     }
     else
@@ -934,6 +1126,18 @@ void handleNavigationSystem()
   {
     // --- 初始化阶段 ---
     // 只要确认静止，即使没有 GPS 也允许初始化
+    //
+    // ★ 对准语义（必须读懂，避免误称为“罗经对准”）：
+    //   本机**没有**秦书 §9.9 的静基座罗经/自对准：MEMS 陀螺零偏（配置的初始
+    //   不确定度 0.4 dps）远大于地球自转水平分量（长沙 28.2°N 时 ω_ie·cosL≈13.25°/h），
+    //   无法用 ω_ie 定向；§9.9 的粗对准双矢量是 g^b 与 ω_ie^b，这里第二把
+    //   “尺子”换成了**伪磁常量** (30,0,40)（见下方 mag_ut）经 TiltCompass，
+    //   故航向初值只保证“数值确定”，不保证物理指向真北。
+    //   航向的物理修正只来自：GNSS 航迹−光流侧滑的双矢量观测（有速度时），
+    //   或未来接入的磁矢量。静止时航向不可观（无绝对航向源）。
+    //   参考：@ref REF-120 §9.9 p.322–338（对准与可观测性）、
+    //        notes/06 §1（φ_U≈ε_E/(ω_ie·cosL)）；P0(8,8)=0.2 rad 只是把
+    //        “伪磁确定性初始化”的 1σ 写成 0.2（≈11.5°），不是真实航向精度。
     if (is_static_confirmed)
     {
       Serial8.println("[Nav] Static Detected. Attempting EKF Init...");
@@ -998,7 +1202,8 @@ void handleNavigationSystem()
 
       // 3. 初始状态不确定度 (参考 esp32-ins-gnss-fusion)
       //    ★ 2026-08-13 优化研究修正（原 π，仿真实证"航向弱可观踢动"机制）：
-      //    ① 本机 TiltCompass 用伪磁场 (30,0,40) 做确定性航向初始化（见 694 行），
+      //    ① 本机 TiltCompass 用伪磁场 (30,0,40) 做确定性航向初始化（见上文
+      //       mag_ut 赋值段），
       //      初始航向实际是"伪磁系下的确定航向"，π 的语义与之一致性矛盾（原 LOW-7）；
       //    ② 仿真证明 P0(8,8)=π 时，大比力水平分量（VTOL 过渡/转弯）会把 GNSS
       //      速度噪声放大为 ±10-25°/epoch 的航向踢动（K[8,v] ∝ f_x·P(8,8)/Q_a），
@@ -1068,10 +1273,53 @@ void handleNavigationSystem()
     // [A] 陀螺仪输入准备
     // EKF底层会在初始化和传播中显式处理地球自转/导航系转动；静止时不能再把陀螺强行改成bias，
     // 否则会把真实物理角速度也抹掉，长时间无GNSS静置会重新引入慢姿态漂移。
+#if BFS_NAVIGATION_VIBRATION_ADAPTIVE
+    // 仅显式打开时改变 EKF 噪声；默认保持 0.25/0.0015。
+    // GNSS 失效时不能把加速度 Q 降到保守值以下。
+    // 安全策略：振动自适应只允许把 Q 降到固定值以下；
+    // 延时/失锁/恢复/低精度时一律回到保守 0.25。
+    float vib_q = std::clamp(s_vib_estimator.last().accel_std_suggest, 0.15f, 0.25f);
+    if (!gnss_instant_valid_for_nav) {
+      s_vib_gnss_bad_until_ms = millis() + 10000U;
+    }
+    if (static_cast<int32_t>(millis() - s_vib_gnss_bad_until_ms) < 0 ||
+        gnss_measurement_age_s > 0.05f ||
+        gnss_status.last_obs_h_acc_m > 2.0f ||
+        gnss_status.last_obs_h_acc_m < 0.0f) {
+      vib_q = 0.25f;
+    }
+    nav_ekf.accel_std_mps2(vib_q);
+    nav_ekf.gyro_std_radps(s_vib_estimator.last().gyro_std_suggest);
+#endif
+    const bool bias_jump_hold =
+        static_cast<int32_t>(millis() - s_bias_jump_hold_until_ms) < 0;
+    // GNSS 失锁 >2 s 时冻结加计零偏更新：无外部速度/位置基准，
+    // 继续让零偏跟踪会把姿态/振动误差吸收进零偏。
+    const bool gnss_bias_freeze =
+        !gnss_instant_valid_for_nav && gnss_measurement_age_s > 2.0f;
+    // 2026-10-23 组合故障 A/B 发现：把“非激励”加计零偏 Q 压到 0.001
+    // 会在阶跃+温漂场景产生 30 km 级位置发散；撤销该宽门控。
+    // 只在跳变保持/失锁冻结时使用 0.0001，其余恢复正常 0.010。
+    nav_ekf.accel_markov_bias_std_mps2(
+        (bias_jump_hold || gnss_bias_freeze) ? 0.0001f : 0.010f);
+
     Eigen::Vector3f ekf_gyro_input = imu_gyro_radps;
 
     // [B] 时间更新 (预测) - 始终执行
     // 这一步负责 EKF 内部短时惯导外推；无 GNSS 时还会用 AHRS 姿态量测约束漂移。
+    // ── 双子样时间更新（速度增量在 EKF 内做旋转/划摇补偿）──────────────
+    // 公式：V^n_m = V^n_{m−1} + C^n_b(m−1)·ΔV_sf,m + ΔV_g/cor,m
+    //       ΔV_sf,m = ΔV_m + ΔV_rot,m + ΔV_scull,m
+    //       ΔV_rot,m = ½Δθ_m×ΔV_m；ΔV_scull,m = (2/3)(Δθ₁×Δv₂ + Δv₁×Δθ₂)
+    // 符号：Δθ 角增量 [rad]、Δv 速度增量 [m/s]、C^n_b 机体系→导航系、下标 1/2 为
+    //       导航周期内的前后两个子样（本函数按时间中点拆分样本）
+    // 来源：@ref REF-120 §9.6 (9.6.9)(9.6.17)(9.6.19) p.298–299、
+    //       (9.6.25) p.301；姿态阵取区间起始时刻，旋转项正是把它补到区间中点
+    // 实现：`TimeUpdateTwoSample()`（EKF 内），本段只负责把 IMU 缓冲拆成两子样
+    // 等价变换：秦书 ENU/RFU ↔ 本项目 NED/FRD，矢量方程整体协变，分量次序见
+    //       @ref MOD-002 §2；旋转效应只允许计一次（2026-10 P0-0 修复）
+    // 数值证据：test_host/test_ekf_15state.cpp T7（速度增量残差 1.25e-4）
+    // ────────────────────────────────────────────────────────────────
     if (use_two_sample_imu)
     {
       nav_ekf.TimeUpdateTwoSample(delta_theta_1_rad,
@@ -1134,9 +1382,10 @@ void handleNavigationSystem()
       static_gravity_acc += imu_accel_mps2;
       static_gravity_count++;
 
-      const auto profile = Icm45686SelectStaticAidProfile(
+      auto profile = Icm45686SelectStaticAidProfile(
           static_confidence, static_det.confirmed_static_frames,
           nav_ekf.covariance_is_healthy());
+      Icm45686ApplyZuptExtRefNoiseFloor(profile, s_zupt_ext_ref_guard);
 
       // 三层自适应降频: 静止越久、收敛越充分, 辅助量测频率越低以节约 CPU。
       // 参考 esp32-ins-gnss-fusion: 长静止下 ZUPT 可降到 10-25Hz 无损零偏收敛。
@@ -1151,15 +1400,38 @@ void handleNavigationSystem()
         zupt_div = 4U;  gravity_div = 8U;  gyro_div = 8U;    // 50 / 25 / 25 Hz (过渡期)
       }
 
-      const bool zupt_due = (static_aid_frame_counter % zupt_div) == 0U;
+      const bool zupt_due_raw = (static_aid_frame_counter % zupt_div) == 0U;
+      const bool zupt_due =
+          zupt_due_raw &&
+          Icm45686ZuptExternalRefAllowsFusion(
+              s_zupt_ext_ref_guard, nav_ekf.ned_vel_mps().norm());
       const bool gravity_due = (static_aid_frame_counter % gravity_div) == 1U;
       const bool static_gyro_due = (static_aid_frame_counter % gyro_div) == 3U;
+      // 静止陀螺修正是高信任量测（1e-4 rad/s），必须同时满足：
+      // 速度残差小、重力模长可信、角速率低、静止已持续足够久。
+      // 仅靠 is_static_confirmed 不够：低速漂移/地面滑行/外力推动可能误判。
+      const bool static_gyro_consistent =
+          (nav_ekf.ned_vel_mps().norm() < 0.30f) &&
+          (accel_norm_error < 0.50f) &&
+          (imu_gyro_radps.norm() < 0.15f) &&
+          (static_det.confirmed_static_frames >= 200U);
 
       const Icm45686StaticAidAction static_aid_action =
           Icm45686SelectStaticAidAction(
               zupt_due, gravity_due, static_gyro_due,
               profile.prefer_gravity_first);
 
+      // ── 零速修正（ZUPT）：静止时把速度真值 0 作为三轴速度量测 ──────────
+      // 公式：z = 0 − v̂，S = H P Hᵀ + R，K = P Hᵀ S⁻¹，x ← x + K·z
+      // 符号：v̂ 为 EKF 当前 NED 速度估计 [m/s]；R 由静止档位给出（水平/垂直分设）
+      // 来源：@ref REF-121 §8.2.3 p.291（间接法阻尼须用外来信息，ZUPT 的“0”来自
+      //       静止假设而非滤波器自身）；静基座观测条件 @ref REF-120 §9.9.3 p.336
+      // 实现：`MeasurementUpdateVelocityDetailed()`（EKF 内做 NIS 门控/子集更新）
+      // 等价变换：无；三轴速度的观测矩阵 H=[0₃ I₃ 0₃…]
+      // 边界：残差 >1.5 m/s 跳过（已非“刚停稳残速”）；无外部参照时噪声封底
+      //       0.30 m/s、30 s 后停用（见 ins_static_aid_profile.h）
+      // 证据：ZUPT NIS 门限 1000→χ²(3)≈16.3 修正（AGENTS.md EKF 踩坑记录）
+      // ────────────────────────────────────────────────────────────────
       if (static_aid_action == Icm45686StaticAidAction::Zupt) {
         const float zupt_residual_mps = nav_ekf.ned_vel_mps().norm();
         const auto zupt_noise = Icm45686AdaptZuptNoiseForResidual(
@@ -1197,14 +1469,25 @@ void handleNavigationSystem()
         const bfs::MeasurementUpdateResult result =
             nav_ekf.MeasurementUpdateGravityDetailed(gravity_mean, profile.gravity_noise_rad);
         aid_tracker.RecordAttempt(bfs::AidSource::Gravity, result);
-      } else if (static_aid_action == Icm45686StaticAidAction::StaticGyro) {
+      } else if (static_aid_action == Icm45686StaticAidAction::StaticGyro &&
+                 throttlePercent < 3.0f && static_gyro_consistent &&
+                 !bias_jump_hold) {
         // 静止陀螺量测: 直接将当前 gyro 读数作为观测, 噪声 ~0.01 rad/s (0.5°/s).
         // 这直接约束三轴陀螺零偏, 尤其对 Z 轴 (yaw) 零偏——ZUPT/Gravity 对其弱可观.
+        // ★2026-10 守卫: 油门 >3% 说明电机已出力/已离地，即使 IMU 判“静止”
+        // 也不能把机体缓慢漂移当成零角速率去估零偏；否则会污染 bg 并反过来
+        // 让姿态估计漂移（hifi 闭环复现：static gyro 在不该融合时把 bg 拉偏）。
         // 参考 esp32-ins-gnss-fusion applyStaticGyroUpdate.
-        static constexpr float kStaticGyroNoiseRadps = 0.0001f; // 0.006dps, 极高信任
+        // 分轴低信任：Z 轴（航向/偏航零偏）用较高信任，X/Y 轴主要由重力/GNSS
+        // 约束；给 X/Y 极大噪声，避免静止误判时把滚转/俯仰零偏一起拉坏。
+        static constexpr float kStaticGyroZNoiseRadps = 0.0005f;
+        static constexpr float kStaticGyroXYNoiseRadps = 1.0f;
+        const Eigen::Vector3f static_gyro_noise(
+            kStaticGyroXYNoiseRadps, kStaticGyroXYNoiseRadps,
+            kStaticGyroZNoiseRadps);
         const bfs::MeasurementUpdateResult result =
             nav_ekf.MeasurementUpdateStaticGyroDetailed(
-                imu_gyro_radps, kStaticGyroNoiseRadps);
+                imu_gyro_radps, static_gyro_noise);
         aid_tracker.RecordAttempt(bfs::AidSource::StaticGyro, result);
         _sg_attempt++; if (result.fused) _sg_fused++;
       }
@@ -1269,13 +1552,23 @@ void handleNavigationSystem()
       //   Δa≈0，静止检测器会误确认静止 → 下面把 GNSS 速度强制为 0 → 6 维联合
       //   更新 NIS 爆炸 → 位置一并被拒 → 位置纯惯导漂移（仿真 120s 漂 330m）。
       //   修复：GNSS 速度模长超过门限时强制退出静止（仅退出不进入——非对称，
-      //   避免 GNSS 噪声妨碍真静止确认）。详见 TandemVec-EKF-Report 优化研究报告。
+      //   避免 GNSS 噪声妨碍真静止确认）。
+      //   理论依据：秦永元、张洪钺、汪叔华《卡尔曼滤波与组合导航原理（第3版）》，
+      //   西北工业大学出版社 2015，§8.2.3 p.291：间接法滤波的阻尼必须利用来自
+      //   其他导航系统的外来信息，不能用自身信息；§7.3.1 p.255：系统级 FDI 用
+      //   χ² 检验，检测应与故障源独立。这里的 GNSS 速度就是推翻“静止”假设的
+      //   外来信息。
+      //   2026-10 P0-3 仿真 SC9b：1.5 m/s 门在 1.0 m/s 慢速巡航时不触发，静止
+      //   确认把 GNSS 速度强制 0，失联 40 s 位置误差 51.6 m；门限降到 0.8 m/s
+      //   + 外部参照门控后 SC9b 位置 RMSE 25.4→4.19 m（5 种子，
+      //   sim-data/opt/upgrade_P0_guard.json）。0.8 约为典型 GNSS 速度噪声的
+      //   3–5 倍；真静止偶发越门只会短暂退出，100 ms 后可重新确认。
       if (is_static_confirmed)
       {
         const float gnss_speed_mps =
             std::sqrt(gnss_epoch.north_vel_mps * gnss_epoch.north_vel_mps +
                       gnss_epoch.east_vel_mps * gnss_epoch.east_vel_mps);
-        if (gnss_speed_mps > 1.5f)
+        if (gnss_speed_mps > 0.8f)
         {
           Icm45686StaticDetectorReset(static_det);
           is_static_confirmed = false;
@@ -1292,6 +1585,20 @@ void handleNavigationSystem()
       {
         // 运动中，使用真实 GNSS NED 速度。
         meas_vel_ned << gnss_epoch.north_vel_mps, gnss_epoch.east_vel_mps, gnss_epoch.down_vel_mps;
+#if BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE
+        {
+          Eigen::Vector3d origin_lla_auto;
+          origin_lla_auto << origin_lat_rad, origin_lon_rad, origin_alt_m;
+          const Eigen::Vector3d meas_ned_auto =
+              bfs::lla2ned(meas_lla, origin_lla_auto, bfs::AngPosUnit::RAD);
+          // 批处理时间戳用“投递时刻”，量测值仍是该 age 对应的旧值；
+          // 这样 Fit 的 p_ref(t-tau) 模型才成立。
+          const double t_deliver_auto =
+              static_cast<double>(millis()) * 1.0e-3;
+          s_gnss_delay_auto.PushGnss(t_deliver_auto, meas_ned_auto,
+                                     meas_vel_ned.cast<double>());
+        }
+#endif
       }
 
       // 动态权重：接收机精度经 clamp→pDOP 缩放后直接作为 EKF R 矩阵噪声
@@ -1303,6 +1610,20 @@ void handleNavigationSystem()
       nav_ekf.gnss_pos_d_std_m(meas_dw.eff_pos_d_std_m);
       nav_ekf.gnss_vel_ne_std_mps(meas_dw.eff_vel_ne_std_mps);
       nav_ekf.gnss_vel_d_std_mps(meas_dw.eff_vel_d_std_mps);
+
+      // ★ 2026-10 P1-5：按飞行相位启用“航向 consider”。
+      //   过渡/大倾斜（|pitch| 或 |roll| > 0.5 rad ≈ 28.6°）且水平速度 >3 m/s 时，
+      //   F(v,β) 的比力方向变化大，GNSS 速度新息经 P(8,v) 会把航向拉偏；
+      //   此时把 GNSS 更新的航向行清零（速度/位置/水平姿态仍修正）。
+      //   悬停（pitch≈90°）速度<3 m/s 不触发；巡航小坡度不触发。
+      //   理论依据：notes/06 §6；秦永元《卡尔曼滤波与组合导航原理（第3版）》
+      //   §8.2.3 p.291：间接法阻尼必须利用外来信息，航向弱可观时不能靠速度新息“造”观测。
+      const bool phase_consider_heading =
+          (fabsf(nav_ekf.pitch_rad()) > 0.5f ||
+           fabsf(nav_ekf.roll_rad()) > 0.5f) &&
+          (nav_ekf.ned_vel_mps().norm() > 3.0f) &&
+          !is_static_confirmed;
+      nav_ekf.set_gnss_consider_heading(phase_consider_heading);
 
       if (InsGnssShouldReanchor(has_gnss_epoch,
                                 gnss_full_quality_for_nav,
@@ -1325,6 +1646,18 @@ void handleNavigationSystem()
       }
       else
       {
+        // ── GNSS 位置/速度联合更新（6 维量测）─────────────────────────
+        // 公式：z = [p_gnss−p̂; v_gnss−v̂]（NED/LLA 混合残差），
+        //       rᵀS⁻¹r ~ χ²(6) 门控，拒绝时退化为 3D 位置/3D 速度子集 χ² 检验
+        // 符号：p̂/v̂ 为 EKF 预测，z 为同历元 GNSS 观测；R 由动态权重给出
+        // 来源：@ref REF-121 §2.2.1 p.33–34（五方程）、§7.3.1 p.255–259（NIS/FDI），
+        //       §8.2.3 p.291（外来信息阻尼）
+        // 实现：`MeasurementUpdateDetailed()`（EKF 内：年龄补偿、门控、子集更新）
+        // 等价变换：位置残差在 LLA→NED 后与速度同系比较 @ref MOD-002 §2
+        // 边界：静止确认时 meas_vel 强制 0（由 GNSS 速度>0.8 先推翻静止）；
+        //       过渡/大倾斜+速度>3 m/s 时启用 consider_heading（P1-5，按相位）
+        // 数值证据：test_host/test_ekf_15state.cpp T9–T11（子集 FDI）
+        // ──────────────────────────────────────────────────────────────
         const bfs::MeasurementUpdateResult result =
             nav_ekf.MeasurementUpdateDetailed(meas_vel_ned, meas_lla,
                                               nav_update_dt_s,
@@ -1340,6 +1673,9 @@ void handleNavigationSystem()
       applyDowngradedGnssUpdate(gnss_epoch, nav_update_dt_s,
                                 gnss_measurement_age_s);
     }
+
+    // consider 只对本次 GNSS 更新生效；下一帧若相位不满足，恢复原行为。
+    nav_ekf.set_gnss_consider_heading(false);
 
     // 无 GNSS 且非静止时，用光流速度约束 EKF 水平速度。
     // 这是室内无 GPS 悬停/定点的主要速度观测源；EKF 积分得到相对位置。
@@ -1648,6 +1984,78 @@ void handleNavigationSystem()
   }
 #endif
 
+#if BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE
+  {
+    const uint32_t now_ms_auto = millis();
+    const Eigen::Vector3d p_nav(relative_north, relative_east, relative_down);
+    const Eigen::Vector3d v_nav(fused_north_vel, fused_east_vel,
+                                INS_GNSS_Packet.velocity_down);
+    if (!s_ins_ref.valid()) {
+      s_ins_ref.Reset(p_nav, v_nav);
+    }
+    s_ins_ref.Update(imu_accel_mps2, nav_ekf.quat(),
+                     nav_ekf.accel_bias_mps2(), dt_s);
+    s_gnss_delay_auto.PushReference(
+        static_cast<double>(now_ms_auto) * 1.0e-3,
+        s_ins_ref.pos(), s_ins_ref.vel());
+    if ((now_ms_auto - s_gnss_delay_auto_last_ms) >= 1000U)
+    {
+      s_gnss_delay_auto_last_ms = now_ms_auto;
+      if (s_gnss_delay_auto.TryEstimate())
+      {
+        const auto &r = s_gnss_delay_auto.last_result();
+        gnss_status.auto_delay_last_ms = now_ms_auto;
+        gnss_status.auto_delay_valid = r.valid;
+        gnss_status.auto_delay_tau_s = r.tau_s;
+        gnss_status.auto_delay_residual_mps = r.residual_mps;
+        gnss_status.auto_delay_sharpness = r.sharpness;
+      }
+    }
+  }
+#endif
+
+  // 温度-零偏诊断：只在静止 + GNSS 健康时采样，不参与控制。
+  {
+    const auto tr = s_bias_temp_observer.Update(
+        imu_die_temp_c, nav_ekf.gyro_bias_radps(),
+        is_static_confirmed, gnss_instant_valid_for_nav, nav_update_dt_s);
+    gnc_tel.bias_temp_slope_dps_c = tr.gyro_slope_radps_per_c(2) * 57.2958f;
+    gnc_tel.bias_temp_span_c = tr.temp_span_c;
+    gnc_tel.bias_temp_confidence = tr.confidence;
+    // 温度-零偏表只采点，不参与补偿；温度点重复时覆盖旧点。
+    if (is_static_confirmed && gnss_instant_valid_for_nav &&
+        tr.confidence > 0.2f &&
+        static_cast<int32_t>(millis() - s_bias_temp_table_last_ms) >= 5000)
+    {
+      s_bias_temp_table_last_ms = millis();
+      s_bias_temp_table.AddPoint(imu_die_temp_c,
+                                 nav_ekf.gyro_bias_radps(),
+                                 nav_ekf.accel_bias_mps2());
+    }
+  }
+
+  // 零偏跳变监控：只告警，不直接回滚，避免把一次坏更新当成真实零偏。
+  if (!s_bias_jump_monitor.initialized()) {
+    s_bias_jump_monitor.Reset(nav_ekf.accel_bias_mps2(),
+                              nav_ekf.gyro_bias_radps());
+  }
+  {
+    const auto bj = s_bias_jump_monitor.Update(
+        nav_ekf.accel_bias_mps2(), nav_ekf.gyro_bias_radps(),
+        nav_update_dt_s);
+    gnc_tel.bias_jump_accel_delta = bj.accel_delta;
+    gnc_tel.bias_jump_gyro_delta = bj.gyro_delta;
+    gnc_tel.bias_jump_count = bj.jump_count;
+    gnc_tel.bias_slow_drift = bj.accel_slow_drift || bj.gyro_slow_drift;
+    gnc_tel.bias_drift_accel_rate = bj.accel_drift_rate;
+    gnc_tel.bias_drift_gyro_rate = bj.gyro_drift_rate;
+    if (bj.accel_jump || bj.gyro_jump) {
+      s_bias_jump_hold_until_ms = millis() + 5000U;
+    }
+    gnc_tel.bias_jump_hold =
+        static_cast<int32_t>(millis() - s_bias_jump_hold_until_ms) < 0;
+  }
+
   // EKF 总耗时统计
   _ekf_time_sum += micros() - _ekf_t0;
   _ekf_time_cnt++;
@@ -1674,6 +2082,23 @@ void handleNavigationSystem()
   }
 }
 
+/**
+ * @brief 估算“向上为正”的垂直速度：优先 EKF 融合值，否则由高度差分校准
+ * @details 输入：`INS_GNSS_Packet.velocity_down`（GNSS 输出有效时）或激光/气压
+ *          高度及其新鲜度；处理：GNSS 有效直接用 −v_D 并复位差分基准，否则按
+ *          “激光优先（测距通道新鲜度）、气压兜底”做一阶差分 + 低通；
+ *          输出：`estimated_velocity` [m/s]（向上为正）。
+ *          不变量：切换数据源时清对应首次标志，避免跨源差分跳变。
+ * @formula v_up = −v_D；无 GNSS 时 v_up ≈ Δh/Δt（h 向上为正），再经一阶低通
+ * @ref REF-120 §7.5 p.190–191（高度通道需外部高度反馈才稳定）；
+ *          NED z 向下与“向上为正”的符号关系 @ref MOD-002 §5.1
+ * @frame NED（v_D 向下为正）→ 向上为正
+ * @units m、m/s、µs
+ * @note **测距用 `flow_data.last_range_update_ms`，不是 `last_update_ms`**：
+ *       光流速度与测距是两条独立新鲜度通道，测距帧不得刷新速度通道时间戳
+ *       （2026-08-21 踩坑，见 TandemVec_FCS/AGENTS.md）。
+ * @see `handleNavigationSystem()` 气压更新、`flow_data.last_range_update_ms`
+ */
 void updateEstimatedVerticalVelocity()
 {
   // --- 1. 静态状态变量 ---
@@ -1768,6 +2193,21 @@ void updateEstimatedVerticalVelocity()
   }
 }
 
+/**
+ * @brief 独立二状态垂直 KF 任务：由 IMU 天向加速度预测、气压高度更新
+ * @details 输入：`IMU_Packet` 比力、`AHRS_Packet` 四元数、`baro_altitude`；
+ *          处理：比力旋转到 NED → 减重力并翻转为“向上为正” → `predict()` →
+ *          气压 50 Hz 降采样 `update()`；输出：`vfk_height`/`vfk_velocity`。
+ *          该滤波器与 EKF 并行独立运行，只作遥测对照，不写控制量。
+ * @formula a_up = −(C_n^b f^b + g_n)_z，其中 g_n=(0,0,+g)（NED 向下为正）
+ * @ref REF-120 §7.4 (7.4.6) p.189（比力方程）；KF 五方程与 Joseph
+ *          形式 @ref REF-121 §2.2.1 p.33–34、§2.2.4 p.42–43
+ * @frame 机体系 FRD 比力 → NED → 向上为正的标量
+ * @units m/s²、m、m/s、s
+ * @note 激光分支已被 `if (0)` 暂时禁用，实际只用气压；`LASER_NOISE_STD`
+ *       仍在编译期保留。不要用本滤波器输出替换 EKF 的 estimated_height。
+ * @see `VerticalKF_2State.h`、`updateEstimatedVerticalVelocity()`
+ */
 void handleVerticalEstimation()
 {
   // ========================================================================
@@ -1861,6 +2301,25 @@ void handleVerticalEstimation()
   vfk_velocity = vertical_estimator_2state.getVelocity();
 }
 
+/**
+ * @brief 独立水平双轴 KF 任务：IMU 水平加速度预测、光流速度更新
+ * @details 输入：`IMU_Packet` 比力、`AHRS_Packet` 四元数与航向、光流机体速度；
+ *          处理：比力旋转到 NED 取北/东分量 → 两轴 `predict()` → 每个新光流
+ *          样本用航向做平面旋转后 `update()`；输出：`fused_north/east_pos/vel`。
+ *          与 EKF 并行独立，只作对照/后备，不覆盖 EKF 的 relative_*。
+ * @formula v^n = R(ψ)·v^b（仅航向平面旋转）；观测 H=[0,1]（速度量测）
+ * @ref REF-121 §8.2.3 p.291（光流速度作为外部速度阻尼）；
+ *          平面旋转的 DCM 语义 @ref MOD-002 §2
+ * @frame 机体系 FRD（水平两轴）→ NED
+ * @units m、m/s、m/s²、rad
+ * @deviation 本函数只用航向 ψ 做二维旋转（`bodyToNed`），忽略俯仰/滚转；
+ *          机体倾斜时水平投影会含 cos(tilt) 尺度差，EKF 路径用全姿态四元数
+ *          旋转（`handleIndoorOpticalFlowVelocityFusion()`）。两者结果不严格一致，
+ *          属已知差异（仅影响遥测对照/后备，不影响控制）。
+ * @note 判重条件用 `last_update_ms` 且不清 `is_flow_valid`：该标志被多个消费者
+ *       共享，清标志会让同帧其它消费者丢数据（2026-08-21 修复）。
+ * @see `HorizontalKF.h`、`handleIndoorOpticalFlowVelocityFusion()`
+ */
 void handleHorizontalEstimation()
 {
   // --- 1. 计算时间差 dt ---
@@ -1951,12 +2410,6 @@ void handleHorizontalEstimation()
   // EKF 输出桥已写入 relative_north/east (lla→NED 转换) 和 INS_GNSS_Packet.velocity_*。
   // 不再用 kf_north/kf_east 覆盖——水平 KF 纯加速度积分无零速更新, 会持续漂移。
   // kf_north/kf_east 保留为光流融合后备 (AUTO_POSITION 可切换使用 fused_north_pos/vel),
-  // 但不再无条件替换 EKF 的 relative 和 INS 速度。
-  // if (!isGnssOutputValidForNav())
-  // {
-  //   relative_north = fused_north_pos;
-  //   relative_east = fused_east_pos;
-  //   INS_GNSS_Packet.velocity_north = fused_north_vel;
-  //   INS_GNSS_Packet.velocity_east = fused_east_vel;
-  // }
+  // 但不再无条件替换 EKF 的 relative 和 INS 速度。历史实现曾按
+  // “无 GNSS 输出有效”分支整体覆盖，已因漂移问题移除，勿恢复。
 }

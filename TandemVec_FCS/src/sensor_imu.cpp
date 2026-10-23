@@ -1,3 +1,30 @@
+/**
+ * @file    sensor_imu.cpp
+ * @module  固件/传感器（ICM42688 与磁力计采集）
+ * @brief   初始化 IMU/磁力计，逐帧完成校准、滤波、轴变换、Madgwick 姿态与数据打包
+ * @details 输入：SPI 原始加速度(g)/角速度(dps)/温度、I2C 磁力计样本；
+ *          处理：`initICM42688()` 配滤波与量程并用 100 样本静止均值初始化滤波器；
+ *          `readIMUData()` 每帧：自动校准 → 一阶互补滤波 → RUB→FRD 轴映射 →
+ *          累加双子样增量（关中断）→ FRD→FLU 适配 → Madgwick → 四元数修正 →
+ *          欧拉角 → 写 `IMU_Packet` 与后台 AHRS 变量；
+ *          输出：`IMU_Packet`、`icm_*`、`backup_ahrs_*`、`imu_delta_*`、`imu_die_temp_c`。
+ *          不变量：所有对外物理量在写包前统一换算为 rad/s 与 m/s²。
+ * @theory  四元数姿态修正 q_FRD_from_NED = q_FRD_from_FLU⊗q_FLU_from_NWU⊗q_NWU_from_NED
+ *          @ref REF-120 §9.2.2 p.256、§9.2.5 p.264（规范化）；
+ *          轴映射与悬停基态（机头朝天 roll=pitch=0）@ref MOD-002 §1.2；
+ *          欧拉角提取 theta=-asin(R13) @ref MOD-002 §3
+ * @frame   传感器 RUB（右-上-后）→ 机体系 FRD（前右下）→ Madgwick 输入 FLU/NWU；
+ *          输出四元数为 FRD←NED，欧拉角为 NED 系 3-2-1
+ * @units   原始 g/dps，输出 m/s²/rad/s，时间 µs/s，温度 °C，磁场 uT
+ * @redline 传感器轴映射（bX=-sZ、bY=+sX、bZ=-sY）与四元数分量顺序 [w,x,y,z]；
+ *          改动会导致 roll/Heading 退化耦合（2026-08-07 实机事故），
+ *          必须与实飞存档版逐字一致（见 TandemVec_FCS/AGENTS.md）
+ * @note    磁力计馈入 Madgwick 的开关 `kMagFeedMadgwick` 默认关闭（未完成
+ *          轴映射上板标定与椭球标定）；磁力计轮询不受开关影响，样本始终新鲜。
+ *          `AHRS_Packet` 由 `navigation_task.cpp` 输出桥写，本文件只写 backup_ahrs_*。
+ * @see     `sensor_imu.h`、`navigation_task.cpp`、`MagCalStore.h`
+ */
+
 #include "sensor_imu.h"
 #include "math_utils.h"
 #include "QuaternionMath.h"
@@ -318,10 +345,8 @@ bool readIMUData()
     // ========================================================================
     // 机体FRD系 -> Madgwick算法输入系 (伪NWU/FLU)
     // 这一步是为了适配 Madgwick 算法的内部坐标系定义。
-    // ★ 与原始 VTVL 实飞存档版完全一致：
-    //   算法输入X = +机体X
-    //   算法输入Y = -机体Y
-    //   算法输入Z = -机体Z
+    // ★ 与原始 VTVL 实飞存档版完全一致：算法输入 X 取 +机体 X、
+    //   算法输入 Y 取 −机体 Y、算法输入 Z 取 −机体 Z。
 
     float axForMadgwick = axBody;
     float ayForMadgwick = -ayBody;
@@ -439,27 +464,17 @@ bool readIMUData()
      *  3. 将结果同步至 AHRS 数据包与全局调试变量
      * ========================================================= */
 
-    // const double MAGNETIC_DECLINATION_DEG = -4.133; // 长沙磁偏角：-4°8′ (西偏为负)
+    // 磁偏角补偿当前关闭：Madgwick 由伪磁/未标定磁力计驱动时，叠加长沙磁偏角
+    // （约 -4.13°）只会把未标定的航向基准再平移，故暂不引入（见文件头 note）。
     double roll, pitch, yaw; // 机体欧拉角（弧度）
 
     // 1. 获取磁航向 (NED系, -PI ~ +PI)
     madgwick.getEulerAngles_NED_FRD(roll, pitch, yaw);
 
-    // 2. 叠加磁偏角 (Yaw_True = Yaw_Mag + Declination)
-    //    注意：这里必须使用 +=，因为西偏是负值，相当于减去偏差
-    // double declination_rad = MAGNETIC_DECLINATION_DEG * DEG_TO_RAD;
-    // yaw += declination_rad;
+    // 2. 真航向 = 磁航向 + 磁偏角（西偏为负）；当前关闭，见上方说明。
 
-    // 3. 【关键步骤】归一化到 [-PI, +PI] 范围
-    //    防止越界导致控制律失效
-    // if (yaw > M_PI)
-    // {
-    //   yaw -= 2.0 * M_PI;
-    // }
-    // else if (yaw < -M_PI)
-    // {
-    //   yaw += 2.0 * M_PI;
-    // }
+    // 3. 归一化到 [-PI, +PI]：由下方 wrapAnglePi() 统一完成（避免与 0/2π
+    //    边界处的 EKF/AHRS 差值跳变冲突），此处不再手写分支。
 
     // 后台 AHRS 航向叠加 EKF 校正偏置，保持与 EKF 航向基准对齐。
     backup_ahrs_roll = roll;
@@ -500,6 +515,15 @@ bool readIMUData()
     icm_accel_x = axBody * G_TO_MS2; // 更新全局辅助变量
     icm_accel_y = ayBody * G_TO_MS2;
     icm_accel_z = azBody * G_TO_MS2;
+
+    // ICM42688 芯片温度：1 Hz 更新，用于后续温漂建模/诊断。
+    static uint32_t last_temp_ms = 0;
+    if (millis() - last_temp_ms >= 1000U)
+    {
+      last_temp_ms = millis();
+      const float t_c = IMU.temp();
+      if (std::isfinite(t_c)) imu_die_temp_c = t_c;
+    }
 
     return true; // 返回成功标志，表示姿态已更新
   }

@@ -1,3 +1,37 @@
+/**
+ * @file    flight_control.cpp
+ * @module  固件/控制（GNC 执行器：模式判定、姿态/速率环、控制分配、执行器 mix）
+ * @brief   把遥控输入与导航状态转换为舵机摆角、双电机转速与油门
+ * @details 输入：RC 摇杆、导航姿态/角速率、参数表 kFlightCtrlParams；
+ *          处理：runGNCExecutive 每 200 Hz 严格按序执行
+ *            层0 输入与模式判定 → 姿态外环 → 角速率内环 → 控制分配（B 矩阵）
+ *            → 执行器 mix → 限幅与安全门控 → 故障诊断 → 在线辨识（只观测）；
+ *          输出：上摆 δf / 下摆 δt 舵机 PWM% 与双电机油门%。
+ *          不变量：任何分支的输出都先经 dMax / dwMax / ±MAX_CORRECTION /
+ *            0–100% 限幅才落地；锁定态电机恒 0%。
+ * @theory  SAS 三通道与直接映射 @ref CTL-001 §3–§5；
+ *          差速开方分配 @ref CTL-001 §7、@ref PROP-001 §6；
+ *          B_true 控制分配 @ref THY-003 §3、@ref TandemVec-Paper/ch/05-allocation.tex (eq:effectiveness_matrix)；
+ *          惯量逆解交叉耦合 @ref THY-003 §1.2；
+ *          电机 τm 一阶滞后 @ref THY-002 §4、@ref PROP-001 §3；
+ *          FPV 摇杆曲线 @ref TandemVec-Paper/ch/07-control.tex (eq:rc_curve)；
+ *          执行器轴映射（悬停构型）@ref AGENTS.md 踩坑记录
+ * @frame   固件"悬停存档系"：x_b=滚转轴、y_b=俯仰轴、z_b=推力轴（悬停竖直指地，
+ *          即机头朝天时机身纵轴）；导航量 NED（x 北 / y 东 / z 下）。
+ *          与论文/MOD-002 模型系差一个纯旋转置换，轴名不可跨文档混读。
+ * @units   控制器角度域统一 deg、deg/s、deg/s²；仅在写 ControlOutputs_t 时
+ *          经 ControlUnits::dps2ToRadps2 转 rad/s² 进入惯量逆解；
+ *          位置 m、m/s、m/s²；PWM 988–2012 µs 或 0–100%；时间 s、毫秒 _ms。
+ * @redline 执行器轴映射、速率环量纲、差速公式 ωf=ω0√(1+Δω)、SAS 摆角限幅
+ *          （逐条见 docs/registers/行为保持红线清单.md）
+ * @note    速率环量纲 2026-08-11 迁移完成：roll/pitch kp=16.042818 s⁻¹、
+ *          yaw kp=11.459156 s⁻¹、ki=5.729578 / 4.297184 s⁻²。外部参数文件若
+ *          仍写旧混合域 0.28/0.20/0.10，物理增益会低 57.3 倍，不得导入。
+ * @see     flight_control.h、FlightCtrlParams.h、TandemVec_ControlAllocation.h、
+ *          CTL-001 §8.6（仿真↔固件对照表）
+ * @test    test_host/test_flight_control_axis.cpp（T16–T18 轴映射/前馈/航向跟踪）；
+ *          test_host/fw_sil/（真实源码 SIL 定高/阶跃）
+ */
 #include "flight_control.h"
 #include "ins_altitude_reference.h"
 #include "math_utils.h"
@@ -14,23 +48,35 @@
 #include "InertiaDecoupling.h"
 #include "RcCurve.h"    // FPV 摇杆曲线（RATE_MODE，★2026-08-11）
 #include "ControlUnits.h"
+#include "ActuatorFaultMonitor.h" // 执行器故障检测（2026-10，只读诊断）
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 【层0】RC 输入与模式判定
+//   process_control_inputs → determine_control_mode → manage_pid_integrals
+//   职责：PWM 通道 → 语义化输入（解锁/点火/手动TVC/姿态子模式）；
+//         模式档位 → ControlMode；按模式/油门动态使能各环积分。
+//   安全约定：一切开关判定先过 isLinkUp 门控（上电 raw_rc 全 0 会误判低档，
+//     见 AGENTS.md 踩坑记录）；锁定/断链时电机强制 0。
+// ═══════════════════════════════════════════════════════════════════════════
+
 /**
- * @brief 处理遥控器输入和系统状态
+ * @brief 处理遥控器输入与开关状态，完成解锁上升沿的一次性初始化
  *
- * 本函数是飞控系统的"输入层"，负责：
- * 1. 从 raw_rc_values 读取所有遥控通道原始值
- * 2. 处理开关量 (解锁/点火/TVC手动/姿态模式) 并带去抖动滤波
- * 3. 读取燃料液位传感器 (中值+低通双级滤波)
- * 4. 同步状态标志 (数据记录/轨迹规划)
- * 5. 解锁上升沿触发: 重置所有控制目标和PID状态、设置导航原点
- * 6. 实时计算相对位置 (从导航原点)
- * 7. 控制辅助执行机构 (燃料阀门/点火MOS管)
+ * 职责：① 读 raw_rc_values（PWM 988–2012 µs）；② 开关量去抖动与语义化；
+ * ③ 燃料液位双级滤波；④ 同步状态标志；⑤ 解锁上升沿重置控制目标/PID/
+ * 滤波器/卡尔曼/原点；⑥ 起飞点相对位置清零；⑦ 燃料阀与点火 MOS 输出。
  *
- * @param[out] inputs 控制输入结构体，填充所有遥控器通道值和开关状态
+ * @param[out] inputs 控制输入结构体（通道原始值 + 开关状态），全部覆盖写
+ * @pre  raw_rc_values[] 已由通信层更新（无链路时为 0，故必须配合 isLinkUp）
+ * @post 所有开关量已去抖；解锁上升沿后的控制器状态与起飞点均为零初值
+ * @note  解锁上升沿的重置范围（目标高度/位置、12 个 PID、7 个滤波器、
+ *        HorizontalKF、气压参考）必须保持"全清"——漏一项会让新架次继承旧积分。
+ * @ref   CTL-001 §8.6（模式与门控）；见 AGENTS.md 踩坑记录
+ * @units 输入 PWM µs（988–2012，1500 中位）；内部相对位置 m（NED）
+ * @frame 通道语义按 FRD 摇杆约定；相对位置 NED（北/东/下）
  */
 void process_control_inputs(ControlInputs_t &inputs)
 {
@@ -209,23 +255,14 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
   // 更新 last_unlocked_state，为下一个循环检测上升沿做准备
   last_unlocked_state = inputs.is_unlocked;
 
-  // 实时计算相对位移
-  // 只有当 is_origin_lla_set 为 true 时才进行相对位置计算
+  // 实时计算相对位移：本函数不在这里积分/差分
+  // ① relative_north/east/down 由导航层统一写入（EKF 相对起飞点 NED），
+  //    历史上这里曾有两套本地实现（经纬度→ENU 位移、FDI location_* 直接差分），
+  //    两者都会与导航层争抢同一组全局量，已删除（git 历史保留）。
+  // ② 本函数只负责"原点未建立时兜底清零"，防止解锁前残留上一架次的值。
   if (is_origin_lla_set)
   {
-    // 经纬度计算位移
-    // double current_lat_deg = Geodetic_Pos_Packet.latitude * RAD_TO_DEG;
-    // double current_lon_deg = Geodetic_Pos_Packet.longitude * RAD_TO_DEG;
-    // double current_alt_m = Geodetic_Pos_Packet.height;
-    // ENU_Coord enu = calculate_ne_displacement(origin_lat_deg, origin_lon_deg, origin_alt_m, current_lat_deg, current_lon_deg, current_alt_m);
-    // relative_north = (float)enu.North;
-    // relative_east = (float)enu.East;
-    // relative_down = (float)-enu.Up;
-
-    // FDI组合导航位移
-    // relative_north = INS_GNSS_Packet.location_north - origin_north;
-    // relative_east = INS_GNSS_Packet.location_east - origin_east;
-    // relative_down = INS_GNSS_Packet.location_down - origin_down;
+    // 原点有效：relative_* 直接使用导航层本拍写入值，不做二次换算。
   }
   else
   {
@@ -242,6 +279,16 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
   digitalWrite(ignition, (inputs.is_unlocked && inputs.is_ignition_enabled) ? HIGH : LOW);
 }
 
+/**
+ * @brief 由模式通道档位判定飞行模式，并处理 GUIDED 指令超时降级
+ * @param[in] inputs 控制输入（只用 mode_channel_val；解锁门控在 getControlMode 内部）
+ * @return ControlMode（MANUAL / AUTO_ALTITUDE / AUTO_POSITION / GUIDED）
+ * @pre  CH7 模式通道已读入；GUIDED 模式要求上位机持续刷新制导指令
+ * @note  超时门限 GUIDANCE_CMD_TIMEOUT_MS = 500 ms：制导链一断就退回 MANUAL，
+ *        属于安全降级路径，任何改动都必须保留（不得为"连得上"而放宽）。
+ * @ref   CTL-001 §8.6
+ * @units millis() 毫秒
+ */
 ControlMode determine_control_mode(const ControlInputs_t &inputs)
 {
   ControlMode mode = getControlMode(inputs.mode_channel_val); // getControlMode内部已处理未解锁情况
@@ -255,6 +302,21 @@ ControlMode determine_control_mode(const ControlInputs_t &inputs)
   return mode;
 }
 
+/**
+ * @brief 按模式/油门/手动旁路状态动态使能各 PID 环的积分项
+ * @param[in] inputs 控制输入（解锁、手动TVC、油门、姿态子模式）
+ * @param[in] mode   当前飞行模式
+ * @return 无；就地调用各 PID 的 setIntegralEnable()
+ * @pre  在每拍控制律之前调用（runGNCExecutive 步骤 3）
+ * @note  ① 姿态外环积分仅在角度模式 + 有动力时使能；
+ *        ② 航向外环积分恒禁用（悬停倾斜误差会积分饱和，且航向源与磁解耦，
+ *          见 manage_pid_integrals 内 yawAnglePID 那一行）；
+ *        ③ 速率内环积分只要姿态控制激活就使能（消除配平力矩）；
+ *        ④ 垂直速度环积分只在定高/定点/制导且非手动旁路时使能。
+ *        setIntegralEnable 内部做无扰切换（从当前输出反推积分初值），
+ *        因此频繁开关不会在输出上产生阶跃。
+ * @ref   PositionPID.h（无扰切换/积分状态钳位）
+ */
 void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
 {
   // 判断油门是否有效（大于1100表示有动力）
@@ -285,6 +347,21 @@ void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
       (mode == AUTO_ALTITUDE || mode == AUTO_POSITION || mode == GUIDED) && inputs.is_unlocked && !inputs.is_manual_tvc);
 }
 
+/**
+ * @brief 垂直通道：模式 → 天向加速度指令 → 总推力需求 → 油门百分比
+ * @param[in]  inputs  控制输入（手动模式下油门摇杆直通）
+ * @param[in]  mode    当前飞行模式；AUTO_* / GUIDED 走闭环，其余手动油门
+ * @param[out] outputs 只写 throttle_percent（0–100，其余字段由后续层填）
+ * @pre  高度/垂直速度来自导航层（起飞点 NED 原点，向上为正）
+ * @formula F_z = m·(g + a_z_up)；F_total = F_z / cos_tilt；
+ *          thr% = F_total / MAX_THRUST × 100
+ * @ref  PROP-001 §2、见 CTL-001 §8.4（串级定高与倾角补偿）；
+ *       @ref MOD-002 §1.2（cos_tilt 用 R33，不是 R13）
+ * @units 高度 m、垂直速度 m/s、加速度 m/s²、推力 N、油门 %；PID 步长 0.005 s
+ * @note  倾角补偿用 |R33| = |1−2(qx²+qy²)|：存档系 z_b=推力轴，R33 即推力轴在
+ *        NED 竖直方向的投影。若误用 R13（x_b 投影），悬停时 R13≈0 → 钳到 0.5
+ *        → 油门需求凭空 ×2（2026-08-07 已踩，勿改回）。
+ */
 void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, ControlOutputs_t &outputs)
 {
   // 控制高度统一使用起飞点 NED 原点，转换为天向为正。
@@ -510,12 +587,21 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
   throttlePercent = outputs.throttle_percent;
 }
 
+/**
+ * @brief 初始化水平位置保持链（位置环 → 速度环）的限幅/滤波/积分界
+ * @pre  首次进入 AUTO_POSITION 时调用；参数全部取自 kFlightCtrlParams
+ * @post 位置/速度环 PID 清零并配好限幅；thrust_comp 滤波与 HorizontalKF 归零
+ * @note  位置环输入 m、输出 m/s（限幅 ±kPosCtrlMaxSpeedCmd）；
+ *        速度环输入 m/s、输出 m/s²（限幅 ±kMaxAccelCmd）。
+ *        积分界用 int_limit（输出量纲），实际积分状态由 PositionPID 反推钳位。
+ * @ref   CTL-001 §8.4（串级定高/水平环）；见 PositionPID.h
+ * @units m、m/s、m/s²；PID 步长 0.005 s（200 Hz）
+ */
 void initPositionHold()
 {
   // --- 1. 目标位置初始化 ---
-  // 在新的Loiter模式下，目标点是动态设置的，这里无需初始化
-  // targetNorth = 0.0f;
-  // targetEast = 0.0f;
+  // Loiter 目标点是动态设置的：进入定点模式时由 handlePositionControl
+  // 把 targetNorth/targetEast 锁到当前点，故这里无需预置。
 
   // --- 2. 位置环PID初始化 (输入: m, 输出: m/s) ---
   // ★ 2026-08-08 C路径重构：限幅/积分/滤波统一读自 kFlightCtrlParams（§4.0）
@@ -560,6 +646,21 @@ void initPositionHold()
   kf_east.reset();
 }
 
+/**
+ * @brief 水平定点：Loiter 状态机 + 位置/速度串级 → 目标倾斜推力分量
+ * @param[in] roll_rc_raw  滚转通道原始 PWM（988–2012 µs）
+ * @param[in] pitch_rc_raw 俯仰通道原始 PWM（988–2012 µs）
+ * @return 无；更新全局 thrust_comp_N / thrust_comp_E（单位推力矢量水平分量）
+ * @pre  仅 AUTO_POSITION / AUTO_ALTITUDE 有实际作用，其他模式复位并返回
+ * @formula 刹车点 s = v·|v| / (2·a_max)·k_safe，a_max = g·tan(15°)；
+ *          速度环 a = kp·Δv + ki∫Δv + kd·d(−v)/dt；
+ *          加速度圆限幅 |a| ≤ MAX_ACCEL_CMD；推力分量 = a_i / |[a_n,a_e,g+a_z]|
+ * @ref  CTL-001 §8.4；见 THY-003 §1（牛顿–欧拉）
+ * @units 位置 m、速度 m/s、加速度 m/s²、倾角 rad；PID 步长 0.005 s
+ * @note  北向由 pitch 摇杆、东向由 roll 摇杆映射（体轴映射见 AGENTS.md 低速悬停
+ *        闭环口径踩坑记录，2026-10-21 修正；旧实现把东向塞进偏航会漂）。
+ *        刹车预测点限幅 ±5 m，防止速度估计异常把目标点设到数公里外。
+ */
 void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
 {
   // --- 1. 模式检查与初始化 ---
@@ -595,32 +696,12 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // 使用全局计算好的相对位置
   float currentNorth = relative_north;
   float currentEast = relative_east;
-  // 速度已包含了光流和卫导组合导航的切换逻辑，因此无需再进行判断
+  // 速度已包含光流与卫导的组合切换逻辑，本函数不再做数据源选择。
+  // 历史遗留：这里曾按 flow_data.is_flow_valid 直接替换速度、或把机体系光流
+  // 速度 bodyToNed 到 NED，两套分支均已并入导航层 EKF（光流/测距是两条独立
+  // 新鲜度通道，见 AGENTS.md 光流踩坑记录），故不再保留本地换算。
   float currentVelNorth = INS_GNSS_Packet.velocity_north;
   float currentVelEast = INS_GNSS_Packet.velocity_east;
-  // currentVelEast = ubx.east_vel_mps();
-  // currentVelNorth = ubx.north_vel_mps();
-
-  // **数据融合逻辑**：如果光流速度有效，并且无卫导数据，则用它替代GNSS速度
-  // if (flow_data.is_flow_valid && Geodetic_Pos_Packet.longitude == 0.0f && Geodetic_Pos_Packet.latitude == 0.0f)
-  // if (true) // TODO: 临时使用光流数据
-  // {
-  // 光流提供的是机体坐标系(FRD)下的速度 (velocity_x_mps, velocity_y_mps)
-  // 必须将其旋转到导航坐标系(NED)才能用于位置控制器
-  // float yaw_rad = AHRS_Packet.Heading;
-  // float ned_vel_n, ned_vel_e;
-
-  // 调用已有的工具函数进行坐标变换
-  // bodyToNed(flow_data.velocity_x_mps, flow_data.velocity_y_mps, yaw_rad, ned_vel_n, ned_vel_e);
-
-  // 使用N系光流速度直接替换
-  // currentVelNorth = ned_vel_n;
-  // currentVelEast = ned_vel_e;
-
-  // 使用光流+IMU融合速度
-  // currentVelNorth = fused_north_vel;
-  // currentVelEast = fused_east_vel;
-  // }
 
   // 判断摇杆是否在中心死区内
   bool sticks_in_deadzone = (fabsf(roll_rc_raw - 1500.0f) < RC_LOITER_DEADZONE) &&
@@ -805,6 +886,23 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // constructTiltTargetQuaternion 函数内部会处理从这些分量到完整单位矢量的构造。
 }
 
+/**
+ * @brief 姿态目标生成：定点/制导走推力矢量逆解，其余模式走摇杆或速率直通
+ * @param[in]  inputs  控制输入（姿态子模式、摇杆、航向）
+ * @param[in]  mode    当前飞行模式
+ * @param[out] q_target 目标姿态四元数（机体系→NED，分量 {w,x,y,z}）
+ * @pre  姿态量 AHRS_Packet 已更新；AUTO_POSITION 时 thrust_comp_N/E 已由
+ *       handlePositionControl 本拍算好
+ * @formula q_target = q_tilt ⊗ Rz(Heading)（定点/制导，先倾斜再叠航向）；
+ *          姿态模式 q_target = Rz(Heading) ⊗ Rxy(rollTarget, pitchTarget)；
+ *          倾角来自 constructTiltTargetQuaternion(comp_N, comp_E)
+ * @ref  MOD-002 §3（四元数右乘/分量顺序）；见 CTL-001 §8.6
+ * @units 角度 rad（摇杆目标角先乘 DEG_TO_RAD）；杆量 PWM µs
+ * @note  ① 存档系 z_b=推力轴 → 悬停静止 roll=pitch=0，直接叠 Rz(Heading) 即可，
+ *          不加"悬停基态补偿"，天然避开欧拉奇异点（2026-08-07 恢复）。
+ *        ② 定点模式切回时把 positionHoldEnabled 清掉，强制重锁当前点，
+ *          否则会自主飞回上一段悬停点（2026-08-10 修复，见函数内注释）。
+ */
 void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Quaternion &q_target)
 {
   if (mode == AUTO_POSITION)
@@ -852,10 +950,8 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
     float raw_thrust_comp_E = target_accel_e / total_force_norm;
 
     // --- 滤波输出 ---
-    // 对目标矢量进行低通滤波，使姿态变化更柔和，减少电机/舵机抖动
-    // thrust_comp_N = thrustCompN_filter.filter(raw_thrust_comp_N);
-    // thrust_comp_E = thrustCompE_filter.filter(raw_thrust_comp_E);
-    // 直接使用未滤波的加速度分量
+    // GUIDED 模式刻意不做低通：制导计算机已给出平滑的加速度指令，
+    // 再滤波只会增加相位滞后（AUTO_POSITION 分支才用 thrustComp 滤波器）。
     thrust_comp_N = raw_thrust_comp_N;
     thrust_comp_E = raw_thrust_comp_E;
 
@@ -973,6 +1069,31 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
 static bool  s_yaw_hold_armed = false;
 static float s_yaw_hold_ref_rad = 0.0f;
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 【控制链】姿态外环 → 角速率内环（roll / pitch / yaw 三通道）
+//   execute_attitude_controller：四元数误差 → 目标角速率 → 角加速度指令
+//   execute_yaw_controller     ：航向锁（ratchet hold）→ 目标角速率 → 角加速度
+//   单位口径：外环 deg→deg/s，内环 deg/s→deg/s²；只在写 ControlOutputs_t 时
+//   转 rad/s²。见下方"角速率内环量纲"红线块。
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * @brief 滚转/俯仰姿态控制：姿态外环（角度模式）→ 角速率内环 → α 指令
+ * @param[in]  inputs  控制输入（解锁、手动TVC旁路、姿态子模式、摇杆）
+ * @param[in]  q_target 目标姿态四元数（{w,x,y,z}，机体系→NED）
+ * @param[out] outputs 写 alpha_roll_radps2 / alpha_pitch_radps2 [rad/s²]
+ * @pre  陀螺已减 EKF 零偏；姿态控制门控 = is_unlocked && !is_manual_tvc
+ * @formula 外环 Δω_ref = kp_a·Δθ + ki_a∫Δθ − kd_a·ω（输出限幅 ±80 deg/s）；
+ *          内环 α_ref = kp_r·(ω_ref−ω) + ki_r∫(ω_ref−ω)（deg/s²）；kd=0
+ * @ref  CTL-001 §4–§5（SAS 三通道/极性）；见 MOD-002 §3（四元数误差右乘）
+ * @units 角度 deg、角速率 deg/s、角加速度 deg/s²（仅写输出时转 rad/s²）
+ * @note  ① 姿态误差角取 2·atan2(|q_vec|, |q_w|)，大误差下精确、小误差退化为
+ *          2·q_vec；q_w 取正保证最短路径。
+ *        ② 姿态外环的 D 项用外部导数（陀螺），传参语义为 d(input)/dt，
+ *          PositionPID 内部取负作误差导数。
+ *        ③ RATE_MODE 走 FPV 曲线直通目标角速率，并复位外环/内环 PID，
+ *          避免模式切换时携带旧积分。
+ */
 void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion &q_target, ControlOutputs_t &outputs)
 {
   // 获取当前角速率
@@ -1015,9 +1136,13 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       // 通过选择w分量为正的版本，确保旋转路径最短
       float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
 
-      // FRD 体轴映射（x_b=机身纵轴=推力轴，NED→FRD 标准轴序）：x=滚转、y=俯仰、z=偏航
-      // Roll（滚转）取 q_err.x，Pitch 取 q_err.y，Yaw（航向）在 execute_yaw_controller 取 q_err.z
-      // 与底层控制分配对齐（悬停构型语义，★2026-08-07 轴置换）：Mx'(差速)←yaw、My(下摆)←pitch、Mz'(上摆)←roll
+      // ── 姿态外环（四元数误差 → 目标角速率）────────────────────────────
+      // 体轴映射（存档系，★以 mix 层实码为准）：滚转=绕 x_b、俯仰=绕 y_b、
+      // 偏航=绕 z_b=推力轴（悬停时竖直，即世界航向）。
+      // 故误差四元数分量：q_err.x → 滚转外环（上摆 δf）、q_err.y → 俯仰外环
+      // （下摆 δt）、q_err.z → 航向（由 execute_yaw_controller 统一处理）。
+      // ⚠️ 旧注释"x_b=机身纵轴=推力轴"把论文模型系（x'=推力轴）与固件存档系
+      //   （z_b=推力轴）混读，已废止：本固件滚转永远指"绕 x_b"。
       // 使用完整四元数向量模长，确保多轴同时存在误差时 atan2 参数正确
       // 原代码仅用 sqrt(y²+z²)，当偏航误差（x分量）不为零时会低估模长，
       // 导致进入 atan2 分支的判断偏低，large-angle精确缩放系数偏大
@@ -1074,14 +1199,29 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     gnc_tel.omega_ref_dps[0] = rollAngleOutputFilter.filter(gnc_tel.omega_ref_dps[0]);
     gnc_tel.omega_ref_dps[1] = pitchAngleOutputFilter.filter(gnc_tel.omega_ref_dps[1]);
 
+    // ── 角速率内环（角速率误差 → 角加速度指令）────────────────────────
     // 内环统一角度域：角速率误差(deg/s) → 角加速度指令(deg/s²)。
     // 仅在写入 ControlOutputs 时转换为 rad/s²，供惯量逆解使用。
+    //
+    // ── 角速率内环量纲（2026-08-11 统一，行为红线）──────────────────────
+    // 公式：α_ref[deg/s²] = kp[s⁻¹]·(ω_ref−ω)[deg/s] + ki[s⁻²]·∫(ω_ref−ω)dt
+    // 现值：kp roll/pitch 16.042818、yaw 11.459156；ki roll/pitch 5.729578、
+    //       yaw 4.297184（2026-08-12 下调 25%）；kd 全轴 0。
+    // 来源：@ref AGENTS.md 踩坑记录"速率环量纲已统一"
+    // 实现：PositionPID::computeDerivativeOnMeasurement 输出 deg/s²，
+    //       再经 ControlUnits::dps2ToRadps2 转 rad/s² 写 outputs。
+    // 警示：旧"混合域"参数 0.28/0.20/0.10 只有乘 180/π 才与本组等价——
+    //       若外部参数文件（0xE1 / 上位机 / 旧存档）继续写旧值，物理增益
+    //       会低 57.3 倍；同理 kd 若要从 0 调非零，也必须先 ×57.3。
+    //       另：PositionPID 的 D 项按"每拍差分"实现（未除 dt），kd≠0 时
+    //       数值量纲隐含 200 Hz，不能当连续域微分用。
+    // ────────────────────────────────────────────────────────────────────
     gnc_tel.alpha_ref_dps2[0] = rollRatePID.computeDerivativeOnMeasurement(
         gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x, 0.005f);
     // ★ 2026-08-10 通读修复：原误用 rollRatePID（复制粘贴）——pitchRatePID.compute
     //   从未被调用 → pitch 积分恒 0、且 roll/pitch 共享同一 PID 实例的积分状态互相污染；
     //   在线辨识 i_term[1]=pitchRatePID.getIntegral() 因此恒 0（pitch CG/配平力矩辨识失效）。
-      //   迁移前 kp 相同（0.28）掩盖了比例项错误，实机调参稳定期未被发现。修复后 pitch 积分独立。
+    //   迁移前 kp 相同（0.28）掩盖了比例项错误，实机调参稳定期未被发现。修复后 pitch 积分独立。
     gnc_tel.alpha_ref_dps2[1] = pitchRatePID.computeDerivativeOnMeasurement(
         gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
     gnc_tel.alpha_ref_dps2[0] = rollOutputFilter.filter(gnc_tel.alpha_ref_dps2[0]);
@@ -1110,18 +1250,25 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 }
 
 /**
- * @brief 步骤7: 偏航/倾斜控制器 — ATTITUDE_MODE 姿态外环 + RATE_MODE 摇杆速率
- *
- * VTOL 悬停构型（x_b 竖直）下，机体 z_b 是水平轴：
- *   - q_err.x（绕 x_b）→ Roll 外环（execute_attitude_controller）→ 上摆 δ_f
- *     （绕模型系 z'=+x_b 的力矩——悬停时绕竖直轴的误差，见步骤6/8 轴置换）
- *   - q_err.z（绕 z_b）→ 本控制器（yaw hold）→ 差速 Δω（绕模型系 x'=-z_b 的力矩）
- *   （水平巡航构型下 q_err.z = 航向误差，但本项目按 VTOL 构型统一处理）
- *   ★ 2026-08-09 修正：旧注释"q_err.x→差速、q_err.z→上摆"为轴置换前语义，
- *   与步骤6（1016-1023）和步骤8（1250-1252）实码矛盾——已按实码统一。
- *
- * ATTITUDE_MODE：q_err.z 姿态外环（与 Roll/Pitch 对称），消除静态倾斜误差；
- * RATE_MODE：摇杆 → 目标角速率（松杆即停，原行为保留）。
+ * @brief 航向通道：摇杆角速率指令 + 回中航向锁（ratchet hold）→ α_yaw 指令
+ * @param[in]  inputs   控制输入（yaw 摇杆、解锁状态）
+ * @param[in]  q_target 目标姿态四元数（本控制器不消费：航向参考由 Euler 航向锁
+ *                      维护；保留形参只为与 execute_attitude_controller 同签名）
+ * @param[out] outputs  写 alpha_yaw_radps2 [rad/s²]
+ * @pre  航向取 AHRS_Packet.Heading（NED）；门控 is_unlocked && !is_manual_tvc
+ * @formula 杆量偏离：ω_ref = rcRateCurve(Δus/512, rc_rate, expo[2], super[2], 600)
+ *          杆量回中：ω_ref = clamp(att_yaw.kp · Δψ, ±att_yaw.int_limit)，
+ *          Δψ = 短弧航向误差（±π 归一化）；内环 α_yaw = kp_r·(ω_ref−ω_z)+ki_r∫
+ * @ref  CTL-001 §8.6（ratchet hold 与仿真对照）；
+ *       @ref TandemVec-Paper/ch/07-control.tex (eq:rc_curve)
+ * @units 角度 rad、角速率 deg/s、角加速度 deg/s²；死区 40 µs；限幅 ±24 deg/s
+ * @note  ① 偏航摇杆在 ATTITUDE_MODE / RATE_MODE 下都是"角速度指令"（与原始
+ *          存档版一致）；回中后的航向保持由本函数的锁逻辑提供，**不是**
+ *          q_err 姿态外环——旧注释"ATTITUDE_MODE 走 q_err.z 姿态外环"与实码
+ *          不符，已废止（2026-08-09 起为 ratchet hold）。
+ *        ② 解锁瞬间以当前航向为参考（防旧参考导致起飞猛转）。
+ *        ③ 差速通道受电机 τm=0.28 s 限带，航向环带宽必须保守（CTL-001 §8.6）。
+ * @test test_host/test_flight_control_axis.cpp T17（航向指令跟踪与转角验证）
  */
 void execute_yaw_controller(const ControlInputs_t &inputs,
                              const Quaternion      &q_target,
@@ -1193,14 +1340,27 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 }
 
 /**
- * @brief 步骤8: 混控输出 — 物理模型逆解控制分配版
- *
- * 控制链底层（上层与飞行器模型完全解耦）：
- *   alpha × I → M_cmd → allocateMoments(BTRUE) → δ_f, δ_t, Δω
- *
- * 轴向（FRD，★2026-08-07 轴置换）：x_b=前→滚转/上摆δ_f，y_b=右→俯仰/下摆δ_t，
- * z_b=下=推力轴→偏航/差速Δω（旧注释"上摆=偏航/差速=滚转"已废止）
- * 手动TVC旁路：RC直接映射舵机，跳过控制分配。
+ * @brief 控制分配（层1–2）+ 执行器 mix（层3）+ 限幅/安全门控
+ * @param[in] inputs  控制输入（解锁、手动TVC、四通道摇杆）
+ * @param[in] outputs 控制律输出（alpha_roll/alpha_pitch/alpha_yaw [rad/s²]、
+ *                    throttle_percent [0,100]）
+ * @return 无；直接写舵机/电机 PWM，并更新 gnc_tel 执行器段与 g_tvc_* 观测量
+ * @pre  上层已给出 α 指令与油门；本层是整条链唯一写执行器的地方
+ * @formula ① 惯量逆解 M = I·α（+ 交叉耦合前馈），经轴置换进模型系；
+ *          ② 差速通道增益调度 k = min((w0_eff/w_hover)², 1)；
+ *          ③ B_true 分配 u = B_true⁻¹·M_cmd（3×3 Cramer 逆，近奇异退 FULL_B）；
+ *          ④ 差速开方分配 ωf,t = w0·√(1±Δω)，再钳到 wMax；
+ *          ⑤ 舵机 PWM% = 50 + (摆角·传动比·方向)/半行程×50
+ * @ref  THY-003 §3（控制分配/B⁺）；见 TandemVec-Paper/ch/05-allocation.tex
+ *       (eq:direct_mapping、eq:Btrue_allocation)；
+ *       CTL-001 §7（差速分配）、§8.6（固件链）；见 PROP-001 §5–§6
+ * @units α [rad/s²]、M [N·m]、摆角 [rad]（转 deg 后进舵机映射）、Δω 无量纲、
+ *        转速 [rad/s]、PWM 0–100%
+ * @note  本层三条硬性安全边界（删任一条都会改变实机行为）：
+ *        ① 锁定态电机强制 0%（只有舵机允许随摇杆摆动做地面标定）；
+ *        ② 零油门门控（throttle < 5%）把 δf/δt/Δω 一并归零，保持"零油门→执行器归中"；
+ *        ③ allocateDifferential 必须用**真实指令油门 w0**（它决定实际转速），
+ *           B 矩阵工作点才用观测转速 w0_eff——两者混用会把电机顶上 30% 转速。
  */
 // ★ 2026-08-07：差速回路增益调度系数，供在线辨识修正命令量使用。
 // mix 层（步骤8）写入 → update_online_identification（步骤9）读取，
@@ -1275,6 +1435,11 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       //   差速(绕x_b): Δω = +K·ω_x  （物理 Δω>0→Mx<0，负斜率）
       // 增益：0.5 deg per (deg/s)，30°/s 时触达 ±15° 摆角限幅
       // 2026-08-07 实机第4轮：方向全对但超调严重 → 大幅降 P（0.5→0.1）
+      // ⚠️ 本块是**调试死路径**（GYRO_DIRECT_TEST=0 时不参与编译）：
+      //   上面的轴名沿用历史模型系叫法（上摆"绕 z_b"），与固件通道命名
+      //   （上摆=滚转=体轴 x）不是一套；符号以本块代码为准，且代码里
+      //   upper 取 +K·ω_z（与上一行注释的 -K·ω_z 写法不一致，见核查记录
+      //   P2-8）。正式飞行永远走 #else 的 BTRUE 分配，勿照抄本块。
       const float GYRO_K = 0.1f;
       const float R2D = 57.29578f;
       lower_gimbal_deg  = constrain( GYRO_K * icm_gyro_y * R2D, -15.0f, 15.0f);
@@ -1308,6 +1473,26 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       const float w0_est = sqrtf(0.5f * (g_wf_est * g_wf_est + g_wt_est * g_wt_est));
       const float w0_eff   = fmaxf(w0_est, w0_floor);
 
+      // ── 执行器轴映射（核对锚点：以本函数实码为准，勿凭概念名）──────────
+      // 公式：alpha_roll → Mz' → 上摆 δ_f；alpha_pitch → My' → 下摆 δ_t；
+      //       alpha_yaw → Mx' → 差速 Δω。实码即本段三条 M 赋值，随后
+      //       `lower_gimbal_deg = ao.delta_t`（写 TVC_PITCH 舵机）、
+      //       `upper_gimbal_deg = ao.delta_f`（写 TVC_ROLL 舵机）。
+      // 符号：δ_f 上摆角、δ_t 下摆角 [rad]；Δω 差速（无量纲）；α_* [rad/s²]
+      // 来源：@ref AGENTS.md 踩坑记录（2026-08-07 轴置换，锚点=手动直通实机）
+      // 实现：本函数"层1 惯量逆解"三条 M 赋值 ∘ allocateMoments(BTRUE) ∘ 层3 mix
+      // 等价变换：固件存档系（z_b=推力轴）与论文/MOD-002 模型系（x'=推力轴）
+      //   差一个纯旋转置换 x'=−z_b、y'=+y_b、z'=+x_b（det=+1）。因此论文
+      //   ch05"差速→Mx'(滚转)、上摆→Mz'(偏航)"是模型系读法；固件同一个 Mx'
+      //   服务的是偏航通道——悬停时差速绕竖直推力轴，物理上就是世界航向。
+      // 构型语义（悬停）：机头朝天、机身竖立，推力轴竖直指地，前电机在最高点
+      //   =上摆（滚转主控）、尾电机在最低点=下摆（俯仰主控）、差速=偏航主控。
+      //   巡航构型下同一对摆即前摆/尾摆；旧读法"前摆=偏航、差速反扭=滚转"
+      //   属巡航系（MOD-002 §1.2 的 Mx=滚转/Mz=偏航），跨系混读必错。
+      // 数值证据：@test test_host/test_flight_control_axis.cpp
+      //   （M_pos_dt[1]<0、M_pos_df[2]>0、M_pos_dw[0]<0，与 allocateMoments 符号一致）
+      // ────────────────────────────────────────────────────────────────────
+
       // 层1：惯量逆解 — 角加速度(rad/s²) × 惯量 → 期望力矩(N·m)
       // ★ 2026-08-07 恢复存档映射后的**轴置换**（tools/verify_mix_axes.py 推导）：
       //   控制律输出在**存档系**（x_b=前, y_b=右, z_b=下=推力轴）：
@@ -1319,14 +1504,20 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       float My =  P.Iy * outputs.alpha_pitch_radps2; // My'(下摆)          ← alpha_pitch(绕 y_b)
       float Mz = -P.Iz * outputs.alpha_roll_radps2;  // Mz'(上摆)          ← alpha_roll(绕 x_b)
       // ★ 2026-08-10 交叉耦合前馈（通用层，仿真 dynamics.mjs 同构）：
-      //   完整刚体动力学 M = I·α + ω×(I·ω) + ω×h。前馈在**机体系**按物理轴计算，
-      //   再经轴置换 R（M_x'=-M_z, M_y'=+M_y, M_z'=+M_x，verify_frame_map）进模型系，
-      //   与 I·α 同坐标系相加后一起过差速增益调度。
+      //   完整刚体动力学 M = I·α + ω×(I·ω) + ω×h。
+      //   ★ 2026-10-23（C-02 修正）：控制律/gyro 在**存档系**（x=滚转、y=俯仰、
+      //   z=推力轴），而前馈原语 `computeInertiaCompensation()` 约定**模型系**
+      //   （x′=推力轴）。旧调用直接把存档系 ω 传进模型系函数、并把 h 放在下标 0，
+      //   机动时前馈落到错误通道（与差速权限同量级）；现统一走存档系封装，
+      //   由 `computeInertiaCompensationFromArchive()` 一次性完成
+      //   ω′=(−ωz, ωy, ωx)、h′=(h,0,0)、I′=(I_axial, I_pitch, I_roll) 的置换。
+      //   输出已是模型系，直接与 Mx/My/Mz（分配器模型系）相加，不再手写映射。
       //   使能掩码 kFlightCtrlParams.inertia_comp_mask（默认全开；0xE1 在线可关做 A/B）。
       if (inertiaCompEnabled(kFlightCtrlParams.inertia_comp_mask))
       {
         // 角速度：与 execute_attitude_controller 相同的偏置补偿（EKF 零偏，
         // 前馈为确定性补偿，必须与姿态环同一参考系、且用滤波前原始值）
+        // 坐标：存档系 x=滚转、y=俯仰、z=推力轴（与 icm_gyro_* 同轴名）
         float omega_body[3] = { icm_gyro_x, icm_gyro_y, icm_gyro_z };
         if (nav_system_initialized)
         {
@@ -1335,21 +1526,23 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
           omega_body[1] -= gb(1);
           omega_body[2] -= gb(2);
         }
-        // 转子角动量：前后转子反向（前 CW 后 CCW），净角动量沿推力轴=
-        // 机体系 x 分量（仿真 hv.x = Jp·(wf·cf − wt·ct) 同构；摆角小 cos≈1）
-        const float h_rotor[3] = {
+        // 转子角动量：前后转子反向（前 CW 后 CCW），净角动量沿推力轴。
+        // 正方向取模型系 +x′（推力方向），与封装入参 h_along_thrust 一致；
+        // ★ 模型 x′ = −存档 z_b，故等价存档系分量为 (0,0,−h)；
+        // 仿真 hv.x = Jp·(wf·cf − wt·ct) 同构（摆角小 cos≈1）。
+        const float h_along_thrust =
             P.Jp * (g_wf_est * cosf(prev_prop_state.delta_f) -
-                    g_wt_est * cosf(prev_prop_state.delta_t)),
-            0.0f, 0.0f };
-        const InertiaCompResult ff = computeInertiaCompensation(
-            omega_body, P.Ix, P.Iy, P.Iz, h_rotor,
+                    g_wt_est * cosf(prev_prop_state.delta_t));
+        // 存档系惯量：x=滚转（侧倾惯量 P.Iz）、y=俯仰（P.Iy）、z=推力轴（轴向 P.Ix）
+        const InertiaCompResult ff = computeInertiaCompensationFromArchive(
+            omega_body, P.Iz, P.Iy, P.Ix, h_along_thrust,
             kFlightCtrlParams.inertia_comp_mask);
-        Mx += -ff.Mz_ff;   // 机体系 → 模型系
-        My += +ff.My_ff;
-        Mz += +ff.Mx_ff;
-        gnc_tel.M_ff[0] = -ff.Mz_ff;  // 模型系分量（诊断遥测）
-        gnc_tel.M_ff[1] = +ff.My_ff;
-        gnc_tel.M_ff[2] = +ff.Mx_ff;
+        Mx += ff.Mx_ff;   // 模型系：x′=推力轴（差速）
+        My += ff.My_ff;   // 模型系：y′=俯仰（下摆）
+        Mz += ff.Mz_ff;   // 模型系：z′=滚转（上摆）
+        gnc_tel.M_ff[0] = ff.Mx_ff;  // 模型系分量（诊断遥测）
+        gnc_tel.M_ff[1] = ff.My_ff;
+        gnc_tel.M_ff[2] = ff.Mz_ff;
       }
       else
       {
@@ -1448,9 +1641,13 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   }
 
   // ================================================================
-  // 舵机输出 — 齿轮传动 + 标定参数（全部来自 kDefaultServoConfig）
-  // ================================================================
-  // 修改舵机方向 / 中位 / 行程：编辑 TandemVec_Config.h §ServoConfig
+  // 层3：执行器 mix — 舵机 PWM + 电机 PWM（齿轮传动 + 标定参数）
+  // ----------------------------------------------------------------
+  // 有向舵机角[deg] = 摆座角[deg] × 传动比(40/30=1.333) × 方向符号；
+  // PWM% = (50 + 中位偏置) + 舵机角 / 半行程 × 50，最后钳到 0–100%。
+  // 限幅与安全门控：舵机钳位 0–100%（机械行程保护，超出会堵转）；
+  //   电机由上层分支保证锁定=0%、零油门=归中；此处不再有模式判断。
+  // 修改方向 / 中位 / 行程：编辑 TandemVec_Config.h §ServoConfig
   // ================================================================
   const ServoConfig& SC = kDefaultServoConfig;
   const float gear = SC.teeth_gimbal / SC.teeth_servo;  // 40/30 = 1.333
@@ -1491,9 +1688,19 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
  *   即使辨识结果完全错误，也不影响飞行 —— 这是"第一步：只观测不闭环"。
  *   待多架次数据确认 b_est 稳定后，才考虑人工调整增益（第二步）。
  *
-  * 轴序约定：[0]=roll(滚转/上摆) [1]=pitch(俯仰/下摆) [2]=yaw(偏航/差速)
+ * 轴序约定：[0]=roll(滚转/上摆) [1]=pitch(俯仰/下摆) [2]=yaw(偏航/差速)，
  *   与 outputs.alpha_* 及 current_omega_dps_body_filtered 的 FRD 映射对应：
- *   滚转←omega.x, 俯仰←omega.y, 偏航←omega.z
+ *   滚转←omega.x、俯仰←omega.y、偏航←omega.z。
+ * @param[in] inputs  控制输入（解锁/手动旁路门控）
+ * @param[in] outputs 本拍控制输出（α 指令 [rad/s²]、油门 [0,100]）
+ * @pre  必须在 mix 层之后调用：α 与油门此时才是本拍最终值
+ * @formula y = φᵀθ + ε，y=ω̇（陀螺数值微分），φ=[α_cmd, 1]ᵀ，θ=[b, d]ᵀ；
+ *          FFRLS 递推，激励门控 σ² = 0.95σ² + 0.05α_cmd² > 4 才更新
+ * @ref  TandemVec_OnlineID.h；见 TandemVec-Paper/ch/16-adrc-onlineid.tex
+ *       (eq:rls_update、eq:excitation、eq:gain_scheduling)
+ * @units α [rad/s²]；ω 传入 deg/s（OnlineID 内部转 rad/s 再微分）；dt 0.005 s
+ * @note  差速通道的 α 指令必须乘 s_yaw_gain_sched 才是"实际执行量"，否则
+ *        辨识会把调度衰减误判成"命令大、响应小"，b_est 系统性偏小。
  */
 static void update_online_identification(const ControlInputs_t &inputs,
                                          const ControlOutputs_t &outputs)
@@ -1549,26 +1756,112 @@ static void update_online_identification(const ControlInputs_t &inputs,
 }
 
 /**
- * @brief GNC (制导、导航与控制) 核心调度执行器 [频率: 200Hz]
+ * @brief 执行器故障只读诊断（2026-10）：F3 单发推力损失 / F4 舵机卡死
  *
- * 执行流程说明:
+ * 输入来自本拍最终执行器指令、姿态误差和垂直速度误差（**测得−目标**）；
+ * 只写 g_actuator_* 诊断标志，不改变油门/舵机输出。
+ * 注意：这只是检测层，受控下降/故障重构尚未接入（标志仅供遥测/地面站）。
+ *
+ * 边界（两类的判据与能力上限不同，不能混写）：
+ *   F3 推力损失：油门 > 75% 且垂直速度误差 < −1.0 m/s 持续 1.0 s；
+ *     仅 AUTO_ALTITUDE / AUTO_POSITION / GUIDED 有效（手动模式无有效垂直目标）；
+ *     动作建议 ThrustBoost（抬油门），实际执行由控制层决定；定高模式下
+ *     高度环本身可补偿 ~30% 推力损失（仿真 PASS），不等同"故障重构"。
+ *   F4 舵机卡死：|姿态误差| > 25° 且 |摆角指令| ≥ 90% dMax 持续 0.5 s；
+ *     动作建议 ControlledDescent（有界下降）。前摆 δ_f 是滚转**唯一**主控，
+ *     卡死属硬件单点，无法靠控制律恢复（见 notes/08-F4 单舵机卡死能力边界）。
+ *
+ * 2026-10-23 修正：F3 垂直速度误差旧实现写成"目标−当前"，与监测器
+ *   "下沉为负"的约定相反，真实下沉时永不触发；现统一走
+ *   `bfs::thrustLossVerticalVelocityError(measured, target)`。
+ *
+ * @param[in] inputs  控制输入（解锁门控：未解锁直接清零诊断状态）
+ * @param[in] outputs 本拍控制输出（油门百分比）
+ * @param[in] mode    当前飞行模式（F3 仅在自动垂直模式启用）
+ * @pre  必须在 mix 层之后调用（要用本拍最终 gnc_tel.delta_*_deg）
+ * @ref  ActuatorFaultMonitor.h；见 docs/08-参考资料/notes/08-F4单舵机卡死能力边界.md
+ * @units 姿态误差 deg、摆角占空比（|cmd|/dMax 无量纲）、油门 [0,1]、
+ *        垂直速度误差 m/s、时间 s
+ */
+static bfs::ActuatorFaultMonitor s_actuator_fault_monitor;
+static void updateActuatorFaultDiagnostics(const ControlInputs_t &inputs,
+                                           const ControlOutputs_t &outputs,
+                                           const ControlMode mode)
+{
+  if (!inputs.is_unlocked)
+  {
+    s_actuator_fault_monitor.reset();
+    g_actuator_servo_jam = false;
+    g_actuator_thrust_loss = false;
+    g_actuator_controlled_descent_request = false;
+    return;
+  }
+
+  const float dmax_deg = kDefaultTandemVecParams.dMax * 57.2957795f;
+  const float df_frac = (dmax_deg > 1e-3f)
+                            ? (gnc_tel.delta_f_deg / dmax_deg)
+                            : 0.0f;
+  const float dt_frac = (dmax_deg > 1e-3f)
+                            ? (gnc_tel.delta_t_deg / dmax_deg)
+                            : 0.0f;
+  // ── F3 判据输入（2026-10-23 修正）────────────────────────────────────
+  // 公式：e_v = v_up,meas − v_up,target（下沉为负）@ref CTL-002 §3
+  // 历史缺陷：旧代码写成 target − measured，真实下沉时 e_v>0，F3 永不触发；
+  //   反向爬升超目标且油门>75% 持续 1s 时会误报 ThrustBoost。
+  // 手动模式：target_vertical_velocity 只在 AUTO_*/GUIDED 更新，手动下是上次
+  //   自动模式的陈旧值 → 不允许 F3 参与判定（thrust_detection_enabled=false），
+  //   否则会把陈旧目标当成“期望下沉”而误判/漏判。
+  // 符号契约已收口到 thrustLossVerticalVelocityError()，调用方不得自行相减。
+  const float current_v_up =
+      InsVerticalVelocityUpFromNedDown(INS_GNSS_Packet.velocity_down);
+  const float vertical_vel_err =
+      bfs::thrustLossVerticalVelocityError(current_v_up, target_vertical_velocity);
+  const bool f3_enabled = (mode == AUTO_ALTITUDE || mode == AUTO_POSITION ||
+                           mode == GUIDED);
+  s_actuator_fault_monitor.update(gnc_tel.error_deg[0],
+                                  gnc_tel.error_deg[1],
+                                  df_frac,
+                                  dt_frac,
+                                  outputs.throttle_percent / 100.0f,
+                                  vertical_vel_err,
+                                  0.005f, // 200 Hz 导航/控制周期
+                                  f3_enabled);
+  g_actuator_servo_jam = s_actuator_fault_monitor.servo_jam();
+  g_actuator_thrust_loss = s_actuator_fault_monitor.thrust_loss();
+  g_actuator_controlled_descent_request =
+      (s_actuator_fault_monitor.action() ==
+       bfs::ActuatorFaultAction::ControlledDescent);
+}
+
+/**
+ * @brief GNC（制导、导航与控制）核心调度执行器 [频率: 200 Hz]
+ *
+ * 执行流程（顺序不可交换，每步依赖上一步的全局量）:
  *
  * 1. 状态管理 (State Management):
  *    - 判定飞行模式 (MANUAL / AUTO_ALT / AUTO_POS / GUIDED)；
  *    - 处理解锁安全联锁、原点复位、积分项动态使能及 GUIDED 超时保护。
  *
  * 2. 制导律计算 (Guidance Law):
- *    - 垂直通道: 闭环计算高度与速度误差，生成垂直推力需求；
- *    - 水平通道: 闭环计算位置与速度误差，生成水平加速度指令；
- *    - 目标合成: 基于物理模型将 3 轴期望加速度转化为目标姿态四元数 (q_target)。
+ *    - 垂直通道: 闭环计算高度与速度误差，生成垂直推力需求（油门 %）；
+ *    - 水平通道: 闭环计算位置与速度误差，生成水平推力分量；
+ *    - 目标合成: 期望加速度 → 推力方向 → 目标姿态四元数 (q_target)。
  *
  * 3. 控制律执行 (Control Law):
- *    - 姿态环: 计算当前与目标四元数的旋转差值，输出目标角速率；
- *    - 角速率环: PID 结算 TVC 舵机摆角 (Roll/Pitch) 与电机差速 (Yaw)。
+ *    - 姿态外环: 姿态误差四元数 → 目标角速率 (deg/s)；
+ *    - 角速率内环: 角速率误差 → 角加速度指令 (deg/s²)；
+ *    - 航向通道: 摇杆角速率 + 回中航向锁 → 差速通道 α_yaw。
  *
  * 4. 动力混控 (Mixer & Output):
- *    - 执行油门、矢量摆角与偏航扭矩的混控逻辑；
- *    - 输出 PWM 信号至舵机与电调。
+ *    - 惯量逆解 → 轴置换 → B_true 分配 → 摆角/差速 → 舵机与电调 PWM。
+ *
+ * 5. 诊断与观测: 执行器故障只读诊断（F3/F4）+ 在线辨识（不写回增益）。
+ *
+ * @pre  由 200 Hz 任务调度器调用；本拍内完成，禁止阻塞（含串口/Flash 写）
+ * @post 执行器 PWM 已刷新；gnc_tel 控制链中间量已填好供遥测
+ * @ref  CTL-001 §8.6；见 THY-003 §3
+ * @units 每拍固定 dt = 0.005 s；角度域 deg/deg/s/deg/s²，写执行器前转 rad
+ * @note  步骤 8 必须在步骤 6/7 之后、步骤 9 之前：辨识要用本拍最终 α 与油门。
  */
 
 void runGNCExecutive()
@@ -1599,11 +1892,15 @@ void runGNCExecutive()
   // 步骤 6: 执行Roll/Pitch姿态控制器，计算TVC舵机修正量
   execute_attitude_controller(controller_inputs, q_target_attitude, controller_outputs);
 
-  // 步骤 7: 执行偏航控制器 → 上摆角 δ_f（纵列双发适配：原差速输出改为上摆角）
+  // 步骤 7: 执行偏航控制器 → 差速通道 Δω（悬停时绕推力轴 = 世界航向）
+  //   注：旧注释"→ 上摆角 δ_f"是轴置换前的语义，与 mix 层实码不符，已废止。
   execute_yaw_controller(controller_inputs, q_target_attitude, controller_outputs);
 
   // 步骤 8: 将所有计算出的控制量混合，并输出到执行机构
   mix_and_output_commands(controller_inputs, controller_outputs);
+
+  // 步骤 8b: 执行器故障只读诊断（不改变输出）
+  updateActuatorFaultDiagnostics(controller_inputs, controller_outputs, current_mode);
 
   // 步骤 9: 在线参数辨识 — ★ 纯观测，只写 id_* 遥测量，不改任何增益
   //   放在混控之后：此时 alpha_* 与 throttle_percent 均为本拍最终值。

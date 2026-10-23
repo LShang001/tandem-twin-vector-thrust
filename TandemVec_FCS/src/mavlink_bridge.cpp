@@ -1,18 +1,25 @@
-// ============================================================
-//  mavlink_bridge.cpp — MAVLink 双向功能实现（QGC 桥接）
-//
-//  2026-08-10 双向扩展：
-//    PARAM_REQUEST_LIST → PARAM_VALUE 逐条广播（121 条，200Hz 每拍 1 条 ≈0.6s 收全）
-//    PARAM_REQUEST_READ → 按截断名/索引读单条
-//    PARAM_SET          → 写入 + applyFlightCtrlParams + 回读确认（写失败也回当前值）
-//    COMMAND_LONG       → 246 重启（回 ACK 后 300ms 软复位）；400 ARM / 176 SET_MODE
-//                         安全拒绝（解锁/模式由 RC CH5 硬判定，地面站远程控制是红线）；
-//                         其余 UNSUPPORTED；所有命令必回 COMMAND_ACK
-//    STATUSTEXT         → 关键事件文本队列（1Hz 轮发）
-//
-//  参数名 char[16] 截断规则：线上名 >15B 时 QGC 侧按截断名匹配（唯一性已核实，
-//  见 docs/mavlink-ref/MAVLink-参数服务.md）。参数表 = ano_params 注册表。
-// ============================================================
+/**
+ * @file    mavlink_bridge.cpp
+ * @module  固件/通信（MAVLink 双向桥：QGC / Mission Planner）
+ * @brief   实现 MAVLink 参数服务、命令应答与 STATUSTEXT 队列
+ *
+ * @details 上行：
+ *          PARAM_REQUEST_LIST → PARAM_VALUE 逐条广播（条数 = ANO_PARAMS_COUNT，
+ *          200Hz 每拍 1 条，约 0.6s 收全）；
+ *          PARAM_REQUEST_READ → 按截断名/索引读单条；
+ *          PARAM_SET → 写入 + `applyFlightCtrlParams()` + 回读确认（写失败也回当前值）；
+ *          COMMAND_LONG → 246 重启（回 ACK 后 300ms 软复位）；400 ARM / 176 SET_MODE
+ *          安全拒绝（解锁/模式由 RC CH5 硬判定，地面站远程控制是红线）；其余 UNSUPPORTED；
+ *          所有命令必回 COMMAND_ACK。
+ *          下行：PARAM_VALUE 广播状态机、COMMAND_ACK、STATUSTEXT 队列（1Hz 轮发）。
+ * @theory  N/A（协议桥接实现）
+ * @ref     docs/mavlink-ref/MAVLink-参数服务.md、docs/mavlink-ref/MAVLink-命令与状态.md
+ * @frame   N/A（消息字段语义由 MAVLink 定义）
+ * @units   参数一律 float；STATUSTEXT 文本 ≤50B；param_id ≤15B 可见字符
+ * @note    参数名 char[16] 截断规则：线上名 >15B 时 QGC 侧按截断名匹配（唯一性已核实，
+ *          见 docs/mavlink-ref/MAVLink-参数服务.md）。参数表 = ano_params 注册表，
+ *          数量以 ANO_PARAMS_COUNT 为准（追加 rc_* 后短名仍 ≤15B，无需额外截断）。
+ */
 #include "mavlink_bridge.h"
 #include "ano_params.h"
 #include <cstring>
@@ -45,9 +52,10 @@ static void mavSend(const mavlink_message_t &msg)
 }
 
 // 参数线上名 → MAVLink param_id（≤15B 唯一短名）
-// ★ 2026-08-10 短名算法（Python 侧 121 参数唯一性已验证，测试双保险）：
+// ★ 2026-08-10 短名算法（GCS/server/params.py 侧已按名称做唯一性校验，测试双保险）：
 //   field 缩写 out_min→omin / out_max→omax / int_limit→ilim / threshold→thr /
-//   enabled→en；inertia_comp_mask→inertia_mask；其余截 15B。
+//   enabled→en；inertia_comp_mask→inertia_mask；rc_rate/rc_expo[i]/rc_super[i] 原样（≤10B）；
+//   其余截 15B。
 //   注意：直接截断有冲突（att_pitch.out_min/out_max 都变 out_m，实测）！
 static void mavParamIdOfName(const char *name, char out[16])
 {
@@ -241,7 +249,7 @@ void mavlinkBridgeTick()
     static uint32_t s_tick = 0;
     s_tick++;
 
-    // 1) PARAM_VALUE 广播状态机：每拍 1 条（200Hz → 121 条约 0.6s 收全）
+    // 1) PARAM_VALUE 广播状态机：每拍 1 条（200Hz → 全部参数约 0.6s 收全）
     if (s_param_broadcast_active)
     {
         mavSendParamValue(s_param_broadcast_idx, (int16_t)s_param_broadcast_idx);

@@ -1,28 +1,37 @@
 /**
  * @file flight_control.h
- * @brief 飞行控制模块：制导律、控制律、TVC混控输出
+ * @module 固件/控制（GNC 对外接口）
+ * @brief 飞行控制模块的对外声明：GNC 调度、水平定点链
  *
- * 本模块实现完整的 GNC (制导-导航-控制) 执行流程：
+ * 本模块实现完整的 GNC（制导-导航-控制）执行流程：
  *
  *   制导律 (Guidance):
- *   - 垂直通道: 高度/速度串级PID -> 垂直推力加速度
+ *   - 垂直通道: 高度/速度串级PID -> 垂直推力加速度 -> 油门
  *   - 水平通道: 位置/速度串级PID -> 水平加速度矢量
  *   - 物理模型逆解: 3轴加速度 -> 推力方向矢量 -> 目标姿态四元数
  *
  *   控制律 (Control):
- *   - 姿态外环: 四元数误差 -> 目标角速率 (PID)
- *   - 角速率内环: 角速率误差 -> TVC摆角/电机差速 (PID, 微分先行)
- *   - 偏航环: 摇杆 -> 目标角速率 -> 电机差速 (PID)
+ *   - 姿态外环: 四元数误差 -> 目标角速率 (deg/s)
+ *   - 角速率内环: 角速率误差 -> 角加速度指令 (deg/s²)
+ *   - 航向环: 摇杆角速率 + 回中航向锁 -> 差速通道
  *
  *   混控输出 (Mixer):
- *   - TVC舵机: roll/pitch修正量 -> PWM百分比
- *   - 共轴电机: 油门 ± 偏航差速 -> 双电机PWM
+ *   - 上摆 δf 舵机（滚转）、下摆 δt 舵机（俯仰）: 摆角 -> PWM 百分比
+ *   - 双电机: 指令油门 ± 差速 Δω（纵列双发，差速=偏航）-> 双电机 PWM
  *
  *   飞行模式:
- *   - MANUAL: 手动油门 + 姿态自稳 (角度/角速率模式)
+ *   - MANUAL: 手动油门 + 姿态自稳（角度/角速率模式）
  *   - AUTO_ALTITUDE: 自动高度 + 手动水平
- *   - AUTO_POSITION: 自动高度 + 自动定点 (光流/KF/GNSS)
- *   - GUIDED: 机载计算机加速度指令制导
+ *   - AUTO_POSITION: 自动高度 + 自动定点（光流/KF/GNSS 由导航层融合）
+ *   - GUIDED: 机载计算机加速度指令制导（超时 500 ms 降级 MANUAL）
+ *
+ * @details 只做声明与接口约定，实现与各层注释见 flight_control.cpp。
+ *          模块间状态一律经 state_data.h 的全局量交换（不新增静态通道）。
+ * @theory  SAS 三通道 @ref CTL-001 §4；差速分配 @ref CTL-001 §7；
+ *          控制分配 B_true @ref THY-003 §3
+ * @frame  固件悬停存档系（x_b=滚转、y_b=俯仰、z_b=推力轴竖直）；导航量 NED
+ * @units  角度域 deg / deg/s / deg/s²；位置 m / m/s / m/s²；PWM 0–100%
+ * @see   flight_control.cpp、FlightCtrlParams.h、CTL-001 §8.6
  */
 #pragma once
 #include "state_data.h"
