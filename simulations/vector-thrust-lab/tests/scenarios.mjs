@@ -1,7 +1,19 @@
-// ============================================================
-//  测试场景运行器：固定步长驱动 core，供回归基线生成与比对
-//  （本文件不是测试，由 regression 测试与 fixtures/generate.mjs 共用）
-// ============================================================
+/**
+ * @file    scenarios.mjs
+ * @module  仿真 tests/场景运行器
+ * @brief   用固定步长驱动 core 复现标准机动，供回归比对与基线生成共用
+ * @details 输入：时长、每帧控制回调、初始化回调；处理：复位 → 按 1/60 s 帧步进
+ *          （stepPhysics 内部再按 4 ms 子步细分）→ 每秒记录一次快照；
+ *          输出：{final, samples}。
+ *          不变量：帧步长固定 1/60 s、每秒 60 帧采样一次——与 UI 主循环同构，
+ *          保证基线可由浏览器外复现。
+ * @theory  场景对应 MOD-001 §7.3 的演示性数值检查（配平/俯仰/滚转/偏航阶跃）
+ * @frame   机体系 FRD / NED
+ * @units   s、m、m/s、rad、rad/s、N、N·m
+ * @note 本文件不是测试文件（无 test()），被 regression.test.mjs 与 fixtures/generate.mjs 复用；
+ *       改动采样口径会同时改基线 → 属行为红线流程
+ * @see     tests/regression.test.mjs、tests/fixtures/generate.mjs
+ */
 import { P } from '../src/core/parameters.mjs';
 import { createSimulationState, resetSimulationState } from '../src/core/state.mjs';
 import { stepPhysics } from '../src/core/dynamics.mjs';

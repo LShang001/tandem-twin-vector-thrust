@@ -3,6 +3,18 @@
 """
 robust_lmi_analysis.py — 级联架构 LMI 鲁棒稳定性分析
 ======================================================
+@file    robust_lmi_analysis.py
+@module  仿真/鲁棒性分析（LMI 鲁棒稳定）
+@brief   用 Lyapunov/Petersen LMI 求级联架构的最大范数有界不确定界 γ̄
+@details 输入：A0 与不确定分解 (BΔ, CΔ)、内环增益 btrueK；
+         处理：cvxpy+CLARABEL 求可行性 → 二分搜索 γ̄ → 增益裕度扫描得 vtolAttKp 可行带；
+         输出：文本结论 + 退出码（标称可行/γ̄>0 为 0）。
+@theory  范数有界不确定的二次稳定判据（Petersen 1988）@ref TandemVec-Paper/ch15-cascade-control (15.7)
+@frame   N/A（状态空间，无坐标系）
+@units   无量纲（γ、K）、s⁻¹
+@note    本 LMI 是充分条件：γ̄ 内必稳定、γ̄ 外不保证；且模型无积分/滤波/执行器动态，
+         结果不得外推为实机增益裕度（@ref AGENTS.md 踩坑记录「单通道 LMI 不得外推」）
+@see     cascade_closedform.py、robust_montecarlo.py
 对应论文 TandemVec-Paper/ch/15-cascade-control.tex §15.7（新增）
 
 三件事（"还论文的债"）：

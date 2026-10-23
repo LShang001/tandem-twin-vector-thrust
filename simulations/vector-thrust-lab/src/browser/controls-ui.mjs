@@ -1,8 +1,29 @@
-// ============================================================
-//  控制面板 UI：滑块 / 开关 / 复位 / 模态框
-// ============================================================
+/**
+ * @file    controls-ui.mjs
+ * @module  仿真 browser/控制面板
+ * @brief   滑块/开关/复位的 DOM 绑定，以及滑块语义到物理指令的换算
+ * @details 输入：DOM 控件事件与 sim 状态；处理：按模式（巡航/悬停、SAS 模式）切换
+ *          滑块量纲（°、%、°/s、rad/s）并写回 S.thr/dt/df/dw；输出：状态更新与控件文案。
+ *          不变量：UI 只写指令 S.dt/df/dw，不直接写执行量 dtAct/dfAct/dwAct。
+ * @theory  滑块语义：巡航 dt/df 为摆角指令、dw 为差速幅值；悬停 dt/df 为姿态角指令、
+ *          dw 为航向角速度（rate 模式）@ref CTL-001 §8.2；
+ *          rate 模式（sasMode=3）滑块映射到 ±rateQMax/±ratePMax @ref CTL-001 §4.1
+ * @frame   N/A（纯 UI；角度绕机体轴）
+ * @units   UI 显示 °、°/s、%，写回状态一律 rad、rad/s、[-]
+ * @redline 悬停/巡航切换必须走 resetVtolHoverState/resetSimulationState（模式标志与状态一致）
+ * @note 弹簧回中只作用于 dt/df/dw：油门不回中，否则松手掉油门
+ * @see     state.mjs（复位语义）、control.mjs（消费指令）、tests/vtol.test.mjs
+ */
 import { resetSimulationState, resetVtolHoverState, resetPoseOnly } from '../core/state.mjs';
 
+// @note refreshModeUI 同时改文案与滑块 min/max/step，因为差速滑块在两种模式下量纲不同
+//       （巡航 %、悬停 °/s）——只改一半会导致松手回中按错量纲计算
+// @note 复位按钮走 resetPoseOnly（保留模式与输入），与"切模式"按钮的复位语义不同
+/**
+ * @brief 创建控制面板交互：同步滑块 ↔ 状态，绑定模式/复位/模态框按钮
+ * @param {Object} opts {sim, P, hooks}；hooks.stopDemo 为用户操作时打断演示的回调
+ * @returns {{syncFromUI: Function, pushToUI: Function}} 双向同步接口
+ */
 export function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
   const $ = id => document.getElementById(id);

@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FW-NAV 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录--fw-nav">代码理论核查记录 — fw-nav</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：fw-nav（Agent Teams task-3）｜ 规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：<code>6784221</code>（2026-09-11）；工作区另含 2026-10 的
+P0-0/P0-1/P0-3/P1-5 未提交改动（EKF 旋转效应、ZUPT 门限、GNSS
+降级/子集更新、振动自适应等），本记录以<strong>工作区实际代码</strong>为核查对象。
+理论来源：REF-120（秦永元《惯性导航》第三版）§7.2/§7.4/§7.5/§9.2/§9.6/§9.8/§9.9；REF-121（《卡尔曼滤波与组合导航原理》第三版）§2.2.1/§2.2.4/§7.3.1/§8.2.3；MOD-002
+§2/§3/§5；notes/01、04、06；GOV-004 附录 A。 方法：逐文件读代码 →
+对照公式与式号 → 实际打开 REF-120/REF-121 章节核对式号与原文表述 → 核对
+notes/01/04/06 的页码与结论 → 补 L0/L1/L2 与五段式 →
+<code>check-code-comments.py</code> 复检 → 宿主 g++ 回归。</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>行数</th>
+<th>L0 文件头</th>
+<th>L1 符号文档</th>
+<th><code>@ref</code> 引用</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/navigation_task.cpp</code></td>
+<td>2412</td>
+<td>有</td>
+<td>有（主状态机/双矢量/光流/降级/重锚/三个 KF + 5 段五段式）</td>
+<td>28</td>
+<td>R07 理论关键文件</td>
+</tr>
+<tr>
+<td><code>src/navigation_task.h</code></td>
+<td>156</td>
+<td>有</td>
+<td>有（全部导出函数）</td>
+<td>4</td>
+<td>修正“15 状态=四元数4+…”等 3 处腐烂注释</td>
+</tr>
+<tr>
+<td><code>src/sensor_imu.cpp</code></td>
+<td>547</td>
+<td>有</td>
+<td>有（init/read/handle）</td>
+<td>3</td>
+<td>轴映射红线</td>
+</tr>
+<tr>
+<td><code>src/sensor_imu.h</code></td>
+<td>75</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td>修正“写 AHRS_Packet”错误描述</td>
+</tr>
+<tr>
+<td><code>src/math_utils.h</code></td>
+<td>280</td>
+<td>有</td>
+<td>部分（原有工具函数注释）</td>
+<td>2</td>
+<td>R07 理论关键文件</td>
+</tr>
+<tr>
+<td><code>include/QuaternionMath.h</code></td>
+<td>540</td>
+<td>有</td>
+<td>有（全部公开函数）</td>
+<td>4</td>
+<td>修正 <code>theta=-asin(R13)</code> 等价说明</td>
+</tr>
+<tr>
+<td><code>include/Quat4f.h</code></td>
+<td>54</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td>原 <code>//</code> 头改为 <code>/** */</code> L0</td>
+</tr>
+<tr>
+<td><code>include/VerticalKF.h</code></td>
+<td>389</td>
+<td>有</td>
+<td>有（类 + 成员）</td>
+<td>2</td>
+<td>3 状态垂直 KF</td>
+</tr>
+<tr>
+<td><code>include/VerticalKF_2State.h</code></td>
+<td>330</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td>修正 25=5σ 的错误注释</td>
+</tr>
+<tr>
+<td><code>include/HorizontalKF.h</code></td>
+<td>265</td>
+<td>有</td>
+<td>有（类 + 成员）</td>
+<td>2</td>
+<td>速度观测型水平 KF</td>
+</tr>
+<tr>
+<td><code>include/ComplementaryFilter.h</code></td>
+<td>97</td>
+<td>有</td>
+<td>有（原有类注释）</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/IMU_AutoCalibrator.h</code></td>
+<td>260</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td>方差检测校准</td>
+</tr>
+<tr>
+<td><code>include/GeoDisplacement.h</code></td>
+<td>134</td>
+<td>有</td>
+<td>有（原有函数注释）</td>
+<td>2</td>
+<td>ENU/NED 混用风险已注明</td>
+</tr>
+<tr>
+<td><code>include/ins_altitude_reference.h</code></td>
+<td>64</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_bias_jump_monitor.h</code></td>
+<td>208</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_bias_temp_observer.h</code></td>
+<td>115</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_bias_temp_table.h</code></td>
+<td>121</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_gnss_delay_auto.h</code></td>
+<td>284</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_gnss_dynamic_weight.h</code></td>
+<td>137</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_gnss_epoch_timing.h</code></td>
+<td>122</td>
+<td>有</td>
+<td>有（原有函数语义）</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_gnss_pps_latency.h</code></td>
+<td>147</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_inertial_reference.h</code></td>
+<td>66</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_static_aid_profile.h</code></td>
+<td>271</td>
+<td>有</td>
+<td>有（原有调度说明）</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_static_detector.h</code></td>
+<td>280</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>include/ins_vibration_adaptive.h</code></td>
+<td>121</td>
+<td>有</td>
+<td>有（原 <code>//</code> 块保留为说明）</td>
+<td>1</td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p>合计：25 文件 / 7475 行（核查前 6887 行，本轮净增 588
+行注释与文档）；L0 覆盖 25/25；<code>@ref</code> 共 71 处（本轮新增 62
+处）。 本轮 diff 中新增注释/文档约 680
+行，无新增/删除可执行语句（唯一非注释变更行是
+<code>VerticalKF_2State</code>
+某常量行的行尾注释文字，代码值不变）。</p>
+<hr />
+<h2 id="2-核对矩阵">2 核对矩阵</h2>
+<p>结论枚举：<code>一致</code> / <code>等价变换后一致</code> /
+<code>近似（可接受）</code> / <code>偏差（已登记）</code> /
+<code>不一致（待修）</code>。</p>
+<h3 id="21-姿态更新与姿态数学a">2.1 姿态更新与姿态数学（A）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-01</td>
+<td><code>QuaternionMath.h</code></td>
+<td>Hamilton 乘积 <code>q1⊗q2</code>、共轭
+<code>q*=w−xi−yj−zk</code></td>
+<td>REF-120 §9.2.1 (9.2.2)(9.2.5) p.253</td>
+<td><code>quaternionMultiply()</code>、<code>quaternionConjugate()</code></td>
+<td>一致</td>
+<td>分量展开逐项对照；<code>Quat4f.h</code> float 版逐字同构</td>
+<td>补 <code>@theory</code>/<code>@ref</code></td>
+</tr>
+<tr>
+<td>A-02</td>
+<td><code>QuaternionMath.h</code></td>
+<td>四元数规范化 <code>q / norm(q)</code>（模长过小回退单位四元数）</td>
+<td>REF-120 §9.2.5 p.264</td>
+<td><code>normalizeQuaternion()</code></td>
+<td>一致</td>
+<td>阈值 1e-9 为工程保护，不影响归一化数学</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>A-03</td>
+<td><code>QuaternionMath.h</code></td>
+<td>3-2-1 欧拉角提取 <code>theta=-asin(R13)</code></td>
+<td>MOD-002 §3；REF-120 §9.2.2 p.256</td>
+<td><code>quaternionToEuler()</code></td>
+<td>等价变换后一致</td>
+<td><code>R13=2(xz+wy) ⇒ −asin(R13)=asin(2(wy−xz))</code>，与实现
+<code>sin_pitch=2(w*y−x*z)</code> 逐字一致；<code>sin_pitch</code> 钳位
+[−1,1]</td>
+<td>已补
+<code>@formula</code>/@note，标注<strong>不可改符号</strong>（红线）</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td><code>QuaternionMath.h</code></td>
+<td>欧拉角→四元数 Z-Y′-X″</td>
+<td>MOD-002 §3</td>
+<td><code>eulerToQuaternion()</code></td>
+<td>一致</td>
+<td>半角公式四式与 ZYX 顺序一致；输出保范</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>A-05</td>
+<td><code>QuaternionMath.h</code></td>
+<td>坐标变换 <code>v_F2=q⊗v_F1⊗q*</code></td>
+<td>REF-120 §9.2.2 p.256</td>
+<td><code>rotateVector()</code></td>
+<td>一致</td>
+<td>纯四元数旋转定义</td>
+<td>已有说明</td>
+</tr>
+<tr>
+<td>A-06</td>
+<td><code>QuaternionMath.h</code></td>
+<td>最短对齐旋转（半角公式 + 反向特判）</td>
+<td>REF-120 §9.2.1 p.253（构造式）</td>
+<td><code>computeAlignQuaternion()</code></td>
+<td>近似（可接受）</td>
+<td>夹角→π 时旋转轴不唯一，代码用垂直轴兜底；对航向无影响</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>A-07</td>
+<td><code>QuaternionMath.h</code></td>
+<td>纯倾斜目标姿态（机体 −z 对齐推力方向、无绕 z 旋转）</td>
+<td>项目控制构造（无教材式）</td>
+<td><code>constructTiltTargetQuaternion()</code></td>
+<td>近似（可接受）</td>
+<td>四元数 <code>(1−d_D, d_E, −d_N, 0)</code>
+归一化；水平分量超限时归一化</td>
+<td>登记 P2-7（缺项目推导文档引用）</td>
+</tr>
+<tr>
+<td>A-08</td>
+<td><code>navigation_task.cpp</code></td>
+<td>姿态右乘更新 <code>q_{k+1}=q_k⊗Exp(ω^b Δt)</code></td>
+<td>REF-120 §9.2 (9.2.14) p.268；MOD-002 §3.4</td>
+<td><code>TimeUpdateTwoSample()</code> / <code>TimeUpdate()</code>
+调用点</td>
+<td>一致（库内实现由 fw-ekf 核查）</td>
+<td>本区域只负责双子样拆分与调用；库内每步保范由 fw-ekf 记录</td>
+<td>补五段式与 <code>@ref</code></td>
+</tr>
+<tr>
+<td>A-09</td>
+<td><code>navigation_task.cpp</code></td>
+<td>双子样速度增量：旋转项 <code>½Δθ×Δv</code>、划摇项
+<code>(2/3)(Δθ₁×Δv₂+Δv₁×Δθ₂)</code></td>
+<td>REF-120 §9.6 (9.6.9)(9.6.17)(9.6.19) p.298–299、(9.6.25) p.301</td>
+<td><code>TimeUpdateTwoSample()</code> 调用点</td>
+<td>一致（P0-0 已修“旋转效应双计”）</td>
+<td><code>test_host/test_ekf_15state.cpp</code> T7：残差 0.000125005 vs
+期望 0.000124999</td>
+<td>补五段式</td>
+</tr>
+<tr>
+<td>A-10</td>
+<td><code>sensor_imu.cpp</code></td>
+<td>四元数链式修正
+<code>q_FRD_from_NED=q_FRD_from_FLU⊗q_FLU_from_NWU⊗q_NWU_from_NED</code></td>
+<td>REF-120 §9.2.2 p.256；MOD-002 §3.3</td>
+<td><code>readIMUData()</code> 步骤 8</td>
+<td>等价变换后一致</td>
+<td>两次 180° 旋转（FLU→FRD、NWU→NED）；轴映射与实飞存档版逐字一致</td>
+<td>补 <code>@ref</code>/红线说明</td>
+</tr>
+<tr>
+<td>A-11</td>
+<td><code>sensor_imu.cpp</code></td>
+<td>Madgwick 梯度下降姿态滤波（非秦书算法）</td>
+<td>工程实现（Madgwick 2010）</td>
+<td><code>madgwick.updateIMU()</code></td>
+<td>近似（可接受）</td>
+<td>只作后台 AHRS/无 GNSS 姿态量测源；yaw 无磁时纯陀螺积分</td>
+<td>文件头 <code>@theory</code> 注明“非秦书算法”</td>
+</tr>
+<tr>
+<td>A-12</td>
+<td><code>math_utils.h</code></td>
+<td>平面旋转 <code>[x_b,y_b]=R(−ψ)[x_n,y_n]</code></td>
+<td>MOD-002 §2</td>
+<td><code>nedToBody()</code>、<code>bodyToNed()</code></td>
+<td>一致</td>
+<td>与 DCM 3-2-1 的 ψ 分量一致</td>
+<td>补 <code>@ref</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-初始对准与航向源b">2.2 初始对准与航向源（B）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B-01</td>
+<td><code>navigation_task.cpp</code></td>
+<td>伪磁初值 <code>mag_ut=(30,0,40)</code> 的语义</td>
+<td>REF-120 §9.9.1 p.323（静基座 <code>f≈−g</code>）；notes/04
+§1.3/§2</td>
+<td><code>handleNavigationSystem()</code> 初始化前的 <code>mag_ut</code>
+赋值</td>
+<td>偏差（已登记）</td>
+<td>该矢量不随姿态/磁北变化，只提供“确定性”航向；TiltCompass
+解算结果非真北</td>
+<td>代码已注明“伪磁/非罗经对准”；报告中明确语义</td>
+</tr>
+<tr>
+<td>B-02</td>
+<td><code>navigation_task.cpp</code></td>
+<td>TiltCompass 双矢量定姿（第二把尺子）</td>
+<td>REF-120 §9.9.1 p.323；notes/06 §2</td>
+<td><code>nav_ekf.Initialize(..., mag_ut, ...)</code></td>
+<td>等价变换后一致</td>
+<td>秦书用 <code>g^b</code>+<code>ω_ie^b</code>；本机用
+<code>g^b</code>+伪磁，MEMS 陀螺无法分辨
+<code>ω_ie cosL≈13.25°/h</code>（长沙 28.2°N，notes/04 §1）</td>
+<td>保留，注明替换基准</td>
+</tr>
+<tr>
+<td>B-03</td>
+<td><code>navigation_task.cpp</code></td>
+<td>双矢量航向 <code>ψ=atan2(v_E,v_N)−atan2(v_y^b,v_x^b)</code></td>
+<td>REF-120 §9.8.14 p.320–322；notes/06 §2/§4</td>
+<td><code>handleDualVectorYawFusion()</code></td>
+<td>近似（可接受）</td>
+<td>门控：v≥1 m/s、<code>|ω_z|</code>≤0.35 rad/s、尺度比
+±35%；静止跳过</td>
+<td>补 L1 + 五段式 + <code>@deviation</code></td>
+</tr>
+<tr>
+<td>B-04</td>
+<td><code>navigation_task.cpp</code></td>
+<td><code>P0(8,8)=0.2 rad</code> 的语义</td>
+<td>notes/06 §1.2；AGENTS.md“EKF 三个机制性风险”</td>
+<td><code>init_heading_err_std_rad(0.2f)</code></td>
+<td>一致（语义=伪磁确定性 1σ，非真实精度）</td>
+<td>2026-08-13 仿真：π→2.5–6.7 km 闭环崩溃；0.2 rad 后姿态误差
+5–17°</td>
+<td>保留并注释</td>
+</tr>
+<tr>
+<td>B-05</td>
+<td><code>navigation_task.cpp</code></td>
+<td>航向弱可观：<code>K(8,v)∝f_x·P(8,8)/Q_a</code>；consider 门控</td>
+<td>REF-121 §8.2.3 p.291；notes/06 §6</td>
+<td><code>set_gnss_consider_heading()</code> 调用点</td>
+<td>一致</td>
+<td>P1-5：<code>|pitch|/|roll|&gt;0.5 rad</code> 且
+<code>|v|&gt;3 m/s</code> 时置位，仅本次更新生效</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>B-06</td>
+<td><code>navigation_task.cpp</code></td>
+<td>静止时航向不可观、双矢量观测退化</td>
+<td>notes/06 §1/§4</td>
+<td><code>handleDualVectorYawFusion()</code> 的
+<code>static_det.confirmed_static</code> 早退</td>
+<td>一致</td>
+<td>悬停/匀速时航迹角退化，§9.8.14 的 φ_U 不进入速度观测</td>
+<td>已有 L2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-速度位置编排零速修正与静止检测c">2.3
+速度/位置编排、零速修正与静止检测（C）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td><code>navigation_task.cpp</code></td>
+<td>比力方程 <code>V̇ⁿ=Cⁿ_b f^b−(2ω_ie+ω_en)×Vⁿ+gⁿ</code></td>
+<td>REF-120 §7.4 (7.4.6) p.189</td>
+<td><code>TimeUpdate()</code>/<code>TimeUpdateTwoSample()</code>
+调用</td>
+<td>一致（库内实现）</td>
+<td>库内 <code>PropagateStateFromIncrements()</code>（fw-ekf 记录）</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>C-02</td>
+<td><code>navigation_task.cpp</code></td>
+<td>位置编排
+<code>L̇=V_N/(R_m+h)</code>、<code>ḣ=−V_D</code>；高度通道不稳定</td>
+<td>REF-120 §7.2/§8.1、§7.5 (7.5.2) p.190–191</td>
+<td>输出桥 <code>relative_down</code>、气压高度更新</td>
+<td>一致</td>
+<td>高度必有气压反馈；纯惯导高度发散见 §7.5</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>C-03</td>
+<td><code>ins_static_detector.h</code></td>
+<td>静止判据 <code>|f^b|≈g、|ω^b|≈0、短时变化小</code> + 迟滞</td>
+<td>REF-120 §9.9.3 p.336（静基座假设）；REF-121 §8.2.3 p.291</td>
+<td><code>Icm45686StaticDetectorUpdate()</code></td>
+<td>一致</td>
+<td>阈值 9.5–10.1 m/s²、0.01 rad/s、Δa 0.5、Δω 0.05；进 20 帧/出 5
+帧</td>
+<td>补 L0/L1</td>
+</tr>
+<tr>
+<td>C-04</td>
+<td><code>navigation_task.cpp</code></td>
+<td>静止误判的物理边界：恒速平飞与静止在 IMU 上不可区分</td>
+<td>REF-121 §8.2.3 p.291（须外来信息）；§7.3.1 p.255</td>
+<td><code>handleNavigationSystem()</code> 静止检测段</td>
+<td>一致</td>
+<td>仿真 120 s 漂 330 m（修复前）；GNSS 速度&gt;0.8 强制退出后消失</td>
+<td>已有 L2，补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>C-05</td>
+<td><code>navigation_task.cpp</code></td>
+<td>ZUPT：<code>z=0−v̂</code>，三轴速度观测</td>
+<td>REF-121 §8.2.3 p.291；REF-120 §9.9.3 p.336</td>
+<td><code>MeasurementUpdateVelocityDetailed()</code> 调用点</td>
+<td>一致</td>
+<td><code>test_host/test_ekf_15state.cpp</code> T4/T5；ZUPT NIS 16.3
+修正</td>
+<td>补五段式</td>
+</tr>
+<tr>
+<td>C-06</td>
+<td><code>ins_static_aid_profile.h</code></td>
+<td>ZUPT 残差门限与自适应噪声（&gt;1.5 m/s 跳过、分段放大到 6×）</td>
+<td>REF-121 §7.3.1 p.255（FDI 门限）</td>
+<td><code>Icm45686AdaptZuptNoiseForResidual()</code></td>
+<td>近似（可接受）</td>
+<td>分段系数为工程折中，无教材对应；残差大时跳过有物理依据</td>
+<td>补 <code>@ref</code> + <code>@note</code></td>
+</tr>
+<tr>
+<td>C-07</td>
+<td><code>ins_static_aid_profile.h</code></td>
+<td>外部参照门控：无参照 &gt;0.75 m/s 拒绝、3 s 封底 0.30、30 s
+停用</td>
+<td>REF-121 §8.2.3 p.291</td>
+<td><code>Icm45686UpdateZuptExtRefGuard()</code>、<code>Icm45686ZuptExternalRefAllowsFusion()</code></td>
+<td>一致</td>
+<td>仿真 SC9b：末端 51.64 m→11.21
+m；<code>Icm45686StaticAidPhasesCanCollide()</code>
+用中国剩余定理防饿死</td>
+<td>补 L0；结构化说明</td>
+</tr>
+<tr>
+<td>C-08</td>
+<td><code>ins_static_aid_profile.h</code></td>
+<td>三档强度与分频调度（弱约束→稳态→长静止）</td>
+<td>工程调度（无教材式）</td>
+<td><code>Icm45686SelectStaticAidProfile()</code>、<code>Icm45686SelectStaticAidAction()</code></td>
+<td>近似（可接受）</td>
+<td>档位噪声 0.18/0.10/0.03
+m/s（水平），置信度/帧数与协方差健康共同门控</td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>C-09</td>
+<td><code>navigation_task.cpp</code></td>
+<td>GNSS 6 维联合更新 + NIS/子集 FDI</td>
+<td>REF-121 §2.2.1 p.33–34、§7.3.1 p.255–259</td>
+<td><code>MeasurementUpdateDetailed()</code> 调用点</td>
+<td>一致（库内）</td>
+<td>T9–T11 覆盖速度坏/位置坏/双坏；χ²(3) 25.90/16.27</td>
+<td>补五段式</td>
+</tr>
+<tr>
+<td>C-10</td>
+<td><code>navigation_task.cpp</code></td>
+<td>降级 GNSS：位置 R=1e4 等效关闭、速度 R 用 spd_acc</td>
+<td>REF-121 §2.2.1 p.33</td>
+<td><code>applyDowngradedGnssUpdate()</code></td>
+<td>一致</td>
+<td>位置量测用 epoch 真实 LLA（2026-08-12 修复自差语义）</td>
+<td>补 L1</td>
+</tr>
+<tr>
+<td>C-11</td>
+<td><code>navigation_task.cpp</code></td>
+<td>首次真实 GNSS 硬重锚（位置/速度重置、恢复起飞点）</td>
+<td>工程（无教材式）</td>
+<td><code>reanchorNavigationToGnss()</code></td>
+<td>一致</td>
+<td>量测年龄 ≤0.15 s；姿态/零偏保持连续</td>
+<td>补 L1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-辅助源气压光流磁零偏延时振动d">2.4
+辅助源：气压、光流、磁、零偏、延时、振动（D）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td><code>ins_altitude_reference.h</code></td>
+<td>绝对高度 = 起飞点绝对高度 + 相对高度（向上为正）</td>
+<td>REF-120 §7.2（大地/高度基准）；MOD-002 §5.1</td>
+<td><code>InsComputeAbsoluteBaroAltitude()</code>、<code>InsRelativeHeightUpFromNedDown()</code></td>
+<td>一致</td>
+<td><code>test_host/test_altitude_reference.cpp</code> PASS</td>
+<td>补 L0/L1</td>
+</tr>
+<tr>
+<td>D-02</td>
+<td><code>navigation_task.cpp</code></td>
+<td>气压高度标量量测（25 Hz 降采样，H 仅位置 D 分量）</td>
+<td>REF-121 §2.2.1 p.33；REF-120 §7.5 p.190–191</td>
+<td><code>MeasurementUpdateBaroAltitudeDetailed()</code> 调用点</td>
+<td>一致</td>
+<td>NIS 门限 16≈χ²(1) 99.99%；<code>baro_ekf_*</code> 诊断</td>
+<td>已有 L2</td>
+</tr>
+<tr>
+<td>D-03</td>
+<td><code>navigation_task.cpp</code></td>
+<td>光流速度 <code>v^n=C_b^n·[v_x^b,v_y^b,0]</code>，垂直通道 R=1e3
+关闭</td>
+<td>REF-120 §7.4 (7.4.6) p.189；REF-121 §8.2.3 p.291</td>
+<td><code>handleIndoorOpticalFlowVelocityFusion()</code></td>
+<td>一致</td>
+<td>用 <code>quat2dcm(q)^T</code> 全姿态旋转；z 取 0 的误差
+≈v_z·sin(tilt)</td>
+<td>补 L1 + 五段式</td>
+</tr>
+<tr>
+<td>D-04</td>
+<td><code>navigation_task.cpp</code></td>
+<td>光流速度/测距双新鲜度通道：测距不得刷新
+<code>last_update_ms</code></td>
+<td>AGENTS.md 2026-08-21 踩坑记录</td>
+<td><code>updateEstimatedVerticalVelocity()</code>、<code>handleHorizontalEstimation()</code>、<code>handleIndoorOpticalFlowVelocityFusion()</code></td>
+<td>一致</td>
+<td>测距分支用 <code>last_range_update_ms</code>；速度通道用
+<code>last_update_ms</code></td>
+<td>L2 已注明（原注释保留并强化）</td>
+</tr>
+<tr>
+<td>D-05</td>
+<td><code>navigation_task.cpp</code></td>
+<td>光流速度失锁重锚（连续 50 次拒绝 → 重置速度 + 抬 P）</td>
+<td>AGENTS.md 2026-08-21</td>
+<td><code>ResetVelocityToExternal()</code>、<code>s_consecutive_rejects</code></td>
+<td>一致</td>
+<td><code>test_host/test_ekf_aiding_velocity.cpp</code> 16
+断言（fw-tests）</td>
+<td>补 <code>@deviation</code></td>
+</tr>
+<tr>
+<td>D-06</td>
+<td><code>sensor_imu.cpp</code> / <code>lib/MagCal</code></td>
+<td>椭球标定（9 参数、≥30 样本、残差 RMS≤0.15、Flash 持久化）</td>
+<td>notes/04 §1.3/§4.2（Gebre-Egziabher 2006）</td>
+<td><code>initMagnetometer()</code>、<code>magcal::storeLoad()</code></td>
+<td>一致</td>
+<td>质量门对航向偏松（notes/04 建议 ≤0.03），当前未馈入 EKF</td>
+<td>登记 P1-3（不在本区域改）</td>
+</tr>
+<tr>
+<td>D-07</td>
+<td><code>navigation_task.cpp</code></td>
+<td>加计/陀螺零偏观测（Gauss-Markov、静止陀螺分轴权重）</td>
+<td>REF-121 §2.2.1 p.33</td>
+<td><code>MeasurementUpdateStaticGyroDetailed()</code> 调用点</td>
+<td>一致</td>
+<td>Z 轴噪声 5e-4、X/Y 1.0；<code>throttlePercent&lt;3%</code>
+才融合</td>
+<td>已有 L2</td>
+</tr>
+<tr>
+<td>D-08</td>
+<td><code>ins_bias_jump_monitor.h</code>/<code>ins_bias_temp_*.h</code></td>
+<td>零偏阶跃/慢漂/温漂监控与温度表（只诊断）</td>
+<td>REF-121 §7.3.1 p.255（FDI）</td>
+<td><code>InsBiasJumpMonitor</code>、<code>InsBiasTempObserver</code>、<code>InsBiasTempTable</code></td>
+<td>一致</td>
+<td>宿主回归 bjm/bto/btt 全部 rc=0</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>D-09</td>
+<td><code>navigation_task.cpp</code></td>
+<td>GNSS 量测年龄/延时回放（默认 15 ms 编译常量）</td>
+<td>REF-121 §8.2.3 p.291</td>
+<td><code>BFS_NAVIGATION_GNSS_DELAY_S</code>、<code>InsGnssMapEpochToLocalTime()</code></td>
+<td>一致</td>
+<td>无 PPS 时 15 ms 是常量；实机需标定</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>D-10</td>
+<td><code>ins_gnss_delay_auto.h</code></td>
+<td>无 PPS 延时批处理估计（9 参数最小二乘 + 0–150 ms 网格）</td>
+<td>REF-121 §8.2.3 p.291</td>
+<td><code>InsGnssDelayAutoEstimator::TryEstimate()</code></td>
+<td>一致</td>
+<td>机动窗口估计 45 ms/真实 50 ms；匀速不可观</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>D-11</td>
+<td><code>ins_gnss_pps_latency.h</code></td>
+<td>PPS 链路延时（中位数 + MAD）</td>
+<td>REF-121 §2.2.1 p.33（统计量建模）</td>
+<td><code>InsGnssEstimatePpsLatency()</code></td>
+<td>一致</td>
+<td>25/50 ms 回归 8/8；硬件捕获未接入</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>D-12</td>
+<td><code>ins_gnss_epoch_timing.h</code></td>
+<td>GPS 周内时→本地 micros 映射与年龄（模运算、半周折叠）</td>
+<td>REF-121 §8.2.3 p.291</td>
+<td><code>InsGnssMapEpochToLocalTime()</code>、<code>InsGnssEpochAgeSeconds()</code></td>
+<td>一致</td>
+<td>micros 回绕/负映射回归用例</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>D-13</td>
+<td><code>ins_vibration_adaptive.h</code></td>
+<td>振动 RMS → EKF 噪声建议（0.5 Hz 高通 + 0.5 s EMA）</td>
+<td>REF-121 §2.2.1 p.33</td>
+<td><code>InsVibrationEstimator::Update()</code></td>
+<td>近似（可接受）</td>
+<td>Policy C：Q 仅允许 0.15–0.25，延时/失锁/低精度回退 0.25</td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>D-14</td>
+<td><code>VerticalKF.h</code>/<code>VerticalKF_2State.h</code></td>
+<td>KF 五方程 + Joseph 形式 + 残差门限</td>
+<td>REF-121 §2.2.1 (2.2.4a–e) p.33–34、§2.2.4 p.42–43；REF-120 §7.5
+p.190–191</td>
+<td><code>predict()</code>、<code>update()</code></td>
+<td>一致</td>
+<td><code>test_host/test_vertical_kf.cpp</code>
+PASS；门限按标准化残差平方比较</td>
+<td>L0 已补；修正 25=5σ 注释</td>
+</tr>
+<tr>
+<td>D-15</td>
+<td><code>HorizontalKF.h</code></td>
+<td>速度观测型 KF（H=[0,1]）</td>
+<td>同上</td>
+<td><code>HorizontalKF_1Axis_VelMeas</code></td>
+<td>近似（可接受）</td>
+<td>位置无绝对观测→随机游走；只用于短时/后备</td>
+<td>L0 已补；登记 P1-1</td>
+</tr>
+<tr>
+<td>D-16</td>
+<td><code>IMU_AutoCalibrator.h</code></td>
+<td>静基座零偏标定（方差检测 + 3 s + 4000 样本）</td>
+<td>REF-120 §9.9.1 p.323（静基座基准）</td>
+<td><code>IMU_AutoCalibrator::update()</code></td>
+<td>一致</td>
+<td>方差阈值 2e-5、陀螺 0.02 rad/s；解锁即中止</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>D-17</td>
+<td><code>GeoDisplacement.h</code></td>
+<td>WGS84 LLA→ECEF→ENU</td>
+<td>REF-120 §7.2.1/§7.2.2 p.174–178；MOD-002 §1</td>
+<td><code>lla_to_ecef()</code>、<code>calculate_ne_displacement()</code></td>
+<td>一致</td>
+<td>椭球常量与公式逐项对照；ENU 与 NED 轴向差异已
+<code>@note</code></td>
+<td>L0 已补</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-agentsmd-重点坑位复核e">2.5 AGENTS.md 重点坑位复核（E）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>坑位</th>
+<th>代码证据</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E-01</td>
+<td>光流速度/测距双新鲜度通道，测距帧不得刷新
+<code>last_update_ms</code></td>
+<td><code>updateEstimatedVerticalVelocity()</code> 用
+<code>last_range_update_ms</code>；速度消费者用
+<code>last_update_ms</code></td>
+<td>一致，注释已强化</td>
+</tr>
+<tr>
+<td>E-02</td>
+<td>static gyro 在 <code>throttlePercent≥3%</code> 跳过融合</td>
+<td><code>handleNavigationSystem()</code> 静止辅助的
+<code>StaticGyro</code> 分支</td>
+<td>一致（<code>throttlePercent &lt; 3.0f</code> 条件）</td>
+</tr>
+<tr>
+<td>E-03</td>
+<td>航向弱可观、P0 航向与 consider 门控</td>
+<td><code>init_heading_err_std_rad(0.2f)</code>、<code>set_gnss_consider_heading()</code></td>
+<td>一致，按相位启用</td>
+</tr>
+<tr>
+<td>E-04</td>
+<td>ZUPT 门限/盲区（1.5→0.8 m/s、外部参照门控）</td>
+<td><code>handleNavigationSystem()</code> GNSS
+静止退出段、<code>ins_static_aid_profile.h</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>E-05</td>
+<td>四元数分量顺序 <code>[w,x,y,z]</code>（不是 xyzw）</td>
+<td><code>Quaternion</code> 结构体首成员
+<code>w</code>；<code>Quat4f</code> 注释</td>
+<td>一致，L0 已写明</td>
+</tr>
+<tr>
+<td>E-06</td>
+<td>传感器轴映射 <code>bX=-sZ、bY=+sX、bZ=-sY</code></td>
+<td><code>readIMUData()</code> 步骤 5</td>
+<td>一致，标为 <code>@redline</code></td>
+</tr>
+<tr>
+<td>E-07</td>
+<td><code>DISABLE_GNSS_DELAY_REPLAY=1</code> 会拒绝全部
+GNSS（纯惯导测试宏）</td>
+<td>本区域未直接消费该宏（在 <code>ekf_15_state.h</code>）</td>
+<td>记录在报告，不在本区域改</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-发现清单">3 发现清单</h2>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0</td>
+<td>—</td>
+<td>本轮未发现符号/量纲/定理层面的错误（姿态
+<code>theta=-asin(R13)</code>、双子样系数、ZUPT/门限均与文献或已修记录一致）</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>P1-1</td>
+<td><code>handleHorizontalEstimation()</code> /
+<code>HorizontalKF</code></td>
+<td>光流速度只用航向 ψ
+做二维旋转（<code>bodyToNed</code>），忽略俯仰/滚转；EKF
+路径用全姿态四元数</td>
+<td>倾斜时速度投影有 cos(tilt) 尺度误差；只影响 <code>fused_*</code>
+遥测/后备，不影响控制（控制消费 EKF）</td>
+<td>后续改为全姿态旋转，或保持现状但明确标注适用范围（已在 L1
+<code>@deviation</code> 标注）</td>
+</tr>
+<tr>
+<td>P1-2</td>
+<td><code>handleNavigationSystem()</code> 的 <code>mag_ut</code></td>
+<td>磁力计未馈入（<code>kMagFeedMadgwick=false</code>），航向初始化为伪磁常量；无绝对航向物理源</td>
+<td>悬停/过渡航向只能靠双矢量（有速度时）与短时陀螺；与 notes/04
+结论一致，属设计缺口</td>
+<td>按 notes/04 G0–G3 验收后启用磁矢量更新；本轮只登记</td>
+</tr>
+<tr>
+<td>P1-3</td>
+<td><code>initMagnetometer()</code> / <code>lib/MagCal</code></td>
+<td>椭球标定质量门 residual RMS≤0.15 对航向偏松（notes/04 建议
+≤0.03）</td>
+<td>启用磁航向时方向误差可达约 8.6°</td>
+<td>属 <code>lib/MagCal</code>（非本区域），提交 fw-ekf/磁专项处理</td>
+</tr>
+<tr>
+<td>P1-4</td>
+<td><code>handleVerticalEstimation()</code></td>
+<td>激光高度分支 <code>if (0)</code> 永久禁用，垂直 KF
+只剩气压高度更新</td>
+<td>气压失效时无备份高度源（EKF 侧仍有 GNSS 高度）</td>
+<td>明确恢复条件或删除死代码；本轮只加注说明</td>
+</tr>
+<tr>
+<td>P2-1</td>
+<td><code>VerticalKF_2State</code> 构造函数</td>
+<td>门限 25.0 的注释写“3-sigma (3*3=9)”，实际 25=5²</td>
+<td>误读门限强度</td>
+<td>已修正为“5σ 的平方（非 3σ）”</td>
+</tr>
+<tr>
+<td>P2-2</td>
+<td><code>sensor_imu.cpp</code> 磁偏角段</td>
+<td>旧常量 −4.133° 与 notes/04（长沙约 −2.2°，待 WMM2025
+核实）不一致，且该段已被注释</td>
+<td>读者可能误用旧值</td>
+<td>已改写为不含具体数值的说明</td>
+</tr>
+<tr>
+<td>P2-3</td>
+<td><code>navigation_task.cpp</code> 多处</td>
+<td>注释中残留
+<code>本文件 1116 行 / 1183 行 / 694 行 / 1118-1123 行</code>
+行号引用，违反 GOV-004 §6.2</td>
+<td>行号随重构漂移</td>
+<td>已改为符号名引用</td>
+</tr>
+<tr>
+<td>P2-4</td>
+<td><code>navigation_task.h</code></td>
+<td>旧注释：EKF“15 状态=四元数(4)+速度+位置+零偏”，实际误差状态 15
+维、四元数单独维护；静止检测“50 帧”、垂直 KF “激光优先”、水平 KF“覆盖
+relative_*”均已过期</td>
+<td>误导读者</td>
+<td>已按实现修正（见 §1 备注）</td>
+</tr>
+<tr>
+<td>P2-5</td>
+<td><code>sensor_imu.h</code></td>
+<td>旧注释称 <code>readIMUData()</code> 打包到
+<code>AHRS_Packet</code>，实际只写 <code>backup_ahrs_*</code></td>
+<td>误导读者</td>
+<td>已修正</td>
+</tr>
+<tr>
+<td>P2-6</td>
+<td><code>GeoDisplacement.h</code></td>
+<td>输出为 ENU（东-北-天），与飞控 NED 不同；函数名
+<code>calculate_ne_displacement</code> 易误解为 NED</td>
+<td>换轴错误风险</td>
+<td>已在 L0 <code>@note</code>
+明确“north=North、east=East、down=−Up”</td>
+</tr>
+<tr>
+<td>P2-7</td>
+<td><code>constructTiltTargetQuaternion()</code></td>
+<td>工程构造无项目推导文档引用（MOD/CTL/THY）</td>
+<td>可追溯性弱</td>
+<td>后续在 CTL-001/THY 补一节或加 <code>@deviation</code></td>
+</tr>
+<tr>
+<td>P2-8</td>
+<td><code>ins_gnss_dynamic_weight.h</code></td>
+<td>原“使用方式”代码块被 R04 判为注释代码</td>
+<td>规范不合规</td>
+<td>已改写为散文说明（语义不变）</td>
+</tr>
+<tr>
+<td>P2-9</td>
+<td>notes/01 引用 (9.9.43c)</td>
+<td>REF-120 MinerU 版仅有 43a/43b/43d（OCR 缺项）</td>
+<td>引用式号无法逐字定位</td>
+<td>本轮代码引用避开 43c；notes 由作者维护</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-未决问题">4 未决问题</h2>
+<ol type="1">
+<li><strong>航向绝对基准</strong>：磁力计未接入、伪磁初值非真北；双矢量航向只在有速度时有效。航向弱可观的根治（磁矢量更新、速度通道重锚、可观测性门控）仍为开放项（与
+notes/04、AGENTS.md 2026-08-13 一致）。</li>
+<li><strong>水平 KF
+的旋转近似</strong>（P1-1）：是否统一到全姿态旋转，需评估 CPU
+与遥测口径影响；本轮不改行为。</li>
+<li><strong>激光高度分支</strong>（P1-4）：<code>if (0)</code>
+是临时禁用还是永久策略，代码无 owner/日期，需项目确认后删除或恢复。</li>
+<li><strong>GNSS 延时标定</strong>：15 ms 为编译期常量；PPS
+硬件捕获未接入，无 PPS 自动估计只在机动段可用且默认有条件应用。</li>
+<li><strong>磁偏角</strong>：代码旧值 −4.133° 与 notes/04 的 −2.2°
+不一致，需以 WMM2025/地面标定定值。</li>
+<li><strong>REF-121 页码</strong>：本轮沿用的
+<code>§8.2.3 p.291</code>、<code>§7.3.1 p.255</code> 来自
+AGENTS.md/既有核查记录；MinerU
+版无印刷页码，未能独立复核页码，只核对了章节与原文表述（§2.2.1
+p.33–34、§2.2.4 p.42–43 页码来自 GOV-004 附录 A）。</li>
+<li><strong><code>test/ekf_host_regression.cpp</code></strong> 在 HEAD
+基线即挂 3743 断言（project
+场景），非本区域改动引入，仍待单独定位（fw-tests 负责）。</li>
+</ol>
+<hr />
+<h2 id="5-门禁与测试">5 门禁与测试</h2>
+<h3 id="51-注释规范门禁">5.1 注释规范门禁</h3>
+<pre class="text"><code>核查前：py -3.12 tools/check-code-comments.py --area fw-nav --check
+        25 文件 | 平均分 69.4 | error 33 | warning 21（R01=25 R04=14 R06=2 R07=8 R09=5）→ 退出码 1
+
+核查后：py -3.12 tools/check-code-comments.py --area fw-nav --check
+        25 文件 | 平均分 100.0 | error 0 | warning 0 | 全绿 25 → 退出码 0</code></pre>
+<h3
+id="52-宿主回归g-1320-stdc17-itandemvec_fcsinclude--itandemvec_fcslibeigensrc">5.2
+宿主回归（g++
+13.2.0，<code>-std=c++17</code>，<code>-ITandemVec_FCS/include -ITandemVec_FCS/lib/eigen/src</code>）</h3>
+<p>命令模板（仓库根目录；MinGW g++ 是原生 Windows 程序，<code>-o</code>
+必须用 <code>C:/...</code> 或相对路径，MSYS 的 <code>/c/...</code> 会报
+cannot open output file）：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="va">BIN</span><span class="op">=</span><span class="st">&quot;C:/Users/&lt;user&gt;/AppData/Local/Temp/tv_fcs_nav_bin&quot;</span><span class="kw">;</span> <span class="fu">mkdir</span> <span class="at">-p</span> <span class="st">&quot;</span><span class="va">$BIN</span><span class="st">&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O1</span> <span class="at">-Iinclude</span> <span class="at">-Ilib</span>/eigen/src test_host/test_static_detector.cpp <span class="at">-o</span> <span class="st">&quot;</span><span class="va">$BIN</span><span class="st">/sd.exe&quot;</span> <span class="kw">&amp;&amp;</span> <span class="st">&quot;</span><span class="va">$BIN</span><span class="st">/sd.exe&quot;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># test_mag_cal 追加 -Ilib/MagCal；test_vertical_kf 追加 -Itest_host/stub</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>测试</th>
+<th>结果</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_gnss_dynamic_weight.cpp</code></td>
+<td>rc=0，全部通过</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_static_aid_profile.cpp</code></td>
+<td>rc=0，全部通过</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_static_detector.cpp</code></td>
+<td>rc=0，全部通过</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_altitude_reference.cpp</code></td>
+<td>rc=0，[PASS]</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_gnss_epoch_timing.cpp</code></td>
+<td>rc=0，通过</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_gnss_pps_latency.cpp</code></td>
+<td>rc=0，8 passed / 0 failed</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_gnss_delay_auto.cpp</code></td>
+<td>rc=0，[PASS]</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_ins_vibration_adaptive.cpp</code></td>
+<td>rc=0，[PASS]</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_bias_jump_monitor.cpp</code></td>
+<td>rc=0</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_bias_temp_observer.cpp</code></td>
+<td>rc=0</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_bias_temp_table.cpp</code></td>
+<td>rc=0</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_mag_cal.cpp</code></td>
+<td>rc=0，全部通过</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_vertical_kf.cpp</code></td>
+<td>rc=0，全部通过</td>
+<td>PASS</td>
+</tr>
+</tbody>
+</table>
+<p>合计 13/13 通过（0 失败）。</p>
+<h3 id="53-固件构建与语法检查">5.3 固件构建与语法检查</h3>
+<ul>
+<li><code>pio run</code>（TandemVec_FCS）：<strong>SUCCESS</strong>（TandemVec_FCS
+env 67.8 s、test env 63.2 s，RAM 35.7%、Flash
+16.6%），在本轮导航注释修改后执行；编译警告均为基线既有项（如
+<code>sensor_imu.cpp</code> 的 <code>gyrFrd[3]</code> double→float
+收窄、<code>communication.cpp</code> 未用变量），非本轮引入。</li>
+<li>独立头文件语法检查：<code>QuaternionMath.h</code>、<code>Quat4f.h</code>、<code>VerticalKF*.h</code>、<code>HorizontalKF.h</code>、<code>ComplementaryFilter.h</code>、<code>ins_*.h</code>
+共 18/20 通过
+<code>g++ -fsyntax-only</code>；<code>GeoDisplacement.h</code> 需
+<code>-D_USE_MATH_DEFINES</code>（Windows 的 <code>M_PI</code>
+定义）、<code>IMU_AutoCalibrator.h</code> 需真实 <code>Arduino.h</code>
+的 <code>millis()</code>（<code>test_host/stub/Arduino.h</code>
+明确不提供时间基准），二者均为既有环境限制，非本轮改动。</li>
+</ul>
+<h3 id="54-行为不变自查">5.4 行为不变自查</h3>
+<ul>
+<li><code>git diff</code> 逐文件扫描：本轮触及的 25
+个文件中，新增可执行语句 0 行、删除可执行语句 0 行；除
+<code>VerticalKF_2State.h</code>
+某常量行的行尾注释文字（值未变）外，全部新增行均为注释/文档。</li>
+<li>工作区中
+<code>navigation_task.cpp</code>、<code>sensor_imu.cpp</code>、<code>ins_static_aid_profile.h</code>
+另含任务开始前已存在的 2026-10
+功能改动（P0-3/P1-5、振动、温度等），非本轮引入，已在代码基线中注明。任务开始时记下的基线
+<code>git diff --stat</code>：<code>navigation_task.cpp</code>
++240/−7、<code>sensor_imu.cpp</code>
++9/−0、<code>ins_static_aid_profile.h</code>
++76/−0，与本轮扫描到的“非注释 diff
+行”逐一对应；本轮对这三文件的净变更均为注释。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-NAV-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

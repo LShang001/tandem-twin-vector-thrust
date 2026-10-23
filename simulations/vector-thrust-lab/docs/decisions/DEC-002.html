@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>DEC-002 六项 P0 修复决策 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="dec-002-六项-p0-的修复决策与验证">DEC-002 六项 P0
+的修复决策与验证</h1>
+<h2 id="状态">状态</h2>
+<p>已接受</p>
+<h2 id="日期">日期</h2>
+<p>2026-10-23</p>
+<h2 id="背景">背景</h2>
+<p>2026-10-23 全仓“代码-理论对照核查”在 <a
+href="../code-audit/MOD-004.html">MOD-004</a>
+中登记了 6 项 P0。它们分两类：</p>
+<ul>
+<li><strong>固件（2 项）</strong>：F3
+单发推力损失判据的垂直速度误差符号相反（C-01）；惯量交叉耦合前馈把存档系角速度/角动量传给模型系函数（C-02）。二者都只在“前馈/诊断层”，首飞未致失控，但会漏报故障、污染调参与诊断。</li>
+<li><strong>研究仿真（4 项）</strong>：<code>ekf_core</code>
+旋转效应双计（A-01）；P0 航向仍为 π（A-02）；<code>initialize()</code>
+未设置 <code>home_lla</code>（A-03）；25° 配平口径与固件 15°
+限幅冲突（A-04）。</li>
+</ul>
+<p>用户要求“深入研究清楚 6 项 P0
+应该怎么处理最好，然后自己决策最佳方案”。本决策记录给出逐项依据、选择、实施与验证；原则是：<strong>以固件实码/教材公式为真值，只修确定性错误，不碰红线参数（增益、限幅、差速公式、轴映射），每项都要有可复跑的回归证据。</strong></p>
+<h2 id="决策">决策</h2>
+<h3 id="c-01-f3-垂直速度误差符号">C-01 F3 垂直速度误差符号</h3>
+<p><strong>决策</strong>：把符号契约收口到监测器头文件，新增</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>bfs<span class="op">::</span>thrustLossVerticalVelocityError<span class="op">(</span>vertical_vel_mps<span class="op">,</span> target_vertical_vel_mps<span class="op">)</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">// e_v = measured − target；下沉为负</span></span></code></pre></div>
+<p><code>flight_control.cpp::updateActuatorFaultDiagnostics</code>
+改用它，并把 F3 限定在
+<code>AUTO_ALTITUDE / AUTO_POSITION / GUIDED</code>（手动模式
+<code>target_vertical_velocity</code>
+是上次自动模式的陈旧值，不能参与判据）。监测器 <code>update()</code>
+增加默认 <code>thrust_detection_enabled=true</code> 参数，手动模式显式传
+<code>false</code>，只重置 F3 计时器、不影响 F4。</p>
+<p><strong>不选择的方案</strong>：把监测器判据改成
+<code>&gt; +1.0</code>（会让“爬升”变成故障语义，且与现有测试/注释冲突）；在调用方就地相减（同一符号契约仍分散在两处，易再次写反）。</p>
+<p><strong>阈值保持 0.75（2026-10-23 修正）</strong>：SIL 里修好符号后
+F3 仍不触发——本机 SIL 悬停油门约 45–50%，自动定高在 12.5 m/s²
+加速度限幅下最大指令约 57%，75% 门限在 SIL 中不可达。但<strong>实飞
+PID/门限是飞行验证基线，不用未标定仿真反向覆盖</strong>：<code>thrust_throttle</code>
+保持 <strong>0.75</strong>，SIL 观察只作为“F3
+可能在当前气动/油门水平下失效”的风险登记，是否参数化/下调须等实机悬停油门与故障日志。T4b
+边界测试相应锁定 0.75（0.74 不触发 / 0.76 触发）。下沉误差 −1.0
+m/s、持续时间 1.0 s 与 F3/F4 优先级保持不变。</p>
+<h3 id="c-02-惯量前馈跨坐标系">C-02 惯量前馈跨坐标系</h3>
+<p><strong>决策</strong>：保留 <code>computeInertiaCompensation()</code>
+作为<strong>模型系</strong>（x′=推力轴）纯函数，新增存档系封装：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>computeInertiaCompensationFromArchive<span class="op">(</span>omega_archive<span class="op">,</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    I_roll<span class="op">,</span> I_pitch<span class="op">,</span> I_yaw_axial<span class="op">,</span> h_along_thrust<span class="op">,</span> mask<span class="op">)</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co">// ω′=(−ωz, ωy, ωx)、h′=(h,0,0)、I′=(I_axial, I_pitch, I_roll)</span></span></code></pre></div>
+<p>mix 层改用它，输出已是模型系，直接
+<code>Mx+=ff.Mx_ff; My+=ff.My_ff; Mz+=ff.Mz_ff</code>，删除原手写
+<code>-ff.Mz / +ff.My / +ff.Mx</code> 置换。惯量入参按语义取
+<code>P.Iz</code>（滚转）、<code>P.Iy</code>（俯仰）、<code>P.Ix</code>（推力轴）；本机后两者数值相同，但语义正确才能在参数分化后仍成立。</p>
+<p><strong>不选择的方案</strong>：①在调用方手写置换后直接调模型系函数（置换散落在业务代码，难测试）；②保持“存档系输入
++ 存档系惯量”并用现有映射（需要给 <code>h</code> 一个负 z
+分量，符号更绕）。封装方案把唯一一次坐标变换放进可单测的头文件函数。</p>
+<p><strong>为什么不直接关闭前馈</strong>：<code>inertia_comp_mask</code>
+默认全开是既有设计；关闭会掩盖问题并损失机动补偿。修复后仍保留在线 A/B
+能力。</p>
+<h3 id="a-01-仿真旋转效应双计">A-01 仿真旋转效应双计</h3>
+<p><strong>决策</strong>：删除 <code>time_update()</code> 里的
+<code>0.5·Δθ×ΔV</code>，新增 <code>two_sample_delta_v()</code>
+统一双子样增量（<code>ΔV + (2/3)(Δθ1×ΔV2 + ΔV1×Δθ2)</code>），与固件
+P0-0 修复后语义一致。</p>
+<p><strong>依据</strong>：REF-120 §9.6.1 (9.6.17) p.298 的
+<code>½Δθ×ΔV</code>
+是配合<strong>区间起始姿态</strong>的旋转补偿；本仿真用<strong>中点姿态</strong>
+<code>Cnb_mid</code> 旋转，半程旋转已包含，再叠加即双计。单步多算量
+<code>½|ω×f|dt²</code> 已由 <code>verify_p0_fixes.py</code>
+数值锁定。</p>
+<p><strong>影响</strong>：此前用该仿真得到的动态段速度/位置数字（notes/05、优化研究报告）需按新口径复核；本决策不追溯重跑全部历史场景，改为在报告中明确“旧数字口径”。</p>
+<h3 id="a-02-仿真-p0-航向">A-02 仿真 P0 航向</h3>
+<p><strong>决策</strong>：<code>ekf_core.cfg_p0["hdg"]</code> 与
+<code>opt_ekf.FW["p0_hdg"]</code> 默认改为 <strong>0.2
+rad</strong>（固件 2026-10-21 修复值）。π
+只保留为显式覆盖（<code>spec["p0_hdg"]=π</code>）用于复现历史失效链。</p>
+<p><strong>理由</strong>：默认参数必须代表当前固件；旧 π
+是已废止的失败配置。候选基线 <code>CUR_SPEC</code> 本来就是
+0.2，本次只是把默认值对齐，减少“忘记覆盖”导致的假失败。</p>
+<h3 id="a-03-仿真-home_lla">A-03 仿真 <code>home_lla</code></h3>
+<p><strong>决策</strong>：<code>Ekf15.initialize()</code> 设置
+<code>self.home_lla = self.lla.copy()</code>；外部脚本仍可在初始化后覆盖为不同起飞点。</p>
+<p><strong>理由</strong>：<code>measurement_update_gnss()</code> 的 NED
+位置观测以 <code>home_lla</code> 为参考；缺省时直接调用会
+<code>AttributeError</code>。初始 LLA
+天然是合理起飞点，设为默认不改变任何显式设置 <code>home_lla</code>
+的脚本行为。</p>
+<h3 id="a-04-15-限幅下的巡航配平">A-04 15° 限幅下的巡航配平</h3>
+<p><strong>决策</strong>：<strong>不改</strong>
+<code>aircraft-model.json</code> 的
+<code>vTrim=28 m/s</code>、<code>dMax=25°</code>，也<strong>不放宽</strong>固件
+15° 限幅；改为把“模型概念窗口”和“固件包线”显式分开：</p>
+<ol type="1">
+<li><code>scripts/trim_solve.py</code> 新增
+<code>--dmax-deg</code>、<code>--scan</code>，按固件限幅逐速度判定；</li>
+<li>MOD-003 §3.2 与 ASM-017 写入 15° 可行包线：<strong>下限约 29.8
+m/s，30–40 m/s 可行</strong>（30 m/s 时 dt=−14.76°）；</li>
+<li>明确“不是降速就安全”：低于阈值尾摆需求反而增大；28 m/s
+若必须使用，只能放宽限幅（需硬件复核）或重新设计配平。</li>
+</ol>
+<p><strong>理由</strong>：改 <code>vTrim</code>
+会触发参数红线与回归基线重采，且 28 m/s
+是模型/论文多年口径；改固件限幅需要舵机行程/结构复核，不能在代码层拍板。把事实与包线写清、给出可复算工具，是风险最低且可执行的处置。</p>
+<h2 id="备选方案">备选方案</h2>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>说明</th>
+<th>采纳/否决理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>全部只登记、不改代码</td>
+<td>保持“核查轮”零行为变化</td>
+<td>否决：用户明确要求处理；C-01/C-02
+是确定性符号/坐标系错误，继续保留会持续漏报/污染诊断</td>
+</tr>
+<tr>
+<td>只改仿真、不改固件</td>
+<td>先让分析链自洽</td>
+<td>否决：F3 与惯量前馈是真实固件缺陷，且修复范围小、可 host 回归</td>
+</tr>
+<tr>
+<td>直接改固件限幅到 20° 解决 28 m/s 配平</td>
+<td>让模型配平点可用</td>
+<td>否决：限幅属硬件/安全红线，需舵机行程、结构、实机验证；不能用代码决策替代</td>
+</tr>
+<tr>
+<td>改 <code>vTrim</code> 到 30 m/s</td>
+<td>让模型与 15° 包线一致</td>
+<td>否决：触发参数红线、重采全部回归基线，且论文/历史数据口径全变；本轮不扩范围</td>
+</tr>
+<tr>
+<td>关闭惯量前馈（mask=0）</td>
+<td>规避跨系错误</td>
+<td>否决：掩盖问题、损失机动补偿；修复后仍保留在线 A/B</td>
+</tr>
+</tbody>
+</table>
+<h2 id="后果">后果</h2>
+<h3 id="正面影响">正面影响</h3>
+<ul>
+<li>F3 在真实下沉时能触发，手动模式不再用陈旧目标误判；F3/F4
+判据仍只做诊断，不改变操纵。</li>
+<li>惯量前馈在机动段回到正确通道；跨系置换被封装并可单测，后续参数分化不会再次出错。</li>
+<li>研究仿真默认口径与固件一致（旋转项、P0
+航向、home_lla），减少“仿真通过/实机失败”的口径噪声。</li>
+<li>15° 巡航包线有可复算数字（≥29.8 m/s），避免把 28 m/s
+配平点直接用于实机。</li>
+</ul>
+<h3 id="代价与风险">代价与风险</h3>
+<ul>
+<li>C-02 改变机动段前馈力矩（示例 ω=(0.5,0.3,1.0)、h=0.005
+时模型系差异约 0.019 N·m）；<strong>尚未实机 A/B</strong>，建议首飞前做
+<code>inertia_comp_mask=0/0x03</code> 对照，并保持低杆量。</li>
+<li>C-01 只改诊断，但 F3
+标志现在会真正出现；地面站/飞手需知道“ThrustBoost
+只是建议、无自动执行”。</li>
+<li>A-01/A-02
+使旧仿真数字口径变化；历史报告中的速度/位置结论需标注“旧口径”。</li>
+<li>A-04 的 30 m/s 方案只剩约 0.24° SAS
+增量裕度，<strong>不代表可安全巡航</strong>；仍需控制裕度评估与实机包线试飞。</li>
+</ul>
+<h2 id="验证">验证</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td><code>g++ … test_host/test_actuator_fault_monitor.cpp &amp;&amp; ./afm</code></td>
+<td>18/18 通过（T8 符号、T9 使能、T10 旧反向漏报回归）</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td><code>g++ … test_host/test_inertia_decoupling.cpp &amp;&amp; ./inertia</code></td>
+<td>全部通过（T6 旧直调恒 0、新封装 −0.0199；T7 封装=显式置换；T8
+存档系直接叉乘 h=(0,0,−h) 与封装一致）</td>
+</tr>
+<tr>
+<td>C-01/C-02</td>
+<td><code>cd TandemVec_FCS &amp;&amp; pio run</code></td>
+<td><code>TandemVec_FCS</code> + <code>test</code> 双 env SUCCESS（约 29
+s / 32 s）</td>
+</tr>
+<tr>
+<td>A-01/A-02/A-03</td>
+<td><code>cd TandemVec-EKF-Report/sim &amp;&amp; py -3.12 verify_p0_fixes.py</code></td>
+<td>9/9 通过；20 s 场景冒烟
+<code>pos_err≈0.10/0.05 m</code>、NIS≈4.63</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td><code>py -3.12 scripts/trim_solve.py --scan --dmax-deg 15</code></td>
+<td>可行区间 30.00–40.00 m/s；阈值约 29.8 m/s</td>
+</tr>
+</tbody>
+</table>
+<h2
+id="仿真验证2026-10-23-追加详见-p0-修复仿真验证">仿真验证（2026-10-23
+追加，详见 <a
+href="../code-audit/P0-VALIDATION.html">P0
+修复仿真验证</a>）</h2>
+<ul>
+<li><strong>50 seed 直线</strong>：位置 RMSE 均值 0.369 m、P95 0.467
+m、最大 0.549 m、0/50 失败。</li>
+<li><strong>A-01 开环旋转</strong>（2 rad/s、5 m/s²、10 s 无 GNSS）：新
+0.617 m/s vs 旧 1.233 m/s（旧多 2.00×）。</li>
+<li><strong>A-02 20 seed × 4 口径</strong>（10° 初始航向误差）：legacy π
+组平均位置误差 460 m / P90 658 m / 最大 4.16 km；新 95 m / 210 m / 0.33
+km。简化仿真有失锁种子，只作 A/B 排序，不作概率结论。</li>
+<li><strong>C-01 SIL</strong>：单元 18/18；SIL 发现 75%
+门限在未标定模型下不可达（悬停 45–50%、定高最大
+~57%），但<strong>实飞基线优先，门限保持 0.75</strong>；F3
+是否在实机可用需实机悬停油门/故障日志确认。手动模式 F3 保持禁用。</li>
+<li><strong>C-02 温和耦合 SIL A/B</strong>：3 seed 中 mask=3
+未劣化（seed1 滚转峰值 2.08° vs 3.37°），仍待实机 A/B。</li>
+<li><strong>A-04</strong>：15° 可行区间 30.00–40.00 m/s，阈值约 29.8
+m/s。</li>
+</ul>
+<h2 id="回滚方式">回滚方式</h2>
+<ul>
+<li>C-01：<code>git revert</code> 对应提交即可；F3
+仅诊断，回滚不影响操纵。</li>
+<li>C-02：可先 <code>inertia_comp_mask=0</code>
+在线关闭前馈（无需回滚代码）；确认方向后再启用。</li>
+<li>A-01/A-02/A-03：改回默认值/保留 <code>home_lla</code>
+显式赋值即可；均不影响固件。</li>
+<li>A-04：纯文档与工具，无运行时回滚需求。</li>
+</ul>
+<h2 id="关联文档">关联文档</h2>
+<ul>
+<li>核查总报告：<a
+href="../code-audit/MOD-004.html">MOD-004</a></li>
+<li>区域记录：<a
+href="../code-audit/FW-CTRL.html">FW-CTRL</a>、<a
+href="../code-audit/ANALYSIS.html">ANALYSIS</a></li>
+<li>规范：<a
+href="../governance/GOV-004.html">GOV-004</a></li>
+<li>包线：<a href="../modeling/MOD-003.html">MOD-003
+§3.2</a>、<a href="../registers/assumptions-log.html">ASM-017</a></li>
+<li>代码：<code>TandemVec_FCS/include/ActuatorFaultMonitor.h</code>、<code>TandemVec_FCS/include/InertiaDecoupling.h</code>、<code>TandemVec_FCS/src/flight_control.cpp</code>、<code>TandemVec-EKF-Report/sim/ekf_core.py</code>、<code>TandemVec-EKF-Report/sim/opt/opt_ekf.py</code>、<code>scripts/trim_solve.py</code></li>
+<li>测试：<code>TandemVec_FCS/test_host/test_actuator_fault_monitor.cpp</code>、<code>TandemVec_FCS/test_host/test_inertia_decoupling.cpp</code>、<code>TandemVec-EKF-Report/sim/verify_p0_fixes.py</code></li>
+</ul>
+<footer class="provenance">源文件 <code>docs/09-决策记录/DEC-002-六项P0修复决策.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

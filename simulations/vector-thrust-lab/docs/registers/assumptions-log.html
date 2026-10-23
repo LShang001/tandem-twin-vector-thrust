@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
+  <meta name="generator" content="pandoc 3.12.1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>假设与局限日志 · 纵列双发矢量推力飞行器</title>
   <style>
@@ -10,8 +10,12 @@
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -22,7 +26,6 @@
       margin: 0 0.8em 0.2em -1.6em;
       vertical-align: middle;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
   <link rel="stylesheet" href="../docstyle.css" />
 <style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
@@ -220,9 +223,15 @@ dMax=0.2618、<code>state_data.cpp</code> MAX_CORRECTION=15），而
 <td>仿真摆角裕度比实机大 10°：仿真中可用的摆角范围（含配平偏置
 dtTrim=−18.702°
 之上的增量裕度）在实机上会提前触限；凡涉及摆角裕度、配平摆角占限幅比例的结论，外推实机前必须按
-15° 重算</td>
+15° 重算。<strong>2026-10-23
+补算</strong>：<code>scripts/trim_solve.py --scan --dmax-deg 15</code>
+给出 15° 下可行巡航速度下限约 <strong>29.8 m/s</strong>（30 m/s 时
+dt=−14.76°；28 m/s 需 −18.70°
+不可达）；低于阈值尾摆需求反而增大，不能按“降速更安全”外推</td>
 <td>将 dMax 回写为 0.2618 rad
-并重采回归基线（红线变更流程），或至少在引用前标注分歧</td>
+并重采回归基线（红线变更流程），或至少在引用前标注分歧（见 <a
+href="../modeling/MOD-003.html">MOD-003
+§3.2</a>）</td>
 <td><a href="parameter-handbook.html">参数数据手册</a> PAR-011、<a
 href="behavior-redlines.html">行为保持红线清单</a>、<code>TandemVec_FCS/include/TandemVec_Config.h</code></td>
 </tr>
@@ -238,5 +247,5 @@ href="hazard-log.html"><code>危害与失效模式日志</code></a>、<a
 href="../verification/SAFE-001.html">SAFE-001</a>
 共同构成模型成熟度声明的支撑文件。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
 </html>

@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>GCS 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录--上位机-gcs-与工具gcs">代码理论核查记录 —
+上位机 GCS 与工具（gcs）</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：gcs Agent ｜ 规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：main 工作区（含多 Agent 未提交改动；本记录只覆盖
+<code>TandemVec_FCS/GCS/**</code> 与
+<code>TandemVec_FCS/tools/**</code>）
+协议来源：<code>TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md</code>（帧格式/校验/遥测帧
+DATA 布局/0xE0-0xE3
+参数链路/本工程差异对照表）、<code>TandemVec_FCS/docs/COMM-001-数传通信链路优化方案.md</code>（双环频率、组模式、read_size、推送
+50Hz）、<code>TandemVec_FCS/docs/GCS-001-上位机与参数在线读写方案.md</code>（参数在线读写、P
+帧增量数）、<code>TandemVec_FCS/docs/C路径-参数集中与遥测结构化方案.md</code>（kFlightCtrlParams
+集中与遥测结构化）、 <a
+href="../control/CTL-001.html">CTL-001</a>（SAS
+速率环量纲、控制分配）、<a
+href="../modeling/MOD-002.html">MOD-002</a>、AGENTS.md 踩坑记录
+固件对照（只读，未修改）：<code>lib/AnoComProtocol/AnoComProtocol.cpp</code>、<code>src/communication.cpp</code>、<code>src/ano_params.cpp</code>、<code>lib/W25N01GV/src/W25N01GV_log.{h,cpp}</code>
+方法：逐文件读代码 → 对照协议章节与固件发送/解析实现 → pytest 与机检复算
+→ 补 L0/L1/L2 → 机检复检</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<table>
+<thead>
+<tr>
+<th>子系统</th>
+<th style="text-align: right;">文件数</th>
+<th style="text-align: right;">行数（核查后）</th>
+<th>L0 文件头</th>
+<th>L1 符号文档</th>
+<th style="text-align: right;">@ref</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GCS/server/**</code>（协议/链路/参数/黑匣子/CLI）</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">3586</td>
+<td>10/10</td>
+<td>公共类与函数全覆盖（机检 R08=0）</td>
+<td style="text-align: right;">9</td>
+</tr>
+<tr>
+<td><code>GCS/web/src/**</code>（前端 8 模块）</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">1817</td>
+<td>8/8</td>
+<td>8 个导出函数文档块 + 局部函数注释</td>
+<td style="text-align: right;">17</td>
+</tr>
+<tr>
+<td><code>GCS/tests/**</code></td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">688</td>
+<td>4/4</td>
+<td>测试名即语义（GOV-004 豁免 R08）</td>
+<td style="text-align: right;">3</td>
+</tr>
+<tr>
+<td><code>GCS/app.py</code>（桌面启动器）</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">206</td>
+<td>1/1</td>
+<td>3 个公共函数</td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr>
+<td><code>TandemVec_FCS/tools/**</code>（核对/分析脚本）</td>
+<td style="text-align: right;">19</td>
+<td style="text-align: right;">2132</td>
+<td>19/19</td>
+<td>19/19</td>
+<td style="text-align: right;">34</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>42</strong></td>
+<td style="text-align: right;"><strong>8429</strong></td>
+<td><strong>42/42</strong></td>
+<td>机检 R08=0</td>
+<td style="text-align: right;"><strong>64</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>机检基线（核查前）：42 error / 77
+warning（R01=42、R08=47、R09=28、R04=2），平均分 70.8，0
+个文件全绿。</li>
+<li>核查后：<strong>0 error / 0 warning，平均分 100.0，42/42
+全绿</strong>（命令见 §5）。</li>
+<li>新增：L0 文件头 42 个（含 2 个空 <code>__init__.py</code>
+包文档）、L1 文档块 47 个（R08 全消）、<code>@ref</code> 引用 63
+处（本区现有 64 处）。</li>
+<li>行为保持：<code>git diff -U0</code> 中删除行仅为旧 docstring/banner
+注释，无代码语句增删（§5 自查）。</li>
+</ul>
+<hr />
+<h2 id="2-核对矩阵">2 核对矩阵</h2>
+<blockquote>
+<p>代码位置一律用符号名（不写行号）。结论枚举：<code>一致</code> /
+<code>等价变换后一致</code> / <code>近似（可接受）</code> /
+<code>偏差（已登记）</code> / <code>不一致（待修）</code>。</p>
+</blockquote>
+<h3 id="21-anocom-帧格式与校验anocompy--固件-anocomprotocol">2.1 AnoCom
+帧格式与校验（<code>anocom.py</code> ↔︎ 固件
+<code>AnoComProtocol</code>）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>要素</th>
+<th>协议出处</th>
+<th>PC 实现（符号）</th>
+<th>固件实现（符号）</th>
+<th>结论</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-01</td>
+<td>帧结构：<code>AB</code> + S_ADDR + D_ADDR + ID + LEN(u16 LE) + DATA
++ SC + AC</td>
+<td>PROTOCOL-001 §1「通信帧格式介绍」</td>
+<td><code>encode_frame</code>、<code>extract_frames</code></td>
+<td><code>AnoComProtocol::buildFrame</code>（头 6B，帧尾
+<code>buf[6+len]</code>=SC、<code>buf[7+len]</code>=AC）</td>
+<td>一致</td>
+<td><code>tests/test_anocom.py::test_frame_checksum_reference</code>
+逐字节断言头/长度/载荷/校验</td>
+</tr>
+<tr>
+<td>A-02</td>
+<td>SC = Σ(头 6B + DATA) &amp; 0xFF；AC = Σ(SC) &amp; 0xFF</td>
+<td>PROTOCOL-001 §1「和校验/附加校验」</td>
+<td><code>sum_check</code>、<code>add_check</code>、<code>encode_frame</code></td>
+<td><code>buildFrame</code> 单循环
+<code>sum += b; add += sum;</code>（COMM-001 A2）</td>
+<td>一致</td>
+<td>同上测试
+<code>add_check(f[:13])</code>；<code>test_find_frames_valid_and_corrupt</code>
+覆盖坏字节</td>
+</tr>
+<tr>
+<td>A-03</td>
+<td>帧同步（AB 05 FF）+ 小端长度 + 半帧保留</td>
+<td>PROTOCOL-001 §1</td>
+<td><code>extract_frames</code>（返回
+<code>consumed</code>，调用方删前缀）</td>
+<td><code>receiveData</code>（<code>_rxIndex</code>
+续帧、<code>rxStalled</code> 自愈）</td>
+<td>一致（PC 侧不整缓冲清空）</td>
+<td><code>test_find_frames_valid_and_corrupt</code>：垃圾前缀/尾部半帧</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td>0x00 校验帧 DATA = ID_GET + SC_GET + AC_GET</td>
+<td>PROTOCOL-001 §2.1（安全通信协议）</td>
+<td><code>_on_param_check</code> 等确认链路</td>
+<td><code>AnoComProtocol::sendDataCheck</code>（<code>onAnoRxFrame</code>
+回传源帧真实 SC/AC）</td>
+<td>一致</td>
+<td>GCS-001 §2；<code>test_params_and_link.py</code> 参数链路用例</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-遥测帧缩放anocompy-解码--communicationcpp-组帧">2.2
+遥测帧缩放（<code>anocom.py</code> 解码 ↔︎ <code>communication.cpp</code>
+组帧）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>帧</th>
+<th>线缆格式/缩放</th>
+<th>协议出处</th>
+<th>PC 解码（符号）</th>
+<th>固件发送（符号）</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-05</td>
+<td>0x01 IMU</td>
+<td>3×int16 acc(cm/s²) + 3×int16 gyr(32768↔︎2000 deg/s) + u8</td>
+<td>§2.1</td>
+<td><code>decode_imu</code>（÷100、÷16.384）</td>
+<td><code>sendIMUData</code>（acc×100、gyr×16.384、限幅 ±32767）</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>A-06</td>
+<td>0x03 欧拉</td>
+<td>3×int16 ×100 + u8 FUSION_STA</td>
+<td>§2.3</td>
+<td><code>decode_euler</code>（÷100；bit7=DETA100
+在线、bit6=数据源）</td>
+<td><code>sendAttitudeEuler</code>；<code>communication.cpp</code> 的
+<code>fusionSta</code> 高位编码</td>
+<td>一致（扩展位官方未用，不破坏官方语义）</td>
+</tr>
+<tr>
+<td>A-07</td>
+<td>0x05 高度</td>
+<td>3×int32 ×100(cm) + u8</td>
+<td>§2.5</td>
+<td><code>decode_altitude</code>（÷100 → m）</td>
+<td><code>sendAltitudeData</code>（×100）</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>A-08</td>
+<td>0x07 速度</td>
+<td>3×int16 ×100(cm/s)</td>
+<td>§2.7</td>
+<td><code>decode_speed</code>（÷100）</td>
+<td><code>sendFlightSpeed</code>（n×100、e×100、−down×100）</td>
+<td>等价变换后一致（固件已取反为"向上为正"）</td>
+</tr>
+<tr>
+<td>A-09</td>
+<td>0x08 位置</td>
+<td>3×int32 ×100(cm)</td>
+<td>§2.8</td>
+<td><code>decode_pos</code>（÷100）</td>
+<td><code>sendPosOffset</code>（−relative_down）</td>
+<td>等价变换后一致（同上取反）</td>
+</tr>
+<tr>
+<td>A-10</td>
+<td>0x0A 目标姿态</td>
+<td>3×int16 ×100</td>
+<td>§2.10</td>
+<td><code>decode_target_attitude</code>（÷100）</td>
+<td><code>sendTargetAttitude</code>（rollTarget×100、pitchTarget×100、<code>omega_ref_dps</code>×100）</td>
+<td>一致（第 3 字段本工程语义为目标偏航角速率，注释已写明）</td>
+</tr>
+<tr>
+<td>A-11</td>
+<td>0x0B 目标速度</td>
+<td>3×int16 ×100</td>
+<td>§2.11</td>
+<td><code>decode_target_speed</code></td>
+<td><code>sendTargetSpeed</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>A-12</td>
+<td>0x0D 电压电流</td>
+<td>5×u16 ×100</td>
+<td>§2.13 + 差异对照表</td>
+<td><code>decode_volt_curr</code>（÷100；bat=真实 ADC、fc 字段=P1/P2
+氧压）</td>
+<td><code>sendVoltCurr(bat_voltage_mv/1000, bat_current_ca/10, P1, P2, 0)</code></td>
+<td>一致；旧注释"bat 占位常量 12.6/16.8"陈旧，本轮已按固件实码修正</td>
+</tr>
+<tr>
+<td>A-13</td>
+<td>0x20 PWM</td>
+<td>8×u16，单位 0.01%</td>
+<td>§2 控制量输出</td>
+<td><code>decode_pwm</code></td>
+<td><code>sendPWMOutput(ch3×100, ch4×100, 0…)</code></td>
+<td>一致（本工程仅前两通道有物理语义）</td>
+</tr>
+<tr>
+<td>A-14</td>
+<td>0x21 姿态控制量</td>
+<td>4×int16 ×10；本工程 α_ref(rad/s²)×10、thr×10</td>
+<td>§2.2 +「2026-08-11 单位兼容说明」</td>
+<td><code>decode_attitude_control</code>（÷10 → rad/s²，派生
+<code>ctrl_*_dps2</code> = ×180/π）</td>
+<td><code>sendAttitudeControl(...)</code>，实参
+<code>alpha_ref_radps2×10</code>、<code>throttlePercent×10</code></td>
+<td>一致（线缆保持 rad/s²，显示域 deg/s²）</td>
+</tr>
+<tr>
+<td>A-15</td>
+<td>0x30 GPS</td>
+<td>u8/u8 + i32×2(1e7) + i32(cm) + i16×3(cm/s) + u8×3(×10)</td>
+<td>§3.1 + 差异对照表（÷10 而非手册文字 ÷100）</td>
+<td><code>decode_gps</code>（÷1e7、÷100、÷10）</td>
+<td><code>sendGPSInfo1</code>（pdop×10、vacc×10、sacc×10）</td>
+<td>一致；★ 形参命名与实参对调（形参 <code>…,vacc,sacc</code>、调用实参
+<code>…,sacc,vacc</code>），字节流仍为
+<code>[pdop, SACC, VACC]</code>＝手册
+p[20..22]，两侧变量名与内容相反（注释已写明）</td>
+</tr>
+<tr>
+<td>A-16</td>
+<td>0x40 遥控</td>
+<td>10×int16（手册 1000–2000 µs，0=无通信）</td>
+<td>§5.1 + 差异对照表</td>
+<td><code>decode_rc</code>（<code>&lt;10h</code>）</td>
+<td><code>sendRCData(const uint16_t*)</code>（10×u16 LE）</td>
+<td>等价变换后一致（1000–2000 与 0 范围内有符号/无符号同值）</td>
+</tr>
+<tr>
+<td>A-17</td>
+<td>0xF1 执行器（本工程自定义灵活帧）</td>
+<td>12B：摆角 int16 ×100、电机 u16 ×10、Δω int16 ×1000、sat u8、预留
+u8</td>
+<td>PROTOCOL-001 §1.3（0xF1–0xFA 灵活格式帧）+ 差异对照表</td>
+<td><code>decode_actuator</code></td>
+<td><code>communication.cpp</code> 的
+<code>act[12]</code>（<code>put16</code> 小端）</td>
+<td>一致（顺序与缩放逐项对齐；sat bit0/1/2 = δf/δt/Δω）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-参数链路paramspy--ano_paramscpp只读核对固件">2.3
+参数链路（<code>params.py</code> ↔︎
+<code>ano_params.cpp</code>，只读核对固件）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>要素</th>
+<th>出处</th>
+<th>PC 实现</th>
+<th>固件实现</th>
+<th>结论</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B-01</td>
+<td>参数 ID = 注册表顺序（当前 128 项）</td>
+<td>GCS-001 §2；<code>ano_params.h</code>
+<code>ANO_PARAMS_COUNT 128</code></td>
+<td><code>expected_names()</code></td>
+<td><code>kAnoParams[ANO_PARAMS_COUNT]</code></td>
+<td>一致</td>
+<td><code>tests/test_params_and_link.py::test_param_count_matches_firmware</code>：len=128、<code>names[117]=='inertia_comp_mask'</code>、<code>names[121:128]</code>
+为 rc_rate/rc_expo[0..2]/rc_super[0..2]</td>
+</tr>
+<tr>
+<td>B-02</td>
+<td>12 环 × 9
+字段顺序（kp、ki、kd、out_min、out_max、int_limit、threshold、falpha、enabled）</td>
+<td>同上</td>
+<td><code>PID_GROUPS</code> + <code>FIELD_META</code> +
+<code>expected_names</code></td>
+<td><code>PID_FLOAT</code>/<code>PID_ALPHA</code>/<code>PID_ENABLED</code>
+宏展开</td>
+<td>一致</td>
+<td>同测试；<code>FIELD_META['filter_alpha']['wire_name']='falpha'</code>
+对应 <code>PID_ALPHA</code> 的 <code>#loop ".falpha"</code></td>
+</tr>
+<tr>
+<td>B-03</td>
+<td>滤波数组短名 spd_alpha/ang_alpha/out_alpha/spd2_alpha</td>
+<td>PAR_NAME 定长 20B（§4.3）</td>
+<td><code>FILTER_WIRE</code></td>
+<td><code>ALPHA_ENTRY</code></td>
+<td>一致</td>
+<td>同测试的尾部顺序断言</td>
+</tr>
+<tr>
+<td>B-04</td>
+<td>参数类型 float=8 / uint8=0</td>
+<td>§4.4</td>
+<td><code>ANO_FLOAT=8</code>、<code>ANO_UINT8=0</code>、<code>is_float_name</code></td>
+<td><code>AnoDataType</code>、<code>anoParamSerialize</code></td>
+<td>一致</td>
+<td><code>test_params_and_link.py</code> 类型用例</td>
+</tr>
+<tr>
+<td>B-05</td>
+<td>0xE0 命令语义 0x01/0x02/0x03/0x10</td>
+<td>§4.1</td>
+<td><code>cmd_read_param_count</code>、<code>cmd_read_param_value</code>、<code>cmd_read_param_info</code>、<code>cmd_param_restore_defaults</code>、<code>cmd_param_save</code></td>
+<td><code>anoParamsHandleRx</code> 的 <code>switch(cmd)</code></td>
+<td>一致</td>
+<td><code>test_params_and_link.py</code></td>
+</tr>
+<tr>
+<td>B-06</td>
+<td>0xE1 写入 = ID u16 LE + PAR_VAL（类型定长）</td>
+<td>§4.2</td>
+<td><code>cmd_write_param</code>（float 4B / u8 1B）</td>
+<td><code>anoParamDeserialize</code>（长度严格匹配 +
+<code>isfinite</code> 拒绝 NaN/Inf）</td>
+<td>一致</td>
+<td>同测试写读回用例</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-黑匣子blackboxpy--固件-w25n01gv_log只读核对">2.4
+黑匣子（<code>blackbox.py</code> ↔︎ 固件
+<code>W25N01GV_log</code>，只读核对）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>要素</th>
+<th>出处</th>
+<th>PC 实现</th>
+<th>固件实现</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td>I 帧 63B：magic AA55 + 0x49 + seq u16 + t_ms u32 + N×f32 +
+CRC16</td>
+<td><code>lib/W25N01GV/src/W25N01GV_log.h</code></td>
+<td><code>IFRAME_SIZE = 9 + 4N + 2</code></td>
+<td><code>W25N01GV_LOG_IFRAME_SIZE 63</code></td>
+<td>一致（N=13）</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td>P 帧 33B：magic + 0x50 + seq u16 + dt u16 + (N−1)×i16 + CRC；差值
+×100</td>
+<td>同上 + GCS-001 §3</td>
+<td><code>PFRAME_SIZE = 7 + (N−1)*2 + 2</code>；<code>deltas / DELTA_SCALE</code>；末通道保持参考值</td>
+<td><code>buildPFrame</code>（<code>N_DELTAS = (PFRAME_SIZE-9)/2 = 12</code>）</td>
+<td>一致（末槽为 CRC，不按 22 增量解析）</td>
+</tr>
+<tr>
+<td>C-03</td>
+<td>S 帧 236B 定长：magic + 0x53 + seg u16 + t_ms u32 + 名表 224B（NUL
+结尾）+ CRC</td>
+<td>同上</td>
+<td><code>SFRAME_MAX=236</code>、<code>_sframe_channel_count</code></td>
+<td><code>buildSFrame</code>（<code>SFRAME_MAX</code>）</td>
+<td>一致（名表自描述，列名不硬编码）</td>
+</tr>
+<tr>
+<td>C-04</td>
+<td>E 帧 15B：magic + 0x45 + seg u16 + dur u32 + frames u32 + CRC</td>
+<td>同上</td>
+<td><code>EFRAME_SIZE=15</code></td>
+<td><code>buildEFrame</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>C-05</td>
+<td>CRC16-CCITT poly 0x1021、init 0xFFFF</td>
+<td>同上</td>
+<td><code>crc16</code></td>
+<td><code>crc16_ccitt</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>C-06</td>
+<td>通道数动态推导（当前 13；旧段无 S 帧回退 22）</td>
+<td>同上（通道表 22→13 裁剪）</td>
+<td><code>_set_channel_count</code>、<code>extract_frames</code></td>
+<td>固件通道表</td>
+<td>一致（<code>tests/test_blackbox.py</code>）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-websockethttp-字段单位与频率后端--前端">2.5 WebSocket/HTTP
+字段、单位与频率（后端 ↔︎ 前端）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>要素</th>
+<th>出处</th>
+<th>后端</th>
+<th>前端</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td>遥测推送 50Hz</td>
+<td>COMM-001 §4 C 层（TELEMETRY_PERIOD 0.05→0.02）</td>
+<td><code>TELEMETRY_PERIOD=0.02</code>、<code>_on_telemetry_rx</code>
+节流</td>
+<td><code>main.mjs</code> 解析
+<code>telemetry</code>；<code>scope</code>/<code>dashboard</code>/<code>view3d</code>
+订阅 bus</td>
+<td>一致（前端随事件刷新 ≈50Hz）</td>
+</tr>
+<tr>
+<td>D-02</td>
+<td>hello 版本握手（防残留旧后端）</td>
+<td>AGENTS.md 踩坑记录「改 GCS 后端后必须杀掉旧进程」</td>
+<td><code>ws_endpoint</code> 发
+<code>{'type':'hello','version':app.version}</code></td>
+<td><code>main.mjs</code> <code>BACKEND_VERSION='0.3.0'</code>
+比对并告警</td>
+<td>一致（<code>main.py</code>
+<code>app=FastAPI(version='0.3.0')</code>）</td>
+</tr>
+<tr>
+<td>D-03</td>
+<td>字段单位/缩放</td>
+<td><code>anocom.py</code> 各解码函数</td>
+<td>快照字段后缀 <code>_deg/_dps/_ms2/_ms/_m/_pct/_v</code></td>
+<td><code>scope.PRESETS</code>、<code>dashboard</code>
+控件按后缀显示</td>
+<td>一致（前端不做二次换算）</td>
+</tr>
+<tr>
+<td>D-04</td>
+<td>0x21 派生量</td>
+<td>PROTOCOL-001「2026-08-11 单位兼容说明」</td>
+<td><code>decode_attitude_control</code> 同时给
+<code>ctrl_*</code>(rad/s²) 与 <code>ctrl_*_dps2</code>(deg/s²)</td>
+<td><code>dashboard</code> 用 <code>ctrl_*_dps2</code>（α °/s²）</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>D-05</td>
+<td>记录 CSV 列</td>
+<td>GCS-001 §上位机（记录/回放）</td>
+<td><code>datalog.RECORD_FIELDS</code> 固定列</td>
+<td>回放复用同一 <code>telemetry</code> 结构</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>D-06</td>
+<td>变量（0xF2/0xF3）字段命名</td>
+<td>AGENTS.md 踩坑记录（AnoVars）</td>
+<td><code>_on_vars_list</code>（名
+16B）、<code>_on_vars_value</code>（id u16 + f32 LE）</td>
+<td><code>dashboard</code> 变量表</td>
+<td>一致</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-工具脚本核对口径">2.6 工具脚本核对口径</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>脚本</th>
+<th>核对对象</th>
+<th>口径来源</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E-01</td>
+<td><code>verify_axis_map.py</code></td>
+<td>传感器 RUB → 机体系
+FRD：<code>bX=-sZ</code>、<code>bY=+sX</code>、<code>bZ=-sY</code>；<code>q_body_from_FLU</code>
+绕 X 180°</td>
+<td>AGENTS.md 轴映射踩坑、<code>sensor_imu.cpp</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>E-02</td>
+<td><code>verify_mix_axes.py</code></td>
+<td>模型系
+<code>x'=-z_b</code>、<code>y'=+y_b</code>、<code>z'=+x_b</code>（det=+1）；<code>Mx'=-Ix·α_yaw</code>
+等符号</td>
+<td>AGENTS.md 轴置换踩坑、CTL-001 §5</td>
+<td>一致（脚本头标注"以实机直通为锚点"）</td>
+</tr>
+<tr>
+<td>E-03</td>
+<td><code>verify_frame_map.py</code></td>
+<td>存档系（z=推力轴）↔︎
+模型系置换：<code>Mx'=-Mz</code>、<code>My'=+My</code>、<code>Mz'=+Mx</code></td>
+<td>MOD-002 §3、CTL-001 §5</td>
+<td>一致（det=+1 手性检验）</td>
+</tr>
+<tr>
+<td>E-04</td>
+<td><code>verify_control_sign.py</code></td>
+<td>俯仰符号链：角度域 Kp 2.8、速率环 16.042818 s⁻¹、Iy=0.022、力臂
+0.315</td>
+<td>CTL-001 §4（速率环量纲 2026-08-11 迁移）</td>
+<td>一致（FAIL 时 exit 1，可作断言）</td>
+</tr>
+<tr>
+<td>E-05</td>
+<td><code>verify_allocation_sign.py</code>、<code>verify_torque_sign.py</code>、<code>verify_slope_direct.py</code></td>
+<td>B 矩阵与力矩/斜率符号（My→δt、Mx→Δω、δf→Mz）</td>
+<td>THY-002 §2–3、THY-003 §2–3、CTL-001 §5</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>E-06</td>
+<td><code>verify_w0_floor.py</code>、<code>verify_floor_consistency.py</code>、<code>verify_yaw_{authority,gain_schedule,vs_archive}.py</code></td>
+<td>w0 floor、调度 <code>s=(w0/w_hover)²</code>、差速权限与存档对照</td>
+<td>AGENTS.md 差速增益调度三层坑、CTL-001 §5</td>
+<td>一致（脚本头已标注"历史回放/历史设计评估"，不代表现役链路）</td>
+</tr>
+<tr>
+<td>E-07</td>
+<td><code>audit_math.py</code></td>
+<td>TVC 15° 限幅与增益饱和匹配、差速限幅余量</td>
+<td>CTL-001 §5</td>
+<td>一致（历史脚本，未含 τm 观测器）</td>
+</tr>
+<tr>
+<td>E-08</td>
+<td><code>test_mavlink_bridge.py</code></td>
+<td>MAVLink 参数桥短名（≤15B）与写后读回</td>
+<td>AGENTS.md MAVLink 踩坑记录</td>
+<td>口径一致；<strong>波特率写死 2000000，与 COMM-001 后 921600
+不符</strong>（P2）</td>
+</tr>
+<tr>
+<td>E-09</td>
+<td><code>dps_profile_parser.js</code>、<code>dps_profile_runner.js</code>、<code>nmea-host-test/**</code></td>
+<td>DPS310 诊断汇总、GNSS 双协议宿主回归</td>
+<td>固件诊断宏、<code>lib/ublox-main</code></td>
+<td>一致（仅测试/分析，不参与固件）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-发现清单">3 发现清单</h2>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>—</td>
+<td>—</td>
+<td>未发现 P0（帧格式/校验/缩放/参数 ID 与固件无安全级不一致）</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>P1</td>
+<td><code>params.py::build_meta</code></td>
+<td><code>FIELD_META</code> 加入 <code>rc_rate/rc_expo/rc_super</code>
+后，<code>build_meta</code> 仍对每个 PID 环展开这些字段，生成 36
+个永不命中的 <code>att_roll.rc_rate</code> 等条目（META 实际 164 项 vs
+固件 128）；<code>expected_names()</code> 已用
+<code>field.startswith('rc_')</code> 跳过，两函数口径不一致</td>
+<td>无功能影响（前端按固件 E2 名查表），但误导核查、增大元数据表</td>
+<td>给 <code>build_meta</code> 加同样的 <code>rc_*</code>
+跳过；属行为相邻改动，本轮登记不动，建议随下次参数变更一起做并补测试</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>参数计数注释（固件
+<code>ano_params.h</code>/<code>ano_params.cpp</code>/<code>communication.cpp</code>，本区
+<code>params.py</code>）</td>
+<td>注释仍写"117/121 参数"，实际注册表 128（C 路径后两次追加：spd2_alpha
+3 项、FPV 摇杆曲线 7 项）</td>
+<td>维护者误判参数总数，排查 ID 错位时走弯路</td>
+<td>GCS 侧已去掉写死数字并注明当前 128；固件侧属其他 Agent
+范围，登记</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>anocom.py::decode_volt_curr</code></td>
+<td>旧注释称 bat 电压/电流为"占位常量
+12.6/16.8、无真实采样"；固件早已改为真实
+ADC（<code>bat_voltage_mv/1000</code>、<code>bat_current_ca/10</code>）</td>
+<td>注释与实现相反，易误判遥测来源</td>
+<td>本轮已修正注释（行为未动）</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>main.py::_on_vars_value</code></td>
+<td>docstring 写"随 20Hz telemetry 推送"，实际
+<code>TELEMETRY_PERIOD=0.02</code>（50Hz）</td>
+<td>频率口径错误</td>
+<td>本轮已改为 50Hz</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>test_mavlink_bridge.py</code></td>
+<td><code>BAUD=2000000</code> 未随 COMM-001（921600）更新；PARAM
+条数文案写死 121</td>
+<td>直接运行会乱码/超时，统计文案与实际 128 不符</td>
+<td>联调前改 BAUD；条数文案建议改为
+<code>len(pm.expected_names())</code>（工具脚本非 CI 路径）</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>GCS-001</code> 文档</td>
+<td>文中"117 参数""pytest 26 项"为 2026-08-08 口径，当前 128 参数、35
+项测试</td>
+<td>文档滞后</td>
+<td>建议随本记录交叉更新（不属本任务范围）</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>TandemVec_FCS/tools</code> 历史脚本</td>
+<td><code>verify_yaw_*</code>、<code>audit_math</code>、<code>verify_w0_floor</code>
+保留迁移前数值口径（未含 τm 观测器/FPV 曲线）</td>
+<td>误当现役检查器会得出过时结论</td>
+<td>已在脚本 L0 标注"历史回放/历史设计评估"</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-未决问题">4 未决问题</h2>
+<ol type="1">
+<li><strong>0x30 GPS
+形参命名与内容互换</strong>：<code>sendGPSInfo1</code> 形参
+<code>(…, pdop, vacc, sacc)</code>，<code>communication.cpp</code>
+调用实参 <code>(…, pdop, sacc, vacc)</code>，函数体内
+<code>data[21]=vacc×10</code>、<code>data[22]=sacc×10</code>。字节流与手册一致（data[21]=SACC、data[22]=VACC），但两处命名与内容相反。任何一侧"修正命名"都会翻转字节语义——改动前必须同时改调用与
+GCS 解码；本记录保留现状，建议在固件通信层统一命名后一并验证。</li>
+<li><strong>0x40 RC 有符号/无符号</strong>：固件
+<code>sendRCData(const uint16_t*)</code>，手册定义 int16。当前 1000–2000
+与 0 范围内等价；若未来出现负值或 &gt;32767 将不一致（现有 RC
+语义不会出现）。</li>
+<li><strong><code>build_meta</code> 与 <code>expected_names</code>
+口径不一致</strong>（P1）：需确认前端/工具是否依赖 <code>META</code>
+条目数量或键集合做校验（当前未见），再决定是否清理 36
+个垃圾条目；清理时须同步
+<code>tests/test_params_and_link.py</code>。</li>
+<li><strong>文档滞后</strong>：<code>GCS-001</code>（117 参数、26
+项测试）与 <code>COMM-001</code>（README
+中部分旧口径）需随本轮记录更新，避免下一轮核查再次踩"117/121"。</li>
+</ol>
+<hr />
+<h2 id="5-门禁与测试">5 门禁与测试</h2>
+<ul>
+<li><code>py -3.12 tools/check-code-comments.py --area gcs --check</code>
+<ul>
+<li>核查前：exit 1，<strong>42 error / 77
+warning</strong>（R01=42、R08=47、R09=28、R04=2），平均分 70.8，0
+文件全绿。</li>
+<li>核查后：exit 0，<strong>0 error / 0 warning</strong>，平均分
+100.0，42/42 文件全绿，规则命中"无"。</li>
+</ul></li>
+<li><code>cd TandemVec_FCS/GCS &amp;&amp; py -3.12 -m pytest tests/ -q</code>
+<ul>
+<li>核查前：<code>35 passed, 2 warnings</code>（0.28 s）</li>
+<li>核查后：<code>35 passed, 2 warnings</code>（0.29 s）</li>
+</ul></li>
+<li>前端/脚本语法：<code>node --check web/src/*.mjs</code>（8/8
+通过）、<code>node --check tools/dps_profile_{parser,runner}.js</code>（2/2
+通过）。</li>
+<li>行为保持自查：<code>git diff -U0 -- TandemVec_FCS/GCS TandemVec_FCS/tools</code>
+删除行仅为旧 docstring/banner
+注释，新增行均为注释/文档字符串；协议常量、解码缩放、WS
+字段、前端逻辑、pytest 用例均未改动。</li>
+</ul>
+<hr />
+<h2 id="6-修订记录">6 修订记录</h2>
+<table>
+<thead>
+<tr>
+<th>日期</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-10-23</td>
+<td>首版：42 文件 L0/L1 补齐；AnoCom
+帧格式/缩放、参数链路、黑匣子、WS/前端、工具口径五组核对矩阵；P1×2、P2×5、未决
+4 项</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/GCS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

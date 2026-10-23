@@ -1,4 +1,16 @@
-// telemetry.mjs 单元测试（遥测快照视图）
+/**
+ * @file    telemetry.test.mjs
+ * @module  仿真 tests/遥测快照
+ * @brief   锁定遥测分组键集合、快照隔离性与 flags 派生
+ * @details 覆盖：八组键名（actuators/aero/commands/flags/flight/forces/rotors/time）；
+ *          修改快照不影响 sim；flags 反映 sasMode/aero/lockXY。
+ *          容差依据：无浮点计算，全部 deepEqual/equal 精确断言。
+ * @theory  N/A（数据搬运）；字段语义 @ref MOD-002 §8
+ * @frame   继承 sim 约定
+ * @units   继承 sim 约定
+ * @note 键集合断言是 HUD 的接口契约（改名=破坏下游），刻意逐字比对
+ * @see     src/core/telemetry.mjs、src/browser/hud.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

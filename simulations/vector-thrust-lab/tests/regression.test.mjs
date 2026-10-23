@@ -1,6 +1,19 @@
-// 回归测试：与 fixtures/regression-baseline.json 的行为基线比对
-// 基线由 tests/fixtures/generate.mjs 从当前实现采集；
-// 仅在有意的行为变更后才允许重新生成（提交说明必须记录原因）。
+/**
+ * @file    regression.test.mjs
+ * @module  仿真 tests/行为基线
+ * @brief   把四个标准场景的轨迹逐点比对回归基线 JSON
+ * @details 覆盖：trim（配平直飞 10 s）、pitchStep（8° 俯仰阶跃）、rollStep（滚转阶跃）、
+ *          yawStep（8° 偏航阶跃）；逐项比较 t/V/alpha/euler/pqr/pos/T/M。
+ *          容差依据：max(1e-9, |x|·1e-9) —— 相对 1e-9 ≈ 数个双精度 ulp 的累积余量，
+ *          用于吸收跨 Node 版本数学库（sin/atan2 实现）的末位差异；任何真实行为变化
+ *          都远大于该量级。基线只允许在"有意行为变更"后重采（见红线清单）。
+ * @theory  N/A（行为锁定）；场景物理背景 @ref MOD-001 §7.3
+ * @frame   机体系 FRD / NED
+ * @units   混合（见 scenarios.mjs 快照字段）
+ * @redline 重新生成基线即触碰行为红线：须重采 tests/fixtures/regression-baseline.json
+ *          并在提交说明写明原因（@ref docs/registers/行为保持红线清单.md）
+ * @see     tests/scenarios.mjs、tests/fixtures/generate.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

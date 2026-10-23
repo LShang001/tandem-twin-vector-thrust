@@ -1,0 +1,1333 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FW-CTRL 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录--fw-control">代码理论核查记录 — fw-control</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：fw-control（Agent Teams task-4）｜
+规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：<code>6784221</code>（2026-09-11）；工作区另含任务开始前已存在的未提交改动（<code>ActuatorFaultMonitor.h</code>
+新文件、<code>flight_control.cpp</code> 的故障诊断接线，约 49
+行），本记录以<strong>工作区实际代码</strong>为核查对象。 理论来源：<a
+href="../control/CTL-001.html">CTL-001</a>
+§2–§8.6、<a
+href="../control/CTL-002.html">CTL-002</a>
+§1–§3、<a
+href="../theory/02-propulsion-modeling.html">THY-002</a>
+§2–§6、<a
+href="../theory/03-dynamics-allocation-modes.html">THY-003</a>
+§1.2–§3、<a
+href="../propulsion/PROP-001.html">PROP-001</a>
+§2–§6、<a
+href="../modeling/MOD-002.html">MOD-002</a>
+§1.2/§3、<code>TandemVec-Paper/ch/05-allocation.tex</code>（eq:diff_def
+/ eq:differential_roll / eq:effectiveness_matrix / eq:Btrue_allocation /
+eq:direct_mapping）、<code>ch07-control.tex</code>（eq:sas_* /
+eq:rate_command / eq:rc_curve /
+eq:max_clamp）、<code>ch16-adrc-onlineid.tex</code>（eq:eso2_* /
+eq:adrc_law / eq:rls_update / eq:excitation /
+eq:gain_scheduling）、<code>AGENTS.md</code>
+踩坑记录（轴映射、差速增益调度、速率环量纲、FPV 曲线）。
+方法：逐文件读代码 → 对照公式/式号与参数现值 → 核对 AGENTS
+踩坑记录与红线条目 → 补 L0/L1/L2 与五段式公式块 →
+<code>check-code-comments.py</code> 复检 → 宿主 g++ 回归 + 真实源码 SIL
+编译/运行。</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>行数</th>
+<th>L0 文件头</th>
+<th>L1 符号文档</th>
+<th><code>@ref</code></th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/flight_control.cpp</code></td>
+<td>1890</td>
+<td>有</td>
+<td>有（每层段落标题 + 8 个函数文档块 + 4 段五段式）</td>
+<td>24</td>
+<td>轴映射/速率量纲/差速调度三条红线</td>
+</tr>
+<tr>
+<td><code>src/flight_control.h</code></td>
+<td>77</td>
+<td>有</td>
+<td>有（3 个导出函数）</td>
+<td>2</td>
+<td>原头缺 <code>@module/@details/@frame/@units</code></td>
+</tr>
+<tr>
+<td><code>include/FlightCtrlParams.h</code></td>
+<td>170</td>
+<td>有（原 <code>//</code> 块改 <code>/** */</code>）</td>
+<td>有（两个结构体逐字段单位）</td>
+<td>2</td>
+<td>清理重复 <code>#pragma once</code>；R05 长行重排</td>
+</tr>
+<tr>
+<td><code>include/ControlUnits.h</code></td>
+<td>51</td>
+<td>有</td>
+<td>有（2 个换算函数）</td>
+<td>3</td>
+<td>量纲唯一换算点</td>
+</tr>
+<tr>
+<td><code>include/IncrementalPID.h</code></td>
+<td>144</td>
+<td>有</td>
+<td>有（类 + compute）</td>
+<td>0</td>
+<td>历史工具类，无调用点（见 §2.6）</td>
+</tr>
+<tr>
+<td><code>include/PositionPID.h</code></td>
+<td>395</td>
+<td>有</td>
+<td>有（主文件已有，补积分/微分约定）</td>
+<td>2</td>
+<td>R04 注释块改写</td>
+</tr>
+<tr>
+<td><code>include/RcCurve.h</code></td>
+<td>87</td>
+<td>有</td>
+<td>有（3 个函数）</td>
+<td>3</td>
+<td>补 <code>@module/@details/@frame/@units</code></td>
+</tr>
+<tr>
+<td><code>include/InertiaDecoupling.h</code></td>
+<td>103</td>
+<td>有</td>
+<td>有（2 个函数）</td>
+<td>2</td>
+<td>R04 大块改写；坐标系问题见 P0-2</td>
+</tr>
+<tr>
+<td><code>include/AirframeModel.h</code></td>
+<td>164</td>
+<td>有</td>
+<td>有（结构体 + 2 个合成器）</td>
+<td>1</td>
+<td>数值差分 B</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_Config.h</code></td>
+<td>139</td>
+<td>有（原 <code>//</code> 块改 <code>/** */</code>）</td>
+<td>有（参数逐项单位）</td>
+<td>1</td>
+<td>dMax 15°/25° 双口径已注明</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_ControlAllocation.h</code></td>
+<td>261</td>
+<td>有</td>
+<td>有（输入/输出/主函数）</td>
+<td>4</td>
+<td>R04 两处策略注释块改写</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_Propulsion.h</code></td>
+<td>243</td>
+<td>有</td>
+<td>有（正向映射/差速/效能矩阵）</td>
+<td>2</td>
+<td>R04/R06 修（<code>/* Fx */</code> 假阳性）</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_OnlineID.h</code></td>
+<td>244</td>
+<td>有</td>
+<td>有（RLS + 管理器 step/adapt）</td>
+<td>1</td>
+<td>R04 FFRLS 注释块改写</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_ADRC.h</code></td>
+<td>125</td>
+<td>有</td>
+<td>有（ESO2 + ADRC）</td>
+<td>1</td>
+<td>未接线，已注明</td>
+</tr>
+<tr>
+<td><code>include/TVC_Control_3rdOrder_Poly.h</code></td>
+<td>75</td>
+<td>有</td>
+<td>有（1 个函数）</td>
+<td>1</td>
+<td>已弃用，仅 main.cpp 包含、无调用</td>
+</tr>
+<tr>
+<td><code>include/TVC_Control_Geometric.h</code></td>
+<td>78</td>
+<td>有</td>
+<td>有（1 个函数）</td>
+<td>2</td>
+<td>已弃用，同上</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_ServoModel.h</code></td>
+<td>108</td>
+<td>有（原 <code>//</code> 块改 <code>/** */</code>）</td>
+<td>有（2 个函数）</td>
+<td>1</td>
+<td>仿真用；25° 口径已注明</td>
+</tr>
+<tr>
+<td><code>include/ActuatorFaultMonitor.h</code></td>
+<td>151</td>
+<td>有</td>
+<td>有（类 + update/action）</td>
+<td>1</td>
+<td>F3/F4 判据与边界</td>
+</tr>
+</tbody>
+</table>
+<p>合计：18 文件 / 4512 行（核查前 3970 行，本轮净增 542
+行注释与文档）；L0 覆盖 18/18；<code>@ref</code> 共 53 处。</p>
+<hr />
+<h2 id="2-核对矩阵">2 核对矩阵</h2>
+<p>结论枚举：<code>一致</code> / <code>等价变换后一致</code> /
+<code>近似（可接受）</code> / <code>偏差（已登记）</code> /
+<code>不一致（待修）</code>。</p>
+<h3 id="21-执行器轴映射与构型语义a">2.1 执行器轴映射与构型语义（A）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-01</td>
+<td>通道→执行器：滚转→上摆 δf、俯仰→下摆 δt、偏航→差速 Δω</td>
+<td>AGENTS.md 踩坑记录（2026-08-07 轴置换）；CTL-001 §8.6</td>
+<td><code>mix_and_output_commands</code> 的 <code>Mx/My/Mz</code>
+三条逆解赋值 → <code>allocateMoments(BTRUE)</code> →
+<code>lower_gimbal_deg=ao.delta_t</code>、<code>upper_gimbal_deg=ao.delta_f</code>
+→ <code>SetServoPos(...,TVC_PITCH/TVC_ROLL_SERVO_PIN)</code></td>
+<td>一致</td>
+<td>实码即锚点：<code>alpha_roll→Mz'→δf</code>、<code>alpha_pitch→My'→δt</code>、<code>alpha_yaw→Mx'→Δω</code>；<code>test_flight_control_axis</code>
+断言
+<code>M_pos_dt[1]&lt;0</code>、<code>M_pos_df[2]&gt;0</code>、<code>M_pos_dw[0]&lt;0</code>
+与分配层符号一致</td>
+</tr>
+<tr>
+<td>A-02</td>
+<td>悬停构型语义：机头朝天、前电机最高=上摆、尾电机最低=下摆、差速绕推力轴=世界航向</td>
+<td>AGENTS.md 执行器分配段；MOD-002 §1.2</td>
+<td>同上 + <code>TandemVec_Config</code>（Ix=轴向惯量）+
+<code>TandemVec_Propulsion::computeWrench</code></td>
+<td>等价变换后一致</td>
+<td>固件存档系（z_b=推力轴）与论文/MOD-002
+模型系（x'=推力轴）是同一机械布局的纯旋转置换
+<code>x'=−z_b、y'=+y_b、z'=+x_b</code>（det=+1，<code>TandemVec_FCS/tools/verify_frame_map.py</code>
+输出）；<strong>同一物理、两套轴名</strong></td>
+</tr>
+<tr>
+<td>A-03</td>
+<td>巡航读法：前摆 δf→Mz（偏航）、差速反扭→Mx（滚转）</td>
+<td>MOD-002 §1.2；CTL-001 §3 表；论文 ch05 eq:moment_linearized</td>
+<td><code>computeWrench</code>（Mz=a·Tf·sδf、Mx=−Qf·cf+Qt·ct）</td>
+<td>等价变换后一致</td>
+<td>该读法属<strong>仿真模型系</strong>（x_b=机身纵轴/推力轴）；固件把同一
+Mz'/Mx' 通道命名为滚转/偏航。论文 ch05
+已注明"经轴置换后差速对应偏航通道"；CTL-001 §3 表未标口径 → P2-3</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td>轴置换符号：<code>Mx'=−Ix·α_yaw</code>、<code>My'=+Iy·α_pitch</code>、<code>Mz'=−Iz·α_roll</code></td>
+<td>AGENTS.md <code>verify_mix_axes.py</code> 结论；CTL-001 §4/§5</td>
+<td><code>mix_and_output_commands</code> 层1</td>
+<td>等价变换后一致</td>
+<td><code>tools/verify_mix_axes.py</code>
+以实机陀螺直通锚点反解：<code>tail: My'=+I·α_pitch</code>、<code>front: Mz'=−I·α_roll</code>、<code>dw: Mx'=−I·α_yaw</code>，与实码逐字一致</td>
+</tr>
+<tr>
+<td>A-05</td>
+<td>手动 TVC 直通方向须与自控链最终摆角一致（roll 取反）</td>
+<td>AGENTS.md 踩坑记录；<code>mix_and_output_commands</code>
+锁定/手动分支</td>
+<td><code>upper_gimbal_deg = mapFloat(roll_raw, 988, 2012, MAX_CORRECTION, −MAX_CORRECTION)</code></td>
+<td>等价变换后一致</td>
+<td>注释写明取反理由（<code>Mz=−Iz·α_roll</code> + 分配器正系数 ⇒ front
+摆角与 α_roll 反号）；2026-08-08 已实机核对</td>
+</tr>
+<tr>
+<td>A-06</td>
+<td>固件注释不得再写"x_b=机身纵轴=推力轴"</td>
+<td>AGENTS.md 踩坑记录（写轴注释前先查 mix 层）</td>
+<td><code>execute_attitude_controller</code> 原注释</td>
+<td>不一致（注释）→ 已修</td>
+<td>原注释把模型系与存档系混读，已改正为"滚转=绕
+x_b、z_b=推力轴"；同类旧注释"步骤7 → 上摆角 δ_f"、「ATTITUDE_MODE 走
+q_err.z 姿态外环」一并废止（P2-1、P2-4）</td>
+</tr>
+<tr>
+<td>A-07</td>
+<td><code>GYRO_DIRECT_TEST</code> 调试直通路径不参与正式飞行</td>
+<td><code>TandemVec_Config.h</code> 调试开关（<code>#if</code>
+判断）</td>
+<td><code>mix_and_output_commands</code> 的
+<code>#if GYRO_DIRECT_TEST</code> 块</td>
+<td>偏差（已登记）</td>
+<td>宏为 0，整块不编译；块内注释"上摆 −K·ω_z"与实码 <code>+K·ω_z</code>
+不一致、轴名沿用历史模型系 → P2-8，已在块内加警示</td>
+</tr>
+</tbody>
+</table>
+<p><strong>口径注（必须与上述映射同时阅读）</strong>：悬停构型下机身竖立、机头朝天，推力轴（体轴
+z_b）竖直指地；上摆=前电机（最高点）主控滚转，下摆=尾电机（最低点）主控俯仰，差速绕推力轴=主控航向。巡航构型下同一对摆即"前摆/尾摆"；旧描述"前摆=偏航、差速反扭=滚转"是巡航系读法，已废止。两种读法数值上通过固定置换对应，<strong>不得跨文档混用轴名</strong>。</p>
+<h3 id="22-速率环量纲与串级单位b">2.2 速率环量纲与串级单位（B）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B-01</td>
+<td>控制器输入 deg/s、输出 deg/s²，仅在写 <code>ControlOutputs_t</code>
+时 ×π/180</td>
+<td>AGENTS.md"速率环量纲已统一（2026-08-11）"；CTL-001 §8.6</td>
+<td><code>ControlUnits::dps2ToRadps2</code> +
+<code>execute_attitude_controller</code> /
+<code>execute_yaw_controller</code> 两处赋值</td>
+<td>一致</td>
+<td>全仓仅 <code>ControlUnits.h</code> 做换算；<code>dps2ToRadps2</code>
+调用点只有上述两条链路与 <code>update_online_identification</code> 的
+i_term；<code>test_control_units</code> 11 断言 PASS</td>
+</tr>
+<tr>
+<td>B-02</td>
+<td>kp/ki 现值与旧混合域 0.28/0.20/0.10 严格等价</td>
+<td>同上</td>
+<td><code>kFlightCtrlParamsDefaults.rate_roll/rate_pitch/rate_yaw</code></td>
+<td>一致</td>
+<td>复算：0.28×57.29578=16.042818 ✓、0.20×57.29578=11.459156
+✓、0.10×57.29578=5.729578 ✓；yaw ki 2026-08-12 下调
+25%：5.729578×0.75=4.297184 ✓（与文件现值逐位一致）</td>
+</tr>
+<tr>
+<td>B-03</td>
+<td>PositionPID 的 D 项为"每拍差分（未除 dt）"</td>
+<td>GOV-004 §8；AGENTS.md 速率环量纲条</td>
+<td><code>PositionPID::computePID2DOF</code> 的 dOut 一行</td>
+<td>一致</td>
+<td>kd 现役全 0，故当前无物理影响；非零时必须连同 ×180/π
+一起迁移（注释已写入调用点）</td>
+</tr>
+<tr>
+<td>B-04</td>
+<td>旧混合域 ×57.3 换算警示必须写在控制链旁</td>
+<td>AGENTS.md</td>
+<td><code>execute_attitude_controller</code>
+的"角速率内环量纲"红线块</td>
+<td>一致</td>
+<td>注释给出"外部参数写旧值会让物理增益低 57.3 倍"的可操作警示</td>
+</tr>
+<tr>
+<td>B-05</td>
+<td>0x21/CAN/旧 <code>alpha_ref_*</code> 仍
+rad/s²，<code>adps2_x/y/z</code> 才是角度域</td>
+<td>AGENTS.md AnoVars 条</td>
+<td><code>gnc_tel.alpha_ref_radps2</code> /
+<code>alpha_ref_dps2</code></td>
+<td>一致</td>
+<td>遥测双字段并存，注释写明边界换算唯一出口</td>
+</tr>
+<tr>
+<td>B-06</td>
+<td>姿态外环输出限幅 ±80 deg/s，与 RATE_MODE ±600 deg/s 解耦</td>
+<td>AGENTS.md FPV 曲线条；论文 ch07 §rc_curve</td>
+<td><code>kMaxTargetRate=80</code>、<code>MAX_MANUAL_*RATE=600</code></td>
+<td>一致</td>
+<td>复算满杆：0.5×200/(1−0.7)=333.3 deg/s、yaw 0.5×200/(1−0.55)=222.2
+deg/s，均 &lt;600</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-差速分配与增益调度c">2.3 差速分配与增益调度（C）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td>差速开方分配 ωf=ω0√(1+Δω)、ωt=ω0√(1−Δω)</td>
+<td>CTL-001 §7.1；论文 ch05 eq:diff_def</td>
+<td><code>TandemVec_Propulsion::allocateDifferential</code></td>
+<td>一致</td>
+<td>公式与红线条目逐字一致；<code>max(0,·)</code> 兜底 + wMax 钳位 +
+饱和标记；<code>test_tandemvec_allocation</code> 覆盖</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td>未钳位时 ωf²+ωt²=2ω0²（总推力一阶不变），钳位破坏该性质</td>
+<td>CTL-001 §7.2；论文 ch07 eq:max_clamp</td>
+<td>同上</td>
+<td>一致</td>
+<td>注释写明"钳位后总推力低于预期，调用方应提示操纵手"</td>
+</tr>
+<tr>
+<td>C-03</td>
+<td>低油门 1/w0² 使 Δω 指令爆炸 → 调度 (w0/wh)²</td>
+<td>AGENTS.md 差速增益调度坑①（2026-08-07）</td>
+<td><code>mix_and_output_commands</code> 层2 的
+<code>yaw_gain_sched</code></td>
+<td>一致</td>
+<td><code>w_hover=√(0.5·m·g/kT)</code> 复算 ≈574
+rad/s；<code>w0_floor=0.6·w_hover≈344 rad/s ≈30% wMax</code>（注释数值正确）</td>
+</tr>
+<tr>
+<td>C-04</td>
+<td>物理力矩仍 ∝w0² → 稳态有效增益随油门放大 → 封顶 1.0</td>
+<td>AGENTS.md 坑②（2026-08-09）</td>
+<td><code>yaw_gain_sched = fminf((w0_eff/w_hover)², 1.0f)</code></td>
+<td>一致</td>
+<td>仅乘 Mx（差速）通道，摆座通道不扩范围</td>
+</tr>
+<tr>
+<td>C-05</td>
+<td>τm 一阶观测器
+<code>w_est += (w_cmd−w_est)·dt/τm</code>（dt=0.005、τm=0.28）</td>
+<td>AGENTS.md 坑③（2026-08-09 抖油门震荡根因）；THY-002 §4；PROP-001
+§3</td>
+<td><code>g_wf_est/g_wt_est</code> 更新两行</td>
+<td>一致</td>
+<td>每拍系数 0.005/0.28=0.017857；观测器输入是
+<code>prev_prop_state</code>（上一拍分配输出），与"指令经 τm
+滞后"一致；开环状态估计无稳定性问题</td>
+</tr>
+<tr>
+<td>C-06</td>
+<td>有效回路增益 = kp·(w0_actual/w0_used)²，瞬态 0.25→0.44 越震荡点
+0.35</td>
+<td>AGENTS.md 坑③</td>
+<td>层2 长注释块</td>
+<td>一致</td>
+<td>注释完整复述三层根因与"约 160 ms"量级，并给出
+<code>tools/verify_*.py</code> 验证入口</td>
+</tr>
+<tr>
+<td>C-07</td>
+<td>B 矩阵工作点/调度/current_state
+全用观测转速；<code>allocateDifferential</code> 必须用真实指令 w0</td>
+<td>AGENTS.md 坑③修复；CTL-001 §8.6</td>
+<td><code>ai.w0=w0</code> vs
+<code>w0_eff</code>、<code>ai.current_state.wf=fmaxf(g_wf_est,w0_floor)</code></td>
+<td>一致</td>
+<td>两套转速的用途在注释中逐条说明；零油门门控（throttle&lt;5%）补回"零油门→执行器归中"</td>
+</tr>
+<tr>
+<td>C-08</td>
+<td>观测器用相对步长（无 min 截断），与 PROP-001 的
+<code>min(dt/τ,1)</code></td>
+<td>PROP-001 §3.1/§3.2</td>
+<td>同上</td>
+<td>近似（可接受）</td>
+<td>dt/τ=0.0179≪1，min 永不触发；两式在本工况数值等价</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-控制分配-b-矩阵d">2.4 控制分配 B 矩阵（D）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td>解析 B_true 九元素与论文 eq:Btrue_allocation 逐项一致</td>
+<td>论文 ch05 eq:Btrue_allocation</td>
+<td><code>TandemVec_Propulsion::computeEffectMatrix</code></td>
+<td>一致</td>
+<td>逐项：<code>[−kQw0²(cf+ct), −Qt·st, Qf·sf; b·kTw0²st−kQw0²sf, −b·Tt·ct, −Qf·cf; a·kTw0²sf+kQw0²st, −Qt·ct, a·Tf·cf]</code>
+与论文矩阵逐元素相同</td>
+</tr>
+<tr>
+<td>D-02</td>
+<td>零摆角退化 B_full = diag(−2τ0, −bT0, aT0) + 交叉项</td>
+<td>CTL-002 §1.1；论文 ch05 eq:effectiveness_matrix</td>
+<td>同上（注释末段）</td>
+<td>一致</td>
+<td>注释给出退化矩阵并注明 <code>T0=Tt=Tf、τ0=Qt=Qf</code> 条件</td>
+</tr>
+<tr>
+<td>D-03</td>
+<td>数值差分 B（中心差分 h=1e-4 相对、摆轴 Rodrigues
+旋转）与解析式等价</td>
+<td>THY-003 §2.2（摆角雅可比 = 摆轴×推力轴）</td>
+<td><code>AirframeModel::computeJacobianNumeric</code> +
+<code>computeEffectMatrixDataDriven</code></td>
+<td>一致</td>
+<td><code>test_tandemvec_allocation</code> T11：相对 &lt;5e-3、绝对
+&lt;5e-4；零摆角耦合项为 0
+两实现一致；<code>test_airframe_generic</code> 14 断言 PASS</td>
+</tr>
+<tr>
+<td>D-04</td>
+<td>本机 3 输入×3 力矩通道为方阵：用 B⁻¹（精确逆）而非 B⁺ 伪逆</td>
+<td>THY-003 §3.2；CTL-001 §2</td>
+<td><code>allocateMoments</code> BTRUE 分支（Cramer）</td>
+<td>等价变换后一致</td>
+<td>方阵且非奇异时 B⁺=B⁻¹；伪逆只在冗余执行器场景需要（CTL-002 §5
+登记为未来方向）</td>
+</tr>
+<tr>
+<td>D-05</td>
+<td>近奇异保护：</td>
+<td>det</td>
+<td>&lt;1e-8 退降 FULL_B；零推力 T0&lt;T0_MIN 直接全零</td>
+<td>THY-003 §3.3（奇异性）；CTL-002 §2</td>
+<td><code>allocateMoments</code> 的 <code>DET_MIN</code> /
+<code>T0_MIN</code></td>
+</tr>
+<tr>
+<td>D-06</td>
+<td>列序 [Δω, δ_t, δ_f] ↔︎ 行序 [Mx', My', Mz']；输出限幅 dMax/dwMax</td>
+<td>论文 ch05 eq:Btrue_allocation；CTL-001 §8.6</td>
+<td><code>AllocationOutput</code> / <code>EffectMatrix</code> / 末尾
+clampf</td>
+<td>一致</td>
+<td><code>sat_*</code> 标记 = 限幅前后是否不等；固件
+dMax=15°、dwMax=0.7</td>
+</tr>
+<tr>
+<td>D-07</td>
+<td><code>roll_authority = (2kQw0²)/(2kQwMax²)</code></td>
+<td>论文 ch05 §耦合比</td>
+<td><code>out.roll_authority = T0/T0_max</code></td>
+<td>等价变换后一致</td>
+<td>代码用 kT 比值、注释用 kQ 比值，二者是同一
+<code>(w0/wMax)²</code>，结论相同</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-惯量逆解与交叉耦合e">2.5 惯量逆解与交叉耦合（E）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E-01</td>
+<td>欧拉方程 <code>I·ω̇ = M − ω×(Iω) − ω×h</code>，前馈取
+<code>M_ff=ω×(Iω)+ω×h</code></td>
+<td>THY-003 §1.2、§5；THY-002 §5</td>
+<td><code>InertiaDecoupling::computeInertiaCompensation</code></td>
+<td>一致</td>
+<td>对角惯量展开三项 + 叉乘三项；符号以仿真 <code>dynamics.mjs</code>
+为锚（g += ω×h，M_ff=+g）</td>
+</tr>
+<tr>
+<td>E-02</td>
+<td>转子角动量 h
+沿推力轴，<code>h=Jp(ωf·cf−ωt·ct)</code>（前后反向）</td>
+<td>THY-002 §5（h=Jp·ω·n）；论文 ch03</td>
+<td><code>mix_and_output_commands</code> 的 <code>h_rotor</code></td>
+<td>近似（可接受）</td>
+<td>用上一拍摆角余弦投影（小角度 cos≈1），忽略摆座摆动附加进动项
+<code>−δ̇·Jp·ω·(e_摆轴×n)</code>（THY-002 §5 末条），量级 Jp·ω·δ̇</td>
+</tr>
+<tr>
+<td>E-03</td>
+<td>使能掩码 bit0=陀螺耦合、bit1=转子陀螺，可在线 A/B</td>
+<td>AGENTS.md（<code>inertia_comp_mask</code>）；<code>FlightCtrlParams.h</code></td>
+<td><code>inertiaCompEnabled</code> / 掩码分支</td>
+<td>一致</td>
+<td>默认 0x03；host <code>test_inertia_decoupling</code> 15
+断言对照刚体模型（7e-7）</td>
+</tr>
+<tr>
+<td>E-04</td>
+<td>前馈的输入必须与 ω、I、h 同坐标系</td>
+<td>MOD-002 §2（DCM 语义）；AGENTS.md 轴映射</td>
+<td>同上调用点</td>
+<td><strong>不一致（待修）</strong></td>
+<td>固件传入 fw 系陀螺（x=滚转、z=推力轴），却用模型系惯量顺序（Ix=轴向
+0.0021 放在第 1 位）与 <code>h=(h,0,0)</code>（h
+实际沿推力轴=z）；随后又按 fw→模型置换映射结果 → 见
+<strong>P0-2</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-在线辨识--adrc--indi-定位f">2.6 在线辨识 / ADRC / INDI
+定位（F）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-01</td>
+<td>FFRLS：<code>y=φᵀθ+ε</code>，<code>φ=[α_cmd,1]ᵀ</code>，<code>θ=[b,d]ᵀ</code>，标准递推
++ 遗忘因子</td>
+<td>论文 ch16 eq:rls_model/eq:rls_update；Åström &amp; Wittenmark
+(1995)、Ljung (1999)</td>
+<td><code>RLS_2Param::update</code></td>
+<td>一致</td>
+<td>逐式核对：S=Pφ、K=S/(λ+φᵀS)、θ+=Kε、P=(I−Kφᵀ)P/λ；<code>test_online_id</code>
+25 断言 PASS</td>
+</tr>
+<tr>
+<td>F-02</td>
+<td>激励门控 <code>σ²=0.95σ²+0.05α_cmd²</code>，σ²≤4 跳过更新</td>
+<td>论文 ch16 eq:excitation</td>
+<td><code>OnlineID::step</code></td>
+<td>一致</td>
+<td>与论文式逐项一致（RMS&lt;2 rad/s² 不更新）；另有 5%/拍变化率限制与
+b∈[0.3,3.0] 硬约束</td>
+</tr>
+<tr>
+<td>F-03</td>
+<td>辨识输入角速率用 deg/s（内部转 rad/s 再微分）</td>
+<td>注释 2026-08-11 修复记录</td>
+<td><code>OnlineID::step</code> 的 <code>DEG2RAD</code></td>
+<td>一致</td>
+<td>若直接传 deg/s 会把 ω̇ 放大 57.3 倍并把 b
+顶到约束边界（注释已写）</td>
+</tr>
+<tr>
+<td>F-04</td>
+<td>CG 偏移 = <code>i_term[1]·Iy / (2·kT·w0²)</code>，悬停门控（30–70%
+油门、三轴</td>
+<td>ω</td>
+<td>&lt;15 deg/s）</td>
+<td>论文 ch16 eq:cg_moment/eq:cg_offset</td>
+<td><code>OnlineID::step</code> 尾段</td>
+</tr>
+<tr>
+<td>F-05</td>
+<td>辨识只观测、不写回增益</td>
+<td>AGENTS.md"第一步只观测不闭环"</td>
+<td><code>update_online_identification</code> 的导出段</td>
+<td>一致</td>
+<td>只写 <code>id_*</code>；建议 Kp
+仅供地面站（<code>adaptKpR</code>）</td>
+</tr>
+<tr>
+<td>F-06</td>
+<td>ADRC（二阶 ESO）为候选模块，未接入生产链</td>
+<td>论文 ch16 §ESO/§ADRC 稳定性</td>
+<td><code>TandemVec_ADRC.h</code></td>
+<td>一致</td>
+<td><code>grep #include "TandemVec_ADRC.h"</code> = 0
+处；论文亦注明"ADRC 尚未接入生产控制链"</td>
+</tr>
+<tr>
+<td>F-07</td>
+<td>固件不是 INDI：BTRUE 是"上一拍工作点 Jacobian +
+绝对指令"（准线性/增益调度）</td>
+<td>AGENTS.md（2026-08-11 术语修正）；CTL-001 §8.5</td>
+<td><code>mix_and_output_commands</code> 首段注释</td>
+<td>一致</td>
+<td>无增量累加、不用实测角加速度；注释已写明"不是 INDI"</td>
+</tr>
+<tr>
+<td>F-08</td>
+<td><code>TandemVec_ServoModel.h</code> 为仿真/分析模型，固件不调用</td>
+<td>PROP-001 §7（理想化声明）</td>
+<td>全仓 include 计数 = 0</td>
+<td>一致</td>
+<td>已在 L0 注明，并标明 25° 为仿真口径</td>
+</tr>
+</tbody>
+</table>
+<h3 id="27-fpv-摇杆曲线与舵机模型g">2.7 FPV 摇杆曲线与舵机模型（G）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G-01</td>
+<td>三参数模型 `ω=200·rcRate·rcCmd/(1−</td>
+<td>rcCmd</td>
+<td>·super)<code>，</code>rcCmd=rc(expo·rc²+1−expo)`</td>
+<td>论文 ch07 eq:rc_curve；AGENTS.md FPV 条</td>
+<td><code>rcRateCurve</code> / <code>rcExpoCurve</code></td>
+</tr>
+<tr>
+<td>G-02</td>
+<td>满杆值 = rcRate×200/(1−super)；死区 0.02；极点保护 denom≥0.1</td>
+<td>论文 ch07 §rc_curve</td>
+<td>同上</td>
+<td>一致</td>
+<td>复算 333.3/222.2 deg/s；死区 0.02×512≈10 µs</td>
+</tr>
+<tr>
+<td>G-03</td>
+<td>限幅必须独立于姿态外环（600 而非 80）</td>
+<td>AGENTS.md（2026-08-11 解耦）；论文 ch07 §实机限幅解耦教训</td>
+<td><code>MAX_MANUAL_rollRATE/pitchRATE/yawRATE</code> 调用点</td>
+<td>一致</td>
+<td>注释写明"80 会在半杆削平曲线"的成因</td>
+</tr>
+<tr>
+<td>G-04</td>
+<td>舵机动态：速率限制 + 死区 + 一阶滞后（摆座端↔︎舵机端换齿轮比）</td>
+<td>PROP-001 §3（一阶滞后离散化）</td>
+<td><code>stepServo</code></td>
+<td>近似（可接受）</td>
+<td>代码用 <code>α=dt/(τ+dt)</code>（近似 ZOH），PROP-001 用
+<code>min(dt/τ,1)</code>（前向欧拉），差
+O((dt/τ)²)≈3e-4；注释已标"仿真口径"</td>
+</tr>
+<tr>
+<td>G-05</td>
+<td>摆角→PWM：中位 + 半行程归一 + 齿轮比 + 方向</td>
+<td><code>TandemVec_Config.h</code>
+§ServoConfig；<code>flight_control.cpp</code> 层3</td>
+<td><code>gimbalToServoPWM</code>（仿真）/ mix 层（固件）</td>
+<td>等价变换后一致</td>
+<td>固件用
+<code>SC.zero_*_pct</code>、<code>SC.half_travel_deg</code>、<code>gear=40/30</code>、<code>dir_*=±1</code>；<code>gimbalToServoPWM</code>
+的 <code>gimbal_max</code> 形参未使用（P2-6）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="28-执行器故障监测-f3f4h">2.8 执行器故障监测 F3/F4（H）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H-01</td>
+<td>F4 判据：</td>
+<td>姿态误差</td>
+<td>&gt;25° 且</td>
+<td>摆角指令</td>
+<td>≥90% dMax 持续 0.5 s</td>
+</tr>
+<tr>
+<td>H-02</td>
+<td>F4 只能"检测 + 有界下降"，前摆是滚转唯一主控，无第二条通道</td>
+<td>notes/08 结论；AGENTS.md 低速悬停闭环口径</td>
+<td><code>action()</code>→ControlledDescent；<code>g_actuator_controlled_descent_request</code></td>
+<td>一致</td>
+<td>只写标志，无执行路径；notes/08 明确"不是可恢复故障"</td>
+</tr>
+<tr>
+<td>H-03</td>
+<td>F3 判据：油门&gt;75% 且垂直速度误差&lt;−1.0 m/s 持续 1.0 s</td>
+<td>notes/08；FULL-ENVELOPE-STATUS F3 行</td>
+<td><code>ActuatorFaultMonitor</code> 配置 + 调用点</td>
+<td><strong>不一致（待修）</strong></td>
+<td>监测器约定"下沉为负"（测试 T4 用 −2.0 m/s），但调用点传
+<code>target_vertical_velocity − current_v_up</code>（下沉为正）→ 见
+<strong>P0-1</strong></td>
+</tr>
+<tr>
+<td>H-04</td>
+<td>F3 动作建议 ThrustBoost，定高环可补偿 ~30% 推力损失</td>
+<td>FULL-ENVELOPE-STATUS F3 行</td>
+<td><code>action()</code></td>
+<td>一致</td>
+<td>注释区分"高度环补偿"与"故障重构"，不外推</td>
+</tr>
+</tbody>
+</table>
+<h3 id="29-sas--摆角--差速限幅口径j">2.9 SAS / 摆角 /
+差速限幅口径（J）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>J-01</td>
+<td>仿真 SAS 限幅 ±25°/±0.7 是<strong>仿真值</strong>，固件实机摆角
+±15°</td>
+<td>AGENTS.md 行为红线；CTL-001
+§4.3/§8.6；<code>TandemVec_Config.h</code></td>
+<td><code>kDefaultTandemVecParams.dMax=0.2617994</code>（15°）、<code>dwMax=0.7</code></td>
+<td>等价变换后一致（不同口径）</td>
+<td><strong>不得混写</strong>：仿真
+<code>P.dMax</code>=25°（<code>aircraft-model.json</code> 未回写）、固件
+15°；dwMax 两边都是 0.7。注释与文档均以"不同口径"表述</td>
+</tr>
+<tr>
+<td>J-02</td>
+<td>固件姿态外环输出 ±80
+deg/s（<code>kMaxTargetRate</code>）；手动姿态角 ±30°</td>
+<td>CTL-001 §8.6；<code>state_data.cpp</code></td>
+<td><code>MAX_TARGET_RATE</code>、<code>MAX_ANGLE_COMMAND</code></td>
+<td>一致</td>
+<td><code>max_angle</code> 需小于 90°−dMax 保留执行器余量（注释）</td>
+</tr>
+<tr>
+<td>J-03</td>
+<td>位置环最大倾角
+15°（<code>POS_CTRL_MAX_TILT_ANGLE_RAD</code>）与刹车预测
+<code>MAX_TILT_DEG</code> 一致</td>
+<td>CTL-001 §8.4</td>
+<td><code>handlePositionControl</code> 的 <code>MAX_TILT_DEG</code></td>
+<td>一致</td>
+<td>均 15°；a_max=g·tan15°≈2.62 m/s² 注释复算正确</td>
+</tr>
+</tbody>
+</table>
+<h3 id="210-垂直水平通道k">2.10 垂直/水平通道（K）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>理论要素</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据 / 处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>K-01</td>
+<td><code>F_z=m(g+a_z)</code>；倾角补偿 `F_total=F_z/</td>
+<td>R33</td>
+<td><code>（钳 0.5）；</code>thr%=F/MAX_THRUST`</td>
+<td>PROP-001 §5；MOD-002 §1.2；CTL-001 §8.4</td>
+<td><code>compute_thrust_control</code> 段3</td>
+</tr>
+<tr>
+<td>K-02</td>
+<td>刹车点 `s=v</td>
+<td>v</td>
+<td>/(2a_max)·1.4`，限幅 ±5 m（水平）/±3 m（垂直）</td>
+<td>CTL-001 §8.4（物理制导优化）</td>
+<td><code>handlePositionControl</code>/<code>compute_thrust_control</code>
+状态机</td>
+</tr>
+<tr>
+<td>K-03</td>
+<td>水平加速度圆限幅（非方形）</td>
+<td>THY-003 §3（可达集）</td>
+<td><code>handlePositionControl</code> 段5 /
+<code>generate_attitude_target</code> GUIDED 分支</td>
+<td>一致</td>
+<td>圆形限幅避免斜向超限；注释已说明</td>
+</tr>
+<tr>
+<td>K-04</td>
+<td>推力方向 →
+目标姿态：<code>q_tilt ⊗ Rz(Heading)</code>（定点/制导）、<code>Rz(Heading) ⊗ Rxy</code>（姿态模式）</td>
+<td>MOD-002 §3（右乘约定）；CTL-001 §8.6</td>
+<td><code>generate_attitude_target</code></td>
+<td>等价变换后一致</td>
+<td>存档系 z_b=推力轴 → 悬停 roll=pitch=0，无需悬停基态补偿；注释含
+2026-08-07 的错误映射事故</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-发现清单">3 发现清单</h2>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>P0-1</strong></td>
+<td><code>updateActuatorFaultDiagnostics</code> →
+<code>ActuatorFaultMonitor::update</code> 的
+<code>vertical_vel_err</code></td>
+<td>调用方传
+<code>target_vertical_velocity − current_v_up</code>（下沉为正），而监测器/测试的约定是"下沉为负"（<code>thrust_vel_err_mps=-1.0</code>，<code>test_actuator_fault_monitor</code>
+T4 传 −2.0 m/s）</td>
+<td>F3 单发推力损失<strong>漏报</strong>（真实下沉时 <code>err</code>
+为正，永不满足 <code>&lt;−1.0</code>）；反之爬升超目标 &gt;1 m/s 且油门
+&gt;75% 持续 1 s 会<strong>误报</strong>
+ThrustBoost。当前无自动执行路径，不影响操纵，但 F3 检测实际失效</td>
+<td><strong>已修复（2026-10-23，DEC-002）</strong>：调用方改走
+<code>bfs::thrustLossVerticalVelocityError(measured, target)</code>，F3
+仅在 AUTO_ALTITUDE/AUTO_POSITION/GUIDED 启用；SIL 发现 75%
+门限在未标定模型下不可达，但<strong>实飞基线优先，<code>thrust_throttle</code>
+保持
+0.75</strong>（是否参数化/下调待实机日志）；<code>test_actuator_fault_monitor</code>
+18/18（T4b 75% 边界、T8–T10）</td>
+</tr>
+<tr>
+<td><strong>P0-2</strong></td>
+<td><code>mix_and_output_commands</code>
+的惯量前馈段（<code>omega_body</code>/<code>h_rotor</code>/<code>Ix,Iy,Iz</code>）</td>
+<td>输入不在同一坐标系：ω
+是固件存档系（x=滚转、y=俯仰、z=推力轴），但惯量按模型系顺序传（Ix=轴向
+0.0021 排第 1 位，实际应排 z），<code>h_rotor=(h,0,0)</code> 也放在第 1
+位（h 沿推力轴=z）；结果随后又按"存档系→模型系"置换映射</td>
+<td>转子陀螺前馈落到错误通道：物理上应由"俯仰/滚转速率"产生"滚转/俯仰"力矩，实码变成由"偏航/俯仰速率"产生"差速/俯仰"力矩；同时
+<code>(Iz−Iy)ωyωz</code> 项因 Iy=Iz 恒 0，而正确项应为
+<code>(I_z^fw−I_y^fw)=(0.0021−0.022)≠0</code>。悬停 ω≈0 时≈0，机动时注入
+~0.05–0.17 N·m 的错误通道力矩（差速权限 0.74 N·m 同量级）</td>
+<td><strong>已修复（2026-10-23，DEC-002）</strong>：新增
+<code>computeInertiaCompensationFromArchive()</code>，一次性完成
+ω′=(−ωz,ωy,ωx)、h′=(h,0,0)、I′=(I_axial,I_pitch,I_roll)
+置换，输出模型系直接相加；<code>test_inertia_decoupling</code>
+全通过（T6 复现旧缺陷、T7 封装=显式置换），<code>pio run</code> 双 env
+SUCCESS</td>
+</tr>
+<tr>
+<td>P1-1</td>
+<td><code>execute_attitude_controller</code> 的 RATE_MODE 分支</td>
+<td>每拍执行
+<code>rollRatePID.reset(); pitchRatePID.reset();</code>（连同外环
+PID）</td>
+<td>RATE_MODE 下速率环积分每拍清零 → 等效纯 P；与论文 ch07"固件 Rate
+模式采用 PI 并输出角加速度指令"不一致；若依赖积分消除配平误差，RATE_MODE
+下不存在</td>
+<td>文档/注释写明该口径（本轮已在函数 L0 注明"RATE_MODE 复位内环
+PID"）；是否改为保留积分属行为变更，需评审</td>
+</tr>
+<tr>
+<td>P1-2</td>
+<td><code>update_online_identification</code> 的
+<code>alpha_cmd[0..2]</code> 符号链</td>
+<td>辨识命令量经 <code>s_yaw_gain_sched</code>
+修正，但三通道与惯量/轴置换的符号未在同一测试中对齐；首测
+<code>b≈0.35/0.36</code> 贴近硬约束下限 0.3</td>
+<td>若符号反，RLS 会收敛到负值并被 <code>clamp(0.3,3.0)</code>
+截断，读数"稳定"但无物理意义</td>
+<td>用 <code>inertia_comp_mask=0</code> + 已知 α
+方波做一次开环合成数据回归（host 可做），确认 b 的符号与量级</td>
+</tr>
+<tr>
+<td>P2-1</td>
+<td><code>TandemVec_FCS/AGENTS.md</code> §坐标系统一约定</td>
+<td>"x_b = 机身纵轴（…）；★ 电机推力轴 = z_b" 同一段自相矛盾（x_b 与 z_b
+都被称纵轴/推力轴）</td>
+<td>写轴注释时最易再踩；本次核查即在源码中发现两处混读</td>
+<td>改为"存档系：z_b=推力轴=机身纵轴（悬停竖直指地）；x_b/y_b
+为两条横向轴（悬停水平）"</td>
+</tr>
+<tr>
+<td>P2-2</td>
+<td>根 <code>AGENTS.md</code> 速率环量纲条</td>
+<td>写 "yaw ki=5.729578"，实际 <code>FlightCtrlParams.h</code> 已是
+4.297184（2026-08-12 下调 25%）</td>
+<td>参数抄写漂移</td>
+<td>同步为 4.297184 并注明下调日期</td>
+</tr>
+<tr>
+<td>P2-3</td>
+<td><code>CTL-001 §3</code> 三通道表</td>
+<td>表中 δf→Mz 称"偏航"、Δω→Mx 称"滚转"，未标"仿真模型系"</td>
+<td>与固件通道名相反，首次阅读者会误判代码轴错</td>
+<td>表头加"仿真模型系（x_b=推力轴）；固件通道名见 §8.6"</td>
+</tr>
+<tr>
+<td>P2-4</td>
+<td><code>execute_yaw_controller</code> 文档/形参</td>
+<td>原注释"ATTITUDE_MODE 走 q_err.z 姿态外环"与实码（ratchet
+hold）不符；形参 <code>q_target</code> 未使用</td>
+<td>注释腐烂（已在本轮改写为实码语义）</td>
+<td>保留形参（与同签名），注释已说明</td>
+</tr>
+<tr>
+<td>P2-5</td>
+<td><code>TandemVec_ServoModel.h</code> 的
+<code>gimbalToServoPWM</code></td>
+<td>形参 <code>gimbal_max</code> 未使用（-Wunused-parameter）；该文件
+25° 为仿真口径</td>
+<td>误读为固件限幅</td>
+<td>L0 已注明"仿真/分析模型"与 15°/25° 双口径；形参保留待后续清理</td>
+</tr>
+<tr>
+<td>P2-6</td>
+<td><code>TVC_Control_Geometric.h</code></td>
+<td><code>r²&lt;0</code> 时静默退回零位长度；<code>M_PI</code> 依赖
+<code>_USE_MATH_DEFINES</code> 且必须在任何 <code>&lt;cmath&gt;</code>
+之前包含</td>
+<td>标定时若某角度恒返回 50 难以发现；头文件顺序敏感</td>
+<td>已在 L0
+注明兜底语义；建议后续改为显式错误返回（非本区域行为变更）</td>
+</tr>
+<tr>
+<td>P2-7</td>
+<td><code>IncrementalPID.h</code></td>
+<td>无任何 <code>@ref</code>；Ki/Kd 隐含采样周期，且无调用点</td>
+<td>历史工具类，误用会与 PositionPID 的连续域 Ki 混淆</td>
+<td>L0 已注明"离散增益、换频率必须重整定、无调用点"</td>
+</tr>
+<tr>
+<td>P2-8</td>
+<td><code>mix_and_output_commands</code> 的
+<code>GYRO_DIRECT_TEST</code> 调试块</td>
+<td>块内注释写"上摆: δf = −K·ω_z"，实码为
+<code>upper_gimbal_deg = +GYRO_K * icm_gyro_z</code>；轴名沿用历史模型系（上摆"绕
+z_b"），与固件通道命名（上摆=滚转=体轴 x）不同；该块在
+<code>GYRO_DIRECT_TEST=0</code> 时不参与编译</td>
+<td>调试路径的注释自相矛盾；若将来重启直通测试，可能按注释改错符号</td>
+<td>本轮已在块内加"调试死路径/符号以代码为准/勿与 mix
+层通道命名混读"警示；是否修正符号需按实机直通重新标定后决定</td>
+</tr>
+</tbody>
+</table>
+<p><strong>P0 说明</strong>：两条 P0
+均属"符号/坐标系错误"，但都作用在<strong>前馈/诊断层</strong>（不是闭环稳定性的基础）：F3
+无自动执行路径；惯量前馈可通过 <code>inertia_comp_mask=0</code>
+在线关闭，悬停 ω≈0
+时影响≈0。实机首飞已通过说明二者未造成失控，但会掩盖/污染调参与故障诊断，应按
+P0 跟踪。<strong>2026-10-23 已按 DEC-002
+修复并回归</strong>（只改这两处，未改增益/限幅/阈值）。</p>
+<hr />
+<h2 id="4-未决问题">4 未决问题</h2>
+<ol type="1">
+<li><strong>P0-1 已修复</strong>：调用方符号统一走
+<code>thrustLossVerticalVelocityError()</code>，F3
+仅自动垂直模式启用；后续建议在实机日志中确认 F3
+标志与真实掉高事件一致（当前无自动执行路径）。</li>
+<li><strong>P0-2 已修复</strong>：存档系→模型系封装已通过 host
+置换等价回归；实机建议仍做一次 <code>inertia_comp_mask=0/0x03</code>
+A/B（机动段对比姿态超调/振动），确认修正后的前馈方向正确。</li>
+<li><strong>P1-2 在线辨识符号链</strong>：需一次开环/合成数据回归；当前
+<code>b_est</code> 首测值（0.35/0.36/0.90）与 0.3
+下限过近，存在被硬约束截断的可能。</li>
+<li><strong>轴名术语统一</strong>：<code>MOD-002 §1.2</code>、<code>TandemVec_FCS/AGENTS.md</code>、<code>CTL-001 §3</code>、<code>TandemVec_Propulsion.h</code>
+用的是"模型系（x=推力轴）"，固件源码与 <code>TandemVec_Config.h</code>
+用"存档系（z=推力轴）"。建议在 GOV-004 §7.1
+增一行"两套轴名的固定置换"，避免每轮核查重复解释。</li>
+<li><strong><code>TVC_Control_*</code> 两个弃用头文件</strong>仍被
+<code>src/main.cpp</code> 包含（无调用点）——属 fw-infra 的 include
+清理项，不在本区域改动。</li>
+<li><strong><code>fw_sil --manual</code>
+口径</strong>：默认（定高）场景本轮复跑仍收敛到 10.00
+m；<code>--manual</code> 复跑末尾高度持续下降（−458 m/40 s）且
+roll/pitch≈0，与 AGENTS"roll +5.86°/pitch −5.85°"的记录不一致，疑为
+fw-tests 侧 harness 更新中，留给该区域确认（不影响本区域结论）。</li>
+</ol>
+<hr />
+<h2 id="5-门禁与测试">5 门禁与测试</h2>
+<h3 id="51-注释规范门禁">5.1 注释规范门禁</h3>
+<pre class="text"><code>核查前：py -3.12 tools/check-code-comments.py --area fw-control --check
+        18 文件 | 平均分 58.6 | error 30 | warning 32
+        （R01=18 R03=1 R04=19 R05=8 R06=2 R07=11 R09=3）→ 退出码 1
+
+核查后：py -3.12 tools/check-code-comments.py --area fw-control --check
+        18 文件 | 平均分 100.0 | error 0 | warning 0 | 全绿 18 → 退出码 0</code></pre>
+<h3 id="52-宿主回归g-1320-stdc17--o2仓库根目录">5.2 宿主回归（g++
+13.2.0，<code>-std=c++17 -O2</code>，仓库根目录）</h3>
+<p>命令模板（MinGW g++ 是原生 Windows 程序，<code>-o</code> 必须用
+<code>C:/...</code> 或相对路径，MSYS 的 <code>/c/...</code> 会报 cannot
+open output file）：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS/..     <span class="co"># 仓库根</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="va">BIN</span><span class="op">=</span><span class="st">&quot;C:/Users/&lt;user&gt;/AppData/Local/Temp/fwctrl&quot;</span><span class="kw">;</span> <span class="fu">mkdir</span> <span class="at">-p</span> <span class="st">&quot;</span><span class="va">$BIN</span><span class="st">&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="va">INC</span><span class="op">=</span><span class="st">&quot;-ITandemVec_FCS/include -ITandemVec_FCS/lib/eigen/src -ITandemVec_FCS/test_host/stub&quot;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> t <span class="kw">in</span> test_flight_control_axis test_tandemvec_allocation test_position_pid <span class="dt">\</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>         test_airframe_generic test_rc_curve test_inertia_decoupling <span class="dt">\</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>         test_online_id test_control_units test_actuator_fault_monitor<span class="kw">;</span> <span class="cf">do</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O2</span> <span class="va">$INC</span> TandemVec_FCS/test_host/<span class="va">$t</span>.cpp <span class="at">-o</span> <span class="st">&quot;</span><span class="va">$BIN</span><span class="st">/</span><span class="va">$t</span><span class="st">.exe&quot;</span> <span class="kw">&amp;&amp;</span> <span class="st">&quot;</span><span class="va">$BIN</span><span class="st">/</span><span class="va">$t</span><span class="st">.exe&quot;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="cf">done</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>测试</th>
+<th>结果（末尾输出）</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_flight_control_axis.cpp</code></td>
+<td><code>=== 全部通过 ===</code>（41 条 PASS 行）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_tandemvec_allocation.cpp</code></td>
+<td><code>=== 全部通过 ===</code>（72 条 PASS 行）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_position_pid.cpp</code></td>
+<td><code>=== 全部通过 ===</code>（53 条 PASS 行）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_airframe_generic.cpp</code></td>
+<td><code>=== 全部通过（通用框架跨机型验证）===</code>（14）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_rc_curve.cpp</code></td>
+<td><code>test_rc_curve: ALL PASSED</code></td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_inertia_decoupling.cpp</code></td>
+<td><code>全部通过（失败 0）</code>（含 T6/T7 跨系回归）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_online_id.cpp</code></td>
+<td><code>=== 全部通过 ===</code>（25）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_control_units.cpp</code></td>
+<td><code>test_control_units: ALL PASSED</code>（11）</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><code>test_actuator_fault_monitor.cpp</code></td>
+<td><code>=== 结果: 16 通过, 0 失败 ===</code>（含 T8–T10）</td>
+<td>PASS</td>
+</tr>
+</tbody>
+</table>
+<p>合计 9/9 套件通过，0 失败（与核查前基线一致）。</p>
+<h3 id="53-固件源码编译与闭环检查">5.3 固件源码编译与闭环检查</h3>
+<ul>
+<li><strong>真实源码
+SIL</strong>（<code>test_host/fw_sil/build_and_run.sh</code>，链接
+<code>src/flight_control.cpp</code> +
+<code>src/state_data.cpp</code>）：
+<ul>
+<li>编译 <strong>成功</strong>（无
+error；<code>g++ … -DTANDEMVEC_FIRMWARE</code>，输出到临时目录）；</li>
+<li>默认场景运行 40 s：高度收敛到 <strong>10.00 m</strong>（t=36 s
+起），roll/pitch/yaw ≈0，舵机 50/50、电机 49.9/49.9 —— 与 AGENTS
+记录的"定高到 10.00 m"一致，说明注释改动未影响控制链数值。</li>
+<li>首次尝试时该脚本因
+<code>lib/navigation-main/src/ekf_15_state.h</code> 缺 5
+参重载而中断（fw-ekf
+区域正在改，非本轮引入）；稍后复跑已恢复并成功。</li>
+</ul></li>
+<li><strong>独立头文件语法检查</strong>：14 个被改头文件合并成一个 TU 做
+<code>g++ -fsyntax-only</code>
+通过；<code>TVC_Control_Geometric.h</code> 单独编译通过（其
+<code>M_PI</code> 依赖 <code>_USE_MATH_DEFINES</code> 先于
+<code>&lt;cmath&gt;</code>，属既有顺序敏感性，见 P2-6）。</li>
+<li><strong><code>pio run</code></strong>：2026-10-23 P0
+修复后统一复跑，<code>TandemVec_FCS</code> 与 <code>test</code> 两个 env
+均 <strong>SUCCESS</strong>（约 29 s / 32 s，2/2 succeeded；RAM
+35.7%、Flash 16.6%）。</li>
+</ul>
+<h3 id="54-行为不变自查">5.4 行为不变自查</h3>
+<ul>
+<li><code>git diff</code> 逐文件扫描（18 个文件）：新增可执行语句
+<strong>0</strong> 行、删除可执行语句 <strong>0</strong> 行。非注释 diff
+行仅三类，均可逐条解释：
+<ol type="1">
+<li><strong>L0 头插入导致的 include/<code>#pragma once</code>
+位置变化</strong>（<code>AirframeModel.h</code>、<code>InertiaDecoupling.h</code>：<code>#pragma once</code>+<code>#include</code>
+移到顶部注释块之后）；</li>
+<li><strong><code>FlightCtrlParams.h</code>
+初始化行的空白对齐</strong>（att_*/pos_n/pos_e
+行去掉了多列对齐空格、pos_n/pos_e
+拆成两行，<strong>数值逐字未变</strong>；另删除重复的
+<code>#pragma once</code>）；</li>
+<li><strong>任务开始前已存在的未提交改动</strong>（<code>flight_control.cpp</code>
+的 <code>ActuatorFaultMonitor</code>
+include/静态对象/<code>updateActuatorFaultDiagnostics</code>/调用点，以及新文件
+<code>ActuatorFaultMonitor.h</code>
+本身），非本轮引入，已计入代码基线说明。</li>
+</ol></li>
+<li>无任何增益/限幅/阈值/逻辑改动；<code>tools/verify_*.py</code>
+未需要重跑（公式未动）。</li>
+<li>本轮只改本区域 18 个文件 + 本记录；未提交 git（遵守纪律）。</li>
+</ul>
+<h3 id="55-p0-修复复验2026-10-23dec-002">5.5 P0
+修复复验（2026-10-23，DEC-002）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>改动</th>
+<th>回归</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01 F3 符号</td>
+<td><code>ActuatorFaultMonitor::update()</code> 增加
+<code>thrust_detection_enabled</code>；新增
+<code>thrustLossVerticalVelocityError()</code>；<code>flight_control.cpp</code>
+改用该函数并按自动垂直模式门控</td>
+<td><code>test_actuator_fault_monitor</code> 18/18（T8 符号契约、T9
+使能开关、T10 旧反向符号漏报回归）</td>
+</tr>
+<tr>
+<td>C-02 惯量前馈跨系</td>
+<td><code>InertiaDecoupling.h</code> 新增
+<code>computeInertiaCompensationFromArchive()</code>；mix
+层改用它，输出模型系直接相加（删除手写置换）；h
+的模型系/存档系符号（x′=−z_b）写入文档</td>
+<td><code>test_inertia_decoupling</code> 全通过（T6 复现旧直调恒
+0、新封装 −0.0199；T7 封装=显式置换；T8
+存档系直接叉乘等价），<code>pio run</code> 双 env SUCCESS</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-CTRL-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

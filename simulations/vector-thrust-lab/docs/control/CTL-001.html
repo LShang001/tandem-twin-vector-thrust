@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
+  <meta name="generator" content="pandoc 3.12.1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>CTL-001 控制架构与 SAS · 纵列双发矢量推力飞行器</title>
   <style>
@@ -10,8 +10,12 @@
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -22,7 +26,6 @@
       margin: 0 0.8em 0.2em -1.6em;
       vertical-align: middle;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
     /* CSS for syntax highlighting */
     html { -webkit-text-size-adjust: 100%; }
     pre > code.sourceCode { white-space: pre; position: relative; }
@@ -105,24 +108,25 @@ href="../theory/03-dynamics-allocation-modes.html">THY-003</a>。</p>
 <h2 id="1-控制链总览">1 控制链总览</h2>
 <p>整机控制链路如下图所示。操纵输入经 UI 限幅后进入
 SAS（可选），三通道律输出执行指令，再由推进分配映射为六维力/力矩，最后经刚体动力学积分得到状态反馈。</p>
-<pre class="mermaid"><code>flowchart LR
-    accTitle 整机控制链路
-    accDescr 从 UI 操纵输入到动力学状态反馈的完整信号流，标注关键限幅点。
-
-    UI[&quot;UI 滑块输入\nthr / dt / df / dw&quot;]
-    UI_LIM[&quot;UI 限幅\n|dt|,|df|≤dMax\n|dw|≤dwUiMax&quot;]
-    SAS_SW{&quot;SAS 开关\nsas=true/false&quot;}
-    SAS_LAW[&quot;SAS 三通道律\n俯仰/偏航/滚转&quot;]
-    ACT_LIM[&quot;执行限幅\n|dtAct|,|dfAct|≤dMax\n|dwAct|≤dwMax&quot;]
-    PROP[&quot;推进分配\n差速开方 + 六维映射&quot;]
-    DYN[&quot;六自由度动力学\n牛顿–欧拉积分&quot;]
-    STATE[&quot;状态反馈\nφ,θ,ψ / p,q,r&quot;]
-
-    UI --&gt; UI_LIM --&gt; SAS_SW
-    SAS_SW --&gt;|开启| SAS_LAW --&gt; ACT_LIM
-    SAS_SW --&gt;|关闭| ACT_LIM
-    ACT_LIM --&gt; PROP --&gt; DYN --&gt; STATE
-    STATE -.-&gt; SAS_LAW</code></pre>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode mermaid"><code class="sourceCode mermaid"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">flowchart</span> <span class="cn">LR</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accTitle</span> <span class="er">整</span><span class="dt">机控制链路</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accDescr</span> <span class="er">从</span> <span class="dt">UI</span> <span class="er">操</span><span class="dt">纵输入到动力学状态反馈的完整信号流</span><span class="er">，</span><span class="dt">标注关键限幅点</span><span class="er">。</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">UI</span>[<span class="st">&quot;UI 滑块输入\nthr / dt / df / dw&quot;</span>]</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">UI_LIM</span>[<span class="st">&quot;UI 限幅\n|dt|,|df|≤dMax\n|dw|≤dwUiMax&quot;</span>]</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">SAS_SW</span>{<span class="st">&quot;SAS 开关\nsas=true/false&quot;</span>}</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">SAS_LAW</span>[<span class="st">&quot;SAS 三通道律\n俯仰/偏航/滚转&quot;</span>]</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ACT_LIM</span>[<span class="st">&quot;执行限幅\n|dtAct|,|dfAct|≤dMax\n|dwAct|≤dwMax&quot;</span>]</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">PROP</span>[<span class="st">&quot;推进分配\n差速开方 + 六维映射&quot;</span>]</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">DYN</span>[<span class="st">&quot;六自由度动力学\n牛顿–欧拉积分&quot;</span>]</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>    <span class="dt">STATE</span>[<span class="st">&quot;状态反馈\nφ,θ,ψ / p,q,r&quot;</span>]</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">UI</span> <span class="pp">--&gt;</span> <span class="dt">UI_LIM</span> <span class="pp">--&gt;</span> <span class="dt">SAS_SW</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">SAS_SW</span> <span class="pp">--&gt;</span><span class="vs">|开启|</span> <span class="dt">SAS_LAW</span> <span class="pp">--&gt;</span> <span class="dt">ACT_LIM</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">SAS_SW</span> <span class="pp">--&gt;</span><span class="vs">|关闭|</span> <span class="dt">ACT_LIM</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">ACT_LIM</span> <span class="pp">--&gt;</span> <span class="dt">PROP</span> <span class="pp">--&gt;</span> <span class="dt">DYN</span> <span class="pp">--&gt;</span> <span class="dt">STATE</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">STATE</span> <span class="pp">-.-&gt;</span> <span class="dt">SAS_LAW</span></span></code></pre></div>
 <p>链路说明：</p>
 <table>
 <thead>
@@ -761,5 +765,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 21:06</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
 </html>

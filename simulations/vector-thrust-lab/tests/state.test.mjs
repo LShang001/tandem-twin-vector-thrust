@@ -1,4 +1,17 @@
-// state.mjs 复位语义测试
+/**
+ * @file    state.test.mjs
+ * @module  仿真 tests/状态复位
+ * @brief   锁定三种复位入口的语义边界（完整复位/轻量复位/悬停复位）
+ * @details 覆盖：完整复位恢复配平动态并保留模式开关；轻量复位保留模式与输入、
+ *          只复位飞行状态；悬停轻量复位保留 vtolMode/altHold/useBtrue。
+ *          容差依据：复位是赋值操作，故用严格相等；唯一带容差的两处是三角函数式
+ *          sin(aTrim/2) 与转速乘法的浮点结果（1e-9/1e-12）。
+ * @theory  悬停复位语义 @ref CTL-001 §8.1；配平初值 @ref MOD-003 §2.2
+ * @frame   机体系 FRD / NED
+ * @units   rad、rad/s、m
+ * @note 复位语义是 UI 契约：改动会让"复位按钮"变成"切模式"，属行为变更
+ * @see     src/core/state.mjs、src/browser/controls-ui.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

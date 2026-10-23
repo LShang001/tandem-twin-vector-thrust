@@ -1,4 +1,18 @@
-// math.mjs 单元测试
+/**
+ * @file    math.test.mjs
+ * @module  仿真 tests/姿态数学
+ * @brief   锁定 math.mjs 的四元数代数、旋转与欧拉角提取行为
+ * @details 覆盖：clamp 边界；绕 z 转 90°；旋转往返还原；单位元/逆元；归一化零回退；
+ *          eulerFromQuat 的 theta=−a0（红线）；重力变换方向。
+ *          容差依据：纯代数浮点运算，误差仅来自双精度舍入 —— 精确构造式取 1e-12，
+ *          多步复合/往返取 1e-9（量级 1 的矢量累积 3 次乘加的量级）。
+ * @theory  @ref THY-001 §6（四元数代数与三明治积）、§8（四元数→DCM）、
+ *          @ref MOD-002 §4（本项目 theta=−asin(R13) 约定）
+ * @frame   机体系 FRD → 惯性系 NED
+ * @units   rad
+ * @note 本文件是"行为锁定"测试：断言现行语义，不是校验教材标准 3-2-1 符号
+ * @see     src/core/math.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clamp, rotateVecByQuat, quatInvert, quatMultiply, quatNormalize, eulerFromQuat } from '../src/core/math.mjs';

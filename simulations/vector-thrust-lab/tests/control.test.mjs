@@ -1,4 +1,18 @@
-// control.mjs（SAS）单元测试
+/**
+ * @file    control.test.mjs
+ * @module  仿真 tests/SAS 控制律
+ * @brief   锁定 control.mjs 的模式分支、反馈极性、限幅与积分器行为
+ * @details 覆盖：模式 0 直通；三条极性（俯仰/偏航/滚转）；执行限幅 ±dMax/±dwMax；
+ *          积分限幅与累积；模式 2（仅阻尼）与模式 3（角速度闭环三通道）；
+ *          模式切换时积分器清零。
+ *          容差依据：全部为确定性代数（无时间积分误差）→ 用 1e-9/1e-12 精确断言；
+ *          需要比较大小的用例只用方向断言（<、>），避免把整定值写死。
+ * @theory  SAS 律与极性 @ref CTL-001 §4.1、§5；模式 3 与悬停内环同构 @ref CTL-001 §8.2
+ * @frame   显示欧拉角（theta=−asin(R13)）与机体角速度 p/q/r
+ * @units   rad、rad/s
+ * @note 极性断言是历史的回归护栏：符号错一次就发散，故按通道逐条锁定
+ * @see     src/core/control.mjs、src/core/state.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

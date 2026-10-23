@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>代码理论核查记录（索引） · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录gov-004-配套">代码理论核查记录（GOV-004
+配套）</h1>
+<blockquote>
+<p>目的：把“代码实现 ↔︎ 教材公式 ↔︎
+项目推导文档”的核对过程固化为可复查的证据，而不是一次性口头结论。
+汇总报告：<a href="MOD-004.html">MOD-004
+代码-理论对照核查报告</a> 6 项 P0 的决策与验证：<a
+href="../decisions/DEC-002.html">DEC-002 六项 P0
+修复决策</a> P0 修复的仿真验证：<a
+href="P0-VALIDATION.html">P0 修复仿真验证（2026-10-23）</a>
+规范：<a
+href="../governance/GOV-004.html">GOV-004
+代码注释与理论对照规范</a>
+机检：<code>py -3.12 tools/check-code-comments.py --area &lt;区域&gt; --check</code>
+汇总索引：<a
+href="../registers/traceability-matrix.html">模型-代码追溯矩阵</a></p>
+</blockquote>
+<hr />
+<h2 id="1-区域划分与记录文件">1 区域划分与记录文件</h2>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>范围</th>
+<th>核查记录</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sim</code></td>
+<td><code>simulations/vector-thrust-lab/**</code></td>
+<td><a href="SIM.html">SIM-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>fw-ekf</code></td>
+<td><code>TandemVec_FCS/lib/navigation-main/src/**</code></td>
+<td><a href="FW-EKF.html">FW-EKF-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>fw-nav</code></td>
+<td>导航任务、IMU、ins_* 头文件、姿态数学</td>
+<td><a href="FW-NAV.html">FW-NAV-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>fw-control</code></td>
+<td>飞行控制、控制分配、执行器模型、参数表</td>
+<td><a href="FW-CTRL.html">FW-CTRL-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>fw-infra</code></td>
+<td>主循环、通信、传感器外设、调度、参数/变量注册</td>
+<td><a href="FW-INFRA.html">FW-INFRA-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>fw-tests</code></td>
+<td><code>TandemVec_FCS/test_host/**</code></td>
+<td><a href="FW-TESTS.html">FW-TESTS-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>gcs</code></td>
+<td>上位机后端/前端/测试/工具</td>
+<td><a href="GCS.html">GCS-代码理论核查.md</a></td>
+</tr>
+<tr>
+<td><code>analysis</code></td>
+<td>高保真仿真、EKF 研究仿真、scripts/tools</td>
+<td><a href="ANALYSIS.html">ANALYSIS-代码理论核查.md</a></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>区域由 <code>tools/check-code-comments.py::AREAS</code>
+定义，边界不重叠（一个文件只属于一个区域）。</p>
+</blockquote>
+<h2 id="2-记录文件模板">2 记录文件模板</h2>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode markdown"><code class="sourceCode markdown"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu"># 代码理论核查记录 — &lt;区域名&gt;</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; 核查日期：YYYY-MM-DD ｜ 执行：&lt;agent/人名&gt; ｜ 规范：GOV-004</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; 代码基线：</span><span class="dt">&lt;</span><span class="kw">commit</span><span class="dt">&gt;</span><span class="at">（工作区含未提交改动时注明）</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; 理论来源：REF-120 §…、REF-121 §…、MOD-00x、CTL-00x、THY-00x、论文 ch…</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; 方法：逐文件读代码 → 对照公式 → 测试/数值复算 → 补注释 → lint 复检</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="fu">## 1 范围与覆盖率</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 文件 <span class="pp">|</span> 行数 <span class="pp">|</span> L0 文件头 <span class="pp">|</span> L1 符号文档 <span class="pp">|</span> @ref 引用 <span class="pp">|</span> 备注 <span class="pp">|</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="pp">|------|------|-----------|-------------|-----------|------|</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> … <span class="pp">|</span> … <span class="pp">|</span> 有/无 <span class="pp">|</span> 有/部分 <span class="pp">|</span> n <span class="pp">|</span> … <span class="pp">|</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>合计：N 文件 / M 行；L0 覆盖 x/N；新增 @ref n 处。</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="fu">## 2 核对矩阵</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> ID <span class="pp">|</span> 模块/文件 <span class="pp">|</span> 理论要素或公式 <span class="pp">|</span> 文献出处 <span class="pp">|</span> 代码位置（符号名） <span class="pp">|</span> 结论 <span class="pp">|</span> 证据 <span class="pp">|</span> 处置 <span class="pp">|</span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="pp">|----|-----------|----------------|----------|--------------------|------|------|------|</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> A-01 <span class="pp">|</span> … <span class="pp">|</span> … <span class="pp">|</span> REF-120 §9.6 (9.6.19) p.298 <span class="pp">|</span> <span class="in">`PropagateStateFromIncrements()`</span> <span class="pp">|</span> 一致 <span class="pp">|</span> test_host/test_ekf_15state.cpp T7 <span class="pp">|</span> 补注释 <span class="pp">|</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a>结论枚举：<span class="in">`一致`</span> / <span class="in">`等价变换后一致`</span> / <span class="in">`近似（可接受）`</span> / <span class="in">`偏差（已登记）`</span> / <span class="in">`不一致（待修）`</span>。</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a><span class="fu">## 3 发现清单</span></span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 严重度 <span class="pp">|</span> 位置（符号） <span class="pp">|</span> 问题 <span class="pp">|</span> 影响 <span class="pp">|</span> 建议 <span class="pp">|</span></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="pp">|--------|--------------|------|------|------|</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> P0 <span class="pp">|</span> … <span class="pp">|</span> … <span class="pp">|</span> 飞行安全/正确性 <span class="pp">|</span> … <span class="pp">|</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> P1 <span class="pp">|</span> … <span class="pp">|</span> … <span class="pp">|</span> 精度/可维护性 <span class="pp">|</span> … <span class="pp">|</span></span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> P2 <span class="pp">|</span> … <span class="pp">|</span> … <span class="pp">|</span> 注释/文档 <span class="pp">|</span> … <span class="pp">|</span></span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>严重度定义：</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**P0**：影响飞行安全或定理成立条件（符号错误、量纲错误、收敛性/稳定性结论错误）。</span>
+<span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**P1**：数值精度、鲁棒性、可维护性问题，不直接危及安全。</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**P2**：注释错误、引用缺失、命名/文档不一致。</span>
+<span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a><span class="fu">## 4 未决问题</span></span>
+<span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>…</span>
+<span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a><span class="fu">## 5 门禁与测试</span></span>
+<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span><span class="in">`py -3.12 tools/check-code-comments.py --area &lt;区域&gt; --check`</span>：error 0（核查前 X）</span>
+<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>测试：&lt;命令&gt; → &lt;通过数&gt;/&lt;失败数&gt;</span></code></pre></div>
+<h2 id="3-纪律">3 纪律</h2>
+<ol type="1">
+<li><strong>注释与行为分离</strong>：本轮只加注释/文档；发现代码与理论不一致时，登记
+P0/P1 并上报，不擅自改行为。</li>
+<li><strong>不写行号引用</strong>：代码位置一律用符号名，避免重构后失效。</li>
+<li><strong>引用必须可追溯</strong>：<code>@ref REF-120 §章节 (式号) p.印刷页</code>；禁止“见书/见教材”。</li>
+<li><strong>数值证据优先</strong>：测试断言、复算命令、回归夹具；没有证据写“未验证”，不要写“应该一致”。</li>
+<li><strong>不做机械翻译</strong>：行内注释只写“为什么/单位/边界/出处”，不复述代码。</li>
+</ol>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/README.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

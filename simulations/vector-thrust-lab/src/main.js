@@ -1,8 +1,18 @@
-// ============================================================
-//  纵列双发矢量推力布局 · 六维力/力矩动力学可视化
-//  引导与主循环装配：core（纯计算） + browser（Three.js/DOM 适配）
-//  机体系约定: x 前 / y 右 / z 下
-// ============================================================
+/**
+ * @file    main.js
+ * @module  仿真 browser/入口装配
+ * @brief   装配 core 状态机与 browser 渲染层，运行 requestAnimationFrame 主循环
+ * @details 输入：DOM 容器与参数表；处理：构造 sim → 场景/效果/模型/HUD/UI/演示，
+ *          每帧 demo → stepPhysics → 渲染同步 → 后处理；
+ *          输出：持续更新的三维画面与 HUD。
+ *          不变量：物理步长受 frameCap=0.05 s 截断；HUD 每 3 帧同步一次（降 DOM 压力）。
+ * @theory  N/A（装配层）；物理与控制在 core/ 实现 @ref MOD-001 §5
+ * @frame   机体系 FRD（动力学）/ NED（位置与地速）；渲染世界系与 NED 同向
+ * @units   s（时间）、rad（姿态/摆角）、m（位置）
+ * @redline 帧 delta ≤ 0.05 s 是行为红线——截断必须保留，否则掉帧时会一次性积掉大 dt
+ * @note 初始化时把 dtAct/dfAct 置为配平偏置：否则首帧 SAS 会从 0 摆角开始把飞机"拽"一下
+ * @see     core/dynamics.mjs（stepPhysics）、browser/scene.mjs（渲染上下文）
+ */
 import * as THREE from 'three';
 import { P } from './core/parameters.mjs';
 import { createSimulationState } from './core/state.mjs';

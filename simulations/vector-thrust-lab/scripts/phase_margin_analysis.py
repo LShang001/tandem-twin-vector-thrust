@@ -3,7 +3,21 @@
 """
 phase_margin_analysis.py — 级联架构相位裕度与滤波滞后分析
 ============================================================
-D1（增益裕度 γ̄=0.968）的自然延伸：补全"稳定裕度"拼图的相位侧。
+@file    phase_margin_analysis.py
+@module  仿真/鲁棒性分析（级联控制频域）
+@brief   量化陀螺一阶滤波与电机 τm 对内环相位裕度的影响，补全"稳定裕度"相位侧
+@details 输入：控制周期 200 Hz、滤波 α、τm、内环增益 btrueK；
+         处理：3 状态增广模型（e_R, ω, ω_f）→ 极点/阻尼比 → 开环传函 PM/GM →
+         连续域与 200 Hz ZOH 离散域对照；
+         输出：文本报告 + 退出码（差速通道 PM>0 为 0，否则 1）。
+@theory  一阶低通相位滞后、二阶/三阶开环传函的 PM @ref CTL-001 §8.5（B_true 内环）；
+         电机一阶滞后 τm 的物理来源 @ref THY-002 §4
+@frame   N/A（单通道 SISO 频域模型，不涉及坐标系）
+@units   s、rad/s、度；τ_f 用 z 极点映射连续等效 τf = −dt/ln(1−α)
+@note    本模型为简化单通道：不含固件 PI、采样保持、BTRUE 非对角耦合与饱和，
+         结论只能作为待检验假设，不得当作实机增益/相位裕度
+         （@ref AGENTS.md 踩坑记录「单通道 LMI 不得外推为实机增益裕度」）
+@see     pm_sensitivity.py、pm_observer_compensation.py、TandemVec-Paper/ch05-allocation.tex
 
 核心问题：实机"滤波滞后 4.2° 稳 / 6.9° 必抖"（memory 滤波大审计）无理论解释。
 本脚本建立含陀螺一阶滤波的增广模型，分析滤波对闭环极点/相位裕度的影响，
@@ -35,14 +49,17 @@ TAU_M = 0.28                      # 电机一阶滞后时间常数（差速通�
 # ============================================================
 #  增广模型
 # ============================================================
-def augmented_A(tau_f: float,
-                vtol_att_kp: float = VTOL_ATT_KP,
-                btrue_k: float = BTRUE_K) -> np.ndarray:
+def augmented_A(tau_f: float, vtol_att_kp: float = VTOL_ATT_KP, btrue_k: float = BTRUE_K) -> np.ndarray:
     """含陀螺一阶滤波的增广闭环 A_aug（状态 [e_R, ω, ω_f]）。
 
-    ė_R = -ω
-    ω̇ = btrue_k·(K_p·e_R - ω_f)       （K_p = vtol_att_kp）
-    ω̇_f = (ω - ω_f) / τ_f
+    @brief   组装 3 状态增广闭环矩阵（外环 P + 内环 P + 滤波一阶）
+    @param   tau_f 陀螺滤波连续等效时间常数 [s]（α=0.4/200Hz 时 ≈9.8 ms）
+    @param   vtol_att_kp 外环姿态增益 [1/s]
+    @param   btrue_k 内环角加速度增益 [1/s]
+    @returns 3×3 A 矩阵
+    @formula ė_R = −ω；ω̇ = btrue_k·(K_p·e_R − ω_f)；ω̇_f = (ω − ω_f)/τ_f
+    @ref     CTL-001 §8.5（级联内环）；滤波一阶滞后来源见 pm_sensitivity.py
+    @note    单行签名是为了让本 docstring 紧贴 def（机检 R08 的 3 行窗口），非风格偏好
     """
     Kp = vtol_att_kp
     return np.array([
@@ -92,6 +109,13 @@ def damping_of_complex_pair(eigs: np.ndarray):
 
 
 def max_real_part(A: np.ndarray) -> float:
+    """返回 A 的最大特征值实部（<0 表示连续域稳定）。
+
+    @brief  连续域稳定性判据的标量指标
+    @param  A 状态矩阵
+    @returns max Re(λ)
+    @note   仅用于连续域；离散域稳定性用 |λ|<1（见 discrete_poles）
+    """
     return float(np.max(np.linalg.eigvals(A).real))
 
 
@@ -108,7 +132,7 @@ def inner_loop_tf(tau_f: float, btrue_k: float = BTRUE_K,
         L(s) = btrueK / [s·(τ_f s+1)·(τm s+1)]   （三阶）
 
     回路：ω_des → ×btrueK → [执行器 1/(τm s+1)] → ω̇ → ∫ → ω → 滤波 1/(τ_f s+1) → ω_f → 反馈。
-    差速通道化简后 B_yaw/Ix 约掉，回路增益仅依赖 btrueK（见论文推导）。
+    差速通道化简后 B_yaw/Ix 约掉，回路增益仅依赖 btrueK（@ref CTL-001 §8.5）。
     """
     num = [btrue_k]
     den = np.polymul([tau_f, 1.0, 0.0], [actuator_tau, 1.0]) if actuator_tau > 1e-12 \
@@ -191,10 +215,18 @@ def _numerical_margin(num_d, den_d, dt):
 # ============================================================
 #  离散化分析（200Hz ZOH）
 # ============================================================
-def discrete_poles(tau_f: float, dt: float = DT,
-                   vtol_att_kp: float = VTOL_ATT_KP,
-                   btrue_k: float = BTRUE_K) -> np.ndarray:
-    """连续增广模型 ZOH 离散化后的极点（应在单位圆内 = 稳定）。"""
+def discrete_poles(tau_f: float, dt: float = DT, vtol_att_kp: float = VTOL_ATT_KP, btrue_k: float = BTRUE_K) -> np.ndarray:
+    """连续增广模型 ZOH 离散化后的极点（应在单位圆内 = 稳定）。
+
+    @brief  ZOH 离散化并返回极点（含采样保持效应）
+    @param  tau_f 滤波时间常数 [s]
+    @param  dt 采样周期 [s]（固件/仿真 200 Hz → 5 ms）
+    @param  vtol_att_kp 外环增益 [1/s]
+    @param  btrue_k 内环增益 [1/s]
+    @returns 离散极点数组（|λ|<1 为稳定）
+    @ref    REF-121 §2.2.1 p.33（连续系统 ZOH 离散化的标准形式）
+    @note   单行签名同样是为满足机检 R08 的 docstring 窗口
+    """
     A = augmented_A(tau_f, vtol_att_kp, btrue_k)
     B = np.zeros((3, 1))
     C = np.zeros((1, 3))

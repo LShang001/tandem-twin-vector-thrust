@@ -3,6 +3,19 @@
 """
 cascade_closedform.py — 级联架构标称闭环符号推导与不确定建模
 ================================================================
+@file    cascade_closedform.py
+@module  仿真/鲁棒性分析（级联控制符号推导）
+@brief   推导单通道 2 状态级联闭环的符号/数值闭式，并给出范数有界不确定分解
+@details 输入：仿真增益 vtolAttKp=2.5、btrueK=60 与惯量 Ix/Iy/Iz；
+         处理：sympy 符号 A/特征多项式自检 → 数值特征值/判别式 → A(δ)=A0+BΔ·δ·CΔ 分解；
+         输出：文本自检结果 + 退出码（符号与数值闭式一致为 0）。
+@theory  内外环级联与理想解耦 @ref CTL-001 §8.5；范数有界不确定与 Petersen 引理
+         @ref TandemVec-Paper/ch15-cascade-control (15.4)
+@frame   N/A（单通道模型；状态 [e_R, ω]）
+@units   s⁻¹、rad/s；惯量 kg·m²
+@note    论文符号 K_p = vtolAttKp、K_ω/I = btrueK；顶部常量改一处即可联动全部脚本
+@note    内环解耦的理想性假设见 control.mjs:applyVtolHover，属"设计内近似"
+@see     robust_lmi_analysis.py、robust_montecarlo.py
 对应论文 TandemVec-Paper/ch/15-cascade-control.tex §15.4–15.6
 
 目的：
@@ -16,7 +29,7 @@ cascade_closedform.py — 级联架构标称闭环符号推导与不确定建模
     ω = 角速度（rad/s）
 
   外环（当前固件几何误差约定）：ω_des = vtolAttKp·e_R
-  内环（control.mjs:142-147，理想 B·B⁻¹=I 精确对角化，论文 eq:cascade_inner_dot）：
+  内环（control.mjs:applyVtolHover，理想 B·B⁻¹=I 精确对角化，论文 eq:cascade_inner_dot）：
     ė_R = -ω，ω̇ = btrueK·(ω_des - ω)
 
   论文符号对应（ch/15 eq:cascade_inner_tf / eq:cascade_outer_tf）：

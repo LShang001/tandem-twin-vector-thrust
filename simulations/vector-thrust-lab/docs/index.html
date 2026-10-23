@@ -44,6 +44,11 @@
     <h2>GOV-003 多 Agent 协作规范</h2>
     <p>多 Agent 协作流程、上下文边界、串行改动约束与 Agent 注册表</p>
   </a>
+  <a class="card" href="./governance/GOV-004.html">
+    <span class="tag">GOV-004</span>
+    <h2>GOV-004 代码注释与理论对照规范</h2>
+    <p>L0/L1/L2 三层注释、理论对照五段式、文献引用格式、单位/坐标系约定与机检规则 R01–R10</p>
+  </a>
   <div class="sec">方案设计</div>
   <a class="card" href="./design/CFG-000.html">
     <span class="tag">CFG-000</span>
@@ -93,6 +98,62 @@
     <h2>MOD-003 配平与稳定性分析</h2>
     <p>纵向配平推导与数值核对、C_m0 补偿案例、小扰动模态定性分析</p>
   </a>
+  <div class="sec">代码理论核查</div>
+  <a class="card" href="./code-audit/MOD-004.html">
+    <span class="tag">MOD-004</span>
+    <h2>MOD-004 代码-理论对照核查报告</h2>
+    <p>305 文件注释落地、8 区域理论核对、6 项 P0、仿真-固件 18 项口径对照</p>
+  </a>
+  <a class="card" href="./code-audit/README.html">
+    <span class="tag">代码理论核查记录（索引）</span>
+    <h2>代码理论核查记录（索引）</h2>
+    <p>区域划分、记录模板、证据纪律与门禁命令</p>
+  </a>
+  <a class="card" href="./code-audit/SIM.html">
+    <span class="tag">SIM</span>
+    <h2>SIM 代码理论核查</h2>
+    <p>仿真 core/browser/tests：四元数、动力学、控制、推进、气动、B 矩阵</p>
+  </a>
+  <a class="card" href="./code-audit/FW-EKF.html">
+    <span class="tag">FW-EKF</span>
+    <h2>FW-EKF 代码理论核查</h2>
+    <p>15 状态 ESKF：F 矩阵、圆锥/划摇、KF/Joseph/NIS、地球模型</p>
+  </a>
+  <a class="card" href="./code-audit/FW-NAV.html">
+    <span class="tag">FW-NAV</span>
+    <h2>FW-NAV 代码理论核查</h2>
+    <p>导航任务、IMU、ins_*、姿态数学、ZUPT/航向/光流辅助</p>
+  </a>
+  <a class="card" href="./code-audit/FW-CTRL.html">
+    <span class="tag">FW-CTRL</span>
+    <h2>FW-CTRL 代码理论核查</h2>
+    <p>轴映射、速率量纲、差速调度、B 矩阵、惯量前馈、RC 曲线、F3/F4</p>
+  </a>
+  <a class="card" href="./code-audit/FW-INFRA.html">
+    <span class="tag">FW-INFRA</span>
+    <h2>FW-INFRA 代码理论核查</h2>
+    <p>主循环、AnoCom 双环、参数/变量注册、UBX、调度、传感器外设</p>
+  </a>
+  <a class="card" href="./code-audit/FW-TESTS.html">
+    <span class="tag">FW-TESTS</span>
+    <h2>FW-TESTS 代码理论核查</h2>
+    <p>65 个宿主测试：覆盖矩阵、断言强度、仿真口径边界与缺口</p>
+  </a>
+  <a class="card" href="./code-audit/GCS.html">
+    <span class="tag">GCS</span>
+    <h2>GCS 代码理论核查</h2>
+    <p>AnoCom 17 帧缩放、128 参数链路、黑匣子、WS/前端字段</p>
+  </a>
+  <a class="card" href="./code-audit/ANALYSIS.html">
+    <span class="tag">ANALYSIS</span>
+    <h2>ANALYSIS 代码理论核查</h2>
+    <p>高保真/EKF 研究仿真、scripts/tools：48 条矩阵 + 18 项口径对照</p>
+  </a>
+  <a class="card" href="./code-audit/P0-VALIDATION.html">
+    <span class="tag">P0</span>
+    <h2>P0 修复仿真验证</h2>
+    <p>50 seed 稳定性和 80 次航向 A/B、开环旋转、固件 SIL 故障/耦合 A/B、15° 包线</p>
+  </a>
   <div class="sec">控制与分配</div>
   <a class="card" href="./control/CTL-001.html">
     <span class="tag">CTL-001</span>
@@ -126,6 +187,11 @@
     <span class="tag">DEC-001</span>
     <h2>DEC-001 参数单一事实源</h2>
     <p>ADR：aircraft-model.json + 代码生成 + 漂移检测的决策与备选方案</p>
+  </a>
+  <a class="card" href="./decisions/DEC-002.html">
+    <span class="tag">DEC-002</span>
+    <h2>DEC-002 六项 P0 修复决策</h2>
+    <p>F3 符号、惯量前馈跨系、仿真旋转项/P0 航向/home_lla、15° 巡航包线的决策与验证</p>
   </a>
   <a class="card" href="./decisions/adr-template.html">
     <span class="tag">决策记录模板（ADR）</span>

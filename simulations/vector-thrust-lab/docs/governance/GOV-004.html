@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>GOV-004 代码注释与理论对照规范 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="gov-004-代码注释与理论对照规范">GOV-004
+代码注释与理论对照规范</h1>
+<blockquote>
+<p>编号：GOV-004 ｜ 版本：1.0 ｜ 状态：生效 ｜ 生效日期：2026-10-23
+适用范围：本仓库全部自研代码（范围见 §2）
+机检工具：<code>tools/check-code-comments.py</code>（<code>--check</code>
+返回非零即门禁不通过） 上游依据：<a
+href="GOV-002.html">GOV-002 信息与配置管理</a>、<a
+href="GOV-003.html">GOV-003 多Agent协作规范</a>、<a
+href="../modeling/MOD-002.html">MOD-002
+坐标系与符号约定</a>、<a
+href="../registers/behavior-redlines.html">行为保持红线清单</a>
+下游产物：<a
+href="../code-audit/README.html">代码理论核查记录</a>、<a
+href="../registers/traceability-matrix.html">模型-代码追溯矩阵</a></p>
+</blockquote>
+<hr />
+<h2 id="1-目的">1 目的</h2>
+<p>1.1
+<strong>可读</strong>：读者不打开公式文档，只看代码与注释，就能回答“这段在算什么、单位是什么、坐标系是什么、公式出自哪本书哪一页”。</p>
+<p>1.2 <strong>可核查</strong>：每条公式性实现都能通过 <code>@ref</code>
+定位到教材/论文/项目推导文档，理论核对结论可复查、可审计，而不是“某人说过一致”。</p>
+<p>1.3
+<strong>可维护</strong>：改代码必须同一次提交改注释；注释腐烂（stale
+comment）本身按缺陷对待。</p>
+<p>1.4
+<strong>可教学</strong>：注释面向“第一次读这个项目的人”（低年级研究生、新
+Agent、评审专家），承担教材与工程实现之间的翻译职责。</p>
+<blockquote>
+<p>一句话原则：<strong>注释解释“为什么”和“从哪来”，代码自己说明“做什么”。</strong></p>
+</blockquote>
+<hr />
+<h2 id="2-适用范围">2 适用范围</h2>
+<h3 id="21-纳入本规范的自研代码">2.1 纳入本规范的自研代码</h3>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仿真核心</td>
+<td><code>simulations/vector-thrust-lab/src/**</code>、<code>tests/**</code></td>
+<td>纯计算层 + 浏览器层；core 层零 Three.js 依赖</td>
+</tr>
+<tr>
+<td>固件</td>
+<td><code>TandemVec_FCS/src/**</code>、<code>TandemVec_FCS/include/**</code></td>
+<td>飞行控制、导航、通信、传感器</td>
+</tr>
+<tr>
+<td>导航库（深度改造）</td>
+<td><code>TandemVec_FCS/lib/navigation-main/src/**</code></td>
+<td>上游库已被本项目大幅修改，按自研代码管理</td>
+</tr>
+<tr>
+<td>固件宿主测试</td>
+<td><code>TandemVec_FCS/test_host/**</code></td>
+<td>g++ 平台无关回归测试</td>
+</tr>
+<tr>
+<td>上位机</td>
+<td><code>TandemVec_FCS/GCS/server/**</code>、<code>GCS/web/src/**</code>、<code>GCS/tests/**</code></td>
+<td>Python 后端 + 浏览器前端</td>
+</tr>
+<tr>
+<td>分析仿真</td>
+<td><code>simulations/high-fidelity-analysis/**</code>、<code>TandemVec-EKF-Report/sim/**</code></td>
+<td>Python 数值分析</td>
+</tr>
+<tr>
+<td>脚本</td>
+<td><code>scripts/**</code>、<code>tools/**</code>、<code>TandemVec_FCS/tools/**</code></td>
+<td>构建、参数同步、核对脚本</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-排除不按本规范逐行注释">2.2 排除（不按本规范逐行注释）</h3>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>例子</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第三方库</td>
+<td><code>lib/eigen/**</code>、<code>lib/MAVLink/**</code>、<code>lib/ublox-main/**</code>、<code>lib/DPS310-Pressure-Sensor/**</code>
+等</td>
+<td>上游代码，保持原样便于升级比对</td>
+</tr>
+<tr>
+<td>浏览器 vendor</td>
+<td><code>TandemVec_FCS/GCS/web/vendor/**</code></td>
+<td>Three.js 发行版</td>
+</tr>
+<tr>
+<td>生成物</td>
+<td><code>parameters.mjs</code>、<code>standalone.html</code>、<code>simulations/vector-thrust-lab/docs/*.html</code></td>
+<td>由脚本生成，改生成器与源文件</td>
+</tr>
+<tr>
+<td>示例</td>
+<td><code>lib/**/examples/**</code>、<code>*.ino</code> 示例</td>
+<td>上游示例</td>
+</tr>
+<tr>
+<td>数据/资源</td>
+<td><code>*.json</code>（参数源除外）、图片、<code>*.pdf</code>、<code>*.tex</code></td>
+<td>见对应文档规范</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>parameters.mjs</code> 的注释由
+<code>tools/sync-params.py</code>
+生成器负责；<strong>禁止手改</strong>（AGENTS.md 边界）。</p>
+</blockquote>
+<h3 id="23-例外与豁免">2.3 例外与豁免</h3>
+<ul>
+<li>自动生成文件：在文件头写 <code>@generated</code>
+并注明生成器与命令，即可豁免 L1/L2 检查。</li>
+<li>纯数据表（无逻辑）：允许只写 L0 文件头 + 每段数据一个分组注释。</li>
+<li>确实无法解释的历史遗留：用 <code>@legacy</code>
+标注并登记到核查报告“待澄清”列表，不得沉默。</li>
+</ul>
+<hr />
+<h2 id="3-三层注释模型">3 三层注释模型</h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>位置</th>
+<th>回答的问题</th>
+<th>强制程度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>L0 文件头</strong></td>
+<td>文件最顶部</td>
+<td>这个文件是什么、属于哪层、实现什么模型、单位/坐标系、有哪些坑与红线</td>
+<td>每个文件必填</td>
+</tr>
+<tr>
+<td><strong>L1 符号文档块</strong></td>
+<td>函数/类/结构体/导出常量之前</td>
+<td>输入输出、单位、公式、文献出处、前置条件、误差/限幅</td>
+<td>对外符号与复杂内部符号必填</td>
+</tr>
+<tr>
+<td><strong>L2 行内注释</strong></td>
+<td>关键语句上方或行尾</td>
+<td>为什么这样写、边界条件、符号翻转、经验常数来源</td>
+<td>只在“非显然”处出现</td>
+</tr>
+</tbody>
+</table>
+<p><strong>L2
+的判定标准</strong>：如果删除这行注释，读者需要额外查资料或停下来推导才能明白，则保留；如果注释只是把代码翻译成中文，删除。</p>
+<hr />
+<h2 id="4-l0文件头模板">4 L0：文件头模板</h2>
+<h3 id="41-字段表">4.1 字段表</h3>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>必填</th>
+<th>内容要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>@file</code></td>
+<td>是</td>
+<td>文件名（与磁盘一致）</td>
+</tr>
+<tr>
+<td><code>@module</code></td>
+<td>是</td>
+<td>所属分层/子系统，如
+<code>core/姿态数学</code>、<code>固件/导航</code>、<code>GCS/协议</code></td>
+</tr>
+<tr>
+<td><code>@brief</code></td>
+<td>是</td>
+<td>一句话职责（≤ 40 字），动词开头</td>
+</tr>
+<tr>
+<td><code>@details</code></td>
+<td>是</td>
+<td>输入→处理→输出，2–5 行；写清关键不变量与调用方</td>
+</tr>
+<tr>
+<td><code>@theory</code></td>
+<td>理论文件必填</td>
+<td>本文件实现的公式/模型清单，逐条给出 <code>@ref</code>；非理论文件写
+<code>N/A</code></td>
+</tr>
+<tr>
+<td><code>@frame</code></td>
+<td>是</td>
+<td>坐标系约定（NED/FRD、机体系/导航系/世界系）；纯 UI/工具写
+<code>N/A</code></td>
+</tr>
+<tr>
+<td><code>@units</code></td>
+<td>是</td>
+<td>单位约定（SI、角度 rad/deg、时间 s/ms）；无物理量写
+<code>N/A</code></td>
+</tr>
+<tr>
+<td><code>@redline</code></td>
+<td>触及红线时必填</td>
+<td>命中的红线条目（与红线清单逐字对应）；未触及则省略</td>
+</tr>
+<tr>
+<td><code>@note</code></td>
+<td>否</td>
+<td>依赖、限制、已知偏差、历史决策</td>
+</tr>
+<tr>
+<td><code>@see</code></td>
+<td>否</td>
+<td>相关文件/文档/测试</td>
+</tr>
+<tr>
+<td><code>@generated</code></td>
+<td>生成物必填</td>
+<td>生成器路径 + 生成命令</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-cc-模板">4.2 C/C++ 模板</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@file</span><span class="co">    </span><span class="cv">flight_control.cpp</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@module</span><span class="co">  固件/控制（姿态环、执行器分配、SAS）</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@brief</span><span class="co">   将操纵输入与导航状态转换为执行器指令（摆角/差速/油门）</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@details</span><span class="co"> 输入：RC 摇杆、导航姿态/速度、参数表；</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"> *          处理：模式判定 → 外环姿态/高度 → 内环角速率 → 控制分配 → 限幅；</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co"> *          输出：舵机摆角、双电机差速与油门。</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"> *          不变量：输出始终经 ±MAX_* 限幅；分配矩阵 B 使用 τm 观测转速。</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@theory</span><span class="co">  SAS 三通道律 </span><span class="an">@ref</span><span class="co"> </span><span class="cv">CTL-001</span><span class="co"> §4；</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co"> *          差速开方分配 </span><span class="an">@ref</span><span class="co"> </span><span class="cv">CTL-001</span><span class="co"> §5；</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"> *          执行器轴映射（上摆=滚转/下摆=俯仰/差速=偏航）</span><span class="an">@ref</span><span class="co"> AGENTS.md 踩坑记录</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@frame</span><span class="co">   NED（导航系）/ FRD（机体系）；摇杆正方向见 CTL-001 §2</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@units</span><span class="co">   角度内部 rad，PWM 为 988–2012 µs，增益单位见 ControlUnits.h</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@redline</span><span class="co"> 速率环量纲、SAS 限幅、执行器轴映射（见行为保持红线清单）</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@see</span><span class="co">     docs/05-控制与分配/CTL-001-控制架构与SAS.md</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span></code></pre></div>
+<h3 id="43-javascriptesm模板">4.3 JavaScript（ESM）模板</h3>
+<div class="sourceCode" id="cb2"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@file</span><span class="co">    </span><span class="cv">math.mjs</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@module</span><span class="co">  仿真 core/姿态数学</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@brief</span><span class="co">   四元数、旋转与欧拉角提取的纯函数集合</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@details</span><span class="co"> 只做纯计算，禁止依赖 Three.js/DOM；被 dynamics/control 复用。</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="co"> *          约定 q 为 {x,y,z,w}，左乘/右乘语义见函数内注释。</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@theory</span><span class="co">  四元数运动学 q̇ = ½·q⊗ω_body </span><span class="an">@ref</span><span class="co"> </span><span class="cv">REF-120</span><span class="co"> §9.2；</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="co"> *          3-2-1 欧拉角 theta = -asin(R13) </span><span class="an">@ref</span><span class="co"> </span><span class="cv">MOD-002</span><span class="co"> §3</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@frame</span><span class="co">   机体系 FRD → 导航系 NED</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@units</span><span class="co">   角度 rad，角速度 rad/s</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span></code></pre></div>
+<h3 id="44-python-模板">4.4 Python 模板</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">&quot;&quot;&quot;anocom.py — AnoCom（匿名地面站协议）编解码。</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">@module  GCS/协议</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="co">@brief   实现 AnoCom 帧的打包与解析，与固件逐字节对齐。</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="co">@details 输入：串口字节流；处理：帧同步→校验→按功能码解码→缩放；</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="co">         输出：结构化遥测帧/参数帧。</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="co">@theory  N/A（协议实现，非理论模型）</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="co">@ref     PROTOCOL-001 §3（帧格式）、§4（功能码约定）</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="co">@frame   N/A</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="co">@units   帧内缩放见各解码函数 @units 标签</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co">@note    与固件 src/communication.cpp 的发送实现必须逐字节一致；</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="co">         任何字段/缩放改动须同步 tests/test_anocom.py。</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a><span class="co">&quot;&quot;&quot;</span></span></code></pre></div>
+<hr />
+<h2 id="5-l1符号文档块">5 L1：符号文档块</h2>
+<h3 id="51-统一标签">5.1 统一标签</h3>
+<table>
+<thead>
+<tr>
+<th>标签</th>
+<th>用途</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>@brief</code></td>
+<td>一句话功能</td>
+<td><code>@brief 由四元数提取 3-2-1 欧拉角</code></td>
+</tr>
+<tr>
+<td><code>@param[in/out/in,out]</code></td>
+<td>参数名 + 含义 + <strong>单位</strong> + 符号</td>
+<td><code>@param[in] dt_s 积分步长 [s]</code></td>
+</tr>
+<tr>
+<td><code>@return</code></td>
+<td>返回值含义/单位/失败语义</td>
+<td><code>@return 姿态角 {phi,theta,psi} [rad]</code></td>
+</tr>
+<tr>
+<td><code>@formula</code></td>
+<td>该函数实现的公式（单行）</td>
+<td><code>@formula theta = -asin(R13)</code></td>
+</tr>
+<tr>
+<td><code>@ref</code></td>
+<td>文献/文档出处（格式见 §6）</td>
+<td><code>@ref REF-120 §9.2 (9.2.14) p.268</code></td>
+</tr>
+<tr>
+<td><code>@pre</code> / <code>@post</code></td>
+<td>前置条件 / 后置保证</td>
+<td><code>@pre 输入四元数已归一化</code></td>
+</tr>
+<tr>
+<td><code>@note</code></td>
+<td>坑、边界、经验值来源</td>
+<td><code>@note 空速下限 0.5 m/s，低于此值分母保护</code></td>
+</tr>
+<tr>
+<td><code>@deviation</code></td>
+<td>与理论/文档不一致的已知偏差</td>
+<td><code>@deviation 用级数重力式，与 (7.2.17) 差 ~1e-5 m/s²</code></td>
+</tr>
+<tr>
+<td><code>@approx</code></td>
+<td>有意的近似及量级</td>
+<td><code>@approx 忽略 F(β,P)，量级 ≤1e-9</code></td>
+</tr>
+<tr>
+<td><code>@test</code></td>
+<td>覆盖该符号的测试</td>
+<td><code>@test test_host/test_ekf_15state.cpp T7</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-何时必须写">5.2 何时必须写</h3>
+<ul>
+<li>所有导出/公有函数、类、结构体、枚举（有物理语义时）。</li>
+<li>所有超过 10 行的内部函数。</li>
+<li>所有带物理意义的常量与参数表（可分组写一个块，逐项注释单位）。</li>
+<li>简单 getter/setter：允许一行 <code>///&lt; 单位/含义</code>
+行尾注释。</li>
+</ul>
+<h3 id="53-示例c">5.3 示例（C++）</h3>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@brief</span><span class="co"> 由双子样角增量与速度增量递推 15 状态误差协方差</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co"> </span><span class="cv">dtheta_1</span><span class="co"> 第 1 子样角增量 [rad]</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co"> </span><span class="cv">dtheta_2</span><span class="co"> 第 2 子样角增量 [rad]</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co"> </span><span class="cv">dv_1</span><span class="co">     第 1 子样速度增量 [m/s]</span></span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co"> </span><span class="cv">dv_2</span><span class="co">     第 2 子样速度增量 [m/s]</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co"> </span><span class="cv">dt_s</span><span class="co">     更新周期 [s]</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@return</span><span class="co"> 无；就地更新 state_ 与 cov_</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@formula</span><span class="co"> ΔV_scull = (2/3)(Δθ₁×ΔV₂ + ΔV₁×Δθ₂)</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@ref</span><span class="co"> </span><span class="cv">REF-120</span><span class="co"> §9.6 (9.6.25) p.301</span></span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@pre</span><span class="co"> 两个子样时间等分，dq 已含圆锥补偿</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@test</span><span class="co"> test_host/test_ekf_15state.cpp T7</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span></code></pre></div>
+<hr />
+<h2 id="6-理论对照注释本规范核心">6 理论对照注释（本规范核心）</h2>
+<h3 id="61-标准公式块">6.1 标准公式块</h3>
+<p>凡是实现教材/论文公式的位置，按下列五段式写；短公式可压缩为一行
+<code>@formula</code> + <code>@ref</code>。</p>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co">// ── 速度更新（比力方程在 NED 下的离散形式）────────────────────────────</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="co">// 公式：V̇^n = C^n_b·f^b − (2ω_ie + ω_en)×V^n + g^n</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co">// 符号：V^n 导航系速度 [m/s]；C^n_b 机体系→导航系 DCM；</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="co">//       f^b 比力 [m/s²]；ω_ie 地球自转 [rad/s]；ω_en 传输率 [rad/s]；</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="co">//       g^n 正常重力 [m/s²]（NED 下 z 分量向下为正）</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co">// 来源：@ref REF-120 §7.4 (7.4.6) p.189</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="co">// 实现：本函数中 `v_mid = v_prev + (a_sf + a_cor + g)*dt` 一段</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a><span class="co">// 等价变换：秦书为 ENU/RFU，本项目为 NED/FRD；分量次序与 ± 号见 MOD-002 §2</span></span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a><span class="co">// 数值证据：@test test_host/test_ekf_15state.cpp T7（速度增量残差 1.25e-4）</span></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="co">// ─────────────────────────────────────────────────────────────────────</span></span></code></pre></div>
+<p><strong>五段式要求</strong>：公式（可抄成
+ASCII/Unicode）、符号与单位、出处、实现映射（函数名或段落，不写死行号）、等价变换与数值证据。五段缺一不可（无变换/证据时写“无”）。</p>
+<h3 id="62-引用格式强制">6.2 引用格式（强制）</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>格式</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>教材</td>
+<td><code>@ref REF-120 §章节 (式号) p.印刷页</code></td>
+<td><code>@ref REF-120 §9.6 (9.6.19) p.298</code></td>
+</tr>
+<tr>
+<td>教材（无式号）</td>
+<td><code>@ref REF-121 §2.2.1 p.33</code></td>
+<td><code>@ref REF-121 §2.2.1 p.33</code></td>
+</tr>
+<tr>
+<td>项目推导</td>
+<td><code>@ref THY-00x §n</code></td>
+<td><code>@ref THY-003 §4</code></td>
+</tr>
+<tr>
+<td>建模/控制文档</td>
+<td><code>@ref MOD-00x §n</code>、<code>@ref CTL-00x §n</code></td>
+<td><code>@ref MOD-002 §3</code></td>
+</tr>
+<tr>
+<td>论文</td>
+<td><code>@ref TandemVec-Paper/ch05 (5.12)</code></td>
+<td><code>@ref TandemVec-Paper/ch05 (5.12)</code></td>
+</tr>
+<tr>
+<td>代码位置</td>
+<td>反引号写符号名，不写行号</td>
+<td><code>`PropagateStateFromIncrements()`</code></td>
+</tr>
+</tbody>
+</table>
+<p>规则：</p>
+<ol type="1">
+<li>页码一律用<strong>印刷页</strong>（REF-120 印刷页 = PDF 页 −
+8；REF-121 见 <code>notes/02</code> 页偏移说明）。</li>
+<li>无法确认页码时，至少写“章节 +
+式号”，<strong>禁止</strong>只写“见书/见文献/参考教材”。</li>
+<li>引用项目文档必须用编号（GOV/MOD/CTL/THY/REQ/VER/COMM/PROTOCOL），便于全站检索。</li>
+<li>引用其他代码用符号名，<strong>不写行号</strong>（行号随重构漂移，是注释腐烂的高发点）。</li>
+</ol>
+<h3 id="63-等价变换必须写明">6.3 等价变换必须写明</h3>
+<p>教材与本项目坐标约定不同（秦书 ENU/RFU，本项目 NED/FRD；误差角 φⁿ vs
+δβᵇ；δ
+方向取反），符号看起来“对不上”不等于实现错误。凡做过变换，必须写明：</p>
+<div class="sourceCode" id="cb6"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co">// 等价变换：φ = C^n_b·δβ（秦书 φ 为导航系失准角，固件 δβ 为体系右乘误差）</span></span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="co">//           秦书 δ = 计算值−真值，固件 δv = 真值−估计，故速度项相差一次取反</span></span></code></pre></div>
+<h3 id="64-近似与偏差">6.4 近似与偏差</h3>
+<ul>
+<li>有意的截断/近似：<code>@approx &lt;忽略了什么&gt; &lt;量级&gt; &lt;为什么可接受&gt;</code>。</li>
+<li>已确认的偏差：<code>@deviation &lt;现象&gt; &lt;量级/影响&gt; &lt;依据&gt; &lt;处置：保留/待修/已登记&gt;</code>。</li>
+<li>偏差必须同步登记到 <code>docs/04-数学建模/代码理论核查/</code>
+对应模块记录，<strong>不得用注释掩盖</strong>。</li>
+</ul>
+<h3 id="65-数值证据优先">6.5 数值证据优先</h3>
+<p>“手算过/应该没问题”不算证据。优先引用：单元测试断言、回归基线夹具、宿主测试编号（T1/T2…）、复算脚本输出。无测试时，在核查记录里给出可复算命令。</p>
+<hr />
+<h2 id="7-单位坐标系与符号">7 单位、坐标系与符号</h2>
+<h3 id="71-强制约定">7.1 强制约定</h3>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单位制</td>
+<td>SI；角度内部一律 rad，UI/日志可用 deg 但变量名必须带
+<code>_deg</code></td>
+</tr>
+<tr>
+<td>时间</td>
+<td>秒 <code>_s</code>，毫秒
+<code>_ms</code>；帧周期、时间戳必须标明基准（上电/Unix/单调）</td>
+</tr>
+<tr>
+<td>坐标系</td>
+<td>默认 NED（导航系）+
+FRD（机体系）；世界系/摆座系/电机系必须显式写出</td>
+</tr>
+<tr>
+<td>符号</td>
+<td>与 <a href="../modeling/MOD-002.html">MOD-002</a>
+符号表一致：<code>q</code>、<code>C_n_b</code>、<code>ω</code>、<code>f</code>、<code>δ</code>、<code>Δω</code></td>
+</tr>
+<tr>
+<td>后缀</td>
+<td><code>_raw</code> 原始、<code>_est</code> 估计、<code>_cmd</code>
+指令、<code>_ned</code>/<code>_body</code>
+坐标系、<code>_deg</code>/<code>_ms</code> 单位</td>
+</tr>
+<tr>
+<td>执行器语义</td>
+<td>同时写“体轴映射”和“构型语义”：上摆 δf→体轴 x（滚转）、下摆 δt→体轴
+y（俯仰）、差速 Δω→体轴 z（偏航）；悬停构型语义见 AGENTS.md
+轴映射踩坑记录</td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-姿态角约定易错必须写">7.2 姿态角约定（易错，必须写）</h3>
+<ul>
+<li>3-2-1 顺序，<code>theta = -asin(R13)</code>（项目约定，见 MOD-002
+§3）。</li>
+<li>四元数右乘：<code>q̇ = ½·q⊗[0,ω_b]</code>；误差状态为体轴右乘
+<code>q_true = q_est⊗Exp(δβ)</code>。</li>
+<li>渲染力臂 ≠ 物理力臂（±1.78 m vs 0.315 m），注释不得混用。</li>
+<li><strong>两套轴名必须显式区分（2026-10-23 核查新增）</strong>：
+<ul>
+<li>固件源码 / <code>TandemVec_Config.h</code> /
+<code>flight_control.cpp</code> mix
+层使用<strong>存档系</strong>：<code>z_b = 推力轴 = 机身纵轴</code>（悬停时竖直指地），<code>x_b/y_b</code>
+为两条横向轴；</li>
+<li>仿真 <code>TandemVec_Propulsion.h</code> / <code>MOD-001</code> /
+<code>CTL-001 §3</code>
+使用<strong>模型系</strong>：<code>x' = 推力轴</code>，<code>y' = 尾摆轴</code>，<code>z' = 前摆轴</code>；</li>
+<li>两套轴名固定置换
+<code>x' = −z_b, y' = +y_b, z' = +x_b</code>（det=+1，见
+<code>flight_control.cpp</code> mix 层与
+<code>TandemVec_FCS/AGENTS.md</code>）。写轴/通道注释时必须注明“存档系”或“模型系”，<strong>不得只写
+x/y/z</strong>；悬停构型语义（上摆=滚转 / 下摆=俯仰 / 差速=偏航）另见根
+AGENTS.md 轴映射踩坑记录。</li>
+</ul></li>
+</ul>
+<hr />
+<h2 id="8-l2行内注释规则">8 L2：行内注释规则</h2>
+<h3 id="81-应该写">8.1 应该写</h3>
+<ul>
+<li>单位换算与量纲（<code>deg→rad</code>、<code>µs→归一化</code>）。</li>
+<li>符号约定与翻转（<code>NED 下 z 向下，故取负</code>）。</li>
+<li>边界/奇异保护（<code>低速分母保护：空速下限 0.5 m/s</code>）。</li>
+<li>经验常数来源（<code>0.28 s 为电机一阶时间常数，来源：台架辨识</code>）。</li>
+<li>时序/并发假设（<code>本函数在 200 Hz tick 内调用，禁止阻塞</code>）。</li>
+<li>与理论不同的工程取舍（<code>用中点姿态，二阶精度，理由见 @deviation</code>）。</li>
+</ul>
+<h3 id="82-禁止写">8.2 禁止写</h3>
+<table>
+<thead>
+<tr>
+<th>反例</th>
+<th>问题</th>
+<th>改法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>// i 自增</code></td>
+<td>复述代码</td>
+<td>删除</td>
+</tr>
+<tr>
+<td><code>// 定义变量 x</code></td>
+<td>零信息</td>
+<td>删除或写用途</td>
+</tr>
+<tr>
+<td><code>// 这里很重要</code></td>
+<td>无信息</td>
+<td>写清为什么重要</td>
+</tr>
+<tr>
+<td><code>// 暂时这样，以后再说</code></td>
+<td>无 owner/日期/条件</td>
+<td><code>TODO(name, 2026-10-23): …</code> 或删除</td>
+</tr>
+<tr>
+<td><code>// 旧实现：...（整段注释代码）</code></td>
+<td>注释掉的代码</td>
+<td>删除，git 保留历史</td>
+</tr>
+<tr>
+<td><code>// 见书</code></td>
+<td>不可追溯</td>
+<td>补 <code>@ref</code> 章节/式号/页码</td>
+</tr>
+<tr>
+<td>emoji/颜文字</td>
+<td>编码与检索问题</td>
+<td>删除</td>
+</tr>
+</tbody>
+</table>
+<h3 id="83-风格">8.3 风格</h3>
+<ul>
+<li>中文注释使用中文标点；技术名词、变量名、单位符号保留英文/符号。</li>
+<li>注释与代码同缩进；段落分隔用 <code>// ── 标题 ──</code>
+或空注释行。</li>
+<li>单行 ≤ 120 字符（含中文按显示宽度宽松处理，机检按字符数）。</li>
+<li>不使用制表符对齐。</li>
+</ul>
+<hr />
+<h2 id="9-禁止项机检规则">9 禁止项（机检规则）</h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>禁止项</th>
+<th>级别</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R01</td>
+<td>缺 L0 文件头或必填字段</td>
+<td>error</td>
+<td>补齐</td>
+</tr>
+<tr>
+<td>R02</td>
+<td><code>@ref</code> 目标格式非法/无编号</td>
+<td>error</td>
+<td>改为 §6.2 格式</td>
+</tr>
+<tr>
+<td>R03</td>
+<td><code>TODO/FIXME</code> 无 <code>(owner, YYYY-MM-DD)</code></td>
+<td>error</td>
+<td>补全或删除</td>
+</tr>
+<tr>
+<td>R04</td>
+<td>连续 ≥3 行注释掉的代码</td>
+<td>warning</td>
+<td>删除</td>
+</tr>
+<tr>
+<td>R05</td>
+<td>注释行 &gt; 120 字符</td>
+<td>warning</td>
+<td>换行</td>
+</tr>
+<tr>
+<td>R06</td>
+<td>纯英文注释块（无中文、≥6 词）</td>
+<td>warning</td>
+<td>翻为中文</td>
+</tr>
+<tr>
+<td>R07</td>
+<td>理论关键文件无任何 <code>@ref REF-/MOD-/CTL-/THY-</code></td>
+<td>error</td>
+<td>补引用</td>
+</tr>
+<tr>
+<td>R08</td>
+<td>公共符号缺 L1 文档块</td>
+<td>warning</td>
+<td>补文档块</td>
+</tr>
+<tr>
+<td>R09</td>
+<td>文件头 <code>@theory</code> 非 N/A 却无 <code>@ref</code></td>
+<td>warning</td>
+<td>补引用</td>
+</tr>
+<tr>
+<td>R10</td>
+<td>模糊引用（“见书/见文档/参考教材”无编号）</td>
+<td>warning</td>
+<td>补编号</td>
+</tr>
+</tbody>
+</table>
+<p>评分：文件基准 100 分，error −20，warning −5，下限
+0。门禁：<strong>error = 0</strong>；warning
+数量逐轮下降并记录在核查报告。</p>
+<hr />
+<h2 id="10-维护规则">10 维护规则</h2>
+<ol type="1">
+<li><strong>同提交原则</strong>：改代码行为/公式，必须在同一次提交内更新相关注释与
+<code>@ref</code>。</li>
+<li><strong>改公式</strong>：同步更新
+<code>@formula</code>、<code>@ref</code>、<code>@deviation</code>，并在核查记录中留痕。</li>
+<li><strong>红线文件</strong>：触及红线清单的文件，L0 必须有
+<code>@redline</code>，且改动需按红线流程重采基线。</li>
+<li><strong>重构/移动符号</strong>：更新所有
+<code>@see</code>、核查记录、追溯矩阵中的符号名（不写行号）。</li>
+<li><strong>新增模块</strong>：先写 L0 +
+关键公式引用，再写实现；核查记录新增一节。</li>
+<li><strong>注释腐烂检查</strong>：发版前跑
+<code>py -3.12 tools/check-code-comments.py --check</code>；核查报告随版本更新。</li>
+<li><strong>禁止批量脚本改注释</strong>：跨文件机械替换需人工复核，避免误改字符串/正则/协议字段。</li>
+</ol>
+<hr />
+<h2 id="11-质量门禁与执行">11 质量门禁与执行</h2>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 全量检查（仓库根目录）</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--check</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 单区域 / 单文件</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--area</span> firmware-nav <span class="at">--check</span></span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--paths</span> TandemVec_FCS/src/flight_control.cpp <span class="at">--check</span></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 机器可读报告</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--json</span> .code-comments-report.json</span></code></pre></div>
+<p>执行时机：提交前自检；发版前全量；多 Agent 任务中每个 Agent
+完工前对自己区域跑一次。</p>
+<hr />
+<h2 id="12-示例完整">12 示例（完整）</h2>
+<h3 id="121-c公式型函数">12.1 C++（公式型函数）</h3>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@brief</span><span class="co"> 四元数右乘更新姿态：q ← q ⊗ Exp(ω·dt)</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in,out]</span><span class="co"> </span><span class="cv">q</span><span class="co">       姿态四元数（机体系→导航系），输入需归一化</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co">     </span><span class="cv">omega_b</span><span class="co"> 机体系角速度 [rad/s]</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param[in]</span><span class="co">     </span><span class="cv">dt_s</span><span class="co">    积分步长 [s]</span></span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@return</span><span class="co"> 无</span></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@formula</span><span class="co"> q_{k+1} = q_k ⊗ Exp(ω^b·Δt)，</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="co"> *          Exp(φ) = [cos(|φ|/2), sin(|φ|/2)·φ/|φ|]</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@ref</span><span class="co"> </span><span class="cv">REF-120</span><span class="co"> §9.2 (9.2.14) p.268（等效旋转矢量）；</span><span class="an">@ref</span><span class="co"> MOD-002 §3（右乘约定）</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@pre</span><span class="co"> |q| = 1；dt_s ≤ 0.004 s（子步上限，见行为红线）</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@post</span><span class="co"> 每步后做保范投影，|q| 误差 ≤ 1e-9</span></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@test</span><span class="co"> test_host/test_advanced_theory.cpp</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span></code></pre></div>
+<h3 id="122-javascript纯函数">12.2 JavaScript（纯函数）</h3>
+<div class="sourceCode" id="cb9"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co">/**</span></span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@brief</span><span class="co"> 由单位四元数提取 3-2-1 欧拉角</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@param</span><span class="co"> </span><span class="cv">{Object}</span><span class="co"> q 单位四元数 {x,y,z,w}</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@returns</span><span class="co"> {{phi:number, theta:number, psi:number}} 姿态角 [rad]</span></span>
+<span id="cb9-5"><a href="#cb9-5" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@formula</span><span class="co"> phi = atan2(m23,m33)，theta = -asin(m13)，psi = atan2(m12,m11)</span></span>
+<span id="cb9-6"><a href="#cb9-6" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="an">@ref</span><span class="co"> </span><span class="cv">MOD-002</span><span class="co"> §3（本项目 theta = -asin(R13) 约定）</span></span>
+<span id="cb9-7"><a href="#cb9-7" aria-hidden="true" tabindex="-1"></a><span class="co"> * </span><span class="in">@note</span><span class="co"> m13 需 clamp 到 [-1,1]，避免浮点越界导致 NaN</span></span>
+<span id="cb9-8"><a href="#cb9-8" aria-hidden="true" tabindex="-1"></a><span class="co"> */</span></span>
+<span id="cb9-9"><a href="#cb9-9" aria-hidden="true" tabindex="-1"></a><span class="im">export</span> <span class="kw">function</span> <span class="fu">eulerFromQuat</span>(q) { <span class="co">/* ... */</span> }</span></code></pre></div>
+<h3 id="123-python分析脚本">12.3 Python（分析脚本）</h3>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> propagate(state: np.ndarray, dt: <span class="bu">float</span>) <span class="op">-&gt;</span> np.ndarray:</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;15 状态误差卡尔曼预测一步（与固件同构）。</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co">    @brief   对协方差做 Phi P Phi^T + Qd 传播</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a><span class="co">    @param   state 15 维误差状态（位置/速度/失准角/加计零偏/陀螺零偏）</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co">    @param   dt    步长 [s]，需与固件 200 Hz 基一致</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a><span class="co">    @returns 传播后的协方差（不修改输入）</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a><span class="co">    @formula P_{k+1} = Φ P_k Φ^T + Γ Q Γ^T</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a><span class="co">    @ref     REF-121 §2.2.1 (2.2.4d) p.33</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="co">    @note    与 ekf_15_state.h 的 Propagate 保持同构；改一处必须同步另一处</span></span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="co">    &quot;&quot;&quot;</span></span></code></pre></div>
+<hr />
+<h2 id="附录-a-常用公式与引用速查">附录 A 常用公式与引用速查</h2>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>公式/要素</th>
+<th>文献</th>
+<th>本项目对照</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>四元数微分</td>
+<td><code>q̇ = ½ q⊗[0,ω_b]</code></td>
+<td>REF-120 §9.2 p.267–270</td>
+<td><code>QuaternionMath.h</code>、<code>math.mjs</code></td>
+</tr>
+<tr>
+<td>等效旋转矢量</td>
+<td><code>Exp(φ)</code>，圆锥补偿 <code>2/3·Δθ₁×Δθ₂</code></td>
+<td>REF-120 §9.3 (9.3.30) p.274</td>
+<td><code>ekf_15_state.h</code></td>
+</tr>
+<tr>
+<td>姿态阵/欧拉角</td>
+<td>3-2-1；<code>theta = -asin(R13)</code></td>
+<td>MOD-002 §3</td>
+<td><code>math.mjs:eulerFromQuat</code></td>
+</tr>
+<tr>
+<td>比力方程</td>
+<td><code>V̇^n = C^n_b f^b − (2ω_ie+ω_en)×V^n + g^n</code></td>
+<td>REF-120 §7.4 (7.4.6) p.189</td>
+<td><code>ekf_15_state.h</code>、<code>dynamics.mjs</code></td>
+</tr>
+<tr>
+<td>速度更新</td>
+<td><code>V_m^n = V_{m−1}^n + C^n_b(m−1)ΔV_sf + ΔV_g/cor</code></td>
+<td>REF-120 §9.6 (9.6.9) p.298</td>
+<td><code>PropagateStateFromIncrements()</code></td>
+</tr>
+<tr>
+<td>旋转效应</td>
+<td><code>ΔV_rot = ½Δθ×ΔV</code></td>
+<td>REF-120 §9.6 (9.6.17) p.298</td>
+<td>同上（已修重复计入）</td>
+</tr>
+<tr>
+<td>划摇补偿</td>
+<td><code>ΔV_scull = (2/3)(Δθ₁×ΔV₂ + ΔV₁×Δθ₂)</code></td>
+<td>REF-120 §9.6 (9.6.25) p.301</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>位置速率</td>
+<td><code>L̇=V_N/(R_m+h)</code>、<code>λ̇=V_E/((R_n+h)cosL)</code>、<code>ḣ=−V_D</code></td>
+<td>REF-120 §7.2/§8.1</td>
+<td><code>ComputeLlaRateFromTerms()</code></td>
+</tr>
+<tr>
+<td>正常重力</td>
+<td>Somigliana <code>(7.2.17)</code>、高度修正
+<code>(7.2.18)</code></td>
+<td>REF-120 §7.2.4 p.178</td>
+<td><code>ComputeEarthModelTerms()</code></td>
+</tr>
+<tr>
+<td>KF 五方程</td>
+<td>(2.2.4a–e)</td>
+<td>REF-121 §2.2.1 p.33–34</td>
+<td><code>ekf_15_state.h</code> 预测/更新</td>
+</tr>
+<tr>
+<td>Joseph 形式</td>
+<td><code>P=(I−KH)P⁻(I−KH)^T+KRK^T</code></td>
+<td>REF-121 §2.2.4 p.42–43</td>
+<td>GNSS/气压更新</td>
+</tr>
+<tr>
+<td>NIS 门控</td>
+<td><code>r^T S⁻¹ r ~ χ²(m)</code></td>
+<td>REF-121 §7.3.1 p.255–259</td>
+<td><code>ekf_15_state.h</code> 更新入口</td>
+</tr>
+<tr>
+<td>差速分配</td>
+<td><code>ω_f=ω₀√(1+Δω)</code>、<code>ω_t=ω₀√(1−Δω)</code></td>
+<td>CTL-001 §5</td>
+<td><code>propulsion.mjs</code>、<code>TandemVec_Propulsion.h</code></td>
+</tr>
+<tr>
+<td>推力/反扭</td>
+<td><code>T=k_Tω²</code>、<code>Q=k_Qω²+J_pω̇</code></td>
+<td>THY-002 §2–3</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>气动</td>
+<td><code>q̄=½ρV²</code>、<code>L=q̄SC_L(α)</code>、阻尼/侧滑项</td>
+<td>MOD-001 §3</td>
+<td><code>aerodynamics.mjs</code></td>
+</tr>
+<tr>
+<td>控制分配</td>
+<td><code>u = B⁺τ</code>（加权伪逆/增量分配）</td>
+<td>THY-003 §3–4、CTL-001 §5</td>
+<td><code>control-allocation.mjs</code>、<code>TandemVec_ControlAllocation.h</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>本表为速查，不替代逐函数注释；页码以 REF-120/121 印刷页为准。</p>
+</blockquote>
+<h2 id="附录-b-术语对照">附录 B 术语对照</h2>
+<table>
+<thead>
+<tr>
+<th>中文</th>
+<th>英文/符号</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>捷联惯导</td>
+<td>SINS</td>
+<td>陀螺/加计固连机体</td>
+</tr>
+<tr>
+<td>误差状态卡尔曼滤波</td>
+<td>ESKF</td>
+<td>15 状态：位置/速度/失准角/加计零偏/陀螺零偏</td>
+</tr>
+<tr>
+<td>新息</td>
+<td>innovation <code>r = z − Hx̂</code></td>
+<td>量测残差</td>
+</tr>
+<tr>
+<td>归一化新息平方</td>
+<td>NIS</td>
+<td>门控统计量</td>
+</tr>
+<tr>
+<td>零速修正</td>
+<td>ZUPT</td>
+<td>静止检测辅助</td>
+</tr>
+<tr>
+<td>增稳系统</td>
+<td>SAS</td>
+<td>角速率/姿态反馈</td>
+</tr>
+<tr>
+<td>增量非线性动态逆</td>
+<td>INDI</td>
+<td>基于角加速度反馈</td>
+</tr>
+<tr>
+<td>自抗扰控制</td>
+<td>ADRC</td>
+<td>扩张状态观测器</td>
+</tr>
+<tr>
+<td>模型预测控制</td>
+<td>MPC</td>
+<td>滚动优化</td>
+</tr>
+<tr>
+<td>上摆/下摆</td>
+<td>δf/δt</td>
+<td>悬停构型：上摆=滚转主控、下摆=俯仰主控</td>
+</tr>
+<tr>
+<td>差速</td>
+<td>Δω</td>
+<td>偏航主控</td>
+</tr>
+<tr>
+<td>悬停构型</td>
+<td>hover</td>
+<td>机头朝天，前电机在最高点</td>
+</tr>
+<tr>
+<td>巡航构型</td>
+<td>cruise</td>
+<td>机头朝前，前电机在前</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="修订记录">修订记录</h2>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>日期</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>2026-10-23</td>
+<td>首版：三层注释模型、理论对照五段式、单位/坐标系约定、机检规则
+R01–R10</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-004-代码注释与理论对照规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

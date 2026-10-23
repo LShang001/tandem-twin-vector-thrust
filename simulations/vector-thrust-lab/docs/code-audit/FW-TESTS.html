@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FW-TESTS 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录--fw-tests固件宿主回归测试">代码理论核查记录 —
+fw-tests（固件宿主回归测试）</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：fw-tests（注释与理论核对 Agent）｜
+规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：工作区（HEAD +
+各区域未提交改动；<code>TandemVec_FCS/test_host/**</code> 内 40
+个已跟踪文件被修改，35 个未跟踪文件属既有新增测试与
+<code>fw_sil/</code>）
+理论来源：REF-120（捷联惯导）、REF-121（卡尔曼滤波）、MOD-002（坐标系与符号）、
+CTL-001（控制架构与
+SAS）、CTL-002（可控性与失效模式）、THY-002/003（推力/分配）、
+PROTOCOL-001（AnoCom）、COMM-001（数传链路）、<code>TandemVec_FCS/AGENTS.md</code>
+踩坑记录 方法：逐文件读代码 → 对照被测符号与公式 → 补 L0/L1/L2
+注释（不改行为）→ <code>check-code-comments.py</code> 复检 → g++/node/py
+语法与编译验证 → 汇总矩阵与缺口</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<p>本区域由 <code>tools/check-code-comments.py::AREAS["fw-tests"]</code>
+定义，范围为 <code>TandemVec_FCS/test_host/**</code> 内的
+<code>.cpp/.h/.js/.py</code>（<code>bin/</code> 产物与 <code>*.sh</code>
+不在检查范围）。</p>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>文件数</th>
+<th>行数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C++ 回归测试/研究工具</td>
+<td>48</td>
+<td>10072</td>
+<td><code>test_*.cpp</code>、<code>dps310_fifo_policy_test.cpp</code>、<code>task_scheduler_interval_test.cpp</code>、<code>optimizer_runner.cpp</code></td>
+</tr>
+<tr>
+<td>测试基础设施头</td>
+<td>1</td>
+<td>269</td>
+<td><code>mpc_emb.h</code>（被测原型头，非桩）</td>
+</tr>
+<tr>
+<td>SIL 入口/链接桩</td>
+<td>3</td>
+<td>673</td>
+<td><code>fw_sil_main.cpp</code>、<code>fw_sil_env_main.cpp</code>、<code>fw_sil_stubs.cpp</code></td>
+</tr>
+<tr>
+<td>SIL 桩头</td>
+<td>5</td>
+<td>443</td>
+<td><code>fw_sil/stub/{Arduino,SPI,Stream,Wire,ubx}.h</code></td>
+</tr>
+<tr>
+<td>测试桩头</td>
+<td>2</td>
+<td>100</td>
+<td><code>stub/{Arduino,WS2812Driver}.h</code></td>
+</tr>
+<tr>
+<td>JS 工具链测试</td>
+<td>2</td>
+<td>171</td>
+<td><code>dps_profile_{parser,runner}_test.js</code></td>
+</tr>
+<tr>
+<td>Python MC 驱动</td>
+<td>4</td>
+<td>644</td>
+<td><code>run_*_mc.py</code>（无断言，产出 CSV/JSON）</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td><strong>65</strong></td>
+<td><strong>12372</strong></td>
+<td>本轮新增注释约 1100 行</td>
+</tr>
+</tbody>
+</table>
+<p>L0 覆盖与引用：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>核查前</th>
+<th>核查后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L0
+文件头（<code>@file/@module/@brief/@details/@theory/@frame/@units</code>）</td>
+<td>0 / 65（4 个 py 有残缺口）</td>
+<td>65 / 65</td>
+</tr>
+<tr>
+<td><code>@ref</code> 引用（章节/式号/页码格式）</td>
+<td>0 处</td>
+<td>84 处</td>
+</tr>
+<tr>
+<td><code>@test</code> 用例索引（文件头汇总用例编号）</td>
+<td>0 处</td>
+<td>49 处</td>
+</tr>
+<tr>
+<td>lint error / warning</td>
+<td>65 / 13</td>
+<td>0 / 0</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>注：<code>@ref</code> 页码一律按 VALID
+记录；无法确认页码处只写章节（符合 GOV-004 §6.2 第 2 条）。
+本区域<strong>没有</strong>理论关键文件（<code>THEORY_GLOBS</code> 不含
+<code>test_host/</code>），R07 不适用。</p>
+</blockquote>
+<hr />
+<h2 id="2-核对矩阵">2 核对矩阵</h2>
+<p>断言强度定义：</p>
+<ul>
+<li><strong>强</strong>：与解析解、理论值或不变量对比，容差有量级依据；实现写错会失败。</li>
+<li><strong>中</strong>：只验证方向、单调性、收敛、门控或边界行为，无绝对参考值。</li>
+<li><strong>弱</strong>：无断言（只打印/基准/产出数据），失败需人读表或由外部脚本判定。</li>
+</ul>
+<h3 id="21-导航纯函数静止辅助与传感器数学">2.1
+导航纯函数、静止辅助与传感器数学</h3>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>被测符号/模块</th>
+<th>理论性质</th>
+<th>强度</th>
+<th>缺口/建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_gnss_dynamic_weight.cpp</code></td>
+<td><code>ins_gnss_dynamic_weight.h</code>：配置校验、<code>Icm45686ComputeGnssStd</code>
+类纯函数</td>
+<td>GNSS 量测噪声阵 R 的 floor/cap/pDOP 缩放与 fix
+门控（工程整定，非教材式）</td>
+<td>强</td>
+<td>未覆盖多星座/fix 抖动；R 地板与实机接受率的关系仍靠报告证据</td>
+</tr>
+<tr>
+<td><code>test_static_aid_profile.cpp</code></td>
+<td><code>ins_static_aid_profile.h</code> 全部 constexpr 函数</td>
+<td>静止辅助周期 GCD/相位碰撞、强度三档调度、ZUPT
+噪声自适应分段、外部参照门控</td>
+<td>强</td>
+<td>只验证纯函数；<code>navigation_task.cpp</code>
+中实际相位是否错开无回归</td>
+</tr>
+<tr>
+<td><code>test_static_detector.cpp</code></td>
+<td><code>ins_static_detector.h</code>：<code>Icm45686StaticDetectorUpdate</code></td>
+<td>迟滞状态机、置信度爬升、NaN 防御与可恢复性</td>
+<td>中</td>
+<td>真实振动/机动误判场景未覆盖（伪静止是历史事故点）</td>
+</tr>
+<tr>
+<td><code>test_altitude_reference.cpp</code></td>
+<td><code>ins_altitude_reference.h</code> 四个换算函数</td>
+<td>NED 向下 → 控制向上、相对气压高度叠加起飞点、GNSS
+重锚保持相对高度</td>
+<td>强</td>
+<td>未覆盖 GNSS 高度跳变/重锚瞬间的连续性</td>
+</tr>
+<tr>
+<td><code>test_gnss_epoch_timing.cpp</code></td>
+<td><code>ins_gnss_epoch_timing.h</code>：消费门控、重锚判据、iTOW→本地时间、micros
+回绕</td>
+<td>GNSS 量测时标与年龄（REF-121 §2.2.1）</td>
+<td>强</td>
+<td>硬件微秒计数器漂移与 PPS 对齐未覆盖</td>
+</tr>
+<tr>
+<td><code>test_gnss_pps_latency.cpp</code></td>
+<td><code>ins_gnss_pps_latency.h</code>：<code>InsGnssEstimatePpsLatency</code></td>
+<td>PPS 边沿与 PVT 到达差的中位数即链路延时；离散度给 σ</td>
+<td>强</td>
+<td>硬件 PPS 捕获尚未接入固件，纯算法层证据</td>
+</tr>
+<tr>
+<td><code>test_gnss_delay_auto.cpp</code></td>
+<td><code>ins_gnss_delay_auto.h</code> 在线延时估计器</td>
+<td>机动段曲率使 τ 可观测；野值剔除、失锁拒绝</td>
+<td>中</td>
+<td>理想 GNSS 噪声；多径/失锁抖动未覆盖</td>
+</tr>
+<tr>
+<td><code>test_ins_vibration_adaptive.cpp</code></td>
+<td><code>ins_vibration_adaptive.h</code>：<code>InsVibrationEstimator</code></td>
+<td>0.5 Hz 高通 + 0.5 s RMS 分离振动与真实加速度</td>
+<td>中</td>
+<td>只测 20 Hz 单频；扫频证据在 MC 侧</td>
+</tr>
+<tr>
+<td><code>test_bias_temp_observer.cpp</code></td>
+<td><code>ins_bias_temp_observer.h</code></td>
+<td>线性温漂斜率可辨 + 温度跨度门控</td>
+<td>强</td>
+<td>温度滞后/安装热梯度未覆盖</td>
+</tr>
+<tr>
+<td><code>test_bias_temp_table.cpp</code></td>
+<td><code>ins_bias_temp_table.h</code></td>
+<td>两点线性插值解析值</td>
+<td>强</td>
+<td>越界外推行为未断言（由调用点保证）</td>
+</tr>
+<tr>
+<td><code>test_bias_temp_pipeline.cpp</code></td>
+<td>观测器 + 温度表联合</td>
+<td>同一线性模型下两条链路斜率一致</td>
+<td>强</td>
+<td>表采样窗口与在线窗口不同，容差已放宽到 5e-4</td>
+</tr>
+<tr>
+<td><code>test_bias_jump_monitor.cpp</code></td>
+<td><code>ins_bias_jump_monitor.h</code></td>
+<td>静置不误报 + 缓漂可检出</td>
+<td>中</td>
+<td>阶跃幅度谱/持续时间谱未覆盖</td>
+</tr>
+<tr>
+<td><code>test_rc_curve.cpp</code></td>
+<td><code>RcCurve.h</code>：<code>rcNormFromUs</code>/<code>rcRateCurve</code></td>
+<td>Betaflight 三参数曲线：expo 中心压低、super 边缘双曲、rc_rate
+线性缩放</td>
+<td>强</td>
+<td>实机手感与通道映射未覆盖（属调参范畴）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-ekf-15-状态与辅助测速">2.2 EKF 15 状态与辅助测速</h3>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>被测符号/模块</th>
+<th>理论性质</th>
+<th>强度</th>
+<th>缺口/建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_ekf_15state.cpp</code></td>
+<td><code>ekf_15_state.h</code>：<code>Initialize</code>/<code>TimeUpdate</code>/<code>TimeUpdateTwoSample</code>/<code>MeasurementUpdate*Detailed</code>/协方差接口</td>
+<td>KF 五方程（REF-121 §2.2.1 p.33）、Joseph 形式（§2.2.4
+p.42）、速度增量与旋转效应（REF-120 §9.6.1 p.298）、NIS 门控（REF-121
+§7.3.1 p.255）、3+3 子集回退与软重锚</td>
+<td>强</td>
+<td>T8/T9–T11 用 <code>set_covariance_for_test</code>
+注入协方差，覆盖算法分支而非真实协方差演化；实机噪声谱/多径未覆盖</td>
+</tr>
+<tr>
+<td><code>test_ekf_aiding_velocity.cpp</code></td>
+<td><code>MeasurementUpdateAidingVelocityDetailed</code>/<code>ResetVelocityToExternal</code>/ZUPT
+路径</td>
+<td>aiding 更新豁免零速守卫、30 m/s 残差门、失锁重锚（REF-121 §8.2.3
+p.291）</td>
+<td>强</td>
+<td>实机光流尺度/延迟未覆盖（<code>fw_sil --flow</code>
+有实现但无断言）</td>
+</tr>
+<tr>
+<td><code>test_vertical_kf.cpp</code></td>
+<td><code>VerticalKF.h</code> 三状态 KF</td>
+<td>预测/更新、3σ 门限、输入饱和、Joseph 协方差、P 上限</td>
+<td>强</td>
+<td>气压计真实噪声谱与更新率耦合未覆盖</td>
+</tr>
+<tr>
+<td><code>test_ekf_delay_highspeed.cpp</code></td>
+<td><code>MeasurementUpdateDetailed(..., age)</code> 回放融合</td>
+<td>高速时延补偿（30 m/s × 50 ms ≈ 1.5 m 偏差量与 GNSS 噪声同量级）</td>
+<td>强</td>
+<td>匀速直线、无振动；实机需 PPS 标定实际延迟</td>
+</tr>
+<tr>
+<td><code>test_ekf_delay_mmae.cpp</code></td>
+<td>11 候选 age 的 MMAE 原型</td>
+<td>新息统计量作假设似然（NIS ~ χ²(m)）</td>
+<td>弱</td>
+<td>研究原型，无断言；匀速段不可观测属理论预期</td>
+</tr>
+<tr>
+<td><code>test_ekf_highspeed_realistic.cpp</code></td>
+<td>EKF + 振动自适应 Q + 延时自动估计的仿真台</td>
+<td>标称传感器噪声下的闭环误差指标</td>
+<td>弱</td>
+<td>参数为 1-based 顺序映射，错位会静默改语义（AGENTS
+已登记）；无断言，由 MC 驱动消费</td>
+</tr>
+<tr>
+<td><code>test_ekf_bias_static.cpp</code></td>
+<td>零偏状态 + static gyro/gravity/ZUPT 组合</td>
+<td>静止窗口是零偏唯一强观测段；误检静止会污染零偏</td>
+<td>弱</td>
+<td>仅打印，无断言；建议加“真值误差带”门限</td>
+</tr>
+<tr>
+<td><code>test_gnss_delay_batch.cpp</code></td>
+<td>本文件 <code>fitResidual()</code> 原型</td>
+<td>批处理对齐：固定 τ 时对 (p0,v0,b_a) 线性；仅机动段可观测</td>
+<td>中</td>
+<td>本体只打印误差，判定在 Python 驱动侧</td>
+</tr>
+<tr>
+<td><code>test_gnss_delay_batch_vel.cpp</code></td>
+<td><code>fitVelocity()</code> 原型</td>
+<td>速度通道信噪比高于位置通道（0.05 m/s vs 1.5 m）</td>
+<td>中</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>test_gnss_delay_batch_ekf.cpp</code></td>
+<td>EKF 零偏估计 + 批处理</td>
+<td>延时与零偏强耦合，需先估零偏</td>
+<td>中</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-控制分配与执行器">2.3 控制、分配与执行器</h3>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>被测符号/模块</th>
+<th>理论性质</th>
+<th>强度</th>
+<th>缺口/建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_tandemvec_allocation.cpp</code></td>
+<td><code>TandemVec_ControlAllocation.h</code>（<code>allocateMoments</code>/<code>allocateDifferential</code>）、<code>TandemVec_Propulsion.h</code>、<code>AirframeModel.h</code></td>
+<td>u=B⁺τ 与对角分配、差速开方分配平方和不变（CTL-001
+§7）、推力/反扭（THY-002 §2–3）、往返一致、数据驱动 B 等价</td>
+<td>强</td>
+<td>策略切换连续性只在同一输入下比较（无时间维）；τ₀
+交叉项只取少数工作点</td>
+</tr>
+<tr>
+<td><code>test_flight_control_axis.cpp</code></td>
+<td><code>flight_control.cpp</code> 姿态环（按同一控制律重建）+
+<code>kFlightCtrlParams</code> + <code>computeWrench</code></td>
+<td>SAS/姿态环（CTL-001 §4）、轴映射（AGENTS
+踩坑记录）、四元数右乘误差（MOD-002 §3）、R13 垂直投影、6DOF 悬停</td>
+<td>强</td>
+<td><strong>直连轴序 ≠ 实机 mix 层置换</strong>（README
+已声明）；无气动/风</td>
+</tr>
+<tr>
+<td><code>test_position_pid.cpp</code></td>
+<td><code>PositionPID.h</code></td>
+<td>PID 五特性：积分分离、积分钳位、反算抗饱和、无扰切换、2-DOF
+加权</td>
+<td>强</td>
+<td>变步长/dt 抖动未覆盖</td>
+</tr>
+<tr>
+<td><code>test_inertia_decoupling.cpp</code></td>
+<td><code>InertiaDecoupling.h</code></td>
+<td>ω×(Iω) 与 ω×h 前馈、掩码开关、闭环收益</td>
+<td>强</td>
+<td>闭环收益是理想刚体，未含 τm 滞后</td>
+</tr>
+<tr>
+<td><code>test_airframe_generic.cpp</code></td>
+<td><code>AirframeModel.h</code>（几何表、数值
+Jacobian、<code>computeWrenchGeneric</code>）</td>
+<td>换机型只填几何数据；B 由数值差分生成；伪逆往返</td>
+<td>强</td>
+<td>只验证四旋翼 demo；本机 B 等价由 allocation 测试覆盖</td>
+</tr>
+<tr>
+<td><code>test_control_units.cpp</code></td>
+<td><code>ControlUnits.h</code> + <code>kFlightCtrlParams</code></td>
+<td>速率环量纲迁移（deg/s→deg/s²）前后物理输出等价（AGENTS 记录）</td>
+<td>强</td>
+<td><code>kd</code> 非零时的迁移未覆盖（当前 kd=0）</td>
+</tr>
+<tr>
+<td><code>test_online_id.cpp</code></td>
+<td><code>TandemVec_OnlineID.h</code>（RLS + 增益调度）</td>
+<td>惯量比可辨识性、零激励不更新、约束边界</td>
+<td>中</td>
+<td>激励只有 15° 阶跃；正弦/噪声激励未覆盖</td>
+</tr>
+<tr>
+<td><code>test_actuator_fault_monitor.cpp</code></td>
+<td><code>ActuatorFaultMonitor.h</code></td>
+<td>舵机卡死/单发推力损失的“误差+饱和+持续时间”判据与优先级（CTL-002
+§3）</td>
+<td>中</td>
+<td>真实舵机电流/堵转特征未覆盖；F4 属硬件单点（只能检测+有界下降）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-通信注册表灯效调度气压计">2.4
+通信、注册表、灯效、调度、气压计</h3>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>被测符号/模块</th>
+<th>理论性质</th>
+<th>强度</th>
+<th>缺口/建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_anocom_packing.cpp</code></td>
+<td><code>AnoComProtocol</code>：buildFrame/sendData/beginGroup/endGroup/高层
+sendXxx</td>
+<td>帧格式与双校验（PROTOCOL-001 §3）、长度保护、组模式单次
+write（COMM-001）</td>
+<td>强</td>
+<td>组缓冲恰好 256B 的 flush 边界未全覆盖；<code>handleAnoCom</code>
+双环频率分档无回归</td>
+</tr>
+<tr>
+<td><code>test_ano_vars.cpp</code></td>
+<td><code>AnoVars.h</code> 注册表契约</td>
+<td>类型→float 序列化、9 字符截断、watch 集合语义（PROTOCOL-001 §4 的
+0xF2/0xF3）</td>
+<td>强</td>
+<td>MAVLink 名称截断唯一性由固件侧保证，无宿主测试</td>
+</tr>
+<tr>
+<td><code>test_led_status.cpp</code></td>
+<td><code>Ws2812AppStatus.h</code></td>
+<td>上电自检序列、13 状态配色/节奏、故障覆盖、每拍渲染</td>
+<td>中</td>
+<td>真实灯带时序/颜色顺序未覆盖（mock 只记录像素）</td>
+</tr>
+<tr>
+<td><code>task_scheduler_interval_test.cpp</code></td>
+<td><code>task_scheduler_interval.h</code></td>
+<td>小数分频（Bresenham 误差累加）、平均间隔=请求值、亚 tick 钳位</td>
+<td>强</td>
+<td>真实 tick 抖动与优先级抢占未覆盖</td>
+</tr>
+<tr>
+<td><code>dps310_fifo_policy_test.cpp</code></td>
+<td><code>Dps310FifoPolicy.h</code></td>
+<td>FIFO 取数策略：温压配对、读取上限、停采、可恢复错误才 flush</td>
+<td>强</td>
+<td>真实 SPI 时序与 FIFO 溢出行为未覆盖</td>
+</tr>
+<tr>
+<td><code>test_mag_parse.cpp</code></td>
+<td><code>MagMath.h</code> + <code>tilt_compass.h</code></td>
+<td>灵敏度换算、小端补码、芯片系→FRD、北半球 z 分量为正的物理判据</td>
+<td>强</td>
+<td>备份磁力计/第二芯片路径未覆盖</td>
+</tr>
+<tr>
+<td><code>test_mag_cal.cpp</code></td>
+<td><code>MagCalMath.h</code></td>
+<td>椭球拟合（硬铁/软铁）、Jacobi 特征分解、质量门与拒绝路径</td>
+<td>强</td>
+<td>实机电机电流磁干扰未覆盖</td>
+</tr>
+<tr>
+<td><code>test_mag_guide.cpp</code></td>
+<td><code>MagCalGuide.h</code></td>
+<td>两圈引导的状态机、姿态/转速门、扇区跨 ±π</td>
+<td>中</td>
+<td>实机姿态源噪声与操作者节奏未覆盖</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-研究型仿真与工具非回归闸门">2.5
+研究型仿真与工具（非回归闸门）</h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>被测/用途</th>
+<th>性质</th>
+<th>强度</th>
+<th>缺口/建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_comprehensive_sim.cpp</code></td>
+<td>单轴闭环增益扫描 + 模型偏差</td>
+<td>执行器权限主导响应；物理逆解对惯量偏差鲁棒</td>
+<td>中</td>
+<td>研究输出为主；结论不外推实机包线</td>
+</tr>
+<tr>
+<td><code>test_qual_analysis.cpp</code></td>
+<td>增益定性分析（Q1–Q5）</td>
+<td>关键增益识别、α_max 瓶颈、积分阈值</td>
+<td>中</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>test_robustness.cpp</code></td>
+<td>大机动 + MC 参数扰动（R1–R4）</td>
+<td>大角度可收敛、参数扰动有界</td>
+<td>中</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>test_advanced_theory.cpp</code></td>
+<td>Lyapunov/ADRC/辨识（L1–L3、B1–B7）</td>
+<td>二次型单调下降、ESO 扰动估计与抵消、二阶辨识</td>
+<td>中</td>
+<td>名义参数理论分析，非实机结论</td>
+</tr>
+<tr>
+<td><code>test_optimal_gains.cpp</code></td>
+<td>二阶系统解析最优增益</td>
+<td>ωn²=Kp_r·Kp_a、2ζωn=Kp_r</td>
+<td>弱</td>
+<td>无断言（研究输出），不在 run_all 内</td>
+</tr>
+<tr>
+<td><code>test_integrator_compare.cpp</code> /
+<code>test_integrator_sweep.cpp</code></td>
+<td>外环/内环积分对比与 Ki 扫描</td>
+<td>积分位置对扰动抑制与超调的权衡</td>
+<td>弱</td>
+<td>无断言；评分权重是自定工程准则</td>
+</tr>
+<tr>
+<td><code>test_mpc_emb.cpp</code></td>
+<td><code>mpc_emb.h</code> 求解器</td>
+<td>滚动优化 + 框约束投影；单拍耗时预算</td>
+<td>弱</td>
+<td>基准型，未接入固件控制链</td>
+</tr>
+<tr>
+<td><code>optimizer_runner.cpp</code></td>
+<td>Python 优化器的目标函数</td>
+<td>单轴闭环代价/峰值/调节时间</td>
+<td>弱</td>
+<td>输出格式被 Python 正则依赖；无断言</td>
+</tr>
+<tr>
+<td><code>dps_profile_parser_test.js</code></td>
+<td><code>tools/dps_profile_parser.js</code></td>
+<td>日志窗口聚合与字段提取</td>
+<td>强</td>
+<td>需 node，未纳入 <code>run_all.sh</code></td>
+</tr>
+<tr>
+<td><code>dps_profile_runner_test.js</code></td>
+<td><code>tools/dps_profile_runner.js</code></td>
+<td>label 清洗、参数解析、platformio 配置注入</td>
+<td>强</td>
+<td>同上；含“不得出现的宏”负断言</td>
+</tr>
+<tr>
+<td><code>fw_sil_main.cpp</code></td>
+<td>真实固件控制链 + 单刚体 plant</td>
+<td>定高/手动阶跃闭环</td>
+<td>弱</td>
+<td>只打印，无断言；README 的 10.00 m 结论未自动判定</td>
+</tr>
+<tr>
+<td><code>fw_sil_env_main.cpp</code></td>
+<td>真实固件 + 6DOF + 传感器/风/故障注入</td>
+<td>定高（直注/EKF）、手动、故障、光流</td>
+<td>弱</td>
+<td>只打印；多 seed 稳定性靠 <code>run_matrix.sh</code></td>
+</tr>
+<tr>
+<td><code>run_delay_closed_loop_mc.py</code></td>
+<td>延时补偿 MC 驱动</td>
+<td>延时估计收敛与改善量</td>
+<td>弱</td>
+<td>无断言；<code>--bin</code> 默认写死 Windows 临时路径</td>
+</tr>
+<tr>
+<td><code>run_gnss_delay_large_mc.py</code></td>
+<td>延时批处理大规模 MC</td>
+<td>τ 估计误差分布</td>
+<td>弱</td>
+<td>门限（20 ms 通过率）在报告侧，不在脚本内</td>
+</tr>
+<tr>
+<td><code>run_vibration_adaptive_mc.py</code></td>
+<td>振动自适应 Q 配对 MC</td>
+<td>固定 Q vs 自适应 Q</td>
+<td>弱</td>
+<td>无断言；需成对跑才有统计意义</td>
+</tr>
+<tr>
+<td><code>run_vibration_policy_mc.py</code></td>
+<td>策略 C 大规模 MC</td>
+<td>不超过 5% 成对退化</td>
+<td>弱</td>
+<td>同上；CSV 字段与历史数据兼容</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-测试基础设施替身不对应理论">2.6
+测试基础设施（替身，不对应理论）</h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+<th>与真实硬件/上游差异</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stub/Arduino.h</code></td>
+<td>让依赖 <code>Arduino.h</code> 的头文件在宿主机编译</td>
+<td>无时间基准、无引脚 I/O、无 Serial</td>
+</tr>
+<tr>
+<td><code>stub/WS2812Driver.h</code></td>
+<td>记录最近像素与 show 次数</td>
+<td>无 BSRR/DMA 时序、无颜色顺序换算</td>
+</tr>
+<tr>
+<td><code>fw_sil/stub/Arduino.h</code></td>
+<td>SIL 用的更大替身（引脚宏/类型/空实现）</td>
+<td>不模拟外设行为，SIL 自己注入状态</td>
+</tr>
+<tr>
+<td><code>fw_sil/stub/{SPI,Wire,ubx}.h</code></td>
+<td>外设/驱动空实现</td>
+<td>无时序、无总线错误、恒“在线”</td>
+</tr>
+<tr>
+<td><code>fw_sil/fw_sil_stubs.cpp</code></td>
+<td>补齐链接所需符号</td>
+<td>传感器/日志类构造函数为空，<code>Crc8::calc</code> 恒 0</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-覆盖边界仿真口径-vs-实机">3 覆盖边界（仿真口径 vs 实机）</h2>
+<ol type="1">
+<li><strong>全部为宿主/离线口径</strong>：没有任何测试接触真实
+IMU/GNSS/气压计/舵机/电机，
+传感器输入均为合成或注入；<code>fw_sil/</code> 是真实固件源码 + 理想
+plant，仍不是 <code>pio run</code> 二进制、不是
+QEMU/Renode、不是实机。</li>
+<li><strong>执行器与气动</strong>：plant
+侧只有一阶电机滞后与推力/反扭，无桨叶气动、无风扰模型
+（<code>fw_sil_env_main</code> 的侧风以等效 NED 力注入）；舵机在 SIL
+中另加 300°/s 速率限幅与 0.1% PWM
+量化，但与真实舵机的死区/回差/温度漂移不同。</li>
+<li><strong>传感器误差模型</strong>：ICM-42688/UBX PVT
+用型号标称量级，不是实机标定值； 无振动谱形状、无磁干扰、无 GNSS
+多径、无杆臂安装误差（杆臂只在仿真里显式参数化）。</li>
+<li><strong>轴序</strong>：<code>test_flight_control_axis.cpp</code>
+是<strong>直连轴序</strong>，与实机 <code>mix</code> 层的
+存档系→模型系置换不同构；该差异已在 README
+与文件头显式声明，专项核对前不引入置换。</li>
+<li><strong>时标</strong>：GNSS 延时用编译常量或合成延时，真实链路延迟需
+PPS 标定； <code>ins_gnss_pps_latency.h</code> 的硬件捕获尚未接入。</li>
+<li><strong>通信</strong>：只验证打包/校验/组模式与变量注册表；<code>handleAnoCom</code>
+的双环频率分档 （COMM-001）、MAVLink 互斥切换、0xF2/0xF3
+实机时序均无宿主回归。</li>
+<li><strong>参数来源</strong>：控制增益读
+<code>kFlightCtrlParams</code>（唯一事实源），但测试内仍有
+局部常数（惯量、kT/kQ 取自
+<code>TandemVec_Config.h</code>）；<code>models/aircraft-model.json</code>
+的仿真参数不在本区域验证。</li>
+</ol>
+<hr />
+<h2 id="4-发现清单">4 发现清单</h2>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1</td>
+<td><code>test_ekf_bias_static.cpp</code>、<code>test_ekf_delay_mmae.cpp</code>、<code>test_ekf_highspeed_realistic.cpp</code>、<code>fw_sil_main.cpp</code>、<code>fw_sil_env_main.cpp</code></td>
+<td>print-only / 无断言，回归价值依赖人读表或外部脚本</td>
+<td>这些链路“跑得过”不等于“没退化”</td>
+<td>为关键指标建立 golden 基线（如定高 10.00 m ±0.05、延时估计误差 ≤20
+ms）并加断言</td>
+</tr>
+<tr>
+<td>P1</td>
+<td><code>test_gnss_delay_batch*.cpp</code> 与
+<code>run_gnss_delay_large_mc.py</code>、<code>run_vibration_*_mc.py</code></td>
+<td>判定门限在报告/脚本侧，测试本体只产出数据</td>
+<td>“通过率”结论不可由单一命令复现</td>
+<td>把门限写进脚本并输出退出码</td>
+</tr>
+<tr>
+<td>P1</td>
+<td><code>test_ekf_15state.cpp</code> 的 T8/T9–T11</td>
+<td>依赖 <code>set_covariance_for_test</code> 等仅供宿主的注入接口</td>
+<td>覆盖算法分支，不等于真实协方差演化下的行为</td>
+<td>补一条“自然演化 + 注入故障”的端到端用例</td>
+</tr>
+<tr>
+<td>P1</td>
+<td><code>test_flight_control_axis.cpp</code></td>
+<td>直连轴序与实机 mix 置换无对照测试</td>
+<td>轴映射回归只能靠实机打杆</td>
+<td>专项核对后增加“置换层”单测（需先统一
+README/flight_control/state_data 三处注释）</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>构建环境</td>
+<td>中文仓库路径下 g++ 写二进制失败（MSYS 路径转换）</td>
+<td>CI/新机器直接按 README 命令会失败</td>
+<td>保持 <code>BIN_DIR</code>/<code>-o</code> 指向 ASCII 目录，并在
+README 写明</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>test_host/README.md</code> 的“断言数”表</td>
+<td>数字未自动化，改动后易漂移</td>
+<td>文档与实测不一致</td>
+<td>由 <code>run_all.sh</code> 输出实际 PASS 数并与 README 对账</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>dps_profile_*_test.js</code></td>
+<td>需 node，未纳入 <code>run_all.sh</code></td>
+<td>工具链回归靠人工执行</td>
+<td>在 <code>run_all.sh</code> 末尾加可选 node 段（缺 node
+时跳过并告警）</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>dps310_fifo_policy_test.cpp</code> 的
+<code>MockFifo</code></td>
+<td>只按脚本给样本，不模拟真实 FIFO 满/溢出</td>
+<td>硬件错误恢复未被证明</td>
+<td>补“溢出后恢复”用例</td>
+</tr>
+<tr>
+<td>P2</td>
+<td><code>CTL-001 §9 测试覆盖指针</code></td>
+<td>只指向 <code>simulations/</code> 的 mjs 测试</td>
+<td>固件侧测试与规范文档未互链</td>
+<td>在 CTL-001 §9 增加本区域测试指针（或交叉引用本文件）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-已知失败与环境依赖">5 已知失败与环境依赖</h2>
+<ol type="1">
+<li><strong>EKF
+大回归基线失败（既有）</strong>：<code>TandemVec_FCS/test/ekf_host_regression.cpp</code>
+的 project 场景在 HEAD 基线即挂 3743 个断言，与本轮注释改动无关，未纳入
+<code>run_all.sh</code>； 待单独定位（见
+<code>TandemVec_FCS/AGENTS.md</code> 2026-08-21 条）。</li>
+<li><strong>EKF 头文件注释破坏编译（本轮已修复）</strong>：2026-10-23
+22:14 前后 <code>lib/navigation-main/src/ekf_15_state.h</code> 的
+Doxygen 块中出现 <code>subset_*/NIS</code>， <code>*/</code>
+提前闭合注释导致所有包含它的 EKF 测试编译失败；已由 fw-ekf 改为
+<code>subset_* 与 NIS</code>，本轮复验 7 个 EKF 测试全部编译通过。
+<strong>教训</strong>：注释里不要出现 <code>*/</code>、<code>/*</code>
+与行尾续行符。</li>
+<li><strong>中文路径</strong>：<code>g++ -o /c/Users/...</code> 报
+<code>ld: cannot open output file</code>， 改用
+<code>C:/Users/...</code>（Windows 盘符形式）或 <code>BIN_DIR</code>
+指向 ASCII 目录即通过。</li>
+<li><strong>依赖外部二进制</strong>：四个 <code>run_*_mc.py</code> 通过
+<code>subprocess</code> 调用已编译的测试可执行体， <code>--bin</code>
+默认值写死本机 Windows 临时路径，换机器必须显式传参。</li>
+<li><strong>依赖第三方库</strong>：EKF 组需
+Eigen（<code>lib/eigen/src</code>）与
+<code>lib/units/src/convang*.cpp</code>， 并需
+<code>-DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES</code>；缺宏时链接失败而非编译报错。</li>
+<li><strong>SIL 需 MSYS
+bash</strong>：<code>fw_sil/build_and_run.sh</code> 依赖
+<code>/c/...</code> 形式路径与 <code>BIN_DIR</code>， 在纯 PowerShell
+下需手工拼命令。</li>
+</ol>
+<hr />
+<h2 id="6-未决问题">6 未决问题</h2>
+<ul>
+<li><code>run_all.sh</code> 是否应纳入 <code>fw_sil/</code>
+两个入口与两个 <code>.js</code> 测试？当前它们是“手动/专项”集合。</li>
+<li>是否为 print-only 研究测试建立统一 golden 数值夹具（放
+<code>test_host/baselines/</code>）？</li>
+<li><code>test_ekf_highspeed_realistic.cpp</code> 的 1-based
+命令行参数映射是否需要改为具名参数 （错位会静默改变整批 MC
+语义，历史上已导致一轮结果撤回）？</li>
+<li>CTL-001 §9 是否补固件侧测试指针，形成“文档 ↔︎ 测试”双向索引？</li>
+</ul>
+<hr />
+<h2 id="7-门禁与验证证据">7 门禁与验证证据</h2>
+<h3 id="71-注释门禁">7.1 注释门禁</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--area</span> fw-tests <span class="at">--check</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>范围</th>
+<th>error</th>
+<th>warning</th>
+<th>平均分</th>
+<th>退出码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>核查前</td>
+<td>65 文件</td>
+<td>65</td>
+<td>13</td>
+<td>79.0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>核查后</td>
+<td>65 文件</td>
+<td><strong>0</strong></td>
+<td><strong>0</strong></td>
+<td><strong>100.0</strong></td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>规则命中变化：R01 65→0、R04 5→0、R05 3→0、R06 1→0、R09 4→0。</p>
+<h3 id="72-编译语法验证">7.2 编译/语法验证</h3>
+<p>编译输出统一落在 ASCII
+临时目录（规避中文路径），<strong>只编译不运行</strong>：</p>
+<ul>
+<li><strong>C++：51 个 <code>.cpp</code> 全部编译通过</strong>（48
+个测试/研究工具 + 3 个 SIL 文件； <code>mpc_emb.h</code> 经
+<code>test_mpc_emb.cpp</code> 间接覆盖）。分两批： 46 个走
+<code>-Iinclude</code>
+类单文件命令，<code>test_optimal_gains.cpp</code>、<code>test_integrator_compare.cpp</code>
+单独补编译，<code>fw_sil_main.cpp</code>/<code>fw_sil_env_main.cpp</code>/<code>fw_sil_stubs.cpp</code>
+按 <code>build_and_run.sh</code>/<code>build_and_run_env.sh</code>
+的源码清单编译并链接。</li>
+<li><strong>改动最大的 10 个</strong>（均已 <code>[BUILD OK]</code>）：
+<code>test_flight_control_axis.cpp</code>、<code>test_tandemvec_allocation.cpp</code>、<code>test_position_pid.cpp</code>、
+<code>test_ekf_15state.cpp</code>、<code>test_ekf_aiding_velocity.cpp</code>、<code>test_static_aid_profile.cpp</code>、
+<code>test_ekf_highspeed_realistic.cpp</code>、<code>test_ekf_delay_highspeed.cpp</code>、
+<code>test_gnss_delay_batch.cpp</code>、<code>test_mag_cal.cpp</code>。</li>
+<li><strong>EKF 组（7
+个）</strong>：<code>test_ekf_15state</code>、<code>test_ekf_aiding_velocity</code>、
+<code>test_ekf_delay_highspeed</code>、<code>test_ekf_highspeed_realistic</code>、<code>test_ekf_delay_mmae</code>、
+<code>test_ekf_bias_static</code>、<code>test_gnss_delay_batch_ekf</code>
+全部通过（修好头文件注释后）。 Lead 侧复验 <code>test_ekf_15state</code>
+运行 <strong>36/36 PASS</strong>。</li>
+<li><strong>JS</strong>：<code>node --check</code> 通过 2/2。</li>
+<li><strong>Python</strong>：<code>py -3.12 -m py_compile</code> 通过
+4/4（<code>PYTHONPYCACHEPREFIX</code> 指向临时目录， 未在仓库生成
+<code>__pycache__</code>）。</li>
+</ul>
+<p>代表性编译命令（仓库根目录，<code>TandemVec_FCS/</code>
+为工作目录）：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 控制/分配（无 Eigen）</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-Iinclude</span> test_host/test_flight_control_axis.cpp <span class="at">-o</span> <span class="st">&quot;</span><span class="va">$TEMP</span><span class="st">/fca.exe&quot;</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># EKF 15 状态（需宏 + units 源）</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O2</span> <span class="at">-DEKF_HOST_REGRESSION</span> <span class="at">-D_USE_MATH_DEFINES</span> <span class="dt">\</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>    <span class="at">-Iinclude</span> <span class="at">-Isrc</span> <span class="at">-Ilib</span>/navigation-main/src <span class="at">-Ilib</span>/eigen/src <span class="at">-Ilib</span>/units/src <span class="dt">\</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>    test_host/test_ekf_15state.cpp lib/units/src/convang<span class="pp">*</span>.cpp <span class="at">-o</span> <span class="st">&quot;</span><span class="va">$TEMP</span><span class="st">/ekf15.exe&quot;</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 磁力计标定（需 MagCal 头路径）</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-Iinclude</span> <span class="at">-Ilib</span>/MagCal test_host/test_mag_cal.cpp <span class="at">-o</span> <span class="st">&quot;</span><span class="va">$TEMP</span><span class="st">/mc.exe&quot;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="co"># SIL（与 build_and_run.sh 同源码清单，只链接不运行；INC 含 fw_sil/stub 与 lib 各子目录）</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O2</span> <span class="at">-DTANDEMVEC_FIRMWARE</span> <span class="at">-Wno-address-of-packed-member</span> <span class="at">-Wno-psabi</span> <span class="dt">\</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>    <span class="at">-Itest_host</span>/fw_sil/stub <span class="at">-Iinclude</span> <span class="at">-Isrc</span> <span class="at">-Itest_host</span>/stub <span class="dt">\</span></span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a>    <span class="at">-Ilib</span>/navigation-main/src <span class="at">-Ilib</span>/units/src <span class="at">-Ilib</span>/AnoComProtocol <span class="at">-Ilib</span>/MAVLink <span class="dt">\</span></span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a>    src/flight_control.cpp src/state_data.cpp test_host/fw_sil/fw_sil_stubs.cpp <span class="dt">\</span></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>    test_host/fw_sil/fw_sil_main.cpp <span class="dt">\</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    lib/DPS310-Pressure-Sensor/src/Dps310.cpp lib/DPS310-Pressure-Sensor/src/DpsClass.cpp <span class="dt">\</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">-o</span> <span class="st">&quot;</span><span class="va">$TEMP</span><span class="st">/fw_sil.exe&quot;</span></span></code></pre></div>
+<h3 id="73-行为保持自查方法与限制">7.3 行为保持（自查方法与限制）</h3>
+<p>本轮只新增/改写注释与文档：未修改任何断言、期望值、测试数据、超时、宏开关与编译选项。</p>
+<ul>
+<li>全部改动通过带锚点的 <code>edit</code> 逐处插入/替换，插入内容均为
+<code>/** … */</code> L0 文件头、 <code>@test</code> 用例索引或
+<code>//</code> 行内说明；<code>edit</code> 的 <code>old_string</code>
+中若有代码行， 都在 <code>new_string</code> 中原样保留（如
+<code>#include</code>、<code>#pragma once</code>、<code>int main</code>、<code>HardwareSerial Serial;</code>）。</li>
+<li>被替换的仅是各文件原有的头注释块（含 5 处被 R04
+判为“注释掉的代码”的公式行， 改为 <code>@formula</code>
+标注，语义不变）。</li>
+<li>验证口径：51 个 <code>.cpp</code> 全部重新编译通过（§7.2）+ lint 65
+文件 0 error（§7.1）， 说明注释未破坏任何编译单元。</li>
+<li><strong>限制</strong>：<code>git diff -- TandemVec_FCS/test_host</code>
+同时包含<strong>此前会话</strong>的未提交功能改动 （例如
+<code>test_ekf_15state.cpp</code> 的
+T7–T11、<code>test_static_aid_profile.cpp</code> 的门控用例），
+因此不能单凭整段 diff
+判定“本轮只改注释”；上一条逐处核对方法是本轮的自查依据。
+若需机器级证明，应在改动前保存工作区快照做逐文件对比（本轮未留存，记为流程改进项）。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-TESTS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
+  <meta name="generator" content="pandoc 3.12.1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>CFG-000 概念构型基线 C0 · 纵列双发矢量推力飞行器</title>
   <style>
@@ -10,8 +10,12 @@
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -22,7 +26,71 @@
       margin: 0 0.8em 0.2em -1.6em;
       vertical-align: middle;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
   </style>
   <link rel="stylesheet" href="../docstyle.css" />
 <style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
@@ -40,17 +108,18 @@
 反向旋转螺旋桨</strong>构型。机体系约定见 <a
 href="../modeling/MOD-002.html">MOD-002</a>：x
 轴指向前，y 轴指向右，z 轴指向下方（NED 体系），原点在质心。</p>
-<pre class="mermaid"><code>flowchart LR
-    accTitle 纵列双发布局与控制轴示意图
-    accDescr 展示前电机位于机头 +a 处、绕 z_b 摆动主控偏航；尾电机位于机尾 -b 处、绕 y_b 摆动主控俯仰；滚转由双发差速反扭差实现。
-
-    subgraph 侧视图 x-z 平面
-        FM[前电机&lt;br/&gt;拉力式 CW&lt;br/&gt;绕 z_b 摆动]
-        CG((质心))
-        RM[尾电机&lt;br/&gt;推进式 CCW&lt;br/&gt;绕 y_b 摆动]
-        FM -- &quot;a = 0.315 m&quot; --&gt; CG
-        CG -- &quot;b = 0.315 m&quot; --&gt; RM
-    end</code></pre>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode mermaid"><code class="sourceCode mermaid"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">flowchart</span> <span class="cn">LR</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accTitle</span> <span class="er">纵</span><span class="dt">列双发布局与控制轴示意图</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accDescr</span> <span class="er">展</span><span class="dt">示前电机位于机头</span> <span class="er">+</span><span class="dt">a</span> <span class="er">处、</span><span class="dt">绕</span> <span class="er">z</span><span class="dt">_b</span> <span class="er">摆</span><span class="dt">动主控偏航</span><span class="er">；</span><span class="dt">尾电机位于机尾</span> <span class="er">-</span><span class="dt">b</span> <span class="er">处、</span><span class="dt">绕</span> <span class="er">y</span><span class="dt">_b</span> <span class="er">摆</span><span class="dt">动主控俯仰</span><span class="er">；</span><span class="dt">滚转由双发差速反扭差实现</span><span class="er">。</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">subgraph</span> <span class="dt">侧视图</span> <span class="er">x</span><span class="dt">-z</span> <span class="er">平</span><span class="dt">面</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>        <span class="dt">FM</span>[<span class="vs">前电机</span><span class="sc">&lt;br/&gt;</span><span class="vs">拉力式 CW</span><span class="sc">&lt;br/&gt;</span><span class="vs">绕 z_b 摆动</span>]</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>        <span class="dt">CG</span>((<span class="vs">质心</span>))</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>        <span class="dt">RM</span>[<span class="vs">尾电机</span><span class="sc">&lt;br/&gt;</span><span class="vs">推进式 CCW</span><span class="sc">&lt;br/&gt;</span><span class="vs">绕 y_b 摆动</span>]</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>        <span class="dt">FM</span> <span class="pp">--</span> <span class="st">&quot;a = 0.315 m&quot;</span> <span class="pp">--&gt;</span> <span class="dt">CG</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>        <span class="dt">CG</span> <span class="pp">--</span> <span class="st">&quot;b = 0.315 m&quot;</span> <span class="pp">--&gt;</span> <span class="dt">RM</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">end</span></span></code></pre></div>
 <p>关键几何事实：</p>
 <ul>
 <li>前电机力臂 <code>a = 0.315 m</code>（质心到前电机中心），尾电机力臂
@@ -603,5 +672,5 @@ ASM-017）。</li>
 配置管理流程，更新 <code>models/aircraft-model.json</code>，并重新运行
 <code>tools/sync-params.py</code> 与回归测试。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
 </html>

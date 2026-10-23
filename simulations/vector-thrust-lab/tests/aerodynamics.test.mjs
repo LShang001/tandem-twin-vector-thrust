@@ -1,4 +1,17 @@
-// aerodynamics.mjs 单元测试
+/**
+ * @file    aerodynamics.test.mjs
+ * @module  仿真 tests/气动力
+ * @brief   锁定气动开关、升力/侧力/力矩符号与低速保护
+ * @details 覆盖：aeroOn=false 时力/力矩为零但空速遥测仍更新；α>0 产生 −z 升力且 aX
+ *          与解析式一致；Cmq<0 阻尼；β>0 产生负侧力与 Cnb/Clb 符号；零速时动压与力为零。
+ *          容差依据：解析式比对取 1e-9（同一模型、同一输入，只差浮点舍入）；
+ *          符号断言避免与量级绑定。
+ * @theory  q̄=½ρV²、L/D/Y 与 Clb/Clp、Cm0/Cma/Cmq、Cnb/Cnr @ref MOD-001 §6
+ * @frame   风轴系 → 机体系 FRD
+ * @units   m/s、Pa、N、N·m
+ * @note 空速下限 0.5 m/s 只保护分母：零速用例专门断言"保护速度不造力"
+ * @see     src/core/aerodynamics.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

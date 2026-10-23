@@ -1,4 +1,19 @@
-// propulsion.mjs 单元测试
+/**
+ * @file    propulsion.test.mjs
+ * @module  仿真 tests/推进系统
+ * @brief   锁定推力/反扭矩稳态关系、差速配、摆角符号与电机一阶滞后
+ * @details 覆盖：T=kT·ω²、τ≈kQ·ω²；ωf²+ωt²=2ω0²；df>0 → Fy>0/Mz>0；dt>0 → Fz<0/My<0；
+ *          零摆角等转速反扭对消；一阶滞后一个时间常数后达 63.2%。
+ *          容差依据：稳态对消取 1e-6（推力 ~0.5 N 的浮点残差量级）；
+ *          滞后用例用 100 个 τm/100 小步逼近连续解，离散截断 O((dt/τm)²)≈1e-4，
+ *          故取 0.5%·wMax 的绝对容差；步长 ≥τm 时离散式会截断为 1（直达目标），不能用于该断言。
+ * @theory  差速开方分配 @ref CTL-001 §7.1；T/Q 集总式 @ref THY-002 §6；
+ *          电机一阶滞后来源 @ref THY-002 §4
+ * @frame   机体系 FRD
+ * @units   rad/s、N、N·m
+ * @note 这些用例不检查数值大小（参数未标定），只锁定符号与结构关系
+ * @see     src/core/propulsion.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

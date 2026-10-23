@@ -297,11 +297,21 @@ function __req(id) {
   return __exports[id] = __mods[id]();
 }
 __def('src/main.js', function() {
-// ============================================================
-//  纵列双发矢量推力布局 · 六维力/力矩动力学可视化
-//  引导与主循环装配：core（纯计算） + browser（Three.js/DOM 适配）
-//  机体系约定: x 前 / y 右 / z 下
-// ============================================================
+/**
+ * @file    main.js
+ * @module  仿真 browser/入口装配
+ * @brief   装配 core 状态机与 browser 渲染层，运行 requestAnimationFrame 主循环
+ * @details 输入：DOM 容器与参数表；处理：构造 sim → 场景/效果/模型/HUD/UI/演示，
+ *          每帧 demo → stepPhysics → 渲染同步 → 后处理；
+ *          输出：持续更新的三维画面与 HUD。
+ *          不变量：物理步长受 frameCap=0.05 s 截断；HUD 每 3 帧同步一次（降 DOM 压力）。
+ * @theory  N/A（装配层）；物理与控制在 core/ 实现 @ref MOD-001 §5
+ * @frame   机体系 FRD（动力学）/ NED（位置与地速）；渲染世界系与 NED 同向
+ * @units   s（时间）、rad（姿态/摆角）、m（位置）
+ * @redline 帧 delta ≤ 0.05 s 是行为红线——截断必须保留，否则掉帧时会一次性积掉大 dt
+ * @note 初始化时把 dtAct/dfAct 置为配平偏置：否则首帧 SAS 会从 0 摆角开始把飞机"拽"一下
+ * @see     core/dynamics.mjs（stepPhysics）、browser/scene.mjs（渲染上下文）
+ */
 const THREE = __req('three');
 const { P } = __req('src/core/parameters.mjs');
 const { createSimulationState } = __req('src/core/state.mjs');
@@ -54945,7 +54955,7 @@ __def('src/core/parameters.mjs', function() {
 const P = Object.freeze({
   // ---- 推进 ----
   kT: 1.04e-05,  // 推力系数 T = kT·ω²（由 T_max=13.73N @1150rad/s 反推） [N·s²]
-  kQ: 3.1e-07,  // 反扭系数 τ = kQ·ω²（kQ/kT≈0.030，9047 桨） [N·m·s²]
+  kQ: 2.8e-07,  // 反扭系数 τ = kQ·ω²（kQ/kT≈0.027；2026-08-09 实机两轮：0.030 yaw 偏软→0.025 有效增益压边界自激→回退 0.027） [N·m·s²]
   Jp: 0.0002,  // 桨+转子转动惯量 [kg·m²]
   wMax: 1150,  // 最大转速（≈11000 RPM，1400KV×11.1V×0.75 带桨负载） [rad/s]
   a: 0.315,  // 前电机到质心距离（总长 63cm，重心居中） [m]
@@ -54956,7 +54966,7 @@ const P = Object.freeze({
   Ix: 0.0021,  // 机体滚转惯量（绕纵轴=差速航向轴，组件级估算） [kg·m²]
   Iy: 0.022,  // 机体俯仰惯量（组件级估算：2×电机+桨 m×L² 主导） [kg·m²]
   Iz: 0.022,  // 机体偏航惯量（组件级估算，同 Iy 对称） [kg·m²]
-  dMax: 0.4363323129985824,  // 摆角限幅（25°） [rad]
+  dMax: 0.4363323129985824,  // 摆角限幅（25°）——仿真概念窗口值；固件实机 2026-08-07 已收紧为 ±15°（TandemVec_Config.h dMax / state_data.cpp MAX_CORRECTION=15），仿真未回写。差异与取舍以 docs/registers/行为保持红线清单.md「SAS 摆角限幅」行为准，回写须重采回归基线 [rad]
 
   // ---- 质量 / 气动 ----
   m: 0.7,  // 质量（2212×2+9047×2+3S+碳管框架 ≈600g，实测待精化） [kg]
@@ -55023,29 +55033,65 @@ const P = Object.freeze({
 return { P };
 });
 __def('src/core/state.mjs', function() {
-// ============================================================
-//  仿真状态：控制/执行状态 S、飞行状态 F、遥测 dyn/aero
-// ============================================================
+/**
+ * @file    state.mjs
+ * @module  仿真 core/状态与复位
+ * @brief   定义仿真状态容器（S/F/dyn/aero）与三种复位入口
+ * @details 输入：参数表 P 与用户模式开关；处理：构造状态对象、按模式（巡航/悬停）
+ *          初始化姿态/速度/转速/积分器；输出：可被 dynamics 直接推进的状态树。
+ *          不变量：S 为控制与执行状态、F 为飞行状态、dyn/aero 为只读遥测缓存；
+ *          复位入口的语义差异是 UI 契约（见各函数 @note），改动会改变演示行为。
+ * @theory  悬停姿态 Q_HOVER = 绕 NED y 转 +90° @ref CTL-001 §8.1；
+ *          悬停配平油门 2·kT·(thr·wMax)² = m·g @ref CTL-001 §8.1；
+ *          巡航配平初始条件 @ref MOD-003 §2
+ * @frame   NED（惯性系，z 向下）/ FRD（机体系，x 前 y 右 z 下）
+ * @units   SI：位置 m、速度 m/s、角度 rad、角速度 rad/s、转速 rad/s
+ * @redline 地面基准 groundZ=6.2 m 与空速下限 vMin=0.5 m/s 的初值语义见 behavior 红线
+ * @see     dynamics.mjs、control.mjs、tests/state.test.mjs
+ */
 const { vec3, quat } = __req('src/core/math.mjs');
 
-// 悬停初始姿态：绕 NED y 转 +90°（机头朝天，x_b → NED −z）
-// 验证：rotateVecByQuat((1,0,0), Q_HOVER) = (0,0,−1)；显示约定下 theta = −90°
+/**
+ * @brief 悬停初始姿态：绕 NED y 轴转 +90°（机头朝天，x_b → NED −z）
+ * @formula Q_HOVER = (x,y,z,w) = (0, √2/2, 0, √2/2)
+ * @ref CTL-001 §8.1
+ * @note 验证：rotateVecByQuat((1,0,0), Q_HOVER) = (0,0,−1)；显示约定下 theta = −90°
+ *       （欧拉角在此奇异，故悬停控制必须走四元数误差链，不得用欧拉反馈）
+ * @test tests/vtol.test.mjs「Q_HOVER：机头朝天」
+ */
 const Q_HOVER = quat(0, Math.SQRT1_2, 0, Math.SQRT1_2);
 
-// 悬停配平油门（物理派生量，非独立参数）：
-// 双发推力平衡重力：2·kT·(thr·wMax)² = m·g → thr = √(m·g / (2·kT·wMax²))
+// @formula thr = √(m·g/(2·kT·wMax²))，由 2·kT·(thr·wMax)² = m·g 解出 @ref CTL-001 §8.1
+// @note 两发均分重力；T ∝ ω² 故带平方根——定高的 1/√cosγ 补偿同源
+// @test tests/vtol.test.mjs「悬停配平油门：双发推力恰好平衡重力」
+/**
+ * @brief 悬停配平油门（物理派生量，不是独立参数）
+ * @param {Object} P 参数表（需 m/g/kT/wMax）
+ * @returns {number} 悬停油门 [-]（约 0.499）
+ */
 function hoverThrottle(P) {
   return Math.sqrt(P.m * P.g / (2 * P.kT * P.wMax * P.wMax));
 }
 
+// @ref MOD-001 §5（六自由度状态量）、MOD-002 §8（代码变量对照）
+// @note 所有字段一次给全并带默认值，避免 undefined 参与积分；dyn/aero 是"上一子步缓存"
+// @note 轴语义（两套读法必须同时写）：体轴 δt→M_y(俯仰)、δf→M_z(偏航)、Δω→M_x(滚转)；
+//       悬停构型（机头朝天）下同一执行器 = 下摆(俯仰)/上摆(滚转)/差速(偏航)
+//       ——见 @ref AGENTS.md 踩坑记录「执行器轴映射（2026-08-07 轴置换）」
+/**
+ * @brief 构造一份完整的仿真状态（巡航配平初值）
+ * @param {Object} P 参数表
+ * @returns {Object} { S 控制/执行状态, F 飞行状态, dyn 推力遥测, aero 气动遥测 }
+ * @see resetFlightState、resetSimulationState、resetVtolHoverState
+ */
 function createSimulationState(P) {
   const sim = {
     // ---- 运行状态 ----
     S: {
-      thr: P.thrTrim,      // 总油门 0..1
-      df: 0,               // 前摆角指令（偏航, 绕 z）
-      dt: 0,               // 尾摆增量指令（俯仰, 绕 y；实际值含 dtTrim）
-      dw: 0,               // 差速指令 -1..1
+      thr: P.thrTrim,      // 总油门 0..1（配平值来自四方程配平，见 MOD-003 §2.2）
+      df: 0,               // 前摆角指令（体轴 M_z=偏航；悬停构型=上摆→滚转）
+      dt: 0,               // 尾摆增量指令（体轴 M_y=俯仰；悬停构型=下摆→俯仰）
+      dw: 0,               // 差速指令 -1..1（体轴 M_x=滚转；悬停构型→偏航）
       dtAct: 0, dfAct: 0, dwAct: 0,   // SAS 修正后的实际执行量
       sasMode: 1,          // SAS 模式: 0=关, 1=全SAS, 2=仅角速率阻尼, 3=角速度闭环(滑块=ω_ref)
       _prevSasMode: 1,     // 上一 SAS 模式（供 control.mjs 检测模式切换）
@@ -55079,7 +55125,15 @@ function createSimulationState(P) {
   return sim;
 }
 
-// 以配平状态初始化（物理俯仰 α0；显示约定 theta0=-α0，平飞航迹）
+// @formula v_b = (vTrim·cosα0, 0, vTrim·sinα0)，q = Ry(α0)，显示角 theta0 = −α0
+// @ref MOD-003 §2.2（配平工作点）、MOD-002 §4（显示角符号）
+// @note α0 = aTrim 是"物理迎角"，飞控显示角为 −α0；两者同时出现时以显示角注释为准
+// @note lockXY=true 时清零水平速度（水平运动学约束，仅 UI 演示用，不是悬停模型）
+/**
+ * @brief 以配平状态初始化飞行状态（姿态、机体系速度、积分器）
+ * @param {Object} sim 仿真状态（就地修改）；@param {Object} P 参数表
+ * @returns {void}
+ */
 function resetFlightState(sim, P) {
   const a0 = P.aTrim;
   const { S, F } = sim;
@@ -55095,9 +55149,15 @@ function resetFlightState(sim, P) {
   }
 }
 
-// UI/演示使用的完整动态复位；保留 SAS、气动和水平约束开关。
-// 本函数设置 S.vtolMode=false（resetVtolHoverState 对称地设置 true）——
-// 演示/复位按钮从悬停模式出发时会自动退出悬停，保证模式标志与状态一致。
+// @note 与 resetVtolHoverState 对称：本函数令 vtolMode=false，悬停复位令其为 true，
+//       保证"任何复位入口后模式标志与状态一致"——演示/复位按钮据此自动退出悬停
+// @note 保留 sasMode/aero/lockXY（用户模式选择），只清动力学状态
+// @test tests/state.test.mjs「完整复位恢复可重复的配平动态状态并保留模式开关」
+/**
+ * @brief 完整动态复位到巡航配平（时间/转速/遥测全清，保留模式开关）
+ * @param {Object} sim 仿真状态（就地修改）；@param {Object} P 参数表
+ * @returns {void}
+ */
 function resetSimulationState(sim, P) {  const { S, dyn, aero } = sim;
   S.vtolMode = false;     // ★ 模式标志（与悬停复位对称）
   S.altHold = false;      // 定高仅悬停模式有意义，一并清零
@@ -55114,11 +55174,15 @@ function resetSimulationState(sim, P) {  const { S, dyn, aero } = sim;
   resetFlightState(sim, P);
 }
 
-// 轻量复位（UI「复位」按钮）：只复位飞行状态（位置/速度/姿态/角速度/积分器/
-// 执行器基准），★ 保留模式与输入（vtolMode/altHold/useBtrue/sasMode/aero/
-// lockXY/thr/dt/df/dw 滑块指令均不动）。按当前构型分支复位：
-//   悬停 → Q_HOVER 机头朝天静止；巡航 → 配平平飞（含 lockXY 语义）。
-// 电机转速跟随当前油门 S.thr（保留输入）；时间不归零。
+// @note 保留 vtolMode/altHold/useBtrue/sasMode/aero/lockXY 与 thr/dt/df/dw 滑块指令；
+//       时间不归零；电机转速跟随当前油门（用户"复位位置但不丢输入"的契约）
+// @note 按当前构型分支：悬停 → Q_HOVER 静止、摆角回 0；巡航 → 配平平飞（含 lockXY）
+// @test tests/state.test.mjs「轻量复位（巡航）」「轻量复位（悬停）」
+/**
+ * @brief 轻量复位（UI「复位」按钮）：只复位飞行状态，保留全部模式与输入
+ * @param {Object} sim 仿真状态（就地修改）；@param {Object} P 参数表
+ * @returns {void}
+ */
 function resetPoseOnly(sim, P) {
   const { S, F, dyn, aero } = sim;
   S.intTh = 0; S.intPhi = 0; S.intAlt = 0;
@@ -55143,13 +55207,15 @@ function resetPoseOnly(sim, P) {
   Object.assign(aero, { V: 0, qbar: 0, alpha: 0, beta: 0, Mx: 0, My: 0, Mz: 0 });
 }
 
-// VTOL 悬停模式复位：机头朝天（x_b 竖直），悬停配平油门，速度/角速度/积分清零。
-// ★ 无翼构型：默认关闭气动力（S.aero=false），进入悬停即"关掉机翼"，可手动再开。
-//   （aero 恢复由 UI 层负责：b-vtol 切回巡航时显式 S.aero=true；直接调
-//    resetSimulationState 保持用户当前的 aero 开关状态，与固定翼复位语义一致）
-// 悬停控制律基准为 0 摆角（不叠加巡航配平 dtTrim/dfTrim）。
-// 本函数设置 S.vtolMode=true（resetSimulationState 对称地设置 false）——
-// 任何入口调用复位都会使模式标志与状态一致。
+// @note 与 resetSimulationState 对称：令 vtolMode=true；摆角基准为 0（不叠加巡航
+//       dtTrim/dfTrim），否则进入悬停瞬间会带上 18.7° 尾摆配平偏置
+// @note 默认关气动=悬停"拆掉机翼"；恢复 aero 由 UI 层负责（切回巡航时显式置 true）
+// @test tests/vtol.test.mjs「resetVtolHoverState：无翼默认…」
+/**
+ * @brief 进入 VTOL 悬停构型：机头朝天、悬停配平油门、无翼（aero=false）
+ * @param {Object} sim 仿真状态（就地修改）；@param {Object} P 参数表
+ * @returns {void}
+ */
 function resetVtolHoverState(sim, P) {
   const { S, F, dyn, aero } = sim;
   const thr = hoverThrottle(P);
@@ -55179,34 +55245,67 @@ function resetVtolHoverState(sim, P) {
 return { Q_HOVER, hoverThrottle, createSimulationState, resetFlightState, resetSimulationState, resetPoseOnly, resetVtolHoverState };
 });
 __def('src/core/dynamics.mjs', function() {
-// ============================================================
-//  六自由度刚体动力学解算 — RK4 高精度积分
-//  平动: m·v̇ = F推力 + F气动 + m·g − m·ω×v        （机体系）
-//  转动: I·ω̇ = M推力 + M气动 − ω×(I·ω) − ω×h转子
-//  姿态: q̇  = ½·q ⊗ [0, ω]^T                        （四元数运动学）
-//
-//  方法：经典四阶显式 Runge-Kutta (RK4)，联合积分 [v, ω, q]
-//  O(h⁵) 局部截断，每子步保范投影消除浮点漂移
-//  ★ 气动在每个 RK4 阶段用中间状态重算（对齐 Python rk4_step 的 aero_forces
-//    逐阶段重算）；推进/转子角动量在子步内恒定（与 Python 一致）
-// ============================================================
+/**
+ * @file    dynamics.mjs
+ * @module  仿真 core/六自由度动力学
+ * @brief   六自由度刚体动力学解算：子步调度 + RK4 联合积分 [v, ω, q] + 地面约束
+ * @details 输入：状态 S/F、参数表、控制律输出（由 control/propulsion 产生）；
+ *          处理：按 maxStep 拆子步 → 每子步一次 SAS/推进更新 → RK4 四阶段
+ *          （气动逐阶段用中间状态重算）→ 位置积分 → 地面钳位；
+ *          输出：更新 S.omega/S.quat 与 F.vel/vWorld/pos。
+ *          不变量：子步 h ≤ maxStep；每阶段与终点都做四元数保范投影；
+ *          推进力/转子角动量在子步内视为常数（气动则逐阶段重算）。
+ * @theory  平动 m·v̇ = F_thrust + F_aero + m·g_b − m·(ω×v) @ref MOD-001 §5.1、@ref THY-003 §1.1；
+ *          转动 I·ω̇ = M_thrust + M_aero − ω×(I·ω) − ω×h_rotor @ref MOD-001 §5.2、@ref THY-003 §1.2；
+ *          姿态运动学 q̇ = ½·q⊗(0,ω_b) @ref MOD-001 §5.3、@ref THY-001 §7；
+ *          转子角动量 h 定义 @ref MOD-001 §3.4
+ * @frame   机体系 FRD（v/ω/力矩）→ 惯性系 NED（位置、地速、重力）
+ * @units   SI：m、m/s、rad、rad/s、N、N·m、s
+ * @redline 子步 ≤0.004 s、四元数 RK4 + 每阶段保范投影、地面 pos.z>6.2 钳位均为行为红线
+ * @note 气动逐阶段重算、推进/角动量子步内恒定，是与 Python rk4_step 对齐的口径；
+ *       改动任一侧都会改变回归基线
+ * @see     propulsion.mjs、aerodynamics.mjs、control.mjs、tests/dynamics.test.mjs
+ */
 const { eulerFromQuat, quatMultiply, quatNormalize, quatInvert, rotateVecByQuat } = __req('src/core/math.mjs');
 const { applySas } = __req('src/core/control.mjs');
 const { stepPropulsion } = __req('src/core/propulsion.mjs');
 const { computeAero, computeAeroState } = __req('src/core/aerodynamics.mjs');
 
-// ============================================================
-//  RK4 子步调度
-// ============================================================
+// ── 子步调度 ──────────────────────────────────────────────────────
+// 公式：n = max(1, ceil(dt/maxStep))，h = dt/n
+// 符号：dt 为帧间隔（已由 main.js 截到 frameCap=0.05 s）；maxStep=0.004 s
+// 来源：@ref MOD-001 §9（子步长 ≤4 ms 的数值理由：滚转气动阻尼时间常数 ~12 ms）
+// 实现：`stepPhysics` 两行；余数均匀摊到 n 个子步，不做变步长
+// 等价变换：无；ceil 保证 h≤maxStep（红线），代价是末子步略小于 h
+// 数值证据：@test tests/dynamics.test.mjs「调度结果应与手动子步完全一致」
+// ─────────────────────────────────────────────────────────────────
+// @formula n = max(1, ceil(dt/maxStep))，h = dt/n，重复 n 次 physicsStep(h) @ref MOD-001 §9
+// @note n 由 ceil 而非 round：宁可多算一步，也不让任何子步超过 4 ms（数值稳定红线）
+// @test tests/dynamics.test.mjs「子步调度」（与手动 n 子步逐位相等）
+/**
+ * @brief 把一帧 dt 拆成 n 个 ≤maxStep 的子步并逐个子步推进
+ * @param {Object} sim 仿真状态；@param {Object} P 参数表（maxStep）
+ * @param {number} dt 帧间隔 [s]（0<dt≤frameCap=0.05）
+ * @returns {void}
+ */
 function stepPhysics(sim, P, dt) {
   const n = Math.max(1, Math.ceil(dt / P.maxStep));
   const h = dt / n;
   for (let i = 0; i < n; i++) physicsStep(sim, P, h);
 }
 
-// ============================================================
-//  单步推进：控制量计算（一次）→ RK4 状态积分
-// ============================================================
+// ── 单子步推进（控制一次 + RK4 积分 + 位置/地面约束）──────────────
+// @formula v_world = R(q)·v_body；pos += v_world·h（水平可被 lockXY 清零）
+// @ref MOD-001 §5（动力学）、MOD-002 §5.2（地面约束）
+// @note 控制/推进每子步只算一次（不是每个 RK4 阶段）：执行器动态远慢于 4 ms；
+//       气动则必须逐阶段重算，两者口径不可互换
+// @note 地面约束只在"钻入地面且仍在向下"时触发——上升穿过 groundZ 不能被拦截
+// @test tests/dynamics.test.mjs（归一化、触地、上升不拦截、lockXY）
+/**
+ * @brief 推进一个积分子步：控制量更新一次 → RK4 积分 → 位置积分与触地钳位
+ * @param {Object} sim 仿真状态；@param {Object} P 参数表；@param {number} h 子步长 [s]
+ * @returns {void}（更新 F.vel/vWorld/pos 与 S.omega/quat）
+ */
 function physicsStep(sim, P, h) {
   const { S, F } = sim;
 
@@ -55259,10 +55358,34 @@ function physicsStep(sim, P, h) {
   }
 }
 
-// ============================================================
-//  状态导数: f([v, ω, q], u) → [v̇, ω̇, q̇]
-//  气动由调用方传入（RK4 各阶段用中间状态重算）
-// ============================================================
+// ── 状态导数（牛顿–欧拉 + 四元数运动学）────────────────────────────
+// 公式：v̇ = (F_thrust + F_aero)/m + g_b − ω×v
+//       ω̇ = I⁻¹·(M_thrust + M_aero − ω×(I·ω) − ω×h)
+//       q̇ = ½·q⊗(0,ω)
+// 符号：g_b = R(q)ᵀ·(0,0,g)（重力在机体系分量，NED 下 g_z 向下为正）；
+//       h = Jp·[ωf·cf−ωt·ct, ωf·sf, ωt·st] 为双转子角动量（MOD-001 §3.4）
+// 来源：@ref THY-003 §1.1–1.2（体轴系绝对导数展开）、@ref MOD-001 §5.1–5.3
+// 实现：`stateDerivatives` 三段（gb/vDot、欧拉方程、qDot）
+// 等价变换：教材在惯性系写 m·a=F，此处用动系公式引入 −ω×v 与 −ω×(I·ω)；
+//           g_b 由 Rᵀ 而非 R 变换（重力在惯性系为常数矢量）
+// 数值证据：@test tests/math.test.mjs「重力变换方向」、tests/dynamics.test.mjs 配平直飞
+// ─────────────────────────────────────────────────────────────────
+/**
+ * @brief 计算状态导数 [v̇, ω̇, q̇]（气动由调用方按 RK4 阶段传入）
+ * @param {{x:number,y:number,z:number}} v 机体系速度 [m/s]
+ * @param {{x:number,y:number,z:number}} w 机体角速度 [rad/s]
+ * @param {{x:number,y:number,z:number,w:number}} q 姿态四元数（体系→惯性系）
+ * @param {Object} P 参数表（m/g/Ix/Iy/Iz）
+ * @param {Object} thrust 推进力/力矩 {Fx,Fy,Fz,Mx,My,Mz} [N]/[N·m]
+ * @param {Object} aero 气动力/力矩 {aX,Y,aZ,Mx,My,Mz} [N]/[N·m]
+ * @param {{x:number,y:number,z:number}} hv 双转子角动量 [kg·m²/s]
+ * @returns {{vDot:Object,wDot:Object,qDot:Object}} 三个导数
+ * @formula 见上方五段式
+ * @ref THY-003 §1；MOD-001 §5
+ * @pre q 已归一化（否则 g_b 的模长会偏离 g）
+ * @note 转动方程里 ω×(I·ω) 用主轴展开避免矩阵乘；hv 项符号为 −ω×h（转子对机体的反作用）
+ * @note 本函数不修改入参，纯函数便于 RK4 反复调用
+ */
 function stateDerivatives(v, w, q, P, thrust, aero, hv) {
   // ---------- 重力在机体系中的分量（q 的函数） ----------
   const gb = rotateVecByQuat({ x: 0, y: 0, z: P.g }, quatInvert(q));
@@ -55294,12 +55417,33 @@ function stateDerivatives(v, w, q, P, thrust, aero, hv) {
   return { vDot, wDot, qDot };
 }
 
-// ============================================================
-//  经典四阶 Runge-Kutta (RK4) — 一步推进 [v, ω, q]
-//  O(h⁵) 局部截断, 稳定域显著优于显式欧拉
-//  ★ 气动在每个 k 阶段用中间状态 (vv, ww) 重算（对齐 Python rk4_step），
-//    推进力/转子角动量恒定通过本子步（与 Python 一致）
-// ============================================================
+// ── 经典四阶 Runge–Kutta（一步推进 [v, ω, q]）──────────────────────
+// 公式：y₊ = y + h/6·(k₁ + 2k₂ + 2k₃ + k₄)，k₂/k₃ 取中点、k₄ 取终点
+// 符号：y = [v, ω, q]；h 为子步长；每个 k 阶段先归一化 q 再求导
+// 来源：RK4 标准形式；一阶积分漂移与归一化见 @ref THY-001 §9
+// 实现：`rk4Step` 四个 stage + 加权组合；气动用 computeAeroState 逐阶段重算
+// 等价变换：教材的四元数指数映射解 q(t+h)=q⊗Exp(ωh) 是另一种（无误差）积分；
+//           本实现用 RK4 加权组合 + 每次保范投影，局部截断 O(h⁵)，工程上更省
+// 数值证据：@test tests/dynamics.test.mjs（长时间积分 |q|−1 < 1e-9）
+// ─────────────────────────────────────────────────────────────────
+/**
+ * @brief 用 RK4 推进一个子步的 [v, ω, q]（推进力/角动量在子步内恒定）
+ * @param {Object} sim 仿真状态（就地写 F.vel、S.omega、S.quat）
+ * @param {Object} P 参数表
+ * @param {number} h 子步长 [s]
+ * @param {Object} thrust 推进六维力/力矩（本子步恒定）
+ * @param {{x:number,y:number,z:number}} hv 双转子角动量（本子步恒定）
+ * @returns {void}
+ * @formula y₊ = y + (h/6)(k₁+2k₂+2k₃+k₄)；中间阶段 q 归一化
+ * @ref THY-001 §9（归一化的必要性）
+ * @pre h>0；q 已归一化
+ * @post |q| = 1（末端再投影一次）；v/ω 为一步末值
+ * @note 与显式欧拉相比，RK4 的稳定域大得多——4 ms 子步下滚转通道（阻尼时间常数 ~12 ms）
+ *       才不至于数值失稳（@ref MOD-001 §9）
+ * @note 每阶段 q 归一化是"保范投影"红线的落地：中间点的 q 也必须落在单位球上，
+ *       否则 k₄ 阶段的四元数误差会污染 ω̇ 的 g_b 项
+ * @test tests/dynamics.test.mjs（600 帧机动后范数误差 <1e-9）
+ */
 function rk4Step(sim, P, h, thrust, hv) {
   const { S, F } = sim;
   const v0 = { x: F.vel.x, y: F.vel.y, z: F.vel.z };
@@ -55374,10 +55518,28 @@ function scaleAddQuat(q, dq, s) {
 return { stepPhysics, physicsStep };
 });
 __def('src/core/telemetry.mjs', function() {
-// ============================================================
-//  遥测快照：浏览器层（HUD / 渲染）读取的数据视图
-// ============================================================
+/**
+ * @file    telemetry.mjs
+ * @module  仿真 core/遥测快照
+ * @brief   把仿真状态整理成浏览器层只读数据视图（深拷贝分组）
+ * @details 输入：sim 状态树；处理：按 forces/aero/rotors/actuators/commands/flight/flags
+ *          分组浅拷贝；输出：纯数据快照，供 HUD/示波器读取。
+ *          不变量：快照与 sim 内部对象不共享引用（改快照不会改状态）。
+ * @theory  N/A（数据搬运，不含物理公式）；分组字段语义沿用 @ref MOD-002 §8 代码变量对照表
+ * @frame   继承 sim 约定：位置/地速为 NED，速度/角速度为机体系 FRD
+ * @units   角度 rad、角速度 rad/s、转速 rad/s、力 N、力矩 N·m、时间 s
+ * @note 分组名是 HUD 的接口契约（tests/telemetry.test.mjs 锁定键集合），不要随意改名
+ * @see     browser/hud.mjs（消费方）、tests/telemetry.test.mjs
+ */
 
+// @note 只做一层分组拷贝（嵌套对象各自展开），避免 HUD 写到状态树
+// @note flags.sas 是 sasMode>0 的派生布尔，方便 HUD 一句话判断"自稳是否在管"
+// @test tests/telemetry.test.mjs（键集合、拷贝隔离、flags 映射）
+/**
+ * @brief 生成一帧遥测快照（分组 + 拷贝）
+ * @param {Object} sim 仿真状态
+ * @returns {Object} {forces, aero, rotors, actuators, commands, flight, flags, time}
+ */
 function getTelemetry(sim) {
   const { S, F, dyn, aero } = sim;
   return {
@@ -55402,15 +55564,34 @@ function getTelemetry(sim) {
 return { getTelemetry };
 });
 __def('src/browser/scene.mjs', function() {
-// ============================================================
-//  渲染器 / 场景 / 相机 / 灯光 / 辉光后处理
-// ============================================================
+/**
+ * @file    scene.mjs
+ * @module  仿真 browser/渲染装配
+ * @brief   渲染器、场景、相机、轨道控制、灯光与辉光后处理的初始化
+ * @details 输入：DOM 容器；处理：创建 WebGLRenderer（ACES 色调映射）、Scene（雾）、
+ *          PerspectiveCamera、OrbitControls、三灯照明与 EffectComposer(Bloom)；
+ *          输出：渲染上下文句柄。
+ *          不变量：相机 up 设为 (0,0,−1) 以匹配 NED 的 z 向下。
+ * @theory  N/A（渲染装配）
+ * @frame   世界系与 NED 同向（x 前、y 右、z 下）⇒ "上"是 −z
+ * @units   长度 world unit，FOV °，像素尺寸 px
+ * @note 相机 up 若误用默认 (0,1,0)，OrbitControls 的"上"会变成 y 轴，
+ *       与 NED 语义冲突（画面里地面会竖起来）
+ * @see     main.js（装配顺序）、theme.mjs（运行时改主题）
+ */
 const THREE = __req('three');
 const { OrbitControls } = __req('three/addons/controls/OrbitControls.js');
 const { EffectComposer } = __req('three/addons/postprocessing/EffectComposer.js');
 const { RenderPass } = __req('three/addons/postprocessing/RenderPass.js');
 const { UnrealBloomPass } = __req('three/addons/postprocessing/UnrealBloomPass.js');
 
+// @note 像素比上限 2：高分屏下避免 4K 全分辨率造成的填充率瓶颈
+// @note bloom 参数 (0.30, 0.45, 0.85) 与 theme 的 dark/light 主题共享强度值
+/**
+ * @brief 创建渲染上下文（renderer/scene/camera/controls/composer/lights）
+ * @param {HTMLElement} container 渲染画布容器（#scene）
+ * @returns {{renderer,scene,camera,controls,composer,bloom,lights}} 渲染上下文
+ */
 function createScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -55462,13 +55643,31 @@ function createScene(container) {
 return { createScene };
 });
 __def('src/browser/effects.mjs', function() {
-// ============================================================
-//  环境效果：地面网格 / 星空 / 气流粒子 / 网格跟随
-// ============================================================
+/**
+ * @file    effects.mjs
+ * @module  仿真 browser/环境效果
+ * @brief   地面网格、星空、天空穹顶、地平线环与气流粒子的创建与逐帧更新
+ * @details 输入：场景对象与每帧 sim 状态（地速、高度、空速）；
+ *          处理：粒子按地速反向漂移（相对风）、网格按位置反衬平移与真实高度升降；
+ *          输出：场景对象与 update/rebuild 接口。
+ *          不变量：所有视觉效果是"载机跟随惯性系"的假象——机体恒在画面中心。
+ * @theory  N/A（视觉表现，不参与力学）；"机体不动、世界动"的渲染口径 @ref MOD-001 §9
+ * @frame   世界系与 NED 同向（z 向下）；天空球 z 分量判断天顶/地面
+ * @units   长度为 world unit（示意），速度取 m/s 仅用于动画相位
+ * @note 气流粒子是相对风的可视化，不是 CFD/尾流模型，禁止据此讨论气动干涉
+ * @see     main.js（每帧 effects.update）、theme.mjs（按主题重建网格/天空）
+ */
 const THREE = __req('three');
 
 const AIR_N = 1300;
 
+// @note 地面网格 z = 7.5 − pos.z 且下限 1.6：既反衬真实高度又避免网格贴到相机上
+// @note update 内的粒子回绕用固定周期（68/30/11 world unit），与真实位移量无关
+/**
+ * @brief 创建环境效果集合（网格/星空/天空/地平线环/气流粒子）
+ * @param {THREE.Scene} scene 场景对象
+ * @returns {{rebuildGrid: Function, rebuildSky: Function, stars: Object, air: Object, update: Function}}
+ */
 function createEffects(scene) {
   // ---------- 地面网格 ----------
   let grid = null;
@@ -55582,10 +55781,24 @@ function createEffects(scene) {
 return { createEffects };
 });
 __def('src/browser/aircraft-view.mjs', function() {
-// ============================================================
-//  飞行器程序化几何与三维可视化同步
-//  注意：渲染几何为示意性非尺度模型，与动力学力臂（a=b=0.62m）无关
-// ============================================================
+/**
+ * @file    aircraft-view.mjs
+ * @module  仿真 browser/三维模型
+ * @brief   程序化生成飞行器几何并逐帧同步姿态/摆角/力矢可视化
+ * @details 输入：sim 状态与遥测（姿态四元数、SAS 执行角、T/Q 遥测）；
+ *          处理：构型几何（机身/机翼/双摆座/桨盘）→ 每帧更新四元数、摆座转角、
+ *          螺旋桨视觉转速、推力箭头长度、反扭矩弧缩放、力矩箭头方向；
+ *          输出：Three.js 场景对象。
+ *          不变量：渲染长度为示意比例，力学计算一律用 parameters.mjs 的物理力臂。
+ * @theory  摆角语义：前摆绕 z_b（体轴=偏航，悬停=上摆/滚转）、尾摆绕 y_b
+ *          （体轴=俯仰，悬停=下摆）@ref MOD-001 §2、@ref AGENTS.md 执行器轴映射；
+ *          姿态 q 直接赋给 THREE.Quaternion（体系→惯性系）@ref MOD-002 §3.5
+ * @frame   渲染世界系与 NED 同向（z 向下），模型本体系 FRD
+ * @units   几何尺寸为无量纲示意值（world unit），转角 rad，力/力矩仅用于映射箭头长度
+ * @redline 渲染力臂（±1.78 m 视觉位置）与物理力臂（a=b=0.315 m）必须分离，禁止混用
+ * @note 视觉转速 ≠ 物理转速（视觉取 6+0.05ω 只为可读性），不得据此做任何定量推断
+ * @see     docs/04-数学建模/MOD-002-坐标系与符号约定.md §6（渲染/物理比例声明）
+ */
 const THREE = __req('three');
 
 // ---------- 材质 ----------
@@ -55701,6 +55914,15 @@ function makeLabel(text, color) {
   return sp;
 }
 
+// @note 摆座组原点在转轴处：前摆 x=+1.78、尾摆 x=−1.82（视觉值，非物理力臂 0.315 m）；
+//       推力/反扭箭头挂在摆座组内，随摆角自动偏转——这是"摆动即矢量"的视觉表达
+// @note 前电机为拉力式（桨在前）、尾电机为推进式（桨在后并绕 y 转 180°）
+/**
+ * @brief 构建飞行器可视模型（机身/机翼/双矢量摆座/箭头/标签/体轴参考线）
+ * @param {THREE.Scene} scene 场景对象（模型以子组形式挂入）
+ * @returns {Object} 视图句柄：aircraft/front/tail/cgRing/thrustF/thrustT/arcF/arcT/mArrow* 等
+ * @see updateAircraftView
+ */
 function createAircraftView(scene) {
   const aircraft = new THREE.Group();
   scene.add(aircraft);
@@ -55820,6 +56042,14 @@ function createAircraftView(scene) {
 }
 
 // ---------- 可视化同步（每帧） ----------
+// @note 摆角用 SAS 修正后的 dtAct/dfAct（不是滑块指令），操作者看到的才是实际执行量
+// @note 力矩箭头设置含符号翻转：负值把箭头绕 z 转 180°——方向与大小同时表达
+/**
+ * @brief 每帧把仿真状态同步到可视模型
+ * @param {Object} view createAircraftView 句柄；@param {Object} sim 仿真状态
+ * @param {Object} P 参数表（用 wMax 归一化桨盘透明度）；@param {number} dt 帧间隔 [s]
+ * @returns {void}；@note 摆角取 dtAct/dfAct（实际执行量），不是滑块指令
+ */
 function updateAircraftView(view, sim, P, dt) {
   const { S, dyn } = sim;
   // 姿态 → 机体
@@ -55870,9 +56100,21 @@ function updateAircraftView(view, sim, P, dt) {
 return { createAircraftView, updateAircraftView };
 });
 __def('src/browser/hud.mjs', function() {
-// ============================================================
-//  HUD 仪表与遥测数据显示
-// ============================================================
+/**
+ * @file    hud.mjs
+ * @module  仿真 browser/HUD
+ * @brief   六维力/力矩条形表与数字遥测的 DOM 渲染
+ * @details 输入：core/telemetry 的遥测快照；处理：按通道满量程归一化条宽、
+ *          更新数字文本与告警颜色；输出：DOM 内容。
+ *          不变量：HUD 只读快照，不写 sim；量程 CH[].max 是显示契约而非物理上限。
+ * @theory  N/A（显示层）；欧拉角直接显示 telemetry 的显示角（theta 取负约定）
+ *          @ref MOD-002 §4（HUD 已把负号纳入操作者习惯）
+ * @frame   显示机体系力/力矩；姿态角为项目显示约定（非标准 3-2-1）
+ * @units   力 N、力矩 N·m、转速 rad/s、空速 m/s、高度 m、姿态 °、时间 s
+ * @note 姿态显示直接用 57.3 系数把 rad 转 °——不要在这里"修正"符号，
+ *       否则与 SAS 的显示角语义分叉（红线：theta=−asin(R13) 全链一致）
+ * @see     core/telemetry.mjs（数据来源）、main.js（每 3 帧同步一次）
+ */
 
 const CH = [
   { id: 'Fx', name: 'F_x 纵向力',  color: '#22d3ee', max: 40,  unit: 'N',   bipolar: false },
@@ -55883,6 +56125,13 @@ const CH = [
   { id: 'Mz', name: 'M_z 推进偏航矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
 ];
 
+// @note 双向条（bipolar）从中线向两侧生长：正负力矩方向是操作者判读的主要信息
+// @note 差速对消判定阈值 0.02 N·m 是显示级阈值（零摆角附近的反扭残差），不用于控制
+/**
+ * @brief 在容器内生成六条力/力矩仪表并返回同步函数
+ * @param {HTMLElement} box 仪表容器（#meters）
+ * @returns {{sync: Function}} sync(t) 接收 core/telemetry 的遥测快照
+ */
 function createHud(box) {
   const $ = id => document.getElementById(id);
   const meterEls = {};
@@ -55946,11 +56195,32 @@ function createHud(box) {
 return { createHud };
 });
 __def('src/browser/controls-ui.mjs', function() {
-// ============================================================
-//  控制面板 UI：滑块 / 开关 / 复位 / 模态框
-// ============================================================
+/**
+ * @file    controls-ui.mjs
+ * @module  仿真 browser/控制面板
+ * @brief   滑块/开关/复位的 DOM 绑定，以及滑块语义到物理指令的换算
+ * @details 输入：DOM 控件事件与 sim 状态；处理：按模式（巡航/悬停、SAS 模式）切换
+ *          滑块量纲（°、%、°/s、rad/s）并写回 S.thr/dt/df/dw；输出：状态更新与控件文案。
+ *          不变量：UI 只写指令 S.dt/df/dw，不直接写执行量 dtAct/dfAct/dwAct。
+ * @theory  滑块语义：巡航 dt/df 为摆角指令、dw 为差速幅值；悬停 dt/df 为姿态角指令、
+ *          dw 为航向角速度（rate 模式）@ref CTL-001 §8.2；
+ *          rate 模式（sasMode=3）滑块映射到 ±rateQMax/±ratePMax @ref CTL-001 §4.1
+ * @frame   N/A（纯 UI；角度绕机体轴）
+ * @units   UI 显示 °、°/s、%，写回状态一律 rad、rad/s、[-]
+ * @redline 悬停/巡航切换必须走 resetVtolHoverState/resetSimulationState（模式标志与状态一致）
+ * @note 弹簧回中只作用于 dt/df/dw：油门不回中，否则松手掉油门
+ * @see     state.mjs（复位语义）、control.mjs（消费指令）、tests/vtol.test.mjs
+ */
 const { resetSimulationState, resetVtolHoverState, resetPoseOnly } = __req('src/core/state.mjs');
 
+// @note refreshModeUI 同时改文案与滑块 min/max/step，因为差速滑块在两种模式下量纲不同
+//       （巡航 %、悬停 °/s）——只改一半会导致松手回中按错量纲计算
+// @note 复位按钮走 resetPoseOnly（保留模式与输入），与"切模式"按钮的复位语义不同
+/**
+ * @brief 创建控制面板交互：同步滑块 ↔ 状态，绑定模式/复位/模态框按钮
+ * @param {Object} opts {sim, P, hooks}；hooks.stopDemo 为用户操作时打断演示的回调
+ * @returns {{syncFromUI: Function, pushToUI: Function}} 双向同步接口
+ */
 function createControlsUI({ sim, P, hooks }) {
   const S = sim.S;
   const $ = id => document.getElementById(id);
@@ -56144,10 +56414,20 @@ function createControlsUI({ sim, P, hooks }) {
 return { createControlsUI };
 });
 __def('src/browser/scope.mjs', function() {
-// ============================================================
-//  角速度示波器：p/q/r 波形曲线（可开关）
-//  实线 = 实际机体角速度；角速度闭环模式下虚线 = 目标角速度 ω_ref
-// ============================================================
+/**
+ * @file    scope.mjs
+ * @module  仿真 browser/示波器
+ * @brief   p/q/r 角速度波形示波器（环形缓冲 + Canvas 绘制 + 面板拖拽）
+ * @details 输入：sim.S.omega 与 sasMode=3 时的滑块目标角速度；
+ *          处理：~60 Hz 采样进 480 点环形缓冲 → ~30 fps 绘制实线（实测）与虚线（目标）；
+ *          输出：Canvas 像素与面板位置。
+ *          不变量：缓冲窗口 8 s 与 ±180°/s 量程固定，超量程波形被裁边而不缩放。
+ * @theory  N/A（显示层）；目标角速度语义见 @ref CTL-001 §4.1（mode 3）
+ * @frame   机体角速度 p/q/r（绕 x/y/z_b）
+ * @units   内部 rad/s 与 rad，绘制时转 °/s
+ * @note 采样与绘制各自节流，是为了让 480 点缓冲恰好铺满 8 s 窗口，不受显示器刷新率影响
+ * @see     main.js（b-scope 按钮与 update）、control.mjs（目标角速度来源）
+ */
 
 const DEG = Math.PI / 180;
 const COLORS = { p: '#fb7185', q: '#34d399', r: '#818cf8' };   // 与图例一致
@@ -56155,6 +56435,13 @@ const WINDOW_S = 8;        // 时间窗口（秒）
 const N = 480;             // 环形缓冲点数（≈60Hz 采样）
 const SCALE = Math.PI;     // 纵轴量程 ±π rad/s（±180°/s）
 
+// @note 目标角速度只在 sasMode=3 有定义，其余模式写 NaN → 虚线断点（不画假目标）
+// @note 面板拖拽把 left/top 固定为像素值，避免容器缩放时定位漂移
+/**
+ * @brief 创建示波器实例并绑定拖拽/可见性
+ * @param {Object} sim 仿真状态（只读 S.omega/S.sasMode/S.dw/dt/df）
+ * @returns {{setVisible: Function, update: Function, visible: boolean}}
+ */
 function createScope(sim) {
   const { S } = sim;
   const panel = document.getElementById('scope');
@@ -56276,13 +56563,31 @@ function createScope(sim) {
 return { createScope };
 });
 __def('src/browser/demo.mjs', function() {
-// ============================================================
-//  演示序列：俯仰 / 偏航 / 滚转 / 综合
-// ============================================================
+/**
+ * @file    demo.mjs
+ * @module  仿真 browser/演示序列
+ * @brief   自动演示脚本：正弦俯仰/偏航/滚转与综合动作，驱动 UI 滑块
+ * @details 输入：仿真时间 t 与演示名（pitch/yaw/roll/cine）；
+ *          处理：按单周期 3.2 s 的正弦（或 12 s 分段综合序列）写 S.dt/df/dw/thr，
+ *          再调 ui.pushToUI 让滑块跟随；输出：状态指令变化（不直接算力）。
+ *          不变量：演示只改指令、不改模式；开始演示前先完整复位（resetSimulationState）。
+ * @theory  激励幅值 18°（摆角）/0.28（Δω）在 SAS 线性工作区内 @ref CTL-001 §4
+ * @frame   N/A（指令层；dt/df 绕机体 y/z 轴）
+ * @units   角度 °（内部转 rad）、差速无量纲
+ * @note 演示是"给人看的"，幅值/周期不是识别数据；任何定量结论都不能取自演示
+ * @see     main.js（demoStep 每帧调用）、controls-ui.mjs（pushToUI）
+ */
 const { resetSimulationState } = __req('src/core/state.mjs');
 
 const D2R = Math.PI / 180;
 
+// @note 再次点击同一按钮 = 停止（toggle 语义）；开始前完整复位以保证可重复
+// @note demoStep 每帧调用，τ 用 S.time−t0 计算，所以暂停/复位后相位自动归零
+/**
+ * @brief 创建演示控制器并绑定按钮
+ * @param {Object} opts {sim, P, controls, ui}；controls 用 autoRotate 做环绕运镜
+ * @returns {{startDemo: Function, stopDemo: Function, demoStep: Function}}
+ */
 function createDemo({ sim, P, controls, ui }) {
   const S = sim.S;
   const $ = id => document.getElementById(id);
@@ -56332,9 +56637,19 @@ function createDemo({ sim, P, controls, ui }) {
 return { createDemo };
 });
 __def('src/browser/theme.mjs', function() {
-// ============================================================
-//  深色 / 浅色主题
-// ============================================================
+/**
+ * @file    theme.mjs
+ * @module  仿真 browser/主题
+ * @brief   深色/浅色主题切换（背景、雾、网格、天空、星空、粒子混合与灯光）
+ * @details 输入：主题名 dark/light；处理：一次性重设场景颜色、雾距、网格/天空、
+ *          粒子混合模式与三灯强度；输出：视觉样式 + localStorage 记忆。
+ *          不变量：主题只改渲染参数，不触碰仿真状态或力学参数。
+ * @theory  N/A（显示层）
+ * @frame   N/A
+ * @units   N/A
+ * @note 浅色主题把粒子从加性混合改为普通混合，否则浅背景下粒子会"消失"
+ * @see     effects.mjs（rebuildGrid/rebuildSky）、scene.mjs（lights/bloom）
+ */
 const THREE = __req('three');
 
 const THEMES = {
@@ -56346,6 +56661,13 @@ const THEMES = {
            sky: { top: 0x6f9fd6, horizonCol: 0xe4edf7, bottom: 0xc9d5e2, ring: 0x7186a0, ringOp: 0.9 } },
 };
 
+// @note localStorage 读写包在 try/catch：隐私模式/禁用存储时不应打断初始化
+// @note 主题名非法时回退 dark——按钮文案与 body class 由同一 name 驱动，不会不同步
+/**
+ * @brief 创建主题控制器并绑定 #b-theme 按钮
+ * @param {Object} ctx {scene, bloom, lights, effects}（由 main.js 注入的渲染上下文）
+ * @returns {{setTheme: Function}} setTheme('dark'|'light')
+ */
 function createTheme({ scene, bloom, lights, effects }) {
   const $ = id => document.getElementById(id);
 
@@ -56378,17 +56700,64 @@ function createTheme({ scene, bloom, lights, effects }) {
 return { createTheme };
 });
 __def('src/core/math.mjs', function() {
-// ============================================================
-//  纯 JavaScript 数学工具 —— core 层禁止依赖 Three.js
-//  运算语义与 THREE.Vector3 / Quaternion / Matrix4 严格一致
-// ============================================================
+/**
+ * @file    math.mjs
+ * @module  仿真 core/姿态数学
+ * @brief   四元数、旋转与欧拉角提取的纯函数集合
+ * @details 输入：机体系/惯性系矢量与单位四元数 {x,y,z,w}；
+ *          处理：标量钳位、四元数乘法/共轭/归一化、三明治积旋转、3-2-1 欧拉角提取；
+ *          输出：新对象（不修改入参），被 dynamics/control/state 复用。
+ *          不变量：core 层零 Three.js/DOM 依赖，Node 可独立单测；
+ *          q 的语义固定为"机体系→惯性系"（MOD-002 §3.2）。
+ * @theory  四元数代数与三明治积 @ref THY-001 §6；
+ *          姿态运动学右乘式 q̇ = ½·q⊗(0,ω_b) @ref THY-001 §7；
+ *          四元数→DCM 展开 @ref THY-001 §8；
+ *          3-2-1 欧拉角提取（本项目锁定式）@ref MOD-002 §4
+ * @frame   机体系 FRD → 惯性系 NED（z 向下）
+ * @units   角度 rad，角速度 rad/s；本文件不做 deg 换算
+ * @redline theta = −asin(R13) 为行为保持红线（@ref MOD-002 §4.3）
+ * @see     dynamics.mjs、control.mjs、tests/math.test.mjs
+ */
 
+// @note 限幅类红线的统一实现：SAS 摆角/差速、α/β 定义域都走它；不处理 NaN
+// @test tests/math.test.mjs「clamp 边界」
+/**
+ * @brief 把标量钳位到闭区间 [lo, hi]
+ * @param {number} x 输入标量；@param {number} lo 下限；@param {number} hi 上限
+ * @returns {number} 钳位结果（NaN 原样传播）
+ */
 const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 
+/**
+ * @brief 构造三维矢量对象
+ * @param {number} [x=0] x 分量；@param {number} [y=0] y 分量；@param {number} [z=0] z 分量
+ * @returns {{x:number,y:number,z:number}} 矢量对象
+ * @note 无参调用给零矢量；单位由使用处决定（位置 m、速度 m/s、力 N）
+ */
 const vec3 = (x = 0, y = 0, z = 0) => ({ x, y, z });
+
+/**
+ * @brief 构造四元数对象
+ * @param {number} [x=0] 虚部 i；@param {number} [y=0] 虚部 j；@param {number} [z=0] 虚部 k
+ * @param {number} [w=1] 实部（默认 1 ⇒ 单位元）
+ * @returns {{x:number,y:number,z:number,w:number}} 四元数
+ */
 const quat = (x = 0, y = 0, z = 0, w = 1) => ({ x, y, z, w });
 
-// v' = q ⊗ v ⊗ q*（THREE.Vector3.applyQuaternion 同款公式）
+// ── 四元数旋转（三明治积）──────────────────────────────────────────
+// 公式：v' = q ⊗ ṽ ⊗ q*，ṽ = (0, v)
+// 符号：q 单位四元数（机体系→惯性系）；v/v' 待旋转/旋转后矢量
+// 来源：@ref THY-001 §6（与罗德里格斯公式 v'=v·cosθ+n(n·v)(1−cosθ)+(n×v)·sinθ 等价）
+// 实现：本函数展开为 t = 2(q×v)，v' = v + q_w·t + q×t —— 免构造中间四元数，少 2 次分配
+// 等价变换：无（教材与项目同为右手系、同一四元数定义）
+// 数值证据：tests/math.test.mjs「绕 z 轴旋转 90°」「旋转再逆旋转还原向量」
+// ─────────────────────────────────────────────────────────────────
+/**
+ * @brief 用单位四元数旋转三维矢量：v' = q⊗ṽ⊗q*
+ * @param v 待旋转矢量；@param q 单位四元数（须已归一化，体系→惯性系）
+ * @returns {{x,y,z}} 旋转后的矢量（同单位）；@formula t=2(q×v)，v'=v+q_w·t+q×t
+ * @ref THY-001 §6；@note 与 THREE.Vector3.applyQuaternion 逐项一致；@test tests/math.test.mjs
+ */
 function rotateVecByQuat(v, q) {
   const { x: vx, y: vy, z: vz } = v;
   const { x: qx, y: qy, z: qz, w: qw } = q;
@@ -56403,10 +56772,21 @@ function rotateVecByQuat(v, q) {
   };
 }
 
-// 单位四元数的逆 = 共轭（与 THREE.Quaternion.invert 一致）
+/**
+ * @brief 单位四元数求逆（= 共轭）
+ * @param q 单位四元数；@returns {{x,y,z,w}} 共轭 (−x,−y,−z,w)
+ * @formula q⁻¹ = q* = (−v, q₀)，仅当 |q| = 1；@ref THY-001 §6
+ * @note 非单位四元数的真逆为 q* 除以 |q|²，本函数不补该除法（调用点均已保范）
+ */
 const quatInvert = (q) => ({ x: -q.x, y: -q.y, z: -q.z, w: q.w });
 
 // a ⊗ b（THREE.Quaternion.multiply 的分量顺序）
+/**
+ * @brief 四元数 Hamilton 乘 a⊗b（旋转复合：先 b 后 a）
+ * @param a 左乘四元数；@param b 右乘四元数；@returns {{x,y,z,w}} a⊗b
+ * @formula (p₀q₀−v_p·v_q, p₀v_q+q₀v_p+v_p×v_q)；@ref THY-001 §6
+ * @note 分量顺序对齐 THREE.Quaternion.multiply；姿态积分固定右乘 q⊗ω̃（体系角速度）
+ */
 function quatMultiply(a, b) {
   return {
     x: a.x * b.w + a.w * b.x + a.y * b.z - a.z * b.y,
@@ -56416,15 +56796,33 @@ function quatMultiply(a, b) {
   };
 }
 
+/**
+ * @brief 四元数归一化（保范投影）
+ * @param q 任意四元数；@returns {{x,y,z,w}} 单位四元数（零输入回退单位元）
+ * @formula q ← q/‖q‖；@ref THY-001 §9（积分漂移与每步归一化）
+ * @note 零输入回退 (0,0,0,1) 而非 NaN——RK4 中间点若抵消，不应污染整条状态链
+ */
 function quatNormalize(q) {
   const l = Math.hypot(q.x, q.y, q.z, q.w);
   if (l === 0) return { x: 0, y: 0, z: 0, w: 1 };
   return { x: q.x / l, y: q.y / l, z: q.z / l, w: q.w / l };
 }
 
-// 由单位四元数提取 3-2-1 欧拉角 {phi, theta, psi}
-// 与 THREE.Matrix4.makeRotationFromQuaternion 列主序元素
-// e[8]=m13, e[9]=m23, e[10]=m33, e[4]=m12, e[0]=m11 的用法一致
+// ── 3-2-1 欧拉角提取（本项目锁定约定，勿按教材"修正"）──────────────
+// 公式：phi = atan2(R23,R33)，theta = −asin(R13)，psi = atan2(R12,R11)
+// 符号：R_ij 为机体系→惯性系 DCM 元素；theta 的负号是本项目约定（非标准 3-2-1）
+// 来源：@ref MOD-002 §4.1（公式）与 §4.3（行为锁定）；DCM 展开 @ref THY-001 §8
+// 实现：本函数一次算出 m11/m12/m13/m23/m33 五个元素，省去构造整矩阵
+// 等价变换：三式合起来等于"对 R^T 做标准 ZYX 分解"⇒ 三个角都是逆旋转角，
+//           单轴正转 a 时 phi/theta/psi 读数均为 −a（phi、psi 同样取负，见 MOD-002 §4.2 注）
+// 数值证据：@test tests/math.test.mjs「纯俯仰四元数 → theta = -a0」
+// ─────────────────────────────────────────────────────────────────
+/**
+ * @brief 由单位四元数提取 3-2-1 欧拉角（项目锁定式）
+ * @param q 单位四元数（机体系→惯性系）；@returns {{phi,theta,psi}} 显示角 [rad]
+ * @formula phi=atan2(R23,R33)、theta=−asin(R13)、psi=atan2(R12,R11)；@ref MOD-002 §4.1
+ * @note R13 先 clamp 到 [−1,1] 防浮点越界 NaN；返回值是 HUD/SAS 共用的"逆旋转角"
+ */
 function eulerFromQuat(q) {
   const { x, y, z, w } = q;
   const x2 = x + x, y2 = y + y, z2 = z + z;
@@ -56446,23 +56844,55 @@ function eulerFromQuat(q) {
 return { clamp, vec3, quat, rotateVecByQuat, quatInvert, quatMultiply, quatNormalize, eulerFromQuat };
 });
 __def('src/core/control.mjs', function() {
-// ============================================================
-//  SAS 增稳控制：角速率阻尼 + 姿态角比例/积分反馈
-//  → 摆角/差速修正（积分与指令均限幅）
-//
-//  模式（S.sasMode）：
-//    0 = 关闭（直通）
-//    1 = 全 SAS（角速率阻尼 + 姿态比例 + 积分）
-//    2 = 仅角速率阻尼（无姿态/积分）
-//    3 = 角速度闭环（Rate Command：滑块 = 目标角速度）
-// ============================================================
+/**
+ * @file    control.mjs
+ * @module  仿真 core/控制律（SAS 增稳 + VTOL 悬停）
+ * @brief   把滑块指令与姿态/角速度反馈合成为执行量（摆角、差速、油门）
+ * @details 输入：S 中的指令与角速度、F.euler 显示角、参数表；
+ *          处理：模式分支（关闭/全 SAS/仅角速率/角速度闭环）→ 反馈叠加 → 限幅；
+ *          悬停模式另走误差四元数级联 + 可选定高/B_true 分配；
+ *          输出：S.dtAct/dfAct/dwAct（以及定高时的 S.thr）。
+ *          不变量：所有执行量出口都经 ±dMax/±dwMax 限幅；积分器出口经 ±intThMax/±intPhiMax。
+ * @theory  SAS 三通道律 @ref CTL-001 §4.1；反馈极性整定 @ref CTL-001 §5；
+ *          差速/摆角效率符号 @ref CTL-001 §3；悬停四元数级联 @ref CTL-001 §8.2；
+ *          定高串级与 1/√cosγ 倾角补偿 @ref CTL-001 §8.4；
+ *          B_true 增量分配 @ref CTL-001 §8.5
+ * @frame   机体系 FRD 的力矩（Mx/My/Mz）与显示欧拉角（theta=−asin(R13) 约定）
+ * @units   角度 rad、角速度 rad/s、增益单位见 parameters.mjs（sasQ [s]、sasTh [-]）
+ * @redline SAS 限幅 ±25°(dMax)/±0.7(dwMax) 为仿真值；固件实机摆角 2026-08-07 已收紧
+ *          ±15°，仿真未回写 —— 评审时按 @ref docs/registers/行为保持红线清单.md「SAS 摆角限幅」处理
+ * @note 执行器轴语义（两套读法必须同时写）：体轴 δt→M_y(俯仰)、δf→M_z(偏航)、Δω→M_x(滚转)；
+ *       悬停构型（机头朝天）下同一摆 = 下摆(俯仰)/上摆(滚转)/差速(偏航)，
+ *       见 @ref AGENTS.md 踩坑记录「执行器轴映射（2026-08-07 轴置换）」
+ * @see     propulsion.mjs（效率符号来源）、control-allocation.mjs、tests/control.test.mjs
+ */
 const { clamp, quat } = __req('src/core/math.mjs');
 const { quatMultiply, quatInvert, quatNormalize, rotateVecByQuat } = __req('src/core/math.mjs');
 const { Q_HOVER, hoverThrottle } = __req('src/core/state.mjs');
 const { computeBTrue, inv3 } = __req('src/core/control-allocation.mjs');
 
-// 反馈极性按各通道控制效率符号整定
-// （∂My/∂δ_t<0, ∂Mx/∂Δω<0 → 正号; ∂Mz/∂δ_f>0 → 负号）
+// ── 固定翼 SAS（巡航构型）──────────────────────────────────────────
+// 公式：δt_cmd = clamp(dtTrim + δt + sasQ·q − sasTh·Δθ − sasI·∫Δθ, ±dMax)
+//       δf_cmd = clamp(dfTrim + δf − sasR·r, ±dMax)
+//       Δω_cmd = clamp(Δω + sasP·p − sasPhi·φ − sasIPhi·∫φ, ±dwMax)
+// 符号：Δθ = θ + aTrim（θ 为显示角，θ_ref = −aTrim）；q/p/r 为机体角速度
+// 来源：@ref CTL-001 §4.1；极性推导 @ref CTL-001 §5
+// 实现：`applySas` 的模式 1/2/3 三个分支；限幅在函数末尾统一执行
+// 等价变换：显示约定下 theta_dot≈−q、phi_dot≈−p ⇒ 速率项取正号、姿态项取负号，
+//           两类反馈符号必须分开整定（不能只看 ∂M/∂δ 的同号性）
+// 数值证据：@test tests/control.test.mjs（三条极性用例 + 限幅 + 积分限幅）
+// ─────────────────────────────────────────────────────────────────
+// @formula 见上方五段式；模式 3 速率闭环：
+//          dt=rateKq·(q−q_ref)、df=rateKr·(r_ref−r)、dw=rateKp·(p−p_ref)
+// @ref CTL-001 §4.1（模式 1）、§8.2（模式 3 与悬停内环同构）
+// @note 为什么模式切换要清积分：三个模式共用积分器，切回模式 1 时旧累积值会
+//       直接变成配平偏置（历史曾出现切换瞬间掉高）
+// @test tests/control.test.mjs（直通、极性、限幅、积分限幅、模式 2/3、切换清零）
+/**
+ * @brief SAS 主入口：按 S.sasMode 合成执行量（悬停模式转 applyVtolHover）
+ * @param {Object} sim 仿真状态；@param {Object} P 参数表；@param {number} dt 控制周期 [s]
+ * @returns {void}（写 S.dtAct/dfAct/dwAct，输出均已限幅）
+ */
 function applySas(sim, P, dt) {
   const { S, F } = sim;
   // VTOL 悬停构型：机头朝天（x_b 竖直），欧拉角在 θ≈90° 奇异，
@@ -56505,26 +56935,35 @@ function applySas(sim, P, dt) {
   S.dtAct = dtC; S.dfAct = dfC; S.dwAct = dwC;
 }
 
-// ============================================================
-//  VTOL 悬停控制：误差四元数姿态外环 + 角速度 P 内环（级联）
-//  —— 与固件 flight_control.cpp 悬停链同构（q_hover ⊗ Rx(-Heading) 语义），
-//     符号经数值验证（见 tests/vtol.test.mjs "控制符号"用例）。
-//
-//  目标姿态：qCmd = Q_HOVER ⊗ 滑块小角度指令（四轴式语义）
-//     dt 滑块 → 俯仰倾斜 θ（绕 y_b）目标角
-//     df 滑块 → 侧倾 φ（绕 z_b）目标角
-//     dw 滑块 → ★ 航向角速度指令 ψ̇（绕 x_b，rad/s；rate 模式，松手回中停转，
-//        不参与 qCmd —— 航向通道无姿态回中，纯角速度追踪 + 速率阻尼）
-//  机体系误差：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系，小角度 qe.xyz ≈ 误差/2；
-//     ⚠ 勿用 q ⊗ qCmd⁻¹ —— 那是 NED 系表达，悬停时 x/y/z 轴错位）
-//  目标角速度（y/z 通道姿态回中）：ωdes.yz = −2·vtolAttKp·qe.yz
-//  角速度内环按通道效率符号（与 sasMode=3 一致）：
-//     尾摆 δt（∂My/∂δt<0）: dtC = rateKq·(ω.y − ωdes.y)
-//     前摆 δf（∂Mz/∂δf>0）: dfC = rateKr·(ωdes.z − ω.z)
-//     差速 Δω（∂Mx/∂Δω<0）: dwC = rateKp·(ω.x − S.dw)（航向：滑块=目标角速度）
-//  悬停基准为 0 摆角（不叠加巡航配平偏置 dtTrim/dfTrim）；
-//  sasMode=0 时 dt/df 直通滑块摆角（无自稳），dw 仍为角速度指令。
-// ============================================================
+// ── VTOL 悬停控制（误差四元数级联）────────────────────────────────
+// 公式：qCmd = Q_HOVER ⊗ Rx(ψ_est) ⊗ Ry(θ_cmd) ⊗ Rz(φ_cmd)
+//       qe = qCmd⁻¹⊗q；ωdes.yz = −2·vtolAttKp·qe.yz
+//       δt = rateKq·(ω_y−ωdes.y)；δf = rateKr·(ωdes.z−ω_z)；Δω = rateKp·(ω_x−ψ̇_cmd)
+// 符号：qe 为机体系误差四元数（w<0 取反走短弧）；ψ_est 由 y_b 水平投影提取
+// 来源：@ref CTL-001 §8.2（控制律与符号表）、§8.3（三通道符号数值验证）
+// 实现：`applyVtolHover`；定高段 `if (S.altHold)`；B_true 段 `if (S.useBtrue)`
+// 等价变换：θ≈90° 时欧拉角奇异、固定翼欧拉反馈失效 ⇒ 必须改用四元数误差链；
+//           内环仍复用 sasMode=3 的通道效率符号（∂My/∂δt<0、∂Mz/∂δf>0、∂Mx/∂Δω<0）
+// 数值证据：@test tests/vtol.test.mjs 31 用例（收敛、航向 90°/180°、定高、B_true）
+// ─────────────────────────────────────────────────────────────────
+/**
+ * @brief 悬停构型控制律：四元数姿态外环 + 角速度内环 + 可选定高/B_true 分配
+ * @param {Object} sim 仿真状态（S.dt/df 为姿态角指令、S.dw 为航向角速度指令）
+ * @param {Object} P 参数表（vtolAttKp/rateKp/rateKr/rateKp/dMax/dwMax/altKp 系列/btrueK/Ix/Iy/Iz）
+ * @param {number} dt 控制周期 [s]（定高积分与 B_true 的 ω̇ 差分用）
+ * @returns {void}
+ * @formula 见上方五段式；定高：vZref=clamp(altKpH·h_err+altKpI·∫h_err, ±altVZMax)，
+ *          thr=thrHover/√cosγ + altKpV·(vZref−vZ)
+ * @ref CTL-001 §8.2/§8.4/§8.5
+ * @pre S.vtolMode=true（由 applySas 分派）；dt>0
+ * @post dtAct/dfAct 限幅 ±dMax，dwAct 限幅 ±dwMax（限幅只在有分支的出口生效）
+ * @note qCmd 必须跟随当前航向：航向由角速度指令自由旋转（x 通道无姿态回中），
+ *       若 qCmd 固定，qe 的 y/z 分量被 cosψ 调制 → ψ=90° 倾斜失效、180° 反向发散
+ * @note 悬停基准是 0 摆角（不叠加 dtTrim/dfTrim）；sasMode=0 时 dt/df 直通、dw 仍为
+ *       航向角速度追踪（rate 语义不因自稳关闭而消失）
+ * @note 高度用真值（本仿真无传感器模型），定高只接管油门、不触碰摆角
+ * @test tests/vtol.test.mjs（初始化/符号/闭环/定高/B_true 五个分组）
+ */
 function applyVtolHover(sim, P, dt) {
   const { S, F } = sim;
 
@@ -56549,11 +56988,11 @@ function applyVtolHover(sim, P, dt) {
   // ---------- 高度保持（S.altHold=true，仅悬停模式） ----------
   // 独立于姿态自稳（sasMode=0 直通时同样生效）：只接管油门，不触碰摆角。
   // 串级：高度外环（P+I）→ 目标垂直速度 → 油门内环（P）
-  //   h    = −pos.z       （NED z 向下，高度向上为正）
-  //   vZ   = −vWorld.z    （垂直速度，向上为正）
-  //   vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)
-  //   thr  = thrHover/√cosγ + altKpV·(vZref − vZ)   （cosγ = x̂_b·(−ẑ_NED) 倾角补偿：
-  //          倾斜损失竖直推力分量，且 T∝thr² → 补偿因子 1/√cosγ 而非 1/cosγ）
+  // 公式：h = −pos.z（NED z 向下，高度向上为正）、vZ = −vWorld.z（向上为正）
+  // 公式：vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)
+  // 公式：thr = thrHover/√cosγ + altKpV·(vZref − vZ)
+  // 符号：cosγ = x̂_b·(−ẑ_NED) = −R31 为机头轴竖直分量；T∝thr² ⇒ 补偿因子 1/√cosγ
+  // 来源：@ref CTL-001 §8.4（串级结构、倾角补偿与积分限幅）
   if (S.altHold) {
     const h = -F.pos.z;
     const vZ = -F.vWorld.z;
@@ -56579,12 +57018,11 @@ function applyVtolHover(sim, P, dt) {
 
     if (S.useBtrue) {
       // ---- B_true 在线控制分配（S.useBtrue=true）----
-      // 内环：角速度误差 → 目标力矩（每通道独立对角，M = I·K·(ωdes − ω)）
-      //   ωdes.x = 航向角速度指令（rate 模式）、ωdes.y/z = 姿态回中（qe）
+      // 内环：角速度误差 → 目标力矩（每通道独立对角）
+      // 公式：M_des = diag(Ix,Iy,Iz)·btrueK·(ωdes − ω)
       // 分配层：Δu = B⁻¹·(M_des − M_cur)，u += Δu（限幅）
-      //   M_cur = 当前执行器位置的推进力矩（模型预测，含 Jp 瞬态反扭；
-      //           不含气动/gyro——分配层只负责执行器，外扰由内环闭环抑制）
-      //   B = ∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf] 当前工作点 Jacobian（列序 [Δdw,Δδt,Δδf]）
+      // 符号：u 列序 [Δdw, Δδt, Δδf]；M_cur 为当前执行器位置的推进力矩（模型预测）
+      // 来源：@ref CTL-001 §8.5；B 的解析表达式见 control-allocation.mjs
       // ★ 非 INDI：无角加速度反演（不需要 ω̇ 估计）；M_cur 用当前状态重算
       //   （sim.dyn 是上一子步滞后值——applySas 先于 stepPropulsion 执行）
       const kX = P.Ix * P.btrueK, kY = P.Iy * P.btrueK, kZ = P.Iz * P.btrueK;
@@ -56634,17 +57072,52 @@ function applyVtolHover(sim, P, dt) {
 return { applySas };
 });
 __def('src/core/propulsion.mjs', function() {
-// ============================================================
-//  动力装置：电机一阶惯性 + 电磁反扭 + 推力矢量六维映射
-// ============================================================
+/**
+ * @file    propulsion.mjs
+ * @module  仿真 core/推进系统
+ * @brief   电机一阶滞后、差速开方分配、反扭矩与推力矢量六维映射
+ * @details 输入：油门 thr 与执行量（dtAct/dfAct/dwAct）、上一步转速；
+ *          处理：差速分配求目标转速 → 一阶滞后更新实际转速 → T/Q 计算 → 六维力/力矩；
+ *          输出：写入 sim.dyn 的 {Fx,Fy,Fz,Mx,My,Mz,Tf,Tt,Qf,Qt} 与摆角三角函数。
+ *          不变量：六维映射只依赖当前摆角/转速，不含气动与陀螺项（后者在 dynamics）。
+ * @theory  差速开方分配 ωf=ω0√(1+Δω)、ωt=ω0√(1−Δω) @ref CTL-001 §7.1；
+ *          推力 T=kT·ω²、反扭矩 τ=kQ·ω²+Jp·ω̇ @ref THY-002 §6；
+ *          六维映射（机体系 δf→Mz、δt→My、Δω→Mx）@ref MOD-001 §4；
+ *          电机一阶滞后 τm 来源 @ref THY-002 §4
+ * @frame   机体系 FRD（x 前 / y 右 / z 下）；摆座系到机体系仅绕固定轴旋转
+ * @units   ω [rad/s]、T [N]、Q/τ [N·m]、力矩 [N·m]、力 [N]
+ * @redline 差速公式 ωf=ω0√(1+Δω) 不可改；τm=0.28 s 不可改（见行为保持红线清单）
+ * @note 执行器轴语义：体轴 δf→M_z(偏航)/δt→M_y(俯仰)/Δω→M_x(滚转)；
+ *       悬停构型下同一摆分别主控滚转/俯仰，见 @ref AGENTS.md「执行器轴映射」
+ * @see     control.mjs（SAS/悬停律输出 dtAct/dfAct/dwAct）、tests/propulsion.test.mjs
+ */
 
-// 更新转速、推力、反扭矩与机体系六维力/力矩
-// 返回摆角三角函数供转动方程的转子角动量项使用
+// ── 差速开方分配（平方和不变）──────────────────────────────────────
+// 公式：ωf = ω0·√(1+Δω)，ωt = ω0·√(1−Δω)，ω0 = thr·wMax
+// 符号：Δω 为差速指令，正=前快尾慢；wMax 为最大转速
+// 来源：@ref CTL-001 §7.1–7.2；@ref MOD-001 §3.2
+// 实现：`wfT/wtT` 两行；sqrt 前 max(0,·) 兜底指令越界（|Δω|>1）
+// 等价变换：平方后 ωf²+ωt²=2ω0² ⇒ T=kT·ωf² 对 Δω 严格线性（Tf=T0(1+Δω)），
+//           这是"一阶不扰动总推力"的代数来源，不是小角度近似
+// 数值证据：@test tests/propulsion.test.mjs「差速分配保持平方转速和不变」
+// ─────────────────────────────────────────────────────────────────
+// @formula ω̇≈(ω_cmd−ω)/τm；T=kT·ω²；Q=kQ·ω²+Jp·ω̇；
+//          Fx=Tf·cf+Tt·ct、Fy=Tf·sf、Fz=−Tt·st；
+//          Mx=−Qf·cf+Qt·ct、My=−b·Tt·st−Qf·sf、Mz=a·Tf·sf−Qt·st
+// @ref THY-002 §3（反扭矩=电磁扭矩）、§4（一阶滞后）；@ref MOD-001 §2–§4
+// @note ω̇ 用后向差分 ((ω−ω_prev)/dt)，dt 下限 1e-4 s 仅防除零
+// @approx 一阶滞后用显式欧拉（1−e^(−dt/τm) 的一阶截断），dt=4 ms 时相对误差 ~7e-3
+// @test tests/propulsion.test.mjs（T/Q 稳态、平方和、摆角符号、反扭对消、一阶滞后 63.2%）
+/**
+ * @brief 推进一步推进系统：更新转速/推力/反扭矩与机体系六维力/力矩
+ * @param {Object} sim 仿真状态；@param {Object} P 参数表；@param {number} dt 子步长 [s]
+ * @returns {{cf:number,sf:number,ct:number,st:number}} 摆角三角函数（供转子角动量）
+ */
 function stepPropulsion(sim, P, dt) {
   const { S, dyn } = sim;
   const dtC = S.dtAct, dfC = S.dfAct, dwC = S.dwAct;
 
-  // 差速分配: ω_f²+ω_t² ≈ 常数
+  // 差速分配: ω_f²+ω_t² ≈ 常数（钳位 wMax 后不再严格成立，见 CTL-001 §7.2 注）
   const w0 = S.thr * P.wMax;
   const wfT = Math.min(w0 * Math.sqrt(Math.max(0, 1 + dwC)), P.wMax);
   const wtT = Math.min(w0 * Math.sqrt(Math.max(0, 1 - dwC)), P.wMax);
@@ -56655,7 +57128,7 @@ function stepPropulsion(sim, P, dt) {
   sim.prevWf = S.wf; sim.prevWt = S.wt;
 
   const Tf = P.kT * S.wf * S.wf, Tt = P.kT * S.wt * S.wt;
-  const Qf = P.kQ * S.wf * S.wf + P.Jp * dWf;   // 传给机体的反扭矩 = 电磁扭矩
+  const Qf = P.kQ * S.wf * S.wf + P.Jp * dWf;   // 传给机体的反扭矩 = 电磁扭矩（含转子惯性项）
   const Qt = P.kQ * S.wt * S.wt + P.Jp * dWt;
   const cf = Math.cos(dfC), sf = Math.sin(dfC);
   const ct = Math.cos(dtC), st = Math.sin(dtC);
@@ -56664,37 +57137,67 @@ function stepPropulsion(sim, P, dt) {
   dyn.Fx = Tf * cf + Tt * ct;
   dyn.Fy = Tf * sf;
   dyn.Fz = -Tt * st;
-  dyn.Mx = -Qf * cf + Qt * ct;                  // 滚转: 反扭差
-  dyn.My = -P.b * Tt * st - Qf * sf;            // 俯仰: 尾摆 + 耦合
-  dyn.Mz = P.a * Tf * sf - Qt * st;             // 偏航: 前摆 + 耦合
+  dyn.Mx = -Qf * cf + Qt * ct;                  // 滚转: 反扭差（零摆角时 Mx=Qt−Qf）
+  dyn.My = -P.b * Tt * st - Qf * sf;            // 俯仰: 尾摆力臂 + 前摆反扭耦合
+  dyn.Mz = P.a * Tf * sf - Qt * st;             // 偏航: 前摆力臂 + 尾摆反扭耦合
   return { cf, sf, ct, st };
 }
 
 return { stepPropulsion };
 });
 __def('src/core/aerodynamics.mjs', function() {
-// ============================================================
-//  空气动力（风轴系 → 机体系）
-// ============================================================
+/**
+ * @file    aerodynamics.mjs
+ * @module  仿真 core/气动力
+ * @brief   风轴系气动力/力矩（升力、阻力、侧力、静稳定与阻尼）→ 机体系
+ * @details 输入：机体系速度 v、机体角速度 ω、参数表、气动开关；
+ *          处理：动压/迎角/侧滑角 → 风轴升阻力与三轴气动矩 → 投影到机体系；
+ *          输出：机体系力分量 {aX,Y,aZ} 与力矩 {Mx,My,Mz}，可写入遥测 sink。
+ *          不变量：aeroOn=false 时力与力矩恒为零，但空速/动压遥测仍更新。
+ * @theory  动压 q̄=½ρV²、L=q̄S·CLa·α、D=q̄S(CD0+CDk·CL²) @ref MOD-001 §6；
+ *          气动矩 Clb/Clp、Cm0/Cma/Cmq、Cnb/Cnr @ref MOD-001 §6；
+ *          风轴→机体系投影 @ref THY-003 §1
+ * @frame   输入速度为机体系 FRD；内部在风轴系算力，再绕 y_b 转 −α 投影回机体系
+ * @units   V [m/s]、q̄ [Pa]、α/β [rad]、力 [N]、力矩 [N·m]
+ * @redline 空速下限 vMin=0.5 m/s 仅用于分母保护（见行为保持红线清单）
+ * @note 本模块不含螺旋桨滑流、失速与非定常效应（线性小迎角模型，@ref MOD-001 §11）
+ * @see     dynamics.mjs（RK4 每阶段用中间状态重算气动）、tests/aerodynamics.test.mjs
+ */
 const { clamp } = __req('src/core/math.mjs');
 
-// 纯状态气动计算：v（机体系速度）、w（机体角速度）→ 气动力/力矩
-// 供 RK4 各阶段用中间状态重算（对齐 Python rk4_step 的 aero_forces 逐阶段重算），
-// 也供 computeAero 遥测调用。aeroOn=false 时贡献为零（无翼/裸物理复现）。
-// sink 可选：写入遥测对象 {V, qbar, alpha, beta}（由 computeAero 传入 sim.aero）
+// ── 气动模型（风轴系）──────────────────────────────────────────────
+// 公式：q̄=½ρV²；L=q̄S·CLa·α；D=q̄S(CD0+CDk·CL²)；Y=q̄S·CYb·β
+//       Mx=q̄Sb̄(Clb·β+Clp·p̂)、My=q̄Sc̄(Cm0+Cma·α+Cmq·q̂)、Mz=q̄Sb̄(Cnb·β+Cnr·r̂)
+// 符号：α=atan2(w,u)（抬头为正）、β=asin(v/V)、p̂=p·b̄/(2V) 等为无量纲角速率
+// 来源：@ref MOD-001 §6（模型形式）、@ref THY-003 §1（刚体方程）
+// 实现：`computeAeroState` 一段；风轴力再投影 aX=L·sinα−D·cosα、aZ=−L·cosα−D·sinα
+// 等价变换：无（线性小迎角模型；教材 ENU 与本项目 NED 仅在符号约定层，见 MOD-002 §2）
+// 数值证据：@test tests/aerodynamics.test.mjs（升力方向、aX 解析式 1e-9、Cmq 阻尼符号）
+// ─────────────────────────────────────────────────────────────────
+// @formula α=atan2(w,u)，β=asin(v/max(V,vMin))，q̄=½ρV²；
+//          aX=L·sinα−D·cosα，aZ=−L·cosα−D·sinα
+// @note 动压用真实 V（零速为 0），只有 β 与无量纲角速率的分母用 vSafe=max(V,vMin)
+//       ——低速保护不会凭空造力，这是"关掉气动可复现角速度自由积分"的前提
+// @test tests/aerodynamics.test.mjs（开关归零、升力方向、β/Clb 符号、零速保护）
+/**
+ * @brief 纯状态气动计算：给定机体系速度/角速度返回气动力与力矩
+ * @param vVec 机体系速度 [u,v,w] [m/s]；@param wVec 机体角速度 [p,q,r] [rad/s]
+ * @param {Object} P 参数表；@param {boolean} [aeroOn] 气动开关；@param {Object} [sink] 遥测缓存
+ * @returns {{aX,Y,aZ,Mx,My,Mz}} 机体系力 [N] / 力矩 [N·m]；@ref MOD-001 §6
+ */
 function computeAeroState(vVec, wVec, P, aeroOn = true, sink = null) {
   const u = vVec.x, v = vVec.y, wv = vVec.z;
   const V = Math.hypot(u, v, wv);
   const vSafe = Math.max(V, P.vMin);
-  const al = Math.atan2(wv, u);                        // 迎角 α
-  const be = Math.asin(clamp(v / vSafe, -1, 1));       // 侧滑角 β
-  const qb = 0.5 * P.rho * V * V;                      // 动压
+  const al = Math.atan2(wv, u);                        // 迎角 α（抬头为正：w>0 表示来流从下方）
+  const be = Math.asin(clamp(v / vSafe, -1, 1));       // 侧滑角 β（vSafe 防 V→0 除零）
+  const qb = 0.5 * P.rho * V * V;                      // 动压（真实空速，低速不加料）
   let aX = 0, Y = 0, aZ = 0, Mx = 0, My = 0, Mz = 0;
   if (aeroOn) {
     const CL = P.CLa * al;
-    const L = qb * P.Sw * CL;                          // 升力
+    const L = qb * P.Sw * CL;                          // 升力（沿风轴 −z_w）
     const D = qb * P.Sw * (P.CD0 + P.CDk * CL * CL);   // 阻力（零升+诱导）
-    Y = qb * P.Sw * P.CYb * be;                        // 侧力
+    Y = qb * P.Sw * P.CYb * be;                        // 侧力（风轴 y_w → 机体系 y 近似）
     aX = L * Math.sin(al) - D * Math.cos(al);
     aZ = -L * Math.cos(al) - D * Math.sin(al);
     // 气动矩: 静稳定项 + 阻尼导数项（无量纲角速率）
@@ -56710,7 +57213,14 @@ function computeAeroState(vVec, wVec, P, aeroOn = true, sink = null) {
   return { aX, Y, aZ, Mx, My, Mz };
 }
 
-// 仿真状态接口（遥测/子步初显示）：包装纯函数，返回机体系气动力分量增量 {aX, Y, aZ}
+// @note 本函数只在子步开始调用一次（供 SAS/遥测看到一致状态）；RK4 各阶段用
+//       computeAeroState 拿中间状态重算，两条路径共用同一模型，不允许分叉
+// @test tests/aerodynamics.test.mjs（computeAero 与解析式 1e-9 比对）
+/**
+ * @brief 仿真状态接口：按当前状态算气动力并刷新 sim.aero 遥测
+ * @param {Object} sim 仿真状态；@param {Object} P 参数表
+ * @returns {{aX,Y,aZ}} 机体系气动力分量 [N]（不含力矩）；@ref MOD-001 §6
+ */
 function computeAero(sim, P) {
   const { S, F, aero } = sim;
   const out = computeAeroState(F.vel, S.omega, P, S.aero, aero);
@@ -58971,21 +59481,34 @@ UnrealBloomPass.BlurDirectionY = new Vector2( 0.0, 1.0 );
 return { UnrealBloomPass };
 });
 __def('src/core/control-allocation.mjs', function() {
-// ============================================================
-//  B_true — 在线控制效能 Jacobian（控制分配）
-//  对齐 Python core.control_effectiveness / 论文 ch/10 / 固件
-//  TandemVec_ControlAllocation.h（三端同构）
-//
-//  B 矩阵：行 = [Mx, My, Mz]（力矩增量），列 = [Δdw, Δδt, Δδf]（执行器增量）
-//  B[i,j] = ∂M_i/∂u_j 在当前工作点 (ω0, δf, δt, dw) 的解析偏导
-//  （ω0 = 当前油门基准转速；Tf/Tt、Qf/Qt 用差速线性化 T0·(1±dw)）
-//
-//  用法（纯控制分配，非 INDI）：
-//    内环：M_des = diag(I)·K·(ωdes − ω)（目标力矩，对角独立）
-//    分配：Δu = B⁻¹·(M_des − M_cur) → u += Δu（限幅）
-// ============================================================
+/**
+ * @file    control-allocation.mjs
+ * @module  仿真 core/控制分配
+ * @brief   B_true 在线控制效能 Jacobian 与 3×3 求逆（悬停增量分配用）
+ * @details 输入：当前工作点 (ω0, δf, δt, Δω) 与参数表；
+ *          处理：按解析偏导组装 B=∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf]，供 B⁻¹ 增量分配；
+ *          输出：3×3 矩阵 / 逆矩阵（奇异时 null）。
+ *          不变量：B 为"准稳态"效率矩阵——忽略 Jp·ω̇ 瞬态反扭与气动/陀螺项。
+ * @theory  力矩映射 M=Σ[r×F + s·τ·n] @ref THY-003 §2.1；
+ *          摆角雅可比 ∂M/∂δ @ref THY-003 §2.2；
+ *          线性化分配 Δu = B⁻¹·ΔM @ref THY-003 §3.2、@ref CTL-001 §8.5
+ * @frame   机体系 FRD；列序固定 [Δdw(Δω), Δδt(δt), Δδf(δf)]
+ * @units   ω0 [rad/s]、δ [rad]、Δω [-]，B 元素单位 N·m 每执行器单位
+ * @redline 列序/行序是与固件 TandemVec_ControlAllocation.h 的接口约定，改动即失配
+ * @note 三端同构：Python core.control_effectiveness、固件 TandemVec_ControlAllocation.h
+ * @see     control.mjs（applyVtolHover 的 B_true 分支）、tests/control-allocation.test.mjs
+ */
 
-// 3×3 矩阵求逆（伴随矩阵法，det≠0）
+// @formula A⁻¹ = adj(A)/det(A)，det 阈值 1e-12
+// @ref THY-003 §3.3（几何奇异/权限退化）
+// @note 返回 null 而非抛异常/NaN：调用方（悬停分配）据此回退对角映射；
+//       低油门时 B∝ω0² 必然近奇异，这是设计内的工况而非错误
+// @test tests/control-allocation.test.mjs「低油门奇异防护」「B⁻¹·B = I」
+/**
+ * @brief 3×3 矩阵求逆（伴随矩阵法）
+ * @param {number[][]} m 3×3 矩阵（行优先）
+ * @returns {number[][]|null} 逆矩阵；行列式近零或非有限时返回 null
+ */
 function inv3(m) {
   const [a, b, c] = m[0], [d, e, f] = m[1], [g, h, i] = m[2];
   const det = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
@@ -58998,7 +59521,27 @@ function inv3(m) {
   ];
 }
 
-// 在线 Jacobian：B = ∂[Mx,My,Mz]/∂[dw,δt,δf]（解析偏导，忽略 Jp·ω̇ 瞬态项）
+// ── B_true：推进力矩对执行器增量的解析 Jacobian ────────────────────
+// 公式：B[i][j] = ∂M_i/∂u_j，u=[Δω, δt, δf]
+// 符号：T0=kT·ω0²、tau0=kQ·ω0² 为工作点基准；Tf=T0(1+Δω)、Tt=T0(1−Δω)
+// 来源：@ref THY-003 §2.2（雅可比解析链）、@ref CTL-001 §8.5（三端同构）
+// 实现：`computeBTrue` 返回 3×3；偏导直接对六维映射求导（无差分，无迭代）
+// 等价变换：差速开方分配使 ωf²=ω0²(1+Δω) ⇒ T/Q 对 Δω 严格线性，故 B 的 dw 列是精确偏导
+//          （不是小 Δω 近似）；钳位 wMax 后该线性在边界失效（分配需限幅兜底）
+// 数值证据：@test tests/control-allocation.test.mjs「与数值差分一致 < 1e-6」
+// ─────────────────────────────────────────────────────────────────
+// @formula T0=kT·ω0²、tau0=kQ·ω0²；Tf=T0(1+Δω)、Tt=T0(1−Δω)、τf/τt 同构
+// @ref THY-003 §2.2；@ref CTL-001 §8.5
+// @note 忽略项：Jp·ω̇ 瞬态反扭、气动力矩、ω×h 陀螺项——分配层只负责执行器，
+//       外扰与刚体耦合由内环闭环抑制（与 CTL-001 §8.5 口径一致）
+// @note Δω 列含 −tau0(cf+ct)：零摆角时退化为 −2·kQ·ω0²（CTL-001 §7.4 的线性效率）
+// @test tests/control-allocation.test.mjs（差分一致性、Python 同构、分配精度）
+/**
+ * @brief 组装当前工作点的控制效能矩阵 B = ∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf]
+ * @param omega0 基准转速 [rad/s]；@param delta_f 前摆角 [rad]
+ * @param delta_t 尾摆角 [rad]；@param dw 差速指令 [-]；@param {Object} P 参数表
+ * @returns {number[][]} 3×3 B 矩阵，行 [Mx,My,Mz]、列 [dw,δt,δf]
+ */
 function computeBTrue(omega0, delta_f, delta_t, dw, P) {
   const T0 = P.kT * omega0 * omega0;      // 基准推力
   const tau0 = P.kQ * omega0 * omega0;    // 基准反扭

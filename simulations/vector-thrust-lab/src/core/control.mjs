@@ -1,20 +1,52 @@
-// ============================================================
-//  SAS 增稳控制：角速率阻尼 + 姿态角比例/积分反馈
-//  → 摆角/差速修正（积分与指令均限幅）
-//
-//  模式（S.sasMode）：
-//    0 = 关闭（直通）
-//    1 = 全 SAS（角速率阻尼 + 姿态比例 + 积分）
-//    2 = 仅角速率阻尼（无姿态/积分）
-//    3 = 角速度闭环（Rate Command：滑块 = 目标角速度）
-// ============================================================
+/**
+ * @file    control.mjs
+ * @module  仿真 core/控制律（SAS 增稳 + VTOL 悬停）
+ * @brief   把滑块指令与姿态/角速度反馈合成为执行量（摆角、差速、油门）
+ * @details 输入：S 中的指令与角速度、F.euler 显示角、参数表；
+ *          处理：模式分支（关闭/全 SAS/仅角速率/角速度闭环）→ 反馈叠加 → 限幅；
+ *          悬停模式另走误差四元数级联 + 可选定高/B_true 分配；
+ *          输出：S.dtAct/dfAct/dwAct（以及定高时的 S.thr）。
+ *          不变量：所有执行量出口都经 ±dMax/±dwMax 限幅；积分器出口经 ±intThMax/±intPhiMax。
+ * @theory  SAS 三通道律 @ref CTL-001 §4.1；反馈极性整定 @ref CTL-001 §5；
+ *          差速/摆角效率符号 @ref CTL-001 §3；悬停四元数级联 @ref CTL-001 §8.2；
+ *          定高串级与 1/√cosγ 倾角补偿 @ref CTL-001 §8.4；
+ *          B_true 增量分配 @ref CTL-001 §8.5
+ * @frame   机体系 FRD 的力矩（Mx/My/Mz）与显示欧拉角（theta=−asin(R13) 约定）
+ * @units   角度 rad、角速度 rad/s、增益单位见 parameters.mjs（sasQ [s]、sasTh [-]）
+ * @redline SAS 限幅 ±25°(dMax)/±0.7(dwMax) 为仿真值；固件实机摆角 2026-08-07 已收紧
+ *          ±15°，仿真未回写 —— 评审时按 @ref docs/registers/行为保持红线清单.md「SAS 摆角限幅」处理
+ * @note 执行器轴语义（两套读法必须同时写）：体轴 δt→M_y(俯仰)、δf→M_z(偏航)、Δω→M_x(滚转)；
+ *       悬停构型（机头朝天）下同一摆 = 下摆(俯仰)/上摆(滚转)/差速(偏航)，
+ *       见 @ref AGENTS.md 踩坑记录「执行器轴映射（2026-08-07 轴置换）」
+ * @see     propulsion.mjs（效率符号来源）、control-allocation.mjs、tests/control.test.mjs
+ */
 import { clamp, quat } from './math.mjs';
 import { quatMultiply, quatInvert, quatNormalize, rotateVecByQuat } from './math.mjs';
 import { Q_HOVER, hoverThrottle } from './state.mjs';
 import { computeBTrue, inv3 } from './control-allocation.mjs';
 
-// 反馈极性按各通道控制效率符号整定
-// （∂My/∂δ_t<0, ∂Mx/∂Δω<0 → 正号; ∂Mz/∂δ_f>0 → 负号）
+// ── 固定翼 SAS（巡航构型）──────────────────────────────────────────
+// 公式：δt_cmd = clamp(dtTrim + δt + sasQ·q − sasTh·Δθ − sasI·∫Δθ, ±dMax)
+//       δf_cmd = clamp(dfTrim + δf − sasR·r, ±dMax)
+//       Δω_cmd = clamp(Δω + sasP·p − sasPhi·φ − sasIPhi·∫φ, ±dwMax)
+// 符号：Δθ = θ + aTrim（θ 为显示角，θ_ref = −aTrim）；q/p/r 为机体角速度
+// 来源：@ref CTL-001 §4.1；极性推导 @ref CTL-001 §5
+// 实现：`applySas` 的模式 1/2/3 三个分支；限幅在函数末尾统一执行
+// 等价变换：显示约定下 theta_dot≈−q、phi_dot≈−p ⇒ 速率项取正号、姿态项取负号，
+//           两类反馈符号必须分开整定（不能只看 ∂M/∂δ 的同号性）
+// 数值证据：@test tests/control.test.mjs（三条极性用例 + 限幅 + 积分限幅）
+// ─────────────────────────────────────────────────────────────────
+// @formula 见上方五段式；模式 3 速率闭环：
+//          dt=rateKq·(q−q_ref)、df=rateKr·(r_ref−r)、dw=rateKp·(p−p_ref)
+// @ref CTL-001 §4.1（模式 1）、§8.2（模式 3 与悬停内环同构）
+// @note 为什么模式切换要清积分：三个模式共用积分器，切回模式 1 时旧累积值会
+//       直接变成配平偏置（历史曾出现切换瞬间掉高）
+// @test tests/control.test.mjs（直通、极性、限幅、积分限幅、模式 2/3、切换清零）
+/**
+ * @brief SAS 主入口：按 S.sasMode 合成执行量（悬停模式转 applyVtolHover）
+ * @param {Object} sim 仿真状态；@param {Object} P 参数表；@param {number} dt 控制周期 [s]
+ * @returns {void}（写 S.dtAct/dfAct/dwAct，输出均已限幅）
+ */
 export function applySas(sim, P, dt) {
   const { S, F } = sim;
   // VTOL 悬停构型：机头朝天（x_b 竖直），欧拉角在 θ≈90° 奇异，
@@ -57,26 +89,35 @@ export function applySas(sim, P, dt) {
   S.dtAct = dtC; S.dfAct = dfC; S.dwAct = dwC;
 }
 
-// ============================================================
-//  VTOL 悬停控制：误差四元数姿态外环 + 角速度 P 内环（级联）
-//  —— 与固件 flight_control.cpp 悬停链同构（q_hover ⊗ Rx(-Heading) 语义），
-//     符号经数值验证（见 tests/vtol.test.mjs "控制符号"用例）。
-//
-//  目标姿态：qCmd = Q_HOVER ⊗ 滑块小角度指令（四轴式语义）
-//     dt 滑块 → 俯仰倾斜 θ（绕 y_b）目标角
-//     df 滑块 → 侧倾 φ（绕 z_b）目标角
-//     dw 滑块 → ★ 航向角速度指令 ψ̇（绕 x_b，rad/s；rate 模式，松手回中停转，
-//        不参与 qCmd —— 航向通道无姿态回中，纯角速度追踪 + 速率阻尼）
-//  机体系误差：qe = qCmd⁻¹ ⊗ q（误差旋转表达在机体系，小角度 qe.xyz ≈ 误差/2；
-//     ⚠ 勿用 q ⊗ qCmd⁻¹ —— 那是 NED 系表达，悬停时 x/y/z 轴错位）
-//  目标角速度（y/z 通道姿态回中）：ωdes.yz = −2·vtolAttKp·qe.yz
-//  角速度内环按通道效率符号（与 sasMode=3 一致）：
-//     尾摆 δt（∂My/∂δt<0）: dtC = rateKq·(ω.y − ωdes.y)
-//     前摆 δf（∂Mz/∂δf>0）: dfC = rateKr·(ωdes.z − ω.z)
-//     差速 Δω（∂Mx/∂Δω<0）: dwC = rateKp·(ω.x − S.dw)（航向：滑块=目标角速度）
-//  悬停基准为 0 摆角（不叠加巡航配平偏置 dtTrim/dfTrim）；
-//  sasMode=0 时 dt/df 直通滑块摆角（无自稳），dw 仍为角速度指令。
-// ============================================================
+// ── VTOL 悬停控制（误差四元数级联）────────────────────────────────
+// 公式：qCmd = Q_HOVER ⊗ Rx(ψ_est) ⊗ Ry(θ_cmd) ⊗ Rz(φ_cmd)
+//       qe = qCmd⁻¹⊗q；ωdes.yz = −2·vtolAttKp·qe.yz
+//       δt = rateKq·(ω_y−ωdes.y)；δf = rateKr·(ωdes.z−ω_z)；Δω = rateKp·(ω_x−ψ̇_cmd)
+// 符号：qe 为机体系误差四元数（w<0 取反走短弧）；ψ_est 由 y_b 水平投影提取
+// 来源：@ref CTL-001 §8.2（控制律与符号表）、§8.3（三通道符号数值验证）
+// 实现：`applyVtolHover`；定高段 `if (S.altHold)`；B_true 段 `if (S.useBtrue)`
+// 等价变换：θ≈90° 时欧拉角奇异、固定翼欧拉反馈失效 ⇒ 必须改用四元数误差链；
+//           内环仍复用 sasMode=3 的通道效率符号（∂My/∂δt<0、∂Mz/∂δf>0、∂Mx/∂Δω<0）
+// 数值证据：@test tests/vtol.test.mjs 31 用例（收敛、航向 90°/180°、定高、B_true）
+// ─────────────────────────────────────────────────────────────────
+/**
+ * @brief 悬停构型控制律：四元数姿态外环 + 角速度内环 + 可选定高/B_true 分配
+ * @param {Object} sim 仿真状态（S.dt/df 为姿态角指令、S.dw 为航向角速度指令）
+ * @param {Object} P 参数表（vtolAttKp/rateKp/rateKr/rateKp/dMax/dwMax/altKp 系列/btrueK/Ix/Iy/Iz）
+ * @param {number} dt 控制周期 [s]（定高积分与 B_true 的 ω̇ 差分用）
+ * @returns {void}
+ * @formula 见上方五段式；定高：vZref=clamp(altKpH·h_err+altKpI·∫h_err, ±altVZMax)，
+ *          thr=thrHover/√cosγ + altKpV·(vZref−vZ)
+ * @ref CTL-001 §8.2/§8.4/§8.5
+ * @pre S.vtolMode=true（由 applySas 分派）；dt>0
+ * @post dtAct/dfAct 限幅 ±dMax，dwAct 限幅 ±dwMax（限幅只在有分支的出口生效）
+ * @note qCmd 必须跟随当前航向：航向由角速度指令自由旋转（x 通道无姿态回中），
+ *       若 qCmd 固定，qe 的 y/z 分量被 cosψ 调制 → ψ=90° 倾斜失效、180° 反向发散
+ * @note 悬停基准是 0 摆角（不叠加 dtTrim/dfTrim）；sasMode=0 时 dt/df 直通、dw 仍为
+ *       航向角速度追踪（rate 语义不因自稳关闭而消失）
+ * @note 高度用真值（本仿真无传感器模型），定高只接管油门、不触碰摆角
+ * @test tests/vtol.test.mjs（初始化/符号/闭环/定高/B_true 五个分组）
+ */
 function applyVtolHover(sim, P, dt) {
   const { S, F } = sim;
 
@@ -101,11 +142,11 @@ function applyVtolHover(sim, P, dt) {
   // ---------- 高度保持（S.altHold=true，仅悬停模式） ----------
   // 独立于姿态自稳（sasMode=0 直通时同样生效）：只接管油门，不触碰摆角。
   // 串级：高度外环（P+I）→ 目标垂直速度 → 油门内环（P）
-  //   h    = −pos.z       （NED z 向下，高度向上为正）
-  //   vZ   = −vWorld.z    （垂直速度，向上为正）
-  //   vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)
-  //   thr  = thrHover/√cosγ + altKpV·(vZref − vZ)   （cosγ = x̂_b·(−ẑ_NED) 倾角补偿：
-  //          倾斜损失竖直推力分量，且 T∝thr² → 补偿因子 1/√cosγ 而非 1/cosγ）
+  // 公式：h = −pos.z（NED z 向下，高度向上为正）、vZ = −vWorld.z（向上为正）
+  // 公式：vZref = clamp(altKpH·h_err + altKpI·∫h_err, ±altVZMax)
+  // 公式：thr = thrHover/√cosγ + altKpV·(vZref − vZ)
+  // 符号：cosγ = x̂_b·(−ẑ_NED) = −R31 为机头轴竖直分量；T∝thr² ⇒ 补偿因子 1/√cosγ
+  // 来源：@ref CTL-001 §8.4（串级结构、倾角补偿与积分限幅）
   if (S.altHold) {
     const h = -F.pos.z;
     const vZ = -F.vWorld.z;
@@ -131,12 +172,11 @@ function applyVtolHover(sim, P, dt) {
 
     if (S.useBtrue) {
       // ---- B_true 在线控制分配（S.useBtrue=true）----
-      // 内环：角速度误差 → 目标力矩（每通道独立对角，M = I·K·(ωdes − ω)）
-      //   ωdes.x = 航向角速度指令（rate 模式）、ωdes.y/z = 姿态回中（qe）
+      // 内环：角速度误差 → 目标力矩（每通道独立对角）
+      // 公式：M_des = diag(Ix,Iy,Iz)·btrueK·(ωdes − ω)
       // 分配层：Δu = B⁻¹·(M_des − M_cur)，u += Δu（限幅）
-      //   M_cur = 当前执行器位置的推进力矩（模型预测，含 Jp 瞬态反扭；
-      //           不含气动/gyro——分配层只负责执行器，外扰由内环闭环抑制）
-      //   B = ∂[Mx,My,Mz]/∂[Δdw,Δδt,Δδf] 当前工作点 Jacobian（列序 [Δdw,Δδt,Δδf]）
+      // 符号：u 列序 [Δdw, Δδt, Δδf]；M_cur 为当前执行器位置的推进力矩（模型预测）
+      // 来源：@ref CTL-001 §8.5；B 的解析表达式见 control-allocation.mjs
       // ★ 非 INDI：无角加速度反演（不需要 ω̇ 估计）；M_cur 用当前状态重算
       //   （sim.dyn 是上一子步滞后值——applySas 先于 stepPropulsion 执行）
       const kX = P.Ix * P.btrueK, kY = P.Iy * P.btrueK, kZ = P.Iz * P.btrueK;

@@ -1,4 +1,21 @@
-// VTOL 悬停模式测试：四元数误差级联控制（control.mjs applyVtolHover）
+/**
+ * @file    vtol.test.mjs
+ * @module  仿真 tests/VTOL 悬停
+ * @brief   锁定悬停模式的初始化、控制符号、闭环收敛、定高与 B_true 分配行为
+ * @details 覆盖五组：初始化与派生量（hoverThrottle/Q_HOVER/resetVtolHoverState）；
+ *          三通道控制符号（dt/df/dw）；闭环（保持/扰动/航向 rate/90°/180°/无自稳对比）；
+ *          自动定高（爬升/下降/直通/倾角补偿/积分限幅/关闭）；B_true 增量分配（稳定/收敛/
+ *          不劣化/切换连续）。容差依据：姿态误差取 0.03–0.08 rad（≈1.7°–4.6°），
+ *          量级由未标定的 vtolAttKp/rateK* 与 8–10 s 仿真窗决定；这些是"收敛到同一
+ *          量级"的工程断言，不是精度指标；确定性代数用例（配平推力、符号）用 1e-9/1e-12。
+ * @theory  悬停构型、配平油门与四元数级联 @ref CTL-001 §8.1–§8.3；
+ *          定高串级与 1/√cosγ 补偿 @ref CTL-001 §8.4；B_true 分配 @ref CTL-001 §8.5
+ * @frame   机体系 FRD；悬停时 x_b 竖直（机头朝天），欧拉角奇异
+ * @units   rad、rad/s、m、m/s、N、N·m
+ * @note 本文件是悬停控制的行为护栏：符号/收敛/不劣化三类断言覆盖了历史上三次真 bug
+ *       （qCmd 不跟航向、M_cur 用滞后遥测、短弧分支）
+ * @see     src/core/control.mjs、src/core/state.mjs、tests/dynamics.test.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

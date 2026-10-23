@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
+  <meta name="generator" content="pandoc 3.12.1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>模型-代码追溯矩阵 · 纵列双发矢量推力飞行器</title>
   <style>
@@ -10,8 +10,12 @@
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -22,7 +26,6 @@
       margin: 0 0.8em 0.2em -1.6em;
       vertical-align: middle;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
   </style>
   <link rel="stylesheet" href="../docstyle.css" />
 <style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
@@ -32,6 +35,11 @@
 <p>本矩阵将 C0 模型的理论要素 / 方程映射到
 <code>simulations/vector-thrust-lab/src/core/</code>
 中的具体实现位置、单元测试及回归基线场景。用于回答「模型中的某条方程在代码哪里被实现、被什么测试覆盖」。</p>
+<p><strong>2026-10-23 扩展</strong>：本矩阵已从仿真 core
+扩展到固件/上位机/分析仿真，见文末「全仓扩展」；旧表中的行号会随重构漂移，新条目一律用符号名。完整核查结论见
+<a href="../code-audit/MOD-004.html">MOD-004
+代码-理论对照核查报告</a> 与 <a
+href="../code-audit/README.html">代码理论核查记录</a>。</p>
 </blockquote>
 <hr />
 <table>
@@ -160,5 +168,184 @@
 <code>tests/fixtures/regression-baseline.json</code> 比对。</li>
 <li>若新增模型要素，须在本矩阵中新增一行，并补充对应单元测试或演示检查证据。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/模型-代码追溯矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
+<hr />
+<h2 id="全仓扩展2026-10-23-代码理论核查">全仓扩展（2026-10-23
+代码理论核查）</h2>
+<blockquote>
+<p>原则：代码位置用<strong>符号名</strong>，不写行号；结论枚举与区域记录一致（一致
+/ 等价变换后一致 / 近似 / 偏差已登记 /
+不一致待修）。证据优先级：测试断言 &gt; 数值复算 &gt; 文档推导。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>理论要素/公式</th>
+<th>代码位置（符号）</th>
+<th>文献出处</th>
+<th>证据</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>四元数姿态更新</td>
+<td><code>q_{k+1}=q_k⊗Exp(ω_bΔt)</code>，每步保范</td>
+<td><code>QuaternionMath::rotateVector</code>、<code>math.mjs:quatMultiply/quatNormalize</code></td>
+<td>REF-120 §9.2 (9.2.14) p.268；MOD-002 §3.4</td>
+<td><code>math.test.mjs</code>；<code>test_advanced_theory</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>欧拉角提取</td>
+<td><code>theta=-asin(R13)</code>，ZYX</td>
+<td><code>math.mjs:eulerFromQuat</code>、<code>QuaternionMath::quaternionToEuler</code></td>
+<td>MOD-002 §3/§4</td>
+<td><code>math.test.mjs</code>；<code>test_advanded_theory</code></td>
+<td>等价变换后一致（红线）</td>
+</tr>
+<tr>
+<td>比力方程/速度更新</td>
+<td><code>V̇ⁿ=Cⁿ_b f^b−(2ω_ie+ω_en)×Vⁿ+gⁿ</code></td>
+<td><code>ekf_15_state.h:PropagateStateFromIncrements</code></td>
+<td>REF-120 §7.4 (7.4.6) p.189；§9.6 (9.6.9) p.298</td>
+<td><code>test_ekf_15state</code> T7</td>
+<td>一致（P0-0 已修）</td>
+</tr>
+<tr>
+<td>旋转/划摇补偿</td>
+<td><code>½Δθ×ΔV</code>；<code>(2/3)(Δθ₁×ΔV₂+ΔV₁×Δθ₂)</code></td>
+<td>同上（双子样段）</td>
+<td>REF-120 (9.6.17) p.298、(9.6.25) p.301</td>
+<td>T7 残差 1.25e-4</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>位置速率</td>
+<td><code>L̇=V_N/(R_m+h)</code>、<code>λ̇=V_E/((R_n+h)cosL)</code>、<code>ḣ=−V_D</code></td>
+<td><code>ekf_15_state.h:ComputeLlaRateFromTerms</code></td>
+<td>REF-120 §7.2/§8.1</td>
+<td><code>test_ekf_15state</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>正常重力</td>
+<td>Somigliana (7.2.17)(7.2.18)</td>
+<td><code>earth_model.h:normalgravity_mps2</code>、<code>ComputeEarthModelTerms</code></td>
+<td>REF-120 §7.2.4 p.178</td>
+<td><code>test_ekf_15state</code></td>
+<td>近似（差 ~1e-5 m/s²，@deviation）</td>
+</tr>
+<tr>
+<td>KF 五方程/Joseph/NIS</td>
+<td>(2.2.4a–e)、(2.2.4e)、χ² 门控</td>
+<td><code>ekf_15_state.h</code> 预测/更新入口</td>
+<td>REF-121 §2.2.1 p.33–34、§2.2.4 p.42–43、§7.3.1 p.255–259</td>
+<td><code>test_ekf_15state</code> T1–T11</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>控制分配 B 矩阵</td>
+<td>解析 B 与数值差分一致，方阵 B⁻¹</td>
+<td><code>AirframeModel.h:computeEffectMatrixDataDriven</code>、<code>TandemVec_ControlAllocation.h</code></td>
+<td>THY-003 §3–4；CTL-001 §5</td>
+<td><code>test_airframe_generic</code> T11</td>
+<td>一致</td>
+</tr>
+<tr>
+<td>执行器轴映射</td>
+<td>上摆=滚转 / 下摆=俯仰 / 差速=偏航</td>
+<td><code>flight_control.cpp:mix_and_output_commands</code></td>
+<td>AGENTS.md 轴映射踩坑记录；CTL-001 §8.6</td>
+<td><code>test_flight_control_axis</code></td>
+<td>一致（文档术语混读 P2）</td>
+</tr>
+<tr>
+<td>速率环量纲</td>
+<td>deg/s 输入、deg/s² 输出，边界 ×π/180</td>
+<td><code>ControlUnits::dps2ToRadps2</code></td>
+<td>CTL-001 §8.6</td>
+<td><code>test_control_units</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>差速分配</td>
+<td><code>ωf=ω0√(1+Δω)</code>、<code>ωt=ω0√(1−Δω)</code></td>
+<td><code>propulsion.mjs:stepPropulsion</code>、<code>TandemVec_Propulsion.h</code></td>
+<td>CTL-001 §5；THY-002 §3</td>
+<td><code>propulsion.test.mjs</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>推力/反扭</td>
+<td><code>T=k_Tω²</code>、<code>Q=k_Qω²+J_pω̇</code></td>
+<td>同上</td>
+<td>THY-002 §2–3</td>
+<td><code>propulsion.test.mjs</code>、<code>test_ekf_15state</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>气动</td>
+<td>动压、升力/阻力/侧滑/阻尼、0.5 m/s 下限</td>
+<td><code>aerodynamics.mjs:computeAero</code></td>
+<td>MOD-001 §3</td>
+<td><code>aerodynamics.test.mjs</code></td>
+<td>一致（悬停线性模型失效 @note）</td>
+</tr>
+<tr>
+<td>AnoCom 帧</td>
+<td><code>AB+src+dst+func+len(LE)+data+SC+AC</code></td>
+<td><code>GCS/server/anocom.py:encode_frame/extract_frames</code>、<code>AnoComProtocol::buildFrame</code></td>
+<td>PROTOCOL-001 §1</td>
+<td><code>test_anocom</code></td>
+<td>逐字节一致</td>
+</tr>
+<tr>
+<td>参数链路</td>
+<td>128 项注册表顺序</td>
+<td><code>params.py:expected_names</code>、<code>ano_params.cpp:kAnoParams</code></td>
+<td>GCS-001 §2</td>
+<td><code>test_params_and_link</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>黑匣子</td>
+<td>I/P/S/E 帧、CRC16-CCITT</td>
+<td><code>blackbox.py</code>、<code>W25N01GV_log</code></td>
+<td>PROTOCOL-001/GCS-001 §3</td>
+<td><code>test_blackbox</code></td>
+<td>一致</td>
+</tr>
+<tr>
+<td>仿真 EKF 传播</td>
+<td>与固件同构</td>
+<td><code>TandemVec-EKF-Report/sim/ekf_core.py:Ekf15.time_update</code></td>
+<td>REF-120 §9.6 + 固件 P0-0</td>
+<td><code>verify.py</code> 复算</td>
+<td><strong>偏差已登记</strong>（旋转效应双计，A-01）</td>
+</tr>
+<tr>
+<td>惯量前馈</td>
+<td><code>ω×(Iω)+ω×h</code></td>
+<td><code>flight_control.cpp:mix_and_output_commands</code>、<code>InertiaDecoupling.h</code></td>
+<td>THY-003 §4</td>
+<td><code>test_inertia_decoupling</code></td>
+<td><strong>偏差已登记</strong>（跨坐标系，C-02）</td>
+</tr>
+<tr>
+<td>F3 推力损失</td>
+<td>垂直速度误差判据</td>
+<td><code>ActuatorFaultMonitor::update</code> + 调用方</td>
+<td>CTL-002 §4</td>
+<td><code>test_actuator_fault_monitor</code></td>
+<td><strong>偏差已登记</strong>（符号，C-01）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>未列入本表的 P1/P2 见 MOD-004 §5
+与各区域记录；新增模型/公式时必须同步本表与 GOV-004 的
+<code>@ref</code>。</p>
+</blockquote>
+<footer class="provenance">源文件 <code>docs/registers/模型-代码追溯矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
 </html>

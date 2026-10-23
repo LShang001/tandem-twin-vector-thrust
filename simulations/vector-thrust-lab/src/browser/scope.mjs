@@ -1,7 +1,17 @@
-// ============================================================
-//  角速度示波器：p/q/r 波形曲线（可开关）
-//  实线 = 实际机体角速度；角速度闭环模式下虚线 = 目标角速度 ω_ref
-// ============================================================
+/**
+ * @file    scope.mjs
+ * @module  仿真 browser/示波器
+ * @brief   p/q/r 角速度波形示波器（环形缓冲 + Canvas 绘制 + 面板拖拽）
+ * @details 输入：sim.S.omega 与 sasMode=3 时的滑块目标角速度；
+ *          处理：~60 Hz 采样进 480 点环形缓冲 → ~30 fps 绘制实线（实测）与虚线（目标）；
+ *          输出：Canvas 像素与面板位置。
+ *          不变量：缓冲窗口 8 s 与 ±180°/s 量程固定，超量程波形被裁边而不缩放。
+ * @theory  N/A（显示层）；目标角速度语义见 @ref CTL-001 §4.1（mode 3）
+ * @frame   机体角速度 p/q/r（绕 x/y/z_b）
+ * @units   内部 rad/s 与 rad，绘制时转 °/s
+ * @note 采样与绘制各自节流，是为了让 480 点缓冲恰好铺满 8 s 窗口，不受显示器刷新率影响
+ * @see     main.js（b-scope 按钮与 update）、control.mjs（目标角速度来源）
+ */
 
 const DEG = Math.PI / 180;
 const COLORS = { p: '#fb7185', q: '#34d399', r: '#818cf8' };   // 与图例一致
@@ -9,6 +19,13 @@ const WINDOW_S = 8;        // 时间窗口（秒）
 const N = 480;             // 环形缓冲点数（≈60Hz 采样）
 const SCALE = Math.PI;     // 纵轴量程 ±π rad/s（±180°/s）
 
+// @note 目标角速度只在 sasMode=3 有定义，其余模式写 NaN → 虚线断点（不画假目标）
+// @note 面板拖拽把 left/top 固定为像素值，避免容器缩放时定位漂移
+/**
+ * @brief 创建示波器实例并绑定拖拽/可见性
+ * @param {Object} sim 仿真状态（只读 S.omega/S.sasMode/S.dw/dt/df）
+ * @returns {{setVisible: Function, update: Function, visible: boolean}}
+ */
 export function createScope(sim) {
   const { S } = sim;
   const panel = document.getElementById('scope');

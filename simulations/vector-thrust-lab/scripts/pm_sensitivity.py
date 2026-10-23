@@ -3,13 +3,26 @@
 """
 pm_sensitivity.py — 差速通道相位裕度对内环带宽的敏感度分析
 ============================================================
+@file    pm_sensitivity.py
+@module  仿真/鲁棒性分析（带宽口径与 PM 敏感度）
+@brief   厘清固件/仿真/旧论文三方带宽量纲，给出 PM(K) 完整依赖曲线
+@details 输入：三方带宽常量 K_FW=16.042818、K_SIM=60、K_OLD_PAPER=364；
+         处理：三阶开环传函 |L|=1 求 ω_gc → PM(K) → 与实机经验边界对照；
+         输出：文本曲线表 + 退出码。
+@theory  内环开环 L(s)=K/[s(τf·s+1)(τm·s+1)] 的相位裕度 @ref CTL-001 §8.5；
+         速率环量纲统一（deg/s→deg/s²，π/180 边界）@ref AGENTS.md 踩坑记录
+@frame   N/A（单通道频域）
+@units   s⁻¹（带宽）、rad/s、度
+@note    K_FW 是固件 rate.kp 直接作为 s⁻¹ 的口径；若外部参数文件仍写旧混单位值，
+         物理增益会差 57.3 倍——脚本不做单位自动推断，改参数必须同步改常量
+@see     phase_margin_analysis.py、pm_2d_sweep.py、pm_observer_compensation.py
 背景：固件/仿真/旧论文三方的内环带宽数字不一致，需厘清量纲后给出
       PM 对带宽的完整依赖曲线，供论文重构（Hermes）裁决使用。
 
 三方带宽（已从代码厘清）：
   - 固件实机：rate.kp=16.042818 s⁻¹，PID 输入 deg/s、输出 deg/s²，
       进入惯量逆解前统一乘 pi/180；因此比例项带宽直接是 16.04 rad/s。
-  - 仿真 parameters.mjs：btrueK=60（control.mjs:142-147，纯 rad 域）
+  - 仿真 parameters.mjs：btrueK=60（control.mjs:applyVtolHover，纯 rad 域）
   - 旧论文假设：K_ω=8.0, I=0.022 ⟹ K_ω/I=364（Hermes 已声明废止）
 
 差速通道开环（含电机 τm + 陀螺滤波 τf，见 phase_margin_analysis.py）：

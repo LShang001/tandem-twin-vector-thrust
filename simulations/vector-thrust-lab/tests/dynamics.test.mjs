@@ -1,4 +1,20 @@
-// dynamics.mjs 单元测试
+/**
+ * @file    dynamics.test.mjs
+ * @module  仿真 tests/六自由度动力学
+ * @brief   锁定子步调度、四元数保范、地面约束、配平有界性与水平锁定行为
+ * @details 覆盖：stepPhysics 与手动 n 子步逐位一致；600 帧后 |q|−1<1e-9；触地钳位；
+ *          上升不拦截；配平直飞 10 s 有界；全 SAS 衰减；无气动时角速度自由积累；
+ *          lockXY 只锁水平。
+ *          容差依据：deepEqual 用于"同路径等价"；1e-9 为四元数归一化残差；
+ *          触地后的机体系速度残差 1e-5 来自步内气动力矩对姿态的微扰（见用例注释）；
+ *          姿态收敛容差 0.75° 由参数未标定 + INDI 增量律对 kQ 敏感决定（见用例注释）。
+ * @theory  平动/转动方程 @ref MOD-001 §5、@ref THY-003 §1；子步 ≤4 ms 的数值理由
+ *          @ref MOD-001 §9；地面约束 @ref MOD-002 §5.2
+ * @frame   机体系 FRD / NED
+ * @units   s、rad、rad/s、m、m/s
+ * @note 这些用例锁定"有界/收敛方向"，不锁定具体轨迹——具体轨迹由 regression.test.mjs 锁定
+ * @see     src/core/dynamics.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

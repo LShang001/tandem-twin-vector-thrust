@@ -1,5 +1,19 @@
-// B_true 在线控制效能 Jacobian 测试（control-allocation.mjs）
-// 数学验证：解析偏导 vs 数值差分、B⁻¹·B = I、三端同构（对齐 Python core.control_effectiveness）
+/**
+ * @file    control-allocation.test.mjs
+ * @module  仿真 tests/控制分配
+ * @brief   锁定 B_true 解析 Jacobian、可逆性与增量分配精度
+ * @details 覆盖：B 与中心差分逐元素比对；与 Python 参考式抽查 3 元素；B⁻¹·B=I；
+ *          低油门奇异返回 null；Δu=B⁻¹·ΔM 的力矩复现。
+ *          容差依据：差分 h=1e-7 的截断+相消误差量级 ~|M''|h²/6 + ε·|M|/h ≈ 1e-6
+ *          → 元素比对取 1e-6；B⁻¹B 是纯代数取 1e-9；分配复现受一阶线性化限制取 1e-4。
+ * @theory  摆角雅可比 @ref THY-003 §2.2；线性化分配/伪逆 @ref THY-003 §3.2；
+ *          三端同构口径 @ref CTL-001 §8.5
+ * @frame   机体系力矩，列序 [Δdw, Δδt, Δδf]
+ * @units   N·m、rad、rad/s
+ * @note 测试内置的 torqueAt 是 propulsion.mjs 六维映射的独立副本——若两处口径漂移，
+ *       本文件会先失败（这是刻意的重复实现，不是冗余代码）
+ * @see     src/core/control-allocation.mjs、src/core/propulsion.mjs
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

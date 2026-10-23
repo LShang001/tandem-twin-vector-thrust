@@ -3,6 +3,20 @@
 """
 pm_observer_compensation.py — τm 观测器对差速通道 PM 的补偿量化
 =================================================================
+@file    pm_observer_compensation.py
+@module  仿真/鲁棒性分析（观测器补偿量化）
+@brief   把"油门释放瞬态增益失配"翻译成 PM(t) 轨迹，量化 τm 观测器的补偿量
+@details 输入：K_NOM=60、w_ratio 峰值 1.33、τm=0.28、200 Hz；
+         处理：w0_actual 一阶衰减 → 有效增益 K·(w_actual/w_used)² → PM(K_eff) 时间轨迹；
+         输出：失稳窗口时长、补偿前后的 PM 差。
+@theory  有效回路增益 = kp·(w0_actual/w0_used)² 与 τm 观测器修复
+         @ref AGENTS.md 踩坑记录「差速增益调度」（2026-08-09 三层定位）；
+         内环 PM(K) @ref CTL-001 §8.5
+@frame   N/A（单通道频域 + 时间历程）
+@units   s、无量纲增益比、度
+@note    本模型不含固件 PI/采样保持/BTRUE 非对角耦合：观测器收益只能作为
+         "需要实机日志复核"的假设，不能解释实机振荡（@ref AGENTS.md 红线）
+@see     pm_sensitivity.py、phase_margin_analysis.py
 问题：实机"抖油门震荡"（memory 三层定位，2026-08-09）的频域解释？
 
 memory 关键事实：

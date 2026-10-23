@@ -3,6 +3,17 @@
 """
 robust_montecarlo.py — LMI 鲁棒界的蒙特卡洛数值验证
 =====================================================
+@file    robust_montecarlo.py
+@module  仿真/鲁棒性分析（蒙特卡洛验证）
+@brief   用特征值边界/随机采样/时域积分三路独立验证 LMI 的 γ̄ 与保守度
+@details 输入：A0、不确定分解、LMI 给出的 γ̄；处理：二分求真实失稳边界 δ*、
+         随机 δ 采样统计失稳率、线性系统时域积分判收敛；
+         输出：保守度 γ̄/δ*、失稳率表、文本结论 + 退出码。
+@theory  范数有界不确定 LMI 的充分性 @ref TandemVec-Paper/ch15-cascade-control (15.7)
+@frame   N/A（状态空间）
+@units   无量纲
+@note    固定随机种子保证可复现；LMI 只是充分条件，故"γ̄ 外仍稳定"不构成反例
+@see     robust_lmi_analysis.py、cascade_closedform.py
 对应论文 ch/15 §15.7 的验证部分
 
 三件事（数值证伪/证实 LMI 预测）：

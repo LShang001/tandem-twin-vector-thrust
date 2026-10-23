@@ -1,10 +1,28 @@
-// ============================================================
-//  环境效果：地面网格 / 星空 / 气流粒子 / 网格跟随
-// ============================================================
+/**
+ * @file    effects.mjs
+ * @module  仿真 browser/环境效果
+ * @brief   地面网格、星空、天空穹顶、地平线环与气流粒子的创建与逐帧更新
+ * @details 输入：场景对象与每帧 sim 状态（地速、高度、空速）；
+ *          处理：粒子按地速反向漂移（相对风）、网格按位置反衬平移与真实高度升降；
+ *          输出：场景对象与 update/rebuild 接口。
+ *          不变量：所有视觉效果是"载机跟随惯性系"的假象——机体恒在画面中心。
+ * @theory  N/A（视觉表现，不参与力学）；"机体不动、世界动"的渲染口径 @ref MOD-001 §9
+ * @frame   世界系与 NED 同向（z 向下）；天空球 z 分量判断天顶/地面
+ * @units   长度为 world unit（示意），速度取 m/s 仅用于动画相位
+ * @note 气流粒子是相对风的可视化，不是 CFD/尾流模型，禁止据此讨论气动干涉
+ * @see     main.js（每帧 effects.update）、theme.mjs（按主题重建网格/天空）
+ */
 import * as THREE from 'three';
 
 const AIR_N = 1300;
 
+// @note 地面网格 z = 7.5 − pos.z 且下限 1.6：既反衬真实高度又避免网格贴到相机上
+// @note update 内的粒子回绕用固定周期（68/30/11 world unit），与真实位移量无关
+/**
+ * @brief 创建环境效果集合（网格/星空/天空/地平线环/气流粒子）
+ * @param {THREE.Scene} scene 场景对象
+ * @returns {{rebuildGrid: Function, rebuildSky: Function, stars: Object, air: Object, update: Function}}
+ */
 export function createEffects(scene) {
   // ---------- 地面网格 ----------
   let grid = null;

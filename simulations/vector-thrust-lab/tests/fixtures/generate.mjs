@@ -1,8 +1,17 @@
-// ============================================================
-//  回归基线生成器：node tests/fixtures/generate.mjs
-//  从当前 core 实现采集场景轨迹，写入 regression-baseline.json
-//  ⚠️ 仅在有意的行为变更后重新生成，并在提交说明中记录原因
-// ============================================================
+/**
+ * @file    generate.mjs
+ * @module  仿真 tests/基线生成器
+ * @brief   从当前 core 实现采集四场景轨迹并写入 regression-baseline.json
+ * @details 输入：tests/scenarios.mjs 的场景函数；处理：跑完四场景取整份结果；
+ *          输出：fixtures/regression-baseline.json（含 meta 与四个场景）。
+ *          不变量：meta 记录模型版本、帧步长与子步长，便于判断基线是否过期。
+ * @theory  N/A（工具脚本）；场景物理背景 @ref MOD-001 §7.3
+ * @frame   机体系 FRD / NED
+ * @units   继承 scenarios.mjs 快照字段
+ * @redline 重采基线属行为红线流程：仅在有意的行为变更后运行，并在提交说明记录原因
+ * @note 本脚本会覆盖已提交的基线文件——运行前先确认 diff 是否符合预期
+ * @see     tests/scenarios.mjs、tests/regression.test.mjs
+ */
 import { writeFileSync } from 'node:fs';
 import { SCENARIOS } from '../scenarios.mjs';
 

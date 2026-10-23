@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>MOD-004 代码-理论对照核查报告 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="mod-004-代码-理论对照核查报告">MOD-004
+代码-理论对照核查报告</h1>
+<blockquote>
+<p>编号：MOD-004 ｜ 日期：2026-10-23 ｜ 状态：核查完成；6 项 P0 已按 <a
+href="../decisions/DEC-002.html">DEC-002</a>
+修复/处置并复验 执行：Team Lead + 8 个区域 Agent（sim / fw-ekf / fw-nav
+/ fw-control / fw-infra / fw-tests / gcs / analysis） 规范：<a
+href="../governance/GOV-004.html">GOV-004
+代码注释与理论对照规范</a>
+机检：<code>py -3.12 tools/check-code-comments.py --check</code>
+代码基线：<code>main @ 6784221</code> + 工作区未提交改动（2026-10 的 EKF
+P0/P1 修复、光流重锚等） 区域记录：见 §7 与 <a
+href="README.html">代码理论核查目录</a></p>
+</blockquote>
+<hr />
+<h2 id="1-结论摘要">1 结论摘要</h2>
+<ol type="1">
+<li><strong>注释规范已落地并可机检</strong>：全仓自研代码 <strong>308
+个文件</strong>全部具备 L0
+文件头，<code>error = 0</code>、<code>warning = 0</code>，<strong>308/308
+全绿</strong>，平均分 <strong>70.1 → 100.0</strong>；<code>@ref</code>
+文献/文档引用 <strong>884 处</strong>，<code>@formula</code> <strong>122
+处</strong>。</li>
+<li><strong>理论核对不是“看起来一致”</strong>：8 个区域共产出 <strong>约
+300
+条核对矩阵</strong>（公式/文献/代码符号/结论/证据/处置），覆盖四元数与姿态、比力方程与双子样、15
+状态 ESKF、控制分配与轴映射、推进/气动、AnoCom
+协议与参数链路、仿真口径。绝大多数差异经等价变换后一致（ENU↔︎NED、RFU↔︎FRD、φ=Cⁿ_b·δβ、δ
+方向取反、模型系↔︎存档系）。</li>
+<li><strong>发现并处理 6 项 P0</strong>（决策见 <a
+href="../decisions/DEC-002.html">DEC-002</a>；固件 2
+项已修，仿真 4 项已对齐/口径化）：
+<ul>
+<li><strong>C-01</strong> F3
+单发推力损失监测：垂直速度误差符号与监测器约定相反 →
+漏报/可误报（<code>fw-control</code>，已修）。</li>
+<li><strong>C-02</strong> 惯量交叉耦合前馈：ω 为固件存档系，I/h
+按模型系排列 →
+机动时前馈落到错误通道（<code>fw-control</code>，已修）。</li>
+<li><strong>A-01</strong> 研究仿真 <code>ekf_core</code> 仍把
+<code>½Δθ×ΔV</code> 与中点姿态并用 →
+旋转效应双计（<code>analysis</code>，已对齐固件 P0-0）。</li>
+<li><strong>A-02</strong> 仿真 P0 航向仍为 π（固件已改 0.2
+rad），会复现旧失效链（<code>analysis</code>，默认已改 0.2）。</li>
+<li><strong>A-03</strong> 仿真 <code>Ekf15</code> 依赖未初始化的
+<code>home_lla</code>（<code>analysis</code>，<code>initialize()</code>
+已设置）。</li>
+<li><strong>A-04</strong> 25°
+摆角口径的配平点（<code>dtTrim=−18.702°</code>）在固件 15°
+限幅下不可达（<code>analysis</code>，已给出 15° 可行包线）。</li>
+</ul></li>
+<li><strong>固件导航链本轮未发现
+P0</strong>：<code>ekf_15_state.h</code> 的 F 矩阵、圆锥/划摇、KF
+五方程、Joseph、NIS、地球模型与 REF-120/REF-121 逐块一致；此前 P0-0
+的“旋转效应双计”已确认修复（T7 残差 <code>0.000125005</code>，期望
+<code>0.000124999</code>）。</li>
+<li><strong>测试与构建证据</strong>：仿真 91/91；GCS 35/35；EKF 36/36 +
+aiding 16/16；fw-nav 13/13；fw-control 9/9 + P0 回归 18/18、惯量
+T6/T7；fw-infra 协议/调度 4 套；<code>pio run</code> 双 env SUCCESS（P0
+修复后复跑）。注释改动未改变可执行语义（AST/去注释比对见 §6）。</li>
+<li><strong>非注释副作用已处理</strong>：修复 1 处注释内 <code>*/</code>
+导致的编译阻塞；重新生成 <code>parameters.mjs</code>（仅 description
+漂移）与 <code>standalone.html</code>（源码变更后必须重建）；同步根
+<code>AGENTS.md</code> 的偏航 Ki 数值（5.729578 → 4.297184，2026-08-12
+已下调）。</li>
+</ol>
+<hr />
+<h2 id="2-方法与证据链">2 方法与证据链</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做法</th>
+<th>产物/证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 读码</td>
+<td>逐文件读实现、调用方与被调用方，标注可疑点</td>
+<td>区域记录 §1 覆盖率表</td>
+</tr>
+<tr>
+<td>2 对书</td>
+<td><strong>实际打开</strong> REF-120/REF-121 章节与项目 MOD/CTL/THY
+文档，核对式号、页码、符号</td>
+<td>核对矩阵“文献出处”列</td>
+</tr>
+<tr>
+<td>3 换算</td>
+<td>教材 ENU/RFU ↔︎ 项目
+NED/FRD；φ=Cⁿ_b·δβ；δ=真值−估计；模型系↔︎存档系</td>
+<td>每区单列“等价变换”小节（如 FW-EKF E-1…E-6）</td>
+</tr>
+<tr>
+<td>4 复算</td>
+<td>单元/宿主测试断言、数值复算、解析 vs 差分、闭环冒烟</td>
+<td>核对矩阵“证据”列与 §6</td>
+</tr>
+<tr>
+<td>5 补注释</td>
+<td>按 GOV-004 三层模型写 L0/L1/L2，公式用五段式</td>
+<td>884 处 <code>@ref</code>、122 处 <code>@formula</code></td>
+</tr>
+<tr>
+<td>6 门禁</td>
+<td><code>check-code-comments.py</code> 分区 + 全量；测试/编译</td>
+<td>§3、§6</td>
+</tr>
+</tbody>
+</table>
+<p><strong>证据分级</strong>：文献页码/式号 <strong>&gt;</strong>
+测试断言/复算 <strong>&gt;</strong> 代码推导 <strong>&gt;</strong>
+经验判断。没有证据的结论在区域记录中写“未验证”，不写“应该一致”。</p>
+<p><strong>行为边界</strong>：本轮默认只加注释与文档；发现的代码-理论不一致
+<strong>只登记不改</strong>（改行为须单独立项、重采红线基线）。唯一例外是修复注释导致编译失败，以及构建产物重建。</p>
+<hr />
+<h2 id="3-覆盖与门禁">3 覆盖与门禁</h2>
+<h3 id="31-分区门禁gov-004-lint">3.1 分区门禁（GOV-004 lint）</h3>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th style="text-align: right;">文件</th>
+<th>核查前 error/warning/均分</th>
+<th>核查后 error/warning/均分</th>
+<th>全绿</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sim</td>
+<td style="text-align: right;">38</td>
+<td>46 / 49 / 69.3</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>38/38</td>
+</tr>
+<tr>
+<td>fw-ekf</td>
+<td style="text-align: right;">8</td>
+<td>13 / 20 / 55.0</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>8/8</td>
+</tr>
+<tr>
+<td>fw-nav</td>
+<td style="text-align: right;">25</td>
+<td>33 / 21 / 69.4</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>25/25</td>
+</tr>
+<tr>
+<td>fw-control</td>
+<td style="text-align: right;">18</td>
+<td>30 / 32 / 58.6</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>18/18</td>
+</tr>
+<tr>
+<td>fw-infra</td>
+<td style="text-align: right;">29</td>
+<td>29 / 29 / 75.0</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>29/29</td>
+</tr>
+<tr>
+<td>fw-tests</td>
+<td style="text-align: right;">65</td>
+<td>65 / 13 / 79.0</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>65/65</td>
+</tr>
+<tr>
+<td>gcs</td>
+<td style="text-align: right;">42</td>
+<td>42 / 77 / 70.8</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>42/42</td>
+</tr>
+<tr>
+<td>analysis</td>
+<td style="text-align: right;">83</td>
+<td>85 / 214 / 65.4</td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td>83/83</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>308</strong></td>
+<td><strong>343 / 455 / 70.1</strong></td>
+<td><strong>0 / 0 / 100.0</strong></td>
+<td><strong>308/308</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>R01–R10 全规则零命中；R08 最后 38 处（<code>analysis</code>
+长脚本辅助函数 docstring）已在收尾轮补齐（当前 0）。</li>
+<li>覆盖口径：GOV-004 §2.1
+的自研代码（不含第三方库、vendor、生成物、示例）。<code>parameters.mjs</code>、<code>standalone.html</code>
+为生成物，按边界由生成器重建。</li>
+</ul>
+<h3 id="32-每个文件的注释结构">3.2 每个文件的注释结构</h3>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>覆盖</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L0 文件头</td>
+<td>308/308</td>
+<td><code>@file/@module/@brief/@details/@theory/@frame/@units</code>，红线文件带
+<code>@redline</code></td>
+</tr>
+<tr>
+<td>L1 符号文档块</td>
+<td>公共函数/类/结构体全覆盖（机检 R08=0，测试文件按规范豁免）</td>
+<td><code>@param</code>
+带单位、<code>@formula</code>、<code>@ref</code>、<code>@pre/@post</code>、<code>@note</code></td>
+</tr>
+<tr>
+<td>L2 行内注释</td>
+<td>关键换算/符号/边界/时序</td>
+<td>只写“为什么”，不逐行翻译</td>
+</tr>
+<tr>
+<td>理论块</td>
+<td>6 个仿真理论文件 + EKF/导航/控制核心函数</td>
+<td>五段式：公式、符号单位、出处、实现映射、等价变换+数值证据</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-分主题核对结论">4 分主题核对结论</h2>
+<h3 id="41-姿态旋转与欧拉角">4.1 姿态、旋转与欧拉角</h3>
+<ul>
+<li><code>math.mjs</code> / <code>QuaternionMath.h</code> /
+<code>Quat4f.h</code>：四元数乘法、共轭、归一化、三明治积
+<code>q⊗v⊗q*</code> 与 <code>t=2(q×v)</code> 展开一致；数值复算误差
+<code>3.11e-15</code>（sim）、<code>1e-15</code> 量级（fw-nav）。</li>
+<li><code>theta = -asin(R13)</code> 与代码
+<code>sin_pitch = 2(wy−xz)</code>
+是恒等变换（<code>R13=2(xz+wy)</code>），且被列为红线；fw-nav
+已加“不可改符号”警示。</li>
+<li><code>eulerFromQuat</code> 实际是 <strong>ZYX(Rᵀ)</strong>
+分解（三个角都是逆旋转角），MOD-002 只解释了 theta 的负号——sim 已登记
+P2，建议文档补全语义。</li>
+<li>姿态更新右乘 <code>q_{k+1}=q_k⊗Exp(ωΔt)</code> + 每步保范，与
+REF-120 §9.2 (9.2.14) p.268、MOD-002 §3 一致。</li>
+</ul>
+<h3 id="42-捷联惯导与-15-状态-eskf固件本轮无-p0">4.2 捷联惯导与 15 状态
+ESKF（固件，本轮无 P0）</h3>
+<ul>
+<li>比力方程 <code>V̇ⁿ=Cⁿ_b f^b−(2ω_ie+ω_en)×Vⁿ+gⁿ</code>（REF-120 §7.4
+(7.4.6) p.189）、速度更新 (9.6.9) p.298、旋转效应 (9.6.17)、划摇
+(9.6.25) p.301：与 <code>ekf_15_state.h</code> 实现逐项一致；P0-0 修复后
+T7 残差 <code>0.000125005</code>（期望 <code>0.000124999</code>）。</li>
+<li>误差定义：固件为体轴右乘
+<code>q_true=q_est⊗Exp(δβ)</code>，与秦书导航系失准角 <code>φ</code>
+的关系 <code>φ=Cⁿ_b·δβ</code>；<code>δ=计算值−真值</code> vs 固件
+<code>δ=真值−估计</code> 的方向取反已单列推导（FW-EKF §2.4 E-1…E-6），F
+矩阵与 (9.8.3)/(9.8.13)
+换算后逐块一致——<strong>属于等价变换，不是符号错误</strong>。</li>
+<li>KF 五方程 (2.2.4a–e) p.33–34、Joseph (2.2.4e) p.42–43、序贯/子集
+§3.3 p.84–86、NIS χ² §7.3.1 p.255–259：一致。</li>
+<li>地球模型：固件级数式 vs Somigliana (7.2.17)(7.2.18) p.178 差
+~<code>1e-5 m/s²</code>（远小于 MEMS 加计零偏），已
+<code>@deviation</code> 登记。</li>
+<li>航向源：伪磁初值 <code>(30,0,40)</code> + <code>P0(8,8)=0.2</code>
+是<strong>伪磁确定性初始化</strong>，不是秦书意义的罗经/自对准（MEMS
+零偏 0.4 dps ≫
+<code>ω_ie·cosL≈13.25°/h</code>）。无磁馈入时航向无绝对物理源，属已知设计缺口（fw-nav
+P1）。</li>
+<li>静止/ZUPT/光流双新鲜度、<code>throttle≥3%</code> 跳过 static gyro
+等坑位均已按 AGENTS.md 逐项写入注释。</li>
+</ul>
+<h3 id="43-控制分配与执行器">4.3 控制、分配与执行器</h3>
+<ul>
+<li><strong>轴映射</strong>（最高风险项）：以 mix 层实码为锚，确认
+<code>alpha_roll→Mz'→上摆 δf</code>、<code>alpha_pitch→My'→下摆 δt</code>、<code>alpha_yaw→Mx'→差速 Δω</code>；三处文档（根
+AGENTS / TandemVec_FCS/AGENTS / CTL-001 §3）存在“模型系 vs
+存档系”混读，已在 GOV-004 §7.2 增加固定置换说明。</li>
+<li><strong>速率环量纲</strong>：输入 deg/s、输出 deg/s²，仅在
+<code>ControlOutputs_t</code> 边界 ×π/180；kp
+<code>16.042818/16.042818/11.459156</code>、ki
+<code>5.729578/5.729578/4.297184</code>，与旧混合域
+<code>0.28/0.20/0.10</code> 逐位等价（fw-control 复算）。</li>
+<li><strong>差速</strong>：<code>ωf=ω0√(1+Δω)</code>、<code>ωt=ω0√(1−Δω)</code>；有效增益
+<code>kp·(w0_actual/w0_used)²</code>、τm 观测器
+<code>w_est += (w_cmd−w_est)·dt/τm</code>（0.005/0.28）、封顶 1.0 与
+AGENTS 三层记录一致。</li>
+<li><strong>B 矩阵</strong>：解析式九元素与论文
+<code>eq:Btrue_allocation</code> 逐项一致，数值差分 T11 等价；方阵用 B⁻¹
+而非 B⁺（与 CTL-001 §2 一致）。</li>
+<li><strong>两个固件 P0（已按 DEC-002 修复）</strong>：
+<ul>
+<li>C-01 <code>ActuatorFaultMonitor</code> 的
+<code>vertical_vel_err</code>
+符号：调用方原传“目标−当前（下沉为正）”，与监测器“下沉为负”相反；现统一走
+<code>thrustLossVerticalVelocityError(measured,target)</code>，并只在自动垂直模式启用
+F3。</li>
+<li>C-02 惯量前馈：<code>omega_body</code>
+为存档系（z=推力轴），<code>Ix,Iy,Iz</code> 与 <code>h_rotor</code>
+原按模型系（x'=推力轴）排列；现由
+<code>computeInertiaCompensationFromArchive()</code>
+一次性置换到模型系，机动时前馈回到正确通道。</li>
+</ul></li>
+<li>RATE_MODE 每拍复位内环 PID → 等效纯 P（P1，与论文“Rate 模式
+PI”表述不符）；在线辨识符号链未对齐（P1）。</li>
+</ul>
+<h3 id="44-推进气动与六自由度动力学">4.4 推进、气动与六自由度动力学</h3>
+<ul>
+<li><code>propulsion.mjs</code> /
+<code>hifi_core</code>：<code>T=k_Tω²</code>、<code>Q=k_Qω²+J_pω̇</code>、转子角动量、六维映射、差速平方和近似不变，与
+THY-002 一致；B 矩阵解析 vs 数值差分误差 <code>2.38e-9</code>。</li>
+<li><code>aerodynamics.mjs</code>：动压、升力/阻力/侧滑/阻尼、0.5 m/s
+空速下限与 MOD-001 一致；悬停开气动时线性模型失效已注明（P2）。</li>
+<li>刚体动力学：牛顿-欧拉、RK4 保范、子步
+<code>n=ceil(dt/maxStep)</code>、地面约束一致；端到端收敛阶实测
+1.53/1.38/1.74（一阶 RK4 只作用于 [v,ω,q] 的已知限制，P2）。</li>
+<li>25° vs 15° 摆角口径：仿真 <code>dMax=25°</code>、固件实机
+<code>±15°</code>，是<strong>两套口径</strong>；25° 配平点
+<code>dtTrim=−18.702°</code> 在 15° 下超限 24.7%，28 m/s
+巡航配平不可达（analysis P0-3）。<strong>2026-10-23 补算</strong>：15°
+下可行巡航速度下限约 29.8 m/s（30–40 m/s 可行），见 MOD-003 §3.2。</li>
+<li>仿真 <code>applyVtolHover</code> 的 B
+工作点用指令油门、<code>M_cur</code> 用实际转速（τm 滞后），固件已改用
+<code>w_est</code>，仿真未同步 → 油门瞬态有效增益偏差
+∝(w_act/w_cmd)²（sim P1-2）。</li>
+</ul>
+<h3 id="45-通信协议与上位机本轮无-p0">4.5 通信协议与上位机（本轮无
+P0）</h3>
+<ul>
+<li>AnoCom
+帧：<code>AB + src + dst + func + len(LE) + data + SC + AC</code>；SC=Σ、AC=ΣSC；固件
+<code>AnoComProtocol::buildFrame</code> 与 PC <code>encode_frame</code>
+逐字节一致（gcs/fw-infra 双向核对）。</li>
+<li>17
+个遥测帧缩放逐项对齐：0x01/03/05/07/08/0A/0B/0D/20/21/30/40/F1；0x07/0x08
+为“取反向上”等价变换；0xF1 12B 顺序/缩放一致。</li>
+<li>参数链路：<code>expected_names()</code> <strong>128 项</strong>与
+<code>ano_params.cpp</code> 注册表顺序逐项一致（ID
+顺序变更须同步的约束已写入注释）。</li>
+<li>200 Hz 双环：快环 100 Hz（0x01/03/0A/21/F1，奇数 tick）+ 慢环
+50/25/10 Hz（偶数 tick 余数错开）；组模式单次
+write；SERIAL6_BAUDRATE=921600。</li>
+<li>AnoVars 三坑（extern 无大小、volatile fptr、0xF3 20B）、MAVLink
+运行时切换、黑匣子 I/P/S/E 帧与 CRC16 均逐项核对。</li>
+<li>遗留：0x30 形参命名与内容互换（字节流正确）、0x40
+有符号/无符号等价、<code>wsseq</code>
+参数解析被并进注释行、<code>build_meta</code> 对 rc_* 生成 36
+条永不命中的元数据——均登记未改。</li>
+</ul>
+<h3 id="46-测试覆盖fw-tests">4.6 测试覆盖（fw-tests）</h3>
+<ul>
+<li>65 个测试/工具文件（12 372 行）全部补 L0
+与用例意图注释，断言/期望值/测试数据零改动；覆盖矩阵按“测试文件 →
+被测符号 → 理论性质 → 断言强度 → 缺口”整理（见 <a
+href="FW-TESTS.html">FW-TESTS-代码理论核查.md</a>）。</li>
+<li>EKF 组 7
+个测试在修复注释编译阻塞后全部编译通过；<code>test_ekf_15state</code>
+36/36、<code>aiding_velocity</code> 16/16。</li>
+<li>覆盖边界：全部为宿主/离线口径（无真实传感器、无实机二进制、无
+QEMU）；<code>test_flight_control_axis</code> 是直连轴序，与实机 mix
+置换不同构；<code>handleAnoCom</code> 双环频率/MAVLink
+切换无宿主回归。</li>
+<li>覆盖缺口（P1）：5 个测试 print-only
+无断言；<code>test_gnss_delay_batch*</code> 与 MC
+脚本的判定门限在脚本侧、不可单命令复现；T8/T9–T11
+依赖测试注入接口；轴映射缺“置换层”对照；中文路径下 g++ <code>-o</code>
+需 ASCII 目录。</li>
+<li>已知失败：<code>TandemVec_FCS/test/ekf_host_regression.cpp</code> 的
+project 场景在 HEAD 基线即挂 3743 断言，与本轮无关，待单独定位。</li>
+</ul>
+<h3 id="47-仿真口径-vs-固件口径18-项详见-analysis-记录-d-01d-18">4.7
+仿真口径 vs 固件口径（18 项，详见 ANALYSIS 记录 D-01…D-18）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>仿真</th>
+<th>固件</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>摆角限幅</td>
+<td>25°（模型 JSON）/ 15°（hifi 部分场景）</td>
+<td>±15°（2026-08-07）</td>
+<td>25° 配平点不可达；SAS 指标不可直接对比</td>
+</tr>
+<tr>
+<td>重力</td>
+<td>9.79（动力学）/ 9.80665（EKF）</td>
+<td>Somigliana</td>
+<td>闭环内 0.17% 口径差</td>
+</tr>
+<tr>
+<td>P0 航向</td>
+<td>π</td>
+<td>0.2 rad</td>
+<td>复现旧失锁链（A-02）</td>
+</tr>
+<tr>
+<td>ZUPT NIS</td>
+<td>1000</td>
+<td>16.3（χ²(3) 99.9%）</td>
+<td>门控统计失效</td>
+</tr>
+<tr>
+<td>baro</td>
+<td><code>--baro-hz 2 --baro-phase 2</code> 才稳</td>
+<td>实际速率不同</td>
+<td>相位错配</td>
+</tr>
+<tr>
+<td>alt_vel.ki</td>
+<td>1.25 或候选 0.5</td>
+<td>1.25</td>
+<td>1.25 时 A2 出现 74.8/818.5 m 发散</td>
+</tr>
+<tr>
+<td>位置环/磁/光流</td>
+<td><code>--pos-hold/--mag-vector/--flow-aiding</code> 为理想化</td>
+<td>未验证</td>
+<td>A2/A3/A5 的 <code>pos_ne</code> 不能单列判据</td>
+</tr>
+<tr>
+<td>静止检测油门门控</td>
+<td>无</td>
+<td><code>throttle≥3%</code> 跳过</td>
+<td>仿真可能把电机出力估成零偏</td>
+</tr>
+<tr>
+<td>闭环结论</td>
+<td><code>run_full_envelope</code> 10/10 FAIL</td>
+<td><code>test_host</code> + <code>pio run</code></td>
+<td>两类结论不可互换</td>
+</tr>
+<tr>
+<td>A8 / F4</td>
+<td>A8 目标不成立；F4 只能检测+有界下降</td>
+<td>—</td>
+<td>不计入通过率</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-发现清单">5 发现清单</h2>
+<h3 id="51-p06-项已按-dec-002-修复处置">5.1 P0（6 项，已按 DEC-002
+修复/处置）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>区域</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td>fw-control</td>
+<td><code>updateActuatorFaultDiagnostics</code> →
+<code>ActuatorFaultMonitor::update</code> 的
+<code>vertical_vel_err</code></td>
+<td>调用方“目标−当前（下沉为正）” vs 监测器“下沉为负”</td>
+<td>F3 漏报/可误报；无自动执行路径</td>
+<td><strong>已修复</strong>：<code>thrustLossVerticalVelocityError()</code>
++ F3 自动模式门控；18/18 测试</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td>fw-control</td>
+<td><code>mix_and_output_commands</code> 惯量前馈段</td>
+<td>ω 为存档系，I/h 按模型系排列，随后又做系置换</td>
+<td>机动时前馈落到错误通道（~0.05–0.17 N·m）</td>
+<td><strong>已修复</strong>：<code>computeInertiaCompensationFromArchive()</code>；T6/T7
+回归 + pio SUCCESS</td>
+</tr>
+<tr>
+<td>A-01</td>
+<td>analysis</td>
+<td><code>ekf_core.Ekf15.time_update</code></td>
+<td>划摇保留 <code>½Δθ×ΔV</code> 又用中点姿态旋转</td>
+<td>动态段速度偏置 ~1e-2–5e-2 m/s²</td>
+<td><strong>已修复</strong>：删除旋转项、统一
+<code>two_sample_delta_v()</code>；<code>verify_p0_fixes</code></td>
+</tr>
+<tr>
+<td>A-02</td>
+<td>analysis</td>
+<td><code>ekf_core.cfg_p0</code> / <code>opt_ekf</code></td>
+<td>仿真 P0 航向仍为 π</td>
+<td>复现旧失效链</td>
+<td><strong>已修复</strong>：两处默认 0.2 rad，π 仅显式覆盖</td>
+</tr>
+<tr>
+<td>A-03</td>
+<td>analysis</td>
+<td><code>Ekf15.measurement_update_gnss</code></td>
+<td>依赖未初始化的 <code>home_lla</code></td>
+<td>仿真 GNSS 结果不可信</td>
+<td><strong>已修复</strong>：<code>initialize()</code> 设置
+<code>home_lla</code></td>
+</tr>
+<tr>
+<td>A-04</td>
+<td>analysis</td>
+<td><code>trim_analysis</code> / MOD-003</td>
+<td>25° 口径配平点</td>
+<td>15° 固件下 28 m/s 巡航配平不可达</td>
+<td><strong>已处置</strong>：15° 可行下限 ~29.8 m/s（30–40 m/s），写入
+MOD-003 §3.2 / ASM-017</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-p1按区域完整条目见各区域记录-3">5.2
+P1（按区域，完整条目见各区域记录 §3）</h3>
+<ul>
+<li><strong>sim</strong>：B 工作点用指令油门 vs 实际转速（τm
+观测器未同步）；SAS ±25°/±0.7 vs 固件
+±15°/0.7；<code>parameters.mjs</code> 漂移（本轮已重建，仅
+description）。</li>
+<li><strong>fw-ekf</strong>：<code>dcm2quat</code> 180°
+退化；<code>WrapToPi</code> 单次归位边界；地球模型 ~1e-5 m/s²
+差异；<code>DISABLE_GNSS_DELAY_REPLAY=1</code> 会拒绝全部带年龄
+GNSS；ZUPT 残差门自指。</li>
+<li><strong>fw-nav</strong>：水平 KF 只用航向二维旋转；磁力计未馈入 +
+伪磁初值；磁椭球质量门偏松（lib/MagCal）；激光高度分支
+<code>if(0)</code> 永久禁用。</li>
+<li><strong>fw-control</strong>：RATE_MODE 每拍复位内环 PID（等效纯
+P）；在线辨识符号链未对齐、<code>b_est</code> 贴近 0.3 下限。</li>
+<li><strong>fw-infra</strong>：<code>handleDebugConsole</code> 的
+<code>wsseq</code> 参数解析被并入注释行（<code>ms</code> 恒 500、逼近
+IWDG）；参数计数/工具值滞后（已同步 128）。</li>
+<li><strong>fw-tests</strong>：5 个测试 print-only
+无断言（<code>test_ekf_bias_static</code>、<code>test_ekf_delay_mmae</code>、<code>test_ekf_highspeed_realistic</code>、<code>fw_sil_main</code>、<code>fw_sil_env_main</code>）；<code>test_gnss_delay_batch*</code>
+与 MC 脚本门限在脚本侧；T8/T9–T11
+依赖测试注入接口；轴映射缺“置换层”单测；中文路径 g++ 需 ASCII
+输出目录。</li>
+<li><strong>gcs</strong>：<code>build_meta</code> 对 rc_* 生成 36
+条永不命中的元数据；<code>test_mavlink_bridge</code> 的
+BAUD/条数滞后（2M/121 vs 921600/128）。</li>
+<li><strong>analysis</strong>：<code>F[6:9,6:9]</code> 重复赋值 +
+<code>a_est</code> 死代码；<code>hifi_core</code>
+注释“RK2”实为一阶半隐式欧拉；<code>imu_measure</code> 硬写 5 ms；INDI
+姿态指令回归失败；默认闭环无位置环；种子数不足。</li>
+</ul>
+<h3 id="53-p2节选">5.3 P2（节选）</h3>
+<p><code>eulerFromQuat</code> 三角度语义未在 MOD-002
+写全；<code>GYRO_DIRECT_TEST</code>
+死路径注释符号与实码相反；<code>TVC_Control_*</code> 弃用头仍被
+<code>main.cpp</code> 包含；<code>q_target</code>
+形参未用；<code>IncrementalPID</code> 无
+<code>@ref</code>；<code>ServoModel</code> 25°/15°
+双口径；<code>AGENTS.md</code>/<code>CTL-001 §3</code>
+轴名混读；<code>TVC_Control_Geometric</code>
+负根静默兜底；<code>analyze_ano.py --dt</code> 默认 0.02
+滞后；<code>hifi_core</code> 分配只用 B 对角；<code>py-web-lab</code>
+测试硬编码本机 Playwright 路径；8 处
+<code>SyntaxWarning</code>（<code>'\,'</code>、<code>'\o'</code>）。</p>
+<hr />
+<h2 id="6-行为不变性与构建验证">6 行为不变性与构建验证</h2>
+<h3 id="61-注释-only-证据">6.1 注释-only 证据</h3>
+<table>
+<thead>
+<tr>
+<th>检查</th>
+<th>方法</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python AST 等价</td>
+<td>去 docstring 后 <code>ast.dump</code> 与 HEAD 比对</td>
+<td>103 个改动 <code>.py</code> 中 91 个完全等价；12 个差异：8
+个来自<strong>本轮之前</strong>的未提交改动，2 个是空
+<code>__init__.py</code> 只加模块 docstring（AST
+工具对空模块的已知误报），<code>build-docs.py</code>/<code>check-links.py</code>
+是 Lead 本轮加的 docstring
+与链接检查修复（工具代码，非业务逻辑）；<code>repro_exit.py</code> 仅去
+BOM</td>
+</tr>
+<tr>
+<td>C/C++/JS token 等价</td>
+<td>自写词法剥离
+<code>//</code>、<code>/* */</code>、字符串/模板串后比较</td>
+<td>161 个改动文件中 <strong>13 个</strong>存在非注释差异；逐一核对：11
+个为任务前既有改动，<code>FlightCtrlParams.h</code> 为结构体初始化换行 +
+重复 <code>#pragma once</code>
+清理（数值逐位相同），<code>main.cpp</code> 为 BOM 去除；固件业务代码无
+token 变化</td>
+</tr>
+<tr>
+<td>随机性/数值</td>
+<td>配平/特征值/冒烟数值与核查前一致</td>
+<td>一致（见 ANALYSIS 记录）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-构建与测试">6.2 构建与测试</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>命令/结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>注释门禁</td>
+<td><code>py -3.12 tools/check-code-comments.py --check</code> → error
+0</td>
+</tr>
+<tr>
+<td>仿真</td>
+<td><code>node --test "simulations/vector-thrust-lab/tests/*.test.mjs"</code>
+→ 91/91</td>
+</tr>
+<tr>
+<td>GCS</td>
+<td><code>cd TandemVec_FCS/GCS &amp;&amp; py -3.12 -m pytest tests/ -q</code>
+→ 35 passed</td>
+</tr>
+<tr>
+<td>EKF 宿主</td>
+<td><code>test_ekf_15state</code>
+36/36；<code>test_ekf_aiding_velocity</code>
+16/16；<code>test_ekf_bias_static</code> exit 0</td>
+</tr>
+<tr>
+<td>其他宿主</td>
+<td>fw-nav 13/13；fw-control 9/9；fw-infra 4 套；fw-tests <strong>51/51
+C++ 编译通过</strong>（48 测试/研究工具 + 3 SIL）</td>
+</tr>
+<tr>
+<td>P0 修复回归</td>
+<td><code>test_actuator_fault_monitor</code>
+18/18；<code>test_inertia_decoupling</code>
+全通过（T6/T7/T8）；<code>verify_p0_fixes.py</code> 9/9</td>
+</tr>
+<tr>
+<td>P0 仿真验证</td>
+<td>50 seed 直线（位置 RMSE 均值 0.369 m、0/50 失败）；20 seed ×4 航向
+A/B；开环旋转 0.617 vs 1.233 m/s；详见 <a
+href="P0-VALIDATION.html">P0
+修复仿真验证</a></td>
+</tr>
+<tr>
+<td>参数/产物</td>
+<td><code>sync-params.py --check</code>
+OK；<code>build-standalone.py --check</code> OK（已重建）</td>
+</tr>
+<tr>
+<td>固件编译</td>
+<td><code>pio run</code> 双 env <strong>SUCCESS</strong>（P0
+修复后：<code>TandemVec_FCS</code> 29 s / <code>test</code> 32 s；2/2
+succeeded）</td>
+</tr>
+<tr>
+<td>文档</td>
+<td><code>build-docs.py</code> 构建 40 页；<code>check-links.py</code>
+通过（Markdown 303 处、HTML 354 处，零断链）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="63-本轮非注释改动逐条说明">6.3 本轮非注释改动（逐条说明）</h3>
+<ol type="1">
+<li><code>ekf_15_state.h</code>：注释内 <code>subset_*/NIS</code> 的
+<code>*/</code> 提前闭合 Doxygen，改为
+<code>subset_* 与 NIS</code>（注释文本修复，解除编译阻塞）。</li>
+<li><code>parameters.mjs</code>：按 <code>sync-params.py</code> 重建，仅
+<code>dMax.description</code> 文本变化（数值
+<code>0.4363323129985824</code> 不变）。</li>
+<li><code>standalone.html</code>：按 <code>build-standalone.py</code>
+重建（源码注释进入 bundle）。</li>
+<li><code>AGENTS.md</code>：偏航 Ki 现值补注 4.297184（2026-08-12
+下调），并加 GOV-004 入口/命令；<code>GOV-004 §7.2</code> 增加“模型系 vs
+存档系”固定置换说明。</li>
+<li><code>ekf_15_state.h</code> 两处局部 <code>const</code>
+限定符：并发编辑产生，语义中性（去注释比对已确认其余 token 不变）。</li>
+<li>重复 <code>#pragma once</code> 清理、文件 BOM
+去除（<code>main.cpp</code>、<code>repro_exit.py</code>
+等）：语义中性。</li>
+</ol>
+<h3 id="64-p0-修复引入的行为变更2026-10-23dec-002">6.4 P0
+修复引入的行为变更（2026-10-23，DEC-002）</h3>
+<blockquote>
+<p>与“注释-only”轮次区分：以下为<strong>有意的行为修复</strong>，均已过回归；不影响增益/限幅/差速公式/轴映射。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>文件/符号</th>
+<th>变更</th>
+<th>验证</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td><code>ActuatorFaultMonitor.h</code>、<code>flight_control.cpp</code></td>
+<td>新增 <code>thrustLossVerticalVelocityError()</code>；F3
+改为“测得−目标 + 自动模式门控”</td>
+<td><code>test_actuator_fault_monitor</code> 18/18</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td><code>InertiaDecoupling.h</code>、<code>flight_control.cpp</code></td>
+<td>新增 <code>computeInertiaCompensationFromArchive()</code>；mix
+层改用封装，删除手写置换</td>
+<td><code>test_inertia_decoupling</code> T6/T7/T8；<code>pio run</code>
+SUCCESS</td>
+</tr>
+<tr>
+<td>A-01</td>
+<td><code>ekf_core.py</code></td>
+<td>删除 <code>0.5·Δθ×ΔV</code>，统一
+<code>two_sample_delta_v()</code></td>
+<td><code>verify_p0_fixes.py</code> 量化单步多算量</td>
+</tr>
+<tr>
+<td>A-02</td>
+<td><code>ekf_core.py</code>、<code>opt_ekf.py</code></td>
+<td>P0 航向默认 0.2 rad（π 仅显式覆盖）</td>
+<td><code>verify_p0_fixes.py</code> 断言</td>
+</tr>
+<tr>
+<td>A-03</td>
+<td><code>ekf_core.py</code></td>
+<td><code>initialize()</code> 设置 <code>home_lla</code></td>
+<td><code>verify_p0_fixes.py</code> 零残差 GNSS</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td><code>scripts/trim_solve.py</code>、MOD-003、ASM-017</td>
+<td>新增 15° 包线扫描；不改 dMax/vTrim</td>
+<td><code>--scan --dmax-deg 15</code> → 30–40 m/s 可行</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-区域记录索引">7 区域记录索引</h2>
+<table>
+<thead>
+<tr>
+<th>区域</th>
+<th>记录</th>
+<th>核对矩阵规模</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sim</td>
+<td><a
+href="SIM.html">SIM-代码理论核查.md</a></td>
+<td>6 个理论文件五段式 + 38 文件覆盖</td>
+</tr>
+<tr>
+<td>fw-ekf</td>
+<td><a
+href="FW-EKF.html">FW-EKF-代码理论核查.md</a></td>
+<td>42 条 + 6 条等价变换推导</td>
+</tr>
+<tr>
+<td>fw-nav</td>
+<td><a
+href="FW-NAV.html">FW-NAV-代码理论核查.md</a></td>
+<td>34 条</td>
+</tr>
+<tr>
+<td>fw-control</td>
+<td><a
+href="FW-CTRL.html">FW-CTRL-代码理论核查.md</a></td>
+<td>10 个子矩阵、60+ 条</td>
+</tr>
+<tr>
+<td>fw-infra</td>
+<td><a
+href="FW-INFRA.html">FW-INFRA-代码理论核查.md</a></td>
+<td>40 条</td>
+</tr>
+<tr>
+<td>fw-tests</td>
+<td><a
+href="FW-TESTS.html">FW-TESTS-代码理论核查.md</a></td>
+<td>覆盖矩阵 + 缺口</td>
+</tr>
+<tr>
+<td>gcs</td>
+<td><a
+href="GCS.html">GCS-代码理论核查.md</a></td>
+<td>5 组、17 帧/128 参数/黑匣子/WS</td>
+</tr>
+<tr>
+<td>analysis</td>
+<td><a
+href="ANALYSIS.html">ANALYSIS-代码理论核查.md</a></td>
+<td>48 条 + 18 项口径对照</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-未决问题与建议">8 未决问题与建议</h2>
+<ol type="1">
+<li><strong>C-01 / C-02 已按 DEC-002 修复</strong>：F3 回归 18/18、惯量
+T6/T7 通过、<code>pio run</code> 双 env SUCCESS；建议实机前仍做一次
+<code>inertia_comp_mask=0/0x03</code> A/B 与 F3 日志核对。</li>
+<li><strong>A-01/A-02
+已对齐固件口径</strong>：研究仿真默认值已改；旧口径跑出的速度/位置结论需按
+<code>notes/05</code>、优化报告逐项标注“旧口径”，不建议直接引用为当前结论。</li>
+<li><strong>A-03/A-04 已处置</strong>：<code>home_lla</code> 默认化；15°
+可行巡航下限约 29.8 m/s（30–40 m/s 可行），见 MOD-003 §3.2 /
+ASM-017。</li>
+<li><strong>航向绝对基准</strong>：磁矢量更新/速度重锚/可观测性门控仍是开放项（与
+notes/04 一致）；磁偏角未建模。</li>
+<li><strong>水平 KF
+三维旋转</strong>、<strong>激光高度分支去留</strong>、<strong>RATE_MODE
+积分</strong>、<strong>F3
+是否只在自动模式评估</strong>：均需行为变更评审。</li>
+<li><strong>文档术语统一</strong>：模型系 vs 存档系已在 GOV-004 §7.2
+固定，但
+<code>MOD-002 §1.2</code>、<code>TandemVec_FCS/AGENTS.md</code>、<code>CTL-001 §3</code>
+仍需按该节改写（本轮只改注释与新增规范，不改这些正文）。</li>
+<li><strong>门禁基线提升</strong>：R08
+已清零，<code>check-code-comments.py --check</code> 可按 <strong>0 error
+/ 0 warning / 308 全绿</strong> 作为下一轮验收基线。</li>
+</ol>
+<hr />
+<h2 id="修订记录">修订记录</h2>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>日期</th>
+<th>变更</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>2026-10-23</td>
+<td>首版：305 文件注释落地、8 区域理论核对、6 项 P0、仿真-固件 18
+项口径对照</td>
+</tr>
+<tr>
+<td>1.1</td>
+<td>2026-10-23</td>
+<td>6 项 P0 按 DEC-002 修复/处置：F3 符号、惯量前馈跨系、仿真旋转项/P0
+航向/home_lla、15° 巡航包线；补修复回归与行为变更清单</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-004-代码理论对照核查报告.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

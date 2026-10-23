@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
+  <meta name="generator" content="pandoc 3.12.1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>MOD-002 坐标系与符号约定 · 纵列双发矢量推力飞行器</title>
   <style>
@@ -10,8 +10,12 @@
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -22,7 +26,6 @@
       margin: 0 0.8em 0.2em -1.6em;
       vertical-align: middle;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
     /* CSS for syntax highlighting */
     html { -webkit-text-size-adjust: 100%; }
     pre > code.sourceCode { white-space: pre; position: relative; }
@@ -136,12 +139,13 @@ THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重
 </tbody>
 </table>
 <p>坐标系关系图示：</p>
-<pre class="mermaid"><code>graph LR
-    accTitle 坐标系关系
-    accDescr 惯性系 NED、机体系与前后摆座系的层级关系
-    I[&quot;{I} 地面 NED&lt;br/&gt;x北 y东 z下&quot;] --&gt;|&quot;姿态四元数 q&quot;| B[&quot;{B} 机体&lt;br/&gt;x_b前 y_b右 z_b下&quot;]
-    B --&gt;|&quot;前摆角 δ_f 绕 z_b&quot;| Mf[&quot;{M_f} 前摆座&quot;]
-    B --&gt;|&quot;尾摆角 δ_t 绕 y_b&quot;| Mt[&quot;{M_t} 尾摆座&quot;]</code></pre>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode mermaid"><code class="sourceCode mermaid"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">graph</span> <span class="cn">LR</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accTitle</span> <span class="er">坐</span><span class="dt">标系关系</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accDescr</span> <span class="er">惯</span><span class="dt">性系</span> <span class="er">N</span><span class="dt">ED</span><span class="er">、</span><span class="dt">机体系与前后摆座系的层级关系</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">I</span>[<span class="st">&quot;{I} 地面 NED</span><span class="sc">&lt;br/&gt;</span><span class="st">x北 y东 z下&quot;</span>] <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;姿态四元数 q&quot;</span><span class="vs">|</span> <span class="dt">B</span>[<span class="st">&quot;{B} 机体</span><span class="sc">&lt;br/&gt;</span><span class="st">x_b前 y_b右 z_b下&quot;</span>]</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">B</span> <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;前摆角 δ_f 绕 z_b&quot;</span><span class="vs">|</span> <span class="dt">Mf</span>[<span class="st">&quot;{M_f} 前摆座&quot;</span>]</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">B</span> <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;尾摆角 δ_t 绕 y_b&quot;</span><span class="vs">|</span> <span class="dt">Mt</span>[<span class="st">&quot;{M_t} 尾摆座&quot;</span>]</span></code></pre></div>
 <h3 id="11-关键方向约定">1.1 关键方向约定</h3>
 <ul>
 <li><strong>重力</strong>：在 {I} 中表示为
@@ -779,5 +783,5 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-
 theta 符号这一锁定行为的事实记录。</li>
 </ul>
 <p>两者结合，方可避免“文档公式与源码实现不一致”的歧义。</p>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
 </html>

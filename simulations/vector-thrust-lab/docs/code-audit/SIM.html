@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>SIM 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录--sim">代码理论核查记录 — sim</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：sim-core（Agent Teams task-1）｜
+规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：<code>6784221</code>（工作区含未提交改动；sim 区域核查前在 git
+中是<strong>干净</strong>的，本记录全部改动均为本轮新增注释/文档）
+理论来源：MOD-001 §2–§9；MOD-002 §2–§6；MOD-003 §2；THY-001
+§6–§9；THY-002 §3–§6；THY-003 §1–§3；CTL-001
+§3–§8；<code>TandemVec-Paper/ch02-propulsion</code>–<code>ch05-allocation</code>；AGENTS.md（执行器轴映射、速率环量纲、LMI
+外推红线） 方法：逐文件读代码 → 对照公式与符号 → Node
+数值复算（四元数等价、重力变换、B 矩阵差分、收敛阶）→ 补 L0/L1/L2
+与五段式 → <code>check-code-comments.py --area sim --check</code> 复检 →
+<code>node --test</code> 全量回归。</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<p>范围：<code>simulations/vector-thrust-lab/**</code> 下全部自研
+<code>.mjs/.js/.py</code>（排除
+<code>vendor/three-r170/**</code>、生成物
+<code>parameters.mjs</code>、构建产物 <code>docs/*.html</code>），共
+<strong>38 文件</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>行数</th>
+<th>L0 文件头</th>
+<th>L1 符号文档</th>
+<th><code>@ref</code> 引用</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/core/math.mjs</code></td>
+<td>140</td>
+<td>有</td>
+<td>有（8 个导出全部）</td>
+<td>13</td>
+<td>R07 理论关键；四元数/欧拉角五段式</td>
+</tr>
+<tr>
+<td><code>src/core/state.mjs</code></td>
+<td>208</td>
+<td>有</td>
+<td>有（6 个导出）</td>
+<td>8</td>
+<td>R07；轴语义双读法、三种复位语义</td>
+</tr>
+<tr>
+<td><code>src/core/control.mjs</code></td>
+<td>224</td>
+<td>有</td>
+<td>有（SAS + 悬停律）</td>
+<td>15</td>
+<td>R07；SAS 五段式、定高/B_true 分支注释</td>
+</tr>
+<tr>
+<td><code>src/core/dynamics.mjs</code></td>
+<td>269</td>
+<td>有</td>
+<td>有（调度/单步/导数/RK4）</td>
+<td>16</td>
+<td>R07；牛顿–欧拉与 RK4 五段式</td>
+</tr>
+<tr>
+<td><code>src/core/propulsion.mjs</code></td>
+<td>70</td>
+<td>有</td>
+<td>有（stepPropulsion）</td>
+<td>9</td>
+<td>R07；差速分配 + 六维映射五段式</td>
+</tr>
+<tr>
+<td><code>src/core/aerodynamics.mjs</code></td>
+<td>80</td>
+<td>有</td>
+<td>有（2 个导出）</td>
+<td>8</td>
+<td>R07；风轴→机体五段式</td>
+</tr>
+<tr>
+<td><code>src/core/control-allocation.mjs</code></td>
+<td>75</td>
+<td>有</td>
+<td>有（2 个导出）</td>
+<td>9</td>
+<td>R07；B 矩阵五段式</td>
+</tr>
+<tr>
+<td><code>src/core/telemetry.mjs</code></td>
+<td>42</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td>R07 豁免后仍补 <code>@ref MOD-002 §8</code></td>
+</tr>
+<tr>
+<td><code>src/core/parameters.mjs</code></td>
+<td>82</td>
+<td>—</td>
+<td>—</td>
+<td>0</td>
+<td><strong>生成物，只读核对</strong>（见 P1-1），未改动</td>
+</tr>
+<tr>
+<td><code>src/browser/aircraft-view.mjs</code></td>
+<td>315</td>
+<td>有</td>
+<td>有（2 个导出）</td>
+<td>3</td>
+<td>修正"力臂 0.62 m"腐烂注释（P2-8）</td>
+</tr>
+<tr>
+<td><code>src/browser/controls-ui.mjs</code></td>
+<td>215</td>
+<td>有</td>
+<td>有</td>
+<td>2</td>
+<td>滑块语义/量纲切换说明</td>
+</tr>
+<tr>
+<td><code>src/browser/effects.mjs</code></td>
+<td>134</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td>载机跟随系渲染口径</td>
+</tr>
+<tr>
+<td><code>src/browser/hud.mjs</code></td>
+<td>91</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td>显示契约（键名/量程）</td>
+</tr>
+<tr>
+<td><code>src/browser/scene.mjs</code></td>
+<td>75</td>
+<td>有</td>
+<td>有</td>
+<td>0</td>
+<td>相机 up=−z 的原因</td>
+</tr>
+<tr>
+<td><code>src/browser/scope.mjs</code></td>
+<td>145</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td>采样/绘制节流的理由</td>
+</tr>
+<tr>
+<td><code>src/browser/theme.mjs</code></td>
+<td>59</td>
+<td>有</td>
+<td>有</td>
+<td>0</td>
+<td>主题只改渲染参数</td>
+</tr>
+<tr>
+<td><code>src/browser/demo.mjs</code></td>
+<td>70</td>
+<td>有</td>
+<td>有</td>
+<td>1</td>
+<td>演示激励幅值口径</td>
+</tr>
+<tr>
+<td><code>src/main.js</code></td>
+<td>72</td>
+<td>有</td>
+<td>装配层</td>
+<td>1</td>
+<td>帧截断红线、首帧执行器初值</td>
+</tr>
+<tr>
+<td><code>tests/math.test.mjs</code></td>
+<td>78</td>
+<td>有</td>
+<td>覆盖表 + 容差依据</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/control.test.mjs</code></td>
+<td>190</td>
+<td>有</td>
+<td>覆盖表</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/control-allocation.test.mjs</code></td>
+<td>124</td>
+<td>有</td>
+<td>覆盖表 + 容差依据</td>
+<td>3</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/dynamics.test.mjs</code></td>
+<td>136</td>
+<td>有</td>
+<td>覆盖表 + 容差依据</td>
+<td>4</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/aerodynamics.test.mjs</code></td>
+<td>81</td>
+<td>有</td>
+<td>覆盖表</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/propulsion.test.mjs</code></td>
+<td>81</td>
+<td>有</td>
+<td>覆盖表 + 容差依据</td>
+<td>3</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/state.test.mjs</code></td>
+<td>103</td>
+<td>有</td>
+<td>覆盖表</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/telemetry.test.mjs</code></td>
+<td>60</td>
+<td>有</td>
+<td>覆盖表</td>
+<td>1</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/regression.test.mjs</code></td>
+<td>46</td>
+<td>有</td>
+<td>容差 1e-9 依据</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/parameters.test.mjs</code></td>
+<td>70</td>
+<td>有</td>
+<td>覆盖表</td>
+<td>2</td>
+<td></td>
+</tr>
+<tr>
+<td><code>tests/vtol.test.mjs</code></td>
+<td>499</td>
+<td>有</td>
+<td>覆盖表 + 容差依据</td>
+<td>3</td>
+<td>31 用例，五个分组</td>
+</tr>
+<tr>
+<td><code>tests/scenarios.mjs</code></td>
+<td>69</td>
+<td>有</td>
+<td>运行器语义</td>
+<td>0</td>
+<td>非 test 文件</td>
+</tr>
+<tr>
+<td><code>tests/fixtures/generate.mjs</code></td>
+<td>35</td>
+<td>有</td>
+<td>红线流程</td>
+<td>1</td>
+<td>基线生成器</td>
+</tr>
+<tr>
+<td><code>scripts/cascade_closedform.py</code></td>
+<td>262</td>
+<td>有</td>
+<td>8 个函数 docstring</td>
+<td>2</td>
+<td>符号/数值闭式</td>
+</tr>
+<tr>
+<td><code>scripts/phase_margin_analysis.py</code></td>
+<td>409</td>
+<td>有</td>
+<td>5 个公共符号</td>
+<td>6</td>
+<td>R08 三处已修</td>
+</tr>
+<tr>
+<td><code>scripts/pm_sensitivity.py</code></td>
+<td>131</td>
+<td>有</td>
+<td>2 个公共符号</td>
+<td>2</td>
+<td>三方带宽口径</td>
+</tr>
+<tr>
+<td><code>scripts/pm_observer_compensation.py</code></td>
+<td>119</td>
+<td>有</td>
+<td>1 个公共符号</td>
+<td>3</td>
+<td>观测器补偿量化</td>
+</tr>
+<tr>
+<td><code>scripts/pm_2d_sweep.py</code></td>
+<td>171</td>
+<td>有</td>
+<td>2 个公共符号</td>
+<td>3</td>
+<td>二维扫描</td>
+</tr>
+<tr>
+<td><code>scripts/robust_lmi_analysis.py</code></td>
+<td>291</td>
+<td>有</td>
+<td>6 个公共符号</td>
+<td>2</td>
+<td>Petersen LMI</td>
+</tr>
+<tr>
+<td><code>scripts/robust_montecarlo.py</code></td>
+<td>224</td>
+<td>有</td>
+<td>4 个公共符号</td>
+<td>1</td>
+<td>蒙特卡洛验证</td>
+</tr>
+<tr>
+<td><code>scripts/run_all.py</code></td>
+<td>121</td>
+<td>有</td>
+<td>入口 docstring</td>
+<td>0</td>
+<td>编排脚本</td>
+</tr>
+</tbody>
+</table>
+<p>合计：<strong>38 文件 / 5666 行</strong>（核查前 4824 行，本轮净增
+842 行注释与文档）；L0 覆盖 38/38；L1 覆盖全部 JS 导出符号（32 个）与
+Python 公共函数/入口（机检 R08 命中项已全部清零）；<code>@ref</code> 共
+<strong>134 处</strong>（本轮新增 110 行引用）。</p>
+<p>本轮 diff：38 文件 / +1057 −215 行；其中注释与 docstring 增行 1008
+行，其余 49 行为 docstring 散文行与 2 处 Python
+多行签名单行化（<code>augmented_A</code>/<code>discrete_poles</code>，仅为满足机检
+R08 的 docstring 3
+行窗口，<strong>参数、默认值、语句顺序与行为均未变</strong>）。</p>
+<hr />
+<h2 id="2-核对矩阵">2 核对矩阵</h2>
+<p>结论枚举：<code>一致</code> / <code>等价变换后一致</code> /
+<code>近似（可接受）</code> / <code>偏差（已登记）</code> /
+<code>不一致（待修）</code>。</p>
+<h3 id="21-姿态数学a">2.1 姿态数学（A）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-01</td>
+<td><code>math.mjs</code></td>
+<td>四元数 Hamilton 乘 <code>a⊗b</code> 分量式</td>
+<td>THY-001 §6</td>
+<td><code>quatMultiply()</code></td>
+<td>一致</td>
+<td>与 THY-001 §6 展开式逐项相同；复合顺序数值验证 1.60e-15</td>
+<td>补 <code>@formula</code>/<code>@ref</code></td>
+</tr>
+<tr>
+<td>A-02</td>
+<td><code>math.mjs</code></td>
+<td>三明治积 <code>v'=q⊗ṽ⊗q*</code></td>
+<td>THY-001 §6</td>
+<td><code>rotateVecByQuat()</code></td>
+<td>等价变换后一致</td>
+<td>2000 随机 <code>(v,q)</code>：与 <code>quatMultiply(q, v, q*)</code>
+最大差 <strong>3.11e-15</strong>；与罗德里格斯式同源</td>
+<td>五段式写明 <code>t=2(q×v)</code> 展开</td>
+</tr>
+<tr>
+<td>A-03</td>
+<td><code>math.mjs</code></td>
+<td>单位四元数逆 = 共轭</td>
+<td>THY-001 §6</td>
+<td><code>quatInvert()</code></td>
+<td>一致</td>
+<td><code>q⊗q⁻¹=1</code> 单测 1e-9</td>
+<td>补 <code>@pre</code>（仅单位范数成立）</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td><code>math.mjs</code></td>
+<td>归一化/保范投影、零四元数回退</td>
+<td>THY-001 §9</td>
+<td><code>quatNormalize()</code></td>
+<td>一致</td>
+<td>单测：非零范数=1、零输入回退 <code>(0,0,0,1)</code></td>
+<td>补 <code>@note</code> 零回退理由</td>
+</tr>
+<tr>
+<td>A-05</td>
+<td><code>math.mjs</code></td>
+<td>3-2-1 欧拉角
+<code>phi=atan2(R23,R33)</code>、<code>theta=−asin(R13)</code>、<code>psi=atan2(R12,R11)</code></td>
+<td>MOD-002 §4.1；THY-001 §8</td>
+<td><code>eulerFromQuat()</code></td>
+<td>一致（公式层）</td>
+<td>2000 样本与"标准 ZYX 分解作用于 <code>R^T</code>"最大差
+<strong>1.8e-14</strong></td>
+<td>补公式与 clamp 说明</td>
+</tr>
+<tr>
+<td>A-06</td>
+<td><code>math.mjs</code></td>
+<td>三角度符号语义（"显示角"）</td>
+<td>MOD-002 §4.2</td>
+<td><code>eulerFromQuat()</code></td>
+<td>偏差（已登记 P2-1）</td>
+<td>单轴正转 a → φ/θ/ψ 全为 −a；复合 <code>(φ,θ,ψ)=(0.2,0.3,−0.5)</code>
+→ 代码读数
+<code>(−0.3228,−0.1596,0.5564)</code>，<strong>不是</strong>逐分量取负</td>
+<td>不改代码（行为红线），登记文档缺口</td>
+</tr>
+<tr>
+<td>A-07</td>
+<td><code>math.mjs</code></td>
+<td><code>q</code> 为机体→惯性系、右乘运动学</td>
+<td>MOD-002 §3.2/§3.4；THY-001 §7</td>
+<td><code>dynamics.mjs:stateDerivatives()</code> 的
+<code>qDot</code></td>
+<td>一致</td>
+<td><code>quatMultiply(q, {0.5ω,0})</code>，与 THY-001 §7
+右乘式一致</td>
+<td>补五段式</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-六自由度动力学与积分b">2.2 六自由度动力学与积分（B）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B-01</td>
+<td><code>dynamics.mjs</code></td>
+<td>重力变换 <code>g_b=R(q)ᵀ·(0,0,g)</code></td>
+<td>MOD-001 §5.1；THY-003 §1.1</td>
+<td><code>stateDerivatives()</code> 的 <code>gb</code></td>
+<td>一致</td>
+<td>2000 样本与 <code>Rᵀg</code> 最大差
+<strong>4.44e-15</strong>；`</td>
+<td>g_b</td>
+</tr>
+<tr>
+<td>B-02</td>
+<td><code>dynamics.mjs</code></td>
+<td>平动 <code>m·v̇=F_thrust+F_aero+m·g_b−m(ω×v)</code></td>
+<td>MOD-001 §5.1；THY-003 §1.1</td>
+<td><code>stateDerivatives()</code> 的 <code>vDot</code></td>
+<td>一致</td>
+<td>逐项对照；<code>−ω×v</code> 为动系绝对导数必然项</td>
+<td>已补五段式</td>
+</tr>
+<tr>
+<td>B-03</td>
+<td><code>dynamics.mjs</code></td>
+<td>转动 <code>I·ω̇=M−ω×(I·ω)−ω×h</code></td>
+<td>MOD-001 §5.2；THY-003 §1.2</td>
+<td><code>stateDerivatives()</code> 的 <code>wDot</code></td>
+<td>一致</td>
+<td>主轴展开式 <code>(Iz−Iy)qr</code> 等逐项对应；<code>h</code> 见
+B-04</td>
+<td>已补五段式</td>
+</tr>
+<tr>
+<td>B-04</td>
+<td><code>dynamics.mjs</code></td>
+<td>双转子角动量
+<code>h=[Jp(ωf·cf−ωt·ct), Jp·ωf·sf, Jp·ωt·st]</code></td>
+<td>MOD-001 §3.4；THY-002 §5</td>
+<td><code>physicsStep()</code> 的 <code>hv</code></td>
+<td>一致</td>
+<td>与 MOD-001 §3.4 矢量式逐分量相同（含尾桨反号）</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>B-05</td>
+<td><code>dynamics.mjs</code></td>
+<td>子步调度 <code>n=max(1,ceil(dt/maxStep))</code></td>
+<td>MOD-001 §9</td>
+<td><code>stepPhysics()</code></td>
+<td>一致</td>
+<td>单测：与手动 n 子步 <code>deepEqual</code> 完全一致；保证
+<code>h≤4 ms</code></td>
+<td>补五段式</td>
+</tr>
+<tr>
+<td>B-06</td>
+<td><code>dynamics.mjs</code></td>
+<td>经典 RK4 权重与每阶段保范</td>
+<td>THY-001 §9</td>
+<td><code>rk4Step()</code></td>
+<td>一致</td>
+<td>权重 <code>1/6,2/6,2/6,1/6</code>；每阶段
+<code>quatNormalize</code>；600 帧机动后 `</td>
+<td>q</td>
+</tr>
+<tr>
+<td>B-07</td>
+<td><code>dynamics.mjs</code></td>
+<td>整体离散精度阶</td>
+<td>数值积分理论</td>
+<td><code>physicsStep()</code>（RK4 + 显式欧拉混用）</td>
+<td>近似（可接受，P2-2）</td>
+<td>端到端收敛阶估测 <strong>1.53 / 1.38 / 1.74</strong>（T=0.2
+s，n=4/8/16/32 vs n=6400 参考）：被电机转速一阶滞后与 SAS
+积分器的显式欧拉限制为一阶</td>
+<td>注释写明"RK4 仅作用于 [v,ω,q]"</td>
+</tr>
+<tr>
+<td>B-08</td>
+<td><code>dynamics.mjs</code></td>
+<td>地面约束 <code>pos.z&gt;groundZ 且 vWorld.z&gt;0</code></td>
+<td>MOD-002 §5.2</td>
+<td><code>physicsStep()</code> 尾部</td>
+<td>一致</td>
+<td>单测：触地钳位+清下降速度（机体系速度残差
+&lt;1e-5，来自步内气动微扰）；上升不拦截</td>
+<td>补 <code>@note</code> 触发条件</td>
+</tr>
+<tr>
+<td>B-09</td>
+<td><code>dynamics.mjs</code></td>
+<td>位置积分用末速度、<code>lockXY</code> 语义</td>
+<td>MOD-001 §9（载机跟随系）</td>
+<td><code>physicsStep()</code> 的
+<code>vw</code>/<code>F.pos</code></td>
+<td>一致（工程约定）</td>
+<td>单测：lockXY 水平速度/位置不变、垂向照常</td>
+<td>补 <code>@note</code>（非悬停模型）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-推进系统c">2.3 推进系统（C）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td><code>propulsion.mjs</code></td>
+<td>差速开方分配
+<code>ωf=ω0√(1+Δω)</code>、<code>ωt=ω0√(1−Δω)</code></td>
+<td>CTL-001 §7.1；MOD-001 §3.2</td>
+<td><code>stepPropulsion()</code> 的 <code>wfT/wtT</code></td>
+<td>一致</td>
+<td><code>ωf²+ωt²=2ω0²</code> 数值精确（952200 vs
+952200）；<code>max(0,·)</code> 兜底</td>
+<td>红线注释</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td><code>propulsion.mjs</code></td>
+<td>推力/反扭矩 <code>T=kT·ω²</code>、<code>τ=kQ·ω²+Jp·ω̇</code></td>
+<td>THY-002 §3/§6</td>
+<td><code>stepPropulsion()</code> 的 <code>Tf/Tt/Qf/Qt</code></td>
+<td>一致</td>
+<td>单测稳态 T=kT·ω²（1e-6）；反扭矩含 <code>Jp·ω̇</code> 项，与
+THY-002"机体承受电磁扭矩"结论一致</td>
+<td>五段式写明</td>
+</tr>
+<tr>
+<td>C-03</td>
+<td><code>propulsion.mjs</code></td>
+<td>一阶滞后 <code>τm·ω̇+ω=ω_cmd</code></td>
+<td>THY-002 §4</td>
+<td><code>stepPropulsion()</code> 的 <code>wfT→S.wf</code></td>
+<td>近似（可接受，P2-3）</td>
+<td>100 个 τm/100 小步后达 63.2%（0.5%·wMax 内）；显式欧拉截断
+O((dt/τm)²)≈7e-3 @4 ms</td>
+<td><code>@approx</code> 标注</td>
+</tr>
+<tr>
+<td>C-04</td>
+<td><code>propulsion.mjs</code></td>
+<td>六维映射 <code>Fx/Fy/Fz、Mx/My/Mz</code></td>
+<td>MOD-001 §4</td>
+<td><code>stepPropulsion()</code> 尾部</td>
+<td>一致</td>
+<td>与 MOD-001 §4
+六式逐项相同；<code>df&gt;0→Fy&gt;0,Mz&gt;0</code>、<code>dt&gt;0→Fz&lt;0,My&lt;0</code>
+单测锁定；零摆角等转速 Mx≈0（1e-6）</td>
+<td>已补 <code>@formula</code></td>
+</tr>
+<tr>
+<td>C-05</td>
+<td><code>propulsion.mjs</code></td>
+<td>差速对总推力一阶不变</td>
+<td>CTL-001 §7.2–7.3</td>
+<td><code>stepPropulsion()</code> 的 <code>Fx</code></td>
+<td>等价变换后一致</td>
+<td>由 <code>Tf=T0(1+Δω)</code> 精确线性（√ 分配平方后）⇒ 小摆角下
+<code>Fx</code> 一阶不变；钳位 <code>wMax</code>
+后失效（文档已注明）</td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>C-06</td>
+<td><code>propulsion.mjs</code></td>
+<td>目标转速用指令油门、力矩用实际转速</td>
+<td>固件对照（AGENTS 差速增益调度）</td>
+<td><code>stepPropulsion()</code></td>
+<td>一致（仿真口径）</td>
+<td>仿真内 B
+用指令油门（P1-2），力矩用实际转速——与固件"修复前"口径相同</td>
+<td>见 P1-2</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-气动d">2.4 气动（D）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td><code>aerodynamics.mjs</code></td>
+<td>动压
+<code>q̄=½ρV²</code>、<code>L=q̄S·CLa·α</code>、<code>D=q̄S(CD0+CDk·CL²)</code>、<code>Y=q̄S·CYb·β</code></td>
+<td>MOD-001 §6</td>
+<td><code>computeAeroState()</code></td>
+<td>一致</td>
+<td>单测 aX 与解析式差 &lt;1e-9；α&gt;0 时 aZ&lt;0（升力沿 −z_b）</td>
+<td>五段式</td>
+</tr>
+<tr>
+<td>D-02</td>
+<td><code>aerodynamics.mjs</code></td>
+<td>气动矩
+<code>Clb/Clp</code>、<code>Cm0/Cma/Cmq</code>、<code>Cnb/Cnr</code> +
+无量纲角速率</td>
+<td>MOD-001 §6</td>
+<td><code>computeAeroState()</code> 的 <code>Mx/My/Mz</code></td>
+<td>一致</td>
+<td>与 MOD-001 §6 三式逐项相同；Cmq&lt;0 阻尼、Cnb&gt;0/Clb&lt;0
+符号单测</td>
+<td>补 <code>@ref</code></td>
+</tr>
+<tr>
+<td>D-03</td>
+<td><code>aerodynamics.mjs</code></td>
+<td>风轴→机体投影
+<code>aX=L·sinα−D·cosα</code>、<code>aZ=−L·cosα−D·sinα</code></td>
+<td>THY-003 §1</td>
+<td><code>computeAeroState()</code></td>
+<td>一致</td>
+<td>解析式比对 1e-9；α→0 时退化 <code>aX≈−D, aZ≈−L</code></td>
+<td>五段式</td>
+</tr>
+<tr>
+<td>D-04</td>
+<td><code>aerodynamics.mjs</code></td>
+<td>空速下限 <code>vMin=0.5 m/s</code> 仅作分母保护</td>
+<td>MOD-001 §6 注；行为红线</td>
+<td><code>computeAeroState()</code> 的 <code>vSafe</code></td>
+<td>一致</td>
+<td>单测：V=0 时 <code>q̄=0</code>、力/力矩全零、<code>qbar</code>
+有限——保护速度不造力</td>
+<td>已补 <code>@note</code></td>
+</tr>
+<tr>
+<td>D-05</td>
+<td><code>aerodynamics.mjs</code></td>
+<td>迎角 <code>α=atan2(w,u)</code> 无低速保护</td>
+<td>MOD-001 §11（线性小迎角模型边界）</td>
+<td><code>computeAeroState()</code> 的 <code>al</code></td>
+<td>近似（可接受，P2-5）</td>
+<td><code>u→0</code> 时 α→±90°，线性 <code>CL=CLa·α</code>
+失效；悬停默认 <code>aero=false</code> 规避</td>
+<td>注释写明适用边界</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-控制分配e">2.5 控制分配（E）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E-01</td>
+<td><code>control-allocation.mjs</code></td>
+<td>力矩映射 <code>M=Σ[r×F+s·τ·n]</code>、摆角雅可比</td>
+<td>THY-003 §2.1–2.2</td>
+<td><code>computeBTrue()</code></td>
+<td>一致</td>
+<td>解析偏导与中心差分最大差 <strong>2.38e-9</strong>（测试阈值
+1e-6）</td>
+<td>五段式</td>
+</tr>
+<tr>
+<td>E-02</td>
+<td><code>control-allocation.mjs</code></td>
+<td>行/列序 <code>[Mx,My,Mz]</code>×<code>[Δdw,Δδt,Δδf]</code></td>
+<td>CTL-001 §8.5；固件三端同构</td>
+<td><code>computeBTrue()</code></td>
+<td>一致</td>
+<td>与 <code>TandemVec_ControlAllocation.h</code>、Python
+<code>control_effectiveness</code> 同构；测试抽查 3 元素 1e-12</td>
+<td>红线注释</td>
+</tr>
+<tr>
+<td>E-03</td>
+<td><code>control-allocation.mjs</code></td>
+<td><code>∂Mx/∂Δω=−2·kQ·ω0²</code>（零摆角）</td>
+<td>CTL-001 §7.4</td>
+<td><code>computeBTrue()[0][0]</code></td>
+<td>等价变换后一致</td>
+<td><code>B[0][0]=−tau0(cf+ct)</code>，零摆角退化为
+<code>−2kQω0²</code></td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>E-04</td>
+<td><code>control-allocation.mjs</code></td>
+<td>增量分配 <code>Δu=B⁻¹(M_des−M_cur)</code>、奇异回退</td>
+<td>THY-003 §3.2；CTL-001 §8.5</td>
+<td><code>inv3()</code>、<code>applyVtolHover()</code></td>
+<td>一致</td>
+<td><code>B⁻¹B=I</code>（1e-9）；低油门 <code>det≈0</code> 返回 null；ΔM
+复现 1e-4</td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>E-05</td>
+<td><code>control-allocation.mjs</code></td>
+<td>B 为准稳态（忽略 <code>Jp·ω̇</code>、气动、陀螺）</td>
+<td>CTL-001 §8.5 口径</td>
+<td><code>computeBTrue()</code></td>
+<td>近似（可接受，P2-4）</td>
+<td><code>M_cur</code> 含 <code>Jp·ω̇</code> 而 B 不含 ⇒
+分配层存在一阶模型失配；小增量下可接受</td>
+<td>注释写明忽略项</td>
+</tr>
+<tr>
+<td>E-06</td>
+<td><code>control.mjs</code></td>
+<td>B 工作点用 <code>S.thr·wMax</code>（指令）</td>
+<td>固件对照</td>
+<td><code>applyVtolHover()</code> 的 <code>computeBTrue</code> 调用</td>
+<td>偏差（已登记 P1-2）</td>
+<td>固件自 2026-08-09 起用 τm 观测器
+<code>w_est</code>；仿真仍用指令油门 ⇒ 油门瞬态有效增益偏差
+∝(w_act/w_cmd)²（峰值 ~1.33 → ~76%）</td>
+<td>不改行为，登记</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-sas-与悬停控制f">2.6 SAS 与悬停控制（F）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-01</td>
+<td><code>control.mjs</code></td>
+<td>SAS 三通道律（阻尼+比例+积分）</td>
+<td>CTL-001 §4.1</td>
+<td><code>applySas()</code></td>
+<td>一致</td>
+<td>与 CTL-001 §4.1 源码摘录逐项相同（限幅位置不同但等价：统一在出口
+clamp）</td>
+<td>五段式</td>
+</tr>
+<tr>
+<td>F-02</td>
+<td><code>control.mjs</code></td>
+<td>反馈极性：<code>θ̇≈−q</code>、<code>φ̇≈−p</code> ⇒
+速率项正、姿态项负</td>
+<td>CTL-001 §5</td>
+<td><code>applySas()</code></td>
+<td>一致</td>
+<td>12 条单测：俯仰/偏航/滚转极性、方向断言</td>
+<td>补 <code>@note</code> 为何不能只看 ∂M/∂δ</td>
+</tr>
+<tr>
+<td>F-03</td>
+<td><code>control.mjs</code></td>
+<td>积分器与指令限幅 <code>±intThMax/±intPhiMax/±dMax/±dwMax</code></td>
+<td>CTL-001 §4.3</td>
+<td><code>applySas()</code></td>
+<td>一致</td>
+<td>单测积分限幅收敛到 <code>intThMax</code>；摆角/差速限幅断言</td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>F-04</td>
+<td><code>control.mjs</code></td>
+<td>模式切换清积分器</td>
+<td>工程约定（历史瞬态事故）</td>
+<td><code>applySas()</code> 的 <code>_prevSasMode</code> 分支</td>
+<td>一致（工程约定）</td>
+<td>单测：切模式积分归零、不切则继续累积</td>
+<td>补 <code>@note</code></td>
+</tr>
+<tr>
+<td>F-05</td>
+<td><code>control.mjs</code></td>
+<td>仿真摆角限幅 ±25° vs 固件 ±15°</td>
+<td>行为红线/AGENTS</td>
+<td><code>P.dMax</code>（参数）</td>
+<td>偏差（已登记 P1-3）</td>
+<td><code>dMax=0.4363 rad</code>（25°）；固件 2026-08-07 收紧
+±15°，仿真未回写</td>
+<td>已 <code>@redline</code> 标注；回写需重采基线</td>
+</tr>
+<tr>
+<td>F-06</td>
+<td><code>param</code></td>
+<td>角速度闭环（mode 3）滑块=ω_ref</td>
+<td>CTL-001 §8.2</td>
+<td><code>applySas()</code> 的 <code>sasMode===3</code> 分支</td>
+<td>一致</td>
+<td>单测三通道：误差为零保留配平偏置、超调反向修正</td>
+<td>已补</td>
+</tr>
+<tr>
+<td>F-07</td>
+<td><code>control.mjs</code></td>
+<td>悬停 <code>qCmd=Q_HOVER⊗Rx(ψ)⊗Ry(θ)⊗Rz(φ)</code></td>
+<td>CTL-001 §8.2</td>
+<td><code>applyVtolHover()</code></td>
+<td>一致</td>
+<td>与 §8.2 公式同序；ψ_est 由 <code>y_b</code> 水平投影提取（ψ=0/90/180
+用例）</td>
+<td>五段式</td>
+</tr>
+<tr>
+<td>F-08</td>
+<td><code>control.mjs</code></td>
+<td>机体系误差四元数 <code>qe=qCmd⁻¹⊗q</code>、短弧取反</td>
+<td>CTL-001 §8.2</td>
+<td><code>applyVtolHover()</code></td>
+<td>一致</td>
+<td>200° 误差走 +160° 短弧用例</td>
+<td>已补</td>
+</tr>
+<tr>
+<td>F-09</td>
+<td><code>control.mjs</code></td>
+<td>悬停内环三通道效率符号</td>
+<td>CTL-001 §8.3</td>
+<td><code>applyVtolHover()</code></td>
+<td>一致</td>
+<td>三通道符号链单测（δt→My&lt;0、Δω→Mx&lt;0、δf→Mz&lt;0）</td>
+<td>已补</td>
+</tr>
+<tr>
+<td>F-10</td>
+<td><code>control.mjs</code></td>
+<td>定高串级 + <code>1/√cosγ</code> 倾角补偿</td>
+<td>CTL-001 §8.4</td>
+<td><code>applyVtolHover()</code> 的 <code>altHold</code> 段</td>
+<td>一致</td>
+<td>倾斜 10° 稳态油门 ≈
+<code>thrHover/√cos10°</code>（±0.02）；爬升/下降/直通/积分限幅用例</td>
+<td>已补</td>
+</tr>
+<tr>
+<td>F-11</td>
+<td><code>state.mjs</code></td>
+<td><code>Q_HOVER</code>、<code>hoverThrottle</code></td>
+<td>CTL-001 §8.1</td>
+<td><code>Q_HOVER</code>、<code>hoverThrottle()</code></td>
+<td>一致</td>
+<td><code>x_b→(0,0,−1)</code>；双发推力=重力（1e-9）</td>
+<td>已补 <code>@formula</code></td>
+</tr>
+<tr>
+<td>F-12</td>
+<td><code>state.mjs</code></td>
+<td>三种复位语义</td>
+<td>CTL-001 §8.1；UI 契约</td>
+<td><code>resetSimulationState</code>/<code>resetPoseOnly</code>/<code>resetVtolHoverState</code></td>
+<td>一致</td>
+<td>3 条复位测试（保留模式/输入、模式标志对称）</td>
+<td>已补 <code>@note</code></td>
+</tr>
+<tr>
+<td>F-13</td>
+<td><code>control.mjs</code></td>
+<td>执行器轴映射（体轴 vs 悬停构型）</td>
+<td>AGENTS.md「执行器轴映射」；CTL-001 §8.6</td>
+<td><code>applySas</code>/<code>applyVtolHover</code>/<code>propulsion.mjs</code></td>
+<td>一致</td>
+<td>体轴 δf→Mz/δt→My/Δω→Mx 与 MOD-001 §4
+相同；悬停构型语义（上摆=滚转、下摆=俯仰、差速=偏航）为同一符号在不同姿态下的读法，不构成代码分叉</td>
+<td>L0 与 L1 同时写两套读法</td>
+</tr>
+</tbody>
+</table>
+<h3 id="27-状态参数遥测与浏览器层g">2.7
+状态、参数、遥测与浏览器层（G）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G-01</td>
+<td><code>parameters.mjs</code></td>
+<td>59 参数与 <code>aircraft-model.json</code> 一致</td>
+<td>GOV-002；AGENTS</td>
+<td>生成物</td>
+<td>偏差（已登记 P1-1）</td>
+<td><code>sync-params.py --check</code>
+<strong>FAIL</strong>；逐字比对差异仅为 <code>dMax</code> 的 description
+文本（数值相同）</td>
+<td>不手改生成物；由参数 owner 重生成</td>
+</tr>
+<tr>
+<td>G-02</td>
+<td><code>parameters.mjs</code></td>
+<td>配平常数（aTrim/dtTrim/dfTrim/thrTrim）</td>
+<td>MOD-003 §2.2</td>
+<td><code>P.aTrim</code> 等</td>
+<td>一致</td>
+<td><code>parameters.test.mjs</code> 锁定到 1e-15；与 MOD-001 §7.2
+数值一致</td>
+<td>已补测试说明</td>
+</tr>
+<tr>
+<td>G-03</td>
+<td><code>telemetry.mjs</code></td>
+<td>遥测分组/快照隔离</td>
+<td>MOD-002 §8</td>
+<td><code>getTelemetry()</code></td>
+<td>一致</td>
+<td>单测键集合、改快照不影响 sim</td>
+<td>已补</td>
+</tr>
+<tr>
+<td>G-04</td>
+<td><code>aircraft-view.mjs</code></td>
+<td>渲染力臂 ±1.78/−1.82 m ≠ 物理 0.315 m</td>
+<td>MOD-002 §6</td>
+<td><code>createAircraftView()</code></td>
+<td>一致（注释已修正）</td>
+<td>原注释"a=b=0.62 m"错误（P2-8），已改 0.315 m；几何位置与 MOD-002 §6
+表一致</td>
+<td>已修</td>
+</tr>
+<tr>
+<td>G-05</td>
+<td><code>browser/*.mjs</code></td>
+<td>渲染约定（相机 up=−z、载机跟随系）</td>
+<td>MOD-001 §9</td>
+<td><code>createScene()</code>、<code>effects.update()</code></td>
+<td>一致（工程约定）</td>
+<td>注释说明；无物理量参与</td>
+<td>已补</td>
+</tr>
+<tr>
+<td>G-06</td>
+<td><code>tests/*</code></td>
+<td>91 项测试性质与容差</td>
+<td>各模块文献</td>
+<td><code>tests/**</code></td>
+<td>一致</td>
+<td>见 §5；容差依据写在各文件头</td>
+<td>已补</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-发现清单">3 发现清单</h2>
+<blockquote>
+<p>严重度定义见 <a href="README.html">README</a> §3。<strong>P0 =
+无</strong>（未发现符号/量纲/稳定性结论错误；四元数、重力、牛顿–欧拉、六维映射、B
+矩阵与文档逐项一致）。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1-1</td>
+<td>生成物 <code>parameters.mjs</code> ↔︎
+<code>models/aircraft-model.json</code></td>
+<td><code>py -3.12 tools/sync-params.py --check</code>
+失败：两者文本不一致（逐字比对确认<strong>仅 <code>dMax</code> 的
+description 文本</strong>不同，数值 <code>0.4363323129985824</code>
+相同；另含行尾差异）</td>
+<td>参数漂移门禁红灯；后续改参数时无法用该检查守护</td>
+<td>由参数 owner 走 GOV-002
+重生成（不改数值、不手改生成物）；本轮只读核对并登记</td>
+</tr>
+<tr>
+<td>P1-2</td>
+<td><code>applyVtolHover()</code> →
+<code>computeBTrue(S.thr·wMax, …)</code></td>
+<td>B_true 工作点用<strong>指令油门</strong>换算 <code>ω0</code>，而
+<code>M_cur</code> 用<strong>实际转速</strong>
+<code>S.wf/S.wt</code>（含 τm 滞后）。固件已于 2026-08-09 改为 τm 观测器
+<code>w_est</code>，仿真未同步</td>
+<td>油门瞬态时分配增益失配：有效增益 ∝(w_act/w_cmd)²，峰值比 ≈1.33
+时偏差 ~76%，可能放大抖油门振荡</td>
+<td>登记待决策；若同步固件需改行为并重采回归基线（属红线流程），本轮不改</td>
+</tr>
+<tr>
+<td>P1-3</td>
+<td><code>P.dMax</code> / <code>applySas()</code></td>
+<td>仿真摆角限幅 ±25°（<code>dMax=0.4363</code>），固件实机 2026-08-07
+已收紧 ±15°，仿真未回写</td>
+<td>仿真控制权限高于实机；±15°–25° 段的仿真结论不能外推实机</td>
+<td>已按红线在 L0 <code>@redline</code>
+与参数注释标注；回写需重采基线，登记不擅自改</td>
+</tr>
+<tr>
+<td>P2-1</td>
+<td><code>eulerFromQuat()</code></td>
+<td>返回值实为"对 <code>Rᵀ</code> 做标准 ZYX 分解"的角，<strong>φ/θ/ψ
+三者皆为逆旋转角</strong>；MOD-002 §4.2 只强调 theta 的负号</td>
+<td>读者可能误以为 φ/ψ 是标准角；复合姿态下不是简单取负（数值例见
+A-06）</td>
+<td>不改代码（行为红线）；建议 MOD-002 §4.2 补一句全角说明（文档
+owner）</td>
+</tr>
+<tr>
+<td>P2-2</td>
+<td><code>physicsStep()</code> + <code>stepPropulsion()</code> +
+<code>applySas()</code></td>
+<td>耦合系统端到端为一阶精度：RK4 仅作用于
+<code>[v,ω,q]</code>，电机转速与 SAS 积分器为显式欧拉</td>
+<td>4 ms
+子步下可接受；提高子步精度需同步改电机/积分器离散化（会改基线）</td>
+<td>注释写明（B-07）；不改行为</td>
+</tr>
+<tr>
+<td>P2-3</td>
+<td><code>stepPropulsion()</code></td>
+<td>一阶滞后用显式欧拉 <code>ω+=(ω_cmd−ω)·min(dt/τm,1)</code>，非
+<code>1−e^(−dt/τm)</code></td>
+<td>相对误差 ~7e-3（dt=4 ms/τm=0.28 s）</td>
+<td>已 <code>@approx</code> 标注；可接受</td>
+</tr>
+<tr>
+<td>P2-4</td>
+<td><code>computeBTrue()</code></td>
+<td>B 为准稳态（不含 <code>Jp·ω̇</code>），而 <code>M_cur</code>
+含该瞬态项</td>
+<td>分配层一阶模型失配（小增量可接受）</td>
+<td>已 <code>@note</code>；不改</td>
+</tr>
+<tr>
+<td>P2-5</td>
+<td><code>computeAeroState()</code> 的 <code>al</code></td>
+<td>α 用 <code>atan2(w,u)</code>，未像 β
+那样做低速分母保护；<code>u→0</code> 时线性小迎角模型失效</td>
+<td>悬停开气动时升力/力矩无物理意义（悬停默认
+<code>aero=false</code>）</td>
+<td>注释写明适用边界；建议 UI 层保持"悬停默认关气动"</td>
+</tr>
+<tr>
+<td>P2-6</td>
+<td><code>theme.mjs</code></td>
+<td><code>import * as THREE</code> 未使用（死导入）</td>
+<td>无功能影响；静态检查噪声</td>
+<td>建议后续删除（非注释改动，本轮不动）</td>
+</tr>
+<tr>
+<td>P2-7</td>
+<td>MOD-002 §3.4/§5.2、CTL-001 §4.1/§7.1 等</td>
+<td>文档用行号引用源码（<code>dynamics.mjs:physicsStep 第 62–63 行</code>、<code>propulsion.mjs:12–14</code>、<code>control.mjs:16/17/18/19</code>），本轮补注释后行号进一步漂移</td>
+<td>引用失效（GOV-004 §6.2 明令禁止行号）</td>
+<td>文档 owner 改为符号名；本轮核查记录一律用符号名</td>
+</tr>
+<tr>
+<td>P2-8</td>
+<td><code>aircraft-view.mjs</code> 文件头</td>
+<td>原注释"与动力学力臂（a=b=0.62m）无关"数值错误（实际 0.315 m）</td>
+<td>误导读者（渲染/物理力臂红线）</td>
+<td><strong>已修正</strong>为 0.315 m，并补 MOD-002 §6 引用</td>
+</tr>
+<tr>
+<td>P2-9</td>
+<td><code>tests/**</code>（91 条 test）</td>
+<td>逐 test 块注释采用"文件头覆盖表（性质/输入/期望/容差依据）+
+关键容差块内注释"，未为每条 test 再加一行</td>
+<td>满足"为什么这个容差"的可追溯性，但非逐块行内注释</td>
+<td>列为遗留；如需严格逐块，可在后续轮次补 91 行（不改行为）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-未决问题">4 未决问题</h2>
+<ol type="1">
+<li><strong>P1-2 的口径决策</strong>：仿真是否跟进固件的 τm 观测器（用
+<code>w_est</code> 做 B 工作点）。跟进会改变悬停分配行为 →
+需重采回归基线，应由飞控/仿真 owner 共同决策。</li>
+<li><strong>P1-3 的仿真回写</strong>：仿真 <code>dMax</code> 是否收紧到
+±15°。影响巡航配平窗口（<code>dtTrim=−18.7°</code> 已超出
+±15°，回写会直接使巡航配平不可达）——这不是简单改参数，须先讨论固件配平逻辑。</li>
+<li><strong>P2-1 的文档措辞</strong>：MOD-002 §4.2 是否补充"φ/ψ
+同为逆旋转角"以及复合姿态示例。</li>
+<li>本次核查以代码与文档公式对照 +
+数值复算为准，<strong>未使用实机飞行数据</strong>；SAS
+增益与气动参数仍为 MODEL-DEFAULT 未标定（MOD-001
+§10），本文"一致"仅指实现与文档公式一致，不表示与真实飞机一致。</li>
+</ol>
+<hr />
+<h2 id="5-门禁与测试">5 门禁与测试</h2>
+<h3 id="51-注释门禁gov-004">5.1 注释门禁（GOV-004）</h3>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>文件数</th>
+<th>平均分</th>
+<th>error</th>
+<th>warning</th>
+<th>全绿</th>
+<th>规则命中</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>核查前</td>
+<td>38</td>
+<td>69.3</td>
+<td><strong>46</strong></td>
+<td>49</td>
+<td>0</td>
+<td>R01=38 R04=4 R07=8 R08=36 R09=8 R10=1</td>
+</tr>
+<tr>
+<td>核查后</td>
+<td>38</td>
+<td><strong>100.0</strong></td>
+<td><strong>0</strong></td>
+<td><strong>0</strong></td>
+<td><strong>38</strong></td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+<p>命令：<code>py -3.12 tools/check-code-comments.py --area sim --check</code>
+→ <strong>退出码 0</strong>。</p>
+<p>说明：R04 的 4 处（<code>control.mjs</code> 模式表/定高公式/B_true
+说明、<code>math.mjs</code>
+列主序式）在人工判断后确认是<strong>公式注释</strong>被启发式误判（<code>0 = 关闭</code>、<code>h = −pos.z</code>
+等行匹配"变量赋值"模式）；本轮改写为 <code>公式：…</code>/<code>→</code>
+形式，语义不变。R08 的 3 处 Python 误报由多行签名导致（docstring
+落在机检 3
+行窗口外），通过签名单行化消除——参数、默认值与语句完全不变。</p>
+<h3 id="52-单元回归测试">5.2 单元/回归测试</h3>
+<ul>
+<li><code>node --test "simulations/vector-thrust-lab/tests/*.test.mjs"</code>
+→ <strong>91/91 通过，0 失败</strong>（约 0.2 s）。</li>
+<li>全量测试覆盖：math 8、control 12、control-allocation 5、dynamics
+10、aerodynamics 5、propulsion 6、state 3、telemetry 3、parameters
+6、regression 4、vtol 31。</li>
+<li>注释改动未改变任何数值断言：<code>tests/fixtures/regression-baseline.json</code>
+<strong>未改动</strong>。</li>
+</ul>
+<h3 id="53-静态与语法">5.3 静态与语法</h3>
+<ul>
+<li><code>py -3.12 -m py_compile simulations/vector-thrust-lab/scripts/*.py</code>
+→ 通过（8/8）。</li>
+<li><code>node --check</code> 覆盖
+<code>src/core/*.mjs</code>、<code>src/browser/*.mjs</code>、<code>src/main.js</code>
+→ 全部通过。</li>
+<li>冒烟运行：<code>pm_sensitivity.py</code>、<code>cascade_closedform.py</code>
+退出码 0（依赖 numpy/scipy/sympy 可用）。</li>
+</ul>
+<h3 id="54-数值复算可复跑">5.4 数值复算（可复跑）</h3>
+<p>以下结论由一次性 Node 脚本对 <code>src/core/</code>
+复算得到（不入库，命令可复现）：</p>
+<table>
+<thead>
+<tr>
+<th>核对项</th>
+<th>方法</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rotateVecByQuat</code> ≡ <code>q⊗ṽ⊗q*</code></td>
+<td>2000 组随机 <code>(v,q)</code></td>
+<td>最大差 <strong>3.11e-15</strong></td>
+</tr>
+<tr>
+<td>四元数复合顺序 <code>q_a⊗q_b</code>（先 b 后 a）</td>
+<td>2000 组随机</td>
+<td>最大差 <strong>1.60e-15</strong></td>
+</tr>
+<tr>
+<td>重力变换 <code>g_b=Rᵀ·(0,0,g)</code></td>
+<td>2000 组随机姿态</td>
+<td>最大差 <strong>4.44e-15</strong></td>
+</tr>
+<tr>
+<td><code>eulerFromQuat</code> ≡ 标准 ZYX(Rᵀ)</td>
+<td>2000 组随机姿态</td>
+<td>最大差 <strong>1.8e-14</strong></td>
+</tr>
+<tr>
+<td><code>computeBTrue</code> 解析 vs 中心差分</td>
+<td><code>h=1e-7</code>，悬停工作点</td>
+<td>最大差 <strong>2.38e-9</strong>（测试阈值 1e-6）</td>
+</tr>
+<tr>
+<td>耦合系统收敛阶</td>
+<td>T=0.2 s，n=4/8/16/32 vs n=6400 参考</td>
+<td><strong>1.53 / 1.38 / 1.74</strong>（一阶，见 P2-2）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-本轮改动摘要仅注释文档">6 本轮改动摘要（仅注释/文档）</h2>
+<ul>
+<li>38 文件全部补
+L0（<code>@file/@module/@brief/@details/@theory/@frame/@units</code>，触及红线处加
+<code>@redline</code>）。</li>
+<li>32 个 JS 导出符号与 8 个 Python 公共函数补 L1
+文档块（<code>@brief/@param 带单位/@returns/@formula/@ref/@note/@approx/@test</code>）。</li>
+<li>核心 6
+个理论文件（math/dynamics/control/propulsion/aerodynamics/control-allocation）各补"五段式"理论对照块（公式/符号/来源/实现/等价变换与数值证据）。</li>
+<li>L2：单位与符号翻转（NED z 向下）、边界保护（vMin/奇异/null
+回退）、红线常量（dMax/dwMax/tauM/groundZ）、时序假设（applySas 先于
+stepPropulsion）、历史事故理由（模式切换清积分、qCmd 跟航向）。</li>
+<li>修正腐烂注释 1 处（渲染力臂 0.62 m → 0.315 m），消除
+docstring/注释中的行号式源码引用 2 处（<code>control.mjs:142-147</code>
+→ 符号名 <code>applyVtolHover</code>）；另有 1 处同类引用位于
+<code>pm_sensitivity.py</code>
+的运行输出字符串中（改文本会改变程序输出，留给脚本 owner，见
+P2-7）。</li>
+<li>未改动：任何可执行语句的语义/数值/顺序、<code>parameters.mjs</code>（生成物）、<code>regression-baseline.json</code>（基线）、<code>docs/*.html</code>（构建产物）。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/SIM-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

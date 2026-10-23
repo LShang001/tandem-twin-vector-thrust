@@ -1,12 +1,31 @@
-// ============================================================
-//  渲染器 / 场景 / 相机 / 灯光 / 辉光后处理
-// ============================================================
+/**
+ * @file    scene.mjs
+ * @module  仿真 browser/渲染装配
+ * @brief   渲染器、场景、相机、轨道控制、灯光与辉光后处理的初始化
+ * @details 输入：DOM 容器；处理：创建 WebGLRenderer（ACES 色调映射）、Scene（雾）、
+ *          PerspectiveCamera、OrbitControls、三灯照明与 EffectComposer(Bloom)；
+ *          输出：渲染上下文句柄。
+ *          不变量：相机 up 设为 (0,0,−1) 以匹配 NED 的 z 向下。
+ * @theory  N/A（渲染装配）
+ * @frame   世界系与 NED 同向（x 前、y 右、z 下）⇒ "上"是 −z
+ * @units   长度 world unit，FOV °，像素尺寸 px
+ * @note 相机 up 若误用默认 (0,1,0)，OrbitControls 的"上"会变成 y 轴，
+ *       与 NED 语义冲突（画面里地面会竖起来）
+ * @see     main.js（装配顺序）、theme.mjs（运行时改主题）
+ */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
+// @note 像素比上限 2：高分屏下避免 4K 全分辨率造成的填充率瓶颈
+// @note bloom 参数 (0.30, 0.45, 0.85) 与 theme 的 dark/light 主题共享强度值
+/**
+ * @brief 创建渲染上下文（renderer/scene/camera/controls/composer/lights）
+ * @param {HTMLElement} container 渲染画布容器（#scene）
+ * @returns {{renderer,scene,camera,controls,composer,bloom,lights}} 渲染上下文
+ */
 export function createScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

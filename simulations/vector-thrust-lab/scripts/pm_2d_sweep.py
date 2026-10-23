@@ -3,6 +3,18 @@
 """
 pm_2d_sweep.py — 滤波 α × 电机 τm 二维相位裕度扫描
 =====================================================
+@file    pm_2d_sweep.py
+@module  仿真/鲁棒性分析（二维参数扫描）
+@brief   扫描 (滤波 α, 电机 τm) 平面上的差速通道相位裕度并找经验边界组合
+@details 输入：α∈(0,1)、τm 范围、内环带宽 K_SIM；
+         处理：τf=−dt/ln(1−α) → 逐点求 PM → 等高线/边界 CSV → 文本结论；
+         输出：scripts/figs 下的 PNG、边界 CSV、控制台摘要。
+@theory  一阶滤波相位滞后与三阶开环 PM @ref CTL-001 §8.5；τm 物理来源 @ref THY-002 §4
+@frame   N/A（单通道频域）
+@units   α 无量纲、τm s、PM 度
+@note    实机经验边界（4.2° 稳 / 6.9° 抖）来自 memory 滤波审计，是待检验假设而非定理；
+         本脚本只画"简化模型"的 PM，不可直接当作实机判据（@ref AGENTS.md 相关踩坑记录）
+@see     phase_margin_analysis.py、pm_sensitivity.py
 目的：找实机"滤波滞后 4.2° 稳 / 6.9° 必抖"边界对应的完整参数组合，
      并核查差速通道 PM 的二维依赖（α、τm 哪个主导）。
 

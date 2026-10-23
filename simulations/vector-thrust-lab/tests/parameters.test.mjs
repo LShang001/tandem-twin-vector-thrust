@@ -1,4 +1,17 @@
-// parameters.mjs 单元测试（生成物完整性与物理合理性）
+/**
+ * @file    parameters.test.mjs
+ * @module  仿真 tests/参数生成物
+ * @brief   校验 parameters.mjs（生成物）的完整性、符号与限幅自洽
+ * @details 覆盖：59 个参数齐全且有限；关键物理量为正；气动导数符号；限幅关系
+ *          （dwUiMax<dwMax、maxStep≤4 ms、dMax<90°）；对象冻结；配平角常数换算。
+ *          容差依据：参数是 JSON 常量的逐字生成，故用 1e-15/严格相等锁定；
+ *          任何数值改动都应先改 models/aircraft-model.json 再重生成，测试即黄灯。
+ * @theory  配平工作点 @ref MOD-003 §2.2；参数来源与置信度 @ref MOD-001 §10
+ * @frame   N/A
+ * @units   见各断言注释（rad、kg、kg·m² 等）
+ * @note 本文件是"生成物守门员"：parameters.mjs 被手改时这里最先失败（禁止手改）
+ * @see     tools/sync-params.py、models/aircraft-model.json
+ */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { P } from '../src/core/parameters.mjs';

@@ -2,7 +2,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8" />
-  <meta name="generator" content="pandoc" />
+  <meta name="generator" content="pandoc 3.12.1" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
   <title>GOV-002 信息与配置管理 · 纵列双发矢量推力飞行器</title>
   <style>
@@ -10,8 +10,12 @@
     ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
     */
     span.smallcaps{font-variant: small-caps;}
-    div.columns{display: flex; gap: min(4vw, 1.5em);}
-    div.column{flex: auto; overflow-x: auto;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
     div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
     /* The extra [class] is a hack that increases specificity enough to
        override a similar rule in reveal.js */
@@ -22,7 +26,71 @@
       margin: 0 0.8em 0.2em -1.6em;
       vertical-align: middle;
     }
-    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
   </style>
   <link rel="stylesheet" href="../docstyle.css" />
 <style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
@@ -162,25 +230,26 @@
 </ul>
 <h2 id="3-参数治理工作流">3. 参数治理工作流</h2>
 <h3 id="31-参数追溯链">3.1 参数追溯链</h3>
-<pre class="mermaid"><code>flowchart LR
-    accTitle 参数单一事实源追溯链
-    accDescr 展示 aircraft-model.json 如何通过 sync-params.py 生成 parameters.mjs，并流向 core 模块与测试基线；--check 形成漂移检测回路。
-
-    JSON[&quot;models/aircraft-model.json\n59 参数 + 来源/置信度&quot;]
-    TOOL[&quot;tools/sync-params.py\n生成 + --check 校验&quot;]
-    PMS[&quot;simulations/.../parameters.mjs\n勿手改&quot;]
-    CORE[&quot;src/core/*\nmath/control/...&quot;]
-    TESTS[&quot;tests/*.test.mjs\n单测断言&quot;]
-    BASE[&quot;tests/fixtures/\nregression-baseline.json&quot;]
-    CI[&quot;CI / 本地提交前\npy -3.12 tools/sync-params.py --check&quot;]
-
-    JSON --&gt;|生成| TOOL
-    TOOL --&gt;|写入| PMS
-    PMS --&gt;|导入| CORE
-    CORE --&gt;|驱动| TESTS
-    CORE --&gt;|驱动| BASE
-    CI --&gt;|比对| TOOL
-    TOOL -.-&gt;|漂移告警| JSON</code></pre>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode mermaid"><code class="sourceCode mermaid"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="kw">flowchart</span> <span class="cn">LR</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accTitle</span> <span class="er">参</span><span class="dt">数单一事实源追溯链</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accDescr</span> <span class="er">展</span><span class="dt">示</span> <span class="er">a</span><span class="dt">ircraft-model.json</span> <span class="er">如</span><span class="dt">何通过</span> <span class="er">s</span><span class="dt">ync-params.py</span> <span class="er">生</span><span class="dt">成</span> <span class="er">p</span><span class="dt">arameters.mjs</span><span class="er">，</span><span class="dt">并流向</span> <span class="er">c</span><span class="dt">ore</span> <span class="er">模</span><span class="dt">块与测试基线</span><span class="er">；</span><span class="pp">--</span><span class="vs">check 形成漂移检测回路。</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="vs">JSON[</span><span class="er">&quot;</span><span class="vs">models/aircraft-model.json\n59 参数 + 来源/置信度</span><span class="er">&quot;</span><span class="vs">]</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="vs">TOOL[</span><span class="er">&quot;</span><span class="vs">tools/sync-params.py\n生成 + </span><span class="pp">--</span><span class="er">c</span><span class="dt">heck</span> <span class="er">校</span><span class="dt">验</span><span class="er">&quot;]</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>    <span class="dt">PMS</span>[<span class="st">&quot;simulations/.../parameters.mjs\n勿手改&quot;</span>]</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>    <span class="dt">CORE</span>[<span class="st">&quot;src/core/</span><span class="sc">*</span><span class="st">\nmath/control/...&quot;</span>]</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>    <span class="dt">TESTS</span>[<span class="st">&quot;tests/</span><span class="sc">*</span><span class="st">.test.mjs\n单测断言&quot;</span>]</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>    <span class="dt">BASE</span>[<span class="st">&quot;tests/fixtures/\nregression-baseline.json&quot;</span>]</span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>    <span class="dt">CI</span>[<span class="st">&quot;CI / 本地提交前\npy -3.12 tools/sync-params.py --check&quot;</span>]</span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="dt">JSON</span> <span class="pp">--&gt;</span><span class="vs">|生成|</span> <span class="dt">TOOL</span></span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>    <span class="dt">TOOL</span> <span class="pp">--&gt;</span><span class="vs">|写入|</span> <span class="dt">PMS</span></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>    <span class="dt">PMS</span> <span class="pp">--&gt;</span><span class="vs">|导入|</span> <span class="dt">CORE</span></span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="dt">CORE</span> <span class="pp">--&gt;</span><span class="vs">|驱动|</span> <span class="dt">TESTS</span></span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a>    <span class="dt">CORE</span> <span class="pp">--&gt;</span><span class="vs">|驱动|</span> <span class="dt">BASE</span></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a>    <span class="dt">CI</span> <span class="pp">--&gt;</span><span class="vs">|比对|</span> <span class="dt">TOOL</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a>    <span class="dt">TOOL</span> <span class="pp">-.-&gt;</span><span class="vs">|漂移告警|</span> <span class="dt">JSON</span></span></code></pre></div>
 <h3 id="32-变更步骤">3.2 变更步骤</h3>
 <ol type="1">
 <li>在 <code>models/aircraft-model.json</code>
@@ -437,5 +506,5 @@ rad</td>
 <li>禁止在构建产物中直接做持久化修改，所有修改应在 Markdown
 源中完成并重新构建。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.9.0.2 · 2026-08-11 08:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
 </html>

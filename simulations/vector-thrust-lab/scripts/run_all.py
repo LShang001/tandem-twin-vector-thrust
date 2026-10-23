@@ -3,7 +3,18 @@
 """
 run_all.py — 鲁棒性/相位裕度分析工具集统一入口
 ================================================
-一键运行全部 7 个分析脚本，输出汇总 JSON（供论文同步/交接使用）。
+@file    run_all.py
+@module  仿真/鲁棒性分析入口
+@brief   一键运行 7 个分析脚本并汇总关键行与退出码（可写 JSON 供论文同步）
+@details 输入：--quick（跳过二维扫描）、--json 输出路径、--fw-k 固件带宽提示；
+         处理：按固定顺序 subprocess 调用各脚本，抽取关键行；
+         输出：控制台汇总 + 可选 JSON + 退出码（全通过 0，否则 1）。
+@theory  N/A（工具编排）；各脚本理论出处见其文件头
+@frame   N/A
+@units   N/A（透传，无物理计算）
+@note    汇总 JSON 只抽"关键行"，不替代各脚本完整输出；--fw-k 仅打印提示，
+         真正生效的固件带宽常量在 pm_sensitivity.py 顶部 K_FW
+@see     cascade_closedform.py、robust_lmi_analysis.py、phase_margin_analysis.py
 
 用法：
   py -3.12 run_all.py                 # 全量运行 + 汇总
@@ -54,6 +65,12 @@ def extract_key_lines(log: str, script: str):
 
 
 def main():
+    """运行全部分析脚本并汇总关键行与退出码。
+
+    @brief  编排 7 个脚本、抽取关键行、可选写 JSON
+    @returns 无（以 sys.exit 表达总体通过/失败）
+    @note   子进程统一使用 sys.executable，避免 py/python 版本错配
+    """
     ap = argparse.ArgumentParser(description="鲁棒性分析工具集统一入口")
     ap.add_argument("--quick", action="store_true", help="只跑核心 6 个脚本")
     ap.add_argument("--json", default=None, help="汇总 JSON 输出路径")

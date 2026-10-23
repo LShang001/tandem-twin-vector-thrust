@@ -1,7 +1,21 @@
-// ============================================================
-//  飞行器程序化几何与三维可视化同步
-//  注意：渲染几何为示意性非尺度模型，与动力学力臂（a=b=0.62m）无关
-// ============================================================
+/**
+ * @file    aircraft-view.mjs
+ * @module  仿真 browser/三维模型
+ * @brief   程序化生成飞行器几何并逐帧同步姿态/摆角/力矢可视化
+ * @details 输入：sim 状态与遥测（姿态四元数、SAS 执行角、T/Q 遥测）；
+ *          处理：构型几何（机身/机翼/双摆座/桨盘）→ 每帧更新四元数、摆座转角、
+ *          螺旋桨视觉转速、推力箭头长度、反扭矩弧缩放、力矩箭头方向；
+ *          输出：Three.js 场景对象。
+ *          不变量：渲染长度为示意比例，力学计算一律用 parameters.mjs 的物理力臂。
+ * @theory  摆角语义：前摆绕 z_b（体轴=偏航，悬停=上摆/滚转）、尾摆绕 y_b
+ *          （体轴=俯仰，悬停=下摆）@ref MOD-001 §2、@ref AGENTS.md 执行器轴映射；
+ *          姿态 q 直接赋给 THREE.Quaternion（体系→惯性系）@ref MOD-002 §3.5
+ * @frame   渲染世界系与 NED 同向（z 向下），模型本体系 FRD
+ * @units   几何尺寸为无量纲示意值（world unit），转角 rad，力/力矩仅用于映射箭头长度
+ * @redline 渲染力臂（±1.78 m 视觉位置）与物理力臂（a=b=0.315 m）必须分离，禁止混用
+ * @note 视觉转速 ≠ 物理转速（视觉取 6+0.05ω 只为可读性），不得据此做任何定量推断
+ * @see     docs/04-数学建模/MOD-002-坐标系与符号约定.md §6（渲染/物理比例声明）
+ */
 import * as THREE from 'three';
 
 // ---------- 材质 ----------
@@ -117,6 +131,15 @@ function makeLabel(text, color) {
   return sp;
 }
 
+// @note 摆座组原点在转轴处：前摆 x=+1.78、尾摆 x=−1.82（视觉值，非物理力臂 0.315 m）；
+//       推力/反扭箭头挂在摆座组内，随摆角自动偏转——这是"摆动即矢量"的视觉表达
+// @note 前电机为拉力式（桨在前）、尾电机为推进式（桨在后并绕 y 转 180°）
+/**
+ * @brief 构建飞行器可视模型（机身/机翼/双矢量摆座/箭头/标签/体轴参考线）
+ * @param {THREE.Scene} scene 场景对象（模型以子组形式挂入）
+ * @returns {Object} 视图句柄：aircraft/front/tail/cgRing/thrustF/thrustT/arcF/arcT/mArrow* 等
+ * @see updateAircraftView
+ */
 export function createAircraftView(scene) {
   const aircraft = new THREE.Group();
   scene.add(aircraft);
@@ -236,6 +259,14 @@ export function createAircraftView(scene) {
 }
 
 // ---------- 可视化同步（每帧） ----------
+// @note 摆角用 SAS 修正后的 dtAct/dfAct（不是滑块指令），操作者看到的才是实际执行量
+// @note 力矩箭头设置含符号翻转：负值把箭头绕 z 转 180°——方向与大小同时表达
+/**
+ * @brief 每帧把仿真状态同步到可视模型
+ * @param {Object} view createAircraftView 句柄；@param {Object} sim 仿真状态
+ * @param {Object} P 参数表（用 wMax 归一化桨盘透明度）；@param {number} dt 帧间隔 [s]
+ * @returns {void}；@note 摆角取 dtAct/dfAct（实际执行量），不是滑块指令
+ */
 export function updateAircraftView(view, sim, P, dt) {
   const { S, dyn } = sim;
   // 姿态 → 机体

@@ -1,0 +1,971 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FW-EKF 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="代码理论核查记录--fw-ekf15-状态-eskf-导航库">代码理论核查记录 —
+fw-ekf（15 状态 ESKF 导航库）</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：fw-ekf（Agent） ｜ 规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：<code>TandemVec_FCS/lib/navigation-main/src/**</code>
+工作区状态（任务开始时已含未提交的 P0-1 子集 FDI / 航向 consider /
+光流重锚逻辑改动，见 §3 P2-2；本轮不改变任何代码 token）
+理论来源：REF-120（秦永元《惯性导航》第3版）§7.2/§7.4/§9.2–9.8；REF-121（秦永元《卡尔曼滤波与
+组合导航原理》第3版）§2.2/§3.3/§6.2.3/§7.3.1/§8.2.3；MOD-002；notes/01、notes/02、notes/07
+方法：逐文件读代码 → 回书核对公式文本 → 以 notes 的印刷页锚点定位页码 →
+五段式补注释 → 宿主回归 + 语法检查 + lint 复检 →
+去注释后与基线逐行比对确认无代码变化</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>行数（改后）</th>
+<th>L0 文件头</th>
+<th>L1 符号文档</th>
+<th>@ref 处数</th>
+<th>@formula</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ekf_15_state.h</code></td>
+<td>4584</td>
+<td>有</td>
+<td>有（传播内核/各量测入口/回放/稳定化）</td>
+<td>45</td>
+<td>25</td>
+<td>本轮重点；状态与误差方向约定单列</td>
+</tr>
+<tr>
+<td><code>transforms.h</code></td>
+<td>516</td>
+<td>有</td>
+<td>有（姿态互转/LLA-ECEF-NED/Olson）</td>
+<td>17</td>
+<td>12</td>
+<td>删除 5 处“公式样式伪代码”注释块</td>
+</tr>
+<tr>
+<td><code>earth_model.h</code></td>
+<td>290</td>
+<td>有</td>
+<td>有（曲率/重力/LLA 率/自转/运输率）</td>
+<td>15</td>
+<td>9</td>
+<td>Somigliana 偏差登记</td>
+</tr>
+<tr>
+<td><code>aid_source_status.h</code></td>
+<td>298</td>
+<td>有</td>
+<td>部分（观测源/结果结构/各记账接口）</td>
+<td>2</td>
+<td>0</td>
+<td>与 EKF 解耦，理论点少</td>
+</tr>
+<tr>
+<td><code>navigation.h</code></td>
+<td>116</td>
+<td>有</td>
+<td>聚合头（模块职责/宏/调用序列）</td>
+<td>4</td>
+<td>0</td>
+<td>重写文件头，消除示例代码块</td>
+</tr>
+<tr>
+<td><code>tilt_compass.h</code></td>
+<td>84</td>
+<td>有</td>
+<td>有（调平/定向公式与奇异）</td>
+<td>3</td>
+<td>1</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>constants.h</code></td>
+<td>84</td>
+<td>有</td>
+<td>有（两组常量分组说明）</td>
+<td>4</td>
+<td>0</td>
+<td>两组取值来源区分</td>
+</tr>
+<tr>
+<td><code>utils.h</code></td>
+<td>105</td>
+<td>有</td>
+<td>有（Wrap/Skew）</td>
+<td>5</td>
+<td>3</td>
+<td>归一化边界说明</td>
+</tr>
+</tbody>
+</table>
+<p>合计：8 文件 / 6077 行；L0 覆盖 8/8；新增 <code>@ref</code> 95
+处、<code>@formula</code> 50 处。 基线 lint：13 error / 20
+warning（平均分 55.0）→ 核查后 0 error / 0 warning（平均分 100.0）。</p>
+<hr />
+<h2 id="2-核对矩阵">2 核对矩阵</h2>
+<p>结论枚举：<code>一致</code> / <code>等价变换后一致</code> /
+<code>近似（可接受）</code> / <code>偏差（已登记）</code> /
+<code>不一致（待修）</code>。 页码为 REF-120/121
+印刷页；页码与式号均以本地书稿 OCR 全文回书核对，页码锚点取自
+notes/01、notes/02。</p>
+<h3 id="21-状态定义误差方向与姿态数学">2.1
+状态定义、误差方向与姿态数学</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-01</td>
+<td><code>ekf_15_state.h</code></td>
+<td>15 维误差状态顺序 [δp, δv, δβ, δb_a, δb_g]；δ = 真值−估计</td>
+<td>MOD-002 §3；GOV-004 §6.3</td>
+<td>类前“状态与误差定义”注释、<code>InjectErrorState()</code></td>
+<td>一致</td>
+<td><code>test_ekf_15state</code> T1/T4/T6</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-02</td>
+<td><code>ekf_15_state.h</code></td>
+<td>四元数右乘误差 <code>q_true = q_est⊗Exp(δβ)</code>；指数映射</td>
+<td>REF-120 §9.2.4 p.262</td>
+<td><code>BuildDeltaQuatFromRotationVector()</code>、<code>InjectErrorState()</code></td>
+<td>一致</td>
+<td>T4/T6；ω=2 rad/s 下与一阶近似差 O(δβ³)</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-03</td>
+<td><code>ekf_15_state.h</code></td>
+<td>秦书导航系失准角 <code>φ = C^n_b·δβ</code>（一阶等价）</td>
+<td>REF-120 §9.8.2 (9.8.12)(9.8.13)</td>
+<td>类前注释、F 矩阵注释</td>
+<td>等价变换后一致</td>
+<td>推导见 §2.4 E-1</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td><code>ekf_15_state.h</code></td>
+<td>δ 方向取反：秦书 δV=计算−真值，固件 δv=真值−估计</td>
+<td>GOV-004 §6.3</td>
+<td>文件头 <code>@note</code>、F(V,β)/F(β,V) 注释</td>
+<td>等价变换后一致</td>
+<td>推导见 §2.4 E-2</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-05</td>
+<td><code>tilt_compass.h</code></td>
+<td>重力调平
+<code>pitch=asin(a_x)</code>、<code>roll=asin(−a_y/cosθ)</code>；磁矢量倾斜补偿
+atan2</td>
+<td>REF-120 §9.9.1 p.323–324</td>
+<td><code>TiltCompass()</code></td>
+<td>一致</td>
+<td>T1（水平静止 roll/pitch&lt;1e-3 rad）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-06</td>
+<td><code>transforms.h</code></td>
+<td><code>theta = −asin(R13)</code>；四元数↔︎DCM 等价</td>
+<td>MOD-002 §3；REF-120 §9.2.2 p.256–258</td>
+<td><code>quat2angle()</code>、<code>dcm2angle()</code>、<code>quat2dcm()</code></td>
+<td>一致</td>
+<td>T1（欧拉角基准）</td>
+<td>补注释</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-捷联惯导名义传播速度姿态位置">2.2
+捷联惯导名义传播（速度/姿态/位置）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-07</td>
+<td><code>ekf_15_state.h</code></td>
+<td>双子样圆锥补偿 <code>Φ=Δθ₁+Δθ₂+(2/3)Δθ₁×Δθ₂</code></td>
+<td>REF-120 §9.3.3 (9.3.30) p.274</td>
+<td><code>PropagateStateFromIncrements()</code> 的
+<code>coning_delta_theta_rad</code></td>
+<td>一致</td>
+<td>notes/01 §2 复核：10 Hz 划桨 5 ms 系数残差 0.12%</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-08</td>
+<td><code>ekf_15_state.h</code></td>
+<td>双子样划摇 <code>ΔV_scul=(2/3)[ΔV₁×Δθ₂−ΔV₂×Δθ₁]</code></td>
+<td>REF-120 §9.6.2 (9.6.25) p.301；最优系数 §9.6.3 p.303</td>
+<td><code>sculling_delta_v_body_mps</code></td>
+<td>等价变换后一致</td>
+<td>恒等式 <code>a×b=−b×a</code>，两式恒等</td>
+<td>五段式注释写明</td>
+</tr>
+<tr>
+<td>A-09</td>
+<td><code>ekf_15_state.h</code></td>
+<td>旋转效应 <code>ΔV_rot=½Δθ×ΔV</code>
+必须配合<strong>区间起始姿态</strong></td>
+<td>REF-120 §9.6.1 (9.6.17) p.298、(9.6.19) p.299</td>
+<td><code>delta_v_ned</code>（中点姿态 <code>t_b2ned_mid</code>）</td>
+<td>一致（历史 P0-0 已修）</td>
+<td>T7：0.000250008 → 0.000125005（期望 0.000124999）</td>
+<td>五段式写明“当前实现与历史缺陷”</td>
+</tr>
+<tr>
+<td>A-10</td>
+<td><code>ekf_15_state.h</code></td>
+<td>速度更新 <code>V_m=V_{m−1}+C^n_b(m−1)ΔV_sf+ΔV_g/cor</code></td>
+<td>REF-120 §9.6.1 (9.6.9) p.298</td>
+<td><code>delta_v_ned</code>、<code>ins_ned_vel_mps_</code></td>
+<td>等价变换后一致（改用中点姿态，二阶精度）</td>
+<td>T2/T3/T7</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-11</td>
+<td><code>ekf_15_state.h</code></td>
+<td>比力方程 <code>V̇^n=C^n_b f^b−(2ω_ie+ω_en)×V^n+g^n</code></td>
+<td>REF-120 §7.4 (7.4.6) p.189</td>
+<td><code>coriolis_accel_mid_ned</code>、<code>gravity_ned_mid</code></td>
+<td>一致</td>
+<td>T2（静止速度保持 &lt;0.02 m/s）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-12</td>
+<td><code>ekf_15_state.h</code></td>
+<td>姿态推进 <code>q_k=Exp(−(ω_ie+ω_en)Δt)⊗q_{k−1}⊗Exp(Φ)</code></td>
+<td>REF-120 §9.2.4 p.262；§9.8.2 (9.8.13)</td>
+<td><code>quat_</code>、<code>nav_frame_delta_theta_rad</code></td>
+<td>等价变换后一致</td>
+<td>T2（静止 100 步姿态保持）</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-13</td>
+<td><code>ekf_15_state.h</code></td>
+<td>位置积分
+<code>L̇=V_N/(Rm+h)</code>、<code>λ̇=V_E/((Rn+h)cosL)</code>、<code>ḣ=−V_D</code></td>
+<td>REF-120 §9.7 p.304–313；§9.8.1 (9.8.5a–c) p.317–322</td>
+<td><code>ComputeLlaRateFromTerms()</code></td>
+<td>一致</td>
+<td>T4（GNSS 位置残差收敛）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-14</td>
+<td><code>ekf_15_state.h</code></td>
+<td>地球自转率 <code>ω_ie^n=[ω_e cosφ,0,−ω_e sinφ]</code>；运输率
+<code>ω_en^n</code></td>
+<td>REF-120 §7.4 (7.4.6) p.189</td>
+<td><code>ComputeEarthModelTerms()</code>、<code>ComputeNavRateFromTerms()</code></td>
+<td>一致</td>
+<td>T1（初始零偏扣除含 ω_ie+ω_en）</td>
+<td>补注释</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-误差状态-f-矩阵离散化与过程噪声">2.3 误差状态 F
+矩阵、离散化与过程噪声</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-15</td>
+<td><code>ekf_15_state.h</code></td>
+<td>速度误差方程 <code>δV̇=−φ^n×f^n+…</code>；F(V,β)=−C^n_b[f^b]×</td>
+<td>REF-120 §9.8.1 (9.8.3) p.317–322</td>
+<td><code>fs_.block(3,6)</code></td>
+<td>等价变换后一致</td>
+<td>推导见 §2.4 E-2/E-3</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-16</td>
+<td><code>ekf_15_state.h</code></td>
+<td>姿态误差方程 <code>φ̇=φ×ω_in^n+δω_in^n−C^n_b ε^b</code>；F(β,V)</td>
+<td>REF-120 §9.8.2 (9.8.13)</td>
+<td><code>fs_.block(6,3)</code>（M 为 NED 下 ∂ω_en/∂v）</td>
+<td>等价变换后一致</td>
+<td>推导见 §2.4 E-4；与 KF-GINS M 定义一致</td>
+<td>五段式注释（含 M 的完整矩阵）</td>
+</tr>
+<tr>
+<td>A-17</td>
+<td><code>ekf_15_state.h</code></td>
+<td>F(V,V) 哥氏/传输率 8 项；F(P,P) 5 项</td>
+<td>REF-120 §9.8.1 (9.8.3)(9.8.4) p.317–322</td>
+<td><code>fs_</code> 的 <code>F(V,V)</code>/<code>F(P,P)</code> 块</td>
+<td>一致</td>
+<td>逐项与 (9.8.4) 分量式对照</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-18</td>
+<td><code>ekf_15_state.h</code></td>
+<td>F(V,b_a)=−C^n_b；F(V,D)=2g/R̄；F(β,β)=−[ω^b]×；F(β,b_g)=−I₃；Markov
+零偏块</td>
+<td>REF-120 §9.8.1/§9.8.2；REF-121 §2.2.1 p.33</td>
+<td><code>fs_.block(3,9)</code>、<code>fs_(5,2)</code>、<code>fs_.block(6,6)</code>、<code>fs_.block(6,12)</code>、<code>RefreshStateTransitionStaticBlocks()</code></td>
+<td>一致</td>
+<td>T2/T3（P 增长有界）+ 量纲核对</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-19</td>
+<td><code>ekf_15_state.h</code></td>
+<td>离散化 <code>Φ≈I+FΔt+½(FΔt)²</code>（快路径一阶）</td>
+<td>REF-121 §2.2.1 (2.2.4d) p.33</td>
+<td><code>phi_</code></td>
+<td>近似（可接受）</td>
+<td>5 ms 下二阶项量级 O((FΔt)²)；一阶路径仅 bring-up</td>
+<td><code>@approx</code> 标注</td>
+</tr>
+<tr>
+<td>A-20</td>
+<td><code>ekf_15_state.h</code></td>
+<td>过程噪声 <code>Qd=∫ΦG Rw G^T Φ^T dτ</code>（Simpson 三点）</td>
+<td>REF-121 §2.2.1 (2.2.4d) p.33</td>
+<td><code>q_</code>、<code>Icm45686StructuredContinuousQc()</code></td>
+<td>一致</td>
+<td>T2/T3（200 步 P 有界/对称）</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-21</td>
+<td><code>ekf_15_state.h</code></td>
+<td>Q 的结构化等价：<code>C^n_b(σ²I)C^b_n=σ²I</code></td>
+<td>矩阵正交性（自证）</td>
+<td>快速路径 4
+个对角块、<code>Icm45686FirstOrderCovarianceDeltaFromBlocks()</code></td>
+<td>等价变换后一致</td>
+<td>与稠密 <code>Gs·Rw·Gs^T</code> 数学等价</td>
+<td>注释写明前提（非对角相关项出现须回退）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-等价变换推导单列">2.4 等价变换推导（单列）</h3>
+<p><strong>E-1 φ 与 δβ 的关系</strong>：秦书
+<code>Ĉ^n_b=(I−[φ]×)C^n_b</code>（Ĉ 为计算值）；固件
+<code>C_true=C_est·Exp(δβ)</code>（右乘）。一阶展开
+<code>C_est=C_true(I−[δβ]×)</code>，与
+<code>(I−[φ]×)C_true=C_true(I−[C^b_nφ]×)</code> 比较得
+<code>δβ=C^b_nφ</code>，即 <code>φ=C^n_b·δβ</code>。 <strong>E-2 δ
+方向取反</strong>：秦书速度误差 <code>δV=计算−真值</code>，固件
+<code>δv=真值−估计</code>，故 <code>δv=−δV</code>；姿态误差 φ 由 E-1 与
+δβ 同向。 速度通道：<code>δV̇=−φ×f^n+…</code> ⇒
+<code>δv̇=+φ×f^n=−C^n_b[f^b]×δβ</code>，对应
+<code>F(V,β)=−C^n_b[f^b]×</code>（代码实现）。 <strong>E-3 F(V,β)
+的坐标旋转</strong>：<code>−[f^n]×=−[C^n_b f^b]×=−C^n_b[f^b]×C^b_n</code>，左乘/右乘
+φ 与 δβ 的转换后与代码一致。 <strong>E-4 F(β,V)
+的符号与矩阵</strong>：<code>φ̇⊃δω_in^n</code>，其中
+<code>δω_en^n=∂ω_en/∂v·δV</code>，NED 下
+<code>∂ω_en/∂v=[[0,1/(Rn+h),0],[−1/(Rm+h),0,0],[0,−tanφ/(Rn+h),0]]</code>（代码
+<code>transport_jacobian</code>）。 由 <code>δβ̇=C^b_nφ̇+Ċ^b_nφ</code> 得
+<code>δβ̇⊃C^b_n·∂ω_en/∂v·δV</code>；再用 E-2 的 <code>δv=−δV</code>
+取反，得 <code>F(β,V)=−C^b_n·M</code>，其中
+<code>M=∂ω_en/∂v</code>——与代码
+<code>fs_.block&lt;3,3&gt;(6,3) = -t_b2ned_mid.transpose() * transport_jacobian</code>
+一致。 <strong>E-5
+划摇两式恒等</strong>：<code>(2/3)[ΔV₁×Δθ₂−ΔV₂×Δθ₁] = (2/3)(Δθ₁×ΔV₂+ΔV₁×Δθ₂)</code>（叉积反交换）。
+<strong>E-6 位置误差→LLA
+比例尺</strong>：<code>δL=δp_N/(Rm+h)</code>、<code>δλ=δp_E/((Rn+h)cosL)</code>、<code>δh=−δp_D</code>，代码
+<code>InjectErrorState()</code> 用更新前纬度/高度统一比例尺。</p>
+<h3 id="25-量测更新门控与鲁棒性">2.5 量测更新、门控与鲁棒性</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-22</td>
+<td><code>ekf_15_state.h</code></td>
+<td>KF 五方程 (2.2.4a–e)</td>
+<td>REF-121 §2.2.1 p.33–34</td>
+<td><code>MeasurementUpdateDetailed()</code></td>
+<td>一致</td>
+<td>T4/T9–T11</td>
+<td>五段式注释</td>
+</tr>
+<tr>
+<td>A-23</td>
+<td><code>ekf_15_state.h</code></td>
+<td>Joseph 形式 (2.2.4e)；简单式数值退化风险</td>
+<td>REF-121 §2.2.4 p.42–43</td>
+<td>全部量测更新（<code>p_=(I−KH)P(I−KH)^T+KRK^T</code>）</td>
+<td>一致</td>
+<td>T2/T3（P 对称/正定）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-24</td>
+<td><code>ekf_15_state.h</code></td>
+<td>NIS <code>r^T S^-1 r ~ χ²(m)</code>；门限由误警率 α 定</td>
+<td>REF-121 §7.3.1 p.255–259（表 7.3.1）</td>
+<td>门限常量区、各 <code>Apply*UpdateDetailed()</code></td>
+<td>一致（门限偏保守）</td>
+<td>T6/T9–T11；ZUPT 门限 1000→16.3</td>
+<td>注释列全部门限与分位数</td>
+</tr>
+<tr>
+<td>A-25</td>
+<td><code>ekf_15_state.h</code></td>
+<td>序贯/子集更新等价性 (3.3.2a–c)</td>
+<td>REF-121 §3.3 p.84–86</td>
+<td><code>ApplyGnssSubsetFallback()</code></td>
+<td>等价变换后一致（3+3 子集是序贯特例）</td>
+<td>T9–T11（速度坏/位置坏/双坏）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-26</td>
+<td><code>ekf_15_state.h</code></td>
+<td>重力方向观测
+<code>H=+[h]×</code>（体系误差）；扣加计零偏后取方向</td>
+<td>REF-120 §9.8.2 (9.8.13)</td>
+<td><code>ApplyGravityUpdateDetailed()</code></td>
+<td>一致</td>
+<td><code>test_ekf_bias_static</code>（静止重力约束）</td>
+<td>补注释（含历史漏乘 <code>t_b2ned</code> 修复说明）</td>
+</tr>
+<tr>
+<td>A-27</td>
+<td><code>ekf_15_state.h</code></td>
+<td>航向 H = 真航向轴在体系的分量 = <code>C^b_n</code> 第三行</td>
+<td>REF-120 §9.8.2 (9.8.13)；本项目推导</td>
+<td><code>ApplyYawUpdateDetailed()</code> 的 <code>h_yaw</code></td>
+<td>一致</td>
+<td>T8（consider 对比）</td>
+<td>注释写明 2026-08-12 修复</td>
+</tr>
+<tr>
+<td>A-28</td>
+<td><code>ekf_15_state.h</code></td>
+<td>bias-only 静止陀螺更新（不改姿态）</td>
+<td>REF-121 §8.2.3 p.291；§7.3.1 p.255–259</td>
+<td><code>ApplyStaticGyroUpdateDetailed()</code></td>
+<td>一致（工程决策，见注释）</td>
+<td><code>test_ekf_bias_static</code></td>
+<td>补注释（含 throttle 门控）</td>
+</tr>
+<tr>
+<td>A-29</td>
+<td><code>ekf_15_state.h</code></td>
+<td>气压高度与 GNSS-D 同构的标量更新</td>
+<td>REF-121 (2.2.4b–e) p.33–34；REF-120 (9.8.5c) p.321</td>
+<td><code>ApplyBaroAltitudeUpdateDetailed()</code></td>
+<td>一致</td>
+<td><code>test_ekf_bias_static</code></td>
+<td>补注释（绝对椭球高前提）</td>
+</tr>
+<tr>
+<td>A-30</td>
+<td><code>ekf_15_state.h</code></td>
+<td>GNSS 延迟回放：量测作用于其对应时刻</td>
+<td>REF-121 §2.2.1 p.33；AGENTS.md 踩坑</td>
+<td><code>GetDelayedSnapshotIndexByAge()</code>、<code>RestoreSnapshot()</code>、<code>RepropagateFromDelayedSnapshot()</code></td>
+<td>一致（工程实现，非教材内容）</td>
+<td><code>test_ekf_delay_highspeed.cpp</code>（延迟 50 ms RMSE
+1.458→0.164 m）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-31</td>
+<td><code>ekf_15_state.h</code></td>
+<td>失联膨胀与重捕获低增益融合</td>
+<td>REF-121 §3.5 p.87–93（P 过度自信）</td>
+<td><code>GrowGnssOutageCovariance()</code>、<code>BuildConservativeGnssReacquisitionNoise()</code></td>
+<td>近似（工程参数）</td>
+<td>注释标注上限 4 倍</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-32</td>
+<td><code>ekf_15_state.h</code></td>
+<td>光流/持续测速辅助：残差门放宽、NIS 主门控</td>
+<td>REF-121 §7.3.1 p.255–259</td>
+<td><code>MeasurementUpdateAidingVelocityDetailed()</code>、<code>ResetVelocityToExternal()</code></td>
+<td>一致（工程决策）</td>
+<td><code>test_ekf_aiding_velocity</code> 16/16</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-33</td>
+<td><code>ekf_15_state.h</code></td>
+<td>P0-1 航向 consider：K 的航向行清零（Schmidt 近似）</td>
+<td>REF-121 §8.2.3 p.291</td>
+<td><code>set_gnss_consider_heading()</code>、<code>k_.row(8).setZero()</code></td>
+<td>近似（可接受，按相位启用）</td>
+<td>T8（1.724°→0.000°）</td>
+<td>补注释</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-地球模型坐标变换与工具">2.6 地球模型、坐标变换与工具</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/文件</th>
+<th>理论要素或公式</th>
+<th>文献出处</th>
+<th>代码位置（符号名）</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-34</td>
+<td><code>earth_model.h</code></td>
+<td>正常重力 Somigliana (7.2.17) + 高度修正 (7.2.18)</td>
+<td>REF-120 §7.2.4 (7.2.17)(7.2.18) p.178</td>
+<td><code>normalgravity_mps2()</code>、<code>ComputeEarthModelTerms()</code></td>
+<td>偏差（已登记）</td>
+<td>常数项差 8.7e-6、sin²2φ 项差 ~1e-6，合成 ~1e-5 m/s²</td>
+<td><code>@deviation</code> + 本表</td>
+</tr>
+<tr>
+<td>A-35</td>
+<td><code>earth_model.h</code></td>
+<td>卯酉圈/子午圈曲率半径</td>
+<td>REF-120 §7.2.1 表 7.2.1</td>
+<td><code>earthrad_transverse_m()</code>、<code>earthrad_meridonal_m()</code></td>
+<td>一致</td>
+<td>T2/T3（经 Rn/Rm 积分的位置有界）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-36</td>
+<td><code>earth_model.h</code></td>
+<td>地球自转率/运输率/LLA 变化率</td>
+<td>REF-120 §7.4 (7.4.6) p.189；§9.7 p.304–313</td>
+<td><code>earthrate()</code>、<code>navrate()</code>、<code>llarate()</code></td>
+<td>一致</td>
+<td>与 EKF 内部缓存实现同式</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-37</td>
+<td><code>transforms.h</code></td>
+<td>WGS-84 LLA↔︎ECEF（解析式）</td>
+<td>REF-120 §7.2.1 表 7.2.1</td>
+<td><code>lla2ecef()</code></td>
+<td>一致</td>
+<td>T4（位置换算链路）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-38</td>
+<td><code>transforms.h</code></td>
+<td>ECEF→LLA Olson 一次修正</td>
+<td>REF-120 §7.2.1/§7.2.2（椭球几何）</td>
+<td><code>ecef2lla()</code></td>
+<td>近似（可接受）</td>
+<td>亚米级标称精度；</td>
+<td>h</td>
+</tr>
+<tr>
+<td>A-39</td>
+<td><code>transforms.h</code></td>
+<td>ECEF↔︎NED 切平面旋转阵 R</td>
+<td>REF-120 §9.8.1 (9.8.1) p.317–318</td>
+<td><code>ecef2ned()</code>、<code>ned2ecef()</code></td>
+<td>一致</td>
+<td>R 正交，逆=转置</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-40</td>
+<td><code>utils.h</code></td>
+<td>角度归一化与斜对称矩阵</td>
+<td>REF-121 §2.2.1 p.33；REF-120 §9.2.3 (9.2.47) p.261–262</td>
+<td><code>WrapTo2Pi()</code>、<code>WrapToPi()</code>、<code>Skew()</code></td>
+<td>一致（WrapToPi 边界见 P1-2）</td>
+<td>T2（新息/姿态）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-41</td>
+<td><code>constants.h</code></td>
+<td>WGS-84 椭球/自转/引力常量（两套取值）</td>
+<td>REF-120 §7.2.1 表 7.2.1；ICD-GPS-200</td>
+<td><code>SEMI_MAJOR_AXIS_LENGTH_M</code> 等</td>
+<td>一致</td>
+<td>与 (7.2.17) 使用的 a/e² 一致</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-42</td>
+<td><code>tilt_compass.h</code></td>
+<td>无磁时伪磁向量的确定性航向语义</td>
+<td>notes/06（P0 航向修复）</td>
+<td><code>TiltCompass()</code> + <code>Initialize()</code></td>
+<td>一致（工程语义）</td>
+<td>T1；AGENTS.md P0 航向 π→0.2 rad</td>
+<td>注释写明</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-发现清单">3 发现清单</h2>
+<h3
+id="p0影响飞行安全或定理成立条件">P0（影响飞行安全或定理成立条件）</h3>
+<p>本轮<strong>未发现 P0</strong>。特别说明：核对中重点复核了“F(β,V) 与
+F(V,β) 的符号是否与秦书相反”这一 易误判点，按 §2.4 E-1～E-4
+的等价变换换算后与 (9.8.3)/(9.8.13)
+逐块一致，属<strong>等价变换</strong>而非缺陷。</p>
+<h3
+id="p1精度鲁棒性可维护性不直接危及安全">P1（精度/鲁棒性/可维护性，不直接危及安全）</h3>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1-1</td>
+<td><code>transforms.h::dcm2quat()</code></td>
+<td><code>w=½√(1+tr C)</code> + <code>/(4w)</code> 在 tr(C)→−1（180°
+旋转）时数值退化</td>
+<td>当前库内无调用点；启用后会得坏四元数</td>
+<td>改为“选 trace 最大主分量”分支法并补 180° 用例；已加
+<code>@deviation</code></td>
+</tr>
+<tr>
+<td>P1-2</td>
+<td><code>utils.h::WrapToPi()</code></td>
+<td>只做一次 2π 归位，仅保证 (−3π,3π) 输入落回主值</td>
+<td>外部传大角度会返回非主值；EKF 内部另用
+<code>WrapAngleRad()</code>（fmod）不受影响</td>
+<td>已在 <code>@note</code> 写明边界；若外部启用需改为 fmod 版</td>
+</tr>
+<tr>
+<td>P1-3</td>
+<td><code>earth_model.h::normalgravity_mps2()</code>、<code>ComputeEarthModelTerms()</code></td>
+<td>级数式与 (7.2.17) Somigliana 闭式差 ~1e-5 m/s²</td>
+<td>远小于 MEMS 加计零偏（~1e-2），高度通道无系统偏差</td>
+<td>保留（<code>@deviation</code> 登记）；如换高精度 IMU 再评估</td>
+</tr>
+<tr>
+<td>P1-4</td>
+<td><code>ekf_15_state.h</code> 延迟回放 +
+<code>BFS_NAVIGATION_EMBEDDED_DISABLE_GNSS_DELAY_REPLAY</code></td>
+<td>该宏置 1 时缓冲缩为 1 格，带年龄的 GNSS 更新会被
+<code>require_delayed_snapshot</code> 路径全部拒绝</td>
+<td>误当“禁用回放”使用会导致纯惯导</td>
+<td>文件头 <code>@note</code> 已写明；建议在 platformio.ini
+注释同步</td>
+</tr>
+<tr>
+<td>P1-5</td>
+<td><code>ekf_15_state.h::ApplyVelocityUpdateDetailed()</code></td>
+<td>ZUPT 残差门使用 EKF 自身速度（自指判据），无外部参照</td>
+<td>长时间失联期可能自洽错误</td>
+<td>已引 REF-121 §8.2.3
+p.291；根治需外部速度参照（上层门控，非本文件改动）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="p2注释引用工具链">P2（注释/引用/工具链）</h3>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P2-1</td>
+<td><code>tools/check-code-comments.py::CODE_HINT</code></td>
+<td>任务期间该文件的第三分支 <code>^\s*[\w.\[\]]+\s*=\s*[^=]</code>
+被外部删除（文件变为未跟踪状态），R04 判定范围缩小</td>
+<td>注释掉的赋值型代码不再被检出；本区域仍全绿，但全仓 R04
+基线会漂移</td>
+<td>由 Lead 确认该工具改动的归属，恢复第三分支后重跑全仓 R04</td>
+</tr>
+<tr>
+<td>P2-2</td>
+<td><code>ekf_15_state.h</code>、<code>aid_source_status.h</code></td>
+<td>任务开始时工作区已含未提交的 P0-1 子集 FDI / 航向 consider /
+光流重锚逻辑改动；任务期间另有并发改动给
+<code>delta_theta_rad</code>/<code>delta_v_body_mps</code> 加了两处
+<code>const</code></td>
+<td>以 <code>git HEAD</code> 比对会看到代码差异，易误判为本轮引入</td>
+<td>本轮以“任务开始时备份”+ 去注释比对确认：除上述两处并发
+<code>const</code> 外无任何代码 token 变化（见 §5）</td>
+</tr>
+<tr>
+<td>P2-3</td>
+<td>注释与核查记录</td>
+<td>历史 notes 使用行号引用（如 <code>:2275-2280</code>）</td>
+<td>重构后失效</td>
+<td>本轮新增注释一律用符号名；核查记录同</td>
+</tr>
+<tr>
+<td>P2-4</td>
+<td><code>transforms.h</code>、<code>earth_model.h</code>、<code>ekf_15_state.h</code></td>
+<td>基线 12 处“公式样式伪代码”注释块（<code>Rn = a/√(...)</code>
+等）触发 R04 误报</td>
+<td>lint warning</td>
+<td>已改写为 Doxygen <code>@formula</code> 形式，warning
+清零；同时保留原工程说明</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-未决问题">4 未决问题</h2>
+<ol type="1">
+<li><strong>φ=C^n_b·δβ 的直接数值回归缺失</strong>：当前靠推导 + T7/T8
+间接覆盖。建议增加一个 host 断言： 构造已知小角度姿态误差，检查
+<code>F(β,V)</code> 与 <code>F(V,β)</code> 作用方向与手算一致（可作为
+fw-tests 的后续任务）。</li>
+<li><strong>磁偏角</strong>：<code>TiltCompass()</code>/<code>MeasurementUpdateYaw()</code>
+的航向量测以磁北为基准，磁偏角未建模； 与 GNSS
+航向/双矢量航向混用时会产生常值偏置（不在本轮范围）。</li>
+<li><strong>GNSS
+延迟常量的静态假设</strong>：<code>BFS_NAVIGATION_GNSS_DELAY_S=0.015</code>
+是编译期估计；PPS 标定与
+在线估计（<code>ins_gnss_delay_auto.h</code>）的接入点不在本文件，需在导航任务层核对。</li>
+<li><strong><code>dcm2quat()</code> 与 <code>WrapToPi()</code>
+的边界用例</strong>：当前无调用点/无测试；若后续启用，需补回归。</li>
+</ol>
+<hr />
+<h2 id="5-门禁与测试">5 门禁与测试</h2>
+<h3 id="51-gov-004-lint">5.1 GOV-004 lint</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--area</span> fw-ekf <span class="at">--check</span></span></code></pre></div>
+<ul>
+<li>核查前：8 文件，平均分 55.0，<strong>error 13 / warning
+20</strong>（R01=8、R04=12、R07=5、R09=8）</li>
+<li>核查后：8 文件，平均分 <strong>100.0</strong>，<strong>error 0 /
+warning 0</strong>，退出码 <strong>0</strong></li>
+</ul>
+<h3 id="52-语法检查编译阻塞回归">5.2 语法检查（编译阻塞回归）</h3>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-fsyntax-only</span> <span class="at">-D_USE_MATH_DEFINES</span> <span class="at">-DEKF_HOST_REGRESSION</span> <span class="dt">\</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">-Iinclude</span> <span class="at">-Ilib</span>/eigen/src <span class="at">-Isrc</span> <span class="at">-Ilib</span>/navigation-main/src <span class="at">-Ilib</span>/units/src <span class="dt">\</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>    test_host/test_ekf_15state.cpp</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="co"># 同样命令对 test_ekf_aiding_velocity.cpp / test_ekf_bias_static.cpp</span></span></code></pre></div>
+<p>结果：三者均 <strong>无输出、退出码 0</strong>。</p>
+<blockquote>
+<p>任务中期曾出现
+<code>stray '@' in program</code>：<code>MeasurementUpdateDetailed()</code>
+的 <code>@return</code> 行写作 <code>subset_*/NIS</code>，其中
+<code>*/</code> 提前闭合了 Doxygen 块。已改为
+<code>subset_* 与 NIS</code>，并对全区域 检索了注释内
+<code>*/</code>/<code>/*</code> 片段（仅此一处异常）。</p>
+</blockquote>
+<h3 id="53-宿主回归">5.3 宿主回归</h3>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O2</span> <span class="at">-DEKF_HOST_REGRESSION</span> <span class="at">-D_USE_MATH_DEFINES</span> <span class="dt">\</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="at">-Iinclude</span> <span class="at">-Ilib</span>/eigen/src <span class="at">-Isrc</span> <span class="at">-Ilib</span>/navigation-main/src <span class="at">-Ilib</span>/units/src <span class="dt">\</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    test_host/test_ekf_15state.cpp lib/units/src/convang.cpp <span class="dt">\</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp <span class="at">-o</span> /tmp/tv_bin2/ekf_15state.exe</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a><span class="ex">./ekf_15state.exe</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>测试</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_ekf_15state.cpp</code></td>
+<td><strong>36 通过 / 0 失败</strong>（T1–T11）</td>
+</tr>
+<tr>
+<td><code>test_ekf_aiding_velocity.cpp</code></td>
+<td><strong>16 pass / 0 fail</strong></td>
+</tr>
+<tr>
+<td><code>test_ekf_bias_static.cpp</code></td>
+<td>退出码 0（seed=1 mode=1 输出正常）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="54-代码-token-不变性">5.4 代码 token 不变性</h3>
+<p>方法：自写 C++ 注释剥离器（处理
+<code>//</code>、<code>/* */</code>、字符串/字符字面量），比较“去注释后的代码行序列”。</p>
+<ul>
+<li>6
+个文件（<code>constants.h</code>、<code>earth_model.h</code>、<code>navigation.h</code>、<code>tilt_compass.h</code>、<code>transforms.h</code>、<code>utils.h</code>）：
+<strong>与 git HEAD 去注释后完全一致</strong>。</li>
+<li><code>ekf_15_state.h</code>：<strong>与任务开始时备份去注释后 2962
+行代码完全一致</strong>，仅差异为并发改动新增的两处
+<code>const</code>（<code>delta_theta_rad</code>、<code>delta_v_body_mps</code>），非本
+Agent 修改。</li>
+<li><code>aid_source_status.h</code>：<code>git diff</code>
+中唯一的代码差异是任务前已有的 P0-1 字段
+（<code>subset_position</code>/<code>subset_velocity</code>/<code>nis_pos3</code>/<code>nis_vel3</code>），本
+Agent 只改文件头与 <code>MarkAvailable()</code> 的注释块。</li>
+</ul>
+<p>结论：本轮为<strong>纯注释/文档改动</strong>，未修改任何逻辑、宏值、阈值、状态维数或矩阵索引。</p>
+<hr />
+<h2 id="6-重新生成命令">6 重新生成命令</h2>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 门禁</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--area</span> fw-ekf <span class="at">--check</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 宿主回归（全部）</span></span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS <span class="kw">&amp;&amp;</span> <span class="va">BIN_DIR</span><span class="op">=</span>/c/Users/<span class="op">&lt;</span>user<span class="op">&gt;</span>/AppData/Local/Temp/tv_bin <span class="fu">bash</span> test_host/run_all.sh</span></code></pre></div>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-EKF-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>

@@ -1,6 +1,18 @@
-// ============================================================
-//  HUD 仪表与遥测数据显示
-// ============================================================
+/**
+ * @file    hud.mjs
+ * @module  仿真 browser/HUD
+ * @brief   六维力/力矩条形表与数字遥测的 DOM 渲染
+ * @details 输入：core/telemetry 的遥测快照；处理：按通道满量程归一化条宽、
+ *          更新数字文本与告警颜色；输出：DOM 内容。
+ *          不变量：HUD 只读快照，不写 sim；量程 CH[].max 是显示契约而非物理上限。
+ * @theory  N/A（显示层）；欧拉角直接显示 telemetry 的显示角（theta 取负约定）
+ *          @ref MOD-002 §4（HUD 已把负号纳入操作者习惯）
+ * @frame   显示机体系力/力矩；姿态角为项目显示约定（非标准 3-2-1）
+ * @units   力 N、力矩 N·m、转速 rad/s、空速 m/s、高度 m、姿态 °、时间 s
+ * @note 姿态显示直接用 57.3 系数把 rad 转 °——不要在这里"修正"符号，
+ *       否则与 SAS 的显示角语义分叉（红线：theta=−asin(R13) 全链一致）
+ * @see     core/telemetry.mjs（数据来源）、main.js（每 3 帧同步一次）
+ */
 
 const CH = [
   { id: 'Fx', name: 'F_x 纵向力',  color: '#22d3ee', max: 40,  unit: 'N',   bipolar: false },
@@ -11,6 +23,13 @@ const CH = [
   { id: 'Mz', name: 'M_z 推进偏航矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
 ];
 
+// @note 双向条（bipolar）从中线向两侧生长：正负力矩方向是操作者判读的主要信息
+// @note 差速对消判定阈值 0.02 N·m 是显示级阈值（零摆角附近的反扭残差），不用于控制
+/**
+ * @brief 在容器内生成六条力/力矩仪表并返回同步函数
+ * @param {HTMLElement} box 仪表容器（#meters）
+ * @returns {{sync: Function}} sync(t) 接收 core/telemetry 的遥测快照
+ */
 export function createHud(box) {
   const $ = id => document.getElementById(id);
   const meterEls = {};

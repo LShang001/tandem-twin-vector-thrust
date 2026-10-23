@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>FW-INFRA 代码理论核查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1
+id="代码理论核查记录--fw-infra主循环--通信--传感器外设--调度--参数与变量注册">代码理论核查记录
+— fw-infra（主循环 / 通信 / 传感器外设 / 调度 / 参数与变量注册）</h1>
+<blockquote>
+<p>核查日期：2026-10-23 ｜ 执行：fw-infra（子 Agent）｜ 规范：<a
+href="../governance/GOV-004.html">GOV-004</a>
+代码基线：<code>6784221</code>（工作区含未提交改动：<code>ano_vars.cpp</code>
+/ <code>state_data.cpp</code> / <code>state_data.h</code> 的功能性新增
+为<strong>他人既有改动</strong>，非本区域本次产物；本次仅新增/修订注释与本文档）
+说明：核查期间工作区同时存在其他区域的并发改动（gcs / fw-nav /
+fw-control / fw-tests）， 本记录只对本区域 29
+个文件的注释与协议一致性负责，不对其他区域改动背书。
+理论来源：本区域几乎无理论公式，<code>@theory</code> 一律
+<code>N/A</code>；协议与设计来源为
+协议/设计文档：<code>TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md</code>、<code>TandemVec_FCS/docs/COMM-001-数传通信链路优化方案.md</code>、<code>TandemVec_FCS/docs/GCS-001-上位机与参数在线读写方案.md</code>、<code>TandemVec_FCS/docs/C路径-参数集中与遥测结构化方案.md</code>、<code>TandemVec_FCS/docs/mavlink-ref/</code>、根
+<code>AGENTS.md</code> 踩坑记录 方法：逐文件读代码 →
+对照协议章节/发送端符号 → 跨区域只读核对（注册表 vs 上位机）→ 测试复跑 →
+补注释 → lint 复检 → <code>git diff</code> 行为审计</p>
+</blockquote>
+<hr />
+<h2 id="1-范围与覆盖率">1 范围与覆盖率</h2>
+<p>29 个文件 / 12 855 行（含本次新增注释 714 行）。L0 文件头 29/29
+覆盖；L1 文档块按“导出函数 + 超 10 行内部函数”补齐；全文
+<code>@ref</code> 引用 47 行（含单行多引用）。表中“L1”列为
+<code>@brief</code> 计数。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>行数</th>
+<th>L0</th>
+<th>L1（@brief 数）</th>
+<th>@ref</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/main.cpp</code></td>
+<td>545</td>
+<td>有（新）</td>
+<td>2</td>
+<td>1</td>
+<td>补初始化/任务注册/主循环；加频率总表；去 BOM（见 P2-4）</td>
+</tr>
+<tr>
+<td><code>src/communication.cpp</code></td>
+<td>3450</td>
+<td>有（新）</td>
+<td>31</td>
+<td>12</td>
+<td>双环 L1 表、0x01/0x03/0x0A/0x21/0x0D/0x30/0xF1
+字段表、0x00/0xE3/0xF2/0xF3 字段</td>
+</tr>
+<tr>
+<td><code>src/communication.h</code></td>
+<td>331</td>
+<td>有（补）</td>
+<td>37</td>
+<td>2</td>
+<td>旧“4 组 50Hz 轮发”描述废止，改为双环分档表</td>
+</tr>
+<tr>
+<td><code>src/can_bus.cpp</code></td>
+<td>203</td>
+<td>有（补）</td>
+<td>1</td>
+<td>1</td>
+<td>8 帧轮发表、Flash 写页互斥、float 小端约定</td>
+</tr>
+<tr>
+<td><code>src/can_bus.h</code></td>
+<td>70</td>
+<td>有（补）</td>
+<td>3</td>
+<td>1</td>
+<td>ID 分配与单位、Flash 互斥门控</td>
+</tr>
+<tr>
+<td><code>src/mavlink_bridge.cpp</code></td>
+<td>298</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>双向桥 L0；短名映射（≤15B）与 rc_* 说明</td>
+</tr>
+<tr>
+<td><code>src/mavlink_bridge.h</code></td>
+<td>32</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>互斥/命令拒绝红线</td>
+</tr>
+<tr>
+<td><code>src/ubx_config.cpp</code></td>
+<td>623</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>UBX 帧与校验、探测 300ms/ACK 500ms、阻塞调用约束</td>
+</tr>
+<tr>
+<td><code>src/ubx_config.h</code></td>
+<td>204</td>
+<td>有（新）</td>
+<td>13</td>
+<td>1</td>
+<td>配置结果/选项/NMEA 枚举；默认配置注释中文化（R06）</td>
+</tr>
+<tr>
+<td><code>src/task_scheduler.cpp</code></td>
+<td>376</td>
+<td>有（补）</td>
+<td>5</td>
+<td>1</td>
+<td>统计口径即“软超时”；tick 单位纠正（0.5ms）</td>
+</tr>
+<tr>
+<td><code>src/task_scheduler.h</code></td>
+<td>87</td>
+<td>有（补）</td>
+<td>8</td>
+<td>1</td>
+<td>超时/看门狗语义（调度器不喂狗，IWDG 在 main）</td>
+</tr>
+<tr>
+<td><code>src/task_scheduler_interval.h</code></td>
+<td>102</td>
+<td>有（新）</td>
+<td>3</td>
+<td>1</td>
+<td>Q8 分数 tick 的 L1/L2（7.735ms 来源）</td>
+</tr>
+<tr>
+<td><code>src/ano_params.cpp</code></td>
+<td>376</td>
+<td>有（新）</td>
+<td>4</td>
+<td>1</td>
+<td>注册表宏展开、ID=下标不变量、NaN 拒绝</td>
+</tr>
+<tr>
+<td><code>src/ano_params.h</code></td>
+<td>74</td>
+<td>有（新）</td>
+<td>2</td>
+<td>1</td>
+<td>0xE0/0xE1/0xE2 字段表；计数统一 128</td>
+</tr>
+<tr>
+<td><code>src/ano_vars.cpp</code></td>
+<td>315</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>三坑写入 L0；0xF2/0xF3 帧格式</td>
+</tr>
+<tr>
+<td><code>src/ano_vars.h</code></td>
+<td>35</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>0xF2 6B / 0xF3 20B</td>
+</tr>
+<tr>
+<td><code>src/sensor_peripheral.cpp</code></td>
+<td>1861</td>
+<td>有（新）</td>
+<td>7</td>
+<td>1</td>
+<td>DPS310 时序、光流双通道新鲜度、UART7 相位表</td>
+</tr>
+<tr>
+<td><code>src/sensor_peripheral.h</code></td>
+<td>157</td>
+<td>有（补）</td>
+<td>12</td>
+<td>1</td>
+<td>光流几何补偿公式与两通道约束</td>
+</tr>
+<tr>
+<td><code>src/state_data.cpp</code></td>
+<td>685</td>
+<td>有（补）</td>
+<td>2</td>
+<td>2</td>
+<td><code>applyFlightCtrlParams()</code> 无扰语义；公式行去 R04
+误报</td>
+</tr>
+<tr>
+<td><code>src/state_data.h</code></td>
+<td>850</td>
+<td>有（补）</td>
+<td>3</td>
+<td>5</td>
+<td><code>SERIAL6_BAUDRATE</code> 唯一源 + COMM-001
+引用；<code>OpticalFlowData</code>/<code>Task</code> L1</td>
+</tr>
+<tr>
+<td><code>src/deta100_types.h</code></td>
+<td>217</td>
+<td>有（补）</td>
+<td>9</td>
+<td>1</td>
+<td>结构布局=协议解析的不变量</td>
+</tr>
+<tr>
+<td><code>src/icm45686_ins_fast_covariance_blocks.h</code></td>
+<td>153</td>
+<td>有（新）</td>
+<td>1</td>
+<td>2</td>
+<td>EKF 协方差块展开：等价性 + Qc 正交阵假设</td>
+</tr>
+<tr>
+<td><code>include/AnoVars.h</code></td>
+<td>181</td>
+<td>有（补）</td>
+<td>1</td>
+<td>1</td>
+<td>三坑 @note；名称 16B / watch 16 约束</td>
+</tr>
+<tr>
+<td><code>include/StatusLED.h</code></td>
+<td>110</td>
+<td>有（新）</td>
+<td>2</td>
+<td>1</td>
+<td>非阻塞闪烁</td>
+</tr>
+<tr>
+<td><code>include/Ws2812AppStatus.h</code></td>
+<td>223</td>
+<td>有（新）</td>
+<td>3</td>
+<td>1</td>
+<td>只渲染不判定；上电无信号 vs 断链</td>
+</tr>
+<tr>
+<td><code>include/MedianFilter.h</code></td>
+<td>238</td>
+<td>有（新）</td>
+<td>9</td>
+<td>1</td>
+<td>窗口奇偶/未填满语义/开销</td>
+</tr>
+<tr>
+<td><code>include/DETA100_module.h</code></td>
+<td>526</td>
+<td>有（补）</td>
+<td>12</td>
+<td>1</td>
+<td>双 CRC、帧定界靠长度；删除 4B 旧 <code>parseTimestamp</code>
+注释代码</td>
+</tr>
+<tr>
+<td><code>analyze_ano.py</code></td>
+<td>349</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>协议标签补全；4 个公共函数补 docstring；50Hz→100Hz 说明</td>
+</tr>
+<tr>
+<td><code>analyze_ano.js</code></td>
+<td>184</td>
+<td>有（新）</td>
+<td>1</td>
+<td>1</td>
+<td>同上（JS 头注释）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-核对矩阵以协议字段--频率--id为主">2 核对矩阵（以“协议字段 /
+频率 / ID”为主）</h2>
+<p>结论枚举：<code>一致</code> / <code>等价变换后一致</code> /
+<code>近似（可接受）</code> / <code>偏差（已登记）</code> /
+<code>不一致（待修）</code>。</p>
+<h3 id="21-调度与遥测频率">2.1 调度与遥测频率</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-01</td>
+<td><code>handleAnoCom</code></td>
+<td>200Hz tick 双环：快环 100Hz
+<code>t%2==1</code>（0x01/0x03/0x0A/0x21/0xF1）；位置 50Hz
+<code>t%4==2</code>；RC 25Hz <code>t%8==4</code>；显示 25Hz
+<code>t%8==6</code>；GPS·氧压 10Hz <code>t%20==10</code></td>
+<td>COMM-001 §3、AGENTS.md 踩坑记录（遥测双环）</td>
+<td>一致</td>
+<td>代码取模表达式；慢环余数 2/4/6/10 互不相同；快环占奇数 tick</td>
+<td>补 L1 频率表</td>
+</tr>
+<tr>
+<td>A-02</td>
+<td><code>handleAnoCom</code> / <code>AnoComProtocol</code></td>
+<td>组模式 <code>beginGroup/endGroup</code> 同 tick 多帧合并<strong>单次
+write</strong></td>
+<td>COMM-001 §4 A3</td>
+<td>一致</td>
+<td><code>lib/AnoComProtocol/AnoComProtocol.cpp</code>
+<code>endGroup()</code>；<code>test_host/test_anocom_packing.cpp</code>
+A3（3 帧 → 1 次 write，字节流与逐帧一致，44B）</td>
+<td>补注释</td>
+</tr>
+<tr>
+<td>A-03</td>
+<td><code>handleAnoCom</code></td>
+<td>TX 余量守卫 <code>availableForWrite() &lt; 190</code>（最坏同拍组
+≈175B）</td>
+<td>代码内 2026-08-10 审查记录</td>
+<td>一致</td>
+<td>守卫值与 RC20+disp86+pos20+gps31+volt18=175B 自洽</td>
+<td>补 L2</td>
+</tr>
+<tr>
+<td>A-04</td>
+<td><code>SERIAL6_BAUDRATE</code>（<code>state_data.h</code>）</td>
+<td>地面站波特率 921600，唯一事实源；无 2000000 硬编码</td>
+<td>COMM-001 §2 决策 D1、§3（利用率 ~12.5%）</td>
+<td>一致</td>
+<td><code>main.cpp</code>
+<code>Serial6.begin(SERIAL6_BAUDRATE)</code>；<code>grep 2000000</code>
+固件 src/include 无命中</td>
+<td>补 @ref；工具脚本见 P1-2</td>
+</tr>
+<tr>
+<td>A-05</td>
+<td><code>setup()</code> 任务注册表</td>
+<td>2kHz / ~129Hz（7.735ms）/ 500Hz / 200Hz / 100Hz / 50Hz / 25Hz / 10Hz
+分档</td>
+<td>main.cpp 注册段、COMM-001 §3</td>
+<td>一致</td>
+<td>新增“频率总表”注释与逐行注册值逐项对应</td>
+<td>补 L2 表</td>
+</tr>
+<tr>
+<td>A-06</td>
+<td><code>timerCallback</code> / <code>addTaskNamed</code></td>
+<td>tick 单位
+0.5ms（<code>interval*2</code>），<code>currentCount</code> 为
+uint32（溢出 ~248 天）</td>
+<td>代码</td>
+<td>一致</td>
+<td>原头注释“05ms”为排版笔误，已改 0.5ms</td>
+<td>修注释</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-anocom-帧格式与功能码">2.2 AnoCom 帧格式与功能码</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B-01</td>
+<td><code>buildFrame</code></td>
+<td>帧结构
+<code>AB / src / dst / func / lenL lenH / data / SC / AC</code>（小端）</td>
+<td>PROTOCOL-001 §一.1</td>
+<td>一致</td>
+<td>偏移 0..5 为头、6..6+len 为数据、6+len 与 7+len 为 SC/AC；返回
+<code>len+8</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>B-02</td>
+<td><code>buildFrame</code></td>
+<td>SC = 逐字节和；AC = “和的和”（均低 8 位，单循环边拷边算）</td>
+<td>PROTOCOL-001 §一.1 校验示例</td>
+<td>一致</td>
+<td><code>test_anocom_packing.cpp</code> A2
+与独立参考实现逐字节一致</td>
+<td>—</td>
+</tr>
+<tr>
+<td>B-03</td>
+<td><code>sendIMUData</code>（发送端）+ <code>handleAnoCom</code></td>
+<td>0x01 13B：ACC int16×3 [cm/s²]（×100）、GYR int16×3（32768↔︎2000
+deg/s，×16.384）、SHOCK u8</td>
+<td>PROTOCOL-001 §二.1.1</td>
+<td>一致</td>
+<td><code>AnoComProtocol.cpp</code> <code>sendIMUData</code> 内
+<code>*100.0f</code> 与 <code>GYRO_SCALE_FACTOR=16.384</code></td>
+<td>补字段表</td>
+</tr>
+<tr>
+<td>B-04</td>
+<td><code>sendAttitudeEuler</code></td>
+<td>0x03 7B：ROL/PIT/YAW int16 ×100 [deg] + FUSION_STA u8</td>
+<td>PROTOCOL-001 §二.1.3</td>
+<td>等价变换后一致</td>
+<td>字段数与缩放一致；FUSION_STA 为工程自定义位域（bit7 DETA100 在线 /
+bit6 数据源 / 低 6 位 EKF 状态）</td>
+<td>补位域说明</td>
+</tr>
+<tr>
+<td>B-05</td>
+<td><code>sendTargetAttitude</code></td>
+<td>0x0A 6B：3×int16 ×100；<strong>第 3 字段承载目标航向角速率
+[deg/s]</strong>，手册为目标航向角</td>
+<td>PROTOCOL-001 §二.1.9</td>
+<td>偏差（已登记）</td>
+<td>固件 <code>gnc_tel.omega_ref_dps[2]*100</code>；GCS
+<code>decode_target_attitude</code> 注释同口径</td>
+<td>差值已注明，见 P2-1</td>
+</tr>
+<tr>
+<td>B-06</td>
+<td><code>sendAttitudeControl</code></td>
+<td>0x21 8B：4×int16 ±5000；本工程 =
+<code>alpha_ref_radps2×10</code>（rad/s²）+ 油门%×10</td>
+<td>PROTOCOL-001 §二.2.2 + 差异表</td>
+<td>等价变换后一致</td>
+<td>传输 <code>rad/s²</code>×10，量程 ±500 rad/s²；顺序
+(rol,pit,thr,yaw) 有防错位注释</td>
+<td>补字段表</td>
+</tr>
+<tr>
+<td>B-07</td>
+<td><code>sendPWMOutput</code> 调用点</td>
+<td>0x20 16B：8×u16，ch3/ch4 = 电机输出 %×100（0-10000，0.01%）</td>
+<td>PROTOCOL-001 §二.2.1 + 差异表</td>
+<td>一致</td>
+<td><code>constrain(ch3_output*100, 0, 10000)</code>；2026-08-10
+数据归位</td>
+<td>—</td>
+</tr>
+<tr>
+<td>B-08</td>
+<td><code>sendRCData</code></td>
+<td>0x40 20B：10×u16 raw µs（手册为
+10×int16，且方向为“地面站→飞控”）</td>
+<td>PROTOCOL-001 §二.4.1 + 差异表</td>
+<td>等价变换后一致</td>
+<td>字节宽度一致；本工程为回传方向，上行不处理</td>
+<td>—</td>
+</tr>
+<tr>
+<td>B-09</td>
+<td><code>sendVoltCurr</code> 调用点</td>
+<td>0x0D 10B：5×u16；bat V×100、A×100（真实 ADC）；<strong>fc
+两字段占用为发动机氧压 P1/P2</strong></td>
+<td>PROTOCOL-001 §二.1.13 + 差异表</td>
+<td>偏差（已登记）</td>
+<td><code>bat_voltage_mv/1000</code>、<code>bat_current_ca/10</code> 再
+×100；<code>receivedP1/P2</code> 进 fc 槽</td>
+<td>补 @ref</td>
+</tr>
+<tr>
+<td>B-10</td>
+<td><code>sendGPSInfo1</code> 调用点</td>
+<td>0x30 23B：经纬 ×1e7、高度 ×100、NED 速度
+×100、<strong>pdop/vacc/sacc ×10</strong>、fix/sv u8</td>
+<td>PROTOCOL-001 §二.3.1 + 差异表</td>
+<td>一致</td>
+<td><code>ano</code> 发送端 <code>pdop*10</code>；实参顺序
+<code>(pdop, sacc, vacc)</code> 有 2026-08-10 修复注释</td>
+<td>—</td>
+</tr>
+<tr>
+<td>B-11</td>
+<td><code>handleAnoCom</code> 快环执行器块</td>
+<td>0xF1 12B：上/下摆 ×100 deg(i16)、前/尾电机
+%×10(u16)、Δω×1000(i16)、饱和 u8、预留 u8</td>
+<td>PROTOCOL-001 §一.3（灵活格式帧）</td>
+<td>一致（自定义）</td>
+<td><code>put16</code> 逐字段小端；<code>anoCtrlSafe</code> 防 NaN</td>
+<td>补字段表</td>
+</tr>
+<tr>
+<td>B-12</td>
+<td><code>anoVarsSendTick</code></td>
+<td>0xF2 6B：<code>[id u16 LE][float LE]</code>；<code>200/rate</code>
+tick 节流、watch 轮转</td>
+<td>PROTOCOL-001 §六（灵活帧自定义语义）</td>
+<td>一致（自定义）</td>
+<td><code>period = 200/rate_hz</code>；<code>s_vars_idx</code> 轮转</td>
+<td>—</td>
+</tr>
+<tr>
+<td>B-13</td>
+<td><code>anoVarsHandleList</code></td>
+<td>0xF3 应答 20B = CMD(1)+ID(2)+TYPE(1)+NAME(16)；count 应答
+3B，只读不回校验帧</td>
+<td>AGENTS.md 三坑③ / 仿 0xE2</td>
+<td>一致</td>
+<td>缓冲
+<code>tx[1+2+1+16]</code>；<code>memset(&amp;tx[4],0,16)</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-参数链路0xe00xe3与注册表">2.3
+参数链路（0xE0–0xE3）与注册表</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-01</td>
+<td><code>anoParamsHandleRx</code> 0xE0</td>
+<td>CMD 0x00 设备信息（上层回 0xE3）/0x01 个数/0x02 读值/0x03
+读信息/0x10 0xAA 恢复默认·0xAB 保存</td>
+<td>PROTOCOL-001 §四.1 命令表</td>
+<td>一致</td>
+<td><code>switch(cmd)</code> 五分支；0x00 由 <code>onAnoRxFrame</code>
+应答</td>
+<td>—</td>
+</tr>
+<tr>
+<td>C-02</td>
+<td><code>onAnoRxFrame</code> + <code>ano_params</code> 0xE1</td>
+<td>0xE1 <code>[PAR_ID u16][PAR_VAL 定长]</code>；写后回 0x00
+校验帧（真实 SC/AC）</td>
+<td>PROTOCOL-001 §四.2</td>
+<td>一致</td>
+<td><code>AnoCom.sendDataCheck(funcCode, rxSumCheck, rxAddCheck)</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>C-03</td>
+<td><code>anoParamsHandleRx</code> 0xE2</td>
+<td><code>[ID u16][TYPE u8][NAME 20B]</code>；TYPE=FLOAT(8)/UINT8(0)</td>
+<td>PROTOCOL-001 §四.3 + PAR_TYPE 表</td>
+<td>一致</td>
+<td>23B DATA；名称补 0x00 定长</td>
+<td>—</td>
+</tr>
+<tr>
+<td>C-04</td>
+<td><code>onAnoRxFrame</code> 0xE3</td>
+<td><code>DEV_ID u8 + HW/SW/BL/PT 各 i16 + NAME 20B</code> = 29B
+DATA</td>
+<td>PROTOCOL-001 §四.4</td>
+<td>一致</td>
+<td><code>sendDeviceInfo</code> 数据区 <code>1+8+20</code>；守卫
+<code>availableForWrite()&gt;=40</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>C-05</td>
+<td><code>kAnoParams</code>（128 项） vs
+<code>GCS/server/params.py::expected_names()</code></td>
+<td>名称<strong>与顺序</strong>逐项一致（ID 即下标）</td>
+<td>AGENTS.md 关键路径（注册表 ID 顺序须同步）</td>
+<td>一致</td>
+<td>只读复核脚本：展开宏列表 vs <code>expected_names()</code> →
+<code>firmware=128 gcs=128 mismatch: NONE</code>；GCS
+<code>tests/test_params_and_link.py</code> 断言 128/唯一</td>
+<td>矩阵留证</td>
+</tr>
+<tr>
+<td>C-06</td>
+<td><code>ANO_PARAMS_COUNT</code> / 名称长度</td>
+<td>128 = 12 环×9 + 12 滤波 alpha（含 spd2 ×3）+ 掩码 + rc_* 7；线上名
+≤20B（<code>falpha</code> 短名）</td>
+<td>PROTOCOL-001 §四.3（PAR_NAME 20B）</td>
+<td>一致</td>
+<td><code>static_assert</code> 数量校验；<code>PID_ALPHA</code> 用
+<code>loop.falpha</code></td>
+<td>统一注释计数（P2-5）</td>
+</tr>
+<tr>
+<td>C-07</td>
+<td>0x10/0xAB 保存</td>
+<td>收到即回校验帧，<strong>参数无持久化</strong>（重启回
+<code>kFlightCtrlParamsDefaults</code>）</td>
+<td>PROTOCOL-001 §四.1（0xAB 语义为“保存”）</td>
+<td>偏差（已登记）</td>
+<td><code>ano_params.cpp</code> 0xAB 分支仅返回 true；注释说明无需处理旧
+Flash 值</td>
+<td>文档已述，P2 备注</td>
+</tr>
+<tr>
+<td>C-08</td>
+<td><code>applyFlightCtrlParams</code></td>
+<td>写参数后同步 12 PID + 12 滤波器，保留积分/滤波状态（无扰）</td>
+<td>GCS-001 §2、C路径 §4.3</td>
+<td>一致</td>
+<td>12 个 <code>applyPid</code> + 12 个
+<code>setAlpha</code>；<code>setIntegralEnable(enabled)</code></td>
+<td>补 L1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-anovars0xf20xf3">2.4 AnoVars（0xF2/0xF3）</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td><code>kAnoVars</code></td>
+<td>注册表定义 <code>extern const</code>
+且<strong>不带数组大小</strong>（否则 sizeof 虚高/遍历空项崩）</td>
+<td>AGENTS.md 三坑①</td>
+<td>一致</td>
+<td><code>extern const AnoVarEntry kAnoVars[] = {...}</code> +
+<code>static_assert(sizeof/sizeof &lt;= MAX)</code></td>
+<td>三坑写入 L0</td>
+</tr>
+<tr>
+<td>D-02</td>
+<td><code>AnoVarEntry::fptr</code></td>
+<td><code>const volatile float *</code>，兼容 ISR 写入的
+<code>bat_voltage_mv</code></td>
+<td>AGENTS.md 三坑②</td>
+<td>一致</td>
+<td>结构体字段声明</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>D-03</td>
+<td><code>anoVarsHandleList</code></td>
+<td>0xF3 应答 20B（少 1B 越界）</td>
+<td>AGENTS.md 三坑③</td>
+<td>一致</td>
+<td><code>uint8_t tx[1+2+1+16]</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td>D-04</td>
+<td>watch 上限/速率/名称</td>
+<td>watch ≤16、rate 1-200Hz、名称 ≤16B（MAVLink 侧 ≤9
+可见字符唯一）</td>
+<td><code>include/AnoVars.h</code>
+宏；AGENTS.md（<code>adps2_x/y/z</code> 命名）</td>
+<td>一致</td>
+<td><code>ANO_VARS_MAX_*</code>；<code>adps2_*</code>
+三轴截断后仍唯一</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-mavlink-桥">2.5 MAVLink 桥</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E-01</td>
+<td><code>s_mav_active</code> / <code>handleMavlink</code></td>
+<td>AnoCom 与 MAVLink 互斥：DBG <code>proto mavlink</code> 或
+<code>proto anocom</code> 运行时切换（不重烧）；mavlink 分支先
+return，AnoCom 上行解析停用</td>
+<td>AGENTS.md 踩坑记录（MAVLink 切换）</td>
+<td>一致</td>
+<td><code>handleAnoCom</code> 的
+<code>if (s_mav_active) {...return;}</code>；DBG 扫描在 mavlink
+模式跳过</td>
+<td>补 L0/L1</td>
+</tr>
+<tr>
+<td>E-02</td>
+<td><code>mavlinkSendTelemetry</code></td>
+<td>分频：1Hz（HEARTBEAT/SYS_STATUS/BATTERY）、40Hz（ATTITUDE/ATTITUDE_QUAT/RAW_IMU/NAMED_VALUE_FLOAT/DEBUG_VECT）、20Hz（GLOBAL_POSITION_INT/VFR_HUD/RC_CHANNELS_RAW）</td>
+<td><code>communication.h</code> 原注释、代码
+<code>%200/%5/%10</code></td>
+<td>一致</td>
+<td>新增分频表注释与代码逐条对应</td>
+<td>补表</td>
+</tr>
+<tr>
+<td>E-03</td>
+<td><code>mavlink_bridge.cpp</code>
+<code>handleCommandLong</code>（命令分支）</td>
+<td>246 重启放行；400 ARM / 176 SET_MODE <strong>安全拒绝</strong>；其余
+UNSUPPORTED；全部回 ACK</td>
+<td>AGENTS.md（地面站远程控制是红线）</td>
+<td>一致</td>
+<td>命令分支 + <code>COMMAND_ACK</code> 发送</td>
+<td>—</td>
+</tr>
+<tr>
+<td>E-04</td>
+<td><code>mavParamIdOfName</code> /
+<code>mavParamIdFromMavName</code></td>
+<td>param_id
+≤15B；<code>out_min→omin</code>…缩写；<code>inertia_comp_mask→inertia_mask</code>；rc_*
+原样；反查用“生成后比对”而非前缀匹配</td>
+<td><code>docs/mavlink-ref/MAVLink-参数服务.md</code></td>
+<td>一致</td>
+<td>函数内缩写表；注释说明“直接截断会冲突（实测）”</td>
+<td>更新为 128 口径</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-gnssubxnmea与数据源">2.6 GNSS（UBX/NMEA）与数据源</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F-01</td>
+<td><code>_ubx_send</code>（<code>ubx_config.cpp</code>）</td>
+<td>UBX 帧
+<code>B5 62 / cls / id / lenL lenH / payload / CK_A CK_B</code>，校验
+sum0/sum1</td>
+<td>u-blox 协议 / SparkFun 参考</td>
+<td>一致</td>
+<td>校验循环从索引 2 起（头不参与），与 UBX 规范一致</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>F-02</td>
+<td><code>ubxAutoConfig</code></td>
+<td>探测（目标优先/已固化快路径）→ CFG-PRT → CFG-RATE →
+CFG-MSG(NAV-PVT/EOE) → CFG-NAV5 → CFG-GNSS → CFG-SBAS → CFG-CFG →
+回读校验；每步独立成败</td>
+<td><code>docs/reference/sparkfun-ublox-gnss</code></td>
+<td>一致</td>
+<td><code>main.cpp</code> §1.6 调用，仅 INTERNAL
+路径；<code>kDetectWindowMs=300</code>/<code>kAckTimeoutMs=500</code> 为
+uint32</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>F-03</td>
+<td><code>ubx.SetProtocol(kAuto)</code> / <code>gpsproto</code></td>
+<td>UBX 优先 + NMEA（GGA/RMC/GSA）兜底，解析在
+<code>lib/ublox-main</code>（minmea），固件只切协议与波特率</td>
+<td><code>lib/ublox-main/src/ubx.h</code> 头注释（2026-08-09
+双协议）</td>
+<td>一致</td>
+<td>固件侧无 NMEA 解析代码，只有
+<code>SetProtocol</code>/<code>ubxcfg nmea</code>/<code>gpsproto</code></td>
+<td>补注释指向</td>
+</tr>
+<tr>
+<td>F-04</td>
+<td><code>setup()</code> DETA100 探测 / <code>loop()</code></td>
+<td>Serial4 复用：DETA100 帧头 0xFC、UBX
+0xB5；探测窗口按帧轮换喂各自解析器；DETA100 模式下 loop 不泵 UBX</td>
+<td>AGENTS.md 硬性代码边界（NavDataSource 不可更改）</td>
+<td>一致</td>
+<td>奇偶轮换
+<code>detect_toggle &amp; 0x01</code>；<code>if (nav_data_source != DETA100)</code>
+才 Pump</td>
+<td>补 L0</td>
+</tr>
+<tr>
+<td>F-05</td>
+<td><code>handleDeta100</code>（<code>main.cpp</code>）</td>
+<td>DETA100 在线判定：收帧刷新 <code>deta100_last_frame_ms</code>；超
+<code>DETA100_ONLINE_TIMEOUT_MS</code> 置离线并发 STATUSTEXT</td>
+<td><code>deta100_types.h</code> / AGENTS.md</td>
+<td>一致</td>
+<td>超时分支 + <code>mavlinkSendStatustext</code></td>
+<td>补 L1（已存在，增强）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="27-传感器外设">2.7 传感器外设</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G-01</td>
+<td><code>initDPS310</code> / <code>handleDPS310</code></td>
+<td>温度 1Hz/OSR×4、压力 128Hz/OSR×2；任务 7.735ms（分数 tick）；FIFO
+只在溢出/通信异常时清</td>
+<td><code>sensor_peripheral.h</code>、<code>main.cpp</code>
+<code>BFS_DPS310_TASK_INTERVAL_MS</code></td>
+<td>一致</td>
+<td><code>dps310_fifo_policy_test.cpp</code>
+通过；<code>task_scheduler_interval_test.cpp</code> 通过</td>
+<td>补 L1</td>
+</tr>
+<tr>
+<td>G-02</td>
+<td><code>flow_data</code> 双新鲜度</td>
+<td><code>last_update_ms</code>
+仅光流（速度）帧刷新；<code>last_range_update_ms</code> 仅测距刷新</td>
+<td>AGENTS.md 踩坑记录（2026-08-21）</td>
+<td>一致</td>
+<td>测距分支只写 <code>last_range_update_ms</code>；MSP/MAVLink
+两处注释显式说明</td>
+<td>写入 L1</td>
+</tr>
+<tr>
+<td>G-03</td>
+<td><code>handleOpticalFlowSensor</code></td>
+<td>相位扫描：LQS48@921600 → MSP@115200 → Micolink@115200 →
+MAVLink-APM@115200 → LQS48@115200 → Micolink@921600；失锁 1500ms
+重扫</td>
+<td>代码 + AGENTS.md（UART7 自动识别）</td>
+<td>一致</td>
+<td><code>FlowDetectPhase</code> 枚举与 <code>FLOW_DETECT_*</code>
+常量</td>
+<td>补 L1</td>
+</tr>
+<tr>
+<td>G-04</td>
+<td><code>handleMTF02PFlow</code> / <code>handleLQS48Flow</code></td>
+<td>几何补偿：H = S·abs(cos(tilt))；V_total = ω_flow·H；V_rot =
+H·ω_imu；V_trans = V_total − V_rot</td>
+<td><code>sensor_peripheral.h</code>
+<code>@theory</code>（自洽几何推导，非教材公式）</td>
+<td>近似（可接受）</td>
+<td>代码步骤 1/2/2.5 与公式逐项对应；无外部标准可对照</td>
+<td>标注“非教材出处”</td>
+</tr>
+<tr>
+<td>G-05</td>
+<td><code>getFilteredTVCAngles</code></td>
+<td>传感器 2 原始读数取反（安装方向补偿）</td>
+<td>代码</td>
+<td>一致</td>
+<td><code>angle2 = -raw2</code> 路径；注释显式声明非符号错误</td>
+<td>补 L1</td>
+</tr>
+</tbody>
+</table>
+<h3 id="28-状态数据与调度统计">2.8 状态数据与调度统计</h3>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>模块/符号</th>
+<th>核对对象</th>
+<th>依据</th>
+<th>结论</th>
+<th>证据</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H-01</td>
+<td><code>GncTelemetry</code>（<code>state_data.h</code> §4.0b）</td>
+<td>字段与 C路径 §4.2 一致；写入点固定在 3
+个控制函数尾部（同拍一致）</td>
+<td>C路径 §4.2</td>
+<td>一致</td>
+<td><code>gnc_tel</code> 字段逐个比对方案文档；<code>ano_vars.cpp</code>
+注册表消费同名字段</td>
+<td>补 @ref</td>
+</tr>
+<tr>
+<td>H-02</td>
+<td><code>Task</code> / <code>Timer</code> 统计</td>
+<td>名义周期 µs（注册时写入）；迟到判据 = 间隔 &gt;
+1.5×名义；<code>tasks</code> 打印后清零</td>
+<td><code>task_scheduler.cpp</code></td>
+<td>一致</td>
+<td><code>gap &gt; nominal*3/2</code> →
+<code>late_count++</code>；<code>schedulerStatsPrint</code> 末尾
+<code>schedulerStatsReset()</code></td>
+<td>补 L0 超时语义</td>
+</tr>
+<tr>
+<td>H-03</td>
+<td>IWDG 语义</td>
+<td>主循环每轮 <code>kickIwdg()</code>；3.0s 窗口（LSI 32kHz/256 ×
+reload 374 = 2.99s）；长阻塞任务需自行喂狗</td>
+<td><code>main.cpp</code> <code>initIwdg</code>；AGENTS.md（flash
+导出）</td>
+<td>一致</td>
+<td><code>initIwdg</code> 参数；<code>communication.cpp</code> export
+循环 <code>kickIwdg()</code></td>
+<td>写入调度器 L0</td>
+</tr>
+<tr>
+<td>H-04</td>
+<td>黑匣子 <code>kBbChannels[]</code></td>
+<td>13 通道唯一事实源；Serial3 CSV + Flash 双写；S 帧随段头写入</td>
+<td><code>communication.cpp</code>、GCS-001 §3</td>
+<td>一致</td>
+<td>通道表 + <code>bbSegmentNames()</code> +
+<code>setSegmentNameProvider</code></td>
+<td>补 L1</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-发现清单">3 发现清单</h2>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>位置（符号）</th>
+<th>问题</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1-1</td>
+<td><code>handleDebugConsole</code> 的 <code>wsseq</code> 分支</td>
+<td>参数解析语句被一次历史编辑并入了注释行（物理行内含字面
+<code>\n</code>），<code>ms</code> 恒 500，<code>wsseq &lt;ms&gt;</code>
+无效；整行还触发 R05 超长</td>
+<td>仅 DBG 灯效诊断：4×500ms=2s 阻塞，逼近 IWDG 3.0s
+窗口；不影响飞行</td>
+<td>已在注释中登记现状；<strong>未修</strong>（本次红线：只改注释）。修复方式：把被并入的
+<code>sscanf</code>+<code>constrain</code> 拆回语句（原表达式见 git
+历史），并入 fw-infra 后续修复任务</td>
+</tr>
+<tr>
+<td>P1-2</td>
+<td><code>TandemVec_FCS/tools/test_mavlink_bridge.py</code>（来源：gcs
+区域交叉核对）</td>
+<td><code>BAUD = 2000000</code> 与固件 921600 不一致（脚本自己 docstring
+已注明需同步）；参数条数阈值写死 121，实际 128</td>
+<td>联调会全乱码；参数收全判据误报</td>
+<td><strong>本区域不改</strong>（属 gcs/tools）；建议改为从
+<code>state_data.h</code> 读取宏或 128，并把 BAUD 默认改 921600</td>
+</tr>
+<tr>
+<td>P1-3</td>
+<td><code>GCS/server/params.py::build_meta</code>（来源：gcs
+区域交叉核对）</td>
+<td><code>FIELD_META</code> 新增 <code>rc_*</code>
+后，<code>build_meta</code> 仍按 PID 环展开 <code>out_*.rc_rate</code>
+一类永不命中的 36 条元数据</td>
+<td>前端“其他”组可能出现伪参数；不影响真参数读写</td>
+<td><strong>本区域不改</strong>（GCS 侧已登记 P1）</td>
+</tr>
+<tr>
+<td>P2-1</td>
+<td><code>sendTargetAttitude</code>（0x0A 第 3 字段）</td>
+<td>承载目标航向<strong>角速率</strong>，官方手册为目标航向角</td>
+<td>用官方上位机看“目标航向”会把 deg/s 当角度显示</td>
+<td>GCS 解码已同口径并注释；建议在 PROTOCOL-001
+差异表补一行（文档侧，非代码）</td>
+</tr>
+<tr>
+<td>P2-2</td>
+<td>COMM-001 §3 频率表</td>
+<td>把 0x0A 目标姿态列入 25Hz 组，实现（含 AGENTS.md 踩坑记录）为快环
+100Hz</td>
+<td>读者按文档核对会误判不一致</td>
+<td>以 AGENTS.md + 代码为准；建议 COMM-001 表加脚注</td>
+</tr>
+<tr>
+<td>P2-3</td>
+<td><code>analyze_ano.py</code> <code>--dt</code> 默认 0.02</td>
+<td>注释/默认值仍按 50Hz；0x03 自 2026-08-10 起为 100Hz</td>
+<td>用它算 yaw 漂移率会低估一半</td>
+<td>已在 docstring 与 docstring <code>@note</code>
+标明；默认值属脚本行为，未改（待 owner 定）</td>
+</tr>
+<tr>
+<td>P2-4</td>
+<td><code>src/main.cpp</code> 编码</td>
+<td>原文件带 UTF-8 BOM，<code>check-code-comments.py</code> 无法识别
+<code>/**</code> 文件头（R01 误报为“缺少 L0”）</td>
+<td>门禁无法通过</td>
+<td>已去除 BOM（内容零变化，不影响 GCC/PlatformIO
+编译）；若后续工具链要求 BOM 需同步修检查器</td>
+</tr>
+<tr>
+<td>P2-5</td>
+<td>多文件注释</td>
+<td>参数计数陈旧（117/121）与实际 128 不一致</td>
+<td>误导调参/联调（121→128 差 7 条 rc_*）</td>
+<td>已统一为 <code>ANO_PARAMS_COUNT</code> /
+128（<code>ano_params.h/.cpp</code>、<code>communication.cpp</code>、<code>mavlink_bridge.cpp</code>）</td>
+</tr>
+<tr>
+<td>P2-6</td>
+<td><code>task_scheduler.cpp</code> 文件头</td>
+<td>“05ms 周期/05ms 精度”排版笔误</td>
+<td>误读 tick 精度</td>
+<td>已改为 0.5ms</td>
+</tr>
+<tr>
+<td>P2-7</td>
+<td><code>include/DETA100_module.h</code></td>
+<td><code>@file</code>
+名与磁盘不一致（<code>DETA100_MODULE.h</code>）；另残留 4 字节旧
+<code>parseTimestamp</code> 注释代码（R04）</td>
+<td>注释腐烂</td>
+<td>已改正 <code>@file</code> 并删除注释代码（git 保留历史）</td>
+</tr>
+<tr>
+<td>P2-8</td>
+<td><code>src/ubx_config.h</code> 默认配置块</td>
+<td>纯英文 <code>/* target_baud */</code> 注释触发 R06</td>
+<td>规范不一致</td>
+<td>已中文化</td>
+</tr>
+<tr>
+<td>P2-9</td>
+<td><code>src/state_data.h/.cpp</code> 公式注释</td>
+<td>以 <code>X = ...</code> 开头的物理公式行被 R04
+启发式误判为“注释掉的代码”</td>
+<td>误报噪声</td>
+<td>已改写为“公式 …”“现值 …”前缀（语义不变，绕开启发式）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-未决问题">4 未决问题</h2>
+<ol type="1">
+<li><strong>0x21 的量纲表述</strong>：帧内为
+<code>rad/s²</code>×10，而控制器内部为
+<code>deg/s²</code>；两处放大链（PID 输出 → 物理边界 ×π/180 → 遥测 ×10）
+容易在文档里被读成一条。是否在 PROTOCOL-001 差异表补“0x21 =
+rad/s²×10，派生 deg/s² 由 GCS 计算”？</li>
+<li><strong>0x0A 第 3 字段语义</strong>（P2-1）：改回角度属协议变更，需
+GCS/固件同步，非本区域可决。</li>
+<li><strong><code>wsseq</code> 修复归属</strong>（P1-1）：归 fw-infra
+后续修复任务还是并入 DBG 控制台重构。</li>
+<li><strong><code>pio run</code>
+未执行</strong>：本次为纯注释改动，未跑固件全量编译（无硬件/不改变行为）；建议
+Lead 在集成时统一 <code>pio run</code> 与
+<code>bash test_host/run_all.sh</code>。</li>
+<li><strong>MAVLink 参数广播时长</strong>：128 条 @200Hz 每拍 1 条约
+0.64s；QGC 默认参数超时是否足够未实测。</li>
+<li><strong><code>tools/test_mavlink_bridge.py</code> 的
+BAUD/条数</strong>（P1-2）：需 gcs 区域确认修复方式（读宏 vs 写死
+921600/128）。</li>
+</ol>
+<hr />
+<h2 id="5-门禁与测试">5 门禁与测试</h2>
+<h3 id="51-注释门禁gov-004">5.1 注释门禁（GOV-004）</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> tools/check-code-comments.py <span class="at">--area</span> fw-infra <span class="at">--check</span></span></code></pre></div>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>文件数</th>
+<th>error</th>
+<th>warning</th>
+<th>平均分</th>
+<th>退出码</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>核查前（基线）</td>
+<td>29</td>
+<td>29（R01×29）</td>
+<td>29（R04×8, R05×2, R06×1, R08×4, R09×14）</td>
+<td>75.0</td>
+<td>1</td>
+</tr>
+<tr>
+<td>核查后</td>
+<td>29</td>
+<td><strong>0</strong></td>
+<td><strong>0</strong></td>
+<td><strong>100.0</strong></td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<h3
+id="52-宿主测试g-itandemvec_fcsinclude--itandemvec_fcslibeigensrc--itandemvec_fcstest_hoststub">5.2
+宿主测试（g++，<code>-ITandemVec_FCS/include -ITandemVec_FCS/lib/eigen/src -ITandemVec_FCS/test_host/stub</code>）</h3>
+<p>仓库根目录执行（<code>ap</code> 套件另需
+<code>-ITandemVec_FCS/lib/AnoComProtocol</code>，与
+<code>test_host/run_all.sh</code> 一致）：</p>
+<table>
+<thead>
+<tr>
+<th>套件</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AnoCom 打包回归</td>
+<td><code>g++ -std=c++17 $INC -ITandemVec_FCS/lib/AnoComProtocol TandemVec_FCS/test_host/test_anocom_packing.cpp TandemVec_FCS/lib/AnoComProtocol/AnoComProtocol.cpp -o ap.exe &amp;&amp; ./ap.exe</code></td>
+<td><strong>通过</strong>（5 组断言：帧结构/校验/长度保护 256
+截断/组模式单次 write/组缓冲满 flush）</td>
+</tr>
+<tr>
+<td>AnoVars 注册表</td>
+<td><code>g++ -std=c++17 $INC TandemVec_FCS/test_host/test_ano_vars.cpp -o av.exe &amp;&amp; ./av.exe</code></td>
+<td><strong>通过</strong>（<code>ALL PASSED (16 vars)</code>）</td>
+</tr>
+<tr>
+<td>调度分数 tick</td>
+<td><code>g++ -std=c++17 $INC TandemVec_FCS/test_host/task_scheduler_interval_test.cpp -o ts.exe &amp;&amp; ./ts.exe</code></td>
+<td><strong>通过</strong></td>
+</tr>
+<tr>
+<td>DPS310 FIFO 策略</td>
+<td><code>g++ -std=c++17 $INC TandemVec_FCS/test_host/dps310_fifo_policy_test.cpp -o dp.exe &amp;&amp; ./dp.exe</code></td>
+<td><strong>通过</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="53-行为保持审计">5.3 行为保持审计</h3>
+<ul>
+<li>对 27 个 C/C++ 文件做“剥离整行注释后比对 HEAD 与工作区”的脚本审计：
+<strong>本次改动的 24
+个文件代码行序列完全一致</strong>（仅注释/空行变化）。 剩余 3
+个文件的代码差异来自<strong>他人既有未提交改动</strong>（<code>ano_vars.cpp</code>
+新增 <code>vib_*</code>/<code>afm_*</code> 等注册行、
+<code>state_data.cpp</code> 新增
+<code>imu_die_temp_c</code>/<code>g_actuator_*</code>
+定义、<code>state_data.h</code> 对应声明），与本轮注释工作无关。</li>
+<li>行尾/BOM：CRLF 文件（12 个）经本次编辑后已归一为统一
+CRLF；<code>main.cpp</code> 去 BOM（见 P2-4）。</li>
+<li><code>git diff</code>
+自查：无帧格式、字节序、缩放系数、频率、缓冲区尺寸、逻辑改动。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-23 23:40</footer></article></body>
+</html>
