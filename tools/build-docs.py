@@ -1,6 +1,16 @@
 #!/usr/bin/env python3
 """文档站点可复现构建：docs/ 下 Markdown → simulations/vector-thrust-lab/docs/ HTML 站。
 
+@file     build-docs.py
+@module   工具/文档构建
+@brief    把 SECTIONS 清单中的 Markdown 用固定 pandoc 命令构建为站点 HTML。
+@details  输入：SECTIONS 列出的源 Markdown；处理：pandoc gfm→html5、注入返回
+          导航与页脚溯源；输出：站点页面 + 自动生成的文档中心 index.html。
+          --check 在临时目录重建并逐字节比对（剥离时间戳页脚），用于漂移检测。
+@theory   N/A（工程构建）
+@frame    N/A
+@units    N/A
+
 用法（仓库根目录）：
     py -3.12 tools/build-docs.py            构建并写入站点
     py -3.12 tools/build-docs.py --check    漂移检测：临时目录重建并与现有站点比对
@@ -34,6 +44,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "GOV-002 信息与配置管理", "文档编号规则、参数治理工作流与状态分类、Git 配置管理、行为保持红线"),
         ("docs/00-项目治理/GOV-003-多Agent协作规范.md", "governance/GOV-003.html",
          "GOV-003 多 Agent 协作规范", "多 Agent 协作流程、上下文边界、串行改动约束与 Agent 注册表"),
+        ("docs/00-项目治理/GOV-004-代码注释与理论对照规范.md", "governance/GOV-004.html",
+         "GOV-004 代码注释与理论对照规范", "L0/L1/L2 三层注释、理论对照五段式、文献引用格式、单位/坐标系约定与机检规则 R01–R10"),
     ]),
     ("方案设计", [
         ("docs/01-方案设计/CFG-000-概念构型基线C0.md", "design/CFG-000.html",
@@ -61,6 +73,30 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
         ("docs/04-数学建模/MOD-003-配平与稳定性分析.md", "modeling/MOD-003.html",
          "MOD-003 配平与稳定性分析", "纵向配平推导与数值核对、C_m0 补偿案例、小扰动模态定性分析"),
     ]),
+    ("代码理论核查", [
+        ("docs/04-数学建模/MOD-004-代码理论对照核查报告.md", "code-audit/MOD-004.html",
+         "MOD-004 代码-理论对照核查报告", "305 文件注释落地、8 区域理论核对、6 项 P0、仿真-固件 18 项口径对照"),
+        ("docs/04-数学建模/代码理论核查/README.md", "code-audit/README.html",
+         "代码理论核查记录（索引）", "区域划分、记录模板、证据纪律与门禁命令"),
+        ("docs/04-数学建模/代码理论核查/SIM-代码理论核查.md", "code-audit/SIM.html",
+         "SIM 代码理论核查", "仿真 core/browser/tests：四元数、动力学、控制、推进、气动、B 矩阵"),
+        ("docs/04-数学建模/代码理论核查/FW-EKF-代码理论核查.md", "code-audit/FW-EKF.html",
+         "FW-EKF 代码理论核查", "15 状态 ESKF：F 矩阵、圆锥/划摇、KF/Joseph/NIS、地球模型"),
+        ("docs/04-数学建模/代码理论核查/FW-NAV-代码理论核查.md", "code-audit/FW-NAV.html",
+         "FW-NAV 代码理论核查", "导航任务、IMU、ins_*、姿态数学、ZUPT/航向/光流辅助"),
+        ("docs/04-数学建模/代码理论核查/FW-CTRL-代码理论核查.md", "code-audit/FW-CTRL.html",
+         "FW-CTRL 代码理论核查", "轴映射、速率量纲、差速调度、B 矩阵、惯量前馈、RC 曲线、F3/F4"),
+        ("docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md", "code-audit/FW-INFRA.html",
+         "FW-INFRA 代码理论核查", "主循环、AnoCom 双环、参数/变量注册、UBX、调度、传感器外设"),
+        ("docs/04-数学建模/代码理论核查/FW-TESTS-代码理论核查.md", "code-audit/FW-TESTS.html",
+         "FW-TESTS 代码理论核查", "65 个宿主测试：覆盖矩阵、断言强度、仿真口径边界与缺口"),
+        ("docs/04-数学建模/代码理论核查/GCS-代码理论核查.md", "code-audit/GCS.html",
+         "GCS 代码理论核查", "AnoCom 17 帧缩放、128 参数链路、黑匣子、WS/前端字段"),
+        ("docs/04-数学建模/代码理论核查/ANALYSIS-代码理论核查.md", "code-audit/ANALYSIS.html",
+         "ANALYSIS 代码理论核查", "高保真/EKF 研究仿真、scripts/tools：48 条矩阵 + 18 项口径对照"),
+        ("docs/04-数学建模/代码理论核查/P0修复仿真验证-2026-10-23.md", "code-audit/P0-VALIDATION.html",
+         "P0 修复仿真验证", "50 seed 稳定性和 80 次航向 A/B、开环旋转、固件 SIL 故障/耦合 A/B、15° 包线"),
+    ]),
     ("控制与分配", [
         ("docs/05-控制与分配/CTL-001-控制架构与SAS.md", "control/CTL-001.html",
          "CTL-001 控制架构与 SAS", "控制链总览、三通道 SAS 律、反馈极性整定、差速开方分配"),
@@ -80,6 +116,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
     ("决策记录", [
         ("docs/09-决策记录/DEC-001-参数单一事实源.md", "decisions/DEC-001.html",
          "DEC-001 参数单一事实源", "ADR：aircraft-model.json + 代码生成 + 漂移检测的决策与备选方案"),
+        ("docs/09-决策记录/DEC-002-六项P0修复决策.md", "decisions/DEC-002.html",
+         "DEC-002 六项 P0 修复决策", "F3 符号、惯量前馈跨系、仿真旋转项/P0 航向/home_lla、15° 巡航包线的决策与验证"),
         ("docs/09-决策记录/模板-决策记录.md", "decisions/adr-template.html",
          "决策记录模板（ADR）", "新增决策记录使用的空白模板"),
     ]),
@@ -148,6 +186,7 @@ HUB_FOOT = "</article>\n</body>\n</html>\n"
 
 
 def pandoc_version() -> str:
+    """返回 pandoc 版本字符串（第一行），用于页脚溯源与 --check 比对。"""
     out = subprocess.run(["pandoc", "--version"], capture_output=True, text=True,
                          encoding="utf-8", check=True).stdout
     return out.splitlines()[0].strip()
@@ -237,6 +276,7 @@ def build_hub(site: Path) -> None:
 
 
 def build_all(site: Path) -> int:
+    """按 SECTIONS 清单构建全部页面与文档中心，返回生成页数。"""
     count = 0
     for _section, pages in SECTIONS:
         for src_rel, out_rel, title, _desc in pages:
@@ -258,6 +298,7 @@ def scrub(text: str) -> str:
 
 
 def main() -> int:
+    """命令行入口：构建站点，或执行 --check 漂移检测。"""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true", help="漂移检测：重建并比对，不写入站点")
     args = ap.parse_args()

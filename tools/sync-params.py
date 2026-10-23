@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """sync-params.py — 由 models/aircraft-model.json 生成仿真参数模块。
 
-用法:
-    python tools/sync-params.py            重新生成 parameters.mjs
-    python tools/sync-params.py --check    校验生成物与 JSON 一致（漂移检测）
-
-生成目标: simulations/vector-thrust-lab/src/core/parameters.mjs（禁止手改）
+@file    sync-params.py
+@module  analysis/工具（参数同步）
+@brief   把唯一参数源 JSON 渲染为 simulations/vector-thrust-lab/src/core/parameters.mjs。
+@details 输入：models/aircraft-model.json + aircraft-model.schema.json；
+         处理：校验 → 按字段顺序渲染 ESM 常量与来源/置信度注释；
+         输出：parameters.mjs（生成物，禁止手改）；--check 时只比对不写盘。
+         用法：python tools/sync-params.py / python tools/sync-params.py --check
+@theory  N/A（参数搬运，不含物理模型）
+@frame  N/A
+@units   沿用 JSON 内的单位字段（N·s²、kg·m²、rad/s 等）
+@note    本文件是参数一致性的唯一通道：改参数必须改 JSON 再同步，
+         手改 parameters.mjs 会被 --check 判为漂移（@ref AGENTS.md 边界）。
+@see     models/aircraft-model.json、@ref AGENTS.md（参数同步命令）
 """
 from __future__ import annotations
 
@@ -77,6 +85,11 @@ def js_number(v: float) -> str:
 
 
 def render(model: dict) -> str:
+    """把参数 JSON 渲染为 parameters.mjs 源码文本（含来源/单位/置信度注释）。
+
+    @param[in] model aircraft-model.json 的解析结果
+    @return 生成的 ESM 源码（写盘前可先与现有文件比对）
+    """
     lines = [HEADER, "export const P = Object.freeze({\n"]
     for section in model["sections"]:
         lines.append(f"  // ---- {section['title']} ----\n")
@@ -96,6 +109,7 @@ def _reject_constant(name: str) -> None:
 
 
 def main() -> int:
+    """CLI 入口：默认写盘生成 parameters.mjs；--check 只比对并返回退出码。"""
     model = json.loads(MODEL_JSON.read_text(encoding="utf-8"), parse_constant=_reject_constant)
     validate_model(model)
     content = render(model)

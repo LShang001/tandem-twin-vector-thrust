@@ -1,17 +1,23 @@
 #!/usr/bin/env python3
-"""单文件版构建：把 Three.js + 插件 + src/ 全部模块内联成 standalone.html，双击即用（file:// 直开）。
+"""build-standalone.py — 单文件版构建：把 ESM 工程内联成 standalone.html。
 
-用法（仓库根目录）：
-    py -3.12 tools/build-standalone.py            生成 simulations/vector-thrust-lab/standalone.html
-    py -3.12 tools/build-standalone.py --check    漂移检测：重建并与现有文件字节比对
-
-原理（无 npm/bundler 约束下的微型打包器）：
-- file:// 协议下浏览器禁止加载 ES 模块（CORS），故 ESM 工程必须有服务器；
-  本工具把全部模块按依赖闭包收集，转换为 tiny-AMD 形式（__def/__req），
-  连同 CSS 一起内联进单个 HTML，消除全部文件请求。
-- 仅支持本项目实际使用的语法子集：命名导入、命名空间导入（import * as）、
-  export function/const/let/class、export { ... }（含 as 别名、多行）。
-  遇到不支持的形式（default 导入/导出、re-export、动态 import）直接报错。
+@file    build-standalone.py
+@module  analysis/工具（构建）
+@brief   收集模块依赖闭包，转换为 tiny-AMD 形式并与 CSS 一起内联成单个 HTML。
+@details 用法（仓库根目录）：
+           py -3.12 tools/build-standalone.py          生成 standalone.html
+           py -3.12 tools/build-standalone.py --check  漂移检测（重建并字节比对）
+         原理：file:// 下浏览器禁止加载 ES 模块（CORS），故把全部模块按依赖闭包
+         转成 tiny-AMD（__def/__req），消除全部文件请求。
+         仅支持本项目实际使用的语法子集：命名导入、命名空间导入（import * as）、
+         export function/const/let/class、export { ... }（含 as 别名、多行）。
+         遇到不支持的形式（default 导入/导出、re-export、动态 import）直接报错。
+@theory  N/A（构建工具，不含物理模型）
+@frame  N/A
+@units   N/A（输出字节数）
+@note    standalone.html 是构建产物，禁止手改；改源码后必须重跑本工具
+         （@ref AGENTS.md 边界）。--check 供 CI 做产物漂移门禁。
+@see     simulations/vector-thrust-lab/standalone.html、@ref AGENTS.md
 """
 from __future__ import annotations
 
@@ -126,6 +132,11 @@ function __req(id) {
 
 
 def build_bundle() -> str:
+    """从入口模块收集依赖闭包并转换为 tiny-AMD 定义表（返回拼接后的 JS 文本）。
+
+    @note   遇到不支持的 ESM 形式（default 导入/导出、re-export、动态 import）直接报错，
+             不做静默降级——否则产物会在浏览器里运行期失败。
+    """
     modules = collect()
     parts = [RUNTIME]
     for mod_id, (_path, body, exports) in modules.items():
@@ -136,6 +147,7 @@ def build_bundle() -> str:
 
 
 def build_html(bundle: str) -> str:
+    """把模块包、CSS 与启动脚本拼成单文件 HTML（file:// 可直接打开）。"""
     html = (SIM / "index.html").read_text(encoding="utf-8")
     css = (SIM / "css" / "style.css").read_text(encoding="utf-8")
     css_tag = '<link rel="stylesheet" href="./css/style.css">'
@@ -158,6 +170,7 @@ def build_html(bundle: str) -> str:
 
 
 def main() -> int:
+    """CLI 入口：默认生成 standalone.html；--check 重建并字节比对。"""
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--check", action="store_true", help="漂移检测：重建并比对，不写入")
     args = ap.parse_args()
