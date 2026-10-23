@@ -1,0 +1,86 @@
+{
+  "variant": "firmware",
+  "scenes": {
+    "A0_ground_static": {
+      "pos_ne_rmse": 0.6848242554551571,
+      "pos_d_rmse": 0.11038704559469438,
+      "vel_ne_rmse": 0.3780008030093771,
+      "att_q_rmse_deg": 13.730081470075604,
+      "alt_err_rmse": 0.11111856548664166,
+      "pass": false
+    },
+    "A1_hover_gust": {
+      "pos_ne_rmse": 280.99620706266506,
+      "pos_d_rmse": 155.79868236311844,
+      "vel_ne_rmse": 56.605827450256385,
+      "att_q_rmse_deg": 25.49788862963078,
+      "alt_err_rmse": 155.8093552265659,
+      "pass": false
+    },
+    "A2_alt_hold": {
+      "pos_ne_rmse": 758.5626666930373,
+      "pos_d_rmse": 0.47544593378559924,
+      "vel_ne_rmse": 58.609044868713816,
+      "att_q_rmse_deg": 16.373154522332836,
+      "alt_err_rmse": 0.4943607467786093,
+      "pass": false
+    },
+    "A3_gps_loss": {
+      "pos_ne_rmse": 211.32080616599723,
+      "pos_d_rmse": 0.38412685888831927,
+      "vel_ne_rmse": 22.911286834128227,
+      "att_q_rmse_deg": 13.026850992456408,
+      "alt_err_rmse": 0.3854883336897961,
+      "pass": false
+    },
+    "A4_accel_jump": {
+      "pos_ne_rmse": 0.17045606081923298,
+      "pos_d_rmse": 0.08003816897028215,
+      "vel_ne_rmse": 0.15859701386919772,
+      "att_q_rmse_deg": 12.60863927908166,
+      "alt_err_rmse": 0.08017925805990865,
+      "pass": false
+    },
+    "A5_tilt20": {
+      "pos_ne_rmse": 1585.4148130231483,
+      "pos_d_rmse": 0.6003660389588718,
+      "vel_ne_rmse": 176.49898638668296,
+      "att_q_rmse_deg": 23.485336487240875,
+      "alt_err_rmse": 0.632880996069986,
+      "pass": false
+    },
+    "A6_gps_jump": {
+      "pos_ne_rmse": 5.42977645940591,
+      "pos_d_rmse": 0.10709985588010872,
+      "vel_ne_rmse": 0.24805901290181512,
+      "att_q_rmse_deg": 14.767058095615962,
+      "alt_err_rmse": 0.10771347429212073,
+      "pass": false
+    },
+    "A7_gyro_jump": {
+      "pos_ne_rmse": 0.1977022882068206,
+      "pos_d_rmse": 0.11710220605537995,
+      "vel_ne_rmse": 0.28383489722452815,
+      "att_q_rmse_deg": 11.47543636604803,
+      "alt_err_rmse": 0.11787385332191032,
+      "pass": false
+    },
+    "A8_yaw90": {
+      "pos_ne_rmse": 13779.621038893563,
+      "pos_d_rmse": 15050.58519584973,
+      "vel_ne_rmse": 3620.3373187386405,
+      "att_q_rmse_deg": 118.03456190577339,
+      "alt_err_rmse": 15050.442107788962,
+      "pass": false
+    },
+    "A9_long_hover": {
+      "pos_ne_rmse": 2662.6326305665443,
+      "pos_d_rmse": 0.3603794475179707,
+      "vel_ne_rmse": 86.16523915243641,
+      "att_q_rmse_deg": 65.51671816492409,
+      "alt_err_rmse": 0.3676943606274286,
+      "pass": false
+    }
+  },
+  "all_pass": false
+}

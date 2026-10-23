@@ -1,15 +1,21 @@
 # -*- coding: utf-8 -*-
-"""
-修复前全面核查仿真（v2）：对每个已确认问题的端到端影响量化
-同时实现"固件当前逻辑(bug)"与"修复后逻辑"，输出 before/after 对比
+"""audit_before.py — 修复前缺陷的端到端影响量化（bug 逻辑 vs 修复逻辑）。
 
-E1  H1   降级 GNSS 300s，backup_ahrs_yaw 缠绕对回退航向输出的污染
-E2  H2   45°/85° 俯仰过渡飞行，标量航向融合：H=e8(bug) vs H=C_b^n 第三行(修复)
-         量化: 有效 yaw 修正系数 / 额外 roll 变化
-E3  MED-1,2 静止辅助档位 + 辅助动作分布（理想静止 与 中低置信度 两场景）
-E4  MED-3 epoch 时间映射负值/陈旧判定
-E5  MED-6 静止 30s + 多径，双矢量航向对 EKF yaw 的累计拉偏
-E6  MED-0b 500ms 卡顿帧，单子样路径速度积分误差（dt 低估）
+@file    audit_before.py
+@module  analysis/EKF 研究仿真（修复前审计）
+@brief   对每个已确认问题同时实现"固件当前逻辑(bug)"与"修复后逻辑"，输出 before/after 对比。
+@details E1 H1 降级 GNSS 300 s，backup_ahrs_yaw 缠绕污染回退航向；
+         E2 H2 45°/85° 俯仰过渡，标量航向 H=e8(bug) vs H=C_b^n 第三行(修复)；
+         E3 MED-1/2 静止辅助档位与辅助动作分布；E4 MED-3 epoch 时间映射负值/陈旧判定；
+         E5 MED-6 静止 30 s + 多径，双矢量航向累计拉偏；E6 MED-0b 500 ms 卡顿帧 dt 低估。
+         输出：sim-data/audit_before*.json。
+@theory  标量航向量测的倾斜补偿 H=C_b^n(2,:) @ref docs/08-参考资料/notes/04-航向与磁辅助.md；
+         航向弱可观与踢动机制 @ref docs/08-参考资料/notes/02-卡尔曼滤波理论.md §3 P0-2；
+         NIS 门控 @ref REF-121 §7.3.1 p.255–259。
+@frame  NED + FRD；H 索引 6–8 为失准角行（固件口径），旧实现误用 7–10。
+@units   SI；角度 rad（结论常用 deg）、dt s、位置 m。
+@note    本文件刻意保留 bug 语义作为对照臂——**不要"顺手修好"**，修复对照见 audit_after.py。
+@see     audit_after.py、verify_integration.py、ekf_core.py
 """
 import json
 import math
@@ -22,6 +28,7 @@ os.makedirs(OUT, exist_ok=True)
 
 
 def wrap_pi(a):
+    """角度折算到 (−π, π]，用于航向残差与回退航向的边界处理。"""
     a = math.fmod(a + math.pi, 2 * math.pi)
     if a < 0:
         a += 2 * math.pi
@@ -252,6 +259,7 @@ def e6_overflow_dt():
 
 
 def main():
+    """程序入口：跑 E1–E6 修复前审计并输出 before/after JSON。"""
     results = {
         "E1_H1": e1_ahrs_yaw_correction(),
         "E2_H2": e2_scalar_yaw_tilt(),

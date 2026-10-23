@@ -1,10 +1,20 @@
 # -*- coding: utf-8 -*-
-"""
-第三遍复查：数值交叉验证（对固件数学实现的独立验证）
-V1  F 矩阵数值微分验证（解析 vs 数值）
-V2  NIS 分布一致性检验（S2 噪声=R 配置时 NIS 应 ~ χ²(6)，均值 6 方差 12）
-V3  协方差-误差统计一致性（Monte Carlo 复验 + 误差白化检验）
-V4  双子样 vs 单子样传播一致性（静止时两者应一致）
+"""verify.py — 对 EKF 数学实现的独立数值交叉验证（V1–V4）。
+
+@file    verify.py
+@module  analysis/EKF 研究仿真（数值验证）
+@brief   用数值微分/Monte Carlo 独立复核 F 矩阵、NIS 分布、协方差一致性与双子样等价。
+@details V1 F 矩阵解析 vs 数值微分；V2 NIS 分布一致性（噪声=R 时 ~χ²(6)，均值 6、方差 12）；
+         V3 协方差-误差统计一致性 + 误差白化；V4 双子样 vs 单子样传播（静止时应一致）。
+         输出：sim-data/verify*.json 与控制台结论。
+@theory  Φ 的离散化与 F 线性化 @ref REF-121 §2.2.1 p.33；
+         NIS 的 χ²(m) 分布与门限 @ref REF-121 §7.3.1 (7.3.22) p.255–259；
+         NEES/一致性检验 @ref docs/08-参考资料/notes/07-深读-一致性与故障检测.md §1.1。
+@frame  NED + FRD。
+@units   SI；NIS 无量纲。
+@note    V2 的前提是"注入噪声与 R 完全一致"，实机不满足，故 NIS 长期偏大是**预期**的
+         （R 含未建模相关误差），不能据此断言滤波器实现错误。
+@see     ekf_core.py、run_scenarios.py、@ref docs/08-参考资料/notes/07-深读-一致性与故障检测.md
 """
 import json
 import math
@@ -21,6 +31,7 @@ os.makedirs(OUT, exist_ok=True)
 
 
 def make_ekf():
+    """构造并初始化 Ekf15（静基座调平 + P0），供各项验证复用同一初值。"""
     ekf = Ekf15(cfg)
     ekf.home_lla = HOME_LLA.copy()
     ekf.initialize(np.array([0.0, 0.0, -G_MPS2]), np.zeros(3), HOME_LLA)
@@ -155,6 +166,7 @@ def verify_repropagation_consistency():
 
 
 def main():
+    """程序入口：跑 V1–V4 四项数值验证并打印结论。"""
     results = {}
     results["V1_F_max_err"] = verify_F_matrix()
     results["V2_NIS"] = verify_nis_distribution()

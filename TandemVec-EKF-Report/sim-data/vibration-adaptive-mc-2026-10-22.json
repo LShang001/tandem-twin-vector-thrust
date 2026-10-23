@@ -1,0 +1,16 @@
+{
+  "cases": 3,
+  "ok": 3,
+  "fixed_mean": 3601.9193333333333,
+  "adapt_mean": 2348.4016666666666,
+  "fixed_p50": 4951.181,
+  "adapt_p50": 2273.519,
+  "fixed_p95": 4951.181,
+  "adapt_p95": 2273.519,
+  "mean_improve_pct": 34.80138089340886,
+  "median_ratio": 0.7591486440096121,
+  "worse_5pct": 0,
+  "worse_10pct": 0,
+  "worst_ratio": 0.9592806241581555,
+  "best_ratio": 0.3902737420836547
+}

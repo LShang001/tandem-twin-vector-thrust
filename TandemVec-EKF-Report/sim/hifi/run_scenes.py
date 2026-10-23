@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
-"""
-高保真固件闭环仿真 —— EKF 导航适配 + 场景运行
-================================================
-把 ekf_core.py 的 15 态 EKF（修复后）接入闭环：
-  动力学.IMU -> EKF 时间更新 -> EKF 量测更新(GNSS/静止辅助) -> 固件控制
+"""run_scenes.py — 高保真固件闭环仿真：EKF 接入闭环 + S1–S6 场景。
 
-场景：
-  S1 悬停抗扰（阵风脉冲）
-  S2 定高保持
-  S3 GPS 丢失（失联 60s -> 恢复）
-  S4 传感器故障（加计零偏跳变 / 陀螺零偏跳变 / 陀螺饱和）
-  S5 大机动（快速倾斜指令）
-  S6 参数边界（摆角限幅 15°、τm、增益扫描）
+@file    run_scenes.py
+@module  analysis/闭环仿真（导航在环）
+@brief   把 ekf_core 的 15 态 EKF 接入 6DOF + 固件控制律闭环并跑六个场景。
+@details 链路：Dynamics.IMU → EKF 时间更新 → EKF 量测更新(GNSS/静止辅助) → 固件控制。
+         场景：S1 悬停抗扰（阵风脉冲）、S2 定高保持、S3 GPS 丢失 60 s→恢复、
+         S4 传感器故障（加计/陀螺零偏跳变、陀螺饱和）、S5 大机动、
+         S6 参数边界（摆角 15°、τm、增益扫描）。
+         输出：sim-data/hifi_scenes*.json 与 fig。
+@theory  6DOF 动力学 @ref MOD-001 §5；控制律 @ref CTL-001 §4；
+         EKF 传播/更新 @ref REF-121 §2.2.1 p.33；NIS 门控 @ref REF-121 §7.3.1 p.255–259。
+@frame  NED + FRD；悬停时 x_b 朝天。
+@units   SI；摆角限幅 15°（固件口径，见 hifi_core.P["dMax"]）。
+@note    EKF 进控制闭环目前 10/10 FAIL（@ref AGENTS.md 2026-10-21 追加项），
+         这些场景用于定位而非验收；导航在环（truth-stabilized）另见 run_nav_envelope.py。
+@see     hifi_core.py、run_full_envelope.py、ekf_core.py
 """
 import json
 import os
@@ -253,6 +257,7 @@ def summarize(r, name):
 
 
 def main():
+    """程序入口：跑 S1–S6 闭环场景并写结果 JSON/图件。"""
     results = {}
 
     # S1 悬停抗扰

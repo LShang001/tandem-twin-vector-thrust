@@ -1,0 +1,15 @@
+{
+  "cases": 2500,
+  "fixed_mean": 3.288794,
+  "adapt_mean": 3.2887936,
+  "mean_improve_pct": 1.216251307445404e-05,
+  "fixed_p50": 0.28,
+  "adapt_p50": 0.28,
+  "fixed_p95": 0.738,
+  "adapt_p95": 0.738,
+  "median_ratio": 1.0,
+  "worse_5pct": 0,
+  "worse_10pct": 0,
+  "worst_ratio": 1.0061919504643964,
+  "best_ratio": 0.9911504424778761
+}

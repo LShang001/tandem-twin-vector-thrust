@@ -1,0 +1,78 @@
+{
+  "variant": "firmware_truth_stabilized",
+  "scenes": {
+    "A0_ground_static": {
+      "pos_ne_rmse": 0.07592544595676214,
+      "pos_d_rmse": 0.06336446054706563,
+      "vel_ne_rmse": 0.03983762969628655,
+      "att_q_rmse_deg": 0.5611148287126737,
+      "alt_err_rmse": 0.06336446054706563,
+      "pass": true
+    },
+    "A1_hover_gust": {
+      "pos_ne_rmse": 0.2550987714490496,
+      "pos_d_rmse": 0.08489803529540836,
+      "vel_ne_rmse": 0.1360237620103077,
+      "att_q_rmse_deg": 0.7809495655559793,
+      "alt_err_rmse": 0.08489803529540836,
+      "pass": true
+    },
+    "A2_alt_hold": {
+      "pos_ne_rmse": 0.10414049347372566,
+      "pos_d_rmse": 0.06926055609345534,
+      "vel_ne_rmse": 0.04117508983573833,
+      "att_q_rmse_deg": 0.39311178109856654,
+      "alt_err_rmse": 0.06926055609345534,
+      "pass": true
+    },
+    "A3_gps_loss": {
+      "pos_ne_rmse": 0.036143975033222774,
+      "pos_d_rmse": 0.3798440450527425,
+      "vel_ne_rmse": 0.0031295917636513745,
+      "att_q_rmse_deg": 0.568125778267793,
+      "alt_err_rmse": 0.3798440450527425,
+      "pass": true
+    },
+    "A4_accel_jump": {
+      "pos_ne_rmse": 0.13459783330460215,
+      "pos_d_rmse": 0.07651960811214932,
+      "vel_ne_rmse": 0.148440718210963,
+      "att_q_rmse_deg": 1.4999535252299043,
+      "alt_err_rmse": 0.07651960811214932,
+      "pass": true
+    },
+    "A6_gps_jump": {
+      "pos_ne_rmse": 4.208685306424012,
+      "pos_d_rmse": 0.047851928823162235,
+      "vel_ne_rmse": 0.04003062216572548,
+      "att_q_rmse_deg": 0.5539522538267267,
+      "alt_err_rmse": 0.047851928823162235,
+      "pass": true
+    },
+    "A7_gyro_jump": {
+      "pos_ne_rmse": 0.14258647468548583,
+      "pos_d_rmse": 0.08846236607028278,
+      "vel_ne_rmse": 0.14142544515062094,
+      "att_q_rmse_deg": 7.9048688716262205,
+      "alt_err_rmse": 0.08846236607028278,
+      "pass": true
+    },
+    "A9_long_hover": {
+      "pos_ne_rmse": 0.08379045860255527,
+      "pos_d_rmse": 0.06286905766300666,
+      "vel_ne_rmse": 0.041505361071163066,
+      "att_q_rmse_deg": 0.6411342821398942,
+      "alt_err_rmse": 0.06286905766300666,
+      "pass": true
+    },
+    "A5_tilt10": {
+      "pos_ne_rmse": 0.24345659812746506,
+      "pos_d_rmse": 0.08703598025133587,
+      "vel_ne_rmse": 0.22545923333868018,
+      "att_q_rmse_deg": 9.353109171205094,
+      "alt_err_rmse": 0.08703598025133587,
+      "pass": true
+    }
+  },
+  "all_pass": true
+}

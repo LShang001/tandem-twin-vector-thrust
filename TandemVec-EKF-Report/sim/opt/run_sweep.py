@@ -1,13 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-EKF 参数敏感性扫描
-==================
-15 个扫描维度，按组运行：
-  gnss    —— GNSS R 地板 / NIS 门限 / 双矢量航向噪声 / 延迟回放
-  qnoise  —— 过程噪声 Q（加计/陀螺/零偏游走）标定
-  static  —— 静止辅助（ZUPT/重力/静止陀螺噪声、NIS、检测器阈值）
-  outage  —— 失联膨胀 / 重捕获策略
-输出 sim-data/opt/sweep_<group>.json
+"""run_sweep.py — EKF 参数敏感性扫描（15 维，按组运行）。
+
+@file    run_sweep.py
+@module  analysis/EKF 优化研究（灵敏度）
+@brief   对 GNSS/Q/静止辅助/失联重捕获四组参数做单因子扫描。
+@details 组别：gnss（R 地板、NIS 门限、双矢量噪声、延迟回放）、qnoise（Q 标定）、
+         static（ZUPT/重力/静止陀螺噪声与检测器阈值）、outage（失联膨胀/重捕获）。
+         输出：sim-data/opt/sweep_<group>.json。
+@theory  R/Q 标定与一致性 @ref REF-121 §2.2.1 p.33、§3.10 p.129–139；
+         NIS 门限的 χ² 分位含义 @ref REF-121 §7.3.1 p.255–259。
+@frame  NED + FRD。
+@units   SI；噪声 std 按 m/s²、m/s、rad、rad/s 区分。
+@note    单因子扫描不覆盖参数耦合（如 R 与 Q 同调）；"最优值"只在所扫区间内成立。
+         GNSS R 地板经实测不可收紧，扫描结论仅供定位敏感方向。
+@see     opt_ekf.py、run_baseline.py、run_variants.py
 """
 import copy
 import json
@@ -61,6 +67,7 @@ def _spec(name, **mods):
 # 扫描定义：每项 = (组, 名称, 说明, 场景, [(标签, spec修改, cfg覆盖, opts覆盖, 窗口)])
 # ---------------------------------------------------------------------------
 def sweeps():
+    """返回 15 个扫描维度定义列表（group/name/desc/scenarios/points），供 run_group 消费。"""
     S = []
     add = lambda g, n, d, scs, points: S.append(dict(group=g, name=n, desc=d,
                                                      scenarios=scs, points=points))
@@ -154,6 +161,7 @@ def sweeps():
 
 
 def run_group(group):
+    """跑一个参数组（gnss/qnoise/static/outage）的全部扫描点，返回可 JSON 化的结果 dict。"""
     out = {}
     for sw in [s for s in sweeps() if s["group"] == group]:
         print(f"[{sw['name']}] {sw['desc']}")

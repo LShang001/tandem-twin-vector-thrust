@@ -1,17 +1,31 @@
 # -*- coding: utf-8 -*-
-"""
-高保真飞控固件闭环仿真 —— 核心框架
-====================================
-纵列双发矢量推力飞行器固件级全链路仿真：
+"""hifi_core.py — 高保真固件闭环仿真核心（6DOF 动力学 + 传感器 + 固件控制律）。
 
-  6DOF 动力学(真实物理) → 传感器模型(IMU/GPS/光流/气压, 含噪声/震动/零偏漂移/故障)
-    → EKF 导航(修复后 15 态误差状态滤波 + 静止辅助 + GNSS 融合 + 双矢量航向)
-    → 固件控制律(误差四元数外环 + 角速率内环 + 惯量逆解 + B 矩阵分配 + 差速)
-    → 执行器(摆座伺服动态 + 电机 τm 一阶滞后 + 限幅) → 6DOF 动力学(闭环)
-
-物理参数逐项取自固件 TandemVec_Config.h / FlightCtrlParams.h（唯一事实源）。
-控制律语义逐行复刻固件 flight_control.cpp（误差四元数外环、角速率内环、
-惯量逆解、BTRUE 工作点分配、差速 √(1+Δω) 公式、τm 观测器）。
+@file    hifi_core.py
+@module  analysis/闭环仿真核心（动力学 + 传感器模型 + 固件控制律）
+@brief   提供真值 6DOF 动力学、带噪/带故障传感器与逐行复刻固件的控制律。
+@details 输入：控制器指令 (δf, δt, Δω, 油门/转速)；处理：执行器一阶（舵机 0.05 s、
+         电机 τm=0.28 s）→ 推力/反扭矩/转子角动量 → 受扰刚体动力学 → 位置/姿态积分，
+         同时输出 IMU（比力+角速度）、GNSS、磁、气压量测；
+         输出：真值状态、传感器读数与执行器指令，供 hifi/run_*.py 组闭环。
+         全链：6DOF → 传感器 → EKF → 固件控制律 → 执行器 → 6DOF。
+@theory  推力矢量六维映射与差速滚转 @ref MOD-001 §2–§4；
+         刚体平动/转动方程（含 ω×Iω 与 ω×h）@ref MOD-001 §5.1–§5.2；
+         推力 T=kT·ω²、反扭 τ=kQ·ω²+Jp·ω̇ @ref THY-002 §2；
+         控制分配 B 矩阵工作点 @ref THY-003 §3、@ref CTL-001 §5；
+         误差四元数外环 + 角速率内环 + 惯量逆解 @ref CTL-001 §4；
+         差速分配 ωf=ω0√(1+Δω) @ref CTL-001 §5。
+@frame  NED 真值位置/速度 + FRD 机体系；悬停时 x_b 朝天（推力轴），
+         控制通道 [roll,pitch,yaw] 映射到力矩 [Mz',My',Mx']。
+@units  SI：力 N、力矩 N·m、转速 rad/s、加速度 m/s²、角度 rad；控制增益在 deg 域
+         （rate_kp 等为 1/s、1/s²，见 @ref AGENTS.md 速率环量纲条目）。
+@note    ★ 口径：本文件 P["dMax"]=0.2618 rad（**15°，固件实机值**），
+         而 simulations/high-fidelity-analysis 用 25°（模型 JSON）——两者不可混用结论。
+         P["g"]=9.79 取 @ref models/aircraft-model.json 的 MODEL-DEFAULT；
+         EKF 侧用 9.80665（G_MPS2），闭环内存在 0.17% 的重力口径差。
+         本文件不是 C++ 固件 HIL；固件正确性由 test_host 与 `pio run` 验证。
+@see     hifi/run_scenes.py、hifi/run_full_envelope.py、hifi/run_nav_envelope.py、
+         @ref docs/08-参考资料/notes/05-仿真验证.md §1.1（基线口径）
 """
 import math
 
@@ -36,6 +50,9 @@ P = {
     "m": 0.7,           # kg
     "g": 9.79,          # m/s²
 }
+
+# 理想地磁矢量（NED，µT；长沙附近量级，仅仿真概念验证）
+MAG_NED_UT = np.array([22.0, 0.0, -42.0])
 
 # 悬停转速
 w_hover = math.sqrt(0.5 * P["m"] * P["g"] / P["kT"])
@@ -80,6 +97,15 @@ D2R = math.pi / 180.0
 # 四元数工具（与 ekf_core 一致）
 # =====================================================================
 def quat_mult(q, p):
+    """Hamilton 四元数乘积 q⊗p（标量在前）。
+
+    @brief   姿态更新与误差四元数计算的基础算子。
+    @param[in] q 左乘四元数 (w,x,y,z)
+    @param[in] p 右乘四元数 (w,x,y,z)
+    @return  q⊗p (w,x,y,z)
+    @formula (q⊗p)_w=q_w p_w−q_v·p_v；(q⊗p)_v=q_w p_v+p_w q_v+q_v×p_v
+    @ref     REF-120 §9.2 p.267–270、@ref MOD-002 §3.4
+    """
     w1, x1, y1, z1 = q
     w2, x2, y2, z2 = p
     return np.array([
@@ -90,6 +116,13 @@ def quat_mult(q, p):
 
 
 def quat_conj(q):
+    """四元数共轭 (w,−x,−y,−z)。
+
+    @brief   单位四元数下等价于逆，用于 q_err=q_cur*⊗q_target。
+    @param[in] q 四元数 (w,x,y,z)
+    @return  共轭四元数
+    @ref     MOD-002 §3.3
+    """
     return np.array([q[0], -q[1], -q[2], -q[3]])
 
 
@@ -103,6 +136,15 @@ def quat_to_dcm(q):
 
 
 def rotvec_to_quat(theta):
+    """旋转矢量 → 四元数（指数映射，小角度自动降阶）。
+
+    @brief   把等效旋转矢量 φ 映射为 q=Exp(φ/2)。
+    @param[in] theta 等效旋转矢量 (3,) [rad]
+    @return  单位四元数 (w,x,y,z)
+    @formula q0=cos(|φ|/2)、q_v=sin(|φ|/2)·φ/|φ|；|φ|<1e-6 时 q_v≈φ/2
+    @ref     REF-120 §9.3 (9.3.30) p.274（等效旋转矢量）
+    @note    小角度分支必须存在：|φ|→0 时 sin(half)/|φ| 为 0/0 型。
+    """
     a = np.linalg.norm(theta)
     q = np.zeros(4)
     if a > 1e-6:
@@ -129,6 +171,15 @@ def quat_from_euler(yaw, pitch, roll):
 
 
 def quat_to_euler(q):
+    """四元数 → ZYX 欧拉角（固件 quat2angle 语义）。
+
+    @brief   由 C^n_b 元素提取 (yaw, pitch, roll)。
+    @param[in] q 四元数 (w,x,y,z)
+    @return  [yaw, pitch, roll] [rad]
+    @formula pitch=−asin(C20)、roll=atan2(C21,C22)、yaw=atan2(C10,C00)
+    @ref     MOD-002 §4.1（本项目 theta=−asin(R13) 锁定约定）
+    @note    C20 需钳到 [−1,1]，避免浮点越界使 asin 返回 NaN。
+    """
     C = quat_to_dcm(q)
     pitch = -math.asin(max(-1.0, min(1.0, C[2, 0])))
     roll = math.atan2(C[2, 1], C[2, 2])
@@ -137,6 +188,13 @@ def quat_to_euler(q):
 
 
 def wrap_pi(a):
+    """角度折算到 (−π, π]。
+
+    @brief   航向误差缠绕保护。
+    @param[in] a 角度 [rad]
+    @return  等价角度 [rad]
+    @note    航向锁 dy=wrap_pi(yaw_ref−yaw) 必须在乘 kp 前缠绕。
+    """
     a = math.fmod(a + math.pi, 2 * math.pi)
     if a < 0:
         a += 2 * math.pi
@@ -165,19 +223,44 @@ class Dynamics:
         self.gyro_bias_true = np.array([0.003, -0.002, 0.004])  # 真实零偏漂移
         self.accel_bias_true = np.array([0.05, -0.03, 0.08])
         self.disturb = np.zeros(3)        # 外部扰动（阵风/推力扰动）
+        self.t = 0.0                      # 仿真时间（执行器/故障用）
+        self.fault = {}                   # 执行器故障（thrust_loss/servo_jam/wind_shear）
         self._prev_vel = np.zeros(3)
         self._dt_prev = 0.005
         self._prev_wf_act = w_hover
         self._prev_wt_act = w_hover
 
     def step(self, act, dt):
-        """act: (df_cmd, dt_cmd, dw_cmd, thr_cmd, w0_cmd)——执行器指令"""
+        """推进一个真值仿真步（执行器动态 + 刚体动力学）。
+
+        @param[in] act dict：df/dt 摆角指令 [rad]、wf/wt 目标转速 [rad/s]、thr/w0 油门与工作点
+        @param[in] dt  步长 [s]（调用方用 0.005 s = 200 Hz，与固件 tick 同量级）
+        @return (Tf, Tt, M_body)：本步推力 [N] 与机体系力矩 [N·m]，供记录/诊断
+        @formula F_body=[Tf·cf+Tt·ct, Tf·sf, −Tt·st]；
+                 M_body=[−Qf·cf+Qt·ct, −b·Tt·st−Qf·sf, a·Tf·sf−Qt·st]；
+                 I·ω̇ = M − ω×Iω − ω×h；q ← q⊗Exp(ω·dt)
+        @ref     MOD-001 §2–§5（推力映射与刚体动力学）
+        @deviation 本实现是**一阶半隐式欧拉**（速度/角速度先用本步导数更新，四元数再用新 ω
+                 右乘），不是二阶 RK2；函数内 `dt2 = dt/2` 与 `dq` 为早期遗留变量，未参与计算。
+                 在 dt=5 ms、τm=0.28 s 的悬停闭环下数值稳定，但定步长收敛阶为一阶，
+                 做精度对比（如与 core.py 的 RK4 对比）时必须先声明这一差异。
+        @note    摆角伺服用 τs=0.05 s 一阶，电机用 τm=0.28 s 一阶，均按 dt/τ 比例更新；
+                 ω̇ 只用于反扭矩的 Jp·ω̇ 项。
+        """
+        self.t += dt
         # ---- 执行器动态 ----
         # 摆座伺服一阶（τs=0.05s）+ 限幅
         tau_s = 0.05
         k = min(dt / tau_s, 1.0)
         self.df += k * (act["df"] - self.df)
         self.dt += k * (act["dt"] - self.dt)
+        # 执行器故障：舵机卡死（在伺服一阶之后覆盖，模拟机械卡死）
+        sj = self.fault.get("servo_jam")
+        if sj and self.t >= float(sj.get("t", 0.0)):
+            if sj.get("axis", "df") == "df":
+                self.df = float(sj.get("value", 0.0))
+            else:
+                self.dt = float(sj.get("value", 0.0))
         self.df = max(-P["dMax"], min(P["dMax"], self.df))
         self.dt = max(-P["dMax"], min(P["dMax"], self.dt))
         # 电机 τm 一阶
@@ -190,6 +273,13 @@ class Dynamics:
         # ---- 推力/力矩（机体系）----
         Tf = P["kT"] * self.wf**2
         Tt = P["kT"] * self.wt**2
+        # 执行器故障：单发推力损失（ESC/电机/桨效率下降）
+        tl = self.fault.get("thrust_loss")
+        if tl and self.t >= float(tl.get("t", 0.0)):
+            if tl.get("motor", "front") == "front":
+                Tf *= float(tl.get("scale", 1.0))
+            else:
+                Tt *= float(tl.get("scale", 1.0))
         # ★ 实际转速差分用动力学自身状态（上一拍实际值），不用控制器的指令 prev——
         #   指令/实际时序错位会产生虚假巨大 dWf，Jp·dW 反扭瞬态项爆炸（仿真发散根因）。
         dWf = (self.wf - self._prev_wf_act) / max(dt, 1e-4)
@@ -252,8 +342,9 @@ class Dynamics:
         self._prev_vel = self.vel.copy()
         self._dt_prev = 0.005
         f_b = -quat_to_dcm(self.quat).T @ np.array([0, 0, P["g"]])             + quat_to_dcm(self.quat).T @ a_ned_motion
-        # 震动（共轴双桨 80Hz）
-        vib = 0.05 * np.sin(2 * np.pi * 80 * t) * np.array([1, 1, 1])
+        # 震动（共轴双桨 80Hz）；vib_amp 可被故障场景放大
+        vib_amp = float(self.fault.get("vib_amp", 0.05))
+        vib = vib_amp * np.sin(2 * np.pi * 80 * t) * np.array([1, 1, 1])
         accel = f_b + self.accel_bias_true + self.rng.normal(0, 0.05, 3) + vib * 0.3
         gyro = self.omega + self.gyro_bias_true + self.rng.normal(0, 0.0015, 3)
         # 故障注入
@@ -267,21 +358,41 @@ class Dynamics:
         return accel, gyro
 
     def gps_measure(self, t, fault=None):
-        """GPS NED 位置/速度（10Hz），含噪声/丢星/延迟/野值"""
+        """GPS NED 位置/速度（10Hz），含噪声/丢星/延迟/野值/慢漂"""
         pos_ned = self.pos.copy()
         vel_ned = quat_to_dcm(self.quat) @ self.vel
         if fault:
             if fault.get("gps_lost") and fault["gps_lost"][0] < t < fault["gps_lost"][1]:
                 return None
-            if fault.get("gps_jump") and t > fault["gps_jump_t"]:
-                pos_ned += fault["gps_jump"]
+            if "gps_jump" in fault and t > fault["gps_jump_t"]:
+                pos_ned = pos_ned + fault["gps_jump"]
+            # 慢漂/欺骗：从 t0 起按速率累积（不是单帧跳变）
+            gd = fault.get("gps_drift")
+            if gd and t > gd.get("t", 0.0):
+                pos_ned = pos_ned + np.asarray(gd.get("rate", [0, 0, 0]), dtype=float) * (t - gd.get("t", 0.0))
         pos_ned += self.rng.normal(0, 1.5, 3)
         vel_ned += self.rng.normal(0, 0.2, 3)
         return pos_ned, vel_ned
 
-    def baro_measure(self, t):
-        """气压高度（向上为正）"""
-        return -self.pos[2] + self.rng.normal(0, 0.5)
+    def mag_measure(self, t, fault=None):
+        """理想三轴磁力计（机体系 µT）+ 噪声/软磁干扰；仅 P0-2 概念验证。"""
+        m_ned = MAG_NED_UT.copy()
+        if fault:
+            m_ned = m_ned + np.asarray(fault.get("mag_disturb_ut", [0, 0, 0]),
+                                       dtype=float)
+        m_body = quat_to_dcm(self.quat).T @ m_ned
+        m_body = m_body + self.rng.normal(0, 1.0, 3)
+        return m_body
+
+    def baro_measure(self, t, fault=None):
+        """气压高度（向上为正），支持慢漂/偏置故障"""
+        alt = -self.pos[2]
+        if fault:
+            bd = fault.get("baro_drift")
+            if bd and t > bd.get("t", 0.0):
+                alt += float(bd.get("rate_mps", 0.0)) * (t - bd.get("t", 0.0))
+            alt += float(fault.get("baro_bias_m", 0.0))
+        return alt + self.rng.normal(0, 0.5)
 
 
 # =====================================================================
@@ -300,6 +411,9 @@ class FirmwareControl:
         self.prev_w0 = w_hover
         self.prev_wf = w_hover
         self.prev_wt = w_hover
+        # 舵机卡死/姿态持续超差的简化 failsafe（仿真验证用，不是固件实现）
+        self.failsafe_active = False
+        self.fault_count = 0
 
     def _lowpass(self, prev, x, alpha):
         return alpha * x + (1 - alpha) * prev
@@ -313,7 +427,12 @@ class FirmwareControl:
         omega_raw = nav["omega_body"].copy()
         if nav.get("gyro_bias") is not None:
             omega_raw = omega_raw - nav["gyro_bias"]
-        self.rate_filt = self._lowpass(self.rate_filt, omega_raw * R2D, CTRL["speed_alpha"])
+        # ★ 2026-10 轴映射修复：Dynamics 的 omega 是机体系 [x,y,z]
+        #   （x=推力轴/偏航、y=下摆/俯仰、z=上摆/滚转）；控制通道是
+        #   [roll,pitch,yaw]，必须重排为 [ωz, ωy, ωx]。
+        #   旧实现直接把 [ωx,ωy,ωz] 当 [roll,pitch,yaw]，速率环正反馈发散。
+        omega_ctrl = np.array([omega_raw[2], omega_raw[1], omega_raw[0]])
+        self.rate_filt = self._lowpass(self.rate_filt, omega_ctrl * R2D, CTRL["speed_alpha"])
         self.rate_filt2 = self._lowpass(self.rate_filt2, self.rate_filt, CTRL["speed_alpha2"])
         omega_dps = self.rate_filt2
 
@@ -322,9 +441,9 @@ class FirmwareControl:
         q_err = quat_mult(quat_conj(q_cur), ref["q_target"])
         if q_err[0] < 0:
             q_err = -q_err
-        # 体轴误差（deg）：roll=q_err.x, pitch=q_err.y（悬停构型轴置换后）
-        # 固件：roll 取 x、pitch 取 y；yaw 由航向通道处理
-        err_deg = np.array([q_err[1], q_err[2], q_err[3]]) * 2 * R2D
+        # 体轴误差（deg）：机体系 x=推力轴/yaw、y=pitch、z=roll；
+        # 控制通道顺序 [roll,pitch,yaw] = [q_err.z,q_err.y,q_err.x]。
+        err_deg = np.array([q_err[3], q_err[2], q_err[1]]) * 2 * R2D
         # 外环 P：目标角速度（yaw 用 att_yaw kp，无积分）
         omega_ref = np.array([
             CTRL["att_kp"] * err_deg[0],
@@ -363,13 +482,15 @@ class FirmwareControl:
 
         # ---- 惯量逆解 -> 力矩指令（rad/s² → N·m）----
         # ★ 模型系自洽闭环（轴阻尼测试验证三轴收敛）：
-        #   本仿真采用模型系（x'=推力轴朝天、y'=下摆、z'=上摆），
-        #   动力学 M_body、EKF 姿态、控制 M 全部在同一参考系，
-        #   M = +I·alpha（无需固件的档案系↔模型系轴置换）。
+        #   本仿真采用模型系（x'=差速偏航、y'=下摆俯仰、z'=上摆滚转）。
+        #   控制通道顺序是 [roll, pitch, yaw] = q_err.x/y/z；必须交叉映射：
+        #   yaw→Mx'(差速)、pitch→My'(下摆)、roll→Mz'(上摆)。
+        #   2026-10 修复：旧实现把 roll 接到 Mx、yaw 接到 Mz，起飞即滚转/偏航
+        #   交叉耦合，是 hifi 闭环发散的根因之一。
         M_cmd = np.array([
-            P["Ix"] * alpha_cmd[0] * D2R,   # Mx'(差速)
-            P["Iy"] * alpha_cmd[1] * D2R,   # My'(下摆)
-            P["Iz"] * alpha_cmd[2] * D2R,   # Mz'(上摆)
+            P["Ix"] * alpha_cmd[2] * D2R,   # Mx'(差速) ← yaw
+            P["Iy"] * alpha_cmd[1] * D2R,   # My'(下摆) ← pitch
+            P["Iz"] * alpha_cmd[0] * D2R,   # Mz'(上摆) ← roll
         ])
         # 陀螺耦合前馈（inertia_comp_mask & 0x03，悬停 ω≈0 时≈0）
         if CTRL["inertia_mask"] & 0x01:
@@ -390,14 +511,19 @@ class FirmwareControl:
             vel_cmd = np.clip(CTRL["alt_pos_kp"] * alt_err, -1.5, 1.5)
             vel_err = vel_cmd - nav["vel_up"]
             thr_delta = CTRL["alt_vel_kp"] * vel_err
-            self.alt_int = getattr(self, "alt_int", 0.0) + CTRL["alt_vel_ki"] * vel_err * dt
+            alt_ki = ref.get("alt_vel_ki")
+            if alt_ki is None:
+                alt_ki = CTRL["alt_vel_ki"]
+            self.alt_int = getattr(self, "alt_int", 0.0) + float(alt_ki) * vel_err * dt
             self.alt_int = max(-10.0, min(10.0, self.alt_int))
             thr_delta += self.alt_int
             thr_delta = np.clip(thr_delta, -CTRL["alt_vel_out_max"], CTRL["alt_vel_out_max"])
             thr = 50.0 + thr_delta
             thr = max(20.0, min(80.0, thr))
         else:
-            thr = ref.get("thr", 50.0)
+            # 悬停配平油门：w_hover 对应 100*w_hover/wMax ≈49.91%，不是恰好 50%。
+            # 旧默认 50% 会多 0.17% 推力，60 s 爬升约 60 m；A0 静止场景会误判。
+            thr = ref.get("thr", 100.0 * w_hover / P["wMax"])
         w0 = (thr / 100.0) * P["wMax"]
         w0 = max(P["w0_floor"], min(P["wMax"], w0))
 
@@ -411,9 +537,27 @@ class FirmwareControl:
         dt_cmd = max(-P["dMax"], min(P["dMax"], dt_cmd))
         dw_cmd = max(-P["dwMax"], min(P["dwMax"], dw_cmd))
 
+        # ---- 简化执行器故障 failsafe（仅仿真验证）----
+        # 舵机卡死/姿态持续超差且控制量饱和 -> 切油门，避免继续积分发散。
+        if ref.get("failsafe", False):
+            # 姿态持续超差即认为执行器失效（不依赖舵机反馈/饱和判断）。
+            severe = max(abs(err_deg[0]), abs(err_deg[1])) > 10.0
+            self.fault_count = self.fault_count + 1 if severe else 0
+            if self.fault_count >= 40:  # 0.2 s @200Hz
+                self.failsafe_active = True
+        if self.failsafe_active:
+            thr = 0.0
+            df_cmd = 0.0
+            dt_cmd = 0.0
+            dw_cmd = 0.0
+
         # ---- 差速分配（固件公式 ωf=ω0√(1+Δω)）----
-        wf_target = min(w0 * math.sqrt(max(0, 1 + dw_cmd)), P["wMax"])
-        wt_target = min(w0 * math.sqrt(max(0, 1 - dw_cmd)), P["wMax"])
+        if self.failsafe_active:
+            wf_target = 0.0
+            wt_target = 0.0
+        else:
+            wf_target = min(w0 * math.sqrt(max(0, 1 + dw_cmd)), P["wMax"])
+            wt_target = min(w0 * math.sqrt(max(0, 1 - dw_cmd)), P["wMax"])
 
         act = {
             "df": df_cmd, "dt": dt_cmd,

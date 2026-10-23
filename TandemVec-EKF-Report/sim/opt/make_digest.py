@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
-"""EKF 优化研究结果汇总 —— 读取 baseline/sweep/variants JSON 生成对比表
-输出 sim-data/opt/digest.md"""
+"""make_digest.py — 汇总 EKF 优化研究结果（读 JSON → 生成 digest.md）。
+
+@file    make_digest.py
+@module  analysis/EKF 优化研究（结果汇总）
+@brief   读取 baseline/sweep/variants 结果文件，生成人读对比表。
+@details 输入：sim-data/opt/{baseline_mc,sweep_*,variants}.json（缺失则跳过）；
+         处理：按场景分组拼接指标；输出：sim-data/opt/digest.md。
+@theory  N/A（结果汇总，不含滤波计算）
+@frame  N/A
+@units   表内沿用源 JSON 单位（m、m/s、deg、无量纲 NIS）
+@note    缺失文件只跳过不报错，因此"空表"不等于"没跑过"——需回看源 JSON 是否存在。
+@see     run_baseline.py、run_sweep.py、run_variants.py、
+         @ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md
+"""
 import json
 import os
 
@@ -10,6 +22,7 @@ os.makedirs(OUT, exist_ok=True)
 
 
 def load(name):
+    """读取 sim-data/opt 下的 JSON；不存在返回 None（汇总时跳过）。"""
     p = os.path.join(OUT, name)
     if not os.path.exists(p):
         return None
@@ -18,6 +31,7 @@ def load(name):
 
 
 def main():
+    """程序入口：汇总可用结果文件并写 digest.md。"""
     lines = ["# EKF 优化研究 —— 数据摘要（自动生成）", ""]
     base = load("baseline_mc.json")
     if base:

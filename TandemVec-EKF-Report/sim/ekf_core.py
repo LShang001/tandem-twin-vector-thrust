@@ -1,23 +1,39 @@
 # -*- coding: utf-8 -*-
-"""
-15 状态误差状态 EKF 数值仿真核心
-================================
-逐行对照固件 `lib/navigation-main/src/ekf_15_state.h` 与
-`src/navigation_task.cpp` 的算法语义实现，用于生成分析报告的数值素材。
+"""ekf_core.py — 15 状态误差状态 EKF 数值仿真核心（逐项对照固件语义）。
 
-状态定义（与固件完全一致）:
-    x = [δp_N, δp_E, δp_D, δv_N, δv_E, δv_D, δβ_N, δβ_E, δβ_D,
-         δba_x, δba_y, δba_z, δbg_x, δbg_y, δbg_z]^T
-误差姿态为体坐标系右乘等效旋转向量（q = q_nom ⊗ Exp(δβ^b)）。
-
-关键数值参数直接取自固件代码（见下方 CONFIG）:
-  - IMU:  gyro_std=0.0015 rad/s, gyro_markov_bias_std=0.00524 rad/s,
-          gyro_tau=180 s, accel_std=0.25 m/s^2, accel_tau=100 s
-  - GNSS R 地板: pos_ne 2m / pos_d 3m / vel_ne 0.15 / vel_d 0.25
-  - NIS 门限: GNSS=30, ZUPT=1000, Gravity=18, StaticGyro=24, Yaw=12
-  - 静止辅助: ZUPT 每 4 帧, Gravity 每 8 帧, StaticGyro 每 8 帧 (200Hz 基)
-  - 传播: 双子样圆锥/划摇补偿, 中点重力, 地球自转+传输速率, 二阶 Φ, Simpson Qd
-  - 更新: Joseph 形式协方差, NIS 门控, GNSS 重捕获膨胀 R
+@file    ekf_core.py
+@module  analysis/EKF 研究仿真（组合导航滤波器）
+@brief   按固件 ekf_15_state.h / navigation_task.cpp 语义复现 15 态 ESKF。
+@details 输入：双子样 IMU 增量 (dθ1,dθ2,dv1,dv2)、GNSS 位置/速度、静止辅助量测；
+         处理：扣零偏 → 圆锥/划摇补偿 → 中点姿态旋转 → 一阶+二阶 Φ 离散 → P 传播
+               → Joseph 量测更新 + NIS 门控 → 误差状态注入；
+         输出：状态 [lla, v_ned, q, ba, bg]、协方差 P 与每次融合的 NIS/接受标志。
+         误差姿态为体轴右乘：q = q_nom ⊗ Exp(δβ^b)，δβ 为导航系分量近似（φ≈δβ）。
+@theory  比力方程与速度更新 @ref REF-120 §7.4 (7.4.6) p.189、§9.6 (9.6.9) p.298；
+         等效旋转矢量与圆锥补偿 (9.3.30) p.274 @ref REF-120 §9.3；
+         划摇补偿 (9.6.25) p.301 @ref REF-120 §9.6；
+         地球模型与正常重力 (7.2.17)(7.2.18) @ref REF-120 §7.2.4 p.178；
+         位置速率方程 @ref REF-120 §8.1；
+         KF 五方程与 P 递推 @ref REF-121 §2.2.1 (2.2.4a–e) p.33；
+         Joseph 形式 @ref REF-121 §2.2.4 p.42–43；
+         残差 χ²(NIS) 门控 @ref REF-121 §7.3.1 p.255–259；
+         延迟回放＝局部重处理而非 RTS 平滑 @ref REF-121 §6.1.3 p.194。
+@frame  NED 导航系 + FRD 机体系；四元数 (w,x,y,z)。误差状态下标 6-8 为失准角。
+@units   SI：位置 m（lla 为 rad/rad/m）、速度 m/s、角度 rad、加计零偏 m/s²、陀螺零偏 rad/s。
+@note    本文件是**研究仿真**，与固件同构但不等同（口径差异单列在核查记录里）。
+         固件取值照抄于此（见 CONFIG 常量与 cfg/cfg_p0）：
+           - IMU：gyro_std=0.0015 rad/s、gyro_markov_bias_std=0.00524 rad/s、gyro_tau=180 s、
+             accel_std=0.25 m/s²、accel_tau=100 s（加计零偏游走 std=0.01）
+           - GNSS R 地板：pos_ne 2 m / pos_d 3 m / vel_ne 0.15 / vel_d 0.25（不可收紧）
+           - NIS 门限：GNSS=30、ZUPT=1000、Gravity=18、StaticGyro=24、Yaw=12
+           - 静止辅助分频（200 Hz 基）：ZUPT 每 4 帧、Gravity 每 8 帧、StaticGyro 每 8 帧
+           - 传播：双子样圆锥/划摇、中点重力、地球自转+传输速率、二阶 Φ、Simpson Qd
+           - 更新：Joseph 协方差、NIS 门控、GNSS 重捕获膨胀 R
+         P0 航向方差已按固件 2026-10-21 修复取 0.2 rad（cfg_p0["hdg"]）；
+         若要复现旧失效链（航向 π），必须由调用方显式覆盖该项，不要改默认值。
+         静止检测/光流重锚/子集 FDI 仅在 opt/upgrade_candidates.py 一侧实现。
+@see     run_scenarios.py、verify.py、hifi/hifi_core.py、opt/opt_ekf.py、
+         @ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md
 """
 import json
 import math
@@ -37,6 +53,16 @@ ECC2 = 6.69437999014e-3
 
 
 def skew(v):
+    """反对称矩阵 [v]×（叉乘算子）。
+
+    @brief   构造 3×3 反对称阵，使 [v]×·u = v×u。
+    @param[in] v 三维矢量（角速度/位置/比力等）
+    @return  3×3 反对称矩阵
+    @formula [v]× = [[0,−v3,v2],[v3,0,−v1],[−v2,v1,0]]
+    @ref     REF-120 §9.6 p.298（误差方程中的反对称阵形式）、@ref THY-001 §2
+    @note    F(v,β)=−C^n_b·[f_b]× 与 F(β,v) 由该算子生成，符号翻转敏感，
+             改符号会直接翻转姿态-速度耦合方向。
+    """
     return np.array([[0.0, -v[2], v[1]],
                      [v[2], 0.0, -v[0]],
                      [-v[1], v[0], 0.0]])
@@ -69,6 +95,13 @@ def quat_mult(q, p):
 
 
 def quat_conj(q):
+    """四元数共轭 (w,−x,−y,−z)，单位四元数下即逆。
+
+    @brief   返回 q*，用于 C^n_b = C^b_n^T 的装配与姿态取逆。
+    @param[in] q 四元数 (w,x,y,z)
+    @return  共轭四元数
+    @ref     MOD-002 §3.3
+    """
     return np.array([q[0], -q[1], -q[2], -q[3]])
 
 
@@ -124,16 +157,58 @@ def quat_to_euler(q):
 
 
 def wrap_pi(a):
+    """把角度折算到 (−π, π]。
+
+    @brief   航向/方位角缠绕保护，避免 ±π 跳变造成虚假大残差。
+    @param[in] a 角度 [rad]
+    @return  等价角度 [rad]，区间 (−π, π]
+    @note    航向量测残差 y=wrap_pi(z−yaw) 必须先缠绕再算 NIS，
+             否则 179°/−179° 边界会误判为野值。
+    """
     a = math.fmod(a + math.pi, 2 * math.pi)
     if a < 0:
         a += 2 * math.pi
     return a - math.pi
 
 
+def two_sample_delta_v(dtheta1, dtheta2, dv1, dv2):
+    """双子样速度增量（与固件 2026-10 P0-0 修复后同构）。
+
+    @brief   合并两个子样的速度增量并加划摇补偿。
+    @param[in] dtheta1/dtheta2 两个等分子样的角增量 [rad]
+    @param[in] dv1/dv2         两个等分子样的速度增量 [m/s]
+    @return  机体系等效速度增量 [m/s]
+    @formula ΔV = ΔV1+ΔV2 + (2/3)·(Δθ1×ΔV2 + ΔV1×Δθ2)
+    @ref     REF-120 §9.6 (9.6.25) p.301（划摇补偿，注意 ΔV×Δθ = −Δθ×ΔV）
+    @note    ★ 不含 ½Δθ×ΔV。该项只在用**区间起始姿态**旋转时需要；本实现用
+             **中点姿态** Cnb_mid 旋转，半程旋转已包含在内，再加会双计
+             （固件 P0-0，2026-10-21；本仿真 A-01，2026-10-23 对齐）。
+    """
+    dtheta = dtheta1 + dtheta2
+    dv = dv1 + dv2
+    return dv + (2.0 / 3.0) * (
+        np.cross(dtheta1, dv2) + np.cross(dv1, dtheta2)
+    )
+
+
 # ---------------------------------------------------------------------------
 # 地球模型（与固件 ComputeEarthModelTerms 一致）
 # ---------------------------------------------------------------------------
 class EarthModel:
+    """WGS-84 地球模型量（与固件 ComputeEarthModelTerms 同构）。
+
+    提供子午圈/卯酉圈曲率半径 rm/rn、正常重力 g、地球自转在 NED 的投影
+    ω_ie^n，以及导航系相对地球的传输速率 ω_en^n 与经纬高变化率。
+
+    @formula rn = a/√(1−e²sin²L)，rm = a(1−e²)/(1−e²sin²L)^{3/2}
+             g0 = 9.780318(1+5.3024e-3 sin²L−5.898e-6 sin²2L)，g = g0/(1+h/√(rm·rn))²
+             ω_ie^n = [ΩcosL, 0, −ΩsinL]；ω_en^n = [V_E/(rn+h), −V_N/(rm+h), −V_E·tanL/(rn+h)]
+             ḣ = −V_D
+    @ref     REF-120 §7.2.4 (7.2.17)(7.2.18) p.178（正常重力）、§8.1（位置速率）
+    @note    alt 用**椭球高**近似；重力用 Somigliana 展开式而非完整级数
+             （@deviation 与教材 (7.2.17) 相差 ~1e-5 m/s² 量级，随时间累积极小）。
+    """
+
     def __init__(self, lat_rad, alt_m):
         self.lat = lat_rad
         self.alt = alt_m
@@ -172,6 +247,27 @@ class EarthModel:
 # 15 状态 EKF（按固件语义）
 # ---------------------------------------------------------------------------
 class Ekf15:
+    """15 状态误差状态卡尔曼滤波器（固件语义复现）。
+
+    状态：x = [δp(3), δv(3), δβ(3), δba(3), δbg(3)]，误差为“估计−真值”的
+    机体系右乘失准角；名义状态为 [lla, v_ned, q, ba, bg]。
+
+    主要接口：
+      initialize()                    静基座调平初始化 + P0
+      time_update()                   双子样传播 + Φ/Qd + 协方差传播
+      measurement_update_gnss()       6 维位置/速度融合（NIS + 重捕获 + 延迟回放）
+      measurement_update_velocity()   ZUPT/速度辅助（含物理残差门控）
+      measurement_update_gravity()    重力方向（约束 roll/pitch）
+      measurement_update_static_gyro() 静止陀螺零偏（仅零偏子块）
+      measurement_update_yaw()        标量航向
+      inject()                        误差状态注入名义状态并清零
+
+    @note  R 为对角阵（固件 UpdateGnssNoiseMatrix 只填对角），故这里不做序贯分解；
+           6 维联合 NIS 会把“速度坏”判成“整帧坏”，是 F1/F3 失效链的成因
+           （见 @ref docs/08-参考资料/notes/02-卡尔曼滤波理论.md §2、§3 P0-1）。
+    @test   verify.py V1–V4（F 矩阵数值微分、NIS 分布、协方差一致性、双子样一致性）
+    """
+
     def __init__(self, cfg):
         self.cfg = cfg
         self.dt = cfg["dt"]
@@ -223,9 +319,26 @@ class Ekf15:
 
     # ---- 初始化 ----
     def initialize(self, accel, gyro, lla, vel=None):
+        """静基座调平初始化 + P0 装配。
+
+        @param[in] accel 静止时加计比力 [m/s²]（机体系）
+        @param[in] gyro  静止时陀螺读数 [rad/s]（机体系，含零偏）
+        @param[in] lla   [lat, lon, alt]（rad, rad, m）
+        @param[in] vel   初始速度 [m/s]（None 取 0）
+        @formula 用最小旋转把 NED 的 (0,0,1) 对齐到 −f_n，得 C^b_n；零偏初值
+                 bg = gyro − C^b_nᵀ·(ω_ie^n+ω_en^n)
+        @ref     REF-120 §7.4 p.189（比力与重力关系）、§8.1（对准）
+        @note    ★ P0 直接取自模块级全局 cfg_p0（未走 self.cfg），因此外部改 cfg
+                 不会改变 P0；opt/opt_ekf.py::build_p0 通过覆盖 cfg_p0 生效。
+                 ★ 2026-10-23（A-03）修正：本函数把 `self.home_lla` 初始化为
+                 传入 lla 的副本，`measurement_update_gnss()` 可直接使用；外部
+                 run_*.py 若需不同起飞点，仍可在 initialize 后覆盖。
+        """
         if vel is None:
             vel = np.zeros(3)
         self.lla = np.array(lla, dtype=float)
+        # 起飞点 = 初始 LLA（GNSS 位置观测的 NED 参考；外部可覆盖）
+        self.home_lla = self.lla.copy()
         self.vel = np.array(vel, dtype=float)
         # 静止调平：比力方向为重力反方向
         f = np.array(accel, dtype=float)
@@ -263,6 +376,22 @@ class Ekf15:
 
     # ---- 双子样传播 ----
     def time_update(self, dtheta1, dtheta2, dv1, dv2, dt, record=True):
+        """双子样时间更新：补偿 → 传播 → Φ/Qd → 协方差。
+
+        @param[in] dtheta1/2 两个等分子样的角增量 [rad]
+        @param[in] dv1/dv2   两个等分子样的速度增量 [m/s]
+        @param[in] dt        导航周期 [s]（固件 200 Hz 基 = 0.005 s）
+        @param[in] record    是否写延迟回放快照
+        @formula 圆锥 Δθ=Δθ1+Δθ2+(2/3)Δθ1×Δθ2
+                 划摇 ΔV=ΔV1+ΔV2+(2/3)(Δθ1×ΔV2+ΔV1×Δθ2)
+                 ΔV^n = C^n_b(mid)·ΔV + dt·(g^n − (2ω_ie+ω_en)×V^n)
+        @ref     REF-120 §9.3 (9.3.30) p.274、§9.6.1 (9.6.9) p.298、§9.6.2 (9.6.25) p.301
+        @deviation 无：2026-10-23（A-01）已删除旧实现的 `½Δθ×ΔV`。该旋转项只
+                 配合**区间起始姿态**使用；本实现用**中点姿态** `Cnb_mid` 旋转，
+                 半程旋转已包含在内，重复相加会多算 ~1e-2–5e-2 m/s²（与固件
+                 P0-0 同源）。双子样增量统一由 `two_sample_delta_v()` 计算。
+        @note    协方差用二阶 Φ + Simpson Qd（与固件飞行构建的 ZOH Qd 不同，量级 1%）。
+        """
         # 记录本步 IMU 增量供延迟回放重传播
         self._last_inc = (dtheta1.copy(), dtheta2.copy(), dv1.copy(), dv2.copy(),
                           dt)
@@ -275,8 +404,7 @@ class Ekf15:
         dtheta = dtheta1 + dtheta2
         dv = dv1 + dv2
         coning = dtheta + (2.0 / 3.0) * np.cross(dtheta1, dtheta2)
-        scull = (dv + 0.5 * np.cross(dtheta, dv) +
-                 (2.0 / 3.0) * (np.cross(dtheta1, dv2) + np.cross(dv1, dtheta2)))
+        scull = two_sample_delta_v(dtheta1, dtheta2, dv1, dv2)
         # 中点四元数（用于比力旋转）
         dq_mid = rotvec_to_quat(coning * 0.5)
         q_mid = quat_mult(self.quat, dq_mid)
@@ -686,7 +814,9 @@ cfg = {
 }
 cfg_p0 = {
     "pos": 2.0, "vel": 0.08, "att": 0.08,
-    "hdg": math.pi, "ba": 0.196, "bg": 0.00698,
+    # 航向方差：0.2 rad = 固件 2026-10-21 修复后的值（旧 π 仅用于复现历史失效链；
+    # 需要时由调用方显式覆盖，不要改回默认值）。
+    "hdg": 0.2, "ba": 0.196, "bg": 0.00698,
 }
 # 静止辅助分频（200Hz）
 ZUPT_DIV = 4      # 50 Hz

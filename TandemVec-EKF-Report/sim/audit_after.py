@@ -1,13 +1,23 @@
 # -*- coding: utf-8 -*-
-"""
-修复后回归验证：对每项修复实现"修复后逻辑"，与 audit_before 的 bug 结果对比
-验证项与修复文件对应：
-R1 H1      navigation_task.cpp 降级 AHRS 校正残差闭环
-R2 H2      ekf_15_state.h 标量航向 H=C_b^n(2,:) 倾斜补偿
-R3 MED-1/2 ins_static_aid_profile.h 档位门槛 36 + ZUPT 回退
-R4 MED-3   ins_gnss_epoch_timing.h 负值判无效
-R5 MED-6   navigation_task.cpp 双矢量航向静止门控
-R6 MED-0b  navigation_task.cpp 溢出帧 dt 用 micros 差分
+"""audit_after.py — 修复后回归验证（与 audit_before 的 bug 结果逐项对比）。
+
+@file    audit_after.py
+@module  analysis/EKF 研究仿真（修复后回归）
+@brief   对每项修复实现"修复后逻辑"，量化相对 audit_before 的改善。
+@details R1 H1 navigation_task.cpp 降级 AHRS 校正残差闭环；
+         R2 H2 ekf_15_state.h 标量航向 H=C_b^n(2,:) 倾斜补偿；
+         R3 MED-1/2 ins_static_aid_profile.h 档位门槛 36 + ZUPT 回退；
+         R4 MED-3 ins_gnss_epoch_timing.h 负值判无效；
+         R5 MED-6 navigation_task.cpp 双矢量航向静止门控；
+         R6 MED-0b navigation_task.cpp 溢出帧 dt 用 micros 差分。
+         输出：sim-data/audit_after*.json。
+@theory  标量航向倾斜补偿 @ref docs/08-参考资料/notes/04-航向与磁辅助.md；
+         航向弱可观与踢动 @ref docs/08-参考资料/notes/02-卡尔曼滤波理论.md §3 P0-2；
+         NIS 门控与 χ² 分位 @ref REF-121 §7.3.1 p.255–259。
+@frame  NED + FRD；H 索引按固件口径 6–8。
+@units   SI；结论常用 deg / m。
+@note    修复逻辑与固件函数一一对应，但仍是**仿真复现**；实机/录包回放未在此验证。
+@see     audit_before.py、verify_integration.py
 """
 import json
 import math
@@ -19,6 +29,7 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "sim-data")
 
 
 def wrap_pi(a):
+    """角度折算到 (−π, π]，用于航向残差边界处理。"""
     a = math.fmod(a + math.pi, 2 * math.pi)
     if a < 0:
         a += 2 * math.pi
@@ -67,6 +78,7 @@ def r2_yaw_tilt_fixed():
 
 # ============ R3: MED-1/2 修复后 ============
 def r3_tier_fixed():
+    """R3（MED-1/2）修复后逻辑：静止辅助三档门槛 36 帧 + ZUPT 回退，返回动作序列统计。"""
     ZUPT_DIV, GRAV_DIV, SG_DIV = 4, 8, 8
     ENTER_MIN = 20
 
@@ -111,6 +123,7 @@ def r3_tier_fixed():
 
 # ============ R4: MED-3 修复后 ============
 def r4_epoch_fixed():
+    """R4（MED-3）修复后逻辑：epoch 时间映射负值/越界判无效，返回映射分类统计。"""
     def map_age(mapped_us, now_us):
         if mapped_us < 0:
             return "invalid"
@@ -164,6 +177,7 @@ def r6_overflow_fixed():
 
 
 def main():
+    """程序入口：跑 R1–R6 修复后回归并输出对比 JSON。"""
     results = {
         "R1_H1_fixed": r1_ahrs_fixed(),
         "R2_H2_fixed": r2_yaw_tilt_fixed(),

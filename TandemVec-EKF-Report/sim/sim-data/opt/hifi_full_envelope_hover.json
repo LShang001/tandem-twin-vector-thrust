@@ -1,0 +1,92 @@
+{
+  "variant": "firmware",
+  "gravity_fast": true,
+  "grav_noise": 0.08,
+  "pos_hold": true,
+  "mag_vector": true,
+  "flow_aiding": true,
+  "a1_tilt_limit": 5.0,
+  "scenes": {
+    "A0_ground_static": {
+      "pos_ne_rmse": 0.4668941823995517,
+      "pos_d_rmse": 0.21011851948820456,
+      "vel_ne_rmse": 0.1539583595948773,
+      "att_q_rmse_deg": 0.43065448593895495,
+      "alt_err_rmse": 0.21020855645603478,
+      "pass": true
+    },
+    "A1_hover_gust": {
+      "pos_ne_rmse": 0.46321318439203496,
+      "pos_d_rmse": 0.19976447149150114,
+      "vel_ne_rmse": 0.16377016006822007,
+      "att_q_rmse_deg": 2.533752850473561,
+      "alt_err_rmse": 0.19995182666602854,
+      "pass": true
+    },
+    "A2_alt_hold": {
+      "pos_ne_rmse": 0.4747592946383566,
+      "pos_d_rmse": 0.19070792678740237,
+      "vel_ne_rmse": 0.2222611250578146,
+      "att_q_rmse_deg": 0.4800640912808392,
+      "alt_err_rmse": 0.1909313089742861,
+      "pass": true
+    },
+    "A3_gps_loss": {
+      "pos_ne_rmse": 0.09036135531872874,
+      "pos_d_rmse": 0.4784270954965671,
+      "vel_ne_rmse": 0.07162782674607275,
+      "att_q_rmse_deg": 1.000380882506954,
+      "alt_err_rmse": 0.47843393662656114,
+      "pass": true
+    },
+    "A4_accel_jump": {
+      "pos_ne_rmse": 0.5058985717793235,
+      "pos_d_rmse": 0.21054518901959846,
+      "vel_ne_rmse": 0.16419370450252288,
+      "att_q_rmse_deg": 0.37653497286918075,
+      "alt_err_rmse": 0.21141966540404003,
+      "pass": true
+    },
+    "A5_tilt20": {
+      "pos_ne_rmse": 0.5058688854770578,
+      "pos_d_rmse": 0.1903683030951223,
+      "vel_ne_rmse": 0.16469732573543228,
+      "att_q_rmse_deg": 0.4090984311200422,
+      "alt_err_rmse": 0.19049325389822852,
+      "pass": true
+    },
+    "A6_gps_jump": {
+      "pos_ne_rmse": 5.231885816201953,
+      "pos_d_rmse": 0.17211194614019082,
+      "vel_ne_rmse": 0.17132172521549194,
+      "att_q_rmse_deg": 0.4461797857951893,
+      "alt_err_rmse": 0.17231661992373293,
+      "pass": true
+    },
+    "A7_gyro_jump": {
+      "pos_ne_rmse": 0.5054914526219656,
+      "pos_d_rmse": 0.19036224666942855,
+      "vel_ne_rmse": 0.16445566475062112,
+      "att_q_rmse_deg": 2.576363978606116,
+      "alt_err_rmse": 0.19048869366774068,
+      "pass": true
+    },
+    "A8_yaw90": {
+      "pos_ne_rmse": 12394.308963390431,
+      "pos_d_rmse": 32202.18755290386,
+      "vel_ne_rmse": 4846.172255860691,
+      "att_q_rmse_deg": 129.3645084906495,
+      "alt_err_rmse": 32203.202871044527,
+      "pass": false
+    },
+    "A9_long_hover": {
+      "pos_ne_rmse": 0.32172768101445787,
+      "pos_d_rmse": 0.19677514037912477,
+      "vel_ne_rmse": 0.15434373237454324,
+      "att_q_rmse_deg": 0.49127427411807933,
+      "alt_err_rmse": 0.1968352400992669,
+      "pass": true
+    }
+  },
+  "all_pass": false
+}

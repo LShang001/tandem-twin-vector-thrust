@@ -1,16 +1,28 @@
 # -*- coding: utf-8 -*-
-"""
-EKF 优化探索框架 —— 变体 EKF + 静止检测/分级 + 轨迹与场景引擎
-================================================================
-基于 ekf_core.Ekf15（已修复语义）扩展：
-  - 可开关的算法变体：自适应R / 重捕获膨胀衰减 / ZUPT残差自适应噪声 /
-    气压辅助 / H2 航向投影 / 延迟回放开关
-  - 固件语义静止检测器（四条件+迟滞+置信度）与三档静止辅助分级
-  - 轨迹发生器（静基座/巡航转弯/VTOL过渡/悬停/震动）
-  - 场景运行器 + 统一指标（RMSE/NIS/3σ覆盖/收敛时间/偏航漂移率）
+"""opt_ekf.py — EKF 优化探索框架：变体 EKF + 静止检测/分级 + 轨迹与场景引擎。
 
-默认参数全部取固件实机运行值（navigation_task.cpp / ins_static_*.h /
-ins_gnss_dynamic_weight.h），开关全关时与 ekf_core 现状行为一致。
+@file    opt_ekf.py
+@module  analysis/EKF 优化研究（变体与场景引擎）
+@brief   在 ekf_core.Ekf15 上增加可开关算法变体、固件语义静止辅助与轨迹/场景运行器。
+@details 输入：场景规格（轨迹 + GNSS/辅助开关 + 故障）与参数覆盖 dict；
+         处理：build_cfg/build_p0 生成固件现值配置 → Scenario 逐历元推进真值轨迹
+               → OptEkf 传播/更新 → 统计 RMSE、NIS、接受率、航向踢动；
+         输出：指标 dict（scenario.run() 返回值），由 run_*.py 汇总成 JSON。
+         开关全关时与 ekf_core 现状行为一致（等价性由 run_baseline 复现）。
+@theory  15 态 ESKF 与 Joseph/NIS 见 @ref REF-121 §2.2.1 p.33、§2.2.4 p.42–43、§7.3.1 p.255–259；
+         静止检测四条件（|a|≈g、|ω|≈0、Δa、Δω）+ 迟滞 @ref TandemVec_FCS/include/ins_static_detector.h；
+         三档静止辅助分级 @ref TandemVec_FCS/include/ins_static_aid_profile.h；
+         失联协方差膨胀与重捕获低增益 @ref REF-121 §7.3.1 p.255–259（约束一致性）；
+         NIS 仅是一致性检验、对软故障不敏感 @ref docs/08-参考资料/notes/02-卡尔曼滤波理论.md §1.13。
+@frame  NED + FRD；四元数 (w,x,y,z)；双矢量航向 H 取 6:9（失准角行）为固件口径，
+         仿真旧版 7:10 已确认错位（见 @ref docs/08-参考资料/notes/05-仿真验证.md §2）。
+@units  SI；噪声 std 用 m/s²、m/s、rad、rad/s；角度内部 rad。
+@note    ★ P0 口径（2026-10-23 修正）：FW["p0_hdg"] 取固件现值 0.2 rad；
+         历史 π 是修复前值，仅用于显式覆盖复现旧失效链（spec["p0_hdg"]=π）。
+         候选/基线对比统一用 CUR_SPEC={"p0_hdg": 0.2}（见 upgrade_candidates.py）。
+         GNSS R 地板（2/3/0.15/0.25）经实测**不可收紧**；Q 加计 0.25 在无实机震动数据前不动。
+@see     run_baseline.py、run_sweep.py、run_variants.py、upgrade_candidates.py、
+         @ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md
 """
 import math
 import os
@@ -21,7 +33,7 @@ import numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from ekf_core import (Ekf15, cfg, cfg_p0, HOME_LLA, D2R, R2D, G_MPS2,
                       EarthModel, quat_mult, quat_conj, quat_to_dcm,
-                      quat_to_euler, rotvec_to_quat, wrap_pi)
+                      quat_to_euler, rotvec_to_quat, wrap_pi, skew)
 
 # ---------------------------------------------------------------------------
 # 固件实机运行参数默认值（来源见各注释）
@@ -35,7 +47,7 @@ FW = {
     "gyro_bias_std": 0.00524,    # 陀螺零偏 Markov 驱动 (rad/s, ≈0.3°/s)
     "gyro_tau": 180.0,           # 相关时间 (s)
     # —— 初始协方差（同上）——
-    "p0_pos": 2.0, "p0_vel": 0.08, "p0_att": 0.08, "p0_hdg": math.pi,
+    "p0_pos": 2.0, "p0_vel": 0.08, "p0_att": 0.08, "p0_hdg": 0.2,
     "p0_ba": 0.196, "p0_bg": 0.00698,
     # —— GNSS 动态权重地板（ins_gnss_dynamic_weight.h）——
     "r_pos_ne": 2.0, "r_pos_d": 3.0, "r_vel_ne": 0.15, "r_vel_d": 0.25,
@@ -92,6 +104,15 @@ def build_cfg(overrides=None, opts=None):
 
 
 def build_p0(overrides=None):
+    """构造初始协方差 P0 参数 dict（默认=固件现值）。
+
+    @brief   把 cfg_p0 复制为可变 dict，再按变体覆盖。
+    @param[in] overrides 覆盖项，如 {"hdg": 0.2}（修复后的航向初值）
+    @return  dict：pos/vel/att/hdg/ba/bg 的 1σ 初值
+    @note    航向项 hdg=π 是修复前口径；候选基线统一覆盖为 0.2 rad
+             （伪磁确定性初始化语义，见 2026-10-21 P0 修复）。
+    @ref     docs/08-参考资料/notes/05-仿真验证.md §1.1（基线口径）
+    """
     p = dict(cfg_p0)
     if overrides:
         p.update(overrides)
@@ -102,6 +123,19 @@ def build_p0(overrides=None):
 # 静止检测器（固件 ins_static_detector.h 语义）
 # ---------------------------------------------------------------------------
 class StaticDetector:
+    """固件语义静止检测器（四条件 + 迟滞 + 置信度）。
+
+    四条件：|a|∈[sd_a_lo,sd_a_hi]（≈g）、|ω|<sd_g、|Δa|<sd_da、|Δω|<sd_dg。
+    进入需连续 sd_enter 帧，退出需连续 sd_exit 帧（迟滞防抖）；
+    置信度 = min(四子分, dwell 进度)，供三档静止辅助选择档位。
+
+    @note   ★ 已知机理风险：水平匀速飞行与真静止在 IMU 上不可区分（|a|≈g、|ω|≈0、
+           Δa≈0），会误确认静止 → GNSS 速度被强制 0 → 6 维联合更新 NIS 爆炸 →
+           位置一并被拒 → 纯惯导漂移。固件修复是"GNSS 速度>0.8 m/s 强制退出
+           （只出不进）"，本类以 force_exit() 提供该出口，由导航侧按外部速度调用。
+           @ref docs/08-参考资料/notes/03-组合导航与鲁棒性.md §4.4
+    """
+
     def __init__(self, prm):
         self.p = prm
         self.enter_cnt = 0
@@ -168,6 +202,16 @@ class StaticDetector:
 # 静止辅助分级（固件 ins_static_aid_profile.h 语义）
 # ---------------------------------------------------------------------------
 class StaticAid:
+    """静止辅助三档分级（固件 ins_static_aid_profile.h 语义）。
+
+    档位由置信度与已确认静止帧数决定：tier1（刚确认）/tier2（frames≥100 且
+    置信度≥0.80）/tier3（更久），档位越高量测噪声越小、分频越稀。
+
+    @return tier() 返回 1/2/3；divs() 返回 (ZUPT, 重力, 静止陀螺) 的分频数；
+            noise() 返回 (重力, 速度NE, 速度D) 的量测噪声 std
+    @note    分频是相对 200 Hz 基的；tier1 的 4/8/8 与固件一致。
+    """
+
     def __init__(self, prm):
         self.p = prm
         self.frame_cnt = 0   # 本次静止会话帧号
@@ -212,6 +256,7 @@ class OptEkf(Ekf15):
         self._reacq_elapsed = 0.0
         # 气压辅助
         self._last_baro_t = -1e9
+        self._baro_rej_streak = 0
         self.meas_log = {"gnss_nis": [], "zupt_nis": [], "grav_nis": [],
                          "sg_nis": [], "yaw_nis": [], "baro_nis": [],
                          "gnss_fused": 0, "gnss_rej": 0, "gnss_conservative": 0,
@@ -392,19 +437,26 @@ class OptEkf(Ekf15):
     def measurement_update_baro(self, alt_up_m, noise_std=None):
         """一维高度量测（向上为正）。H = -e2（见推导）。"""
         noise = noise_std if noise_std is not None else FW["baro_noise"]
-        alt_est = -(self.lla[2] - self.home_lla[2])
+        # lla[2] 是 WGS-84 高度（向上为正），不是 NED down；
+        # 旧实现写成 -(lla-home) 会让“当前高度”变成负值，气压修正反向。
+        alt_est = self.lla[2] - self.home_lla[2]
         y = alt_up_m - alt_est
         if abs(y) > FW["baro_res_rej"]:
             self.meas_log["baro_rej"] += 1
+            self._baro_recover(y)
             return {"fused": False, "nis": float("nan"), "rejected": "residual"}
         H = np.zeros((1, 15))
-        H[0, 2] = 1.0    # y = z_alt − alt_est = δp_D（下为正误差态），对齐固件 H=e₂
+        # y = alt_up - alt_est = -(D_meas - D_est) = -δp_D（向上为正）
+        # 状态 x[2] 是 NED down 误差，故 H=-e₂；旧 +e₂ 符号反了，
+        # 会把气压修正推向错误方向并让 P_DD 坍缩、后续 NIS 全拒。
+        H[0, 2] = -1.0
         R = np.array([[noise**2]])
         S = H @ self.P @ H.T + R
         nis = float(y * y / S[0, 0])
         self.meas_log["baro_nis"].append(nis)
         if nis > self.opts.get("nis_baro", FW["nis_baro"]):
             self.meas_log["baro_rej"] += 1
+            self._baro_recover(y)
             return {"fused": False, "nis": nis, "rejected": "nis"}
         K = self.P @ H.T / S[0, 0]
         I15 = np.eye(15)
@@ -412,7 +464,40 @@ class OptEkf(Ekf15):
         self.P = self.stabilize(self.P)
         dx = K.ravel() * y
         self.inject(dx)
+        self._baro_rej_streak = 0
         self.meas_log["baro_fused"] += 1
+        return {"fused": True, "nis": nis}
+
+    def _baro_recover(self, y):
+        """气压连续被拒且残差大时膨胀 P_DD，避免高度估计锁死在旧值。"""
+        self._baro_rej_streak += 1
+        if abs(y) > 5.0 and self._baro_rej_streak >= 10:
+            self.P[2, 2] += (abs(y) * 0.5) ** 2
+            self.P = self.stabilize(self.P)
+            self._baro_rej_streak = 0
+
+    # ---- P0-2 概念验证：机体系磁矢量更新 ----
+    def measurement_update_mag_vector(self, mag_body, mag_ned, noise_ut=1.0):
+        """3D 磁矢量更新；H=[m_b×]（右乘体轴误差）。仅仿真概念验证。"""
+        Cbn = quat_to_dcm(self.quat).T
+        pred = Cbn @ np.asarray(mag_ned, float)
+        y = np.asarray(mag_body, float) - pred
+        H = np.zeros((3, 15))
+        # 与固件 notes/06 约定一致：δm_b = [m_b×] δβ^b
+        H[:, 6:9] = skew(pred)
+        R = (noise_ut ** 2) * np.eye(3)
+        S = H @ self.P @ H.T + R
+        nis = float(y @ np.linalg.solve(S, y))
+        if nis > self.opts.get("nis_mag", 30.0):
+            self.meas_log["yaw_rej"] += 1
+            return {"fused": False, "nis": nis}
+        K = self.P @ H.T @ np.linalg.solve(S, np.eye(3))
+        K *= float(self.opts.get("mag_k_scale", 1.0))
+        I15 = np.eye(15)
+        self.P = (I15 - K @ H) @ self.P @ (I15 - K @ H).T + K @ R @ K.T
+        self.P = self.stabilize(self.P)
+        self.inject(K @ y)
+        self.meas_log["yaw_fused"] += 1
         return {"fused": True, "nis": nis}
 
     # ---- H2 修复版标量航向（真航向轴投影，固件 2026-08-12 修复）----
@@ -422,11 +507,15 @@ class OptEkf(Ekf15):
         if abs(y) > 1.0:
             self.meas_log["yaw_rej"] += 1
             return {"fused": False}
-        # 真航向轴（NED 竖直向下 g_sf_ned）在机体系的投影 = C_b^n 第三行
+        # 真航向轴（NED 竖直向下）在机体系的投影 = C_b^n 第三行；
+        # 状态索引必须是 6..8（roll/pitch/yaw 误差），不是 7..9。
+        # 2026-10 修复：旧实现写 7:10，把航向新息注入加计零偏 x（见 notes/05）。
+        # 理论对应：秦永元《惯性导航（第三版）》§9.8.2 姿态误差方程（p.320–322）；
+        # 本实现按固件 ApplyYawUpdateDetailed() 的 H 口径 6..8 对齐。
         Cbn = quat_to_dcm(self.quat).T      # C^b_n：机体系 -> NED
         h_axis = Cbn[2, :]                  # NED z 轴在机体系分量
         H = np.zeros((1, 15))
-        H[0, 7:10] = h_axis
+        H[0, 6:9] = h_axis
         R = np.array([[noise_rad**2]])
         S = H @ self.P @ H.T + R
         nis = float(y * y / S[0, 0])
@@ -625,6 +714,16 @@ class TrajGen:
 
 
 def quat_from_yp(yaw, pitch, roll):
+    """ZYX(yaw,pitch,roll) → 四元数 (w,x,y,z)。
+
+    @brief   轨迹发生器按欧拉角给定真值姿态时的变换。
+    @param[in] yaw,pitch,roll 姿态角 [rad]
+    @return  四元数 (w,x,y,z)
+    @formula q = q_z(yaw)⊗q_y(pitch)⊗q_x(roll)（3-2-1 顺序）
+    @ref     MOD-002 §3、§4.1（注意本项目 euler 提取对 theta 取负）
+    @note    与 quat_to_euler 互逆；若混用符号会导致真值轨迹姿态反号，
+             场景 1/2 的误差统计随之整体偏大。
+    """
     cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
     cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
     cr, sr = math.cos(roll / 2), math.sin(roll / 2)

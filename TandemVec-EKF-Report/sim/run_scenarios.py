@@ -1,14 +1,22 @@
 # -*- coding: utf-8 -*-
-"""
-EKF 组合导航仿真场景 —— 生成分析报告数值素材
-场景:
-  S1 静基座对准 + 静止辅助(ZUPT/Gravity/StaticGyro)零偏收敛
-  S2 GNSS 位置/速度融合收敛 (含 3σ 包络)
-  S3 GNSS 失联 → 协方差膨胀 → 重捕获低增益融合
-  S4 GNSS 延迟回放 (15ms) 与无延迟对比
-  S5 双矢量航向融合 vs 纯陀螺积分漂移
-  S6 NIS 野值门控
-输出: sim-data/*.json, fig/*.png
+"""run_scenarios.py — EKF 组合导航仿真场景（生成报告数值素材）。
+
+@file    run_scenarios.py
+@module  analysis/EKF 研究仿真（场景批跑）
+@brief   跑 S1–S6 场景并把曲线/JSON 写到 sim-data 与 fig。
+@details 场景：S1 静基座对准 + 静止辅助零偏收敛；S2 GNSS 位置/速度融合收敛（含 3σ）；
+         S3 GNSS 失联 → 协方差膨胀 → 重捕获低增益；S4 GNSS 延迟回放（15 ms）对比；
+         S5 双矢量航向 vs 纯陀螺积分；S6 NIS 野值门控。
+         输出：TandemVec-EKF-Report/sim-data/*.json、fig/*.png。
+@theory  15 态 ESKF 传播/更新 @ref REF-121 §2.2.1 p.33；
+         NIS 门控与 χ² 分位 @ref REF-121 §7.3.1 p.255–259；
+         延迟回放＝局部重处理（非 RTS）@ref REF-121 §6.1.3 p.194；
+         失联膨胀与重捕获见 @ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md。
+@frame  NED + FRD；误差状态航向行索引 8。
+@units   SI；时间 s、位置 m、速度 m/s、角度 rad（作图转 deg）。
+@note    场景用固定种子（seed=1）以保证可复现；S4 的 15 ms 延迟是固件 GNSS 链路的实测量级，
+         不是任意参数。P0 航向方差沿用 ekf_core 的 π，未套用固件 0.2 修复。
+@see     ekf_core.py、verify.py、@ref TandemVec-EKF-Report/审查报告-固件EKF导航全面审查.md
 """
 import json
 import math
@@ -46,6 +54,7 @@ def quat_rot_v(q, v):
 
 
 def make_ekf(init_att_deg=0.0):
+    """构造并初始化 Ekf15；init_att_deg 可给初始倾角误差 [deg]。"""
     ekf = Ekf15(cfg)
     ekf.home_lla = HOME_LLA.copy()
     # 初始静止：机体系比力 = (0,0,-g)（水平）
@@ -97,13 +106,20 @@ def simulate_static(duration_s, true_bias_ba, true_bias_bg):
             np.array(p_att), np.array(p_bg), np.array(conf))
 
 
-def simulate_gnss(duration_s, truth_vel, gnss_hz=10, age_s=0.0,
-                  gnss_noise=None, outage=(None, None), rng_seed=7,
-                  ahrs_fallback=False, replay=True):
-    """S2/S3/S4: 恒定速度直线飞行 + GNSS 采样融合。
-    gnss_noise: (pos_ne_std, pos_d_std, vel_ne_std, vel_d_std)
-    ahrs_fallback: 失联期间用重力方向量测约束 roll/pitch（对齐固件无GNSS+运动时
-                   的 AHRS 姿态辅助分支，yaw 噪声=π 忽略）"""
+def simulate_gnss(duration_s, truth_vel, gnss_hz=10, age_s=0.0, gnss_noise=None,
+                  outage=(None, None), rng_seed=7, ahrs_fallback=False, replay=True):
+    """S2/S3/S4 共用：恒定速度直线飞行 + 按 gnss_hz 采样融合，返回逐历元记录 dict。
+
+    @param[in] duration_s    仿真时长 [s]，dt=0.005 s
+    @param[in] truth_vel     真值 NED 速度 [m/s]
+    @param[in] gnss_hz       GNSS 更新率 [Hz]
+    @param[in] age_s         GNSS 延迟 [s]（0 表示不启用延迟回放）
+    @param[in] gnss_noise    (pos_ne, pos_d, vel_ne, vel_d) 的 1σ；None 用固件地板 2/3/0.15/0.25
+    @param[in] outage        (起, 止) 失联窗口 [s]；None 表示不失联
+    @param[in] rng_seed      随机种子（固定以保证可复现）
+    @param[in] ahrs_fallback 失联期间用重力方向约束 roll/pitch（对齐固件 AHRS 分支，yaw 忽略）
+    @param[in] replay        是否启用延迟回放
+    """
     if gnss_noise is None:
         gnss_noise = (2.0, 3.0, 0.15, 0.25)
     rng = np.random.default_rng(rng_seed)
@@ -264,6 +280,7 @@ def simulate_nis_outlier(duration_s, gnss_hz=10):
 
 
 def main():
+    """程序入口：依次跑 S1–S6 场景并写 sim-data/fig。"""
     summary = {}
 
     # ================= S1 静基座收敛 =================

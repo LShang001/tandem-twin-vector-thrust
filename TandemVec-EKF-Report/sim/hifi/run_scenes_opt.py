@@ -1,14 +1,20 @@
 # -*- coding: utf-8 -*-
-"""
-高保真固件闭环仿真 —— EKF 变体验证
-====================================
-在 6DOF 动力学 + 固件控制律闭环中，用全固件语义导航（OptEkf：
-三档静止辅助+ZUPT残差自适应+气压辅助+双矢量航向+延迟回放+重捕获）
-对基准与候选变体做 A/B。
+"""run_scenes_opt.py — 高保真闭环下的 EKF 变体验证（A/B）。
 
-场景：
-  H1 悬停+阵风 | H2 定高10m | H3 GPS丢失30s | H4 加计零偏跳变 | H5 倾斜20°
-输出 sim-data/opt/hifi_variants.json
+@file    run_scenes_opt.py
+@module  analysis/闭环仿真（变体 A/B）
+@brief   在 6DOF + 固件控制律闭环中，用固件语义导航（OptEkf）对比基准与候选变体。
+@details 导航链：三档静止辅助 + ZUPT 残差自适应 + 气压辅助 + 双矢量航向 + 延迟回放 + 重捕获；
+         场景：H1 悬停+阵风、H2 定高 10 m、H3 GPS 丢失 30 s、H4 加计零偏跳变、H5 倾斜 20°。
+         输出：sim-data/opt/hifi_variants.json。
+@theory  EKF 变体开关语义 @ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md；
+         静止辅助分级 @ref TandemVec_FCS/include/ins_static_aid_profile.h；
+         NIS 门控 @ref REF-121 §7.3.1 p.255–259。
+@frame  NED + FRD。
+@units   SI。
+@note    变体间只改开关/噪声，不改状态维数或参数化，保证与基线逐位可比；
+         结果用于报告 §5，不构成实机结论。
+@see     opt_ekf.py、run_scenes.py、@ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md
 """
 import json
 import math
@@ -41,6 +47,8 @@ class NavOpt:
 
     def __init__(self, cfgd, opts, seed):
         self.ekf = OptEkf(cfgd, opts)
+        self.use_static_gyro = bool(opts.get("static_gyro", True))
+        self.gravity_fast = bool(opts.get("gravity_fast", False))
         self.ekf.home_lla = np.array([28.2 * D2R, 112.9 * D2R, 50.0])
         self.det = StaticDetector(FW)
         self.aid = StaticAid(FW)
@@ -78,9 +86,9 @@ class NavOpt:
             if c % dz == 0:
                 self.ekf.measurement_update_velocity_adaptive(
                     np.zeros(3), v_n, v_d)
-            if c % dg == 1:
+            if self.gravity_fast or c % dg == 1:
                 self.ekf.measurement_update_gravity(accel, g_n)
-            if c % ds == 3:
+            if c % ds == 3 and self.use_static_gyro:
                 self.ekf.measurement_update_static_gyro(
                     self.gyro_avg / max(self.gyro_cnt, 1),
                     np.full(3, FW["sg_noise"]))
@@ -127,11 +135,15 @@ class NavOpt:
     def get_nav(self):
         return {
             "quat": self.ekf.quat,
-            "omega_body": self._last_gyro - self.gyro_bias_est,
+            # 返回原始陀螺；FirmwareControl 会再减 gyro_bias（只减一次）。
+            # 旧实现返回已减偏的 omega_body 又返回 gyro_bias，控制器二次减偏，
+            # 闭环速率环被注入 -bias，是 A0-A9 闭环发散的根因之一。
+            "omega_body": self._last_gyro.copy(),
             "gyro_bias": self.gyro_bias_est.copy(),
             "alt_up": self.alt_up,
             "vel_up": self.vel_up,
             "pos": self.ekf.ned_from_lla(self.ekf.lla, self.ekf.home_lla),
+            "vel": self.ekf.vel.copy(),
         }
 
 
@@ -149,7 +161,15 @@ SCENES = {
 
 
 def run_scene(scene, duration, nav_factory, seed=1, seed_dyn=1):
+    """跑一个闭环场景（动力学 seed_dyn + 导航 seed），返回逐历元记录 dict。
+
+    @param[in] scene        场景规格（ref/fault 开关）
+    @param[in] duration     时长 [s]
+    @param[in] nav_factory  导航工厂（每场景新建 EKF，避免状态串味）
+    @return dict：t / pos_err / vel_err / att_err / ealt 等序列
+    """
     dyn = Dynamics(seed=seed_dyn)
+    dyn.fault = scene.get("fault", {})
     nav = nav_factory()
     ctrl = FirmwareControl()
     fault = scene.get("fault", {})
@@ -186,21 +206,108 @@ def run_scene(scene, duration, nav_factory, seed=1, seed_dyn=1):
                 np.random.default_rng(500 + k).normal(0, 0.05 * max(
                     1.0, float(np.linalg.norm(dyn.vel[:2]))), 2)
             nav.dual_vector_yaw(gps[1], flow, gyro)
-        # 气压 25Hz
-        if k % (HZ // 25) == 0:
-            nav.baro_update(dyn.baro_measure(t))
+        # 气压默认 25Hz；A2 种子敏感暴露出定高反馈与气压更新率相关
+        baro_hz = float(scene.get("baro_hz", 25.0))
+        if scene.get("baro_adaptive"):
+            tgt = ref.get("alt_hold")
+            if tgt is not None and (abs(float(tgt) - nav.alt_up) > 2.0
+                                    or abs(nav.vel_up) > 0.5):
+                baro_hz = 25.0
+            else:
+                baro_hz = 2.0
+        phase = int(scene.get("baro_phase", 0))
+        if (k + phase) % max(1, int(round(HZ / baro_hz))) == 0:
+            nav.baro_update(dyn.baro_measure(t, fault))
+        # P0-2 概念验证：理想磁航向（真值+噪声），仅用于证明 yaw 可观后
+        # 悬停闭环能否收敛；真实磁模型/标定/门控另做。
+        if scene.get("mag_ideal") and k % 10 == 0:
+            nav.ekf.measurement_update_yaw_h2(quat_to_euler(dyn.quat)[0], 0.05)
+        mag_hz = float(scene.get("mag_hz", 20.0))
+        mag_step = max(1, int(round(HZ / max(mag_hz, 0.1))))
+        if scene.get("mag_vector") and k % mag_step == 0:
+            from hifi_core import MAG_NED_UT
+            # 低速门控：速度大时磁矢量与位置/速度耦合会放大种子差异。
+            gate = scene.get("mag_gate_speed")
+            if gate is None or float(np.linalg.norm(nav.ekf.vel[0:2])) < float(gate):
+                nav.ekf.measurement_update_mag_vector(dyn.mag_measure(t, fault),
+                                                      MAG_NED_UT, 1.0)
+        # A3 光流速度概念验证：GNSS 无效时用真值水平速度+噪声模拟光流辅助。
+        # 仅用于证明“失锁后有水平速度观测”能否维持位置，不是固件光流链路。
+        if scene.get("flow_aiding") and gps is None:
+            v_ned = quat_to_dcm(dyn.quat) @ dyn.vel
+            v_meas = v_ned + np.array([
+                np.random.default_rng(900 + k).normal(0, 0.15),
+                np.random.default_rng(901 + k).normal(0, 0.15), 0.0])
+            nav.ekf.measurement_update_velocity(v_meas, 0.2, 0.5)
 
         q_ref = Q_HOVER.copy()
         if ref.get("tilt") and t > ref["tilt"][0]:
             q_ref = quat_mult(Q_HOVER, rotvec_to_quat(
                 np.array([0, ref["tilt"][1] * D2R, 0])))
+        # A8 航向：目标姿态必须同时含 yaw，否则 q_target=Q_HOVER 与 yaw_lock
+        # 互相打架（旧 A8 发散的根因）。
+        yaw_cmd = None
+        if ref.get("yaw_lock") is not None:
+            yr = ref.get("yaw_lock")
+            ramp = float(ref.get("yaw_ramp_s", 0.0))
+            if ramp > 0.0:
+                yr = ref["yaw_lock"] * min(1.0, t / ramp)
+            yaw_cmd = yr
+            q_ref = quat_from_euler(yr, 0.5 * math.pi, 0.0)
+        # 诊断：航向目标跟随 EKF 当前 yaw（不做航向回中），用于区分
+        # “航向不可观”与“航向目标/位置环耦合”。
+        if scene.get("yaw_free"):
+            q_ref = quat_from_euler(quat_to_euler(nav.ekf.quat)[0],
+                                    0.5 * math.pi, 0.0)
+        # 低速/悬停水平位置保持（仿真）：简单 P-D 位置误差 -> 目标倾角。
+        if ref.get("pos_hold"):
+            ns = nav.get_nav()
+            pn, pe = float(ns["pos"][0]), float(ns["pos"][1])
+            vn, ve = float(ns["vel"][0]), float(ns["vel"][1])
+            kp = float(ref.get("pos_kp", 0.8))
+            kd = float(ref.get("pos_kd", 0.6))
+            # 位置积分（抗稳态偏置）；仅 pos_hold 场景，默认 0。
+            ki = float(ref.get("pos_ki", 0.0))
+            pint = getattr(nav, "pos_int", np.zeros(2))
+            pint = pint + np.array([pn, pe]) * DT * ki
+            pint = np.clip(pint, -1.0, 1.0)
+            nav.pos_int = pint
+            ax = -kp * pn - kd * vn - ki * pint[0]
+            ay = -kp * pe - kd * ve - ki * pint[1]
+            # 可选倾角限幅（仅按场景启用；全局限幅会伤 A2/A9）
+            lim = ref.get("pos_tilt_limit_deg")
+            if lim is not None:
+                amax = P["g"] * math.tan(math.radians(float(lim)))
+                ax = max(-amax, min(amax, ax))
+                ay = max(-amax, min(amax, ay))
+            sr = float(ref.get("pos_roll_sign", 1.0))
+            sp = float(ref.get("pos_pitch_sign", -1.0))
+            # 体轴 rotvec = [yaw(x), pitch(y), roll(z)]；北向用 pitch，
+            # 东向必须用 roll(z)，旧实现把东向塞进 x(偏航) 导致位置保持无效。
+            q_ref = quat_mult(Q_HOVER, rotvec_to_quat(
+                np.array([0.0, sp * ax / P["g"], sr * ay / P["g"]])))
+        if yaw_cmd is not None and ref.get("pos_hold"):
+            # 位置保持的倾角目标再叠加体轴 x 偏航
+            q_yaw = rotvec_to_quat(np.array([yaw_cmd, 0.0, 0.0]))
+            if ref.get("yaw_premultiply"):
+                q_ref = quat_mult(q_yaw, q_ref)
+            else:
+                q_ref = quat_mult(q_ref, q_yaw)
         ref_dict = {
             "q_target": q_ref,
             "thr": ref.get("thr", 50.0),
             "alt_hold": ref.get("alt_hold"),
+            "alt_vel_ki": ref.get("alt_vel_ki"),
             "yaw_lock": ref.get("yaw_lock"),
         }
-        act = ctrl.step(nav.get_nav(), ref_dict, DT)
+        nav_state = nav.get_nav()
+        # 诊断开关：只替换角速率/零偏为真值，姿态仍用 EKF。
+        if scene.get("truth_rate", False):
+            nav_state["omega_body"] = dyn.omega.copy()
+            nav_state["gyro_bias"] = np.zeros(3)
+        if scene.get("truth_att", False):
+            nav_state["quat"] = dyn.quat.copy()
+        act = ctrl.step(nav_state, ref_dict, DT)
         dyn.step(act, DT)
 
         # 记录（四元数距离评估姿态）
@@ -233,6 +340,7 @@ def run_scene(scene, duration, nav_factory, seed=1, seed_dyn=1):
 
 
 def summarize(r, t0, t1):
+    """统计窗口 [t0,t1] 内的位置/速度/姿态 RMSE 与误差极值，返回指标 dict。"""
     m = (r["t"] >= t0) & (r["t"] <= t1)
     pe = r["pos_err"][m]
     return dict(
@@ -285,8 +393,9 @@ class NavV(NavOpt):
         if not self.initialized:
             return
         # 静态门控：GNSS 速度超阈 → 强制退出静止（防误静止巡航）
+        # 2026-10 与固件同步：1.5→0.8 m/s（P0-3，补 1 m/s 慢速盲区）。
         if self.static_gate and \
-                float(np.hypot(vel_ned[0], vel_ned[1])) > 1.5:
+                float(np.hypot(vel_ned[0], vel_ned[1])) > 0.8:
             self.det.force_exit()
         R = self.r_floor if self.r_floor else [2.0, 3.0, 0.15, 0.25]
         self.ekf.measurement_update_gnss(pos_ned, vel_ned, R,
@@ -320,6 +429,7 @@ VARIANTS = {
 
 
 def main():
+    """程序入口：跑 H1–H5 变体 A/B 并写 hifi_variants.json。"""
     out = {"variants": {}}
     for vname, v in VARIANTS.items():
         cfgd = build_cfg(v["cfg"])

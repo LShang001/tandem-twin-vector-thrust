@@ -1,10 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-固件集成层关键发现的可复现数值验证（审查报告 §〇 中 V9-V12）
-V9  H1 降级路径 AHRS 航向校正开环积分（HIGH）
-V11 M4 静止时双矢量航向缺静止门控 → 噪声污染
-V12 M1 IMU 缓冲溢出帧传播 dt 低估
-V13 MED-11 AHRS 姿态量测门限过宽 vs 双矢量 20°/s
+"""verify_integration.py — 固件集成层关键发现的数值复现（V9–V13）。
+
+@file    verify_integration.py
+@module  analysis/EKF 研究仿真（集成层验证）
+@brief   复现审查报告中 V9/V11/V12/V13 四项集成层缺陷的影响量级。
+@details V9 H1 降级路径 AHRS 航向校正开环积分（HIGH）；V11 M4 静止时双矢量航向缺静止门控；
+         V12 M1 IMU 缓冲溢出帧传播 dt 低估；V13 MED-11 AHRS 姿态量测门限过宽 vs 双矢量 20°/s。
+         输出：sim-data/*.json 与结论打印。
+@theory  航向可观测性与双矢量量测 @ref docs/08-参考资料/notes/04-航向与磁辅助.md；
+         NIS/残差门控 @ref REF-121 §7.3.1 p.255–259；
+         误差状态注入一致性 @ref REF-121 §2.2.1 p.33。
+@frame  NED + FRD。
+@units   SI；角度 rad、dt s。
+@note    本文件只做"发现可复现"，修复前后对照见 audit_before.py / audit_after.py。
+@see     audit_before.py、audit_after.py、@ref TandemVec-EKF-Report/审查报告-固件EKF导航全面审查.md
 """
 import json
 import math
@@ -16,6 +25,7 @@ OUT = os.path.join(os.path.dirname(__file__), "..", "sim-data")
 
 
 def wrap_pi(a):
+    """角度折算到 (−π, π]，用于航向残差边界处理。"""
     a = math.fmod(a + math.pi, 2 * math.pi)
     if a < 0:
         a += 2 * math.pi
@@ -103,6 +113,7 @@ def v13_ahrs_gate():
 
 
 def main():
+    """程序入口：跑 V9/V11/V12/V13 集成层复现并打印结论。"""
     results = {
         "V9_H1_ahrs_yaw": v9_ahrs_yaw_correction(),
         "V11_M4_dualvec_static": v11_dual_vector_yaw_static(),

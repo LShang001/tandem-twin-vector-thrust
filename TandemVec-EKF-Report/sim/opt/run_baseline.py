@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
-"""
-基线蒙特卡洛：固件现值参数下 8 类场景的统计性能 + NIS 一致性诊断
-输出 sim-data/opt/baseline_mc.json
+"""run_baseline.py — 基线蒙特卡洛：固件现值下 8 类场景的统计性能与 NIS 诊断。
+
+@file    run_baseline.py
+@module  analysis/EKF 优化研究（基线）
+@brief   用固件现值参数跑 8 场景蒙特卡洛，产出指标分布与一致性诊断。
+@details 输入：opt_ekf.Scenario/build_cfg/build_p0 + GNSS 默认噪声 (2,3,0.15,0.25)@10 Hz、
+         age 15 ms、静止辅助三档开启；处理：逐场景逐种子运行；输出：
+         sim-data/opt/baseline_mc.json。
+@theory  15 态 ESKF @ref REF-121 §2.2.1 p.33；NIS 门控 @ref REF-121 §7.3.1 p.255–259；
+         基线口径（P0 航向 0.2 / ZUPT NIS 16.3）见 @ref docs/08-参考资料/notes/05-仿真验证.md §1.1。
+@frame  NED + FRD。
+@units   SI；RMSE 用 m / m/s / deg；NIS 无量纲。
+@note    本文件的 base_scenarios() 被 run_sweep/upgrade_candidates 复用，
+         改场景定义会改变所有下游 A/B 结论。
+@see     opt_ekf.py、run_sweep.py、upgrade_candidates.py
 """
 import json
 import os
@@ -107,6 +119,7 @@ def base_scenarios():
 
 
 def run_one(name, spec, seed):
+    """跑一个场景的一个种子，返回指标 dict（复用 build_cfg/build_p0 + Scenario）。"""
     c = build_cfg()
     p0 = build_p0()
 
@@ -120,6 +133,7 @@ def run_one(name, spec, seed):
 
 
 def mc(scenarios, seeds, only=None):
+    """对场景集做蒙特卡洛聚合：每场景逐种子 run_one 后汇总均值/标准差。"""
     results = {}
     t_all = time.time()
     for name, spec in scenarios.items():

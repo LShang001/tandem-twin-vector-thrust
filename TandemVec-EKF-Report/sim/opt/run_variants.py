@@ -1,17 +1,22 @@
 # -*- coding: utf-8 -*-
-"""
-EKF 算法变体 A/B 对比
-=====================
-以固件现值（含 25Hz 气压辅助）为基准，量化各算法改进的收益/代价：
-  baro_off     —— 关闭气压辅助（旧仿真口径）：量化失联期垂直漂移收益
-  q_calib      —— Q 标定（accel_std 0.25→0.05，对齐真实传感器噪声）
-  r_tight      —— GNSS R 地板 ×0.5（更紧的 GNSS 融合）
-  adr          —— 新息方差自适应 R
-  combo        —— q_calib + r_tight + adr 组合
-  zupt_nis16   —— ZUPT NIS 门限 1000→16.3（χ²(3) 99.9%，恢复统计意义）
-  h2_off       —— 标量航向退回旧 H=e8（量化 H2 投影修复价值）
-  reacq_decay  —— 重捕获窗口内 R 膨胀逐帧衰减
-输出 sim-data/opt/variants.json
+"""run_variants.py — EKF 算法变体 A/B 对比（以固件现值为基准）。
+
+@file    run_variants.py
+@module  analysis/EKF 优化研究（变体 A/B）
+@brief   量化各算法改动的收益/代价：气压、Q 标定、R 收紧、自适应 R、ZUPT NIS、H2、重捕获。
+@details 变体：baro_off（关气压，旧仿真口径）、q_calib（accel_std 0.25→0.05）、
+         r_tight（GNSS R ×0.5）、adr（新息方差自适应 R）、combo、zupt_nis16
+         （1000→16.3，χ²(3) 99.9%）、h2_off（退回 H=e8）、reacq_decay（膨胀逐帧衰减）。
+         输出：sim-data/opt/variants.json。
+@theory  χ²(3) 99.9% 分位 = 16.27 @ref REF-121 §7.3.1 p.255–259；
+         标量航向倾斜补偿（H=C_b^n(2,:)）@ref docs/08-参考资料/notes/04-航向与磁辅助.md；
+         Q/R 一致性与滤波发散 @ref REF-121 §3.5 p.87–93。
+@frame  NED + FRD；H 索引 6–8 为失准角行（旧实现误用 7:10）。
+@units   SI；指标含 pos_ne RMSE（m）、航向误差（deg）、NIS（无量纲）。
+@note    ★ 已知无效实验：split 变体在未修 F1 的基线上运行时"接受率 1.0 而 NIS 2.7e4"，
+         说明门控语义被绕过，该条目不能作为"序贯无用"的证据，必须重跑。
+@see     opt_ekf.py、run_sweep.py、upgrade_candidates.py、
+         @ref TandemVec-EKF-Report/优化研究-算法与参数优化研究报告.md
 """
 import copy
 import json
@@ -113,6 +118,7 @@ KEYS = ["pos_ne_rmse", "pos_d_rmse", "vel_ne_rmse", "vel_d_rmse",
 
 
 def run_variant(vname, scn, win, seeds=SEEDS):
+    """跑一个算法变体（覆盖 spec）在同一场景上的多种子指标，返回统计 dict。"""
     v = VARIANTS[vname]
     spec = copy.deepcopy(base_scenarios()[scn])
     for k, val in v["spec"].items():
@@ -134,6 +140,7 @@ def run_variant(vname, scn, win, seeds=SEEDS):
 
 
 def main():
+    """程序入口：跑全部变体（或 --only 指定项）并写 variants.json。"""
     # 基准：所有涉及场景
     base_scns = sorted({s for lst in EVAL.values() for s, _ in lst})
     baseline = {}

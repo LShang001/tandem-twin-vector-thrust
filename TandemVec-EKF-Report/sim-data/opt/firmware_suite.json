@@ -1,0 +1,98 @@
+{
+  "variant": "firmware_truth_stabilized",
+  "scenes": {
+    "F0_nominal_hover": {
+      "pos_ne_rmse": 0.07630436524168915,
+      "pos_d_rmse": 0.22220197749941345,
+      "att_q_rmse_deg": 0.5412619690388852,
+      "alt_err_rmse": 0.22220197749941345,
+      "pass": true
+    },
+    "F1_alt_step": {
+      "pos_ne_rmse": 0.10831207943331421,
+      "pos_d_rmse": 0.8117242455056863,
+      "att_q_rmse_deg": 0.28490835043236706,
+      "alt_err_rmse": 0.8117242455056863,
+      "pass": true
+    },
+    "F2_gust": {
+      "pos_ne_rmse": 0.2551130229475894,
+      "pos_d_rmse": 0.2070590222085813,
+      "att_q_rmse_deg": 0.7432735636705956,
+      "alt_err_rmse": 0.2070590222085813,
+      "pass": true
+    },
+    "F3_thrust_loss30": {
+      "pos_ne_rmse": 0.07597159799873193,
+      "pos_d_rmse": 1.7648728956985698,
+      "att_q_rmse_deg": 0.5288284784442404,
+      "alt_err_rmse": 1.7648728956985698,
+      "pass": true
+    },
+    "F4_servo_jam": {
+      "pos_ne_rmse": 41266.15580814917,
+      "pos_d_rmse": 86334.23084491315,
+      "att_q_rmse_deg": 84.0254666729607,
+      "alt_err_rmse": 86334.23084491315,
+      "pass": false
+    },
+    "F4b_servo_jam_failsafe": {
+      "pos_ne_rmse": 56.01100423914538,
+      "pos_d_rmse": 420.81350386562997,
+      "att_q_rmse_deg": 98.16449128855814,
+      "alt_err_rmse": 420.81350386562997,
+      "pass": true
+    },
+    "F5_vibration": {
+      "pos_ne_rmse": 0.07624127123652454,
+      "pos_d_rmse": 0.22225313004508523,
+      "att_q_rmse_deg": 0.6042353871117513,
+      "alt_err_rmse": 0.22225313004508523,
+      "pass": true
+    },
+    "F6_gyro_jump": {
+      "pos_ne_rmse": 0.14258669276789673,
+      "pos_d_rmse": 0.22878439514751356,
+      "att_q_rmse_deg": 7.907470334197997,
+      "alt_err_rmse": 0.22878439514751356,
+      "pass": true
+    },
+    "F7_accel_jump": {
+      "pos_ne_rmse": 0.1425161655250342,
+      "pos_d_rmse": 0.27067999818017097,
+      "att_q_rmse_deg": 0.828440787596016,
+      "alt_err_rmse": 0.27067999818017097,
+      "pass": true
+    },
+    "F8_gps_loss": {
+      "pos_ne_rmse": 0.036144146995570815,
+      "pos_d_rmse": 0.45759494727228756,
+      "att_q_rmse_deg": 0.5684928612749596,
+      "alt_err_rmse": 0.45759494727228756,
+      "pass": true
+    },
+    "F9_gps_jump": {
+      "pos_ne_rmse": 4.208685191634665,
+      "pos_d_rmse": 0.23032756367766713,
+      "att_q_rmse_deg": 0.5547986338371035,
+      "alt_err_rmse": 0.23032756367766713,
+      "pass": true
+    },
+    "F10_tilt10": {
+      "pos_ne_rmse": 0.2434080913729772,
+      "pos_d_rmse": 2.3590805509562616,
+      "att_q_rmse_deg": 9.341310991171085,
+      "alt_err_rmse": 2.3590805509562616,
+      "pass": true
+    },
+    "F11_long_hover": {
+      "pos_ne_rmse": 0.08379032996557367,
+      "pos_d_rmse": 1.713979905061599,
+      "att_q_rmse_deg": 0.6426500761713927,
+      "alt_err_rmse": 1.713979905061599,
+      "pass": true
+    }
+  },
+  "pass": 12,
+  "total": 13
+}
