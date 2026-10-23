@@ -9,7 +9,9 @@
          链路延时 0–100 ms、机动类型、振动 g/模式/频率、GNSS 位置速度噪声、
          失锁标记与失锁时长。
          处理：subprocess 调用被测可执行体，用正则解析
-         `DBG_BATCH ok=… tau=… valid=…` 与 `age-comp: … pos3d=… improve=… est_tau=…` 两行。
+         `DBG_BATCH ok=… tau=… valid=…`、`reacq: resets=…` 与
+         `age-comp: … pos3d=… improve=… est_tau=…` 三行；`--anti-alias`
+         透传到被测体的 argv[40]，模拟 IMU 模拟前端抗混叠。
          输出：CSV（字段见 FIELDS）+ 进度行；解析失败即抛异常（不静默跳过）。
 @theory  GNSS 量测年龄补偿：量测对应 t-τ 时刻状态，EKF 回放融合后重传播到当前；
          估计量 τ̂ 与真值 τ 的比较是“估计器是否收敛”的判据。
@@ -28,7 +30,8 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 OUT = ROOT / "TandemVec-EKF-Report" / "sim-data"
 FIELDS = ["case","seed","speed","latency_ms","maneuver","vib_g","vib_mode",
           "vib_hz","gyro_vib","gnss_pos","gnss_vel","outage","outage_len",
-          "est_tau_ms","true_tau_ms","pos3d_base","pos3d_comp","improve_pct"]
+          "est_tau_ms","true_tau_ms","pos3d_base","pos3d_comp","improve_pct",
+          "reacquire_resets","anti_alias"]
 
 
 def run_one(bin_path, a):
@@ -37,9 +40,11 @@ def run_one(bin_path, a):
     out = p.stdout
     m1 = re.search(r"DBG_BATCH ok=(\d+) tau=([0-9.]+) valid=(\d+)", out)
     m2 = re.search(r"age-comp:.*pos3d=([0-9.]+).*improve=([-0-9.]+)%.*est_tau=([0-9.]+)", out)
+    m3 = re.search(r"reacq: resets=(\d+)", out)
     if not (m1 and m2):
         raise RuntimeError("parse failed:\n" + out + "\n" + p.stderr)
-    return (float(m1.group(2)), float(m2.group(1)), float(m2.group(2)))
+    return (float(m1.group(2)), float(m2.group(1)), float(m2.group(2)),
+            int(m3.group(1)) if m3 else 0)
 
 
 def main():
@@ -49,6 +54,8 @@ def main():
     ap.add_argument("--every", type=int, default=100)
     ap.add_argument("--bin", default=r"C:\Users\12631\AppData\Local\Temp\hsreal.exe")
     ap.add_argument("--out", default=str(OUT / "delay-closed-loop.csv"))
+    ap.add_argument("--anti-alias", action="store_true",
+                    help="传感器模型启用 8 阶 Butterworth 抗混叠（抑制近 Nyquist 振动假直流）")
     args = ap.parse_args()
     rng = random.Random(args.seed)
     rows = []
@@ -75,12 +82,13 @@ def main():
         # 11 base + adaptive=1 + mode/gv/hz/os/oe + 0/0/0/0 + sensor 6
         cli = [speed, lat, 0.25, 0.0015, 0.00524, gp, gvel, seed, man,
                0.01, vib, 1, mode, gv, hz, os_, oe,
-               0, 0, 0, 1, scale, scale, mis, by, bz, of]
+               0, 0, 0, 1, scale, scale, mis, by, bz, of,
+               0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1 if args.anti_alias else 0]
         try:
-            est, pos, improve = run_one(args.bin, cli)
+            est, pos, improve, resets = run_one(args.bin, cli)
             ok = 1
         except Exception as exc:  # noqa: BLE001
-            est = pos = improve = float("nan"); ok = 0
+            est = pos = improve = float("nan"); resets = 0; ok = 0
             print(f"[WARN] {i}: {exc}", flush=True)
         rows.append({"case":i,"seed":seed,"speed":speed,
                      "latency_ms":lat*1000.0,"maneuver":man,"vib_g":vib,
@@ -89,7 +97,8 @@ def main():
                      "outage_len":(oe-os_) if outage else 0.0,
                      "est_tau_ms":est,"true_tau_ms":lat*1000.0,
                      "pos3d_base":pos,"pos3d_comp":pos,"improve_pct":improve,
-                     "ok":ok})
+                     "reacquire_resets":resets,
+                     "anti_alias":int(args.anti_alias),"ok":ok})
         if (i+1) % args.every == 0 or i+1 == args.cases:
             el=time.time()-t0; rate=(i+1)/max(el,1e-9)
             print(f"[progress] {i+1}/{args.cases} ({100*(i+1)/args.cases:.1f}%) "

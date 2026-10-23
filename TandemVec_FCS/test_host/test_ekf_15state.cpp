@@ -27,7 +27,8 @@
  * @test    T1 初始化姿态/速度/位置；T2 静态传播 100 步；T3 静态传播 200 步协方差有界；
  *          T4 GNSS 速度量测收敛；T5 NaN 输入被拒且不污染状态；T6 ZUPT 保持零速；
  *          T7 速度旋转效应不重复计入（P0-0）；T8 航向 consider（P1-5）；
- *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）
+ *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）；
+ *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚
  * @see     TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md §5.1/§9.6
  */
 #include <cstdio>
@@ -292,6 +293,78 @@ int main()
     const auto r2 = ekf.MeasurementUpdateDetailed(
         Eigen::Vector3f::Zero(), kLla, 0.005f, 0.004f, true);
     CHECK("T12 sub-frame age=4ms 延迟 GNSS 融合", r2.fused);
+  }
+
+  // ---- T13 长时间失联 + 连续不可信 GNSS：第 3 帧应硬重锚位置/速度 ----
+  // 场景：5 m/s 速度偏差纯惯导 7 s，位置漂出 ~35 m（超过 25 m 重捕获残差门），
+  // 之后连续 3 帧 GNSS 都在真实位置。前两帧拒绝，第三帧应重锚并恢复融合。
+  {
+    Ekf15State ekf = makeInit();
+    ekf.ResetPositionVelocityToGnss(Eigen::Vector3f(5.0f, 0.0f, 0.0f), kLla);
+    for (int i = 0; i < 1400; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const double drift_m = bfs::lla2ned(ekf.lla_rad_m(), kLla,
+                                        bfs::AngPosUnit::RAD).norm();
+    CHECK("T13 失联漂移已超过重捕获残差门", drift_m > 25.0);
+
+    Eigen::Vector3f vel_true = Eigen::Vector3f::Zero();
+    const auto r1 = ekf.MeasurementUpdateDetailed(
+        vel_true, kLla, 0.005f, 0.0f, true);
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto r2 = ekf.MeasurementUpdateDetailed(
+        vel_true, kLla, 0.005f, 0.0f, true);
+    CHECK("T13 第 1 帧不可信 GNSS 被拒", !r1.fused);
+    CHECK("T13 第 2 帧不可信 GNSS 被拒", !r2.fused);
+    CHECK("T13 前两帧未触发重锚",
+          ekf.gnss_reacquire_reset_count() == 0U);
+
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto r3 = ekf.MeasurementUpdateDetailed(
+        vel_true, kLla, 0.005f, 0.0f, true);
+    CHECK("T13 第 3 帧触发硬重锚", r3.fused && r3.reacquired);
+    const double pos_err_m = bfs::lla2ned(ekf.lla_rad_m(), kLla,
+                                          bfs::AngPosUnit::RAD).norm();
+    CHECK("T13 重锚后位置回到 GNSS（<1 m）", pos_err_m < 1.0);
+    CHECK("T13 重锚后速度回到 GNSS（<0.01 m/s）",
+          ekf.ned_vel_mps().norm() < 0.01f);
+    CHECK("T13 重锚计数 = 1", ekf.gnss_reacquire_reset_count() == 1U);
+    CHECK("T13 重锚抬升位置协方差",
+          ekf.covariance_coeff_for_test(0, 0) > 30.0f);
+    CHECK("T13 重锚抬升速度协方差",
+          ekf.covariance_coeff_for_test(3, 3) > 0.5f);
+
+    // 重锚后下一帧 GNSS 应回到普通融合路径，不再重复重锚。
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto r4 = ekf.MeasurementUpdateDetailed(
+        vel_true, kLla, 0.005f, 0.0f, true);
+    CHECK("T13 重锚后 GNSS 恢复正常融合", r4.fused && !r4.reacquired);
+  }
+
+  // ---- T13b 相邻帧速度互相矛盾（跳点串）不得触发硬重锚 ----
+  {
+    Ekf15State ekf = makeInit();
+    ekf.ResetPositionVelocityToGnss(Eigen::Vector3f(5.0f, 0.0f, 0.0f), kLla);
+    for (int i = 0; i < 1400; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+
+    bool any_fused = false;
+    for (int i = 0; i < 5; ++i)
+    {
+      const Eigen::Vector3f jumpy_vel =
+          (i % 2 == 0) ? Eigen::Vector3f::Zero()
+                       : Eigen::Vector3f(50.0f, 0.0f, 0.0f);
+      const auto r = ekf.MeasurementUpdateDetailed(
+          jumpy_vel, kLla, 0.005f, 0.0f, true);
+      any_fused = any_fused || r.fused;
+      for (int k = 0; k < 20; ++k)
+        ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    }
+    CHECK("T13b 矛盾跳点串始终不融合", !any_fused);
+    CHECK("T13b 矛盾跳点串不触发重锚",
+          ekf.gnss_reacquire_reset_count() == 0U);
   }
 
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);

@@ -8,6 +8,8 @@
  *          传感器模型（按型号标称量级，非实机标定）：ICM-42688 陀螺噪声密度
  *          0.0035 dps/√Hz、零偏 0.5 dps；加计噪声密度 70 µg/√Hz、零偏 20 mg；
  *          UBX PVT 水平 1.5 m (1σ)、速度 0.05 m/s (1σ)、10 Hz；链路延迟可配置。
+ *          振动可选用 8 阶 Butterworth（fc=80 Hz）模拟 IMU 模拟前端抗混叠，
+ *          避免近 Nyquist 单频在 200 Hz 采样后伪装成准直流零偏。
  *          输入：argv 为速度/延时/各噪声/种子/机动/振动 g/模式/频率/失锁窗口/
  *          杆臂/纬度抖动/auto_delay/尺度误差/安装失准/轴零偏/野值比例/
  *          加计门控/阶跃与缓漂参数等（默认值见 main 开头）。
@@ -21,7 +23,8 @@
  * @note    ★ 历史坑：本文件的命令行参数是 1-based 顺序映射，
  *          argv[21] 是 auto_delay、argv[22] 是 accel_scale；曾因错位一位导致整批
  *          MC 结果（40 km 发散、硬重锚等）被撤回，见 AGENTS.md（EKF 在线零偏可靠性）。
- *          改参数顺序会静默改变所有历史 CSV 的语义。
+ *          改参数顺序会静默改变所有历史 CSV 的语义。argv[40] 是后加的
+ *          anti_alias 开关，缺省 0，不影响 1–39 的历史语义。
  * @test    S1 速度/延时扫描；S2 振动矩阵；S3 失锁与恢复；S4 杆臂补偿；
  *          S5 阶跃/缓漂零偏；S6 野值注入；S7 auto_delay 闭环；S8 参数扫频
  * @see     TandemVec-EKF-Report/卫惯组合导航-延时补偿-高速精度-2026-10-22.md、
@@ -58,11 +61,24 @@ constexpr float kGyroBiasDps = 0.5f;
 constexpr float kAccelBiasMg = 20.0f;
 
 struct Sample { double t; double deliver_t; Eigen::Vector3f vel; Eigen::Vector3d lla; };
+
+// 200 Hz 采样下，199.9 Hz 单频振动会混叠成 ~0.1 Hz 的准直流偏置（幅值可达
+// 整个 vib_g）。真实 ICM-42688 在 ODR 前有模拟抗混叠低通，必须先衰减再采样；
+// 对已采样序列做数字滤波无法去掉这个假直流。这里按 8 阶 Butterworth
+// （fc=80 Hz）的幅频响应缩放连续振动，20–60 Hz 基本无衰减，200 Hz 约 −64 dB。
+constexpr float kAntiAliasCutoffHz = 80.0f;
+constexpr float kAntiAliasOrder = 8.0f;
+inline float AntiAliasGain(float f_hz) {
+  const float r = f_hz / kAntiAliasCutoffHz;
+  return 1.0f / std::sqrt(1.0f + std::pow(r, 2.0f * kAntiAliasOrder));
+}
+
 struct Result {
   double pos_base, pos_comp, vel_base, vel_comp;
   double pos3d_base, pos3d_comp;
   double est_delay_s;
   int fused, rejected;
+  unsigned reacquire_resets;
   Eigen::Vector3f accel_bias;
   Eigen::Vector3f gyro_bias;
 };
@@ -102,7 +118,7 @@ Result run(float speed_mps, float latency_s, unsigned seed, int maneuver,
            float bias_step_gyro_dps, float bias_drift_accel,
            float bias_drift_gyro_dps, bool gnss_bias_freeze, bool trace,
            bool post_outage_boost, bool bias_reanchor,
-           bool reset_on_recovery, bool soft_velocity) {
+           bool reset_on_recovery, bool soft_velocity, bool anti_alias) {
   std::mt19937 rng(seed);
   // 200 Hz 样本噪声：密度 × sqrt(带宽 100 Hz)
   const float gyro_sample_sigma =
@@ -151,7 +167,7 @@ Result run(float speed_mps, float latency_s, unsigned seed, int maneuver,
   float a_bias_x = accel_bias0, a_bias_y = 0.0f, a_bias_z = 0.0f;
   float g_bias_x = gyro_bias0, g_bias_y = 0.0f, g_bias_z = 0.0f;
 
-  Result out{0, 0, 0, 0, 0, 0, 0.0, 0, 0};
+  Result out{0, 0, 0, 0, 0, 0, 0.0, 0, 0, 0};
   double sum_pb = 0, sum_pc = 0, sum_vb = 0, sum_vc = 0;
   double sum_p3b = 0, sum_p3c = 0;
   int count = 0;
@@ -213,11 +229,19 @@ Result run(float speed_mps, float latency_s, unsigned seed, int maneuver,
     float vib = 0.0f;
     if (vib_mode == 1) {
       const float w = 2.0f * 3.14159265f * (float)t;
-      vib = vib_g * kG * (0.70f * std::sin(w * 40.0f) +
-                          0.45f * std::sin(w * 80.0f + 1.1f) +
-                          0.25f * std::sin(w * 120.0f + 2.2f));
+      float a40 = 0.70f, a80 = 0.45f, a120 = 0.25f;
+      if (anti_alias) {
+        a40 *= AntiAliasGain(40.0f);
+        a80 *= AntiAliasGain(80.0f);
+        a120 *= AntiAliasGain(120.0f);
+      }
+      vib = vib_g * kG * (a40 * std::sin(w * 40.0f) +
+                          a80 * std::sin(w * 80.0f + 1.1f) +
+                          a120 * std::sin(w * 120.0f + 2.2f));
     } else {
-      vib = vib_g * kG * std::sin(2.0f * 3.14159265f * vib_hz * (float)t);
+      float amp = vib_g * kG;
+      if (anti_alias) amp *= AntiAliasGain(vib_hz);
+      vib = amp * std::sin(2.0f * 3.14159265f * vib_hz * (float)t);
     }
     const Eigen::Vector3f f_ned = a_cmd - Eigen::Vector3f(0.0f, 0.0f, kG);
     Eigen::Vector3f accel = q_true.conjugate() * f_ned;
@@ -395,6 +419,7 @@ Result run(float speed_mps, float latency_s, unsigned seed, int maneuver,
   out.vel_comp = std::sqrt(sum_vc / count);
   out.accel_bias = comp.accel_bias_mps2();
   out.gyro_bias = comp.gyro_bias_radps();
+  out.reacquire_resets = comp.gnss_reacquire_reset_count();
   return out;
 }
 } // namespace
@@ -425,6 +450,7 @@ int main(int argc, char **argv) {
   bool bias_reanchor = false;
   bool reset_on_recovery = false;
   bool soft_velocity = false;
+  bool anti_alias = false;
   float accel_scale = 1.0f, gyro_scale = 1.0f, misalign = 0.0f;
   float accel_bias_y = 0.0f, accel_bias_z = 0.0f;
   float gnss_outlier_frac = 0.0f;
@@ -469,6 +495,7 @@ int main(int argc, char **argv) {
   if (argc > 37) bias_reanchor = std::atoi(argv[37]) != 0;
   if (argc > 38) reset_on_recovery = std::atoi(argv[38]) != 0;
   if (argc > 39) soft_velocity = std::atoi(argv[39]) != 0;
+  if (argc > 40) anti_alias = std::atoi(argv[40]) != 0;
 
   std::printf("ARG trace=%d argc=%d\n", trace ? 1 : 0, argc);
   const Result r = run(speed, latency, seed, maneuver, ekf_accel_std,
@@ -483,7 +510,7 @@ int main(int argc, char **argv) {
                        bias_step_gyro_dps, bias_drift_accel,
                        bias_drift_gyro_dps, gnss_bias_freeze, trace,
                        post_outage_boost, bias_reanchor,
-                       reset_on_recovery, soft_velocity);
+                       reset_on_recovery, soft_velocity, anti_alias);
   const double gain = (r.pos_base > 1e-9) ? (1.0 - r.pos_comp / r.pos_base) * 100.0 : 0.0;
   std::printf("ICM-42688 + UBX PVT | v=%.1f m/s tau=%.0f ms seed=%u maneuver=%d vib=%.2fg adaptiveQ=%d\n",
               speed, latency * 1000.0f, seed, maneuver, vib_g,
@@ -497,6 +524,8 @@ int main(int argc, char **argv) {
               r.accel_bias(0), r.accel_bias(1), r.accel_bias(2),
               r.gyro_bias(0)*57.2958f, r.gyro_bias(1)*57.2958f,
               r.gyro_bias(2)*57.2958f);
+  // reacq 行必须放在 age-comp 之前：既有验收脚本用 `tail -1` 解析 age-comp。
+  std::printf("reacq: resets=%u\n", r.reacquire_resets);
   std::printf("age-comp: pos=%.3f m pos3d=%.3f m vel=%.3f m/s | fused=%d rejected=%d | improve=%.1f%% | est_tau=%.1f ms\n",
               r.pos_comp, r.pos3d_comp, r.vel_comp, r.fused, r.rejected, gain,
               r.est_delay_s * 1000.0);

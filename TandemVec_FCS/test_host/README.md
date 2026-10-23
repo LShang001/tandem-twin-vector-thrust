@@ -21,7 +21,7 @@
 | `test_robustness.cpp` | 大机动 + 系统误差鲁棒性（名义参数扫描） | Arduino.h 桩 | 8 |
 | `test_qual_analysis.cpp` | 增益定性分析（Kp_a/Kp_r 扫描，固件语义对照） | Arduino.h 桩 | 16 |
 | `test_comprehensive_sim.cpp` | 增益扫描/扰动抑制/模型偏差（研究工具，非实机回归） | Arduino.h 桩 | 10 |
-| `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`；2026-10 加 P0-0 速度旋转 T7、P1-5 航向 consider T8、P0-1 3+3 子集/软重锚 T9–T11） | units/eigen | 36 |
+| `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`；2026-10 加 P0-0 速度旋转 T7、P1-5 航向 consider T8、P0-1 3+3 子集/软重锚 T9–T11、T12 sub-frame 延迟量测、T13/T13b 长失联连续不可信 GNSS 硬重锚与跳点串防护） | units/eigen | 51 |
 | `test_ekf_aiding_velocity.cpp` | `ekf_15_state.h` — 测速源辅助接口（aiding 速度更新豁免零速守卫、失锁重锚 ResetVelocityToExternal、D 通道大噪声不压垂直协方差；2026-08-21 室内光流融合配套） | units/eigen | 16 |
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
