@@ -60,6 +60,8 @@ class NavOpt:
         self.alt_up = 0.0
         self._last_gyro = np.zeros(3)
         self.gyro_bias_est = np.zeros(3)
+        # 上一拍实际油门（%）；与固件 throttlePercent>=3% 跳过静止陀螺融合对齐。
+        self.throttle_pct = 0.0
 
     def init(self, accel, gyro):
         self.ekf.initialize(accel, gyro, self.ekf.home_lla)
@@ -88,7 +90,8 @@ class NavOpt:
                     np.zeros(3), v_n, v_d)
             if self.gravity_fast or c % dg == 1:
                 self.ekf.measurement_update_gravity(accel, g_n)
-            if c % ds == 3 and self.use_static_gyro:
+            if (c % ds == 3 and self.use_static_gyro and
+                    self.throttle_pct < 3.0):
                 self.ekf.measurement_update_static_gyro(
                     self.gyro_avg / max(self.gyro_cnt, 1),
                     np.full(3, FW["sg_noise"]))
@@ -295,7 +298,9 @@ def run_scene(scene, duration, nav_factory, seed=1, seed_dyn=1):
                 q_ref = quat_mult(q_ref, q_yaw)
         ref_dict = {
             "q_target": q_ref,
-            "thr": ref.get("thr", 50.0),
+            # 默认悬停配平必须与 hifi_core 的 100*w_hover/wMax≈49.91% 一致；
+            # 硬编码 50% 会让真值在 A0/A9 60 s 爬升约 60 m，污染闭环指标。
+            "thr": ref.get("thr", 100.0 * w_hover / P["wMax"]),
             "alt_hold": ref.get("alt_hold"),
             "alt_vel_ki": ref.get("alt_vel_ki"),
             "yaw_lock": ref.get("yaw_lock"),
@@ -308,6 +313,7 @@ def run_scene(scene, duration, nav_factory, seed=1, seed_dyn=1):
         if scene.get("truth_att", False):
             nav_state["quat"] = dyn.quat.copy()
         act = ctrl.step(nav_state, ref_dict, DT)
+        nav.throttle_pct = act["thr"] * 100.0
         dyn.step(act, DT)
 
         # 记录（四元数距离评估姿态）

@@ -1,5 +1,24 @@
 # 高保真全方位仿真现状（2026-10-21）
 
+> **2026-10-24 追加（EKF 进控制闭环定位）**
+>
+> - 默认 `run_full_envelope.py` 的 10/10 FAIL **不是单一 EKF 数学 bug**。消融：控制用
+>   真值姿态时 5 seeds × A0/A2/A9 全部 0.7–2.4°、位置 0.5–1.7 m；用 EKF 姿态则 A0
+>   3.5–38°、A9 可达 68°。根因是悬停姿态/航向不可观 + 闭环速率抖动使静止门
+>   `|ω|<0.01 rad/s` 永不满足（A0/A2/A9 静止确认 0%），ZUPT/重力/静止陀螺全关，
+>   EKF 姿态误差 1:1 进入控制回路。
+> - 修复路径：绝对姿态源（机体系磁矢量 `H=[m_pred×]`）+ 位置保持/高度门控；默认
+>   无 `--pos-hold/--mag-vector` 时 A2/A5/A3 的 `pos_ne` 不能单独当控制失败判据。
+> - 本轮加 `--pos-hold --mag-vector --flow-aiding --baro-hz 2 --baro-phase 2`
+>   重跑：**A0–A7/A9 全部 PASS（9/9，A8 目标定义不成立单列）**；A9 0.32 m/0.43°、
+>   A5 0.51 m/0.42°。这是 **L1 模型仿真 + 理想磁/光流**，不是固件已完成，也不是实测。
+> - 同时修：`run_scenes_opt.py` 默认 `thr=50%` → hifi 悬停配平 49.912%（旧值
+>   60 s 爬 60 m）；仿真静止陀螺在 50% 油门仍融合 → 按固件 `throttlePercent>=3%`
+>   门控。
+> - 固件侧已新增 `MeasurementUpdateMagVectorDetailed`（T15：0.15 rad 初偏收敛、
+>   roll/pitch<0.02 rad、1.2 rad 跳变 NIS 拒绝），但**尚未接真实磁力计/标定**；
+>   SIL `--mag` 只是实验路径。下一步是磁力计数据链 + 软/硬铁标定 + 门控。
+
 ## 1. 模型链
 
 `run_scenes_opt.py` / `run_full_envelope.py`：
