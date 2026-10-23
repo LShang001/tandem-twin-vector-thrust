@@ -274,6 +274,9 @@ public:
   void setOverflow(unsigned long, int) {}
   void attachInterrupt(void (*)()) {}
 };
+// 仿真虚拟时钟：由 SIL 主循环按仿真时间推进；未设置时保持 0，兼容旧 SIL。
+extern uint32_t g_sil_time_us;
+
 class HardwareSerial : public Stream {
 public:
   HardwareSerial() {}
@@ -282,6 +285,32 @@ public:
   void begin(unsigned long, int) {}
   void end() {}
   operator bool() const { return true; }
+
+  int available() override { return static_cast<int>(count_); }
+  int read() override {
+    if (count_ == 0) return -1;
+    const uint8_t v = buf_[head_];
+    head_ = (head_ + 1) % sizeof(buf_);
+    --count_;
+    return v;
+  }
+  int peek() override { return count_ > 0 ? buf_[head_] : -1; }
+  void clear() { head_ = tail_ = count_ = 0; }
+  // SIL 注入：模拟 UART 收到的字节（环形缓冲，满则丢弃最新字节）。
+  void feed(const uint8_t *data, size_t n) {
+    while (n-- > 0) {
+      if (count_ >= sizeof(buf_)) break;
+      buf_[tail_] = *data++;
+      tail_ = (tail_ + 1) % sizeof(buf_);
+      ++count_;
+    }
+  }
+
+private:
+  uint8_t buf_[4096] = {};
+  size_t head_ = 0;
+  size_t tail_ = 0;
+  size_t count_ = 0;
 };
 
 using Uart = HardwareSerial;
@@ -301,11 +330,16 @@ inline void digitalWrite(uint8_t, uint8_t) {}
 inline int digitalRead(uint8_t) { return 0; }
 inline void analogWrite(uint8_t, int) {}
 inline int analogRead(uint8_t) { return 0; }
-inline unsigned long millis() { return 0; }
-inline unsigned long micros() { return 0; }
+// 与 STM32/Arduino 一致返回 32 bit，避免 Linux 64 bit unsigned long 掩盖
+// micros() 71.6 min 回绕与 dt_s 模运算路径。
+inline uint32_t millis() { return g_sil_time_us / 1000U; }
+inline uint32_t micros() { return g_sil_time_us; }
 inline void delay(unsigned long) {}
 inline void delayMicroseconds(unsigned int) {}
 inline void yield() {}
+// 宿主单线程：临界区为空实现；真实中断并发不在 SIL 覆盖范围。
+inline void noInterrupts() {}
+inline void interrupts() {}
 
 template <typename T> static T constrain(T v, T lo, T hi) {
   return (v < lo) ? lo : ((v > hi) ? hi : v);

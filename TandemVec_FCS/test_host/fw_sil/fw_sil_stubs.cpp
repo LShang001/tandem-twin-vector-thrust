@@ -18,13 +18,52 @@
 #include "state_data.h"
 #include "flight_control.h"
 #include <cstdio>
+#include <ctime>
+
+#ifdef _WIN32
+// MinGW 的 libminmea 使用 timegm；MSVC 运行时对应 _mkgmtime。
+extern "C" time_t timegm(struct tm *tm) { return _mkgmtime(tm); }
+#endif
+uint32_t g_sil_time_us = 0;  // 仿真虚拟时钟（由 SIL 主循环推进）
 HardwareSerial Serial;
 SPIClass SPI;
 TwoWire Wire;
 Vector3 current_omega_dps_body_filtered(0.0, 0.0, 0.0);
 
+#ifndef FW_SIL_REAL_NAV
+// 真实导航任务参与链接时，该函数由 navigation_task.cpp 提供，避免重复定义。
 void setNavigationOriginFromLlaRad(double, double, double) {}
+#endif
 void resetBaroAltitudeReference() {}
+
+// SIL 不链接 communication.cpp（其遥测/CRSF 依赖过重），这里按真实
+// linkUp/linkDown 策略提供行为替身：飞行中断链保持解锁、摇杆归中、
+// 模式落 AUTO_ALTITUDE；地面断链全部回锁定值。策略变更时必须同步
+// src/communication.cpp:linkDownCallback()。
+void linkUpCallback()
+{
+  isLinkUp = true;
+  failsafe_in_flight = false;
+}
+
+void linkDownCallback()
+{
+  isLinkUp = false;
+  const bool was_in_flight =
+      (raw_rc_values[4] > 1500) && (raw_rc_values[2] > 1100);
+  failsafe_in_flight = was_in_flight;
+  for (int i = 0; i < 9; ++i)
+  {
+    if (i == 0 || i == 1 || i == 3)
+      raw_rc_values[i] = 1500;
+    else if (i == 4)
+      raw_rc_values[i] = was_in_flight ? 1500 : 988;
+    else if (i == 6)
+      raw_rc_values[i] = was_in_flight ? 1500 : 988;
+    else
+      raw_rc_values[i] = 988;
+  }
+}
 void mavlinkSendStatustext(unsigned char, const char*) {}
 
 MagSensor::MagSensor() {}

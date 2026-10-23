@@ -186,3 +186,51 @@ BIN_DIR=/c/Users/12631/AppData/Local/Temp/tv_fcs_fw_sil   bash test_host/fw_sil/
 
 **结论：真实固件 SIL 已可复现地验证“定高闭环”；水平失锁保持、光流鲁棒性、
 F3/F4 故障重构仍未完成。**
+
+## 6. 真实导航任务 SIL（`--real-nav`，2026-10-24）
+
+旧 SIL 的 `--ekf` 只把传感器直接喂给 EKF；`--real-nav` 改为：
+
+- **2 kHz IMU** 采样/聚合，真实 `navigation_task.cpp::handleNavigationSystem()` 在
+  200 Hz 消费（含静止检测、双子样、GNSS 动态权重、epoch 时间映射、气压/光流、重捕获）；
+- **UBX NAV-PVT/NAV-EOE 二进制帧**注入 Serial4，由真实 `lib/ublox-main` 解析；
+- 虚拟 `millis()/micros()`（32 bit，与 STM32 对齐）；
+- GNSS 延迟/噪声/失联/野值、气压滞后/漂移、光流噪声/延迟、RC 链路丢失、IMU 丢样；
+- 可选 `--mag`：机体系磁矢量走新增 `MeasurementUpdateMagVectorDetailed`（SIL 实验路径，
+  生产固件尚未接磁力计）。
+
+### 运行
+
+```bash
+# 构建并跑 clean/nominal/degraded × 3 seeds（40 s）
+BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/run_real_acceptance.sh
+
+# 单例（例：nominal + 位置保持）
+BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/build_and_run_real.sh \
+  --real-nav --profile nominal --pos-hold --seconds 40 --seed 1
+```
+
+### 配置
+
+| profile | 传感器/环境 | 用途 |
+|---|---|---|
+| clean | 低噪声、无失联/风、无振动 | 最小闭环基线 |
+| nominal | 1 g/80 Hz 振动、20 ms 延迟、5 s 失联、1 m/s² 风、光流 | 常规退化验收 |
+| degraded | 2 g/120 Hz、50 ms、2.5 m 噪声、5 s 失联、1.5 m/s² 风、2% 野值、光流、IMU 丢样 | 退化边界 |
+| `--rc-loss A:B` | 单独注入真实 `linkDownCallback` failsafe | 不能与传感器退化混在一起 |
+
+### 当前基线（L2 SIL，1 seed/profile，2026-10-24）
+
+clean/nominal/degraded × 3 seeds **9/9 PASS**：
+
+- clean：final_alt≈10.0 m，hold_end≈1.1–1.5 m；
+- nominal：final_alt≈9.2 m，hold_end≈0.5–1.4 m；
+- degraded：final_alt≈6.1–6.2 m（气压漂移），hold_end≈0.6–1.1 m，野值拒绝 5–7 次。
+
+RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `linkDownCallback`
+保持解锁、模式落 AUTO_ALTITUDE、摇杆归中；final_alt 8.18 m、hold_end 0.87 m，
+无空中 disarm/坠落。该结果只证明 SIL 中 failsafe 策略路径，不是实机链路失效验证。
+
+**边界**：传感器模型参数是 MODEL-DEFAULT，不是实机标定；这是 L2 SIL，不是 HIL，
+不能证明真实气动/推进/传感器/执行器/调度行为。RC-loss 是独立故障路径，不能把
+“命令 disarm 后坠落”写成传感器退化验收失败。
