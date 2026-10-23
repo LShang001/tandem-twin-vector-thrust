@@ -330,6 +330,10 @@ struct RealNavConfig
   float outage_start = 20.0f;
   float outage_end = 25.0f;
   float outlier_prob = 0.0f;
+  bool gnss_spoof = false;
+  float spoof_offset_m = 20.0f;
+  float spoof_ramp_mps = 0.0f;
+  float spoof_start_s = 15.0f;
   float baro_noise = 0.25f;
   float baro_drift = 0.02f;
   bool baro_lag = true;
@@ -585,6 +589,17 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           pn += 50.0f; pe -= 40.0f; pd += 30.0f;
           vn += 12.0f; ve -= 10.0f;
         }
+      }
+      // GNSS spoof：位置偏移但自报精度仍然良好（h_acc 正常），用于检验
+      // 30 m 野值门/NIS 能否识别“慢偏/小台阶”欺骗；不是普通野值。
+      if (cfg.gnss_spoof && t >= cfg.spoof_start_s)
+      {
+        const float dt_spoof = t - cfg.spoof_start_s;
+        const float off = cfg.spoof_offset_m + cfg.spoof_ramp_mps * dt_spoof;
+        pn += off;
+        pe += 0.6f * off;
+        vn += cfg.spoof_ramp_mps;
+        ve += 0.6f * cfg.spoof_ramp_mps;
       }
 
       const Eigen::Vector3d lla = bfs::ned2lla(
@@ -966,6 +981,15 @@ int main(int argc, char** argv) {
       real_cfg.gnss_vel_ne_std=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--gnss-outlier")==0 && i+1<argc)
       real_cfg.outlier_prob=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--gnss-spoof")==0 && i+1<argc)
+    {
+      real_cfg.gnss_spoof = true;
+      real_cfg.spoof_offset_m = std::atof(argv[++i]);
+    }
+    else if (std::strcmp(argv[i],"--gnss-spoof-ramp")==0 && i+1<argc)
+      real_cfg.spoof_ramp_mps=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--gnss-spoof-start")==0 && i+1<argc)
+      real_cfg.spoof_start_s=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--gnss-outage")==0 && i+1<argc)
       std::sscanf(argv[++i], "%f:%f", &real_cfg.outage_start, &real_cfg.outage_end);
     else if (std::strcmp(argv[i],"--baro-noise")==0 && i+1<argc)

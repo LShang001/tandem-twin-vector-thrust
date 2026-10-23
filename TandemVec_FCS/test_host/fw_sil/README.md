@@ -244,6 +244,7 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | IMU 冻结 | `--imu-fault stuck --imu-fault-window A:B` | 有限值继续进 EKF/控制；**无冻结检测**，2 s 冻结导致失稳/坠落 |
 | GNSS 野值 | `--gnss-outlier P`（profile degraded） | 显式 30 m/10 m/s 野值门 + NIS；SIL degraded 每 40 s 拒绝 5–7 帧 |
 | GNSS 失联 | `--gnss-outage A:B` | 无 GNSS 时纯惯导；有光流可保持水平，无光流只能验收定高 |
+| GNSS spoof | `--gnss-spoof M`、`--gnss-spoof-ramp MPS`、`--gnss-spoof-start S` | 位置偏移但 h_acc 正常；20 m 台阶/0.5 m/s 慢偏均被融合（outlier_rejects=0），位置保持被拖走 20–32 m |
 
 **边界**：IMU NaN/冻结目前只有“NaN 不传播”的防护，没有故障检测和可控下降；
 不能写成故障恢复通过。RC loss 结果也不能外推到真实链路/接收机失效。
