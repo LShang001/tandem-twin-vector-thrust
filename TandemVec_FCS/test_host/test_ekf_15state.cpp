@@ -28,7 +28,8 @@
  *          T4 GNSS 速度量测收敛；T5 NaN 输入被拒且不污染状态；T6 ZUPT 保持零速；
  *          T7 速度旋转效应不重复计入（P0-0）；T8 航向 consider（P1-5）；
  *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）；
- *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚
+ *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚；
+ *          T14 正常跟踪期 50 m GNSS 跳点的显式野值门；T15 机体系磁矢量更新
  * @see     TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md §5.1/§9.6
  */
 #include <cstdio>
@@ -365,6 +366,81 @@ int main()
     CHECK("T13b 矛盾跳点串始终不融合", !any_fused);
     CHECK("T13b 矛盾跳点串不触发重锚",
           ekf.gnss_reacquire_reset_count() == 0U);
+  }
+
+  // ---- T14 正常跟踪期 50 m GNSS 位置跳点：显式野值门必须拒绝 ----
+  // 回归：高振动/高延迟下 P 膨胀会让 50 m 跳点通过 NIS，滤波锁定到错误
+  // 位置后反过来拒绝好帧；单帧大跳点必须在进入 NIS 前被物理门拒绝。
+  {
+    Ekf15State ekf = makeInit();
+    for (int i = 0; i < 10; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto good = ekf.MeasurementUpdateDetailed(
+        Eigen::Vector3f::Zero(), kLla, 0.005f, 0.0f, true);
+    CHECK("T14 正常 GNSS 帧融合", good.fused);
+
+    const Eigen::Vector3d jump_lla = bfs::ned2lla(
+        Eigen::Vector3d(50.0, 0.0, 0.0), kLla, bfs::AngPosUnit::RAD);
+    const auto bad = ekf.MeasurementUpdateDetailed(
+        Eigen::Vector3f::Zero(), jump_lla, 0.005f, 0.0f, true);
+    CHECK("T14 50 m 跳点被拒绝", !bad.fused);
+    CHECK("T14 跳点标记为 outlier_rejected", bad.outlier_rejected);
+    CHECK("T14 野值拒绝计数 = 1", ekf.gnss_outlier_reject_count() == 1U);
+    const double pos_err_m = bfs::lla2ned(ekf.lla_rad_m(), kLla,
+                                          bfs::AngPosUnit::RAD).norm();
+    CHECK("T14 野值拒绝后位置未被拉动（<1 m）", pos_err_m < 1.0);
+
+    const auto bad_vel = ekf.MeasurementUpdateDetailed(
+        Eigen::Vector3f(20.0f, 0.0f, 0.0f), kLla, 0.005f, 0.0f, true);
+    CHECK("T14 20 m/s 速度跳点被拒绝", !bad_vel.fused);
+    CHECK("T14 速度跳点标记为 outlier_rejected", bad_vel.outlier_rejected);
+    CHECK("T14 野值拒绝计数 = 2", ekf.gnss_outlier_reject_count() == 2U);
+
+    for (int i = 0; i < 10; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto good2 = ekf.MeasurementUpdateDetailed(
+        Eigen::Vector3f::Zero(), kLla, 0.005f, 0.0f, true);
+    CHECK("T14 野值后好帧仍能融合", good2.fused && !good2.outlier_rejected);
+  }
+
+  // ---- T15 三轴磁矢量更新：yaw 收敛、roll/pitch 不被拉偏、野值拒绝 ----
+  {
+    Ekf15State ekf = makeInit();
+    ekf.set_quaternion_for_test(Eigen::Quaternionf::Identity());
+    const Eigen::Vector3f mag_ned =
+        Eigen::Vector3f(30.0f, 0.0f, 40.0f).normalized();
+    const float yaw_true = 0.15f;
+    const Eigen::Quaternionf q_true(
+        Eigen::AngleAxisf(yaw_true, Eigen::Vector3f::UnitZ()));
+    const Eigen::Vector3f mag_body = q_true.conjugate() * mag_ned;
+
+    bool all_fused = true;
+    for (int i = 0; i < 100; ++i)
+    {
+      const auto r = ekf.MeasurementUpdateMagVectorDetailed(
+          mag_body, mag_ned, 0.5f);
+      all_fused = all_fused && r.fused;
+    }
+    std::printf("[INFO] T15 yaw=%.4f roll=%.4f pitch=%.4f\n",
+                ekf.yaw_rad(), ekf.roll_rad(), ekf.pitch_rad());
+    CHECK("T15 磁矢量更新全部融合", all_fused);
+    CHECK("T15 yaw 收敛到真值（±0.05 rad）",
+          std::fabs(ekf.yaw_rad() - yaw_true) < 0.05f);
+    CHECK("T15 roll 未被拉偏（<0.02 rad）", std::fabs(ekf.roll_rad()) < 0.02f);
+    CHECK("T15 pitch 未被拉偏（<0.02 rad）", std::fabs(ekf.pitch_rad()) < 0.02f);
+    CHECK("T15 融合计数 = 100", ekf.mag_vector_fused_count() == 100U);
+
+    const Eigen::Vector3f mag_bad = Eigen::AngleAxisf(
+        1.2f, Eigen::Vector3f::UnitZ()).toRotationMatrix() * mag_body;
+    const Eigen::Vector3d pos_before(ekf.lat_rad(), ekf.lon_rad(),
+                                     ekf.alt_m());
+    const auto bad = ekf.MeasurementUpdateMagVectorDetailed(
+        mag_bad, mag_ned, 0.05f);
+    CHECK("T15 1.2 rad 磁跳变被 NIS 拒绝", !bad.fused);
+    CHECK("T15 磁拒绝计数 = 1", ekf.mag_vector_reject_count() == 1U);
+    const Eigen::Vector3d pos_after(ekf.lat_rad(), ekf.lon_rad(),
+                                    ekf.alt_m());
+    CHECK("T15 磁更新不影响位置", (pos_after - pos_before).norm() < 1e-4f);
   }
 
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);

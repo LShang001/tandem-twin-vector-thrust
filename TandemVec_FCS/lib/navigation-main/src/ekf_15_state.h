@@ -961,6 +961,26 @@ namespace bfs
       y_.segment(3, 3) = gnss_vel - hist_vel;
       result.innovation_norm = y_.norm();
 
+      // 正常跟踪期的单帧大跳点显式拒绝。高振动/高延迟时 P 可能膨胀到让
+      // 50 m 位置跳点通过 NIS；一旦野值被融合，滤波会锁定到错误位置并
+      // 反过来拒绝后续好帧。长失联恢复（≥2 s）不走此门，由重捕获逻辑处理。
+      const bool in_reacquire_window =
+          time_since_gnss_update_s_ >= GNSS_REACQUIRE_MIN_OUTAGE_S;
+      if (!in_reacquire_window &&
+          ((y_.segment(0, 2).norm() > GNSS_OUTLIER_POS_NE_GATE_M) ||
+           (std::fabs(y_(2)) > GNSS_OUTLIER_POS_D_GATE_M) ||
+           (y_.segment(3, 2).norm() > GNSS_OUTLIER_VEL_NE_GATE_MPS) ||
+           (std::fabs(y_(5)) > GNSS_OUTLIER_VEL_D_GATE_MPS)))
+      {
+        result.outlier_rejected = true;
+        ++gnss_outlier_reject_count_;
+        if (can_repropagate)
+        {
+          RepropagateFromDelayedSnapshot(hist_idx);
+        }
+        return result;
+      }
+
       // ----------------------------------------------------------------------
       // [步骤 2] 计算新息协方差 (Innovation Covariance)
       // 公式: S = H * P * H^T + R
@@ -1460,6 +1480,81 @@ namespace bfs
     }
 
     /**
+     * @brief 机体系三轴磁矢量量测更新（航向绝对观测，悬停/低速主力）
+     * @param[in] mag_body_ut 磁力计机体系 FRD 三轴 [uT]（已完成硬铁/软铁标定）
+     * @param[in] mag_ned_ut  NED 参考磁矢量 [uT]（WMM 或现场标定方向）
+     * @param[in] noise_ut    单轴磁测噪声标准差 [uT]
+     * @return 是否通过 NIS/有限值检查并融合
+     * @formula m_pred = C^n_b · m_ned；y = m_body − m_pred；
+     *          H = ∂m_b/∂δβ = [m_pred×]（误差状态按 q_true=q_est⊗Exp(δβ)）；
+     *          S = HPHᵀ+R；NIS=yᵀS⁻¹y ~ χ²(3)，门限 30；Joseph 更新
+     * @ref REF-120 §9.8.2 (9.8.13) p.317–322（姿态误差与磁观测）；
+     *      REF-121 §7.3.1 p.255–259（NIS）；notes/06（航向可观测性）
+     * @note 只观测姿态 3 维，不直接改位置/速度/零偏；磁干扰/异常先经上层
+     *       模长与方向门控。融合后覆盖最新快照，保证 GNSS 延迟回放姿态一致。
+     * @test test_host/test_ekf_15state.cpp T15（yaw 收敛/roll-pitch 不被拉偏/野值拒绝）
+     */
+    MeasurementUpdateResult MeasurementUpdateMagVectorDetailed(
+        const Eigen::Vector3f &mag_body_ut,
+        const Eigen::Vector3f &mag_ned_ut,
+        const float noise_ut)
+    {
+      MeasurementUpdateResult result;
+      if (!IsFiniteVector(mag_body_ut) || !IsFiniteVector(mag_ned_ut) ||
+          mag_body_ut.norm() < 1.0e-3f || mag_ned_ut.norm() < 1.0e-3f ||
+          !IsValidNoiseStd(noise_ut))
+      {
+        return result;
+      }
+      result.input_valid = true;
+      result.attempted = true;
+
+      // quat2dcm 返回 C^n_b（NED→body，见 transforms.h），与 t_b2ned=C^b_n 互转置。
+      const Eigen::Matrix3f c_n_b = quat2dcm(quat_);
+      const Eigen::Vector3f pred = c_n_b * mag_ned_ut;
+      const Eigen::Vector3f y = mag_body_ut - pred;
+      result.innovation_norm = y.norm();
+
+      Eigen::Matrix<float, 3, 15> h_mag = Eigen::Matrix<float, 3, 15>::Zero();
+      h_mag.block<3, 3>(0, 6) = Skew(pred);
+      const Eigen::Matrix3f r =
+          noise_ut * noise_ut * Eigen::Matrix3f::Identity();
+      const Eigen::Matrix3f s = h_mag * p_ * h_mag.transpose() + r;
+      Eigen::Matrix3f s_inv;
+      if (!InvertSymmetricPositiveDefiniteMatrix(s, &s_inv))
+      {
+        return result;
+      }
+      const float nis = y.transpose() * s_inv * y;
+      result.test_ratio = std::isfinite(nis)
+                              ? nis / MAG_VECTOR_NIS_REJECT_THRESHOLD
+                              : 0.0f;
+      if (!std::isfinite(nis) || nis > MAG_VECTOR_NIS_REJECT_THRESHOLD)
+      {
+        ++mag_vector_reject_count_;
+        return result;
+      }
+
+      const Eigen::Matrix<float, 15, 3> k =
+          p_ * h_mag.transpose() * s_inv;
+      const Eigen::Matrix<float, 15, 15> identity =
+          Eigen::Matrix<float, 15, 15>::Identity();
+      p_ = (identity - k * h_mag) * p_ * (identity - k * h_mag).transpose() +
+           k * r * k.transpose();
+      StabilizeCovariance();
+      x_ = k * y;
+      InjectErrorState();
+      const int latest_idx = LatestSnapshotIndex();
+      if (latest_idx >= 0)
+      {
+        OverwriteSnapshotState(latest_idx);
+      }
+      ++mag_vector_fused_count_;
+      result.fused = true;
+      return result;
+    }
+
+    /**
      * @brief 直接重锚定绝对位置和速度，用于无GNSS假原点启动后首次获得真实GNSS。
      *
      * 该接口不重置姿态、IMU零偏和协方差中的姿态/零偏部分，只把地理位置、NED速度
@@ -1548,6 +1643,18 @@ namespace bfs
     inline uint32_t gnss_reacquire_reset_count() const
     {
       return gnss_reacquire_reset_count_;
+    }
+    inline uint32_t gnss_outlier_reject_count() const
+    {
+      return gnss_outlier_reject_count_;
+    }
+    inline uint32_t mag_vector_fused_count() const
+    {
+      return mag_vector_fused_count_;
+    }
+    inline uint32_t mag_vector_reject_count() const
+    {
+      return mag_vector_reject_count_;
     }
 
 #ifdef EKF_HOST_REGRESSION
@@ -4401,6 +4508,13 @@ namespace bfs
     static constexpr float GNSS_REACQUIRE_RESET_POS_D_STD_M = 12.0f;
     static constexpr float GNSS_REACQUIRE_RESET_VEL_NE_STD_MPS = 1.0f;
     static constexpr float GNSS_REACQUIRE_RESET_VEL_D_STD_MPS = 1.5f;
+    // 正常跟踪期的显式 GNSS 野值门：单帧位置/速度跳变超过这些物理门限时
+    // 直接拒绝，不依赖 NIS（高振动/高延迟下 P 膨胀会让 50 m 跳点也能通过 NIS）。
+    // 长失联恢复不走此门，由上面的重捕获/连续 3 帧重锚逻辑处理。
+    static constexpr float GNSS_OUTLIER_POS_NE_GATE_M = 30.0f;
+    static constexpr float GNSS_OUTLIER_POS_D_GATE_M = 40.0f;
+    static constexpr float GNSS_OUTLIER_VEL_NE_GATE_MPS = 10.0f;
+    static constexpr float GNSS_OUTLIER_VEL_D_GATE_MPS = 8.0f;
     static constexpr float GNSS_OUTAGE_TIME_CAP_S = 60.0f;
     static constexpr float GNSS_OUTAGE_POS_NE_GROWTH_MPS = 1.2f;
     static constexpr float GNSS_OUTAGE_POS_D_GROWTH_MPS = 1.8f;
@@ -4434,6 +4548,8 @@ namespace bfs
     static constexpr float ATTITUDE_RESIDUAL_REJECT_RAD = 0.8f;
     // 1维航向量测NIS门限；高于99.9%卡方门限，保留真实小修正但拒绝大跳变。
     static constexpr float YAW_NIS_REJECT_THRESHOLD = 12.0f;
+    // 三轴磁矢量 χ²(3,0.999)≈16.3；取 30 保留软铁残差/机动容差。
+    static constexpr float MAG_VECTOR_NIS_REJECT_THRESHOLD = 30.0f;
     // 航向辅助量测物理残差门限；保留中小幅航向修正，拒绝约57度以上的单帧跳变。
     static constexpr float YAW_RESIDUAL_REJECT_RAD = 1.0f;
     // 气压高度标量量测 NIS 门限；χ²(1) 99.99% 分位数 ≈ 15.1，取 16 为 4σ 等效。
@@ -4632,6 +4748,9 @@ namespace bfs
     Eigen::Vector3f last_implausible_gnss_vel_ = Eigen::Vector3f::Zero();
     bool has_last_implausible_gnss_vel_ = false;
     uint32_t gnss_reacquire_reset_count_ = 0;
+    uint32_t gnss_outlier_reject_count_ = 0;
+    uint32_t mag_vector_fused_count_ = 0;
+    uint32_t mag_vector_reject_count_ = 0;
 
     /* GNSS 重捕获保守融合窗口的剩余计时，单位 s。
        一次成功重捕获后设置窗口宽度，窗口内继续使用膨胀 R 防止后续帧再被普通门限拒绝。 */

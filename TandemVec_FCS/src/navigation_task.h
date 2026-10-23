@@ -136,6 +136,19 @@ void updateUbxRelativePosition();
  */
 void handleNavigationSystem();
 
+#ifdef FW_SIL_REAL_NAV
+// 仅宿主 SIL 使用的内部观测点，用于解释导航初始化/静止检测状态；
+// 生产固件不编译这些符号，也不参与控制/导航逻辑。
+extern int g_sil_nav_debug_imu_count;
+extern float g_sil_nav_debug_accel[3];
+extern float g_sil_nav_debug_gyro[3];
+extern bool g_sil_nav_debug_static;
+extern float g_sil_nav_debug_static_confidence;
+extern uint32_t g_sil_nav_debug_static_frames;
+extern bool g_sil_nav_debug_gnss_epoch;
+extern bool g_sil_nav_debug_initialized;
+#endif
+
 /**
  * @brief 估算垂直速度
  *

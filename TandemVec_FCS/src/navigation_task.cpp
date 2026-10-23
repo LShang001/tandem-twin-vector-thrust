@@ -234,6 +234,15 @@ static constexpr float GNSS_FIRST_REANCHOR_MAX_AGE_S = 0.15f;
  * @note 最小门限是 fix≥3D、卫星数≥3、h_acc>0，精度本身不丢弃、只作为 R 权重。
  * @see `Icm45686ComputeGnssDynamicWeights()`、`applyDowngradedGnssUpdate()`
  */
+// EKF 初始化的 GNSS 质量门：初始位置一旦被单帧野值污染，后续好帧会被
+// 反向拒绝。要求接收机自报精度足够好；差分解/RTK 更严格，普通 3D 解
+// 的 h_acc 通常 1–3 m。不合格时先用伪原点初始化，等首个可信 GNSS 再重锚。
+static constexpr float GNSS_INIT_MAX_H_ACC_M = 5.0f;
+static constexpr float GNSS_INIT_MAX_V_ACC_M = 10.0f;
+// NMEA 兜底 epoch 的 vAcc=0、sAcc=3.0（ubx.cpp），部分 UBX 接收机也不上报
+// 精度；0 视为未知而不是“不合格”，sAcc 门放到 5 m/s 仍能挡住野值。
+static constexpr float GNSS_INIT_MAX_S_ACC_MPS = 5.0f;
+
 static bool gnssEpochPassesFullQuality(const bfs::UbxEpoch &epoch)
 {
   // 动态权重：最小门限仅需 fix>=3D + sv>=3 + h_acc>0，接收机精度直接作为 R
@@ -332,7 +341,11 @@ static void reanchorNavigationToGnss(const Eigen::Vector3f &gnss_vel_ned,
       gnss_vel_ned.cast<double>() * static_cast<double>(measurement_age_s),
       gnss_lla, bfs::AngPosUnit::RAD);
   Eigen::Vector3d takeoff_to_current_ned = Eigen::Vector3d::Zero();
-  const bool preserve_takeoff_origin = g_is_unlocked && is_origin_lla_set;
+  // 假原点初始化时 EKF 的“历史位移”没有真实起飞点语义；若此时 reacquire
+  // 已先重置过位置，再用 EKF 位置反推会把假原点当成起飞点。直接以当前
+  // GNSS 为原点，避免污染 origin。
+  const bool preserve_takeoff_origin =
+      g_is_unlocked && is_origin_lla_set && !nav_initialized_with_fake_origin;
   if (preserve_takeoff_origin)
   {
     const Eigen::Vector3d old_origin_lla(
@@ -803,6 +816,17 @@ static uint32_t s_vib_gnss_bad_until_ms = 0;
  * @see `handleVerticalEstimation()`、`handleHorizontalEstimation()`、
  *      `handleDualVectorYawFusion()`、`handleIndoorOpticalFlowVelocityFusion()`
  */
+#ifdef FW_SIL_REAL_NAV
+int g_sil_nav_debug_imu_count = 0;
+float g_sil_nav_debug_accel[3] = {0.0f, 0.0f, 0.0f};
+float g_sil_nav_debug_gyro[3] = {0.0f, 0.0f, 0.0f};
+bool g_sil_nav_debug_static = false;
+float g_sil_nav_debug_static_confidence = 0.0f;
+uint32_t g_sil_nav_debug_static_frames = 0;
+bool g_sil_nav_debug_gnss_epoch = false;
+bool g_sil_nav_debug_initialized = false;
+#endif
+
 void handleNavigationSystem()
 {
   // EKF 总耗时测量 + 零偏诊断
@@ -854,6 +878,9 @@ void handleNavigationSystem()
 
   noInterrupts();
   const int local_imu_sample_count = imu_sample_count;
+#ifdef FW_SIL_REAL_NAV
+  g_sil_nav_debug_imu_count = local_imu_sample_count;
+#endif
   if (local_imu_sample_count == 0)
   {
     interrupts();
@@ -903,6 +930,14 @@ void handleNavigationSystem()
   // 使用 IMU 数据降采样后的平均值
   imu_accel_mps2 << local_acc_sum_x * scale, local_acc_sum_y * scale, local_acc_sum_z * scale;
   imu_gyro_radps << local_gyro_sum_x * scale, local_gyro_sum_y * scale, local_gyro_sum_z * scale;
+#ifdef FW_SIL_REAL_NAV
+  g_sil_nav_debug_accel[0] = imu_accel_mps2(0);
+  g_sil_nav_debug_accel[1] = imu_accel_mps2(1);
+  g_sil_nav_debug_accel[2] = imu_accel_mps2(2);
+  g_sil_nav_debug_gyro[0] = imu_gyro_radps(0);
+  g_sil_nav_debug_gyro[1] = imu_gyro_radps(1);
+  g_sil_nav_debug_gyro[2] = imu_gyro_radps(2);
+#endif
 
   {
     const InsVibrationEstimate vib =
@@ -1024,6 +1059,15 @@ void handleNavigationSystem()
     static_det_configured = true;
   }
   Icm45686StaticDetectorUpdate(imu_accel_mps2, imu_gyro_radps, static_det);
+  // 有油门出力且 EKF 已初始化时，禁止把“静止”用于 ZUPT/重力/静止陀螺辅助：
+  // 螺旋桨振动/机体微动可能在个别帧同时满足模长与角速率门限，误判静止会把
+  // 真实垂直速度拉零。用 g_is_unlocked 门控，避免地面未解锁时摇杆微动
+  // （throttlePercent>3%）阻断 EKF 初始化；初始化后重置检测器，落地收油门后
+  // 重新积累。检测器本身继续更新，不改变初始化语义。
+  if (g_is_unlocked && nav_system_initialized && throttlePercent >= 3.0f)
+  {
+    Icm45686StaticDetectorReset(static_det);
+  }
   // ★ 2026-08-21 光流静止出口：检测器原有唯一出口是 GNSS 速度>1.5m/s（见下方
   //   GNSS 分支），室内无 GNSS 时恒速平飞会误确认静止 → ZUPT 钉零速度 → 光流
   //   融合又被 confirmed_static 门控自我禁用（唯一能证伪静止的传感器被静止假设
@@ -1043,6 +1087,12 @@ void handleNavigationSystem()
   }
   bool is_static_confirmed = static_det.confirmed_static;
   const float static_confidence = static_det.confidence;
+#ifdef FW_SIL_REAL_NAV
+  g_sil_nav_debug_static = is_static_confirmed;
+  g_sil_nav_debug_static_confidence = static_confidence;
+  g_sil_nav_debug_static_frames = static_det.confirmed_static_frames;
+  g_sil_nav_debug_initialized = nav_system_initialized;
+#endif
 
   // GNSS 数据新鲜度由 UBX epoch 队列驱动；每次成功出队就是唯一消费凭证。
   gnss_status.epoch_count = ubx.queued_epoch_count();
@@ -1055,6 +1105,9 @@ void handleNavigationSystem()
 
   bfs::UbxEpoch gnss_epoch;
   const bool has_gnss_epoch = ubx.PopEpoch(&gnss_epoch);
+#ifdef FW_SIL_REAL_NAV
+  g_sil_nav_debug_gnss_epoch = has_gnss_epoch;
+#endif
   // 注：NMEA 兜底已内聚进库（2026-08-09）——kAuto 模式下 UBX 失效时库内自动
   // 合成 NMEA epoch 入同一队列，导航层无感（见 lib/ublox-main Ubx::TryPushNmeaEpoch）。
   const bool perform_measurement_update =
@@ -1100,6 +1153,15 @@ void handleNavigationSystem()
 
   const bool gnss_data_fresh_for_nav = isGnssDataFreshForNav();
   const bool gnss_full_quality_for_nav = has_gnss_epoch && gnssEpochPassesFullQuality(gnss_epoch);
+  // 首次真实重锚必须使用高精度解；低精度/野值帧不能把 EKF 从假原点锚到错误位置。
+  const bool gnss_quality_for_reanchor =
+      gnss_full_quality_for_nav &&
+      gnss_epoch.horz_acc_m > 0.0f &&
+      gnss_epoch.horz_acc_m <= GNSS_INIT_MAX_H_ACC_M &&
+      (gnss_epoch.vert_acc_m <= 0.0f ||
+       gnss_epoch.vert_acc_m <= GNSS_INIT_MAX_V_ACC_M) &&
+      (gnss_epoch.spd_acc_mps <= 0.0f ||
+       gnss_epoch.spd_acc_mps <= GNSS_INIT_MAX_S_ACC_MPS);
   const bool gnss_downgrade_quality_for_nav = has_gnss_epoch && !gnss_full_quality_for_nav && gnssEpochQualifiesForDowngrade(gnss_epoch);
   const bool gnss_instant_valid_for_nav = gnss_full_quality_for_nav;
   if (gnss_full_quality_for_nav || gnss_downgrade_quality_for_nav)
@@ -1162,7 +1224,14 @@ void handleNavigationSystem()
       Eigen::Vector3d init_lla;
 
       // 检查 GPS 质量
-      bool gps_available = gnss_instant_valid_for_nav;
+      const bool gps_available =
+          gnss_instant_valid_for_nav &&
+          gnss_epoch.horz_acc_m > 0.0f &&
+          gnss_epoch.horz_acc_m <= GNSS_INIT_MAX_H_ACC_M &&
+          (gnss_epoch.vert_acc_m <= 0.0f ||
+           gnss_epoch.vert_acc_m <= GNSS_INIT_MAX_V_ACC_M) &&
+          (gnss_epoch.spd_acc_mps <= 0.0f ||
+           gnss_epoch.spd_acc_mps <= GNSS_INIT_MAX_S_ACC_MPS);
 
       if (gps_available)
       {
@@ -1626,7 +1695,7 @@ void handleNavigationSystem()
       nav_ekf.set_gnss_consider_heading(phase_consider_heading);
 
       if (InsGnssShouldReanchor(has_gnss_epoch,
-                                gnss_full_quality_for_nav,
+                                gnss_quality_for_reanchor,
                                 gnss_time_mapping_valid,
                                 gnss_measurement_age_s,
                                 GNSS_FIRST_REANCHOR_MAX_AGE_S,
