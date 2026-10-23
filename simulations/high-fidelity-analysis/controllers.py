@@ -1,5 +1,24 @@
 # -*- coding: utf-8 -*-
-"""四元数域控制器：QuatSAS + QuatINDI + VTOL 仿真"""
+"""controllers.py — 四元数域姿态控制器与 VTOL 尾座式闭环仿真。
+
+@file    controllers.py
+@module  analysis/姿态控制律（SAS / INDI / LQR + 尾座式仿真）
+@brief   实现三种四元数姿态控制器，并提供 VTOL 悬停/过渡的闭环仿真驱动。
+@details 输入：当前姿态 q、期望姿态 q_des、机体系角速度 ω、基准转速 ω0、步长 dt；
+         处理：误差四元数 q_err=q_des*⊗q → 外环姿态 → 内环角速率 → 效能矩阵逆映射；
+         输出：执行器指令 (δf, δt, Δω) [rad, rad, 无量纲]，并返回时间序列 dict。
+         不变量：误差四元数取最短路径，指令经 dMax/dwMax 限幅。
+@theory  误差四元数与矢量部分 ε @ref REF-120 §9.2 p.267–270、@ref MOD-002 §3；
+         四元数 SAS/PD 律与限幅 @ref MOD-001 §8、@ref TandemVec-Paper/ch12；
+         INDI 增量非线性动态逆（在线 B 逆 + ω̇ 反馈）@ref TandemVec-Paper/ch10；
+         悬停点线性化 + CARE 的 LQR @ref TandemVec-Paper/ch14；
+         效能矩阵与分配 @ref MOD-001 §4、@ref THY-003 §3。
+@frame  NED + FRD；前摆 δf 绕 z_b、尾摆 δt 绕 y_b、差速 Δω 绕 x_b。
+@units  角度 rad、角速度 rad/s、力矩 N·m、转速 rad/s、时间 s；返回数组为 SI。
+@note    仿真限幅 ±25°/±0.7 不等于固件实机 ±15°（2026-08-07 收紧，仿真未回写）。
+         本文件只做研究对比，不是固件控制律的实现（固件见 flight_control.cpp）。
+@see     core.py、estimators.py、run_vtol.py、cascade_vtol.py、@ref MOD-001
+"""
 
 import numpy as np
 from core import (
@@ -11,6 +30,15 @@ from core import (
 #  四元数 SAS 控制器
 # ============================================================
 class QuatSASController:
+    """四元数增稳（SAS）：ε 比例 + 角速率阻尼 + ε 积分，对角效能逆映射。
+
+    误差取 q_err=q_des*⊗q 的矢量部分 ε≈φ/2（小角度），故比例增益 K_q 需约 2 倍
+    才能与欧拉角 SAS 等价；积分带条件抗饱和（|ε|<0.2 才积分），
+    阻尼增益随 |ε| 调度（1→4），抑制大角度机动的欠阻尼振荡。
+    输出经 dMax/dwMax 限幅（仿真 ±25°/±0.7）。
+    @ref MOD-001 §8（SAS 律与反馈极性）、@ref TandemVec-Paper/ch12
+    """
+
     def __init__(self, P, trim=None, omega0=None):
         self.P = P
         self.omega0 = omega0 if omega0 else 400.0  # 允许外部传入
@@ -88,6 +116,14 @@ class QuatLQRController:
 from estimators import EulerDiffEstimator, AdaptiveComplementaryEstimator
 
 class QuatINDIController:
+    """四元数 INDI：外环姿态→角速率指令，内环用角加速度反馈做增量分配。
+
+    控制量按“增量”累加：Δu = B⁻¹·I·(ν−ω̇_est)，再做 dMax 限幅，
+    因此对推力系数/反扭系数误差不敏感（只在 B 失配时退化）。
+    ω̇ 由可插拔估计器给出（默认 EulerDiffEstimator(0.004)）。
+    @ref TandemVec-Paper/ch10（INDI 角加速度获取与滤波）、@ref MOD-001 §4
+    """
+
     def __init__(self, P, trim=None, estimator=None):
         self.P = P
         self.prev_df = 0.0; self.prev_dt = 0.0; self.prev_dw = 0.0

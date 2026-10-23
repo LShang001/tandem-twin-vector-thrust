@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
-r"""
-纵列双发矢量推力飞行器 — 高精度多维仿真分析
-===========================================
-运行: py -3.12 simulations/high-fidelity-analysis/run_all.py
+r"""run_all.py — 高保真分析总入口：配平 → 线性化 → SAS/INDI → LaTeX 数据。
 
-产出:
-  1. 配平分析 (24 m/s 纵向平衡点)
-  2. 数值线性化 + 特征值/模态分析
-  3. SAS 闭环阶跃响应
-  4. INDI vs SAS 对比 (扰动抑制)
-  5. LaTeX 表格数据 → docs/03-理论推导/THY-004/sim-data/
+@file    run_all.py
+@module  analysis/批处理入口（巡航分析）
+@brief   一键跑出配平、模态、闭环响应与论文表格数据。
+@details 输入：models/aircraft-model.json；处理：trim_longitudinal(28 m/s) →
+         linearize_at_trim/analyze_modes → SAS 闭环阶跃 → INDI vs SAS 扰动对比；
+         输出：控制台摘要 + TandemVec-Paper/sim-data/ 下的 JSON/LaTeX 片段。
+         运行：仓库根目录 `py -3.12 simulations/high-fidelity-analysis/run_all.py`。
+@theory  纵向四方程配平（Fx/Fz/My）@ref MOD-003 §2；
+         数值线性化与小扰动模态 @ref MOD-003 §4；
+         SAS 律（角速率阻尼 + 姿态 P/I）@ref MOD-001 §8；
+         INDI 增量分配 @ref TandemVec-Paper/ch10。
+@frame   NED + FRD；状态顺序 [u,v,w,p,q,r,x,y,z,q0..q3]（见 trim_analysis 注释）。
+@units   SI；配平速度 m/s、摆角 rad、油门无量纲。
+@note    配平初值是**参考点**而非六自由度全配平：dfTrim≠0 在 y 轴留一阶小残差，
+         未闭合 Fy/Mx（@ref MOD-003 §2.2）。油门开环时呈弱 phugoid 慢发散。
+@see     core.py、trim_analysis.py、simulate.py、export_latex.py、@ref MOD-003
 """
 
 import sys, os, json
@@ -23,10 +30,11 @@ from trim_analysis import trim_longitudinal, linearize_at_trim, analyze_modes
 from simulate import SASController, INDIController, compare_controllers, simulate
 from export_latex import modes_table, trim_table, step_response_metrics
 
-OUT = Path(__file__).parent.parent.parent / "docs" / "03-理论推导" / "THY-004" / "sim-data"
+OUT = Path(__file__).parent.parent.parent / "TandemVec-Paper" / "sim-data"
 OUT.mkdir(parents=True, exist_ok=True)
 
 def main():
+    """程序入口：串起配平 → 线性化/模态 → SAS 阶跃 → INDI 对比 → 表格导出。"""
     P = load_params()
     print("=" * 60)
     print(" 纵列双发矢量推力飞行器 — 高精度多维仿真分析")

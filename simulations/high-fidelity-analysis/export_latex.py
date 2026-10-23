@@ -1,5 +1,18 @@
 # -*- coding: utf-8 -*-
-"""导出 LaTeX 表格数据"""
+"""export_latex.py — 把模态分析结果导出为 LaTeX 表格片段。
+
+@file    export_latex.py
+@module  analysis/论文数据导出
+@brief   由 analyze_modes 的特征值结果生成 modes/参数表 LaTeX 源码。
+@details 输入：analyze_modes() 返回 dict + trim 结果 + 参数字典；处理：配对共轭特征值、
+         计算频率/阻尼比/时间常数；输出：LaTeX 表格字符串（由 run_all.py 写盘）。
+@theory  特征值→频率/阻尼映射 λ=σ±jω_d，ω_n=|λ|、ζ=−σ/|λ| @ref MOD-003 §4.2；
+         纵向（短周期/长周期）与横航向（荷兰滚/滚转收敛/螺旋）模态分类 @ref MOD-003 §4。
+@frame  N/A（纯数据格式化）
+@units   频率 Hz、阻尼比无量纲、时间常数 s；表格内数值保留 3–4 位有效数字。
+@note    共轭对只输出一次（seen_pairs 去重），否则表里会出现两行重复模态。
+@see     trim_analysis.py、run_all.py、@ref MOD-003
+"""
 
 import numpy as np
 

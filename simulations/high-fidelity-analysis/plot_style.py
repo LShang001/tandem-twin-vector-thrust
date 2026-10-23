@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
-"""论文仿真图统一样式：Times New Roman(西文) + SimSun(中文) + STIX 公式
-   配色采用 Okabe-Ito 色盲安全调色板，全部图件中文标注。"""
+"""plot_style.py — 论文仿真图统一样式（字体/配色/坐标轴约定）。
+
+@file    plot_style.py
+@module  analysis/图件样式
+@brief   统一 matplotlib 样式：SimSun 宋体 + STIX 公式 + Okabe-Ito 色盲安全配色。
+@details 输入：无（import 即配置 rcParams）；处理：字体、线宽、刻度、矢量导出；
+         输出：apply_style()/finish()/ref_hline()/log_sci_ticks() 等绘图辅助。
+         不变量：全部图件导出矢量 PDF、中文标注、配色语义固定（蓝=SAS、朱红=INDI）。
+@theory  N/A（图件样式，不含物理模型）
+@frame   N/A
+@units   N/A（线宽 pt、字号 pt）
+@note    matplotlib 不做逐字形回退：Times+SimSun 混排会丢中文字形，故统一 SimSun；
+         绘图脚本不得另设 rcParams 覆盖本模块，否则图件风格漂移。
+@see     plot_results.py、run_vtol.py、TandemVec-Paper/fig-sim
+"""
 
 import matplotlib
 matplotlib.use('Agg')
@@ -16,6 +29,7 @@ C_PURPLE = '#CC79A7'  # 紫红
 C_GRAY = '#7F7F7F'    # 参考线灰
 
 def apply_style():
+    """应用全局 rcParams（字体/线宽/刻度/矢量导出），供所有图件复用。"""
     plt.rcParams.update({
         # 字体：SimSun 宋体（中西文全覆盖，与 ctex 正文一致），公式 STIX
         # 注：matplotlib 不做逐字形回退，Times+SimSun 列表会导致中文缺字形，故统一用 SimSun
@@ -68,6 +82,12 @@ def log_sci_ticks(ax, axis='y'):
         ax.xaxis.set_major_formatter(fmt)
 
 def finish(fig, path):
+    """收紧坐标轴并按矢量格式保存图件。
+
+    @param[in] fig  matplotlib Figure
+    @param[in] path 输出路径（PDF/SVG）
+    @note   统一走这里导出，避免各脚本用不同 dpi/bbox 导致图件尺寸漂移。
+    """
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)

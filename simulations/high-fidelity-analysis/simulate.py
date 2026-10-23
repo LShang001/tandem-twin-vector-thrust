@@ -1,5 +1,22 @@
 # -*- coding: utf-8 -*-
-"""时域仿真：SAS 和 INDI 控制器 + 对比分析"""
+"""simulate.py — 巡航时域仿真：SAS / INDI 控制器与对比驱动。
+
+@file    simulate.py
+@module  analysis/时域仿真（巡航闭环）
+@brief   实现欧拉角域的 SAS 与 INDI 控制器，并提供单次仿真/对比入口。
+@details 输入：配平结果 trim{alpha,omega0,delta_t,V} + 扰动元组 + 控制周期 dt；
+         处理：构造配平初值（q=绕 +y 转 +α、v=[V cosα,0,V sinα]）→ 逐步调用控制器
+         → 推进一阶电机 → RK4 积分；输出：以 dict 给出时间序列（t/phi/theta/p/q/r/δ…）。
+         不变量：控制器输出先限幅再积分，推进力用上一拍指令（显式时序）。
+@theory  SAS 律（角速率阻尼 + 姿态比例/积分）@ref MOD-001 §8；
+         INDI 增量非线性动态逆 @ref TandemVec-Paper/ch10；
+         比力方程与刚体动力学 @ref MOD-001 §5.1–§5.2。
+@frame  NED + FRD；theta 为项目锁定显示值 theta=−asin(R13)，故 dtheta=theta−(−aTrim)。
+@units   SI：V m/s、α/δ rad、角速度 rad/s、时间 s；扰动角速度用 deg/s 输入后转 rad。
+@note    俯仰阻尼项取 +sasQ·q 而姿态项取 −sasTh·dtheta：因显示约定下 θ̇≈−q，
+         符号必须成对检查（@ref MOD-001 §8 末段）。
+@see     core.py、trim_analysis.py、controllers.py
+"""
 
 import numpy as np
 from core import *  # noqa: F403
@@ -8,6 +25,14 @@ from core import *  # noqa: F403
 #  SAS 控制器 (对标 control.mjs)
 # ============================================================
 class SASController:
+    """巡航 SAS：角速率阻尼 + 姿态比例/积分，输出摆角与差速并限幅。
+
+    @formula δt = δt_trim + kq·q − kθ·Δθ − ki·∫Δθ（Δθ=θ+aTrim）
+             δf = dfTrim − kr·r； Δω = kp·p − kφ·φ − kiφ·∫φ
+    @ref     MOD-001 §8（反馈极性与限幅：仿真 ±25°/±0.7）
+    @note    俯仰项符号与 theta_dot≈−q 的锁定约定成对出现，单独改任一处都会正反馈。
+    """
+
     def __init__(self, P, trim):
         self.P = P; self.trim = trim
         self.int_th = 0.0; self.int_phi = 0.0
@@ -36,6 +61,14 @@ class SASController:
 #  INDI 控制器
 # ============================================================
 class INDIController:
+    """巡航 INDI：角速率误差→虚拟角加速度，混合 ω̇ 估计后经 B⁻¹ 增量分配。
+
+    @formula Δu = B⁻¹·I·(ν − ω̇_filt)，ω̇_filt = 0.7·ω̇_model + 0.3·差分后低通
+    @ref     TandemVec-Paper/ch10（INDI 与角加速度获取）
+    @note    "×I"不可省：惯量各向异性（Ix=0.0021 vs Iy=Iz=0.022）会让滚转通道被放大
+             约 10 倍并正反馈发散；增量限幅放宽到 dMax 以避免饱和停滞。
+    """
+
     def __init__(self, P, trim):
         self.P = P; self.trim = trim
         self.int_th = 0.0; self.int_phi = 0.0

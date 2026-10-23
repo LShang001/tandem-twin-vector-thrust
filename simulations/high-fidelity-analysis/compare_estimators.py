@@ -1,9 +1,19 @@
 # -*- coding: utf-8 -*-
-"""INDI 估计器闭环对比（严谨版）
-   关键改进：
-   1. 每个估计器用其最优带宽参数
-   2. 对比多种陀螺噪声水平下的耦合抑制 + 稳定性
-   3. 自适应互补滤波用完整动力学模型预测通道
+"""compare_estimators.py — INDI 角加速度估计器的闭环对比实验。
+
+@file    compare_estimators.py
+@module  analysis/实验脚本（估计器对比）
+@brief   在同一 INDI 闭环下比较四种 ω̇ 估计器的耦合抑制与稳定性。
+@details 输入：参数 + 陀螺噪声水平扫描；处理：每个估计器用其带宽参数跑闭环，
+         扫描噪声强度记录耦合峰值/是否发散；输出：fig-sim PDF 与控制台摘要。
+         运行：仓库根目录 `py -3.12 simulations/high-fidelity-analysis/compare_estimators.py`。
+@theory  INDI 增量律与角加速度反馈 @ref TandemVec-Paper/ch10；
+         转子陀螺项 ω×h 与欧拉耦合 @ref MOD-001 §5.2。
+@frame  NED + FRD；角速率与角加速度均为机体系三轴。
+@units   ω rad/s、ω̇ rad/s²、噪声 std rad/s、时间 s。
+@note    种子由固定 seed 传入（默认 0），结果可复现；噪声标准差是**人为注入**的陀螺噪声，
+         不代表实机 IMU 指标。实验结论：电机一阶滞后使模型预测通道失配时差分更稳健。
+@see     estimators.py、controllers.py、@ref TandemVec-Paper/ch10
 """
 import numpy as np
 import matplotlib
@@ -17,6 +27,12 @@ from estimators import (EulerDiffEstimator, SavitzkyGolayEstimator,
 P = load_params()
 
 class INDI:
+    """最小 INDI 内环：ω̇ 估计 + 速率误差 → 增量 B⁻¹ 分配（估计器可插拔）。
+
+    @note  该类只保留对比所需的最小结构（无外环姿态、无积分），
+           与 QuatINDIController 的差别是刻意为之：隔离估计器的影响。
+    """
+
     def __init__(self, estimator, K=3.0):
         self.est = estimator
         self.K = K
@@ -38,6 +54,15 @@ class INDI:
         return self.prev_u
 
 def simulate(est, noise_std, T=6.0, dt=0.004, seed=0, K=3.0):
+    """用给定估计器跑一次 INDI 闭环。
+
+    @param[in] est       角加速度估计器实例
+    @param[in] noise_std 注入陀螺噪声 std [rad/s]（人为设定，非实机指标）
+    @param[in] T         时长 [s]；dt 子步 [s]
+    @param[in] seed      随机种子（固定以保证可复现）
+    @param[in] K         内环带宽 [1/s]
+    @return dict：时间/角速率/耦合量序列
+    """
     rng = np.random.default_rng(seed)
     N = int(T/dt); omega0 = 0.441*P["wMax"]
     v = np.array([24.0,0,0]); w = np.zeros(3); q = quat_norm(np.array([1.,0,0,0]))
@@ -61,6 +86,11 @@ def simulate(est, noise_std, T=6.0, dt=0.004, seed=0, K=3.0):
 
 # 每个估计器配其代表性参数
 def make(name, dt):
+    """估计器工厂：按中文名构造（差分 / S-G / 互补 / 平滑），参数为对比选定的较优带宽。
+
+    @note  S-G 用 M=3、平滑用 N=2 是为了压低群延迟——与 estimators.py 的默认值不同，
+           属于"每个估计器用其最优参数"的实验设计，不是实现差异。
+    """
     if name=="差分": return EulerDiffEstimator(dt)
     if name=="S-G":  return SavitzkyGolayEstimator(dt, M=3, d=2)   # 更小窗口减延迟
     if name=="互补": return AdaptiveComplementaryEstimator(dt, P,

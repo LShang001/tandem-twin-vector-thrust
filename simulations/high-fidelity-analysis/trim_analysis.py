@@ -1,5 +1,24 @@
 # -*- coding: utf-8 -*-
-"""配平求解、数值线性化、特征值分析"""
+"""trim_analysis.py — 纵向配平求解、数值线性化与模态分析。
+
+@file    trim_analysis.py
+@module  analysis/配平与稳定性
+@brief   解 α/ω0/δt 三方程配平，并在配平点数值线性化 12 状态系统。
+@details 输入：目标速度 V_target + 参数字典；处理：Newton 迭代（数值 Jacobian、
+         δ_f=Δω=β=0、水平飞行假设）求 Fx=Fz=My=0；再对 [u,v,w,p,q,r,x,y,z,q0..q3]
+         中心差分得 A(13×13)，抽出纵向 [u,w,q,θ] 与横航向 [v,p,r,φ] 子块；
+         输出：trim dict 与 (A, A_long, A_lat)，eigvals 供 export_latex 使用。
+         不变量：状态编号固定 0–12，θ 步取自 q2（绕 +y 转 +α 的物理抬头）。
+@theory  推力/气动/重力三力平衡与俯仰力矩平衡 @ref MOD-001 §7.1；
+         配平四方程与 28 m/s 数值解（更完整口径用 scripts/trim_solve.py）@ref MOD-003 §2.1–§2.2；
+         小扰动线性化与模态分类 @ref MOD-003 §4。
+@frame  NED + FRD；欧拉角 θ=−asin(R13)，故步进 q2 时 dθ≈+dq2（符号由约定决定）。
+@units   V m/s、α/ω0 rad 与 rad/s、力 N、力矩 N·m；A 矩阵元素单位随状态混合。
+@note    仅闭合 Fx/Fz/My三方程（四方程含 dfTrim 的版本见 scripts/trim_solve.py），
+         因此该配平点是**纵向参考点**，Fy/Mx 未闭合，不能当六自由度全配平用
+         （@ref MOD-003 §2.2）。alpha 限幅 ±0.3 rad、ω0∈[50,wMax]、δt∈±dMax。
+@see     core.py、simulate.py、export_latex.py、scripts/trim_solve.py、@ref MOD-003
+"""
 
 import numpy as np
 from core import *  # noqa: F403

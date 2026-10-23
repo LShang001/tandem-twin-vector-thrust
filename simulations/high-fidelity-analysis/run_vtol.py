@@ -1,5 +1,20 @@
 # -*- coding: utf-8 -*-
-"""VTOL Tail-sitter 仿真 + 可视化 (v5: 三控制器对比, 中文专业图件)"""
+"""run_vtol.py — 尾座式 VTOL 闭环仿真与三控制器对比图件。
+
+@file    run_vtol.py
+@module  analysis/图件生成（VTOL 悬停/过渡）
+@brief   在悬停姿态下对比四元数 SAS / INDI / LQR 的控制效果并出图。
+@details 输入：参数 + 悬停配平转速 ω0=√(mg/2kT)；处理：simulate_vtol 闭环（可选
+         slerp 过渡与气动开关）→ 记录姿态/角速率/摆角/高度；输出：fig-sim PDF。
+         运行：仓库根目录 `py -3.12 simulations/high-fidelity-analysis/run_vtol.py`。
+@theory  悬停姿态与推力平衡 m·g=2·kT·ω0² @ref MOD-001 §3.2；
+         误差四元数控制与限幅 @ref TandemVec-Paper/ch12；
+         VTOL 构型与过渡分析 @ref TandemVec-Paper/ch13。
+@frame  NED + FRD；悬停四元数绕 NED y 转 +90°（机头朝天，显示 theta=−90°）。
+@units  姿态 deg、角速率 rad/s、摆角 deg、高度 m、转速 rad/s。
+@note    仿真摆角限幅用模型 JSON 的 25°（dMax），固件实机为 15°——图件不代表实机权限。
+@see     controllers.py、plot_style.py、cascade_vtol.py、@ref TandemVec-Paper/ch13
+"""
 import sys, os
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
 from core import load_params, quat_multiply
@@ -10,7 +25,7 @@ from plot_style import (apply_style, finish, ref_hline, log_sci_ticks,
 import numpy as np
 import matplotlib.pyplot as plt
 
-OUT = "docs/03-理论推导/THY-004/fig-sim"
+OUT = "TandemVec-Paper/fig-sim"
 os.makedirs(OUT, exist_ok=True)
 apply_style()
 
@@ -25,6 +40,12 @@ T_SLERP = 3.0   # slerp 过渡时长
 T_TO = 10.0     # 起飞仿真时长
 
 def make_controllers(omega0):
+    """构造三套控制器（SAS / INDI / LQR）及各自绘图色/线型。
+
+    @param[in] omega0 该场景的工作转速 [rad/s]（悬停配平或起飞 105%）
+    @return dict：name → (controller, color, linestyle)
+    @note    INDI 不接收 omega0（它每步自行取当前工作点算 B），故构造参数不同。
+    """
     return {
         'SAS':  (QuatSASController(P, omega0=omega0), C_BLUE,  '-'),
         'INDI': (QuatINDIController(P),               C_VERM,  '-'),

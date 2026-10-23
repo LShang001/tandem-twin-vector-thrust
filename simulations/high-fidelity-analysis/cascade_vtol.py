@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
-"""级联架构 VTOL tail-sitter 大姿态角验证
-   验证误差四元数外环在万向锁附近（θ=-90°）的有效性
-   场景：水平→悬停 slerp 过渡 + 悬停抗扰
+"""cascade_vtol.py — 级联控制器在 VTOL 大姿态角（万向锁附近）的验证。
+
+@file    cascade_vtol.py
+@module  analysis/实验脚本（VTOL 大角度）
+@brief   验证误差四元数外环在 θ≈−90° 附近不出现欧拉奇异，并测悬停抗扰。
+@details 输入：参数 + ω0=√(mg/2kT)；处理：水平→悬停 slerp 过渡 + 悬停脉冲扰动，
+         三种控制器对比；输出：fig-sim PDF。
+         运行：仓库根目录 `py -3.12 simulations/high-fidelity-analysis/cascade_vtol.py`。
+@theory  四元数误差角在 ±90° 无奇异（对比欧拉角 theta=−asin(R13) 会锁死）
+         @ref MOD-002 §4、@ref TandemVec-Paper/ch12；
+         悬停推力平衡 @ref MOD-001 §3.2。
+@frame  NED + FRD；悬停 q=绕 NED y +90°；显示 theta=−90°（项目锁定符号）。
+@units   姿态 deg、角速率 rad/s、时间 s。
+@note    目标是验证**控制器结构**而非实机收益；仿真摆角 25° 与固件 15° 不同。
+@see     controllers.py、cascade_extended.py、@ref TandemVec-Paper/ch12
 """
 import numpy as np
 import matplotlib
@@ -20,6 +32,10 @@ W0_H = np.sqrt(P["m"]*P["g"]/(2*P["kT"]))
 U_MAX = np.array([P["dwMax"], P["dMax"], P["dMax"]])
 
 def eps_of(q,q_des):
+    """误差四元数 q_des*⊗q 的矢量部分 ε（小角度≈φ/2）。
+
+    @ref REF-120 §9.2 p.267–270、@ref MOD-002 §3.4
+    """
     qe=quat_multiply(quat_conj(q_des),q); return np.array([qe[1],qe[2],qe[3]])
 
 class CascadePI:
@@ -43,6 +59,7 @@ class CascadePI:
 
 T_SLERP=3.0; T_TO=10.0
 def run(ctrl):
+    """跑"水平→悬停 slerp 过渡"场景，返回 simulate_vtol 的时间序列 dict。"""
     return simulate_vtol(ctrl, P, qh, W0_H*1.05, T_total=T_TO,
                          slerp_duration=T_SLERP, q_des_initial=q_level)
 

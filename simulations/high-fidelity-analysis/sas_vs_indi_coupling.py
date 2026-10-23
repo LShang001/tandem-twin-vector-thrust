@@ -1,7 +1,18 @@
 # -*- coding: utf-8 -*-
-"""耦合抑制对比：SAS(对角) vs INDI(全矩阵) vs LQR(冻结B_full)
-   场景：24 m/s 巡航 + 前摆 δ_f 阶跃 → 俯仰耦合（-τ_f·sinδ_f）
-   扫摆角幅度，量化 LQR 冻结 B(δ=0) 的大摆角退化
+"""sas_vs_indi_coupling.py — 前摆阶跃引起的俯仰耦合抑制对比。
+
+@file    sas_vs_indi_coupling.py
+@module  analysis/实验脚本（耦合抑制）
+@brief   扫前摆 δf 幅度，对比 SAS(对角) / INDI(全矩阵) / LQR(冻结 B) 的耦合残差。
+@details 输入：24 m/s 配平点 + δf 阶跃（默认 10°）+ 陀螺噪声；处理：三种控制器闭环，
+         记录俯仰/滚转耦合峰值；输出：fig-sim PDF 与退化曲线。
+@theory  前摆反扭在 y 轴的耦合 M_y=−τ_f·sinδ_f @ref MOD-001 §3.3；
+         控制效率矩阵非对角项 @ref MOD-001 §4；
+         LQR 冻结 B(δ=0) 在大摆角下的退化 @ref TandemVec-Paper/ch14。
+@frame  FRD 机体系；δf 绕 z_b（偏航主控），其反扭投影到 y_b 即俯仰耦合。
+@units   摆角 deg、角速度 rad/s、力矩 N·m、时间 s。
+@note    seed 固定（默认 0）保证可复现；耦合量级随油门（T0）变化，结论只在同工作点成立。
+@see     controllers.py、lqr_online_b.py、@ref MOD-001
 """
 import numpy as np
 import matplotlib
@@ -16,6 +27,15 @@ DT = 0.004
 W0 = 0.441 * P["wMax"]
 
 def simulate(ctrl, kind, noise_std=0.002, T=6.0, seed=0, df_step=10.0):
+    """跑一次闭环：24 m/s 初速 + 前摆阶跃 + 陀螺噪声。
+
+    @param[in] ctrl      控制器（update(q,q_des,ω,dt) 或 INDI 五参版）
+    @param[in] noise_std 陀螺噪声 std [rad/s]
+    @param[in] T         时长 [s]，dt=DT=0.004 s
+    @param[in] seed      随机种子（固定以保证可复现）
+    @param[in] df_step   前摆阶跃 [deg]（t=2 s 起）
+    @return (t, theta)：时间 [s] 与锁定显示俯仰角 [rad]
+    """
     rng = np.random.default_rng(seed)
     N = int(T/DT)
     v = np.array([24.,0,0]); w = np.zeros(3); q = quat_norm(np.array([1.,0,0,0]))
@@ -38,11 +58,17 @@ def simulate(ctrl, kind, noise_std=0.002, T=6.0, seed=0, df_step=10.0):
     return np.arange(N)*DT, th
 
 def make(kind):
+    """控制器工厂：按名字新建实例（SAS / LQR / INDI），避免跨种子共享状态。"""
     if kind=="SAS": return QuatSASController(P, omega0=W0)
     if kind=="LQR": return QuatLQRController(P, omega0=W0)
     return QuatINDIController(P, estimator=EulerDiffEstimator(DT))
 
 def coupling_peak(kind, df_step, ns=0.002, NSEED=5):
+    """多种子统计俯仰耦合峰值。
+
+    @return 平均耦合峰值 [rad]
+    @note   峰值以阶跃后前 5 点均值为基准，避免把初值偏置算成耦合。
+    """
     peaks=[]
     for s in range(NSEED):
         t, th = simulate(make(kind), kind, noise_std=ns, seed=s, df_step=df_step)

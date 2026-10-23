@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
-"""级联控制：外环姿态P→角速度指令，内环角速度环+交叉项补偿
-   用户架构：外环纯比例（姿态），内环角速度控制（带在线B_true交叉项补偿）
-   对比: 纯LQR / 纯INDI / 级联P+B_true分配 / 级联P+增益调度分配
+"""lqr_online_b.py — 级联控制在线 B_true 补偿与 LQR/INDI 的对比实验。
+
+@file    lqr_online_b.py
+@module  analysis/实验脚本（分配器对比）
+@brief   外环姿态 P + 内环角速率，分别用固定 B、在线 B_true、增益调度分配并对比。
+@details 输入：参数 + DT=0.004、W0=0.441·wMax；处理：四元数误差外环 → 角速率内环
+         → 三种分配策略 → RK4 闭环；输出：fig-sim PDF 与收敛统计。
+@theory  连续时间 LQR（CARE）@ref TandemVec-Paper/ch14；
+         在线效能矩阵 B_true 反解与交叉项补偿 @ref THY-003 §3、@ref MOD-001 §4；
+         转子陀螺项补偿 @ref MOD-001 §3.4。
+@frame  FRD 机体系；u=[Δω,δt,δf] 与 core.control_effectiveness 列顺序一致。
+@units   增益 1/s、角速度 rad/s、摆角 rad、时间 s。
+@note    在线 B 用当前摆角/差速求 Jacobian，与离线固定 B 相比在|δ|较大时才显著；
+         本文件是研究对比，不是固件分配器（固件用 AirframeModel 数据驱动 B）。
+@see     controllers.py、sas_vs_indi_coupling.py、@ref TandemVec-Paper/ch14
 """
 import numpy as np
 from scipy.linalg import solve_continuous_are
@@ -17,6 +29,11 @@ P = load_params(); DT=0.004; W0=0.441*P["wMax"]
 U_MAX = np.array([P["dwMax"], P["dMax"], P["dMax"]])
 
 def eps_of(q, q_des):
+    """误差四元数 q_des*⊗q 的矢量部分 ε（小角度≈φ/2）。
+
+    @formula ε=[q_err.x,q_err.y,q_err.z]，q_err=q_des*⊗q
+    @ref     REF-120 §9.2 p.267–270、@ref MOD-002 §3.4
+    """
     qe = quat_multiply(quat_conj(q_des), q)
     return np.array([qe[1], qe[2], qe[3]])
 
@@ -25,6 +42,8 @@ def eps_of(q, q_des):
 #       内环角速度环: ν = K_ω(ω_ref - ω)，u = B_true(u_k)⁻¹ ν  （交叉项补偿）
 # ============================================================
 class CascadeOnlineB:
+    """级联 P + 角速率内环 + 在线 B_true 增量分配（每步重算效能矩阵并做交叉项补偿）。"""
+
     name = "级联P+在线B_true"
     def __init__(self, Kp=2.0, Kw=8.0, du_max=0.5):
         self.Kp=Kp; self.Kw=Kw; self.du_max=du_max
@@ -48,6 +67,11 @@ class CascadeOnlineB:
 
 # 级联 + 冻结B（无交叉项补偿，作对照）
 class CascadeFrozenB:
+    """级联 P + 角速率内环 + 冻结 B（δ=Δω=0 处线性化、无交叉项补偿），作对照臂。
+
+    @note    大摆角下冻结 B 的退化幅度即"在线 B 的收益"（@ref TandemVec-Paper/ch14）。
+    """
+
     name = "级联P+冻结B(无补偿)"
     def __init__(self, Kp=2.0, Kw=8.0, du_max=0.5):
         self.Kp=Kp; self.Kw=Kw; self.du_max=du_max
@@ -67,6 +91,16 @@ class CascadeFrozenB:
 
 # ============================================================
 def simulate(ctrl, kind, noise_std=0.002, T=6.0, seed=0, df_step=10.0):
+    """跑一次闭环：24 m/s 初速 + 前摆阶跃 + 陀螺噪声。
+
+    @param[in] ctrl      控制器实例（update 接口）
+    @param[in] kind      记录用的控制器名
+    @param[in] noise_std 陀螺噪声 std [rad/s]
+    @param[in] T         仿真时长 [s]，dt=DT=0.004 s
+    @param[in] seed      随机种子（固定以保证可复现）
+    @param[in] df_step   前摆阶跃幅度 [deg]
+    @return (t, theta)：时间序列 [s] 与锁定显示俯仰角 [rad]
+    """
     rng=np.random.default_rng(seed); N=int(T/DT)
     v=np.array([24.,0,0]); w=np.zeros(3); q=quat_norm(np.array([1.,0,0,0]))
     prop=Propulsion(P); prop.wf=prop.wt=W0; prop.prev_wf=prop.prev_wt=W0
@@ -87,6 +121,14 @@ def simulate(ctrl, kind, noise_std=0.002, T=6.0, seed=0, df_step=10.0):
     return np.arange(N)*DT, th
 
 def peak(make, kind, df_step, NSEED=5):
+    """多种子统计俯仰耦合峰值（阶跃后相对初值的最大偏差）。
+
+    @param[in] make    控制器工厂（每种子新建实例，避免状态串味）
+    @param[in] kind    控制器名
+    @param[in] df_step 前摆阶跃 [deg]
+    @param[in] NSEED   种子数
+    @return 平均耦合峰值 [rad]
+    """
     peaks=[]
     for s in range(NSEED):
         t,th=simulate(make(), kind, seed=s, df_step=df_step)

@@ -1,7 +1,19 @@
 # -*- coding: utf-8 -*-
-"""级联控制参数离线优化：网格搜索 + 多目标代价
-   目标：在耦合抑制/跟踪速度/执行器代价间找最优 (Kp, Ki, Kw)
-   方法：参数网格 + 复合代价函数 J = w1*耦合峰值 + w2*调节时间 + w3*控制能量
+"""cascade_param_opt.py — 级联控制参数离线网格搜索（多目标代价）。
+
+@file    cascade_param_opt.py
+@module  analysis/参数优化脚本
+@brief   在 (Kp, Ki, Kw) 网格上按复合代价 J 选最优级联增益。
+@details 输入：参数 + 固定 DT=0.004 与 W0=0.441·wMax 工作点；处理：每个增益组合跑
+         固定时长闭环，统计耦合峰值/调节时间/控制能量；输出：寻优表与 fig-sim 图件。
+         运行：仓库根目录 `py -3.12 simulations/high-fidelity-analysis/cascade_param_opt.py`。
+@theory  级联结构（外环姿态 P、内环角速率）@ref TandemVec-Paper/ch15；
+         效能矩阵分配 @ref MOD-001 §4、@ref THY-003 §3。
+@frame  FRD 机体系三轴。
+@units   增益无量纲/1/s、时间 s、控制能量无量纲。
+@note    代价权重 (w1,w2,w3) 是研究者设定，不是物理量——换权重会换"最优"增益；
+         结果不可直接写回固件参数（仿真工作点 W0 与固件调度不同）。
+@see     cascade_extended.py、@ref TandemVec-Paper/ch15
 """
 import numpy as np
 import matplotlib
@@ -15,6 +27,15 @@ from plot_style import apply_style, finish, C_BLUE, C_VERM, C_GREEN
 apply_style()
 
 def simulate_full(ctrl, ns=0.002, T=6.0, seed=0, df_step=10.0):
+    """跑一次闭环（24 m/s 初速 + t=2 s 前摆阶跃 + 陀螺噪声）。
+
+    @param[in] ctrl     控制器实例
+    @param[in] ns       陀螺噪声 std [rad/s]
+    @param[in] T        时长 [s]，dt=DT=0.004 s
+    @param[in] seed     随机种子（固定以保证可复现）
+    @param[in] df_step  前摆阶跃 [deg]
+    @return (t, theta, u_energy)
+    """
     rng=np.random.default_rng(seed);N=int(T/DT)
     v=np.array([24.,0,0]);w=np.zeros(3);q=quat_norm(np.array([1.,0,0,0]))
     prop=Propulsion(P);prop.wf=prop.wt=W0;prop.prev_wf=prop.prev_wt=W0
@@ -30,6 +51,13 @@ def simulate_full(ctrl, ns=0.002, T=6.0, seed=0, df_step=10.0):
     return np.arange(N)*DT,th,u_eng
 
 def cost(params, NSEED=1):
+    """网格搜索的复合代价 J = w1·耦合峰值 + w2·调节时间 + w3·控制能量。
+
+    @param[in] params (Kp, Ki, Kw)
+    @param[in] NSEED  种子数（默认 1：网格搜索为控时，最终候选应增加种子复核）
+    @return 标量代价（越小越好）
+    @note    权重是研究者设定而非物理量，换权重会换"最优"增益。
+    """
     Kp,Ki,Kw=params
     pk=[];ts=[];ue=[]
     for s in range(NSEED):

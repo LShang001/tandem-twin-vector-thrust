@@ -1,5 +1,19 @@
 # -*- coding: utf-8 -*-
-"""生成仿真可视化图表 → PDF（v2: 中文专业图件，统一 plot_style）"""
+"""plot_results.py — 巡航配平/模态/SAS 阶跃的论文图生成。
+
+@file    plot_results.py
+@module  analysis/图件生成（巡航纵向）
+@brief   由 trim_analysis + simulate 计算工况并输出 PDF 图件。
+@details 输入：models/aircraft-model.json 参数；处理：28 m/s 纵向配平 → 数值线性化
+         → SAS 闭环阶跃 → 绘图；输出：TandemVec-Paper/fig-sim/*.pdf。
+         运行：仓库根目录 `py -3.12 simulations/high-fidelity-analysis/plot_results.py`。
+@theory  纵向配平与数值线性化 @ref MOD-003 §2、§4（小扰动框架）；
+         SAS 律与反馈极性 @ref MOD-001 §8；四元数 RK4 积分 @ref MOD-001 §9。
+@frame  NED + FRD；图中 theta 为项目锁定显示值（theta=−asin(R13)，与几何角反号）。
+@units  时间 s、姿态 deg、角速率 rad/s、速度 m/s。
+@note    本脚本不含随机数，重复运行结果确定性一致；字体依赖 plot_style（SimSun）。
+@see     trim_analysis.py、simulate.py、plot_style.py、@ref MOD-003
+"""
 import sys, os
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
 from core import load_params, quat_norm, quat_multiply
@@ -10,7 +24,7 @@ from plot_style import (apply_style, finish, ref_hline, log_sci_ticks,
 import numpy as np
 import matplotlib.pyplot as plt
 
-OUT = "docs/03-理论推导/THY-004/fig-sim"
+OUT = "TandemVec-Paper/fig-sim"
 os.makedirs(OUT, exist_ok=True)
 apply_style()
 
@@ -46,7 +60,13 @@ print("图2: RK4 vs Euler 积分精度...")
 q_e = np.array([1.0, 0.0, 0.0, 0.0]); q_r = np.array([1.0, 0.0, 0.0, 0.0])
 omega = np.array([0.0, 0.0, 1.0]); dt = 0.004; N = 15000
 err_e = np.zeros(N); err_r = np.zeros(N)
-def f_q(qq): return 0.5*quat_multiply(qq, np.array([0, omega[0], omega[1], omega[2]]))
+def f_q(qq):
+    """四元数微分右乘形式 q̇=½·q⊗[0,ω]（欧拉一阶法用的导数）。
+
+    @formula q̇ = ½·q⊗ω̃ @ref REF-120 §9.2 p.267–270、@ref MOD-002 §3.4
+    @note    此处只做欧拉法与 RK4 的舍入/保范对比，不改积分器选型。
+    """
+    return 0.5*quat_multiply(qq, np.array([0, omega[0], omega[1], omega[2]]))
 for i in range(N):
     # 欧拉（一阶）
     q_e = quat_norm(q_e + dt*f_q(q_e))

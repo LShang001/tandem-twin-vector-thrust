@@ -1,5 +1,19 @@
 # -*- coding: utf-8 -*-
-"""级联架构扩展仿真：增益扫描/噪声鲁棒/饱和/时域细节，生成论文图件"""
+"""cascade_extended.py — 级联架构扩展仿真（增益扫描/噪声/饱和）与图件。
+
+@file    cascade_extended.py
+@module  analysis/实验脚本（级联扩展）
+@brief   提供 CascadePI 控制器与扩展工况，供 cascade_param_opt/论文图件复用。
+@details 输入：参数 + DT=0.004、W0=0.441·wMax；处理：误差四元数 + 增量分配的级联闭环，
+         扫描增益/噪声/饱和；输出：fig-sim PDF。
+         同时导出 P/DT/W0/U_MAX 供 cascade_param_opt 直接 import（模块级常量契约）。
+@theory  级联姿态/角速率结构与限幅 @ref TandemVec-Paper/ch15；
+         分配上限 U_MAX=[dwMax,dMax,dMax] @ref MOD-001 §4。
+@frame  FRD 机体系三轴。
+@units   增益 1/s、时间 s、摆角 rad、差速无量纲。
+@note    本模块 import 即建图样式并定义全局常量，被 import 时不应有副作用以外的计算。
+@see     cascade_param_opt.py、controllers.py、@ref TandemVec-Paper/ch15
+"""
 import numpy as np
 import matplotlib
 matplotlib.use("Agg")
@@ -15,9 +29,20 @@ U_MAX=np.array([P["dwMax"],P["dMax"],P["dMax"]])
 apply_style()
 
 def eps_of(q,q_des):
+    """误差四元数 q_des*⊗q 的矢量部分 ε（小角度≈φ/2）。
+
+    @formula ε=[q_err.x,q_err.y,q_err.z]
+    @ref     REF-120 §9.2 p.267–270、@ref MOD-002 §3.4
+    """
     qe=quat_multiply(quat_conj(q_des),q); return np.array([qe[1],qe[2],qe[3]])
 
 class CascadePI:
+    """级联 PI：外环姿态 P/I → 角速率指令，内环角速率比例 + 增量分配。
+
+    @note  积分器 ie 未在此处限幅，饱和/抗饱和由调用方与 du_max 承担
+           （@ref TandemVec-Paper/ch15）。
+    """
+
     def __init__(self,Kp=2.0,Ki=0.5,Kw=8.0,du_max=0.5):
         self.Kp=Kp;self.Ki=Ki;self.Kw=Kw;self.du_max=du_max
         self.u=np.zeros(3);self.ie=np.zeros(3)
@@ -35,6 +60,16 @@ class CascadePI:
         return self.u
 
 def simulate(ctrl,kind,ns=0.002,T=6.0,seed=0,df_step=10.0):
+    """跑一次闭环（24 m/s 初速 + t=2 s 前摆阶跃 + 陀螺噪声）。
+
+    @param[in] ctrl     控制器实例
+    @param[in] kind     控制器名
+    @param[in] ns       陀螺噪声 std [rad/s]
+    @param[in] T        时长 [s]，dt=DT=0.004 s
+    @param[in] seed     随机种子（固定以保证可复现）
+    @param[in] df_step  前摆阶跃 [deg]
+    @return (t, theta, omega_y, delta_t_cmd)
+    """
     rng=np.random.default_rng(seed);N=int(T/DT)
     v=np.array([24.,0,0]);w=np.zeros(3);q=quat_norm(np.array([1.,0,0,0]))
     prop=Propulsion(P);prop.wf=prop.wt=W0;prop.prev_wf=prop.prev_wt=W0
@@ -53,6 +88,11 @@ def simulate(ctrl,kind,ns=0.002,T=6.0,seed=0,df_step=10.0):
     return np.arange(N)*DT,th,wy,dtc
 
 def peak(make,kind,df_step,ns=0.002,NSEED=5):
+    """多种子统计耦合峰值与离散度。
+
+    @return (mean, std)，单位 rad
+    @note   make 是控制器工厂：每种子新建实例，避免积分器跨种子残留。
+    """
     ps=[]
     for s in range(NSEED):
         t,th,_,_=simulate(make(),kind,ns=ns,seed=s,df_step=df_step)

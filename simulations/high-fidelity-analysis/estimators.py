@@ -1,7 +1,21 @@
 # -*- coding: utf-8 -*-
-"""角加速度估计器 — 用于 INDI 的 ω̇ 估计方法对比研究
-   实现四种估计器，统一接口 update(omega, dt) -> omega_dot
-   参考 THY-004 §10.6.3 角加速度获取与滤波
+"""estimators.py — INDI 用角加速度估计器（四种实现对比）。
+
+@file    estimators.py
+@module  analysis/估计器（角加速度/微分滤波）
+@brief   实现后向欧拉差分、Savitzky-Golay、自适应互补滤波、固定滞后 Kalman 平滑。
+@details 输入：机体系角速度序列 ω[k] 与步长 dt；处理：差分/多项式拟合/模型+观测融合；
+         输出：角加速度估计 ω̇ [rad/s²]，或同时输出平滑后的 ω。
+         统一接口 update(omega, dt) -> omega_dot，便于 INDI 闭环替换。
+@theory  后向欧拉差分 + 一阶低通（基线）@ref TandemVec-Paper/ch10；
+         Savitzky-Golay 窗口最小二乘多项式拟合并解析求导 @ref TandemVec-Paper/ch10；
+         自适应互补滤波（模型预测低通 + 差分高通、截止随残差调度）@ref TandemVec-Paper/ch10；
+         固定滞后 Kalman 平滑（状态 [ω, ω̇] 恒加速度模型）@ref REF-121 §6.1.3 p.194。
+@frame  FRD 机体系三轴，各轴独立（无交叉耦合假设）。
+@units  ω rad/s、ω̇ rad/s²、dt s、τ_f s、截止频率 rad/s；sigma 为 rad/s² 归一化尺度。
+@note    各估计器的零延迟/群延迟特性不同：差分零延迟但噪声放大 ∝1/dt²，
+         S-G 群延迟 M·dt，固定滞后平滑延迟 N·dt——用于 INDI 时必须在闭环带宽上留裕度。
+@see     controllers.py::QuatINDIController、compare_estimators.py、@ref TandemVec-Paper/ch10
 """
 
 import numpy as np
