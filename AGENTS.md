@@ -131,6 +131,8 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 
 - **Host 仿真脚本执行（2026-10-24）**：`.sh` 必须 LF；CRLF 会让 Git Bash 把 `set -eu`/`for` 解析成非法命令（症状：`set: -: invalid option`）。`.gitattributes` 已固定 `*.sh text eol=lf`。直接 `bash script.sh` 可能解析到 WSL bash（症状：WSL localhost 警告后停在编译前），SIL/矩阵统一用 `/bin/bash`（Git Bash）执行；修复后 SIL 验收 3/3 PASS（来源：2026-10-24 超大规模仿真）
 
+- **自动延时闭环 5k 未通过（2026-10-24）**：`run_delay_closed_loop_mc.py` 5000 例、`auto_delay=1`，估计延时误差 mean 28.3 ms / P95 91.1 ms，仅 56.6% ≤20 ms；位置 P95 3.1 m、max 4.3 km。更异常的是 `<20 ms` 子组 τ 估计准确但位置 P95≈2 km，说明低延时 `auto_delay`/回放路径存在独立发散机制，不能只归因于 τ 误差。**在定位前不要把自动延时补偿作为实机默认依赖**；原始结果见 `TandemVec-EKF-Report/sim-data/campaign-2026-10-24/`（来源：2026-10-24 超大规模仿真）
+
 ## 知识沉淀协议
 
 > 本协议在对话中自动生效。不是规章制度——是给你未来会话的自己的**记忆外挂**。
