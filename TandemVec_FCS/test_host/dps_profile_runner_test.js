@@ -1,3 +1,20 @@
+/**
+ * @file    dps_profile_runner_test.js
+ * @module  固件/宿主研究（fw-tests：DPS310 profile 运行器配置生成）
+ * @brief   校验 profile 运行器的 label 清洗、参数解析与 platformio 配置注入
+ * @details 被测：`TandemVec_FCS/tools/dps_profile_runner.js` 的
+ *          sanitizeLabel / parseArgs / buildProfileConfig。
+ *          输入：基础 platformio.ini 文本与一组 profile 参数；
+ *          处理：生成带 -DBFS_* 宏的 [env:dps_profile] 段；
+ *          输出：process.exitCode 非零即失败。
+ *          运行：node test_host/dps_profile_runner_test.js
+ * @theory  N/A（构建配置生成，非控制/导航模型）
+ * @frame   N/A
+ * @units   任务间隔 ms、FIFO 读深度 次、采样率/过采样为枚举宏
+ * @note    断言里刻意包含“不得出现的宏”（直读模式、停止后继续等），
+ *          用于锁定已被否决的采样策略不会意外回归；改配置注入逻辑须同步本文件。
+ * @see     TandemVec_FCS/tools/dps_profile_runner.js
+ */
 const assert = require("assert");
 const { buildProfileConfig, parseArgs, sanitizeLabel } = require("../tools/dps_profile_runner");
 

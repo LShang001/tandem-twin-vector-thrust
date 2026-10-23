@@ -1,13 +1,23 @@
-// ============================================================
-//  test_integrator_compare.cpp — 外环积分 vs 内环积分 精确对比
-//
-//  纯C++，无Arduino依赖。仿真单轴俯仰动力学 + 持续扰动力矩。
-//  分别测4种积分配置的阶跃响应和稳态误差。
-//
-//  编译：
-//    g++ -std=c++17 -Iinclude test_host/test_integrator_compare.cpp \
-//        -o test_host/bin/ic && ./test_host/bin/ic
-// ============================================================
+/**
+ * @file    test_integrator_compare.cpp
+ * @module  固件/宿主研究（fw-tests：外环积分 vs 内环积分）
+ * @brief   同一扰动下比较四种积分配置的阶跃响应与稳态误差
+ * @details 被测：无（本文件用 MiniPID 复刻 PositionPID 的积分语义：
+ *          位置式外环、测量微分内环、积分显式乘 dt）。
+ *          场景：单轴俯仰动力学 + 持续扰动力矩，四种积分配置；
+ *          输出：阶跃响应/稳态误差表（研究输出，无 PASS/FAIL 断言）。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_integrator_compare.cpp -o bin/ic
+ * @theory  积分放在外环或内环影响“扰动抑制由谁承担”：内环积分要先经过外环的
+ *          角度误差才被激励，外环积分直接看到角度偏差，但两者在饱和下的表现不同。
+ *          @ref CTL-001 §4（内环量纲与积分限幅）
+ * @frame   单轴（俯仰绕 y_b）
+ * @units   角度 deg，角速率 deg/s，力矩 N·m，时间 s
+ * @note    ★ 研究工具，不在 run_all.sh 回归集合内，无断言；结论仅在同模型内有效。
+ *          MiniPID 必须与 `PositionPID` 保持同一积分实现（积分乘 dt、限幅作用于
+ *          ki·integral 而非 integral 本身），否则对比失去意义。
+ * @test    S1 四种积分配置的阶跃响应；S2 稳态误差对照（输出表，无断言）
+ * @see     TandemVec_FCS/include/PositionPID.h、test_integrator_sweep.cpp
+ */
 #include "../include/TandemVec_Config.h"
 #include "../include/ControlUnits.h"
 #include <cmath>

@@ -1,16 +1,29 @@
+/**
+ * @file    test_anocom_packing.cpp
+ * @module  固件/宿主回归测试（fw-tests：AnoCom 帧打包与组模式）
+ * @brief   验证帧结构/校验和、长度保护与“组模式多帧合并单次 write”
+ * @details 被测：`lib/AnoComProtocol/AnoComProtocol.cpp` 的 buildFrame/sendData/
+ *          beginGroup/endGroup 与各 sendXxx 高层接口。
+ *          输入：`MockSerial`（记录所有 write 的拼接字节与每次写长度）；
+ *          处理：构造帧、逐字节对照独立重算的 sum/add 校验、组模式多帧合并；
+ *          输出：assert 失败即 abort，进程非零退出。
+ *          编译（run_all.sh 注册为 "ap" 套件，双文件）：
+ *          g++ -std=c++17 -Iinclude -Itest_host/stub test_anocom_packing.cpp
+ *          lib/AnoComProtocol/AnoComProtocol.cpp -o bin/ap
+ * @theory  AnoCom 帧：AB 05 <dest> <func> <lenL> <lenH> <data…> <sum> <add>，
+ *          sum/add 为单循环边拷边算的两个 8 位累加校验。
+ *          @ref PROTOCOL-001 §3（帧格式）、@ref COMM-001（组模式减少 write 次数）
+ * @frame   N/A（字节流）
+ * @units   长度字节、校验为 uint8 模 256；时间无关
+ * @note    A1 的 256 截断是防越界写的硬保护：调用方缓冲按 256 设计，
+ *          超过必须截断而不是写爆。A3 的“单次 write”是 COMM-001 的收益来源，
+ *          断言 write 次数为 1 而不是只看字节流，否则会漏掉回归。
+ * @test    A1 len>256 截断；A2 帧结构与校验逐字节；A3 组模式单次 write 且字节流等价；
+ *          A3b 组缓冲超 256B 自动 flush；A3c 高层 sendXxx 在组模式下同样走组缓冲
+ * @see     TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md、
+ *          TandemVec_FCS/docs/COMM-001-数传通信链路优化方案.md
+ */
 // -*- coding: utf-8 -*-
-// test_anocom_packing.cpp — AnoComProtocol 打包回归测试（★2026-08-10 COMM-001）
-//
-// 覆盖：
-//   A1 长度保护：buildFrame len>256 截断（防栈/外部缓冲越界写）
-//   A2 校验单循环边拷边算：sum/add 与独立参考实现逐字节一致
-//   A3 组模式：beginGroup+多帧 sendData+endGroup = 单次 write，
-//      字节流 = 逐帧 sendData 的拼接（协议兼容：官方上位机逐帧解析无感）
-//   帧结构：AB 05 <dest> <func> <lenL> <lenH> <data...> <sum> <add>
-//
-// 编译（run_all.sh 注册为 "ap" 套件，多文件）：
-//   g++ -std=c++17 -Iinclude -Itest_host/stub test_anocom_packing.cpp \
-//       lib/AnoComProtocol/AnoComProtocol.cpp -o bin/ap
 #include <cassert>
 #include <cstdio>
 #include <cstring>

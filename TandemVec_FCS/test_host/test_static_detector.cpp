@@ -1,7 +1,29 @@
+/**
+ * @file    test_static_detector.cpp
+ * @module  固件/宿主回归测试（fw-tests：静止检测器状态机）
+ * @brief   验证迟滞状态机、置信度爬升、异常输入防御与可恢复性
+ * @details 被测：`include/ins_static_detector.h`
+ *          （`Icm45686StaticDetectorUpdate()` 与配置函数）。
+ *          输入：静止比力 (0,0,-g) 与零角速率、运动样本、NaN 输入；
+ *          `setupDetector()` 配置一组覆盖长沙重力（9.80665）的阈值；
+ *          处理：逐帧推进状态机（enter_min_frames/exit_min_frames 各 10 帧）；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Ilib/eigen/src test_host/test_static_detector.cpp
+ * @theory  静止判据 = 比力模长贴近 g + 角速率近零 + 帧间增量小；进出各需连续
+ *          N 帧构成迟滞，避免单帧噪声抖动导致 ZUPT 误开/误关。
+ *          @ref REF-121 §8.2.3 p.291（静止检测/ZUPT 条件）
+ * @frame   机体系 FRD（比力沿 -z_b，静止时模长 ≈ g）
+ * @units   加速度 m/s²，角速率 rad/s，帧数无量纲
+ * @note    阈值 9.3–10.3 m/s² 为 g±0.5、角速率 0.05 rad/s≈2.9 dps；
+ *          NaN 用例验证的是“不崩溃且不误确认”，不是“NaN 被当静止”。
+ *          该检测器是 ZUPT 的前置门，误判会直接污染 EKF 零偏估计。
+ * @test    T1 连续静止帧确认；T2 置信度随驻留爬升；T3 运动不确认；
+ *          T4 迟滞退出；T5 单帧静止不确认；T6 Reset 清状态；
+ *          T7 NaN 不误确认；T8 NaN 后可恢复；T9 角速度恰等阈值的严格小于语义；
+ *          T10 加速度模长越界不确认
+ * @see     TandemVec_FCS/include/ins_static_detector.h、test_static_aid_profile.cpp
+ */
 // 宿主机回归测试：静止检测器（状态机 + 置信度评分）
-// 编译运行：g++ -std=c++17 -Iinclude -Ilib/eigen/src test_host/test_static_detector.cpp -o test_host/bin/sd && ./test_host/bin/sd
-//
-// 验证 include/ins_static_detector.h 的迟滞状态机、置信度评分与异常输入防御。
 #include "../include/ins_static_detector.h"
 
 #include <cmath>

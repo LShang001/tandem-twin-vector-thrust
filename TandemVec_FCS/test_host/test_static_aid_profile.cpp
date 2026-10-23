@@ -1,7 +1,33 @@
+/**
+ * @file    test_static_aid_profile.cpp
+ * @module  固件/宿主回归测试（fw-tests：静止辅助强度调度纯函数）
+ * @brief   验证 ZUPT/重力辅助的周期 GCD、相位碰撞、强度分级与帧边界精确值
+ * @details 被测：`include/ins_static_aid_profile.h` 的 constexpr 纯函数：
+ *          `Icm45686NormalizeStaticAidDivider()`、`Icm45686StaticAidGcd()`、
+ *          `Icm45686StaticAidPhasesCanCollide()`、`Icm45686Clamp01()`、
+ *          `Icm45686SelectStaticAidAction()`、`Icm45686AdaptZuptNoiseForResidual()`、
+ *          `Icm45686SelectStaticAidProfile()` 与 ZUPT 外部参照门控。
+ *          输入：周期/相位/残差/置信度等标量组合，含 0 与边界值；
+ *          处理：逐条 check 断言返回值（含帧边界精确值）；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_static_aid_profile.cpp -o bin/sap
+ * @theory  静止辅助按“每 N 帧做一次”分档；两个辅助若周期 GCD 与相位差同余，
+ *          会同帧叠加，必须避免（否则同一帧执行两次 ZUPT/重力修正）。
+ *          噪声自适应把残差量级映射成 ZUPT 观测噪声缩放（0.6–1.5 区间分段，
+ *          cap 6.0），本质是把“残差大小”转成“信任程度”。
+ *          @ref REF-121 §8.2.3 p.291（静止辅助/ZUPT）、@ref REF-121 §7.3.1 p.255（门控）
+ * @frame   N/A（调度/标量逻辑；残差在 NED 速度域但本文件只传标量）
+ * @units   周期/相位为帧数；残差 m/s；噪声缩放无量纲
+ * @note    帧边界用例是从已删除的 `static_aid_profile_test.cpp` 并入的（2026-08-08），
+ *          期望值全部是解析值（例如 1.50 不 > 1.5 走计算分支：
+ *          scale=3+(1.5−0.6)×5=7.5 再 cap 到 6.0）。0 周期被归一化为 1 是防除零硬保护。
+ * @test    S1 divider 归一化；S2 GCD 含双零；S3 相位碰撞判据；S4 Clamp01；
+ *          S5 动作选择优先级；S6 ZUPT 噪声自适应分段；S7 三档 profile 调度；
+ *          S8 帧边界精确值；S9 ZUPT 外部参照门控（P0-3）
+ * @see     TandemVec_FCS/include/ins_static_aid_profile.h、
+ *          TandemVec_FCS/include/ins_static_detector.h
+ */
 // 宿主机回归测试：静止辅助强度调度纯函数
-// 编译运行：g++ -std=c++17 -Iinclude test_host/test_static_aid_profile.cpp -o test_host/bin/sap && ./test_host/bin/sap
-//
-// 本文件不依赖 Arduino / STM32 HAL / Eigen，仅验证 include/ins_static_aid_profile.h 的 constexpr 逻辑。
 #include "../include/ins_static_aid_profile.h"
 
 #include <cmath>
@@ -172,6 +198,41 @@ int main()
   {
     auto p = Icm45686SelectStaticAidProfile(-0.5f, 200U, true);
     check(approx(p.gravity_noise_rad, 0.18f), "置信度<0 被 clamp 后进档1");
+  }
+
+  // ---- ZUPT 外部参照门控（2026-10 P0-3）----
+  // 理论依据：秦永元等《卡尔曼滤波与组合导航原理（第3版）》，西北工业大学
+  //   出版社 2015，§8.2.3 p.291：间接法滤波的阻尼必须利用外来信息；
+  //   §7.3.1 p.255：系统级 FDI 用 χ² 检验。
+  {
+    Icm45686ZuptExtRefGuard g;
+    g = Icm45686UpdateZuptExtRefGuard(g, false, 2.9f);
+    check(!g.cap_noise && !g.disable_zupt, "外部参照门控: <3s 不封顶");
+    check(!Icm45686ZuptExternalRefAllowsFusion(g, 1.0f),
+          "外部参照门控: 无外部参照立即拒绝 1.0m/s ZUPT");
+    check(Icm45686ZuptExternalRefAllowsFusion(g, 0.5f),
+          "外部参照门控: 无外部参照低速仍允许 ZUPT");
+    g = Icm45686UpdateZuptExtRefGuard(g, false, 0.2f);
+    check(g.cap_noise && !g.disable_zupt, "外部参照门控: ≥3s 封顶噪声");
+    check(Icm45686ZuptExternalRefAllowsFusion(g, 0.5f),
+          "外部参照门控: 封顶期低速仍允许 ZUPT");
+    check(!Icm45686ZuptExternalRefAllowsFusion(g, 1.0f),
+          "外部参照门控: 封顶期 1.0m/s 拒绝 ZUPT（慢速巡航盲区）");
+    g = Icm45686UpdateZuptExtRefGuard(g, false, 27.1f);
+    check(g.disable_zupt, "外部参照门控: ≥30s 停用 ZUPT");
+    check(!Icm45686ZuptExternalRefAllowsFusion(g, 0.0f),
+          "外部参照门控: 停用后即使零速也不融合");
+
+    g = Icm45686UpdateZuptExtRefGuard(g, true, 0.005f);
+    check(!g.cap_noise && !g.disable_zupt && g.no_ext_ref_s == 0.0f,
+          "外部参照门控: 外部参照恢复后清零/解除");
+
+    Icm45686StaticAidProfile p{0.03f, 0.02f, 0.04f, false};
+    g = Icm45686UpdateZuptExtRefGuard(g, false, 3.1f);
+    Icm45686ApplyZuptExtRefNoiseFloor(p, g);
+    check(p.vel_ne_std_mps >= Icm45686ZuptExtRefNoiseFloorMps &&
+              p.vel_d_std_mps >= Icm45686ZuptExtRefNoiseFloorMps,
+          "外部参照门控: 封顶把 0.02/0.03 抬到 0.30");
   }
 
   if (g_fail_count == 0)

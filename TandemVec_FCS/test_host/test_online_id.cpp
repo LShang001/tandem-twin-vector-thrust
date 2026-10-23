@@ -1,10 +1,28 @@
-// ============================================================
-//  test_online_id.cpp — 在线参数辨识收敛性验证
-//
-//  场景: 真实惯量 = 名义值 ×0.7 (辨识目标: b=1/0.7=1.43)
-//        飞行器做一系列15°阶跃机动提供激励
-//        观察RLS的 θ_b 是否收敛到 1.43
-//  编译: g++ -std=c++17 -Iinclude test_host/test_online_id.cpp -o test_host/bin/oi && ./test_host/bin/oi
+/**
+ * @file    test_online_id.cpp
+ * @module  固件/宿主回归测试（fw-tests：在线参数辨识 RLS）
+ * @brief   验证两参数 RLS 在不同真实惯量比下收敛、抗噪、零激励不污染与约束边界
+ * @details 被测：`include/TandemVec_OnlineID.h`（`RLS_2Param` 与自适应增益调度）。
+ *          场景：真实惯量 = 名义值 ×0.7（辨识目标 b=1/0.7≈1.43），飞行器做一系列
+ *          15° 阶跃机动提供激励；观察 θ_b 是否收敛到 1.43。
+ *          输入：`run_identification(b_true, noise_amp, n_steps)` 的合成角加速度与
+ *          测量角速率（固定种子 12345 可复现）；
+ *          输出：A1–A14 的 PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_online_id.cpp -o bin/oi
+ * @theory  角加速度→角速率的离散模型 ω̇ = b·α_cmd，b 为真实/名义惯量比；
+ *          RLS 递推 θ_{k+1} = θ_k + P·φ·(y−φᵀθ)/(λ+φᵀPφ)。
+ *          @ref REF-121 §2.2.1 p.33（最小二乘/协方差递推同源）
+ * @frame   单轴（俯仰），b 为标量惯量比
+ * @units   角速率 rad/s、角加速度 rad/s²、b 无量纲
+ * @note    收敛判据的量级来自“b_true=1.43、激励 8 段 15° 阶跃”的可观测性：
+ *          无激励时 b 保持初值 1.0 是正确行为，不是缺陷（A5/A10 正是此断言）。
+ *          噪声放大 4 倍（A4）用于确认估计不发散而非精度不变。
+ * @test    A1 主场景收敛；A2 不同惯量比一致性；A3 名义值场景 b=1；
+ *          A4 抗噪；A5 无激励不污染；A6 reset 清零；A7 自适应增益方向；
+ *          A8 b 硬约束 [0.3,3.0]；A9 deg/s 单位转换；A10 零激励不更新；
+ *          A11 变化率限制；A12 物理约束；A13 CG 悬停门控；A14 reset 清三轴
+ * @see     TandemVec_FCS/include/TandemVec_OnlineID.h
+ */
 // ============================================================
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #include "../include/TandemVec_OnlineID.h"

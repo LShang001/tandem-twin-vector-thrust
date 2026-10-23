@@ -1,17 +1,25 @@
-// ============================================================
-//  test_qual_analysis.cpp — 定性分析 + 灵敏度 + 调参指导
-//
-//  给定模型参数不确定性(±30%)，回答：
-//    1. 哪些增益是"关键调参"，哪些是"设对就行"？
-//    2. 执行器限制(α_max) vs 增益限制 — 谁主导响应？
-//    3. 积分分离阈值设多少合适？
-//    4. 参数偏差对稳定性的边际影响？
-//
-//  输出：定性趋势表 + 实飞调参步进路线
-//
-//  编译: g++ -std=c++17 -Iinclude -Itest_host/stub \
-//        test_host/test_qual_analysis.cpp -o test_host/bin/qa && ./test_host/bin/qa
-// ============================================================
+/**
+ * @file    test_qual_analysis.cpp
+ * @module  固件/宿主研究（fw-tests：增益定性分析与调参指导）
+ * @brief   在模型参数 ±30% 不确定下回答“哪些增益关键、谁主导响应、阈值怎么取”
+ * @details 被测：`PositionPID` + `allocateMoments` + `computeWrench` 的单轴闭环，
+ *          并读 `kFlightCtrlParams` 的实机增益做对照。
+ *          问题：1) 哪些增益是“关键调参”、哪些“设对就行”？
+ *          2) 执行器限制 α_max 与增益限制谁主导响应？
+ *          3) 积分分离阈值取多少合适？4) 参数偏差对稳定性的边际影响？
+ *          输出：定性趋势表 + Q1–Q5 断言 + 调参步进路线。
+ *          编译：g++ -std=c++17 -Iinclude -Itest_host/stub test_host/test_qual_analysis.cpp
+ * @theory  执行器权限（α_max）先于增益成为瓶颈时，调增益只改变超调不改变上升时间；
+ *          积分分离阈值应落在“误差已退出饱和区”的量级。@ref CTL-001 §4
+ * @frame   单轴（俯仰绕 y_b）
+ * @units   角度 deg，角速率 deg/s，角加速度 deg/s²，时间 s
+ * @note    结论是**模型内**的定性判断：模型参数不确定 ±30% 已包含在扫描里，
+ *          但 τm 瞬态失配、B_true 非对角耦合、实机振动不在模型内，
+ *          不能直接当实机调参建议（参见 AGENTS.md 单通道 LMI 不外推的教训）。
+ * @test    Q1 α_max 是响应主导因素；Q2 外环 Kp_a 非临界；Q3 内环 Kp_r 有宽裕度；
+ *          Q4 积分分离阈值区间；Q5 模型参数偏差鲁棒性
+ * @see     TandemVec_FCS/include/FlightCtrlParams.h、test_comprehensive_sim.cpp
+ */
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #include "../include/TandemVec_ControlAllocation.h"
 #include "../include/TandemVec_Propulsion.h"

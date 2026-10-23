@@ -1,15 +1,29 @@
-// ============================================================
-//  Ekf15State 测速源辅助接口回归测试
-//  覆盖（2026-08-21 室内光流速度融合配套改动）：
-//   - MeasurementUpdateAidingVelocityDetailed：豁免 ZUPT 零速守卫
-//     （悬停近零测量 + 大漂移时 ZUPT 接口硬拒、aiding 接口按 NIS 裁决）
-//   - AIDING_VELOCITY_RESIDUAL_REJECT_MPS 宽残差门仍挡荒谬跳点
-//   - ResetVelocityToExternal：速度重锚 + 速度协方差块抬升 + NaN 防御
-//   - D 通道 1e3 噪声下垂直协方差不被无信息压缩
-//  编译：g++ -std=c++17 -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES \
-//        -Iinclude -Isrc -Ilib/navigation-main/src -Ilib/eigen/src -Ilib/units/src \
-//        test_host/test_ekf_aiding_velocity.cpp lib/units/src/convang*.cpp -o bin/aidvel.exe
-// ============================================================
+/**
+ * @file    test_ekf_aiding_velocity.cpp
+ * @module  固件/宿主回归测试（fw-tests：外部测速源辅助的速度融合接口）
+ * @brief   验证 aiding 速度更新豁免 ZUPT 零速守卫、宽残差门与失锁重锚语义
+ * @details 被测：`lib/navigation-main/src/ekf_15_state.h` 的
+ *          `MeasurementUpdateAidingVelocityDetailed()`、`ResetVelocityToExternal()`
+ *          与既有 `MeasurementUpdateVelocityDetailed()`（ZUPT 路径，行为必须不变）。
+ *          输入：近零速度量测 + 大速度漂移、30 m/s 级荒谬残差、1e3 噪声的 D 通道；
+ *          处理：逐项检查 fused/rejected 标志与协方差变化；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：与 test_ekf_15state.cpp 相同（-DEKF_HOST_REGRESSION + convang 源），
+ *          见 run_all.sh 的 aidvel 目标。
+ * @theory  测速源（光流/空速）辅助的速度更新必须绕过“零速守卫”——守卫假设
+ *          机体静止，而室内光流悬停时速度近零但 P 很大，若走 ZUPT 路径会被硬拒。
+ *          改用 NIS 裁决 + 30 m/s 宽残差门，并在失锁时抬升速度协方差实现软重锚。
+ *          @ref REF-121 §7.3.1 p.255（NIS 门控）、@ref REF-121 §8.2.3 p.291（静止辅助）
+ * @frame   NED（速度量测），残差门按 3D 范数
+ * @units   速度 m/s，协方差 m²/s²，噪声 1e3 为极端压力值
+ * @note    30 m/s 残差门是“物理上限”而不是调参量：大于此值的残差必然来自
+ *          时间戳错位或光流失锁，不能融合。T7 用 1e3 噪声验证“无信息量测不得
+ *          压缩垂直协方差”，对应实机光流停流场景。
+ * @test    T1 ZUPT 零速量测正常融合；T2 漂移 6 m/s 后 ZUPT 仍硬拒；
+ *          T3 aiding 豁免零速守卫；T4 30 m/s 残差门；T5 ResetVelocityToExternal
+ *          含 NaN 防御；T6 失锁→重锚→恢复闭环；T7 D 通道大噪声不压垂直协方差
+ * @see     TandemVec_FCS/test_host/test_ekf_15state.cpp、@ref AGENTS.md（2026-08-21 光流审查轮）
+ */
 #include <cstdio>
 #include <cmath>
 #include <Eigen/Dense>

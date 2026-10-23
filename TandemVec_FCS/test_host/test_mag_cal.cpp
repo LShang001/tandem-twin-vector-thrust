@@ -1,13 +1,28 @@
-// ============================================================
-//  test_mag_cal.cpp — 磁力计椭球标定数学层 host 测试
-//
-//  纯平台无关：验证 lib/MagCal/MagCalMath.h ——
-//    1. CRC32 标准向量
-//    2. 3×3 对称矩阵 Jacobi 特征分解（含旋转后重构）
-//    3. invert3 / solve9 线性代数工具
-//    4. applyCal（身份/偏移/缩放）
-//    5. 合成椭球拟合：已知硬铁+软铁+噪声 → 恢复精度 / 校正后单位球 / 质量门
-//    6. 拒绝路径：样本不足 / 共面（覆盖度不足）/ 参数合理性
+/**
+ * @file    test_mag_cal.cpp
+ * @module  固件/宿主回归测试（fw-tests：磁力计椭球标定数学层）
+ * @brief   验证 CRC32、Jacobi 特征分解、线性代数工具、合成椭球拟合与拒绝路径
+ * @details 被测：`lib/MagCal/MagCalMath.h`（纯平台无关）。
+ *          覆盖：1) CRC32 标准向量；2) 3×3 对称矩阵 Jacobi 特征分解（含旋转后重构）；
+ *          3) invert3 / solve9 线性代数工具；4) applyCal（身份/偏移/缩放）；
+ *          5) 合成椭球拟合：已知硬铁+软铁+噪声 → 恢复精度 / 校正后单位球 / 质量门；
+ *          6) 拒绝路径：样本不足 / 共面（覆盖度不足）/ 参数合理性。
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Ilib/MagCal test_host/test_mag_cal.cpp -o bin/mc
+ * @theory  椭球模型 (B−h)ᵀA(B−h)=1，硬铁 h 由椭球中心给出、软铁由 A 的特征值/
+ *          特征向量给出；校正即把椭球映射回单位球。硬铁/软铁参数只做一次拟合，
+ *          跑在芯片系（与轴映射解耦），应用顺序 raw→标定→轴映射→FRD。
+ *          @ref AGENTS.md（2026-08-15 磁力计椭球标定 DBG magcal）
+ * @frame   芯片系（标定在轴映射之前完成，与 FRD 解耦）
+ * @units   磁场 µT，CRC/矩阵元素无量纲；恢复精度门 ~1 µT @0.2 µT 噪声
+ * @note    噪声用固定线性同余发生器而非 std::random，避免不同编译器/标准库
+ *          分布实现差异导致结果不可复现。质量门（正定/覆盖度/残差≤15%）是
+ *          固件侧拒绝坏标定的唯一防线，故 A6 的拒绝路径与拟合精度同等重要。
+ * @test    S1 CRC32；S2 Jacobi 分解与重构；S3 invert3/solve9；
+ *          S4 applyCal 三种情形；S5 合成椭球恢复精度与单位球；
+ *          S6 拒绝路径（样本不足/共面/共线）；S7 paramsSanity
+ * @see     TandemVec_FCS/lib/MagCal/MagCalMath.h、test_mag_guide.cpp
+ */
 // ============================================================
 #include <cstdio>
 #include <cmath>

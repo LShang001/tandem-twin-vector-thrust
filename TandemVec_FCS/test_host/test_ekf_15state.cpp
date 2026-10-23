@@ -1,9 +1,35 @@
-﻿// ============================================================
-//  Ekf15State 宿主回归测试（15 状态 INS/GNSS 融合 EKF）
-//  覆盖：初始化、静态传播、GNSS 量测收敛、有效性门控、协方差
-//  编译：g++ -std=c++17 -Iinclude -Ilib/navigation-main/src -Ilib/eigen/src \
-//        test_host/test_ekf_15state.cpp -o test_host/bin/ekf15.exe
-// ============================================================
+/**
+ * @file    test_ekf_15state.cpp
+ * @module  固件/宿主回归测试（fw-tests：15 状态 INS/GNSS 融合 EKF）
+ * @brief   验证 EKF 初始化、静态传播、GNSS/ZUPT 更新、NIS 门控与子集回退
+ * @details 被测：`lib/navigation-main/src/ekf_15_state.h`（`bfs::Ekf15State`）的
+ *          `Initialize`/`TimeUpdate`/`MeasurementUpdate*Detailed`/协方差接口。
+ *          输入：静止比力 (0,0,-g) 与零角速率；GNSS 速度/位置真值与故障样本
+ *          （5 m/s 速度阶跃、30 m 位置跳变）；上海附近 LLA；
+ *          处理：按 200 Hz 步长传播、按 10 Hz 融合量测；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译（header-only + bfs::convang 系列 + 测试用快速协方差块）：
+ *          g++ -std=c++17 -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES
+ *          -Iinclude -Isrc -Ilib/navigation-main/src -Ilib/eigen/src -Ilib/units/src
+ *          test_host/test_ekf_15state.cpp lib/units/src/convang*.cpp -o bin/ekf15
+ * @theory  15 状态误差卡尔曼：位置/速度/失准角/加计零偏/陀螺零偏，误差状态按体轴右乘
+ *          `q_true = q_est ⊗ Exp(δβ)`。
+ *          预测 @ref REF-121 §2.2.1 (2.2.4a) p.33；
+ *          更新 @ref REF-121 §2.2.1 (2.2.4c-e) p.33；Joseph 形式 @ref REF-121 §2.2.4 p.42；
+ *          速度增量与旋转效应 @ref REF-120 §9.6.1 (9.6.9)(9.6.17) p.298；
+ *          NIS 门控 @ref REF-121 §7.3.1 p.255。
+ * @frame   NED（导航系速度/位置）+ FRD（机体系比力/角速率）；误差状态在体系
+ * @units   位置 m、速度 m/s、角度 rad、加计零偏 m/s²、陀螺零偏 rad/s、步长 s
+ * @note    重力输入必须与 `TandemVec_Config.h` 的 g=9.79 一致（项目唯一事实源），
+ *          不要改成 9.81。`-DEKF_HOST_REGRESSION` 会打开仅供宿主的测试接口，
+ *          缺这个宏会链接失败。T7 的期望值来自解析推导（旋转效应不得重复计入），
+ *          详见 @ref AGENTS.md（P0-0 修复）。
+ * @test    T1 初始化姿态/速度/位置；T2 静态传播 100 步；T3 静态传播 200 步协方差有界；
+ *          T4 GNSS 速度量测收敛；T5 NaN 输入被拒且不污染状态；T6 ZUPT 保持零速；
+ *          T7 速度旋转效应不重复计入（P0-0）；T8 航向 consider（P1-5）；
+ *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）
+ * @see     TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md §5.1/§9.6
+ */
 #include <cstdio>
 #include <cmath>
 #include <Eigen/Dense>
@@ -123,6 +149,132 @@ int main()
     for (int i = 0; i < 10; ++i)
       ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
     CHECK("T6 ZUPT 后速度保持 <0.05 m/s", ekf.ned_vel_mps().norm() < 0.05f);
+  }
+
+  // ---- T7 速度旋转效应：中点姿态已含 0.5Δθ，不应再加 0.5Δθ×Δv（P0-0） ----
+  // 理论依据：秦永元《惯性导航（第三版）》，科学出版社 2020，§9.6.1，
+  //   式(9.6.9)(9.6.17)(9.6.19)，p.298–299：速度更新用区间起始姿态
+  //   C_b^n(m-1)，旋转补偿 ΔV_rot=½Δθ×ΔV 与之配套；改用中点姿态后不能再
+  //   重复加该补偿项。
+  {
+    Ekf15State ekf = makeInit();
+    const float dt = 0.005f;
+    const Eigen::Vector3f omega(0.0f, 0.0f, 2.0f);
+    const Eigen::Vector3f f(5.0f, 0.0f, -9.79f);
+    const Eigen::Vector3f dtheta = omega * (0.5f * dt);
+    const Eigen::Vector3f dv = f * (0.5f * dt);
+    ekf.TimeUpdateTwoSample(dtheta, dtheta, dv, dv, dt);
+
+    // 解析参考：C_b^n(mid) · (f·dt) + g·dt；水平/yaw 小角下 v_E ≈ 0.5·ω·f_x·dt²
+    const Eigen::Matrix3f c_mid =
+        Eigen::AngleAxisf(0.5f * omega.norm() * dt, omega.normalized())
+            .toRotationMatrix();
+    const Eigen::Vector3f expected =
+        c_mid * (f * dt) + Eigen::Vector3f(0.0f, 0.0f, 9.79f * dt);
+    const Eigen::Vector3f v = ekf.ned_vel_mps();
+    const float err_e = std::fabs(v(1) - expected(1));
+    std::printf("[INFO] T7 v_E=%.9f expected=%.9f err=%.9f\n",
+                v(1), expected(1), err_e);
+    // 容差依据：v_E 的解析增量 ≈ ½·ω·f_x·dt² ≈ 1.25e-4 m/s；若旋转效应被重复计入，
+    // 误差会翻倍到 2.5e-4 量级，故 3e-5 门限足以区分“正确/双计”，
+    // 又远大于 float 在本量级的舍入噪声（~1e-8）。v_N 同理取 1e-4。
+    CHECK("T7 速度旋转效应不双计（v_E 误差 <3e-5）", err_e < 3.0e-5f);
+    CHECK("T7 速度旋转效应不双计（v_N 误差 <1e-4）",
+          std::fabs(v(0) - expected(0)) < 1.0e-4f);
+  }
+
+  // ---- T8 P1-5 航向 consider：GNSS 速度新息不修正航向 ----
+  // 构造 P(8,3) 非零 + 5° 航向误差 + 1 m/s 速度新息；consider=true 时 K(8,:)=0，
+  // 航向应保持不变；consider=false 时航向应被速度新息拉动。
+  {
+    const float yaw_err = 5.0f * static_cast<float>(M_PI) / 180.0f;
+    const float p_vv = 0.04f;
+    const float p_hh = yaw_err * yaw_err;
+
+    auto make_case = [&](bool consider) {
+      Ekf15State e = makeInit();
+      e.set_covariance_for_test(3, 3, p_vv);
+      e.set_covariance_for_test(8, 8, p_hh);
+      e.set_covariance_for_test(8, 3, 0.5f * std::sqrt(p_vv * p_hh));
+      Eigen::Quaternionf q = e.quat();
+      q = q * Eigen::AngleAxisf(yaw_err, Eigen::Vector3f::UnitZ());
+      e.set_quaternion_for_test(q);
+      e.set_gnss_consider_heading(consider);
+      const float yaw_before = e.yaw_rad();
+      const auto r = e.MeasurementUpdateDetailed(
+          Eigen::Vector3f(1.0f, 0.0f, 0.0f), kLla, 0.005f, 0.0f, false);
+      const float d = e.yaw_rad() - yaw_before;
+      const float d_wrapped = std::atan2(std::sin(d), std::cos(d));
+      std::printf("[INFO] T8 consider=%d fused=%d dyaw=%.6f°\n",
+                  consider ? 1 : 0, r.fused ? 1 : 0,
+                  d_wrapped * 180.0f / static_cast<float>(M_PI));
+      return d_wrapped;
+    };
+
+    const float dy_no = make_case(false);
+    const float dy_yes = make_case(true);
+    CHECK("T8 consider 保持航向（|Δψ|<1e-4 rad）",
+          std::fabs(dy_yes) < 1.0e-4f);
+    CHECK("T8 非 consider 航向会被速度新息拉动",
+          std::fabs(dy_no) > std::fabs(dy_yes) + 1.0e-6f);
+  }
+
+  // ---- T9/T10/T11 P0-1：GNSS 3+3 子集回退与软重锚 ----
+  // 理论依据：秦永元等《卡尔曼滤波与组合导航原理（第3版）》§7.3.1 p.255
+  //   （系统级 χ² FDI）；§3.3 p.84–86（序贯处理）。
+  {
+    auto make_case = []() {
+      Ekf15State e = makeInit();
+      for (int i = 0; i < 3; ++i)
+      {
+        e.set_covariance_for_test(i, i, 0.04f);       // 位置 0.2 m 1σ
+        e.set_covariance_for_test(3 + i, 3 + i, 0.01f); // 速度 0.1 m/s 1σ
+      }
+      return e;
+    };
+
+    // T9：速度 5 m/s 故障、位置健康 → 联合门拒绝，但位置子集应融合、速度子集拒绝
+    {
+      Ekf15State e = make_case();
+      const auto r = e.MeasurementUpdateDetailed(
+          Eigen::Vector3f(5.0f, 0.0f, 0.0f), kLla, 0.005f, 0.0f, false);
+      std::printf("[INFO] T9 fused=%d sub_p=%d sub_v=%d nis_p=%.2f nis_v=%.2f\n",
+                  r.fused ? 1 : 0, r.subset_position ? 1 : 0,
+                  r.subset_velocity ? 1 : 0, r.nis_pos3, r.nis_vel3);
+      CHECK("T9 联合门拒绝后位置子集融合", r.subset_position);
+      CHECK("T9 速度子集被拒（不拉速度）", !r.subset_velocity &&
+                                          e.ned_vel_mps().norm() < 0.2f);
+    }
+
+    // T10：位置 30 m 故障、速度健康 → 速度子集融合、位置子集拒绝
+    {
+      Ekf15State e = make_case();
+      Eigen::Vector3d bad_lla = kLla;
+      bad_lla(0) += 30.0 / 6378137.0;
+      const auto r = e.MeasurementUpdateDetailed(
+          Eigen::Vector3f::Zero(), bad_lla, 0.005f, 0.0f, false);
+      std::printf("[INFO] T10 fused=%d sub_p=%d sub_v=%d nis_p=%.2f nis_v=%.2f\n",
+                  r.fused ? 1 : 0, r.subset_position ? 1 : 0,
+                  r.subset_velocity ? 1 : 0, r.nis_pos3, r.nis_vel3);
+      CHECK("T10 位置子集被拒", !r.subset_position);
+      CHECK("T10 速度子集融合", r.subset_velocity);
+    }
+
+    // T11：位置+速度同时坏，连续 10 次后触发 P_vv 软重锚
+    {
+      Ekf15State e = make_case();
+      Eigen::Vector3d bad_lla = kLla;
+      bad_lla(0) += 30.0 / 6378137.0;
+      for (int i = 0; i < 10; ++i)
+      {
+        const auto r = e.MeasurementUpdateDetailed(
+            Eigen::Vector3f(5.0f, 0.0f, 0.0f), bad_lla, 0.005f, 0.0f, false);
+        CHECK("T11 双坏帧不融合", !r.fused);
+      }
+      std::printf("[INFO] T11 reanchors=%u\n",
+                  static_cast<unsigned>(e.gnss_velocity_reanchor_count()));
+      CHECK("T11 连续拒绝触发软重锚", e.gnss_velocity_reanchor_count() > 0U);
+    }
   }
 
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);

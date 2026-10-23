@@ -1,31 +1,34 @@
-// ============================================================
-//  test_flight_control_axis.cpp — flight_control.cpp 姿态环闭环仿真
-//
-//  目的：对 src/flight_control.cpp 的姿态环做宿主机数值仿真验证，
-//  驱动刚体角动力学 + 推进力矩模型闭环，验证：
-//   T1 滚转误差（绕 x_b=模型系 z'）→ 前摆(Mz') 负反馈收敛
-//   T2 俯仰误差（绕 y_b=模型系 y'）→ 尾摆(My') 负反馈收敛
-//   T3 滚转速率（绕 z'）→ roll 内环（前摆）速率阻尼
-//   T4 三轴组合扰动闭环收敛（5 s 内误差 < 1°）
-//   T5 执行器映射符号与 propulsion.mjs 一致
-//   T6 轴序对齐：绕 z'/y'/x' 扰动分别只激发对应通道（无错位）
-//
-//  ★ 2026-08-08 修复（审查发现）：
-//    · 参数原为自建快照（1.5/6.0/6.0、MAX_TARGET_RATE=90、35/50°/s），
-//      与当时实机（2.5/0.25/0.20、80°/s；迁移前混合域）严重脱节 → 现全部读自
-//      include/FlightCtrlParams.h（kFlightCtrlParams，实机唯一事实源）
-//    · 2026-08-11 速率 PID 迁移为 deg/s→deg/s²，测试在惯量逆解边界转 rad/s²。
-//    · 轴置换原为旧映射（alpha_roll→差速、alpha_yaw→前摆），与实机
-//      mix 层（flight_control.cpp:1187-1189，恢复存档系后）相反 →
-//      已对齐：Mx'←alpha_yaw（差速）、My'←alpha_pitch（尾摆）、
-//      Mz'←alpha_roll（前摆）
-//    · update() 反馈/误差轴序按模型系（x'=推力轴、y'=y_b、z'=x_b）重排：
-//      err_roll←q_err.z、err_pitch←q_err.y、err_yaw←q_err.x
-//
-//  编译运行：
-//    g++ -std=c++17 -Iinclude test_host/test_flight_control_axis.cpp \
-//        -o test_host/bin/fca && ./test_host/bin/fca
-// ============================================================
+/**
+ * @file    test_flight_control_axis.cpp
+ * @module  固件/宿主回归测试（fw-tests：姿态环轴序/符号/闭环）
+ * @brief   对 flight_control.cpp 的姿态环做数值闭环验证（收敛、轴序、符号、6DOF）
+ * @details 被测：`src/flight_control.cpp` 的姿态环逻辑（本文件按同一控制律重建）
+ *          与 `include/FlightCtrlParams.h`（参数唯一事实源，防漂移）、
+ *          `TandemVec_Propulsion.h` 的推力/反扭口径。
+ *          驱动：刚体角动力学 + 推进力矩模型，闭环步长 1 ms、总时长 5 s；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_flight_control_axis.cpp -o bin/fca
+ * @theory  控制律 @ref CTL-001 §4；执行器轴映射（上摆=滚转 / 下摆=俯仰 / 差速=偏航）
+ *          @ref AGENTS.md 踩坑记录；四元数右乘误差与 3-2-1 欧拉角 @ref MOD-002 §3。
+ *          推力垂直投影在悬停构型用 R13（x_b 投影），与巡航读法的 R33 区分。
+ * @frame   模型系（x'=推力轴、y'=y_b、z'=x_b）与存档系之间的置换；
+ *          直连轴序与 thrustWrench 自洽，实机 mix 层置换另见 `AttitudeLoop::update`
+ * @units   角度 deg/rad 双轨（变量名带 _deg 区分），角速率 deg/s，时间 s，惯量 kg·m²
+ * @note    ★ 本测试的轴序是**直连序**（与 thrustWrench/allocateMoments 自洽）；
+ *          实机 mix 层还存在存档系→模型系置换（悬停构型语义），两者关系涉及
+ *          README/flight_control/state_data 三处注释的历史矛盾，专项核对前
+ *          不在测试中引入置换（2026-08-08 审查结论）。参数一律读
+ *          `kFlightCtrlParams`，不要自建快照——历史上自建快照（1.5/6.0/6.0、
+ *          MAX_TARGET_RATE=90）与实机严重脱节，2026-08-11 速率环又迁移为
+ *          deg/s→deg/s²，测试在惯量逆解边界转 rad/s²。
+ * @test    T1 滚转误差→前摆负反馈；T2 俯仰误差→下摆；T3 滚转速率阻尼；
+ *          T4 三轴组合 5 s 内误差<1°；T5 执行器符号与 propulsion.mjs 一致；
+ *          T6 单轴扰动只激发对应通道；T7 推力垂直投影 R13；T8 目标姿态合成；
+ *          T9 悬停构型闭环；T10 悬停油门；T11 80°/s 小信号符号链；
+ *          T12 悬停配平；T13 航向保持；T14 饱和鲁棒；T15 电机滞后；
+ *          T16 陀螺耦合；T17 航向指令跟踪；T18 四元数保范
+ * @see     TandemVec_FCS/docs/CTL-001-控制架构与SAS.md §4、test_host/README.md
+ */
 #include "../include/QuaternionMath.h"
 #include "../include/PositionPID.h"
 #include "../include/TandemVec_Config.h"
@@ -271,10 +274,10 @@ static void allocate(const std::array<float, 3> &alpha, float w0,
                      const std::array<float, 3> *w_body = nullptr,
                      float hx = 0.f)
 {
-    // ★ 2026-08-10 惯量前馈（与固件 mix 层 InertiaDecoupling.h 同构，红线同源）：
-    //   M = I·α + M_ff，M_ff = ω×(I·ω) + ω×h（ω×h 符号，非 h×ω）。
-    //   传入 w_body/hx 时启用（T16 陀螺耦合场景复刻固件完整行为）；
-    //   其余测试不传 = 纯对角分配（与旧行为一致）。
+    // ★ 2026-08-10 惯量前馈（与固件 mix 层 InertiaDecoupling.h 同构，红线同源）。
+    // @formula M_tot = I·α + M_ff，其中 M_ff = ω×(I·ω) + ω×h（注意是 ω×h 而非 h×ω）。
+    // @note 传入 w_body/hx 时启用（T16 陀螺耦合场景复刻固件完整行为）；
+    //       其余测试不传参数，退化为纯对角分配（与旧行为一致）。
     float Mx = P.Ix * alpha[0];   // alpha_roll → Mx → 差速
     float My = P.Iy * alpha[1];   // alpha_pitch → My → 尾摆
     float Mz = P.Iz * alpha[2];   // alpha_yaw → Mz → 前摆
@@ -554,6 +557,8 @@ int main()
     // T12: 悬停配平平衡——转速 √(mg/2kT) 下双发总推力 = mg；6DOF 闭环 10s 垂直速度≈0
     {
         float T_total = 2.f * P.kT * w0h * w0h;
+        // 期望值来源：悬停配平解析解 2·kT·w0² = m·g，w0 由 hoverOmega0() 反解；
+        // 1e-3 相对容差覆盖 float 平方运算与参数常数截断。
         check(approx(T_total, P.m * P.g, 1e-3f), "T12 悬停配平：2·kT·w0² = m·g");
         SixDOF body;
         body.q = q_hover;
@@ -594,6 +599,9 @@ int main()
         }
         Quaternion qe = quaternionMultiply(quaternionConjugate(body.q), q_hover);
         float e = std::sqrt(qe.x*qe.x + qe.y*qe.y + qe.z*qe.z);
+        // 0.02 rad ≈ 1.15°：既是“收敛”的人眼判据，也大于四元数误差提取在
+        // 小角下的数值噪声（~1e-4 rad）；60° 扰动触达限幅后仍须收敛，
+        // 若只断言收敛不断言饱和，就无法区分“没触限”和“触限后稳定”。
         check(sat_seen, "T14 60° 扰动确实触达执行器限幅（dMax/dwMax）");
         check(e < 0.02f, "T14 60° 大扰动收敛（饱和限幅下仍稳定）");
     }
@@ -676,6 +684,9 @@ int main()
 
     // T18: 四元数保范——6000 步（6s）积分范数偏差 < 1e-6
     // （注释修正：断言为 1e-6，非 1e-9）
+    // 量级依据：float 下每步 qNorm 的舍入 ~1e-7，6000 步随机游走累积约
+    // √6000·1e-7 ≈ 8e-6 的最坏包线，故门限取 1e-6 代表“保范投影生效”，
+    // 若去掉每步归一化，偏差会到 1e-3 量级。
     {
         SixDOF body;
         body.q = q_hover;

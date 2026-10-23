@@ -1,9 +1,24 @@
-// ============================================================
-//  test_robustness.cpp — 大机动 + 系统误差鲁棒性分析
-//
-//  分析: (1)大角度阶跃 30/45/60/90° (2)Monte Carlo参数随机扰动
-//  编译: g++ -std=c++17 -Iinclude -Itest_host/stub
-//        test_host/test_robustness.cpp -o test_host/bin/rb && ./test_host/bin/rb
+/**
+ * @file    test_robustness.cpp
+ * @module  固件/宿主研究（fw-tests：大机动与系统误差鲁棒性）
+ * @brief   大角度阶跃 + Monte Carlo 参数扰动，检查闭环是否全程可控
+ * @details 被测：`PositionPID` + `allocateMoments` + `computeWrench` 的单轴闭环。
+ *          分析：(1) 大角度阶跃 30/45/60/90° (2) Monte Carlo 参数随机扰动
+ *          （惯量 ×[0.5,1.5]、kT ×[0.7,1.3]、CG ≤10 mm）；R1–R4 为断言。
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Itest_host/stub test_host/test_robustness.cpp
+ * @theory  大角度下四元数误差的标量等效角与欧拉角近似分道，闭环仍应收敛；
+ *          参数扰动下“物理逆解”把增益误差转成力矩误差而非发散。
+ *          @ref CTL-001 §4、@ref THY-003 §3
+ * @frame   单轴（俯仰绕 y_b）；初始偏差可到 50°
+ * @units   角度 deg，角速率 deg/s，角加速度 deg/s²，时间 s
+ * @note    电机初值必须为悬停转速：从 w=0 冷启动时前 ~0.3 s 推力≈0、控制权限为零，
+ *          姿态先自由漂移，会把任何增益都判成发散（真实飞行中电机早已在悬停转速）。
+ *          本文件是研究工具，结论不外推为实机包线。
+ * @test    R1 大角度阶跃 10–90° 全程可控；R2 从 10–50° 倾斜回正；
+ *          R3 Monte Carlo 参数扰动；R4 最坏参数组合
+ * @see     TandemVec_FCS/include/TandemVec_Config.h、test_comprehensive_sim.cpp
+ */
 // ============================================================
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #include "../include/TandemVec_ControlAllocation.h"

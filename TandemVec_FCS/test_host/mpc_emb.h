@@ -1,13 +1,24 @@
-// ============================================================
-//  mpc_emb.h — 嵌入式 LMPC 求解器（展开式 QP + 梯度投影 + warm start）
-//
-//  纯头文件、零依赖、float/double 可切（模板），面向 STM32H743
-//  状态 x = [ε(3), ω(3), a(3)]（a 为执行器滞后角加速度，τm 增广）
-//  输入 u = [Δω, δt, δf]，预测时域 N，框约束 |u|≤u_max
-//
-//  编译运行（test_host 基准）：
-//    g++ -std=c++17 -O2 -Iinclude test_host/test_mpc_emb.cpp -o test_host/bin/mpcb
-// ============================================================
+/**
+ * @file    mpc_emb.h
+ * @module  固件/宿主研究（fw-tests：嵌入式 LMPC 原型求解器）
+ * @brief   展开式 QP + 梯度投影 + warm start 的轻量线性 MPC，头文件模板实现
+ * @details 被测：无（本文件是研究原型，由 test_mpc_emb.cpp 基准测试驱动）。
+ *          纯头文件、零依赖、float/double 可切（模板），面向 STM32H743 量级算力。
+ *          状态 x 为 9 维：ε(3) 姿态误差、ω(3) 机体角速率、a(3) 执行器滞后角加速度；
+ *          输入 u 为 3 维：Δω、δt、δf；预测时域 N，框约束 |u| ≤ u_max。
+ *          输入：init() 的模型参数与 Q/R 权、每拍的状态反馈；
+ *          处理：离散化增广模型 → 展开 QP → 梯度投影迭代 → 取首拍；
+ *          输出：3 维控制量。
+ * @theory  线性 MPC：min Σ xᵀQx + uᵀRu，满足 x_{k+1} = A x_k + B u_k 与框约束。
+ *          预测模型在执行器滞后处增广一阶惯性（时间常数 τm），与电机一阶模型同源。
+ *          @ref CTL-001 §4（角速率内环量纲/限幅口径）
+ * @frame   机体系 FRD 下的姿态误差/角速率；控制量语义遵循
+ *          上摆 δf→滚转、下摆 δt→俯仰、差速 Δω→偏航（@ref AGENTS.md 轴映射）
+ * @units   角度 rad，角速率 rad/s，角加速度 rad/s²，时间 s；电压/占空比无量纲
+ * @note    研究原型：**未接入固件控制链**，本文件的数值结果不能当作实机 MPC 结论。
+ *          状态不含位置/高度，故不能替代定高/位置环。
+ * @see     TandemVec_FCS/test_host/test_mpc_emb.cpp
+ */
 #ifndef MPC_EMB_H
 #define MPC_EMB_H
 

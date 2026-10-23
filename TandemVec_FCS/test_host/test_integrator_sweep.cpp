@@ -1,13 +1,22 @@
-// ============================================================
-//  test_integrator_sweep.cpp — Ki参数扫描 + 最优配比
-//
-//  公平比较两种架构：各自扫Ki找最优，然后最优vs最优
-//  评估指标：综合分数 = RMS×0.4 + 收敛×0.3 + (100-超调惩罚)×0.3
-//
-//  编译：
-//    g++ -std=c++17 -Iinclude test_host/test_integrator_sweep.cpp \
-//        -o test_host/bin/sw && ./test_host/bin/sw
-// ============================================================
+/**
+ * @file    test_integrator_sweep.cpp
+ * @module  固件/宿主研究（fw-tests：Ki 参数扫描与最优配比）
+ * @brief   两种积分架构各自扫 Ki 找最优，再“最优 vs 最优”公平比较
+ * @details 被测：无（MiniPID 与 test_integrator_compare.cpp 完全一致的实现）。
+ *          方法：各自扫 Ki 取综合分数最优，再比较两条最优曲线；
+ *          评分 = RMS×0.4 + 收敛×0.3 + (100−超调惩罚)×0.3；
+ *          输出：扫描表与结论（无 PASS/FAIL 断言）。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_integrator_sweep.cpp -o bin/sw
+ * @theory  积分增益与超调/收敛的权衡是二阶系统的经典折中；权重 0.4/0.3/0.3
+ *          是本项目自定的工程评分，不是理论最优准则。
+ *          @ref CTL-001 §4（积分分离与限幅口径）
+ * @frame   单轴（俯仰绕 y_b）
+ * @units   角度 deg，时间 s，Ki 为 s⁻²（或按配置的外环量纲）
+ * @note    ★ 研究工具，不在 run_all.sh 回归集合内，无断言；权重与归一化方式改变会
+ *          直接改变“最优”结论，引用结论时必须同时引用评分式。
+ * @test    S1 内环积分 Ki 扫描；S2 外环积分 Ki 扫描；S3 最优对最优比较（输出表）
+ * @see     TandemVec_FCS/test_host/test_integrator_compare.cpp、include/PositionPID.h
+ */
 #include "../include/TandemVec_Config.h"
 #include "../include/ControlUnits.h"
 #include <cmath>

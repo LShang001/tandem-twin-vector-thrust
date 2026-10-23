@@ -1,14 +1,27 @@
-// ============================================================
-//  test_comprehensive_sim.cpp — 全面仿真:增益扫描+扰动+灵敏度
-//
-//  条件: α限幅=±100(不截断PID), 完整物理链路
-//  使用真实 PositionPID（dt 显式积分）
-//  镜像 flight_control.cpp 的完整控制路径
-//
-//  分析: (1)Kp_a单独 (2)Kp_r单独 (3)联合扫描 (4)扰动抑制 (5)模型偏差
-//
-//  编译: g++ -std=c++17 -Iinclude -Itest_host/stub
-//        test_host/test_comprehensive_sim.cpp -o test_host/bin/cs && ./test_host/bin/cs
+/**
+ * @file    test_comprehensive_sim.cpp
+ * @module  固件/宿主研究（fw-tests：增益扫描与模型偏差灵敏度）
+ * @brief   在完整物理链路上扫描 Kp_a/Kp_r、注入扰动与模型偏差，量化收敛边界
+ * @details 被测：`PositionPID` + `allocateMoments` + `allocateDifferential`
+ *          + `computeWrench` 组成的单轴俯仰闭环（镜像 `flight_control.cpp`
+ *          的控制路径，但**不是**固件源码本身）。
+ *          条件：α 限幅放到 ±100 deg/s²（不截断 PID），dt 显式积分；
+ *          分析：(1) Kp_a 单独扫描 (2) Kp_r 单独扫描 (3) 联合扫描
+ *          (4) 扰动抑制 (5) 模型偏差（CG/kT/惯量）。
+ *          输出：PASS/FAIL 计数（C1–C4），main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Itest_host/stub test_host/test_comprehensive_sim.cpp
+ * @theory  级联 P-PI 的增益与执行器权限共同决定响应：α_max 触顶时增大增益不再提速，
+ *          只增加超调；物理逆解架构（I·α→力矩）在惯量偏差 ±50% 下仍收敛是核心论断。
+ *          @ref CTL-001 §4、@ref CTL-001 §7（执行器分配）
+ * @frame   单轴（俯仰绕 y_b）
+ * @units   角度 deg，角速率 deg/s，角加速度 deg/s²，力矩 N·m，惯量 kg·m²
+ * @note    ★ 研究工具，不是实机回归：`run_all.sh` 的 cs 套件只验证“这些结论仍成立”，
+ *          调增益后必须重跑并重读表格。冷启动陷阱：电机初值必须是悬停转速，
+ *          从 0 起步会有 0.3 s 零控制权限、把任何增益都判成发散（已验证）。
+ * @test    C1 扫描区误差/超调有界；C2 固件实际增益理想工况收敛；
+ *          C3 CG+kT 扰动下稳态偏置有界；C4 惯量 ±50% 偏差仍收敛
+ * @see     TandemVec_FCS/include/FlightCtrlParams.h、docs/05-控制与分配/CTL-001-控制架构与SAS.md
+ */
 // ============================================================
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #include "../include/TandemVec_ControlAllocation.h"

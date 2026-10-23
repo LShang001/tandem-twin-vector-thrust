@@ -1,3 +1,26 @@
+/**
+ * @file    dps310_fifo_policy_test.cpp
+ * @module  固件/宿主研究（fw-tests：DPS310 FIFO 采样策略）
+ * @brief   用 MockFifo 验证气压计 FIFO 取数策略的配对、上限、停采与错误处理
+ * @details 被测：`lib/DPS310-Pressure-Sensor/src/Dps310FifoPolicy.h` 的策略函数。
+ *          输入：`MockFifo`（按脚本给出样本序列，可制造空 FIFO/未完成/溢出/其它错误）；
+ *          处理：按策略每次最多取 N 个样本，决定本次是否可更新气压高度；
+ *          输出：`require()` 失败即 exit(1)，stderr 打印失败原因。
+ *          运行：g++ -std=c++17 -Iinclude -Ilib/DPS310-Pressure-Sensor/src
+ *                test_host/dps310_fifo_policy_test.cpp -o bin/dpsfifo
+ * @theory  N/A（采样策略/状态机，非控制或导航公式）；判据来自 DPS310 数据手册的
+ *          FIFO 状态位语义与本项目“一次取数必须凑齐温压对”的约定。
+ * @frame   N/A（无姿态/位置）
+ * @units   原始码值 LSB、时间 µs、压力 Pa、温度 ℃
+ * @note    `MockFifo` 与真实驱动的差异：没有 SPI 时序、没有 FIFO 满溢出真实行为，
+ *          错误码按脚本注入，故本文件不能证明硬件错误恢复，只能证明策略分支覆盖。
+ * @test    T1 温压成对返回；T2 仅压力到达时的部分样本；T3 无压力不算气压更新；
+ *          T4 空 FIFO 报告未完成；T5 读取数封顶；T6 实时任务的小批量取数；
+ *          T7 首样本可信后空检查；T8 压力优先停采；T9 压力优先只停压力；
+ *          T10 只取 1 个温度样本不算气压更新；T11 仅在可恢复错误时 flush；
+ *          T12 单寄存器读解码 FIFO 状态
+ * @see     TandemVec_FCS/lib/DPS310-Pressure-Sensor/src/Dps310FifoPolicy.h
+ */
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>

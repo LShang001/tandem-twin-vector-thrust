@@ -1,10 +1,20 @@
-// 宿主机测试用 Arduino.h 极简桩
-// VerticalKF.h / VerticalKF_2State.h / HorizontalKF.h / Ws2812AppStatus.h 等
-// 仅 #include <Arduino.h> 后使用 isnan / fmaxf / PI / pow 等符号，
-// 这些在标准 <math.h> / <cmath> 中已提供（PI 为 Arduino 同名宏）。
-// 本桩仅转发到标准库，使这些平台相关头文件可在宿主机用 g++ 编译。
-// 注意：仅在 test_host/ 宿主机测试编译路径下通过 -Itest_host/stub 优先命中，
-// 不影响 PlatformIO 固件编译（固件使用真实的 Arduino.h）。
+/**
+ * @file    Arduino.h
+ * @module  固件/宿主回归桩（fw-tests：Arduino 框架最小替身）
+ * @brief   把 #include <Arduino.h> 转发到标准库，使平台相关头文件可在宿主机编译
+ * @details 被测：无（替身层）。VerticalKF.h / VerticalKF_2State.h / HorizontalKF.h /
+ *          Ws2812AppStatus.h 等只用到 isnan、fmaxf、PI、pow、Stream 基类与 constrain，
+ *          这些在标准库或本桩中提供。
+ *          输入：测试文件的 #include <Arduino.h>；处理：只做声明与宏转发；
+ *          输出：可在 g++ 下编译的头文件。
+ * @theory  N/A（框架替身，无算法）
+ * @frame   N/A
+ * @units   N/A
+ * @note    与真实 Arduino 的差异：无 millis()/micros() 时间基准、无引脚 I/O、
+ *          无 Serial 实现；`constrain` 在部分测试里被宏覆盖，故本桩用 #ifndef 保护。
+ *          仅当 -Itest_host/stub 排在真实 Arduino 核之前时生效，不影响 pio 固件编译。
+ * @see     test_host/fw_sil/stub/Arduino.h（SIL 用的更大替身）、test_host/README.md
+ */
 #ifndef TEST_HOST_ARDUINO_STUB_H
 #define TEST_HOST_ARDUINO_STUB_H
 

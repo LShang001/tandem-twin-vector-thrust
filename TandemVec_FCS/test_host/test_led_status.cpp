@@ -1,12 +1,24 @@
+/**
+ * @file    test_led_status.cpp
+ * @module  固件/宿主回归测试（fw-tests：WS2812 灯效状态机）
+ * @brief   验证上电自检序列、13 个状态的配色/节奏、故障覆盖与每拍渲染
+ * @details 被测：`include/Ws2812AppStatus.h`。
+ *          输入：每个用例通过 `update()` 注入状态、时间（ms）与故障标志；
+ *          处理：状态机内部按 400 ms 分段/呼吸/闪烁时基计算颜色；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Itest_host/stub -Iinclude test_host/test_led_status.cpp
+ * @theory  N/A（灯效人机界面）；节奏时基来自设计约定（400 ms 段、1.2 s 自检、
+ *          SOS 长短闪比例），不是物理模型。
+ * @frame   N/A
+ * @units   时间 ms；RGB 分量 0–255
+ * @note    与真实驱动的差异：`WS2812Driver` 被 mock 成只记录 last_rgb 与 show 次数，
+ *          因此本测试只验证“想显示什么”，不验证灯带时序/颜色顺序/供电。
+ *          BOOT 自检 1.2 s 的期望值来自 `playBoot()` 的 10 ms 步进循环。
+ * @test    S1 BOOT 白→蓝→绿 各 400 ms；S2 13 个状态配色；S3 闪烁/SOS 时基；
+ *          S4 呼吸亮度与上限；S5 setFault 覆盖优先级；S6 每拍必渲染
+ * @see     TandemVec_FCS/include/Ws2812AppStatus.h、test_host/stub/WS2812Driver.h
+ */
 // 宿主机回归测试：Ws2812AppStatus 灯效状态机（include/Ws2812AppStatus.h）
-// 编译运行：g++ -std=c++17 -Itest_host/stub -Iinclude test_host/test_led_status.cpp -o test_host/bin/led_status && ./test_host/bin/led_status
-//
-// 验证（2026-08-08 灯效扩展）：
-//   - BOOT 上电自检序列：白→蓝→绿 三段 400ms，1.2s 后进入正常状态机
-//   - 13 个 FcsLedState 的颜色与节奏（呼吸/慢闪/快闪/SOS 双闪时基）
-//   - setFault 调试命令覆盖优先级
-//   - 每次 update 必渲染（show() 调用）
-// 通过 -Itest_host/stub 用极简 WS2812Driver mock 替代真实驱动。
 #include "../include/Ws2812AppStatus.h"
 
 #include <cstdio>

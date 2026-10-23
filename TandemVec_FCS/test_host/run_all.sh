@@ -45,9 +45,19 @@ run_one() {
 # 平台无关算法（include/ins_*.h，不依赖 Arduino）：
 run_one "$ROOT/test_host/test_gnss_dynamic_weight.cpp" gdw ""
 run_one "$ROOT/test_host/test_static_aid_profile.cpp"  sap ""
+# 执行器故障监测（ActuatorFaultMonitor.h，纯平台无关——舵机卡死/单发推力损失
+# 的“误差+饱和+持续时间”检测与动作建议；F3/F4 故障矩阵的固件侧最小模块）：
+run_one "$ROOT/test_host/test_actuator_fault_monitor.cpp" afm ""
 run_one "$ROOT/test_host/test_static_detector.cpp"     sd  ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
+run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""
+run_one "$ROOT/test_host/test_gnss_delay_batch.cpp"      bdelay ""
+run_one "$ROOT/test_host/test_gnss_delay_auto.cpp"       dauto ""
+run_one "$ROOT/test_host/test_ins_vibration_adaptive.cpp" vib ""
+run_one "$ROOT/test_host/test_bias_temp_observer.cpp" btemp ""
+run_one "$ROOT/test_host/test_bias_temp_table.cpp" btable ""
+run_one "$ROOT/test_host/test_bias_temp_pipeline.cpp" btpipe ""
 
 # 通用变量注册表 AnoVars（include/AnoVars.h，纯平台无关——注册表遍历/
 # 各类型→float 序列化/名称截断/watch 集合上限/rate 钳制/越界容错）：
@@ -162,6 +172,35 @@ else
   echo "---- 运行 aidvel ----"
   if ! "$BIN_DIR/aidvel$EXE_SUFFIX"; then
     echo "[RUN FAIL] aidvel"
+    fail=1
+  fi
+  echo
+fi
+
+
+# 高速 GNSS/INS 延时补偿回归（30 m/s、50 ms、5 Hz；年龄补偿应显著优于无补偿）：
+echo "---- 编译 delayhs ----"
+if ! $CXX -std=$STD -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES      $INCLUDES -I$ROOT/src -I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src      "$ROOT/test_host/test_ekf_delay_highspeed.cpp"      "$ROOT/lib/units/src/convang.cpp"      "$ROOT/lib/units/src/convangacc.cpp"      "$ROOT/lib/units/src/convangvel.cpp"      -o "$BIN_DIR/delayhs$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] delayhs"
+  fail=1
+else
+  echo "---- 运行 delayhs ----"
+  if ! "$BIN_DIR/delayhs$EXE_SUFFIX"; then
+    echo "[RUN FAIL] delayhs"
+    fail=1
+  fi
+  echo
+fi
+
+# 传感器标称精度（ICM-42688/UBX PVT）+ 高速延时补偿：默认参数应不劣于无补偿：
+echo "---- 编译 hsreal ----"
+if ! $CXX -std=$STD -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES      $INCLUDES -I$ROOT/src -I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src      "$ROOT/test_host/test_ekf_highspeed_realistic.cpp"      "$ROOT/lib/units/src/convang.cpp"      "$ROOT/lib/units/src/convangacc.cpp"      "$ROOT/lib/units/src/convangvel.cpp"      -o "$BIN_DIR/hsreal$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] hsreal"
+  fail=1
+else
+  echo "---- 运行 hsreal ----"
+  if ! "$BIN_DIR/hsreal$EXE_SUFFIX"; then
+    echo "[RUN FAIL] hsreal"
     fail=1
   fi
   echo

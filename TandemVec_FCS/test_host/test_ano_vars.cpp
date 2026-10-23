@@ -1,10 +1,25 @@
-// ============================================================
-//  test_ano_vars.cpp — 通用变量注册表（AnoVars.h）host 测试
-//
-//  纯平台无关（无 Arduino 依赖）：验证注册表遍历、各类型→float
-//  序列化、名称截断、watch 集合（增删清上限）、rate 钳制、越界容错。
-//  测试自带 kAnoVars 表（模拟固件变量），链接时替代固件侧定义。
-// ============================================================
+/**
+ * @file    test_ano_vars.cpp
+ * @module  固件/宿主回归测试（fw-tests：通用变量注册表 AnoVars）
+ * @brief   验证注册表遍历、各类型→float 序列化、名称截断与 watch 集合语义
+ * @details 被测：`include/AnoVars.h` 的 `kAnoVars`/`ANO_VARS_COUNT` 契约与
+ *          查找/序列化/watch 辅助函数；本文件自带一份模拟固件变量表，
+ *          链接时替代固件侧定义。
+ *          输入：float/u8/u16/i16/i32/u32/bool/数组 八类变量与越界名称；
+ *          处理：按名称查找、转 float、维护 watch 集合（增删清、上限、rate 钳制）；
+ *          输出：CHECK 失败计数，main 返回非零即失败。
+ *          运行：g++ -std=c++17 -Iinclude -Isrc test_host/test_ano_vars.cpp -o bin/av
+ * @theory  N/A（注册表/序列化实现规约）；输出协议见
+ *          @ref PROTOCOL-001 §4（0xF2 值帧 / 0xF3 清单）
+ * @frame   N/A
+ * @units   序列化为 float，角度类变量须在注册处已完成 rad→deg 换算
+ * @note    ★ 数组必须声明为不带大小的 `extern const AnoVarEntry kAnoVars[]`：
+ *          带 ANO_VARS_MAX_COUNT 会让 sizeof 按 64 计、遍历到空项触发 segfault
+ *          （2026-08-10 host segfault 三层定位的坑，见 AGENTS.md）。
+ * @test    T1 类型→float 序列化；T2 名称查找与 9 字符截断；T3 watch 集合增删清与上限；
+ *          T4 rate 钳制；T5 空 watch 语义；T6 越界名称容错
+ * @see     TandemVec_FCS/include/AnoVars.h、src/ano_vars.cpp
+ */
 #include <cstdio>
 #include <cstring>
 #include <cstdint>

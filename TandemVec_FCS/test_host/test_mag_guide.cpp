@@ -1,11 +1,27 @@
-// ============================================================
-//  test_mag_guide.cpp — 大疆式两圈引导校准状态机 host 测试
-//
-//  纯平台无关：验证 lib/MagCal/MagCalGuide.h ——
-//    1. 阶段1 水平旋转：姿态/旋转/扇区覆盖判定，≥315° 自动切阶段2
-//    2. 阶段2 机头朝下旋转：完成 → DONE
-//    3. 判定门：加速度模长越界 / 次轴旋转过大 / 姿态不对 → 拒绝采集
-//    4. DONE 后停止动作；reset 回 IDLE；扇区跨 ±π 边界
+/**
+ * @file    test_mag_guide.cpp
+ * @module  固件/宿主回归测试（fw-tests：两圈引导校准状态机）
+ * @brief   验证水平旋转→机头朝下旋转的两阶段流程、判定门与扇区跨边界
+ * @details 被测：`lib/MagCal/MagCalGuide.h`（纯平台无关状态机）。
+ *          覆盖：1) 阶段 1 水平旋转：姿态/旋转/扇区覆盖判定，≥315° 自动切阶段 2；
+ *          2) 阶段 2 机头朝下旋转：完成 → DONE；3) 判定门：加速度模长越界 /
+ *          次轴旋转过大 / 姿态不对 → 拒绝采集；4) DONE 后停止动作、reset 回 IDLE、
+ *          扇区跨 ±π 边界。
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Ilib/MagCal test_host/test_mag_guide.cpp -o bin/mg
+ * @theory  大疆式两圈校准：水平圈覆盖磁航向全周，机头朝下圈覆盖第三个自由度；
+ *          每个阶段要求姿态门（|acc|≈g、主导轴 ≥0.7|acc|、主导转速 0.3–6 rad/s、
+ *          次轴 <0.45×主导）成立才采信样本。
+ *          @ref AGENTS.md（2026-08-15 两圈引导校准 DBG magcal guided）
+ * @frame   机体系 FRD（加速度/角速率均机体系；磁方位在水平面内按 ±π 归一）
+ * @units   加速度 m/s²，角速率 rad/s，角度 deg/rad，扇区 45°×8
+ * @note    315° 覆盖阈值 = 7/8 圈，留 45° 余量避免操作者收尾时反复补转；
+ *          扇区跨 ±π 的用例来自现场“从 -175° 起转”的真实操作习惯。
+ * @test    S1 完整两圈流程；S2 加速度模长门；S3 姿态门；S4 次轴旋转门；
+ *          S5 转速过快/过慢拒绝；S6 magFresh=false 语义；S7 扇区跨 ±π；
+ *          S8 reset / FAILED 终态
+ * @see     TandemVec_FCS/lib/MagCal/MagCalGuide.h、test_mag_cal.cpp
+ */
 // ============================================================
 #include <cstdio>
 #include <cmath>

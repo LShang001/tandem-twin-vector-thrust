@@ -1,14 +1,25 @@
-// ============================================================
-//  test_optimal_gains.cpp — 解析最优增益 + 仿真验证
-//
-//  级联 P-P 闭环 = 二阶系统:
-//    θ/θ_ref = ωn²/(s²+2ζωn·s+ωn²)
-//    ωn² = Kp_r · Kp_a
-//    2ζωn = Kp_r
-//  迁移后 Kp_r 本身就是角度域比例增益（s⁻¹）。
-//
-//  编译: g++ -std=c++17 test_host/test_optimal_gains.cpp -o test_host/bin/og && ./test_host/bin/og
-// ============================================================
+/**
+ * @file    test_optimal_gains.cpp
+ * @module  固件/宿主研究（fw-tests：级联 P-PI 的解析最优增益与仿真对照）
+ * @brief   用二阶系统闭式解算 Kp 的理论最优值，再用数值闭环验证
+ * @details 被测：无（本文件自带二阶闭环模型）；结论用于给 `PositionPID` 的
+ *          Kp_a/Kp_r 选型提供解析基线。
+ *          级联 P-PI 闭环等效二阶系统 θ/θ_ref 的传递函数，其
+ *          @formula ωn²=Kp_r·Kp_a、2ζωn=Kp_r（迁移后 Kp_r 本身是角度域比例增益 s⁻¹）
+ *          输入：Kp_a/Kp_r/Ki、惯量、目标角、扰动力矩；
+ *          处理：`run()` 以 5 ms 步长积分 10 s；
+ *          输出：稳态误差表 + PASS/FAIL 计数。
+ *          编译：g++ -std=c++17 test_host/test_optimal_gains.cpp -o bin/og
+ * @theory  二阶系统 ωn、ζ 与超调/上升时间的标准关系；给定 ζ 目标（约 0.7）时
+ *          Kp_r=2ζωn、Kp_a=ωn²/Kp_r。@ref CTL-001 §4（速率环量纲）
+ * @frame   单轴（俯仰绕 y_b）
+ * @units   Kp_a 无量纲（deg/s per deg）、Kp_r 为 s⁻¹、Ki 为 s⁻²；角度 deg
+ * @note    ★ 研究工具，不在 run_all.sh 回归集合内；结论是线性模型内的解析值，
+ *          不含 α 限幅、τm 与 B 耦合，不能直接当实机增益。
+ * @test    G1 解析最优与仿真最优一致；G2 扰动下稳态误差为零（有 Ki 时）；
+ *          G3 ζ 目标对应的超调量
+ * @see     TandemVec_FCS/include/PositionPID.h、test_comprehensive_sim.cpp
+ */
 #include <cmath>
 #include <cstdio>
 

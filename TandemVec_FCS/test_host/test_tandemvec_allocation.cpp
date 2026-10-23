@@ -1,20 +1,40 @@
+/**
+ * @file    test_tandemvec_allocation.cpp
+ * @module  固件/宿主回归测试（fw-tests：控制分配与推进正/逆映射）
+ * @brief   验证四策略分配（DIRECT/FULL_B/FF/BTRUE）、极性、饱和与正向往返一致
+ * @details 被测：`include/TandemVec_ControlAllocation.h`（`allocateMoments()`、
+ *          `allocateDifferential()`）、`include/TandemVec_Propulsion.h`
+ *          （`computeWrench()`/`thrustWrench()`）、`include/AirframeModel.h`
+ *          （数值差分 B 矩阵）与 `include/TandemVec_Config.h` 的机型常数。
+ *          覆盖：1) 零力矩→零输出；2) 纯单通道极性（滚转/俯仰/偏航）；
+ *          3) DIRECT 与 FULL_B 的差异方向（τ₀ 交叉项贡献）；
+ *          4) DIRECT_WITH_FF 与 FULL_B 一阶近似一致；5) 执行器限幅与饱和标记；
+ *          6) 低油门滚转效能退化；7) B_true 在零摆角处退化为 B_full；
+ *          8) 分配输出代入 `computeWrench()` 应接近原始指令；
+ *          9) 差速分配的平方和不变性与 wMax 钳位；10) 策略切换零冲击；
+ *          11) 数据驱动 B 与解析式逐元素等价（2026-08-10）。
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_tandemvec_allocation.cpp -o bin/ta
+ * @theory  分配矩阵 B：u = B⁺τ（FULL_B）/ u = diag(B)⁻¹τ（DIRECT）；
+ *          差速开方分配 ωf=ω0·√(1+Δω)、ωt=ω0·√(1−Δω) 保持平方和不变；
+ *          推力/反扭 T=kT·ω²、Q=kQ·ω²。
+ *          @ref CTL-001 §7（差速开方分配）、@ref THY-003 §3–4（分配口径）、
+ *          @ref THY-002 §2–3（推力/反扭）
+ * @frame   悬停构型语义：上摆 δf→滚转、下摆 δt→俯仰、差速 Δω→偏航；
+ *          分配器吃模型系（x'=推力轴朝机头），与存档系之间有置换
+ * @units   力矩 N·m，摆角 rad，转速 rad/s，惯量 kg·m²，相对容差 1e-3
+ * @note    ★ 红线锁定：差速公式与力臂分离（物理 0.315 m ≠ 渲染 ±1.78 m）不得改；
+ *          1e-3 相对容差对应 float 在 N·m 量级的舍入，`exact()` 只用于
+ *          “零输入必须严格零输出”这类可精确判定的点。
+ *          往返一致性的期望值来源是“分配后再正向映射应回到指令”，
+ *          不是某个硬编码数字，因此对机型参数改动天然鲁棒。
+ * @test    A1 零力矩；A2 单通道极性；A3 DIRECT/FULL_B 差异方向；A4 FF 与 FULL_B 一阶一致；
+ *          A5 饱和与标记；A6 低油门滚转退化；A7 B_true 零摆角退化；A8 正向往返；
+ *          A9 差速平方和/钳位；A10 策略切换连续性；A11 数据驱动 B 等价
+ * @see     TandemVec_FCS/include/TandemVec_ControlAllocation.h、
+ *          docs/05-控制与分配/CTL-001-控制架构与SAS.md §5/§7
+ */
 // 宿主机回归测试：纵列双发矢量推力飞行器控制分配模块
-// 编译运行：
-//   g++ -std=c++17 -Iinclude test_host/test_tandemvec_allocation.cpp \
-//       -o test_host/bin/ta && ./test_host/bin/ta
-//
-// 覆盖范围：
-//   1. 零力矩 → 零输出
-//   2. 纯单通道极性（滚转/俯仰/偏航）
-//   3. DIRECT 与 FULL_B 的差异方向（τ₀ 交叉项贡献）
-//   4. DIRECT_WITH_FF 与 FULL_B 一阶近似一致性
-//   5. 执行器限幅与饱和标记
-//   6. 低油门滚转效能退化
-//   7. B_true 在零摆角处退化为 B_full（数值验证）
-//   8. 正向映射往返一致：分配输出代入 computeWrench() 应接近原始指令
-//   9. 差速分配：平方和不变性与 wMax 钳位
-//  10. 策略切换零冲击（指令连续性）
-//  11. ★2026-08-10 数据驱动 B（AirframeModel 数值差分）与解析式逐元素等价
 #include "../include/TandemVec_Config.h"
 #include "../include/TandemVec_Propulsion.h"
 #include "../include/TandemVec_ControlAllocation.h"
@@ -312,6 +332,9 @@ static void test_differential_allocation()
         auto r = allocateDifferential(w0, dw, p);
         check(!r.wf_clamped && !r.wt_clamped, "中等差速不触达 wMax");
         float sum_sq = r.wf_target * r.wf_target + r.wt_target * r.wt_target;
+        // 平方和不变性是差速公式的解析结果（ωf=w0·√(1+Δω)、ωt=w0·√(1−Δω)），
+        // 所以期望值不是录制值而是 2·w0²；1e-4 相对容差对应 float 开方误差
+        // （sqrt 后单次乘加，误差约 1 ulp ≈ 1e-7 相对，留两个数量级余量）。
         check(approx(sum_sq, 2.0f * w0 * w0, 1e-4f),
               "差速分配：wf² + wt² = 2·w0²（平方和不变）");
     }

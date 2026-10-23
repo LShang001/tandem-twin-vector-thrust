@@ -1,3 +1,29 @@
+/**
+ * @file    test_control_units.cpp
+ * @module  固件/宿主回归测试（fw-tests：速率环量纲迁移的等价性）
+ * @brief   验证 deg/s² 与 rad/s² 双向换算，以及迁移前后 PID 物理输出逐拍等价
+ * @details 被测：`include/ControlUnits.h` 的换算常量/函数，配合
+ *          `kFlightCtrlParams.rate_*` 与 `PositionPID`、`ComplementaryFilter`。
+ *          输入：旧混合域参数（0.28/0.10、限幅 100、积分限幅 20、分离阈 60）
+ *          经 `kRadPerDeg` 反推的角度域参数；参考/测量序列为手工波形与
+ *          5000 拍正弦+阶跃混合序列；
+ *          处理：逐拍比较“旧域直接输出”与“新域输出换算回 rad/s²”；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          运行：g++ -std=c++17 -Iinclude test_host/test_control_units.cpp -o bin/cu
+ * @theory  速率环量纲统一（2026-08-11）：控制器输入 deg/s、输出 deg/s²，
+ *          仅在写 `ControlOutputs_t` 的惯量逆解边界乘 π/180。因此
+ *          kp[deg/s² per deg/s] × π/180 必须等于迁移前的混合域 kp。
+ *          @ref AGENTS.md（速率环量纲已统一、旧值不得导入）、@ref CTL-001 §4
+ * @frame   N/A（标量控制量，轴向由调用方决定）
+ * @units   kp 为 s⁻¹、ki 为 s⁻²、限幅 deg/s²；比较在 rad/s² 域进行
+ * @note    容差 2e-5（≈float 在 1e0 量级的相对 7 位有效数字）用于纯换算；
+ *          5e-5 与 1e-4 用于 PID 动态序列，放大量级来自浮点累积与
+ *          输出滤波的状态差异，不是行为放宽。
+ * @test    T1 换算往返；T2 roll/pitch/yaw 的 kp 物理增益；T3 ki 物理增益；
+ *          T4 输出/积分限幅物理上限；T5 PID 动态序列等价；
+ *          T6 PID+输出滤波 5000 拍长序列等价
+ * @see     TandemVec_FCS/include/ControlUnits.h、include/FlightCtrlParams.h
+ */
 #include "ControlUnits.h"
 #include "FlightCtrlParams.h"
 #include "PositionPID.h"

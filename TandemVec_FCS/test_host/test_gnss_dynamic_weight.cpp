@@ -1,7 +1,27 @@
-// 宿主机回归测试：GNSS 动态权重 R 矩阵纯函数
-// 编译运行：g++ -std=c++17 -Iinclude test_host/test_gnss_dynamic_weight.cpp -o test_host/bin/gdw && ./test_host/bin/gdw
-//
-// 本文件不依赖 Arduino / STM32 HAL，仅验证 include/ins_gnss_dynamic_weight.h 的平台无关逻辑。
+/**
+ * @file    test_gnss_dynamic_weight.cpp
+ * @module  固件/宿主回归测试（fw-tests：导航量测噪声阵 R 的纯函数层）
+ * @brief   验证 GNSS 动态权重（精度字段→R 标准差）纯函数的门控、地板与缩放语义
+ * @details 被测：`include/ins_gnss_dynamic_weight.h` 中的配置校验与
+ *          `Icm45686ComputeGnssStd()` 类纯函数；不依赖 Arduino/STM32 HAL。
+ *          输入：手工构造的 `Icm45686GnssDynamicWeightConfig` 与 GNSS 精度字段；
+ *          处理：逐项断言 fix 门控、floor/cap 钳制、pDOP 缩放与 v_acc/s_acc 回退；
+ *          输出：PASS/FAIL 计数，main 返回非零即回归失败。
+ *          运行（仓库根目录）：
+ *          g++ -std=c++17 -Iinclude test_host/test_gnss_dynamic_weight.cpp -o bin/gdw
+ * @theory  GNSS 量测噪声阵 R 的工程整定，非教材公式：精度字段→1σ 的线性映射、
+ *          噪声地板/天花板、pDOP 放大与 fix 类型门控。默认参数与
+ *          `navigation_task.cpp` 的 kGnssDwCfg 一致，锁定实机配置。
+ *          @ref AGENTS.md（EKF 踩坑：R 地板不可收紧，收紧后接受率暴跌）
+ * @frame   N/A（标量精度字段，与 NED/FRD 无关）
+ * @units   位置标准差 m；速度标准差 m/s；pDOP 无量纲；fix 类型为 UBX 枚举
+ * @note    本文件锁定“pDOP 缩放在 clamp 之后（缩放结果可突破 cap）”的当前语义；
+ *          改顺序属行为变更，须同步 `navigation_task.cpp` 并重采 EKF 回归证据。
+ * @test    S1 fix 类型/卫星数/h_acc 门控；S2 精度区间内直通；
+ *          S3 噪声地板与天花板；S4 v_acc/s_acc 为 0 回退；S5 pDOP 缩放；
+ *          S6 pDOP 非法值视为未提供；S7 RTK 高 fix 类型
+ * @see     TandemVec_FCS/include/ins_gnss_dynamic_weight.h、test_host/README.md
+ */
 #include "../include/ins_gnss_dynamic_weight.h"
 
 #include <cmath>

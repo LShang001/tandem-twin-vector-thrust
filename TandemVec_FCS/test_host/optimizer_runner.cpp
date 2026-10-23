@@ -1,3 +1,20 @@
+/**
+ * @file    optimizer_runner.cpp
+ * @module  固件/宿主研究（fw-tests：增益优化器的被调可执行体）
+ * @brief   跑一次 8 s 单轴俯仰闭环并输出代价/峰值/调节时间/RMS，供 Python 优化器调用
+ * @details 被测：无（本文件是优化器的目标函数）。
+ *          输入：argv 为 Kp_a、Kp_r、Ki、积分分离阈值 四个参数；
+ *          处理：20° 阶跃 + CG 偏 3 mm + 3% 推力不对称，积分步长 5 ms、共 1600 步；
+ *          输出：stdout 打印 cost/peak/settle/rms，供优化脚本解析。
+ * @theory  单轴俯仰的级联 P-PI：外环角度→目标角速率、内环角速率→角加速度，
+ *          力矩经 `allocateMoments(..., FULL_B)` 分配到摆角/差速，
+ *          再经 `computeWrench()` 回到刚体动力学。@ref CTL-001 §4
+ * @frame   机体系单轴（俯仰绕 y_b），不涉及平动/航向
+ * @units   角度 deg，角速率 deg/s，角加速度 deg/s²，力矩与惯量 SI
+ * @note    研究工具，不在 `run_all.sh` 回归集合内；输出格式被 Python 侧正则依赖，
+ *          改动 print 格式会静默破坏优化器。
+ * @see     TandemVec_FCS/include/PositionPID.h、TandemVec_ControlAllocation.h
+ */
 // optimizer_runner.cpp — 20°阶跃+CG3mm+推力3%不对称, 8s仿真
 // 被Python优化器调用: or.exe Kpa Kpr Ki sep → stdout: cost peak settle rms
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))

@@ -1,3 +1,27 @@
+/**
+ * @file    test_gnss_epoch_timing.cpp
+ * @module  固件/宿主回归测试（fw-tests：GNSS epoch 消费与时标映射）
+ * @brief   验证 epoch 出队门控、重锚条件、iTOW→本地时间映射与 micros 回绕
+ * @details 被测：`include/ins_gnss_epoch_timing.h` 的 `InsGnssShouldConsumeEpoch()`、
+ *          `InsGnssShouldReanchor()`、`InsGnssMapEpochToLocalTime()`、
+ *          `InsGnssEpochAgeSeconds()`。
+ *          输入：手工构造的 (队列有样本, ready 标志, 质量通过, 年龄, 上限) 组合，
+ *          以及 iTOW/本地微秒对、基础输出延迟；
+ *          处理：逐条 require 断言布尔门控与映射后的测量时刻；
+ *          输出：任一断言失败即 exit(1)。
+ *          运行：g++ -std=c++17 -Iinclude test_host/test_gnss_epoch_timing.cpp -o bin/get
+ * @theory  GNSS 量测时标：PVT 的 iTOW 是整秒对齐的 GPS 时，链路与输出延迟需由
+ *          “最近完整 epoch 的接收时刻 + 基础延迟”反推量测时刻；年龄即当前时刻与之差，
+ *          供 EKF 回放融合使用。@ref REF-121 §2.2.1 p.33（量测更新的时标假设）
+ * @frame   N/A（纯时间轴）
+ * @units   iTOW 与本地时间 µs，年龄 s，容差 1e-6（float 比较）
+ * @note    不用 std::assert：NDEBUG 下会被编译掉、断言静默失效，故用 require 显式退出。
+ *          星期回绕与 micros 回绕是历史事故点（错误延迟约 7 天 / 71.6 分钟）。
+ * @test    T1 消费门控只看出队结果；T2 重锚四个前置条件与年龄上限；
+ *          T3 队列旧 epoch 映射；T4 GPS 周回绕；T5 缺参考 epoch 回退；
+ *          T6 时间不连续保护；T7 micros 回绕保持连续
+ * @see     TandemVec_FCS/include/ins_gnss_epoch_timing.h、src/navigation_task.cpp
+ */
 #include "ins_gnss_epoch_timing.h"
 
 #include <cmath>

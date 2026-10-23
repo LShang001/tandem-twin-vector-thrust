@@ -1,13 +1,29 @@
-// ============================================================
-//  test_advanced_theory.cpp — Lyapunov证明 + ADRC vs PID + 系统辨识
-//
-//  三层分析:
-//    L1: Lyapunov稳定性证明 (任意初始条件的全局收敛)
-//    L2: ADRC vs PID 在参数偏差下的性能对比
-//    L3: 从阶跃响应数据做系统辨识 (反推ωn,ζ,b0)
-//
-//  编译: g++ -std=c++17 -Iinclude -Itest_host/stub
-//        test_host/test_advanced_theory.cpp -o test_host/bin/at && ./test_host/bin/at
+/**
+ * @file    test_advanced_theory.cpp
+ * @module  固件/宿主研究（fw-tests：级联控制的 Lyapunov/ADRC/辨识分析）
+ * @brief   三层理论验证：Lyapunov 全局收敛、ADRC 与 PID 的参数偏差对比、阶跃辨识
+ * @details 被测：`include/TandemVec_ADRC.h`、`include/PositionPID.h`、
+ *          `include/TandemVec_ControlAllocation.h`、`include/TandemVec_Propulsion.h`
+ *          在名义参数下的级联闭环行为。
+ *          L1：Lyapunov 稳定性（任意初始条件的全局收敛）；
+ *          L2：ADRC vs PID 在参数偏差下的性能对比（B1–B7）；
+ *          L3：从阶跃响应数据做系统辨识（反推 ωn、ζ、b0）。
+ *          输入：单轴俯仰刚体 + 电机一阶滞后 + 推进力矩模型，`SimResult` 记录
+ *          峰值/调节时间/误差；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Itest_host/stub test_host/test_advanced_theory.cpp
+ * @theory  Lyapunov 二次型 V=½eᵀe 沿闭环单调下降；ADRC 的 ESO 把未建模项
+ *          并入总扰动并在控制端抵消；辨识用二阶系统 ωn²=Kp_r·Kp_a、2ζωn=Kp_r。
+ *          @ref CTL-001 §4（SAS 控制律）、@ref THY-003 §3（控制分配）
+ * @frame   单轴（俯仰绕 y_b），四元数姿态误差取标量等效角
+ * @units   角度 deg，角速率 deg/s，角加速度 deg/s²，时间 s；ADRC 带宽 rad/s
+ * @note    ★ 这是名义参数的**理论分析**，不是实机回归：结论（如“ADRC 对参数偏差
+ *          更鲁棒”）不能外推为飞行结论；本测试也不覆盖 τm 瞬态失配与 B_true 耦合。
+ *          `#define constrain` 在包含固件头之前定义，与 Arduino 宏行为一致。
+ * @test    L1 Lyapunov 多初值收敛；L2 B1–B7（名义收敛/直流增益/超调/偏差稳定/
+ *          退化有界/舵机动态/无 NaN）；L3 辨识反推 ωn、ζ、b0
+ * @see     TandemVec_FCS/include/TandemVec_ADRC.h、docs/05-控制与分配/CTL-001-控制架构与SAS.md
+ */
 // ============================================================
 #define constrain(amt,low,high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #include "../include/TandemVec_ControlAllocation.h"
@@ -76,9 +92,8 @@ static SimResult sim_full(bool use_adrc, float Iy_scale, float kT_scale, float c
   ServoState sv_f={0,0}, sv_t={0,0};
   ServoParams sp;
 
-  // pk   = 俯仰角响应峰值（用于测超调，非误差幅值）
-  // st   = 进入 ±2% 目标带并保持的时间（标准 settling time，无人为下限）
-  // opk  = 角速率峰值
+  // pk 为俯仰角响应峰值（测超调，非误差幅值）；st 为进入 ±2% 目标带并保持的时间
+  // （标准 settling time，无人为下限）；opk 为角速率峰值。
   SimResult r; float pk=0,st=-1.f,fe=0,opk=0;
   const float band=fabsf(target_deg)*0.02f;   // ±2% 稳态带
   float t_out_of_band=0.f;                    // 最后一次跳出稳态带的时刻

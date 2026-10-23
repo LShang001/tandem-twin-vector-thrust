@@ -1,3 +1,25 @@
+/**
+ * @file    task_scheduler_interval_test.cpp
+ * @module  固件/宿主回归测试（fw-tests：调度器小数 tick 间隔）
+ * @brief   验证 0.5 ms 分辨率的任务间隔换算、抖动分布与下限钳位
+ * @details 被测：`src/task_scheduler_interval.h` 的
+ *          `intervalMsToTicksQ8()`、`initialIntervalErrorQ8()`、
+ *          `initialIntervalTicks()`、`nextIntervalTicks()`。
+ *          输入：整数毫秒（7.0/10.0）、半毫秒（7.5）、亚 tick（0.2）间隔；
+ *          处理：连续生成 8 个 tick 间隔；
+ *          输出：`require()` 失败即 exit(1)。
+ *          运行：g++ -std=c++17 -Iinclude test_host/task_scheduler_interval_test.cpp -o bin/tsi
+ * @theory  小数分频（Bresenham 式误差累加）：把平均间隔抖动分摊到相邻 tick，
+ *          保证长期平均等于请求值，同时单个间隔偏差 ≤1 tick。
+ *          见 @ref AGENTS.md（`BFS_TASK_FRACTIONAL_INTERVALS` 相关约定）
+ * @frame   N/A（调度时间轴）
+ * @units   间隔 ms、tick 数（Q8 定点：1 tick = 256 Q8 单位）
+ * @note    亚 tick 请求被钳到 1 tick 是防忙等的硬保护：小于调度器分辨率的周期
+ *          会让任务每拍都触发、CPU 占用失控。容差按 tick 整数比较，不涉及浮点误差。
+ * @test    T1 整半毫秒（7.5）不产生抖动；T2 小数间隔抖动分布；
+ *          T3 长期平均等于请求值；T4 亚 tick 正间隔钳到 1 tick
+ * @see     TandemVec_FCS/src/task_scheduler_interval.h
+ */
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>

@@ -1,13 +1,26 @@
-// ============================================================
-//  test_mag_parse.cpp — 磁力计解析/轴对齐数学层 host 测试
-//
-//  纯平台无关：验证 lib/MagSensor/MagMath.h ——
-//    1. IST8310 / QMC5883L 灵敏度换算（数据手册典型值）
-//    2. 6 字节小端 + 二进制补码解码
-//    3. 芯片系 -> 机体 FRD 的旋转矩阵对齐（含硬铁偏置）
-//    4. 全链路：芯片原始数据 -> FRD -> TiltCompass 北向判定
-//       （地磁场在北半球指"北+下"，FRD 的 z 分量必须为正，
-//        这是任何新芯片轴映射正误的物理判据）
+/**
+ * @file    test_mag_parse.cpp
+ * @module  固件/宿主回归测试（fw-tests：磁力计解析与轴对齐数学层）
+ * @brief   验证灵敏度换算、小端补码解码、芯片系→FRD 旋转与北向判定全链路
+ * @details 被测：`lib/MagSensor/MagMath.h` 与 `lib/navigation-main/src/tilt_compass.h`。
+ *          覆盖：1) IST8310 / QMC5883L 灵敏度换算（数据手册典型值）；
+ *          2) 6 字节小端 + 二进制补码解码；3) 芯片系→机体 FRD 的旋转矩阵对齐
+ *          （含硬铁偏置）；4) 全链路：芯片原始数据→FRD→TiltCompass 北向判定。
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude -Ilib/MagSensor -Ilib/navigation-main/src
+ *          test_host/test_mag_parse.cpp -o bin/mp
+ * @theory  IST8310 0.3 µT/LSB、QMC5883L ±2G=12000 LSB/G 与 ±8G=3000 LSB/G；
+ *          北半球地磁场指向“北 + 下”，故校正后 FRD 的 z 分量必须为正——
+ *          这是任何新芯片轴映射正误的物理判据（符号错会给出负 z）。
+ *          @ref MOD-002 §2（FRD 轴向约定）、@ref AGENTS.md（磁力计标定与应用顺序）
+ * @frame   芯片系 → 机体 FRD（右乘旋转矩阵）；地磁参考在北半球 z_b > 0
+ * @units   磁场 µT、原始码 LSB、角度 rad
+ * @note    330 LSB 期望 99 µT 的用例专门锁定“0.30303 旧系数会得 100 µT”的
+ *          历史 +1% 偏差；容差 1e-4–1e-3 为换算常数精度量级。
+ * @test    S1 IST8310 灵敏度；S2 QMC5883L 双量程；S3 小端/补码解码；
+ *          S4 芯片系→FRD 轴对齐；S5 全链路北向物理判据
+ * @see     TandemVec_FCS/lib/MagSensor/MagMath.h、test_mag_cal.cpp
+ */
 // ============================================================
 #include <cstdio>
 #include <cmath>

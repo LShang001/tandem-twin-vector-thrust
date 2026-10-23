@@ -1,26 +1,29 @@
-// ============================================================
-//  test_position_pid.cpp — PositionPID v3 回归测试
-//
-//  该类此前无独立测试，v2 的四项扩展特性（2-DOF加权/反算抗饱和/
-//  输出速率限制/无扰切换）从未被验证，其中三项实际处于失效状态。
-//  本文件覆盖：
-//
-//    P1  基础比例/积分/微分响应正确性
-//    P2  积分分离阈值 (integralThreshold)
-//    P3  积分状态钳位 (v3 修复#2：integral_ 本身有界)
-//    P4  输出限幅
-//    P5  输出变化率限制 (v3 修复#1：原先恒不触发)
-//    P6  反算抗饱和 (v3 修复#4：原先量纲错误)
-//    P7  无扰切换 (v3 修复#3：原先未扣除 D 项)
-//    P8  2-DOF 设定点加权
-//    P9  NaN/Inf 防护 (v3 新增#5)
-//    P10 三种 compute 接口一致性
-//    P11 reset() 完整性
-//    P12 微分滤波系数
-//
-//  编译: g++ -std=c++17 -Iinclude test_host/test_position_pid.cpp \
-//        -o test_host/bin/pp && ./test_host/bin/pp
-// ============================================================
+/**
+ * @file    test_position_pid.cpp
+ * @module  固件/宿主回归测试（fw-tests：PositionPID v3 全特性回归）
+ * @brief   P1–P12 覆盖比例/积分/微分、分离阈值、抗饱和、无扰切换与 NaN 防护
+ * @details 被测：`include/PositionPID.h`。
+ *          背景：该类 v2 的四项扩展特性（2-DOF 加权 / 反算抗饱和 / 输出速率限制 /
+ *          无扰切换）此前从未被验证，其中三项实际处于失效状态；v3 修复后
+ *          本文件成为这些特性的回归闸门。
+ *          输入：手工构造的参考/测量序列、极端误差、NaN/Inf、限幅与切换场景；
+ *          处理：逐用例调用三种 compute 接口并比对期望；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_position_pid.cpp -o bin/pp
+ * @theory  PID：u = kp·e + ki·∫e dt + kd·de/dt；2-DOF 用 setpoint 权重把 P 与 D
+ *          的设定点响应解耦；反算抗饱和用（饱和输出−未饱和输出）/跟踪时间回灌积分。
+ *          @ref CTL-001 §4（积分分离阈值与限幅口径）
+ * @frame   N/A（标量控制器；量纲由调用方决定，速率环为 deg/s→deg/s²）
+ * @units   输入/输出量纲由调用方定义；时间 s；容差 1e-4 相对
+ * @note    每个用例的期望值都由公式解析给出（例如纯 P 时输出等于 kp×误差），
+ *          不是录制值；1e-4 容差覆盖 float 累加误差，同时能拒掉量纲级错误。
+ *          P5/P6/P7 是历史失效点，断言特意写得可区分“完全没实现”与“实现但量纲错”。
+ * @test    P1 基础 P/I/D；P2 积分分离阈值；P3 积分状态钳位；P4 输出限幅；
+ *          P5 输出变化率限制；P6 反算抗饱和；P7 无扰切换（含 D 项扣除）；
+ *          P8 2-DOF 设定点加权；P9 NaN/Inf 防护；P10 三种 compute 一致性；
+ *          P11 reset 完整性；P12 微分滤波系数
+ * @see     TandemVec_FCS/include/PositionPID.h、test_control_units.cpp
+ */
 #include "../include/PositionPID.h"
 
 #include <cmath>

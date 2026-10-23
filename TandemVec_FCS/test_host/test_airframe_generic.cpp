@@ -1,17 +1,29 @@
-// 宿主机测试：AirframeModel 通用框架跨机型验证（四旋翼 demo）
-// 编译运行：
-//   g++ -std=c++17 -Iinclude test_host/test_airframe_generic.cpp \
-//       -o test_host/bin/ag && ./test_host/bin/ag
-//
-// ★2026-08-10 通用层验证：
-//   用同一套 AirframeModel（执行器几何表 + 输入映射 + 数值 Jacobian 合成器）
-//   定义四旋翼（与纵列双发不同的拓扑），验证"换机型 = 填几何数据，不写算法"。
-//
-// 覆盖：
-//   A1 四旋翼正向映射（推力/反扭叠加）
-//   A2 数值 Jacobian 生成（3×4）
-//   A3 伪逆分配 → 正向往返（M_cmd → ω² → M ≈ M_cmd，相对误差 <1e-3）
-//   A4 经典 Mixer 对照（Mx=左右差、My=前后差、Mz=CW/CCW 差）
+/**
+ * @file    test_airframe_generic.cpp
+ * @module  固件/宿主回归测试（fw-tests：机型数据驱动通用执行器模型）
+ * @brief   用四旋翼拓扑验证 AirframeModel“换机型=填几何表”的通用性
+ * @details 被测：`include/AirframeModel.h` 的执行器几何表、输入映射、
+ *          数值 Jacobian 合成器与 `computeWrenchGeneric()`。
+ *          输入：十字布局四旋翼（臂长 0.25 m、kT=1e-5、kQ 由 kT 比例给出、
+ *          两 CW 两 CCW），等速工作点 500 rad/s 与给定力矩指令；
+ *          处理：正向映射 → 数值差分生成 3×4 的 B → 伪逆分配 → 再正向映射；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          运行：g++ -std=c++17 -Iinclude test_host/test_airframe_generic.cpp -o bin/ag
+ * @theory  执行器力矩映射 M = B(δ,ω)·u，B 由几何表数值差分得到；
+ *          伪逆分配 u = B⁺τ 是《控制分配》MINIMUM_NORM 口径的最小范数解。
+ *          @ref THY-003 §3–4、@ref CTL-001 §7（分配口径）
+ * @frame   模型系 = 机体系 x 前 / y 右 / z 下（四旋翼十字布局），推力沿 -z
+ * @units   臂长 m，转速 rad/s，推力系数 N/(rad/s)²，反扭系数 N·m/(rad/s)²，
+ *          力矩 N·m，相对容差 1e-3
+ * @note    1e-3 的相对容差对应“数值雅可比 + 伪逆 + 正向映射”三步 float 累积误差；
+ *          收紧到 1e-6 会因 float 有效位而不稳，放宽到 1e-2 又失去分配正确性判据。
+ *          本测试证明通用层可承载非本机拓扑，不证明本机 B_true 数值正确
+ *          （那由 test_tandemvec_allocation.cpp 的往返一致性覆盖）。
+ * @test    A1 四旋翼正向映射（推力/反扭叠加）；A2 数值 Jacobian 逐元素；
+ *          A3 伪逆分配正向往返；A4 经典 Mixer 方向对照
+ * @see     TandemVec_FCS/include/AirframeModel.h、test_tandemvec_allocation.cpp
+ */
+// ★2026-08-10 通用层验证：换机型只填几何数据，算法层不改。
 #include "../include/AirframeModel.h"
 
 #include <cmath>

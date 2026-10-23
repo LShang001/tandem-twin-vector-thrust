@@ -1,9 +1,30 @@
+/**
+ * @file    test_vertical_kf.cpp
+ * @module  固件/宿主回归测试（fw-tests：三状态垂直卡尔曼滤波器）
+ * @brief   验证 VerticalKF 的预测/更新数学、异常值门限、输入饱和与协方差有界
+ * @details 被测：`include/VerticalKF.h`（高度/垂直速度/加计零偏三状态）。
+ *          输入：200 Hz 步长、恒定/零加速度、正常与 3σ 异常气压测量、NaN 测量；
+ *          处理：逐拍 predict/update，检查协方差对称有界；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Itest_host/stub -Iinclude test_host/test_vertical_kf.cpp
+ *          （用 stub/Arduino.h 让依赖 Arduino.h 的头文件可在宿主机编译）
+ * @theory  三状态 KF：x = [高度, 垂直速度, 加计零偏]；
+ *          预测 @ref REF-121 §2.2.1 (2.2.4a) p.33、
+ *          更新 @ref REF-121 §2.2.1 (2.2.4c-e) p.33、
+ *          Joseph 形式 @ref REF-121 §2.2.4 p.42；
+ *          3σ 门限对应 χ² 尾部（1 维）。
+ * @frame   高度用“向上为正”的控制口径，输入加速度为 NED 向下加计的负值
+ * @units   高度 m，速度 m/s，加速度 m/s²，协方差 m²/(m²/s²)，步长 s
+ * @note    默认 max_input_accel_=10 m/s² 是防积分爆走的硬限幅；
+ *          P_max[0]=100 是高度方差上限，长期无测量时协方差不得无限增长。
+ *          容差 1e-3 相对，对应 float 在 1e0 量级的累积误差。
+ * @test    T1 begin 初始高度；T2 零加速度静止保持；T3 恒定加速度速度线性增长；
+ *          T4 输入加速度饱和；T5 NaN 测量跳过；T6 正常测量收敛；
+ *          T7 3σ 异常值拒绝；T8 更新后协方差减小；T9 协方差上限；
+ *          T10 configureRobustness 覆盖；T11 加计零偏可观测
+ * @see     TandemVec_FCS/include/VerticalKF.h、test_host/stub/Arduino.h
+ */
 // 宿主机回归测试：三状态垂直卡尔曼滤波器（高度/速度/加速度计零偏）
-// 编译运行：g++ -std=c++17 -Itest_host/stub -Iinclude test_host/test_vertical_kf.cpp -o test_host/bin/vkf && ./test_host/bin/vkf
-//
-// 验证 include/VerticalKF.h 的预测/更新数学、异常值门限、输入饱和、
-// Joseph 形式协方差更新与协方差限制。通过 -Itest_host/stub 用极简 Arduino.h 桩
-// 替代真实 Arduino.h，使该平台相关头文件可在宿主机编译。
 #include "../include/VerticalKF.h"
 
 #include <cmath>
@@ -97,6 +118,8 @@ int main()
       kf.predict(0.0f, dt);
       kf.update(8.0f, 0.1f); // 真实高度 8m
     }
+    // 容差 0.1 m = 测量噪声 1σ(0.1 m) 的 1 倍：200 次更新后状态应落在测量值
+    // 的统计误差带内；更紧会因单次噪声序列而不稳，更松则失去收敛判据。
     check(approx(kf.getHeight(), 8.0f, 0.1f), "小残差高度测量后收敛到测量值");
   }
 

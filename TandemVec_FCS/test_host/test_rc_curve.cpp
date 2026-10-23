@@ -1,11 +1,27 @@
-// ============================================================
-//  test_rc_curve.cpp — FPV 摇杆曲线（RcCurve.h）host 测试
-//
-//  纯平台无关：验证 Betaflight 三参数模型——
-//    expo（中心压低，满杆增益恰 1）
-//    super（边缘双曲放大，低杆量几乎无感、满杆 1/(1-super) 倍）
-//    rc_rate（整条曲线线性缩放）
-//    死区/限幅/极点保护
+/**
+ * @file    test_rc_curve.cpp
+ * @module  固件/宿主回归测试（fw-tests：FPV 摇杆曲线）
+ * @brief   验证 Betaflight 三参数曲线（rc_rate/expo/super）与死区、限幅、极点保护
+ * @details 被测：`include/RcCurve.h`（`rcNormFromUs()`、`rcRateCurve()` 与默认参数）。
+ *          输入：PWM µs（988–2012）与归一化杆量；rc_rate/expo/super 组合；
+ *          处理：归一化→死区→expo→rc_rate→super→限幅；
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_rc_curve.cpp -o bin/rc
+ * @theory  Betaflight 曲线：expo 中心压低且满杆增益恰 1；super 边缘双曲放大，
+ *          低杆量几乎无感、满杆最多 1/(1−super) 倍；rc_rate 整条曲线线性缩放。
+ *          默认 0.5/0.25/0.7·0.7·0.55 → 满杆 roll/pitch 333°/s、yaw 222°/s。
+ *          @ref AGENTS.md（2026-08-11 FPV 摇杆曲线接入）
+ * @frame   N/A（杆量→角速率指令，轴映射由调用方按 roll/pitch/yaw 选择）
+ * @units   PWM µs，归一化杆量 −1…+1，输出 deg/s，上限 MAX_MANUAL_*_RATE=600
+ * @note    期望值全部由曲线公式手算：expo=0.5、rc=0.5 时
+ *          0.5·(0.5·0.25+0.5)=0.3125 → 62.5°/s（线性为 100°/s）。
+ *          极点保护 super=0.95 不发散：1/(1−0.95)=20 倍仍有限，
+ *          但满杆会撞 600°/s 限幅。容差 1e-3 为 float 累乘误差。
+ * @test    S1 归一化；S2 死区；S3 线性基线；S4 expo 中心压低/满杆增益；
+ *          S5 super 边缘放大；S6 默认参数组合；S7 负杆量对称；
+ *          S8 super≈1 极点保护
+ * @see     TandemVec_FCS/include/RcCurve.h、include/FlightCtrlParams.h
+ */
 // ============================================================
 #include <cstdio>
 #include <cmath>

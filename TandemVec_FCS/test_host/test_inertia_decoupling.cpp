@@ -1,14 +1,31 @@
+/**
+ * @file    test_inertia_decoupling.cpp
+ * @module  固件/宿主回归测试（fw-tests：惯量逆解的交叉耦合前馈）
+ * @brief   验证 ω×(Iω) 与 ω×h 两项前馈的数值展开、掩码开关与闭环收益
+ * @details 被测：`include/InertiaDecoupling.h`（`computeInertiaCompensation()`）。
+ *          覆盖：1) ω×(I·ω) 陀螺耦合逐项数值展开（对照仿真 dynamics.mjs 的 gx/gy/gz）；
+ *          2) ω×h 转子角动量陀螺项展开；3) 使能掩码按位开关（mask=0 → 全零）；
+ *          4) 理想刚体闭环对照：前馈开 → 跟踪误差 ~0，前馈关 → 误差等于耦合项/I；
+ *          5) 本机细长杆特性 Iy=Iz → 绕 x 轴陀螺耦合项恒 0。
+ *          输出：PASS/FAIL 计数，main 返回非零即失败。
+ *          编译：g++ -std=c++17 -Iinclude test_host/test_inertia_decoupling.cpp -o bin/id
+ * @theory  刚体角动力学 `I·ω̇ = M − ω×(Iω) − ω×h`；前馈项即把两个耦合项
+ *          提前算进力矩指令，使闭环回到“解耦的二阶系统”。
+ *          @ref REF-120 §9.2 p.267（角速度/角动量关系）、@ref THY-002 §2–3（转子角动量）
+ * @frame   模型系（x′=推力轴）为前馈原语坐标系；存档系（x=滚转、y=俯仰、
+ *          z=推力轴）由 `computeInertiaCompensationFromArchive()` 换算
+ * @units   惯量 kg·m²，角速率 rad/s，角动量 kg·m²/s，力矩 N·m
+ * @note    数值期望值全部手算：ω=(1,2,3)、Iy=Iz=0.022、Ix=0.0021 时
+ *          My_ff=(Ix−Iz)·3·1=−0.0597、Mz_ff=(Iy−Ix)·1·2=0.0398。
+ *          容差 1e-4 相对（float 在 1e-2 量级约 6–7 位有效数字，手算式与
+ *          代码编译期常量同源）。
+ * @test    T1 陀螺耦合逐项；T2 ω×h 展开；T3 掩码按位；T4 闭环前馈收益；
+ *          T5 细长杆 Iy=Iz 时 Mx 恒零；T6 存档系封装（陀螺耦合）；
+ *          T7 存档系封装（转子陀螺项 + 与显式置换等价）；
+ *          T8 存档系直接叉乘（H=(0,0,−h)）与封装逐项一致
+ * @see     TandemVec_FCS/include/InertiaDecoupling.h、src/flight_control.cpp（mix 层调用点）
+ */
 // 宿主机回归测试：惯量逆解交叉耦合前馈（InertiaDecoupling.h）
-// 编译运行：
-//   g++ -std=c++17 -Iinclude test_host/test_inertia_decoupling.cpp \
-//       -o test_host/bin/id && ./test_host/bin/id
-//
-// 覆盖范围：
-//   1. ω×(I·ω) 陀螺耦合逐项数值展开（对照仿真 dynamics.mjs gx/gy/gz）
-//   2. ω×h 转子角动量陀螺项展开
-//   3. 使能掩码按位开关（mask=0 → 全零）
-//   4. 理想刚体闭环对照：前馈开 → 跟踪误差 ~0；前馈关 → 误差 = 耦合项/I
-//   5. 本机细长杆特性：Iy=Iz → 绕 x 轴陀螺耦合项恒 0
 #include "../include/InertiaDecoupling.h"
 
 #include <cmath>
@@ -40,11 +57,8 @@ static constexpr float kIz = 0.022f;   // 横向（与 Iy 对称）
 
 // ============================================================
 //  测试 1：陀螺耦合展开（对照仿真 dynamics.mjs gx/gy/gz）
-//   仿真：gx=(Iz−Iy)·wy·wz；gy=(Ix−Iz)·wz·wx；gz=(Iy−Ix)·wx·wy
-//   ω=(1,2,3) rad/s：
-//     gx = (0.022−0.022)·2·3        = 0
-//     gy = (0.0021−0.022)·3·1       = −0.0597
-//     gz = (0.022−0.0021)·1·2       = 0.0398
+// @formula gx=(Iz−Iy)·wy·wz；gy=(Ix−Iz)·wz·wx；gz=(Iy−Ix)·wx·wy
+// @note 取 ω=(1,2,3) rad/s 手算：gx=0、gy=−0.0597、gz=0.0398。
 // ============================================================
 static void test_gyro_coupling()
 {
@@ -179,12 +193,101 @@ static void test_rigid_body_closed_loop()
     check(err_on < err_off * 1e-3f, "前馈开：误差比关闭小 3 个数量级（理想刚体精确补偿）");
 }
 
+// ============================================================
+//  测试 6：存档系封装——陀螺耦合的轴置换（2026-10-23 C-02 回归）
+//  存档系 ω=(0,1,1) → 模型系 ω′=(−ωz, ωy, ωx)=(−1,1,0)；
+//    I=(Ix=0.0021, Iy=0.022, Iz=0.022)：
+//    Mz_ff=(Iy−Ix)·ωx′·ωy′=(0.022−0.0021)·(−1)·1=−0.0199 N·m。
+//  旧实现直接传存档系 ω 且 Ix 当模型系 → 同用例三项全 0（漏补偿）。
+// ============================================================
+static void test_archive_frame_gyro()
+{
+    const float omega_archive[3] = {0.0f, 1.0f, 1.0f};
+    const auto r = computeInertiaCompensationFromArchive(
+        omega_archive, kIz, kIy, kIx, 0.0f, kInertiaCompGyro);
+    check(approx(r.Mx_ff, 0.0f), "T6 存档系 Mx=0（模型系 Iz=Iy）");
+    check(approx(r.My_ff, 0.0f), "T6 存档系 My=0（ωz′=0）");
+    check(approx(r.Mz_ff, (kIy - kIx) * (-1.0f) * 1.0f),
+          "T6 存档系 Mz=(Iy−Ix)·ωx′ωy′=−0.0199（轴置换）");
+
+    // 反例：旧实现把存档系 ω 直接当模型系 → 本用例三项全 0（动力学上漏补偿）
+    const float h_zero[3] = {0.0f, 0.0f, 0.0f};
+    const auto legacy = computeInertiaCompensation(omega_archive, kIx, kIy, kIz,
+                                                   h_zero, kInertiaCompGyro);
+    check(legacy.Mx_ff == 0.0f && legacy.My_ff == 0.0f && legacy.Mz_ff == 0.0f,
+          "T6 旧直调在该机动下恒 0（C-02 缺陷可复现）");
+    check(std::fabs(r.Mz_ff) > 1e-3f, "T6 新封装恢复非零耦合补偿");
+}
+
+// ============================================================
+//  测试 7：存档系封装——转子角动量 + 与显式置换等价
+//  存档系 ω=(0,1,0)（俯仰速率），h 沿推力轴 0.1：
+//    模型系 ω′=(0,1,0)、h′=(0.1,0,0) → ω′×h′=(0,0,−0.1)。
+// ============================================================
+static void test_archive_frame_rotor()
+{
+    const float omega_archive[3] = {0.0f, 1.0f, 0.0f};
+    const auto r = computeInertiaCompensationFromArchive(
+        omega_archive, kIz, kIy, kIx, 0.1f, kInertiaCompRotor);
+    check(approx(r.Mx_ff, 0.0f) && approx(r.My_ff, 0.0f) &&
+              approx(r.Mz_ff, -0.1f),
+          "T7 存档系转子陀螺 Mz=−0.1（ω′×h′）");
+
+    // 与显式轴置换逐项等价（mask 全开）
+    const float omega_archive2[3] = {0.3f, -0.2f, 0.5f};
+    const float h = 0.01f;
+    const auto wrapped = computeInertiaCompensationFromArchive(
+        omega_archive2, kIz, kIy, kIx, h,
+        kInertiaCompGyro | kInertiaCompRotor);
+    const float omega_model[3] = {-omega_archive2[2], omega_archive2[1],
+                                  omega_archive2[0]};
+    const float h_model[3] = {h, 0.0f, 0.0f};
+    const auto explicit_ref = computeInertiaCompensation(
+        omega_model, kIx, kIy, kIz, h_model,
+        kInertiaCompGyro | kInertiaCompRotor);
+    check(approx(wrapped.Mx_ff, explicit_ref.Mx_ff) &&
+              approx(wrapped.My_ff, explicit_ref.My_ff) &&
+              approx(wrapped.Mz_ff, explicit_ref.Mz_ff),
+          "T7 封装 = 显式 (−ωz,ωy,ωx)+(h,0,0) 置换");
+}
+
+// ============================================================
+//  测试 8：存档系直接叉乘（h_archive=(0,0,−h)）与封装逐项一致
+//  说明：模型 x′=−z_b，故模型系 +x′ 的 h 对应存档系 −z 的 h；
+//        本测试用存档系欧拉方程直接算，再按 M_model=(−M_z, M_y, M_x) 变换，
+//        与封装输出逐项比较，锁定 h 符号约定。
+// ============================================================
+static void test_archive_direct_equivalence()
+{
+    const float w[3] = {0.5f, 0.3f, 1.0f};
+    const float h = 0.005f;
+    const float I_arch[3] = {kIz, kIy, kIx};  // 存档系 x=滚转、y=俯仰、z=推力轴
+    const float H_arch[3] = {0.0f, 0.0f, -h};
+    const float ff_arch[3] = {
+        (I_arch[2] - I_arch[1]) * w[1] * w[2] +
+            (w[1] * H_arch[2] - w[2] * H_arch[1]),
+        (I_arch[0] - I_arch[2]) * w[2] * w[0] +
+            (w[2] * H_arch[0] - w[0] * H_arch[2]),
+        (I_arch[1] - I_arch[0]) * w[0] * w[1] +
+            (w[0] * H_arch[1] - w[1] * H_arch[0]),
+    };
+    const auto r = computeInertiaCompensationFromArchive(
+        w, kIz, kIy, kIx, h, kInertiaCompGyro | kInertiaCompRotor);
+    check(approx(r.Mx_ff, -ff_arch[2]) &&
+              approx(r.My_ff, ff_arch[1]) &&
+              approx(r.Mz_ff, ff_arch[0]),
+          "T8 封装 = 存档系直接叉乘经 (−z,y,x) 变换");
+}
+
 int main()
 {
     test_gyro_coupling();
     test_rotor_coupling();
     test_mask();
     test_rigid_body_closed_loop();
+    test_archive_frame_gyro();
+    test_archive_frame_rotor();
+    test_archive_direct_equivalence();
 
     std::printf("\n%s（失败 %d）\n", g_fail_count == 0 ? "全部通过" : "存在失败",
                 g_fail_count);

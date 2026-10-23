@@ -7,7 +7,8 @@
 | 测试文件 | 被测算法 | 依赖 | 断言数 |
 |---|---|---|---|
 | `test_gnss_dynamic_weight.cpp` | `ins_gnss_dynamic_weight.h` — GNSS 动态权重 R 矩阵 | 无 | 28 |
-| `test_static_aid_profile.cpp` | `ins_static_aid_profile.h` — 静止辅助强度调度（含帧边界精确值，并入自已删除的 static_aid_profile_test.cpp） | 无 | 46 |
+| `test_static_aid_profile.cpp` | `ins_static_aid_profile.h` — 静止辅助强度调度（含帧边界精确值；2026-10 加 ZUPT 外部参照门控测试） | 无 | 55 |
+| `test_actuator_fault_monitor.cpp` | `ActuatorFaultMonitor.h` — 舵机卡死/单发推力损失检测（误差+饱和+持续时间；2026-10 F3/F4 故障矩阵配套） | 无 | 9 |
 | `test_static_detector.cpp` | `ins_static_detector.h` — 静止检测器状态机 | Eigen/Dense | 22 |
 | `test_altitude_reference.cpp` | `ins_altitude_reference.h` — 气压/GNSS/控制高度参考系转换 | 无 | 8 |
 | `test_gnss_epoch_timing.cpp` | `ins_gnss_epoch_timing.h` — epoch 消费门控、iTOW 到 MCU 时间映射与回绕 | 无 | 20 |
@@ -20,7 +21,7 @@
 | `test_robustness.cpp` | 大机动 + 系统误差鲁棒性（名义参数扫描） | Arduino.h 桩 | 8 |
 | `test_qual_analysis.cpp` | 增益定性分析（Kp_a/Kp_r 扫描，固件语义对照） | Arduino.h 桩 | 16 |
 | `test_comprehensive_sim.cpp` | 增益扫描/扰动抑制/模型偏差（研究工具，非实机回归） | Arduino.h 桩 | 10 |
-| `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`） | units/eigen | 15 |
+| `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`；2026-10 加 P0-0 速度旋转 T7、P1-5 航向 consider T8、P0-1 3+3 子集/软重锚 T9–T11） | units/eigen | 36 |
 | `test_ekf_aiding_velocity.cpp` | `ekf_15_state.h` — 测速源辅助接口（aiding 速度更新豁免零速守卫、失锁重锚 ResetVelocityToExternal、D 通道大噪声不压垂直协方差；2026-08-21 室内光流融合配套） | units/eigen | 16 |
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。

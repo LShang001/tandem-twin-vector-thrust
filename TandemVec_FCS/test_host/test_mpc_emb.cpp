@@ -1,8 +1,23 @@
-// ============================================================
-//  test_mpc_emb.cpp — 嵌入式 LMPC 求解器基准测试
-//  1) 数值验证：与 Python 原型（mpc_proto.py）同场景对比收敛曲线
-//  2) 性能基准：耗时（float/double、不同迭代数）、内存占用
-//  3) 极限测试：N 可扩展性、数值稳定性（长时运行、NaN 检查）
+/**
+ * @file    test_mpc_emb.cpp
+ * @module  固件/宿主研究（fw-tests：嵌入式 LMPC 求解器基准）
+ * @brief   对 mpc_emb.h 做数值验证、耗时基准与极限（N 扩展/长跑/NaN）测试
+ * @details 被测：`test_host/mpc_emb.h`（`EmbeddedLMPC<T,N>`）。
+ *          1) 数值验证：与 Python 原型（mpc_proto.py）同场景对比收敛曲线；
+ *          2) 性能基准：耗时（float/double、不同迭代数）、内存占用；
+ *          3) 极限测试：N 可扩展性、数值稳定性（长时运行、NaN 检查）。
+ *          输出：基准表 + PASS/FAIL 计数。
+ *          编译：g++ -std=c++17 -O2 -Iinclude test_host/test_mpc_emb.cpp -o bin/mpcb
+ * @theory  MPC 的滚动优化与框约束投影；性能判据是“单拍求解能否塞进 200 Hz
+ *          周期预算”，而非控制器性能。@ref CTL-001 §4（执行器限幅口径）
+ * @frame   机体系 FRD 下的姿态误差/角速率（模型见 mpc_emb.h 的状态定义）
+ * @units   时间 ms，内存 KB；角度 rad、角速率 rad/s
+ * @note    ★ 研究原型：未接入固件控制链，结果不能当实机 MPC 结论；
+ *          N 增大后耗时随时域平方增长，基准数字只在同机同编译选项下可比。
+ * @test    S1 与 Python 原型收敛一致性；S2 float/double 耗时对比；
+ *          S3 迭代数对收敛/耗时影响；S4 N 可扩展性；S5 长跑 NaN 检查
+ * @see     TandemVec_FCS/test_host/mpc_emb.h
+ */
 // ============================================================
 #include "mpc_emb.h"
 #include "../include/TandemVec_Config.h"
