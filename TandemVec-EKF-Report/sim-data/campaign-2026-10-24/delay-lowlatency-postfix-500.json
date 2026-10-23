@@ -1,0 +1,4514 @@
+{
+  "summary": {
+    "cases": 500,
+    "parsed": 500,
+    "fused_ge_500": 499,
+    "pos_lt_10m": 499,
+    "pos_p95": 0.594,
+    "pos_max": 324.954,
+    "fused_mean": 599.662,
+    "rejected_mean": 0.338
+  },
+  "rows": [
+    {
+      "case": 0,
+      "ok": true,
+      "latency_ms": 3.6303125349520804,
+      "vib_g": 0.770620753039585,
+      "pos3d": 0.417,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 1,
+      "ok": true,
+      "latency_ms": 4.26055654622249,
+      "vib_g": 1.6281809565270144,
+      "pos3d": 0.482,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 2,
+      "ok": true,
+      "latency_ms": 1.6765746580618686,
+      "vib_g": 0.19163606376602887,
+      "pos3d": 0.125,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 3,
+      "ok": true,
+      "latency_ms": 4.629620050320738,
+      "vib_g": 0.21826221361767512,
+      "pos3d": 0.185,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 4,
+      "ok": true,
+      "latency_ms": 0.18299379956420003,
+      "vib_g": 0.4863226801320114,
+      "pos3d": 0.459,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 5,
+      "ok": true,
+      "latency_ms": 3.4863165760285613,
+      "vib_g": 1.806240235354574,
+      "pos3d": 0.168,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 6,
+      "ok": true,
+      "latency_ms": 2.337232333559292,
+      "vib_g": 1.307360644881982,
+      "pos3d": 0.184,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 7,
+      "ok": true,
+      "latency_ms": 2.7281525785353122,
+      "vib_g": 1.7107345306882489,
+      "pos3d": 0.329,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 8,
+      "ok": true,
+      "latency_ms": 4.2080111334788715,
+      "vib_g": 1.9273323591504246,
+      "pos3d": 0.374,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 9,
+      "ok": true,
+      "latency_ms": 3.444603434721025,
+      "vib_g": 0.6436669446489279,
+      "pos3d": 0.294,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 10,
+      "ok": true,
+      "latency_ms": 3.644351392463531,
+      "vib_g": 0.6089874869264861,
+      "pos3d": 0.123,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 11,
+      "ok": true,
+      "latency_ms": 2.2353103418599924,
+      "vib_g": 0.5942584284344465,
+      "pos3d": 0.456,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 12,
+      "ok": true,
+      "latency_ms": 2.195597555493458,
+      "vib_g": 0.36022974240088823,
+      "pos3d": 0.462,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 13,
+      "ok": true,
+      "latency_ms": 3.8233631637678913,
+      "vib_g": 0.6101952744308964,
+      "pos3d": 0.16,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 14,
+      "ok": true,
+      "latency_ms": 0.058962020179710306,
+      "vib_g": 1.6663112976385483,
+      "pos3d": 0.262,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 15,
+      "ok": true,
+      "latency_ms": 0.6074152834521163,
+      "vib_g": 1.6049444879205175,
+      "pos3d": 0.105,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 16,
+      "ok": true,
+      "latency_ms": 2.5228186112229114,
+      "vib_g": 2.4161369406948188,
+      "pos3d": 0.236,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 17,
+      "ok": true,
+      "latency_ms": 4.3675053693729655,
+      "vib_g": 2.4939987072557863,
+      "pos3d": 0.341,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 18,
+      "ok": true,
+      "latency_ms": 0.20264579713598463,
+      "vib_g": 1.7061397026046967,
+      "pos3d": 0.365,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 19,
+      "ok": true,
+      "latency_ms": 3.7356732172810676,
+      "vib_g": 0.23522650991081556,
+      "pos3d": 0.426,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 20,
+      "ok": true,
+      "latency_ms": 3.245980273906052,
+      "vib_g": 2.1766343992201738,
+      "pos3d": 0.291,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 21,
+      "ok": true,
+      "latency_ms": 2.880935414672696,
+      "vib_g": 1.3202381997126877,
+      "pos3d": 0.339,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 22,
+      "ok": true,
+      "latency_ms": 2.694468075925664,
+      "vib_g": 1.3067024638000704,
+      "pos3d": 0.481,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 23,
+      "ok": true,
+      "latency_ms": 3.5877649303276296,
+      "vib_g": 0.685678120040199,
+      "pos3d": 0.407,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 24,
+      "ok": true,
+      "latency_ms": 1.3292647993357898,
+      "vib_g": 1.8926782033928804,
+      "pos3d": 0.416,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 25,
+      "ok": true,
+      "latency_ms": 1.0018093934472145,
+      "vib_g": 2.295605581957978,
+      "pos3d": 0.629,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 26,
+      "ok": true,
+      "latency_ms": 2.057019675915686,
+      "vib_g": 1.4825888663384934,
+      "pos3d": 0.482,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 27,
+      "ok": true,
+      "latency_ms": 2.9353662718781353,
+      "vib_g": 1.3973240432904888,
+      "pos3d": 0.307,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 28,
+      "ok": true,
+      "latency_ms": 3.823297588878564,
+      "vib_g": 2.1932917136656767,
+      "pos3d": 0.795,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 29,
+      "ok": true,
+      "latency_ms": 2.1433515101872316,
+      "vib_g": 0.40479420212881756,
+      "pos3d": 0.23,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 30,
+      "ok": true,
+      "latency_ms": 3.896968238470939,
+      "vib_g": 0.07151093600354874,
+      "pos3d": 0.13,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 31,
+      "ok": true,
+      "latency_ms": 2.0382455848151113,
+      "vib_g": 0.16757445949266203,
+      "pos3d": 0.191,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 32,
+      "ok": true,
+      "latency_ms": 2.4085277996469774,
+      "vib_g": 0.4174768236961873,
+      "pos3d": 0.147,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 33,
+      "ok": true,
+      "latency_ms": 3.8959636734208067,
+      "vib_g": 0.21413529538147652,
+      "pos3d": 0.104,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 34,
+      "ok": true,
+      "latency_ms": 2.1371413229534135,
+      "vib_g": 1.0334048440828236,
+      "pos3d": 0.218,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 35,
+      "ok": true,
+      "latency_ms": 0.9320606632924172,
+      "vib_g": 2.153207243185323,
+      "pos3d": 0.508,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 36,
+      "ok": true,
+      "latency_ms": 1.0715146299277167,
+      "vib_g": 1.7521324839411467,
+      "pos3d": 0.492,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 37,
+      "ok": true,
+      "latency_ms": 3.3283450932927905,
+      "vib_g": 2.453948245279483,
+      "pos3d": 0.438,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 38,
+      "ok": true,
+      "latency_ms": 3.799416118950399,
+      "vib_g": 1.550281050708254,
+      "pos3d": 0.157,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 39,
+      "ok": true,
+      "latency_ms": 3.091680059968481,
+      "vib_g": 1.043236838220529,
+      "pos3d": 0.148,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 40,
+      "ok": true,
+      "latency_ms": 3.2181384576191445,
+      "vib_g": 0.36354904170912167,
+      "pos3d": 0.175,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 41,
+      "ok": true,
+      "latency_ms": 2.959454172929886,
+      "vib_g": 1.2045441836598394,
+      "pos3d": 0.274,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 42,
+      "ok": true,
+      "latency_ms": 0.8466905827948401,
+      "vib_g": 2.004261205268331,
+      "pos3d": 0.323,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 43,
+      "ok": true,
+      "latency_ms": 3.260806563431634,
+      "vib_g": 0.6964888856715625,
+      "pos3d": 0.19,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 44,
+      "ok": true,
+      "latency_ms": 0.6925079754017094,
+      "vib_g": 0.7632618997003565,
+      "pos3d": 0.453,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 45,
+      "ok": true,
+      "latency_ms": 1.6159257073702715,
+      "vib_g": 1.3696040150905031,
+      "pos3d": 0.411,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 46,
+      "ok": true,
+      "latency_ms": 0.10417418299494553,
+      "vib_g": 2.049085146915867,
+      "pos3d": 0.15,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 47,
+      "ok": true,
+      "latency_ms": 2.315924241583231,
+      "vib_g": 0.14949640009174703,
+      "pos3d": 0.203,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 48,
+      "ok": true,
+      "latency_ms": 2.097736424879444,
+      "vib_g": 1.9977023893037913,
+      "pos3d": 0.307,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 49,
+      "ok": true,
+      "latency_ms": 0.5380603473328949,
+      "vib_g": 1.052745284512289,
+      "pos3d": 0.169,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 50,
+      "ok": true,
+      "latency_ms": 0.7202725902034801,
+      "vib_g": 2.3380523105093602,
+      "pos3d": 0.316,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 51,
+      "ok": true,
+      "latency_ms": 3.165435301396907,
+      "vib_g": 1.9598683351096549,
+      "pos3d": 0.227,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 52,
+      "ok": true,
+      "latency_ms": 3.9424980523918176,
+      "vib_g": 0.8076325035471223,
+      "pos3d": 0.335,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 53,
+      "ok": true,
+      "latency_ms": 3.8439727548786995,
+      "vib_g": 1.7376951428995722,
+      "pos3d": 0.215,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 54,
+      "ok": true,
+      "latency_ms": 0.36096163336020337,
+      "vib_g": 2.2821459742051924,
+      "pos3d": 0.352,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 55,
+      "ok": true,
+      "latency_ms": 0.7382153412081327,
+      "vib_g": 1.8108954545512197,
+      "pos3d": 0.289,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 56,
+      "ok": true,
+      "latency_ms": 3.698325430840856,
+      "vib_g": 1.67089128958694,
+      "pos3d": 0.378,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 57,
+      "ok": true,
+      "latency_ms": 3.64683713221408,
+      "vib_g": 0.8076981899918778,
+      "pos3d": 0.342,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 58,
+      "ok": true,
+      "latency_ms": 2.1737135253583597,
+      "vib_g": 0.3812868581615503,
+      "pos3d": 0.109,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 59,
+      "ok": true,
+      "latency_ms": 1.1687819260781462,
+      "vib_g": 1.9739754200658186,
+      "pos3d": 0.501,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 60,
+      "ok": true,
+      "latency_ms": 3.7200312715890913,
+      "vib_g": 0.5561339195297319,
+      "pos3d": 0.238,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 61,
+      "ok": true,
+      "latency_ms": 1.2210524537095602,
+      "vib_g": 1.326241043709936,
+      "pos3d": 0.289,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 62,
+      "ok": true,
+      "latency_ms": 1.6442860824016425,
+      "vib_g": 0.47155611765819894,
+      "pos3d": 0.064,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 63,
+      "ok": true,
+      "latency_ms": 4.337350189652835,
+      "vib_g": 1.1083569461773293,
+      "pos3d": 0.209,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 64,
+      "ok": true,
+      "latency_ms": 4.797256257094695,
+      "vib_g": 1.7911173626472734,
+      "pos3d": 0.389,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 65,
+      "ok": true,
+      "latency_ms": 1.081941136412042,
+      "vib_g": 1.1847239237416827,
+      "pos3d": 0.173,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 66,
+      "ok": true,
+      "latency_ms": 2.6215977496583505,
+      "vib_g": 0.08545341784333804,
+      "pos3d": 0.276,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 67,
+      "ok": true,
+      "latency_ms": 4.473259402321012,
+      "vib_g": 1.1505145329327537,
+      "pos3d": 0.241,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 68,
+      "ok": true,
+      "latency_ms": 2.72978093490543,
+      "vib_g": 0.33793580317239363,
+      "pos3d": 0.311,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 69,
+      "ok": true,
+      "latency_ms": 4.534933970674687,
+      "vib_g": 0.1455834717659804,
+      "pos3d": 0.231,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 70,
+      "ok": true,
+      "latency_ms": 0.19332181377965277,
+      "vib_g": 0.3375945832845126,
+      "pos3d": 0.132,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 71,
+      "ok": true,
+      "latency_ms": 1.0376842149707621,
+      "vib_g": 0.4472182757096363,
+      "pos3d": 0.433,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 72,
+      "ok": true,
+      "latency_ms": 2.9498089471679703,
+      "vib_g": 2.2522707309230876,
+      "pos3d": 0.58,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 73,
+      "ok": true,
+      "latency_ms": 0.27317443527874685,
+      "vib_g": 1.7103917717106811,
+      "pos3d": 0.197,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 74,
+      "ok": true,
+      "latency_ms": 4.577430211602136,
+      "vib_g": 0.5657935166713507,
+      "pos3d": 0.19,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 75,
+      "ok": true,
+      "latency_ms": 0.042600457193452956,
+      "vib_g": 1.049003032598169,
+      "pos3d": 0.38,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 76,
+      "ok": true,
+      "latency_ms": 2.1779822691623116,
+      "vib_g": 1.5162202310514037,
+      "pos3d": 0.483,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 77,
+      "ok": true,
+      "latency_ms": 4.382875579159249,
+      "vib_g": 2.1203423808133874,
+      "pos3d": 0.419,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 78,
+      "ok": true,
+      "latency_ms": 2.9283464320629853,
+      "vib_g": 2.4679816239766477,
+      "pos3d": 0.379,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 79,
+      "ok": true,
+      "latency_ms": 2.5227821302514077,
+      "vib_g": 0.7306785822448186,
+      "pos3d": 0.182,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 80,
+      "ok": true,
+      "latency_ms": 2.781298792991688,
+      "vib_g": 0.019965810786399252,
+      "pos3d": 0.417,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 81,
+      "ok": true,
+      "latency_ms": 2.5291941954930506,
+      "vib_g": 0.4827515705733648,
+      "pos3d": 0.144,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 82,
+      "ok": true,
+      "latency_ms": 1.960711497766494,
+      "vib_g": 0.9434229155596824,
+      "pos3d": 0.425,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 83,
+      "ok": true,
+      "latency_ms": 4.756858739502794,
+      "vib_g": 0.11804986666097306,
+      "pos3d": 0.357,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 84,
+      "ok": true,
+      "latency_ms": 4.8407609539637,
+      "vib_g": 2.4719132355576825,
+      "pos3d": 0.363,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 85,
+      "ok": true,
+      "latency_ms": 4.139708616644081,
+      "vib_g": 0.7914657852327689,
+      "pos3d": 0.175,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 86,
+      "ok": true,
+      "latency_ms": 0.4008909947223238,
+      "vib_g": 0.15252728269943866,
+      "pos3d": 0.412,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 87,
+      "ok": true,
+      "latency_ms": 3.588385504489949,
+      "vib_g": 2.4295875207028907,
+      "pos3d": 0.262,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 88,
+      "ok": true,
+      "latency_ms": 2.949352009982945,
+      "vib_g": 0.10758749764850473,
+      "pos3d": 0.149,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 89,
+      "ok": true,
+      "latency_ms": 2.6258303914704526,
+      "vib_g": 1.1111372620776532,
+      "pos3d": 0.327,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 90,
+      "ok": true,
+      "latency_ms": 2.7650760602491675,
+      "vib_g": 0.4234506689273482,
+      "pos3d": 0.188,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 91,
+      "ok": true,
+      "latency_ms": 2.752626307083959,
+      "vib_g": 2.3819088205047616,
+      "pos3d": 0.19,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 92,
+      "ok": true,
+      "latency_ms": 2.5021504587340426,
+      "vib_g": 0.5692062478661114,
+      "pos3d": 0.623,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 93,
+      "ok": true,
+      "latency_ms": 4.28883435234271,
+      "vib_g": 1.9907199913534044,
+      "pos3d": 3.406,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 94,
+      "ok": true,
+      "latency_ms": 3.970665483621426,
+      "vib_g": 1.9393252547880355,
+      "pos3d": 0.291,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 95,
+      "ok": true,
+      "latency_ms": 4.837340358941382,
+      "vib_g": 2.4339789546178774,
+      "pos3d": 0.52,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 96,
+      "ok": true,
+      "latency_ms": 3.370906432194809,
+      "vib_g": 0.6918015177798029,
+      "pos3d": 0.576,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 97,
+      "ok": true,
+      "latency_ms": 1.2825097525122742,
+      "vib_g": 2.2946173914166903,
+      "pos3d": 0.283,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 98,
+      "ok": true,
+      "latency_ms": 2.225515513179773,
+      "vib_g": 2.3858292211167824,
+      "pos3d": 0.307,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 99,
+      "ok": true,
+      "latency_ms": 3.476896024797776,
+      "vib_g": 1.3483400763597393,
+      "pos3d": 0.316,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 100,
+      "ok": true,
+      "latency_ms": 1.4693275008520257,
+      "vib_g": 2.385022854175251,
+      "pos3d": 0.279,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 101,
+      "ok": true,
+      "latency_ms": 1.0731471394376257,
+      "vib_g": 0.7896275152436788,
+      "pos3d": 0.101,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 102,
+      "ok": true,
+      "latency_ms": 0.8286152963047749,
+      "vib_g": 2.089086771401665,
+      "pos3d": 0.334,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 103,
+      "ok": true,
+      "latency_ms": 3.483739425902243,
+      "vib_g": 0.6430003730662598,
+      "pos3d": 0.372,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 104,
+      "ok": true,
+      "latency_ms": 4.152220606211296,
+      "vib_g": 0.9411521714480418,
+      "pos3d": 0.225,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 105,
+      "ok": true,
+      "latency_ms": 0.5457562889714812,
+      "vib_g": 1.770719951622814,
+      "pos3d": 0.281,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 106,
+      "ok": true,
+      "latency_ms": 4.500280916867629,
+      "vib_g": 0.7374894731747078,
+      "pos3d": 0.268,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 107,
+      "ok": true,
+      "latency_ms": 0.7518897961717169,
+      "vib_g": 0.4261325287125378,
+      "pos3d": 0.215,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 108,
+      "ok": true,
+      "latency_ms": 2.4754461667670924,
+      "vib_g": 1.0203789501391203,
+      "pos3d": 0.245,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 109,
+      "ok": true,
+      "latency_ms": 4.445405532370704,
+      "vib_g": 1.913714676514057,
+      "pos3d": 0.285,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 110,
+      "ok": true,
+      "latency_ms": 1.9759641965631014,
+      "vib_g": 0.15910833177695455,
+      "pos3d": 0.672,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 111,
+      "ok": true,
+      "latency_ms": 1.5338443251810419,
+      "vib_g": 1.090772490547662,
+      "pos3d": 0.174,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 112,
+      "ok": true,
+      "latency_ms": 3.8506374687511964,
+      "vib_g": 1.2121510241214029,
+      "pos3d": 0.226,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 113,
+      "ok": true,
+      "latency_ms": 3.5208775546689215,
+      "vib_g": 2.0069686072790334,
+      "pos3d": 0.473,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 114,
+      "ok": true,
+      "latency_ms": 1.3941503861310185,
+      "vib_g": 1.4931180977719674,
+      "pos3d": 0.588,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 115,
+      "ok": true,
+      "latency_ms": 0.2524741312566664,
+      "vib_g": 1.2151590360540907,
+      "pos3d": 0.139,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 116,
+      "ok": true,
+      "latency_ms": 0.5395549979658776,
+      "vib_g": 0.8238505895238729,
+      "pos3d": 0.726,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 117,
+      "ok": true,
+      "latency_ms": 0.8548114852482885,
+      "vib_g": 0.9027127210209052,
+      "pos3d": 0.421,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 118,
+      "ok": true,
+      "latency_ms": 2.492536061586951,
+      "vib_g": 1.3461062611870158,
+      "pos3d": 0.467,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 119,
+      "ok": true,
+      "latency_ms": 4.136203207512979,
+      "vib_g": 0.01311371192000782,
+      "pos3d": 0.321,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 120,
+      "ok": true,
+      "latency_ms": 0.08055096298857478,
+      "vib_g": 1.4754048776958024,
+      "pos3d": 0.132,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 121,
+      "ok": true,
+      "latency_ms": 1.6816546284475458,
+      "vib_g": 0.5573430489854914,
+      "pos3d": 0.294,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 122,
+      "ok": true,
+      "latency_ms": 0.3113957444303339,
+      "vib_g": 1.705826914255707,
+      "pos3d": 0.487,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 123,
+      "ok": true,
+      "latency_ms": 1.4438378046139295,
+      "vib_g": 1.9340565025273198,
+      "pos3d": 0.225,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 124,
+      "ok": true,
+      "latency_ms": 2.0064011098444077,
+      "vib_g": 0.6234815278608097,
+      "pos3d": 0.185,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 125,
+      "ok": true,
+      "latency_ms": 1.5858669085194987,
+      "vib_g": 2.1394063780328167,
+      "pos3d": 0.281,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 126,
+      "ok": true,
+      "latency_ms": 1.7418668720045078,
+      "vib_g": 0.9839937707473151,
+      "pos3d": 0.291,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 127,
+      "ok": true,
+      "latency_ms": 0.6750245128498739,
+      "vib_g": 2.1961970336603236,
+      "pos3d": 0.231,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 128,
+      "ok": true,
+      "latency_ms": 0.5849895789547077,
+      "vib_g": 0.012911188601627266,
+      "pos3d": 0.215,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 129,
+      "ok": true,
+      "latency_ms": 0.7112654562695031,
+      "vib_g": 0.10182393815761859,
+      "pos3d": 0.306,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 130,
+      "ok": true,
+      "latency_ms": 4.322221750957802,
+      "vib_g": 2.322556971820446,
+      "pos3d": 0.297,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 131,
+      "ok": true,
+      "latency_ms": 4.79340943181778,
+      "vib_g": 0.39611018800621456,
+      "pos3d": 0.211,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 132,
+      "ok": true,
+      "latency_ms": 1.4340177595817056,
+      "vib_g": 2.440416725429272,
+      "pos3d": 0.648,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 133,
+      "ok": true,
+      "latency_ms": 3.398466892924969,
+      "vib_g": 1.0144721640535959,
+      "pos3d": 0.26,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 134,
+      "ok": true,
+      "latency_ms": 3.801030500883234,
+      "vib_g": 0.014799435434666997,
+      "pos3d": 0.422,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 135,
+      "ok": true,
+      "latency_ms": 1.771442442533333,
+      "vib_g": 0.511427941667628,
+      "pos3d": 0.273,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 136,
+      "ok": true,
+      "latency_ms": 2.4296432690341945,
+      "vib_g": 2.397426347877863,
+      "pos3d": 0.514,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 137,
+      "ok": true,
+      "latency_ms": 4.008260292496386,
+      "vib_g": 0.8110189735233253,
+      "pos3d": 0.248,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 138,
+      "ok": true,
+      "latency_ms": 1.6457979890637935,
+      "vib_g": 0.12578982553676954,
+      "pos3d": 0.172,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 139,
+      "ok": true,
+      "latency_ms": 4.47058819240217,
+      "vib_g": 1.0870890736042773,
+      "pos3d": 0.498,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 140,
+      "ok": true,
+      "latency_ms": 2.280160205267641,
+      "vib_g": 0.18392891381066506,
+      "pos3d": 0.412,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 141,
+      "ok": true,
+      "latency_ms": 0.011634205421686139,
+      "vib_g": 1.1981110752400161,
+      "pos3d": 0.198,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 142,
+      "ok": true,
+      "latency_ms": 1.6810850032625713,
+      "vib_g": 1.6897035014852704,
+      "pos3d": 0.666,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 143,
+      "ok": true,
+      "latency_ms": 3.576679180841038,
+      "vib_g": 1.3581197746725007,
+      "pos3d": 0.3,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 144,
+      "ok": true,
+      "latency_ms": 2.2790989727927853,
+      "vib_g": 1.2045996070881895,
+      "pos3d": 0.276,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 145,
+      "ok": true,
+      "latency_ms": 1.3956656892372823,
+      "vib_g": 2.3523554688213446,
+      "pos3d": 0.392,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 146,
+      "ok": true,
+      "latency_ms": 1.3812450970527763,
+      "vib_g": 0.28939378398552956,
+      "pos3d": 0.42,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 147,
+      "ok": true,
+      "latency_ms": 1.838666907148487,
+      "vib_g": 1.3501020395902268,
+      "pos3d": 0.364,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 148,
+      "ok": true,
+      "latency_ms": 1.0257505251741672,
+      "vib_g": 0.8581998691588139,
+      "pos3d": 0.325,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 149,
+      "ok": true,
+      "latency_ms": 3.020528271321127,
+      "vib_g": 1.522694701877461,
+      "pos3d": 0.287,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 150,
+      "ok": true,
+      "latency_ms": 1.5653688879631045,
+      "vib_g": 0.12177282212789742,
+      "pos3d": 0.142,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 151,
+      "ok": true,
+      "latency_ms": 4.71267224929122,
+      "vib_g": 1.5502155116777114,
+      "pos3d": 0.266,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 152,
+      "ok": true,
+      "latency_ms": 3.345546625475932,
+      "vib_g": 1.5293327825530667,
+      "pos3d": 0.095,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 153,
+      "ok": true,
+      "latency_ms": 0.8759727717955956,
+      "vib_g": 1.6456646217708357,
+      "pos3d": 0.403,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 154,
+      "ok": true,
+      "latency_ms": 3.028905668063202,
+      "vib_g": 0.49091810160389576,
+      "pos3d": 0.239,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 155,
+      "ok": true,
+      "latency_ms": 4.793680731461401,
+      "vib_g": 0.9543708344062463,
+      "pos3d": 0.186,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 156,
+      "ok": true,
+      "latency_ms": 1.5146260273356582,
+      "vib_g": 0.18037468851746952,
+      "pos3d": 0.411,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 157,
+      "ok": true,
+      "latency_ms": 0.029565953710386506,
+      "vib_g": 2.054427479565129,
+      "pos3d": 0.306,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 158,
+      "ok": true,
+      "latency_ms": 1.9103902559740311,
+      "vib_g": 1.0293065665690526,
+      "pos3d": 0.566,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 159,
+      "ok": true,
+      "latency_ms": 3.431783029568848,
+      "vib_g": 1.7331775631484478,
+      "pos3d": 0.328,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 160,
+      "ok": true,
+      "latency_ms": 1.821065586106212,
+      "vib_g": 2.2652996841626796,
+      "pos3d": 0.205,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 161,
+      "ok": true,
+      "latency_ms": 0.15143549932811418,
+      "vib_g": 1.579751653263504,
+      "pos3d": 0.265,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 162,
+      "ok": true,
+      "latency_ms": 4.908375584334138,
+      "vib_g": 2.107122914164958,
+      "pos3d": 0.37,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 163,
+      "ok": true,
+      "latency_ms": 1.2389755453738145,
+      "vib_g": 0.11239604925362245,
+      "pos3d": 0.739,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 164,
+      "ok": true,
+      "latency_ms": 3.0992352441094067,
+      "vib_g": 1.5088929179678987,
+      "pos3d": 0.181,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 165,
+      "ok": true,
+      "latency_ms": 2.0271805619380108,
+      "vib_g": 2.4485228248913478,
+      "pos3d": 0.502,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 166,
+      "ok": true,
+      "latency_ms": 2.0039656721951444,
+      "vib_g": 1.6017863735912696,
+      "pos3d": 0.242,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 167,
+      "ok": true,
+      "latency_ms": 1.8091211147323623,
+      "vib_g": 2.2074543500615516,
+      "pos3d": 0.371,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 168,
+      "ok": true,
+      "latency_ms": 3.979277301249042,
+      "vib_g": 2.014686490944895,
+      "pos3d": 0.252,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 169,
+      "ok": true,
+      "latency_ms": 4.359991967449123,
+      "vib_g": 0.24454629550071716,
+      "pos3d": 0.188,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 170,
+      "ok": true,
+      "latency_ms": 0.11746572395988586,
+      "vib_g": 0.017607897520456883,
+      "pos3d": 0.244,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 171,
+      "ok": true,
+      "latency_ms": 4.557481579460672,
+      "vib_g": 1.9102287301776544,
+      "pos3d": 0.324,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 172,
+      "ok": true,
+      "latency_ms": 4.1617934310564495,
+      "vib_g": 1.7776069440055235,
+      "pos3d": 0.263,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 173,
+      "ok": true,
+      "latency_ms": 3.043889471986453,
+      "vib_g": 0.7015014144241574,
+      "pos3d": 0.11,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 174,
+      "ok": true,
+      "latency_ms": 2.891296590257602,
+      "vib_g": 0.41629765608226066,
+      "pos3d": 0.284,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 175,
+      "ok": true,
+      "latency_ms": 1.0102774370876448,
+      "vib_g": 1.4458440300901743,
+      "pos3d": 0.267,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 176,
+      "ok": true,
+      "latency_ms": 0.5745934420249772,
+      "vib_g": 1.0386668447517875,
+      "pos3d": 0.242,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 177,
+      "ok": true,
+      "latency_ms": 2.410086188810374,
+      "vib_g": 2.091303715558237,
+      "pos3d": 0.152,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 178,
+      "ok": true,
+      "latency_ms": 2.138337382176673,
+      "vib_g": 0.12109237064282741,
+      "pos3d": 0.192,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 179,
+      "ok": true,
+      "latency_ms": 0.6512553848344949,
+      "vib_g": 0.2747348034681682,
+      "pos3d": 0.421,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 180,
+      "ok": true,
+      "latency_ms": 0.28599880358183116,
+      "vib_g": 0.5847828840277094,
+      "pos3d": 0.216,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 181,
+      "ok": true,
+      "latency_ms": 4.622979081609031,
+      "vib_g": 0.34024585161829934,
+      "pos3d": 0.157,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 182,
+      "ok": true,
+      "latency_ms": 0.4565634357635112,
+      "vib_g": 1.0960412985243275,
+      "pos3d": 0.257,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 183,
+      "ok": true,
+      "latency_ms": 0.5599807476315011,
+      "vib_g": 1.748728861894355,
+      "pos3d": 0.316,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 184,
+      "ok": true,
+      "latency_ms": 1.9458174324391688,
+      "vib_g": 1.486601080985741,
+      "pos3d": 0.404,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 185,
+      "ok": true,
+      "latency_ms": 4.440201410587486,
+      "vib_g": 1.9755461213395311,
+      "pos3d": 0.226,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 186,
+      "ok": true,
+      "latency_ms": 1.7637843862912512,
+      "vib_g": 0.01531920390219571,
+      "pos3d": 0.249,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 187,
+      "ok": true,
+      "latency_ms": 0.8975345909783783,
+      "vib_g": 2.24722418235954,
+      "pos3d": 0.187,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 188,
+      "ok": true,
+      "latency_ms": 2.1585266593917063,
+      "vib_g": 0.6977140433840151,
+      "pos3d": 0.461,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 189,
+      "ok": true,
+      "latency_ms": 4.3725857032293,
+      "vib_g": 1.3455288025218626,
+      "pos3d": 324.954,
+      "fused": 431,
+      "rejected": 169
+    },
+    {
+      "case": 190,
+      "ok": true,
+      "latency_ms": 3.2535424376406303,
+      "vib_g": 2.2321620118088816,
+      "pos3d": 0.242,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 191,
+      "ok": true,
+      "latency_ms": 4.600586437294977,
+      "vib_g": 1.2289049539975192,
+      "pos3d": 0.181,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 192,
+      "ok": true,
+      "latency_ms": 3.5701490320878846,
+      "vib_g": 0.1143061627759942,
+      "pos3d": 0.207,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 193,
+      "ok": true,
+      "latency_ms": 0.18694594436369286,
+      "vib_g": 1.6124771338498667,
+      "pos3d": 0.202,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 194,
+      "ok": true,
+      "latency_ms": 2.606535807918742,
+      "vib_g": 0.7570533152576266,
+      "pos3d": 0.165,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 195,
+      "ok": true,
+      "latency_ms": 4.880123430974337,
+      "vib_g": 2.177297017961071,
+      "pos3d": 0.255,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 196,
+      "ok": true,
+      "latency_ms": 3.756308421233339,
+      "vib_g": 0.7968448078216337,
+      "pos3d": 0.171,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 197,
+      "ok": true,
+      "latency_ms": 2.888187882952164,
+      "vib_g": 0.7245482779742013,
+      "pos3d": 0.179,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 198,
+      "ok": true,
+      "latency_ms": 1.2760369472604833,
+      "vib_g": 1.9754887176414528,
+      "pos3d": 0.206,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 199,
+      "ok": true,
+      "latency_ms": 0.07453609524295468,
+      "vib_g": 2.0505631583939485,
+      "pos3d": 0.149,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 200,
+      "ok": true,
+      "latency_ms": 3.0208867435059195,
+      "vib_g": 1.4783462705035673,
+      "pos3d": 0.15,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 201,
+      "ok": true,
+      "latency_ms": 2.1513768552993184,
+      "vib_g": 1.2147370937089474,
+      "pos3d": 0.151,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 202,
+      "ok": true,
+      "latency_ms": 4.327814889754654,
+      "vib_g": 2.2963950947966256,
+      "pos3d": 0.198,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 203,
+      "ok": true,
+      "latency_ms": 3.6126955547592674,
+      "vib_g": 2.1237536699696413,
+      "pos3d": 0.404,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 204,
+      "ok": true,
+      "latency_ms": 2.0265735332268853,
+      "vib_g": 1.2782369287794966,
+      "pos3d": 0.255,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 205,
+      "ok": true,
+      "latency_ms": 2.3055301308735903,
+      "vib_g": 0.5982974367109015,
+      "pos3d": 0.244,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 206,
+      "ok": true,
+      "latency_ms": 2.9294852297090825,
+      "vib_g": 2.1718130211054145,
+      "pos3d": 0.314,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 207,
+      "ok": true,
+      "latency_ms": 1.621568074726964,
+      "vib_g": 0.003057819268702522,
+      "pos3d": 0.51,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 208,
+      "ok": true,
+      "latency_ms": 3.37770827997962,
+      "vib_g": 1.9678527771180485,
+      "pos3d": 0.427,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 209,
+      "ok": true,
+      "latency_ms": 2.803205106991201,
+      "vib_g": 2.0851109529981176,
+      "pos3d": 0.305,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 210,
+      "ok": true,
+      "latency_ms": 0.9267399133591842,
+      "vib_g": 2.243961449965533,
+      "pos3d": 0.494,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 211,
+      "ok": true,
+      "latency_ms": 0.5599370874163829,
+      "vib_g": 0.4065588431102582,
+      "pos3d": 0.393,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 212,
+      "ok": true,
+      "latency_ms": 4.912160150011842,
+      "vib_g": 1.3307305319612954,
+      "pos3d": 0.19,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 213,
+      "ok": true,
+      "latency_ms": 1.7899392107240724,
+      "vib_g": 2.0941761261852494,
+      "pos3d": 0.289,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 214,
+      "ok": true,
+      "latency_ms": 3.663262529737476,
+      "vib_g": 1.7248403849100353,
+      "pos3d": 0.184,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 215,
+      "ok": true,
+      "latency_ms": 1.6437858700915249,
+      "vib_g": 0.25187516980947317,
+      "pos3d": 0.493,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 216,
+      "ok": true,
+      "latency_ms": 4.415257811898608,
+      "vib_g": 0.17119696886271268,
+      "pos3d": 0.602,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 217,
+      "ok": true,
+      "latency_ms": 0.4586947889546134,
+      "vib_g": 1.3901860046846761,
+      "pos3d": 0.138,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 218,
+      "ok": true,
+      "latency_ms": 0.3154125028836047,
+      "vib_g": 0.12461178374861243,
+      "pos3d": 0.321,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 219,
+      "ok": true,
+      "latency_ms": 1.8149533999644307,
+      "vib_g": 0.28048353759682065,
+      "pos3d": 0.152,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 220,
+      "ok": true,
+      "latency_ms": 1.8232846771511235,
+      "vib_g": 1.742830446627375,
+      "pos3d": 0.239,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 221,
+      "ok": true,
+      "latency_ms": 3.4464166597771846,
+      "vib_g": 0.7005990139060797,
+      "pos3d": 0.281,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 222,
+      "ok": true,
+      "latency_ms": 4.817021602211646,
+      "vib_g": 0.5410167044189709,
+      "pos3d": 0.302,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 223,
+      "ok": true,
+      "latency_ms": 4.965842393336447,
+      "vib_g": 0.9052652108186463,
+      "pos3d": 0.147,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 224,
+      "ok": true,
+      "latency_ms": 3.9285729804907805,
+      "vib_g": 1.5679552724539183,
+      "pos3d": 0.351,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 225,
+      "ok": true,
+      "latency_ms": 3.016439139954989,
+      "vib_g": 0.22200180934672437,
+      "pos3d": 0.43,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 226,
+      "ok": true,
+      "latency_ms": 4.264948363783589,
+      "vib_g": 0.14682952202186073,
+      "pos3d": 0.299,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 227,
+      "ok": true,
+      "latency_ms": 2.626790119923287,
+      "vib_g": 2.345169107400892,
+      "pos3d": 0.315,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 228,
+      "ok": true,
+      "latency_ms": 3.115780923837374,
+      "vib_g": 1.998078357405658,
+      "pos3d": 0.349,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 229,
+      "ok": true,
+      "latency_ms": 3.982517064522308,
+      "vib_g": 0.3219963887551486,
+      "pos3d": 0.209,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 230,
+      "ok": true,
+      "latency_ms": 4.483880326569267,
+      "vib_g": 1.9046728168108662,
+      "pos3d": 0.234,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 231,
+      "ok": true,
+      "latency_ms": 1.21330258881715,
+      "vib_g": 2.1310926135059933,
+      "pos3d": 0.074,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 232,
+      "ok": true,
+      "latency_ms": 3.5601113353761003,
+      "vib_g": 2.3414441424249857,
+      "pos3d": 0.382,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 233,
+      "ok": true,
+      "latency_ms": 0.20888306423149428,
+      "vib_g": 1.6326665257534303,
+      "pos3d": 0.724,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 234,
+      "ok": true,
+      "latency_ms": 1.4979305016236837,
+      "vib_g": 1.4648479657590308,
+      "pos3d": 0.236,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 235,
+      "ok": true,
+      "latency_ms": 2.7948726553743484,
+      "vib_g": 2.0584663408456,
+      "pos3d": 0.229,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 236,
+      "ok": true,
+      "latency_ms": 2.0929186047252863,
+      "vib_g": 2.462838798848929,
+      "pos3d": 0.324,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 237,
+      "ok": true,
+      "latency_ms": 4.764361709187389,
+      "vib_g": 2.2610146800998883,
+      "pos3d": 0.258,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 238,
+      "ok": true,
+      "latency_ms": 3.337998122193298,
+      "vib_g": 0.5864307820402361,
+      "pos3d": 0.145,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 239,
+      "ok": true,
+      "latency_ms": 4.119386220089229,
+      "vib_g": 1.9538028498878435,
+      "pos3d": 0.366,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 240,
+      "ok": true,
+      "latency_ms": 3.0759006773817856,
+      "vib_g": 0.9909818710625939,
+      "pos3d": 0.387,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 241,
+      "ok": true,
+      "latency_ms": 0.8785679911374006,
+      "vib_g": 0.7772885729068004,
+      "pos3d": 0.727,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 242,
+      "ok": true,
+      "latency_ms": 1.1450192116771498,
+      "vib_g": 0.6704633130239215,
+      "pos3d": 0.234,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 243,
+      "ok": true,
+      "latency_ms": 3.745243292079599,
+      "vib_g": 1.4002748291785942,
+      "pos3d": 0.234,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 244,
+      "ok": true,
+      "latency_ms": 4.333952617919437,
+      "vib_g": 0.2453712923386145,
+      "pos3d": 0.284,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 245,
+      "ok": true,
+      "latency_ms": 3.3945725494026964,
+      "vib_g": 0.7428306786272387,
+      "pos3d": 0.223,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 246,
+      "ok": true,
+      "latency_ms": 2.0836963898667973,
+      "vib_g": 1.809793023020303,
+      "pos3d": 0.256,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 247,
+      "ok": true,
+      "latency_ms": 0.3523994936504282,
+      "vib_g": 1.4803628027370184,
+      "pos3d": 0.307,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 248,
+      "ok": true,
+      "latency_ms": 2.439820200777679,
+      "vib_g": 1.925271823871637,
+      "pos3d": 3.042,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 249,
+      "ok": true,
+      "latency_ms": 0.9084854715549512,
+      "vib_g": 1.0418942980967296,
+      "pos3d": 0.245,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 250,
+      "ok": true,
+      "latency_ms": 3.5227663655101322,
+      "vib_g": 0.8714422650601489,
+      "pos3d": 0.127,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 251,
+      "ok": true,
+      "latency_ms": 3.2074502257416624,
+      "vib_g": 1.0342642712517367,
+      "pos3d": 0.12,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 252,
+      "ok": true,
+      "latency_ms": 3.0117388329359813,
+      "vib_g": 0.4306830675911752,
+      "pos3d": 0.492,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 253,
+      "ok": true,
+      "latency_ms": 0.938747758035956,
+      "vib_g": 2.06753552171088,
+      "pos3d": 0.567,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 254,
+      "ok": true,
+      "latency_ms": 0.22650948668221593,
+      "vib_g": 0.2887525769683269,
+      "pos3d": 0.528,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 255,
+      "ok": true,
+      "latency_ms": 3.721122437472555,
+      "vib_g": 0.40897669685737825,
+      "pos3d": 0.193,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 256,
+      "ok": true,
+      "latency_ms": 4.077353714347179,
+      "vib_g": 2.3983050423007746,
+      "pos3d": 0.285,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 257,
+      "ok": true,
+      "latency_ms": 0.3929273264260075,
+      "vib_g": 0.8847531207190779,
+      "pos3d": 0.594,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 258,
+      "ok": true,
+      "latency_ms": 1.2283983416853868,
+      "vib_g": 0.8407655156678917,
+      "pos3d": 0.288,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 259,
+      "ok": true,
+      "latency_ms": 0.92489405818936,
+      "vib_g": 0.7986587255004202,
+      "pos3d": 0.375,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 260,
+      "ok": true,
+      "latency_ms": 1.4868289307702487,
+      "vib_g": 1.7021828589781127,
+      "pos3d": 0.351,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 261,
+      "ok": true,
+      "latency_ms": 2.018971413150139,
+      "vib_g": 0.9107248591729233,
+      "pos3d": 0.449,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 262,
+      "ok": true,
+      "latency_ms": 1.9517121079069872,
+      "vib_g": 2.2845800266362493,
+      "pos3d": 0.28,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 263,
+      "ok": true,
+      "latency_ms": 2.3890224172984222,
+      "vib_g": 0.7596076442734887,
+      "pos3d": 0.478,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 264,
+      "ok": true,
+      "latency_ms": 0.7848651594820821,
+      "vib_g": 1.818563638686853,
+      "pos3d": 0.402,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 265,
+      "ok": true,
+      "latency_ms": 4.040463669559328,
+      "vib_g": 1.6370362007820318,
+      "pos3d": 0.652,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 266,
+      "ok": true,
+      "latency_ms": 2.8769213937354734,
+      "vib_g": 1.8985855941172605,
+      "pos3d": 0.323,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 267,
+      "ok": true,
+      "latency_ms": 0.6071348596121123,
+      "vib_g": 0.59241389898093,
+      "pos3d": 0.615,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 268,
+      "ok": true,
+      "latency_ms": 3.495589591017756,
+      "vib_g": 0.9825695091634618,
+      "pos3d": 0.214,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 269,
+      "ok": true,
+      "latency_ms": 4.9721183289182225,
+      "vib_g": 1.0613037098671412,
+      "pos3d": 0.132,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 270,
+      "ok": true,
+      "latency_ms": 2.918188374042016,
+      "vib_g": 2.0302942073071755,
+      "pos3d": 0.264,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 271,
+      "ok": true,
+      "latency_ms": 0.47871157350521276,
+      "vib_g": 0.04196647121213981,
+      "pos3d": 0.107,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 272,
+      "ok": true,
+      "latency_ms": 0.34214982384435155,
+      "vib_g": 1.6843025176492734,
+      "pos3d": 0.433,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 273,
+      "ok": true,
+      "latency_ms": 0.36879402919566096,
+      "vib_g": 0.8795738740825008,
+      "pos3d": 0.105,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 274,
+      "ok": true,
+      "latency_ms": 0.08549121552523575,
+      "vib_g": 0.5554672425116436,
+      "pos3d": 0.138,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 275,
+      "ok": true,
+      "latency_ms": 2.47919686130948,
+      "vib_g": 0.7617834791405789,
+      "pos3d": 0.425,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 276,
+      "ok": true,
+      "latency_ms": 3.443982160675167,
+      "vib_g": 0.8689479544582812,
+      "pos3d": 0.181,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 277,
+      "ok": true,
+      "latency_ms": 2.454659589719228,
+      "vib_g": 0.25594098961825823,
+      "pos3d": 0.422,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 278,
+      "ok": true,
+      "latency_ms": 0.32059327198835585,
+      "vib_g": 0.09781468042105501,
+      "pos3d": 0.319,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 279,
+      "ok": true,
+      "latency_ms": 3.089282300962696,
+      "vib_g": 0.8748376820359088,
+      "pos3d": 0.189,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 280,
+      "ok": true,
+      "latency_ms": 1.7537019550769395,
+      "vib_g": 0.4205057103073001,
+      "pos3d": 0.11,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 281,
+      "ok": true,
+      "latency_ms": 1.7903977651487963,
+      "vib_g": 2.4949075984035183,
+      "pos3d": 0.259,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 282,
+      "ok": true,
+      "latency_ms": 4.6400671435414385,
+      "vib_g": 0.5092054312156156,
+      "pos3d": 0.353,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 283,
+      "ok": true,
+      "latency_ms": 4.045173985643539,
+      "vib_g": 0.9527302139755456,
+      "pos3d": 0.155,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 284,
+      "ok": true,
+      "latency_ms": 1.7064730849646486,
+      "vib_g": 0.27762776629750296,
+      "pos3d": 0.351,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 285,
+      "ok": true,
+      "latency_ms": 0.08791975523742057,
+      "vib_g": 1.9143862856299496,
+      "pos3d": 0.59,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 286,
+      "ok": true,
+      "latency_ms": 3.657478136128207,
+      "vib_g": 1.301092338673528,
+      "pos3d": 0.374,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 287,
+      "ok": true,
+      "latency_ms": 4.967492262236676,
+      "vib_g": 0.9137045212821104,
+      "pos3d": 0.152,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 288,
+      "ok": true,
+      "latency_ms": 0.26577989712061656,
+      "vib_g": 0.2614095986752721,
+      "pos3d": 0.423,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 289,
+      "ok": true,
+      "latency_ms": 2.33544065603661,
+      "vib_g": 0.656023592622737,
+      "pos3d": 0.361,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 290,
+      "ok": true,
+      "latency_ms": 4.869845526371288,
+      "vib_g": 0.7093479972554356,
+      "pos3d": 0.196,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 291,
+      "ok": true,
+      "latency_ms": 1.6590835270582356,
+      "vib_g": 0.6454105196274404,
+      "pos3d": 0.46,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 292,
+      "ok": true,
+      "latency_ms": 1.6821380427760395,
+      "vib_g": 1.4587332242332163,
+      "pos3d": 0.299,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 293,
+      "ok": true,
+      "latency_ms": 0.5840687851146092,
+      "vib_g": 1.5889772092310173,
+      "pos3d": 0.197,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 294,
+      "ok": true,
+      "latency_ms": 0.7698380446963277,
+      "vib_g": 2.4892918747084325,
+      "pos3d": 0.379,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 295,
+      "ok": true,
+      "latency_ms": 3.8992341159337514,
+      "vib_g": 0.550843002321737,
+      "pos3d": 0.111,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 296,
+      "ok": true,
+      "latency_ms": 1.3346969431813533,
+      "vib_g": 0.7578308867895667,
+      "pos3d": 0.257,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 297,
+      "ok": true,
+      "latency_ms": 0.6866254805412125,
+      "vib_g": 1.6418615999166866,
+      "pos3d": 0.64,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 298,
+      "ok": true,
+      "latency_ms": 3.5707381828903118,
+      "vib_g": 0.6226944407243293,
+      "pos3d": 0.151,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 299,
+      "ok": true,
+      "latency_ms": 4.493374917291071,
+      "vib_g": 1.1355581698634007,
+      "pos3d": 0.584,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 300,
+      "ok": true,
+      "latency_ms": 3.673170948836205,
+      "vib_g": 0.4330882385985724,
+      "pos3d": 0.22,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 301,
+      "ok": true,
+      "latency_ms": 0.10589597007162,
+      "vib_g": 0.07754274842262432,
+      "pos3d": 0.297,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 302,
+      "ok": true,
+      "latency_ms": 4.877254515799597,
+      "vib_g": 0.3433184642859122,
+      "pos3d": 0.257,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 303,
+      "ok": true,
+      "latency_ms": 1.3485255179105904,
+      "vib_g": 1.378410102550711,
+      "pos3d": 0.173,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 304,
+      "ok": true,
+      "latency_ms": 4.02794056232514,
+      "vib_g": 2.1625039991464985,
+      "pos3d": 0.31,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 305,
+      "ok": true,
+      "latency_ms": 0.20053417770291185,
+      "vib_g": 2.2919974146500732,
+      "pos3d": 0.557,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 306,
+      "ok": true,
+      "latency_ms": 4.113374212104359,
+      "vib_g": 1.5275041693369786,
+      "pos3d": 0.461,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 307,
+      "ok": true,
+      "latency_ms": 2.015283588793176,
+      "vib_g": 1.3567691627798697,
+      "pos3d": 0.306,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 308,
+      "ok": true,
+      "latency_ms": 3.6114177402291476,
+      "vib_g": 1.288166337706445,
+      "pos3d": 0.467,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 309,
+      "ok": true,
+      "latency_ms": 4.956891862516695,
+      "vib_g": 1.4165893842483837,
+      "pos3d": 0.37,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 310,
+      "ok": true,
+      "latency_ms": 2.4330671867352405,
+      "vib_g": 0.7767372416490231,
+      "pos3d": 0.376,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 311,
+      "ok": true,
+      "latency_ms": 1.965089871309225,
+      "vib_g": 0.5469417432876469,
+      "pos3d": 0.545,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 312,
+      "ok": true,
+      "latency_ms": 3.0180040746439247,
+      "vib_g": 1.067443046376353,
+      "pos3d": 0.404,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 313,
+      "ok": true,
+      "latency_ms": 2.5193642122012156,
+      "vib_g": 2.062505484658803,
+      "pos3d": 0.374,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 314,
+      "ok": true,
+      "latency_ms": 2.0645395777945943,
+      "vib_g": 0.4766137441091009,
+      "pos3d": 0.114,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 315,
+      "ok": true,
+      "latency_ms": 3.831376450511569,
+      "vib_g": 0.698218464086833,
+      "pos3d": 0.286,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 316,
+      "ok": true,
+      "latency_ms": 0.6641012596160961,
+      "vib_g": 2.087143743890351,
+      "pos3d": 0.355,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 317,
+      "ok": true,
+      "latency_ms": 0.29476047370522673,
+      "vib_g": 0.20512159783647427,
+      "pos3d": 0.248,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 318,
+      "ok": true,
+      "latency_ms": 1.1413766996445651,
+      "vib_g": 0.6904055737271697,
+      "pos3d": 0.435,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 319,
+      "ok": true,
+      "latency_ms": 2.8382561305176663,
+      "vib_g": 0.09237909734033767,
+      "pos3d": 0.289,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 320,
+      "ok": true,
+      "latency_ms": 4.3551490593230415,
+      "vib_g": 2.0844506972290002,
+      "pos3d": 0.098,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 321,
+      "ok": true,
+      "latency_ms": 3.618808979447995,
+      "vib_g": 0.46211740240499816,
+      "pos3d": 0.119,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 322,
+      "ok": true,
+      "latency_ms": 4.142206310790163,
+      "vib_g": 1.7154492780785833,
+      "pos3d": 0.221,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 323,
+      "ok": true,
+      "latency_ms": 1.7835398174721155,
+      "vib_g": 2.190609333771478,
+      "pos3d": 0.446,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 324,
+      "ok": true,
+      "latency_ms": 0.943651655896875,
+      "vib_g": 1.6643097531487947,
+      "pos3d": 0.334,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 325,
+      "ok": true,
+      "latency_ms": 4.349239650731893,
+      "vib_g": 1.1830454057709905,
+      "pos3d": 0.315,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 326,
+      "ok": true,
+      "latency_ms": 2.6485009516011258,
+      "vib_g": 0.677621335294814,
+      "pos3d": 0.165,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 327,
+      "ok": true,
+      "latency_ms": 3.300400879560677,
+      "vib_g": 0.25510509794707176,
+      "pos3d": 0.371,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 328,
+      "ok": true,
+      "latency_ms": 1.050097554434658,
+      "vib_g": 2.0852060311103706,
+      "pos3d": 0.458,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 329,
+      "ok": true,
+      "latency_ms": 1.1662778268670133,
+      "vib_g": 0.5073116686225942,
+      "pos3d": 0.135,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 330,
+      "ok": true,
+      "latency_ms": 3.970733605083936,
+      "vib_g": 0.17498357930706226,
+      "pos3d": 0.124,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 331,
+      "ok": true,
+      "latency_ms": 0.2547740101546053,
+      "vib_g": 0.8567388251080521,
+      "pos3d": 0.542,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 332,
+      "ok": true,
+      "latency_ms": 4.072943749369044,
+      "vib_g": 1.3509426779818334,
+      "pos3d": 0.321,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 333,
+      "ok": true,
+      "latency_ms": 4.426847418133901,
+      "vib_g": 1.0011466900844093,
+      "pos3d": 0.407,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 334,
+      "ok": true,
+      "latency_ms": 3.44839523884168,
+      "vib_g": 0.7702584512045298,
+      "pos3d": 0.264,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 335,
+      "ok": true,
+      "latency_ms": 1.2554386161983322,
+      "vib_g": 2.257187093476272,
+      "pos3d": 0.776,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 336,
+      "ok": true,
+      "latency_ms": 1.202303546765134,
+      "vib_g": 0.8330785691492573,
+      "pos3d": 0.281,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 337,
+      "ok": true,
+      "latency_ms": 1.4021143736316222,
+      "vib_g": 1.4403186744017216,
+      "pos3d": 0.188,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 338,
+      "ok": true,
+      "latency_ms": 2.80099529777297,
+      "vib_g": 2.0096518933461156,
+      "pos3d": 0.171,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 339,
+      "ok": true,
+      "latency_ms": 3.729310677203295,
+      "vib_g": 1.3010494748308263,
+      "pos3d": 0.175,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 340,
+      "ok": true,
+      "latency_ms": 4.287276969772436,
+      "vib_g": 1.6039468455202697,
+      "pos3d": 0.259,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 341,
+      "ok": true,
+      "latency_ms": 4.034591172884715,
+      "vib_g": 0.9522657812280777,
+      "pos3d": 0.421,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 342,
+      "ok": true,
+      "latency_ms": 2.0840338045666162,
+      "vib_g": 0.9971071777796076,
+      "pos3d": 0.298,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 343,
+      "ok": true,
+      "latency_ms": 0.6139814462404736,
+      "vib_g": 0.18296404656026166,
+      "pos3d": 0.325,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 344,
+      "ok": true,
+      "latency_ms": 2.9228432372915525,
+      "vib_g": 1.2432522253041354,
+      "pos3d": 0.362,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 345,
+      "ok": true,
+      "latency_ms": 4.967245309434718,
+      "vib_g": 1.786774764448678,
+      "pos3d": 0.436,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 346,
+      "ok": true,
+      "latency_ms": 0.6652737707203715,
+      "vib_g": 2.40321814005675,
+      "pos3d": 0.17,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 347,
+      "ok": true,
+      "latency_ms": 3.351123342459357,
+      "vib_g": 1.25498375528741,
+      "pos3d": 0.281,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 348,
+      "ok": true,
+      "latency_ms": 1.329149720168505,
+      "vib_g": 2.1489103183624416,
+      "pos3d": 0.248,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 349,
+      "ok": true,
+      "latency_ms": 0.9422854387067792,
+      "vib_g": 0.4590094033066988,
+      "pos3d": 0.371,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 350,
+      "ok": true,
+      "latency_ms": 3.5660429864498298,
+      "vib_g": 0.2694847060837907,
+      "pos3d": 0.322,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 351,
+      "ok": true,
+      "latency_ms": 4.411830486256396,
+      "vib_g": 2.0312256159301354,
+      "pos3d": 0.411,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 352,
+      "ok": true,
+      "latency_ms": 4.308565347784017,
+      "vib_g": 0.2074045345489009,
+      "pos3d": 0.312,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 353,
+      "ok": true,
+      "latency_ms": 1.1193044763717956,
+      "vib_g": 2.2350813506267015,
+      "pos3d": 0.114,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 354,
+      "ok": true,
+      "latency_ms": 3.882435046047814,
+      "vib_g": 0.9079911268325941,
+      "pos3d": 0.393,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 355,
+      "ok": true,
+      "latency_ms": 2.9021286034841194,
+      "vib_g": 0.9434445191743585,
+      "pos3d": 0.345,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 356,
+      "ok": true,
+      "latency_ms": 3.410903122166427,
+      "vib_g": 1.0939159055338443,
+      "pos3d": 0.185,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 357,
+      "ok": true,
+      "latency_ms": 4.206412557138917,
+      "vib_g": 2.0528235367395817,
+      "pos3d": 0.473,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 358,
+      "ok": true,
+      "latency_ms": 2.143861325220144,
+      "vib_g": 2.3077032973924445,
+      "pos3d": 0.229,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 359,
+      "ok": true,
+      "latency_ms": 1.1212078526981228,
+      "vib_g": 0.18118638051635771,
+      "pos3d": 0.238,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 360,
+      "ok": true,
+      "latency_ms": 2.7851547031570023,
+      "vib_g": 0.3480720799946943,
+      "pos3d": 0.355,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 361,
+      "ok": true,
+      "latency_ms": 2.2741195434431987,
+      "vib_g": 2.0823745641034015,
+      "pos3d": 0.283,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 362,
+      "ok": true,
+      "latency_ms": 3.3691843688680123,
+      "vib_g": 1.6050639189909668,
+      "pos3d": 0.314,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 363,
+      "ok": true,
+      "latency_ms": 2.7126273156249776,
+      "vib_g": 0.06615021758377165,
+      "pos3d": 0.319,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 364,
+      "ok": true,
+      "latency_ms": 2.9572075418197277,
+      "vib_g": 1.9823566093231584,
+      "pos3d": 0.257,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 365,
+      "ok": true,
+      "latency_ms": 4.806906354447654,
+      "vib_g": 1.6427025087830993,
+      "pos3d": 0.44,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 366,
+      "ok": true,
+      "latency_ms": 4.609305479542246,
+      "vib_g": 1.1606045335609474,
+      "pos3d": 0.271,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 367,
+      "ok": true,
+      "latency_ms": 4.943550628168277,
+      "vib_g": 0.6951799326131112,
+      "pos3d": 0.427,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 368,
+      "ok": true,
+      "latency_ms": 0.22773642798265828,
+      "vib_g": 1.4440106423536192,
+      "pos3d": 0.3,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 369,
+      "ok": true,
+      "latency_ms": 1.4070086203996228,
+      "vib_g": 0.4757324815050523,
+      "pos3d": 0.147,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 370,
+      "ok": true,
+      "latency_ms": 3.184506820768749,
+      "vib_g": 1.6560624021353876,
+      "pos3d": 0.212,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 371,
+      "ok": true,
+      "latency_ms": 4.31605707823596,
+      "vib_g": 1.2242714103233538,
+      "pos3d": 0.225,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 372,
+      "ok": true,
+      "latency_ms": 2.3883921127993113,
+      "vib_g": 1.019386590349673,
+      "pos3d": 0.203,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 373,
+      "ok": true,
+      "latency_ms": 2.643510934718642,
+      "vib_g": 1.6464865204287187,
+      "pos3d": 0.267,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 374,
+      "ok": true,
+      "latency_ms": 4.730875890095845,
+      "vib_g": 0.550460755631488,
+      "pos3d": 0.172,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 375,
+      "ok": true,
+      "latency_ms": 2.62447462235726,
+      "vib_g": 1.8979459649118577,
+      "pos3d": 0.304,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 376,
+      "ok": true,
+      "latency_ms": 2.062168692753403,
+      "vib_g": 0.8703225494780337,
+      "pos3d": 0.272,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 377,
+      "ok": true,
+      "latency_ms": 4.4182698442003305,
+      "vib_g": 0.7203545848160153,
+      "pos3d": 0.577,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 378,
+      "ok": true,
+      "latency_ms": 3.1568417308810233,
+      "vib_g": 1.598956166733819,
+      "pos3d": 0.162,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 379,
+      "ok": true,
+      "latency_ms": 2.1609256135625383,
+      "vib_g": 1.7784924697726643,
+      "pos3d": 0.523,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 380,
+      "ok": true,
+      "latency_ms": 4.079640342338361,
+      "vib_g": 0.451727097140672,
+      "pos3d": 0.198,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 381,
+      "ok": true,
+      "latency_ms": 3.3049606041143753,
+      "vib_g": 2.4582057012592013,
+      "pos3d": 0.206,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 382,
+      "ok": true,
+      "latency_ms": 1.00618293060202,
+      "vib_g": 0.5219435345242787,
+      "pos3d": 0.434,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 383,
+      "ok": true,
+      "latency_ms": 0.915343716330958,
+      "vib_g": 1.4375385855501133,
+      "pos3d": 0.321,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 384,
+      "ok": true,
+      "latency_ms": 3.414087960367744,
+      "vib_g": 1.4487343950884082,
+      "pos3d": 0.394,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 385,
+      "ok": true,
+      "latency_ms": 2.011408370643411,
+      "vib_g": 1.9246616860914747,
+      "pos3d": 0.282,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 386,
+      "ok": true,
+      "latency_ms": 2.5715618451277407,
+      "vib_g": 0.6115165979190873,
+      "pos3d": 0.162,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 387,
+      "ok": true,
+      "latency_ms": 1.8435984120576794,
+      "vib_g": 0.19740985618579565,
+      "pos3d": 0.168,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 388,
+      "ok": true,
+      "latency_ms": 2.5476671575324152,
+      "vib_g": 2.261090468405559,
+      "pos3d": 0.262,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 389,
+      "ok": true,
+      "latency_ms": 2.230517359153313,
+      "vib_g": 1.6820398868223465,
+      "pos3d": 0.072,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 390,
+      "ok": true,
+      "latency_ms": 0.27836312392632734,
+      "vib_g": 1.9996006731331408,
+      "pos3d": 0.767,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 391,
+      "ok": true,
+      "latency_ms": 4.670132521216971,
+      "vib_g": 1.033017365909801,
+      "pos3d": 0.321,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 392,
+      "ok": true,
+      "latency_ms": 0.8643280752694071,
+      "vib_g": 1.9265470107269995,
+      "pos3d": 0.293,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 393,
+      "ok": true,
+      "latency_ms": 4.556567088450406,
+      "vib_g": 1.8903188179093515,
+      "pos3d": 0.282,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 394,
+      "ok": true,
+      "latency_ms": 2.342062504453506,
+      "vib_g": 0.766316986124159,
+      "pos3d": 0.134,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 395,
+      "ok": true,
+      "latency_ms": 3.6386749689939366,
+      "vib_g": 2.3863143540833174,
+      "pos3d": 0.318,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 396,
+      "ok": true,
+      "latency_ms": 3.914944890637143,
+      "vib_g": 1.3797106044911975,
+      "pos3d": 0.536,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 397,
+      "ok": true,
+      "latency_ms": 3.844957754372961,
+      "vib_g": 1.2408528000146348,
+      "pos3d": 0.183,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 398,
+      "ok": true,
+      "latency_ms": 4.4273087106902596,
+      "vib_g": 0.4674579999666789,
+      "pos3d": 0.528,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 399,
+      "ok": true,
+      "latency_ms": 4.272737504883815,
+      "vib_g": 0.03568727201378269,
+      "pos3d": 0.464,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 400,
+      "ok": true,
+      "latency_ms": 1.0840024239292363,
+      "vib_g": 0.49329643739165346,
+      "pos3d": 9.541,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 401,
+      "ok": true,
+      "latency_ms": 3.704957331324429,
+      "vib_g": 1.1484729706523822,
+      "pos3d": 0.187,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 402,
+      "ok": true,
+      "latency_ms": 0.24573526033631557,
+      "vib_g": 2.1295849955572392,
+      "pos3d": 0.305,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 403,
+      "ok": true,
+      "latency_ms": 2.034438132761874,
+      "vib_g": 0.5030652393535076,
+      "pos3d": 0.506,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 404,
+      "ok": true,
+      "latency_ms": 0.9350348756226147,
+      "vib_g": 1.8633688363820622,
+      "pos3d": 0.363,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 405,
+      "ok": true,
+      "latency_ms": 0.7171827412508441,
+      "vib_g": 1.6816286120490065,
+      "pos3d": 0.532,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 406,
+      "ok": true,
+      "latency_ms": 2.2790712059623757,
+      "vib_g": 2.1310060288608144,
+      "pos3d": 0.251,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 407,
+      "ok": true,
+      "latency_ms": 0.5957084807537772,
+      "vib_g": 2.2071191178351985,
+      "pos3d": 0.465,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 408,
+      "ok": true,
+      "latency_ms": 4.939285306877304,
+      "vib_g": 0.20245946596490955,
+      "pos3d": 0.096,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 409,
+      "ok": true,
+      "latency_ms": 1.96551090236798,
+      "vib_g": 1.501423383536995,
+      "pos3d": 0.134,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 410,
+      "ok": true,
+      "latency_ms": 2.6404877018824005,
+      "vib_g": 0.15020779271429419,
+      "pos3d": 0.336,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 411,
+      "ok": true,
+      "latency_ms": 3.4258010850014657,
+      "vib_g": 1.1888813133298906,
+      "pos3d": 0.337,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 412,
+      "ok": true,
+      "latency_ms": 1.802034936670639,
+      "vib_g": 1.257238800212868,
+      "pos3d": 0.311,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 413,
+      "ok": true,
+      "latency_ms": 0.40850058243368903,
+      "vib_g": 1.001068464128302,
+      "pos3d": 0.224,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 414,
+      "ok": true,
+      "latency_ms": 0.09755767836197582,
+      "vib_g": 1.4335834397273028,
+      "pos3d": 0.22,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 415,
+      "ok": true,
+      "latency_ms": 4.388064548303878,
+      "vib_g": 0.1950529247509486,
+      "pos3d": 0.333,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 416,
+      "ok": true,
+      "latency_ms": 2.5895738470730474,
+      "vib_g": 2.0109435059322123,
+      "pos3d": 0.234,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 417,
+      "ok": true,
+      "latency_ms": 3.220442625828658,
+      "vib_g": 0.3281581805778605,
+      "pos3d": 0.286,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 418,
+      "ok": true,
+      "latency_ms": 1.5106427267030331,
+      "vib_g": 1.4792077442174378,
+      "pos3d": 0.346,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 419,
+      "ok": true,
+      "latency_ms": 3.3120539401187172,
+      "vib_g": 0.565133521446052,
+      "pos3d": 0.363,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 420,
+      "ok": true,
+      "latency_ms": 1.9695633944922992,
+      "vib_g": 1.0161596418114276,
+      "pos3d": 0.23,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 421,
+      "ok": true,
+      "latency_ms": 2.6678322439329776,
+      "vib_g": 0.74842123510724,
+      "pos3d": 0.163,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 422,
+      "ok": true,
+      "latency_ms": 1.6787791075057108,
+      "vib_g": 1.8767314446620211,
+      "pos3d": 0.218,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 423,
+      "ok": true,
+      "latency_ms": 1.0216287613546498,
+      "vib_g": 0.21058075055272074,
+      "pos3d": 0.178,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 424,
+      "ok": true,
+      "latency_ms": 1.3050347862650375,
+      "vib_g": 1.397437468506246,
+      "pos3d": 0.269,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 425,
+      "ok": true,
+      "latency_ms": 3.5007474171544275,
+      "vib_g": 0.3380098610078619,
+      "pos3d": 0.139,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 426,
+      "ok": true,
+      "latency_ms": 3.5857102148012228,
+      "vib_g": 2.0921129935723046,
+      "pos3d": 0.455,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 427,
+      "ok": true,
+      "latency_ms": 3.1223468401675953,
+      "vib_g": 1.5631044066069422,
+      "pos3d": 0.33,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 428,
+      "ok": true,
+      "latency_ms": 2.7180021912165198,
+      "vib_g": 0.9014464149033061,
+      "pos3d": 0.259,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 429,
+      "ok": true,
+      "latency_ms": 0.3390311630121601,
+      "vib_g": 0.3367744969960451,
+      "pos3d": 0.434,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 430,
+      "ok": true,
+      "latency_ms": 4.140662609976016,
+      "vib_g": 1.4747123835623146,
+      "pos3d": 0.357,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 431,
+      "ok": true,
+      "latency_ms": 2.838085278817919,
+      "vib_g": 2.4395348451765235,
+      "pos3d": 0.406,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 432,
+      "ok": true,
+      "latency_ms": 0.8018038844630881,
+      "vib_g": 1.708163100115752,
+      "pos3d": 0.398,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 433,
+      "ok": true,
+      "latency_ms": 0.9774047628090593,
+      "vib_g": 0.892566612954341,
+      "pos3d": 0.178,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 434,
+      "ok": true,
+      "latency_ms": 4.160772694001463,
+      "vib_g": 2.0966451575675555,
+      "pos3d": 0.247,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 435,
+      "ok": true,
+      "latency_ms": 0.19431582573533723,
+      "vib_g": 1.8975337903658496,
+      "pos3d": 0.145,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 436,
+      "ok": true,
+      "latency_ms": 3.1726217071257667,
+      "vib_g": 1.1302647535583923,
+      "pos3d": 0.399,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 437,
+      "ok": true,
+      "latency_ms": 1.86901145360868,
+      "vib_g": 1.7041754952073171,
+      "pos3d": 0.112,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 438,
+      "ok": true,
+      "latency_ms": 4.081728701243218,
+      "vib_g": 0.8313203674489222,
+      "pos3d": 0.174,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 439,
+      "ok": true,
+      "latency_ms": 3.5727441004508815,
+      "vib_g": 1.053107729175227,
+      "pos3d": 0.483,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 440,
+      "ok": true,
+      "latency_ms": 1.2633597047255252,
+      "vib_g": 0.6147501344169739,
+      "pos3d": 0.277,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 441,
+      "ok": true,
+      "latency_ms": 4.83229678177623,
+      "vib_g": 0.4096282599326609,
+      "pos3d": 0.444,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 442,
+      "ok": true,
+      "latency_ms": 4.048648329784312,
+      "vib_g": 0.897861758188462,
+      "pos3d": 0.167,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 443,
+      "ok": true,
+      "latency_ms": 1.7228365828656689,
+      "vib_g": 1.2244047732460732,
+      "pos3d": 0.197,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 444,
+      "ok": true,
+      "latency_ms": 1.623790967579295,
+      "vib_g": 2.135051671365574,
+      "pos3d": 0.269,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 445,
+      "ok": true,
+      "latency_ms": 0.7082060299997095,
+      "vib_g": 0.6227994803645489,
+      "pos3d": 0.339,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 446,
+      "ok": true,
+      "latency_ms": 3.3718523053606404,
+      "vib_g": 1.2383307891946314,
+      "pos3d": 0.34,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 447,
+      "ok": true,
+      "latency_ms": 3.004293631480004,
+      "vib_g": 2.2476149065163686,
+      "pos3d": 0.579,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 448,
+      "ok": true,
+      "latency_ms": 3.7544689340136266,
+      "vib_g": 1.8904574495406008,
+      "pos3d": 0.357,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 449,
+      "ok": true,
+      "latency_ms": 3.8949949954940446,
+      "vib_g": 1.5778854747585846,
+      "pos3d": 0.597,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 450,
+      "ok": true,
+      "latency_ms": 0.5002043552392177,
+      "vib_g": 0.32899766424924204,
+      "pos3d": 0.605,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 451,
+      "ok": true,
+      "latency_ms": 4.054073951867281,
+      "vib_g": 1.0975875052582815,
+      "pos3d": 0.311,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 452,
+      "ok": true,
+      "latency_ms": 3.991749308397751,
+      "vib_g": 2.4549891692441372,
+      "pos3d": 0.214,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 453,
+      "ok": true,
+      "latency_ms": 1.2005084825540335,
+      "vib_g": 0.1784540287005304,
+      "pos3d": 0.469,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 454,
+      "ok": true,
+      "latency_ms": 1.3245566040159853,
+      "vib_g": 1.278673076196461,
+      "pos3d": 0.185,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 455,
+      "ok": true,
+      "latency_ms": 0.012385839634155293,
+      "vib_g": 0.8514809555044403,
+      "pos3d": 0.145,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 456,
+      "ok": true,
+      "latency_ms": 3.748100690008505,
+      "vib_g": 0.2566302772669002,
+      "pos3d": 0.191,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 457,
+      "ok": true,
+      "latency_ms": 4.62260986508145,
+      "vib_g": 0.2539533605536462,
+      "pos3d": 0.132,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 458,
+      "ok": true,
+      "latency_ms": 0.06386206759701751,
+      "vib_g": 2.142248626288866,
+      "pos3d": 0.509,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 459,
+      "ok": true,
+      "latency_ms": 1.5715585016165408,
+      "vib_g": 0.37569546273541893,
+      "pos3d": 0.669,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 460,
+      "ok": true,
+      "latency_ms": 1.3002342963469422,
+      "vib_g": 1.9237457930814479,
+      "pos3d": 0.398,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 461,
+      "ok": true,
+      "latency_ms": 2.7224044999248624,
+      "vib_g": 0.4375330058406063,
+      "pos3d": 0.34,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 462,
+      "ok": true,
+      "latency_ms": 4.8534433361190885,
+      "vib_g": 1.8637233627879044,
+      "pos3d": 0.564,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 463,
+      "ok": true,
+      "latency_ms": 2.61471381822415,
+      "vib_g": 1.7194553263824832,
+      "pos3d": 0.273,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 464,
+      "ok": true,
+      "latency_ms": 2.446977270501398,
+      "vib_g": 1.001209654813123,
+      "pos3d": 0.215,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 465,
+      "ok": true,
+      "latency_ms": 2.5119497948858958,
+      "vib_g": 1.442753057357066,
+      "pos3d": 0.35,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 466,
+      "ok": true,
+      "latency_ms": 2.7162015639200265,
+      "vib_g": 0.1812898742689148,
+      "pos3d": 0.235,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 467,
+      "ok": true,
+      "latency_ms": 0.15021271138914938,
+      "vib_g": 1.5066629185507883,
+      "pos3d": 0.207,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 468,
+      "ok": true,
+      "latency_ms": 1.7411766339884311,
+      "vib_g": 1.6623155345864462,
+      "pos3d": 0.306,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 469,
+      "ok": true,
+      "latency_ms": 1.6939045111833295,
+      "vib_g": 0.4742879337487538,
+      "pos3d": 0.465,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 470,
+      "ok": true,
+      "latency_ms": 4.680955147013981,
+      "vib_g": 1.1051143770908904,
+      "pos3d": 0.216,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 471,
+      "ok": true,
+      "latency_ms": 0.8691609592991306,
+      "vib_g": 0.275973341028167,
+      "pos3d": 0.601,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 472,
+      "ok": true,
+      "latency_ms": 1.1358897395530887,
+      "vib_g": 0.9104275904259143,
+      "pos3d": 0.172,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 473,
+      "ok": true,
+      "latency_ms": 2.6302717676418905,
+      "vib_g": 1.5377907895332807,
+      "pos3d": 0.214,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 474,
+      "ok": true,
+      "latency_ms": 3.6122362114262168,
+      "vib_g": 1.9335184232374991,
+      "pos3d": 0.269,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 475,
+      "ok": true,
+      "latency_ms": 4.395938586882957,
+      "vib_g": 1.6655292189309132,
+      "pos3d": 0.254,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 476,
+      "ok": true,
+      "latency_ms": 1.3134212646714645,
+      "vib_g": 0.8739232151047654,
+      "pos3d": 0.183,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 477,
+      "ok": true,
+      "latency_ms": 2.507611309438251,
+      "vib_g": 0.2602842555504828,
+      "pos3d": 0.139,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 478,
+      "ok": true,
+      "latency_ms": 1.769373475719246,
+      "vib_g": 1.1530024481274674,
+      "pos3d": 0.118,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 479,
+      "ok": true,
+      "latency_ms": 3.519128889427507,
+      "vib_g": 1.5058795891790222,
+      "pos3d": 0.399,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 480,
+      "ok": true,
+      "latency_ms": 1.2374265552973613,
+      "vib_g": 1.603907992247028,
+      "pos3d": 0.152,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 481,
+      "ok": true,
+      "latency_ms": 2.6689226142991807,
+      "vib_g": 1.8781736955256658,
+      "pos3d": 0.299,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 482,
+      "ok": true,
+      "latency_ms": 4.465481182706562,
+      "vib_g": 0.6086434084751147,
+      "pos3d": 0.405,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 483,
+      "ok": true,
+      "latency_ms": 2.978639649520075,
+      "vib_g": 2.3642813908762292,
+      "pos3d": 0.402,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 484,
+      "ok": true,
+      "latency_ms": 3.4240300533417156,
+      "vib_g": 0.6741735022996629,
+      "pos3d": 0.303,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 485,
+      "ok": true,
+      "latency_ms": 4.485899307388091,
+      "vib_g": 1.5237806920370234,
+      "pos3d": 0.399,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 486,
+      "ok": true,
+      "latency_ms": 0.2812172072487623,
+      "vib_g": 1.593464294359383,
+      "pos3d": 0.205,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 487,
+      "ok": true,
+      "latency_ms": 4.838454086890032,
+      "vib_g": 1.9952244668162853,
+      "pos3d": 2.817,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 488,
+      "ok": true,
+      "latency_ms": 0.9050214244875654,
+      "vib_g": 0.4620694555110627,
+      "pos3d": 0.083,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 489,
+      "ok": true,
+      "latency_ms": 1.1032867695686477,
+      "vib_g": 1.2285727365448702,
+      "pos3d": 0.505,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 490,
+      "ok": true,
+      "latency_ms": 0.3504911751893358,
+      "vib_g": 2.0081701332274,
+      "pos3d": 0.216,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 491,
+      "ok": true,
+      "latency_ms": 3.358843780957107,
+      "vib_g": 0.16123724426634123,
+      "pos3d": 0.288,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 492,
+      "ok": true,
+      "latency_ms": 3.609575489760328,
+      "vib_g": 2.1237649806311474,
+      "pos3d": 0.545,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 493,
+      "ok": true,
+      "latency_ms": 0.2384951109562894,
+      "vib_g": 0.4423085423429515,
+      "pos3d": 0.452,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 494,
+      "ok": true,
+      "latency_ms": 3.349451994851113,
+      "vib_g": 2.345091286635708,
+      "pos3d": 0.349,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 495,
+      "ok": true,
+      "latency_ms": 1.4815459230653483,
+      "vib_g": 1.228149375476243,
+      "pos3d": 0.15,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 496,
+      "ok": true,
+      "latency_ms": 4.249857939939436,
+      "vib_g": 1.2896222694328214,
+      "pos3d": 0.186,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 497,
+      "ok": true,
+      "latency_ms": 1.4628779028435117,
+      "vib_g": 0.1844868313316672,
+      "pos3d": 0.584,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 498,
+      "ok": true,
+      "latency_ms": 0.2557260502263248,
+      "vib_g": 0.550548998282086,
+      "pos3d": 0.13,
+      "fused": 600,
+      "rejected": 0
+    },
+    {
+      "case": 499,
+      "ok": true,
+      "latency_ms": 2.097994307154239,
+      "vib_g": 0.6854051945696876,
+      "pos3d": 0.261,
+      "fused": 600,
+      "rejected": 0
+    }
+  ]
+}

@@ -206,5 +206,16 @@
         "within20": 7
       }
     }
-  }
+  },
+  "delay_lowlatency_after_fix": {
+    "cases": 500,
+    "parsed": 500,
+    "fused_ge_500": 499,
+    "pos_lt_10m": 499,
+    "pos_p95": 0.594,
+    "pos_max": 324.954,
+    "fused_mean": 599.662,
+    "rejected_mean": 0.338
+  },
+  "delay_root_cause": "GetDelayedSnapshotIndexByAge returned false for delay < 0.5*dt; require_delayed_snapshot=true rejected all GNSS updates; fixed by initializing best_idx=latest_idx"
 }
