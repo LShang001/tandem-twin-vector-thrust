@@ -96,7 +96,7 @@
 | A-28 | `ekf_15_state.h` | bias-only 静止陀螺更新（不改姿态） | REF-121 §8.2.3 p.291；§7.3.1 p.255–259 | `ApplyStaticGyroUpdateDetailed()` | 一致（工程决策，见注释） | `test_ekf_bias_static` | 补注释（含 throttle 门控） |
 | A-29 | `ekf_15_state.h` | 气压高度与 GNSS-D 同构的标量更新 | REF-121 (2.2.4b–e) p.33–34；REF-120 (9.8.5c) p.321 | `ApplyBaroAltitudeUpdateDetailed()` | 一致 | `test_ekf_bias_static` | 补注释（绝对椭球高前提） |
 | A-30 | `ekf_15_state.h` | GNSS 延迟回放：量测作用于其对应时刻 | REF-121 §2.2.1 p.33；AGENTS.md 踩坑 | `GetDelayedSnapshotIndexByAge()`、`RestoreSnapshot()`、`RepropagateFromDelayedSnapshot()` | 一致（工程实现，非教材内容） | `test_ekf_delay_highspeed.cpp`（延迟 50 ms RMSE 1.458→0.164 m） | 补注释 |
-| A-31 | `ekf_15_state.h` | 失联膨胀与重捕获低增益融合 | REF-121 §3.5 p.87–93（P 过度自信） | `GrowGnssOutageCovariance()`、`BuildConservativeGnssReacquisitionNoise()` | 近似（工程参数） | 注释标注上限 4 倍 | 补注释 |
+| A-31 | `ekf_15_state.h` | 失联膨胀、重捕获低增益融合与连续一致 GNSS 硬重锚 | REF-121 §3.5 p.87–93（P 过度自信）；REF-121 §7.3.1 p.255–259（残差门控） | `GrowGnssOutageCovariance()`、`BuildConservativeGnssReacquisitionNoise()`、`TryResetAfterPersistentImplausibleGnss()` | 近似（工程参数；硬重锚为恢复路径，非教材算法） | T13/T13b；注释标注上限 4 倍与 3 帧一致性条件 | 补注释 |
 | A-32 | `ekf_15_state.h` | 光流/持续测速辅助：残差门放宽、NIS 主门控 | REF-121 §7.3.1 p.255–259 | `MeasurementUpdateAidingVelocityDetailed()`、`ResetVelocityToExternal()` | 一致（工程决策） | `test_ekf_aiding_velocity` 16/16 | 补注释 |
 | A-33 | `ekf_15_state.h` | P0-1 航向 consider：K 的航向行清零（Schmidt 近似） | REF-121 §8.2.3 p.291 | `set_gnss_consider_heading()`、`k_.row(8).setZero()` | 近似（可接受，按相位启用） | T8（1.724°→0.000°） | 补注释 |
 

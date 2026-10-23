@@ -217,5 +217,89 @@
     "fused_mean": 599.662,
     "rejected_mean": 0.338
   },
-  "delay_root_cause": "GetDelayedSnapshotIndexByAge returned false for delay < 0.5*dt; require_delayed_snapshot=true rejected all GNSS updates; fixed by initializing best_idx=latest_idx"
+  "delay_root_cause": "GetDelayedSnapshotIndexByAge returned false for delay < 0.5*dt; require_delayed_snapshot=true rejected all GNSS updates; fixed by initializing best_idx=latest_idx",
+  "delay_closed_loop_5k_subframe_fix": {
+    "cases": 5000,
+    "ok": 5000,
+    "pos3d_mean": 4.3607082,
+    "pos3d_p95": 2.535,
+    "pos3d_p99": 4.091,
+    "pos3d_max": 4325.376,
+    "gt10": 37,
+    "gt20": 32,
+    "gt50": 31,
+    "gt100": 27,
+    "gt500": 4,
+    "outage_gt50": 31,
+    "reset_cases": 0,
+    "reset_total": 0,
+    "reset_max": 0
+  },
+  "delay_closed_loop_5k_reacquire_reset": {
+    "cases": 5000,
+    "ok": 5000,
+    "pos3d_mean": 0.9084438,
+    "pos3d_p95": 2.419,
+    "pos3d_p99": 3.38,
+    "pos3d_max": 24.078,
+    "gt10": 8,
+    "gt20": 1,
+    "gt50": 0,
+    "gt100": 0,
+    "gt500": 0,
+    "outage_gt50": 0,
+    "reset_cases": 37,
+    "reset_total": 37,
+    "reset_max": 1
+  },
+  "delay_aliasing_artifact": {
+    "symptom": "200 Hz 采样下 199.9 Hz 单频混叠成 ~0.1 Hz 准直流，EKF 当零偏",
+    "case_3493_frequency_sweep_pos3d_m": {
+      "20": 1.19,
+      "40": 0.985,
+      "60": 0.478,
+      "80": 0.547,
+      "100": 0.275,
+      "150": 0.221,
+      "198": 8.682,
+      "199.9": 14.961,
+      "199.96": 21.98,
+      "200": 0.275
+    },
+    "model_fix": "可选 anti_alias：8 阶 Butterworth fc=80 Hz，按连续频率先衰减再采样",
+    "case_3493_after_antialias_pos3d_m": {
+      "199.96": 0.275,
+      "80": 0.329,
+      "20": 1.19
+    },
+    "note": "数字滤波对已采样的假直流无效；必须模拟 ODR 前模拟低通",
+    "full_5k_before_antialias": {
+      "max_m": 24.078,
+      "gt10": 8,
+      "note": "6 个无失锁尾部均在 vib_hz≈199–200 Hz"
+    },
+    "full_5k_after_antialias": {
+      "max_m": 4.931,
+      "gt10": 0,
+      "reset_cases": 26
+    }
+  },
+  "delay_closed_loop_5k_antialias": {
+    "cases": 5000,
+    "ok": 5000,
+    "pos3d_mean": 0.9026368,
+    "pos3d_p95": 2.407,
+    "pos3d_p99": 3.293,
+    "pos3d_max": 4.931,
+    "gt10": 0,
+    "gt20": 0,
+    "gt50": 0,
+    "gt100": 0,
+    "gt500": 0,
+    "no_outage_max": 4.105,
+    "outage_max": 4.931,
+    "reset_cases": 26,
+    "reset_total": 26,
+    "reset_max": 1
+  }
 }
