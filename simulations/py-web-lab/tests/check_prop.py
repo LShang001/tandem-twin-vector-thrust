@@ -1,4 +1,16 @@
-# 数值验证：螺旋桨旋转（__pwl 钩子读 prop.rotation 两帧对比）
+"""check_prop.py — 浏览器实测：螺旋桨旋转（__pwl 钩子读 prop.rotation 两帧对比）。
+
+@file    check_prop.py
+@module  analysis/py-web-lab 测试（浏览器）
+@brief   通过前端调试钩子读取两帧螺旋桨转角，验证推进可视化随转速旋转。
+@details 输入：本地 8090 服务 + headless Chromium；处理：__pwl 钩子取 prop.rotation
+         → 两帧差值断言非零；输出：控制台断言。
+@theory  N/A（可视化链路测试；推力模型见 core.Propulsion）
+@frame  渲染层（非物理力臂）
+@units   角度 rad（渲染）
+@note    EXE 为作者本机 Playwright 绝对路径，换机需改。
+@see     server/sim.py、web/src/browser/aircraft-view.mjs
+"""
 import asyncio
 import json
 

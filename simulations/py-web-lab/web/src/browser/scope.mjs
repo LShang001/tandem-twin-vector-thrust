@@ -1,7 +1,15 @@
-// ============================================================
-//  角速度示波器：p/q/r 波形曲线（可开关）
-//  实线 = 实际机体角速度；角速度闭环模式下虚线 = 目标角速度 ω_ref
-// ============================================================
+/**
+ * @file    scope.mjs
+ * @module  analysis/py-web-lab 渲染（角速度示波器）
+ * @brief   绘制 p/q/r 环形缓冲波形；闭环模式下叠加目标角速度 ω_ref 虚线。
+ * @details 输入：S.omega（实际）与 S.omegaRef（目标）；处理：环形缓冲 + canvas 折线；
+ *          输出：示波器面板更新。
+ * @theory  N/A（显示层；角速率为机体系 p/q/r @ref MOD-002 §7.1）
+ * @frame   FRD 机体三轴
+ * @units   rad/s；纵轴量程 ±π rad/s（±180°/s），窗口 WINDOW_S=8 s
+ * @note    窗口 8 s / 480 点 ≈ 60 Hz 采样，仅用于观察趋势，不是采样定理级记录。
+ * @see     main.mjs、hud.mjs
+ */
 
 const DEG = Math.PI / 180;
 const COLORS = { p: '#fb7185', q: '#34d399', r: '#818cf8' };   // 与图例一致
@@ -9,6 +17,11 @@ const WINDOW_S = 8;        // 时间窗口（秒）
 const N = 480;             // 环形缓冲点数（≈60Hz 采样）
 const SCALE = Math.PI;     // 纵轴量程 ±π rad/s（±180°/s）
 
+/**
+ * 创建角速度示波器（p/q/r 环形缓冲波形，可选叠加目标角速率虚线）。
+ * @param {Object} sim 状态代理（读 S.omega / S.omegaRef，单位 rad/s）
+ * @returns {Object} { update(), toggle() } 等控制接口
+ */
 export function createScope(sim) {
   const { S } = sim;
   const panel = document.getElementById('scope');

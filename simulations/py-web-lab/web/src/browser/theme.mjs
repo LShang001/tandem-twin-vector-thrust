@@ -1,6 +1,15 @@
-// ============================================================
-//  深色 / 浅色主题
-// ============================================================
+/**
+ * @file    theme.mjs
+ * @module  analysis/py-web-lab 渲染（主题）
+ * @brief   定义深/浅两套配色与光照参数，供场景与效果模块切换。
+ * @details 输入：主题名 dark/light；处理：返回颜色、雾、辉光、光强参数集；
+ *          输出：供 scene/effects/aircraft-view 使用的常量表。
+ * @theory  N/A（渲染层）
+ * @frame   N/A
+ * @units   颜色为十六进制、强度为无量纲倍数
+ * @note    主题只影响视觉，不改变任何仿真状态。
+ * @see     scene.mjs、effects.mjs
+ */
 import * as THREE from 'three';
 
 const THEMES = {
@@ -12,6 +21,11 @@ const THEMES = {
            sky: { top: 0x6f9fd6, horizonCol: 0xe4edf7, bottom: 0xc9d5e2, ring: 0x7186a0, ringOp: 0.9 } },
 };
 
+/**
+ * 主题切换器：把深/浅两套配色应用到场景、辉光、灯光与环境效果。
+ * @param {Object} ctx { scene, bloom, lights, effects } 需要换肤的对象集合
+ * @returns {Object} { toggle(), apply(name) }：切换并返回当前主题名
+ */
 export function createTheme({ scene, bloom, lights, effects }) {
   const $ = id => document.getElementById(id);
 

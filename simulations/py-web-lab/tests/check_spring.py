@@ -1,4 +1,16 @@
-# 验证：回中开关（从 thumb 按下拖拽，模拟真实用户）
+"""check_spring.py — 验证回中开关（按下拖拽 thumb，模拟真实用户手势）。
+
+@file    check_spring.py
+@module  analysis/py-web-lab 测试（浏览器）
+@brief   拖拽摇杆后松手，断言 S 指令回到中点（回中开关生效）。
+@details 输入：本地 8090 服务 + headless Chromium；处理：mouse.down → 拖拽 → up
+         → 读 S.dt/S.dw；输出：控制台断言。
+@theory  N/A（人机接口行为测试）
+@frame  N/A
+@units   摇杆行程归一化；切换后读 S.dt rad
+@note    该用例覆盖 2026-08 修复的「回中开关」交互，不能用合成 click 代替真实拖拽。
+@see     protocol.py（set 命令白名单）、web/src/main.mjs
+"""
 import asyncio
 
 from playwright.async_api import async_playwright

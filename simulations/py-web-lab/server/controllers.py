@@ -1,15 +1,25 @@
 # -*- coding: utf-8 -*-
-"""py-web-lab 控制律：逐位对齐 vector-thrust-lab/src/core/control.mjs，
-并接入 high-fidelity-analysis / 固件的其他控制算法。
+"""controllers.py — py-web-lab 控制律（SAS/INDI/LQR/ADRC 四模式）。
 
-ctrl 模式（S.ctrl）：
-  sas   默认——巡航 SAS（4 模式）+ VTOL 悬停（四元数级联 + 定高 + B_true）
-  indi  巡航 INDI 增量非线性动态逆（移植 simulate.py:INDIController，论文 ch/11）
-  lqr   悬停 LQR 姿态控制（移植 controllers.py:QuatLQRController，论文 ch/14）
-  adrc  悬停内环 ADRC（移植固件 TandemVec_ADRC.h：ESO2 + PD，论文 ch/16）
-
-四元数内部用 core.py 顺序 (w,x,y,z)；S.quat 为 JS 顺序 (x,y,z,w)。
-交叉验证 tests/cross_verify.mjs 保证 sas 模式与 JS 漂移 < 1e-6。
+@file    controllers.py
+@module  analysis/py-web-lab 控制律
+@brief   逐位对齐 vector-thrust-lab/src/core/control.mjs，并接入研究用控制器。
+@details ctrl 模式（S.ctrl）：
+           sas  默认——巡航 SAS（4 模式）+ VTOL 悬停（四元数级联 + 定高 + B_true）
+           indi 巡航 INDI 增量非线性动态逆（移植 simulate.py:INDIController）
+           lqr  悬停 LQR 姿态控制（移植 controllers.py:QuatLQRController）
+           adrc 悬停内环 ADRC（移植固件 TandemVec_ADRC.h：ESO2 + PD）
+         输入：S 状态 + 指令 + dt；输出：执行器指令（摆角/差速/油门）。
+         四元数内部用 (w,x,y,z)；S.quat 为 JS 顺序 (x,y,z,w)。
+@theory  SAS 律与限幅 @ref MOD-001 §8、@ref CTL-001 §4；
+         差速分配 ωf=ω0√(1+Δω) @ref CTL-001 §5；
+         INDI @ref TandemVec-Paper/ch10；LQR @ref TandemVec-Paper/ch14；
+         ADRC/ESO @ref TandemVec-Paper/ch16。
+@frame  NED + FRD；悬停时控制通道 [roll,pitch,yaw] 经轴重排映射到力矩 [Mz',My',Mx']。
+@units  内部角度 rad；显示/增益在 deg 域时变量名带 _deg；时间 s。
+@note    本文件是浏览器实验台的控制器，**不是固件 flight_control.cpp**；
+         交叉验证 tests/cross/*（run_js.mjs vs run_py.py）保证 sas 模式漂移 <1e-6。
+@see     sim.py、core.py、@ref CTL-001、@ref TandemVec-Paper/ch16
 """
 import numpy as np
 

@@ -1,8 +1,16 @@
-// ============================================================
-//  py-web-lab 前端装配：WebSocket 客户端 + Three.js 渲染
-//  —— 所有物理/控制逻辑在 Python 服务端；本文件只做
-//     指令发送 + 状态渲染（零计算）。
-// ============================================================
+/**
+ * @file    main.mjs
+ * @module  analysis/py-web-lab 前端装配
+ * @brief   连接 WebSocket、把遥测状态分发给渲染模块，并把用户操作发回服务端。
+ * @details 输入：服务端 state/params 帧与 DOM 事件；处理：本地状态代理 → 各 browser/*
+ *          模块更新场景/HUD/示波器；输出：指令帧（init/reset/set/pulse/step）。
+ *          所有物理/控制逻辑在 Python 服务端，本文件零计算。
+ * @theory  N/A（装配层，不含物理模型）
+ * @frame   NED（渲染世界系）+ FRD（机体），四元数按 (x,y,z,w) 传输
+ * @units   角度 rad、时间 s（渲染层只做显示换算）
+ * @note    禁止在此文件引入物理计算，否则与 Python 引擎产生第二份事实源。
+ * @see     server/main.py、server/protocol.py、browser/scene.mjs
+ */
 import * as THREE from 'three';
 import { createScene } from './browser/scene.mjs';
 import { createEffects } from './browser/effects.mjs';

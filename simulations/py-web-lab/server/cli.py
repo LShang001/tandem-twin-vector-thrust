@@ -1,17 +1,20 @@
 # -*- coding: utf-8 -*-
-"""py-web-lab 命令行接口（调试 / 测试 / 分析，不依赖浏览器与 WebSocket）。
+"""cli.py — py-web-lab 命令行接口（无浏览器/无 WebSocket 的调试与批跑）。
 
-用法：
-  python cli.py state [--mode cruise|vtol]                 # 初始状态快照
-  python cli.py scene [--name vtol_pert] [--secs 8]        # 跑场景 → JSON 轨迹
-                      [--out path.json] [--S thr=0.5,dt=0.1] [--pulse 0,0.3,0]
-                      [--mode cruise|vtol] [--paused]
-  python cli.py step [--n 100] [--dt 0.004] [--mode vtol]  # 逐步推进（打印控制律中间量）
-                      [--S ...] [--pulse ...] [--print-every 25]
-  python cli.py compare <a.json> <b.json> [--tolerance 1e-6]   # 轨迹对比
-
-场景名（对齐 tests/cross）：vtol / vtol_pert / vtol_alt / vtol_btrue /
-  cruise_sas / vtol_dw / cruise_trim
+@file    cli.py
+@module  analysis/py-web-lab CLI
+@brief   提供 state/scene/step/compare 四个子命令，直接驱动 Simulation。
+@details 输入：命令行参数（模式、步数、dt、S 字段覆盖、脉冲）；
+         处理：构造 Simulation → 逐帧推进或跑预设场景 → 收集轨迹；
+         输出：JSON（stdout 或 --out 文件），compare 给出逐字段最大偏差。
+         场景名对齐 tests/cross：vtol / vtol_pert / vtol_alt / vtol_btrue /
+         cruise_sas / vtol_dw / cruise_trim。
+@theory  N/A（驱动层；物理在 sim.py/controllers.py）
+@frame  N/A
+@units   dt s、脉冲角速度 rad/s、摆角 rad。
+@note    --print-every 打印控制律中间量，用于排查饱和/积分分离；
+         与 WebSocket 路径共用同一 Simulation，结论可互相对照。
+@see     sim.py、controllers.py、tests/cross/run_py.py
 """
 import argparse
 import json
@@ -36,6 +39,15 @@ SCENES = {
 
 
 def build_scene(name, mode=None, S=None, pulse=None):
+    """按名字构造场景初始状态与推进参数（与 tests/cross 的场景名对齐）。
+
+    @param[in] name  场景名（vtol/vtol_pert/cruise_sas/…）
+    @param[in] mode  cruise|vtol；None 时按场景名推断
+    @param[in] S     覆盖的 S 字段 dict（可空）
+    @param[in] pulse 角速度脉冲 (x,y,z) [rad/s]（可空）
+    @return dict：Simulation 实例 + 该场景的步数/复位参数
+    @note    场景名清单必须与 run_py.py/run_js.mjs 的 SCENES 保持同步。
+    """
     sim = Simulation()
     if name.startswith('vtol') or mode == 'vtol':
         sim.reset_vtol()
@@ -64,6 +76,7 @@ def build_scene(name, mode=None, S=None, pulse=None):
 
 
 def snap(sim):
+    """取一帧遥测快照（S/F/dyn/aero + t），用于打印或落盘。"""
     S, F = sim.S, sim.F
     return {
         't': round(S['time'], 4),
@@ -99,12 +112,14 @@ def parse_S(pairs):
 #  子命令
 # ------------------------------------------------------------
 def cmd_state(args):
+    """state 子命令：打印初始状态快照（不推进）。"""
     sim = build_scene(args.name, args.mode)
     print(json.dumps(snap(sim), ensure_ascii=False, indent=1))
     print('# params:', len([k for k in sim.P]))
 
 
 def cmd_scene(args):
+    """scene 子命令：跑预设场景 → 轨迹 JSON（stdout 或 --out）。"""
     sim = build_scene(args.name, args.mode, parse_S(args.S),
                       tuple(float(x) for x in args.pulse.split(',')) if args.pulse else None)
     sim.S['paused'] = bool(args.paused)
@@ -127,6 +142,7 @@ def cmd_scene(args):
 
 
 def cmd_step(args):
+    """step 子命令：逐步推进并打印控制律中间量（--print-every）。"""
     sim = build_scene(args.name, args.mode, parse_S(args.S),
                       tuple(float(x) for x in args.pulse.split(',')) if args.pulse else None)
     sim.S['paused'] = bool(args.paused)
@@ -151,6 +167,7 @@ def cmd_step(args):
 
 
 def cmd_compare(args):
+    """compare 子命令：比较两份轨迹 JSON 的逐字段最大偏差。"""
     a = json.loads(Path(args.a).read_text(encoding='utf-8'))
     b = json.loads(Path(args.b).read_text(encoding='utf-8'))
     if len(a) != len(b):
@@ -177,6 +194,7 @@ def cmd_compare(args):
 
 # ------------------------------------------------------------
 def main():
+    """CLI 入口：解析子命令并分发到 cmd_*。"""
     ap = argparse.ArgumentParser(description='py-web-lab CLI')
     sub = ap.add_subparsers(dest='cmd', required=True)
 

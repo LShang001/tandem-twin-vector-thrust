@@ -1,4 +1,15 @@
-// 交叉对比：py-*.json vs js-*.json（门槛：各字段最大偏差 < 1e-6）
+/**
+ * @file    compare.mjs
+ * @module  analysis/py-web-lab 测试（交叉验证比对）
+ * @brief   逐场景逐字段比较 py-*.json 与 js-*.json，门限 1e-6。
+ * @details 输入：tests/cross/{py,js}-<scene>.json；处理：按 SCENES/FIELDS 求最大偏差；
+ *          输出：stdout 报告，超门限时非零退出。
+ * @theory  N/A（一致性验证；两份实现同源于 @ref MOD-001 与 @ref MOD-002）
+ * @frame   N/A（四元数按 (x,y,z,w) 透传）
+ * @units   SI
+ * @note    门限 1e-6 是双精度下"同公式不同语言"应达到的量级；放宽会掩盖实现漂移。
+ * @see     run_py.py、run_js.mjs
+ */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';

@@ -1,6 +1,16 @@
-// ============================================================
-//  HUD 仪表与遥测数据显示
-// ============================================================
+/**
+ * @file    hud.mjs
+ * @module  analysis/py-web-lab 渲染（HUD 与遥测）
+ * @brief   生成通道曲线与数值仪表，显示力/力矩/姿态/转速等遥测。
+ * @details 输入：dyn/aero/S 遥测字段；处理：按 CH 表映射量程与双极性；
+ *          输出：DOM 更新（力 N、力矩 N·m）。
+ * @theory  N/A（显示层；量的物理含义见 @ref MOD-001 §4）
+ * @frame   显示为机体系分量（Fx/Fy/Fz、Mx/My/Mz）
+ * @units   N、N·m、rad/s、rad；CH.max 为绘图量程上限
+ * @note    Mx 量程 1.6 N·m，远小于 My/Mz 的 6 N·m——滚转权限由反扭矩差驱动，
+ *          量级天然小一个数量级（@ref MOD-001 §3.2、§11）。
+ * @see     main.mjs、scope.mjs、@ref MOD-001
+ */
 
 const CH = [
   { id: 'Fx', name: 'F_x 纵向力',  color: '#22d3ee', max: 40,  unit: 'N',   bipolar: false },
@@ -11,6 +21,11 @@ const CH = [
   { id: 'Mz', name: 'M_z 推进偏航矩', color: '#818cf8', max: 6,   unit: 'N·m', bipolar: true  },
 ];
 
+/**
+ * 在给定容器内构建 HUD（通道数值 + 力/力矩曲线），返回逐帧更新接口。
+ * @param {HTMLElement} box 承载 HUD 的 DOM 容器
+ * @returns {Object} { update(sim) }：按遥测刷新数值与曲线（N / N·m / rad）
+ */
 export function createHud(box) {
   const $ = id => document.getElementById(id);
   const meterEls = {};

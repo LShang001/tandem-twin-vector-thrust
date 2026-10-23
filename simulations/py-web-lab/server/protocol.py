@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
-"""py-web-lab 消息协议（client ⇄ server，WebSocket JSON）。
+"""protocol.py — py-web-lab 消息协议（client ⇄ server，WebSocket JSON）。
 
-client → server:
-  {"cmd": "init"}                          # 全量状态 + 参数快照
-  {"cmd": "reset", "mode": "cruise"|"vtol"|"pose"}
-  {"cmd": "set", "S": {"thr": .., "dt": .., ...}}   # 白名单字段
-  {"cmd": "pulse", "omega": {"x": .., "y": .., "z": ..}}   # 角速度扰动注入
-  {"cmd": "step", "dt": 0.016}             # 推进一帧（内部按 maxStep 分子步）
-
-server → client:
-  {"type": "state", "cmd": <回显>, "S": {...}, "F": {...}, "dyn": {...}, "aero": {...}, "t": ..}
-  {"type": "params", "P": {...}}           # init 响应附加
-  {"type": "error", "msg": "..."}
+@file    protocol.py
+@module  analysis/py-web-lab 协议
+@brief   定义命令白名单、字段校验与回包结构，隔离前端与仿真内状态。
+@details 输入：WebSocket JSON 命令；处理：_num/_bool 有限性与范围校验 → 白名单字段
+         写入 S → 调 Simulation；输出：state/params/error 帧。
+@theory  N/A（协议与校验，无物理模型）
+@frame  N/A（S.quat 为 JS 顺序 (x,y,z,w)）
+@units   dt 秒、角度 rad、角速度 rad/s、油门 0–1；越界一律抛 ValueError 不静默截断。
+@note    白名单是安全边界：客户端不能直接改 F（积分状态），只能改 S 指令字段。
+@see     main.py、sim.py、web/src/main.mjs
 """
 import math
 import numpy as np

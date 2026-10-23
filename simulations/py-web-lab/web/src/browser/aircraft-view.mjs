@@ -1,7 +1,16 @@
-// ============================================================
-//  飞行器程序化几何与三维可视化同步
-//  注意：渲染几何为示意性非尺度模型，与动力学力臂（a=b=0.62m）无关
-// ============================================================
+/**
+ * @file    aircraft-view.mjs
+ * @module  analysis/py-web-lab 渲染（机体几何）
+ * @brief   程序化生成飞行器几何体，并按遥测姿态/摆角/转速同步三维姿态。
+ * @details 输入：S（quat/df/dt/dw/wf/wt）；处理：机体组旋转 + 摆座局部旋转 + 桨旋转；
+ *          输出：Three.js 场景对象更新。
+ * @theory  N/A（渲染层）
+ * @frame   NED 世界系 + FRD 机体；四元数来自遥测 (x,y,z,w)
+ * @units   渲染长度单位（示意），角度 rad
+ * @note    ★ 渲染几何为示意性非尺度模型，与动力学力臂 a=b=0.315 m 无关；
+ *          历史注释里的 0.62/1.78/1.82 均为渲染值，不得用于物理估算（@ref MOD-002 §6）。
+ * @see     main.mjs、@ref MOD-002
+ */
 import * as THREE from 'three';
 
 // ---------- 材质 ----------
@@ -117,6 +126,11 @@ function makeLabel(text, color) {
   return sp;
 }
 
+/**
+ * 创建飞行器可视化对象（机体组 + 摆座 + 螺旋桨），加入场景并返回引用集合。
+ * @param {THREE.Scene} scene 目标场景
+ * @returns {Object} 视图对象：aircraft 根组、摆座、桨叶等可更新节点
+ */
 export function createAircraftView(scene) {
   const aircraft = new THREE.Group();
   scene.add(aircraft);
@@ -236,6 +250,12 @@ export function createAircraftView(scene) {
 }
 
 // ---------- 可视化同步（每帧） ----------
+/**
+ * 用一帧遥测同步机体姿态、摆角与螺旋桨转角（渲染层，不做物理计算）。
+ * @param {Object} view createAircraftView 的返回值
+ * @param {Object} sim  状态代理（S/F），quat 按 (x,y,z,w)
+ * @param {number} dt   帧间隔 [s]（P 仅渲染比例，非物理力臂）
+ */
 export function updateAircraftView(view, sim, P, dt) {
   const { S, dyn } = sim;
   // 姿态 → 机体

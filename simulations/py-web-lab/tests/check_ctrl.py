@@ -1,4 +1,16 @@
-# 浏览器实测：控制律切换按钮（sas→indi→lqr→adrc）
+"""check_ctrl.py — 浏览器实测：控制律切换按钮（sas→indi→lqr→adrc）。
+
+@file    check_ctrl.py
+@module  analysis/py-web-lab 测试（浏览器）
+@brief   用 Playwright 点选控制律按钮并截图，验证前端切换链路。
+@details 输入：本地 8090 服务 + headless Chromium；处理：打开页面 → 依次点击模式按钮
+         → 读回 S.ctrl；输出：控制台断言 + 截图（人工核对）。
+@theory  N/A（前端交互链路测试）
+@frame  N/A
+@units   N/A
+@note    依赖本机 Playwright 浏览器绝对路径 EXE；服务未启动时脚本会直接失败。
+@see     server/controllers.py、tests/pw_verify.py
+"""
 import asyncio
 
 from playwright.async_api import async_playwright

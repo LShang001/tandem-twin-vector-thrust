@@ -1,5 +1,16 @@
-// 交叉验证（JS 侧）：vector-thrust-lab web core 跑同场景 → JSON 轨迹
-// 与 run_py.py 同场景，由 compare.mjs 对比（门槛 <1e-6）
+/**
+ * @file    run_js.mjs
+ * @module  analysis/py-web-lab 测试（交叉验证 JS 侧）
+ * @brief   用 vector-thrust-lab 的 core 模块跑与 run_py.py 相同的 6 个场景。
+ * @details 输入：simulations/vector-thrust-lab/src/core/*.mjs；处理：确定性推进并记录
+ *          quat/omega/vel/pos；输出：tests/cross/js-*.json。
+ * @theory  N/A（一致性验证；JS core 是回归基线的实现，@ref MOD-001）
+ * @frame   NED + FRD
+ * @units   SI
+ * @note    场景清单与 run_py.py 必须同步修改，否则 compare.mjs 报缺文件；
+ *          本脚本使用 parameters.mjs（由 tools/sync-params.py 生成，禁止手改）。
+ * @see     run_py.py、compare.mjs、@ref AGENTS.md（parameters.mjs 边界）
+ */
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';

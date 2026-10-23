@@ -1,10 +1,24 @@
-// ============================================================
-//  环境效果：地面网格 / 星空 / 气流粒子 / 网格跟随
-// ============================================================
+/**
+ * @file    effects.mjs
+ * @module  analysis/py-web-lab 渲染（环境效果）
+ * @brief  构建地面网格、星空、气流粒子并让网格随载机惯性速度反向平移。
+ * @details 输入：状态代理（速度/姿态/主题）；处理：网格重建、粒子推进；
+ *          输出：Three.js 对象更新（仅视觉，不参与物理）。
+ * @theory  N/A（渲染层）
+ * @frame   世界系 NED（网格贴水平面），粒子按惯性速度方向流动
+ * @units   渲染单位与 m/s（仅用于视觉速度比例）
+ * @note    "载机跟随"渲染策略：机体居中、地面网格反衬真实位移（@ref MOD-001 §9）。
+ * @see     main.mjs、theme.mjs
+ */
 import * as THREE from 'three';
 
 const AIR_N = 1300;
 
+/**
+ * 创建环境效果集合（地面网格 / 星空 / 气流粒子），返回逐帧更新接口。
+ * @param {THREE.Scene} scene 目标场景
+ * @returns {Object} { update(dt, sim), rebuildGrid(c1,c2,op) } 等可调用成员
+ */
 export function createEffects(scene) {
   // ---------- 地面网格 ----------
   let grid = null;

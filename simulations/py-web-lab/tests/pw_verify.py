@@ -1,4 +1,16 @@
-# py-web-lab 浏览器实测：连接 → 巡航 → 悬停 → 定高 → 截图
+"""pw_verify.py — 浏览器端到端实测：连接 → 巡航 → 悬停 → 定高 → 截图。
+
+@file    pw_verify.py
+@module  analysis/py-web-lab 测试（浏览器）
+@brief   打开 http://127.0.0.1:8090/，逐模式操作并截图存档。
+@details 输入：本地 8090 服务 + headless Chromium；处理：连接 → 切模式 → 发 step
+         → 截图；输出：tests/*.png 与控制台日志。
+@theory  N/A（端到端链路）
+@frame  渲染层（非物理）
+@units   N/A
+@note    OUT 固定为测试目录；截图仅作人工核对，不参与数值断言。
+@see     server/main.py、tests/check_*.py
+"""
 import asyncio
 from pathlib import Path
 

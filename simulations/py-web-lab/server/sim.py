@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
-"""py-web-lab 仿真引擎：状态 + 子步推进（复用 high-fidelity-analysis/core.py）。
+"""sim.py — py-web-lab 仿真引擎：状态 + 子步推进（复用 high-fidelity-analysis/core.py）。
 
-状态结构与 vector-thrust-lab 的 sim 完全一致（S/F/dyn/aero 字段同名），
-遥测输出四元数为 JS 顺序 (x,y,z,w)；引擎内部用 core.py 的 (w,x,y,z)。
+@file    sim.py
+@module  analysis/py-web-lab 仿真引擎
+@brief   维护 S/F/dyn/aero 状态并调用 core 的 RK4 子步推进，产出遥测与参数快照。
+@details 输入：命令层设置的 S 字段（油门/摆角/差速/模式）+ 帧步长 dt；
+         处理：n=ceil(dt/maxStep) 个子步，每步控制律（controllers）→ 推进 → 状态更新；
+         输出：S/F/dyn/aero 四组遥测（四元数按 JS 顺序 (x,y,z,w) 输出）。
+         状态结构与 vector-thrust-lab 的 sim 字段同名，便于前端与交叉验证共用。
+@theory  四元数 RK4 与每阶段保范 @ref MOD-001 §9、@ref MOD-002 §3.4；
+         推力矢量与气动 @ref MOD-001 §2–§6；theta=−asin(R13) @ref MOD-002 §4.1。
+@frame  NED + FRD；内部 (w,x,y,z) 与遥测 (x,y,z,w) 的转换边界在本文件。
+@units   SI；dt s、转速 rad/s、角度 rad（遥测中 euler 为 rad）。
+@note    子步上限 maxStep 与帧步长关系是行为红线（帧 delta≤0.05 s / 子步≤0.004 s）；
+         本引擎不实现固件的调度与通信分频，只是物理闭环。
+@see     controllers.py、protocol.py、core.py、@ref MOD-002
 """
 import sys
 from pathlib import Path

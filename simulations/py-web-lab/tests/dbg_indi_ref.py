@@ -1,4 +1,18 @@
-"""对照：simulate.py 原版 INDI 全闭环（rk4），初始 q=0.3 rad/s 扰动"""
+"""dbg_indi_ref.py — 对照：simulate.py 原版 INDI 全闭环（RK4）的参考轨迹。
+
+@file    dbg_indi_ref.py
+@module  analysis/py-web-lab 调试脚本
+@brief   用 high-fidelity-analysis 的 INDIController 跑 0.3 rad/s 初始扰动闭环，
+         作为 py-web-lab INDI 移植的逐帧参考。
+@details 输入：参数 + trim{aTrim,dtTrim,thrTrim}；处理：simulate 原版闭环若干步；
+         输出：stdout 逐帧打印，供与本仓移植实现比对。
+@theory  INDI 增量分配 @ref TandemVec-Paper/ch10；
+         配平参考点 @ref MOD-003 §2。
+@frame  NED + FRD；theta 为项目锁定显示值。
+@units   rad、rad/s、s。
+@note    一次性比对脚本（非 pytest）；路径 parents[2] 指向 simulations/。
+@see     server/controllers.py、high-fidelity-analysis/simulate.py
+"""
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'high-fidelity-analysis'))

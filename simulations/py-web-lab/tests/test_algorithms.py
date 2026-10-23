@@ -1,7 +1,18 @@
 # -*- coding: utf-8 -*-
-"""控制算法回归：INDI/LQR/ADRC 收敛断言（5°/s 扰动，8s 内 |ω|<0.05 rad/s）。
+"""test_algorithms.py — 控制算法回归：INDI/LQR/ADRC 收敛断言。
 
-运行：cd simulations/py-web-lab && python tests/test_algorithms.py
+@file    test_algorithms.py
+@module  analysis/py-web-lab 测试（数值回归）
+@brief   5°/s 扰动下要求 8 s 内 |ω|<0.05 rad/s，覆盖三套控制器移植。
+@details 输入：Simulation 引擎（进程内，无需服务）；处理：注入扰动 → 逐帧推进 →
+         判定收敛；输出：控制台 PASS/FAIL 与失败项。
+         运行：cd simulations/py-web-lab && python tests/test_algorithms.py
+@theory  INDI @ref TandemVec-Paper/ch10；LQR @ref TandemVec-Paper/ch14；
+         ADRC/ESO @ref TandemVec-Paper/ch16。
+@frame  FRD 机体系角速率。
+@units   角速度 rad/s、时间 s、扰动 deg/s。
+@note    阈值 0.05 rad/s ≈ 2.9°/s 是移植合理性的经验门限，不是适航指标。
+@see     server/controllers.py、server/sim.py
 """
 import sys
 from pathlib import Path

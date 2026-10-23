@@ -1,12 +1,26 @@
-// ============================================================
-//  渲染器 / 场景 / 相机 / 灯光 / 辉光后处理
-// ============================================================
+/**
+ * @file    scene.mjs
+ * @module  analysis/py-web-lab 渲染（场景/相机/后处理）
+ * @brief   建立 WebGL 渲染器、场景、相机、灯光与辉光后处理管线。
+ * @details 输入：DOM 容器；处理：初始化 Three.js 渲染链路与 resize；
+ *          输出：{renderer, scene, camera, composer} 供 main.mjs 使用。
+ * @theory  N/A（渲染层）
+ * @frame   世界系 NED；相机为轨道控制（视觉观察，不参与姿态解算）
+ * @units   渲染单位、像素
+ * @note    ACES 色调映射 + UnrealBloom 为视觉增强，不改变任何物理量。
+ * @see     main.mjs、theme.mjs
+ */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 
+/**
+ * 初始化 WebGL 渲染链路（渲染器/场景/相机/灯光/辉光后处理）并处理窗口 resize。
+ * @param {HTMLElement} container 渲染画布容器
+ * @returns {Object} { renderer, scene, camera, composer }
+ */
 export function createScene(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2));

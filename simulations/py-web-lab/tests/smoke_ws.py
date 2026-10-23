@@ -1,5 +1,17 @@
 # -*- coding: utf-8 -*-
-"""协议冒烟测试：init → reset vtol → step 8s → set altHold → 验证遥测"""
+"""smoke_ws.py — 协议冒烟：init → reset vtol → step 8s → set altHold → 验遥测。
+
+@file    smoke_ws.py
+@module  analysis/py-web-lab 测试（协议）
+@brief   直接连 WebSocket 校验命令往返与遥测字段完整性。
+@details 输入：本地 8090 服务；处理：init/reset/set/step 命令序列 → 解析回包；
+         输出：控制台断言（含 S/F 关键字段）。
+@theory  N/A（协议冒烟；物理正确性由 tests/test_algorithms.py 覆盖）
+@frame  N/A
+@units   dt s、角度 rad
+@note    不依赖浏览器，是 CI 里最快的协议级回归；服务未启动会抛连接异常。
+@see     server/protocol.py、tests/test_algorithms.py
+"""
 import asyncio
 import json
 

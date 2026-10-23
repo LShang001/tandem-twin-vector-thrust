@@ -1,4 +1,16 @@
-# 验证：Web「关闭服务」按钮 → 服务进程退出 → 端口释放 → 页面显示已关闭
+"""check_shutdown.py — 验证「关闭服务」按钮 → 进程退出 → 端口释放。
+
+@file    check_shutdown.py
+@module  analysis/py-web-lab 测试（浏览器）
+@brief   点页面关闭按钮后轮询 8090 端口，断言服务已退出且页面提示已关闭。
+@details 输入：本地 8090 服务 + headless Chromium；处理：点击关闭 → port_alive()
+         轮询 → 读页面文案；输出：控制台断言。
+@theory  N/A（生命周期测试）
+@frame  N/A
+@units   超时 s
+@note    该测试会**真的杀掉** 8090 服务进程，跑完需重新启动服务。
+@see     server/main.py、server/cli.py
+"""
 import asyncio
 import urllib.request
 

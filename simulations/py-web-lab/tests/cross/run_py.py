@@ -1,6 +1,17 @@
 # -*- coding: utf-8 -*-
-"""交叉验证（Python 侧）：py-web-lab 引擎跑场景 → JSON 轨迹。
-与 run_js.mjs 同场景，由 compare.mjs 对比（门槛 <1e-6）。"""
+"""run_py.py — 交叉验证（Python 侧）：py-web-lab 引擎跑场景 → JSON 轨迹。
+
+@file    run_py.py
+@module  analysis/py-web-lab 测试（跨语言交叉验证）
+@brief   用 Python 引擎跑 6 个固定场景并落盘，供 compare.mjs 与 JS 侧逐字段比对。
+@details 输入：server/sim.py + controllers.py；处理：每个场景确定性推进并记录
+         quat/omega/vel/pos；输出：tests/cross/py-*.json。
+@theory  N/A（一致性验证；两边实现同源于 @ref MOD-001 与 @ref MOD-002）
+@frame  NED + FRD；落盘四元数按 JS 顺序 (x,y,z,w)。
+@units   SI
+@note    场景清单必须与 run_js.mjs 的 SCENES 完全一致，否则 compare.mjs 直接报缺文件。
+@see     run_js.mjs、compare.mjs、server/sim.py
+"""
 import json
 import sys
 from pathlib import Path
