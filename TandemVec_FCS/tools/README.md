@@ -26,6 +26,7 @@
 | `audit_math.py` | 数学/约定一致性审计 |
 | `dps_profile_parser.js` / `dps_profile_runner.js` | DBG 任务调度性能分析（`tasks` 命令输出） |
 | `nmea-host-test/` | GNSS 双协议解析 host 回归测试（g++ 66 断言） |
+| `gen_mag_reference.py` | 离线生成 IGRF/WMM 站点磁参考场常量（写入 `include/mag_reference.h`；需临时装 ppigrf） |
 
 ## 历史验证脚本（verify_*.py — 一次性数学/符号验证，跑完即归档）
 
