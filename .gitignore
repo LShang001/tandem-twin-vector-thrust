@@ -71,3 +71,21 @@ output/playwright/
 .zcode/
 output/
 TandemVec_FCS/output/
+
+# ---- Agent 会话临时产物 ----
+.dsh-ops/
+.code-comments-report.json
+
+# ---- Windows 保留名误生成 ----
+TandemVec_FCS/nul
+
+# ---- 宿主机测试编译产物 ----
+TandemVec_FCS/test_host/bin/
+
+# ---- 参考书 MinerU 生成图片与解析中间件 ----
+docs/08-参考资料/books/**/images/
+docs/08-参考资料/books/**/layout.json
+docs/08-参考资料/books/**/*_content_list*.json
+docs/08-参考资料/books/**/*_model.json
+docs/08-参考资料/books/**/manifest.json
+docs/08-参考资料/books/**/result.zip
