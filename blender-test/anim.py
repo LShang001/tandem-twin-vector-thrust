@@ -1,9 +1,17 @@
-"""
-╔══════════════════════════════════════════════════════════╗
-║  纵列双发矢量推力飞行器 · Blender 电影级动画渲染脚本      ║
-║  引擎: EEVEE Next (快速高质量) / Cycles 可选              ║
-║  用法: blender.exe --background --python anim.py          ║
-╚══════════════════════════════════════════════════════════╝
+"""anim.py — Blender 电影级动画渲染脚本（纵列双发矢量推力飞行器）。
+
+@file    anim.py
+@module  analysis/可视化渲染（Blender）
+@brief   程序化搭建机体/场景/材质与动画，用 EEVEE Next（或 Cycles）渲染成片。
+@details 输入：无外部资产（全部程序化几何）；处理：清场景 → 建机身/机臂/电机/桨
+         → 材质与灯光 → 关键帧动画 → 逐帧渲染；输出：视频/帧序列（OUT_DIR 下）。
+         用法：blender.exe --background --python anim.py
+@theory  N/A（渲染脚本，不含动力学；姿态约定示意性参照 @ref MOD-002 §6）
+@frame   渲染世界系（Z 向上，Blender 约定），与仿真 NED 不同；姿态为示意
+@units   渲染单位（米级示意）、角度 rad、帧号
+@note    本脚本在 Blender 内运行（依赖 bpy），无法在 CPython 下 import；
+         渲染力臂与物理力臂无关（@ref MOD-002 §6），不得据此做物理估算。
+@see     test_render.py、@ref MOD-002
 """
 import bpy
 import math
@@ -307,10 +315,9 @@ for y_sign, s in [(1, "R"), (-1, "L")]:
 # 2. PBR 材质系统
 # ═════════════════════════════════════════════════════════
 
-def create_material(name, base_rgba, metallic=0.0, roughness=0.5,
-                    emission_rgb=None, emission_strength=0.0,
-                    anisotropic=0.0, clearcoat=0.0, subsurface=0.0,
-                    specular=0.5):
+def create_material(name, base_rgba, metallic=0.0, roughness=0.5, emission_rgb=None,
+                    emission_strength=0.0, anisotropic=0.0, clearcoat=0.0, subsurface=0.0, specular=0.5):
+    """创建 Principled BSDF 材质并返回（base_rgba 为 0–1 线性 RGBA，其余为无量纲参数）。"""
     mat = bpy.data.materials.new(name=name)
     mat.use_nodes = True  # noqa: BL6-warn
     nodes = mat.node_tree.nodes

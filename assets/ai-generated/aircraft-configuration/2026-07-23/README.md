@@ -6,7 +6,7 @@
 
 - 生成日期：2026-07-23
 - 生成方式：AI 图像生成工具，参考图驱动生成
-- 权威参考图：`docs/03-理论推导/THY-004/fig/01-web-render.png`
+- 权威参考图：`TandemVec-Paper/fig/01-web-render.png`
 - 关键构型约束：参考视角中左侧为前发拉力式，右侧为尾发推进式；恰好两副纵列螺旋桨；不得形成 X 形机翼歧义
 
 ## 文件与视觉审查
@@ -130,7 +130,7 @@ Constraints: edit only propeller handedness, hub, and short visible shaft; no ar
 ## 候选 M 生成记录
 
 - 生成工具：`mcp__uTools__utools_zfc4py1y_image_generate`
-- 参考图：`docs/03-理论推导/THY-004/fig/01-ai-selected-j.png`
+- 参考图：`TandemVec-Paper/fig/01-ai-selected-j.png`
 - 输出原始文件：`C:/Users/12631/Downloads/image_1784748715455.png`
 - 归档尺寸：`1264 x 848`
 - 追溯说明：上游会话只保留了生成工具、参考图和编辑意图，未保留逐字提示词。以下是按会话交接记录恢复的完整语义约束，**不是逐字原始提示词**，因此 M 不作为最终论文证据图。
@@ -177,10 +177,10 @@ Avoid: both shafts collinear, both motors tilted in the same image plane, arbitr
 
 ## 最终选用的确定性底图
 
-- 源码：`docs/03-理论推导/THY-004/fig/01-web-orthogonal-deflection.html`
+- 源码：`TandemVec-Paper/fig/01-web-orthogonal-deflection.html`
 - 渲染：直接复用 `simulations/vector-thrust-lab/src/browser/aircraft-view.mjs`
 - 固定状态：`delta_f = +18 deg` 绕 `z_b`，`delta_t = +18 deg` 绕 `y_b`
-- 输出：`docs/03-理论推导/THY-004/fig/01-web-orthogonal-deflection.png`
+- 输出：`TandemVec-Paper/fig/01-web-orthogonal-deflection.png`
 - 尺寸：`1600 x 900`
 - SHA-256：`9DA7A49AA94F9147A127A3ED0FC6604B91109070A4A590ED702C33253B156ADF`
 - 可验证元素：两条零摆角虚线、两条当前电机轴线、前部 `z_b` 枢轴、尾部 `y_b` 枢轴、两个绑定到不同三维平面的摆动弧。

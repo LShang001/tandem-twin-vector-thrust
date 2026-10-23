@@ -1,7 +1,15 @@
-"""
-Blender 命令行渲染测试
-用法: blender.exe --background --python test_render.py
-输出: test_output.png
+"""test_render.py — Blender 命令行最小渲染测试（验证环境可出图）。
+
+@file    test_render.py
+@module  analysis/可视化渲染（Blender 冒烟）
+@brief   搭一个简版飞行器 + 灯光 + 相机，渲染单帧确认 Blender 环境可用。
+@details 用法：blender.exe --background --python test_render.py
+         输出：test_output.png（与本脚本同目录）。
+@theory  N/A（渲染冒烟，不含动力学）
+@frame   渲染世界系（Z 向上），与仿真 NED 不同
+@units   渲染单位（米级示意）、像素
+@note    这是环境自检脚本，不是物理/控制验证；出图成功只说明 bpy 与渲染后端可用。
+@see     anim.py、@ref MOD-002
 """
 import bpy
 import math
