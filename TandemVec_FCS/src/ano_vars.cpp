@@ -211,7 +211,7 @@ void anoVarsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
 // ------------------------------------------------------------------
 //  DBG vars 命令（handleDebugConsole 分派）
 // ------------------------------------------------------------------
-void anoVarsDebugCommand(HardwareSerial &serial, char *args)
+void anoVarsDebugCommand(Uart &serial, char *args)
 {
     // 跳前导空格（分派传入 line+4，命令与参数间有空格）
     while (args && *args == ' ')

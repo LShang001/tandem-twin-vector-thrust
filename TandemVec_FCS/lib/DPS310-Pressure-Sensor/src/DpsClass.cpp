@@ -59,7 +59,8 @@ void DpsClass::begin(SPIClass &bus, int32_t chipSelect, uint8_t threeWire)
 
 	// Init bus
 	m_spibus->begin();
-	m_spibus->setDataMode(SPI_MODE3);
+	// Arduino Core 3.0 移除了 SPIClass::setDataMode()；
+	// SPI 模式由后续每次 beginTransaction(SPISettings(..., SPI_MODE3)) 应用。
 
 	pinMode(m_chipSelect, OUTPUT);
 	digitalWrite(m_chipSelect, HIGH);

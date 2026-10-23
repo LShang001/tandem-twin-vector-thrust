@@ -25,8 +25,6 @@
 
 #include "state_data.h"
 
-class Print; // Arduino 输出流（HardwareSerial 基类），供 schedulerStatsPrint 参数
-
 /**
  * @brief 定时器中断回调函数 (2kHz)
  *
@@ -84,4 +82,4 @@ void schedulerStatsReset();
  *
  * @param out 输出流（DBG 控制台 Serial6）
  */
-void schedulerStatsPrint(Print &out);
+void schedulerStatsPrint(arduino::Print &out);

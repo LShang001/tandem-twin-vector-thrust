@@ -346,7 +346,7 @@ namespace
       return;
     }
 
-    // STM32duino HardwareSerial 支持运行时 end/begin 重配置波特率。
+    // STM32duino Uart 支持运行时 end/begin 重配置波特率。
     // 切换波特率后清空一次接收缓冲，避免上一波特率残留下乱码数据。
     opticalFlowSerial.end();
     opticalFlowSerial.begin(baud);
@@ -994,7 +994,7 @@ uint32_t flowSensorGetUartRxReadSum()
 // DBG `flowdump`：暂停自动识别，独占读取 UART7 指定时长并统计帧头/字节样本。
 // 用于没有示波器时判断“模块到底有没有出数据、出的是哪种协议”。
 // ------------------------------------------------------------------
-void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms)
+void flowSensorDebugDump(Uart &out, uint32_t duration_ms)
 {
   if (duration_ms > 2000)
   {

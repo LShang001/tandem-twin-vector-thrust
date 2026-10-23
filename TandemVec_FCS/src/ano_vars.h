@@ -32,4 +32,4 @@ void anoVarsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
                      const uint8_t *data, uint16_t len);
 
 // DBG vars 命令（handleDebugConsole 分派）
-void anoVarsDebugCommand(HardwareSerial &serial, char *args);
+void anoVarsDebugCommand(Uart &serial, char *args);

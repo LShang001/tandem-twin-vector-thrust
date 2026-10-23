@@ -254,7 +254,7 @@ uint64_t parseTimestamp(const uint8_t *data) {
   *
   * @param serial DETA100 连接的串口对象引用 (Serial4)
   */
- void Read_DETA100Data(HardwareSerial &serial)
+ void Read_DETA100Data(Uart &serial)
  {
      static uint16_t Count = 0;
      static uint16_t expectedLength = 0;

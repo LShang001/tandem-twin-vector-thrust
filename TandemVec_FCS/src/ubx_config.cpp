@@ -33,7 +33,7 @@ const UbxCfgResult &ubxLastCfgResult() { return s_last_cfg; }
 // UBX 帧: B5 62 | cls | id | lenL | lenH | payload | CK_A | CK_B（标准 sum0/sum1）
 static uint8_t s_txbuf[6 + 40 + 2];   // 最大配置帧（CFG-GNSS/CFG-NAV5 36B）
 
-static void _ubx_send(HardwareSerial &serial, uint8_t cls, uint8_t id,
+static void _ubx_send(Uart &serial, uint8_t cls, uint8_t id,
                       const uint8_t *payload, uint16_t len)
 {
   uint8_t *p = s_txbuf;
@@ -54,7 +54,7 @@ static void _ubx_send(HardwareSerial &serial, uint8_t cls, uint8_t id,
 }
 
 // ---------------- ACK-ACK 等待（带回显校验）----------------
-static bool _ubx_wait_ack(HardwareSerial &serial, uint8_t cls, uint8_t id, uint32_t timeout_ms)
+static bool _ubx_wait_ack(Uart &serial, uint8_t cls, uint8_t id, uint32_t timeout_ms)
 {
   const uint32_t t0 = millis();
   uint8_t state = 0;
@@ -106,7 +106,7 @@ static bool _ubx_wait_ack(HardwareSerial &serial, uint8_t cls, uint8_t id, uint3
 
 // ---------------- 通用"轮询读取"：发 len=0 的 CFG-* → 收同 cls/id 响应 payload ----------------
 // 返回实际收到的 payload 长度（0 = 超时/失败）；校验通过才返回
-static uint16_t _ubx_poll_payload(HardwareSerial &serial, uint8_t cls, uint8_t id,
+static uint16_t _ubx_poll_payload(Uart &serial, uint8_t cls, uint8_t id,
                                   uint8_t *out, uint16_t out_max, uint32_t timeout_ms)
 {
   _ubx_send(serial, cls, id, nullptr, 0);
@@ -162,7 +162,7 @@ static uint16_t _ubx_poll_payload(HardwareSerial &serial, uint8_t cls, uint8_t i
 // ---------------- 波特率探测 ----------------
 enum DetectKind { DETECT_NONE, DETECT_UBX, DETECT_NMEA };
 
-static DetectKind _probe_baud(HardwareSerial &serial, uint32_t baud, uint32_t window_ms)
+static DetectKind _probe_baud(Uart &serial, uint32_t baud, uint32_t window_ms)
 {
   serial.begin(baud);
   const uint32_t t0 = millis();
@@ -214,7 +214,7 @@ static DetectKind _probe_baud(HardwareSerial &serial, uint32_t baud, uint32_t wi
 // ---------------- 配置帧构造 ----------------
 
 // CFG-PRT（20B）：UART1 → 目标波特率 + 协议掩码（nmea_out=false 时 UBX-only）
-static void _cfg_prt(HardwareSerial &serial, uint32_t baud, bool nmea_out)
+static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
 {
   uint8_t p[20] = {0};
   p[0] = 1;                          // portID = UART1
@@ -229,7 +229,7 @@ static void _cfg_prt(HardwareSerial &serial, uint32_t baud, bool nmea_out)
 }
 
 // CFG-RATE（6B）：测量周期 / 导航频率 / 时间基准
-static void _cfg_rate(HardwareSerial &serial, uint16_t meas_rate_ms)
+static void _cfg_rate(Uart &serial, uint16_t meas_rate_ms)
 {
   uint8_t p[6] = {0};
   p[0] = (uint8_t)(meas_rate_ms & 0xFF);
@@ -240,7 +240,7 @@ static void _cfg_rate(HardwareSerial &serial, uint16_t meas_rate_ms)
 }
 
 // CFG-MSG（8B）：UART1 上使能指定消息
-static void _cfg_msg(HardwareSerial &serial, uint8_t cls, uint8_t id, uint8_t rate)
+static void _cfg_msg(Uart &serial, uint8_t cls, uint8_t id, uint8_t rate)
 {
   uint8_t p[8] = {cls, id, rate, 0, 0, 0, 0, 0};
   _ubx_send(serial, 0x06, 0x01, p, 8);
@@ -253,7 +253,7 @@ static void _cfg_msg(HardwareSerial &serial, uint8_t cls, uint8_t id, uint8_t ra
 //   pdop_thresh pDOP 定位门限：-1 不改（单位 0.1，如 50=5.0）
 // ★ 2026-08-09 修复：dynModel 在 payload[2]、mask 位在 payload[0]（bit0）——
 //   旧实现把 dynModel 枚举值写进 mask 字节，Airborne 配置从未生效过。
-static bool _cfg_nav5_rw(HardwareSerial &serial, int dyn_model, int fix_mode,
+static bool _cfg_nav5_rw(Uart &serial, int dyn_model, int fix_mode,
                          int min_elev, int pdop_thresh)
 {
   uint8_t cur[36];
@@ -297,7 +297,7 @@ static bool _cfg_nav5_rw(HardwareSerial &serial, int dyn_model, int fix_mode,
 
 // CFG-GNSS（星座配置）——读改写：轮询当前 → 按掩码改各星座使能位 → 回写
 // gnss_mask: bit0 GPS(0) bit1 GLONASS(6) bit2 Galileo(2) bit3 BeiDou(3)
-static bool _cfg_gnss(HardwareSerial &serial, uint8_t gnss_mask)
+static bool _cfg_gnss(Uart &serial, uint8_t gnss_mask)
 {
   uint8_t cur[40];
   const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, cur, sizeof(cur), 500);
@@ -336,7 +336,7 @@ static bool _cfg_gnss(HardwareSerial &serial, uint8_t gnss_mask)
 }
 
 // CFG-SBAS（8B）：差分增强使能
-static bool _cfg_sbas(HardwareSerial &serial)
+static bool _cfg_sbas(Uart &serial)
 {
   uint8_t p[8] = {1, 0, 0, 0, 0, 0, 0, 0};   // enabled=1
   _ubx_send(serial, 0x06, 0x16, p, 8);
@@ -344,7 +344,7 @@ static bool _cfg_sbas(HardwareSerial &serial)
 }
 
 // CFG-CFG（13B）：固化当前配置到接收机非易失存储
-static void _cfg_save(HardwareSerial &serial)
+static void _cfg_save(Uart &serial)
 {
   uint8_t p[13] = {0};
   // ★ 2026-08-10 全面审查修复：0x1F→0x3F 补 senConf(bit5)——原 0x1F 不含
@@ -354,7 +354,7 @@ static void _cfg_save(HardwareSerial &serial)
 }
 
 // ---------------- 回读校验：CFG-PRT 轮询 ----------------
-static bool _ubx_verify_prt(HardwareSerial &serial, uint32_t expected_baud)
+static bool _ubx_verify_prt(Uart &serial, uint32_t expected_baud)
 {
   uint8_t payload[20];
   const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x00, payload, sizeof(payload), 500);
@@ -370,7 +370,7 @@ static bool _ubx_verify_prt(HardwareSerial &serial, uint32_t expected_baud)
 // ============================================================
 //  主入口
 // ============================================================
-UbxCfgResult ubxAutoConfig(HardwareSerial &serial, const UbxConfigOptions *opt)
+UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
 {
   const UbxConfigOptions &o = (opt != nullptr) ? *opt : kUbxDefaultCfg;
   UbxCfgResult r = {};
@@ -496,7 +496,7 @@ UbxCfgResult ubxAutoConfig(HardwareSerial &serial, const UbxConfigOptions *opt)
 }
 
 // CFG-RST：GNSS 仅软件复位（navBbrMask=0x02, resetMode=0x02）
-void ubxResetReceiver(HardwareSerial &serial)
+void ubxResetReceiver(Uart &serial)
 {
   uint8_t p[4] = {0x02, 0x02, 0, 0};
   _ubx_send(serial, 0x06, 0x04, p, 4);
@@ -511,7 +511,7 @@ void ubxResetReceiver(HardwareSerial &serial)
 
 // 消息输出速率（CFG-MSG；rate=0 关闭，1-127 为 1/n 秒）。
 // cls=0xF0 为 NMEA 句、cls=0x01 为 UBX 消息（NAV-PVT/EOE/DOP/SAT...）。
-bool ubxMsgRateConfig(HardwareSerial &serial, uint8_t cls, uint8_t msg_id,
+bool ubxMsgRateConfig(Uart &serial, uint8_t cls, uint8_t msg_id,
                       uint8_t rate)
 {
   if (rate > 127)
@@ -523,7 +523,7 @@ bool ubxMsgRateConfig(HardwareSerial &serial, uint8_t cls, uint8_t msg_id,
 }
 
 // CFG-NMEA（0x06 0x17，20B V1）读改写公共骨架：轮询当前 → 改 offset → 回写 → 等 ACK
-static bool _cfg_nmea_read_modify_write(HardwareSerial &serial, uint8_t offset,
+static bool _cfg_nmea_read_modify_write(Uart &serial, uint8_t offset,
                                         uint8_t value)
 {
   uint8_t cur[20];
@@ -539,7 +539,7 @@ static bool _cfg_nmea_read_modify_write(HardwareSerial &serial, uint8_t offset,
 }
 
 // NMEA 版本（offset 1）：编码 = (主<<4)|次，如 0x23=2.3 / 0x41=4.1 / 0x4A=4.10 / 0x4B=4.11
-bool ubxNmeaVersionConfig(HardwareSerial &serial, uint8_t version)
+bool ubxNmeaVersionConfig(Uart &serial, uint8_t version)
 {
   if (version == 0)
   {
@@ -549,7 +549,7 @@ bool ubxNmeaVersionConfig(HardwareSerial &serial, uint8_t version)
 }
 
 // 主 talker ID（offset 8）：NMEA_TALKER_*（0=不覆盖接收机默认）
-bool ubxNmeaTalkerConfig(HardwareSerial &serial, uint8_t talker_id)
+bool ubxNmeaTalkerConfig(Uart &serial, uint8_t talker_id)
 {
   if (talker_id == 0)
   {
@@ -559,13 +559,13 @@ bool ubxNmeaTalkerConfig(HardwareSerial &serial, uint8_t talker_id)
 }
 
 // NMEA 输出滤波掩码（offset 0）：NMEA_FILTER_*（0=不过滤，全量输出）
-bool ubxNmeaFilterConfig(HardwareSerial &serial, uint8_t filter_mask)
+bool ubxNmeaFilterConfig(Uart &serial, uint8_t filter_mask)
 {
   return _cfg_nmea_read_modify_write(serial, 0, filter_mask);
 }
 
 // 串口输出协议掩码（CFG-PRT outProtoMask，读改写——不动波特率/模式）
-bool ubxProtoOutputConfig(HardwareSerial &serial, uint8_t out_mask)
+bool ubxProtoOutputConfig(Uart &serial, uint8_t out_mask)
 {
   if (out_mask == 0 || out_mask > 3)
   {
@@ -584,14 +584,14 @@ bool ubxProtoOutputConfig(HardwareSerial &serial, uint8_t out_mask)
 }
 
 // 导航引擎参数（CFG-NAV5 读改写，见 _cfg_nav5_rw）
-bool ubxNav5Config(HardwareSerial &serial, int dyn_model, int fix_mode,
+bool ubxNav5Config(Uart &serial, int dyn_model, int fix_mode,
                    int min_elev, int pdop_thresh)
 {
   return _cfg_nav5_rw(serial, dyn_model, fix_mode, min_elev, pdop_thresh);
 }
 
 // CFG-ITFM（0x06 0x39，8B）：CW 干扰检测开关（读改写 bit0）
-bool ubxItfmConfig(HardwareSerial &serial, bool enable)
+bool ubxItfmConfig(Uart &serial, bool enable)
 {
   uint8_t cur[8];
   const uint16_t n =
@@ -615,7 +615,7 @@ bool ubxItfmConfig(HardwareSerial &serial, bool enable)
 // CFG-ANT（0x06 0x13，4B）：天线状态查询（纯读，不改配置）
 //   返回 true 且 out[0..1]=config、out[2..3]=status；
 //   status 低 2 位：0=INIT 1=UNKNOWN 2=OK 3=SHORT/OPEN（短路或开路，看 config 启用了哪个检测）
-bool ubxAntStatusQuery(HardwareSerial &serial, uint8_t out[4])
+bool ubxAntStatusQuery(Uart &serial, uint8_t out[4])
 {
   const uint16_t n =
       _ubx_poll_payload(serial, 0x06, 0x13, out, 4, 500);

@@ -82,13 +82,13 @@ static const UbxConfigOptions kUbxDefaultCfg = {
  * @param serial 绑定的串口（本机 Serial4，与 DETA100 共用——仅 INTERNAL 路径调用）
  * @param opt    配置选项（见 UbxConfigOptions；传 nullptr = kUbxDefaultCfg）
  */
-UbxCfgResult ubxAutoConfig(HardwareSerial &serial, const UbxConfigOptions *opt);
+UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt);
 
 /** @brief 上次配置结果（DBG `ubxcfg status` 读取） */
 const UbxCfgResult &ubxLastCfgResult();
 
 /** @brief CFG-RST 软复位接收机（DBG `ubxcfg rst`；GNSS 仅软件复位） */
-void ubxResetReceiver(HardwareSerial &serial);
+void ubxResetReceiver(Uart &serial);
 
 // ============================================================
 //  NMEA 输出配置扩展（2026-08-09，DBG `ubxcfg nmea` / `ubxcfg proto`）
@@ -143,30 +143,30 @@ enum
  * @param msg_id 消息 ID（NMEA 用 UBX_NMEA_*，UBX 用协议 ID）
  * @param rate   输出速率（1-127；0 = 关闭）
  */
-bool ubxMsgRateConfig(HardwareSerial &serial, uint8_t cls, uint8_t msg_id,
+bool ubxMsgRateConfig(Uart &serial, uint8_t cls, uint8_t msg_id,
                       uint8_t rate);
 
 /**
  * @brief 设置 NMEA 版本（CFG-NMEA 0x06 0x17 读改写，offset 1）
  * @param version 编码 = (主<<4)|次，如 0x23=2.3 / 0x41=4.1 / 0x4A=4.10 / 0x4B=4.11；0=不改
  */
-bool ubxNmeaVersionConfig(HardwareSerial &serial, uint8_t version);
+bool ubxNmeaVersionConfig(Uart &serial, uint8_t version);
 
 /**
  * @brief 设置主 talker ID（CFG-NMEA offset 8；NMEA_TALKER_*；0=不改）
  */
-bool ubxNmeaTalkerConfig(HardwareSerial &serial, uint8_t talker_id);
+bool ubxNmeaTalkerConfig(Uart &serial, uint8_t talker_id);
 
 /**
  * @brief 设置 NMEA 输出滤波掩码（CFG-NMEA offset 0；NMEA_FILTER_*；0=不过滤）
  */
-bool ubxNmeaFilterConfig(HardwareSerial &serial, uint8_t filter_mask);
+bool ubxNmeaFilterConfig(Uart &serial, uint8_t filter_mask);
 
 /**
  * @brief 设置串口输出协议掩码（CFG-PRT OutProtocolMask）
  * @param out_mask 1=UBX-only，2=NMEA-only，3=UBX+NMEA
  */
-bool ubxProtoOutputConfig(HardwareSerial &serial, uint8_t out_mask);
+bool ubxProtoOutputConfig(Uart &serial, uint8_t out_mask);
 
 /**
  * @brief 导航引擎参数（CFG-NAV5 0x06 0x24 读改写，mask 按需置位）
@@ -176,14 +176,14 @@ bool ubxProtoOutputConfig(HardwareSerial &serial, uint8_t out_mask);
  * @param pdop_thresh  pDOP 定位门限：-1 不改（单位 0.1，如 50=5.0）
  * @note 2026-08-09 修复：旧实现把 dynModel 枚举写进 mask 字节致 Airborne 配置从未生效
  */
-bool ubxNav5Config(HardwareSerial &serial, int dyn_model, int fix_mode,
+bool ubxNav5Config(Uart &serial, int dyn_model, int fix_mode,
                    int min_elev, int pdop_thresh);
 
 /**
  * @brief CW 干扰检测开关（CFG-ITFM 0x06 0x39 读改写 bit0）
  * @note 城市/图传频段干扰导致定位漂移时可开启诊断（接收机自报干扰而非盲目调 EKF）
  */
-bool ubxItfmConfig(HardwareSerial &serial, bool enable);
+bool ubxItfmConfig(Uart &serial, bool enable);
 
 /**
  * @brief 天线状态查询（CFG-ANT 0x06 0x13，纯读）
@@ -191,7 +191,7 @@ bool ubxItfmConfig(HardwareSerial &serial, bool enable);
  *            out[2..3]=status（低 2 位：0=INIT 1=UNKNOWN 2=OK 3=SHORT/OPEN）
  * @return 收到 4 字节响应
  */
-bool ubxAntStatusQuery(HardwareSerial &serial, uint8_t out[4]);
+bool ubxAntStatusQuery(Uart &serial, uint8_t out[4]);
 
 /** @brief UBX 帧类型常量（供外部消息使能用） */
 enum

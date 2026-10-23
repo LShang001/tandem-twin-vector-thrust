@@ -293,32 +293,32 @@ void handleFlashService();
  * 退出方式：调试模式下发 "exit"
  * 命令集：help / ws <r> <g> <b> / wsoff / wsseq [ms] / wsstat / ver / exit
  */
-void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
+void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
                         uint8_t maxLen, bool &dbgMode);
 
 /**
  * @brief GPIO 诊断：打印 PD15 (WS2812) 实时寄存器状态
  * 调试命令 "gpio" 调用
  */
-void debugGpioDump(HardwareSerial &serial);
+void debugGpioDump(Uart &serial);
 
 /**
  * @brief TIM4+DMA 诊断：验证 DMA 链路是否真的工作
  * 调试命令 "tim4" 调用
  */
-void debugTim4Dump(HardwareSerial &serial);
+void debugTim4Dump(Uart &serial);
 
 /**
  * @brief Flash 调试命令（id/erase/stat/dump/test）
  * 调试命令 "flash <sub>" 调用
  */
-void debugFlashCommand(HardwareSerial &serial, char *args);
+void debugFlashCommand(Uart &serial, char *args);
 
 /**
  * @brief 磁力计椭球标定调试命令（status/start/stop/fit/save/load/clear/erase）
  * 调试命令 "magcal <sub>" 调用
  */
-void debugMagCalCommand(HardwareSerial &serial, char *args);
+void debugMagCalCommand(Uart &serial, char *args);
 
 /**
  * @brief MAVLink 遥测发送任务 (200Hz)

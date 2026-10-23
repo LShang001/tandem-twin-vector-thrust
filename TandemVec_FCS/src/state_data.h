@@ -216,19 +216,19 @@ struct Task
  */
 
 // --- 2.1 串口资源分配 ---
-extern HardwareSerial Serial1; // USART1: ELRS接收机 (CRSF输入)
-extern HardwareSerial Serial2; // USART2: 发动机控制器 / 数据转发
-extern HardwareSerial Serial3; // USART3: 黑匣子数据记录 (高速)
-extern HardwareSerial Serial4; // UART4:  DETA100 IMU/GNSS模块
-extern HardwareSerial Serial5; // UART5:  上位机轨迹规划接口
-extern HardwareSerial Serial6; // USART6: AnoCom地面站通信
-extern HardwareSerial Serial7; // UART7:  光流传感器接口
-extern HardwareSerial Serial8; // UART8:  USB Type-C 调试输出
+extern Uart Serial1; // USART1: ELRS接收机 (CRSF输入)
+extern Uart Serial2; // USART2: 发动机控制器 / 数据转发
+extern Uart Serial3; // USART3: 黑匣子数据记录 (高速)
+extern Uart Serial4; // UART4:  DETA100 IMU/GNSS模块
+extern Uart Serial5; // UART5:  上位机轨迹规划接口
+extern Uart Serial6; // USART6: AnoCom地面站通信
+extern Uart Serial7; // UART7:  光流传感器接口
+extern Uart Serial8; // UART8:  USB Type-C 调试输出
 
 // 串口引用别名
-extern HardwareSerial &receiverSerial;    // 遥控接收
-extern HardwareSerial &transmitterSerial; // 外部设备/发动机
-extern HardwareSerial &opticalFlowSerial; // 光流
+extern Uart &receiverSerial;    // 遥控接收
+extern Uart &transmitterSerial; // 外部设备/发动机
+extern Uart &opticalFlowSerial; // 光流
 
 // --- 2.2 执行机构引脚 (Actuators) ---
 #define TVC_ROLL_SERVO_PIN PA0  // [TIM2_CH1] TVC 滚转舵机 (SERVO1)
@@ -491,7 +491,7 @@ extern float kf_h_r_vel_base;
 extern float kf_h_outlier_gate;
 
 // --- 5.2 组合导航系统 ---
-extern HardwareSerial &gpsSerialPort;
+extern Uart &gpsSerialPort;
 extern bfs::Ubx ubx;
 extern bfs::Ekf15State nav_ekf;
 

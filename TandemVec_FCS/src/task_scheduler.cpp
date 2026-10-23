@@ -72,7 +72,7 @@ void schedulerStatsReset()
   s_loop_max_pass_us = 0;
 }
 
-void schedulerStatsPrint(Print &out)
+void schedulerStatsPrint(arduino::Print &out)
 {
   const uint32_t window_us = micros() - s_stats_window_start_us;
   const uint32_t window_ms = window_us / 1000U;

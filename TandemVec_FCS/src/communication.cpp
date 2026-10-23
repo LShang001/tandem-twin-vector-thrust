@@ -2104,7 +2104,7 @@ void handleMavlink()
  * @note 阻塞型命令（wsseq/flash 导出）会长时间占住主循环：`wsseq` 单色上限被压到
  *       150ms 以免累积超过 IWDG 3.0s 窗口；flash export 在循环内主动 `kickIwdg()`。
  */
-void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
+void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
                         uint8_t maxLen, bool &dbgMode)
 {
   // ---- 收集一行（\n 结尾）----
@@ -2834,7 +2834,7 @@ void handleDebugConsole(HardwareSerial &serial, char *line, uint8_t *lineLen,
 // GPIO 诊断命令（调试模式: gpio）— 读 PD15 实时寄存器状态
 // ========================================================================
 // 注：此函数通过调试控制台追加注册，见 handleDebugConsole 的 "gpio" 分支
-void debugGpioDump(HardwareSerial &serial)
+void debugGpioDump(Uart &serial)
 {
   // GPIOD 寄存器（H743: AHB4 域）
   GPIO_TypeDef *gpiob = GPIOB; // 使用 GPIO 宏（框架已映射）
@@ -2862,7 +2862,7 @@ void debugGpioDump(HardwareSerial &serial)
 // ========================================================================
 // TIM4 + DMA 寄存器诊断（调试模式: tim4）— 验证 DMA 链路是否真的工作
 // ========================================================================
-void debugTim4Dump(HardwareSerial &serial)
+void debugTim4Dump(Uart &serial)
 {
   serial.println(F("[DBG] === TIM4 + DMA state ==="));
   serial.print(F("[DBG] PCLK1="));
@@ -2934,7 +2934,7 @@ void debugTim4Dump(HardwareSerial &serial)
 //   flash dump <page> 读回一页 hexdump（前 32 字节）
 //   flash test        写读回一致性测试（写 5 帧到当前游标，读回验证）
 // ========================================================================
-void debugFlashCommand(HardwareSerial &serial, char *args)
+void debugFlashCommand(Uart &serial, char *args)
 {
   if (strncmp(args, "id", 2) == 0) {
     serial.print(F("[DBG] Flash JEDEC ID: 0x"));
@@ -3183,7 +3183,7 @@ static const char *magCalStageName(magcal::GuideStage st)
     }
 }
 
-static void magCalPrintParams(HardwareSerial &serial, const magcal::MagCalParams &p)
+static void magCalPrintParams(Uart &serial, const magcal::MagCalParams &p)
 {
     serial.print(F("[DBG]   bias(uT) = ("));
     serial.print(p.hardIron[0], 2);
@@ -3208,7 +3208,7 @@ static void magCalPrintParams(HardwareSerial &serial, const magcal::MagCalParams
     serial.println(p.scale, 2);
 }
 
-static void magCalPrintStats(HardwareSerial &serial, const magcal::MagCalStats &st)
+static void magCalPrintStats(Uart &serial, const magcal::MagCalStats &st)
 {
     serial.print(F("[DBG]   samples = "));
     serial.println(st.count);
@@ -3223,7 +3223,7 @@ static void magCalPrintStats(HardwareSerial &serial, const magcal::MagCalStats &
     serial.println(F(" uT"));
 }
 
-void debugMagCalCommand(HardwareSerial &serial, char *args)
+void debugMagCalCommand(Uart &serial, char *args)
 {
     // 解锁态保护：采样/写入只允许在地面未解锁时进行
     const bool armed = (raw_rc_values[4] > 1500);

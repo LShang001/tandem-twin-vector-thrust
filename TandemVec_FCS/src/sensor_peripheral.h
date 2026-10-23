@@ -116,7 +116,7 @@ uint32_t flowSensorGetMspFlowFrames();
 uint32_t flowSensorGetMspRangeFrames();
 uint32_t flowSensorGetUartRxAvailSum();
 uint32_t flowSensorGetUartRxReadSum();
-void flowSensorDebugDump(HardwareSerial &out, uint32_t duration_ms);
+void flowSensorDebugDump(Uart &out, uint32_t duration_ms);
 
 /**
  * @brief MTF02P (Micolink 协议) 光流传感器数据处理

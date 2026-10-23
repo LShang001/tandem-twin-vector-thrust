@@ -46,7 +46,7 @@ static void mavSend(const mavlink_message_t &msg)
 {
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    extern HardwareSerial Serial6;
+    extern Uart Serial6;
     if (Serial6.availableForWrite() >= len + 4)
         Serial6.write(buf, len);
 }
