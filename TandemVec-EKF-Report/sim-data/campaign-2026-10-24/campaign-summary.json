@@ -115,5 +115,96 @@
       9.17
     ],
     "pass": true
+  },
+  "gates": {
+    "firmware_build": "TandemVec_FCS + test SUCCESS",
+    "host_regression": "all pass",
+    "gcs_pytest": "35 passed",
+    "vector_thrust_node": "91 passed",
+    "gov004": "308 files, 100.0, 0 error / 0 warning",
+    "params_drift": "OK",
+    "link_check": "320 Markdown / 377 HTML, 0 broken"
+  },
+  "delay_closed_loop_5k": {
+    "cases": 5000,
+    "ok": 5000,
+    "est_tau_error_ms_mean": 28.32651837556549,
+    "est_tau_error_ms_p95": 91.13463682954655,
+    "est_tau_error_ms_max": 99.94797888560072,
+    "est_within_10ms": 2526,
+    "est_within_20ms": 2831,
+    "pos3d_mean": 57.5713276,
+    "pos3d_p95": 3.103,
+    "pos3d_max": 4325.376,
+    "improve_mean": -37279.46788,
+    "improve_p95": 79.0,
+    "nonfinite_pos": 0,
+    "est_tau_zero": 2768,
+    "buckets": {
+      "50-80ms|no_outage": {
+        "n": 1393,
+        "est_mean_ms": 33.253493935006006,
+        "est_p95_ms": 77.05180196817157,
+        "pos_p95_m": 2.113,
+        "pos_max_m": 24.078,
+        "within20": 719
+      },
+      "80-100ms|no_outage": {
+        "n": 883,
+        "est_mean_ms": 47.650109018272765,
+        "est_p95_ms": 98.17146028195705,
+        "pos_p95_m": 3.004,
+        "pos_max_m": 6.327,
+        "within20": 433
+      },
+      "20-50ms|no_outage": {
+        "n": 1373,
+        "est_mean_ms": 19.483267995452586,
+        "est_p95_ms": 46.4954033220196,
+        "pos_p95_m": 1.206,
+        "pos_max_m": 16.365,
+        "within20": 660
+      },
+      "<20ms|no_outage": {
+        "n": 870,
+        "est_mean_ms": 6.187835464086165,
+        "est_p95_ms": 17.958375832382412,
+        "pos_p95_m": 1985.268,
+        "pos_max_m": 2158.916,
+        "within20": 870
+      },
+      "50-80ms|outage": {
+        "n": 139,
+        "est_mean_ms": 58.65780456375666,
+        "est_p95_ms": 78.06517969427432,
+        "pos_p95_m": 110.89,
+        "pos_max_m": 3778.326,
+        "within20": 13
+      },
+      "<20ms|outage": {
+        "n": 116,
+        "est_mean_ms": 10.357573830977962,
+        "est_p95_ms": 18.800965173763753,
+        "pos_p95_m": 1956.068,
+        "pos_max_m": 2142.28,
+        "within20": 116
+      },
+      "20-50ms|outage": {
+        "n": 137,
+        "est_mean_ms": 32.04109814128819,
+        "est_p95_ms": 48.56476761491868,
+        "pos_p95_m": 154.476,
+        "pos_max_m": 4325.376,
+        "within20": 13
+      },
+      "80-100ms|outage": {
+        "n": 89,
+        "est_mean_ms": 82.66225738882892,
+        "est_p95_ms": 98.61530075453098,
+        "pos_p95_m": 4.929,
+        "pos_max_m": 432.976,
+        "within20": 7
+      }
+    }
   }
 }
