@@ -129,6 +129,8 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 
 - **PlatformIO 20 / Arduino Core 3.0 升级（2026-10-24）**：① `pio upgrade` 在 Windows 可能因 `pio.exe` 被占用中断（WinError 32），恢复用 `C:\Users\12631\.platformio\penv\Scripts\python.exe -m pip install -U platformio==6.2.0`；② PlatformIO 包下载必须走代理，当前 shell 用 `eval "$(proxy env --shell bash)"` 注入 7897 代理，长命令后台跑；不要并行开多个 `pio pkg install`；③ Core 3.0 具体串口类改名 `Uart`，`HardwareSerial` 成为抽象基类；`availableForWrite` 只在 `Uart`，所以 `opticalFlowSerial`、`debugFlashCommand`、`handleDebugConsole` 等必须用 `Uart&`；④ `Print` 进入 `arduino::` 命名空间，`task_scheduler.h` 的全局 `class Print;` 会产生二义性，改用 `arduino::Print&`；⑤ 宿主 SIL 替身需在 `test_host/fw_sil/stub/Arduino.h` 增加 `using Uart = HardwareSerial;` 与 `namespace arduino { using ::Print; }`；完整清单见 `docs/memory/2026-10-24-PIO20升级-ArduinoCore3迁移.md`（来源：2026-10-24 升级实施）
 
+- **Host 仿真脚本执行（2026-10-24）**：`.sh` 必须 LF；CRLF 会让 Git Bash 把 `set -eu`/`for` 解析成非法命令（症状：`set: -: invalid option`）。`.gitattributes` 已固定 `*.sh text eol=lf`。直接 `bash script.sh` 可能解析到 WSL bash（症状：WSL localhost 警告后停在编译前），SIL/矩阵统一用 `/bin/bash`（Git Bash）执行；修复后 SIL 验收 3/3 PASS（来源：2026-10-24 超大规模仿真）
+
 ## 知识沉淀协议
 
 > 本协议在对话中自动生效。不是规章制度——是给你未来会话的自己的**记忆外挂**。

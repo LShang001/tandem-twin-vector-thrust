@@ -1,0 +1,143 @@
+{
+  "cases": 10000,
+  "pass_20ms": 9990,
+  "pass_rate": 0.999,
+  "mean_abs_error_ms": 2.6257707999999997,
+  "p50_abs_error_ms": 1.681,
+  "p90_abs_error_ms": 6.307,
+  "p95_abs_error_ms": 8.387,
+  "p99_abs_error_ms": 13.097,
+  "max_abs_error_ms": 24.1,
+  "by_maneuver": {
+    "longitudinal": {
+      "n": 4975,
+      "pass_rate": 0.9989949748743718,
+      "p95_abs_error_ms": 8.307,
+      "mean_abs_error_ms": 2.619411457286432
+    },
+    "3d_lateral_climb": {
+      "n": 5025,
+      "pass_rate": 0.9990049751243781,
+      "p95_abs_error_ms": 8.596,
+      "mean_abs_error_ms": 2.632066865671642
+    }
+  },
+  "by_delay_bin": {
+    "[20,50)": {
+      "n": 2586,
+      "pass_rate": 0.9984532095901005,
+      "p95_abs_error_ms": 8.78,
+      "mean_abs_error_ms": 2.6714686774941994
+    },
+    "[0,20)": {
+      "n": 1287,
+      "pass_rate": 0.9992229992229992,
+      "p95_abs_error_ms": 7.521,
+      "mean_abs_error_ms": 2.4990947940947943
+    },
+    "[80,120)": {
+      "n": 3420,
+      "pass_rate": 0.9988304093567252,
+      "p95_abs_error_ms": 8.277,
+      "mean_abs_error_ms": 2.608540643274854
+    },
+    "[50,80)": {
+      "n": 2707,
+      "pass_rate": 0.9996305873660879,
+      "p95_abs_error_ms": 8.428,
+      "mean_abs_error_ms": 2.6641100849649058
+    }
+  },
+  "by_speed_bin": {
+    "[30,50)": {
+      "n": 3708,
+      "pass_rate": 0.9991909385113269,
+      "p95_abs_error_ms": 8.344,
+      "mean_abs_error_ms": 2.6458406148867315
+    },
+    "[10,30)": {
+      "n": 3619,
+      "pass_rate": 0.9988947222989776,
+      "p95_abs_error_ms": 8.585,
+      "mean_abs_error_ms": 2.637567560099475
+    },
+    "[0,10)": {
+      "n": 944,
+      "pass_rate": 0.9989406779661016,
+      "p95_abs_error_ms": 8.038,
+      "mean_abs_error_ms": 2.519094279661017
+    },
+    "[50,61)": {
+      "n": 1729,
+      "pass_rate": 0.9988432620011567,
+      "p95_abs_error_ms": 8.4,
+      "mean_abs_error_ms": 2.6162805089647194
+    }
+  },
+  "by_gnss_sigma_bin": {
+    "[0,0.5)": {
+      "n": 1834,
+      "pass_rate": 0.9994547437295529,
+      "p95_abs_error_ms": 8.374,
+      "mean_abs_error_ms": 2.5749830970556165
+    },
+    "[0.5,1.5)": {
+      "n": 3810,
+      "pass_rate": 0.9992125984251968,
+      "p95_abs_error_ms": 8.405,
+      "mean_abs_error_ms": 2.5653057742782153
+    },
+    "[3,5.01)": {
+      "n": 1852,
+      "pass_rate": 0.9989200863930886,
+      "p95_abs_error_ms": 8.219,
+      "mean_abs_error_ms": 2.694158747300216
+    },
+    "[1.5,3)": {
+      "n": 2504,
+      "pass_rate": 0.9984025559105432,
+      "p95_abs_error_ms": 8.76,
+      "mean_abs_error_ms": 2.7043897763578277
+    }
+  },
+  "by_bias_norm_bin": {
+    "[0.3,0.6)": {
+      "n": 6837,
+      "pass_rate": 0.9988298961532837,
+      "p95_abs_error_ms": 8.558,
+      "mean_abs_error_ms": 2.612143922773146
+    },
+    "[0.6,0.87)": {
+      "n": 2038,
+      "pass_rate": 0.9995093228655545,
+      "p95_abs_error_ms": 8.331,
+      "mean_abs_error_ms": 2.7413724239450445
+    },
+    "[0.1,0.3)": {
+      "n": 1085,
+      "pass_rate": 0.9990783410138249,
+      "p95_abs_error_ms": 7.869,
+      "mean_abs_error_ms": 2.4949142857142856
+    },
+    "[0,0.1)": {
+      "n": 40,
+      "pass_rate": 1.0,
+      "p95_abs_error_ms": 7.47,
+      "mean_abs_error_ms": 2.614525
+    }
+  },
+  "by_dropout": {
+    "no_dropout": {
+      "n": 7981,
+      "pass_rate": 0.9988723217641899,
+      "p95_abs_error_ms": 8.331,
+      "mean_abs_error_ms": 2.5882519734369125
+    },
+    "with_dropout": {
+      "n": 2019,
+      "pass_rate": 0.9995047052996533,
+      "p95_abs_error_ms": 8.596,
+      "mean_abs_error_ms": 2.7740807330361563
+    }
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "variant": "firmware",
+  "gravity_fast": false,
+  "grav_noise": null,
+  "pos_hold": true,
+  "mag_vector": true,
+  "flow_aiding": true,
+  "a1_tilt_limit": 5.0,
+  "scenes": {
+    "A0_ground_static": {
+      "pos_ne_rmse": 0.46689432556390104,
+      "pos_d_rmse": 0.21011919151024117,
+      "vel_ne_rmse": 0.15400398927118564,
+      "att_q_rmse_deg": 0.430708014498755,
+      "alt_err_rmse": 0.21020922745057394,
+      "pass": true
+    },
+    "A1_hover_gust": {
+      "pos_ne_rmse": 0.4596647241794347,
+      "pos_d_rmse": 0.2000813740447432,
+      "vel_ne_rmse": 0.15858631756923935,
+      "att_q_rmse_deg": 1.3427629047345786,
+      "alt_err_rmse": 0.20017480444279628,
+      "pass": true
+    },
+    "A2_alt_hold": {
+      "pos_ne_rmse": 0.47475901937294135,
+      "pos_d_rmse": 0.19070838395062983,
+      "vel_ne_rmse": 0.22231741420080686,
+      "att_q_rmse_deg": 0.4798813715873119,
+      "alt_err_rmse": 0.1909317893131337,
+      "pass": true
+    },
+    "A3_gps_loss": {
+      "pos_ne_rmse": 0.09028587560658219,
+      "pos_d_rmse": 0.4791126698603263,
+      "vel_ne_rmse": 0.0715328097683891,
+      "att_q_rmse_deg": 0.7499454436919861,
+      "alt_err_rmse": 0.479136355258724,
+      "pass": true
+    },
+    "A4_accel_jump": {
+      "pos_ne_rmse": 0.5058986745921722,
+      "pos_d_rmse": 0.21054586303465234,
+      "vel_ne_rmse": 0.1642496576313946,
+      "att_q_rmse_deg": 0.37657441274459,
+      "alt_err_rmse": 0.211420369843685,
+      "pass": true
+    },
+    "A5_tilt20": {
+      "pos_ne_rmse": 0.5058689909118742,
+      "pos_d_rmse": 0.1903689331626448,
+      "vel_ne_rmse": 0.16474954065207809,
+      "att_q_rmse_deg": 0.40918036322801055,
+      "alt_err_rmse": 0.19049391436537158,
+      "pass": true
+    },
+    "A6_gps_jump": {
+      "pos_ne_rmse": 5.231901181396717,
+      "pos_d_rmse": 0.1721139240942254,
+      "vel_ne_rmse": 0.17138396483477353,
+      "att_q_rmse_deg": 0.446289118237114,
+      "alt_err_rmse": 0.17231863623701818,
+      "pass": true
+    },
+    "A7_gyro_jump": {
+      "pos_ne_rmse": 0.505491372170165,
+      "pos_d_rmse": 0.19036290029449288,
+      "vel_ne_rmse": 0.16450740006251166,
+      "att_q_rmse_deg": 2.576966213271978,
+      "alt_err_rmse": 0.19048937267956273,
+      "pass": true
+    },
+    "A8_yaw90": {
+      "pos_ne_rmse": 3570.7378018747104,
+      "pos_d_rmse": 22861.166752104255,
+      "vel_ne_rmse": 2780.383660770314,
+      "att_q_rmse_deg": 115.82167593029047,
+      "alt_err_rmse": 22861.166712408027,
+      "pass": false
+    },
+    "A9_long_hover": {
+      "pos_ne_rmse": 0.32173106863376555,
+      "pos_d_rmse": 0.19677561916798622,
+      "vel_ne_rmse": 0.1544145512337189,
+      "att_q_rmse_deg": 0.5023531546381202,
+      "alt_err_rmse": 0.1968357216127548,
+      "pass": true
+    }
+  },
+  "all_pass": false
+}
