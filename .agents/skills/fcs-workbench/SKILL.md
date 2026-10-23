@@ -218,6 +218,8 @@ py -3.12 server/cli.py --port COM10 record start -d 90 -o output/flight1.csv
 10. **串口互斥**：CLI 与后端不能同时开 COM；CLI 操作完或后端重启都要先确认端口释放
 11. **数字滤波相位滞后是裕度杀手**（2026-08-09 实测）：本机有物理减震底座，振动已被隔离——滤波只加滞后（4.2°@1Hz 稳 / 6.9° 振铃）。当前滤波近全关（α1=0.4/二级直通/输出 0.9）。调滤波前先确认振动源是否物理隔离，噪声收益要量化后再换滞后
 12. **GNSS NMEA 解析三坑**（2026-08-09 库级集成）：① 解析器用 minmea（MIT）——MicroNMEA 是 LGPL 2.1（商业闭源静态链接有传染约束）；② u-blox 真实 RMC 尾部 `,,A` 会让官方 `minmea_parse_rmc` 失败（库内已自实现）；③ `gpsproto` 里 `sent(gga/rmc/gsa)` 分布全 0 = 波特率不对或接收机没开 NMEA 输出（`ubxcfg core on`）
+13. **ELRS 回传链路（7 个任务，main.cpp ~L455）**：Battery/Attitude/Baro/Vario 25Hz + Mode/Gps/Temp 10Hz。每帧发送前有 `Serial1.availableForWrite() < N` 非阻塞保护，不足则 `elrs_tx_skipped++`（communication.cpp 三处）。**三个 tx_skipped 计数只增不减、无输出渠道 —— 丢帧不可观测**，排查只能临时加打印或走 DBG 暴露计数。带宽不是瓶颈（420k ≈ 42KB/s，7 帧合计 ~1.5KB/s）。链路质量 `s_elrs_lq` 由 0x14 帧 `onPacketLinkStatistics` 回调更新，仅用于灯效弱信号预警（`ELRS_LQ_WARN_THRESHOLD`）；ELRS 500Hz 包率下 LQ 掉得快，先怀疑射频侧
+14. **CRSF 库两坑**：`lib/crsf/` 是 Linux 风格参考实现（uart_fd/write），实机跑的是 `lib/CrsfSerial/`（Arduino `_port.write`）—— 搜代码别被参考实现误导；`CrsfSerial::queuePacket` 直接 write 无内部队列，满则丢，非阻塞保护在调用侧。另：platformio.ini `SERIAL_TX_BUFFER_SIZE=1024` → `availableForWrite` 上限 1024，v1 曾用 `>=2048` 等待条件恒假造成死循环（communication.cpp L2218-2223 有记录）
 
 ## 数据源选择
 
