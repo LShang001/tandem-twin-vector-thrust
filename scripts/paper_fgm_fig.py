@@ -1,6 +1,19 @@
 # -*- coding: utf-8 -*-
-"""论文图：FGM vs PGD 收敛轨迹（单次 QP，5° 误差初态）
-f(z) = ½z'Hz + f'z（N=30 展开式），f* 用 5000 迭代 PGD 近似
+"""paper_fgm_fig.py — 论文图：FGM（快速梯度法）vs PGD 的 QP 收敛轨迹。
+
+@file    paper_fgm_fig.py
+@module  analysis/图件生成（QP 求解器对比）
+@brief   在同一个二次型上对比 FGM 与 PGD 的迭代收敛，画收敛曲线图。
+@details 目标 f(z)=½z'Hz+f'z（N=30 展开式），最优值 f* 用 5000 次 PGD 迭代近似；
+         初态取 5° 姿态误差对应的 QP。
+         运行：仓库根目录 `py -3.12 scripts/paper_fgm_fig.py`。
+@theory  二次规划与梯度类求解 @ref TandemVec-Paper/ch17（MPC 的 QP 子问题）；
+         MPC 在线求解的实时性约束同上。
+@frame  N/A（纯数值优化）
+@units   目标函数无量纲化；迭代次数为整数。
+@note    f* 是**数值近似**（5000 次 PGD），不是解析最优；比较收敛率时可以，
+         但不能把该 f* 当精确下界用于绝对最优性证明。
+@see     mpc_proto.py、@ref TandemVec-Paper/ch17
 """
 import sys, os
 sys.path.insert(0, 'scripts')
@@ -33,6 +46,7 @@ lo = np.tile(-u_max, MP.N); hi = np.tile(u_max, MP.N)
 alpha = mpc.alpha
 
 def cost(z):
+    """二次目标 f(z)=½zᵀHz+fᵀz（无量纲），收敛曲线纵轴的取值函数。"""
     return 0.5 * z @ H @ z + f @ z
 
 # f*：5000 迭代 PGD
@@ -42,6 +56,7 @@ for _ in range(5000):
 fstar = cost(z)
 
 def pgd_traj(n_iter, warm=False):
+    """投影梯度下降（PGD）迭代轨迹：返回每次迭代的目标值列表，用于作图与 f* 参考。"""
     z = np.zeros(3 * MP.N)
     traj = []
     for it in range(n_iter):
@@ -50,6 +65,7 @@ def pgd_traj(n_iter, warm=False):
     return np.array(traj)
 
 def fgm_traj(n_iter):
+    """快速梯度法（FGM/Nesterov）迭代轨迹：返回每次迭代目标值列表，与 PGD 对比收敛率。"""
     z = np.zeros(3 * MP.N)
     t = 1.0
     traj = []
@@ -67,7 +83,7 @@ def fgm_traj(n_iter):
 n = 400
 tp = pgd_traj(n)
 tf = fgm_traj(n)
-OUT = os.path.join('docs', '03-理论推导', 'THY-004', 'fig-mpc')
+OUT = os.path.join('TandemVec-Paper', 'fig-mpc')
 os.makedirs(OUT, exist_ok=True)
 
 fig, ax = plt.subplots(figsize=(6.8, 3.6))

@@ -1,7 +1,20 @@
 # -*- coding: utf-8 -*-
-"""物理参数非线性辨识：开环 PRBS → 最小二乘辨识 [kT, kQ, Ix, Iy, Iz]
-用实测 wf/wt（免滞后建模）→ 残差只含物理参数 → 全局模型不依赖工作点
-ω̇ = I⁻¹[M(wf,wt,df,dt) − ω×(Iω) − ω×h(wf,wt)]
+"""ident_phys.py — 物理参数非线性辨识（PRBS 激励 + 最小二乘）。
+
+@file    ident_phys.py
+@module  analysis/系统辨识（物理参数）
+@brief   用开环 PRBS 激励 + 非线性最小二乘辨识 [kT, kQ, Ix, Iy, Iz]。
+@details 用实测 wf/wt（免一阶滞后建模）→ 残差只含物理参数 → 模型不依赖工作点。
+         回归式：ω̇ = I⁻¹[M(wf,wt,δf,δt) − ω×(Iω) − ω×h(wf,wt)]。
+         运行：仓库根目录 `py -3.12 scripts/ident_phys.py`。
+@theory  推力/反扭与转子角动量 @ref THY-002 §2、@ref MOD-001 §3；
+         刚体转动方程 @ref MOD-001 §5.2；
+         非线性最小二乘（leastsq/信赖域）@ref TandemVec-Paper/ch16。
+@frame  FRD 机体系。
+@units   SI：kT [N·s²]、kQ [N·m·s²]、I [kg·m²]、ω rad/s、ω̇ rad/s²。
+@note    "用实测转速而非指令转速"是关键：否则 τm=0.28 s 的滞后会被错误吸收进 kT/kQ，
+         导致辨识结果随工作点漂移（这是 v5 之前的失败模式）。
+@see     ident_probe.py、@ref THY-002、@ref TandemVec-Paper/ch16
 """
 import sys
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
@@ -70,6 +83,7 @@ def predict_wdot(theta):
     return out
 
 def resid(theta):
+    """非线性最小二乘残差向量：ω̇_pred(θ) − ω̇_meas（rad/s²，逐轴逐样本）。"""
     return (predict_wdot(theta) - wdot_a).ravel()
 
 theta0 = np.array([P['kT'], P['kQ'], P['Ix'], P['Iy'], P['Iz']])

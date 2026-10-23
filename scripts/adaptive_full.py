@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
-"""自适应 MPC 整链演示：开环脉冲辨识 B_eff → 更新 MPC 模型 → 闭环对比
-失配仿真（kT×0.8、Iy×1.3、Ix×1.2），俯仰/偏航通道辨识精确、差速通道名义近似
+"""adaptive_full.py — 自适应 MPC 整链演示：辨识 → 更新模型 → 闭环对比。
+
+@file    adaptive_full.py
+@module  analysis/控制算法原型（自适应 MPC 整链）
+@brief   用开环脉冲辨识 B_eff，把辨识结果喂给 MPC 预测模型，再做闭环对比。
+@details 失配仿真（kT×0.8、Iy×1.3、Ix×1.2）：俯仰/偏航通道辨识精确、差速通道用名义近似。
+         链路：ident_probe 激励 → 通道回归 → mpc_proto 替换 B → 闭环评估。
+@theory  增量效能辨识 ω̇≈B_eff·u @ref THY-003 §3、@ref MOD-001 §4；
+         模型失配下的自适应控制 @ref TandemVec-Paper/ch17、ch16（在线辨识）。
+@frame  FRD 机体系；u=[Δω,δt,δf]。
+@units   SI；B 元素量纲随列（N·m/(rad/s²) 等），报告中按通道归一化比较。
+@note    "差速通道名义近似"是已知局限：Jp·ω̇ 瞬态与摆角交叉项使该通道信噪比低，
+         不是辨识器实现错误（@ref TandemVec-Paper/ch16）。
+@see     ident_probe.py、mpc_proto.py、adaptive_mpc.py、@ref TandemVec-Paper/ch17
 """
 import sys
 sys.path.insert(0, 'scripts')
@@ -38,6 +50,11 @@ print('真实 Beff:\n', np.round(Beff_true, 2))
 #  2. 可更新模型 LMPC（B_eff → 重算展开系数）
 # ============================================================
 def build_mpc(Beff):
+    """按给定效能矩阵构造 LMPC 实例（辨识前后对比用）。
+
+    @param[in] Beff 3×3 效能矩阵（列顺序 [Δω,δt,δf]）
+    @ref  MOD-001 §4、@ref TandemVec-Paper/ch17
+    """
     DT_PRED, N = 0.02, 30
     Ac = np.zeros((6, 6)); Ac[:3, 3:] = 0.5 * np.eye(3)
     A6 = np.eye(6) + Ac * DT_PRED
@@ -73,6 +90,7 @@ def build_mpc(Beff):
     return H, L, N, 1.0 / (np.linalg.eigvalsh(H).max() + 1e-12)
 
 def make_ctrl(Beff):
+    """按效能矩阵构造自适应 MPC 控制器（辨识后模型）。"""
     H, L, N, alpha = build_mpc(Beff)
     ctrl = MP.LMPCAttitude()
     ctrl.H, ctrl.L, ctrl.N, ctrl.alpha = H, L, N, alpha
@@ -82,6 +100,11 @@ def make_ctrl(Beff):
 #  3. 闭环对比（失配动力学）
 # ============================================================
 def simulate(controller, q0, T_total=8.0):
+    """闭环跑一次（子步 DT=0.004 s），返回时间序列 dict。
+
+    @param[in] q0 初始姿态四元数 [w,x,y,z]
+    @note  真值动力学用 ident_probe.P_true（失配参数），控制器只用名义 P。
+    """
     v = np.zeros(3); w = np.zeros(3); q = np.array(q0, dtype=float)
     prop = Propulsion(P_true); prop.wf = prop.wt = W0_H
     prop.prev_wf = prop.prev_wt = W0_H

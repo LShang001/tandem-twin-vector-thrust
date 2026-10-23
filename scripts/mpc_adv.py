@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
-"""高级 MPC 原型：Offset-free LMPC + NMPC（非线性预测）对比 SAS/LMPC
-场景：VTOL 悬停扰动（5°/60°）+ slerp 过渡（水平→悬停）
-Offset-free：增广常数扰动 d 估计（消除模型误差稳态残差）
-NMPC：完整非线性模型（四元数运动学 + 陀螺 ω×(Iω)+ω×h + 推进一阶滞后 + 推进非线性）
+"""mpc_adv.py — 高级 MPC 原型：Offset-free LMPC 与 NMPC 对比 SAS/LMPC。
+
+@file    mpc_adv.py
+@module  analysis/控制算法原型（MPC 进阶）
+@brief   实现增广扰动估计的 Offset-free LMPC 与完整非线性预测的 NMPC。
+@details 场景：VTOL 悬停扰动（5°/60°）+ slerp 过渡（水平→悬停）。
+         Offset-free：增广常数扰动 d 估计，消除模型误差引起的稳态残差；
+         NMPC：完整非线性模型（四元数运动学 + 陀螺 ω×(Iω)+ω×h + 推进一阶滞后 + 非线性推力）。
+@theory  Offset-free MPC 的扰动增广 @ref TandemVec-Paper/ch17；
+         刚体转动方程与转子陀螺项 @ref MOD-001 §5.2；
+         推进一阶滞后与 T=kT·ω² @ref THY-002 §2。
+@frame  FRD 机体系；四元数 (w,x,y,z)。
+@units   rad、rad/s、N·m、时间 s。
+@note    60° 扰动已超出小角度线性化区，LMPC 退化是**预期**结论（对比项），
+         不能把该场景的 LMPC 表现当作实现 bug。
+@see     mpc_proto.py、adaptive_nmpc.py、@ref TandemVec-Paper/ch17
 """
 import sys
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
@@ -23,6 +35,14 @@ u_max = np.array([P['dwMax'], P['dMax'], P['dMax']])
 #  共享：仿真与指标
 # ============================================================
 def simulate_6dof(controller, q0, T_total=5.0, q_des_fn=None):
+    """用 6DOF（含气动开关）闭环跑一个控制器。
+
+    @param[in] controller 控制器实例（update 接口）
+    @param[in] q0         初始姿态四元数 [w,x,y,z]
+    @param[in] T_total    时长 [s]，子步 DT=0.004 s
+    @param[in] q_des_fn   可选期望姿态时间函数（slerp 过渡用）
+    @return dict：时间/姿态/角速率/控制量序列
+    """
     v = np.zeros(3); w = np.zeros(3)
     q = np.array(q0, dtype=float)
     prop = Propulsion(P); prop.wf = prop.wt = W0_H
@@ -54,6 +74,11 @@ def slerp_traj(t, T_slerp=3.0):
 #  Offset-free LMPC（增广常数扰动 d：ω̇ = a + d，d 在线估计）
 # ============================================================
 class OffsetFreeLMPC:
+    """Offset-free 线性 MPC：状态增广常数扰动 d，消除模型误差引起的稳态残差。
+
+    @note 扰动估计器假设 d 慢变；对阶跃类未建模扰动有效，对高频扰动无效。
+    @ref  TandemVec-Paper/ch17
+    """
     def __init__(self, n_iter=400):
         self.n_iter = n_iter
         from mpc_proto import (A_aug, B_aug, Q, R, N, u_max as UM)
@@ -122,6 +147,11 @@ class OffsetFreeLMPC:
 #  预测状态 x = [q(4), ω(3), wf, wt]（9 维），决策 u_0..u_{N-1}
 # ============================================================
 class NMPC:
+    """非线性 MPC：直接用完整非线性模型（四元数运动学 + 陀螺项 + 推进一阶滞后）做预测。
+
+    @note 每步需非线性求解，单步耗时远高于 LMPC；仅用于论证预测模型精度收益。
+    @ref  TandemVec-Paper/ch17
+    """
     def __init__(self, n_horizon=8, dt_pred=0.04, n_iter=25):
         self.N = n_horizon
         self.dt_p = dt_pred
@@ -182,6 +212,7 @@ class NMPC:
 #  场景与对比
 # ============================================================
 def run(name, controller, q0, T_total=5.0, q_des_fn=None):
+    """跑一个场景并打印/返回指标（超调、稳态误差、求解耗时）。"""
     eps = simulate_6dof(controller, q0, T_total, q_des_fn)
     extra = ''
     if hasattr(controller, 'solve_us'):

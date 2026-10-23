@@ -1,8 +1,20 @@
 # -*- coding: utf-8 -*-
-"""自适应 MPC 原型：模型失配下 RLS 在线辨识 B_eff → 周期更新 LMPC 预测模型
-真实动力学用失配参数（kT×0.8、kQ×0.8、Iy×1.3、Ix×1.2），控制器只用名义参数。
-RLS：ω̇ ≈ B_eff·u（3 通道独立回归，遗忘因子 λ），u = [Δω, δt, δf]
-对比：名义 LMPC（无辨识）vs 自适应 LMPC vs SAS
+"""adaptive_mpc.py — 模型失配下 RLS 在线辨识 B_eff + 周期更新 LMPC。
+
+@file    adaptive_mpc.py
+@module  analysis/控制算法原型（自适应 LMPC）
+@brief   用递推最小二乘在线估计控制效能矩阵，并按周期刷新 MPC 预测模型。
+@details 真实动力学用失配参数（kT×0.8、kQ×0.8、Iy×1.3、Ix×1.2），控制器只用名义参数；
+         RLS：ω̇ ≈ B_eff·u（3 通道独立回归，遗忘因子 λ），u=[Δω,δt,δf]；
+         对比：名义 LMPC（无辨识）vs 自适应 LMPC vs SAS。
+@theory  效能矩阵线性化 @ref MOD-001 §4、@ref THY-003 §3；
+         RLS 与遗忘因子 @ref TandemVec-Paper/ch16；
+         MPC 滚动优化 @ref TandemVec-Paper/ch17。
+@frame  FRD 机体系。
+@units   SI；λ 无量纲，回归量 ω̇ rad/s²、u rad 或无量纲。
+@note    失配倍数（0.8/1.3/1.2）是**人为设定的鲁棒性测试**，不是实机标定偏差；
+         λ 的选择决定跟踪速度与噪声敏感度的折中，需与采样率一起看。
+@see     adaptive_nmpc.py、ident_probe.py、@ref TandemVec-Paper/ch17
 """
 import sys
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
@@ -24,6 +36,11 @@ u_max = np.array([P['dwMax'], P['dMax'], P['dMax']])
 #  RLS 逐通道辨识（3×3 B_eff）
 # ============================================================
 class RLS:
+    """递推最小二乘（带遗忘因子 λ）：每通道独立回归 ω̇ ≈ B_eff·u。
+
+    @note  λ<1 使旧数据指数衰减；λ=1 为无限记忆，模型漂移时会失配。
+    @ref   TandemVec-Paper/ch16
+    """
     def __init__(self, n=3, lam=0.97):
         self.P = np.eye(n) * 200.0
         self.theta = np.zeros(n)
@@ -39,6 +56,11 @@ class RLS:
 #  可更新模型的 LMPC（B_eff → B_aug 重算展开系数）
 # ============================================================
 class AdaptiveLMPC:
+    """自适应 LMPC：用 RLS 在线辨识的 B̂ 替换预测模型中的名义 B。
+
+    @note 只更新 B，不更新惯性/推进参数；对大范围工作点变化仍需调度。
+    @ref  TandemVec-Paper/ch17
+    """
     def __init__(self, n_iter=400, update_every=300, excite_until=4.0):
         self.n_iter = n_iter
         self.update_every = update_every
@@ -161,6 +183,11 @@ class AdaptiveLMPC:
 #  仿真（真实参数 P_true 动力学）
 # ============================================================
 def simulate(controller, q0, T_total=8.0):
+    """闭环跑一次（子步 DT=0.004 s），返回时间序列 dict。
+
+    @param[in] q0 初始姿态四元数 [w,x,y,z]
+    @note  真值动力学用 P_true（失配参数），控制器只用名义 P。
+    """
     v = np.zeros(3); w = np.zeros(3)
     q = np.array(q0, dtype=float)
     prop = Propulsion(P_true); prop.wf = prop.wt = W0_H

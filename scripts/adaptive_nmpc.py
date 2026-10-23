@@ -1,6 +1,18 @@
 # -*- coding: utf-8 -*-
-"""自适应 NMPC：物理非线性模型 + 辨识线性校正（ω̇_pred = 非线性(θ) + (B̂−B̄)·u）
-失配仿真（kT×0.8、Iy×1.3、Ix×1.2）下对比：SAS / LMPC(名义|辨识) / NMPC(名义|辨识)
+"""adaptive_nmpc.py — 自适应 NMPC：物理非线性模型 + 辨识线性校正。
+
+@file    adaptive_nmpc.py
+@module  analysis/控制算法原型（自适应 NMPC）
+@brief   预测模型取"物理非线性项 + 辨识 B 偏差修正"，在失配仿真下与其他方案对比。
+@details 预测式：ω̇_pred = 非线性(θ) + (B̂ − B̄)·u；失配参数（kT×0.8、Iy×1.3、Ix×1.2）下
+         对比 SAS / LMPC(名义|辨识) / NMPC(名义|辨识)。
+@theory  非线性刚体转动方程 @ref MOD-001 §5.2；
+         非线性预测控制 @ref TandemVec-Paper/ch17；在线辨识 @ref TandemVec-Paper/ch16。
+@frame  FRD 机体系。
+@units   SI。
+@note    该结构把"模型可信度"集中在 B 上：物理非线性项保留、参数误差用辨识修正，
+         因此对气动/推进参数误差的鲁棒性优于纯 LMPC，代价是每步非线性求解耗时。
+@see     adaptive_mpc.py、mpc_adv.py、@ref TandemVec-Paper/ch17
 """
 import sys
 sys.path.insert(0, 'scripts')
@@ -32,6 +44,7 @@ dBeff = Beff_hat - Beff_nom
 
 # —— 可更新 LMPC（B_eff → 展开系数）——
 def make_ctrl(Beff):
+    """按效能矩阵构造控制器：None=名义 NMPC，B̂=辨识校正后的 NMPC。"""
     DT_PRED, N = 0.02, 30
     Ac = np.zeros((6, 6)); Ac[:3, 3:] = 0.5 * np.eye(3)
     A_aug = np.zeros((9, 9)); A_aug[:6, :6] = np.eye(6) + Ac * DT_PRED
@@ -67,6 +80,10 @@ def make_ctrl(Beff):
 
 # —— 自适应 NMPC（物理 + 辨识线性校正）——
 class AdaptiveNMPC(MA.NMPC):
+    """在物理非线性预测上叠加 (B̂−B̄)·u 线性校正项的自适应 NMPC。
+
+    @ref TandemVec-Paper/ch16、ch17
+    """
     def _predict(self, x, u):
         x1 = super()._predict(x, u)
         x1[4:7] += (dBeff @ np.array(u)) * self.dt_p
@@ -74,6 +91,7 @@ class AdaptiveNMPC(MA.NMPC):
 
 # —— 闭环仿真（失配动力学，无气动）——
 def simulate(controller, q0, T_total):
+    """闭环跑一次（子步 DT=0.004 s），返回时间序列 dict。"""
     v = np.zeros(3); w = np.zeros(3); q = np.array(q0, dtype=float)
     prop = Propulsion(P_true); prop.wf = prop.wt = W0_H
     prop.prev_wf = prop.prev_wt = W0_H

@@ -1,8 +1,22 @@
 # -*- coding: utf-8 -*-
-"""B_eff 单轴脉冲辨识 v5
-定理：陀螺项 g = ω×(Iω) + ω×h 为三轴交叉乘积——单轴转动时恒为零。
-每通道独立脉冲激励 → ω 仅沿该轴积累 → g=0 → ω̇ = I⁻¹·M 干净可辨。
-差速段：长脉冲（wf/wt 稳定后采样，Jp 瞬态=0）；尾摆/前摆段：短脉冲（ω 积累小，无 Jp）。
+"""ident_probe.py — B_eff 单轴脉冲辨识（v5）。
+
+@file    ident_probe.py
+@module  analysis/系统辨识（脉冲激励）
+@brief   分通道施加脉冲激励，用干净角加速度回归控制效能矩阵列。
+@details 定理：陀螺项 g=ω×(Iω)+ω×h 是三轴交叉乘积——单轴转动时恒为零，
+         故每通道独立脉冲可使 ω 仅沿该轴积累、g=0，从而 ω̇ = I⁻¹·M 可干净辨识。
+         差速段用长脉冲（wf/wt 稳定后采样，Jp 瞬态=0）；尾摆/前摆段用短脉冲
+         （ω 积累小，避免 Jp 瞬态混入）。
+         运行：仓库根目录 `py -3.12 scripts/ident_probe.py`。
+@theory  ω̇ = I⁻¹[M − ω×(Iω) − ω×h] @ref MOD-001 §5.2；
+         效能矩阵 ∂M/∂u @ref MOD-001 §4、@ref THY-003 §3；
+         转子角动量与 Jp 瞬态 @ref MOD-001 §3.4。
+@frame  FRD 机体系；脉冲分别绕 x_b（差速）、y_b（尾摆）、z_b（前摆）。
+@units   SI；u rad 或无量纲，ω̇ rad/s²。
+@note    失配参数（kT×0.8、kQ×0.8、Iy×1.3、Ix×1.2）是故意设置的辨识对象；
+         该激励设计依赖"单轴转动"假设，实机需先做轴向解耦验证。
+@see     ident_phys.py、adaptive_full.py、@ref THY-003
 """
 import sys
 sys.path.insert(0, 'simulations/high-fidelity-analysis')

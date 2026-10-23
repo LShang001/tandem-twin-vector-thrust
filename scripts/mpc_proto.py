@@ -1,6 +1,22 @@
 # -*- coding: utf-8 -*-
-"""LMPC 可行性原型：VTOL 悬停姿态控制（悬停点线性化 + 滚动时域 + 显式约束）
-对比 QuatSASController，验证 MPC 在该构型的约束价值与实时性量级"""
+"""mpc_proto.py — LMPC 可行性原型：VTOL 悬停姿态的约束滚动优化。
+
+@file    mpc_proto.py
+@module  analysis/控制算法原型（MPC）
+@brief   在悬停点线性化模型上做显式约束的滚动时域优化，与四元数 SAS 对比。
+@details 输入：参数 + 悬停工作点 ω0=√(mg/2kT) + 初态误差；处理：线性预测模型
+         （状态 [ε,ω]、输入 [Δω,δt,δf]）+ scipy.minimize 每步求解；输出：闭环轨迹与
+         求解耗时量级（可行性/实时性结论，非嵌入式实现）。
+         运行：仓库根目录 `py -3.12 scripts/mpc_proto.py`（需 PYTHONPATH 含本目录）。
+@theory  悬停点线性化与状态空间 @ref MOD-003 §4（小扰动框架）、@ref MOD-001 §5；
+         滚动时域与约束 MPC @ref TandemVec-Paper/ch17；
+         效能矩阵 B 由 core.control_effectiveness 给出 @ref MOD-001 §4、@ref THY-003 §3。
+@frame  FRD 机体系；u=[Δω,δt,δf] 列顺序与 B 一致。
+@units   SI：角速度 rad/s、摆角 rad、差速无量纲、时间 s（求解耗时 ms）。
+@note    预测步长 DT=0.004 s；求解器为 SLSQP 类通用优化，单步耗时远高于嵌入式预算，
+         故只能证明"约束有价值"，不能据此断言可在飞控上实时运行。
+@see     mpc_adv.py、ident_probe.py、@ref TandemVec-Paper/ch17
+"""
 import sys
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
 import time
@@ -126,6 +142,13 @@ def simulate_vtol_6dof(controller, q0, omega0, T_total=5.0, q_des=None):
     return eps_hist
 
 def run(name, controller, q0, q_des=None):
+    """跑一个对比场景，打印指标并返回时间序列。
+
+    @param[in] name       控制器名（作图/表格用）
+    @param[in] controller 控制器实例
+    @param[in] q0         初始姿态四元数 [w,x,y,z]
+    @param[in] q_des      期望姿态四元数（None 取悬停基态）
+    """
     eps = simulate_vtol_6dof(controller, q0, W0_H, T_total=5.0, q_des=q_des)
     print('%-14s eps峰值=%.4f 末值=%.4f' % (name, eps.max(), eps[-1]))
     if hasattr(controller, 'solve_us'):

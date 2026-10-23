@@ -1,6 +1,20 @@
 # -*- coding: utf-8 -*-
-"""论文 MPC 实验图件生成：收敛曲线、过渡跟踪、辨识结果、自适应闭环
-输出到 docs/03-理论推导/THY-004/fig-mpc/ + sim-data/mpc_compare.tex
+"""paper_mpc_figs.py — 论文 MPC 实验图件：收敛曲线/过渡跟踪/辨识结果/自适应闭环。
+
+@file    paper_mpc_figs.py
+@module  analysis/图件生成（MPC 章节）
+@brief   复跑 mpc_proto/mpc_adv/ident_probe 并把结果画成论文图与 LaTeX 表。
+@details 输入：参数 + 各原型模块；处理：求解/闭环比对 → 绘图；输出：
+         TandemVec-Paper/fig-mpc/*.pdf 与 sim-data/mpc_compare.tex。
+         运行：仓库根目录 `py -3.12 scripts/paper_mpc_figs.py`。
+@theory  LMPC/NMPC 与 Offset-free 结构 @ref TandemVec-Paper/ch17；
+         在线辨识 B_eff @ref TandemVec-Paper/ch16；
+         小角度线性化边界 @ref MOD-003 §4.4。
+@frame  FRD 机体系。
+@units   SI；图件横轴时间 s、纵轴 deg 或 rad/s。
+@note    图件数值来自本机重跑（非缓存），故论文图与报告数字应一致；
+         若改了原型脚本的默认参数，必须同步重跑本文件。
+@see     mpc_proto.py、mpc_adv.py、ident_probe.py、@ref TandemVec-Paper/ch17
 """
 import sys, os
 sys.path.insert(0, 'scripts')
@@ -19,13 +33,14 @@ import ident_probe as ID
 P = load_params()
 P_true = ID.P_true
 qh = ID.qh; W0_H = ID.W0_H; DT = 0.004
-OUT = os.path.join('docs', '03-理论推导', 'THY-004', 'fig-mpc')
+OUT = os.path.join('TandemVec-Paper', 'fig-mpc')
 os.makedirs(OUT, exist_ok=True)
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 C1, C2, C3, C4 = '#2E86AB', '#E4572E', '#2CA02C', '#9467BD'
 
 def simulate(controller, q0, T_total, q_des_fn=None, use_aero=False):
+    """用失配参数 P_true 跑一次 6DOF 闭环，返回时间序列 dict（t/姿态/角速率/控制量）。"""
     v = np.zeros(3); w = np.zeros(3); q = np.array(q0, dtype=float)
     prop = Propulsion(P_true); prop.wf = prop.wt = W0_H
     prop.prev_wf = prop.prev_wt = W0_H
@@ -42,6 +57,7 @@ def simulate(controller, q0, T_total, q_des_fn=None, use_aero=False):
     return t, eps
 
 def slerp_traj(t, T_slerp=3.0):
+    """水平→悬停的参考姿态时间函数：t<T_slerp 内 slerp 过渡，之后保持悬停四元数 qh。"""
     if t >= T_slerp: return qh
     s = t / T_slerp
     q0, q1 = np.array([1.0, 0, 0, 0]), qh
@@ -101,6 +117,7 @@ print('图2 mpc_transition.pdf')
 #  图 3：预测时域效应（LMPC N=5 vs 30，5° 扰动，失配）
 # ============================================================
 def make_ctrl_N(Beff, N):
+    """按给定效能矩阵与预测步数 N 构造 LMPC（预测步长 0.02 s，状态 9 维含扰动增广）。"""
     DT_PRED = 0.02
     Ac = np.zeros((6, 6)); Ac[:3, 3:] = 0.5 * np.eye(3)
     A_aug = np.zeros((9, 9)); A_aug[:6, :6] = np.eye(6) + Ac * DT_PRED
@@ -185,6 +202,7 @@ B0_nom, _, _ = control_effectiveness(W0_H, 0, 0, 0, P)
 Beff_nom = np.diag([1/P['Ix'], 1/P['Iy'], 1/P['Iz']]) @ B0_nom
 
 def make_ctrl(Beff):
+    """默认参数（N=30、0.02 s）的 LMPC 构造快捷函数；Beff=None 表示用名义 B。"""
     DT_PRED, N = 0.02, 30
     Ac = np.zeros((6, 6)); Ac[:3, 3:] = 0.5 * np.eye(3)
     A_aug = np.zeros((9, 9)); A_aug[:6, :6] = np.eye(6) + Ac * DT_PRED
@@ -241,7 +259,7 @@ for tag, q0, T, qf in [('5° 扰动', qA, 6.0, None), ('60° 扰动', qB, 6.0, N
     e_l = simulate(MP.LMPCAttitude(), q0, T, qf)[1]
     e_n = simulate(MA.NMPC(6, 0.05, 20), q0, T, qf)[1]
     rows.append((tag, e_sas[-1], e_l[-1], e_n[-1]))
-with open(os.path.join('docs', '03-理论推导', 'THY-004', 'sim-data', 'mpc_compare.tex'), 'w',
+with open(os.path.join('TandemVec-Paper', 'sim-data', 'mpc_compare.tex'), 'w',
           encoding='utf-8') as f:
     f.write('\\begin{table}[H]\n\\centering\n'
             '\\caption{姿态误差范数末值对比（失配仿真 kT×0.8、Iy×1.3、Ix×1.2，4--6\\,s）}\n'
