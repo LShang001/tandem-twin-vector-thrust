@@ -1664,6 +1664,12 @@ void handleNavigationSystem()
                                               gnss_measurement_age_s);
         gnss_status.last_test_ratio = result.test_ratio;
         aid_tracker.RecordAttempt(bfs::AidSource::Gnss, result);
+        if (result.reacquired)
+        {
+          // 长失联后连续不可信 GNSS 触发的位置/速度硬重锚，单独计入 reset_count，
+          // 便于 DBG 区分“普通融合”和“恢复重锚”。
+          aid_tracker.RecordReset(bfs::AidSource::Gnss);
+        }
       }
     }
     else if (perform_measurement_update && gnss_downgrade_quality_for_nav)

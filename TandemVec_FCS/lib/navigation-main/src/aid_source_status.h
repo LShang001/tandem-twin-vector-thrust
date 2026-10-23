@@ -85,6 +85,7 @@ struct MeasurementUpdateResult
   bool input_valid = false;         // 输入量测和噪声参数是否有限且物理有效
   bool attempted = false;           // 是否实际进入了 EKF 更新流程
   bool fused = false;               // 是否完成了状态/协方差更新
+  bool reacquired = false;          // 是否为长时间失联后的自动位置/速度重锚
   bool subset_position = false;     // P0-1：仅位置子集更新是否融合
   bool subset_velocity = false;     // P0-1：仅速度子集更新是否融合
   float nis_pos3 = 0.0f;            // P0-1：3 维位置子集 NIS

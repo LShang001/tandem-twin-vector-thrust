@@ -879,13 +879,14 @@ namespace bfs
      * @param[in] dt_avg_s  EKF 平均周期 [s]（仅用于输入有效性校验）
      * @param[in] measurement_age_s GNSS 观测年龄 [s]，0 表示当前时刻
      * @param[in] require_delayed_snapshot 是否强制要求命中历史快照
-     * @return MeasurementUpdateResult（input_valid/attempted/fused/subset_* 与 NIS）
+     * @return MeasurementUpdateResult（input_valid/attempted/fused/reacquired/subset_* 与 NIS）
      * @formula y = [lla2ned(gnss,hist); gnss_vel−hist_vel]；S = HPH^T+R；
      *          K = PH^T S^-1；x = Ky；P = (I−KH)P(I−KH)^T+KRK^T；NIS = y^T S^-1 y
      * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34（五方程与 Joseph 形式）；
      *      REF-121 §7.3.1 p.255–259（χ² 门控）；REF-121 §3.3 p.84–86（子集/序贯）
      * @pre gnss_vel 有限、LLA 有效（非极点、|h|≤100 km）、age ≥ 0
-     * @post 无论是否融合，恢复过的历史快照都会重传播回当前时刻
+     * @post 无论是否融合，恢复过的历史快照都会重传播回当前时刻；reacquired
+     *       路径会重置位置/速度并清空历史，后续帧重新积累回放快照
      * @note 联合 NIS 门限 30（χ²(6,0.999)≈22.46 的保守值）；拒绝后按 3+3 位置/
      *       速度子集重检（χ²(3) 门限 25.90/16.27），只更新通过的子集。
      * @test test_host/test_ekf_15state.cpp T4/T9–T11（收敛、子集隔离、软重锚）
@@ -977,12 +978,27 @@ namespace bfs
       if (time_since_gnss_update_s_ >= GNSS_REACQUIRE_MIN_OUTAGE_S &&
           !IsGnssReacquisitionResidualPlausible())
       {
+        // 高振动/长失联下纯惯导可漂出数百米，物理残差门会永久拒绝 GNSS。
+        // 连续多帧互相一致的 GNSS 才硬重锚，单帧跳点仍按离群值拒绝。
+        if (TryResetAfterPersistentImplausibleGnss(gnss_vel, gnss_lla,
+                                                   measurement_age_s,
+                                                   can_repropagate, hist_idx))
+        {
+          result.fused = true;
+          result.reacquired = true;
+          result.innovation_norm = y_.norm();
+          return result;
+        }
+        result.innovation_norm = y_.norm();
         if (can_repropagate)
         {
           RepropagateFromDelayedSnapshot(hist_idx);
         }
         return result;
       }
+      // 残差回到可信范围（或尚未进入失联窗口）即中断“连续不可信”计数。
+      gnss_implausible_reject_streak_ = 0;
+      has_last_implausible_gnss_vel_ = false;
 
       Eigen::Matrix<float, 6, 6> s_inv;
       float nis_value = 0.0f;
@@ -1529,6 +1545,10 @@ namespace bfs
     {
       return gnss_vel_reanchor_count_;
     }
+    inline uint32_t gnss_reacquire_reset_count() const
+    {
+      return gnss_reacquire_reset_count_;
+    }
 
 #ifdef EKF_HOST_REGRESSION
     /* 宿主机回归专用：直接设置姿态/协方差，构造 P(8,v) 非零的航向 consider 用例。
@@ -1859,6 +1879,90 @@ namespace bfs
                                   Eigen::Matrix3f::Identity();
       }
       StabilizeCovariance();
+    }
+
+    /*
+     * @brief 长时间失联后物理残差持续不可信时，用连续一致的 GNSS 硬重锚位置/速度。
+     * @details 高振动下纯惯导可能在数秒失联内漂出数百米，重捕获残差门
+     *          （25 m / 6 m/s）会永久拒绝 GNSS，滤波再也不会回到闭环。
+     *          本函数要求连续 GNSS_REACQUIRE_RESET_REJECT_STREAK 帧残差都不可信，
+     *          且相邻帧速度差不超过 GNSS_REACQUIRE_RESET_MAX_FIX_VEL_DIFF_MPS，
+     *          以排除单帧/双帧跳点；满足后用 GNSS 量测（按量测年龄用速度前推）
+     *          重置位置/速度并抬升对应协方差，姿态和零偏保持不动。
+     * @note  只应在 time_since_gnss_update_s_ 已超过失联门限的调用点使用；
+     *        本函数不校验失联时长，调用方负责。
+     */
+    bool TryResetAfterPersistentImplausibleGnss(
+        const Eigen::Vector3f &gnss_vel,
+        const Eigen::Vector3d &gnss_lla,
+        const float measurement_age_s,
+        const bool can_repropagate,
+        const int hist_idx)
+    {
+      if (!IsFiniteVector(gnss_vel) || !IsValidLlaForEarthModel(gnss_lla))
+      {
+        return false;
+      }
+
+      if (has_last_implausible_gnss_vel_ &&
+          (gnss_vel - last_implausible_gnss_vel_).norm() >
+              GNSS_REACQUIRE_RESET_MAX_FIX_VEL_DIFF_MPS)
+      {
+        // 相邻帧互相矛盾：重新开始计数，避免把跳点串当成一致恢复。
+        gnss_implausible_reject_streak_ = 0;
+      }
+      last_implausible_gnss_vel_ = gnss_vel;
+      has_last_implausible_gnss_vel_ = true;
+      if (gnss_implausible_reject_streak_ < 255U)
+      {
+        ++gnss_implausible_reject_streak_;
+      }
+      if (gnss_implausible_reject_streak_ <
+          GNSS_REACQUIRE_RESET_REJECT_STREAK)
+      {
+        return false;
+      }
+
+      if (can_repropagate)
+      {
+        RepropagateFromDelayedSnapshot(hist_idx);
+      }
+      // GNSS 位置对应 t-age；用 GNSS 速度前推到当前时刻，残余误差为 O(a·age²)。
+      const Eigen::Vector3d pos_now =
+          (measurement_age_s > 0.0f)
+              ? ned2lla(gnss_vel.cast<double>() *
+                            static_cast<double>(measurement_age_s),
+                        gnss_lla, bfs::AngPosUnit::RAD)
+              : gnss_lla;
+      ins_lla_rad_m_ = pos_now;
+      ins_ned_vel_mps_ = gnss_vel;
+      p_.block<3, 3>(0, 0) =
+          (Eigen::Vector3f(GNSS_REACQUIRE_RESET_POS_NE_STD_M,
+                           GNSS_REACQUIRE_RESET_POS_NE_STD_M,
+                           GNSS_REACQUIRE_RESET_POS_D_STD_M)
+               .array()
+               .square())
+              .matrix()
+              .asDiagonal();
+      p_.block<3, 3>(3, 3) =
+          (Eigen::Vector3f(GNSS_REACQUIRE_RESET_VEL_NE_STD_MPS,
+                           GNSS_REACQUIRE_RESET_VEL_NE_STD_MPS,
+                           GNSS_REACQUIRE_RESET_VEL_D_STD_MPS)
+               .array()
+               .square())
+              .matrix()
+              .asDiagonal();
+      p_.block<3, 3>(0, 3).setZero();
+      p_.block<3, 3>(3, 0).setZero();
+      StabilizeCovariance();
+      ResetHistoryBuffer();
+      time_since_gnss_update_s_ = 0.0f;
+      gnss_reacquire_timer_s_ = 0.0f;
+      gnss_vel_reject_streak_ = 0;
+      gnss_implausible_reject_streak_ = 0;
+      has_last_implausible_gnss_vel_ = false;
+      ++gnss_reacquire_reset_count_;
+      return true;
     }
 
     static Eigen::Vector3f ClampStaticGyroNoiseStd(const Eigen::Vector3f &std_value)
@@ -4288,6 +4392,15 @@ namespace bfs
     static constexpr float GNSS_REACQUIRE_POS_D_EXTRA_STD_M = 4.0f;
     static constexpr float GNSS_REACQUIRE_VEL_NE_EXTRA_STD_MPS = 0.5f;
     static constexpr float GNSS_REACQUIRE_VEL_D_EXTRA_STD_MPS = 0.7f;
+    // 长时间失联后，若物理残差持续超出上面重捕获窗口的可接受范围（例如
+    // 高振动使纯惯导位置漂移数百米），保守融合永远无法把状态拉回。连续
+    // N 帧互相一致的 GNSS 才允许硬重锚：单帧/双帧跳点不会触发。
+    static constexpr uint8_t GNSS_REACQUIRE_RESET_REJECT_STREAK = 3U;
+    static constexpr float GNSS_REACQUIRE_RESET_MAX_FIX_VEL_DIFF_MPS = 3.0f;
+    static constexpr float GNSS_REACQUIRE_RESET_POS_NE_STD_M = 8.0f;
+    static constexpr float GNSS_REACQUIRE_RESET_POS_D_STD_M = 12.0f;
+    static constexpr float GNSS_REACQUIRE_RESET_VEL_NE_STD_MPS = 1.0f;
+    static constexpr float GNSS_REACQUIRE_RESET_VEL_D_STD_MPS = 1.5f;
     static constexpr float GNSS_OUTAGE_TIME_CAP_S = 60.0f;
     static constexpr float GNSS_OUTAGE_POS_NE_GROWTH_MPS = 1.2f;
     static constexpr float GNSS_OUTAGE_POS_D_GROWTH_MPS = 1.8f;
@@ -4512,6 +4625,13 @@ namespace bfs
        连续 N 次速度子集被拒后膨胀 P_vv（不清速度/历史），让速度重新进入闭环。 */
     uint8_t gnss_vel_reject_streak_ = 0;
     uint32_t gnss_vel_reanchor_count_ = 0;
+
+    /* 长时间失联后物理残差持续不可信的连续帧计数。连续 N 帧且相邻帧速度
+       互相一致时才允许硬重锚；任何融合成功或残差回到可信范围都清零。 */
+    uint8_t gnss_implausible_reject_streak_ = 0;
+    Eigen::Vector3f last_implausible_gnss_vel_ = Eigen::Vector3f::Zero();
+    bool has_last_implausible_gnss_vel_ = false;
+    uint32_t gnss_reacquire_reset_count_ = 0;
 
     /* GNSS 重捕获保守融合窗口的剩余计时，单位 s。
        一次成功重捕获后设置窗口宽度，窗口内继续使用膨胀 R 防止后续帧再被普通门限拒绝。 */
