@@ -1,0 +1,11 @@
+[PASS] clean    seed1 alt=9.97 hold_end=1.45 hold_max=2.09 pos_rms=0.50 roll_max=12.68 resets=0 outliers=0
+[PASS] clean    seed2 alt=9.98 hold_end=1.11 hold_max=1.83 pos_rms=0.51 roll_max=10.52 resets=0 outliers=0
+[PASS] clean    seed3 alt=10.02 hold_end=1.20 hold_max=1.91 pos_rms=0.58 roll_max=11.14 resets=0 outliers=0
+[PASS] nominal  seed1 alt=9.23 hold_end=0.52 hold_max=3.33 pos_rms=0.64 roll_max=15.34 resets=0 outliers=0
+[PASS] nominal  seed2 alt=9.17 hold_end=1.42 hold_max=2.16 pos_rms=1.26 roll_max=15.62 resets=0 outliers=0
+[PASS] nominal  seed3 alt=9.30 hold_end=1.44 hold_max=4.71 pos_rms=1.57 roll_max=15.95 resets=0 outliers=0
+[PASS] degraded seed1 alt=6.23 hold_end=0.72 hold_max=4.35 pos_rms=0.57 roll_max=19.70 resets=0 outliers=5
+[PASS] degraded seed2 alt=6.09 hold_end=0.55 hold_max=6.28 pos_rms=1.64 roll_max=18.67 resets=0 outliers=7
+[PASS] degraded seed3 alt=6.09 hold_end=1.14 hold_max=5.99 pos_rms=2.18 roll_max=19.89 resets=0 outliers=5
+
+=== real-nav acceptance: 9 cases, 0 failed ===

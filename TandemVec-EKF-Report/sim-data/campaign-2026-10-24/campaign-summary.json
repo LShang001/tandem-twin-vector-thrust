@@ -301,5 +301,78 @@
     "reset_cases": 26,
     "reset_total": 26,
     "reset_max": 1
+  },
+  "sil_real_nav": {
+    "mode": "--real-nav: real handleNavigationSystem + real UBX parser, 2 kHz IMU, 200 Hz nav",
+    "profiles": [
+      "clean",
+      "nominal",
+      "degraded"
+    ],
+    "seeds": [
+      1,
+      2,
+      3
+    ],
+    "result": "9/9 PASS",
+    "clean": {
+      "final_alt_m": [
+        9.97,
+        9.98,
+        10.02
+      ],
+      "hold_end_rms_m": [
+        1.45,
+        1.11,
+        1.2
+      ]
+    },
+    "nominal": {
+      "final_alt_m": [
+        9.23,
+        9.17,
+        9.3
+      ],
+      "hold_end_rms_m": [
+        0.52,
+        1.42,
+        1.44
+      ]
+    },
+    "degraded": {
+      "final_alt_m": [
+        6.23,
+        6.09,
+        6.09
+      ],
+      "hold_end_rms_m": [
+        0.72,
+        0.55,
+        1.14
+      ],
+      "outlier_rejects": [
+        5,
+        7,
+        5
+      ]
+    },
+    "rc_failsafe": {
+      "case": "nominal + --rc-loss 30:31",
+      "final_alt_m": 8.175,
+      "hold_end_rms_m": 0.87,
+      "disarm_in_air": false
+    }
+  },
+  "ekf_in_loop": {
+    "root_cause": "hover attitude/heading unobservable; closed-loop rate jitter prevents static detector (|omega|<0.01 rad/s), ZUPT/gravity/static-gyro all off; EKF attitude error enters control 1:1",
+    "ablation": "truth attitude in control: 5 seeds x A0/A2/A9 all 0.7-2.4 deg, pos 0.5-1.7 m",
+    "fix_path": "absolute attitude source (body magnetic vector H=[m_pred x]) + position/altitude hold gating",
+    "hifi_with_mag_poshold_flow": "A0-A7/A9 9/9 PASS; A9 0.32 m/0.43 deg, A5 0.51 m/0.42 deg (A8 invalid target)",
+    "evidence_level": "L1 model simulation with ideal mag/flow; not firmware/HIL",
+    "harness_fixes": [
+      "trim 50 -> 49.912%",
+      "static gyro throttled at >=3%",
+      "mag vector T15 firmware unit test"
+    ]
   }
 }
