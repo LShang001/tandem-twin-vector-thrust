@@ -1,6 +1,18 @@
-// ============================================================
-//  main.mjs — GCS 前端入口：WebSocket 客户端 + 页面路由 + 全局状态
-// ============================================================
+/**
+ * @file    main.mjs
+ * @module  GCS/前端入口（WS 客户端 + 页面路由 + 全局状态）
+ * @brief   建立 WS 连接、分发消息到各页面模块，维护全局快照与参数表
+ * @details 数据来源：WS /ws 消息（hello、conn、telemetry、param_*、vars_*、dbg_*、flash_* 等）；
+ *          处理：JSON 解析 → 按 type 更新 state 并经 bus 派发事件；
+ *          输出：连接/告警状态栏与页面切换。
+ *          刷新频率：telemetry 由后端按 50Hz 节流推送（TELEMETRY_PERIOD=0.02）。
+ *          不变量：BACKEND_VERSION 必须与后端 app.version 一致（hello 握手比对，
+ *          版本不符说明前端页面配到了残留旧后端）。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   字段单位由后端快照后缀约定（_deg/_dps/_ms2/_ms/_m/_pct/_v），前端不换算
+ * @ref     GCS-001 §上位机、COMM-001 §4 C 层（推送 50Hz）
+ */
 import { fmt, fmtInt } from './widget.mjs';
 
 export const bus = new EventTarget();
@@ -15,12 +27,24 @@ export const state = {
   paramValues: {},          // id → value
 };
 
+/** @brief 通过 WS 发送一条命令对象
+ *  @param {Object} obj 命令对象（{cmd, ...}）
+ *  @note  未连接时静默丢弃，不排队重发
+ *  @units  N/A
+ *  @ref    GCS-001 §上位机
+ */
 export function send(obj) {
   if (ws.sock && ws.sock.readyState === WebSocket.OPEN) {
     ws.sock.send(JSON.stringify(obj));
   }
 }
 
+/** @brief 用 bus 派发自定义事件（跨模块解耦）
+ *  @param {string} type 事件名；@param {*} detail 事件载荷
+ *  @note  订阅方用 bus.addEventListener(type, ...) 接收
+ *  @units  N/A
+ *  @ref    GCS-001 §上位机
+ */
 export function emit(type, detail) {
   bus.dispatchEvent(new CustomEvent(type, { detail }));
 }
@@ -186,6 +210,12 @@ function renderLinkStat(m) {
 // ---------------- 页面路由 ----------------
 const pages = ['dashboard', 'view3d', 'scope', 'blackbox', 'params', 'console'];
 let activePage = 'dashboard';
+/** @brief 切换到指定页面（非法页面名忽略）
+ *  @param {string} name 页面名（dashboard/scope/params/blackbox/console/view3d）
+ *  @note  切换后向 bus 派发 'page' 事件，供页面懒激活与暂停渲染
+ *  @units  N/A
+ *  @ref    GCS-001 §上位机
+ */
 export function switchPage(name) {
   if (!pages.includes(name)) return;
   activePage = name;
@@ -254,6 +284,12 @@ bus.addEventListener('device-info', (e) => {
 
 // ---------------- 告警 ----------------
 const alarmTimers = {};
+/** @brief 顶栏告警条显示
+ *  @param {string} level info|warn|error；@param {string} text 提示文本
+ *  @note  仅前端提示，不发送任何协议帧
+ *  @units  N/A
+ *  @ref    GCS-001 §上位机
+ */
 export function flashAlarm(level, text) {
   const bar = $('alarmBar');
   const el = document.createElement('div');

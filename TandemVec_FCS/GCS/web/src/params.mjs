@@ -1,7 +1,16 @@
-// ============================================================
-//  params.mjs — 参数页：AnoCom 0xE0/0xE1 在线读写（分组表格）
-//  名称/类型来自固件 E2 信息帧（自描述）；分组/单位/范围来自本地元数据
-// ============================================================
+/**
+ * @file    params.mjs
+ * @module  GCS/前端参数页
+ * @brief   参数分组表格展示与主动 0xE0/0xE1 在线读写（写后读回校验）
+ * @details 数据来源：WS 消息 param_count/param_info/param_value/param_written；
+ *          名称/类型来自固件 E2 信息帧（自描述），分组/单位/范围来自本地元数据
+ *          （LOCAL_GROUPS/FIELD_RANGE）；处理：用户编辑 → send({cmd:'param_write'})
+ *          → 写后读回比对，超差告警；输出：表格与写入状态提示。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   参数量纲随环：姿态外环 deg/s、角速率内环 deg/s²、垂直/水平串级 m/s 与 m/s²
+ * @ref     PROTOCOL-001 §4（0xE0-0xE3 参数链路）、GCS-001 §2
+ */
 import { bus, send, state, flashAlarm } from './main.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -32,6 +41,12 @@ let params = [];      // [{id, name, type, value, pending}]
 let initialized = false;
 let pendingWrites = new Set();
 
+/** @brief 挂载参数页事件并触发首次读取
+ *  @details 绑定读全部/恢复默认/写入按钮，订阅 param_* 消息
+ *  @note    幂等：initialized 后直接返回
+ *  @units   参数量纲随环（deg/s、deg/s²、m/s、m/s²）
+ *  @ref     PROTOCOL-001 §4
+ */
 export function activate() {
   if (initialized) return;
   initialized = true;

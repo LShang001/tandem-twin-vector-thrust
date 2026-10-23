@@ -3,6 +3,22 @@
 """
 cli.py — GCS 命令行调试接口（复用 server.main 处理链路，行为与 Web 后端一致）
 
+@file    cli.py
+@module  GCS/命令行调试（复用 server.main 同一处理链路）
+@brief   提供串口枚举/连接、遥测快照、参数读写、DBG、黑匣子、变量、帧监控等子命令
+@details 输入：argv 子命令与 --port/--baud/--json；处理：可选自动连接 → 复用 main 的
+         切帧/解码/参数链路 → 按子命令收集规定时长 → 打印人读表格或 JSON；
+         输出：stdout。退出码：0=成功；1=未连接/命令前置条件失败
+         （require_connected、cmd_baudscan、_param_id_of 等显式 sys.exit(1)）。
+         不变量：CLI 自消费 rx_q（consume_thread=False），不启动后端消费线程；
+         连接后先等 stat_tele>0 再发命令（防固件 DBG 残留导致首请求必超时）。
+@theory  N/A
+@ref     PROTOCOL-001 §4（参数链路）、COMM-001 §4 C 层（DEFAULT_BAUD=921600）、GCS-001 §2
+@frame   N/A
+@units   输出字段单位随快照字段后缀；纯文本表格与 --json 均不做二次换算
+@note    每条命令独立进程：给 --port 时命令前自动连接、结束后断开；baudscan 跳过预连接
+@see     server/main.py、server/anocom.py、TandemVec_FCS/tools/README.md
+
 用法（全部命令在 TandemVec_FCS/GCS 目录执行；每条命令独立连接，加 --port 自动连/断）：
   py -3.12 server/cli.py ports                          # 枚举串口
   py -3.12 server/cli.py --port COM10 telemetry -n 5    # 自动连接并收集 5 个遥测快照
@@ -48,6 +64,10 @@ DEFAULT_BAUD = 921600   # ★ 2026-08-10 COMM-001：2M→921600（VCP 丢帧 ~15
 #  串口队列消费（同步版 rx_consumer，行为与 WS 后端一致）
 # ========================================================================
 def drain(duration=0.5):
+    """@brief 同步消费串口 rx 队列并喂给后端同一处理链路
+    @param[in] duration 消费时长 [s]
+    @note  CLI 自消费，不启动后端消费线程（否则 DBG 文本/参数响应会被线程取走）
+    """
     end = time.time() + duration
     while time.time() < end:
         try:
@@ -64,6 +84,7 @@ def drain(duration=0.5):
 
 
 def require_connected():
+    """@brief 前置检查：未连接串口时打印提示并以退出码 1 结束"""
     if not (m.g.link and m.g.link.is_open):
         print('✗ 未连接。先执行: cli.py connect <COM口> [--baud N]')
         sys.exit(1)
@@ -73,6 +94,7 @@ def require_connected():
 #  命令实现
 # ========================================================================
 def cmd_ports(_):
+    """@brief 子命令 ports：枚举串口，表格或 --json 输出"""
     from serial_link import list_ports
     for p in list_ports():
         print(f'{p["port"]:<6} {p["desc"]}  [{p["hwid"]}]')
@@ -86,6 +108,10 @@ def cmd_ports(_):
 #  main() 中 auto_conn 对 baudscan 跳过。
 # ========================================================================
 def cmd_baudscan(a):
+    """@brief 子命令 baudscan：逐波特率采集并按帧头 0x00 间隔规律性评分
+    @param a.dur 每波特率采集秒数；a.bauds 候选波特率（逗号分隔）
+    @note  自开串口，跳过 --port 预连接；无有效帧时退出码 1
+    """
     import serial as _serial
     if not a.port:
         print('✗ baudscan 需要串口: cli.py baudscan --port COM10 [--dur 2] [--bauds 9600,...,2000000]')
@@ -122,6 +148,9 @@ def cmd_baudscan(a):
 
 
 def cmd_connect(a):
+    """@brief 子命令 connect：保持串口会话（CLI 进程退出即断开）
+    @param a.port 串口名；a.baud 波特率
+    """
     m.g.connect(a.port, a.baud)
     print(f'✓ 已连接 {a.port} @ {a.baud}')
     # 自动拉取设备信息
@@ -130,6 +159,9 @@ def cmd_connect(a):
 
 
 def cmd_telemetry(a):
+    """@brief 子命令 telemetry：按间隔采集 N 个遥测快照并打印/JSON
+    @param a.n 快照数；a.i 采集间隔 [s]
+    """
     require_connected()
     print(f'收集 {a.n} 个遥测快照（间隔 {a.i}s）…')
     last = 0
@@ -153,6 +185,7 @@ def cmd_telemetry(a):
 
 
 def cmd_device(_):
+    """@brief 子命令 device：0xE0 CMD 0x00 读 0xE3 设备信息与参数个数"""
     require_connected()
     m.g.write(anocom.encode_frame(anocom.FUNC_PARAM_CMD, bytes([0x00, 0, 0, 0, 0])))
     for _ in range(40):
@@ -195,6 +228,10 @@ def _param_id_of(spec):
 
 
 def cmd_param(a):
+    """@brief 子命令 param：list/get/set/verify/restore 参数在线读写
+    @param a.action 动作；a.spec 参数 ID 或名称（att_roll.kp）；a.value 写入值
+    @note  set 写后读回校验（确认帧假阴性兜底），失败时退出码非 0
+    """
     require_connected()
     if a.action == 'list':
         _param_list(a)
@@ -516,6 +553,9 @@ def _dbg_collect(dur):
 
 
 def cmd_dbg(a):
+    """@brief 子命令 dbg：on/off 切换调试模式，或发送任意 DBG 命令行
+    @param a.cmdline 'on' / 'off' / 任意命令文本（如 "flash stat"）
+    """
     require_connected()
     if a.cmdline == 'on':
         _dbg_mode(True)
@@ -535,6 +575,10 @@ def cmd_dbg(a):
 
 
 def cmd_flash(a):
+    """@brief 子命令 flash：stat/findseg/export 黑匣子操作（导出可解析成 CSV）
+    @param a.action stat|findseg|export；a.start/a.count 页范围；
+           a.latest 取最新飞行段；a.out CSV 输出；a.quiet 不打印预览
+    """
     require_connected()
     if m.g.mode != 'dbg':
         print('（自动进入调试模式）')
@@ -641,6 +685,10 @@ def _flash_export(a):
 
 
 def cmd_record(a):
+    """@brief 子命令 record：start/stop 遥测 CSV 记录
+    @param a.action start|stop；a.out 输出文件；
+           a.duration 记录秒数（0 = 直到 Ctrl+C）
+    """
     require_connected()
     if a.action == 'start':
         path = a.out or f'output/rec_{time.strftime("%Y%m%d_%H%M%S")}.csv'
@@ -960,6 +1008,9 @@ def cmd_stick(a):
 
 
 def cmd_raw(a):
+    """@brief 子命令 raw：把 hex 字符串解析为字节直接写入串口
+    @param a.hex 十六进制串（可含空格/0x 前缀）
+    """
     require_connected()
     data = bytes.fromhex(a.hex)
     m.g.write(data)
@@ -971,6 +1022,9 @@ def cmd_raw(a):
 #  入口
 # ========================================================================
 def main():
+    """@brief 命令行入口：解析全局/子命令参数，可选自动连接后执行，最后断开
+    @note  baudscan 跳过预连接；连接后等 stat_tele>0（防固件 DBG 残留导致首请求超时）
+    """
     ap = argparse.ArgumentParser(description='TandemVec GCS CLI（复用 server.main 链路）')
     # 全局自动连接：每条命令独立进程，提供 --port 则命令前后自动 连接/断开
     ap.add_argument('--port', help='自动连接串口（如 COM10），命令结束自动断开')

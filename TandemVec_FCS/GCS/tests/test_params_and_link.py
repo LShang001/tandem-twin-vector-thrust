@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""参数元数据 + 遥测链路（GCS 全局状态机）测试"""
+"""参数元数据 + 遥测链路（GCS 全局状态机）测试
+
+@file    test_params_and_link.py
+@module  GCS/测试（参数与链路）
+@brief   校验参数名/顺序与固件注册表一致，并用 FakeSerialLink 驱动遥测状态机
+@details 输入：expected_names() 与注入的 AnoCom 字节流；处理：参数元数据查询、
+         切帧/解码/快照聚合；输出：pytest 断言。
+@theory  N/A
+@ref     GCS-001 §2（注册表顺序即参数 ID）、PROTOCOL-001 §4（0xE0-0xE3）
+@frame   N/A
+@units   参数元数据按环携带 deg/s、deg/s²、m/s、m/s²
+"""
 import os
 import struct
 import sys

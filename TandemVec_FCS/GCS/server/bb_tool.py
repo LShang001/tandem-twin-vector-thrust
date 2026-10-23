@@ -1,6 +1,20 @@
 #!/usr/bin/env python3
 """bb_tool.py — 黑匣子读取与分析工具（驱动 GCS 后端 DBG flash 导出链路）
 
+@file    bb_tool.py
+@module  GCS/黑匣子工具（独立脚本）
+@brief   通过 WS 驱动后端 DBG flash 命令，导出飞行段并做阶跃超调分析
+@details 输入：argv（--list/--latest/--seg/--analyze）；处理：连接 ws://127.0.0.1:8091/ws →
+         进入 DBG → flash findseg / flash export → 等待 flash_done →
+         解析 rows/columns → 可选超调统计 → 写 output/blackbox_segN.csv；
+         输出：CSV 与 stdout 分析结论。
+         不变量：DBG 与遥测互斥（进入 DBG 后固件停发遥测）；依赖后端已启动。
+@theory  N/A
+@ref     GCS-001 §上位机（黑匣子导出链路）、GCS-001 §3（P 帧增量数）
+@frame   N/A
+@units   CSV 单位随固件通道表；分析指标为 deg（姿态角）与 %（超调量）
+@note    预览最多 3000 行时间抽样（后端 flash_done 载荷），完整数据回落到 CSV
+
 用法（在 TandemVec_FCS/GCS 下）:
   py -3.12 server/bb_tool.py --list              # 列出飞行段
   py -3.12 server/bb_tool.py --latest            # 导出最新段 → output/blackbox_segN.csv
@@ -32,6 +46,11 @@ def _field(msg: str, name: str):
 
 
 class BbTool:
+    """黑匣子导出会话：驱动后端 DBG flash 命令并收集段列表/导出数据。
+
+    @brief  维护 segments / done / 事件队列，配合后端 flash_* 广播
+    @note   导出的原始页字节由后端解析成 rows/columns 后经 flash_done 下发
+    """
     def __init__(self):
         self.segments = []       # flash_segments: {num, page, tms}
         self.done = None         # flash_done 消息原文
@@ -205,6 +224,9 @@ def analyze_overshoot(rows, columns):
 
 
 def main():
+    """@brief 命令行入口：解析 --list/--latest/--seg/--analyze 并驱动导出
+    @note  依赖后端已启动（ws://127.0.0.1:8091/ws）；无后端时报错退出
+    """
     ap = argparse.ArgumentParser(description='黑匣子读取与分析')
     ap.add_argument('--list', action='store_true', help='只列飞行段')
     ap.add_argument('--latest', action='store_true', help='导出最新段')

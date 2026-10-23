@@ -2,6 +2,23 @@
 """
 app.py — TandemVec GCS 桌面启动器（独立窗口，无需手动开浏览器）
 
+@file    app.py
+@module  GCS/桌面启动
+@brief   后台拉起 uvicorn 后端并提供 pywebview 原生窗口，关窗即停
+@details 输入：命令行 --port/--browser；处理：端口占用检测 → /api/status 版本比对，
+         不符则重启残留后端 → 后台线程跑 uvicorn → 等待 HTTP 就绪 →
+         pywebview 窗口加载页面；输出：进程内后端 + 前端窗口
+         （pywebview 不可用时回退系统浏览器）。
+         不变量：前端 web/src/main.mjs 的 BACKEND_VERSION 必须与 app.version 一致；
+         app.py 直接 import 同一 app.version 校验残留后端（见 _ensure_fresh_backend）。
+         （WS hello 握手与端口探活都靠它识别"残留旧进程"）。
+@theory  N/A
+@frame   N/A
+@units   N/A
+@ref     GCS-001 §上位机；AGENTS.md 踩坑记录「改 GCS 后端后必须杀掉旧进程再启动」
+@note    ★ 8091 旧进程残留 + 前端 no-store = "界面全新、后端逻辑全旧"（2026-08-08 定位）
+@see     server/main.py、web/src/main.mjs
+
 流程：
   1. 后台线程启动 uvicorn（FastAPI 后端 + 静态前端）
   2. 等待 HTTP 就绪
@@ -31,11 +48,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name
 
 
 def port_free(port: int) -> bool:
+    """@brief 检测本机端口是否空闲（能连上说明已被占用）
+    @param[in] port TCP 端口
+    @return True = 可绑定（connect_ex != 0）
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         return s.connect_ex((HOST, port)) != 0
 
 
 def wait_http_ready(url: str, timeout: float = 15.0) -> bool:
+    """@brief 轮询 URL 直到返回 200 或超时
+    @param[in] url 探活地址；timeout 最长等待 [s]
+    @return True = 后端已就绪
+    """
     t0 = time.time()
     while time.time() - t0 < timeout:
         try:
@@ -61,6 +86,7 @@ def start_server(port: int):
 
 
 def main():
+    """@brief 解析参数并启动桌面窗口/浏览器（阻塞到窗口关闭后停后端）"""
     ap = argparse.ArgumentParser(description='TandemVec GCS 桌面启动器')
     ap.add_argument('--port', type=int, default=DEFAULT_PORT)
     ap.add_argument('--browser', action='store_true', help='强制系统浏览器模式（不用原生窗口）')

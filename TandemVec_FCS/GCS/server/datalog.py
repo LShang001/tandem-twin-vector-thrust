@@ -2,6 +2,19 @@
 """
 datalog.py — 实时遥测记录（CSV）与回放数据源
 
+@file    datalog.py
+@module  GCS/数据记录与回放
+@brief   把遥测快照写 CSV，并按行回放为快照（复用前端渲染管线）
+@details 输入：main.py 的 g.snap（已解码、带单位后缀的字段）；处理：固定列顺序追加写、
+         缺列填空；回放时逐行读 CSV 并按后端推送周期广播；
+         输出：output/*.csv 与 replay 快照。
+         不变量：RECORD_FIELDS 与列顺序保持一致（前端/工具按列名消费）。
+@theory  N/A
+@ref     COMM-001 §4（遥测 50Hz 推送）、GCS-001 §上位机（记录/回放页）
+@frame   N/A
+@units   列名自带单位后缀；t_ms 为 ms（相对记录起点的快照时间）
+@note    回放与实时遥测共用同一 telemetry 消息结构，前端零分支
+
 - CsvRecorder: 把遥测快照 dict 追加写 CSV（列固定，缺列填空；时间戳 t_ms）
 - ReplaySource: 读 CSV 按行推送快照（供前端复用仪表渲染管线回放）
 """
@@ -28,6 +41,12 @@ RECORD_FIELDS = [
 
 
 class CsvRecorder:
+    """遥测 CSV 记录器：按 RECORD_FIELDS 固定列追加写，缺列填空。
+
+    @brief  打开/关闭 CSV 文件并按快照写一行
+    @param  path 输出 CSV 路径（output/ 下）
+    @note   t_ms 为快照时间戳（ms），由调用方保证单调
+    """
     def __init__(self, path):
         self.path = path
         self._f = None

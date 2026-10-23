@@ -1,17 +1,17 @@
-// ============================================================
-//  view3d.mjs — 基础 3D 姿态视图（Three.js）
-//  设计原则：只画"姿态"本身——六面异色长方体 + 前向箭头 + 机背立柱
-//            + 地平参考，无机型细节，方向判读无歧义。
-//
-//  坐标映射（★ 2026-08-08 重写，旧实现缺 Pᵀ 相似变换导致轴向错乱）：
-//    模型在机体系建造：+x 前 / +y 右 / +z 下（NED 机体轴）。
-//    嵌套两个 Group：
-//      groupBasis  —— 固定旋转 P（NED→Three 基变换，det=1 真旋转）
-//                     Three_x=NED_y(右)  Three_y=-NED_z(上)  Three_z=-NED_x(前)
-//      groupBody   —— 姿态四元数 q_ned（机体相对 NED 世界，标准 3-2-1）
-//    顶点最终变换 = P · R_ned · v —— 数学上是严格的相似变换。
-//    q_ned 由欧拉角合成：q = qz(ψ) ⊗ qy(θ) ⊗ qx(φ) ⇔ THREE Euler 'ZYX'。
-// ============================================================
+/**
+ * @file    view3d.mjs
+ * @module  GCS/前端 3D 姿态视图（Three.js）
+ * @brief   用长方体+前向箭头+机背立柱+地平参考渲染机体姿态，方向判读无歧义
+ * @details 数据来源：bus 的 'telemetry' 事件（roll/pitch/heading，deg，50Hz）；
+ *          处理：欧拉角合成本体系四元数，与 NED→Three 基变换 P 级联后渲染；
+ *          输出：WebGL 画面（页面不可见时暂停渲染）。
+ *          不变量：顶点最终变换由 P·R_ned·v 给出（det=1 的严格相似变换）；
+ *          P 的列依次是 NED 三轴在 Three 系中的像：x 右、y 上、z 反向。
+ * @theory  N/A（仅渲染，不参与物理计算）
+ * @frame   机体系 NED（x 前 / y 右 / z 下）→ Three 显示基（x 右 / y 上 / z 后）
+ * @units   角度 deg（快照字段给出），不做二次换算
+ * @note    ★ 2026-08-08 重写：旧实现缺 P 的转置相似变换，导致轴向错乱
+ */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { bus, state } from './main.mjs';
@@ -30,6 +30,12 @@ const P_BASIS = new THREE.Matrix4().makeBasis(
   new THREE.Vector3(0, -1, 0),
 );
 
+/** @brief 初始化 Three.js 场景并订阅 telemetry
+ *  @details 建场景/相机/OrbitControls/机体与地平参考，注册 resize 与 page 事件
+ *  @note    幂等：running 后直接返回；页面不可见时暂停渲染
+ *  @units   角度 deg（快照字段）
+ *  @ref     MOD-002 §3（姿态角约定）
+ */
 export function activate() {
   if (running) return;
   running = true;

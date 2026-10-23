@@ -1,6 +1,16 @@
-// ============================================================
-//  blackbox.mjs — 黑匣子页：飞行段管理 / 表格预览 / 分组绘图 / CSV 导出
-// ============================================================
+/**
+ * @file    blackbox.mjs
+ * @module  GCS/前端黑匣子页
+ * @brief   飞行段管理、表格预览、分组绘图与 CSV 导出
+ * @details 数据来源：WS flash_segments/flash_progress/flash_done；
+ *          处理：DBG 模式下发 flash_findseg/flash_export，收到 flash_done 载荷
+ *          （rows/columns）后渲染表格与曲线；输出：预览与浏览器下载 CSV。
+ *          不变量：DBG 与遥测互斥；导出需先 dbg_enter。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   列单位随固件通道表（同遥测/0xF1 语义）
+ * @ref     GCS-001 §上位机（黑匣子导出链路）、GCS-001 §3（P 帧增量数）
+ */
 import { bus, send, state } from './main.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -12,6 +22,12 @@ let selectedCols = new Set();
 let plotTab = 'attitude';
 let initialized = false;
 
+/** @brief 挂载黑匣子页事件与 bus 订阅
+ *  @details 绑定 flash_* 按钮，订阅 flash-segments/progress/done 消息
+ *  @note    幂等：initialized 后直接返回
+ *  @units   列单位随固件通道表
+ *  @ref     GCS-001 §上位机
+ */
 export function activate() {
   if (initialized) return;
   initialized = true;

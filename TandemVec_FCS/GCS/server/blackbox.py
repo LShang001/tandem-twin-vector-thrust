@@ -2,6 +2,23 @@
 """
 blackbox.py — W25N01GV 黑匣子下载与解析（移植自 tools/flash_export.py，v2 I/P 差分帧 + S/E 飞行段）
 
+@file    blackbox.py
+@module  GCS/黑匣子解析
+@brief   切分并解析 W25N01GV 飞行日志（I/P 差分帧 + S/E 段），还原为时间序列
+@details 输入：flash export 原始页字节；处理：AA 55 magic 同步 → 按类型切帧 →
+         CRC16-CCITT 校验 → S 帧取权威通道名与通道数 → I 帧重置绝对值参考 →
+         P 帧 int16 增量 /100 累加还原；输出：rows/segments/columns。
+         不变量：帧布局必须与固件 lib/W25N01GV/src/W25N01GV_log.{h,cpp} 一致；
+         帧尺寸按 S 帧通道数动态推导（固件通道表 22→13 裁剪后固定尺寸失效）。
+@theory  N/A
+@ref     GCS-001 §3（P 帧增量数修正：末槽为 CRC，实际 N-1 个增量）、
+         固件 lib/W25N01GV/src/W25N01GV_log.h（I/P/S/E 帧、DELTA_SCALE=100）
+@frame   N/A
+@units   时间 ms（t_ms/dt_ms）；通道值单位继承固件通道表（同 0xF1/遥测语义）；
+         差值缩放 DELTA_SCALE=100（int16 存储 0.01 分辨率）
+@note    S 帧定长 236B（通道名表 224B + 12B 头尾）；旧段无 S 帧时回退 22 通道
+@see     server/bb_tool.py、TandemVec_FCS/tools/plot_blackbox.py、tests/test_blackbox.py
+
 帧格式 v2（与固件 lib/W25N01GV/W25N01GV_log.h 一致，小端，CRC16-CCITT poly 0x1021 init 0xFFFF）:
   I: magic(2)+type(1)=0x49+seq(2)+t_ms(4)+Nxfloat(4N)+crc16(2)
   P: magic(2)+type(1)=0x50+seq(2)+dt_ms(2)+(N-1)xint16+crc16(2)

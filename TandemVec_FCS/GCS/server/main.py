@@ -2,6 +2,23 @@
 """
 main.py — GCS 服务入口：FastAPI + WebSocket + pyserial
 
+@file    main.py
+@module  GCS/后端服务（FastAPI + WebSocket + 串口链路）
+@brief   把串口 AnoCom 帧流解码为遥测快照，经 WS/HTTP 提供给前端与 CLI
+@details 输入：串口读线程字节流、WS 客户端命令；处理：切帧→解码→聚合快照→
+         按 TELEMETRY_PERIOD 节流广播，并驱动参数/变量/黑匣子/DBG 状态机；
+         输出：WS 消息（hello/conn/telemetry/link_stat/param_*/vars_*/dbg_*/flash_*）、
+         /api/status 与 /download。
+         不变量：app.version 必须与前端 web/src/main.mjs 的 BACKEND_VERSION 一致；
+         telemetry 与 dbg 模式互斥（固件行为，进入 DBG 后固件停发遥测）。
+@theory  N/A
+@ref     PROTOCOL-001 §2/§4、COMM-001 §3（推送 50Hz）、COMM-001 §4 C 层（read_size 256）、
+         GCS-001 §2（参数在线读写）
+@frame   N/A（姿态/速度/位置由 anocom.py 解码，速度与高度已为"向上为正"）
+@units   快照字段自带单位后缀（_deg/_dps/_ms2/_ms/_m/_pct/_v），原样透传前端
+@note    ★ 改后端后必须杀掉 8091 残留进程（AGENTS.md 踩坑记录）：WS hello 握手比对版本
+@see     server/anocom.py、server/params.py、server/blackbox.py、web/src/main.mjs
+
 启动：python -m uvicorn main:app --host 127.0.0.1 --port 8091
 前端：http://127.0.0.1:8091/
 
@@ -469,7 +486,7 @@ def _on_vars_list(f: anocom.Frame):
 
 def _on_vars_value(f: anocom.Frame):
     """0xF2 变量值帧 [id u16 LE] + [float LE]：查 vars_meta 映射名称进快照
-    （字段名 vars_<name>，随 20Hz telemetry 推送 + record 落盘）。
+    （字段名 vars_<name>，随 50Hz telemetry 推送 + record 落盘）。
     清单未拉全时仍可推（名退化为 vars_idN）——CLI vars watch 会先拉清单。"""
     p = f.payload
     if len(p) < 6:
@@ -493,6 +510,11 @@ def _on_vars_value(f: anocom.Frame):
 # ========================================================================
 
 async def handle_ws_message(ws: WebSocket, msg: dict):
+    """@brief 按 msg['cmd'] 分派一条 WS 客户端命令
+    @param ws 该客户端连接；msg 已解析的 JSON 命令（connect/disconnect/param_*/
+           vars_*/flash_*/dbg_*/record_*/replay_* 等）
+    @note  命令处理异常由 ws_endpoint 捕获并回 log 消息，不关闭连接
+    """
     cmd = msg.get('cmd')
     if cmd == 'list_ports':
         await ws.send_json({'type': 'ports', 'ports': list_ports()})
@@ -739,7 +761,7 @@ def _param_id_of(msg: dict):
 
 
 async def _param_read_all(ws: WebSocket):
-    """拉取固件全部 117 参数（逐 ID 发送 + 等待该 ID 双全，超时重试。
+    """拉取固件全部注册表参数（当前 128；逐 ID 发送 + 等待该 ID 双全，超时重试。
     ★ 2M 速率下 USB 串口偶发丢字节（固件 CRC 失败静默丢弃）——
       批量灌发会系统性丢参数，必须逐 ID 确认）"""
     if not (g.link and g.link.is_open):
@@ -781,6 +803,10 @@ async def _param_read_single_async(pid, timeout=1.5, tries=3):
 
 @app.websocket('/ws')
 async def ws_endpoint(ws: WebSocket):
+    """@brief WebSocket 端点：接受连接 → 发 hello 版本握手 → 循环处理命令
+    @note  首个消息固定为 {'type':'hello','version':app.version}，前端据此识别
+           残留旧后端（AGENTS.md 踩坑记录）
+    """
     await ws.accept()
     g.ws_clients.add(ws)
     g._loop = asyncio.get_running_loop()
@@ -843,6 +869,9 @@ app.mount('/', StaticFiles(directory=str(WEB_DIR), html=True), name='web')
 
 @app.middleware('http')
 async def no_cache_middleware(request, call_next):
+    """@brief 给所有 HTTP 响应加 Cache-Control: no-store
+    @note  前端改动后浏览器刷新即取最新 JS，避免"界面全新、逻辑全旧"
+    """
     resp = await call_next(request)
     resp.headers['Cache-Control'] = 'no-store'
     return resp
@@ -850,6 +879,7 @@ async def no_cache_middleware(request, call_next):
 
 @app.on_event('startup')
 async def startup():
+    """@brief 应用启动钩子：记录事件循环并启动链路统计任务"""
     g._loop = asyncio.get_running_loop()
     asyncio.create_task(_stat_loop())
     log.info('GCS 后端启动完成（状态接口 /api/status）')

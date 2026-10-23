@@ -1,6 +1,15 @@
-// ============================================================
-//  dashboard.mjs — 仪表盘：人工地平线 + HUD + RC/控制条 + GNSS
-// ============================================================
+/**
+ * @file    dashboard.mjs
+ * @module  GCS/前端仪表盘
+ * @brief   人工地平线、HUD、RC/控制量条与 GNSS 状态渲染
+ * @details 数据来源：bus 的 'telemetry' 事件（后端 50Hz 快照）；
+ *          处理：按快照字段直接绘制（姿态 deg、角加速度 deg/s²、油门 %、RC us）；
+ *          输出：DOM 文本与 Canvas 人工地平线。
+ * @theory  N/A
+ * @frame   NED 下 3-2-1 欧拉角（roll/pitch/heading，deg），仅显示不参与计算
+ * @units   deg、deg/s²、%、us、m、V（字段名自带后缀，不做二次缩放）
+ * @ref     GCS-001 §上位机（仪表盘页）、PROTOCOL-001 §2（0x03/0x21/0x40 字段语义）
+ */
 import { bus, state } from './main.mjs';
 import { drawAttitude, drawTvcDial, barRow, fmt, fmtInt, val } from './widget.mjs';
 
@@ -20,6 +29,12 @@ let actBars = [];
 let varsRows = {};      // 变量名 → {nameEl, valEl, seen}
 let initializing = false;
 
+/** @brief 构建仪表盘 DOM 并订阅 telemetry（后端 50Hz 快照）
+ *  @details 初始化 RC/控制量/执行器条与人工地平线、GNSS 状态芯片
+ *  @note    幂等：initialized 后直接返回
+ *  @units   deg、deg/s²、%、us、m、V
+ *  @ref     GCS-001 §上位机（仪表盘页）
+ */
 export function activate() {
   if (initializing) return;
   initializing = true;

@@ -2,6 +2,20 @@
 """
 serial_link.py — 串口抽象层
 
+@file    serial_link.py
+@module  GCS/链路层
+@brief   串口枚举与连接封装（读线程回调字节流；测试用内存回放实现）
+@details 输入：port/baud、pyserial 读线程；处理：持续 read 并回调 on_data；
+         输出：字节流交给 main.py 的切帧器。
+         不变量：read_size=256（COMM-001 P6：1024B 攒批 ~68ms → 256B ~17ms）；
+         回调内不得阻塞——消费吞吐必须远高于遥测 210 帧/s 的产生速率。
+@theory  N/A
+@ref     COMM-001 §1 P6、§4 C 层（read_size 1024→256）；AGENTS.md 踩坑记录（残留进程）
+@frame   N/A
+@units   波特率 921600（唯一权威源为固件 state_data.h 的 SERIAL6_BAUDRATE）
+@note    pyserial 缺失时仍可 import（文档服务器/无串口环境），list_ports 返回空表
+@see     server/main.py、FakeSerialLink（tests/test_params_and_link.py）
+
 - list_ports(): 枚举可用串口（供前端下拉）
 - SerialLink: 连接/断开/读写线程；读数据通过 on_data 回调推送（读线程持续 read 并回调）
 - FakeSerialLink: 测试用内存回放串口（可注入字节流，验证解析链路）

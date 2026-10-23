@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""黑匣子 I/P/S/E 帧解析测试 — 与固件 W25N01GV_log.h / tools/flash_export.py 对齐"""
+"""黑匣子 I/P/S/E 帧解析测试 — 与固件 W25N01GV_log.h / tools/flash_export.py 对齐
+
+@file    test_blackbox.py
+@module  GCS/测试（黑匣子）
+@brief   验证 I/P 差分还原、S 帧通道名、E 帧段信息与 CRC 拒绝
+@details 输入：按固件布局合成的帧；处理：extract_frames/decode_frames；
+         输出：pytest 断言（列名、数值、段统计、坏 CRC 剔除）。
+@theory  N/A
+@ref     GCS-001 §3（P 帧增量数）、固件 lib/W25N01GV/src/W25N01GV_log.h
+@frame   N/A
+@units   时间 ms；差值 0.01 分辨率（DELTA_SCALE=100）
+"""
 import struct
 import sys
 import os

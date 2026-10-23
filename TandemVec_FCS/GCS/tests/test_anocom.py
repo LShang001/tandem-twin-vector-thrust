@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""AnoCom 协议编解码测试 — 与固件 lib/AnoComProtocol 逐字节对齐"""
+"""AnoCom 协议编解码测试 — 与固件 lib/AnoComProtocol 逐字节对齐
+
+@file    test_anocom.py
+@module  GCS/测试（协议）
+@brief   逐字节验证帧组装、SC/AC 校验、切帧与各功能码解码缩放
+@details 输入：手工构造 payload 与坏帧；处理：encode_frame/extract_frames/decode_*；
+         输出：pytest 断言。作为 anocom.py 与固件发送实现一致性的回归证据。
+@theory  N/A
+@ref     PROTOCOL-001 §1（帧格式/校验算法）、§2（各帧 DATA 缩放）
+@frame   N/A
+@units   断言按线缆单位（cm/s²、0.01deg、cm）与解码单位（m/s²、deg、m）对照
+"""
 import struct
 import sys
 import os

@@ -2,6 +2,23 @@
 """
 params.py — 参数显示元数据（分组/单位/范围/说明）
 
+@file    params.py
+@module  GCS/参数元数据
+@brief   为固件自描述参数（E2 帧）补充分组、单位、范围与显示说明
+@details 输入：固件 0xE0 CMD 0x03 返回的 ID→名称/类型；处理：按名称查本地元数据表
+         （PID_GROUPS/FILTER_GROUPS/FIELD_META），未命中落入"其他"组；
+         输出：前端参数页的分组、单位与校验范围。
+         不变量：命名必须与固件 src/ano_params.cpp 注册表逐字一致（含 {loop}.falpha
+         与 spd_alpha/ang_alpha/out_alpha/spd2_alpha 线上名）；参数 ID 顺序由
+         expected_names() 镜像，用于跨实现（PC↔固件）顺序校验。
+@theory  N/A
+@ref     PROTOCOL-001 §4（0xE2 PAR_NAME 定长 20B）、GCS-001 §2（注册表顺序即参数 ID）
+@frame   N/A
+@units   元数据单位：姿态外环 deg/s、角速率内环 deg/s²、垂直串级 m/s 与 m/s²、
+         位置环 m/s、速度环 m/s²；rc_* 为归一化系数（无量纲）
+@note    滤波 alpha 线上名受 PAR_NAME 20B 限制而缩短（filter_alpha → falpha）
+@see     server/anocom.py、TandemVec_FCS/src/ano_params.cpp（只读对照）
+
 ★ 名称与固件 ano_params.cpp 注册表严格同名（att_roll.kp 等）——
   上位机先经 0xE0 CMD 0x03 拉取固件 E2 信息帧（ID→名称/类型），
   再用本表按名称补充分组/单位/范围；未命中名称自动落入"其他"组。
@@ -83,7 +100,7 @@ def _loop_out_unit(loop):
 
 
 def build_meta():
-    """生成 {name: meta} 完整元数据表（117 参数，name = 线上名）"""
+    """生成 {name: meta} 元数据表（name = 线上名，覆盖固件注册表所需分组/单位）"""
     meta = {}
     for loop, group, desc in PID_GROUPS:
         for field, fm in FIELD_META.items():
@@ -172,6 +189,10 @@ def meta_for(name):
 
 
 def is_float_name(name):
+    """@brief 判断参数是否为 float 类型（未知名称按 float 处理，以固件 E2 为准）
+    @param[in] name 线上参数名（如 att_roll.kp / spd_alpha[0]）
+    @return True = float（4B），False = uint8（1B）
+    """
     m = meta_for(name)
     if m:
         return m['type'] == 'float'
@@ -179,9 +200,9 @@ def is_float_name(name):
     return True
 
 
-# 固件注册表同序参数名列表（校验用：保证 121 个线上名与固件一致）
+# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 128 项）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回 121 个线上参数名（跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 128 项，跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():

@@ -1,6 +1,16 @@
-// ============================================================
-//  scope.mjs — 多通道实时曲线（环形缓冲 canvas 滚动示波器）
-// ============================================================
+/**
+ * @file    scope.mjs
+ * @module  GCS/前端示波器
+ * @brief   多通道实时曲线（canvas 环形缓冲滚动显示）
+ * @details 数据来源：bus 的 'telemetry' 事件（后端 50Hz 快照）；
+ *          处理：按预设通道组取快照字段压入环形缓冲并重绘；
+ *          输出：canvas 曲线。窗口 20s、每通道历史 6000 点；
+ *          页面不可见时暂停重绘（省 CPU）。
+ * @theory  N/A
+ * @frame   仅显示，不参与计算
+ * @units   通道单位见 PRESETS 标签（deg、deg/s、m/s²、m/s、m、%、V）
+ * @ref     GCS-001 §上位机（实时曲线页）、COMM-001 §4 C 层（推送 50Hz）
+ */
 import { bus, state } from './main.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -64,6 +74,12 @@ let paused = false;
 let pageVisible = true;        // 页面不可见时停止重绘（scope 在后台白烧 CPU）
 let initialized = false;
 
+/** @brief 构建预设通道卡片并订阅 telemetry
+ *  @details 初始化预设下拉/暂停/清空按钮，按 PRESETS 建卡片
+ *  @note    幂等：initialized 后直接返回；页面不可见时暂停重绘
+ *  @units   见 PRESETS 标签（deg、deg/s、m/s²、m/s、m、%、V）
+ *  @ref     GCS-001 §上位机（实时曲线页）
+ */
 export function activate() {
   if (initialized) return;
   initialized = true;

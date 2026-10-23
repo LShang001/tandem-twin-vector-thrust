@@ -1,17 +1,32 @@
-// ============================================================
-//  widget.mjs — 通用小部件：格式化 / 人工地平线 / 条形指示
-// ============================================================
+/**
+ * @file    widget.mjs
+ * @module  GCS/前端通用小部件
+ * @brief   数值格式化、人工地平线与条形指示器绘制
+ * @details 纯显示工具：输入遥测字段值，输出 DOM 文本或 Canvas 图元；
+ *          不持有状态、不发网络请求。
+ * @theory  N/A
+ * @frame   人工地平线按 NED 3-2-1 欧拉角显示（roll/pitch/heading，deg）
+ * @units   由调用方决定：drawTvcDial 摆角 deg、推力 %；drawAttitude 姿态 deg
+ */
 
+/** @brief 浮点格式化：空值/NaN → '--'，其余固定 digits 位小数 */
 export function fmt(v, digits = 1) {
   if (v === undefined || v === null || Number.isNaN(v)) return '--';
   return Number(v).toFixed(digits);
 }
+/** @brief 整数格式化：空值/NaN → '--'，其余四舍五入取整 */
 export function fmtInt(v) {
   if (v === undefined || v === null || Number.isNaN(v)) return '--';
   return Math.round(Number(v)).toString();
 }
 
 /** 从遥测快照安全取值 */
+/** @brief 从遥测快照安全取值
+ *  @param {Object} snap 快照；@param {string} key 字段名
+ *  @param {*} def 缺失时的默认值
+ *  @returns {*} 字段值或 def
+ *  @units   继承字段后缀
+ */
 export function val(snap, key, def = undefined) {
   const v = snap[key];
   return (v === undefined || v === null) ? def : v;
@@ -20,6 +35,10 @@ export function val(snap, key, def = undefined) {
 // ============================================================
 //  人工地平线（canvas）— 横滚/俯仰/航向 + 刻度
 // ============================================================
+/** @brief 绘制人工地平线（canvas）
+ *  @param cv canvas 元素；rollDeg/pitchDeg/headingDeg 姿态角 [deg]
+ *  @note  pitch 显示 clamp 到 ±45°，仅影响显示幅度不影响数据
+ */
 export function drawAttitude(cv, rollDeg, pitchDeg, headingDeg) {
   const dpr = window.devicePixelRatio || 1;
   const W = cv.width, H = cv.height;
@@ -117,6 +136,12 @@ export function drawAttitude(cv, rollDeg, pitchDeg, headingDeg) {
 //  TVC 摆角仪表（canvas）— 箭头方向 = 摆角（±15°），长度 = 推力 %
 // ============================================================
 const TVC_LIMIT_DEG = 15;            // 摆角限幅（固件 MAX_CORRECTION/GYRO_K ±15°）
+/** @brief 绘制 TVC 摆角/推力表盘
+ *  @param {HTMLCanvasElement} cv 画布；@param {number} angleDeg 摆角 [deg]
+ *  @param {number} thrustPct 推力 [%]
+ *  @units   deg、%
+ *  @ref     GCS-001 §上位机
+ */
 export function drawTvcDial(cv, angleDeg, thrustPct, { color = '#3ea6ff' } = {}) {
   const dpr = window.devicePixelRatio || 1;
   const W = cv.width, H = cv.height;
@@ -184,6 +209,10 @@ export function drawTvcDial(cv, angleDeg, thrustPct, { color = '#3ea6ff' } = {})
 // ============================================================
 //  条形指示（RC 通道 / 控制输出）
 // ============================================================
+/** @brief 生成一行条形指示器
+ *  @param label 显示名；el 容器元素；center=true 时以中点为零位（双向条）
+ *  @returns {{set:function(number):void}} 置值函数
+ */
 export function barRow(label, el, { center = false, color = '' } = {}) {
   el.classList.add('bar-row');
   if (center) el.classList.add('center');

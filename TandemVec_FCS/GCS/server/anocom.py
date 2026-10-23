@@ -2,6 +2,25 @@
 """
 anocom.py — AnoCom（匿名地面站协议）编解码
 
+@file    anocom.py
+@module  GCS/协议（AnoCom 帧编解码，PC 侧唯一事实源）
+@brief   打包/解析 AnoCom 帧，并把遥测 DATA 区按协议缩放解码为结构化字段
+@details 输入：串口字节流；处理：AB 05 FF 帧头同步 → 长度切帧 → SC/AC 双校验 →
+         按功能码解码 → 除以各字段缩放因子；输出：Frame 列表与遥测 dict。
+         不变量：帧格式与缩放必须与固件 lib/AnoComProtocol 的 buildFrame 及
+         src/communication.cpp 发送实现逐字节一致；任何改动须同步 tests/test_anocom.py。
+@theory  N/A（协议实现，非理论模型）
+@ref     PROTOCOL-001 §1（帧格式与校验算法）、§2（遥测帧 DATA 布局）、
+         §3（0xF1 灵活格式帧）、§4（0xE0-0xE3 参数链路）、
+         COMM-001 §3（双环频率表）、GCS-001 §2（参数在线读写）
+@frame   N/A（协议字段语义见各解码函数；速度/位置由固件取反后以"向上为正"发送）
+@units   线缆单位：加速度 cm/s²、陀螺 int16/16.384、角度 0.01deg、高度/位置 cm、
+         速度 cm/s、GPS 经纬度 1e-7deg、PDOP/SACC/VACC 0.1、0x21 角加速度 0.1rad/s²、
+         0x0D 电压电流 0.01、0xF1 摆角 0.01deg·电机 0.1%·差速 0.001
+@note    本工程对官方手册的占用约定：0x0D 的 fc 字段承载 P1/P2 氧压、0xF1 承载执行器帧
+         （2026-08-10 由 0x40 迁入）、0x40 恢复手册遥控语义；0x21 线缆保持 rad/s² 并派生 deg/s²。
+@see     PROTOCOL-001「本工程与官方手册差异对照」、tests/test_anocom.py
+
 与固件 lib/AnoComProtocol 逐字节对齐：
   - 帧格式：AB | src(0x05) | dst(0xFF) | func | len_lo len_hi(LE) | data[len] | SC | AC
   - SC = 逐字节和 & 0xFF；AC = 累加和 & 0xFF（sum += b; add += sum）
@@ -60,6 +79,11 @@ ANO_FLOAT = 8
 
 @dataclass
 class Frame:
+    """一个已切出的 AnoCom 帧（payload 为未解码的 DATA 区原始字节）。
+
+    @brief 帧容器：功能码 + DATA 区 + 帧尾 SC/AC + 校验结论
+    @note  valid=False 的帧仍保留 sc/ac，便于诊断链路坏帧
+    """
     func: int
     payload: bytes
     sc: int

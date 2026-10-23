@@ -1,6 +1,16 @@
-// ============================================================
-//  console.mjs — DBG 控制台 + 数据记录 / 回放
-// ============================================================
+/**
+ * @file    console.mjs
+ * @module  GCS/前端控制台
+ * @brief   DBG 命令行终端与遥测记录/回放控制
+ * @details 数据来源：WS dbg_out/dbg_mode/record_state/replay_state/recordings；
+ *          处理：输入行 → send({cmd:'dbg_cmd'})，输出终端历史（上限 2000 行）；
+ *          记录/回放按钮驱动后端 CSV 录制与回放任务。
+ *          说明：DBG 与遥测互斥，进入 DBG 后后端停发 telemetry。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   N/A
+ * @ref     AGENTS.md 踩坑记录（DBG 调试模式）、GCS-001 §上位机（记录/回放）
+ */
 import { bus, send, state, flashAlarm } from './main.mjs';
 
 const $ = (id) => document.getElementById(id);
@@ -8,6 +18,12 @@ const $ = (id) => document.getElementById(id);
 const HISTORY_MAX = 2000;
 let initialized = false;
 
+/** @brief 挂载控制台/记录回放页事件
+ *  @details 绑定 DBG 输入、记录与回放按钮，订阅 dbg_out/dbg_mode/record_state
+ *  @note    幂等：initialized 后直接返回；DBG 与遥测互斥
+ *  @units   N/A
+ *  @ref     GCS-001 §上位机
+ */
 export function activate() {
   if (initialized) return;
   initialized = true;
