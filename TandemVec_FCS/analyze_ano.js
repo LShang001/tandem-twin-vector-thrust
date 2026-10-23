@@ -1,3 +1,18 @@
+/**
+ * @file    analyze_ano.js
+ * @module  工具/协议离线分析
+ * @brief   解析 AnoCom 二进制 dump，统计姿态稳定性 / yaw 漂移 / 异常帧
+ * @details 输入：串口原始字节流文件（可含任意功能码）；
+ *          处理：帧头 0xAB 同步 → 2 字节小端长度 → SC/AC 双校验 → 0x03 姿态帧 int16÷100；
+ *          输出：标准输出文本报告（无外部依赖，Node 直接跑）。
+ *          不变量：校验算法与固件逐字节一致（uint8 逐步截断）。
+ * @theory  N/A（协议解码与统计）
+ * @ref     PROTOCOL-001 §一.1（帧格式与双校验算法）；COMM-001 §3（0x03 快环 100Hz）
+ * @frame   N/A
+ * @units   姿态 deg（int16÷100）、时间以帧序推算
+ * @note    默认按 20ms/帧（50Hz）估算时长；COMM-001 后 0x03 提升到 100Hz，
+ *          分析新 dump 时记得按 10ms/帧 重新解读（脚本参数见 Python 版 --dt）。
+ */
 // AnoCom 姿态数据统计分析脚本
 // 用法: node analyze_ano.js [ano_raw.bin]
 // 解析固件 AnoComProtocol 发送的二进制帧流 (帧头 0xAB)，统计姿态稳定性 / 漂移 / 异常。

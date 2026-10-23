@@ -5,6 +5,16 @@
       → 分配 Δω = Mx'/(2·kQ·w0²) → 转速差
 对比 TVC 通道（Iy、δt 分配）看数量级差异。数值已换算为新角度域单位，
 但未引入后续的 w0 floor、观测器和 FPV 曲线，不代表现役链路。
+
+@file    verify_yaw_authority.py
+@module  工具/固件核对（差速权限，历史回放）
+@brief   量化 yaw（差速）通道打杆权限与 TVC 通道的数量级差异
+@details 输入：高保真参数；处理：摇杆→角速率误差→α→Mx→Δω 全链路；
+         输出：stdout 对比表。★ 历史口径，未含 floor/τm 观测器/FPV 曲线。
+@theory  Δω = Mx'/(2kQ·w0²) @ref CTL-001 §5
+@frame   模型系
+@units   角速率 deg/s，角加速度 deg/s²，Δω 归一化
+@ref     CTL-001 §5、AGENTS.md 踩坑记录（单通道 LMI 不外推）
 """
 import sys
 import math

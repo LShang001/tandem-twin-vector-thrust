@@ -3,6 +3,17 @@
 """
 plot_blackbox.py — 黑匣子 CSV 可视化（飞行数据分析）
 
+@file    plot_blackbox.py
+@module  工具/飞行数据分析
+@brief   把黑匣子导出 CSV 按列名前缀自动分组绘制成 PNG
+@details 输入：bb_tool/flash export 生成的黑匣子 CSV（列名来自 S 帧通道名表）；
+         处理：按 GROUPS 前缀分组 + 水平轨迹 + 未归类通道；缺列自动跳过；
+         输出：output/<base>_*.png。
+@theory  N/A
+@frame   轨迹图以 rel_e（东）/rel_n（北）为横纵轴（NED 水平面）
+@units   t 轴 s（由 t_ms 归一），加速度 m/s²、角速率 deg/s、速度 m/s
+@ref     GCS-001 §上位机（黑匣子导出）、lib/W25N01GV/src/W25N01GV_log.h（S 帧通道表）
+
 用法:
   python plot_blackbox.py <csv文件> [-o 输出目录]
 
@@ -49,6 +60,9 @@ def plot_group(df, t, cols, fname, title, ylabel, outdir, base):
 
 
 def main():
+    """@brief 命令行入口：读取 CSV → 分组绘图 → 输出 PNG
+    @return 无；缺 t_ms 列时打印错误并返回（不抛异常）
+    """
     ap = argparse.ArgumentParser(description="Blackbox CSV plotter (adaptive columns)")
     ap.add_argument("csv", help="导出 CSV 文件")
     ap.add_argument("-o", "--outdir", default="output",

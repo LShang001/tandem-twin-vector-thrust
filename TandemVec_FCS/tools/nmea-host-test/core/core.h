@@ -1,3 +1,15 @@
+/**
+ * @file    core/core.h
+ * @module  工具/宿主测试桩（NMEA/UBX 库级回归）
+ * @brief   非 Arduino 主机环境的最小兼容层：HardwareSerial 兼容类、可控时钟、常用宏
+ * @details 输入：测试喂入的字节；处理：FIFO 读写 + 全局 millis/micros 推进；
+ *          输出：供 lib/ublox-main 在 g++ 下编译运行。
+ *          不变量：仅测试使用，不进入固件构建。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   ms/µs（可控时钟），角度宏为弧度换算
+ * @ref     AGENTS.md（跨平台编译验证）、TandemVec_FCS/tools/README.md
+ */
 // core/core.h — 非 Arduino 主机环境的最小兼容层（ubx.h 平台分支的原设计）
 // 提供 HardwareSerial 兼容类（测试喂字节）+ 可控时钟 + Arduino 常用宏。
 #pragma once

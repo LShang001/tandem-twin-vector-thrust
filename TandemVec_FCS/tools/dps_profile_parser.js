@@ -1,3 +1,15 @@
+/**
+ * @file    dps_profile_parser.js
+ * @module  工具/气压计性能分析
+ * @brief   解析固件诊断输出，汇总任务耗时、CPU 负载与 DPS310 FIFO 状态
+ * @details 输入：串口原始抓取文件（BFS_TASK_PROFILE / BFS_DPS310_DIAG 输出）；
+ *          处理：按诊断行提取字段 → 平均/最大/计数；输出：终端摘要与结构化结果
+ *          （供 dps_profile_runner.js 汇总）。诊断产物 .bin/.ini 不提交仓库。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   时间 ms/µs，频率 Hz，CPU 负载 %
+ * @ref     AGENTS.md 踩坑记录（固件内调试命令优先）、lib/DPS310-Pressure-Sensor（驱动）
+ */
 const fs = require("fs");
 
 // 解析 BFS_TASK_PROFILE / BFS_DPS310_DIAG 诊断固件输出。

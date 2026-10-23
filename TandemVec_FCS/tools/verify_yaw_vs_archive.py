@@ -1,6 +1,16 @@
 # -*- coding: utf-8 -*-
 """存档 VTVL vs 当前实现：差速控制量级对比（统一量纲 = 电机输出百分比差）
 
+@file    verify_yaw_vs_archive.py
+@module  工具/固件核对（差速量级对照）
+@brief   统一量纲（电机输出百分比差）对照存档 VTVL 与当前实现的差速控制量级
+@details 输入：存档 Kp=3.8/80°/s 与当前角度域链路参数；处理：各自换算到 %；
+         输出：stdout 对照表（说明低油门权限差异）。
+@theory  ωf=ω0√(1+Δω)（差速公式） @ref CTL-001 §5
+@frame   模型系
+@units   角速率 deg/s，油门 %
+@ref     CTL-001 §5、AGENTS.md 踩坑记录（执行器轴映射与调参）
+
 存档链路（实飞验证）：
   yawRateTarget = 摇杆 → ±MAX_MANUAL_yawRATE(80°/s)
   yaw_diff_us   = Kp(3.8) × error            ← 输出直接是 PWM 微秒

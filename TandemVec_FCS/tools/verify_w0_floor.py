@@ -1,6 +1,16 @@
 # -*- coding: utf-8 -*-
 """w0 下限（floor）方案验证：低油门不再一路缩放到 0 附近
 
+@file    verify_w0_floor.py
+@module  工具/固件核对（低油门病态与 floor 方案）
+@brief   比较不同 w0 floor 下的 B 条件数、调度系数与差速指令，评估方案
+@details 输入：高保真参数；处理：扫描油门与 floor，计算 det/cond(B)、
+         调度系数、Δω 与物理 Mx；输出：stdout 表格（历史设计评估，非现役断言）。
+@theory  Δω = s·Mx'/(2kQ·w0_eff²) @ref CTL-001 §5
+@frame   模型系
+@units   转速 rad/s，力矩 N·m，Δω 归一化
+@ref     CTL-001 §5、AGENTS.md 踩坑记录（差速增益调度三层坑）
+
 思路（用户提出）：正常悬停油门在一定范围内，没必要从 0 油门开始算
 调度系数和 B 矩阵——低油门区是数值病态区（B∝w0² 整体趋零、det 趋零、
 逆解增益∝1/w0² 爆炸），且那里本来也飞不起来。

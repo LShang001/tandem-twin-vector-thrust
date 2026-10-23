@@ -3,6 +3,17 @@
 1. 增益调度是否破坏 B_true 的三轴解耦（交叉耦合补偿是否仍正确）
 2. TVC 内环增益与 15° 摆角限幅的匹配度（饱和阈值）
 3. 差速通道限幅余量
+
+@file    audit_math.py
+@module  工具/离线核算（历史分析脚本）
+@brief   用高保真模型效能矩阵复核混控增益调度、摆角饱和与差速限幅余量
+@details 输入：simulations/high-fidelity-analysis 的参数与 control_effectiveness；
+         处理：B/B⁻¹ 线性代数 + 角加速度/摆角换算；输出：stdout 结论（无断言）。
+         说明：历史脚本，数值为迁移前口径（TVC 限幅 15°），不是现役参数检查器。
+@theory  Mx'=Ix·α（差速）、My'=Iy·α（下摆）、调度 s=(w0/w_hover)² @ref CTL-001 §5
+@frame   模型系 x'=推力轴、y'=尾摆、z'=前摆（与 mix 层轴置换一致）
+@units   摆角 deg，角加速度 deg/s²，力矩 N·m，转速 rad/s
+@ref     CTL-001 §5（控制分配与差速增益调度）
 """
 import numpy as np
 import sys

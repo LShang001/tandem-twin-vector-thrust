@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""存档系(z=推力轴朝下) ↔ 推进模型系(x'=推力轴朝机头) 的轴置换推导"""
+"""存档系(z=推力轴朝下) ↔ 推进模型系(x'=推力轴朝机头) 的轴置换推导
+
+@file    verify_frame_map.py
+@module  工具/固件核对（轴置换）
+@brief   推导"存档系 ↔ 推进模型系"的轴置换与符号
+@details 输入：单位基向量；处理：叉积定手性、构造 R、det 检验；
+         输出：stdout 置换式（Mx'=-Mz、My'=+My、Mz'=+Mx）。
+@theory  轴置换 x'=-z_b、y'=+y_b、z'=+x_b（det=+1）@ref AGENTS.md 踩坑记录
+@frame   存档系（x 前/y 右/z 下=推力轴）→ 模型系（x' 推力轴朝机头）
+@units   N/A
+@ref     CTL-001 §5（控制分配）、AGENTS.md 踩坑记录（执行器轴映射/模型系）
+"""
 import numpy as np
 
 # 存档系右手基（e1=前, e2=右, e3=下=推力轴指地）

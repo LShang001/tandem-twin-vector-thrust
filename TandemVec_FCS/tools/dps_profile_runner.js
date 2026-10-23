@@ -1,3 +1,15 @@
+/**
+ * @file    dps_profile_runner.js
+ * @module  工具/气压计性能实验编排
+ * @brief   生成临时 PlatformIO 环境并编译上传，抓取 DPS310 profile 输出后调用解析器汇总
+ * @details 输入：platformio.ini 与候选参数（intervalMs/fifoReads/测量率/OSR）；
+ *          处理：生成 dps_profile 环境 → pio run -t upload → PowerShell 限时抓串口 →
+ *          parser 汇总；输出：实验表格与 .pio/ 中间产物（不纳入 git）。
+ * @theory  N/A
+ * @frame   N/A
+ * @units   intervalMs 为 ms；press/temp rate 与 OSR 为固件枚举名（无量纲）
+ * @ref     AGENTS.md 踩坑记录（调试工具链/串口独占）、TandemVec_FCS/tools/README.md
+ */
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");

@@ -3,6 +3,16 @@
 1. ai.w0=w0_eff 但 ai.current_state=真实转速 → B 矩阵混用两个工作点，
    零/低油门时 wf=wt≈0 使 B 的第1、2列全零 → det=0 → BTRUE 退降 FULL_B
 2. allocateMoments 的零油门保护 T0<T0_MIN 基于 in.w0 → 用 w0_eff 后永不触发
+
+@file    verify_floor_consistency.py
+@module  工具/固件核对（差速工作点下限）
+@brief   量化 w0 floor 的两个自洽性问题（B 混用工作点、零油门保护失效）
+@details 输入：高保真参数；处理：复刻 computeEffectMatrix，比较真实/下限工作点下的
+         det(B) 与 T0 触发条件；输出：stdout 表格与结论。
+@theory  B(w0,wf,wt) 与 det→FULL_B 退降 @ref CTL-001 §5
+@frame   模型系
+@units   转速 rad/s，力矩 N·m，det(B) 无量纲
+@ref     CTL-001 §5、AGENTS.md 踩坑记录（差速增益调度三层坑）
 """
 import numpy as np
 import sys

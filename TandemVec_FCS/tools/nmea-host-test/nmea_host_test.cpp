@@ -1,3 +1,15 @@
+/**
+ * @file    nmea_host_test.cpp
+ * @module  工具/宿主测试（GNSS 双协议）
+ * @brief   回归 lib/ublox-main 的 UBX+NMEA 双协议解析与自动兜底
+ * @details 输入：合成 NMEA/UBX 字节流（core.h 可控时钟）；处理：GpsProtocol 各模式解析；
+ *          输出：PASS/FAIL 计数（g_fail 非零即失败）。
+ *          编译：gcc 编 minmea.c + g++ 编 ubx.cpp 与本文件。
+ * @theory  NMEA GGA/RMC 字段语义、UBX fix 映射 @ref lib/ublox-main/src/ubx.h
+ * @frame   N/A
+ * @units   经纬度 deg、高度 m、速度 m/s、时间 UTC
+ * @ref     TandemVec_FCS/tools/README.md、AGENTS.md（跨平台编译验证）
+ */
 // nmea_host_test.cpp — 库级双协议宿主机回归测试
 // 验证 lib/ublox-main 的 UBX+NMEA 双协议（GpsProtocol）：
 //   - kNmea 模式：GGA/RMC 句子切分、minmea 解析、快照→UbxEpoch 换算、

@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""核验 sensor_imu 轴映射链的手性与四元数转换（本轮两处修复）"""
+"""核验 sensor_imu 轴映射链的手性与四元数转换（本轮两处修复）
+
+@file    verify_axis_map.py
+@module  工具/固件核对（IMU 轴映射）
+@brief   手工推导 IMU 轴映射链与 q_body_from_FLU 四元数，验证右手性
+@details 输入：写死的实测加速度读数与映射矩阵；处理：叉积手性检查、向量反解、
+         180° 旋转四元数解析；输出：stdout 一致/FAIL 判定（不设非零退出码）。
+@theory  180° 旋转 q ≡ q⁻¹、q_body_from_FLU = {0,0.7071,0,0.7071} @ref MOD-002 §3
+@frame   传感器 RUB（右/上/后）→ 机体系 FRD
+@units   加速度 g，角度 deg
+@ref     MOD-002 §3（坐标系与姿态约定）、AGENTS.md 踩坑记录（IMU 轴映射勿改）
+"""
 import numpy as np
 
 # 传感器 RUB 右手系基（世界参考：e1=右, e2=上, e3=后）

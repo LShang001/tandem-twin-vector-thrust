@@ -1,5 +1,16 @@
 # -*- coding: utf-8 -*-
-"""核对直通模式的物理斜率假设：Δω→Mx、δf→Mz（与实机观察对照）"""
+"""核对直通模式的物理斜率假设：Δω→Mx、δf→Mz（与实机观察对照）
+
+@file    verify_slope_direct.py
+@module  工具/固件核对（直通斜率）
+@brief   核对直通模式物理斜率：Δω→Mx、δf→Mz、δt→My 的符号
+@details 输入：高保真 Propulsion 模型；处理：单变量扰动求力矩差；
+         输出：stdout 斜率符号（与"负=阻尼假设成立"对照）。
+@theory  M = B·δ @ref THY-003 §2
+@frame   模型系
+@units   Δω 归一化，摆角 rad，力矩 N·m
+@ref     THY-003 §2–3（推力/反扭与分配）、CTL-001 §5
+"""
 import sys
 sys.path.insert(0, 'simulations/high-fidelity-analysis')
 from core import load_params, Propulsion

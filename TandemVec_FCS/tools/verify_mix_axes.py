@@ -3,6 +3,17 @@
 
 旧映射(2026-08-07 误改, x_b竖直): bX=+sY, bY=+sX, bZ=-sZ
 新映射(存档原版, z_b=推力轴):     bX=-sZ, bY=+sX, bZ=-sY
+
+@file    verify_mix_axes.py
+@module  工具/固件核对（mix 层符号）
+@brief   以实机已验证的陀螺直通行为为锚点，反解 mix 层轴置换与符号
+@details 输入：旧/新映射表、实机三通道锚点、分配器主对角增益；
+         处理：通道对应矩阵 → 锚点换算 → 内环负反馈符号反解；
+         输出：stdout 每通道所需符号（供 flight_control.cpp 层1 核对）。
+@theory  α_i = -Kp·ω_i（内环负反馈）@ref CTL-001 §4
+@frame   传感器基 → 存档系 → 模型系
+@units   rad/s，rad/s²，力矩 N·m
+@ref     CTL-001 §4/§5、AGENTS.md 踩坑记录（2026-08-07 轴置换）
 """
 import numpy as np
 import sys

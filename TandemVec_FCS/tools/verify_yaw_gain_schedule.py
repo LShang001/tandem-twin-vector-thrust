@@ -1,6 +1,16 @@
 # -*- coding: utf-8 -*-
 """2026-08-07 历史回放：验证 Mx_cmd × (w0/w_hover)² 的基本解耦原理。
 
+@file    verify_yaw_gain_schedule.py
+@module  工具/固件核对（差速调度，历史回放）
+@brief   验证 Mx_cmd×(w0/w_hover)² 使 Δω 与油门无关的基本解耦原理
+@details 输入：高保真参数；处理：对比调度前后不同油门的 Δω；输出：stdout 表。
+         ★ 历史推导；现役另有 w0 floor、上限 1.0 与 τm 观测器（见 AGENTS.md）。
+@theory  Δω = s·Mx'/(2kQ·w0²)，s=(w0/w_hover)² @ref CTL-001 §5
+@frame   模型系
+@units   转速 rad/s，Δω 归一化
+@ref     CTL-001 §5、AGENTS.md 踩坑记录（差速增益调度）
+
 问题：Δω = Mx/(2·kQ·w0²) → 低油门时 1/w0² 把回路增益放大几十倍
 （迁移前 Kp=0.6，现等价值 34.38 s⁻¹，曾发生震荡）。
 方案：mix 层给 Mx 乘 (w0/w_hover)²，则

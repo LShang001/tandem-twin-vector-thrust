@@ -1,11 +1,23 @@
 # -*- coding: utf-8 -*-
 """MAVLink 双向桥接实测脚本（模拟 QGC 全流程）
 
+@file    test_mavlink_bridge.py
+@module  工具/联调脚本（MAVLink）
+@brief   以 QGC 视角跑 MAVLink 双向全流程（心跳/参数列表/读写/命令/STATUSTEXT）
+@details 输入：串口与 pymavlink；处理：按固件 mavlink_bridge.cpp 的短名算法
+         （≤15B）构造请求；输出：stdout 断言（count/index 连续、短名唯一、写后读回一致）。
+         说明：需真实串口与 pymavlink，非 CI 必跑项。
+@theory  N/A
+@frame   N/A
+@units   波特率脚本写死 2000000；COMM-001 后固件 SERIAL6_BAUDRATE=921600，
+         联调前须同步 BAUD（否则全乱码）
+@ref     AGENTS.md 踩坑记录（MAVLink 参数桥/9 字符唯一性）、PROTOCOL-001 §4
+
 用法: py -3.12 tools/test_mavlink_bridge.py [COM口] [--set att_roll.kp 1.1]
 
 流程:
   1. 发 HEARTBEAT（QGC 存在性握手）
-  2. PARAM_REQUEST_LIST → 收 121 条 PARAM_VALUE（校验 count/index 连续 + 短名唯一性）
+  2. PARAM_REQUEST_LIST → 收全参数（当前 128 条，校验 count/index 连续 + 短名唯一性）
   3. PARAM_REQUEST_READ 按短名读单条（att_roll.kp → att_roll.kp 短名相同）
   4. PARAM_SET 写入（--set 参数）→ 读回确认
   5. COMMAND_LONG 246 重启（--reboot 时执行）

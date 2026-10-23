@@ -1,7 +1,19 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-AnoCom 姿态数据统计分析（Python 版，numpy + matplotlib 升级）
+"""analyze_ano.py — AnoCom 姿态数据统计分析（离线回放，numpy + matplotlib）。
+
+@file    analyze_ano.py
+@module  工具/协议离线分析
+@brief   解析 AnoCom 二进制 dump，统计姿态稳定性 / yaw 漂移 / 异常 / 融合状态。
+@details 输入：串口原始字节流文件（`ano_raw.bin`，可含任意功能码）；
+         处理：帧同步（0xAB）→ 2 字节小端长度 → SC/AC 双校验 → 0x03 姿态帧解码；
+         输出：文本报告 / CSV / PNG 图表。
+@theory  N/A（协议解码与统计，非理论模型）
+@ref     PROTOCOL-001 §一.1（帧格式 AB|src|dst|func|len(LE)|data|SC|AC）、
+         §一.1 校验算法（SC=逐字节和，AC=和的和，均取低 8 位）；
+         COMM-001 §3（快环 100Hz：0x03 欧拉角自 2026-08-10 起为 100Hz，不再是 50Hz）
+@frame   N/A（只解码角度字段）
+@units   姿态 int16 ×100 → deg；时间 s；漂移率 deg/s
 
 用法:
     python analyze_ano.py [ano_raw.bin]            # 仅打印文本报告
@@ -12,7 +24,7 @@ AnoCom 姿态数据统计分析（Python 版，numpy + matplotlib 升级）
     帧结构 : AB | src | dst | func | len(2B小端) | data | SC | AC
     双校验 : SC = 逐字节和 & 0xFF ; AC = "和的和" & 0xFF（uint8 逐步截断）
     0x03   : roll/pitch/yaw = int16 小端 ×100 (度) , fusion @ data[6]
-    采样率 : 姿态帧实际间隔 20ms（handleAnoCom@200Hz，4 包分组 → 0x03 为 50Hz）
+    采样率 : 0x03 快环 100Hz（COMM-001 双环）——旧 dump 可能是 50Hz，用 --dt 覆盖
 
 升级点（相对 JS 版）：
     - numpy 向量化统计 / 校验
@@ -115,6 +127,13 @@ def _unwrap_deg(yaw_deg):
 
 # ----------------------------- 报告 -----------------------------
 def report(stats, atts, dt):
+    """打印文本统计报告（数据范围/稳定性/yaw 漂移/突变/融合状态/首尾趋势）。
+
+    @param stats decode() 返回的计数字典（total/crc_ok/crc_fail/att_fail/func_tally）
+    @param atts  decode() 返回的姿态数组字典（raw int16 ×100 与 fusion 字节）
+    @param dt    姿态帧间隔 [s]（用于漂移率与时间轴；当前固件快环为 0.01s）
+    @returns 无（仅标准输出）
+    """
     print("\n" + "=" * 30)
     print("  AnoCom 数据统计报告 (Python)")
     print("=" * 30)
@@ -215,6 +234,13 @@ def report(stats, atts, dt):
 
 # ----------------------------- 导出 / 绘图 -----------------------------
 def export_csv(atts, dt, path):
+    """把姿态样本导出为 CSV（含解缠 yaw 与原始 int16 值，便于二次分析）。
+
+    @param atts decode() 返回的姿态数组字典
+    @param dt   姿态帧间隔 [s]
+    @param path 输出 CSV 路径
+    @returns 无（文件写入）
+    """
     na = len(atts["idx"])
     yaw = atts["yaw_raw"] / 100.0
     yaw_un = _unwrap_deg(yaw) if na >= 2 else yaw
@@ -232,6 +258,14 @@ def export_csv(atts, dt, path):
 
 
 def plot(atts, dt, save=None, show=False):
+    """绘制 roll/pitch/yaw 时间序列与 yaw 解缠漂移趋势。
+
+    @param atts decode() 返回的姿态数组字典
+    @param dt   姿态帧间隔 [s]
+    @param save PNG 输出路径（None 不保存；只保存时强制 Agg 后端，无 GUI 也可用）
+    @param show True 则弹窗显示
+    @returns 无；未安装 matplotlib 时打印提示并跳过（不抛异常）
+    """
     na = len(atts["idx"])
     if na < 2:
         print("  姿态帧不足，跳过绘图")
@@ -280,6 +314,12 @@ def plot(atts, dt, save=None, show=False):
 
 # ----------------------------- 入口 -----------------------------
 def main():
+    """命令行入口：读 dump → 解码 → 打报告 →（可选）导出 CSV / 画图。
+
+    @returns 无；文件不可读时 sys.exit 带中文错误
+    @note --dt 默认 0.02（=50Hz，COMM-001 之前的快环频率）；当前固件 0x03 为 100Hz，
+          离线分析应显式传 --dt 0.01，否则漂移率被低估一半。
+    """
     ap = argparse.ArgumentParser(description="AnoCom 姿态数据统计分析 (Python 版)")
     ap.add_argument("file", nargs="?", default="ano_raw.bin", help="二进制 dump 文件")
     ap.add_argument("--dt", type=float, default=0.02,

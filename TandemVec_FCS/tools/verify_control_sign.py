@@ -1,11 +1,27 @@
 # -*- coding: utf-8 -*-
-"""Numerically verify the pitch feedback sign from attitude error to torque."""
+"""数值核对俯仰通道"姿态误差 → 力矩 → 舵机脉宽"符号链。
+
+@file    verify_control_sign.py
+@module  工具/固件核对（控制符号）
+@brief   从 +10° 俯仰误差出发，逐步算出角加速度、My、δt 与舵机脉宽，断言负反馈
+@details 输入：姿态外环 Kp=2.8、速率环 Kp=16.042818、Iy=0.022、力臂 0.315、
+         kT、悬停转速；处理：四元数误差 → 角速率目标 → 角加速度 → My → δt → 脉宽；
+         输出：stdout 符号链；FAIL 时 exit 1（可作 CI 断言）。
+@theory  q_err = q_cur⁻¹⊗q_tgt；α = Kp_rate·Kp_att·e @ref CTL-001 §4
+@frame   机体系 FRD、NED 欧拉角
+@units   deg、deg/s、deg/s²、rad/s²、N·m、µs（中位 1500）
+@ref     CTL-001 §4（SAS 速率环与角度域量纲）、MOD-002 §3
+"""
 
 import math
 import sys
 
 
 def e2q(roll, pitch, yaw):
+    """@brief 3-2-1 欧拉角 → 四元数 (x,y,z,w)
+    @param[in] roll,pitch,yaw [rad]
+    @return (x,y,z,w)，与固件差整体符号不影响姿态
+    """
     cr, sr = math.cos(roll / 2), math.sin(roll / 2)
     cp, sp = math.cos(pitch / 2), math.sin(pitch / 2)
     cy, sy = math.cos(yaw / 2), math.sin(yaw / 2)
@@ -18,10 +34,12 @@ def e2q(roll, pitch, yaw):
 
 
 def conj(q):
+    """@brief 单位四元数共轭（逆）：q⁻¹ = (-x,-y,-z,w)"""
     return (-q[0], -q[1], -q[2], q[3])
 
 
 def qmul(a, b):
+    """@brief 四元数乘法 a⊗b（分量顺序 (x,y,z,w)，与 e2q/conj 一致）"""
     return (
         a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
         a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
