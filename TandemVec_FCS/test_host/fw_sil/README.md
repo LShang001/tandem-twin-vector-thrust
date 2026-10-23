@@ -195,9 +195,12 @@ F3/F4 故障重构仍未完成。**
   200 Hz 消费（含静止检测、双子样、GNSS 动态权重、epoch 时间映射、气压/光流、重捕获）；
 - **UBX NAV-PVT/NAV-EOE 二进制帧**注入 Serial4，由真实 `lib/ublox-main` 解析；
 - 虚拟 `millis()/micros()`（32 bit，与 STM32 对齐）；
-- GNSS 延迟/噪声/失联/野值、气压滞后/漂移、光流噪声/延迟、RC 链路丢失、IMU 丢样；
-- 可选 `--mag`：机体系磁矢量走新增 `MeasurementUpdateMagVectorDetailed`（SIL 实验路径，
-  生产固件尚未接磁力计）。
+- GNSS 延迟/噪声/失联/野值/spoof、气压滞后/漂移、光流噪声/延迟、RC 链路丢失、IMU 丢样/NaN/冻结；
+- **磁力计生产链**：SIL 以 100 Hz 把站点参考场+噪声/干扰注入 `MagSensor`，导航任务按
+  10 Hz 门控后走 `MeasurementUpdateMagVectorDetailed`；不再是绕过导航的 EKF 旁路；
+- **IMU 健康监测**：非有限/无样本/冻结/饱和判定，Failed 时隔离静止辅助并保持最后有效输出；
+- **GNSS 一致性**：1 s 窗口 IMU 速度增量/位置自洽/光流/气压交叉；默认只告警，
+  `--gnss-consistency-reject` 才启用拒绝（见 §8）。
 
 ### 运行
 
@@ -217,9 +220,13 @@ BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/build_and_run_real.sh \
 | clean | 低噪声、无失联/风、无振动 | 最小闭环基线 |
 | nominal | 1 g/80 Hz 振动、20 ms 延迟、5 s 失联、1 m/s² 风、光流 | 常规退化验收 |
 | degraded | 2 g/120 Hz、50 ms、2.5 m 噪声、5 s 失联、1.5 m/s² 风、2% 野值、光流、IMU 丢样 | 退化边界 |
+| mag_clean / mag_nominal | 在 clean/nominal 上加 100 Hz 磁注入、0.3/0.6 µT 噪声 | 磁链路无干扰基线 |
+| mag_disturbed | nominal + 12 µT NED 慢变干扰 | 磁门控拒绝边界 |
 | `--rc-loss A:B` | 单独注入真实 `linkDownCallback` failsafe | 不能与传感器退化混在一起 |
+| `imu_stuck` / `imu_nan` / `imu_drop` | 10–11 s 冻结/NaN/全丢样 | 只验收“检测/隔离”，不验收降落品质 |
+| `gnss_spoof` | 15 s 起 0.5 m/s ramp + 一致性拒绝 | 只验收监测/拒绝路径，不保证位置保持 |
 
-### 当前基线（L2 SIL，1 seed/profile，2026-10-24）
+### 当前基线（L2 SIL，3 seeds/profile，2026-10-24）
 
 clean/nominal/degraded × 3 seeds **9/9 PASS**：
 
@@ -240,11 +247,53 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | 注入 | 开关 | 当前行为（L2 SIL） |
 |---|---|---|
 | RC 链路丢失 | `--rc-loss A:B` | 真实 `linkDownCallback`：飞行中保持解锁+AUTO_ALTITUDE；nominal 1 s 丢失 final_alt 8.18 m、hold_end 0.87 m |
-| IMU NaN | `--imu-fault nan --imu-fault-window A:B` | 导航跳过非有限帧、控制陀螺保持上一有效值；**不再输出 NaN**，但 1 s 缺失仍导致失稳 |
-| IMU 冻结 | `--imu-fault stuck --imu-fault-window A:B` | 有限值继续进 EKF/控制；**无冻结检测**，2 s 冻结导致失稳/坠落 |
+| IMU NaN | `--imu-fault nan --imu-fault-window A:B` | 健康监测立即 Failed；导航保持最后有效输出，`imu_detected=1`，但 1 s 缺失仍导致失稳 |
+| IMU 冻结 | `--imu-fault stuck --imu-fault-window A:B` | 健康监测约 0.5 s 内 Failed/Frozen；隔离 ZUPT/Gravity/StaticGyro，不再把冻结样本积分；**无安全降落** |
+| IMU 全丢样 | `--imu-dropout A:B` | 健康监测约 0.2 s 内 Failed/NoSamples；后续同冻结路径 |
 | GNSS 野值 | `--gnss-outlier P`（profile degraded） | 显式 30 m/10 m/s 野值门 + NIS；SIL degraded 每 40 s 拒绝 5–7 帧 |
 | GNSS 失联 | `--gnss-outage A:B` | 无 GNSS 时纯惯导；有光流可保持水平，无光流只能验收定高 |
-| GNSS spoof | `--gnss-spoof M`、`--gnss-spoof-ramp MPS`、`--gnss-spoof-start S` | 位置偏移但 h_acc 正常；20 m 台阶/0.5 m/s 慢偏均被融合（outlier_rejects=0），位置保持被拖走 20–32 m |
+| GNSS spoof | `--gnss-spoof ... --gnss-consistency-reject` | 一致性监测可在 ramp 后拒绝 GNSS（`gnss_crej>0`）；默认 warn-only；无外部基准时拒绝后仍可能漂移/坠落 |
 
-**边界**：IMU NaN/冻结目前只有“NaN 不传播”的防护，没有故障检测和可控下降；
-不能写成故障恢复通过。RC loss 结果也不能外推到真实链路/接收机失效。
+**边界**：IMU 健康监测只提供“检测+隔离”，单 IMU 无冗余，不能写成故障恢复/安全降落；
+GNSS 一致性默认只告警，0.02 m/s 级慢漂和“恒定偏置+一致速度”欺骗不在可检测范围。
+RC loss 结果也不能外推到真实链路/接收机失效。
+
+## 8. 磁/IMU/GNSS 健康链路（2026-10，L2）
+
+### 磁生产链
+
+- 标定输出已从“单位球”修成物理 µT；旧 Flash `scale=0` 标定会被 fail-closed 拒绝，
+  需重新 `magcal fit/save`；
+- 参考场来自 IGRF-14 2026.0 @ 28.2N/112.9E（`include/mag_reference.h`），NED、D 向下；
+  导航层用 origin 与站点距离 >50 km 使参考场失效；
+- 3 seeds × 40 s 结果：`mag_clean`/`mag_nominal` 各 392 fused/0 gate，
+  `mag_disturbed` 204–212 fused/180–188 gate；三场景 final_alt 9.1–10.1 m、
+  pos_rms≤1.6 m。`mag_disturbed` 的拒绝期间不能用“仍然能飞”解释为磁融合成功。
+
+### IMU 健康
+
+- 3 seeds × 40 s：`imu_stuck` / `imu_nan` / `imu_drop` 均在 10–11 s 故障窗内
+  `imu_detected=1`；1 s 故障后样本恢复，健康状态回到 Ok，飞行保持定高（非故障恢复证明）；
+- Failed 后导航不再积分冻结/缺失样本，并禁止 ZUPT/Gravity/StaticGyro；
+- 没有冗余 IMU/独立姿态源，**不提供安全降落**；若故障持续/落地，验收只看检测与隔离，
+  不能把 1 s 窗口内的定高保持写成“故障恢复”。
+
+### GNSS 一致性
+
+- 默认 `g_gnss_consistency_reject_enabled=false`，只写 `gnss_susp/gnss_crej/gnss_cres` 遥测；
+  基线 clean/nominal/degraded 仍 9/9 PASS（warn-only）；
+- `--gnss-consistency-reject` 时 `gnss_spoof` profile（15 s 起 0.5 m/s ramp）出现
+  `gnss_crej>0` 并跳过 GNSS；但无外部水平基准时拒绝后仍可能漂移，故该 profile
+  `skip_motion`，只验收监测/拒绝路径；
+- 0.02 m/s 慢漂/恒定偏置欺骗不承诺检测（单测 C6 明确锁定）。
+
+```bash
+# 磁与故障 profile（3 seeds，40 s）
+py -3.12 test_host/fw_sil/run_real_acceptance.py \
+  --bin /tmp/tv_fcs_fw_sil_real/fw_real \
+  --profiles mag_clean,mag_nominal,mag_disturbed,imu_stuck,imu_nan,imu_drop,gnss_spoof \
+  --seeds 1,2,3 --seconds 40
+```
+
+**证据边界**：以上全部为 L2 SIL；磁硬/软铁、电机磁干扰、真实 IMU 电气冻结、RF spoof、
+HIL/实飞均未验证。

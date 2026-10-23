@@ -21,8 +21,12 @@
 | `test_robustness.cpp` | 大机动 + 系统误差鲁棒性（名义参数扫描） | Arduino.h 桩 | 8 |
 | `test_qual_analysis.cpp` | 增益定性分析（Kp_a/Kp_r 扫描，固件语义对照） | Arduino.h 桩 | 16 |
 | `test_comprehensive_sim.cpp` | 增益扫描/扰动抑制/模型偏差（研究工具，非实机回归） | Arduino.h 桩 | 10 |
-| `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`；2026-10 加 P0-0 速度旋转 T7、P1-5 航向 consider T8、P0-1 3+3 子集/软重锚 T9–T11、T12 sub-frame 延迟量测、T13/T13b 长失联连续不可信 GNSS 硬重锚与跳点串防护、T14 GNSS 正常跟踪野值门、T15 机体系磁矢量更新） | units/eigen | 68 |
+| `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`；2026-10 加 P0-0 速度旋转 T7、P1-5 航向 consider T8、P0-1 3+3 子集/软重锚 T9–T11、T12 sub-frame 延迟量测、T13/T13b 长失联连续不可信 GNSS 硬重锚与跳点串防护、T14 GNSS 正常跟踪野值门、T15 机体系磁矢量更新、T16 真实磁初始化磁偏角偏移） | units/eigen | 71 |
 | `test_ekf_aiding_velocity.cpp` | `ekf_15_state.h` — 测速源辅助接口（aiding 速度更新豁免零速守卫、失锁重锚 ResetVelocityToExternal、D 通道大噪声不压垂直协方差；2026-08-21 室内光流融合配套） | units/eigen | 16 |
+| `test_mag_reference.cpp` | `mag_reference.h` + `tilt_compass.h` — 站点参考场 NED 符号/总场/倾角/磁偏角与磁北→真北航向偏移（2026-10 磁链路） | Eigen + navigation | 13 |
+| `test_mag_gate.cpp` | `mag_measurement_gate.h` — 磁矢量模长/倾角/方位/航迹/新鲜度/标定/油门门控与自适应噪声（2026-10 磁链路） | Eigen | 24 |
+| `test_imu_health_monitor.cpp` | `ins_imu_health.h` — 非有限/无样本/低样本/冻结/饱和/高振动/零偏跳变状态机与复位（2026-10） | Eigen | 28 |
+| `test_gnss_consistency.cpp` | `ins_gnss_consistency.h` — GNSS 加速度一致性/位置自洽/光流/气压交叉、Suspect 锁存与 reset（2026-10） | Eigen | 16 |
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
 

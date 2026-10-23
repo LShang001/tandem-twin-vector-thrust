@@ -141,6 +141,12 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 
 - **自动延时闭环低延时发散（2026-10-24，已修复）**：`run_delay_closed_loop_mc.py` 5k 原结果 est τ mean 28.3 ms / P95 91.1 ms、pos max 4.3 km；根因是 `Ekf15State::GetDelayedSnapshotIndexByAge()` 对 `delay < 0.5*dt` 时 `best_idx=-1` 返回 false，`require_delayed_snapshot=true` 的 GNSS 更新被整帧拒绝，comp EKF 变纯惯导（`auto_delay=0` 同样复现）。修复：初始化 `best_idx=latest_idx`（最新快照为 sub-frame 最近邻），补 T12 回归；修复后 case54 fused=600/rejected=0、pos3d 0.076 m，500 例低延时定向 499/500 fused≥500、P95 0.594 m。**5k 全量尚未复跑，4 个高延时离群案例另查；复跑前实机不默认依赖自动延时补偿**（来源：2026-10-24 超大规模仿真 + 根因定位）
 
+- **磁标定输出单位球≠µT（2026-10 磁链路前置修复）**：`MagCalCollector::fit()` 原 `scale=0`，`applyCal()` 输出 |c|≈1 的单位球，但 `MagSample` 文档写 µT；直接接 EKF 会被模长门控全拒。已改为质量门通过后 `scale=stats.fieldMagUt`，`paramsSanity()` 要求有效 scale 5–200 µT，旧 Flash scale=0 标定 fail-closed（需重新 `magcal fit/save`）。改磁标定/融合前先确认这个量纲契约（来源：2026-10-24 磁生产链接入）
+- **磁参考场必须 NED z-down 且含磁偏角（2026-10）**：IGRF-14 2026.0 @28.2N/112.9E → N/E/D=35.075/-2.523/+34.079 µT，D>0、dec=-4.114°。hifi 旧 `MAG_NED_UT=[22,0,-42]` 的 D 为负，与 `MagMath` 的北半球 z>0 判据矛盾；已统一到 `include/mag_reference.h`。真实磁初始化必须给 EKF 加磁偏角 offset，否则 TiltCompass 得到磁北航向；参考场离开 home >50 km 应失效（来源：2026-10-24 磁链路）
+- **40 s 位置保持的横滚/航向摆动是既有控制边界，不是磁更新引入（2026-10-24）**：real-nav SIL clean/nominal 40 s `--pos-hold` 无磁也会 max_roll≈12–13°，磁 clean 9.9°；去掉 `--pos-hold` 后两者 max_roll=0。磁更新 `mag_kick` 仅约 0.6°/`mag_krp` 0.04°，不是根因。磁/故障 profile 的姿态门限只能做“不发散”宽松门（20–25°），不能当飞行品质或磁融合质量指标；根因仍是位置保持-偏航/姿态耦合（来源：2026-10-24 磁 SIL 调试）
+- **IMU 健康监测只做检测+隔离，不做安全降落（2026-10）**：`ins_imu_health.h` 检测非有限/无样本/低样本/精确冻结/饱和/高振动/零偏跳变；Failed 时导航停止积分并禁止 ZUPT/Gravity/StaticGyro。单 IMU 无冗余，stuck/nan/drop 故障窗内均能 `imu_detected=1`；1 s 窗口结束后样本恢复、健康回到 Ok，但**持续故障最终会失稳/坠落**，不要写成故障恢复或安全降落。冻结判据只覆盖精确重复样本，不覆盖缓慢变化/带噪声假数据（来源：2026-10-24 IMU 健康 SIL）
+- **GNSS 一致性默认 warn-only，0.02 m/s 慢漂不可检测（2026-10）**：`ins_gnss_consistency.h` 用 1 s 窗口 IMU 速度增量/位置自洽/光流/气压交叉；爬升/位置保持动态下 1 s 加速度残差可被姿态误差推到 ~0.9 m/s²，故基线默认只告警（`g_gnss_consistency_reject_enabled=false`），避免误拒 GNSS。`--gnss-consistency-reject` + 0.5 m/s ramp 可触发拒绝，但无外部基准时拒绝后仍漂移；0.02 m/s 慢漂/恒定偏置+一致速度欺骗不承诺检测（来源：2026-10-24 GNSS 一致性接入）
+
 ## 知识沉淀协议
 
 > 本协议在对话中自动生效。不是规章制度——是给你未来会话的自己的**记忆外挂**。

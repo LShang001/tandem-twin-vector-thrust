@@ -15,9 +15,13 @@
 > - 同时修：`run_scenes_opt.py` 默认 `thr=50%` → hifi 悬停配平 49.912%（旧值
 >   60 s 爬 60 m）；仿真静止陀螺在 50% 油门仍融合 → 按固件 `throttlePercent>=3%`
 >   门控。
-> - 固件侧已新增 `MeasurementUpdateMagVectorDetailed`（T15：0.15 rad 初偏收敛、
->   roll/pitch<0.02 rad、1.2 rad 跳变 NIS 拒绝），但**尚未接真实磁力计/标定**；
->   SIL `--mag` 只是实验路径。下一步是磁力计数据链 + 软/硬铁标定 + 门控。
+> - 固件侧已接真实磁生产链（2026-10）：标定输出改为物理 µT、站点参考场
+>   `include/mag_reference.h`（D 向下/含磁偏角）、模长/倾角/航迹/标定门控、
+>   10 Hz EKF 磁矢量更新；SIL `mag_*` profile 走真实 `MagSensor`。hifi
+>   `MAG_NED_UT` 已统一到同一 NED z-down 口径。**旧 hifi JSON/报告使用的是旧磁
+>   模型，未随本次常量修正重跑**；引用 hifi 数字时必须标注模型版本。SIL 40 s
+>   `--pos-hold` 的横滚/航向摆动在无磁基线也存在，属既有位置保持-偏航耦合，
+>   不是磁更新引入。
 
 ## 1. 模型链
 
