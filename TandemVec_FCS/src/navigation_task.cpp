@@ -4,7 +4,7 @@
  * @brief   实现 200 Hz 导航状态机：IMU 双子样预测、静止/ZUPT/重力/AHRS 辅助、
  *          GNSS 位置速度更新、双矢量航向、气压高度、光流速度与输出桥
  * @details 输入：IMU 平均比力与角速度、双子样增量、UBX epoch 队列、DPS310 相对高度、
- *          光流速度/测距、磁力计（当前为伪磁常量）、DETA100（可选直出）；
+ *          光流速度/测距、MagSensor FRD 磁样本（无/无效时回退伪磁初始化）、DETA100（可选直出）；
  *          处理：取数（关中断快照）→ 静止检测 → EKF 初始化/预测 →
  *          静止辅助或 AHRS 姿态 → GNSS 全质量/降级更新或首次重锚 →
  *          光流速度 → 气压高度 → 输出桥（EKF→全局状态）；
@@ -56,6 +56,10 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "ins_altitude_reference.h"
 #include "ins_static_detector.h"
 #include "ins_static_aid_profile.h"
+#include "mag_reference.h"
+#include "mag_measurement_gate.h"
+#include "ins_imu_health.h"
+#include "ins_gnss_consistency.h"
 
 #include <cmath>
 
@@ -799,6 +803,71 @@ static uint32_t s_bias_temp_table_last_ms = 0;
 #endif
 static InsVibrationEstimator s_vib_estimator;
 static uint32_t s_vib_gnss_bad_until_ms = 0;
+static bfs::MagMeasurementGate s_mag_gate;
+static uint32_t s_mag_last_consumed_seq = 0;
+static uint32_t s_mag_last_attempt_us = 0xFFFFFFFFu; // 首帧立即允许
+static bfs::ImuHealthMonitor s_imu_health;
+static bfs::InsGnssConsistencyMonitor s_gnss_consistency;
+static Eigen::Vector3f s_gnss_imu_dv_accum = Eigen::Vector3f::Zero();
+static uint32_t s_gnss_last_epoch_us = 0;
+
+static void publishImuHealth(const bfs::ImuHealthStatus &status)
+{
+  g_imu_health_state = static_cast<uint8_t>(status.state);
+  g_imu_health_flags = status.flags;
+  g_imu_health_frozen_s = status.frozen_s;
+  g_imu_health_no_sample_s = status.no_sample_s;
+  g_imu_health_sample_rate_hz = status.sample_rate_hz;
+#ifdef FW_SIL_REAL_NAV
+  g_sil_nav_debug_imu_failed =
+      (status.state == bfs::ImuHealthState::Failed);
+#endif
+}
+
+static bfs::ImuHealthStatus updateImuHealth(
+    const Eigen::Vector3f &accel, const Eigen::Vector3f &gyro,
+    const uint32_t sample_count, const float dt_s)
+{
+  const float vib_g = s_vib_estimator.last().accel_rms_g;
+  // 复用既有零偏跳变监测的保持标志（上一帧写入）作为健康 Warning 输入，
+  // 不重复实现跳变检测；一帧延迟对 5 s 保持窗口无影响。
+  const bool bias_jump_hint = gnc_tel.bias_jump_hold;
+  const bfs::ImuHealthStatus status = s_imu_health.update(
+      accel, gyro, sample_count, dt_s, vib_g, g_is_unlocked, throttlePercent,
+      bias_jump_hint);
+  publishImuHealth(status);
+  return status;
+}
+
+static void publishGnssConsistency(const bfs::GnssConsistencyStatus &status)
+{
+  gnss_status.consistency_suspect =
+      (status.state == bfs::GnssConsistencyState::Suspect);
+  gnss_status.consistency_accel_res = status.accel_res_mps2;
+  gnss_status.consistency_pos_res = status.pos_res_m;
+  gnss_status.consistency_flow_res = status.flow_res_mps;
+  gnss_status.consistency_baro_span = status.baro_span_m;
+  gnss_status.consistency_reason = static_cast<uint8_t>(status.last_reason);
+  gnss_status.consistency_suspect_count = status.suspect_count;
+}
+
+// 参考场按 home 站点固定；origin 尚未建立时按 home 处理（GNSS 首帧前）。
+static bool magReferenceValidForCurrentOrigin()
+{
+  if (!bfs::kDefaultMagReference.valid)
+  {
+    return false;
+  }
+  if (!is_origin_lla_set)
+  {
+    return true;
+  }
+  const float distance_km = bfs::magref::siteDistanceKm(
+      static_cast<float>(origin_lat_deg), static_cast<float>(origin_lon_deg),
+      bfs::kDefaultMagReference.site_lat_deg,
+      bfs::kDefaultMagReference.site_lon_deg);
+  return distance_km <= 50.0f;
+}
 
 /**
  * @brief 导航主任务（200 Hz）：取 IMU → 静止检测 → EKF 初始化/预测 →
@@ -819,6 +888,7 @@ static uint32_t s_vib_gnss_bad_until_ms = 0;
 #ifdef FW_SIL_REAL_NAV
 int g_sil_nav_debug_imu_count = 0;
 int g_sil_nav_debug_imu_invalid = 0;
+bool g_sil_nav_debug_imu_failed = false;
 float g_sil_nav_debug_accel[3] = {0.0f, 0.0f, 0.0f};
 float g_sil_nav_debug_gyro[3] = {0.0f, 0.0f, 0.0f};
 bool g_sil_nav_debug_static = false;
@@ -859,6 +929,8 @@ void handleNavigationSystem()
   Eigen::Vector3f imu_accel_mps2;
   Eigen::Vector3f imu_gyro_radps;
   Eigen::Vector3f mag_ut;
+  MagSample mag_sample{};
+  bool mag_real_for_init = false;
   Eigen::Vector3f delta_theta_1_rad = Eigen::Vector3f::Zero();
   Eigen::Vector3f delta_theta_2_rad = Eigen::Vector3f::Zero();
   Eigen::Vector3f delta_v_1_mps = Eigen::Vector3f::Zero();
@@ -885,6 +957,8 @@ void handleNavigationSystem()
   if (local_imu_sample_count == 0)
   {
     interrupts();
+    // 无样本也要推进健康计时，否则冻结/丢样会被静默跳过。
+    updateImuHealth(Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), 0U, dt_s);
 #ifdef BFS_NAV_PROFILE
     recordNavProfileStage(9U, micros() - _nav_profile_total_start);
     printNavProfileIfDue();
@@ -931,6 +1005,11 @@ void handleNavigationSystem()
   // 使用 IMU 数据降采样后的平均值
   imu_accel_mps2 << local_acc_sum_x * scale, local_acc_sum_y * scale, local_acc_sum_z * scale;
   imu_gyro_radps << local_gyro_sum_x * scale, local_gyro_sum_y * scale, local_gyro_sum_z * scale;
+  // 健康监测先于 NaN 门和静止检测：非有限/冻结/丢样要留下状态，
+  // 不能只在控制侧“保持上一帧”而让导航继续积分。
+  const bfs::ImuHealthStatus imu_health_status =
+      updateImuHealth(imu_accel_mps2, imu_gyro_radps,
+                      static_cast<uint32_t>(local_imu_sample_count), dt_s);
   // 传感器 NaN/Inf 安全门：跳过本帧传播，保持上一有效导航输出；控制侧另有
   // 陀螺有限值守卫。不能把 NaN 灌进 EKF/姿态环（SIL 故障注入已复现崩溃）。
   if (!imu_accel_mps2.allFinite() || !imu_gyro_radps.allFinite())
@@ -938,6 +1017,12 @@ void handleNavigationSystem()
 #ifdef FW_SIL_REAL_NAV
     ++g_sil_nav_debug_imu_invalid;
 #endif
+    return;
+  }
+  // 单 IMU 失效没有独立姿态源：确认 Failed 后保持最后有效导航输出，
+  // 不继续用冻结样本积分，也不伪称“受控下降”。控制侧仍按最后有效陀螺值保持。
+  if (imu_health_status.state == bfs::ImuHealthState::Failed)
+  {
     return;
   }
 #ifdef FW_SIL_REAL_NAV
@@ -1032,15 +1117,71 @@ void handleNavigationSystem()
   s_zupt_ext_ref_guard = Icm45686UpdateZuptExtRefGuard(
       s_zupt_ext_ref_guard, has_external_velocity_reference, nav_update_dt_s);
 
-  // 获取磁力计数据 (用于初始化航向)
-  // 真实磁力计路径：MagSensor 已完成芯片系→FRD 对齐与硬铁偏置，
-  // 可用 sampleFRD() 取机体 FRD 三轴（uT）后填入 mag_ut。
-  // 当前未启用：以伪磁场矢量完成确定性航向初始化（语义见 EKF 初始化注释）。
-
-  // 强制磁场矢量指向正北 (X轴)，Z轴分量是为了模拟地磁倾角(Dip Angle)，防止奇异值
-  // 这里的 {50, 0, 0} 代表磁力线完全水平指向前方
-  // 如果在长沙，地磁倾角约 45度，写成 {30, 0, 40} 更符合物理真实，利于 TiltCompass 解算
-  mag_ut << 30.0f, 0.0f, 40.0f;
+  // 获取磁力计数据（真实路径优先，失败回退伪磁）
+  // MagSensor 已完成芯片系→FRD 对齐、椭球标定与标定有效性校验；
+  // 这里只做初始化前的粗量程检查，完整门控在 EKF 运行阶段执行。
+  mag_sample = magSensor.sampleFRD();
+  const uint32_t mag_now_us = micros();
+  const bool mag_present = magSensor.isPresent();
+  const bool mag_cal_valid = magSensor.calValid();
+  const bool mag_ref_valid = magReferenceValidForCurrentOrigin();
+  const float mag_norm_ut = std::sqrt(
+      mag_sample.x * mag_sample.x + mag_sample.y * mag_sample.y +
+      mag_sample.z * mag_sample.z);
+  mag_status.present = mag_present;
+  mag_status.fresh = magSensor.fresh();
+  mag_status.cal_valid = mag_cal_valid;
+  mag_status.ref_valid = mag_ref_valid;
+  mag_status.seq = mag_sample.seq;
+  mag_status.norm_ut = mag_norm_ut;
+  mag_status.norm_dev_ut =
+      std::fabs(mag_norm_ut - bfs::kDefaultMagReference.total_ut);
+  mag_status.age_ms = (mag_sample.seq == 0U || mag_sample.timestamp_us == 0U)
+                          ? 0xFFFFFFFFu
+                          : (mag_now_us - mag_sample.timestamp_us) / 1000U;
+  mag_status.last_gate_reason =
+      static_cast<uint8_t>(bfs::MagGateReason::None);
+  mag_real_for_init =
+      mag_present && mag_sample.seq != 0U && mag_cal_valid && mag_ref_valid &&
+      std::isfinite(mag_sample.x) && std::isfinite(mag_sample.y) &&
+      std::isfinite(mag_sample.z) &&
+      mag_norm_ut >= 15.0f && mag_norm_ut <= 100.0f;
+  if (mag_real_for_init)
+  {
+    mag_ut << mag_sample.x, mag_sample.y, mag_sample.z;
+  }
+  else
+  {
+    // 伪磁只保证确定性初始化，不保证真北；真实磁不可用时保留历史语义。
+    mag_ut << 30.0f, 0.0f, 40.0f;
+    bfs::MagGateReason init_reason = bfs::MagGateReason::None;
+    if (!mag_present || mag_sample.seq == 0U)
+    {
+      init_reason = bfs::MagGateReason::Stale;
+    }
+    else if (!mag_cal_valid)
+    {
+      init_reason = bfs::MagGateReason::CalInvalid;
+    }
+    else if (!mag_ref_valid)
+    {
+      init_reason = bfs::MagGateReason::RefInvalid;
+    }
+    else if (!std::isfinite(mag_sample.x) || !std::isfinite(mag_sample.y) ||
+             !std::isfinite(mag_sample.z))
+    {
+      init_reason = bfs::MagGateReason::NonFinite;
+    }
+    else if (mag_norm_ut < 15.0f)
+    {
+      init_reason = bfs::MagGateReason::NormLow;
+    }
+    else
+    {
+      init_reason = bfs::MagGateReason::NormHigh;
+    }
+    mag_status.last_gate_reason = static_cast<uint8_t>(init_reason);
+  }
 
   // ====================================================================
   // 3. 统一静止检测 (Unified Static Detection)
@@ -1095,7 +1236,8 @@ void handleNavigationSystem()
       Icm45686StaticDetectorReset(static_det);
     }
   }
-  bool is_static_confirmed = static_det.confirmed_static;
+  bool is_static_confirmed =
+      static_det.confirmed_static && s_imu_health.staticAidsAllowed();
   const float static_confidence = static_det.confidence;
 #ifdef FW_SIL_REAL_NAV
   g_sil_nav_debug_static = is_static_confirmed;
@@ -1161,6 +1303,19 @@ void handleNavigationSystem()
     }
   }
 
+  // GNSS 一致性监视所需的机体系比力→NED 速度增量（每帧积累，epoch 消费后清零）。
+  if (nav_system_initialized)
+  {
+    const Eigen::Matrix3f c_b2n = bfs::quat2dcm(nav_ekf.quat()).transpose();
+    const Eigen::Vector3f specific_force_ned =
+        c_b2n * (imu_accel_mps2 - nav_ekf.accel_bias_mps2());
+    Eigen::Vector3f gravity_ned;
+    gravity_ned << 0.0f, 0.0f,
+        static_cast<float>(nav_ekf.gravity_mps2());
+    const Eigen::Vector3f accel_ned = specific_force_ned + gravity_ned;
+    s_gnss_imu_dv_accum += accel_ned * nav_update_dt_s;
+  }
+
   const bool gnss_data_fresh_for_nav = isGnssDataFreshForNav();
   const bool gnss_full_quality_for_nav = has_gnss_epoch && gnssEpochPassesFullQuality(gnss_epoch);
   // 首次真实重锚必须使用高精度解；低精度/野值帧不能把 EKF 从假原点锚到错误位置。
@@ -1173,8 +1328,88 @@ void handleNavigationSystem()
       (gnss_epoch.spd_acc_mps <= 0.0f ||
        gnss_epoch.spd_acc_mps <= GNSS_INIT_MAX_S_ACC_MPS);
   const bool gnss_downgrade_quality_for_nav = has_gnss_epoch && !gnss_full_quality_for_nav && gnssEpochQualifiesForDowngrade(gnss_epoch);
-  const bool gnss_instant_valid_for_nav = gnss_full_quality_for_nav;
-  if (gnss_full_quality_for_nav || gnss_downgrade_quality_for_nav)
+  bool gnss_instant_valid_for_nav = gnss_full_quality_for_nav;
+
+  // 慢漂移/欺骗一致性：只在完整质量 epoch 上做窗口检验；Suspect 时把
+  // gnss_instant_valid_for_nav 置 false，让后续 GNSS 更新跳过，并让 AHRS/光流
+  // 辅助接管。它不是瞬时野值门（后者仍在 EKF 内保留）。
+  if (nav_system_initialized && gnss_full_quality_for_nav)
+  {
+    const uint32_t now_us = micros();
+    const float epoch_dt_s =
+        (s_gnss_last_epoch_us == 0U)
+            ? 0.0f
+            : static_cast<float>(static_cast<uint32_t>(now_us -
+                                                        s_gnss_last_epoch_us)) *
+                  1.0e-6f;
+    Eigen::Vector3d gnss_pos_ned = Eigen::Vector3d::Zero();
+    bool pos_valid = false;
+    if (is_origin_lla_set)
+    {
+      const Eigen::Vector3d gnss_lla(gnss_epoch.lat_rad, gnss_epoch.lon_rad,
+                                     static_cast<double>(gnss_epoch.alt_wgs84_m));
+      const Eigen::Vector3d origin_lla(origin_lat_rad, origin_lon_rad,
+                                       origin_alt_m);
+      if (gnss_lla.allFinite() && origin_lla.allFinite())
+      {
+        gnss_pos_ned = bfs::lla2ned(gnss_lla, origin_lla, bfs::AngPosUnit::RAD);
+        pos_valid = gnss_pos_ned.allFinite();
+      }
+    }
+    bool flow_valid = false;
+    Eigen::Vector3f flow_ned = Eigen::Vector3f::Zero();
+    if (flow_data.is_flow_valid && flow_data.flow_quality >= 50 &&
+        (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs &&
+        std::isfinite(flow_data.velocity_x_mps) &&
+        std::isfinite(flow_data.velocity_y_mps))
+    {
+      const Eigen::Matrix3f c_b2n = bfs::quat2dcm(nav_ekf.quat()).transpose();
+      Eigen::Vector3f flow_body;
+      flow_body << static_cast<float>(flow_data.velocity_x_mps),
+          static_cast<float>(flow_data.velocity_y_mps), 0.0f;
+      flow_ned = c_b2n * flow_body;
+      flow_valid = flow_ned.allFinite();
+    }
+    bfs::GnssConsistencyInput consistency_input;
+    consistency_input.dt_s = (epoch_dt_s > 0.0f && epoch_dt_s <= 0.35f)
+                                 ? epoch_dt_s
+                                 : 0.1f;
+    consistency_input.gnss_vel_ned
+        << gnss_epoch.north_vel_mps, gnss_epoch.east_vel_mps,
+        gnss_epoch.down_vel_mps;
+    consistency_input.imu_dv_ned = s_gnss_imu_dv_accum;
+    consistency_input.pos_valid = pos_valid;
+    consistency_input.gnss_pos_ned = gnss_pos_ned.cast<float>();
+    consistency_input.flow_valid = flow_valid;
+    consistency_input.flow_vel_ned = flow_ned;
+    consistency_input.baro_valid = pos_valid && std::isfinite(baro_altitude);
+    consistency_input.gnss_alt_up_m =
+        pos_valid ? -static_cast<float>(gnss_pos_ned.z()) : 0.0f;
+    consistency_input.baro_alt_up_m = baro_altitude;
+    consistency_input.reset =
+        (s_gnss_last_epoch_us == 0U || !(epoch_dt_s > 0.0f) ||
+         epoch_dt_s > 0.35f);
+    const bfs::GnssConsistencyStatus consistency_status =
+        s_gnss_consistency.update(consistency_input);
+    publishGnssConsistency(consistency_status);
+    if (consistency_status.state == bfs::GnssConsistencyState::Suspect &&
+        g_gnss_consistency_reject_enabled)
+    {
+      ++gnss_status.consistency_reject_count;
+      gnss_instant_valid_for_nav = false;
+    }
+    s_gnss_last_epoch_us = now_us;
+    s_gnss_imu_dv_accum.setZero();
+  }
+  else if (!gnss_data_fresh_for_nav)
+  {
+    s_gnss_consistency.reset();
+    publishGnssConsistency(s_gnss_consistency.status());
+    s_gnss_last_epoch_us = 0U;
+    s_gnss_imu_dv_accum.setZero();
+  }
+
+  if (gnss_instant_valid_for_nav || gnss_downgrade_quality_for_nav)
   {
     gnss_status.has_last_tow = true;
     gnss_status.last_tow_ms = gnss_epoch.pvt_tow_ms;
@@ -1320,8 +1555,13 @@ void handleNavigationSystem()
       // 无 GPS 时 GNSS R 不会被消费 (perform_measurement_update 为 false),
       // 不需要设伪值. 删除了原来的 else { nav_ekf.gnss_pos_ne_std_m(0.5); ... } 死代码.
 
-      // 执行初始化
-      nav_ekf.Initialize(imu_accel_mps2, imu_gyro_radps, mag_ut, init_vel_ned, init_lla);
+      // 执行初始化。真实磁样本给的是磁北航向，需加站点磁偏角转到真北；
+      // 伪磁/不可用磁保持 offset=0，避免改变历史确定性行为。
+      const float mag_init_yaw_offset =
+          mag_real_for_init ? bfs::kDefaultMagReference.declination_rad : 0.0f;
+      nav_ekf.Initialize(imu_accel_mps2, imu_gyro_radps, mag_ut, init_vel_ned,
+                         init_lla, mag_init_yaw_offset);
+      mag_status.init_source = mag_real_for_init ? 1U : 0U;
 
       nav_system_initialized = true;
 
@@ -1606,6 +1846,129 @@ void handleNavigationSystem()
     }
 #endif
 
+    // [B3] 磁矢量量测（20 Hz）：真实磁传感器路径，门控通过才进 EKF。
+    // 不改变位置/速度；只约束绝对航向。磁默认不存在时 MarkUnavailable，
+    // 行为与历史伪磁路径一致（伪磁只用于初始化）。
+    {
+      const uint32_t mag_now_us = micros();
+      const bool mag_rate_due =
+          static_cast<uint32_t>(mag_now_us - s_mag_last_attempt_us) >= 100000U;
+      if (mag_present && mag_sample.seq != 0U && mag_rate_due)
+      {
+        bool gnss_course_valid = false;
+        float gnss_course_rad = 0.0f;
+        float speed_mps = 0.0f;
+        if (gnss_instant_valid_for_nav && has_gnss_epoch)
+        {
+          speed_mps = std::hypot(gnss_epoch.north_vel_mps,
+                                 gnss_epoch.east_vel_mps);
+          if (std::isfinite(speed_mps) && speed_mps > 1.0f)
+          {
+            gnss_course_rad =
+                std::atan2(gnss_epoch.east_vel_mps, gnss_epoch.north_vel_mps);
+            gnss_course_valid = std::isfinite(gnss_course_rad);
+          }
+        }
+        const Eigen::Vector3f mag_body(mag_sample.x, mag_sample.y,
+                                       mag_sample.z);
+        bfs::MagGateInput gate_input;
+        gate_input.mag_body_ut = mag_body;
+        gate_input.sample_timestamp_us = mag_sample.timestamp_us;
+        gate_input.now_us = mag_now_us;
+        gate_input.sample_seq = mag_sample.seq;
+        gate_input.last_consumed_seq = s_mag_last_consumed_seq;
+        gate_input.cal_valid = mag_cal_valid;
+        gate_input.ref = &bfs::kDefaultMagReference;
+        gate_input.c_n_b = bfs::quat2dcm(nav_ekf.quat());
+        gate_input.gnss_course_valid = gnss_course_valid;
+        gate_input.gnss_course_rad = gnss_course_rad;
+        gate_input.estimated_yaw_rad = nav_ekf.yaw_rad();
+        gate_input.speed_mps = speed_mps;
+        gate_input.tilt_sigma_rad = nav_ekf.tilt_sigma_rad();
+        gate_input.throttle_pct = throttlePercent;
+        const bfs::MagGateResult gate = s_mag_gate.Evaluate(gate_input);
+        s_mag_last_attempt_us = mag_now_us;
+        mag_status.norm_ut = gate.norm_ut;
+        mag_status.norm_dev_ut = gate.norm_dev_ut;
+        mag_status.dip_deg = bfs::magref::radToDeg(gate.dip_rad);
+        mag_status.dip_dev_deg = bfs::magref::radToDeg(gate.dip_dev_rad);
+        mag_status.heading_error_deg =
+            bfs::magref::radToDeg(gate.heading_error_rad);
+        mag_status.track_dev_deg =
+            bfs::magref::radToDeg(gate.track_dev_rad);
+        if (!gate.pass)
+        {
+          mag_status.last_gate_reason = static_cast<uint8_t>(gate.reason);
+          ++mag_status.gate_rejected;
+          aid_tracker.MarkAvailable(bfs::AidSource::Mag, false);
+        }
+        else
+        {
+          // 三轴磁矢量只观测 2 个姿态自由度（绕磁场方向的滚转不可观）；
+          // 仅当加速度方向仍可信时先做重力方向辅助，形成“重力+磁”双矢量
+          // 姿态观测，避免磁更新沿不可观方向把 roll/pitch 慢慢拉走。
+          // 大水平加速度/大角速率时跳过，防止把线加速度误当重力方向。
+          if (!is_static_confirmed)
+          {
+            const Eigen::Vector3f gravity_dir_body =
+                bfs::quat2dcm(nav_ekf.quat()) *
+                (-Eigen::Vector3f::UnitZ());
+            const float accel_norm_safe =
+                std::fmax(imu_accel_mps2.norm(), 1.0e-3f);
+            const float dot = std::fmax(
+                -1.0f, std::fmin(1.0f, imu_accel_mps2.dot(gravity_dir_body) /
+                                          accel_norm_safe));
+            const float gravity_dir_error_rad = std::acos(dot);
+            if (accel_norm_error < 0.5f && angular_rate_quiet &&
+                gravity_dir_error_rad < 15.0f * 0.017453292f)
+            {
+              const bfs::MeasurementUpdateResult grav_result =
+                  nav_ekf.MeasurementUpdateGravityDetailed(imu_accel_mps2,
+                                                           0.05f);
+              aid_tracker.RecordAttempt(bfs::AidSource::Gravity, grav_result);
+            }
+          }
+
+          // 无论 EKF 是否融合，本样本只尝试一次，避免 NIS 拒绝后逐帧重试。
+          s_mag_last_consumed_seq = mag_sample.seq;
+          const Eigen::Vector3f mag_ref_field(
+              bfs::kDefaultMagReference.field_ut[0],
+              bfs::kDefaultMagReference.field_ut[1],
+              bfs::kDefaultMagReference.field_ut[2]);
+          const float yaw_before_rad = nav_ekf.yaw_rad();
+          const float roll_before_rad = nav_ekf.roll_rad();
+          const float pitch_before_rad = nav_ekf.pitch_rad();
+          const bfs::MeasurementUpdateResult result =
+              nav_ekf.MeasurementUpdateMagVectorDetailed(
+                  mag_body, mag_ref_field, gate.noise_ut);
+          mag_status.last_kick_deg = bfs::magref::radToDeg(bfs::magWrapPi(
+              nav_ekf.yaw_rad() - yaw_before_rad));
+          mag_status.last_kick_rp_deg = bfs::magref::radToDeg(std::fmax(
+              std::fabs(bfs::magWrapPi(nav_ekf.roll_rad() - roll_before_rad)),
+              std::fabs(bfs::magWrapPi(nav_ekf.pitch_rad() - pitch_before_rad))));
+          aid_tracker.RecordAttempt(bfs::AidSource::Mag, result);
+          if (result.fused)
+          {
+            ++mag_status.fused;
+            mag_status.last_gate_reason =
+                static_cast<uint8_t>(bfs::MagGateReason::None);
+          }
+          else
+          {
+            ++mag_status.ekf_rejected;
+            mag_status.last_gate_reason =
+                static_cast<uint8_t>(bfs::MagGateReason::EkfRejected);
+          }
+        }
+      }
+      else if (!mag_present || mag_sample.seq == 0U)
+      {
+        mag_status.last_gate_reason =
+            static_cast<uint8_t>(bfs::MagGateReason::Stale);
+        aid_tracker.MarkUnavailable(bfs::AidSource::Mag);
+      }
+    }
+
     // [C] 测量更新 (修正) - GNSS 位置/速度更新
     if (perform_measurement_update && gnss_instant_valid_for_nav)
     {
@@ -1721,6 +2084,10 @@ void handleNavigationSystem()
         nav_has_real_gnss_anchor = true;
         aid_tracker.RecordReset(bfs::AidSource::Gnss);
         aid_tracker.RecordAttempt(bfs::AidSource::Gnss, true, 0.0f, 0.0f);
+        s_gnss_consistency.reset();
+        publishGnssConsistency(s_gnss_consistency.status());
+        s_gnss_last_epoch_us = 0U;
+        s_gnss_imu_dv_accum.setZero();
         Serial8.println("[Nav] Re-anchored EKF to first valid GNSS fix.");
       }
       else
@@ -1748,10 +2115,15 @@ void handleNavigationSystem()
           // 长失联后连续不可信 GNSS 触发的位置/速度硬重锚，单独计入 reset_count，
           // 便于 DBG 区分“普通融合”和“恢复重锚”。
           aid_tracker.RecordReset(bfs::AidSource::Gnss);
+          s_gnss_consistency.reset();
+          publishGnssConsistency(s_gnss_consistency.status());
+          s_gnss_last_epoch_us = 0U;
+          s_gnss_imu_dv_accum.setZero();
         }
       }
     }
-    else if (perform_measurement_update && gnss_downgrade_quality_for_nav)
+    else if (perform_measurement_update && gnss_downgrade_quality_for_nav &&
+             !gnss_status.consistency_suspect)
     {
       // 边缘 GNSS 解只融合速度，位置噪声放大为近似关闭，避免弱位置观测拉偏原点。
       gnss_status.downgrade_count++;
@@ -1835,7 +2207,7 @@ void handleNavigationSystem()
   }
 #endif
 
-  if (perform_measurement_update && gnss_full_quality_for_nav)
+  if (perform_measurement_update && gnss_instant_valid_for_nav)
   {
     // UBX原始相对位置必须在EKF初始化/假原点重锚定之后更新，避免首帧真实GNSS用旧原点发布跳变。
     updateUbxRelativePosition();

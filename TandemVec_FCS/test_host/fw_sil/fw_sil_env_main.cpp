@@ -11,6 +11,9 @@
  *          `--mask N` 覆盖 `inertia_comp_mask`（0=关前馈 / 3=全开，用于 C-02 A/B）、
  *          `--coupled` 同时 roll/pitch 激励 + 油门脉冲、`--flow` 光流测速、
  *          `--flow-delay N` 光流延迟、`--mag` 磁航向、`--seed`、`--no-wind`；
+ *          `--real-nav` 下另有 `--mag-noise/--mag-disturb/--mag-dropout/
+ *          --mag-cal-invalid`、`--imu-fault nan|stuck`/`--imu-dropout A:B`、
+ *          `--gnss-consistency-reject`；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -21,10 +24,10 @@
  *          @ref THY-002 §2–3、@ref CTL-001 §4（控制链）
  * @frame   NED（位置/速度/风）+ FRD（角速率/比力）；`--ekf` 时 EKF 内部保持 WGS84 LLA
  * @units   高度 m，姿态 deg，舵机 PWM 百分比，电机转速 rad/s，风 m/s，时间 s
- * @note    与实机差异：传感器为理想注入 + 白噪声，无振动谱、无磁干扰、无 GNSS 多径；
- *          `--mag` 默认关闭（多 seed 下 MeasurementUpdateYaw 会 NaN/发散，见 AGENTS.md）；
- *          `--flow` 是理想光流，不能当实机验证。AGENTS.md 记录的水平漂移 115–457 m
- *          正是本文件无外部参考时的失锁表现。
+ * @note    与实机差异：传感器为注入模型 + 白噪声，无真实振动谱、无电机磁干扰、
+ *          无 GNSS 多径；`--mag`/`mag_*` profile 才启用磁路径，基线默认关闭；
+ *          `--flow` 是理想光流，不能当实机验证。40 s `--pos-hold` 的横滚/航向摆动
+ *          在无磁基线也存在，属既有位置保持-偏航耦合边界，不是磁更新引入。
  * @test    S1 定高（直注/EKF）闭环；S2 --manual 阶跃；S3 --fault 3/4 故障降级；
  *          S4 --flow 光流辅助；S5 --seed 多 seed 稳定性（run_matrix.sh）；
  *          S6 --coupled + --mask 0/3 前馈 A/B（C-02）；S7 --fault 3 的 F3 标志（C-01）
@@ -42,6 +45,7 @@
 #include "QuaternionMath.h"
 #include "ekf_15_state.h"
 #include "transforms.h"
+#include "mag_reference.h"
 #include <Eigen/Dense>
 #ifdef FW_SIL_REAL_NAV
 #include "communication.h"
@@ -348,7 +352,15 @@ struct RealNavConfig
   int imu_fault_mode = 0;  // 0 none / 1 stuck / 2 NaN
   float imu_fault_start = 20.0f;
   float imu_fault_end = 21.0f;
+  float imu_dropout_start = 1.0e9f;
+  float imu_dropout_end = 1.0e9f;
   bool mag = false;
+  bool gnss_consistency_reject = false;
+  float mag_noise_ut = 0.5f;
+  float mag_disturb_ut = 0.0f; // NED 正弦干扰幅值；0=干净
+  float mag_dropout_start = 1.0e9f;
+  float mag_dropout_end = 1.0e9f;
+  bool mag_cal_invalid = false;
 };
 
 static void applyRealNavProfile(RealNavConfig &c, const char *name)
@@ -397,6 +409,27 @@ static void applyRealNavProfile(RealNavConfig &c, const char *name)
     c.rc_loss_start = 20.0f;
     c.rc_loss_end = 22.0f;
     c.imu_drop_prob = 0.001f;
+  }
+  else if (std::strcmp(name, "mag_clean") == 0)
+  {
+    applyRealNavProfile(c, "clean");
+    c.mag = true;
+    c.mag_noise_ut = 0.3f;
+    c.mag_disturb_ut = 0.0f;
+  }
+  else if (std::strcmp(name, "mag_nominal") == 0)
+  {
+    applyRealNavProfile(c, "nominal");
+    c.mag = true;
+    c.mag_noise_ut = 0.6f;
+    c.mag_disturb_ut = 0.0f;
+  }
+  else if (std::strcmp(name, "mag_disturbed") == 0)
+  {
+    applyRealNavProfile(c, "nominal");
+    c.mag = true;
+    c.mag_noise_ut = 0.8f;
+    c.mag_disturb_ut = 12.0f;
   }
   else  // nominal
   {
@@ -494,6 +527,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
 
   bool alt_cmd = false;
   float max_roll = 0.0f, max_pitch = 0.0f;
+  float max_mag_kick = 0.0f;
+  float max_mag_kick_rp = 0.0f;
+  bool imu_fault_detected_any = false;
   double sum_roll2 = 0.0, sum_pitch2 = 0.0;
   double sum_pos2 = 0.0, max_pos = 0.0;
   int n_att = 0, n_pos = 0;
@@ -691,22 +727,54 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       hold_set = true;
     }
 
-    // 可选磁矢量辅助（SIL 实验路径）：用真值姿态生成机体系磁测，
-    // 走新增的 MeasurementUpdateMagVectorDetailed；生产固件尚未接磁力计。
-    if (cfg.mag && nav_system_initialized && (k % 20) == 0)
+    // 磁力计注入（生产路径）：按真值姿态把站点参考场旋到机体系，
+    // 加噪声/硬铁残差/慢变干扰后写入 MagSensor；导航任务自行做门控与 EKF 融合。
+    // 100 Hz 注入（2 kHz 内环每 2 拍一次），更接近真实 MagSensor 轮询率。
+    if (cfg.mag)
     {
-      const Eigen::Quaternionf q_true(p.q.w, p.q.x, p.q.y, p.q.z);
-      const Eigen::Vector3f mag_ned =
-          Eigen::Vector3f(30.0f, 0.0f, 40.0f).normalized();
-      const Eigen::Vector3f mag_body =
-          q_true.conjugate() * mag_ned +
-          0.5f * Eigen::Vector3f(n01(rng), n01(rng), n01(rng));
-      nav_ekf.MeasurementUpdateMagVectorDetailed(mag_body, mag_ned, 0.5f);
+      const bool mag_dropout =
+          t >= cfg.mag_dropout_start && t <= cfg.mag_dropout_end;
+      if (!mag_dropout && (k % 2) == 0)
+      {
+        const Eigen::Quaternionf q_true(p.q.w, p.q.x, p.q.y, p.q.z);
+        Eigen::Vector3f mag_ned(
+            bfs::kDefaultMagReference.field_ut[0],
+            bfs::kDefaultMagReference.field_ut[1],
+            bfs::kDefaultMagReference.field_ut[2]);
+        if (cfg.mag_disturb_ut > 0.0f)
+        {
+          // NED 慢变干扰：同时破坏模长/倾角/方位，模拟电机/外部磁源。
+          mag_ned.x() += cfg.mag_disturb_ut *
+                         std::sin(2.0f * 3.14159265f * t / 7.0f + 0.3f);
+          mag_ned.y() += cfg.mag_disturb_ut *
+                         std::cos(2.0f * 3.14159265f * t / 11.0f + 0.7f);
+          mag_ned.z() += 0.5f * cfg.mag_disturb_ut *
+                         std::sin(2.0f * 3.14159265f * t / 13.0f);
+        }
+        Eigen::Vector3f mag_body = q_true.conjugate() * mag_ned;
+        mag_body.x() += cfg.mag_noise_ut * n01(rng);
+        mag_body.y() += cfg.mag_noise_ut * n01(rng);
+        mag_body.z() += cfg.mag_noise_ut * n01(rng);
+        magSensor.silInjectFrdSample(mag_body.data(), micros(),
+                                     !cfg.mag_cal_invalid);
+      }
     }
 
     // 真实导航任务 + 真实 GNC。导航任务消费 IMU 聚合量和 UBX epoch。
     handleNavigationSystem();
     runGNCExecutive();
+    if (g_sil_nav_debug_imu_failed)
+    {
+      imu_fault_detected_any = true;
+    }
+    if (std::fabs(mag_status.last_kick_deg) > max_mag_kick)
+    {
+      max_mag_kick = std::fabs(mag_status.last_kick_deg);
+    }
+    if (mag_status.last_kick_rp_deg > max_mag_kick_rp)
+    {
+      max_mag_kick_rp = mag_status.last_kick_rp_deg;
+    }
 
     if (!manual && !alt_cmd && t >= 3.0f)
     {
@@ -770,7 +838,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       const float rpm_ratio = std::fmax(p.motor_wf, p.motor_wt) / P.wMax;
       const float vib_scale = rpm_ratio * rpm_ratio;
       std::uniform_real_distribution<float> u01(0.0f, 1.0f);
-      const bool drop = (cfg.imu_drop_prob > 0.0f) && (u01(rng) < cfg.imu_drop_prob);
+      const bool imu_dropout_window =
+          t >= cfg.imu_dropout_start && t <= cfg.imu_dropout_end;
+      const bool drop = imu_dropout_window ||
+                        ((cfg.imu_drop_prob > 0.0f) &&
+                         (u01(rng) < cfg.imu_drop_prob));
       const bool imu_fault =
           (cfg.imu_fault_mode != 0) &&
           (t >= cfg.imu_fault_start && t < cfg.imu_fault_end);
@@ -869,7 +941,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       }
       std::printf("t=%5.1f alt=%7.2f nav_alt=%7.2f pos=(%6.2f,%6.2f) truth=(%6.2f,%6.2f) "
                   "obs=(%6.2f,%6.2f) nis=%.2f ep=%u pvt=%u eoe=%u pend=%u "
-                  "roll=%6.2f pitch=%6.2f servo=(%5.1f,%5.1f) motor=(%5.1f,%5.1f) "
+                  "roll=%6.2f pitch=%6.2f yaw=%6.2f navyaw=%6.2f "
+                  "servo=(%5.1f,%5.1f) motor=(%5.1f,%5.1f) "
                   "nav=%d fix=%d gnss_age=%ld imu=%d acc=(%6.2f,%6.2f,%6.2f) "
                   "gyro=(%6.3f,%6.3f,%6.3f) st=%d/%.2f/%u epoch=%d initd=%d\n",
                   t, -p.pos[2],
@@ -878,7 +951,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                   obs_rel(0), obs_rel(1), gnss_status.last_test_ratio,
                   gnss_status.epoch_count, gnss_status.parser_nav_pvt_count,
                   gnss_status.parser_nav_eoe_count, gnss_status.pending_epoch_count,
-                  r * 57.29578f, pitch * 57.29578f,
+                  r * 57.29578f, pitch * 57.29578f, yaw * 57.29578f,
+                  nav_system_initialized ? nav_ekf.yaw_rad() * 57.29578f : 0.0f,
                   ch1_output, ch2_output, ch3_output, ch4_output,
                   nav_system_initialized ? 1 : 0,
                   static_cast<int>(ubx.fix()), age_ms,
@@ -903,7 +977,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "pos_rms=%.2f pos_max=%.2f hold_rms=%.2f hold_max=%.2f hold_end_rms=%.2f "
               "max_roll=%.2f max_pitch=%.2f rms_roll=%.2f rms_pitch=%.2f "
               "nav_init=%d fix3d=%u quality_fail=%u tow_mismatch=%u duplicate=%u "
-              "reacquire_resets=%u outlier_rejects=%u mag_fused=%u mag_rej=%u\n",
+              "reacquire_resets=%u outlier_rejects=%u mag_fused=%u mag_rej=%u "
+              "mag_gate=%u mag_cal=%d mag_norm=%.2f mag_hdg=%.2f "
+              "grav_att=%u grav_fused=%u mag_kick=%.2f mag_kickrp=%.2f "
+              "imu_state=%d imu_frz=%.2f imu_drop=%.2f imu_failed=%d "
+              "imu_detected=%d gnss_susp=%d gnss_crej=%u gnss_cres=%.3f\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -912,7 +990,18 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               nav_ekf.gnss_reacquire_reset_count(),
               nav_ekf.gnss_outlier_reject_count(),
               nav_ekf.mag_vector_fused_count(),
-              nav_ekf.mag_vector_reject_count());
+              nav_ekf.mag_vector_reject_count(),
+              mag_status.gate_rejected, mag_status.cal_valid ? 1 : 0,
+              mag_status.norm_ut, mag_status.heading_error_deg,
+              aid_tracker.status(bfs::AidSource::Gravity).attempt_count,
+              aid_tracker.status(bfs::AidSource::Gravity).fuse_count,
+              max_mag_kick, max_mag_kick_rp,
+              static_cast<int>(g_imu_health_state), g_imu_health_frozen_s,
+              g_imu_health_no_sample_s, g_sil_nav_debug_imu_failed ? 1 : 0,
+              imu_fault_detected_any ? 1 : 0,
+              gnss_status.consistency_suspect ? 1 : 0,
+              gnss_status.consistency_reject_count,
+              gnss_status.consistency_accel_res);
   std::printf("SIL_REAL_JSON {\"profile\":%d,\"seed\":%d,\"final_alt\":%.3f,"
               "\"nav_alt_mean\":%.3f,\"pos_rms\":%.3f,\"pos_max\":%.3f,"
               "\"hold_rms\":%.3f,\"hold_max\":%.3f,\"hold_end_rms\":%.3f,"
@@ -920,7 +1009,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"max_pitch\":%.3f,\"rms_roll\":%.3f,\"rms_pitch\":%.3f,"
               "\"nav_init\":%d,\"fix3d\":%u,\"quality_fail\":%u,"
               "\"tow_mismatch\":%u,\"duplicate\":%u,\"reacquire_resets\":%u,"
-              "\"outlier_rejects\":%u,\"mag_fused\":%u,\"mag_rej\":%u}\n",
+              "\"outlier_rejects\":%u,\"mag_fused\":%u,\"mag_rej\":%u,"
+              "\"mag_gate\":%u,\"mag_cal\":%d,\"mag_norm\":%.3f,"
+              "\"mag_hdg\":%.3f,\"imu_state\":%d,\"imu_frz\":%.3f,"
+              "\"imu_drop\":%.3f,\"imu_failed\":%d,\"imu_detected\":%d,"
+              "\"gnss_susp\":%d,\"gnss_crej\":%u,\"gnss_cres\":%.3f}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -929,7 +1022,15 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               nav_ekf.gnss_reacquire_reset_count(),
               nav_ekf.gnss_outlier_reject_count(),
               nav_ekf.mag_vector_fused_count(),
-              nav_ekf.mag_vector_reject_count());
+              nav_ekf.mag_vector_reject_count(),
+              mag_status.gate_rejected, mag_status.cal_valid ? 1 : 0,
+              mag_status.norm_ut, mag_status.heading_error_deg,
+              static_cast<int>(g_imu_health_state), g_imu_health_frozen_s,
+              g_imu_health_no_sample_s, g_sil_nav_debug_imu_failed ? 1 : 0,
+              imu_fault_detected_any ? 1 : 0,
+              gnss_status.consistency_suspect ? 1 : 0,
+              gnss_status.consistency_reject_count,
+              gnss_status.consistency_accel_res);
   return 0;
 }
 #endif  // FW_SIL_REAL_NAV
@@ -965,6 +1066,12 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--mag")==0) g_use_mag_yaw=true;
     else if (std::strcmp(argv[i],"--seed")==0 && i+1<argc) seed=std::atoi(argv[++i]);
 #ifdef FW_SIL_REAL_NAV
+    else if (std::strcmp(argv[i],"--mag-noise")==0 && i+1<argc) real_cfg.mag_noise_ut=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--mag-disturb")==0 && i+1<argc) real_cfg.mag_disturb_ut=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--mag-dropout")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &real_cfg.mag_dropout_start,
+                  &real_cfg.mag_dropout_end);
+    else if (std::strcmp(argv[i],"--mag-cal-invalid")==0) real_cfg.mag_cal_invalid=true;
     else if (std::strcmp(argv[i],"--real-nav")==0) real_cfg.enabled=true;
     else if (std::strcmp(argv[i],"--profile")==0 && i+1<argc)
       applyRealNavProfile(real_cfg, argv[++i]);
@@ -1017,6 +1124,11 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--imu-fault-window")==0 && i+1<argc)
       std::sscanf(argv[++i], "%f:%f", &real_cfg.imu_fault_start,
                   &real_cfg.imu_fault_end);
+    else if (std::strcmp(argv[i],"--imu-dropout")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &real_cfg.imu_dropout_start,
+                  &real_cfg.imu_dropout_end);
+    else if (std::strcmp(argv[i],"--gnss-consistency-reject")==0)
+      real_cfg.gnss_consistency_reject=true;
 #endif
   }
 #ifdef FW_SIL_REAL_NAV
@@ -1025,6 +1137,7 @@ int main(int argc, char** argv) {
     real_cfg.flow = real_cfg.flow || flow;
     real_cfg.flow_delay = g_flow_delay;
     real_cfg.mag = real_cfg.mag || g_use_mag_yaw;
+    g_gnss_consistency_reject_enabled = real_cfg.gnss_consistency_reject;
     kFlightCtrlParams.inertia_comp_mask = static_cast<uint8_t>(mask & 0x03);
     if (coupled) manual = true;
     return runRealNavLoop(real_cfg, seed, seconds, target_alt, manual, coupled,

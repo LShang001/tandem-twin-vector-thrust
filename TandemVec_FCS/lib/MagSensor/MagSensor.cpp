@@ -9,7 +9,7 @@ MagSensor::MagSensor()
 {
     _wire = nullptr;
     _chip = MagChip::NONE;
-    _last = {0.0f, 0.0f, 0.0f, 0};
+    _last = {};
     _seq = 0;
     _calCollecting = false;
     _collector.reset();
@@ -25,7 +25,7 @@ bool MagSensor::begin(TwoWire *wire)
 {
     _wire = wire;
     _chip = MagChip::NONE;
-    _last = {0.0f, 0.0f, 0.0f, 0};
+    _last = {};
     _seq = 0;
     _calCollecting = false;
     _collector.reset();
@@ -111,7 +111,7 @@ bool MagSensor::update()
     float frd[3];
     magmath::magAlignToBody(corrected, rot, zeroOff, frd);
 
-    _last = {frd[0], frd[1], frd[2], ++_seq};
+    _last = {frd[0], frd[1], frd[2], ++_seq, micros()};
     return true;
 }
 

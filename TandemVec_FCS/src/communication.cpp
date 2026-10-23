@@ -33,6 +33,7 @@
 #include "task_scheduler.h" // 调度统计 DBG `tasks` 命令
 #include "ubx_config.h"      // UBX 接收机自动配置（DBG `ubxcfg`）
 #include "MagCalStore.h"     // 磁力计标定持久化（DBG `magcal` 命令）
+#include "mag_measurement_gate.h" // DBG magcal 状态：上层磁门控拒绝原因
 
 // IWDG 喂狗（main.cpp 暴露）：flash export 大页数导出阻塞任务 >3s 时
 // 循环内喂狗，防看门狗复位打断导出（2026-08-08）
@@ -3238,6 +3239,29 @@ void debugMagCalCommand(Uart &serial, char *args)
         serial.print(magSensor.calSampleCount());
         serial.print(F(" cal="));
         serial.println(magSensor.calValid() ? F("VALID") : F("NONE"));
+        serial.print(F("[DBG]   nav: present="));
+        serial.print(mag_status.present ? 1 : 0);
+        serial.print(F(" ref="));
+        serial.print(mag_status.ref_valid ? 1 : 0);
+        serial.print(F(" age="));
+        serial.print(static_cast<unsigned long>(mag_status.age_ms));
+        serial.print(F("ms norm="));
+        serial.print(mag_status.norm_ut, 1);
+        serial.print(F("uT ndev="));
+        serial.print(mag_status.norm_dev_ut, 1);
+        serial.print(F(" hdg="));
+        serial.print(mag_status.heading_error_deg, 1);
+        serial.print(F("deg dip="));
+        serial.print(mag_status.dip_deg, 1);
+        serial.print(F("deg fused="));
+        serial.print(static_cast<unsigned long>(mag_status.fused));
+        serial.print(F(" rej="));
+        serial.print(static_cast<unsigned long>(mag_status.gate_rejected));
+        serial.print(F(" erej="));
+        serial.print(static_cast<unsigned long>(mag_status.ekf_rejected));
+        serial.print(F(" reason="));
+        serial.println(bfs::magGateReasonName(
+            static_cast<bfs::MagGateReason>(mag_status.last_gate_reason)));
 
         // 引导校准进度
         if (magSensor.guideActive() || magSensor.guideStage() != magcal::GuideStage::IDLE)

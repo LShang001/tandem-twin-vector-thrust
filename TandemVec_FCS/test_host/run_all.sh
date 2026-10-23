@@ -49,6 +49,8 @@ run_one "$ROOT/test_host/test_static_aid_profile.cpp"  sap ""
 # 的“误差+饱和+持续时间”检测与动作建议；F3/F4 故障矩阵的固件侧最小模块）：
 run_one "$ROOT/test_host/test_actuator_fault_monitor.cpp" afm ""
 run_one "$ROOT/test_host/test_static_detector.cpp"     sd  ""
+run_one "$ROOT/test_host/test_imu_health_monitor.cpp"  imuhealth ""
+run_one "$ROOT/test_host/test_gnss_consistency.cpp"    gnssc ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""
@@ -99,6 +101,9 @@ run_one "$ROOT/test_host/test_mag_cal.cpp"             mc  "-I$ROOT/lib/MagCal"
 # 大疆式两圈引导校准状态机（lib/MagCal/MagCalGuide.h 纯平台无关——
 # 姿态/旋转/扇区覆盖判定、两阶段自动切换、门限拒绝路径）：
 run_one "$ROOT/test_host/test_mag_guide.cpp"          mg  "-I$ROOT/lib/MagCal"
+# 磁参考场/测量门控（2026-10 生产磁链路）：纯头文件 + Eigen
+run_one "$ROOT/test_host/test_mag_reference.cpp"      mref "-I$ROOT/lib/navigation-main/src"
+run_one "$ROOT/test_host/test_mag_gate.cpp"           mgate ""
 
 # 平台相关算法（依赖 Arduino.h，通过 test_host/stub/Arduino.h 桩在宿主机编译）：
 run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"

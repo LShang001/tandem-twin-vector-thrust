@@ -51,8 +51,9 @@ P = {
     "g": 9.79,          # m/s²
 }
 
-# 理想地磁矢量（NED，µT；长沙附近量级，仅仿真概念验证）
-MAG_NED_UT = np.array([22.0, 0.0, -42.0])
+# 站点参考地磁矢量（NED，µT；与 TandemVec_FCS/include/mag_reference.h 一致）。
+# IGRF-14 2026.0 @ 28.2N/112.9E：N/E/D=35.075/-2.523/+34.079，D 向下为正。
+MAG_NED_UT = np.array([35.075, -2.523, 34.079])
 
 # 悬停转速
 w_hover = math.sqrt(0.5 * P["m"] * P["g"] / P["kT"])

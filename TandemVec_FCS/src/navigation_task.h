@@ -2,7 +2,7 @@
  * @file    navigation_task.h
  * @module  固件/导航（状态估计任务入口）
  * @brief   声明 EKF 组合导航、垂直/水平 KF、双矢量航向与 GNSS 数据有效性接口
- * @details 输入：IMU/GNSS/气压/激光/光流/磁（经 `state_data.h` 全局量）；
+ * @details 输入：IMU/GNSS/气压/激光/光流/磁（MagSensor FRD 经门控，见 navigation_task.cpp）；
  *          处理：`handleNavigationSystem()` 主状态机（初始化→预测→辅助量测→
  *          GNSS 更新→输出桥），以及并行的 `handleVerticalEstimation()` /
  *          `handleHorizontalEstimation()` 独立滤波器；
@@ -141,6 +141,7 @@ void handleNavigationSystem();
 // 生产固件不编译这些符号，也不参与控制/导航逻辑。
 extern int g_sil_nav_debug_imu_count;
 extern int g_sil_nav_debug_imu_invalid;
+extern bool g_sil_nav_debug_imu_failed;
 extern float g_sil_nav_debug_accel[3];
 extern float g_sil_nav_debug_gyro[3];
 extern bool g_sil_nav_debug_static;

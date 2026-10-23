@@ -39,7 +39,7 @@ namespace
   // 启用前必须完成：① 对应芯片轴映射上板标定（MagMath.h 常量表）；
   //                ② 椭球标定（DBG 命令 `magcal start/fit/save`，见 communication.cpp）。
   // 磁力计轮询不受此开关影响（见步骤 7），样本始终保持新鲜，
-  // 供遥测 / EKF 初始化使用；本开关只决定是否馈入姿态解算。
+  // 供遥测 / EKF 初始化与磁矢量融合使用；本开关只决定是否馈入 Madgwick。
   constexpr bool kMagFeedMadgwick = false;
 }
 

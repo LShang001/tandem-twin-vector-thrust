@@ -107,6 +107,40 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("adps2_x",          gnc_tel.alpha_ref_dps2[0]),
     ANO_VAR_FLOAT("adps2_y",          gnc_tel.alpha_ref_dps2[1]),
     ANO_VAR_FLOAT("adps2_z",          gnc_tel.alpha_ref_dps2[2]),
+
+    // ---- 磁测量生产链（2026-10，MagRuntimeStatus；名称满足 MAVLink ≤9 字符）----
+    ANO_VAR_BOOL("mag_on",            mag_status.present),
+    ANO_VAR_BOOL("mag_cal",           mag_status.cal_valid),
+    ANO_VAR_BOOL("mag_refok",         mag_status.ref_valid),
+    ANO_VAR_U32("mag_seq",            mag_status.seq),
+    ANO_VAR_U32("mag_age",            mag_status.age_ms),
+    ANO_VAR_U32("mag_fused",          mag_status.fused),
+    ANO_VAR_U32("mag_rej",            mag_status.gate_rejected),
+    ANO_VAR_U32("mag_erej",           mag_status.ekf_rejected),
+    ANO_VAR_U8("mag_gate",            mag_status.last_gate_reason),
+    ANO_VAR_FLOAT("mag_norm",         mag_status.norm_ut),
+    ANO_VAR_FLOAT("mag_ndev",         mag_status.norm_dev_ut),
+    ANO_VAR_FLOAT("mag_hdg",          mag_status.heading_error_deg),
+    ANO_VAR_FLOAT("mag_kick",         mag_status.last_kick_deg),
+    ANO_VAR_FLOAT("mag_krp",          mag_status.last_kick_rp_deg),
+    ANO_VAR_FLOAT("mag_dip",          mag_status.dip_deg),
+    ANO_VAR_U8("mag_init",            mag_status.init_source),
+
+    // ---- IMU 健康（2026-10，ins_imu_health.h；只读）----
+    ANO_VAR_U8("imu_state",           g_imu_health_state),
+    ANO_VAR_U16("imu_fault",          g_imu_health_flags),
+    ANO_VAR_FLOAT("imu_frz",          g_imu_health_frozen_s),
+    ANO_VAR_FLOAT("imu_drop",         g_imu_health_no_sample_s),
+    ANO_VAR_FLOAT("imu_rate",         g_imu_health_sample_rate_hz),
+
+    // ---- GNSS 慢漂移/欺骗一致性（2026-10，只读）----
+    ANO_VAR_BOOL("gnss_susp",         gnss_status.consistency_suspect),
+    ANO_VAR_U32("gnss_crej",          gnss_status.consistency_reject_count),
+    ANO_VAR_FLOAT("gnss_cres",        gnss_status.consistency_accel_res),
+    ANO_VAR_FLOAT("gnss_cpos",        gnss_status.consistency_pos_res),
+    ANO_VAR_FLOAT("gnss_cflw",        gnss_status.consistency_flow_res),
+    ANO_VAR_FLOAT("gnss_cbar",        gnss_status.consistency_baro_span),
+    ANO_VAR_U8("gnss_creas",          gnss_status.consistency_reason),
 };
 static_assert(sizeof(kAnoVars) / sizeof(kAnoVars[0]) <= ANO_VARS_MAX_COUNT,
               "ano_vars: 注册表超上限");

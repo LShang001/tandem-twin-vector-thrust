@@ -44,7 +44,8 @@ enum class AidSource : uint8_t
   YawGsf = 4,     // GNSS 速度辅助航向估计 (EKF-GSF)，后续可接双天线航向
   StaticGyro = 5, // 静止角速度量测，只约束陀螺零偏，不直接注入姿态
   Baro = 6,       // 气压高度标量量测，观测 NED D 分量 (位置误差状态索引 2)
-  Count = 7
+  Mag = 7,        // 机体系三轴磁矢量量测，约束绝对航向（真北参考场）
+  Count = 8
 };
 
 /*

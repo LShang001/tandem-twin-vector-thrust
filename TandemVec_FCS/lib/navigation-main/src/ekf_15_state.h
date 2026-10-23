@@ -487,6 +487,8 @@ namespace bfs
      * @param[in] mag     初始磁力计读数（定航向；无磁时传伪磁向量）
      * @param[in] ned_vel 初始 NED 速度 [m/s]（通常为零，空中对准时非零）
      * @param[in] lla     初始位置 (纬度 rad, 经度 rad, 椭球高 m)
+     * @param[in] yaw_offset_rad 初始航向偏置 [rad]（真实磁北→真北的磁偏角；
+     *                  伪磁初始化传 0，保持历史确定性行为）
      * @return 无；就地初始化名义状态、P0、Rw/R 与 Fs 静态块
      * @formula 初始姿态 = TiltCompass(accel, mag) 的欧拉角转四元数；
      *          P0 为分块对角（位置/速度/水平姿态/航向/加计零偏/陀螺零偏）；
@@ -503,7 +505,7 @@ namespace bfs
      */
     void Initialize(const Eigen::Vector3f &accel, const Eigen::Vector3f &gyro,
                     const Eigen::Vector3f &mag, const Eigen::Vector3f &ned_vel,
-                    const Eigen::Vector3d &lla)
+                    const Eigen::Vector3d &lla, const float yaw_offset_rad = 0.0f)
     {
       // 初始化入口也做传感器兜底，防止单帧坏数据把初始姿态、零偏或地理坐标置为NaN。
       const Eigen::Vector3f safe_accel = SanitizeAccelForInit(accel);
@@ -646,6 +648,12 @@ namespace bfs
        * - 磁力计 -> 计算 Yaw (定向)
        */
       ins_ypr_rad_ = TiltCompass(safe_accel, safe_mag);
+      // 真实磁力计给出磁北航向；真北导航系需加磁偏角（东偏为正）。
+      // 伪磁初始化保持 yaw_offset=0，避免改变历史确定性行为。
+      if (std::isfinite(yaw_offset_rad))
+      {
+        ins_ypr_rad_(0) = WrapAngleRad(ins_ypr_rad_(0) + yaw_offset_rad);
+      }
 
       /* 4. 将欧拉角转换为四元数，作为系统的初始姿态 */
       quat_ = eul2quat(ins_ypr_rad_);
@@ -1627,6 +1635,11 @@ namespace bfs
     inline Eigen::Vector3d lla_rad_m() const { return ins_lla_rad_m_; }
     // 直接获取 EKF 估计的四元数姿态 (FRD 机体系 → NED 导航系)
     inline Eigen::Quaternionf quat() const { return quat_; }
+    // 水平姿态（roll/pitch）1σ，供磁矢量门控在过渡/大倾斜期判断倾角补偿可信度。
+    inline float tilt_sigma_rad() const
+    {
+      return std::sqrt(std::fmax(p_(6, 6) + p_(7, 7), 0.0f));
+    }
 
     /* P1-5：设置 GNSS 更新是否把航向作为 consider 状态。
        默认 false（原行为）；上层按飞行相位置位，避免在过渡/大倾斜段

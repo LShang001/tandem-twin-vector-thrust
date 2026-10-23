@@ -29,13 +29,15 @@
  *          T7 速度旋转效应不重复计入（P0-0）；T8 航向 consider（P1-5）；
  *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）；
  *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚；
- *          T14 正常跟踪期 50 m GNSS 跳点的显式野值门；T15 机体系磁矢量更新
+ *          T14 正常跟踪期 50 m GNSS 跳点的显式野值门；T15 机体系磁矢量更新；
+ *          T16 真实磁初始化磁偏角偏置与 tilt_sigma 可用性
  * @see     TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md §5.1/§9.6
  */
 #include <cstdio>
 #include <cmath>
 #include <Eigen/Dense>
 #include "ekf_15_state.h"
+#include "mag_reference.h"
 
 using bfs::Ekf15State;
 
@@ -441,6 +443,31 @@ int main()
     const Eigen::Vector3d pos_after(ekf.lat_rad(), ekf.lon_rad(),
                                     ekf.alt_m());
     CHECK("T15 磁更新不影响位置", (pos_after - pos_before).norm() < 1e-4f);
+  }
+
+  // ---- T16 真实磁初始化：磁偏角 offset 把磁北航向转到真北 ----
+  {
+    const Eigen::Vector3f mag_body(
+        bfs::kDefaultMagReference.field_ut[0],
+        bfs::kDefaultMagReference.field_ut[1],
+        bfs::kDefaultMagReference.field_ut[2]);
+    Ekf15State with_offset;
+    with_offset.Initialize(kGravity, Eigen::Vector3f::Zero(), mag_body,
+                           Eigen::Vector3f::Zero(), kLla,
+                           bfs::kDefaultMagReference.declination_rad);
+    Ekf15State without_offset;
+    without_offset.Initialize(kGravity, Eigen::Vector3f::Zero(), mag_body,
+                              Eigen::Vector3f::Zero(), kLla);
+    std::printf("[INFO] T16 yaw with offset=%.5f no offset=%.5f rad\n",
+                with_offset.yaw_rad(), without_offset.yaw_rad());
+    CHECK("T16 加磁偏角后真北航向≈0",
+          std::fabs(with_offset.yaw_rad()) < 1e-4f);
+    CHECK("T16 不加 offset 时航向≈-dec（磁北）",
+          std::fabs(without_offset.yaw_rad() +
+                    bfs::kDefaultMagReference.declination_rad) < 1e-4f);
+    CHECK("T16 tilt_sigma 有限且非负",
+          std::isfinite(with_offset.tilt_sigma_rad()) &&
+              with_offset.tilt_sigma_rad() >= 0.0f);
   }
 
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);

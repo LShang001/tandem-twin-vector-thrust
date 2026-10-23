@@ -774,8 +774,59 @@ struct GnssRuntimeStatus
   float auto_delay_tau_s = 0.0f;
   float auto_delay_residual_mps = 0.0f;
   float auto_delay_sharpness = 0.0f;
+  // GNSS 慢漂移/欺骗一致性监测（2026-10，ins_gnss_consistency.h）
+  bool consistency_suspect = false;
+  uint32_t consistency_reject_count = 0;
+  uint32_t consistency_suspect_count = 0;
+  float consistency_accel_res = 0.0f;
+  float consistency_pos_res = 0.0f;
+  float consistency_flow_res = 0.0f;
+  float consistency_baro_span = 0.0f;
+  uint8_t consistency_reason = 0;
 };
 extern GnssRuntimeStatus gnss_status;
+
+/**
+ * @brief 磁测量运行诊断（只读，供遥测/DBG）
+ * @note `last_gate_reason` 对应 bfs::MagGateReason 的整数值；NAV 层写，
+ *       通信层只读。`init_source`: 0=pseudo，1=real mag。
+ */
+struct MagRuntimeStatus
+{
+  bool present = false;
+  bool fresh = false;
+  bool cal_valid = false;
+  bool ref_valid = false;
+  uint32_t seq = 0;
+  uint32_t age_ms = 0;
+  float norm_ut = 0.0f;
+  float norm_dev_ut = 0.0f;
+  float dip_deg = 0.0f;
+  float dip_dev_deg = 0.0f;
+  float heading_error_deg = 0.0f;
+  float track_dev_deg = 0.0f;
+  float last_kick_deg = 0.0f;    // 最近一次磁更新对 EKF 航向的瞬时修正量
+  float last_kick_rp_deg = 0.0f; // 最近一次磁更新对 roll/pitch 的最大瞬时修正量
+  uint8_t last_gate_reason = 0;
+  uint8_t init_source = 0;
+  uint32_t fused = 0;
+  uint32_t gate_rejected = 0;
+  uint32_t ekf_rejected = 0;
+};
+extern MagRuntimeStatus mag_status;
+
+// IMU 健康监测（2026-10，ins_imu_health.h）；0=Ok, 1=Warning, 2=Failed。
+extern uint8_t g_imu_health_state;
+extern uint16_t g_imu_health_flags;
+extern float g_imu_health_frozen_s;
+extern float g_imu_health_no_sample_s;
+extern float g_imu_health_sample_rate_hz;
+
+// GNSS 一致性拒绝开关：默认只告警；SIL/后续实机验证通过后再启用拒绝。
+// （2026-10 仿真发现 1 s 窗口在爬升/位置保持动态下会被姿态误差触发，
+//  因此基线默认 warn-only，避免把正常 GNSS 拒掉。）
+extern bool g_gnss_consistency_reject_enabled;
+
 extern bfs::AidSourceStatusTracker aid_tracker;
 extern uint32_t static_start_time;
 extern bool is_static_confirmed;

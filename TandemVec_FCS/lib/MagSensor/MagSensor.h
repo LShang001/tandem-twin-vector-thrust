@@ -6,7 +6,7 @@
  *   - 上电时按顺序探测 IST8310 (0x0E) -> QMC5883L (0x0D)，命中即用；
  *   - 两个芯片驱动各自负责芯片坐标系 uT 数据采集；
  *   - 本层统一完成 芯片系 -> 机体 FRD(前-右-下) 的轴对齐（矩阵见 MagMath.h）
- *     与椭球标定（MagCalMath.h），上层（Madgwick / EKF 初始化）只看到 FRD 数据。
+ *     与椭球标定（MagCalMath.h），上层（Madgwick / EKF 磁矢量融合）只看到 FRD 数据。
  *
  * 标定管线（数据顺序，均在芯片系进行，与轴映射解耦）：
  *   原始芯片样本 --(MagCalCollector 采集)--> 椭球拟合(硬铁+软铁)
@@ -47,10 +47,11 @@ enum class MagChip : uint8_t
  */
 struct MagSample
 {
-    float x;      //< 机体前 (uT)
-    float y;      //< 机体右 (uT)
-    float z;      //< 机体下 (uT)
-    uint32_t seq; //< 样本序号（自增；0 = 从未采样）
+    float x = 0.0f;             //< 机体前 (uT)
+    float y = 0.0f;             //< 机体右 (uT)
+    float z = 0.0f;             //< 机体下 (uT)
+    uint32_t seq = 0;           //< 样本序号（自增；0 = 从未采样）
+    uint32_t timestamp_us = 0;  //< 采样时刻 micros()，用于导航新鲜度门控
 };
 
 class MagSensor
@@ -84,6 +85,34 @@ public:
      */
     MagSample sampleFRD() const { return _last; }
     bool fresh() const { return _last.seq != 0; }
+    uint32_t lastUpdateUs() const { return _last.timestamp_us; }
+
+#ifdef FW_SIL_REAL_NAV
+    /**
+     * @brief SIL 专用：注入已标定/已轴对齐的 FRD 样本（生产路径不调用）
+     * @param frd          机体系 FRD 磁场 [uT]
+     * @param timestamp_us 虚拟/真实 micros() 时间戳
+     * @param cal_valid    是否模拟“已有有效 Flash 标定”
+     * @return 输入有限且注入成功
+     * @note 仅用于真实固件 SIL 把传感器模型接到 MagSensor，绕过 I2C 驱动；
+     *       生产固件不编译此接口。
+     */
+    bool silInjectFrdSample(const float frd[3], uint32_t timestamp_us,
+                            bool cal_valid)
+    {
+        if (!std::isfinite(frd[0]) || !std::isfinite(frd[1]) ||
+            !std::isfinite(frd[2]))
+        {
+            return false;
+        }
+        _chip = MagChip::IST8310; // 标记“已探测到”，供导航层走真实路径
+        _cal.identity();
+        _cal.scale = 50.0f; // 模拟一次通过质量门的物理场强标定
+        _cal.valid = cal_valid;
+        _last = {frd[0], frd[1], frd[2], ++_seq, timestamp_us};
+        return true;
+    }
+#endif
 
     // ========================================================================
     // 椭球标定（芯片系；与 MagCalStore 持久化配合使用）
@@ -156,26 +185,26 @@ public:
     uint32_t reinitCount() const;
 
 private:
-    TwoWire *_wire;
-    MagChip _chip;
+    TwoWire *_wire = nullptr;
+    MagChip _chip = MagChip::NONE;
     IST8310 _ist;
     QMC5883L _qmc;
-    MagSample _last;
-    uint32_t _seq;
+    MagSample _last{};
+    uint32_t _seq = 0;
 
     // 椭球标定（芯片系）
-    magcal::MagCalCollector _collector;
-    magcal::MagCalParams _cal;
-    bool _calCollecting;
+    magcal::MagCalCollector _collector{};
+    magcal::MagCalParams _cal{};
+    bool _calCollecting = false;
 
     // 大疆式引导校准
-    magcal::MagCalGuide _guide;
-    bool _guideActive;
-    bool _guideFitReady;
-    bool _guideFitOk;
-    magcal::MagCalStats _guideFitStats;
-    float _lastChip[3];   //< 最近一次芯片系原始样本（引导采集用）
-    bool _lastChipValid;
+    magcal::MagCalGuide _guide{};
+    bool _guideActive = false;
+    bool _guideFitReady = false;
+    bool _guideFitOk = false;
+    magcal::MagCalStats _guideFitStats{};
+    float _lastChip[3] = {0.0f, 0.0f, 0.0f}; //< 最近一次芯片系原始样本（引导采集用）
+    bool _lastChipValid = false;
 };
 
 #endif // MAG_SENSOR_MANAGER_H

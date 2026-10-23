@@ -63,12 +63,14 @@ CUR_SPEC = {"gnss": {"static_gate": True}, "p0_hdg": 0.2}
 CUR_CFG = {"nis_zupt": 16.3}
 CUR_OPTS = {}
 
-# 磁模型（μT，NED）：水平 27 / 垂直向下 39 / 磁偏角 -2°（华南量级）
-MAG_BH, MAG_BD, MAG_DEC = 27.0, 39.0, math.radians(-2.0)
-MAG_B_TOTAL = math.hypot(MAG_BH, MAG_BD)          # 47.43 μT
-MAG_DIP = math.atan2(MAG_BD, MAG_BH)              # 55.3°
-MAG_B_NED = np.array([MAG_BH * math.cos(MAG_DEC),
-                      MAG_BH * math.sin(MAG_DEC), MAG_BD])
+# 站点参考场（μT，NED）：与 TandemVec_FCS/include/mag_reference.h 一致。
+# IGRF-14 2026.0 @ 28.2N/112.9E；D 向下为正，磁偏角为西偏。
+MAG_B_NED = np.array([35.075, -2.523, 34.079])
+MAG_BH = float(math.hypot(MAG_B_NED[0], MAG_B_NED[1]))
+MAG_BD = float(MAG_B_NED[2])
+MAG_DEC = float(math.atan2(MAG_B_NED[1], MAG_B_NED[0]))
+MAG_B_TOTAL = float(np.linalg.norm(MAG_B_NED))
+MAG_DIP = float(math.atan2(MAG_BD, MAG_BH))
 
 
 # ===========================================================================
