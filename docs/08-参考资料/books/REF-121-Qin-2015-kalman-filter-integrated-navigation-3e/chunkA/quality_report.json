@@ -1,0 +1,46 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\books\\REF-121-Qin-2015-kalman-filter-integrated-navigation-3e\\chunkA",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\books\\REF-121-Qin-2015-kalman-filter-integrated-navigation-3e\\chunkA\\a08bcccb-9bb9-4abd-a9e0-b21963826e0c_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 420614,
+    "word_like_count": 74808,
+    "line_count": 8543,
+    "heading_count": 94,
+    "table_row_count": 0,
+    "html_table_count": 5,
+    "latex_block_count": 1245,
+    "latex_inline_count": 2063
+  },
+  "images": {
+    "referenced_count": 19,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 140,
+    "item_count": 3261,
+    "type_counts": {
+      "title": 94,
+      "paragraph": 1629,
+      "image": 16,
+      "page_header": 133,
+      "page_footer": 3,
+      "page_number": 133,
+      "equation_interline": 1245,
+      "chart": 3,
+      "table": 5
+    }
+  },
+  "status": "warn",
+  "warnings": [
+    "表格以 HTML 形式输出（5 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+  ]
+}

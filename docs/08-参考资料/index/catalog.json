@@ -1,0 +1,413 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-21T19:32:23+08:00",
+  "generated_by": "docs/08-参考资料/scripts/check-refs.py --update-catalog",
+  "root": "docs/08-参考资料",
+  "conventions": {
+    "papers": "papers/REF-<nnn>-<第一作者>-<年份>-<关键词>/{paper.pdf,paper.md,notes.md,quality_report.json}",
+    "books": "books/REF-<nnn>-<作者>-<年份>-<关键词>/{book.pdf,book.json,<vol>/full.md}",
+    "md_chars": "paper.md（书籍为 book.md）字符数；缺失为 0",
+    "notes_ok": "notes.md 含 题录/摘要/项目关系/可借鉴/不适用 全部必备节（书籍以 book.json 视为元数据笔记）",
+    "status": "已就位 = PDF + Markdown 齐备；仅题录条目不在本 catalog（见 index/registry_pending.md）"
+  },
+  "counts": {
+    "papers_total": 16,
+    "papers_ready": 16,
+    "books_total": 2,
+    "books_ready": 2
+  },
+  "entries": [
+    {
+      "ref": "REF-104",
+      "type": "paper",
+      "path": "papers/REF-104-Kumar-2020-quaternion-thrust-vectoring",
+      "dir_name": "REF-104-Kumar-2020-quaternion-thrust-vectoring",
+      "status": "已就位",
+      "pdf_sha256": "6000ae86fa47de294ce5541fc6a0441e4be57eda8a86392934afeac3393afe25",
+      "pdf_bytes": 713186,
+      "pdf_pages": null,
+      "md_chars": 42954,
+      "notes_ok": false,
+      "quality": null,
+      "title": "Quaternion Feedback Based Autonomous Control of a Quadcopter UAV with Thrust Vectoring Rotors",
+      "authors": [
+        "Kumar"
+      ],
+      "year": 2020
+    },
+    {
+      "ref": "REF-105",
+      "type": "paper",
+      "path": "papers/REF-105-Enenakpogbe-2024-full-envelope-vectored-thrust",
+      "dir_name": "REF-105-Enenakpogbe-2024-full-envelope-vectored-thrust",
+      "status": "已就位",
+      "pdf_sha256": "0fef47cc96ecdcecd9c5fdc0ebde8887cd8c869ca295a56e7945fe525d61273d",
+      "pdf_bytes": 5733055,
+      "pdf_pages": null,
+      "md_chars": 105048,
+      "notes_ok": false,
+      "quality": "ok",
+      "title": "Full Envelope Control of Over-Actuated Fixed-Wing Vectored Thrust eVTOL †",
+      "authors": [
+        "Enenakpogbe"
+      ],
+      "year": 2024
+    },
+    {
+      "ref": "REF-107",
+      "type": "paper",
+      "path": "papers/REF-107-Jiang-2026-enhanced-INDI-flying-wing",
+      "dir_name": "REF-107-Jiang-2026-enhanced-INDI-flying-wing",
+      "status": "已就位",
+      "pdf_sha256": "c41a23377afd80a4c36ff881cf476bdd56eb91140f30b202d2ba55687fe88fc8",
+      "pdf_bytes": 16765172,
+      "pdf_pages": null,
+      "md_chars": 91635,
+      "notes_ok": false,
+      "quality": "ok",
+      "title": "Enhanced Incremental Nonlinear Dynamic Inversion with Aerodynamic Angular Rate Feedback for Autonomous Wing Rock Recovery of a Flying-Wing UAV",
+      "authors": [
+        "Jiang"
+      ],
+      "year": 2026
+    },
+    {
+      "ref": "REF-108",
+      "type": "paper",
+      "path": "papers/REF-108-Milz-2020-INDI-reference-controller",
+      "dir_name": "REF-108-Milz-2020-INDI-reference-controller",
+      "status": "已就位",
+      "pdf_sha256": "389ba3365d4073672500de7c79c402428aa170adaff2f98471e1de5bd0c85955",
+      "pdf_bytes": 1082089,
+      "pdf_pages": null,
+      "md_chars": 48229,
+      "notes_ok": false,
+      "quality": null,
+      "title": "Design and Evaluation of Advanced Intelligent Flight Controllers",
+      "authors": [
+        "Milz"
+      ],
+      "year": 2020
+    },
+    {
+      "ref": "REF-109",
+      "type": "paper",
+      "path": "papers/REF-109-Pollack-2023-INDI-stability",
+      "dir_name": "REF-109-Pollack-2023-INDI-stability",
+      "status": "已就位",
+      "pdf_sha256": "5b5275fc14b5f0661ee95858a4fd2783a209fbe068a1be38010eddfaba03ec0d",
+      "pdf_bytes": 1711212,
+      "pdf_pages": null,
+      "md_chars": 65979,
+      "notes_ok": false,
+      "quality": null,
+      "title": "Robust Stability and Performance Analysis of Incremental Dynamic Inversion-based Flight Control Laws",
+      "authors": [
+        "Pollack"
+      ],
+      "year": 2023
+    },
+    {
+      "ref": "REF-110",
+      "type": "paper",
+      "path": "papers/REF-110-Simplicio-2025-INDI-launcher",
+      "dir_name": "REF-110-Simplicio-2025-INDI-launcher",
+      "status": "已就位",
+      "pdf_sha256": "acc9aa1e82fbe7aa6bbd93407630fe8ec4579f671fe35a076197c83bd9e61316",
+      "pdf_bytes": 9844086,
+      "pdf_pages": null,
+      "md_chars": 81702,
+      "notes_ok": false,
+      "quality": "ok",
+      "title": "Design and Analysis of a Launcher Flight Control System Based on Incremental Nonlinear Dynamic Inversion †",
+      "authors": [
+        "Simplicio"
+      ],
+      "year": 2025
+    },
+    {
+      "ref": "REF-111",
+      "type": "paper",
+      "path": "papers/REF-111-Jeong-2022-hybrid-INDI-tiltrotor",
+      "dir_name": "REF-111-Jeong-2022-hybrid-INDI-tiltrotor",
+      "status": "已就位",
+      "pdf_sha256": "dc000795660f39bfabd327dfce144cc5400ca8f20ab37846474b3bb3150528ac",
+      "pdf_bytes": 1472427,
+      "pdf_pages": null,
+      "md_chars": 33651,
+      "notes_ok": false,
+      "quality": null,
+      "title": "Robust flight control using Hybrid Incremental Nonlinear Dynamic Inversion Control for Tiltrotor UAV",
+      "authors": [
+        "Jeong"
+      ],
+      "year": 2022
+    },
+    {
+      "ref": "REF-119",
+      "type": "paper",
+      "path": "papers/REF-119-Li-2026-usv-eso-rl-optimal-tracking",
+      "dir_name": "REF-119-Li-2026-usv-eso-rl-optimal-tracking",
+      "status": "已就位",
+      "pdf_sha256": "23a1d353e18030a3b6c0f4e69caa7b920b3765b85c9c5edd8230e29ddd3d8c7c",
+      "pdf_bytes": 5067552,
+      "pdf_pages": null,
+      "md_chars": 85629,
+      "notes_ok": false,
+      "quality": "ok",
+      "title": "Adaptive optimal tracking control for underactuated surface vessels using extended state observer and reinforcement learning",
+      "authors": [
+        "Li"
+      ],
+      "year": 2026
+    },
+    {
+      "ref": "REF-120",
+      "type": "book",
+      "path": "books/REF-120-Qin-2020-inertial-navigation-3e",
+      "status": "已入库",
+      "pdf_sha256": "e9f067a986ec7dcd6928ad5a90906eb50c9e84561f038e28e4f1b0c83904ef9b",
+      "pdf_bytes": 139416403,
+      "pdf_pages": 388,
+      "md_chars": 1005466,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "惯性导航（第三版）",
+      "authors": [
+        "秦永元"
+      ],
+      "year": 2020,
+      "volumes": [
+        {
+          "name": "part0",
+          "page_range": "1-169",
+          "md_chars": 394717,
+          "quality": "warn"
+        },
+        {
+          "name": "part1",
+          "page_range": "170-280",
+          "md_chars": 268046,
+          "quality": "warn"
+        },
+        {
+          "name": "part2",
+          "page_range": "281-388",
+          "md_chars": 342458,
+          "quality": "warn"
+        }
+      ],
+      "isbn": "978-7-03-066408-2"
+    },
+    {
+      "ref": "REF-121",
+      "type": "book",
+      "path": "books/REF-121-Qin-2015-kalman-filter-integrated-navigation-3e",
+      "status": "已入库",
+      "pdf_sha256": "f531bf55d8aa77caf4438eda99c6b9774fd65fad1d34c21823510e4e6ba64e0e",
+      "pdf_bytes": 72104399,
+      "pdf_pages": 408,
+      "md_chars": 1233745,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "卡尔曼滤波与组合导航原理（第3版）",
+      "authors": [
+        "秦永元",
+        "张洪钺",
+        "汪叔华"
+      ],
+      "year": 2015,
+      "volumes": [
+        {
+          "name": "toc_probe",
+          "page_range": "1-24",
+          "md_chars": 45697,
+          "quality": "ok"
+        },
+        {
+          "name": "chunkA",
+          "page_range": "1-140",
+          "md_chars": 420614,
+          "quality": "warn"
+        },
+        {
+          "name": "chunkB",
+          "page_range": "141-220",
+          "md_chars": 312824,
+          "quality": "warn"
+        },
+        {
+          "name": "part2",
+          "page_range": "221-408",
+          "md_chars": 500020,
+          "quality": "warn"
+        }
+      ],
+      "isbn": "978-7-5612-4350-3"
+    },
+    {
+      "ref": "REF-136",
+      "type": "paper",
+      "path": "papers/REF-136-Sola-2017-quaternion-eskf",
+      "dir_name": "REF-136-Sola-2017-quaternion-eskf",
+      "status": "已就位",
+      "pdf_sha256": "6a3d3d3933c425eb6cef049290c2b48b71a90f5189e9810575d83d3a922faaca",
+      "pdf_bytes": 1686327,
+      "pdf_pages": null,
+      "md_chars": 258932,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "Quaternion kinematics for the error-state Kalman filter",
+      "authors": [
+        "Joan Solà"
+      ],
+      "year": 2017
+    },
+    {
+      "ref": "REF-138",
+      "type": "paper",
+      "path": "papers/REF-138-Hesch-2014-consistency-vision-aided-ins",
+      "dir_name": "REF-138-Hesch-2014-consistency-vision-aided-ins",
+      "status": "已就位",
+      "pdf_sha256": "60c60fa6d63525d961a02fc01ab1d3a37606e8cccd5bfa13cf2f01fbb6deb0c2",
+      "pdf_bytes": 1218587,
+      "pdf_pages": null,
+      "md_chars": 118190,
+      "notes_ok": true,
+      "quality": "ok",
+      "title": "Consistency Analysis and Improvement of Vision-aided Inertial Navigation",
+      "authors": [
+        "Joel A. Hesch",
+        "Dimitrios G. Kottas",
+        "Sean L. Bowman",
+        "Stergios I. Roumeliotis"
+      ],
+      "year": 2014
+    },
+    {
+      "ref": "REF-140",
+      "type": "paper",
+      "path": "papers/REF-140-Barrau-2017-inekf-stable-observer",
+      "dir_name": "REF-140-Barrau-2017-inekf-stable-observer",
+      "status": "已就位",
+      "pdf_sha256": "ca81b8ef0fc135e6d67a9531f30188476a2d927ee47a95e83d0f9da4f8a91e37",
+      "pdf_bytes": 503153,
+      "pdf_pages": null,
+      "md_chars": 129734,
+      "notes_ok": true,
+      "quality": "ok",
+      "title": "The Invariant Extended Kalman filter as a stable observer",
+      "authors": [
+        "Axel Barrau",
+        "Silvère Bonnabel"
+      ],
+      "year": 2017
+    },
+    {
+      "ref": "REF-144",
+      "type": "paper",
+      "path": "papers/REF-144-Cui-2023-observability-ckf-gnss-ins",
+      "dir_name": "REF-144-Cui-2023-observability-ckf-gnss-ins",
+      "status": "已就位",
+      "pdf_sha256": "255fa86f3bf13417504f3d6e666db8c738d4b16294d1fbc876f1891243bbc3b2",
+      "pdf_bytes": 4185355,
+      "pdf_pages": null,
+      "md_chars": 77058,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "Observability-Constrained Resampling-Free Cubature Kalman Filter for GNSS/INS with Measurement Outliers",
+      "authors": [
+        "Bingbo Cui",
+        "Wu Chen",
+        "Duojie Weng",
+        "Xinhua Wei",
+        "Zeyu Sun",
+        "Yan Zhao",
+        "Yufei Liu"
+      ],
+      "year": 2023
+    },
+    {
+      "ref": "REF-145",
+      "type": "paper",
+      "path": "papers/REF-145-Zhao-2025-mf-iekf-federated",
+      "dir_name": "REF-145-Zhao-2025-mf-iekf-federated",
+      "status": "已就位",
+      "pdf_sha256": "3c5700f92dc2d9d689bb792c6c7f481684a7345b7e4e9f620a7b26b3d6eaadfa",
+      "pdf_bytes": 4443211,
+      "pdf_pages": null,
+      "md_chars": 112521,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "MF-IEKF: A Multiplicative Federated Invariant Extended Kalman Filter for INS/GNSS",
+      "authors": [
+        "Lebin Zhao",
+        "Tao Chen",
+        "Peipei Yuan",
+        "Xiaoyang Li",
+        "Yang Luo"
+      ],
+      "year": 2026
+    },
+    {
+      "ref": "REF-154",
+      "type": "paper",
+      "path": "papers/REF-154-Liu-2023-robust-protection-level-gnss-ins",
+      "dir_name": "REF-154-Liu-2023-robust-protection-level-gnss-ins",
+      "status": "已就位",
+      "pdf_sha256": "3d4550dbf7b5603be7b747cc9b69e996b115991f9c7b8d780cd183e309e64107",
+      "pdf_bytes": 3385649,
+      "pdf_pages": null,
+      "md_chars": 75199,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "Robust state and protection‑level estimation within tightly coupled GNSS/INS navigation system",
+      "authors": [
+        "Shuchen Liu",
+        "Kaizheng Wang",
+        "Dirk Abel"
+      ],
+      "year": 2023
+    },
+    {
+      "ref": "REF-163",
+      "type": "paper",
+      "path": "papers/REF-163-Laidig-2023-vqf",
+      "dir_name": "REF-163-Laidig-2023-vqf",
+      "status": "已就位",
+      "pdf_sha256": "15cd9cd07267cd36bb6bd205822dc06962136d2f5558a2c91232040b1128dc7d",
+      "pdf_bytes": 1696579,
+      "pdf_pages": null,
+      "md_chars": 105491,
+      "notes_ok": true,
+      "quality": "warn",
+      "title": "VQF: Highly Accurate IMU Orientation Estimation with Bias Estimation and Magnetic Disturbance Rejection⋆",
+      "authors": [
+        "Daniel Laidig",
+        "Thomas Seel"
+      ],
+      "year": 2023
+    },
+    {
+      "ref": "REF-169",
+      "type": "paper",
+      "path": "papers/REF-169-Forster-2017-on-manifold-preintegration",
+      "dir_name": "REF-169-Forster-2017-on-manifold-preintegration",
+      "status": "已就位",
+      "pdf_sha256": "214b8bee53e1fb6218c1cec1352d74c24951feec815517e6a0cc6dfcf1fd8f32",
+      "pdf_bytes": 3816161,
+      "pdf_pages": null,
+      "md_chars": 150471,
+      "notes_ok": true,
+      "quality": "ok",
+      "title": "On-Manifold Preintegration for Real-Time Visual-Inertial Odometry",
+      "authors": [
+        "Christian Forster",
+        "Luca Carlone",
+        "Frank Dellaert",
+        "Davide Scaramuzza"
+      ],
+      "year": 2017
+    }
+  ]
+}

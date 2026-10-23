@@ -1,0 +1,43 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-140-Barrau-2017-inekf-stable-observer",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-140-Barrau-2017-inekf-stable-observer\\452bb325-3e67-4180-ad77-cb718d4f49cd_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 129734,
+    "word_like_count": 23363,
+    "line_count": 1093,
+    "heading_count": 47,
+    "table_row_count": 0,
+    "html_table_count": 0,
+    "latex_block_count": 127,
+    "latex_inline_count": 555
+  },
+  "images": {
+    "referenced_count": 13,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 36,
+    "item_count": 431,
+    "type_counts": {
+      "title": 47,
+      "paragraph": 216,
+      "page_aside_text": 1,
+      "page_footnote": 1,
+      "equation_interline": 127,
+      "list": 26,
+      "chart": 12,
+      "image": 1
+    }
+  },
+  "status": "ok",
+  "warnings": []
+}

@@ -1,0 +1,48 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-144-Cui-2023-observability-ckf-gnss-ins",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-144-Cui-2023-observability-ckf-gnss-ins\\a135a4ec-dc60-4d3c-b813-d4ec8c478965_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 77058,
+    "word_like_count": 12861,
+    "line_count": 657,
+    "heading_count": 13,
+    "table_row_count": 0,
+    "html_table_count": 3,
+    "latex_block_count": 58,
+    "latex_inline_count": 250
+  },
+  "images": {
+    "referenced_count": 22,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 21,
+    "item_count": 272,
+    "type_counts": {
+      "paragraph": 89,
+      "title": 13,
+      "image": 3,
+      "page_header": 24,
+      "page_footer": 2,
+      "page_number": 19,
+      "equation_interline": 58,
+      "algorithm": 2,
+      "table": 3,
+      "chart": 19,
+      "list": 40
+    }
+  },
+  "status": "warn",
+  "warnings": [
+    "表格以 HTML 形式输出（3 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+  ]
+}

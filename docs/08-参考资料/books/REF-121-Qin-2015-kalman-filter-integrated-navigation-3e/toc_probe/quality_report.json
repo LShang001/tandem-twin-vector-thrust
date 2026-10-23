@@ -1,0 +1,42 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\books\\REF-121-Qin-2021-kalman-filter-integrated-navigation-3e\\toc_probe",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\books\\REF-121-Qin-2021-kalman-filter-integrated-navigation-3e\\toc_probe\\262a5585-2f4b-41ee-8132-8d87c3f67baa_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 45697,
+    "word_like_count": 7226,
+    "line_count": 1009,
+    "heading_count": 19,
+    "table_row_count": 0,
+    "html_table_count": 0,
+    "latex_block_count": 110,
+    "latex_inline_count": 182
+  },
+  "images": {
+    "referenced_count": 2,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 24,
+    "item_count": 397,
+    "type_counts": {
+      "title": 19,
+      "paragraph": 228,
+      "image": 2,
+      "page_header": 18,
+      "page_footer": 3,
+      "page_number": 17,
+      "equation_interline": 110
+    }
+  },
+  "status": "ok",
+  "warnings": []
+}

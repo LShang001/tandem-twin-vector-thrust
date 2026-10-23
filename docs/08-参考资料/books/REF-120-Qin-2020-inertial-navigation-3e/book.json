@@ -1,0 +1,155 @@
+{
+ "ref": "REF-120",
+ "type": "book",
+ "title": "惯性导航（第三版）",
+ "title_en": "Inertial Navigation (3rd Edition)",
+ "authors": [
+  "秦永元"
+ ],
+ "publisher": "科学出版社",
+ "publisher_place": "北京",
+ "year": 2020,
+ "edition": "第3版",
+ "isbn": "978-7-03-066408-2",
+ "isbn_source": "PDF 第 3 页文本层检出 'ISBN 978-7-03-<l66408-2'（数字 0 被识别成 '<l'，属文本层/OCR 瑕疵）；与 index/bibliography.md、参考资料注册表.md 登记值一致",
+ "language": "zh",
+ "pdf": {
+  "path": "book.pdf",
+  "bytes": 139416403,
+  "sha256": "e9f067a986ec7dcd6928ad5a90906eb50c9e84561f038e28e4f1b0c83904ef9b",
+  "header_magic": "%PDF-",
+  "header_ok": true,
+  "pdf_pages": 388,
+  "has_text_layer": true
+ },
+ "print_page_offset": {
+  "rule": "PDF 页 = 印刷页 + 8",
+  "evidence": "index/bibliography.md §8；part1 起点 PDF p.170 对应印刷页 162",
+  "note": "仅用于按印刷页引用时换算，未逐页抽样复核"
+ },
+ "volumes": [
+  {
+   "name": "part0",
+   "source": "book.pdf",
+   "page_range": "1-169",
+   "pdf_pages": 169,
+   "output_dir": "part0",
+   "markdown": "part0/full.md",
+   "md_chars": 394717,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": false,
+   "quality_status": "warn",
+   "quality_warnings": [
+    "表格以 HTML 形式输出（3 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+   ],
+   "image_missing": 0
+  },
+  {
+   "name": "part1",
+   "source": "book.pdf",
+   "page_range": "170-280",
+   "pdf_pages": 111,
+   "output_dir": "part1",
+   "markdown": "part1/full.md",
+   "md_chars": 268046,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": false,
+   "quality_status": "warn",
+   "quality_warnings": [
+    "表格以 HTML 形式输出（12 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+   ],
+   "image_missing": 0
+  },
+  {
+   "name": "part2",
+   "source": "book.pdf",
+   "page_range": "281-388",
+   "pdf_pages": 108,
+   "output_dir": "part2",
+   "markdown": "part2/full.md",
+   "md_chars": 342458,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": false,
+   "quality_status": "warn",
+   "quality_warnings": [
+    "表格以 HTML 形式输出（9 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+   ],
+   "image_missing": 0
+  }
+ ],
+ "coverage": {
+  "converted_ranges": [
+   "1-169",
+   "170-280",
+   "281-388"
+  ],
+  "not_converted_ranges": [],
+  "note": "全文 PDF 1–388 已转换；导航算法重点为第三篇 Ch7–Ch10。"
+ },
+ "merged_artifacts": [
+  {
+   "path": "book.md",
+   "chars": 610738,
+   "content": "part1 + part2 合并全文"
+  },
+  {
+   "path": "chapters/",
+   "content": "按章节切分的 Markdown（ch7 惯导基本关系 / ch8 平台式惯导 / ch9 捷联式惯导 / ch10 极区惯性导航）"
+  },
+  {
+   "path": "ch9_extract.txt",
+   "chars": 61605,
+   "content": "第 9 章要点抽取（研究辅助产物，非 MinerU 原始输出）"
+  }
+ ],
+ "quality_status": "warn",
+ "quality_summary": "两卷均 vlm 转换、无 OCR、图片零缺失；唯一告警为 HTML 表格（共 21 张），不影响正文与公式，若下游需管道表可跑 mineru_postprocess.py。个别小节标题编号顺序被打乱（如 §9.4.4），检索建议按式号/关键词。",
+ "conversion": {
+  "tool": "MinerU v4 (mineru_convert.py)",
+  "model_version": "vlm",
+  "language": "ch",
+  "ocr": false,
+  "formula": true,
+  "table": true,
+  "converted_at": "2026-10-21",
+  "converted_by": "Lead 侧书籍流水线（ref-librarian 仅核验元数据，未重复转换）"
+ },
+ "usage": {
+  "priority_chapters": "Ch7-Ch9（印刷页 162-388 对应 PDF 170-388）",
+  "primary_consumers": [
+   "sins-theory (task-2)",
+   "heading-mag (task-5)",
+   "kf-theory"
+  ],
+  "key_sections_available": [
+   "§9.3.3 尾部（式 9.3.30-9.3.33 双子样/四子样系数、四元数毕卡更新）",
+   "§9.4 锥运动与旋转矢量优化（9.4.1-9.4.4）",
+   "§9.5 姿态更新算法（欧拉角/方向余弦/罗德参数/比较）",
+   "§9.6 划桨效应与补偿（9.6.1-9.6.3）",
+   "§9.7 位置更新与涡卷效应（9.7.1-9.7.4）",
+   "§9.8 捷联惯导误差模型",
+   "§9.9 初始对准（9.9.1 粗对准 / 9.9.2 参数辨识法精对准 / 9.9.3 卡尔曼滤波法精对准）",
+   "§9.10 传递对准（9.10.1-9.10.2）",
+   "§9.11 捷联惯性器件余度技术"
+  ]
+ },
+ "license": "个人研究副本，PDF 不入公开仓库；转换后 Markdown/笔记可入库（见 TEAM-BRIEF §7）",
+ "updated_at": "2026-10-21",
+ "chapters": [
+  "ch1",
+  "ch2",
+  "ch3",
+  "ch4",
+  "ch5",
+  "ch6",
+  "ch7",
+  "ch8",
+  "ch9",
+  "ch10"
+ ],
+ "ocr_errata": "ocr-errata.md",
+ "ocr_status": "partial: front matter/headings/key formulas visually checked; body global scan"
+}

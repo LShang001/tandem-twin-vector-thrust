@@ -1,0 +1,45 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-169-Forster-2017-on-manifold-preintegration",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-169-Forster-2017-on-manifold-preintegration\\d96c9ce7-e927-4d04-8b5d-97c1bbe959ea_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 150471,
+    "word_like_count": 24213,
+    "line_count": 1139,
+    "heading_count": 33,
+    "table_row_count": 0,
+    "html_table_count": 0,
+    "latex_block_count": 99,
+    "latex_inline_count": 340
+  },
+  "images": {
+    "referenced_count": 31,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 21,
+    "item_count": 511,
+    "type_counts": {
+      "paragraph": 237,
+      "page_number": 21,
+      "page_aside_text": 1,
+      "title": 33,
+      "page_footnote": 13,
+      "image": 11,
+      "equation_interline": 99,
+      "chart": 20,
+      "list": 75,
+      "page_header": 1
+    }
+  },
+  "status": "ok",
+  "warnings": []
+}

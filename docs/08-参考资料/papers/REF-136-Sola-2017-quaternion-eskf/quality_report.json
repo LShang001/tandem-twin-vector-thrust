@@ -1,0 +1,47 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-136-Sola-2017-quaternion-eskf",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-136-Sola-2017-quaternion-eskf\\43cb94a4-fb1d-42a2-9847-05790f87fef5_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 258932,
+    "word_like_count": 42403,
+    "line_count": 4145,
+    "heading_count": 123,
+    "table_row_count": 0,
+    "html_table_count": 5,
+    "latex_block_count": 598,
+    "latex_inline_count": 971
+  },
+  "images": {
+    "referenced_count": 14,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 95,
+    "item_count": 1580,
+    "type_counts": {
+      "title": 123,
+      "paragraph": 655,
+      "page_aside_text": 1,
+      "page_number": 95,
+      "equation_interline": 598,
+      "page_footnote": 73,
+      "chart": 1,
+      "table": 5,
+      "image": 13,
+      "list": 16
+    }
+  },
+  "status": "warn",
+  "warnings": [
+    "表格以 HTML 形式输出（5 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+  ]
+}

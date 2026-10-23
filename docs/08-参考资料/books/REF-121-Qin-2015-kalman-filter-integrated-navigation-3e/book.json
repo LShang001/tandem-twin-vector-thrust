@@ -1,0 +1,160 @@
+{
+ "ref": "REF-121",
+ "type": "book",
+ "title": "卡尔曼滤波与组合导航原理（第3版）",
+ "title_en": "Kalman Filtering and Integrated Navigation Principles (3rd Edition)",
+ "authors": [
+  "秦永元",
+  "张洪钺",
+  "汪叔华"
+ ],
+ "publisher": "西北工业大学出版社",
+ "publisher_place": "西安",
+ "year": 2015,
+ "edition": "第3版",
+ "isbn": "978-7-5612-4350-3",
+ "isbn_source": "index/bibliography.md §1 与 参考资料注册表.md 登记值；**PDF 前 12 页文本层未检出 ISBN 字符串**（纯扫描件、无可靠文本层），未逐页 OCR 核实 —— 登记时请以纸本版权页为准",
+ "language": "zh",
+ "pdf": {
+  "path": "book.pdf",
+  "bytes": 72104399,
+  "sha256": "f531bf55d8aa77caf4438eda99c6b9774fd65fad1d34c21823510e4e6ba64e0e",
+  "header_magic": "%PDF-",
+  "header_ok": true,
+  "pdf_pages": 408,
+  "has_text_layer": false,
+  "note": "扫描件：自带文本层为乱码（如 '革统/础'），不可作为文本源；全部正文依赖 MinerU OCR"
+ },
+ "print_page_offset": {
+  "rule": "按 OCR 后的章节标题定位，不依赖固定偏移",
+  "evidence": "index/bibliography.md §8",
+  "note": "扫描件页码与 PDF 页码的对应关系未逐页建立"
+ },
+ "volumes": [
+  {
+   "name": "toc_probe",
+   "source": "book.pdf",
+   "page_range": "1-24",
+   "output_dir": "toc_probe",
+   "markdown": "toc_probe/full.md",
+   "md_chars": 45697,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": true,
+   "quality_status": "ok",
+   "quality_warnings": [],
+   "image_missing": 0,
+   "purpose": "目录/前 24 页侦察卷（确认章节结构与页码）"
+  },
+  {
+   "name": "chunkA",
+   "source": "book.pdf",
+   "split_file": "book_p001-140.pdf",
+   "page_range": "1-140",
+   "output_dir": "chunkA",
+   "markdown": "chunkA/full.md",
+   "md_chars": 420614,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": true,
+   "quality_status": "warn",
+   "quality_warnings": [
+    "表格以 HTML 形式输出（5 张 <table>），Markdown 管道表 0 行"
+   ],
+   "image_missing": 0
+  },
+  {
+   "name": "chunkB",
+   "source": "book.pdf",
+   "split_file": "book_p141-220.pdf",
+   "page_range": "141-220",
+   "output_dir": "chunkB",
+   "markdown": "chunkB/full.md",
+   "md_chars": 312824,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": true,
+   "quality_status": "warn",
+   "quality_warnings": [
+    "表格以 HTML 形式输出（1 张 <table>），Markdown 管道表 0 行"
+   ],
+   "image_missing": 0
+  },
+  {
+   "name": "part2",
+   "source": "book.pdf",
+   "page_range": "221-408",
+   "output_dir": "part2",
+   "markdown": "part2/full.md",
+   "md_chars": 500020,
+   "model_version": "vlm",
+   "language": "ch",
+   "ocr": true,
+   "quality_status": "warn",
+   "quality_warnings": [
+    "表格以 HTML 形式输出（27 张 <table>），Markdown 管道表 0 行",
+    "content_list 含 30 个 table 块，Markdown 仅解析出 27 张表，可能有表格被合并或丢失"
+   ],
+   "image_missing": 0
+  }
+ ],
+ "coverage": {
+  "converted_ranges": [
+   "1-24 (toc_probe)",
+   "1-140 (chunkA)",
+   "141-220 (chunkB)",
+   "221-408 (part2)"
+  ],
+  "not_converted_ranges": [],
+  "note": "全书 408 页已覆盖（toc_probe 与 chunkA 前 24 页重叠，仅用于目录侦察）。chunkA/chunkB 由拆分 PDF 转换，part2 直接由 book.pdf 指定页范围转换，三者不重叠。"
+ },
+ "merged_artifacts": [
+  {
+   "path": "book.md",
+   "chars": 1233745,
+   "content": "合并全文（chunkA + chunkB + part2）"
+  },
+  {
+   "path": "chapters/",
+   "content": "按章切分：ch1 绪论 / ch2 最优估计与 KF 基本方程 / ch3 滤波技术处理 / ch4 滤波稳定性 / ch5 滤波系统校正 / ch6 滤波推广(EKF-UKF-PF) / ch7 容错组合导航设计 / ch8 组合导航系统设计"
+  },
+  {
+   "path": "book_p001-140.pdf",
+   "content": "拆分卷（p.1-140），用于 chunkA 转换"
+  },
+  {
+   "path": "book_p141-220.pdf",
+   "content": "拆分卷（p.141-220），用于 chunkB 转换"
+  }
+ ],
+ "quality_status": "warn",
+ "quality_summary": "四卷均 OCR=true + vlm；图片零缺失。告警集中在 HTML 表格（共 33 张）与 part2 的表格块数不一致（30 块 vs 27 表），属表格结构保真度问题，正文与公式可用。扫描件质量决定公式 OCR 风险高于 REF-120，关键公式建议页面渲染交叉核对（heading-mag 已采用此法）。",
+ "conversion": {
+  "tool": "MinerU v4 (mineru_convert.py)",
+  "model_version": "vlm",
+  "language": "ch",
+  "ocr": true,
+  "formula": true,
+  "table": true,
+  "converted_at": "2026-10-21",
+  "converted_by": "Lead 侧书籍流水线（ref-librarian 仅核验元数据，未重复转换）"
+ },
+ "usage": {
+  "priority_chapters": "Ch3、Ch4、Ch6、Ch7、Ch8",
+  "primary_consumers": [
+   "kf-theory (task-3)",
+   "gnss-robust (task-4)",
+   "heading-mag (task-5)"
+  ],
+  "key_sections_available": [
+   "§8.3.6 磁航向仪（book.md:18289）",
+   "§8.3.3 大气数据系统（book.md:17919）",
+   "§8.4 惯性导航系统误差模型（book.md:18469）",
+   "§8.5 卡尔曼滤波理论在惯导初始对准中的应用（book.md:19408）"
+  ]
+ },
+ "license": "个人研究副本，PDF 不入公开仓库；转换后 Markdown/笔记可入库（见 TEAM-BRIEF §7）",
+ "updated_at": "2026-10-21",
+ "ocr_errata": "ocr-errata.md",
+ "ocr_status": "spot-check p84/255/291 + global scan; no systemic OCR errors found"
+}

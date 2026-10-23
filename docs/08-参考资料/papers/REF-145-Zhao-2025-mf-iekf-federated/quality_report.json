@@ -1,0 +1,48 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-145-Zhao-2025-mf-iekf-federated",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-145-Zhao-2025-mf-iekf-federated\\ad8bfd35-fac4-4af1-9fa9-bf667bb2ba65_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 112521,
+    "word_like_count": 18481,
+    "line_count": 1096,
+    "heading_count": 21,
+    "table_row_count": 0,
+    "html_table_count": 2,
+    "latex_block_count": 119,
+    "latex_inline_count": 228
+  },
+  "images": {
+    "referenced_count": 21,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 31,
+    "item_count": 496,
+    "type_counts": {
+      "paragraph": 191,
+      "title": 21,
+      "page_header": 35,
+      "page_footer": 32,
+      "page_number": 28,
+      "image": 1,
+      "equation_interline": 119,
+      "algorithm": 1,
+      "chart": 20,
+      "table": 2,
+      "list": 46
+    }
+  },
+  "status": "warn",
+  "warnings": [
+    "表格以 HTML 形式输出（2 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+  ]
+}

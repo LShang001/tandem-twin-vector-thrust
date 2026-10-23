@@ -1,0 +1,46 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-138-Hesch-2014-consistency-vision-aided-ins",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-138-Hesch-2014-consistency-vision-aided-ins\\82c5aef3-e60f-4913-a577-6ee08e08ceb2_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 118190,
+    "word_like_count": 19394,
+    "line_count": 1178,
+    "heading_count": 30,
+    "table_row_count": 0,
+    "html_table_count": 0,
+    "latex_block_count": 129,
+    "latex_inline_count": 250
+  },
+  "images": {
+    "referenced_count": 31,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 19,
+    "item_count": 504,
+    "type_counts": {
+      "title": 30,
+      "paragraph": 204,
+      "page_footer": 1,
+      "page_number": 19,
+      "page_header": 19,
+      "page_footnote": 22,
+      "image": 11,
+      "equation_interline": 129,
+      "algorithm": 1,
+      "chart": 20,
+      "list": 48
+    }
+  },
+  "status": "ok",
+  "warnings": []
+}

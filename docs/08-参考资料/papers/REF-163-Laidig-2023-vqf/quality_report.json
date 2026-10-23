@@ -1,0 +1,51 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-163-Laidig-2023-vqf",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\papers\\REF-163-Laidig-2023-vqf\\52381268-f251-416a-8ee7-ad6159c0bbcc_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 105491,
+    "word_like_count": 17143,
+    "line_count": 905,
+    "heading_count": 35,
+    "table_row_count": 0,
+    "html_table_count": 3,
+    "latex_block_count": 58,
+    "latex_inline_count": 271
+  },
+  "images": {
+    "referenced_count": 25,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 22,
+    "item_count": 386,
+    "type_counts": {
+      "title": 35,
+      "paragraph": 167,
+      "page_aside_text": 1,
+      "page_footnote": 3,
+      "page_footer": 22,
+      "page_number": 22,
+      "image": 6,
+      "equation_interline": 58,
+      "chart": 19,
+      "page_header": 16,
+      "algorithm": 3,
+      "table": 3,
+      "list": 30,
+      "code": 1
+    }
+  },
+  "status": "warn",
+  "warnings": [
+    "表格以 HTML 形式输出（3 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+  ]
+}

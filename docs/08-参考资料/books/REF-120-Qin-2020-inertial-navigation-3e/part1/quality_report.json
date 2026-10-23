@@ -1,0 +1,45 @@
+{
+  "output_dir": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\books\\REF-120-Qin-2020-inertial-navigation-3e\\part1",
+  "files": {
+    "markdown_exists": true,
+    "layout_json_exists": true,
+    "manifest_exists": true,
+    "content_list_v2_exists": true,
+    "content_list_exists": true,
+    "content_list_path": "D:\\纵列双发矢量推力飞行器\\docs\\08-参考资料\\books\\REF-120-Qin-2020-inertial-navigation-3e\\part1\\828773f1-3673-4f57-8174-6bafc081e4ca_content_list_v2.json"
+  },
+  "markdown": {
+    "char_count": 268046,
+    "word_like_count": 48983,
+    "line_count": 5632,
+    "heading_count": 116,
+    "table_row_count": 0,
+    "html_table_count": 12,
+    "latex_block_count": 812,
+    "latex_inline_count": 1054
+  },
+  "images": {
+    "referenced_count": 71,
+    "missing_count": 0,
+    "missing": []
+  },
+  "content_list": {
+    "schema": "nested_pages",
+    "page_count": 111,
+    "item_count": 2182,
+    "type_counts": {
+      "paragraph": 957,
+      "equation_interline": 812,
+      "title": 116,
+      "page_number": 107,
+      "page_header": 107,
+      "image": 70,
+      "table": 12,
+      "chart": 1
+    }
+  },
+  "status": "warn",
+  "warnings": [
+    "表格以 HTML 形式输出（12 张 <table>），Markdown 管道表 0 行；下游按 | 解析会丢结构，需先展平（见 mineru_postprocess.py）"
+  ]
+}
