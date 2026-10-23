@@ -4098,8 +4098,11 @@ namespace bfs
       }
 
       float accumulated_s = 0.0f;
+      // 最新快照的年龄为 0，误差即 delay_s；若 delay 小于首帧 dt/2，
+      // 它就是最近邻。此前 best_idx=-1 会让 sub-frame 延时直接返回 false，
+      // require_delayed_snapshot=true 的 GNSS 更新因而被整帧拒绝。
       float best_error_s = delay_s;
-      int best_idx = -1;
+      int best_idx = latest_idx;
       int cursor = latest_idx;
       for (int steps_back = 1; steps_back < buf_count_; ++steps_back)
       {

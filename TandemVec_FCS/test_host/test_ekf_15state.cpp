@@ -277,6 +277,23 @@ int main()
     }
   }
 
+  // ---- T12 sub-frame 延迟量测：age < 首帧 dt/2 仍应命中最新快照并融合 ----
+  // 回归：GetDelayedSnapshotIndexByAge 曾在 delay < 0.5*dt 时 best_idx=-1
+  // 返回 false，导致 require_delayed_snapshot=true 的 GNSS 更新全部被拒。
+  {
+    Ekf15State ekf = makeInit();
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto r1 = ekf.MeasurementUpdateDetailed(
+        Eigen::Vector3f::Zero(), kLla, 0.005f, 0.002f, true);
+    CHECK("T12 sub-frame age=2ms 延迟 GNSS 融合", r1.fused);
+    for (int i = 0; i < 10; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto r2 = ekf.MeasurementUpdateDetailed(
+        Eigen::Vector3f::Zero(), kLla, 0.005f, 0.004f, true);
+    CHECK("T12 sub-frame age=4ms 延迟 GNSS 融合", r2.fused);
+  }
+
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
