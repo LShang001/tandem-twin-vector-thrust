@@ -5,6 +5,9 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 
+# Shell 脚本必须 LF（Git Bash/WSL 对 CRLF 的 set/for 解析会失败）
+*.sh text eol=lf
+
 # 二进制资产（当前及未来）
 *.png binary
 *.jpg binary
