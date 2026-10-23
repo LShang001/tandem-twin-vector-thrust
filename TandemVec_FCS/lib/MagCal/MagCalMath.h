@@ -10,6 +10,8 @@
  *   3. Jacobi 特征分解 Q = VΛVᵀ（Q 必须正定，否则拒绝）；
  *   4. 白化矩阵  M = Λ^{1/2}·Vᵀ / √s（满足 MᵀM = Q/s），
  *      使 c = M·(x−b) 在椭球面上恒有 |c| = 1（被拉伸的轴压回单位球）。
+ *   5. 质量门通过后把 scale 设为平均原始场强（µT），因此对上层输出
+ *      c = scale·M·(x−b) 是物理磁场（|c|≈50 µT），不是单位球。
  *
  * 标定在"芯片系"进行（与安装方向的轴映射解耦——轴映射表改了标定依然有效），
  * 应用顺序： raw(芯片) → 标定(芯片系) → 轴映射(机体FRD)，由 MagSensor 层保证。
@@ -42,7 +44,7 @@ struct MagCalParams
 {
     float hardIron[3];   //< 硬铁偏移 b (uT, 芯片系)
     float softIron[3][3]; //< 软铁矩阵 M：c = M·(raw − b)，|c| = 1（单位球）
-    float scale;         //< 输出场强缩放 (uT)；<=0 表示保持单位球（归一化输出）
+    float scale;         //< 输出场强缩放 (uT)；有效标定必须为物理场强（约 5–200 uT）
     bool valid;          //< 是否有效（身份参数时 false = 未标定）
 
     void identity()
@@ -74,7 +76,8 @@ struct MagCalStats
 
 /**
  * @brief 应用标定：out = scale·M·(in − b)，芯片系
- * @note scale ≤ 0 时按 1.0 处理（输出单位球）
+ * @note scale ≤ 0 时按 1.0 处理，仅用于 `fit()` 内部计算单位球残差；
+ *       有效标定的 scale 必须是物理场强（µT），不能持久化为 0。
  */
 inline void applyCal(const MagCalParams &p, const float in[3], float out[3])
 {
@@ -87,12 +90,14 @@ inline void applyCal(const MagCalParams &p, const float in[3], float out[3])
 
 /**
  * @brief 标定参数合理性校验（加载持久化参数时防御坏块/位翻转）
+ * @note 有效标定的 scale 必须是物理场强；旧版本 `scale=0` 的单位球标定
+ *       会被拒绝，必须重新 `magcal fit/save` 后才能用于导航。
  */
 inline bool paramsSanity(const MagCalParams &p)
 {
     if (!p.valid)
         return false;
-    if (!isfinite(p.scale) || p.scale < 0.0f)
+    if (!isfinite(p.scale) || p.scale < 5.0f || p.scale > 200.0f)
         return false;
     for (int i = 0; i < 3; i++)
     {
@@ -541,7 +546,9 @@ inline bool MagCalCollector::fit(MagCalParams &out, MagCalStats &stats) const
     cand.hardIron[0] = bFinal[0];
     cand.hardIron[1] = bFinal[1];
     cand.hardIron[2] = bFinal[2];
-    cand.scale = 0.0f; // 单位球输出；上层可另设场强缩放
+    // 先保留单位球缩放计算残差；拟合质量确认后再写入物理场强，
+    // 使 MagSensor 对外输出 µT（与 MagSample/EKF 参考场同量纲）。
+    cand.scale = 0.0f;
     cand.valid = true;
 
     // ---- 6. 校正残差：||c|−1| 的均方根；同时统计平均半径（物理场强诊断） ----
@@ -565,6 +572,8 @@ inline bool MagCalCollector::fit(MagCalParams &out, MagCalStats &stats) const
     stats.fieldMagUt = (float)(sumR / (double)_count);
     if (!(stats.fieldMagUt >= 5.0f && stats.fieldMagUt <= 200.0f))
         return false;
+    // 对外输出物理场强（µT），不能把单位球参数直接交给 EKF/持久化层。
+    cand.scale = stats.fieldMagUt;
 
     out = cand;
     return true;

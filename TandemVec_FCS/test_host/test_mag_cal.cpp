@@ -5,8 +5,8 @@
  * @details 被测：`lib/MagCal/MagCalMath.h`（纯平台无关）。
  *          覆盖：1) CRC32 标准向量；2) 3×3 对称矩阵 Jacobi 特征分解（含旋转后重构）；
  *          3) invert3 / solve9 线性代数工具；4) applyCal（身份/偏移/缩放）；
- *          5) 合成椭球拟合：已知硬铁+软铁+噪声 → 恢复精度 / 校正后单位球 / 质量门；
- *          6) 拒绝路径：样本不足 / 共面（覆盖度不足）/ 参数合理性。
+ *          5) 合成椭球拟合：已知硬铁+软铁+噪声 → 恢复精度 / 校正后物理场强 / 质量门；
+ *          6) 拒绝路径：样本不足 / 共面（覆盖度不足）/ 参数合理性（含旧 scale=0 记录）。
  *          输出：PASS/FAIL 计数，main 返回非零即失败。
  *          编译：g++ -std=c++17 -Iinclude -Ilib/MagCal test_host/test_mag_cal.cpp -o bin/mc
  * @theory  椭球模型 (B−h)ᵀA(B−h)=1，硬铁 h 由椭球中心给出、软铁由 A 的特征值/
@@ -19,8 +19,8 @@
  *          分布实现差异导致结果不可复现。质量门（正定/覆盖度/残差≤15%）是
  *          固件侧拒绝坏标定的唯一防线，故 A6 的拒绝路径与拟合精度同等重要。
  * @test    S1 CRC32；S2 Jacobi 分解与重构；S3 invert3/solve9；
- *          S4 applyCal 三种情形；S5 合成椭球恢复精度与单位球；
- *          S6 拒绝路径（样本不足/共面/共线）；S7 paramsSanity
+ *          S4 applyCal 三种情形；S5 合成椭球恢复精度与物理场强（µT）；
+ *          S6 拒绝路径（样本不足/共面/共线）；S7 paramsSanity（含旧 scale=0）
  * @see     TandemVec_FCS/lib/MagCal/MagCalMath.h、test_mag_guide.cpp
  */
 // ============================================================
@@ -190,7 +190,8 @@ int main()
         // 残差质量
         CHECK(st.residualRms < 0.05f, "校正残差 RMS < 5%");
 
-        // 用拟合参数校正"采集器外"的新样本：应落在单位球上（|c|≈1）
+        // 用拟合参数校正"采集器外"的新样本：应恢复物理场强（µT），
+        // 不能再输出单位球；否则 EKF 的模长门控/参考场比较全部失效。
         const float u2[3] = {1.0f, 0.0f, 0.0f}; // 任取方向
         float w[3] = {F * u2[0], F * u2[1], F * u2[2]};
         float raw[3] = {b[0] + Ai[0][0] * w[0] + Ai[0][1] * w[1] + Ai[0][2] * w[2],
@@ -199,7 +200,8 @@ int main()
         float c[3];
         magcal::applyCal(fit, raw, c);
         const float mag = sqrtf(c[0] * c[0] + c[1] * c[1] + c[2] * c[2]);
-        CHECK(CLOSE(mag, 1.0f, 0.05f), "校正后落在单位球");
+        CHECK(CLOSE(mag, F, 2.5f), "校正后输出物理场强≈48uT");
+        CHECK(fit.scale > 43.0f && fit.scale < 54.0f, "拟合 scale 为物理场强");
     }
 
     // ---- 6. 拒绝路径 ----
@@ -236,7 +238,12 @@ int main()
         p.identity();
         CHECK(!magcal::paramsSanity(p), "identity(valid=false) 不可用");
         p.valid = true;
-        CHECK(magcal::paramsSanity(p), "identity(valid=true) 可用");
+        CHECK(!magcal::paramsSanity(p), "identity(valid=true, scale=1) 旧单位球标定拒绝");
+        p.scale = 48.0f;
+        CHECK(magcal::paramsSanity(p), "scale=48uT 的有效标定可用");
+        p.scale = 0.0f;
+        CHECK(!magcal::paramsSanity(p), "旧 Flash scale=0 记录拒绝");
+        p.scale = 48.0f;
         p.softIron[1][1] = INFINITY;
         CHECK(!magcal::paramsSanity(p), "NaN/Inf 参数拒绝");
     }
