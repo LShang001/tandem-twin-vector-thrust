@@ -33,6 +33,7 @@ metadata:
 - 行数统计：`(Get-Content <file>).Count`
 - 残留化石检查：`Select-String -Path TandemVec_FCS\AGENTS.md -Pattern 'vtvl_electricdualrotor|parameters\.mjs|pio_projects'`
 - 异味标准：Lint 泄漏 / 上下文膨胀 / 技能泄漏 / 指令冲突 / 初始化化石 / 盲引用
+- **通用方法与 100 仓审计的检出率数据（62%/42%/35%/28%/24%/16%）见用户级 `init-agent-md` 模式二；本技能只写纵列落地层（行数闸门、外移路径、安全硬约束清单、验证方法）**
 - 长度闸门：≤80 优秀 · 81-120 审查 · 121-160 精简 · **>160 必须砍**（遵循率崩溃线）
 
 ## Procedure
