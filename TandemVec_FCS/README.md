@@ -79,7 +79,7 @@
 
 #### 环境要求
 
-- PlatformIO CLI (`pio`)
+- PlatformIO Core 6.2.0 / ststm32 20.0.0（Arduino Core 3.0；串口具体类型为 `Uart`）
 - ARM GCC 工具链 (PlatformIO 自动管理)
 - CMSIS-DAP 调试器 (或 JLink, 需在 `platformio.ini` 中切换)
 
