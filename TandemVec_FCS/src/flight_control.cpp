@@ -1094,10 +1094,13 @@ static float s_yaw_hold_ref_rad = 0.0f;
  *        ③ RATE_MODE 走 FPV 曲线直通目标角速率，并复位外环/内环 PID，
  *          避免模式切换时携带旧积分。
  */
+static Vector3 getSanitizedBodyGyro();
+
 void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion &q_target, ControlOutputs_t &outputs)
 {
   // 获取当前角速率
-  Vector3 current_omega_rps_body = {icm_gyro_x, icm_gyro_y, icm_gyro_z};
+  Vector3 current_omega_rps_body = getSanitizedBodyGyro();
+  // （getSanitizedBodyGyro 定义在混控段之前，见文件下方静态函数）
   // ★ 2026-08-09 陀螺动态零偏补偿："飘"根因修复——EKF 实时估计的零偏
   //   （温度漂移 0.2-0.4°/s，初值不确定度 0.4°/s）此前只用于日志，控制
   //   用静态校准原始值 → 速率模式持续旋转（每分钟 12-24°）。补偿后速率
@@ -1367,9 +1370,23 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 // 同一 GNC 拍内顺序执行，数据一致。
 static float s_yaw_gain_sched = 1.0f;
 
+/*
+ * 控制侧陀螺有限值守卫：传感器故障/NaN 时保持上一有效值，避免 NaN 进入
+ * 姿态/速率环和混控。只做安全兜底，不替代 IMU 驱动层的健康检查。
+ */
+static Vector3 getSanitizedBodyGyro()
+{
+  static float last_x = 0.0f, last_y = 0.0f, last_z = 0.0f;
+  if (std::isfinite(icm_gyro_x)) last_x = icm_gyro_x;
+  if (std::isfinite(icm_gyro_y)) last_y = icm_gyro_y;
+  if (std::isfinite(icm_gyro_z)) last_z = icm_gyro_z;
+  return Vector3{last_x, last_y, last_z};
+}
+
 void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs_t &outputs)
 {
   const TandemVecParams &P = kDefaultTandemVecParams;
+  const Vector3 gyro_safe = getSanitizedBodyGyro();
   const float MOTOR_PWM_MIN = 1000.0f;
   const float MOTOR_PWM_MAX = 2000.0f;
   (void)MOTOR_PWM_MIN; (void)MOTOR_PWM_MAX;  // 保留常量供调试/注释引用，消除编译器警告
@@ -1442,10 +1459,10 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       //   P2-8）。正式飞行永远走 #else 的 BTRUE 分配，勿照抄本块。
       const float GYRO_K = 0.1f;
       const float R2D = 57.29578f;
-      lower_gimbal_deg  = constrain( GYRO_K * icm_gyro_y * R2D, -15.0f, 15.0f);
-      upper_gimbal_deg = constrain( GYRO_K * icm_gyro_z * R2D, -15.0f, 15.0f);
+      lower_gimbal_deg  = constrain( GYRO_K * gyro_safe.y * R2D, -15.0f, 15.0f);
+      upper_gimbal_deg = constrain( GYRO_K * gyro_safe.z * R2D, -15.0f, 15.0f);
       float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
-      float dw = constrain( GYRO_K * icm_gyro_x * R2D * 0.05f, -P.dwMax, P.dwMax);
+      float dw = constrain( GYRO_K * gyro_safe.x * R2D * 0.05f, -P.dwMax, P.dwMax);
       auto diff = allocateDifferential(w0, dw, P);
       motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
       motor2_pct = constrain(mapFloat(diff.wt_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
@@ -1518,7 +1535,9 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
         // 角速度：与 execute_attitude_controller 相同的偏置补偿（EKF 零偏，
         // 前馈为确定性补偿，必须与姿态环同一参考系、且用滤波前原始值）
         // 坐标：存档系 x=滚转、y=俯仰、z=推力轴（与 icm_gyro_* 同轴名）
-        float omega_body[3] = { icm_gyro_x, icm_gyro_y, icm_gyro_z };
+        float omega_body[3] = { static_cast<float>(gyro_safe.x),
+                                static_cast<float>(gyro_safe.y),
+                                static_cast<float>(gyro_safe.z) };
         if (nav_system_initialized)
         {
           const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();

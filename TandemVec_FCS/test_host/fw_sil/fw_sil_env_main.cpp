@@ -52,6 +52,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <random>
 #include <array>
 
@@ -340,6 +341,9 @@ struct RealNavConfig
   float rc_loss_start = 15.0f;
   float rc_loss_end = 17.0f;
   float imu_drop_prob = 0.0f;
+  int imu_fault_mode = 0;  // 0 none / 1 stuck / 2 NaN
+  float imu_fault_start = 20.0f;
+  float imu_fault_end = 21.0f;
   bool mag = false;
 };
 
@@ -495,6 +499,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   bool hold_set = false;
   bool rc_lost_prev = false;
   float pending_imu_dt = 0.0f;  // 丢样时把时间并到下一个被接受的样本
+  sil::ImuSample last_imu;
+  bool have_last_imu = false;
+  const float kImuNaN = std::numeric_limits<float>::quiet_NaN();
   double sum_hold2 = 0.0, max_hold = 0.0;
   double sum_hold_end2 = 0.0;
   int n_hold = 0, n_hold_end = 0;
@@ -749,6 +756,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       const float vib_scale = rpm_ratio * rpm_ratio;
       std::uniform_real_distribution<float> u01(0.0f, 1.0f);
       const bool drop = (cfg.imu_drop_prob > 0.0f) && (u01(rng) < cfg.imu_drop_prob);
+      const bool imu_fault =
+          (cfg.imu_fault_mode != 0) &&
+          (t >= cfg.imu_fault_start && t < cfg.imu_fault_end);
       if (drop)
       {
         pending_imu_dt += dt_imu;
@@ -757,10 +767,31 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       {
         const float sample_dt = dt_imu + pending_imu_dt;
         pending_imu_dt = 0.0f;
-        const float omega[3] = {p.omega[0], p.omega[1], p.omega[2]};
-        const sil::ImuSample sample = imu.Step(
-            omega, f_body, ts, sample_dt, cfg.vib_g * vib_scale, cfg.vib_hz,
-            cfg.vib_mode, cfg.anti_alias);
+        sil::ImuSample sample;
+        if (imu_fault && cfg.imu_fault_mode == 1 && have_last_imu)
+        {
+          sample = last_imu;  // 传感器输出冻结
+        }
+        else
+        {
+          const float omega[3] = {p.omega[0], p.omega[1], p.omega[2]};
+          sample = imu.Step(
+              omega, f_body, ts, sample_dt, cfg.vib_g * vib_scale, cfg.vib_hz,
+              cfg.vib_mode, cfg.anti_alias);
+          if (imu_fault && cfg.imu_fault_mode == 2)
+          {
+            for (int a = 0; a < 3; ++a)
+            {
+              sample.accel[a] = kImuNaN;
+              sample.gyro[a] = kImuNaN;
+            }
+          }
+          else
+          {
+            last_imu = sample;
+            have_last_imu = true;
+          }
+        }
         accumulateImuSample(sample, sample_dt);
         icm_gyro_x = sample.gyro[0];
         icm_gyro_y = sample.gyro[1];
@@ -953,6 +984,15 @@ int main(int argc, char** argv) {
     }
     else if (std::strcmp(argv[i],"--imu-drop")==0 && i+1<argc)
       real_cfg.imu_drop_prob=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--imu-fault")==0 && i+1<argc)
+    {
+      const char *m = argv[++i];
+      real_cfg.imu_fault_mode = (std::strcmp(m, "stuck") == 0) ? 1 :
+                                ((std::strcmp(m, "nan") == 0) ? 2 : 0);
+    }
+    else if (std::strcmp(argv[i],"--imu-fault-window")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &real_cfg.imu_fault_start,
+                  &real_cfg.imu_fault_end);
 #endif
   }
 #ifdef FW_SIL_REAL_NAV

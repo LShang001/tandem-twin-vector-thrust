@@ -140,6 +140,7 @@ void handleNavigationSystem();
 // 仅宿主 SIL 使用的内部观测点，用于解释导航初始化/静止检测状态；
 // 生产固件不编译这些符号，也不参与控制/导航逻辑。
 extern int g_sil_nav_debug_imu_count;
+extern int g_sil_nav_debug_imu_invalid;
 extern float g_sil_nav_debug_accel[3];
 extern float g_sil_nav_debug_gyro[3];
 extern bool g_sil_nav_debug_static;

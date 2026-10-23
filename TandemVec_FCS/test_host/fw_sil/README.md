@@ -234,3 +234,16 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 **边界**：传感器模型参数是 MODEL-DEFAULT，不是实机标定；这是 L2 SIL，不是 HIL，
 不能证明真实气动/推进/传感器/执行器/调度行为。RC-loss 是独立故障路径，不能把
 “命令 disarm 后坠落”写成传感器退化验收失败。
+
+## 7. 故障注入（2026-10-24 首批）
+
+| 注入 | 开关 | 当前行为（L2 SIL） |
+|---|---|---|
+| RC 链路丢失 | `--rc-loss A:B` | 真实 `linkDownCallback`：飞行中保持解锁+AUTO_ALTITUDE；nominal 1 s 丢失 final_alt 8.18 m、hold_end 0.87 m |
+| IMU NaN | `--imu-fault nan --imu-fault-window A:B` | 导航跳过非有限帧、控制陀螺保持上一有效值；**不再输出 NaN**，但 1 s 缺失仍导致失稳 |
+| IMU 冻结 | `--imu-fault stuck --imu-fault-window A:B` | 有限值继续进 EKF/控制；**无冻结检测**，2 s 冻结导致失稳/坠落 |
+| GNSS 野值 | `--gnss-outlier P`（profile degraded） | 显式 30 m/10 m/s 野值门 + NIS；SIL degraded 每 40 s 拒绝 5–7 帧 |
+| GNSS 失联 | `--gnss-outage A:B` | 无 GNSS 时纯惯导；有光流可保持水平，无光流只能验收定高 |
+
+**边界**：IMU NaN/冻结目前只有“NaN 不传播”的防护，没有故障检测和可控下降；
+不能写成故障恢复通过。RC loss 结果也不能外推到真实链路/接收机失效。

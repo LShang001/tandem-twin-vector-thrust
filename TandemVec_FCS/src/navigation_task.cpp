@@ -818,6 +818,7 @@ static uint32_t s_vib_gnss_bad_until_ms = 0;
  */
 #ifdef FW_SIL_REAL_NAV
 int g_sil_nav_debug_imu_count = 0;
+int g_sil_nav_debug_imu_invalid = 0;
 float g_sil_nav_debug_accel[3] = {0.0f, 0.0f, 0.0f};
 float g_sil_nav_debug_gyro[3] = {0.0f, 0.0f, 0.0f};
 bool g_sil_nav_debug_static = false;
@@ -930,6 +931,15 @@ void handleNavigationSystem()
   // 使用 IMU 数据降采样后的平均值
   imu_accel_mps2 << local_acc_sum_x * scale, local_acc_sum_y * scale, local_acc_sum_z * scale;
   imu_gyro_radps << local_gyro_sum_x * scale, local_gyro_sum_y * scale, local_gyro_sum_z * scale;
+  // 传感器 NaN/Inf 安全门：跳过本帧传播，保持上一有效导航输出；控制侧另有
+  // 陀螺有限值守卫。不能把 NaN 灌进 EKF/姿态环（SIL 故障注入已复现崩溃）。
+  if (!imu_accel_mps2.allFinite() || !imu_gyro_radps.allFinite())
+  {
+#ifdef FW_SIL_REAL_NAV
+    ++g_sil_nav_debug_imu_invalid;
+#endif
+    return;
+  }
 #ifdef FW_SIL_REAL_NAV
   g_sil_nav_debug_accel[0] = imu_accel_mps2(0);
   g_sil_nav_debug_accel[1] = imu_accel_mps2(1);
