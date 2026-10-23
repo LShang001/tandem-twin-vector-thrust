@@ -1,0 +1,141 @@
+{
+  "best": {
+    "gen": 4,
+    "score": 203.44296979783076,
+    "case": 78,
+    "pos_ne": 2034.4296979783076,
+    "att_deg": 104.35057451609448,
+    "alt_err": 219.23249501470252,
+    "finite": 1,
+    "fail": 1,
+    "w_hover": 383.21012512719454,
+    "m": 0.45,
+    "e_cg": -0.06,
+    "Ix_scale": 1.4011148164411695,
+    "Iy_scale": 1.7999999999999998,
+    "kT": 1.4999999999999987e-05,
+    "kQ_ratio": 0.045,
+    "Jp": 0.00020683328162985677,
+    "tauM": 0.0968923036419759,
+    "att_kp": 6.0,
+    "att_kp_yaw": 1.0,
+    "rate_kp_rp": 8.215199393463656,
+    "rate_ki_rp": 9.50148125167855,
+    "rate_kp_yaw": 5.558329677487553,
+    "rate_ki_yaw": 5.6208616437450125,
+    "alt_pos_kp": 1.9006197477625935,
+    "alt_vel_kp": 1.0,
+    "alt_vel_ki": 0.1
+  },
+  "evaluations": 144,
+  "generations": 8,
+  "pop": 16,
+  "elapsed_s": 180.67787075042725,
+  "git_head": "28853a879c9ead770dbfbcfec8dac6ea9768776a",
+  "seed": 20261024,
+  "note": "L1 hifi + ideal mag/flow; boundary search, not HIL/real",
+  "params": [
+    {
+      "name": "m",
+      "low": 0.45,
+      "high": 0.95,
+      "log": false
+    },
+    {
+      "name": "e_cg",
+      "low": -0.06,
+      "high": 0.06,
+      "log": false
+    },
+    {
+      "name": "Ix_scale",
+      "low": 0.4,
+      "high": 2.2,
+      "log": false
+    },
+    {
+      "name": "Iy_scale",
+      "low": 0.4,
+      "high": 1.8,
+      "log": false
+    },
+    {
+      "name": "kT",
+      "low": 6.5e-06,
+      "high": 1.5e-05,
+      "log": true
+    },
+    {
+      "name": "kQ_ratio",
+      "low": 0.015,
+      "high": 0.045,
+      "log": false
+    },
+    {
+      "name": "Jp",
+      "low": 4e-05,
+      "high": 0.0006,
+      "log": true
+    },
+    {
+      "name": "tauM",
+      "low": 0.08,
+      "high": 0.7,
+      "log": true
+    },
+    {
+      "name": "att_kp",
+      "low": 0.8,
+      "high": 6.0,
+      "log": false
+    },
+    {
+      "name": "att_kp_yaw",
+      "low": 1.0,
+      "high": 10.0,
+      "log": false
+    },
+    {
+      "name": "rate_kp_rp",
+      "low": 4.0,
+      "high": 35.0,
+      "log": false
+    },
+    {
+      "name": "rate_ki_rp",
+      "low": 0.5,
+      "high": 12.0,
+      "log": false
+    },
+    {
+      "name": "rate_kp_yaw",
+      "low": 3.0,
+      "high": 25.0,
+      "log": false
+    },
+    {
+      "name": "rate_ki_yaw",
+      "low": 0.5,
+      "high": 10.0,
+      "log": false
+    },
+    {
+      "name": "alt_pos_kp",
+      "low": 0.2,
+      "high": 3.0,
+      "log": false
+    },
+    {
+      "name": "alt_vel_kp",
+      "low": 1.0,
+      "high": 10.0,
+      "log": false
+    },
+    {
+      "name": "alt_vel_ki",
+      "low": 0.1,
+      "high": 3.0,
+      "log": false
+    }
+  ]
+}
