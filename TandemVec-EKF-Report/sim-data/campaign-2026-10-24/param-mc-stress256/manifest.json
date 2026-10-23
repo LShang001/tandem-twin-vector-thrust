@@ -1,0 +1,121 @@
+{
+  "git_head": "518257162c2dc7ce5307573d0d1e6bd9310eae98",
+  "seed": 20261024,
+  "cases": 256,
+  "workers": 10,
+  "params": [
+    {
+      "name": "m",
+      "low": 0.45,
+      "high": 0.95,
+      "log": false
+    },
+    {
+      "name": "e_cg",
+      "low": -0.06,
+      "high": 0.06,
+      "log": false
+    },
+    {
+      "name": "Ix_scale",
+      "low": 0.4,
+      "high": 2.2,
+      "log": false
+    },
+    {
+      "name": "Iy_scale",
+      "low": 0.4,
+      "high": 1.8,
+      "log": false
+    },
+    {
+      "name": "kT",
+      "low": 6.5e-06,
+      "high": 1.5e-05,
+      "log": true
+    },
+    {
+      "name": "kQ_ratio",
+      "low": 0.015,
+      "high": 0.045,
+      "log": false
+    },
+    {
+      "name": "Jp",
+      "low": 4e-05,
+      "high": 0.0006,
+      "log": true
+    },
+    {
+      "name": "tauM",
+      "low": 0.08,
+      "high": 0.7,
+      "log": true
+    },
+    {
+      "name": "att_kp",
+      "low": 0.8,
+      "high": 6.0,
+      "log": false
+    },
+    {
+      "name": "att_kp_yaw",
+      "low": 1.0,
+      "high": 10.0,
+      "log": false
+    },
+    {
+      "name": "rate_kp_rp",
+      "low": 4.0,
+      "high": 35.0,
+      "log": false
+    },
+    {
+      "name": "rate_ki_rp",
+      "low": 0.5,
+      "high": 12.0,
+      "log": false
+    },
+    {
+      "name": "rate_kp_yaw",
+      "low": 3.0,
+      "high": 25.0,
+      "log": false
+    },
+    {
+      "name": "rate_ki_yaw",
+      "low": 0.5,
+      "high": 10.0,
+      "log": false
+    },
+    {
+      "name": "alt_pos_kp",
+      "low": 0.2,
+      "high": 3.0,
+      "log": false
+    },
+    {
+      "name": "alt_vel_kp",
+      "low": 1.0,
+      "high": 10.0,
+      "log": false
+    },
+    {
+      "name": "alt_vel_ki",
+      "low": 0.1,
+      "high": 3.0,
+      "log": false
+    }
+  ],
+  "limits": {
+    "pos_ne": 10.0,
+    "att_deg": 15.0,
+    "alt_err": 5.0
+  },
+  "window_s": [
+    12.0,
+    40.0
+  ],
+  "note": "L1 hifi model; parameters ESTIMATED/MODEL-DEFAULT; not HIL/real",
+  "stress": true
+}
