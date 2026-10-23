@@ -12,6 +12,7 @@
  * @see     TandemVec_FCS/test_host/fw_sil/fw_sil_stubs.cpp
  */
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #define SPI_MODE3 3
 #define SPI_MODE0 0

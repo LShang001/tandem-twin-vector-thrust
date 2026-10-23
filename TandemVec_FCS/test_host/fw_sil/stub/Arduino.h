@@ -262,6 +262,9 @@ public:
   size_t write(const uint8_t* b, size_t n) override { return Print::write(b, n); }
 };
 
+// Arduino Core 3.0 将串口具体类命名为 Uart；宿主替身沿用 HardwareSerial 实现。
+namespace arduino { using ::Print; }
+
 class HardwareTimer {
 public:
   HardwareTimer() {}
@@ -280,6 +283,8 @@ public:
   void end() {}
   operator bool() const { return true; }
 };
+
+using Uart = HardwareSerial;
 
 extern HardwareSerial Serial;
 extern HardwareSerial Serial1;
