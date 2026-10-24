@@ -3,7 +3,7 @@
  * @module  固件/宿主参考测试（fw-tests：液体火箭 CCAEGT 实飞制导 + 本机推进模型）
  * @brief   用外部实飞工程 `VTVL_LiquidRocket_FC` 的 CCAEGT 制导库驱动
  *          `LiquidRocketPropulsion`，验证 30 m 垂直回收剖面与触地速度
- * @details 被测：`test_host/reference/ccaegt/`（逐字复制的外部参考库）
+ * @details 被测：`test_host/reference/ccaegt/`（逐字复制、仅补充注释字段的外部参考库）
  *          + `include/LiquidRocketModel.h`（本仓库推进/质量/喷管模型）。
  *          本测试不把 CCAEGT 接入固件飞行模式，只做参考制导与推进模型的
  *          组合闭环；用于回答“实飞制导假设与本机模型能否闭合”。
