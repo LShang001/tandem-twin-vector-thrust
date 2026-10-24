@@ -1,0 +1,31 @@
+{
+  "reference": "mega-tandemvec-1m-fixed-seed32-2026-10-24",
+  "candidate": "mega-tandemvec-1m-selective-seed32-2026-10-24",
+  "vehicles": {
+    "TandemVec": {
+      "pass_rate": [
+        0.785856,
+        0.789524
+      ],
+      "fail_rate": [
+        0.019604,
+        0.016104
+      ],
+      "max_ang_p95": [
+        11.603832751578647,
+        11.598520298363924
+      ],
+      "final_h_p05": [
+        6.606860224795285,
+        6.899677841499531
+      ],
+      "final_h_p95": [
+        12.217025715001038,
+        12.222507026794336
+      ],
+      "delta_pass_pp": 0.36680000000000046,
+      "delta_fail_pp": -0.35,
+      "delta_ang_p95_deg": -0.005312453214722623
+    }
+  }
+}
