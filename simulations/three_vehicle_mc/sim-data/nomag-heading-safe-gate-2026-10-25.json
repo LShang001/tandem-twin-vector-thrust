@@ -1,0 +1,67 @@
+{
+ "date": "2026-10-25",
+ "test": "real-nav SIL safe no-mag gate: motion-excitation + yaw-drift consistency, heading hold off in hover",
+ "evidence_level": "L2",
+ "cases": [
+  {
+   "profile": "clean",
+   "mode": 2,
+   "variant": "nowind",
+   "final_alt": 9.994,
+   "hold_end_rms": 0.0,
+   "pos_rms": 0.496,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0,
+   "mag_fused": 0
+  },
+  {
+   "profile": "clean",
+   "mode": 2,
+   "variant": "wind3",
+   "final_alt": 9.995,
+   "hold_end_rms": 225.843,
+   "pos_rms": 0.497,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0,
+   "mag_fused": 0
+  },
+  {
+   "profile": "magclean",
+   "mode": 1,
+   "variant": "base",
+   "final_alt": 9.975,
+   "hold_end_rms": 0.0,
+   "pos_rms": 0.894,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0,
+   "mag_fused": 0
+  },
+  {
+   "profile": "magclean",
+   "mode": 2,
+   "variant": "base",
+   "final_alt": 9.974,
+   "hold_end_rms": 0.0,
+   "pos_rms": 0.894,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0,
+   "mag_fused": 0
+  },
+  {
+   "profile": "magclean",
+   "mode": 0,
+   "variant": "base",
+   "final_alt": 9.968,
+   "hold_end_rms": 1.147,
+   "pos_rms": 0.894,
+   "max_roll": 9.035,
+   "pos_degraded": 0,
+   "heading_aiding": 1,
+   "mag_fused": 392
+  }
+ ]
+}
