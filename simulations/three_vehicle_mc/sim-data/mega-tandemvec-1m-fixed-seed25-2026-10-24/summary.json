@@ -1,0 +1,55 @@
+{
+  "seed": 20261025,
+  "cases_per_vehicle": 1000000,
+  "duration_s": 20.0,
+  "nominal": false,
+  "variant": "fixed",
+  "osc_params": {
+    "window_s": 0.25,
+    "threshold": 6.0,
+    "decay": 0.9,
+    "recovery": 1.01,
+    "floor": 0.55
+  },
+  "vehicles": {
+    "TandemVec": {
+      "cases": 1000000,
+      "pass_rate": 0.786474,
+      "fail_rate": 0.019488,
+      "final_h_p50": 9.735398881219218,
+      "final_h_p05": 6.6178066915904985,
+      "final_h_p95": 12.213538246617025,
+      "max_ang_p50": 4.206139135572816,
+      "max_ang_p95": 11.634530634680337,
+      "sat_frac_p50": 0.0,
+      "sat_frac_p95": 0.0,
+      "top_param_corr": [
+        [
+          "thrust_loss",
+          -0.43104581750710075
+        ],
+        [
+          "delay_s",
+          0.2272740148032572
+        ],
+        [
+          "att_kp_mult",
+          0.07001206534820852
+        ],
+        [
+          "wind_up",
+          -0.05736861704644901
+        ],
+        [
+          "rate_kp_mult",
+          0.05381970092804849
+        ],
+        [
+          "servo_jam",
+          0.02836077520019394
+        ]
+      ]
+    }
+  },
+  "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设"
+}

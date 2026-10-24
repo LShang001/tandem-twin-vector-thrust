@@ -1,0 +1,110 @@
+{
+  "baseline": "mega-tandemvec-1m-fixed-seed25-2026-10-24",
+  "candidate": "mega-tandemvec-1m-tuned-seed25-2026-10-24",
+  "n": 1000000,
+  "params_identical": true,
+  "vehicles": {
+    "TandemVec": {
+      "n": 1000000,
+      "transitions": {
+        "pass": {
+          "pass": 785319,
+          "marginal": 1155,
+          "fail": 0
+        },
+        "marginal": {
+          "pass": 6846,
+          "marginal": 187161,
+          "fail": 31
+        },
+        "fail": {
+          "pass": 6956,
+          "marginal": 1870,
+          "fail": 10662
+        }
+      },
+      "base_pass": 786474,
+      "cand_pass": 799121,
+      "base_fail": 19488,
+      "cand_fail": 10693,
+      "rescued": 8826,
+      "regressed": 31,
+      "new_pass": 13802,
+      "lost_pass": 1155,
+      "fault": {
+        "no_fault": {
+          "n": 970163,
+          "rescued": 8597,
+          "regressed": 0,
+          "base_fail": 10314,
+          "cand_fail": 1717
+        },
+        "with_fault": {
+          "n": 29837,
+          "rescued": 229,
+          "regressed": 31,
+          "base_fail": 9174,
+          "cand_fail": 8976
+        }
+      },
+      "delay_bins": [
+        {
+          "bin": "<30ms",
+          "n": 453072,
+          "base_fail": 3999,
+          "cand_fail": 4015,
+          "rescued": 0,
+          "regressed": 16
+        },
+        {
+          "bin": "30-60ms",
+          "n": 317190,
+          "base_fail": 2832,
+          "cand_fail": 2841,
+          "rescued": 1,
+          "regressed": 10
+        },
+        {
+          "bin": "60-90ms",
+          "n": 158336,
+          "base_fail": 1443,
+          "cand_fail": 1421,
+          "rescued": 25,
+          "regressed": 3
+        },
+        {
+          "bin": "90-120ms",
+          "n": 55326,
+          "base_fail": 4601,
+          "cand_fail": 1228,
+          "rescued": 3375,
+          "regressed": 2
+        },
+        {
+          "bin": "120-150ms",
+          "n": 13396,
+          "base_fail": 4954,
+          "cand_fail": 885,
+          "rescued": 4069,
+          "regressed": 0
+        },
+        {
+          "bin": "150-200ms",
+          "n": 2618,
+          "base_fail": 1607,
+          "cand_fail": 295,
+          "rescued": 1312,
+          "regressed": 0
+        },
+        {
+          "bin": ">=200ms",
+          "n": 62,
+          "base_fail": 52,
+          "cand_fail": 8,
+          "rescued": 44,
+          "regressed": 0
+        }
+      ]
+    }
+  }
+}

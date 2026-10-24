@@ -372,8 +372,8 @@ A/B，并保持实飞基线可回退。</li>
 <thead>
 <tr>
 <th>机型</th>
-<th>严格通过 fixed→osc</th>
-<th>失败 fixed→osc</th>
+<th>严格通过 fixed→默认 osc</th>
+<th>失败 fixed→默认 osc</th>
 <th>有界率</th>
 <th>无故障失败</th>
 <th>含故障失败</th>
@@ -655,6 +655,90 @@ m、P95 4.97 m，P05 −5.38 m），因此“推力损失失败”主要是高�
 默认参数已同步为 tuned； 仍是纯类、默认不接入飞控路径。建议只在
 TandemVec 这类高 T/W 机型启用， 低 T/W 机型需另行验证；上机前必须
 SIL/台架 A/B。</p>
+<h3 id="37-1m-独立种子与-60-s-时窗验证">3.7 1M 独立种子与 60 s
+时窗验证</h3>
+<p><strong>1M（<code>seed=20261025</code>，TandemVec，独立于 300k
+的样本流）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>通过</th>
+<th>失败</th>
+<th>无故障失败</th>
+<th>max_ang P95</th>
+<th>最坏单例</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed</td>
+<td>78.65%</td>
+<td>1.95%</td>
+<td>1.06%</td>
+<td>11.63°</td>
+<td>165.1° / −4197.7 m</td>
+</tr>
+<tr>
+<td>tuned</td>
+<td><strong>79.91%</strong></td>
+<td><strong>1.07%</strong></td>
+<td><strong>0.18%</strong></td>
+<td><strong>10.30°</strong></td>
+<td>165.1° / −4197.7 m</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>逐 case：救回 <strong>8,826</strong>、新增
+<strong>31</strong>（全部边缘→失败，<strong>无通过→失败</strong>）；
+新增通过 13,802，通过→边缘 1,155。无故障桶救回 8,597、无新增失败。</li>
+<li>延迟桶失败数：90–120/120–150/150–200/&gt;200 ms 为 4601→1228 /
+4954→885 / 1607→295 / 52→8；&lt;90 ms 基本不变（净 +52）。</li>
+<li><strong>尾部显著收窄</strong>：失败
+19,488→10,693；<code>max_ang&gt;120°</code> 1620→321、
+<code>&gt;180°</code> 410→94；<code>final_h&lt;−100 m</code>
+3573→908、<code>&lt;−1000 m</code> 1225→389； max_ang P99.9
+139.6°→81.1°，final_h P0.1 −1182→−44 m。</li>
+<li><strong>但不提供最坏情况保证</strong>：两者最坏单例相同（delay 0.159
+s、 att/rate 增益 1.245/1.390，165.1° / −4197.7
+m），极端延迟+高增益仍会发散。 tuned
+降低的是概率和尾部质量，不是把包线变成无条件安全。</li>
+</ul>
+<p><strong>60
+s（5k，<code>seed=20261026</code>，时窗外推）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>通过</th>
+<th>失败</th>
+<th>无故障失败</th>
+<th>max_ang P95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed</td>
+<td>77.68%</td>
+<td>2.26%</td>
+<td>1.22%</td>
+<td>11.85°</td>
+</tr>
+<tr>
+<td>tuned</td>
+<td><strong>79.36%</strong></td>
+<td><strong>1.24%</strong></td>
+<td><strong>0.23%</strong></td>
+<td><strong>10.23°</strong></td>
+</tr>
+</tbody>
+</table>
+<p>逐 case 救回 51、新增 0、无通过→失败、5 例通过→边缘；延迟桶方向与 20
+s 一致。样本只有 5k，只作时窗外推，不作为独立概率结论。</p>
+<p><code>run_mega.py</code> 已改为流式写 CSV + 分块聚合；2k
+回归与旧实现逐字节一致， 因此 1M 结果可复现且不再需要百万行 dict
+常驻内存。</p>
 <hr />
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
@@ -668,6 +752,8 @@ T/W）上得到一致收益；共轴中性、液体净负，
 <strong>不能无条件套用到所有机型</strong>；</li>
 <li>osc/tuned 不是延迟补偿器：&gt;150 ms 仍可失败；也不是推力损失容错，
 不能恢复高度或替代安全降落；</li>
+<li>快速 MC 的振荡检测只用滚转速率误差；模块本身是标量、可每轴独立实例，
+但俯仰/偏航轴的触发频率与收益未在 MC 中验证；</li>
 <li>推力损失/舵机卡死模型是简化效率因子/零控制权限，不是真实电机/舵机故障。</li>
 </ul>
 <h2 id="5-复现">5 复现</h2>
@@ -689,5 +775,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 18:14</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 20:24</footer></article></body>
 </html>

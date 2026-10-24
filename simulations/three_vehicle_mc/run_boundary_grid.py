@@ -27,8 +27,6 @@ import numpy as np
 from fast_mc import simulate
 from models import MODELS
 
-G = 9.80665
-
 DELAYS = [0.0, 0.03, 0.06, 0.09, 0.12, 0.15, 0.18, 0.21]
 ATT_GAINS = [0.8, 1.0, 1.2, 1.4]
 RATE_GAINS = [0.8, 1.0, 1.2, 1.4]
@@ -85,7 +83,7 @@ def main() -> int:
     p, rows = build_params(len(DELAYS) * len(ATT_GAINS) * len(RATE_GAINS)
                            * len(FAULTS) * REPEATS)
     n = len(rows)
-    base_label = np.array([r["fault"] == "none" for r in rows])
+    no_fault_mask = np.array([r["fault"] == "none" for r in rows])
 
     results = {}
     summary = {"grid": {"delays_s": DELAYS, "att_gains": ATT_GAINS,
@@ -107,11 +105,11 @@ def main() -> int:
         d = p["delay_s"]
         for lo, hi in [(0.0, 0.06), (0.06, 0.09), (0.09, 0.12),
                        (0.12, 0.15), (0.15, 0.18), (0.18, 9.0)]:
-            sel = (d >= lo) & (d < hi) & base_label
+            sel = (d >= lo) & (d < hi) & no_fault_mask
             by_delay.append({"bin": f"{lo:.2f}-{hi:.2f}", "n": int(sel.sum()),
                              "fail": float(fail[sel].mean()) if sel.any() else None})
         for g in ATT_GAINS:
-            sel = (p["att_kp_mult"] == g) & base_label
+            sel = (p["att_kp_mult"] == g) & no_fault_mask
             by_gain.append({"att_kp": g, "n": int(sel.sum()),
                             "fail": float(fail[sel].mean())})
         for f in FAULTS:
@@ -120,14 +118,14 @@ def main() -> int:
                            "pass": float(ok[sel].mean())}
         summary["candidates"][name] = {
             "overall": {"n": n, "fail": float(fail.mean()), "pass": float(ok.mean())},
-            "no_fault": {"n": int(base_label.sum()),
-                         "fail": float(fail[base_label].mean()),
-                         "pass": float(ok[base_label].mean())},
+            "no_fault": {"n": int(no_fault_mask.sum()),
+                         "fail": float(fail[no_fault_mask].mean()),
+                         "pass": float(ok[no_fault_mask].mean())},
             "by_delay": by_delay, "by_att_gain": by_gain, "by_fault": by_fault,
             "settings": cfg,
         }
         print(f"{name}: overall fail={fail.mean()*100:.1f}% "
-              f"no_fault fail={fail[base_label].mean()*100:.1f}% "
+              f"no_fault fail={fail[no_fault_mask].mean()*100:.1f}% "
               f"pass={ok.mean()*100:.1f}%")
 
     fixed_fail = results["fixed"][0]

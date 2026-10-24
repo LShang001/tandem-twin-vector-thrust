@@ -16,6 +16,10 @@
 | `mega-osc-default-300k-v2-2026-10-24/` | **修正后** 默认 osc 300k | 权威 A/B |
 | `mega-osc-tuned-300k-v2-2026-10-24/` | **修正后** tuned osc 300k（0.15 s/4/0.85/1.01/0.45） | 权威 A/B |
 | `boundary-grid-2026-10-24/` | TandemVec 延迟×姿态/速率增益×故障确定性网格 | 修正后 |
+| `mega-tandemvec-1m-fixed-seed25-2026-10-24/` | TandemVec 1M，独立 seed 20261025 | 权威独立验证 |
+| `mega-tandemvec-1m-tuned-seed25-2026-10-24/` | TandemVec 1M tuned，同上 | 权威独立验证 |
+| `mega-tandemvec-60s-fixed-5k-2026-10-24/` | TandemVec 60 s、5k，seed 20261026 | 时窗外推 |
+| `mega-tandemvec-60s-tuned-5k-2026-10-24/` | TandemVec 60 s、5k tuned | 时窗外推 |
 
 ## 2 thrust_loss 建模勘误（2026-10-24）
 
@@ -48,4 +52,5 @@ py -3.12 run_boundary_grid.py --out sim-data/boundary-grid-2026-10-24
 ```
 
 `compare_casewise.py` 会先校验 17 个参数列逐 case 一致，防止把不同样本差异
-当成策略收益。
+当成策略收益。`run_mega.py` 采用流式 CSV + 分块聚合，百万级 case 不需要
+百万行 dict 常驻内存；2k 回归与旧实现逐字节一致。
