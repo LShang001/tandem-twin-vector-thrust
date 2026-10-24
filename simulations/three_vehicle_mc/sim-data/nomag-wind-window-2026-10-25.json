@@ -3228,6 +3228,71 @@
      45.0
     ]
    }
+  },
+  "convergence_static": {
+   "desc": "SIL static hold T s, control frozen during hold, 10 seeds, eval 16 s after takeoff",
+   "summary": {
+    "2": {
+     "n": 10,
+     "max_abs_yaw": 18.2,
+     "median_abs_yaw": 8.6,
+     "max_pos": 1.02,
+     "yaw_ok_10": 8,
+     "pos_ok_3": 10
+    },
+    "10": {
+     "n": 10,
+     "max_abs_yaw": 103.8,
+     "median_abs_yaw": 17.4,
+     "max_pos": 17.41,
+     "yaw_ok_10": 3,
+     "pos_ok_3": 8
+    },
+    "30": {
+     "n": 10,
+     "max_abs_yaw": 70.4,
+     "median_abs_yaw": 28.6,
+     "max_pos": 8.32,
+     "yaw_ok_10": 2,
+     "pos_ok_3": 7
+    },
+    "60": {
+     "n": 10,
+     "max_abs_yaw": 132.7,
+     "median_abs_yaw": 41.0,
+     "max_pos": 58.22,
+     "yaw_ok_10": 1,
+     "pos_ok_3": 5
+    }
+   },
+   "note": "Longer static hold worsens in-flight yaw/pos in current filter; bias converges in ~1 s (SIL constant+Markov bias)."
+  },
+  "convergence_motion": {
+   "desc": "SIL mode2, 20 seeds, t=19 s; hover / 15 m forward / 15 m lateral",
+   "summary": {
+    "hover": {
+     "n": 20,
+     "max_abs_yaw": 10.8,
+     "median_abs_yaw": 1.9,
+     "max_pos": 1.54,
+     "yaw_ok_10": 19
+    },
+    "forward15": {
+     "n": 20,
+     "max_abs_yaw": 40.8,
+     "median_abs_yaw": 13.7,
+     "max_pos": 4.48,
+     "yaw_ok_10": 5
+    },
+    "lateral15": {
+     "n": 20,
+     "max_abs_yaw": 22.6,
+     "median_abs_yaw": 6.8,
+     "max_pos": 1.9,
+     "yaw_ok_10": 15
+    }
+   },
+   "note": "Motion does not improve heading; forward is worst. Position reaches target."
   }
  }
 }

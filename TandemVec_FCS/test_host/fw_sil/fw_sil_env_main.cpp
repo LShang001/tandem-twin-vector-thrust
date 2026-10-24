@@ -22,6 +22,8 @@
  *          `--pos-hold-at T` `--fwd-stick A:B`（定高前飞后再切定点）、
  *          `--takeoff-at T`（起飞时刻，默认 3 s；验证地面等待不计窗口）、
  *          `--initial-yaw-deg D`（plant 初始真值航向，验证手动对准）、
+ *          `--static-calib-s S`（地面静止校准时长，默认 SIL 0=跳过）、
+ *          `--calib-hold T`（前 T 秒电机不出力、固件油门 0，研究静置收敛）、
  *          `--wind-window A:B`（覆盖侧风时段）、`--bias-z-max R`
  *          （无磁离地陀螺零偏 z 限幅，0=关闭）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
@@ -84,6 +86,8 @@ static int g_plant_substeps = 1;
 static float g_takeoff_at_s = 3.0f;
 // 仅 SIL：初始真值航向偏置 [deg]，用于验证起飞前手动航向对准。
 static float g_initial_yaw_deg = 0.0f;
+// 仅 SIL：地面静置校准段（电机不出力、固件油门置 0）。
+static float g_calib_hold_s = 0.0f;
 
 #ifdef BFS_RATE_ACCEL_FB
 extern void setRateAccelFeedbackGains(float rp_gain, float yaw_gain,
@@ -910,8 +914,18 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     }
 
     // 真实导航任务 + 真实 GNC。导航任务消费 IMU 聚合量和 UBX epoch。
+    const bool calib_hold = (t < g_calib_hold_s);
+    if (calib_hold)
+    {
+      throttlePercent = 0.0f; // 校准段固件看到零油门，静止陀螺/ZUPT 可用
+    }
     handleNavigationSystem();
-    runGNCExecutive();
+    if (!calib_hold)
+    {
+      // 校准段不跑控制：否则位置/姿态积分器在地面长时间饱和，起飞瞬间
+      // 直接翻车，会把“控制器饱和”误当成 EKF 不收敛。
+      runGNCExecutive();
+    }
     if (g_sil_nav_debug_imu_failed)
     {
       imu_fault_detected_any = true;
@@ -979,6 +993,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
 #endif
     motor_target_wf = (ch3_output / 100.0f) * P.wMax;
     motor_target_wt = (ch4_output / 100.0f) * P.wMax;
+    if (t < g_calib_hold_s)
+    {
+      motor_target_wf = 0.0f;
+      motor_target_wt = 0.0f;
+    }
 
     // 2 kHz 内环：执行器动态 + plant + IMU 采样。
     for (int s = 0; s < sub_steps; ++s)
@@ -1327,6 +1346,10 @@ int main(int argc, char** argv) {
       heading_aid_mode=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--heading-align-deg")==0 && i+1<argc)
       heading_align_deg=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--calib-hold")==0 && i+1<argc)
+      g_calib_hold_s=static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--static-calib-s")==0 && i+1<argc)
+      g_static_calib_required_s=static_cast<float>(std::atof(argv[++i]));
     else if (std::strcmp(argv[i],"--bias-z-max")==0 && i+1<argc)
       g_nomag_bias_z_max_radps=std::atof(argv[++i]); // 0=关闭限幅（消融用）
     else if (std::strcmp(argv[i],"--pos-leg")==0 && i+1<argc)
@@ -1486,6 +1509,8 @@ int main(int argc, char** argv) {
   }
   g_heading_aid_mode = static_cast<uint8_t>(heading_aid_mode);
   g_heading_align_deg = heading_align_deg;
+  // 飞行段回归默认跳过地面 30 s 静置；测校准门控时显式传 --static-calib-s 30。
+  g_static_calib_required_s = 0.0f;
   g_sil_pos_leg_n_m = pos_leg_n_m;
   g_sil_pos_leg_e_m = pos_leg_e_m;
   if (ang_alpha >= 0.0f)

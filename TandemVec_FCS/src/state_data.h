@@ -847,6 +847,11 @@ extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针�
 extern float g_nomag_bias_z_max_radps;
 // 无磁 20 s 保持窗口剩余时间 [s]；-1 表示当前不是无磁模式（遥测/告警用）。
 extern float g_nomag_hold_left_s;
+// 地面静止校准（无磁定点前置条件）。默认要求连续静止 30 s；
+// SIL 可把 required 设为 0 只跑飞行段回归。
+extern bool g_imu_static_calibrated;
+extern float g_static_calib_s;
+extern float g_static_calib_required_s;
 // GNSS 失联后重捕获的一次性目标重锚请求：位置保持把当前点作为新目标，
 // 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
 extern bool g_pos_hold_reanchor;

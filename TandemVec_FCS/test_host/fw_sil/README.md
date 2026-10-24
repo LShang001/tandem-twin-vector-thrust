@@ -298,6 +298,7 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | 前飞段测试 | `--pos-leg N:E` | 仅测试用：进入 AUTO_POSITION 时把目标点叠加北/东偏移 [m]，用于“起飞→有倾斜前飞→转定点”时序；**trace 的 `hold_n/hold_e` 不含该偏移**，分析误差时须自行加上 N/E |
 | 前飞→定点时序 | `--pos-hold-at T --fwd-stick A:B` | 仅测试用：T 秒前保持定高、A–B 秒压俯仰杆建立速度/倾斜，T 秒切 AUTO_POSITION；需配合 `--pos-leg` 验证无磁运动航向启动定点 |
 | 风窗口 | `--wind-window A:B` | 仅测试用：覆盖默认 20–25 s 侧风时段，用于验证 20 s 无磁窗口内受风保持 |
+| 地面静置校准 | `--calib-hold T` | 仅测试用：前 T 秒电机不出力、固件油门置 0，用于研究静止校准时长对 EKF 收敛的影响；配合 `--static-calib-s 0` 跳过门控 |
 | 初始航向 | `--initial-yaw-deg D` | 仅测试用：plant 初始真值航向 D°，配合 `--heading-align-deg D` 验证起飞前手动对准 |
 | 起飞时刻 | `--takeoff-at T` | 仅测试用：延迟起飞到 T 秒（默认 3 s）。★ 地面只约束 z、无摩擦，位置环会让机体积滑；T>10 s 的等待场景结果无效（SIL 台缺陷），窗口离地判据用门控单元测试 T9b/T9c 验证 |
 | 零偏限幅 | `--bias-z-max R` | 无磁离地时陀螺零偏 z 限幅 [rad/s]，默认 0.01；0=关闭（消融对比） |

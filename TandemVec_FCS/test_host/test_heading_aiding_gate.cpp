@@ -198,6 +198,24 @@ int main()
     CHECK(out.heading_hold_allowed, "T9b 离地后仍允许 heading hold");
   }
 
+  // T9d 静止校准前置：未完成校准不得进入无磁位置保持。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 5.0f;
+    in.airborne = true;
+    in.calibrated = false;
+    for (int i = 0; i < 100; ++i) (void)gate.update(in);
+    auto out = gate.update(in);
+    CHECK(out.position_hold_degraded, "T9d 未静止校准降级");
+    CHECK(!out.heading_hold_allowed, "T9d 未静止校准禁 heading hold");
+    in.calibrated = true;
+    out = gate.update(in);
+    CHECK(!out.position_hold_degraded, "T9d 校准完成后允许位置保持");
+    CHECK(out.heading_hold_allowed, "T9d 校准完成后允许 heading hold");
+  }
+
   // T9c 落地复位窗口：离地超时降级后，落地再起飞重新获得 20 s。
   {
     bfs::HeadingAidingGate gate;

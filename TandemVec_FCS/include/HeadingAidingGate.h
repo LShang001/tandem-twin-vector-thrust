@@ -58,6 +58,7 @@ struct HeadingAidingInput
     bool motion_excitation_valid = false; // 速度 + 倾斜同时存在，航向可观测
     float yaw_drift_dps = 0.0f;        // EKF 航向变化率 − 陀螺 z（无磁一致性）
     bool airborne = false;             // 已离地（解锁且油门上量），无磁窗口从离地起算
+    bool calibrated = true;            // 静止校准已完成（无磁模式的保持前置条件）
     float dt_s = 0.005f;
 };
 
@@ -209,7 +210,9 @@ public:
             const bool time_ok = no_mag_hold_s_ <= kNoMagHoldMaxS;
             const bool sigma_ok20 =
                 std::isfinite(in.yaw_sigma_deg) && in.yaw_sigma_deg <= 20.0f;
-            const bool hold_ok = time_ok && sigma_ok20;
+            // 静止校准（陀螺零偏/水平）未完成前不得进入位置保持：否则
+            // 零偏/姿态初值误差会直接进入位置环（用户要求先静后动）。
+            const bool hold_ok = in.calibrated && time_ok && sigma_ok20;
             out.source_fresh = hold_ok;
             out.heading_hold_allowed = hold_ok;
             out.position_hold_degraded = !hold_ok;

@@ -1255,6 +1255,19 @@ void handleNavigationSystem()
   }
   bool is_static_confirmed =
       static_det.confirmed_static && s_imu_health.staticAidsAllowed();
+  // 地面静止校准：EKF 已初始化、油门未上量且检测器确认静止才累计。
+  // 默认 30 s 后才允许无磁位置保持；陀螺零偏/水平初值需要长静置收敛，
+  // 2 s 级静置不够（用户 2026-10-25 明确要求几十秒量级）。
+  if (!g_imu_static_calibrated && nav_system_initialized &&
+      throttlePercent < 3.0f && is_static_confirmed &&
+      std::isfinite(nav_update_dt_s) && nav_update_dt_s > 0.0f)
+  {
+    g_static_calib_s += nav_update_dt_s;
+    if (g_static_calib_s >= g_static_calib_required_s)
+    {
+      g_imu_static_calibrated = true;
+    }
+  }
   const float static_confidence = static_det.confidence;
 #ifdef FW_SIL_REAL_NAV
   g_sil_nav_debug_static = is_static_confirmed;
@@ -1584,6 +1597,9 @@ void handleNavigationSystem()
               : ((g_heading_aid_mode >= 1U)
                      ? g_heading_align_deg * 0.0174532925f
                      : 0.0f);
+      // 重新初始化会重置零偏估计，静止校准必须重新累积。
+      g_imu_static_calibrated = false;
+      g_static_calib_s = 0.0f;
       nav_ekf.Initialize(imu_accel_mps2, imu_gyro_radps, mag_ut, init_vel_ned,
                          init_lla, mag_init_yaw_offset);
       mag_status.init_source = mag_real_for_init ? 1U : 0U;
@@ -2650,6 +2666,7 @@ void handleNavigationSystem()
     // 离地判据：解锁且油门已出力。SIL 地面会滑跑/自动油门，长地面等待
     // 场景不代表实机；窗口语义由门控单元测试 T9b/T9c 锁定。
     heading_in.airborne = g_is_unlocked && throttlePercent >= 3.0f;
+    heading_in.calibrated = g_imu_static_calibrated;
     heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
     {
       // 无磁一致性：EKF 航向变化率应有陀螺 z 支撑；纯平移时估计器自漂
