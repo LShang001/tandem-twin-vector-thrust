@@ -66,6 +66,8 @@ run_one "$ROOT/test_host/test_liquid_rocket_model.cpp" lrm ""
 # 共轴双桨 VTVL DirectTvcRate 控制律（CoaxialVtvControl.h，纯平台无关——
 # 通道极性/限幅/手动旁路/偏航差速 + 简化 6DOF 刚体闭环）：
 run_one "$ROOT/test_host/test_coaxial_vtv_control.cpp" cvc ""
+# 液体火箭闭环 SIL（LiquidRocketModel + mapNozzleGimbal + 简化 6DOF 垂直回收）：
+run_one "$ROOT/test_host/test_liquid_rocket_sil.cpp" lrsil ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""

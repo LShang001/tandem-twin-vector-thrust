@@ -162,12 +162,18 @@ DirectTvcRate 控制律（姿态 P → 速率 PI → ±10° 修正角；偏航�
 µs
 差速），默认增益取自外部共轴工程；<code>test_coaxial_vtv_control.cpp</code>
 含简化 6DOF 刚体闭环（初始 5°/3° 姿态、10°/s 偏航速率，10 s
-后收敛）。<strong>尚未接入 <code>runGNCExecutive</code>
-的机型选择，也无共轴整机 SIL/台架。</strong></li>
+后收敛）。已通过 <code>BFS_COAXIAL_VTVL</code> /
+<code>CoaxialVTVL</code> env 接入
+<code>runGNCExecutive</code>，共用输入/模式/定高/目标姿态层；<code>run_coaxial_acceptance.sh</code>
+用真实固件 + 近似共轴 plant 跑出 mag_clean/mag_nominal/nomag_degraded ×3
+<strong>9/9 PASS</strong>。<strong>仍无共轴台架/HIL/实机；plant
+惯量/力臂/差速力矩是 L1 假设。</strong></li>
 <li><code>include/LiquidRocketModel.h</code>（2026-10-24）：L1
 液体火箭推进模型（点火/解锁互锁、阀门/推力速率、Tmin、比冲质量流、推进剂耗尽、变质量）与双轴喷管
 asin 几何；参数取自外部 <code>VTVL_LiquidRocket_FC</code> 的 CCAEGT
-示例，<strong>不是本机标定值，未接入飞行模式</strong>。</li>
+示例，<strong>不是本机标定值</strong>。<code>test_liquid_rocket_sil.cpp</code>
+已用该模型 + 简化 6DOF plant 做 30 m 垂直回收闭环（触地速度 2.22
+m/s、压力/姿态有界）；<strong>无气动/RCS/多级/泵压动态，未接入固件飞行模式</strong>。</li>
 <li><code>src/flight_control.cpp</code> 层 3 已改为走
 <code>ActuatorOutputMap</code>；GPIO/PWM 写入仍留在固件层，通用层不依赖
 Arduino。自动分配路径走 <code>TandemVecAllocator</code>，manual/locked
@@ -249,10 +255,10 @@ TVC 映射目前未被其实际 mix
 <ol type="1">
 <li>选 <code>kCoaxialVtvProfile</code>：2 舵机 + 2
 电调，<code>DirectTvcRate</code> / <code>DifferentialPwmUs</code>；</li>
-<li>控制律使用 <code>CoaxialVtvControl.h</code>（已在宿主 6DOF
-闭环验证）；还需在 <code>runGNCExecutive</code>
-增加机型选择分支，并建立共轴专用 6DOF SIL/台架——当前固件仍只跑 TandemVec
-分配路径；</li>
+<li>控制律使用 <code>CoaxialVtvControl.h</code>，已通过
+<code>BFS_COAXIAL_VTVL</code> 接入 <code>runGNCExecutive</code>
+并建立共轴近似 6DOF SIL（9/9 PASS）；下一步是共轴台架/HIL
+标定惯量、力臂、差速力矩与 TVC 机械方向；</li>
 <li>输出层调用 <code>mapCoaxialVtvOutputs()</code>：复现
 ±15°→33.33–66.67%、1000–2000 µs 联合限幅、未解锁/45° 大倾角锁电机；</li>
 <li>复用现有模式/解锁/点火/燃料联锁、导航、传感器、日志和
@@ -350,5 +356,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 <p>当前完成 P1 的代码骨架；P2
 之后才可能谈“支持某新机型”。现有实机仍应按原纵列双发基线调参/飞行。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 15:45</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:14</footer></article></body>
 </html>
