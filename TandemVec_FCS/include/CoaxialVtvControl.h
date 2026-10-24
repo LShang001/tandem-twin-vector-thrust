@@ -16,21 +16,19 @@
  * @note    ★ 增益/限幅/滤波口径对齐外部实飞工程 `VTVL_ElectricDualRotor_FCS`：
  *          att 4.25/0（±80，积分限 40）；rate 0.25/0.08（±10，积分限 5，
  *          微分滤波 0.2，输出滤波 0.25）；yaw 3.8/30（±180，积分限 50，
- *          阈值 40）。位置式 PID 的积分限幅/抗饱和语义由 `PositionPID` 保证。
+ *          阈值 40）。位置式 PID 的积分限幅/抗饱和语义由本文件 `CoaxialLegacyPid` 保证。
  *          RATE_MODE 下实飞工程每拍重置 rate PID，本实现同样处理（速率环
  *          退化为纯 P），不要“顺手”改成积分保持。
  *          参数仍是外部工程的 MODEL-DEFAULT，未做本机台架/实机再标定。
  * @redline 修正角 ±10°、偏航差速 ±180 µs、RATE_MODE 每拍复位速率 PID
  * @test    test_host/test_coaxial_vtv_control.cpp
- * @see     include/ActuatorOutputMap.h、include/PositionPID.h、CTL-003 §2.2
+ * @see     include/ActuatorOutputMap.h、CTL-003 §2.2
  */
 
 #ifndef TANDEMVEC_COAXIAL_VTV_CONTROL_H
 #define TANDEMVEC_COAXIAL_VTV_CONTROL_H
 
 #include <cmath>
-
-#include "PositionPID.h"
 
 namespace bfs
 {
@@ -101,6 +99,153 @@ struct CoaxialFirstOrderFilter
         state = a * x + (1.0f - a) * state;
         return state;
     }
+};
+
+// 实飞共轴工程 PositionPID 的逐行等价实现（无 v3 无扰切换差异）。
+// 仅供本机型控制律使用；TandemVec 仍使用项目统一的 PositionPID v3。
+class CoaxialLegacyPid
+{
+public:
+    CoaxialLegacyPid(float kp = 0.0f, float ki = 0.0f, float kd = 0.0f,
+                     float minOutput = -100.0f, float maxOutput = 100.0f,
+                     bool enableIntegral = true, float integralLimit = 250.0f,
+                     float integralThreshold = 0.0f,
+                     float filterCoefficient = 0.0f)
+        : kp_(kp), ki_(ki), kd_(kd), integral_(0.0f), previousError_(0.0f),
+          previousInput_(0.0f), previousDerivative_(0.0f), lastOutput_(0.0f),
+          outputMin_(minOutput), outputMax_(maxOutput),
+          integralLimit_(integralLimit), integralThreshold_(integralThreshold),
+          filterCoefficient_(filterCoefficient),
+          enableIntegral_(enableIntegral)
+    {
+        setFilterCoefficient(filterCoefficient_);
+    }
+
+    void setOutputLimits(float lo, float hi)
+    {
+        outputMin_ = lo;
+        outputMax_ = hi;
+    }
+    void setIntegralEnable(bool enable)
+    {
+        enableIntegral_ = enable;
+        if (!enableIntegral_)
+        {
+            integral_ = 0.0f;
+        }
+    }
+    void setIntegralLimit(float limit)
+    {
+        integralLimit_ = std::fabs(limit);
+    }
+    void setIntegralThreshold(float threshold)
+    {
+        integralThreshold_ = std::fabs(threshold);
+    }
+    void setFilterCoefficient(float coefficient)
+    {
+        filterCoefficient_ = (coefficient <= 0.0f || coefficient > 1.0f)
+                                 ? 1.0f
+                                 : coefficient;
+    }
+    void reset()
+    {
+        integral_ = 0.0f;
+        previousError_ = 0.0f;
+        previousInput_ = 0.0f;
+        previousDerivative_ = 0.0f;
+        lastOutput_ = 0.0f;
+    }
+
+    float computeWithExternalDerivative(float setpoint, float input,
+                                        float derivative, float dt)
+    {
+        if (!isFiniteF(setpoint) || !isFiniteF(input) ||
+            !isFiniteF(derivative))
+        {
+            return lastOutput_;
+        }
+        const float error = setpoint - input;
+        const float filteredDerivative = filterDerivative(-derivative);
+        const float output = computePID(error, filteredDerivative, dt);
+        previousError_ = error;
+        previousInput_ = input;
+        lastOutput_ = output;
+        return output;
+    }
+
+    float computeDerivativeOnMeasurement(float setpoint, float input, float dt)
+    {
+        if (!isFiniteF(setpoint) || !isFiniteF(input))
+        {
+            return lastOutput_;
+        }
+        const float error = setpoint - input;
+        const float derivative = previousInput_ - input;
+        const float filteredDerivative = filterDerivative(derivative);
+        const float output = computePID(error, filteredDerivative, dt);
+        previousError_ = error;
+        previousInput_ = input;
+        lastOutput_ = output;
+        return output;
+    }
+
+private:
+    static bool isFiniteF(float v)
+    {
+        return (v == v) && (v < 3.0e38f) && (v > -3.0e38f);
+    }
+    float filterDerivative(float currentDerivative)
+    {
+        if (filterCoefficient_ >= 1.0f)
+        {
+            previousDerivative_ = currentDerivative;
+            return currentDerivative;
+        }
+        const float filtered = filterCoefficient_ * currentDerivative +
+                               (1.0f - filterCoefficient_) * previousDerivative_;
+        previousDerivative_ = filtered;
+        return filtered;
+    }
+    void clampIntegralState()
+    {
+        if (ki_ == 0.0f)
+        {
+            integral_ = 0.0f;
+            return;
+        }
+        const float bound = std::fabs(integralLimit_ / ki_);
+        integral_ = coaxialVtvClamp(integral_, -bound, bound);
+    }
+    float computePID(float error, float derivative, float dt)
+    {
+        const float pOut = kp_ * error;
+        float iOut = 0.0f;
+        if (enableIntegral_ && ki_ != 0.0f)
+        {
+            if (integralThreshold_ <= 0.0f ||
+                std::fabs(error) < integralThreshold_)
+            {
+                integral_ += error * dt;
+            }
+            clampIntegralState();
+            iOut = coaxialVtvClamp(ki_ * integral_, -integralLimit_,
+                                   integralLimit_);
+        }
+        else
+        {
+            integral_ = 0.0f;
+        }
+        const float dOut = kd_ * derivative;
+        return coaxialVtvClamp(pOut + iOut + dOut, outputMin_, outputMax_);
+    }
+
+    float kp_, ki_, kd_;
+    float integral_, previousError_, previousInput_, previousDerivative_,
+        lastOutput_;
+    float outputMin_, outputMax_, integralLimit_, integralThreshold_,
+        filterCoefficient_;
+    bool enableIntegral_;
 };
 
 class CoaxialVtvController
@@ -244,25 +389,25 @@ public:
 private:
     void applyParams()
     {
-        roll_angle_pid_ = PositionPID(
+        roll_angle_pid_ = CoaxialLegacyPid(
             params_.att_kp_roll, 0.0f, 0.0f, -params_.max_target_rate_dps,
             params_.max_target_rate_dps, true, params_.att_integral_limit, 0.0f,
             0.0f);
-        pitch_angle_pid_ = PositionPID(
+        pitch_angle_pid_ = CoaxialLegacyPid(
             params_.att_kp_pitch, 0.0f, 0.0f, -params_.max_target_rate_dps,
             params_.max_target_rate_dps, true, params_.att_integral_limit, 0.0f,
             0.0f);
-        roll_rate_pid_ = PositionPID(
+        roll_rate_pid_ = CoaxialLegacyPid(
             params_.rate_kp_roll, params_.rate_ki_roll, 0.0f,
             -params_.max_correction_deg, params_.max_correction_deg, true,
             params_.rate_integral_limit, 0.0f,
             params_.pid_derivative_filter_alpha);
-        pitch_rate_pid_ = PositionPID(
+        pitch_rate_pid_ = CoaxialLegacyPid(
             params_.rate_kp_pitch, params_.rate_ki_pitch, 0.0f,
             -params_.max_correction_deg, params_.max_correction_deg, true,
             params_.rate_integral_limit, 0.0f,
             params_.pid_derivative_filter_alpha);
-        yaw_rate_pid_ = PositionPID(
+        yaw_rate_pid_ = CoaxialLegacyPid(
             params_.rate_kp_yaw, params_.rate_ki_yaw, 0.0f,
             -params_.max_yaw_diff_us, params_.max_yaw_diff_us, true,
             params_.yaw_integral_limit, params_.yaw_integral_threshold,
@@ -282,11 +427,11 @@ private:
     }
 
     CoaxialVtvParams params_{};
-    PositionPID roll_angle_pid_;
-    PositionPID pitch_angle_pid_;
-    PositionPID roll_rate_pid_;
-    PositionPID pitch_rate_pid_;
-    PositionPID yaw_rate_pid_;
+    CoaxialLegacyPid roll_angle_pid_;
+    CoaxialLegacyPid pitch_angle_pid_;
+    CoaxialLegacyPid roll_rate_pid_;
+    CoaxialLegacyPid pitch_rate_pid_;
+    CoaxialLegacyPid yaw_rate_pid_;
     CoaxialFirstOrderFilter roll_rate_filter_;
     CoaxialFirstOrderFilter pitch_rate_filter_;
     CoaxialFirstOrderFilter roll_corr_filter_;
