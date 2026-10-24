@@ -126,6 +126,7 @@ def simulate_gnss(duration_s, truth_vel, gnss_hz=10, age_s=0.0, gnss_noise=None,
     ekf = make_ekf()
     n = int(duration_s * HZ)
     ts, pos_err, vel_err, p_pos, p_vel, nis_hist = [], [], [], [], [], []
+    nees_pos_full, nees_vel_full = [], []
     gnss_k = 0
     outage_start, outage_end = outage
     # 真实轨迹: 前 2s 从静止线性加速到巡航 (与 EKF 静止初始化一致)，之后匀速
@@ -191,9 +192,22 @@ def simulate_gnss(duration_s, truth_vel, gnss_hz=10, age_s=0.0, gnss_noise=None,
         vel_err.append(ekf.vel - v_ned_true)
         p_pos.append(np.sqrt(np.diag(ekf.P)[0:3]))
         p_vel.append(np.sqrt(np.diag(ekf.P)[3:6]))
+        # 完整 3×3 P 块：NEES 必须用 P^{-1}，只取对角线会忽略轴间相关。
+        pe_now = est_pos - pos_ned_true
+        ve_now = ekf.vel - v_ned_true
+        try:
+            nees_pos_full.append(float(pe_now @ np.linalg.solve(
+                ekf.P[0:3, 0:3], pe_now)) / 3.0)
+            nees_vel_full.append(float(ve_now @ np.linalg.solve(
+                ekf.P[3:6, 3:6], ve_now)) / 3.0)
+        except np.linalg.LinAlgError:
+            nees_pos_full.append(float("nan"))
+            nees_vel_full.append(float("nan"))
     return dict(ts=np.array(ts), pos_err=np.array(pos_err),
                 vel_err=np.array(vel_err), p_pos=np.array(p_pos),
-                p_vel=np.array(p_vel), nis=np.array(nis_hist))
+                p_vel=np.array(p_vel), nis=np.array(nis_hist),
+                nees_pos_full=np.array(nees_pos_full),
+                nees_vel_full=np.array(nees_vel_full))
 
 
 def simulate_dual_vector_yaw(duration_s, speed, flow_noise_std=0.08,
