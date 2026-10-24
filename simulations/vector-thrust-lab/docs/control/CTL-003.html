@@ -149,6 +149,25 @@ GPIO/量纲。该抽取已由 SIL 基线逐值回归。</li>
 仍采用既有线性油门口径（刻意不改成 kT·ω²
 物理逆，避免实机行为漂移），<code>test_thrust_allocation.cpp</code>
 锁定旧 <code>mapFloat</code> 逐值口径。</li>
+<li><code>include/HeadingAidingGate.h</code>（2026-10-24
+安全门控）：以磁矢量最近成功融合时间为唯一绝对航向源；失效立即降级、恢复需连续
+3 s 磁新鲜。<code>determine_control_mode()</code> 据此把
+AUTO_POSITION/GUIDED 强制降为
+AUTO_ALTITUDE，<code>execute_yaw_controller()</code> 同时关闭 heading
+hold（回中只给 ω_ref=0）。无磁 <code>nomag_degraded</code> SIL profile 3
+seeds 通过（定高 9.17–9.29 m、max_roll
+0、<code>pos_degraded=1</code>）；无磁位置保持不再被当作验收项。</li>
+<li><code>include/CoaxialVtvControl.h</code>（2026-10-24）：纯
+DirectTvcRate 控制律（姿态 P → 速率 PI → ±10° 修正角；偏航速率 PI → ±180
+µs
+差速），默认增益取自外部共轴工程；<code>test_coaxial_vtv_control.cpp</code>
+含简化 6DOF 刚体闭环（初始 5°/3° 姿态、10°/s 偏航速率，10 s
+后收敛）。<strong>尚未接入 <code>runGNCExecutive</code>
+的机型选择，也无共轴整机 SIL/台架。</strong></li>
+<li><code>include/LiquidRocketModel.h</code>（2026-10-24）：L1
+液体火箭推进模型（点火/解锁互锁、阀门/推力速率、Tmin、比冲质量流、推进剂耗尽、变质量）与双轴喷管
+asin 几何；参数取自外部 <code>VTVL_LiquidRocket_FC</code> 的 CCAEGT
+示例，<strong>不是本机标定值，未接入飞行模式</strong>。</li>
 <li><code>src/flight_control.cpp</code> 层 3 已改为走
 <code>ActuatorOutputMap</code>；GPIO/PWM 写入仍留在固件层，通用层不依赖
 Arduino。自动分配路径走 <code>TandemVecAllocator</code>，manual/locked
@@ -230,8 +249,10 @@ TVC 映射目前未被其实际 mix
 <ol type="1">
 <li>选 <code>kCoaxialVtvProfile</code>：2 舵机 + 2
 电调，<code>DirectTvcRate</code> / <code>DifferentialPwmUs</code>；</li>
-<li>控制律移植外部工程的姿态/速率环：roll/pitch 摆角限幅
-<code>MAX_CORRECTION=10°</code>，yaw 速率 PID 输出 µs 差速；</li>
+<li>控制律使用 <code>CoaxialVtvControl.h</code>（已在宿主 6DOF
+闭环验证）；还需在 <code>runGNCExecutive</code>
+增加机型选择分支，并建立共轴专用 6DOF SIL/台架——当前固件仍只跑 TandemVec
+分配路径；</li>
 <li>输出层调用 <code>mapCoaxialVtvOutputs()</code>：复现
 ±15°→33.33–66.67%、1000–2000 µs 联合限幅、未解锁/45° 大倾角锁电机；</li>
 <li>复用现有模式/解锁/点火/燃料联锁、导航、传感器、日志和
@@ -256,12 +277,17 @@ GCS；<strong>不要复用 TandemVec 的 BTRUE 差速开方路径</strong>；</l
 <ol type="1">
 <li>输出表增加阀门、点火、双摆座、RCS；能力位
 <code>ThrustValve/Ignition/Rcs/VariableMass</code>；</li>
-<li>推进模型需要从“kT·ω²”扩展为“推力曲线/阀门开度/推进剂质量时变”；</li>
+<li>推进模型已抽
+<code>LiquidRocketModel.h</code>（推力曲线/阀门/点火/比冲流量/变质量/双轴喷管），但参数是外部
+CCAEGT 示例，需本机标定；RCS 脉冲/多级尚未实现；</li>
 <li>分配内核使用 N 输入（摆座 2 + RCS 脉冲），处理秩亏/最小脉冲；</li>
 <li>模式状态机需要 <code>IGNITION/ASCENT/STAGE_SEP/DESCENT/LANDED</code>
-等新状态；现有解锁/燃料联锁可复用，但不能直接复用 VTOL 模式；</li>
+等新状态；现有解锁/燃料联锁可复用，但不能直接复用 VTOL 模式；外部
+<code>VTVL_LiquidRocket_FC</code> 的 CCAEGT
+制导库只作参考，未复制进本仓库；</li>
 <li>级间分离、变质量、RCS
-最小脉冲和上升段制导必须单独安全论证；<strong>本轮不实现</strong>。</li>
+最小脉冲和上升段制导必须单独安全论证；<strong>本轮只做 L1
+模型，不接入飞行模式</strong>。</li>
 </ol>
 <hr />
 <h2 id="4-兼容与红线">4 兼容与红线</h2>
@@ -270,6 +296,10 @@ GCS；<strong>不要复用 TandemVec 的 BTRUE 差速开方路径</strong>；</l
 <code>ω=w0√(1±Δω)</code>、τm 观测、零油门 5%
 归中、轴置换、dMax/dwMax、锁定 0%
 不得被通用分配器替换；通用层只能以等价适配器接入。</li>
+<li>航向不可观时不得继续 AUTO_POSITION/GUIDED
+水平位置闭环，也不得做绝对航向 heading hold；这是
+<code>HeadingAidingGate</code> 的安全红线，不是可调增益。</li>
+<li>液体火箭模型的点火/解锁互锁、推进剂耗尽推力归零、质量不得为负是硬边界；模型参数未标定，不得用于实机推力/着陆预测。</li>
 <li>参数 ID=注册表下标是协议，只允许尾部追加；0xF1
 旧帧保持，新增执行器遥测优先走 AnoVars/新帧。</li>
 <li>任何新机型 profile 在没有
@@ -320,5 +350,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 <p>当前完成 P1 的代码骨架；P2
 之后才可能谈“支持某新机型”。现有实机仍应按原纵列双发基线调参/飞行。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 15:20</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 15:45</footer></article></body>
 </html>

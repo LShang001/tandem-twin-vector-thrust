@@ -60,6 +60,12 @@ run_one "$ROOT/test_host/test_thrust_allocation.cpp" talloc ""
 # 绝对航向辅助/位置保持降级门控（HeadingAidingGate.h，纯平台无关——
 # Mag/YawGsf 新鲜度、失效立即降级、恢复 3 s 锁存、YawGsf 速度门限）：
 run_one "$ROOT/test_host/test_heading_aiding_gate.cpp" hag ""
+# 液体火箭变质量推进/喷管几何（LiquidRocketModel.h，纯平台无关——
+# 点火/解锁互锁、阀门/推力速率、Tmin、比冲流量、耗尽关机、两轴 asin 分解）：
+run_one "$ROOT/test_host/test_liquid_rocket_model.cpp" lrm ""
+# 共轴双桨 VTVL DirectTvcRate 控制律（CoaxialVtvControl.h，纯平台无关——
+# 通道极性/限幅/手动旁路/偏航差速 + 简化 6DOF 刚体闭环）：
+run_one "$ROOT/test_host/test_coaxial_vtv_control.cpp" cvc ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""
