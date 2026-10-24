@@ -205,8 +205,10 @@ F3/F4 故障重构仍未完成。**
 ### 运行
 
 ```bash
-# 构建并跑 clean/nominal/degraded × 3 seeds（40 s）
-BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/run_real_acceptance.sh
+# 构建并跑磁基线 mag_clean/mag_nominal/mag_disturbed × 3 seeds（40 s）
+# 无磁 clean/nominal/degraded 是观测性诊断，不是位置保持验收基线（见 §6）
+BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/run_real_acceptance.sh \
+  --profiles mag_clean,mag_nominal,mag_disturbed
 
 # 单例（例：nominal + 位置保持）
 BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/build_and_run_real.sh \
@@ -226,13 +228,33 @@ BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/build_and_run_real.sh \
 | `imu_stuck` / `imu_nan` / `imu_drop` | 10–11 s 冻结/NaN/全丢样 | 只验收“检测/隔离”，不验收降落品质 |
 | `gnss_spoof` | 15 s 起 0.5 m/s ramp + 一致性拒绝 | 只验收监测/拒绝路径，不保证位置保持 |
 
-### 当前基线（L2 SIL，3 seeds/profile，2026-10-24）
+### 当前基线（L2 SIL，3 seeds/profile，2026-10-24 垂直推力重构后）
 
-clean/nominal/degraded × 3 seeds **9/9 PASS**：
+**位置保持验收基线必须启用磁力计。** 无磁 `clean/nominal/degraded` 在 40 s
+位置保持中约 23 s 后出现姿态/航向发散（clean seed1 末段 `hold_end≈50 m`），
+根因是悬停航向/姿态不可观（见 AGENTS.md「EKF 进控制闭环 10/10 FAIL」）。
+2026-10-24 复测：该失败在重构前 HEAD 与重构后二进制上 1 Hz 轨迹逐行一致，
+不是垂直推力映射改动引入；此前 README 的“clean/nominal/degraded 9/9”记录
+与当前脚本不符，已按实测更正。无磁 profile 只用于观测性/失效研究。
 
-- clean：final_alt≈10.0 m，hold_end≈1.1–1.5 m；
-- nominal：final_alt≈9.2 m，hold_end≈0.5–1.4 m；
-- degraded：final_alt≈6.1–6.2 m（气压漂移），hold_end≈0.6–1.1 m，野值拒绝 5–7 次。
+磁生产链 profile × 3 seeds **9/9 PASS**：
+
+- `mag_clean`：final_alt 9.94–10.06 m，hold_end 0.80–1.44 m，pos_rms 0.48–0.89 m；
+- `mag_nominal`：final_alt 9.15–9.23 m，hold_end 0.45–1.18 m，pos_rms 0.55–1.05 m；
+- `mag_disturbed`：final_alt 9.14–9.22 m，hold_end 0.37–1.22 m，pos_rms 0.69–1.16 m，
+  mag gate 179–196/392。
+
+2026-10-24 全 10 profile × 3 seeds 复测：**21/30 PASS**；9 个失败全部是无磁
+`clean/nominal/degraded`（航向/姿态不可观的已知失效路径），磁基线、IMU 三类故障
+和 GNSS spoof 共 21 例全部 PASS。不要把 21/30 写成“系统通过”；无磁位置保持是
+未解决的安全边界，后续需要磁失效检测 + 位置保持门控/降级策略。
+
+```bash
+# 磁基线（位置保持验收）
+py -3.12 test_host/fw_sil/run_real_acceptance.py \
+  --bin /tmp/tv_fcs_fw_sil_real/fw_real \
+  --profiles mag_clean,mag_nominal,mag_disturbed --seeds 1,2,3 --seconds 40
+```
 
 RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `linkDownCallback`
 保持解锁、模式落 AUTO_ALTITUDE、摇杆归中；final_alt 8.18 m、hold_end 0.87 m，

@@ -3,11 +3,12 @@
 
 @file    run_real_acceptance.py
 @module  固件/宿主 SIL（fw-tests：real-nav 验收门）
-@brief   对 clean/nominal/degraded 三套传感器/环境配置各跑 3 seeds，
+@brief   对磁基线（mag_clean/mag_nominal/mag_disturbed）各跑 3 seeds，
          解析被测体输出的 SIL_REAL_JSON 行并按阈值判定。
 @details 输入：--bin 被测可执行体；--seconds 仿真时长（默认 40 s）；
-         --profiles 可选 baseline（clean/nominal/degraded）、磁（mag_*）、
-         IMU 故障（imu_*）与 GNSS 欺骗（gnss_spoof）。
+         --profiles 默认磁基线；也可选无磁 clean/nominal/degraded（观测性诊断，
+         40 s 位置保持会因航向不可观发散，不作验收）、IMU 故障（imu_*）与
+         GNSS 欺骗（gnss_spoof）。
          处理：subprocess 运行 `--real-nav --profile <p> --pos-hold`；
          从 stdout 取最后一行 `SIL_REAL_JSON {...}`（NaN/Inf 转 null）；
          输出：逐例 PASS/FAIL 表；任何失败退出码非 0。
@@ -107,7 +108,9 @@ def main() -> int:
     ap.add_argument("--bin", required=True)
     ap.add_argument("--seconds", type=float, default=40.0)
     ap.add_argument("--seeds", default="1,2,3")
-    ap.add_argument("--profiles", default="clean,nominal,degraded")
+    ap.add_argument(
+        "--profiles", default="mag_clean,mag_nominal,mag_disturbed",
+        help="默认磁基线；无磁 clean/nominal/degraded 仅用于观测性诊断")
     args = ap.parse_args()
     seeds = [int(s) for s in args.seeds.split(",") if s]
     profiles = [p for p in args.profiles.split(",") if p]
@@ -156,11 +159,13 @@ def main() -> int:
                     errors.append(f"{key}=nonfinite")
             if not gates.get("skip_motion", False):
                 lo, hi = gates["final_alt"]
-                if not (lo <= float(data.get("final_alt", -1e9)) <= hi):
-                    errors.append(f"final_alt={data.get('final_alt')} not in [{lo},{hi}]")
+                final_alt = data.get("final_alt")
+                if finite(final_alt) and not (lo <= float(final_alt) <= hi):
+                    errors.append(f"final_alt={final_alt} not in [{lo},{hi}]")
                 for key in ("hold_end_rms", "pos_rms"):
-                    if float(data.get(key, 1e9)) > gates[key]:
-                        errors.append(f"{key}={data.get(key)} > {gates[key]}")
+                    value = data.get(key)
+                    if finite(value) and float(value) > gates[key]:
+                        errors.append(f"{key}={value} > {gates[key]}")
                 if "mag_fused_min" in gates and data.get("mag_fused", 0) < gates["mag_fused_min"]:
                     errors.append(f"mag_fused={data.get('mag_fused')} < {gates['mag_fused_min']}")
                 if "mag_gate_min" in gates and data.get("mag_gate", 0) < gates["mag_gate_min"]:
@@ -169,8 +174,9 @@ def main() -> int:
                     errors.append(f"mag_cal={data.get('mag_cal')}")
                 for key in ("max_roll", "max_pitch"):
                     limit_key = f"{key}_max"
-                    if limit_key in gates and float(data.get(key, 1e9)) > gates[limit_key]:
-                        errors.append(f"{key}={data.get(key)} > {gates[limit_key]}")
+                    value = data.get(key)
+                    if limit_key in gates and finite(value) and float(value) > gates[limit_key]:
+                        errors.append(f"{key}={value} > {gates[limit_key]}")
             if gates.get("require_imu_detected") and data.get("imu_detected") != 1:
                 errors.append(f"imu_detected={data.get('imu_detected')}")
             if "gnss_crej_min" in gates and data.get("gnss_crej", 0) < gates["gnss_crej_min"]:
