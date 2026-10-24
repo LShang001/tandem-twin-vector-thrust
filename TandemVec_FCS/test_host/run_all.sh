@@ -54,6 +54,9 @@ run_one "$ROOT/test_host/test_gnss_consistency.cpp"    gnssc ""
 run_one "$ROOT/test_host/test_vehicle_profile.cpp"     vp  ""
 run_one "$ROOT/test_host/test_generic_allocation.cpp"  ga  ""
 run_one "$ROOT/test_host/test_tandemvec_allocator.cpp" tva ""
+# 垂直推力机型映射（ThrustAllocation.h，纯平台无关——比力→总推力/油门、
+# 倾角补偿、上下饱和、非有限输入；锁旧 mapFloat 逐值口径）：
+run_one "$ROOT/test_host/test_thrust_allocation.cpp" talloc ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""

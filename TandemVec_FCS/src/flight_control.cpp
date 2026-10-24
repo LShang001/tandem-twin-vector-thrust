@@ -50,6 +50,7 @@
 #include "ControlUnits.h"
 #include "ActuatorFaultMonitor.h" // 执行器故障检测（2026-10，只读诊断）
 #include "ActuatorOutputMap.h"    // 机型输出表 → 舵机/电调/阀门（通用层）
+#include "ThrustAllocation.h"     // 期望天向比力 → 总推力/油门（机型推进层）
 #include "TandemVecAllocator.h"   // 纵列双发 α/油门 → 摆角/差速（机型分配器）
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
@@ -350,17 +351,22 @@ void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
 }
 
 /**
- * @brief 垂直通道：模式 → 天向加速度指令 → 总推力需求 → 油门百分比
+ * @brief 垂直通道：模式 → 天向加速度指令 → 期望天向比力（机型无关边界）
  * @param[in]  inputs  控制输入（手动模式下油门摇杆直通）
  * @param[in]  mode    当前飞行模式；AUTO_* / GUIDED 走闭环，其余手动油门
- * @param[out] outputs 只写 throttle_percent（0–100，其余字段由后续层填）
+ * @param[out] outputs 自动模式写 specific_force_up_mps2/thrust_cos_tilt/
+ *                     throttle_direct；手动模式写直通油门。throttle_percent
+ *                     的自动值由 mix 层机型推力映射回填。
  * @pre  高度/垂直速度来自导航层（起飞点 NED 原点，向上为正）
- * @formula F_z = m·(g + a_z_up)；F_total = F_z / cos_tilt；
- *          thr% = F_total / MAX_THRUST × 100
+ * @formula a_up = g + a_z_cmd；cos_tilt = max(|R33|, 0.5)；
+ *          输出比力 a_up，机型层再用 F_total = m·a_up/cos_tilt 映射执行器
  * @ref  PROP-001 §2、见 CTL-001 §8.4（串级定高与倾角补偿）；
- *       @ref MOD-002 §1.2（cos_tilt 用 R33，不是 R13）
- * @units 高度 m、垂直速度 m/s、加速度 m/s²、推力 N、油门 %；PID 步长 0.005 s
- * @note  倾角补偿用 |R33| = |1−2(qx²+qy²)|：存档系 z_b=推力轴，R33 即推力轴在
+ *       @ref MOD-002 §1.2（cos_tilt 用 R33，不是 R13）；CTL-003 §2
+ * @units 高度 m、垂直速度 m/s、比力 m/s²；PID 步长 0.005 s
+ * @note  ★ 2026-10-24：本函数不再读取 initial_mass/MAX_THRUST，也不做油门映射。
+ *        质量与最大推力属于机型推进层（ThrustAllocation），否则控制层会把
+ *        TandemVec 的推进能力泄漏到共轴/火箭路径。
+ *        倾角补偿用 |R33| = |1−2(qx²+qy²)|：存档系 z_b=推力轴，R33 即推力轴在
  *        NED 竖直方向的投影。若误用 R13（x_b 投影），悬停时 R13≈0 → 钳到 0.5
  *        → 油门需求凭空 ×2（2026-08-07 已踩，勿改回）。
  */
@@ -527,21 +533,15 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
       target_acceleration_z = altitudeVelocityPIDController.computeDerivativeOnMeasurement(target_vertical_velocity, currentVerticalVelocity, 0.005f);
     }
 
-    // --- 3. 动力合成与物理模型逆解 (所有自动模式通用) ---
-
-    // 物理模型: F_z = m * (g + a_z)
+    // --- 3. 输出期望天向比力（控制层边界，机型无关） ---
     // 这里的 target_acceleration_z 要么来自 PID (AUTO模式)，要么来自上位机 (GUIDED模式)
-    // 1. 计算所需的垂直推力加速度, 总垂直推力加速度 = 抵消重力(1g) + 运动加速度
-    //    重力项用 EKF 当地值 ekf_gravity_mps2（Somigliana，未初始化时回退 9.81）
-    float total_vertical_accel_required = ekf_gravity_mps2 + target_acceleration_z;
+    // 总天向比力 = 抵消重力(1g) + 运动加速度；重力项用 EKF 当地值
+    // ekf_gravity_mps2（Somigliana，未初始化时回退 9.81）。
+    // ★ 本层不乘质量、不除 MAX_THRUST：质量/最大推力/推力曲线属于机型层，
+    //   由 mix_and_output_commands() 的 ThrustAllocation 完成。
+    outputs.specific_force_up_mps2 = ekf_gravity_mps2 + target_acceleration_z;
 
-    // 2. 计算所需的垂直推力分量 ( F_z = m * a_z )
-    float desired_vertical_thrust = initial_mass * total_vertical_accel_required;
-
-    // 3. 倾斜推力补偿 (Tilt Compensation)
-    // 原理: 当机体倾斜时，为了保持相同的垂直分力，总推力必须增大。
-    // F_total = F_vertical / cos(tilt_angle)
-
+    // 倾斜推力补偿的几何量：当机体倾斜时，为保持相同天向分力，总推力必须增大。
     // 计算倾斜角的余弦值 (cos_tilt)
     // ★ 与原始 VTVL 实飞存档版一致（2026-08-07 恢复）：
     // 存档系 z_b = 推力轴（机头朝天时指向地面，推力沿 -z_b 朝上），
@@ -555,19 +555,11 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
 
     // 安全保护：限制最大补偿角度，防止倾斜过大时推力暴增导致失控
     // 例如限制在 60度 (cos(60)=0.5)，即推力最多增加到原来的2倍
-    // 如果 cos_tilt 小于 0.5，就按 0.5 计算
     cos_tilt = fmaxf(cos_tilt, 0.5f);
+    outputs.thrust_cos_tilt = cos_tilt;
 
-    // 计算实际需要的总推力
-    float desired_total_thrust = desired_vertical_thrust / cos_tilt;
-
-    // 4. 推力限幅 (Safety Constrain)
-    // 限制推力在 0 到 最大物理推力 之间
-    desired_total_thrust = constrain(desired_total_thrust, 0.0f, MAX_THRUST);
-
-    // --- 动力映射 (Force to PWM) ---
-    // 输出最终的油门百分比
-    outputs.throttle_percent = mapFloat(desired_total_thrust, 0.0f, MAX_THRUST, 0.0f, 100.0f);
+    outputs.throttle_direct = false;
+    outputs.throttle_percent = 0.0f; // 机型层映射后回填，供遥测/辨识/故障诊断
 
     target_accel_z_up_global = target_acceleration_z; // 更新天向运动的目标加速度全局变量
   }
@@ -583,10 +575,12 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
     altitudeVelocityPIDController.reset();     // 手动模式下重置 PID，积分清零
     vertical_loiter_state = ALTITUDE_HOVERING; // 退出模式时重置状态机
     outputs.throttle_percent = mapFloat(inputs.throttle_raw, 988.0f, 2012.0f, 0.0f, 100.0f);
+    outputs.specific_force_up_mps2 = 0.0f;
+    outputs.thrust_cos_tilt = 1.0f;
+    outputs.throttle_direct = true;
   }
-
-  // 用于CRSF发送的油门百分比
-  throttlePercent = outputs.throttle_percent;
+  // 注意：throttlePercent 全局量在 mix_and_output_commands() 末尾统一回填；
+  // 自动模式下本函数不再提前给出油门，避免控制层提前完成机型推力逆解。
 }
 
 /**
@@ -1345,27 +1339,32 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 }
 
 /**
- * @brief 控制分配（层1–2）+ 执行器 mix（层3）+ 限幅/安全门控
+ * @brief 垂直推力机型映射 + 控制分配（层1–2）+ 执行器 mix（层3）+ 限幅/安全门控
  * @param[in] inputs  控制输入（解锁、手动TVC、四通道摇杆）
- * @param[in] outputs 控制律输出（alpha_roll/alpha_pitch/alpha_yaw [rad/s²]、
- *                    throttle_percent [0,100]）
+ * @param[in,out] outputs 控制律输出（specific_force_up_mps2、thrust_cos_tilt、
+ *                    alpha_roll/alpha_pitch/alpha_yaw [rad/s²]）；本层回填
+ *                    最终 throttle_percent 供遥测/辨识/故障诊断
  * @return 无；直接写舵机/电机 PWM，并更新 gnc_tel 执行器段与 g_tvc_* 观测量
- * @pre  上层已给出 α 指令与油门；本层是整条链唯一写执行器的地方
- * @formula ① 惯量逆解 M = I·α（+ 交叉耦合前馈），经轴置换进模型系；
+ * @pre  上层已给出 α 指令与期望天向比力；本层是整条链唯一写执行器的地方
+ * @formula ⓪ 自动模式 F_total = m·a_up/cos_tilt，thr% = F_total·100/F_max；
+ *          ① 惯量逆解 M = I·α（+ 交叉耦合前馈），经轴置换进模型系；
  *          ② 差速通道增益调度 k = min((w0_eff/w_hover)², 1)；
  *          ③ B_true 分配 u = B_true⁻¹·M_cmd（3×3 Cramer 逆，近奇异退 FULL_B）；
  *          ④ 差速开方分配 ωf,t = w0·√(1±Δω)，再钳到 wMax；
  *          ⑤ 舵机 PWM% = 50 + (摆角·传动比·方向)/半行程×50
  * @ref  THY-003 §3（控制分配/B⁺）；见 TandemVec-Paper/ch/05-allocation.tex
  *       (eq:direct_mapping、eq:Btrue_allocation)；
- *       CTL-001 §7（差速分配）、§8.6（固件链）；见 PROP-001 §5–§6
- * @units α [rad/s²]、M [N·m]、摆角 [rad]（转 deg 后进舵机映射）、Δω 无量纲、
- *        转速 [rad/s]、PWM 0–100%
+ *       CTL-001 §7/§8.4（差速分配/垂直推力）、§8.6（固件链）；见 PROP-001 §5–§6；
+ *       CTL-003 §2（垂直推力属于机型推进层）
+ * @units α [rad/s²]、比力 [m/s²]、M [N·m]、摆角 [rad]（转 deg 后进舵机映射）、
+ *        Δω 无量纲、转速 [rad/s]、PWM 0–100%
  * @note  本层三条硬性安全边界（删任一条都会改变实机行为）：
  *        ① 锁定态电机强制 0%（只有舵机允许随摇杆摆动做地面标定）；
  *        ② 零油门门控（throttle < 5%）把 δf/δt/Δω 一并归零，保持"零油门→执行器归中"；
  *        ③ allocateDifferential 必须用**真实指令油门 w0**（它决定实际转速），
  *           B 矩阵工作点才用观测转速 w0_eff——两者混用会把电机顶上 30% 转速。
+ *        ④ 垂直映射只在自动模式执行（throttle_direct=false）；手动 RC 直通不得
+ *           再乘质量/除 cos_tilt，否则零油门/地面模式油门会被改写。
  */
 // ★ 2026-08-07：差速回路增益调度系数，供在线辨识修正命令量使用。
 // mix 层（步骤8）写入 → update_online_identification（步骤9）读取，
@@ -1385,7 +1384,7 @@ static Vector3 getSanitizedBodyGyro()
   return Vector3{last_x, last_y, last_z};
 }
 
-void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs_t &outputs)
+void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &outputs)
 {
   const TandemVecParams &P = kDefaultTandemVecParams;
   const Vector3 gyro_safe = getSanitizedBodyGyro();
@@ -1404,6 +1403,23 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   float lower_gimbal_deg  = 0.0f;
   float motor1_pct       = 0.0f;   // 直接用百分比，避免 us→pct 双重转换
   float motor2_pct       = 0.0f;
+
+  // ── 垂直推力机型映射（控制层只给期望天向比力）────────────────────────
+  // 自动模式：specific_force_up_mps2 是天向比力（含 1g），这里才乘质量、除
+  // cos_tilt、限幅并映射到油门。手动模式：throttle_direct=true，直接沿用 RC。
+  // ★ 这是 TandemVec 的推进能力口径；共轴/火箭应替换为各自的推力曲线/阀门映射。
+  float final_throttle_pct = outputs.throttle_percent;
+  if (!outputs.throttle_direct)
+  {
+    bfs::ThrustAllocationInput thrust_in;
+    thrust_in.specific_force_up_mps2 = outputs.specific_force_up_mps2;
+    thrust_in.thrust_axis_up_cos = outputs.thrust_cos_tilt;
+    thrust_in.mass_kg = initial_mass;
+    thrust_in.max_total_thrust_n = MAX_THRUST;
+    const bfs::ThrustAllocationOutput thrust_out =
+        bfs::allocateLinearThrustThrottle(thrust_in);
+    final_throttle_pct = thrust_out.valid ? thrust_out.throttle_pct : 0.0f;
+  }
 
   if (!inputs.is_unlocked)
   {
@@ -1433,7 +1449,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
                                 -MAX_CORRECTION, MAX_CORRECTION);
     upper_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
                                 MAX_CORRECTION, -MAX_CORRECTION);
-    float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
+    float w0 = (final_throttle_pct / 100.0f) * P.wMax;
     float manual_dw = mapFloat((inputs.yaw_raw - 1500.0f), -512.0f, 512.0f,
                                -P.dwMax, P.dwMax);
     auto diff = allocateDifferential(w0, manual_dw, P);
@@ -1465,7 +1481,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       const float R2D = 57.29578f;
       lower_gimbal_deg  = constrain( GYRO_K * gyro_safe.y * R2D, -15.0f, 15.0f);
       upper_gimbal_deg = constrain( GYRO_K * gyro_safe.z * R2D, -15.0f, 15.0f);
-      float w0 = (outputs.throttle_percent / 100.0f) * P.wMax;
+      float w0 = (final_throttle_pct / 100.0f) * P.wMax;
       float dw = constrain( GYRO_K * gyro_safe.x * R2D * 0.05f, -P.dwMax, P.dwMax);
       auto diff = allocateDifferential(w0, dw, P);
       motor1_pct = constrain(mapFloat(diff.wf_target, 0.0f, P.wMax, 0.0f, 100.0f), 0.0f, 100.0f);
@@ -1479,7 +1495,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
       alloc_in.alpha_roll_radps2 = outputs.alpha_roll_radps2;
       alloc_in.alpha_pitch_radps2 = outputs.alpha_pitch_radps2;
       alloc_in.alpha_yaw_radps2 = outputs.alpha_yaw_radps2;
-      alloc_in.throttle_pct = outputs.throttle_percent;
+      alloc_in.throttle_pct = final_throttle_pct;
       float gyro_body[3] = {static_cast<float>(gyro_safe.x),
                             static_cast<float>(gyro_safe.y),
                             static_cast<float>(gyro_safe.z)};
@@ -1594,6 +1610,11 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   // 执行器指令物理量纲（全模式统一捕获）→ AnoCom 0x40 帧 / 上位机 TVC 显示
   g_tvc_upper_deg = upper_gimbal_deg;
   g_tvc_lower_deg  = lower_gimbal_deg;
+
+  // 本拍最终油门（手动直通或机型推力映射）回填到控制输出与 CRSF/导航观测。
+  // 必须在 mix 返回前完成：步骤 8b 故障诊断与步骤 9 在线辨识都读该值。
+  outputs.throttle_percent = final_throttle_pct;
+  throttlePercent = final_throttle_pct;
 }
 /**
  * @brief 在线参数辨识更新 — ★ 纯观测模式，不改变任何控制行为

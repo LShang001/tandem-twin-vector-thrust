@@ -172,8 +172,11 @@ typedef struct
 } ControlInputs_t;
 
 // 控制输出结构体 — **机型无关控制层的边界**
-// 位置/速度/姿态/角速率环只产生 throttle + 三轴 SI 角加速度；
-// 从本结构往后才进入机型逆解（TandemVecAllocator/共轴 TVC/火箭摆座），
+// 位置/速度/姿态/角速率环只产生"期望天向比力 + 三轴 SI 角加速度"；
+// 质量、最大推力、推力曲线、摆座几何、电机数量都不属于本层。
+// 从本结构往后才进入机型逆解：
+//   垂直通道 → ThrustAllocation（比力→总推力/油门/阀门）
+//   转动通道 → TandemVecAllocator / 共轴 DirectTvcRate / 火箭摆座/RCS
 // 不要再把电机数量、摆角、BTRUE、差速开方耦合进姿态/速率控制。
 // 速率 PID 在角度域输出 deg/s²；写入本结构前统一转换为 rad/s²。
 // 轴向（★ 2026-08-07 轴置换后，旧注释"上摆=偏航/差速=滚转"已废止；
@@ -181,7 +184,15 @@ typedef struct
 // alpha_pitch→体轴y→下摆δ_t，alpha_yaw→体轴z→差速Δω
 typedef struct
 {
-  float throttle_percent; // 油门百分比 (0-100)
+  // 最终执行器油门：手动模式为 RC 直通值，自动模式由 mix 层机型推力映射回填。
+  // 它属于机型输出口径，不是跨机型物理量；跨机型统一量是 specific_force_up。
+  float throttle_percent;
+  // 垂直通道机型无关输出：期望总比力（含抵消重力的 1g）沿 NED 天向，m/s²。
+  float specific_force_up_mps2;
+  // 推力轴在 NED 天向的投影 |R33|，已按安全下限钳到 0.5。
+  float thrust_cos_tilt;
+  // true = throttle_percent 是遥控直通（手动）；false = 由 specific_force 映射。
+  bool throttle_direct;
   float alpha_roll_radps2;  // rad/s²  体轴x角加速度（滚转/上摆δ_f）
   float alpha_pitch_radps2; // rad/s²  体轴y角加速度（俯仰/下摆δ_t）
   float alpha_yaw_radps2;   // rad/s²  体轴z角加速度（偏航/差速Δω）

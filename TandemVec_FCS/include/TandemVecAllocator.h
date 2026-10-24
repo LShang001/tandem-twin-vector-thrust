@@ -16,6 +16,8 @@
  * @units   α rad/s²、ω rad/s、M N·m、摆角 rad、电机 %
  * @note    ★ 本文件只搬运当前已验证的 TandemVec 机型逆解，行为红线（差速开方、
  *          τm 观测、零油门归中、BTRUE 退化、轴置换）不得在此“顺手改公式”。
+ *          垂直通道的"比力→总推力/油门"由 ThrustAllocation.h 独立处理；
+ *          本文件只负责转动通道（α_cmd→力矩→摆角/差速）。
  *          共轴/火箭需要各自的 allocator；它们的控制层仍可复用 α_cmd 接口。
  * @test    test_host/test_tandemvec_allocator.cpp（与 flight_control 旧公式/SIL 对照）
  * @see     TandemVec_ControlAllocation.h、InertiaDecoupling.h、ActuatorOutputMap.h
