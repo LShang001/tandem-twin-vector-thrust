@@ -469,7 +469,26 @@ K=0.3/0.5/0.8/1.2 为 80.47/0.91%、80.53/0.84%、80.54/0.84%、
 不能外推到 SIL。`BFS_RATE_ACCEL_FB` 保持默认关闭，AAF 不进入固件候选，
 只保留 L1 研究分支。数据：`sim-data/aaf-2026-10-24/`。
 
-### 5.11 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
+### 5.11 固定降增益的固件 SIL 复核（L1 收益未复现）
+
+`run_real_acceptance.py --gain-scale 0.85/0.70`（只缩 kp；另跑 0.70 +
+`--scale-ki`）同一 6 例：
+
+| 变体 | 通过 | 失败点 |
+|---|---|---|
+| fixed | **6/6** | mag_clean seed3 hold_end 1.10 m（离 1.5 m 门限很近） |
+| detune85 | 5/6 | mag_clean seed3 hold_end 3.63 m |
+| detune70 | 5/6 | mag_clean seed3 hold_end 5.57 m |
+| detune70 + scale-ki | 5/6 | 与 detune70 逐行相同（该 SIL 路径未体现 Ki 缩放） |
+
+降增益把 L1 100k 失败 1.90%→1.01/0.83%，但在 SIL 的 mag_clean seed3 上
+反而把接近门限的 1.10 m 推到 3.6–5.6 m；其余 5 例正常。**这说明当前
+位置保持的 hold_end 裕度本身很小（基线 1.10/1.5 m），1 个种子的相位
+变化就能翻转结论；不能用“L1 失败率下降”直接推固件默认值。** 固定
+降增益仍只能作为 SIL/台架 A/B 候选，不是实机调参结论。数据：
+`sim-data/aaf-2026-10-24/sil_acceptance.json`。
+
+### 5.12 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
 
 `RatePhaseLead.h`：`ω_eff=ω+K·(ω−LPF(ω))`，一阶低通 τ=0.02 s，DC 增益 1、
 高频增益 1+K；不直接对陀螺做差分，理论上比 AAF 更抗噪声。20k

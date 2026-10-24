@@ -609,6 +609,204 @@
       ],
       "passed": 0,
       "total": 6
+    },
+    "detune85": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.98,
+          "hold_end": 1.02,
+          "hold_max": 1.9,
+          "pos_rms": 0.9,
+          "roll_max": 8.88
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.96,
+          "hold_end": 0.55,
+          "hold_max": 1.16,
+          "pos_rms": 0.48,
+          "roll_max": 7.45
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": false,
+          "alt": 10.06,
+          "hold_end": 3.63,
+          "hold_max": 5.08,
+          "pos_rms": 0.65,
+          "roll_max": 13.7
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.23,
+          "hold_end": 0.57,
+          "hold_max": 3.19,
+          "pos_rms": 0.56,
+          "roll_max": 16.88
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.19,
+          "hold_end": 1.0,
+          "hold_max": 6.35,
+          "pos_rms": 1.04,
+          "roll_max": 15.56
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 0.28,
+          "hold_max": 6.91,
+          "pos_rms": 0.78,
+          "roll_max": 16.86
+        }
+      ],
+      "passed": 5,
+      "total": 6
+    },
+    "detune70": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.97,
+          "hold_end": 0.78,
+          "hold_max": 5.58,
+          "pos_rms": 0.89,
+          "roll_max": 11.84
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.95,
+          "hold_end": 0.42,
+          "hold_max": 1.54,
+          "pos_rms": 0.48,
+          "roll_max": 9.22
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": false,
+          "alt": 10.06,
+          "hold_end": 5.57,
+          "hold_max": 10.22,
+          "pos_rms": 0.64,
+          "roll_max": 10.73
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.21,
+          "hold_end": 1.7,
+          "hold_max": 4.75,
+          "pos_rms": 0.56,
+          "roll_max": 17.78
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.19,
+          "hold_end": 1.78,
+          "hold_max": 6.52,
+          "pos_rms": 1.03,
+          "roll_max": 15.65
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 0.45,
+          "hold_max": 4.13,
+          "pos_rms": 0.77,
+          "roll_max": 15.17
+        }
+      ],
+      "passed": 5,
+      "total": 6
+    },
+    "detune70_scale_ki": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.97,
+          "hold_end": 0.78,
+          "hold_max": 5.58,
+          "pos_rms": 0.89,
+          "roll_max": 11.84
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.95,
+          "hold_end": 0.42,
+          "hold_max": 1.54,
+          "pos_rms": 0.48,
+          "roll_max": 9.22
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": false,
+          "alt": 10.06,
+          "hold_end": 5.57,
+          "hold_max": 10.22,
+          "pos_rms": 0.64,
+          "roll_max": 10.73
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.21,
+          "hold_end": 1.7,
+          "hold_max": 4.75,
+          "pos_rms": 0.56,
+          "roll_max": 17.78
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.19,
+          "hold_end": 1.78,
+          "hold_max": 6.52,
+          "pos_rms": 1.03,
+          "roll_max": 15.65
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 0.45,
+          "hold_max": 4.13,
+          "pos_rms": 0.77,
+          "roll_max": 15.17
+        }
+      ],
+      "passed": 5,
+      "total": 6
     }
   }
 }

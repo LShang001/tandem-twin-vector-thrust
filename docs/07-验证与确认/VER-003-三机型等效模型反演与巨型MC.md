@@ -545,7 +545,19 @@ RMS 8.60° 优于 lead05 8.90°。对抗 TPE（250 trials）：fixed 280.6°/
 L1 收益不能外推到 SIL。`BFS_RATE_ACCEL_FB` 保持默认关闭，AAF 不进入
 固件候选，只保留 L1 研究分支。数据：`sim-data/aaf-2026-10-24/`。
 
-### 3.14 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
+### 3.14 固定降增益的固件 SIL 复核（L1 收益未复现）
+
+`--gain-scale 0.85/0.70`（只缩 kp；另跑 0.70 + `--scale-ki`）同一 6 例：
+fixed **6/6**（mag_clean seed3 hold_end 1.10 m，离 1.5 m 门限很近）；
+detune85 **5/6**（同 seed hold_end 3.63 m）；detune70 **5/6**（5.57 m）；
+detune70+scale-ki 5/6，与 detune70 逐行相同（该 SIL 路径未体现 Ki 缩放）。
+降增益把 L1 100k 失败 1.90%→1.01/0.83%，但 SIL 在接近门限的 seed 上
+反而把 1.10 m 推到 3.6–5.6 m。**当前位置保持 hold_end 裕度本身很小，
+1 个种子的相位变化即可翻转结论；不能用 L1 失败率下降直接推固件默认值。**
+固定降增益仍只能作为 SIL/台架 A/B 候选。数据：
+`sim-data/aaf-2026-10-24/sil_acceptance.json`。
+
+### 3.15 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
 
 `RatePhaseLead.h`：`ω_eff=ω+K·(ω−LPF(ω))`，一阶低通 τ=0.02 s，DC 增益 1、
 高频增益 1+K；不直接对陀螺做差分，理论上比 AAF 更抗噪声。20k
