@@ -24,6 +24,8 @@
  */
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #ifndef DEG_TO_RAD
 #define DEG_TO_RAD 0.017453292519943295
@@ -46,11 +48,23 @@ static int g_fail = 0;
     }                                                                           \
   } while (0)
 
-int main()
+int main(int argc, char **argv)
 {
+  double h0 = 30.0;
+  double prop0 = 3.0;
+  double roll0_deg = 3.0;
+  double pitch0_deg = -2.0;
+  for (int i = 1; i + 1 < argc; i += 2)
+  {
+    if (std::strcmp(argv[i], "--h0") == 0) h0 = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--prop") == 0) prop0 = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--roll0") == 0) roll0_deg = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--pitch0") == 0) pitch0_deg = std::atof(argv[i + 1]);
+  }
+
   bfs::LiquidRocketParams params;
   params.dry_mass_kg = 13.5f;
-  params.initial_propellant_kg = 3.0f;
+  params.initial_propellant_kg = static_cast<float>(prop0);
   params.max_thrust_n = 200.0f;
   params.min_thrust_n = 80.0f;
   params.isp_s = 200.0f;
@@ -63,10 +77,11 @@ int main()
 
   const double dt = 0.005;
   const double g = params.g0_mps2;
-  Quaternion q = eulerToQuaternion(3.0 * DEG_TO_RAD, -2.0 * DEG_TO_RAD, 0.0);
+  Quaternion q = eulerToQuaternion(roll0_deg * DEG_TO_RAD,
+                                    pitch0_deg * DEG_TO_RAD, 0.0);
   Vector3 omega{0.0, 0.0, 0.0};
   Vector3 vel{0.0, 0.0, 0.0};
-  Vector3 pos{0.0, 0.0, -30.0}; // NED down：-30 m 高度
+  Vector3 pos{0.0, 0.0, -h0}; // NED down：-h0 m 高度
   const double Ix = 0.8, Iy = 0.8, Iz = 0.5;
   const double lever = 0.4;
   const double a_brake = 1.5;

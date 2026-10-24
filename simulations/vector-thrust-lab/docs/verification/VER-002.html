@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-002 三机型兼容性与虚拟验证 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-002-三机型兼容性与虚拟验证">VER-002
+三机型兼容性与虚拟验证</h1>
+<blockquote>
+<p>本文回答一个具体问题：把共轴
+VTVL（<code>VTVL_ElectricDualRotor_FCS</code>）和液体火箭（<code>VTVL_LiquidRocket_FC</code>）接入统一固件后，<strong>原来的纵列双发飞行器是否还能按原行为飞行</strong>，以及三机型各自能证明到什么程度。
+全部结论均为 L0/L1/L2 虚拟证据；没有
+HIL、台架或实飞数据，不能写成“实机通过”。</p>
+</blockquote>
+<hr />
+<h2 id="1-兼容性判据">1 兼容性判据</h2>
+<table>
+<thead>
+<tr>
+<th>层级</th>
+<th>判据</th>
+<th>本次采用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1 输入/模式/导航</td>
+<td>相同 RC/传感器输入 → 相同模式判定与导航输出</td>
+<td>TandemVec：逐位一致；共轴：共用同一层，SIL 验证</td>
+</tr>
+<tr>
+<td>C2 制导/姿态/速率</td>
+<td>相同姿态/误差/角速率 → 相同执行器指令</td>
+<td>TandemVec：逐位一致；共轴：按实飞工程
+PID/滤波/限幅结构逐项对齐；液体：仅 L1 模型，未接飞行模式</td>
+</tr>
+<tr>
+<td>C3 执行器输出</td>
+<td>相同指令 → 相同 PWM/µs/百分比</td>
+<td>TandemVec：逐位一致；共轴：<code>mapCoaxialVtvOutputs</code> 与实飞
+mix 等价单测；液体：未接固件</td>
+</tr>
+<tr>
+<td>C4 闭环响应</td>
+<td>相同场景 → 高度/姿态/位置包线一致</td>
+<td>TandemVec SIL 24/24；共轴 SIL 15/15；液体 SIL 9/9 参数扫描</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论先说</strong>：</p>
+<ul>
+<li><strong>纵列双发（原飞行器）兼容性成立</strong>：新固件在
+<code>TandemVec_FCS</code> env 下与改造前基线逐位一致，SIL 24/24。</li>
+<li><strong>共轴 VTVL</strong>：控制律按实飞工程结构逐项对齐，真实固件 +
+近似 6DOF plant
+15/15；但<strong>没有外部实飞日志回放</strong>，不能证明逐波形一致。</li>
+<li><strong>液体火箭</strong>：只有 L1 推进/质量/喷管模型 + 自研简单回收
+SIL；<strong>实飞 CCAEGT
+制导未移植，不能声称飞行响应兼容</strong>。</li>
+</ul>
+<hr />
+<h2 id="2-三机型证据矩阵">2 三机型证据矩阵</h2>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>参考基线</th>
+<th>当前统一固件路径</th>
+<th>虚拟证据</th>
+<th>未证明项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>纵列双发 TandemVec</td>
+<td>改造前 HEAD <code>2d3774a</code> / 垂直推力重构前 SIL</td>
+<td><code>TandemVec_FCS</code>
+env，<code>TandemVecAllocator + ThrustAllocation + ActuatorOutputMap</code></td>
+<td><code>mag_clean seed2</code> 1 Hz
+轨迹与改前<strong>逐位一致</strong>；8 profile×3 seeds <strong>24/24
+PASS</strong>；宿主/固件编译/GOV 全绿</td>
+<td>实机/HIL；真实气动/推进/传感器</td>
+</tr>
+<tr>
+<td>共轴双桨 VTVL</td>
+<td>外部实飞工程控制律（PositionPID 4.25/0、0.25/0.08、yaw
+3.8/30；±80°/s、±10°、±180 µs；α=0.85/0.25 滤波）</td>
+<td><code>CoaxialVTVL</code>
+env，<code>CoaxialVtvControl + mapCoaxialVtvOutputs</code></td>
+<td>实飞同款 PID/滤波/限幅结构；宿主 6DOF 闭环；真实固件 SIL
+<code>mag_clean/mag_nominal/nomag_degraded</code> ×5 <strong>15/15
+PASS</strong></td>
+<td>外部实飞日志逐波形回放；台架/HIL；plant 惯量/力臂/差速力矩为 L1
+假设；偏航无自动 heading hold</td>
+</tr>
+<tr>
+<td>液体火箭</td>
+<td>外部实飞工程 CCAEGT 示例参数（16.5 kg、200 N、Isp 200 s）</td>
+<td>仅 <code>LiquidRocketModel.h</code> +
+<code>test_liquid_rocket_sil</code></td>
+<td>9 组高度/推进剂垂直回收：接地 2.15–2.45 m/s、姿态有界</td>
+<td><strong>未接固件飞行模式；CCAEGT 未移植；无
+RCS/多级/泵压动态/气动</strong>；不能称兼容</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-大规模虚拟验证结果">3 大规模虚拟验证结果</h2>
+<h3 id="31-tandemvec原飞行器">3.1 TandemVec（原飞行器）</h3>
+<ul>
+<li>逐位回归：<code>mag_clean seed2</code> 改前/改后 JSON
+完全一致（hold_end 0.712 m、max_roll 10.723°）；SIL 1 Hz 轨迹 diff
+为空。</li>
+<li>验收：<code>mag_clean/mag_nominal/mag_disturbed/nomag_degraded/imu_stuck/imu_nan/imu_drop/gnss_spoof</code>
+×3 seeds <strong>24/24 PASS</strong>。</li>
+<li>无磁 <code>nomag_degraded</code>：3/3，定高 9.99–10.03
+m、max_roll=0、<code>pos_degraded=1</code>（航向不可观主动降级）。</li>
+<li>边界：无磁 nominal/degraded 会按设计放弃位置保持，风致漂移 75/113
+m；不计入位置保持验收。</li>
+</ul>
+<h3 id="32-共轴-vtvl">3.2 共轴 VTVL</h3>
+<ul>
+<li><code>CoaxialVtvControl</code> 与实飞工程逐项对齐：外环/内环 PID
+增益、积分限幅（40/5/50）、输出限幅（±80/±10/±180）、微分滤波
+0.2、姿态目标 α=0.85、修正角 α=0.25、RATE_MODE 每拍复位速率 PID。</li>
+<li>真实固件（<code>BFS_COAXIAL_VTVL</code>）+ 近似
+plant：<code>mag_clean</code> hold_end 0.29–0.88 m、max_roll
+0.71–1.17°；<code>mag_nominal</code> hold_end 0.16–0.85 m、max_roll
+8.59–14.23°；<code>nomag_degraded</code> 定高 9.84–9.92
+m、<code>pos_degraded=1</code>。合计 <strong>15/15 PASS</strong>。</li>
+<li><code>CoaxialVTVL</code> env 编译 SUCCESS；宿主 6DOF 闭环（初始
+5°/3°、10°/s 偏航）收敛。</li>
+<li>未证明：真实共轴惯量/力臂/差速力矩、TVC 机械方向、45°
+锁电机故障、实飞航向保持。</li>
+</ul>
+<h3 id="33-液体火箭">3.3 液体火箭</h3>
+<ul>
+<li><code>LiquidRocketModel</code>：点火/解锁互锁、阀门/推力速率、Tmin、Isp
+质量流、耗尽关机、双轴 asin 喷管几何；宿主单测 33 断言。</li>
+<li><code>test_liquid_rocket_sil</code>：30 m、3 kg 代表场景接地 2.22
+m/s，max_roll 3.0°、max_pitch 2.0°。</li>
+<li><code>run_liquid_sil_sweep.sh</code>：20/30/40 m × 2.5/3/4 kg 共 9
+组，全部着陆，接地 2.15–2.45 m/s。</li>
+<li>未证明：外部 CCAEGT
+制导、真实阀门/泵压/室压、RCS、多级、气动、实机。</li>
+</ul>
+<hr />
+<h2 id="4-模块化与复用边界">4 模块化与复用边界</h2>
+<p>当前分层（详见 <a
+href="../control/CTL-003.html">CTL-003</a>）：</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>模块</th>
+<th>复用方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L0 机型数据</td>
+<td><code>VehicleProfile.h</code></td>
+<td>机型能力位/输出表</td>
+</tr>
+<tr>
+<td>L1 正向模型</td>
+<td><code>AirframeModel.h</code>、<code>TandemVec_Propulsion.h</code></td>
+<td>执行器几何/输入映射/数值 B</td>
+</tr>
+<tr>
+<td>L2b 垂直推力</td>
+<td><code>ThrustAllocation.h</code></td>
+<td>比力 → 总推力/油门</td>
+</tr>
+<tr>
+<td>L2 转动分配</td>
+<td><code>TandemVecAllocator.h</code>、<code>GenericControlAllocation.h</code>、<code>CoaxialVtvControl.h</code></td>
+<td>机型逆解/通用 N 输入/DirectTvcRate</td>
+</tr>
+<tr>
+<td>L3 输出</td>
+<td><code>ActuatorOutputMap.h</code></td>
+<td>归一化指令 → 舵机/电调/阀门</td>
+</tr>
+<tr>
+<td>L4 GNC 胶水</td>
+<td><code>runGNCExecutive</code></td>
+<td>输入/模式/定高/目标姿态共用；机型分支只替换控制/混控</td>
+</tr>
+<tr>
+<td>安全观测</td>
+<td><code>HeadingAidingGate.h</code>、IMU/GNSS/磁门控</td>
+<td>跨机型复用</td>
+</tr>
+</tbody>
+</table>
+<p><strong>当前机型选择是编译期</strong>（<code>TandemVec_FCS</code> /
+<code>CoaxialVTVL</code>）；后续可把 <code>VehicleProfile</code>
+选择做成运行期参数/配置，但要先完成各机型参数/输出表的实机标定，不能只靠枚举切换。</p>
+<hr />
+<h2 id="5-结论与下一步">5 结论与下一步</h2>
+<p><strong>可以确认</strong>：统一固件在 TandemVec
+配置下与改造前行为逐位一致；共轴控制律结构已对齐实飞工程并通过 15 个 SIL
+场景；液体推进/质量/喷管模型通过 9 组回收 SIL。</p>
+<p><strong>不能确认</strong>：共轴/液体与各自实飞固件的逐波形响应一致；三机型在真实气动/推进/传感器/执行器/HIL
+下的稳定性；液体 CCAEGT 飞行模式兼容。</p>
+<p>下一步按证据优先级：</p>
+<ol type="1">
+<li>用两型实飞日志做传感器/指令回放，比较新固件执行器输出与原固件（最强兼容性证据）；</li>
+<li>移植/审查 CCAEGT 制导与液体双摆座/阀门/RCS
+输出，建立液体固件分支；</li>
+<li>共轴台架标定惯量、力臂、差速力矩、TVC 方向与 45° 锁；</li>
+<li>再做 HIL/系留，最后才谈实飞。</li>
+</ol>
+<hr />
+<h2 id="6-参考">6 参考</h2>
+<ul>
+<li><a href="../control/CTL-003.html">CTL-003
+多机型与执行器抽象</a></li>
+<li><a href="VER-001.html">VER-001
+验证确认与模型可信度</a></li>
+<li><code>TandemVec_FCS/test_host/fw_sil/README.md</code>（TandemVec/共轴
+SIL 口径）</li>
+<li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:32</footer></article></body>
+</html>

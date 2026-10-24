@@ -112,6 +112,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
     ("验证与确认", [
         ("docs/07-验证与确认/VER-001-验证确认与模型可信度.md", "verification/VER-001.html",
          "VER-001 验证确认与模型可信度", "V 模型框架、证据清单、模型可信度分级与证据规则"),
+        ("docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md", "verification/VER-002.html",
+         "VER-002 三机型兼容性与虚拟验证", "TandemVec 逐位兼容、共轴 15/15、液体 9 组回收 SIL 与未证明项"),
         ("docs/07-验证与确认/SAFE-001-初步安全计划.md", "verification/SAFE-001.html",
          "SAFE-001 初步安全计划", "纯软件仿真范围声明、软件层面风险与缓解、硬件化前瞻议题登记"),
     ]),
