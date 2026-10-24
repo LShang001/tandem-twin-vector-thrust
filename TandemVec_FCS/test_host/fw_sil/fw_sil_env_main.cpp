@@ -13,7 +13,9 @@
  *          `--flow-delay N` 光流延迟、`--mag` 磁航向、`--seed`、`--no-wind`；
  *          `--real-nav` 下另有 `--mag-noise/--mag-disturb/--mag-dropout/
  *          --mag-cal-invalid`、`--imu-fault nan|stuck`/`--imu-dropout A:B`、
- *          `--gnss-consistency-reject`；
+ *          `--gnss-consistency-reject`、`--trace-csv PATH`（200 Hz 控制级
+ *          CSV：真值/EKF 姿态、陀螺、角速率指令、位置/目标、磁 kick/门控、
+ *          模式与降级标志；仅测试设施）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -59,6 +61,10 @@
 #include <limits>
 #include <random>
 #include <array>
+
+// 200 Hz 控制级 CSV 追踪（仅 SIL 测试设施；默认关闭）。
+static const char *g_trace_csv_path = nullptr;
+static FILE *g_trace_csv_file = nullptr;
 
 #ifdef BFS_RATE_ACCEL_FB
 extern void setRateAccelFeedbackGains(float rp_gain, float yaw_gain,
@@ -613,6 +619,25 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   double sum_hold_end2 = 0.0;
   int n_hold = 0, n_hold_end = 0;
 
+  if (g_trace_csv_path != nullptr)
+  {
+    g_trace_csv_file = std::fopen(g_trace_csv_path, "w");
+    if (g_trace_csv_file == nullptr)
+    {
+      std::fprintf(stderr, "[trace] cannot open %s\n", g_trace_csv_path);
+    }
+    else
+    {
+      std::fprintf(
+          g_trace_csv_file,
+          "t,truth_roll,truth_pitch,truth_yaw,ekf_roll,ekf_pitch,ekf_yaw,"
+          "gyro_x,gyro_y,gyro_z,omega_ref_x,omega_ref_y,omega_ref_z,"
+          "ekf_n,ekf_e,true_n,true_e,hold_n,hold_e,"
+          "mag_kick,mag_kick_rp,mag_gate_reason,mode,reanchor,"
+          "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4\n");
+    }
+  }
+
   for (int k = 0; k < steps; ++k)
   {
     const float t = k * dt_ctrl;
@@ -841,6 +866,31 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     if (mag_status.last_kick_rp_deg > max_mag_kick_rp)
     {
       max_mag_kick_rp = mag_status.last_kick_rp_deg;
+    }
+
+    if (g_trace_csv_file != nullptr)
+    {
+      float tr = 0.0f, tp = 0.0f, ty = 0.0f;
+      p.euler(tr, tp, ty);
+      std::fprintf(
+          g_trace_csv_file,
+          "%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
+          "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,"
+          "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
+          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f\n",
+          t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
+          nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
+          nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
+          g_sil_nav_debug_gyro[1], g_sil_nav_debug_gyro[2],
+          gnc_tel.omega_ref_dps[0], gnc_tel.omega_ref_dps[1],
+          gnc_tel.omega_ref_dps[2], relative_north, relative_east,
+          p.pos[0], p.pos[1], hold_target[0], hold_target[1],
+          mag_status.last_kick_deg, mag_status.last_kick_rp_deg,
+          static_cast<unsigned>(mag_status.last_gate_reason),
+          static_cast<int>(g_current_flight_mode),
+          g_pos_hold_reanchor ? 1 : 0, g_heading_aiding_valid ? 1 : 0,
+          g_mode_degraded_heading ? 1 : 0, ch1_output, ch2_output,
+          ch3_output, ch4_output);
     }
 
     if (!manual && !alt_cmd && t >= 3.0f)
@@ -1129,6 +1179,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               g_actuator_thrust_loss ? 1 : 0,
               g_actuator_servo_jam ? 1 : 0,
               g_mode_degraded_heading ? 1 : 0);
+  if (g_trace_csv_file != nullptr)
+  {
+    std::fclose(g_trace_csv_file);
+    g_trace_csv_file = nullptr;
+  }
   return 0;
 }
 #endif  // FW_SIL_REAL_NAV
@@ -1144,6 +1199,10 @@ int main(int argc, char** argv) {
   float seconds=40.0f;    // 仿真时长 [s]
   int mask=0x03;        // inertia_comp_mask，0 关闭前馈 / 3 全开（C-02 A/B）
   float gain_scale=1.0f; // 测试用：att/rate kp 缩放（默认 1.0，不影响生产）
+  float rate_gain_scale=1.0f; // 测试用：仅 rate kp 缩放（覆盖 gain_scale）
+  float att_gain_scale=1.0f;  // 测试用：仅 att kp 缩放（覆盖 gain_scale）
+  bool rate_gain_scale_set=false;
+  bool att_gain_scale_set=false;
   bool scale_ki=false;   // 同时缩放 rate ki
 #ifdef BFS_RATE_ACCEL_FB
   float aaf_gain=-1.0f;      // 测试用：AAF 滚转/俯仰增益覆盖（<0 用编译期默认）
@@ -1172,6 +1231,16 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--seconds")==0 && i+1<argc) seconds=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--mask")==0 && i+1<argc) mask=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--gain-scale")==0 && i+1<argc) gain_scale=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--rate-gain-scale")==0 && i+1<argc)
+    {
+      rate_gain_scale=std::atof(argv[++i]);
+      rate_gain_scale_set=true;
+    }
+    else if (std::strcmp(argv[i],"--att-gain-scale")==0 && i+1<argc)
+    {
+      att_gain_scale=std::atof(argv[++i]);
+      att_gain_scale_set=true;
+    }
     else if (std::strcmp(argv[i],"--scale-ki")==0) scale_ki=true;
 #ifdef BFS_RATE_ACCEL_FB
     else if (std::strcmp(argv[i],"--aaf-gain")==0 && i+1<argc) aaf_gain=std::atof(argv[++i]);
@@ -1197,6 +1266,8 @@ int main(int argc, char** argv) {
                   &real_cfg.mag_dropout_end);
     else if (std::strcmp(argv[i],"--mag-cal-invalid")==0) real_cfg.mag_cal_invalid=true;
     else if (std::strcmp(argv[i],"--real-nav")==0) real_cfg.enabled=true;
+    else if (std::strcmp(argv[i],"--trace-csv")==0 && i+1<argc)
+      g_trace_csv_path = argv[++i];
     else if (std::strcmp(argv[i],"--profile")==0 && i+1<argc)
       applyRealNavProfile(real_cfg, argv[++i]);
 #ifdef FW_SIL_COAXIAL
@@ -1269,18 +1340,20 @@ int main(int argc, char** argv) {
       real_cfg.gnss_consistency_reject=true;
 #endif
   }
-  if (gain_scale != 1.0f)
+  const float rate_scale = rate_gain_scale_set ? rate_gain_scale : gain_scale;
+  const float att_scale = att_gain_scale_set ? att_gain_scale : gain_scale;
+  if (att_scale != 1.0f || rate_scale != 1.0f)
   {
-    auto scale_pid = [&](auto &q) {
-      q.kp *= gain_scale;
-      if (scale_ki) q.ki *= gain_scale;
+    auto scale_pid = [&](auto &q, float s) {
+      q.kp *= s;
+      if (scale_ki) q.ki *= s;
     };
-    scale_pid(kFlightCtrlParams.att_roll);
-    scale_pid(kFlightCtrlParams.att_pitch);
-    scale_pid(kFlightCtrlParams.att_yaw);
-    scale_pid(kFlightCtrlParams.rate_roll);
-    scale_pid(kFlightCtrlParams.rate_pitch);
-    scale_pid(kFlightCtrlParams.rate_yaw);
+    scale_pid(kFlightCtrlParams.att_roll, att_scale);
+    scale_pid(kFlightCtrlParams.att_pitch, att_scale);
+    scale_pid(kFlightCtrlParams.att_yaw, att_scale);
+    scale_pid(kFlightCtrlParams.rate_roll, rate_scale);
+    scale_pid(kFlightCtrlParams.rate_pitch, rate_scale);
+    scale_pid(kFlightCtrlParams.rate_yaw, rate_scale);
   }
 #ifdef BFS_RATE_ACCEL_FB
   if (aaf_gain >= 0.0f)

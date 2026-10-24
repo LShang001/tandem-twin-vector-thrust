@@ -1,0 +1,197 @@
+{
+ "date": "2026-10-25",
+ "evidence_level": "L2",
+ "trace_option": "--trace-csv PATH (200 Hz)",
+ "note": "SIL control-rate trace; plant gyro is 2 kHz raw, 200 Hz CSV aliases >100 Hz content. Not real-flight evidence.",
+ "seed13": {
+  "max_yaw_rate_dps": 259.1,
+  "t_max_yaw": 28.84,
+  "first_gt60": 26.415,
+  "max_ekf_pitch_err": 13.9,
+  "max_mag_kick": 21.6,
+  "max_ekf_yaw_step": 132.5,
+  "t_max_step": 27.7
+ },
+ "seed14": {
+  "max_yaw_rate_dps": 41.5,
+  "t_max_yaw": 32.7,
+  "first_gt60": null,
+  "max_ekf_pitch_err": 1.6,
+  "max_mag_kick": 31.3,
+  "max_ekf_yaw_step": 39.9,
+  "t_max_step": 38.5
+ },
+ "normal_seeds": {
+  "1": {
+   "max_yaw_rate_dps": 106.8,
+   "t_max_yaw": 39.99,
+   "first_gt60": 39.325,
+   "max_ekf_pitch_err": 3.4,
+   "max_mag_kick": 22.1,
+   "max_ekf_yaw_step": 22.7,
+   "t_max_step": 39.4
+  },
+  "10": {
+   "max_yaw_rate_dps": 36.6,
+   "t_max_yaw": 32.53,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.3,
+   "max_mag_kick": 13.5,
+   "max_ekf_yaw_step": 16.3,
+   "t_max_step": 38.27
+  },
+  "11": {
+   "max_yaw_rate_dps": 47.4,
+   "t_max_yaw": 27.25,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.5,
+   "max_mag_kick": 25.1,
+   "max_ekf_yaw_step": 18.7,
+   "t_max_step": 38.38
+  },
+  "12": {
+   "max_yaw_rate_dps": 39.4,
+   "t_max_yaw": 38.97,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.8,
+   "max_mag_kick": 26.1,
+   "max_ekf_yaw_step": 26.1,
+   "t_max_step": 38.91
+  },
+  "14": {
+   "max_yaw_rate_dps": 41.5,
+   "t_max_yaw": 32.7,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 1.6,
+   "max_mag_kick": 31.3,
+   "max_ekf_yaw_step": 39.9,
+   "t_max_step": 38.5
+  },
+  "15": {
+   "max_yaw_rate_dps": 154.7,
+   "t_max_yaw": 39.81,
+   "first_gt60": 38.695,
+   "max_ekf_pitch_err": 10.3,
+   "max_mag_kick": 29.2,
+   "max_ekf_yaw_step": 52.6,
+   "t_max_step": 39.6
+  },
+  "16": {
+   "max_yaw_rate_dps": 40.9,
+   "t_max_yaw": 32.77,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.2,
+   "max_mag_kick": 15.1,
+   "max_ekf_yaw_step": 16.5,
+   "t_max_step": 34.14
+  },
+  "17": {
+   "max_yaw_rate_dps": 34.5,
+   "t_max_yaw": 28.37,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.0,
+   "max_mag_kick": 12.4,
+   "max_ekf_yaw_step": 12.4,
+   "t_max_step": 39.11
+  },
+  "18": {
+   "max_yaw_rate_dps": 34.7,
+   "t_max_yaw": 32.23,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.8,
+   "max_mag_kick": 15.4,
+   "max_ekf_yaw_step": 13.4,
+   "t_max_step": 38.91
+  },
+  "19": {
+   "max_yaw_rate_dps": 37.0,
+   "t_max_yaw": 30.38,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 3.4,
+   "max_mag_kick": 16.5,
+   "max_ekf_yaw_step": 16.3,
+   "t_max_step": 39.11
+  },
+  "2": {
+   "max_yaw_rate_dps": 41.2,
+   "t_max_yaw": 35.11,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 1.6,
+   "max_mag_kick": 15.3,
+   "max_ekf_yaw_step": 18.1,
+   "t_max_step": 38.61
+  },
+  "20": {
+   "max_yaw_rate_dps": 52.0,
+   "t_max_yaw": 33.09,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 4.0,
+   "max_mag_kick": 21.3,
+   "max_ekf_yaw_step": 33.0,
+   "t_max_step": 38.8
+  },
+  "3": {
+   "max_yaw_rate_dps": 50.4,
+   "t_max_yaw": 39.59,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.1,
+   "max_mag_kick": 28.5,
+   "max_ekf_yaw_step": 38.2,
+   "t_max_step": 39.5
+  },
+  "4": {
+   "max_yaw_rate_dps": 48.2,
+   "t_max_yaw": 39.27,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 2.5,
+   "max_mag_kick": 27.1,
+   "max_ekf_yaw_step": 38.9,
+   "t_max_step": 39.2
+  },
+  "5": {
+   "max_yaw_rate_dps": 47.5,
+   "t_max_yaw": 33.18,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 3.3,
+   "max_mag_kick": 15.6,
+   "max_ekf_yaw_step": 14.9,
+   "t_max_step": 32.14
+  },
+  "6": {
+   "max_yaw_rate_dps": 56.8,
+   "t_max_yaw": 23.66,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 13.8,
+   "max_mag_kick": 27.7,
+   "max_ekf_yaw_step": 27.7,
+   "t_max_step": 26.11
+  },
+  "7": {
+   "max_yaw_rate_dps": 39.3,
+   "t_max_yaw": 37.8,
+   "first_gt60": null,
+   "max_ekf_pitch_err": 1.7,
+   "max_mag_kick": 15.6,
+   "max_ekf_yaw_step": 18.3,
+   "t_max_step": 37.17
+  },
+  "8": {
+   "max_yaw_rate_dps": 154.3,
+   "t_max_yaw": 39.99,
+   "first_gt60": 38.965,
+   "max_ekf_pitch_err": 9.7,
+   "max_mag_kick": 19.7,
+   "max_ekf_yaw_step": 127.0,
+   "t_max_step": 39.9
+  },
+  "9": {
+   "max_yaw_rate_dps": 100.9,
+   "t_max_yaw": 39.39,
+   "first_gt60": 38.84,
+   "max_ekf_pitch_err": 3.9,
+   "max_mag_kick": 31.5,
+   "max_ekf_yaw_step": 70.0,
+   "t_max_step": 39.3
+  }
+ }
+}

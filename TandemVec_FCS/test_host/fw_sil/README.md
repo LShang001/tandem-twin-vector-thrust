@@ -291,6 +291,8 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | GNSS 野值 | `--gnss-outlier P`（profile degraded） | 显式 30 m/10 m/s 野值门 + NIS；SIL degraded 每 40 s 拒绝 5–7 帧 |
 | GNSS 失联 | `--gnss-outage A:B` | 无 GNSS 时纯惯导；有光流可保持水平，无光流只能验收定高 |
 | GNSS spoof | `--gnss-spoof ... --gnss-consistency-reject` | 一致性监测可在 ramp 后拒绝 GNSS（`gnss_crej>0`）；默认 warn-only；无外部基准时拒绝后仍可能漂移/坠落 |
+| 控制级追踪 | `--trace-csv PATH` | 200 Hz CSV：真值/EKF 姿态、陀螺、角速率指令、EKF 位置与保持目标、磁 kick/门控原因、飞行模式/降级/重锚、舵机与电机输出；仅测试设施，默认关闭 |
+| 增益分离扫描 | `--rate-gain-scale X` / `--att-gain-scale X` | 仅测试用：分别缩放速率内环/姿态外环 kp（覆盖 `--gain-scale` 的对应项）；用于区分高频振荡与位置/姿态慢响应 |
 
 **边界**：IMU 健康监测只提供“检测+隔离”，单 IMU 无冗余，不能写成故障恢复/安全降落；
 GNSS 一致性默认只告警，0.02 m/s 级慢漂和“恒定偏置+一致速度”欺骗不在可检测范围。

@@ -707,6 +707,21 @@ seed23 18.9、seed49 clean 8.76/nominal 12.29 m，其余多为 1.06–1.56 m
 `sim-data/sil-acceptance-20seed-yawcond-2026-10-25.json`、
 `sim-data/yaw-hold-limit-conditional-2026-10-25.json`。
 
+**200 Hz 控制级追踪（2026-10-25）**：新增 SIL `--trace-csv`。seed13 vs
+正常 seed14：最大机体 yaw rate 259.1 vs 41.5°/s，EKF pitch 误差峰值
+13.9° vs 1.6°，最大磁 kick 21.6° vs **31.3°**（正常种子更大）。磁 kick
+幅值不是判别量；seed13 先出现 roll/pitch 高频振荡/EKF 倾角误差，随后
+磁修正与航向环互相追错，t=26.4 yaw>60°/s，t=27.8 现有门控才降级。
+“更快降级”路线均否定：yaw rate 安全门使 seed13 55.3→75.7 m、seed6
+3.67→43.9 m；yaw 振荡门控 seed13→76.4 m；磁 yaw 限幅 5/10/15/20° 为
+26.3/140.9/88.9/59.1 m。增益 detune85 在 50 seeds 为 93/100 vs 90/100，
+但 **100 seeds×2 = 181/200 vs 基线 182/200**，并新增 seed79 499 m 尾部；
+分离扫描显示 rate-only 无效果、att-only 复现 detune——敏感性在姿态
+外环。下一步先加 2 kHz 短窗追踪并对总 IMU 信号做 anti-alias（当前 SIL
+只滤注入振动），确认高频成分是否为 plant/舵机数值伪影，再决定姿态环
+滤波，不能直接改增益。数据：`sim-data/mag-tail-trace-2026-10-25.json`、
+`sim-data/sil-acceptance-100seed-*.json`。
+
 光流辅助对照（诊断，不替换默认基线；随机流未对齐）：`mag_clean` 继承
 `clean`，**无 GNSS 失联/风/振动**；seed8/9 的 pos_rms 1.06/1.03 是
 0.5 m/轴 GNSS 噪声 + EKF 估计本底（水平 RMS≈0.707 m），不是失联滑行。
