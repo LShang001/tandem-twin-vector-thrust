@@ -664,6 +664,12 @@ mag_clean seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
 与失联无关）。默认路径生效；无失联时行为不变。数据：
 `sil_acceptance.json`、`seed7_factor.json`。
 
+失联时长扫描（seeds 1/2/3/7，`run_reanchor_sweep.py`）：0.5/1/2/5/10 s
+失联 hold_end 最大 0.92/1.12/2.07/4.92/7.33 m，roll 最大
+15.8/17.5/16.3/18.7/18.7°，均未发散；10 s seed7 的 7.33 m 已接近
+8 m 门限。**重锚保证失联累积误差不再变成大姿态指令，不保证原位保持；
+更长失联仍需飞控失效保护。** 数据：`sim-data/reanchor-sweep-2026-10-25/`。
+
 ### 3.22 MATLAB 频域裕度独立复核
 
 MATLAB R2025b Control System Toolbox 对速率环连续近似
