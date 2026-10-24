@@ -122,10 +122,11 @@ PASS</strong></td>
 <tr>
 <td>液体火箭</td>
 <td>外部实飞工程 CCAEGT 示例参数（16.5 kg、200 N、Isp 200 s）</td>
-<td>仅 <code>LiquidRocketModel.h</code> +
-<code>test_liquid_rocket_sil</code></td>
-<td>9 组高度/推进剂垂直回收：接地 2.15–2.45 m/s、姿态有界</td>
-<td><strong>未接固件飞行模式；CCAEGT 未移植；无
+<td><code>LiquidRocketModel.h</code> +
+<code>test_liquid_rocket_sil</code>；CCAEGT 仅作参考测试</td>
+<td>9 组高度/推进剂垂直回收（接地 2.15–2.45 m/s）；CCAEGT 参考制导 +
+本机模型 30 m 回收接地 1.87 m/s</td>
+<td><strong>未接固件飞行模式；CCAEGT 未移植进固件；无
 RCS/多级/泵压动态/气动</strong>；不能称兼容</td>
 </tr>
 </tbody>
@@ -167,8 +168,18 @@ m、<code>pos_degraded=1</code>。合计 <strong>15/15 PASS</strong>。</li>
 m/s，max_roll 3.0°、max_pitch 2.0°。</li>
 <li><code>run_liquid_sil_sweep.sh</code>：20/30/40 m × 2.5/3/4 kg 共 9
 组，全部着陆，接地 2.15–2.45 m/s。</li>
-<li>未证明：外部 CCAEGT
-制导、真实阀门/泵压/室压、RCS、多级、气动、实机。</li>
+<li><code>test_liquid_ccaegt_reference</code>：把外部实飞工程的 CCAEGT
+制导库（逐字复制于
+<code>test_host/reference/ccaegt/</code>，仅加注释字段）作为参考制导，驱动本机
+<code>LiquidRocketPropulsion</code>：30 m 回收进入 BRAKE、触地 1.87
+m/s、LANDED， 质量 16.5→15.96 kg、剩余推进剂 3.46 kg。证明“实飞制导假设
++ 本机推进模型” 可以闭合，<strong>不等于</strong>把 CCAEGT
+接入了固件飞行模式。</li>
+<li>已知参数不一致：外部 CCAEGT <code>M_DRY=12.5 kg</code>，外部固件
+<code>DRY_MASS=13.5 kg</code>； 参考测试用 12.5+4.0=16.5 kg 对齐
+CCAEGT，未擅自改外部飞行固件。</li>
+<li>未证明：CCAEGT
+固件级接入、真实阀门/泵压/室压、RCS、多级、气动、实机。</li>
 </ul>
 <hr />
 <h2 id="4-模块化与复用边界">4 模块化与复用边界</h2>
@@ -249,5 +260,5 @@ href="../control/CTL-003.html">CTL-003</a>）：</p>
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:42</footer></article></body>
 </html>

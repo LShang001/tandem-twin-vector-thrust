@@ -35,6 +35,10 @@
 | `test_liquid_rocket_model.cpp` | `LiquidRocketModel.h` — 点火/解锁互锁、阀门/推力速率、Tmin、比冲质量流、耗尽关机、两轴 asin 喷管几何 | 无 | 33 |
 | `test_coaxial_vtv_control.cpp` | `CoaxialVtvControl.h` — DirectTvcRate 极性/限幅/手动旁路/偏航差速/RATE_MODE + 简化 6DOF 刚体闭环 | QuaternionMath | 26 |
 | `test_liquid_rocket_sil.cpp` | `LiquidRocketModel.h` — 30 m 垂直回收闭环：点火/变质量/Tmin/喷管姿态/触地关机（L1，无气动/RCS） | QuaternionMath | 11 |
+| `test_liquid_ccaegt_reference.cpp` | 外部 CCAEGT 实飞参考制导 + `LiquidRocketModel` 组合 30 m 回收（参考库，不接入固件飞行模式） | CCAEGT 参考库 | 8 |
+
+> 液体回收参数扫描：`bash test_host/run_liquid_sil_sweep.sh`（20/30/40 m × 2.5/3/4 kg 共 9 组）。
+> CCAEGT 参考库仅位于 `test_host/reference/ccaegt/`，不随固件编译。
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
 

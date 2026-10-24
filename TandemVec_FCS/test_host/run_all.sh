@@ -68,6 +68,23 @@ run_one "$ROOT/test_host/test_liquid_rocket_model.cpp" lrm ""
 run_one "$ROOT/test_host/test_coaxial_vtv_control.cpp" cvc ""
 # 液体火箭闭环 SIL（LiquidRocketModel + mapNozzleGimbal + 简化 6DOF 垂直回收）：
 run_one "$ROOT/test_host/test_liquid_rocket_sil.cpp" lrsil ""
+# 液体 CCAEGT 实飞参考制导 + 本机推进模型（外部参考库逐字复制于
+# test_host/reference/ccaegt/，仅参考测试，不接入固件飞行模式）：
+echo "---- 编译 lrccaegt ----"
+if ! $CXX -std=$STD -O2 $INCLUDES -I"$ROOT/test_host/reference/ccaegt" \
+     "$ROOT/test_host/test_liquid_ccaegt_reference.cpp" \
+     "$ROOT/test_host/reference/ccaegt/CCAEGT.cpp" \
+     -o "$BIN_DIR/lrccaegt$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] lrccaegt"
+  fail=1
+else
+  echo "---- 运行 lrccaegt ----"
+  if ! "$BIN_DIR/lrccaegt$EXE_SUFFIX"; then
+    echo "[RUN FAIL] lrccaegt"
+    fail=1
+  fi
+  echo
+fi
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""

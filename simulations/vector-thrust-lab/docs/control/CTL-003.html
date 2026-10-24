@@ -175,8 +175,10 @@ asin 几何；参数取自外部 <code>VTVL_LiquidRocket_FC</code> 的 CCAEGT
 示例，<strong>不是本机标定值</strong>。<code>test_liquid_rocket_sil.cpp</code>
 + <code>run_liquid_sil_sweep.sh</code> 对 20/30/40 m × 2.5/3/4 kg 共 9
 组做垂直回收闭环，接地速度 2.15–2.45
-m/s、姿态有界；<strong>无气动/RCS/多级/泵压动态，未接入固件飞行模式，CCAEGT
-实飞制导未移植</strong>。</li>
+m/s、姿态有界；<code>test_liquid_ccaegt_reference</code> 又把外部实飞
+CCAEGT 制导库作为参考，驱动本机推进模型完成 30 m 回收（接地 1.87
+m/s）。<strong>CCAEGT
+仍未移植进固件飞行模式；无气动/RCS/多级/泵压动态；参数不是本机标定值。</strong></li>
 <li><code>src/flight_control.cpp</code> 层 3 已改为走
 <code>ActuatorOutputMap</code>；GPIO/PWM 写入仍留在固件层，通用层不依赖
 Arduino。自动分配路径走 <code>TandemVecAllocator</code>，manual/locked
@@ -363,5 +365,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 href="../verification/VER-002.html">VER-002
 三机型兼容性与虚拟验证</a>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:42</footer></article></body>
 </html>
