@@ -1,0 +1,26 @@
+{
+  "sil_seed7_trace.log": {
+    "first_trigger_s": 31.0,
+    "max_abs_rate_dps": 175.03,
+    "final_yaw_deg": 82.37,
+    "final_pos": null
+  },
+  "sil_nom_seed1_trace.log": {
+    "first_trigger_s": null,
+    "max_abs_rate_dps": 23.85,
+    "final_yaw_deg": 4.79,
+    "final_pos": null
+  },
+  "sil_nom_seed2_trace.log": {
+    "first_trigger_s": null,
+    "max_abs_rate_dps": 28.02,
+    "final_yaw_deg": -11.61,
+    "final_pos": null
+  },
+  "sil_nom_seed3_trace.log": {
+    "first_trigger_s": null,
+    "max_abs_rate_dps": 25.05,
+    "final_yaw_deg": -11.95,
+    "final_pos": null
+  }
+}

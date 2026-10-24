@@ -67,6 +67,8 @@ run_one "$ROOT/test_host/test_rate_lead_predictor.cpp" rlp ""
 run_one "$ROOT/test_host/test_rate_accel_feedback.cpp" aaf ""
 # 速率相位超前（纯模块，默认不接飞控；不放大差分噪声）：
 run_one "$ROOT/test_host/test_rate_phase_lead.cpp" rpl ""
+# 偏航振荡检测（纯模块，默认不接导航；位置保持降级候选）：
+run_one "$ROOT/test_host/test_yaw_oscillation_detector.cpp" yod ""
 # 绝对航向辅助/位置保持降级门控（HeadingAidingGate.h，纯平台无关——
 # Mag/YawGsf 新鲜度、失效立即降级、恢复 3 s 锁存、YawGsf 速度门限）：
 run_one "$ROOT/test_host/test_heading_aiding_gate.cpp" hag ""
