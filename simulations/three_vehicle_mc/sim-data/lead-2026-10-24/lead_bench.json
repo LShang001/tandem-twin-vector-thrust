@@ -63,5 +63,31 @@
       "h_min": 5.6,
       "h_median": 5.6
     }
+  },
+  "cross_vehicle_100k": {
+    "seed": 20261031,
+    "CoaxialVTVL": {
+      "fixed": {
+        "pass_rate": 0.8473,
+        "fail_rate": 0.0389
+      },
+      "lead05": {
+        "pass_rate": 0.8481,
+        "fail_rate": 0.0387,
+        "max_ang_p95": 10.3
+      }
+    },
+    "LiquidRocket": {
+      "fixed": {
+        "pass_rate": 0.6085,
+        "fail_rate": 0.2363
+      },
+      "lead05": {
+        "pass_rate": 0.6085,
+        "fail_rate": 0.2362,
+        "max_ang_p95": 35.33
+      }
+    },
+    "note": "L1; lead TandemVec-specific"
   }
 }
