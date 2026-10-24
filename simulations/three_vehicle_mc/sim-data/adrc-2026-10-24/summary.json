@@ -1,0 +1,64 @@
+{
+  "seed": 20261031,
+  "cases_per_vehicle": 100000,
+  "duration_s": 20.0,
+  "nominal": false,
+  "variant": "adrc",
+  "osc_params": {
+    "window_s": 0.25,
+    "threshold": 6.0,
+    "decay": 0.9,
+    "recovery": 1.01,
+    "floor": 0.55,
+    "filter_tau_s": 0.05,
+    "min_rate_dps": 2.0,
+    "ref_gate_deg": 0.5,
+    "gain_scale": 1.0,
+    "adrc": {
+      "wc": 12.0,
+      "wo": 30.0,
+      "b0": 1.0
+    }
+  },
+  "vehicles": {
+    "TandemVec": {
+      "cases": 100000,
+      "pass_rate": 0.42346,
+      "fail_rate": 0.14618,
+      "final_h_p50": 8.949763634431429,
+      "final_h_p05": 3.838194453928168,
+      "final_h_p95": 11.75281907428046,
+      "max_ang_p50": 32.027852231888055,
+      "max_ang_p95": 75.66601886574662,
+      "sat_frac_p50": 0.5735,
+      "sat_frac_p95": 0.67825,
+      "top_param_corr": [
+        [
+          "delay_s",
+          0.707083118350755
+        ],
+        [
+          "thrust_loss",
+          -0.19082522091624332
+        ],
+        [
+          "att_kp_mult",
+          0.04152459714836924
+        ],
+        [
+          "wind_up",
+          -0.01895524884168249
+        ],
+        [
+          "i_pitch",
+          -0.005921095330546247
+        ],
+        [
+          "sensor_rate_dps",
+          0.004754402717316623
+        ]
+      ]
+    }
+  },
+  "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设"
+}

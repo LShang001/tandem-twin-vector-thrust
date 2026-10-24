@@ -325,6 +325,27 @@ py -3.12 run_mega.py --cases 100000 --vehicles TandemVec --variant fixed \
 依赖：scikit-learn / optuna / matplotlib。未上深度学习时序模型或 RL：
 当前没有轨迹级标注数据，先把可解释的表格模型和实验设计跑通。
 
+### 5.7 现代控制尝试：一阶 ADRC/ESO（否定）
+
+`include/AdrcController.h` 实现一阶线性 ADRC/ESO（`dy/dt=b0·u+d`），
+`test_host/test_adrc_controller.cpp` 8 条断言覆盖阶跃/常值扰动/限幅/非有限/复位；
+`fast_mc` 增加 `variant="adrc"`，用 ESO 替换速率环 P。100k 同种子：
+
+| 参数 | 通过 | 失败 | max_ang P95 |
+|---|---|---|---|
+| PID fixed | 78.41% | 1.91% | 11.6° |
+| 固定 detune70 | **79.97%** | **0.82%** | 10.2° |
+| ADRC wc5/wo15 | 30.63% | 42.77% | 131.9° |
+| ADRC wc8/wo24 | 35.18% | 22.69% | 89.8° |
+| ADRC wc12/wo30 | 42.35% | 14.62% | 75.7° |
+| ADRC wc16/wo50 | 64.59% | 2.59% | 48.3° |
+
+ADRC 失败率与 delay 的相关达 0.71–0.80；wc12 相对 fixed 无救回、12,735 例
+新增失败，60–120 ms 桶爆炸。原因：ESO 直接用延迟/噪声速率测量估计扰动，
+相位滞后把内环推入振荡；本模型没有 TD/延迟补偿/测量滤波。**结论：一阶
+ADRC/ESO 不能直接替换现有速率 PID，不接入默认飞控路径；模块保留为研究库，
+下一步若继续需加延迟补偿或先做 SIL。** 数据：`sim-data/adrc-2026-10-24/`。
+
 ## 6 证据等级
 
 L1：模型/参数假设下的数值包线；不是 L2 SIL，不是 HIL/台架/实机。

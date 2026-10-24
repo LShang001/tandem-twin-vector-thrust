@@ -30,6 +30,7 @@
 | `ml-select-2026-10-24/` | 选择性检测器 TPE 参数搜索 | L1 选择性阻尼 |
 | `transient-2026-10-24/` | 姿态双拍/突风瞬态，fixed/selective/detune 对比 | L1 瞬态基准 |
 | `ablation-2026-10-24/` | 100k fixed/selective/detune 消融、跨机型与 casewise | L1 消融 |
+| `adrc-2026-10-24/` | 一阶 ADRC/ESO 四组带宽 100k | L1 现代控制否定 |
 
 ## 2 thrust_loss 建模勘误（2026-10-24）
 

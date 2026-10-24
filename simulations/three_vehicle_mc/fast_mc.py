@@ -98,7 +98,9 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
              wind_sine_amp: float = 0.0, wind_sine_hz: float = 1.0,
              osc_filter_tau_s: float = 0.05,
              osc_min_rate_dps: float = 2.0,
-             osc_ref_gate_deg: float = 0.5, gain_scale: float = 1.0):
+             osc_ref_gate_deg: float = 0.5, gain_scale: float = 1.0,
+             adrc_wc: float = 16.0, adrc_wo: float = 50.0,
+             adrc_b0: float = 1.0):
     """向量化闭环；返回 metrics dict（每个 case 一行）。
 
     ref_roll_deg/ref_pitch_deg 可为标量或长度 steps 的数组（瞬态跟踪）；
@@ -126,6 +128,9 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     osc_timer = np.zeros(n)
     sign_prev = np.zeros(n)
     err_filt = np.zeros(n)
+    az1r = np.zeros(n); az2r = np.zeros(n); aur = np.zeros(n)
+    az1p = np.zeros(n); az2p = np.zeros(n); aup = np.zeros(n)
+    az1y = np.zeros(n); az2y = np.zeros(n); auy = np.zeros(n)
 
     # 等效角加速度权限：保持机型表给出的控制权限（不再用惯量比外推，
     # 避免把 TandemVec 小滚转惯量放大成不真实的滚转权限）。
@@ -216,6 +221,8 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
         else:
             auth_scale = 1.0
         gain_eff = auth_scale * gain_osc
+        if variant == "adrc":
+            gain_eff = 1.0
 
         # 姿态串级 PD（角度域）；参考可为瞬态指令，传感器噪声进入反馈
         rate_ref_phi = np.clip(att_kp * gain_eff * (roll_ref - phi_m),
@@ -227,12 +234,35 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
         rate_ref_psi = np.clip(att_kp * gain_eff * (-psi_m),
                                -np.radians(model.rate_max_dps),
                                np.radians(model.rate_max_dps))
-        alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_m),
-                             -alpha_roll_max, alpha_roll_max)
-        alpha_pitch = np.clip(rate_kp * gain_eff * (rate_ref_theta - q_m),
-                              -alpha_max, alpha_max)
-        alpha_yaw = np.clip(rate_kp * gain_eff * (rate_ref_psi - r_m),
-                            -alpha_yaw_max, alpha_yaw_max)
+        if variant == "adrc":
+            e1 = az1r - p_m
+            az1r += (az2r + adrc_b0 * aur - adrc_wo * e1) * dt
+            az2r += (-adrc_wo * adrc_wo * e1) * dt
+            az2r = np.clip(az2r, -1.0e4, 1.0e4)
+            alpha_roll = np.clip((adrc_wc * (rate_ref_phi - az1r) - az2r) / adrc_b0,
+                                 -alpha_roll_max, alpha_roll_max)
+            aur = alpha_roll
+            e1 = az1p - q_m
+            az1p += (az2p + adrc_b0 * aup - adrc_wo * e1) * dt
+            az2p += (-adrc_wo * adrc_wo * e1) * dt
+            az2p = np.clip(az2p, -1.0e4, 1.0e4)
+            alpha_pitch = np.clip((adrc_wc * (rate_ref_theta - az1p) - az2p) / adrc_b0,
+                                  -alpha_max, alpha_max)
+            aup = alpha_pitch
+            e1 = az1y - r_m
+            az1y += (az2y + adrc_b0 * auy - adrc_wo * e1) * dt
+            az2y += (-adrc_wo * adrc_wo * e1) * dt
+            az2y = np.clip(az2y, -1.0e4, 1.0e4)
+            alpha_yaw = np.clip((adrc_wc * (rate_ref_psi - az1y) - az2y) / adrc_b0,
+                                -alpha_yaw_max, alpha_yaw_max)
+            auy = alpha_yaw
+        else:
+            alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_m),
+                                 -alpha_roll_max, alpha_roll_max)
+            alpha_pitch = np.clip(rate_kp * gain_eff * (rate_ref_theta - q_m),
+                                  -alpha_max, alpha_max)
+            alpha_yaw = np.clip(rate_kp * gain_eff * (rate_ref_psi - r_m),
+                                -alpha_yaw_max, alpha_yaw_max)
         # 自适应振荡抑制：滤波 + 最小幅值门控 + 驾驶杆活动门控。
         # 原始“逐拍符号换向”会被陀螺噪声持续触发（悬停也 98% 时间降增益），
         # 不是振荡选择器；这里只统计滤波后、幅值足够、且驾驶杆回中的换向。

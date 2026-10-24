@@ -1056,6 +1056,66 @@ detune70（0.83%）。
 模块已改为选择性检测器（11 条宿主断言），但仍仅作研究模块、
 默认不接入飞控。数据：<code>sim-data/transient-2026-10-24/</code>。</p>
 <hr />
+<h3 id="310-现代控制尝试一阶-adrceso否定">3.10 现代控制尝试：一阶
+ADRC/ESO（否定）</h3>
+<p><code>AdrcController.h</code> 实现一阶线性
+ADRC/ESO（<code>dy/dt=b0·u+d</code>），宿主 8 条断言
+覆盖阶跃/常值扰动/限幅/非有限/复位；<code>fast_mc</code> 增加
+<code>variant="adrc"</code>， 用 ESO 替换速率环 P。100k 同种子：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>通过</th>
+<th>失败</th>
+<th>max_ang P95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PID fixed</td>
+<td>78.41%</td>
+<td>1.91%</td>
+<td>11.6°</td>
+</tr>
+<tr>
+<td>固定 detune70</td>
+<td><strong>79.97%</strong></td>
+<td><strong>0.82%</strong></td>
+<td>10.2°</td>
+</tr>
+<tr>
+<td>ADRC wc5/wo15</td>
+<td>30.63%</td>
+<td>42.77%</td>
+<td>131.9°</td>
+</tr>
+<tr>
+<td>ADRC wc8/wo24</td>
+<td>35.18%</td>
+<td>22.69%</td>
+<td>89.8°</td>
+</tr>
+<tr>
+<td>ADRC wc12/wo30</td>
+<td>42.35%</td>
+<td>14.62%</td>
+<td>75.7°</td>
+</tr>
+<tr>
+<td>ADRC wc16/wo50</td>
+<td>64.59%</td>
+<td>2.59%</td>
+<td>48.3°</td>
+</tr>
+</tbody>
+</table>
+<p>ADRC 失败率与 delay 的相关 0.71–0.80；wc12 相对 fixed 无救回、12,735
+例 新增失败，60–120 ms 桶爆炸。原因是 ESO
+直接使用延迟/噪声速率测量估计扰动， 相位滞后把内环推入振荡；该模型没有
+TD/延迟补偿/测量滤波。<strong>结论：一阶 ADRC/ESO 不能直接替换现有速率
+PID，不接入默认飞控；模块保留为研究库， 继续需加延迟补偿或先做
+SIL。</strong> 数据：<code>sim-data/adrc-2026-10-24/</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1099,5 +1159,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 22:14</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 22:28</footer></article></body>
 </html>

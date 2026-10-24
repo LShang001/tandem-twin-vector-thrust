@@ -50,7 +50,7 @@ def main() -> int:
     ap.add_argument("--duration", type=float, default=20.0)
     ap.add_argument("--nominal", action="store_true")
     ap.add_argument("--variant", default="fixed",
-                    choices=["fixed", "auth", "osc", "adaptive"])
+                    choices=["fixed", "auth", "osc", "adaptive", "adrc"])
     ap.add_argument("--osc-window", type=float, default=0.25)
     ap.add_argument("--osc-threshold", type=float, default=6.0)
     ap.add_argument("--osc-decay", type=float, default=0.90)
@@ -60,6 +60,9 @@ def main() -> int:
     ap.add_argument("--osc-min-rate", type=float, default=2.0)
     ap.add_argument("--osc-ref-gate", type=float, default=0.5)
     ap.add_argument("--gain-scale", type=float, default=1.0)
+    ap.add_argument("--adrc-wc", type=float, default=16.0)
+    ap.add_argument("--adrc-wo", type=float, default=50.0)
+    ap.add_argument("--adrc-b0", type=float, default=1.0)
     ap.add_argument("--vehicles", default="TandemVec,CoaxialVTVL,LiquidRocket")
     ap.add_argument("--seed", type=int, default=20261024)
     ap.add_argument("--out", default="")
@@ -79,6 +82,7 @@ def main() -> int:
             "floor": args.osc_floor, "filter_tau_s": args.osc_filter_tau,
             "min_rate_dps": args.osc_min_rate, "ref_gate_deg": args.osc_ref_gate,
             "gain_scale": args.gain_scale,
+            "adrc": {"wc": args.adrc_wc, "wo": args.adrc_wo, "b0": args.adrc_b0},
         },
         "vehicles": {}, "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设",
     }
@@ -106,7 +110,9 @@ def main() -> int:
                              osc_filter_tau_s=args.osc_filter_tau,
                              osc_min_rate_dps=args.osc_min_rate,
                              osc_ref_gate_deg=args.osc_ref_gate,
-                             gain_scale=args.gain_scale)
+                             gain_scale=args.gain_scale,
+                             adrc_wc=args.adrc_wc, adrc_wo=args.adrc_wo,
+                             adrc_b0=args.adrc_b0)
                 chunk = []
                 for i in range(n):
                     row = dict(vehicle=name, case=done + i,
