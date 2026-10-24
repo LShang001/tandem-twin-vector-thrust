@@ -80,6 +80,18 @@ int main()
     CHECK(out.pitch_correction_deg > 0.0f, "T2 pitch 极性");
   }
 
+  // T2b RATE_MODE：直接使用速率目标，不经过姿态 P。
+  {
+    bfs::CoaxialVtvController c;
+    auto in = baseInput();
+    in.rate_mode = true;
+    in.roll_rate_target_dps = 30.0f;
+    in.pitch_rate_target_dps = -20.0f;
+    const auto out = c.update(in);
+    CHECK(out.roll_correction_deg > 0.0f, "T2b rate roll 极性");
+    CHECK(out.pitch_correction_deg < 0.0f, "T2b rate pitch 极性");
+  }
+
   // T3 速率阻尼：零误差、正角速率 → 负修正。
   {
     bfs::CoaxialVtvController c;

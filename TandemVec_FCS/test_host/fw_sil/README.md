@@ -337,3 +337,39 @@ py -3.12 test_host/fw_sil/run_real_acceptance.py \
 
 **证据边界**：以上全部为 L2 SIL；磁硬/软铁、电机磁干扰、真实 IMU 电气冻结、RF spoof、
 HIL/实飞均未验证。
+
+## 9 共轴双桨 VTVL 固件分支（2026-10-24）
+
+`platformio.ini` 的 `CoaxialVTVL` env 定义 `BFS_COAXIAL_VTVL`；`runGNCExecutive`
+仍复用输入/模式/定高/目标姿态层，但从姿态控制开始改走
+`CoaxialVtvControl` + `mapCoaxialVtvOutputs`（±10° 修正、PWM 差速、45° 锁电机），
+不再进入 TandemVec 的 BTRUE/差速开方。编译通过：
+
+```bash
+cd TandemVec_FCS
+pio run -e CoaxialVTVL
+```
+
+SIL 使用同一套真实导航/传感器注入，只增加共轴近似 plant：
+
+```bash
+BIN_DIR=/tmp/tv_fcs_fw_sil_coax \
+  bash test_host/fw_sil/run_coaxial_acceptance.sh
+# 或单例
+BIN_DIR=/tmp/tv_fcs_fw_sil_coax \
+  bash test_host/fw_sil/build_and_run_coaxial.sh \
+  --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 1 --no-wind --mag
+```
+
+3 seeds 结果（L2，近似 plant）：
+
+- `mag_clean`：final_alt 9.84–9.94 m、hold_end 0.28–0.88 m、max_roll 0.72–1.21°；
+- `mag_nominal`：final_alt 9.04–9.10 m、hold_end 0.16–0.53 m、max_roll 10.72–14.26°；
+- `nomag_degraded`：final_alt 9.87–9.91 m、`pos_degraded=1`，位置保持被门控关闭，
+  hold 5.7–11.5 m 是风/残余倾斜漂移，max_roll 0.07–0.13°；
+- 9/9 PASS。
+
+**边界**：plant 的质量 0.84 kg、惯量 0.05/0.05/0.08、力臂 0.15 m、差速力矩
+0.0005 N·m/norm 都是 L1 假设（外部工程只给了 0.84 kg/14 N，未给惯量/力臂）；
+没有共轴台架、桨距/反扭标定、45° 锁电机故障注入或实机证据。该 SIL 证明
+“固件分支能跑通、姿态/定高闭环有界”，不能证明真实共轴机飞行品质。

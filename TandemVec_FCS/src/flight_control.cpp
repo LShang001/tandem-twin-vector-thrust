@@ -52,6 +52,9 @@
 #include "ActuatorOutputMap.h"    // 机型输出表 → 舵机/电调/阀门（通用层）
 #include "ThrustAllocation.h"     // 期望天向比力 → 总推力/油门（机型推进层）
 #include "TandemVecAllocator.h"   // 纵列双发 α/油门 → 摆角/差速（机型分配器）
+#ifdef BFS_COAXIAL_VTVL
+#include "CoaxialVtvControl.h"    // 共轴双桨 DirectTvcRate（机型选择分支）
+#endif
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
@@ -1109,15 +1112,11 @@ static float s_yaw_hold_ref_rad = 0.0f;
  */
 static Vector3 getSanitizedBodyGyro();
 
-void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion &q_target, ControlOutputs_t &outputs)
+// 陀螺零偏补偿 + 二级低通，更新全局 current_omega_dps_body_filtered。
+// 仅共轴 DirectTvcRate 使用；TandemVec 路径保留原内联块以维持逐位基线。
+[[maybe_unused]] static Vector3 updateFilteredBodyRates()
 {
-  // 获取当前角速率
   Vector3 current_omega_rps_body = getSanitizedBodyGyro();
-  // （getSanitizedBodyGyro 定义在混控段之前，见文件下方静态函数）
-  // ★ 2026-08-09 陀螺动态零偏补偿："飘"根因修复——EKF 实时估计的零偏
-  //   （温度漂移 0.2-0.4°/s，初值不确定度 0.4°/s）此前只用于日志，控制
-  //   用静态校准原始值 → 速率模式持续旋转（每分钟 12-24°）。补偿后速率
-  //   反馈与 EKF 姿态同一参考系。仅 EKF 初始化后补偿（收敛前估计不可靠）。
   if (nav_system_initialized)
   {
     const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
@@ -1125,7 +1124,47 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     current_omega_rps_body.y -= gb(1);
     current_omega_rps_body.z -= gb(2);
   }
-  // 滤波链（2026-08-09 审计后近全关：α1=0.4 / 二级直通——物理减震底座已隔离振动）
+  current_omega_dps_body_filtered = {
+      rollSpeedFilter2.filter(rollSpeedFilter.filter(current_omega_rps_body.x * RAD_TO_DEG)),
+      pitchSpeedFilter2.filter(pitchSpeedFilter.filter(current_omega_rps_body.y * RAD_TO_DEG)),
+      yawSpeedFilter2.filter(yawSpeedFilter.filter(current_omega_rps_body.z * RAD_TO_DEG))};
+  return current_omega_dps_body_filtered;
+}
+
+// 四元数姿态误差 → roll/pitch 误差（deg）。与 execute_attitude_controller
+// 内联公式逐行一致，供共轴 DirectTvcRate 复用；不改 TandemVec 路径。
+[[maybe_unused]] static void computeAttitudeErrorsDeg(
+    const Quaternion &q_target, float &error_roll_deg,
+    float &error_pitch_deg)
+{
+  const Quaternion q_current = {AHRS_Packet.Qw, AHRS_Packet.Qx,
+                                AHRS_Packet.Qy, AHRS_Packet.Qz};
+  const Quaternion q_error =
+      quaternionMultiply(quaternionConjugate(q_current), q_target);
+  const float sign_qw = (q_error.w >= 0.0f) ? 1.0f : -1.0f;
+  const float q_vec_norm =
+      sqrtf(q_error.x * q_error.x + q_error.y * q_error.y +
+            q_error.z * q_error.z);
+  const float precise_scale =
+      (q_vec_norm > 0.25f)
+          ? 2.0f * atan2f(q_vec_norm, fabsf(q_error.w)) / q_vec_norm *
+                RAD_TO_DEG
+          : 2.0f * RAD_TO_DEG;
+  error_roll_deg = sign_qw * q_error.x * precise_scale;
+  error_pitch_deg = sign_qw * q_error.y * precise_scale;
+}
+
+void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion &q_target, ControlOutputs_t &outputs)
+{
+  // 获取当前角速率
+  Vector3 current_omega_rps_body = getSanitizedBodyGyro();
+  if (nav_system_initialized)
+  {
+    const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
+    current_omega_rps_body.x -= gb(0);
+    current_omega_rps_body.y -= gb(1);
+    current_omega_rps_body.z -= gb(2);
+  }
   current_omega_dps_body_filtered = {
       rollSpeedFilter2.filter(rollSpeedFilter.filter(current_omega_rps_body.x * RAD_TO_DEG)),
       pitchSpeedFilter2.filter(pitchSpeedFilter.filter(current_omega_rps_body.y * RAD_TO_DEG)),
@@ -1655,6 +1694,131 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
   outputs.throttle_percent = final_throttle_pct;
   throttlePercent = final_throttle_pct;
 }
+
+#ifdef BFS_COAXIAL_VTVL
+// ── 共轴双桨 VTVL 机型后端（编译期选择）──────────────────────────────
+// 与 TandemVec 共用输入/模式/定高/目标姿态层，但从姿态误差开始走
+// DirectTvcRate：两轴修正角 + 偏航 PWM 差速，最终由 mapCoaxialVtvOutputs
+// 映射到 33.33–66.67% 舵机与 1000–2000 µs 电机。
+// ★ 质量/最大推力取外部 VTVL_ElectricDualRotor_FCS 的 0.84 kg / 14 N，
+//   是 MODEL-DEFAULT，未标定；不得把本分支输出当实机推力承诺。
+static bfs::CoaxialVtvController s_coaxial_controller;
+
+static void run_coaxial_control(const ControlInputs_t &inputs,
+                                ControlOutputs_t &outputs,
+                                const Quaternion &q_target)
+{
+  constexpr float kCoaxMassKg = 0.84f;
+  constexpr float kCoaxMaxThrustN = 14.0f;
+  constexpr float kCoaxMaxCorrectionDeg = 10.0f;
+
+  updateFilteredBodyRates();
+  float error_roll_deg = 0.0f;
+  float error_pitch_deg = 0.0f;
+  computeAttitudeErrorsDeg(q_target, error_roll_deg, error_pitch_deg);
+
+  bfs::CoaxialVtvInput control_in;
+  control_in.error_roll_deg = error_roll_deg;
+  control_in.error_pitch_deg = error_pitch_deg;
+  control_in.rate_roll_dps = current_omega_dps_body_filtered.x;
+  control_in.rate_pitch_dps = current_omega_dps_body_filtered.y;
+  control_in.rate_yaw_dps = current_omega_dps_body_filtered.z;
+  control_in.rate_mode = (inputs.attitude_mode == RATE_MODE);
+  control_in.roll_rate_target_dps = rcRateCurve(
+      rcNormFromUs(inputs.roll_raw), kFlightCtrlParams.rc_rate,
+      kFlightCtrlParams.rc_expo[0], kFlightCtrlParams.rc_super[0],
+      MAX_MANUAL_rollRATE);
+  control_in.pitch_rate_target_dps = -rcRateCurve(
+      rcNormFromUs(inputs.pitch_raw), kFlightCtrlParams.rc_rate,
+      kFlightCtrlParams.rc_expo[1], kFlightCtrlParams.rc_super[1],
+      MAX_MANUAL_pitchRATE);
+  control_in.yaw_rate_target_dps = rcRateCurve(
+      rcNormFromUs(inputs.yaw_raw), kFlightCtrlParams.rc_rate,
+      kFlightCtrlParams.rc_expo[2], kFlightCtrlParams.rc_super[2],
+      MAX_MANUAL_yawRATE);
+  control_in.attitude_active = inputs.is_unlocked && !inputs.is_manual_tvc &&
+                               inputs.throttle_raw > 1050.0f;
+  control_in.manual_tvc = inputs.is_manual_tvc;
+  control_in.manual_roll_deg = mapFloat(
+      inputs.roll_raw, 988.0f, 2012.0f, -kCoaxMaxCorrectionDeg,
+      kCoaxMaxCorrectionDeg);
+  control_in.manual_pitch_deg = mapFloat(
+      inputs.pitch_raw, 988.0f, 2012.0f, kCoaxMaxCorrectionDeg,
+      -kCoaxMaxCorrectionDeg);
+  control_in.dt_s = 0.005f;
+  const bfs::CoaxialVtvOutput control_out =
+      s_coaxial_controller.update(control_in);
+
+  float final_throttle_pct = outputs.throttle_percent;
+  if (!outputs.throttle_direct)
+  {
+    bfs::ThrustAllocationInput thrust_in;
+    thrust_in.specific_force_up_mps2 = outputs.specific_force_up_mps2;
+    thrust_in.thrust_axis_up_cos = outputs.thrust_cos_tilt;
+    thrust_in.mass_kg = kCoaxMassKg;
+    thrust_in.max_total_thrust_n = kCoaxMaxThrustN;
+    const bfs::ThrustAllocationOutput thrust_out =
+        bfs::allocateLinearThrustThrottle(thrust_in);
+    final_throttle_pct = thrust_out.valid ? thrust_out.throttle_pct : 0.0f;
+  }
+  if (!inputs.is_unlocked)
+  {
+    final_throttle_pct = 0.0f;
+  }
+
+  bfs::CoaxialVtvOutputInput output_in;
+  output_in.roll_correction_deg =
+      control_out.valid ? control_out.roll_correction_deg : 0.0f;
+  output_in.pitch_correction_deg =
+      control_out.valid ? control_out.pitch_correction_deg : 0.0f;
+  output_in.throttle_pct = final_throttle_pct;
+  output_in.yaw_diff_us = control_out.valid ? control_out.yaw_diff_us : 0.0f;
+  output_in.attitude_roll_deg = AHRS_Packet.Roll;
+  output_in.attitude_pitch_deg = AHRS_Packet.Pitch;
+  output_in.unlocked = inputs.is_unlocked;
+  output_in.attitude_safe =
+      fabsf(AHRS_Packet.Roll) < 45.0f && fabsf(AHRS_Packet.Pitch) < 45.0f;
+
+  bfs::CoaxialVtvOutputCalibration output_cal;
+  output_cal.servo_half_angle_deg = 15.0f;
+  output_cal.motor_min_us = 1000.0f;
+  output_cal.motor_max_us = 2000.0f;
+  output_cal.attitude_limit_deg = 45.0f;
+  const bfs::OutputCommandSet commands =
+      bfs::mapCoaxialVtvOutputs(output_in, output_cal);
+  for (uint8_t i = 0; i < commands.count; ++i)
+  {
+    const bfs::OutputCommand &cmd = commands.commands[i];
+    switch (cmd.hardware_slot)
+    {
+    case 0: // roll TVC servo
+      SetServoPos(cmd.value, TVC_ROLL_SERVO_PIN);
+      ch1_output = cmd.value;
+      break;
+    case 1: // pitch TVC servo
+      SetServoPos(cmd.value, TVC_PITCH_SERVO_PIN);
+      ch2_output = cmd.value;
+      break;
+    case 2: // motor 1
+      SetServoPos(cmd.value, MOTOR1_PIN);
+      ch3_output = cmd.value;
+      break;
+    case 3: // motor 2
+      SetServoPos(cmd.value, MOTOR2_PIN);
+      ch4_output = cmd.value;
+      break;
+    default:
+      break;
+    }
+  }
+
+  g_tvc_upper_deg = output_in.roll_correction_deg;
+  g_tvc_lower_deg = output_in.pitch_correction_deg;
+  outputs.throttle_percent = final_throttle_pct;
+  throttlePercent = final_throttle_pct;
+}
+#endif // BFS_COAXIAL_VTVL
+
 /**
  * @brief 在线参数辨识更新 — ★ 纯观测模式，不改变任何控制行为
  *
@@ -1679,8 +1843,8 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
  * @note  差速通道的 α 指令必须乘 s_yaw_gain_sched 才是"实际执行量"，否则
  *        辨识会把调度衰减误判成"命令大、响应小"，b_est 系统性偏小。
  */
-static void update_online_identification(const ControlInputs_t &inputs,
-                                         const ControlOutputs_t &outputs)
+[[maybe_unused]] static void update_online_identification(
+    const ControlInputs_t &inputs, const ControlOutputs_t &outputs)
 {
   static OnlineID s_online_id;
   static bool     s_was_unlocked = false;
@@ -1761,9 +1925,9 @@ static void update_online_identification(const ControlInputs_t &inputs,
  *        垂直速度误差 m/s、时间 s
  */
 static bfs::ActuatorFaultMonitor s_actuator_fault_monitor;
-static void updateActuatorFaultDiagnostics(const ControlInputs_t &inputs,
-                                           const ControlOutputs_t &outputs,
-                                           const ControlMode mode)
+[[maybe_unused]] static void updateActuatorFaultDiagnostics(
+    const ControlInputs_t &inputs, const ControlOutputs_t &outputs,
+    const ControlMode mode)
 {
   if (!inputs.is_unlocked)
   {
@@ -1866,6 +2030,13 @@ void runGNCExecutive()
   // 步骤 5: 根据模式和输入，生成目标姿态四元数
   generate_attitude_target(controller_inputs, current_mode, q_target_attitude);
 
+#ifdef BFS_COAXIAL_VTVL
+  // 共轴双桨机型：DirectTvcRate（两轴修正角 + PWM 差速）→ 通用输出表。
+  // 仍然复用步骤 1–5 的输入/模式/定高/目标姿态层；姿态外环/速率环由
+  // CoaxialVtvControl 负责，不再走 TandemVec 的 BTRUE/差速开方。F3/F4
+  // 诊断与在线辨识是 TandemVec 专用观测，不能在共轴分支复用。
+  run_coaxial_control(controller_inputs, controller_outputs, q_target_attitude);
+#else
   // 步骤 6: 执行Roll/Pitch姿态控制器，计算TVC舵机修正量
   execute_attitude_controller(controller_inputs, q_target_attitude, controller_outputs);
 
@@ -1882,6 +2053,7 @@ void runGNCExecutive()
   // 步骤 9: 在线参数辨识 — ★ 纯观测，只写 id_* 遥测量，不改任何增益
   //   放在混控之后：此时 alpha_* 与 throttle_percent 均为本拍最终值。
   update_online_identification(controller_inputs, controller_outputs);
+#endif
 
   // --- 3. 清理工作 ---
   // 清除新指令标志，确保每个新指令只被处理一次

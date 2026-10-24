@@ -57,6 +57,9 @@ struct CoaxialVtvInput
     float rate_pitch_dps = 0.0f;
     float rate_yaw_dps = 0.0f;
     float yaw_rate_target_dps = 0.0f;
+    bool rate_mode = false;             // true: 直接用 roll/pitch_rate_target
+    float roll_rate_target_dps = 0.0f;
+    float pitch_rate_target_dps = 0.0f;
     bool attitude_active = false;       // 解锁 && !手动TVC && 油门有效
     bool manual_tvc = false;
     float manual_roll_deg = 0.0f;
@@ -130,18 +133,22 @@ public:
 
         const float alpha =
             coaxialVtvClamp(params_.output_filter_alpha, 0.0f, 1.0f);
+        const float rate_ref_roll =
+            in.rate_mode ? in.roll_rate_target_dps
+                         : params_.att_kp_roll * in.error_roll_deg;
+        const float rate_ref_pitch =
+            in.rate_mode ? in.pitch_rate_target_dps
+                         : params_.att_kp_pitch * in.error_pitch_deg;
         out.roll_correction_deg = updateAxis(
-            in.error_roll_deg, in.rate_roll_dps, params_.att_kp_roll,
-            params_.rate_kp_roll, params_.rate_ki_roll,
-            params_.rate_integral_limit_deg, params_.max_target_rate_dps,
-            params_.max_correction_deg, in.dt_s, alpha, int_roll_, filt_roll_,
-            out.saturated);
+            rate_ref_roll, in.rate_roll_dps, params_.rate_kp_roll,
+            params_.rate_ki_roll, params_.rate_integral_limit_deg,
+            params_.max_target_rate_dps, params_.max_correction_deg, in.dt_s,
+            alpha, int_roll_, filt_roll_, out.saturated);
         out.pitch_correction_deg = updateAxis(
-            in.error_pitch_deg, in.rate_pitch_dps, params_.att_kp_pitch,
-            params_.rate_kp_pitch, params_.rate_ki_pitch,
-            params_.rate_integral_limit_deg, params_.max_target_rate_dps,
-            params_.max_correction_deg, in.dt_s, alpha, int_pitch_, filt_pitch_,
-            out.saturated);
+            rate_ref_pitch, in.rate_pitch_dps, params_.rate_kp_pitch,
+            params_.rate_ki_pitch, params_.rate_integral_limit_deg,
+            params_.max_target_rate_dps, params_.max_correction_deg, in.dt_s,
+            alpha, int_pitch_, filt_pitch_, out.saturated);
 
         const float yaw_err = in.yaw_rate_target_dps - in.rate_yaw_dps;
         const float yaw_unsat = params_.rate_kp_yaw * yaw_err +
@@ -178,15 +185,14 @@ public:
     }
 
 private:
-    static float updateAxis(const float error_deg, const float rate_dps,
-                            const float att_kp, const float rate_kp,
-                            const float rate_ki, const float int_limit,
-                            const float max_rate, const float max_correction,
-                            const float dt_s, const float alpha,
-                            float &integral, float &filtered,
+    static float updateAxis(const float rate_ref_in, const float rate_dps,
+                            const float rate_kp, const float rate_ki,
+                            const float int_limit, const float max_rate,
+                            const float max_correction, const float dt_s,
+                            const float alpha, float &integral, float &filtered,
                             bool &saturated)
     {
-        float rate_ref = att_kp * error_deg;
+        float rate_ref = rate_ref_in;
         if (rate_ref > max_rate || rate_ref < -max_rate)
         {
             saturated = true;
