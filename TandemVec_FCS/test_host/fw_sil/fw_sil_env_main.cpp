@@ -1018,7 +1018,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                   "roll=%6.2f pitch=%6.2f yaw=%6.2f navyaw=%6.2f "
                   "servo=(%5.1f,%5.1f) motor=(%5.1f,%5.1f) "
                   "nav=%d fix=%d gnss_age=%ld imu=%d acc=(%6.2f,%6.2f,%6.2f) "
-                  "gyro=(%6.3f,%6.3f,%6.3f) st=%d/%.2f/%u epoch=%d initd=%d\n",
+                  "gyro=(%6.3f,%6.3f,%6.3f) st=%d/%.2f/%u epoch=%d initd=%d "
+                  "mk=%.2f mg=%u\n",
                   t, -p.pos[2],
                   nav_system_initialized ? (nav_ekf.alt_m() - origin_alt_m) : 0.0,
                   relative_north, relative_east, p.pos[0], p.pos[1],
@@ -1037,7 +1038,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                   g_sil_nav_debug_static_confidence,
                   g_sil_nav_debug_static_frames,
                   g_sil_nav_debug_gnss_epoch ? 1 : 0,
-                  g_sil_nav_debug_initialized ? 1 : 0);
+                  g_sil_nav_debug_initialized ? 1 : 0,
+                  mag_status.last_kick_deg,
+                  static_cast<unsigned>(mag_status.last_gate_reason));
     }
   }
 

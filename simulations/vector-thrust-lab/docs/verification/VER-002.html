@@ -143,10 +143,10 @@ RCS/多级/泵压动态/气动</strong>；不能称兼容</td>
 <strong>15/15 PASS</strong>。</li>
 <li>无磁 <code>nomag_degraded</code>：3/3，定高 9.99–10.03
 m、max_roll=0、<code>pos_degraded=1</code>（航向不可观主动降级）。</li>
-<li><strong>长航时边界</strong>：<code>mag_clean</code> 120 s 在约 65 s
-后姿态发散（max_roll 180°、max_pitch 90°）， 陀螺饱和/IMU 健康
-Failed；40 s 基线仍通过。该长航时位置保持不通过，不能把 40 s 结果外推到
-120 s；属于既有位置保持-航向/姿态边界。</li>
+<li><strong>长航时边界</strong>：<code>mag_clean</code> 时长扫描
+40/45/50/55 s 通过，<strong>60 s 失败</strong> （roll 179°、pitch
+21°，随后 IMU 饱和/健康 Failed）；120 s 同样失败。 失效起始在 55–60
+s，属于既有位置保持-横滚/航向耦合边界；40 s 基线不能外推。</li>
 <li>边界：无磁 nominal/degraded 会按设计放弃位置保持，风致漂移 75/113
 m；不计入位置保持验收。</li>
 </ul>
@@ -176,8 +176,15 @@ F4（只检测/上报，<strong>没有重构或安全降落</strong>）；30%
 单发损失仍能定高。严重参数失配时 F4
 也可能作为诊断触发。<strong>这些是参数边界，不是可忽略的噪声。</strong></li>
 <li><strong>120 s 长航时</strong>：<code>mag_clean</code> 通过（hold_end
-0.857 m、max_roll 1.17°、max_pitch 2.53°），未出现 TandemVec 的 65 s
+0.857 m、max_roll 1.17°、max_pitch 2.53°），未出现 TandemVec 的 60 s
 发散。</li>
+<li><strong>随机参数 MC</strong>（<code>run_coaxial_mc.py</code>，100
+例，宽范围）：<strong>60/100 通过</strong>； hold P50/P95 = 1.26/64.93
+m，roll P95=23.9°、pitch P95=55.8°。 敏感性：低质量（0.70–0.78 kg
+8/25）、高 Iy（0.09–0.10 1/11）、 低力臂（0.08–0.12 m
+10/33）显著降低通过率；名义 0.84 kg/0.05/0.15 本身通过。 该 MC
+说明当前实飞增益对 plant
+参数偏差没有宽裕度，<strong>必须台架标定</strong>。</li>
 <li><code>CoaxialVTVL</code> env 编译 SUCCESS；宿主 6DOF 闭环（初始
 5°/3°、10°/s 偏航）收敛。</li>
 <li>未证明：真实共轴惯量/力臂/差速力矩、TVC 机械方向、45°
@@ -206,6 +213,11 @@ N 时接地 4.00 m/s（刚好越过 4 m/s 门限），
 <li><code>run_ccaegt_sweep.sh</code>：CCAEGT 参考制导 20/30/40 m
 三组全部着陆， 接地 1.84–1.87 m/s；说明参考制导在本 L1
 模型下对高度不敏感（在 4 kg 推进剂包线内），不是实机包线。</li>
+<li><strong>随机参数 MC</strong>（<code>run_liquid_mc.py</code>，200
+例，宽范围）：<strong>160/200 通过</strong>； 接地速度 P50/P95=2.30/3.46
+m/s，roll/pitch P95≈4.6°。 Tmax 180–190 N 组仅 30/63，Tmax≥200 N 组
+84/84；低推力/高质量组合是 主要失效边界。参数为 L1
+模型假设，不是实机包线。</li>
 <li>已知参数不一致：外部 CCAEGT <code>M_DRY=12.5 kg</code>，外部固件
 <code>DRY_MASS=13.5 kg</code>； 参考测试用 12.5+4.0=16.5 kg 对齐
 CCAEGT，未擅自改外部飞行固件。</li>
@@ -298,5 +310,5 @@ SIL，不能做飞行波形回放；需要用户提供 原始黑匣子/遥测日
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:15</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:25</footer></article></body>
 </html>

@@ -1,0 +1,63 @@
+{
+  "bin": "C:\\Users\\12631\\AppData\\Local\\Temp\\tv_fcs_fw_sil_final4\\fw_real.exe",
+  "profile": "mag_clean",
+  "seed": 1,
+  "extra": "--no-wind --mag",
+  "rows": [
+    {
+      "seconds": 40.0,
+      "ok": 1,
+      "final_alt": 9.975,
+      "hold_end": 1.023,
+      "max_roll": 7.643,
+      "max_pitch": 5.259,
+      "imu_state": 1,
+      "imu_frz": 0.0,
+      "pos_degraded": 0
+    },
+    {
+      "seconds": 45.0,
+      "ok": 1,
+      "final_alt": 9.993,
+      "hold_end": 2.759,
+      "max_roll": 7.643,
+      "max_pitch": 6.902,
+      "imu_state": 1,
+      "imu_frz": 0.0,
+      "pos_degraded": 0
+    },
+    {
+      "seconds": 50.0,
+      "ok": 1,
+      "final_alt": 10.022,
+      "hold_end": 3.049,
+      "max_roll": 8.06,
+      "max_pitch": 7.902,
+      "imu_state": 1,
+      "imu_frz": 0.0,
+      "pos_degraded": 0
+    },
+    {
+      "seconds": 55.0,
+      "ok": 1,
+      "final_alt": 10.005,
+      "hold_end": 0.774,
+      "max_roll": 8.06,
+      "max_pitch": 7.902,
+      "imu_state": 1,
+      "imu_frz": 0.0,
+      "pos_degraded": 0
+    },
+    {
+      "seconds": 60.0,
+      "ok": 0,
+      "final_alt": 7.997,
+      "hold_end": 3.363,
+      "max_roll": 179.435,
+      "max_pitch": 21.246,
+      "imu_state": 1,
+      "imu_frz": 0.0,
+      "pos_degraded": 1
+    }
+  ]
+}

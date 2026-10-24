@@ -41,7 +41,10 @@
 > 液体回收参数扫描：`bash test_host/run_liquid_sil_sweep.sh`（20/30/40 m × 2.5/3/4 kg 共 9 组）；
 > 推进参数扰动：`py -3.12 test_host/run_liquid_sweep.py --bin <lrsil>`（15 组）；
 > CCAEGT 参考制导包线：`bash test_host/run_ccaegt_sweep.sh`（20/30/40 m）。
-> 共轴 plant/故障扰动：`py -3.12 test_host/fw_sil/run_coaxial_sweep.py --bin <fw_coax>`（17 组）。
+> 共轴 plant/故障扰动：`py -3.12 test_host/fw_sil/run_coaxial_sweep.py --bin <fw_coax>`（18 组）；
+> 随机 MC：`py -3.12 test_host/fw_sil/run_coaxial_mc.py --bin <fw_coax> --cases 100`；
+> 液体随机 MC：`py -3.12 test_host/run_liquid_mc.py --bin <lrsil> --cases 200`；
+> 长航时起始点：`py -3.12 test_host/fw_sil/run_long_duration_sweep.py --bin <bin>`。
 > CCAEGT 参考库仅位于 `test_host/reference/ccaegt/`，不随固件编译。
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
