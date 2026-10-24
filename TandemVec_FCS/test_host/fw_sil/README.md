@@ -254,6 +254,12 @@ nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof` ×3 seeds）：
 max_roll 0–5.94°；它们属于 `skip_motion` 路径，`hold_end` 不作为判据
 （无磁时位置保持已被门控降级）。
 
+无磁 `clean/nominal/degraded` 仅作诊断（不计验收）：clean 3/3 稳定定高
+（hold=0、max_roll=0）；nominal/degraded 因位置保持被门控关闭，风致漂移
+75.3/113.0 m，但 final_alt 分别 9.17–9.29/6.08–6.24 m、max_roll 0–8.8°，
+未再出现加门控前的航向自旋。**这些 FAIL 是“主动放弃位置保持”的预期结果，
+不能写成姿态发散或位置保持通过。**
+
 ```bash
 # 磁基线（位置保持验收）
 py -3.12 test_host/fw_sil/run_real_acceptance.py \
