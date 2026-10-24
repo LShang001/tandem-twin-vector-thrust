@@ -3293,6 +3293,60 @@
     }
    },
    "note": "Motion does not improve heading; forward is worst. Position reaches target."
+  },
+  "takeoff_inflate_ab": {
+   "desc": "takeoff attitude covariance inflation 3deg/yaw10deg + zero P(8,v); 10 seeds; c2=off, c3=on",
+   "summary": {
+    "2_off": {
+     "n": 10,
+     "yaw_median": 7.55,
+     "yaw_max": 18.2,
+     "pos_max": 1.02
+    },
+    "2_on": {
+     "n": 10,
+     "yaw_median": 9.95,
+     "yaw_max": 24.0,
+     "pos_max": 1.21
+    },
+    "10_off": {
+     "n": 10,
+     "yaw_median": 17.1,
+     "yaw_max": 103.8,
+     "pos_max": 17.41
+    },
+    "10_on": {
+     "n": 10,
+     "yaw_median": 46.55,
+     "yaw_max": 172.6,
+     "pos_max": 27.9
+    },
+    "30_off": {
+     "n": 10,
+     "yaw_median": 26.9,
+     "yaw_max": 70.4,
+     "pos_max": 8.32
+    },
+    "30_on": {
+     "n": 10,
+     "yaw_median": 33.5,
+     "yaw_max": 75.2,
+     "pos_max": 24.37
+    },
+    "60_off": {
+     "n": 10,
+     "yaw_median": 40.95,
+     "yaw_max": 132.7,
+     "pos_max": 58.22
+    },
+    "60_on": {
+     "n": 10,
+     "yaw_median": 38.15,
+     "yaw_max": 104.0,
+     "pos_max": 68.58
+    }
+   },
+   "note": "REVERTED: helps neither short nor long static hold; short hold worsens (T=10 yaw 17->47deg)."
   }
  }
 }

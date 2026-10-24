@@ -1648,6 +1648,7 @@ namespace bfs
         gyro_bias_radps_.z() = -max_abs_radps;
       }
     }
+
     inline Eigen::Vector3f accel_mps2() const { return ins_accel_mps2_; }
     inline Eigen::Vector3f gyro_radps() const { return ins_gyro_radps_; }
     inline Eigen::Vector3f ned_vel_mps() const { return ins_ned_vel_mps_; }

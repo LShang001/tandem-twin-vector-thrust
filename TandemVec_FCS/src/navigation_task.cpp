@@ -2667,6 +2667,7 @@ void handleNavigationSystem()
     // 场景不代表实机；窗口语义由门控单元测试 T9b/T9c 锁定。
     heading_in.airborne = g_is_unlocked && throttlePercent >= 3.0f;
     heading_in.calibrated = g_imu_static_calibrated;
+
     heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
     {
       // 无磁一致性：EKF 航向变化率应有陀螺 z 支撑；纯平移时估计器自漂
