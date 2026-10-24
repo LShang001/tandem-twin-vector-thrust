@@ -1318,6 +1318,17 @@ Ki/真实陀螺噪声下，任何抬升速率测量高频分量的方案都会�
 裕度，L1 的相位超前收益无法在 L2 复现。<code>BFS_RATE_PHASE_LEAD</code>
 默认关闭，
 不进入固件候选。数据：<code>sim-data/aaf-2026-10-24/</code>。</p>
+<h3 id="317-磁航向跳变限幅否定">3.17 磁航向跳变限幅（否定）</h3>
+<p><code>Ekf15State</code> 新增单次磁矢量更新 yaw
+修正上限（<code>mag_yaw_jump_limit_rad</code>， 默认 0 关闭；SIL
+<code>--mag-yaw-jump</code>）。seed7 mag_nominal：关闭 104.7 m/
+37.0°；15°→146.2 m/<strong>176.3°</strong>（更差）；30°→77.5
+m/37.0°；45°→ 104.7 m/37.0°（同 baseline）。15°
+限幅拒掉正常航向收敛所需修正，反而 让航向漂移更远；30/45°
+只挪动失败点。正常 seed1–3（15°）仍 6/6，门控
+本身不破坏正常路径，但<strong>单次跳变限幅不能解决磁扰航向问题</strong>——需要
+连续一致性/多帧确认或更好的磁干扰模型。该 API 保持默认关闭，不进入
+默认导航路径。数据：<code>sim-data/aaf-2026-10-24/sil_acceptance.json</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1361,5 +1372,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:01</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:07</footer></article></body>
 </html>

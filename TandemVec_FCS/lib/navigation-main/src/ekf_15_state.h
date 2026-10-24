@@ -1545,12 +1545,20 @@ namespace bfs
 
       const Eigen::Matrix<float, 15, 3> k =
           p_ * h_mag.transpose() * s_inv;
+      const Eigen::Matrix<float, 15, 1> dx = k * y;
+      if (mag_yaw_jump_limit_rad_ > 0.0f && mag_vector_fused_count_ > 20 &&
+          std::fabs(dx(8)) > mag_yaw_jump_limit_rad_)
+      {
+        // 单次航向修正过大：保留姿态/协方差，按拒绝计数上报。
+        ++mag_vector_reject_count_;
+        return result;
+      }
       const Eigen::Matrix<float, 15, 15> identity =
           Eigen::Matrix<float, 15, 15>::Identity();
       p_ = (identity - k * h_mag) * p_ * (identity - k * h_mag).transpose() +
            k * r * k.transpose();
       StabilizeCovariance();
-      x_ = k * y;
+      x_ = dx;
       InjectErrorState();
       const int latest_idx = LatestSnapshotIndex();
       if (latest_idx >= 0)
@@ -1668,6 +1676,18 @@ namespace bfs
     inline uint32_t mag_vector_reject_count() const
     {
       return mag_vector_reject_count_;
+    }
+
+    // 单次磁矢量更新的航向修正上限 [rad]；<=0 关闭（默认，保持旧行为）。
+    // 磁扰下 NIS 可能仍通过，但一次修正几十度会把航向估计拉翻；该门控只
+    // 拦截“单次大幅 yaw 修正”，不替代模长/方向/NIS 门控。
+    inline void mag_yaw_jump_limit_rad(const float v)
+    {
+      mag_yaw_jump_limit_rad_ = (v > 0.0f) ? v : 0.0f;
+    }
+    inline float mag_yaw_jump_limit_rad() const
+    {
+      return mag_yaw_jump_limit_rad_;
     }
 
 #ifdef EKF_HOST_REGRESSION
@@ -4764,6 +4784,7 @@ namespace bfs
     uint32_t gnss_outlier_reject_count_ = 0;
     uint32_t mag_vector_fused_count_ = 0;
     uint32_t mag_vector_reject_count_ = 0;
+    float mag_yaw_jump_limit_rad_ = 0.0f;
 
     /* GNSS 重捕获保守融合窗口的剩余计时，单位 s。
        一次成功重捕获后设置窗口宽度，窗口内继续使用膨胀 R 防止后续帧再被普通门限拒绝。 */

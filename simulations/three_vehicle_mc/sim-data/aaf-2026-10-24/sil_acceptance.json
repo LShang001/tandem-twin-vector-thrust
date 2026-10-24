@@ -1451,6 +1451,54 @@
       ],
       "passed": 16,
       "total": 20
+    },
+    "mag_yaw_jump_15deg_seed7": {
+      "cases": [
+        {
+          "profile": "mag_nominal",
+          "seed": 7,
+          "pass_": false,
+          "alt": 11.6,
+          "hold_end": 146.21,
+          "hold_max": 240.31,
+          "pos_rms": 1.53,
+          "roll_max": 176.31
+        }
+      ],
+      "passed": 0,
+      "total": 1
+    },
+    "mag_yaw_jump_30deg_seed7": {
+      "cases": [
+        {
+          "profile": "mag_nominal",
+          "seed": 7,
+          "pass_": false,
+          "alt": 9.33,
+          "hold_end": 77.47,
+          "hold_max": 110.75,
+          "pos_rms": 0.6,
+          "roll_max": 36.98
+        }
+      ],
+      "passed": 0,
+      "total": 1
+    },
+    "mag_yaw_jump_45deg_seed7": {
+      "cases": [
+        {
+          "profile": "mag_nominal",
+          "seed": 7,
+          "pass_": false,
+          "alt": 9.21,
+          "hold_end": 104.71,
+          "hold_max": 169.05,
+          "pos_rms": 0.6,
+          "roll_max": 36.98
+        }
+      ],
+      "passed": 0,
+      "total": 1
     }
   }
 }

@@ -147,6 +147,8 @@ def main() -> int:
                     help="测试用：相位超前偏航增益（0 关闭偏航）")
     ap.add_argument("--pl-tau", type=float, default=None,
                     help="测试用：相位超前低通时间常数 [s]")
+    ap.add_argument("--mag-yaw-jump", type=float, default=None,
+                    help="测试用：单次磁航向修正上限 [deg]（0/缺省关闭）")
     args = ap.parse_args()
     seeds = [int(s) for s in args.seeds.split(",") if s]
     profiles = [p for p in args.profiles.split(",") if p]
@@ -184,6 +186,8 @@ def main() -> int:
                 cmd += ["--pl-yaw-gain", str(args.pl_yaw_gain)]
             if args.pl_tau is not None:
                 cmd += ["--pl-tau", str(args.pl_tau)]
+            if args.mag_yaw_jump is not None:
+                cmd += ["--mag-yaw-jump", str(args.mag_yaw_jump)]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
             try:
                 data = parse_json_line(proc.stdout)

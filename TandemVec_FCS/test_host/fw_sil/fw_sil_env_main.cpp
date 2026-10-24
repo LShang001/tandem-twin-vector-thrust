@@ -74,6 +74,7 @@ static bfs::Ekf15State g_ekf;
 static bool g_use_ekf = false;
 static int g_flow_delay = 1;  // 10 Hz 样本数
 static bool g_use_mag_yaw = false;
+static float g_mag_yaw_jump_rad = 0.0f; // 测试用：单次磁航向修正上限
 static float g_flow_scale = 0.95f; // 在线标定后的光流尺度
 static const Eigen::Vector3d kHomeLla(28.2 * M_PI / 180.0,
                                       112.9 * M_PI / 180.0, 50.0);
@@ -1188,6 +1189,8 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--seed")==0 && i+1<argc) seed=std::atoi(argv[++i]);
 #ifdef FW_SIL_REAL_NAV
     else if (std::strcmp(argv[i],"--mag-noise")==0 && i+1<argc) real_cfg.mag_noise_ut=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--mag-yaw-jump")==0 && i+1<argc)
+      g_mag_yaw_jump_rad = std::atof(argv[++i]) * 0.0174532925f;
     else if (std::strcmp(argv[i],"--mag-disturb")==0 && i+1<argc) real_cfg.mag_disturb_ut=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--mag-dropout")==0 && i+1<argc)
       std::sscanf(argv[++i], "%f:%f", &real_cfg.mag_dropout_start,
@@ -1295,6 +1298,10 @@ int main(int argc, char** argv) {
                           pl_tau);
   }
 #endif
+  if (g_mag_yaw_jump_rad > 0.0f)
+  {
+    nav_ekf.mag_yaw_jump_limit_rad(g_mag_yaw_jump_rad);
+  }
 #ifdef FW_SIL_REAL_NAV
   if (real_cfg.enabled)
   {
