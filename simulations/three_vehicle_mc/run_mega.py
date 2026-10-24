@@ -39,6 +39,8 @@ def main() -> int:
     ap.add_argument("--chunk", type=int, default=5000)
     ap.add_argument("--duration", type=float, default=20.0)
     ap.add_argument("--nominal", action="store_true")
+    ap.add_argument("--variant", default="fixed",
+                    choices=["fixed", "auth", "osc", "adaptive"])
     ap.add_argument("--vehicles", default="TandemVec,CoaxialVTVL,LiquidRocket")
     ap.add_argument("--seed", type=int, default=20261024)
     ap.add_argument("--out", default="")
@@ -51,6 +53,7 @@ def main() -> int:
     summary = {
         "seed": args.seed, "cases_per_vehicle": args.cases,
         "duration_s": args.duration, "nominal": args.nominal,
+        "variant": args.variant,
         "vehicles": {}, "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设",
     }
     all_rows = []
@@ -67,7 +70,8 @@ def main() -> int:
         while done < args.cases:
             n = min(args.chunk, args.cases - done)
             p = sample_params(model, n, rng, nominal=args.nominal)
-            m = simulate(model, p, rng, duration_s=args.duration)
+            m = simulate(model, p, rng, duration_s=args.duration,
+                         variant=args.variant)
             for i in range(n):
                 row = dict(vehicle=name, case=done + i,
                            ok=int(m["ok"][i]), fail=int(m["fail"][i]),

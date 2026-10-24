@@ -39,9 +39,16 @@
 cd simulations/three_vehicle_mc
 py -3.12 run_mega.py --cases 2000 --nominal          # 名义参数快速自检
 py -3.12 run_mega.py --cases 100000 --duration 20    # 宽范围 100k/机型
+py -3.12 run_mega.py --cases 100000 --variant osc    # 振荡自适应 A/B
+py -3.12 analyze_mega.py --dir sim-data/<campaign> \
+  --compare-dir sim-data/<reference>                 # 分桶/1% 样本/最坏案例
+py -3.12 compare_casewise.py --baseline <dirA> --candidate <dirB>  # 同种子逐 case A/B
 ```
 
-结果写入 `sim-data/mega-300k-2026-10-24/summary.json` + `samples.csv`。
+结果写入 `--out` 指定目录（默认 `sim-data/three-vehicle-mc-2026-10-24`），
+包含 `summary.json` + `samples.csv`；`analyze_mega.py` 追加
+`analysis.json`、`samples_1pct.csv`、`worst_cases.csv`、`compare.json`；
+`compare_casewise.py` 要求两套 campaign 的逐 case 参数完全一致。
 
 ## 4 当前结果（2026-10-24，L1 降阶 MC）
 
@@ -61,8 +68,33 @@ py -3.12 run_mega.py --cases 100000 --duration 20    # 宽范围 100k/机型
 - 宽范围采样：质量 ±18%、惯量 ±35%、推力 ±15%、τm 0.4–2.5×、增益 ±25%、
   力臂 ±35%、角度噪声 0–~6°、角速率噪声 0–~15°/s、偏置 ±6°/±6°/s、风 ±4.5 m/s²、
   力矩噪声、0–150 ms 延迟、2% 推力损失、1% 舵机卡死。
-- 数据：`sim-data/mega-300k-2026-10-24/`（summary/analysis/1% 样本/最坏案例）
-  与 `sim-data/mega-nominal-150k-2026-10-24/`；完整 110 MB CSV 未入库，可由脚本复现。
+- 鲁棒化 A/B（20k/机型）：振荡自适应让 TandemVec 失败 3.01%→2.33%、
+  max_ang P95 11.49°→10.47°；权限归一化反而使 P95 到 25°，不采用；
+  液体低 T/W 是物理边界，调增益无效。候选只做仿真，不改固件默认参数。
+- **300k 同代码同种子 osc A/B**（100k/机型；逐 case 参数一致校验通过）：
+
+| 机型 | 通过 fixed→osc | 失败 fixed→osc | 无故障失败 | 含故障失败 | max_ang P95 |
+|---|---|---|---|---|---|
+| TandemVec | 78.61%→**79.75%** | 3.00%→**2.29%** | 1.05%→**0.32%** | 67.77%→67.63% | 11.67°→**10.39°** |
+| 共轴 VTVL | 84.86%→84.91% | 3.85%→3.84% | 2.31%→2.30% | 53.71%→53.64% | 11.27°→**10.52°** |
+| 液体火箭 | 60.52%→60.50% | 23.92%→23.95% | 22.32%→22.35% | 76.23%→76.26% | 35.13°→35.13° |
+
+- 逐 case 转移：TandemVec **救回 714 例失败、0 例新增失败**（584 失败→通过、
+  130 失败→边缘；73 通过→边缘）；共轴救回 14/新增 3；液体救回 6/新增 35
+  （均为边缘→失败，无通过→失败），净效应中性偏负。
+- TandemVec 收益几乎全部来自 **延迟 ≥90 ms**：无故障失败组 100% 落在该区间；
+  osc 把 90–120/120–150/>150 ms 桶失败率从 6.72/37.37/60.96% 降到
+  1.81/11.21/24.30%，而 <90 ms 桶失败率两版均为 0%。90 ms 以内通过率不变。
+- 含故障桶几乎不变：50% 推力损失后可用推力约 1 倍重力，任何增益调度都无法
+  补回高度；液体低 T/W 同理。**osc 不是故障容错，也不是物理权限补偿**。
+- >150 ms 仍有 24.3% 失败，说明阻尼器不能替代延迟/相位裕度补偿；下一步做
+  延迟专项，而不是继续降增益。
+- 早期一次未配对 osc 跑（79.61%/2.43%）因 RNG 流在修复后改变而作废；
+  当前表为同代码成对重跑，方向一致、数值以本表为准。
+- 数据：`sim-data/mega-fixed-300k-paired-2026-10-24/` 与
+  `sim-data/mega-osc-300k-paired-2026-10-24/`（summary/analysis/1% 样本/
+  最坏案例/casewise）；`mega-300k-2026-10-24/` 与
+  `mega-nominal-150k-2026-10-24/` 为早期基线；完整 110 MB CSV 不入库。
 
 ## 5 证据等级
 

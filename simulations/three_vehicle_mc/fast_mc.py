@@ -89,7 +89,8 @@ def sample_params(model: VehicleModel, n: int, rng: np.random.Generator,
 
 
 def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
-             duration_s: float = 20.0, dt: float = 0.005):
+             duration_s: float = 20.0, dt: float = 0.005,
+             variant: str = "fixed"):
     """向量化闭环；返回 metrics dict（每个 case 一行）。"""
     n = len(p["mass_mult"])
     mass = model.mass_kg * p["mass_mult"]
@@ -101,6 +102,17 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     att_kp = model.att_kp * p["att_kp_mult"]
     rate_kp = model.rate_kp * p["rate_kp_mult"]
     lever = model.lever_m * p["lever_mult"]
+    if model.thrust_curve == "quadratic_throttle":
+        u_hover_nom = math.sqrt(model.mass_kg * G / model.thrust_max_n)
+        auth_power = 2.0
+    else:
+        u_hover_nom = model.mass_kg * G / model.thrust_max_n
+        auth_power = 1.0
+    u_eff_filt = np.full(n, u_hover_nom)
+    gain_osc = np.ones(n)
+    osc_count = np.zeros(n)
+    osc_timer = np.zeros(n)
+    sign_prev = np.zeros(n)
 
     # 等效角加速度权限：保持机型表给出的控制权限（不再用惯量比外推，
     # 避免把 TandemVec 小滚转惯量放大成不真实的滚转权限）。
@@ -163,19 +175,48 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
         a_t = 1.0 - np.exp(-dt / np.maximum(tau_m, dt))
         thrust_act += (_curve_thrust(model, throttle_cmd, tmax) - thrust_act) * a_t
 
+        # 控制权限归一化：用实际推力对应的等效油门，而不是指令油门；
+        # 推力损失时 u_eff 下降 → 增益上调补偿，高推力/高质量时增益下调。
+        u_eff = np.where(model.thrust_curve == "quadratic_throttle",
+                         np.sqrt(np.clip(thrust_act / tmax, 0.0, 1.0)),
+                         np.clip(thrust_act / tmax, 0.0, 1.0))
+        u_eff_filt += (u_eff - u_eff_filt) * (1.0 - np.exp(-dt / 0.5))
+        if variant in ("auth", "adaptive"):
+            auth_scale = np.clip((u_hover_nom / (u_eff_filt + 1e-3)) ** auth_power,
+                                 0.6, 1.6)
+        else:
+            auth_scale = 1.0
+        gain_eff = auth_scale * gain_osc
+
         # 姿态串级 PD（角度域）；传感器噪声进入反馈
-        rate_ref_phi = np.clip(att_kp * (-phi_m), -np.radians(model.rate_max_dps),
+        rate_ref_phi = np.clip(att_kp * gain_eff * (-phi_m),
+                               -np.radians(model.rate_max_dps),
                                np.radians(model.rate_max_dps))
-        rate_ref_theta = np.clip(att_kp * (-theta_m), -np.radians(model.rate_max_dps),
+        rate_ref_theta = np.clip(att_kp * gain_eff * (-theta_m),
+                                 -np.radians(model.rate_max_dps),
                                  np.radians(model.rate_max_dps))
-        rate_ref_psi = np.clip(att_kp * (-psi_m), -np.radians(model.rate_max_dps),
+        rate_ref_psi = np.clip(att_kp * gain_eff * (-psi_m),
+                               -np.radians(model.rate_max_dps),
                                np.radians(model.rate_max_dps))
-        alpha_roll = np.clip(rate_kp * (rate_ref_phi - p_m), -alpha_roll_max,
-                             alpha_roll_max)
-        alpha_pitch = np.clip(rate_kp * (rate_ref_theta - q_m), -alpha_max,
-                              alpha_max)
-        alpha_yaw = np.clip(rate_kp * (rate_ref_psi - r_m), -alpha_yaw_max,
-                            alpha_yaw_max)
+        alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_m),
+                             -alpha_roll_max, alpha_roll_max)
+        alpha_pitch = np.clip(rate_kp * gain_eff * (rate_ref_theta - q_m),
+                              -alpha_max, alpha_max)
+        alpha_yaw = np.clip(rate_kp * gain_eff * (rate_ref_psi - r_m),
+                            -alpha_yaw_max, alpha_yaw_max)
+        # 自适应振荡抑制：速率误差频繁换向 → 降增益；安静时缓慢恢复。
+        if variant in ("osc", "adaptive"):
+            sign_now = np.sign(rate_ref_phi - p_m)
+            osc_count += ((sign_now * sign_prev) < 0.0).astype(float)
+            sign_prev = sign_now
+            osc_timer += dt
+            due = osc_timer >= 0.25
+            if np.any(due):
+                hot = due & (osc_count > 6.0)
+                gain_osc = np.where(hot, np.maximum(0.55, gain_osc * 0.90),
+                                    np.minimum(1.0, gain_osc * 1.01))
+                osc_count = np.where(due, 0.0, osc_count)
+                osc_timer = np.where(due, 0.0, osc_timer)
         # 力矩噪声 + 舵机卡死（冻结在 0，模拟无控制）
         alpha_roll += p["torque_noise"] * rng.standard_normal(n)
         alpha_pitch += p["torque_noise"] * rng.standard_normal(n)
