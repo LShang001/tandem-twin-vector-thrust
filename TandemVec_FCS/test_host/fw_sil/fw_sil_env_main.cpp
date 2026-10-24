@@ -20,6 +20,7 @@
  *          样本，用于区分高频模态/混叠；仅测试设施）、`--pos-leg N:E`
  *          （进入 AUTO_POSITION 时叠加前飞段目标偏移，仅 SIL）、
  *          `--pos-hold-at T` `--fwd-stick A:B`（定高前飞后再切定点）、
+ *          `--takeoff-at T`（起飞时刻，默认 3 s；验证地面等待不计窗口）、
  *          `--wind-window A:B`（覆盖侧风时段）、`--bias-z-max R`
  *          （无磁离地陀螺零偏 z 限幅，0=关闭）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
@@ -78,6 +79,8 @@ static float g_trace_fast_start_s = 24.0f;
 static float g_trace_fast_end_s = 26.0f;
 // 6DOF 积分子步数：默认 1 保持旧行为；>1 用于诊断显式欧拉近 Nyquist 数值振荡。
 static int g_plant_substeps = 1;
+// 起飞时刻（仅 SIL）：默认 3 s；用于验证地面等待不消耗无磁 20 s 窗口。
+static float g_takeoff_at_s = 3.0f;
 
 #ifdef BFS_RATE_ACCEL_FB
 extern void setRateAccelFeedbackGains(float rp_gain, float yaw_gain,
@@ -941,7 +944,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           nav_ekf.gyro_bias_radps().z());
     }
 
-    if (!manual && !alt_cmd && t >= 3.0f)
+    if (!manual && !alt_cmd && t >= g_takeoff_at_s)
     {
       target_altitude = target_alt;
       vertical_loiter_state = ALTITUDE_HOVERING;
@@ -1400,6 +1403,8 @@ int main(int argc, char** argv) {
       real_cfg.baro_drift=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--wind-force")==0 && i+1<argc)
       real_cfg.wind_force_mps2=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--takeoff-at")==0 && i+1<argc)
+      g_takeoff_at_s=static_cast<float>(std::atof(argv[++i]));
     else if (std::strcmp(argv[i],"--wind-window")==0 && i+1<argc)
       std::sscanf(argv[++i], "%f:%f", &real_cfg.wind_start_s,
                   &real_cfg.wind_end_s);
@@ -1560,7 +1565,7 @@ int main(int argc, char** argv) {
     }
     feed_firmware(p,s);
     runGNCExecutive();
-    if (!manual && !alt_cmd && t >= 3.0f) {
+    if (!manual && !alt_cmd && t >= g_takeoff_at_s) {
       target_altitude = target_alt;
       vertical_loiter_state = ALTITUDE_HOVERING;
       alt_cmd = true;

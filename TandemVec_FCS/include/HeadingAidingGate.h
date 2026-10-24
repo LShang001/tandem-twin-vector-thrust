@@ -57,7 +57,7 @@ struct HeadingAidingInput
     bool gnss_motion_valid = false;    // GNSS 速度足以观测航向（>2 m/s）
     bool motion_excitation_valid = false; // 速度 + 倾斜同时存在，航向可观测
     float yaw_drift_dps = 0.0f;        // EKF 航向变化率 − 陀螺 z（无磁一致性）
-    bool airborne = false;             // 已离地（油门/解锁），无磁窗口从离地起算
+    bool airborne = false;             // 已离地（解锁且油门上量），无磁窗口从离地起算
     float dt_s = 0.005f;
 };
 

@@ -2647,6 +2647,8 @@ void handleNavigationSystem()
     heading_in.horizontal_speed_mps =
         std::hypot(vel_ned(0), vel_ned(1));
     heading_in.heading_mode = g_heading_aid_mode;
+    // 离地判据：解锁且油门已出力。SIL 地面会滑跑/自动油门，长地面等待
+    // 场景不代表实机；窗口语义由门控单元测试 T9b/T9c 锁定。
     heading_in.airborne = g_is_unlocked && throttlePercent >= 3.0f;
     heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
     {
