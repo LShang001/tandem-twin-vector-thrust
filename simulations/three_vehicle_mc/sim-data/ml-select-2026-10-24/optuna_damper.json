@@ -1,0 +1,52 @@
+{
+  "opt_cases": 8000,
+  "val_cases": 100000,
+  "trials": 60,
+  "seed": 20261027,
+  "baseline_opt": {
+    "fail": 0.019,
+    "pass": 0.77675,
+    "lost_pass": 0.0,
+    "score": 0.023465
+  },
+  "best_value": 0.020743499999999998,
+  "best_params": {
+    "window_s": 0.811703337851513,
+    "threshold": 1,
+    "decay": 0.8251188355877908,
+    "floor": 0.48117990385062576,
+    "recovery": 1.0159925085666208
+  },
+  "best_user_attrs": {
+    "fail": 0.01125,
+    "pass": 0.785,
+    "lost_pass": 0.000125,
+    "hover_active": 0.010312000000000002
+  },
+  "validation": {
+    "fixed": {
+      "fail": 0.01958,
+      "pass": 0.78733,
+      "lost_pass": 0.0,
+      "score": 0.0238334
+    },
+    "grid_tuned": {
+      "fail": 0.01575,
+      "pass": 0.79097,
+      "lost_pass": 4e-05,
+      "score": 0.019942600000000005,
+      "rescued": 383,
+      "regressed": 0
+    },
+    "optuna": {
+      "fail": 0.01221,
+      "pass": 0.79483,
+      "lost_pass": 6e-05,
+      "score": 0.0163314,
+      "rescued": 737,
+      "regressed": 0
+    }
+  },
+  "hover_false_penalty": 0.5,
+  "note": "L1 选择性阻尼 TPE 搜索；不是实机调参"
+}
