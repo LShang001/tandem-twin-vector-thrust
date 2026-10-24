@@ -1129,6 +1129,8 @@ int main(int argc, char** argv) {
   float target_alt=10.0f; // AUTO_ALTITUDE 目标高度 [m]（F3 验证可调高）
   float seconds=40.0f;    // 仿真时长 [s]
   int mask=0x03;        // inertia_comp_mask，0 关闭前馈 / 3 全开（C-02 A/B）
+  float gain_scale=1.0f; // 测试用：att/rate kp 缩放（默认 1.0，不影响生产）
+  bool scale_ki=false;   // 同时缩放 rate ki
   bool flow=false;
   bool wind_on=true;    // --no-wind 关闭 20–25 s 侧风（F3 洁净场景用）
 #ifdef FW_SIL_REAL_NAV
@@ -1145,6 +1147,8 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--alt")==0 && i+1<argc) target_alt=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--seconds")==0 && i+1<argc) seconds=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--mask")==0 && i+1<argc) mask=std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--gain-scale")==0 && i+1<argc) gain_scale=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--scale-ki")==0) scale_ki=true;
     else if (std::strcmp(argv[i],"--flow")==0) flow=true;
     else if (std::strcmp(argv[i],"--flow-delay")==0 && i+1<argc) g_flow_delay=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--mag")==0) g_use_mag_yaw=true;
@@ -1228,6 +1232,19 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--gnss-consistency-reject")==0)
       real_cfg.gnss_consistency_reject=true;
 #endif
+  }
+  if (gain_scale != 1.0f)
+  {
+    auto scale_pid = [&](auto &q) {
+      q.kp *= gain_scale;
+      if (scale_ki) q.ki *= gain_scale;
+    };
+    scale_pid(kFlightCtrlParams.att_roll);
+    scale_pid(kFlightCtrlParams.att_pitch);
+    scale_pid(kFlightCtrlParams.att_yaw);
+    scale_pid(kFlightCtrlParams.rate_roll);
+    scale_pid(kFlightCtrlParams.rate_pitch);
+    scale_pid(kFlightCtrlParams.rate_yaw);
   }
 #ifdef FW_SIL_REAL_NAV
   if (real_cfg.enabled)

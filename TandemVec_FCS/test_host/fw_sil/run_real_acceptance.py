@@ -123,6 +123,10 @@ def main() -> int:
     ap.add_argument(
         "--profiles", default="mag_clean,mag_nominal,mag_disturbed",
         help="默认磁基线；无磁 clean/nominal/degraded 仅用于观测性诊断")
+    ap.add_argument("--gain-scale", type=float, default=1.0,
+                    help="测试用 att/rate kp 缩放")
+    ap.add_argument("--scale-ki", action="store_true",
+                    help="同时缩放 rate ki")
     args = ap.parse_args()
     seeds = [int(s) for s in args.seeds.split(",") if s]
     profiles = [p for p in args.profiles.split(",") if p]
@@ -144,6 +148,10 @@ def main() -> int:
                 "--pos-hold", "--seconds", str(args.seconds),
                 "--seed", str(seed), *extra,
             ]
+            if args.gain_scale != 1.0:
+                cmd += ["--gain-scale", str(args.gain_scale)]
+            if args.scale_ki:
+                cmd += ["--scale-ki"]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
             try:
                 data = parse_json_line(proc.stdout)
