@@ -1,0 +1,223 @@
+# -*- coding: utf-8 -*-
+"""fast_mc.py — 三机型快速参数化 6DOF 降阶 MC 内核。
+
+@file    fast_mc.py
+@module  仿真/三机型快速 MC（降阶 6DOF + 噪声/误差/故障）
+@brief   对 TandemVec/共轴/液体三型等效模型做向量化姿态+高度闭环 MC。
+@details 状态：高度/垂速、roll/pitch/yaw 角与角速率；控制：姿态外环→速率内环
+         （角度域 PD）+ 高度 PD；执行器：电机/舵机一阶滞后、推力曲线、限幅；
+         扰动：质量/惯量/推力/增益/力臂偏差、传感器噪声/偏置/延迟、风、力矩噪声、
+         推力损失/舵机卡死。每个 case 独立参数，向量化并行。
+         输出每个 case 的 max 角度、最终高度、失败标记；不替代 SIL/实机。
+@theory  T=u·Tmax（共轴/液体）或 T=Tmax·u²（TandemVec）；M=I·α；
+         姿态/速率串级 PD；高度 PD
+         @ref CTL-001 §4–§5、§8.4；CTL-003 §2
+@frame   悬停存档系小角度等效；角度 rad、角速率 rad/s
+@units   m、m/s、rad、rad/s、N、kg、s
+@note    ★ 本内核是“包线/敏感度”工具，不是飞控固件复刻；增益/执行器被降阶为
+         等效 PD/一阶滞后。不得用其结果宣称实机通过或飞行响应等价。
+@test    run_mega.py --cases 2000 --nominal
+@see     models.py、run_mega.py、VER-002
+"""
+import math
+from dataclasses import replace
+import numpy as np
+
+from models import VehicleModel
+
+G = 9.80665
+
+
+def _curve_thrust(model: VehicleModel, throttle, tmax):
+    throttle = np.clip(throttle, 0.0, 1.0)
+    if model.thrust_curve == "quadratic_throttle":
+        return tmax * throttle * throttle
+    thrust = tmax * throttle
+    # 液体最小稳定推力：只有阀门打开时才抬到 Tmin
+    if model.thrust_min_n > 0.0:
+        thrust = np.where((throttle > 1e-4) & (thrust < model.thrust_min_n),
+                          model.thrust_min_n, thrust)
+    return thrust
+
+
+def sample_params(model: VehicleModel, n: int, rng: np.random.Generator,
+                  nominal: bool = False):
+    """采样每个 case 的模型/传感器/故障参数；返回 dict[str, ndarray]."""
+    if nominal:
+        def nrm(scale):
+            return np.clip(1.0 + scale * rng.standard_normal(n), 1.0 - 1.5 * scale,
+                           1.0 + 1.5 * scale)
+        p = dict(
+            mass_mult=nrm(0.05), i_roll=nrm(0.10), i_pitch=nrm(0.10),
+            i_yaw=nrm(0.10), thrust_mult=nrm(0.03), tau_mult=nrm(0.10),
+            att_kp_mult=nrm(0.08), rate_kp_mult=nrm(0.08),
+            lever_mult=nrm(0.08), sensor_angle_deg=np.abs(nrm(0.02)) * 0.2,
+            sensor_rate_dps=np.abs(nrm(0.02)) * 0.5,
+            bias_angle_deg=0.2 * rng.standard_normal(n),
+            bias_rate_dps=0.2 * rng.standard_normal(n),
+            wind_up=0.2 * rng.standard_normal(n),
+            torque_noise=0.005 * np.abs(rng.standard_normal(n)),
+            delay_s=np.abs(nrm(0.02)) * 0.005,
+            thrust_loss=np.ones(n), servo_jam=np.zeros(n, dtype=bool),
+            init_angle_deg=0.3 * rng.standard_normal(n),
+            init_rate_dps=0.3 * rng.standard_normal(n),
+        )
+    else:
+        p = dict(
+            mass_mult=np.clip(1.0 + 0.18 * rng.standard_normal(n), 0.70, 1.30),
+            i_roll=np.clip(1.0 + 0.35 * rng.standard_normal(n), 0.55, 1.70),
+            i_pitch=np.clip(1.0 + 0.35 * rng.standard_normal(n), 0.55, 1.70),
+            i_yaw=np.clip(1.0 + 0.35 * rng.standard_normal(n), 0.55, 1.70),
+            thrust_mult=np.clip(1.0 + 0.15 * rng.standard_normal(n), 0.75, 1.25),
+            tau_mult=np.clip(1.0 + 0.60 * rng.standard_normal(n), 0.40, 2.50),
+            att_kp_mult=np.clip(1.0 + 0.25 * rng.standard_normal(n), 0.60, 1.40),
+            rate_kp_mult=np.clip(1.0 + 0.25 * rng.standard_normal(n), 0.60, 1.40),
+            lever_mult=np.clip(1.0 + 0.35 * rng.standard_normal(n), 0.50, 1.60),
+            sensor_angle_deg=np.abs(2.0 * rng.standard_normal(n)),
+            sensor_rate_dps=np.abs(5.0 * rng.standard_normal(n)),
+            bias_angle_deg=2.0 * rng.standard_normal(n),
+            bias_rate_dps=2.0 * rng.standard_normal(n),
+            wind_up=1.5 * rng.standard_normal(n),
+            torque_noise=0.20 * np.abs(rng.standard_normal(n)),
+            delay_s=np.abs(0.05 * rng.standard_normal(n)),
+            thrust_loss=np.where(rng.random(n) < 0.02, 0.5, 1.0),
+            servo_jam=(rng.random(n) < 0.01),
+            init_angle_deg=5.0 * rng.standard_normal(n),
+            init_rate_dps=5.0 * rng.standard_normal(n),
+        )
+    return p
+
+
+def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
+             duration_s: float = 20.0, dt: float = 0.005):
+    """向量化闭环；返回 metrics dict（每个 case 一行）。"""
+    n = len(p["mass_mult"])
+    mass = model.mass_kg * p["mass_mult"]
+    ix = model.ix * p["i_roll"]
+    iy = model.iy * p["i_pitch"]
+    iz = model.iz * p["i_yaw"]
+    tmax = model.thrust_max_n * p["thrust_mult"]
+    tau_m = model.tau_motor_s * p["tau_mult"]
+    att_kp = model.att_kp * p["att_kp_mult"]
+    rate_kp = model.rate_kp * p["rate_kp_mult"]
+    lever = model.lever_m * p["lever_mult"]
+
+    # 等效角加速度权限：保持机型表给出的控制权限（不再用惯量比外推，
+    # 避免把 TandemVec 小滚转惯量放大成不真实的滚转权限）。
+    alpha_max = np.full(n, model.alpha_max_radps2)
+    alpha_yaw_max = np.full(n, model.yaw_alpha_max_radps2)
+    alpha_roll_max = np.full(n, model.alpha_max_radps2)
+
+    # 状态
+    h = np.zeros(n)
+    v = np.zeros(n)
+    phi = np.radians(p["init_angle_deg"])
+    theta = np.radians(p["init_angle_deg"] * 0.7)
+    psi = np.radians(p["init_angle_deg"] * 0.3)
+    pp = np.radians(p["init_rate_dps"])
+    qq = np.radians(p["init_rate_dps"] * 0.7)
+    rr = np.radians(p["init_rate_dps"] * 0.3)
+    phi_lag, theta_lag, psi_lag = phi.copy(), theta.copy(), psi.copy()
+    p_lag, q_lag, r_lag = pp.copy(), qq.copy(), rr.copy()
+    thrust_act = np.zeros(n)
+    alpha_roll_act = np.zeros(n)
+    alpha_pitch_act = np.zeros(n)
+    alpha_yaw_act = np.zeros(n)
+
+    max_phi = np.zeros(n)
+    max_theta = np.zeros(n)
+    max_psi = np.zeros(n)
+    max_alt = np.zeros(n)
+    sat_steps = np.zeros(n)
+
+    steps = int(duration_s / dt)
+    for _ in range(steps):
+        # 传感器：一阶延迟 + 偏置 + 白噪声
+        tau_s = np.maximum(p["delay_s"], dt)
+        a_s = 1.0 - np.exp(-dt / tau_s)
+        phi_lag += (phi - phi_lag) * a_s
+        theta_lag += (theta - theta_lag) * a_s
+        psi_lag += (psi - psi_lag) * a_s
+        p_lag += (pp - p_lag) * a_s
+        q_lag += (qq - q_lag) * a_s
+        r_lag += (rr - r_lag) * a_s
+        # 使用随机噪声（每步独立）
+        noise_a = np.radians(p["sensor_angle_deg"]) * rng.standard_normal(n)
+        noise_r = np.radians(p["sensor_rate_dps"]) * rng.standard_normal(n)
+        phi_m = phi_lag + np.radians(p["bias_angle_deg"]) + noise_a
+        theta_m = theta_lag + np.radians(p["bias_angle_deg"] * 0.8) + noise_a
+        psi_m = psi_lag + np.radians(p["bias_angle_deg"] * 0.5) + noise_a
+        p_m = p_lag + np.radians(p["bias_rate_dps"]) + noise_r
+        q_m = q_lag + np.radians(p["bias_rate_dps"] * 0.8) + noise_r
+        r_m = r_lag + np.radians(p["bias_rate_dps"] * 0.5) + noise_r
+
+        # 高度 PD → 推力/油门
+        thrust_cmd = mass * G + model.vertical_kp * mass * (10.0 - h) \
+            - model.vertical_kd * mass * v
+        thrust_cmd = np.clip(thrust_cmd, 0.0, tmax)
+        if model.thrust_curve == "quadratic_throttle":
+            throttle_cmd = np.sqrt(np.clip(thrust_cmd / tmax, 0.0, 1.0))
+        else:
+            throttle_cmd = np.clip(thrust_cmd / tmax, 0.0, 1.0)
+        throttle_cmd *= p["thrust_loss"]
+        a_t = 1.0 - np.exp(-dt / np.maximum(tau_m, dt))
+        thrust_act += (_curve_thrust(model, throttle_cmd, tmax) - thrust_act) * a_t
+
+        # 姿态串级 PD（角度域）；传感器噪声进入反馈
+        rate_ref_phi = np.clip(att_kp * (-phi_m), -np.radians(model.rate_max_dps),
+                               np.radians(model.rate_max_dps))
+        rate_ref_theta = np.clip(att_kp * (-theta_m), -np.radians(model.rate_max_dps),
+                                 np.radians(model.rate_max_dps))
+        rate_ref_psi = np.clip(att_kp * (-psi_m), -np.radians(model.rate_max_dps),
+                               np.radians(model.rate_max_dps))
+        alpha_roll = np.clip(rate_kp * (rate_ref_phi - p_m), -alpha_roll_max,
+                             alpha_roll_max)
+        alpha_pitch = np.clip(rate_kp * (rate_ref_theta - q_m), -alpha_max,
+                              alpha_max)
+        alpha_yaw = np.clip(rate_kp * (rate_ref_psi - r_m), -alpha_yaw_max,
+                            alpha_yaw_max)
+        # 力矩噪声 + 舵机卡死（冻结在 0，模拟无控制）
+        alpha_roll += p["torque_noise"] * rng.standard_normal(n)
+        alpha_pitch += p["torque_noise"] * rng.standard_normal(n)
+        alpha_yaw += p["torque_noise"] * rng.standard_normal(n)
+        alpha_roll = np.where(p["servo_jam"], 0.0, alpha_roll)
+        alpha_pitch = np.where(p["servo_jam"], 0.0, alpha_pitch)
+        sat_steps += ((np.abs(alpha_roll) >= alpha_roll_max * 0.98) |
+                      (np.abs(alpha_pitch) >= alpha_max * 0.98)).astype(float)
+
+        a_act = 1.0 - np.exp(-dt / 0.05)
+        alpha_roll_act += (alpha_roll - alpha_roll_act) * a_act
+        alpha_pitch_act += (alpha_pitch - alpha_pitch_act) * a_act
+        alpha_yaw_act += (alpha_yaw - alpha_yaw_act) * a_act
+
+        # 刚体角动力学（小角度等效 + 阻尼）
+        damp = 0.2
+        pp += (alpha_roll_act - damp * pp) * dt
+        qq += (alpha_pitch_act - damp * qq) * dt
+        rr += (alpha_yaw_act - damp * rr) * dt
+        phi += pp * dt
+        theta += qq * dt
+        psi += rr * dt
+
+        # 垂向：推力投影 + 重力 + 风
+        v += ((thrust_act * np.cos(phi) * np.cos(theta) - mass * G) / mass
+              + p["wind_up"]) * dt
+        h += v * dt
+
+        max_phi = np.maximum(max_phi, np.abs(phi))
+        max_theta = np.maximum(max_theta, np.abs(theta))
+        max_psi = np.maximum(max_psi, np.abs(psi))
+        max_alt = np.maximum(max_alt, h)
+
+    max_ang = np.maximum(max_phi, np.maximum(max_theta, max_psi))
+    finite = np.isfinite(h) & np.isfinite(v) & np.isfinite(max_ang)
+    fail = (~finite) | (h < -0.5) | (h > 30.0) | (max_ang > np.radians(60.0))
+    ok = finite & (~fail) & (h >= 8.0) & (h <= 12.0) & \
+         (max_ang <= np.radians(35.0))
+    return dict(
+        ok=ok.astype(np.int8), fail=fail.astype(np.int8),
+        final_h=h, max_alt=max_alt,
+        max_roll_deg=np.degrees(max_phi), max_pitch_deg=np.degrees(max_theta),
+        max_yaw_deg=np.degrees(max_psi), max_ang_deg=np.degrees(max_ang),
+        sat_frac=sat_steps / steps,
+    )

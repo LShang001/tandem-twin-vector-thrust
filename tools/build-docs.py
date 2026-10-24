@@ -114,6 +114,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "VER-001 验证确认与模型可信度", "V 模型框架、证据清单、模型可信度分级与证据规则"),
         ("docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md", "verification/VER-002.html",
          "VER-002 三机型兼容性与虚拟验证", "TandemVec 逐位兼容、共轴 15/15、液体 9 组回收 SIL 与未证明项"),
+        ("docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md", "verification/VER-003.html",
+         "VER-003 三机型等效模型反演与巨型 MC", "从可飞行参数反演等效模型、10 万级参数/噪声/故障扫描与边界"),
         ("docs/07-验证与确认/SAFE-001-初步安全计划.md", "verification/SAFE-001.html",
          "SAFE-001 初步安全计划", "纯软件仿真范围声明、软件层面风险与缓解、硬件化前瞻议题登记"),
     ]),

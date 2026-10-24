@@ -1,0 +1,48 @@
+{
+  "seed": 20261024,
+  "cases_per_vehicle": 50000,
+  "duration_s": 20.0,
+  "nominal": true,
+  "vehicles": {
+    "TandemVec": {
+      "cases": 50000,
+      "pass_rate": 1.0,
+      "fail_rate": 0.0,
+      "final_h_p50": 9.830362799773486,
+      "final_h_p05": 9.504933962956441,
+      "final_h_p95": 10.153295026524159,
+      "max_ang_p50": 0.30178500974398687,
+      "max_ang_p95": 0.6160656588560537,
+      "sat_frac_p50": 0.0,
+      "sat_frac_p95": 0.0,
+      "top_param_corr": []
+    },
+    "CoaxialVTVL": {
+      "cases": 50000,
+      "pass_rate": 1.0,
+      "fail_rate": 0.0,
+      "final_h_p50": 9.91922968150568,
+      "final_h_p05": 9.646327463427356,
+      "final_h_p95": 10.19225167086864,
+      "max_ang_p50": 0.3017711103634484,
+      "max_ang_p95": 0.6158988781126042,
+      "sat_frac_p50": 0.0,
+      "sat_frac_p95": 0.0,
+      "top_param_corr": []
+    },
+    "LiquidRocket": {
+      "cases": 50000,
+      "pass_rate": 1.0,
+      "fail_rate": 0.0,
+      "final_h_p50": 9.805712618036395,
+      "final_h_p05": 9.471976709302774,
+      "final_h_p95": 10.130644025764896,
+      "max_ang_p50": 0.486750693477097,
+      "max_ang_p95": 1.1664845807103237,
+      "sat_frac_p50": 0.0,
+      "sat_frac_p95": 0.0,
+      "top_param_corr": []
+    }
+  },
+  "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设"
+}

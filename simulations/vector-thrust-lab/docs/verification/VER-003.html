@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-003 三机型等效模型反演与巨型 MC ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-003-三机型等效模型反演与巨型-mc">VER-003
+三机型等效模型反演与巨型 MC</h1>
+<blockquote>
+<p>目标：从“曾经能飞”的固件参数/控制配置反演三机型等效系统模型，并在该模型上
+做十万级参数-噪声-误差-故障扫描。<br />
+<strong>证据等级：L1（模型/假设内数值包线）</strong>。没有原始飞行日志，反演不唯一；
+不能据此宣称实机模型或飞行响应通过。</p>
+</blockquote>
+<hr />
+<h2 id="1-反演思路">1 反演思路</h2>
+<p>“能飞”只给出可行性约束（推力/重量、控制权限、闭环时间尺度、限幅），
+不能唯一确定质量、惯量、力臂、阻尼等全部参数。本文采用：</p>
+<ol type="1">
+<li><strong>直接回写</strong>：固件/模型 JSON
+已有的质量、推力、惯量、力臂、时间常数、增益；</li>
+<li><strong>控制权限约束</strong>：用实飞增益 + 限幅 +
+质量/推力反推等效惯量/力臂量级；</li>
+<li><strong>可行点假设</strong>：在不可辨识方向选一个与
+SIL/组件估算一致的可行点；</li>
+<li><strong>明确标注</strong>：每个参数的来源、置信度、不可辨识项。</li>
+</ol>
+<p>反演实现：<code>simulations/three_vehicle_mc/models.py</code>； 快速
+MC：<code>simulations/three_vehicle_mc/fast_mc.py</code>。</p>
+<hr />
+<h2 id="2-三机型等效模型">2 三机型等效模型</h2>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>TandemVec</th>
+<th>共轴 VTVL</th>
+<th>液体火箭</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>质量</td>
+<td>0.70 kg（实飞配置）</td>
+<td>0.84 kg（实飞配置）</td>
+<td>16.5 kg（CCAEGT M0）</td>
+</tr>
+<tr>
+<td>Tmax</td>
+<td>27.5 N（2·kT·wMax²）</td>
+<td>14 N（实飞配置）</td>
+<td>200 N（CCAEGT）</td>
+</tr>
+<tr>
+<td>Tmin</td>
+<td>0</td>
+<td>0</td>
+<td>80 N</td>
+</tr>
+<tr>
+<td>推力曲线</td>
+<td>T=Tmax·u²</td>
+<td>T=Tmax·u</td>
+<td>T=Tmax·u</td>
+</tr>
+<tr>
+<td>惯量 Ix/Iy/Iz</td>
+<td>0.0021/0.022/0.022（组件估算）</td>
+<td>0.05/0.05/0.08（<strong>反演假设</strong>）</td>
+<td>0.35/3.0/3.0（<strong>细长体假设</strong>）</td>
+</tr>
+<tr>
+<td>力臂</td>
+<td>a=b=0.315 m（实飞配置）</td>
+<td>0.15 m（<strong>反演假设</strong>）</td>
+<td>0.45 m（<strong>假设</strong>）</td>
+</tr>
+<tr>
+<td>电机 τ</td>
+<td>0.28 s</td>
+<td>0.28 s</td>
+<td>0.10 s</td>
+</tr>
+<tr>
+<td>姿态增益</td>
+<td>att 2.8、rate 16.04（实飞配置）</td>
+<td>att 4.25、rate_eff 10.5（实飞 PID 反演）</td>
+<td>att 3.0、rate 8.0（<strong>假设</strong>）</td>
+</tr>
+<tr>
+<td>角加速度权限</td>
+<td>±100 rad/s²（降阶等效）</td>
+<td>±7.33/±5 rad/s²</td>
+<td>±10 rad/s²</td>
+</tr>
+<tr>
+<td>不可辨识</td>
+<td>气动阻尼/Jp/部分惯量</td>
+<td>惯量/力臂/差速力矩/TVC 方向</td>
+<td>惯量/力臂/气动/RCS</td>
+</tr>
+</tbody>
+</table>
+<h3 id="21-共轴反演的定量关系">2.1 共轴反演的定量关系</h3>
+<p>实飞速率环 <code>u = Kp_r·(ω_ref−ω)</code>，修正角 <code>u</code>
+产生力矩 <code>M=L·T·u</code>，于是</p>
+<pre><code>ω̇ = (Kp_r·L·T/I)·(ω_ref−ω)</code></pre>
+<p>取实飞
+<code>Kp_r=0.25</code>、<code>L=0.15 m</code>、<code>T=14 N</code>，并选
+<code>I=0.05 kg·m²</code>，得到 速率环等效极点
+<code>10.5 s⁻¹</code>（时间常数约 0.095 s）。这是“能飞 + 手感可接受”
+的一个可行点，不是唯一解；<code>L</code> 与 <code>I</code>
+同比例变化时结果不可区分。</p>
+<h3 id="22-液体反演">2.2 液体反演</h3>
+<p><code>Tmax/Tmin/Isp/M0</code> 直接来自 CCAEGT/实飞配置；惯量按 16.5
+kg、约 1.5 m 细长体
+<code>I_trans≈m·L²/12≈3 kg·m²</code>、<code>I_axial≈0.35</code>
+构造；力臂 0.45 m、 姿态增益为可行点假设。CCAEGT
+<code>M_DRY=12.5 kg</code> 与固件 <code>DRY_MASS=13.5 kg</code>
+存在已知不一致，本模型用 16.5 kg 总量，不修改外部固件。</p>
+<hr />
+<h2 id="3-巨型-mc-设计">3 巨型 MC 设计</h2>
+<h3 id="31-扫描规模">3.1 扫描规模</h3>
+<ul>
+<li>名义自检：2000 例/机型（质量/惯量/推力 ±5–10%、低噪声）；</li>
+<li>宽范围：<strong>100,000 例/机型，共 300,000 例</strong>，20
+s/例，dt=5 ms；</li>
+<li>状态：高度/垂速、roll/pitch/yaw 与角速率；</li>
+<li>控制：姿态外环 P→速率内环 P + 高度 PD；</li>
+<li>执行器：电机/舵机一阶、推力曲线、限幅、舵机卡死、推力损失；</li>
+<li>扰动：质量/惯量/推力/增益/力臂偏差、角度/角速率噪声与偏置、传感器延迟、
+垂直风、力矩噪声；参数分布见
+<code>simulations/three_vehicle_mc/README.md</code>。</li>
+</ul>
+<h3 id="32-判据">3.2 判据</h3>
+<ul>
+<li>失败：非有限、<code>h&lt;−0.5 m</code>、<code>h&gt;30 m</code>、max
+角度 &gt;60°；</li>
+<li>通过：最终高度 8–12 m、max 角度 ≤35°、无失败。</li>
+<li>统计最终高度/最大角度
+P50/P95、失效率和参数-失败相关系数（仅诊断）。</li>
+</ul>
+<h3 id="33-结果">3.3 结果</h3>
+<p>数据：<code>simulations/three_vehicle_mc/sim-data/mega-300k-2026-10-24/</code>
+（<code>summary.json</code>、<code>analysis.json</code>、<code>samples_1pct.csv</code>、<code>worst_cases.csv</code>）。</p>
+<p><strong>名义范围 50k/机型（无故障，150k 总）：三机型均 100%
+通过</strong> （max_ang P95 0.62–1.17°，final_h P05/P95 9.47–10.19
+m）。</p>
+<p><strong>宽范围 100k/机型（含 2% 推力损失、1% 舵机卡死，300k
+总）：</strong></p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>全部通过/失败</th>
+<th>无故障通过/失败</th>
+<th>含故障通过/失败</th>
+<th>max_ang P95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TandemVec</td>
+<td>78.49% / 3.16%</td>
+<td>80.37% / 1.09%</td>
+<td>18.40% / 69.31%</td>
+<td>11.60°</td>
+</tr>
+<tr>
+<td>共轴 VTVL</td>
+<td>84.71% / 3.91%</td>
+<td>86.63% / 2.35%</td>
+<td>21.92% / 54.91%</td>
+<td>11.26°</td>
+</tr>
+<tr>
+<td>液体火箭</td>
+<td>60.52% / 23.48%</td>
+<td>61.90% / 21.89%</td>
+<td>15.38% / 75.74%</td>
+<td>35.53°</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>“通过”是严格判据（20 s 末高度 8–12 m、max 角度 ≤35°）；“失败”是
+非有限/撞地/飞出 30 m/角度 &gt;60°。两者之间的 case
+是“有界但未收敛到窄带”， 不能一律算失败，也不能算通过。</p>
+</blockquote>
+<p><strong>参数敏感度（Pearson 相关，仅诊断）：</strong></p>
+<ul>
+<li>TandemVec：<code>thrust_loss=-0.802</code>、<code>delay=+0.179</code>；无故障时失效率
+1.09%， 说明主要风险是推力损失与延迟，不是噪声。</li>
+<li>共轴：<code>thrust_loss=-0.530</code>、<code>wind_up=-0.181</code>、<code>thrust_mult=-0.178</code>、
+<code>mass_mult=+0.173</code>；低推力/高质量/风是主要边界。</li>
+<li>液体：<code>mass_mult=+0.410</code>、<code>thrust_mult=-0.381</code>、<code>wind_up=-0.372</code>；
+推力系数 0.7–0.9 组失败 48.2%，1.15–1.31 组失败 5.1%，低 T/W
+是主导失效。</li>
+</ul>
+<p><strong>结论</strong>：在反演可行点附近、无故障名义范围，三机型闭环稳定；宽范围包线
+主要由推力/质量/风/延迟和故障主导。共轴/液体的惯量/力臂是反演假设，
+这些“通过率”不是实机概率。</p>
+<hr />
+<h2 id="4-解释边界">4 解释边界</h2>
+<ul>
+<li>这是 <strong>L1 降阶 MC</strong>：无
+EKF/导航融合、无气动/桨叶动态、无真实振动谱；</li>
+<li>共轴/液体的惯量与力臂是反演可行点，不是唯一实机模型；</li>
+<li>高通过率只说明“在该假设模型 + 该参数分布下闭环有界”；</li>
+<li>低通过率指出需要台架辨识/增益调度的方向，不等于实机失效概率。</li>
+</ul>
+<h2 id="5-复现">5 复现</h2>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulations/three_vehicle_mc</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 2000 <span class="at">--nominal</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--duration</span> 20</span></code></pre></div>
+<p>数据：<code>sim-data/mega-300k-2026-10-24/summary.json</code> +
+<code>samples.csv</code>。</p>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:40</footer></article></body>
+</html>
