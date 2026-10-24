@@ -664,6 +664,22 @@ mag_clean seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
 与失联无关）。默认路径生效；无失联时行为不变。数据：
 `sil_acceptance.json`、`seed7_factor.json`。
 
+### 3.22 MATLAB 频域裕度独立复核
+
+MATLAB R2025b Control System Toolbox 对速率环连续近似
+`L=C·H/(τa s+1)(τf s+1)s·e^{−τs}`（τa=0.05 s、τf=2.17 ms、延迟 20 ms）
+做 `allmargin`：roll/pitch fixed PM 37.8°/附加延迟 49.4 ms；detune70
+47.7°/82.8 ms；lead05 66.5°/72.4 ms；aaf08 **162.6°/13.3 ms**。
+yaw：fixed 47.9°/81.8 ms、detune70 55.7°/129.3 ms、lead05
+72.3°/110.1 ms、**aaf08 −128°/−13.7 ms（线性模型已不稳定）**。
+速率环 GM 无相位穿越（视为∞）。
+
+这独立解释了 AAF 的 SIL 失败：高相位裕度是假象，高频增益把穿越频率
+推到延迟主导区，附加延迟裕度只剩 13 ms；lead05 在速率环模型里尚可但
+SIL 仍失败，说明外层位置/航向环与 GNSS 重捕获是后续瓶颈（§3.21）。
+**L1 连续线性近似，不含位置环/磁融合/振动，不是实机结论。**
+图/数据：`sim-data/matlab-2026-10-25/`。
+
 ## 4 解释边界
 
 - 这是 **L1 降阶 MC**：无 EKF/导航融合、无气动/桨叶动态、无真实振动谱；

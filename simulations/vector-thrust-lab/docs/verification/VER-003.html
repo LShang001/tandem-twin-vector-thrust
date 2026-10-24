@@ -1376,6 +1376,20 @@ age&gt;0.5 s 置失联锁存， 重捕获（age&lt;0.2 s）置一次性
 seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
 与失联无关）。默认路径生效；无失联时行为不变。数据：
 <code>sil_acceptance.json</code>、<code>seed7_factor.json</code>。</p>
+<h3 id="322-matlab-频域裕度独立复核">3.22 MATLAB 频域裕度独立复核</h3>
+<p>MATLAB R2025b Control System Toolbox 对速率环连续近似
+<code>L=C·H/(τa s+1)(τf s+1)s·e^{−τs}</code>（τa=0.05 s、τf=2.17
+ms、延迟 20 ms） 做 <code>allmargin</code>：roll/pitch fixed PM
+37.8°/附加延迟 49.4 ms；detune70 47.7°/82.8 ms；lead05 66.5°/72.4
+ms；aaf08 <strong>162.6°/13.3 ms</strong>。 yaw：fixed 47.9°/81.8
+ms、detune70 55.7°/129.3 ms、lead05 72.3°/110.1 ms、<strong>aaf08
+−128°/−13.7 ms（线性模型已不稳定）</strong>。 速率环 GM
+无相位穿越（视为∞）。</p>
+<p>这独立解释了 AAF 的 SIL 失败：高相位裕度是假象，高频增益把穿越频率
+推到延迟主导区，附加延迟裕度只剩 13 ms；lead05 在速率环模型里尚可但 SIL
+仍失败，说明外层位置/航向环与 GNSS 重捕获是后续瓶颈（§3.21）。
+<strong>L1 连续线性近似，不含位置环/磁融合/振动，不是实机结论。</strong>
+图/数据：<code>sim-data/matlab-2026-10-25/</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1419,5 +1433,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:32</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:38</footer></article></body>
 </html>
