@@ -162,8 +162,8 @@ int main()
     CHECK(!out.position_hold_degraded, "T8 磁新鲜+协方差小恢复位置保持");
   }
 
-  // T9 无磁/磁仅初始对准：即使运动、sigma 小、航向一致，也禁用位置保持
-  // 与 heading hold（绝对航向不可观；SIL 前飞后定点漂 229–239 m）。
+  // T9 无磁/磁仅初始对准：短时（≤20 s）允许位置保持/heading hold；
+  // 时间窗结束或航向 1σ 过大时降级。
   {
     bfs::HeadingAidingGate gate;
     bfs::HeadingAidingInput in = input(1.0e9f);
@@ -172,10 +172,14 @@ int main()
     in.yaw_drift_dps = 0.2f;
     in.motion_excitation_valid = true;
     for (int i = 0; i < 700; ++i) (void)gate.update(in);
-    const auto out = gate.update(in);
-    CHECK(out.position_hold_degraded, "T9 无磁禁用位置保持");
-    CHECK(!out.heading_hold_allowed, "T9 无磁禁用 heading hold");
-    CHECK(!out.source_fresh, "T9 无磁无绝对航向源");
+    auto out = gate.update(in);
+    CHECK(!out.position_hold_degraded, "T9 短时窗口内允许位置保持");
+    CHECK(out.heading_hold_allowed, "T9 短时窗口内允许 heading hold");
+    CHECK(out.source_fresh, "T9 短时窗口内航向源可用");
+    for (int i = 0; i < 4000; ++i) (void)gate.update(in);
+    out = gate.update(in);
+    CHECK(out.position_hold_degraded, "T9 超过 20 s 降级");
+    CHECK(!out.heading_hold_allowed, "T9 超过 20 s 禁 heading hold");
   }
 
   if (g_fail == 0)

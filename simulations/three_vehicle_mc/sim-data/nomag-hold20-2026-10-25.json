@@ -1,0 +1,47 @@
+{
+ "date": "2026-10-25",
+ "test": "SIL no-mag 20 s hold window: hover holds, 15 m leg reaches ~16.5 m then post-window drift; mag baseline unchanged",
+ "evidence_level": "L2",
+ "cases": [
+  {
+   "mode": "m2",
+   "variant": "hover",
+   "final_alt": 9.994,
+   "hold_end_rms": 0.0,
+   "pos_rms": 0.496,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
+   "mode": "m2",
+   "variant": "leg",
+   "final_alt": 9.992,
+   "hold_end_rms": 29.023,
+   "pos_rms": 0.524,
+   "max_roll": 12.526,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
+   "mode": "m2",
+   "variant": "wind3",
+   "final_alt": 9.995,
+   "hold_end_rms": 225.843,
+   "pos_rms": 0.497,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
+   "mode": "m0",
+   "variant": "base",
+   "final_alt": 9.975,
+   "hold_end_rms": 1.023,
+   "pos_rms": 0.894,
+   "max_roll": 7.643,
+   "pos_degraded": 0,
+   "heading_aiding": 1
+  }
+ ]
+}

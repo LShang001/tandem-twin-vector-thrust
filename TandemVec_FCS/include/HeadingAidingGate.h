@@ -79,6 +79,7 @@ public:
     static constexpr float kYawGsfMinSpeedMps = 2.0f;
     static constexpr float kReenableHoldS = 3.0f;
     static constexpr float kMotionCoastS = 3.0f;
+    static constexpr float kNoMagHoldMaxS = 20.0f;
 
     void reset()
     {
@@ -88,6 +89,7 @@ public:
         drift_quiet_s_ = 0.0f;
         drift_degraded_ = false;
         motion_coast_s_ = 0.0f;
+        no_mag_hold_s_ = 0.0f;
         yaw_osc_.reset();
         sigma_high_accum_s_ = 0.0f;
         sigma_quiet_accum_s_ = 0.0f;
@@ -191,10 +193,17 @@ public:
         // hold，只保留定高/手动姿态；位置保持必须等绝对航向源可用。
         if (in.heading_mode >= 1U)
         {
-            out.source_fresh = false;
-            out.heading_hold_allowed = false;
-            out.position_hold_degraded = true;
-            out.valid_for_s = 0.0f;
+            // 无磁/磁仅初始：短时允许位置保持与 heading hold。陀螺零偏在
+            // 数十秒内有限；时间窗结束或航向 1σ 过大时必须降级定高。
+            no_mag_hold_s_ += dt_s;
+            const bool time_ok = no_mag_hold_s_ <= kNoMagHoldMaxS;
+            const bool sigma_ok20 =
+                std::isfinite(in.yaw_sigma_deg) && in.yaw_sigma_deg <= 20.0f;
+            const bool hold_ok = time_ok && sigma_ok20;
+            out.source_fresh = hold_ok;
+            out.heading_hold_allowed = hold_ok;
+            out.position_hold_degraded = !hold_ok;
+            out.valid_for_s = kNoMagHoldMaxS - no_mag_hold_s_;
             return out;
         }
 
@@ -279,6 +288,7 @@ private:
     float drift_quiet_s_ = 0.0f;
     bool drift_degraded_ = false;
     float motion_coast_s_ = 0.0f;
+    float no_mag_hold_s_ = 0.0f;
     float sigma_high_accum_s_ = 0.0f;
     float sigma_quiet_accum_s_ = 0.0f;
     bool sigma_degraded_ = false;
