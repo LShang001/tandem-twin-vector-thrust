@@ -65,7 +65,8 @@ def make_ekf(init_att_deg=0.0):
     return ekf
 
 
-def simulate_static(duration_s, true_bias_ba, true_bias_bg):
+def simulate_static(duration_s, true_bias_ba, true_bias_bg,
+                    gyro_drift_radps2=0.0):
     """S1: 静基座，无 GNSS，静止辅助。返回零偏估计/协方差轨迹"""
     ekf = make_ekf()
     n = int(duration_s * HZ)
@@ -79,7 +80,9 @@ def simulate_static(duration_s, true_bias_ba, true_bias_bg):
         a_true = np.array([0.0, 0.0, -G_MPS2])
         w_true = np.zeros(3)
         a_meas = a_true + true_bias_ba + RNG.normal(0, cfg["accel_std"], 3)
-        w_meas = w_true + true_bias_bg + RNG.normal(0, cfg["gyro_std"], 3)
+        # 可选的 z 轴慢漂（温漂等效）：真实零偏随时间线性变化，滤波器不知道。
+        bg_now = true_bias_bg + np.array([0.0, 0.0, gyro_drift_radps2 * t])
+        w_meas = w_true + bg_now + RNG.normal(0, cfg["gyro_std"], 3)
         ekf.time_update(w_meas * DT, np.zeros(3), a_meas * DT, np.zeros(3), DT)
         # 静止确认 (20 帧后)
         if k >= 20:
