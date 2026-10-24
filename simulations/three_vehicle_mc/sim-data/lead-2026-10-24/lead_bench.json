@@ -89,5 +89,11 @@
       }
     },
     "note": "L1; lead TandemVec-specific"
+  },
+  "60s_5k": {
+    "seed": 20261026,
+    "pass_rate": 0.7952,
+    "fail_rate": 0.0102,
+    "note": "L1; 60 s"
   }
 }
