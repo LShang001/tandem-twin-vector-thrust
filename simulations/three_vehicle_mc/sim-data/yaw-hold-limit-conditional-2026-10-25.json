@@ -1,0 +1,47 @@
+{
+ "date": "2026-10-25",
+ "test": "conditional yaw hold rate limit (<20 deg err -> 14 deg/s, else int_limit) targeted seeds",
+ "evidence_level": "L2",
+ "cases": [
+  {
+   "profile": "mag_clean",
+   "seed": 6,
+   "hold_end": 0.826,
+   "pos_rms": 0.371,
+   "max_roll": 9.524,
+   "mag_gate": 0
+  },
+  {
+   "profile": "mag_nominal",
+   "seed": 12,
+   "hold_end": 19.28,
+   "pos_rms": 0.405,
+   "max_roll": 16.278,
+   "mag_gate": 50
+  },
+  {
+   "profile": "mag_clean",
+   "seed": 13,
+   "hold_end": 53.054,
+   "pos_rms": 0.753,
+   "max_roll": 15.01,
+   "mag_gate": 52
+  },
+  {
+   "profile": "mag_clean",
+   "seed": 3,
+   "hold_end": 0.82,
+   "pos_rms": 0.644,
+   "max_roll": 7.234,
+   "mag_gate": 0
+  },
+  {
+   "profile": "mag_nominal",
+   "seed": 7,
+   "hold_end": 5.308,
+   "pos_rms": 0.632,
+   "max_roll": 14.894,
+   "mag_gate": 21
+  }
+ ]
+}

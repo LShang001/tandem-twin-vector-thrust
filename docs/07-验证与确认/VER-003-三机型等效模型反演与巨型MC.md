@@ -689,17 +689,19 @@ profiles 仍 17/20。**关键口径：SIL 的 `pos_rms` 是 EKF 相对位置 −
 属 1 m 级导航估计误差，不能用控制增益修；按种子调 yaw 只会引入 seed3
 新失败。数据：`sim-data/yaw-tune-2026-10-25.json`。
 
-回中航向锁速率限幅（正向，生产路径）：seed6 的 3.67 m/roll 14° 是
-位置保持与回中后航向锁的 1 Hz 极限环。测试用全局 `att_yaw.int_limit`
-扫描 8/12/14/15/16°/s：8 修 seed6 但 seed3 10.14 m；12 seed6 53.95 m；
-**14–15 同时保持 seed3/6**（0.90/1.36、1.15/1.20 m）；16 seed6
-2.38 m。生产只钳“偏航杆回中且 heading hold 允许”分支的速率指令
-（14°/s），杆量直通与 `att_yaw.int_limit=24` 不变。10 seeds × 2
-profiles **18/20**（17/20 → 18/20；seed6 1.36 m/roll 14.9° PASS；
-mag_clean seed8/9 仍是 pos_rms 1.06/1.03 的导航估计边际失败，
-hold_end 1.26/0.58 m）。PIO 与宿主回归通过；**L2 结果，实机回中锁
-航向速率受舵机/差速权限影响，需低杆量验证**。数据：
-`sim-data/yaw-hold-limit-2026-10-25.json`。
+回中航向锁速率限幅（2026-10-25 撤回）：10 seeds 时把回中航向锁速率
+钳到 14°/s 看似修好 seed6（3.67→1.36 m，17/20→18/20）。**20 seeds
+否定**：基线（`att_yaw.int_limit` 默认 80°/s，原文档误写 24）36/40；
+14°/s 仍 36/40，但 mag_nominal seed12 由 1.61 m 变 46.3 m、mag_clean
+seed13 由 55.3 m 放大到 196.7 m。仅在小误差（<20°）钳 14°/s、大误差
+回 80°/s 也不够：seed6 0.83 m 修好，但 seed12 仍 19.3 m、seed13
+53.1 m。**限制航向速率削弱大磁修正后的恢复，属于按种子调参；固件已
+恢复原行为。** 20 种子基线 36/40，剩余边界 seed6 3.67 m、seed8/9
+pos_rms 1.06/1.03、seed13 55.3 m（磁航向 kick/门控类）。数据：
+`sim-data/sil-acceptance-20seed-baseline-2026-10-25.json`、
+`sim-data/sil-acceptance-20seed-2026-10-25.json`、
+`sim-data/sil-acceptance-20seed-yawcond-2026-10-25.json`、
+`sim-data/yaw-hold-limit-conditional-2026-10-25.json`。
 
 光流辅助对照（诊断，不替换默认基线）：`mag_clean` 默认无光流，
 seed8/9 的 1 m 级 `pos_rms` 主要来自 20–25 s GNSS 失联段惯导滑行。
