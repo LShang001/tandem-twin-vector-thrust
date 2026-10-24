@@ -1269,6 +1269,17 @@ seed5 hold 39.4 m、seed10 13.1 m）。detune70 修掉 baseline 的 seed6/7，
 落在 1.0–1.5 m），单种子变化即可翻转。固定降增益仍只能作为 SIL/台架 A/B
 候选，不是实机调参结论。数据：
 <code>sim-data/aaf-2026-10-24/sil_acceptance.json</code>。</p>
+<p>seed7 失败轨迹（baseline mag_nominal）：t=19 s 前爬升段 yaw 已在
+−8.7°/ +4.8° 摆动；t=20 s 进入位置保持后 yaw 依次到 +42°→+172°→−82°，
+roll/pitch 达 ±31°，位置从 0 跑到 132 m（t=39 s），而高度保持 9.5 m、
+NIS 0.1–0.6
+正常。<strong>根因是磁扰下航向环的极限环/航向估计翻转，位置环
+按错误航向把 NED 修正投到错误机体方向，形成正反馈；不是速率环相位或 位置
+PID 增益。</strong> 这解释了 AAF/lead/detune 在 SIL 中都无效：它们都没
+处理航向。轨迹见
+<code>sim-data/aaf-2026-10-24/seed7_trace.log</code>。下一步应做
+航向振荡/磁新息门控（偏航角速度 RMS + 磁拒绝率），失效时降级定高，
+而不是继续调速率/位置增益。</p>
 <h3 id="315-速率相位超前phase-leadl1-接近-aafsil-仍否定">3.15
 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）</h3>
 <p><code>RatePhaseLead.h</code>：<code>ω_eff=ω+K·(ω−LPF(ω))</code>，一阶低通
@@ -1329,5 +1340,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:45</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:47</footer></article></body>
 </html>

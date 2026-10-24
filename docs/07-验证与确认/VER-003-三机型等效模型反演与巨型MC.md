@@ -564,6 +564,16 @@ seed5 hold 39.4 m、seed10 13.1 m）。detune70 修掉 baseline 的 seed6/7，
 A/B 候选，不是实机调参结论。数据：
 `sim-data/aaf-2026-10-24/sil_acceptance.json`。
 
+seed7 失败轨迹（baseline mag_nominal）：t=19 s 前爬升段 yaw 已在 −8.7°/
++4.8° 摆动；t=20 s 进入位置保持后 yaw 依次到 +42°→+172°→−82°，
+roll/pitch 达 ±31°，位置从 0 跑到 132 m（t=39 s），而高度保持 9.5 m、
+NIS 0.1–0.6 正常。**根因是磁扰下航向环的极限环/航向估计翻转，位置环
+按错误航向把 NED 修正投到错误机体方向，形成正反馈；不是速率环相位或
+位置 PID 增益。** 这解释了 AAF/lead/detune 在 SIL 中都无效：它们都没
+处理航向。轨迹见 `sim-data/aaf-2026-10-24/seed7_trace.log`。下一步应做
+航向振荡/磁新息门控（偏航角速度 RMS + 磁拒绝率），失效时降级定高，
+而不是继续调速率/位置增益。
+
 ### 3.15 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
 
 `RatePhaseLead.h`：`ω_eff=ω+K·(ω−LPF(ω))`，一阶低通 τ=0.02 s，DC 增益 1、
