@@ -54,23 +54,33 @@ int main(int argc, char **argv)
   double prop0 = 3.0;
   double roll0_deg = 3.0;
   double pitch0_deg = -2.0;
+  double isp = 200.0;
+  double tmax = 200.0;
+  double tmin = 80.0;
+  double valve_rate = 10.0;
+  double thrust_rate = 1800.0;
   for (int i = 1; i + 1 < argc; i += 2)
   {
     if (std::strcmp(argv[i], "--h0") == 0) h0 = std::atof(argv[i + 1]);
     else if (std::strcmp(argv[i], "--prop") == 0) prop0 = std::atof(argv[i + 1]);
     else if (std::strcmp(argv[i], "--roll0") == 0) roll0_deg = std::atof(argv[i + 1]);
     else if (std::strcmp(argv[i], "--pitch0") == 0) pitch0_deg = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--isp") == 0) isp = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--tmax") == 0) tmax = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--tmin") == 0) tmin = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--valve-rate") == 0) valve_rate = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--thrust-rate") == 0) thrust_rate = std::atof(argv[i + 1]);
   }
 
   bfs::LiquidRocketParams params;
   params.dry_mass_kg = 13.5f;
   params.initial_propellant_kg = static_cast<float>(prop0);
-  params.max_thrust_n = 200.0f;
-  params.min_thrust_n = 80.0f;
-  params.isp_s = 200.0f;
+  params.max_thrust_n = static_cast<float>(tmax);
+  params.min_thrust_n = static_cast<float>(tmin);
+  params.isp_s = static_cast<float>(isp);
   params.g0_mps2 = 9.80665f;
-  params.thrust_rate_limit_nps = 1800.0f;
-  params.valve_rate_limit_per_s = 10.0f;
+  params.thrust_rate_limit_nps = static_cast<float>(thrust_rate);
+  params.valve_rate_limit_per_s = static_cast<float>(valve_rate);
 
   bfs::LiquidRocketPropulsion engine;
   CHECK(engine.init(params), "L1 初始化");

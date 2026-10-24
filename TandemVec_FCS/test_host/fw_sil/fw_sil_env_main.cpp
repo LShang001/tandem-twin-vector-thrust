@@ -70,6 +70,19 @@ static float g_flow_scale = 0.95f; // 在线标定后的光流尺度
 static const Eigen::Vector3d kHomeLla(28.2 * M_PI / 180.0,
                                       112.9 * M_PI / 180.0, 50.0);
 
+#ifdef FW_SIL_COAXIAL
+// 共轴 L1 plant 参数（CLI 可覆盖）；默认值见 CTL-003/VER-002。
+static float g_coax_mass_kg = 0.84f;
+static float g_coax_ix = 0.05f;
+static float g_coax_iy = 0.05f;
+static float g_coax_iz = 0.08f;
+static float g_coax_max_thrust_n = 14.0f;
+static float g_coax_lever_m = 0.15f;
+static float g_coax_yaw_nm_per_norm = 0.0005f;
+static float g_coax_motor_loss1 = 1.0f;
+static float g_coax_motor_loss2 = 1.0f;
+#endif
+
 struct Plant {
   Quat4f q;
   float omega[3];      // body rad/s
@@ -108,14 +121,9 @@ struct Plant {
     const float M[3] = {-w.Mz, w.My, -w.Mx};
 
 #ifdef FW_SIL_COAXIAL
-    // 共轴近似：滚转/俯仰为横向轴（P.Iy），偏航为推力轴（P.Ix）；
-    // 质量用外部共轴工程 0.84 kg。仍是 L1 集总模型，不是实机辨识值。
-    constexpr float kCoaxMassKg = 0.84f;
-    // 共轴 L1 假设惯量：横向 0.05、轴向 0.08 kg·m²。外部工程未给惯量，
-    // 这里用与宿主 6DOF 闭环测试一致的量级，避免把 TandemVec 细长杆轴向
-    // 惯量 0.0021 误用到共轴偏航，导致偏航环病态。
-    constexpr float Ixx = 0.05f, Iyy = 0.05f, Izz = 0.08f;
-    const float mass = kCoaxMassKg;
+    // 共轴 L1 参数可由 CLI 覆盖（默认见 g_coax_*）；不是实机辨识值。
+    const float Ixx = g_coax_ix, Iyy = g_coax_iy, Izz = g_coax_iz;
+    const float mass = g_coax_mass_kg;
 #else
     const float Ixx = P.Ix, Iyy = P.Iy, Izz = P.Iz;
     const float mass = P.m;
@@ -158,21 +166,21 @@ struct Plant {
 // 两轴舵机修正角→推力方向与滚转/俯仰力矩。L1 集总模型，无真实桨距/反扭。
 static SixDOFWrench computeCoaxialWrench(const Plant &p)
 {
-  constexpr float kMaxThrustN = 14.0f; // 外部共轴工程 MAX_THRUST
-  constexpr float kLeverM = 0.15f;     // 喷管/推力线到 CG 的等效力臂（假设）
-  constexpr float kYawNmPerNorm = 0.0005f; // 差速→偏航力矩（L1 假设，待台架标定）
-  const float avg = 0.5f * (p.motor_wf + p.motor_wt) / P.wMax;
-  const float diff = (p.motor_wf - p.motor_wt) / P.wMax;
-  const float thrust = std::fmax(0.0f, std::fmin(1.0f, avg)) * kMaxThrustN;
+  const float wf = p.motor_wf * g_coax_motor_loss1;
+  const float wt = p.motor_wt * g_coax_motor_loss2;
+  const float avg = 0.5f * (wf + wt) / P.wMax;
+  const float diff = (wf - wt) / P.wMax;
+  const float thrust =
+      std::fmax(0.0f, std::fmin(1.0f, avg)) * g_coax_max_thrust_n;
   const float roll = p.servo_f;
   const float pitch = p.servo_t;
   SixDOFWrench w;
   w.Fx = thrust * std::cos(roll) * std::cos(pitch);
   w.Fy = thrust * std::sin(roll);
   w.Fz = thrust * std::sin(pitch);
-  w.Mx = kYawNmPerNorm * diff;              // body Mz = -w.Mx（差速反向）
-  w.My = kLeverM * thrust * std::sin(pitch); // body My
-  w.Mz = -kLeverM * thrust * std::sin(roll); // body Mx = -w.Mz
+  w.Mx = g_coax_yaw_nm_per_norm * diff;      // body Mz = -w.Mx（差速反向）
+  w.My = g_coax_lever_m * thrust * std::sin(pitch); // body My
+  w.Mz = -g_coax_lever_m * thrust * std::sin(roll); // body Mx = -w.Mz
   return w;
 }
 #endif
@@ -869,6 +877,13 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       p.wind[1] = (wind_on && t > 20 && t < 25) ? cfg.wind_force_mps2 * P.m : 0.0f;
 
 #ifdef FW_SIL_COAXIAL
+      g_coax_motor_loss1 = 1.0f;
+      g_coax_motor_loss2 = 1.0f;
+      if (t > fault_at && (fault == 3 || fault == 5))
+      {
+        g_coax_motor_loss1 = loss;
+        if (fault == 5) g_coax_motor_loss2 = loss;
+      }
       p.step(computeCoaxialWrench(p), dt_imu);
 #else
       PropulsionState ps{p.motor_wf, p.motor_wt, p.servo_f, p.servo_t};
@@ -1139,6 +1154,20 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--real-nav")==0) real_cfg.enabled=true;
     else if (std::strcmp(argv[i],"--profile")==0 && i+1<argc)
       applyRealNavProfile(real_cfg, argv[++i]);
+#ifdef FW_SIL_COAXIAL
+    else if (std::strcmp(argv[i],"--coax-mass")==0 && i+1<argc)
+      g_coax_mass_kg = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--coax-thrust")==0 && i+1<argc)
+      g_coax_max_thrust_n = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--coax-lever")==0 && i+1<argc)
+      g_coax_lever_m = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--coax-iy")==0 && i+1<argc)
+      g_coax_iy = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--coax-iz")==0 && i+1<argc)
+      g_coax_iz = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--coax-yawk")==0 && i+1<argc)
+      g_coax_yaw_nm_per_norm = std::atof(argv[++i]);
+#endif
     else if (std::strcmp(argv[i],"--vib")==0 && i+1<argc) real_cfg.vib_g=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--vib-hz")==0 && i+1<argc) real_cfg.vib_hz=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--vib-mode")==0 && i+1<argc) real_cfg.vib_mode=std::atoi(argv[++i]);
@@ -1324,6 +1353,12 @@ int main(int argc, char** argv) {
     // 阵风：20-25s 侧风 3 m/s（以 NED 侧向力体现）；--no-wind 时关闭
     p.wind[1]=(wind_on && t>20 && t<25)?3.0f*P.m:0.0f;
 #ifdef FW_SIL_COAXIAL
+    g_coax_motor_loss1 = 1.0f;
+    g_coax_motor_loss2 = 1.0f;
+    if (t > fault_at && (fault == 3 || fault == 5)) {
+      g_coax_motor_loss1 = loss;
+      if (fault == 5) g_coax_motor_loss2 = loss;
+    }
     SixDOFWrench wr=computeCoaxialWrench(p);
 #else
     PropulsionState ps{p.motor_wf,p.motor_wt,p.servo_f,p.servo_t};
