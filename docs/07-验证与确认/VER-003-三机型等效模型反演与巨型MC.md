@@ -648,6 +648,22 @@ hold_end 104.7→54.0 m、roll 37→23.3°，仍失败；正常 6 例 **2/6**
 协方差门控同样不能用单一阈值区分正常磁收敛与失效。默认关闭。
 数据：`sil_acceptance.json`。
 
+### 3.21 GNSS 失联后位置目标重锚（首个正向 SIL 修复）
+
+seed7 因子隔离（baseline 二进制）：完整 nominal hold 104.7 m/roll 37°；
+无 GNSS 失联 **5.37 m**/15.2°；无振动 1.51 m；无风 1.27 m；无失联+
+无振动 1.12 m；无位置保持 roll 0°。**20–25 s GNSS 失联是必要条件，
+不是磁标定/门控问题。** 修复：导航层 GNSS age>0.5 s 置失联锁存，
+重捕获（age<0.2 s）置一次性 `g_pos_hold_reanchor`；位置保持把当前点
+设为目标并复位位置/速度环积分，避免失联期间累积误差在重捕获后变成
+大姿态指令。
+
+SIL：seed7 mag_nominal **PASS**（hold 1.28 m、roll 15.7°、mag 392/0）；
+10 seeds × 2 profiles **17/20**（baseline 16/20，seed7 修复；剩余
+mag_clean seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
+与失联无关）。默认路径生效；无失联时行为不变。数据：
+`sil_acceptance.json`、`seed7_factor.json`。
+
 ## 4 解释边界
 
 - 这是 **L1 降阶 MC**：无 EKF/导航融合、无气动/桨叶动态、无真实振动谱；

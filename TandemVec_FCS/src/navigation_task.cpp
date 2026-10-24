@@ -2607,6 +2607,22 @@ void handleNavigationSystem()
     _sg_attempt = _sg_fused = 0;
   }
 
+  // GNSS 失联 → 重捕获：请求位置保持把当前点重设为目标，避免失联期间
+  // 累积的位置误差在重捕获后变成大姿态指令（seed7 的 runaway 触发条件）。
+  {
+    static bool s_gnss_was_out = false;
+    const float gnss_age_s = aid_tracker.status(bfs::AidSource::Gnss).age_s;
+    if (std::isfinite(gnss_age_s) && gnss_age_s > 0.5f)
+    {
+      s_gnss_was_out = true;
+    }
+    else if (s_gnss_was_out && gnss_age_s >= 0.0f && gnss_age_s < 0.2f)
+    {
+      g_pos_hold_reanchor = true;
+      s_gnss_was_out = false;
+    }
+  }
+
   // 绝对航向辅助可用性 → 位置保持门控（2026-10）：
   // 磁矢量只有 EKF **成功融合**才把 age 清零；门控拒绝/无样本都会让年龄增长。
   // YawGsf 是“GNSS 航迹 − 光流侧滑”的航向观测，只在有速度时成立，不能替代

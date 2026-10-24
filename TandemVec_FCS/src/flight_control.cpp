@@ -840,6 +840,21 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // 状态机切换为悬停状态
     loiter_state = LOITER_HOVERING;
 
+    // GNSS 失联后重捕获：把当前点作为新目标，清掉失联期间累积的
+    // 位置误差和速度环积分，避免重捕获瞬间产生大姿态指令。
+    if (g_pos_hold_reanchor)
+    {
+      targetNorth = currentNorth;
+      targetEast = currentEast;
+      targetVelNorth = 0.0f;
+      targetVelEast = 0.0f;
+      northPosPID.reset();
+      eastPosPID.reset();
+      northVelPID.reset();
+      eastVelPID.reset();
+      g_pos_hold_reanchor = false;
+    }
+
     // 运行位置环，计算修正速度
     float northError = targetNorth - currentNorth;
     float eastError = targetEast - currentEast;

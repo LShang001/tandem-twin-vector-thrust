@@ -1360,6 +1360,22 @@ s。SIL： seed7 hold_end 18.2 m（baseline 104.7、单帧陀螺约束
 也会短时 &gt;10°，误降级。
 协方差门控同样不能用单一阈值区分正常磁收敛与失效。默认关闭。
 数据：<code>sil_acceptance.json</code>。</p>
+<h3 id="321-gnss-失联后位置目标重锚首个正向-sil-修复">3.21 GNSS
+失联后位置目标重锚（首个正向 SIL 修复）</h3>
+<p>seed7 因子隔离（baseline 二进制）：完整 nominal hold 104.7 m/roll
+37°； 无 GNSS 失联 <strong>5.37 m</strong>/15.2°；无振动 1.51 m；无风
+1.27 m；无失联+ 无振动 1.12 m；无位置保持 roll 0°。<strong>20–25 s GNSS
+失联是必要条件， 不是磁标定/门控问题。</strong> 修复：导航层 GNSS
+age&gt;0.5 s 置失联锁存， 重捕获（age&lt;0.2 s）置一次性
+<code>g_pos_hold_reanchor</code>；位置保持把当前点
+设为目标并复位位置/速度环积分，避免失联期间累积误差在重捕获后变成
+大姿态指令。</p>
+<p>SIL：seed7 mag_nominal <strong>PASS</strong>（hold 1.28 m、roll
+15.7°、mag 392/0）； 10 seeds × 2 profiles
+<strong>17/20</strong>（baseline 16/20，seed7 修复；剩余 mag_clean
+seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
+与失联无关）。默认路径生效；无失联时行为不变。数据：
+<code>sil_acceptance.json</code>、<code>seed7_factor.json</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1403,5 +1419,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:23</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:32</footer></article></body>
 </html>

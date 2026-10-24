@@ -1,0 +1,72 @@
+{
+  "nopos": {
+    "max_roll": 0.0,
+    "max_pitch": 0.0,
+    "hold_end_rms": -1.0,
+    "final_alt": 9.299,
+    "pos_degraded": 0,
+    "mag_fused": 385,
+    "mag_rej": 0,
+    "mag_gate": 7
+  },
+  "pos": {
+    "max_roll": 36.982,
+    "max_pitch": 38.187,
+    "hold_end_rms": 104.706,
+    "final_alt": 9.211,
+    "pos_degraded": 1,
+    "mag_fused": 307,
+    "mag_rej": 0,
+    "mag_gate": 85
+  },
+  "nomag": {
+    "max_roll": 0.0,
+    "max_pitch": 0.0,
+    "hold_end_rms": 0.0,
+    "final_alt": 10.024,
+    "pos_degraded": 1,
+    "mag_fused": 0,
+    "mag_rej": 0,
+    "mag_gate": 0
+  },
+  "noout": {
+    "max_roll": 15.193,
+    "max_pitch": 12.897,
+    "hold_end_rms": 5.365,
+    "final_alt": 9.212,
+    "pos_degraded": 0,
+    "mag_fused": 371,
+    "mag_rej": 0,
+    "mag_gate": 21
+  },
+  "novib": {
+    "max_roll": 15.992,
+    "max_pitch": 6.937,
+    "hold_end_rms": 1.511,
+    "final_alt": 9.296,
+    "pos_degraded": 0,
+    "mag_fused": 392,
+    "mag_rej": 0,
+    "mag_gate": 0
+  },
+  "nowind": {
+    "max_roll": 6.705,
+    "max_pitch": 2.361,
+    "hold_end_rms": 1.268,
+    "final_alt": 9.298,
+    "pos_degraded": 0,
+    "mag_fused": 392,
+    "mag_rej": 0,
+    "mag_gate": 0
+  },
+  "noout_vib0": {
+    "max_roll": 14.685,
+    "max_pitch": 3.596,
+    "hold_end_rms": 1.119,
+    "final_alt": 9.188,
+    "pos_degraded": 0,
+    "mag_fused": 392,
+    "mag_rej": 0,
+    "mag_gate": 0
+  }
+}

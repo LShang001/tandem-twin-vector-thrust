@@ -835,6 +835,9 @@ extern MagRuntimeStatus mag_status;
 extern bool g_heading_aiding_valid;
 extern float g_heading_aiding_age_s; // <0 表示从未融合
 extern bool g_pos_hold_degraded;
+// GNSS 失联后重捕获的一次性目标重锚请求：位置保持把当前点作为新目标，
+// 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
+extern bool g_pos_hold_reanchor;
 extern bool g_mode_degraded_heading;
 
 // IMU 健康监测（2026-10，ins_imu_health.h）；0=Ok, 1=Warning, 2=Failed。

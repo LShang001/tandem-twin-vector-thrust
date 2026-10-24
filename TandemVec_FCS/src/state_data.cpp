@@ -536,6 +536,7 @@ MagRuntimeStatus mag_status;
 bool g_heading_aiding_valid = false;
 float g_heading_aiding_age_s = -1.0f;
 bool g_pos_hold_degraded = true;
+bool g_pos_hold_reanchor = false;
 bool g_mode_degraded_heading = false;
 uint8_t g_imu_health_state = 0;
 uint16_t g_imu_health_flags = 0;
