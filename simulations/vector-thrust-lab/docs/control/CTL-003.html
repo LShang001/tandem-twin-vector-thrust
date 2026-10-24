@@ -169,9 +169,9 @@ seeds 通过（定高 9.17–9.29 m、max_roll
 原头文件做参考，600 拍（ATTITUDE/RATE/手动/失效）逐拍误差
 0；<code>run_coaxial_acceptance.sh</code> 用真实固件 + 近似共轴 plant
 跑出 mag_clean/mag_nominal/nomag_degraded ×5 seeds <strong>15/15
-PASS</strong>；17 组 plant 参数/故障扫描 13/17
-通过，边界为低质量/低力臂/高 Iy
-与舵机卡死（无故障重构）。<strong>仍无共轴台架/HIL/实机；plant
+PASS</strong>；18 组 plant 参数/故障扫描 15/18
+通过，边界为低质量/低力臂/高 Iy；双发损失/舵机卡死可触发 F3/F4
+检测但没有重构/安全降落。<strong>仍无共轴台架/HIL/实机；plant
 惯量/力臂/差速力矩是 L1
 假设，没有外部实飞日志做逐波形回放。</strong></li>
 <li><code>include/LiquidRocketModel.h</code>（2026-10-24）：L1
@@ -371,5 +371,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 href="../verification/VER-002.html">VER-002
 三机型兼容性与虚拟验证</a>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:09</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:13</footer></article></body>
 </html>

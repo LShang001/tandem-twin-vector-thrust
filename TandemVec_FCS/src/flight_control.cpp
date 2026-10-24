@@ -1749,6 +1749,8 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   control_in.dt_s = 0.005f;
   const bfs::CoaxialVtvOutput control_out =
       s_coaxial_controller.update(control_in);
+  gnc_tel.error_deg[0] = error_roll_deg;
+  gnc_tel.error_deg[1] = error_pitch_deg;
 
   float final_throttle_pct = outputs.throttle_percent;
   if (!outputs.throttle_direct)
@@ -1817,6 +1819,41 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   g_tvc_lower_deg = output_in.pitch_correction_deg;
   outputs.throttle_percent = final_throttle_pct;
   throttlePercent = final_throttle_pct;
+}
+
+// 共轴执行器故障只读诊断：复用 TandemVec 的 ActuatorFaultMonitor 判据，
+// 但输入换成共轴 ±10° 修正角与偏航无关的垂直速度误差。只置遥测标志，
+// 不做重构/安全降落；共轴单舵机卡死同样是硬件单点。
+static bfs::ActuatorFaultMonitor s_coax_fault_monitor;
+static void updateCoaxialFaultDiagnostics(const ControlInputs_t &inputs,
+                                          const ControlOutputs_t &outputs,
+                                          const ControlMode mode)
+{
+  if (!inputs.is_unlocked)
+  {
+    s_coax_fault_monitor.reset();
+    g_actuator_servo_jam = false;
+    g_actuator_thrust_loss = false;
+    g_actuator_controlled_descent_request = false;
+    return;
+  }
+  constexpr float kCoaxMaxCorrectionDeg = 10.0f;
+  const float df_frac = g_tvc_upper_deg / kCoaxMaxCorrectionDeg;
+  const float dt_frac = g_tvc_lower_deg / kCoaxMaxCorrectionDeg;
+  const float v_up =
+      InsVerticalVelocityUpFromNedDown(INS_GNSS_Packet.velocity_down);
+  const float v_err =
+      bfs::thrustLossVerticalVelocityError(v_up, target_vertical_velocity);
+  const bool f3_enabled =
+      (mode == AUTO_ALTITUDE || mode == AUTO_POSITION || mode == GUIDED);
+  s_coax_fault_monitor.update(gnc_tel.error_deg[0], gnc_tel.error_deg[1],
+                              df_frac, dt_frac, outputs.throttle_percent / 100.0f,
+                              v_err, 0.005f, f3_enabled);
+  g_actuator_servo_jam = s_coax_fault_monitor.servo_jam();
+  g_actuator_thrust_loss = s_coax_fault_monitor.thrust_loss();
+  g_actuator_controlled_descent_request =
+      (s_coax_fault_monitor.action() ==
+       bfs::ActuatorFaultAction::ControlledDescent);
 }
 #endif // BFS_COAXIAL_VTVL
 
@@ -2037,6 +2074,8 @@ void runGNCExecutive()
   // CoaxialVtvControl 负责，不再走 TandemVec 的 BTRUE/差速开方。F3/F4
   // 诊断与在线辨识是 TandemVec 专用观测，不能在共轴分支复用。
   run_coaxial_control(controller_inputs, controller_outputs, q_target_attitude);
+  updateCoaxialFaultDiagnostics(controller_inputs, controller_outputs,
+                                current_mode);
 #else
   // 步骤 6: 执行Roll/Pitch姿态控制器，计算TVC舵机修正量
   execute_attitude_controller(controller_inputs, q_target_attitude, controller_outputs);

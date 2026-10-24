@@ -35,6 +35,8 @@ CASES = [
     ("combined_high", 1.00, 16.0, 0.22, 0.08, 0.12, 0.0010, []),
     ("motor_loss_30", 0.84, 14.0, 0.15, 0.05, 0.08, 0.0005,
      ["--fault", "3", "--fault-at", "15"]),
+    ("both_loss_60", 0.84, 14.0, 0.15, 0.05, 0.08, 0.0005,
+     ["--fault", "5", "--fault-at", "15", "--loss", "0.4"]),
     ("servo_jam", 0.84, 14.0, 0.15, 0.05, 0.08, 0.0005,
      ["--fault", "4", "--fault-at", "15"]),
 ]
@@ -75,12 +77,25 @@ def main() -> int:
         hold = data.get("hold_end_rms")
         roll = data.get("max_roll")
         pitch = data.get("max_pitch")
-        ok = (data.get("nav_init") == 1 and isinstance(alt, (int, float))
-              and 8.0 <= alt <= 11.0
-              and isinstance(hold, (int, float)) and hold <= 6.0
-              and isinstance(roll, (int, float)) and roll <= 30.0
-              and isinstance(pitch, (int, float)) and pitch <= 30.0)
-        status = "PASS" if ok else "FAIL"
+        is_fault = "--fault" in extra
+        fault_id = 0
+        if is_fault:
+            fault_id = int(extra[extra.index("--fault") + 1])
+        if fault_id == 4:
+            # 舵机卡死：只验收检测，不验收恢复/降落
+            ok = data.get("f4") == 1
+            status = "DETECTED" if ok else "MISS"
+        elif fault_id == 5:
+            # 双发同时损失：只验收 F3 检测
+            ok = data.get("f3") == 1
+            status = "DETECTED" if ok else "MISS"
+        else:
+            ok = (data.get("nav_init") == 1 and isinstance(alt, (int, float))
+                  and 8.0 <= alt <= 11.0
+                  and isinstance(hold, (int, float)) and hold <= 6.0
+                  and isinstance(roll, (int, float)) and roll <= 30.0
+                  and isinstance(pitch, (int, float)) and pitch <= 30.0)
+            status = "PASS" if ok else "FAIL"
         if not ok:
             failures += 1
         print(f"[{status}] {name:14s} mass={mass:.2f} T={thrust:.0f} "
@@ -88,7 +103,8 @@ def main() -> int:
               f"alt={alt if alt is not None else 'nan'} "
               f"hold={hold if hold is not None else 'nan'} "
               f"roll={roll if roll is not None else 'nan'} "
-              f"pitch={pitch if pitch is not None else 'nan'}")
+              f"pitch={pitch if pitch is not None else 'nan'} "
+              f"f3={data.get('f3')} f4={data.get('f4')}")
     print(f"\n=== coaxial sweep: {len(CASES)} cases, {failures} failed ===")
     return 0 if failures == 0 else 1
 
