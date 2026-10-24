@@ -80,10 +80,10 @@ PID 或 EKF。</li>
 </tr>
 <tr>
 <td>L2 分配</td>
-<td>力矩 → N 个控制输入，限幅/冗余/秩亏</td>
-<td><code>TandemVec_ControlAllocation.h</code>（3×3 legacy）；新增
-<code>GenericControlAllocation.h</code></td>
-<td>N 输入加权最小范数</td>
+<td>α_cmd/力矩 → N 个控制输入，限幅/冗余/秩亏</td>
+<td><code>TandemVec_ControlAllocation.h</code>（3×3
+legacy）、<code>TandemVecAllocator.h</code>（纵列机型逆解）、<code>GenericControlAllocation.h</code></td>
+<td>纵列专用逆解 / N 输入加权最小范数</td>
 </tr>
 <tr>
 <td>L3 输出</td>
@@ -106,6 +106,13 @@ PID 或 EKF。</li>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>严格说，<strong>垂直推力映射</strong>也是机型相关：当前
+<code>compute_thrust_control()</code> 仍用 TandemVec 的 m/kT/MAX_THRUST
+把期望垂直加速度变成
+<code>throttle_percent</code>。更彻底的边界是让控制层输出“期望比力/归一化推力”，由机型推进层映射到电调/阀门；该层尚未抽取，不能把现有
+<code>throttle_percent</code> 当成跨机型物理推力。</p>
+</blockquote>
 <h3 id="21-已完成的第一刀2026-10-24">2.1
 已完成的第一刀（2026-10-24）</h3>
 <ul>
@@ -119,9 +126,15 @@ PID 或 EKF。</li>
 <code>mapCoaxialVtvOutputs()</code> 分别是两套旧 mix
 公式的等价适配器（共轴适配器含 1000–2000 µs 差速与 45°
 锁电机保护）。</li>
+<li><code>include/TandemVecAllocator.h</code>：把 <strong>α_cmd + 油门 →
+惯量逆解/轴置换/BTRUE/差速/电机百分比</strong> 从
+<code>flight_control</code>
+自动路径抽出；控制层到此只输出角加速度，机型层负责逆解，输出层只做
+GPIO/量纲。该抽取已由 SIL 基线逐值回归。</li>
 <li><code>src/flight_control.cpp</code> 层 3 已改为走
 <code>ActuatorOutputMap</code>；GPIO/PWM 写入仍留在固件层，通用层不依赖
-Arduino。</li>
+Arduino。自动分配路径走 <code>TandemVecAllocator</code>，manual/locked
+路径保留旧安全分支。</li>
 <li><code>include/GenericControlAllocation.h</code>：3×N
 加权最小范数分配，含限幅、秩亏标记和残差；与 legacy BTRUE 的 3×3
 等价由宿主测试锁定。</li>
@@ -289,5 +302,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 <p>当前完成 P1 的代码骨架；P2
 之后才可能谈“支持某新机型”。现有实机仍应按原纵列双发基线调参/飞行。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 14:59</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 15:10</footer></article></body>
 </html>

@@ -29,6 +29,7 @@
 | `test_gnss_consistency.cpp` | `ins_gnss_consistency.h` — GNSS 加速度一致性/位置自洽/光流/气压交叉、Suspect 锁存与 reset（2026-10） | Eigen | 16 |
 | `test_vehicle_profile.cpp` | `VehicleProfile.h` + `ActuatorOutputMap.h` — 机型输出表校验、纵列双发旧 mix 等价、共轴 VTVL 舵机/差速/大倾角保护、多旋翼/液体火箭输出表扩展 | 无 | 38 |
 | `test_generic_allocation.cpp` | `GenericControlAllocation.h` — 3×N 加权最小范数分配、限幅/冗余/秩亏、与 legacy BTRUE 等价 | TandemVec headers | 28 |
+| `test_tandemvec_allocator.cpp` | `TandemVecAllocator.h` — α_cmd/油门 → 摆角/差速/电机，零油门/饱和/τm 状态/前馈掩码 | TandemVec headers | 16 |
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
 

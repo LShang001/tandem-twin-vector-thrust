@@ -171,9 +171,11 @@ typedef struct
   AttitudeSubMode attitude_mode; // 姿态/角速度模式
 } ControlInputs_t;
 
-// 控制输出结构体
-// 速率 PID 在角度域输出 deg/s²；写入本结构前统一转换为 rad/s²，
-// 底层控制分配只接收 SI 制角加速度并根据物理模型逆解执行器指令。
+// 控制输出结构体 — **机型无关控制层的边界**
+// 位置/速度/姿态/角速率环只产生 throttle + 三轴 SI 角加速度；
+// 从本结构往后才进入机型逆解（TandemVecAllocator/共轴 TVC/火箭摆座），
+// 不要再把电机数量、摆角、BTRUE、差速开方耦合进姿态/速率控制。
+// 速率 PID 在角度域输出 deg/s²；写入本结构前统一转换为 rad/s²。
 // 轴向（★ 2026-08-07 轴置换后，旧注释"上摆=偏航/差速=滚转"已废止；
 // 锚点 = 手动模式摇杆直通实机验证）：alpha_roll→体轴x→上摆δ_f，
 // alpha_pitch→体轴y→下摆δ_t，alpha_yaw→体轴z→差速Δω
