@@ -2647,6 +2647,7 @@ void handleNavigationSystem()
     heading_in.horizontal_speed_mps =
         std::hypot(vel_ned(0), vel_ned(1));
     heading_in.heading_mode = g_heading_aid_mode;
+    heading_in.airborne = g_is_unlocked && throttlePercent >= 3.0f;
     heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
     {
       // 无磁一致性：EKF 航向变化率应有陀螺 z 支撑；纯平移时估计器自漂
@@ -2717,6 +2718,13 @@ void handleNavigationSystem()
         (heading_out.best_age_s < 1.0e6f) ? heading_out.best_age_s : -1.0f;
     g_heading_hold_allowed = heading_out.heading_hold_allowed;
     g_pos_hold_degraded = heading_out.position_hold_degraded;
+    // 无磁离地：限制零偏 z。GNSS 位置/速度更新会通过姿态-速度耦合把机体
+    // 真实偏航率误估成陀螺零偏，导致 EKF 航向冻结而真值在转（SIL 风扰
+    // 消融：GNSS 正常时 bias_z 40 s 吸收到 0.41 rad/s，断 GNSS 时保持 0.008）。
+    if (g_heading_aid_mode != 0U && heading_in.airborne)
+    {
+      nav_ekf.ClampGyroBiasZ(g_nomag_bias_z_max_radps);
+    }
   }
 }
 

@@ -8,7 +8,8 @@
  *          处理：新鲜度判定（**仅 Mag ≤2 s 可作为位置保持/heading hold 的
  *          绝对航向源**；YawGsf 是航迹−侧滑的伪航向，只在有速度时成立，
  *          仅作诊断，不解除门控）+ 降级锁存（失效立即降级；恢复后需连续
- *          3 s 磁新鲜才允许重新位置保持）；
+ *          3 s 磁新鲜才允许重新位置保持）；无磁模式 20 s 保持窗口
+ *          **只在离地后计时**（上电/地面等待不消耗，落地复位）；
  *          输出：source_fresh / position_hold_degraded / best_age_s。
  *          纯函数、零 Arduino/Eigen 依赖，宿主可直接回归。
  * @theory  悬停时航向不可观（无绝对航向源），EKF 航向误差会 1:1 进入姿态/
@@ -56,6 +57,7 @@ struct HeadingAidingInput
     bool gnss_motion_valid = false;    // GNSS 速度足以观测航向（>2 m/s）
     bool motion_excitation_valid = false; // 速度 + 倾斜同时存在，航向可观测
     float yaw_drift_dps = 0.0f;        // EKF 航向变化率 − 陀螺 z（无磁一致性）
+    bool airborne = false;             // 已离地（油门/解锁），无磁窗口从离地起算
     float dt_s = 0.005f;
 };
 
@@ -195,7 +197,15 @@ public:
         {
             // 无磁/磁仅初始：短时允许位置保持与 heading hold。陀螺零偏在
             // 数十秒内有限；时间窗结束或航向 1σ 过大时必须降级定高。
-            no_mag_hold_s_ += dt_s;
+            // 窗口只在离地后计时：上电/地面等待不消耗保持时间，落地复位。
+            if (in.airborne)
+            {
+                no_mag_hold_s_ += dt_s;
+            }
+            else
+            {
+                no_mag_hold_s_ = 0.0f;
+            }
             const bool time_ok = no_mag_hold_s_ <= kNoMagHoldMaxS;
             const bool sigma_ok20 =
                 std::isfinite(in.yaw_sigma_deg) && in.yaw_sigma_deg <= 20.0f;

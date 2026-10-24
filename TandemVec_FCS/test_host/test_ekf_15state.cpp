@@ -30,7 +30,8 @@
  *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）；
  *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚；
  *          T14 正常跟踪期 50 m GNSS 跳点的显式野值门；T15 机体系磁矢量更新；
- *          T16 真实磁初始化磁偏角偏置与 tilt_sigma 可用性
+ *          T16 真实磁初始化磁偏角偏置与 tilt_sigma 可用性；
+ *          T17 无磁离地零偏 z 限幅（ClampGyroBiasZ）
  * @see     TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md §5.1/§9.6
  */
 #include <cstdio>
@@ -468,6 +469,22 @@ int main()
     CHECK("T16 tilt_sigma 有限且非负",
           std::isfinite(with_offset.tilt_sigma_rad()) &&
               with_offset.tilt_sigma_rad() >= 0.0f);
+  }
+
+  // ---- T17 无磁离地零偏 z 限幅：初始化吸收的偏航率可被投影回小值 ----
+  {
+    Ekf15State ekf;
+    ekf.Initialize(kGravity, Eigen::Vector3f(0.0f, 0.0f, 0.4f),
+                   Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), kLla);
+    CHECK("T17 初始化可把静止偏航率吸收进 bias_z",
+          ekf.gyro_bias_radps().z() > 0.3f);
+    ekf.ClampGyroBiasZ(0.01f);
+    CHECK("T17 限幅后 |bias_z| ≤ 0.01",
+          std::fabs(ekf.gyro_bias_radps().z()) <= 0.010001f);
+    const float clamped = ekf.gyro_bias_radps().z();
+    ekf.ClampGyroBiasZ(0.0f);
+    CHECK("T17 非正上限不改变零偏",
+          std::fabs(ekf.gyro_bias_radps().z() - clamped) < 1e-6f);
   }
 
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);

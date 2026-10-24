@@ -1625,6 +1625,29 @@ namespace bfs
     // ---- EKF 全量状态读取 (只读 getter) ----
     inline Eigen::Vector3f accel_bias_mps2() const { return accel_bias_mps2_; }
     inline Eigen::Vector3f gyro_bias_radps() const { return gyro_bias_radps_; }
+
+    /**
+     * @brief 限制 z 轴陀螺零偏（无绝对航向时防止真实偏航率被 GNSS 吸收）
+     * @details 无磁时航向不可观，GNSS 位置/速度更新会通过姿态-速度耦合把真实
+     *          yaw rate 误估为陀螺零偏，导致 EKF 航向“冻结”而机体实际在转。
+     *          该接口只做状态投影，不改协方差；由导航层仅在无磁且离地时调用。
+     * @param max_abs_radps 零偏 z 绝对值上限 [rad/s]
+     */
+    inline void ClampGyroBiasZ(const float max_abs_radps)
+    {
+      if (!std::isfinite(max_abs_radps) || max_abs_radps <= 0.0f)
+      {
+        return;
+      }
+      if (gyro_bias_radps_.z() > max_abs_radps)
+      {
+        gyro_bias_radps_.z() = max_abs_radps;
+      }
+      else if (gyro_bias_radps_.z() < -max_abs_radps)
+      {
+        gyro_bias_radps_.z() = -max_abs_radps;
+      }
+    }
     inline Eigen::Vector3f accel_mps2() const { return ins_accel_mps2_; }
     inline Eigen::Vector3f gyro_radps() const { return ins_gyro_radps_; }
     inline Eigen::Vector3f ned_vel_mps() const { return ins_ned_vel_mps_; }

@@ -171,6 +171,7 @@ int main()
     in.yaw_sigma_deg = 5.0f;
     in.yaw_drift_dps = 0.2f;
     in.motion_excitation_valid = true;
+    in.airborne = true;
     for (int i = 0; i < 700; ++i) (void)gate.update(in);
     auto out = gate.update(in);
     CHECK(!out.position_hold_degraded, "T9 短时窗口内允许位置保持");
@@ -180,6 +181,38 @@ int main()
     out = gate.update(in);
     CHECK(out.position_hold_degraded, "T9 超过 20 s 降级");
     CHECK(!out.heading_hold_allowed, "T9 超过 20 s 禁 heading hold");
+  }
+
+  // T9b 无磁窗口只从离地起算：地面等待 60 s 不消耗保持时间。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 5.0f;
+    in.airborne = false;
+    for (int i = 0; i < 12000; ++i) (void)gate.update(in);
+    in.airborne = true;
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    const auto out = gate.update(in);
+    CHECK(!out.position_hold_degraded, "T9b 地面时间不计入 20 s 窗口");
+    CHECK(out.heading_hold_allowed, "T9b 离地后仍允许 heading hold");
+  }
+
+  // T9c 落地复位窗口：离地超时降级后，落地再起飞重新获得 20 s。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 5.0f;
+    in.airborne = true;
+    for (int i = 0; i < 6000; ++i) (void)gate.update(in);
+    auto out = gate.update(in);
+    CHECK(out.position_hold_degraded, "T9c 离地 30 s 后降级");
+    in.airborne = false;
+    (void)gate.update(in);
+    in.airborne = true;
+    out = gate.update(in);
+    CHECK(!out.position_hold_degraded, "T9c 落地复位后重新允许短时保持");
   }
 
   if (g_fail == 0)

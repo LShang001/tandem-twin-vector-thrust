@@ -541,6 +541,7 @@ bool g_heading_hold_allowed = false;
 uint8_t g_heading_aid_mode =
     static_cast<uint8_t>(kFlightCtrlParams.heading_aid_mode);
 float g_heading_align_deg = kFlightCtrlParams.heading_align_deg;
+float g_nomag_bias_z_max_radps = 0.01f;
 bool g_pos_hold_reanchor = false;
 bool g_mode_degraded_heading = false;
 float g_sil_pos_leg_n_m = 0.0f;

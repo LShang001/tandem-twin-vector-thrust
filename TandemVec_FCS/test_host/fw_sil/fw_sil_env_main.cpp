@@ -19,7 +19,9 @@
  *          `--trace-fast-window A:B`（2 kHz 短窗 plant 角速率与 IMU 原始
  *          样本，用于区分高频模态/混叠；仅测试设施）、`--pos-leg N:E`
  *          （进入 AUTO_POSITION 时叠加前飞段目标偏移，仅 SIL）、
- *          `--pos-hold-at T` `--fwd-stick A:B`（定高前飞后再切定点）；
+ *          `--pos-hold-at T` `--fwd-stick A:B`（定高前飞后再切定点）、
+ *          `--wind-window A:B`（覆盖侧风时段）、`--bias-z-max R`
+ *          （无磁离地陀螺零偏 z 限幅，0=关闭）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -417,7 +419,9 @@ struct RealNavConfig
   float baro_noise = 0.25f;
   float baro_drift = 0.02f;
   bool baro_lag = true;
-  float wind_force_mps2 = 1.0f;  // 20–25 s 侧风等效加速度（历史 SIL 的 3 m/s² 作为 degraded）
+  float wind_force_mps2 = 1.0f;  // 侧风等效加速度（默认 20–25 s）
+  float wind_start_s = 20.0f;
+  float wind_end_s = 25.0f;
   bool flow = false;
   int flow_delay = 1;
   bool pos_hold = false;
@@ -653,7 +657,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "gyro_x,gyro_y,gyro_z,omega_ref_x,omega_ref_y,omega_ref_z,"
           "ekf_n,ekf_e,true_n,true_e,hold_n,hold_e,"
           "mag_kick,mag_kick_rp,mag_gate_reason,mode,reanchor,"
-          "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4,yaw_sigma,heading_mode\n");
+          "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4,yaw_sigma,heading_mode,"
+          "gyro_bias_z\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -918,7 +923,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
           "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
-          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u\n",
+          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u,%.4f\n",
           t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
           nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
           nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
@@ -932,7 +937,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           g_pos_hold_reanchor ? 1 : 0, g_heading_aiding_valid ? 1 : 0,
           g_mode_degraded_heading ? 1 : 0, ch1_output, ch2_output,
           ch3_output, ch4_output, nav_ekf.yaw_sigma_rad() * 57.29578f,
-          static_cast<unsigned>(g_heading_aid_mode));
+          static_cast<unsigned>(g_heading_aid_mode),
+          nav_ekf.gyro_bias_radps().z());
     }
 
     if (!manual && !alt_cmd && t >= 3.0f)
@@ -980,7 +986,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       p.motor_wt += (motor_target_wt - p.motor_wt) * std::fmin(1.0f, dt_imu / 0.28f);
 
       if (fault == 4 && t > fault_at) p.servo_f = 8.0f * 0.017453292f;
-      p.wind[1] = (wind_on && t > 20 && t < 25) ? cfg.wind_force_mps2 * P.m : 0.0f;
+      p.wind[1] = (wind_on && t > cfg.wind_start_s && t < cfg.wind_end_s)
+                       ? cfg.wind_force_mps2 * P.m
+                       : 0.0f;
 
 #ifdef FW_SIL_COAXIAL
       g_coax_motor_loss1 = 1.0f;
@@ -1308,6 +1316,8 @@ int main(int argc, char** argv) {
       heading_aid_mode=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--heading-align-deg")==0 && i+1<argc)
       heading_align_deg=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--bias-z-max")==0 && i+1<argc)
+      g_nomag_bias_z_max_radps=std::atof(argv[++i]); // 0=关闭限幅（消融用）
     else if (std::strcmp(argv[i],"--pos-leg")==0 && i+1<argc)
       std::sscanf(argv[++i], "%f:%f", &pos_leg_n_m, &pos_leg_e_m);
     else if (std::strcmp(argv[i],"--scale-ki")==0) scale_ki=true;
@@ -1390,6 +1400,9 @@ int main(int argc, char** argv) {
       real_cfg.baro_drift=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--wind-force")==0 && i+1<argc)
       real_cfg.wind_force_mps2=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--wind-window")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &real_cfg.wind_start_s,
+                  &real_cfg.wind_end_s);
     else if (std::strcmp(argv[i],"--no-baro-lag")==0) real_cfg.baro_lag=false;
     else if (std::strcmp(argv[i],"--pos-hold")==0) real_cfg.pos_hold=true;
     else if (std::strcmp(argv[i],"--pos-hold-at")==0 && i+1<argc)
