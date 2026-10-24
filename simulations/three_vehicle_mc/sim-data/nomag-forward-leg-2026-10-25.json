@@ -5,7 +5,24 @@
  "command": "fw_real --real-nav --profile {clean,mag_clean} --pos-hold --pos-leg 15:0 --heading-aid-mode {0,2}",
  "cases": [
   {
-   "profile": "leg",
+   "variant": "m2 a0",
+   "final_alt": 9.994,
+   "hold_end_rms": 0.0,
+   "pos_rms": 0.496,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
+   "variant": "m2 a15",
+   "final_alt": 9.994,
+   "hold_end_rms": 0.0,
+   "pos_rms": 0.496,
+   "max_roll": 0.0,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
    "variant": "m0",
    "final_alt": 9.976,
    "hold_end_rms": 14.644,
