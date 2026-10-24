@@ -53,5 +53,25 @@
    "nees_vel": 0.76,
    "nis": 5.334
   }
+ },
+ "validation_0.05": {
+  "delay": {
+   "pos": 0.588,
+   "vel": 0.082,
+   "nees_vel": 0.754,
+   "nis": 5.268
+  },
+  "outage": {
+   "pos": 0.726,
+   "vel": 0.102,
+   "nees_vel": 0.697,
+   "nis": 5.239
+  },
+  "highnoise": {
+   "pos": 1.483,
+   "vel": 0.207,
+   "nees_vel": 0.812,
+   "nis": 5.337
+  }
  }
 }
