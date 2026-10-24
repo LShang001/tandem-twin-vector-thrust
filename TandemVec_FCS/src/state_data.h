@@ -835,6 +835,11 @@ extern MagRuntimeStatus mag_status;
 extern bool g_heading_aiding_valid;
 extern float g_heading_aiding_age_s; // <0 表示从未融合
 extern bool g_pos_hold_degraded;
+// 航向源模式（2026-10，无磁/磁仅初始对准）：
+// 0=MAG_ONLY（默认，磁连续融合）；1=MAG_INIT_ONLY（磁仅初始化，之后靠运动
+// EKF/陀螺）；2=NO_MAG_MANUAL（无磁，起飞前手动对准 + 运动 EKF）。
+extern uint8_t g_heading_aid_mode;
+extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针）
 // GNSS 失联后重捕获的一次性目标重锚请求：位置保持把当前点作为新目标，
 // 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
 extern bool g_pos_hold_reanchor;

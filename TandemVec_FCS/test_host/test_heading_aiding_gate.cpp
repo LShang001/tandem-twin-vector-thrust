@@ -162,6 +162,51 @@ int main()
     CHECK(!out.position_hold_degraded, "T8 磁新鲜+协方差小恢复位置保持");
   }
 
+  // T9 无磁模式：仅手动对准、无运动激励 → 不允许位置保持。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 5.0f;
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    const auto out = gate.update(in);
+    CHECK(out.position_hold_degraded, "T9 无运动激励保持降级");
+    CHECK(!out.source_fresh, "T9 无绝对/运动航向源");
+  }
+
+  // T10 无磁模式：速度+倾斜运动激励恢复保持；停止后 3 s coast 再降级。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 5.0f;
+    in.motion_excitation_valid = true;
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    CHECK(!gate.update(in).position_hold_degraded,
+          "T10 运动激励恢复保持");
+    in.motion_excitation_valid = false;
+    bool early_degraded = false;
+    for (int i = 0; i < 599; ++i)
+    {
+      if (gate.update(in).position_hold_degraded) early_degraded = true;
+    }
+    CHECK(!early_degraded, "T10 coast 未满 3 s 不降级");
+    const auto out = gate.update(in);
+    CHECK(out.position_hold_degraded, "T10 coast 结束降级");
+  }
+
+  // T11 无磁模式：航向 1σ 超过 10° 时运动激励也不解除。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 12.0f;
+    in.motion_excitation_valid = true;
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    CHECK(gate.update(in).position_hold_degraded,
+          "T11 航向不确定度超限降级");
+  }
+
   if (g_fail == 0)
   {
     std::printf("=== test_heading_aiding_gate: 全部通过 ===\n");

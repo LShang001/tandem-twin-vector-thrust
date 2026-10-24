@@ -15,7 +15,9 @@
  *          --mag-cal-invalid`、`--imu-fault nan|stuck`/`--imu-dropout A:B`、
  *          `--gnss-consistency-reject`、`--trace-csv PATH`（200 Hz 控制级
  *          CSV：真值/EKF 姿态、陀螺、角速率指令、位置/目标、磁 kick/门控、
- *          模式与降级标志；仅测试设施）；
+ *          模式与降级标志；仅测试设施）、`--trace-fast PATH`
+ *          `--trace-fast-window A:B`（2 kHz 短窗 plant 角速率与 IMU 原始
+ *          样本，用于区分高频模态/混叠；仅测试设施）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -65,6 +67,13 @@
 // 200 Hz 控制级 CSV 追踪（仅 SIL 测试设施；默认关闭）。
 static const char *g_trace_csv_path = nullptr;
 static FILE *g_trace_csv_file = nullptr;
+// 2 kHz 短窗追踪：仅记录 [start,end) 内的 plant 角速率与 IMU 原始样本。
+static const char *g_trace_fast_path = nullptr;
+static FILE *g_trace_fast_file = nullptr;
+static float g_trace_fast_start_s = 24.0f;
+static float g_trace_fast_end_s = 26.0f;
+// 6DOF 积分子步数：默认 1 保持旧行为；>1 用于诊断显式欧拉近 Nyquist 数值振荡。
+static int g_plant_substeps = 1;
 
 #ifdef BFS_RATE_ACCEL_FB
 extern void setRateAccelFeedbackGains(float rp_gain, float yaw_gain,
@@ -143,35 +152,40 @@ struct Plant {
     const float Ixx = P.Ix, Iyy = P.Iy, Izz = P.Iz;
     const float mass = P.m;
 #endif
-    const float p=omega[0], qq=omega[1], r=omega[2];
-    omega[0] += (M[0] - (Izz-Iyy)*qq*r) / Ixx * dt;
-    omega[1] += (M[1] - (Ixx-Izz)*r*p) / Iyy * dt;
-    omega[2] += (M[2] - (Iyy-Ixx)*p*qq) / Izz * dt;
+    const int n_sub = g_plant_substeps > 0 ? g_plant_substeps : 1;
+    const float h = dt / static_cast<float>(n_sub);
+    for (int ss = 0; ss < n_sub; ++ss)
+    {
+      const float p=omega[0], qq=omega[1], r=omega[2];
+      omega[0] += (M[0] - (Izz-Iyy)*qq*r) / Ixx * h;
+      omega[1] += (M[1] - (Ixx-Izz)*r*p) / Iyy * h;
+      omega[2] += (M[2] - (Iyy-Ixx)*p*qq) / Izz * h;
 
-    const float wx=omega[0], wy=omega[1], wz=omega[2];
-    Quat4f dq{-0.5f*(q.x*wx+q.y*wy+q.z*wz),
-              0.5f*(q.w*wx+q.y*wz-q.z*wy),
-              0.5f*(q.w*wy-q.x*wz+q.z*wx),
-              0.5f*(q.w*wz+q.x*wy-q.y*wx)};
-    q.w+=dq.w*dt; q.x+=dq.x*dt; q.y+=dq.y*dt; q.z+=dq.z*dt;
-    q=qNorm(q);
+      const float wx=omega[0], wy=omega[1], wz=omega[2];
+      Quat4f dq{-0.5f*(q.x*wx+q.y*wy+q.z*wz),
+                0.5f*(q.w*wx+q.y*wz-q.z*wy),
+                0.5f*(q.w*wy-q.x*wz+q.z*wx),
+                0.5f*(q.w*wz+q.x*wy-q.y*wx)};
+      q.w+=dq.w*h; q.x+=dq.x*h; q.y+=dq.y*h; q.z+=dq.z*h;
+      q=qNorm(q);
 
-    float Fn[3];
-    body_to_ned(Fb, Fn);
-    const float ax=(Fn[0]+wind[0])/mass;
-    const float ay=(Fn[1]+wind[1])/mass;
-    const float az=(Fn[2]+wind[2])/mass + P.g;
-    acc_ned[0]=ax; acc_ned[1]=ay; acc_ned[2]=az;
-    force_ned[0]=Fn[0]+wind[0]; force_ned[1]=Fn[1]+wind[1]; force_ned[2]=Fn[2]+wind[2];
-    vel[0]+=ax*dt; vel[1]+=ay*dt; vel[2]+=az*dt;
-    pos[0]+=vel[0]*dt; pos[1]+=vel[1]*dt; pos[2]+=vel[2]*dt;
+      float Fn[3];
+      body_to_ned(Fb, Fn);
+      const float ax=(Fn[0]+wind[0])/mass;
+      const float ay=(Fn[1]+wind[1])/mass;
+      const float az=(Fn[2]+wind[2])/mass + P.g;
+      acc_ned[0]=ax; acc_ned[1]=ay; acc_ned[2]=az;
+      force_ned[0]=Fn[0]+wind[0]; force_ned[1]=Fn[1]+wind[1]; force_ned[2]=Fn[2]+wind[2];
+      vel[0]+=ax*h; vel[1]+=ay*h; vel[2]+=az*h;
+      pos[0]+=vel[0]*h; pos[1]+=vel[1]*h; pos[2]+=vel[2]*h;
 
-    if (pos[2] >= 0.0f) { // NED down: ground at 0
-      pos[2]=0.0f;
-      if (vel[2] > 0.0f) vel[2]=0.0f;
-      on_ground = true;
-    } else {
-      on_ground = false;
+      if (pos[2] >= 0.0f) { // NED down: ground at 0
+        pos[2]=0.0f;
+        if (vel[2] > 0.0f) vel[2]=0.0f;
+        on_ground = true;
+      } else {
+        on_ground = false;
+      }
     }
   }
 };
@@ -634,7 +648,21 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "gyro_x,gyro_y,gyro_z,omega_ref_x,omega_ref_y,omega_ref_z,"
           "ekf_n,ekf_e,true_n,true_e,hold_n,hold_e,"
           "mag_kick,mag_kick_rp,mag_gate_reason,mode,reanchor,"
-          "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4\n");
+          "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4,yaw_sigma,heading_mode\n");
+    }
+  }
+  if (g_trace_fast_path != nullptr)
+  {
+    g_trace_fast_file = std::fopen(g_trace_fast_path, "w");
+    if (g_trace_fast_file == nullptr)
+    {
+      std::fprintf(stderr, "[trace-fast] cannot open %s\n", g_trace_fast_path);
+    }
+    else
+    {
+      std::fprintf(g_trace_fast_file,
+                   "t,plant_wx,plant_wy,plant_wz,"
+                   "gyro_x,gyro_y,gyro_z,accel_x,accel_y,accel_z\n");
     }
   }
 
@@ -877,7 +905,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
           "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
-          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f\n",
+          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u\n",
           t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
           nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
           nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
@@ -890,7 +918,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           static_cast<int>(g_current_flight_mode),
           g_pos_hold_reanchor ? 1 : 0, g_heading_aiding_valid ? 1 : 0,
           g_mode_degraded_heading ? 1 : 0, ch1_output, ch2_output,
-          ch3_output, ch4_output);
+          ch3_output, ch4_output, nav_ekf.yaw_sigma_rad() * 57.29578f,
+          static_cast<unsigned>(g_heading_aid_mode));
     }
 
     if (!manual && !alt_cmd && t >= 3.0f)
@@ -1003,6 +1032,15 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           sample = imu.Step(
               omega, f_body, ts, sample_dt, cfg.vib_g * vib_scale, cfg.vib_hz,
               cfg.vib_mode, cfg.anti_alias);
+          if (g_trace_fast_file != nullptr && ts >= g_trace_fast_start_s &&
+              ts < g_trace_fast_end_s)
+          {
+            std::fprintf(g_trace_fast_file,
+                         "%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f\n",
+                         ts, omega[0], omega[1], omega[2], sample.gyro[0],
+                         sample.gyro[1], sample.gyro[2], sample.accel[0],
+                         sample.accel[1], sample.accel[2]);
+          }
           if (imu_fault && cfg.imu_fault_mode == 2)
           {
             for (int a = 0; a < 3; ++a)
@@ -1184,6 +1222,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     std::fclose(g_trace_csv_file);
     g_trace_csv_file = nullptr;
   }
+  if (g_trace_fast_file != nullptr)
+  {
+    std::fclose(g_trace_fast_file);
+    g_trace_fast_file = nullptr;
+  }
   return 0;
 }
 #endif  // FW_SIL_REAL_NAV
@@ -1201,6 +1244,9 @@ int main(int argc, char** argv) {
   float gain_scale=1.0f; // 测试用：att/rate kp 缩放（默认 1.0，不影响生产）
   float rate_gain_scale=1.0f; // 测试用：仅 rate kp 缩放（覆盖 gain_scale）
   float att_gain_scale=1.0f;  // 测试用：仅 att kp 缩放（覆盖 gain_scale）
+  float ang_alpha=-1.0f;      // 测试用：姿态外环输出滤波 alpha（<0 用参数默认）
+  int heading_aid_mode=0;     // 0=磁连续；1=磁仅初始对准；2=无磁手动对准
+  float heading_align_deg=0.0f; // 无磁/初始对准的机头真北航向 [deg]
   bool rate_gain_scale_set=false;
   bool att_gain_scale_set=false;
   bool scale_ki=false;   // 同时缩放 rate ki
@@ -1241,6 +1287,12 @@ int main(int argc, char** argv) {
       att_gain_scale=std::atof(argv[++i]);
       att_gain_scale_set=true;
     }
+    else if (std::strcmp(argv[i],"--ang-alpha")==0 && i+1<argc)
+      ang_alpha=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--heading-aid-mode")==0 && i+1<argc)
+      heading_aid_mode=std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--heading-align-deg")==0 && i+1<argc)
+      heading_align_deg=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--scale-ki")==0) scale_ki=true;
 #ifdef BFS_RATE_ACCEL_FB
     else if (std::strcmp(argv[i],"--aaf-gain")==0 && i+1<argc) aaf_gain=std::atof(argv[++i]);
@@ -1268,6 +1320,13 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--real-nav")==0) real_cfg.enabled=true;
     else if (std::strcmp(argv[i],"--trace-csv")==0 && i+1<argc)
       g_trace_csv_path = argv[++i];
+    else if (std::strcmp(argv[i],"--trace-fast")==0 && i+1<argc)
+      g_trace_fast_path = argv[++i];
+    else if (std::strcmp(argv[i],"--trace-fast-window")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &g_trace_fast_start_s,
+                  &g_trace_fast_end_s);
+    else if (std::strcmp(argv[i],"--plant-substeps")==0 && i+1<argc)
+      g_plant_substeps = std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--profile")==0 && i+1<argc)
       applyRealNavProfile(real_cfg, argv[++i]);
 #ifdef FW_SIL_COAXIAL
@@ -1374,6 +1433,13 @@ int main(int argc, char** argv) {
   if (g_mag_yaw_jump_rad > 0.0f)
   {
     nav_ekf.mag_yaw_jump_limit_rad(g_mag_yaw_jump_rad);
+  }
+  g_heading_aid_mode = static_cast<uint8_t>(heading_aid_mode);
+  g_heading_align_deg = heading_align_deg;
+  if (ang_alpha >= 0.0f)
+  {
+    rollAngleOutputFilter.setAlpha(ang_alpha);
+    pitchAngleOutputFilter.setAlpha(ang_alpha);
   }
 #ifdef FW_SIL_REAL_NAV
   if (real_cfg.enabled)

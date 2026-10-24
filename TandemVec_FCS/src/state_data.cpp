@@ -536,6 +536,15 @@ MagRuntimeStatus mag_status;
 bool g_heading_aiding_valid = false;
 float g_heading_aiding_age_s = -1.0f;
 bool g_pos_hold_degraded = true;
+// 无磁/磁仅初始对准的编译期默认值；SIL/GCS 可在运行时覆盖。
+#ifndef BFS_HEADING_AID_MODE
+#define BFS_HEADING_AID_MODE 0
+#endif
+#ifndef BFS_HEADING_ALIGN_DEG
+#define BFS_HEADING_ALIGN_DEG 0.0f
+#endif
+uint8_t g_heading_aid_mode = static_cast<uint8_t>(BFS_HEADING_AID_MODE);
+float g_heading_align_deg = BFS_HEADING_ALIGN_DEG;
 bool g_pos_hold_reanchor = false;
 bool g_mode_degraded_heading = false;
 uint8_t g_imu_health_state = 0;

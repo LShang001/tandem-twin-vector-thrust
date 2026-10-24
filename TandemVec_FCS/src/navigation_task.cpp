@@ -1158,6 +1158,7 @@ void handleNavigationSystem()
   mag_status.last_gate_reason =
       static_cast<uint8_t>(bfs::MagGateReason::None);
   mag_real_for_init =
+      g_heading_aid_mode != 2U &&
       mag_present && mag_sample.seq != 0U && mag_cal_valid && mag_ref_valid &&
       std::isfinite(mag_sample.x) && std::isfinite(mag_sample.y) &&
       std::isfinite(mag_sample.z) &&
@@ -1543,7 +1544,11 @@ void handleNavigationSystem()
       nav_ekf.init_pos_err_std_m(2.0f);            // 初始位置不确定度 2m
       nav_ekf.init_vel_err_std_mps(0.08f);         // 初始速度不确定度 0.08 m/s
       nav_ekf.init_att_err_std_rad(0.08f);         // 初始姿态 (roll/pitch) 不确定度 ~4.6度
-      nav_ekf.init_heading_err_std_rad(0.2f);      // 初始航向不确定度 0.2 rad (~11.5度，伪磁确定性初始化语义)
+      // 无磁手动对准：假定机头指向已知（±3°）；真实磁初始化保留 0.2 rad。
+      nav_ekf.init_heading_err_std_rad(
+          (g_heading_aid_mode >= 1U)
+              ? (mag_real_for_init ? 0.1f : 0.05f)
+              : 0.2f);
       nav_ekf.init_accel_bias_std_mps2(0.196f);    // 初始加速度零偏不确定度 0.02g
       nav_ekf.init_gyro_bias_std_radps(0.00698f);  // 初始陀螺零偏不确定度 0.4度/s
 
@@ -1574,7 +1579,11 @@ void handleNavigationSystem()
       // 执行初始化。真实磁样本给的是磁北航向，需加站点磁偏角转到真北；
       // 伪磁/不可用磁保持 offset=0，避免改变历史确定性行为。
       const float mag_init_yaw_offset =
-          mag_real_for_init ? bfs::kDefaultMagReference.declination_rad : 0.0f;
+          mag_real_for_init
+              ? bfs::kDefaultMagReference.declination_rad
+              : ((g_heading_aid_mode >= 1U)
+                     ? g_heading_align_deg * 0.0174532925f
+                     : 0.0f);
       nav_ekf.Initialize(imu_accel_mps2, imu_gyro_radps, mag_ut, init_vel_ned,
                          init_lla, mag_init_yaw_offset);
       mag_status.init_source = mag_real_for_init ? 1U : 0U;
@@ -1869,7 +1878,8 @@ void handleNavigationSystem()
       const uint32_t mag_now_us = micros();
       const bool mag_rate_due =
           static_cast<uint32_t>(mag_now_us - s_mag_last_attempt_us) >= 100000U;
-      if (mag_present && mag_sample.seq != 0U && mag_rate_due)
+      if (g_heading_aid_mode == 0U && mag_present && mag_sample.seq != 0U &&
+          mag_rate_due)
       {
         bool gnss_course_valid = false;
         float gnss_course_rad = 0.0f;
@@ -2636,6 +2646,25 @@ void handleNavigationSystem()
     const Eigen::Vector3f vel_ned = nav_ekf.ned_vel_mps();
     heading_in.horizontal_speed_mps =
         std::hypot(vel_ned(0), vel_ned(1));
+    heading_in.heading_mode = g_heading_aid_mode;
+    heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
+    if (gnss_instant_valid_for_nav && has_gnss_epoch)
+    {
+      const float gnss_speed_mps =
+          std::hypot(gnss_epoch.north_vel_mps, gnss_epoch.east_vel_mps);
+      heading_in.gnss_motion_valid =
+          std::isfinite(gnss_speed_mps) && gnss_speed_mps > 2.0f;
+    }
+    // 纯平移（风推、无倾斜）不能观测机头航向；只有“速度+倾斜”运动激励
+    // 才允许无磁位置保持。倾斜门限 5° 高于配平抖动、低于正常前飞姿态。
+    {
+      const float tilt_deg =
+          std::fmax(std::fabs(nav_ekf.roll_rad()),
+                    std::fabs(nav_ekf.pitch_rad())) *
+          57.2957795f;
+      heading_in.motion_excitation_valid =
+          heading_in.gnss_motion_valid && tilt_deg > 5.0f;
+    }
 #ifdef BFS_YAW_SIGMA_GATE
     // 航向协方差是比“事后速率”更早的不可观信号：P(8,8) 持续大时，
     // 位置保持不应继续依赖该航向估计。

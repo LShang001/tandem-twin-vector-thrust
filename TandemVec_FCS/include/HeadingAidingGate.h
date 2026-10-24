@@ -35,6 +35,7 @@
 
 #include <cmath>
 #include <cfloat>
+#include <cstdint>
 
 #include "YawOscillationDetector.h"
 
@@ -50,6 +51,10 @@ struct HeadingAidingInput
     bool monitor_yaw_oscillation = false; // 默认关闭，保持旧行为
     float yaw_sigma_deg = 0.0f;        // EKF 航向 1σ 不确定度
     bool monitor_yaw_sigma = false;    // 默认关闭，保持旧行为
+    // 无磁/磁仅初始对准模式：航向由运动 EKF 观测，悬停靠陀螺短时维持。
+    uint8_t heading_mode = 0;          // 0=MAG_ONLY / 1=MAG_INIT / 2=NO_MAG
+    bool gnss_motion_valid = false;    // GNSS 速度足以观测航向（>2 m/s）
+    bool motion_excitation_valid = false; // 速度 + 倾斜同时存在，航向可观测
     float dt_s = 0.005f;
 };
 
@@ -71,11 +76,13 @@ public:
     static constexpr float kYawGsfMaxAgeS = 2.0f;
     static constexpr float kYawGsfMinSpeedMps = 2.0f;
     static constexpr float kReenableHoldS = 3.0f;
+    static constexpr float kMotionCoastS = 3.0f;
 
     void reset()
     {
         degraded_ = true;
         valid_accum_s_ = 0.0f;
+        motion_coast_s_ = 0.0f;
         yaw_osc_.reset();
         sigma_high_accum_s_ = 0.0f;
         sigma_quiet_accum_s_ = 0.0f;
@@ -91,14 +98,35 @@ public:
         const bool mag_fresh =
             std::isfinite(in.mag_age_s) && in.mag_age_s >= 0.0f &&
             in.mag_age_s <= kMagMaxAgeS;
-        // YawGsf 只做诊断，不解除门控：详见头文件 @note。
-        const bool yaw_gsf_fresh =
-            std::isfinite(in.yaw_gsf_age_s) && in.yaw_gsf_age_s >= 0.0f &&
-            in.yaw_gsf_age_s <= kYawGsfMaxAgeS &&
-            std::isfinite(in.horizontal_speed_mps) &&
-            in.horizontal_speed_mps >= kYawGsfMinSpeedMps;
-        out.yaw_gsf_fresh = yaw_gsf_fresh;
-        out.source_fresh = mag_fresh;
+        // 无磁/磁仅初始对准：纯悬停或纯平移时航向不可观（风推不产生倾斜，
+    // GNSS 速度不能唯一确定机头），因此位置保持只在实际“速度+倾斜”运动
+    // 激励后短时允许；悬停降级为定高，避免追漂移航向。
+    const bool no_mag_mode = in.heading_mode >= 1U;
+    const bool sigma_valid =
+        std::isfinite(in.yaw_sigma_deg) && in.yaw_sigma_deg >= 0.0f;
+    const bool sigma_ok =
+        sigma_valid && in.yaw_sigma_deg <= 10.0f;
+    const bool motion_heading_ok =
+        no_mag_mode && in.motion_excitation_valid && sigma_ok;
+    if (motion_heading_ok)
+    {
+        motion_coast_s_ = kMotionCoastS;
+    }
+    else if (dt_s > 0.0f && motion_coast_s_ > 0.0f)
+    {
+        motion_coast_s_ = std::fmax(0.0f, motion_coast_s_ - dt_s);
+    }
+    const bool motion_coast_ok =
+        no_mag_mode && motion_coast_s_ > 0.0f && sigma_ok;
+    // YawGsf 只做诊断，不解除门控：详见头文件 @note。
+    const bool yaw_gsf_fresh =
+        std::isfinite(in.yaw_gsf_age_s) && in.yaw_gsf_age_s >= 0.0f &&
+        in.yaw_gsf_age_s <= kYawGsfMaxAgeS &&
+        std::isfinite(in.horizontal_speed_mps) &&
+        in.horizontal_speed_mps >= kYawGsfMinSpeedMps;
+    out.yaw_gsf_fresh = yaw_gsf_fresh;
+    out.source_fresh =
+        mag_fresh || motion_heading_ok || motion_coast_ok;
 
         out.best_age_s = FLT_MAX;
         if (std::isfinite(in.mag_age_s) && in.mag_age_s >= 0.0f)
@@ -187,6 +215,7 @@ public:
 private:
     bool degraded_ = true;
     float valid_accum_s_ = 0.0f;
+    float motion_coast_s_ = 0.0f;
     float sigma_high_accum_s_ = 0.0f;
     float sigma_quiet_accum_s_ = 0.0f;
     bool sigma_degraded_ = false;
