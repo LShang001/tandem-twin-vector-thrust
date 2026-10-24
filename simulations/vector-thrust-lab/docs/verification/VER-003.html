@@ -1046,6 +1046,9 @@ detune85 283°/−2561 m、detune70 <strong>170°/−1526 m</strong>、选择性
 0、hover 触发 1.03%； 优于手工选择性（1.575%），但仍不如固定
 detune70（0.83%）。
 数据：<code>sim-data/ml-select-2026-10-24/</code>。</p>
+<p>高保真 hifi A/B 未成立：默认/EKF 闭环基线 A0/A1 已 FAIL （A0 att
+20.3°、A1 31.5°/288 m），与既有“EKF 进控制闭环 10/10 FAIL”一致；
+不能从该基线分离 detune 影响，需先修 hifi 闭环或走 C++ SIL。</p>
 <p>结论（L1，否定性）：<code>AdaptiveGainDamper</code>
 不值得为这点收益上机；
 下一步应验证“固定增益裕度/延迟裕度”，而不是继续调阻尼器。固定降增益
@@ -1096,5 +1099,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 22:10</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 22:14</footer></article></body>
 </html>

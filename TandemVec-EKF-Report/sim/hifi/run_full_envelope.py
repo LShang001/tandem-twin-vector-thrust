@@ -122,8 +122,18 @@ def main():
     ap.add_argument("--nis-mag", type=float, default=None)
     ap.add_argument("--baro-hz", type=float, default=None)
     ap.add_argument("--baro-phase", type=int, default=None)
+    ap.add_argument("--gain-scale", type=float, default=1.0,
+                    help="A/B only: scale att/rate kp (and optionally ki)")
+    ap.add_argument("--scale-ki", action="store_true")
     ap.add_argument("--out", default=os.path.join(OUT, "hifi_full_envelope.json"))
     args = ap.parse_args()
+    if args.gain_scale != 1.0:
+        from hifi_core import CTRL
+        for k in ("att_kp", "att_kp_yaw", "rate_kp_rp", "rate_kp_yaw"):
+            CTRL[k] *= args.gain_scale
+        if args.scale_ki:
+            for k in ("rate_ki_rp", "rate_ki_yaw"):
+                CTRL[k] *= args.gain_scale
     cfgd = build_cfg({})
     if args.grav_noise is not None:
         # 仅用于仿真重力增益 A/B；固件参数另走 FlightCtrlParams。
@@ -134,6 +144,7 @@ def main():
            "grav_noise": args.grav_noise, "pos_hold": bool(args.pos_hold),
            "mag_vector": bool(args.mag_vector),
            "flow_aiding": bool(args.flow_aiding),
+           "gain_scale": args.gain_scale, "scale_ki": bool(args.scale_ki),
            "a1_tilt_limit": args.a1_tilt_limit, "scenes": {}}
     all_pass = True
     for name, sc_orig in SCENES.items():
