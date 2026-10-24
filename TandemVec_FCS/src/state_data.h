@@ -846,6 +846,9 @@ extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针�
 // 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
 extern bool g_pos_hold_reanchor;
 extern bool g_mode_degraded_heading;
+// SIL 测试用：进入 AUTO_POSITION 时叠加的位置目标偏移 [m]（固件默认 0）。
+extern float g_sil_pos_leg_n_m;
+extern float g_sil_pos_leg_e_m;
 
 // IMU 健康监测（2026-10，ins_imu_health.h）；0=Ok, 1=Warning, 2=Failed。
 extern uint8_t g_imu_health_state;

@@ -765,6 +765,11 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // 首次进入时，将当前位置设为目标悬停点
     targetNorth = relative_north;
     targetEast = relative_east;
+#ifdef FW_SIL_REAL_NAV
+    // SIL 前飞段测试：仅在宿主 SIL 构建中叠加目标偏移，固件默认 0。
+    targetNorth += g_sil_pos_leg_n_m;
+    targetEast += g_sil_pos_leg_e_m;
+#endif
     loiter_state = LOITER_HOVERING; // 初始状态为悬停
   }
 

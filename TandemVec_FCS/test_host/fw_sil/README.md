@@ -295,6 +295,7 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | 2 kHz 短窗追踪 | `--trace-fast PATH --trace-fast-window A:B` | 记录窗口内 plant 角速率与 IMU 原始 gyro/accel（2 kHz），用于区分高频模态、混叠与控制器行为；仅测试设施，默认关闭 |
 | 6DOF 积分子步 | `--plant-substeps N` | 诊断用：将 0.5 ms 的 plant 积分再细分 N 步（默认 1 保持旧行为），用于判断显式欧拉近 Nyquist 数值振荡 |
 | 航向源模式 | `--heading-aid-mode 0\|1\|2` `--heading-align-deg X` | 仅测试用：0=磁连续（默认）；1=磁仅初始对准；2=无磁手动对准（机头真北角 X）。无磁位置保持只在“速度>2 m/s + 倾斜>5° + yaw 1σ≤10° + 航向/陀螺一致性”运动激励后短时允许；heading hold 也只在该激励期间，纯悬停降级定高 |
+| 前飞段测试 | `--pos-leg N:E` | 仅测试用：进入 AUTO_POSITION 时把目标点叠加北/东偏移 [m]，用于“起飞→有倾斜前飞→转定点”时序 |
 | 增益分离扫描 | `--rate-gain-scale X` / `--att-gain-scale X` | 仅测试用：分别缩放速率内环/姿态外环 kp（覆盖 `--gain-scale` 的对应项）；用于区分高频振荡与位置/姿态慢响应 |
 
 **边界**：IMU 健康监测只提供“检测+隔离”，单 IMU 无冗余，不能写成故障恢复/安全降落；

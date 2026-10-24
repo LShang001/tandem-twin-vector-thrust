@@ -17,7 +17,8 @@
  *          CSV：真值/EKF 姿态、陀螺、角速率指令、位置/目标、磁 kick/门控、
  *          模式与降级标志；仅测试设施）、`--trace-fast PATH`
  *          `--trace-fast-window A:B`（2 kHz 短窗 plant 角速率与 IMU 原始
- *          样本，用于区分高频模态/混叠；仅测试设施）；
+ *          样本，用于区分高频模态/混叠；仅测试设施）、`--pos-leg N:E`
+ *          （进入 AUTO_POSITION 时叠加前飞段目标偏移，仅 SIL）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -1247,6 +1248,8 @@ int main(int argc, char** argv) {
   float ang_alpha=-1.0f;      // 测试用：姿态外环输出滤波 alpha（<0 用参数默认）
   int heading_aid_mode=0;     // 0=磁连续；1=磁仅初始对准；2=无磁手动对准
   float heading_align_deg=0.0f; // 无磁/初始对准的机头真北航向 [deg]
+  float pos_leg_n_m=0.0f;     // SIL 前飞段目标北向偏移 [m]
+  float pos_leg_e_m=0.0f;     // SIL 前飞段目标东向偏移 [m]
   bool rate_gain_scale_set=false;
   bool att_gain_scale_set=false;
   bool scale_ki=false;   // 同时缩放 rate ki
@@ -1293,6 +1296,8 @@ int main(int argc, char** argv) {
       heading_aid_mode=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--heading-align-deg")==0 && i+1<argc)
       heading_align_deg=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--pos-leg")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &pos_leg_n_m, &pos_leg_e_m);
     else if (std::strcmp(argv[i],"--scale-ki")==0) scale_ki=true;
 #ifdef BFS_RATE_ACCEL_FB
     else if (std::strcmp(argv[i],"--aaf-gain")==0 && i+1<argc) aaf_gain=std::atof(argv[++i]);
@@ -1436,6 +1441,8 @@ int main(int argc, char** argv) {
   }
   g_heading_aid_mode = static_cast<uint8_t>(heading_aid_mode);
   g_heading_align_deg = heading_align_deg;
+  g_sil_pos_leg_n_m = pos_leg_n_m;
+  g_sil_pos_leg_e_m = pos_leg_e_m;
   if (ang_alpha >= 0.0f)
   {
     rollAngleOutputFilter.setAlpha(ang_alpha);
