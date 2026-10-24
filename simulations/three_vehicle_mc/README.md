@@ -630,6 +630,13 @@ mag 392/0）；10 seeds × 2 profiles **17/20**（baseline 16/20，seed7 由
 7.33 m 已接近 8 m 门限，说明更长失联仍会累积漂移，重锚只保证不把累积
 误差变成大姿态指令，不保证原位保持。数据：`sim-data/reanchor-sweep-2026-10-25/`。
 
+**10/20 s 失联 × 10 seeds**：10 s 有 1/10 边际失败（seed4 hold 9.59 m，
+roll 18.0°），其余最大 hold 7.33 m、roll 18.7°；20 s 全部 pass
+（hold 最大 5.91 m、roll 18.7°）。
+说明漂移不随失联时长单调恶化（取决于 flow/估计相位），但 10 s 已出现
+位置门限失败；重锚解决的是“不发散”，不是“原位保持”。数据：
+`sim-data/reanchor-longout-2026-10-25/`。
+
 ### 5.19 MATLAB 频域裕度独立复核
 
 用 MATLAB R2025b Control System Toolbox 对速率环连续近似
