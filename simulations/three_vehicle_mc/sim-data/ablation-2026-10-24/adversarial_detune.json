@@ -1,0 +1,30 @@
+{
+  "case": "1000-trial TPE worst-case params",
+  "n_noise": 8,
+  "seed_base": 20261029,
+  "fixed": {
+    "angle_max": 310.2,
+    "angle_median": 308.2,
+    "h_min": -4051.0,
+    "h_median": -3737.6
+  },
+  "detune85": {
+    "angle_max": 282.8,
+    "angle_median": 281.4,
+    "h_min": -2560.7,
+    "h_median": -2218.4
+  },
+  "detune70": {
+    "angle_max": 170.0,
+    "angle_median": 169.6,
+    "h_min": -1525.6,
+    "h_median": -1159.9
+  },
+  "selective": {
+    "angle_max": 309.5,
+    "angle_median": 308.1,
+    "h_min": -4051.0,
+    "h_median": -3737.6
+  },
+  "note": "L1; detune reduces but does not rescue wind/delay divergence; selective no effect"
+}
