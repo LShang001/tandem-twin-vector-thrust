@@ -27,6 +27,8 @@
 | `test_mag_gate.cpp` | `mag_measurement_gate.h` — 磁矢量模长/倾角/方位/航迹/新鲜度/标定/油门门控与自适应噪声（2026-10 磁链路） | Eigen | 24 |
 | `test_imu_health_monitor.cpp` | `ins_imu_health.h` — 非有限/无样本/低样本/冻结/饱和/高振动/零偏跳变状态机与复位（2026-10） | Eigen | 28 |
 | `test_gnss_consistency.cpp` | `ins_gnss_consistency.h` — GNSS 加速度一致性/位置自洽/光流/气压交叉、Suspect 锁存与 reset（2026-10） | Eigen | 16 |
+| `test_vehicle_profile.cpp` | `VehicleProfile.h` + `ActuatorOutputMap.h` — 机型输出表校验、纵列双发旧 mix 等价、VTVL/液体火箭输出表扩展 | 无 | 29 |
+| `test_generic_allocation.cpp` | `GenericControlAllocation.h` — 3×N 加权最小范数分配、限幅/冗余/秩亏、与 legacy BTRUE 等价 | TandemVec headers | 28 |
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
 

@@ -49,6 +49,7 @@
 #include "RcCurve.h"    // FPV 摇杆曲线（RATE_MODE，★2026-08-11）
 #include "ControlUnits.h"
 #include "ActuatorFaultMonitor.h" // 执行器故障检测（2026-10，只读诊断）
+#include "ActuatorOutputMap.h"    // 机型输出表 → 舵机/电调/阀门（通用层）
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
@@ -1660,38 +1661,50 @@ void mix_and_output_commands(const ControlInputs_t &inputs, const ControlOutputs
   }
 
   // ================================================================
-  // 层3：执行器 mix — 舵机 PWM + 电机 PWM（齿轮传动 + 标定参数）
+  // 层3：执行器输出 — 通用输出表映射（当前机型 kTandemVecProfile）
   // ----------------------------------------------------------------
-  // 有向舵机角[deg] = 摆座角[deg] × 传动比(40/30=1.333) × 方向符号；
-  // PWM% = (50 + 中位偏置) + 舵机角 / 半行程 × 50，最后钳到 0–100%。
-  // 限幅与安全门控：舵机钳位 0–100%（机械行程保护，超出会堵转）；
-  //   电机由上层分支保证锁定=0%、零油门=归中；此处不再有模式判断。
-  // 修改方向 / 中位 / 行程：编辑 TandemVec_Config.h §ServoConfig
+  // 旧 mix 的齿轮/方向/中位/半行程公式已收口到 ActuatorOutputMap 的
+  // TandemVecOutputCalibration；后续机型只需替换 VehicleProfile 输出表。
+  // 硬件槽位 → GPIO 映射仍留在本层，通用层不依赖 Arduino。
+  // 限幅与安全门控：舵机/电调钳位 0–100%；锁定/零油门由上层分支保证。
+  // 修改方向 / 中位 / 行程：仍编辑 TandemVec_Config.h §ServoConfig。
   // ================================================================
   const ServoConfig& SC = kDefaultServoConfig;
-  const float gear = SC.teeth_gimbal / SC.teeth_servo;  // 40/30 = 1.333
-
-  //  有向舵机角(deg) = 摆座角(deg) × 传动比 × 方向符号
-  float servo_deg_pitch = lower_gimbal_deg  * gear * SC.dir_pitch;
-  float servo_deg_roll  = upper_gimbal_deg * gear * SC.dir_roll;
-
-  //  映射到百分比：中位偏置 + 行程归一
-  float pitch_servo = (50.f + SC.zero_pitch_pct) + (servo_deg_pitch / SC.half_travel_deg) * 50.f;
-  float roll_servo  = (50.f + SC.zero_roll_pct ) + (servo_deg_roll  / SC.half_travel_deg) * 50.f;
-
-  pitch_servo = constrain(pitch_servo, 0.f, 100.f);
-  roll_servo  = constrain(roll_servo,  0.f, 100.f);
-
-  SetServoPos(pitch_servo, TVC_PITCH_SERVO_PIN);
-  SetServoPos(roll_servo,  TVC_ROLL_SERVO_PIN);
-  ch2_output = pitch_servo;
-  ch1_output = roll_servo;
-
-  // ---- 电机输出 ----
-  SetServoPos(motor1_pct, MOTOR1_PIN);
-  SetServoPos(motor2_pct, MOTOR2_PIN);
-  ch3_output = motor1_pct;
-  ch4_output = motor2_pct;
+  bfs::TandemVecOutputCalibration output_cal;
+  output_cal.gear_ratio = SC.teeth_gimbal / SC.teeth_servo;
+  output_cal.half_travel_deg = SC.half_travel_deg;
+  output_cal.dir_roll = SC.dir_roll;
+  output_cal.dir_pitch = SC.dir_pitch;
+  output_cal.zero_roll_pct = SC.zero_roll_pct;
+  output_cal.zero_pitch_pct = SC.zero_pitch_pct;
+  const bfs::OutputCommandSet actuator_outputs = bfs::mapTandemVecOutputs(
+      upper_gimbal_deg, lower_gimbal_deg, motor1_pct, motor2_pct,
+      output_cal);
+  for (uint8_t i = 0; i < actuator_outputs.count; ++i)
+  {
+    const bfs::OutputCommand &cmd = actuator_outputs.commands[i];
+    switch (cmd.hardware_slot)
+    {
+    case 0: // 上摆/滚转舵机
+      SetServoPos(cmd.value, TVC_ROLL_SERVO_PIN);
+      ch1_output = cmd.value;
+      break;
+    case 1: // 下摆/俯仰舵机
+      SetServoPos(cmd.value, TVC_PITCH_SERVO_PIN);
+      ch2_output = cmd.value;
+      break;
+    case 2: // 前电机
+      SetServoPos(cmd.value, MOTOR1_PIN);
+      ch3_output = cmd.value;
+      break;
+    case 3: // 尾电机
+      SetServoPos(cmd.value, MOTOR2_PIN);
+      ch4_output = cmd.value;
+      break;
+    default:
+      break;
+    }
+  }
 
   // 执行器指令物理量纲（全模式统一捕获）→ AnoCom 0x40 帧 / 上位机 TVC 显示
   g_tvc_upper_deg = upper_gimbal_deg;
