@@ -40,7 +40,7 @@ enum AnoVarType : uint8_t
 };
 
 // ---- 容量上限 ----
-#define ANO_VARS_MAX_COUNT  96   // 注册表上限（0xF3 count 为 u16；watch 仍限 16）
+#define ANO_VARS_MAX_COUNT  112  // 注册表上限（0xF3 count 为 u16；watch 仍限 16）
 #define ANO_VARS_MAX_WATCH  16   // 上报集合上限
 #define ANO_VARS_NAME_LEN   16   // 名称定长（0xF3 帧 PAR_NAME 16B，含 NUL 截断约束）
 #define ANO_VARS_MAV_NAME_LEN 10 // MAVLink NAMED_VALUE_FLOAT 名称 ≤9 字符 + NUL

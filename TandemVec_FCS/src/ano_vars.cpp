@@ -132,6 +132,9 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_BOOL("hdg_abs",           g_heading_aiding_valid),
     ANO_VAR_FLOAT("hdg_abs_age",      g_heading_aiding_age_s),
     ANO_VAR_BOOL("pos_deg",           g_mode_degraded_heading),
+    ANO_VAR_BOOL("hdg_hold",          g_heading_hold_allowed),
+    ANO_VAR_FLOAT("hdg_win",          g_nomag_hold_left_s),
+    ANO_VAR_U8("hdg_mode",            g_heading_aid_mode),
 
     // ---- IMU 健康（2026-10，ins_imu_health.h；只读）----
     ANO_VAR_U8("imu_state",           g_imu_health_state),

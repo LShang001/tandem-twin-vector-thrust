@@ -2718,6 +2718,9 @@ void handleNavigationSystem()
         (heading_out.best_age_s < 1.0e6f) ? heading_out.best_age_s : -1.0f;
     g_heading_hold_allowed = heading_out.heading_hold_allowed;
     g_pos_hold_degraded = heading_out.position_hold_degraded;
+    g_nomag_hold_left_s = (g_heading_aid_mode != 0U)
+                              ? std::fmax(0.0f, heading_out.valid_for_s)
+                              : -1.0f;
     // 无磁离地：限制零偏 z。GNSS 位置/速度更新会通过姿态-速度耦合把机体
     // 真实偏航率误估成陀螺零偏，导致 EKF 航向冻结而真值在转（SIL 风扰
     // 消融：GNSS 正常时 bias_z 40 s 吸收到 0.41 rad/s，断 GNSS 时保持 0.008）。

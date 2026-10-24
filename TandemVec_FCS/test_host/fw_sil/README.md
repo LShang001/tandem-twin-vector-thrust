@@ -295,7 +295,7 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | 2 kHz 短窗追踪 | `--trace-fast PATH --trace-fast-window A:B` | 记录窗口内 plant 角速率与 IMU 原始 gyro/accel（2 kHz），用于区分高频模态、混叠与控制器行为；仅测试设施，默认关闭 |
 | 6DOF 积分子步 | `--plant-substeps N` | 诊断用：将 0.5 ms 的 plant 积分再细分 N 步（默认 1 保持旧行为），用于判断显式欧拉近 Nyquist 数值振荡 |
 | 航向源模式 | `--heading-aid-mode 0\|1\|2` `--heading-align-deg X` | 仅测试用：0=磁连续（默认）；1=磁仅初始对准；2=无磁手动对准（机头真北角 X）。模式 1/2 允许 20 s 内的位置保持/heading hold（yaw 1σ≤20°），窗口从离地起算（地面等待不计时，落地复位），结束或超限降级定高；这是短时边界，不承诺长时定点 |
-| 前飞段测试 | `--pos-leg N:E` | 仅测试用：进入 AUTO_POSITION 时把目标点叠加北/东偏移 [m]，用于“起飞→有倾斜前飞→转定点”时序 |
+| 前飞段测试 | `--pos-leg N:E` | 仅测试用：进入 AUTO_POSITION 时把目标点叠加北/东偏移 [m]，用于“起飞→有倾斜前飞→转定点”时序；**trace 的 `hold_n/hold_e` 不含该偏移**，分析误差时须自行加上 N/E |
 | 前飞→定点时序 | `--pos-hold-at T --fwd-stick A:B` | 仅测试用：T 秒前保持定高、A–B 秒压俯仰杆建立速度/倾斜，T 秒切 AUTO_POSITION；需配合 `--pos-leg` 验证无磁运动航向启动定点 |
 | 风窗口 | `--wind-window A:B` | 仅测试用：覆盖默认 20–25 s 侧风时段，用于验证 20 s 无磁窗口内受风保持 |
 | 零偏限幅 | `--bias-z-max R` | 无磁离地时陀螺零偏 z 限幅 [rad/s]，默认 0.01；0=关闭（消融对比） |

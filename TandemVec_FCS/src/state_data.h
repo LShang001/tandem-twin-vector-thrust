@@ -845,6 +845,8 @@ extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针�
 // 无磁离地时陀螺零偏 z 限幅 [rad/s]：防止 GNSS 更新把真实偏航率吸收成零偏。
 // 0.01 rad/s ≈ 0.57°/s，20 s 累积 ≤11.5°，落在短时保持窗口内。
 extern float g_nomag_bias_z_max_radps;
+// 无磁 20 s 保持窗口剩余时间 [s]；-1 表示当前不是无磁模式（遥测/告警用）。
+extern float g_nomag_hold_left_s;
 // GNSS 失联后重捕获的一次性目标重锚请求：位置保持把当前点作为新目标，
 // 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
 extern bool g_pos_hold_reanchor;
