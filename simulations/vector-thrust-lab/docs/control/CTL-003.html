@@ -164,11 +164,13 @@ seeds 通过（定高 9.17–9.29 m、max_roll
 40），外加姿态目标 α=0.85、修正角 α=0.25
 两级滤波；<code>RATE_MODE</code> 与实飞工程一样每拍复位速率 PID。已通过
 <code>BFS_COAXIAL_VTVL</code> / <code>CoaxialVTVL</code> env 接入
-<code>runGNCExecutive</code>，共用输入/模式/定高/目标姿态层；<code>run_coaxial_acceptance.sh</code>
-用真实固件 + 近似共轴 plant 跑出 mag_clean/mag_nominal/nomag_degraded ×5
-seeds <strong>15/15 PASS</strong>。<strong>仍无共轴台架/HIL/实机；plant
-惯量/力臂/差速力矩是 L1
-假设，没有外部实飞日志做逐波形回放。</strong></li>
+<code>runGNCExecutive</code>，共用输入/模式/定高/目标姿态层；<code>test_coaxial_reference_equivalence</code>
+用实飞工程 <code>PositionPID/ComplementaryFilter</code>
+原头文件做参考，600 拍（ATTITUDE/RATE/手动/失效）逐拍误差
+0；<code>run_coaxial_acceptance.sh</code> 用真实固件 + 近似共轴 plant
+跑出 mag_clean/mag_nominal/nomag_degraded ×5 seeds <strong>15/15
+PASS</strong>。<strong>仍无共轴台架/HIL/实机；plant 惯量/力臂/差速力矩是
+L1 假设，没有外部实飞日志做逐波形回放。</strong></li>
 <li><code>include/LiquidRocketModel.h</code>（2026-10-24）：L1
 液体火箭推进模型（点火/解锁互锁、阀门/推力速率、Tmin、比冲质量流、推进剂耗尽、变质量）与双轴喷管
 asin 几何；参数取自外部 <code>VTVL_LiquidRocket_FC</code> 的 CCAEGT
@@ -365,5 +367,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 href="../verification/VER-002.html">VER-002
 三机型兼容性与虚拟验证</a>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:42</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:47</footer></article></body>
 </html>

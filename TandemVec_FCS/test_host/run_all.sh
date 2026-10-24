@@ -66,6 +66,22 @@ run_one "$ROOT/test_host/test_liquid_rocket_model.cpp" lrm ""
 # 共轴双桨 VTVL DirectTvcRate 控制律（CoaxialVtvControl.h，纯平台无关——
 # 通道极性/限幅/手动旁路/偏航差速 + 简化 6DOF 刚体闭环）：
 run_one "$ROOT/test_host/test_coaxial_vtv_control.cpp" cvc ""
+# 共轴控制律输出级参考等价（实飞工程 PositionPID/ComplementaryFilter 原头文件）：
+echo "---- 编译 cxreq ----"
+if ! $CXX -std=$STD -O2 $INCLUDES -I"$ROOT/test_host/reference/coaxial" $STUB_INCLUDE \
+     "$ROOT/test_host/test_coaxial_reference_equivalence.cpp" \
+     "$ROOT/test_host/reference/coaxial/coax_reference.cpp" \
+     -o "$BIN_DIR/cxreq$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] cxreq"
+  fail=1
+else
+  echo "---- 运行 cxreq ----"
+  if ! "$BIN_DIR/cxreq$EXE_SUFFIX"; then
+    echo "[RUN FAIL] cxreq"
+    fail=1
+  fi
+  echo
+fi
 # 液体火箭闭环 SIL（LiquidRocketModel + mapNozzleGimbal + 简化 6DOF 垂直回收）：
 run_one "$ROOT/test_host/test_liquid_rocket_sil.cpp" lrsil ""
 # 液体 CCAEGT 实飞参考制导 + 本机推进模型（外部参考库逐字复制于

@@ -113,8 +113,8 @@ PASS</strong>；宿主/固件编译/GOV 全绿</td>
 3.8/30；±80°/s、±10°、±180 µs；α=0.85/0.25 滤波）</td>
 <td><code>CoaxialVTVL</code>
 env，<code>CoaxialVtvControl + mapCoaxialVtvOutputs</code></td>
-<td>实飞同款 PID/滤波/限幅结构；宿主 6DOF 闭环；真实固件 SIL
-<code>mag_clean/mag_nominal/nomag_degraded</code> ×5 <strong>15/15
+<td>实飞原头文件参考等价（600 拍 max_err=0）；宿主 6DOF 闭环；真实固件
+SIL <code>mag_clean/mag_nominal/nomag_degraded</code> ×5 <strong>15/15
 PASS</strong></td>
 <td>外部实飞日志逐波形回放；台架/HIL；plant 惯量/力臂/差速力矩为 L1
 假设；偏航无自动 heading hold</td>
@@ -150,6 +150,12 @@ m；不计入位置保持验收。</li>
 <li><code>CoaxialVtvControl</code> 与实飞工程逐项对齐：外环/内环 PID
 增益、积分限幅（40/5/50）、输出限幅（±80/±10/±180）、微分滤波
 0.2、姿态目标 α=0.85、修正角 α=0.25、RATE_MODE 每拍复位速率 PID。</li>
+<li><strong>输出级参考等价</strong>：<code>test_coaxial_reference_equivalence</code>
+直接编译实飞工程的
+<code>PositionPID.h</code>/<code>ComplementaryFilter.h</code>
+原头文件做参考，在 600 拍确定性序列 （ATTITUDE/RATE/手动
+TVC/失效回中）上逐拍比较两轴修正角与偏航差速，
+<code>max_err roll/pitch/yaw = 0.000000</code>。</li>
 <li>真实固件（<code>BFS_COAXIAL_VTVL</code>）+ 近似
 plant：<code>mag_clean</code> hold_end 0.29–0.88 m、max_roll
 0.71–1.17°；<code>mag_nominal</code> hold_end 0.16–0.85 m、max_roll
@@ -260,5 +266,5 @@ href="../control/CTL-003.html">CTL-003</a>）：</p>
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:42</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 16:47</footer></article></body>
 </html>
