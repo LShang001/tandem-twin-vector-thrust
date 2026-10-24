@@ -387,6 +387,21 @@ with delayed GPS/vision measurements；Predictor-Based Time Delay Control
 of A Hex-Jet UAV (IEEE RA-L 2025)；modified Smith predictor for
 integrating processes。**结论：lead 是下一轮 SIL/台架首选，不是实机结论。**
 
+### 5.9 INDI 增量非线性动态逆（否定）
+
+`fast_mc variant="indi"`：用滤波后的陀螺角加速度做增量修正
+`α=α_prev+(ν−ω̇_meas)/b0`。100k：
+
+| 滤波 τ | 通过 | 失败 | P95 |
+|---|---|---|---|
+| 0.02 s | 77.76% | 0.97% | 25.58° |
+| 0.05 s | 72.91% | 1.29% | 35.31° |
+
+INDI 确实把 90–120/120–150 ms 失败降到 490→60 / 465→35，但低延迟段新增
+66 例失败、丢通过 2,116，P95 从 11.6° 升到 25.6°：陀螺差分噪声/延迟
+使增量项抖动。**整体不如 PID/detune/lead，不接入固件**；保留为
+delay-specific 研究分支。数据：`sim-data/indi-2026-10-24/`。
+
 ## 6 证据等级
 
 L1：模型/参数假设下的数值包线；不是 L2 SIL，不是 HIL/台架/实机。

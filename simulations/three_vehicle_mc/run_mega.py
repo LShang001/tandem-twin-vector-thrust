@@ -50,7 +50,7 @@ def main() -> int:
     ap.add_argument("--duration", type=float, default=20.0)
     ap.add_argument("--nominal", action="store_true")
     ap.add_argument("--variant", default="fixed",
-                    choices=["fixed", "auth", "osc", "adaptive", "adrc", "lead"])
+                    choices=["fixed", "auth", "osc", "adaptive", "adrc", "lead", "indi"])
     ap.add_argument("--osc-window", type=float, default=0.25)
     ap.add_argument("--osc-threshold", type=float, default=6.0)
     ap.add_argument("--osc-decay", type=float, default=0.90)
@@ -64,6 +64,8 @@ def main() -> int:
     ap.add_argument("--adrc-wo", type=float, default=50.0)
     ap.add_argument("--adrc-b0", type=float, default=1.0)
     ap.add_argument("--lead-s", type=float, default=0.0)
+    ap.add_argument("--indi-filter-tau", type=float, default=0.02)
+    ap.add_argument("--indi-b0", type=float, default=1.0)
     ap.add_argument("--vehicles", default="TandemVec,CoaxialVTVL,LiquidRocket")
     ap.add_argument("--seed", type=int, default=20261024)
     ap.add_argument("--out", default="")
@@ -85,6 +87,7 @@ def main() -> int:
             "gain_scale": args.gain_scale,
             "adrc": {"wc": args.adrc_wc, "wo": args.adrc_wo, "b0": args.adrc_b0},
             "lead_s": args.lead_s,
+            "indi": {"filter_tau_s": args.indi_filter_tau, "b0": args.indi_b0},
         },
         "vehicles": {}, "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设",
     }
@@ -115,7 +118,9 @@ def main() -> int:
                              gain_scale=args.gain_scale,
                              adrc_wc=args.adrc_wc, adrc_wo=args.adrc_wo,
                              adrc_b0=args.adrc_b0,
-                             lead_s=args.lead_s)
+                             lead_s=args.lead_s,
+                             indi_filter_tau_s=args.indi_filter_tau,
+                             indi_b0=args.indi_b0)
                 chunk = []
                 for i in range(n):
                     row = dict(vehicle=name, case=done + i,

@@ -1,0 +1,14 @@
+{
+  "seed": 20261031,
+  "note": "L1 INDI negative",
+  "filter_0.02": {
+    "pass_rate": 0.77756,
+    "fail_rate": 0.00969,
+    "max_ang_p95": 25.57970952867888
+  },
+  "filter_0.05": {
+    "pass_rate": 0.7291,
+    "fail_rate": 0.01291,
+    "max_ang_p95": 35.31027377816931
+  }
+}

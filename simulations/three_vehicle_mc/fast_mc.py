@@ -100,7 +100,8 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
              osc_min_rate_dps: float = 2.0,
              osc_ref_gate_deg: float = 0.5, gain_scale: float = 1.0,
              adrc_wc: float = 16.0, adrc_wo: float = 50.0,
-             adrc_b0: float = 1.0, lead_s: float = 0.0):
+             adrc_b0: float = 1.0, lead_s: float = 0.0,
+             indi_filter_tau_s: float = 0.02, indi_b0: float = 1.0):
     """向量化闭环；返回 metrics dict（每个 case 一行）。
 
     ref_roll_deg/ref_pitch_deg 可为标量或长度 steps 的数组（瞬态跟踪）；
@@ -131,6 +132,10 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     az1r = np.zeros(n); az2r = np.zeros(n); aur = np.zeros(n)
     az1p = np.zeros(n); az2p = np.zeros(n); aup = np.zeros(n)
     az1y = np.zeros(n); az2y = np.zeros(n); auy = np.zeros(n)
+    indi_pr = np.zeros(n); indi_qr = np.zeros(n); indi_rr = np.zeros(n)
+    indi_pd = np.zeros(n); indi_qd = np.zeros(n); indi_rd = np.zeros(n)
+    indi_ur = np.zeros(n); indi_up = np.zeros(n); indi_uy = np.zeros(n)
+    indi_first = True
 
     # 等效角加速度权限：保持机型表给出的控制权限（不再用惯量比外推，
     # 避免把 TandemVec 小滚转惯量放大成不真实的滚转权限）。
@@ -221,7 +226,7 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
         else:
             auth_scale = 1.0
         gain_eff = auth_scale * gain_osc
-        if variant == "adrc":
+        if variant in ("adrc", "indi"):
             gain_eff = 1.0
 
         # 姿态串级 PD（角度域）；参考可为瞬态指令，传感器噪声进入反馈
@@ -256,6 +261,25 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
             alpha_yaw = np.clip((adrc_wc * (rate_ref_psi - az1y) - az2y) / adrc_b0,
                                 -alpha_yaw_max, alpha_yaw_max)
             auy = alpha_yaw
+        elif variant == "indi":
+            if indi_first:
+                indi_pr[:] = p_m; indi_qr[:] = q_m; indi_rr[:] = r_m
+                indi_first = False
+            a_i = 1.0 - np.exp(-dt / max(indi_filter_tau_s, dt))
+            indi_pd += ((p_m - indi_pr) / dt - indi_pd) * a_i
+            indi_qd += ((q_m - indi_qr) / dt - indi_qd) * a_i
+            indi_rd += ((r_m - indi_rr) / dt - indi_rd) * a_i
+            alpha_roll = np.clip(
+                indi_ur + (rate_kp * gain_eff * (rate_ref_phi - p_m) - indi_pd) / indi_b0,
+                -alpha_roll_max, alpha_roll_max)
+            alpha_pitch = np.clip(
+                indi_up + (rate_kp * gain_eff * (rate_ref_theta - q_m) - indi_qd) / indi_b0,
+                -alpha_max, alpha_max)
+            alpha_yaw = np.clip(
+                indi_uy + (rate_kp * gain_eff * (rate_ref_psi - r_m) - indi_rd) / indi_b0,
+                -alpha_yaw_max, alpha_yaw_max)
+            indi_ur[:] = alpha_roll; indi_up[:] = alpha_pitch; indi_uy[:] = alpha_yaw
+            indi_pr[:] = p_m; indi_qr[:] = q_m; indi_rr[:] = r_m
         elif variant == "lead":
             p_eff = p_m + lead_s * alpha_roll_act
             q_eff = q_m + lead_s * alpha_pitch_act
