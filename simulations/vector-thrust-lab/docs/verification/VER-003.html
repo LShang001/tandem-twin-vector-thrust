@@ -1257,10 +1257,17 @@ m）</td>
 m）；detune70 <strong>5/6</strong>（5.57 m）； detune70+scale-ki 5/6，与
 detune70 逐行相同（该 SIL 路径未体现 Ki 缩放）。 降增益把 L1 100k 失败
 1.90%→1.01/0.83%，但 SIL 在接近门限的 seed 上 反而把 1.10 m 推到 3.6–5.6
-m。<strong>当前位置保持 hold_end 裕度本身很小， 1
-个种子的相位变化即可翻转结论；不能用 L1
-失败率下降直接推固件默认值。</strong> 固定降增益仍只能作为 SIL/台架 A/B
-候选。数据：
+m。</p>
+<p>扩大到 10 seeds × 2 profiles（20 例）：fixed
+<strong>16/20</strong>（失败 mag_clean seed6/8/9、mag_nominal
+seed7；seed7 hold 104.7 m、roll 37°）， detune70
+<strong>15/20</strong>（失败 mag_clean seed3/5/8/9、mag_nominal seed10；
+seed5 hold 39.4 m、seed10 13.1 m）。detune70 修掉 baseline 的 seed6/7，
+但新增 seed3/5/10，<strong>净通过数少 1
+例</strong>。说明当前位置保持失败是外环/
+相位问题，不是速率环增益单一因素；hold_end 裕度本身很小（baseline 多次
+落在 1.0–1.5 m），单种子变化即可翻转。固定降增益仍只能作为 SIL/台架 A/B
+候选，不是实机调参结论。数据：
 <code>sim-data/aaf-2026-10-24/sil_acceptance.json</code>。</p>
 <h3 id="315-速率相位超前phase-leadl1-接近-aafsil-仍否定">3.15
 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）</h3>
@@ -1322,5 +1329,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:43</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:45</footer></article></body>
 </html>

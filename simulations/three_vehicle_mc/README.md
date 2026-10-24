@@ -482,10 +482,16 @@ K=0.3/0.5/0.8/1.2 为 80.47/0.91%、80.53/0.84%、80.54/0.84%、
 | detune70 + scale-ki | 5/6 | 与 detune70 逐行相同（该 SIL 路径未体现 Ki 缩放） |
 
 降增益把 L1 100k 失败 1.90%→1.01/0.83%，但在 SIL 的 mag_clean seed3 上
-反而把接近门限的 1.10 m 推到 3.6–5.6 m；其余 5 例正常。**这说明当前
-位置保持的 hold_end 裕度本身很小（基线 1.10/1.5 m），1 个种子的相位
-变化就能翻转结论；不能用“L1 失败率下降”直接推固件默认值。** 固定
-降增益仍只能作为 SIL/台架 A/B 候选，不是实机调参结论。数据：
+反而把接近门限的 1.10 m 推到 3.6–5.6 m；其余 5 例正常。
+
+**扩大到 10 seeds × 2 profiles（20 例）**：fixed **16/20**（失败
+mag_clean seed6/8/9 与 mag_nominal seed7；seed7 hold 104.7 m、roll 37°），
+detune70 **15/20**（失败 mag_clean seed3/5/8/9 与 mag_nominal seed10；
+seed5 hold 39.4 m、seed10 13.1 m）。detune70 修掉 baseline 的 seed6/7，
+但新增 seed3/5/10，**净通过数还少 1 例**。这说明当前位置保持的失败是
+外环/相位问题，不是速率环增益单一因素；`hold_end` 裕度本身很小
+（baseline 多次落在 1.0–1.5 m），单种子变化即可翻转。固定降增益仍只能
+作为 SIL/台架 A/B 候选，不是实机调参结论。数据：
 `sim-data/aaf-2026-10-24/sil_acceptance.json`。
 
 ### 5.12 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
