@@ -102,6 +102,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "CTL-001 控制架构与 SAS", "控制链总览、三通道 SAS 律、反馈极性整定、差速开方分配"),
         ("docs/05-控制与分配/CTL-002-可控性与失效模式.md", "control/CTL-002.html",
          "CTL-002 可控性与失效模式", "控制效能矩阵、可控性包线、失效模式登记与改进方向"),
+        ("docs/05-控制与分配/CTL-003-多机型与执行器抽象.md", "control/CTL-003.html",
+         "CTL-003 多机型与执行器抽象", "机型/能力位/执行器输出表、N 输入分配、VTVL/液体火箭扩展边界"),
     ]),
     ("推进与执行机构", [
         ("docs/06-推进与执行机构/PROP-001-推进与摆座模型.md", "propulsion/PROP-001.html",
