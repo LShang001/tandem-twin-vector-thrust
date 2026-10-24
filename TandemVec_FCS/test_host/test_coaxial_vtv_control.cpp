@@ -52,6 +52,7 @@ static bfs::CoaxialVtvInput baseInput()
 {
   bfs::CoaxialVtvInput in;
   in.attitude_active = true;
+  in.yaw_active = true;
   in.dt_s = 0.005f;
   return in;
 }
@@ -197,6 +198,7 @@ int main()
                               : 2.0f * static_cast<float>(RAD_TO_DEG);
       bfs::CoaxialVtvInput in;
       in.attitude_active = true;
+      in.yaw_active = true;
       in.dt_s = static_cast<float>(dt);
       in.error_roll_deg = sign_qw * static_cast<float>(q_err.x) * scale;
       in.error_pitch_deg = sign_qw * static_cast<float>(q_err.y) * scale;

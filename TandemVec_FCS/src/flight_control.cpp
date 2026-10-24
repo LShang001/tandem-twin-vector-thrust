@@ -1738,6 +1738,7 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
       MAX_MANUAL_yawRATE);
   control_in.attitude_active = inputs.is_unlocked && !inputs.is_manual_tvc &&
                                inputs.throttle_raw > 1050.0f;
+  control_in.yaw_active = inputs.is_unlocked && inputs.throttle_raw > 1050.0f;
   control_in.manual_tvc = inputs.is_manual_tvc;
   control_in.manual_roll_deg = mapFloat(
       inputs.roll_raw, 988.0f, 2012.0f, -kCoaxMaxCorrectionDeg,

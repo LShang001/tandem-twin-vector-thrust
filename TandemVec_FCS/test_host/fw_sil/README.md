@@ -343,7 +343,9 @@ HIL/实飞均未验证。
 `platformio.ini` 的 `CoaxialVTVL` env 定义 `BFS_COAXIAL_VTVL`；`runGNCExecutive`
 仍复用输入/模式/定高/目标姿态层，但从姿态控制开始改走
 `CoaxialVtvControl` + `mapCoaxialVtvOutputs`（±10° 修正、PWM 差速、45° 锁电机），
-不再进入 TandemVec 的 BTRUE/差速开方。编译通过：
+不再进入 TandemVec 的 BTRUE/差速开方。`CoaxialVtvControl` 的 PID 增益、
+积分限幅、姿态目标/修正角两级滤波和 RATE_MODE 复位行为已按实飞共轴工程
+逐项对齐（见 `CTL-003 §2.1`）。编译通过：
 
 ```bash
 cd TandemVec_FCS
@@ -361,13 +363,13 @@ BIN_DIR=/tmp/tv_fcs_fw_sil_coax \
   --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 1 --no-wind --mag
 ```
 
-3 seeds 结果（L2，近似 plant）：
+5 seeds 结果（L2，近似 plant）：
 
-- `mag_clean`：final_alt 9.84–9.94 m、hold_end 0.28–0.88 m、max_roll 0.72–1.21°；
-- `mag_nominal`：final_alt 9.04–9.10 m、hold_end 0.16–0.53 m、max_roll 10.72–14.26°；
-- `nomag_degraded`：final_alt 9.87–9.91 m、`pos_degraded=1`，位置保持被门控关闭，
-  hold 5.7–11.5 m 是风/残余倾斜漂移，max_roll 0.07–0.13°；
-- 9/9 PASS。
+- `mag_clean`：final_alt 9.84–9.94 m、hold_end 0.29–0.88 m、max_roll 0.71–1.17°；
+- `mag_nominal`：final_alt 9.04–9.12 m、hold_end 0.16–0.85 m、max_roll 8.59–14.23°；
+- `nomag_degraded`：final_alt 9.84–9.92 m、`pos_degraded=1`，位置保持被门控关闭，
+  hold 5.4–12.5 m 是风/残余倾斜漂移，max_roll 0.07–0.14°；
+- 15/15 PASS。
 
 **边界**：plant 的质量 0.84 kg、惯量 0.05/0.05/0.08、力臂 0.15 m、差速力矩
 0.0005 N·m/norm 都是 L1 假设（外部工程只给了 0.84 kg/14 N，未给惯量/力臂）；
