@@ -1,0 +1,65 @@
+{
+  "seed": 20261031,
+  "cases_per_vehicle": 100000,
+  "duration_s": 20.0,
+  "nominal": false,
+  "variant": "lead",
+  "osc_params": {
+    "window_s": 0.25,
+    "threshold": 6.0,
+    "decay": 0.9,
+    "recovery": 1.01,
+    "floor": 0.55,
+    "filter_tau_s": 0.05,
+    "min_rate_dps": 2.0,
+    "ref_gate_deg": 0.5,
+    "gain_scale": 1.0,
+    "adrc": {
+      "wc": 16.0,
+      "wo": 50.0,
+      "b0": 1.0
+    },
+    "lead_s": 0.05
+  },
+  "vehicles": {
+    "TandemVec": {
+      "cases": 100000,
+      "pass_rate": 0.80084,
+      "fail_rate": 0.00823,
+      "final_h_p50": 9.780677393164982,
+      "final_h_p05": 7.01433163239596,
+      "final_h_p95": 12.238620296931805,
+      "max_ang_p50": 4.0247911732011445,
+      "max_ang_p95": 10.149548077906926,
+      "sat_frac_p50": 0.0,
+      "sat_frac_p95": 0.0,
+      "top_param_corr": [
+        [
+          "thrust_loss",
+          -0.624251616778521
+        ],
+        [
+          "wind_up",
+          -0.07989810279382362
+        ],
+        [
+          "servo_jam",
+          0.048041380743384245
+        ],
+        [
+          "sensor_rate_dps",
+          0.004378140398162219
+        ],
+        [
+          "mass_mult",
+          0.003964280154943603
+        ],
+        [
+          "thrust_mult",
+          0.0037046083397475906
+        ]
+      ]
+    }
+  },
+  "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设"
+}

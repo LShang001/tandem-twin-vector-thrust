@@ -31,6 +31,7 @@
 | `transient-2026-10-24/` | 姿态双拍/突风瞬态，fixed/selective/detune 对比 | L1 瞬态基准 |
 | `ablation-2026-10-24/` | 100k fixed/selective/detune 消融、跨机型与 casewise | L1 消融 |
 | `adrc-2026-10-24/` | 一阶 ADRC/ESO 四组带宽 100k | L1 现代控制否定 |
+| `lead-2026-10-24/` | 速率预测 L=0.02–0.12，100k/1M/瞬态/对抗 | L1 当前最强候选 |
 
 ## 2 thrust_loss 建模勘误（2026-10-24）
 

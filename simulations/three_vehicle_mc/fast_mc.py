@@ -100,7 +100,7 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
              osc_min_rate_dps: float = 2.0,
              osc_ref_gate_deg: float = 0.5, gain_scale: float = 1.0,
              adrc_wc: float = 16.0, adrc_wo: float = 50.0,
-             adrc_b0: float = 1.0):
+             adrc_b0: float = 1.0, lead_s: float = 0.0):
     """向量化闭环；返回 metrics dict（每个 case 一行）。
 
     ref_roll_deg/ref_pitch_deg 可为标量或长度 steps 的数组（瞬态跟踪）；
@@ -256,6 +256,16 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
             alpha_yaw = np.clip((adrc_wc * (rate_ref_psi - az1y) - az2y) / adrc_b0,
                                 -alpha_yaw_max, alpha_yaw_max)
             auy = alpha_yaw
+        elif variant == "lead":
+            p_eff = p_m + lead_s * alpha_roll_act
+            q_eff = q_m + lead_s * alpha_pitch_act
+            r_eff = r_m + lead_s * alpha_yaw_act
+            alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_eff),
+                                 -alpha_roll_max, alpha_roll_max)
+            alpha_pitch = np.clip(rate_kp * gain_eff * (rate_ref_theta - q_eff),
+                                  -alpha_max, alpha_max)
+            alpha_yaw = np.clip(rate_kp * gain_eff * (rate_ref_psi - r_eff),
+                                -alpha_yaw_max, alpha_yaw_max)
         else:
             alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_m),
                                  -alpha_roll_max, alpha_roll_max)

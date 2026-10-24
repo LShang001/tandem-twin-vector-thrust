@@ -16,7 +16,7 @@ for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 $CC -std=c11 -O2 -Ilib/ublox-main/src -c lib/ublox-main/src/minmea.c -o "$BIN_DIR/minmea.o"
 
 OUT_BASE="$BIN_DIR/fw_real"
-$CXX -std=c++17 $OPT -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO=300 \
+$CXX -std=c++17 $OPT ${EXTRA_CXXFLAGS:-} -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO=300 \
   -DBFS_EKF_BARO_ALTITUDE_UPDATE \
   -Wno-address-of-packed-member -Wno-psabi \
   $INC \

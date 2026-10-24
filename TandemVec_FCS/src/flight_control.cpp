@@ -55,9 +55,19 @@
 #ifdef BFS_COAXIAL_VTVL
 #include "CoaxialVtvControl.h"    // 共轴双桨 DirectTvcRate（机型选择分支）
 #endif
+#ifdef BFS_RATE_LEAD
+#include "RateLeadPredictor.h"    // 速率预测/超前补偿（opt-in，默认关闭）
+#endif
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
+
+#ifdef BFS_RATE_LEAD
+static bfs::RateLeadPredictor g_rate_lead_roll;
+static bfs::RateLeadPredictor g_rate_lead_pitch;
+static bfs::RateLeadPredictor g_rate_lead_yaw;
+static float g_rate_lead_alpha_prev[3] = {0.0f, 0.0f, 0.0f};
+#endif
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 【层0】RC 输入与模式判定
@@ -181,6 +191,11 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
     rollRatePID.reset();   // Roll 角速率内环
     pitchRatePID.reset();  // Pitch 角速率内环
     yawRatePID.reset();    // Yaw 角速率内环
+#ifdef BFS_RATE_LEAD
+    g_rate_lead_alpha_prev[0] = 0.0f;
+    g_rate_lead_alpha_prev[1] = 0.0f;
+    g_rate_lead_alpha_prev[2] = 0.0f;
+#endif
     // 位置与垂直轴
     altitudePositionPController.reset();
     altitudeVelocityPIDController.reset();
@@ -1271,16 +1286,29 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     //       另：PositionPID 的 D 项按"每拍差分"实现（未除 dt），kd≠0 时
     //       数值量纲隐含 200 Hz，不能当连续域微分用。
     // ────────────────────────────────────────────────────────────────────
+#ifdef BFS_RATE_LEAD
+    const float rate_meas_roll = g_rate_lead_roll.predict(
+        current_omega_dps_body_filtered.x, g_rate_lead_alpha_prev[0]);
+    const float rate_meas_pitch = g_rate_lead_pitch.predict(
+        current_omega_dps_body_filtered.y, g_rate_lead_alpha_prev[1]);
+#else
+    const float rate_meas_roll = current_omega_dps_body_filtered.x;
+    const float rate_meas_pitch = current_omega_dps_body_filtered.y;
+#endif
     gnc_tel.alpha_ref_dps2[0] = rollRatePID.computeDerivativeOnMeasurement(
-        gnc_tel.omega_ref_dps[0], current_omega_dps_body_filtered.x, 0.005f);
+        gnc_tel.omega_ref_dps[0], rate_meas_roll, 0.005f);
     // ★ 2026-08-10 通读修复：原误用 rollRatePID（复制粘贴）——pitchRatePID.compute
     //   从未被调用 → pitch 积分恒 0、且 roll/pitch 共享同一 PID 实例的积分状态互相污染；
     //   在线辨识 i_term[1]=pitchRatePID.getIntegral() 因此恒 0（pitch CG/配平力矩辨识失效）。
     //   迁移前 kp 相同（0.28）掩盖了比例项错误，实机调参稳定期未被发现。修复后 pitch 积分独立。
     gnc_tel.alpha_ref_dps2[1] = pitchRatePID.computeDerivativeOnMeasurement(
-        gnc_tel.omega_ref_dps[1], current_omega_dps_body_filtered.y, 0.005f);
+        gnc_tel.omega_ref_dps[1], rate_meas_pitch, 0.005f);
     gnc_tel.alpha_ref_dps2[0] = rollOutputFilter.filter(gnc_tel.alpha_ref_dps2[0]);
     gnc_tel.alpha_ref_dps2[1] = pitchOutputFilter.filter(gnc_tel.alpha_ref_dps2[1]);
+#ifdef BFS_RATE_LEAD
+    g_rate_lead_alpha_prev[0] = gnc_tel.alpha_ref_dps2[0];
+    g_rate_lead_alpha_prev[1] = gnc_tel.alpha_ref_dps2[1];
+#endif
     outputs.alpha_roll_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[0]);
     outputs.alpha_pitch_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[1]);
   }
@@ -1398,9 +1426,18 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     gnc_tel.omega_ref_dps[2] = yawAngleOutputFilter.filter(gnc_tel.omega_ref_dps[2]);
 
     // 内环统一角度域：速率误差(deg/s) → 角加速度指令(deg/s²)。
+#ifdef BFS_RATE_LEAD
+    const float rate_meas_yaw = g_rate_lead_yaw.predict(
+        current_omega_dps_body_filtered.z, g_rate_lead_alpha_prev[2]);
+#else
+    const float rate_meas_yaw = current_omega_dps_body_filtered.z;
+#endif
     gnc_tel.alpha_ref_dps2[2] = yawRatePID.computeDerivativeOnMeasurement(
-        gnc_tel.omega_ref_dps[2], current_omega_dps_body_filtered.z, 0.005f);
+        gnc_tel.omega_ref_dps[2], rate_meas_yaw, 0.005f);
     gnc_tel.alpha_ref_dps2[2] = yawOutputFilter.filter(gnc_tel.alpha_ref_dps2[2]);
+#ifdef BFS_RATE_LEAD
+    g_rate_lead_alpha_prev[2] = gnc_tel.alpha_ref_dps2[2];
+#endif
     outputs.alpha_yaw_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[2]);
   }
   else

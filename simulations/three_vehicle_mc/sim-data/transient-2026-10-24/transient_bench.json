@@ -80,6 +80,21 @@
       "final_h_p95": 12.203177877364146
     },
     {
+      "scenario": "hover",
+      "variant": "lead05",
+      "fail_rate": 0.0,
+      "track_rms_roll": 1.7956401407396876,
+      "track_rms_roll_p95": 4.059582717266573,
+      "max_track_err_p95": 17.23515734545931,
+      "sat_frac_mean": 0.0,
+      "sat_frac_p95": 0.0,
+      "gain_min_p05": 1.0,
+      "gain_active_mean": 0.0,
+      "gain_active_p95": 0.0,
+      "final_h_p05": 7.339442308704037,
+      "final_h_p95": 12.204130630929214
+    },
+    {
       "scenario": "doublet_slow",
       "variant": "fixed",
       "fail_rate": 0.0125,
@@ -153,6 +168,21 @@
       "gain_active_p95": 0.0,
       "final_h_p05": 7.291006385961563,
       "final_h_p95": 12.167675404302466
+    },
+    {
+      "scenario": "doublet_slow",
+      "variant": "lead05",
+      "fail_rate": 0.0,
+      "track_rms_roll": 4.7189413530431885,
+      "track_rms_roll_p95": 5.9859246280278136,
+      "max_track_err_p95": 29.734697349033667,
+      "sat_frac_mean": 0.0,
+      "sat_frac_p95": 0.0,
+      "gain_min_p05": 1.0,
+      "gain_active_mean": 0.0,
+      "gain_active_p95": 0.0,
+      "final_h_p05": 7.287987395062634,
+      "final_h_p95": 12.171042218326258
     },
     {
       "scenario": "doublet_fast",
@@ -230,6 +260,21 @@
       "final_h_p95": 12.197544841146648
     },
     {
+      "scenario": "doublet_fast",
+      "variant": "lead05",
+      "fail_rate": 0.0005,
+      "track_rms_roll": 8.904987224709384,
+      "track_rms_roll_p95": 10.934582066056848,
+      "max_track_err_p95": 31.3410551848376,
+      "sat_frac_mean": 0.0,
+      "sat_frac_p95": 0.0,
+      "gain_min_p05": 1.0,
+      "gain_active_mean": 0.0,
+      "gain_active_p95": 0.0,
+      "final_h_p05": 7.326769728218135,
+      "final_h_p95": 12.194751375753501
+    },
+    {
       "scenario": "wind_step",
       "variant": "fixed",
       "fail_rate": 0.0115,
@@ -303,6 +348,21 @@
       "gain_active_p95": 0.0,
       "final_h_p05": 9.251445126618568,
       "final_h_p95": 14.118637273918345
+    },
+    {
+      "scenario": "wind_step",
+      "variant": "lead05",
+      "fail_rate": 0.0,
+      "track_rms_roll": 1.7956401407396876,
+      "track_rms_roll_p95": 4.059582717266573,
+      "max_track_err_p95": 17.23515734545931,
+      "sat_frac_mean": 0.0,
+      "sat_frac_p95": 0.0,
+      "gain_min_p05": 1.0,
+      "gain_active_mean": 0.0,
+      "gain_active_p95": 0.0,
+      "final_h_p05": 9.25394739990477,
+      "final_h_p95": 14.119603612223184
     },
     {
       "scenario": "wind_sine",
@@ -380,6 +440,21 @@
       "final_h_p95": 12.029400947347002
     },
     {
+      "scenario": "wind_sine",
+      "variant": "lead05",
+      "fail_rate": 0.0,
+      "track_rms_roll": 1.7956401407396876,
+      "track_rms_roll_p95": 4.059582717266573,
+      "max_track_err_p95": 17.23515734545931,
+      "sat_frac_mean": 0.0,
+      "sat_frac_p95": 0.0,
+      "gain_min_p05": 1.0,
+      "gain_active_mean": 0.0,
+      "gain_active_p95": 0.0,
+      "final_h_p05": 7.194839430286593,
+      "final_h_p95": 12.030811326349914
+    },
+    {
       "scenario": "combined",
       "variant": "fixed",
       "fail_rate": 0.0125,
@@ -453,6 +528,21 @@
       "gain_active_p95": 0.0,
       "final_h_p05": 7.183550183685427,
       "final_h_p95": 12.021621420838693
+    },
+    {
+      "scenario": "combined",
+      "variant": "lead05",
+      "fail_rate": 0.0005,
+      "track_rms_roll": 8.904987224709384,
+      "track_rms_roll_p95": 10.934582066056848,
+      "max_track_err_p95": 31.3410551848376,
+      "sat_frac_mean": 0.0,
+      "sat_frac_p95": 0.0,
+      "gain_min_p05": 1.0,
+      "gain_active_mean": 0.0,
+      "gain_active_p95": 0.0,
+      "final_h_p05": 7.1806566959950695,
+      "final_h_p95": 12.020389495317364
     }
   ]
 }

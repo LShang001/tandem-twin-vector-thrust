@@ -77,7 +77,8 @@ def main() -> int:
     variants = {"fixed": ("fixed", {}), "selective": ("osc", SEL),
                 "selective_aggr": ("osc", SEL_AGGR),
                 "detune85": ("fixed", {"gain_scale": 0.85}),
-                "detune70": ("fixed", {"gain_scale": 0.70})}
+                "detune70": ("fixed", {"gain_scale": 0.70}),
+                "lead05": ("lead", {"lead_s": 0.05})}
     rows = []
     for scen, kw in scenarios(steps).items():
         for name, (variant, osc) in variants.items():

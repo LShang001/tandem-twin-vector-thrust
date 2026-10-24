@@ -1,0 +1,67 @@
+{
+  "seed100k": 20261031,
+  "seed1m": 20261032,
+  "note": "L1 lead predictor; not flight validated",
+  "sweep_100k": {
+    "lead02": {
+      "pass_rate": 0.80067,
+      "fail_rate": 0.00843,
+      "max_ang_p95": 10.169827618538053
+    },
+    "lead05": {
+      "pass_rate": 0.80084,
+      "fail_rate": 0.00823,
+      "max_ang_p95": 10.149548077906926
+    },
+    "lead08": {
+      "pass_rate": 0.80084,
+      "fail_rate": 0.00823,
+      "max_ang_p95": 10.155907063788149
+    },
+    "lead12": {
+      "pass_rate": 0.80084,
+      "fail_rate": 0.00823,
+      "max_ang_p95": 10.15885093484784
+    }
+  },
+  "100k": {
+    "pass_rate": 0.80084,
+    "fail_rate": 0.00823,
+    "max_ang_p95": 10.149548077906926,
+    "final_h_p05": 7.01433163239596,
+    "final_h_p95": 12.238620296931805
+  },
+  "1m": {
+    "pass_rate": 0.801788,
+    "fail_rate": 0.008624,
+    "max_ang_p95": 10.103107017994668,
+    "final_h_p05": 7.011984752835628,
+    "final_h_p95": 12.230236795198271
+  },
+  "adversarial": {
+    "fixed": {
+      "angle_max": 310.2,
+      "angle_median": 308.2,
+      "h_min": -4051.0,
+      "h_median": -3737.6
+    },
+    "detune70": {
+      "angle_max": 170.0,
+      "angle_median": 169.6,
+      "h_min": -1525.6,
+      "h_median": -1159.9
+    },
+    "lead05": {
+      "angle_max": 11.2,
+      "angle_median": 9.2,
+      "h_min": 5.5,
+      "h_median": 5.6
+    },
+    "lead08": {
+      "angle_max": 8.1,
+      "angle_median": 7.8,
+      "h_min": 5.6,
+      "h_median": 5.6
+    }
+  }
+}

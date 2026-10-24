@@ -449,6 +449,34 @@ ADRC 失败率与 delay 的相关 0.71–0.80；wc12 相对 fixed 无救回、12
 ADRC/ESO 不能直接替换现有速率 PID，不接入默认飞控；模块保留为研究库，
 继续需加延迟补偿或先做 SIL。** 数据：`sim-data/adrc-2026-10-24/`。
 
+### 3.11 速率预测/超前补偿（lead，当前最强 L1 候选）
+
+`RateLeadPredictor.h` 用上一拍角加速度预测当前速率：
+`ω_pred=ω_meas+L·α_prev`，再送原速率 PID；不降增益，是 predictor/Smith
+类延迟补偿的最小形式。固件已加 `BFS_RATE_LEAD` opt-in 分支（默认关闭），
+`-DBFS_RATE_LEAD` 单文件编译通过。
+
+100k（seed 20261031）：L=0.02/0.05/0.08/0.12 s 失败 0.84/0.82/0.82/0.82%，
+通过 80.07/80.08/80.08/80.08%。**1M（seed 20261032，L=0.05）：
+通过 80.18%、失败 0.86%，无故障失败 0.00%；逐 case 救回 10,980、
+新增失败 0、丢通过 82；延迟 90–120/120–150/150–200/>200 ms 失败
+4699→471 / 5161→111 / 1669→21 / 36→1。** 与 detune70（80.16%/0.87%）
+基本持平但不降增益。
+
+瞬态：hover/慢双拍失败 0%，roll RMS 1.80°/4.72°，优于 detune70
+（1.99°/5.25°）；快双拍 RMS 8.90°（fixed 7.89°、detune70 8.40°），
+失败 0.05%，有轻微高频跟踪代价。对抗最坏组合（8 噪声种子）：
+fixed 310°/−4051 m、detune70 170°/−1526 m、**lead05 11.2°/5.5 m**、
+lead08 8.1°/5.6 m。
+
+边界：fast MC 用 `alpha_act`（执行器滤波后的指令）预测，固件 opt-in 用
+上一拍 `alpha_ref`，两者不完全等价；SIL 尚未通过；固定 L=0.05 s 对未知/
+时变延迟不一定最优，高噪声/高 lead 未系统扫。文献方向（仅方法参考）：
+predictor-based position control of quadrotor with delayed GPS/vision
+measurements；Predictor-Based Time Delay Control of A Hex-Jet UAV
+(IEEE RA-L 2025)；modified Smith predictor for integrating processes。
+**结论：lead 是下一轮 SIL/台架首选，不是实机结论。**
+
 ## 4 解释边界
 
 - 这是 **L1 降阶 MC**：无 EKF/导航融合、无气动/桨叶动态、无真实振动谱；
