@@ -663,22 +663,29 @@ seed3 新失败；不要追边际种子。数据：`sim-data/yaw-tune-2026-10-25
 但 seed12 仍 19.3 m 失败，seed13 53.1 m。**限制航向速率会削弱大磁修正
 后的恢复，属于按种子调参；固件已恢复原行为。** 基线 20 种子 36/40，
 剩余边界为 seed6 3.67 m、seed8/9 pos_rms 1.06/1.03、seed13 55.3 m
-（磁航向 kick/门控类，非 yaw 速率可修）。数据：
+（磁航向 kick/门控类，非 yaw 速率可修）。**扩到 50 seeds：90/100**
+（mag_clean 9/50、mag_nominal 1/50），严重尾部 seed13 55.3、seed23
+18.9、seed49 clean 8.76/nominal 12.29 m，其余多为 1.06–1.56 m 或
+pos_rms 1.03–1.13 的边际。数据：
+`sil-acceptance-50seed-baseline-2026-10-25.json`、
 `sil-acceptance-20seed-baseline-2026-10-25.json`、
 `sil-acceptance-20seed-2026-10-25.json`、
 `sil-acceptance-20seed-yawcond-2026-10-25.json`、
 `yaw-hold-limit-conditional-2026-10-25.json`。**不要再按 seed6 调 yaw
 速率上限。**
 
-**光流辅助对照（诊断 profile，不替换默认基线）**：`mag_clean` 默认无光流
-（`clean` 环境 `flow=false`），seed8/9 的 1 m 级 `pos_rms` 主要来自
-20–25 s GNSS 失联段的惯导滑行。额外加 `--flow` 后 10 seeds 的
-`pos_rms` 全部降到 **0.26–0.83 m**（seed8/9：1.06/1.03 → 0.48/0.57），
-但 `hold_end` 反而有 3 例超 1.5 m 门限（seed1 7.88 m/roll 18.2°、
-seed7 1.55 m、seed9 2.18 m，roll ≤12.3°），**7/10**。说明光流测速
-能修导航滑行误差，却会通过速度环与位置保持耦合引入保持误差；不能把
-“加光流”当成无条件下改善。`mag_nominal` 环境本身已含光流且 10/10
-通过；默认 `mag_clean` 基线继续保持无光流，避免掩盖该耦合。数据：
+**光流辅助对照（诊断 profile，不替换默认基线；随机流未对齐）**：
+`mag_clean` 继承 `clean`，**无 GNSS 失联、无风、无振动**；seed8/9 的
+`pos_rms` 1.06/1.03 是 0.5 m/轴 GNSS 噪声 + EKF 估计的本底（水平
+RMS≈0.707 m），不是失联滑行。加 `--flow` 的 10 seeds 结果为
+`pos_rms` 0.26–0.83 m、但 `hold_end` 3 例超 1.5 m 门限（seed1 7.88 m/
+roll 18.2°、seed7 1.55 m、seed9 2.18 m），**7/10**。**该差异不能归因于
+光流**：SIL 的光流噪声会消耗 RNG，启用 `--flow` 会改变整条传感器噪声
+序列；本对照未做随机流对齐。且 `mag_clean` 无 GNSS 失联时
+`handleIndoorOpticalFlowVelocityFusion` 在 GNSS 有效时直接返回，光流
+最多只在初始化窗口起作用。结论只能是“配置变化会改变该种子的边界”，
+不能说明光流因果；默认 `mag_clean` 继续保持无光流。若要做因果 A/B，
+必须固定 RNG 流或给光流独立的 RNG。数据：
 `sim-data/flow-aiding-2026-10-25.json`。新 profile 名必须在
 `run_real_acceptance.py::BIN_PROFILE_ALIAS` 映射到 SIL 认识的 profile，
 否则二进制会回落到 nominal（无磁）——这是本轮已踩过的测试台坑。

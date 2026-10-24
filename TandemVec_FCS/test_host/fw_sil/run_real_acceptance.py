@@ -55,8 +55,9 @@ PROFILES = {
          "mag_fused_min": 30, "require_mag_cal": True,
          "max_roll_max": 20.0, "max_pitch_max": 20.0},
     ),
-    # 光流辅助的磁 clean：二进制仍用 mag_clean 环境，仅额外打开光流；
-    # 用于对比 GNSS 失联段惯导滑行误差，不替换无光流基线。
+    # 光流诊断 profile：二进制仍用 mag_clean 环境，仅额外打开光流。
+    # mag_clean 无 GNSS 失联；SIL 光流噪声会消耗 RNG，随机流未对齐，
+    # 结果不能归因于光流，只作配置敏感性诊断，不替换无光流基线。
     "mag_clean_flow": (
         ["--no-wind", "--flow"],
         {"final_alt": (8.0, 11.0), "hold_end_rms": 1.5, "pos_rms": 1.0,

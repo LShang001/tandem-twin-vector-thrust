@@ -697,20 +697,25 @@ seed13 由 55.3 m 放大到 196.7 m。仅在小误差（<20°）钳 14°/s、大
 回 80°/s 也不够：seed6 0.83 m 修好，但 seed12 仍 19.3 m、seed13
 53.1 m。**限制航向速率削弱大磁修正后的恢复，属于按种子调参；固件已
 恢复原行为。** 20 种子基线 36/40，剩余边界 seed6 3.67 m、seed8/9
-pos_rms 1.06/1.03、seed13 55.3 m（磁航向 kick/门控类）。数据：
+pos_rms 1.06/1.03、seed13 55.3 m（磁航向 kick/门控类）。**50 seeds
+90/100**（mag_clean 9/50、mag_nominal 1/50），严重尾部 seed13 55.3、
+seed23 18.9、seed49 clean 8.76/nominal 12.29 m，其余多为 1.06–1.56 m
+或 pos_rms 1.03–1.13 的边际。数据：
+`sim-data/sil-acceptance-50seed-baseline-2026-10-25.json`、
 `sim-data/sil-acceptance-20seed-baseline-2026-10-25.json`、
 `sim-data/sil-acceptance-20seed-2026-10-25.json`、
 `sim-data/sil-acceptance-20seed-yawcond-2026-10-25.json`、
 `sim-data/yaw-hold-limit-conditional-2026-10-25.json`。
 
-光流辅助对照（诊断，不替换默认基线）：`mag_clean` 默认无光流，
-seed8/9 的 1 m 级 `pos_rms` 主要来自 20–25 s GNSS 失联段惯导滑行。
-加 `--flow` 后 10 seeds 的 `pos_rms` 降到 0.26–0.83 m（seed8/9
-1.06/1.03 → 0.48/0.57），但 `hold_end` 有 3 例超门限（seed1 7.88 m、
-seed7 1.55 m、seed9 2.18 m，roll ≤18.2°），**7/10**。光流能修导航
-滑行误差，但经速度环与位置保持耦合引入保持误差；不能把“加光流”
-当成无条件下改善。`mag_nominal` 环境本身含光流且 10/10 通过，默认
-`mag_clean` 继续保持无光流。数据：`sim-data/flow-aiding-2026-10-25.json`。
+光流辅助对照（诊断，不替换默认基线；随机流未对齐）：`mag_clean` 继承
+`clean`，**无 GNSS 失联/风/振动**；seed8/9 的 pos_rms 1.06/1.03 是
+0.5 m/轴 GNSS 噪声 + EKF 估计本底（水平 RMS≈0.707 m），不是失联滑行。
+加 `--flow` 的 10 seeds 为 pos_rms 0.26–0.83 m、hold_end 3 例超门限
+（seed1 7.88 m、seed7 1.55 m、seed9 2.18 m），7/10。**不能归因于光流**：
+SIL 光流噪声消耗 RNG，启用 `--flow` 会改变整条噪声序列，本对照未做
+随机流对齐；且 GNSS 有效时光流融合函数直接返回，最多影响初始化窗口。
+默认 `mag_clean` 继续保持无光流；因果 A/B 需固定 RNG 流或独立光流 RNG。
+数据：`sim-data/flow-aiding-2026-10-25.json`。
 
 ### 3.22 MATLAB 频域裕度独立复核
 
