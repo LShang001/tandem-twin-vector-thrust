@@ -283,13 +283,22 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
 }
 
 /**
- * @brief 由模式通道档位判定飞行模式，并处理 GUIDED 指令超时降级
+ * @brief 由模式通道档位判定飞行模式，并处理 GUIDED 超时与航向不可观降级
  * @param[in] inputs 控制输入（只用 mode_channel_val；解锁门控在 getControlMode 内部）
  * @return ControlMode（MANUAL / AUTO_ALTITUDE / AUTO_POSITION / GUIDED）
  * @pre  CH7 模式通道已读入；GUIDED 模式要求上位机持续刷新制导指令
- * @note  超时门限 GUIDANCE_CMD_TIMEOUT_MS = 500 ms：制导链一断就退回 MANUAL，
- *        属于安全降级路径，任何改动都必须保留（不得为"连得上"而放宽）。
- * @ref   CTL-001 §8.6
+ * @note  ① 超时门限 GUIDANCE_CMD_TIMEOUT_MS = 500 ms：制导链一断就退回 MANUAL，
+ *           属于安全降级路径，任何改动都必须保留（不得为"连得上"而放宽）。
+ *        ② 航向不可观降级（2026-10）：`g_pos_hold_degraded` 由导航层
+ *           HeadingAidingGate 置位（磁矢量超过 2 s 无成功融合；YawGsf 只诊断，
+ *           不解除门控）。
+ *           AUTO_POSITION/GUIDED 都依赖绝对航向构造水平推力方向，航向不可观时
+ *           继续位置闭环会追逐漂移的航向估计（AGENTS.md EKF-in-loop 根因）。
+ *           此时强制降为 AUTO_ALTITUDE：保留高度环，放弃水平位置闭环；
+ *           摇杆仍可控制姿态。磁源恢复并连续 3 s 新鲜后由导航层解除门控。
+ *           无绝对航向源（未装磁/未标定/磁长时间受扰）不是可飞行状态，
+ *           该降级是安全边界，不是可选功能。
+ * @ref   CTL-001 §8.6；CTL-003 §2；AGENTS.md「EKF 进控制闭环 10/10 FAIL」
  * @units millis() 毫秒
  */
 ControlMode determine_control_mode(const ControlInputs_t &inputs)
@@ -301,6 +310,14 @@ ControlMode determine_control_mode(const ControlInputs_t &inputs)
   {
     mode = MANUAL; // 超时则强制切换到手动模式
                    // AnoCom.sendText("Guidance Timeout! Switching to MANUAL.");
+  }
+
+  g_mode_degraded_heading = false;
+  if (g_pos_hold_degraded &&
+      (mode == AUTO_POSITION || mode == GUIDED))
+  {
+    mode = AUTO_ALTITUDE;
+    g_mode_degraded_heading = true;
   }
   return mode;
 }
@@ -1267,6 +1284,9 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
  *          不符，已废止（2026-08-09 起为 ratchet hold）。
  *        ② 解锁瞬间以当前航向为参考（防旧参考导致起飞猛转）。
  *        ③ 差速通道受电机 τm=0.28 s 限带，航向环带宽必须保守（CTL-001 §8.6）。
+ *        ④ 2026-10-24：`g_pos_hold_degraded`（HeadingAidingGate，无新鲜磁/
+ *           YawGsf 航向）时禁用 ratchet hold，回中只给 ω_ref=0；否则会追逐
+ *           不可观且漂移的 AHRS 航向，SIL 无磁 nominal 已复现 yaw 自旋。
  * @test test_host/test_flight_control_axis.cpp T17（航向指令跟踪与转角验证）
  */
 void execute_yaw_controller(const ControlInputs_t &inputs,
@@ -1295,6 +1315,17 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     }
     const float yaw_stick_us = inputs.yaw_raw - 1500.0f;
     const float YAW_STICK_DEADBAND_US = 40.0f;   // 回中死区（杆位抖动）
+    // ★ 2026-10-24 航向不可观时禁止 heading hold：
+    //   无磁/无 GNSS 航向时 AHRS_Packet.Heading 的绝对误差不可观测，ratchet
+    //   hold 会持续追一个漂移的参考（SIL 无磁 nominal 出现 yaw 自旋）。
+    //   失效期间回中只做角速率=0（速率阻尼），不锁绝对航向；摇杆仍可控制 yaw。
+    //   磁源恢复且门控解除后，重新以当前航向为参考。位置保持降级与 yaw hold
+    //   降级共用同一个观测性门控，避免两处判据漂移。
+    const bool heading_hold_allowed = !g_pos_hold_degraded;
+    if (!heading_hold_allowed)
+    {
+      s_yaw_hold_armed = false;
+    }
     if (fabsf(yaw_stick_us) > YAW_STICK_DEADBAND_US)
     {
       // ★ 2026-08-11 FPV 摇杆曲线接入（yaw 通道，expo/super 独立参数）
@@ -1302,9 +1333,12 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
           yaw_stick_us / 512.0f,
           kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[2],
           kFlightCtrlParams.rc_super[2], MAX_MANUAL_yawRATE);
-      s_yaw_hold_ref_rad = AHRS_Packet.Heading;  // 持续刷新：回中即锁当时航向
+      if (heading_hold_allowed)
+      {
+        s_yaw_hold_ref_rad = AHRS_Packet.Heading;  // 持续刷新：回中即锁当时航向
+      }
     }
-    else
+    else if (heading_hold_allowed)
     {
       // 回中：航向短弧误差（ref−current，与 roll/pitch 误差约定一致）→ 速率指令
       float yaw_err = s_yaw_hold_ref_rad - AHRS_Packet.Heading;
@@ -1314,6 +1348,11 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
           kFlightCtrlParams.att_yaw.kp * yaw_err * RAD_TO_DEG,
           -kFlightCtrlParams.att_yaw.int_limit,
            kFlightCtrlParams.att_yaw.int_limit);
+    }
+    else
+    {
+      // 航向不可观：回中即零角速率（仅保留 yaw 速率阻尼）。
+      gnc_tel.omega_ref_dps[2] = 0.0f;
     }
     yawAnglePID.reset();  // 航向不用 PID 外环（自定义 hold 逻辑，增益取自 att_yaw 参数）
 

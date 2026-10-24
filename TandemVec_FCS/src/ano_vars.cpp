@@ -126,6 +126,13 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("mag_dip",          mag_status.dip_deg),
     ANO_VAR_U8("mag_init",            mag_status.init_source),
 
+    // ---- 绝对航向/位置保持门控（2026-10，HeadingAidingGate.h；只读）----
+    // hdg_abs = 当前有新鲜磁/YawGsf 绝对航向源；pos_deg = 本拍实际发生
+    // AUTO_POSITION/GUIDED → AUTO_ALTITUDE 的航向不可观降级。
+    ANO_VAR_BOOL("hdg_abs",           g_heading_aiding_valid),
+    ANO_VAR_FLOAT("hdg_abs_age",      g_heading_aiding_age_s),
+    ANO_VAR_BOOL("pos_deg",           g_mode_degraded_heading),
+
     // ---- IMU 健康（2026-10，ins_imu_health.h；只读）----
     ANO_VAR_U8("imu_state",           g_imu_health_state),
     ANO_VAR_U16("imu_fault",          g_imu_health_flags),

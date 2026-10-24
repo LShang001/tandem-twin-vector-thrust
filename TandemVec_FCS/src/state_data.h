@@ -828,6 +828,15 @@ struct MagRuntimeStatus
 };
 extern MagRuntimeStatus mag_status;
 
+// 绝对航向辅助与位置保持门控（2026-10，HeadingAidingGate.h）：
+// 磁矢量/YawGsf 最近成功融合时间不足时，AUTO_POSITION/GUIDED 视为航向不可观，
+// 上层应降级为不含水平位置闭环的 AUTO_ALTITUDE。`g_pos_hold_degraded` 是门控
+// 建议，`g_mode_degraded_heading` 是本拍实际发生的模式降级。
+extern bool g_heading_aiding_valid;
+extern float g_heading_aiding_age_s; // <0 表示从未融合
+extern bool g_pos_hold_degraded;
+extern bool g_mode_degraded_heading;
+
 // IMU 健康监测（2026-10，ins_imu_health.h）；0=Ok, 1=Warning, 2=Failed。
 extern uint8_t g_imu_health_state;
 extern uint16_t g_imu_health_flags;

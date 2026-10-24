@@ -58,6 +58,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "ins_static_aid_profile.h"
 #include "mag_reference.h"
 #include "mag_measurement_gate.h"
+#include "HeadingAidingGate.h"
 #include "ins_imu_health.h"
 #include "ins_gnss_consistency.h"
 
@@ -804,8 +805,20 @@ static uint32_t s_bias_temp_table_last_ms = 0;
 static InsVibrationEstimator s_vib_estimator;
 static uint32_t s_vib_gnss_bad_until_ms = 0;
 static bfs::MagMeasurementGate s_mag_gate;
+static bfs::HeadingAidingGate s_heading_aiding_gate;
 static uint32_t s_mag_last_consumed_seq = 0;
 static uint32_t s_mag_last_attempt_us = 0xFFFFFFFFu; // 首帧立即允许
+
+// IMU 无样本/非有限/Failed 时导航本帧不更新，但位置保持门控必须立即失效；
+// 否则上一帧的“磁航向有效”会继续放行位置闭环（控制仍用最后有效姿态）。
+static void markHeadingAidingInvalid()
+{
+  bfs::HeadingAidingInput heading_in; // 年龄默认 FLT_MAX = 无源
+  (void)s_heading_aiding_gate.update(heading_in);
+  g_heading_aiding_valid = false;
+  g_heading_aiding_age_s = -1.0f;
+  g_pos_hold_degraded = true;
+}
 static bfs::ImuHealthMonitor s_imu_health;
 static bfs::InsGnssConsistencyMonitor s_gnss_consistency;
 static Eigen::Vector3f s_gnss_imu_dv_accum = Eigen::Vector3f::Zero();
@@ -963,6 +976,7 @@ void handleNavigationSystem()
     recordNavProfileStage(9U, micros() - _nav_profile_total_start);
     printNavProfileIfDue();
 #endif
+    markHeadingAidingInvalid();
     return; // 防止除零
   }
   local_acc_sum_x = acc_sum_x;
@@ -1017,12 +1031,14 @@ void handleNavigationSystem()
 #ifdef FW_SIL_REAL_NAV
     ++g_sil_nav_debug_imu_invalid;
 #endif
+    markHeadingAidingInvalid();
     return;
   }
   // 单 IMU 失效没有独立姿态源：确认 Failed 后保持最后有效导航输出，
   // 不继续用冻结样本积分，也不伪称“受控下降”。控制侧仍按最后有效陀螺值保持。
   if (imu_health_status.state == bfs::ImuHealthState::Failed)
   {
+    markHeadingAidingInvalid();
     return;
   }
 #ifdef FW_SIL_REAL_NAV
@@ -2536,6 +2552,28 @@ void handleNavigationSystem()
     Serial8.println();
     _ekf_time_sum = _ekf_time_cnt = 0;
     _sg_attempt = _sg_fused = 0;
+  }
+
+  // 绝对航向辅助可用性 → 位置保持门控（2026-10）：
+  // 磁矢量只有 EKF **成功融合**才把 age 清零；门控拒绝/无样本都会让年龄增长。
+  // YawGsf 是“GNSS 航迹 − 光流侧滑”的航向观测，只在有速度时成立，不能替代
+  // 悬停磁航向。失效时上层 AUTO_POSITION/GUIDED 必须降级为定高，否则位置
+  // 保持会追逐不可观航向估计，形成姿态-位置耦合发散（AGENTS.md EKF-in-loop）。
+  {
+    bfs::HeadingAidingInput heading_in;
+    heading_in.mag_age_s = aid_tracker.status(bfs::AidSource::Mag).age_s;
+    heading_in.yaw_gsf_age_s =
+        aid_tracker.status(bfs::AidSource::YawGsf).age_s;
+    const Eigen::Vector3f vel_ned = nav_ekf.ned_vel_mps();
+    heading_in.horizontal_speed_mps =
+        std::hypot(vel_ned(0), vel_ned(1));
+    heading_in.dt_s = nav_update_dt_s;
+    const bfs::HeadingAidingOutput heading_out =
+        s_heading_aiding_gate.update(heading_in);
+    g_heading_aiding_valid = heading_out.source_fresh;
+    g_heading_aiding_age_s =
+        (heading_out.best_age_s < 1.0e6f) ? heading_out.best_age_s : -1.0f;
+    g_pos_hold_degraded = heading_out.position_hold_degraded;
   }
 }
 

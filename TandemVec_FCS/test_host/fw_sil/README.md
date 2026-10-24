@@ -223,37 +223,47 @@ BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/build_and_run_real.sh \
 | nominal | 1 g/80 Hz 振动、20 ms 延迟、5 s 失联、1 m/s² 风、光流 | 常规退化验收 |
 | degraded | 2 g/120 Hz、50 ms、2.5 m 噪声、5 s 失联、1.5 m/s² 风、2% 野值、光流、IMU 丢样 | 退化边界 |
 | mag_clean / mag_nominal | 在 clean/nominal 上加 100 Hz 磁注入、0.3/0.6 µT 噪声 | 磁链路无干扰基线 |
-| mag_disturbed | nominal + 12 µT NED 慢变干扰 | 磁门控拒绝边界 |
+| mag_disturbed | nominal + 12 µT NED 慢变干扰 | 磁门控拒绝/姿态有界；不验收位置保持 |
+| nomag_degraded | clean 环境但不注入磁 | 验证 `HeadingAidingGate` 降级到定高、`pos_degraded=1` |
 | `--rc-loss A:B` | 单独注入真实 `linkDownCallback` failsafe | 不能与传感器退化混在一起 |
 | `imu_stuck` / `imu_nan` / `imu_drop` | 10–11 s 冻结/NaN/全丢样 | 只验收“检测/隔离”，不验收降落品质 |
 | `gnss_spoof` | 15 s 起 0.5 m/s ramp + 一致性拒绝 | 只验收监测/拒绝路径，不保证位置保持 |
 
 ### 当前基线（L2 SIL，3 seeds/profile，2026-10-24 垂直推力重构后）
 
-**位置保持验收基线必须启用磁力计。** 无磁 `clean/nominal/degraded` 在 40 s
-位置保持中约 23 s 后出现姿态/航向发散（clean seed1 末段 `hold_end≈50 m`），
-根因是悬停航向/姿态不可观（见 AGENTS.md「EKF 进控制闭环 10/10 FAIL」）。
-2026-10-24 复测：该失败在重构前 HEAD 与重构后二进制上 1 Hz 轨迹逐行一致，
-不是垂直推力映射改动引入；此前 README 的“clean/nominal/degraded 9/9”记录
-与当前脚本不符，已按实测更正。无磁 profile 只用于观测性/失效研究。
+**无磁时位置保持已被安全门控降级，不再作为验收项。** `HeadingAidingGate`
+只把“磁矢量最近成功融合 ≤2 s”当作绝对航向源；失效即把 AUTO_POSITION/GUIDED
+强制降为 AUTO_ALTITUDE，并关闭 yaw heading hold（回中只给 ω_ref=0）。无磁
+`nomag_degraded` ×3 seeds **3/3 PASS**：final_alt 9.17–9.29 m、max_roll=0、
+`pos_degraded=1`。加门控前无磁 40 s 位置保持会在约 23 s 后姿态/航向发散；
+该失败在重构前 HEAD 与重构后二进制上 1 Hz 轨迹逐行一致，不是垂直推力映射引入。
+**无磁 profile 现在只验证“降级到定高且不追不可观航向”，不再验证位置保持。**
 
-磁生产链 profile × 3 seeds **9/9 PASS**：
+磁生产链 profile ×3 seeds **6/6 PASS**（`mag_clean` + `mag_nominal`）：
 
-- `mag_clean`：final_alt 9.94–10.06 m，hold_end 0.80–1.44 m，pos_rms 0.48–0.89 m；
-- `mag_nominal`：final_alt 9.15–9.23 m，hold_end 0.45–1.18 m，pos_rms 0.55–1.05 m；
-- `mag_disturbed`：final_alt 9.14–9.22 m，hold_end 0.37–1.22 m，pos_rms 0.69–1.16 m，
-  mag gate 179–196/392。
+- `mag_clean`：final_alt 9.96–10.06 m，hold_end 0.71–1.10 m，pos_rms 0.48–0.89 m；
+- `mag_nominal`：final_alt 9.15–9.24 m，hold_end 0.47–0.90 m，pos_rms 0.55–1.05 m。
 
-2026-10-24 全 10 profile × 3 seeds 复测：**21/30 PASS**；9 个失败全部是无磁
-`clean/nominal/degraded`（航向/姿态不可观的已知失效路径），磁基线、IMU 三类故障
-和 GNSS spoof 共 21 例全部 PASS。不要把 21/30 写成“系统通过”；无磁位置保持是
-未解决的安全边界，后续需要磁失效检测 + 位置保持门控/降级策略。
+`mag_disturbed`（nominal 的 GNSS 失联 + 12 µT 磁干扰）只验收“磁门控确实拒绝 +
+高度/姿态有界”，不把位置保持当判据：3 seeds 通过，mag gate 179–251/392；
+同时失去绝对航向与水平姿态辅助时，位置保持本身已不可保证。
+
+生产传感器 + 故障路径验收矩阵（`mag_clean,mag_nominal,mag_disturbed,
+nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof` ×3 seeds）：
+**24/24 PASS**。IMU 故障三类的 `imu_detected=1`、final_alt 9.16–9.29 m、
+max_roll 0–5.94°；它们属于 `skip_motion` 路径，`hold_end` 不作为判据
+（无磁时位置保持已被门控降级）。
 
 ```bash
 # 磁基线（位置保持验收）
 py -3.12 test_host/fw_sil/run_real_acceptance.py \
   --bin /tmp/tv_fcs_fw_sil_real/fw_real \
   --profiles mag_clean,mag_nominal,mag_disturbed --seeds 1,2,3 --seconds 40
+
+# 无磁降级路径（定高 + pos_degraded）
+py -3.12 test_host/fw_sil/run_real_acceptance.py \
+  --bin /tmp/tv_fcs_fw_sil_real/fw_real \
+  --profiles nomag_degraded --seeds 1,2,3 --seconds 40
 ```
 
 RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `linkDownCallback`
@@ -288,9 +298,10 @@ RC loss 结果也不能外推到真实链路/接收机失效。
   需重新 `magcal fit/save`；
 - 参考场来自 IGRF-14 2026.0 @ 28.2N/112.9E（`include/mag_reference.h`），NED、D 向下；
   导航层用 origin 与站点距离 >50 km 使参考场失效；
-- 3 seeds × 40 s 结果：`mag_clean`/`mag_nominal` 各 392 fused/0 gate，
-  `mag_disturbed` 204–212 fused/180–188 gate；三场景 final_alt 9.1–10.1 m、
-  pos_rms≤1.6 m。`mag_disturbed` 的拒绝期间不能用“仍然能飞”解释为磁融合成功。
+- 3 seeds × 40 s 结果：`mag_clean`/`mag_nominal` 约 380–392 fused、0–14 gate，
+  `mag_disturbed` 141–206 fused/186–251 gate；三场景 final_alt 9.1–10.1 m。
+  `mag_disturbed` 的拒绝期间不能用“仍然能飞”解释为磁融合成功；加入
+  `HeadingAidingGate` 后它只验收门控拒绝和姿态有界，不再要求位置保持。
 
 ### IMU 健康
 
@@ -303,7 +314,8 @@ RC loss 结果也不能外推到真实链路/接收机失效。
 ### GNSS 一致性
 
 - 默认 `g_gnss_consistency_reject_enabled=false`，只写 `gnss_susp/gnss_crej/gnss_cres` 遥测；
-  基线 clean/nominal/degraded 仍 9/9 PASS（warn-only）；
+  无磁 clean/nominal/degraded 现在会先经 `HeadingAidingGate` 降级为定高，不能再拿
+  clean/nominal/degraded 的位置保持当验收；磁基线 `mag_clean/mag_nominal` 6/6 PASS（warn-only）；
 - `--gnss-consistency-reject` 时 `gnss_spoof` profile（15 s 起 0.5 m/s ramp）出现
   `gnss_crej>0` 并跳过 GNSS；但无外部水平基准时拒绝后仍可能漂移，故该 profile
   `skip_motion`，只验收监测/拒绝路径；
@@ -313,7 +325,7 @@ RC loss 结果也不能外推到真实链路/接收机失效。
 # 磁与故障 profile（3 seeds，40 s）
 py -3.12 test_host/fw_sil/run_real_acceptance.py \
   --bin /tmp/tv_fcs_fw_sil_real/fw_real \
-  --profiles mag_clean,mag_nominal,mag_disturbed,imu_stuck,imu_nan,imu_drop,gnss_spoof \
+  --profiles mag_clean,mag_nominal,mag_disturbed,nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof \
   --seeds 1,2,3 --seconds 40
 ```
 

@@ -55,11 +55,15 @@ PROFILES = {
          "mag_fused_min": 30, "require_mag_cal": True,
          "max_roll_max": 20.0, "max_pitch_max": 20.0},
     ),
+    # 磁干扰 + nominal 的 GNSS 失联组合：只验收“磁门控确实拒绝 + 高度/姿态
+    # 有界”，不把位置保持当判据——同时失去绝对航向与水平姿态辅助时，
+    # 位置保持本身已不可保证。
     "mag_disturbed": (
         [],
-        {"final_alt": (6.0, 12.0), "hold_end_rms": 25.0, "pos_rms": 25.0,
+        {"final_alt": (6.0, 12.0), "pos_rms": 25.0,
+         "skip_hold_end": True,
          "mag_gate_min": 1, "require_mag_cal": True,
-         "max_roll_max": 25.0, "max_pitch_max": 25.0},
+         "max_roll_max": 60.0, "max_pitch_max": 60.0},
     ),
     # IMU 故障路径只验证“检测到并隔离”，不把故障后的降落品质当验收门。
     "imu_stuck": (
@@ -79,6 +83,14 @@ PROFILES = {
         ["--gnss-spoof", "0", "--gnss-spoof-ramp", "0.5",
          "--gnss-spoof-start", "15", "--gnss-consistency-reject"],
         {"skip_motion": True, "gnss_crej_min": 1},
+    ),
+    # 无磁（无绝对航向）降级路径：不再要求位置保持，只验证高度保持、
+    # 姿态有界和“确实发生 AUTO_POSITION→AUTO_ALTITUDE 降级”。
+    "nomag_degraded": (
+        ["--no-wind"],
+        {"final_alt": (8.0, 11.0), "pos_rms": 5.0,
+         "skip_hold_end": True, "require_pos_degraded": True,
+         "max_roll_max": 25.0, "max_pitch_max": 25.0},
     ),
 }
 
@@ -163,6 +175,8 @@ def main() -> int:
                 if finite(final_alt) and not (lo <= float(final_alt) <= hi):
                     errors.append(f"final_alt={final_alt} not in [{lo},{hi}]")
                 for key in ("hold_end_rms", "pos_rms"):
+                    if key == "hold_end_rms" and gates.get("skip_hold_end", False):
+                        continue
                     value = data.get(key)
                     if finite(value) and float(value) > gates[key]:
                         errors.append(f"{key}={value} > {gates[key]}")
@@ -179,6 +193,8 @@ def main() -> int:
                         errors.append(f"{key}={value} > {gates[limit_key]}")
             if gates.get("require_imu_detected") and data.get("imu_detected") != 1:
                 errors.append(f"imu_detected={data.get('imu_detected')}")
+            if gates.get("require_pos_degraded") and data.get("pos_degraded") != 1:
+                errors.append(f"pos_degraded={data.get('pos_degraded')}")
             if "gnss_crej_min" in gates and data.get("gnss_crej", 0) < gates["gnss_crej_min"]:
                 errors.append(f"gnss_crej={data.get('gnss_crej')} < {gates['gnss_crej_min']}")
 

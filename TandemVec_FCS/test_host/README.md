@@ -31,6 +31,7 @@
 | `test_generic_allocation.cpp` | `GenericControlAllocation.h` — 3×N 加权最小范数分配、限幅/冗余/秩亏、与 legacy BTRUE 等价 | TandemVec headers | 28 |
 | `test_tandemvec_allocator.cpp` | `TandemVecAllocator.h` — α_cmd/油门 → 摆角/差速/电机，零油门/饱和/τm 状态/前馈掩码 | TandemVec headers | 16 |
 | `test_thrust_allocation.cpp` | `ThrustAllocation.h` — 期望天向比力 → 总推力/油门，倾角补偿/cos 下限/上下饱和/非有限输入/旧 mapFloat 口径 | TandemVec headers | 25 |
+| `test_heading_aiding_gate.cpp` | `HeadingAidingGate.h` — 磁/YawGsf 航向新鲜度、失效立即降级、恢复 3 s 锁存、YawGsf 只诊断不解除、非有限输入 | 无 | 15 |
 
 > 注：`test_flight_control_axis.cpp` 的轴序为**直连序**（与 thrustWrench/allocateMoments 轴系自洽）。实机 `flight_control.cpp` mix 层存在存档系→模型系置换（悬停构型语义），两者对应关系涉及 README/flight_control/state_data 三处轴系注释矛盾（悬停 vs 巡航推力轴定义），**专项核对前不在测试中引入置换**（2026-08-08 审查结论）。
 

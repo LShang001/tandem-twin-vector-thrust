@@ -57,6 +57,9 @@ run_one "$ROOT/test_host/test_tandemvec_allocator.cpp" tva ""
 # 垂直推力机型映射（ThrustAllocation.h，纯平台无关——比力→总推力/油门、
 # 倾角补偿、上下饱和、非有限输入；锁旧 mapFloat 逐值口径）：
 run_one "$ROOT/test_host/test_thrust_allocation.cpp" talloc ""
+# 绝对航向辅助/位置保持降级门控（HeadingAidingGate.h，纯平台无关——
+# Mag/YawGsf 新鲜度、失效立即降级、恢复 3 s 锁存、YawGsf 速度门限）：
+run_one "$ROOT/test_host/test_heading_aiding_gate.cpp" hag ""
 run_one "$ROOT/test_host/test_altitude_reference.cpp"  ar  ""
 run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""

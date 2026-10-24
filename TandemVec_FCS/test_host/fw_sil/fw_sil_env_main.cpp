@@ -385,6 +385,14 @@ static void applyRealNavProfile(RealNavConfig &c, const char *name)
     c.rc_loss = false;
     c.imu_drop_prob = 0.0f;
   }
+  else if (std::strcmp(name, "nomag_degraded") == 0)
+  {
+    // 无磁观测性降级场景：环境用 clean，但不注入磁；由 HeadingAidingGate
+    // 强制 AUTO_POSITION→AUTO_ALTITUDE。不要复用 nominal 的 1g 振动/风，
+    // 否则把“降级后自由漂移”误当成控制发散。
+    applyRealNavProfile(c, "clean");
+    c.mag = false;
+  }
   else if (std::strcmp(name, "degraded") == 0)
   {
     c.profile = 2;
@@ -1013,7 +1021,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"mag_gate\":%u,\"mag_cal\":%d,\"mag_norm\":%.3f,"
               "\"mag_hdg\":%.3f,\"imu_state\":%d,\"imu_frz\":%.3f,"
               "\"imu_drop\":%.3f,\"imu_failed\":%d,\"imu_detected\":%d,"
-              "\"gnss_susp\":%d,\"gnss_crej\":%u,\"gnss_cres\":%.3f}\n",
+              "\"gnss_susp\":%d,\"gnss_crej\":%u,\"gnss_cres\":%.3f,"
+              "\"heading_aiding\":%d,\"heading_age\":%.2f,"
+              "\"pos_degraded\":%d}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -1030,7 +1040,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               imu_fault_detected_any ? 1 : 0,
               gnss_status.consistency_suspect ? 1 : 0,
               gnss_status.consistency_reject_count,
-              gnss_status.consistency_accel_res);
+              gnss_status.consistency_accel_res,
+              g_heading_aiding_valid ? 1 : 0,
+              static_cast<double>(g_heading_aiding_age_s),
+              g_mode_degraded_heading ? 1 : 0);
   return 0;
 }
 #endif  // FW_SIL_REAL_NAV
