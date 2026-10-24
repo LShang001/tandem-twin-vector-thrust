@@ -765,11 +765,6 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     // 首次进入时，将当前位置设为目标悬停点
     targetNorth = relative_north;
     targetEast = relative_east;
-#ifdef FW_SIL_REAL_NAV
-    // SIL 前飞段测试：仅在宿主 SIL 构建中叠加目标偏移，固件默认 0。
-    targetNorth += g_sil_pos_leg_n_m;
-    targetEast += g_sil_pos_leg_e_m;
-#endif
     loiter_state = LOITER_HOVERING; // 初始状态为悬停
   }
 
@@ -1008,10 +1003,23 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
     //   被调用，内部 currentMode 恒为 AUTO_POSITION，positionHoldEnabled 永不复位，
     //   目标点残留 → 从手动/定高切回定点时飞行器自动飞回旧悬停点（无操纵自主机动）。
     static ControlMode s_prev_mode = MANUAL;
+    static bool s_sil_leg_applied = false;
     if (s_prev_mode != AUTO_POSITION)
+    {
       positionHoldEnabled = false;  // 触发 handlePositionControl 内重新 init + 锁当前点
+      s_sil_leg_applied = false;
+    }
     s_prev_mode = mode;
     handlePositionControl(inputs.roll_raw, inputs.pitch_raw);
+#ifdef FW_SIL_REAL_NAV
+    // SIL 前飞段测试：切入 AUTO_POSITION 后一次性叠加目标偏移（固件默认 0）。
+    if (!s_sil_leg_applied)
+    {
+      targetNorth += g_sil_pos_leg_n_m;
+      targetEast += g_sil_pos_leg_e_m;
+      s_sil_leg_applied = true;
+    }
+#endif
     // `handlePositionControl` 更新全局的 thrust_comp_N/E
   }
   else if (mode == GUIDED)

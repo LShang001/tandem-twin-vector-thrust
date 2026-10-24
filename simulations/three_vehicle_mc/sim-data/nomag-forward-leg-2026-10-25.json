@@ -1,0 +1,18 @@
+{
+ "date": "2026-10-25",
+ "test": "SIL forward-leg 15 m: mag mode completes, no-mag cannot bootstrap AUTO_POSITION from rest (gate requires motion)",
+ "evidence_level": "L2",
+ "command": "fw_real --real-nav --profile {clean,mag_clean} --pos-hold --pos-leg 15:0 --heading-aid-mode {0,2}",
+ "cases": [
+  {
+   "profile": "leg",
+   "variant": "m0",
+   "final_alt": 9.976,
+   "hold_end_rms": 14.644,
+   "pos_rms": 0.893,
+   "max_roll": 10.538,
+   "pos_degraded": 0,
+   "heading_aiding": 1
+  }
+ ]
+}

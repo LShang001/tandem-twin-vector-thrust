@@ -154,6 +154,8 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 
 - **无磁/磁仅初始对准（2026-10-25）**：新增 `g_heading_aid_mode`（0=磁连续默认/1=磁仅初始/2=无磁手动）与 `g_heading_align_deg`（编译期 `BFS_HEADING_AID_MODE`/`BFS_HEADING_ALIGN_DEG`，SIL 可 CLI 覆盖）。物理边界：纯悬停和纯平移（风推、无倾斜）航向不可观——SIL seed1 在 4 m/s² 侧风定高下真实 yaw=0、EKF yaw 漂到 −147°；不能把 GNSS 速度方向当航向。`HeadingAidingGate` 在模式 1/2 下只在“水平速度>2 m/s + |roll|或|pitch|>5° + yaw 1σ≤10° + 航向变化率/陀螺一致性”运动激励时允许 AUTO_POSITION，heading hold 也只在运动激励期间允许；激励消失 coast 3 s 后降级定高，纯悬停不提供位置保持。放宽为“sigma+一致性即可悬停保持”的对照实测无风漂 26.6/33.2 m、侧风 161 m，已回退。SIL：模式0 mag_clean 3 seeds hold 1.15/0.71/1.10 m 不变；模式1/2 mag_clean/clean 3 seeds 高度 9.96–10.07 m、max_roll 0、pos_degraded=1、mag_fused=0；门控 T9–T11 全绿。已接 GCS 参数 hdg_mode/hdg_align（对准角须在下一次导航初始化前设置）；前飞→定点 SIL 时序与 yaw 漂移监测仍待做（来源：2026-10-25 无磁航向）
 
+- **MinGW O0 构建 Eigen SIL 失败（2026-10-25）**：`OPT=-O0` 编译 fw_real 时汇编器报 `too many sections (76084)` / `file too big`，构建无二进制；`build_and_run_real.sh` 默认 `-O2` 可正常构建。调试该 SIL 不要用 O0，需保留 O2 或用其他编译器；排查“构建卡住 3 分钟”时先看输出尾部是否有该汇编错误（来源：2026-10-25 前飞段测试构建）。
+
 ## 知识沉淀协议
 
 > 本协议在对话中自动生效。不是规章制度——是给你未来会话的自己的**记忆外挂**。
