@@ -940,6 +940,15 @@ C1（延迟/增益振荡类），C0/C2（推力损失/舵机卡死）基本不�
 410→72、<code>final_h&lt;−1000 m</code> 1225→210， 但最坏单例仍为
 349°/−3701 m，<strong>仍无最坏情况保证</strong>。</li>
 </ul>
+<p><strong>对抗搜索（AI 红队）</strong>：250 次 TPE 在采样范围内最大化
+<code>max_ang/60 + |h|/100</code>，fixed/tuned 找到同一最坏组合（延迟
+187 ms、 风 −4.5 m/s²、增益 1.38/1.36、τm 2.31×），280.6°/−2901 m； 8
+个噪声种子复核全部失败（最大角 282°、最低 −3046 m）。但 1M 随机 MC
+最坏单例更差（349°/−3701 m）：250 次主动搜索没有超过 100 万随机尾部。
+更关键的是 fixed 与 tuned
+逐值相同——该最坏模式是<strong>恒定风/发散</strong>，不是振荡，
+阻尼器不触发。说明对抗搜索是随机 MC 的补充而非替代，并能暴露算法不覆盖的
+失效模式（此处需要配平/积分或风估计）。</p>
 <p>TPE 候选比网格 tuned 更敏感、衰减更快；只在 fast MC
 的悬停/无驾驶杆输入下
 验证过，<strong>不直接改成固件默认值</strong>。<code>AdaptiveGainDamper</code>
@@ -964,7 +973,8 @@ T/W）上得到一致收益；共轴中性、液体净负，
 <li>ML 代理/风险图/主动学习/聚类/TPE 都是 <strong>L1
 数据内分析</strong>：标签来自 fast MC， 不是实机失效；all 模型的高 AUC
 部分来自故障标志特征；风险图高延迟角点稀疏； 聚类不是物理失效机理；TPE
-候选未经过 SIL/台架，不能直接当固件默认值。</li>
+候选未经过 SIL/台架，不能直接当固件默认值；
+对抗搜索是红队/最坏情况工具，不是概率估计，也不能证明真实结构/气动极限。</li>
 </ul>
 <h2 id="5-复现">5 复现</h2>
 <div class="sourceCode" id="cb2"><pre
@@ -985,5 +995,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:06</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:22</footer></article></body>
 </html>

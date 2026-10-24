@@ -214,6 +214,15 @@ fast MC 的悬停/无驾驶杆输入下验证过，**不直接改成固件默认
 `AdaptiveGainDamper` 当前默认仍是网格 tuned；TPE 结果作为下一轮
 SIL/台架 A/B 的候选。
 
+**对抗搜索（AI 红队，`ml_optuna_worstcase.py`）**：250 次 TPE 在采样范围内
+主动最大化 `max_ang/60 + |h|/100`，fixed/tuned 找到同一最坏组合：
+延迟 187 ms、风 −4.5 m/s²、增益 1.38/1.36、τm 2.31×，280.6°/−2901 m；
+8 个噪声种子复核全部失败（最大角 282°，最低 −3046 m）。但 1M 随机 MC 的
+最坏单例更差（349°/−3701 m）——250 次主动搜索没有超过 100 万随机尾部。
+更关键的是 fixed 与 tuned 结果逐值相同：该最坏模式是**恒定风/发散**，
+不是振荡，阻尼器不触发。结论：对抗搜索是随机 MC 的补充，不是替代；
+它还能暴露“算法不覆盖的失效模式”（这里是风偏/发散，需要配平/积分或风估计）。
+
 ### 5.5 复现
 
 ```bash
@@ -221,6 +230,7 @@ py -3.12 ml_failure_surrogate.py --fixed /tmp/fixed-1m.csv --tuned /tmp/tuned-1m
 py -3.12 ml_active_learning.py --data /tmp/fixed-1m.csv
 py -3.12 ml_failure_clusters.py --fixed /tmp/fixed-1m.csv --tuned /tmp/tuned-1m.csv
 py -3.12 ml_optuna_damper.py
+py -3.12 ml_optuna_worstcase.py --trials 250
 ```
 
 证据：`sim-data/ml-2026-10-24/`（metrics/风险图/校准/重要性/主动学习/
