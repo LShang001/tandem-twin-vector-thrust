@@ -18,7 +18,8 @@
  *          模式与降级标志；仅测试设施）、`--trace-fast PATH`
  *          `--trace-fast-window A:B`（2 kHz 短窗 plant 角速率与 IMU 原始
  *          样本，用于区分高频模态/混叠；仅测试设施）、`--pos-leg N:E`
- *          （进入 AUTO_POSITION 时叠加前飞段目标偏移，仅 SIL）；
+ *          （进入 AUTO_POSITION 时叠加前飞段目标偏移，仅 SIL）、
+ *          `--pos-hold-at T` `--fwd-stick A:B`（定高前飞后再切定点）；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -420,6 +421,9 @@ struct RealNavConfig
   bool flow = false;
   int flow_delay = 1;
   bool pos_hold = false;
+  float pos_hold_at = 5.0f;   // SIL 测试用：延迟切 AUTO_POSITION [s]
+  float fwd_stick_start = 1.0e9f; // SIL 测试用：前飞俯仰杆窗口
+  float fwd_stick_end = 1.0e9f;
   bool rc_loss = false;
   float rc_loss_start = 15.0f;
   float rc_loss_end = 17.0f;
@@ -709,8 +713,16 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         const uint16_t thr = (t < 1.0f) ? 1000 : ((t >= 2.0f && t < 5.0f) ? 1600 : 1500);
         // 1700 落在 AUTO_POSITION 档（<1750 不触发 GUIDED 轨迹规划），
         // 1800 会因 ignition 打开被判成 GUIDED，超时后退回 MANUAL。
-        const uint16_t mode = (cfg.pos_hold && t >= 5.0f) ? 1700 : ((t < 2) ? 1300 : 1500);
-        set_rc(thr, mode, t >= 0.5f);
+        const uint16_t mode = (cfg.pos_hold && t >= cfg.pos_hold_at)
+                                  ? 1700
+                                  : ((t < 2) ? 1300 : 1500);
+        uint16_t roll = 1500;
+        uint16_t pitch = 1500;
+        if (t >= cfg.fwd_stick_start && t < cfg.fwd_stick_end)
+        {
+          pitch = 1600;  // SIL 前飞段：定高模式下压杆建立速度和倾斜
+        }
+        set_rc(thr, mode, t >= 0.5f, roll, pitch);
       }
     }
 
@@ -1380,6 +1392,11 @@ int main(int argc, char** argv) {
       real_cfg.wind_force_mps2=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--no-baro-lag")==0) real_cfg.baro_lag=false;
     else if (std::strcmp(argv[i],"--pos-hold")==0) real_cfg.pos_hold=true;
+    else if (std::strcmp(argv[i],"--pos-hold-at")==0 && i+1<argc)
+      real_cfg.pos_hold_at=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--fwd-stick")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &real_cfg.fwd_stick_start,
+                  &real_cfg.fwd_stick_end);
     else if (std::strcmp(argv[i],"--no-flow")==0) real_cfg.flow=false;
     else if (std::strcmp(argv[i],"--rc-loss")==0 && i+1<argc)
     {

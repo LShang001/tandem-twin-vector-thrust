@@ -1,0 +1,37 @@
+{
+ "date": "2026-10-25",
+ "test": "SIL short forward stick then AUTO_POSITION: no-mag drifts 229-239 m, mag 6 m",
+ "evidence_level": "L2",
+ "cases": [
+  {
+   "mode": "m2",
+   "variant": "a0",
+   "final_alt": 9.993,
+   "hold_end_rms": 238.737,
+   "pos_rms": 0.424,
+   "max_roll": 9.764,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
+   "mode": "m2",
+   "variant": "a15",
+   "final_alt": 9.992,
+   "hold_end_rms": 229.276,
+   "pos_rms": 0.458,
+   "max_roll": 9.017,
+   "pos_degraded": 1,
+   "heading_aiding": 0
+  },
+  {
+   "mode": "m0",
+   "variant": "base",
+   "final_alt": 9.976,
+   "hold_end_rms": 6.093,
+   "pos_rms": 0.893,
+   "max_roll": 12.143,
+   "pos_degraded": 0,
+   "heading_aiding": 1
+  }
+ ]
+}

@@ -186,6 +186,18 @@ public:
             out.best_age_s = std::fmin(out.best_age_s, in.yaw_gsf_age_s);
         }
 
+        // 无磁/磁仅初始对准：绝对航向不可观。SIL 证明悬停/前飞后切定点都会
+        // 因航向估计漂移而发散（229–239 m），故禁用 AUTO_POSITION 与 heading
+        // hold，只保留定高/手动姿态；位置保持必须等绝对航向源可用。
+        if (in.heading_mode >= 1U)
+        {
+            out.source_fresh = false;
+            out.heading_hold_allowed = false;
+            out.position_hold_degraded = true;
+            out.valid_for_s = 0.0f;
+            return out;
+        }
+
         if (!out.source_fresh)
         {
             // 失效立即降级：不允许“先飞一会儿再看”。
