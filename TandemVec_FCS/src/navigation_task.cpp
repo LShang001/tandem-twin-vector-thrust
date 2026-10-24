@@ -2648,6 +2648,25 @@ void handleNavigationSystem()
         std::hypot(vel_ned(0), vel_ned(1));
     heading_in.heading_mode = g_heading_aid_mode;
     heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
+    {
+      // 无磁一致性：EKF 航向变化率应有陀螺 z 支撑；纯平移时估计器自漂
+      // 会表现为“航向在变、陀螺没动”。仅用于无磁模式门控。
+      static float s_prev_drift_heading_rad = 0.0f;
+      static bool s_prev_drift_heading_valid = false;
+      const float heading_now_rad = AHRS_Packet.Heading;
+      float heading_rate_dps = 0.0f;
+      if (s_prev_drift_heading_valid && nav_update_dt_s > 1.0e-4f)
+      {
+        float d = heading_now_rad - s_prev_drift_heading_rad;
+        while (d > 3.14159265f) d -= 6.2831853f;
+        while (d < -3.14159265f) d += 6.2831853f;
+        heading_rate_dps = d * 57.2957795f / nav_update_dt_s;
+      }
+      s_prev_drift_heading_rad = heading_now_rad;
+      s_prev_drift_heading_valid = true;
+      heading_in.yaw_drift_dps =
+          heading_rate_dps - current_omega_dps_body_filtered.z;
+    }
     if (gnss_instant_valid_for_nav && has_gnss_epoch)
     {
       const float gnss_speed_mps =
@@ -2696,6 +2715,7 @@ void handleNavigationSystem()
     g_heading_aiding_valid = heading_out.source_fresh;
     g_heading_aiding_age_s =
         (heading_out.best_age_s < 1.0e6f) ? heading_out.best_age_s : -1.0f;
+    g_heading_hold_allowed = heading_out.heading_hold_allowed;
     g_pos_hold_degraded = heading_out.position_hold_degraded;
   }
 }

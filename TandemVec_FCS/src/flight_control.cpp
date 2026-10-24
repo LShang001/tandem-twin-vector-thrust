@@ -1468,7 +1468,8 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     //   失效期间回中只做角速率=0（速率阻尼），不锁绝对航向；摇杆仍可控制 yaw。
     //   磁源恢复且门控解除后，重新以当前航向为参考。位置保持降级与 yaw hold
     //   降级共用同一个观测性门控，避免两处判据漂移。
-    const bool heading_hold_allowed = !g_pos_hold_degraded;
+    const bool heading_hold_allowed =
+        !g_pos_hold_degraded && g_heading_hold_allowed;
     if (!heading_hold_allowed)
     {
       s_yaw_hold_armed = false;

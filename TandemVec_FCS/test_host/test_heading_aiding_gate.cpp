@@ -162,28 +162,31 @@ int main()
     CHECK(!out.position_hold_degraded, "T8 磁新鲜+协方差小恢复位置保持");
   }
 
-  // T9 无磁模式：仅手动对准、无运动激励 → 不允许位置保持。
+  // T9 无磁模式：无运动激励 → 不允许位置保持/heading hold。
   {
     bfs::HeadingAidingGate gate;
     bfs::HeadingAidingInput in = input(1.0e9f);
     in.heading_mode = 2;
     in.yaw_sigma_deg = 5.0f;
+    in.yaw_drift_dps = 0.2f;
     for (int i = 0; i < 700; ++i) (void)gate.update(in);
     const auto out = gate.update(in);
     CHECK(out.position_hold_degraded, "T9 无运动激励保持降级");
-    CHECK(!out.source_fresh, "T9 无绝对/运动航向源");
+    CHECK(!out.heading_hold_allowed, "T9 无运动激励不 heading hold");
   }
 
-  // T10 无磁模式：速度+倾斜运动激励恢复保持；停止后 3 s coast 再降级。
+  // T10 无磁模式：运动激励恢复；停止后 3 s coast 再降级。
   {
     bfs::HeadingAidingGate gate;
     bfs::HeadingAidingInput in = input(1.0e9f);
     in.heading_mode = 2;
     in.yaw_sigma_deg = 5.0f;
+    in.yaw_drift_dps = 0.2f;
     in.motion_excitation_valid = true;
     for (int i = 0; i < 700; ++i) (void)gate.update(in);
-    CHECK(!gate.update(in).position_hold_degraded,
-          "T10 运动激励恢复保持");
+    auto out = gate.update(in);
+    CHECK(!out.position_hold_degraded, "T10 运动激励恢复保持");
+    CHECK(out.heading_hold_allowed, "T10 运动激励允许 heading hold");
     in.motion_excitation_valid = false;
     bool early_degraded = false;
     for (int i = 0; i < 599; ++i)
@@ -191,7 +194,7 @@ int main()
       if (gate.update(in).position_hold_degraded) early_degraded = true;
     }
     CHECK(!early_degraded, "T10 coast 未满 3 s 不降级");
-    const auto out = gate.update(in);
+    out = gate.update(in);
     CHECK(out.position_hold_degraded, "T10 coast 结束降级");
   }
 
@@ -205,6 +208,22 @@ int main()
     for (int i = 0; i < 700; ++i) (void)gate.update(in);
     CHECK(gate.update(in).position_hold_degraded,
           "T11 航向不确定度超限降级");
+  }
+
+  // T12 无磁模式：航向估计自漂（航向变、陀螺没动）时运动激励也不解除。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(1.0e9f);
+    in.heading_mode = 2;
+    in.yaw_sigma_deg = 5.0f;
+    in.motion_excitation_valid = true;
+    in.yaw_drift_dps = 6.0f;
+    bool drift_seen = false;
+    for (int i = 0; i < 300; ++i)
+    {
+      drift_seen = drift_seen || gate.update(in).position_hold_degraded;
+    }
+    CHECK(drift_seen, "T12 航向估计自漂降级");
   }
 
   if (g_fail == 0)

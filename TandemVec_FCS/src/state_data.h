@@ -835,6 +835,8 @@ extern MagRuntimeStatus mag_status;
 extern bool g_heading_aiding_valid;
 extern float g_heading_aiding_age_s; // <0 表示从未融合
 extern bool g_pos_hold_degraded;
+// 是否允许 ratchet heading hold（无磁悬停=false，仅位置保持可用）。
+extern bool g_heading_hold_allowed;
 // 航向源模式（2026-10，无磁/磁仅初始对准）：
 // 0=MAG_ONLY（默认，磁连续融合）；1=MAG_INIT_ONLY（磁仅初始化，之后靠运动
 // EKF/陀螺）；2=NO_MAG_MANUAL（无磁，起飞前手动对准 + 运动 EKF）。

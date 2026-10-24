@@ -536,6 +536,7 @@ MagRuntimeStatus mag_status;
 bool g_heading_aiding_valid = false;
 float g_heading_aiding_age_s = -1.0f;
 bool g_pos_hold_degraded = true;
+bool g_heading_hold_allowed = false;
 // 无磁/磁仅初始对准的默认值来自参数块（编译期默认值在 FlightCtrlParams.h）。
 uint8_t g_heading_aid_mode =
     static_cast<uint8_t>(kFlightCtrlParams.heading_aid_mode);
