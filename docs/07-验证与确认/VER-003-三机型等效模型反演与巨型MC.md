@@ -674,6 +674,12 @@ mag_clean seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
 但 10 s 已出现位置门限失败。数据：`sim-data/reanchor-sweep-2026-10-25/`、
 `sim-data/reanchor-longout-2026-10-25/`。
 
+失联时序（seeds 1/2/3/7，5 s）：10–15 s（位置保持前）seed3
+9.42 m 边际失败、其余 ≤1.55 m；25–30 s（保持中）全 pass（max 4.67 m）；
+30–35 s（后段）全 pass（max 1.67 m）。重锚对保持中/后段失联最有效；
+保持前失联仍会在进入位置保持时继承较差估计。数据：
+`sim-data/reanchor-timing-2026-10-25/`。
+
 ### 3.22 MATLAB 频域裕度独立复核
 
 MATLAB R2025b Control System Toolbox 对速率环连续近似

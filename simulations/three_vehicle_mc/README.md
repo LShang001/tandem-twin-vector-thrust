@@ -637,6 +637,12 @@ roll 18.0°），其余最大 hold 7.33 m、roll 18.7°；20 s 全部 pass
 位置门限失败；重锚解决的是“不发散”，不是“原位保持”。数据：
 `sim-data/reanchor-longout-2026-10-25/`。
 
+**失联时序**（seeds 1/2/3/7，5 s 失联）：10–15 s（位置保持前）seed3
+hold 9.42 m 边际失败，其余 ≤1.55 m；25–30 s（保持中）全部 pass，
+hold 最大 4.67 m；30–35 s（保持后段）全部 pass，hold 最大 1.67 m。
+重锚对“保持中/后段失联”最有效；保持前失联仍会在进入位置保持时
+继承较差估计。数据：`sim-data/reanchor-timing-2026-10-25/`。
+
 ### 5.19 MATLAB 频域裕度独立复核
 
 用 MATLAB R2025b Control System Toolbox 对速率环连续近似
