@@ -12,8 +12,9 @@
  *          @ref THY-003 §2–§3；CTL-001 §8.6（输出限幅/执行器口径）
  * @frame   N/A（不解释姿态/位置；输入已是输出通道量纲）
  * @units   输出百分比 %（点火 0/1）；归一化指令无量纲
- * @note    当前 `mapTandemVecOutputs()` 是旧 mix 公式的等价适配器，用于把
- *          固定两舵机/两电机路径先收敛到通用输出表；新增机型只需填 profile。
+ * @note    当前 `mapTandemVecOutputs()` 与 `mapCoaxialVtvOutputs()` 分别是两套
+ *          旧 mix 公式的等价适配器，用于把固定两舵机/两电机路径收敛到通用输出表；
+ *          新增机型只需填 profile。共轴适配器不包含其 DirectTvcRate 控制律。
  * @test    test_host/test_vehicle_profile.cpp
  * @see     include/VehicleProfile.h、src/flight_control.cpp
  */
@@ -157,6 +158,80 @@ inline OutputCommandSet mapTandemVecOutputs(
     normalizeTandemVecOutputs(upper_gimbal_deg, lower_gimbal_deg, motor1_pct,
                               motor2_pct, cal, normalized);
     return mapNormalizedOutputs(kTandemVecProfile, normalized, 4U);
+}
+
+struct CoaxialVtvOutputCalibration
+{
+    float servo_half_angle_deg = 15.0f;
+    float motor_min_us = 1000.0f;
+    float motor_max_us = 2000.0f;
+    float attitude_limit_deg = 45.0f;
+};
+
+struct CoaxialVtvOutputInput
+{
+    float roll_correction_deg = 0.0f;
+    float pitch_correction_deg = 0.0f;
+    float throttle_pct = 0.0f;
+    float yaw_diff_us = 0.0f;
+    float attitude_roll_deg = 0.0f;
+    float attitude_pitch_deg = 0.0f;
+    bool unlocked = false;
+    bool attitude_safe = true;
+};
+
+/**
+ * @brief 共轴双桨 VTVL 旧 mix 公式的兼容适配器
+ * @details 外部工程 `VTVL_ElectricDualRotor_FCS` 的 mix：
+ *          roll 舵机 = map(-roll,-15,15,66.67,33.33) ⇒ 50 + roll/15×16.67；
+ *          pitch 舵机 = map(pitch,-15,15,66.67,33.33) ⇒ 50 − pitch/15×16.67；
+ *          电机 = 1000–2000 µs 基准油门 ± yaw_diff，联合限幅；
+ *          未解锁/大倾角保护时基准回 1000 µs。
+ * @param[in] in 角度/油门/偏航差速/安全门控
+ * @param[in] cal 舵机半行程、电机 PWM 量程、姿态保护角
+ * @return 4 路输出命令（槽位 0/1 舵机，2/3 电调）
+ * @note 该适配器只统一“输出/量纲”，不统一共轴 VTVL 的 DirectTvcRate 控制律；
+ *       控制律接入仍是后续阶段。
+ * @ref CTL-003 §2.2（共轴双桨 VTVL 对照）；
+ *      外部实现参考 `VTVL_ElectricDualRotor_FCS/src/flight_control.cpp` mix 函数
+ */
+inline OutputCommandSet mapCoaxialVtvOutputs(
+    const CoaxialVtvOutputInput &in,
+    const CoaxialVtvOutputCalibration &cal)
+{
+    const float half = (std::fabs(cal.servo_half_angle_deg) > 1.0e-3f)
+                           ? cal.servo_half_angle_deg
+                           : 15.0f;
+    const float span = cal.motor_max_us - cal.motor_min_us;
+    const float safe_span = (span > 1.0e-3f) ? span : 1000.0f;
+    const float throttle = clampOutput(in.throttle_pct, 0.0f, 100.0f);
+
+    float base_us = cal.motor_min_us + throttle * 0.01f * safe_span;
+    const bool attitude_ok =
+        in.attitude_safe &&
+        std::fabs(in.attitude_roll_deg) < cal.attitude_limit_deg &&
+        std::fabs(in.attitude_pitch_deg) < cal.attitude_limit_deg;
+    if (!in.unlocked || !attitude_ok)
+    {
+        base_us = cal.motor_min_us;
+    }
+    const float yaw_diff = clampOutput(in.yaw_diff_us,
+                                       cal.motor_min_us - base_us,
+                                       cal.motor_max_us - base_us);
+    const float motor1_us =
+        clampOutput(base_us - yaw_diff, cal.motor_min_us, cal.motor_max_us);
+    const float motor2_us =
+        clampOutput(base_us + yaw_diff, cal.motor_min_us, cal.motor_max_us);
+    const float motor1_pct = (motor1_us - cal.motor_min_us) / safe_span * 100.0f;
+    const float motor2_pct = (motor2_us - cal.motor_min_us) / safe_span * 100.0f;
+
+    float normalized[4] = {
+        in.roll_correction_deg / half,   // 上摆方向：roll 正 → 舵机百分比增大
+        -in.pitch_correction_deg / half, // 外部工程 pitch 映射方向相反
+        motor1_pct / 100.0f,
+        motor2_pct / 100.0f,
+    };
+    return mapNormalizedOutputs(kCoaxialVtvProfile, normalized, 4U);
 }
 
 } // namespace bfs

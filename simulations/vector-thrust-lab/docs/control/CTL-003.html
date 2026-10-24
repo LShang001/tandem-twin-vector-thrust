@@ -110,12 +110,15 @@ PID 或 EKF。</li>
 已完成的第一刀（2026-10-24）</h3>
 <ul>
 <li><code>include/VehicleProfile.h</code>：<code>VehicleKind</code>、<code>CapabilityFlag</code>、<code>OutputChannelSpec</code>、<code>VehicleProfile</code>、表校验；内置
-<code>kTandemVecProfile</code>，并提供
+<code>kTandemVecProfile</code>、共轴
+<code>kCoaxialVtvProfile</code>，并提供
 <code>kQuadVtvProfile</code>/<code>kLiquidRocketProfile</code>
-作为表结构示例（<strong>未接入控制链</strong>）。</li>
+作为表结构示例（后两者<strong>未接入控制链</strong>）。</li>
 <li><code>include/ActuatorOutputMap.h</code>：归一化指令 →
-输出命令表；<code>mapTandemVecOutputs()</code> 是旧 mix
-公式的等价适配器。</li>
+输出命令表；<code>mapTandemVecOutputs()</code> 与
+<code>mapCoaxialVtvOutputs()</code> 分别是两套旧 mix
+公式的等价适配器（共轴适配器含 1000–2000 µs 差速与 45°
+锁电机保护）。</li>
 <li><code>src/flight_control.cpp</code> 层 3 已改为走
 <code>ActuatorOutputMap</code>；GPIO/PWM 写入仍留在固件层，通用层不依赖
 Arduino。</li>
@@ -125,9 +128,89 @@ Arduino。</li>
 <li>宿主测试：<code>test_vehicle_profile.cpp</code>、<code>test_generic_allocation.cpp</code>；SIL
 基线保持。</li>
 </ul>
+<h3 id="22-共轴双桨-vtvl-对照外部工程-vtvl_electricdualrotor_fcs">2.2
+共轴双桨 VTVL 对照（外部工程
+<code>VTVL_ElectricDualRotor_FCS</code>）</h3>
+<p>外部共轴工程与当前纵列双发的<strong>执行器数量相同</strong>（2 电机 +
+2 舵机），但拓扑、混控和控制架构不同，不能只换参数：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>纵列双发（当前实机）</th>
+<th>共轴双桨 VTVL（外部工程）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>推力布局</td>
+<td>前/后两电机，力臂 a/b</td>
+<td>两对转电机共轴，力臂≈0；差速只产生偏航反扭</td>
+</tr>
+<tr>
+<td>TVC</td>
+<td>上摆=滚转、下摆=俯仰；齿轮 40/30、半行程 45°、dMax 15°</td>
+<td>喷管两轴 TVC；舵机 33.33–66.67% 对应
+±15°，<code>MAX_CORRECTION=10°</code></td>
+</tr>
+<tr>
+<td>偏航</td>
+<td>Δω → <code>w0√(1±Δω)</code>，BTRUE 力矩分配</td>
+<td>偏航速率 PID → 电机 PWM 微秒差（1000–2000 µs）</td>
+</tr>
+<tr>
+<td>控制架构</td>
+<td>姿态/速率环 → 三轴力矩 → 3×3 BTRUE → 执行器</td>
+<td>姿态/速率环 → roll/pitch 摆角 + yaw µs，<strong>直接 TVC
+混控</strong></td>
+</tr>
+<tr>
+<td>主要限幅</td>
+<td>dMax 15°、dwMax 0.7、零油门 5% 归中</td>
+<td><code>MAX_CORRECTION=10°</code>、电机 1000–2000 µs、大倾角 45°
+锁电机</td>
+</tr>
+<tr>
+<td>增益</td>
+<td><code>FlightCtrlParams.h</code>（2.8/16.04/11.46 等）</td>
+<td><code>VtvLParams.h</code>（4.25/0.25/3.8 等）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>通用点</strong>（可直接复用）：IMU/GNSS/气压/光流/磁传感器与导航、EKF、模式判定/解锁/点火/燃料联锁、RC
+输入与 FPV
+曲线、任务调度、日志/GCS/AnoCom/AnoVars、四元数姿态误差、PID/滤波/限幅工具、地面/飞行安全门控、FRD/NED
+坐标系约定。</p>
+<p><strong>不同点</strong>（必须由机型层吸收）：推力几何与力臂、TVC
+机械映射、偏航执行方式、控制架构（力矩分配 vs 直接
+TVC）、增益/限幅/保护门限、参数表/遥测字段。</p>
+<p>本轮的 <code>kCoaxialVtvProfile</code> 与
+<code>mapCoaxialVtvOutputs()</code> 已能表达共轴输出表并复现外部 mix
+的舵机方向、PWM 差速和大倾角锁电机；但 <strong>DirectTvcRate
+控制律尚未接入当前
+<code>runGNCExecutive</code></strong>，因此仍不能把当前固件直接飞共轴机型。外部工程中的几何/三阶多项式
+TVC 映射目前未被其实际 mix
+调用，暂作为可选运动学表保留，不冒充当前实现。燃料阀门/点火是独立安全输出，未纳入
+4 路姿态 mix；接入共轴整机时需把阀门/点火增加到 profile 或复用现有 fuel
+安全链。</p>
 <hr />
 <h2 id="3-新机型接入步骤">3 新机型接入步骤</h2>
-<h3 id="31-多旋翼-vtvl">3.1 多旋翼 VTVL</h3>
+<h3 id="31-共轴双桨-vtvl">3.1 共轴双桨 VTVL</h3>
+<ol type="1">
+<li>选 <code>kCoaxialVtvProfile</code>：2 舵机 + 2
+电调，<code>DirectTvcRate</code> / <code>DifferentialPwmUs</code>；</li>
+<li>控制律移植外部工程的姿态/速率环：roll/pitch 摆角限幅
+<code>MAX_CORRECTION=10°</code>，yaw 速率 PID 输出 µs 差速；</li>
+<li>输出层调用 <code>mapCoaxialVtvOutputs()</code>：复现
+±15°→33.33–66.67%、1000–2000 µs 联合限幅、未解锁/45° 大倾角锁电机；</li>
+<li>复用现有模式/解锁/点火/燃料联锁、导航、传感器、日志和
+GCS；<strong>不要复用 TandemVec 的 BTRUE 差速开方路径</strong>；</li>
+<li>增加共轴 6DOF SIL/台架场景（推力同轴、反扭差速、TVC
+机械映射）；旧纵列路径回归不变；</li>
+<li>外部工程的几何/三阶多项式 TVC 表可选接入，但当前实际 mix 是线性 ±15°
+映射，先不要混用。</li>
+</ol>
+<h3 id="32-多旋翼-vtvl">3.2 多旋翼 VTVL</h3>
 <ol type="1">
 <li>填 <code>VehicleProfile</code> 输出表（N 路 ESC）与能力位；</li>
 <li>用 <code>AirframeModel::ActuatorDef</code> 填 N
@@ -138,7 +221,7 @@ Arduino。</li>
 <li>在 L4 增加/复用姿态、高度、位置模式；过渡段另立；</li>
 <li>以 SIL + 台架验证，旧 <code>TandemVec</code> profile 回归不变。</li>
 </ol>
-<h3 id="32-液体火箭">3.2 液体火箭</h3>
+<h3 id="33-液体火箭">3.3 液体火箭</h3>
 <ol type="1">
 <li>输出表增加阀门、点火、双摆座、RCS；能力位
 <code>ThrustValve/Ignition/Rcs/VariableMass</code>；</li>
@@ -206,5 +289,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 <p>当前完成 P1 的代码骨架；P2
 之后才可能谈“支持某新机型”。现有实机仍应按原纵列双发基线调参/飞行。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 14:49</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 14:59</footer></article></body>
 </html>

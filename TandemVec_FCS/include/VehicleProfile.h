@@ -31,9 +31,32 @@ constexpr uint8_t kMaxVehicleOutputs = 16;
 enum class VehicleKind : uint8_t
 {
     TandemVec = 0,   // 纵列双发矢量推力（当前实机）
-    MultirotorVTVL,  // 多旋翼/共轴 VTVL
+    CoaxialVTVL,     // 共轴双桨 VTVL（两个对转电机 + 两轴 TVC 舵机）
+    MultirotorVTVL,  // 多旋翼 VTVL
     LiquidRocket,    // 液体火箭（发动机+摆座/阀门/RCS）
     Count
+};
+
+// 控制架构：决定 L2 分配器和 L3 mix 走哪条路径，而不是只看执行器数量。
+enum class ControlArchitecture : uint8_t
+{
+    Unspecified = 0,   // 仅有输出表骨架，控制链未接入
+    MomentAllocation,  // 力矩指令 → BTRUE/N 输入分配（纵列双发）
+    DirectTvcRate,     // 角速率环直接输出 TVC 摆角/差速 PWM（共轴 VTVL）
+};
+
+enum class YawMixStrategy : uint8_t
+{
+    None = 0,
+    DifferentialOmega, // Δω → w0√(1±Δω)
+    DifferentialPwmUs, // 偏航 PID → 电机 PWM 微秒差
+};
+
+enum class TvcKinematics : uint8_t
+{
+    None = 0,          // 无 TVC 舵机
+    LinearServo,       // 角度 → 舵机百分比线性映射（共轴 VTVL 当前实现）
+    NozzleGeometric,   // 喷管几何/推杆长度映射（可选）
 };
 
 enum class CapabilityFlag : uint16_t
@@ -81,6 +104,9 @@ struct VehicleProfile
     uint16_t capabilities = 0;
     const OutputChannelSpec *outputs = nullptr;
     uint8_t output_count = 0;
+    ControlArchitecture control_architecture = ControlArchitecture::Unspecified;
+    YawMixStrategy yaw_strategy = YawMixStrategy::None;
+    TvcKinematics tvc_kinematics = TvcKinematics::None;
 };
 
 enum class VehicleProfileError : uint8_t
@@ -177,6 +203,31 @@ static constexpr VehicleProfile kTandemVecProfile = {
         static_cast<uint16_t>(CapabilityFlag::EscThrottle),
     kTandemVecOutputs,
     static_cast<uint8_t>(sizeof(kTandemVecOutputs) / sizeof(kTandemVecOutputs[0])),
+    ControlArchitecture::MomentAllocation,
+    YawMixStrategy::DifferentialOmega,
+    TvcKinematics::LinearServo,
+};
+
+// ---- 共轴双桨 VTVL：两个对转电机 + 两轴 TVC 舵机；输出表按外部工程标定 ----
+static constexpr OutputChannelSpec kCoaxialVtvOutputs[] = {
+    {OutputKind::ServoPwmPct, 0U, 0.0f, 100.0f, 50.0f, 16.667f}, // TVC roll
+    {OutputKind::ServoPwmPct, 1U, 0.0f, 100.0f, 50.0f, 16.667f}, // TVC pitch
+    {OutputKind::EscPwmPct, 2U, 0.0f, 100.0f, 0.0f, 100.0f},    // 主电机 1
+    {OutputKind::EscPwmPct, 3U, 0.0f, 100.0f, 0.0f, 100.0f},    // 主电机 2
+};
+
+static constexpr VehicleProfile kCoaxialVtvProfile = {
+    "CoaxialVTVL",
+    VehicleKind::CoaxialVTVL,
+    static_cast<uint16_t>(CapabilityFlag::DifferentialYaw) |
+        static_cast<uint16_t>(CapabilityFlag::GimbalServo) |
+        static_cast<uint16_t>(CapabilityFlag::EscThrottle),
+    kCoaxialVtvOutputs,
+    static_cast<uint8_t>(sizeof(kCoaxialVtvOutputs) /
+                         sizeof(kCoaxialVtvOutputs[0])),
+    ControlArchitecture::DirectTvcRate,
+    YawMixStrategy::DifferentialPwmUs,
+    TvcKinematics::LinearServo,
 };
 
 // ---- 多旋翼 VTVL 示例：4 电调、无舵机；仅用于扩展表/测试，当前固件未接 ----
@@ -193,6 +244,9 @@ static constexpr VehicleProfile kQuadVtvProfile = {
     static_cast<uint16_t>(CapabilityFlag::EscThrottle),
     kQuadVtvOutputs,
     static_cast<uint8_t>(sizeof(kQuadVtvOutputs) / sizeof(kQuadVtvOutputs[0])),
+    ControlArchitecture::Unspecified,
+    YawMixStrategy::None,
+    TvcKinematics::None,
 };
 
 // ---- 液体火箭输出示例：阀门/点火/双摆座/RCS；当前固件未接 ----
@@ -216,6 +270,9 @@ static constexpr VehicleProfile kLiquidRocketProfile = {
     kLiquidRocketOutputs,
     static_cast<uint8_t>(sizeof(kLiquidRocketOutputs) /
                          sizeof(kLiquidRocketOutputs[0])),
+    ControlArchitecture::Unspecified,
+    YawMixStrategy::None,
+    TvcKinematics::LinearServo,
 };
 
 } // namespace bfs
