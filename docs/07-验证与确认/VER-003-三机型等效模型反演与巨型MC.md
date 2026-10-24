@@ -680,6 +680,12 @@ mag_clean seed6/8/9 为 3.67 m / pos_rms 1.06 / 1.03 的边际失败，
 保持前失联仍会在进入位置保持时继承较差估计。数据：
 `sim-data/reanchor-timing-2026-10-25/`。
 
+剩余边际失败的 yaw 增益试验（否定）：仅缩 yaw att/rate kp 到 0.85，
+seed6 hold 3.67→修好，但 mag_clean seed3 新增 3.63 m 失败；seed8/9
+pos_rms 1.06/1.03 基本不变（hold_end 0.60/0.72 m）。10 seeds×2
+profiles 仍 17/20。**seed8/9 不是 yaw 增益问题，按种子调参只会转移
+失败；需单独分析位置环/指标定义。** 数据：`sim-data/yaw-tune-2026-10-25.json`。
+
 ### 3.22 MATLAB 频域裕度独立复核
 
 MATLAB R2025b Control System Toolbox 对速率环连续近似

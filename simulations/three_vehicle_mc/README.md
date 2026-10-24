@@ -643,6 +643,13 @@ hold 最大 4.67 m；30–35 s（保持后段）全部 pass，hold 最大 1.67 m
 重锚对“保持中/后段失联”最有效；保持前失联仍会在进入位置保持时
 继承较差估计。数据：`sim-data/reanchor-timing-2026-10-25/`。
 
+**剩余边际失败的 yaw 增益试验（否定）**：仅缩 yaw att/rate kp 到 0.85，
+seed6 从 hold 3.67 m 修好，但 mag_clean seed3 新增 3.63 m 失败；
+seed8/9 的 pos_rms 1.06/1.03 基本不变（hold_end 仅 0.60/0.72 m）。
+10 seeds×2 profiles 仍 **17/20**。说明 seed8/9 不是 yaw 增益问题，且
+按种子调 yaw 增益会引入新失败；不要再追边际种子，需单独分析位置环/
+指标定义。数据：`sim-data/yaw-tune-2026-10-25.json`。
+
 ### 5.19 MATLAB 频域裕度独立复核
 
 用 MATLAB R2025b Control System Toolbox 对速率环连续近似
