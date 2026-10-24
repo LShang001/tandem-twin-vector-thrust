@@ -1329,6 +1329,20 @@ m/37.0°；45°→ 104.7 m/37.0°（同 baseline）。15°
 本身不破坏正常路径，但<strong>单次跳变限幅不能解决磁扰航向问题</strong>——需要
 连续一致性/多帧确认或更好的磁干扰模型。该 API 保持默认关闭，不进入
 默认导航路径。数据：<code>sim-data/aaf-2026-10-24/sil_acceptance.json</code>。</p>
+<h3 id="318-陀螺约束的磁航向修正门控否定">3.18
+陀螺约束的磁航向修正门控（否定）</h3>
+<p><code>BFS_MAG_YAW_GYRO_GATE</code>：每次磁更新前把单次 yaw
+修正上限设为
+<code>2° + 3·|gyro_z|·0.1 s</code>，想用“真实航向不可能比陀螺积分变得更快”挡住
+磁扰翻转、同时放行正常转弯。SIL：seed7 mag_nominal hold_end 104.7→
+<strong>11.9 m</strong>、roll 37→15.7°，仍失败，且 yaw 仍在 t=33/35/38 s
+出现 −107°/−94°/−74° 翻转；正常 6 例 <strong>3/6</strong>（mag_clean
+seed1/2 hold 2.2/11.6 m、mag_nominal seed2 roll
+21.8°），门控把正常磁修正也拒掉。
+结论：<strong>单次幅值门控（固定或陀螺约束）不能区分正常收敛与磁扰翻转</strong>；
+需要多帧方向一致性/磁矢量与惯导交叉一致性，或改进磁干扰模型。
+<code>BFS_MAG_YAW_GYRO_GATE</code>
+默认关闭。数据：<code>sil_acceptance.json</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1372,5 +1386,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:07</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:14</footer></article></body>
 </html>

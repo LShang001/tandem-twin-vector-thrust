@@ -1954,6 +1954,18 @@ void handleNavigationSystem()
           const float yaw_before_rad = nav_ekf.yaw_rad();
           const float roll_before_rad = nav_ekf.roll_rad();
           const float pitch_before_rad = nav_ekf.pitch_rad();
+#ifdef BFS_MAG_YAW_GYRO_GATE
+          // 物理约束：两次磁更新之间真实航向变化不可能远大于陀螺积分。
+          // 磁扰造成的 yaw 翻转通常伴随很小的陀螺 z；用 2° 地板 + 3 倍
+          // 陀螺积分作为单次修正上限，既挡住翻转、又允许正常转弯收敛。
+          {
+            constexpr float kMagNominalDtS = 0.10f;
+            const float gyro_yaw_step_rad =
+                std::fabs(imu_gyro_radps.z()) * kMagNominalDtS;
+            nav_ekf.mag_yaw_jump_limit_rad(
+                0.035f + 3.0f * gyro_yaw_step_rad);
+          }
+#endif
           const bfs::MeasurementUpdateResult result =
               nav_ekf.MeasurementUpdateMagVectorDetailed(
                   mag_body, mag_ref_field, gate.noise_ut);

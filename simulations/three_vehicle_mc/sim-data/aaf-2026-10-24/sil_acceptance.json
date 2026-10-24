@@ -1499,6 +1499,88 @@
       ],
       "passed": 0,
       "total": 1
+    },
+    "mag_gyro_gate_seed7": {
+      "cases": [
+        {
+          "profile": "mag_nominal",
+          "seed": 7,
+          "pass_": false,
+          "alt": 9.3,
+          "hold_end": 11.93,
+          "hold_max": 13.95,
+          "pos_rms": 0.63,
+          "roll_max": 15.66
+        }
+      ],
+      "passed": 0,
+      "total": 1
+    },
+    "mag_gyro_gate_normal": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.97,
+          "hold_end": 2.21,
+          "hold_max": 8.77,
+          "pos_rms": 0.9,
+          "roll_max": 12.19
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.9,
+          "hold_end": 11.65,
+          "hold_max": 22.07,
+          "pos_rms": 0.47,
+          "roll_max": 14.2
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.03,
+          "hold_end": 0.67,
+          "hold_max": 2.18,
+          "pos_rms": 0.64,
+          "roll_max": 9.33
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.23,
+          "hold_end": 1.14,
+          "hold_max": 4.78,
+          "pos_rms": 0.55,
+          "roll_max": 18.66
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": false,
+          "alt": 8.98,
+          "hold_end": 1.94,
+          "hold_max": 5.7,
+          "pos_rms": 1.05,
+          "roll_max": 21.79
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.06,
+          "hold_end": 2.66,
+          "hold_max": 5.1,
+          "pos_rms": 0.76,
+          "roll_max": 17.08
+        }
+      ],
+      "passed": 3,
+      "total": 6
     }
   }
 }
