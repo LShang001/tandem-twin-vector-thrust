@@ -1,0 +1,57 @@
+{
+ "scale": {
+  "1.0": {
+   "nees_vel": 0.4,
+   "vel_rmse": 0.13,
+   "pos_rmse": 0.5,
+   "nis": 4.77
+  },
+  "0.5": {
+   "nees_vel": 0.446,
+   "vel_rmse": 0.1,
+   "pos_rmse": 0.499,
+   "nis": 5.057
+  },
+  "0.25": {
+   "nees_vel": 0.524,
+   "vel_rmse": 0.084,
+   "pos_rmse": 0.499,
+   "nis": 5.2
+  },
+  "0.1": {
+   "nees_vel": 0.685,
+   "vel_rmse": 0.079,
+   "pos_rmse": 0.498,
+   "nis": 5.281
+  },
+  "0.05": {
+   "nees_vel": 0.811,
+   "vel_rmse": 0.079,
+   "pos_rmse": 0.498,
+   "nis": 5.302
+  }
+ },
+ "validation_0.1": {
+  "delay": {
+   "pos": 0.588,
+   "vel": 0.081,
+   "nees_pos": 1.622,
+   "nees_vel": 0.647,
+   "nis": 5.246
+  },
+  "outage": {
+   "pos": 0.728,
+   "vel": 0.102,
+   "nees_pos": 1.585,
+   "nees_vel": 0.621,
+   "nis": 5.219
+  },
+  "highnoise": {
+   "pos": 1.482,
+   "vel": 0.208,
+   "nees_pos": 1.547,
+   "nees_vel": 0.76,
+   "nis": 5.334
+  }
+ }
+}

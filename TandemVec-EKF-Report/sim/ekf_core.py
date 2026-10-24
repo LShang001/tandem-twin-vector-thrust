@@ -280,8 +280,8 @@ class Ekf15:
         self.bg = np.zeros(3)           # gyro bias
         self.P = np.zeros((15, 15))
         # 过程噪声连续谱密度
-        a_std = cfg["accel_std"]
-        g_std = cfg["gyro_std"]
+        a_std = cfg["accel_std"] * cfg.get("q_accel_scale", 1.0)
+        g_std = cfg["gyro_std"] * cfg.get("q_gyro_scale", 1.0)
         a_b = cfg["accel_bias_std"]
         g_b = cfg["gyro_bias_std"]
         a_tau = cfg["accel_tau"]
