@@ -122,13 +122,19 @@ py -3.12 run_boundary_grid.py --out sim-data/boundary-grid-2026-10-24  # TandemV
   `sim-data/mega-tandemvec-1m-*-seed25-2026-10-24/`、
   `sim-data/mega-tandemvec-1m-{fixed,grid,optuna}-seed28-2026-10-24/`、
   `sim-data/mega-tandemvec-60s-*-5k-2026-10-24/`、
-  `sim-data/ml-2026-10-24/`；历史修正前目录见
+  `sim-data/ml-2026-10-24/`、`sim-data/ml-select-2026-10-24/`、
+  `sim-data/transient-2026-10-24/`；历史修正前目录见
   `sim-data/README.md`，仅无故障桶有效；完整 CSV 不入库。
 
 ## 5 ML/AI 分析层（2026-10-24，L1 数据内）
 
 > 目的不是替代物理模型，而是用 ML 做敏感度、边界筛选和实验设计。
 > 标签是 `fast_mc` 的 fail，不是实机失效；所有结论只在这套反演模型和采样分布内成立。
+
+> **勘误（2026-10-24 晚）**：瞬态基准发现旧“逐拍符号换向”检测器在纯悬停噪声下
+> 98–99% 时间触发，实际是**常降增益**，不是振荡选择器。§5.4 的旧
+> grid/TPE 数值只能解释为“常降增益”的控制效果，不能写成振荡选择性；
+> 新检测器（低通+最小幅值+驾驶杆门控）与选择性 A/B 见 §5.6。
 
 ### 5.1 失败代理与可解释性
 
@@ -184,6 +190,10 @@ tuned 几乎只消灭 C1（延迟/增益振荡类），C0（推力损失）和 C
 
 ### 5.4 贝叶斯优化阻尼参数
 
+> ⚠ 本节 grid/TPE 结果使用旧检测器（逐拍符号换向）。瞬态基准证明它在悬停
+> 噪声下 98% 时间触发，实际是**常降增益**，不是振荡选择性；这些数值不能
+> 作为“振荡阻尼”结论。修正与新消融见 §5.6。
+
 `ml_optuna_damper.py`：Optuna TPE，60 trials，8k 优化集，100k 独立验证；
 目标 `fail + 0.30·lost_pass + 0.02·(1−pass)`。最优区域：
 `window≈0.397 s, threshold=3, decay≈0.758, recovery≈1.019, floor≈0.574`。
@@ -214,23 +224,59 @@ fast MC 的悬停/无驾驶杆输入下验证过，**不直接改成固件默认
 `AdaptiveGainDamper` 当前默认仍是网格 tuned；TPE 结果作为下一轮
 SIL/台架 A/B 的候选。
 
-**对抗搜索（AI 红队，`ml_optuna_worstcase.py`）**：250 次 TPE 在采样范围内
-主动最大化 `max_ang/60 + |h|/100`，fixed/tuned 找到同一最坏组合：
-延迟 187 ms、风 −4.5 m/s²、增益 1.38/1.36、τm 2.31×，280.6°/−2901 m；
-8 个噪声种子复核全部失败（最大角 282°，最低 −3046 m）。但 1M 随机 MC 的
-最坏单例更差（349°/−3701 m）——250 次主动搜索没有超过 100 万随机尾部。
-更关键的是 fixed 与 tuned 结果逐值相同：该最坏模式是**恒定风/发散**，
-不是振荡，阻尼器不触发。结论：对抗搜索是随机 MC 的补充，不是替代；
-它还能暴露“算法不覆盖的失效模式”（这里是风偏/发散，需要配平/积分或风估计）。
+**对抗搜索（AI 红队，`ml_optuna_worstcase.py`）**：在采样范围内主动最大化
+`max_ang/60 + |h|/100`。250 次 TPE 找到 280.6°/−2901 m（低于 1M 随机
+最坏 349°/−3701 m）；**1000 次 TPE 找到 308.3°/−3804 m，严重度 43.18，
+略高于随机最坏的 42.8**，8 个噪声种子复核全部失败（最大角 310°、
+最低 −4051 m）。最坏组合为延迟 199 ms、风 −4.25 m/s²、增益 1.385/1.387；
+fixed 与 tuned 逐值相同——仍是**恒定风/延迟发散**，不是振荡，阻尼器不触发。
+结论：对抗搜索需要足够预算才能超过随机尾部；它能暴露算法不覆盖的失效模式
+（风偏/发散需要配平/积分或风估计），是随机 MC 的补充而非替代。
 
-### 5.5 复现
+### 5.6 瞬态基准：自适应阻尼 vs 固定降增益
+
+`run_transient_bench.py` 加入姿态双拍、风阶跃/正弦、组合场景；`fast_mc`
+新增参考跟踪、扰动、滤波/幅值/门控检测器和 `gain_scale` 消融开关。
+默认零输入已用 2k 回归确认与旧版逐字节一致。
+
+**旧检测器缺陷**：悬停噪声 1°/2°/s 时，旧 grid 参数 `gain_active≈98.6%`、
+旧 TPE `≈97.8%`，双拍时仍 ≈98%；`gain_min` 直接到 floor。它不是振荡
+选择器，而是噪声驱动的常降增益。新检测器（filter 0.05 s、min 2°/s、
+驾驶杆 >0.5° 门控、窗口 1 s/阈值 2）把悬停/双拍触发率降到 **0.8%/0.4–0.5%**，
+`gain_min≈1.00`，跟踪 RMS 不变。
+
+**100k 同种子（seed 20261031）消融**：
+
+| 方案 | 通过 | 失败 | 说明 |
+|---|---|---|---|
+| fixed | 78.54% | 1.88% | 基线 |
+| 选择性阻尼 sel_A | 78.92% | 1.51% | 救回 370/新增 0；延迟 90–120 ms 490→235 |
+| 固定 detune 0.85 | 79.87% | 1.01% | 无检测器 |
+| 固定 detune 0.70 | **80.07%** | **0.83%** | 无检测器 |
+| 固定 detune 0.55 | 80.06% | 0.83% | 与 0.70 持平 |
+
+**瞬态代价**（2k 场景，roll tracking RMS）：detune85 比 fixed 高
+0.08–0.26°，detune70 高 0.18–0.69°；max_track_err P95 不升反略降。
+在这个降阶模型里，**固定 15–30% 增益裕度显著优于自适应阻尼**，
+且没有检测器误触发/状态机复杂度。
+
+**结论（L1，否定性结果）**：`AdaptiveGainDamper` 不值得为这点收益上机；
+先把“固定增益裕度/延迟裕度”作为候选。固定降增益会牺牲真实驾驶品质，
+不能直接写实机调参，必须 SIL/台架 A/B。C++ 模块已改成选择性检测器
+（11 条断言）但仅作研究模块，默认不接入飞控。旧 §5.4 的 TPE 结果
+不能再用作选择性阻尼证据；固定 detune 的 1M 复核见
+`transient-2026-10-24/` 与后续数据。
+
 
 ```bash
 py -3.12 ml_failure_surrogate.py --fixed /tmp/fixed-1m.csv --tuned /tmp/tuned-1m.csv
 py -3.12 ml_active_learning.py --data /tmp/fixed-1m.csv
 py -3.12 ml_failure_clusters.py --fixed /tmp/fixed-1m.csv --tuned /tmp/tuned-1m.csv
-py -3.12 ml_optuna_damper.py
+py -3.12 ml_optuna_damper.py --out sim-data/ml-select-2026-10-24
 py -3.12 ml_optuna_worstcase.py --trials 250
+py -3.12 run_transient_bench.py --cases 2000
+py -3.12 run_mega.py --cases 100000 --vehicles TandemVec --variant fixed \
+  --gain-scale 0.70 --seed 20261031 --out <detune70-dir>
 ```
 
 证据：`sim-data/ml-2026-10-24/`（metrics/风险图/校准/重要性/主动学习/

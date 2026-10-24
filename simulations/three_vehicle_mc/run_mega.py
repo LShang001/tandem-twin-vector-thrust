@@ -56,6 +56,10 @@ def main() -> int:
     ap.add_argument("--osc-decay", type=float, default=0.90)
     ap.add_argument("--osc-recovery", type=float, default=1.01)
     ap.add_argument("--osc-floor", type=float, default=0.55)
+    ap.add_argument("--osc-filter-tau", type=float, default=0.05)
+    ap.add_argument("--osc-min-rate", type=float, default=2.0)
+    ap.add_argument("--osc-ref-gate", type=float, default=0.5)
+    ap.add_argument("--gain-scale", type=float, default=1.0)
     ap.add_argument("--vehicles", default="TandemVec,CoaxialVTVL,LiquidRocket")
     ap.add_argument("--seed", type=int, default=20261024)
     ap.add_argument("--out", default="")
@@ -72,7 +76,9 @@ def main() -> int:
         "osc_params": {
             "window_s": args.osc_window, "threshold": args.osc_threshold,
             "decay": args.osc_decay, "recovery": args.osc_recovery,
-            "floor": args.osc_floor,
+            "floor": args.osc_floor, "filter_tau_s": args.osc_filter_tau,
+            "min_rate_dps": args.osc_min_rate, "ref_gate_deg": args.osc_ref_gate,
+            "gain_scale": args.gain_scale,
         },
         "vehicles": {}, "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设",
     }
@@ -96,7 +102,11 @@ def main() -> int:
                              osc_threshold=args.osc_threshold,
                              osc_decay=args.osc_decay,
                              osc_recovery=args.osc_recovery,
-                             osc_floor=args.osc_floor)
+                             osc_floor=args.osc_floor,
+                             osc_filter_tau_s=args.osc_filter_tau,
+                             osc_min_rate_dps=args.osc_min_rate,
+                             osc_ref_gate_deg=args.osc_ref_gate,
+                             gain_scale=args.gain_scale)
                 chunk = []
                 for i in range(n):
                     row = dict(vehicle=name, case=done + i,

@@ -940,20 +940,83 @@ C1（延迟/增益振荡类），C0/C2（推力损失/舵机卡死）基本不�
 410→72、<code>final_h&lt;−1000 m</code> 1225→210， 但最坏单例仍为
 349°/−3701 m，<strong>仍无最坏情况保证</strong>。</li>
 </ul>
-<p><strong>对抗搜索（AI 红队）</strong>：250 次 TPE 在采样范围内最大化
-<code>max_ang/60 + |h|/100</code>，fixed/tuned 找到同一最坏组合（延迟
-187 ms、 风 −4.5 m/s²、增益 1.38/1.36、τm 2.31×），280.6°/−2901 m； 8
-个噪声种子复核全部失败（最大角 282°、最低 −3046 m）。但 1M 随机 MC
-最坏单例更差（349°/−3701 m）：250 次主动搜索没有超过 100 万随机尾部。
-更关键的是 fixed 与 tuned
-逐值相同——该最坏模式是<strong>恒定风/发散</strong>，不是振荡，
-阻尼器不触发。说明对抗搜索是随机 MC 的补充而非替代，并能暴露算法不覆盖的
-失效模式（此处需要配平/积分或风估计）。</p>
+<p><strong>对抗搜索（AI 红队）</strong>：250 次 TPE 找到 280.6°/−2901
+m（低于 1M 随机 最坏 349°/−3701 m）；<strong>1000 次 TPE 找到
+308.3°/−3804 m，严重度 43.18， 略高于随机最坏 42.8</strong>，8
+个噪声种子复核全部失败（最大角 310°、最低 −4051 m）。 最坏组合为延迟 199
+ms、风 −4.25 m/s²、增益 1.385/1.387；fixed 与 tuned
+逐值相同——该模式是<strong>恒定风/延迟发散</strong>而非振荡，阻尼器不触发。
+结论：对抗搜索需要足够预算才能超过随机尾部；它能暴露算法不覆盖的失效模式
+（此处需要配平/积分或风估计），是随机 MC 的补充而非替代。</p>
 <p>TPE 候选比网格 tuned 更敏感、衰减更快；只在 fast MC
 的悬停/无驾驶杆输入下
 验证过，<strong>不直接改成固件默认值</strong>。<code>AdaptiveGainDamper</code>
 当前默认仍是网格 tuned； TPE 结果作为下一轮 SIL/台架 A/B
 的候选。数据与图： <code>sim-data/ml-2026-10-24/</code>。</p>
+<h3 id="39-瞬态基准与检测器修正同日否定性结果">3.9
+瞬态基准与检测器修正（同日，否定性结果）</h3>
+<p>瞬态基准（<code>run_transient_bench.py</code>）加入姿态双拍、风阶跃/正弦与组合场景后，
+发现旧“逐拍符号换向”检测器在纯悬停噪声下 <strong>98–99%
+时间触发</strong>（<code>gain_min</code> 直接到
+floor），实际是常降增益，不是振荡选择器。旧 §3.8 的 grid/TPE
+数值只能解释为“常降增益”的控制效果，不能再作为振荡选择性证据。</p>
+<p>新检测器：0.05 s 低通 + 2°/s 最小幅值 + 驾驶杆 &gt;0.5° 门控 + 1 s
+窗口/2 次换向。效果：悬停/双拍触发率降到
+<strong>0.8%/0.4–0.5%</strong>， <code>gain_min≈1.00</code>，跟踪 RMS
+不变。</p>
+<p><strong>100k 同种子消融（seed 20261031）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>通过</th>
+<th>失败</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed</td>
+<td>78.54%</td>
+<td>1.88%</td>
+<td>基线</td>
+</tr>
+<tr>
+<td>选择性阻尼</td>
+<td>78.92%</td>
+<td>1.51%</td>
+<td>救回 370/新增 0；延迟 90–120 ms 490→235</td>
+</tr>
+<tr>
+<td>固定 detune 0.85</td>
+<td>79.87%</td>
+<td>1.01%</td>
+<td>无检测器</td>
+</tr>
+<tr>
+<td>固定 detune 0.70</td>
+<td><strong>80.07%</strong></td>
+<td><strong>0.83%</strong></td>
+<td>无检测器</td>
+</tr>
+<tr>
+<td>固定 detune 0.55</td>
+<td>80.06%</td>
+<td>0.83%</td>
+<td>与 0.70 持平</td>
+</tr>
+</tbody>
+</table>
+<p>瞬态跟踪代价：detune85 的 roll RMS 比 fixed 高 0.08–0.26°，detune70
+高 0.18–0.69°；max_track_err P95 不升反略降。<strong>在这个降阶模型里，
+固定 15–30%
+增益裕度显著优于自适应阻尼</strong>，且无检测器误触发/状态机复杂度。</p>
+<p>结论（L1，否定性）：<code>AdaptiveGainDamper</code>
+不值得为这点收益上机；
+下一步应验证“固定增益裕度/延迟裕度”，而不是继续调阻尼器。固定降增益
+会牺牲真实驾驶品质，不能直接写实机调参，必须 SIL/台架 A/B。 C++
+模块已改为选择性检测器（11 条宿主断言），但仍仅作研究模块、
+默认不接入飞控。数据：<code>sim-data/transient-2026-10-24/</code>。</p>
 <hr />
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
@@ -974,7 +1037,10 @@ T/W）上得到一致收益；共轴中性、液体净负，
 数据内分析</strong>：标签来自 fast MC， 不是实机失效；all 模型的高 AUC
 部分来自故障标志特征；风险图高延迟角点稀疏； 聚类不是物理失效机理；TPE
 候选未经过 SIL/台架，不能直接当固件默认值；
-对抗搜索是红队/最坏情况工具，不是概率估计，也不能证明真实结构/气动极限。</li>
+对抗搜索是红队/最坏情况工具，不是概率估计，也不能证明真实结构/气动极限；</li>
+<li>固定降增益消融只是 fast MC 的 L1
+结果：它降低了模型失败率，但会牺牲真实
+驾驶品质/扰动抑制；不能直接写实机调参，必须 SIL/台架验证。</li>
 </ul>
 <h2 id="5-复现">5 复现</h2>
 <div class="sourceCode" id="cb2"><pre
@@ -995,5 +1061,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:22</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:41</footer></article></body>
 </html>

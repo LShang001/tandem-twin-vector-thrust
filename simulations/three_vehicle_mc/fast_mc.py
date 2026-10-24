@@ -92,8 +92,18 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
              duration_s: float = 20.0, dt: float = 0.005,
              variant: str = "fixed", osc_window_s: float = 0.25,
              osc_threshold: float = 6.0, osc_decay: float = 0.90,
-             osc_recovery: float = 1.01, osc_floor: float = 0.55):
-    """向量化闭环；返回 metrics dict（每个 case 一行）。"""
+             osc_recovery: float = 1.01, osc_floor: float = 0.55,
+             ref_roll_deg=0.0, ref_pitch_deg=0.0,
+             wind_step_mps2: float = 0.0, wind_step_s: float = 0.0,
+             wind_sine_amp: float = 0.0, wind_sine_hz: float = 1.0,
+             osc_filter_tau_s: float = 0.05,
+             osc_min_rate_dps: float = 2.0,
+             osc_ref_gate_deg: float = 0.5, gain_scale: float = 1.0):
+    """向量化闭环；返回 metrics dict（每个 case 一行）。
+
+    ref_roll_deg/ref_pitch_deg 可为标量或长度 steps 的数组（瞬态跟踪）；
+    wind_step/sine 叠加在 p["wind_up"] 上。默认全零时行为与原版一致。
+    """
     n = len(p["mass_mult"])
     mass = model.mass_kg * p["mass_mult"]
     ix = model.ix * p["i_roll"]
@@ -101,8 +111,8 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     iz = model.iz * p["i_yaw"]
     tmax = model.thrust_max_n * p["thrust_mult"]
     tau_m = model.tau_motor_s * p["tau_mult"]
-    att_kp = model.att_kp * p["att_kp_mult"]
-    rate_kp = model.rate_kp * p["rate_kp_mult"]
+    att_kp = model.att_kp * p["att_kp_mult"] * gain_scale
+    rate_kp = model.rate_kp * p["rate_kp_mult"] * gain_scale
     lever = model.lever_m * p["lever_mult"]
     if model.thrust_curve == "quadratic_throttle":
         u_hover_nom = math.sqrt(model.mass_kg * G / model.thrust_max_n)
@@ -115,6 +125,7 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     osc_count = np.zeros(n)
     osc_timer = np.zeros(n)
     sign_prev = np.zeros(n)
+    err_filt = np.zeros(n)
 
     # 等效角加速度权限：保持机型表给出的控制权限（不再用惯量比外推，
     # 避免把 TandemVec 小滚转惯量放大成不真实的滚转权限）。
@@ -143,9 +154,23 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     max_psi = np.zeros(n)
     max_alt = np.zeros(n)
     sat_steps = np.zeros(n)
+    track_sq_roll = np.zeros(n)
+    track_sq_pitch = np.zeros(n)
+    max_track_err = np.zeros(n)
+    gain_min = np.ones(n)
+    gain_sum = np.zeros(n)
+    gain_active = np.zeros(n)
+
+    def ref_value(ref, k: int) -> float:
+        if np.ndim(ref) == 0:
+            return float(ref)
+        return float(ref[min(k, len(ref) - 1)])
 
     steps = int(duration_s / dt)
-    for _ in range(steps):
+    for k in range(steps):
+        t = k * dt
+        roll_ref = np.radians(ref_value(ref_roll_deg, k))
+        pitch_ref = np.radians(ref_value(ref_pitch_deg, k))
         # 传感器：一阶延迟 + 偏置 + 白噪声
         tau_s = np.maximum(p["delay_s"], dt)
         a_s = 1.0 - np.exp(-dt / tau_s)
@@ -192,11 +217,11 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
             auth_scale = 1.0
         gain_eff = auth_scale * gain_osc
 
-        # 姿态串级 PD（角度域）；传感器噪声进入反馈
-        rate_ref_phi = np.clip(att_kp * gain_eff * (-phi_m),
+        # 姿态串级 PD（角度域）；参考可为瞬态指令，传感器噪声进入反馈
+        rate_ref_phi = np.clip(att_kp * gain_eff * (roll_ref - phi_m),
                                -np.radians(model.rate_max_dps),
                                np.radians(model.rate_max_dps))
-        rate_ref_theta = np.clip(att_kp * gain_eff * (-theta_m),
+        rate_ref_theta = np.clip(att_kp * gain_eff * (pitch_ref - theta_m),
                                  -np.radians(model.rate_max_dps),
                                  np.radians(model.rate_max_dps))
         rate_ref_psi = np.clip(att_kp * gain_eff * (-psi_m),
@@ -208,13 +233,24 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
                               -alpha_max, alpha_max)
         alpha_yaw = np.clip(rate_kp * gain_eff * (rate_ref_psi - r_m),
                             -alpha_yaw_max, alpha_yaw_max)
-        # 自适应振荡抑制：速率误差频繁换向 → 降增益；安静时缓慢恢复。
+        # 自适应振荡抑制：滤波 + 最小幅值门控 + 驾驶杆活动门控。
+        # 原始“逐拍符号换向”会被陀螺噪声持续触发（悬停也 98% 时间降增益），
+        # 不是振荡选择器；这里只统计滤波后、幅值足够、且驾驶杆回中的换向。
         if variant in ("osc", "adaptive"):
-            sign_now = np.sign(rate_ref_phi - p_m)
+            err = rate_ref_phi - p_m
+            a_f = 1.0 - np.exp(-dt / max(osc_filter_tau_s, dt))
+            err_filt += (err - err_filt) * a_f
+            gate = np.abs(roll_ref) <= np.radians(osc_ref_gate_deg)
+            min_rate = np.radians(osc_min_rate_dps)
+            err_filt = np.where(gate, err_filt, 0.0)
+            sign_now = np.where(gate & (np.abs(err_filt) >= min_rate),
+                                np.sign(err_filt), 0.0)
             osc_count += ((sign_now * sign_prev) < 0.0).astype(float)
             sign_prev = sign_now
-            osc_timer += dt
-            due = osc_timer >= osc_window_s
+            osc_timer = np.where(gate, osc_timer + dt, 0.0)
+            osc_count = np.where(gate, osc_count, 0.0)
+            sign_prev = np.where(gate, sign_prev, 0.0)
+            due = gate & (osc_timer >= osc_window_s)
             if np.any(due):
                 hot = due & (osc_count > osc_threshold)
                 gain_osc = np.where(hot, np.maximum(osc_floor, gain_osc * osc_decay),
@@ -244,15 +280,26 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
         theta += qq * dt
         psi += rr * dt
 
-        # 垂向：推力投影 + 重力 + 风
+        # 垂向：推力投影 + 重力 + 风（可叠加阶跃/正弦扰动）
+        wind = (p["wind_up"] + wind_step_mps2 * (t >= wind_step_s)
+                + wind_sine_amp * np.sin(2.0 * np.pi * wind_sine_hz * t))
         v += ((thrust_act * np.cos(phi) * np.cos(theta) - mass * G) / mass
-              + p["wind_up"]) * dt
+              + wind) * dt
         h += v * dt
 
         max_phi = np.maximum(max_phi, np.abs(phi))
         max_theta = np.maximum(max_theta, np.abs(theta))
         max_psi = np.maximum(max_psi, np.abs(psi))
         max_alt = np.maximum(max_alt, h)
+        err_roll = roll_ref - phi_m
+        err_pitch = pitch_ref - theta_m
+        track_sq_roll += err_roll * err_roll
+        track_sq_pitch += err_pitch * err_pitch
+        max_track_err = np.maximum(max_track_err,
+                                   np.maximum(np.abs(err_roll), np.abs(err_pitch)))
+        gain_min = np.minimum(gain_min, gain_osc)
+        gain_sum += gain_osc
+        gain_active += (gain_osc < 0.999)
 
     max_ang = np.maximum(max_phi, np.maximum(max_theta, max_psi))
     finite = np.isfinite(h) & np.isfinite(v) & np.isfinite(max_ang)
@@ -265,4 +312,9 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
         max_roll_deg=np.degrees(max_phi), max_pitch_deg=np.degrees(max_theta),
         max_yaw_deg=np.degrees(max_psi), max_ang_deg=np.degrees(max_ang),
         sat_frac=sat_steps / steps,
+        track_rms_roll_deg=np.degrees(np.sqrt(track_sq_roll / steps)),
+        track_rms_pitch_deg=np.degrees(np.sqrt(track_sq_pitch / steps)),
+        max_track_err_deg=np.degrees(max_track_err),
+        gain_min=gain_min, gain_mean=gain_sum / steps,
+        gain_active_frac=gain_active / steps,
     )

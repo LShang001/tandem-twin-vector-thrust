@@ -24,6 +24,8 @@
 | `mega-tandemvec-1m-grid-seed28-2026-10-24/` | TandemVec 1M 网格 tuned，同 seed | 同种子对照 |
 | `mega-tandemvec-1m-optuna-seed28-2026-10-24/` | TandemVec 1M TPE 候选 | TPE 独立验证 |
 | `ml-2026-10-24/` | 失败代理/校准/重要性/风险图、主动学习、失效聚类、Optuna | L1 数据内 ML |
+| `ml-select-2026-10-24/` | 选择性检测器 TPE 参数搜索 | L1 选择性阻尼 |
+| `transient-2026-10-24/` | 姿态双拍/突风瞬态，fixed/selective/detune 对比 | L1 瞬态基准 |
 
 ## 2 thrust_loss 建模勘误（2026-10-24）
 
