@@ -39,7 +39,8 @@
 | `test_liquid_ccaegt_reference.cpp` | 外部 CCAEGT 实飞参考制导 + `LiquidRocketModel` 组合 30 m 回收（参考库，不接入固件飞行模式） | CCAEGT 参考库 | 8 |
 
 > 液体回收参数扫描：`bash test_host/run_liquid_sil_sweep.sh`（20/30/40 m × 2.5/3/4 kg 共 9 组）；
-> 推进参数扰动：`py -3.12 test_host/run_liquid_sweep.py --bin <lrsil>`（15 组）。
+> 推进参数扰动：`py -3.12 test_host/run_liquid_sweep.py --bin <lrsil>`（15 组）；
+> CCAEGT 参考制导包线：`bash test_host/run_ccaegt_sweep.sh`（20/30/40 m）。
 > 共轴 plant/故障扰动：`py -3.12 test_host/fw_sil/run_coaxial_sweep.py --bin <fw_coax>`（17 组）。
 > CCAEGT 参考库仅位于 `test_host/reference/ccaegt/`，不随固件编译。
 

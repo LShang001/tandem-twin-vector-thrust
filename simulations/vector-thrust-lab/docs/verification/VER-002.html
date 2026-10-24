@@ -203,6 +203,9 @@ s、Tmax 180–220 N、 Tmin 60–100 N、阀门 5–20/s、推力速率 900–2
 N/s、20–40 m、2.5–4 kg。 <strong>14/15 通过</strong>；唯一边界 Tmax=180
 N 时接地 4.00 m/s（刚好越过 4 m/s 门限），
 说明低推力裕度不足时必须降低回收高度/提高 Tmax 或放宽着陆速度。</li>
+<li><code>run_ccaegt_sweep.sh</code>：CCAEGT 参考制导 20/30/40 m
+三组全部着陆， 接地 1.84–1.87 m/s；说明参考制导在本 L1
+模型下对高度不敏感（在 4 kg 推进剂包线内），不是实机包线。</li>
 <li>已知参数不一致：外部 CCAEGT <code>M_DRY=12.5 kg</code>，外部固件
 <code>DRY_MASS=13.5 kg</code>； 参考测试用 12.5+4.0=16.5 kg 对齐
 CCAEGT，未擅自改外部飞行固件。</li>
@@ -295,5 +298,5 @@ SIL，不能做飞行波形回放；需要用户提供 原始黑匣子/遥测日
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:13</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:15</footer></article></body>
 </html>

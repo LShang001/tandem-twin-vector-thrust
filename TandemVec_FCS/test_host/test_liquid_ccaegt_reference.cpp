@@ -23,6 +23,8 @@
  */
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include "CCAEGT.h"
 #include "LiquidRocketModel.h"
@@ -38,11 +40,19 @@ static int g_fail = 0;
     }                                                                           \
   } while (0)
 
-int main()
+int main(int argc, char **argv)
 {
+  double h0 = 30.0;
+  double prop0 = 4.0; // 对齐 CCAEGT_M0=16.5 kg（干重 12.5）
+  for (int i = 1; i + 1 < argc; i += 2)
+  {
+    if (std::strcmp(argv[i], "--h0") == 0) h0 = std::atof(argv[i + 1]);
+    else if (std::strcmp(argv[i], "--prop") == 0) prop0 = std::atof(argv[i + 1]);
+  }
+
   bfs::LiquidRocketParams params;
   params.dry_mass_kg = 12.5f;   // 对齐 CCAEGT_M_DRY
-  params.initial_propellant_kg = 4.0f; // 对齐 CCAEGT_M0=16.5 kg
+  params.initial_propellant_kg = static_cast<float>(prop0);
   params.max_thrust_n = 200.0f;
   params.min_thrust_n = 80.0f;
   params.isp_s = 200.0f;
@@ -57,7 +67,7 @@ int main()
 
   const double dt = 0.005;
   const double g = params.g0_mps2;
-  double h = 30.0;
+  double h = h0;
   double v_up = 0.0;
   bool landed = false;
   bool brake_seen = false;
