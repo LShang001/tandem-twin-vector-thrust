@@ -1007,6 +1007,10 @@ floor），实际是常降增益，不是振荡选择器。旧 §3.8 的 grid/TP
 </tr>
 </tbody>
 </table>
+<p>跨机型 detune70（100k，seed 20261031）：共轴 fixed 84.73%/3.89% →
+84.81%/3.87%（救回 20/新增 4，P95 11.19°→10.21°）；液体 60.85%/23.63% →
+60.83%/23.64%（救回 3/新增 18）。<strong>固定降增益收益是 TandemVec
+特定的，共轴近乎中性、液体略负，不能跨机型套用。</strong></p>
 <p>瞬态跟踪代价：detune85 的 roll RMS 比 fixed 高 0.08–0.26°，detune70
 高 0.18–0.69°；max_track_err P95 不升反略降。<strong>在这个降阶模型里，
 固定 15–30%
@@ -1071,5 +1075,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:52</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:56</footer></article></body>
 </html>
