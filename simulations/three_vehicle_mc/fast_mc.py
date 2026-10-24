@@ -101,7 +101,9 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
              osc_ref_gate_deg: float = 0.5, gain_scale: float = 1.0,
              adrc_wc: float = 16.0, adrc_wo: float = 50.0,
              adrc_b0: float = 1.0, lead_s: float = 0.0,
-             indi_filter_tau_s: float = 0.02, indi_b0: float = 1.0):
+             indi_filter_tau_s: float = 0.02, indi_b0: float = 1.0,
+             accel_fb_gain: float = 0.8, accel_fb_tau_s: float = 0.02,
+             phase_lead_gain: float = 0.3, phase_lead_tau_s: float = 0.02):
     """向量化闭环；返回 metrics dict（每个 case 一行）。
 
     ref_roll_deg/ref_pitch_deg 可为标量或长度 steps 的数组（瞬态跟踪）；
@@ -136,6 +138,11 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
     indi_pd = np.zeros(n); indi_qd = np.zeros(n); indi_rd = np.zeros(n)
     indi_ur = np.zeros(n); indi_up = np.zeros(n); indi_uy = np.zeros(n)
     indi_first = True
+    aaf_pd = np.zeros(n); aaf_qd = np.zeros(n); aaf_rd = np.zeros(n)
+    aaf_pr = np.zeros(n); aaf_qr = np.zeros(n); aaf_rr = np.zeros(n)
+    aaf_first = True
+    lead_lp_p = np.zeros(n); lead_lp_q = np.zeros(n); lead_lp_r = np.zeros(n)
+    lead_first = True
 
     # 等效角加速度权限：保持机型表给出的控制权限（不再用惯量比外推，
     # 避免把 TandemVec 小滚转惯量放大成不真实的滚转权限）。
@@ -284,6 +291,45 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
             p_eff = p_m + lead_s * alpha_roll_act
             q_eff = q_m + lead_s * alpha_pitch_act
             r_eff = r_m + lead_s * alpha_yaw_act
+            alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_eff),
+                                 -alpha_roll_max, alpha_roll_max)
+            alpha_pitch = np.clip(rate_kp * gain_eff * (rate_ref_theta - q_eff),
+                                  -alpha_max, alpha_max)
+            alpha_yaw = np.clip(rate_kp * gain_eff * (rate_ref_psi - r_eff),
+                                -alpha_yaw_max, alpha_yaw_max)
+        elif variant == "accel_fb":
+            # 实测角加速度反馈（AAF）：只对陀螺差分做阻尼，不反馈指令，
+            # 因此不会像指令 alpha_ref 那样经 Ki 形成代数正反馈。
+            if aaf_first:
+                aaf_pr[:] = p_m; aaf_qr[:] = q_m; aaf_rr[:] = r_m
+                aaf_first = False
+            a_af = 1.0 - np.exp(-dt / max(accel_fb_tau_s, dt))
+            aaf_pd += ((p_m - aaf_pr) / dt - aaf_pd) * a_af
+            aaf_qd += ((q_m - aaf_qr) / dt - aaf_qd) * a_af
+            aaf_rd += ((r_m - aaf_rr) / dt - aaf_rd) * a_af
+            alpha_roll = np.clip(
+                rate_kp * gain_eff * (rate_ref_phi - p_m) - accel_fb_gain * aaf_pd,
+                -alpha_roll_max, alpha_roll_max)
+            alpha_pitch = np.clip(
+                rate_kp * gain_eff * (rate_ref_theta - q_m) - accel_fb_gain * aaf_qd,
+                -alpha_max, alpha_max)
+            alpha_yaw = np.clip(
+                rate_kp * gain_eff * (rate_ref_psi - r_m) - accel_fb_gain * aaf_rd,
+                -alpha_yaw_max, alpha_yaw_max)
+            aaf_pr[:] = p_m; aaf_qr[:] = q_m; aaf_rr[:] = r_m
+        elif variant == "phase_lead":
+            # 相位超前（高通抬升）：ω_eff = ω + K·(ω − LPF(ω))。
+            # 不放大差分噪声，DC 增益仍为 1；K 提供中频相位超前/阻尼。
+            if lead_first:
+                lead_lp_p[:] = p_m; lead_lp_q[:] = q_m; lead_lp_r[:] = r_m
+                lead_first = False
+            a_l = 1.0 - np.exp(-dt / max(phase_lead_tau_s, dt))
+            lead_lp_p += (p_m - lead_lp_p) * a_l
+            lead_lp_q += (q_m - lead_lp_q) * a_l
+            lead_lp_r += (r_m - lead_lp_r) * a_l
+            p_eff = p_m + phase_lead_gain * (p_m - lead_lp_p)
+            q_eff = q_m + phase_lead_gain * (q_m - lead_lp_q)
+            r_eff = r_m + phase_lead_gain * (r_m - lead_lp_r)
             alpha_roll = np.clip(rate_kp * gain_eff * (rate_ref_phi - p_eff),
                                  -alpha_roll_max, alpha_roll_max)
             alpha_pitch = np.clip(rate_kp * gain_eff * (rate_ref_theta - q_eff),

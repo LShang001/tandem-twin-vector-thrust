@@ -1,0 +1,614 @@
+{
+  "date": "2026-10-24",
+  "test": "fw_sil real-nav acceptance (real firmware sources, virtual plant/sensors)",
+  "evidence_level": "L2",
+  "command": "run_real_acceptance.py --profiles mag_clean,mag_nominal --seeds 1,2,3 --seconds 40 (--pos-hold implied)",
+  "variants": {
+    "fixed": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.97,
+          "hold_end": 1.15,
+          "hold_max": 1.88,
+          "pos_rms": 0.89,
+          "roll_max": 9.04,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.96,
+          "hold_end": 0.71,
+          "hold_max": 1.36,
+          "pos_rms": 0.48,
+          "roll_max": 10.72,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.06,
+          "hold_end": 1.1,
+          "hold_max": 1.93,
+          "pos_rms": 0.64,
+          "roll_max": 8.21,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.24,
+          "hold_end": 0.9,
+          "hold_max": 4.78,
+          "pos_rms": 0.55,
+          "roll_max": 18.66,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.2,
+          "hold_end": 0.79,
+          "hold_max": 5.7,
+          "pos_rms": 1.05,
+          "roll_max": 15.64,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 0.47,
+          "hold_max": 2.93,
+          "pos_rms": 0.76,
+          "roll_max": 14.82,
+          "resets": 0,
+          "outliers": 0
+        }
+      ],
+      "passed": 6,
+      "total": 6,
+      "summary": "=== real-nav acceptance: 6 cases, 0 failed ==="
+    },
+    "aaf_k0.5": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 12.39,
+          "hold_end": 150.41,
+          "hold_max": 230.4,
+          "pos_rms": 1.16,
+          "roll_max": 68.04,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.93,
+          "hold_end": 6.29,
+          "hold_max": 12.95,
+          "pos_rms": 0.47,
+          "roll_max": 18.06,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": false,
+          "alt": 9.94,
+          "hold_end": 4.44,
+          "hold_max": 7.22,
+          "pos_rms": 0.64,
+          "roll_max": 14.73,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.12,
+          "hold_end": 13.85,
+          "hold_max": 25.4,
+          "pos_rms": 0.61,
+          "roll_max": 20.94,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.26,
+          "hold_end": 14.71,
+          "hold_max": 29.32,
+          "pos_rms": 1.12,
+          "roll_max": 19.04,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.05,
+          "hold_end": 4.48,
+          "hold_max": 10.31,
+          "pos_rms": 0.74,
+          "roll_max": 19.39,
+          "resets": 0,
+          "outliers": 0
+        }
+      ],
+      "passed": 1,
+      "total": 6,
+      "summary": "=== real-nav acceptance: 6 cases, 5 failed ==="
+    },
+    "aaf_k0.8": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.75,
+          "hold_end": 277.94,
+          "hold_max": 412.2,
+          "pos_rms": 1.29,
+          "roll_max": 49.65,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.88,
+          "hold_end": 4.03,
+          "hold_max": 6.01,
+          "pos_rms": 0.48,
+          "roll_max": 15.83,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.05,
+          "hold_end": 0.85,
+          "hold_max": 3.53,
+          "pos_rms": 0.65,
+          "roll_max": 6.95,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.26,
+          "hold_end": 10.59,
+          "hold_max": 16.41,
+          "pos_rms": 0.6,
+          "roll_max": 19.73,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": false,
+          "alt": 8.92,
+          "hold_end": 11.13,
+          "hold_max": 18.51,
+          "pos_rms": 1.1,
+          "roll_max": 23.44,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": false,
+          "alt": 8.93,
+          "hold_end": 16.49,
+          "hold_max": 20.48,
+          "pos_rms": 0.73,
+          "roll_max": 21.11,
+          "resets": 0,
+          "outliers": 0
+        }
+      ],
+      "passed": 1,
+      "total": 6,
+      "summary": "=== real-nav acceptance: 6 cases, 5 failed ==="
+    },
+    "aaf_k0.05_yaw0": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.98,
+          "hold_end": 1.12,
+          "hold_max": 1.99,
+          "pos_rms": 0.9,
+          "roll_max": 9.26,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.95,
+          "hold_end": 0.71,
+          "hold_max": 1.28,
+          "pos_rms": 0.48,
+          "roll_max": 6.86,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.07,
+          "hold_end": 1.25,
+          "hold_max": 1.9,
+          "pos_rms": 0.64,
+          "roll_max": 5.91,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.26,
+          "hold_end": 7.68,
+          "hold_max": 10.51,
+          "pos_rms": 0.56,
+          "roll_max": 17.41,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.18,
+          "hold_end": 2.19,
+          "hold_max": 8.9,
+          "pos_rms": 1.06,
+          "roll_max": 15.3,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 0.74,
+          "hold_max": 5.07,
+          "pos_rms": 0.75,
+          "roll_max": 15.07,
+          "resets": 0,
+          "outliers": 0
+        }
+      ],
+      "passed": 6,
+      "total": 6,
+      "summary": "=== real-nav acceptance: 6 cases, 0 failed ==="
+    },
+    "aaf_k0.1_yaw0": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.94,
+          "hold_end": 1.21,
+          "hold_max": 2.41,
+          "pos_rms": 0.89,
+          "roll_max": 11.27,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.93,
+          "hold_end": 5.89,
+          "hold_max": 9.58,
+          "pos_rms": 0.48,
+          "roll_max": 11.99,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.03,
+          "hold_end": 1.4,
+          "hold_max": 2.42,
+          "pos_rms": 0.65,
+          "roll_max": 13.29,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.14,
+          "hold_end": 40.11,
+          "hold_max": 45.06,
+          "pos_rms": 0.53,
+          "roll_max": 21.85,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.16,
+          "hold_end": 1.72,
+          "hold_max": 3.51,
+          "pos_rms": 1.06,
+          "roll_max": 13.5,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 1.72,
+          "hold_max": 3.32,
+          "pos_rms": 0.76,
+          "roll_max": 14.87,
+          "resets": 0,
+          "outliers": 0
+        }
+      ],
+      "passed": 4,
+      "total": 6,
+      "summary": "=== real-nav acceptance: 6 cases, 2 failed ==="
+    },
+    "aaf_k0.2_yaw0": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.89,
+          "hold_end": 103.5,
+          "hold_max": 120.54,
+          "pos_rms": 0.88,
+          "roll_max": 18.09,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.9,
+          "hold_end": 3.95,
+          "hold_max": 4.99,
+          "pos_rms": 0.48,
+          "roll_max": 7.7,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.06,
+          "hold_end": 1.25,
+          "hold_max": 2.39,
+          "pos_rms": 0.65,
+          "roll_max": 11.11,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.24,
+          "hold_end": 27.99,
+          "hold_max": 30.1,
+          "pos_rms": 0.55,
+          "roll_max": 19.3,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.17,
+          "hold_end": 1.25,
+          "hold_max": 3.42,
+          "pos_rms": 1.07,
+          "roll_max": 10.52,
+          "resets": 0,
+          "outliers": 0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": false,
+          "alt": 9.07,
+          "hold_end": 11.82,
+          "hold_max": 13.03,
+          "pos_rms": 0.76,
+          "roll_max": 14.4,
+          "resets": 0,
+          "outliers": 0
+        }
+      ],
+      "passed": 2,
+      "total": 6,
+      "summary": "=== real-nav acceptance: 6 cases, 4 failed ==="
+    },
+    "phase_lead_k0.5_yaw0": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.99,
+          "hold_end": 2.71,
+          "hold_max": 5.45,
+          "pos_rms": 0.9,
+          "roll_max": 11.92
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.96,
+          "hold_end": 1.61,
+          "hold_max": 2.58,
+          "pos_rms": 0.48,
+          "roll_max": 7.89
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": false,
+          "alt": 10.05,
+          "hold_end": 1.98,
+          "hold_max": 2.88,
+          "pos_rms": 0.64,
+          "roll_max": 10.2
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.27,
+          "hold_end": 7.8,
+          "hold_max": 14.84,
+          "pos_rms": 0.57,
+          "roll_max": 18.7
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.19,
+          "hold_end": 1.4,
+          "hold_max": 5.92,
+          "pos_rms": 1.08,
+          "roll_max": 14.32
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.16,
+          "hold_end": 2.69,
+          "hold_max": 4.2,
+          "pos_rms": 0.75,
+          "roll_max": 16.66
+        }
+      ],
+      "passed": 3,
+      "total": 6
+    },
+    "phase_lead_k1.0_yaw0": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 8.36,
+          "hold_end": 9.74,
+          "hold_max": 11.64,
+          "pos_rms": 0.93,
+          "roll_max": 49.07
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": false,
+          "alt": 9.94,
+          "hold_end": 6.08,
+          "hold_max": 10.17,
+          "pos_rms": 0.48,
+          "roll_max": 7.9
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": false,
+          "alt": 9.95,
+          "hold_end": 5.75,
+          "hold_max": 8.67,
+          "pos_rms": 0.65,
+          "roll_max": 9.9
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.15,
+          "hold_end": 77.71,
+          "hold_max": 114.57,
+          "pos_rms": 0.48,
+          "roll_max": 23.67
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": false,
+          "alt": 8.71,
+          "hold_end": 4.03,
+          "hold_max": 10.87,
+          "pos_rms": 1.09,
+          "roll_max": 29.0
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": false,
+          "alt": 8.96,
+          "hold_end": 5.56,
+          "hold_max": 8.53,
+          "pos_rms": 0.75,
+          "roll_max": 20.5
+        }
+      ],
+      "passed": 0,
+      "total": 6
+    }
+  }
+}

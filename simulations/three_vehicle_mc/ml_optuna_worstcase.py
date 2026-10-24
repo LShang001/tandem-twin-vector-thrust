@@ -119,14 +119,19 @@ def main() -> int:
     model = MODELS["TandemVec"]
     result = {"trials": args.trials, "seed": args.seed,
               "note": "L1 对抗搜索；非概率，不能外推实机极限", "searches": {}}
-    for variant, osc in (("fixed", {}),
-                         ("tuned", dict(osc_window_s=0.15, osc_threshold=4,
-                                        osc_decay=0.85, osc_recovery=1.01,
-                                        osc_floor=0.45))):
-        print("search", variant)
-        result["searches"][variant] = search(model, variant, args.trials,
-                                             args.seed, **osc)
-        print(variant, result["searches"][variant]["best_trial"])
+    # 注意：fast_mc 的选择器变体名是 "osc"；旧代码把 "tuned" 直接传给
+    # simulate，会落入 fixed 分支，使 tuned 与 fixed 结果逐位相同。
+    for label, variant, osc in (
+            ("fixed", "fixed", {}),
+            ("accel_fb", "accel_fb", dict(accel_fb_gain=0.8,
+                                          accel_fb_tau_s=0.02)),
+            ("osc_tuned", "osc", dict(osc_window_s=0.15, osc_threshold=4,
+                                      osc_decay=0.85, osc_recovery=1.01,
+                                      osc_floor=0.45))):
+        print("search", label)
+        result["searches"][label] = search(model, variant, args.trials,
+                                           args.seed, **osc)
+        print(label, result["searches"][label]["best_trial"])
     (out / "optuna_worstcase.json").write_text(
         json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"saved: {out/'optuna_worstcase.json'}")

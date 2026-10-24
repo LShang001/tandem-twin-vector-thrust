@@ -1,0 +1,314 @@
+{
+  "baseline": "20k-fixed",
+  "candidate": "20k-g0.8",
+  "n": 60000,
+  "params_identical": true,
+  "vehicles": {
+    "TandemVec": {
+      "n": 20000,
+      "transitions": {
+        "pass": {
+          "pass": 15801,
+          "marginal": 3,
+          "fail": 0
+        },
+        "marginal": {
+          "pass": 142,
+          "marginal": 3674,
+          "fail": 0
+        },
+        "fail": {
+          "pass": 165,
+          "marginal": 46,
+          "fail": 169
+        }
+      },
+      "base_pass": 15804,
+      "cand_pass": 16108,
+      "base_fail": 380,
+      "cand_fail": 169,
+      "rescued": 211,
+      "regressed": 0,
+      "new_pass": 307,
+      "lost_pass": 3,
+      "fault": {
+        "no_fault": {
+          "n": 19424,
+          "rescued": 206,
+          "regressed": 0,
+          "base_fail": 206,
+          "cand_fail": 0
+        },
+        "with_fault": {
+          "n": 576,
+          "rescued": 5,
+          "regressed": 0,
+          "base_fail": 174,
+          "cand_fail": 169
+        }
+      },
+      "delay_bins": [
+        {
+          "bin": "<30ms",
+          "n": 9049,
+          "base_fail": 72,
+          "cand_fail": 72,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "30-60ms",
+          "n": 6371,
+          "base_fail": 52,
+          "cand_fail": 52,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "60-90ms",
+          "n": 3125,
+          "base_fail": 36,
+          "cand_fail": 36,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "90-120ms",
+          "n": 1125,
+          "base_fail": 80,
+          "cand_fail": 6,
+          "rescued": 74,
+          "regressed": 0
+        },
+        {
+          "bin": "120-150ms",
+          "n": 272,
+          "base_fail": 104,
+          "cand_fail": 3,
+          "rescued": 101,
+          "regressed": 0
+        },
+        {
+          "bin": "150-200ms",
+          "n": 57,
+          "base_fail": 35,
+          "cand_fail": 0,
+          "rescued": 35,
+          "regressed": 0
+        },
+        {
+          "bin": ">=200ms",
+          "n": 1,
+          "base_fail": 1,
+          "cand_fail": 0,
+          "rescued": 1,
+          "regressed": 0
+        }
+      ]
+    },
+    "CoaxialVTVL": {
+      "n": 20000,
+      "transitions": {
+        "pass": {
+          "pass": 16972,
+          "marginal": 4,
+          "fail": 0
+        },
+        "marginal": {
+          "pass": 23,
+          "marginal": 2170,
+          "fail": 0
+        },
+        "fail": {
+          "pass": 1,
+          "marginal": 3,
+          "fail": 827
+        }
+      },
+      "base_pass": 16976,
+      "cand_pass": 16996,
+      "base_fail": 831,
+      "cand_fail": 827,
+      "rescued": 4,
+      "regressed": 0,
+      "new_pass": 24,
+      "lost_pass": 4,
+      "fault": {
+        "no_fault": {
+          "n": 19410,
+          "rescued": 4,
+          "regressed": 0,
+          "base_fail": 494,
+          "cand_fail": 490
+        },
+        "with_fault": {
+          "n": 590,
+          "rescued": 0,
+          "regressed": 0,
+          "base_fail": 337,
+          "cand_fail": 337
+        }
+      },
+      "delay_bins": [
+        {
+          "bin": "<30ms",
+          "n": 8937,
+          "base_fail": 365,
+          "cand_fail": 365,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "30-60ms",
+          "n": 6391,
+          "base_fail": 275,
+          "cand_fail": 275,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "60-90ms",
+          "n": 3230,
+          "base_fail": 124,
+          "cand_fail": 124,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "90-120ms",
+          "n": 1117,
+          "base_fail": 52,
+          "cand_fail": 52,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "120-150ms",
+          "n": 279,
+          "base_fail": 12,
+          "cand_fail": 10,
+          "rescued": 2,
+          "regressed": 0
+        },
+        {
+          "bin": "150-200ms",
+          "n": 44,
+          "base_fail": 2,
+          "cand_fail": 1,
+          "rescued": 1,
+          "regressed": 0
+        },
+        {
+          "bin": ">=200ms",
+          "n": 2,
+          "base_fail": 1,
+          "cand_fail": 0,
+          "rescued": 1,
+          "regressed": 0
+        }
+      ]
+    },
+    "LiquidRocket": {
+      "n": 20000,
+      "transitions": {
+        "pass": {
+          "pass": 12106,
+          "marginal": 3,
+          "fail": 0
+        },
+        "marginal": {
+          "pass": 0,
+          "marginal": 3142,
+          "fail": 3
+        },
+        "fail": {
+          "pass": 0,
+          "marginal": 2,
+          "fail": 4744
+        }
+      },
+      "base_pass": 12109,
+      "cand_pass": 12106,
+      "base_fail": 4746,
+      "cand_fail": 4747,
+      "rescued": 2,
+      "regressed": 3,
+      "new_pass": 0,
+      "lost_pass": 3,
+      "fault": {
+        "no_fault": {
+          "n": 19405,
+          "rescued": 2,
+          "regressed": 3,
+          "base_fail": 4302,
+          "cand_fail": 4303
+        },
+        "with_fault": {
+          "n": 595,
+          "rescued": 0,
+          "regressed": 0,
+          "base_fail": 444,
+          "cand_fail": 444
+        }
+      },
+      "delay_bins": [
+        {
+          "bin": "<30ms",
+          "n": 8985,
+          "base_fail": 2085,
+          "cand_fail": 2086,
+          "rescued": 0,
+          "regressed": 1
+        },
+        {
+          "bin": "30-60ms",
+          "n": 6404,
+          "base_fail": 1543,
+          "cand_fail": 1544,
+          "rescued": 0,
+          "regressed": 1
+        },
+        {
+          "bin": "60-90ms",
+          "n": 3119,
+          "base_fail": 738,
+          "cand_fail": 738,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": "90-120ms",
+          "n": 1179,
+          "base_fail": 297,
+          "cand_fail": 297,
+          "rescued": 1,
+          "regressed": 1
+        },
+        {
+          "bin": "120-150ms",
+          "n": 260,
+          "base_fail": 72,
+          "cand_fail": 71,
+          "rescued": 1,
+          "regressed": 0
+        },
+        {
+          "bin": "150-200ms",
+          "n": 51,
+          "base_fail": 10,
+          "cand_fail": 10,
+          "rescued": 0,
+          "regressed": 0
+        },
+        {
+          "bin": ">=200ms",
+          "n": 2,
+          "base_fail": 1,
+          "cand_fail": 1,
+          "rescued": 0,
+          "regressed": 0
+        }
+      ]
+    }
+  }
+}

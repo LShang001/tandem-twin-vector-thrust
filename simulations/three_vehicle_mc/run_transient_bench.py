@@ -78,7 +78,9 @@ def main() -> int:
                 "selective_aggr": ("osc", SEL_AGGR),
                 "detune85": ("fixed", {"gain_scale": 0.85}),
                 "detune70": ("fixed", {"gain_scale": 0.70}),
-                "lead05": ("lead", {"lead_s": 0.05})}
+                "lead05": ("lead", {"lead_s": 0.05}),
+                "accel_fb": ("accel_fb", {"accel_fb_gain": 0.8,
+                                          "accel_fb_tau_s": 0.02})}
     rows = []
     for scen, kw in scenarios(steps).items():
         for name, (variant, osc) in variants.items():

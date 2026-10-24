@@ -58,6 +58,12 @@
 #ifdef BFS_RATE_LEAD
 #include "RateLeadPredictor.h"    // 速率预测/超前补偿（opt-in，默认关闭）
 #endif
+#ifdef BFS_RATE_ACCEL_FB
+#include "RateAccelFeedback.h"    // 实测角加速度反馈 AAF（opt-in，默认关闭）
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+#include "RatePhaseLead.h"        // 速率相位超前（opt-in，默认关闭）
+#endif
 #include "mavlink_bridge.h"    // MAVLink STATUSTEXT 事件桥接（2026-08-10）
 
 #include <cmath>
@@ -67,6 +73,45 @@ static bfs::RateLeadPredictor g_rate_lead_roll;
 static bfs::RateLeadPredictor g_rate_lead_pitch;
 static bfs::RateLeadPredictor g_rate_lead_yaw;
 static float g_rate_lead_alpha_prev[3] = {0.0f, 0.0f, 0.0f};
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+static bfs::RatePhaseLead g_rate_pl_roll;
+static bfs::RatePhaseLead g_rate_pl_pitch;
+static bfs::RatePhaseLead g_rate_pl_yaw;
+
+void setRatePhaseLeadGains(const float rp_gain, const float yaw_gain,
+                           const float tau_s)
+{
+  bfs::RatePhaseLeadParams p_rp = g_rate_pl_roll.params();
+  p_rp.gain = rp_gain;
+  if (tau_s > 0.0f) p_rp.tau_s = tau_s;
+  g_rate_pl_roll.setParams(p_rp);
+  g_rate_pl_pitch.setParams(p_rp);
+  bfs::RatePhaseLeadParams p_yaw = g_rate_pl_yaw.params();
+  p_yaw.gain = yaw_gain;
+  if (tau_s > 0.0f) p_yaw.tau_s = tau_s;
+  g_rate_pl_yaw.setParams(p_yaw);
+}
+#endif
+#ifdef BFS_RATE_ACCEL_FB
+static bfs::RateAccelFeedback g_rate_aaf_roll;
+static bfs::RateAccelFeedback g_rate_aaf_pitch;
+static bfs::RateAccelFeedback g_rate_aaf_yaw;
+
+// 宿主机 SIL 用运行时增益覆盖；生产固件不调用，保持编译期默认值。
+void setRateAccelFeedbackGains(const float rp_gain, const float yaw_gain,
+                               const float tau_s)
+{
+  bfs::RateAccelFeedbackParams p_rp = g_rate_aaf_roll.params();
+  p_rp.gain = rp_gain;
+  if (tau_s > 0.0f) p_rp.tau_s = tau_s;
+  g_rate_aaf_roll.setParams(p_rp);
+  g_rate_aaf_pitch.setParams(p_rp);
+  bfs::RateAccelFeedbackParams p_yaw = g_rate_aaf_yaw.params();
+  p_yaw.gain = yaw_gain;
+  if (tau_s > 0.0f) p_yaw.tau_s = tau_s;
+  g_rate_aaf_yaw.setParams(p_yaw);
+}
 #endif
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1286,7 +1331,12 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     //       另：PositionPID 的 D 项按"每拍差分"实现（未除 dt），kd≠0 时
     //       数值量纲隐含 200 Hz，不能当连续域微分用。
     // ────────────────────────────────────────────────────────────────────
-#ifdef BFS_RATE_LEAD
+#ifdef BFS_RATE_PHASE_LEAD
+    const float rate_meas_roll = g_rate_pl_roll.update(
+        current_omega_dps_body_filtered.x, 0.005f);
+    const float rate_meas_pitch = g_rate_pl_pitch.update(
+        current_omega_dps_body_filtered.y, 0.005f);
+#elif defined(BFS_RATE_LEAD)
     const float rate_meas_roll = g_rate_lead_roll.predict(
         current_omega_dps_body_filtered.x, g_rate_lead_alpha_prev[0]);
     const float rate_meas_pitch = g_rate_lead_pitch.predict(
@@ -1309,6 +1359,13 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     g_rate_lead_alpha_prev[0] = gnc_tel.alpha_ref_dps2[0];
     g_rate_lead_alpha_prev[1] = gnc_tel.alpha_ref_dps2[1];
 #endif
+#ifdef BFS_RATE_ACCEL_FB
+    // 实测角加速度负反馈：只加阻尼，不反馈指令，避免积分器正反馈。
+    gnc_tel.alpha_ref_dps2[0] += g_rate_aaf_roll.update(
+        current_omega_dps_body_filtered.x, 0.005f);
+    gnc_tel.alpha_ref_dps2[1] += g_rate_aaf_pitch.update(
+        current_omega_dps_body_filtered.y, 0.005f);
+#endif
     outputs.alpha_roll_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[0]);
     outputs.alpha_pitch_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[1]);
   }
@@ -1318,6 +1375,14 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     pitchAnglePID.reset();
     rollRatePID.reset();
     pitchRatePID.reset();
+#ifdef BFS_RATE_ACCEL_FB
+    g_rate_aaf_roll.reset();
+    g_rate_aaf_pitch.reset();
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+    g_rate_pl_roll.reset();
+    g_rate_pl_pitch.reset();
+#endif
     gnc_tel.omega_ref_dps[0] = 0.0f;
     gnc_tel.omega_ref_dps[1] = 0.0f;
     // 手动TVC：alpha清零，mix层走RC旁路直接控制舵机
@@ -1426,7 +1491,10 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
     gnc_tel.omega_ref_dps[2] = yawAngleOutputFilter.filter(gnc_tel.omega_ref_dps[2]);
 
     // 内环统一角度域：速率误差(deg/s) → 角加速度指令(deg/s²)。
-#ifdef BFS_RATE_LEAD
+#ifdef BFS_RATE_PHASE_LEAD
+    const float rate_meas_yaw = g_rate_pl_yaw.update(
+        current_omega_dps_body_filtered.z, 0.005f);
+#elif defined(BFS_RATE_LEAD)
     const float rate_meas_yaw = g_rate_lead_yaw.predict(
         current_omega_dps_body_filtered.z, g_rate_lead_alpha_prev[2]);
 #else
@@ -1438,12 +1506,22 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
 #ifdef BFS_RATE_LEAD
     g_rate_lead_alpha_prev[2] = gnc_tel.alpha_ref_dps2[2];
 #endif
+#ifdef BFS_RATE_ACCEL_FB
+    gnc_tel.alpha_ref_dps2[2] += g_rate_aaf_yaw.update(
+        current_omega_dps_body_filtered.z, 0.005f);
+#endif
     outputs.alpha_yaw_radps2 = ControlUnits::dps2ToRadps2(gnc_tel.alpha_ref_dps2[2]);
   }
   else
   {
     yawAnglePID.reset();
     yawRatePID.reset();
+#ifdef BFS_RATE_ACCEL_FB
+    g_rate_aaf_yaw.reset();
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+    g_rate_pl_yaw.reset();
+#endif
     gnc_tel.omega_ref_dps[2] = 0.0f;
     gnc_tel.alpha_ref_dps2[2] = 0.0f;
     outputs.alpha_yaw_radps2 = 0.0f;  // 手动TVC由mix层RC旁路处理；锁定时保持零

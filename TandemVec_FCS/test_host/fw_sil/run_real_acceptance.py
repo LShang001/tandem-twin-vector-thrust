@@ -127,6 +127,18 @@ def main() -> int:
                     help="测试用 att/rate kp 缩放")
     ap.add_argument("--scale-ki", action="store_true",
                     help="同时缩放 rate ki")
+    ap.add_argument("--aaf-gain", type=float, default=None,
+                    help="测试用：AAF 滚转/俯仰增益（需 -DBFS_RATE_ACCEL_FB）")
+    ap.add_argument("--aaf-yaw-gain", type=float, default=None,
+                    help="测试用：AAF 偏航增益（0 关闭偏航）")
+    ap.add_argument("--aaf-tau", type=float, default=None,
+                    help="测试用：AAF 差分低通时间常数 [s]")
+    ap.add_argument("--pl-gain", type=float, default=None,
+                    help="测试用：相位超前增益（需 -DBFS_RATE_PHASE_LEAD）")
+    ap.add_argument("--pl-yaw-gain", type=float, default=None,
+                    help="测试用：相位超前偏航增益（0 关闭偏航）")
+    ap.add_argument("--pl-tau", type=float, default=None,
+                    help="测试用：相位超前低通时间常数 [s]")
     args = ap.parse_args()
     seeds = [int(s) for s in args.seeds.split(",") if s]
     profiles = [p for p in args.profiles.split(",") if p]
@@ -152,6 +164,18 @@ def main() -> int:
                 cmd += ["--gain-scale", str(args.gain_scale)]
             if args.scale_ki:
                 cmd += ["--scale-ki"]
+            if args.aaf_gain is not None:
+                cmd += ["--aaf-gain", str(args.aaf_gain)]
+            if args.aaf_yaw_gain is not None:
+                cmd += ["--aaf-yaw-gain", str(args.aaf_yaw_gain)]
+            if args.aaf_tau is not None:
+                cmd += ["--aaf-tau", str(args.aaf_tau)]
+            if args.pl_gain is not None:
+                cmd += ["--pl-gain", str(args.pl_gain)]
+            if args.pl_yaw_gain is not None:
+                cmd += ["--pl-yaw-gain", str(args.pl_yaw_gain)]
+            if args.pl_tau is not None:
+                cmd += ["--pl-tau", str(args.pl_tau)]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
             try:
                 data = parse_json_line(proc.stdout)

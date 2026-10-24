@@ -60,6 +60,14 @@
 #include <random>
 #include <array>
 
+#ifdef BFS_RATE_ACCEL_FB
+extern void setRateAccelFeedbackGains(float rp_gain, float yaw_gain,
+                                      float tau_s);
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+extern void setRatePhaseLeadGains(float rp_gain, float yaw_gain, float tau_s);
+#endif
+
 static const TandemVecParams &P = kDefaultTandemVecParams;
 static const ServoConfig &SC = kDefaultServoConfig;
 static bfs::Ekf15State g_ekf;
@@ -1131,6 +1139,16 @@ int main(int argc, char** argv) {
   int mask=0x03;        // inertia_comp_mask，0 关闭前馈 / 3 全开（C-02 A/B）
   float gain_scale=1.0f; // 测试用：att/rate kp 缩放（默认 1.0，不影响生产）
   bool scale_ki=false;   // 同时缩放 rate ki
+#ifdef BFS_RATE_ACCEL_FB
+  float aaf_gain=-1.0f;      // 测试用：AAF 滚转/俯仰增益覆盖（<0 用编译期默认）
+  float aaf_yaw_gain=-1.0f;  // 测试用：AAF 偏航增益覆盖（可设 0 关闭偏航）
+  float aaf_tau=-1.0f;       // 测试用：差分低通时间常数覆盖（<0 用默认 0.02 s）
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+  float pl_gain=-1.0f;
+  float pl_yaw_gain=-1.0f;
+  float pl_tau=-1.0f;
+#endif
   bool flow=false;
   bool wind_on=true;    // --no-wind 关闭 20–25 s 侧风（F3 洁净场景用）
 #ifdef FW_SIL_REAL_NAV
@@ -1149,6 +1167,16 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--mask")==0 && i+1<argc) mask=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--gain-scale")==0 && i+1<argc) gain_scale=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--scale-ki")==0) scale_ki=true;
+#ifdef BFS_RATE_ACCEL_FB
+    else if (std::strcmp(argv[i],"--aaf-gain")==0 && i+1<argc) aaf_gain=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--aaf-yaw-gain")==0 && i+1<argc) aaf_yaw_gain=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--aaf-tau")==0 && i+1<argc) aaf_tau=std::atof(argv[++i]);
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+    else if (std::strcmp(argv[i],"--pl-gain")==0 && i+1<argc) pl_gain=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--pl-yaw-gain")==0 && i+1<argc) pl_yaw_gain=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--pl-tau")==0 && i+1<argc) pl_tau=std::atof(argv[++i]);
+#endif
     else if (std::strcmp(argv[i],"--flow")==0) flow=true;
     else if (std::strcmp(argv[i],"--flow-delay")==0 && i+1<argc) g_flow_delay=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--mag")==0) g_use_mag_yaw=true;
@@ -1246,6 +1274,22 @@ int main(int argc, char** argv) {
     scale_pid(kFlightCtrlParams.rate_pitch);
     scale_pid(kFlightCtrlParams.rate_yaw);
   }
+#ifdef BFS_RATE_ACCEL_FB
+  if (aaf_gain >= 0.0f)
+  {
+    setRateAccelFeedbackGains(aaf_gain,
+                              (aaf_yaw_gain >= 0.0f) ? aaf_yaw_gain : aaf_gain,
+                              aaf_tau);
+  }
+#endif
+#ifdef BFS_RATE_PHASE_LEAD
+  if (pl_gain >= 0.0f)
+  {
+    setRatePhaseLeadGains(pl_gain,
+                          (pl_yaw_gain >= 0.0f) ? pl_yaw_gain : pl_gain,
+                          pl_tau);
+  }
+#endif
 #ifdef FW_SIL_REAL_NAV
   if (real_cfg.enabled)
   {

@@ -1175,6 +1175,96 @@ predictor for integrating processes。<strong>结论：lead 在 L1
 ms 失败降到 490→60 / 465→35，但低延迟新增 66 例失败、 丢通过 2,116、P95
 从 11.6° 升到 25.6°——陀螺差分噪声/延迟使增量项抖动。 整体不如
 PID/detune/lead，不接入固件。数据：<code>sim-data/indi-2026-10-24/</code>。</p>
+<h3 id="313-实测角加速度反馈-aafl1-最强固件-sil-否定">3.13
+实测角加速度反馈 AAF（L1 最强，固件 SIL 否定）</h3>
+<p><code>RateAccelFeedback.h</code> /
+<code>fast_mc variant="accel_fb"</code>：对滤波后陀螺速率做 差分并再经
+τ=0.02 s 低通，输出 <code>α_corr=-K·dω/dt</code> 叠加到速率环输出。 与
+lead 的关键区别是<strong>只反馈实测角加速度、不反馈指令
+<code>alpha_ref</code></strong>，
+因此不会经指令通道/积分器形成代数正反馈。</p>
+<p>同种子 20k（seed 20261024）：TandemVec fixed 79.02%/1.90% →
+K=0.3/0.5/ 0.8/1.2 为
+80.47/0.91%、80.53/0.84%、80.54/0.84%、80.54/0.84%，K≥0.5
+饱和；共轴/液体中性。同种子 100k：TandemVec 78.63/1.90 →
+<strong>80.22/0.85</strong>； 逐 case 救回 211、新增失败 0、丢通过
+3；无故障失败 206→0；延迟 90–120/120–150/150–200/&gt;200 ms 失败 80→6 /
+104→3 / 35→0 / 1→0。 共轴 84.86/3.85→84.97/3.83、液体
+60.52/23.92→60.52/23.93（中性）。</p>
+<p>1M 独立种子（seed 20261032，TandemVec）：fixed 78.59/1.96 → AAF
+<strong>80.18/0.86</strong>（detune70 80.16/0.87、lead05
+80.18/0.86），不降增益达到 同等失败率。</p>
+<p>60s/5k：fixed 77.68/2.26、detune70 79.48/1.02、lead05 79.52/1.02、
+<strong>AAF 79.66/0.88</strong>，当前 60 s 最好。瞬态 2k：全场景 0%
+失败，快双拍 RMS 8.60° 优于 lead05 8.90°。对抗 TPE（250 trials）：fixed
+280.6°/ −2901 m（severity 33.69）→ AAF <strong>15.0°/7.9 m（severity
+0.25，8/8 通过）</strong>。</p>
+<p><strong>L2 固件 SIL 否定（2026-10-24）</strong>：真实固件 A/B，6 例
+（mag_clean/mag_nominal × seed1–3，40 s，含 <code>--pos-hold</code>，yaw
+通道关闭）：</p>
+<table>
+<thead>
+<tr>
+<th>AAF 配置</th>
+<th>通过</th>
+<th>典型失败</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>K=0.05，τ=0.02 s</td>
+<td><strong>6/6</strong></td>
+<td>指标与基线互有胜负：mag_clean roll 9.26/6.86/5.91°（基线
+9.04/10.72/8.21°），但 mag_nominal hold 0.74–7.68 m（基线 0.47–0.90
+m）</td>
+</tr>
+<tr>
+<td>K=0.1，τ=0.02 s</td>
+<td>4/6</td>
+<td>mag_nominal seed1 hold 40 m/roll 21.8°</td>
+</tr>
+<tr>
+<td>K=0.2，τ=0.02 s</td>
+<td>2/6</td>
+<td>mag_clean seed1 hold 103 m</td>
+</tr>
+<tr>
+<td>K=0.5/0.8，τ=0.02 s（yaw 同增益）</td>
+<td>1/6 / 1/6</td>
+<td>mag_clean seed1 roll 68°/50°、hold 150/278 m；mag_nominal
+全失败</td>
+</tr>
+<tr>
+<td>K=0.1/0.2/0.3，τ=0.005 s</td>
+<td><strong>0/6</strong></td>
+<td>降低差分滤波后噪声主导，失败更重</td>
+</tr>
+</tbody>
+</table>
+<p>只有 K=0.05 能过 6/6，但相对基线没有一致的姿态/位置改善；K≥0.1 的退化
+随增益单调，τ
+降低反而更差——说明<strong>陀螺差分噪声与位置保持外环耦合</strong>
+是主因，而非单一滤波滞后。fast MC 没有水平位置环/Ki/真实陀螺噪声谱， L1
+收益不能外推到 SIL。<code>BFS_RATE_ACCEL_FB</code> 保持默认关闭，AAF
+不进入 固件候选，只保留 L1
+研究分支。数据：<code>sim-data/aaf-2026-10-24/</code>。</p>
+<h3 id="314-速率相位超前phase-leadl1-接近-aafsil-仍否定">3.14
+速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）</h3>
+<p><code>RatePhaseLead.h</code>：<code>ω_eff=ω+K·(ω−LPF(ω))</code>，一阶低通
+τ=0.02 s，DC 增益 1、 高频增益 1+K；不直接对陀螺做差分，理论上比 AAF
+更抗噪声。20k （seed 20261024，TandemVec）K=0.1/0.3/0.5/1.0：通过
+79.48/79.96/80.23/<strong>80.50%</strong>、失败
+1.65/1.31/1.10/<strong>0.89%</strong>，K=1.0 接近 AAF
+K=0.8（80.54/0.84）。</p>
+<p>固件 SIL 同样否定（同 6 例、<code>--pos-hold</code>、yaw
+关闭）：K=0.5 <strong>3/6</strong> （mag_clean 三 seed hold 1.6–2.7
+m，全部超 1.5 m 门限）；K=1.0 <strong>0/6</strong> （mag_clean seed1
+roll 49°/pitch 54°；mag_nominal seed1 hold 77.7 m、 roll 23.7°，其余
+roll 20–29°）。与 AAF 结论一致：在现有位置保持外环/
+Ki/真实陀螺噪声下，任何抬升速率测量高频分量的方案都会降低相位/噪声
+裕度，L1 的相位超前收益无法在 L2 复现。<code>BFS_RATE_PHASE_LEAD</code>
+默认关闭，
+不进入固件候选。数据：<code>sim-data/aaf-2026-10-24/</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1218,5 +1308,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:18</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:39</footer></article></body>
 </html>

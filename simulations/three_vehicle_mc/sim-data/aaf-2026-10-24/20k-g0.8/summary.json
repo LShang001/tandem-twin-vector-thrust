@@ -1,0 +1,149 @@
+{
+  "seed": 20261024,
+  "cases_per_vehicle": 20000,
+  "duration_s": 20.0,
+  "nominal": false,
+  "variant": "accel_fb",
+  "osc_params": {
+    "window_s": 0.25,
+    "threshold": 6.0,
+    "decay": 0.9,
+    "recovery": 1.01,
+    "floor": 0.55,
+    "filter_tau_s": 0.05,
+    "min_rate_dps": 2.0,
+    "ref_gate_deg": 0.5,
+    "gain_scale": 1.0,
+    "adrc": {
+      "wc": 16.0,
+      "wo": 50.0,
+      "b0": 1.0
+    },
+    "lead_s": 0.0,
+    "indi": {
+      "filter_tau_s": 0.02,
+      "b0": 1.0
+    },
+    "accel_fb": {
+      "gain": 0.8,
+      "tau_s": 0.02
+    }
+  },
+  "vehicles": {
+    "TandemVec": {
+      "cases": 20000,
+      "pass_rate": 0.8054,
+      "fail_rate": 0.00845,
+      "final_h_p50": 9.749664821758184,
+      "final_h_p05": 7.025527696316768,
+      "final_h_p95": 12.209642665060956,
+      "max_ang_p50": 4.046084335674009,
+      "max_ang_p95": 10.144291397955158,
+      "sat_frac_p50": 0.0,
+      "sat_frac_p95": 0.0,
+      "top_param_corr": [
+        [
+          "thrust_loss",
+          -0.629427111183643
+        ],
+        [
+          "wind_up",
+          -0.08442313820497092
+        ],
+        [
+          "servo_jam",
+          0.030125336258200554
+        ],
+        [
+          "bias_rate_dps",
+          0.008171837603246641
+        ],
+        [
+          "bias_angle_deg",
+          0.006904799440773718
+        ],
+        [
+          "torque_noise",
+          0.0068945987887165765
+        ]
+      ]
+    },
+    "CoaxialVTVL": {
+      "cases": 20000,
+      "pass_rate": 0.8498,
+      "fail_rate": 0.04135,
+      "final_h_p50": 9.854705628048375,
+      "final_h_p05": 6.1054208909849095,
+      "final_h_p95": 11.922539614793626,
+      "max_ang_p50": 4.141244921512355,
+      "max_ang_p95": 10.182946800989017,
+      "sat_frac_p50": 0.0355,
+      "sat_frac_p95": 0.389,
+      "top_param_corr": [
+        [
+          "thrust_loss",
+          -0.5367749070764611
+        ],
+        [
+          "wind_up",
+          -0.1949901935648708
+        ],
+        [
+          "mass_mult",
+          0.18241475634672738
+        ],
+        [
+          "thrust_mult",
+          -0.18150057125142208
+        ],
+        [
+          "servo_jam",
+          0.04115208090355161
+        ],
+        [
+          "i_yaw",
+          0.014047678409667674
+        ]
+      ]
+    },
+    "LiquidRocket": {
+      "cases": 20000,
+      "pass_rate": 0.6053,
+      "fail_rate": 0.23735,
+      "final_h_p50": 9.512815129543519,
+      "final_h_p05": -514.8224105722071,
+      "final_h_p95": 12.228294061560474,
+      "max_ang_p50": 10.524715265095363,
+      "max_ang_p95": 35.39727496521308,
+      "sat_frac_p50": 0.0005,
+      "sat_frac_p95": 0.21275,
+      "top_param_corr": [
+        [
+          "mass_mult",
+          0.4180544802178595
+        ],
+        [
+          "thrust_mult",
+          -0.38037328632041684
+        ],
+        [
+          "wind_up",
+          -0.3792191112440031
+        ],
+        [
+          "thrust_loss",
+          -0.2357945812482812
+        ],
+        [
+          "torque_noise",
+          0.0365500174557978
+        ],
+        [
+          "servo_jam",
+          0.029680913948927603
+        ]
+      ]
+    }
+  },
+  "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设"
+}
