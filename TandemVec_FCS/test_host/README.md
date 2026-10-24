@@ -31,6 +31,7 @@
 | `test_generic_allocation.cpp` | `GenericControlAllocation.h` — 3×N 加权最小范数分配、限幅/冗余/秩亏、与 legacy BTRUE 等价 | TandemVec headers | 28 |
 | `test_tandemvec_allocator.cpp` | `TandemVecAllocator.h` — α_cmd/油门 → 摆角/差速/电机，零油门/饱和/τm 状态/前馈掩码 | TandemVec headers | 16 |
 | `test_thrust_allocation.cpp` | `ThrustAllocation.h` — 期望天向比力 → 总推力/油门，倾角补偿/cos 下限/上下饱和/非有限输入/旧 mapFloat 口径 | TandemVec headers | 25 |
+| `test_adaptive_gain_damper.cpp` | `AdaptiveGainDamper.h` — 振荡检测降增益/安静恢复/上下限/非有限输入/复位（候选鲁棒层，未接默认飞控） | 无 | 7 |
 | `test_heading_aiding_gate.cpp` | `HeadingAidingGate.h` — 磁/YawGsf 航向新鲜度、失效立即降级、恢复 3 s 锁存、YawGsf 只诊断不解除、非有限输入 | 无 | 15 |
 | `test_liquid_rocket_model.cpp` | `LiquidRocketModel.h` — 点火/解锁互锁、阀门/推力速率、Tmin、比冲质量流、耗尽关机、两轴 asin 喷管几何 | 无 | 33 |
 | `test_coaxial_vtv_control.cpp` | `CoaxialVtvControl.h` — DirectTvcRate 极性/限幅/手动旁路/偏航差速/RATE_MODE + 简化 6DOF 刚体闭环 | QuaternionMath | 26 |
