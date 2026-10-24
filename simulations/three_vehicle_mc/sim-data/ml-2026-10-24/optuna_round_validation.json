@@ -1,0 +1,38 @@
+{
+  "fixed": {
+    "fail": 0.01958,
+    "pass": 0.78733
+  },
+  "exact": {
+    "fail": 0.00941,
+    "pass": 0.80175,
+    "rescued": 1018,
+    "regressed": 1,
+    "lost_pass": 61,
+    "p95": 10.179320831191658
+  },
+  "round": {
+    "fail": 0.00937,
+    "pass": 0.80174,
+    "rescued": 1022,
+    "regressed": 1,
+    "lost_pass": 63,
+    "p95": 10.179841601536097
+  },
+  "round55": {
+    "fail": 0.00937,
+    "pass": 0.80169,
+    "rescued": 1022,
+    "regressed": 1,
+    "lost_pass": 70,
+    "p95": 10.180633839913654
+  },
+  "grid": {
+    "fail": 0.01057,
+    "pass": 0.79998,
+    "rescued": 904,
+    "regressed": 3,
+    "lost_pass": 105,
+    "p95": 10.27893527587636
+  }
+}

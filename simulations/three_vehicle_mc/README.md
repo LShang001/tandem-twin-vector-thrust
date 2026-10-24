@@ -120,9 +120,114 @@ py -3.12 run_boundary_grid.py --out sim-data/boundary-grid-2026-10-24  # TandemV
   `sim-data/mega-osc-tuned-300k-v2-2026-10-24/`、
   `sim-data/boundary-grid-2026-10-24/`、
   `sim-data/mega-tandemvec-1m-*-seed25-2026-10-24/`、
-  `sim-data/mega-tandemvec-60s-*-5k-2026-10-24/`；历史修正前目录见
+  `sim-data/mega-tandemvec-1m-{fixed,grid,optuna}-seed28-2026-10-24/`、
+  `sim-data/mega-tandemvec-60s-*-5k-2026-10-24/`、
+  `sim-data/ml-2026-10-24/`；历史修正前目录见
   `sim-data/README.md`，仅无故障桶有效；完整 CSV 不入库。
 
-## 5 证据等级
+## 5 ML/AI 分析层（2026-10-24，L1 数据内）
+
+> 目的不是替代物理模型，而是用 ML 做敏感度、边界筛选和实验设计。
+> 标签是 `fast_mc` 的 fail，不是实机失效；所有结论只在这套反演模型和采样分布内成立。
+
+### 5.1 失败代理与可解释性
+
+`ml_failure_surrogate.py`：HistGradientBoosting（balanced，300 iter，70/15/15），
+分别训练 fixed/tuned 的 all 与 no-fault 四套模型，测试集 150k：
+
+| 模型 | AUC | AP | Brier（原始→isotonic） |
+|---|---|---|---|
+| fixed_all | 0.9998 | 0.9919 | 0.00407→0.00123 |
+| fixed_no_fault | 0.9999 | 0.9927 | 0.00151→0.00074 |
+| tuned_all | 0.9992 | 0.9580 | 0.00769→0.00162 |
+| tuned_no_fault | 0.9985 | 0.5617 | 0.00545→0.00109 |
+
+- **all 模型的高 AUC 部分来自故障标志本身**（thrust_loss/servo_jam 几乎直接导致 fail）；
+  no-fault 模型才是阻尼相关边界。
+- 置换重要性（AUC drop）：fixed_no_fault 首位是 `delay×att_kp`（0.0263），
+  其次是 `delay×rate_kp`、`gain_product`；tuned_no_fault 的 `delay×att_kp`
+  升到 0.2787、`delay×rate_kp` 0.1450——剩余失败高度集中在延迟×增益交互。
+- 校准：isotonic 把 Brier 降 2–5 倍；按延迟分桶的预测/实测几乎重合
+  （fixed 90–120 ms 0.072/0.073，tuned 120–150 ms 0.057/0.058）。
+- 风险图：固定名义上下文、isotonic 校准后，fixed_no_fault 的 `p>0.5` 面积
+  23.2%，tuned 为 0%；150 ms/rate=1.0 处 0.908→0.07。**风险图是模型表面，
+  高延迟角点样本稀疏；延迟分桶校准才是已验证的可靠性口径。**
+
+### 5.2 主动学习（稀有失败边界）
+
+`ml_active_learning.py`：no-fault 池 820k、测试 150k，初始 3k 标签，
+每轮加 3k，3 个种子；对比 entropy 不确定度采样与随机采样：
+
+| 标签数 | 随机 AP | 不确定度 AP | 随机 Brier | 不确定度 Brier |
+|---|---|---|---|---|
+| 6k | 0.9507 | 0.9543 | 0.00314 | 0.00206 |
+| 9k | 0.9612 | **0.9910** | 0.00284 | 0.00089 |
+| 15k | 0.9695 | **0.9954** | 0.00246 | **0.00062** |
+
+- 不确定度采样用 **9k 标签**的 AP（0.9910）已超过随机 15k（0.9695），
+  即约 40% 标签达到更好边界精度；Brier 低 4 倍。
+- 这是该数据/模型/特征下的结果，不外推为通用主动学习结论。
+
+### 5.3 失效模式聚类
+
+`ml_failure_clusters.py`：仅用输入特征（不含结果严重度）做 KMeans，
+轮廓系数选 k=3（0.253）；tuned 失败投影到同一空间：
+
+| 簇 | 输入特征 | fixed 失败 | tuned 失败 |
+|---|---|---|---|
+| C0 | thrust_loss=1、低延迟 | 8,375 | 8,379（不变） |
+| C1 | 98% 无故障、延迟中位 125 ms、增益 1.23/1.16 | **10,527** | **1,771（−83%）** |
+| C2 | servo_jam 74% | 586 | 543 |
+
+tuned 几乎只消灭 C1（延迟/增益振荡类），C0（推力损失）和 C2（舵机卡死）
+基本不变——与“阻尼不是故障容错”的结论一致。簇是输入区域，不是物理失效机理。
+
+### 5.4 贝叶斯优化阻尼参数
+
+`ml_optuna_damper.py`：Optuna TPE，60 trials，8k 优化集，100k 独立验证；
+目标 `fail + 0.30·lost_pass + 0.02·(1−pass)`。最优区域：
+`window≈0.397 s, threshold=3, decay≈0.758, recovery≈1.019, floor≈0.574`。
+
+| 版本 | 100k 失败 | 100k 通过 | 救回/新增失败 |
+|---|---|---|---|
+| fixed | 1.958% | 78.73% | — |
+| 网格 tuned | 1.057% | 80.00% | 904 / 3 |
+| TPE 候选 | **0.941%** | **80.18%** | **1018 / 1** |
+
+1M 独立种子（seed 20261028）同种子三方对照：
+
+| 版本 | 通过 | 失败 | max_ang P95 |
+|---|---|---|---|
+| fixed | 78.57% | 1.93% | 11.67° |
+| 网格 tuned | 79.84% | 1.05% | 10.33° |
+| TPE 候选 | **80.03%** | **0.93%** | **10.22°** |
+
+- fixed→TPE：救回 10,014、新增 13（全部边缘→失败、无通过→失败）。
+- grid→TPE：救回 **1,228**、新增 4（3 例边缘→失败 + **1 例通过→失败**）、
+  新增通过 2,172、通过→边缘 257；延迟桶 90–120/120–150/150–200 ms
+  失败 1272→721 / 969→433 / 299→183。
+- TPE 尾部 `max_ang>180°` 410→72、`final_h<−1000 m` 1225→210；
+  但最坏单例仍为 349°/−3701 m，**仍无最坏情况保证**。
+
+TPE 候选比网格 tuned 更激进（更敏感、衰减更快、floor 更高）；它只在
+fast MC 的悬停/无驾驶杆输入下验证过，**不直接改成固件默认值**。
+`AdaptiveGainDamper` 当前默认仍是网格 tuned；TPE 结果作为下一轮
+SIL/台架 A/B 的候选。
+
+### 5.5 复现
+
+```bash
+py -3.12 ml_failure_surrogate.py --fixed /tmp/fixed-1m.csv --tuned /tmp/tuned-1m.csv
+py -3.12 ml_active_learning.py --data /tmp/fixed-1m.csv
+py -3.12 ml_failure_clusters.py --fixed /tmp/fixed-1m.csv --tuned /tmp/tuned-1m.csv
+py -3.12 ml_optuna_damper.py
+```
+
+证据：`sim-data/ml-2026-10-24/`（metrics/风险图/校准/重要性/主动学习/
+聚类/optuna trials 与验证）。全部为 L1 模型内分析，不是实机概率。
+依赖：scikit-learn / optuna / matplotlib。未上深度学习时序模型或 RL：
+当前没有轨迹级标注数据，先把可解释的表格模型和实验设计跑通。
+
+## 6 证据等级
 
 L1：模型/参数假设下的数值包线；不是 L2 SIL，不是 HIL/台架/实机。

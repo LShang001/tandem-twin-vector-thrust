@@ -20,6 +20,10 @@
 | `mega-tandemvec-1m-tuned-seed25-2026-10-24/` | TandemVec 1M tuned，同上 | 权威独立验证 |
 | `mega-tandemvec-60s-fixed-5k-2026-10-24/` | TandemVec 60 s、5k，seed 20261026 | 时窗外推 |
 | `mega-tandemvec-60s-tuned-5k-2026-10-24/` | TandemVec 60 s、5k tuned | 时窗外推 |
+| `mega-tandemvec-1m-fixed-seed28-2026-10-24/` | TandemVec 1M fixed，独立 seed 20261028 | TPE 对照基线 |
+| `mega-tandemvec-1m-grid-seed28-2026-10-24/` | TandemVec 1M 网格 tuned，同 seed | 同种子对照 |
+| `mega-tandemvec-1m-optuna-seed28-2026-10-24/` | TandemVec 1M TPE 候选 | TPE 独立验证 |
+| `ml-2026-10-24/` | 失败代理/校准/重要性/风险图、主动学习、失效聚类、Optuna | L1 数据内 ML |
 
 ## 2 thrust_loss 建模勘误（2026-10-24）
 

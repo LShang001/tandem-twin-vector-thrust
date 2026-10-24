@@ -1,0 +1,834 @@
+{
+  "seed": 20261024,
+  "note": "L1 模型内失败代理；不是实机概率",
+  "models": {
+    "fixed_all": {
+      "metrics_raw": {
+        "n": 150000,
+        "positives": 2923,
+        "auc": 0.9997962159506233,
+        "average_precision": 0.9918704356834518,
+        "brier": 0.004073363154921061,
+        "log_loss": 0.013243581885072506,
+        "threshold": 0.97,
+        "precision": 0.9719002458728486,
+        "recall": 0.9466301744782758,
+        "f1": 0.9590987868284229,
+        "confusion": {
+          "tn": 146997,
+          "fp": 80,
+          "fn": 156,
+          "tp": 2767
+        }
+      },
+      "metrics_calibrated": {
+        "n": 150000,
+        "positives": 2923,
+        "auc": 0.9997894970410874,
+        "average_precision": 0.9905141919953027,
+        "brier": 0.0012268596061226493,
+        "log_loss": 0.004478867671838249,
+        "threshold": 0.97,
+        "precision": 0.9987684729064039,
+        "recall": 0.8323640095791994,
+        "f1": 0.9080052248553835,
+        "confusion": {
+          "tn": 147074,
+          "fp": 3,
+          "fn": 490,
+          "tp": 2433
+        }
+      },
+      "calibration_by_delay": {
+        "raw": [
+          {
+            "bin": "<30ms",
+            "n": 67766,
+            "mean_pred": 0.013004035051591601,
+            "observed": 0.008352271050379246
+          },
+          {
+            "bin": "30-60ms",
+            "n": 47568,
+            "mean_pred": 0.012976784977572025,
+            "observed": 0.008177766565758493
+          },
+          {
+            "bin": "60-90ms",
+            "n": 23902,
+            "mean_pred": 0.014135987348601907,
+            "observed": 0.009287925696594427
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8315,
+            "mean_pred": 0.11464815880148725,
+            "observed": 0.08731208659049909
+          },
+          {
+            "bin": "120-150ms",
+            "n": 2029,
+            "mean_pred": 0.42952313843263284,
+            "observed": 0.3765401675702316
+          },
+          {
+            "bin": ">=150ms",
+            "n": 420,
+            "mean_pred": 0.674637524934853,
+            "observed": 0.6095238095238096
+          }
+        ],
+        "calibrated": [
+          {
+            "bin": "<30ms",
+            "n": 67766,
+            "mean_pred": 0.008153375109558346,
+            "observed": 0.008352271050379246
+          },
+          {
+            "bin": "30-60ms",
+            "n": 47568,
+            "mean_pred": 0.008026360607340353,
+            "observed": 0.008177766565758493
+          },
+          {
+            "bin": "60-90ms",
+            "n": 23902,
+            "mean_pred": 0.009087449570910355,
+            "observed": 0.009287925696594427
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8315,
+            "mean_pred": 0.0866980846105244,
+            "observed": 0.08731208659049909
+          },
+          {
+            "bin": "120-150ms",
+            "n": 2029,
+            "mean_pred": 0.37209543129507605,
+            "observed": 0.3765401675702316
+          },
+          {
+            "bin": ">=150ms",
+            "n": 420,
+            "mean_pred": 0.5935357286881883,
+            "observed": 0.6095238095238096
+          }
+        ]
+      },
+      "importance": [
+        {
+          "feature": "delay_x_att",
+          "auc_drop": 0.02923625227751922
+        },
+        {
+          "feature": "delay_x_rate",
+          "auc_drop": 0.009808872858509066
+        },
+        {
+          "feature": "wind_up",
+          "auc_drop": 0.00895837461536289
+        },
+        {
+          "feature": "fault",
+          "auc_drop": 0.007910740946857564
+        },
+        {
+          "feature": "thrust_loss",
+          "auc_drop": 0.005024493307503625
+        },
+        {
+          "feature": "gain_product",
+          "auc_drop": 0.00208094122663105
+        },
+        {
+          "feature": "delay_s",
+          "auc_drop": 0.0008518863698158963
+        },
+        {
+          "feature": "rate_kp_mult",
+          "auc_drop": 0.0008139138699880533
+        },
+        {
+          "feature": "att_kp_mult",
+          "auc_drop": 0.0005098766123680931
+        },
+        {
+          "feature": "servo_jam",
+          "auc_drop": 0.00026090885873278347
+        },
+        {
+          "feature": "bias_angle_deg",
+          "auc_drop": 1.7038048970047237e-05
+        },
+        {
+          "feature": "thrust_eff",
+          "auc_drop": 6.79592516322769e-06
+        },
+        {
+          "feature": "bias_rate_dps",
+          "auc_drop": 2.937040212480646e-06
+        },
+        {
+          "feature": "lever_mult",
+          "auc_drop": 2.422522219047707e-06
+        },
+        {
+          "feature": "tau_mult",
+          "auc_drop": 1.838329913989023e-06
+        },
+        {
+          "feature": "sensor_angle_deg",
+          "auc_drop": 1.1308676730326095e-06
+        },
+        {
+          "feature": "sensor_rate_dps",
+          "auc_drop": 5.252371182706828e-07
+        },
+        {
+          "feature": "thrust_mult",
+          "auc_drop": 2.0902293476621203e-07
+        },
+        {
+          "feature": "delay_ms",
+          "auc_drop": 0.0
+        },
+        {
+          "feature": "i_pitch",
+          "auc_drop": -2.840568089357287e-07
+        },
+        {
+          "feature": "torque_noise",
+          "auc_drop": -8.89687363725411e-07
+        },
+        {
+          "feature": "i_yaw",
+          "auc_drop": -2.5618708423547076e-06
+        },
+        {
+          "feature": "authority",
+          "auc_drop": -2.947759337429412e-06
+        },
+        {
+          "feature": "mass_mult",
+          "auc_drop": -3.510513392729342e-06
+        }
+      ],
+      "model_iter": 128
+    },
+    "fixed_no_fault": {
+      "metrics_raw": {
+        "n": 145525,
+        "positives": 1547,
+        "auc": 0.9999193387505165,
+        "average_precision": 0.9927174772073729,
+        "brier": 0.0015052553049836588,
+        "log_loss": 0.005663575254548659,
+        "threshold": 0.9500000000000001,
+        "precision": 0.9332501559575795,
+        "recall": 0.967032967032967,
+        "f1": 0.9498412698412698,
+        "confusion": {
+          "tn": 143871,
+          "fp": 107,
+          "fn": 51,
+          "tp": 1496
+        }
+      },
+      "metrics_calibrated": {
+        "n": 145525,
+        "positives": 1547,
+        "auc": 0.9979729427527007,
+        "average_precision": 0.9857382837594006,
+        "brier": 0.0007430631621892342,
+        "log_loss": 0.004371797095657104,
+        "threshold": 0.9500000000000001,
+        "precision": 0.9967266775777414,
+        "recall": 0.7873303167420814,
+        "f1": 0.8797399783315276,
+        "confusion": {
+          "tn": 143974,
+          "fp": 4,
+          "fn": 329,
+          "tp": 1218
+        }
+      },
+      "calibration_by_delay": {
+        "raw": [
+          {
+            "bin": "<30ms",
+            "n": 65867,
+            "mean_pred": 0.00010707560877225862,
+            "observed": 0.0
+          },
+          {
+            "bin": "30-60ms",
+            "n": 46282,
+            "mean_pred": 0.00010707560877225864,
+            "observed": 0.0
+          },
+          {
+            "bin": "60-90ms",
+            "n": 22920,
+            "mean_pred": 0.00019699578626492997,
+            "observed": 0.0
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8085,
+            "mean_pred": 0.0902542313876928,
+            "observed": 0.07297464440321583
+          },
+          {
+            "bin": "120-150ms",
+            "n": 1965,
+            "mean_pred": 0.40706445765822097,
+            "observed": 0.35776081424936385
+          },
+          {
+            "bin": ">=150ms",
+            "n": 406,
+            "mean_pred": 0.6810961709516518,
+            "observed": 0.625615763546798
+          }
+        ],
+        "calibrated": [
+          {
+            "bin": "<30ms",
+            "n": 65867,
+            "mean_pred": 0.0,
+            "observed": 0.0
+          },
+          {
+            "bin": "30-60ms",
+            "n": 46282,
+            "mean_pred": 0.0,
+            "observed": 0.0
+          },
+          {
+            "bin": "60-90ms",
+            "n": 22920,
+            "mean_pred": 5.421481458533411e-06,
+            "observed": 0.0
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8085,
+            "mean_pred": 0.07206796909856639,
+            "observed": 0.07297464440321583
+          },
+          {
+            "bin": "120-150ms",
+            "n": 1965,
+            "mean_pred": 0.3564331246421657,
+            "observed": 0.35776081424936385
+          },
+          {
+            "bin": ">=150ms",
+            "n": 406,
+            "mean_pred": 0.6190670819828072,
+            "observed": 0.625615763546798
+          }
+        ]
+      },
+      "importance": [
+        {
+          "feature": "delay_x_att",
+          "auc_drop": 0.02630748282673981
+        },
+        {
+          "feature": "delay_x_rate",
+          "auc_drop": 0.002756438907394826
+        },
+        {
+          "feature": "gain_product",
+          "auc_drop": 0.002266836343358586
+        },
+        {
+          "feature": "att_kp_mult",
+          "auc_drop": 0.0019306707901128595
+        },
+        {
+          "feature": "rate_kp_mult",
+          "auc_drop": 0.0005250232720871717
+        },
+        {
+          "feature": "delay_s",
+          "auc_drop": 0.0003774386361687643
+        },
+        {
+          "feature": "bias_angle_deg",
+          "auc_drop": 1.149714860829154e-05
+        },
+        {
+          "feature": "bias_rate_dps",
+          "auc_drop": 4.260766165220531e-06
+        },
+        {
+          "feature": "wind_up",
+          "auc_drop": 4.112479639717392e-06
+        },
+        {
+          "feature": "sensor_rate_dps",
+          "auc_drop": 3.034930887935161e-06
+        },
+        {
+          "feature": "sensor_angle_deg",
+          "auc_drop": 2.8471012890329828e-06
+        },
+        {
+          "feature": "i_yaw",
+          "auc_drop": 1.2950356557128728e-06
+        },
+        {
+          "feature": "i_pitch",
+          "auc_drop": 1.2554925822583218e-06
+        },
+        {
+          "feature": "authority",
+          "auc_drop": 7.216610905524945e-07
+        },
+        {
+          "feature": "thrust_mult",
+          "auc_drop": 3.855449661471777e-07
+        },
+        {
+          "feature": "lever_mult",
+          "auc_drop": 3.6577342943378e-07
+        },
+        {
+          "feature": "torque_noise",
+          "auc_drop": 2.570299774129481e-07
+        },
+        {
+          "feature": "delay_ms",
+          "auc_drop": 0.0
+        },
+        {
+          "feature": "mass_mult",
+          "auc_drop": -7.315468590896046e-07
+        },
+        {
+          "feature": "tau_mult",
+          "auc_drop": -9.391479947329362e-07
+        }
+      ],
+      "model_iter": 141
+    },
+    "tuned_all": {
+      "metrics_raw": {
+        "n": 150000,
+        "positives": 1604,
+        "auc": 0.9992165264619524,
+        "average_precision": 0.9580169754407626,
+        "brier": 0.007691239288244955,
+        "log_loss": 0.024206998129564807,
+        "threshold": 0.98,
+        "precision": 0.9576271186440678,
+        "recall": 0.8453865336658354,
+        "f1": 0.8980132450331125,
+        "confusion": {
+          "tn": 148336,
+          "fp": 60,
+          "fn": 248,
+          "tp": 1356
+        }
+      },
+      "metrics_calibrated": {
+        "n": 150000,
+        "positives": 1604,
+        "auc": 0.9991936950361099,
+        "average_precision": 0.9518180098403454,
+        "brier": 0.0016212375671843238,
+        "log_loss": 0.006025686807341868,
+        "threshold": 0.98,
+        "precision": 0.9992076069730587,
+        "recall": 0.7861596009975063,
+        "f1": 0.8799720865317515,
+        "confusion": {
+          "tn": 148395,
+          "fp": 1,
+          "fn": 343,
+          "tp": 1261
+        }
+      },
+      "calibration_by_delay": {
+        "raw": [
+          {
+            "bin": "<30ms",
+            "n": 67780,
+            "mean_pred": 0.015253644352733067,
+            "observed": 0.008630864561817645
+          },
+          {
+            "bin": "30-60ms",
+            "n": 47902,
+            "mean_pred": 0.015243167474202204,
+            "observed": 0.009122792367750824
+          },
+          {
+            "bin": "60-90ms",
+            "n": 23627,
+            "mean_pred": 0.015227678235345422,
+            "observed": 0.00905743429127693
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8201,
+            "mean_pred": 0.07468576433512003,
+            "observed": 0.02304597000365809
+          },
+          {
+            "bin": "120-150ms",
+            "n": 2063,
+            "mean_pred": 0.23444606042392493,
+            "observed": 0.06398448860882211
+          },
+          {
+            "bin": ">=150ms",
+            "n": 427,
+            "mean_pred": 0.35221939866189717,
+            "observed": 0.11007025761124122
+          }
+        ],
+        "calibrated": [
+          {
+            "bin": "<30ms",
+            "n": 67780,
+            "mean_pred": 0.008789773921402759,
+            "observed": 0.008630864561817645
+          },
+          {
+            "bin": "30-60ms",
+            "n": 47902,
+            "mean_pred": 0.009086902993544655,
+            "observed": 0.009122792367750824
+          },
+          {
+            "bin": "60-90ms",
+            "n": 23627,
+            "mean_pred": 0.009249156781174437,
+            "observed": 0.00905743429127693
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8201,
+            "mean_pred": 0.023742477820459726,
+            "observed": 0.02304597000365809
+          },
+          {
+            "bin": "120-150ms",
+            "n": 2063,
+            "mean_pred": 0.061505804030613564,
+            "observed": 0.06398448860882211
+          },
+          {
+            "bin": ">=150ms",
+            "n": 427,
+            "mean_pred": 0.09533062807831984,
+            "observed": 0.11007025761124122
+          }
+        ]
+      },
+      "importance": [
+        {
+          "feature": "thrust_loss",
+          "auc_drop": 0.022765466031882342
+        },
+        {
+          "feature": "wind_up",
+          "auc_drop": 0.015676031737870605
+        },
+        {
+          "feature": "delay_x_att",
+          "auc_drop": 0.004255193818229558
+        },
+        {
+          "feature": "fault",
+          "auc_drop": 0.0032672614354422036
+        },
+        {
+          "feature": "delay_x_rate",
+          "auc_drop": 0.0020860682176284395
+        },
+        {
+          "feature": "servo_jam",
+          "auc_drop": 0.0011850466751376076
+        },
+        {
+          "feature": "gain_product",
+          "auc_drop": 0.0008053997176809546
+        },
+        {
+          "feature": "sensor_angle_deg",
+          "auc_drop": 0.000544820973257476
+        },
+        {
+          "feature": "delay_s",
+          "auc_drop": 0.00038954292532564216
+        },
+        {
+          "feature": "sensor_rate_dps",
+          "auc_drop": 0.00031524175523867104
+        },
+        {
+          "feature": "att_kp_mult",
+          "auc_drop": 7.83581550863055e-05
+        },
+        {
+          "feature": "rate_kp_mult",
+          "auc_drop": 6.793301526095141e-05
+        },
+        {
+          "feature": "bias_angle_deg",
+          "auc_drop": 3.4518293773128095e-05
+        },
+        {
+          "feature": "mass_mult",
+          "auc_drop": 4.649476677026643e-06
+        },
+        {
+          "feature": "lever_mult",
+          "auc_drop": 3.1117120173340673e-06
+        },
+        {
+          "feature": "authority",
+          "auc_drop": 2.3202155013668513e-06
+        },
+        {
+          "feature": "bias_rate_dps",
+          "auc_drop": 7.960193533218529e-07
+        },
+        {
+          "feature": "i_yaw",
+          "auc_drop": 2.578017224974527e-07
+        },
+        {
+          "feature": "delay_ms",
+          "auc_drop": 0.0
+        },
+        {
+          "feature": "thrust_eff",
+          "auc_drop": -3.3016711809830124e-06
+        },
+        {
+          "feature": "i_pitch",
+          "auc_drop": -5.834460032327904e-06
+        },
+        {
+          "feature": "tau_mult",
+          "auc_drop": -7.127991481392648e-06
+        },
+        {
+          "feature": "thrust_mult",
+          "auc_drop": -1.0936220432744559e-05
+        },
+        {
+          "feature": "torque_noise",
+          "auc_drop": -1.7756658982265305e-05
+        }
+      ],
+      "model_iter": 111
+    },
+    "tuned_no_fault": {
+      "metrics_raw": {
+        "n": 145525,
+        "positives": 258,
+        "auc": 0.9985180456003948,
+        "average_precision": 0.5617366579252702,
+        "brier": 0.005448643462448026,
+        "log_loss": 0.023560909044831043,
+        "threshold": 0.99,
+        "precision": 0.5098039215686274,
+        "recall": 0.6046511627906976,
+        "f1": 0.5531914893617021,
+        "confusion": {
+          "tn": 145117,
+          "fp": 150,
+          "fn": 102,
+          "tp": 156
+        }
+      },
+      "metrics_calibrated": {
+        "n": 145525,
+        "positives": 258,
+        "auc": 0.9965705490819551,
+        "average_precision": 0.5353444442837348,
+        "brier": 0.0010871058463905023,
+        "log_loss": 0.003844408265809604,
+        "threshold": 0.99,
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "confusion": {
+          "tn": 145267,
+          "fp": 0,
+          "fn": 258,
+          "tp": 0
+        }
+      },
+      "calibration_by_delay": {
+        "raw": [
+          {
+            "bin": "<30ms",
+            "n": 65663,
+            "mean_pred": 0.003371649637677584,
+            "observed": 0.0
+          },
+          {
+            "bin": "30-60ms",
+            "n": 46230,
+            "mean_pred": 0.0033716496376775843,
+            "observed": 0.0
+          },
+          {
+            "bin": "60-90ms",
+            "n": 23039,
+            "mean_pred": 0.0033641985759916386,
+            "observed": 0.0
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8157,
+            "mean_pred": 0.06972525061937578,
+            "observed": 0.012994973642270443
+          },
+          {
+            "bin": "120-150ms",
+            "n": 2039,
+            "mean_pred": 0.25443554635938764,
+            "observed": 0.05787150564001962
+          },
+          {
+            "bin": ">=150ms",
+            "n": 397,
+            "mean_pred": 0.3675961725037647,
+            "observed": 0.08564231738035265
+          }
+        ],
+        "calibrated": [
+          {
+            "bin": "<30ms",
+            "n": 65663,
+            "mean_pred": 0.0,
+            "observed": 0.0
+          },
+          {
+            "bin": "30-60ms",
+            "n": 46230,
+            "mean_pred": 0.0,
+            "observed": 0.0
+          },
+          {
+            "bin": "60-90ms",
+            "n": 23039,
+            "mean_pred": 2.7471304848520477e-07,
+            "observed": 0.0
+          },
+          {
+            "bin": "90-120ms",
+            "n": 8157,
+            "mean_pred": 0.013634198275831302,
+            "observed": 0.012994973642270443
+          },
+          {
+            "bin": "120-150ms",
+            "n": 2039,
+            "mean_pred": 0.05741975618278486,
+            "observed": 0.05787150564001962
+          },
+          {
+            "bin": ">=150ms",
+            "n": 397,
+            "mean_pred": 0.08637291317230379,
+            "observed": 0.08564231738035265
+          }
+        ]
+      },
+      "importance": [
+        {
+          "feature": "delay_x_att",
+          "auc_drop": 0.27866306466291935
+        },
+        {
+          "feature": "delay_x_rate",
+          "auc_drop": 0.14494648628743914
+        },
+        {
+          "feature": "sensor_angle_deg",
+          "auc_drop": 0.005352205991780407
+        },
+        {
+          "feature": "sensor_rate_dps",
+          "auc_drop": 0.004670554865507298
+        },
+        {
+          "feature": "gain_product",
+          "auc_drop": 0.0014772734861232817
+        },
+        {
+          "feature": "delay_s",
+          "auc_drop": 0.0006865104804641975
+        },
+        {
+          "feature": "rate_kp_mult",
+          "auc_drop": 0.00023342787311247948
+        },
+        {
+          "feature": "att_kp_mult",
+          "auc_drop": 0.0001213049828472923
+        },
+        {
+          "feature": "i_yaw",
+          "auc_drop": 3.2316195971021644e-05
+        },
+        {
+          "feature": "thrust_mult",
+          "auc_drop": 1.4071258762238248e-05
+        },
+        {
+          "feature": "wind_up",
+          "auc_drop": 1.2699907272650801e-05
+        },
+        {
+          "feature": "torque_noise",
+          "auc_drop": 9.062844626511746e-06
+        },
+        {
+          "feature": "tau_mult",
+          "auc_drop": 7.631869159113736e-06
+        },
+        {
+          "feature": "bias_angle_deg",
+          "auc_drop": 3.5774386682452253e-06
+        },
+        {
+          "feature": "i_pitch",
+          "auc_drop": 1.9079672896604727e-06
+        },
+        {
+          "feature": "delay_ms",
+          "auc_drop": 0.0
+        },
+        {
+          "feature": "lever_mult",
+          "auc_drop": -1.0970811916449774e-05
+        },
+        {
+          "feature": "authority",
+          "auc_drop": -2.2180119744141802e-05
+        },
+        {
+          "feature": "bias_rate_dps",
+          "auc_drop": -2.2508051622016634e-05
+        },
+        {
+          "feature": "mass_mult",
+          "auc_drop": -2.8977253214046428e-05
+        }
+      ],
+      "model_iter": 83
+    }
+  }
+}

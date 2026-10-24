@@ -1,0 +1,31 @@
+{
+  "reference": "mega-tandemvec-1m-fixed-seed28-2026-10-24",
+  "candidate": "mega-tandemvec-1m-optuna-seed28-2026-10-24",
+  "vehicles": {
+    "TandemVec": {
+      "pass_rate": [
+        0.785662,
+        0.800295
+      ],
+      "fail_rate": [
+        0.019302,
+        0.009301
+      ],
+      "max_ang_p95": [
+        11.672611295410595,
+        10.223239765393089
+      ],
+      "final_h_p05": [
+        6.615250826242744,
+        6.986579925893948
+      ],
+      "final_h_p95": [
+        12.214782091421428,
+        12.226250351573016
+      ],
+      "delta_pass_pp": 1.4633000000000007,
+      "delta_fail_pp": -1.0001,
+      "delta_ang_p95_deg": -1.4493715300175065
+    }
+  }
+}

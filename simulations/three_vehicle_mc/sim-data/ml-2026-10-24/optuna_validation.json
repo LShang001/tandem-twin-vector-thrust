@@ -1,0 +1,23 @@
+{
+  "fixed": {
+    "fail": 0.01958,
+    "pass_": 0.78733,
+    "rescued": 0,
+    "regressed": 0,
+    "lost_pass": 0
+  },
+  "grid": {
+    "fail": 0.01057,
+    "pass_": 0.79998,
+    "rescued": 904,
+    "regressed": 3,
+    "lost_pass": 105
+  },
+  "optuna": {
+    "fail": 0.00941,
+    "pass_": 0.80175,
+    "rescued": 1018,
+    "regressed": 1,
+    "lost_pass": 61
+  }
+}

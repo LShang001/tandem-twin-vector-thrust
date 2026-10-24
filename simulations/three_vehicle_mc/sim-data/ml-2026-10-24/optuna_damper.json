@@ -1,0 +1,50 @@
+{
+  "opt_cases": 8000,
+  "val_cases": 100000,
+  "trials": 60,
+  "seed": 20261027,
+  "baseline_opt": {
+    "fail": 0.019,
+    "pass": 0.77675,
+    "lost_pass": 0.0,
+    "score": 0.023465
+  },
+  "best_value": 0.013585,
+  "best_params": {
+    "window_s": 0.3973882634337829,
+    "threshold": 3,
+    "decay": 0.7578274224015186,
+    "floor": 0.5735892694511316,
+    "recovery": 1.0192973264183793
+  },
+  "best_user_attrs": {
+    "fail": 0.009125,
+    "pass": 0.792,
+    "lost_pass": 0.001
+  },
+  "validation": {
+    "fixed": {
+      "fail": 0.01958,
+      "pass": 0.78733,
+      "lost_pass": 0.0,
+      "score": 0.0238334
+    },
+    "grid_tuned": {
+      "fail": 0.01057,
+      "pass": 0.79998,
+      "lost_pass": 0.00105,
+      "score": 0.014885399999999998,
+      "rescued": 904,
+      "regressed": 3
+    },
+    "optuna": {
+      "fail": 0.00941,
+      "pass": 0.80175,
+      "lost_pass": 0.00061,
+      "score": 0.013558,
+      "rescued": 1018,
+      "regressed": 1
+    }
+  },
+  "note": "L1 模型内 TPE 搜索；不是实机调参"
+}

@@ -739,6 +739,212 @@ s 一致。样本只有 5k，只作时窗外推，不作为独立概率结论。
 <p><code>run_mega.py</code> 已改为流式写 CSV + 分块聚合；2k
 回归与旧实现逐字节一致， 因此 1M 结果可复现且不再需要百万行 dict
 常驻内存。</p>
+<h3 id="38-mlai-分析层l1-数据内">3.8 ML/AI 分析层（L1 数据内）</h3>
+<p>目标是用 ML 做敏感度、边界筛选和实验设计，不替代物理模型。标签为
+<code>fast_mc</code> 的
+fail；全部结论只在这套反演模型/采样分布内成立。</p>
+<p><strong>失败代理（HistGradientBoosting，70/15/15，测试
+150k）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>AUC</th>
+<th>AP</th>
+<th>Brier（原始→isotonic）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed_all</td>
+<td>0.9998</td>
+<td>0.9919</td>
+<td>0.00407→0.00123</td>
+</tr>
+<tr>
+<td>fixed_no_fault</td>
+<td>0.9999</td>
+<td>0.9927</td>
+<td>0.00151→0.00074</td>
+</tr>
+<tr>
+<td>tuned_all</td>
+<td>0.9992</td>
+<td>0.9580</td>
+<td>0.00769→0.00162</td>
+</tr>
+<tr>
+<td>tuned_no_fault</td>
+<td>0.9985</td>
+<td>0.5617</td>
+<td>0.00545→0.00109</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>all 模型的高 AUC 部分来自故障标志（thrust_loss/servo_jam
+几乎直接导致 fail）， no-fault 模型才是阻尼相关边界。置换重要性首位是
+<code>delay×att_kp</code> （fixed 0.0263、tuned 0.2787），其次是
+<code>delay×rate_kp</code> 与 <code>gain_product</code>。</li>
+<li>按延迟分桶的校准预测/实测几乎重合（fixed 90–120 ms 0.072/0.073；
+tuned 120–150 ms 0.057/0.058；≥150 ms 0.086/0.086）。</li>
+<li>风险图（固定名义上下文 + isotonic）：fixed_no_fault 的
+<code>p&gt;0.5</code> 面积 23.2%， tuned 为 0%；150 ms/rate=1.0 处
+0.908→0.07。<strong>高延迟角点样本稀疏，
+风险图只作方向；分桶校准才是可靠性口径。</strong></li>
+</ul>
+<p><strong>主动学习（no-fault，池 820k、测试 150k、3
+种子）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>标签数</th>
+<th>随机 AP</th>
+<th>不确定度 AP</th>
+<th>随机 Brier</th>
+<th>不确定度 Brier</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6k</td>
+<td>0.9507</td>
+<td>0.9543</td>
+<td>0.00314</td>
+<td>0.00206</td>
+</tr>
+<tr>
+<td>9k</td>
+<td>0.9612</td>
+<td><strong>0.9910</strong></td>
+<td>0.00284</td>
+<td>0.00089</td>
+</tr>
+<tr>
+<td>15k</td>
+<td>0.9695</td>
+<td><strong>0.9954</strong></td>
+<td>0.00246</td>
+<td><strong>0.00062</strong></td>
+</tr>
+</tbody>
+</table>
+<p>不确定度采样用 9k 标签的 AP 已超过随机 15k（0.9910 vs 0.9695）， 即约
+40% 标签达到更好边界精度；Brier 低 4
+倍。该结论不外推为通用主动学习结论。</p>
+<p><strong>失效模式聚类（仅输入特征，KMeans k=3，轮廓
+0.253）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>簇</th>
+<th>输入特征</th>
+<th>fixed 失败</th>
+<th>tuned 失败</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C0</td>
+<td>thrust_loss=1、低延迟</td>
+<td>8,375</td>
+<td>8,379（不变）</td>
+</tr>
+<tr>
+<td>C1</td>
+<td>98% 无故障、延迟中位 125 ms、增益 1.23/1.16</td>
+<td><strong>10,527</strong></td>
+<td><strong>1,771（−83%）</strong></td>
+</tr>
+<tr>
+<td>C2</td>
+<td>servo_jam 74%</td>
+<td>586</td>
+<td>543</td>
+</tr>
+</tbody>
+</table>
+<p>tuned 几乎只消灭
+C1（延迟/增益振荡类），C0/C2（推力损失/舵机卡死）基本不变；
+簇是输入区域，不是物理失效机理，不能直接映射故障树。</p>
+<p><strong>贝叶斯优化（Optuna TPE，60 trials，8k 优化集，100k
+独立验证）</strong>： 最优区域
+<code>window≈0.397 s, threshold=3, decay≈0.758, recovery≈1.019, floor≈0.574</code>。</p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>100k 失败</th>
+<th>100k 通过</th>
+<th>救回/新增失败</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed</td>
+<td>1.958%</td>
+<td>78.73%</td>
+<td>—</td>
+</tr>
+<tr>
+<td>网格 tuned</td>
+<td>1.057%</td>
+<td>80.00%</td>
+<td>904 / 3</td>
+</tr>
+<tr>
+<td>TPE 候选</td>
+<td><strong>0.941%</strong></td>
+<td><strong>80.18%</strong></td>
+<td><strong>1018 / 1</strong></td>
+</tr>
+</tbody>
+</table>
+<p>1M 独立种子（seed 20261028）同种子三方对照：</p>
+<table>
+<thead>
+<tr>
+<th>版本</th>
+<th>通过</th>
+<th>失败</th>
+<th>max_ang P95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed</td>
+<td>78.57%</td>
+<td>1.93%</td>
+<td>11.67°</td>
+</tr>
+<tr>
+<td>网格 tuned</td>
+<td>79.84%</td>
+<td>1.05%</td>
+<td>10.33°</td>
+</tr>
+<tr>
+<td>TPE 候选</td>
+<td><strong>80.03%</strong></td>
+<td><strong>0.93%</strong></td>
+<td><strong>10.22°</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>fixed→TPE：救回 10,014、新增 13（全部边缘→失败、无通过→失败）。</li>
+<li>grid→TPE：救回 <strong>1,228</strong>、新增 4（3 例边缘→失败 +
+<strong>1 例通过→失败</strong>）、 新增通过 2,172、通过→边缘 257；延迟桶
+90–120/120–150/150–200 ms 失败 1272→721 / 969→433 / 299→183。</li>
+<li>TPE 尾部 <code>max_ang&gt;180°</code>
+410→72、<code>final_h&lt;−1000 m</code> 1225→210， 但最坏单例仍为
+349°/−3701 m，<strong>仍无最坏情况保证</strong>。</li>
+</ul>
+<p>TPE 候选比网格 tuned 更敏感、衰减更快；只在 fast MC
+的悬停/无驾驶杆输入下
+验证过，<strong>不直接改成固件默认值</strong>。<code>AdaptiveGainDamper</code>
+当前默认仍是网格 tuned； TPE 结果作为下一轮 SIL/台架 A/B
+的候选。数据与图： <code>sim-data/ml-2026-10-24/</code>。</p>
 <hr />
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
@@ -754,7 +960,11 @@ T/W）上得到一致收益；共轴中性、液体净负，
 不能恢复高度或替代安全降落；</li>
 <li>快速 MC 的振荡检测只用滚转速率误差；模块本身是标量、可每轴独立实例，
 但俯仰/偏航轴的触发频率与收益未在 MC 中验证；</li>
-<li>推力损失/舵机卡死模型是简化效率因子/零控制权限，不是真实电机/舵机故障。</li>
+<li>推力损失/舵机卡死模型是简化效率因子/零控制权限，不是真实电机/舵机故障；</li>
+<li>ML 代理/风险图/主动学习/聚类/TPE 都是 <strong>L1
+数据内分析</strong>：标签来自 fast MC， 不是实机失效；all 模型的高 AUC
+部分来自故障标志特征；风险图高延迟角点稀疏； 聚类不是物理失效机理；TPE
+候选未经过 SIL/台架，不能直接当固件默认值。</li>
 </ul>
 <h2 id="5-复现">5 复现</h2>
 <div class="sourceCode" id="cb2"><pre
@@ -775,5 +985,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 20:24</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:06</footer></article></body>
 </html>

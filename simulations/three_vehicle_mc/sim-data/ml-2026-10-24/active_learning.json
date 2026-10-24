@@ -1,0 +1,30 @@
+{
+  "data": "mega-tandemvec-1m-fixed-seed25-2026-10-24 (full 1M; CSV not committed)",
+  "pool": 820163,
+  "test": 150000,
+  "seeds": 3,
+  "initial": 3000,
+  "step": 3000,
+  "rounds": 4,
+  "final": {
+    "random": {
+      "n_labels": 15000,
+      "auc_mean": 0.9996553445682982,
+      "auc_std": 0.00019212426504120354,
+      "ap_mean": 0.9694858307240777,
+      "ap_std": 0.019412958371509557,
+      "brier_mean": 0.002462818787403038,
+      "brier_std": 0.000396966045322684
+    },
+    "uncertainty": {
+      "n_labels": 15000,
+      "auc_mean": 0.9999489662227581,
+      "auc_std": 1.1090572402491037e-06,
+      "ap_mean": 0.9953876239952487,
+      "ap_std": 8.998502287823566e-05,
+      "brier_mean": 0.0006236543625506163,
+      "brier_std": 1.6822909958708575e-05
+    }
+  },
+  "note": "L1 模型内主动学习实验；AP 为稀有失败主指标"
+}
