@@ -141,6 +141,27 @@ int main()
     CHECK(!out.position_hold_degraded, "T7 磁新鲜+安静恢复位置保持");
   }
 
+  // T8 航向协方差：P_yaw 持续 >10° 降级；<6° 持续 3 s 恢复。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(0.1f);
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    in.monitor_yaw_sigma = true;
+    in.yaw_sigma_deg = 20.0f;
+    bool sigma_seen = false;
+    for (int i = 0; i < 300; ++i)
+    {
+      const auto out = gate.update(in);
+      sigma_seen = sigma_seen || out.yaw_sigma_high;
+    }
+    CHECK(sigma_seen, "T8 高航向协方差降级");
+    in.yaw_sigma_deg = 2.0f;
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    const auto out = gate.update(in);
+    CHECK(!out.yaw_sigma_high, "T8 协方差收敛后解除");
+    CHECK(!out.position_hold_degraded, "T8 磁新鲜+协方差小恢复位置保持");
+  }
+
   if (g_fail == 0)
   {
     std::printf("=== test_heading_aiding_gate: 全部通过 ===\n");

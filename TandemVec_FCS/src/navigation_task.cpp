@@ -1954,6 +1954,7 @@ void handleNavigationSystem()
           const float yaw_before_rad = nav_ekf.yaw_rad();
           const float roll_before_rad = nav_ekf.roll_rad();
           const float pitch_before_rad = nav_ekf.pitch_rad();
+          bool mag_update_allowed = true;
 #ifdef BFS_MAG_YAW_GYRO_GATE
           // 物理约束：两次磁更新之间真实航向变化不可能远大于陀螺积分。
           // 磁扰造成的 yaw 翻转通常伴随很小的陀螺 z；用 2° 地板 + 3 倍
@@ -1966,9 +1967,49 @@ void handleNavigationSystem()
                 0.035f + 3.0f * gyro_yaw_step_rad);
           }
 #endif
-          const bfs::MeasurementUpdateResult result =
-              nav_ekf.MeasurementUpdateMagVectorDetailed(
-                  mag_body, mag_ref_field, gate.noise_ut);
+#ifdef BFS_MAG_YAW_MULTIFRAME_GATE
+          // 多帧一致性：单帧限幅只允许 2°，但记录“期望修正是否持续超限”。
+          // 连续 5 帧（约 0.5 s）都要求大修正 → 磁矢量受扰，暂停磁融合 3 s；
+          // 正常收敛的期望修正会随航向接近而减小，不会持续超限。
+          static int s_mag_clamp_streak = 0;
+          static uint32_t s_mag_untrusted_until_ms = 0;
+          const uint32_t now_ms = millis();
+          if (s_mag_untrusted_until_ms != 0 &&
+              static_cast<int32_t>(now_ms - s_mag_untrusted_until_ms) < 0)
+          {
+            mag_update_allowed = false;
+          }
+          else
+          {
+            s_mag_untrusted_until_ms = 0;
+            nav_ekf.mag_yaw_jump_limit_rad(0.035f);
+          }
+#endif
+          bfs::MeasurementUpdateResult result;
+          if (mag_update_allowed)
+          {
+            result = nav_ekf.MeasurementUpdateMagVectorDetailed(
+                mag_body, mag_ref_field, gate.noise_ut);
+          }
+          else
+          {
+            result.input_valid = true;
+            result.attempted = true;
+          }
+#ifdef BFS_MAG_YAW_MULTIFRAME_GATE
+          if (result.fused && result.yaw_correction_clamped)
+          {
+            if (++s_mag_clamp_streak >= 5)
+            {
+              s_mag_untrusted_until_ms = now_ms + 3000u;
+              s_mag_clamp_streak = 0;
+            }
+          }
+          else if (result.fused)
+          {
+            s_mag_clamp_streak = 0;
+          }
+#endif
           mag_status.last_kick_deg = bfs::magref::radToDeg(bfs::magWrapPi(
               nav_ekf.yaw_rad() - yaw_before_rad));
           mag_status.last_kick_rp_deg = bfs::magref::radToDeg(std::fmax(
@@ -2579,6 +2620,12 @@ void handleNavigationSystem()
     const Eigen::Vector3f vel_ned = nav_ekf.ned_vel_mps();
     heading_in.horizontal_speed_mps =
         std::hypot(vel_ned(0), vel_ned(1));
+#ifdef BFS_YAW_SIGMA_GATE
+    // 航向协方差是比“事后速率”更早的不可观信号：P(8,8) 持续大时，
+    // 位置保持不应继续依赖该航向估计。
+    heading_in.monitor_yaw_sigma = true;
+    heading_in.yaw_sigma_deg = nav_ekf.yaw_sigma_rad() * 57.2957795f;
+#endif
 #ifdef BFS_YAW_OSC_GATE
     // 监测航向估计自身的跳变速率（不是陀螺 z）：seed7 的 yaw 翻转来自
     // 磁融合修正，实际机体角速度很小；只监测陀螺会漏掉这种失效。

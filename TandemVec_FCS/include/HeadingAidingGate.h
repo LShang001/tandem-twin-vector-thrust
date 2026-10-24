@@ -48,6 +48,8 @@ struct HeadingAidingInput
     float horizontal_speed_mps = 0.0f; // EKF/GNSS 水平速度（YawGsf 有效性）
     float yaw_rate_dps = 0.0f;         // 机体系 z 角速度（偏航振荡检测）
     bool monitor_yaw_oscillation = false; // 默认关闭，保持旧行为
+    float yaw_sigma_deg = 0.0f;        // EKF 航向 1σ 不确定度
+    bool monitor_yaw_sigma = false;    // 默认关闭，保持旧行为
     float dt_s = 0.005f;
 };
 
@@ -56,6 +58,7 @@ struct HeadingAidingOutput
     bool source_fresh = false;             // 磁航向是否新鲜（唯一绝对源）
     bool yaw_gsf_fresh = false;            // YawGsf 诊断标志，不解除门控
     bool yaw_oscillating = false;          // 偏航角速度持续超限（航向环振荡）
+    bool yaw_sigma_high = false;           // EKF 航向不确定度持续超限
     bool position_hold_degraded = true;    // true=禁止水平位置保持/heading hold
     float best_age_s = FLT_MAX;            // 两源中较新的年龄，用于遥测
     float valid_for_s = 0.0f;              // 恢复计时（饱和到重新使能门限）
@@ -74,6 +77,9 @@ public:
         degraded_ = true;
         valid_accum_s_ = 0.0f;
         yaw_osc_.reset();
+        sigma_high_accum_s_ = 0.0f;
+        sigma_quiet_accum_s_ = 0.0f;
+        sigma_degraded_ = false;
     }
 
     HeadingAidingOutput update(const HeadingAidingInput &in)
@@ -132,7 +138,46 @@ public:
             yaw_osc_.reset();
             out.yaw_oscillating = false;
         }
-        out.position_hold_degraded = degraded_ || out.yaw_oscillating;
+        if (in.monitor_yaw_sigma && std::isfinite(in.yaw_sigma_deg) &&
+            in.yaw_sigma_deg >= 0.0f && dt_s > 0.0f)
+        {
+            if (in.yaw_sigma_deg > 10.0f)
+            {
+                sigma_high_accum_s_ += dt_s;
+                sigma_quiet_accum_s_ = 0.0f;
+                if (sigma_high_accum_s_ >= 0.5f)
+                {
+                    sigma_degraded_ = true;
+                }
+            }
+            else
+            {
+                sigma_high_accum_s_ = 0.0f;
+                if (in.yaw_sigma_deg < 6.0f)
+                {
+                    sigma_quiet_accum_s_ += dt_s;
+                    if (sigma_quiet_accum_s_ >= 3.0f)
+                    {
+                        sigma_degraded_ = false;
+                        sigma_quiet_accum_s_ = 0.0f;
+                    }
+                }
+                else
+                {
+                    sigma_quiet_accum_s_ = 0.0f;
+                }
+            }
+            out.yaw_sigma_high = sigma_degraded_;
+        }
+        else
+        {
+            sigma_high_accum_s_ = 0.0f;
+            sigma_quiet_accum_s_ = 0.0f;
+            sigma_degraded_ = false;
+            out.yaw_sigma_high = false;
+        }
+        out.position_hold_degraded =
+            degraded_ || out.yaw_oscillating || out.yaw_sigma_high;
         out.valid_for_s = std::fmin(valid_accum_s_, kReenableHoldS);
         return out;
     }
@@ -142,6 +187,9 @@ public:
 private:
     bool degraded_ = true;
     float valid_accum_s_ = 0.0f;
+    float sigma_high_accum_s_ = 0.0f;
+    float sigma_quiet_accum_s_ = 0.0f;
+    bool sigma_degraded_ = false;
     YawOscillationDetector yaw_osc_;
 };
 

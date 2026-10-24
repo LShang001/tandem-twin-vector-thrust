@@ -580,6 +580,26 @@ roll 23.7°，其余 roll 20–29°）。与 AAF 的结论一致：**在现有�
 改进磁干扰模型，不能再用单帧阈值。`BFS_MAG_YAW_GYRO_GATE` 默认关闭，
 不进入默认导航路径。数据：`sil_acceptance.json`。
 
+### 5.16 多帧磁修正一致性门控（否定）
+
+`BFS_MAG_YAW_MULTIFRAME_GATE`：EKF 把单次 yaw 修正限到 2° 后**继续应用**
+（不再整帧拒绝），并返回限幅前的期望修正；导航层连续 5 帧看到“期望修正
+超限”就暂停磁融合 3 s。理论上应避免单帧翻转，同时不整帧丢弃修正。
+SIL：seed7 hold_end 18.2 m（baseline 104.7、陀螺约束单帧 11.9），
+仍失败；正常 6 例 **1/6**（mag_clean seed2/3、mag_nominal seed1/3 均失败，
+hold 5.6–71.4 m）——2° 限幅本身就把正常收敛改坏。**限幅/拒绝类方法
+都会破坏正常磁收敛，不能再用“修正幅值”作为磁故障判据。** 默认关闭。
+数据：`sil_acceptance.json`。
+
+### 5.17 航向协方差门控（否定）
+
+`BFS_YAW_SIGMA_GATE`：`HeadingAidingGate` 增加 EKF 航向 1σ 输入，
+`P_yaw` 1σ >10° 持续 0.5 s → 降级位置保持；<6° 持续 3 s 恢复。
+SIL：seed7 hold_end 104.7→**54.0 m**、roll 37→23.3°，仍失败；正常 6 例
+**2/6**（mag_clean seed2/3、mag_nominal seed3 hold 8.8/11.1/14.1 m）——
+正常爬升/悬停时 P_yaw 也会短时 >10°，误降级。**协方差门控同样不能用
+单一阈值区分正常磁收敛与失效。** 默认关闭。数据：`sil_acceptance.json`。
+
 ## 6 证据等级
 
 L1：模型/参数假设下的数值包线；不是 L2 SIL，不是 HIL/台架/实机。

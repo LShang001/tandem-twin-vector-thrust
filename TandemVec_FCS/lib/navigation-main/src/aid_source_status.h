@@ -94,6 +94,8 @@ struct MeasurementUpdateResult
   float nis_vel3 = 0.0f;            // P0-1：3 维速度子集 NIS
   float innovation_norm = 0.0f;     // 新息模长，便于上层记录
   float test_ratio = 0.0f;          // NIS/门限归一化比值，不可得时为 0
+  float yaw_correction_rad = 0.0f;  // 磁更新期望的 yaw 修正（限幅前）
+  bool yaw_correction_clamped = false; // 本次 yaw 修正是否被上限截断
 };
 
 /*

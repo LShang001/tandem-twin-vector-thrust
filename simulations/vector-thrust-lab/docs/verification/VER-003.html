@@ -1343,6 +1343,23 @@ seed1/2 hold 2.2/11.6 m、mag_nominal seed2 roll
 需要多帧方向一致性/磁矢量与惯导交叉一致性，或改进磁干扰模型。
 <code>BFS_MAG_YAW_GYRO_GATE</code>
 默认关闭。数据：<code>sil_acceptance.json</code>。</p>
+<h3 id="319-多帧磁修正一致性门控否定">3.19
+多帧磁修正一致性门控（否定）</h3>
+<p><code>BFS_MAG_YAW_MULTIFRAME_GATE</code>：EKF 把单次 yaw 修正限到 2°
+后继续应用 并返回限幅前期望值；导航层连续 5 帧看到超限就暂停磁融合 3
+s。SIL： seed7 hold_end 18.2 m（baseline 104.7、单帧陀螺约束
+11.9），仍失败； 正常 6 例 <strong>1/6</strong>（hold 5.6–71.4 m）——2°
+限幅本身破坏正常磁收敛。
+<strong>限幅/拒绝类方法不能再以“修正幅值”作为磁故障判据。</strong>
+默认关闭。 数据：<code>sil_acceptance.json</code>。</p>
+<h3 id="320-航向协方差门控否定">3.20 航向协方差门控（否定）</h3>
+<p><code>BFS_YAW_SIGMA_GATE</code>：HeadingAidingGate 增加 EKF 航向 1σ
+输入，P_yaw 1σ &gt;10° 持续 0.5 s 降级位置保持，&lt;6° 持续 3 s
+恢复。SIL：seed7 hold_end 104.7→54.0 m、roll 37→23.3°，仍失败；正常 6 例
+<strong>2/6</strong> （hold 8.8/11.1/14.1 m）——正常爬升/悬停 P_yaw
+也会短时 &gt;10°，误降级。
+协方差门控同样不能用单一阈值区分正常磁收敛与失效。默认关闭。
+数据：<code>sil_acceptance.json</code>。</p>
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
 <li>这是 <strong>L1 降阶 MC</strong>：无
@@ -1386,5 +1403,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:14</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:23</footer></article></body>
 </html>

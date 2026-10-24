@@ -1545,13 +1545,16 @@ namespace bfs
 
       const Eigen::Matrix<float, 15, 3> k =
           p_ * h_mag.transpose() * s_inv;
-      const Eigen::Matrix<float, 15, 1> dx = k * y;
+      Eigen::Matrix<float, 15, 1> dx = k * y;
+      result.yaw_correction_rad = dx(8);
       if (mag_yaw_jump_limit_rad_ > 0.0f && mag_vector_fused_count_ > 20 &&
           std::fabs(dx(8)) > mag_yaw_jump_limit_rad_)
       {
-        // 单次航向修正过大：保留姿态/协方差，按拒绝计数上报。
-        ++mag_vector_reject_count_;
-        return result;
+        // 限幅应用而不是整帧拒绝：让上层看到“期望修正持续超限”的证据，
+        // 同时避免单帧把航向拉翻。连续超限由上层多帧门控处理。
+        dx(8) = (dx(8) > 0.0f) ? mag_yaw_jump_limit_rad_
+                               : -mag_yaw_jump_limit_rad_;
+        result.yaw_correction_clamped = true;
       }
       const Eigen::Matrix<float, 15, 15> identity =
           Eigen::Matrix<float, 15, 15>::Identity();
@@ -1629,6 +1632,12 @@ namespace bfs
     {
       EnsureEulerAnglesUpToDate();
       return ins_ypr_rad_(0);
+    }
+    // 航向估计的 1σ 不确定度 [rad]（P(8,8) 的对角元）；供上层做
+    // “航向不可观时禁止水平位置保持”的协方差门控。
+    inline float yaw_sigma_rad() const
+    {
+      return std::sqrt(std::fmax(p_(8, 8), 0.0f));
     }
     inline float pitch_rad() const
     {
