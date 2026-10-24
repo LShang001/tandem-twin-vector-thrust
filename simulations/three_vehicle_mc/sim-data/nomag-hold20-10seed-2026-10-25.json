@@ -205,6 +205,6 @@
   "n_drift_gt_50m_at_40s": 3,
   "max_t25_m": 8.01,
   "max_t40_m": 127.4,
-  "note": "6/10 seeds stay 0 m; 4/10 drift 59-127 m by 40 s -> must land/switch manual at window end"
+  "note": "6/10 seeds stay 0 m; 4/10 drift 29-127 m by 40 s (3/10 >50 m) -> must land/switch manual at window end"
  }
 }
