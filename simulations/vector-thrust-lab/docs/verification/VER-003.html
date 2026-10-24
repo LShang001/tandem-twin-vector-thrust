@@ -1394,9 +1394,12 @@ s（后段）全 pass（max 1.67 m）。重锚对保持中/后段失联最有效
 <p>剩余边际失败的 yaw 增益试验（否定）：仅缩 yaw att/rate kp 到 0.85，
 seed6 hold 3.67→修好，但 mag_clean seed3 新增 3.63 m 失败；seed8/9
 pos_rms 1.06/1.03 基本不变（hold_end 0.60/0.72 m）。10 seeds×2 profiles
-仍 17/20。<strong>seed8/9 不是 yaw 增益问题，按种子调参只会转移
-失败；需单独分析位置环/指标定义。</strong>
-数据：<code>sim-data/yaw-tune-2026-10-25.json</code>。</p>
+仍 17/20。<strong>关键口径：SIL 的 <code>pos_rms</code> 是 EKF 相对位置
+− 真值 （导航估计误差），不是 plant
+相对目标的保持误差；<code>hold_end</code> 才是保持 误差。</strong>
+seed8/9 超门限仅 0.03–0.06 m，hold_end 0.60/0.72 m 本身良好， 属 1 m
+级导航估计误差，不能用控制增益修；按种子调 yaw 只会引入 seed3
+新失败。数据：<code>sim-data/yaw-tune-2026-10-25.json</code>。</p>
 <h3 id="322-matlab-频域裕度独立复核">3.22 MATLAB 频域裕度独立复核</h3>
 <p>MATLAB R2025b Control System Toolbox 对速率环连续近似
 <code>L=C·H/(τa s+1)(τf s+1)s·e^{−τs}</code>（τa=0.05 s、τf=2.17
@@ -1454,5 +1457,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:58</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 01:04</footer></article></body>
 </html>

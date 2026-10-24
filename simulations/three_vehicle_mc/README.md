@@ -646,9 +646,13 @@ hold 最大 4.67 m；30–35 s（保持后段）全部 pass，hold 最大 1.67 m
 **剩余边际失败的 yaw 增益试验（否定）**：仅缩 yaw att/rate kp 到 0.85，
 seed6 从 hold 3.67 m 修好，但 mag_clean seed3 新增 3.63 m 失败；
 seed8/9 的 pos_rms 1.06/1.03 基本不变（hold_end 仅 0.60/0.72 m）。
-10 seeds×2 profiles 仍 **17/20**。说明 seed8/9 不是 yaw 增益问题，且
-按种子调 yaw 增益会引入新失败；不要再追边际种子，需单独分析位置环/
-指标定义。数据：`sim-data/yaw-tune-2026-10-25.json`。
+10 seeds×2 profiles 仍 **17/20**。
+
+关键口径：SIL 的 `pos_rms` 是 **EKF 相对位置 − 真值**（导航估计误差），
+不是 plant 相对目标点的保持误差；`hold_end` 才是保持误差。seed8/9
+超门限仅 0.03–0.06 m，而 hold_end 0.60/0.72 m 本身良好——这是 **1 m
+级导航估计误差**，不能用 yaw/位置控制增益修。按种子调 yaw 只会引入
+seed3 新失败；不要追边际种子。数据：`sim-data/yaw-tune-2026-10-25.json`。
 
 ### 5.19 MATLAB 频域裕度独立复核
 
