@@ -449,7 +449,7 @@ ADRC 失败率与 delay 的相关 0.71–0.80；wc12 相对 fixed 无救回、12
 ADRC/ESO 不能直接替换现有速率 PID，不接入默认飞控；模块保留为研究库，
 继续需加延迟补偿或先做 SIL。** 数据：`sim-data/adrc-2026-10-24/`。
 
-### 3.11 速率预测/超前补偿（lead，当前最强 L1 候选）
+### 3.11 速率预测/超前补偿（lead：L1 最强，固件 SIL 否定）
 
 `RateLeadPredictor.h` 用上一拍角加速度预测当前速率：
 `ω_pred=ω_meas+L·α_prev`，再送原速率 PID；不降增益，是 predictor/Smith
@@ -473,13 +473,28 @@ ADRC/ESO 不能直接替换现有速率 PID，不接入默认飞控；模块保�
 fixed 310°/−4051 m、detune70 170°/−1526 m、**lead05 11.2°/5.5 m**、
 lead08 8.1°/5.6 m。
 
-边界：fast MC 用 `alpha_act`（执行器滤波后的指令）预测，固件 opt-in 用
-上一拍 `alpha_ref`，两者不完全等价；SIL 尚未通过；固定 L=0.05 s 对未知/
-时变延迟不一定最优，高噪声/高 lead 未系统扫。文献方向（仅方法参考）：
-predictor-based position control of quadrotor with delayed GPS/vision
-measurements；Predictor-Based Time Delay Control of A Hex-Jet UAV
-(IEEE RA-L 2025)；modified Smith predictor for integrating processes。
-**结论：lead 是下一轮 SIL/台架首选，不是实机结论。**
+**L2 固件 SIL 否定（2026-10-24）**：真实固件源码 + 虚拟 plant/传感器，
+基线 `/tmp/fw_base.exe` **6/6 PASS**；`-DBFS_RATE_LEAD` 的
+`/tmp/fw_lead.exe` **2/6 PASS**。失败：mag_clean seed1（roll 33.3°、
+pitch 25.3°、hold_end 15.8 m）；mag_nominal seed1/2/3（roll
+59.9/76.4/26.9°，hold_end 89.7/224.1/105.6 m，seed2 37 次离群拒绝 +
+1 次重锚）。mag_clean seed2/3 的 roll 恒 0，属未触发侧倾，不能算正向证据。
+
+口径差异（推测根因，待验证）：fast MC 用 `alpha_act`（执行器滤波后的
+**实际**角加速度）预测，固件用上一拍 `gnc_tel.alpha_ref_dps2`（**指令**
+角加速度）。指令→预测速率→速率误差→新指令构成近似代数正反馈；原速率环
+还带 Ki，积分继续放大，位置保持/磁噪声下把相位补偿变成正反馈振荡。fast MC
+的 lead 只改微分测量项，固件改的是 PID 的 derivative-on-measurement 输入，
+对 Ki 路径作用也不同。**L1 的 lead 收益不能外推到固件。**
+
+边界：固定 L=0.05 s 对未知/时变延迟不一定最优，高噪声/高 lead 未系统扫。
+文献方向（仅方法参考）：predictor-based position control of quadrotor with
+delayed GPS/vision measurements；Predictor-Based Time Delay Control of A
+Hex-Jet UAV (IEEE RA-L 2025)；modified Smith predictor for integrating
+processes。**结论：lead 在 L1 降阶模型上最强，但按当前实现进固件 SIL
+明确失败；`BFS_RATE_LEAD` 默认关闭，不得作为固件候选，除非改成基于
+实测角加速度/上一拍实测速率差的外推并重跑 SIL。** 数据：
+`sim-data/lead-2026-10-24/sil_acceptance.json`。
 
 ### 3.12 INDI 增量非线性动态逆（否定）
 

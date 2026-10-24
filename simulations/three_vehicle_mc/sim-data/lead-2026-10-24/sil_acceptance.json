@@ -1,0 +1,182 @@
+{
+  "date": "2026-10-24",
+  "test": "fw_sil real-nav acceptance (real firmware sources, virtual sensors/plant)",
+  "evidence_level": "L2",
+  "binary": {
+    "fixed": "/tmp/fw_base.exe",
+    "lead": "/tmp/fw_lead.exe"
+  },
+  "command": "run_real_acceptance.py --profiles mag_clean,mag_nominal --seeds 1,2,3 --seconds 40",
+  "variants": {
+    "fixed": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.97,
+          "hold_end": 1.02,
+          "hold_max": 1.85,
+          "pos_rms": 0.89,
+          "roll_max": 7.64,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.96,
+          "hold_end": 0.71,
+          "hold_max": 1.36,
+          "pos_rms": 0.48,
+          "roll_max": 10.72,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.06,
+          "hold_end": 1.1,
+          "hold_max": 1.93,
+          "pos_rms": 0.64,
+          "roll_max": 8.21,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": true,
+          "alt": 9.24,
+          "hold_end": 0.9,
+          "hold_max": 4.78,
+          "pos_rms": 0.55,
+          "roll_max": 18.66,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.2,
+          "hold_end": 0.79,
+          "hold_max": 5.7,
+          "pos_rms": 1.05,
+          "roll_max": 15.64,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": true,
+          "alt": 9.15,
+          "hold_end": 0.47,
+          "hold_max": 2.93,
+          "pos_rms": 0.76,
+          "roll_max": 14.82,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        }
+      ],
+      "passed": 6,
+      "total": 6,
+      "summary": "real-nav acceptance: 6 cases, 0 failed"
+    },
+    "lead": {
+      "cases": [
+        {
+          "profile": "mag_clean",
+          "seed": 1,
+          "pass_": false,
+          "alt": 9.29,
+          "hold_end": 15.79,
+          "hold_max": 33.27,
+          "pos_rms": 0.88,
+          "roll_max": 33.28,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 2,
+          "pass_": true,
+          "alt": 9.96,
+          "hold_end": 0.0,
+          "hold_max": 0.0,
+          "pos_rms": 0.48,
+          "roll_max": 0.0,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_clean",
+          "seed": 3,
+          "pass_": true,
+          "alt": 10.07,
+          "hold_end": 0.0,
+          "hold_max": 0.0,
+          "pos_rms": 0.64,
+          "roll_max": 0.0,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 1,
+          "pass_": false,
+          "alt": 0.0,
+          "hold_end": 89.67,
+          "hold_max": 170.1,
+          "pos_rms": 1.78,
+          "roll_max": 59.88,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 2,
+          "pass_": false,
+          "alt": 7.97,
+          "hold_end": 224.07,
+          "hold_max": 383.24,
+          "pos_rms": 9.03,
+          "roll_max": 76.44,
+          "resets": 1,
+          "outliers": 37,
+          "fail_reasons": []
+        },
+        {
+          "profile": "mag_nominal",
+          "seed": 3,
+          "pass_": false,
+          "alt": 8.95,
+          "hold_end": 105.62,
+          "hold_max": 129.3,
+          "pos_rms": 1.67,
+          "roll_max": 26.91,
+          "resets": 0,
+          "outliers": 0,
+          "fail_reasons": []
+        }
+      ],
+      "passed": 2,
+      "total": 6,
+      "summary": "real-nav acceptance: 6 cases, 4 failed"
+    }
+  }
+}

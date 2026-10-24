@@ -10,8 +10,11 @@
  *          @ref VER-003 §3.11；CTL-001 §8.6
  * @frame   N/A（标量速率轴）
  * @units   ω 与 α 必须同轴同单位；L 为 s
- * @note    ★ 预测使用上一拍实际/指令角加速度；若用指令值代替实际值，
- *          需确认执行器滞后不会让预测失真。默认不接入飞行路径。
+ * @note    ★ 2026-10-24 固件 SIL 否定：基线 6/6 PASS，`-DBFS_RATE_LEAD`
+ *          仅 2/6（mag_nominal 全失败）。fast MC 用实际 alpha_act 预测，
+ *          固件用上一拍指令 alpha_ref，构成近似代数正反馈且被 Ki 放大。
+ *          默认不接入飞行路径；如需再试，改用实测速率差/实测角加速度外推。
+ *          @ref VER-003 §3.11
  * @test    test_host/test_rate_lead_predictor.cpp
  * @see     VER-003、simulations/three_vehicle_mc/fast_mc.py
  */

@@ -346,7 +346,7 @@ ADRC 失败率与 delay 的相关达 0.71–0.80；wc12 相对 fixed 无救回�
 ADRC/ESO 不能直接替换现有速率 PID，不接入默认飞控路径；模块保留为研究库，
 下一步若继续需加延迟补偿或先做 SIL。** 数据：`sim-data/adrc-2026-10-24/`。
 
-### 5.8 速率预测/超前补偿（lead，当前最强 L1 候选）
+### 5.8 速率预测/超前补偿（lead：L1 最强，固件 SIL 否定）
 
 `RateLeadPredictor.h` 用上一拍角加速度预测当前速率：
 `ω_pred = ω_meas + L·α_prev`，再送入原速率 PID；这是 predictor/Smith 类
@@ -379,13 +379,33 @@ ADRC/ESO 不能直接替换现有速率 PID，不接入默认飞控路径；模�
 170°/−1526 m、**lead05 11.2°/5.5 m**、lead08 8.1°/5.6 m——预测器
 对风偏/延迟发散也有效，是当前最强候选。
 
-**边界**：fast MC 用 `alpha_act`（执行器滤波后的指令）做预测；固件 opt-in
-用上一拍 `alpha_ref`，两者不完全等价，尚未通过 SIL；固定 L=0.05 s 对
-未知/时变延迟不一定最优；高噪声/高 lead 的稳定性未系统扫。
-文献方向（仅方法参考）：predictor-based position control of quadrotor
-with delayed GPS/vision measurements；Predictor-Based Time Delay Control
-of A Hex-Jet UAV (IEEE RA-L 2025)；modified Smith predictor for
-integrating processes。**结论：lead 是下一轮 SIL/台架首选，不是实机结论。**
+**L2 固件 SIL 否定（2026-10-24）**：真实固件源码 + 虚拟 plant/传感器，
+`run_real_acceptance.py --profiles mag_clean,mag_nominal --seeds 1,2,3 --seconds 40`，
+直接 g++ 编 `/tmp/fw_base.exe`（无宏）与 `/tmp/fw_lead.exe`（`-DBFS_RATE_LEAD`）：
+
+| 变体 | 通过 | 失败案例 |
+|---|---|---|
+| fixed（基线） | **6/6** | — |
+| lead05 | **2/6** | mag_clean seed1（roll 33.3°/pitch 25.3°/hold_end 15.8 m）；mag_nominal seed1/2/3（roll 59.9/76.4/26.9°，hold_end 89.7/224.1/105.6 m，seed2 另有 37 次离群拒绝、1 次重锚） |
+
+mag_clean seed2/3 的 roll 恒为 0（未触发位置保持侧倾），不能算 lead 的正向证据。
+
+**口径差异（推测根因，待验证）**：fast MC 的 `alpha_act` 是执行器滤波后的
+**实际**角加速度；固件 `BFS_RATE_LEAD` 用上一拍 `gnc_tel.alpha_ref_dps2`
+（**指令**角加速度）。指令→预测速率→速率误差→新指令构成近似代数正反馈，
+且原速率环还带 Ki（积分会继续放大），在位置保持/磁噪声下把相位补偿变成
+正反馈振荡。另外 fast MC 的 lead 只改微分测量项，固件改的是 PID 的
+derivative-on-measurement 输入，两者对 Ki 路径的作用不同。**在下结论前
+不能把 L1 的 lead 收益外推到固件。**
+
+**边界**：固定 L=0.05 s 对未知/时变延迟不一定最优；高噪声/高 lead 的稳定性
+未系统扫。文献方向（仅方法参考）：predictor-based position control of
+quadrotor with delayed GPS/vision measurements；Predictor-Based Time Delay
+Control of A Hex-Jet UAV (IEEE RA-L 2025)；modified Smith predictor for
+integrating processes。**结论：lead 在 L1 降阶模型上最强，但按当前实现
+进固件 SIL 明确失败；`BFS_RATE_LEAD` 保持默认关闭，不得作为固件候选，
+除非改成基于实测角加速度/上一拍实测速率差的外推并重跑 SIL。** 数据：
+`sim-data/lead-2026-10-24/sil_acceptance.json`。
 
 ### 5.9 INDI 增量非线性动态逆（否定）
 
