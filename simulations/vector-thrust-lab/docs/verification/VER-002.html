@@ -143,6 +143,10 @@ RCS/多级/泵压动态/气动</strong>；不能称兼容</td>
 <strong>15/15 PASS</strong>。</li>
 <li>无磁 <code>nomag_degraded</code>：3/3，定高 9.99–10.03
 m、max_roll=0、<code>pos_degraded=1</code>（航向不可观主动降级）。</li>
+<li><strong>长航时边界</strong>：<code>mag_clean</code> 120 s 在约 65 s
+后姿态发散（max_roll 180°、max_pitch 90°）， 陀螺饱和/IMU 健康
+Failed；40 s 基线仍通过。该长航时位置保持不通过，不能把 40 s 结果外推到
+120 s；属于既有位置保持-航向/姿态边界。</li>
 <li>边界：无磁 nominal/degraded 会按设计放弃位置保持，风致漂移 75/113
 m；不计入位置保持验收。</li>
 </ul>
@@ -169,6 +173,9 @@ mass=0.70 kg、lever=0.08
 m、Iy=0.08（位置保持/俯仰先失稳），说明当前实飞增益对低质量/低力臂/高转动惯量没有鲁棒裕度；<code>servo_jam</code>
 如预期不可恢复（无共轴故障检测/重构），<code>motor_loss_30</code>
 仍可定高。<strong>这些是参数边界，不是可忽略的噪声。</strong></li>
+<li><strong>120 s 长航时</strong>：<code>mag_clean</code> 通过（hold_end
+0.857 m、max_roll 1.17°、max_pitch 2.53°），未出现 TandemVec 的 65 s
+发散。</li>
 <li><code>CoaxialVTVL</code> env 编译 SUCCESS；宿主 6DOF 闭环（初始
 5°/3°、10°/s 偏航）收敛。</li>
 <li>未证明：真实共轴惯量/力臂/差速力矩、TVC 机械方向、45°
@@ -260,6 +267,13 @@ href="../control/CTL-003.html">CTL-003</a>）：</p>
 场景；液体推进/质量/喷管模型通过 9 组回收 SIL。</p>
 <p><strong>不能确认</strong>：共轴/液体与各自实飞固件的逐波形响应一致；三机型在真实气动/推进/传感器/执行器/HIL
 下的稳定性；液体 CCAEGT 飞行模式兼容。</p>
+<p><strong>实飞日志检索结果</strong>：已检查两个外部工程的 git
+全历史、<code>outputs/</code>、<code>test/</code>、
+<code>tools/</code>、归档与 <code>.reasonix</code> 目录，未发现可回放的
+<code>.bin/.csv/.tlog/.ulg</code> 飞行记录。
+因此当前只能做到控制律/结构级等价和
+SIL，不能做飞行波形回放；需要用户提供 原始黑匣子/遥测日志后才能完成 C4
+级飞行响应对照。</p>
 <p>下一步按证据优先级：</p>
 <ol type="1">
 <li>用两型实飞日志做传感器/指令回放，比较新固件执行器输出与原固件（最强兼容性证据）；</li>
@@ -279,5 +293,5 @@ href="../control/CTL-003.html">CTL-003</a>）：</p>
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:07</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 17:09</footer></article></body>
 </html>
