@@ -55,8 +55,9 @@
 
 ## 5. 待办
 
-1. 把 `heading_aid_mode` / `heading_align_deg` 接入 GCS 参数与起飞前
-   对准流程（当前仅有编译期默认与 SIL CLI）。
+1. `heading_aid_mode` / `heading_align_deg` 已注册为 GCS 参数 `hdg_mode` /
+   `hdg_align`（0xE1 在线写）；对准角在**下一次导航初始化前**设置才生效，
+   上机流程与界面说明待补。
 2. SIL 增加“垂直起飞 → 有倾斜前飞 → 转定点”时序，验证运动 EKF 航向
    收敛与位置保持切换；当前 SIL 只有悬停/手动激励，未覆盖该时序。
 3. 增加 yaw 估计与陀螺一致性监测，防止纯平移时航向漂移被 heading hold

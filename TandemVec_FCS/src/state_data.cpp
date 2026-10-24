@@ -536,15 +536,10 @@ MagRuntimeStatus mag_status;
 bool g_heading_aiding_valid = false;
 float g_heading_aiding_age_s = -1.0f;
 bool g_pos_hold_degraded = true;
-// 无磁/磁仅初始对准的编译期默认值；SIL/GCS 可在运行时覆盖。
-#ifndef BFS_HEADING_AID_MODE
-#define BFS_HEADING_AID_MODE 0
-#endif
-#ifndef BFS_HEADING_ALIGN_DEG
-#define BFS_HEADING_ALIGN_DEG 0.0f
-#endif
-uint8_t g_heading_aid_mode = static_cast<uint8_t>(BFS_HEADING_AID_MODE);
-float g_heading_align_deg = BFS_HEADING_ALIGN_DEG;
+// 无磁/磁仅初始对准的默认值来自参数块（编译期默认值在 FlightCtrlParams.h）。
+uint8_t g_heading_aid_mode =
+    static_cast<uint8_t>(kFlightCtrlParams.heading_aid_mode);
+float g_heading_align_deg = kFlightCtrlParams.heading_align_deg;
 bool g_pos_hold_reanchor = false;
 bool g_mode_degraded_heading = false;
 uint8_t g_imu_health_state = 0;
@@ -703,4 +698,10 @@ void applyFlightCtrlParams()
     rollOutputFilter.setAlpha(kFlightCtrlParams.output_filter_alpha[0]);
     pitchOutputFilter.setAlpha(kFlightCtrlParams.output_filter_alpha[1]);
     yawOutputFilter.setAlpha(kFlightCtrlParams.output_filter_alpha[2]);
+    // 航向源参数同步（0xE1 写入后立即生效；对准角仅影响下一次导航初始化）
+    int mode = static_cast<int>(kFlightCtrlParams.heading_aid_mode + 0.5f);
+    if (mode < 0) mode = 0;
+    if (mode > 2) mode = 2;
+    g_heading_aid_mode = static_cast<uint8_t>(mode);
+    g_heading_align_deg = kFlightCtrlParams.heading_align_deg;
 }

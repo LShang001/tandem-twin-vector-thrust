@@ -97,6 +97,9 @@ struct FlightCtrlParams
     float rc_rate;                    // 全局灵敏度（默认 1.0）
     float rc_expo[3];                 // 每轴 expo（roll/pitch/yaw，默认 0.2）
     float rc_super[3];                // 每轴 super（默认 0.7/0.7/0.55）
+    // ---- 航向源（2026-10-25 无磁/磁仅初始对准）----
+    float heading_aid_mode;           // 0=磁连续 1=磁仅初始 2=无磁手动
+    float heading_align_deg;          // 手动对准航向 [deg]，真北顺时针
 };
 
 // ============================================================
@@ -113,6 +116,13 @@ struct FlightCtrlParams
 //      kFlightCtrlParams 保持 static constexpr 只读副本，测试参数永不与
 //      出厂值漂移。
 // ============================================================
+// 航向源编译期默认（0=磁连续/1=磁仅初始/2=无磁手动；GCS 0xE1 可在线覆盖）
+#ifndef BFS_HEADING_AID_MODE
+#define BFS_HEADING_AID_MODE 0
+#endif
+#ifndef BFS_HEADING_ALIGN_DEG
+#define BFS_HEADING_ALIGN_DEG 0.0f
+#endif
 static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ---- 姿态外环（deg 域：输入 deg、输出 deg/s）----
     // ★ 2026-08-09：2.5→2.3（提阻尼）→2.2（再降一档，先稳）
@@ -159,6 +169,8 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* rc_rate               */ 0.5f,
     /* rc_expo[3]            */ { 0.25f, 0.25f, 0.25f },
     /* rc_super[3]           */ { 0.7f, 0.7f, 0.55f },
+    /* heading_aid_mode      */ static_cast<float>(BFS_HEADING_AID_MODE),
+    /* heading_align_deg     */ BFS_HEADING_ALIGN_DEG,
 };
 
 #ifdef TANDEMVEC_FIRMWARE

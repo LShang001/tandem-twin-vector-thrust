@@ -164,6 +164,13 @@ def build_meta():
                                      field='', unit='', min=0, max=3, step=1,
                                      type='uint8',
                                      desc='惯量逆解前馈掩码（bit0 陀螺耦合 / bit1 转子陀螺；0=全关）')
+    # 2026-10-25 航向源（无磁/磁仅初始对准）
+    meta['hdg_mode'] = dict(name='hdg_mode', group='航向源', loop='', field='',
+                            unit='', min=0, max=2, step=1, type='float',
+                            desc='航向源：0=磁连续 1=磁仅初始对准 2=无磁手动')
+    meta['hdg_align'] = dict(name='hdg_align', group='航向源', loop='', field='',
+                             unit='deg', min=0, max=360, step=1, type='float',
+                             desc='手动对准航向（真北顺时针；下一次导航初始化前生效）')
     return meta
 
 
@@ -200,9 +207,9 @@ def is_float_name(name):
     return True
 
 
-# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 128 项）
+# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 130 项）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 128 项，跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 130 项，跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():
@@ -230,4 +237,7 @@ def expected_names():
         names.append(f'rc_expo[{i}]')
     for i in range(3):
         names.append(f'rc_super[{i}]')
+    # 2026-10-25 航向源（固件尾部追加）
+    names.append('hdg_mode')
+    names.append('hdg_align')
     return names
