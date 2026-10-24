@@ -8,10 +8,11 @@
  *          编译：g++ -std=c++17 -Iinclude test_host/test_adaptive_gain_damper.cpp
  *                -o bin/agd
  * @theory  高频换向 → 相位裕度不足；降增益拉回稳定区，安静后缓慢恢复
- *          @ref CTL-001 §8.6；VER-003 §3.4
+ *          @ref CTL-001 §8.6；VER-003 §3.6
  * @frame   N/A
  * @units   s、无量纲
- * @note    默认增益 1.0；模块未接入默认飞控路径，只是候选鲁棒层。
+ * @note    默认参数 0.15 s/4/0.85/1.01/0.45，来自 TandemVec L1 MC；
+ *          模块未接入默认飞控路径，只建议高 T/W 机型启用。
  * @test    A1 高频换向降增益；A2 安静恢复；A3 下限；A4 非有限输入；A5 复位
  * @see     include/AdaptiveGainDamper.h、simulations/three_vehicle_mc/fast_mc.py
  */

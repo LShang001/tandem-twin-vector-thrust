@@ -8,11 +8,13 @@
  *          纯类、零 Arduino 依赖；**未接入默认飞控路径**，只作为候选鲁棒层。
  * @theory  速率环高频换向 = 相位裕度不足/延迟过大；降低环路增益可把极点
  *          拉回稳定区。恢复慢于衰减，避免在振荡边界来回切换。
- *          @ref CTL-001 §8.6；CTL-003 §2；VER-003 §3.4
+ *          @ref CTL-001 §8.6；CTL-003 §2；VER-003 §3.6
  * @frame   N/A（标量速率误差）
  * @units   时间 s；增益无量纲
- * @note    ★ 默认增益保持 1.0；要上机必须 SIL/台架 A/B，并保证可回退。
- *          该模块不能修复推力/质量物理包线或舵机卡死。
+ * @note    ★ 默认增益保持 1.0；默认参数由 TandemVec L1 MC 选定
+ *          （0.15 s/4 次/0.85/1.01/0.45），只建议高 T/W 机型启用。
+ *          要上机必须 SIL/台架 A/B，并保证可回退；该模块不能修复推力/
+ *          质量物理包线或舵机卡死。
  * @test    test_host/test_adaptive_gain_damper.cpp
  * @see     VER-003、simulations/three_vehicle_mc/fast_mc.py
  */
@@ -26,11 +28,11 @@ namespace bfs
 
 struct AdaptiveGainDamperParams
 {
-    float window_s = 0.25f;
-    int reversal_threshold = 6;
-    float decay = 0.90f;
+    float window_s = 0.15f;
+    int reversal_threshold = 4;
+    float decay = 0.85f;
     float recovery = 1.01f;
-    float floor = 0.55f;
+    float floor = 0.45f;
 };
 
 class AdaptiveGainDamper
