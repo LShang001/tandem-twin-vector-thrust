@@ -1491,10 +1491,17 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
       float yaw_err = s_yaw_hold_ref_rad - AHRS_Packet.Heading;
       while (yaw_err > M_PI)  yaw_err -= 2.0f * (float)M_PI;
       while (yaw_err < -M_PI) yaw_err += 2.0f * (float)M_PI;
+      // 回中航向锁的速率指令上限：24°/s 在 hover 会与位置保持耦合形成
+      // 1 Hz 极限环（seed6 roll/yaw 摆到数十度）。SIL 扫描 14–15°/s 可
+      // 同时保持 seed3/6；手动偏航杆量不走本分支，不受影响。
+      constexpr float kYawHoldRateLimitDps = 14.0f;
+      const float yaw_rate_limit =
+          (kFlightCtrlParams.att_yaw.int_limit < kYawHoldRateLimitDps)
+              ? kFlightCtrlParams.att_yaw.int_limit
+              : kYawHoldRateLimitDps;
       gnc_tel.omega_ref_dps[2] = constrain(
           kFlightCtrlParams.att_yaw.kp * yaw_err * RAD_TO_DEG,
-          -kFlightCtrlParams.att_yaw.int_limit,
-           kFlightCtrlParams.att_yaw.int_limit);
+          -yaw_rate_limit, yaw_rate_limit);
     }
     else
     {

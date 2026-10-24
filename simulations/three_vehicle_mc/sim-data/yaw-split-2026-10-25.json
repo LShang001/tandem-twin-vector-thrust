@@ -1,0 +1,44 @@
+{
+  "rate07": [
+    {
+      "seed": 3,
+      "hold_end": 1.104,
+      "pos_rms": 0.644,
+      "max_roll": 8.212
+    },
+    {
+      "seed": 6,
+      "hold_end": 3.675,
+      "pos_rms": 0.371,
+      "max_roll": 13.948
+    }
+  ],
+  "rate085": [
+    {
+      "seed": 3,
+      "hold_end": 1.104,
+      "pos_rms": 0.644,
+      "max_roll": 8.212
+    },
+    {
+      "seed": 6,
+      "hold_end": 3.675,
+      "pos_rms": 0.371,
+      "max_roll": 13.948
+    }
+  ],
+  "att085": [
+    {
+      "seed": 3,
+      "hold_end": 3.628,
+      "pos_rms": 0.645,
+      "max_roll": 13.704
+    },
+    {
+      "seed": 6,
+      "hold_end": 0.802,
+      "pos_rms": 0.372,
+      "max_roll": 8.354
+    }
+  ]
+}

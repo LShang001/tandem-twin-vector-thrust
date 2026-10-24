@@ -689,6 +689,27 @@ profiles 仍 17/20。**关键口径：SIL 的 `pos_rms` 是 EKF 相对位置 −
 属 1 m 级导航估计误差，不能用控制增益修；按种子调 yaw 只会引入 seed3
 新失败。数据：`sim-data/yaw-tune-2026-10-25.json`。
 
+回中航向锁速率限幅（正向，生产路径）：seed6 的 3.67 m/roll 14° 是
+位置保持与回中后航向锁的 1 Hz 极限环。测试用全局 `att_yaw.int_limit`
+扫描 8/12/14/15/16°/s：8 修 seed6 但 seed3 10.14 m；12 seed6 53.95 m；
+**14–15 同时保持 seed3/6**（0.90/1.36、1.15/1.20 m）；16 seed6
+2.38 m。生产只钳“偏航杆回中且 heading hold 允许”分支的速率指令
+（14°/s），杆量直通与 `att_yaw.int_limit=24` 不变。10 seeds × 2
+profiles **18/20**（17/20 → 18/20；seed6 1.36 m/roll 14.9° PASS；
+mag_clean seed8/9 仍是 pos_rms 1.06/1.03 的导航估计边际失败，
+hold_end 1.26/0.58 m）。PIO 与宿主回归通过；**L2 结果，实机回中锁
+航向速率受舵机/差速权限影响，需低杆量验证**。数据：
+`sim-data/yaw-hold-limit-2026-10-25.json`。
+
+光流辅助对照（诊断，不替换默认基线）：`mag_clean` 默认无光流，
+seed8/9 的 1 m 级 `pos_rms` 主要来自 20–25 s GNSS 失联段惯导滑行。
+加 `--flow` 后 10 seeds 的 `pos_rms` 降到 0.26–0.83 m（seed8/9
+1.06/1.03 → 0.48/0.57），但 `hold_end` 有 3 例超门限（seed1 7.88 m、
+seed7 1.55 m、seed9 2.18 m，roll ≤18.2°），**7/10**。光流能修导航
+滑行误差，但经速度环与位置保持耦合引入保持误差；不能把“加光流”
+当成无条件下改善。`mag_nominal` 环境本身含光流且 10/10 通过，默认
+`mag_clean` 继续保持无光流。数据：`sim-data/flow-aiding-2026-10-25.json`。
+
 ### 3.22 MATLAB 频域裕度独立复核
 
 MATLAB R2025b Control System Toolbox 对速率环连续近似

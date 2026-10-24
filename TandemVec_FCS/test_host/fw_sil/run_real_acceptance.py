@@ -55,6 +55,14 @@ PROFILES = {
          "mag_fused_min": 30, "require_mag_cal": True,
          "max_roll_max": 20.0, "max_pitch_max": 20.0},
     ),
+    # 光流辅助的磁 clean：二进制仍用 mag_clean 环境，仅额外打开光流；
+    # 用于对比 GNSS 失联段惯导滑行误差，不替换无光流基线。
+    "mag_clean_flow": (
+        ["--no-wind", "--flow"],
+        {"final_alt": (8.0, 11.0), "hold_end_rms": 1.5, "pos_rms": 1.0,
+         "mag_fused_min": 100, "require_mag_cal": True,
+         "max_roll_max": 20.0, "max_pitch_max": 20.0},
+    ),
     # 磁干扰 + nominal 的 GNSS 失联组合：只验收“磁门控确实拒绝 + 高度/姿态
     # 有界”，不把位置保持当判据——同时失去绝对航向与水平姿态辅助时，
     # 位置保持本身已不可保证。
@@ -101,6 +109,9 @@ PROFILES = {
          "max_roll_max": 25.0, "max_pitch_max": 25.0},
     ),
 }
+
+# 验收 profile 名（含 _flow 等变体）→ SIL 环境 profile 名。
+BIN_PROFILE_ALIAS = {"mag_clean_flow": "mag_clean"}
 
 
 def parse_json_line(stdout: str) -> dict:
@@ -166,7 +177,8 @@ def main() -> int:
         extra, gates = PROFILES[profile]
         for seed in seeds:
             cmd = [
-                str(bin_path), "--real-nav", "--profile", profile,
+                str(bin_path), "--real-nav", "--profile",
+                BIN_PROFILE_ALIAS.get(profile, profile),
                 "--pos-hold", "--seconds", str(args.seconds),
                 "--seed", str(seed), *extra,
             ]
