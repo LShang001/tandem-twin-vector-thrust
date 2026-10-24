@@ -65,6 +65,14 @@ PROFILES = {
          "mag_gate_min": 1, "require_mag_cal": True,
          "max_roll_max": 60.0, "max_pitch_max": 60.0},
     ),
+    # 偏航振荡门控验证：只要求“确实降级 + 高度/姿态有界”，不要求水平位置保持。
+    "mag_gate": (
+        [],
+        {"final_alt": (6.0, 12.0), "pos_rms": 30.0,
+         "skip_hold_end": True, "require_pos_degraded": True,
+         "mag_fused_min": 30, "require_mag_cal": True,
+         "max_roll_max": 30.0, "max_pitch_max": 30.0},
+    ),
     # IMU 故障路径只验证“检测到并隔离”，不把故障后的降落品质当验收门。
     "imu_stuck": (
         ["--imu-fault", "stuck", "--imu-fault-window", "10:11"],

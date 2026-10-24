@@ -36,6 +36,8 @@
 #include <cmath>
 #include <cfloat>
 
+#include "YawOscillationDetector.h"
+
 namespace bfs
 {
 
@@ -44,6 +46,8 @@ struct HeadingAidingInput
     float mag_age_s = FLT_MAX;         // 距 Mag 最近一次成功融合的时间
     float yaw_gsf_age_s = FLT_MAX;     // 距 YawGsf 最近一次成功融合的时间
     float horizontal_speed_mps = 0.0f; // EKF/GNSS 水平速度（YawGsf 有效性）
+    float yaw_rate_dps = 0.0f;         // 机体系 z 角速度（偏航振荡检测）
+    bool monitor_yaw_oscillation = false; // 默认关闭，保持旧行为
     float dt_s = 0.005f;
 };
 
@@ -51,6 +55,7 @@ struct HeadingAidingOutput
 {
     bool source_fresh = false;             // 磁航向是否新鲜（唯一绝对源）
     bool yaw_gsf_fresh = false;            // YawGsf 诊断标志，不解除门控
+    bool yaw_oscillating = false;          // 偏航角速度持续超限（航向环振荡）
     bool position_hold_degraded = true;    // true=禁止水平位置保持/heading hold
     float best_age_s = FLT_MAX;            // 两源中较新的年龄，用于遥测
     float valid_for_s = 0.0f;              // 恢复计时（饱和到重新使能门限）
@@ -68,6 +73,7 @@ public:
     {
         degraded_ = true;
         valid_accum_s_ = 0.0f;
+        yaw_osc_.reset();
     }
 
     HeadingAidingOutput update(const HeadingAidingInput &in)
@@ -117,7 +123,16 @@ public:
             valid_accum_s_ = kReenableHoldS;
         }
 
-        out.position_hold_degraded = degraded_;
+        if (in.monitor_yaw_oscillation)
+        {
+            out.yaw_oscillating = yaw_osc_.update(in.yaw_rate_dps, dt_s);
+        }
+        else
+        {
+            yaw_osc_.reset();
+            out.yaw_oscillating = false;
+        }
+        out.position_hold_degraded = degraded_ || out.yaw_oscillating;
         out.valid_for_s = std::fmin(valid_accum_s_, kReenableHoldS);
         return out;
     }
@@ -127,6 +142,7 @@ public:
 private:
     bool degraded_ = true;
     float valid_accum_s_ = 0.0f;
+    YawOscillationDetector yaw_osc_;
 };
 
 } // namespace bfs

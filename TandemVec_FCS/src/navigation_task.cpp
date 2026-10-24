@@ -2567,6 +2567,25 @@ void handleNavigationSystem()
     const Eigen::Vector3f vel_ned = nav_ekf.ned_vel_mps();
     heading_in.horizontal_speed_mps =
         std::hypot(vel_ned(0), vel_ned(1));
+#ifdef BFS_YAW_OSC_GATE
+    // 监测航向估计自身的跳变速率（不是陀螺 z）：seed7 的 yaw 翻转来自
+    // 磁融合修正，实际机体角速度很小；只监测陀螺会漏掉这种失效。
+    static float s_prev_heading_rad = 0.0f;
+    static bool s_prev_heading_valid = false;
+    const float heading_now_rad = AHRS_Packet.Heading;
+    float heading_rate_dps = 0.0f;
+    if (s_prev_heading_valid && nav_update_dt_s > 1.0e-4f)
+    {
+      float d = heading_now_rad - s_prev_heading_rad;
+      while (d > 3.14159265f) d -= 6.2831853f;
+      while (d < -3.14159265f) d += 6.2831853f;
+      heading_rate_dps = d * 57.2957795f / nav_update_dt_s;
+    }
+    s_prev_heading_rad = heading_now_rad;
+    s_prev_heading_valid = true;
+    heading_in.monitor_yaw_oscillation = true;
+    heading_in.yaw_rate_dps = heading_rate_dps;
+#endif
     heading_in.dt_s = nav_update_dt_s;
     const bfs::HeadingAidingOutput heading_out =
         s_heading_aiding_gate.update(heading_in);

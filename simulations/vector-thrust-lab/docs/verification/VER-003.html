@@ -1287,10 +1287,20 @@ oscillating；|r|&lt;10°/s 连续 3 s 解除。SIL 逐秒轨迹回放（1 Hz
 差分、角度解卷绕）：失败轨迹 mag_nominal seed7 在 <strong>31.0
 s</strong> 触发（最大 175.0°/s），位置 t=33–39 s 才从 9 m 跑到 132
 m，提前 2 s；正常 seed1/2/3 最大 |r| 23.9/28.0/25.1°/s，
-均未触发。正常轨迹与 35°/s 门限有 7°/s 余量。<strong>纯模块 + 回放，尚未
-接入导航</strong>；下一步并入
-<code>HeadingAidingGate</code>，仅在位置保持/摇杆回中时
-触发降级。数据：<code>sim-data/aaf-2026-10-24/yaw_replay.json</code>。</p>
+均未触发。正常轨迹与 35°/s 门限有 7°/s 余量。</p>
+<p>已并入
+<code>HeadingAidingGate</code>（输入改为<strong>航向估计自身跳变速率</strong>，不是陀螺
+z： seed7 的 yaw 翻转来自磁融合修正，陀螺看不到），由
+<code>BFS_YAW_OSC_GATE</code> opt-in
+接入导航，默认关闭。SIL（opt-in）：10 seeds × 2 profiles
+<strong>16/20</strong>， 与 baseline 相同；mag_nominal seed7 位置
+132→<strong>81 m</strong>、roll 41→<strong>30.8°</strong>，
+<code>pos_degraded=1</code> 但<strong>仍超 20° 姿态门限</strong>。门控在
+t≈31 s 才触发，此时 位置环已给出 ~9 m/s
+水平速度，切定高后只能滑行。<strong>检测/降级方向正确，
+但必须更早阻断（磁新息跳变门控/航向估计修复），不能靠速率门控单独
+解决。</strong>
+数据：<code>sil_acceptance.json</code>、<code>yaw_replay.json</code>。</p>
 <h3 id="316-速率相位超前phase-leadl1-接近-aafsil-仍否定">3.16
 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）</h3>
 <p><code>RatePhaseLead.h</code>：<code>ω_eff=ω+K·(ω−LPF(ω))</code>，一阶低通
@@ -1351,5 +1361,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 23:49</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 00:01</footer></article></body>
 </html>

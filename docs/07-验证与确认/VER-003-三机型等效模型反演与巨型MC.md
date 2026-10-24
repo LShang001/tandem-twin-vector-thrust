@@ -580,9 +580,16 @@ NIS 0.1–0.6 正常。**根因是磁扰下航向环的极限环/航向估计翻
 连续 3 s 解除。SIL 逐秒轨迹回放（1 Hz 差分、角度解卷绕）：失败轨迹
 mag_nominal seed7 在 **31.0 s** 触发（最大 175.0°/s），位置 t=33–39 s
 才从 9 m 跑到 132 m，提前 2 s；正常 seed1/2/3 最大 |r| 23.9/28.0/25.1°/s，
-均未触发。正常轨迹与 35°/s 门限有 7°/s 余量。**纯模块 + 回放，尚未
-接入导航**；下一步并入 `HeadingAidingGate`，仅在位置保持/摇杆回中时
-触发降级。数据：`sim-data/aaf-2026-10-24/yaw_replay.json`。
+均未触发。正常轨迹与 35°/s 门限有 7°/s 余量。
+
+已并入 `HeadingAidingGate`（输入改为**航向估计自身跳变速率**，不是陀螺 z：
+seed7 的 yaw 翻转来自磁融合修正，陀螺看不到），由 `BFS_YAW_OSC_GATE`
+opt-in 接入导航，默认关闭。SIL（opt-in）：10 seeds × 2 profiles **16/20**，
+与 baseline 相同；mag_nominal seed7 位置 132→**81 m**、roll 41→**30.8°**，
+`pos_degraded=1` 但**仍超 20° 姿态门限**。门控在 t≈31 s 才触发，此时
+位置环已给出 ~9 m/s 水平速度，切定高后只能滑行。**检测/降级方向正确，
+但必须更早阻断（磁新息跳变门控/航向估计修复），不能靠速率门控单独
+解决。** 数据：`sil_acceptance.json`、`yaw_replay.json`。
 
 ### 3.16 速率相位超前（phase lead：L1 接近 AAF，SIL 仍否定）
 

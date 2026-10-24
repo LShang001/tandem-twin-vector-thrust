@@ -120,6 +120,27 @@ int main()
     CHECK(std::isfinite(out.valid_for_s), "T6 valid_for 有限");
   }
 
+  // T7 偏航振荡：磁新鲜时仍因持续高偏航角速度降级；安静 3 s 恢复。
+  {
+    bfs::HeadingAidingGate gate;
+    bfs::HeadingAidingInput in = input(0.1f);
+    for (int i = 0; i < 700; ++i) (void)gate.update(in); // 先恢复位置保持
+    in.monitor_yaw_oscillation = true;
+    in.yaw_rate_dps = 80.0f;
+    bool osc_seen = false;
+    for (int i = 0; i < 300; ++i)
+    {
+      const auto out = gate.update(in);
+      osc_seen = osc_seen || out.yaw_oscillating;
+    }
+    CHECK(osc_seen, "T7 高偏航率触发降级");
+    in.yaw_rate_dps = 2.0f;
+    for (int i = 0; i < 700; ++i) (void)gate.update(in);
+    const auto out = gate.update(in);
+    CHECK(!out.yaw_oscillating, "T7 安静后解除振荡");
+    CHECK(!out.position_hold_degraded, "T7 磁新鲜+安静恢复位置保持");
+  }
+
   if (g_fail == 0)
   {
     std::printf("=== test_heading_aiding_gate: 全部通过 ===\n");

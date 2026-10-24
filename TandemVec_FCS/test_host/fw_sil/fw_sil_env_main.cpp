@@ -485,6 +485,11 @@ static void applyRealNavProfile(RealNavConfig &c, const char *name)
     c.mag_noise_ut = 0.6f;
     c.mag_disturb_ut = 0.0f;
   }
+  else if (std::strcmp(name, "mag_gate") == 0)
+  {
+    // 与 mag_nominal 同一传感器环境；验收只看“偏航振荡门控降级 + 有界”。
+    applyRealNavProfile(c, "mag_nominal");
+  }
   else if (std::strcmp(name, "mag_disturbed") == 0)
   {
     applyRealNavProfile(c, "nominal");
