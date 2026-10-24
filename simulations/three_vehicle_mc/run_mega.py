@@ -41,6 +41,11 @@ def main() -> int:
     ap.add_argument("--nominal", action="store_true")
     ap.add_argument("--variant", default="fixed",
                     choices=["fixed", "auth", "osc", "adaptive"])
+    ap.add_argument("--osc-window", type=float, default=0.25)
+    ap.add_argument("--osc-threshold", type=float, default=6.0)
+    ap.add_argument("--osc-decay", type=float, default=0.90)
+    ap.add_argument("--osc-recovery", type=float, default=1.01)
+    ap.add_argument("--osc-floor", type=float, default=0.55)
     ap.add_argument("--vehicles", default="TandemVec,CoaxialVTVL,LiquidRocket")
     ap.add_argument("--seed", type=int, default=20261024)
     ap.add_argument("--out", default="")
@@ -54,6 +59,11 @@ def main() -> int:
         "seed": args.seed, "cases_per_vehicle": args.cases,
         "duration_s": args.duration, "nominal": args.nominal,
         "variant": args.variant,
+        "osc_params": {
+            "window_s": args.osc_window, "threshold": args.osc_threshold,
+            "decay": args.osc_decay, "recovery": args.osc_recovery,
+            "floor": args.osc_floor,
+        },
         "vehicles": {}, "note": "降阶快速 MC（非固件 SIL），参数为反演/实飞配置混合假设",
     }
     all_rows = []
@@ -71,7 +81,12 @@ def main() -> int:
             n = min(args.chunk, args.cases - done)
             p = sample_params(model, n, rng, nominal=args.nominal)
             m = simulate(model, p, rng, duration_s=args.duration,
-                         variant=args.variant)
+                         variant=args.variant,
+                         osc_window_s=args.osc_window,
+                         osc_threshold=args.osc_threshold,
+                         osc_decay=args.osc_decay,
+                         osc_recovery=args.osc_recovery,
+                         osc_floor=args.osc_floor)
             for i in range(n):
                 row = dict(vehicle=name, case=done + i,
                            ok=int(m["ok"][i]), fail=int(m["fail"][i]),

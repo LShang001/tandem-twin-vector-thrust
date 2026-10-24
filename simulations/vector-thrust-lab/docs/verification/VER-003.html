@@ -104,6 +104,14 @@
 <strong>证据等级：L1（模型/假设内数值包线）</strong>。没有原始飞行日志，反演不唯一；
 不能据此宣称实机模型或飞行响应通过。</p>
 </blockquote>
+<blockquote>
+<p><strong>勘误（2026-10-24 同日）</strong>：<code>fast_mc.py</code>
+早期把 <code>thrust_loss</code> 乘在油门、
+再过二次推力曲线，<code>0.5</code> 被平方成 <code>0.25</code>
+推力；TandemVec 的故障桶与 “50% 损失≈1 倍 T/W”表述作废。无故障
+case（<code>thrust_loss=1</code>）逐位不变。 修正后权威数据见
+§3.5/§3.6，历史目录状态见 <code>sim-data/README.md</code>。</p>
+</blockquote>
 <hr />
 <h2 id="1-反演思路">1 反演思路</h2>
 <p>“能飞”只给出可行性约束（推力/重量、控制权限、闭环时间尺度、限幅），
@@ -279,6 +287,12 @@ m）。</p>
 非有限/撞地/飞出 30 m/角度 &gt;60°。两者之间的 case
 是“有界但未收敛到窄带”， 不能一律算失败，也不能算通过。</p>
 </blockquote>
+<blockquote>
+<p>⚠ 上表为 <strong>thrust_loss 修正前</strong>批次：TandemVec
+的“全部/含故障”失败列与 <code>thrust_loss</code>
+敏感度受油门平方律放大影响，已作废；无故障列仍有效。 修正后权威结果见
+§3.5/§3.6。</p>
+</blockquote>
 <p><strong>参数敏感度（Pearson 相关，仅诊断）：</strong></p>
 <ul>
 <li>TandemVec：<code>thrust_loss=-0.802</code>、<code>delay=+0.179</code>；无故障时失效率
@@ -339,27 +353,28 @@ TandemVec 有小幅正收益：失败 3.01%→2.33%，max_ang P95 11.49°→10.4
 <li><strong>这些是降阶 L1 MC
 的算法候选，不修改固件默认飞行参数</strong>；要上机必须 SIL/台架
 A/B，并保持实飞基线可回退。</li>
+<li>⚠ 该 20k 批次在 thrust_loss 修正前；TandemVec
+的失败率含被放大的故障，
+只作方向参考。共轴/液体线性油门，结果不受修正影响。</li>
 </ul>
 <p><strong>候选结论</strong>：优先研究“振荡检测降增益”作为可选鲁棒层，默认关闭；
 不要用权限归一化替代实飞增益；液体需要推力/质量包线门控而不是调参。</p>
 <p>该策略已固化为纯模块
 <code>TandemVec_FCS/include/AdaptiveGainDamper.h</code> （7
-条宿主断言，默认不接入飞控）。快速 MC 的 osc 变体与之同构； 其 300k 规模
-A/B 数据写入 <code>sim-data/mega-osc-300k-2026-10-24/</code>。</p>
-<h3 id="35-300k-同代码同种子-osc-ab100k机型">3.5 300k 同代码同种子 osc
-A/B（100k/机型）</h3>
-<p>早期一次未配对 osc 跑（79.61%/2.43%）因 RNG 流在修复后改变而作废。
-本节使用同代码、同
-<code>seed=20261024</code>、同参数/噪声分布的成对重跑；
-<code>compare_casewise.py</code> 逐 case 校验 17
-个参数列完全一致后再统计转移。</p>
+条宿主断言，默认不接入飞控）。快速 MC 的 osc 变体与之同构； 修正后 300k
+与 tuned 参数见 §3.6。</p>
+<h3 id="35-修正后-300k-同代码同种子-ab100k机型">3.5 修正后 300k
+同代码同种子 A/B（100k/机型）</h3>
+<p>数据为修正 <code>thrust_loss</code> 后的成对重跑（同
+<code>seed=20261024</code>）； <code>compare_casewise.py</code> 逐 case
+校验 17 个参数列一致后才统计转移。</p>
 <table>
 <thead>
 <tr>
 <th>机型</th>
 <th>严格通过 fixed→osc</th>
 <th>失败 fixed→osc</th>
-<th>有界率（未判失败）</th>
+<th>有界率</th>
 <th>无故障失败</th>
 <th>含故障失败</th>
 <th>max_ang P95</th>
@@ -368,11 +383,11 @@ A/B（100k/机型）</h3>
 <tbody>
 <tr>
 <td>TandemVec</td>
-<td>78.61%→<strong>79.75%</strong></td>
-<td>3.00%→<strong>2.29%</strong></td>
-<td>97.00%→<strong>97.71%</strong></td>
+<td>78.63%→<strong>79.76%</strong></td>
+<td>1.90%→<strong>1.17%</strong></td>
+<td>98.10%→<strong>98.83%</strong></td>
 <td>1.05%→<strong>0.32%</strong></td>
-<td>67.77%→67.63%</td>
+<td>29.90%→29.46%</td>
 <td>11.67°→<strong>10.39°</strong></td>
 </tr>
 <tr>
@@ -395,11 +410,11 @@ A/B（100k/机型）</h3>
 </tr>
 </tbody>
 </table>
-<p><strong>逐 case 转移</strong>：</p>
+<p><strong>逐 case 转移（fixed→默认 osc）</strong>：</p>
 <ul>
-<li>TandemVec：<strong>救回 714 例失败、0 例新增失败</strong>（584
-失败→通过、130 失败→边缘； 另有 73 通过→边缘，无通过→失败）。无故障失败
-1020→310。</li>
+<li>TandemVec：救回 <strong>726</strong> 例失败、新增 <strong>3</strong>
+例失败（全部为边缘→失败， <strong>无通过→失败</strong>）；另有 73
+例通过→边缘。无故障失败 1020→310。</li>
 <li>共轴：救回 14、新增 3（净 −11），无通过→失败；基本中性。</li>
 <li>液体：救回 6、新增 35（34 例为边缘→失败，无通过→失败），净效应略负；
 低 T/W 是物理边界，振荡阻尼不适用。</li>
@@ -461,11 +476,185 @@ A/B（100k/机型）</h3>
 </table>
 <p>结论：osc 的收益几乎全部来自 <strong>延迟 ≥90 ms
 的振荡类失败</strong>，且不改变 &lt;90 ms 桶的行为；&gt;150 ms 仍有
-24.3% 失败，说明阻尼器不是延迟补偿器。 含故障桶不变：50%
-推力损失后可用推力约 1 倍重力，任何增益调度都无法补回高度。</p>
-<p>数据：<code>sim-data/mega-fixed-300k-paired-2026-10-24/</code>、
-<code>sim-data/mega-osc-300k-paired-2026-10-24/</code>（含
+24.3% 失败，说明阻尼器不是延迟补偿器。</p>
+<p><strong>修正后的推力损失语义</strong>：TandemVec T/W=4.0，50%
+损失后仍有 2.0，理论上可悬停； 但降阶模型的高度 PD
+无积分，损失后稳态工作点被推到接近地面（<code>final_h</code> 中位数 0.03
+m、P95 4.97 m，P05 −5.38 m），因此“推力损失失败”主要是高度丢失/触地，
+不是姿态振荡。osc
+只能减少高延迟下的姿态发散，<strong>不能恢复高度</strong>； 共轴/液体
+50% 损失后 T/W&lt;1，仍以坠落为主。</p>
+<p>数据：<code>sim-data/mega-fixed-300k-v2-2026-10-24/</code>、
+<code>sim-data/mega-osc-default-300k-v2-2026-10-24/</code>（含
 <code>casewise.json</code>）。</p>
+<h3 id="36-tuned-阻尼与确定性边界网格">3.6 tuned
+阻尼与确定性边界网格</h3>
+<p>在 §3.5 的默认参数（0.25 s/6/0.90/1.01/0.55）之外，用确定性网格
+（延迟 0–210 ms × 姿态增益 0.8–1.4 × 速率增益 0.8–1.4 × 无故障/50%
+推力损失/舵机卡死，3 次噪声重复）筛选出更快的阻尼参数：</p>
+<ul>
+<li><strong>tuned</strong>：<code>window=0.15 s, threshold=4, decay=0.85, recovery=1.01, floor=0.45</code>；</li>
+<li>不采用 <code>recovery=1.00</code> 的 latch
+版本：它在网格上更好，但降增益后不再恢复，
+长航时/瞬态后性能不可接受，只作为上限参考。</li>
+</ul>
+<p><strong>修正后 300k 对照</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>版本</th>
+<th>通过</th>
+<th>失败</th>
+<th>有界率</th>
+<th>无故障失败</th>
+<th>max_ang P95</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TandemVec</td>
+<td>fixed</td>
+<td>78.63%</td>
+<td>1.90%</td>
+<td>98.10%</td>
+<td>1.05%</td>
+<td>11.67°</td>
+</tr>
+<tr>
+<td>TandemVec</td>
+<td>默认 osc</td>
+<td>79.76%</td>
+<td>1.17%</td>
+<td>98.83%</td>
+<td>0.32%</td>
+<td>10.39°</td>
+</tr>
+<tr>
+<td>TandemVec</td>
+<td><strong>tuned osc</strong></td>
+<td><strong>79.95%</strong></td>
+<td><strong>1.02%</strong></td>
+<td><strong>98.98%</strong></td>
+<td><strong>0.17%</strong></td>
+<td><strong>10.28°</strong></td>
+</tr>
+<tr>
+<td>共轴</td>
+<td>fixed / 默认 / tuned</td>
+<td>84.86/84.91/84.93%</td>
+<td>3.85/3.84/3.84%</td>
+<td>—</td>
+<td>2.31/2.30/2.31%</td>
+<td>11.27/10.52/10.43°</td>
+</tr>
+<tr>
+<td>液体</td>
+<td>fixed / 默认 / tuned</td>
+<td>60.52/60.50/60.50%</td>
+<td>23.92/23.95/23.97%</td>
+<td>—</td>
+<td>22.32/22.35/22.38%</td>
+<td>35.13/35.13/35.13°</td>
+</tr>
+</tbody>
+</table>
+<p><strong>逐 case 转移（TandemVec）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>救回失败</th>
+<th>新增失败</th>
+<th>新增通过</th>
+<th>通过→边缘</th>
+<th>通过→失败</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed→默认 osc</td>
+<td>726</td>
+<td>3</td>
+<td>1211</td>
+<td>73</td>
+<td>0</td>
+</tr>
+<tr>
+<td>fixed→tuned</td>
+<td><strong>877</strong></td>
+<td>4</td>
+<td><strong>1433</strong></td>
+<td>107</td>
+<td>0</td>
+</tr>
+<tr>
+<td>默认→tuned</td>
+<td>152</td>
+<td>2</td>
+<td>228</td>
+<td>40</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>tuned 相对默认再有 152 例失败被救回、2 例边缘→失败、40 例通过→边缘；
+所有新增失败都来自原本已处于边缘带的 case，没有把通过 case
+变成失败。</li>
+<li>tuned 在 TandemVec 无故障延迟桶继续改善：90–120/120–150/&gt;150 ms
+失败率 <strong>0.92/5.98/12.35%</strong>（默认 1.81/11.21/24.30%，fixed
+6.72/37.37/60.96%）；&lt;90 ms 失败率仍为 0，通过率基本不变 （&lt;60 ms
+81.89% vs fixed 81.93%）。</li>
+<li>共轴 tuned 救回 16/新增 6；液体救回 7/新增 59（均为边缘→失败），
+<strong>tuned 不应无条件用于低 T/W
+机型</strong>。降增益会增大倾角/高度损失， 液体本就在 T/W
+边界，净效应为负。</li>
+</ul>
+<p><strong>确定性网格（TandemVec，修正后）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>候选</th>
+<th>无故障失败</th>
+<th>全部失败</th>
+<th>vs fixed 救回/新增失败</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fixed</td>
+<td>35.4%</td>
+<td>36.8%</td>
+<td>—</td>
+</tr>
+<tr>
+<td>默认 osc</td>
+<td>7.6%</td>
+<td>16.9%</td>
+<td>229 / 0</td>
+</tr>
+<tr>
+<td><strong>tuned</strong></td>
+<td><strong>1.0%</strong></td>
+<td><strong>12.1%</strong></td>
+<td><strong>285 / 0</strong></td>
+</tr>
+<tr>
+<td>latch（无恢复）</td>
+<td>0.8%</td>
+<td>10.1%</td>
+<td>308 / 0</td>
+</tr>
+</tbody>
+</table>
+<p>网格是<strong>刻意加严</strong>的确定性边界（最高 210 ms 延迟、增益
+±40%）， 这些百分比不是实机概率；它只说明参数方向与交互，最终以 300k
+随机 MC 为准。 latch 的 0.8% 是“永不恢复”的上限，不作为飞行候选。</p>
+<p><strong>模块状态</strong>：<code>AdaptiveGainDamper.h</code>
+默认参数已同步为 tuned； 仍是纯类、默认不接入飞控路径。建议只在
+TandemVec 这类高 T/W 机型启用， 低 T/W 机型需另行验证；上机前必须
+SIL/台架 A/B。</p>
 <hr />
 <h2 id="4-解释边界">4 解释边界</h2>
 <ul>
@@ -473,20 +662,32 @@ A/B（100k/机型）</h3>
 EKF/导航融合、无气动/桨叶动态、无真实振动谱；</li>
 <li>共轴/液体的惯量与力臂是反演可行点，不是唯一实机模型；</li>
 <li>高通过率只说明“在该假设模型 + 该参数分布下闭环有界”；</li>
-<li>低通过率指出需要台架辨识/增益调度的方向，不等于实机失效概率。</li>
+<li>低通过率指出需要台架辨识/增益调度的方向，不等于实机失效概率；</li>
+<li>tuned 阻尼只在 TandemVec（高
+T/W）上得到一致收益；共轴中性、液体净负，
+<strong>不能无条件套用到所有机型</strong>；</li>
+<li>osc/tuned 不是延迟补偿器：&gt;150 ms 仍可失败；也不是推力损失容错，
+不能恢复高度或替代安全降落；</li>
+<li>推力损失/舵机卡死模型是简化效率因子/零控制权限，不是真实电机/舵机故障。</li>
 </ul>
 <h2 id="5-复现">5 复现</h2>
 <div class="sourceCode" id="cb2"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulations/three_vehicle_mc</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 2000 <span class="at">--nominal</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--duration</span> 20</span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>dir<span class="op">&gt;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> analyze_mega.py <span class="at">--dir</span> <span class="op">&lt;</span>dir<span class="op">&gt;</span> --compare-dir <span class="op">&lt;</span>reference<span class="op">&gt;</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> compare_casewise.py <span class="at">--baseline</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span> --candidate <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span></code></pre></div>
-<p>数据：<code>sim-data/mega-300k-2026-10-24/</code>（早期 fixed
-基线）、 <code>sim-data/mega-fixed-300k-paired-2026-10-24/</code> 与
-<code>sim-data/mega-osc-300k-paired-2026-10-24/</code>（成对 A/B，含
-casewise）、 <code>sim-data/mega-nominal-150k-2026-10-24/</code>。完整
-110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 18:03</footer></article></body>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--osc-window</span> 0.15 <span class="dt">\</span></span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">--osc-threshold</span> 4 <span class="at">--osc-decay</span> 0.85 <span class="at">--osc-recovery</span> 1.01 <span class="at">--osc-floor</span> 0.45 <span class="dt">\</span></span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>tuned-dir<span class="op">&gt;</span></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> analyze_mega.py <span class="at">--dir</span> <span class="op">&lt;</span>dir<span class="op">&gt;</span> --compare-dir <span class="op">&lt;</span>reference<span class="op">&gt;</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> compare_casewise.py <span class="at">--baseline</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span> --candidate <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_boundary_grid.py <span class="at">--out</span> sim-data/boundary-grid-2026-10-24</span></code></pre></div>
+<p>数据：<code>sim-data/mega-fixed-300k-v2-2026-10-24/</code>、
+<code>sim-data/mega-osc-default-300k-v2-2026-10-24/</code>、
+<code>sim-data/mega-osc-tuned-300k-v2-2026-10-24/</code>（修正后权威
+A/B，含 casewise）、
+<code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
+早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
+完整 110 MB CSV 不入库，可由上述命令复现。</p>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 18:14</footer></article></body>
 </html>

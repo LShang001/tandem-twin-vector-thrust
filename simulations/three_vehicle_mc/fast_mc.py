@@ -90,7 +90,9 @@ def sample_params(model: VehicleModel, n: int, rng: np.random.Generator,
 
 def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
              duration_s: float = 20.0, dt: float = 0.005,
-             variant: str = "fixed"):
+             variant: str = "fixed", osc_window_s: float = 0.25,
+             osc_threshold: float = 6.0, osc_decay: float = 0.90,
+             osc_recovery: float = 1.01, osc_floor: float = 0.55):
     """向量化闭环；返回 metrics dict（每个 case 一行）。"""
     n = len(p["mass_mult"])
     mass = model.mass_kg * p["mass_mult"]
@@ -171,9 +173,11 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
             throttle_cmd = np.sqrt(np.clip(thrust_cmd / tmax, 0.0, 1.0))
         else:
             throttle_cmd = np.clip(thrust_cmd / tmax, 0.0, 1.0)
-        throttle_cmd *= p["thrust_loss"]
         a_t = 1.0 - np.exp(-dt / np.maximum(tau_m, dt))
-        thrust_act += (_curve_thrust(model, throttle_cmd, tmax) - thrust_act) * a_t
+        # thrust_loss 是推力效率因子，必须乘在推力上；乘在油门上会被平方律放大
+        # （0.5 油门因子 → 实际 0.25 推力），把 50% 损失误算成 75%。
+        thrust_act += (_curve_thrust(model, throttle_cmd, tmax) * p["thrust_loss"]
+                       - thrust_act) * a_t
 
         # 控制权限归一化：用实际推力对应的等效油门，而不是指令油门；
         # 推力损失时 u_eff 下降 → 增益上调补偿，高推力/高质量时增益下调。
@@ -210,11 +214,11 @@ def simulate(model: VehicleModel, p: dict, rng: np.random.Generator,
             osc_count += ((sign_now * sign_prev) < 0.0).astype(float)
             sign_prev = sign_now
             osc_timer += dt
-            due = osc_timer >= 0.25
+            due = osc_timer >= osc_window_s
             if np.any(due):
-                hot = due & (osc_count > 6.0)
-                gain_osc = np.where(hot, np.maximum(0.55, gain_osc * 0.90),
-                                    np.minimum(1.0, gain_osc * 1.01))
+                hot = due & (osc_count > osc_threshold)
+                gain_osc = np.where(hot, np.maximum(osc_floor, gain_osc * osc_decay),
+                                    np.minimum(1.0, gain_osc * osc_recovery))
                 osc_count = np.where(due, 0.0, osc_count)
                 osc_timer = np.where(due, 0.0, osc_timer)
         # 力矩噪声 + 舵机卡死（冻结在 0，模拟无控制）
