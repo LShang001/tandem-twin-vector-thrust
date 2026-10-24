@@ -1,0 +1,44 @@
+{
+  "seed": 20261031,
+  "cases": 100000,
+  "note": "oracle 使用真实 delay；仅作上界，不可直接实现",
+  "fixed": {
+    "pass": 78.41,
+    "fail": 1.91
+  },
+  "detune70": {
+    "pass": 79.97,
+    "fail": 0.82,
+    "rescued": 1088,
+    "regressed": 1,
+    "lost_pass": 37
+  },
+  "oracle60": {
+    "pass": 79.98,
+    "fail": 0.82,
+    "rescued": 1088,
+    "regressed": 0,
+    "lost_pass": 13
+  },
+  "oracle90": {
+    "pass": 79.77,
+    "fail": 0.82,
+    "rescued": 1084,
+    "regressed": 0,
+    "lost_pass": 5
+  },
+  "oracle120": {
+    "pass": 79.02,
+    "fail": 1.22,
+    "rescued": 688,
+    "regressed": 0,
+    "lost_pass": 3
+  },
+  "soft60_90": {
+    "pass": 79.99,
+    "fail": 0.82,
+    "rescued": 1088,
+    "regressed": 0,
+    "lost_pass": 8
+  }
+}

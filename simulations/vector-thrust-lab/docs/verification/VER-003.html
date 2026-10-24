@@ -1028,6 +1028,19 @@ detune85 283°/−2561 m、detune70 <strong>170°/−1526 m</strong>、选择性
 3,502、 新增 2（均为边缘→失败，无通过→失败）。延迟 90–120/120–150 ms
 失败 4699→2319 / 5161→4127，&lt;90 ms 不变。收益比 100k
 小，但方向一致。</p>
+<p><strong>1M detune70（同 seed 20261032）</strong>：fixed 78.59%/1.96%
+→ <strong>80.16%/0.87%</strong>； 无故障失败
+1.10%→<strong>0.004%</strong>（10,693→40）；逐 case 救回 10,939、 新增
+4（均为边缘→失败，无通过→失败）、通过→边缘 385； 延迟
+90–120/120–150/150–200 ms 失败 4699→472 / 5161→113 / 1669→57， &lt;90 ms
+基本不变；max_ang P95 11.60°→10.13°。</p>
+<p><strong>Oracle 延迟调度上界（100k）</strong>：fixed
+78.41%/1.91%；固定 detune70 79.97%/0.82%（救回 1088/新增 1/丢通过
+37）；按真实 delay 分档 （&lt;60/60–90/&gt;90 ms 用
+1/0.85/0.70）79.99%/0.82%（救回 1088/新增 0/ 丢通过 8）；oracle90
+79.77%/0.82%、丢通过 5。<strong>延迟感知调度没有进一步
+降低失败率</strong>，只是减少低延迟段的通过损失；固定 0.70
+已接近该模型上界， 不值得为延迟估计增加复杂度。</p>
 <p>选择性检测器的 TPE（60 trials，目标含 0.5×hover 误触发惩罚，100k
 验证）： 失败 <strong>1.221%</strong>、通过 79.483%、救回 737/新增
 0、hover 触发 1.03%； 优于手工选择性（1.575%），但仍不如固定
@@ -1083,5 +1096,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 21:58</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-24 22:10</footer></article></body>
 </html>
