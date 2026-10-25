@@ -2790,11 +2790,16 @@ void handleNavigationSystem()
     // bias_z 达 -37 rad/s，EKF 航向与真值反向并进入 179° 滚转尾部。
     // 航向源陈旧 0.5 s 即提前钳制，不等 position_hold_degraded 的 2 s。
     const bool heading_source_stale = g_heading_aiding_age_s > 0.5f;
-    if ((g_heading_aid_mode != 0U || g_pos_hold_degraded ||
-         heading_source_stale) &&
-        heading_in.airborne)
+    const bool heading_degraded = (g_heading_aid_mode != 0U ||
+                                   g_pos_hold_degraded ||
+                                   heading_source_stale);
+    if (heading_in.airborne)
     {
-      nav_ekf.ClampGyroBiasZ(g_nomag_bias_z_max_radps);
+      // 正常磁模式也硬限 bias_z：风扰下真值 yaw 可先旋转、航向仍新鲜，
+      // 真实偏航率被吸到 ~96 deg/s（wind_S_10_s10 trace）；0.05 rad/s
+      // 保留正常 ~0.039 零偏，降级时仍用无磁验证的 0.01。
+      nav_ekf.ClampGyroBiasZ(heading_degraded ? g_nomag_bias_z_max_radps
+                                              : 0.05f);
     }
   }
 }
