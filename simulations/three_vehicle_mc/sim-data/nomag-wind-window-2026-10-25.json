@@ -3416,6 +3416,54 @@
     }
    },
    "note": "REJECTED: q=0.05/0.1 bimodal 37-54 m tails under 1 m/s2 wind vs baseline max 3.82 m; default Q=1.0."
+  },
+  "q_sil_high_ab_2026_10_25": {
+   "desc": "closed-loop SIL high Q (2x/4x), 10 seeds; default q=1 validated",
+   "summary": {
+    "q2_nw": {
+     "n": 10,
+     "max_pos": 1.17,
+     "last_pos_max": 1.55,
+     "max_roll": 7.45,
+     "max_yaw": 11.16
+    },
+    "q2_w05": {
+     "n": 10,
+     "max_pos": 2.09,
+     "last_pos_max": 1.53,
+     "max_roll": 11.48,
+     "max_yaw": 16.56
+    },
+    "q2_w1": {
+     "n": 10,
+     "max_pos": 7.47,
+     "last_pos_max": 9.0,
+     "max_roll": 12.55,
+     "max_yaw": 50.53
+    },
+    "q4_nw": {
+     "n": 10,
+     "max_pos": 1.49,
+     "last_pos_max": 1.27,
+     "max_roll": 8.11,
+     "max_yaw": 12.88
+    },
+    "q4_w05": {
+     "n": 10,
+     "max_pos": 2.2,
+     "last_pos_max": 1.71,
+     "max_roll": 10.55,
+     "max_yaw": 15.4
+    },
+    "q4_w1": {
+     "n": 10,
+     "max_pos": 8.95,
+     "last_pos_max": 10.97,
+     "max_roll": 12.99,
+     "max_yaw": 62.45
+    }
+   },
+   "note": "q=1 best worst-case: wind1 max 3.82 m vs q2 7.47/q4 8.95; default Q=1.0."
   }
  }
 }
