@@ -157,6 +157,8 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 
 - **MinGW O0 构建 Eigen SIL 失败（2026-10-25）**：`OPT=-O0` 编译 fw_real 时汇编器报 `too many sections (76084)` / `file too big`，构建无二进制；`build_and_run_real.sh` 默认 `-O2` 可正常构建。调试该 SIL 不要用 O0，需保留 O2 或用其他编译器；排查“构建卡住 3 分钟”时先看输出尾部是否有该汇编错误（来源：2026-10-25 前飞段测试构建）。
 
+- **GNSS 5 s 失联闭环 6/10 失稳与姿态锁平（2026-10-25，SIL 10 seeds）**：`mag_clean --pos-hold`、40 s，20–25 s 失联：hold_end 中位/最大 16.2/602.7 m，6/10 超 5 m，max_roll 31.8°；同矩阵无故障 0/10、IMU NaN 1/10（seed1 约 30 s 后 yaw/姿态耦合发散，39.5 s 后 EKF 位置数值爆掉，每 5 ms 跳约 700 m，真值仅约 250 m）、IMU 冻结 1/10（边际：hold 7.5 m/roll 31°）、spoof 20 m 台阶 0/10（位置未被拖走，但 `outlier_rejects=0` 只表示物理野值门未触发，具体量测门未逐项区分，**不能写成识别欺骗**）、spoof 0.5 m/s 慢偏 10/10（hold 15–37 m，`gnss_crej=0`，不可检测）。失联 seed6 的 200 Hz 追踪：真值 pitch −31°、EKF pitch ≈0°，EKF 位置冻在 −2.5 m 而真值飞出 45 m，25.5 s 重捕获跳到 56 m；位置环看不到倾斜加速度，持续加大倾角形成正反馈。**磁门内重力辅助不是来源**：加 GNSS-age 门控后 `grav_fused` 205→205、失败 6/10→6/10；205 次与地面静止段约 4 s×50 Hz 量级一致，且门控后不变，说明这些融合不经过该门控，无法影响失联段。当前定位候选是“无 GNSS 运动时 AHRS 姿态量测”（`!gnss_instant_valid_for_nav && accel_gravity_trusted && angular_rate_quiet`）：Madgwick 用加速度重力修正，持续推力时把倾斜拉平，再以约 2° 噪声灌入 EKF 覆盖陀螺。**A/B `BFS_AHRS_ATT_GNSS_OUTAGE_GATE`（默认关；曾成功融合过 GNSS 且当前 age>0.5 s 时禁用该量测）：无故障/NaN 完全一致，失联 6/10→4/10、hold 中位 16.2→3.0 m、max_roll 31.8→19.5°；seed6 pitch 误差 28°→中段 ≤13°/24 s 后 ≤2°。但新增 seed1/5 失败（14.0/12.7 m），seed6 仍丢 222 m 站位：22 s 时 `heading_aiding=0`/`pos_degraded=1`，`HeadingAidingGate` 把位置保持降为定高，残余速度把机体带走，重捕获 reanchor 又把当前位置设为目标。所以姿态锁平已定位，但站位保持仍未解决；下一步是解耦“航向门控降级”与短时 GNSS 失联（磁/陀螺短时可信时保留位置保持或主动刹车），不能只启用该门控。**不要用导航-only 5 s 失联不发散推断闭环安全。**（来源：2026-10-25 故障注入矩阵）
+
 ## 知识沉淀协议
 
 > 本协议在对话中自动生效。不是规章制度——是给你未来会话的自己的**记忆外挂**。

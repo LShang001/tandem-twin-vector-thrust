@@ -911,6 +911,21 @@ bool g_sil_nav_debug_gnss_epoch = false;
 bool g_sil_nav_debug_initialized = false;
 #endif
 
+#ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
+// Madgwick 的 roll/pitch 来自“陀螺积分 + 加速度重力修正”。GNSS 失联且
+// 持续推力时比力≈mg，AHRS 会把倾斜航迹逐渐拉回水平；以 2° 噪声把它
+// 灌进 EKF 会覆盖陀螺，形成姿态锁平。仅在 GNSS 曾成功融合且当前已失联
+// 时禁用该量测；首次定位前仍允许 AHRS 辅助启动。
+static bool ahrsAttitudeAidAllowed()
+{
+  const bfs::AidSourceStatus &gnss = aid_tracker.status(bfs::AidSource::Gnss);
+  const bool gnss_was_used = gnss.fuse_count > 0U;
+  const bool gnss_recent =
+      !std::isfinite(gnss.age_s) || gnss.age_s <= 0.5f;
+  return !gnss_was_used || gnss_recent;
+}
+#endif
+
 void handleNavigationSystem()
 {
   // EKF 总耗时测量 + 零偏诊断
@@ -1857,7 +1872,11 @@ void handleNavigationSystem()
     // ========================================================================
     // 无 GNSS + 运动时：AHRS 姿态量测（利用重力融合约束姿态）
     // ========================================================================
-    else if (!gnss_instant_valid_for_nav && accel_gravity_trusted && angular_rate_quiet) {
+    else if (!gnss_instant_valid_for_nav && accel_gravity_trusted && angular_rate_quiet
+#ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
+             && ahrsAttitudeAidAllowed()
+#endif
+            ) {
       // 无 GNSS 时，运动中需要 AHRS 约束姿态漂移
       // Madgwick 的 roll/pitch 来自”陀螺积分 + 加速度重力修正”，已经融合了重力信息
       // 把它作为 EKF 姿态量测，可以在运动中持续约束姿态
