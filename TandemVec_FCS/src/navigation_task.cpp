@@ -922,7 +922,14 @@ static bool ahrsAttitudeAidAllowed()
   const bool gnss_was_used = gnss.fuse_count > 0U;
   const bool gnss_recent =
       !std::isfinite(gnss.age_s) || gnss.age_s <= 0.5f;
-  return !gnss_was_used || gnss_recent;
+#ifdef BFS_AHRS_ATT_GNSS_OUTAGE_BOUNDED
+  // 长失联不再禁用 AHRS：20 s 50 seeds 出现 roll 179.7° 尾部反噬。
+  const bool beyond_gate_window =
+      std::isfinite(gnss.age_s) && gnss.age_s > 10.0f;
+#else
+  const bool beyond_gate_window = false;
+#endif
+  return !gnss_was_used || gnss_recent || beyond_gate_window;
 }
 #endif
 
