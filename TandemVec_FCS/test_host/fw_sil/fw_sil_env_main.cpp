@@ -416,6 +416,7 @@ struct RealNavConfig
   int vib_mode = 0;
   bool anti_alias = true;
   float gnss_latency_s = 0.020f;
+  float gnss_rate_hz = 10.0f;
   float gnss_pos_ne_std = 0.8f;
   float gnss_pos_d_std = 1.2f;
   float gnss_vel_ne_std = 0.10f;
@@ -749,16 +750,20 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       }
     }
 
-    // GNSS 10 Hz：真实 UBX NAV-PVT+EOE 注入 Serial4，由 ubx.Pump 解析。
+    // GNSS 可配置刷新率（默认 10 Hz）：真实 UBX NAV-PVT+EOE 注入 Serial4。
     const bool gnss_outage = (t >= cfg.outage_start && t < cfg.outage_end);
-    if (!gnss_outage && (k % 20) == 0 && t >= 0.1f)
+    const float gnss_rate_hz = std::fmax(1.0f, std::fmin(100.0f, cfg.gnss_rate_hz));
+    const int gnss_div =
+        std::max(1, static_cast<int>(std::lround(200.0f / gnss_rate_hz)));
+    if (!gnss_outage && (k % gnss_div) == 0 && t >= 0.1f)
     {
       const float t_meas = t - cfg.gnss_latency_s;
       int j = k - static_cast<int>(std::lround(cfg.gnss_latency_s / dt_ctrl));
       if (j < 0) j = 0;
       const TruthSample &h = hist[j % kHist];
 
-      const float a_corr = std::exp(-0.1f / 20.0f);
+      const float gnss_dt_s = 1.0f / gnss_rate_hz;
+      const float a_corr = std::exp(-gnss_dt_s / 20.0f);
       const float q_corr = std::sqrt(std::max(0.0f, 1.0f - a_corr * a_corr));
       gnss_corr(0) = a_corr * gnss_corr(0) + q_corr * 0.5f * n01(rng);
       gnss_corr(1) = a_corr * gnss_corr(1) + q_corr * 0.5f * n01(rng);
@@ -1424,6 +1429,8 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--anti-alias")==0) real_cfg.anti_alias=true;
     else if (std::strcmp(argv[i],"--gnss-latency-ms")==0 && i+1<argc)
       real_cfg.gnss_latency_s=std::atof(argv[++i])*0.001f;
+    else if (std::strcmp(argv[i],"--gnss-rate-hz")==0 && i+1<argc)
+      real_cfg.gnss_rate_hz=static_cast<float>(std::atof(argv[++i]));
     else if (std::strcmp(argv[i],"--gnss-pos-std")==0 && i+1<argc)
       real_cfg.gnss_pos_ne_std=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--gnss-vel-std")==0 && i+1<argc)
