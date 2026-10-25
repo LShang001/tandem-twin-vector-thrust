@@ -28,21 +28,37 @@ public:
     {
         bool degraded = false;
         bool descent_requested = false;
+        bool attitude_only = false;
         bool recovered = false;
     };
 
     Output update(const bool gnss_stale, const bool flow_invalid,
-                  const float dt_s)
+                  const float dt_s, const bool heading_invalid = false)
     {
         Output out;
         if (!std::isfinite(dt_s) || dt_s <= 0.0f)
         {
             out.degraded = degraded_;
             out.descent_requested = descent_;
+            out.attitude_only = attitude_only_;
             return out;
         }
 
         const bool lost = gnss_stale && flow_invalid;
+        const bool no_attitude_reference = lost && heading_invalid;
+        if (no_attitude_reference)
+        {
+            attitude_lost_s_ += dt_s;
+            if (attitude_lost_s_ >= kAttitudeOnlyS)
+            {
+                attitude_only_ = true;
+            }
+        }
+        else
+        {
+            attitude_lost_s_ = 0.0f;
+        }
+
         if (lost)
         {
             lost_s_ += dt_s;
@@ -59,13 +75,14 @@ public:
         else
         {
             lost_s_ = 0.0f;
-            if (degraded_ || descent_)
+            if (degraded_ || descent_ || attitude_only_)
             {
                 recover_s_ += dt_s;
                 if (recover_s_ >= kRecoverS)
                 {
                     degraded_ = false;
                     descent_ = false;
+                    attitude_only_ = false;
                     recover_s_ = 0.0f;
                     out.recovered = true;
                 }
@@ -74,20 +91,25 @@ public:
 
         out.degraded = degraded_;
         out.descent_requested = descent_;
+        out.attitude_only = attitude_only_;
         return out;
     }
 
     bool degraded() const { return degraded_; }
     bool descentRequested() const { return descent_; }
+    bool attitudeOnly() const { return attitude_only_; }
 
 private:
     static constexpr float kDegradeS = 0.5f;
     static constexpr float kDescentS = 2.0f;
+    static constexpr float kAttitudeOnlyS = 0.5f;
     static constexpr float kRecoverS = 1.0f;
     float lost_s_ = 0.0f;
+    float attitude_lost_s_ = 0.0f;
     float recover_s_ = 0.0f;
     bool degraded_ = false;
     bool descent_ = false;
+    bool attitude_only_ = false;
 };
 
 } // namespace bfs

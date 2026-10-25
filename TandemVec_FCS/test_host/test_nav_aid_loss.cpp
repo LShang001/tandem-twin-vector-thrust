@@ -26,17 +26,19 @@ static int g_fail = 0;
 
 static bfs::NavAidLossDetector::Output run(bfs::NavAidLossDetector &det,
                                            bool gnss_stale, bool flow_invalid,
-                                           float seconds)
+                                           float seconds,
+                                           bool heading_invalid = false)
 {
   bfs::NavAidLossDetector::Output out;
   const int steps = static_cast<int>(seconds / 0.005f);
   for (int i = 0; i < steps; ++i)
   {
     const bfs::NavAidLossDetector::Output step =
-        det.update(gnss_stale, flow_invalid, 0.005f);
+        det.update(gnss_stale, flow_invalid, 0.005f, heading_invalid);
     out.recovered = out.recovered || step.recovered;
     out.degraded = step.degraded;
     out.descent_requested = step.descent_requested;
+    out.attitude_only = step.attitude_only;
   }
   return out;
 }
@@ -89,6 +91,12 @@ int main()
     bfs::NavAidLossDetector det;
     const auto out = run(det, false, true, 2.1f);
     CHECK(!out.degraded, "D8 仅光流无效不触发（GNSS 可用）");
+  }
+
+  {
+    bfs::NavAidLossDetector det;
+    const auto out = run(det, true, true, 0.6f, true);
+    CHECK(out.attitude_only, "D9 无 GNSS/光流/磁时进入纯姿态");
   }
 
   if (g_fail == 0)
