@@ -164,7 +164,9 @@ SIL 的 `--takeoff-at` 长地面等待场景无效：地面只约束 z、无摩�
    正确形式 `n=(Rx(roll)Ry(pitch))^T m_ned`，
    `ψ=atan2(n_y,n_x)−atan2(m_by,m_bx)`，已实现
    `magTiltCompensatedHeadingRad()` 并由 G10 单测锁定。
-   但“AHRS 门控 + 失联段标量 yaw 回退”10 seeds 与 AHRS-only 逐项相同
-   （失联 4/10、hold 3.02/222.60 m、roll 19.5°），说明 yaw 更新未生效
-   （很可能被自身 NIS 拒）；回退代码未保留，下一步记录 yaw 更新的
-   fused/rejected/NIS 诊断再决定是否放宽 R。
+   但“AHRS 门控 + 失联段标量 yaw 回退”10 seeds（0.15/0.5 rad 噪声
+   各一组）与 AHRS-only 逐项相同（失联 4/10、hold 3.02/222.60 m、
+   roll 19.5°）。回退在磁门 `gate.pass` 的 else 分支内，失联姿态误差
+   会让磁门先以 Residual/Tilt 拒绝，回退没有机会执行——不是 yaw NIS。
+   回退代码未保留，下一步先保证姿态/磁门通过（AHRS 门控或放宽
+   tilt/residual），再谈 yaw 回退。
