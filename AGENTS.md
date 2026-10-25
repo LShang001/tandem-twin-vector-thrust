@@ -167,6 +167,8 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 
 - **宿主 run_all.sh 的 BIN_DIR 必须 ASCII（2026-10-25）**：默认 `BIN_DIR=$ROOT/test_host/bin` 位于中文项目路径下，MinGW `ld` 会对部分测试报 `cannot open output file .../bin/xxx.exe: No such file or directory`（`sd/imuhealth/pps/get/ar` 等），不是代码错误。设 `BIN_DIR=/tmp/host_bin_v3` 后 `test_host/run_all.sh` **全绿（EXIT=0）**。脚本注释已提示 PowerShell 用英文路径；Git Bash 下同样适用。
 
+- **SIL 边际 seed 跨会话不可复现（2026-10-25）**：固定 v3 二进制（md5 5688276e…）/固定命令，NE3 wind seed2 在一次 12-worker 批量 0/100 通过，冷启动串行 20/20 失败（roll 46.7°）；outage seed31 19/20 失败、1/20 通过；同会话 12 并行与串行一致，排除简单并发竞争。`millis/micros` 已虚拟、fw_sil 无 chrono/thread/sleep/random_device，隐藏宿主时序依赖未定位。**结论：2/6720 只是量级参考，不能当精确失效率；NE3 单 seed 的 R/阈值/yaw A/B 不能当因果证据。** 先修 SIL 可复现性（或固定负载/重复协议）再做尾部调参；v3 的无 90°/无 km 发散仍成立，但具体失败数不作承诺。
+
 ## 知识沉淀协议
 
 > 本协议在对话中自动生效。不是规章制度——是给你未来会话的自己的**记忆外挂**。

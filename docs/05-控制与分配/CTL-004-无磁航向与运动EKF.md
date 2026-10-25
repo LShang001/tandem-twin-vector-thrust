@@ -151,6 +151,8 @@ SIL 的 `--takeoff-at` 长地面等待场景无效：地面只约束 z、无摩�
   约 2.3 m/s；50 m 腿 25 s 内到不了，末端误差不能当导航失败。
   详见报告 §7.4/§7.5。
 
+- **SIL 边际可复现性（2026-10-25）**：固定 v3 二进制/命令，wind NE3 seed2 在一次批量 0/100 通过、冷启动串行 20/20 失败；outage seed31 19/20 失败、1/20 通过。`millis/micros` 已虚拟、fw_sil 无线程/chrono/sleep，隐藏时序依赖未定位。**2/6720 只能作量级参考，NE3 单 seed A/B 不作因果**；先修 SIL 可复现性再做尾部调参。
+
 ## 5. 待办
 
 1. `heading_aid_mode` / `heading_align_deg` 已注册为 GCS 参数 `hdg_mode` /
