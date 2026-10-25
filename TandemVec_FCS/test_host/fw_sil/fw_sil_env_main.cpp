@@ -435,6 +435,8 @@ struct RealNavConfig
   float wind_end_s = 25.0f;
   bool flow = false;
   int flow_delay = 1;
+  float flow_dropout_start = 1.0e9f;
+  float flow_dropout_end = 1.0e9f;
   bool pos_hold = false;
   float pos_hold_at = 5.0f;   // SIL 测试用：延迟切 AUTO_POSITION [s]
   float fwd_stick_start = 1.0e9f; // SIL 测试用：前飞俯仰杆窗口
@@ -843,7 +845,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     // 光流 10 Hz：机体系速度 + 尺度/噪声 + 姿态质量门控 + 链路延迟。
     if ((k % 20) == 0)
     {
-      if (cfg.flow)
+      const bool flow_dropout =
+          (t >= cfg.flow_dropout_start && t < cfg.flow_dropout_end);
+      if (cfg.flow && !flow_dropout)
       {
         float vb[3];
         p.ned_to_body(p.vel, vb);
@@ -1373,6 +1377,9 @@ int main(int argc, char** argv) {
 #endif
     else if (std::strcmp(argv[i],"--flow")==0) flow=true;
     else if (std::strcmp(argv[i],"--flow-delay")==0 && i+1<argc) g_flow_delay=std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--flow-dropout")==0 && i+1<argc)
+      std::sscanf(argv[++i], "%f:%f", &real_cfg.flow_dropout_start,
+                  &real_cfg.flow_dropout_end);
     else if (std::strcmp(argv[i],"--mag")==0) g_use_mag_yaw=true;
     else if (std::strcmp(argv[i],"--seed")==0 && i+1<argc) seed=std::atoi(argv[++i]);
 #ifdef FW_SIL_REAL_NAV
