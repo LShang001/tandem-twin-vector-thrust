@@ -159,3 +159,6 @@ SIL 的 `--takeoff-at` 长地面等待场景无效：地面只约束 z、无摩�
    `MagGateResult.heading_error_rad` 是场一致性误差（参考场方位 −
    用 EKF 姿态反旋的实测方位），**不是航向残差**，不能直接做 yaw 回退；
    需从 `mag_body` 与 roll/pitch 单独构造 yaw 残差，或放宽 3D 更新 R/NIS。
+   朴素 `angle2dcm(0,pitch,roll)` 反旋也不行：离线真航向 30°、
+   pitch −20°、roll 10° 算出 14.7°（倾角把垂直场混入水平投影）。
+   先补标准倾斜补偿的单元测试（符号/欧拉顺序）再上 SIL。
