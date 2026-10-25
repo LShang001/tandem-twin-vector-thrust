@@ -557,7 +557,8 @@ namespace bfs
       // ----------------------------------------------------------------------
 
       /* 加速度计白噪声 (Velocity Random Walk) */
-      rw_.block(0, 0, 3, 3) = accel_std_mps2_ * accel_std_mps2_ *
+      rw_.block(0, 0, 3, 3) = q_accel_scale_ * q_accel_scale_ *
+                              accel_std_mps2_ * accel_std_mps2_ *
                               Eigen::Matrix<float, 3, 3>::Identity();
 
       /* 陀螺仪白噪声 (Angle Random Walk) */
@@ -1625,6 +1626,15 @@ namespace bfs
     // ---- EKF 全量状态读取 (只读 getter) ----
     inline Eigen::Vector3f accel_bias_mps2() const { return accel_bias_mps2_; }
     inline Eigen::Vector3f gyro_bias_radps() const { return gyro_bias_radps_; }
+
+    /** 研究用：缩放加速度过程噪声（默认 1.0；Initialize 前调用）。 */
+    inline void set_q_accel_scale(const float scale)
+    {
+      if (std::isfinite(scale) && scale > 0.0f)
+      {
+        q_accel_scale_ = scale;
+      }
+    }
 
     /**
      * @brief 限制 z 轴陀螺零偏（无绝对航向时防止真实偏航率被 GNSS 吸收）
@@ -3258,7 +3268,8 @@ namespace bfs
        * 这条快路径与当前 Gs/Rw 构造完全等价；若未来过程噪声模型引入非对角相关项，
        * 必须同步回退或重写这里的结构化展开。
        */
-      const float accel_rw_var = accel_std_mps2_ * accel_std_mps2_ * dt_s;
+      const float accel_rw_var = q_accel_scale_ * q_accel_scale_ *
+                                  accel_std_mps2_ * accel_std_mps2_ * dt_s;
       const float gyro_rw_var = gyro_std_radps_ * gyro_std_radps_ * dt_s;
       const float accel_bias_rw_var =
           (2.0f * accel_markov_bias_std_mps2_ * accel_markov_bias_std_mps2_ /
@@ -3363,7 +3374,7 @@ namespace bfs
        */
       const Eigen::Matrix<double, 15, 15> qc_d =
           Icm45686StructuredContinuousQc(
-              static_cast<double>(accel_std_mps2_),
+              static_cast<double>(accel_std_mps2_ * q_accel_scale_),
               static_cast<double>(gyro_std_radps_),
               static_cast<double>(accel_markov_bias_std_mps2_),
               static_cast<double>(accel_tau_s_),
@@ -4728,6 +4739,7 @@ namespace bfs
        中 3 维：陀螺白噪声 (rad²/s²·s = (rad/s)²)
        后 6 维：加速度/陀螺零偏 Markov 驱动噪声 (2σ²/τ) */
     Eigen::Matrix<float, 12, 12> rw_ = Eigen::Matrix<float, 12, 12>::Zero();
+    float q_accel_scale_ = 1.0f;
 
     /* 噪声输入矩阵 Gs (15×12)：将 12 维权值噪声映射到 15 维状态空间。
        结构为固定稀疏块（速度←加速度、姿态←陀螺、零偏←自身）。 */

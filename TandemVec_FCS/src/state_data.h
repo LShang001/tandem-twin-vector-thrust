@@ -852,6 +852,8 @@ extern float g_nomag_hold_left_s;
 extern bool g_imu_static_calibrated;
 extern float g_static_calib_s;
 extern float g_static_calib_required_s;
+// 研究用：EKF 加速度过程噪声缩放（默认 1.0，导航初始化前生效）。
+extern float g_ekf_q_accel_scale;
 // GNSS 失联后重捕获的一次性目标重锚请求：位置保持把当前点作为新目标，
 // 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
 extern bool g_pos_hold_reanchor;

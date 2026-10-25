@@ -301,6 +301,8 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | 地面静置校准 | `--calib-hold T` | 仅测试用：前 T 秒电机不出力、固件油门置 0，用于研究静止校准时长对 EKF 收敛的影响；配合 `--static-calib-s 0` 跳过门控 |
 | 初始航向 | `--initial-yaw-deg D` | 仅测试用：plant 初始真值航向 D°，配合 `--heading-align-deg D` 验证起飞前手动对准 |
 | 起飞时刻 | `--takeoff-at T` | 仅测试用：延迟起飞到 T 秒（默认 3 s）。★ 地面只约束 z、无摩擦，位置环会让机体积滑；T>10 s 的等待场景结果无效（SIL 台缺陷），窗口离地判据用门控单元测试 T9b/T9c 验证 |
+| 增量构建 | `BIN_DIR=/tmp/inc bash test_host/fw_sil/build_incremental.sh` | 与 `build_and_run_real.sh` 同宏同源，按 TU 保留 `.o/.d`；首次全量，之后只重编改动文件（实测 1.4 s 无改动重链接） |
+| Q 研究 | `--ekf-q-scale S` | 仅研究：缩放 EKF 加速度过程噪声；默认 1.0。闭环 SIL 已否决 0.05–0.1（风下 37–54 m 尾部） |
 | 零偏限幅 | `--bias-z-max R` | 无磁离地时陀螺零偏 z 限幅 [rad/s]，默认 0.01；0=关闭（消融对比） |
 | 增益分离扫描 | `--rate-gain-scale X` / `--att-gain-scale X` | 仅测试用：分别缩放速率内环/姿态外环 kp（覆盖 `--gain-scale` 的对应项）；用于区分高频振荡与位置/姿态慢响应 |
 

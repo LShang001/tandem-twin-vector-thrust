@@ -3347,6 +3347,75 @@
     }
    },
    "note": "REVERTED: helps neither short nor long static hold; short hold worsens (T=10 yaw 17->47deg)."
+  },
+  "q_sil_ab_2026_10_25": {
+   "desc": "closed-loop SIL, 10 seeds, 40 s; Q accel scale hook; wind 10-15 s",
+   "summary": {
+    "q1_nw": {
+     "n": 10,
+     "max_pos": 1.54,
+     "last_pos_max": 2.18,
+     "max_roll": 7.06,
+     "max_yaw": 10.82
+    },
+    "q1_w05": {
+     "n": 10,
+     "max_pos": 2.3,
+     "last_pos_max": 1.51,
+     "max_roll": 11.28,
+     "max_yaw": 14.67
+    },
+    "q1_w1": {
+     "n": 10,
+     "max_pos": 3.82,
+     "last_pos_max": 3.2,
+     "max_roll": 13.23,
+     "max_yaw": 43.84
+    },
+    "q005_nw": {
+     "n": 10,
+     "max_pos": 1.56,
+     "last_pos_max": 2.07,
+     "max_roll": 7.97,
+     "max_yaw": 7.13
+    },
+    "q005_w05": {
+     "n": 10,
+     "max_pos": 7.57,
+     "last_pos_max": 3.38,
+     "max_roll": 13.5,
+     "max_yaw": 16.36
+    },
+    "q005_w1": {
+     "n": 10,
+     "max_pos": 43.75,
+     "last_pos_max": 54.04,
+     "max_roll": 13.96,
+     "max_yaw": 33.55
+    },
+    "q01_nw": {
+     "n": 10,
+     "max_pos": 1.37,
+     "last_pos_max": 2.04,
+     "max_roll": 7.63,
+     "max_yaw": 6.96
+    },
+    "q01_w05": {
+     "n": 10,
+     "max_pos": 8.47,
+     "last_pos_max": 4.87,
+     "max_roll": 13.25,
+     "max_yaw": 23.42
+    },
+    "q01_w1": {
+     "n": 10,
+     "max_pos": 43.18,
+     "last_pos_max": 52.92,
+     "max_roll": 13.21,
+     "max_yaw": 19.44
+    }
+   },
+   "note": "REJECTED: q=0.05/0.1 bimodal 37-54 m tails under 1 m/s2 wind vs baseline max 3.82 m; default Q=1.0."
   }
  }
 }

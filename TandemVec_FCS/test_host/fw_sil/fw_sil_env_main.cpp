@@ -23,6 +23,7 @@
  *          `--takeoff-at T`（起飞时刻，默认 3 s；验证地面等待不计窗口）、
  *          `--initial-yaw-deg D`（plant 初始真值航向，验证手动对准）、
  *          `--static-calib-s S`（地面静止校准时长，默认 SIL 0=跳过）、
+ *          `--ekf-q-scale S`（EKF 加速度过程噪声缩放，研究用）、
  *          `--calib-hold T`（前 T 秒电机不出力、固件油门 0，研究静置收敛）、
  *          `--wind-window A:B`（覆盖侧风时段）、`--bias-z-max R`
  *          （无磁离地陀螺零偏 z 限幅，0=关闭）；
@@ -1348,6 +1349,8 @@ int main(int argc, char** argv) {
       heading_align_deg=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--calib-hold")==0 && i+1<argc)
       g_calib_hold_s=static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--ekf-q-scale")==0 && i+1<argc)
+      g_ekf_q_accel_scale=static_cast<float>(std::atof(argv[++i]));
     else if (std::strcmp(argv[i],"--static-calib-s")==0 && i+1<argc)
       g_static_calib_required_s=static_cast<float>(std::atof(argv[++i]));
     else if (std::strcmp(argv[i],"--bias-z-max")==0 && i+1<argc)

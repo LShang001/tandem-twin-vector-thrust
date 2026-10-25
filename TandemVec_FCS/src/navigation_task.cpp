@@ -1600,6 +1600,11 @@ void handleNavigationSystem()
       // 重新初始化会重置零偏估计，静止校准必须重新累积。
       g_imu_static_calibrated = false;
       g_static_calib_s = 0.0f;
+#ifdef FW_SIL_REAL_NAV
+      fprintf(stderr, "[sil] ekf_q_scale=%.4f\n",
+              static_cast<double>(g_ekf_q_accel_scale));
+#endif
+      nav_ekf.set_q_accel_scale(g_ekf_q_accel_scale);
       nav_ekf.Initialize(imu_accel_mps2, imu_gyro_radps, mag_ut, init_vel_ned,
                          init_lla, mag_init_yaw_offset);
       mag_status.init_source = mag_real_for_init ? 1U : 0U;

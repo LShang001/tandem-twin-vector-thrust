@@ -548,6 +548,7 @@ float g_static_calib_s = 0.0f;
 // 默认关闭硬门控：2026-10-25 SIL 显示当前 EKF 长静置后起飞反而更差
 // （协方差过自信/GNSS 航向耦合），待修复后再启用 30 s 级要求。
 float g_static_calib_required_s = 0.0f;
+float g_ekf_q_accel_scale = 1.0f;
 bool g_pos_hold_reanchor = false;
 bool g_mode_degraded_heading = false;
 float g_sil_pos_leg_n_m = 0.0f;
