@@ -214,6 +214,39 @@ int main()
           "G9 residual 名称");
   }
 
+  // G10 倾斜补偿航向：用已知 yaw/pitch/roll 合成机体磁矢量，反解应回原 yaw。
+  {
+    const Eigen::Vector3f m_ned(
+        bfs::kDefaultMagReference.field_ut[0],
+        bfs::kDefaultMagReference.field_ut[1],
+        bfs::kDefaultMagReference.field_ut[2]);
+    const float cases[][3] = {
+        {30.0f, -20.0f, 10.0f},
+        {0.0f, -20.0f, 10.0f},
+        {-45.0f, 15.0f, 5.0f},
+        {170.0f, 25.0f, -30.0f}};
+    for (const auto &c : cases)
+    {
+      const float yaw = c[0] * 0.017453292f;
+      const float pitch = c[1] * 0.017453292f;
+      const float roll = c[2] * 0.017453292f;
+      const float cr = std::cos(roll), sr = std::sin(roll);
+      const float cp = std::cos(pitch), sp = std::sin(pitch);
+      const float cy = std::cos(yaw), sy = std::sin(yaw);
+      Eigen::Matrix3f rx;
+      rx << 1, 0, 0, 0, cr, -sr, 0, sr, cr;
+      Eigen::Matrix3f ry;
+      ry << cp, 0, sp, 0, 1, 0, -sp, 0, cp;
+      Eigen::Matrix3f rz;
+      rz << cy, -sy, 0, sy, cy, 0, 0, 0, 1;
+      const Eigen::Vector3f mag_body = (rx * ry * rz).transpose() * m_ned;
+      const float heading =
+          bfs::magTiltCompensatedHeadingRad(mag_body, roll, pitch, m_ned);
+      CHECK(std::fabs(bfs::magWrapPi(heading - yaw)) < 1e-3f,
+            "G10 倾斜补偿航向回解");
+    }
+  }
+
   if (g_fail == 0)
   {
     std::printf("=== test_mag_gate: 全部通过 ===\n");

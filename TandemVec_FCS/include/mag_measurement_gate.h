@@ -31,11 +31,52 @@
 #include <Eigen/Dense>
 #include <cmath>
 #include <cstdint>
+#include <limits>
 
 #include "mag_reference.h"
 
 namespace bfs
 {
+
+inline float magWrapPi(float angle_rad);
+
+/**
+ * @brief 由机体系磁矢量与 roll/pitch 计算倾斜补偿绝对航向 [rad]（NED）
+ * @param[in] mag_body_ut 机体系磁矢量（FRD，已标定）
+ * @param[in] roll_rad    EKF 横滚 φ
+ * @param[in] pitch_rad   EKF 俯仰 θ
+ * @param[in] mag_ned_ref NED 参考磁矢量（含磁偏角/倾角）
+ * @return 航向 ψ（真北，[-π,π]）；输入非有限时返回 NaN
+ * @formula C^n_b = Rx(φ)Ry(θ)Rz(ψ)，m_b = C^T m_n；
+ *          n = (Rx(φ)Ry(θ))^T m_n，ψ = atan2(n_y,n_x) − atan2(m_by,m_bx)
+ * @ref REF-120 §9.8.2 (9.8.13) p.317–322（姿态与磁观测）；
+ *      notes/06（航向可观测性）
+ * @note 只用 EKF 的 roll/pitch，不依赖 EKF 当前 yaw；roll/pitch 误差会直接
+ *       引入航向偏差，只适合短时 GNSS 失联的标量 yaw 回退，不能替代 3D 磁更新。
+ */
+inline float magTiltCompensatedHeadingRad(
+    const Eigen::Vector3f &mag_body_ut,
+    const float roll_rad,
+    const float pitch_rad,
+    const Eigen::Vector3f &mag_ned_ref)
+{
+    if (!mag_body_ut.allFinite() || !mag_ned_ref.allFinite() ||
+        !std::isfinite(roll_rad) || !std::isfinite(pitch_rad))
+    {
+        return std::numeric_limits<float>::quiet_NaN();
+    }
+    const float cr = std::cos(roll_rad);
+    const float sr = std::sin(roll_rad);
+    const float cp = std::cos(pitch_rad);
+    const float sp = std::sin(pitch_rad);
+    // n = (Rx·Ry)^T · m_ned，展开避免引入 transforms 依赖
+    const float rx = mag_ned_ref.y() * cr + mag_ned_ref.z() * sr;
+    const float rz = -mag_ned_ref.y() * sr + mag_ned_ref.z() * cr;
+    const float nx = cp * mag_ned_ref.x() - sp * rz;
+    const float ny = rx;
+    return magWrapPi(std::atan2(ny, nx) -
+                     std::atan2(mag_body_ut.y(), mag_body_ut.x()));
+}
 
 enum class MagGateReason : uint8_t
 {

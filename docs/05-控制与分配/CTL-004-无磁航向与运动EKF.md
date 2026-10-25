@@ -161,4 +161,10 @@ SIL 的 `--takeoff-at` 长地面等待场景无效：地面只约束 z、无摩�
    需从 `mag_body` 与 roll/pitch 单独构造 yaw 残差，或放宽 3D 更新 R/NIS。
    朴素 `angle2dcm(0,pitch,roll)` 反旋也不行：离线真航向 30°、
    pitch −20°、roll 10° 算出 14.7°（倾角把垂直场混入水平投影）。
-   先补标准倾斜补偿的单元测试（符号/欧拉顺序）再上 SIL。
+   正确形式 `n=(Rx(roll)Ry(pitch))^T m_ned`，
+   `ψ=atan2(n_y,n_x)−atan2(m_by,m_bx)`，已实现
+   `magTiltCompensatedHeadingRad()` 并由 G10 单测锁定。
+   但“AHRS 门控 + 失联段标量 yaw 回退”10 seeds 与 AHRS-only 逐项相同
+   （失联 4/10、hold 3.02/222.60 m、roll 19.5°），说明 yaw 更新未生效
+   （很可能被自身 NIS 拒）；回退代码未保留，下一步记录 yaw 更新的
+   fused/rejected/NIS 诊断再决定是否放宽 R。
