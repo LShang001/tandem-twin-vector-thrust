@@ -151,3 +151,11 @@ SIL 的 `--takeoff-at` 长地面等待场景无效：地面只约束 z、无摩�
    seed6 hold 222.6→256.4 m；真磁丢 5/10→4/10 但新增 seed3 31 m；
    NaN seed1 163→236 m、max_roll 118.5°。放宽 mag_age 没有修好失联，
    反而扩大其他故障暴露时间；后续优先做“降级时主动刹车/零速保持”。
+7. **失联段磁航向断供（trace，2026-10-25）**：SIL trace 新增 `mag_age` /
+   `heading_age` 后，seed6 失联段 `mag_age` 0.04→5.04 s 线性增长，
+   磁门偶发 `EkfRejected`（reason=9）、无成功融合；2.0 s 时
+   `heading_aiding=1→0`、`pos_degraded=0→1`。直接触发是 EKF NIS 拒绝
+   磁矢量导致绝对航向断供，不是单纯 mag_age 阈值。
+   `MagGateResult.heading_error_rad` 是场一致性误差（参考场方位 −
+   用 EKF 姿态反旋的实测方位），**不是航向残差**，不能直接做 yaw 回退；
+   需从 `mag_body` 与 roll/pitch 单独构造 yaw 残差，或放宽 3D 更新 R/NIS。

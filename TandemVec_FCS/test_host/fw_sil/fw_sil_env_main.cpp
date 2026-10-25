@@ -674,7 +674,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "ekf_n,ekf_e,true_n,true_e,hold_n,hold_e,"
           "mag_kick,mag_kick_rp,mag_gate_reason,mode,reanchor,"
           "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4,yaw_sigma,heading_mode,"
-          "gyro_bias_z\n");
+          "gyro_bias_z,mag_age,heading_age\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -949,7 +949,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
           "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
-          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u,%.4f\n",
+          "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u,%.4f,"
+          "%.3f,%.3f\n",
           t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
           nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
           nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
@@ -964,7 +965,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           g_mode_degraded_heading ? 1 : 0, ch1_output, ch2_output,
           ch3_output, ch4_output, nav_ekf.yaw_sigma_rad() * 57.29578f,
           static_cast<unsigned>(g_heading_aid_mode),
-          nav_ekf.gyro_bias_radps().z());
+          nav_ekf.gyro_bias_radps().z(),
+          aid_tracker.status(bfs::AidSource::Mag).age_s,
+          g_heading_aiding_age_s);
     }
 
     if (!manual && !alt_cmd && t >= g_takeoff_at_s)
