@@ -916,8 +916,9 @@ bool g_sil_nav_debug_initialized = false;
 // 持续推力时比力≈mg，AHRS 会把倾斜航迹逐渐拉回水平；以 2° 噪声把它
 // 灌进 EKF 会覆盖陀螺，形成姿态锁平。仅在 GNSS 曾成功融合且当前已失联
 // 时禁用该量测；首次定位前仍允许 AHRS 辅助启动。
-static bool ahrsAttitudeAidAllowed()
+static bool ahrsAttitudeAidAllowed(const float roll_rad)
 {
+  (void)roll_rad;
   const bfs::AidSourceStatus &gnss = aid_tracker.status(bfs::AidSource::Gnss);
   const bool gnss_was_used = gnss.fuse_count > 0U;
   const bool gnss_recent =
@@ -928,6 +929,19 @@ static bool ahrsAttitudeAidAllowed()
       std::isfinite(gnss.age_s) && gnss.age_s > 10.0f;
 #else
   const bool beyond_gate_window = false;
+#endif
+#if defined(BFS_AHRS_ATT_ROLL_GUARD_45) || defined(BFS_AHRS_ATT_ROLL_GUARD_60)
+  // 大滚转时临时恢复 AHRS，避免失联尾巴滚到 180°。
+#ifdef BFS_AHRS_ATT_ROLL_GUARD_45
+  constexpr float kGuardRad = 45.0f * 0.017453292f;
+#else
+  constexpr float kGuardRad = 60.0f * 0.017453292f;
+#endif
+  if (gnss_was_used && !gnss_recent &&
+      std::isfinite(roll_rad) && std::fabs(roll_rad) > kGuardRad)
+  {
+    return true;
+  }
 #endif
   return !gnss_was_used || gnss_recent || beyond_gate_window;
 }
@@ -1881,7 +1895,7 @@ void handleNavigationSystem()
     // ========================================================================
     else if (!gnss_instant_valid_for_nav && accel_gravity_trusted && angular_rate_quiet
 #ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
-             && ahrsAttitudeAidAllowed()
+             && ahrsAttitudeAidAllowed(nav_ekf.roll_rad())
 #endif
             ) {
       // 无 GNSS 时，运动中需要 AHRS 约束姿态漂移
