@@ -2679,6 +2679,7 @@ void handleNavigationSystem()
   {
     static bool s_gnss_was_out = false;
     const float gnss_age_s = aid_tracker.status(bfs::AidSource::Gnss).age_s;
+    g_gnss_outage_age_s = (std::isfinite(gnss_age_s) && gnss_age_s < 1.0e5f) ? gnss_age_s : 0.0f;
     if (std::isfinite(gnss_age_s) && gnss_age_s > 0.5f)
     {
       s_gnss_was_out = true;

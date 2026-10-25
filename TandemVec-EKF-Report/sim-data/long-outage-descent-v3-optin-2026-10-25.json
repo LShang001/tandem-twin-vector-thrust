@@ -1,0 +1,30 @@
+{
+  "config": "BFS_LONG_GNSS_OUTAGE_DESCENT",
+  "core": 2,
+  "outage_20s": {
+    "baseline_v3": {
+      "seeds": 50,
+      "hold_med": 14.0,
+      "hold_p95": 149.3,
+      "hold_max": 192.2,
+      "pos_max": 4.9,
+      "landed": 0,
+      "roll_max": 19.1
+    },
+    "descent": {
+      "seeds": 50,
+      "hold_med": 13.0,
+      "hold_p95": 120.3,
+      "hold_max": 157.3,
+      "pos_max": 49.3,
+      "landed": 50,
+      "roll_max": 26.8
+    }
+  },
+  "outage_10s": {
+    "seeds": 20,
+    "descent_hold_max": 11.0,
+    "baseline_hold_max": 11.4,
+    "landed": 0
+  }
+}

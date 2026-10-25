@@ -564,6 +564,15 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
 
         // 外环：计算高度误差 -> 目标垂直速度
         float altitude_error = target_altitude - current_altitude_for_control;
+#ifdef BFS_LONG_GNSS_OUTAGE_DESCENT
+        // 长失联 opt-in：超过 10 s 无 GNSS 后以 1 m/s 降高目标，
+        // 缩短无绝对位置时的水平漂移时间；默认宏关闭。
+        if (g_gnss_outage_age_s > 10.0f && current_altitude_for_control > 0.3f)
+        {
+          target_altitude = std::fmax(0.0f, target_altitude - 1.0f * 0.005f);
+          altitude_error = target_altitude - current_altitude_for_control;
+        }
+#endif
         float raw_target_vertical_velocity = altitudePositionPController.compute(altitude_error, 0, 0.005f);
         // 目标垂直速度进行滤波，使指令变化更平滑
         target_vertical_velocity = altitude_rate_target_filter.filter(raw_target_vertical_velocity);
