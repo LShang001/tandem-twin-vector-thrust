@@ -166,6 +166,8 @@ run_one "$ROOT/test_host/test_mag_guide.cpp"          mg  "-I$ROOT/lib/MagCal"
 # 磁参考场/测量门控（2026-10 生产磁链路）：纯头文件 + Eigen
 run_one "$ROOT/test_host/test_mag_reference.cpp"      mref "-I$ROOT/lib/navigation-main/src"
 run_one "$ROOT/test_host/test_mag_gate.cpp"           mgate ""
+# GNSS+光流组合失效检测（连续丢失/滞回恢复/非法 dt）
+run_one "$ROOT/test_host/test_nav_aid_loss.cpp"       navaid ""
 
 # 平台相关算法（依赖 Arduino.h，通过 test_host/stub/Arduino.h 桩在宿主机编译）：
 run_one "$ROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
