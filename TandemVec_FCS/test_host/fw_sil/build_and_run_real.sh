@@ -32,6 +32,7 @@ $CXX -std=c++17 $OPT ${EXTRA_CXXFLAGS:-} -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV 
   lib/DPS310-Pressure-Sensor/src/Dps310.cpp \
   lib/DPS310-Pressure-Sensor/src/DpsClass.cpp \
   lib/units/src/convang.cpp lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp \
+  lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp \
   "$BIN_DIR/minmea.o" \
   -o "$OUT_BASE"
 
