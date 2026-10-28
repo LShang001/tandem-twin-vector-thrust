@@ -100,6 +100,11 @@ struct FlightCtrlParams
     // ---- 航向源（2026-10-25 无磁/磁仅初始对准）----
     float heading_aid_mode;           // 0=磁连续 1=磁仅初始 2=无磁手动
     float heading_align_deg;          // 手动对准航向 [deg]，真北顺时针
+    // ---- GNSS 天线杆臂（相对 IMU，机体系，[m]）----
+    // 高角速率/大机动下天线位置/速度与 IMU 不同；默认 0（保持旧行为）。
+    float gnss_lever_x_m;
+    float gnss_lever_y_m;
+    float gnss_lever_z_m;
 };
 
 // ============================================================
@@ -171,6 +176,9 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* rc_super[3]           */ { 0.7f, 0.7f, 0.55f },
     /* heading_aid_mode      */ static_cast<float>(BFS_HEADING_AID_MODE),
     /* heading_align_deg     */ BFS_HEADING_ALIGN_DEG,
+    /* gnss_lever_x_m        */ 0.0f,
+    /* gnss_lever_y_m        */ 0.0f,
+    /* gnss_lever_z_m        */ 0.0f,
 };
 
 #ifdef TANDEMVEC_FIRMWARE

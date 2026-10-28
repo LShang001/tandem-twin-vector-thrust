@@ -39,7 +39,7 @@
 
 // 参数总数（12 环 × 9 字段 + 12 滤波 alpha + 前馈掩码 + 二级滤波 + ★2026-08-11 FPV 摇杆曲线 7 参数）
 // ★ 唯一真值：改动注册表必须同时改这里与 GCS/server/params.py::expected_names()
-#define ANO_PARAMS_COUNT 130
+#define ANO_PARAMS_COUNT 133
 
 /**
  * @brief 处理 AnoCom 参数帧（0xE0 参数命令 / 0xE1 参数写入）

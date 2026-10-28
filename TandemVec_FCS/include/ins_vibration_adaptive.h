@@ -38,6 +38,12 @@
 #define BFS_NAVIGATION_VIBRATION_ADAPTIVE 1
 #endif
 
+// 陀螺侧允许的保守抬升上界 [rad/s]；估计器建议值还会被它夹持。
+// 默认 0.010 与历史行为一致（历史直接写入 suggest，其自身上限即 0.010）。
+#ifndef BFS_NAVIGATION_VIBRATION_GYRO_STD_MAX
+#define BFS_NAVIGATION_VIBRATION_GYRO_STD_MAX 0.010f
+#endif
+
 struct InsVibrationEstimate
 {
   float accel_rms_mps2 = 0.0f;
@@ -119,3 +125,26 @@ private:
   float gyro_ms_ = 0.0f;
   InsVibrationEstimate out_{};
 };
+
+/**
+ * @brief 陀螺侧建议值的安全夹持（上层策略，非估计器内部逻辑）
+ * @details 本模块的高通只到 0.5 Hz 量级，且输入还经过 IMU 软件低通：实测弹道上
+ *          `gyro_rms_dps` 主要由确定性机动贡献，`gyro_std_suggest` 会长期停在
+ *          标称值的数倍处，而加计侧早有 `[0.15, 0.25]` 保守夹持、陀螺侧没有。
+ *          这里把两侧对齐：不得低于标称 0.0015，不得高于给定的保守上界。
+ * @param  suggest_radps 估计器建议的陀螺量测标准差 [rad/s]
+ * @param  cap_radps     允许的最大抬升 [rad/s]；取 0.0015 等效关闭自适应
+ * @return 夹持后的 gyro 量测标准差 [rad/s]
+ * @units  rad/s
+ * @see    `handleNavigationSystem()` 振动自适应段、`test_ins_vibration_adaptive.cpp` T5
+ */
+inline float InsClampGyroStd(const float suggest_radps, const float cap_radps)
+{
+  constexpr float kNominalGyroStdRadps = 0.0015f;
+  const float cap = std::max(kNominalGyroStdRadps, cap_radps);
+  if (!(suggest_radps > 0.0f))
+  {
+    return kNominalGyroStdRadps;
+  }
+  return std::clamp(suggest_radps, kNominalGyroStdRadps, cap);
+}

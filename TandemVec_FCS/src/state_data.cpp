@@ -451,6 +451,22 @@ float ekf_accel_bias_z_mps2 = 0.0f;  // EKF Z轴加速度零偏遥测 (m/s^2)
 float baro_ekf_test_ratio = 0.0f;
 bool baro_ekf_fused = false;
 
+// 气压健康门控（opt-in）：默认关闭；定义宏后默认开启，SIL 用 --baro-health-gate 覆盖。
+#ifdef BFS_BARO_HEALTH_GATE
+bool g_baro_health_gate_enable = true;
+#else
+bool g_baro_health_gate_enable = false;
+#endif
+bool g_gnss_vel_subset_recovery_enable = false;
+float g_gnss_vel_subset_max_pos_resid_m = 25.0f;
+int g_gnss_vel_subset_max_fires_per_epoch = 1;
+bool g_baro_health_suspect = false;
+uint16_t g_baro_health_flags = 0;
+uint16_t g_baro_health_flags_cum = 0;
+uint32_t g_baro_health_sus_count = 0;
+float g_baro_health_drift_mps = 0.0f;
+uint32_t g_baro_health_skips = 0;
+
 volatile OpticalFlowData flow_data = {0};
 
 // UART7 光流传感器自动识别状态（默认未识别，由 sensor_peripheral.cpp 的检测状态机锁定）
@@ -461,6 +477,19 @@ volatile uint32_t g_flow_fusion_attempts = 0;
 volatile uint32_t g_flow_fusion_fused = 0;
 volatile uint32_t g_flow_fusion_rejected = 0;
 volatile uint32_t g_flow_fusion_reanchors = 0;
+volatile uint32_t g_baro_vel_aid_attempts = 0;
+volatile uint32_t g_baro_vel_aid_fused = 0;
+volatile uint32_t g_baro_vel_aid_rejected = 0;
+#ifdef BFS_BARO_VERTICAL_VELOCITY_AID
+bool g_baro_vel_aid_enable = true;   // 宏启用时默认开；SIL 可用 --baro-vel-aid 覆盖
+#else
+bool g_baro_vel_aid_enable = false;
+#endif
+#ifdef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE
+bool g_flare_enable = true;          // 宏启用时默认开；SIL 可用 --flare 覆盖
+#else
+bool g_flare_enable = false;
+#endif
 
 // 通信协议数据
 // 发动机控制器通信
@@ -502,6 +531,15 @@ bool is_origin_position_set = false;
 bool is_origin_lla_set = false;
 float origin_north = 0.0f, origin_east = 0.0f, origin_down = 0.0f;
 double origin_lat_deg = 0.0, origin_lon_deg = 0.0, origin_lat_rad = 0.0, origin_lon_rad = 0.0, origin_alt_m = 0.0;
+// GNSS 垂直一致性重锚门控（opt-in）：默认关闭；定义宏后默认开启，
+// SIL 用 --gnss-v-gate 0|1 在同一二进制内做 A/B。
+#ifdef BFS_GNSS_VERTICAL_REANCHOR_GATE
+bool g_gnss_v_gate_enable = true;
+#else
+bool g_gnss_v_gate_enable = false;
+#endif
+bool g_gnss_vert_suspect = false;
+uint32_t g_gnss_vert_gate_frames = 0;
 float relative_north = 0.0f, relative_east = 0.0f, relative_down = 0.0f;
 float ubx_relative_north = 0.0f;
 float ubx_relative_east = 0.0f;
@@ -552,6 +590,7 @@ float g_static_calib_required_s = 0.0f;
 float g_ekf_q_accel_scale = 1.0f;
 bool g_pos_hold_reanchor = false;
 bool g_mode_degraded_heading = false;
+bool g_mode_degraded_gnss = false;
 float g_sil_pos_leg_n_m = 0.0f;
 float g_sil_pos_leg_e_m = 0.0f;
 uint8_t g_imu_health_state = 0;
@@ -559,6 +598,8 @@ uint16_t g_imu_health_flags = 0;
 float g_imu_health_frozen_s = 0.0f;
 float g_imu_health_no_sample_s = 0.0f;
 float g_imu_health_sample_rate_hz = 0.0f;
+uint32_t g_nav_increment_raw_ticks = 0U;
+uint32_t g_nav_increment_fallback_ticks = 0U;
 bool g_gnss_consistency_reject_enabled = false;
 bfs::AidSourceStatusTracker aid_tracker;
 uint32_t static_start_time = 0;

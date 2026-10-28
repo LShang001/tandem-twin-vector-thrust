@@ -636,6 +636,22 @@ extern float baro_ekf_test_ratio;      // NIS/门限比值 (>1 表示被拒绝)
 extern bool baro_ekf_fused;           // 本帧是否融合成功
 extern float ekf_accel_bias_z_mps2;  // EKF 估计 Z 轴加表零偏 (机体系 FRD, 下为正, m/s^2)
 
+// 气压健康门控（opt-in BFS_BARO_HEALTH_GATE）：检测 Drift/Spike/Stuck 后
+// 暂停气压融合与“气压替换 GNSS 垂直”仲裁；SIL 用 --baro-health-gate 做 A/B。
+extern bool g_baro_health_gate_enable;
+// GNSS 速度野值软恢复（opt-in，默认关；SIL --gnss-vel-subset 覆盖）
+extern bool g_gnss_vel_subset_recovery_enable;
+// 速度子集允许触发的最大位置残差 [m]（默认 25，§4.24t；SIL --gnss-vel-subset-posres）
+extern float g_gnss_vel_subset_max_pos_resid_m;
+// 每个"完整更新历元"允许的子集触发次数（默认 1，§4.24w；255=不限，SIL --gnss-vel-subset-maxfires）
+extern int g_gnss_vel_subset_max_fires_per_epoch;
+extern bool g_baro_health_suspect;       // 锁存后的可疑标志（含 5 s 恢复保持）
+extern uint16_t g_baro_health_flags;     // 1=Drift 2=Spike 4=Stuck
+extern uint16_t g_baro_health_flags_cum; // 本次运行内出现过的 flag 位或
+extern uint32_t g_baro_health_sus_count; // Suspect 进入次数
+extern float g_baro_health_drift_mps;    // 残差斜率低通 (m/s)
+extern uint32_t g_baro_health_skips;     // 因可疑被跳过的气压 EKF 更新次数
+
 // 光流全局数据实例
 extern volatile OpticalFlowData flow_data;
 
@@ -648,6 +664,12 @@ extern volatile uint32_t g_flow_fusion_attempts;
 extern volatile uint32_t g_flow_fusion_fused;
 extern volatile uint32_t g_flow_fusion_rejected;
 extern volatile uint32_t g_flow_fusion_reanchors; // 连续拒绝触发的速度重锚次数
+extern volatile uint32_t g_baro_vel_aid_attempts;
+extern volatile uint32_t g_baro_vel_aid_fused;
+extern volatile uint32_t g_baro_vel_aid_rejected;
+extern bool g_baro_vel_aid_enable;
+extern bool g_flare_enable;
+
 
 /*
  * ==========================================================================================
@@ -711,6 +733,10 @@ extern bool is_origin_position_set;
 extern bool is_origin_lla_set;
 extern float origin_north, origin_east, origin_down;
 extern double origin_lat_deg, origin_lon_deg, origin_lat_rad, origin_lon_rad, origin_alt_m;
+// GNSS 垂直一致性重锚门控（opt-in）
+extern bool g_gnss_v_gate_enable;
+extern bool g_gnss_vert_suspect;
+extern uint32_t g_gnss_vert_gate_frames;
 extern float relative_north, relative_east, relative_down;
 extern float ubx_relative_north, ubx_relative_east, ubx_relative_down;
 
@@ -787,6 +813,20 @@ struct GnssRuntimeStatus
   float auto_delay_tau_s = 0.0f;
   float auto_delay_residual_mps = 0.0f;
   float auto_delay_sharpness = 0.0f;
+  // 拒绝原因/样本计数：只给一个 valid 位不足以区分"没激励""数据被粗差门
+  // 吃掉""代价平底"三种病因，而三者修法完全不同（2026-10-27 导弹段定位）。
+  uint8_t auto_delay_reject = 0;   ///< InsGnssDelayAutoReject
+  uint16_t auto_delay_n_gnss = 0;  ///< 本次参与拟合的 GNSS 样本数（剔除后）
+  uint16_t auto_delay_n_erased = 0;///< 本次被粗差门剔除的 GNSS 样本数
+  float auto_delay_speed_max_mps = 0.0f; ///< 窗口最大参考速度（门限自适应依据）
+  // ★ 应用侧可观测：`auto_delay_valid` 是**锁存**标志（只在估计成功那一次刷新），
+  //   它=1 不代表本历元真的用了估计值。导弹 SIL 实测四臂 τ̂ 中位 56~124 ms、
+  //   valid=20/20，但位置误差与完全不补偿相同 ⇒ 必须能直接看到"有没有应用、
+  //   被哪一条挡住"，否则这条通路是不可诊断的黑盒（2026-10-27）。
+  uint32_t auto_delay_applied_count = 0;  ///< 估计值实际替换固定先验的次数
+  uint8_t auto_delay_apply_block = 0;     ///< 最近一次未应用的原因位图
+  //   bit0=高振动否决 bit1=估计过期(>5 s) bit2=锐度不足(<0.003)
+  //   bit3=与先验偏差超门限 bit4=时间映射无效(不进本分支)
   // GNSS 慢漂移/欺骗一致性监测（2026-10，ins_gnss_consistency.h）
   bool consistency_suspect = false;
   uint32_t consistency_reject_count = 0;
@@ -845,6 +885,8 @@ extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针�
 // 无磁离地时陀螺零偏 z 限幅 [rad/s]：防止 GNSS 更新把真实偏航率吸收成零偏。
 // 0.01 rad/s ≈ 0.57°/s，20 s 累积 ≤11.5°，落在短时保持窗口内。
 extern float g_nomag_bias_z_max_radps;
+// 最近一次有效 GNSS 距今时间 [s]；从未拿到过 GNSS 时为 1e5（按“永远失联”
+// 触发上层失效保护），不是 0。
 extern float g_gnss_outage_age_s;
 // 无磁 20 s 保持窗口剩余时间 [s]；-1 表示当前不是无磁模式（遥测/告警用）。
 extern float g_nomag_hold_left_s;
@@ -859,6 +901,9 @@ extern float g_ekf_q_accel_scale;
 // 避免失联期间累积的位置误差在重捕获后变成大姿态指令。
 extern bool g_pos_hold_reanchor;
 extern bool g_mode_degraded_heading;
+// 本拍长 GNSS 失联水平保护策略触发（opt-in 宏；若航向门控已先降级，
+// 则只作诊断标志，不代表本宏改变了模式）。
+extern bool g_mode_degraded_gnss;
 // SIL 测试用：进入 AUTO_POSITION 时叠加的位置目标偏移 [m]（固件默认 0）。
 extern float g_sil_pos_leg_n_m;
 extern float g_sil_pos_leg_e_m;
@@ -869,6 +914,12 @@ extern uint16_t g_imu_health_flags;
 extern float g_imu_health_frozen_s;
 extern float g_imu_health_no_sample_s;
 extern float g_imu_health_sample_rate_hz;
+
+// 导航 IMU 增量源诊断（NavImuIncrementSelect.h，仅
+// BFS_NAVIGATION_RAW_IMU_INCREMENT 打开时累加；宏关闭恒为 0）。
+// 回退占空比 = fb/(raw+fb)，用于实机确认健康键误触发率。
+extern uint32_t g_nav_increment_raw_ticks;
+extern uint32_t g_nav_increment_fallback_ticks;
 
 // GNSS 一致性拒绝开关：默认只告警；SIL/后续实机验证通过后再启用拒绝。
 // （2026-10 仿真发现 1 s 窗口在爬升/位置保持动态下会被姿态误差触发，

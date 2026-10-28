@@ -29,6 +29,9 @@
 #include "math_utils.h"
 #include "QuaternionMath.h"
 #include "MagCalStore.h" // 标定参数内部 Flash 持久化（上电加载）
+#include "imu_range.h"   // 量程常量：换 FS 时必须同步改这里
+#include "ins_vibration_hf.h" // 高频振动通道：用低通前/后之差测 80–120 Hz 机械振动
+#include "NavImuIncrementSelect.h" // 导航增量源选择（默认宏关闭时不参与累加）
 
 namespace
 {
@@ -133,12 +136,12 @@ int initICM42688()
   // === 步骤 4: 配置量程和采样率 ===
   // 加速度计: ±8G 量程, 2kHz 输出数据率 (ODR)
   // ±8G 量程对应灵敏度: 4096 LSB/g，足够覆盖正常飞行加速度范围
-  IMU.setAccelFS(ICM42688::AccelFS::gpm8);
+  IMU.setAccelFS(ICM42688::AccelFS::gpm8); // 必须与 bfs::kIcm42688AccelFullScaleG 一致
   IMU.setAccelODR(ICM42688::ODR::odr2k);
 
   // 陀螺仪: ±2000°/s 量程, 2kHz 输出数据率 (ODR)
   // ±2000°/s 量程对应灵敏度: 164 LSB/(°/s)，覆盖快速旋转场景
-  IMU.setGyroFS(ICM42688::GyroFS::dps2000);
+  IMU.setGyroFS(ICM42688::GyroFS::dps2000); // 必须与 bfs::kIcm42688GyroFullScaleDps 一致
   IMU.setGyroODR(ICM42688::ODR::odr2k);
 
   delay(500); // 等待 500ms，让传感器稳定并开始输出数据
@@ -280,6 +283,18 @@ bool readIMUData()
     float gzFilteredRaw = gyroZFilter.filter(gz_cal_dps); // 滤波陀螺仪Z (单位: dps)
 
     // ========================================================================
+    // 步骤 4.5: 高频振动监测（不改变任何控制/导航数据通路）
+    // ========================================================================
+    // hp = raw − lp 是软件低通的补滤波器（高通），保留低通截止（fc≈6/16 Hz）以上
+    // 的带内能量。`ins_vibration_adaptive.h` 的 0.5 Hz 高通吃在低通**之后**，
+    // 对弹载 80–120 Hz 主谱只有 2–8% 灵敏度，而本通道在 2 kHz 历元上直接测到。
+    {
+      const float hf_raw_g[3] = {raw_ax_g, raw_ay_g, raw_az_g};
+      const float hf_lp_g[3] = {axFilteredRaw, ayFilteredRaw, azFilteredRaw};
+      g_ins_hf_vibration.Update(hf_raw_g, hf_lp_g, static_cast<float>(deltaTimeSecs));
+    }
+
+    // ========================================================================
     // 步骤 5: 第一次坐标变换 (Sensor Frame -> Body Frame)
     // ========================================================================
     // 传感器系 (右-上-后) -> 机体系
@@ -303,12 +318,47 @@ bool readIMUData()
     float gzBody = -gyFilteredRaw;
 
     // EKF使用与IMU_Packet一致的轻微低通后FRD机体系数据，避免平均值和增量路径数据源不一致。
+#ifdef BFS_NAVIGATION_RAW_IMU_INCREMENT
+    // 导航累加（均值 + 双子样增量）改用**未过软件低通**的同轴映射值，绕开低通的
+    // 时变群延迟；惯导健康 Failed 时由选择器回退到滤波值（含 5 s 后持）。
+    // ★ 打开本宏即刻意打破上行"与 IMU_Packet 同源"的口径：导航侧吃未滤波增量，
+    //   IMU_Packet/Madgwick/控制侧仍吃滤波值——§4.24 的提带宽正是靠这个不一致。
+    // 低通在传感器系做、轴映射是定常带符号置换，两者可交换 ⇒ 这里的 raw 分支
+    // 与"SIL 里先映射后低通"逐轴等价。Madgwick 与控制侧不受影响（仍用 axBody 等）。
+    // ★ 自参考回路：`acc_sum_*` 同时喂 IMU 健康监测（navigation_task 的 Failed 判据），
+    //   而 Failed 又决定本拍用哪一路 ⇒ 提带宽后监测吃的是 raw 样本（方差更大，
+    //   但饱和/振动按模块不变量只进 Warning、不进 Failed）。该回路只由 47 格矩阵
+    //   （41/47 逐 seed 不变、无格变差 >1%）与 K2 四风险格 nrfb=0 覆盖，实机需盯
+    //   navi_raw/navi_fb 占空比。
+    constexpr uint8_t kImuHealthFailed = 2U; // 与 ins_imu_health.h::ImuHealthState 一致
+    const float axBodyNavRaw = -raw_az_g;
+    const float ayBodyNavRaw = raw_ax_g;
+    const float azBodyNavRaw = -raw_ay_g;
+    const float gxBodyNavRaw = -gz_cal_dps;
+    const float gyBodyNavRaw = gx_cal_dps;
+    const float gzBodyNavRaw = -gy_cal_dps;
+
+    static bfs::NavImuIncrementSelector s_nav_increment_sel(
+        true, bfs::NavImuIncrementSelector::kDefaultHoldTicks);
+    const bool navUseRaw = s_nav_increment_sel.select(g_imu_health_state == kImuHealthFailed) ==
+                           bfs::NavImuSource::Raw;
+    g_nav_increment_raw_ticks = s_nav_increment_sel.rawTicks();
+    g_nav_increment_fallback_ticks = s_nav_increment_sel.fallbackTicks();
+
+    const float accel_body_x_mps2 = (navUseRaw ? axBodyNavRaw : axBody) * G_TO_MS2;
+    const float accel_body_y_mps2 = (navUseRaw ? ayBodyNavRaw : ayBody) * G_TO_MS2;
+    const float accel_body_z_mps2 = (navUseRaw ? azBodyNavRaw : azBody) * G_TO_MS2;
+    const float gyro_body_x_radps = (navUseRaw ? gxBodyNavRaw : gxBody) * DEG_TO_RAD;
+    const float gyro_body_y_radps = (navUseRaw ? gyBodyNavRaw : gyBody) * DEG_TO_RAD;
+    const float gyro_body_z_radps = (navUseRaw ? gzBodyNavRaw : gzBody) * DEG_TO_RAD;
+#else
     const float accel_body_x_mps2 = axBody * G_TO_MS2;
     const float accel_body_y_mps2 = ayBody * G_TO_MS2;
     const float accel_body_z_mps2 = azBody * G_TO_MS2;
     const float gyro_body_x_radps = gxBody * DEG_TO_RAD;
     const float gyro_body_y_radps = gyBody * DEG_TO_RAD;
     const float gyro_body_z_radps = gzBody * DEG_TO_RAD;
+#endif
 
     noInterrupts();
     acc_sum_x += accel_body_x_mps2;

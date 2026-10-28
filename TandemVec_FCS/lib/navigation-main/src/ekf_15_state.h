@@ -960,14 +960,31 @@ namespace bfs
        * gnss_lla 与 hist_lla 均为弧度，必须显式传 RAD——若按 DEG 解释，
        * 新息会被缩小 π/180 倍且旋转矩阵建在错误纬度上。
        */
+      // GNSS 杆臂补偿：量测在天线处，状态在 IMU 处。
+      // 位置 p_ant = p_imu + C_b^n r；速度 v_ant = v_imu + C_b^n(ω×r)。
+      // 必须在【量测时刻的历史姿态】上计算，不能用当前姿态（高角速率下
+      // 20–200 ms 的姿态差会留下米级残差）。@ref REF-120 §9.6 杆臂/旋转项。
+      Eigen::Vector3f lever_ned = Eigen::Vector3f::Zero();
+      Eigen::Vector3f lever_vel_ned = Eigen::Vector3f::Zero();
+      if (gnss_lever_arm_body_m_.squaredNorm() > 1e-12f)
+      {
+        lever_ned = t_b2ned * gnss_lever_arm_body_m_;
+        Eigen::Vector3f omega = can_repropagate
+                                    ? state_buffer_[hist_idx].gyro_input
+                                    : ins_gyro_radps_;
+        omega -= gyro_bias_radps_;
+        lever_vel_ned =
+            t_b2ned * omega.cross(gnss_lever_arm_body_m_);
+      }
       y_.segment(0, 3) =
-          lla2ned(gnss_lla, hist_lla, bfs::AngPosUnit::RAD).cast<float>();
+          lla2ned(gnss_lla, hist_lla, bfs::AngPosUnit::RAD).cast<float>() -
+          lever_ned;
 
       /*
        * 计算速度误差 (后3维):
        * 直接计算 GNSS 速度与 INS 估计速度的差值。
        */
-      y_.segment(3, 3) = gnss_vel - hist_vel;
+      y_.segment(3, 3) = gnss_vel - hist_vel - lever_vel_ned;
       result.innovation_norm = y_.norm();
 
       // 正常跟踪期的单帧大跳点显式拒绝。高振动/高延迟时 P 可能膨胀到让
@@ -975,12 +992,84 @@ namespace bfs
       // 反过来拒绝后续好帧。长失联恢复（≥2 s）不走此门，由重捕获逻辑处理。
       const bool in_reacquire_window =
           time_since_gnss_update_s_ >= GNSS_REACQUIRE_MIN_OUTAGE_S;
-      if (!in_reacquire_window &&
-          ((y_.segment(0, 2).norm() > GNSS_OUTLIER_POS_NE_GATE_M) ||
-           (std::fabs(y_(2)) > GNSS_OUTLIER_POS_D_GATE_M) ||
-           (y_.segment(3, 2).norm() > GNSS_OUTLIER_VEL_NE_GATE_MPS) ||
-           (std::fabs(y_(5)) > GNSS_OUTLIER_VEL_D_GATE_MPS)))
+      const bool pos_outlier_gate =
+          (y_.segment(0, 2).norm() > GNSS_OUTLIER_POS_NE_GATE_M) ||
+          (std::fabs(y_(2)) > GNSS_OUTLIER_POS_D_GATE_M);
+      const bool vel_outlier_gate =
+          (y_.segment(3, 2).norm() > GNSS_OUTLIER_VEL_NE_GATE_MPS) ||
+          (std::fabs(y_(5)) > GNSS_OUTLIER_VEL_D_GATE_MPS);
+      // 只读诊断：记录本帧两条物理门的残差与判据结果，供 SIL 归因
+      // （哪一先越门）使用；不参与任何滤波决策。
+      last_gnss_resid_pos_ne_m_ = y_.segment(0, 2).norm();
+      last_gnss_resid_vel_ne_mps_ = y_.segment(3, 2).norm();
+      last_gate_pos_ = pos_outlier_gate;
+      last_gate_vel_ = vel_outlier_gate;
+      if (!in_reacquire_window && (pos_outlier_gate || vel_outlier_gate))
       {
+        // 速度-only 恢复：只要速度残差超门且连续 3 帧互一致就修正速度，
+        // 位置残差是否越门不影响（位置仍整帧拒绝）。30 g 级轴向过载下水平
+        // 加速度误差同时把位置与速度残差推过门限，若要求"位置在门内"则本
+        // 通道永不触发，误差只能靠 ~17 s 后的整帧重锚才收敛。
+        // ★ 只在"位置残差仍然小"时才做速度-only 部分更新（报告 §4.24q–§4.24t）。
+        //   30.5 g × 100 seeds 实测：允许触发的残差上限落在 [14, 41) 这段平台上——
+        //   收紧到 12 m 会把有益触发一起拦掉（发生率反升到 5/50，比不加阈值的 2/50 更差），
+        //   放宽到 41 m 才第一次放行灾难性触发（单 seed 从 7.7 m 恶化到 42.9 m）。
+        //   机理不是"幅值大就危险"：单次 21–30 m 的触发几乎无害甚至有益，
+        //   真正致命的是位置残差已经大了还**反复**触发（无上限时 3–4 次 ⇒ 44–105 m），
+        //   因为只修速度会把位置留在错误值上、制造位置-速度不一致，之后整帧持续被拒。
+        //   故取 25 m（两侧裕度 +11/−16 m）。注意这与 §4.24p 被否证的"要求位置门越门(>30 m)"
+        //   方向相反——那次修复恰好选中了有害区，所以被完整回退。
+        if (gnss_vel_subset_recovery_enabled_ && vel_outlier_gate &&
+            last_gnss_resid_pos_ne_m_ <= gnss_vel_subset_max_pos_resid_m_ &&
+            // ★ §4.24w：每个"完整更新历元"只允许有限次子集触发。机制依据是
+            //   §4.24r–t：害处来自"位置残差已大还反复触发"（nocap 下 3–4 次 ⇒ 44–105 m），
+            //   而不是单次幅值。配额在完整 6 维更新成功时重置（见下方漏斗），
+            //   默认 1 次；置 255 即取消该限制（同二进制 A/B 复现旧行为）。
+            gnss_vel_subset_fires_since_full_ < gnss_vel_subset_max_fires_per_epoch_)
+        {
+          // ★ 一致性判据作用在**残差**上而不是 GNSS 速度本身：持续 30 g 下
+          //   相邻 10 Hz 量测速度合法地差约 29 m/s，用原始速度做 3 m/s 门
+          //   永远凑不满 3 帧（首轮 smoke 即因此 rec=0）。
+          constexpr float kVelSubsetResidDiffMps = 3.0f;
+          const Eigen::Vector3f vel_resid = y_.segment(3, 3);
+          if (has_last_gnss_vel_subset_resid_ &&
+              (vel_resid - last_gnss_vel_subset_resid_).norm() <=
+                  kVelSubsetResidDiffMps)
+          {
+            if (gnss_vel_subset_streak_ < 255U)
+            {
+              ++gnss_vel_subset_streak_;
+            }
+          }
+          else
+          {
+            gnss_vel_subset_streak_ = 1U;
+          }
+          last_gnss_vel_subset_resid_ = vel_resid;
+          has_last_gnss_vel_subset_resid_ = true;
+          if (gnss_vel_subset_streak_ >= kVelSubsetStreakFrames &&
+              // ★ 杆臂：子集更新把量测当作【IMU 原点】速度，必须扣掉天线处
+              //   C_b^n(ω×r)；27.8°/s + 2 m 杆臂约 1 m/s，高滚转率下更大。
+              ApplyGnssVelocitySubsetSoftUpdate(gnss_vel - lever_vel_ned))
+          {
+            ++gnss_velocity_subset_recovery_count_;
+            if (gnss_vel_subset_fires_since_full_ < 255U)
+            {
+              ++gnss_vel_subset_fires_since_full_;
+            }
+            gnss_vel_subset_streak_ = 0U;
+            result.fused = true;
+            result.subset_velocity = true;
+            result.outlier_rejected = false;
+            result.innovation_norm = y_.norm();
+            return result;
+          }
+        }
+        else
+        {
+          gnss_vel_subset_streak_ = 0U;
+          has_last_gnss_vel_subset_resid_ = false;
+        }
         result.outlier_rejected = true;
         ++gnss_outlier_reject_count_;
         if (can_repropagate)
@@ -989,6 +1078,8 @@ namespace bfs
         }
         return result;
       }
+      gnss_vel_subset_streak_ = 0U;
+      has_last_gnss_vel_subset_resid_ = false;
 
       // ----------------------------------------------------------------------
       // [步骤 2] 计算新息协方差 (Innovation Covariance)
@@ -1009,7 +1100,15 @@ namespace bfs
       {
         // 高振动/长失联下纯惯导可漂出数百米，物理残差门会永久拒绝 GNSS。
         // 连续多帧互相一致的 GNSS 才硬重锚，单帧跳点仍按离群值拒绝。
-        if (TryResetAfterPersistentImplausibleGnss(gnss_vel, gnss_lla,
+        // ★ 杆臂：硬重锚把量测【直接写进状态】，必须先把天线量测换算到 IMU
+        //   原点，否则 |r| 米级位置偏差与 |ω×r| 速度偏差被当成真实导航状态。
+        const Eigen::Vector3d gnss_lla_imu =
+            lever_ned.squaredNorm() > 1e-12f
+                ? ned2lla((-lever_ned).cast<double>(), gnss_lla,
+                          bfs::AngPosUnit::RAD)
+                : gnss_lla;
+        if (TryResetAfterPersistentImplausibleGnss(gnss_vel - lever_vel_ned,
+                                                   gnss_lla_imu,
                                                    measurement_age_s,
                                                    can_repropagate, hist_idx))
         {
@@ -1158,6 +1257,8 @@ namespace bfs
       {
         gnss_reacquire_timer_s_ = GNSS_REACQUIRE_WINDOW_S;
       }
+      // ★ §4.24w：完整 6 维更新成功 ⇒ 重置"本历元已用子集次数"配额
+      gnss_vel_subset_fires_since_full_ = 0U;
       time_since_gnss_update_s_ = 0.0f;
       result.fused = true;
       return result;
@@ -1692,6 +1793,16 @@ namespace bfs
       return std::sqrt(std::fmax(p_(6, 6) + p_(7, 7), 0.0f));
     }
 
+    /* 只读诊断：最近一次 GNSS 量测更新里两条物理野值门的残差与判据结果。
+       用于 SIL 归因"位置先越门还是速度先越门"，不参与滤波决策。 */
+    inline float gnss_resid_pos_ne_m() const { return last_gnss_resid_pos_ne_m_; }
+    inline float gnss_resid_vel_ne_mps() const
+    {
+      return last_gnss_resid_vel_ne_mps_;
+    }
+    inline bool gnss_gate_pos_outlier() const { return last_gate_pos_; }
+    inline bool gnss_gate_vel_outlier() const { return last_gate_vel_; }
+
     /* P1-5：设置 GNSS 更新是否把航向作为 consider 状态。
        默认 false（原行为）；上层按飞行相位置位，避免在过渡/大倾斜段
        让 GNSS 速度新息经 P(8,v) 把航向拉偏。 */
@@ -1700,6 +1811,109 @@ namespace bfs
       gnss_consider_heading_ = enable;
     }
     inline bool gnss_consider_heading() const { return gnss_consider_heading_; }
+
+    /* 外部基准（气压高度）与 GNSS 垂直位置持续矛盾时，上层禁止
+       TryResetAfterPersistentImplausibleGnss 把位置硬重锚到 GNSS；
+       否则持续欺骗/故障会被当成失联恢复真值。默认允许（旧行为）。 */
+    inline void set_gnss_reanchor_allowed(const bool allowed)
+    {
+      gnss_reanchor_allowed_ = allowed;
+    }
+    inline bool gnss_reanchor_allowed() const { return gnss_reanchor_allowed_; }
+
+    /* 气压健康判 Suspect 时只允许重锚水平通道：垂直位置/速度保留 INS，
+       防止垂直 spoof 借“持久不可信 → 硬重锚”路径把高度重置到假值。
+       默认允许（旧行为）；无健康监测/气压可信时不受影响。 */
+    inline void set_gnss_vertical_reanchor_allowed(const bool allowed)
+    {
+      gnss_vertical_reanchor_allowed_ = allowed;
+    }
+    inline bool gnss_vertical_reanchor_allowed() const
+    {
+      return gnss_vertical_reanchor_allowed_;
+    }
+    inline uint32_t gnss_horizontal_reanchor_count() const
+    {
+      return gnss_horizontal_reanchor_count_;
+    }
+
+    /* IMU 合理值门限必须随传感器量程缩放（约 1.2–1.6× FS）；
+       否则 ±16/32 g 量程下 >12.2 g 的合法样本会被 TimeUpdate 整帧丢弃。 */
+    inline void set_imu_plausibility_limits(const float accel_mps2,
+                                            const float gyro_radps)
+    {
+      if (std::isfinite(accel_mps2) && accel_mps2 > 0.0f)
+      {
+        max_plausible_accel_mps2_ = accel_mps2;
+      }
+      if (std::isfinite(gyro_radps) && gyro_radps > 0.0f)
+      {
+        max_plausible_gyro_radps_ = gyro_radps;
+      }
+    }
+
+    /* 正常跟踪期速度野值门恢复（opt-in，默认关）。
+       物理野值门因**速度残差**整帧拒绝时（位置残差是否越门不影响），
+       且连续 3 帧"速度残差自洽"时：
+       先膨胀 P_vv（承认速度可能已错），再做一次膨胀 R 的速度-only 更新；
+       位置仍按野值拒绝，由后续位置更新/重锚修正。
+       ★ 一致性判据必须作用在残差 (v_gnss−v_ins) 上，不是相邻帧 GNSS 速度本身：
+         持续 30 g 下相邻 10 Hz 速度合法地差约 29.4 m/s。
+       用于 30 g 轴向高动态下 10 Hz GNSS 的“速度误差→整帧拒绝→位置漂移”链。 */
+    inline void set_gnss_velocity_subset_recovery_enabled(const bool enabled)
+    {
+      gnss_vel_subset_recovery_enabled_ = enabled;
+    }
+    inline bool gnss_velocity_subset_recovery_enabled() const
+    {
+      return gnss_vel_subset_recovery_enabled_;
+    }
+    /// 速度子集允许触发的最大位置残差 [m]。默认 25 m：§4.24q 先按 15 m 接受，
+    /// §4.24r–t 在独立 seeds 上量出平台 [14, 41)（收紧到 12 m 反而 5/50 失效、
+    /// 放宽到 41 m 才放行首次灾难性触发），取 25 m 使两侧裕度分别为 +11/−16 m。
+    /// 设为 >=1e3 即取消该条件（只用于同二进制 A/B 复现旧行为）。
+    inline void set_gnss_velocity_subset_max_pos_resid_m(const float max_m)
+    {
+      gnss_vel_subset_max_pos_resid_m_ = max_m;
+    }
+    inline float gnss_velocity_subset_max_pos_resid_m() const
+    {
+      return gnss_vel_subset_max_pos_resid_m_;
+    }
+    inline uint32_t gnss_velocity_subset_recovery_count() const
+    {
+      return gnss_velocity_subset_recovery_count_;
+    }
+    /// §4.24w：每个"完整更新历元"允许的子集触发次数（默认 1；255=取消限制）。
+    /// 依据：§4.24r–t 证明害处来自"位置残差已大还反复触发"，不是单次幅值；
+    /// 配额在完整 6 维更新成功时重置，因此它把"反复触发"直接限制住，
+    /// 且不依赖"米"这个需要按平台重标的绝对量。
+    inline void set_gnss_velocity_subset_max_fires_per_epoch(const uint8_t n)
+    {
+      // ★ 只赋值、不重置计数器：调用方（navigation_task）每个 GNSS 历元都会下发一次，
+      //   若在这里清零，配额就永远用不完、门形同虚设（本轮实现时踩过）。
+      gnss_vel_subset_max_fires_per_epoch_ = n;
+    }
+    inline uint8_t gnss_velocity_subset_max_fires_per_epoch() const
+    {
+      return gnss_vel_subset_max_fires_per_epoch_;
+    }
+    inline uint8_t gnss_velocity_subset_fires_since_full() const
+    {
+      return gnss_vel_subset_fires_since_full_;
+    }
+
+    /* GNSS 天线相对 IMU 的机体系杆臂 [m]。默认 0（旧行为）。
+       高角速率/高角加速度下，天线位置/速度相对 IMU 有 C_b^n·r 与
+       C_b^n(ω×r) 偏移；不补偿会把杆臂运动误当成载体运动。 */
+    inline void gnss_lever_arm_body_m(const Eigen::Vector3f &lever_m)
+    {
+      gnss_lever_arm_body_m_ = lever_m;
+    }
+    inline Eigen::Vector3f gnss_lever_arm_body_m() const
+    {
+      return gnss_lever_arm_body_m_;
+    }
     inline uint32_t gnss_velocity_reanchor_count() const
     {
       return gnss_vel_reanchor_count_;
@@ -1749,6 +1963,14 @@ namespace bfs
         p_(r, c) = v;
         p_(c, r) = v;
       }
+    }
+    // 构造“F 矩阵必须用去偏 IMU”用例：若实现误用原始 ω/f，F(V,β)/F(β,β)
+    // 会差一个零偏量级，T18 可直接锁定该回归。
+    inline void set_biases_for_test(const Eigen::Vector3f &accel_bias,
+                                    const Eigen::Vector3f &gyro_bias)
+    {
+      accel_bias_mps2_ = accel_bias;
+      gyro_bias_radps_ = gyro_bias;
     }
 #endif
 
@@ -1828,6 +2050,19 @@ namespace bfs
       // 主机仿真/调参记录用：返回P矩阵最大绝对元素，用于判断PSD退化是否来自病态尺度。
       return p_.cwiseAbs().maxCoeff();
     }
+
+#ifdef EKF_NAV_TELEMETRY
+    /* SIL 协方差一致性观测专用：只读 P 元素，不进入滤波计算。
+       与 EKF_HOST_REGRESSION 分开，避免为观测打开测试接缝而改变快路径代码布局。 */
+    inline float covariance_coeff(const int row, const int col) const
+    {
+      if (row < 0 || row >= 15 || col < 0 || col >= 15)
+      {
+        return std::numeric_limits<float>::quiet_NaN();
+      }
+      return p_(row, col);
+    }
+#endif
 
 #ifdef EKF_HOST_REGRESSION
     inline float covariance_coeff_for_test(const int row, const int col) const
@@ -2032,6 +2267,45 @@ namespace bfs
       return out;
     }
 
+    /* 速度-only 软恢复：膨胀 P_vv 承认速度可能已错，再用膨胀 R 的速度子集
+       更新把速度拉回 GNSS；不更新位置。返回是否成功注入。 */
+    bool ApplyGnssVelocitySubsetSoftUpdate(const Eigen::Vector3f &gnss_vel_ned)
+    {
+      constexpr float kInflateStdMps = 20.0f;
+      constexpr float kMeasStdMps = 5.0f;
+      p_.block<3, 3>(3, 3) += kInflateStdMps * kInflateStdMps *
+                              Eigen::Matrix3f::Identity();
+      Eigen::Matrix<float, 3, 15> hv = Eigen::Matrix<float, 3, 15>::Zero();
+      hv.block<3, 3>(0, 3).setIdentity();
+      const Eigen::Matrix3f rv =
+          kMeasStdMps * kMeasStdMps * Eigen::Matrix3f::Identity();
+      const Eigen::Vector3f yv = gnss_vel_ned - ins_ned_vel_mps_;
+      const Eigen::Matrix3f sv = hv * p_ * hv.transpose() + rv;
+      if (!IsFiniteMatrix(sv))
+      {
+        return false;
+      }
+      const Eigen::Matrix3f sv_inv = sv.inverse();
+      const float nis = yv.dot(sv_inv * yv);
+      if (!std::isfinite(nis) || nis > 100.0f)
+      {
+        return false;
+      }
+      Eigen::Matrix<float, 15, 3> kv = p_ * hv.transpose() * sv_inv;
+      if (gnss_consider_heading_)
+      {
+        kv.row(8).setZero();
+      }
+      const Eigen::Matrix<float, 15, 15> i15 =
+          Eigen::Matrix<float, 15, 15>::Identity();
+      p_ = (i15 - kv * hv) * p_ * (i15 - kv * hv).transpose() +
+           kv * rv * kv.transpose();
+      StabilizeCovariance();
+      x_ = kv * yv;
+      InjectErrorState();
+      return true;
+    }
+
     /* P0-1 软重锚：连续速度子集被拒后膨胀 P_vv，让速度重新进入 NIS 门控。
        不清速度态、不清历史；只增加速度不确定度，避免硬重置的航向踢动。 */
     void InflateVelocityCovariance(const float add_std_mps)
@@ -2087,6 +2361,14 @@ namespace bfs
         return false;
       }
 
+      if (!gnss_reanchor_allowed_)
+      {
+        // 上层判定 GNSS 垂直位置与气压高度持续矛盾：禁止硬重锚，清零
+        // “连续不可信”计数，等外部基准一致后重新累计。
+        gnss_implausible_reject_streak_ = 0;
+        return false;
+      }
+
       if (has_last_implausible_gnss_vel_ &&
           (gnss_vel - last_implausible_gnss_vel_).norm() >
               GNSS_REACQUIRE_RESET_MAX_FIX_VEL_DIFF_MPS)
@@ -2110,6 +2392,11 @@ namespace bfs
       {
         RepropagateFromDelayedSnapshot(hist_idx);
       }
+      const bool horizontal_only = !gnss_vertical_reanchor_allowed_;
+      const double keep_alt_m = ins_lla_rad_m_.z();
+      const float keep_vd_mps = ins_ned_vel_mps_.z();
+      const float keep_p_dd = p_(2, 2);
+      const float keep_p_vdvd = p_(5, 5);
       // GNSS 位置对应 t-age；用 GNSS 速度前推到当前时刻，残余误差为 O(a·age²)。
       const Eigen::Vector3d pos_now =
           (measurement_age_s > 0.0f)
@@ -2119,6 +2406,12 @@ namespace bfs
               : gnss_lla;
       ins_lla_rad_m_ = pos_now;
       ins_ned_vel_mps_ = gnss_vel;
+      if (horizontal_only)
+      {
+        ins_lla_rad_m_.z() = keep_alt_m;
+        ins_ned_vel_mps_.z() = keep_vd_mps;
+        ++gnss_horizontal_reanchor_count_;
+      }
       p_.block<3, 3>(0, 0) =
           (Eigen::Vector3f(GNSS_REACQUIRE_RESET_POS_NE_STD_M,
                            GNSS_REACQUIRE_RESET_POS_NE_STD_M,
@@ -2137,6 +2430,11 @@ namespace bfs
               .asDiagonal();
       p_.block<3, 3>(0, 3).setZero();
       p_.block<3, 3>(3, 0).setZero();
+      if (horizontal_only)
+      {
+        p_(2, 2) = keep_p_dd;
+        p_(5, 5) = keep_p_vdvd;
+      }
       StabilizeCovariance();
       ResetHistoryBuffer();
       time_since_gnss_update_s_ = 0.0f;
@@ -2352,12 +2650,14 @@ namespace bfs
       return true;
     }
 
-    static bool IsPlausibleImuSample(const Eigen::Vector3f &accel,
-                                     const Eigen::Vector3f &gyro)
+    bool IsPlausibleImuSample(const Eigen::Vector3f &accel,
+                              const Eigen::Vector3f &gyro) const
     {
-      // ICM42688配置为±8g、±2000dps；这里给少量裕度，拒绝明显越界的有限坏帧。
-      return (accel.norm() <= MAX_PLAUSIBLE_ACCEL_MPS2) &&
-             (gyro.norm() <= MAX_PLAUSIBLE_GYRO_RADPS);
+      // 默认按 ICM42688 ±8g/±2000dps 留裕度；换 16/32 g 时上层必须同步
+      // set_imu_plausibility_limits，否则 >12.2 g 的合法样本会被整帧丢弃，
+      // EKF 姿态冻结、位置发散（2026-10-27 32 g 试点定位）。
+      return (accel.norm() <= max_plausible_accel_mps2_) &&
+             (gyro.norm() <= max_plausible_gyro_radps_);
     }
 
     static bool IsValidTimeStep(const float dt_s)
@@ -4591,6 +4891,11 @@ namespace bfs
     static constexpr float GNSS_OUTLIER_POS_NE_GATE_M = 30.0f;
     static constexpr float GNSS_OUTLIER_POS_D_GATE_M = 40.0f;
     static constexpr float GNSS_OUTLIER_VEL_NE_GATE_MPS = 10.0f;
+    /* 速度子集软恢复需要的"残差自洽"连续帧数。250 次延迟预算扫描显示
+       降到 2 帧或加"单帧大残差立即触发"均无可测收益（p95 11.06→11.07 m、
+       immediate 臂逐位不变），因为本通道的绑定约束是速度门首次越界的时刻，
+       不是确认帧数；故保持常量、不做运行时参数。 */
+    static constexpr uint8_t kVelSubsetStreakFrames = 3U;
     static constexpr float GNSS_OUTLIER_VEL_D_GATE_MPS = 8.0f;
     static constexpr float GNSS_OUTAGE_TIME_CAP_S = 60.0f;
     static constexpr float GNSS_OUTAGE_POS_NE_GROWTH_MPS = 1.2f;
@@ -4644,6 +4949,8 @@ namespace bfs
     // 运行期IMU物理合理性门限；超过传感器量程很多的有限值视为坏帧。
     static constexpr float MAX_PLAUSIBLE_ACCEL_MPS2 = 120.0f;
     static constexpr float MAX_PLAUSIBLE_GYRO_RADPS = 40.0f;
+    float max_plausible_accel_mps2_ = MAX_PLAUSIBLE_ACCEL_MPS2;
+    float max_plausible_gyro_radps_ = MAX_PLAUSIBLE_GYRO_RADPS;
     // 量测噪声标准差下限；外部精度再小也不能让R矩阵接近奇异。
     static constexpr float MIN_MEASUREMENT_NOISE_STD = 1.0e-2f;
     static constexpr float MIN_STATIC_GYRO_MEASUREMENT_NOISE_STD = 1.0e-5f;
@@ -4814,11 +5121,31 @@ namespace bfs
        数学依据见 notes/06：F(v,β) 在比力方向恒定时不含航向信息，
        速度新息经 P(8,v) 灌入航向会形成伪观测/踢动。 */
     bool gnss_consider_heading_ = false;
+    bool gnss_reanchor_allowed_ = true;
+    bool gnss_vertical_reanchor_allowed_ = true;
+    uint32_t gnss_horizontal_reanchor_count_ = 0;
+    Eigen::Vector3f gnss_lever_arm_body_m_ = Eigen::Vector3f::Zero();
 
     /* P0-1：连续速度子集被拒计数与软重锚次数。
        连续 N 次速度子集被拒后膨胀 P_vv（不清速度/历史），让速度重新进入闭环。 */
     uint8_t gnss_vel_reject_streak_ = 0;
     uint32_t gnss_vel_reanchor_count_ = 0;
+
+    /* 速度野值恢复：连续 3 帧 GNSS 速度一致才允许，位置野值不触发。 */
+    bool gnss_vel_subset_recovery_enabled_ = false;
+    float gnss_vel_subset_max_pos_resid_m_ = 25.0f;
+    uint8_t gnss_vel_subset_streak_ = 0;
+    /* §4.24w 每"完整更新历元"允许的子集触发次数配额（255=不限，用于 A/B 复现旧行为） */
+    uint8_t gnss_vel_subset_max_fires_per_epoch_ = 1U;
+    uint8_t gnss_vel_subset_fires_since_full_ = 0U;
+    bool has_last_gnss_vel_subset_resid_ = false;
+    Eigen::Vector3f last_gnss_vel_subset_resid_ = Eigen::Vector3f::Zero();
+    /* 只读诊断（不参与滤波）：最近一次 GNSS 帧的位置/速度水平残差与两门判据 */
+    float last_gnss_resid_pos_ne_m_ = 0.0f;
+    float last_gnss_resid_vel_ne_mps_ = 0.0f;
+    bool last_gate_pos_ = false;
+    bool last_gate_vel_ = false;
+    uint32_t gnss_velocity_subset_recovery_count_ = 0;
 
     /* 长时间失联后物理残差持续不可信的连续帧计数。连续 N 帧且相邻帧速度
        互相一致时才允许硬重锚；任何融合成功或残差回到可信范围都清零。 */

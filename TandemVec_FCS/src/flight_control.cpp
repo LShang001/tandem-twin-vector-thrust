@@ -42,6 +42,20 @@
 #include "TandemVec_Propulsion.h"
 #include "TandemVec_Config.h"
 #include "TandemVec_ControlAllocation.h"
+
+// 无 GNSS 水平失效保护（opt-in，默认不定义，不改变出厂行为）。
+// 机理：位置环追一个纯惯导漂移的绝对位置，会持续要 10–15° 倾角；加速度计
+// 无法区分重力与持续推力加速度，EKF 姿态被拉平，位置环再以“错误姿态”继续
+// 追，形成正反馈。速度保持只把水平速度目标压到 0，不再追绝对位置，倾角
+// 权限也限在加速度计可分辨的小角度内。
+#ifdef BFS_GNSS_OUTAGE_VELOCITY_HOLD
+#ifndef BFS_GNSS_OUTAGE_VELOCITY_HOLD_S
+#define BFS_GNSS_OUTAGE_VELOCITY_HOLD_S 0.5f
+#endif
+#ifndef BFS_GNSS_OUTAGE_VELOCITY_HOLD_ACCEL_MPS2
+#define BFS_GNSS_OUTAGE_VELOCITY_HOLD_ACCEL_MPS2 1.0f
+#endif
+#endif
 // 在线参数辨识（★ 纯观测模式：只估计并遥测，不修改任何增益）
 #include "TandemVec_OnlineID.h"
 // 惯量逆解交叉耦合前馈（★2026-08-10 通用层：ω×(I·ω) + ω×h，仿真同构）
@@ -361,6 +375,11 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
  *           摇杆仍可控制姿态。磁源恢复并连续 3 s 新鲜后由导航层解除门控。
  *           无绝对航向源（未装磁/未标定/磁长时间受扰）不是可飞行状态，
  *           该降级是安全边界，不是可选功能。
+ *        ③ 长 GNSS 失联定高降级（opt-in `BFS_GNSS_OUTAGE_ALT_HOLD`，默认关）：
+ *           GNSS 年龄超过门限后水平位置无外部基准，EKF 位置/速度只剩惯导
+ *           递推；继续 AUTO_POSITION 会追逐漂移估计并形成位置-姿态正反馈。
+ *           此时强制 AUTO_ALTITUDE，保留定高与航向锁；短失联（≤门限）不改，
+ *           避免按“短时陀螺漂移”误伤用户要求的定点保持。
  * @ref   CTL-001 §8.6；CTL-003 §2；AGENTS.md「EKF 进控制闭环 10/10 FAIL」
  * @units millis() 毫秒
  */
@@ -375,6 +394,9 @@ ControlMode determine_control_mode(const ControlInputs_t &inputs)
                    // AnoCom.sendText("Guidance Timeout! Switching to MANUAL.");
   }
 
+#ifdef BFS_GNSS_OUTAGE_ALT_HOLD
+  const ControlMode requested_mode = mode;
+#endif
   g_mode_degraded_heading = false;
   if (g_pos_hold_degraded &&
       (mode == AUTO_POSITION || mode == GUIDED))
@@ -382,6 +404,30 @@ ControlMode determine_control_mode(const ControlInputs_t &inputs)
     mode = AUTO_ALTITUDE;
     g_mode_degraded_heading = true;
   }
+  // spoof 有界响应只切速度保持，不切模式、不拒绝 GNSS；保留水平阻尼，
+  // 避免 AUTO_ALTITUDE 无水平控制时被残余速度/风带走。
+  g_mode_degraded_gnss = false;
+#ifdef BFS_GNSS_OUTAGE_ALT_HOLD
+#ifndef BFS_GNSS_OUTAGE_ALT_HOLD_S
+#define BFS_GNSS_OUTAGE_ALT_HOLD_S 10.0f
+#endif
+  // 光流能提供水平速度时位置环仍有外部参照，不做降级；只有 GNSS 与光流
+  // 同时失去水平基准才退定高。
+  const bool flow_velocity_fresh =
+      flow_data.is_flow_valid && flow_data.flow_quality >= 50 &&
+      std::isfinite(flow_data.velocity_x_mps) &&
+      std::isfinite(flow_data.velocity_y_mps) &&
+      (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs;
+  if (requested_mode == AUTO_POSITION && !flow_velocity_fresh &&
+      g_gnss_outage_age_s > BFS_GNSS_OUTAGE_ALT_HOLD_S)
+  {
+    if (mode == AUTO_POSITION)
+    {
+      mode = AUTO_ALTITUDE;
+    }
+    g_mode_degraded_gnss = true;
+  }
+#endif
   return mode;
 }
 
@@ -459,7 +505,7 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
   // 获取当前垂直速度 (向上为正)
   // 注意：DETA100 输出的 velocity_down 是 NED 坐标系，向下为正
   // 控制器期望向上为正，所以取负值
-  const float currentVerticalVelocity =
+  float currentVerticalVelocity =
       InsVerticalVelocityUpFromNedDown(INS_GNSS_Packet.velocity_down);
 
   // ==========================================================================================
@@ -565,18 +611,158 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
         // 外环：计算高度误差 -> 目标垂直速度
         float altitude_error = target_altitude - current_altitude_for_control;
 #ifdef BFS_LONG_GNSS_OUTAGE_DESCENT
-        // 长失联 opt-in：超过 10 s 无 GNSS 后以 1 m/s 降高目标，
+#ifndef BFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S
+#define BFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S 10.0f
+#endif
+#ifndef BFS_LONG_GNSS_OUTAGE_DESCENT_RATE_MPS
+#define BFS_LONG_GNSS_OUTAGE_DESCENT_RATE_MPS 1.0f
+#endif
+#ifdef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE
+#ifndef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_ALT_M
+#define BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_ALT_M 2.0f
+#endif
+#ifndef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_RATE_MPS
+#define BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_RATE_MPS 0.5f
+#endif
+#ifndef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_MIN_AGE_S
+#define BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_MIN_AGE_S 20.0f
+#endif
+#endif
+        // 长失联 opt-in：超过门限无 GNSS 后以 1 m/s 降高目标，
         // 缩短无绝对位置时的水平漂移时间；默认宏关闭。
-        if (g_gnss_outage_age_s > 10.0f && current_altitude_for_control > 0.3f)
+        // ★ 一旦触发就锁存到落地/上锁：高空 + 短窗口失联时，GNSS 可能在
+        //   降到 0 之前恢复；若下降随 age 复位而停止，会悬在 5–20 m 半空，
+        //   既没有完成失效保护，又已离开原高度（2026-10-26 20/30 m 目标高度
+        //   扫描发现：20 m 目标、20 s 失联时停在 5.9 m）。
+        static bool s_long_outage_descent_latched = false;
+        static bool s_descent_ground_locked = false;
+        // 复位只在“上锁”或“已落地且 GNSS 恢复”时发生；GNSS 在下降中途
+        // 恢复（高度仍 >0.3 m）不得清除锁存，否则会停在半空。
+        if (!inputs.is_unlocked ||
+            (current_altitude_for_control < 0.3f &&
+             g_gnss_outage_age_s < 0.5f))
         {
-          target_altitude = std::fmax(0.0f, target_altitude - 1.0f * 0.005f);
+          // 已落地且 GNSS 恢复：目标锁到当前地面高度。否则残余下降目标
+          //（例如 0.6 m）会让飞机再次离地，出现落地后小跳。
+          if (s_long_outage_descent_latched)
+          {
+            target_altitude = current_altitude_for_control;
+          }
+          s_long_outage_descent_latched = false;
+          s_descent_ground_locked = false;
+        }
+        if (!s_long_outage_descent_latched &&
+            g_gnss_outage_age_s > BFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S &&
+            current_altitude_for_control > 0.3f)
+        {
+          s_long_outage_descent_latched = true;
+          // 从当前高度起算，不能沿用起飞目标高度：失联可能发生在爬升途中
+          //（SIL 20 s 失联 + --alt 30 时实际仅约 15 m），若从 30 m 以 1 m/s
+          // 下压，GNSS 恢复/落地锁存释放时目标仍在半空，飞机会重新爬回该
+          // 目标（2026-10-26 下降速率扫描：120 例中 15 例爬回 12–16 m）。
+          target_altitude = std::fmin(target_altitude,
+                                      current_altitude_for_control);
           altitude_error = target_altitude - current_altitude_for_control;
         }
+        if (s_long_outage_descent_latched &&
+            current_altitude_for_control > 0.3f)
+        {
+          target_altitude = std::fmax(
+              0.0f,
+              target_altitude - BFS_LONG_GNSS_OUTAGE_DESCENT_RATE_MPS * 0.005f);
+          altitude_error = target_altitude - current_altitude_for_control;
+        }
+        // 长失联可能在目标斜坡降到 0 之前就触地（实际下降快于斜坡）。此时
+        // 上面的 >0.3 m 条件会让目标停在半空（60 s 失联 trace：触地时目标
+        // 仍 13.4 m），控制器持续给爬升推力；SIL 无地面摩擦，机体被风和推力
+        // 掀翻（roll -104°）。连续 1 s 低于 0.3 m 视为已落地，目标锁到当前
+        // 高度；不能只看单帧，否则下降穿过 0.3 m 时会误停半空。
+        static uint32_t s_descent_ground_since_ms = 0U;
+        if (s_long_outage_descent_latched &&
+            current_altitude_for_control < 0.3f)
+        {
+          if (s_descent_ground_since_ms == 0U)
+          {
+            s_descent_ground_since_ms = millis();
+          }
+          else if (static_cast<uint32_t>(millis() - s_descent_ground_since_ms) >=
+                   1000U)
+          {
+            target_altitude = current_altitude_for_control;
+            altitude_error = 0.0f;
+            s_descent_ground_locked = true;
+          }
+        }
+        else
+        {
+          s_descent_ground_since_ms = 0U;
+        }
+#ifdef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE
+        // 末段 flare（opt-in）：长失联下降的 EKF 垂速可被倾斜/滚转污染到
+        // 符号相反（60 s trace：真值 −1.91、EKF +0.76 m/s），只有到低高度
+        // 才用气压高度斜率做垂速反馈，并把目标压到 0.5 m/s；整段都用会
+        // 拖长下降、增大落点漂移（60 次 A/B：触地 3.35→1.84 m/s，但落点
+        // 432→714 m）。FLARE 只在 <2 m 介入，漂移增加应远小于整段制动。
+        static float s_fl_hist[25] = {0.0f};
+        static uint8_t s_fl_idx = 0U, s_fl_cnt = 0U, s_fl_div = 0U;
+        static float s_fl_vz = 0.0f;
+        static bool s_flare_active = false;
+        if (++s_fl_div >= 4U)
+        {
+          s_fl_div = 0U;
+          s_fl_hist[s_fl_idx] = current_altitude_for_control;
+          s_fl_idx = static_cast<uint8_t>((s_fl_idx + 1U) % 25U);
+          if (s_fl_cnt < 25U) ++s_fl_cnt;
+        }
+        if (s_fl_cnt >= 10U)
+        {
+          const int n = s_fl_cnt;
+          const float mi = 0.5f * static_cast<float>(n - 1);
+          float ma = 0.0f, num = 0.0f, den = 0.0f;
+          for (int i = 0; i < n; ++i)
+          {
+            const int k = (static_cast<int>(s_fl_idx) + 25 - n + i) % 25;
+            ma += s_fl_hist[k];
+          }
+          ma /= static_cast<float>(n);
+          for (int i = 0; i < n; ++i)
+          {
+            const int k = (static_cast<int>(s_fl_idx) + 25 - n + i) % 25;
+            const float di = static_cast<float>(i) - mi;
+            num += di * (s_fl_hist[k] - ma);
+            den += di * di;
+          }
+          const float slope = (den > 1.0e-6f) ? (num / den) / 0.02f : 0.0f;
+          s_fl_vz += 0.1f * (slope - s_fl_vz);
+        }
+        if (g_flare_enable && s_long_outage_descent_latched &&
+            !s_descent_ground_locked &&
+            g_gnss_outage_age_s >
+                BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_MIN_AGE_S &&
+            current_altitude_for_control <
+                BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_ALT_M &&
+            s_fl_cnt >= 10U)
+        {
+          s_flare_active = true;
+          currentVerticalVelocity = s_fl_vz;
+        }
+        else if (!s_long_outage_descent_latched || s_descent_ground_locked)
+        {
+          s_flare_active = false;
+        }
+#endif
 #endif
         float raw_target_vertical_velocity = altitudePositionPController.compute(altitude_error, 0, 0.005f);
         // 目标垂直速度进行滤波，使指令变化更平滑
         target_vertical_velocity = altitude_rate_target_filter.filter(raw_target_vertical_velocity);
 
+#ifdef BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE
+        if (s_flare_active)
+        {
+          target_vertical_velocity =
+              -BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_RATE_MPS;
+        }
+#endif
         // (可选) 对目标垂直速度进行限幅，防止位置环输出过大
         target_vertical_velocity = constrain(target_vertical_velocity, -MAX_TARGET_ALTITUDE_RATE, MAX_TARGET_ALTITUDE_RATE);
       }
@@ -745,6 +931,11 @@ void initPositionHold()
  * @note  北向由 pitch 摇杆、东向由 roll 摇杆映射（体轴映射见 AGENTS.md 低速悬停
  *        闭环口径踩坑记录，2026-10-21 修正；旧实现把东向塞进偏航会漂）。
  *        刹车预测点限幅 ±5 m，防止速度估计异常把目标点设到数公里外。
+ *        ④ 无 GNSS 且无新鲜光流时（opt-in `BFS_GNSS_OUTAGE_VELOCITY_HOLD`，
+ *        默认关）：位置环改用零速度目标 + 1 m/s² 加速度上限。原因是位置环
+ *        追纯惯导漂移的绝对位置会持续要 10–15° 倾角，加速度计无法区分
+ *        重力与持续推力，EKF 姿态被拉平后位置环继续追，形成正反馈
+ *        （SIL 20 s 失联 + 10 m 阶跃：基线漂 600–1800 m）。
  */
 void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
 {
@@ -796,6 +987,7 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // 目标速度变量，将由状态机决定其值
   targetVelNorth = 0.0f;
   targetVelEast = 0.0f;
+  bool velocity_hold_active = false;
 
   // --- 3. Loiter 状态机逻辑 ---
   if (sticks_in_deadzone)
@@ -864,11 +1056,34 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
       g_pos_hold_reanchor = false;
     }
 
-    // 运行位置环，计算修正速度
-    float northError = targetNorth - currentNorth;
-    float eastError = targetEast - currentEast;
-    targetVelNorth = northPosPID.computeWithExternalDerivative(northError, 0, currentVelNorth, 0.005f);
-    targetVelEast = eastPosPID.computeWithExternalDerivative(eastError, 0, currentVelEast, 0.005f);
+#ifdef BFS_GNSS_OUTAGE_VELOCITY_HOLD
+    // GNSS 失效且无新鲜光流时，绝对位置只剩惯导递推，位置环的“目标−估计”
+    // 误差会把机体持续推向某侧；改用零速度目标只做水平阻尼。短失联
+    // （≤门限）仍走位置环，避免按一次掉星就放弃定点。
+    const bool flow_velocity_fresh =
+        flow_data.is_flow_valid && flow_data.flow_quality >= 50 &&
+        std::isfinite(flow_data.velocity_x_mps) &&
+        std::isfinite(flow_data.velocity_y_mps) &&
+        (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs;
+    velocity_hold_active =
+        !flow_velocity_fresh &&
+        g_gnss_outage_age_s > BFS_GNSS_OUTAGE_VELOCITY_HOLD_S;
+#endif
+    if (velocity_hold_active)
+    {
+      // 目标水平速度保持为 0（上面已清），只走速度环阻尼；清位置环积分，
+      // 避免失联期间累积的位置误差在恢复瞬间变成大姿态指令。
+      northPosPID.reset();
+      eastPosPID.reset();
+    }
+    else
+    {
+      // 运行位置环，计算修正速度
+      float northError = targetNorth - currentNorth;
+      float eastError = targetEast - currentEast;
+      targetVelNorth = northPosPID.computeWithExternalDerivative(northError, 0, currentVelNorth, 0.005f);
+      targetVelEast = eastPosPID.computeWithExternalDerivative(eastError, 0, currentVelEast, 0.005f);
+    }
   }
   else
   {
@@ -917,6 +1132,19 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
     eastPosPID.reset();
   }
 
+#ifdef BFS_GNSS_OUTAGE_VELOCITY_HOLD
+  // 进入/退出失联速度保持时清速度环积分：进入前的积分是“追位置”的配平，
+  // 失联后继续用会把机体推走；退出时清掉失联段学到的伪配平，避免恢复瞬间
+  // 产生大姿态。稳态保持期间积分仍工作，用于补偿真实零偏。
+  static bool s_velocity_hold_prev = false;
+  if (velocity_hold_active != s_velocity_hold_prev)
+  {
+    northVelPID.reset();
+    eastVelPID.reset();
+    s_velocity_hold_prev = velocity_hold_active;
+  }
+#endif
+
   // --- 4. 核心优化：速度环 -> 输出物理加速度 (Target Acceleration) ---
   // 物理意义: Kp * (V_target - V_current) = 期望的加速度 (m/s^2)
   // 这里的 PID 输出直接就是 a_x 和 a_y
@@ -926,6 +1154,22 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // --- 5. 加速度矢量圆形限幅 ---
   // 避免 "方形限幅" (即 N 和 E 分别限幅) 导致斜向加速时总加速度过大
   float accel_mag_sq = target_accel_n * target_accel_n + target_accel_e * target_accel_e;
+#ifdef BFS_GNSS_OUTAGE_VELOCITY_HOLD
+  // 失联阻尼阶段把水平加速度权限压到 1 m/s²（≈6°），保证加速度计仍能
+  // 分辨重力方向；否则高速失联时刹车的 15° 倾角会把姿态估计再次带偏。
+  if (velocity_hold_active)
+  {
+    const float hold_limit = BFS_GNSS_OUTAGE_VELOCITY_HOLD_ACCEL_MPS2;
+    const float hold_limit_sq = hold_limit * hold_limit;
+    if (accel_mag_sq > hold_limit_sq)
+    {
+      const float scale = hold_limit / sqrtf(accel_mag_sq);
+      target_accel_n *= scale;
+      target_accel_e *= scale;
+      accel_mag_sq = hold_limit_sq;
+    }
+  }
+#endif
   float max_accel_sq = MAX_ACCEL_CMD * MAX_ACCEL_CMD;
 
   if (accel_mag_sq > max_accel_sq)
@@ -1097,6 +1341,33 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
 
     // 用于存储倾斜目标姿态的四元数（仅包含滚转和俯仰，不含偏航）
     Quaternion q_tilt_target;
+
+#ifdef BFS_GNSS_OUTAGE_TILT_LIMIT
+#ifndef BFS_GNSS_OUTAGE_TILT_LIMIT_S
+#define BFS_GNSS_OUTAGE_TILT_LIMIT_S 0.5f
+#endif
+#ifndef BFS_GNSS_OUTAGE_TILT_LIMIT_DEG
+#define BFS_GNSS_OUTAGE_TILT_LIMIT_DEG 5.0f
+#endif
+    // 无 GNSS 时加速度计无法区分重力与持续推力加速度：位置环持续要 15°
+    // 倾角会把 EKF 姿态拉偏（SIL 20 s 失联：真值 pitch -15°，EKF -2.5°，
+    // 位置环以为已回平而继续加速，最终漂 600 m）。保留位置环但限制其
+    // 水平权限，使倾角始终落在加速度计可分辨的小角度内。
+    if (mode == AUTO_POSITION &&
+        g_gnss_outage_age_s > BFS_GNSS_OUTAGE_TILT_LIMIT_S)
+    {
+      const float max_comp =
+          sinf(BFS_GNSS_OUTAGE_TILT_LIMIT_DEG * DEG_TO_RAD);
+      const float comp_mag =
+          sqrtf(thrust_comp_N * thrust_comp_N + thrust_comp_E * thrust_comp_E);
+      if (comp_mag > max_comp)
+      {
+        const float scale = max_comp / comp_mag;
+        thrust_comp_N *= scale;
+        thrust_comp_E *= scale;
+      }
+    }
+#endif
 
     // 根据推力分量计算倾斜目标四元数
     // thrust_comp_N: 北向推力分量（控制俯仰）

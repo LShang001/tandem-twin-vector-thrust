@@ -138,6 +138,10 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     // 2026-10-25 航向源：0=磁连续 1=磁仅初始 2=无磁手动；对准角 [deg]
     { "hdg_mode", ANO_FLOAT, &kFlightCtrlParams.heading_aid_mode, nullptr, nullptr },
     { "hdg_align", ANO_FLOAT, &kFlightCtrlParams.heading_align_deg, nullptr, nullptr },
+    // 2026-10-26 GNSS 天线杆臂（相对 IMU，机体系 [m]）
+    { "gnss_lever_x", ANO_FLOAT, &kFlightCtrlParams.gnss_lever_x_m, nullptr, nullptr },
+    { "gnss_lever_y", ANO_FLOAT, &kFlightCtrlParams.gnss_lever_y_m, nullptr, nullptr },
+    { "gnss_lever_z", ANO_FLOAT, &kFlightCtrlParams.gnss_lever_z_m, nullptr, nullptr },
 };
 static_assert(sizeof(kAnoParams) / sizeof(kAnoParams[0]) == ANO_PARAMS_COUNT,
               "ano_params: 注册表数量与 ANO_PARAMS_COUNT 不一致");

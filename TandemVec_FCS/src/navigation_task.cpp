@@ -49,6 +49,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "ins_gnss_epoch_timing.h"
 #include "ins_gnss_delay_auto.h"
 #include "ins_vibration_adaptive.h"
+#include "ins_vibration_hf.h"
 #include "ins_inertial_reference.h"
 #include "ins_bias_jump_monitor.h"
 #include "ins_bias_temp_observer.h"
@@ -56,10 +57,83 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "ins_altitude_reference.h"
 #include "ins_static_detector.h"
 #include "ins_static_aid_profile.h"
+#ifdef BFS_PRELAUNCH_ALIGN_STABILITY_GATE
+#include "ins_prelaunch_align.h"
+#endif
+// AHRS 重力方向门默认启用（2026-10-27 导弹 SIL：姿态 RMSE 6.6°→0.4°，
+// VTOL 30 例验收失败集不变）。需要复现旧行为时定义
+// BFS_DISABLE_AHRS_GRAVITY_DIR_GATE。
+#if !defined(BFS_AHRS_GRAVITY_DIR_GATE) && !defined(BFS_DISABLE_AHRS_GRAVITY_DIR_GATE)
+#define BFS_AHRS_GRAVITY_DIR_GATE
+#endif
+#ifdef BFS_AHRS_GRAVITY_DIR_GATE
+#include "ins_ahrs_gravity_gate.h"
+#endif
+// AHRS 姿态辅助的机型策略：VTOL 低倾角包线内它约束姿态漂移，保留；
+// 导弹/高动态构型在 GNSS 低刷新、延迟或振动下，Madgwick 重力参考会
+// 被持续比力/振动污染（2026-10-27 SIL：5 Hz 5.79°、1 g 振动 6.95°）。
+// 高动态构型建议定义 BFS_DISABLE_AHRS_ATTITUDE_AID 关闭该辅助。
+#if defined(BFS_DISABLE_AHRS_ATTITUDE_AID)
+#define BFS_AHRS_ATTITUDE_AID 0
+#else
+#define BFS_AHRS_ATTITUDE_AID 1
+#endif
+// opt-in：IMU 非有限/健康失效时保持上一有效样本继续传播，并保留本帧
+// GNSS/磁/气压更新；默认关闭（实机未验证）。原行为是整帧 return，1 s 6 g
+// 段 NaN 会丢掉这段 GNSS 更新，SIL 位置误差 122 m。
+// 超过 BFS_NAV_IMU_OUTAGE_HOLD_MAX_S 后恢复原 return，避免永久失效时无限
+// 用陈旧样本传播。
+// #define BFS_NAV_IMU_OUTAGE_HOLD_LAST
+// 备选：COAST 用“重力抵消比力 + 零角速率”传播（等速滑行），保留 GNSS 更新；
+// 对冻结样本比 hold-last 更合理，但同样受 2 s 上限约束。二选一。
+// #define BFS_NAV_IMU_OUTAGE_COAST
+// 组合策略：非有限用 hold-last，有限但健康 Failed（冻结）用 coast；
+// 2026-10-27 SIL：NaN 1 s 3.1 m、冻结 1 s 2.0 m，优于单独任一策略。
+// #define BFS_NAV_IMU_OUTAGE_FALLBACK
+#ifndef BFS_NAV_IMU_OUTAGE_FALLBACK_MAX_S
+#define BFS_NAV_IMU_OUTAGE_FALLBACK_MAX_S 2.0f
+#endif
+#ifndef BFS_NAV_IMU_OUTAGE_HOLD_MAX_S
+#define BFS_NAV_IMU_OUTAGE_HOLD_MAX_S 2.0f
+#endif
+#ifndef BFS_NAV_IMU_OUTAGE_COAST_MAX_S
+#define BFS_NAV_IMU_OUTAGE_COAST_MAX_S 2.0f
+#endif
+// 大过载饱和自适应（opt-in）：生产 ICM42688 为 ±8 g，超量程时比力被削顶，
+// 幅值不可信但方向仍可用。锁存期间膨胀加计过程噪声，让 GNSS 主导速度/位置，
+// 避免削顶误差被当成“真实比力”后在 NIS 拒帧中退化为纯惯导。
+// 2026-10-27 导弹 SIL 10.1 g 验证见报告 §4.11；默认关闭。
+// #define BFS_IMU_SATURATION_Q_INFLATE
+// ★ opt-in：导航 IMU 增量绕过控制链软件低通（提带宽），惯导健康 Failed 时回退。
+// 依据（TandemVec-EKF-Report/导弹6DOF-导航SIL-2026-10-27.md §4.24/§4.24h/§4.24k-终/§4.24m）：
+// 30.5 g 生产路径群体退化的驱动是 `sensor_imu.cpp` 步骤 4 一阶低通的**时变群延迟**
+// 被自动 GNSS 延时估计吸收后当成接收机延迟回放；让导航增量绕过该低通可把 47 格
+// 矩阵位置误差压低 20–66%，但同一改动在 IMU 冻结故障格上代价 +67.5%（40 seeds）。
+// 回退键必须用**需要确认时间**的 ImuHealthState::Failed（非有限/确认冻结/无样本），
+// 而不是逐帧即时信号——§4.24m-W 组：跳过故障前沿、覆盖后半段与恢复期 34.20→2.52 m，
+// 在故障第一帧就切只拿到默认水平。饱和/高振动是 Warning，不参与回退。
+// 实机未验证，默认关闭（宏关闭时 `sensor_imu.cpp` 累加路径与现网逐位一致）。
+// #define BFS_NAVIGATION_RAW_IMU_INCREMENT
+#ifndef BFS_IMU_SATURATION_Q_ENTER_S
+#define BFS_IMU_SATURATION_Q_ENTER_S 0.269f
+#endif
+#ifndef BFS_IMU_SATURATION_Q_RELEASE_S
+#define BFS_IMU_SATURATION_Q_RELEASE_S 0.27f
+#endif
+#ifndef BFS_IMU_SATURATION_Q_MPS2
+// 2026-10-27 连续优化 + 独立 seeds 复核（seeds 1–20/21–40）：
+// Q=4.87、enter=0.269 s、release=0.27 s。10.1 g 位置 622.6→3.5 m、
+// 拒帧 20→0；8.4 g 代价 +0.03° 姿态/+0.15° 航向；6.4 g 逐位相同。
+// Q 低于 ~0.5 会重新退化到 km 级，因此不再往更小取。
+#define BFS_IMU_SATURATION_Q_MPS2 4.87f
+#endif
 #include "mag_reference.h"
 #include "mag_measurement_gate.h"
 #include "HeadingAidingGate.h"
 #include "ins_imu_health.h"
+#include "ins_imu_saturation.h"
+#include "ins_baro_health.h"
+#include "imu_range.h"
 #include "ins_gnss_consistency.h"
 
 #include <cmath>
@@ -226,6 +300,11 @@ static constexpr Icm45686GnssDynamicWeightConfig kGnssDwCfg{
 };
 // 统一静止检测器（ins_static_detector.h，平台无关纯算法）
 static Icm45686StaticDetector static_det;
+#ifdef BFS_PRELAUNCH_ALIGN_STABILITY_GATE
+// 起飞前对准稳定性门：只在 EKF 首次初始化前使用，允许陀螺零偏大于
+// 统一静止检测器的绝对角速率门限（见 ins_prelaunch_align.h）。
+static InsPreLaunchAlign prelaunch_align;
+#endif
 static constexpr float GNSS_FIRST_REANCHOR_MAX_AGE_S = 0.15f;
 
 /**
@@ -802,6 +881,10 @@ static InsBiasTempObserver s_bias_temp_observer;
 static InsBiasTempTable s_bias_temp_table;
 static uint32_t s_bias_temp_table_last_ms = 0;
 #endif
+// 高频振动通道全局单例：定义放在编译条件之外，`sensor_imu.cpp`（生产 2 kHz 历元）
+// 与宿主 SIL（复刻软件低通处）都无条件更新，导航侧按 `BFS_VIB_HIGH_SOURCE_HF`
+// 或 SIL 运行时开关选择读哪个通道，避免两个编译分支下的链接不对称。
+InsHfVibrationMonitor g_ins_hf_vibration;
 static InsVibrationEstimator s_vib_estimator;
 static uint32_t s_vib_gnss_bad_until_ms = 0;
 static bfs::MagMeasurementGate s_mag_gate;
@@ -819,10 +902,46 @@ static void markHeadingAidingInvalid()
   g_heading_aiding_age_s = -1.0f;
   g_pos_hold_degraded = true;
 }
-static bfs::ImuHealthMonitor s_imu_health;
+static bfs::ImuHealthMonitor s_imu_health = []() {
+  bfs::ImuHealthConfig cfg;
+  cfg.accel_range_mps2 = bfs::kIcm42688AccelRangeMps2;
+  cfg.gyro_range_radps = bfs::kIcm42688GyroRangeRadps;
+  return bfs::ImuHealthMonitor(cfg);
+}();
+#ifdef BFS_IMU_SATURATION_Q_INFLATE
+static bfs::ImuSaturationQMonitor s_imu_sat_q = []() {  bfs::ImuSaturationQConfig cfg;
+  cfg.enter_s = BFS_IMU_SATURATION_Q_ENTER_S;
+  cfg.release_s = BFS_IMU_SATURATION_Q_RELEASE_S;
+  cfg.inflate_accel_std_mps2 = BFS_IMU_SATURATION_Q_MPS2;
+  return bfs::ImuSaturationQMonitor(cfg);
+}();
+static bool s_imu_sat_q_was_active = false;
+#ifdef FW_SIL_REAL_NAV
+// 研究设施：SIL 运行时覆盖锁存期间的加计噪声标准差（<=0 用编译期默认）。
+// 固件路径不受影响；用于同二进制扫描 Q 取值。
+float g_sil_imu_sat_q_inflate_mps2 = 0.0f;
+float g_sil_imu_sat_q_enter_s = 0.0f;
+float g_sil_imu_sat_q_release_s = 0.0f;
+#endif
+#endif
 static bfs::InsGnssConsistencyMonitor s_gnss_consistency;
 static Eigen::Vector3f s_gnss_imu_dv_accum = Eigen::Vector3f::Zero();
 static uint32_t s_gnss_last_epoch_us = 0;
+
+// 气压健康监测（BFS_BARO_HEALTH_GATE）：Drift/Spike/Stuck 置 Suspect 后
+// 暂停气压 EKF 更新，并让垂直重锚门控不再用气压替换 GNSS 高度。
+// 恢复采用 5 s 连续正常保持，避免单帧抖动反复开关仲裁。
+static bfs::BaroHealthMonitor s_baro_health;
+static bool s_baro_health_have_gnss = false;
+static double s_baro_health_gnss_alt_m = 0.0;
+static uint32_t s_baro_health_gnss_ms = 0;
+static float s_baro_health_clear_s = 0.0f;
+static float s_baro_health_hold_s = 5.0f;
+static bool s_baro_health_distrust = false;
+static uint32_t s_baro_health_last_ms = 0;
+static uint32_t s_baro_health_start_ms = 0;
+// 起飞前后气压计可能仍在热稳定/建立参考，前 5 s 只采集不动作。
+static constexpr float kBaroHealthBlankingS = 5.0f;
 
 static void publishImuHealth(const bfs::ImuHealthStatus &status)
 {
@@ -841,6 +960,15 @@ static bfs::ImuHealthStatus updateImuHealth(
     const Eigen::Vector3f &accel, const Eigen::Vector3f &gyro,
     const uint32_t sample_count, const float dt_s)
 {
+#ifdef FW_SIL_REAL_NAV
+  // 研究设施：SIL 可把健康门限量程改成与实际注入 FS 一致（默认 0=用常量）。
+  if (g_sil_imu_health_accel_range_mps2 > 0.0f)
+  {
+    bfs::ImuHealthConfig cfg = s_imu_health.config();
+    cfg.accel_range_mps2 = g_sil_imu_health_accel_range_mps2;
+    s_imu_health.set_config(cfg);
+  }
+#endif
   const float vib_g = s_vib_estimator.last().accel_rms_g;
   // 复用既有零偏跳变监测的保持标志（上一帧写入）作为健康 Warning 输入，
   // 不重复实现跳变检测；一帧延迟对 5 s 保持窗口无影响。
@@ -904,11 +1032,66 @@ int g_sil_nav_debug_imu_invalid = 0;
 bool g_sil_nav_debug_imu_failed = false;
 float g_sil_nav_debug_accel[3] = {0.0f, 0.0f, 0.0f};
 float g_sil_nav_debug_gyro[3] = {0.0f, 0.0f, 0.0f};
+// [0]=实际写入 EKF 的加计 Q、[1]=高通加速度 RMS [g]、[2]=估计器建议加计 Q、
+// [3]=实际写入 EKF 的陀螺 Q
+// 用途：审计"振动自适应 Q"在真实过载剖面上到底有没有生效（占空比）。
+float g_sil_nav_debug_vib[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+// 研究设施：在线改陀螺 Q 上界，用于同一二进制内做保守夹持 A/B（0=用宏默认）。
+float g_sil_gyro_q_cap_radps = 0.0f;
+// 研究设施：在线改自动延时应用死区 [s]（-1=用宏默认），用于同一二进制 A/B。
+float g_sil_delay_deadband_s = -1.0f;
+// 研究设施：在线开关 `vib_high` 否决（-1=用宏默认，0/1=强制），用于同一二进制 A/B。
+int g_sil_delay_vib_veto = -1;
+// 研究设施：在线切换 vib_high 取中频(0)还是高频(1)通道（-1=用宏默认）。
+int g_sil_vib_hf_source = -1;
+// 研究设施：在线设拟合窗最大 GNSS 缺口 [s]（-1=用宏默认），用于同一二进制 A/B。
+float g_sil_delay_max_gap_s = -1.0f;
+// 研究设施（§4.24ax）：应用量平滑时间常数 [s]（0=不平滑）。用于"同配置只改抖动"的对照。
+float g_sil_delay_apply_lpf_s = 0.0f;
+// 研究设施（§4.24ax）：锁存首次应用量（1=冻结），构造零抖动对照。
+int g_sil_delay_apply_freeze = 0;
+// 研究设施：在线设应用侧残差门限 [m/s]（-1=用宏默认）。
+float g_sil_delay_max_resid_mps = -1.0f;
+// 研究设施：在线设搜索网格上界 [ms]（-1=用宏默认 150）。放大必须与
+// `g_sil_delay_cap_ms` 同步，否则估出的 τ̂ 会被调用方的偏差门限挡掉。
+float g_sil_delay_grid_max_ms = -1.0f;
+// 研究设施：在线设"τ̂ 与编译期先验的最大偏差"门限 [ms]（-1=用宏默认）。
+float g_sil_delay_cap_ms = -1.0f;
 bool g_sil_nav_debug_static = false;
+float g_sil_imu_health_accel_range_mps2 = 0.0f;
 float g_sil_nav_debug_static_confidence = 0.0f;
 uint32_t g_sil_nav_debug_static_frames = 0;
 bool g_sil_nav_debug_gnss_epoch = false;
 bool g_sil_nav_debug_initialized = false;
+bool g_sil_pre_stable = false;
+bool g_sil_pre_ok = false;
+float g_sil_pre_accel_norm = 0.0f;
+float g_sil_pre_accel_std = 0.0f;
+float g_sil_pre_gyro_norm = 0.0f;
+float g_sil_pre_gyro_std = 0.0f;
+#endif
+
+#ifdef BFS_AHRS_GRAVITY_DIR_GATE
+// AHRS 姿态量测前检查比力方向是否仍是重力方向（详见 ins_ahrs_gravity_gate.h）。
+// 只在超出 VTOL 低倾角/低过载包线（|roll|/|pitch|>15° 或 >1.5 g）时启用方向门：
+// 包线内保留原 AHRS 行为（SIL 验收 mag_clean 50 seeds 依赖它稳住位置保持），
+// 包线外（导弹爬升/转弯/俯冲）加速度计已不是重力仪，必须方向一致才允许融合。
+static bool ahrsGravityDirectionAllowed(const Eigen::Quaternionf &q_b2n,
+                                        const Eigen::Vector3f &accel_body_mps2,
+                                        const float roll_rad,
+                                        const float pitch_rad)
+{
+  const float load_g = accel_body_mps2.norm() / 9.80665f;
+  if (!InsAhrsGravityGateRequired(roll_rad, pitch_rad, load_g))
+  {
+    return true;
+  }
+  const Eigen::Vector3f expected_specific_force_dir =
+      bfs::quat2dcm(q_b2n) * (-Eigen::Vector3f::UnitZ());
+  return InsAhrsGravityDirectionAllowed(expected_specific_force_dir,
+                                        accel_body_mps2,
+                                        10.0f * 0.0174532925f);
+}
 #endif
 
 #ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
@@ -944,6 +1127,80 @@ static bool ahrsAttitudeAidAllowed(const float roll_rad)
   }
 #endif
   return !gnss_was_used || gnss_recent || beyond_gate_window;
+}
+#endif
+
+#ifdef BFS_GNSS_VERTICAL_REANCHOR_GATE
+#ifndef BFS_GNSS_VERTICAL_REANCHOR_GATE_DIFF_M
+#define BFS_GNSS_VERTICAL_REANCHOR_GATE_DIFF_M 25.0f
+#endif
+#ifndef BFS_GNSS_VERTICAL_REANCHOR_GATE_CLEAR_M
+#define BFS_GNSS_VERTICAL_REANCHOR_GATE_CLEAR_M 10.0f
+#endif
+#ifndef BFS_GNSS_VERTICAL_REANCHOR_GATE_ACTIVATE_FRAMES
+#define BFS_GNSS_VERTICAL_REANCHOR_GATE_ACTIVATE_FRAMES 3U
+#endif
+#ifndef BFS_GNSS_VERTICAL_REANCHOR_GATE_CLEAR_FRAMES
+#define BFS_GNSS_VERTICAL_REANCHOR_GATE_CLEAR_FRAMES 10U
+#endif
+/**
+ * @brief GNSS 垂直位置与气压高度的持续矛盾检测（重锚门控，opt-in）。
+ * @details 输入：本帧 GNSS epoch、气压相对高度与导航原点；处理：把气压换算为
+ *          绝对椭球高，比较 |Δh|；连续 3 帧 >25 m 判为可疑，连续 10 帧 <10 m
+ *          恢复。可疑期间禁止 EKF 把位置硬重锚到 GNSS（仍允许正常 NIS 融合）。
+ * @return true 表示当前可疑，应禁止重锚。
+ * @note 气压无效时 fail-open，不改变旧行为；阈值/帧数均可宏覆盖。
+ *       气压健康监测判 Suspect（漂移/尖峰/卡死）时同样 fail-open——不能拿
+ *       不可信气压去否定 GNSS 垂直；恢复后重新累积矛盾帧数。
+ *       依据：2026-10-26 SIL 垂直 spoof 矩阵，50–100 m 台阶经
+ *       TryResetAfterPersistentImplausibleGnss 被接受后会导致高度保持降到地面。
+ */
+static bool updateGnssVerticalReanchorGate(const bfs::UbxEpoch &epoch)
+{
+  static uint16_t s_bad_streak = 0;
+  static uint16_t s_good_streak = 0;
+  if (!g_gnss_v_gate_enable ||
+      (g_baro_health_gate_enable && s_baro_health_distrust))
+  {
+    s_bad_streak = 0;
+    s_good_streak = 0;
+    g_gnss_vert_suspect = false;
+    return false;
+  }
+  double baro_absolute_altitude_m = 0.0;
+  if (!InsComputeAbsoluteBaroAltitude(origin_alt_m, baro_altitude,
+                                      &baro_absolute_altitude_m) ||
+      !std::isfinite(epoch.alt_wgs84_m))
+  {
+    s_bad_streak = 0;
+    s_good_streak = 0;
+    g_gnss_vert_suspect = false;
+    return false;
+  }
+  const float diff_m = std::fabs(
+      static_cast<float>(baro_absolute_altitude_m) - epoch.alt_wgs84_m);
+  if (diff_m > BFS_GNSS_VERTICAL_REANCHOR_GATE_DIFF_M)
+  {
+    if (s_bad_streak < 255U) ++s_bad_streak;
+    s_good_streak = 0;
+  }
+  else if (diff_m < BFS_GNSS_VERTICAL_REANCHOR_GATE_CLEAR_M)
+  {
+    if (s_good_streak < 255U) ++s_good_streak;
+    s_bad_streak = 0;
+  }
+  if (!g_gnss_vert_suspect &&
+      s_bad_streak >= BFS_GNSS_VERTICAL_REANCHOR_GATE_ACTIVATE_FRAMES)
+  {
+    g_gnss_vert_suspect = true;
+  }
+  if (g_gnss_vert_suspect &&
+      s_good_streak >= BFS_GNSS_VERTICAL_REANCHOR_GATE_CLEAR_FRAMES)
+  {
+    g_gnss_vert_suspect = false;
+  }
+  if (g_gnss_vert_suspect) ++g_gnss_vert_gate_frames;
+  return g_gnss_vert_suspect;
 }
 #endif
 
@@ -1062,21 +1319,132 @@ void handleNavigationSystem()
                       static_cast<uint32_t>(local_imu_sample_count), dt_s);
   // 传感器 NaN/Inf 安全门：跳过本帧传播，保持上一有效导航输出；控制侧另有
   // 陀螺有限值守卫。不能把 NaN 灌进 EKF/姿态环（SIL 故障注入已复现崩溃）。
-  if (!imu_accel_mps2.allFinite() || !imu_gyro_radps.allFinite())
+#ifdef BFS_NAV_IMU_OUTAGE_HOLD_LAST
+  static Eigen::Vector3f s_last_valid_accel_mps2 = Eigen::Vector3f::Zero();
+  static Eigen::Vector3f s_last_valid_gyro_radps = Eigen::Vector3f::Zero();
+  static bool s_have_last_valid_imu = false;
+  static float s_imu_hold_s = 0.0f;
+#endif
+  bool imu_bad = false;
+  bool imu_coast_active = false;
+  const bool imu_nonfinite =
+      !imu_accel_mps2.allFinite() || !imu_gyro_radps.allFinite();
+  if (imu_nonfinite)
   {
 #ifdef FW_SIL_REAL_NAV
     ++g_sil_nav_debug_imu_invalid;
 #endif
     markHeadingAidingInvalid();
-    return;
+    imu_bad = true;
+  }
+  // 速度子集软恢复（GNSS 速度-only 截断惯导位置发散）的前提是“两次 GNSS 之间
+  // 惯导传播可信”。IMU 非有限/健康 Failed 时惯导速度是停滞的，GNSS-惯导速度
+  // 残差既巨大又自洽（惯导根本没动），会被当成“持续偏差”吸收：SIL 实测
+  // 30.5 g + 1 s IMU NaN 时位置误差 332→551 m（10/10 seeds 全部变差）。
+  // 故故障期间及其后 5 s 锁存抑制该通道（默认关闭时不影响任何行为）。
+  // ★ 必须放在 imu_bad 的 early-return 之前，否则故障帧永远走不到这里。
+  static float s_vel_subset_inhibit_s = 0.0f;
+  constexpr float kVelSubsetImuInhibitS = 5.0f;
+  if (imu_bad || imu_health_status.state == bfs::ImuHealthState::Failed)
+  {
+    s_vel_subset_inhibit_s = kVelSubsetImuInhibitS;
+  }
+  else if (s_vel_subset_inhibit_s > 0.0f)
+  {
+    s_vel_subset_inhibit_s -= dt_s;
+    if (s_vel_subset_inhibit_s < 0.0f)
+    {
+      s_vel_subset_inhibit_s = 0.0f;
+    }
   }
   // 单 IMU 失效没有独立姿态源：确认 Failed 后保持最后有效导航输出，
   // 不继续用冻结样本积分，也不伪称“受控下降”。控制侧仍按最后有效陀螺值保持。
   if (imu_health_status.state == bfs::ImuHealthState::Failed)
   {
     markHeadingAidingInvalid();
+    imu_bad = true;
+  }
+#ifdef BFS_NAV_IMU_OUTAGE_FALLBACK
+  static Eigen::Vector3f s_fb_last_accel = Eigen::Vector3f::Zero();
+  static Eigen::Vector3f s_fb_last_gyro = Eigen::Vector3f::Zero();
+  static bool s_fb_have_last = false;
+  static float s_fb_s = 0.0f;
+  if (imu_bad)
+  {
+    if (s_fb_s >= BFS_NAV_IMU_OUTAGE_FALLBACK_MAX_S ||
+        (!s_fb_have_last && imu_nonfinite))
+    {
+      return;
+    }
+    if (imu_nonfinite)
+    {
+      imu_accel_mps2 = s_fb_last_accel;
+      imu_gyro_radps = s_fb_last_gyro;
+    }
+    else
+    {
+      imu_accel_mps2 = nav_ekf.quat().conjugate() *
+                       Eigen::Vector3f(0.0f, 0.0f, -G_ACCEL_CONST);
+      imu_gyro_radps.setZero();
+      imu_coast_active = true;
+    }
+    s_fb_s += dt_s;
+  }
+  else
+  {
+    s_fb_last_accel = imu_accel_mps2;
+    s_fb_last_gyro = imu_gyro_radps;
+    s_fb_have_last = true;
+    s_fb_s = 0.0f;
+  }
+#elif defined(BFS_NAV_IMU_OUTAGE_HOLD_LAST)
+  if (imu_bad)
+  {
+    if (s_have_last_valid_imu && s_imu_hold_s < BFS_NAV_IMU_OUTAGE_HOLD_MAX_S)
+    {
+      imu_accel_mps2 = s_last_valid_accel_mps2;
+      imu_gyro_radps = s_last_valid_gyro_radps;
+      s_imu_hold_s += dt_s;
+    }
+    else
+    {
+      return;
+    }
+  }
+  else
+  {
+    s_last_valid_accel_mps2 = imu_accel_mps2;
+    s_last_valid_gyro_radps = imu_gyro_radps;
+    s_have_last_valid_imu = true;
+    s_imu_hold_s = 0.0f;
+  }
+#elif defined(BFS_NAV_IMU_OUTAGE_COAST)
+  static float s_imu_coast_s = 0.0f;
+  if (imu_bad)
+  {
+    if (!nav_system_initialized ||
+        s_imu_coast_s >= BFS_NAV_IMU_OUTAGE_COAST_MAX_S)
+    {
+      return;
+    }
+    // 等速滑行：用“抵消重力的比力 + 零角速率”代替冻结样本；EKF 继续推进
+    // 时间并保留 GNSS/磁/气压更新。姿态仍由 EKF 维持，GNSS 修正位置/速度。
+    imu_accel_mps2 = nav_ekf.quat().conjugate() *
+                     Eigen::Vector3f(0.0f, 0.0f, -G_ACCEL_CONST);
+    imu_gyro_radps.setZero();
+    s_imu_coast_s += dt_s;
+    imu_coast_active = true;
+  }
+  else
+  {
+    s_imu_coast_s = 0.0f;
+  }
+#else
+  if (imu_bad)
+  {
     return;
   }
+#endif
 #ifdef FW_SIL_REAL_NAV
   g_sil_nav_debug_accel[0] = imu_accel_mps2(0);
   g_sil_nav_debug_accel[1] = imu_accel_mps2(1);
@@ -1092,7 +1460,17 @@ void handleNavigationSystem()
     gnc_tel.vib_accel_rms_g = vib.accel_rms_g;
     gnc_tel.vib_gyro_rms_dps = vib.gyro_rms_dps;
     gnc_tel.vib_accel_std_suggest = vib.accel_std_suggest;
-    gnc_tel.vib_high = vib.high_vibration;
+#ifdef FW_SIL_REAL_NAV
+    const bool hf_source =
+        (g_sil_vib_hf_source >= 0)
+            ? (g_sil_vib_hf_source != 0)
+            : (BFS_VIB_HIGH_SOURCE_HF != 0);
+#else
+    const bool hf_source = (BFS_VIB_HIGH_SOURCE_HF != 0);
+#endif
+    // 中频通道吃在软件低通之后，弹道上由确定性机动决定；高频通道才对应机械振动。
+    gnc_tel.vib_high = hf_source ? g_ins_hf_vibration.last().high_vibration
+                                 : vib.high_vibration;
   }
   const float first_sample_target_dt_s = 0.5f * local_delta_time_sum_s;
   float accumulated_delta_time_s = 0.0f;
@@ -1139,7 +1517,7 @@ void handleNavigationSystem()
       (!local_delta_overflow) && (local_delta_count >= 2) &&
       (local_delta_time_sum_s > 0.0001f) && (local_delta_time_sum_s <= 0.1f) &&
       ((delta_theta_1_rad + delta_theta_2_rad).allFinite()) &&
-      ((delta_v_1_mps + delta_v_2_mps).allFinite());
+      ((delta_v_1_mps + delta_v_2_mps).allFinite()) && (!imu_coast_active);
   // EKF 传播和 GNSS 延迟回放统一使用本帧实际消费的 IMU 时间跨度，避免调度抖动带来比例误差。
   // ★ 2026-08-12 审查修复：缓冲溢出时（任务卡顿 >32ms）imu_delta_time_sum_s 只含前 64 样本，
   // 直接使用会低估传播 dt（卡顿 64-100ms 时低估 20-36%），使速度/姿态积分欠量。
@@ -1289,8 +1667,36 @@ void handleNavigationSystem()
       Icm45686StaticDetectorReset(static_det);
     }
   }
+#ifdef BFS_PRELAUNCH_ALIGN_STABILITY_GATE
+  // 仅初始化前生效；初始化后立即让位于统一静止检测器，ZUPT/静止陀螺
+  // 语义完全不变。GNSS 零速条件用于排除“匀速转动平台”（如发射自旋）。
+  const bool prelaunch_window_ok =
+      InsPreLaunchAlignUpdate(prelaunch_align, imu_accel_mps2, imu_gyro_radps);
+  const bool gnss_recent_for_align =
+      (last_gnss_nav_valid_ms != 0U) &&
+      (static_cast<uint32_t>(millis() - last_gnss_nav_valid_ms) < 500U);
+  const float gnss_speed_align_mps = std::hypot(
+      gnss_status.last_obs_vel_n_mps, gnss_status.last_obs_vel_e_mps);
+  const bool prelaunch_align_ok =
+      !nav_system_initialized && prelaunch_window_ok &&
+      gnss_recent_for_align && (gnss_speed_align_mps < 0.5f) &&
+      s_imu_health.staticAidsAllowed();
+  g_sil_pre_stable = prelaunch_window_ok;
+  g_sil_pre_ok = prelaunch_align_ok;
+  g_sil_pre_accel_norm = prelaunch_align.accel_mean_body.norm();
+  g_sil_pre_accel_std = prelaunch_align.accel_std_mps2;
+  g_sil_pre_gyro_norm = prelaunch_align.gyro_mean_norm_radps;
+  g_sil_pre_gyro_std = prelaunch_align.gyro_std_norm_radps;
+  if (nav_system_initialized)
+  {
+    InsPreLaunchAlignReset(prelaunch_align);
+  }
+#else
+  const bool prelaunch_align_ok = false;
+#endif
   bool is_static_confirmed =
-      static_det.confirmed_static && s_imu_health.staticAidsAllowed();
+      (static_det.confirmed_static || prelaunch_align_ok) &&
+      s_imu_health.staticAidsAllowed();
   // 地面静止校准：EKF 已初始化、油门未上量且检测器确认静止才累计。
   // 默认 30 s 后才允许无磁位置保持；陀螺零偏/水平初值需要长静置收敛，
   // 2 s 级静置不够（用户 2026-10-25 明确要求几十秒量级）。
@@ -1350,15 +1756,99 @@ void handleNavigationSystem()
       gnss_measurement_age_s = InsGnssEpochAgeSeconds(time_mapping, micros());
 #if BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE && BFS_NAVIGATION_GNSS_DELAY_AUTO_APPLY
       // 仅在估计有效、曲线尖锐、与先验偏差合理时替换固定 15 ms。
+      // 偏差门限必须 ≥ 估计器的搜索上界，否则上界附近的 τ 永远被丢弃
+      // （0~150 ms 网格 + 15 ms 先验 + 100 ms 门限 ⇒ 实际最多只能用到 115 ms）。
       const uint32_t now_auto_apply_ms = millis();
-      if (gnss_status.auto_delay_valid &&
-          !gnc_tel.vib_high &&
-          (now_auto_apply_ms - gnss_status.auto_delay_last_ms) <= 5000U &&
-          gnss_status.auto_delay_sharpness >= 0.003f &&
+      uint8_t block = 0U;
+      if (!gnss_status.auto_delay_valid) block |= 1U << 5;
+      // 该否决按 `accel_rms_g > 0.15 g` 判定（ins_vibration_adaptive.h），
+      // 而导弹 6.4 g→0 的推力台阶本身就把窗口 RMS 顶满 ⇒ 在弹道上恒真，
+      // 拦掉的是确定性机动而不是振动。2026-10-27 追踪实测：t=21–24 s 时
+      // 估计已 valid、锐度 0.09、偏差在限内，唯一否决位就是这一位。
+      // 宏仍决定默认值，SIL 可用 `--vib-veto 0|1` 在同一二进制内做 A/B。
+#ifdef FW_SIL_REAL_NAV
+      const bool vib_veto_on =
+          (g_sil_delay_vib_veto >= 0)
+              ? (g_sil_delay_vib_veto != 0)
+              : (BFS_NAVIGATION_GNSS_DELAY_AUTO_VIB_VETO != 0);
+#else
+      const bool vib_veto_on = (BFS_NAVIGATION_GNSS_DELAY_AUTO_VIB_VETO != 0);
+#endif
+      if (vib_veto_on && gnc_tel.vib_high) block |= 1U << 0;
+      if ((now_auto_apply_ms - gnss_status.auto_delay_last_ms) > 5000U)
+      {
+        block |= 1U << 1;
+      }
+      if (gnss_status.auto_delay_sharpness < 0.003f) block |= 1U << 2;
+      // 死区：|τ̂−先验| 小于一个网格步时，估计差落在自己的量化误差内，保留先验。
+#ifdef FW_SIL_REAL_NAV
+      const float auto_deadband_s =
+          (g_sil_delay_deadband_s >= 0.0f)
+              ? g_sil_delay_deadband_s
+              : BFS_NAVIGATION_GNSS_DELAY_AUTO_DEADBAND_S;
+#else
+      const float auto_deadband_s = BFS_NAVIGATION_GNSS_DELAY_AUTO_DEADBAND_S;
+#endif
+      if (auto_deadband_s > 0.0f &&
           std::fabs(gnss_status.auto_delay_tau_s -
-                    BFS_NAVIGATION_GNSS_DELAY_S) <= 0.10f)
+                    BFS_NAVIGATION_GNSS_DELAY_S) < auto_deadband_s)
+      {
+        block |= 1U << 4;
+      }
+#ifdef FW_SIL_REAL_NAV
+      const float auto_cap_s = (g_sil_delay_cap_ms > 0.0f)
+                                   ? g_sil_delay_cap_ms * 1.0e-3f
+                                   : BFS_NAVIGATION_GNSS_DELAY_AUTO_CAP_S;
+#else
+      const float auto_cap_s = BFS_NAVIGATION_GNSS_DELAY_AUTO_CAP_S;
+#endif
+      if (std::fabs(gnss_status.auto_delay_tau_s -
+                    BFS_NAVIGATION_GNSS_DELAY_S) > auto_cap_s)
+      {
+        block |= 1U << 3;
+      }
+      /* 拟合质量门：自报残差过大说明"参考轨迹与 GNSS 同步"这一前提本身不成立
+      //  （强振动污染纯 IMU 参考、IMU 冻结使参考停止推进）。与 `vib_high` 不同，
+      //  这是估计器对自己拟合质量的度量，不会被确定性机动顶满。
+      //  实测：取消否决后 `vib2g_8p4g` 位置 RMSE 3.07→28.06 m、
+      //  `imu_stuck` 3.11→34.37 m，而 100 ms 延时档同切换得到 −12.75 m。 */
+#ifdef FW_SIL_REAL_NAV
+      const float resid_cap =
+          (g_sil_delay_max_resid_mps >= 0.0f)
+              ? g_sil_delay_max_resid_mps
+              : BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_RESIDUAL_MPS;
+#else
+      const float resid_cap = BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_RESIDUAL_MPS;
+#endif
+      if (resid_cap > 0.0f &&
+          gnss_status.auto_delay_residual_mps > resid_cap)
+      {
+        block |= 1U << 6;
+      }
+      gnss_status.auto_delay_apply_block = block;
+      if (block == 0U)
       {
         gnss_measurement_age_s = gnss_status.auto_delay_tau_s;
+        gnss_status.auto_delay_applied_count++;
+#ifdef FW_SIL_REAL_NAV
+        // §4.24ax：把"应用量抖动"与"其它配置差异"分离。freeze=锁存首次应用值（零抖动、
+        // 保留同一常量偏差）；lpf>0 用 0.1 s（GNSS 历元）步长做一阶平滑。两者默认关。
+        if (g_sil_delay_apply_freeze || g_sil_delay_apply_lpf_s > 0.0f)
+        {
+          static float s_applied_age_latch_s = -1.0f;
+          if (s_applied_age_latch_s < 0.0f)
+          {
+            s_applied_age_latch_s = gnss_measurement_age_s;
+          }
+          else if (g_sil_delay_apply_lpf_s > 0.0f)
+          {
+            const float alpha = 0.1f / (g_sil_delay_apply_lpf_s + 0.1f);
+            s_applied_age_latch_s +=
+                (gnss_measurement_age_s - s_applied_age_latch_s) * alpha;
+          }
+          gnss_measurement_age_s = s_applied_age_latch_s;
+        }
+#endif
       }
 #endif
       gnss_status.last_measurement_age_s = gnss_measurement_age_s;
@@ -1637,8 +2127,27 @@ void handleNavigationSystem()
       g_imu_static_calibrated = false;
       g_static_calib_s = 0.0f;
       nav_ekf.set_q_accel_scale(g_ekf_q_accel_scale);
-      nav_ekf.Initialize(imu_accel_mps2, imu_gyro_radps, mag_ut, init_vel_ned,
+      // 发射振动下用对准窗口的平均矢量初始化；默认宏未定义时行为不变。
+      Eigen::Vector3f init_accel_mps2 = imu_accel_mps2;
+      Eigen::Vector3f init_gyro_radps = imu_gyro_radps;
+#ifdef BFS_PRELAUNCH_ALIGN_STABILITY_GATE
+      if (prelaunch_align_ok)
+      {
+        init_accel_mps2 = prelaunch_align.accel_mean_body;
+        init_gyro_radps = prelaunch_align.gyro_mean_body;
+      }
+#endif
+      nav_ekf.Initialize(init_accel_mps2, init_gyro_radps, mag_ut, init_vel_ned,
                          init_lla, mag_init_yaw_offset);
+      // IMU 合理值门限随量程缩放（默认 8 g/2000 dps 与旧 120/40 等价）；
+      // 否则换 16/32 g 量程后 >12.2 g 的合法样本会被 TimeUpdate 丢弃。
+      nav_ekf.set_imu_plausibility_limits(
+          bfs::kIcm42688AccelRangeMps2 * 1.6f,
+          bfs::kIcm42688GyroRangeRadps * 1.2f);
+      nav_ekf.gnss_lever_arm_body_m(
+          Eigen::Vector3f(kFlightCtrlParams.gnss_lever_x_m,
+                          kFlightCtrlParams.gnss_lever_y_m,
+                          kFlightCtrlParams.gnss_lever_z_m));
       mag_status.init_source = mag_real_for_init ? 1U : 0U;
 
       nav_system_initialized = true;
@@ -1686,7 +2195,56 @@ void handleNavigationSystem()
       vib_q = 0.25f;
     }
     nav_ekf.accel_std_mps2(vib_q);
-    nav_ekf.gyro_std_radps(s_vib_estimator.last().gyro_std_suggest);
+    // 陀螺侧沿用与加计同构的保守夹持：实测弹道/前飞上 `gyro_rms_dps` 主要由
+    // 确定性机动贡献（0.5 Hz 高通还吃在软件低通之后），过去每拍无条件写入
+    // suggest 会把 gyro Q 长期抬到标称 0.0015 的数倍。
+#ifdef FW_SIL_REAL_NAV
+    const float gyro_cap = (g_sil_gyro_q_cap_radps > 0.0f)
+                               ? g_sil_gyro_q_cap_radps
+                               : BFS_NAVIGATION_VIBRATION_GYRO_STD_MAX;
+#else
+    const float gyro_cap = BFS_NAVIGATION_VIBRATION_GYRO_STD_MAX;
+#endif
+    const float vib_gyro =
+        InsClampGyroStd(s_vib_estimator.last().gyro_std_suggest, gyro_cap);
+    nav_ekf.gyro_std_radps(vib_gyro);
+#ifdef FW_SIL_REAL_NAV
+    // 审计用：真正写入 EKF 的加计/陀螺 Q 与高通加速度 RMS，用于统计振动自适应
+    // Q 的占空比（弹道上曾被证明 100% 卡在保守端）。
+    g_sil_nav_debug_vib[0] = vib_q;
+    g_sil_nav_debug_vib[1] = s_vib_estimator.last().accel_rms_g;
+    g_sil_nav_debug_vib[2] = s_vib_estimator.last().accel_std_suggest;
+    g_sil_nav_debug_vib[3] = vib_gyro;
+    g_sil_nav_debug_vib[4] = g_ins_hf_vibration.last().rms_g;
+#endif
+#endif
+#ifdef BFS_IMU_SATURATION_Q_INFLATE
+    // 削顶期间比力幅值误差上界≈真实比力−量程，必须计入过程噪声而不是量测噪声；
+    // 未锁存时不改变上面的振动自适应结果，释放时恢复标称 0.25。
+    {
+      const bool sat_frame = imu_health_status.saturation_s > 0.0f;
+#ifdef FW_SIL_REAL_NAV
+      if (g_sil_imu_sat_q_inflate_mps2 > 0.0f) {
+        bfs::ImuSaturationQConfig sat_cfg = s_imu_sat_q.config();
+        sat_cfg.inflate_accel_std_mps2 = g_sil_imu_sat_q_inflate_mps2;
+        if (g_sil_imu_sat_q_enter_s > 0.0f) {
+          sat_cfg.enter_s = g_sil_imu_sat_q_enter_s;
+        }
+        if (g_sil_imu_sat_q_release_s > 0.0f) {
+          sat_cfg.release_s = g_sil_imu_sat_q_release_s;
+        }
+        s_imu_sat_q.set_config(sat_cfg);
+      }
+#endif
+      const bool sat_q_active = s_imu_sat_q.update(sat_frame, dt_s);
+      if (sat_q_active) {
+        nav_ekf.accel_std_mps2(
+            s_imu_sat_q.accelStdMps2(nav_ekf.accel_std_mps2()));
+      } else if (s_imu_sat_q_was_active) {
+        nav_ekf.accel_std_mps2(0.25f);
+      }
+      s_imu_sat_q_was_active = sat_q_active;
+    }
 #endif
     const bool bias_jump_hold =
         static_cast<int32_t>(millis() - s_bias_jump_hold_until_ms) < 0;
@@ -1892,8 +2450,27 @@ void handleNavigationSystem()
     // 退出静止后重力累加器在下一次进入静止时由 static_gravity_acc=0,count=0 自然重置
     // ========================================================================
     // 无 GNSS + 运动时：AHRS 姿态量测（利用重力融合约束姿态）
+    // 高动态构型可通过 BFS_DISABLE_AHRS_ATTITUDE_AID 关闭（见文件头）。
     // ========================================================================
-    else if (!gnss_instant_valid_for_nav && accel_gravity_trusted && angular_rate_quiet
+#if BFS_AHRS_ATTITUDE_AID
+    else if (
+#ifdef BFS_AHRS_GNSS_FRESH_GATE
+             // AHRS 是“无 GNSS”兜底，不是帧间填补：GNSS 10 Hz、导航 200 Hz 时
+             // gnss_instant_valid 只在出队帧为真，用它作条件会让 AHRS 在 90%
+             // 的帧里持续工作（导弹 SIL 2026-10-27 实测 2022 次尝试/171 次融合）。
+             !gnss_data_fresh_for_nav
+#else
+             !gnss_instant_valid_for_nav
+#endif
+             && accel_gravity_trusted && angular_rate_quiet
+#ifdef BFS_AHRS_GRAVITY_DIR_GATE
+             // 比力模长≈g 不代表比力方向=重力：无坡度转弯/持续推力时升力沿
+             // 机体系 z，AHRS 会把机体拉平。要求实测比力方向与 EKF 预测重力
+             // 方向夹角 <10°，才把它当重力观测。
+             && ahrsGravityDirectionAllowed(nav_ekf.quat(), imu_accel_mps2,
+                                            nav_ekf.roll_rad(),
+                                            nav_ekf.pitch_rad())
+#endif
 #ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
              && ahrsAttitudeAidAllowed(nav_ekf.roll_rad())
 #endif
@@ -1918,6 +2495,7 @@ void handleNavigationSystem()
                                                                                               yaw_noise_rad);
       aid_tracker.RecordAttempt(bfs::AidSource::Attitude, result);
     }
+#endif  // BFS_AHRS_ATTITUDE_AID
     // 有 GNSS + 运动时：不需要 AHRS 辅助
     // EKF 通过 GNSS 位置/速度更新 + 零偏估计，姿态估计已经足够好
 #ifdef BFS_NAV_PROFILE
@@ -2126,6 +2704,14 @@ void handleNavigationSystem()
       // 使用本导航帧弹出的 epoch 快照，避免 UBX 解析缓存被后续串口字节覆盖。
       meas_lla << gnss_epoch.lat_rad, gnss_epoch.lon_rad, static_cast<double>(gnss_epoch.alt_wgs84_m);
 
+      // 气压健康监测的 GNSS 高度参照：只记录实际参与导航的有效历元。
+      if (std::isfinite(gnss_epoch.alt_wgs84_m))
+      {
+        s_baro_health_have_gnss = true;
+        s_baro_health_gnss_alt_m = gnss_epoch.alt_wgs84_m;
+        s_baro_health_gnss_ms = millis();
+      }
+
       // ★ 2026-08-13 静态门控（仿真实证 F1）：水平巡航恒速时 |a|≈g、|ω|≈0、
       //   Δa≈0，静止检测器会误确认静止 → 下面把 GNSS 速度强制为 0 → 6 维联合
       //   更新 NIS 爆炸 → 位置一并被拒 → 位置纯惯导漂移（仿真 120s 漂 330m）。
@@ -2202,6 +2788,41 @@ void handleNavigationSystem()
           (nav_ekf.ned_vel_mps().norm() > 3.0f) &&
           !is_static_confirmed;
       nav_ekf.set_gnss_consider_heading(phase_consider_heading);
+      // IMU 故障锁存见上面 s_vel_subset_inhibit_s 的更新点（必须在 early-return
+      // 之前），这里只读取。
+      nav_ekf.set_gnss_velocity_subset_recovery_enabled(
+          g_gnss_vel_subset_recovery_enable && s_vel_subset_inhibit_s <= 0.0f);
+      // §4.24q：部分更新只在状态仍一致（位置残差小）时介入，避免把位置留在错误值上。
+      nav_ekf.set_gnss_velocity_subset_max_pos_resid_m(
+          g_gnss_vel_subset_max_pos_resid_m);
+      // §4.24w：每个完整更新历元只给一次子集配额（害处来自反复触发，不是单次幅值）。
+      nav_ekf.set_gnss_velocity_subset_max_fires_per_epoch(
+          static_cast<uint8_t>(g_gnss_vel_subset_max_fires_per_epoch < 0 ? 0 :
+                               (g_gnss_vel_subset_max_fires_per_epoch > 255 ? 255 :
+                                g_gnss_vel_subset_max_fires_per_epoch)));
+
+#ifdef BFS_GNSS_VERTICAL_REANCHOR_GATE
+      // 垂直位置与气压高度持续矛盾时：把送入 EKF 的 GNSS 高度替换为气压高度，
+      // 避免物理野值门（|Δz|>40 m）整帧拒绝导致 GNSS 新鲜度丢失、位置保持降级；
+      // 同时忽略 z 的 R 并禁止硬重锚。水平位置/速度仍按 GNSS 融合。
+      const bool vert_suspect = updateGnssVerticalReanchorGate(gnss_epoch);
+      nav_ekf.set_gnss_reanchor_allowed(!vert_suspect);
+      if (vert_suspect)
+      {
+        double baro_absolute_altitude_m = 0.0;
+        if (InsComputeAbsoluteBaroAltitude(origin_alt_m, baro_altitude,
+                                           &baro_absolute_altitude_m))
+        {
+          meas_lla(2) = baro_absolute_altitude_m;
+        }
+        nav_ekf.gnss_pos_d_std_m(1.0e4f);
+      }
+#endif
+
+      // 气压被健康监测判 Drift/Stuck 时，持久不可信 GNSS 的硬重锚只重置水平：
+      // 垂直通道保留 INS，避免“垂直 spoof → 持续拒绝 → 重锚”把高度拉到假值。
+      nav_ekf.set_gnss_vertical_reanchor_allowed(
+          !(g_baro_health_gate_enable && s_baro_health_distrust));
 
       if (InsGnssShouldReanchor(has_gnss_epoch,
                                 gnss_quality_for_reanchor,
@@ -2322,8 +2943,81 @@ void handleNavigationSystem()
         nav_system_initialized && is_origin_lla_set)
     {
       baro_ekf_update_counter = 0;
+
+      // 气压健康监测：以最近 1 s 内有效 GNSS 高度为参照；GNSS 垂直门控
+      // 自身疑似期间暂停漂移判定（否则垂直 spoof 会被误判成气压漂移）。
+      const uint32_t health_now_ms = millis();
+      const float health_dt_s =
+          (s_baro_health_last_ms == 0U)
+              ? 0.0f
+              : static_cast<float>(health_now_ms - s_baro_health_last_ms) *
+                    0.001f;
+      s_baro_health_last_ms = health_now_ms;
+      if (s_baro_health_start_ms == 0U)
+      {
+        s_baro_health_start_ms = health_now_ms;
+      }
+      const bool health_armed =
+          static_cast<float>(health_now_ms - s_baro_health_start_ms) * 0.001f >=
+          kBaroHealthBlankingS;
+      bool baro_ref_valid =
+          s_baro_health_have_gnss &&
+          (health_now_ms - s_baro_health_gnss_ms) <= 1000U;
+#ifdef BFS_GNSS_VERTICAL_REANCHOR_GATE
+      if (g_gnss_vert_suspect)
+      {
+        baro_ref_valid = false;
+      }
+#endif
+      const bfs::BaroHealthStatus baro_health = s_baro_health.update(
+          baro_altitude, static_cast<float>(s_baro_health_gnss_alt_m),
+          nav_ekf.ned_vel_mps().z(), baro_ref_valid, health_dt_s);
+      g_baro_health_flags = baro_health.flags;
+      g_baro_health_flags_cum |= baro_health.flags;
+      g_baro_health_drift_mps = baro_health.drift_rate_mps;
+      if (health_armed &&
+          baro_health.state == bfs::BaroHealthState::Suspect)
+      {
+        const uint16_t severe_mask =
+            bfs::baroHealthFlagBit(bfs::BaroHealthFlag::Drift) |
+            bfs::baroHealthFlagBit(bfs::BaroHealthFlag::Stuck);
+        if ((baro_health.flags & severe_mask) != 0U)
+        {
+          s_baro_health_hold_s = 5.0f;
+          // 只有 Drift/Stuck 才让垂直门控放弃气压基准；单帧 Spike 不能
+          // 用来否决 GNSS 垂直 spoof 检测（否则一次毛刺会掩护 100 m 欺骗）。
+          s_baro_health_distrust = true;
+        }
+        else if (!g_baro_health_suspect)
+        {
+          // 单帧 Spike 只跳过短窗，不为一次毛刺损失 5 s 气压更新。
+          s_baro_health_hold_s = 1.0f;
+        }
+        if (!g_baro_health_suspect)
+        {
+          ++g_baro_health_sus_count;
+        }
+        g_baro_health_suspect = true;
+        s_baro_health_clear_s = 0.0f;
+      }
+      else if (g_baro_health_suspect && health_dt_s > 0.0f && baro_ref_valid)
+      {
+        // 只在有 GNSS 参照且当前判正常时累计恢复，防止失联期间“无参照”
+        // 把刚诊断出的漂移自动放行。
+        s_baro_health_clear_s += health_dt_s;
+        if (s_baro_health_clear_s >= s_baro_health_hold_s)
+        {
+          g_baro_health_suspect = false;
+          s_baro_health_distrust = false;
+          s_baro_health_hold_s = 5.0f;
+        }
+      }
+      const bool baro_gated =
+          g_baro_health_gate_enable && g_baro_health_suspect;
+
       double baro_absolute_altitude_m = 0.0;
-      if (InsComputeAbsoluteBaroAltitude(
+      if (!baro_gated &&
+          InsComputeAbsoluteBaroAltitude(
               origin_alt_m, baro_altitude, &baro_absolute_altitude_m))
       {
         baro_ekf_innovation_m = static_cast<float>(
@@ -2337,7 +3031,119 @@ void handleNavigationSystem()
       }
       else
       {
+        if (baro_gated)
+        {
+          ++g_baro_health_skips;
+        }
         baro_ekf_fused = false;
+      }
+    }
+  }
+#endif
+
+#ifdef BFS_BARO_VERTICAL_VELOCITY_AID
+#ifndef BFS_BARO_VERTICAL_VELOCITY_AID_STD_MPS
+#define BFS_BARO_VERTICAL_VELOCITY_AID_STD_MPS 0.5f
+#endif
+#ifndef BFS_BARO_VERTICAL_VELOCITY_AID_MIN_AGE_S
+#define BFS_BARO_VERTICAL_VELOCITY_AID_MIN_AGE_S 1.0f
+#endif
+#ifndef BFS_BARO_VERTICAL_VELOCITY_AID_RATE_DIV
+#define BFS_BARO_VERTICAL_VELOCITY_AID_RATE_DIV 20U
+#endif
+#ifndef BFS_BARO_VERTICAL_VELOCITY_AID_MIN_ALT_M
+#define BFS_BARO_VERTICAL_VELOCITY_AID_MIN_ALT_M 10.0f
+#endif
+  // GNSS 失联时垂直速度只剩惯导/气压位置更新，长失联下 EKF vz 可被倾斜
+  // 和零偏污染到符号相反（60 s trace：真值 −1.91、EKF +0.76 m/s）。
+  // 这里用 0.5 s 气压高度回归得到垂速伪量测：H 只保留速度 D 分量，
+  // 水平分量填当前估计并给 1e3 m/s 噪声（K≈0），等价于只更新 v_d。
+  // @formula y=v_d，H=[0,0,0,0,1,0…]，R_d=σ²；σ 由 0.5 s 气压高度回归斜率给出
+  // @ref REF-121 §7.3.1 p.255–259（速度量测/NIS 门控）
+  // 默认关闭；仅在 GNSS 已失效 >1 s 且高度 >1 m 时以 10 Hz 尝试，NIS 门控
+  // 仍由 MeasurementUpdateAidingVelocityDetailed 统一把关。
+  {
+    static float s_baro_vz_hist[25] = {0.0f};
+    static uint8_t s_baro_vz_idx = 0U;
+    static uint8_t s_baro_vz_count = 0U;
+    static uint8_t s_baro_vz_div = 0U;
+    static uint8_t s_baro_vz_rate = 0U;
+    static float s_baro_vz_filt = 0.0f;
+    if (++s_baro_vz_div >= 4U)
+    {
+      s_baro_vz_div = 0U;
+      s_baro_vz_hist[s_baro_vz_idx] = baro_altitude;
+      s_baro_vz_idx = static_cast<uint8_t>((s_baro_vz_idx + 1U) % 25U);
+      if (s_baro_vz_count < 25U) ++s_baro_vz_count;
+    }
+    if (++s_baro_vz_rate >= BFS_BARO_VERTICAL_VELOCITY_AID_RATE_DIV)
+    {
+      s_baro_vz_rate = 0U;
+      // 只在 GNSS 失联且无新鲜光流、位置保持已降级为定高时启用：
+      // 前飞+光流时 aid 会与位置/高度环耦合，NE 风下出现 3–4 m 掉高
+      // （2026-10-26 前飞 20 s 失联矩阵：aid on 4/40 vs off 0/40）。
+      // 另按“激活瞬间高度”锁存：10 m 格在 age>8 s 已降到 ~8 m，aid 反而
+      // 让触地中位 0.96→1.41 m/s；<10 m 不武装，避免低高度扰动。
+      static bool s_aid_armed = false;
+      static bool s_aid_arm_evaluated = false;
+      const bool outage_ctx =
+          !gnss_instant_valid_for_nav && g_mode_degraded_gnss;
+      if (!outage_ctx)
+      {
+        s_aid_armed = false;
+        s_aid_arm_evaluated = false;
+      }
+      else if (!s_aid_arm_evaluated &&
+               g_gnss_outage_age_s >
+                   BFS_BARO_VERTICAL_VELOCITY_AID_MIN_AGE_S)
+      {
+        s_aid_arm_evaluated = true;
+        s_aid_armed =
+            std::isfinite(baro_altitude) &&
+            baro_altitude >= BFS_BARO_VERTICAL_VELOCITY_AID_MIN_ALT_M;
+      }
+      const bool gnss_stale =
+          outage_ctx && s_aid_armed &&
+          g_gnss_outage_age_s > BFS_BARO_VERTICAL_VELOCITY_AID_MIN_AGE_S;
+      if (g_baro_vel_aid_enable && nav_system_initialized && gnss_stale &&
+          !(g_baro_health_gate_enable && g_baro_health_suspect) &&
+          s_baro_vz_count >= 10U &&
+          std::isfinite(baro_altitude) && fabsf(baro_altitude) > 1.0f)
+      {
+        const int n = s_baro_vz_count;
+        const float mean_i = 0.5f * static_cast<float>(n - 1);
+        float mean_a = 0.0f, num = 0.0f, den = 0.0f;
+        for (int i = 0; i < n; ++i)
+        {
+          const int k = (static_cast<int>(s_baro_vz_idx) + 25 - n + i) % 25;
+          mean_a += s_baro_vz_hist[k];
+        }
+        mean_a /= static_cast<float>(n);
+        for (int i = 0; i < n; ++i)
+        {
+          const int k = (static_cast<int>(s_baro_vz_idx) + 25 - n + i) % 25;
+          const float di = static_cast<float>(i) - mean_i;
+          num += di * (s_baro_vz_hist[k] - mean_a);
+          den += di * di;
+        }
+        const float slope = (den > 1.0e-6f) ? (num / den) / 0.02f : 0.0f;
+        s_baro_vz_filt += 0.2f * (slope - s_baro_vz_filt);
+
+        Eigen::Vector3f measured_vel = nav_ekf.ned_vel_mps();
+        measured_vel(2) = -s_baro_vz_filt;  // 气压高度向上为正，NED D 向下为正
+        const bfs::MeasurementUpdateResult result =
+            nav_ekf.MeasurementUpdateAidingVelocityDetailed(
+                measured_vel, 1000.0f,
+                BFS_BARO_VERTICAL_VELOCITY_AID_STD_MPS);
+        g_baro_vel_aid_attempts++;
+        if (result.fused)
+        {
+          g_baro_vel_aid_fused++;
+        }
+        else if (result.attempted)
+        {
+          g_baro_vel_aid_rejected++;
+        }
       }
     }
   }
@@ -2594,11 +3400,34 @@ void handleNavigationSystem()
     if ((now_ms_auto - s_gnss_delay_auto_last_ms) >= 1000U)
     {
       s_gnss_delay_auto_last_ms = now_ms_auto;
-      if (s_gnss_delay_auto.TryEstimate())
+#ifdef FW_SIL_REAL_NAV
+      if (g_sil_delay_max_gap_s >= 0.0f)
+      {
+        s_gnss_delay_auto.set_max_gap_s(g_sil_delay_max_gap_s);
+      }
+      if (g_sil_delay_grid_max_ms > 0.0f)
+      {
+        s_gnss_delay_auto.set_max_tau_s(
+            static_cast<double>(g_sil_delay_grid_max_ms) * 1.0e-3);
+      }
+#endif
+      // 诊断字段无论估计成功与否都要刷新：失败原因（没激励/被粗差门饿死/
+      // 代价平底）正是判断"为什么补偿没生效"的唯一线索。
+      const bool auto_ok = s_gnss_delay_auto.TryEstimate();
+      const auto &d = s_gnss_delay_auto.diag();
+      gnss_status.auto_delay_reject = static_cast<uint8_t>(d.reject);
+      gnss_status.auto_delay_n_gnss = d.n_gnss;
+      gnss_status.auto_delay_n_erased = d.n_erased;
+      gnss_status.auto_delay_speed_max_mps = d.speed_max_mps;
+      // ★ 失败必须立刻撤销 valid：旧写法只在成功分支写 `auto_delay_valid`，
+      //   于是估计器一旦拒绝（失锁、缺激励、窗跨缺口），上层仍保留上一次的
+      //   τ̂ 并继续应用，直到 5 s 新鲜度闸才生效——最长 5 s 用陈旧估计。
+      //   导弹 SIL 实测：纯失联段 20/20 seed 位置 RMSE 变差即源于此。
+      gnss_status.auto_delay_valid = auto_ok;
+      if (auto_ok)
       {
         const auto &r = s_gnss_delay_auto.last_result();
         gnss_status.auto_delay_last_ms = now_ms_auto;
-        gnss_status.auto_delay_valid = r.valid;
         gnss_status.auto_delay_tau_s = r.tau_s;
         gnss_status.auto_delay_residual_mps = r.residual_mps;
         gnss_status.auto_delay_sharpness = r.sharpness;
@@ -2679,7 +3508,12 @@ void handleNavigationSystem()
   {
     static bool s_gnss_was_out = false;
     const float gnss_age_s = aid_tracker.status(bfs::AidSource::Gnss).age_s;
-    g_gnss_outage_age_s = (std::isfinite(gnss_age_s) && gnss_age_s < 1.0e5f) ? gnss_age_s : 0.0f;
+    // 从未拿到过 GNSS（age 为负/无穷）按“永远失联”处理，供上层失效保护
+    // 触发；此前写成 0 会让“无 GNSS 起飞”绕过所有长失联保护。
+    g_gnss_outage_age_s =
+        (std::isfinite(gnss_age_s) && gnss_age_s >= 0.0f && gnss_age_s < 1.0e5f)
+            ? gnss_age_s
+            : 1.0e5f;
     if (std::isfinite(gnss_age_s) && gnss_age_s > 0.5f)
     {
       s_gnss_was_out = true;

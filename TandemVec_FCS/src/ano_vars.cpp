@@ -62,6 +62,13 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("gnss_dly_tau",    gnss_status.auto_delay_tau_s),
     ANO_VAR_FLOAT("gnss_dly_res",    gnss_status.auto_delay_residual_mps),
     ANO_VAR_FLOAT("gnss_dly_sharp",  gnss_status.auto_delay_sharpness),
+    // 词根另起（不与 gnss_dly_* 撞 MAVLink 9 字符截断）：延时估计失败病因
+    ANO_VAR_U8("dly_rej",           gnss_status.auto_delay_reject),
+    ANO_VAR_U16("dly_er",           gnss_status.auto_delay_n_erased),
+    ANO_VAR_U16("dly_ng",           gnss_status.auto_delay_n_gnss),
+    // 应用侧：valid 是锁存标志，这两个才回答"估计值到底有没有在用/被谁挡"
+    ANO_VAR_U32("dly_app",          gnss_status.auto_delay_applied_count),
+    ANO_VAR_U8("dly_blk",           gnss_status.auto_delay_apply_block),
     ANO_VAR_FLOAT("yaw_gain_sched",  gnc_tel.yaw_gain_sched),
     ANO_VAR_FLOAT("delta_f_deg",     gnc_tel.delta_f_deg),
     ANO_VAR_FLOAT("delta_t_deg",     gnc_tel.delta_t_deg),
@@ -144,6 +151,10 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("imu_frz",          g_imu_health_frozen_s),
     ANO_VAR_FLOAT("imu_drop",         g_imu_health_no_sample_s),
     ANO_VAR_FLOAT("imu_rate",         g_imu_health_sample_rate_hz),
+
+    // ---- 导航 IMU 增量源诊断（NavImuIncrementSelect.h；宏关闭时恒 0）----
+    ANO_VAR_U32("navi_raw",           g_nav_increment_raw_ticks),
+    ANO_VAR_U32("navi_fb",            g_nav_increment_fallback_ticks),
 
     // ---- GNSS 慢漂移/欺骗一致性（2026-10，只读）----
     ANO_VAR_BOOL("gnss_susp",         gnss_status.consistency_suspect),

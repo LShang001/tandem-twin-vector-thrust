@@ -144,11 +144,46 @@ extern int g_sil_nav_debug_imu_invalid;
 extern bool g_sil_nav_debug_imu_failed;
 extern float g_sil_nav_debug_accel[3];
 extern float g_sil_nav_debug_gyro[3];
+// [0]=实际写入 EKF 的加计 Q、[1]=高通加速度 RMS [g]、[2]=估计器建议加计 Q、
+// [3]=实际写入 EKF 的陀螺 Q
+extern float g_sil_nav_debug_vib[5];
+// 研究设施：在线改陀螺 Q 上界（0=用宏默认）
+extern float g_sil_gyro_q_cap_radps;
+// 研究设施：在线改自动延时应用死区 [s]（-1=用宏默认）
+extern float g_sil_delay_deadband_s;
+// 研究设施：在线开关 vib_high 否决（-1=用宏默认）
+extern int g_sil_delay_vib_veto;
+// 研究设施：vib_high 通道选择（-1=用宏默认）
+extern int g_sil_vib_hf_source;
+// 研究设施：在线设拟合窗最大 GNSS 缺口 [s]（-1=用宏默认）
+extern float g_sil_delay_max_gap_s;
+// 研究设施（§4.24ax）：应用量平滑时间常数 [s]（0=不平滑）
+extern float g_sil_delay_apply_lpf_s;
+// 研究设施（§4.24ax）：锁存首次应用量（1=冻结，构造零抖动对照）
+extern int g_sil_delay_apply_freeze;
+// 研究设施：应用侧残差门限 [m/s]（-1=用宏默认）
+extern float g_sil_delay_max_resid_mps;
+// 研究设施：搜索网格上界 [ms]（-1=用宏默认 150）
+extern float g_sil_delay_grid_max_ms;
+// 研究设施：τ̂ 与编译期先验的最大偏差门限 [ms]（-1=用宏默认）
+extern float g_sil_delay_cap_ms;
 extern bool g_sil_nav_debug_static;
+extern float g_sil_imu_health_accel_range_mps2;
 extern float g_sil_nav_debug_static_confidence;
 extern uint32_t g_sil_nav_debug_static_frames;
 extern bool g_sil_nav_debug_gnss_epoch;
 extern bool g_sil_nav_debug_initialized;
+extern bool g_sil_pre_stable;
+extern bool g_sil_pre_ok;
+#ifdef BFS_IMU_SATURATION_Q_INFLATE
+extern float g_sil_imu_sat_q_inflate_mps2;
+extern float g_sil_imu_sat_q_enter_s;
+extern float g_sil_imu_sat_q_release_s;
+#endif
+extern float g_sil_pre_accel_norm;
+extern float g_sil_pre_accel_std;
+extern float g_sil_pre_gyro_norm;
+extern float g_sil_pre_gyro_std;
 #endif
 
 /**
