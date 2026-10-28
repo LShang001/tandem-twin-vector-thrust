@@ -235,6 +235,30 @@ else
   echo
 fi
 
+# 固件算法宿主直调接口（fw_algo）：经 C ABI 的句柄必须与直接调用 Ekf15State
+# 逐位一致。EKF_NAV_TELEMETRY 只增加只读协方差访问器，不改滤波数学。
+echo "---- 编译 fwalgo ----"
+if ! $CXX -std=$STD -O2 -D_USE_MATH_DEFINES -DEKF_NAV_TELEMETRY \
+     -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE \
+     $INCLUDES -I$ROOT/test_host -I$ROOT/src -I$ROOT/lib/navigation-main/src \
+     -I$ROOT/lib/units/src \
+     "$ROOT/test_host/fw_algo/fw_algo_api.cpp" \
+     "$ROOT/test_host/test_fw_algo_api.cpp" \
+     "$ROOT/lib/units/src/convang.cpp" \
+     "$ROOT/lib/units/src/convangacc.cpp" \
+     "$ROOT/lib/units/src/convangvel.cpp" \
+     -o "$BIN_DIR/fwalgo$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] fwalgo"
+  fail=1
+else
+  echo "---- 运行 fwalgo ----"
+  if ! "$BIN_DIR/fwalgo$EXE_SUFFIX"; then
+    echo "[RUN FAIL] fwalgo"
+    fail=1
+  fi
+  echo
+fi
+
 # EKF 测速源辅助接口回归（aiding 速度更新豁免零速守卫 + 失锁重锚，
 # 2026-08-21 室内光流速度融合配套；依赖同 ekf15）：
 echo "---- 编译 aidvel ----"

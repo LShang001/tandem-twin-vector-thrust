@@ -1976,6 +1976,8 @@ namespace bfs
 
     // 当前 WGS-84 正常重力（Somigliana，随经纬高更新；未初始化时为默认标准值 9.80665）
     inline double gravity_mps2() const { return gravity_mps2_; }
+    // 距上次 GNSS 成功融合/重锚的时间 [s]；只读，供宿主调试与失联降级观测。
+    inline float time_since_gnss_update_s() const { return time_since_gnss_update_s_; }
     inline double lat_rad() const { return ins_lla_rad_m_(0); }
     inline double lon_rad() const { return ins_lla_rad_m_(1); }
     inline double alt_m() const { return ins_lla_rad_m_(2); }

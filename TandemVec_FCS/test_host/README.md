@@ -23,6 +23,7 @@
 | `test_comprehensive_sim.cpp` | 增益扫描/扰动抑制/模型偏差（研究工具，非实机回归） | Arduino.h 桩 | 10 |
 | `test_ekf_15state.cpp` | `ekf_15_state.h` — 15 状态 EKF 主机回归（`-DEKF_HOST_REGRESSION`；2026-10 加 P0-0 速度旋转 T7、P1-5 航向 consider T8、P0-1 3+3 子集/软重锚 T9–T11、T12 sub-frame 延迟量测、T13/T13b 长失联连续不可信 GNSS 硬重锚与跳点串防护、T14 GNSS 正常跟踪野值门、T15 机体系磁矢量更新、T16 真实磁初始化磁偏角偏移） | units/eigen | 71 |
 | `test_ekf_aiding_velocity.cpp` | `ekf_15_state.h` — 测速源辅助接口（aiding 速度更新豁免零速守卫、失锁重锚 ResetVelocityToExternal、D 通道大噪声不压垂直协方差；2026-08-21 室内光流融合配套） | units/eigen | 16 |
+| `test_fw_algo_api.cpp` | `fw_algo/fw_algo_api.cpp` — 固件 EKF 的 C ABI 直调接口：ABI 路径与直接 `Ekf15State` 逐位一致（初始化/单双子样/GNSS/磁/气压/重力/静止陀螺/航向/复位），供 Python ctypes 复用固件算法 | units/eigen | 468 |
 | `test_mag_reference.cpp` | `mag_reference.h` + `tilt_compass.h` — 站点参考场 NED 符号/总场/倾角/磁偏角与磁北→真北航向偏移（2026-10 磁链路） | Eigen + navigation | 13 |
 | `test_mag_gate.cpp` | `mag_measurement_gate.h` — 磁矢量模长/倾角/方位/航迹/新鲜度/标定/油门门控与自适应噪声（2026-10 磁链路） | Eigen | 24 |
 | `test_imu_health_monitor.cpp` | `ins_imu_health.h` — 非有限/无样本/低样本/冻结/饱和/高振动/零偏跳变状态机与复位（2026-10） | Eigen | 28 |
