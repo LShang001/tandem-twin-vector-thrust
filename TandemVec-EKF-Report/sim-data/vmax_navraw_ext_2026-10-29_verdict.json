@@ -1,0 +1,151 @@
+{
+ "date": "2026-10-29",
+ "exe": "C:\\Users\\12631\\AppData\\Local\\Temp\\tv_vmax\\fw_real.exe",
+ "exe_md5": "9813200bd17b1d6ffbc4f978fecd6f02",
+ "base": [
+  "--real-nav",
+  "--missile",
+  "--seconds",
+  "45",
+  "--imu-fs-g",
+  "32",
+  "--imu-health-accel-range",
+  "313.8",
+  "--profile",
+  "mag_clean",
+  "--imu-grade",
+  "icm",
+  "--gnss-rate-hz",
+  "10",
+  "--ms-burn",
+  "10"
+ ],
+ "ladder_N": [
+  24600
+ ],
+ "arms": {
+  "A_default": [],
+  "B_navraw": [
+   "--nav-raw-imu"
+  ],
+  "C_navraw_fb": [
+   "--nav-raw-imu",
+   "--nav-raw-fault-fallback",
+   "--nav-raw-fb-health"
+  ]
+ },
+ "seeds": [
+  101,
+  130
+ ],
+ "bind_cores": [
+  2,
+  3,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10,
+  11,
+  12
+ ],
+ "fail_threshold_m": 25.0,
+ "summary": {
+  "A_default": {
+   "24600": {
+    "n": 30,
+    "n_fail": 18,
+    "rate": 0.6,
+    "vmax_med": 1724.0,
+    "gmax_med": 32.34,
+    "good_med": 23.935,
+    "bad_med": 29.654,
+    "p90": 31.273,
+    "max": 33.779,
+    "att_med": 1.79,
+    "rej_med": 30.0,
+    "reanchor_seeds": 27,
+    "nrfb_max": 0
+   }
+  },
+  "B_navraw": {
+   "24600": {
+    "n": 30,
+    "n_fail": 0,
+    "rate": 0.0,
+    "vmax_med": 1724.0,
+    "gmax_med": 32.34,
+    "good_med": 5.415,
+    "bad_med": null,
+    "p90": 10.62,
+    "max": 12.925,
+    "att_med": 1.044,
+    "rej_med": 0.0,
+    "reanchor_seeds": 0,
+    "nrfb_max": 0
+   }
+  },
+  "C_navraw_fb": {
+   "24600": {
+    "n": 30,
+    "n_fail": 0,
+    "rate": 0.0,
+    "vmax_med": 1724.0,
+    "gmax_med": 32.34,
+    "good_med": 5.415,
+    "bad_med": null,
+    "p90": 10.62,
+    "max": 12.925,
+    "att_med": 1.044,
+    "rej_med": 0.0,
+    "reanchor_seeds": 0,
+    "nrfb_max": 0
+   }
+  }
+ },
+ "paired_A_vs_B": {
+  "24600": {
+   "better": 30,
+   "worse": 0,
+   "same": 0,
+   "worst_degradation_m": 0.0
+  }
+ },
+ "paired_B_vs_C": {
+  "24600": {
+   "better": 0,
+   "worse": 0,
+   "same": 30,
+   "worst_degradation_m": 0.0
+  }
+ },
+ "threshold": {
+  "A": {
+   "thrust": 24600,
+   "vmax": 1724.0
+  },
+  "B": {
+   "thrust": null,
+   "vmax": null
+  },
+  "B_beyond_scan": true
+ },
+ "criteria": {
+  "P1_build_anchor": "见 --anchor 单独运行",
+  "P2_single_point": true,
+  "P2_detail": {
+   "ref_thrust": 24600,
+   "rate_ok": true,
+   "seed_ok": true,
+   "pair_ok": true
+  },
+  "P3_threshold_shift": true,
+  "P4_fallback_inert": true,
+  "P5_att_cost": true,
+  "P6_tail": true,
+  "max_pos_A": 33.779,
+  "max_pos_B": 12.925
+ },
+ "note": "L2 SIL；失效率按 pos_rms>25 m；双峰格不得只看中位；不写实机。"
+}
