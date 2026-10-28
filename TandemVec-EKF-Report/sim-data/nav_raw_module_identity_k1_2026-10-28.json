@@ -1,0 +1,17 @@
+{
+ "old_rows": 80,
+ "new_rows": 80,
+ "paired": 80,
+ "I1_pairing_ok": true,
+ "pos_rms_diff_count": 0,
+ "pos_rms_max_rel": 0.0,
+ "pos_max_diff_count": 0,
+ "pos_max_max_rel": 0.0,
+ "nav_att_rmse_diff_count": 0,
+ "nav_att_rmse_max_rel": 0.0,
+ "nrfb_diff_count": 0,
+ "nrfb_max_rel": 0.0,
+ "diff_examples": {},
+ "I2_identical": true,
+ "gate": "I1 配对 80/80 且 I2 四字段逐 seed 相等 ⇒ 模块实现与原内联锁存等价"
+}

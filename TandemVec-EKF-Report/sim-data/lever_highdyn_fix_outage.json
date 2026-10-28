@@ -1,0 +1,90 @@
+{
+ "exe": "C:/Users/12631/AppData/Local/Temp/host_bin_lev/highdyn.exe",
+ "md5": "5efc318110303f17199bd3dac30148b1",
+ "base": [
+  "--profile",
+  "turn",
+  "--load",
+  "8",
+  "--speed",
+  "80",
+  "--duration",
+  "40",
+  "--latency-ms",
+  "20",
+  "--accel-fs-g",
+  "16",
+  "--imu-rate",
+  "400",
+  "--outage",
+  "10:30"
+ ],
+ "seeds": 10,
+ "arms": [
+  {
+   "arm": "名义无杆臂",
+   "n": 10,
+   "pos_rmse": 3.0383,
+   "pos_max": 25.486,
+   "vel_rmse": 0.4636,
+   "att_rmse_deg": 0.4151,
+   "att_max_deg": 0.614,
+   "nees_pos_med": 0.0113,
+   "fused": 178.6,
+   "rejected": 20.4,
+   "fail": 0
+  },
+  {
+   "arm": "杆臂2m_不补偿",
+   "n": 10,
+   "pos_rmse": 8.9796,
+   "pos_max": 38.784,
+   "vel_rmse": 3.2237,
+   "att_rmse_deg": 2.3092,
+   "att_max_deg": 3.1068,
+   "nees_pos_med": 0.0683,
+   "fused": 137.7,
+   "rejected": 61.3,
+   "fail": 0
+  },
+  {
+   "arm": "杆臂2m_补偿",
+   "n": 10,
+   "pos_rmse": 2.7154,
+   "pos_max": 27.482,
+   "vel_rmse": 0.431,
+   "att_rmse_deg": 0.4042,
+   "att_max_deg": 0.5902,
+   "nees_pos_med": 0.0112,
+   "fused": 188.3,
+   "rejected": 10.7,
+   "fail": 0
+  },
+  {
+   "arm": "杆臂2m_补偿_子集",
+   "n": 10,
+   "pos_rmse": 2.7154,
+   "pos_max": 27.482,
+   "vel_rmse": 0.431,
+   "att_rmse_deg": 0.4042,
+   "att_max_deg": 0.5902,
+   "nees_pos_med": 0.0112,
+   "fused": 188.3,
+   "rejected": 10.7,
+   "fail": 0
+  },
+  {
+   "arm": "杆臂2m_不补偿_子集",
+   "n": 10,
+   "pos_rmse": 8.9796,
+   "pos_max": 38.784,
+   "vel_rmse": 3.2237,
+   "att_rmse_deg": 2.3092,
+   "att_max_deg": 3.1068,
+   "nees_pos_med": 0.0683,
+   "fused": 137.7,
+   "rejected": 61.3,
+   "fail": 0
+  }
+ ]
+}

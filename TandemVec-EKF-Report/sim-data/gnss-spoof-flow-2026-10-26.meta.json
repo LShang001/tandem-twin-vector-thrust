@@ -1,0 +1,28 @@
+{
+  "campaign": "GNSS spoof step/ramp matrix with fresh optical flow (warn-only consistency)",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + ideal flow model, SIL only)",
+  "runs": 480,
+  "binary": {"bin": "camp_spoofresp2/fw_real.exe", "note": "response code reverted; existing consistency warn-only"},
+  "scenario": "30 m hover, pos-hold at 20 s, 10 m N leg, flow 10 Hz, spoof at 25 s, 45 s; 6 dirs x 10 seeds",
+  "results": {
+    "none": {"nav_fail": "0/60", "pos_rms_med_max_m": [0.5, 0.9], "gnss_susp_total": 6, "gnss_crej_total": 0},
+    "step20": {"nav_fail": "0/60", "pos_rms_med_max_m": [0.5, 0.8], "gnss_susp_total": 6},
+    "step30": {"nav_fail": "60/60", "pos_rms_med_max_m": [25.2, 25.5], "gnss_susp_total": 15, "outlier_rejects_total": 1200, "reanchors_total": 60},
+    "step50": {"nav_fail": "60/60", "pos_rms_med_max_m": [41.8, 42.1], "gnss_susp_total": 10},
+    "step100": {"nav_fail": "60/60", "pos_rms_med_max_m": [83.4, 83.7], "gnss_susp_total": 10},
+    "ramp0.1": {"nav_fail": "0/60", "pos_rms_med_max_m": [1.3, 1.6], "gnss_susp_total": 7},
+    "ramp0.5": {"nav_fail": "60/60", "pos_rms_med_max_m": [5.3, 5.6], "gnss_susp_total": 8},
+    "ramp1.0": {"nav_fail": "60/60", "pos_rms_med_max_m": [10.3, 10.7], "gnss_susp_total": 45}
+  },
+  "verdict": "Flow does not turn the existing consistency monitor into a usable spoof detector: no-spoof already has 6/60 suspect, step30 only 15/60, ramp0.5 only 8/60, ramp1.0 45/60; gnss_crej remains 0 (warn-only) and position errors are unchanged. The flow residual threshold/window is not separating normal maneuver noise from spoof; a dedicated detector and a validated response are still needed. Do not add an automatic flow-based response.",
+  "caveats": [
+    "SIL flow is ideal/low-noise and shares the RNG; not a real optical-flow quality test.",
+    "Consistency is warn-only by default; no rejection/response in this matrix.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "gnss-spoof-flow-2026-10-26.jsonl.gz",
+    "script": "campaign_gnss_spoof_flow-2026-10-26.py"
+  }
+}

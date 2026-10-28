@@ -1,0 +1,109 @@
+{
+ "per_segment": {
+  "51-100": {
+   "25": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "p95": 21.425,
+    "max": 22.219,
+    "att": 1.173
+   },
+   "30": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "p95": 21.425,
+    "max": 22.219,
+    "att": 1.173
+   },
+   "35": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "p95": 21.425,
+    "max": 22.219,
+    "att": 1.173
+   }
+  },
+  "1-50": {
+   "25": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "p95": 19.434,
+    "max": 23.206,
+    "att": 1.082
+   },
+   "30": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "p95": 19.434,
+    "max": 23.206,
+    "att": 1.082
+   },
+   "35": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "p95": 19.434,
+    "max": 20.718,
+    "att": 1.082
+   }
+  }
+ },
+ "Y6a": {
+  "diff_counts": {
+   "51-100|25": {
+    "pos_rms": 0,
+    "pos_max": 0,
+    "nav_att_rmse": 0,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0
+   },
+   "1-50|25": {
+    "pos_rms": 0,
+    "pos_max": 0,
+    "nav_att_rmse": 0,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0
+   }
+  },
+  "pass": true
+ },
+ "Y6b": {
+  "per_cap_flags": {
+   "51-100_cap30": {
+    "fail": false,
+    "max_up_gt5": false
+   },
+   "51-100_cap35": {
+    "fail": false,
+    "max_up_gt5": false
+   },
+   "1-50_cap30": {
+    "fail": false,
+    "max_up_gt5": false
+   },
+   "1-50_cap35": {
+    "fail": false,
+    "max_up_gt5": false
+   }
+  },
+  "upper_edge_cap": null,
+  "upper_edge_measured": false,
+  "text": "U > 35 m：30/35 两档都没有劣化 ⇒ 上界仍未测出，尾部只在完全无阈值(nocap)时出现（44.9–105 m）",
+  "pass": true
+ },
+ "Y6c": {
+  "L_measured": 14,
+  "U_measured": null,
+  "width_m": null,
+  "may_write_interval": false,
+  "caliber": "发生率按段报；双峰不报中位；默认值变更本轮只出证据不出决定",
+  "pass": true
+ },
+ "verdict": "UPPER_EDGE_BEYOND_35",
+ "gate": "Y6a cap25 与 §4.24s 归档 5 字段逐 seed 相同；Y6b 给出 U 或 U>35；Y6c 只有 U−L≥5 才允许写区间"
+}

@@ -1,0 +1,40 @@
+{
+ "median": {
+  "默认": {
+   "imu_stuck_icm_full": 34.3715,
+   "imu_stuck2s_icm_full": 140.306,
+   "imu_nan_icm_full": 121.90950000000001,
+   "imu_nan2s_icm_full": 232.75650000000002
+  },
+  "nav-raw": {
+   "imu_stuck_icm_full": 57.6235,
+   "imu_stuck2s_icm_full": 164.965,
+   "imu_nan_icm_full": 121.2635,
+   "imu_nan2s_icm_full": 232.00400000000002
+  },
+  "raw+窗键回退": {
+   "imu_stuck_icm_full": 34.203,
+   "imu_stuck2s_icm_full": 139.912,
+   "imu_nan_icm_full": 121.515,
+   "imu_nan2s_icm_full": 232.35399999999998
+  },
+  "raw+健康键回退": {
+   "imu_stuck_icm_full": 2.792,
+   "imu_stuck2s_icm_full": 104.975,
+   "imu_nan_icm_full": 121.515,
+   "imu_nan2s_icm_full": 232.35399999999998
+  }
+ },
+ "k2_duty_pct": {
+  "clean_icm_full": 0.0,
+  "latency100_icm_full": 0.0,
+  "thrust10g_icm_full": 0.0,
+  "vib2g_8p4g_icm_full": 0.0
+ },
+ "k2_nrfb_max": {
+  "clean_icm_full": 0,
+  "latency100_icm_full": 0,
+  "thrust10g_icm_full": 0,
+  "vib2g_8p4g_icm_full": 0
+ }
+}

@@ -1,0 +1,83 @@
+{
+ "W1": {
+  "b10_off": 50,
+  "b10_pg0": 50,
+  "b20_off": 50,
+  "b20_pg0": 50,
+  "w10_pg1": 50,
+  "w20_pg1": 50,
+  "w_off_pg0": 50,
+  "pass": true
+ },
+ "W2": {
+  "per_arm": {
+   "b20_off": {
+    "n": 50,
+    "fail": 7,
+    "med": 14.123,
+    "p95": 26.042,
+    "max": 27.555,
+    "att": 1.103
+   },
+   "b20_pg0": {
+    "n": 50,
+    "fail": 6,
+    "med": 13.579,
+    "p95": 53.908,
+    "max": 104.965,
+    "att": 1.082
+   },
+   "w20_pg1": {
+    "n": 50,
+    "fail": 9,
+    "med": 14.407,
+    "p95": 27.179,
+    "max": 104.965,
+    "att": 1.103
+   }
+  },
+  "worse_than_20hz_baseline": [
+   28,
+   47
+  ],
+  "max_halved": false,
+  "pass": false
+ },
+ "W3": {
+  "per_arm": {
+   "b10_off": {
+    "n": 50,
+    "fail": 18,
+    "med": 23.391,
+    "p95": 29.721,
+    "max": 32.527,
+    "att": 1.664
+   },
+   "b10_pg0": {
+    "n": 50,
+    "fail": 0,
+    "med": 15.652,
+    "p95": 17.332,
+    "max": 17.845,
+    "att": 1.522
+   },
+   "w10_pg1": {
+    "n": 50,
+    "fail": 18,
+    "med": 23.391,
+    "p95": 29.721,
+    "max": 32.527,
+    "att": 1.664
+   }
+  },
+  "pg0_pg1_identical_seeds": 21,
+  "pass": false
+ },
+ "W4": {
+  "pairs": 50,
+  "diff_seeds": [],
+  "pass": true
+ },
+ "verdict": "REVERT_FIX_AND_RECORD_LIMITATION",
+ "gate": "W1 五臂各 50 seeds；W2 20 Hz 尾部 max 至少砍半且无一 seed 比 20 Hz 基线差 >10%；W3 10 Hz 发生率与 p95 不劣于旧触发；W4 子集关时 posgate 开关逐 seed 无副作用"
+}

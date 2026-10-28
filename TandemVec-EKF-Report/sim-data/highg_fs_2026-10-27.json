@@ -1,0 +1,146 @@
+{
+  "6.4g_fs8": {
+    "n": 3,
+    "pos_rmse": 0.177,
+    "att_rmse": 1.176,
+    "att_max": 1.612,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "6.4g_fs16": {
+    "n": 3,
+    "pos_rmse": 0.177,
+    "att_rmse": 1.176,
+    "att_max": 1.612,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "6.4g_fs32": {
+    "n": 3,
+    "pos_rmse": 0.177,
+    "att_rmse": 1.176,
+    "att_max": 1.612,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "8g_fs8": {
+    "n": 3,
+    "pos_rmse": 0.167,
+    "att_rmse": 0.881,
+    "att_max": 1.081,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "8g_fs16": {
+    "n": 3,
+    "pos_rmse": 0.167,
+    "att_rmse": 0.881,
+    "att_max": 1.081,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "8g_fs32": {
+    "n": 3,
+    "pos_rmse": 0.167,
+    "att_rmse": 0.881,
+    "att_max": 1.081,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "12g_fs8": {
+    "n": 3,
+    "pos_rmse": 1300.858,
+    "att_rmse": 4.117,
+    "att_max": 5.527,
+    "rejected": 152.0,
+    "fail": 0.0
+  },
+  "12g_fs16": {
+    "n": 3,
+    "pos_rmse": 0.206,
+    "att_rmse": 0.47,
+    "att_max": 0.531,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "12g_fs32": {
+    "n": 3,
+    "pos_rmse": 0.206,
+    "att_rmse": 0.47,
+    "att_max": 0.531,
+    "rejected": 0.0,
+    "fail": 0.0
+  },
+  "15g_fs8": {
+    "n": 3,
+    "pos_rmse": 1639.464,
+    "att_rmse": 4.031,
+    "att_max": 5.954,
+    "rejected": 158.0,
+    "fail": 0.0
+  },
+  "15g_fs16": {
+    "n": 3,
+    "pos_rmse": 2218.91,
+    "att_rmse": 101.754,
+    "att_max": 179.981,
+    "rejected": 153.0,
+    "fail": 0.0
+  },
+  "15g_fs32": {
+    "n": 3,
+    "pos_rmse": 2218.91,
+    "att_rmse": 101.754,
+    "att_max": 179.981,
+    "rejected": 153.0,
+    "fail": 0.0
+  },
+  "20g_fs8": {
+    "n": 3,
+    "pos_rmse": 2039.937,
+    "att_rmse": 4.584,
+    "att_max": 5.677,
+    "rejected": 163.0,
+    "fail": 0.0
+  },
+  "20g_fs16": {
+    "n": 3,
+    "pos_rmse": 2666.136,
+    "att_rmse": 105.809,
+    "att_max": 179.935,
+    "rejected": 161.0,
+    "fail": 0.0
+  },
+  "20g_fs32": {
+    "n": 3,
+    "pos_rmse": 2666.136,
+    "att_rmse": 105.809,
+    "att_max": 179.935,
+    "rejected": 161.0,
+    "fail": 0.0
+  },
+  "25g_fs8": {
+    "n": 3,
+    "pos_rmse": 2396.868,
+    "att_rmse": 4.205,
+    "att_max": 5.916,
+    "rejected": 166.0,
+    "fail": 0.0
+  },
+  "25g_fs16": {
+    "n": 3,
+    "pos_rmse": 3209.067,
+    "att_rmse": 95.013,
+    "att_max": 179.996,
+    "rejected": 165.0,
+    "fail": 0.0
+  },
+  "25g_fs32": {
+    "n": 3,
+    "pos_rmse": 3209.067,
+    "att_rmse": 95.013,
+    "att_max": 179.996,
+    "rejected": 165.0,
+    "fail": 0.0
+  }
+}

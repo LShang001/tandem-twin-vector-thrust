@@ -1,0 +1,9 @@
+{
+ "seeds": 20,
+ "median_raw": 5.161,
+ "median_raw_fb": 5.161,
+ "diff_seeds": 0,
+ "nrfb_max": 0,
+ "J6_pass": true,
+ "gate": "J6: 30.5 g 格两臂逐 seed 相同且 nrfb=0（收益未被回退吃掉）"
+}

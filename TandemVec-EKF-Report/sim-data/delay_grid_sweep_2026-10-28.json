@@ -1,0 +1,301 @@
+{
+ "exe_md5": "9ef342cad3e0ff8e8ca9d816ff8040ef",
+ "grids": [
+  150,
+  200,
+  250,
+  300,
+  330
+ ],
+ "latencies": [
+  150,
+  200,
+  250,
+  300,
+  330
+ ],
+ "nseed": 20,
+ "med": {
+  "150_150": {
+   "pos_rms": 27.717,
+   "pos_max": 64.17699999999999,
+   "nav_att_rmse": 1.7385000000000002,
+   "ad_tau_ms": 85.25,
+   "ad_app": 40.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 0.0
+  },
+  "150_200": {
+   "pos_rms": 7.6955,
+   "pos_max": 16.518,
+   "nav_att_rmse": 0.991,
+   "ad_tau_ms": 85.05,
+   "ad_app": 230.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 0.0
+  },
+  "150_250": {
+   "pos_rms": 7.6955,
+   "pos_max": 16.518,
+   "nav_att_rmse": 0.991,
+   "ad_tau_ms": 85.05,
+   "ad_app": 230.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 0.0
+  },
+  "150_300": {
+   "pos_rms": 7.6955,
+   "pos_max": 16.518,
+   "nav_att_rmse": 0.991,
+   "ad_tau_ms": 85.05,
+   "ad_app": 230.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 0.0
+  },
+  "150_330": {
+   "pos_rms": 7.6955,
+   "pos_max": 16.518,
+   "nav_att_rmse": 0.991,
+   "ad_tau_ms": 85.05,
+   "ad_app": 230.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 0.0
+  },
+  "200_150": {
+   "pos_rms": 38.608000000000004,
+   "pos_max": 93.46600000000001,
+   "nav_att_rmse": 2.689,
+   "ad_tau_ms": 85.2,
+   "ad_app": 20.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "200_200": {
+   "pos_rms": 38.559,
+   "pos_max": 93.527,
+   "nav_att_rmse": 2.7279999999999998,
+   "ad_tau_ms": 95.25,
+   "ad_app": 50.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "200_250": {
+   "pos_rms": 23.128999999999998,
+   "pos_max": 85.1195,
+   "nav_att_rmse": 5.184,
+   "ad_tau_ms": 94.3,
+   "ad_app": 220.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 1.0
+  },
+  "200_300": {
+   "pos_rms": 22.839,
+   "pos_max": 85.1195,
+   "nav_att_rmse": 5.184,
+   "ad_tau_ms": 94.3,
+   "ad_app": 220.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 1.0
+  },
+  "200_330": {
+   "pos_rms": 22.839,
+   "pos_max": 85.1195,
+   "nav_att_rmse": 5.184,
+   "ad_tau_ms": 94.3,
+   "ad_app": 220.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 0.0,
+   "reacquire_resets": 1.0
+  },
+  "250_150": {
+   "pos_rms": 43.3645,
+   "pos_max": 117.191,
+   "nav_att_rmse": 4.6795,
+   "ad_tau_ms": 0.0,
+   "ad_app": 0.0,
+   "ad_blk": 38.0,
+   "outlier_rejects": 25.5,
+   "reacquire_resets": 1.0
+  },
+  "250_200": {
+   "pos_rms": 43.3645,
+   "pos_max": 117.191,
+   "nav_att_rmse": 4.6795,
+   "ad_tau_ms": 0.0,
+   "ad_app": 0.0,
+   "ad_blk": 38.0,
+   "outlier_rejects": 25.5,
+   "reacquire_resets": 1.0
+  },
+  "250_250": {
+   "pos_rms": 43.313500000000005,
+   "pos_max": 117.4645,
+   "nav_att_rmse": 3.9355,
+   "ad_tau_ms": 96.45,
+   "ad_app": 40.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 27.0,
+   "reacquire_resets": 1.0
+  },
+  "250_300": {
+   "pos_rms": 30.161,
+   "pos_max": 111.5755,
+   "nav_att_rmse": 4.8625,
+   "ad_tau_ms": 214.55,
+   "ad_app": 259.0,
+   "ad_blk": 0.0,
+   "outlier_rejects": 3.5,
+   "reacquire_resets": 1.0
+  },
+  "250_330": {
+   "pos_rms": 29.721,
+   "pos_max": 111.5755,
+   "nav_att_rmse": 4.855,
+   "ad_tau_ms": 219.15,
+   "ad_app": 324.5,
+   "ad_blk": 0.0,
+   "outlier_rejects": 3.5,
+   "reacquire_resets": 1.0
+  },
+  "300_150": {
+   "pos_rms": 41.966,
+   "pos_max": 106.5505,
+   "nav_att_rmse": 9.896,
+   "ad_tau_ms": 102.5,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "300_200": {
+   "pos_rms": 41.966,
+   "pos_max": 106.5505,
+   "nav_att_rmse": 9.896,
+   "ad_tau_ms": 102.5,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "300_250": {
+   "pos_rms": 41.966,
+   "pos_max": 106.5505,
+   "nav_att_rmse": 9.896,
+   "ad_tau_ms": 102.5,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "300_300": {
+   "pos_rms": 5.433,
+   "pos_max": 13.035,
+   "nav_att_rmse": 2.02,
+   "ad_tau_ms": 224.75,
+   "ad_app": 324.5,
+   "ad_blk": 0.0,
+   "outlier_rejects": 28.0,
+   "reacquire_resets": 0.0
+  },
+  "300_330": {
+   "pos_rms": 3.9325,
+   "pos_max": 11.9435,
+   "nav_att_rmse": 0.969,
+   "ad_tau_ms": 296.6,
+   "ad_app": 419.0,
+   "ad_blk": 0.0,
+   "outlier_rejects": 18.0,
+   "reacquire_resets": 0.0
+  },
+  "330_150": {
+   "pos_rms": 46.084,
+   "pos_max": 117.0815,
+   "nav_att_rmse": 11.7045,
+   "ad_tau_ms": 99.45,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "330_200": {
+   "pos_rms": 46.084,
+   "pos_max": 117.0815,
+   "nav_att_rmse": 11.7045,
+   "ad_tau_ms": 99.45,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "330_250": {
+   "pos_rms": 46.084,
+   "pos_max": 117.0815,
+   "nav_att_rmse": 11.7045,
+   "ad_tau_ms": 99.45,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "330_300": {
+   "pos_rms": 46.084,
+   "pos_max": 117.0815,
+   "nav_att_rmse": 11.7045,
+   "ad_tau_ms": 99.45,
+   "ad_app": 10.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 20.0,
+   "reacquire_resets": 1.0
+  },
+  "330_330": {
+   "pos_rms": 28.0,
+   "pos_max": 47.937,
+   "nav_att_rmse": 9.7715,
+   "ad_tau_ms": 99.45,
+   "ad_app": 200.0,
+   "ad_blk": 34.0,
+   "outlier_rejects": 18.0,
+   "reacquire_resets": 1.0
+  }
+ },
+ "hit": {
+  "150_150": false,
+  "150_200": false,
+  "150_250": false,
+  "150_300": false,
+  "150_330": false,
+  "200_150": false,
+  "200_200": false,
+  "200_250": false,
+  "200_300": false,
+  "200_330": false,
+  "250_150": false,
+  "250_200": false,
+  "250_250": false,
+  "250_300": false,
+  "250_330": false,
+  "300_150": false,
+  "300_200": false,
+  "300_250": false,
+  "300_300": false,
+  "300_330": true,
+  "330_150": false,
+  "330_200": false,
+  "330_250": false,
+  "330_300": false,
+  "330_330": false
+ },
+ "unsafe_grids": [],
+ "best_grid_by_latency": {
+  "300": 330
+ }
+}

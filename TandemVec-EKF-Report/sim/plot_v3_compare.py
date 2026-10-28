@@ -1,4 +1,12 @@
-"""Compare the baseline and v2-clamp maneuver matrices."""
+# -*- coding: utf-8 -*-
+"""Compare the baseline and v2-clamp maneuver matrices.
+@file    plot_v3_compare.py
+@brief   v3 偏航零偏钳制前后对比图。
+@module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 读取 v3 A/B 结果绘图。
+@frame   N/A
+@units   N/A
+"""
 import json
 import os
 

@@ -1,0 +1,166 @@
+{
+ "fire_table": [
+  {
+   "grp": "10 Hz 有益",
+   "hz": 10,
+   "seed": 6,
+   "t_first_fire": 14.4,
+   "pos_resid_at_fire_m": 1.02,
+   "n_fires": 1,
+   "delta_pos_rms_m": -9.12
+  },
+  {
+   "grp": "10 Hz 有益",
+   "hz": 10,
+   "seed": 17,
+   "t_first_fire": 14.4,
+   "pos_resid_at_fire_m": 1.13,
+   "n_fires": 1,
+   "delta_pos_rms_m": -8.57
+  },
+  {
+   "grp": "10 Hz 有益",
+   "hz": 10,
+   "seed": 19,
+   "t_first_fire": 14.4,
+   "pos_resid_at_fire_m": 1.88,
+   "n_fires": 1,
+   "delta_pos_rms_m": -9.97
+  },
+  {
+   "grp": "10 Hz 有益",
+   "hz": 10,
+   "seed": 22,
+   "t_first_fire": 14.4,
+   "pos_resid_at_fire_m": 2.23,
+   "n_fires": 1,
+   "delta_pos_rms_m": -16.3
+  },
+  {
+   "grp": "10 Hz 有益",
+   "hz": 10,
+   "seed": 25,
+   "t_first_fire": 14.4,
+   "pos_resid_at_fire_m": 1.27,
+   "n_fires": 1,
+   "delta_pos_rms_m": -10.52
+  },
+  {
+   "grp": "10 Hz 有益",
+   "hz": 10,
+   "seed": 27,
+   "t_first_fire": 14.4,
+   "pos_resid_at_fire_m": 1.57,
+   "n_fires": 1,
+   "delta_pos_rms_m": -9.12
+  },
+  {
+   "grp": "20 Hz 变好",
+   "hz": 20,
+   "seed": 3,
+   "t_first_fire": 14.7,
+   "pos_resid_at_fire_m": 9.86,
+   "n_fires": 1,
+   "delta_pos_rms_m": -15.95
+  },
+  {
+   "grp": "20 Hz 变好",
+   "hz": 20,
+   "seed": 9,
+   "t_first_fire": 14.85,
+   "pos_resid_at_fire_m": 11.67,
+   "n_fires": 1,
+   "delta_pos_rms_m": -11.08
+  },
+  {
+   "grp": "20 Hz 变好",
+   "hz": 20,
+   "seed": 11,
+   "t_first_fire": 14.75,
+   "pos_resid_at_fire_m": 10.63,
+   "n_fires": 1,
+   "delta_pos_rms_m": -12.68
+  },
+  {
+   "grp": "20 Hz 变好",
+   "hz": 20,
+   "seed": 18,
+   "t_first_fire": 14.75,
+   "pos_resid_at_fire_m": 12.03,
+   "n_fires": 1,
+   "delta_pos_rms_m": -5.25
+  },
+  {
+   "grp": "20 Hz 变好",
+   "hz": 20,
+   "seed": 29,
+   "t_first_fire": 14.7,
+   "pos_resid_at_fire_m": 10.29,
+   "n_fires": 1,
+   "delta_pos_rms_m": -11.84
+  },
+  {
+   "grp": "20 Hz 变好",
+   "hz": 20,
+   "seed": 30,
+   "t_first_fire": 14.75,
+   "pos_resid_at_fire_m": 9.48,
+   "n_fires": 1,
+   "delta_pos_rms_m": -8.96
+  },
+  {
+   "grp": "20 Hz 变差",
+   "hz": 20,
+   "seed": 16,
+   "t_first_fire": 13.55,
+   "pos_resid_at_fire_m": 21.54,
+   "n_fires": 4,
+   "delta_pos_rms_m": 38.86
+  },
+  {
+   "grp": "20 Hz 变差",
+   "hz": 20,
+   "seed": 20,
+   "t_first_fire": 13.55,
+   "pos_resid_at_fire_m": 24.06,
+   "n_fires": 4,
+   "delta_pos_rms_m": 39.6
+  },
+  {
+   "grp": "20 Hz 变差",
+   "hz": 20,
+   "seed": 28,
+   "t_first_fire": 11.2,
+   "pos_resid_at_fire_m": 39.86,
+   "n_fires": 3,
+   "delta_pos_rms_m": 97.28
+  },
+  {
+   "grp": "20 Hz 变差",
+   "hz": 20,
+   "seed": 37,
+   "t_first_fire": 13.6,
+   "pos_resid_at_fire_m": 22.12,
+   "n_fires": 3,
+   "delta_pos_rms_m": 25.37
+  },
+  {
+   "grp": "20 Hz 变差",
+   "hz": 20,
+   "seed": 45,
+   "t_first_fire": 13.6,
+   "pos_resid_at_fire_m": 21.29,
+   "n_fires": 3,
+   "delta_pos_rms_m": 25.83
+  },
+  {
+   "grp": "20 Hz 变差",
+   "hz": 20,
+   "seed": 47,
+   "t_first_fire": 13.6,
+   "pos_resid_at_fire_m": 29.89,
+   "n_fires": 3,
+   "delta_pos_rms_m": 24.59
+  }
+ ]
+}

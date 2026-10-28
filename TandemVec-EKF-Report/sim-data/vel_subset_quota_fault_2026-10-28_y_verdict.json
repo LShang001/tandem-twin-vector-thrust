@@ -1,0 +1,127 @@
+{
+ "per_cell": {
+  "nan1s": {
+   "q1": {
+    "n": 20,
+    "fail_gt25": 20,
+    "p90": 325.202,
+    "max": 326.412,
+    "att": 3.982
+   },
+   "q255": {
+    "n": 20,
+    "fail_gt25": 20,
+    "p90": 325.202,
+    "max": 326.412,
+    "att": 3.982
+   },
+   "pairs": 20,
+   "seeds_identical": 20,
+   "worse_seeds": []
+  },
+  "out5": {
+   "q1": {
+    "n": 20,
+    "fail_gt25": 3,
+    "p90": 45.23,
+    "max": 73.773,
+    "att": 1.891
+   },
+   "q255": {
+    "n": 20,
+    "fail_gt25": 3,
+    "p90": 45.23,
+    "max": 73.773,
+    "att": 1.891
+   },
+   "pairs": 20,
+   "seeds_identical": 20,
+   "worse_seeds": []
+  },
+  "out20": {
+   "q1": {
+    "n": 20,
+    "fail_gt25": 20,
+    "p90": 85.434,
+    "max": 93.34,
+    "att": 0.83
+   },
+   "q255": {
+    "n": 20,
+    "fail_gt25": 20,
+    "p90": 85.434,
+    "max": 93.34,
+    "att": 0.83
+   },
+   "pairs": 20,
+   "seeds_identical": 20,
+   "worse_seeds": []
+  },
+  "vib1g": {
+   "q1": {
+    "n": 20,
+    "fail_gt25": 0,
+    "p90": 19.703,
+    "max": 21.824,
+    "att": 1.252
+   },
+   "q255": {
+    "n": 20,
+    "fail_gt25": 0,
+    "p90": 19.703,
+    "max": 21.824,
+    "att": 1.252
+   },
+   "pairs": 20,
+   "seeds_identical": 20,
+   "worse_seeds": []
+  },
+  "hz10": {
+   "q1": {
+    "n": 20,
+    "fail_gt25": 0,
+    "p90": 17.211,
+    "max": 17.764,
+    "att": 1.613
+   },
+   "q255": {
+    "n": 20,
+    "fail_gt25": 0,
+    "p90": 17.211,
+    "max": 17.764,
+    "att": 1.613
+   },
+   "pairs": 20,
+   "seeds_identical": 20,
+   "worse_seeds": []
+  }
+ },
+ "Y1": {
+  "counts": {
+   "nan1s|q1": 20,
+   "nan1s|q255": 20,
+   "out5|q1": 20,
+   "out5|q255": 20,
+   "out20|q1": 20,
+   "out20|q255": 20,
+   "vib1g|q1": 20,
+   "vib1g|q255": 20,
+   "hz10|q1": 20,
+   "hz10|q255": 20
+  },
+  "pass": true
+ },
+ "Y2": {
+  "cells_with_regression": [],
+  "pass": true
+ },
+ "Y3": {
+  "nan1s": "惰性（20/20 逐 seed 相同）",
+  "out5": "惰性（20/20 逐 seed 相同）",
+  "out20": "惰性（20/20 逐 seed 相同）",
+  "vib1g": "惰性（20/20 逐 seed 相同）",
+  "hz10": "惰性（20/20 逐 seed 相同）"
+ },
+ "verdict": "QUOTA_FAULT_SAFE",
+ "gate": "Y1 五格两臂各 20；Y2 发生率不升且无'变差>20%且>2 m'的 seed；Y3 惰性描述"
+}

@@ -1,0 +1,50 @@
+{
+ "exe": "C:/Users/12631/AppData/Local/Temp/tv_32g_w2/fw_real.exe",
+ "seeds": 20,
+ "seed_start": 51,
+ "seed_range": [
+  51,
+  70
+ ],
+ "bind_core": 5,
+ "base": [
+  "--real-nav",
+  "--missile",
+  "--seconds",
+  "45",
+  "--imu-fs-g",
+  "32",
+  "--imu-health-accel-range",
+  "313.8",
+  "--profile",
+  "mag_clean",
+  "--imu-grade",
+  "icm",
+  "--gnss-rate-hz",
+  "10"
+ ],
+ "ladder_N": [
+  23500
+ ],
+ "extra_args": "--gnss-latency-ms 50",
+ "per_thrust": {
+  "23500": {
+   "O1_ok": true,
+   "n": 20,
+   "g_est": 29.99,
+   "rate_gt25": 0.0,
+   "n_gt25": 0,
+   "cluster_good_med": null,
+   "cluster_bad_med": null,
+   "p90": 17.802,
+   "ad_app_seeds": 20,
+   "ad_app_med": 210.0,
+   "rej_med": 0.0,
+   "rej_max": 0.0,
+   "reanchor_seeds": 0,
+   "att_med": 1.175
+  }
+ },
+ "O1_all_cells_full": true,
+ "note": "发生率按 >25 m 计；双峰格不得用中位当指标（§4.24）"
+}

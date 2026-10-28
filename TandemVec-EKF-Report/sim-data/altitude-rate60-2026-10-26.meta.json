@@ -1,0 +1,34 @@
+{
+  "campaign": "settled-30m-60s-outage-no-recovery",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "purpose": "Compare 20 s outage (GNSS recovers before touchdown) with 60 s outage (no GNSS recovery before touchdown) at a true 30 m hover; test a conservative baro-altitude-slope vertical-velocity override.",
+  "runs": 180,
+  "scenario": "30 m target, pos-hold at 41 s, outage 43-103 s, 1 m/s2 wind, 6 directions x 10 seeds; run 133 s",
+  "arms": {
+    "r1": {"rate_mps": 1.0, "md5": "7e068c3bace5aa3116aada8b23bdf69c", "variant": "baseline descent + speed hold + alt-hold 6 s"},
+    "r2": {"rate_mps": 2.0, "md5": "7406be0b7e2c61897c8aceb3ce8862a3", "variant": "baseline descent + speed hold + alt-hold 6 s"},
+    "r3": {"rate_mps": 3.0, "md5": "a61a9f7c1f2a73b76128880c4736cd12", "variant": "baseline descent + speed hold + alt-hold 6 s"},
+    "baromin": {"rate_mps": 1.0, "md5": "b363ee1751623f331493be3b8b2c3fd5", "variant": "baseline + 0.5 s baro-slope override when it is >0.5 m/s below EKF vz"}
+  },
+  "results": {
+    "baseline_1mps": {"settled": "60/60", "touchdown_med_p95_max_mps": [3.35, 4.48, 4.96], "hold_med_p95_max_m": [431.8, 553.5, 598.9], "preland_roll_med_max_deg": [40.3, 46.2]},
+    "baseline_2mps": {"settled": "60/60", "touchdown_med_p95_max_mps": [3.56, 4.64, 4.74], "hold_med_p95_max_m": [256.9, 371.5, 489.6], "preland_roll_med_max_deg": [37.7, 43.5]},
+    "baseline_3mps": {"settled": "60/60", "touchdown_med_p95_max_mps": [3.88, 5.06, 5.58], "hold_med_p95_max_m": [248.3, 409.7, 453.6], "preland_roll_med_max_deg": [37.5, 43.6]},
+    "baromin_1mps": {"settled": "60/60", "touchdown_med_p95_max_mps": [1.84, 3.22, 3.60], "hold_med_p95_max_m": [713.7, 1213.7, 1776.8], "preland_roll_med_max_deg": [32.5, 44.9]}
+  },
+  "caveats": [
+    "20 s outage at the same 30 m settled altitude (r1) gives touchdown median/p95/max 0.85/1.02/3.29 m/s; the soft touchdown depends on GNSS recovery before landing.",
+    "60 s outage without recovery gives 3.35-3.88 m/s median touchdown for 1/2/3 m/s target ramps; faster ramps do not help.",
+    "The baro-slope override reduces touchdown median to 1.84 m/s but increases landing drift median from 432 to 714 m; it is a trade, not a fix, and is not adopted.",
+    "A ground-dwell latch (target locked to current altitude after 1 s below 0.3 m) was added after these runs; it prevents the residual 13.4 m climb command after early touchdown but does not change pre-touchdown metrics.",
+    "SIL plant has no ground friction/landing gear/impact model; post-landing roll-over under wind is a plant artifact.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "baseline_results": "altitude-rate60-baseline-2026-10-26.jsonl.gz",
+    "baromin_results": "altitude-rate60-baromin-2026-10-26.jsonl.gz",
+    "figure": "../figs/nav_altitude_outage60.png",
+    "scripts": ["campaign_altitude_rate60-2026-10-26.py", "campaign_baromin60-2026-10-26.py"]
+  }
+}

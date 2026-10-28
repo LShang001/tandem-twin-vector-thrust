@@ -1,0 +1,24 @@
+{
+  "campaign": "same-binary 2x2 factorial: gated EKF baro-velocity aid x age-gated terminal flare",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "runs": 240,
+  "binary": {"md5": "443a74e79d289fa81c22bb929ac5f5fb", "bin": "camp_aidflare/fw_real.exe"},
+  "scenario": "30 m settled, 60 s outage 43-103 s (no recovery before landing), 1 m/s2 wind, 6 dirs x 10 seeds, aid/flare runtime toggles",
+  "arms": {
+    "aid0_flare0": {"touchdown_med_p95_max_mps": [3.35, 4.48, 4.96], "hold_med_p95_max_m": [431.8, 553.5, 598.9], "roll_med_max_deg": [40.3, 46.2]},
+    "aid0_flare1": {"touchdown_med_p95_max_mps": [3.17, 4.44, 4.92], "hold_med_p95_max_m": [432.3, 553.5, 636.0], "roll_med_max_deg": [40.6, 46.1]},
+    "aid1_flare0": {"touchdown_med_p95_max_mps": [1.10, 1.52, 1.65], "hold_med_p95_max_m": [544.8, 1127.0, 1446.8], "roll_med_max_deg": [26.3, 46.7]},
+    "aid1_flare1": {"touchdown_med_p95_max_mps": [1.34, 1.77, 1.92], "hold_med_p95_max_m": [567.4, 1128.5, 1420.2], "roll_med_max_deg": [27.0, 47.1]}
+  },
+  "verdict": "Flare-only is nearly ineffective in the same binary (3.35 -> 3.17 m/s), contradicting the earlier cross-binary 1.48 m/s flare result. aid-only is best (1.10 m/s); aid+flare is worse than aid-only (1.34 m/s) and does not reduce drift. The earlier 1.48 m/s flare result was confounded by binary/layout differences and must be marked historical. Do not use the current flare; use aid-only if opting in.",
+  "caveats": [
+    "The flare's age>20 s and altitude<8 m trigger leaves too little time in this 60 s trajectory; it overrides the EKF v_d with a baro slope and undoes part of the aid benefit.",
+    "All arms settle; drift remains a safety-vs-footprint trade for the aid.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "baro-vel-aid-flare-factorial-2026-10-26.jsonl.gz",
+    "script": "campaign_baro_vel_aid_flare_factorial-2026-10-26.py"
+  }
+}

@@ -1,4 +1,11 @@
+# -*- coding: utf-8 -*-
 """Step-maneuver navigation matrix for the real-nav SIL.
+@file    run_maneuver_matrix.py
+@brief   SIL 速度/机动导航矩阵驱动。
+@module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 驱动 fw_real.exe 的多方向/腿长/故障组合。
+@frame   N/A
+@units   N/A
 
 Each run: altitude hold until t=20 s, then AUTO_POSITION with a one-shot
 horizontal target offset (--pos-leg).  Optional 5 s GNSS outage / crosswind

@@ -1,0 +1,25 @@
+{
+  "campaign": "gated EKF baro vertical-velocity aid, 4-altitude 20 s outage A/B",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "runs": 480,
+  "binary": {"md5": "3a347ec92a589886ba77e08a32f2aee4", "bin": "camp_aidrt2/fw_real.exe"},
+  "gating": "g_baro_vel_aid_enable && g_mode_degraded_gnss && outage age >8 s && altitude >1 m",
+  "scenario": "10/20/30/40 m settled, 20 s outage, 1 m/s2 wind, 6 dirs x 10 seeds, aid off/on same binary",
+  "results": {
+    "10m": {"aid_off": {"touchdown_med_p95_max_mps": [0.96, 1.45, 1.56], "hold_med_p95_max_m": [78.5, 140.4, 158.2], "roll_med_max_deg": [20.6, 35.9]}, "aid_on": {"touchdown_med_p95_max_mps": [1.41, 1.75, 1.82], "hold_med_p95_max_m": [80.6, 156.8, 168.5], "roll_med_max_deg": [17.6, 29.6]}},
+    "20m": {"aid_off": {"touchdown_med_p95_max_mps": [0.94, 3.21, 3.58], "hold_med_p95_max_m": [253.9, 548.2, 651.2], "roll_med_max_deg": [30.6, 43.2]}, "aid_on": {"touchdown_med_p95_max_mps": [0.84, 1.03, 1.11], "hold_med_p95_max_m": [221.9, 575.2, 939.0], "roll_med_max_deg": [20.4, 45.0]}},
+    "30m": {"aid_off": {"touchdown_med_p95_max_mps": [0.85, 1.02, 3.29], "hold_med_p95_max_m": [530.4, 1616.9, 1788.8], "roll_med_max_deg": [30.6, 43.5]}, "aid_on": {"touchdown_med_p95_max_mps": [0.82, 0.99, 1.09], "hold_med_p95_max_m": [189.7, 730.6, 1145.7], "roll_med_max_deg": [21.3, 31.2]}},
+    "40m": {"aid_off": {"touchdown_med_p95_max_mps": [0.87, 1.19, 6.94], "hold_med_p95_max_m": [400.7, 2453.6, 2916.0], "roll_med_max_deg": [26.5, 50.4]}, "aid_on": {"touchdown_med_p95_max_mps": [0.81, 0.95, 1.18], "hold_med_p95_max_m": [177.2, 1124.2, 2656.4], "roll_med_max_deg": [21.0, 39.9]}}
+  },
+  "verdict": "Strong tail reduction at 20-40 m: touchdown p95 3.21/1.02/1.19 -> 1.03/0.99/0.95 m/s, max 3.58/3.29/6.94 -> 1.11/1.09/1.18 m/s; drift median at 30/40 m 530/401 -> 190/177 m; roll max at 40 m 50.4 -> 39.9 deg. At 10 m the aid slightly worsens touchdown median 0.96 -> 1.41 m/s (still max 1.82) with no drift benefit; recommend enabling only for >=20 m / long descents, not at 10 m.",
+  "caveats": [
+    "The 10 m aid-on arm activates for a shorter time (attempts 2511 vs 3600) and is not beneficial; a min-altitude gate is a possible future refinement but not yet implemented.",
+    "20 m aid-on drift p95/max is slightly worse (575/939 vs 548/651 m) despite better touchdown; it is a tail trade.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "baro-vel-aid-alt4-2026-10-26.jsonl.gz",
+    "script": "campaign_baro_vel_aid_alt4-2026-10-26.py"
+  }
+}

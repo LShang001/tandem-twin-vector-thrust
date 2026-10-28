@@ -1,0 +1,36 @@
+{
+  "campaign": "2 m/s target ramp + age-gated terminal flare",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "purpose": "Combine the lower-drift 2 m/s target ramp with the age-gated 8 m flare; compare with the safer 1 m/s + flare variant.",
+  "runs": 120,
+  "binary": {"md5": "be90461ba1378dcf29c378bb11014c68", "bin": "camp_flare2/fw_real.exe"},
+  "flags": [
+    "-DBFS_GNSS_OUTAGE_VELOCITY_HOLD",
+    "-DBFS_GNSS_OUTAGE_ALT_HOLD",
+    "-DBFS_GNSS_OUTAGE_ALT_HOLD_S=6.0f",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S=6.0f",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_RATE_MPS=2.0f",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_FLARE",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_ALT_M=8.0f"
+  ],
+  "scenario": "30 m settled, 1 m/s2 wind, 6 directions x 10 seeds; 20 s outage 43-63 s and 60 s outage 43-103 s",
+  "results": {
+    "20s": {"touchdown_med_p95_max_mps": [0.94, 4.43, 4.64], "hold_med_p95_max_m": [259.3, 450.3, 531.4], "preland_roll_med_max_deg": [26.3, 43.5]},
+    "60s": {"touchdown_med_p95_max_mps": [1.35, 4.43, 4.64], "hold_med_p95_max_m": [362.2, 623.0, 676.3], "preland_roll_med_max_deg": [39.1, 43.5]}
+  },
+  "comparison": {
+    "1mps_flare_20s": {"touchdown_med_p95_max_mps": [0.85, 1.02, 3.29], "hold_med_m": 530.4},
+    "1mps_flare_60s": {"touchdown_med_p95_max_mps": [1.48, 3.30, 4.03], "hold_med_m": 516.5}
+  },
+  "verdict": "Drift/roll-priority variant, not the default. It cuts drift substantially (20 s 530 -> 259 m, 60 s 517 -> 362 m) and improves median roll, but the touchdown p95 is 4.43 m/s vs 1.02/3.30 for the 1 m/s + flare. The 1 m/s + flare remains the safer opt-in because touchdown tail is the safety-critical metric; 2 m/s + flare requires landing gear/impact attenuation.",
+  "caveats": [
+    "SIL plant has no landing gear/impact model; touchdown speeds are kinematic.",
+    "Opt-in macros, default off; not real aircraft."
+  ],
+  "artifacts": {
+    "results": "altitude-rate60-flare2-2026-10-26.jsonl.gz",
+    "script": "campaign_flare2-2026-10-26.py"
+  }
+}

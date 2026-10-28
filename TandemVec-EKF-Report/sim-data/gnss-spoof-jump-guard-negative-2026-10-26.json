@@ -1,0 +1,93 @@
+{
+  "date": "2026-10-26",
+  "scenario": "mag_clean pos-hold at 20s, 10 m N leg, spoof step at 25s, 45s run",
+  "baseline_20m": {
+    "pos_rms": 0.88,
+    "pos_max": 1.074,
+    "hold_end_rms": 9.549,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0,
+    "gnss_susp": 0,
+    "gnss_crej": 0,
+    "final_alt": 9.984,
+    "max_roll": 8.06
+  },
+  "consistency_reject_20m": {
+    "pos_rms": 434.682,
+    "pos_max": 1234.212,
+    "hold_end_rms": 678.127,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0,
+    "gnss_susp": 1,
+    "gnss_crej": 305,
+    "final_alt": 0.01,
+    "max_roll": 24.503
+  },
+  "baseline_30m": {
+    "pos_rms": 25.376,
+    "pos_max": 36.52,
+    "hold_end_rms": 23.967,
+    "outlier_rejects": 20,
+    "reacquire_resets": 1,
+    "gnss_susp": 0,
+    "gnss_crej": 0,
+    "final_alt": 9.987,
+    "max_roll": 10.706
+  },
+  "consistency_reject_30m": {
+    "pos_rms": 434.682,
+    "pos_max": 1234.212,
+    "hold_end_rms": 678.127,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0,
+    "gnss_susp": 1,
+    "gnss_crej": 305,
+    "final_alt": 0.01,
+    "max_roll": 24.503
+  },
+  "jump_guard_20m": {
+    "pos_rms": 200.892,
+    "pos_max": 636.797,
+    "hold_end_rms": 446.577,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0,
+    "gnss_susp": 1,
+    "gnss_crej": 0,
+    "final_alt": 0.0,
+    "max_roll": 11.463
+  },
+  "jump_guard_30m": {
+    "pos_rms": 200.892,
+    "pos_max": 636.797,
+    "hold_end_rms": 446.577,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0,
+    "gnss_susp": 1,
+    "gnss_crej": 0,
+    "final_alt": 0.0,
+    "max_roll": 11.463
+  },
+  "no_spoof_guard_on": {
+    "pos_rms": 0.908,
+    "pos_max": 1.138,
+    "hold_end_rms": 10.018,
+    "outlier_rejects": 0,
+    "reacquire_resets": 0,
+    "gnss_susp": 0,
+    "gnss_crej": 0,
+    "final_alt": 9.983,
+    "max_roll": 9.119
+  },
+  "reverted_baseline_30m": {
+    "pos_rms": 25.376,
+    "pos_max": 36.529,
+    "hold_end_rms": 24.775,
+    "outlier_rejects": 20,
+    "reacquire_resets": 1,
+    "gnss_susp": 0,
+    "gnss_crej": 0,
+    "final_alt": 9.964,
+    "max_roll": 11.583
+  },
+  "verdict": "In-flight 20 m step is not dragged (pos_rms 0.88); 30 m step is bounded by NIS/reanchor at pos_rms 25.4 and stays airborne. Hard consistency-reject (305 rejects) and a snapshot position-rate guard (200 rejects) both starve GNSS and crash (434.7 m / 200.9 m). Both hard-reject paths were reverted. Persistent spoof requires external reference/fallback; do not hard-reject."
+}

@@ -1,4 +1,12 @@
-"""Summarize and plot the step-maneuver navigation matrix."""
+# -*- coding: utf-8 -*-
+"""Summarize and plot the step-maneuver navigation matrix.
+@file    plot_maneuver_matrix.py
+@brief   速度/机动矩阵可视化。
+@module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 绘制方向/条件失败率与位置/姿态分布。
+@frame   N/A
+@units   N/A
+"""
 import json
 import os
 import statistics as st

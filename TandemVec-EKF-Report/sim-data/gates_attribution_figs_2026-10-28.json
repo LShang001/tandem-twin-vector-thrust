@@ -1,0 +1,69 @@
+{
+ "cells": [
+  "clean_icm_full",
+  "imu_nan_icm_full",
+  "imu_stuck_icm_full",
+  "latency100_icm_full",
+  "latency150_icm_full",
+  "latency200_icm_full",
+  "thrust8g_icm_full",
+  "vib1g_6p4g_icm_full",
+  "vib1g_8p4g_icm_full",
+  "vib2g_8p4g_icm_full"
+ ],
+ "median": {
+  "默认": {
+   "clean_icm_full": 2.4364999999999997,
+   "imu_nan_icm_full": 121.90950000000001,
+   "imu_stuck_icm_full": 34.3715,
+   "latency100_icm_full": 4.891,
+   "latency150_icm_full": 27.717,
+   "latency200_icm_full": 38.608000000000004,
+   "thrust8g_icm_full": 3.45,
+   "vib1g_6p4g_icm_full": 2.4939999999999998,
+   "vib1g_8p4g_icm_full": 2.6784999999999997,
+   "vib2g_8p4g_icm_full": 22.368499999999997
+  },
+  "仅 HF 否决": {
+   "clean_icm_full": 2.4364999999999997,
+   "imu_nan_icm_full": 121.90950000000001,
+   "imu_stuck_icm_full": 34.3715,
+   "latency100_icm_full": 4.891,
+   "latency150_icm_full": 27.717,
+   "latency200_icm_full": 38.608000000000004,
+   "thrust8g_icm_full": 3.5225,
+   "vib1g_6p4g_icm_full": 2.4995000000000003,
+   "vib1g_8p4g_icm_full": 2.6784999999999997,
+   "vib2g_8p4g_icm_full": 3.0355
+  },
+  "HF+互锁(废)": {
+   "clean_icm_full": 2.4364999999999997,
+   "imu_nan_icm_full": 121.98849999999999,
+   "imu_stuck_icm_full": 34.980000000000004,
+   "latency100_icm_full": 4.891,
+   "latency150_icm_full": 27.717,
+   "latency200_icm_full": 38.608000000000004,
+   "thrust8g_icm_full": 3.5225,
+   "vib1g_6p4g_icm_full": 2.4995000000000003,
+   "vib1g_8p4g_icm_full": 2.6784999999999997,
+   "vib2g_8p4g_icm_full": 3.0355
+  }
+ },
+ "vib2g_gt10m_seeds": {
+  "默认": 12,
+  "仅 HF 否决": 0,
+  "HF+互锁(废)": 0
+ },
+ "same_value3dp_veto_vs_both": {
+  "clean_icm_full": 20,
+  "imu_nan_icm_full": 0,
+  "imu_stuck_icm_full": 0,
+  "latency100_icm_full": 20,
+  "latency150_icm_full": 20,
+  "latency200_icm_full": 20,
+  "thrust8g_icm_full": 20,
+  "vib1g_6p4g_icm_full": 20,
+  "vib1g_8p4g_icm_full": 20,
+  "vib2g_8p4g_icm_full": 20
+ }
+}

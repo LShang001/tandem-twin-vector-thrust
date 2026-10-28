@@ -1,0 +1,141 @@
+{
+ "per_cell": {
+  "nan1s": {
+   "stats": {
+    "off": {
+     "n": 20,
+     "fail_gt25": 20,
+     "p90": 325.202,
+     "max": 326.412,
+     "att_med": 3.982
+    },
+    "on": {
+     "n": 20,
+     "fail_gt25": 20,
+     "p90": 325.202,
+     "max": 326.412,
+     "att_med": 3.982
+    }
+   },
+   "pairs": 20,
+   "worse_seeds": []
+  },
+  "out5": {
+   "stats": {
+    "off": {
+     "n": 20,
+     "fail_gt25": 7,
+     "p90": 79.77,
+     "max": 90.869,
+     "att_med": 1.913
+    },
+    "on": {
+     "n": 20,
+     "fail_gt25": 3,
+     "p90": 45.23,
+     "max": 73.773,
+     "att_med": 1.891
+    }
+   },
+   "pairs": 20,
+   "worse_seeds": []
+  },
+  "out20": {
+   "stats": {
+    "off": {
+     "n": 20,
+     "fail_gt25": 20,
+     "p90": 85.434,
+     "max": 93.34,
+     "att_med": 1.018
+    },
+    "on": {
+     "n": 20,
+     "fail_gt25": 20,
+     "p90": 85.434,
+     "max": 93.34,
+     "att_med": 0.83
+    }
+   },
+   "pairs": 20,
+   "worse_seeds": [
+    {
+     "seed": 52,
+     "off": 35.682,
+     "on": 74.802,
+     "on_rej": 22,
+     "on_rst": 0,
+     "on_att": 0.544
+    },
+    {
+     "seed": 61,
+     "off": 30.962,
+     "on": 73.16,
+     "on_rej": 22,
+     "on_rst": 0,
+     "on_att": 0.545
+    },
+    {
+     "seed": 62,
+     "off": 28.741,
+     "on": 77.261,
+     "on_rej": 37,
+     "on_rst": 0,
+     "on_att": 0.703
+    },
+    {
+     "seed": 69,
+     "off": 32.759,
+     "on": 72.784,
+     "on_rej": 22,
+     "on_rst": 0,
+     "on_att": 0.529
+    }
+   ]
+  },
+  "vib1g": {
+   "stats": {
+    "off": {
+     "n": 20,
+     "fail_gt25": 4,
+     "p90": 25.878,
+     "max": 28.291,
+     "att_med": 1.252
+    },
+    "on": {
+     "n": 20,
+     "fail_gt25": 0,
+     "p90": 19.703,
+     "max": 21.824,
+     "att_med": 1.252
+    }
+   },
+   "pairs": 20,
+   "worse_seeds": []
+  }
+ },
+ "Z1": {
+  "counts": {
+   "nan1s|off": 20,
+   "nan1s|on": 20,
+   "out5|off": 20,
+   "out5|on": 20,
+   "out20|off": 20,
+   "out20|on": 20,
+   "vib1g|off": 20,
+   "vib1g|on": 20
+  },
+  "pass": true
+ },
+ "Z2": {
+  "cells_with_regression": [
+   "out20"
+  ],
+  "pass": false
+ },
+ "Z3": {
+  "note": "若 Z2 不成立，worse_seeds 里的拒帧/重锚/姿态用于区分故障本底"
+ },
+ "verdict": "FAULT_REGRESSION",
+ "gate": "Z1 八格各收满；Z2 每格子集开臂发生率不高于关臂且无'变差>20% 且 >2 m' 的 seed"
+}

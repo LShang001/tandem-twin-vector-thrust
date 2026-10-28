@@ -1,0 +1,34 @@
+{
+  "campaign": "gated EKF baro vertical-velocity aid: outage duration x wind matrix",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "runs": 960,
+  "binary": {"md5": "8f9c1387980d182761872b2528046b70", "bin": "camp_aidrt4/fw_real.exe"},
+  "gate": "g_baro_vel_aid_enable && g_mode_degraded_gnss && age>8 s && baro altitude at activation >=10 m (latched)",
+  "scenario": "30 m settled, outage 43 s to 43+dur, 1 m/s2 wind on/off, 6 dirs x 10 seeds, aid off/on; dur 10/20/30/60 s",
+  "results": {
+    "10s_wind0": {"aid_off": [0.81, 0.94, 1.03], "aid_on": [0.80, 0.96, 1.04], "note": "neutral; 2 s active"},
+    "10s_wind1": {"aid_off": [0.79, 0.91, 0.97], "aid_on": [0.79, 0.88, 0.95], "note": "neutral"},
+    "20s_wind0": {"aid_off": [0.84, 0.97, 1.00], "aid_on": [0.83, 0.96, 0.98]},
+    "20s_wind1": {"aid_off": [0.85, 1.02, 3.29], "aid_on": [0.82, 0.99, 1.09]},
+    "30s_wind0": {"aid_off": [0.86, 2.18, 2.60], "aid_on": [0.86, 1.05, 1.18]},
+    "30s_wind1": {"aid_off": [3.35, 4.48, 4.96], "aid_on": [0.88, 1.06, 1.11]},
+    "60s_wind0": {"aid_off": [1.04, 2.18, 2.60], "aid_on": [1.00, 1.48, 1.69]},
+    "60s_wind1": {"aid_off": [3.35, 4.48, 4.96], "aid_on": [1.10, 1.52, 1.65]}
+  },
+  "drift_examples": {
+    "30s_wind1": {"aid_off_med_p95_max_m": [433.6, 579.2, 739.8], "aid_on_med_p95_max_m": [511.9, 1196.4, 1528.9]},
+    "60s_wind1": {"aid_off_med_p95_max_m": [431.8, 553.5, 598.9], "aid_on_med_p95_max_m": [544.8, 1127.0, 1446.8]},
+    "60s_wind0": {"aid_off_med_p95_max_m": [684.1, 997.2, 1039.9], "aid_on_med_p95_max_m": [694.9, 1301.3, 1361.6]}
+  },
+  "verdict": "10 s is neutral (aid active only 2 s); 20-60 s strongly reduces touchdown tails, especially with wind (30 s wind 3.35->0.88 median, 60 s wind 3.35->1.10). Drift p95/max worsens with longer duration/wind (30 s wind 579->1196 m p95; 60 s wind 554->1127 m p95). This is a safety-vs-footprint trade, not a free improvement. Default off; enable only for >=10 m activation and long no-flow outages when touchdown safety is prioritized.",
+  "caveats": [
+    "The 10 s outage recovers before the descent completes; aid is active for only ~2 s and is neutral.",
+    "Drift is physical (no horizontal absolute reference); the aid slows the descent, extending wind exposure.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "baro-vel-aid-duration-2026-10-26.jsonl.gz",
+    "script": "campaign_baro_vel_aid_duration-2026-10-26.py"
+  }
+}

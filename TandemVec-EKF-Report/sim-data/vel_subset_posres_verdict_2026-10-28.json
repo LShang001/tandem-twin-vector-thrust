@@ -1,0 +1,80 @@
+{
+ "X1": {
+  "b10_off": 50,
+  "b10_old": 50,
+  "b20_off": 50,
+  "b20_old": 50,
+  "q10": 50,
+  "q20": 50,
+  "q20_nocap": 50,
+  "pass": true
+ },
+ "X2": {
+  "per_arm": {
+   "b10_off": {
+    "n": 50,
+    "fail_gt25": 18,
+    "med": 23.391,
+    "p95": 29.721,
+    "max": 32.527,
+    "att": 1.664
+   },
+   "b10_old": {
+    "n": 50,
+    "fail_gt25": 0,
+    "med": 15.652,
+    "p95": 17.332,
+    "max": 17.845,
+    "att": 1.522
+   },
+   "q10": {
+    "n": 50,
+    "fail_gt25": 0,
+    "med": 15.652,
+    "p95": 17.332,
+    "max": 17.845,
+    "att": 1.522
+   }
+  },
+  "pass": true
+ },
+ "X3": {
+  "per_arm": {
+   "b20_off": {
+    "n": 50,
+    "fail_gt25": 7,
+    "med": 14.123,
+    "p95": 26.042,
+    "max": 27.555,
+    "att": 1.103
+   },
+   "b20_old": {
+    "n": 50,
+    "fail_gt25": 6,
+    "med": 13.579,
+    "p95": 53.908,
+    "max": 104.965,
+    "att": 1.082
+   },
+   "q20": {
+    "n": 50,
+    "fail_gt25": 0,
+    "med": 13.546,
+    "p95": 19.86,
+    "max": 23.206,
+    "att": 1.082
+   }
+  },
+  "worsened_target_seeds_still_worse": [],
+  "incidence_le_baseline": true,
+  "max_le_30": true,
+  "pass": true
+ },
+ "X4": {
+  "pairs": 50,
+  "diff_seeds": [],
+  "pass": true
+ },
+ "verdict": "CRITERION_ACCEPTED",
+ "gate": "X2 10 Hz 仍 0/50 且 max≤20；X3 六个受害 seed 全部不再变差、20 Hz 发生率不高于子集关基线、max≤30；X4 取消上限与旧口径逐 seed 相同"
+}

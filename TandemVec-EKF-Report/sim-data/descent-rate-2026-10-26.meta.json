@@ -1,0 +1,130 @@
+{
+  "campaign": "descent-rate-tradeoff",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "source_state": "scalar Eigen SIL; descent target starts at current altitude; ground reset locks target to current altitude",
+  "runs": 1080,
+  "arms": {
+    "r1": {
+      "target_ramp_mps": 1.0,
+      "md5": "c7be9bad7291918691ed1e8fe5e17d7b",
+      "bin": "camp_combo6b/fw_real.exe",
+      "extra_flags": [
+        "-DBFS_GNSS_OUTAGE_VELOCITY_HOLD",
+        "-DBFS_GNSS_OUTAGE_ALT_HOLD",
+        "-DBFS_GNSS_OUTAGE_ALT_HOLD_S=6.0f",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S=6.0f"
+      ]
+    },
+    "r2": {
+      "target_ramp_mps": 2.0,
+      "md5": "fafd9eb2d79f70d19ba395421cc6086b",
+      "bin": "camp_rate2/fw_real.exe",
+      "extra_flags": [
+        "-DBFS_GNSS_OUTAGE_VELOCITY_HOLD",
+        "-DBFS_GNSS_OUTAGE_ALT_HOLD",
+        "-DBFS_GNSS_OUTAGE_ALT_HOLD_S=6.0f",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S=6.0f",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT_RATE_MPS=2.0f"
+      ]
+    },
+    "r3": {
+      "target_ramp_mps": 3.0,
+      "md5": "30f6ed39f3eb70704469d7da9edfac8c",
+      "bin": "camp_rate3/fw_real.exe",
+      "extra_flags": [
+        "-DBFS_GNSS_OUTAGE_VELOCITY_HOLD",
+        "-DBFS_GNSS_OUTAGE_ALT_HOLD",
+        "-DBFS_GNSS_OUTAGE_ALT_HOLD_S=6.0f",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S=6.0f",
+        "-DBFS_LONG_GNSS_OUTAGE_DESCENT_RATE_MPS=3.0f"
+      ]
+    }
+  },
+  "cells": {
+    "out20_alt30_w1": {
+      "outage_s": 20,
+      "target_alt_m": 30,
+      "wind_mps2": 1.0,
+      "seeds_per_dir": 20,
+      "dirs": [
+        "H",
+        "N",
+        "E",
+        "S",
+        "W",
+        "NE"
+      ]
+    },
+    "out60_alt30_w1": {
+      "outage_s": 60,
+      "target_alt_m": 30,
+      "wind_mps2": 1.0,
+      "seeds_per_dir": 20,
+      "dirs": [
+        "H",
+        "N",
+        "E",
+        "S",
+        "W",
+        "NE"
+      ]
+    },
+    "out20_alt30_w0": {
+      "outage_s": 20,
+      "target_alt_m": 30,
+      "wind_mps2": 0.0,
+      "seeds_per_dir": 10,
+      "dirs": [
+        "H",
+        "N",
+        "E",
+        "S",
+        "W",
+        "NE"
+      ]
+    },
+    "out20_alt20_w1": {
+      "outage_s": 20,
+      "target_alt_m": 20,
+      "wind_mps2": 1.0,
+      "seeds_per_dir": 10,
+      "dirs": [
+        "H",
+        "N",
+        "E",
+        "S",
+        "W",
+        "NE"
+      ]
+    }
+  },
+  "command_template": "fw_real.exe --real-nav --profile mag_clean --pos-hold --pos-hold-at 20 --pos-leg <10m dir> --gnss-outage 20:<end> --alt <target_alt> --seed <seed> --seconds <75 or 100> [--wind-window 20:<end> --wind-force <wind>]",
+  "metrics": {
+    "landed": "final_alt < 1.0 m at end of run",
+    "land_t": "first time truth altitude < 0.5 m after exceeding 1.0 m",
+    "land_hold": "horizontal displacement from hold target at first touchdown",
+    "land_vz_down": "truth vertical speed at first touchdown, NED down positive",
+    "max_desc_vz_down": "maximum truth vertical speed before touchdown",
+    "max_roll_preland": "maximum absolute roll before first touchdown"
+  },
+  "caveats": [
+    "The 60 s cells reproduce the 20 s cells exactly: the emergency descent reaches the ground by 33.6-39.7 s, before either outage ends. They are not independent long-outage tests and are excluded from the figure.",
+    "The SIL starts on the ground and climbs at ~0.9-1.0 m/s. At the 20 s outage start the vehicle is at ~8 m; at the 26 s descent trigger it is at ~14.6 m. The --alt value is a target altitude, not the actual altitude. After the target-origin fix, 20 m and 30 m target cells are behaviorally identical.",
+    "Pre-fix stale-target runs were discarded: the ramp started from the takeoff target (30 m), so when the vehicle touched down early and GNSS recovered, the residual target pulled it back up (r1: 15/120 climbed to 12-16 m; r2: 33/120 hovered at 1-3.7 m). Fix: ramp starts at current altitude; on ground + GNSS recovery target is locked to current altitude.",
+    "Touchdown speed is measured against the plant ground constraint; there is no landing gear, impact absorption, or ground friction model. Values are kinematic impact speeds, not structural limits.",
+    "During the GNSS outage the EKF vertical velocity lags the truth by up to ~5 m/s (trace seed1: truth -4.11 m/s, EKF +0.68 m/s at t=40 s). A 20-seed A/B using a 0.5 s baro-altitude slope for the descent inner loop made the 1 m/s case worse (median touchdown 3.53 vs 1.25 m/s) and did not improve 2/3 m/s; that variant was rejected and its results are archived separately.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft.",
+    "A ground-dwell latch (target=current altitude after 1 s below 0.3 m) was added after these runs. It changes only post-touchdown target/throttle behavior; land_t/land_hold/land_vz_down/max_roll_preland are measured before it applies and are unaffected."
+  ],
+  "artifacts": {
+    "results": "descent-rate-2026-10-26.jsonl.gz",
+    "baro_vz_negative": "descent-rate-baro-vz-negative-2026-10-26.jsonl.gz",
+    "figure_tradeoff": "../figs/nav_descent_rate_tradeoff.png",
+    "figure_traces": "../figs/nav_descent_rate_traces.png",
+    "script": "campaign_descent_rate-2026-10-26.py"
+  }
+}

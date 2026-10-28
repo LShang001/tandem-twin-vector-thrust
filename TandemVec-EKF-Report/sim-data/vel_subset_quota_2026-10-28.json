@@ -1,0 +1,60 @@
+{
+ "per_seg": {
+  "51-100": {
+   "quota1": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "max": 22.219,
+    "att": 1.173
+   },
+   "quota255": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "max": 22.219,
+    "att": 1.173
+   },
+   "seeds_better": 0,
+   "seeds_worse": 0
+  },
+  "1-50": {
+   "quota1": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "max": 23.206,
+    "att": 1.082
+   },
+   "quota255": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "max": 23.206,
+    "att": 1.082
+   },
+   "seeds_better": 0,
+   "seeds_worse": 0
+  }
+ },
+ "W1": {
+  "counts": {
+   "w_q1_s51": 50,
+   "w_q255_s51": 50,
+   "w_q1_s1": 50,
+   "w_q255_s1": 50
+  },
+  "pass": true
+ },
+ "W2": {
+  "mismatch": [],
+  "pass": true,
+  "note": "maxfires=255 臂必须与旧二进制 cap25 臂逐 seed 相同"
+ },
+ "W3": {
+  "segs_adding_harm": [],
+  "pass": true
+ },
+ "verdict": "QUOTA_GATE_SAFE",
+ "gate": "W1 四臂各 50；W2 255 臂==旧 cap25 臂逐 seed；W3 配额 1 臂发生率不升、max 不超 +3 m"
+}

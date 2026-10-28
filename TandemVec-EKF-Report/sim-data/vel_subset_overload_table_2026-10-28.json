@@ -1,0 +1,80 @@
+{
+ "per_thrust": {
+  "22.0 g": {
+   "default": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 6.392,
+    "max": 7.213,
+    "att": 1.139
+   },
+   "rec": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 6.696,
+    "max": 6.853,
+    "att": 0.899
+   },
+   "seeds_better": 8,
+   "seeds_worse": 42,
+   "seeds_same": 0
+  },
+  "25.6 g": {
+   "default": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 6.231,
+    "max": 7.572,
+    "att": 1.153
+   },
+   "rec": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 7.981,
+    "max": 9.08,
+    "att": 1.044
+   },
+   "seeds_better": 2,
+   "seeds_worse": 48,
+   "seeds_same": 0
+  },
+  "28.1 g": {
+   "default": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 6.368,
+    "max": 8.821,
+    "att": 1.074
+   },
+   "rec": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 15.796,
+    "max": 19.865,
+    "att": 0.982
+   },
+   "seeds_better": 0,
+   "seeds_worse": 50,
+   "seeds_same": 0
+  }
+ },
+ "Z1": {
+  "counts": {
+   "default": 150,
+   "rec": 150
+  },
+  "pass": true
+ },
+ "Z2": {
+  "thrusts_adding_harm": [
+   "22000"
+  ],
+  "pass": false
+ },
+ "Z3": {
+  "caliber": "逐档记录 p90/max 与逐 seed 方向；不设门槛",
+  "note": "若某档 rec 臂 p90 明显更差，需在报告里写明是交换而非提升"
+ },
+ "verdict": "CLEAN_BAND_HARMS",
+ "gate": "Z1 两臂各 150；Z2 每档发生率不升、max 不超 +3 m；Z3 描述性"
+}

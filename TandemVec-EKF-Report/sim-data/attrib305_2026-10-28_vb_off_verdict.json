@@ -1,0 +1,67 @@
+{
+ "exe": "C:/Users/12631/AppData/Local/Temp/tv_32g_w2/fw_real.exe",
+ "seeds": 50,
+ "seed_start": 1,
+ "seed_range": [
+  1,
+  50
+ ],
+ "bind_core": 6,
+ "base": [
+  "--real-nav",
+  "--missile",
+  "--seconds",
+  "45",
+  "--imu-fs-g",
+  "32",
+  "--imu-health-accel-range",
+  "313.8",
+  "--profile",
+  "mag_clean",
+  "--imu-grade",
+  "icm",
+  "--gnss-rate-hz",
+  "10"
+ ],
+ "ladder_N": [
+  22500,
+  23500
+ ],
+ "extra_args": "--gnss-rate-hz 20",
+ "per_thrust": {
+  "22500": {
+   "O1_ok": true,
+   "n": 50,
+   "g_est": 28.71,
+   "rate_gt25": 0.38,
+   "n_gt25": 19,
+   "cluster_good_med": 7.109,
+   "cluster_bad_med": 25.879,
+   "p90": 26.297,
+   "ad_app_seeds": 50,
+   "ad_app_med": 160.0,
+   "rej_med": 44.0,
+   "rej_max": 48.0,
+   "reanchor_seeds": 39,
+   "att_med": 1.235
+  },
+  "23500": {
+   "O1_ok": true,
+   "n": 50,
+   "g_est": 29.99,
+   "rate_gt25": 0.18,
+   "n_gt25": 9,
+   "cluster_good_med": 7.505,
+   "cluster_bad_med": 25.931,
+   "p90": 25.636,
+   "ad_app_seeds": 50,
+   "ad_app_med": 210.0,
+   "rej_med": 7.0,
+   "rej_max": 53.0,
+   "reanchor_seeds": 17,
+   "att_med": 1.099
+  }
+ },
+ "O1_all_cells_full": true,
+ "note": "发生率按 >25 m 计；双峰格不得用中位当指标（§4.24）"
+}

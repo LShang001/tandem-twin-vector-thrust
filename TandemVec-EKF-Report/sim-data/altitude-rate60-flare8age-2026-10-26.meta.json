@@ -1,0 +1,35 @@
+{
+  "campaign": "age-gated terminal-flare for long GNSS outage descent",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "purpose": "Reduce hard touchdown after long GNSS outage without changing the normal 20 s outage behavior. Flare only when outage age >20 s and altitude <8 m, using a 0.5 s baro-altitude slope for vertical velocity and a 0.5 m/s target descent rate.",
+  "runs": 120,
+  "binary": {"md5": "6413898c912101b028c79ef34d542316", "bin": "camp_flare8age/fw_real.exe"},
+  "flags": [
+    "-DBFS_GNSS_OUTAGE_VELOCITY_HOLD",
+    "-DBFS_GNSS_OUTAGE_ALT_HOLD",
+    "-DBFS_GNSS_OUTAGE_ALT_HOLD_S=6.0f",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S=6.0f",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_FLARE",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_FLARE_ALT_M=8.0f"
+  ],
+  "scenario": "30 m settled, 1 m/s target ramp, 1 m/s2 wind, 6 directions x 10 seeds; 20 s outage 43-63 s and 60 s outage 43-103 s; run 113/133 s",
+  "results": {
+    "20s_flare": {"touchdown_med_p95_max_mps": [0.85, 1.02, 3.29], "hold_med_p95_max_m": [530.4, 1616.9, 1788.8], "preland_roll_med_max_deg": [30.6, 43.5], "note": "identical to baseline; age gate never reached before GNSS recovery"},
+    "60s_baseline": {"touchdown_med_p95_max_mps": [3.35, 4.48, 4.96], "hold_med_p95_max_m": [431.8, 553.5, 598.9], "preland_roll_med_max_deg": [40.3, 46.2]},
+    "60s_flare": {"touchdown_med_p95_max_mps": [1.48, 3.30, 4.03], "hold_med_p95_max_m": [516.5, 783.0, 911.3], "preland_roll_med_max_deg": [42.3, 46.0]}
+  },
+  "caveats": [
+    "The flare is gated on g_gnss_outage_age_s >20 s; the 20 s outage recovers before the gate, so there is no 20 s regression.",
+    "The 60 s maximum touchdown remains 4.03 m/s; the flare reduces the median/p95 but is not a soft-landing guarantee.",
+    "Landing drift increases ~20% median / ~41% p95 because the last 8 m take longer.",
+    "SIL plant has no landing gear/impact model; touchdown speeds are kinematic.",
+    "Opt-in macro, default off; not real aircraft."
+  ],
+  "artifacts": {
+    "results": "altitude-rate60-flare8age-2026-10-26.jsonl.gz",
+    "figure": "../figs/nav_altitude_outage60.png",
+    "script": "campaign_flare8age-2026-10-26.py"
+  }
+}

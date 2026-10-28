@@ -1,0 +1,173 @@
+{
+ "V1": {
+  "per_cell_counts": {
+   "17200@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "22000@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "22500@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "23000@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "23500@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "23700@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "23800@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "23900@20": {
+    "base": 20,
+    "vel": 20
+   },
+   "23900@50": {
+    "base": 50,
+    "vel": 50
+   }
+  },
+  "pass": true
+ },
+ "V2": {
+  "base_fail": "18/50",
+  "vel_fail": "0/50",
+  "vel_med": 15.652,
+  "vel_p90": 17.284,
+  "worse_gt10pct": [],
+  "pass": true
+ },
+ "V3": {
+  "per_cell": {
+   "17200": {
+    "pairs": 20,
+    "diff_seeds": []
+   },
+   "22000": {
+    "pairs": 20,
+    "diff_seeds": []
+   }
+  },
+  "pass": true
+ },
+ "V4": {
+  "per_cell": {
+   "22500@20": {
+    "g": 28.78,
+    "fail_base": "1/20",
+    "fail_vel": "0/20",
+    "med_base": 6.337,
+    "med_vel": 6.337,
+    "p90_base": 9.183,
+    "p90_vel": 9.183,
+    "att_base": 1.153,
+    "att_vel": 1.153,
+    "posmax_base": 26.679,
+    "posmax_vel": 26.679,
+    "rej_base": 0.0,
+    "rej_vel": 0.0,
+    "reanch_base": 1,
+    "reanch_vel": 0
+   },
+   "23000@20": {
+    "g": 29.42,
+    "fail_base": "1/20",
+    "fail_vel": "0/20",
+    "med_base": 7.632,
+    "med_vel": 7.632,
+    "p90_base": 11.623,
+    "p90_vel": 11.154,
+    "att_base": 1.167,
+    "att_vel": 1.167,
+    "posmax_base": 27.367,
+    "posmax_vel": 27.367,
+    "rej_base": 0.0,
+    "rej_vel": 0.0,
+    "reanch_base": 2,
+    "reanch_vel": 0
+   },
+   "23500@20": {
+    "g": 30.06,
+    "fail_base": "1/20",
+    "fail_vel": "0/20",
+    "med_base": 9.918,
+    "med_vel": 9.918,
+    "p90_base": 23.226,
+    "p90_vel": 16.127,
+    "att_base": 1.332,
+    "att_vel": 1.332,
+    "posmax_base": 28.261,
+    "posmax_vel": 28.166,
+    "rej_base": 0.0,
+    "rej_vel": 0.0,
+    "reanch_base": 6,
+    "reanch_vel": 0
+   },
+   "23700@20": {
+    "g": 30.31,
+    "fail_base": "2/20",
+    "fail_vel": "0/20",
+    "med_base": 10.533,
+    "med_vel": 10.533,
+    "p90_base": 24.726,
+    "p90_vel": 16.967,
+    "att_base": 1.389,
+    "att_vel": 1.389,
+    "posmax_base": 28.715,
+    "posmax_vel": 28.433,
+    "rej_base": 0.0,
+    "rej_vel": 0.0,
+    "reanch_base": 8,
+    "reanch_vel": 0
+   },
+   "23800@20": {
+    "g": 30.44,
+    "fail_base": "3/20",
+    "fail_vel": "0/20",
+    "med_base": 13.359,
+    "med_vel": 12.854,
+    "p90_base": 25.704,
+    "p90_vel": 16.892,
+    "att_base": 1.475,
+    "att_vel": 1.478,
+    "posmax_base": 29.251,
+    "posmax_vel": 28.52,
+    "rej_base": 9.0,
+    "rej_vel": 1.0,
+    "reanch_base": 9,
+    "reanch_vel": 0
+   },
+   "23900@20": {
+    "g": 30.57,
+    "fail_base": "3/20",
+    "fail_vel": "0/20",
+    "med_base": 16.846,
+    "med_vel": 12.95,
+    "p90_base": 25.233,
+    "p90_vel": 16.77,
+    "att_base": 1.472,
+    "att_vel": 1.478,
+    "posmax_base": 48.16,
+    "posmax_vel": 28.884,
+    "rej_base": 10.5,
+    "rej_vel": 1.0,
+    "reanch_base": 10,
+    "reanch_vel": 0
+   }
+  },
+  "mid_cells_no_improvement": []
+ },
+ "verdict": "UPGRADE_RECOMMENDED",
+ "gate": "V1 完整性 + V2 (30.5 g 发生率 ≤6/50 且无一 seed 变差 >10%) + V3 非失效区逐 seed 不变 ⇒ 才允许升级推荐；否则只登记边界"
+}

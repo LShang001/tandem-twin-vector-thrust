@@ -1,0 +1,42 @@
+t= 4.0 v=  54.4 ok=1 rej=None          nref= 801 ng= 40 er=  0 span=   62.8 smax=  62.8 tau_hat= 200.0 ms (true   200) res=   16.466 sharp= 2.3946  cost(0)=  475.454 cost(true)=   16.466
+t= 5.0 v=  54.9 ok=1 rej=None          nref=1001 ng= 50 er=  0 span=   62.8 smax=  62.8 tau_hat= 199.9 ms (true   200) res=   18.278 sharp= 2.3188  cost(0)=  534.240 cost(true)=   18.278
+t= 6.0 v=  57.1 ok=1 rej=None          nref=1201 ng= 60 er=  0 span=   62.8 smax=  62.8 tau_hat= 200.0 ms (true   200) res=   19.461 sharp= 2.3110  cost(0)=  578.570 cost(true)=   19.461
+t= 7.0 v=  60.9 ok=1 rej=None          nref=1401 ng= 70 er=  0 span=   62.8 smax=  62.8 tau_hat= 200.0 ms (true   200) res=   20.593 sharp= 2.2783  cost(0)=  611.870 cost(true)=   20.593
+t= 8.0 v=  65.9 ok=1 rej=None          nref=1601 ng= 80 er=  0 span=   65.9 smax=  65.9 tau_hat= 200.0 ms (true   200) res=   22.042 sharp= 2.1824  cost(0)=  638.293 cost(true)=   22.042
+t= 9.0 v=  71.9 ok=1 rej=None          nref=1801 ng= 90 er=  0 span=   71.9 smax=  71.9 tau_hat= 200.0 ms (true   200) res=   23.492 sharp= 2.0815  cost(0)=  659.181 cost(true)=   23.492
+t=10.0 v=  78.7 ok=1 rej=None          nref=2001 ng=100 er=  0 span=   78.7 smax=  78.7 tau_hat= 200.0 ms (true   200) res=   24.799 sharp= 1.9960  cost(0)=  676.307 cost(true)=   24.799
+t=11.0 v=  86.0 ok=1 rej=None          nref=2201 ng=110 er=  0 span=   86.0 smax=  86.0 tau_hat= 200.1 ms (true   200) res=   26.048 sharp= 1.9173  cost(0)=  691.132 cost(true)=   26.048
+t=12.0 v=  93.8 ok=1 rej=None          nref=2401 ng=120 er=  0 span=   93.8 smax=  93.8 tau_hat= 200.1 ms (true   200) res=   27.290 sharp= 1.8385  cost(0)=  703.175 cost(true)=   27.290
+t=13.0 v= 102.0 ok=1 rej=None          nref=2601 ng=130 er=  0 span=  102.0 smax= 102.0 tau_hat= 200.1 ms (true   200) res=   28.406 sharp= 1.7729  cost(0)=  713.567 cost(true)=   28.406
+t=14.0 v= 110.4 ok=1 rej=None          nref=2801 ng=140 er=  0 span=  110.4 smax= 110.4 tau_hat= 200.1 ms (true   200) res=   29.154 sharp= 1.7381  cost(0)=  722.571 cost(true)=   29.154
+t=15.0 v= 119.0 ok=1 rej=None          nref=3001 ng=150 er=  0 span=  119.0 smax= 119.0 tau_hat= 200.1 ms (true   200) res=   30.104 sharp= 1.6859  cost(0)=  730.324 cost(true)=   30.104
+t=16.0 v= 127.8 ok=1 rej=None          nref=3201 ng=160 er=  0 span=  127.8 smax= 127.8 tau_hat= 200.0 ms (true   200) res=   30.859 sharp= 1.6485  cost(0)=  736.980 cost(true)=   30.859
+t=17.0 v= 136.8 ok=1 rej=None          nref=3401 ng=170 er=  0 span=  136.8 smax= 136.8 tau_hat= 200.0 ms (true   200) res=   31.810 sharp= 1.5978  cost(0)=  743.180 cost(true)=   31.810
+t=18.0 v= 145.8 ok=1 rej=None          nref=3601 ng=180 er=  0 span=  145.8 smax= 145.8 tau_hat= 200.0 ms (true   200) res=   32.574 sharp= 1.5608  cost(0)=  748.728 cost(true)=   32.574
+t=19.0 v= 155.0 ok=1 rej=None          nref=3801 ng=190 er=  0 span=  155.0 smax= 155.0 tau_hat= 200.0 ms (true   200) res=   33.346 sharp= 1.5236  cost(0)=  753.684 cost(true)=   33.346
+t=20.0 v= 164.2 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  163.9 smax= 164.2 tau_hat= 199.9 ms (true   200) res=   35.042 sharp= 1.4332  cost(0)=  758.233 cost(true)=   35.042
+t=21.0 v= 173.5 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  119.1 smax= 173.5 tau_hat= 300.0 ms (true   200) res=  122.407 sharp= 0.0014  cost(0)=  139.191 cost(true)=  128.478
+t=22.0 v= 182.8 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  128.5 smax= 182.8 tau_hat=  98.9 ms (true   200) res=   33.902 sharp= 0.0035  cost(0)=   33.910 cost(true)=   39.361
+t=23.0 v= 192.2 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  137.9 smax= 192.2 tau_hat=   6.4 ms (true   200) res=   33.613 sharp= 0.0000  cost(0)=   33.613 cost(true)=   39.287
+t=24.0 v= 201.6 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  147.3 smax= 201.6 tau_hat= 100.0 ms (true   200) res=   33.535 sharp= 0.0037  cost(0)=   33.550 cost(true)=   38.915
+t=25.0 v= 211.1 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  156.2 smax= 211.1 tau_hat=  92.1 ms (true   200) res=   33.408 sharp= 0.0027  cost(0)=   33.408 cost(true)=   39.373
+t=26.0 v= 220.6 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  163.4 smax= 220.6 tau_hat=  90.9 ms (true   200) res=   33.968 sharp= 0.0019  cost(0)=   33.968 cost(true)=   39.722
+t=27.0 v= 230.1 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  169.2 smax= 230.1 tau_hat=  91.1 ms (true   200) res=   34.254 sharp= 0.0038  cost(0)=   34.254 cost(true)=   40.757
+t=28.0 v= 239.6 ok=1 rej=None          nref=4000 ng=200 er=  0 span=  173.7 smax= 239.6 tau_hat=  91.0 ms (true   200) res=   34.056 sharp= 0.0043  cost(0)=   34.056 cost(true)=   40.720
+t=29.0 v= 249.2 ok=1 rej=None          nref=4000 ng=199 er=  1 span=  177.3 smax= 249.2 tau_hat=  99.9 ms (true   200) res=   33.824 sharp= 0.0037  cost(0)=   33.838 cost(true)=   39.313
+t=30.0 v= 258.8 ok=1 rej=None          nref=4000 ng=192 er=  8 span=  180.1 smax= 258.8 tau_hat=   0.0 ms (true   200) res=   33.112 sharp= 0.0048  cost(0)=   33.112 cost(true)=   56.326
+t=31.0 v= 268.4 ok=1 rej=None          nref=4000 ng=186 er= 14 span=  182.3 smax= 268.4 tau_hat=   0.0 ms (true   200) res=  113.226 sharp= 0.0301  cost(0)=  113.226 cost(true)=  188.825
+t=32.0 v= 278.0 ok=1 rej=None          nref=4000 ng=175 er= 21 span=  184.1 smax= 278.0 tau_hat=   0.0 ms (true   200) res=   83.147 sharp= 0.0367  cost(0)=   83.147 cost(true)=  152.683
+t=33.0 v= 287.6 ok=1 rej=None          nref=4000 ng=164 er= 21 span=  185.6 smax= 287.6 tau_hat=   0.0 ms (true   200) res=   58.129 sharp= 0.0419  cost(0)=   58.129 cost(true)=  117.746
+t=34.0 v= 297.2 ok=1 rej=None          nref=4000 ng=154 er= 20 span=  186.8 smax= 297.2 tau_hat=   0.0 ms (true   200) res=   55.152 sharp= 0.0439  cost(0)=   55.152 cost(true)=  115.533
+t=35.0 v= 306.9 ok=1 rej=None          nref=4000 ng=144 er= 20 span=  187.8 smax= 306.9 tau_hat=   0.0 ms (true   200) res=   55.665 sharp= 0.0448  cost(0)=   55.665 cost(true)=  116.998
+t=36.0 v= 316.6 ok=1 rej=None          nref=4000 ng=134 er= 20 span=  188.7 smax= 316.6 tau_hat=   0.0 ms (true   200) res=   55.400 sharp= 0.0459  cost(0)=   55.400 cost(true)=  117.665
+t=37.0 v= 326.2 ok=1 rej=None          nref=4000 ng=123 er= 21 span=  189.4 smax= 326.2 tau_hat=   0.0 ms (true   200) res=   35.640 sharp= 0.0464  cost(0)=   35.640 cost(true)=   85.142
+t=38.0 v= 335.9 ok=1 rej=None          nref=4000 ng=113 er= 20 span=  190.0 smax= 335.9 tau_hat=   0.0 ms (true   200) res=   34.517 sharp= 0.0496  cost(0)=   34.517 cost(true)=   85.324
+t=39.0 v= 345.6 ok=1 rej=None          nref=4000 ng=103 er= 20 span=  190.5 smax= 345.6 tau_hat=   0.0 ms (true   200) res=   32.953 sharp= 0.0513  cost(0)=   32.953 cost(true)=   84.138
+t=40.0 v= 355.3 ok=1 rej=None          nref=4000 ng= 93 er= 20 span=  191.0 smax= 355.3 tau_hat=   0.0 ms (true   200) res=   32.630 sharp= 0.0514  cost(0)=   32.630 cost(true)=   84.277
+t=41.0 v= 365.0 ok=1 rej=None          nref=4000 ng= 82 er= 21 span=  191.4 smax= 365.0 tau_hat=   0.0 ms (true   200) res=   21.829 sharp= 0.0150  cost(0)=   21.829 cost(true)=   55.732
+t=42.0 v= 374.7 ok=1 rej=None          nref=4000 ng= 72 er= 20 span=  191.8 smax= 374.7 tau_hat=   0.0 ms (true   200) res=   20.501 sharp= 0.0124  cost(0)=   20.501 cost(true)=   54.024
+t=43.0 v= 384.4 ok=1 rej=None          nref=4000 ng= 62 er= 20 span=  192.1 smax= 384.4 tau_hat=   0.0 ms (true   200) res=   19.376 sharp= 0.0272  cost(0)=   19.376 cost(true)=   56.864
+t=44.0 v= 394.1 ok=1 rej=None          nref=4000 ng= 52 er= 20 span=  192.4 smax= 394.1 tau_hat=   0.0 ms (true   200) res=   17.894 sharp= 0.0387  cost(0)=   17.894 cost(true)=   56.887
+t=45.0 v= 403.8 ok=1 rej=None          nref=4000 ng= 42 er= 20 span=  192.6 smax= 403.8 tau_hat=   0.0 ms (true   200) res=   16.095 sharp= 0.0367  cost(0)=   16.095 cost(true)=   54.465

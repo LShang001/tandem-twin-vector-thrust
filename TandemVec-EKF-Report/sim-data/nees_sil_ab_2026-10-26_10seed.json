@@ -1,0 +1,41 @@
+{
+ "colored": {
+  "nees_pos_med_median": 2.216,
+  "nees_pos_p95_median": 3.38,
+  "nees_pos_max_median": 3.915,
+  "nees_vel_med_median": 0.0785,
+  "nees_vel_p95_median": 0.2995,
+  "pos_rms_median": 0.46599999999999997,
+  "hold_end_rms_median": 0.8634999999999999,
+  "max_roll_median": 8.7295,
+  "n": 10
+ },
+ "white": {
+  "nees_pos_med_median": 1.056,
+  "nees_pos_p95_median": 1.5155,
+  "nees_pos_max_median": 1.7045,
+  "nees_vel_med_median": 0.0865,
+  "nees_vel_p95_median": 0.349,
+  "pos_rms_median": 0.324,
+  "hold_end_rms_median": 0.797,
+  "max_roll_median": 9.075500000000002,
+  "n": 10
+ },
+ "white_nonoise": {
+  "nees_pos_med_median": 0.028,
+  "nees_pos_p95_median": 0.16749999999999998,
+  "nees_pos_max_median": 0.331,
+  "nees_vel_med_median": 0.01,
+  "nees_vel_p95_median": 0.0655,
+  "pos_rms_median": 0.012,
+  "hold_end_rms_median": 0.0,
+  "max_roll_median": 0.0,
+  "n": 10
+ },
+ "paired": {
+  "nees_pos_med_median": [
+   2.216,
+   1.056
+  ]
+ }
+}

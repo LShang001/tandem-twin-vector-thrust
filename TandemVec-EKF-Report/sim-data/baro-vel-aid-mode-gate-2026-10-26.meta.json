@@ -1,0 +1,31 @@
+{
+  "campaign": "EKF baro vertical-velocity aid: g_mode_degraded_gnss gate validation",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "purpose": "The ungated aid caused 3-4 m altitude loss in forward-flight 20 s outage + NE wind (4/40 independent seeds). Gate the aid on g_mode_degraded_gnss (GNSS stale, no fresh flow, position hold degraded to altitude hold) and verify hover benefits remain while flow-aided forward flight is untouched.",
+  "runs": 320,
+  "binary": {"md5": "3a347ec92a589886ba77e08a32f2aee4", "bin": "camp_aidrt2/fw_real.exe"},
+  "gating": "g_baro_vel_aid_enable && g_mode_degraded_gnss && GNSS outage age >8 s && altitude >1 m",
+  "scenarios": {
+    "hover20": "30 m, 20 s outage, 1 m/s2 wind, 6 dirs x 10 seeds; aid off/on same binary",
+    "hover60": "30 m, 60 s outage, 1 m/s2 wind, 6 dirs x 10 seeds; aid off/on same binary",
+    "ne_fwd": "NE 25/50 m legs, flow, 20 s outage 20-40 s, 1 m/s2 wind, seeds 11-30, aid off/on"
+  },
+  "results": {
+    "hover20": {"aid_off": {"touchdown_med_p95_max_mps": [0.85, 1.02, 3.29], "hold_med_m": 530.4}, "aid_on": {"touchdown_med_p95_max_mps": [0.82, 0.99, 1.09], "hold_med_m": 189.7}},
+    "hover60": {"aid_off": {"touchdown_med_p95_max_mps": [3.35, 4.48, 4.96], "hold_med_m": 431.8}, "aid_on": {"touchdown_med_p95_max_mps": [1.10, 1.52, 1.65], "hold_med_m": 544.8}},
+    "ne_fwd": {"aid_off_nav_fail": "40/40 (alt criterion)", "aid_on_nav_fail": "40/40 (alt criterion)", "attempts": 0, "final_alt_per_seed_identical": true, "note": "This build includes the age-only descent macro, so both arms descend/land from 10 m; the landing is the descent macro, not the aid. The aid is inactive because flow is fresh and g_mode_degraded_gnss=0."},
+    "ungated_forward_matrix": {"runs": 840, "result": "outage no-wind 0/210 both arms; wind NE 2/210 nav in both arms, but aid added 2/210 altitude-loss tails at seed7; independent NE seeds 11-30 aid-on 4/40 vs aid-off 0/40 (final_alt 6.06-6.92 m)"}
+  },
+  "verdict": "Gate prevents the aid from affecting flow-aided forward flight (0 attempts, bit-identical), while hover/descent benefits are unchanged. The aid is therefore only a no-flow GNSS-outage / altitude-hold-degraded feature; default off; requires BFS_GNSS_OUTAGE_ALT_HOLD to set the gate.",
+  "caveats": [
+    "The forward gate test uses a build with the age-only descent macro; the 10 m forward case descends by design, so it cannot measure forward-flight touchdown safety. The aid itself is inactive.",
+    "No forward-flight benefit is claimed; the ungated forward matrix is the negative/mixed evidence for not enabling it there.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "baro-vel-aid-mode-gate-2026-10-26.jsonl.gz",
+    "script": "campaign_baro_vel_aid_mode_gate-2026-10-26.py",
+    "ungated_forward": "baro-vel-aid-forward20-2026-10-26.jsonl.gz"
+  }
+}

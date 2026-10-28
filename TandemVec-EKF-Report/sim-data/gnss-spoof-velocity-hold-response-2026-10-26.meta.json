@@ -1,0 +1,26 @@
+{
+  "campaign": "GNSS spoof bounded response: zero horizontal velocity hold instead of hard rejection",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "runs": 600,
+  "binary": {"md5": "0d00ab86fb093e1d4067507367029e22", "bin": "camp_spoofresp/fw_real.exe"},
+  "scenario": "30 m hover, pos-hold at 20 s, 10 m N leg, spoof at 25 s, 45 s; 6 dirs x 10 seeds, response off/on same binary",
+  "response": "detect >=25 m inter-epoch position residual; do not reject GNSS; set position-hold velocity target to zero (1 m/s^2 cap), keep AUTO_POSITION/altitude/EKF fusion; 10 s hold after detection",
+  "results": {
+    "none": {"aid_off_like": "identical", "hold_end_med_p95_max_m": [9.7, 10.2, 10.2], "spoof_det": 0},
+    "step20": {"hold_end_med_p95_max_m": [9.7, 10.1, 10.7], "spoof_det": 0, "note": "below 25 m threshold; identical"},
+    "step30": {"off": [24.4, 28.8, 56.7], "on": [15.9, 32.3, 61.7], "pos_rms_off_on": [24.9, 24.9]},
+    "step50": {"off": [29.6, 36.2, 53.9], "on": [15.9, 41.2, 68.1], "pos_rms_off_on": [41.5, 41.5]},
+    "step100": {"off": [30.6, 40.1, 55.4], "on": [16.1, 45.6, 71.0], "pos_rms_off_on": [83.1, 83.1]}
+  },
+  "verdict": "Mixed/not adopted. Response lowers median true displacement (30/50/100 m: 24.4/29.6/30.6 -> 15.9/15.9/16.1 m) but worsens p95/max (30 m max 56.7 -> 61.7; 100 m max 55.4 -> 71.0), and does not reduce EKF position error (pos_rms unchanged). It is a control trade, not a spoof fix; without external reference the spoofed coordinate remains accepted. Code was reverted; default behavior remains the existing NIS/reanchor bounded response.",
+  "caveats": [
+    "No false trigger on normal flight or 20 m steps (det=0, identical behavior).",
+    "Without flow, zero-velocity hold cannot stop slow IMU/velocity drift; tails worsen in some seeds.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "gnss-spoof-velocity-hold-response-2026-10-26.jsonl.gz",
+    "script": "campaign_gnss_spoof_velocity_hold-2026-10-26.py"
+  }
+}

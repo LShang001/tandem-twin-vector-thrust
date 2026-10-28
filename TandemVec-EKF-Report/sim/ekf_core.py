@@ -281,6 +281,7 @@ class Ekf15:
         self.P = np.zeros((15, 15))
         # 过程噪声连续谱密度
         a_std = cfg["accel_std"] * cfg.get("q_accel_scale", 1.0)
+        self.q_pos_psd_m2ps = cfg.get("q_pos_psd_m2ps", 0.0)
         g_std = cfg["gyro_std"] * cfg.get("q_gyro_scale", 1.0)
         a_b = cfg["accel_bias_std"]
         g_b = cfg["gyro_bias_std"]
@@ -365,7 +366,8 @@ class Ekf15:
         self.gravity = self.earth.g
         # 初始协方差
         p0 = np.zeros((15, 15))
-        p0[0:3, 0:3] = cfg_p0["pos"]**2 * np.eye(3)
+        p0_pos_std = cfg_p0["pos"] * self.cfg.get("p0_pos_scale", 1.0)
+        p0[0:3, 0:3] = p0_pos_std**2 * np.eye(3)
         p0[3:6, 3:6] = cfg_p0["vel"]**2 * np.eye(3)
         p0[6:8, 6:8] = cfg_p0["att"]**2 * np.eye(2)
         p0[8, 8] = cfg_p0["hdg"]**2
@@ -475,6 +477,9 @@ class Ekf15:
         Phi_half = np.eye(15) + F * 0.5 * dt_f + 0.5 * (F * 0.5 * dt_f) @ (F * 0.5 * dt_f)
         Qd = (dt_f / 6.0) * (Qc + 4.0 * Phi_half @ Qc @ Phi_half.T +
                              Phi @ Qc @ Phi.T)
+        # 研究钩子：位置随机游走 PSD（m²/s），默认 0 = 固件同构行为
+        if self.q_pos_psd_m2ps > 0.0:
+            Qd[0:3, 0:3] += self.q_pos_psd_m2ps * dt_f * np.eye(3)
         Qd = 0.5 * (Qd + Qd.T)
         self.P = Phi @ self.P @ Phi.T + Qd
         self.P = self.stabilize(self.P)

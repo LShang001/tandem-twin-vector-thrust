@@ -1,0 +1,92 @@
+{
+ "per_segment": {
+  "51-100": {
+   "25": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "p95": 21.425,
+    "max": 22.219,
+    "att": 1.173
+   },
+   "40": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "p95": 21.425,
+    "max": 22.219,
+    "att": 1.173
+   },
+   "50": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 17.986,
+    "p95": 21.877,
+    "max": 23.316,
+    "att": 1.173
+   }
+  },
+  "1-50": {
+   "25": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "p95": 19.434,
+    "max": 23.206,
+    "att": 1.082
+   },
+   "40": {
+    "n": 50,
+    "fail_gt25": 0,
+    "p90": 16.775,
+    "p95": 19.434,
+    "max": 20.718,
+    "att": 1.082
+   },
+   "50": {
+    "n": 50,
+    "fail_gt25": 1,
+    "p90": 17.979,
+    "p95": 19.826,
+    "max": 43.174,
+    "att": 1.082
+   }
+  }
+ },
+ "Y7a": {
+  "baseline": "vel_subset_capupper_2026-10-28.json 的 cap25（两段）",
+  "pass": true
+ },
+ "Y7b": {
+  "per_cap_flags": {
+   "51-100_cap40": {
+    "fail": false,
+    "max_up_gt5": false
+   },
+   "51-100_cap50": {
+    "fail": false,
+    "max_up_gt5": false
+   },
+   "1-50_cap40": {
+    "fail": false,
+    "max_up_gt5": false
+   },
+   "1-50_cap50": {
+    "fail": true,
+    "max_up_gt5": true
+   }
+  },
+  "upper_edge_cap": "50",
+  "upper_edge_measured": true,
+  "text": "U = 50 m",
+  "pass": true
+ },
+ "Y7c": {
+  "L_measured": 14,
+  "U_measured": 50,
+  "width_m": 36,
+  "may_propose_default_move": true,
+  "pass": true
+ },
+ "verdict": "UPPER_EDGE_MEASURED"
+}

@@ -1,0 +1,125 @@
+{
+  "campaign": "EKF baro vertical-velocity pseudo-measurement, same-binary runtime A/B",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "purpose": "During long GNSS outage the EKF vertical velocity is corrupted by tilt/bias (60 s trace: truth -1.91, EKF +0.76 m/s). Add an opt-in baro-altitude-slope v_d pseudo-measurement; A/B within one binary via --baro-vel-aid 0/1.",
+  "runs": 360,
+  "binary": {
+    "md5": "d4aa80d9b75245360f6ebc97a43b3b06",
+    "bin": "camp_aidrt/fw_real.exe"
+  },
+  "flags": [
+    "-DBFS_GNSS_OUTAGE_VELOCITY_HOLD",
+    "-DBFS_GNSS_OUTAGE_ALT_HOLD",
+    "-DBFS_GNSS_OUTAGE_ALT_HOLD_S=6.0f",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT",
+    "-DBFS_LONG_GNSS_OUTAGE_DESCENT_AGE_S=6.0f",
+    "-DBFS_BARO_VERTICAL_VELOCITY_AID",
+    "-DBFS_BARO_VERTICAL_VELOCITY_AID_STD_MPS=1.0f",
+    "-DBFS_BARO_VERTICAL_VELOCITY_AID_RATE_DIV=40U (5 Hz)",
+    "-DBFS_BARO_VERTICAL_VELOCITY_AID_MIN_AGE_S=8.0f"
+  ],
+  "scenario": "30 m settled, 1 m/s target ramp, 1 m/s2 wind, 6 directions x 10 seeds; outage 43-48/63/103 s; A/B same binary with --baro-vel-aid 0/1",
+  "results": {
+    "5s": {
+      "aid_off": {
+        "nav_fail": "20/60",
+        "hold_end_med_max_m": [
+          20.86,
+          40.52
+        ]
+      },
+      "aid_on": {
+        "nav_fail": "20/60",
+        "hold_end_med_max_m": [
+          20.12,
+          28.42
+        ]
+      },
+      "per_seed_identical": true,
+      "note": "aid inactive (age<8); the 20/60 absolute tail is a feature-binary layout-sensitive baseline, not an aid effect"
+    },
+    "20s": {
+      "aid_off": {
+        "touchdown_med_p95_max_mps": [
+          0.85,
+          1.02,
+          3.29
+        ],
+        "hold_med_p95_max_m": [
+          530.4,
+          1616.9,
+          1788.8
+        ],
+        "preland_roll_med_max_deg": [
+          30.6,
+          43.5
+        ]
+      },
+      "aid_on": {
+        "touchdown_med_p95_max_mps": [
+          0.82,
+          0.99,
+          1.09
+        ],
+        "hold_med_p95_max_m": [
+          189.7,
+          730.6,
+          1145.7
+        ],
+        "preland_roll_med_max_deg": [
+          21.3,
+          31.2
+        ]
+      }
+    },
+    "60s": {
+      "aid_off": {
+        "touchdown_med_p95_max_mps": [
+          3.35,
+          4.48,
+          4.96
+        ],
+        "hold_med_p95_max_m": [
+          431.8,
+          553.5,
+          598.9
+        ],
+        "preland_roll_med_max_deg": [
+          40.3,
+          46.2
+        ]
+      },
+      "aid_on": {
+        "touchdown_med_p95_max_mps": [
+          1.1,
+          1.52,
+          1.65
+        ],
+        "hold_med_p95_max_m": [
+          544.8,
+          1127.0,
+          1446.8
+        ],
+        "preland_roll_med_max_deg": [
+          26.3,
+          46.7
+        ]
+      }
+    }
+  },
+  "verdict": "Strong opt-in improvement for 20 s outages (touchdown tail 3.29 -> 1.09 m/s; drift median 530 -> 190 m; roll max 43.5 -> 31.2 deg). For 60 s outages it reduces touchdown median 3.35 -> 1.10 m/s but increases drift median 432 -> 545 m and p95 554 -> 1127 m (slower descent / longer exposure). Default remains off; enabling requires the macro (runtime default true) and real-flight validation.",
+  "caveats": [
+    "Baro altitude is already used as a position measurement; the derived velocity is temporally correlated with it. The empirical result is positive but a joint position+velocity update or a dedicated vertical KF is theoretically cleaner.",
+    "Preliminary 10 Hz / sigma 0.5 m/s build looked worse (60 s touchdown median 3.91 m/s), but that was a different binary and is confounded by SIL layout; it is not used as causal evidence.",
+    "The feature binary's 5 s aid-off tail (20/60) differs from the older default-build 10/60; within the same binary aid on/off is bit-identical, so this is a SIL build-layout effect, not an aid effect. Embedded/real-flight validation is required.",
+    "SIL plant has no landing gear/impact model; touchdown speeds are kinematic.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft.",
+    "These A/B runs predate the final g_mode_degraded_gnss gate. Hover 20/60 s results were revalidated identically after the gate (baro-vel-aid-mode-gate-2026-10-26); flow-aided forward flight now has the aid disabled. Use the mode-gate meta for the final feature behavior."
+  ],
+  "artifacts": {
+    "results": "baro-vel-aid-runtime-ab-2026-10-26.jsonl.gz",
+    "figure": "../figs/nav_baro_vel_aid_ab.png",
+    "script": "campaign_baro_vel_aid_ab-2026-10-26.py"
+  }
+}

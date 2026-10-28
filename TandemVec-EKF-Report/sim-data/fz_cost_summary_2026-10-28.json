@@ -1,0 +1,50 @@
+{
+ "cells": [
+  "imu_nan_icm_full",
+  "imu_stuck2s_icm_full",
+  "imu_stuck_icm_full",
+  "thrust8g_nan_icm_full"
+ ],
+ "pos_rms_med": {
+  "默认": {
+   "imu_nan_icm_full": 121.90950000000001,
+   "imu_stuck2s_icm_full": 140.298,
+   "imu_stuck_icm_full": 34.4155,
+   "thrust8g_nan_icm_full": 171.964
+  },
+  "nav-raw": {
+   "imu_nan_icm_full": 121.256,
+   "imu_stuck2s_icm_full": 164.93849999999998,
+   "imu_stuck_icm_full": 57.6345,
+   "thrust8g_nan_icm_full": 170.9105
+  },
+  "raw+互锁(废)": {
+   "imu_nan_icm_full": 121.393,
+   "imu_stuck2s_icm_full": 165.695,
+   "imu_stuck_icm_full": 58.483000000000004,
+   "thrust8g_nan_icm_full": 171.0865
+  }
+ },
+ "window_rms_seed1": {
+  "故障前 t<12 s": {
+   "base": 1.99513265807899,
+   "raw": 1.6215183446644499
+  },
+  "故障窗 12-13 s": {
+   "base": 32.64095205826567,
+   "raw": 70.08243358477938
+  },
+  "故障后 13-45 s": {
+   "base": 34.87825941282452,
+   "raw": 58.06703100619603
+  }
+ },
+ "end_err_seed1": {
+  "base": 0.6961501274873352,
+  "raw": 0.7857206882858808
+ },
+ "ad_app_seed1": {
+  "base": 130.0,
+  "raw": 279.0
+ }
+}

@@ -1,0 +1,28 @@
+{
+  "campaign": "EKF baro vertical-velocity aid: latched minimum activation altitude",
+  "date": "2026-10-26",
+  "evidence_level": "L2 (real firmware + 6DOF plant + sensor models, SIL only)",
+  "runs": 360,
+  "binary": {"md5": "8f9c1387980d182761872b2528046b70", "bin": "camp_aidrt4/fw_real.exe"},
+  "gate": "aid active only if outage context (GNSS stale, no fresh flow, g_mode_degraded_gnss) and baro altitude at first age>8 s is >=10 m; latched for that outage. 10 m cells activate at ~8 m and remain disarmed.",
+  "scenarios": {
+    "a10": "10 m target, 20 s outage, 1 m/s2 wind, 6 dirs x 10 seeds, aid off/on",
+    "a20": "20 m target, 20 s outage, 1 m/s2 wind, 6 dirs x 10 seeds",
+    "a60": "30 m target, 60 s outage, 1 m/s2 wind, 6 dirs x 10 seeds"
+  },
+  "results": {
+    "a10": {"aid_off": {"touchdown_med_p95_max_mps": [0.96, 1.45, 1.56], "hold_med_m": 78.5, "attempts": 0}, "aid_on": {"touchdown_med_p95_max_mps": [0.96, 1.45, 1.56], "hold_med_m": 78.5, "attempts": 0}, "per_seed_identical": true},
+    "a20": {"aid_off": {"touchdown_med_p95_max_mps": [0.94, 3.21, 3.58], "hold_med_m": 253.9}, "aid_on": {"touchdown_med_p95_max_mps": [0.84, 1.03, 1.11], "hold_med_m": 221.9, "attempts": 3600}},
+    "a60": {"aid_off": {"touchdown_med_p95_max_mps": [3.35, 4.48, 4.96], "hold_med_m": 431.8}, "aid_on": {"touchdown_med_p95_max_mps": [1.10, 1.52, 1.65], "hold_med_m": 544.8, "attempts": 8291}}
+  },
+  "verdict": "The 10 m regression is eliminated: aid on/off are bit-identical with 0 attempts. 20 m and 60 s benefits are retained exactly. The aid is now scoped to activation altitude >=10 m, no-flow GNSS outage, g_mode_degraded_gnss, age>8 s. Default off.",
+  "caveats": [
+    "Activation altitude uses baro_altitude at the first 5 Hz evaluation after age>8 s; if baro is invalid the aid does not arm.",
+    "The 10 m cell's initial altitude is 9.9 m and its activation altitude is ~8 m, so it is below the 10 m threshold; 20 m activates ~18 m.",
+    "All numbers are scalar-Eigen SIL L2, not real aircraft."
+  ],
+  "artifacts": {
+    "results": "baro-vel-aid-min-alt-2026-10-26.jsonl.gz",
+    "script": "campaign_baro_vel_aid_min_alt-2026-10-26.py"
+  }
+}

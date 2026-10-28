@@ -10,6 +10,21 @@
 - 覆盖：固件 SIL、导航验收/振动矩阵、GNSS 延时 10k、延时闭环 5k、
   EKF P0 200 runs、全包线 A0–A9、高保真巡航/VTOL。
 
+## 2026-10-26 大过载/大机动与 GNSS 杆臂补偿
+
+- 报告：`高动态卫惯组合导航-大过载大机动-2026-10-26.md`
+- 台架：`../TandemVec_FCS/test_host/test_ekf_high_dynamic.cpp`（固件 EKF，2 kHz 解析真值）
+- 矩阵：`sim/run_high_dynamic_mc.py`（1420 例）、`sim/run_lever_ab.py`（150 例）
+- 结论：2–8 g/180–1080°/s 位置 0.20–0.25 m；>8 g 饱和、≥330 ms 延迟为硬边界；GNSS 杆臂位置+速度补偿已入固件（参数 `gnss_lever_x/y/z`），8 g/2 m 杆臂 1.98→0.21 m。
+
+## 2026-10-27 6DOF 导弹弹体 + 真实固件导航 SIL
+
+- 报告：`导弹6DOF-导航SIL-2026-10-27.md`
+- 台架：`../TandemVec_FCS/test_host/fw_sil/missile_plant.h` + `--missile`（6DOF/气动/自驾，只注入传感器；真实 `handleNavigationSystem()`）
+- 矩阵：`sim/run_missile_sil_mc.py`（20/40 seeds/格，全精度 vs MCU 宏路径）；可视化套件 `sim/plot_missile_sil.py`、`plot_missile_envelope.py`、`plot_missile_visuals.py`、`plot_missile_sensor_fidelity.py`、`plot_vib_isolator.py`（时序/3D/箱线/小提琴/CDF/直方/散点/热图/条形/频响）
+- **结论（2026-10-27 armed 口径）**：代表弹道 6.4 g/451 m/s/1987 m。SIL 现在在 t≥1 s 置 `unlocked=true/throttle=50%`（飞行武装），旧 unarmed 的 hz5 5.79/200 ms 7.72/冻结 3.11 作废。armed 40 seeds：ICM 0.68°/2.46 m/0.158 m/s，5 s 失联 0.65°/2.61 m，200 ms 3.80°/37.8 m，5 Hz 0.66°；失联 10/20/30 s 位置 8.87/13.07/20.47 m。过载 ±8 g：8.4 g 3.69 m 可用；10.1 g 触顶 622.7 m 不可用。armed 后 fresh gate 只剩振动作用（1 g 6.94→1.94°、2 g 8.32→7.97°），其余 19 格逐项相同；VTOL 100 seeds 默认 291/300、fresh 290/300，但 fresh 消掉 24 m 尾部（max hold 2.28 m）。高零偏对准 opt-in 20/20。**物理减震座**：推荐 fn≈20–25 Hz（含 80 Hz）/30 Hz（仅 120 Hz）、ζ≈0.10；2 g/120/8.4 g 7.97→0.64°、速度 0.63→0.24 m/s，1 g/80 1.93→0.98°，发射 2 g 8.73→0.66°；容差网格见 `figs/nav_vib_isolator_tolerance_2026-10-27.png`。**IMU 短时失效组合 fallback（opt-in，上限 2 s）**：NaN 1 s 121.75→3.15 m、冻结 1 s 35.24→2.33 m（0 拒绝/0 重锚）；2 s 为 12.67/65.5 m；33 s 长故障仍失导；10.1 g 饱和不受益。200 ms 延迟臂仍是“数据+iTOW 同移”的未建模延迟口径，见报告 §4.2/§4.5/§4.6/§4.9/§4.10。
+
+
 ## 分析对象（固件代码）
 
 | 文件 | 角色 |
