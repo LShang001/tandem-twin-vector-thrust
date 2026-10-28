@@ -1400,6 +1400,51 @@ pos_rms 1.06/1.03 基本不变（hold_end 0.60/0.72 m）。10 seeds×2 profiles
 seed8/9 超门限仅 0.03–0.06 m，hold_end 0.60/0.72 m 本身良好， 属 1 m
 级导航估计误差，不能用控制增益修；按种子调 yaw 只会引入 seed3
 新失败。数据：<code>sim-data/yaw-tune-2026-10-25.json</code>。</p>
+<p>回中航向锁速率限幅（2026-10-25 撤回）：10 seeds 时把回中航向锁速率
+钳到 14°/s 看似修好 seed6（3.67→1.36 m，17/20→18/20）。<strong>20 seeds
+否定</strong>：基线（<code>att_yaw.int_limit</code> 默认
+80°/s，原文档误写 24）36/40； 14°/s 仍 36/40，但 mag_nominal seed12 由
+1.61 m 变 46.3 m、mag_clean seed13 由 55.3 m 放大到 196.7
+m。仅在小误差（&lt;20°）钳 14°/s、大误差 回 80°/s 也不够：seed6 0.83 m
+修好，但 seed12 仍 19.3 m、seed13 53.1
+m。<strong>限制航向速率削弱大磁修正后的恢复，属于按种子调参；固件已
+恢复原行为。</strong> 20 种子基线 36/40，剩余边界 seed6 3.67 m、seed8/9
+pos_rms 1.06/1.03、seed13 55.3 m（磁航向 kick/门控类）。<strong>50 seeds
+90/100</strong>（mag_clean 9/50、mag_nominal 1/50），严重尾部 seed13
+55.3、 seed23 18.9、seed49 clean 8.76/nominal 12.29 m，其余多为
+1.06–1.56 m 或 pos_rms 1.03–1.13 的边际。数据：
+<code>sim-data/sil-acceptance-50seed-baseline-2026-10-25.json</code>、
+<code>sim-data/sil-acceptance-20seed-baseline-2026-10-25.json</code>、
+<code>sim-data/sil-acceptance-20seed-2026-10-25.json</code>、
+<code>sim-data/sil-acceptance-20seed-yawcond-2026-10-25.json</code>、
+<code>sim-data/yaw-hold-limit-conditional-2026-10-25.json</code>。</p>
+<p><strong>200 Hz 控制级追踪（2026-10-25）</strong>：新增 SIL
+<code>--trace-csv</code>。seed13 vs 正常 seed14：最大机体 yaw rate 259.1
+vs 41.5°/s，EKF pitch 误差峰值 13.9° vs 1.6°，最大磁 kick 21.6° vs
+<strong>31.3°</strong>（正常种子更大）。磁 kick 幅值不是判别量；seed13
+先出现 roll/pitch 高频振荡/EKF 倾角误差，随后
+磁修正与航向环互相追错，t=26.4 yaw&gt;60°/s，t=27.8 现有门控才降级。
+“更快降级”路线均否定：yaw rate 安全门使 seed13 55.3→75.7 m、seed6
+3.67→43.9 m；yaw 振荡门控 seed13→76.4 m；磁 yaw 限幅 5/10/15/20° 为
+26.3/140.9/88.9/59.1 m。增益 detune85 在 50 seeds 为 93/100 vs 90/100，
+但 <strong>100 seeds×2 = 181/200 vs 基线 182/200</strong>，并新增 seed79
+499 m 尾部； 分离扫描显示 rate-only 无效果、att-only 复现
+detune——敏感性在姿态 外环。下一步先加 2 kHz 短窗追踪并对总 IMU 信号做
+anti-alias（当前 SIL 只滤注入振动），确认高频成分是否为
+plant/舵机数值伪影，再决定姿态环
+滤波，不能直接改增益。数据：<code>sim-data/mag-tail-trace-2026-10-25.json</code>、
+<code>sim-data/sil-acceptance-100seed-*.json</code>。</p>
+<p>光流辅助对照（诊断，不替换默认基线；随机流未对齐）：<code>mag_clean</code>
+继承 <code>clean</code>，<strong>无 GNSS 失联/风/振动</strong>；seed8/9
+的 pos_rms 1.06/1.03 是 0.5 m/轴 GNSS 噪声 + EKF 估计本底（水平
+RMS≈0.707 m），不是失联滑行。 加 <code>--flow</code> 的 10 seeds 为
+pos_rms 0.26–0.83 m、hold_end 3 例超门限 （seed1 7.88 m、seed7 1.55
+m、seed9 2.18 m），7/10。<strong>不能归因于光流</strong>： SIL
+光流噪声消耗 RNG，启用 <code>--flow</code>
+会改变整条噪声序列，本对照未做 随机流对齐；且 GNSS
+有效时光流融合函数直接返回，最多影响初始化窗口。 默认
+<code>mag_clean</code> 继续保持无光流；因果 A/B 需固定 RNG 流或独立光流
+RNG。 数据：<code>sim-data/flow-aiding-2026-10-25.json</code>。</p>
 <h3 id="322-matlab-频域裕度独立复核">3.22 MATLAB 频域裕度独立复核</h3>
 <p>MATLAB R2025b Control System Toolbox 对速率环连续近似
 <code>L=C·H/(τa s+1)(τf s+1)s·e^{−τs}</code>（τa=0.05 s、τf=2.17
@@ -1457,5 +1502,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-25 01:04</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-26 12:57</footer></article></body>
 </html>
