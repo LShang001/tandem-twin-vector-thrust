@@ -20,7 +20,8 @@
          延迟回放＝局部重处理而非 RTS 平滑 @ref REF-121 §6.1.3 p.194。
 @frame  NED 导航系 + FRD 机体系；四元数 (w,x,y,z)。误差状态下标 6-8 为失准角。
 @units   SI：位置 m（lla 为 rad/rad/m）、速度 m/s、角度 rad、加计零偏 m/s²、陀螺零偏 rad/s。
-@note    本文件是**研究仿真**，与固件同构但不等同（口径差异单列在核查记录里）。
+@note    ★ 2026-10-29 起：基线研究请直接用 `fwapi` 调固件 Ekf15State（见 TandemVec_FCS/test_host/fw_algo/README.md），本文件只保留给 `opt/` 算法变体探索与历史结果复现，不再作为固件的第二份实现维护。
+         本文件是**研究仿真**，与固件同构但不等同（口径差异单列在核查记录里）。
          固件取值照抄于此（见 CONFIG 常量与 cfg/cfg_p0）：
            - IMU：gyro_std=0.0015 rad/s、gyro_markov_bias_std=0.00524 rad/s、gyro_tau=180 s、
              accel_std=0.25 m/s²、accel_tau=100 s（加计零偏游走 std=0.01）
