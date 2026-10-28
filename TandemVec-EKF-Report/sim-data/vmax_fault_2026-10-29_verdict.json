@@ -1,0 +1,292 @@
+{
+ "date": "2026-10-29",
+ "exe": "C:\\Users\\12631\\AppData\\Local\\Temp\\tv_vmax\\fw_real.exe",
+ "exe_md5": "9813200bd17b1d6ffbc4f978fecd6f02",
+ "base": [
+  "--real-nav",
+  "--missile",
+  "--seconds",
+  "45",
+  "--imu-fs-g",
+  "32",
+  "--imu-health-accel-range",
+  "313.8",
+  "--profile",
+  "mag_clean",
+  "--imu-grade",
+  "icm",
+  "--gnss-rate-hz",
+  "10",
+  "--ms-burn",
+  "10",
+  "--ms-thrust",
+  "24600"
+ ],
+ "faults": {
+  "none": [],
+  "vib1g80": [
+   "--vib",
+   "1.0",
+   "--vib-hz",
+   "80",
+   "--vib-start",
+   "3"
+  ],
+  "out5": [
+   "--gnss-outage",
+   "20:25"
+  ],
+  "vibout": [
+   "--vib",
+   "1.0",
+   "--vib-hz",
+   "80",
+   "--vib-start",
+   "3",
+   "--gnss-outage",
+   "20:25"
+  ]
+ },
+ "arms": {
+  "A_default": [],
+  "B_navraw": [
+   "--nav-raw-imu"
+  ],
+  "C_navraw_fb": [
+   "--nav-raw-imu",
+   "--nav-raw-fault-fallback",
+   "--nav-raw-fb-health"
+  ]
+ },
+ "seeds": [
+  101,
+  120
+ ],
+ "fail_threshold_m": 25.0,
+ "summary": {
+  "none": {
+   "A_default": {
+    "n": 20,
+    "n_fail": 10,
+    "rate": 0.5,
+    "med": 25.05,
+    "p90": 30.558,
+    "max": 32.315,
+    "att_med": 1.806,
+    "rej_med": 27.0,
+    "reanchor_seeds": 17,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "B_navraw": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 5.359,
+    "p90": 9.944,
+    "max": 12.925,
+    "att_med": 1.05,
+    "rej_med": 0.0,
+    "reanchor_seeds": 0,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "C_navraw_fb": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 5.359,
+    "p90": 9.944,
+    "max": 12.925,
+    "att_med": 1.05,
+    "rej_med": 0.0,
+    "reanchor_seeds": 0,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   }
+  },
+  "vib1g80": {
+   "A_default": {
+    "n": 20,
+    "n_fail": 10,
+    "rate": 0.5,
+    "med": 24.945,
+    "p90": 30.798,
+    "max": 32.809,
+    "att_med": 1.824,
+    "rej_med": 28.5,
+    "reanchor_seeds": 17,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "B_navraw": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 5.394,
+    "p90": 10.354,
+    "max": 12.838,
+    "att_med": 1.046,
+    "rej_med": 0.0,
+    "reanchor_seeds": 0,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "C_navraw_fb": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 5.394,
+    "p90": 10.354,
+    "max": 12.838,
+    "att_med": 1.046,
+    "rej_med": 0.0,
+    "reanchor_seeds": 0,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   }
+  },
+  "out5": {
+   "A_default": {
+    "n": 20,
+    "n_fail": 17,
+    "rate": 0.85,
+    "med": 65.876,
+    "p90": 80.482,
+    "max": 87.706,
+    "att_med": 1.436,
+    "rej_med": 20.0,
+    "reanchor_seeds": 20,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "B_navraw": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 17.383,
+    "p90": 18.552,
+    "max": 19.102,
+    "att_med": 1.452,
+    "rej_med": 23.0,
+    "reanchor_seeds": 20,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "C_navraw_fb": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 17.383,
+    "p90": 18.552,
+    "max": 19.102,
+    "att_med": 1.452,
+    "rej_med": 23.0,
+    "reanchor_seeds": 20,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   }
+  },
+  "vibout": {
+   "A_default": {
+    "n": 20,
+    "n_fail": 17,
+    "rate": 0.85,
+    "med": 66.083,
+    "p90": 80.499,
+    "max": 88.991,
+    "att_med": 1.439,
+    "rej_med": 20.0,
+    "reanchor_seeds": 20,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "B_navraw": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 17.072,
+    "p90": 18.113,
+    "max": 18.334,
+    "att_med": 1.477,
+    "rej_med": 16.0,
+    "reanchor_seeds": 20,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   },
+   "C_navraw_fb": {
+    "n": 20,
+    "n_fail": 0,
+    "rate": 0.0,
+    "med": 17.072,
+    "p90": 18.113,
+    "max": 18.334,
+    "att_med": 1.477,
+    "rej_med": 16.0,
+    "reanchor_seeds": 20,
+    "imu_det_seeds": 0,
+    "nrfb_max": 0
+   }
+  }
+ },
+ "paired_A_vs_B": {
+  "none": {
+   "better": 20,
+   "worse": 0,
+   "same": 0,
+   "worst_degradation_m": 0.0
+  },
+  "vib1g80": {
+   "better": 19,
+   "worse": 1,
+   "same": 0,
+   "worst_degradation_m": 6.023
+  },
+  "out5": {
+   "better": 17,
+   "worse": 3,
+   "same": 0,
+   "worst_degradation_m": 2.026
+  },
+  "vibout": {
+   "better": 18,
+   "worse": 2,
+   "same": 0,
+   "worst_degradation_m": 1.661
+  }
+ },
+ "paired_B_vs_C": {
+  "none": {
+   "better": 0,
+   "worse": 0,
+   "same": 20,
+   "worst_degradation_m": 0.0
+  },
+  "vib1g80": {
+   "better": 0,
+   "worse": 0,
+   "same": 20,
+   "worst_degradation_m": 0.0
+  },
+  "out5": {
+   "better": 0,
+   "worse": 0,
+   "same": 20,
+   "worst_degradation_m": 0.0
+  },
+  "vibout": {
+   "better": 0,
+   "worse": 0,
+   "same": 20,
+   "worst_degradation_m": 0.0
+  }
+ },
+ "criteria": {
+  "F1_control": true,
+  "F2_vib": true,
+  "F3_outage": true,
+  "F4_vib_out": true,
+  "F5_fallback": "same"
+ },
+ "note": "L2 SIL；24600 N 的 g_max 32.34 略超 32 g 满量程；20 seeds/格。"
+}
