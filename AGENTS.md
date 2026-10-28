@@ -26,6 +26,10 @@ py -3.12 tools/sync-params.py --check  # 漂移检测
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
 node --test simulations/vector-thrust-lab/tests/propulsion.test.mjs # 单模块
 
+# 固件算法直调（仿真脚本直接调固件 EKF，不再复刻算法）
+bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh              # 生成共享库（/tmp/tv_fw_algo）
+py -3.12 TandemVec-EKF-Report/sim/run_fw_ekf_parity.py             # 与 Python 复刻版对拍
+
 # 上位机 GCS（Python 后端 + Web 前端 + pywebview 桌面窗口，AnoCom 协议）
 cd TandemVec_FCS/GCS && py -3.12 app.py               # 桌面窗口模式（后端自动拉起，关窗即停；--browser 回退浏览器）
 cd TandemVec_FCS/GCS && py -3.12 -m uvicorn server.main:app --port 8091  # 无窗口纯后端，前端 http://127.0.0.1:8091/
@@ -66,13 +70,14 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 | `TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md` | 官方协议手册（MinerU 转换 26 页）+ **本工程差异对照表**（0x40/0x20/0x0D/0x30 占用约定；0xE0-0xE3 参数链路已验证逐项一致） |
 | `TandemVec_FCS/include/FlightCtrlParams.h` | 固件参数唯一事实源：`kFlightCtrlParamsDefaults`（出厂默认，static constexpr）+ 固件分支 `kFlightCtrlParams`（可变实例，0xE1 写入） |
 | `TandemVec_FCS/include/AirframeModel.h` | 机型数据驱动执行器模型（通用层）：换机型=填几何数据表；`computeEffectMatrixDataDriven` 数值差分生成 B（ta T11 等价回归锁定） |
+| `TandemVec_FCS/test_host/fw_algo/` | ★ 固件算法直调接口（C ABI + Python `TandemVec-EKF-Report/sim/fwapi`）：仿真直接调用固件 `Ekf15State`，**禁止在 `sim/` 再复刻一份算法**；`build_fw_algo.sh` 生成共享库，`test_fw_algo_api.cpp` 锁定 ABI 与固件类逐位一致 |
 | `docs/08-参考资料/` | 文献库：两本秦永元教材（`books/REF-120/121`，MinerU 全文/章节）、论文、主题笔记 `notes/00–05`、索引/校验脚本；导航算法升级评估报告在 `TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md` |
 | `docs/00-项目治理/GOV-004-代码注释与理论对照规范.md` | ★ 注释唯一标准：L0 文件头 / L1 符号文档块 / 理论对照五段式 / `@ref` 引用格式 / 机检规则 R01–R10；配套 `tools/check-code-comments.py` 与 `docs/04-数学建模/代码理论核查/` |
 
 ## 原则
 
 1. **先读后改** — 改参数前读 `models/aircraft-model.json`；改推进/动力学/控制逻辑前读 `simulations/vector-thrust-lab/src/core/` 对应模块
-2. **复用优于新建** — 检查 core 层是否有现成函数（math/state/control/propulsion/aerodynamics/dynamics），不要重复实现
+2. **复用优于新建** — 检查 core 层是否有现成函数（math/state/control/propulsion/aerodynamics/dynamics），不要重复实现；**仿真侧算法一律经 `fwapi` 直调固件实现，不要在 `sim/` 另写一份**
 3. **外科手术式修改** — 只改目标代码，不顺手重构、不扩范围
 4. **修改后必须跑测试** — `node --test simulations/vector-thrust-lab/tests/`，全绿再提交
 5. **改代码必改注释（GOV-004）** — 公式性实现必须带 `@formula` + `@ref`（章节+式号+页码）；新文件必须有 L0 文件头；提交前跑 `py -3.12 tools/check-code-comments.py --check`
