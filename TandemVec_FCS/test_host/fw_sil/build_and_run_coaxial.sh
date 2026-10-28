@@ -8,6 +8,8 @@ BIN_DIR="${BIN_DIR:-${TMPDIR:-/tmp}/tv_fcs_fw_sil_coax}"
 CXX="${CXX:-g++}"
 CC="${CC:-gcc}"
 OPT="${OPT:--O2}"
+# 宿主 SIL 固定标量 Eigen 路径（与 build_incremental.sh 同口径）。
+EIGEN_SIL_FLAGS="${EIGEN_SIL_FLAGS:--DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE}"
 mkdir -p "$BIN_DIR"
 
 INC="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude -Isrc -Itest_host/stub"
@@ -17,7 +19,8 @@ for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 $CC -std=c11 -O2 -Ilib/ublox-main/src -c lib/ublox-main/src/minmea.c -o "$BIN_DIR/minmea.o"
 
 OUT_BASE="$BIN_DIR/fw_coax"
-$CXX -std=c++17 $OPT -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV \
+$CXX -std=c++17 $OPT ${EXTRA_CXXFLAGS:-} $EIGEN_SIL_FLAGS \
+  -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV \
   -DFW_SIL_COAXIAL -DBFS_COAXIAL_VTVL -DARDUINO=300 \
   -DBFS_EKF_BARO_ALTITUDE_UPDATE \
   -Wno-address-of-packed-member -Wno-psabi \

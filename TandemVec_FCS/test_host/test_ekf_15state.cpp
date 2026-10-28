@@ -31,7 +31,13 @@
  *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚；
  *          T14 正常跟踪期 50 m GNSS 跳点的显式野值门；T15 机体系磁矢量更新；
  *          T16 真实磁初始化磁偏角偏置与 tilt_sigma 可用性；
- *          T17 无磁离地零偏 z 限幅（ClampGyroBiasZ）
+ *          T17 无磁离地零偏 z 限幅（ClampGyroBiasZ）；
+ *          T18 F 矩阵必须用去偏后的 IMU（单/双子样，防 IEKF/TFG 混用坑）；
+ *          T19 垂直基准不可信时只重锚水平、保留高度（防垂直 spoof）；
+ *          T20 IMU 合理值门限随量程缩放（默认拒绝 15 g，32 g 允许）；
+ *          T21 GNSS 速度野值软恢复（连续一致 3 帧才触发）；
+ *          T22 持续 30 g 下一致性判据作用在残差而非 GNSS 速度本身；
+ *          T24 GNSS 杆臂覆盖速度子集软恢复与硬重锚两条量测消费路径；
  * @see     TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md §5.1/§9.6
  */
 #include <cstdio>
@@ -485,6 +491,432 @@ int main()
     ekf.ClampGyroBiasZ(0.0f);
     CHECK("T17 非正上限不改变零偏",
           std::fabs(ekf.gyro_bias_radps().z() - clamped) < 1e-6f);
+  }
+
+  // ---- T18 F 矩阵必须使用“去偏后”的 IMU（照抄几何滤波复现文的混用坑）----
+  {
+    auto skew = [](const Eigen::Vector3f &v) {
+      Eigen::Matrix3f m;
+      m << 0.0f, -v.z(), v.y(),
+           v.z(), 0.0f, -v.x(),
+           -v.y(), v.x(), 0.0f;
+      return m;
+    };
+    const Eigen::Vector3f ba(0.5f, -0.3f, 0.2f);
+    const Eigen::Vector3f bg(0.1f, -0.05f, 0.03f);
+    const Eigen::Vector3f accel_raw(1.5f, -0.5f, -8.0f);
+    const Eigen::Vector3f gyro_raw = bg; // 去偏后为 0，姿态不变，便于逐块比对
+    const float dt = 0.005f;
+
+    Ekf15State ekf = makeInit();
+    ekf.set_biases_for_test(ba, bg);
+    ekf.TimeUpdate(accel_raw, gyro_raw, dt);
+    const Eigen::Matrix3f c_b2n =
+        bfs::quat2dcm(ekf.quat()).transpose();
+    const Eigen::Matrix3f f_v_beta_expected =
+        -c_b2n * skew(accel_raw - ba);
+    float max_vb_diff = 0.0f;
+    for (int r = 0; r < 3; ++r)
+    {
+      for (int c = 0; c < 3; ++c)
+      {
+        max_vb_diff = std::fmax(
+            max_vb_diff,
+            std::fabs(ekf.fs_coeff_for_test(3 + r, 6 + c) -
+                      f_v_beta_expected(r, c)));
+      }
+    }
+    CHECK("T18 单子样 F(V,β) 使用去偏比力", max_vb_diff < 2e-4f);
+
+    Ekf15State ekf_gyro = makeInit();
+    ekf_gyro.set_biases_for_test(ba, bg);
+    ekf_gyro.TimeUpdate(ba + Eigen::Vector3f(0.0f, 0.0f, -9.79f),
+                        Eigen::Vector3f(0.5f, -0.2f, 0.1f), dt);
+    const Eigen::Matrix3f f_beta_expected =
+        -skew(Eigen::Vector3f(0.5f, -0.2f, 0.1f) - bg);
+    float max_bb_diff = 0.0f;
+    for (int r = 0; r < 3; ++r)
+    {
+      for (int c = 0; c < 3; ++c)
+      {
+        max_bb_diff = std::fmax(
+            max_bb_diff,
+            std::fabs(ekf_gyro.fs_coeff_for_test(6 + r, 6 + c) -
+                      f_beta_expected(r, c)));
+      }
+    }
+    CHECK("T18 单子样 F(β,β) 使用去偏角速率", max_bb_diff < 2e-4f);
+
+    Ekf15State ekf_two = makeInit();
+    ekf_two.set_biases_for_test(ba, bg);
+    ekf_two.TimeUpdateTwoSample(gyro_raw * dt, Eigen::Vector3f::Zero(),
+                                accel_raw * dt, Eigen::Vector3f::Zero(), dt);
+    const Eigen::Matrix3f c_b2n_two =
+        bfs::quat2dcm(ekf_two.quat()).transpose();
+    const Eigen::Matrix3f f_vb_two_expected =
+        -c_b2n_two * skew(accel_raw - ba);
+    float max_vb_two_diff = 0.0f;
+    for (int r = 0; r < 3; ++r)
+    {
+      for (int c = 0; c < 3; ++c)
+      {
+        max_vb_two_diff = std::fmax(
+            max_vb_two_diff,
+            std::fabs(ekf_two.fs_coeff_for_test(3 + r, 6 + c) -
+                      f_vb_two_expected(r, c)));
+      }
+    }
+    CHECK("T18 双子样 F(V,β) 使用去偏比力", max_vb_two_diff < 2e-4f);
+  }
+
+  // ---- T19 垂直基准不可信时：持久不可信 GNSS 只重锚水平，不重置高度 ----
+  // 场景：水平漂 35 m + GNSS 高度 +100 m spoof；气压健康判 Suspect 时
+  // 上层把 vertical reanchor 关掉，第 3 帧应水平重锚但高度保留 INS。
+  {
+    Ekf15State ekf = makeInit();
+    ekf.ResetPositionVelocityToGnss(Eigen::Vector3f(5.0f, 0.0f, 0.0f), kLla);
+    for (int i = 0; i < 1400; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const float alt_before = static_cast<float>(ekf.alt_m());
+    const Eigen::Vector3d spoof_lla(kLla(0), kLla(1), kLla(2) + 100.0);
+    ekf.set_gnss_vertical_reanchor_allowed(false);
+
+    Eigen::Vector3f vel_true = Eigen::Vector3f::Zero();
+    ekf.MeasurementUpdateDetailed(vel_true, spoof_lla, 0.005f, 0.0f, true);
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    ekf.MeasurementUpdateDetailed(vel_true, spoof_lla, 0.005f, 0.0f, true);
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const auto r3 = ekf.MeasurementUpdateDetailed(
+        vel_true, spoof_lla, 0.005f, 0.0f, true);
+
+    CHECK("T19 第 3 帧触发水平重锚", r3.reacquired);
+    CHECK("T19 高度未被 spoof 拉走",
+          std::fabs(static_cast<float>(ekf.alt_m()) - alt_before) < 1.0f);
+    CHECK("T19 水平已重锚到 GNSS",
+          bfs::lla2ned(ekf.lla_rad_m(), kLla, bfs::AngPosUnit::RAD)
+                  .head<2>()
+                  .norm() < 2.0f);
+    CHECK("T19 水平重锚计数=1", ekf.gnss_horizontal_reanchor_count() == 1U);
+  }
+
+  // ---- T20 IMU 合理值门限必须随量程缩放（否则 >12.2 g 整帧丢弃）----
+  {
+    Ekf15State ekf = makeInit();
+    const Eigen::Vector3f accel_15g(0.0f, 0.0f, -15.0f * 9.79f);
+    for (int i = 0; i < 100; ++i)
+      ekf.TimeUpdate(accel_15g, Eigen::Vector3f::Zero(), 0.005f);
+    CHECK("T20 默认门限拒绝 15 g", ekf.ned_vel_mps().norm() < 0.01f);
+    ekf.set_imu_plausibility_limits(32.0f * 9.79f * 1.6f,
+                                   2000.0f * static_cast<float>(M_PI) / 180.0f * 1.2f);
+    for (int i = 0; i < 100; ++i)
+      ekf.TimeUpdate(accel_15g, Eigen::Vector3f::Zero(), 0.005f);
+    CHECK("T20 32 g 门限允许 15 g 传播", ekf.ned_vel_mps().norm() > 1.0f);
+  }
+
+
+  // ---- T21 速度野值软恢复：速度残差连续一致 3 帧才触发 ----
+  // north_m 把 GNSS 位置整体北移（>30 m 即位置残差同时越门）。
+  auto run_vel_subset = [](Ekf15State &ekf, const Eigen::Vector3f &gnss_vel,
+                           double north_m, bool &first_two_rejected,
+                           bool &first_outlier, bool &third_subset_fused) {
+    ekf.set_gnss_velocity_subset_recovery_enabled(true);
+    Eigen::Vector3d meas_lla = kLla;
+    meas_lla(0) += north_m / 6378137.0;
+    bool two = true;
+    for (int frame = 0; frame < 3; ++frame)
+    {
+      for (int i = 0; i < 20; ++i)
+        ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+      const auto r =
+          ekf.MeasurementUpdateDetailed(gnss_vel, meas_lla, 0.005f, 0.0f, true);
+      if (frame == 0)
+        first_outlier = r.outlier_rejected;
+      if (frame < 2)
+        two = two && !r.fused;
+      if (frame == 2)
+        third_subset_fused = r.fused && r.subset_velocity;
+    }
+    first_two_rejected = two;
+  };
+  {
+    Ekf15State ekf = makeInit();
+    bool two = false, out1 = false, third = false;
+    run_vel_subset(ekf, Eigen::Vector3f(20.0f, 0.0f, 0.0f), 0.0, two, out1,
+                   third);
+    CHECK("T21 前两帧速度野值被拒", two && out1);
+    CHECK("T21 第3帧速度子集恢复", third);
+    CHECK("T21 速度已拉向 GNSS", ekf.ned_vel_mps().x() > 10.0f);
+    CHECK("T21 位置未被速度恢复拉动",
+          bfs::lla2ned(ekf.lla_rad_m(), kLla, bfs::AngPosUnit::RAD)
+                  .head<2>()
+                  .norm() < 5.0f);
+  }
+  {
+    // T21b：位置残差同时越门（30 g 尾部真实形态）——仍只修速度、不吃位置。
+    Ekf15State ekf = makeInit();
+    bool two = false, out1 = false, third = false;
+    // 本例位置残差 50 m（>15 m 上限）⇒ 需放宽 §4.24q 的新条件才能测到
+    // "双越门时只修速度、不吃位置"的算术；新条件本身由 T25 单独验证。
+    ekf.set_gnss_velocity_subset_max_pos_resid_m(1.0e6f);
+    run_vel_subset(ekf, Eigen::Vector3f(20.0f, 0.0f, 0.0f), 50.0, two, out1,
+                   third);
+    CHECK("T21b 双越门前两帧被拒", two && out1);
+    CHECK("T21b 第3帧速度子集恢复（位置仍拒）", third);
+    CHECK("T21b 速度已拉向 GNSS", ekf.ned_vel_mps().x() > 10.0f);
+    Eigen::Vector3d meas_lla = kLla;
+    meas_lla(0) += 50.0 / 6378137.0;
+    CHECK("T21b 未吸收 50 m 位置台阶",
+          bfs::lla2ned(ekf.lla_rad_m(), meas_lla, bfs::AngPosUnit::RAD)
+                  .head<2>()
+                  .norm() > 40.0f);
+  }
+  {
+    Ekf15State ekf = makeInit();
+    ekf.set_gnss_velocity_subset_recovery_enabled(true);
+    auto frame = [&](float vx) {
+      for (int i = 0; i < 20; ++i)
+        ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+      return ekf.MeasurementUpdateDetailed(Eigen::Vector3f(vx, 0, 0),
+                                           kLla, 0.005f, 0.0f, true);
+    };
+    frame(20.0f);
+    frame(30.0f);
+    const auto r3 = frame(40.0f);
+    CHECK("T21 不一致速度不触发", !r3.fused);
+  }
+
+  {
+    // T22：持续 30 g 轴向过载下 GNSS 速度每帧合法增长 ~29 m/s，
+    // 但**残差**稳定 —— 一致性判据必须作用在残差上，否则永不达标。
+    Ekf15State ekf = makeInit();
+    ekf.set_gnss_velocity_subset_recovery_enabled(true);
+    ekf.set_gnss_velocity_subset_max_pos_resid_m(1.0e6f);  // 本例测 30 g 算术，见 T25
+    // 必须同时放宽 IMU 合理值门限（默认 120 m/s²=12.2 g 会把 294 m/s² 整帧丢弃，
+    // 滤波器速度不增长、残差就不是"稳定 20 m/s"而是逐帧增大）——见 T20/#125。
+    ekf.set_imu_plausibility_limits(32.0f * 9.79f * 1.6f,
+                                    2000.0f * static_cast<float>(M_PI) / 180.0f * 1.2f);
+    const Eigen::Vector3f accel_30g(294.0f, 0.0f, -9.79f);
+    Eigen::Vector3d meas_lla = kLla;
+    meas_lla(0) += 50.0 / 6378137.0;  // 位置同时越门
+    bool two = true;
+    bool third = false;
+    Eigen::Vector2d pos_before_ne = Eigen::Vector2d::Zero();
+    Eigen::Vector2d pos_after_ne = Eigen::Vector2d::Zero();
+    for (int frame = 0; frame < 3; ++frame)
+    {
+      for (int i = 0; i < 20; ++i)
+        ekf.TimeUpdate(accel_30g, Eigen::Vector3f::Zero(), 0.005f);
+      // 真值速度约 29.4 m/s/帧增长，GNSS 报告值恒偏高 20 m/s（残差稳定）
+      const Eigen::Vector3f v_gnss(20.0f + 29.4f * (frame + 1), 0.0f, 0.0f);
+      if (frame == 2)
+        pos_before_ne = bfs::lla2ned(ekf.lla_rad_m(), kLla, bfs::AngPosUnit::RAD)
+                            .head<2>();
+      const auto r =
+          ekf.MeasurementUpdateDetailed(v_gnss, meas_lla, 0.005f, 0.0f, true);
+      if (frame == 2)
+        pos_after_ne = bfs::lla2ned(ekf.lla_rad_m(), kLla, bfs::AngPosUnit::RAD)
+                           .head<2>();
+      if (frame < 2)
+        two = two && !r.fused;
+      else
+        third = r.fused && r.subset_velocity;
+    }
+    CHECK("T22 高过载下前两帧仍拒", two);
+    CHECK("T22 残差稳定即触发（不被速度合法增长挡住）", third);
+    CHECK("T22 速度已拉向 GNSS", ekf.ned_vel_mps().x() > 70.0f);
+    // 实测带动 0.02 m（速度-only 更新只经 P(p,v) 交叉项影响位置）
+    // 位置只应被 P(p,v) 交叉项轻微带动，绝不能跳到 50 m 外的 GNSS 位置
+    CHECK("T22 未吸收 50 m 位置台阶",
+          (pos_after_ne - pos_before_ne).norm() < 2.0f);
+  }
+  // ---- T25 §4.24q–t：速度子集只在"位置残差仍小"时触发（两端都测，防止只验有害侧） ----
+  {
+    Ekf15State ekf = makeInit();
+    bool two = false, out1 = false, third = false;
+    run_vel_subset(ekf, Eigen::Vector3f(20.0f, 0.0f, 0.0f), 0.0, two, out1, third);
+    CHECK("T25 位置残差 0 m（小）⇒ 触发（有益端）", third);
+    CHECK("T25 默认上限为 25 m（平台 [14,41) 内取点）",
+          ekf.gnss_velocity_subset_max_pos_resid_m() == 25.0f);
+  }
+  {
+    Ekf15State ekf = makeInit();
+    bool two = false, out1 = false, third = false;
+    run_vel_subset(ekf, Eigen::Vector3f(20.0f, 0.0f, 0.0f), 45.0, two, out1, third);
+    CHECK("T25 位置残差 45 m（>25）⇒ 不触发（有害端）", !third);
+    CHECK("T25 不触发时速度未被部分更新拉动", ekf.ned_vel_mps().x() < 10.0f);
+  }
+  {
+    // 边界：残差恰好在上限内侧仍触发（防止把条件写成 <0 之类的静默失效）
+    Ekf15State ekf = makeInit();
+    bool two = false, out1 = false, third = false;
+    run_vel_subset(ekf, Eigen::Vector3f(20.0f, 0.0f, 0.0f), 24.0, two, out1, third);
+    CHECK("T25 位置残差 24 m（<25）⇒ 仍触发", third);
+  }
+  {
+    // 反向对照：把上限取消（>=1e3）后，45 m 残差也会触发 ⇒ 证明上一条确由该门拦住
+    Ekf15State ekf = makeInit();
+    ekf.set_gnss_velocity_subset_max_pos_resid_m(1.0e6f);
+    bool two = false, out1 = false, third = false;
+    run_vel_subset(ekf, Eigen::Vector3f(20.0f, 0.0f, 0.0f), 45.0, two, out1, third);
+    CHECK("T25 取消上限后 45 m 残差仍触发（门确在起作用）", third);
+  }
+
+  // ---- T26 §4.24w：每"完整更新历元"只给一次子集配额（害处来自反复触发） ----
+  //  语义：配额在"完整 6 维更新成功"时重置，因此允许的序列是
+  //  [子集触发 ... 完整成功 ... 子集触发]，**不允许连续两次子集触发而中间没有完整成功**。
+  //  注意不能断言"6 帧只触发 1 次"——首帧触发后状态被拉回，后续帧可能被完整更新接受并
+  //  合法重置配额（调试实测 f2 触发 → f3/f4 完整 → f5 再触发），那是正确行为。
+  {
+    Ekf15State ekf = makeInit();
+    ekf.set_gnss_velocity_subset_recovery_enabled(true);
+    ekf.set_gnss_velocity_subset_max_pos_resid_m(1.0e6f);   // 本条测配额，不测幅值门
+    // 30 g 超过默认 120 m/s² 合理值门限，不放宽会整帧丢弃、残差逐帧增大（同 T20/#125）
+    ekf.set_imu_plausibility_limits(32.0f * 9.79f * 1.6f,
+                                    2000.0f * static_cast<float>(M_PI) / 180.0f * 1.2f);
+    CHECK("T26 默认配额为 1 次", ekf.gnss_velocity_subset_max_fires_per_epoch() == 1U);
+    const Eigen::Vector3f accel_30g(294.0f, 0.0f, -9.79f);
+    Eigen::Vector3d meas_lla = kLla;
+    meas_lla(0) += 50.0 / 6378137.0;
+    bool prev_subset = false;
+    bool violated = false;
+    bool saw_full_between = false;
+    int fires = 0, fulls = 0;
+    unsigned max_quota_seen = 0;
+    for (int frame = 0; frame < 6; ++frame)
+    {
+      for (int i = 0; i < 20; ++i)
+        ekf.TimeUpdate(accel_30g, Eigen::Vector3f::Zero(), 0.005f);
+      const Eigen::Vector3f v_gnss(20.0f + 29.4f * (frame + 1), 0.0f, 0.0f);
+      const auto r =
+          ekf.MeasurementUpdateDetailed(v_gnss, meas_lla, 0.005f, 0.0f, true);
+      const bool is_subset = r.fused && r.subset_velocity;
+      const bool is_full = r.fused && !r.subset_velocity;
+      if (is_full)
+      {
+        ++fulls;
+        saw_full_between = true;
+      }
+      if (is_subset)
+      {
+        ++fires;
+        if (prev_subset && !saw_full_between)
+          violated = true;   // 连续两次子集触发且中间没有完整成功 ⇒ 配额失效
+        prev_subset = true;
+        saw_full_between = false;
+      }
+      max_quota_seen = std::max<unsigned>(
+          max_quota_seen, (unsigned)ekf.gnss_velocity_subset_fires_since_full());
+    }
+    CHECK("T26 至少触发过一次子集", fires >= 1);
+    CHECK("T26 配额计数从未超过上限", max_quota_seen <= 1U);
+    CHECK("T26 两次子集触发之间必须有完整成功（配额语义）", !violated);
+    CHECK("T26 该序列里确实出现过完整更新成功", fulls >= 1);
+  }
+  {
+    // 反向对照：构造"完整更新永远不成功"的场景（位置残差固定 50 m、速度残差持续扩大），
+    // 配额 255 时应多次触发；配额 1 时同样条件下只应触发 1 次 ⇒ 证明该门确在起作用。
+    auto run_persistent = [](unsigned max_fires) {
+      Ekf15State ekf = makeInit();
+      ekf.set_gnss_velocity_subset_recovery_enabled(true);
+      ekf.set_gnss_velocity_subset_max_pos_resid_m(1.0e6f);
+      ekf.set_imu_plausibility_limits(32.0f * 9.79f * 1.6f,
+                                      2000.0f * static_cast<float>(M_PI) / 180.0f * 1.2f);
+      ekf.set_gnss_velocity_subset_max_fires_per_epoch(max_fires);
+      const Eigen::Vector3f accel_30g(294.0f, 0.0f, -9.79f);
+      int fires = 0, fulls = 0;
+      for (int frame = 0; frame < 9; ++frame)
+      {
+        for (int i = 0; i < 20; ++i)
+          ekf.TimeUpdate(accel_30g, Eigen::Vector3f::Zero(), 0.005f);
+        // 位置量测跟随当前估计（位置门不越）+ 速度量测恒偏高 20 m/s（速度门恒越、
+        // 但残差逐帧一致）⇒ 完整更新每帧都被速度门拒绝，只有子集通道可能生效。
+        const Eigen::Vector3d lla_now = ekf.lla_rad_m();
+        const Eigen::Vector3f v_gnss = ekf.ned_vel_mps().cast<float>() +
+                                      Eigen::Vector3f(20.0f, 0.0f, 0.0f);
+        const auto r =
+            ekf.MeasurementUpdateDetailed(v_gnss, lla_now, 0.005f, 0.0f, true);
+        if (r.fused && r.subset_velocity)
+          ++fires;
+        if (r.fused && !r.subset_velocity)
+          ++fulls;
+      }
+      return std::pair<int, int>(fires, fulls);
+    };
+    const auto q1 = run_persistent(1U);
+    const auto q255 = run_persistent(255U);
+    CHECK("T26 持续拒绝场景：配额 1 时只触发 1 次", q1.first == 1);
+    CHECK("T26 持续拒绝场景：配额 255 时触发 >1 次（门确在起作用）", q255.first > 1);
+    CHECK("T26 持续拒绝场景：全程没有完整更新成功", q1.second == 0 && q255.second == 0);
+  }
+
+  // ---- T24 GNSS 杆臂必须覆盖速度子集软恢复与硬重锚两条消费路径 ----
+  // 杆臂取体系 x（天线在 IMU 前方 2 m）、角速率取体系 y（俯仰率 0.5 rad/s）：
+  //   ω×r = (0,ω,0)×(2,0,0) = (0,0,−2ω) 纯体系 z，水平姿态下再经 C_b^n（含任意
+  //   航向的纯偏航旋转）仍是纯 NED z —— 于是 v_d 分量与航向无关，可硬断言。
+  {
+    // 24a 速度子集：量测扣掉 C(ω×r) 后才写进【IMU 原点】速度
+    auto run_subset_with_lever = [](Ekf15State &ekf, float lever_x_m) {
+      ekf.gnss_lever_arm_body_m(Eigen::Vector3f(lever_x_m, 0.0f, 0.0f));
+      ekf.set_gnss_velocity_subset_recovery_enabled(true);
+      const Eigen::Vector3f gyro_pitch(0.0f, 0.5f, 0.0f);
+      bool third = false;
+      for (int frame = 0; frame < 3; ++frame)
+      {
+        for (int i = 0; i < 20; ++i)
+          ekf.TimeUpdate(kGravity, gyro_pitch, 0.005f);
+        const auto r = ekf.MeasurementUpdateDetailed(
+            Eigen::Vector3f(20.0f, 0.0f, 0.0f), kLla, 0.005f, 0.0f, true);
+        if (frame == 2)
+          third = r.fused && r.subset_velocity;
+      }
+      return third;
+    };
+    Ekf15State ekf0 = makeInit();
+    Ekf15State ekf2 = makeInit();
+    const bool trig0 = run_subset_with_lever(ekf0, 0.0f);
+    const bool trig2 = run_subset_with_lever(ekf2, 2.0f);
+    CHECK("T24a 两种杆臂都在第 3 帧触发速度子集", trig0 && trig2);
+    CHECK("T24a 无杆臂时垂速不被伪造", std::fabs(ekf0.ned_vel_mps().z()) < 0.15f);
+    // 天线速度 = IMU 速度 + (0,0,−1)，量测 (20,0,0) 反解出的 IMU 速度应是 (20,0,+1)
+    CHECK("T24a 杆臂 ω×r 已扣除（垂速收敛到 +1 m/s）",
+          ekf2.ned_vel_mps().z() > 0.55f && ekf2.ned_vel_mps().z() < 1.35f);
+  }
+  {
+    // 24b 硬重锚：把天线 LLA 换算到 IMU 原点后再写入状态，否则 |r| 米级偏差
+    // 被当成真实导航位置（本例 2 m，实机弹上可更大且随姿态翻转）。
+    auto run_reanchor_with_lever = [](Ekf15State &ekf, float lever_x_m) {
+      ekf.gnss_lever_arm_body_m(Eigen::Vector3f(lever_x_m, 0.0f, 0.0f));
+      ekf.ResetPositionVelocityToGnss(Eigen::Vector3f(5.0f, 0.0f, 0.0f), kLla);
+      for (int i = 0; i < 1400; ++i)
+        ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+      bool reacquired = false;
+      for (int frame = 0; frame < 3; ++frame)
+      {
+        for (int i = 0; i < 20; ++i)
+          ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+        const auto r = ekf.MeasurementUpdateDetailed(
+            Eigen::Vector3f(5.0f, 0.0f, 0.0f), kLla, 0.005f, 0.0f, true);
+        reacquired = reacquired || r.reacquired;
+      }
+      return reacquired;
+    };
+    Ekf15State ekf0 = makeInit();
+    Ekf15State ekf2 = makeInit();
+    const bool trig0 = run_reanchor_with_lever(ekf0, 0.0f);
+    const bool trig2 = run_reanchor_with_lever(ekf2, 2.0f);
+    CHECK("T24b 两种杆臂都触发硬重锚", trig0 && trig2);
+    const double off0 =
+        bfs::lla2ned(kLla, ekf0.lla_rad_m(), bfs::AngPosUnit::RAD).x();
+    const double off2 =
+        bfs::lla2ned(kLla, ekf2.lla_rad_m(), bfs::AngPosUnit::RAD).x();
+    // 无杆臂：IMU 与天线重合，重锚后 IMU 位置 = 天线 LLA（残差 0）
+    CHECK("T24b 无杆臂重锚到量测处", std::fabs(off0) < 0.5);
+    // 有杆臂：天线在 IMU 前方 2 m，重锚后「天线−IMU」的北向分量应≈ +2 m
+    // （未补偿时该值为 0——状态被直接写成天线位置）
+    CHECK("T24b 硬重锚已把天线量测换算到 IMU 原点（量测−状态≈+2 m）",
+          off2 > 1.2 && off2 < 3.0);
   }
 
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);

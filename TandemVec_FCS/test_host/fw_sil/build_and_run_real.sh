@@ -6,6 +6,9 @@ BIN_DIR="${BIN_DIR:-${TMPDIR:-/tmp}/tv_fcs_fw_sil_real}"
 CXX="${CXX:-g++}"
 CC="${CC:-gcc}"
 OPT="${OPT:--O2}"
+# 宿主 SIL 固定标量 Eigen 路径（理由见 build_incremental.sh）：避免混合核
+# 机器上边际 seed 按核出现双吸引子；固件 Cortex-M7 本身无 NEON。
+EIGEN_SIL_FLAGS="${EIGEN_SIL_FLAGS:--DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE}"
 mkdir -p "$BIN_DIR"
 
 # 真实 ubx.h 必须排在 SIL 的 ubx 桩之前；-DARDUINO 让它使用 SIL 的 Arduino 桩。

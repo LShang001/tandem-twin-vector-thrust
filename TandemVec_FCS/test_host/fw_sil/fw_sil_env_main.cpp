@@ -64,14 +64,26 @@
 #include "communication.h"
 #include "navigation_task.h"
 #include "sil_sensor_model.h"
+#include "missile_plant.h"
+#include "sil_imu_filter.h"
+#include "ins_vibration_hf.h"
+#include "sil_vibration_isolator.h"
+#include "NavImuIncrementSelect.h"
+#include "MadgwickAHRS.h"
+#include "math_utils.h"
 #endif
 
 #include <cmath>
 #include <cstdio>
+#include <string>
 #include <cstring>
 #include <limits>
 #include <random>
 #include <array>
+#ifdef EKF_NAV_TELEMETRY
+#include <vector>
+#include <algorithm>
+#endif
 
 // 200 Hz 控制级 CSV 追踪（仅 SIL 测试设施；默认关闭）。
 static const char *g_trace_csv_path = nullptr;
@@ -83,6 +95,59 @@ static float g_trace_fast_start_s = 24.0f;
 static float g_trace_fast_end_s = 26.0f;
 // 6DOF 积分子步数：默认 1 保持旧行为；>1 用于诊断显式欧拉近 Nyquist 数值振荡。
 static int g_plant_substeps = 1;
+// 6DOF 导弹弹体模式：真实固件导航任务 + 导弹真值/传感器；不跑 TandemVec 控制。
+static bool g_missile_mode = false;
+// 导航在环：把 EKF 姿态/陀螺估计喂给弹体理想自驾，默认关（保持真值闭环）。
+static bool g_missile_nav_loop = false;
+/* --gnss-lever：写入 kFlightCtrlParams.gnss_lever_*，navigation_task 每拍下发给
+   EKF 做天线杆臂补偿（默认 0 = 旧行为）。与 --gnss-lever-inject 一致时应抵消。 */
+static float g_gnss_lever_param[3] = {0.0f, 0.0f, 0.0f};
+/* 最近一次注入的 GNSS 量测（原点相对 NED）与实际杆臂偏移，供 200 Hz 追踪
+   直接核对注入符号——不要用真值姿态反推。 */
+static float g_sil_gnss_meas_ned[3] = {0.0f, 0.0f, 0.0f};
+static float g_sil_gnss_lever_ned[3] = {0.0f, 0.0f, 0.0f};
+static Quat4f g_ms_att_est{1.0f, 0.0f, 0.0f, 0.0f};
+static float g_ms_rate_est[3] = {0.0f, 0.0f, 0.0f};
+static std::string g_imu_grade = "icm";  // ideal/icm/low/adverse（导弹 SIL 研究档位）
+// 导弹 plant 包线扫描（默认 5000 N/120 kg/10 s → 6.4 g/451 m/s）。
+static float g_ms_thrust_n = 5000.0f;
+static float g_ms_mass_kg = 120.0f;
+static float g_ms_burn_s = 10.0f;
+// 生产 ICM-42688 配 ±8 g（sensor_imu.cpp）；16 g 仅作量程敏感性研究。
+static float g_imu_fs_g = 8.0f;
+// §4.24ak 姿态注入设施：把 IMU 三轴整体旋转指定角度（等效轴失准），用于验证
+// "姿态误差 × 比力" 对位置误差的定量关系；默认不设置（按 grade 的原值）。
+static bool g_imu_misalign_set = false;
+static float g_imu_misalign_deg = 0.0f;
+// 振动起始时刻（SIL）：0=从 t=0 起振；>0 用于先干净对准再叠加振动。
+static float g_vib_start_s = 0.0f;
+// 弹载飞控减震座（SIL 研究）：0=未装；>0 为固有频率 Hz；阻尼比默认 0.15。
+static float g_vib_iso_fn_hz = 0.0f;
+static float g_vib_iso_zeta = 0.15f;
+// 生产 sensor_imu.cpp 的软件低通（陀螺 α=0.15/加计 α=0.02/0.05）默认启用；
+// --no-imu-lpf 仅用于 A/B 旧口径。
+static bool g_imu_lpf_enable = true;
+// 生产 AHRS（Madgwick，2 kHz，滤波后机体系→FLU）默认启用；
+// --no-sil-ahrs 仅用于复现旧 SIL 的 backup_ahrs=0 口径。
+static bool g_sil_madgwick_enable = true;
+// 研究开关：导航增量绕过软件 LPF（AHRS/控制仍用滤波值），
+// 用于评估“EKF 用未滤波增量”的收益；默认 false 与生产一致。
+static bool g_nav_raw_imu = false;
+// 研究设施：与 `--nav-raw-imu` 配套。IMU 故障窗及其后 5 s 内，导航增量退回
+// 滤波值（= 默认生产口径），用于检验"冻结格 +67.5% 的代价来自未滤波台阶直接进
+// 导航积分"这一机理假设（报告 §4.24h/§4.24m）。默认 false；单独给出时对
+// 非 raw 臂完全惰性（增量本来就取滤波值）。
+static bool g_nav_raw_fault_fallback = false;
+// 锁存键选择：false=用注入故障窗（研究捷径）；true=用固件 IMU 健康 Failed 信号
+// （= 固件化时真正可用的触发源，用它先测"会不会在高过载/振动格误触发而静默吃掉收益"）。
+static bool g_nav_raw_fb_use_health = false;
+// 机制判别用：把窗键回退的**起点**推迟这么多秒（终点仍是"注入结束 + 5 s"），
+// 用于隔离"健康键优于窗键"是否只因为 Failed 确认延迟让切换点后移（报告 §4.24m）。
+static float g_nav_raw_fb_start_delay_s = 0.0f;
+// 反证用：把后持时长从 5 s 改成 H 秒（H 小 => 在 LPF 仍带冻结值时就切回，
+// 预测台阶重新出现）。报告 §4.24m-W 组的反向检验。
+static float g_nav_raw_fb_hold_s = 5.0f;
+static uint32_t g_nav_raw_fb_frames = 0;  // 自证据：回退真实发生的帧数
 // 起飞时刻（仅 SIL）：默认 3 s；用于验证地面等待不消耗无磁 20 s 窗口。
 static float g_takeoff_at_s = 3.0f;
 // 仅 SIL：初始真值航向偏置 [deg]，用于验证起飞前手动航向对准。
@@ -154,6 +219,9 @@ struct Plant {
     Quaternion qq{q.w,q.x,q.y,q.z};
     quaternionToEuler(qq, roll, pitch, yaw);
   }
+  // ★ 本 plant 只有垂直地面约束：没有气动阻尼，也没有地面水平摩擦。
+  // 水平速度只能被推力改变，落地后仍可滑行/翻滚。长失联 hold/pos 与
+  // 落地后位移是**上界**，不是实机漂移预测（2026-10-26，§7.11）。
   void step(const SixDOFWrench &w, float dt) {
     // model -> body: F=(Fz', Fy', -Fx'), M=(-Mz', My', -Mx')
     const float Fb[3] = {w.Fz, w.Fy, -w.Fx};
@@ -421,12 +489,26 @@ struct RealNavConfig
   float gnss_pos_d_std = 1.2f;
   float gnss_vel_ne_std = 0.10f;
   float gnss_vel_d_std = 0.15f;
+  // 有色 GNSS 误差开关：真实多径/电离层误差在时间上相关，EKF 的 R 按白噪声
+  // 建模；关闭后只剩白噪声，用于同二进制隔离“有色误差导致协方差过度自信”。
+  bool gnss_colored = true;
+  // 仅缩放 UBX 自报精度（h_acc/v_acc/s_acc），不改变实际噪声；用于测试
+  // EKF 的 R 是否应覆盖有色误差（1.0=当前固件口径）。
+  float gnss_r_scale = 1.0f;
+  /* GNSS 天线杆臂【注入】（机体系 [m]，天线相对 IMU 原点）。非 0 时 UBX 报告
+     的是天线相位中心的位置/速度：p+=C_b^n r、v+=C_b^n(ω×r)。
+     固件侧的补偿参数是 kFlightCtrlParams.gnss_lever_*（--gnss-lever）；
+     两者一致时应完全抵消，不一致/为 0 时留下未建模米级与米/秒级偏置。 */
+  float gnss_lever_inject[3] = {0.0f, 0.0f, 0.0f};
   float outage_start = 20.0f;
   float outage_end = 25.0f;
   float outlier_prob = 0.0f;
   bool gnss_spoof = false;
   float spoof_offset_m = 20.0f;
   float spoof_ramp_mps = 0.0f;
+  // 垂直 spoof：正值表示“报得更高”（pd 减小），与水平 spoof 共用 start。
+  float spoof_offset_z_m = 0.0f;
+  float spoof_ramp_z_mps = 0.0f;
   float spoof_start_s = 15.0f;
   float baro_noise = 0.25f;
   float baro_drift = 0.02f;
@@ -570,6 +652,11 @@ struct TruthSample
 {
   float pos[3];
   float vel[3];
+  /* 杆臂注入需要【量测时刻】的姿态与体角速率：GNSS 报告的是天线相位中心，
+     p_ant = p_imu + C_b^n r、v_ant = v_imu + C_b^n(ω×r)。必须用与 pos/vel
+     同一时刻的 q/ω，否则链路延迟 + 高角速率会混进注入误差本身。 */
+  float q[4];
+  float omega[3];
 };
 
 static void accumulateImuSample(const sil::ImuSample &s, float dt_s)
@@ -606,14 +693,74 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                           float fault_at, float loss, int mask, bool wind_on)
 {
   Plant p;
-  if (g_initial_yaw_deg != 0.0f)
+  sil::MissileParams ms_params;
+  ms_params.thrust_n = g_ms_thrust_n;
+  ms_params.mass_kg = g_ms_mass_kg;
+  ms_params.burn_s = g_ms_burn_s;
+  sil::MissilePlant missile(ms_params);
+  if (g_missile_mode)
+  {
+    const auto &ms = missile.state();
+    for (int a = 0; a < 3; ++a) {
+      p.pos[a] = ms.pos[a]; p.vel[a] = ms.vel[a];
+      p.omega[a] = ms.omega[a]; p.force_ned[a] = ms.force_ned[a];
+    }
+    p.q = ms.q;
+    p.on_ground = false;
+  }
+  if (!g_missile_mode && g_initial_yaw_deg != 0.0f)
   {
     const float h = 0.5f * g_initial_yaw_deg * 0.017453292f;
     p.q = Quat4f(std::cos(h), 0.0f, 0.0f, std::sin(h));
   }
   std::mt19937 rng(seed);
   sil::ImuConfig imu_cfg;
+  if (g_imu_grade == "ideal") {
+    imu_cfg.gyro_noise_density_dps = 1e-5f;
+    imu_cfg.accel_noise_density_ug = 1e-3f;
+    for (int i = 0; i < 3; ++i) {
+      imu_cfg.gyro_bias_dps[i] = 0.0f;
+      imu_cfg.accel_bias_mg[i] = 0.0f;
+    }
+    imu_cfg.gyro_bias_instability_dps = 0.0f;
+    imu_cfg.accel_bias_instability_mg = 0.0f;
+    imu_cfg.gyro_scale = 0.0f;
+    imu_cfg.accel_scale = 0.0f;
+    imu_cfg.misalign = 0.0f;
+    imu_cfg.gyro_vib_dps = 0.0f;
+  } else if (g_imu_grade == "low") {
+    for (int i = 0; i < 3; ++i) {
+      imu_cfg.gyro_bias_dps[i] *= 2.0f;
+      imu_cfg.accel_bias_mg[i] *= 2.0f;
+    }
+    imu_cfg.gyro_noise_density_dps *= 2.0f;
+    imu_cfg.accel_noise_density_ug *= 2.0f;
+    imu_cfg.gyro_scale *= 2.0f;
+    imu_cfg.accel_scale *= 2.0f;
+    imu_cfg.misalign *= 2.0f;
+  } else if (g_imu_grade == "adverse") {
+    for (int i = 0; i < 3; ++i) {
+      imu_cfg.gyro_bias_dps[i] *= 5.0f;
+      imu_cfg.accel_bias_mg[i] *= 5.0f;
+    }
+    imu_cfg.gyro_noise_density_dps *= 3.0f;
+    imu_cfg.accel_noise_density_ug *= 3.0f;
+    imu_cfg.gyro_scale *= 5.0f;
+    imu_cfg.accel_scale *= 5.0f;
+    imu_cfg.misalign *= 5.0f;
+  }
+  if (g_imu_misalign_set)
+  {
+    imu_cfg.misalign = g_imu_misalign_deg * static_cast<float>(M_PI) / 180.0f;
+  }
+  imu_cfg.full_scale_accel_g = g_imu_fs_g;
   sil::ImuModel imu(imu_cfg, static_cast<uint32_t>(seed) * 7919U + 11U);
+  sil::ImuLpfState imu_lpf;
+  // 生产 AHRS：sensor_imu.cpp 的 Madgwick（2 kHz，滤波后的机体系样本）。
+  // 之前 SIL 未链接该库，backup_ahrs_* 恒为 0，等于把“重力把俯仰拉平”
+  // 人为固定在 0°；这里接真实库，让 AHRS 量测误差由算法自己产生。
+  Madgwick madgwick_sil;
+  bool madgwick_sil_init = false;
 
   // 让固件自己完成 EKF 初始化/原点设置；不要沿用旧 SIL 的强制初始化。
   nav_system_initialized = false;
@@ -623,7 +770,6 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   isLinkUp = true;
   failsafe_in_flight = false;
   g_sil_time_us = 0;
-
   const float dt_ctrl = 0.005f;
   const int sub_steps = 10;
   const float dt_imu = dt_ctrl / static_cast<float>(sub_steps);
@@ -645,8 +791,27 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   float max_mag_kick = 0.0f;
   float max_mag_kick_rp = 0.0f;
   bool imu_fault_detected_any = false;
+  bool gnss_degrade_seen = false;
+  // 落地时刻指标：把“飞行段行为”与落地后无摩擦滑行分开，避免把滑行
+  // 位移当成飞行漂移（SIL plant 无地面水平摩擦，2026-10-26）。
+  bool airborne_seen = false;
+  bool landed = false;
+  float land_t = -1.0f;
+  float land_hold = -1.0f;
+  float land_pos_err = -1.0f;
+  float land_roll_deg = 0.0f;
+  float max_roll_preland = 0.0f;
+  // 接地垂直速度（NED 向下为正）与接地前最大下降速度：下降策略的
+  // 触地硬度指标，不能只看落地时间/位移（2026-10-26 下降速率权衡）。
+  float land_vz_down = -1.0f;
+  float max_desc_vz_down = 0.0f;
+  // 失联起始瞬间的真值高度：脚本用 --alt 设的是目标高度，爬升未完成时
+  // 与实际失联高度不是一回事（2026-10-26 下降速率扫描发现的台架口径坑）。
+  float alt_at_outage = -1.0f;
+  bool gnss_outage_prev = false;
   double sum_roll2 = 0.0, sum_pitch2 = 0.0;
   double sum_pos2 = 0.0, max_pos = 0.0;
+  double max_gnss_age = 0.0;  // 全程 GNSS 年龄峰值，用作失联注入的自证据
   int n_att = 0, n_pos = 0;
   double sum_nav_alt = 0.0;
   int n_nav_alt = 0;
@@ -659,7 +824,23 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   const float kImuNaN = std::numeric_limits<float>::quiet_NaN();
   double sum_hold2 = 0.0, max_hold = 0.0;
   double sum_hold_end2 = 0.0;
+  double sum_nav_att2 = 0.0, sum_nav_vel2 = 0.0;
+  double max_nav_att = 0.0;
+  // 分轴姿态误差（deg）：四元数总误差无法区分“航向不可观”与“横滚/俯仰
+  // 在过载段发散”，导弹 SIL 需要按轴归因（2026-10-27）。
+  double sum_nav_roll2 = 0.0, sum_nav_pitch2 = 0.0, sum_nav_yaw2 = 0.0;
+  double max_nav_roll = 0.0, max_nav_pitch = 0.0, max_nav_yaw = 0.0;
+  int n_nav_att = 0;
   int n_hold = 0, n_hold_end = 0;
+#ifdef EKF_NAV_TELEMETRY
+  // 闭环协方差一致性观测（仅 SIL 测试设施）：以 plant 真值为参照计算
+  // NEES = e^T P^-1 e / 3，判断滤波器的自报不确定度是否可信。
+  std::vector<float> nees_pos_samples, nees_vel_samples;
+  Eigen::Vector3d nees_origin_last = Eigen::Vector3d::Zero();
+  Eigen::Vector3d nees_truth_origin = Eigen::Vector3d::Zero();
+  bool nees_origin_valid = false;
+  float nees_dbg_ep = 0.0f, nees_dbg_sig = 0.0f, nees_dbg_val = -1.0f;
+#endif
 
   if (g_trace_csv_path != nullptr)
   {
@@ -677,7 +858,14 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "ekf_n,ekf_e,true_n,true_e,hold_n,hold_e,"
           "mag_kick,mag_kick_rp,mag_gate_reason,mode,reanchor,"
           "heading_aiding,pos_degraded,ch1,ch2,ch3,ch4,yaw_sigma,heading_mode,"
-          "gyro_bias_z,mag_age,heading_age\n");
+          "gyro_bias_z,mag_age,heading_age,"
+          "truth_alt,ctl_alt,target_alt,truth_vz,ekf_vz,ekf_ba_z,vfk_vz,"
+          "gbx_dps,gby_dps,abx_mps2,aby_mps2,baro_innov_m,baro_fused,"
+          "ekf_vn,ekf_ve,ekf_tilt_sigma,gnss_resid_pos_ne,gnss_resid_vel_ne,"
+          "gate_pos,gate_vel,vel_sub_rec,"
+          "msr_n,msr_e,msr_d,lv_n,lv_e,lv_d,"
+          "ad_tau_ms,ad_sharp,ad_valid,ad_rej,ad_ng,ad_er,ad_app,ad_blk,"
+          "vib_q,vib_rms_g,vib_sug,vib_gq,vib_gyr_dps,vib_high,vib_hf_g\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -704,6 +892,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     const int hi = k % kHist;
     hist[hi].pos[0] = p.pos[0]; hist[hi].pos[1] = p.pos[1]; hist[hi].pos[2] = p.pos[2];
     hist[hi].vel[0] = p.vel[0]; hist[hi].vel[1] = p.vel[1]; hist[hi].vel[2] = p.vel[2];
+    hist[hi].q[0] = p.q.w; hist[hi].q[1] = p.q.x;
+    hist[hi].q[2] = p.q.y; hist[hi].q[3] = p.q.z;
+    hist[hi].omega[0] = p.omega[0]; hist[hi].omega[1] = p.omega[1];
+    hist[hi].omega[2] = p.omega[2];
 
     // RC 50 Hz：链路丢失走真实 linkDownCallback（飞行中保持解锁 + AUTO_ALTITUDE），
     // 不再用“把 CH5 拉低”模拟——那会让固件执行 disarm 而不是 failsafe。
@@ -752,6 +944,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
 
     // GNSS 可配置刷新率（默认 10 Hz）：真实 UBX NAV-PVT+EOE 注入 Serial4。
     const bool gnss_outage = (t >= cfg.outage_start && t < cfg.outage_end);
+    if (gnss_outage && !gnss_outage_prev) alt_at_outage = -p.pos[2];
+    gnss_outage_prev = gnss_outage;
     const float gnss_rate_hz = std::fmax(1.0f, std::fmin(100.0f, cfg.gnss_rate_hz));
     const int gnss_div =
         std::max(1, static_cast<int>(std::lround(200.0f / gnss_rate_hz)));
@@ -765,9 +959,15 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       const float gnss_dt_s = 1.0f / gnss_rate_hz;
       const float a_corr = std::exp(-gnss_dt_s / 20.0f);
       const float q_corr = std::sqrt(std::max(0.0f, 1.0f - a_corr * a_corr));
+      // 无论启用与否都消耗相同的随机数，保证白噪声臂与有色臂逐 epoch
+      // 共用同一白噪声序列，只差 20 s 相关分量本身。
       gnss_corr(0) = a_corr * gnss_corr(0) + q_corr * 0.5f * n01(rng);
       gnss_corr(1) = a_corr * gnss_corr(1) + q_corr * 0.5f * n01(rng);
       gnss_corr(2) = a_corr * gnss_corr(2) + q_corr * 0.8f * n01(rng);
+      if (!cfg.gnss_colored)
+      {
+        gnss_corr.setZero();
+      }
 
       float pn = h.pos[0] + gnss_corr(0) + cfg.gnss_pos_ne_std * n01(rng);
       float pe = h.pos[1] + gnss_corr(1) + cfg.gnss_pos_ne_std * n01(rng);
@@ -775,6 +975,33 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       float vn = h.vel[0] + cfg.gnss_vel_ne_std * n01(rng);
       float ve = h.vel[1] + cfg.gnss_vel_ne_std * n01(rng);
       float vd = h.vel[2] + cfg.gnss_vel_d_std * n01(rng);
+
+      // 杆臂注入：把 IMU 原点真值换算到天线相位中心，用【量测时刻】的姿态与
+      // 体角速率（与固件延迟快照同口径），偏移本身是确定量、不叠加噪声。
+      g_sil_gnss_lever_ned[0] = g_sil_gnss_lever_ned[1] =
+          g_sil_gnss_lever_ned[2] = 0.0f;
+      if (cfg.gnss_lever_inject[0] != 0.0f || cfg.gnss_lever_inject[1] != 0.0f ||
+          cfg.gnss_lever_inject[2] != 0.0f)
+      {
+        const Quat4f qh{h.q[0], h.q[1], h.q[2], h.q[3]};
+        const float *r = cfg.gnss_lever_inject;
+        const float ocr_body[3] = {
+            h.omega[1] * r[2] - h.omega[2] * r[1],
+            h.omega[2] * r[0] - h.omega[0] * r[2],
+            h.omega[0] * r[1] - h.omega[1] * r[0]};
+        float r_ned[3], ocr_ned[3];
+        sil::BodyToNed(qh, r, r_ned);
+        sil::BodyToNed(qh, ocr_body, ocr_ned);
+        g_sil_gnss_lever_ned[0] = r_ned[0];
+        g_sil_gnss_lever_ned[1] = r_ned[1];
+        g_sil_gnss_lever_ned[2] = r_ned[2];
+        pn += r_ned[0];
+        pe += r_ned[1];
+        pd += r_ned[2];
+        vn += ocr_ned[0];
+        ve += ocr_ned[1];
+        vd += ocr_ned[2];
+      }
 
       bool outlier = false;
       if (cfg.outlier_prob > 0.0f)
@@ -797,10 +1024,16 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         pe += 0.6f * off;
         vn += cfg.spoof_ramp_mps;
         ve += 0.6f * cfg.spoof_ramp_mps;
+        const float off_z = cfg.spoof_offset_z_m + cfg.spoof_ramp_z_mps * dt_spoof;
+        pd -= off_z;  // 正值=报得更高（NED down 减小）
+        vd -= cfg.spoof_ramp_z_mps;
       }
 
       const Eigen::Vector3d lla = bfs::ned2lla(
           Eigen::Vector3d(pn, pe, pd), kHomeLla, bfs::AngPosUnit::RAD);
+      g_sil_gnss_meas_ned[0] = pn;
+      g_sil_gnss_meas_ned[1] = pe;
+      g_sil_gnss_meas_ned[2] = pd;
       sil::UbxPvtFields f;
       f.itow = 100000U + static_cast<uint32_t>(t_meas * 1000.0f);
       f.lon_1e7 = static_cast<int32_t>(std::llround(lla(1) * 57.29577951308232 * 1.0e7));
@@ -814,11 +1047,14 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       f.fix_type = 3;
       f.num_sv = outlier ? 7 : 14;
       f.h_acc_mm = outlier ? 20000U : static_cast<uint32_t>(
-          std::max(0.5f, 0.8f + 0.5f * gnss_corr.head<2>().norm()) * 1000.0f);
+          cfg.gnss_r_scale * std::max(0.5f, 0.8f + 0.5f * gnss_corr.head<2>().norm()) *
+          1000.0f);
       f.v_acc_mm = outlier ? 30000U : static_cast<uint32_t>(
-          std::max(1.0f, 1.5f + 0.8f * std::fabs(gnss_corr(2))) * 1000.0f);
+          cfg.gnss_r_scale * std::max(1.0f, 1.5f + 0.8f * std::fabs(gnss_corr(2))) *
+          1000.0f);
       f.s_acc_mmps = outlier ? 5000U : static_cast<uint32_t>(
-          std::max(0.05f, 0.08f + 0.05f * gnss_corr.head<2>().norm()) * 1000.0f);
+          cfg.gnss_r_scale * std::max(0.05f, 0.08f + 0.05f * gnss_corr.head<2>().norm()) *
+          1000.0f);
       f.p_dop_1e2 = outlier ? 500U : static_cast<uint16_t>(
           100 + 20 * std::min(4.0f, gnss_corr.norm()));
 
@@ -835,7 +1071,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     // 气压计 25 Hz：一阶滞后 + 噪声 + 漂移 + 1 cm 量化。
     if ((k % 8) == 0)
     {
-      const float true_alt = -p.pos[2];
+      // 导弹模式从离地 50 m 起始；导航原点在起飞点，气压高度需减去该偏移。
+      const float true_alt = -p.pos[2] - (g_missile_mode ? 50.0f : 0.0f);
       if (!baro_init) { baro_state = true_alt; baro_init = true; }
       if (cfg.baro_lag)
         baro_state += (true_alt - baro_state) * std::fmin(1.0f, 0.04f / 0.15f);
@@ -929,16 +1166,51 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     {
       throttlePercent = 0.0f; // 校准段固件看到零油门，静止陀螺/ZUPT 可用
     }
+    // 导弹没有 TandemVec 控制，但飞行中固件应按“已解锁 + 有油门”运行：
+    // 否则 IMU 健康监测的冻结检测（unlocked && throttle≥3%）永远不武装，
+    // SIL 会把冻结故障误测成“检测不到”。1 s 发射支撑后置为飞行状态。
+    if (g_missile_mode)
+    {
+      const bool launched = (t >= 1.0f);
+      g_is_unlocked = launched;
+      throttlePercent = launched ? 50.0f : 0.0f;
+    }
     handleNavigationSystem();
-    if (!calib_hold)
+    // 失联注入的自证据：`gnss_age`（= last_measurement_age_s）是量测本身的年龄、
+    // 且取末帧，实测三档都只有 0.025 s，**不能**用来判断失联是否发生；
+    // 真正反映"多久没吃到 GNSS"的是 aid_tracker 的 GNSS 年龄，记其峰值。
+    const float aid_gnss_age =
+        aid_tracker.status(bfs::AidSource::Gnss).age_s;
+    // aid_tracker 在首次记录前把 age_s 初始化为 FLT_MAX 哨兵，必须排除，
+    // 否则峰值恒为 3.4e38、判据永远"有效"。
+    if (aid_gnss_age > 0.0f && aid_gnss_age < 60.0f &&
+        aid_gnss_age > max_gnss_age)
+    {
+      max_gnss_age = aid_gnss_age;
+    }
+    if (g_missile_mode && g_missile_nav_loop && g_sil_nav_debug_initialized)
+    {
+      const Eigen::Quaternionf qe = nav_ekf.quat();
+      g_ms_att_est = Quat4f{qe.w(), qe.x(), qe.y(), qe.z()};
+      const Eigen::Vector3f bg = nav_ekf.gyro_bias_radps();
+      g_ms_rate_est[0] = g_sil_nav_debug_gyro[0] - bg.x();
+      g_ms_rate_est[1] = g_sil_nav_debug_gyro[1] - bg.y();
+      g_ms_rate_est[2] = g_sil_nav_debug_gyro[2] - bg.z();
+    }
+    if (!calib_hold && !g_missile_mode)
     {
       // 校准段不跑控制：否则位置/姿态积分器在地面长时间饱和，起飞瞬间
       // 直接翻车，会把“控制器饱和”误当成 EKF 不收敛。
+      // 导弹模式由弹体自带自动驾驶，固件只跑导航，不跑 TandemVec 控制。
       runGNCExecutive();
     }
     if (g_sil_nav_debug_imu_failed)
     {
       imu_fault_detected_any = true;
+    }
+    if (g_mode_degraded_gnss)
+    {
+      gnss_degrade_seen = true;
     }
     if (std::fabs(mag_status.last_kick_deg) > max_mag_kick)
     {
@@ -959,7 +1231,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u,%.4f,"
-          "%.3f,%.3f\n",
+          "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.4f,%.3f,"
+          "%.4f,%.4f,%.4f,%.4f,%.3f,%d,"
+          "%.2f,%.2f,%.4f,%.2f,%.2f,%d,%d,%u,"
+          "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.4f,%d,%u,%u,%u,%u,%u,"
+          "%.3f,%.3f,%.3f,%.4f,%.2f,%d,%.4f\n",
           t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
           nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
           nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
@@ -976,7 +1252,39 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           static_cast<unsigned>(g_heading_aid_mode),
           nav_ekf.gyro_bias_radps().z(),
           aid_tracker.status(bfs::AidSource::Mag).age_s,
-          g_heading_aiding_age_s);
+          g_heading_aiding_age_s,
+          -p.pos[2], -relative_down, target_altitude, -p.vel[2],
+          -INS_GNSS_Packet.velocity_down, ekf_accel_bias_z_mps2,
+          vfk_velocity,
+          nav_ekf.gyro_bias_radps().x() * 57.29578f,
+          nav_ekf.gyro_bias_radps().y() * 57.29578f,
+          nav_ekf.accel_bias_mps2().x(),
+          nav_ekf.accel_bias_mps2().y(),
+          baro_ekf_innovation_m, baro_ekf_fused ? 1 : 0,
+          nav_ekf.ned_vel_mps().x(), nav_ekf.ned_vel_mps().y(),
+          nav_ekf.tilt_sigma_rad() * 57.29578f,
+          nav_ekf.gnss_resid_pos_ne_m(), nav_ekf.gnss_resid_vel_ne_mps(),
+          nav_ekf.gnss_gate_pos_outlier() ? 1 : 0,
+          nav_ekf.gnss_gate_vel_outlier() ? 1 : 0,
+          static_cast<unsigned>(nav_ekf.gnss_velocity_subset_recovery_count()),
+          g_sil_gnss_meas_ned[0], g_sil_gnss_meas_ned[1],
+          g_sil_gnss_meas_ned[2], g_sil_gnss_lever_ned[0],
+          g_sil_gnss_lever_ned[1], g_sil_gnss_lever_ned[2],
+          static_cast<double>(gnss_status.auto_delay_tau_s * 1000.0f),
+          static_cast<double>(gnss_status.auto_delay_sharpness),
+          gnss_status.auto_delay_valid ? 1 : 0,
+          static_cast<unsigned>(gnss_status.auto_delay_reject),
+          static_cast<unsigned>(gnss_status.auto_delay_n_gnss),
+          static_cast<unsigned>(gnss_status.auto_delay_n_erased),
+          static_cast<unsigned>(gnss_status.auto_delay_applied_count),
+          static_cast<unsigned>(gnss_status.auto_delay_apply_block),
+          static_cast<double>(g_sil_nav_debug_vib[0]),
+          static_cast<double>(g_sil_nav_debug_vib[1]),
+          static_cast<double>(g_sil_nav_debug_vib[2]),
+          static_cast<double>(g_sil_nav_debug_vib[3]),
+          static_cast<double>(gnc_tel.vib_gyro_rms_dps),
+          gnc_tel.vib_high ? 1 : 0,
+          static_cast<double>(g_ins_hf_vibration.last().rms_g));
     }
 
     if (!manual && !alt_cmd && t >= g_takeoff_at_s)
@@ -1018,6 +1326,24 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       const float ts = t + static_cast<float>(s) * dt_imu;
       g_sil_time_us = static_cast<uint32_t>(ts * 1.0e6f);
 
+      if (g_missile_mode)
+      {
+        if (g_missile_nav_loop && g_sil_nav_debug_initialized) {
+          missile.Step(dt_imu, &g_ms_att_est, g_ms_rate_est);
+        } else {
+          missile.Step(dt_imu);
+        }
+        const auto &ms = missile.state();
+        for (int a = 0; a < 3; ++a) {
+          p.pos[a] = ms.pos[a]; p.vel[a] = ms.vel[a];
+          p.omega[a] = ms.omega[a]; p.force_ned[a] = ms.force_ned[a];
+          p.acc_ned[a] = ms.acc_ned[a];
+        }
+        p.q = ms.q;
+        p.on_ground = false;
+      }
+      else
+      {
       const float rate_limit = 300.0f * 0.017453292f * dt_imu;
       const float servo_step_f = std::fmax(-rate_limit, std::fmin(rate_limit,
           (servo_target_f - p.servo_f) * std::fmin(1.0f, dt_imu / 0.05f)));
@@ -1051,6 +1377,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       }
       p.step(computeWrench(ps, P), dt_imu);
 #endif
+      }  // !g_missile_mode
 
       float f_ned[3];
       if (p.on_ground)
@@ -1059,15 +1386,16 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       }
       else
       {
-        f_ned[0] = p.force_ned[0] / P.m;
-        f_ned[1] = p.force_ned[1] / P.m;
-        f_ned[2] = p.force_ned[2] / P.m;
+        const float mass_used = g_missile_mode ? missile.state().mass_kg : P.m;
+        f_ned[0] = p.force_ned[0] / mass_used;
+        f_ned[1] = p.force_ned[1] / mass_used;
+        f_ned[2] = p.force_ned[2] / mass_used;
       }
       float f_body[3];
       p.ned_to_body(f_ned, f_body);
 
       const float rpm_ratio = std::fmax(p.motor_wf, p.motor_wt) / P.wMax;
-      const float vib_scale = rpm_ratio * rpm_ratio;
+      const float vib_scale = g_missile_mode ? 1.0f : rpm_ratio * rpm_ratio;
       std::uniform_real_distribution<float> u01(0.0f, 1.0f);
       const bool imu_dropout_window =
           t >= cfg.imu_dropout_start && t <= cfg.imu_dropout_end;
@@ -1093,8 +1421,18 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         else
         {
           const float omega[3] = {p.omega[0], p.omega[1], p.omega[2]};
+          float vib_now =
+              (ts >= g_vib_start_s) ? cfg.vib_g * vib_scale : 0.0f;
+          if (vib_now > 0.0f && g_vib_iso_fn_hz > 0.0f)
+          {
+            // 多频模式（40/80/120 Hz）用 80 Hz 代表频率做幅值缩放；
+            // 单频模式按实际激励频率计算。真实减震座应按频谱积分。
+            const float vib_f = (cfg.vib_mode == 1) ? 80.0f : cfg.vib_hz;
+            vib_now *= sil::VibrationTransmissibility(vib_f, g_vib_iso_fn_hz,
+                                                      g_vib_iso_zeta);
+          }
           sample = imu.Step(
-              omega, f_body, ts, sample_dt, cfg.vib_g * vib_scale, cfg.vib_hz,
+              omega, f_body, ts, sample_dt, vib_now, cfg.vib_hz,
               cfg.vib_mode, cfg.anti_alias);
           if (g_trace_fast_file != nullptr && ts >= g_trace_fast_start_s &&
               ts < g_trace_fast_end_s)
@@ -1119,7 +1457,93 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
             have_last_imu = true;
           }
         }
-        accumulateImuSample(sample, sample_dt);
+        // 生产 sensor_imu.cpp 在 2 kHz 样本上做一阶软件低通；非有限样本不更新
+        // 滤波器状态（否则 NaN 会永久污染后续恢复）。
+        const sil::ImuSample sample_raw = sample;
+        if (g_imu_lpf_enable && sample.accel[0] == sample.accel[0] &&
+            sample.accel[1] == sample.accel[1] && sample.accel[2] == sample.accel[2] &&
+            sample.gyro[0] == sample.gyro[0] && sample.gyro[1] == sample.gyro[1] &&
+            sample.gyro[2] == sample.gyro[2])
+        {
+          sample = sil::ImuLpfApply(imu_lpf, sample);
+        }
+        // 高频振动通道：与生产 `sensor_imu.cpp` 步骤 4.5 同口径——用软件低通
+        // 前/后之差（补高通）测 80–120 Hz 机械振动；SIL 样本单位 m/s²，换算成 g。
+        {
+          constexpr float kGn = 9.80665f;
+          const float hf_raw_g[3] = {sample_raw.accel[0] / kGn,
+                                     sample_raw.accel[1] / kGn,
+                                     sample_raw.accel[2] / kGn};
+          const float hf_lp_g[3] = {sample.accel[0] / kGn, sample.accel[1] / kGn,
+                                    sample.accel[2] / kGn};
+          g_ins_hf_vibration.Update(hf_raw_g, hf_lp_g, sample_dt);
+        }
+        // 生产 sensor_imu.cpp 顺序：滤波后的机体系 FRD → Madgwick 输入系
+        // (x, -y, -z) → updateIMU(dps, g) → NED/FRD 欧拉 → backup_ahrs_*。
+        if (g_sil_madgwick_enable &&
+            sample.accel[0] == sample.accel[0] &&
+            sample.accel[1] == sample.accel[1] &&
+            sample.accel[2] == sample.accel[2] &&
+            sample.gyro[0] == sample.gyro[0] &&
+            sample.gyro[1] == sample.gyro[1] &&
+            sample.gyro[2] == sample.gyro[2])
+        {
+          constexpr double kGravity = 9.80665;
+          constexpr double kRadToDeg = 57.29577951308232;
+          const double ax_m = sample.accel[0] / kGravity;
+          const double ay_m = -sample.accel[1] / kGravity;
+          const double az_m = -sample.accel[2] / kGravity;
+          const double gx_m = sample.gyro[0] * kRadToDeg;
+          const double gy_m = -sample.gyro[1] * kRadToDeg;
+          const double gz_m = -sample.gyro[2] * kRadToDeg;
+          if (!madgwick_sil_init)
+          {
+            madgwick_sil.initializeFromAccelerometer(ax_m, ay_m, az_m);
+            madgwick_sil_init = true;
+          }
+          madgwick_sil.updateIMU(gx_m, gy_m, gz_m, ax_m, ay_m, az_m, sample_dt);
+          double ahrs_roll = 0.0, ahrs_pitch = 0.0, ahrs_yaw = 0.0;
+          madgwick_sil.getEulerAngles_NED_FRD(ahrs_roll, ahrs_pitch, ahrs_yaw);
+          backup_ahrs_roll = static_cast<float>(ahrs_roll);
+          backup_ahrs_pitch = static_cast<float>(ahrs_pitch);
+          backup_ahrs_yaw = wrapAnglePi(static_cast<float>(ahrs_yaw) +
+                                        ahrs_yaw_correction_rad);
+          const Quaternion ahrs_q = eulerToQuaternion(
+              static_cast<double>(backup_ahrs_roll),
+              static_cast<double>(backup_ahrs_pitch),
+              static_cast<double>(backup_ahrs_yaw));
+          backup_ahrs_Qw = ahrs_q.w;
+          backup_ahrs_Qx = ahrs_q.x;
+          backup_ahrs_Qy = ahrs_q.y;
+          backup_ahrs_Qz = ahrs_q.z;
+        }
+        // 导航增量源：默认取滤波值（生产口径）；`--nav-raw-imu` 改取未滤波值；
+        // 再叠加 `--nav-raw-fault-fallback` 则在故障期内退回滤波值。
+        // 锁存键两种：注入故障窗（研究捷径）或固件健康状态 Failed（= 固件化时真正拿得到的信号）。
+        // 健康键分支直接复用固件模块 `NavImuIncrementSelect.h`（与 `sensor_imu.cpp`
+        // 里 `BFS_NAVIGATION_RAW_IMU_INCREMENT` 打开后的调用完全同一份代码），
+        // 语义与原先的内联锁存逐拍等价：Failed 拍置满 10 000、其后非 Failed 拍递减。
+        static bfs::NavImuIncrementSelector s_nav_fb_sel(
+            true, bfs::NavImuIncrementSelector::kDefaultHoldTicks);
+        bool fault_latched = false;
+        if (g_nav_raw_fb_use_health)
+        {
+          fault_latched =
+              s_nav_fb_sel.select(g_sil_nav_debug_imu_failed) == bfs::NavImuSource::Filtered;
+        }
+        else
+        {
+          fault_latched = (cfg.imu_fault_mode != 0) &&
+                          (t >= cfg.imu_fault_start + g_nav_raw_fb_start_delay_s) &&
+                          (t < cfg.imu_fault_end + g_nav_raw_fb_hold_s);
+        }
+        const bool use_raw_nav = g_nav_raw_imu &&
+                                 !(g_nav_raw_fault_fallback && fault_latched);
+        if (g_nav_raw_imu && g_nav_raw_fault_fallback && fault_latched)
+        {
+          ++g_nav_raw_fb_frames;
+        }
+        accumulateImuSample(use_raw_nav ? sample_raw : sample, sample_dt);
         icm_gyro_x = sample.gyro[0];
         icm_gyro_y = sample.gyro[1];
         icm_gyro_z = sample.gyro[2];
@@ -1133,6 +1557,33 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     float r = 0.0f, pitch = 0.0f, yaw = 0.0f;
     p.euler(r, pitch, yaw);
     if (std::fabs(r * 57.29578f) > max_roll) max_roll = std::fabs(r * 57.29578f);
+    if (!landed && std::fabs(r * 57.29578f) > max_roll_preland)
+    {
+      max_roll_preland = std::fabs(r * 57.29578f);
+    }
+    if (!airborne_seen && -p.pos[2] > 1.0f)
+    {
+      airborne_seen = true;
+    }
+    if (airborne_seen && !landed && p.vel[2] > max_desc_vz_down)
+    {
+      max_desc_vz_down = p.vel[2];
+    }
+    // 首次从 >1 m 降到 <0.5 m 记为落地；land_* 是落地瞬间的快照。
+    if (airborne_seen && !landed && -p.pos[2] < 0.5f)
+    {
+      landed = true;
+      land_t = t;
+      land_vz_down = p.vel[2];
+      land_roll_deg = std::fabs(r * 57.29578f);
+      if (hold_set)
+      {
+        land_hold = std::hypot(double(p.pos[0]) - double(hold_target[0]),
+                               double(p.pos[1]) - double(hold_target[1]));
+      }
+      land_pos_err = std::hypot(double(relative_north) - double(p.pos[0]),
+                                double(relative_east) - double(p.pos[1]));
+    }
     if (std::fabs(pitch * 57.29578f) > max_pitch) max_pitch = std::fabs(pitch * 57.29578f);
     if (t > 9.0f)
     {
@@ -1150,7 +1601,74 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       ++n_pos;
       sum_nav_alt += nav_ekf.alt_m() - origin_alt_m;
       ++n_nav_alt;
+      const Eigen::Quaternionf qe = nav_ekf.quat();
+      const Eigen::Quaternionf qt(p.q.w, p.q.x, p.q.y, p.q.z);
+      const float qdot = std::fabs(std::clamp(qe.dot(qt), -1.0f, 1.0f));
+      const float att_err = 2.0f * std::acos(qdot);
+      const Eigen::Vector3f vel_err =
+          nav_ekf.ned_vel_mps() - Eigen::Vector3f(p.vel[0], p.vel[1], p.vel[2]);
+      sum_nav_att2 += static_cast<double>(att_err) * att_err;
+      sum_nav_vel2 += vel_err.squaredNorm();
+      max_nav_att = std::max(max_nav_att, static_cast<double>(att_err));
+      // 欧拉角差：航向先包到 ±180°，避免 ±π 跳变把 RMSE 拉爆。
+      float dyaw = nav_ekf.yaw_rad() - yaw;
+      while (dyaw > 3.14159265f) dyaw -= 6.2831853f;
+      while (dyaw < -3.14159265f) dyaw += 6.2831853f;
+      const double er = double(nav_ekf.roll_rad() - r) * 57.29578;
+      const double ep = double(nav_ekf.pitch_rad() - pitch) * 57.29578;
+      const double ey = double(dyaw) * 57.29578;
+      sum_nav_roll2 += er * er;
+      sum_nav_pitch2 += ep * ep;
+      sum_nav_yaw2 += ey * ey;
+      max_nav_roll = std::max(max_nav_roll, std::fabs(er));
+      max_nav_pitch = std::max(max_nav_pitch, std::fabs(ep));
+      max_nav_yaw = std::max(max_nav_yaw, std::fabs(ey));
+      ++n_nav_att;
     }
+#ifdef EKF_NAV_TELEMETRY
+    // 原点变化即重取真值基准（包括 t<=10 s 的起飞前/爬升段），
+    // 否则 10 s 才取样会把已爬升的高度当成恒定位置偏差。
+    if (nav_system_initialized && is_origin_lla_set)
+    {
+      const Eigen::Vector3d origin_lla(origin_lat_rad, origin_lon_rad, origin_alt_m);
+      if (!nees_origin_valid || (origin_lla - nees_origin_last).norm() > 1e-9)
+      {
+        nees_origin_valid = true;
+        nees_origin_last = origin_lla;
+        nees_truth_origin = Eigen::Vector3d(p.pos[0], p.pos[1], p.pos[2]);
+      }
+    }
+    // 10 Hz 采样、跳过前 10 s 收敛段。
+    if (nav_system_initialized && is_origin_lla_set && t > 10.0f && (k % 20) == 0)
+    {
+      const Eigen::Vector3d origin_lla(origin_lat_rad, origin_lon_rad, origin_alt_m);
+      const Eigen::Vector3d est = bfs::lla2ned(
+          nav_ekf.lla_rad_m(), origin_lla, bfs::AngPosUnit::RAD);
+      const Eigen::Vector3d truth = Eigen::Vector3d(p.pos[0], p.pos[1], p.pos[2]) -
+                                    nees_truth_origin;
+      const Eigen::Vector3f ep = (est - truth).cast<float>();
+      const Eigen::Vector3f ev = nav_ekf.ned_vel_mps() -
+                                 Eigen::Vector3f(p.vel[0], p.vel[1], p.vel[2]);
+      Eigen::Matrix3f Pp, Pv;
+      for (int rr = 0; rr < 3; ++rr)
+      {
+        for (int cc = 0; cc < 3; ++cc)
+        {
+          Pp(rr, cc) = nav_ekf.covariance_coeff(rr, cc);
+          Pv(rr, cc) = nav_ekf.covariance_coeff(3 + rr, 3 + cc);
+        }
+      }
+      const Eigen::Vector3f wp = Pp.ldlt().solve(ep);
+      const Eigen::Vector3f wv = Pv.ldlt().solve(ev);
+      const float nees_p = ep.dot(wp) / 3.0f;
+      const float nees_v = ev.dot(wv) / 3.0f;
+      if (std::isfinite(nees_p) && nees_p >= 0.0f) nees_pos_samples.push_back(nees_p);
+      if (std::isfinite(nees_v) && nees_v >= 0.0f) nees_vel_samples.push_back(nees_v);
+      nees_dbg_ep = ep.norm();
+      nees_dbg_sig = std::sqrt(std::fmax(0.0f, (Pp(0, 0) + Pp(1, 1) + Pp(2, 2)) / 3.0f));
+      nees_dbg_val = nees_p;
+    }
+#endif
     if (hold_set && t > 10.0f)
     {
       const double hx = double(p.pos[0]) - double(hold_target[0]);
@@ -1207,11 +1725,63 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                   g_sil_nav_debug_initialized ? 1 : 0,
                   mag_status.last_kick_deg,
                   static_cast<unsigned>(mag_status.last_gate_reason));
+      if (g_missile_mode) {
+        const auto &ms = missile.state();
+        float rpy_r, rpy_p, rpy_y;
+        {
+          Quaternion qd{ms.q.w, ms.q.x, ms.q.y, ms.q.z};
+          quaternionToEuler(qd, rpy_r, rpy_p, rpy_y);
+        }
+        std::printf("[ms] t=%5.2f alt=%7.1f pitch=%6.1f alpha=%6.1f qbar=%8.0f T=%5.0f v=%6.1f imp=%d\n",
+                    ms.time_s, -ms.pos[2], rpy_p * 57.3f, ms.alpha_rad * 57.3f,
+                    ms.qbar_pa, ms.thrust_n,
+                    std::sqrt(ms.vel[0]*ms.vel[0]+ms.vel[1]*ms.vel[1]+ms.vel[2]*ms.vel[2]),
+                    ms.impacted ? 1 : 0);
+      }
+#ifdef EKF_NAV_TELEMETRY
+      std::printf("[nees] t=%5.1f ep3d=%6.2f sig_rms=%6.2f nees=%7.2f\n",
+                  t, static_cast<double>(nees_dbg_ep),
+                  static_cast<double>(nees_dbg_sig),
+                  static_cast<double>(nees_dbg_val));
+#endif
     }
   }
 
   const double rms_roll = n_att ? std::sqrt(sum_roll2 / n_att) : 0.0;
   const double rms_pitch = n_att ? std::sqrt(sum_pitch2 / n_att) : 0.0;
+#ifdef EKF_NAV_TELEMETRY
+  auto nees_quantile = [](std::vector<float> v, const double q) -> double {
+    if (v.empty()) return -1.0;
+    std::sort(v.begin(), v.end());
+    const double pos = q * (static_cast<double>(v.size()) - 1.0);
+    const size_t i = static_cast<size_t>(pos);
+    const double frac = pos - static_cast<double>(i);
+    const size_t j = std::min(i + 1, v.size() - 1);
+    return static_cast<double>(v[i]) * (1.0 - frac) +
+           static_cast<double>(v[j]) * frac;
+  };
+  char nees_json[384];
+  if (!nees_pos_samples.empty() && !nees_vel_samples.empty())
+  {
+    std::snprintf(nees_json, sizeof(nees_json),
+                  ",\"nees_pos_med\":%.3f,\"nees_pos_p95\":%.3f,"
+                  "\"nees_pos_max\":%.3f,\"nees_vel_med\":%.3f,"
+                  "\"nees_vel_p95\":%.3f,\"nees_vel_max\":%.3f,\"nees_n\":%d",
+                  nees_quantile(nees_pos_samples, 0.5),
+                  nees_quantile(nees_pos_samples, 0.95),
+                  nees_quantile(nees_pos_samples, 1.0),
+                  nees_quantile(nees_vel_samples, 0.5),
+                  nees_quantile(nees_vel_samples, 0.95),
+                  nees_quantile(nees_vel_samples, 1.0),
+                  static_cast<int>(nees_pos_samples.size()));
+  }
+  else
+  {
+    nees_json[0] = '\0';
+  }
+#else
+  const char *nees_json = "";
+#endif
   const double pos_rms = n_pos ? std::sqrt(sum_pos2 / n_pos) : -1.0;
   const double nav_alt_mean = n_nav_alt ? (sum_nav_alt / n_nav_alt) : 0.0;
   const double hold_rms = n_hold ? std::sqrt(sum_hold2 / n_hold) : -1.0;
@@ -1220,17 +1790,23 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "pos_rms=%.2f pos_max=%.2f hold_rms=%.2f hold_max=%.2f hold_end_rms=%.2f "
               "max_roll=%.2f max_pitch=%.2f rms_roll=%.2f rms_pitch=%.2f "
               "nav_init=%d fix3d=%u quality_fail=%u tow_mismatch=%u duplicate=%u "
-              "reacquire_resets=%u outlier_rejects=%u mag_fused=%u mag_rej=%u "
+              "reacquire_resets=%u horiz_reacq=%u vel_sub_rec=%u "
+              "outlier_rejects=%u mag_fused=%u mag_rej=%u "
               "mag_gate=%u mag_cal=%d mag_norm=%.2f mag_hdg=%.2f "
-              "grav_att=%u grav_fused=%u mag_kick=%.2f mag_kickrp=%.2f "
+              "grav_att=%u grav_fused=%u att_att=%u att_fused=%u "
+              "mag_kick=%.2f mag_kickrp=%.2f "
               "imu_state=%d imu_frz=%.2f imu_drop=%.2f imu_failed=%d "
-              "imu_detected=%d gnss_susp=%d gnss_crej=%u gnss_cres=%.3f\n",
+              "imu_detected=%d imu_inv=%d imu_flags=%u pre_st=%d pre_ok=%d "
+              "pre_acc=%.2f pre_astd=%.3f pre_gyr=%.3f pre_gstd=%.3f "
+              "gnss_susp=%d gnss_crej=%u gnss_cres=%.3f\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
               gnss_status.fix3d_count, gnss_status.quality_fail_count,
               gnss_status.tow_mismatch_count, gnss_status.duplicate_itow_count,
               nav_ekf.gnss_reacquire_reset_count(),
+              nav_ekf.gnss_horizontal_reanchor_count(),
+              nav_ekf.gnss_velocity_subset_recovery_count(),
               nav_ekf.gnss_outlier_reject_count(),
               nav_ekf.mag_vector_fused_count(),
               nav_ekf.mag_vector_reject_count(),
@@ -1238,10 +1814,16 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               mag_status.norm_ut, mag_status.heading_error_deg,
               aid_tracker.status(bfs::AidSource::Gravity).attempt_count,
               aid_tracker.status(bfs::AidSource::Gravity).fuse_count,
+              aid_tracker.status(bfs::AidSource::Attitude).attempt_count,
+              aid_tracker.status(bfs::AidSource::Attitude).fuse_count,
               max_mag_kick, max_mag_kick_rp,
               static_cast<int>(g_imu_health_state), g_imu_health_frozen_s,
               g_imu_health_no_sample_s, g_sil_nav_debug_imu_failed ? 1 : 0,
               imu_fault_detected_any ? 1 : 0,
+              g_sil_nav_debug_imu_invalid, g_imu_health_flags,
+              g_sil_pre_stable ? 1 : 0, g_sil_pre_ok ? 1 : 0,
+              g_sil_pre_accel_norm, g_sil_pre_accel_std,
+              g_sil_pre_gyro_norm, g_sil_pre_gyro_std,
               gnss_status.consistency_suspect ? 1 : 0,
               gnss_status.consistency_reject_count,
               gnss_status.consistency_accel_res);
@@ -1250,37 +1832,128 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"hold_rms\":%.3f,\"hold_max\":%.3f,\"hold_end_rms\":%.3f,"
               "\"max_roll\":%.3f,"
               "\"max_pitch\":%.3f,\"rms_roll\":%.3f,\"rms_pitch\":%.3f,"
-              "\"nav_init\":%d,\"fix3d\":%u,\"quality_fail\":%u,"
+              "\"nav_init\":%d,\"fix3d\":%u,\"gnss_age\":%.3f,"
+              "\"gnss_stale_peak_s\":%.3f,"
+              "\"gnss_tmap_invalid\":%u,\"quality_fail\":%u,"
               "\"tow_mismatch\":%u,\"duplicate\":%u,\"reacquire_resets\":%u,"
+              "\"horiz_reacq\":%u,\"vel_sub_rec\":%u,"
               "\"outlier_rejects\":%u,\"mag_fused\":%u,\"mag_rej\":%u,"
               "\"mag_gate\":%u,\"mag_cal\":%d,\"mag_norm\":%.3f,"
+              "\"att_att\":%u,\"att_fused\":%u,"
               "\"mag_hdg\":%.3f,\"imu_state\":%d,\"imu_frz\":%.3f,"
               "\"imu_drop\":%.3f,\"imu_failed\":%d,\"imu_detected\":%d,"
+              "\"imu_inv\":%d,\"imu_flags\":%u,"
+              "\"pre_stable\":%d,\"pre_ok\":%d,\"pre_acc\":%.2f,"
+              "\"pre_astd\":%.3f,\"pre_gyr\":%.3f,\"pre_gstd\":%.3f,"
               "\"gnss_susp\":%d,\"gnss_crej\":%u,\"gnss_cres\":%.3f,"
+              "\"vgsus\":%d,\"vgfr\":%u,"
+              "\"bh_sus\":%d,\"bh_flags\":%u,\"bh_skips\":%u,\"bh_rate\":%.3f,"
+              "\"bh_fcum\":%u,\"bh_nsus\":%u,"
               "\"heading_aiding\":%d,\"heading_age\":%.2f,"
-              "\"f3\":%d,\"f4\":%d,\"pos_degraded\":%d}\n",
+              "\"f3\":%d,\"f4\":%d,\"pos_degraded\":%d,"
+              "\"mode_degraded_gnss\":%d,"
+              "\"land_t\":%.2f,\"land_hold\":%.2f,\"land_pos_err\":%.2f,"
+              "\"land_roll\":%.2f,\"max_roll_preland\":%.2f,"
+              "\"land_vz_down\":%.3f,\"max_desc_vz_down\":%.3f,"
+              "\"alt_at_outage\":%.2f,"
+              "\"baro_vel_attempts\":%u,\"baro_vel_fused\":%u,"
+              "\"baro_vel_rejected\":%u,"
+              "\"ad_tau_ms\":%.1f,\"ad_sharp\":%.4f,\"ad_valid\":%d,"
+              "\"ad_resid\":%.3f,"
+              "\"ad_rej\":%u,\"ad_ng\":%u,\"ad_er\":%u,\"ad_smax\":%.1f,"
+              "\"ad_app\":%u,\"ad_blk\":%u,"
+              "\"ms_vmax\":%.1f,\"ms_altmax\":%.1f,\"ms_gmax\":%.2f,"
+              "\"ms_rate_max\":%.1f,\"ms_qbar_max\":%.0f,"
+              "\"ms_impact_t\":%.2f,"
+              "\"ms_final_n\":%.1f,\"ms_final_e\":%.1f,\"ms_final_d\":%.1f,"
+              "\"nav_att_rmse\":%.3f,\"nav_att_max\":%.3f,"
+              "\"nav_roll_rmse\":%.3f,\"nav_roll_max\":%.3f,"
+              "\"nav_pitch_rmse\":%.3f,\"nav_pitch_max\":%.3f,"
+              "\"nav_yaw_rmse\":%.3f,\"nav_yaw_max\":%.3f,"
+              "\"nav_vel_rms\":%.4f,\"nrfb\":%u%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
-              gnss_status.fix3d_count, gnss_status.quality_fail_count,
+              gnss_status.fix3d_count,
+              gnss_status.last_measurement_age_s,
+              max_gnss_age,
+              gnss_status.time_mapping_invalid_count,
+              gnss_status.quality_fail_count,
               gnss_status.tow_mismatch_count, gnss_status.duplicate_itow_count,
               nav_ekf.gnss_reacquire_reset_count(),
+              nav_ekf.gnss_horizontal_reanchor_count(),
+              nav_ekf.gnss_velocity_subset_recovery_count(),
               nav_ekf.gnss_outlier_reject_count(),
               nav_ekf.mag_vector_fused_count(),
               nav_ekf.mag_vector_reject_count(),
               mag_status.gate_rejected, mag_status.cal_valid ? 1 : 0,
-              mag_status.norm_ut, mag_status.heading_error_deg,
+              mag_status.norm_ut,
+              aid_tracker.status(bfs::AidSource::Attitude).attempt_count,
+              aid_tracker.status(bfs::AidSource::Attitude).fuse_count,
+              mag_status.heading_error_deg,
               static_cast<int>(g_imu_health_state), g_imu_health_frozen_s,
               g_imu_health_no_sample_s, g_sil_nav_debug_imu_failed ? 1 : 0,
               imu_fault_detected_any ? 1 : 0,
+              g_sil_nav_debug_imu_invalid, g_imu_health_flags,
+              g_sil_pre_stable ? 1 : 0, g_sil_pre_ok ? 1 : 0,
+              g_sil_pre_accel_norm, g_sil_pre_accel_std,
+              g_sil_pre_gyro_norm, g_sil_pre_gyro_std,
               gnss_status.consistency_suspect ? 1 : 0,
               gnss_status.consistency_reject_count,
               gnss_status.consistency_accel_res,
+              g_gnss_vert_suspect ? 1 : 0,
+              g_gnss_vert_gate_frames,
+              g_baro_health_suspect ? 1 : 0,
+              g_baro_health_flags,
+              g_baro_health_skips,
+              static_cast<double>(g_baro_health_drift_mps),
+              g_baro_health_flags_cum,
+              g_baro_health_sus_count,
               g_heading_aiding_valid ? 1 : 0,
               static_cast<double>(g_heading_aiding_age_s),
               g_actuator_thrust_loss ? 1 : 0,
               g_actuator_servo_jam ? 1 : 0,
-              g_mode_degraded_heading ? 1 : 0);
+              g_mode_degraded_heading ? 1 : 0,
+              gnss_degrade_seen ? 1 : 0,
+              static_cast<double>(land_t),
+              static_cast<double>(land_hold),
+              static_cast<double>(land_pos_err),
+              static_cast<double>(land_roll_deg),
+              static_cast<double>(max_roll_preland),
+              static_cast<double>(land_vz_down),
+              static_cast<double>(max_desc_vz_down),
+              static_cast<double>(alt_at_outage),
+              g_baro_vel_aid_attempts, g_baro_vel_aid_fused,
+              g_baro_vel_aid_rejected,
+              static_cast<double>(gnss_status.auto_delay_tau_s * 1000.0f),
+              static_cast<double>(gnss_status.auto_delay_sharpness),
+              gnss_status.auto_delay_valid ? 1 : 0,
+              static_cast<double>(gnss_status.auto_delay_residual_mps),
+              static_cast<unsigned>(gnss_status.auto_delay_reject),
+              static_cast<unsigned>(gnss_status.auto_delay_n_gnss),
+              static_cast<unsigned>(gnss_status.auto_delay_n_erased),
+              static_cast<double>(gnss_status.auto_delay_speed_max_mps),
+              static_cast<unsigned>(gnss_status.auto_delay_applied_count),
+              static_cast<unsigned>(gnss_status.auto_delay_apply_block),
+              static_cast<double>(missile.state().max_speed_mps),
+              static_cast<double>(missile.state().max_alt_m),
+              static_cast<double>(missile.state().max_load_g),
+              static_cast<double>(missile.state().max_rate_dps),
+              static_cast<double>(missile.state().max_qbar_pa),
+              static_cast<double>(missile.state().impact_t),
+              static_cast<double>(p.pos[0]), static_cast<double>(p.pos[1]),
+              static_cast<double>(p.pos[2]),
+              n_nav_att ? std::sqrt(sum_nav_att2 / n_nav_att) * 57.29578 : -1.0,
+              max_nav_att * 57.29578,
+              n_nav_att ? std::sqrt(sum_nav_roll2 / n_nav_att) : -1.0,
+              max_nav_roll,
+              n_nav_att ? std::sqrt(sum_nav_pitch2 / n_nav_att) : -1.0,
+              max_nav_pitch,
+              n_nav_att ? std::sqrt(sum_nav_yaw2 / n_nav_att) : -1.0,
+              max_nav_yaw,
+              n_nav_att ? std::sqrt(sum_nav_vel2 / n_nav_att) : -1.0,
+              static_cast<unsigned>(g_nav_raw_fb_frames),
+              nees_json);
   if (g_trace_csv_file != nullptr)
   {
     std::fclose(g_trace_csv_file);
@@ -1302,6 +1975,7 @@ int main(int argc, char** argv) {
   int fault=0; // 0=none, 3=thrust loss(单发), 4=servo jam, 5=both motors loss
   float fault_at=8.0f;  // 故障注入时刻 [s]（默认 8；定高需先爬升时可设 20）
   float loss=0.70f;     // fault 3/5 的推力保留比例（0.9=损失10%）
+  float vib_hf_enter_g=-1.0f; // 高频振动否决进入门限 [g]（-1=用宏默认 0.15）
   float target_alt=10.0f; // AUTO_ALTITUDE 目标高度 [m]（F3 验证可调高）
   float seconds=40.0f;    // 仿真时长 [s]
   int mask=0x03;        // inertia_comp_mask，0 关闭前馈 / 3 全开（C-02 A/B）
@@ -1406,6 +2080,90 @@ int main(int argc, char** argv) {
                   &g_trace_fast_end_s);
     else if (std::strcmp(argv[i],"--plant-substeps")==0 && i+1<argc)
       g_plant_substeps = std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--missile")==0)      g_missile_mode = true;
+    else if (std::strcmp(argv[i],"--imu-grade")==0 && i+1<argc)
+      g_imu_grade = argv[++i];
+    else if (std::strcmp(argv[i],"--ms-thrust")==0 && i+1<argc)
+      g_ms_thrust_n = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--ms-mass")==0 && i+1<argc)
+      g_ms_mass_kg = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--ms-burn")==0 && i+1<argc)
+      g_ms_burn_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--missile-nav-loop")==0)
+      g_missile_nav_loop = true;
+    else if (std::strcmp(argv[i],"--imu-fs-g")==0 && i+1<argc)
+      g_imu_fs_g = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--imu-misalign-deg")==0 && i+1<argc)
+    {
+      g_imu_misalign_deg = std::atof(argv[++i]);
+      g_imu_misalign_set = true;
+    }
+    else if (std::strcmp(argv[i],"--imu-health-accel-range")==0 && i+1<argc)
+      g_sil_imu_health_accel_range_mps2 = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--no-imu-lpf")==0)
+      g_imu_lpf_enable = false;
+    else if (std::strcmp(argv[i],"--no-sil-ahrs")==0)
+      g_sil_madgwick_enable = false;
+    else if (std::strcmp(argv[i],"--nav-raw-imu")==0)
+      g_nav_raw_imu = true;
+    else if (std::strcmp(argv[i],"--nav-raw-fault-fallback")==0)
+      g_nav_raw_fault_fallback = true;
+    else if (std::strcmp(argv[i],"--nav-raw-fb-health")==0)
+      g_nav_raw_fb_use_health = true;
+    else if (std::strcmp(argv[i],"--nav-raw-fb-delay")==0 && i+1<argc)
+      g_nav_raw_fb_start_delay_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--nav-raw-fb-hold")==0 && i+1<argc)
+      g_nav_raw_fb_hold_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--vib-start")==0 && i+1<argc)
+      g_vib_start_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--gyro-q-cap")==0 && i+1<argc)
+      g_sil_gyro_q_cap_radps = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-deadband")==0 && i+1<argc)
+      g_sil_delay_deadband_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--vib-veto")==0 && i+1<argc)
+      g_sil_delay_vib_veto = std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--vib-hf-source")==0 && i+1<argc)
+      g_sil_vib_hf_source = std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--vib-hf-enter")==0 && i+1<argc)
+      vib_hf_enter_g = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-max-gap")==0 && i+1<argc)
+      g_sil_delay_max_gap_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-max-resid")==0 && i+1<argc)
+      g_sil_delay_max_resid_mps = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-apply-lpf")==0 && i+1<argc)
+      g_sil_delay_apply_lpf_s = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-apply-freeze")==0 && i+1<argc)
+      g_sil_delay_apply_freeze = std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-grid-max-ms")==0 && i+1<argc)
+      g_sil_delay_grid_max_ms = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--delay-cap-ms")==0 && i+1<argc)
+      g_sil_delay_cap_ms = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--vib-iso-fn")==0 && i+1<argc)
+      g_vib_iso_fn_hz = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--vib-iso-zeta")==0 && i+1<argc)
+      g_vib_iso_zeta = std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--sat-q-inflate")==0 && i+1<argc)
+    {
+      ++i;
+#ifdef BFS_IMU_SATURATION_Q_INFLATE
+      g_sil_imu_sat_q_inflate_mps2 =
+          static_cast<float>(std::atof(argv[i]));
+#endif
+    }
+    else if (std::strcmp(argv[i],"--sat-q-enter")==0 && i+1<argc)
+    {
+      ++i;
+#ifdef BFS_IMU_SATURATION_Q_INFLATE
+      g_sil_imu_sat_q_enter_s = static_cast<float>(std::atof(argv[i]));
+#endif
+    }
+    else if (std::strcmp(argv[i],"--sat-q-release")==0 && i+1<argc)
+    {
+      ++i;
+#ifdef BFS_IMU_SATURATION_Q_INFLATE
+      g_sil_imu_sat_q_release_s = static_cast<float>(std::atof(argv[i]));
+#endif
+    }
     else if (std::strcmp(argv[i],"--profile")==0 && i+1<argc)
       applyRealNavProfile(real_cfg, argv[++i]);
 #ifdef FW_SIL_COAXIAL
@@ -1435,6 +2193,37 @@ int main(int argc, char** argv) {
       real_cfg.gnss_pos_ne_std=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--gnss-vel-std")==0 && i+1<argc)
       real_cfg.gnss_vel_ne_std=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--gnss-white")==0)
+      real_cfg.gnss_colored=false;
+    else if (std::strcmp(argv[i],"--gnss-vel-subset")==0 && i+1<argc)
+      g_gnss_vel_subset_recovery_enable = std::atoi(argv[++i]) != 0;
+    else if (std::strcmp(argv[i],"--gnss-vel-subset-posres")==0 && i+1<argc)
+      g_gnss_vel_subset_max_pos_resid_m = std::atof(argv[++i]);  // §4.24q 同二进制 A/B
+    else if (std::strcmp(argv[i],"--gnss-vel-subset-maxfires")==0 && i+1<argc)
+      g_gnss_vel_subset_max_fires_per_epoch = std::atoi(argv[++i]);  // §4.24w 同二进制 A/B
+    else if (std::strcmp(argv[i],"--gnss-v-gate")==0 && i+1<argc)
+      g_gnss_v_gate_enable = std::atoi(argv[++i]) != 0;
+    else if (std::strcmp(argv[i],"--gnss-r-scale")==0 && i+1<argc)
+      real_cfg.gnss_r_scale=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--gnss-lever-inject")==0 && i+1<argc)
+    {
+      // 天线相对 IMU 的机体系杆臂 [m]（SIL 注入侧，逗号分隔）
+      if (std::sscanf(argv[++i], "%f,%f,%f", real_cfg.gnss_lever_inject,
+                      real_cfg.gnss_lever_inject + 1,
+                      real_cfg.gnss_lever_inject + 2) != 3)
+      {
+        std::fprintf(stderr, "[sil] bad --gnss-lever-inject: %s\n", argv[i]);
+      }
+    }
+    else if (std::strcmp(argv[i],"--gnss-lever")==0 && i+1<argc)
+    {
+      // 固件补偿参数（kFlightCtrlParams.gnss_lever_*，逗号分隔）
+      if (std::sscanf(argv[++i], "%f,%f,%f", &g_gnss_lever_param[0],
+                      &g_gnss_lever_param[1], &g_gnss_lever_param[2]) != 3)
+      {
+        std::fprintf(stderr, "[sil] bad --gnss-lever: %s\n", argv[i]);
+      }
+    }
     else if (std::strcmp(argv[i],"--gnss-outlier")==0 && i+1<argc)
       real_cfg.outlier_prob=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--gnss-spoof")==0 && i+1<argc)
@@ -1446,12 +2235,28 @@ int main(int argc, char** argv) {
       real_cfg.spoof_ramp_mps=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--gnss-spoof-start")==0 && i+1<argc)
       real_cfg.spoof_start_s=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--gnss-spoof-z")==0 && i+1<argc)
+    {
+      real_cfg.gnss_spoof = true;
+      real_cfg.spoof_offset_z_m=std::atof(argv[++i]);
+    }
+    else if (std::strcmp(argv[i],"--gnss-spoof-z-ramp")==0 && i+1<argc)
+    {
+      real_cfg.gnss_spoof = true;
+      real_cfg.spoof_ramp_z_mps=std::atof(argv[++i]);
+    }
     else if (std::strcmp(argv[i],"--gnss-outage")==0 && i+1<argc)
       std::sscanf(argv[++i], "%f:%f", &real_cfg.outage_start, &real_cfg.outage_end);
     else if (std::strcmp(argv[i],"--baro-noise")==0 && i+1<argc)
       real_cfg.baro_noise=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--baro-drift")==0 && i+1<argc)
       real_cfg.baro_drift=std::atof(argv[++i]);
+    else if (std::strcmp(argv[i],"--baro-vel-aid")==0 && i+1<argc)
+      g_baro_vel_aid_enable = std::atoi(argv[++i]) != 0;
+    else if (std::strcmp(argv[i],"--baro-health-gate")==0 && i+1<argc)
+      g_baro_health_gate_enable = std::atoi(argv[++i]) != 0;
+    else if (std::strcmp(argv[i],"--flare")==0 && i+1<argc)
+      g_flare_enable = std::atoi(argv[++i]) != 0;
     else if (std::strcmp(argv[i],"--wind-force")==0 && i+1<argc)
       real_cfg.wind_force_mps2=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--initial-yaw-deg")==0 && i+1<argc)
@@ -1491,9 +2296,28 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--gnss-consistency-reject")==0)
       real_cfg.gnss_consistency_reject=true;
 #endif
+    else
+    {
+      // 静默忽略未知参数会让"以为注入了故障、其实没有"的对照臂产出假证据
+      // （实测：`--loss 5` 被当成推力保留比例 500% 且需 `--fault 3/5` 才生效，
+      //  三组"失联"臂因此与洁净臂逐位相同）。一律硬失败。
+      std::fprintf(stderr, "[sil] 未识别的参数: %s\n", argv[i]);
+      return 2;
+    }
   }
-  const float rate_scale = rate_gain_scale_set ? rate_gain_scale : gain_scale;
-  const float att_scale = att_gain_scale_set ? att_gain_scale : gain_scale;
+  if (loss <= 0.0f || loss > 1.0f)
+  {
+    std::fprintf(stderr,
+                 "[sil] --loss 是推力保留比例 (0,1]，收到 %g；"
+                 "GNSS 失联请用 --gnss-outage A:B\n", loss);
+    return 2;
+  }
+  // 高频振动否决门限扫描（同二进制 runtime A/B）：只改进入门限，释放门限按比例缩放。
+  if (vib_hf_enter_g > 0.0f)
+  {
+    g_ins_hf_vibration.SetHysteresis(vib_hf_enter_g, -1.0f);
+  }
+  const float rate_scale = rate_gain_scale_set ? rate_gain_scale : gain_scale;  const float att_scale = att_gain_scale_set ? att_gain_scale : gain_scale;
   if (att_scale != 1.0f || rate_scale != 1.0f)
   {
     auto scale_pid = [&](auto &q, float s) {
@@ -1507,6 +2331,9 @@ int main(int argc, char** argv) {
     scale_pid(kFlightCtrlParams.rate_pitch, rate_scale);
     scale_pid(kFlightCtrlParams.rate_yaw, rate_scale);
   }
+  kFlightCtrlParams.gnss_lever_x_m = g_gnss_lever_param[0];
+  kFlightCtrlParams.gnss_lever_y_m = g_gnss_lever_param[1];
+  kFlightCtrlParams.gnss_lever_z_m = g_gnss_lever_param[2];
 #ifdef BFS_RATE_ACCEL_FB
   if (aaf_gain >= 0.0f)
   {

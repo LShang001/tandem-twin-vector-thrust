@@ -49,7 +49,13 @@ run_one "$ROOT/test_host/test_static_aid_profile.cpp"  sap ""
 # 的“误差+饱和+持续时间”检测与动作建议；F3/F4 故障矩阵的固件侧最小模块）：
 run_one "$ROOT/test_host/test_actuator_fault_monitor.cpp" afm ""
 run_one "$ROOT/test_host/test_static_detector.cpp"     sd  ""
+run_one "$ROOT/test_host/test_ins_prelaunch_align.cpp" pla ""
+run_one "$ROOT/test_host/test_ins_ahrs_gravity_gate.cpp" ahg ""
+# 弹载减震座传递率（SIL 研究设施，纯标量公式）：
+run_one "$ROOT/test_host/test_sil_vibration_isolator.cpp" iso "-I$ROOT/test_host/fw_sil"
 run_one "$ROOT/test_host/test_imu_health_monitor.cpp"  imuhealth ""
+run_one "$ROOT/test_host/test_ins_imu_saturation.cpp"   satq ""
+run_one "$ROOT/test_host/test_ins_baro_health.cpp"      baroh ""
 run_one "$ROOT/test_host/test_gnss_consistency.cpp"    gnssc ""
 run_one "$ROOT/test_host/test_vehicle_profile.cpp"     vp  ""
 run_one "$ROOT/test_host/test_generic_allocation.cpp"  ga  ""
@@ -78,6 +84,9 @@ run_one "$ROOT/test_host/test_liquid_rocket_model.cpp" lrm ""
 # 共轴双桨 VTVL DirectTvcRate 控制律（CoaxialVtvControl.h，纯平台无关——
 # 通道极性/限幅/手动旁路/偏航差速 + 简化 6DOF 刚体闭环）：
 run_one "$ROOT/test_host/test_coaxial_vtv_control.cpp" cvc ""
+# 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
+# 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
+run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""
 # 共轴控制律输出级参考等价（实飞工程 PositionPID/ComplementaryFilter 原头文件）：
 echo "---- 编译 cxreq ----"
 if ! $CXX -std=$STD -O2 $INCLUDES -I"$ROOT/test_host/reference/coaxial" $STUB_INCLUDE \
@@ -119,6 +128,7 @@ run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""
 run_one "$ROOT/test_host/test_gnss_delay_batch.cpp"      bdelay ""
 run_one "$ROOT/test_host/test_gnss_delay_auto.cpp"       dauto ""
 run_one "$ROOT/test_host/test_ins_vibration_adaptive.cpp" vib ""
+run_one "$ROOT/test_host/test_ins_vibration_hf.cpp"        vibhf ""
 run_one "$ROOT/test_host/test_bias_temp_observer.cpp" btemp ""
 run_one "$ROOT/test_host/test_bias_temp_table.cpp" btable ""
 run_one "$ROOT/test_host/test_bias_temp_pipeline.cpp" btpipe ""
@@ -270,6 +280,25 @@ else
   echo "---- 运行 hsreal ----"
   if ! "$BIN_DIR/hsreal$EXE_SUFFIX"; then
     echo "[RUN FAIL] hsreal"
+    fail=1
+  fi
+  echo
+fi
+
+# 大过载/大机动 + GNSS 杆臂补偿回归（2026-10-26）：
+# 8 g 协调转弯 + 2 m 机体系杆臂；EKF 杆臂补偿后 pos<1 m，关闭补偿应失败。
+echo "---- 编译 highdyn ----"
+if ! $CXX -std=$STD -O2 -DEKF_HOST_REGRESSION -D_USE_MATH_DEFINES -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE      $INCLUDES -I$ROOT/src -I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src      "$ROOT/test_host/test_ekf_high_dynamic.cpp"      "$ROOT/lib/units/src/convang.cpp"      "$ROOT/lib/units/src/convangacc.cpp"      "$ROOT/lib/units/src/convangvel.cpp"      -o "$BIN_DIR/highdyn$EXE_SUFFIX" 2>&1; then
+  echo "[BUILD FAIL] highdyn"
+  fail=1
+else
+  echo "---- 运行 highdyn 杆臂回归 ----"
+  if ! "$BIN_DIR/highdyn$EXE_SUFFIX" --profile turn --load 8 --speed 80       --duration 20 --latency-ms 20 --lever-m 2 --lever-comp 2 --seed 1       --assert-rmse 1.0 --json >/dev/null; then
+    echo "[RUN FAIL] highdyn lever-comp"
+    fail=1
+  fi
+  if "$BIN_DIR/highdyn$EXE_SUFFIX" --profile turn --load 8 --speed 80       --duration 20 --latency-ms 20 --lever-m 2 --lever-comp 0 --seed 1       --assert-rmse 1.0 --json >/dev/null 2>&1; then
+    echo "[RUN FAIL] highdyn lever-off 应超过 1 m"
     fail=1
   fi
   echo

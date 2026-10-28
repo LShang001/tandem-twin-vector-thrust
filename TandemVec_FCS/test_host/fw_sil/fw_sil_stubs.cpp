@@ -70,7 +70,8 @@ MagSensor::MagSensor() {}
 ICM42688::ICM42688(SPIClass&, uint8_t, uint32_t) {}
 MTF02P::MTF02P() {}
 LQS48_Flow::LQS48_Flow() {}
-Madgwick::Madgwick() {}
+// Madgwick 由真实 lib/MadgwickAHRS-master 提供（SIL 需复现生产 AHRS，
+// 不能再用空构造桩；否则 backup_ahrs_* 恒为 0，会伪造“姿态被拉平”）。
 W25N01GV::W25N01GV(SPIClass& bus, uint8_t cs)
     : _bus(bus), _cs(cs), _manId(0), _devId(0), _devId2(0), _present(false),
       _lastEcc(0), _lastProgErr(0) {}

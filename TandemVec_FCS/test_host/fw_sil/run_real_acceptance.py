@@ -161,6 +161,9 @@ def main() -> int:
                     help="测试用：相位超前低通时间常数 [s]")
     ap.add_argument("--mag-yaw-jump", type=float, default=None,
                     help="测试用：单次磁航向修正上限 [deg]（0/缺省关闭）")
+    ap.add_argument("--append-args", default="",
+                    help="追加到每次 SIL 命令的运行时开关（同二进制 A/B 用，"
+                         "如 '--gnss-vel-subset 1'）")
     args = ap.parse_args()
     seeds = [int(s) for s in args.seeds.split(",") if s]
     profiles = [p for p in args.profiles.split(",") if p]
@@ -185,6 +188,8 @@ def main() -> int:
             ]
             if args.gain_scale != 1.0:
                 cmd += ["--gain-scale", str(args.gain_scale)]
+            if args.append_args:
+                cmd += args.append_args.split()
             if args.scale_ki:
                 cmd += ["--scale-ki"]
             if args.aaf_gain is not None:

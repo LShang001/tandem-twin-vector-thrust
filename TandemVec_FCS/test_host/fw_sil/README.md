@@ -215,6 +215,11 @@ BIN_DIR=/tmp/tv_fcs_fw_sil_real bash test_host/fw_sil/build_and_run_real.sh \
   --real-nav --profile nominal --pos-hold --seconds 40 --seed 1
 ```
 
+> 宿主 SIL 默认加 `-DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE`：向量化路径会让
+> 边际 seed 在混合核机器上按核出现双吸引子（core0 失败 / core2 通过），而固件
+> Cortex-M7 无 NEON、本来就是标量 Eigen。可用 `EIGEN_SIL_FLAGS` 覆盖；增量构建用
+> `obj/.build_flags` 检测选项变化并整目录重建，避免混合宏二进制。详见报告 §7.10。
+
 ### 配置
 
 | profile | 传感器/环境 | 用途 |
@@ -280,6 +285,51 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 不能证明真实气动/推进/传感器/执行器/调度行为。RC-loss 是独立故障路径，不能把
 “命令 disarm 后坠落”写成传感器退化验收失败。
 
+### 协方差一致性遥测（2026-10-26）
+
+默认 SIL/固件**不含** NEES 观测路径；单独构建：
+
+```bash
+BIN_DIR=/tmp/tv_fcs_nees EXTRA_CXXFLAGS=-DEKF_NAV_TELEMETRY \
+  bin/bash test_host/fw_sil/build_incremental.sh --build-only
+```
+
+SIL 在 t>10 s、10 Hz 以 plant 真值计算 `NEES=e^T P^{-1}e/3`（位置/速度），JSON 增加
+`nees_pos_{med,p95,max}`、`nees_vel_{med,p95,max}`、`nees_n`。真值基准在导航原点
+变化时立即记录；零噪声对照（`--gnss-white --gnss-pos-std 0.01 --gnss-vel-std 0.01`）
+应给出 NEES≈0，否则是参照系/采样口径错误。
+
+- `--gnss-white`：关闭 SIL 的 20 s 相关 GNSS 误差分量（0.5/0.5/0.8 m），保留同一
+  白噪声随机序列，用于同二进制隔离“有色误差导致协方差过度自信”。
+- `--gnss-r-scale S`：只放大 UBX `h_acc/v_acc/s_acc`（EKF 的 R），不改实际噪声；
+  S=1 为固件口径。R 放大改善 NEES 但降低位置保持跟随性（报告 §7.16.4），仅研究用。
+
+结果：白噪声臂 NEES_pos 中位 1.05、默认有色臂 2.22（50 seeds，40 s，mag_clean +
+flow）；零噪声 0.028。详见 `TandemVec-EKF-Report/无磁EKF收敛仿真-2026-10-25.md` §7.16。
+
+### IMU 量程的复现构建（2026-10-27）
+
+16 g / 32 g 过载包线研究此前靠**手改 `include/imu_range.h`** 产出二进制，产物不可复现、
+也无法与 SIL 侧 `--imu-fs-g` 档对齐。现该文件把量程对改成编译期宏，一条命令即可重建：
+
+```bash
+# 8 g（生产默认，与历史逐位相同）
+BIN_DIR=/tmp/tv_hf4 bin/bash test_host/fw_sil/build_incremental.sh --build-only
+# 16 g
+BIN_DIR=/tmp/tv_16g EXTRA_CXXFLAGS="-DBFS_ICM42688_ACCEL_FS_G=16.0f -DBFS_ICM42688_ACCEL_RANGE_MPS2=156.9f" \
+  bin/bash test_host/fw_sil/build_incremental.sh --build-only
+# 32 g
+BIN_DIR=/tmp/tv_32g EXTRA_CXXFLAGS="-DBFS_ICM42688_ACCEL_FS_G=32.0f -DBFS_ICM42688_ACCEL_RANGE_MPS2=313.8f" \
+  bin/bash test_host/fw_sil/build_incremental.sh --build-only
+```
+
+编译期守卫（实测 5 例，`-fsyntax-only`）：配对正确（8/78.45、16/156.9、32/313.8）通过；
+**只给 FS 不给 m/s²** ⇒ `BFS_ICM42688_ACCEL_RANGE_MPS2` 未声明，编译直接失败；
+**只改 m/s² 或两值不匹配**（32 g 配 78.45）⇒ `static_assert` 报"量程对不一致"。
+容差 0.2%，覆盖 78.45/34.9066 这类历史取整值。
+运行时必须同步 `--imu-fs-g` 与 `--imu-health-accel-range`，否则传感器按旧档削顶
+（量程三处同步：传感器 FS、健康门限、EKF 合理值门限）。
+
 ## 7. 故障注入（2026-10-24 首批）
 
 | 注入 | 开关 | 当前行为（L2 SIL） |
@@ -291,7 +341,14 @@ RC 链路失效单独验证（`--profile nominal --rc-loss 30:31`）：真实 `l
 | GNSS 野值 | `--gnss-outlier P`（profile degraded） | 显式 30 m/10 m/s 野值门 + NIS；SIL degraded 每 40 s 拒绝 5–7 帧 |
 | GNSS 失联 | `--gnss-outage A:B` | 无 GNSS 时纯惯导；有光流可保持水平，无光流只能验收定高 |
 | GNSS spoof | `--gnss-spoof ... --gnss-consistency-reject` | 一致性监测可在 ramp 后拒绝 GNSS（`gnss_crej>0`）；默认 warn-only；无外部基准时拒绝后仍可能漂移/坠落 |
-| 控制级追踪 | `--trace-csv PATH` | 200 Hz CSV：真值/EKF 姿态、陀螺、角速率指令、EKF 位置与保持目标、磁 kick/门控原因、飞行模式/降级/重锚、舵机与电机输出；仅测试设施，默认关闭 |
+| GNSS 垂直 spoof | `--gnss-spoof 0 --gnss-spoof-start 25 --gnss-spoof-z ±50` 或 `--gnss-spoof-z-ramp ±0.5` | 正值=报得更高；只改高度时须把水平 `--gnss-spoof` 设 0。默认配置下 ±50/100 m 台阶经重锚被接受，10/10 下降到地面或爬到 32 m（报告 §7.17） |
+| 垂直重锚门控 | `--gnss-v-gate 0\|1`（需 `-DBFS_GNSS_VERTICAL_REANCHOR_GATE` 构建） | GNSS/气压高度差连续 3 帧 >25 m 时忽略 GNSS 垂直位置、禁止硬重锚，水平/速度仍融合；健康气压下 ±50/100 m 台阶 0/10 落地，无欺骗场景与关臂逐项相同。**气压快速漂移时会灌入错误气压，默认关闭** |
+| 控制级追踪 | `--trace-csv PATH` | 200 Hz CSV：真值/EKF 姿态、陀螺、角速率指令、EKF 位置与保持目标、磁 kick/门控原因、飞行模式/降级/重锚、舵机与电机输出，以及真值/EKF 高度、目标高度、真值/控制输入的垂直速度、EKF 加计 z 零偏；仅测试设施，默认关闭。`vfk_vz` 列在 real-nav SIL 中未调度垂直 KF，恒为 0 |
+| 落地/触地指标 | `SIL_REAL_JSON` | `land_t` 首次真值高度 <0.5 m、`land_hold` 触地水平位移、`land_vz_down` 触地垂直速度（NED 向下为正）、`max_desc_vz_down` 触地前最大下降速度、`max_roll_preland` 触地前最大滚转、`alt_at_outage` 失联起始真值高度；用于把飞行段与落地后无摩擦滑行分开，并避免把 `--alt` 目标高度误当实际失联高度 |
+| EKF 气压垂速伪量测 | `--baro-vel-aid 0\|1` | 仅测试/研究：同一二进制内开关 `BFS_BARO_VERTICAL_VELOCITY_AID` 的 v_d 伪量测（5 Hz、σ=1.0 m/s、GNSS age>8 s）；JSON `baro_vel_attempts/fused/rejected` 计数。默认关闭；实机未验证 |
+| IMU 饱和 Q 膨胀 | `--sat-q-inflate Q --sat-q-enter s --sat-q-release s`（需 `-DBFS_IMU_SATURATION_Q_INFLATE` 构建） | 加计削顶锁存期间把加计噪声标准差抬到 Q（默认 4.87 m/s²、enter 0.269 s、release 0.27 s），让 GNSS 主导速度/位置；10.1 g 位置 622.6→3.5 m、拒帧 20→0、重锚 1→0，8.4 g 姿态/航向代价约 +0.03°/+0.15°。默认宏关闭；实机未验证 |
+| 健康门限量程 | `--imu-health-accel-range <m/s²>` | 研究设施：把 `ImuHealthConfig.accel_range_mps2` 改成与实际注入 FS 一致；16 g 实验应配 156.9，否则 8 g 门限会把未削顶误判为饱和并触发 Q（4.19 vs 4.35 m） |
+| 导航在环 | `--missile-nav-loop` | 把 EKF 姿态/陀螺估计（减零偏）喂给弹体理想自驾，默认真值闭环；JSON 新增 `ms_final_n/e/d`，用于比较高过载下导航误差对弹道/稳定性的影响 |
 | 2 kHz 短窗追踪 | `--trace-fast PATH --trace-fast-window A:B` | 记录窗口内 plant 角速率与 IMU 原始 gyro/accel（2 kHz），用于区分高频模态、混叠与控制器行为；仅测试设施，默认关闭 |
 | 6DOF 积分子步 | `--plant-substeps N` | 诊断用：将 0.5 ms 的 plant 积分再细分 N 步（默认 1 保持旧行为），用于判断显式欧拉近 Nyquist 数值振荡 |
 | 航向源模式 | `--heading-aid-mode 0\|1\|2` `--heading-align-deg X` | 仅测试用：0=磁连续（默认）；1=磁仅初始对准；2=无磁手动对准（机头真北角 X）。模式 1/2 允许 20 s 内的位置保持/heading hold（yaw 1σ≤20°），窗口从离地起算（地面等待不计时，落地复位），结束或超限降级定高；这是短时边界，不承诺长时定点 |
@@ -389,3 +446,52 @@ BIN_DIR=/tmp/tv_fcs_fw_sil_coax \
 0.0005 N·m/norm 都是 L1 假设（外部工程只给了 0.84 kg/14 N，未给惯量/力臂）；
 没有共轴台架、桨距/反扭标定、45° 锁电机故障注入或实机证据。该 SIL 证明
 “固件分支能跑通、姿态/定高闭环有界”，不能证明真实共轴机飞行品质。
+
+## 10 6DOF 导弹弹体（`--missile`，2026-10-27，L2）
+
+`missile_plant.h` 提供 6DOF 刚体 + 线性气动 + 理想姿态自驾的导弹 plant；`--missile`
+把 plant 真值接到现有 `--real-nav` 传感器注入链（IMU/UBX/气压/磁），**导航仍跑真实
+`handleNavigationSystem()`**，跳过 `runGNCExecutive()`，导航结果不回灌弹道。
+
+```bash
+BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-only
+/tmp/tv_fcs_missile/fw_real.exe --real-nav --missile --profile mag_clean \
+  --seed 1 --seconds 45 --imu-grade icm --trace-csv /tmp/msl.csv
+```
+
+- `--imu-grade ideal|icm|low|adverse`：理想 / ICM 标称 / ×2 / ×5 零偏+噪声+尺度+失准。
+- **生产传感器路径（默认）**：2 kHz 软件 LPF（传感器系陀螺 α=0.15、加计 x/y α=0.02、z α=0.05；轴映射后机体系 x=0.05、y=0.02、z=0.02）+ 真实 Madgwick（2 kHz，滤波后机体系→FLU/NWU）。A/B 开关：`--no-imu-lpf`（旧未滤波口径）、`--no-sil-ahrs`（旧 `backup_ahrs=0` 口径）、`--nav-raw-imu`（导航增量绕过 LPF，研究未采用；★ 该开关**只改导航增量源**，AHRS/控制仍用滤波值，
+所以它不等价于"整机提带宽"，也不受固件任何门控保护——见报告 §4.24h 的冻结格代价）
+  - **★ `--nav-raw-fault-fallback`（研究设施，必须与 `--nav-raw-imu` 同用）**：IMU 故障窗
+    及其后 5 s 内把导航增量**退回滤波值**，用于检验"冻结格 +67.5% 代价来自未滤波台阶直接进
+    导航积分"这一机理假设（报告 §4.24m）。**地位：机制验证中，不是已判定的交付方案**；
+    单独给出（不带 `--nav-raw-imu`）完全惰性。自证据 = JSON 字段 `nrfb`（回退帧数，
+    不带故障注入时应为 0）。
+  - **`--nav-raw-fb-health`（与上条同用）**：把回退锁存键从"注入故障窗"换成
+    **固件 IMU 健康状态 `Failed`**（导航侧镜像 `g_sil_nav_debug_imu_failed`）+ 5 s 后持，
+    这是固件化时真正拿得到的触发源。用途：测误触发占空比（削顶/强振动会不会让它静默
+    关掉高过载段需要的带宽收益）。判据 K1–K3 见报告 §4.24m；**结论未出，勿当已验证方案**。。
+- **AHRS 策略**：方向门默认开；`BFS_AHRS_GNSS_FRESH_GATE`（GNSS 新鲜时不用 AHRS，opt-in）修 5 Hz/200 ms/1 g 振动；`BFS_DISABLE_AHRS_ATTITUDE_AID` 完全关 AHRS。
+- 轨迹：50 m 起始、1 s 支撑、10 s 推力；最大 6.4 g、451 m/s、1987 m、27.8°/s。
+- 指标：JSON 增加 `ms_vmax/ms_altmax/ms_gmax/ms_rate_max/ms_qbar_max/ms_impact_t` 与分轴姿态误差 `nav_roll/pitch/yaw_rmse,max`；`[ms]` 每秒打印弹体状态。
+- 低/高零偏初始化：统一静止检测器 `|ω|<0.01 rad/s` 对 2×/5× 零偏档不成立；用
+  `EXTRA_CXXFLAGS="-DBFS_PRELAUNCH_ALIGN_STABILITY_GATE"` 构建 opt-in 对准门。
+- 矩阵：`TandemVec-EKF-Report/sim/run_missile_sil_mc.py`、作图 `plot_missile_sil.py` / `plot_missile_envelope.py` / `plot_missile_visuals.py` / `plot_missile_sensor_fidelity.py` / `plot_vib_isolator.py`；报告 `TandemVec-EKF-Report/导弹6DOF-导航SIL-2026-10-27.md`。
+- 该 plant 无气动弹性/风/舵机动态，自驾是理想 PD；只用于导航算法 L2 评估，
+  不是弹道/制导仿真，也不能外推实机。
+- 振动：`--vib G`/`--vib-hz`；`--vib-start T` 用于先干净对准再起振（默认 0）。
+  生产双路 1 g/6.4 g 姿态 6.95°、2 g/120 Hz/8.4 g 8.32°；fresh gate 1.94/7.97°；发射段 v2 门 20/20（1 g 7.01°/2 g 9.02°，fresh 1.98/8.73°）。
+- **自动 GNSS 延时估计的应用侧门（同二进制 A/B）**：`--vib-veto 0|1`（`vib_high` 否决，默认随宏=0 关）、`--delay-deadband S`（应用死区）、`--delay-max-gap S`（拟合窗 GNSS 缺口门）、`--delay-max-resid MPS`（自报残差门，默认 150；`0`=关闭）、`--delay-grid-max-ms MS`（搜索网格上界，默认宏 150——上界以下的延时才可能被估出）、`--delay-cap-ms MS`（τ̂ 与编译期先验的最大偏差门限）；`-1` 一律表示"用编译期宏默认"。★ `--delay-grid-max-ms` 与 `--delay-cap-ms` **必须成对放宽**：只放宽网格，估出的 τ̂ 仍会被 CAP 门挡住（表现为 `ad_blk` 位 3 置位而 `ad_app` 不增）。诊断列 `ad_tau_ms/ad_sharp/ad_valid/ad_rej/ad_ng/ad_er/ad_app/ad_blk` 与 JSON `gnss_stale_peak_s`（失联注入自证据，**必须用它而不是末帧 `gnss_age`**）。历史开关 `--delay-disc-hold`（拟合窗断裂重锚保持）因六格 A/B 无可测收益已**连同枚举与接缝一并删除**，旧脚本再传它会由"未识别参数硬失败"拦下。
+- **`vib_high` 通道选择**：`--vib-hf-source 0|1`（0=既有 0.5 Hz 中频 RMS，吃在软件 LPF **之后**，弹道上由确定性机动决定；1=`ins_vibration_hf.h` 的高频通道 `raw − LPF(raw)`，吃在 LPF **之前**，对应 80–120 Hz 机械振动）。编译期默认 `BFS_VIB_HIGH_SOURCE_HF=0`；trace 新增 `vib_hf_g` 列（无论选哪个通道都记录高频 RMS，便于直接看两个通道的可分性）。`--vib-hf-enter G` 运行时覆盖高频通道进入门限（默认宏 0.15 g，释放门限按 0.667 比例随之缩放），用于在同一次构建里扫"只挡强振动"的档位。
+- **振动自适应 Q 边界**：`--gyro-q-cap RADPS` 在线改陀螺 Q 上界（默认 0.010=历史行为）。实测弹道上 `accel_rms_g` 由确定性机动主导（零振动 6.4→10.1 g 时 0.143→0.279 g），加计 Q 100% 卡在 0.25 端；该检测器对 80–120 Hz 振动灵敏度只有 10 Hz 的 8%~2%（输入在软件 LPF 之后）。
+- **失联开关是 `--gnss-outage 起:止`**；`--loss F` 是推力保留比例（需 `--fault 3/5`），超出 `(0,1]` 或未识别参数现在都会**硬失败退出**（旧行为是静默忽略，曾产出"失联档与洁净档逐位相同"的假证据）。
+- **物理减震座（SIL 研究）**：`--vib-iso-fn <Hz> --vib-iso-zeta <ζ>` 用单自由度传递率缩放振动；推荐 fn≈20–25 Hz（含 80 Hz 主谱）/30 Hz（仅 120 Hz）、ζ≈0.10；2 g/120/8.4 g 7.97°→0.66/0.64°（40 seeds），发射 2 g 8.73°→0.66°。模型只含幅值，无相位/转动传递率，装座前需台架。
+- **飞行武装（2026-10-27 修正）**：导弹模式 t≥1 s 置 `unlocked=true/throttle=50%`，IMU 健康冻结检测才武装。旧 unarmed 的 5 Hz 5.79°/200 ms 7.72°/冻结 3.11 m 作废；armed 40 seeds 为 0.66/3.80°/35.2 m。
+- **IMU 短时失效组合 fallback（opt-in `BFS_NAV_IMU_OUTAGE_FALLBACK`，默认关，上限 2 s）**：非有限→保持上一有效样本；有限但健康 Failed（冻结）→重力抵消比力+零角速率 coast；都保留 GNSS/磁/气压更新。armed 20 seeds：NaN 1 s 121.75→**3.15 m/0.58 m/s/0 拒绝/0 重锚**，冻结 1 s 35.24→**2.33 m/1.06 m/s/0/0**；2 s 12.67/65.5 m；33 s 长故障仍失导；10.1 g 饱和不受益。单独 hold-last/coast 宏保留作研究对照。
+- **`--gnss-latency-ms` 口径**：该开关把数据与 UBX iTOW 一起后移，固件时间映射自洽，
+  `gnss_age` 仍约 15 ms；因此它测的是“未建模接收机延迟/时间标签偏移”，不是 EKF
+  回放缓冲。真延迟测试需保持 iTOW 为量测时刻（只延迟注入）或使用显式年龄接口。
+- 包线扫描：`--ms-thrust N`、`--ms-mass kg`、`--ms-burn s`（默认 5000 N/120 kg/10 s →
+  6.4 g/451 m/s）；8000 N → 8.41 g/696 m/s 仍可用（位置 3.94 m）；10000 N → 10.13 g/844 m/s
+  在生产 ICM ±8 g 量程下触顶、导航失效（636 m）；`--imu-fs-g 16` 仅作研究对照。
+  生产 `sensor_imu.cpp` 是 ±8 g，SIL 默认已对齐 8 g。

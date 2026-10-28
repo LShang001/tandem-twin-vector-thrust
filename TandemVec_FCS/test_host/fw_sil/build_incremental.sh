@@ -10,6 +10,10 @@ OBJ_DIR="$BIN_DIR/obj"
 CXX="${CXX:-g++}"
 CC="${CC:-gcc}"
 OPT="${OPT:--O2}"
+# 宿主 SIL 固定标量 Eigen 路径：向量化路径在混合核机器上会让边际 seed
+# 按核出现双吸引子（同一二进制/命令/core0 失败、core2 通过），而 Cortex-M7
+# 无 NEON、固件本来就是标量 Eigen。该设置只属于测试设施，不改变固件编译。
+EIGEN_SIL_FLAGS="${EIGEN_SIL_FLAGS:--DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE}"
 mkdir -p "$OBJ_DIR"
 
 # 真实 ubx.h 必须排在 SIL 的 ubx 桩之前；-DARDUINO 让它使用 SIL 的 Arduino 桩。
@@ -17,7 +21,21 @@ INC="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude -Isrc -Itest_host/st
 INC="$INC -Ilib/navigation-main/src -Ilib/units/src -Ilib/AnoComProtocol -Ilib/MAVLink -Ilib/eigen/src"
 for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 
-COMMON_CXX="-std=c++17 $OPT ${EXTRA_CXXFLAGS:-} -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO=300 -DBFS_EKF_BARO_ALTITUDE_UPDATE -Wno-address-of-packed-member -Wno-psabi"
+# 气压 EKF 观测默认与固件一致；NO_BARO_EKF=1 仅供 SIL 做“去掉气压量测”的
+# 因果隔离（不是固件选项，不改变生产默认）。
+BARO_EKF_FLAG="-DBFS_EKF_BARO_ALTITUDE_UPDATE"
+if [ "${NO_BARO_EKF:-0}" = "1" ]; then BARO_EKF_FLAG=""; fi
+COMMON_CXX="-std=c++17 $OPT ${EXTRA_CXXFLAGS:-} $EIGEN_SIL_FLAGS -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO=300 $BARO_EKF_FLAG -Wno-address-of-packed-member -Wno-psabi"
+
+# 编译选项不参与 mtime 依赖：选项变化（如加宏/改优化）必须整目录重建，
+# 否则会静默链接出“部分 TU 旧宏、部分 TU 新宏”的混合二进制。
+FLAGS_STAMP="$OBJ_DIR/.build_flags"
+if [ -f "$FLAGS_STAMP" ] && [ "$(cat "$FLAGS_STAMP")" != "$COMMON_CXX" ]; then
+  echo "[inc] flags changed -> rebuild all objects"
+  rm -rf "$OBJ_DIR"
+  mkdir -p "$OBJ_DIR"
+fi
+printf '%s\n' "$COMMON_CXX" > "$FLAGS_STAMP"
 
 obj_name() {
   # 稳定、无目录的对象名
@@ -59,6 +77,7 @@ lib/DPS310-Pressure-Sensor/src/DpsClass.cpp
 lib/units/src/convang.cpp
 lib/units/src/convangacc.cpp
 lib/units/src/convangvel.cpp
+lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp
 "
 OBJS=""
 for src in $SOURCES; do
