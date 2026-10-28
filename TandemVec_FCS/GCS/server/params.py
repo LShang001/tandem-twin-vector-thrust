@@ -171,6 +171,12 @@ def build_meta():
     meta['hdg_align'] = dict(name='hdg_align', group='航向源', loop='', field='',
                              unit='deg', min=0, max=360, step=1, type='float',
                              desc='手动对准航向（真北顺时针；下一次导航初始化前生效）')
+    # 2026-10-26 GNSS 天线杆臂（相对 IMU，机体系 [m]）
+    for ax, desc in (('x', '机头向前'), ('y', '右向'), ('z', '向下')):
+        name = f'gnss_lever_{ax}'
+        meta[name] = dict(name=name, group='导航', loop='', field='',
+                          unit='m', min=-5.0, max=5.0, step=0.01, type='float',
+                          desc=f'GNSS 天线相对 IMU 的机体系杆臂 {desc}（0=不补偿）')
     return meta
 
 
@@ -207,9 +213,9 @@ def is_float_name(name):
     return True
 
 
-# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 130 项）
+# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 133 项）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 130 项，跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 133 项，跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():
@@ -240,4 +246,8 @@ def expected_names():
     # 2026-10-25 航向源（固件尾部追加）
     names.append('hdg_mode')
     names.append('hdg_align')
+    # 2026-10-26 GNSS 天线杆臂（固件尾部追加）
+    names.append('gnss_lever_x')
+    names.append('gnss_lever_y')
+    names.append('gnss_lever_z')
     return names

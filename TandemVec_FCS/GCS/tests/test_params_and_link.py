@@ -22,20 +22,21 @@ import params as pm
 
 
 def test_param_count_matches_firmware():
-    """参数总数 = 12 环 × 9 字段 + 12 滤波 alpha = 130（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波+1 前馈掩码；★2026-08-11 +7 FPV 摇杆曲线；★2026-10-25 +2 航向源）"""
+    """参数总数 = 12 环 × 9 字段 + 12 滤波 alpha = 133（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波+1 前馈掩码；★2026-08-11 +7 FPV 摇杆曲线；★2026-10-25 +2 航向源；★2026-10-26 +3 杆臂）"""
     names = pm.expected_names()
-    assert len(names) == 130
+    assert len(names) == 133
     assert names.index('rate_pitch.kd') == 38
-    assert len(set(names)) == 130
+    assert len(set(names)) == 133
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
     # ★ 2026-08-10 全面审查修复：尾部顺序对齐固件注册表
     #   （inertia_comp_mask@117 → spd2_alpha[0..2]@118-120 → ★2026-08-11 rc 曲线@121-127）
-    assert names[-1] == 'hdg_align'
+    assert names[-1] == 'gnss_lever_z'
     assert names[117] == 'inertia_comp_mask'
-    assert names[121:130] == ['rc_rate', 'rc_expo[0]', 'rc_expo[1]', 'rc_expo[2]',
+    assert names[121:133] == ['rc_rate', 'rc_expo[0]', 'rc_expo[1]', 'rc_expo[2]',
                               'rc_super[0]', 'rc_super[1]', 'rc_super[2]',
-                              'hdg_mode', 'hdg_align']
+                              'hdg_mode', 'hdg_align', 'gnss_lever_x',
+                              'gnss_lever_y', 'gnss_lever_z']
     assert 'att_roll.falpha' in names
     assert all(len(n) <= 20 for n in names), [n for n in names if len(n) > 20]
 
@@ -291,5 +292,5 @@ def test_param_name_to_id_mapping():
     assert names.index('att_roll.kp') == 0
     assert names.index('att_pitch.kp') == 9
     assert names.index('rate_roll.kd') == 29
-    assert len(names) == 130
+    assert len(names) == 133
     assert names.index('rate_pitch.kd') == 38
