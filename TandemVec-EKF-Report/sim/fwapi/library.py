@@ -19,7 +19,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ABI_VERSION = 1
+ABI_VERSION = 2
 STATE_DIM = 15
 
 
@@ -49,6 +49,7 @@ def _sources() -> list[Path]:
     return [
         root / "test_host" / "fw_algo" / "fw_algo_api.cpp",
         root / "test_host" / "fw_algo" / "fw_algo_api.h",
+        root / "test_host" / "fw_algo" / "fw_ctrl_api.cpp",
         root / "lib" / "navigation-main" / "src" / "ekf_15_state.h",
         root / "lib" / "units" / "src" / "convang.cpp",
         root / "lib" / "units" / "src" / "convangacc.cpp",
@@ -154,6 +155,73 @@ class FwNavState(ctypes.Structure):
     ]
 
 
+
+class FwTvParams(ctypes.Structure):
+    _fields_ = [
+        ("kT", ctypes.c_float), ("kQ", ctypes.c_float), ("Jp", ctypes.c_float),
+        ("wMax", ctypes.c_float), ("a", ctypes.c_float), ("b", ctypes.c_float),
+        ("tauM", ctypes.c_float), ("Ix", ctypes.c_float), ("Iy", ctypes.c_float),
+        ("Iz", ctypes.c_float), ("dMax", ctypes.c_float), ("dwMax", ctypes.c_float),
+        ("m", ctypes.c_float), ("g", ctypes.c_float),
+    ]
+
+
+class FwPropState(ctypes.Structure):
+    _fields_ = [("wf", ctypes.c_float), ("wt", ctypes.c_float),
+                ("delta_f", ctypes.c_float), ("delta_t", ctypes.c_float)]
+
+
+class FwTvAllocState(ctypes.Structure):
+    _fields_ = [("prev", FwPropState), ("wf_est", ctypes.c_float),
+                ("wt_est", ctypes.c_float)]
+
+
+class FwTvAllocInput(ctypes.Structure):
+    _fields_ = [
+        ("alpha_roll_radps2", ctypes.c_float),
+        ("alpha_pitch_radps2", ctypes.c_float),
+        ("alpha_yaw_radps2", ctypes.c_float),
+        ("throttle_pct", ctypes.c_float),
+        ("gyro_body_radps", ctypes.c_float * 3),
+        ("dt_s", ctypes.c_float),
+        ("inertia_comp_mask", ctypes.c_int32),
+    ]
+
+
+class FwTvAllocOutput(ctypes.Structure):
+    _fields_ = [
+        ("valid", ctypes.c_int32),
+        ("delta_f_rad", ctypes.c_float), ("delta_t_rad", ctypes.c_float),
+        ("motor1_pct", ctypes.c_float), ("motor2_pct", ctypes.c_float),
+        ("dw", ctypes.c_float),
+        ("M_cmd", ctypes.c_float * 3), ("M_ff", ctypes.c_float * 3),
+        ("w0_eff", ctypes.c_float), ("yaw_gain_sched", ctypes.c_float),
+        ("sat_delta_f", ctypes.c_int32), ("sat_delta_t", ctypes.c_int32),
+        ("sat_dw", ctypes.c_int32),
+        ("next", FwTvAllocState),
+    ]
+
+
+class FwThrustAllocInput(ctypes.Structure):
+    _fields_ = [
+        ("specific_force_up_mps2", ctypes.c_float),
+        ("thrust_axis_up_cos", ctypes.c_float),
+        ("mass_kg", ctypes.c_float),
+        ("max_total_thrust_n", ctypes.c_float),
+        ("min_cos_tilt", ctypes.c_float),
+    ]
+
+
+class FwThrustAllocOutput(ctypes.Structure):
+    _fields_ = [
+        ("valid", ctypes.c_int32),
+        ("total_thrust_n", ctypes.c_float),
+        ("throttle_pct", ctypes.c_float),
+        ("saturated_high", ctypes.c_int32),
+        ("saturated_low", ctypes.c_int32),
+    ]
+
+
 _LIB = None
 _LIB_PATH: Path | None = None
 
@@ -218,6 +286,14 @@ def load(force_build: bool = False) -> ctypes.CDLL:
     lib.fw_ekf_get_state.argtypes = [p.c_void_p, p.POINTER(FwNavState)]
     lib.fw_ekf_diag_json.argtypes = [p.c_void_p, p.c_char_p, p.c_int32]
     lib.fw_ekf_diag_json.restype = p.c_int32
+
+    lib.fw_ctrl_default_params.argtypes = [p.POINTER(FwTvParams)]
+    lib.fw_ctrl_state_hover.argtypes = [p.POINTER(FwTvParams), p.POINTER(FwTvAllocState)]
+    lib.fw_tandemvec_alloc.argtypes = [p.POINTER(FwTvParams), p.POINTER(FwTvAllocState),
+                                       p.POINTER(FwTvAllocInput)]
+    lib.fw_tandemvec_alloc.restype = FwTvAllocOutput
+    lib.fw_thrust_alloc.argtypes = [p.POINTER(FwThrustAllocInput)]
+    lib.fw_thrust_alloc.restype = FwThrustAllocOutput
 
     ver = lib.fw_algo_abi_version()
     if ver != ABI_VERSION:

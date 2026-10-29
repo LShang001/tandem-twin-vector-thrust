@@ -37,10 +37,22 @@ from .library import (  # noqa: F401
     load,
 )
 from .ekf import Ekf  # noqa: F401
+from .control import (  # noqa: F401
+    TandemVecAllocator,
+    default_params,
+    params_to_dict,
+    set_params,
+    thrust_alloc,
+)
 
 __all__ = [
     "ABI_VERSION",
     "Ekf",
+    "TandemVecAllocator",
+    "default_params",
+    "params_to_dict",
+    "set_params",
+    "thrust_alloc",
     "FwEkfInit",
     "FwNavState",
     "FwUpdateResult",
