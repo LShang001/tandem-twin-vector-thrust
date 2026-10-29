@@ -237,22 +237,100 @@ profile（<code>BFS_COAXIAL_VTVL</code> 等）+ <code>caps.vehicle</code>
 <hr />
 <h2 id="6-验证记录2026-10-29">6 验证记录（2026-10-29）</h2>
 <ul>
-<li>构建：<code>bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh</code>
-→ <code>fw_algo.dll</code>（1.2 MB， 冷构建约 4 min，增量约 30
-s）。</li>
-<li><code>py -3.12 TandemVec-EKF-Report/sim/run_fw_gnc_demo.py</code>：
-<ul>
-<li><code>caps</code>：<code>gnc_abi=1</code>、<code>param_count=133</code>、<code>vehicle=tandemvec</code>、<code>features=[gnc_available]</code>；</li>
-<li>参数读写往返一致；</li>
-<li>上锁时电机输出 &lt;5%；定高误差 0→5 m 时油门
-31.2%→43.1%（方向正确）；</li>
-<li>全部输出有限且落在 0–100%。</li>
-</ul></li>
-<li><code>python -m fwapi</code>
-selftest：<code>PASS | fused: True | ctrl: True</code>（L1/L2
-未被破坏）。</li>
+<li>构建：<code>bash test_host/fw_algo/build_fw_algo.sh</code> →
+<code>fw_algo.dll</code>（1.2 MB，冷构建约 4 min，增量约 30 s）。</li>
+<li><code>run_fw_gnc_demo.py</code>：caps（<code>gnc_abi=1</code>、<code>param_count=133</code>、<code>vehicle=tandemvec</code>）、参数往返、
+上锁电机 &lt;5%、定高误差 0→5 m 时油门 31.2%→43.1%
+全通过；<code>python -m fwapi</code> selftest PASS。</li>
+<li><strong>SIL ↔︎
+直调库逐拍对拍</strong>（<code>sim/check_fw_gnc_parity.py</code> + SIL
+<code>--trace-ctrl</code>）： 4 个 profile（mag_clean 20 s；nominal /
+mag_nominal / degraded 各 15 s），每 profile 3000–4000 拍：</li>
 </ul>
-<hr />
+<table>
+<thead>
+<tr>
+<th>profile</th>
+<th>模式不一致</th>
+<th>角加速度 max|Δ|</th>
+<th>角速率指令</th>
+<th>摆角/差速</th>
+<th><strong>电机 %</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mag_clean</td>
+<td>0</td>
+<td>1.2e-3 dps²</td>
+<td>5e-5 dps</td>
+<td>0.15° / 1.1e-3</td>
+<td><strong>0.97</strong></td>
+</tr>
+<tr>
+<td>nominal</td>
+<td>0</td>
+<td>7.8e-5</td>
+<td>5e-5</td>
+<td>0.011° / 6.6e-5</td>
+<td><strong>1.07</strong></td>
+</tr>
+<tr>
+<td>mag_nominal</td>
+<td>0</td>
+<td>1.3e-3</td>
+<td>5e-5</td>
+<td>0.056° / 3.5e-4</td>
+<td><strong>1.39</strong></td>
+</tr>
+<tr>
+<td>degraded</td>
+<td>0</td>
+<td>6e-5</td>
+<td>5e-5</td>
+<td>0.19° / 1.8e-4</td>
+<td><strong>4.89</strong></td>
+</tr>
+<tr>
+<td><strong>manual</strong>（SAS/手动油门，8 s）</td>
+<td>0</td>
+<td><strong>5.5e-5</strong></td>
+<td><strong>5e-5</strong></td>
+<td><strong>5e-5</strong></td>
+<td><strong>5e-5</strong></td>
+</tr>
+</tbody>
+</table>
+<p>⇒ <strong>手动模式全通道 5e-5（CSV 精度极限）⇒
+姿态/SAS/分配/混控逐位等价</strong>；
+<strong>残差只出现在自动油门/高度环</strong>：电机 % 在 RC
+油门台阶（t=1.005）首次出现并随 profile 恶化。<strong>判定：自动模式严判
+C4b 4/4 FAIL、工程判 C6 仅 mag_clean 通过（1/4）</strong> ——nominal /
+mag_nominal / degraded 分别为 1.07 / 1.39 / 4.89%；手动模式 C4b/C6
+全通过。
+残差<strong>尚未定位</strong>（候选：锁高预测/高度环内部状态），下一步在控制轨迹里暴露
+<code>specific_force_up_mps2</code> / <code>final_throttle_pct</code>
+再二分。</p>
+<ul>
+<li>本轮对拍抓出并修复的 ABI 缺陷（每条都有"失败→通过"的实测证据）：
+<ol type="1">
+<li><strong>航向口径</strong>：固件 <code>AHRS_Packet.Heading</code> 用
+<code>wrapAngleTwoPi</code>（[0,2π)），ABI 原用
+<code>quaternionToEuler</code>（±π）⇒ yaw 指令差 ±24 dps；</li>
+<li><strong>角速度源</strong>：控制链用 <code>icm_gyro_*</code>
+重新两级滤波，ABI 只注入滤波后值 ⇒ 二次滤波 且实际忽略了输入（姿态环差
+2968 dps²）；</li>
+<li><strong>单例生命周期</strong>：<code>fw_gnc_destroy</code>
+未清空静态指针 ⇒ 第二次 <code>create</code>
+返回悬空指针（堆损坏）；</li>
+<li><strong>缺失输入</strong>：导航层门控
+<code>g_heading_hold_allowed / g_pos_hold_degraded / g_gnss_outage_age_s</code>
+未注入 ⇒ 航向锁走保守分支（yaw 0 vs ±24 dps）。</li>
+</ol></li>
+<li>行为中性对照：missile seed 73 @23 500 N 在加入
+trace/注入设施前后均为
+<code>pos_rms 35.16 / 拒帧 25 / 重锚 1</code>（共享核心与新增设施不改导航行为）。</li>
+</ul>
 <h2 id="7-边界与未做">7 边界与未做</h2>
 <ol type="1">
 <li><strong>浏览器仿真未接</strong>：本机无
@@ -270,6 +348,11 @@ Python 全闭环仍走 SIL 可执行； 若要 Python 直接驱动
 仍保留；迁移验收判据是 "静态输入序列逐拍输出与 <code>fwapi.Gnc</code>
 一致（容差内）"，不是闭环结果对比 （hifi 闭环本身已发散，见
 §4.24）。</li>
+<li><strong>高度/油门回路的等价性未闭环</strong>：见 §6 的电机 %
+残差（0.24–4.9%）。姿态/速率/分配 已等价，但油门通道存在随 profile
+增大的常值/积分型偏移，<strong>根因未定位</strong>；在定位前， 用
+<code>fwapi.Gnc</code> 做<strong>油门/高度环</strong>相关结论必须与 SIL
+对照，不能单独采信。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-29 17:03</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-29 22:11</footer></article></body>
 </html>
