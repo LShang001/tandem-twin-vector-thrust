@@ -123,7 +123,7 @@ class Gnc:
     def step(self, *, quat, omega, vel, pos, alt_up, rc, dt,
              link_up=True, failsafe_in_flight=False, target_alt=0.0,
              heading_hold_allowed=False, pos_hold_degraded=False,
-             gnss_outage_age_s=0.0) -> dict:
+             gnss_outage_age_s=0.0, apply_target_alt=True) -> dict:
         """推进一拍固件控制链。
 
         @param quat      (w,x,y,z) FRD←NED
@@ -156,6 +156,7 @@ class Gnc:
         o.heading_hold_allowed = 1 if heading_hold_allowed else 0
         o.pos_hold_degraded = 1 if pos_hold_degraded else 0
         o.gnss_outage_age_s = float(gnss_outage_age_s)
+        o.apply_target_alt = 1 if apply_target_alt else 0
 
         rc_code = self._lib.fw_gnc_step(self._h, ctypes.byref(self._in),
                                         ctypes.byref(self._out))
@@ -179,4 +180,8 @@ class Gnc:
             "mode_degraded_gnss": bool(r.mode_degraded_gnss),
             "failsafe": bool(r.failsafe_in_flight),
             "actuator_fault_bits": int(r.actuator_fault_bits),
+            "target_alt_m": r.target_alt_m,
+            "specific_force_up_mps2": r.specific_force_up_mps2,
+            "thrust_cos_tilt": r.thrust_cos_tilt,
+            "throttle_cmd_pct": r.throttle_cmd_pct,
         }

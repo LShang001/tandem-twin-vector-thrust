@@ -116,6 +116,11 @@ typedef struct
   int32_t heading_hold_allowed; /**< HeadingAidingGate：磁航向可信时允许锁航向 */
   int32_t pos_hold_degraded;    /**< 位置保持降级（航向不可观） */
   float gnss_outage_age_s;      /**< GNSS 失联时长 [s]，用于降级/长失联策略 */
+  /** 是否本拍写入 target_alt_m：1=覆写（上位机给设定值），0=保留固件内部值。
+   *  固件的垂直 loiter 状态机会在内部斜坡/锁高改 target_altitude；若每拍都用
+   *  上一拍的观测值覆写，会把内部斜坡多推进一步（对拍实测最大偏差 0.106 m），
+   *  瞬态再经高度/速度 PID 积分放大成油门常值偏移。 */
+  int32_t apply_target_alt;
 } fw_gnc_input_t;
 
 /** @brief 每拍输出（全部为固件本拍实际写出的量）。 */
@@ -136,6 +141,10 @@ typedef struct
   int32_t mode_degraded_gnss;            /**< GNSS 失联降级（同上，失联/光流失效触发） */
   int32_t failsafe_in_flight;            /**< 本拍失控保护状态 */
   uint32_t actuator_fault_bits;          /**< bit0 舵机卡死 / bit1 推力损失 / bit2 请求受控下降 */
+  float target_alt_m;                    /**< 固件内部目标高度（锁高/斜坡后的值，只读） */
+  float specific_force_up_mps2;          /**< 期望天向比力（含 1g）[m/s²] */
+  float thrust_cos_tilt;                 /**< 推力方向倾角余弦 */
+  float throttle_cmd_pct;                /**< 分配后的油门指令 [%] */
 } fw_gnc_output_t;
 
 /** @brief 取能力描述；`out->struct_size` 由调用方预填。 */

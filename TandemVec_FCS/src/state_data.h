@@ -416,6 +416,11 @@ struct GncTelemetry
     float w0_eff;            // 分配工作点（含 w0_floor，rad/s）
     float yaw_gain_sched;    // 差速回路增益调度系数
     float delta_f_deg, delta_t_deg, dw;  // 执行器指令（摆角 deg / 差速归一化）
+    // 垂直/推力链路诊断（只读遥测，不参与控制）：用于固件-仿真对拍时
+    // 区分"高度环输出差异"与"推力分配差异"。
+    float specific_force_up_mps2; // 期望天向比力（含 1g）
+    float thrust_cos_tilt;        // 推力方向倾角余弦
+    float throttle_cmd_pct;       // 分配后的油门指令 [%]
     bool  alloc_sat[3];      // 分配饱和标记（δ_f/δ_t/Δω）
     // 在线振动估计（只读诊断；自适应 EKF 需显式开关）
     float vib_accel_rms_g;      // 高通加速度 RMS (g)

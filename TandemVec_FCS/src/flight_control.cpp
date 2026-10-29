@@ -2117,6 +2117,7 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
   // 必须在 mix 返回前完成：步骤 8b 故障诊断与步骤 9 在线辨识都读该值。
   outputs.throttle_percent = final_throttle_pct;
   throttlePercent = final_throttle_pct;
+  gnc_tel.throttle_cmd_pct = final_throttle_pct;
 }
 
 #ifdef BFS_COAXIAL_VTVL
@@ -2243,6 +2244,7 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   g_tvc_lower_deg = output_in.pitch_correction_deg;
   outputs.throttle_percent = final_throttle_pct;
   throttlePercent = final_throttle_pct;
+  gnc_tel.throttle_cmd_pct = final_throttle_pct;
 }
 
 // 共轴执行器故障只读诊断：复用 TandemVec 的 ActuatorFaultMonitor 判据，
@@ -2488,6 +2490,8 @@ void runGNCExecutive()
 
   // 步骤 4: 计算推力控制，得到油门百分比
   compute_thrust_control(controller_inputs, current_mode, controller_outputs);
+  gnc_tel.specific_force_up_mps2 = controller_outputs.specific_force_up_mps2;
+  gnc_tel.thrust_cos_tilt = controller_outputs.thrust_cos_tilt;
 
   // 步骤 5: 根据模式和输入，生成目标姿态四元数
   generate_attitude_target(controller_inputs, current_mode, q_target_attitude);

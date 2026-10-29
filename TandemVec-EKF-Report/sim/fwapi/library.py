@@ -280,6 +280,7 @@ class FwGncInput(ctypes.Structure):
         ("heading_hold_allowed", ctypes.c_int32),
         ("pos_hold_degraded", ctypes.c_int32),
         ("gnss_outage_age_s", ctypes.c_float),
+        ("apply_target_alt", ctypes.c_int32),
     ]
 
 
@@ -307,6 +308,10 @@ class FwGncOutput(ctypes.Structure):
         ("mode_degraded_gnss", ctypes.c_int32),
         ("failsafe_in_flight", ctypes.c_int32),
         ("actuator_fault_bits", ctypes.c_uint32),
+        ("target_alt_m", ctypes.c_float),
+        ("specific_force_up_mps2", ctypes.c_float),
+        ("thrust_cos_tilt", ctypes.c_float),
+        ("throttle_cmd_pct", ctypes.c_float),
     ]
 
 

@@ -150,7 +150,10 @@ void InjectState(const fw_gnc_input_t *in)
   }
   isLinkUp = (in->link_up != 0);
   failsafe_in_flight = (in->failsafe_in_flight != 0);
-  target_altitude = in->target_alt_m;
+  if (in->apply_target_alt)
+  {
+    target_altitude = in->target_alt_m;
+  }
   // 导航层门控位：控制链（航向锁/位置保持降级/长失联策略）直接消费这些全局。
   // 不注入就会落到 state_data 的保守默认（false/0），与 SIL 行为分叉。
   g_heading_hold_allowed = (in->heading_hold_allowed != 0);
@@ -185,6 +188,10 @@ void ReadOutputs(fw_gnc_output_t *out)
   if (g_actuator_thrust_loss) { faults |= 1U << 1; }
   if (g_actuator_controlled_descent_request) { faults |= 1U << 2; }
   out->actuator_fault_bits = faults;
+  out->target_alt_m = target_altitude;
+  out->specific_force_up_mps2 = gnc_tel.specific_force_up_mps2;
+  out->thrust_cos_tilt = gnc_tel.thrust_cos_tilt;
+  out->throttle_cmd_pct = gnc_tel.throttle_cmd_pct;
 }
 } // namespace
 
