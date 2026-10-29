@@ -814,6 +814,12 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
     // ekf_gravity_mps2（Somigliana，未初始化时回退 9.81）。
     // ★ 本层不乘质量、不除 MAX_THRUST：质量/最大推力/推力曲线属于机型层，
     //   由 mix_and_output_commands() 的 ThrustAllocation 完成。
+    // 只读遥测：高度环中间量（每拍无条件刷新，供固件-仿真对拍）。
+    // ★ 不能只在"油门杆死区内"分支里写：出死区后值会陈旧，两个实现会各自停在
+    //   不同的历史值上，制造出假的 4 m 高度误差差（2026-10-29 实测）。
+    gnc_tel.alt_error_m = target_altitude - current_altitude_for_control;
+    gnc_tel.target_vz_mps = target_vertical_velocity;
+
     outputs.specific_force_up_mps2 = ekf_gravity_mps2 + target_acceleration_z;
 
     // 倾斜推力补偿的几何量：当机体倾斜时，为保持相同天向分力，总推力必须增大。

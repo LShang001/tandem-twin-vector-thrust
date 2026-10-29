@@ -184,4 +184,7 @@ class Gnc:
             "specific_force_up_mps2": r.specific_force_up_mps2,
             "thrust_cos_tilt": r.thrust_cos_tilt,
             "throttle_cmd_pct": r.throttle_cmd_pct,
+            "alt_error_m": r.alt_error_m,
+            "target_vz_mps": r.target_vz_mps,
+            "z_up_m": r.z_up_m,
         }

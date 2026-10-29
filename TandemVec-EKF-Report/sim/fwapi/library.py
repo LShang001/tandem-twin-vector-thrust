@@ -312,6 +312,9 @@ class FwGncOutput(ctypes.Structure):
         ("specific_force_up_mps2", ctypes.c_float),
         ("thrust_cos_tilt", ctypes.c_float),
         ("throttle_cmd_pct", ctypes.c_float),
+        ("alt_error_m", ctypes.c_float),
+        ("target_vz_mps", ctypes.c_float),
+        ("z_up_m", ctypes.c_float),
     ]
 
 

@@ -421,6 +421,8 @@ struct GncTelemetry
     float specific_force_up_mps2; // 期望天向比力（含 1g）
     float thrust_cos_tilt;        // 推力方向倾角余弦
     float throttle_cmd_pct;       // 分配后的油门指令 [%]
+    float alt_error_m;            // 高度环误差（target − current）[m]
+    float target_vz_mps;          // 高度环输出的目标垂直速度 [m/s]
     bool  alloc_sat[3];      // 分配饱和标记（δ_f/δ_t/Δω）
     // 在线振动估计（只读诊断；自适应 EKF 需显式开关）
     float vib_accel_rms_g;      // 高通加速度 RMS (g)

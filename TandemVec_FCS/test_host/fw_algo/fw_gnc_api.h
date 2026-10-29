@@ -145,6 +145,9 @@ typedef struct
   float specific_force_up_mps2;          /**< 期望天向比力（含 1g）[m/s²] */
   float thrust_cos_tilt;                 /**< 推力方向倾角余弦 */
   float throttle_cmd_pct;                /**< 分配后的油门指令 [%] */
+  float alt_error_m;                     /**< 高度环误差 target−current [m] */
+  float target_vz_mps;                   /**< 高度环输出的目标垂直速度 [m/s] */
+  float z_up_m;                          /**< 控制实际使用的高度（-relative_down）[m] */
 } fw_gnc_output_t;
 
 /** @brief 取能力描述；`out->struct_size` 由调用方预填。 */

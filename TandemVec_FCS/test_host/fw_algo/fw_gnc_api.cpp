@@ -130,6 +130,10 @@ void InjectState(const fw_gnc_input_t *in)
   relative_east = in->pos_ned_m[1];
   relative_down = -in->alt_up_m;
   estimated_height = in->alt_up_m;
+  // 每拍重申"原点已建立"：process_control_inputs() 在 !is_origin_lla_set 时会把
+  // relative_* 兜底清零（控制层看不到高度）。放在注入点最靠近消费点，避免任何
+  // 其他路径把它清掉后本拍失效。
+  is_origin_lla_set = true;
 
   // ★ 控制链内部（execute_attitude_controller / mix 层）会用 `icm_gyro_*`
   //   重新计算并做两级低通写入 `current_omega_dps_body_filtered`；只注入后者
@@ -192,6 +196,9 @@ void ReadOutputs(fw_gnc_output_t *out)
   out->specific_force_up_mps2 = gnc_tel.specific_force_up_mps2;
   out->thrust_cos_tilt = gnc_tel.thrust_cos_tilt;
   out->throttle_cmd_pct = gnc_tel.throttle_cmd_pct;
+  out->alt_error_m = gnc_tel.alt_error_m;
+  out->target_vz_mps = gnc_tel.target_vz_mps;
+  out->z_up_m = -relative_down;
 }
 } // namespace
 
@@ -227,6 +234,11 @@ fw_gnc *fw_gnc_create(void)
   if (g_gnc_instance == nullptr)
   {
     g_gnc_instance = new (std::nothrow) fw_gnc();
+    // 调用方负责提供相对起飞点的位置/高度（本 ABI 每拍注入 relative_*），
+    // 因此必须声明"原点已建立"：否则 process_control_inputs() 会按
+    // "原点未建立"把 relative_* 兜底清零，控制链永远看到高度 0
+    // （2026-10-29 对拍定位：alt_err 恒等于 target、油门残差 0.24–4.9%）。
+    is_origin_lla_set = true;
   }
   return g_gnc_instance;
 }
