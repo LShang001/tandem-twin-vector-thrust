@@ -67,7 +67,7 @@ FLAGS="-std=$STD $OPT -D_USE_MATH_DEFINES -DEKF_NAV_TELEMETRY"
 FLAGS="$FLAGS -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO=300"
 FLAGS="$FLAGS -DBFS_EKF_BARO_ALTITUDE_UPDATE"
 FLAGS="$FLAGS -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE"
-FLAGS="$FLAGS ${EXTRA_CXXFLAGS:-} -DFW_BUILD_ID=\"$BUILD_ID\""
+FLAGS="$FLAGS ${EXTRA_CXXFLAGS:-}"
 
 obj_name() { printf '%s' "$1" | tr '/' '_' | tr -d '-'; }
 
@@ -80,12 +80,27 @@ if [ -f "$STAMP" ] && [ "$(cat "$STAMP")" != "$FLAGS" ]; then
 fi
 printf '%s\n' "$FLAGS" > "$STAMP"
 
+# 构建号只影响 fw_gnc_api.cpp 的 caps.build_id：单独记录、不参与全局 flags 比对，
+# 否则每次 git commit（哈希变化）都会触发全量重建（实测约 4 min）。
+ID_STAMP="$OBJ_DIR/.build_id"
+API_REBUILD=0
+if [ ! -f "$ID_STAMP" ] || [ "$(cat "$ID_STAMP")" != "$BUILD_ID" ]; then
+  API_REBUILD=1
+  printf '%s\n' "$BUILD_ID" > "$ID_STAMP"
+fi
+
 OBJS=""
 for src in $CORE_SOURCES $API_SOURCES; do
   obj="$OBJ_DIR/$(obj_name "$src").o"
-  if [ ! -f "$obj" ] || [ "$ROOT/$src" -nt "$obj" ] || [ -n "$(find "$ROOT/include" "$ROOT/src" "$ROOT/lib/navigation-main/src" -newer "$obj" -name '*.h' 2>/dev/null | head -1)" ]; then
+  force=0
+  extra=""
+  if [ "$src" = "test_host/fw_algo/fw_gnc_api.cpp" ]; then
+    extra="-DFW_BUILD_ID=\"$BUILD_ID\""
+    [ "$API_REBUILD" = "1" ] && force=1
+  fi
+  if [ "$force" = "1" ] || [ ! -f "$obj" ] || [ "$ROOT/$src" -nt "$obj" ] || [ -n "$(find "$ROOT/include" "$ROOT/src" "$ROOT/lib/navigation-main/src" -newer "$obj" -name '*.h' 2>/dev/null | head -1)" ]; then
     echo "[fwcore] $src"
-    $CXX $FLAGS $INCS -c "$ROOT/$src" -o "$obj"
+    $CXX $FLAGS $INCS $extra -c "$ROOT/$src" -o "$obj"
   fi
   OBJS="$OBJS $obj"
 done
