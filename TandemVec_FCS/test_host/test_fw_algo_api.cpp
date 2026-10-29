@@ -253,7 +253,9 @@ int main()
   char json[2048];
   const int n = fw_ekf_diag_json(h, json, static_cast<int32_t>(sizeof(json)));
   Check(n > 0, "诊断 JSON 可输出");
-  Check(std::strstr(json, "\"abi\":1") != nullptr, "诊断 JSON 含 ABI 版本");
+  char abi_expect[32];
+  std::snprintf(abi_expect, sizeof(abi_expect), "\"abi\":%d", FW_ALGO_ABI_VERSION);
+  Check(std::strstr(json, abi_expect) != nullptr, "诊断 JSON 含当前 ABI 版本");
   Check(std::strstr(json, "\"cov_diag\":[") != nullptr, "诊断 JSON 含协方差对角");
 
   fw_ekf_destroy(h);
