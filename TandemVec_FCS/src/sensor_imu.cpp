@@ -331,33 +331,46 @@ bool readIMUData()
     //   （41/47 逐 seed 不变、无格变差 >1%）与 K2 四风险格 nrfb=0 覆盖，实机需盯
     //   navi_raw/navi_fb 占空比。
     constexpr uint8_t kImuHealthFailed = 2U; // 与 ins_imu_health.h::ImuHealthState 一致
-    const float axBodyNavRaw = -raw_az_g;
-    const float ayBodyNavRaw = raw_ax_g;
-    const float azBodyNavRaw = -raw_ay_g;
-    const float gxBodyNavRaw = -gz_cal_dps;
-    const float gyBodyNavRaw = gx_cal_dps;
-    const float gzBodyNavRaw = -gy_cal_dps;
+
+    // 两条路径共用同一份 RUB→FRD 置换（宿主 T10–T13 锁死）；选源必须六轴一次性
+    // 取齐（`NavImuSelectIncrement` 返回整结构），不允许逐轴混选。
+    const float accel_rub_filtered_g[3] = {axFilteredRaw, ayFilteredRaw, azFilteredRaw};
+    const float gyro_rub_filtered_dps[3] = {gxFilteredRaw, gyFilteredRaw, gzFilteredRaw};
+    const bfs::NavImuBodySample nav_body_filtered =
+        bfs::NavImuSensorRubToBodyFrd(accel_rub_filtered_g, gyro_rub_filtered_dps);
 
     static bfs::NavImuIncrementSelector s_nav_increment_sel(
         true, bfs::NavImuIncrementSelector::kDefaultHoldTicks);
-    const bool navUseRaw = s_nav_increment_sel.select(g_imu_health_state == kImuHealthFailed) ==
-                           bfs::NavImuSource::Raw;
+    const bfs::NavImuSource nav_source = s_nav_increment_sel.select(
+        g_imu_health_state == kImuHealthFailed);
     g_nav_increment_raw_ticks = s_nav_increment_sel.rawTicks();
     g_nav_increment_fallback_ticks = s_nav_increment_sel.fallbackTicks();
 
-    const float accel_body_x_mps2 = (navUseRaw ? axBodyNavRaw : axBody) * G_TO_MS2;
-    const float accel_body_y_mps2 = (navUseRaw ? ayBodyNavRaw : ayBody) * G_TO_MS2;
-    const float accel_body_z_mps2 = (navUseRaw ? azBodyNavRaw : azBody) * G_TO_MS2;
-    const float gyro_body_x_radps = (navUseRaw ? gxBodyNavRaw : gxBody) * DEG_TO_RAD;
-    const float gyro_body_y_radps = (navUseRaw ? gyBodyNavRaw : gyBody) * DEG_TO_RAD;
-    const float gyro_body_z_radps = (navUseRaw ? gzBodyNavRaw : gzBody) * DEG_TO_RAD;
+    const float accel_rub_raw_g[3] = {raw_ax_g, raw_ay_g, raw_az_g};
+    const float gyro_rub_raw_dps[3] = {gx_cal_dps, gy_cal_dps, gz_cal_dps};
+    const bfs::NavImuBodySample nav_body_raw =
+        bfs::NavImuSensorRubToBodyFrd(accel_rub_raw_g, gyro_rub_raw_dps);
+    const bfs::NavImuBodySample nav_body =
+        bfs::NavImuSelectIncrement(nav_body_filtered, nav_body_raw, nav_source);
+
+    const float accel_body_x_mps2 = nav_body.accel_g[0] * G_TO_MS2;
+    const float accel_body_y_mps2 = nav_body.accel_g[1] * G_TO_MS2;
+    const float accel_body_z_mps2 = nav_body.accel_g[2] * G_TO_MS2;
+    const float gyro_body_x_radps = nav_body.gyro_dps[0] * DEG_TO_RAD;
+    const float gyro_body_y_radps = nav_body.gyro_dps[1] * DEG_TO_RAD;
+    const float gyro_body_z_radps = nav_body.gyro_dps[2] * DEG_TO_RAD;
 #else
-    const float accel_body_x_mps2 = axBody * G_TO_MS2;
-    const float accel_body_y_mps2 = ayBody * G_TO_MS2;
-    const float accel_body_z_mps2 = azBody * G_TO_MS2;
-    const float gyro_body_x_radps = gxBody * DEG_TO_RAD;
-    const float gyro_body_y_radps = gyBody * DEG_TO_RAD;
-    const float gyro_body_z_radps = gzBody * DEG_TO_RAD;
+    const float accel_rub_filtered_g[3] = {axFilteredRaw, ayFilteredRaw, azFilteredRaw};
+    const float gyro_rub_filtered_dps[3] = {gxFilteredRaw, gyFilteredRaw, gzFilteredRaw};
+    const bfs::NavImuBodySample nav_body =
+        bfs::NavImuSensorRubToBodyFrd(accel_rub_filtered_g, gyro_rub_filtered_dps);
+
+    const float accel_body_x_mps2 = nav_body.accel_g[0] * G_TO_MS2;
+    const float accel_body_y_mps2 = nav_body.accel_g[1] * G_TO_MS2;
+    const float accel_body_z_mps2 = nav_body.accel_g[2] * G_TO_MS2;
+    const float gyro_body_x_radps = nav_body.gyro_dps[0] * DEG_TO_RAD;
+    const float gyro_body_y_radps = nav_body.gyro_dps[1] * DEG_TO_RAD;
+    const float gyro_body_z_radps = nav_body.gyro_dps[2] * DEG_TO_RAD;
 #endif
 
     noInterrupts();

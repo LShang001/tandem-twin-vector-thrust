@@ -19,8 +19,12 @@
  *             在故障第一帧就切只拿到默认水平（34.20 vs 2.52 m）。
  *             释放侧不敏感（后持 0.1 s 与 5 s 逐位相同）。
  * @units   时间以"调用节拍数"计（固件 2 kHz、SIL 同频），hold_ticks 默认 10 000 = 5 s
- * @frame   无坐标系语义：只做"用哪一路增量"的布尔决策
+ * @frame   选源本身无坐标系语义（只做"用哪一路增量"的布尔决策）；同文件的
+ *          `NavImuSensorRubToBodyFrd()` 承载传感器系 RUB → 机体系 FRD 的定常置换，
+ *          供两条路径共用同一份映射（避免内联表达式各写一遍）。
  * @note    总开关关闭时 `select()` 恒返回 Filtered，且不改任何计数语义 ⇒ 默认行为等价现网。
+ *          接线级不变量（宿主 T10–T13）：raw / filtered 必须走同一置换，且六轴
+ *          一次性取齐，不允许逐轴混选。
  */
 #pragma once
 
@@ -35,6 +39,40 @@ enum class NavImuSource : uint8_t
   Filtered = 0,
   Raw = 1,
 };
+
+/// 机体系六轴样本（加速度 g、角速度 dps，尚未换算 SI）。
+struct NavImuBodySample
+{
+  float accel_g[3];
+  float gyro_dps[3];
+};
+
+/// 传感器系 RUB（右-上-后）→ 机体系 FRD 的定常带符号置换。
+/// 与 `sensor_imu.cpp` 步骤 5 逐字一致（2026-08-07 轴置换红线）：
+///   bX=-sZ、bY=+sX、bZ=-sY；加速度与角速度使用同一置换。
+/// 把该置换放进平台无关头，是为了让"raw 与 filtered 走同一映射"可被宿主测试锁住，
+/// 而不是只在两处内联表达式上靠人工比对。
+inline NavImuBodySample NavImuSensorRubToBodyFrd(const float accel_rub_g[3],
+                                                 const float gyro_rub_dps[3])
+{
+  NavImuBodySample out{};
+  out.accel_g[0] = -accel_rub_g[2];
+  out.accel_g[1] = accel_rub_g[0];
+  out.accel_g[2] = -accel_rub_g[1];
+  out.gyro_dps[0] = -gyro_rub_dps[2];
+  out.gyro_dps[1] = gyro_rub_dps[0];
+  out.gyro_dps[2] = -gyro_rub_dps[1];
+  return out;
+}
+
+/// 按选源**一次性取齐六轴**。逐轴混选（部分 raw、部分 filtered）是把两条路径
+/// 拼成不存在的第三条，任何情况下都不允许；整结构返回让该约束由类型系统保证。
+inline NavImuBodySample NavImuSelectIncrement(const NavImuBodySample &filtered,
+                                              const NavImuBodySample &raw,
+                                              NavImuSource source)
+{
+  return (source == NavImuSource::Raw) ? raw : filtered;
+}
 
 /// 增量源选择器 + 故障后持锁存。
 ///

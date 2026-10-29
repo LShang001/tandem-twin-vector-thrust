@@ -21,11 +21,14 @@
  *          T4 关闭时 Failed 也不产生任何计数；T5 连续 Failed 刷新锁存；
  *          T6 hold_ticks=0 归一为 1；T7 reset 清零；
  *          T8 确认延迟使切入落点离开故障前沿（§4.24m-W 组不变量）；
- *          T9 定常带符号置换与逐轴一阶低通可交换（raw 分支与 SIL 口径等价的前提）
+ *          T9 定常带符号置换与逐轴一阶低通可交换（raw 分支与 SIL 口径等价的前提）；
+ *          T10 RUB→FRD 逐轴符号（轴置换红线）；T11 选源逐位透传；
+ *          T12 六轴一次性取齐（禁止逐轴混选）；T13 与改动前内联表达式逐位等价
  * @see     include/NavImuIncrementSelect.h、src/sensor_imu.cpp、include/ins_imu_health.h
  */
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 #include "NavImuIncrementSelect.h"
 
@@ -208,6 +211,107 @@ int main()
       }
     }
     CHECK(worst < 1e-4f, "T9 per-axis LPF and constant signed permutation must commute");
+  }
+
+  // T10：RUB→FRD 定常置换的逐轴符号（2026-08-07 轴置换红线：
+  //      bX=-sZ、bY=+sX、bZ=-sY，加速度与角速度同一置换）。
+  {
+    const float unit[3][3] = {{1.0f, 0.0f, 0.0f},
+                              {0.0f, 1.0f, 0.0f},
+                              {0.0f, 0.0f, 1.0f}};
+    // 传感器三轴单位向量 → 机体系期望像
+    const float exp_acc[3][3] = {{0.0f, 1.0f, 0.0f},
+                                 {0.0f, 0.0f, -1.0f},
+                                 {-1.0f, 0.0f, 0.0f}};
+    for (int axis = 0; axis < 3; ++axis)
+    {
+      const bfs::NavImuBodySample b =
+          bfs::NavImuSensorRubToBodyFrd(unit[axis], unit[axis]);
+      for (int k = 0; k < 3; ++k)
+      {
+        CHECK(b.accel_g[k] == exp_acc[axis][k],
+              "T10 accel permutation must be bX=-sZ, bY=+sX, bZ=-sY");
+        CHECK(b.gyro_dps[k] == exp_acc[axis][k],
+              "T10 gyro must use the same permutation as accel");
+      }
+    }
+  }
+
+  // T11：选源必须逐位透传——Filtered 原样返回滤波值，Raw 原样返回未滤波值
+  //      （不允许任何换算、混合或再映射发生在这个函数里）。
+  {
+    const bfs::NavImuBodySample filtered = {{1.5f, -2.25f, 3.125f},
+                                            {0.5f, -0.75f, 1.875f}};
+    const bfs::NavImuBodySample raw = {{-9.5f, 8.25f, -7.125f},
+                                       {-6.5f, 5.75f, -4.875f}};
+    const bfs::NavImuBodySample f = bfs::NavImuSelectIncrement(
+        filtered, raw, bfs::NavImuSource::Filtered);
+    const bfs::NavImuBodySample r =
+        bfs::NavImuSelectIncrement(filtered, raw, bfs::NavImuSource::Raw);
+    CHECK(std::memcmp(&f, &filtered, sizeof(f)) == 0,
+          "T11 Filtered source must be bit-identical to the filtered sample");
+    CHECK(std::memcmp(&r, &raw, sizeof(r)) == 0,
+          "T11 Raw source must be bit-identical to the raw sample");
+  }
+
+  // T12：六轴一次性取齐——raw 与 filtered 的每个分量都不同，任何"逐轴混选"
+  //      都会让结果与 raw 整结构逐位比较失败（这是接线级 bug 的机检形式）。
+  {
+    const bfs::NavImuBodySample filtered = {{1.0f, 2.0f, 3.0f}, {4.0f, 5.0f, 6.0f}};
+    const bfs::NavImuBodySample raw = {{-1.0f, -2.0f, -3.0f}, {-4.0f, -5.0f, -6.0f}};
+    const bfs::NavImuBodySample r =
+        bfs::NavImuSelectIncrement(filtered, raw, bfs::NavImuSource::Raw);
+    CHECK(std::memcmp(&r, &raw, sizeof(r)) == 0,
+          "T12 raw selection must not mix per-axis with filtered");
+    bool any_leak = false;
+    for (int k = 0; k < 3; ++k)
+    {
+      any_leak = any_leak || (r.accel_g[k] == filtered.accel_g[k]) ||
+                 (r.gyro_dps[k] == filtered.gyro_dps[k]);
+    }
+    CHECK(!any_leak, "T12 no axis may come from the other source");
+  }
+
+  // T13：与改动前内联表达式逐位等价——映射 + SI 换算的乘序不变，
+  //      否则"默认关时行为不变"这句话不成立。
+  {
+    // 与固件同值（G_TO_MS2 ← kDefaultTandemVecParams.g；DEG_TO_RAD ← Arduino 核心）。
+    // 断言对常数取值不敏感：只验证乘法次序与映射一致，不比物理量。
+    const float kG = 9.79f;
+    const float kDegToRad = 0.017453292519943295f;
+    int mismatch = 0;
+    for (int i = 0; i < 256; ++i)
+    {
+      const float ph = 0.017f * static_cast<float>(i);
+      const float af[3] = {1.7f * static_cast<float>(std::sin(ph)) + 0.3f,
+                           -1.1f * static_cast<float>(std::cos(0.7f * ph)) + 9.6f,
+                           0.9f * static_cast<float>(std::sin(0.3f * ph)) - 0.4f};
+      const float gf[3] = {12.0f * static_cast<float>(std::sin(0.11f * ph)),
+                           -7.0f * static_cast<float>(std::cos(0.13f * ph)),
+                           3.5f * static_cast<float>(std::sin(0.05f * ph))};
+      const float ar[3] = {af[0] + 0.4f, af[1] - 0.2f, af[2] + 0.7f};
+      const float gr[3] = {gf[0] - 3.0f, gf[1] + 2.0f, gf[2] - 1.0f};
+
+      // 改动前的内联写法（传感器系 RUB → 机体系 FRD + SI 换算）
+      const float legacy_f[6] = {-af[2] * kG, af[0] * kG, -af[1] * kG,
+                                 -gf[2] * kDegToRad, gf[0] * kDegToRad,
+                                 -gf[1] * kDegToRad};
+      const float legacy_r[6] = {-ar[2] * kG, ar[0] * kG, -ar[1] * kG,
+                                 -gr[2] * kDegToRad, gr[0] * kDegToRad,
+                                 -gr[1] * kDegToRad};
+
+      const bfs::NavImuBodySample fb = bfs::NavImuSensorRubToBodyFrd(af, gf);
+      const bfs::NavImuBodySample rb = bfs::NavImuSensorRubToBodyFrd(ar, gr);
+      const float now_f[6] = {fb.accel_g[0] * kG, fb.accel_g[1] * kG,
+                              fb.accel_g[2] * kG, fb.gyro_dps[0] * kDegToRad,
+                              fb.gyro_dps[1] * kDegToRad, fb.gyro_dps[2] * kDegToRad};
+      const float now_r[6] = {rb.accel_g[0] * kG, rb.accel_g[1] * kG,
+                              rb.accel_g[2] * kG, rb.gyro_dps[0] * kDegToRad,
+                              rb.gyro_dps[1] * kDegToRad, rb.gyro_dps[2] * kDegToRad};
+      mismatch += (std::memcmp(legacy_f, now_f, sizeof(now_f)) != 0) ? 1 : 0;
+      mismatch += (std::memcmp(legacy_r, now_r, sizeof(now_r)) != 0) ? 1 : 0;
+    }
+    CHECK(mismatch == 0, "T13 helper must be bit-identical to the legacy inline mapping");
   }
 
   if (g_fail == 0)
