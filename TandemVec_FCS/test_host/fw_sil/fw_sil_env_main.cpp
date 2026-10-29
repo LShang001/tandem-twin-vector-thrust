@@ -895,7 +895,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "rc0,rc1,rc2,rc3,rc4,rc5,rc6,rc7,rc8,alt_up,target_alt,link,fs,"
           "mode,ch1,ch2,ch3,ch4,delta_f,delta_t,dw,or0,or1,or2,ar0,ar1,ar2,"
           "rn,re,rd,vn,ve,vd,roll,pitch,heading,gx_rps,gy_rps,gz_rps,"
-          "hdg_ok,pos_deg,gnss_age\n");
+          "hdg_ok,pos_deg,gnss_age,sfup,cos_tilt,thr_cmd\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -1232,6 +1232,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       // 校准段不跑控制：否则位置/姿态积分器在地面长时间饱和，起飞瞬间
       // 直接翻车，会把“控制器饱和”误当成 EKF 不收敛。
       // 导弹模式由弹体自带自动驾驶，固件只跑导航，不跑 TandemVec 控制。
+      // 对拍轨迹必须记录**调用前**的 target_altitude：固件的垂直 loiter 状态机
+      // 会在调用内修改它，若把调用后的值当输入重放，会晚一拍并双重推进。
+      const float target_alt_pre_call = target_altitude;
       runGNCExecutive();
       if (g_trace_ctrl_file != nullptr)
       {
@@ -1242,13 +1245,13 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
             "%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
             "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
             "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
-            "%.6f,%.6f,%.6f,%.9f,%.9f,%.9f,%d,%d,%.4f\n",
+            "%.6f,%.6f,%.6f,%.9f,%.9f,%.9f,%d,%d,%.4f,%.6f,%.6f,%.4f\n",
             t, AHRS_Packet.Qw, AHRS_Packet.Qx, AHRS_Packet.Qy, AHRS_Packet.Qz,
             current_omega_dps_body_filtered.x, current_omega_dps_body_filtered.y,
             current_omega_dps_body_filtered.z,
             raw_rc_values[0], raw_rc_values[1], raw_rc_values[2], raw_rc_values[3],
             raw_rc_values[4], raw_rc_values[5], raw_rc_values[6], raw_rc_values[7],
-            raw_rc_values[8], estimated_height, target_altitude,
+            raw_rc_values[8], estimated_height, target_alt_pre_call,
             isLinkUp ? 1 : 0, failsafe_in_flight ? 1 : 0,
             static_cast<int>(g_current_flight_mode),
             ch1_output, ch2_output, ch3_output, ch4_output,
@@ -1267,7 +1270,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
             static_cast<double>(icm_gyro_z) -
                 (nav_system_initialized ? nav_ekf.gyro_bias_radps().z() : 0.0f),
             g_heading_hold_allowed ? 1 : 0, g_pos_hold_degraded ? 1 : 0,
-            static_cast<double>(g_gnss_outage_age_s));
+            static_cast<double>(g_gnss_outage_age_s),
+            static_cast<double>(gnc_tel.specific_force_up_mps2),
+            static_cast<double>(gnc_tel.thrust_cos_tilt),
+            static_cast<double>(gnc_tel.throttle_cmd_pct));
       }
     }
     if (g_sil_nav_debug_imu_failed)

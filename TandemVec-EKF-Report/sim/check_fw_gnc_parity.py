@@ -81,6 +81,10 @@ def main():
         if dt <= 0.0:
             dt = 0.005
         prev_t = t
+        # SIL 已把 target_alt 记录为**调用前**快照 ⇒ 每拍原样写入即可与 SIL 的
+        # 调用起点一致（不再需要"仅外部跳变才写"的启发式）。
+        sil_target = float(r["target_alt"])
+        apply_target = True
         try:
             out = g.step(
                 quat=(float(r["quat_w"]), float(r["quat_x"]),
@@ -95,7 +99,8 @@ def main():
                 dt=dt,
                 link_up=int(r["link"]) != 0,
                 failsafe_in_flight=int(r["fs"]) != 0,
-                target_alt=float(r["target_alt"]),
+                target_alt=sil_target,
+                apply_target_alt=apply_target,
                 heading_hold_allowed=int(r["hdg_ok"]) != 0,
                 pos_hold_degraded=int(r["pos_deg"]) != 0,
                 gnss_outage_age_s=float(r["gnss_age"]),
@@ -112,14 +117,16 @@ def main():
             "delta_f": (out["delta_f_deg"], float(r["delta_f"])),
             "delta_t": (out["delta_t_deg"], float(r["delta_t"])),
             "dw": (out["dw"], float(r["dw"])),
+            "sfup": (out["specific_force_up_mps2"], float(r["sfup"])),
+            "cos_tilt": (out["thrust_cos_tilt"], float(r["cos_tilt"])),
+            "thr_cmd": (out["throttle_cmd_pct"], float(r["thr_cmd"])),
         }
         for i in range(3):
             pairs[f"or{i}"] = (out["omega_ref_dps"][i], float(r[f"or{i}"]))
             pairs[f"ar{i}"] = (out["alpha_ref_dps2"][i], float(r[f"ar{i}"]))
         for k, (a, b) in pairs.items():
             d = abs(a - b)
-            if d > maxd.get(k, 0.0):
-                maxd[k] = d
+            maxd[k] = max(maxd.get(k, 0.0), d)
             if d > args.tol and first_bad is None:
                 first_bad = (t, k, a, b, d)
         if int(out["flight_mode"]) != int(r["mode"]):
@@ -146,6 +153,7 @@ def main():
         "delta_f": 0.5, "delta_t": 0.5, "dw": 0.01,
         "or0": 0.1, "or1": 0.1, "or2": 0.1,
         "ar0": 1.0, "ar1": 1.0, "ar2": 1.0,
+        "sfup": 0.01, "cos_tilt": 1e-3, "thr_cmd": 0.5,
     }
     over = {k: (maxd.get(k, 0.0), tol) for k, tol in tolerances.items()
             if maxd.get(k, 0.0) > tol}
