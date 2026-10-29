@@ -77,6 +77,10 @@ W25N01GV::W25N01GV(SPIClass& bus, uint8_t cs)
       _lastEcc(0), _lastProgErr(0) {}
 W25N01GVLog::W25N01GVLog(W25N01GV& f) : _flash(f) {}
 AnoComProtocol::AnoComProtocol(Stream*) {}
+// 参数注册表（ano_params.cpp）引用 sendData 回传 0xE1 应答；宿主直调库只读写
+// 参数值、不跑协议收发，因此这里给空实现满足链接。SIL/固件侧的协议行为
+// 由 communication.cpp + 真实 AnoComProtocol 覆盖，不落在这个桩上。
+void AnoComProtocol::sendData(uint8_t, uint8_t, uint8_t *, uint16_t) {}
 CrsfSerial::CrsfSerial(HardwareSerial& port, uint32_t baud)
     : _port(port), _crc(0xd5), _baud(baud), _lastReceive(0),
       _lastChannelsPacket(0), _linkIsUp(false), _passthroughBaud(0) {}
