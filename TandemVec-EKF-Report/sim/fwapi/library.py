@@ -32,6 +32,23 @@ def fcs_root() -> Path:
     return repo_root() / "TandemVec_FCS"
 
 
+def _bash() -> str:
+    """选择构建用 bash：Windows 上必须显式指向 Git Bash。
+
+    裸 `bash` 在部分 Windows 环境会解析到 WSL 的 bash（路径/挂载不同，
+    且不会继承 MinGW 工具链），表现为构建静默失败。可用 FW_BASH 覆盖。
+    """
+    env = os.environ.get("FW_BASH")
+    if env:
+        return env
+    if sys.platform.startswith("win"):
+        for cand in (r"C:\Program Files\Git\bin\bash.exe",
+                     r"C:\Program Files (x86)\Git\bin\bash.exe"):
+            if Path(cand).exists():
+                return cand
+    return "bash"
+
+
 def build_dir() -> Path:
     """共享库输出目录：优先 BIN_DIR/FW_ALGO_BIN_DIR，否则系统临时目录。"""
     env = os.environ.get("FW_ALGO_BIN_DIR") or os.environ.get("BIN_DIR")
@@ -45,56 +62,62 @@ def library_name() -> str:
 
 
 def _sources() -> list[Path]:
+    """参与共享库的源码（与 test_host/fw_algo/build_fw_algo.sh 的清单一致）。
+
+    只用于信息展示/人工核对；增量判断由构建脚本按目标文件 mtime 完成。
+    """
     root = fcs_root()
-    return [
-        root / "test_host" / "fw_algo" / "fw_algo_api.cpp",
-        root / "test_host" / "fw_algo" / "fw_algo_api.h",
-        root / "test_host" / "fw_algo" / "fw_ctrl_api.cpp",
-        root / "lib" / "navigation-main" / "src" / "ekf_15_state.h",
-        root / "lib" / "units" / "src" / "convang.cpp",
-        root / "lib" / "units" / "src" / "convangacc.cpp",
-        root / "lib" / "units" / "src" / "convangvel.cpp",
+    core = [
+        "test_host/fw_algo/core_sources.sh",
+        "src/flight_control.cpp",
+        "src/navigation_task.cpp",
+        "src/state_data.cpp",
+        "src/ano_params.cpp",
+        "lib/ublox-main/src/ubx.cpp",
+        "test_host/fw_sil/fw_sil_stubs.cpp",
+        "lib/DPS310-Pressure-Sensor/src/Dps310.cpp",
+        "lib/DPS310-Pressure-Sensor/src/DpsClass.cpp",
+        "lib/units/src/convang.cpp",
+        "lib/units/src/convangacc.cpp",
+        "lib/units/src/convangvel.cpp",
+        "lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp",
+        "lib/ublox-main/src/minmea.c",
     ]
+    api = [
+        "test_host/fw_algo/fw_algo_api.cpp",
+        "test_host/fw_algo/fw_ctrl_api.cpp",
+        "test_host/fw_algo/fw_gnc_api.cpp",
+        "test_host/fw_algo/fw_algo_api.h",
+        "test_host/fw_algo/fw_gnc_api.h",
+    ]
+    return [root / p for p in core + api]
 
 
 def build(force: bool = False) -> Path:
-    """编译共享库并返回路径；源码未变且库存在时直接复用。"""
+    """调用固件侧唯一构建入口（build_fw_algo.sh）编译共享库并返回路径。
+
+    刻意不在 Python 里维护第二份编译参数：脚本负责源清单、宏、C/C++ 分流与
+    静态链接；Python 只传输出目录与（可选）强制重建。这样"仿真用的库"与
+    "SIL 用的库"永远来自同一份清单。
+    """
     out = build_dir() / library_name()
-    srcs = _sources()
-    if out.exists() and not force:
-        newest = max(p.stat().st_mtime for p in srcs if p.exists())
-        if out.stat().st_mtime >= newest:
-            return out
-    root = fcs_root()
-    inc = [
-        f"-I{root / 'include'}",
-        f"-I{root / 'src'}",
-        f"-I{root / 'lib' / 'eigen' / 'src'}",
-        f"-I{root / 'lib' / 'navigation-main' / 'src'}",
-        f"-I{root / 'lib' / 'units' / 'src'}",
-        f"-I{root / 'lib' / 'ICM42688' / 'src'}",
-        f"-I{root / 'test_host'}",
-    ]
-    flags = [
-        "-std=c++17",
-        "-O2",
-        "-D_USE_MATH_DEFINES",
-        "-DEKF_NAV_TELEMETRY",
-        "-DEIGEN_DONT_VECTORIZE",
-        "-DEIGEN_DONT_PARALLELIZE",
-    ]
-    cmd = [os.environ.get("CXX", "g++"), *flags, *inc, *map(str, srcs), "-shared"]
-    if sys.platform.startswith("win"):
-        # 自包含 MinGW 运行库：Python 进程的 PATH 上没有 libstdc++/libgcc。
-        cmd += ["-static"]
-    cmd += ["-o", str(out)]
+    script = fcs_root() / "test_host" / "fw_algo" / "build_fw_algo.sh"
+    env = dict(os.environ)
+    env["BIN_DIR"] = str(build_dir())
+    args = [_bash(), str(script)]
+    if force:
+        args.append("--clean")
+    args.append("--print-path")
     try:
-        subprocess.run(cmd, check=True, capture_output=True, text=True)
+        proc = subprocess.run(args, check=True, capture_output=True, text=True, env=env)
     except FileNotFoundError as exc:  # pragma: no cover - 环境缺失
-        raise RuntimeError("找不到 g++；请先安装 MinGW 或设置 CXX。") from exc
+        raise RuntimeError("找不到 bash；请先安装 Git Bash/MinGW。") from exc
     except subprocess.CalledProcessError as exc:  # pragma: no cover
-        raise RuntimeError(f"fw_algo 构建失败：\n{exc.stderr}") from exc
-    return out
+        raise RuntimeError(f"fw_algo 构建失败：\n{exc.stdout}\n{exc.stderr}") from exc
+    path = Path(proc.stdout.strip().splitlines()[-1])
+    if not path.exists():
+        raise RuntimeError(f"构建脚本未产出共享库：{proc.stdout}\n{proc.stderr}")
+    return path
 
 
 # ---- ctypes 结构体（与 fw_algo_api.h 一一对应，改动需同步 ABI_VERSION） ----
@@ -222,6 +245,81 @@ class FwThrustAllocOutput(ctypes.Structure):
     ]
 
 
+class FwCoreCaps(ctypes.Structure):
+    """与 fw_gnc_api.h::fw_core_caps_t 一一对应。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("core_abi_version", ctypes.c_uint32),
+        ("ekf_abi_version", ctypes.c_uint32),
+        ("ctrl_abi_version", ctypes.c_uint32),
+        ("gnc_abi_version", ctypes.c_uint32),
+        ("param_count", ctypes.c_uint32),
+        ("vehicle_profile", ctypes.c_uint32),
+        ("feature_bits", ctypes.c_uint32),
+        ("build_id", ctypes.c_char * 64),
+    ]
+
+
+class FwGncInput(ctypes.Structure):
+    """与 fw_gnc_api.h::fw_gnc_input_t 一一对应（struct_size/abi_version 必须预填）。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("quat_wxyz", ctypes.c_float * 4),
+        ("omega_body_radps", ctypes.c_float * 3),
+        ("vel_ned_mps", ctypes.c_float * 3),
+        ("pos_ned_m", ctypes.c_float * 3),
+        ("alt_up_m", ctypes.c_float),
+        ("rc_pwm", ctypes.c_uint16 * 16),
+        ("link_up", ctypes.c_int32),
+        ("failsafe_in_flight", ctypes.c_int32),
+        ("target_alt_m", ctypes.c_float),
+        ("dt_s", ctypes.c_float),
+    ]
+
+
+class FwGncOutput(ctypes.Structure):
+    """与 fw_gnc_api.h::fw_gnc_output_t 一一对应。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("ch1_pct", ctypes.c_float),
+        ("ch2_pct", ctypes.c_float),
+        ("ch3_pct", ctypes.c_float),
+        ("ch4_pct", ctypes.c_float),
+        ("flight_mode", ctypes.c_int32),
+        ("unlocked", ctypes.c_int32),
+        ("tvc_upper_deg", ctypes.c_float),
+        ("tvc_lower_deg", ctypes.c_float),
+        ("omega_ref_dps", ctypes.c_float * 3),
+        ("alpha_ref_dps2", ctypes.c_float * 3),
+        ("M_cmd", ctypes.c_float * 3),
+        ("delta_f_deg", ctypes.c_float),
+        ("delta_t_deg", ctypes.c_float),
+        ("dw", ctypes.c_float),
+        ("mode_degraded_heading", ctypes.c_int32),
+        ("mode_degraded_gnss", ctypes.c_int32),
+        ("failsafe_in_flight", ctypes.c_int32),
+        ("actuator_fault_bits", ctypes.c_uint32),
+    ]
+
+
+GNC_ABI_VERSION = 1
+CORE_ABI_VERSION = 1
+VEHICLE_NAMES = {0: "tandemvec", 1: "coaxial_vtvl", 2: "liquid_rocket"}
+FEATURE_NAMES = {
+    1 << 0: "raw_imu_increment",
+    1 << 1: "gnss_outage_vel_hold",
+    1 << 2: "gnss_outage_alt_hold",
+    1 << 3: "long_outage_descent",
+    1 << 4: "baro_health_gate",
+    1 << 5: "gnss_vertical_gate",
+    1 << 6: "gnc_available",
+}
+
 _LIB = None
 _LIB_PATH: Path | None = None
 
@@ -294,6 +392,29 @@ def load(force_build: bool = False) -> ctypes.CDLL:
     lib.fw_tandemvec_alloc.restype = FwTvAllocOutput
     lib.fw_thrust_alloc.argtypes = [p.POINTER(FwThrustAllocInput)]
     lib.fw_thrust_alloc.restype = FwThrustAllocOutput
+
+    # 控制链 / 能力 / 参数（fw_gnc_api.h）。旧库缺这些符号时降级，
+    # 不阻塞只用 EKF/分配的脚本（向后兼容的读取侧）。
+    try:
+        lib.fw_core_caps.argtypes = [p.POINTER(FwCoreCaps)]
+        lib.fw_core_caps.restype = None
+        lib.fw_gnc_create.restype = p.c_void_p
+        lib.fw_gnc_destroy.argtypes = [p.c_void_p]
+        lib.fw_gnc_destroy.restype = None
+        lib.fw_gnc_step.argtypes = [p.c_void_p, p.POINTER(FwGncInput),
+                                    p.POINTER(FwGncOutput)]
+        lib.fw_gnc_step.restype = p.c_int32
+        lib.fw_param_count.restype = p.c_uint32
+        lib.fw_param_name.argtypes = [p.c_uint32]
+        lib.fw_param_name.restype = p.c_char_p
+        lib.fw_param_find.argtypes = [p.c_char_p]
+        lib.fw_param_find.restype = p.c_int32
+        lib.fw_param_get.argtypes = [p.c_uint32, p.POINTER(p.c_float)]
+        lib.fw_param_get.restype = p.c_int32
+        lib.fw_param_set.argtypes = [p.c_uint32, p.c_float]
+        lib.fw_param_set.restype = p.c_int32
+    except AttributeError:  # pragma: no cover - 旧库
+        pass
 
     ver = lib.fw_algo_abi_version()
     if ver != ABI_VERSION:

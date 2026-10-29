@@ -44,10 +44,24 @@ from .control import (  # noqa: F401
     set_params,
     thrust_alloc,
 )
+from .gnc import (  # noqa: F401
+    Gnc,
+    caps,
+    param_dump,
+    param_get,
+    param_names,
+    param_set,
+)
 
 __all__ = [
     "ABI_VERSION",
     "Ekf",
+    "Gnc",
+    "caps",
+    "param_dump",
+    "param_get",
+    "param_names",
+    "param_set",
     "TandemVecAllocator",
     "default_params",
     "params_to_dict",
