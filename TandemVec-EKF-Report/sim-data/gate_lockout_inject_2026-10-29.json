@@ -1,0 +1,371 @@
+{
+ "exe": "C:\\Users\\12631\\AppData\\Local\\Temp\\tv_baro_dbg\\fw_real.exe",
+ "thrust_n": 22000,
+ "seeds": [
+  1,
+  2,
+  3
+ ],
+ "bias_mps2": [
+  0.0,
+  20.0,
+  40.0,
+  80.0
+ ],
+ "window_s": [
+  15.0,
+  15.3
+ ],
+ "d_gate_mps": 8.0,
+ "rows": [
+  {
+   "seed": 1,
+   "bias": 0.0,
+   "dose_mps": 0.0,
+   "nav_bias_frames": 610,
+   "pos_rms": 6.007,
+   "pos_max": 25.511,
+   "nav_vel_rms": 1.0518,
+   "att_rmse": 1.178,
+   "rejects": 0,
+   "reanchors": 0,
+   "vz_err_at_inj_end": -0.5469999999999686,
+   "vz_err_at_t1p5": -0.20000000000001705,
+   "gate_frac_after": 0.0
+  },
+  {
+   "seed": 2,
+   "bias": 0.0,
+   "dose_mps": 0.0,
+   "nav_bias_frames": 610,
+   "pos_rms": 5.914,
+   "pos_max": 27.748,
+   "nav_vel_rms": 1.0828,
+   "att_rmse": 1.027,
+   "rejects": 0,
+   "reanchors": 0,
+   "vz_err_at_inj_end": 2.836999999999989,
+   "vz_err_at_t1p5": -0.21800000000001774,
+   "gate_frac_after": 0.0
+  },
+  {
+   "seed": 3,
+   "bias": 0.0,
+   "dose_mps": 0.0,
+   "nav_bias_frames": 610,
+   "pos_rms": 5.369,
+   "pos_max": 26.39,
+   "nav_vel_rms": 1.0621,
+   "att_rmse": 1.019,
+   "rejects": 0,
+   "reanchors": 0,
+   "vz_err_at_inj_end": 2.8729999999999905,
+   "vz_err_at_t1p5": -0.14799999999999613,
+   "gate_frac_after": 0.0
+  },
+  {
+   "seed": 1,
+   "bias": 20.0,
+   "dose_mps": 6.000000000000014,
+   "nav_bias_frames": 610,
+   "pos_rms": 5.675,
+   "pos_max": 25.511,
+   "nav_vel_rms": 1.35,
+   "att_rmse": 1.224,
+   "rejects": 0,
+   "reanchors": 0,
+   "vz_err_at_inj_end": 2.062999999999988,
+   "vz_err_at_t1p5": -0.23500000000001364,
+   "gate_frac_after": 0.0
+  },
+  {
+   "seed": 2,
+   "bias": 20.0,
+   "dose_mps": 6.000000000000014,
+   "nav_bias_frames": 610,
+   "pos_rms": 5.928,
+   "pos_max": 27.748,
+   "nav_vel_rms": 1.2,
+   "att_rmse": 1.015,
+   "rejects": 0,
+   "reanchors": 0,
+   "vz_err_at_inj_end": 5.631000000000029,
+   "vz_err_at_t1p5": -0.2189999999999941,
+   "gate_frac_after": 0.0
+  },
+  {
+   "seed": 3,
+   "bias": 20.0,
+   "dose_mps": 6.000000000000014,
+   "nav_bias_frames": 610,
+   "pos_rms": 5.377,
+   "pos_max": 26.39,
+   "nav_vel_rms": 1.1693,
+   "att_rmse": 1.004,
+   "rejects": 0,
+   "reanchors": 0,
+   "vz_err_at_inj_end": 5.675000000000011,
+   "vz_err_at_t1p5": -0.1490000000000009,
+   "gate_frac_after": 0.0
+  },
+  {
+   "seed": 1,
+   "bias": 40.0,
+   "dose_mps": 12.000000000000028,
+   "nav_bias_frames": 610,
+   "pos_rms": 5.818,
+   "pos_max": 25.511,
+   "nav_vel_rms": 2.6375,
+   "att_rmse": 1.434,
+   "rejects": 7,
+   "reanchors": 0,
+   "vz_err_at_inj_end": 5.4950000000000045,
+   "vz_err_at_t1p5": -0.2750000000000057,
+   "gate_frac_after": 0.14
+  },
+  {
+   "seed": 2,
+   "bias": 40.0,
+   "dose_mps": 12.000000000000028,
+   "nav_bias_frames": 610,
+   "pos_rms": 25.487,
+   "pos_max": 123.763,
+   "nav_vel_rms": 9.7939,
+   "att_rmse": 2.111,
+   "rejects": 20,
+   "reanchors": 1,
+   "vz_err_at_inj_end": 7.9010000000000105,
+   "vz_err_at_t1p5": 1.0360000000000014,
+   "gate_frac_after": 1.0
+  },
+  {
+   "seed": 3,
+   "bias": 40.0,
+   "dose_mps": 12.000000000000028,
+   "nav_bias_frames": 610,
+   "pos_rms": 26.877,
+   "pos_max": 130.081,
+   "nav_vel_rms": 10.151,
+   "att_rmse": 2.165,
+   "rejects": 20,
+   "reanchors": 1,
+   "vz_err_at_inj_end": 7.649000000000001,
+   "vz_err_at_t1p5": 1.117999999999995,
+   "gate_frac_after": 1.0
+  },
+  {
+   "seed": 1,
+   "bias": 80.0,
+   "dose_mps": 24.000000000000057,
+   "nav_bias_frames": 610,
+   "pos_rms": 27.834,
+   "pos_max": 98.204,
+   "nav_vel_rms": 9.7518,
+   "att_rmse": 2.089,
+   "rejects": 20,
+   "reanchors": 1,
+   "vz_err_at_inj_end": 11.338999999999999,
+   "vz_err_at_t1p5": -4.873999999999995,
+   "gate_frac_after": 1.0
+  },
+  {
+   "seed": 2,
+   "bias": 80.0,
+   "dose_mps": 24.000000000000057,
+   "nav_bias_frames": 610,
+   "pos_rms": 29.293,
+   "pos_max": 111.972,
+   "nav_vel_rms": 9.601,
+   "att_rmse": 1.787,
+   "rejects": 20,
+   "reanchors": 1,
+   "vz_err_at_inj_end": 13.115000000000009,
+   "vz_err_at_t1p5": 14.039999999999992,
+   "gate_frac_after": 1.0
+  },
+  {
+   "seed": 3,
+   "bias": 80.0,
+   "dose_mps": 24.000000000000057,
+   "nav_bias_frames": 610,
+   "pos_rms": 23.559,
+   "pos_max": 103.294,
+   "nav_vel_rms": 10.3179,
+   "att_rmse": 2.141,
+   "rejects": 20,
+   "reanchors": 1,
+   "vz_err_at_inj_end": 12.759000000000015,
+   "vz_err_at_t1p5": -1.3460000000000036,
+   "gate_frac_after": 1.0
+  }
+ ],
+ "checks": {
+  "b0": {
+   "I1_ok": true,
+   "I2_dose_ok": true,
+   "vz_err_at_inj_end": [
+    0.547,
+    2.837,
+    2.873
+   ],
+   "gate_frac_after_5s": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "vz_err_at_t1p5": [
+    0.2,
+    0.218,
+    0.148
+   ],
+   "rejects": [
+    0,
+    0,
+    0
+   ],
+   "reanchors": [
+    0,
+    0,
+    0
+   ],
+   "pos_rms": [
+    6.007,
+    5.914,
+    5.369
+   ]
+  },
+  "I4_ok": true,
+  "b20": {
+   "I1_ok": true,
+   "I2_dose_ok": false,
+   "vz_err_at_inj_end": [
+    2.063,
+    5.631,
+    5.675
+   ],
+   "gate_frac_after_5s": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "vz_err_at_t1p5": [
+    0.235,
+    0.219,
+    0.149
+   ],
+   "rejects": [
+    0,
+    0,
+    0
+   ],
+   "reanchors": [
+    0,
+    0,
+    0
+   ],
+   "pos_rms": [
+    5.675,
+    5.928,
+    5.377
+   ],
+   "I3_locked": [
+    0,
+    0,
+    0
+   ],
+   "I5_falsified": [
+    1,
+    1,
+    1
+   ]
+  },
+  "b40": {
+   "I1_ok": true,
+   "I2_dose_ok": false,
+   "vz_err_at_inj_end": [
+    5.495,
+    7.901,
+    7.649
+   ],
+   "gate_frac_after_5s": [
+    0.14,
+    1.0,
+    1.0
+   ],
+   "vz_err_at_t1p5": [
+    0.275,
+    1.036,
+    1.118
+   ],
+   "rejects": [
+    7,
+    20,
+    20
+   ],
+   "reanchors": [
+    0,
+    1,
+    1
+   ],
+   "pos_rms": [
+    5.818,
+    25.487,
+    26.877
+   ],
+   "I3_locked": [
+    0,
+    1,
+    1
+   ],
+   "I5_falsified": [
+    0,
+    0,
+    0
+   ]
+  },
+  "b80": {
+   "I1_ok": true,
+   "I2_dose_ok": false,
+   "vz_err_at_inj_end": [
+    11.339,
+    13.115,
+    12.759
+   ],
+   "gate_frac_after_5s": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "vz_err_at_t1p5": [
+    4.874,
+    14.04,
+    1.346
+   ],
+   "rejects": [
+    20,
+    20,
+    20
+   ],
+   "reanchors": [
+    1,
+    1,
+    1
+   ],
+   "pos_rms": [
+    27.834,
+    29.293,
+    23.559
+   ],
+   "I3_locked": [
+    1,
+    1,
+    1
+   ],
+   "I5_falsified": [
+    0,
+    0,
+    0
+   ]
+  }
+ }
+}
