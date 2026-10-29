@@ -329,7 +329,18 @@ def selftest() -> int:
         st = ekf.state()
         ok = (r["fused"] and np.all(np.isfinite(st["lla"]))
               and np.all(np.isfinite(st["vel"])) and ekf.diag()["abi"] == ABI_VERSION)
-    print("selftest:", "PASS" if ok else "FAIL", "| fused:", r["fused"])
+
+    # 控制/分配层（ABI v2）
+    from .control import TandemVecAllocator, thrust_alloc
+
+    alloc = TandemVecAllocator()
+    a0 = alloc.step(0.0, 0.0, 0.0, throttle_pct=50.0, dt=0.005)
+    thr = thrust_alloc(9.79, 1.0, 0.7, 13.73)
+    ctrl_ok = (a0["valid"] and abs(a0["motor1_pct"] - 50.0) < 0.1
+               and thr["valid"] and abs(thr["throttle_pct"] - 49.9126) < 0.2)
+    ok = ok and ctrl_ok
+    print("selftest:", "PASS" if ok else "FAIL", "| fused:", r["fused"],
+          "| ctrl:", ctrl_ok)
     return 0 if ok else 1
 
 
