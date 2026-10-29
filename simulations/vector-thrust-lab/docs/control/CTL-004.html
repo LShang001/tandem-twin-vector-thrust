@@ -446,11 +446,11 @@ Madgwick 不在共享核心里（硬件耦合）， 那一层由调用方负责 
 </tbody>
 </table>
 <p>⇒ <strong>无振动 profile 达到工程等价</strong>（判据 N1–N4/N6
-严格逐拍一致；N5 姿态/速度/零偏 1e-3 量级、 位置 0.53 m/20 s
-且不增长，残差集中在首个 GNSS 更新 t≈0.315
-s，属宿主重放的原点/帧再生记账）。 <strong>振动 profile
-不通过</strong>：<code>ins_vibration_hf</code> / 自适应 Q 的输入是
-sensor 层 2 kHz 的 "原始−滤波"高频通道，ABI
+严格逐拍一致；N5 姿态/速度/零偏 1e-3 量级、 位置 20 s 内最大 0.53
+m——残差自首个 GNSS 位置更新（t≈0.315 s，0.24 m）起出现并保持有界，
+属宿主重放的 GNSS 帧再生/原点记账差异，不是滤波算法差异）。 <strong>振动
+profile 不通过</strong>：<code>ins_vibration_hf</code> / 自适应 Q
+的输入是 sensor 层 2 kHz 的 "原始−滤波"高频通道，ABI
 没有这个信号（输入是聚合均值/和）⇒ <code>vib_high</code> 恒 0，
 滤波过程噪声与 SIL 不同。<strong>边界：导航 ABI 的对拍证据只在无振动
 profile 成立； 振动/降级研究继续用 SIL 可执行</strong>（或给 ABI 增加
@@ -498,5 +498,5 @@ profile 全部通过严格判据 （最差
 0.0057%）。<strong>余留</strong>：<code>alt_err</code>
 等诊断量在手动模式下是历史值，不能当控制等价信号。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:01</footer></article></body>
 </html>
