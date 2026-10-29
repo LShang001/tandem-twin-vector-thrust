@@ -239,96 +239,96 @@ profile（<code>BFS_COAXIAL_VTVL</code> 等）+ <code>caps.vehicle</code>
 <h2 id="6-验证记录2026-10-29">6 验证记录（2026-10-29）</h2>
 <ul>
 <li>构建：<code>bash test_host/fw_algo/build_fw_algo.sh</code> →
-<code>fw_algo.dll</code>（1.2 MB，冷构建约 4 min，增量约 30 s）。</li>
+<code>fw_algo.dll</code>（1.2 MB，冷构建约 4 min，增量约 3 s）。</li>
 <li><code>run_fw_gnc_demo.py</code>：caps（<code>gnc_abi=1</code>、<code>param_count=133</code>、<code>vehicle=tandemvec</code>）、参数往返、
-上锁电机 &lt;5%、定高误差 0→5 m 时油门 31.2%→43.1%
-全通过；<code>python -m fwapi</code> selftest PASS。</li>
+上锁电机 &lt;5%、定高误差 0→5 m 时油门 31.2%→43.1%、ABI 返回码 0/2/3/5
+全通过； <code>python -m fwapi</code> selftest PASS。</li>
 <li><strong>SIL ↔︎
 直调库逐拍对拍</strong>（<code>sim/check_fw_gnc_parity.py</code> + SIL
-<code>--trace-ctrl</code>）： 4 个 profile（mag_clean 20 s；nominal /
-mag_nominal / degraded 各 15 s），每 profile 3000–4000 拍：</li>
+<code>--trace-ctrl</code>）： 5 个 profile（mag_clean 20 s；nominal /
+mag_nominal / degraded 各 15 s；manual 8 s）， 每 profile 1600–4000
+拍。<strong>修复根因后全部通过预登记严格判据 C4b 与工程判据
+C6</strong>：</li>
 </ul>
 <table>
 <thead>
 <tr>
 <th>profile</th>
 <th>模式不一致</th>
-<th>角加速度 max|Δ|</th>
+<th>最差控制通道 max|Δ|</th>
+<th>角加速度</th>
 <th>角速率指令</th>
 <th>摆角/差速</th>
-<th><strong>电机 %</strong></th>
+<th>诊断 alt_err</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>mag_clean</td>
+<td>mag_clean（20 s）</td>
 <td>0</td>
+<td><strong>0.0054 %</strong>（电机）</td>
 <td>1.2e-3 dps²</td>
 <td>5e-5 dps</td>
-<td>0.15° / 1.1e-3</td>
-<td><strong>0.97</strong></td>
+<td>2.6e-3° / 6.9e-5</td>
+<td>0.35 m</td>
 </tr>
 <tr>
 <td>nominal</td>
 <td>0</td>
+<td><strong>0.0048 %</strong></td>
 <td>7.8e-5</td>
 <td>5e-5</td>
-<td>0.011° / 6.6e-5</td>
-<td><strong>1.07</strong></td>
+<td>5.6e-4° / 5e-5</td>
+<td>0.35 m</td>
 </tr>
 <tr>
 <td>mag_nominal</td>
 <td>0</td>
+<td><strong>0.0047 %</strong></td>
 <td>1.3e-3</td>
 <td>5e-5</td>
-<td>0.056° / 3.5e-4</td>
-<td><strong>1.39</strong></td>
+<td>5.6e-4° / 5.5e-5</td>
+<td>0.35 m</td>
 </tr>
 <tr>
 <td>degraded</td>
 <td>0</td>
+<td><strong>0.0057 %</strong></td>
 <td>6e-5</td>
 <td>5e-5</td>
-<td>0.19° / 1.8e-4</td>
-<td><strong>4.89</strong></td>
+<td>5.7e-4° / 5e-5</td>
+<td>0.35 m</td>
 </tr>
 <tr>
-<td><strong>manual</strong>（SAS/手动油门，8 s）</td>
+<td><strong>manual</strong>（SAS/手动油门）</td>
 <td>0</td>
 <td><strong>5.5e-5</strong></td>
-<td><strong>5e-5</strong></td>
-<td><strong>5e-5</strong></td>
-<td><strong>5e-5</strong></td>
+<td>5.5e-5</td>
+<td>5e-5</td>
+<td>5e-5° / 5e-5</td>
+<td>——</td>
 </tr>
 </tbody>
 </table>
-<p>⇒ <strong>手动模式全通道 5e-5（CSV 精度极限）⇒
-姿态/SAS/分配/混控逐位等价</strong>；
-<strong>残差只出现在自动油门/高度环</strong>：电机 % 在 RC
-油门台阶（t=1.005）首次出现并随 profile 恶化。<strong>判定：自动模式严判
-C4b 4/4 FAIL、工程判 C6 仅 mag_clean 通过（1/4）</strong> ——nominal /
-mag_nominal / degraded 分别为 1.07 / 1.39 / 4.89%；手动模式 C4b/C6
-全通过。 <strong>定位进展（2026-10-29 续）</strong>：把
-<code>specific_force_up_mps2</code>（期望天向比力）、
-<code>thrust_cos_tilt</code>、<code>throttle_cmd_pct</code> 纳入 ABI
-输出与对拍后，得到 <strong><code>cos_tilt</code> 差 ≡
-0、<code>thr_cmd</code> 与电机 % 同步偏离、<code>sfup</code> 差
-0.38–1.92 m/s²</strong> ⇒
-偏差在<strong>高度/速度环输出</strong>，分配与姿态映射完全一致。首次偏离发生在
-RC 油门 台阶（t=1.005，loiter 由 MOVING 切
-HOVERING）并保持为常值偏移，指向该转场时刻 的环内状态差异（独立 seed 2
-的 mag_clean 复现同一形态：<code>sfup</code> 0.263 m/s²、 电机
-0.67%）。图 <code>figs/fw_gnc_parity_2026-10-29_nominal.png</code>
-给出形态： <strong>起飞瞬态（1–3 s）差最大 0.42 m/s²，之后收敛为常值
-−0.07 m/s²</strong>（占悬停比力 0.35%）⇒
-是转场期的积分/限幅路径差，不是结构性的控制律分叉。<strong>已否证</strong>"每拍覆写目标高度导致双重推进"（改为只在外部设定时
-写入、并把 SIL
-轨迹改为记录<strong>调用前</strong>目标，残差逐位不变）。根因仍未定位；
-下一步在 <code>compute_thrust_control</code>
-内暴露目标垂直速度/高度环中间量。</p>
+<p>⇒ <strong>控制输出（执行器/摆角/差速/角速率指令/角加速度）在全部
+profile 上达到 CSV 精度量级</strong> （最差 0.0057%，阈值
+1%）。<code>alt_err</code> 是<strong>只读诊断</strong>：它只在 AUTO
+分支刷新，手动模式保留 各自最后一次 AUTO 的历史值 ⇒
+不参与控制等价判定（单独限 0.5 m）。</p>
 <ul>
-<li>本轮对拍抓出并修复的 ABI 缺陷（每条都有"失败→通过"的实测证据）：
+<li><strong>根因（2026-10-29 收口）：<code>is_origin_lla_set</code>
+是控制链的隐藏输入。</strong> 固件 <code>process_control_inputs()</code>
+在“原点未建立”时把 <code>relative_*</code> 兜底清零（真机上电未定位时
+防止上一架次残留）。宿主 ABI 只注入
+<code>relative_down</code>，从未置位该标志 ⇒ 控制链每拍看到 高度
+0，表现为 <code>alt_err ≡ target</code>、自动模式电机 % 残差
+0.24–4.89%（手动模式不经高度环， 所以一直是
+5e-5）。修复：<code>fw_gnc_step</code> 在注入点<strong>每拍</strong>重申
+<code>is_origin_lla_set = true</code> （<code>fw_gnc_create</code>
+也置一次）；修复后残差 4.89% → 0.0057%。</li>
+<li>本轮对拍抓出并修复的 ABI 缺陷（每条都有“失败→通过”的实测证据）：
 <ol type="1">
+<li><strong>原点标志</strong>（上述，影响最大）；</li>
 <li><strong>航向口径</strong>：固件 <code>AHRS_Packet.Heading</code> 用
 <code>wrapAngleTwoPi</code>（[0,2π)），ABI 原用
 <code>quaternionToEuler</code>（±π）⇒ yaw 指令差 ±24 dps；</li>
@@ -342,6 +342,12 @@ HOVERING）并保持为常值偏移，指向该转场时刻 的环内状态差�
 <code>g_heading_hold_allowed / g_pos_hold_degraded / g_gnss_outage_age_s</code>
 未注入 ⇒ 航向锁走保守分支（yaw 0 vs ±24 dps）。</li>
 </ol></li>
+<li><strong>诊断代码自身的坑</strong>：<code>alt_err/target_vz</code>
+最初只在“油门杆死区内”分支赋值，出死区后
+两边各自停在不同的历史值，制造出<strong>假的 4.39 m
+高度误差差</strong>（看起来像固件缺陷）。
+已改为函数末尾每拍无条件刷新。<strong>判据：任何被用作对拍/验收信号的诊断量，必须每拍刷新，
+不能在单分支里赋值。</strong></li>
 <li>行为中性对照：missile seed 73 @23 500 N 在加入
 trace/注入设施前后均为
 <code>pos_rms 35.16 / 拒帧 25 / 重锚 1</code>（共享核心与新增设施不改导航行为）。</li>
@@ -363,11 +369,12 @@ Python 全闭环仍走 SIL 可执行； 若要 Python 直接驱动
 仍保留；迁移验收判据是 "静态输入序列逐拍输出与 <code>fwapi.Gnc</code>
 一致（容差内）"，不是闭环结果对比 （hifi 闭环本身已发散，见
 §4.24）。</li>
-<li><strong>高度/油门回路的等价性未闭环</strong>：见 §6 的电机 %
-残差（0.24–4.9%）。姿态/速率/分配 已等价，但油门通道存在随 profile
-增大的常值/积分型偏移，<strong>根因未定位</strong>；在定位前， 用
-<code>fwapi.Gnc</code> 做<strong>油门/高度环</strong>相关结论必须与 SIL
-对照，不能单独采信。</li>
+<li><del>高度/油门回路的等价性未闭环</del>（2026-10-29
+已闭合）：根因是宿主未置位
+<code>is_origin_lla_set</code>，控制链每拍看到高度 0。修复后 5 个
+profile 全部通过严格判据 （最差
+0.0057%）。<strong>余留</strong>：<code>alt_err</code>
+等诊断量在手动模式下是历史值，不能当控制等价信号。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-29 23:06</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-29 23:36</footer></article></body>
 </html>
