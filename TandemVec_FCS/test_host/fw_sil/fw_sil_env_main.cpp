@@ -148,6 +148,7 @@ static float g_nav_raw_fb_start_delay_s = 0.0f;
 // 预测台阶重新出现）。报告 §4.24m-W 组的反向检验。
 static float g_nav_raw_fb_hold_s = 5.0f;
 static uint32_t g_nav_raw_fb_frames = 0;  // 自证据：回退真实发生的帧数
+static uint32_t g_nav_bias_frames = 0;    // 自证据：导航加速度偏置注入生效的帧数
 // 起飞时刻（仅 SIL）：默认 3 s；用于验证地面等待不消耗无磁 20 s 窗口。
 static float g_takeoff_at_s = 3.0f;
 // 仅 SIL：初始真值航向偏置 [deg]，用于验证起飞前手动航向对准。
@@ -500,6 +501,12 @@ struct RealNavConfig
      固件侧的补偿参数是 kFlightCtrlParams.gnss_lever_*（--gnss-lever）；
      两者一致时应完全抵消，不一致/为 0 时留下未建模米级与米/秒级偏置。 */
   float gnss_lever_inject[3] = {0.0f, 0.0f, 0.0f};
+  // 研究设施（仅 SIL）：导航专用加速度偏置台阶。只加在喂给导航的 IMU 样本上，
+  // 不改弹体真值、不改控制输入 ⇒ 用来直接检验"速度误差越过物理门后是否必然锁死"
+  // （报告 §9.4 #3 缺的那一次直接注入）。窗口 [start,end)，单位 m/s²，机体系。
+  float nav_accel_bias_mps2[3] = {0.0f, 0.0f, 0.0f};
+  float nav_accel_bias_start_s = -1.0f;
+  float nav_accel_bias_end_s = -1.0f;
   float outage_start = 20.0f;
   float outage_end = 25.0f;
   float outlier_prob = 0.0f;
@@ -865,7 +872,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "gate_pos,gate_vel,vel_sub_rec,"
           "msr_n,msr_e,msr_d,lv_n,lv_e,lv_d,"
           "ad_tau_ms,ad_sharp,ad_valid,ad_rej,ad_ng,ad_er,ad_app,ad_blk,"
-          "vib_q,vib_rms_g,vib_sug,vib_gq,vib_gyr_dps,vib_high,vib_hf_g\n");
+          "vib_q,vib_rms_g,vib_sug,vib_gq,vib_gyr_dps,vib_high,vib_hf_g,"
+          "origin_alt_m,ekf_alt_m,baro_alt_m,p_dd_std_m,reacq_cnt\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -1225,6 +1233,12 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     {
       float tr = 0.0f, tp = 0.0f, ty = 0.0f;
       p.euler(tr, tp, ty);
+      // 位置 D 协方差（仅遥测二进制可读；默认构建恒 -1，保持列集合固定）
+#ifdef EKF_NAV_TELEMETRY
+      const double p_dd_std_trace = std::sqrt(std::fabs(nav_ekf.covariance_coeff(2, 2)));
+#else
+      const double p_dd_std_trace = -1.0;
+#endif
       std::fprintf(
           g_trace_csv_file,
           "%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
@@ -1235,7 +1249,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "%.4f,%.4f,%.4f,%.4f,%.3f,%d,"
           "%.2f,%.2f,%.4f,%.2f,%.2f,%d,%d,%u,"
           "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.4f,%d,%u,%u,%u,%u,%u,"
-          "%.3f,%.3f,%.3f,%.4f,%.2f,%d,%.4f\n",
+          "%.3f,%.3f,%.3f,%.4f,%.2f,%d,%.4f,"
+          "%.3f,%.3f,%.3f,%.3f,%u\n",
           t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
           nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
           nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
@@ -1284,7 +1299,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           static_cast<double>(g_sil_nav_debug_vib[3]),
           static_cast<double>(gnc_tel.vib_gyro_rms_dps),
           gnc_tel.vib_high ? 1 : 0,
-          static_cast<double>(g_ins_hf_vibration.last().rms_g));
+          static_cast<double>(g_ins_hf_vibration.last().rms_g),
+          origin_alt_m, nav_ekf.alt_m(),
+          static_cast<double>(baro_altitude),
+          p_dd_std_trace,
+          nav_ekf.gnss_reacquire_reset_count());
     }
 
     if (!manual && !alt_cmd && t >= g_takeoff_at_s)
@@ -1543,7 +1562,17 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         {
           ++g_nav_raw_fb_frames;
         }
-        accumulateImuSample(use_raw_nav ? sample_raw : sample, sample_dt);
+        sil::ImuSample nav_sample = use_raw_nav ? sample_raw : sample;
+        if (cfg.nav_accel_bias_start_s >= 0.0f &&
+            t >= cfg.nav_accel_bias_start_s && t < cfg.nav_accel_bias_end_s)
+        {
+          for (int a = 0; a < 3; ++a)
+          {
+            nav_sample.accel[a] += cfg.nav_accel_bias_mps2[a];
+          }
+          ++g_nav_bias_frames;
+        }
+        accumulateImuSample(nav_sample, sample_dt);
         icm_gyro_x = sample.gyro[0];
         icm_gyro_y = sample.gyro[1];
         icm_gyro_z = sample.gyro[2];
@@ -1870,7 +1899,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"nav_roll_rmse\":%.3f,\"nav_roll_max\":%.3f,"
               "\"nav_pitch_rmse\":%.3f,\"nav_pitch_max\":%.3f,"
               "\"nav_yaw_rmse\":%.3f,\"nav_yaw_max\":%.3f,"
-              "\"nav_vel_rms\":%.4f,\"nrfb\":%u%s}\n",
+              "\"nav_vel_rms\":%.4f,\"nrfb\":%u,\"nav_bias_frames\":%u%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -1953,6 +1982,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               max_nav_yaw,
               n_nav_att ? std::sqrt(sum_nav_vel2 / n_nav_att) : -1.0,
               static_cast<unsigned>(g_nav_raw_fb_frames),
+              static_cast<unsigned>(g_nav_bias_frames),
               nees_json);
   if (g_trace_csv_file != nullptr)
   {
@@ -2267,6 +2297,19 @@ int main(int argc, char** argv) {
       std::sscanf(argv[++i], "%f:%f", &real_cfg.wind_start_s,
                   &real_cfg.wind_end_s);
     else if (std::strcmp(argv[i],"--no-baro-lag")==0) real_cfg.baro_lag=false;
+    else if (std::strcmp(argv[i],"--nav-accel-bias-step")==0 && i+1<argc)
+    {
+      if (std::sscanf(argv[++i], "%f:%f:%f:%f:%f",
+                      &real_cfg.nav_accel_bias_start_s,
+                      &real_cfg.nav_accel_bias_end_s,
+                      &real_cfg.nav_accel_bias_mps2[0],
+                      &real_cfg.nav_accel_bias_mps2[1],
+                      &real_cfg.nav_accel_bias_mps2[2]) != 5)
+      {
+        std::fprintf(stderr, "[sil] --nav-accel-bias-step 需要 t0:t1:ax:ay:az\n");
+        return 2;
+      }
+    }
     else if (std::strcmp(argv[i],"--pos-hold")==0) real_cfg.pos_hold=true;
     else if (std::strcmp(argv[i],"--pos-hold-at")==0 && i+1<argc)
       real_cfg.pos_hold_at=std::atof(argv[++i]);
