@@ -277,6 +277,9 @@ class FwGncInput(ctypes.Structure):
         ("failsafe_in_flight", ctypes.c_int32),
         ("target_alt_m", ctypes.c_float),
         ("dt_s", ctypes.c_float),
+        ("heading_hold_allowed", ctypes.c_int32),
+        ("pos_hold_degraded", ctypes.c_int32),
+        ("gnss_outage_age_s", ctypes.c_float),
     ]
 
 

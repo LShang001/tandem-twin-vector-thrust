@@ -103,7 +103,7 @@ typedef struct
   uint32_t struct_size;      /**< 入参：调用方结构大小 */
   uint32_t abi_version;      /**< 入参：必须 == FW_GNC_ABI_VERSION */
   float quat_wxyz[4];        /**< 姿态四元数 FRD←NED（w,x,y,z） */
-  float omega_body_radps[3]; /**< 机体系角速度，**已去偏** [rad/s] */
+  float omega_body_radps[3]; /**< 机体系原始角速度，**已去偏** [rad/s]（控制链内部再两级低通） */
   float vel_ned_mps[3];      /**< NED 速度 [m/s] */
   float pos_ned_m[3];        /**< 相对导航原点的 NED 位置 [m] */
   float alt_up_m;            /**< 相对起飞点高度（向上为正）[m] */
@@ -112,6 +112,10 @@ typedef struct
   int32_t failsafe_in_flight;/**< 空中失控保护（对应 failsafe_in_flight） */
   float target_alt_m;        /**< 定高/定点目标高度（相对起飞点）[m] */
   float dt_s;                /**< 本拍步长 [s]，≤0 视为非法输入直接返回 */
+  /* --- 导航层门控（由调用方的导航输出提供；缺省 0 = 保守） --- */
+  int32_t heading_hold_allowed; /**< HeadingAidingGate：磁航向可信时允许锁航向 */
+  int32_t pos_hold_degraded;    /**< 位置保持降级（航向不可观） */
+  float gnss_outage_age_s;      /**< GNSS 失联时长 [s]，用于降级/长失联策略 */
 } fw_gnc_input_t;
 
 /** @brief 每拍输出（全部为固件本拍实际写出的量）。 */

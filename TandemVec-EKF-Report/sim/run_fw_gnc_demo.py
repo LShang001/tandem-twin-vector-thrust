@@ -101,6 +101,32 @@ def main():
                 check(False, f"{k} 越界: {o[k]}")
                 break
 
+    # 4) ABI 健壮性：版本/尺寸/数值非法必须被拒，且不得改动状态
+    import ctypes
+    import fwapi.library as fwl
+    lib = fwl.load()
+    inp = fwl.FwGncInput()
+    inp.struct_size = ctypes.sizeof(fwl.FwGncInput)
+    inp.abi_version = fwl.GNC_ABI_VERSION
+    out = fwl.FwGncOutput()
+    out.struct_size = ctypes.sizeof(fwl.FwGncOutput)
+    h = lib.fw_gnc_create()
+    inp.quat_wxyz[0] = 1.0
+    inp.target_alt_m = 5.0
+    inp.dt_s = 0.005
+    check(lib.fw_gnc_step(h, ctypes.byref(inp), ctypes.byref(out)) == 0, "合法输入返回 0")
+    inp.abi_version = 999
+    check(lib.fw_gnc_step(h, ctypes.byref(inp), ctypes.byref(out)) == 2, "ABI 版本不匹配返回 2")
+    inp.abi_version = fwl.GNC_ABI_VERSION
+    inp.dt_s = 0.0
+    check(lib.fw_gnc_step(h, ctypes.byref(inp), ctypes.byref(out)) == 5, "步长非正返回 5")
+    inp.dt_s = 0.005
+    inp.quat_wxyz[0] = float("nan")
+    check(lib.fw_gnc_step(h, ctypes.byref(inp), ctypes.byref(out)) == 5, "NaN 输入返回 5")
+    inp.quat_wxyz[0] = 1.0
+    inp.struct_size = 4
+    check(lib.fw_gnc_step(h, ctypes.byref(inp), ctypes.byref(out)) == 3, "输入结构过小返回 3")
+
     print("\n=== test_fw_gnc_demo:", "全部通过" if not fails else f"失败 {len(fails)} 项", "===")
     return 0 if not fails else 1
 

@@ -24,6 +24,7 @@
 
 #include "QuaternionMath.h"
 #include "ano_params.h"
+#include "math_utils.h"
 #include "flight_control.h"
 #include "fw_algo_api.h"
 #include "state_data.h"
@@ -113,7 +114,10 @@ void InjectState(const fw_gnc_input_t *in)
   quaternionToEuler(q, roll, pitch, yaw);
   AHRS_Packet.Roll = roll;
   AHRS_Packet.Pitch = pitch;
-  AHRS_Packet.Heading = yaw;
+  // 与 navigation_task 同口径：航向归一化到 [0, 2π)（wrapAngleTwoPi），
+  // 而 quaternionToEuler 给的是 (−π, π]。两者在 ±π 附近差 2π，
+  // 控制链的 heading hold / 航向误差比较对此敏感（对拍会放大成几十 dps）。
+  AHRS_Packet.Heading = wrapAngleTwoPi(yaw);
 
   // 速度/位置：与 SIL feed_firmware 同源
   INS_GNSS_Packet.location_north = in->pos_ned_m[0];
@@ -127,7 +131,14 @@ void InjectState(const fw_gnc_input_t *in)
   relative_down = -in->alt_up_m;
   estimated_height = in->alt_up_m;
 
-  // 控制链吃 dps 域角速度（固件内部再乘 DEG_TO_RAD）
+  // ★ 控制链内部（execute_attitude_controller / mix 层）会用 `icm_gyro_*`
+  //   重新计算并做两级低通写入 `current_omega_dps_body_filtered`；只注入后者
+  //   会被覆盖，且若注入的是滤波后值还会被二次滤波。因此这里注入**原始**
+  //   机体系角速度（rad/s，调用方已去偏；库内 nav_ekf 零偏恒 0）。
+  icm_gyro_x = in->omega_body_radps[0];
+  icm_gyro_y = in->omega_body_radps[1];
+  icm_gyro_z = in->omega_body_radps[2];
+  // 保留一份初值：不走 execute_attitude_controller 的分支（如共轴）直接读它。
   current_omega_dps_body_filtered = Vector3(
       static_cast<double>(in->omega_body_radps[0]) * RAD_TO_DEG,
       static_cast<double>(in->omega_body_radps[1]) * RAD_TO_DEG,
@@ -140,6 +151,11 @@ void InjectState(const fw_gnc_input_t *in)
   isLinkUp = (in->link_up != 0);
   failsafe_in_flight = (in->failsafe_in_flight != 0);
   target_altitude = in->target_alt_m;
+  // 导航层门控位：控制链（航向锁/位置保持降级/长失联策略）直接消费这些全局。
+  // 不注入就会落到 state_data 的保守默认（false/0），与 SIL 行为分叉。
+  g_heading_hold_allowed = (in->heading_hold_allowed != 0);
+  g_pos_hold_degraded = (in->pos_hold_degraded != 0);
+  g_gnss_outage_age_s = in->gnss_outage_age_s;
 }
 
 void ReadOutputs(fw_gnc_output_t *out)
@@ -192,19 +208,29 @@ void fw_core_caps(fw_core_caps_t *out)
   std::memcpy(out, &caps, n);
 }
 
+namespace
+{
+// 单例实例：destroy 必须同时清空它，否则第二次 create 会返回悬空指针
+// （宿主重复创建会被 Heap 检测成 double free）。
+fw_gnc *g_gnc_instance = nullptr;
+} // namespace
+
 fw_gnc *fw_gnc_create(void)
 {
-  static fw_gnc *instance = nullptr;
-  if (instance == nullptr)
+  if (g_gnc_instance == nullptr)
   {
-    instance = new (std::nothrow) fw_gnc();
+    g_gnc_instance = new (std::nothrow) fw_gnc();
   }
-  return instance;
+  return g_gnc_instance;
 }
 
 void fw_gnc_destroy(fw_gnc *handle)
 {
-  delete handle;
+  if (handle != nullptr && handle == g_gnc_instance)
+  {
+    delete g_gnc_instance;
+    g_gnc_instance = nullptr;
+  }
 }
 
 int32_t fw_gnc_step(fw_gnc *handle, const fw_gnc_input_t *in, fw_gnc_output_t *out)

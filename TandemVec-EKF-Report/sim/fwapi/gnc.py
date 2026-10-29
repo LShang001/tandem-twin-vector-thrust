@@ -121,7 +121,9 @@ class Gnc:
             pass
 
     def step(self, *, quat, omega, vel, pos, alt_up, rc, dt,
-             link_up=True, failsafe_in_flight=False, target_alt=0.0) -> dict:
+             link_up=True, failsafe_in_flight=False, target_alt=0.0,
+             heading_hold_allowed=False, pos_hold_degraded=False,
+             gnss_outage_age_s=0.0) -> dict:
         """推进一拍固件控制链。
 
         @param quat      (w,x,y,z) FRD←NED
@@ -151,6 +153,9 @@ class Gnc:
         o.failsafe_in_flight = 1 if failsafe_in_flight else 0
         o.target_alt_m = float(target_alt)
         o.dt_s = float(dt)
+        o.heading_hold_allowed = 1 if heading_hold_allowed else 0
+        o.pos_hold_degraded = 1 if pos_hold_degraded else 0
+        o.gnss_outage_age_s = float(gnss_outage_age_s)
 
         rc_code = self._lib.fw_gnc_step(self._h, ctypes.byref(self._in),
                                         ctypes.byref(self._out))
