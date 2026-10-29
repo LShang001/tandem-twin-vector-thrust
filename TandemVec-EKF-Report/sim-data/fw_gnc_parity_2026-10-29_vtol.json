@@ -1,0 +1,37 @@
+{
+ "trace": "C:/Users/12631/AppData/Local/Temp/ctrl_vtol.csv",
+ "rows": 4000,
+ "max_abs_diff": {
+  "ch1": 0.21487304687499886,
+  "ch2": 0.12929063720702771,
+  "ch3": 0.9715947113037124,
+  "ch4": 0.9713860107421866,
+  "delta_f": 0.14510104370117105,
+  "delta_t": 0.08729763107299782,
+  "dw": 0.0011439689636230446,
+  "or0": 5.005884170528052e-05,
+  "ar0": 0.000450781250037835,
+  "or1": 5.01066207885259e-05,
+  "ar1": 6.268310546886369e-05,
+  "ar2": 0.0012397705078157628,
+  "or2": 0.00015765686035251747
+ },
+ "mode_mismatch": 0,
+ "step_fail": 0,
+ "strict_tol": 0.01,
+ "strict_ok": false,
+ "engineering_over": {},
+ "caps": {
+  "core_abi": 1,
+  "ekf_abi": 2,
+  "ctrl_abi": 2,
+  "gnc_abi": 1,
+  "param_count": 133,
+  "vehicle": "tandemvec",
+  "features": [
+   "gnc_available"
+  ],
+  "feature_bits": 64,
+  "build_id": "58668dc"
+ }
+}

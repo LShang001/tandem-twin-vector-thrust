@@ -1,0 +1,39 @@
+{
+ "trace": "C:/Users/12631/AppData/Local/Temp/ctrl_nominal.csv",
+ "rows": 3000,
+ "max_abs_diff": {
+  "ch1": 0.010125451660158546,
+  "ch2": 0.016274835205081217,
+  "ch3": 1.069142926025389,
+  "ch4": 1.0689298645019534,
+  "delta_f": 0.0068677043914795455,
+  "delta_t": 0.011026095962524352,
+  "dw": 6.638669138774278e-05,
+  "or0": 5.002174377444213e-05,
+  "ar0": 5.626220703192075e-05,
+  "or1": 5.0071144104046894e-05,
+  "ar1": 7.846679687872893e-05,
+  "ar2": 5.007443428040048e-05
+ },
+ "mode_mismatch": 0,
+ "step_fail": 0,
+ "strict_tol": 0.01,
+ "strict_ok": false,
+ "engineering_over": {
+  "ch3": 1.069142926025389,
+  "ch4": 1.0689298645019534
+ },
+ "caps": {
+  "core_abi": 1,
+  "ekf_abi": 2,
+  "ctrl_abi": 2,
+  "gnc_abi": 1,
+  "param_count": 133,
+  "vehicle": "tandemvec",
+  "features": [
+   "gnc_available"
+  ],
+  "feature_bits": 64,
+  "build_id": "58668dc"
+ }
+}

@@ -1,0 +1,39 @@
+{
+ "trace": "C:/Users/12631/AppData/Local/Temp/ctrl_degraded.csv",
+ "rows": 3000,
+ "max_abs_diff": {
+  "ch1": 0.20453326416015472,
+  "ch2": 0.2808807128906281,
+  "ch3": 4.894676556396485,
+  "ch4": 4.893873550415039,
+  "delta_f": 0.13808566856384275,
+  "delta_t": 0.18953819713592535,
+  "dw": 0.0001821086144540459,
+  "or0": 5.004568099975515e-05,
+  "ar0": 5.5639648437022515e-05,
+  "or1": 5.0127792358356515e-05,
+  "ar1": 5.988769531484195e-05,
+  "ar2": 5.014228820798827e-05
+ },
+ "mode_mismatch": 0,
+ "step_fail": 0,
+ "strict_tol": 0.01,
+ "strict_ok": false,
+ "engineering_over": {
+  "ch3": 4.894676556396485,
+  "ch4": 4.893873550415039
+ },
+ "caps": {
+  "core_abi": 1,
+  "ekf_abi": 2,
+  "ctrl_abi": 2,
+  "gnc_abi": 1,
+  "param_count": 133,
+  "vehicle": "tandemvec",
+  "features": [
+   "gnc_available"
+  ],
+  "feature_bits": 64,
+  "build_id": "58668dc"
+ }
+}

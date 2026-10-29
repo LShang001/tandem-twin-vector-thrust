@@ -88,6 +88,10 @@
 // 200 Hz 控制级 CSV 追踪（仅 SIL 测试设施；默认关闭）。
 static const char *g_trace_csv_path = nullptr;
 static FILE *g_trace_csv_file = nullptr;
+// 控制链对拍轨迹（仅 SIL）：逐拍记录喂给 runGNCExecutive 的输入与它写出的输出，
+// 供 fwapi.Gnc 用同一序列重放比对（证明直调 ABI 与 SIL 控制前状态一致）。
+static const char *g_trace_ctrl_path = nullptr;
+static FILE *g_trace_ctrl_file = nullptr;
 // 2 kHz 短窗追踪：仅记录 [start,end) 内的 plant 角速率与 IMU 原始样本。
 static const char *g_trace_fast_path = nullptr;
 static FILE *g_trace_fast_file = nullptr;
@@ -876,6 +880,24 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "origin_alt_m,ekf_alt_m,baro_alt_m,p_dd_std_m,reacq_cnt\n");
     }
   }
+  if (g_trace_ctrl_path != nullptr)
+  {
+    g_trace_ctrl_file = std::fopen(g_trace_ctrl_path, "w");
+    if (g_trace_ctrl_file == nullptr)
+    {
+      std::fprintf(stderr, "[trace-ctrl] cannot open %s\n", g_trace_ctrl_path);
+    }
+    else
+    {
+      std::fprintf(
+          g_trace_ctrl_file,
+          "t,quat_w,quat_x,quat_y,quat_z,wx_dps,wy_dps,wz_dps,"
+          "rc0,rc1,rc2,rc3,rc4,rc5,rc6,rc7,rc8,alt_up,target_alt,link,fs,"
+          "mode,ch1,ch2,ch3,ch4,delta_f,delta_t,dw,or0,or1,or2,ar0,ar1,ar2,"
+          "rn,re,rd,vn,ve,vd,roll,pitch,heading,gx_rps,gy_rps,gz_rps,"
+          "hdg_ok,pos_deg,gnss_age\n");
+    }
+  }
   if (g_trace_fast_path != nullptr)
   {
     g_trace_fast_file = std::fopen(g_trace_fast_path, "w");
@@ -1211,6 +1233,42 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       // 直接翻车，会把“控制器饱和”误当成 EKF 不收敛。
       // 导弹模式由弹体自带自动驾驶，固件只跑导航，不跑 TandemVec 控制。
       runGNCExecutive();
+      if (g_trace_ctrl_file != nullptr)
+      {
+        std::fprintf(
+            g_trace_ctrl_file,
+            "%.4f,%.9f,%.9f,%.9f,%.9f,%.6f,%.6f,%.6f,"
+            "%u,%u,%u,%u,%u,%u,%u,%u,%u,%.4f,%.4f,%d,%d,"
+            "%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
+            "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
+            "%.6f,%.6f,%.6f,%.9f,%.9f,%.9f,%d,%d,%.4f\n",
+            t, AHRS_Packet.Qw, AHRS_Packet.Qx, AHRS_Packet.Qy, AHRS_Packet.Qz,
+            current_omega_dps_body_filtered.x, current_omega_dps_body_filtered.y,
+            current_omega_dps_body_filtered.z,
+            raw_rc_values[0], raw_rc_values[1], raw_rc_values[2], raw_rc_values[3],
+            raw_rc_values[4], raw_rc_values[5], raw_rc_values[6], raw_rc_values[7],
+            raw_rc_values[8], estimated_height, target_altitude,
+            isLinkUp ? 1 : 0, failsafe_in_flight ? 1 : 0,
+            static_cast<int>(g_current_flight_mode),
+            ch1_output, ch2_output, ch3_output, ch4_output,
+            gnc_tel.delta_f_deg, gnc_tel.delta_t_deg, gnc_tel.dw,
+            gnc_tel.omega_ref_dps[0], gnc_tel.omega_ref_dps[1], gnc_tel.omega_ref_dps[2],
+            gnc_tel.alpha_ref_dps2[0], gnc_tel.alpha_ref_dps2[1],
+            gnc_tel.alpha_ref_dps2[2],
+            relative_north, relative_east, relative_down,
+            INS_GNSS_Packet.velocity_north, INS_GNSS_Packet.velocity_east,
+            INS_GNSS_Packet.velocity_down,
+            AHRS_Packet.Roll, AHRS_Packet.Pitch, AHRS_Packet.Heading,
+            static_cast<double>(icm_gyro_x) -
+                (nav_system_initialized ? nav_ekf.gyro_bias_radps().x() : 0.0f),
+            static_cast<double>(icm_gyro_y) -
+                (nav_system_initialized ? nav_ekf.gyro_bias_radps().y() : 0.0f),
+            static_cast<double>(icm_gyro_z) -
+                (nav_system_initialized ? nav_ekf.gyro_bias_radps().z() : 0.0f),
+            g_heading_hold_allowed ? 1 : 0, g_pos_hold_degraded ? 1 : 0,
+            static_cast<double>(g_gnss_outage_age_s));
+      }
     }
     if (g_sil_nav_debug_imu_failed)
     {
@@ -1989,6 +2047,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     std::fclose(g_trace_csv_file);
     g_trace_csv_file = nullptr;
   }
+  if (g_trace_ctrl_file != nullptr)
+  {
+    std::fclose(g_trace_ctrl_file);
+    g_trace_ctrl_file = nullptr;
+  }
   if (g_trace_fast_file != nullptr)
   {
     std::fclose(g_trace_fast_file);
@@ -2103,6 +2166,8 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--real-nav")==0) real_cfg.enabled=true;
     else if (std::strcmp(argv[i],"--trace-csv")==0 && i+1<argc)
       g_trace_csv_path = argv[++i];
+    else if (std::strcmp(argv[i],"--trace-ctrl")==0 && i+1<argc)
+      g_trace_ctrl_path = argv[++i];
     else if (std::strcmp(argv[i],"--trace-fast")==0 && i+1<argc)
       g_trace_fast_path = argv[++i];
     else if (std::strcmp(argv[i],"--trace-fast-window")==0 && i+1<argc)

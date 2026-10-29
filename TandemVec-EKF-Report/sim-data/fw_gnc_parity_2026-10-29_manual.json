@@ -1,0 +1,37 @@
+{
+ "trace": "C:/Users/12631/AppData/Local/Temp/ctrl_manual.csv",
+ "rows": 1600,
+ "max_abs_diff": {
+  "ch3": 4.996948241853261e-05,
+  "ch4": 4.9865722658637424e-05,
+  "or0": 4.991674423215908e-05,
+  "ar0": 5.36499023411352e-05,
+  "or1": 4.991912841800783e-05,
+  "ar1": 5.5059814449975875e-05,
+  "ar2": 5.2948760986382126e-05,
+  "ch1": 5.259399414114796e-05,
+  "ch2": 5.120239257649928e-05,
+  "delta_f": 4.999356269835831e-05,
+  "delta_t": 5.0118446350166934e-05,
+  "dw": 4.989436971955004e-05,
+  "or2": 5.02169132232666e-05
+ },
+ "mode_mismatch": 0,
+ "step_fail": 0,
+ "strict_tol": 0.01,
+ "strict_ok": true,
+ "engineering_over": {},
+ "caps": {
+  "core_abi": 1,
+  "ekf_abi": 2,
+  "ctrl_abi": 2,
+  "gnc_abi": 1,
+  "param_count": 133,
+  "vehicle": "tandemvec",
+  "features": [
+   "gnc_available"
+  ],
+  "feature_bits": 64,
+  "build_id": "58668dc"
+ }
+}
