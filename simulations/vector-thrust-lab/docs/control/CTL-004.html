@@ -137,7 +137,8 @@ PID/滤波器是全局状态：一个进程一个实例；多条独立轨迹用�
 <td>可观测性</td>
 <td>输出同时回报
 <code>mode_degraded_heading/gnss</code>、<code>failsafe_in_flight</code>、<code>actuator_fault_bits</code>（舵机卡死/推力损失/请求下降）⇒
-实验能区分"控制变差"与"门控降级/故障"</td>
+实验能区分"控制变差"与"门控降级/故障"；另回报
+<code>target_alt_m</code>、<code>specific_force_up_mps2</code>、<code>thrust_cos_tilt</code>、<code>throttle_cmd_pct</code>，用于把"高度环输出"与"推力分配"分开对拍</td>
 </tr>
 </tbody>
 </table>
@@ -307,10 +308,24 @@ mag_nominal / degraded 各 15 s），每 profile 3000–4000 拍：</li>
 油门台阶（t=1.005）首次出现并随 profile 恶化。<strong>判定：自动模式严判
 C4b 4/4 FAIL、工程判 C6 仅 mag_clean 通过（1/4）</strong> ——nominal /
 mag_nominal / degraded 分别为 1.07 / 1.39 / 4.89%；手动模式 C4b/C6
-全通过。
-残差<strong>尚未定位</strong>（候选：锁高预测/高度环内部状态），下一步在控制轨迹里暴露
-<code>specific_force_up_mps2</code> / <code>final_throttle_pct</code>
-再二分。</p>
+全通过。 <strong>定位进展（2026-10-29 续）</strong>：把
+<code>specific_force_up_mps2</code>（期望天向比力）、
+<code>thrust_cos_tilt</code>、<code>throttle_cmd_pct</code> 纳入 ABI
+输出与对拍后，得到 <strong><code>cos_tilt</code> 差 ≡
+0、<code>thr_cmd</code> 与电机 % 同步偏离、<code>sfup</code> 差
+0.38–1.92 m/s²</strong> ⇒
+偏差在<strong>高度/速度环输出</strong>，分配与姿态映射完全一致。首次偏离发生在
+RC 油门 台阶（t=1.005，loiter 由 MOVING 切
+HOVERING）并保持为常值偏移，指向该转场时刻 的环内状态差异（独立 seed 2
+的 mag_clean 复现同一形态：<code>sfup</code> 0.263 m/s²、 电机
+0.67%）。图 <code>figs/fw_gnc_parity_2026-10-29_nominal.png</code>
+给出形态： <strong>起飞瞬态（1–3 s）差最大 0.42 m/s²，之后收敛为常值
+−0.07 m/s²</strong>（占悬停比力 0.35%）⇒
+是转场期的积分/限幅路径差，不是结构性的控制律分叉。<strong>已否证</strong>"每拍覆写目标高度导致双重推进"（改为只在外部设定时
+写入、并把 SIL
+轨迹改为记录<strong>调用前</strong>目标，残差逐位不变）。根因仍未定位；
+下一步在 <code>compute_thrust_control</code>
+内暴露目标垂直速度/高度环中间量。</p>
 <ul>
 <li>本轮对拍抓出并修复的 ABI 缺陷（每条都有"失败→通过"的实测证据）：
 <ol type="1">
@@ -354,5 +369,5 @@ Python 全闭环仍走 SIL 可执行； 若要 Python 直接驱动
 <code>fwapi.Gnc</code> 做<strong>油门/高度环</strong>相关结论必须与 SIL
 对照，不能单独采信。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-29 22:11</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-29 23:06</footer></article></body>
 </html>
