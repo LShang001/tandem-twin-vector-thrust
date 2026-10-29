@@ -76,7 +76,7 @@ int32_t fw_algo_abi_version(void)
 const char *fw_algo_build_info(void)
 {
   static const char kInfo[] =
-      "fw_algo abi=1 impl=bfs::Ekf15State(firmware) "
+      "fw_algo abi=2 impl=bfs::Ekf15State(firmware) "
 #if defined(EIGEN_DONT_VECTORIZE)
       "eigen=scalar "
 #else

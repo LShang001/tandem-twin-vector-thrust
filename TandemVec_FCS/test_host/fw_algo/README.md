@@ -59,6 +59,19 @@ bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh --print-path
 - Python 侧环境变量：`FW_ALGO_LIB` 指定现成库；`FW_ALGO_NO_BUILD=1` 禁止自动构建；
   `FW_ALGO_BIN_DIR`/`BIN_DIR` 指定输出目录。
 
+## 控制/分配层（ABI v2，2026-10-29 追加）
+
+| ABI 函数 | 固件实现 |
+|---|---|
+| `fw_ctrl_default_params` | `TandemVec_Config.h::kDefaultTandemVecParams`（14 个机型参数） |
+| `fw_ctrl_state_hover` | 以 `w_hover=√(0.5·m·g/kT)` 初始化分配器状态 |
+| `fw_tandemvec_alloc` | `TandemVecAllocator.h::allocateTandemVec`（惯量逆解/BTRUE/差速开方/τm 观测/饱和） |
+| `fw_thrust_alloc` | `ThrustAllocation.h::allocateLinearThrustThrottle`（比力→总推力/线性油门） |
+
+Python：`fwapi.TandemVecAllocator`（有状态，逐拍调用）与 `fwapi.thrust_alloc()`；
+默认参数直接取固件常量，不在 Python 维护第二份。ABI v1→v2 为新增结构体，
+旧 `fwapi` 会校验版本并自动重建共享库。
+
 ## 覆盖的固件路径
 
 | ABI 函数 | 固件方法 |
@@ -80,9 +93,12 @@ bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh --print-path
 
 ## 验证
 
-1. **宿主一致性**（`test_host/test_fw_algo_api.cpp`，已接入 `run_all.sh` 的 `fwalgo`）：
+1. **宿主一致性**：
+   - `test_host/test_fw_algo_api.cpp`（`fwalgo`）：
    同一输入序列下经 ABI 与直接 `Ekf15State` 的 LLA/速度/四元数/零偏/P 对角/计数器
-   **逐位相同**，当前 **468 项检查 0 失败**，覆盖 GNSS 融合与野值拒绝路径。
+     **逐位相同**，当前 **468 项检查 0 失败**，覆盖 GNSS 融合与野值拒绝路径。
+   - `test_host/test_fw_ctrl_api.cpp`（`fwctrl`）：分配器 11 319 例 + 推力分配 231 例
+     与直接调用头文件逐位相同（含 next 状态递推），非法输入回零。
 2. **与 Python 复刻版对拍**（`TandemVec-EKF-Report/sim/run_fw_ekf_parity.py`，20 s、
    10 Hz GNSS、静态+小幅正弦激励、无磁/无气压/无静止辅助）：
    水平位置 RMS **0.097 m**（max 0.687 m，出现在 t=0 的 P0 差异）、垂直 RMS **2.3 mm**、

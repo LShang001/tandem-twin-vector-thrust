@@ -22,6 +22,7 @@ INCS="$INCS -I$ROOT/lib/units/src -I$ROOT/lib/ICM42688/src -I$ROOT/test_host"
 FLAGS="-std=$STD $OPT -D_USE_MATH_DEFINES -DEKF_NAV_TELEMETRY"
 FLAGS="$FLAGS -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE"
 SRCS="$ROOT/test_host/fw_algo/fw_algo_api.cpp
+$ROOT/test_host/fw_algo/fw_ctrl_api.cpp
 $ROOT/lib/units/src/convang.cpp
 $ROOT/lib/units/src/convangacc.cpp
 $ROOT/lib/units/src/convangvel.cpp"
