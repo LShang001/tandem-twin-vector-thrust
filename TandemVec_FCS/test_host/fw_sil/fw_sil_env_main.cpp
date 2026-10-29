@@ -895,7 +895,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "rc0,rc1,rc2,rc3,rc4,rc5,rc6,rc7,rc8,alt_up,target_alt,link,fs,"
           "mode,ch1,ch2,ch3,ch4,delta_f,delta_t,dw,or0,or1,or2,ar0,ar1,ar2,"
           "rn,re,rd,vn,ve,vd,roll,pitch,heading,gx_rps,gy_rps,gz_rps,"
-          "hdg_ok,pos_deg,gnss_age,sfup,cos_tilt,thr_cmd\n");
+          "hdg_ok,pos_deg,gnss_age,sfup,cos_tilt,thr_cmd,alt_err,tgt_vz\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -1245,7 +1245,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
             "%d,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
             "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
             "%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,"
-            "%.6f,%.6f,%.6f,%.9f,%.9f,%.9f,%d,%d,%.4f,%.6f,%.6f,%.4f\n",
+            "%.6f,%.6f,%.6f,%.9f,%.9f,%.9f,%d,%d,%.4f,%.6f,%.6f,%.4f,%.4f,%.4f\n",
             t, AHRS_Packet.Qw, AHRS_Packet.Qx, AHRS_Packet.Qy, AHRS_Packet.Qz,
             current_omega_dps_body_filtered.x, current_omega_dps_body_filtered.y,
             current_omega_dps_body_filtered.z,
@@ -1273,7 +1273,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
             static_cast<double>(g_gnss_outage_age_s),
             static_cast<double>(gnc_tel.specific_force_up_mps2),
             static_cast<double>(gnc_tel.thrust_cos_tilt),
-            static_cast<double>(gnc_tel.throttle_cmd_pct));
+            static_cast<double>(gnc_tel.throttle_cmd_pct),
+            static_cast<double>(gnc_tel.alt_error_m),
+            static_cast<double>(gnc_tel.target_vz_mps));
       }
     }
     if (g_sil_nav_debug_imu_failed)

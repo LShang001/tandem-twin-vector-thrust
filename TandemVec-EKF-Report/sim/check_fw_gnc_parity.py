@@ -121,6 +121,12 @@ def main():
             "cos_tilt": (out["thrust_cos_tilt"], float(r["cos_tilt"])),
             "thr_cmd": (out["throttle_cmd_pct"], float(r["thr_cmd"])),
         }
+        # 诊断量单独分组：alt_err/tgt_vz 只在 AUTO 分支刷新，手动模式保留历史值，
+        # 两条实现各自停在不同的最后值上 ⇒ 不能当控制等价判据（2026-10-29）。
+        diag = {
+            "alt_err": (out["alt_error_m"], float(r["alt_err"])),
+            "tgt_vz": (out["target_vz_mps"], float(r["tgt_vz"])),
+        }
         for i in range(3):
             pairs[f"or{i}"] = (out["omega_ref_dps"][i], float(r[f"or{i}"]))
             pairs[f"ar{i}"] = (out["alpha_ref_dps2"][i], float(r[f"ar{i}"]))
@@ -129,11 +135,17 @@ def main():
             maxd[k] = max(maxd.get(k, 0.0), d)
             if d > args.tol and first_bad is None:
                 first_bad = (t, k, a, b, d)
+        for k, (a, b) in diag.items():
+            maxd[k] = max(maxd.get(k, 0.0), abs(a - b))
         if int(out["flight_mode"]) != int(r["mode"]):
             mode_bad += 1
 
     check(step_fail == 0, f"C3 fw_gnc_step 失败 {step_fail} 拍")
-    worst = max(maxd.items(), key=lambda kv: kv[1]) if maxd else ("-", 0.0)
+    # C4b 的预登记口径是**控制输出**（ch/摆角/差速/角速率指令/角加速度）；
+    # alt_err/tgt_vz 是后加的只读诊断，不进 C4b，单独用 diag_tol 判。
+    ctrl_keys = list(pairs.keys()) if rows else []
+    worst = max(((k, maxd.get(k, 0.0)) for k in ctrl_keys),
+                key=lambda kv: kv[1]) if ctrl_keys else ("-", 0.0)
     print("max |Δ|:", {k: round(v, 6) for k, v in sorted(maxd.items())})
     check(mode_bad == 0, f"C4a 模式逐拍一致（不一致 {mode_bad} 拍）")
 
@@ -155,11 +167,17 @@ def main():
         "ar0": 1.0, "ar1": 1.0, "ar2": 1.0,
         "sfup": 0.01, "cos_tilt": 1e-3, "thr_cmd": 0.5,
     }
+    diag_tol = {"alt_err": 0.5, "tgt_vz": 0.05}  # 诊断量（非控制输出）
     over = {k: (maxd.get(k, 0.0), tol) for k, tol in tolerances.items()
             if maxd.get(k, 0.0) > tol}
     if over:
         print("C6 超差通道:", {k: (round(v, 6), t) for k, (v, t) in over.items()})
     check(not over, "C6 工程等价（执行器 ≤1%、摆角 ≤0.5°、角速率 ≤0.1 dps、角加速度 ≤1 dps²）")
+    diag_over = {k: maxd.get(k, 0.0) for k, tol in diag_tol.items()
+                 if maxd.get(k, 0.0) > tol}
+    print(("[PASS] " if not diag_over else "[WARN] ") +
+          "诊断量（非控制）：alt_err ≤0.5 m、tgt_vz ≤0.05 m/s" +
+          ("" if not diag_over else f" 超差 {diag_over}"))
 
     if args.json:
         import json
