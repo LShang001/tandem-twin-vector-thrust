@@ -1,0 +1,24 @@
+{
+  "trace": "C:/Users/12631/AppData/Local/Temp/nav_nominal.csv",
+  "rows": 3000,
+  "step_fail": 0,
+  "init_mismatch": 0,
+  "epoch_mismatch": 0,
+  "gate_mismatch": 0,
+  "max_abs_diff": {
+    "quat": 0.007230375900444031,
+    "pos": 1.0821636907348633,
+    "vel": 0.3643912598457336,
+    "alt": 0.10556313022327424,
+    "bias": 0.15075236555228425,
+    "lla": 0.10504530931616074
+  },
+  "first_bad": {
+    "t": 0.52,
+    "field": "pos",
+    "diff": 1.0029518604278564
+  },
+  "fails": [
+    "N5 状态严格等价"
+  ]
+}

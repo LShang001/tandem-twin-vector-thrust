@@ -92,6 +92,24 @@ static FILE *g_trace_csv_file = nullptr;
 // 供 fwapi.Gnc 用同一序列重放比对（证明直调 ABI 与 SIL 控制前状态一致）。
 static const char *g_trace_ctrl_path = nullptr;
 static FILE *g_trace_ctrl_file = nullptr;
+// 导航步进对拍轨迹（仅 SIL）：逐拍记录 handleNavigationSystem() **调用前**的
+// 全部外部输入（聚合 IMU/AHRS/GNSS/气压/磁/光流/标志）与调用后的 EKF 状态，
+// 供 fwapi.Nav 用同一序列重放（证明 fw_nav_* 的注入映射与 SIL 一致）。
+static const char *g_trace_nav_path = nullptr;
+static FILE *g_trace_nav_file = nullptr;
+// 本拍是否向解析器推入了 GNSS 历元 / 磁样本 / 光流样本（都不是每拍发生）。
+static bool g_navtick_gnss = false;
+static float g_navtick_gnss_lla[3] = {0.0f, 0.0f, 0.0f};
+static float g_navtick_gnss_vel[3] = {0.0f, 0.0f, 0.0f};
+static float g_navtick_gnss_acc[3] = {0.0f, 0.0f, 0.0f};
+static uint32_t g_navtick_gnss_itow = 0;
+static bool g_navtick_mag = false;
+static float g_navtick_mag_body[3] = {0.0f, 0.0f, 0.0f};
+static bool g_navtick_flow = false;
+static float g_navtick_flow_v[2] = {0.0f, 0.0f};
+static float g_navtick_flow_range = 0.0f;
+static int g_navtick_flow_q = 0;
+static int g_navtick_range_q = 0;
 // 2 kHz 短窗追踪：仅记录 [start,end) 内的 plant 角速率与 IMU 原始样本。
 static const char *g_trace_fast_path = nullptr;
 static FILE *g_trace_fast_file = nullptr;
@@ -898,6 +916,41 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "hdg_ok,pos_deg,gnss_age,sfup,cos_tilt,thr_cmd,alt_err,tgt_vz\n");
     }
   }
+  if (g_trace_nav_path != nullptr)
+  {
+    g_trace_nav_file = std::fopen(g_trace_nav_path, "w");
+    if (g_trace_nav_file == nullptr)
+    {
+      std::fprintf(stderr, "[trace-nav] cannot open %s\n", g_trace_nav_path);
+    }
+    else
+    {
+      std::fprintf(
+          g_trace_nav_file,
+          "t,acc_sum_x,acc_sum_y,acc_sum_z,gyro_sum_x,gyro_sum_y,gyro_sum_z,"
+          "sample_count,delta_count,delta_dt_sum,"
+          "ahrs_w,ahrs_x,ahrs_y,ahrs_z,"
+          "gnss_valid,gnss_lat,gnss_lon,gnss_alt,gnss_vn,gnss_ve,gnss_vd,"
+          "gnss_hacc,gnss_vacc,gnss_sacc,gnss_itow,"
+          "baro,baro_valid,mag_x,mag_y,mag_z,mag_valid,"
+          "flow_vx,flow_vy,flow_range,flow_q,range_q,flow_valid,"
+          "unlocked,throttle,"
+          "quat_w,quat_x,quat_y,quat_z,roll,pitch,heading,"
+          "lla_lat,lla_lon,lla_alt,rn,re,rd,vn,ve,vd,alt_up,"
+          "bax,bay,baz,bgx,bgy,bgz,init,fix3d,gnss_age,baro_fused,"
+          "hdg_aid,pos_deg,imu_health,baro_innov,gnss_epoch,gnss_fix3d_cnt"
+          ",d0tx,d0ty,d0tz,d0vx,d0vy,d0vz,d0dt"
+          ",d1tx,d1ty,d1tz,d1vx,d1vy,d1vz,d1dt"
+          ",d2tx,d2ty,d2tz,d2vx,d2vy,d2vz,d2dt"
+          ",d3tx,d3ty,d3tz,d3vx,d3vy,d3vz,d3dt"
+          ",d4tx,d4ty,d4tz,d4vx,d4vy,d4vz,d4dt"
+          ",d5tx,d5ty,d5tz,d5vx,d5vy,d5vz,d5dt"
+          ",d6tx,d6ty,d6tz,d6vx,d6vy,d6vz,d6dt"
+          ",d7tx,d7ty,d7tz,d7vx,d7vy,d7vz,d7dt"
+          ",d8tx,d8ty,d8tz,d8vx,d8vy,d8vz,d8dt"
+          ",d9tx,d9ty,d9tz,d9vx,d9vy,d9vz,d9dt,t_us\n");
+    }
+  }
   if (g_trace_fast_path != nullptr)
   {
     g_trace_fast_file = std::fopen(g_trace_fast_path, "w");
@@ -1094,6 +1147,17 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       n = sil::BuildNavEoe(f.itow, frame, sizeof(frame));
       Serial4.feed(frame, n);
       last_gnss_data_ms = millis();
+      g_navtick_gnss = true;
+      g_navtick_gnss_lla[0] = lla(0) * 57.29577951308232;
+      g_navtick_gnss_lla[1] = lla(1) * 57.29577951308232;
+      g_navtick_gnss_lla[2] = lla(2);
+      g_navtick_gnss_vel[0] = vn;
+      g_navtick_gnss_vel[1] = ve;
+      g_navtick_gnss_vel[2] = vd;
+      g_navtick_gnss_acc[0] = f.h_acc_mm / 1000.0f;
+      g_navtick_gnss_acc[1] = f.v_acc_mm / 1000.0f;
+      g_navtick_gnss_acc[2] = f.s_acc_mmps / 1000.0f;
+      g_navtick_gnss_itow = f.itow;
     }
     // 每帧泵一次 UART backlog；真实解析器负责帧同步/校验/epoch 排队。
     ubx.Pump(512, micros());
@@ -1142,11 +1206,18 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         flow_data.range_quality = 90;
         flow_data.is_range_valid = true;
         flow_data.last_range_update_ms = millis();
+        g_navtick_flow = true;
+        g_navtick_flow_v[0] = flow_data.velocity_x_mps;
+        g_navtick_flow_v[1] = flow_data.velocity_y_mps;
+        g_navtick_flow_range = flow_data.distance_m;
+        g_navtick_flow_q = 100;
+        g_navtick_range_q = 90;
       }
       else
       {
         flow_data.is_flow_valid = false;
         flow_data.is_range_valid = false;
+        g_navtick_flow = true;   // 显式失效也是一次"光流状态更新"
       }
     }
 
@@ -1187,6 +1258,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         mag_body.z() += cfg.mag_noise_ut * n01(rng);
         magSensor.silInjectFrdSample(mag_body.data(), micros(),
                                      !cfg.mag_cal_invalid);
+        g_navtick_mag = true;
+        g_navtick_mag_body[0] = mag_body.x();
+        g_navtick_mag_body[1] = mag_body.y();
+        g_navtick_mag_body[2] = mag_body.z();
       }
     }
 
@@ -1205,7 +1280,104 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       g_is_unlocked = launched;
       throttlePercent = launched ? 50.0f : 0.0f;
     }
+    // 导航对拍轨迹：聚合缓冲在 handleNavigationSystem() 内被清零，必须**调用前**
+    // 快照；本拍 GNSS/磁/光流的推送标志由上面的注入分支置位。
+    float navtick_inputs[10] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    float navtick_ahrs[4] = {backup_ahrs_Qw, backup_ahrs_Qx,
+                             backup_ahrs_Qy, backup_ahrs_Qz};
+    const uint32_t navtick_now_us = micros();
+    static constexpr int kNavTraceDeltas = 10;
+    float navtick_dth[kNavTraceDeltas][3] = {};
+    float navtick_dv[kNavTraceDeltas][3] = {};
+    float navtick_ddt[kNavTraceDeltas] = {};
+    if (g_trace_nav_file != nullptr)
+    {
+      navtick_inputs[0] = acc_sum_x;   navtick_inputs[1] = acc_sum_y;
+      navtick_inputs[2] = acc_sum_z;   navtick_inputs[3] = gyro_sum_x;
+      navtick_inputs[4] = gyro_sum_y;  navtick_inputs[5] = gyro_sum_z;
+      navtick_inputs[6] = static_cast<float>(imu_sample_count);
+      navtick_inputs[7] = static_cast<float>(imu_delta_sample_count);
+      navtick_inputs[8] = imu_delta_time_sum_s;
+      const int nd = (imu_delta_sample_count < kNavTraceDeltas)
+                         ? imu_delta_sample_count : kNavTraceDeltas;
+      for (int i = 0; i < nd; ++i)
+      {
+        navtick_dth[i][0] = imu_delta_theta_x[i];
+        navtick_dth[i][1] = imu_delta_theta_y[i];
+        navtick_dth[i][2] = imu_delta_theta_z[i];
+        navtick_dv[i][0] = imu_delta_v_x[i];
+        navtick_dv[i][1] = imu_delta_v_y[i];
+        navtick_dv[i][2] = imu_delta_v_z[i];
+        navtick_ddt[i] = imu_delta_dt_s[i];
+      }
+    }
     handleNavigationSystem();
+    if (g_trace_nav_file != nullptr)
+    {
+      const Eigen::Quaternionf qe = nav_ekf.quat();
+      const float tr = nav_ekf.roll_rad() * 57.2957795f;
+      const float tp = nav_ekf.pitch_rad() * 57.2957795f;
+      const float ty = nav_ekf.yaw_rad() * 57.2957795f;
+      const Eigen::Vector3d lla = nav_ekf.lla_rad_m();
+      const Eigen::Vector3f vel = nav_ekf.ned_vel_mps();
+      const Eigen::Vector3f ba = nav_ekf.accel_bias_mps2();
+      const Eigen::Vector3f bg = nav_ekf.gyro_bias_radps();
+      std::fprintf(
+          g_trace_nav_file,
+          "%.4f,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%.9g,"
+          "%.9f,%.9f,%.9f,%.9f,"
+          "%d,%.9f,%.9f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%u,"
+          "%.6f,%d,%.6f,%.6f,%.6f,%d,"
+          "%.6f,%.6f,%.6f,%d,%d,%d,%d,%.4f,"
+          "%.9f,%.9f,%.9f,%.9f,%.6f,%.6f,%.6f,"
+          "%.9f,%.9f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,%.6f,"
+          "%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%d,%d,%.4f,%d,%d,%d,%d,%.4f,%u,%u",
+          t,
+          navtick_inputs[0], navtick_inputs[1], navtick_inputs[2],
+          navtick_inputs[3], navtick_inputs[4], navtick_inputs[5],
+          static_cast<int>(navtick_inputs[6]),
+          static_cast<int>(navtick_inputs[7]), navtick_inputs[8],
+          navtick_ahrs[0], navtick_ahrs[1], navtick_ahrs[2], navtick_ahrs[3],
+          g_navtick_gnss ? 1 : 0,
+          g_navtick_gnss_lla[0], g_navtick_gnss_lla[1], g_navtick_gnss_lla[2],
+          g_navtick_gnss_vel[0], g_navtick_gnss_vel[1], g_navtick_gnss_vel[2],
+          g_navtick_gnss_acc[0], g_navtick_gnss_acc[1], g_navtick_gnss_acc[2],
+          g_navtick_gnss_itow,
+          baro_altitude, 1,
+          g_navtick_mag_body[0], g_navtick_mag_body[1], g_navtick_mag_body[2],
+          g_navtick_mag ? 1 : 0,
+          flow_data.velocity_x_mps, flow_data.velocity_y_mps,
+          flow_data.distance_m,
+          static_cast<int>(flow_data.flow_quality),
+          static_cast<int>(flow_data.range_quality),
+          flow_data.is_flow_valid ? 1 : 0,
+          g_is_unlocked ? 1 : 0, throttlePercent,
+          qe.w(), qe.x(), qe.y(), qe.z(), tr, tp, ty,
+          lla(0) * 57.29577951308232, lla(1) * 57.29577951308232, lla(2),
+          relative_north, relative_east, relative_down,
+          vel.x(), vel.y(), vel.z(), estimated_height,
+          ba.x(), ba.y(), ba.z(), bg.x(), bg.y(), bg.z(),
+          nav_system_initialized ? 1 : 0,
+          (ubx.fix() >= bfs::Ubx::FIX_3D) ? 1 : 0,
+          gnss_status.last_measurement_age_s,
+          baro_ekf_fused ? 1 : 0,
+          g_heading_hold_allowed ? 1 : 0, g_pos_hold_degraded ? 1 : 0,
+          static_cast<int>(g_imu_health_state),
+          baro_ekf_innovation_m, gnss_status.epoch_count,
+          gnss_status.fix3d_count);
+      for (int i = 0; i < kNavTraceDeltas; ++i)
+      {
+        std::fprintf(g_trace_nav_file,
+                     ",%.9g,%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
+                     navtick_dth[i][0], navtick_dth[i][1], navtick_dth[i][2],
+                     navtick_dv[i][0], navtick_dv[i][1], navtick_dv[i][2],
+                     navtick_ddt[i]);
+      }
+      std::fprintf(g_trace_nav_file, ",%u\n", navtick_now_us);
+      g_navtick_gnss = false;
+      g_navtick_mag = false;
+      g_navtick_flow = false;
+    }
     // 失联注入的自证据：`gnss_age`（= last_measurement_age_s）是量测本身的年龄、
     // 且取末帧，实测三档都只有 0.025 s，**不能**用来判断失联是否发生；
     // 真正反映"多久没吃到 GNSS"的是 aid_tracker 的 GNSS 年龄，记其峰值。
@@ -2060,6 +2232,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     std::fclose(g_trace_ctrl_file);
     g_trace_ctrl_file = nullptr;
   }
+  if (g_trace_nav_file != nullptr)
+  {
+    std::fclose(g_trace_nav_file);
+    g_trace_nav_file = nullptr;
+  }
   if (g_trace_fast_file != nullptr)
   {
     std::fclose(g_trace_fast_file);
@@ -2174,6 +2351,8 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--real-nav")==0) real_cfg.enabled=true;
     else if (std::strcmp(argv[i],"--trace-csv")==0 && i+1<argc)
       g_trace_csv_path = argv[++i];
+    else if (std::strcmp(argv[i],"--trace-nav")==0 && i+1<argc)
+      g_trace_nav_path = argv[++i];
     else if (std::strcmp(argv[i],"--trace-ctrl")==0 && i+1<argc)
       g_trace_ctrl_path = argv[++i];
     else if (std::strcmp(argv[i],"--trace-fast")==0 && i+1<argc)

@@ -1,0 +1,18 @@
+{
+  "trace": "C:/Users/12631/AppData/Local/Temp/nav_magclean4.csv",
+  "rows": 4000,
+  "step_fail": 0,
+  "init_mismatch": 0,
+  "epoch_mismatch": 0,
+  "gate_mismatch": 0,
+  "max_abs_diff": {
+    "quat": 0.0011563987685393096,
+    "pos": 0.5331518002052307,
+    "vel": 0.003497020182132715,
+    "alt": 0.03620277206683159,
+    "bias": 0.0012845648929496762,
+    "lla": 0.03602229908010912
+  },
+  "first_bad": null,
+  "fails": []
+}

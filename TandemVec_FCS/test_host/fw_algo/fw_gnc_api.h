@@ -53,6 +53,10 @@ extern "C"
 #define FW_CORE_ABI_VERSION 1
 /** 控制链步进 ABI 版本：结构体布局或输入映射语义不兼容变化时 +1。 */
 #define FW_GNC_ABI_VERSION 1
+/** 导航步进 ABI 版本（fw_nav_api.h）。 */
+#define FW_NAV_ABI_VERSION 1
+/** 姿态目标直驱 ABI 版本（跳过遥控模式机，直接给目标姿态 + 油门）。 */
+#define FW_GNC_TRACK_ABI_VERSION 1
 
 /** 不透明控制链句柄（进程内单例语义）。 */
 typedef struct fw_gnc fw_gnc;
@@ -75,6 +79,7 @@ enum
   FW_FEAT_BARO_HEALTH_GATE = 1u << 4,    /**< BFS_BARO_HEALTH_GATE */
   FW_FEAT_GNSS_VERTICAL_GATE = 1u << 5,  /**< BFS_GNSS_VERTICAL_REANCHOR_GATE */
   FW_FEAT_GNC_AVAILABLE = 1u << 6,       /**< 本库含控制链（未定义则该库只有 EKF/分配） */
+  FW_FEAT_NAV_AVAILABLE = 1u << 7,       /**< 本库含导航步进 ABI（fw_nav_*） */
 };
 
 /**
@@ -92,6 +97,7 @@ typedef struct
   uint32_t vehicle_profile;  /**< FW_VEHICLE_* */
   uint32_t feature_bits;     /**< FW_FEAT_* 位或 */
   char build_id[64];         /**< 构建标识（-DFW_BUILD_ID，缺省 "dev"） */
+  uint32_t nav_abi_version;  /**< FW_NAV_ABI_VERSION（尾部追加，保持旧字段偏移） */
 } fw_core_caps_t;
 
 /**
@@ -149,6 +155,39 @@ typedef struct
   float target_vz_mps;                   /**< 高度环输出的目标垂直速度 [m/s] */
   float z_up_m;                          /**< 控制实际使用的高度（-relative_down）[m] */
 } fw_gnc_output_t;
+
+/**
+ * @brief 姿态目标直驱输入：目标姿态 + 直通油门。
+ * @note 与 `fw_gnc_input_t` 的区别：不经过遥控模式机/高度环，直接驱动
+ *       固件姿态外环、速率内环、惯量逆解与混控（供设计/优化工具使用）。
+ */
+typedef struct
+{
+  uint32_t struct_size;      /**< 入参：调用方结构大小 */
+  uint32_t abi_version;      /**< 入参：必须 == FW_GNC_TRACK_ABI_VERSION */
+  float quat_wxyz[4];        /**< 当前姿态 FRD←NED */
+  float omega_body_radps[3]; /**< 机体系原始角速度（已去偏）[rad/s] */
+  float q_target_wxyz[4];    /**< 期望姿态 FRD←NED */
+  float throttle_pct;        /**< 直通油门 [%] 0–100 */
+  float dt_s;                /**< 本拍步长 [s]，>0 */
+  int32_t heading_hold_allowed; /**< 航向锁使能（默认 1） */
+} fw_gnc_track_input_t;
+
+/** @brief 姿态直驱输出（执行器 %、分配诊断、内环指令）。 */
+typedef struct
+{
+  uint32_t struct_size;                  /**< 入参：调用方缓冲大小 */
+  uint32_t abi_version;                  /**< 出参：FW_GNC_TRACK_ABI_VERSION */
+  float ch1_pct, ch2_pct, ch3_pct, ch4_pct;
+  float tvc_upper_deg, tvc_lower_deg;
+  float delta_f_deg, delta_t_deg, dw;
+  float omega_ref_dps[3], alpha_ref_dps2[3], M_cmd[3];
+} fw_gnc_track_output_t;
+
+/** @brief 姿态目标直驱步进；返回码语义同 `fw_gnc_step`。 */
+FW_GNC_API int32_t fw_gnc_track_step(fw_gnc *handle,
+                                     const fw_gnc_track_input_t *in,
+                                     fw_gnc_track_output_t *out);
 
 /** @brief 取能力描述；`out->struct_size` 由调用方预填。 */
 FW_GNC_API void fw_core_caps(fw_core_caps_t *out);

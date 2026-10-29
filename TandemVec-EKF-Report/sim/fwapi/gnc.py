@@ -21,10 +21,13 @@ from . import library as _lib_mod
 from .library import (
     FEATURE_NAMES,
     GNC_ABI_VERSION,
+    GNC_TRACK_ABI_VERSION,
     VEHICLE_NAMES,
     FwCoreCaps,
     FwGncInput,
     FwGncOutput,
+    FwGncTrackInput,
+    FwGncTrackOutput,
 )
 
 
@@ -49,6 +52,7 @@ def caps() -> dict:
         "ekf_abi": c.ekf_abi_version,
         "ctrl_abi": c.ctrl_abi_version,
         "gnc_abi": c.gnc_abi_version,
+        "nav_abi": c.nav_abi_version,
         "param_count": c.param_count,
         "vehicle": VEHICLE_NAMES.get(c.vehicle_profile, str(c.vehicle_profile)),
         "features": feats,
@@ -187,4 +191,70 @@ class Gnc:
             "alt_error_m": r.alt_error_m,
             "target_vz_mps": r.target_vz_mps,
             "z_up_m": r.z_up_m,
+        }
+
+
+class GncTrack:
+    """固件姿态目标直驱（跳过遥控模式机，直接给 q_target + 油门）。
+
+    与 `Gnc` 共用同一个固件单例；同一进程内不要同时用两条通道驱动同一条轨迹。
+    """
+
+    def __init__(self) -> None:
+        self._lib = _lib()
+        self._h = self._lib.fw_gnc_create()
+        if not self._h:
+            raise RuntimeError("fw_gnc_create 失败")
+        self._in = FwGncTrackInput()
+        self._in.struct_size = ctypes.sizeof(FwGncTrackInput)
+        self._in.abi_version = GNC_TRACK_ABI_VERSION
+        self._out = FwGncTrackOutput()
+        self._out.struct_size = ctypes.sizeof(FwGncTrackOutput)
+
+    def close(self) -> None:
+        if self._h:
+            self._lib.fw_gnc_destroy(self._h)
+            self._h = None
+
+    def __del__(self):  # pragma: no cover
+        try:
+            self.close()
+        except Exception:
+            pass
+
+    def step(self, *, quat, omega, q_target, throttle_pct, dt,
+             heading_hold_allowed=True) -> dict:
+        """推进一拍固件姿态/速率/分配/混控。
+
+        @param quat     当前姿态 (w,x,y,z) FRD←NED
+        @param omega    原始已去偏机体系角速度 [rad/s]
+        @param q_target 期望姿态 (w,x,y,z) FRD←NED
+        @param throttle_pct 直通油门 [%]
+        @param dt       步长 [s]
+        """
+        o = self._in
+        for i in range(4):
+            o.quat_wxyz[i] = float(quat[i])
+            o.q_target_wxyz[i] = float(q_target[i])
+        for i in range(3):
+            o.omega_body_radps[i] = float(omega[i])
+        o.throttle_pct = float(throttle_pct)
+        o.dt_s = float(dt)
+        o.heading_hold_allowed = 1 if heading_hold_allowed else 0
+        rc = self._lib.fw_gnc_track_step(self._h, ctypes.byref(self._in),
+                                         ctypes.byref(self._out))
+        if rc != 0:
+            raise RuntimeError(f"fw_gnc_track_step 失败：code={rc}")
+        r = self._out
+        return {
+            "ch1_pct": r.ch1_pct, "ch2_pct": r.ch2_pct,
+            "ch3_pct": r.ch3_pct, "ch4_pct": r.ch4_pct,
+            "tvc_upper_deg": r.tvc_upper_deg,
+            "tvc_lower_deg": r.tvc_lower_deg,
+            "delta_f_deg": r.delta_f_deg,
+            "delta_t_deg": r.delta_t_deg,
+            "dw": r.dw,
+            "omega_ref_dps": list(r.omega_ref_dps),
+            "alpha_ref_dps2": list(r.alpha_ref_dps2),
+            "M_cmd": list(r.M_cmd),
         }

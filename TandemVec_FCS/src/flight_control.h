@@ -51,6 +51,25 @@
  */
 void runGNCExecutive();
 
+/* ---- 控制子步骤：供"姿态目标直驱"宿主 ABI 复用（不改变 runGNCExecutive 顺序）----
+ * 典型用途：设计/优化工具直接给目标姿态与油门，跳过遥控模式机，但仍使用固件的
+ * 姿态外环、速率内环、惯量逆解与混控。 */
+struct Quaternion; // 定义见 QuaternionMath.h（此处仅需引用）
+void execute_attitude_controller(const ControlInputs_t &inputs,
+                                 const Quaternion &q_target,
+                                 ControlOutputs_t &outputs);
+void execute_yaw_controller(const ControlInputs_t &inputs,
+                            const Quaternion &q_target,
+                            ControlOutputs_t &outputs);
+void mix_and_output_commands(const ControlInputs_t &inputs,
+                             ControlOutputs_t &outputs);
+/**
+ * @brief 设置航向锁参考角（姿态直驱 ABI 用）
+ * @param[in] yaw_rad 目标航向（FRD←NED，rad）
+ * @note 同时置 armed：下一次 execute_yaw_controller 不会用当前航向覆盖该参考。
+ */
+void setYawHoldReferenceRad(float yaw_rad);
+
 /**
  * @brief 初始化水平位置保持参数
  *

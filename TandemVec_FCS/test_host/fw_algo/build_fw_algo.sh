@@ -4,10 +4,11 @@
 # 同一份固件源码既编进 SIL 可执行（fw_real.exe），也编进本共享库，
 # 因此"仿真里跑的算法"与"固件里烧的算法"是同一份 C++ 源，不是复刻。
 #
-# 库内含三组 ABI：
+# 库内含四组 ABI：
 #   1) fw_algo_api.h  —— 15 态 ESKF 直调；
 #   2) fw_ctrl_api.cpp —— TandemVec 分配 / 线性推力分配；
-#   3) fw_gnc_api.h   —— **控制链**（runGNCExecutive）+ 能力查询 + 参数注册表。
+#   3) fw_gnc_api.h   —— **控制链**（runGNCExecutive）+ 能力查询 + 参数注册表；
+#   4) fw_nav_api.h   —— **导航步进**（handleNavigationSystem，含解析器/门控/重锚）。
 #
 # 用法：bash test_host/fw_algo/build_fw_algo.sh [--print-path] [--clean]
 # 环境：BIN_DIR（默认 /tmp/tv_fw_algo）、EXTRA_CXXFLAGS（追加宏/优化）
@@ -50,12 +51,16 @@ API_SOURCES="
 test_host/fw_algo/fw_algo_api.cpp
 test_host/fw_algo/fw_ctrl_api.cpp
 test_host/fw_algo/fw_gnc_api.cpp
+test_host/fw_algo/fw_nav_api.cpp
 "
 
 INCS="-I$ROOT/lib/ublox-main/src -I$ROOT/test_host/fw_sil/stub -I$ROOT/include"
 INCS="$INCS -I$ROOT/src -I$ROOT/test_host/stub -I$ROOT/lib/navigation-main/src"
 INCS="$INCS -I$ROOT/lib/units/src -I$ROOT/lib/AnoComProtocol -I$ROOT/lib/MAVLink"
 INCS="$INCS -I$ROOT/lib/eigen/src"
+# 导航 ABI 复用 SIL 的 UBX 帧生成（sil_sensor_model.h::BuildNavPvt/EOE），
+# 不在这里再抄一份 NAV-PVT 布局。
+INCS="$INCS -I$ROOT/test_host/fw_sil"
 # 与 SIL 构建同口径：lib 下两层目录都进头文件搜索路径（ICM42688/src、MagSensor 等）。
 for d in $(cd "$ROOT" && find lib -maxdepth 2 -type d); do INCS="$INCS -I$ROOT/$d"; done
 
@@ -98,7 +103,7 @@ for src in $CORE_SOURCES $API_SOURCES; do
     extra="-DFW_BUILD_ID=\"$BUILD_ID\""
     [ "$API_REBUILD" = "1" ] && force=1
   fi
-  if [ "$force" = "1" ] || [ ! -f "$obj" ] || [ "$ROOT/$src" -nt "$obj" ] || [ -n "$(find "$ROOT/include" "$ROOT/src" "$ROOT/lib/navigation-main/src" -newer "$obj" -name '*.h' 2>/dev/null | head -1)" ]; then
+  if [ "$force" = "1" ] || [ ! -f "$obj" ] || [ "$ROOT/$src" -nt "$obj" ] || [ -n "$(find "$ROOT/include" "$ROOT/src" "$ROOT/lib/navigation-main/src" "$ROOT/test_host/fw_algo" -newer "$obj" -name '*.h' 2>/dev/null | head -1)" ]; then
     echo "[fwcore] $src"
     $CXX $FLAGS $INCS $extra -c "$ROOT/$src" -o "$obj"
   fi

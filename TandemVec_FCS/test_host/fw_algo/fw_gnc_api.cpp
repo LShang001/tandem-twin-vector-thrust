@@ -214,9 +214,10 @@ void fw_core_caps(fw_core_caps_t *out)
   caps.ekf_abi_version = FW_ALGO_ABI_VERSION;
   caps.ctrl_abi_version = kCtrlAbiVersion;
   caps.gnc_abi_version = FW_GNC_ABI_VERSION;
+  caps.nav_abi_version = FW_NAV_ABI_VERSION;
   caps.param_count = anoParamCount();
   caps.vehicle_profile = CompileTimeVehicle();
-  caps.feature_bits = CompileTimeFeatures();
+  caps.feature_bits = CompileTimeFeatures() | FW_FEAT_NAV_AVAILABLE;
   std::strncpy(caps.build_id, FW_BUILD_ID, sizeof(caps.build_id) - 1U);
   const uint32_t n = (out->struct_size < sizeof(caps)) ? out->struct_size : sizeof(caps);
   std::memcpy(out, &caps, n);
@@ -288,6 +289,107 @@ int32_t fw_gnc_step(fw_gnc *handle, const fw_gnc_input_t *in, fw_gnc_output_t *o
   runGNCExecutive();
   ReadOutputs(out);
   ++handle->steps;
+  return 0;
+}
+
+int32_t fw_gnc_track_step(fw_gnc *handle, const fw_gnc_track_input_t *in,
+                           fw_gnc_track_output_t *out)
+{
+  if (handle == nullptr || in == nullptr || out == nullptr)
+  {
+    return 1;
+  }
+  if (in->abi_version != FW_GNC_TRACK_ABI_VERSION)
+  {
+    return 2;
+  }
+  if (in->struct_size < sizeof(fw_gnc_track_input_t))
+  {
+    return 3;
+  }
+  if (out->struct_size < sizeof(fw_gnc_track_output_t))
+  {
+    return 4;
+  }
+  if (!AllFinite(in->quat_wxyz, 4) || !AllFinite(in->q_target_wxyz, 4) ||
+      !AllFinite(in->omega_body_radps, 3) || !std::isfinite(in->throttle_pct) ||
+      !std::isfinite(in->dt_s) || in->dt_s <= 0.0f)
+  {
+    return 5;
+  }
+
+  // 姿态/角速度注入（与 fw_gnc_step 同源口径）
+  AHRS_Packet.Qw = in->quat_wxyz[0];
+  AHRS_Packet.Qx = in->quat_wxyz[1];
+  AHRS_Packet.Qy = in->quat_wxyz[2];
+  AHRS_Packet.Qz = in->quat_wxyz[3];
+  const Quaternion q_cur{static_cast<double>(in->quat_wxyz[0]),
+                         static_cast<double>(in->quat_wxyz[1]),
+                         static_cast<double>(in->quat_wxyz[2]),
+                         static_cast<double>(in->quat_wxyz[3])};
+  float r_cur = 0.0f, p_cur = 0.0f, y_cur = 0.0f;
+  quaternionToEuler(q_cur, r_cur, p_cur, y_cur);
+  AHRS_Packet.Roll = r_cur;
+  AHRS_Packet.Pitch = p_cur;
+  AHRS_Packet.Heading = wrapAngleTwoPi(y_cur);
+
+  icm_gyro_x = in->omega_body_radps[0];
+  icm_gyro_y = in->omega_body_radps[1];
+  icm_gyro_z = in->omega_body_radps[2];
+  current_omega_dps_body_filtered = Vector3(
+      static_cast<double>(in->omega_body_radps[0]) * RAD_TO_DEG,
+      static_cast<double>(in->omega_body_radps[1]) * RAD_TO_DEG,
+      static_cast<double>(in->omega_body_radps[2]) * RAD_TO_DEG);
+
+  // 航向锁参考 = 目标姿态的航向（execute_yaw_controller 回中分支使用）
+  const Quaternion q_target{static_cast<double>(in->q_target_wxyz[0]),
+                            static_cast<double>(in->q_target_wxyz[1]),
+                            static_cast<double>(in->q_target_wxyz[2]),
+                            static_cast<double>(in->q_target_wxyz[3])};
+  float r_t = 0.0f, p_t = 0.0f, y_t = 0.0f;
+  quaternionToEuler(q_target, r_t, p_t, y_t);
+  setYawHoldReferenceRad(y_t);
+  g_heading_hold_allowed = (in->heading_hold_allowed != 0);
+  g_pos_hold_degraded = false;
+
+  ControlInputs_t inputs{};
+  inputs.roll_raw = 1500.0f;
+  inputs.pitch_raw = 1500.0f;
+  inputs.throttle_raw = 1500.0f;
+  inputs.yaw_raw = 1500.0f; // 回中 ⇒ 走航向锁分支
+  inputs.mode_channel_val = 1500.0f;
+  inputs.is_unlocked = true;
+  inputs.is_ignition_enabled = false;
+  inputs.is_manual_tvc = false;
+  inputs.attitude_mode = ATTITUDE_MODE;
+
+  ControlOutputs_t outputs{};
+  outputs.throttle_percent = in->throttle_pct;
+  outputs.throttle_direct = true; // 油门直通，不再经高度环比力映射
+
+  execute_attitude_controller(inputs, q_target, outputs);
+  execute_yaw_controller(inputs, q_target, outputs);
+  mix_and_output_commands(inputs, outputs);
+
+  const uint32_t out_size = out->struct_size;
+  std::memset(out, 0, sizeof(fw_gnc_track_output_t));
+  out->struct_size = out_size;
+  out->abi_version = FW_GNC_TRACK_ABI_VERSION;
+  out->ch1_pct = ch1_output;
+  out->ch2_pct = ch2_output;
+  out->ch3_pct = ch3_output;
+  out->ch4_pct = ch4_output;
+  out->tvc_upper_deg = g_tvc_upper_deg;
+  out->tvc_lower_deg = g_tvc_lower_deg;
+  out->delta_f_deg = gnc_tel.delta_f_deg;
+  out->delta_t_deg = gnc_tel.delta_t_deg;
+  out->dw = gnc_tel.dw;
+  for (int i = 0; i < 3; ++i)
+  {
+    out->omega_ref_dps[i] = gnc_tel.omega_ref_dps[i];
+    out->alpha_ref_dps2[i] = gnc_tel.alpha_ref_dps2[i];
+    out->M_cmd[i] = gnc_tel.M_cmd[i];
+  }
   return 0;
 }
 

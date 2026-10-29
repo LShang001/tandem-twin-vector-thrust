@@ -44,8 +44,10 @@ from .control import (  # noqa: F401
     set_params,
     thrust_alloc,
 )
+from .nav import Nav  # noqa: F401
 from .gnc import (  # noqa: F401
     Gnc,
+    GncTrack,
     caps,
     param_dump,
     param_get,
@@ -57,6 +59,8 @@ __all__ = [
     "ABI_VERSION",
     "Ekf",
     "Gnc",
+    "GncTrack",
+    "Nav",
     "caps",
     "param_dump",
     "param_get",

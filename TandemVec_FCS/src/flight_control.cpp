@@ -1459,6 +1459,14 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
 static bool  s_yaw_hold_armed = false;
 static float s_yaw_hold_ref_rad = 0.0f;
 
+// 姿态直驱 ABI 用：显式设置航向锁参考，并标记已 armed，避免被"解锁瞬间
+// 以当前航向为参考"的分支覆盖。
+void setYawHoldReferenceRad(float yaw_rad)
+{
+  s_yaw_hold_ref_rad = yaw_rad;
+  s_yaw_hold_armed = true;
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // 【控制链】姿态外环 → 角速率内环（roll / pitch / yaw 三通道）
 //   execute_attitude_controller：四元数误差 → 目标角速率 → 角加速度指令

@@ -245,6 +245,42 @@ class FwThrustAllocOutput(ctypes.Structure):
     ]
 
 
+class FwGncTrackInput(ctypes.Structure):
+    """与 fw_gnc_api.h::fw_gnc_track_input_t 一一对应。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("quat_wxyz", ctypes.c_float * 4),
+        ("omega_body_radps", ctypes.c_float * 3),
+        ("q_target_wxyz", ctypes.c_float * 4),
+        ("throttle_pct", ctypes.c_float),
+        ("dt_s", ctypes.c_float),
+        ("heading_hold_allowed", ctypes.c_int32),
+    ]
+
+
+class FwGncTrackOutput(ctypes.Structure):
+    """与 fw_gnc_api.h::fw_gnc_track_output_t 一一对应。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("ch1_pct", ctypes.c_float),
+        ("ch2_pct", ctypes.c_float),
+        ("ch3_pct", ctypes.c_float),
+        ("ch4_pct", ctypes.c_float),
+        ("tvc_upper_deg", ctypes.c_float),
+        ("tvc_lower_deg", ctypes.c_float),
+        ("delta_f_deg", ctypes.c_float),
+        ("delta_t_deg", ctypes.c_float),
+        ("dw", ctypes.c_float),
+        ("omega_ref_dps", ctypes.c_float * 3),
+        ("alpha_ref_dps2", ctypes.c_float * 3),
+        ("M_cmd", ctypes.c_float * 3),
+    ]
+
+
 class FwCoreCaps(ctypes.Structure):
     """与 fw_gnc_api.h::fw_core_caps_t 一一对应。"""
 
@@ -258,6 +294,7 @@ class FwCoreCaps(ctypes.Structure):
         ("vehicle_profile", ctypes.c_uint32),
         ("feature_bits", ctypes.c_uint32),
         ("build_id", ctypes.c_char * 64),
+        ("nav_abi_version", ctypes.c_uint32),
     ]
 
 
@@ -319,7 +356,89 @@ class FwGncOutput(ctypes.Structure):
 
 
 GNC_ABI_VERSION = 1
+GNC_TRACK_ABI_VERSION = 1
+NAV_ABI_VERSION = 1
+NAV_MAX_DELTA_SAMPLES = 16
 CORE_ABI_VERSION = 1
+
+class FwNavInput(ctypes.Structure):
+    """与 fw_nav_api.h::fw_nav_input_t 一一对应（struct_size/abi_version 必须预填）。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("dt_s", ctypes.c_float),
+        ("accel_sum_body_mps2", ctypes.c_float * 3),
+        ("gyro_sum_body_radps", ctypes.c_float * 3),
+        ("sample_count", ctypes.c_int32),
+        ("delta_count", ctypes.c_int32),
+        ("delta_theta_rad", (ctypes.c_float * 3) * NAV_MAX_DELTA_SAMPLES),
+        ("delta_vel_mps", (ctypes.c_float * 3) * NAV_MAX_DELTA_SAMPLES),
+        ("delta_dt_s", ctypes.c_float * NAV_MAX_DELTA_SAMPLES),
+        ("ahrs_quat_wxyz", ctypes.c_float * 4),
+        ("ahrs_valid", ctypes.c_int32),
+        ("gnss_valid", ctypes.c_int32),
+        ("gnss_lat_1e7", ctypes.c_int32),
+        ("gnss_lon_1e7", ctypes.c_int32),
+        ("gnss_alt_mm", ctypes.c_int32),
+        ("gnss_vel_ned_mmps", ctypes.c_int32 * 3),
+        ("gnss_h_acc_mm", ctypes.c_uint32),
+        ("gnss_v_acc_mm", ctypes.c_uint32),
+        ("gnss_s_acc_mmps", ctypes.c_uint32),
+        ("gnss_itow_ms", ctypes.c_uint32),
+        ("baro_alt_up_m", ctypes.c_float),
+        ("baro_valid", ctypes.c_int32),
+        ("mag_body_ut", ctypes.c_float * 3),
+        ("mag_valid", ctypes.c_int32),
+        ("flow_vx_mps", ctypes.c_float),
+        ("flow_vy_mps", ctypes.c_float),
+        ("flow_range_m", ctypes.c_float),
+        ("flow_quality", ctypes.c_int32),
+        ("range_quality", ctypes.c_int32),
+        ("flow_valid", ctypes.c_int32),
+        ("unlocked", ctypes.c_int32),
+        ("throttle_pct", ctypes.c_float),
+    ]
+
+
+class FwNavOutput(ctypes.Structure):
+    """与 fw_nav_api.h::fw_nav_output_t 一一对应。"""
+
+    _fields_ = [
+        ("struct_size", ctypes.c_uint32),
+        ("abi_version", ctypes.c_uint32),
+        ("quat_wxyz", ctypes.c_float * 4),
+        ("euler_rpy_deg", ctypes.c_float * 3),
+        ("lla_deg", ctypes.c_double * 3),
+        ("pos_ned_m", ctypes.c_float * 3),
+        ("vel_ned_mps", ctypes.c_float * 3),
+        ("alt_up_m", ctypes.c_float),
+        ("accel_bias_mps2", ctypes.c_float * 3),
+        ("gyro_bias_radps", ctypes.c_float * 3),
+        ("yaw_sigma_deg", ctypes.c_float),
+        ("tilt_sigma_deg", ctypes.c_float),
+        ("initialized", ctypes.c_int32),
+        ("gnss_fix3d", ctypes.c_int32),
+        ("gnss_epoch_count", ctypes.c_uint32),
+        ("gnss_fix3d_count", ctypes.c_uint32),
+        ("gnss_quality_fail", ctypes.c_uint32),
+        ("gnss_duplicate", ctypes.c_uint32),
+        ("gnss_age_s", ctypes.c_float),
+        ("baro_fused", ctypes.c_int32),
+        ("baro_innov_m", ctypes.c_float),
+        ("heading_aiding", ctypes.c_int32),
+        ("pos_degraded", ctypes.c_int32),
+        ("imu_health", ctypes.c_int32),
+        ("imu_health_flags", ctypes.c_uint32),
+        ("gnss_queued", ctypes.c_uint32),
+        ("gnss_pvt", ctypes.c_uint32),
+        ("gnss_eoe", ctypes.c_uint32),
+        ("gnss_overflow", ctypes.c_uint32),
+        ("last_epoch_tow_ms", ctypes.c_uint32),
+        ("steps", ctypes.c_uint32),
+    ]
+
+
 VEHICLE_NAMES = {0: "tandemvec", 1: "coaxial_vtvl", 2: "liquid_rocket"}
 FEATURE_NAMES = {
     1 << 0: "raw_imu_increment",
@@ -329,6 +448,7 @@ FEATURE_NAMES = {
     1 << 4: "baro_health_gate",
     1 << 5: "gnss_vertical_gate",
     1 << 6: "gnc_available",
+    1 << 7: "nav_available",
 }
 
 _LIB = None
@@ -415,6 +535,19 @@ def load(force_build: bool = False) -> ctypes.CDLL:
         lib.fw_gnc_step.argtypes = [p.c_void_p, p.POINTER(FwGncInput),
                                     p.POINTER(FwGncOutput)]
         lib.fw_gnc_step.restype = p.c_int32
+        lib.fw_gnc_track_step.argtypes = [p.c_void_p, p.POINTER(FwGncTrackInput),
+                                          p.POINTER(FwGncTrackOutput)]
+        lib.fw_gnc_track_step.restype = p.c_int32
+
+        nav_handle = p.POINTER(p.c_void_p)
+        lib.fw_nav_create.argtypes = [nav_handle]
+        lib.fw_nav_create.restype = p.c_int32
+        lib.fw_nav_destroy.argtypes = [p.c_void_p]
+        lib.fw_nav_reset.argtypes = [p.c_void_p]
+        lib.fw_nav_reset.restype = p.c_int32
+        lib.fw_nav_step.argtypes = [p.c_void_p, p.POINTER(FwNavInput),
+                                    p.POINTER(FwNavOutput)]
+        lib.fw_nav_step.restype = p.c_int32
         lib.fw_param_count.restype = p.c_uint32
         lib.fw_param_name.argtypes = [p.c_uint32]
         lib.fw_param_name.restype = p.c_char_p

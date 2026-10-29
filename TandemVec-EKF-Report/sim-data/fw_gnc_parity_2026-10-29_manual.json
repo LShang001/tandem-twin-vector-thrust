@@ -1,5 +1,5 @@
 {
- "trace": "C:/Users/12631/AppData/Local/Temp/ctrl_manual.csv",
+ "trace": "C:\\Users\\12631\\AppData\\Local\\Temp\\ctrl_manual.csv",
  "rows": 1600,
  "max_abs_diff": {
   "ch1": 5.259399414114796e-05,
@@ -31,12 +31,14 @@
   "ekf_abi": 2,
   "ctrl_abi": 2,
   "gnc_abi": 1,
+  "nav_abi": 1,
   "param_count": 133,
   "vehicle": "tandemvec",
   "features": [
-   "gnc_available"
+   "gnc_available",
+   "nav_available"
   ],
-  "feature_bits": 64,
-  "build_id": "8958db4"
+  "feature_bits": 192,
+  "build_id": "9a4ac3e"
  }
 }
