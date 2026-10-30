@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>MOD-005 共轴双桨 VTVL 动力学模型 ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="mod-005-共轴双桨-vtvl-动力学模型rigorous">MOD-005 共轴双桨 VTVL
+动力学模型（rigorous）</h1>
+<ul>
+<li>状态：研究模型（SIL 可选，默认关闭）</li>
+<li>日期：2026-10-31</li>
+<li>关联：THY-002 §3–§6、CTL-006 §2、VER-004
+§11、<code>TandemVec_FCS/test_host/fw_sil/coaxial_dynamics_model.h</code></li>
+<li>证据：<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-model-2026-10-31/</code></li>
+</ul>
+<h2 id="1-目的与边界">1. 目的与边界</h2>
+<p>旧 SIL 的共轴 plant 是 L1
+集总模型：推力取两电机平均转速的线性映射，差速直接给偏航力矩，
+没有反扭的转速平方项、没有转子惯量项、没有双转子陀螺耦合。它可以复现历史验收基线，
+但不能回答“物理上力矩从哪来、惯量/反扭/陀螺如何影响响应”。</p>
+<p>本模型给 SIL 增加一个可选的 L2
+物理模型（<code>--coax-plant-model rigorous</code>），用于：</p>
+<ol type="1">
+<li>反扭、陀螺、摆座几何与 6DOF 积分的定量研究；</li>
+<li>参数（kT/kQ/Jp/τ_m/I）灵敏度与标定前的量级检查；</li>
+<li>为后续台架辨识提供"参数→响应"的正向模型。</li>
+</ol>
+<p><strong>不在范围内</strong>：桨叶挥舞/入流/诱导速度、平动升力、地效、旋翼干扰、伺服柔度、电池电压跌落、
+气动阻尼（按用户口径 VTVL 低速不做气动，默认
+<code>drag=0</code>）。地面接触仍由 SIL <code>Plant::step</code>
+负责，本模型不重复施加地面力。参数默认值全部来自存档
+L1，<strong>不是实机辨识值</strong>。</p>
+<h2 id="2-坐标系与符号">2. 坐标系与符号</h2>
+<ul>
+<li>机体系 FRD：x 前、y 右、z 下；NED：z 下。</li>
+<li>推力轴零摆角沿 −z_b（向上）。</li>
+<li>摆座角与固件通道一致：δt（俯仰通道）绕 y_b、δf（滚转通道）绕
+x_b：</li>
+</ul>
+<pre><code>F_b = T · [ sin δt,  sin δf,  −cos δf · cos δt ]ᵀ
+M_b = [ l·T·sin δf ,  l·T·sin δt ,  −Q_net ]ᵀ</code></pre>
+<p><code>l = 0.15 m</code> 为 CG 到推力作用点沿 z_b 的距离（ARCH
+存档值）。δf、δt 的通道方向沿用
+SIL/固件已标定的极性（δf→+Mx、δt→+My）；符号回归测试见 §5。</p>
+<h2 id="3-旋翼反扭与电机">3. 旋翼、反扭与电机</h2>
+<p>单旋翼（准稳态叶素/动量理论的一阶近似）：</p>
+<pre><code>T_i = kT · ω_i²
+Q_i = kQ · ω_i² + Jp · ω̇_i</code></pre>
+<ul>
+<li><code>kT = T_max / (2·ω_max²)</code>：由“双旋翼满转 = 14
+N”反标定，<code>ω_max = 1150 rad/s</code>。</li>
+<li><code>kQ/kT = 0.027</code>：沿用纵列实机经验值；共轴桨的该比值需台架重测。</li>
+<li><code>Jp = 2.0e-4 kg·m²</code>：转子+桨的转动惯量量级估计，直接进入加减速反扭项。</li>
+<li>电机一阶：<code>ω̇ = (ω_cmd − ω)/τ_m</code>，<code>τ_m = 0.28 s</code>；SIL
+的 2 kHz 内环另外已有同样的 一阶跟随与 0.1% PWM 量化，本模型在
+<code>step()</code> 中独立实现以便单测，SIL 接线只替换 wrench。</li>
+</ul>
+<p>双旋翼净反扭：</p>
+<pre><code>Q_net = kQ (ω_f² − ω_t²) + Jp (ω̇_f − ω̇_t)
+M_z = −Q_net</code></pre>
+<p>符号：<code>ω_f &gt; ω_t</code> 时净反扭使机体向
+−z（右偏航的反向）转，与旧 SIL 的 “wf&gt;wt →
+−Mz”一致；旧模型用一个线性系数×差速代替本式。</p>
+<h2 id="4-陀螺耦合与摆座">4. 陀螺耦合与摆座</h2>
+<p>双转子的净角动量（沿推力轴）：</p>
+<pre><code>h = (0, 0, −Jp (ω_f − ω_t))ᵀ
+M_gyro = −Ω × h</code></pre>
+<ul>
+<li>等速反转（ω_f = ω_t）时
+<code>h = 0</code>，陀螺项<strong>严格为零</strong>——这是“反转双桨互相抵消”的
+数学表达，也是单测断言之一。</li>
+<li>存在转速差时，机体滚转/俯仰角速率会通过 <code>−Ω × h</code>
+产生附加力矩；模型提供 <code>enable_gyro</code> 开关，便于 A/B
+判断该项对响应的影响。</li>
+</ul>
+<p>摆座力矩只保留力臂项 <code>l·T·sin δ</code>（小角度下即
+<code>l·T·δ</code>），不含舵机动力学/间隙； 舵机一阶 + 300 °/s
+速率限幅在 <code>step()</code> 中实现，与 SIL 2 kHz 内环同口径。</p>
+<h2 id="5-6dof-积分与地面">5. 6DOF 积分与地面</h2>
+<ul>
+<li>平动：NED 下
+<code>m·v̇ = R(q)·F_b + m·g_ned + 气动阻尼(默认 0)</code>。</li>
+<li>转动：欧拉方程
+<code>I·ω̇ = M_b − ω × (I·ω)</code>；<code>I = (0.05, 0.05, 0.08) kg·m²</code>。</li>
+<li>姿态：<code>q̇ = ½ q ⊗ (0, ω)</code>，每步归一化。</li>
+<li>积分：经典四阶 Runge-Kutta（k1–k4，<code>h/6</code> 加权；每子步 q
+归一），默认 <code>substeps=10</code>。 2026-10-31 起宿主模型、SIL
+<code>Plant::step</code>、宿主 6DOF 测试统一用 RK4，不再用欧拉积分。 RK4
+在模型内部的 <code>derivative()</code>
+里同时给出旋翼/舵机一阶导数、地面接触力和四元数导数。</li>
+<li>地面（<code>enable_ground</code>，单测使用；SIL
+接线关闭）：<code>z ≥ 0</code> 时法向弹簧-阻尼
+<code>N = k·z + c·v_z</code>（截断为非负），水平库仑摩擦按
+<code>μ·N</code> 且单步不反向。</li>
+<li>能量：<code>E = ½m|v|² + ½ωᵀIω − m·g·z</code>，用于自由落体守恒断言。</li>
+</ul>
+<h2 id="6-参数表默认值全部待标定">6. 参数表（默认值，全部待标定）</h2>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th style="text-align: right;">默认</th>
+<th>来源/说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>m</td>
+<td style="text-align: right;">0.84 kg</td>
+<td>存档 L1</td>
+</tr>
+<tr>
+<td>I</td>
+<td style="text-align: right;">(0.05, 0.05, 0.08) kg·m²</td>
+<td>存档 L1，MODEL-DEFAULT</td>
+</tr>
+<tr>
+<td>l</td>
+<td style="text-align: right;">0.15 m</td>
+<td>存档 L1</td>
+</tr>
+<tr>
+<td>ω_max</td>
+<td style="text-align: right;">1150 rad/s</td>
+<td>由 14 N 反标定口径</td>
+</tr>
+<tr>
+<td>kT</td>
+<td style="text-align: right;">5.293e-6 N/(rad/s)²</td>
+<td>= 14/(2·1150²)</td>
+</tr>
+<tr>
+<td>kQ</td>
+<td style="text-align: right;">1.429e-7 N·m/(rad/s)²</td>
+<td>= 0.027·kT（纵列经验）</td>
+</tr>
+<tr>
+<td>Jp</td>
+<td style="text-align: right;">2.0e-4 kg·m²</td>
+<td>量级估计</td>
+</tr>
+<tr>
+<td>τ_m</td>
+<td style="text-align: right;">0.28 s</td>
+<td>存档 L1</td>
+</tr>
+<tr>
+<td>舵机 τ / 速率</td>
+<td style="text-align: right;">0.05 s / 300 °/s</td>
+<td>存档 L1</td>
+</tr>
+<tr>
+<td>悬停转速</td>
+<td style="text-align: right;">882 rad/s（≈8420 rpm）</td>
+<td>由 2·kT·ω² = mg 得</td>
+</tr>
+<tr>
+<td>悬停油门（ω 线性口径）</td>
+<td style="text-align: right;">0.767</td>
+<td>882/1150</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-验证2026-10-31">7. 验证（2026-10-31）</h2>
+<p><strong>宿主单测</strong>
+<code>test_host/test_coaxial_dynamics_model.cpp</code>（<code>cdyn</code>）：36
+断言通过。覆盖 kT 反标定/悬停转速、ω²
+推力、反扭两项、陀螺符号与等速抵消、摆座力矩方向、自由落体
+能量守恒、悬停保持、地面吸收/摩擦、舵机速率限幅、NaN、dt=0。</p>
+<p><strong>SIL 验收对比</strong>（积分统一 RK4
+后，<code>T:/sil_rk4/fw_coax.exe</code>，同一 seed）：</p>
+<table>
+<thead>
+<tr>
+<th>口径</th>
+<th style="text-align: right;">legacy L1</th>
+<th style="text-align: right;">rigorous</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3×5（mag_clean/mag_nominal/nomag_degraded）</td>
+<td style="text-align: right;">8/9</td>
+<td style="text-align: right;">9/9</td>
+<td>legacy 唯一 FAIL <code>mag_nominal seed1</code> max_pitch
+<strong>22.777°</strong>&gt;20°</td>
+</tr>
+<tr>
+<td>8×5（含 mag_disturbed/imu_*/gnss_spoof，Euler 版）</td>
+<td style="text-align: right;">39/40</td>
+<td style="text-align: right;">40/40</td>
+<td>同一失败场景；RK4 后仅复跑 3×5</td>
+</tr>
+<tr>
+<td><code>mag_nominal seed1</code> max_pitch（Euler 版对照）</td>
+<td style="text-align: right;">22.764°</td>
+<td style="text-align: right;">3.427°</td>
+<td>见 §8 解释，<strong>不是控制器改进</strong></td>
+</tr>
+<tr>
+<td>同场景 hold_end / roll_max（RK4）</td>
+<td style="text-align: right;">0.91 m / 8.34°</td>
+<td style="text-align: right;">1.19 m / 8.94°</td>
+<td>rigorous 保持略差、滚转略大</td>
+</tr>
+</tbody>
+</table>
+<p><strong>积分口径变化</strong>：RK4 后 legacy 的
+<code>mag_nominal seed1</code> 由
+22.764°→<strong>22.777°</strong>（+0.013°），
+失败集与其它场景结论不变；rigorous 仍全通过。宿主 <code>T8</code> 6DOF
+闭环改用 RK4 后
+<code>roll=0.001 pitch=0.001 pos=(-1.11,1.98,0.10)</code>，与 Euler
+版（-1.10,1.95,0.10）同级， 断言全过。RK4 不改变“legacy
+是验收基线、rigorous 只用于研究”的结论。</p>
+<h2 id="8-关键发现推力-油门关系与固件-t_est-的口径差">8.
+关键发现：推力-油门关系与固件 T_est 的口径差</h2>
+<p>旧 L1 与固件 <code>T_est = 0.01·throttle_pct·maxT</code> 都假设“推力
+∝ 油门”线性。物理模型是 <code>T = maxT·(ω/ω_max)²</code>，而 SIL
+的电机目标 <code>ω_cmd = (throttle/100)·ω_max</code>，于是</p>
+<pre><code>T_actual(u) = maxT · u²     (u = throttle/100)
+T_est(u)    = maxT · u      (固件/分配器假设)</code></pre>
+<p>悬停时 <code>u≈0.767</code>，<code>T_actual=8.24 N</code> 而
+<code>T_est=10.74 N</code>，即分配器把 α 权限 <code>l·T_est/I</code>
+高估约 30%，实际力矩约为指令的
+<code>T_actual/T_est≈0.77</code>。这解释了为什么 rigorous 下
+<code>mag_nominal seed1</code> 的俯仰峰值从 22.764° 降到
+3.427°：<strong>不是控制变好， 而是同一 α 指令在物理 plant
+上产生的力矩更小、姿态激励更弱</strong>；同时 hold 略差。</p>
+<p>结论与后续：</p>
+<ol type="1">
+<li>rigorous 模型<strong>不能</strong>用来宣称“控制性能提升”；它只说明
+plant 口径改变了闭环历史。</li>
+<li>若要让 α 权限在物理 plant 上正确，需要标定 <code>T(u)</code>
+曲线并把固件 <code>T_est</code> 改成同一
+映射（二次或查表），这属于安全关键区改动，需台架数据与明确授权，本轮不做。</li>
+<li>在此之前，<code>legacy</code> 仍是验收基线；<code>rigorous</code>
+只用于研究/灵敏度/标定前检查。</li>
+</ol>
+<h2 id="9-与-legacy-的差异清单">9. 与 legacy 的差异清单</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>legacy L1</th>
+<th>rigorous L2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>推力</td>
+<td><code>avg(ω)/ω_max · maxT</code>（线性）</td>
+<td><code>kT(ω_f²+ω_t²)</code>（平方）</td>
+</tr>
+<tr>
+<td>偏航力矩</td>
+<td><code>k_yaw · (ω_f−ω_t)/ω_max</code></td>
+<td><code>−[kQ(ω_f²−ω_t²)+Jp(ω̇_f−ω̇_t)]</code></td>
+</tr>
+<tr>
+<td>陀螺</td>
+<td>无</td>
+<td><code>−Ω×h</code>，等速反转抵消</td>
+</tr>
+<tr>
+<td>摆座力矩</td>
+<td><code>l·T·sinδ</code>（T 为线性推力）</td>
+<td><code>l·T·sinδ</code>（T 为平方推力）</td>
+</tr>
+<tr>
+<td>积分</td>
+<td>Plant 刚体 <strong>RK4</strong>（四 stage，q 每步归一）</td>
+<td>模型 <code>step()</code> <strong>RK4</strong>；SIL
+两口径同一积分器</td>
+</tr>
+<tr>
+<td>地面</td>
+<td><code>Plant::step</code> 钳制 + 可选 μ</td>
+<td>模型自带（单测用）；SIL 关闭以免双计</td>
+</tr>
+<tr>
+<td>气动</td>
+<td>无（可选地面 μ）</td>
+<td>默认 0，可开线性/二次阻尼</td>
+</tr>
+</tbody>
+</table>
+<h2 id="10-标定计划建议">10. 标定计划（建议）</h2>
+<ol type="1">
+<li>台架：给定 PWM 扫点，测
+<code>T(u)</code>、<code>Q(u)</code>、<code>ω(u)</code>，拟合
+<code>kT/kQ</code> 与 <code>T(u)</code> 曲线；
+同时测加减速反扭（<code>Jp</code>）与电机时间常数
+<code>τ_m</code>。</li>
+<li>双桨对转、固定摆座：测净反扭与转速差的关系，校验
+<code>kQ/kT</code>。</li>
+<li>单轴角速率脉冲：辨识 <code>I</code> 与陀螺项符号；与 §4 的
+<code>−Ω×h</code> 对照。</li>
+<li>标定完成后，再决定是否把 <code>T_est</code> 改成 <code>T(u)</code>
+曲线并切换默认 plant 口径。</li>
+</ol>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-005-共轴双桨VTVL动力学模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:58</footer></article></body>
+</html>

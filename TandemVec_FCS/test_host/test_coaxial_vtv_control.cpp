@@ -245,33 +245,94 @@ int main()
       const double mx = Ix * out.alpha_roll_radps2;
       const double my = Iy * out.alpha_pitch_radps2;
       const double mz = Iz * out.alpha_yaw_radps2;
-      const double wx = omega.x, wy = omega.y, wz = omega.z;
-      const double wdot_x = (mx - (Iz - Iy) * wy * wz) / Ix;
-      const double wdot_y = (my - (Ix - Iz) * wz * wx) / Iy;
-      const double wdot_z = (mz - (Iy - Ix) * wx * wy) / Iz;
-      omega.x += wdot_x * dt;
-      omega.y += wdot_y * dt;
-      omega.z += wdot_z * dt;
 
-      const Quaternion dq =
-          quaternionMultiply(q, Quaternion(0.0, omega.x * 0.5 * dt,
-                                           omega.y * 0.5 * dt,
-                                           omega.z * 0.5 * dt));
-      q.w += dq.w;
-      q.x += dq.x;
-      q.y += dq.y;
-      q.z += dq.z;
-      q = normalizeQuaternion(q);
+      // 经典 RK4（2026-10-31 用户要求：仿真不用 Euler）。控制器输出在本拍内保持，
+      // 刚体转动/四元数/平动都用四 stage 积分，q 每步归一。
+      struct RkState
+      {
+        double wx, wy, wz;
+        Quaternion q;
+        double vx, vy, vz;
+        double px, py, pz;
+      };
+      struct RkDeriv
+      {
+        double dwx, dwy, dwz;
+        Quaternion dq;
+        double dvx, dvy, dvz;
+        double dpx, dpy, dpz;
+      };
+      auto deriv = [&](const RkState &st) {
+        RkDeriv d;
+        const double wx = st.wx, wy = st.wy, wz = st.wz;
+        d.dwx = (mx - (Iz - Iy) * wy * wz) / Ix;
+        d.dwy = (my - (Ix - Iz) * wz * wx) / Iy;
+        d.dwz = (mz - (Iy - Ix) * wx * wy) / Iz;
+        d.dq = quaternionMultiply(
+            st.q, Quaternion(0.0, 0.5 * wx, 0.5 * wy, 0.5 * wz));
+        const Vector3 f_body{0.0, 0.0, -thrust_n};
+        const Vector3 f_ned = rotateVector(st.q, f_body);
+        d.dvx = f_ned.x / m;
+        d.dvy = f_ned.y / m;
+        d.dvz = f_ned.z / m + g;
+        d.dpx = st.vx;
+        d.dpy = st.vy;
+        d.dpz = st.vz;
+        return d;
+      };
+      auto addStage = [&](const RkState &st, const RkDeriv &d, double h) {
+        RkState o = st;
+        o.wx += d.dwx * h;
+        o.wy += d.dwy * h;
+        o.wz += d.dwz * h;
+        o.q.w += d.dq.w * h;
+        o.q.x += d.dq.x * h;
+        o.q.y += d.dq.y * h;
+        o.q.z += d.dq.z * h;
+        o.q = normalizeQuaternion(o.q);
+        o.vx += d.dvx * h;
+        o.vy += d.dvy * h;
+        o.vz += d.dvz * h;
+        o.px += d.dpx * h;
+        o.py += d.dpy * h;
+        o.pz += d.dpz * h;
+        return o;
+      };
 
-      Vector3 f_body{0.0, 0.0, -thrust_n};
-      Vector3 f_ned = rotateVector(q, f_body);
-      Vector3 acc{f_ned.x / m, f_ned.y / m, f_ned.z / m + g};
-      vel.x += acc.x * dt;
-      vel.y += acc.y * dt;
-      vel.z += acc.z * dt;
-      pos.x += vel.x * dt;
-      pos.y += vel.y * dt;
-      pos.z += vel.z * dt;
+      RkState st0{omega.x, omega.y, omega.z, q,
+                  vel.x, vel.y, vel.z, pos.x, pos.y, pos.z};
+      const RkDeriv k1 = deriv(st0);
+      const RkDeriv k2 = deriv(addStage(st0, k1, 0.5 * dt));
+      const RkDeriv k3 = deriv(addStage(st0, k2, 0.5 * dt));
+      const RkDeriv k4 = deriv(addStage(st0, k3, dt));
+
+      RkState st1 = st0;
+      const double w = dt / 6.0;
+      st1.wx += w * (k1.dwx + 2 * k2.dwx + 2 * k3.dwx + k4.dwx);
+      st1.wy += w * (k1.dwy + 2 * k2.dwy + 2 * k3.dwy + k4.dwy);
+      st1.wz += w * (k1.dwz + 2 * k2.dwz + 2 * k3.dwz + k4.dwz);
+      st1.q.w += w * (k1.dq.w + 2 * k2.dq.w + 2 * k3.dq.w + k4.dq.w);
+      st1.q.x += w * (k1.dq.x + 2 * k2.dq.x + 2 * k3.dq.x + k4.dq.x);
+      st1.q.y += w * (k1.dq.y + 2 * k2.dq.y + 2 * k3.dq.y + k4.dq.y);
+      st1.q.z += w * (k1.dq.z + 2 * k2.dq.z + 2 * k3.dq.z + k4.dq.z);
+      st1.q = normalizeQuaternion(st1.q);
+      st1.vx += w * (k1.dvx + 2 * k2.dvx + 2 * k3.dvx + k4.dvx);
+      st1.vy += w * (k1.dvy + 2 * k2.dvy + 2 * k3.dvy + k4.dvy);
+      st1.vz += w * (k1.dvz + 2 * k2.dvz + 2 * k3.dvz + k4.dvz);
+      st1.px += w * (k1.dpx + 2 * k2.dpx + 2 * k3.dpx + k4.dpx);
+      st1.py += w * (k1.dpy + 2 * k2.dpy + 2 * k3.dpy + k4.dpy);
+      st1.pz += w * (k1.dpz + 2 * k2.dpz + 2 * k3.dpz + k4.dpz);
+
+      omega.x = st1.wx;
+      omega.y = st1.wy;
+      omega.z = st1.wz;
+      q = st1.q;
+      vel.x = st1.vx;
+      vel.y = st1.vy;
+      vel.z = st1.vz;
+      pos.x = st1.px;
+      pos.y = st1.py;
+      pos.z = st1.pz;
 
       float roll, pitch, yaw;
       quaternionToEuler(q, roll, pitch, yaw);

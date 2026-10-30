@@ -255,6 +255,7 @@ static float g_coax_inertia_scale = 1.0f;  // 三轴惯量统一乘子 [0.25,4]
 static float g_coax_thrust_scale = 1.0f;   // 实际推力/指令推力 [0.5,1.5]
 static float g_coax_yaw_scale = 1.0f;      // 差速偏航力矩乘子 [0.25,4]
 static int g_coax_alloc_mode = 0;          // 0=legacy 1=α+分配器（写固件参数）
+static int g_coax_plant_model = 0;         // 0=legacy L1 集总 1=rigorous 物理模型
 
 // —— --rc-profile：CSV 遥控激励表（task-11 追加硬需求）——
 // 首行表头固定为 `t,roll_us,pitch_us,yaw_us,throttle_us,mode_us,att_mode_us`；
@@ -409,6 +410,79 @@ static void rcProfileAt(double t, int &cursor,
 }
 #endif
 
+// —— RK4 积分辅助（2026-10-31 用户要求：仿真统一用四阶 Runge-Kutta）——
+// 力/力矩在 dt 内视为常数（wrench 由调用方每拍算一次），wind 为 NED 等效力。
+struct PlantRKStage
+{
+    Quat4f q;
+    float om[3];
+    float v[3];
+    float p[3];
+};
+
+struct PlantDeriv
+{
+    float dq[4];
+    float dom[3];
+    float dv[3];
+    float dp[3];
+};
+
+static inline void bodyToNedQ(const Quat4f &qq, const float v[3], float out[3])
+{
+    const float w = qq.w, x = qq.x, y = qq.y, z = qq.z;
+    out[0] = (1 - 2 * (y * y + z * z)) * v[0] + 2 * (x * y - w * z) * v[1] +
+             2 * (x * z + w * y) * v[2];
+    out[1] = 2 * (x * y + w * z) * v[0] + (1 - 2 * (x * x + z * z)) * v[1] +
+             2 * (y * z - w * x) * v[2];
+    out[2] = 2 * (x * z - w * y) * v[0] + 2 * (y * z + w * x) * v[1] +
+             (1 - 2 * (x * x + y * y)) * v[2];
+}
+
+static inline PlantDeriv plantDeriv(const PlantRKStage &st, const float Fb[3],
+                                    const float M[3], const float wind[3],
+                                    const float mass, const float Ixx,
+                                    const float Iyy, const float Izz,
+                                    const float g)
+{
+    PlantDeriv d{};
+    float Fn[3];
+    bodyToNedQ(st.q, Fb, Fn);
+    d.dv[0] = (Fn[0] + wind[0]) / mass;
+    d.dv[1] = (Fn[1] + wind[1]) / mass;
+    d.dv[2] = (Fn[2] + wind[2]) / mass + g;
+    d.dp[0] = st.v[0];
+    d.dp[1] = st.v[1];
+    d.dp[2] = st.v[2];
+    const float p = st.om[0], qq = st.om[1], r = st.om[2];
+    d.dom[0] = (M[0] - (Izz - Iyy) * qq * r) / Ixx;
+    d.dom[1] = (M[1] - (Ixx - Izz) * r * p) / Iyy;
+    d.dom[2] = (M[2] - (Iyy - Ixx) * p * qq) / Izz;
+    d.dq[0] = -0.5f * (st.q.x * p + st.q.y * qq + st.q.z * r);
+    d.dq[1] = 0.5f * (st.q.w * p + st.q.y * r - st.q.z * qq);
+    d.dq[2] = 0.5f * (st.q.w * qq - st.q.x * r + st.q.z * p);
+    d.dq[3] = 0.5f * (st.q.w * r + st.q.x * qq - st.q.y * p);
+    return d;
+}
+
+static inline PlantRKStage plantAdd(const PlantRKStage &s,
+                                    const PlantDeriv &d, const float h)
+{
+    PlantRKStage o = s;
+    o.q.w += d.dq[0] * h;
+    o.q.x += d.dq[1] * h;
+    o.q.y += d.dq[2] * h;
+    o.q.z += d.dq[3] * h;
+    o.q = qNorm(o.q);
+    for (int i = 0; i < 3; ++i)
+    {
+        o.om[i] += d.dom[i] * h;
+        o.v[i] += d.dv[i] * h;
+        o.p[i] += d.dp[i] * h;
+    }
+    return o;
+}
+
 struct Plant {
   Quat4f q;
   float omega[3];      // body rad/s
@@ -466,28 +540,42 @@ struct Plant {
     const float h = dt / static_cast<float>(n_sub);
     for (int ss = 0; ss < n_sub; ++ss)
     {
-      const float p=omega[0], qq=omega[1], r=omega[2];
-      omega[0] += (M[0] - (Izz-Iyy)*qq*r) / Ixx * h;
-      omega[1] += (M[1] - (Ixx-Izz)*r*p) / Iyy * h;
-      omega[2] += (M[2] - (Iyy-Ixx)*p*qq) / Izz * h;
+      PlantRKStage st0{q, {omega[0], omega[1], omega[2]},
+                       {vel[0], vel[1], vel[2]},
+                       {pos[0], pos[1], pos[2]}};
+      const PlantDeriv k1 = plantDeriv(st0, Fb, M, wind, mass, Ixx, Iyy, Izz, P.g);
+      const PlantDeriv k2 =
+          plantDeriv(plantAdd(st0, k1, 0.5f * h), Fb, M, wind, mass, Ixx, Iyy, Izz, P.g);
+      const PlantDeriv k3 =
+          plantDeriv(plantAdd(st0, k2, 0.5f * h), Fb, M, wind, mass, Ixx, Iyy, Izz, P.g);
+      const PlantDeriv k4 =
+          plantDeriv(plantAdd(st0, k3, h), Fb, M, wind, mass, Ixx, Iyy, Izz, P.g);
 
-      const float wx=omega[0], wy=omega[1], wz=omega[2];
-      Quat4f dq{-0.5f*(q.x*wx+q.y*wy+q.z*wz),
-                0.5f*(q.w*wx+q.y*wz-q.z*wy),
-                0.5f*(q.w*wy-q.x*wz+q.z*wx),
-                0.5f*(q.w*wz+q.x*wy-q.y*wx)};
-      q.w+=dq.w*h; q.x+=dq.x*h; q.y+=dq.y*h; q.z+=dq.z*h;
-      q=qNorm(q);
+      // 经典 RK4 加权组合：s + h/6·(k1 + 2k2 + 2k3 + k4)
+      Quat4f qn{q.w, q.x, q.y, q.z};
+      qn.w += h / 6.0f * (k1.dq[0] + 2 * k2.dq[0] + 2 * k3.dq[0] + k4.dq[0]);
+      qn.x += h / 6.0f * (k1.dq[1] + 2 * k2.dq[1] + 2 * k3.dq[1] + k4.dq[1]);
+      qn.y += h / 6.0f * (k1.dq[2] + 2 * k2.dq[2] + 2 * k3.dq[2] + k4.dq[2]);
+      qn.z += h / 6.0f * (k1.dq[3] + 2 * k2.dq[3] + 2 * k3.dq[3] + k4.dq[3]);
+      q = qNorm(qn);
+      for (int i = 0; i < 3; ++i)
+      {
+        (&omega[0])[i] += h / 6.0f * (k1.dom[i] + 2 * k2.dom[i] +
+                                      2 * k3.dom[i] + k4.dom[i]);
+        (&vel[0])[i] += h / 6.0f * (k1.dv[i] + 2 * k2.dv[i] +
+                                    2 * k3.dv[i] + k4.dv[i]);
+        (&pos[0])[i] += h / 6.0f * (k1.dp[i] + 2 * k2.dp[i] +
+                                    2 * k3.dp[i] + k4.dp[i]);
+      }
 
       float Fn[3];
-      body_to_ned(Fb, Fn);
-      const float ax=(Fn[0]+wind[0])/mass;
-      const float ay=(Fn[1]+wind[1])/mass;
-      const float az=(Fn[2]+wind[2])/mass + P.g;
-      acc_ned[0]=ax; acc_ned[1]=ay; acc_ned[2]=az;
-      force_ned[0]=Fn[0]+wind[0]; force_ned[1]=Fn[1]+wind[1]; force_ned[2]=Fn[2]+wind[2];
-      vel[0]+=ax*h; vel[1]+=ay*h; vel[2]+=az*h;
-      pos[0]+=vel[0]*h; pos[1]+=vel[1]*h; pos[2]+=vel[2]*h;
+      bodyToNedQ(q, Fb, Fn);
+      acc_ned[0] = (Fn[0] + wind[0]) / mass;
+      acc_ned[1] = (Fn[1] + wind[1]) / mass;
+      acc_ned[2] = (Fn[2] + wind[2]) / mass + P.g;
+      force_ned[0] = Fn[0] + wind[0];
+      force_ned[1] = Fn[1] + wind[1];
+      force_ned[2] = Fn[2] + wind[2];
 
       if (pos[2] >= 0.0f) { // NED down: ground at 0
         pos[2]=0.0f;
@@ -518,6 +606,7 @@ struct Plant {
 };
 
 #ifdef FW_SIL_COAXIAL
+#include "coaxial_dynamics_model.h"
 // 共轴双桨近似 wrench：两电机平均转速→总推力，差速→偏航力矩，
 // 两轴舵机修正角→推力方向与滚转/俯仰力矩。L1 集总模型，无真实桨距/反扭。
 static SixDOFWrench computeCoaxialWrench(const Plant &p)
@@ -542,6 +631,42 @@ static SixDOFWrench computeCoaxialWrench(const Plant &p)
   w.Mx = g_coax_yaw_nm_per_norm * g_coax_yaw_scale * diff;      // body Mz = -w.Mx（差速反向）
   w.My = g_coax_lever_m * thrust * std::sin(pitch); // body My
   w.Mz = -g_coax_lever_m * thrust * std::sin(roll); // body Mx = -w.Mz
+  return w;
+}
+
+
+// —— rigorous 物理模型（2026-10-31，--coax-plant-model rigorous）——
+// 与 L1 集总的差别：推力 = kT·ω²（不是平均转速线性）、反扭 = kQ·ω²+Jp·ω̇、
+// 双转子陀螺耦合、摆座几何力矩；地面接触仍由 Plant::step 负责，避免双重计数。
+// 参数：kT 由 maxT/wMax 反标定；kQ/kT=0.027 沿用纵列经验；Jp=2e-4 量级估计。
+// 标定前只作研究/灵敏度用，不作为实机预测。
+static SixDOFWrench computeCoaxialWrenchRigorous(const Plant &p,
+                                                 const float wdot_f,
+                                                 const float wdot_t)
+{
+  bfs::coax::Params cp = bfs::coax::makeParams(
+      g_coax_max_thrust_n * g_coax_thrust_scale, P.wMax);
+  cp.mass_kg = g_coax_mass_kg;
+  cp.lever_m = g_coax_lever_m;
+  cp.inertia_kgm2[0] = g_coax_ix * g_coax_inertia_scale;
+  cp.inertia_kgm2[1] = g_coax_iy * g_coax_inertia_scale;
+  cp.inertia_kgm2[2] = g_coax_iz * g_coax_inertia_scale;
+  cp.gravity_mps2 = P.g;
+  cp.enable_ground = false;
+  const float wf = p.motor_wf * g_coax_motor_loss1 * g_coax_cli_loss1;
+  const float wt = p.motor_wt * g_coax_motor_loss2 * g_coax_cli_loss2;
+  const bfs::coax::Vec3 omega{p.omega[0], p.omega[1], p.omega[2]};
+  const bfs::coax::Wrench cw = bfs::coax::computeWrench(
+      cp, wf, wt, wdot_f, wdot_t, p.servo_f, p.servo_t, omega);
+  SixDOFWrench w{};
+  if (!cw.valid) return w;
+  // 模型 FRD → 旧 SIL 六自由度坐标：F=(Fz',Fy',-Fx')、M=(-Mz',My',-Mx')
+  w.Fx = -cw.force_body.z;
+  w.Fy = cw.force_body.y;
+  w.Fz = cw.force_body.x;
+  w.Mx = -cw.moment_body.z;
+  w.My = cw.moment_body.y;
+  w.Mz = -cw.moment_body.x;
   return w;
 }
 
@@ -2004,7 +2129,23 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         g_coax_motor_loss1 = loss;
         if (fault == 5) g_coax_motor_loss2 = loss;
       }
-      p.step(computeCoaxialWrench(p), dt_imu);
+      if (g_coax_plant_model == 0)
+      {
+        p.step(computeCoaxialWrench(p), dt_imu);
+      }
+      else
+      {
+        const float tau_m = 0.28f;
+        const float wf_eff = p.motor_wf * g_coax_motor_loss1 * g_coax_cli_loss1;
+        const float wt_eff = p.motor_wt * g_coax_motor_loss2 * g_coax_cli_loss2;
+        const float wdot_f =
+            (motor_target_wf * g_coax_motor_loss1 * g_coax_cli_loss1 - wf_eff) /
+            tau_m;
+        const float wdot_t =
+            (motor_target_wt * g_coax_motor_loss2 * g_coax_cli_loss2 - wt_eff) /
+            tau_m;
+        p.step(computeCoaxialWrenchRigorous(p, wdot_f, wdot_t), dt_imu);
+      }
 #else
       PropulsionState ps{p.motor_wf, p.motor_wt, p.servo_f, p.servo_t};
       if ((fault == 3 || fault == 5) && t > fault_at)
@@ -2887,6 +3028,18 @@ int main(int argc, char** argv) {
       }
       g_coax_alloc_mode = m;
     }
+    // --coax-plant-model：plant 物理模型选择（legacy=L1 集总，rigorous=力/矩物理模型）
+    else if (std::strcmp(argv[i],"--coax-plant-model")==0 && i+1<argc)
+    {
+      const char *m = argv[++i];
+      if (std::strcmp(m,"legacy")==0) g_coax_plant_model = 0;
+      else if (std::strcmp(m,"rigorous")==0) g_coax_plant_model = 1;
+      else
+      {
+        std::fprintf(stderr, "[sil] --coax-plant-model 接受 legacy|rigorous，收到 %s\n", m);
+        return 2;
+      }
+    }
     // --rc-profile：CSV 遥控激励表（行间线性插值，覆盖摇杆 + CH7/CH9）
     else if (std::strcmp(argv[i],"--rc-profile")==0 && i+1<argc)
     {
@@ -3220,6 +3373,8 @@ int main(int argc, char** argv) {
     {
       applyCoaxAllocModeTo(kFlightCtrlParams.coax, g_coax_alloc_mode);
     }
+    std::fprintf(stderr, "[sil] coax plant model: %s\n",
+                 g_coax_plant_model ? "rigorous" : "legacy");
 #endif
     if (coupled) manual = true;
     return runRealNavLoop(real_cfg, seed, seconds, target_alt, manual, coupled,
@@ -3383,7 +3538,22 @@ int main(int argc, char** argv) {
       g_coax_motor_loss1 = loss;
       if (fault == 5) g_coax_motor_loss2 = loss;
     }
-    SixDOFWrench wr=computeCoaxialWrench(p);
+    SixDOFWrench wr{};
+    if (g_coax_plant_model == 0)
+    {
+      wr = computeCoaxialWrench(p);
+    }
+    else
+    {
+      const float tau_m = 0.28f;
+      const float wf_eff = p.motor_wf * g_coax_motor_loss1 * g_coax_cli_loss1;
+      const float wt_eff = p.motor_wt * g_coax_motor_loss2 * g_coax_cli_loss2;
+      const float wdot_f =
+          (wf_t * g_coax_motor_loss1 * g_coax_cli_loss1 - wf_eff) / tau_m;
+      const float wdot_t =
+          (wt_t * g_coax_motor_loss2 * g_coax_cli_loss2 - wt_eff) / tau_m;
+      wr = computeCoaxialWrenchRigorous(p, wdot_f, wdot_t);
+    }
 #else
     PropulsionState ps{p.motor_wf,p.motor_wt,p.servo_f,p.servo_t};
     // 故障注入：fault 3 = 单发（前）推力保留 loss；fault 5 = 双发同时损失

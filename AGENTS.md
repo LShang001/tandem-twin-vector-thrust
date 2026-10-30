@@ -83,7 +83,7 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 ## 原则
 
 1. **先读后改** — 改参数前读 `models/aircraft-model.json`；改推进/动力学/控制逻辑前读 `simulations/vector-thrust-lab/src/core/` 对应模块
-2. **复用优于新建** — 检查 core 层是否有现成函数（math/state/control/propulsion/aerodynamics/dynamics），不要重复实现；**仿真侧算法一律经 `fwapi` 直调固件实现，不要在 `sim/` 另写一份**
+2. **复用优于新建** — 检查 core 层是否有现成函数（math/state/control/propulsion/aerodynamics/dynamics），不要重复实现；**仿真侧算法一律经 `fwapi` 直调固件实现，不要在 `sim/` 另写一份**；**仿真积分统一四阶 Runge-Kutta，不用欧拉积分**（宿主模型、SIL `Plant::step`、宿主刚体测试一致；2026-10-31 用户要求）
 3. **外科手术式修改** — 只改目标代码，不顺手重构、不扩范围
 4. **修改后必须跑测试** — `node --test simulations/vector-thrust-lab/tests/`，全绿再提交
 5. **改代码必改注释（GOV-004）** — 公式性实现必须带 `@formula` + `@ref`（章节+式号+页码）；新文件必须有 L0 文件头；提交前跑 `py -3.12 tools/check-code-comments.py --check`

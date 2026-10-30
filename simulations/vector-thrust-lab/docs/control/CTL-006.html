@@ -261,14 +261,15 @@ MODEL-DEFAULT，启用前需台架辨识惯量与推力，
 失败</strong></td>
 </tr>
 <tr>
-<td>SIL 验收 3×5</td>
+<td>SIL 验收 3×5（RK4）</td>
 <td><strong>8/9</strong>，唯一 FAIL <code>mag_nominal seed1</code>
-max_pitch=<strong>22.764°</strong>（门限 20°），与旧路径失败集一致</td>
+max_pitch=<strong>22.777°</strong>（门限 20°；Euler 基线
+22.764°，同失败集）</td>
 </tr>
 <tr>
-<td>SIL 验收 8×5</td>
-<td><strong>39/40</strong>（同一 FAIL；证据沿用 α-native
-归档，代码路径与单一路径相同）</td>
+<td>SIL 验收 8×5（Euler 版归档）</td>
+<td><strong>39/40</strong>（同一 FAIL；RK4 后未复跑整套，证据沿用
+α-native 归档）</td>
 </tr>
 <tr>
 <td>惯量×1.5（SIL 3×5）</td>
@@ -479,14 +480,15 @@ PASS</strong>（<code>T:/sil_tandem/fw_real.exe</code>）</td>
 <td><code>run_real_acceptance.py</code></td>
 </tr>
 <tr>
-<td>共轴 SIL 验收 3×5（单一路径）</td>
+<td>共轴 SIL 验收 3×5（单一路径，RK4）</td>
 <td><strong>8/9</strong>，唯一 FAIL <code>mag_nominal seed1</code>
-max_pitch=<strong>22.764°</strong>；旧路径同失败集 22.069°</td>
-<td><code>T:/single_35.log</code></td>
+max_pitch=<strong>22.777°</strong>（Euler 基线 22.764°，同失败集）</td>
+<td><code>sim-data/coax-model-2026-10-31/</code></td>
 </tr>
 <tr>
-<td>共轴 SIL 验收 8×5</td>
-<td><strong>39/40</strong>（α-native 归档，同一失败集）</td>
+<td>共轴 SIL 验收 8×5（Euler 版归档）</td>
+<td><strong>39/40</strong>（α-native 归档，同一失败集；RK4
+后未复跑整套）</td>
 <td><code>sim-data/coax-alpha-native-2026-10-31/</code></td>
 </tr>
 <tr>
@@ -499,6 +501,14 @@ max_pitch=<strong>22.764°</strong>；旧路径同失败集 22.069°</td>
 <td><code>pio run -e TandemVec_FCS -e CoaxialVTVL</code> 均
 SUCCESS（α-native 单一路径）</td>
 <td>构建日志</td>
+</tr>
+<tr>
+<td>共轴 rigorous plant（可选，RK4）</td>
+<td><code>test_coaxial_dynamics_model</code> 36
+断言；<code>--coax-plant-model rigorous</code> 3×5=9/9、8×5=40/40（Euler
+版）；两口径积分器已统一 RK4</td>
+<td><a
+href="../modeling/MOD-005.html">MOD-005</a>、<code>sim-data/coax-model-2026-10-31/</code></td>
 </tr>
 </tbody>
 </table>
@@ -538,5 +548,5 @@ MODEL-DEFAULT，飞行前需台架辨识惯量与推力并做系留/限高。</l
 <code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:03</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:59</footer></article></body>
 </html>

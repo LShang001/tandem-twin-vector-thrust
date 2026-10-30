@@ -114,7 +114,13 @@ StepResult step(Rigid3Dof &s, const CoaxialAllocatorParams &p,
     {
         r.alpha_actual[i] = m_body[i] / s.inertia_kgm2[i];
         s.alpha_radps2[i] = r.alpha_actual[i];
-        s.omega_radps[i] += r.alpha_actual[i] * kDt;
+        // 经典 RK4：α 在本拍内由分配器保持恒定（零阶保持），四 stage 导数相同，
+        // RK4 退化为精确线性积分；仍按 RK4 形式写，与 SIL/模型口径一致（2026-10-31）。
+        const float k1 = r.alpha_actual[i];
+        const float k2 = r.alpha_actual[i];
+        const float k3 = r.alpha_actual[i];
+        const float k4 = r.alpha_actual[i];
+        s.omega_radps[i] += (kDt / 6.0f) * (k1 + 2.0f * k2 + 2.0f * k3 + k4);
     }
     return r;
 }

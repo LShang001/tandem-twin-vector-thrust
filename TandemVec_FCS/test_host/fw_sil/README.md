@@ -541,7 +541,7 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
 | `--coax-inertia-scale <F>` | 三轴惯量统一乘子（Ix/Iy/Iz × F），模拟载荷/惯量失配 | 1.0 | [0.25,4] |
 | `--coax-thrust-scale <F>` | 推力效能失配：实际推力 = 指令 × F（只改 plant 力/力矩，不动固件） | 1.0 | [0.5,1.5] |
 | `--coax-yaw-scale <F>` | 差速偏航力矩系数乘子（模拟 kQ/差速效率偏差） | 1.0 | [0.25,4] |
-| `--coax-alloc-mode <0\|1>` | SIL 启动写 `kFlightCtrlParams.coax.alloc_mode`（0=legacy 1=α+分配器） | 0（不写、不打印） | {0,1} |
+| `--coax-alloc-mode <0\|1\|2>` | SIL 启动写 `kFlightCtrlParams.coax.alloc_mode`（**2026-10-31 总装后固件已忽略该参数**，仅为旧 GCS 兼容保留；0/1 为历史 legacy/identity，2=α-native） | 0（不写、不打印） | {0,1,2} |
 | `--rc-profile <CSV>` | 遥控激励表：50 Hz 节拍覆盖四根摇杆与 CH7/CH9 | 关闭（严格走原路径） | 见下 |
 
 - 实际惯量 = `--coax-ix` × `--coax-inertia-scale`（三轴同乘）；JSON 同时记录 IX 与乘子，
@@ -583,3 +583,35 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
 - 环境注记：本机 SIL 进程向 `%TEMP%`/用户根写 trace 会 `errno=13`（Permission
   denied，宿主策略），trace 证据改写到 `T:/traces`（项目内 tmp 盘）；`--rc-profile`
   用相对路径读取正常。
+
+### 11.2 rigorous 共轴动力学模型（2026-10-31，L2，可选）
+
+`--coax-plant-model legacy|rigorous`（默认 `legacy`；wrench 口径不同，但两者积分器自
+2026-10-31 起统一为经典 RK4，见本节末尾）。`rigorous` 用
+`coaxial_dynamics_model.h` 替换 wrench 计算：
+
+- 推力 `T = kT·(ω_f² + ω_t²)`（不是平均转速线性）；`kT = maxT/(2·ω_max²)` 反标定；
+- 反扭 `Q_net = kQ(ω_f²−ω_t²) + Jp(ω̇_f−ω̇_t)`，`Mz = −Q_net`；
+- 双转子陀螺 `M = −Ω×h`，`h=(0,0,−Jp(ω_f−ω_t))`，等速反转严格抵消；
+- 摆座几何 `F_b=(T sinδt, T sinδf, −T cosδf cosδt)`、`Mx=l·T·sinδf`、`My=l·T·sinδt`；
+- 地面接触仍由 `Plant::step` 负责（模型内 `enable_ground=false` 避免双计）；气动默认 0；
+- body F/M 转回旧 SIL 六自由度坐标：`Fx=−Fbz, Fy=Fby, Fz=Fbx; Mx=−Mbz, My=Mby, Mz=−Mbx`。
+
+参数 `kT=5.293e-6`、`kQ=1.429e-7`（kQ/kT=0.027 沿用纵列经验）、`Jp=2e-4 kg·m²`、
+`I=(0.05,0.05,0.08)`、`l=0.15 m`、悬停 `ω≈882 rad/s`（`u≈0.767`）**全部是设计/量级值，
+不是共轴实机辨识值**。启动时打印 `[sil] coax plant model: legacy|rigorous`。
+
+证据（`sim-data/coax-model-2026-10-31/`）：
+
+- `cdyn` 宿主单测 36 断言通过（kT/悬停、ω² 推力、反扭两项、陀螺符号/抵消、摆座、自由落体
+  能量、地面吸收/摩擦、舵机速率、NaN）。
+- 积分统一 RK4 后：legacy 3×5=8/9（`mag_nominal seed1` max_pitch **22.777°**，
+  与 Euler 基线 22.764° 同失败集）；rigorous 3×5=9/9。日志见
+  `acceptance_legacy_rk4.log`、`acceptance_rigorous_rk4.log`。
+- 宿主 `T8` 6DOF 闭环改 RK4 后全过（`roll=0.001 pitch=0.001 pos=(-1.11,1.98,0.10)`），
+  见 `cvc_host_rk4.log`。
+- `mag_nominal seed1` max_pitch 22.764°→3.427°（Euler 版）的原因是 rigorous 的
+  `T∝u²` 与固件 `T_est∝u` 的口径差（悬停时 T_est 高估约 30%，实际 α 力矩约为指令 0.77×），
+  **不是控制性能提升**；详见 `docs/04-数学建模/MOD-005-共轴双桨VTVL动力学模型.md` §8。
+- **积分器**：`Plant::step` 与 `coaxial_dynamics_model.h` 的 `step()` 均为经典 RK4
+  （四 stage、`h/6` 加权、四元数每子步归一），不再使用欧拉积分；宿主刚体测试同步。

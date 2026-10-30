@@ -97,6 +97,9 @@ run_one "$ROOT/test_host/test_power_allocation.cpp" pwa ""
 run_one "$ROOT/test_host/test_alpha_tracking.cpp" atrk ""
 # 液体火箭分配器试点（α+油门→摆座/RCS/主阀；名义往返、饱和、零推力、非有限）：
 run_one "$ROOT/test_host/test_liquid_rocket_allocator.cpp" lra ""
+# 共轴双桨 VTVL rigorous 动力学模型（kT·ω² 推力、反扭含 Jp·ω̇、双转子陀螺、
+# 摆座几何、6DOF 半隐式积分、自由落体能量守恒、地面接触/摩擦；纯平台无关）：
+run_one "$ROOT/test_host/test_coaxial_dynamics_model.cpp" cdyn "-I$ROOT/test_host/fw_sil"
 # 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
 # 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
 run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""

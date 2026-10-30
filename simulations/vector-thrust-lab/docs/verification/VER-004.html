@@ -1694,13 +1694,13 @@ MODEL-DEFAULT。</li>
 <td>与 SIL plant <code>body M=[-w.Mz, w.My, -w.Mx]</code> 一致</td>
 </tr>
 <tr>
-<td>SIL 单一路径 3×5</td>
+<td>SIL 单一路径 3×5（RK4）</td>
 <td><strong>8/9</strong>，唯一失败 <code>mag_nominal seed1</code>
-max_pitch=<strong>22.764°</strong>（旧路径 22.069°，同失败集）</td>
+max_pitch=<strong>22.777°</strong>（Euler 基线 22.764°，同失败集）</td>
 </tr>
 <tr>
 <td>固件/宿主</td>
-<td>两 env SUCCESS；run_all EXIT=0</td>
+<td>两 env SUCCESS；run_all EXIT=0；T8 6DOF 闭环改 RK4 后全过</td>
 </tr>
 <tr>
 <td>历史 A/B（旧路径 vs α-native）</td>
@@ -1708,13 +1708,20 @@ max_pitch=<strong>22.764°</strong>（旧路径 22.069°，同失败集）</td>
 逐位相同；证据 <code>sim-data/coax-alpha-native-2026-10-31/</code></td>
 </tr>
 <tr>
-<td>共轴 8×5</td>
+<td>共轴 8×5（Euler 版归档）</td>
 <td><strong>39/40</strong>（α-native 归档；唯一失败
-<code>mag_nominal seed1</code> 22.764°）</td>
+<code>mag_nominal seed1</code> 22.764°；RK4 后未复跑整套）</td>
 </tr>
 <tr>
 <td>惯量×1.5（3×5）</td>
 <td>与旧路径同一失败集，无额外惯量敏感</td>
+</tr>
+<tr>
+<td>rigorous plant（可选，RK4）</td>
+<td><code>--coax-plant-model rigorous</code>：3×5=9/9；8×5=40/40（Euler
+版）；两口径积分器已统一 RK4；差异见 <a
+href="../modeling/MOD-005.html">MOD-005</a>
+§8（推力-油门口径不同，<strong>不是控制性能提升</strong>）</td>
 </tr>
 </tbody>
 </table>
@@ -1725,7 +1732,8 @@ max_pitch=<strong>22.764°</strong>（旧路径 22.069°，同失败集）</td>
 增益按旧值乘 <code>g=(l·T_est/I)·π/180</code> 折算（偏航
 <code>k_yaw/I_z</code>），由分配器逆解； 旧 δ 路径与适配器已删除。宿主
 cvc/cparams(605)/aco(5539)/atrk(26)/lra(24)/pwa(299 882) 全过；SIL
-单一路径 3×5=8/9（22.764°，同失败集）、8×5=39/40。
+单一路径 3×5=8/9（RK4 22.777°，Euler 基线
+22.764°，同失败集）、8×5=39/40（Euler 版归档）。
 惯量/推力未辨识前不得当作实机可飞依据。</li>
 <li><strong>实飞增益/惯量关系</strong>：旧 identity 层已删除；当前
 α-native 的增益 <code>g ∝ T_est/I_assumed</code>，
@@ -1747,6 +1755,13 @@ TVC 归中并置 <code>kSatLowThrust</code>，偏航指令仍驱动差速（m1=1
 失败）；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换函数签名。</li>
 <li>惯量/力臂/差速系数未台架标定，α 权限与残差只作设计值。</li>
+<li><strong>SIL plant 口径（2026-10-31）</strong>：默认仍是 legacy
+L1（线性推力、线性差速偏航）； <code>--coax-plant-model rigorous</code>
+切到 <code>kT·ω²</code>/反扭/陀螺/摆座几何的物理模型（MOD-005）。
+rigorous 下 3×5=9/9、8×5=40/40，但闭环被 plant 的推力-油门口径改变
+（<code>T∝u²</code> vs <code>T∝u</code>），不得写成控制性能提升；legacy
+缺省路径逐行不变， 验收基线仍以 legacy 为准。rigorous
+只作研究/灵敏度/标定前检查。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:03</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:59</footer></article></body>
 </html>

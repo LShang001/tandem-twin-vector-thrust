@@ -1,0 +1,12 @@
+[PASS] mag_clean seed1 alt=9.86 hold_end=0.87 hold_max=0.92 pos_rms=0.89 roll_max=1.29 resets=0 outliers=0 mag=391/1 imu_det=0
+[PASS] mag_clean seed2 alt=9.84 hold_end=0.27 hold_max=0.36 pos_rms=0.48 roll_max=1.71 resets=0 outliers=0 mag=391/1 imu_det=0
+[PASS] mag_clean seed3 alt=9.94 hold_end=0.45 hold_max=0.56 pos_rms=0.64 roll_max=1.61 resets=0 outliers=0 mag=392/0 imu_det=0
+[FAIL] mag_nominal seed1 alt=9.10 hold_end=0.91 hold_max=1.52 pos_rms=0.56 roll_max=8.34 resets=0 outliers=0 mag=390/2 imu_det=0
+       - max_pitch=22.777 > 20.0
+[PASS] mag_nominal seed2 alt=9.07 hold_end=0.31 hold_max=0.77 pos_rms=1.02 roll_max=8.17 resets=0 outliers=0 mag=390/2 imu_det=0
+[PASS] mag_nominal seed3 alt=9.03 hold_end=0.87 hold_max=1.18 pos_rms=0.77 roll_max=7.60 resets=0 outliers=0 mag=390/2 imu_det=0
+[PASS] nomag_degraded seed1 alt=9.87 hold_end=129.58 hold_max=152.29 pos_rms=0.44 roll_max=1.03 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed2 alt=9.88 hold_end=121.78 hold_max=143.00 pos_rms=0.55 roll_max=1.00 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed3 alt=9.91 hold_end=125.47 hold_max=147.44 pos_rms=0.53 roll_max=1.13 resets=0 outliers=0 mag=0/0 imu_det=0
+
+=== real-nav acceptance: 9 cases, 1 failed ===

@@ -1,0 +1,11 @@
+[PASS] mag_clean seed1 alt=9.85 hold_end=0.87 hold_max=0.92 pos_rms=0.89 roll_max=0.99 resets=0 outliers=0 mag=388/4 imu_det=0
+[PASS] mag_clean seed2 alt=9.84 hold_end=0.30 hold_max=0.35 pos_rms=0.48 roll_max=1.05 resets=0 outliers=0 mag=388/4 imu_det=0
+[PASS] mag_clean seed3 alt=9.91 hold_end=0.46 hold_max=0.55 pos_rms=0.64 roll_max=0.95 resets=0 outliers=0 mag=389/3 imu_det=0
+[PASS] mag_nominal seed1 alt=9.10 hold_end=1.19 hold_max=1.90 pos_rms=0.55 roll_max=8.94 resets=0 outliers=0 mag=383/9 imu_det=0
+[PASS] mag_nominal seed2 alt=9.08 hold_end=0.94 hold_max=1.11 pos_rms=1.02 roll_max=7.71 resets=0 outliers=0 mag=381/11 imu_det=0
+[PASS] mag_nominal seed3 alt=9.04 hold_end=1.56 hold_max=2.08 pos_rms=0.78 roll_max=9.52 resets=0 outliers=0 mag=382/10 imu_det=0
+[PASS] nomag_degraded seed1 alt=9.85 hold_end=106.66 hold_max=125.54 pos_rms=0.45 roll_max=0.88 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed2 alt=9.87 hold_end=108.39 hold_max=128.08 pos_rms=0.55 roll_max=1.00 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed3 alt=9.90 hold_end=107.03 hold_max=126.75 pos_rms=0.53 roll_max=1.12 resets=0 outliers=0 mag=0/0 imu_det=0
+
+=== real-nav acceptance: 9 cases, 0 failed ===

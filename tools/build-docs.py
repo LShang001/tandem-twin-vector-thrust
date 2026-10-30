@@ -72,6 +72,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "MOD-002 坐标系与符号约定", "代码↔文档接口契约：DCM/四元数/欧拉角实现约定、符号表与代码变量对照"),
         ("docs/04-数学建模/MOD-003-配平与稳定性分析.md", "modeling/MOD-003.html",
          "MOD-003 配平与稳定性分析", "纵向配平推导与数值核对、C_m0 补偿案例、小扰动模态定性分析"),
+        ("docs/04-数学建模/MOD-005-共轴双桨VTVL动力学模型.md", "modeling/MOD-005.html",
+         "MOD-005 共轴双桨 VTVL 动力学模型", "kT·ω² 推力/反扭/陀螺/摆座几何、6DOF 积分与地面接触、rigorous SIL 与 legacy 对照、推力-油门口径差"),
     ]),
     ("代码理论核查", [
         ("docs/04-数学建模/MOD-004-代码理论对照核查报告.md", "code-audit/MOD-004.html",
