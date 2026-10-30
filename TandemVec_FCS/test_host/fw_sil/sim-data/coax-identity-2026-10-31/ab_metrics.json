@@ -1,0 +1,4911 @@
+{
+  "commit": "c18e694",
+  "dirty": 58,
+  "cmdline": "TandemVec_FCS/test_host/fw_sil/run_coaxial_ab.py --bin T:/sil_final2/fw_coax.exe --out T:/ab_identity --work T:/ab_work",
+  "bin": "T:\\sil_final2\\fw_coax.exe",
+  "probe": {
+    "--coax-alloc-mode": true,
+    "--rc-profile": true,
+    "--coax-inertia-scale": true,
+    "--coax-thrust-scale": true,
+    "--trace-ctrl": true
+  },
+  "work": "T:\\ab_work",
+  "alloc_modes": [
+    0,
+    1
+  ],
+  "seed": 1,
+  "seconds": 40.0,
+  "profile_contract": [
+    "t",
+    "roll_us",
+    "pitch_us",
+    "yaw_us",
+    "throttle_us",
+    "mode_us",
+    "att_mode_us"
+  ],
+  "cases": 48,
+  "results": [
+    {
+      "case": "rate_roll_square5_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 0.13571158,
+          "peak": 3.136384,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.7806884199999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.3e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square5_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 0.13571158,
+          "peak": 3.136384,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.7806884199999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.3e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square5_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.0789599,
+          "peak": 3.585632,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3107769423558897,
+          "steady_err": 3.9953599
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square5_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.0789599,
+          "peak": 3.585632,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3107769423558897,
+          "steady_err": 3.9953599
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square5_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": -0.04047244,
+          "peak": 3.937579,
+          "target": 3.9164,
+          "overshoot_pct": 0.3931923024546222,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 3.9568724399999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.548429,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square5_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": -0.04047244,
+          "peak": 3.937579,
+          "target": 3.9164,
+          "overshoot_pct": 0.3931923024546222,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 3.9568724399999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.548429,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square10_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 1.25273202,
+          "peak": 6.283082,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 6.65776798
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square10_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 1.25273202,
+          "peak": 6.283082,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 6.65776798
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square10_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 0.41534332,
+          "peak": 7.205599,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3157894736842105,
+          "steady_err": 7.49515668
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -1.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square10_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 0.41534332,
+          "peak": 7.205599,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3157894736842105,
+          "steady_err": 7.49515668
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -1.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square10_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": 0.0365749,
+          "peak": 7.933019,
+          "target": 7.9105,
+          "overshoot_pct": 0.21160461833427746,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 7.8739251
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.309725,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square10_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": 0.0365749,
+          "peak": 7.933019,
+          "target": 7.9105,
+          "overshoot_pct": 0.21160461833427746,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 7.8739251
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.309725,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square20_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 3.54508888,
+          "peak": 13.317123,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 13.388511119999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 7.000000000000001e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square20_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 3.54508888,
+          "peak": 13.317123,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 13.388511119999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 7.000000000000001e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square20_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 2.21609962,
+          "peak": 15.362902,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3208020050125313,
+          "steady_err": 14.717500379999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 0.000156,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square20_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 2.21609962,
+          "peak": 15.362902,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3208020050125313,
+          "steady_err": 14.717500379999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 0.000156,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_square20_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": 1.67874046,
+          "peak": 16.959711,
+          "target": 16.9336,
+          "overshoot_pct": 0.12006297144925782,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 15.254859539999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.253429,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_square20_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": 1.67874046,
+          "peak": 16.959711,
+          "target": 16.9336,
+          "overshoot_pct": 0.12006297144925782,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 15.254859539999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.253429,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp5_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.01896534,
+          "peak": 2.582469,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.9353653399999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp5_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.01896534,
+          "peak": 2.582469,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.9353653399999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp5_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.05858832,
+          "peak": 3.1529,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.97498832
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.5e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp5_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.05858832,
+          "peak": 3.1529,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.97498832
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.5e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp5_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": -0.01586284,
+          "peak": 3.573171,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.22055137844611528,
+          "steady_err": 3.93226284
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.566509000000002,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp5_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": -0.01586284,
+          "peak": 3.573171,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.22055137844611528,
+          "steady_err": 3.93226284
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.566509000000002,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp10_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 0.42841538,
+          "peak": 5.209404,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.48208462
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.1000000000000006e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp10_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 0.42841538,
+          "peak": 5.209404,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.48208462
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.1000000000000006e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp10_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.06211876,
+          "peak": 6.365963,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.97261876
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp10_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": -0.06211876,
+          "peak": 6.365963,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.97261876
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp10_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": -0.14337902,
+          "peak": 7.264172,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.21553884711779447,
+          "steady_err": 8.05387902
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.375796000000001,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp10_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": -0.14337902,
+          "peak": 7.264172,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.21553884711779447,
+          "steady_err": 8.05387902
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.375796000000001,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp20_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 2.06335274,
+          "peak": 10.858532,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 14.87024726
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 1.4e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp20_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 2.06335274,
+          "peak": 10.858532,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 14.87024726
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 1.4e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp20_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 1.0794831,
+          "peak": 13.42829,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 15.854116899999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp20_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005185933333333333,
+          "steady": 1.0794831,
+          "peak": 13.42829,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 15.854116899999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp20_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": 0.63495798,
+          "peak": 15.357961,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.22556390977443608,
+          "steady_err": 16.29864202
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.554369999999999,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_roll_ramp20_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.005780016666666666,
+          "steady": 0.63495798,
+          "peak": 15.357961,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.22556390977443608,
+          "steady_err": 16.29864202
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.554369999999999,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square5_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 0.14076266,
+          "peak": 3.137569,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.77563734
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.4e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square5_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 0.14076266,
+          "peak": 3.137569,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.77563734
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.4e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square5_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.0727058,
+          "peak": 3.582631,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3057644110275689,
+          "steady_err": 3.9891058
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square5_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.0727058,
+          "peak": 3.582631,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3057644110275689,
+          "steady_err": 3.9891058
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square5_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": -0.03604854,
+          "peak": 3.958844,
+          "target": 3.9164,
+          "overshoot_pct": 1.3391388349845101,
+          "rise_time_s": 0.18045112781954886,
+          "steady_err": 3.95244854
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.54031,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square5_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": -0.03604854,
+          "peak": 3.958844,
+          "target": 3.9164,
+          "overshoot_pct": 1.3391388349845101,
+          "rise_time_s": 0.18045112781954886,
+          "steady_err": 3.95244854
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.54031,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square10_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 1.25643948,
+          "peak": 6.283227,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 6.65406052
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square10_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 1.25643948,
+          "peak": 6.283227,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 6.65406052
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square10_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 0.41311966,
+          "peak": 7.192182,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3157894736842105,
+          "steady_err": 7.497380339999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -1.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square10_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 0.41311966,
+          "peak": 7.192182,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3157894736842105,
+          "steady_err": 7.497380339999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -1.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square10_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 0.036809339999999996,
+          "peak": 7.949399,
+          "target": 7.9105,
+          "overshoot_pct": 0.618178791901073,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 7.87369066
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.283218,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square10_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 0.036809339999999996,
+          "peak": 7.949399,
+          "target": 7.9105,
+          "overshoot_pct": 0.618178791901073,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 7.87369066
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.283218,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square20_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 3.54463996,
+          "peak": 13.322147,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 13.388960039999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 7.6e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square20_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 3.54463996,
+          "peak": 13.322147,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 13.388960039999999
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 7.6e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square20_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 2.21141878,
+          "peak": 15.358663,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3208020050125313,
+          "steady_err": 14.72218122
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 0.00016199999999999998,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square20_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 2.21141878,
+          "peak": 15.358663,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.3208020050125313,
+          "steady_err": 14.72218122
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 0.00016199999999999998,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square20_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 1.67229924,
+          "peak": 16.982985,
+          "target": 16.9336,
+          "overshoot_pct": 0.35070530385348775,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 15.261300759999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.134775,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_square20_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 1.67229924,
+          "peak": 16.982985,
+          "target": 16.9336,
+          "overshoot_pct": 0.35070530385348775,
+          "rise_time_s": 0.18546365914786966,
+          "steady_err": 15.261300759999997
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.35001599999999994,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.583584
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.134775,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp5_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.01646874,
+          "peak": 2.578104,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.93286874
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp5_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.01646874,
+          "peak": 2.578104,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.93286874
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp5_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.05487458,
+          "peak": 3.157269,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.9712745799999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.5e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp5_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.05487458,
+          "peak": 3.157269,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 3.9712745799999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.5e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp5_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 0.00173934,
+          "peak": 3.590153,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.21553884711779447,
+          "steady_err": 3.91466066
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.562176999999998,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp5_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 0.00173934,
+          "peak": 3.590153,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.21553884711779447,
+          "steady_err": 3.91466066
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 3.9164,
+          "target": 3.9164,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 3.9164
+        },
+        "target": 3.9164,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.562176999999998,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp10_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 0.4330639,
+          "peak": 5.201348,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.4774361
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.1000000000000006e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp10_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 0.4330639,
+          "peak": 5.201348,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.4774361
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.1000000000000006e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp10_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.06599268,
+          "peak": 6.383303,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.97649268
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp10_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": -0.06599268,
+          "peak": 6.383303,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 7.97649268
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp10_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": -0.14289182,
+          "peak": 7.274579,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.21553884711779447,
+          "steady_err": 8.05339182
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.356323999999999,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp10_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": -0.14289182,
+          "peak": 7.274579,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.21553884711779447,
+          "steady_err": 8.05339182
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 7.9105,
+          "target": 7.9105,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 7.9105
+        },
+        "target": 7.9105,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.356323999999999,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp20_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 2.06739252,
+          "peak": 10.856218,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 14.866207479999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 1.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp20_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 2.06739252,
+          "peak": 10.856218,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 14.866207479999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 1.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp20_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 1.0833472400000002,
+          "peak": 13.432648,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 15.850252759999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 7.1e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp20_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0017030666666666666,
+          "steady": 1.0833472400000002,
+          "peak": 13.432648,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": null,
+          "steady_err": 15.850252759999998
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 7.1e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp20_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 0.64225656,
+          "peak": 15.370951,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.22556390977443608,
+          "steady_err": 16.29134344
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.464426000000001,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "rate_pitch_ramp20_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.010002033333333334,
+          "steady": 0.64225656,
+          "peak": 15.370951,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.22556390977443608,
+          "steady_err": 16.29134344
+        },
+        "ref": {
+          "base": 0.0,
+          "steady": 0.0,
+          "peak": 16.9336,
+          "target": 16.9336,
+          "overshoot_pct": 0.0,
+          "rise_time_s": 0.0,
+          "steady_err": 16.9336
+        },
+        "target": 16.9336,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 10.464426000000001,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 28 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step3_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.012878181375223804,
+          "steady": 0.08543717457872785,
+          "peak": 3.3925404007491173,
+          "target": 3.0,
+          "overshoot_pct": 13.513952737478036,
+          "rise_time_s": 0.37593984962406013,
+          "steady_err": 2.9145628254212723
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step3_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.012878181375223804,
+          "steady": 0.08543717457872785,
+          "peak": 3.3925404007491173,
+          "target": 3.0,
+          "overshoot_pct": 13.513952737478036,
+          "rise_time_s": 0.37593984962406013,
+          "steady_err": 2.9145628254212723
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.8e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step3_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.004773693363098309,
+          "steady": 0.5958852742607782,
+          "peak": 3.1983077081997684,
+          "target": 3.0,
+          "overshoot_pct": 6.451133827888995,
+          "rise_time_s": 0.3107769423558897,
+          "steady_err": 2.404114725739222
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step3_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.004773693363098309,
+          "steady": 0.5958852742607782,
+          "peak": 3.1983077081997684,
+          "target": 3.0,
+          "overshoot_pct": 6.451133827888995,
+          "rise_time_s": 0.3107769423558897,
+          "steady_err": 2.404114725739222
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step3_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0033527580311738673,
+          "steady": 0.567591472421628,
+          "peak": 3.0440101739710377,
+          "target": 3.0,
+          "overshoot_pct": 1.578764400073723,
+          "rise_time_s": 0.2756892230576441,
+          "steady_err": 2.432408527578372
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.585088,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step3_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0033527580311738673,
+          "steady": 0.567591472421628,
+          "peak": 3.0440101739710377,
+          "target": 3.0,
+          "overshoot_pct": 1.578764400073723,
+          "rise_time_s": 0.2756892230576441,
+          "steady_err": 2.432408527578372
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.585088,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step8_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.012878181375223804,
+          "steady": 0.18736063675454998,
+          "peak": 9.143546973595242,
+          "target": 8.0,
+          "overshoot_pct": 14.455314437130824,
+          "rise_time_s": 0.37593984962406013,
+          "steady_err": 7.81263936324545
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.2e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step8_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.012878181375223804,
+          "steady": 0.18736063675454998,
+          "peak": 9.143546973595242,
+          "target": 8.0,
+          "overshoot_pct": 14.455314437130824,
+          "rise_time_s": 0.37593984962406013,
+          "steady_err": 7.81263936324545
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -5.2e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step8_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.004773693363098309,
+          "steady": 1.5988753966114506,
+          "peak": 8.61505070336657,
+          "target": 8.0,
+          "overshoot_pct": 7.628462625043397,
+          "rise_time_s": 0.3057644110275689,
+          "steady_err": 6.401124603388549
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -4.1e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step8_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": 0.004773693363098309,
+          "steady": 1.5988753966114506,
+          "peak": 8.61505070336657,
+          "target": 8.0,
+          "overshoot_pct": 7.628462625043397,
+          "rise_time_s": 0.3057644110275689,
+          "steady_err": 6.401124603388549
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -4.1e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step8_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0033527580311738673,
+          "steady": 1.457100427953099,
+          "peak": 8.22022548674192,
+          "target": 8.0,
+          "overshoot_pct": 2.7947280596636688,
+          "rise_time_s": 0.2656641604010025,
+          "steady_err": 6.542899572046901
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.425378,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_roll_step8_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.0033527580311738673,
+          "steady": 1.457100427953099,
+          "peak": 8.22022548674192,
+          "target": 8.0,
+          "overshoot_pct": 2.7947280596636688,
+          "rise_time_s": 0.2656641604010025,
+          "steady_err": 6.542899572046901
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.425378,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step3_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.002925904473801404,
+          "steady": 0.12713475107716862,
+          "peak": 3.411218824870382,
+          "target": 3.0,
+          "overshoot_pct": 13.804824311472785,
+          "rise_time_s": 0.37092731829573933,
+          "steady_err": 2.8728652489228312
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step3_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.002925904473801404,
+          "steady": 0.12713475107716862,
+          "peak": 3.411218824870382,
+          "target": 3.0,
+          "overshoot_pct": 13.804824311472785,
+          "rise_time_s": 0.37092731829573933,
+          "steady_err": 2.8728652489228312
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step3_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.004487214465532897,
+          "steady": 0.5980373037392896,
+          "peak": 3.2157256251717454,
+          "target": 3.0,
+          "overshoot_pct": 7.34042798790928,
+          "rise_time_s": 0.3007518796992481,
+          "steady_err": 2.4019626962607106
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step3_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.004487214465532897,
+          "steady": 0.5980373037392896,
+          "peak": 3.2157256251717454,
+          "target": 3.0,
+          "overshoot_pct": 7.34042798790928,
+          "rise_time_s": 0.3007518796992481,
+          "steady_err": 2.4019626962607106
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -6.7e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step3_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.011638682678424123,
+          "steady": 0.5422266308311864,
+          "peak": 3.0307175531240023,
+          "target": 3.0,
+          "overshoot_pct": 1.411874526747539,
+          "rise_time_s": 0.2807017543859649,
+          "steady_err": 2.4577733691688137
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.580929000000001,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step3_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.011638682678424123,
+          "steady": 0.5422266308311864,
+          "peak": 3.0307175531240023,
+          "target": 3.0,
+          "overshoot_pct": 1.411874526747539,
+          "rise_time_s": 0.2807017543859649,
+          "steady_err": 2.4577733691688137
+        },
+        "ref": null,
+        "target": 3.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.580929000000001,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step8_thr30",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.002925904473801404,
+          "steady": 0.3374538066826107,
+          "peak": 9.191159766370614,
+          "target": 8.0,
+          "overshoot_pct": 14.926070885555191,
+          "rise_time_s": 0.3659147869674185,
+          "steady_err": 7.6625461933173895
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -4.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step8_thr30",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.002925904473801404,
+          "steady": 0.3374538066826107,
+          "peak": 9.191159766370614,
+          "target": 8.0,
+          "overshoot_pct": 14.926070885555191,
+          "rise_time_s": 0.3659147869674185,
+          "steady_err": 7.6625461933173895
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -4.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step8_thr50",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.004487214465532897,
+          "steady": 1.614065653675959,
+          "peak": 8.6817429907198,
+          "target": 8.0,
+          "overshoot_pct": 8.577877564816646,
+          "rise_time_s": 0.2957393483709273,
+          "steady_err": 6.385934346324041
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step8_thr50",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.004487214465532897,
+          "steady": 1.614065653675959,
+          "peak": 8.6817429907198,
+          "target": 8.0,
+          "overshoot_pct": 8.577877564816646,
+          "rise_time_s": 0.2957393483709273,
+          "steady_err": 6.385934346324041
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": -3.9e-05,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step8_thr70",
+      "alloc": 0,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.011638682678424123,
+          "steady": 1.4260942439117994,
+          "peak": 8.236325600785097,
+          "target": 8.0,
+          "overshoot_pct": 3.0995535432940073,
+          "rise_time_s": 0.2656641604010025,
+          "steady_err": 6.573905756088201
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.392024,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）"
+      ]
+    },
+    {
+      "case": "attitude_pitch_step8_thr70",
+      "alloc": 1,
+      "rc": 0,
+      "metrics": {
+        "pos": {
+          "base": -0.011638682678424123,
+          "steady": 1.4260942439117994,
+          "peak": 8.236325600785097,
+          "target": 8.0,
+          "overshoot_pct": 3.0995535432940073,
+          "rise_time_s": 0.2656641604010025,
+          "steady_err": 6.573905756088201
+        },
+        "ref": null,
+        "target": 8.0,
+        "sat": {
+          "servo_roll": 0.0,
+          "servo_pitch": 0.0,
+          "motor1": 0.012875,
+          "motor2": 0.012875
+        },
+        "alt_end_m": 11.392024,
+        "nan_free": true
+      },
+      "stderr_tail": [
+        "[sil] --rc-profile 载入 20 行（t=0.000…37.500 s）",
+        "[sil] 固件参数 coax.alloc_mode=1（0=legacy 1=α+分配器）"
+      ]
+    }
+  ],
+  "verdicts": [
+    {
+      "case": "rate_roll_square5_thr50",
+      "axis": "roll",
+      "mode": "RATE",
+      "metric": "rise",
+      "rise_a": 0.3107769423558897,
+      "rise_b": 0.3107769423558897,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.585632,
+      "peak_b": 3.585632,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.9142186872297688,
+      "alt_end_m": -5.9e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_roll_square10_thr50",
+      "axis": "roll",
+      "mode": "RATE",
+      "metric": "rise",
+      "rise_a": 0.3157894736842105,
+      "rise_b": 0.3157894736842105,
+      "rise_diff_pct": 0.0,
+      "peak_a": 7.205599,
+      "peak_b": 7.205599,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.9102348861218212,
+      "alt_end_m": -1.8e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_roll_square20_thr50",
+      "axis": "roll",
+      "mode": "RATE",
+      "metric": "rise",
+      "rise_a": 0.3208020050125313,
+      "rise_b": 0.3208020050125313,
+      "rise_diff_pct": 0.0,
+      "peak_a": 15.362902,
+      "peak_b": 15.362902,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.9069374537408861,
+      "alt_end_m": 0.000156,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_roll_ramp5_thr50",
+      "axis": "roll",
+      "mode": "RATE",
+      "metric": "peak",
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 3.1529,
+      "peak_b": 3.1529,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.803726398393082,
+      "alt_end_m": -6.5e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_roll_ramp10_thr50",
+      "axis": "roll",
+      "mode": "RATE",
+      "metric": "peak",
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 6.365963,
+      "peak_b": 6.365963,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.8040929229083708,
+      "alt_end_m": -3.9e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_roll_ramp20_thr50",
+      "axis": "roll",
+      "mode": "RATE",
+      "metric": "peak",
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 13.42829,
+      "peak_b": 13.42829,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.7926905127478309,
+      "alt_end_m": 6.7e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_pitch_square5_thr50",
+      "axis": "pitch",
+      "mode": "RATE",
+      "metric": "rise",
+      "rise_a": 0.3057644110275689,
+      "rise_b": 0.3057644110275689,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.582631,
+      "peak_b": 3.582631,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.9152114356722161,
+      "alt_end_m": -5.9e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_pitch_square10_thr50",
+      "axis": "pitch",
+      "mode": "RATE",
+      "metric": "rise",
+      "rise_a": 0.3157894736842105,
+      "rise_b": 0.3157894736842105,
+      "rise_diff_pct": 0.0,
+      "peak_a": 7.192182,
+      "peak_b": 7.192182,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.9094096538356193,
+      "alt_end_m": -1.8e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_pitch_square20_thr50",
+      "axis": "pitch",
+      "mode": "RATE",
+      "metric": "rise",
+      "rise_a": 0.3208020050125313,
+      "rise_b": 0.3208020050125313,
+      "rise_diff_pct": 0.0,
+      "peak_a": 15.358663,
+      "peak_b": 15.358663,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.9070939473394121,
+      "alt_end_m": 0.00016199999999999998,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_pitch_ramp5_thr50",
+      "axis": "pitch",
+      "mode": "RATE",
+      "metric": "peak",
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 3.157269,
+      "peak_b": 3.157269,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.8066009770878018,
+      "alt_end_m": -6.5e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_pitch_ramp10_thr50",
+      "axis": "pitch",
+      "mode": "RATE",
+      "metric": "peak",
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 6.383303,
+      "peak_b": 6.383303,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.8071558140024861,
+      "alt_end_m": -3.9e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "rate_pitch_ramp20_thr50",
+      "axis": "pitch",
+      "mode": "RATE",
+      "metric": "peak",
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 13.432648,
+      "peak_b": 13.432648,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 0.7933546952016505,
+      "alt_end_m": 7.1e-05,
+      "status": "PASS",
+      "ok": true,
+      "note": ""
+    },
+    {
+      "case": "attitude_roll_step3_thr50",
+      "axis": "roll",
+      "mode": "ATTITUDE",
+      "metric": "rise",
+      "rise_a": 0.3107769423558897,
+      "rise_b": 0.3107769423558897,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.1983077081997684,
+      "peak_b": 3.1983077081997684,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 6.451133827888995,
+      "overshoot_b": 6.451133827888995,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 1.06451133827889,
+      "alt_end_m": -6.7e-05,
+      "status": "NO_LIFT",
+      "ok": false,
+      "note": "NO_LIFT：40 s 末高度 -0.00 m（<2 m），油门不足以离地，姿态指令无判别力"
+    },
+    {
+      "case": "attitude_roll_step8_thr50",
+      "axis": "roll",
+      "mode": "ATTITUDE",
+      "metric": "rise",
+      "rise_a": 0.3057644110275689,
+      "rise_b": 0.3057644110275689,
+      "rise_diff_pct": 0.0,
+      "peak_a": 8.61505070336657,
+      "peak_b": 8.61505070336657,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 7.628462625043397,
+      "overshoot_b": 7.628462625043397,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 1.076284626250434,
+      "alt_end_m": -4.1e-05,
+      "status": "NO_LIFT",
+      "ok": false,
+      "note": "NO_LIFT：40 s 末高度 -0.00 m（<2 m），油门不足以离地，姿态指令无判别力"
+    },
+    {
+      "case": "attitude_pitch_step3_thr50",
+      "axis": "pitch",
+      "mode": "ATTITUDE",
+      "metric": "rise",
+      "rise_a": 0.3007518796992481,
+      "rise_b": 0.3007518796992481,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.2157256251717454,
+      "peak_b": 3.2157256251717454,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 7.34042798790928,
+      "overshoot_b": 7.34042798790928,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 1.0734042798790928,
+      "alt_end_m": -6.7e-05,
+      "status": "NO_LIFT",
+      "ok": false,
+      "note": "NO_LIFT：40 s 末高度 -0.00 m（<2 m），油门不足以离地，姿态指令无判别力"
+    },
+    {
+      "case": "attitude_pitch_step8_thr50",
+      "axis": "pitch",
+      "mode": "ATTITUDE",
+      "metric": "rise",
+      "rise_a": 0.2957393483709273,
+      "rise_b": 0.2957393483709273,
+      "rise_diff_pct": 0.0,
+      "peak_a": 8.6817429907198,
+      "peak_b": 8.6817429907198,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 8.577877564816646,
+      "overshoot_b": 8.577877564816646,
+      "overshoot_diff_pp": 0.0,
+      "bit_identical": true,
+      "response_frac": 1.0857787756481665,
+      "alt_end_m": -3.9e-05,
+      "status": "NO_LIFT",
+      "ok": false,
+      "note": "NO_LIFT：40 s 末高度 -0.00 m（<2 m），油门不足以离地，姿态指令无判别力"
+    }
+  ],
+  "throttle_trend": [
+    {
+      "case": "rate_roll_square5_thr30",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 3.136384,
+      "peak_b": 3.136384,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -6.3e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_roll_square5_thr70",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.18546365914786966,
+      "rise_b": 0.18546365914786966,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.937579,
+      "peak_b": 3.937579,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.3931923024546222,
+      "overshoot_b": 0.3931923024546222,
+      "alt_end_m": 11.548429,
+      "lifted": true
+    },
+    {
+      "case": "rate_roll_square10_thr30",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 6.283082,
+      "peak_b": 6.283082,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -3.8e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_roll_square10_thr70",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.18546365914786966,
+      "rise_b": 0.18546365914786966,
+      "rise_diff_pct": 0.0,
+      "peak_a": 7.933019,
+      "peak_b": 7.933019,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.21160461833427746,
+      "overshoot_b": 0.21160461833427746,
+      "alt_end_m": 11.309725,
+      "lifted": true
+    },
+    {
+      "case": "rate_roll_square20_thr30",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 13.317123,
+      "peak_b": 13.317123,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 7.000000000000001e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_roll_square20_thr70",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.18546365914786966,
+      "rise_b": 0.18546365914786966,
+      "rise_diff_pct": 0.0,
+      "peak_a": 16.959711,
+      "peak_b": 16.959711,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.12006297144925782,
+      "overshoot_b": 0.12006297144925782,
+      "alt_end_m": 10.253429,
+      "lifted": true
+    },
+    {
+      "case": "rate_roll_ramp5_thr30",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 2.582469,
+      "peak_b": 2.582469,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -6.7e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_roll_ramp5_thr70",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.22055137844611528,
+      "rise_b": 0.22055137844611528,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.573171,
+      "peak_b": 3.573171,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 11.566509000000002,
+      "lifted": true
+    },
+    {
+      "case": "rate_roll_ramp10_thr30",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 5.209404,
+      "peak_b": 5.209404,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -5.1000000000000006e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_roll_ramp10_thr70",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.21553884711779447,
+      "rise_b": 0.21553884711779447,
+      "rise_diff_pct": 0.0,
+      "peak_a": 7.264172,
+      "peak_b": 7.264172,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 11.375796000000001,
+      "lifted": true
+    },
+    {
+      "case": "rate_roll_ramp20_thr30",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 10.858532,
+      "peak_b": 10.858532,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 1.4e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_roll_ramp20_thr70",
+      "axis": "roll",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.22556390977443608,
+      "rise_b": 0.22556390977443608,
+      "rise_diff_pct": 0.0,
+      "peak_a": 15.357961,
+      "peak_b": 15.357961,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 10.554369999999999,
+      "lifted": true
+    },
+    {
+      "case": "rate_pitch_square5_thr30",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 3.137569,
+      "peak_b": 3.137569,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -6.4e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_pitch_square5_thr70",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.18045112781954886,
+      "rise_b": 0.18045112781954886,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.958844,
+      "peak_b": 3.958844,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 1.3391388349845101,
+      "overshoot_b": 1.3391388349845101,
+      "alt_end_m": 11.54031,
+      "lifted": true
+    },
+    {
+      "case": "rate_pitch_square10_thr30",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 6.283227,
+      "peak_b": 6.283227,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -3.8e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_pitch_square10_thr70",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.18546365914786966,
+      "rise_b": 0.18546365914786966,
+      "rise_diff_pct": 0.0,
+      "peak_a": 7.949399,
+      "peak_b": 7.949399,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.618178791901073,
+      "overshoot_b": 0.618178791901073,
+      "alt_end_m": 11.283218,
+      "lifted": true
+    },
+    {
+      "case": "rate_pitch_square20_thr30",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 13.322147,
+      "peak_b": 13.322147,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 7.6e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_pitch_square20_thr70",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.18546365914786966,
+      "rise_b": 0.18546365914786966,
+      "rise_diff_pct": 0.0,
+      "peak_a": 16.982985,
+      "peak_b": 16.982985,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.35070530385348775,
+      "overshoot_b": 0.35070530385348775,
+      "alt_end_m": 10.134775,
+      "lifted": true
+    },
+    {
+      "case": "rate_pitch_ramp5_thr30",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 2.578104,
+      "peak_b": 2.578104,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -6.7e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_pitch_ramp5_thr70",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.21553884711779447,
+      "rise_b": 0.21553884711779447,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.590153,
+      "peak_b": 3.590153,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 11.562176999999998,
+      "lifted": true
+    },
+    {
+      "case": "rate_pitch_ramp10_thr30",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 5.201348,
+      "peak_b": 5.201348,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": -5.1000000000000006e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_pitch_ramp10_thr70",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.21553884711779447,
+      "rise_b": 0.21553884711779447,
+      "rise_diff_pct": 0.0,
+      "peak_a": 7.274579,
+      "peak_b": 7.274579,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 11.356323999999999,
+      "lifted": true
+    },
+    {
+      "case": "rate_pitch_ramp20_thr30",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 30,
+      "rise_a": null,
+      "rise_b": null,
+      "rise_diff_pct": null,
+      "peak_a": 10.856218,
+      "peak_b": 10.856218,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 1.8e-05,
+      "lifted": false
+    },
+    {
+      "case": "rate_pitch_ramp20_thr70",
+      "axis": "pitch",
+      "mode": "RATE",
+      "throttle": 70,
+      "rise_a": 0.22556390977443608,
+      "rise_b": 0.22556390977443608,
+      "rise_diff_pct": 0.0,
+      "peak_a": 15.370951,
+      "peak_b": 15.370951,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 0.0,
+      "overshoot_b": 0.0,
+      "alt_end_m": 10.464426000000001,
+      "lifted": true
+    },
+    {
+      "case": "attitude_roll_step3_thr30",
+      "axis": "roll",
+      "mode": "ATTITUDE",
+      "throttle": 30,
+      "rise_a": 0.37593984962406013,
+      "rise_b": 0.37593984962406013,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.3925404007491173,
+      "peak_b": 3.3925404007491173,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 13.513952737478036,
+      "overshoot_b": 13.513952737478036,
+      "alt_end_m": -6.8e-05,
+      "lifted": false
+    },
+    {
+      "case": "attitude_roll_step3_thr70",
+      "axis": "roll",
+      "mode": "ATTITUDE",
+      "throttle": 70,
+      "rise_a": 0.2756892230576441,
+      "rise_b": 0.2756892230576441,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.0440101739710377,
+      "peak_b": 3.0440101739710377,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 1.578764400073723,
+      "overshoot_b": 1.578764400073723,
+      "alt_end_m": 11.585088,
+      "lifted": true
+    },
+    {
+      "case": "attitude_roll_step8_thr30",
+      "axis": "roll",
+      "mode": "ATTITUDE",
+      "throttle": 30,
+      "rise_a": 0.37593984962406013,
+      "rise_b": 0.37593984962406013,
+      "rise_diff_pct": 0.0,
+      "peak_a": 9.143546973595242,
+      "peak_b": 9.143546973595242,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 14.455314437130824,
+      "overshoot_b": 14.455314437130824,
+      "alt_end_m": -5.2e-05,
+      "lifted": false
+    },
+    {
+      "case": "attitude_roll_step8_thr70",
+      "axis": "roll",
+      "mode": "ATTITUDE",
+      "throttle": 70,
+      "rise_a": 0.2656641604010025,
+      "rise_b": 0.2656641604010025,
+      "rise_diff_pct": 0.0,
+      "peak_a": 8.22022548674192,
+      "peak_b": 8.22022548674192,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 2.7947280596636688,
+      "overshoot_b": 2.7947280596636688,
+      "alt_end_m": 11.425378,
+      "lifted": true
+    },
+    {
+      "case": "attitude_pitch_step3_thr30",
+      "axis": "pitch",
+      "mode": "ATTITUDE",
+      "throttle": 30,
+      "rise_a": 0.37092731829573933,
+      "rise_b": 0.37092731829573933,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.411218824870382,
+      "peak_b": 3.411218824870382,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 13.804824311472785,
+      "overshoot_b": 13.804824311472785,
+      "alt_end_m": -6.7e-05,
+      "lifted": false
+    },
+    {
+      "case": "attitude_pitch_step3_thr70",
+      "axis": "pitch",
+      "mode": "ATTITUDE",
+      "throttle": 70,
+      "rise_a": 0.2807017543859649,
+      "rise_b": 0.2807017543859649,
+      "rise_diff_pct": 0.0,
+      "peak_a": 3.0307175531240023,
+      "peak_b": 3.0307175531240023,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 1.411874526747539,
+      "overshoot_b": 1.411874526747539,
+      "alt_end_m": 11.580929000000001,
+      "lifted": true
+    },
+    {
+      "case": "attitude_pitch_step8_thr30",
+      "axis": "pitch",
+      "mode": "ATTITUDE",
+      "throttle": 30,
+      "rise_a": 0.3659147869674185,
+      "rise_b": 0.3659147869674185,
+      "rise_diff_pct": 0.0,
+      "peak_a": 9.191159766370614,
+      "peak_b": 9.191159766370614,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 14.926070885555191,
+      "overshoot_b": 14.926070885555191,
+      "alt_end_m": -4.9e-05,
+      "lifted": false
+    },
+    {
+      "case": "attitude_pitch_step8_thr70",
+      "axis": "pitch",
+      "mode": "ATTITUDE",
+      "throttle": 70,
+      "rise_a": 0.2656641604010025,
+      "rise_b": 0.2656641604010025,
+      "rise_diff_pct": 0.0,
+      "peak_a": 8.236325600785097,
+      "peak_b": 8.236325600785097,
+      "peak_diff_pct": 0.0,
+      "overshoot_a": 3.0995535432940073,
+      "overshoot_b": 3.0995535432940073,
+      "alt_end_m": 11.392024,
+      "lifted": true
+    }
+  ],
+  "safety": [
+    {
+      "case": "yaw_big_lowthr",
+      "note": "低油门 20% yaw 大杆量",
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "pos": {
+              "base": -0.004693566666666666,
+              "steady": 0.18528288,
+              "peak": 0.200471,
+              "target": 121.6819,
+              "overshoot_pct": 0.0,
+              "rise_time_s": null,
+              "steady_err": 121.49661712
+            },
+            "ref": {
+              "base": 0.0,
+              "steady": 4.047608,
+              "peak": 121.6819,
+              "target": 121.6819,
+              "overshoot_pct": 0.0,
+              "rise_time_s": 0.0,
+              "steady_err": 117.634292
+            },
+            "target": 121.6819,
+            "sat": {
+              "servo_roll": 0.0,
+              "servo_pitch": 0.0,
+              "motor1": 0.012875,
+              "motor2": 0.012875
+            },
+            "alt_end_m": -6.9e-05,
+            "nan_free": true
+          },
+          "sat": {
+            "servo_roll": 0.0,
+            "servo_pitch": 0.0,
+            "motor1": 0.012875,
+            "motor2": 0.012875
+          },
+          "reversed": null,
+          "nan_free": true
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "pos": {
+              "base": -0.004693566666666666,
+              "steady": 0.18528288,
+              "peak": 0.200471,
+              "target": 121.6819,
+              "overshoot_pct": 0.0,
+              "rise_time_s": null,
+              "steady_err": 121.49661712
+            },
+            "ref": {
+              "base": 0.0,
+              "steady": 4.047608,
+              "peak": 121.6819,
+              "target": 121.6819,
+              "overshoot_pct": 0.0,
+              "rise_time_s": 0.0,
+              "steady_err": 117.634292
+            },
+            "target": 121.6819,
+            "sat": {
+              "servo_roll": 0.0,
+              "servo_pitch": 0.0,
+              "motor1": 0.012875,
+              "motor2": 0.012875
+            },
+            "alt_end_m": -6.9e-05,
+            "nan_free": true
+          },
+          "sat": {
+            "servo_roll": 0.0,
+            "servo_pitch": 0.0,
+            "motor1": 0.012875,
+            "motor2": 0.012875
+          },
+          "reversed": null,
+          "nan_free": true
+        }
+      }
+    },
+    {
+      "case": "roll_full_50thr",
+      "note": "满杆 roll",
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "pos": {
+              "base": 0.005185933333333333,
+              "steady": 23.0235156,
+              "peak": 123.456093,
+              "target": 333.3333,
+              "overshoot_pct": 0.0,
+              "rise_time_s": null,
+              "steady_err": 310.3097844
+            },
+            "ref": {
+              "base": 0.0,
+              "steady": 5.138316,
+              "peak": 333.3333,
+              "target": 333.3333,
+              "overshoot_pct": 0.0,
+              "rise_time_s": 0.0,
+              "steady_err": 328.19498400000003
+            },
+            "target": 333.3333,
+            "sat": {
+              "servo_roll": 0.0,
+              "servo_pitch": 0.0,
+              "motor1": 0.012875,
+              "motor2": 0.012875
+            },
+            "alt_end_m": -0.0016239999999999998,
+            "nan_free": true
+          },
+          "sat": {
+            "servo_roll": 0.0,
+            "servo_pitch": 0.0,
+            "motor1": 0.012875,
+            "motor2": 0.012875
+          },
+          "reversed": false,
+          "nan_free": true
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "pos": {
+              "base": 0.005185933333333333,
+              "steady": 23.0235156,
+              "peak": 123.456093,
+              "target": 333.3333,
+              "overshoot_pct": 0.0,
+              "rise_time_s": null,
+              "steady_err": 310.3097844
+            },
+            "ref": {
+              "base": 0.0,
+              "steady": 5.138316,
+              "peak": 333.3333,
+              "target": 333.3333,
+              "overshoot_pct": 0.0,
+              "rise_time_s": 0.0,
+              "steady_err": 328.19498400000003
+            },
+            "target": 333.3333,
+            "sat": {
+              "servo_roll": 0.0,
+              "servo_pitch": 0.0,
+              "motor1": 0.012875,
+              "motor2": 0.012875
+            },
+            "alt_end_m": -0.0016239999999999998,
+            "nan_free": true
+          },
+          "sat": {
+            "servo_roll": 0.0,
+            "servo_pitch": 0.0,
+            "motor1": 0.012875,
+            "motor2": 0.012875
+          },
+          "reversed": false,
+          "nan_free": true
+        }
+      }
+    },
+    {
+      "case": "att45_lock",
+      "note": "45° 姿态指令（超 30° 满杆，考察饱和）",
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "pos": {
+              "base": 0.004773693363098309,
+              "steady": 4.60527432907892,
+              "peak": 31.018158859217863,
+              "target": 45.0,
+              "overshoot_pct": 0.0,
+              "rise_time_s": null,
+              "steady_err": 40.394725670921076
+            },
+            "ref": null,
+            "target": 45.0,
+            "sat": {
+              "servo_roll": 0.0,
+              "servo_pitch": 0.0,
+              "motor1": 0.012875,
+              "motor2": 0.012875
+            },
+            "alt_end_m": 0.00032399999999999996,
+            "nan_free": true
+          },
+          "sat": {
+            "servo_roll": 0.0,
+            "servo_pitch": 0.0,
+            "motor1": 0.012875,
+            "motor2": 0.012875
+          },
+          "reversed": false,
+          "nan_free": true
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "pos": {
+              "base": 0.004773693363098309,
+              "steady": 4.60527432907892,
+              "peak": 31.018158859217863,
+              "target": 45.0,
+              "overshoot_pct": 0.0,
+              "rise_time_s": null,
+              "steady_err": 40.394725670921076
+            },
+            "ref": null,
+            "target": 45.0,
+            "sat": {
+              "servo_roll": 0.0,
+              "servo_pitch": 0.0,
+              "motor1": 0.012875,
+              "motor2": 0.012875
+            },
+            "alt_end_m": 0.00032399999999999996,
+            "nan_free": true
+          },
+          "sat": {
+            "servo_roll": 0.0,
+            "servo_pitch": 0.0,
+            "motor1": 0.012875,
+            "motor2": 0.012875
+          },
+          "reversed": false,
+          "nan_free": true
+        }
+      }
+    }
+  ],
+  "mismatch": [
+    {
+      "name": "inertia_scale_1.5",
+      "value": 1.5,
+      "seed": 1,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0051910333333333334,
+            "steady": 1.05503922,
+            "peak": 6.464029,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 6.85546078
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0051910333333333334,
+            "steady": 1.05503922,
+            "peak": 6.464029,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 6.85546078
+          }
+        }
+      }
+    },
+    {
+      "name": "inertia_scale_1.5",
+      "value": 1.5,
+      "seed": 2,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0016311333333333333,
+            "steady": 1.05410054,
+            "peak": 6.449572,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 6.85639946
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0016311333333333333,
+            "steady": 1.05410054,
+            "peak": 6.449572,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 6.85639946
+          }
+        }
+      }
+    },
+    {
+      "name": "inertia_scale_1.5",
+      "value": 1.5,
+      "seed": 3,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.005439833333333334,
+            "steady": 1.04659338,
+            "peak": 6.453476,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 6.86390662
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.005439833333333334,
+            "steady": 1.04659338,
+            "peak": 6.453476,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 6.86390662
+          }
+        }
+      }
+    },
+    {
+      "name": "inertia_scale_0.67",
+      "value": 0.67,
+      "seed": 1,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.005189233333333334,
+            "steady": -0.02715078,
+            "peak": 8.07331,
+            "target": 7.9105,
+            "overshoot_pct": 1.9925512504477325,
+            "rise_time_s": 0.17042606516290726,
+            "steady_err": 7.93765078
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.005189233333333334,
+            "steady": -0.02715078,
+            "peak": 8.07331,
+            "target": 7.9105,
+            "overshoot_pct": 1.9925512504477325,
+            "rise_time_s": 0.17042606516290726,
+            "steady_err": 7.93765078
+          }
+        }
+      }
+    },
+    {
+      "name": "inertia_scale_0.67",
+      "value": 0.67,
+      "seed": 2,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0016338000000000001,
+            "steady": -0.027305239999999998,
+            "peak": 8.08074,
+            "target": 7.9105,
+            "overshoot_pct": 2.1314227924909943,
+            "rise_time_s": 0.17042606516290726,
+            "steady_err": 7.937805239999999
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0016338000000000001,
+            "steady": -0.027305239999999998,
+            "peak": 8.08074,
+            "target": 7.9105,
+            "overshoot_pct": 2.1314227924909943,
+            "rise_time_s": 0.17042606516290726,
+            "steady_err": 7.937805239999999
+          }
+        }
+      }
+    },
+    {
+      "name": "inertia_scale_0.67",
+      "value": 0.67,
+      "seed": 3,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.005436116666666667,
+            "steady": -0.035512419999999996,
+            "peak": 8.077977,
+            "target": 7.9105,
+            "overshoot_pct": 2.0484278279923274,
+            "rise_time_s": 0.17042606516290726,
+            "steady_err": 7.94601242
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.005436116666666667,
+            "steady": -0.035512419999999996,
+            "peak": 8.077977,
+            "target": 7.9105,
+            "overshoot_pct": 2.0484278279923274,
+            "rise_time_s": 0.17042606516290726,
+            "steady_err": 7.94601242
+          }
+        }
+      }
+    },
+    {
+      "name": "thrust_scale_0.8",
+      "value": 0.8,
+      "seed": 1,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0051662,
+            "steady": 0.74074422,
+            "peak": 6.787099,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 7.16975578
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0051662,
+            "steady": 0.74074422,
+            "peak": 6.787099,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 7.16975578
+          }
+        }
+      }
+    },
+    {
+      "name": "thrust_scale_0.8",
+      "value": 0.8,
+      "seed": 2,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0016141333333333334,
+            "steady": 0.73769204,
+            "peak": 6.785985,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 7.17280796
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0016141333333333334,
+            "steady": 0.73769204,
+            "peak": 6.785985,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 7.17280796
+          }
+        }
+      }
+    },
+    {
+      "name": "thrust_scale_0.8",
+      "value": 0.8,
+      "seed": 3,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.00543825,
+            "steady": 0.73024464,
+            "peak": 6.774327,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 7.18025536
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.00543825,
+            "steady": 0.73024464,
+            "peak": 6.774327,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": null,
+            "steady_err": 7.18025536
+          }
+        }
+      }
+    },
+    {
+      "name": "thrust_scale_1.2",
+      "value": 1.2,
+      "seed": 1,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.007572433333333333,
+            "steady": 0.19688106000000002,
+            "peak": 7.570024,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": 0.22556390977443608,
+            "steady_err": 7.71361894
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.007572433333333333,
+            "steady": 0.19688106000000002,
+            "peak": 7.570024,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": 0.22556390977443608,
+            "steady_err": 7.71361894
+          }
+        }
+      }
+    },
+    {
+      "name": "thrust_scale_1.2",
+      "value": 1.2,
+      "seed": 2,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0037056833333333336,
+            "steady": 0.18906582,
+            "peak": 7.575371,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": 0.22556390977443608,
+            "steady_err": 7.72143418
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0037056833333333336,
+            "steady": 0.18906582,
+            "peak": 7.575371,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": 0.22556390977443608,
+            "steady_err": 7.72143418
+          }
+        }
+      }
+    },
+    {
+      "name": "thrust_scale_1.2",
+      "value": 1.2,
+      "seed": 3,
+      "runs": {
+        "0": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0075921999999999995,
+            "steady": 0.1826952,
+            "peak": 7.574904,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": 0.22556390977443608,
+            "steady_err": 7.7278047999999995
+          }
+        },
+        "1": {
+          "rc": 0,
+          "metrics": {
+            "base": 0.0075921999999999995,
+            "steady": 0.1826952,
+            "peak": 7.574904,
+            "target": 7.9105,
+            "overshoot_pct": 0.0,
+            "rise_time_s": 0.22556390977443608,
+            "steady_err": 7.7278047999999995
+          }
+        }
+      }
+    }
+  ],
+  "generated": "2026-10-31T02:04:20"
+}

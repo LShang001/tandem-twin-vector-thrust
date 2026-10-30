@@ -431,8 +431,10 @@ PASS</strong>（<code>--bin T:/sil_tandem/fw_real.exe</code>）：mag_clean
 </tr>
 <tr>
 <td>全量宿主回归</td>
-<td>run_all EXIT=0，"全部宿主机回归测试通过"（含 aco、pwa）</td>
-<td><code>tmp/host_alloc_recheck/run_all.log</code></td>
+<td>2026-10-31 02:15 全量 run_all
+EXIT=0，末行"全部宿主机回归测试通过"，613 个 [PASS]（含
+aco/pwa/atrk/lra）</td>
+<td><code>BIN_DIR=T:/host_milestone bash test_host/run_all.sh</code></td>
 </tr>
 </tbody>
 </table>
@@ -440,6 +442,9 @@ PASS</strong>（<code>--bin T:/sil_tandem/fw_real.exe</code>）：mag_clean
 <code>sim-data/coax-alloc-2026-10-31/</code> 记录（脚本
 <code>run_coaxial_ab.py</code> 与
 <code>run_coaxial_suite.sh --alloc-mode 1</code>）：</p>
+<p>02:04 identity 复跑的原始输出另存
+<code>sim-data/coax-identity-2026-10-31/</code>（<code>ab_summary.md</code>/<code>ab_metrics.json</code>，含
+thr70 逐位等价与 NO_LIFT 判定）。</p>
 <table>
 <thead>
 <tr>
@@ -465,12 +470,6 @@ NO_LIFT</td>
 <tr>
 <td>失配（I/推力 ±）</td>
 <td>4 档×3 seeds：两路径同档同 seed 逐位等价；失配只改变响应幅度</td>
-</tr>
-<tr>
-<td>A/B ATTITUDE</td>
-<td>thr70 离地 4 例有效：峰值 101.0–103.0% 指令、超调
-1.41–3.10%，两路径逐位相同；thr50 4 例 NO_LIFT（7 N &lt; 重量 8.24
-N，地面伪迹，无判别力）</td>
 </tr>
 <tr>
 <td>矩阵 alloc0 vs alloc1</td>
@@ -516,5 +515,5 @@ throttle=0）时 TVC 归中并置
 <code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:05</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:13</footer></article></body>
 </html>
