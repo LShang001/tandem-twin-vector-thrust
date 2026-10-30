@@ -2290,6 +2290,57 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
       coax_out_saturated = true;
     }
   }
+  // ★ 直观执行机构限幅（2026-10-31 用户要求）：α-native 的控制器层用 α 限幅
+  //   （α_max=(l·T/I)·sin(δmax)），但最终下发前仍保留一层按执行机构量纲的硬限幅：
+  //   舵机 ±max_correction_deg、差速 ±max_yaw_diff_us。分配器内部已做同等约束，
+  //   这里作为与机型无关的出口兜底，并把越界写进 coax_alloc_sat，GCS 可直观看到。
+  {
+    const float roll_before = applied_roll_corr_deg;
+    const float pitch_before = applied_pitch_corr_deg;
+    const float yaw_before = applied_yaw_diff_us;
+    if (applied_roll_corr_deg > coax.ctrl.max_correction_deg)
+    {
+      applied_roll_corr_deg = coax.ctrl.max_correction_deg;
+    }
+    else if (applied_roll_corr_deg < -coax.ctrl.max_correction_deg)
+    {
+      applied_roll_corr_deg = -coax.ctrl.max_correction_deg;
+    }
+    if (applied_pitch_corr_deg > coax.ctrl.max_correction_deg)
+    {
+      applied_pitch_corr_deg = coax.ctrl.max_correction_deg;
+    }
+    else if (applied_pitch_corr_deg < -coax.ctrl.max_correction_deg)
+    {
+      applied_pitch_corr_deg = -coax.ctrl.max_correction_deg;
+    }
+    if (applied_yaw_diff_us > coax.ctrl.max_yaw_diff_us)
+    {
+      applied_yaw_diff_us = coax.ctrl.max_yaw_diff_us;
+    }
+    else if (applied_yaw_diff_us < -coax.ctrl.max_yaw_diff_us)
+    {
+      applied_yaw_diff_us = -coax.ctrl.max_yaw_diff_us;
+    }
+    if (roll_before != applied_roll_corr_deg)
+    {
+      alloc_sat_mask = static_cast<uint8_t>(alloc_sat_mask |
+                                            bfs::control::kSatTvcRoll);
+      coax_out_saturated = true;
+    }
+    if (pitch_before != applied_pitch_corr_deg)
+    {
+      alloc_sat_mask = static_cast<uint8_t>(alloc_sat_mask |
+                                            bfs::control::kSatTvcPitch);
+      coax_out_saturated = true;
+    }
+    if (yaw_before != applied_yaw_diff_us)
+    {
+      alloc_sat_mask = static_cast<uint8_t>(alloc_sat_mask |
+                                            bfs::control::kSatYawDiff);
+      coax_out_saturated = true;
+    }
+  }
   // 诊断遥测与最终下发的执行器指令同源
   gnc_tel.coax_roll_corr_deg = applied_roll_corr_deg;
   gnc_tel.coax_pitch_corr_deg = applied_pitch_corr_deg;
