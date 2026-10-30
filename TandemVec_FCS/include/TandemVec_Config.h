@@ -26,7 +26,8 @@
  * @frame   参数本身无坐标系；力臂 a/b 沿模型系 x'（前后电机），惯量按机体系主轴
  * @units   SI：N·s²、N·m·s²、kg·m²、rad/s、m、s、kg、m/s²、rad
  * @note    ★ dMax 有**两套口径**，不得混写：本固件 dMax = 15°（0.2617994 rad，
- *          2026-08-07 实机收紧）；仿真 aircraft-model.json 仍为 25°（未回写）。
+ *          2026-08-07 实机收紧）；仿真 aircraft-model.json 为模型概念窗口 25°
+ *          （仿真域有意保留、非待回写，见 DEC-002 A-04；两套口径不可互推）。
  *          仿真 SAS 限幅"±25°/±0.7" 是仿真值，固件实机摆角是 ±15°，
  *          dwMax = 0.7 两边相同。
  * @see     models/aircraft-model.json、FlightCtrlParams.h（控制增益，另一事实源）
@@ -63,7 +64,7 @@ struct TandemVecParams
     float Ix;    // kg·m²    机体滚转惯量（绕纵轴=差速航向轴）
     float Iy;    // kg·m²    机体俯仰惯量
     float Iz;    // kg·m²    机体偏航/侧倾惯量
-    float dMax;  // rad      摆角限幅（±15°，2026-08-07 实机由 25° 收紧；仿真 aircraft-model.json 仍为 25° 未回写）
+    float dMax;  // rad      摆角限幅（±15°，2026-08-07 实机由 25° 收紧；仿真域概念窗口 25° 为有意保留，见 DEC-002 A-04）
 
     // ===== 控制分配专用 =======================================
     // 来源: models/aircraft-model.json §SAS 增稳

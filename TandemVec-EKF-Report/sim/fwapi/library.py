@@ -436,6 +436,10 @@ class FwNavOutput(ctypes.Structure):
         ("gnss_overflow", ctypes.c_uint32),
         ("last_epoch_tow_ms", ctypes.c_uint32),
         ("steps", ctypes.c_uint32),
+        # 观测专用（尾部追加，见 fw_nav_api.h）：P 对角，未开
+        # EKF_NAV_TELEMETRY 的构建为 NaN。复算卡尔曼增益用。
+        ("pos_cov_m2", ctypes.c_float * 3),
+        ("vel_cov_m2", ctypes.c_float * 3),
     ]
 
 
@@ -548,6 +552,14 @@ def load(force_build: bool = False) -> ctypes.CDLL:
         lib.fw_nav_step.argtypes = [p.c_void_p, p.POINTER(FwNavInput),
                                     p.POINTER(FwNavOutput)]
         lib.fw_nav_step.restype = p.c_int32
+        try:
+            # 武装重定基入口（fw_nav_api.h 新增）。旧库缺符号时降级，不影响
+            # 其余绑定（CTL-004 §6.2 的参考系重对齐要用）。
+            lib.fw_nav_rebase_origin.argtypes = [p.c_void_p,
+                                                 p.POINTER(p.c_double)]
+            lib.fw_nav_rebase_origin.restype = p.c_int32
+        except AttributeError:  # pragma: no cover - 旧库
+            pass
         lib.fw_param_count.restype = p.c_uint32
         lib.fw_param_name.argtypes = [p.c_uint32]
         lib.fw_param_name.restype = p.c_char_p

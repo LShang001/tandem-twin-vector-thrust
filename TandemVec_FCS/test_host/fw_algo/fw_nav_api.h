@@ -154,6 +154,11 @@ typedef struct
   uint32_t gnss_overflow;  /**< 解析器队列溢出数 */
   uint32_t last_epoch_tow_ms;/**< 最近一个原始历元的 iTOW [ms]（与注入序列对账用） */
   uint32_t steps;          /**< 已推进的拍数 */
+  /* ---- 观测专用（尾部追加，abi_version 不变；未定义 EKF_NAV_TELEMETRY 时
+   *      为 NaN）：EKF 协方差对角。逐拍对拍要复算卡尔曼增益 K=PHᵀ(HPHᵀ+R)⁻¹
+   *      必须能看到 P；该宏只加只读访问器、不参与滤波数学（见 run_all.sh）。 */
+  float pos_cov_m2[3];     /**< P(n,n)=位置方差 [m²]，序 NED */
+  float vel_cov_m2[3];     /**< P(v,v)=速度方差 [m²/s²]，序 NED */
 } fw_nav_output_t;
 
 /** @brief 创建/取用单例导航句柄。`out` 非空。返回 0 成功。 */
@@ -170,6 +175,24 @@ FW_NAV_API int32_t fw_nav_reset(fw_nav *handle);
 FW_NAV_API int32_t fw_nav_step(fw_nav *handle, const fw_nav_input_t *in,
                                fw_nav_output_t *out);
 
+/**
+ * @brief 控制层武装重定基（起飞点原点切换）——把固件解锁沿的记账暴露给宿主。
+ * @details SIL 侧由 `flight_control.cpp` 的解锁沿执行同一组动作：
+ *          `setNavigationOriginFromLlaRad(当前原点)` + 清零 `relative_*` /
+ *          `INS_GNSS_Packet.location_*` / `estimated_height` / `fused_*`。这些是
+ *          **导航层状态**，但触发时机在控制层（武装），所以不在 `fw_nav_step` 里。
+ *          宿主若只重放 `fw_nav_step`，解锁后 `pos_ned_m`/`alt_up_m` 会与固件差
+ *          一个**常量**（= 解锁前 EKF 相对首帧 GNSS 原点的漂移，随 seed 变化；
+ *          CTL-004 §6.2 的 0.53 m 残差即由此主导）。调用方在检测到解锁边沿时
+ *          用固件**实际使用的原点**调一次本函数，参考系即重新对齐。
+ * @param origin_lla_deg 固件 `origin_lat_deg/lon_deg/alt_m`（度/度/米）。
+ * @return 0 成功；1 空指针；5 参数非有限。
+ * @note 不触碰 EKF 协方差/状态，也不改滤波算式；只改参考系与对外记账。
+ * @warning 必须在**同一拍的 `fw_nav_step` 之前**调用，时序与 SIL 的
+ *          "控制任务先于/同拍于导航任务"一致。
+ */
+FW_NAV_API int32_t fw_nav_rebase_origin(fw_nav *handle,
+                                        const double origin_lla_deg[3]);
 #ifdef __cplusplus
 }
 #endif

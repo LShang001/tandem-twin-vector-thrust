@@ -1,17 +1,27 @@
 {
-  "trace": "C:/Users/12631/AppData/Local/Temp/nav_magclean4.csv",
+  "trace": "C:/Users/12631/AppData/Local/Temp/nav_resid_20261030/nav_magclean_o1.csv",
   "rows": 4000,
   "step_fail": 0,
   "init_mismatch": 0,
   "epoch_mismatch": 0,
   "gate_mismatch": 0,
   "max_abs_diff": {
-    "quat": 0.0011563987685393096,
-    "pos": 0.5331518002052307,
-    "vel": 0.003497020182132715,
-    "alt": 0.03620277206683159,
-    "bias": 0.0012845648929496762,
-    "lla": 0.03602229908010912
+    "quat": 0.0011561761824439765,
+    "pos": 0.12940057444763187,
+    "vel": 0.00020952956140413885,
+    "alt": 1.6073476452049817e-06,
+    "bias": 0.0004840936790224432,
+    "lla": 1.142777364293579e-06
+  },
+  "origin_rebase": {
+    "arm_row": 104,
+    "offset_m": [
+      0.0,
+      0.0,
+      -1.548940316424703e-07
+    ],
+    "raw_max_pos_m": 0.12940057444763187,
+    "raw_max_alt_m": 1.4524536133819765e-06
   },
   "first_bad": null,
   "fails": []

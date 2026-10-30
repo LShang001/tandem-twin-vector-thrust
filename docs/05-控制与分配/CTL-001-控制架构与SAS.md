@@ -113,7 +113,7 @@ dwC = clamp(dw + P.sasP * S.omega.x - P.sasPhi * phi - P.sasIPhi * S.intPhi, -P.
 |---|---|---|---|---|
 | 俯仰积分限幅 intThMax | 0.5 | rad | `control.mjs:16` | 抑制俯仰积分饱和 |
 | 滚转积分限幅 intPhiMax | 0.3 | rad | `control.mjs:17` | 抑制滚转积分饱和 |
-| 摆角指令限幅 dMax | 0.4363323129985824 | rad（25°） | `control.mjs:18,19` | 尾/前摆角同时限幅 |
+| 摆角指令限幅 dMax | 0.4363323129985824 | rad（**模型概念窗口 25°，仿真域**） | `control.mjs:18,19` | 尾/前摆角同时限幅；固件实机包线 15°（0.2618 rad），两套口径不可互相外推（DEC-002 A-04） |
 | SAS 差速指令限幅 dwMax | 0.7 | − | `control.mjs:19` | SAS 输出差速上限 |
 | UI 差速幅值 dwUiMax | 0.55 | − | UI 输入层 | 用户可操作范围 |
 
@@ -314,7 +314,7 @@ q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w<0 取反�
 
 **模式与门控**（state_data.h + flight_control.cpp）：CH7 模式开关（<1300 MANUAL / 1300-1650 AUTO_ALTITUDE / >1650 AUTO_POSITION/GUIDED，GUIDED 超时 500 ms 强制 MANUAL）；姿态子模式 CH9 切换 ATTITUDE_MODE/RATE_MODE；手动 TVC 旁路 `is_manual_tvc = isLinkUp && CH8>1750`（**isLinkUp 门控兜底**——上电无信号时 raw_rc 全 0 曾致开关误判、舵机钳满偏，见 AGENTS.md 踩坑记录）。姿态控制器门控 `is_attitude_control_active = is_unlocked && !is_manual_tvc`；锁定态摆角直通 + 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。
 
-**摆角限幅**：固件 dMax=±15°（`TandemVec_Config.h` 0.2618 rad + `state_data.cpp` MAX_CORRECTION=15），仿真 `P.dMax`=±25° 未回写——悬停模式摆角基准为 0 不受配平偏置影响，但巡航配平（dtTrim=−18.702°）超出固件限幅，见 MOD-003 §3.2 与假设日志 ASM-017。
+**摆角限幅**：仿真 `P.dMax` 为**模型概念窗口 ±25°（仿真域）**；固件实机包线 ±15°（`TandemVec_Config.h` 0.2618 rad + `state_data.cpp` MAX_CORRECTION=15），两套口径不可互相外推（[DEC-002](../09-决策记录/DEC-002-六项P0修复决策.md) A-04、[ASM-017](../registers/假设与局限日志.md)）。悬停模式摆角基准为 0，不受配平偏置影响；但巡航配平（dtTrim=−18.702°）超出固件 15°——**28 m/s 实机巡航不可达**，15° 可行巡航下限≈29.8 m/s（30–40 m/s 可行，30 m/s 时 −14.76°、裕度仅 0.24°），见 MOD-003 §3.2。
 
 ---
 

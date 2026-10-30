@@ -103,6 +103,13 @@ static float g_navtick_gnss_lla[3] = {0.0f, 0.0f, 0.0f};
 static float g_navtick_gnss_vel[3] = {0.0f, 0.0f, 0.0f};
 static float g_navtick_gnss_acc[3] = {0.0f, 0.0f, 0.0f};
 static uint32_t g_navtick_gnss_itow = 0;
+// SIL 实际喂进 UBX 解析器的**整数**量（lat/lon 1e-7 deg、alt mm、vel mm/s）与
+// 造出它们的 double LLA。上面 3 个 float32 度列在 28°/112° 只有 0.1–0.4 m 的
+// 分辨率：重放若用 float32 度反算整数，量测入口就不是 SIL 的那个数（CTL-004 §6.2）。
+static int32_t g_navtick_gnss_pos_i[3] = {0, 0, 0};
+static int32_t g_navtick_gnss_vel_i[3] = {0, 0, 0};
+static uint32_t g_navtick_gnss_acc_i[3] = {0, 0, 0};
+static double g_navtick_gnss_lla_d[3] = {0.0, 0.0, 0.0};
 static bool g_navtick_mag = false;
 static float g_navtick_mag_body[3] = {0.0f, 0.0f, 0.0f};
 static bool g_navtick_flow = false;
@@ -948,7 +955,17 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           ",d6tx,d6ty,d6tz,d6vx,d6vy,d6vz,d6dt"
           ",d7tx,d7ty,d7tz,d7vx,d7vy,d7vz,d7dt"
           ",d8tx,d8ty,d8tz,d8vx,d8vy,d8vz,d8dt"
-          ",d9tx,d9ty,d9tz,d9vx,d9vy,d9vz,d9dt,t_us\n");
+          ",d9tx,d9ty,d9tz,d9vx,d9vy,d9vz,d9dt,t_us"
+          // 对拍专用列（尾部追加，旧读取器按列名取值不受影响）：SIL 实际注入的
+          // UBX 整数、造出它们的 double LLA，以及调用后的 EKF 协方差对角。
+          ",gnss_lat_1e7,gnss_lon_1e7,gnss_alt_mm"
+          ",gnss_vn_mmps,gnss_ve_mmps,gnss_vd_mmps"
+          ",gnss_hacc_mm,gnss_vacc_mm,gnss_sacc_mmps"
+          ",gnss_lat_d,gnss_lon_d,gnss_alt_d"
+          ",p_pn,p_pe,p_pd,p_vn,p_ve,p_vd"
+          // 控制层武装重定基见证：固件导航原点（度/米）。宿主在解锁边沿用它调
+          // `fw_nav_rebase_origin()` 才能与 SIL 同参考系（CTL-004 §6.2）。
+          ",origin_lat_d,origin_lon_d,origin_alt_d\n");
     }
   }
   if (g_trace_fast_path != nullptr)
@@ -1158,6 +1175,19 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       g_navtick_gnss_acc[1] = f.v_acc_mm / 1000.0f;
       g_navtick_gnss_acc[2] = f.s_acc_mmps / 1000.0f;
       g_navtick_gnss_itow = f.itow;
+      // 对拍用：落盘的必须是**进入 UBX 的整数**本身，而不是 float32 度反算值。
+      g_navtick_gnss_pos_i[0] = f.lat_1e7;
+      g_navtick_gnss_pos_i[1] = f.lon_1e7;
+      g_navtick_gnss_pos_i[2] = f.height_mm;
+      g_navtick_gnss_vel_i[0] = f.vel_n_mmps;
+      g_navtick_gnss_vel_i[1] = f.vel_e_mmps;
+      g_navtick_gnss_vel_i[2] = f.vel_d_mmps;
+      g_navtick_gnss_acc_i[0] = f.h_acc_mm;
+      g_navtick_gnss_acc_i[1] = f.v_acc_mm;
+      g_navtick_gnss_acc_i[2] = f.s_acc_mmps;
+      g_navtick_gnss_lla_d[0] = lla(0) * 57.29577951308232;
+      g_navtick_gnss_lla_d[1] = lla(1) * 57.29577951308232;
+      g_navtick_gnss_lla_d[2] = lla(2);
     }
     // 每帧泵一次 UART backlog；真实解析器负责帧同步/校验/epoch 排队。
     ubx.Pump(512, micros());
@@ -1373,7 +1403,42 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                      navtick_dv[i][0], navtick_dv[i][1], navtick_dv[i][2],
                      navtick_ddt[i]);
       }
-      std::fprintf(g_trace_nav_file, ",%u\n", navtick_now_us);
+      // t_us 与对拍专用列同行：先打 t_us（不换行），下面的追加块负责换行。
+      std::fprintf(g_trace_nav_file, ",%u", navtick_now_us);
+      // 对拍专用列：见证量（注入整数 / double LLA）与调用后 P 对角。取调用后，
+      // 与上面的状态列同一时刻；gnss_valid=0 的行整数列沿用上一历元，必须忽略。
+      // P 对角只在 `-DEKF_NAV_TELEMETRY` 构建可用（该宏只加只读协方差访问器、
+      // 不改滤波数学，见 run_all.sh）；未开时写 nan 而不是 0，避免被当成真值。
+      double navtick_pdiag[6];
+      for (int i = 0; i < 6; ++i)
+      {
+        navtick_pdiag[i] = std::numeric_limits<double>::quiet_NaN();
+      }
+#ifdef EKF_NAV_TELEMETRY
+      for (int i = 0; i < 6; ++i)
+      {
+        navtick_pdiag[i] = static_cast<double>(nav_ekf.covariance_coeff(i, i));
+      }
+#endif
+      std::fprintf(
+          g_trace_nav_file,
+          ",%d,%d,%d,%d,%d,%d,%u,%u,%u,%.12f,%.12f,%.12f,"
+          "%.9g,%.9g,%.9g,%.9g,%.9g,%.9g",
+          static_cast<int>(g_navtick_gnss_pos_i[0]),
+          static_cast<int>(g_navtick_gnss_pos_i[1]),
+          static_cast<int>(g_navtick_gnss_pos_i[2]),
+          static_cast<int>(g_navtick_gnss_vel_i[0]),
+          static_cast<int>(g_navtick_gnss_vel_i[1]),
+          static_cast<int>(g_navtick_gnss_vel_i[2]),
+          static_cast<unsigned>(g_navtick_gnss_acc_i[0]),
+          static_cast<unsigned>(g_navtick_gnss_acc_i[1]),
+          static_cast<unsigned>(g_navtick_gnss_acc_i[2]),
+          g_navtick_gnss_lla_d[0], g_navtick_gnss_lla_d[1],
+          g_navtick_gnss_lla_d[2],
+          navtick_pdiag[0], navtick_pdiag[1], navtick_pdiag[2],
+          navtick_pdiag[3], navtick_pdiag[4], navtick_pdiag[5]);
+      std::fprintf(g_trace_nav_file, ",%.9f,%.9f,%.6f\n",
+                   origin_lat_deg, origin_lon_deg, origin_alt_m);
       g_navtick_gnss = false;
       g_navtick_mag = false;
       g_navtick_flow = false;

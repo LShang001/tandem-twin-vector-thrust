@@ -445,16 +445,81 @@ Madgwick 不在共享核心里（硬件耦合）， 那一层由调用方负责 
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>上表是<strong>加入见证列并在解锁沿重定基（§6.2.1）之前</strong>的口径。修后
+mag_clean 为姿态 1.16e-3、 位置 0.129 m、速度 2.1e-4 m/s、零偏
+4.8e-4，判据 N1–N6 全通过。</p>
+</blockquote>
 <p>⇒ <strong>无振动 profile 达到工程等价</strong>（判据 N1–N4/N6
 严格逐拍一致；N5 姿态/速度/零偏 1e-3 量级、 位置 20 s 内最大 0.53
-m，残差自首个 GNSS 位置更新（t≈0.315 s，0.24 m）起出现并保持有界）。
-<strong>残差机制未定位</strong>：量测年龄（差
-3e-10）、历元计数、门控位、GNSS 整数帧、IMU 和/双子样、
-时间基准均已逐拍对齐；逐一剔除气压 / 磁 / AHRS 输入都不改变该残差 ⇒
-不是这些通道。
-疑点在首个更新处的增益/先验协方差，<strong>下一步</strong>：两侧同时输出
-P 对角（σ_pos/σ_vel）复算增益。 在此之前不得把这条残差写成"已解释"。
-<strong>振动 profile 不通过</strong>：<code>ins_vibration_hf</code> /
+m，残差自首个 GNSS 位置更新（t≈0.315 s，0.24 m）起出现并保持有界）。</p>
+<h4 id="621-残差机制定位2026-10-30-复核逐拍证据">6.2.1
+残差机制定位（2026-10-30 复核，逐拍证据）</h4>
+<p>给 SIL <code>--trace-nav</code>
+追加三组<strong>见证列</strong>后重跑同一条 mag_clean trace（20 s/4000
+拍； 原始 trace 是临时件，由 SIL <code>--trace-nav</code>
+生成，摘要证据落盘
+<code>TandemVec-EKF-Report/sim-data/fw_nav_parity_2026-10-30_mag_clean.json</code>
+的 <code>origin_rebase</code>）： SIL 实际注入的 UBX 整数（lat/lon 1e-7
+deg、alt mm、速度 mm/s、精度 mm）、造出它们的 double LLA、调用后 EKF 的
+P 对角（<code>p_pn/p_pe/p_pd/p_vn/p_ve/p_vd</code>），以及固件当前
+导航原点（<code>origin_lat_d/origin_lon_d/origin_alt_d</code>）。定位到<strong>两处参考系/量测入口差</strong>，
+都不在滤波数学里：</p>
+<ol type="1">
+<li><strong>量测入口的 float32 度往返</strong>。旧 trace 只把 GNSS LLA
+落成 <code>float32</code> 度 （<code>g_navtick_gnss_lla</code>），重放
+<code>round(float32deg×1e7)</code> 与 SIL 的
+<code>llround(double×1e7)</code> 最多差半个 ULP：纬度 28.2° 为 19
+单位（±0.11 m）、 经度 112.9° 为 76 单位（±0.37 m）。首历元实测：SIL
+整数 <code>281999959/1128999984</code> 对应重放
+<code>281999950/1129000015</code>（Δlat −9 单位 = −0.10 m、Δlon +31 单位
+= +0.30 m）。 首个位置更新（t=0.315 s）的 0.24 m 台阶即该入口差 ×
+位置增益（K_pos≈0.7）。</li>
+<li><strong>解锁沿的控制层重定基</strong>。<code>flight_control.cpp:289-326</code>
+在解锁上升沿 <code>setNavigationOriginFromLlaRad(...)</code>
+换原点、清零 <code>relative_*</code>/<code>estimated_height</code>/
+<code>INS_GNSS_Packet.location_*</code>，并把气压起飞参考置零（<code>resetBaroAltitudeReference</code>）。
+<code>fw_nav_step</code> 只封装
+<code>handleNavigationSystem()</code>（导航层），不含这次记账 ⇒ 解锁后
+<code>pos_ned</code>/<code>alt_up_m</code>
+与固件差一个<strong>常量</strong>（seed 1：0.4239 m；旧 trace 0.53 m
+的最大值 即此，且随 seed 变化）。证据：解锁拍（row
+104）<code>p_pn</code> 与 <code>lla_*</code> 均未跳变（不是滤波重锚），
+而 <code>relative_*</code> 被直接写 0；此后水平差恒定、绝对 LLA 逐拍差
+≤5e-10°。</li>
+</ol>
+<p><strong>最小修复</strong>（不改滤波算式）：</p>
+<ul>
+<li><code>fw_sil_env_main.cpp</code>：trace 尾部追加见证列（18 列）+ 3
+列导航原点；</li>
+<li><code>fw_nav_api.h/.cpp</code>：新增
+<code>fw_nav_rebase_origin()</code>——把固件解锁沿的同一组导航层记账
+（<code>setNavigationOriginFromLlaRad</code> + 清零
+<code>relative_*</code>/<code>estimated_height</code>/<code>INS_GNSS_Packet</code>）
+暴露给宿主，调用方在解码到解锁边沿时用固件实际原点调一次；</li>
+<li><code>fwapi/nav.py</code>：GNSS
+输入<strong>优先</strong>接受整数键（<code>lat_1e7/lon_1e7/...</code>），新增
+<code>rebase_origin()</code>；</li>
+<li><code>check_fw_nav_parity.py</code>：用见证整数注入
+GNSS、在原点变化拍触发重定基。</li>
+</ul>
+<p><strong>复核结果</strong>（同一 trace，seed 1，4000
+拍，<code>N1–N4/N6</code> 仍逐拍一致）： 姿态 1.156e-3、速度 2.095e-4
+m/s、零偏 4.841e-4、<code>lla</code> 1.143e-6（≈高度，经纬 1e-10°）、 P
+对角两侧逐拍一致（≤1e-6）；<code>pos_ned</code> 最大 <strong>0.1294
+m</strong>（原 0.53 m）。 逐拍序列显示这 0.1294 m
+<strong>在解锁后第一次相对位置刷新拍（row
+107）一次性出现后保持恒定</strong>
+（<code>(Δn,Δe)=(−0.0364,−0.1294) m</code>），同一拍绝对 LLA 差 ≤1e-10°
+⇒ 是<strong>参考系记账</strong>而非滤波差。</p>
+<p><strong>仍未完全消除</strong>：<code>pos_ned</code> 余 0.1294 m
+常量。来源是 SIL 在解锁后还有控制层/DETA100 同步块重写
+<code>relative_*</code>（<code>navigation_task.cpp:3215-3233</code>
+的绝对位置刷新、 <code>flight_control.cpp:320</code>），而 ABI
+只覆盖导航层刷新；补齐它要么把该同步块也做成 ABI 入口、要么在 trace
+里分清两路 <code>relative_*</code>，属开放项。判据维持 N5 位置 ≤1.0 m 的
+"工程等价"，<strong>不写成逐位等价</strong>。</p>
+<p><strong>振动 profile 不通过</strong>：<code>ins_vibration_hf</code> /
 自适应 Q 的输入是 sensor 层 2 kHz 的 "原始−滤波"高频通道，ABI
 没有这个信号（输入是聚合均值/和）⇒ <code>vib_high</code> 恒 0，
 滤波过程噪声与 SIL 不同。<strong>边界：导航 ABI 的对拍证据只在无振动
@@ -503,5 +568,5 @@ profile 全部通过严格判据 （最差
 0.0057%）。<strong>余留</strong>：<code>alt_err</code>
 等诊断量在手动模式下是历史值，不能当控制等价信号。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

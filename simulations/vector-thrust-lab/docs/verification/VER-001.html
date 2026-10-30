@@ -497,7 +497,8 @@ HUD，方程面板解释模型来源；无飞行硬件风险</td>
 <code>low</code>），未经验证；推进/惯量/质量为 ESTIMATED
 实机回写（置信度
 <code>medium</code>，待台架精化）；执行机构为理想瞬时到位；气动为线性小迎角模型；无失速、无风扰、无传感器
-/ 电调 / 电池模型；仿真/固件摆角限幅存在分歧（25° vs 15°，见
+/ 电调 / 电池模型；摆角限幅为<strong>模型概念窗口 25°（仿真域）/
+固件实机包线 15°</strong>，两套口径不可互相外推（DEC-002 A-04，见
 ASM-017）</td>
 </tr>
 </tbody>
@@ -512,8 +513,9 @@ ASM-017）</td>
 <code>maxStep = 0.004 s</code></li>
 <li>电机时间常数 <code>tauM = 0.28 s</code></li>
 <li>差速开方分配公式</li>
-<li>SAS / 积分 / UI 限幅值（摆角限幅仿真 ±25°；⚠ 固件实机已收紧为
-±15°，2026-08-07，仿真参数未回写——回写须重采基线并更新 <a
+<li>SAS / 积分 / UI 限幅值（摆角限幅：<strong>模型概念窗口
+±25°（仿真域）/ 固件实机包线 ±15°</strong>，两套口径不可互相外推，见
+DEC-002 A-04；任何参数变更须重采基线并更新 <a
 href="../registers/behavior-redlines.html">行为保持红线清单</a>）</li>
 <li>空速下限 <code>vMin = 0.5 m/s</code></li>
 <li>地面约束条件
@@ -595,5 +597,5 @@ href="../propulsion/PROP-001.html">PROP-001</a> —
 <li><a href="../registers/hazard-log.html">危害与失效模式日志</a>
 — 失效模式与缓解措施</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-001-验证确认与模型可信度.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

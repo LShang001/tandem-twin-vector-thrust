@@ -1,0 +1,44 @@
+{
+ "trace": "C:\\Users\\12631\\AppData\\Local\\Temp\\ctrl_degraded.csv",
+ "rows": 3000,
+ "max_abs_diff": {
+  "ch1": 0.0005618225097663299,
+  "ch2": 0.000800274658203648,
+  "ch3": 0.0057104736328135175,
+  "ch4": 0.005630657958985097,
+  "delta_f": 0.00040334224700933063,
+  "delta_t": 0.0005502092361451272,
+  "dw": 5.007405201904475e-05,
+  "sfup": 0.0022263560485837885,
+  "cos_tilt": 4.97810363819795e-07,
+  "thr_cmd": 0.005620565795897647,
+  "or0": 5.010099411006941e-05,
+  "ar0": 5.4089355465691824e-05,
+  "or1": 5.0187110900878906e-05,
+  "ar1": 6.450195311913376e-05,
+  "or2": 0.0,
+  "ar2": 5.022878646854245e-05,
+  "alt_err": 0.00010041351318434977,
+  "tgt_vz": 0.00012299069203436375
+ },
+ "mode_mismatch": 0,
+ "step_fail": 0,
+ "strict_tol": 0.01,
+ "strict_ok": true,
+ "engineering_over": {},
+ "caps": {
+  "core_abi": 1,
+  "ekf_abi": 2,
+  "ctrl_abi": 2,
+  "gnc_abi": 1,
+  "nav_abi": 1,
+  "param_count": 133,
+  "vehicle": "tandemvec",
+  "features": [
+   "gnc_available",
+   "nav_available"
+  ],
+  "feature_bits": 192,
+  "build_id": "4d1ea45"
+ }
+}

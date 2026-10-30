@@ -96,7 +96,7 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 - 四元数RK4积分 + 每阶段保范投影
 - theta=−asin(R₁₃)
 - 力臂分离（渲染±1.78m ≠ 物理0.315m）
-- SAS 限幅 ±25°/±0.7（仿真值；固件实机摆角 2026-08-07 已收紧 ±15°，仿真未回写——积分俯仰±0.5rad / 滚转±0.3rad）
+- SAS 限幅 ±25°/±0.7（**模型概念窗口，仿真域**；固件实机包线摆角 ±15°=0.2618 rad，两套口径不可互相外推，见 DEC-002 A-04——积分俯仰±0.5rad / 滚转±0.3rad）
 - 空速下限 0.5m/s、地面 pos.z>6.2
 
 ## 边界
@@ -237,6 +237,7 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 - **SIL 构建脚本（2026-10-29）**：`build_and_run_real.sh` 原先漏了 `lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp`，HEAD 生产路径（真实 Madgwick）链接必失败 `undefined reference to Madgwick::...`；已补齐。日常优先用 `build_incremental.sh`（同宏、带对象缓存、含 Madgwick），两者都必须在 `TandemVec_FCS/` 根目录执行（脚本用相对路径）；32 g 用 `EXTRA_CXXFLAGS="-DBFS_ICM42688_ACCEL_FS_G=32.0f -DBFS_ICM42688_ACCEL_RANGE_MPS2=313.8f"`。
 
 - **固件控制分配直调（2026-10-29，ABI v2）**：`fw_algo` 新增 `fw_tandemvec_alloc`（`TandemVecAllocator.h::allocateTandemVec`）与 `fw_thrust_alloc`（`ThrustAllocation.h::allocateLinearThrustThrottle`），默认机型参数直接取 `TandemVec_Config.h::kDefaultTandemVecParams`；宿主 `test_fw_ctrl_api.cpp` 分配器 11 319 例、推力 231 例与直接头文件调用**逐位一致**（含 next 状态递推、非法输入回零），已接入 `run_all.sh` 的 `fwctrl` 项。Python `fwapi.TandemVecAllocator`/`thrust_alloc`，演示 `sim/run_fw_ctrl_demo.py`（零油门归中/三轴限幅/推力饱和 9 项不变量 PASS）。**ABI v1→v2 为新增结构体**，旧库会被 `fwapi` 版本校验拦住并自动重建；`hifi_core.py` 的分配块仍是历史简化口径（无 τm 观测/BTRUE/偏航调度），新研究直接用 ABI。**hifi 闭环在 HEAD 上本身已发散**（S1-like 短测 15 s 姿态 89°、位置 57 m，与其 EKF 进闭环已知问题一致）⇒ 控制分配 A/B 无法在 hifi 里做验证，本轮已撤回接入尝试，不把 hifi 当固件分配器的验收设施。
+- **导航 ABI 的 `pos_ned` 是控制层记账，不是纯滤波输出（2026-10-30，CTL-004 §6.2）**：`mag_clean` 对拍的 0.53 m 位置残差有两层**非滤波**来源：① trace 只把 GNSS LLA 落成 float32 度，重放 `round(float32deg×1e7)` 与 SIL `llround(double×1e7)` 差 lat −9 / lon +31 单位（−0.10 / +0.30 m），首个位置更新（t=0.315 s）的 0.24 m 台阶 = 该入口差 × K_pos≈0.7（实测 K=0.67–0.73）；② `flight_control.cpp` 解锁沿换导航原点 + 清零 `relative_*`/`estimated_height` + 气压起飞参考置零，而 `fw_nav_step` 只封装导航层 ⇒ 解锁后差一个**常量**（seed 1 0.4239 m，即旧 0.53 m 的来源，随 seed 变）。修法：trace 尾部追加见证列（SIL 实际注入的 UBX 整数、double LLA、调用后 P 对角、`origin_*`），`fw_nav_api.h` 增 `fw_nav_rebase_origin()`（只换参考系/记账，不改滤波算式），`fwapi.nav` 优先吃整数键 + `rebase_origin()`，对拍脚本在原点变化拍触发重定基。修后姿态 1.156e-3、速度 2.095e-4、零偏 4.841e-4、LLA 1.1e-6、P 对角两侧逐拍一致（≤1e-6），`pos_ned` 0.1294 m，且**在解锁后首次相对位置刷新拍一次性出现后恒定**（同一拍绝对 LLA 差 ≤1e-10°）⇒ 剩下的仍是参考系记账（SIL 还有 `navigation_task.cpp:3215-3233` 的 DETA100 绝对位置同步块在重写 `relative_*`），**未完全消除，不得写成「已解释」**。教训：对拍位置量前先分清两侧量的是「导航层状态」还是「控制层记账」；怀疑量化时先把**量测入口的整数**落盘，用 A/B（float 度 vs 见证整数）分离，再看差异是台阶还是常量。
 
 ## 知识沉淀协议
 

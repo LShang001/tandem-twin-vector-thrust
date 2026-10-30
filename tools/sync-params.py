@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import sys
 from pathlib import Path
 
@@ -108,6 +109,35 @@ def _reject_constant(name: str) -> None:
     raise ValueError(f"非法 JSON 常量: {name}（NaN/Infinity 禁止进入参数源）")
 
 
+FW_CONFIG = ROOT / "TandemVec_FCS" / "include" / "TandemVec_Config.h"
+FW_DMAX_RE = re.compile(r"/\*\s*dMax\s*\*/\s*([0-9.]+)f")
+
+
+def _warn_dmax_calibers(model: dict) -> None:
+    """--check 附加提示：模型 dMax 与固件 dMax 两套口径并存时打印 warning。
+
+    @note DEC-002 A-04（2026-10-23）决定不改模型 25°/固件 15°，两套口径显式分开；
+          本函数只提示、不改变退出码，避免文档/分析混写两套口径。
+    """
+    if not FW_CONFIG.exists():
+        return
+    match = FW_DMAX_RE.search(FW_CONFIG.read_text(encoding="utf-8", errors="ignore"))
+    model_dmax = next(
+        (p["value"] for s in model["sections"] for p in s["parameters"] if p["name"] == "dMax"),
+        None,
+    )
+    if match is None or model_dmax is None:
+        return
+    fw_deg = math.degrees(float(match.group(1)))
+    model_deg = math.degrees(float(model_dmax))
+    if abs(model_deg - fw_deg) > 0.5:
+        print(
+            f"[WARN] dMax 双口径并存：模型概念窗口 {model_deg:.1f}°（仿真域）"
+            f" ≠ 固件实机包线 {fw_deg:.1f}°（TandemVec_Config.h），"
+            "两套口径不可互相外推；见 DEC-002 A-04 与 ASM-017"
+        )
+
+
 def main() -> int:
     """CLI 入口：默认写盘生成 parameters.mjs；--check 只比对并返回退出码。"""
     model = json.loads(MODEL_JSON.read_text(encoding="utf-8"), parse_constant=_reject_constant)
@@ -118,12 +148,14 @@ def main() -> int:
             print(f"[FAIL] 生成物不存在: {TARGET}", file=sys.stderr)
             return 1
         current = TARGET.read_text(encoding="utf-8")
-        if current == content:
+        ok = current == content
+        if ok:
             print(f"[OK] {TARGET.relative_to(ROOT)} 与 {MODEL_JSON.relative_to(ROOT)} 一致")
-            return 0
-        print("[FAIL] 参数漂移：parameters.mjs 与 aircraft-model.json 不一致", file=sys.stderr)
-        print("       运行 python tools/sync-params.py 重新生成", file=sys.stderr)
-        return 1
+        else:
+            print("[FAIL] 参数漂移：parameters.mjs 与 aircraft-model.json 不一致", file=sys.stderr)
+            print("       运行 python tools/sync-params.py 重新生成", file=sys.stderr)
+        _warn_dmax_calibers(model)
+        return 0 if ok else 1
     TARGET.write_text(content, encoding="utf-8", newline="\n")
     n = sum(len(s["parameters"]) for s in model["sections"])
     print(f"[OK] 已生成 {TARGET.relative_to(ROOT)}（{n} 个参数，模型 {model['id']} v{model['version']}）")

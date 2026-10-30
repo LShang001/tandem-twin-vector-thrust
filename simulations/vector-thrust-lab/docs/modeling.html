@@ -287,8 +287,11 @@ s 内尚未完全回到纵向参考点，高度状态因机动改变</td>
 Δω  ← Δω  + k_p·p − k_φ·φ − k_iφ·∫φ       （phi_dot≈−p）</code></pre>
 <p><strong>反馈极性必须同时检查控制效率与姿态运动学</strong>：俯仰、滚转的角速率阻尼项取正号，但在锁定的显示约定下
 <code>theta_dot≈−q</code>、<code>phi_dot≈−p</code>，姿态 P/I
-项必须取负号。执行量经 ±25° 摆角和 ±0.7
-差速限幅（仿真值；固件实机摆角已收紧为 ±15°，见 §10 注记）。</p>
+项必须取负号。执行量经 ±25°
+摆角（<strong>模型概念窗口，仿真域</strong>）和 ±0.7
+差速限幅；固件实机包线为 ±15°（0.2618 rad），两套口径不可互相外推（见
+§10 注记与 <a
+href="decisions/DEC-002.html">DEC-002</a> A-04）。</p>
 <h2 id="9-数值实现">9. 数值实现</h2>
 <table>
 <thead>
@@ -379,10 +382,13 @@ TandemVec_FCS 实机构型值（ESTIMATED，置信度
 medium，待台架标定），气动/SAS 为 MODEL-DEFAULT 概念值（置信度
 low）；全量参数手册见
 <code>docs/registers/参数数据手册.md</code>。摆角限幅 <code>dMax</code>
-仿真为 ±25°，<strong>固件实机 2026-08-07 已收紧为
-±15°</strong>（仿真参数未回写，见 <a
-href="registers/behavior-redlines.html">行为保持红线清单</a> 与假设日志
-ASM-017）。</p>
+为<strong>模型概念窗口 ±25°（仿真域）</strong>，固件实机包线
+<strong>±15°</strong>（<code>TandemVec_Config.h</code> dMax=0.2618
+rad、<code>state_data.cpp</code>
+MAX_CORRECTION=15），两套口径不可互相外推；详见 <a
+href="decisions/DEC-002.html">DEC-002</a> A-04 与 <a
+href="registers/assumptions-log.html">ASM-017</a>（15° 可行巡航下限≈29.8
+m/s；28 m/s 配平不可达）。</p>
 <h2 id="11-局限与后续方向">11. 局限与后续方向</h2>
 <ul>
 <li>气动模型为线性小迎角模型，未含大迎角失速、非定常效应与螺旋桨滑流干扰；</li>
@@ -390,5 +396,5 @@ ASM-017）。</p>
 <li>单电机/单舵面失效无余度；</li>
 <li>后续可扩展：控制分配在线优化、LQR/模型预测姿态控制、过渡走廊（悬停—巡航）包线仿真。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-001-六自由度仿真模型规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-001-六自由度仿真模型规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

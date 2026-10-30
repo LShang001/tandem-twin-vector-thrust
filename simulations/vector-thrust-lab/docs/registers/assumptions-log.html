@@ -218,7 +218,8 @@ href="../verification/VER-001.html">VER-001</a></td>
 起）</strong>：固件实机已将 TVC 摆角限幅由 25° 收紧至
 15°（<code>TandemVec_Config.h</code>
 dMax=0.2618、<code>state_data.cpp</code> MAX_CORRECTION=15），而
-<code>aircraft-model.json</code> dMax 仍为 25° 未回写</td>
+<code>aircraft-model.json</code> dMax 为模型概念窗口
+25°（仿真域有意保留，非待回写，见 DEC-002 A-04）</td>
 <td>控制、推进、实机对照</td>
 <td>仿真摆角裕度比实机大 10°：仿真中可用的摆角范围（含配平偏置
 dtTrim=−18.702°
@@ -228,10 +229,14 @@ dtTrim=−18.702°
 给出 15° 下可行巡航速度下限约 <strong>29.8 m/s</strong>（30 m/s 时
 dt=−14.76°；28 m/s 需 −18.70°
 不可达）；低于阈值尾摆需求反而增大，不能按“降速更安全”外推</td>
-<td>将 dMax 回写为 0.2618 rad
-并重采回归基线（红线变更流程），或至少在引用前标注分歧（见 <a
-href="../modeling/MOD-003.html">MOD-003
-§3.2</a>）</td>
+<td><strong>已处置（<a
+href="../decisions/DEC-002.html">DEC-002</a>
+A-04，2026-10-23）</strong>：双口径分离——仿真域保留模型概念窗口
+25°，固件实机按包线 15°
+执行，两套口径不可互相外推；<code>scripts/trim_solve.py --dmax-deg/--scan</code>
+可复算。残留风险：28 m/s 配平（dtTrim=−18.702°）在 15°
+下不可达，运营/设计须按 ≥29.8 m/s 或重新配平（30–40 m/s 可行，30 m/s 时
+dt=−14.76°、裕度仅 0.24°）</td>
 <td><a href="parameter-handbook.html">参数数据手册</a> PAR-011、<a
 href="behavior-redlines.html">行为保持红线清单</a>、<code>TandemVec_FCS/include/TandemVec_Config.h</code></td>
 </tr>
@@ -247,5 +252,5 @@ href="hazard-log.html"><code>危害与失效模式日志</code></a>、<a
 href="../verification/SAFE-001.html">SAFE-001</a>
 共同构成模型成熟度声明的支撑文件。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:39</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/假设与局限日志.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

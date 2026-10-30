@@ -98,12 +98,15 @@
 <td>SAS 摆角限幅</td>
 <td>±0.4363 rad (25°)</td>
 <td><code>dMax</code></td>
-<td>仿真侧物理摆座行程限制（<code>aircraft-model.json</code>
-值，MODEL-DEFAULT）。⚠️ <strong>固件实机已收紧为 ±0.2618 rad
+<td>仿真侧<strong>模型概念窗口（仿真域，非实机物理限幅）</strong>（<code>aircraft-model.json</code>
+值，MODEL-DEFAULT）；固件实机包线 <strong>±0.2618 rad
 (15°)</strong>（2026-08-07，<code>TandemVec_Config.h</code> dMax +
 <code>state_data.cpp</code>
-MAX_CORRECTION=15）；仿真参数未随固件回写，两者分歧期间摆角裕度结论以本行
-25° 为仿真真值、实机行为以 15° 为准。若回写须重采基线</td>
+MAX_CORRECTION=15）。两套口径不可互相外推（<a
+href="../decisions/DEC-002.html">DEC-002</a>
+A-04、ASM-017）；28 m/s 配平 dtTrim=−18.702° 在 15° 下不可达，15°
+可行巡航下限≈29.8 m/s（30–40 m/s 可行，30 m/s 裕度仅
+0.24°）。若回写须重采基线</td>
 </tr>
 <tr>
 <td>SAS 差速限幅</td>
@@ -221,5 +224,5 @@ R₁₃/θ 推导</td>
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/registers/行为保持红线清单.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:39</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/行为保持红线清单.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

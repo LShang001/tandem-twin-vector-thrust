@@ -69,7 +69,22 @@ def main():
     maxd = {k: 0.0 for k in ("quat", "pos", "vel", "alt", "bias", "lla")}
     first_bad = None
     prev_us = None
-    for r in rows:
+    # 解锁沿重定基（arm rebase）：SIL 在解锁边沿执行 `flight_control` 的武装序列
+    # ——把导航原点设为当时的 EKF LLA 并清零 relative_*，气压起飞参考同时重置。
+    # `fw_nav_step` 只封装 `handleNavigationSystem()`（导航层），不含控制层这次
+    # 记账，所以解锁之后两侧 `pos_ned`/`alt_up_m` 相差一个**常量**（原点差），
+    # 其幅值等于解锁前 EKF 相对首帧 GNSS 原点的漂移（GNSS 噪声驱动，随 seed 变）。
+    # 对拍必须在解锁沿把两侧一起平移，否则量到的是参考系差，而不是滤波差。
+    arm = None            # (out_pos, sil_pos, out_alt, sil_alt) at unlock edge
+    arm_row = -1
+    prev_unlocked = 0
+    raw_max = {"pos": 0.0, "alt": 0.0}
+    # 原点见证列：老 trace 没有这三列，退回解锁沿平移口径。
+    has_origin = ("origin_lat_d" in rows[0] and
+                  rows[0]["origin_lat_d"] not in ("", "nan", "None"))
+    prev_origin = None
+    rebase_count = 0
+    for irow, r in enumerate(rows):
         t = float(r["t"])
         # dt 用 SIL 的**微秒时钟**差分（不是外层 t）：SIL 的导航调用时钟是
         # 上一拍的最后一个 2 kHz 样本，首两拍会出现 0/4.5 ms 的相位，用 t
@@ -88,19 +103,53 @@ def main():
         dv = [[float(r[f"d{i}vx"]), float(r[f"d{i}vy"]), float(r[f"d{i}vz"])]
               for i in range(nd)]
         ddt = [float(r[f"d{i}dt"]) for i in range(nd)]
+        # 控制层武装重定基：trace 记录固件当前导航原点，变化即复现
+        # `flight_control.cpp` 解锁沿的 `setNavigationOriginFromLlaRad` + 清零。
+        # 必须在同一拍 step 之前调用，与 SIL 的任务时序一致。
+        if has_origin:
+            origin = (float(r["origin_lat_d"]), float(r["origin_lon_d"]),
+                      float(r["origin_alt_d"]))
+            if (prev_origin is not None and origin != prev_origin and
+                    hasattr(nav, "rebase_origin")):
+                nav.rebase_origin(origin)
+                rebase_count += 1
+                print(f"[rebase] row={irow} t={t:.3f}s 原点切换为 "
+                      f"({origin[0]:.9f},{origin[1]:.9f},{origin[2]:.6f})")
+            prev_origin = origin
         gnss = None
         if int(r["gnss_valid"]):
-            gnss = {
-                "lat_deg": float(r["gnss_lat"]),
-                "lon_deg": float(r["gnss_lon"]),
-                "alt_m": float(r["gnss_alt"]),
-                "vel_ned": (float(r["gnss_vn"]), float(r["gnss_ve"]),
-                            float(r["gnss_vd"])),
-                "h_acc": float(r["gnss_hacc"]),
-                "v_acc": float(r["gnss_vacc"]),
-                "s_acc": float(r["gnss_sacc"]),
-                "itow_ms": int(float(r["gnss_itow"])),
-            }
+            # 优先用 SIL 见证过的**线格式整数**（`--trace-nav` 新增列，见
+            # fw_sil_env_main.cpp）：SIL 的量测入口是
+            # `llround(lla_deg_double * 1e7)`，而 trace 里的浮点度列只保留
+            # float32（纬度 28° 的 ULP≈1.9e-6°≈19 单位），从浮点度反算整数会
+            # 在**量测入口**就与 SIL 差最多半个量化步（东向可达 0.3 m）。
+            # 缺这列时（旧 trace）退回浮点度换算，精度上限受 float32 限制。
+            gi = r.get("gnss_lat_1e7", "")
+            if gi not in ("", "nan", "None"):
+                gnss = {
+                    "lat_1e7": int(gi),
+                    "lon_1e7": int(r["gnss_lon_1e7"]),
+                    "alt_mm": int(r["gnss_alt_mm"]),
+                    "vel_ned_mmps": (int(r["gnss_vn_mmps"]),
+                                     int(r["gnss_ve_mmps"]),
+                                     int(r["gnss_vd_mmps"])),
+                    "h_acc_mm": int(r["gnss_hacc_mm"]),
+                    "v_acc_mm": int(r["gnss_vacc_mm"]),
+                    "s_acc_mmps": int(r["gnss_sacc_mmps"]),
+                    "itow_ms": int(float(r["gnss_itow"])),
+                }
+            else:
+                gnss = {
+                    "lat_deg": float(r["gnss_lat"]),
+                    "lon_deg": float(r["gnss_lon"]),
+                    "alt_m": float(r["gnss_alt"]),
+                    "vel_ned": (float(r["gnss_vn"]), float(r["gnss_ve"]),
+                                float(r["gnss_vd"])),
+                    "h_acc": float(r["gnss_hacc"]),
+                    "v_acc": float(r["gnss_vacc"]),
+                    "s_acc": float(r["gnss_sacc"]),
+                    "itow_ms": int(float(r["gnss_itow"])),
+                }
         try:
             out = nav.step(
                 dt=dt,
@@ -130,15 +179,40 @@ def main():
             step_fail += 1
             continue
 
+        sil_pos = np.array([float(r["rn"]), float(r["re"]), float(r["rd"])])
+        sil_alt = float(r["alt_up"])
+        unlocked = bool(int(r["unlocked"]))
+        if arm is None and unlocked and not prev_unlocked:
+            arm_row = irow
+            arm = (np.array(out["pos_ned"], dtype=float), sil_pos,
+                   float(out["alt_up_m"]), sil_alt)
+            off = arm[0] - arm[1]
+            print(f"[rebase] 解锁沿 row={arm_row} t={t:.3f}s "
+                  f"两侧原点差=({off[0]:+.6f},{off[1]:+.6f},{off[2]:+.6f}) m")
+        prev_unlocked = int(unlocked)
+        if arm is not None:
+            pos_out = np.array(out["pos_ned"], dtype=float) - arm[0]
+            pos_sil = sil_pos - arm[1]
+            alt_out = float(out["alt_up_m"]) - arm[2]
+            alt_sil = sil_alt - arm[3]
+        else:
+            pos_out = np.array(out["pos_ned"], dtype=float)
+            pos_sil = sil_pos
+            alt_out = float(out["alt_up_m"])
+            alt_sil = sil_alt
+        raw_max["pos"] = max(raw_max["pos"], float(np.max(np.abs(
+            np.array(out["pos_ned"], dtype=float) - sil_pos))))
+        raw_max["alt"] = max(raw_max["alt"],
+                             abs(float(out["alt_up_m"]) - sil_alt))
+
         d = {
             "quat": float(np.max(np.abs(out["quat"] - np.array(
                 [float(r["quat_w"]), float(r["quat_x"]),
                  float(r["quat_y"]), float(r["quat_z"])])))),
-            "pos": float(np.max(np.abs(out["pos_ned"] - np.array(
-                [float(r["rn"]), float(r["re"]), float(r["rd"])])))),
+            "pos": float(np.max(np.abs(pos_out - pos_sil))),
             "vel": float(np.max(np.abs(out["vel_ned"] - np.array(
                 [float(r["vn"]), float(r["ve"]), float(r["vd"])])))),
-            "alt": abs(out["alt_up_m"] - float(r["alt_up"])),
+            "alt": abs(alt_out - alt_sil),
             "lla": float(np.max(np.abs(out["lla_deg"] - np.array(
                 [float(r["lla_lat"]), float(r["lla_lon"]),
                  float(r["lla_alt"])])))),
@@ -179,6 +253,10 @@ def main():
     print(f"N5 max|Δ|: quat={maxd['quat']:.3e} pos={maxd['pos']:.3e} m "
           f"vel={maxd['vel']:.3e} m/s alt={maxd['alt']:.3e} m "
           f"bias={maxd['bias']:.3e} lla={maxd['lla']:.3e} deg")
+    if arm_row >= 0:
+        print(f"   解锁沿重定基后（row={arm_row}）："
+              f"未平移 raw max pos={raw_max['pos']:.6f} m "
+              f"alt={raw_max['alt']:.6f} m")
     if first_bad:
         print(f"   首个超差: t={first_bad['t']:.3f}s {first_bad['field']} "
               f"{first_bad['diff']:.3e}")
@@ -189,6 +267,13 @@ def main():
             "trace": args.trace, "rows": len(rows), "step_fail": step_fail,
             "init_mismatch": init_mismatch, "epoch_mismatch": epoch_mismatch,
             "gate_mismatch": gate_mismatch, "max_abs_diff": maxd,
+            "origin_rebase": {
+                "arm_row": arm_row,
+                "offset_m": (None if arm is None else
+                             [float(x) for x in (arm[0] - arm[1])]),
+                "raw_max_pos_m": raw_max["pos"],
+                "raw_max_alt_m": raw_max["alt"],
+            },
             "first_bad": first_bad, "fails": fails,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"saved {args.json}")

@@ -1,0 +1,44 @@
+{
+ "trace": "C:\\Users\\12631\\AppData\\Local\\Temp\\ctrl_mag_nominal.csv",
+ "rows": 3000,
+ "max_abs_diff": {
+  "ch1": 0.0005477783203104991,
+  "ch2": 0.000770745849607124,
+  "ch3": 0.004756359863279158,
+  "ch4": 0.004697009277343511,
+  "delta_f": 0.0003604732513426967,
+  "delta_t": 0.0005405231475830163,
+  "dw": 5.433553457260404e-05,
+  "sfup": 0.0018344223632809076,
+  "cos_tilt": 4.97810363819795e-07,
+  "thr_cmd": 0.004697497558595387,
+  "or0": 5.004911422734626e-05,
+  "ar0": 5.988769531484195e-05,
+  "or1": 4.998989105220453e-05,
+  "ar1": 7.165527344454858e-05,
+  "or2": 0.00016275453567504705,
+  "ar2": 0.00125224609374186,
+  "alt_err": 0.00010043640136636611,
+  "tgt_vz": 8.980532884597658e-05
+ },
+ "mode_mismatch": 0,
+ "step_fail": 0,
+ "strict_tol": 0.01,
+ "strict_ok": true,
+ "engineering_over": {},
+ "caps": {
+  "core_abi": 1,
+  "ekf_abi": 2,
+  "ctrl_abi": 2,
+  "gnc_abi": 1,
+  "nav_abi": 1,
+  "param_count": 133,
+  "vehicle": "tandemvec",
+  "features": [
+   "gnc_available",
+   "nav_available"
+  ],
+  "feature_bits": 192,
+  "build_id": "4d1ea45"
+ }
+}

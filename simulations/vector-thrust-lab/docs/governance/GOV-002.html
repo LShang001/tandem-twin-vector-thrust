@@ -429,9 +429,13 @@ CRLF；</li>
 </tr>
 <tr>
 <td>SAS 摆角限幅</td>
-<td>±<code>dMax</code> = ±0.4363 rad（25°）</td>
-<td><code>dMax</code>（⚠ 固件实机已收紧为
-±15°，2026-08-07；仿真参数未回写，分歧见行为保持红线清单）</td>
+<td>±<code>dMax</code> = ±0.4363 rad（<strong>模型概念窗口
+25°，仿真域</strong>）/ 固件实机包线 ±15°（0.2618
+rad，<code>TandemVec_Config.h</code> dMax + <code>state_data.cpp</code>
+MAX_CORRECTION=15）</td>
+<td><code>dMax</code>（两套口径不可互相外推；详见 <a
+href="../decisions/DEC-002.html">DEC-002</a> A-04
+与假设日志 ASM-017）</td>
 </tr>
 <tr>
 <td>SAS 差速限幅</td>
@@ -506,5 +510,5 @@ rad</td>
 <li>禁止在构建产物中直接做持久化修改，所有修改应在 Markdown
 源中完成并重新构建。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-002-信息与配置管理.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

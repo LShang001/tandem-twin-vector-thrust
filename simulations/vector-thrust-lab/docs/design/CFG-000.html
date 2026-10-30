@@ -208,7 +208,14 @@ FCS 实机 ESTIMATED 值；气动/SAS 为 MODEL-DEFAULT 概念值）。</p>
 <td>dMax</td>
 <td>0.4363323129985824</td>
 <td>rad</td>
-<td>单轴摆角上限（25°）</td>
+<td>单轴摆角上限（<strong>模型概念窗口
+25°，仿真域</strong>）。固件实机包线 15°（0.2618
+rad，<code>TandemVec_Config.h</code> dMax +
+<code>MAX_CORRECTION=15</code>），两套口径不可互相外推；28 m/s 配平
+dtTrim=−18.702° 在 15° 下不可达，15° 可行巡航下限≈29.8 m/s（30–40 m/s
+可行，30 m/s 时 dt=−14.76°，裕度仅 0.24°）。详见 <a
+href="../decisions/DEC-002.html">DEC-002</a> A-04 与 <a
+href="../registers/assumptions-log.html">ASM-017</a></td>
 <td>MODEL-DEFAULT</td>
 </tr>
 </tbody>
@@ -454,7 +461,9 @@ FCS 实机 ESTIMATED 值；气动/SAS 为 MODEL-DEFAULT 概念值）。</p>
 <td>dtTrim</td>
 <td>-0.3264219585497927</td>
 <td>rad</td>
-<td>28 m/s 四方程尾摆配平偏置（-18.702°）</td>
+<td>28 m/s 四方程尾摆配平偏置（-18.702°）；固件 15° 包线下不可达（15°
+可行巡航下限≈29.8 m/s，30 m/s 时 dt=−14.76°、裕度仅 0.24°），见 DEC-002
+A-04</td>
 <td>ESTIMATED</td>
 </tr>
 <tr>
@@ -660,11 +669,14 @@ Mz,a = q̄·Sw·bspan·(Cnb·β + Cnr·rH)</code></pre>
 <li><strong>参数状态</strong>：推进/惯量/质量/配平为
 ESTIMATED（2026-08-01 回写 TandemVec_FCS 实机构型值，置信度
 <code>medium</code>，待台架标定）；气动与 SAS 为
-<code>MODEL-DEFAULT</code>（置信度 <code>low</code>）。⚠️ 摆角限幅 dMax
-仿真仍为 25°，固件实机已收紧为 15°（见 <a
-href="../registers/behavior-redlines.html">行为保持红线清单</a> 与 <a
-href="../registers/assumptions-log.html">假设与局限日志</a>
-ASM-017）。</li>
+<code>MODEL-DEFAULT</code>（置信度 <code>low</code>）。⚠️
+摆角限幅为<strong>模型概念窗口 25°（仿真域）</strong> /
+<strong>固件实机包线 15°</strong>（0.2618
+rad），两套口径不可互相外推（<a
+href="../decisions/DEC-002.html">DEC-002</a> A-04）；28
+m/s 配平 dtTrim=−18.702° 在 15° 下不可达，15° 可行巡航下限≈29.8
+m/s（30–40 m/s 可行；30 m/s 时 dt=−14.76°，裕度仅 0.24°），见 <a
+href="../registers/assumptions-log.html">ASM-017</a>。</li>
 <li><strong>模型成熟度</strong>：概念级 /
 演示级，用于控制律结构研究、通道机理演示与教学，不用于飞行性能预测。</li>
 <li><strong>变更控制</strong>：任何涉及质量、惯量、力臂、气动导数、推进参数或摆轴定义的变更，须通过
@@ -672,5 +684,5 @@ ASM-017）。</li>
 配置管理流程，更新 <code>models/aircraft-model.json</code>，并重新运行
 <code>tools/sync-params.py</code> 与回归测试。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CFG-000-概念构型基线C0.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

@@ -97,7 +97,7 @@
           "name": "dMax",
           "value": 0.4363323129985824,
           "unit": "rad",
-          "description": "摆角限幅（25°）——仿真概念窗口值；固件实机 2026-08-07 已收紧为 ±15°（TandemVec_Config.h dMax / state_data.cpp MAX_CORRECTION=15），仿真未回写。差异与取舍以 docs/registers/行为保持红线清单.md「SAS 摆角限幅」行为准，回写须重采回归基线",
+          "description": "摆角限幅（25°）——模型概念窗口（仿真域，有意保留，非待回写项）；固件实机包线 ±15°（TandemVec_Config.h dMax / state_data.cpp MAX_CORRECTION=15）。两套口径不可互相外推（DEC-002 A-04、ASM-017）；涉及摆角裕度/配平占限幅比例的结论须按 15° 重算，差异与取舍见 docs/registers/行为保持红线清单.md「SAS 摆角限幅」",
           "source": "MODEL-DEFAULT",
           "confidence": "low"
         }

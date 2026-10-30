@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <cstring>
+#include <limits>
 #include <new>
 
 #include "Arduino.h"
@@ -243,6 +244,20 @@ void ReadOutputs(fw_nav_output_t *out)
   out->gnss_overflow = ubx.queue_overflow_count();
   out->last_epoch_tow_ms = gnss_status.last_epoch_tow_ms;
   out->steps = g_nav_instance != nullptr ? g_nav_instance->steps : 0U;
+  // 观测专用 P 对角：仅在 EKF_NAV_TELEMETRY 构建（共享库默认开启）可用；
+  // 未开时写 NaN，避免 0 被误读成"方差为零"。
+  for (int i = 0; i < 3; ++i)
+  {
+    out->pos_cov_m2[i] = std::numeric_limits<float>::quiet_NaN();
+    out->vel_cov_m2[i] = std::numeric_limits<float>::quiet_NaN();
+  }
+#ifdef EKF_NAV_TELEMETRY
+  for (int i = 0; i < 3; ++i)
+  {
+    out->pos_cov_m2[i] = nav_ekf.covariance_coeff(i, i);
+    out->vel_cov_m2[i] = nav_ekf.covariance_coeff(i + 3, i + 3);
+  }
+#endif
 }
 }  // namespace
 
@@ -291,6 +306,41 @@ int32_t fw_nav_reset(fw_nav *handle)
   estimated_height = 0.0f;
   relative_north = relative_east = relative_down = 0.0f;
   ahrs_yaw_correction_rad = 0.0f;
+  return 0;
+}
+
+/**
+ * @brief 控制层武装重定基：复现 `flight_control.cpp` 解锁沿那组导航层记账。
+ * @details 只改参考系与对外记账（`setNavigationOriginFromLlaRad` + 清零
+ *          `relative_*`/`INS_GNSS_Packet.location_*`/`estimated_height`/`fused_*`），
+ *          不碰 EKF 状态与协方差，也不改滤波算式。SIL 侧同一时刻由控制任务
+ *          执行，故宿主重放必须在同一拍 `fw_nav_step` 之前调用，否则
+ *          `pos_ned_m`/`alt_up_m` 会带一个常量参考系差（CTL-004 §6.2）。
+ */
+int32_t fw_nav_rebase_origin(fw_nav *handle, const double origin_lla_deg[3])
+{
+  if (handle == nullptr || origin_lla_deg == nullptr)
+  {
+    return 1;
+  }
+  for (int i = 0; i < 3; ++i)
+  {
+    if (!std::isfinite(origin_lla_deg[i]))
+    {
+      return 5;
+    }
+  }
+  const double kDegToRad = 3.14159265358979323846 / 180.0;
+  setNavigationOriginFromLlaRad(origin_lla_deg[0] * kDegToRad,
+                                origin_lla_deg[1] * kDegToRad,
+                                origin_lla_deg[2]);
+  relative_north = relative_east = relative_down = 0.0f;
+  INS_GNSS_Packet.location_north = 0.0f;
+  INS_GNSS_Packet.location_east = 0.0f;
+  INS_GNSS_Packet.location_down = 0.0f;
+  estimated_height = 0.0f;
+  fused_north_pos = fused_east_pos = 0.0f;
+  fused_north_vel = 0.0f;
   return 0;
 }
 

@@ -35,6 +35,14 @@
 <p>本矩阵将 <a href="../requirements/REQ-001.html">REQ-001</a>
 中的每条需求映射到验证方法（I/A/T/D）、具体测试或证据，以及当前满足状态。它是
 VER-001 中 V 模型右升路径的详细展开。</p>
+<p><strong>作用域</strong>：本表是 REQ-001 仿真域的验证视图，行集合与
+REQ-001 一一对应；嵌入固件 / 导航（2026-10 主线）不在 REQ-001 范围内（见
+REQ-001 §5「非目标」），其证据见 <a
+href="../control/CTL-004.html">CTL-004
+§6</a>（固件直调 / SIL 对拍）与仓库根 <code>TandemVec-EKF-Report/</code>
+下的导航 / EKF 仿真报告，不归本表管辖。 因此本表没有 2026-10 固件 /
+导航行，不等于这些工作「未回写」——它们本就不属于 REQ-001
+仿真域，故不在本表判定。</p>
 </blockquote>
 <hr />
 <h2 id="1-功能需求">1 功能需求</h2>
@@ -67,7 +75,7 @@ VER-001 中 V 模型右升路径的详细展开。</p>
 <td>REQ-SIM-003</td>
 <td>地面约束平面（NED z = <code>groundZ = 6.2 m</code>）防止穿透</td>
 <td>T</td>
-<td><code>dynamics.mjs:physicsStep</code>（74–78）；<code>tests/dynamics.test.mjs</code>地面约束测试</td>
+<td><code>dynamics.mjs:physicsStep</code>（107–108）；<code>tests/dynamics.test.mjs</code>地面约束测试</td>
 <td>已满足</td>
 </tr>
 <tr>
@@ -110,7 +118,7 @@ href="../design/CFG-000.html">CFG-000</a> §6</td>
 <tr>
 <td>REQ-VTL-003</td>
 <td>自动定高（高度外环 + 垂直速度内环 + 倾角补偿）</td>
-<td>T</td>
+<td>T, D</td>
 <td><code>control.mjs</code>
 高度环；<code>tests/vtol.test.mjs</code>（定高收敛/积分限幅/关闭恢复悬停配平）</td>
 <td>已满足</td>
@@ -134,21 +142,21 @@ href="../design/CFG-000.html">CFG-000</a> §6</td>
 <td>REQ-PRP-001</td>
 <td>差速开方分配：<code>ωf = ω0·sqrt(1+Δω)</code>，<code>ωt = ω0·sqrt(1-Δω)</code></td>
 <td>T, A</td>
-<td><code>propulsion.mjs:stepPropulsion</code>（11–14）；<code>tests/propulsion.test.mjs</code>平方和不变</td>
+<td><code>propulsion.mjs:stepPropulsion</code>（48–49）；<code>tests/propulsion.test.mjs</code>平方和不变</td>
 <td>已满足</td>
 </tr>
 <tr>
 <td>REQ-PRP-002</td>
 <td>电机一阶滞后模型，时间常数 <code>tauM = 0.28 s</code></td>
 <td>T</td>
-<td><code>propulsion.mjs:stepPropulsion</code>（15–16）；<code>tests/propulsion.test.mjs</code>一阶滞后</td>
+<td><code>propulsion.mjs:stepPropulsion</code>（50–51）；<code>tests/propulsion.test.mjs</code>一阶滞后</td>
 <td>已满足</td>
 </tr>
 <tr>
 <td>REQ-PRP-003</td>
 <td>零差速等转速时反扭矩相互抵消（<code>Mx ≈ 0</code>）</td>
 <td>T</td>
-<td><code>propulsion.mjs:stepPropulsion</code>（31）；<code>tests/propulsion.test.mjs</code>零差速反扭对消</td>
+<td><code>propulsion.mjs:stepPropulsion</code>（66）；<code>tests/propulsion.test.mjs</code>零差速反扭对消</td>
 <td>已满足</td>
 </tr>
 <tr>
@@ -171,7 +179,7 @@ href="parameter-handbook.html"><code>参数数据手册</code></a></td>
 <td>REQ-TST-001</td>
 <td>单元测试覆盖核心模块</td>
 <td>T</td>
-<td><code>tests/*.test.mjs</code>，91 项（2026-08-11
+<td><code>tests/*.test.mjs</code>，91 项（2026-10-30
 <code>node --test</code>
 实测）；<code>node --test "tests/*.test.mjs"</code></td>
 <td>已满足</td>
@@ -339,5 +347,5 @@ href="assumptions-log.html"><code>假设与局限日志</code></a> ASM-002</td>
 <li>未满足需求转为已满足时，须经代码 / 测试审查，并更新 <a
 href="../requirements/REQ-001.html">REQ-001</a>。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/registers/验证覆盖矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:39</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/验证覆盖矩阵.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

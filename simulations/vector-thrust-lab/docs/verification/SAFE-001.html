@@ -69,7 +69,11 @@ CCAR-91/92、FAR/CS 等适航或运行规章。</li>
 <td>成熟度声明见根 README、VER-001 与
 CFG-000；参数标注来源与置信度（推进/惯量/质量/配平 ESTIMATED，气动/SAS
 MODEL-DEFAULT +
-<code>low</code>）；模型可信度分级明确禁止用于性能预测和硬件决策；仿真/固件摆角限幅分歧（25°/15°）已在红线清单与假设日志登记</td>
+<code>low</code>）；模型可信度分级明确禁止用于性能预测和硬件决策；摆角限幅已按**模型概念窗口
+25°（仿真域）/ 固件实机包线 15°**显式分离（<a
+href="../decisions/DEC-002.html">DEC-002</a>
+A-04、假设日志 <a
+href="../registers/assumptions-log.html">ASM-017</a>），两套口径不可互相外推</td>
 <td>中：仍取决于使用人员是否阅读并遵循成熟度声明</td>
 <td><a href="VER-001.html">VER-001</a>、<a
 href="../design/CFG-000.html">CFG-000</a>、根
@@ -192,5 +196,5 @@ CTL-002 与危害日志中的失效模式，补充 FMEA / FMECA 与定量风险�
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/SAFE-001-初步安全计划.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/SAFE-001-初步安全计划.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

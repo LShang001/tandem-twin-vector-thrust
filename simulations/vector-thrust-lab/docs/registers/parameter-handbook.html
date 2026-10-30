@@ -210,11 +210,14 @@ ESTIMATED 组件估算并回写固件实机构型值，待台架标定；气动�
 <td><code>dMax</code></td>
 <td>0.4363323129985824</td>
 <td>rad</td>
-<td>摆角限幅（25°）。⚠️ <strong>仿真/固件分歧</strong>：固件实机
-2026-08-07 已收紧为 15°（0.2618 rad，<code>TandemVec_Config.h</code>
-dMax + <code>state_data.cpp</code>
-MAX_CORRECTION=15），本仿真参数尚未回写，仍为
-25°——引用摆角裕度结论时注意区分（见行为保持红线清单）</td>
+<td>摆角限幅——<strong>模型概念窗口 25°（仿真域）</strong>。固件实机包线
+15°（0.2618 rad，<code>TandemVec_Config.h</code> dMax +
+<code>state_data.cpp</code>
+MAX_CORRECTION=15），两套口径不可互相外推（<a
+href="../decisions/DEC-002.html">DEC-002</a> A-04、<a
+href="assumptions-log.html">ASM-017</a>）。28 m/s 配平 dtTrim=−18.702° 在
+15° 下不可达；15° 可行巡航下限≈29.8 m/s（30 m/s 时 −14.76°、裕度仅
+0.24°；30–40 m/s 可行）</td>
 <td>MODEL-DEFAULT</td>
 <td>low</td>
 <td><code>P.dMax</code></td>
@@ -880,5 +883,5 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:39</footer></article></body>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

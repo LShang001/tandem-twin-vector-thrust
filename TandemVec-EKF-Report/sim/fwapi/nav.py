@@ -52,6 +52,24 @@ class Nav:
         if rc != 0:
             raise RuntimeError(f"fw_nav_reset 失败 rc={rc}")
 
+    def rebase_origin(self, origin_lla_deg) -> None:
+        """控制层武装重定基（起飞点原点切换）。
+
+        SIL 侧由 `flight_control.cpp` 的解锁沿执行：把导航原点设为当时的
+        起飞点并清零 `relative_*`/`estimated_height`/`INS_GNSS_Packet.location_*`。
+        宿主重放若只跑 `fw_nav_step`，解锁后 `pos_ned`/`alt_up_m` 会与固件差一个
+        常量参考系差（CTL-004 §6.2）。在解锁边沿用固件**实际使用的原点**
+        （trace 的 `origin_*_d` 列）调一次本函数即可重新对齐。
+        """
+        if not hasattr(self._lib, "fw_nav_rebase_origin"):
+            raise RuntimeError(
+                "当前 fw_algo 库没有 fw_nav_rebase_origin：请重建共享库"
+                "（bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh）")
+        arr = (ctypes.c_double * 3)(*[float(v) for v in origin_lla_deg])
+        rc = self._lib.fw_nav_rebase_origin(self._handle, arr)
+        if rc != 0:
+            raise RuntimeError(f"fw_nav_rebase_origin 失败 rc={rc}")
+
     def step(self, dt, accel, gyro, ahrs_quat=None, sample_count=None,
              delta_theta=None, delta_vel=None, delta_dt=None,
              gnss=None, baro_alt_up=None, mag=None, flow=None,
@@ -100,15 +118,28 @@ class Nav:
         if gnss is not None:
             # 与 UBX 线格式一致：1e-7 deg / mm / mm·s⁻¹（float 在纬度 28° 只有
             # ~0.2 m、经度 112° ~0.75 m 分辨率，会在量测入口丢精度）。
+            # 所以**优先**接受见证过的整数（lat_1e7/lon_1e7/...）：两侧只有注入
+            # 同一个整数，量测入口才真正相同。缺失时退回浮点度换算，会引入至多
+            # 半个量化步的入口差（见 CTL-004 §6.2）。
             inp.gnss_valid = 1
-            inp.gnss_lat_1e7 = int(round(float(gnss["lat_deg"]) * 1e7))
-            inp.gnss_lon_1e7 = int(round(float(gnss["lon_deg"]) * 1e7))
-            inp.gnss_alt_mm = int(round(float(gnss["alt_m"]) * 1000.0))
-            for i in range(3):
-                inp.gnss_vel_ned_mmps[i] = int(round(float(gnss["vel_ned"][i]) * 1000.0))
-            inp.gnss_h_acc_mm = int(round(float(gnss.get("h_acc", 0.5)) * 1000.0))
-            inp.gnss_v_acc_mm = int(round(float(gnss.get("v_acc", 0.8)) * 1000.0))
-            inp.gnss_s_acc_mmps = int(round(float(gnss.get("s_acc", 0.1)) * 1000.0))
+            if "lat_1e7" in gnss:
+                inp.gnss_lat_1e7 = int(gnss["lat_1e7"])
+                inp.gnss_lon_1e7 = int(gnss["lon_1e7"])
+                inp.gnss_alt_mm = int(gnss["alt_mm"])
+                for i in range(3):
+                    inp.gnss_vel_ned_mmps[i] = int(gnss["vel_ned_mmps"][i])
+                inp.gnss_h_acc_mm = int(gnss.get("h_acc_mm", 500))
+                inp.gnss_v_acc_mm = int(gnss.get("v_acc_mm", 800))
+                inp.gnss_s_acc_mmps = int(gnss.get("s_acc_mmps", 100))
+            else:
+                inp.gnss_lat_1e7 = int(round(float(gnss["lat_deg"]) * 1e7))
+                inp.gnss_lon_1e7 = int(round(float(gnss["lon_deg"]) * 1e7))
+                inp.gnss_alt_mm = int(round(float(gnss["alt_m"]) * 1000.0))
+                for i in range(3):
+                    inp.gnss_vel_ned_mmps[i] = int(round(float(gnss["vel_ned"][i]) * 1000.0))
+                inp.gnss_h_acc_mm = int(round(float(gnss.get("h_acc", 0.5)) * 1000.0))
+                inp.gnss_v_acc_mm = int(round(float(gnss.get("v_acc", 0.8)) * 1000.0))
+                inp.gnss_s_acc_mmps = int(round(float(gnss.get("s_acc", 0.1)) * 1000.0))
             inp.gnss_itow_ms = int(gnss.get("itow_ms", 0))
 
         if baro_alt_up is not None:
@@ -168,4 +199,7 @@ class Nav:
             "gnss_overflow": int(out.gnss_overflow),
             "last_epoch_tow_ms": int(out.last_epoch_tow_ms),
             "steps": int(out.steps),
+            # 观测专用：P 对角（库构建未开 EKF_NAV_TELEMETRY 时为 NaN）。
+            "pos_cov_m2": np.array(out.pos_cov_m2, dtype=float),
+            "vel_cov_m2": np.array(out.vel_cov_m2, dtype=float),
         }

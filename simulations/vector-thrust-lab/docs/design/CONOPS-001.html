@@ -165,14 +165,14 @@ href="../governance/GOV-001.html">GOV-001</a> §2）。</p>
 <tr>
 <td>俯仰摆角 δt</td>
 <td><code>s-dt</code> / <code>v-dt</code></td>
-<td>-25° ~ +25°</td>
+<td>-25° ~ +25°（仿真域）</td>
 <td>尾电机绕 y_b 摆动（相对配平增量；sasMode=3 角速度闭环时为目标角速率
 ±90°/s）</td>
 </tr>
 <tr>
 <td>偏航摆角 δf</td>
 <td><code>s-df</code> / <code>v-df</code></td>
-<td>-25° ~ +25°</td>
+<td>-25° ~ +25°（仿真域）</td>
 <td>前电机绕 z_b 摆动（相对配平增量；sasMode=3 时同 δt）</td>
 </tr>
 <tr>
@@ -184,6 +184,14 @@ href="../governance/GOV-001.html">GOV-001</a> §2）。</p>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>摆角口径</strong>：滑块 ±25°
+为<strong>模型概念窗口（仿真域）</strong>；固件实机包线为
+±15°（<code>TandemVec_Config.h</code>
+dMax=0.2618、<code>MAX_CORRECTION=15</code>），两套口径不可互相外推（<a
+href="../decisions/DEC-002.html">DEC-002</a> A-04、<a
+href="../registers/assumptions-log.html">ASM-017</a>）。</p>
+</blockquote>
 <p>**悬停模式（<code>b-vtol</code>
 开启，机头朝天）**下滑块语义切换为四轴式：<code>dw</code> →
 航向角速度指令 ±80°/s（绕 x_b，松手回中停转）；<code>dt</code> →
@@ -381,7 +389,7 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="
 <span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">node</span> <span class="at">--test</span> <span class="st">&quot;tests/*.test.mjs&quot;</span></span></code></pre></div>
 <p>测试覆盖核心模块：数学工具、状态初始化、SAS
 增稳、推进系统、气动力、六自由度积分、悬停级联/定高/B_true（<code>vtol.test.mjs</code>、<code>control-allocation.test.mjs</code>）及四条回归基线（配平直飞
-/ 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）。2026-08-11 实测 91 项全绿。</p>
+/ 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）。2026-10-30 实测 91 项全绿。</p>
 <hr />
 <h2 id="6-约束与未来扩展">6 约束与未来扩展</h2>
 <h3 id="61-当前约束">6.1 当前约束</h3>
@@ -389,9 +397,11 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="
 <li>本仿真域为纯软件，无传感器 / 电调 / 电池模型（实机固件为独立工程
 <code>TandemVec_FCS</code>，2026-08 已实机首飞验证）；</li>
 <li>推进/惯量/质量/配平参数为 ESTIMATED（实机回写），气动与 SAS 为
-<code>MODEL-DEFAULT</code> 未经验证；摆角限幅仿真 ±25° 与固件 ±15°
-存在分歧（见 <a
-href="../registers/behavior-redlines.html">行为保持红线清单</a>）；</li>
+<code>MODEL-DEFAULT</code> 未经验证；摆角限幅为<strong>模型概念窗口
+25°（仿真域）/ 固件实机包线 15°</strong>（0.2618
+rad），两套口径不可互相外推（<a
+href="../decisions/DEC-002.html">DEC-002</a> A-04、<a
+href="../registers/assumptions-log.html">ASM-017</a>）；</li>
 <li>气动为线性小迎角模型，不覆盖失速与大机动；</li>
 <li>执行机构为理想模型，无舵机速率 / 带宽限制；</li>
 <li>无传感器噪声、无通信延迟、无嵌入式软件。</li>
@@ -411,5 +421,5 @@ kT、kQ、Jp、tauM（仿真参数从 ESTIMATED 升级为 BENCH-TESTED）；</li
 <code>TandemVec_FCS/docs/</code>。上述任一路径涉及范围、参数来源或安全承诺的变更时，须按
 <a href="../governance/GOV-002.html">GOV-002</a>
 更新项目范围与基线。</p>
-<footer class="provenance">源文件 <code>docs/01-方案设计/CONOPS-001-运行概念.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/01-方案设计/CONOPS-001-运行概念.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>

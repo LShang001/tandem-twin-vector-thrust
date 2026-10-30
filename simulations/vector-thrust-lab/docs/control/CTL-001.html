@@ -343,9 +343,10 @@ MODEL-DEFAULT，为手工整定值，无系统辨识。</p>
 <tr>
 <td>摆角指令限幅 dMax</td>
 <td>0.4363323129985824</td>
-<td>rad（25°）</td>
+<td>rad（<strong>模型概念窗口 25°，仿真域</strong>）</td>
 <td><code>control.mjs:18,19</code></td>
-<td>尾/前摆角同时限幅</td>
+<td>尾/前摆角同时限幅；固件实机包线 15°（0.2618
+rad），两套口径不可互相外推（DEC-002 A-04）</td>
 </tr>
 <tr>
 <td>SAS 差速指令限幅 dwMax</td>
@@ -669,12 +670,17 @@ AUTO_POSITION/GUIDED，GUIDED 超时 500 ms 强制 MANUAL）；姿态子模式 C
 AGENTS.md 踩坑记录）。姿态控制器门控
 <code>is_attitude_control_active = is_unlocked &amp;&amp; !is_manual_tvc</code>；锁定态摆角直通
 + 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。</p>
-<p><strong>摆角限幅</strong>：固件
-dMax=±15°（<code>TandemVec_Config.h</code> 0.2618 rad +
-<code>state_data.cpp</code> MAX_CORRECTION=15），仿真
-<code>P.dMax</code>=±25° 未回写——悬停模式摆角基准为 0
-不受配平偏置影响，但巡航配平（dtTrim=−18.702°）超出固件限幅，见 MOD-003
-§3.2 与假设日志 ASM-017。</p>
+<p><strong>摆角限幅</strong>：仿真 <code>P.dMax</code>
+为<strong>模型概念窗口 ±25°（仿真域）</strong>；固件实机包线
+±15°（<code>TandemVec_Config.h</code> 0.2618 rad +
+<code>state_data.cpp</code>
+MAX_CORRECTION=15），两套口径不可互相外推（<a
+href="../decisions/DEC-002.html">DEC-002</a> A-04、<a
+href="../registers/assumptions-log.html">ASM-017</a>）。悬停模式摆角基准为
+0，不受配平偏置影响；但巡航配平（dtTrim=−18.702°）超出固件
+15°——<strong>28 m/s 实机巡航不可达</strong>，15° 可行巡航下限≈29.8
+m/s（30–40 m/s 可行，30 m/s 时 −14.76°、裕度仅 0.24°），见 MOD-003
+§3.2。</p>
 <hr />
 <h2 id="9-测试覆盖指针">9 测试覆盖指针</h2>
 <table>
@@ -765,5 +771,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
 </html>
