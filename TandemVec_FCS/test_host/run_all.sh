@@ -93,6 +93,8 @@ run_one "$ROOT/test_host/test_allocator_contracts.cpp" aco ""
 # 制导/位置环加速度 → 推力方向纯函数（PowerAllocation.h，纯平台无关——
 # 圆形加速度限幅、比力归一化、倾角限幅；与拆分前 flight_control.cpp 内联代码等价）：
 run_one "$ROOT/test_host/test_power_allocation.cpp" pwa ""
+# 共轴分配器 3DOF α 跟踪（真实惯量积分；名义/惯量失配/饱和/偏航权限）：
+run_one "$ROOT/test_host/test_alpha_tracking.cpp" atrk ""
 # 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
 # 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
 run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""

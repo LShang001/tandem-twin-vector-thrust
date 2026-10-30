@@ -1238,7 +1238,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
 
   // --rc-profile 的单调游标：作为 profile 时间的稳定基准，仅在 50 Hz 节拍推进；
   // 没有 profile 时完全不参与任何计算（缺省路径逐位不变）。
+#ifdef FW_SIL_COAXIAL
   int rc_prof_cursor = 0;
+#endif
   for (int k = 0; k < steps; ++k)
   {
     const float t = k * dt_ctrl;
@@ -1268,6 +1270,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     rc_lost_prev = rc_lost;
     if (!rc_lost && (k % 4) == 0)
     {
+#ifdef FW_SIL_COAXIAL
+      // --rc-profile 目前只在共轴 SIL 提供（--coax-* / 手感 A/B 用）；
+      // 纵列 SIL 不编入，保持默认 RC 时序逐位不变。
       if (g_rc_profile_rows > 0)
       {
         // --rc-profile：按 CSV 插值覆盖四根摇杆与 CH7(mode)/CH9(att_mode)；
@@ -1280,7 +1285,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
         set_rc(prof_thr, prof_mode, t >= 0.5f, prof_roll, prof_pitch,
                prof_yaw, prof_att);
       }
-      else if (coupled)
+      else
+#endif
+      if (coupled)
       {
         const uint16_t roll = (t > 10 && t < 12) ? 1530 : ((t > 12 && t < 14) ? 1470 : 1500);
         const uint16_t pitch = (t > 10 && t < 12) ? 1470 : ((t > 12 && t < 14) ? 1530 : 1500);

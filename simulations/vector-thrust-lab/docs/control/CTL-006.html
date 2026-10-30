@@ -317,6 +317,23 @@ max_pitch=22.069°（与 legacy 逐项相同）</td>
 <td>run_all 注册 <code>pwa</code></td>
 </tr>
 <tr>
+<td>3DOF α 跟踪</td>
+<td><code>test_alpha_tracking.cpp</code> <strong>26 断言 0
+失败</strong>：名义 α 复现误差 &lt;0.5%；惯量 ×1.5/×0.67 时实际 α 按
+<code>I_assumed/I_true</code> 比例缩放（不饱和、不发散）；超权限时置
+<code>kSatAlpha*</code>+残差&gt;0；偏航 α 钳位同时置 `kSatAlphaYaw</td>
+<td>kSatYawDiff`、差速 180 µs</td>
+</tr>
+<tr>
+<td>纵列 SIL 回归</td>
+<td>3 profiles×3 seeds <strong>9/9
+PASS</strong>（<code>--bin T:/sil_tandem/fw_real.exe</code>）：mag_clean
+9.95–10.06 m、mag_nominal 9.15–9.23 m、nomag_degraded
+按失磁降级判定；PowerAllocation 重构未改纵列 AUTO_POSITION/GUIDED
+行为</td>
+<td><code>run_real_acceptance.py</code></td>
+</tr>
+<tr>
 <td>全量宿主回归</td>
 <td>run_all EXIT=0，"全部宿主机回归测试通过"（含 aco、pwa）</td>
 <td><code>tmp/host_alloc_recheck/run_all.log</code></td>
@@ -377,6 +394,10 @@ throttle=0）时 TVC 归中并置
 反推残差。</li>
 <li><strong>惯量/推力为 MODEL-DEFAULT</strong>：α 权限与逆解精度依赖
 <code>coax.inertia_*</code>、<code>coax.lever_m</code>、<code>coax.yaw_nm_per_us</code>，未台架标定前只作设计值。</li>
+<li><strong>α
+跟踪对惯量失配是开环敏感</strong>：<code>test_alpha_tracking.cpp</code>
+实测实际 α = α_cmd ×
+<code>I_assumed/I_true</code>（×1.5→0.667、×0.67→1.4925），不饱和也不发散；即分配器不会因失配放大指令，但也没有惯量辨识/自适应。惯量辨识或增益调度需实机/台架数据后再做。</li>
 <li><strong>遥测 ABI</strong>：<code>GncTelemetry</code> 尾部新增
 <code>coax_alloc_sat</code>、<code>coax_torque_residual_nm</code>；<code>AnoVars</code>
 尚未暴露分配器饱和位。</li>
@@ -385,5 +406,5 @@ throttle=0）时 TVC 归中并置
 <code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:42</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:49</footer></article></body>
 </html>
