@@ -441,6 +441,13 @@ struct GncTelemetry
     float bias_temp_slope_dps_c; // 陀螺零偏温度斜率 (dps/°C)
     float bias_temp_span_c;
     float bias_temp_confidence;
+    // ---- 共轴双桨 VTVL 诊断（★2026-10-30；仅 BFS_COAXIAL_VTVL 分支每拍填写，
+    //      其他构型恒为 0，不影响既有遥测语义）----
+    float coax_roll_corr_deg;    // 滚转 TVC 修正角 [deg]（±max_corr_deg）
+    float coax_pitch_corr_deg;   // 俯仰 TVC 修正角 [deg]（±max_corr_deg）
+    float coax_yaw_diff_us;      // 偏航差速 [µs]（±max_yaw_us）
+    uint8_t coax_saturated;      // 控制律饱和标记（0=未饱和 1=饱和）
+    uint8_t coax_fault_flags;    // 执行器故障位：bit0 舵机卡死 bit1 推力损失 bit2 受控下降请求
 };
 
 extern GncTelemetry gnc_tel;
@@ -460,6 +467,11 @@ extern GncTelemetry gnc_tel;
 // ============================================================
 extern FlightCtrlParams kFlightCtrlParams;
 void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 9 控制滤波器
+#ifdef BFS_COAXIAL_VTVL
+// 共轴分支参数同步（定义于 flight_control.cpp：推给 s_coaxial_controller）；
+// 仅共轴宏编译，TandemVec 路径零改动。
+void applyCoaxialCtrlFlightParams(const CoaxialCtrlParams &p);
+#endif
 
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — FRD 体轴映射（x_b=前/y_b=右/z_b=下）---
 // ★ 2026-08-07 轴置换后执行器分配（旧注释"VTOL x_b朝上/Roll=体轴z"已废止；

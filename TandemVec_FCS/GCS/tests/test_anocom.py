@@ -199,7 +199,7 @@ def test_vars_list_and_value_frames():
 
 
 def test_mavlink_param_shortname_uniqueness():
-    """MAVLink param_id 短名算法（与固件 mavlink_bridge.cpp 一致）：121 参数 ≤15B 全唯一
+    """MAVLink param_id 短名算法（与固件 mavlink_bridge.cpp 一致）：158 参数 ≤15B 全唯一
     ——直接截断有冲突（att_pitch.out_min/out_max 都变 out_m），靠 field 缩写消除"""
     import params as pm
     FIELD_SHORT = {'out_min': 'omin', 'out_max': 'omax', 'int_limit': 'ilim',
@@ -218,7 +218,7 @@ def test_mavlink_param_shortname_uniqueness():
         return cand[:limit] if len(cand) > limit else cand
 
     names = list(pm.expected_names())
-    assert len(names) == 133
+    assert len(names) == 158
     shorts = [mav_name(n) for n in names]
     assert len(shorts) == len(set(shorts)), '短名重复'
     assert all(len(s) <= 15 for s in shorts), '超 15B'

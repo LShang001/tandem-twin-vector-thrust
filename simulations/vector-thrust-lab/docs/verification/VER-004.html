@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-004 共轴原始固件对照-控制与安全 ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-004-共轴机型原始固件对照控制与安全">VER-004
+共轴机型原始固件对照——控制与安全</h1>
+<blockquote>
+<p>文档编号：VER-004（新建）｜版本：v1.0｜日期：2026-10-30｜性质：<strong>只读对照审计</strong>｜审计：parity-control
+原始侧：<code>D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版</code>（<code>src/main.cpp</code>
+5542 行 + <code>include/</code> 14 个头文件） 当前侧：本仓库工作树（HEAD
+<code>57be7ef</code>，2026-10-30；含并发进行中的"共轴参数可标定化"未提交改动，见
+§1.1） 证据等级：<strong>L0（源码逐行）+ L1（SIL
+实跑）</strong>。没有台架、HIL、实飞数据；本报告不构成实机适航结论。</p>
+</blockquote>
+<p><strong>本报告回答三个问题</strong>：(1)
+当前共轴分支相对原始固件到底改了哪些控制/安全语义；(2)
+文档声称的"逐项对齐""15/15""600 拍 max_err=0"能否复现；(3)
+哪些差异是必须处理的风险。为此本报告区分
+<strong>等价／语义差异／新增／缺失／回归</strong>
+五类判定，并把"已核实"与"未能核实"分列。</p>
+<hr />
+<h2 id="0-结论速览">0. 结论速览</h2>
+<p><strong>一句话</strong>：<strong>固件没有回归，但"逐项对齐"和"15/15"两处结论都不成立</strong>——控制律在
+RATE_MODE、手动 TVC、门控三处与原固件语义不同；15/15 只在旧 SIL
+传感器口径下成立，新口径下真实值为 <strong>14/15</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>级别</th>
+<th>结论</th>
+<th>关键证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C-1</td>
+<td><strong>P0</strong></td>
+<td>共轴 SIL 验收在"当前构建方式"下 <strong>14/15
+PASS</strong>，不是文档写的 15/15：<code>mag_nominal</code> seed1
+<code>max_pitch=22.108°</code> 超 20° 门</td>
+<td>2ec50ac 与 HEAD 两个独立构建均得 22.108/8.21，见 §6</td>
+</tr>
+<tr>
+<td>C-2</td>
+<td><strong>P0</strong></td>
+<td>该 14/15
+<strong>不是固件回归</strong>：<code>git diff db294ac 2ec50ac -- src include</code>
+为空；2ec50ac 只换了 SIL 传感器口径（生产 Madgwick + IMU 低通）</td>
+<td>§6.2 因果隔离：关掉 AHRS 或关掉 IMU 低通任一，15/15 恢复</td>
+</tr>
+<tr>
+<td>C-3</td>
+<td><strong>P0</strong></td>
+<td>2ec50ac 删除了 <code>Madgwick::Madgwick(){}</code>
+空桩却未在共轴构建脚本补
+<code>lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp</code> → 共轴 SIL 自
+10-29 起<strong>无法链接</strong>，这是文档 15/15
+此后无人复跑的直接机制</td>
+<td>§6.3、<code>build_and_run_coaxial.sh</code></td>
+</tr>
+<tr>
+<td>C-4</td>
+<td><strong>P0</strong></td>
+<td><strong>RATE_MODE 语义不等价</strong>：当前每拍
+<code>resetRollPitch()</code> 把速率环 PID
+与两级滤波一起清零、且禁用速率环积分；目标速率由线性 ±80°/s 改为曲线满杆
+333°/s（偏航 222°/s）。原固件只清外环、速率环积分持续、目标 ±80°/s</td>
+<td>§3 D1／D2／D4</td>
+</tr>
+<tr>
+<td>C-5</td>
+<td><strong>P1</strong></td>
+<td>"600 拍 max_err=0.000000" 是<strong>自指测试</strong>：参考侧
+<code>coax_reference.cpp</code> 复刻的是当前实现，参考
+<code>PositionPID.h</code> 也已改动（dt 参数、积分乘 dt、积分钳位、NaN
+冻结）</td>
+<td>§5</td>
+</tr>
+<tr>
+<td>C-6</td>
+<td><strong>P1</strong></td>
+<td>新口径下暴露<strong>真实姿态裕度不足</strong>：俯仰峰值 22.108°，比
+15° 指令上限高 7.1°（+47%），只比 20° 验收门低 2.1°；不是 20°
+门设得紧，是超调大</td>
+<td>§6.2</td>
+</tr>
+<tr>
+<td>C-7</td>
+<td><strong>P1</strong></td>
+<td>三条<strong>安全语义变化</strong>未在验证文档中声明：空中断链保持解锁+定高（原为断链即上锁）、45°
+硬切电机（原无倾角保护）、姿态环在 <code>throttle≤1050</code>
+时整体退出（原始终稳姿态）</td>
+<td>§3 D7／D8／D9</td>
+</tr>
+<tr>
+<td>C-8</td>
+<td>P2</td>
+<td>小差异若干：手动 TVC 极性/滤波、yaw 积分门限 1050 vs
+1100、姿态误差精确化、双级陀螺滤波、重力常数、yaw 差速余量预限幅、F3/F4
+只上报</td>
+<td>§3 D3／D5／D6／D10／D12／D13／D14</td>
+</tr>
+<tr>
+<td>C-9</td>
+<td>P2</td>
+<td>文档自相矛盾：CTL-003:39 说"RATE_MODE 每拍复位速率
+PID"（错误归因），:62 说"DirectTvcRate 尚未接入 runGNCExecutive"，:71
+又说"已接入…9/9 PASS"；VER-002:15/20/30/49-54 的 15/15 已过期</td>
+<td>§8</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1-审计对象与方法">1. 审计对象与方法</h2>
+<h3 id="11-两侧基线与当前的口径">1.1 两侧基线与"当前"的口径</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原始固件</th>
+<th>当前实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库</td>
+<td><code>D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版</code></td>
+<td><code>D:\纵列双发矢量推力飞行器</code>（固件在
+<code>TandemVec_FCS/</code>）</td>
+</tr>
+<tr>
+<td>版本</td>
+<td>外部实飞存档，无 git 历史</td>
+<td>HEAD <code>57be7ef</code>（2026-10-30）+ 未提交改动</td>
+</tr>
+<tr>
+<td>控制律</td>
+<td><code>main.cpp:5099-5185</code>
+<code>execute_attitude_controller</code>、<code>:5199-5225</code>
+yaw、<code>:4380-4600</code> 垂直、<code>:5227-5257</code> mix</td>
+<td><code>include/CoaxialVtvControl.h</code>（443
+行）、<code>src/flight_control.cpp:2137-2319</code>（<code>#ifdef BFS_COAXIAL_VTVL</code>）</td>
+</tr>
+<tr>
+<td>输出映射</td>
+<td><code>main.cpp:5227-5257</code></td>
+<td><code>include/ActuatorOutputMap.h:198-236</code> +
+<code>include/VehicleProfile.h:212-231</code></td>
+</tr>
+<tr>
+<td>仿真</td>
+<td>无</td>
+<td><code>test_host/fw_sil/</code>（真实固件 SIL + 近似 6DOF
+plant）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>"当前"的口径（重要）</strong>：审计时工作树有另一 teammate
+的未提交改动（<code>include/FlightCtrlParams.h</code>、<code>src/flight_control.cpp</code>、<code>src/state_data.*</code>、<code>src/ano_params.*</code>、<code>test_host/fw_sil/*</code>）。就把常量外提为
+<code>kFlightCtrlParams.coax</code> 而言，<strong>缺省值经
+<code>static_assert</code>
+锁定，与原硬编码逐位相同</strong>（<code>include/FlightCtrlParams.h:73-125</code>），控制语义未变；但行号相对
+HEAD 有 +7~+12 偏移，本报告行号均为 <strong>2026-10-30
+工作树行号</strong>，函数名不受影响。该 teammate 当日还在
+<code>test_host/fw_sil/fw_sil_env_main.cpp:1746</code> 引入了未声明的
+<code>coax_jam_latched</code>，导致<strong>工作树直接构建失败</strong>；因此本报告全部对照实验改用
+4 个 detached worktree（见 §1.3），不碰其半成品。</p>
+<h3 id="12-方法">1.2 方法</h3>
+<ol type="1">
+<li><strong>逐行读原始源码</strong>：<code>main.cpp</code>
+的输入装配、模式判定、PID
+实例化与配置、姿态/速率/偏航环、垂直推力、混控、失效回调、任务注册；<code>include/PositionPID.h</code>、<code>ComplementaryFilter.h</code>、<code>CoaxialVtvControl.h</code>
+等。</li>
+<li><strong>逐行读当前源码</strong>：<code>CoaxialVtvControl.h</code>、<code>ActuatorOutputMap.h</code>、<code>VehicleProfile.h</code>、<code>ThrustAllocation.h</code>、<code>FlightCtrlParams.h</code>、<code>flight_control.cpp</code>
+共轴分支、<code>communication.cpp</code>、<code>math_utils.h</code>、<code>state_data.cpp</code>。</li>
+<li><strong>构建复跑</strong>：在 5 个纯净 worktree 上分别构建
+<code>3055ede</code>（记录 15/15
+的文档提交）、<code>db294ac</code>（2ec50ac
+父）、<code>2ec50ac</code>（换 SIL 口径的提交）、HEAD
+<code>57be7ef</code>，跑同 15 场景。</li>
+<li><strong>A/B 因果隔离</strong>：在 2ec50ac 二进制上分别关闭
+<code>--sil-ahrs</code>、<code>--no-imu-lpf</code>，全 15
+场景复跑，定位失败来源。</li>
+<li><strong>文档考古</strong>：<code>git log -S</code> 追
+<code>Madgwick</code> 空桩、构建脚本、验收阈值历史；比对
+VER-002／CTL-003 的声称与实跑值。</li>
+</ol>
+<h3 id="13-复现命令全部可重跑">1.3 复现命令（全部可重跑）</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 构建（示例：HEAD 纯净 worktree；BIN_DIR 用 ASCII 路径）</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> /c/Users/12631/AppData/Local/Temp/tv_audit_head/TandemVec_FCS</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="va">BIN_DIR</span><span class="op">=</span>/c/Users/12631/AppData/Local/Temp/tv_coax_bin_head <span class="dt">\</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bash</span> test_host/fw_sil/build_and_run_coaxial.sh <span class="at">--build-only</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co"># 15 场景验收</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> test_host/fw_sil/run_real_acceptance.py <span class="dt">\</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="at">--bin</span> /c/Users/12631/AppData/Local/Temp/tv_coax_bin_head/fw_coax.exe <span class="dt">\</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">--profiles</span> mag_clean,mag_nominal,nomag_degraded <span class="at">--seeds</span> 1,2,3,4,5</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co"># A/B（2ec50ac 二进制；注意 --append-args 必须用等号，否则 argparse 报错）</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> test_host/fw_sil/run_real_acceptance.py <span class="at">--bin</span> <span class="op">&lt;</span>bin<span class="op">&gt;</span> <span class="dt">\</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>  <span class="at">--profiles</span> mag_clean,mag_nominal,nomag_degraded <span class="at">--seeds</span> 1,2,3,4,5 <span class="dt">\</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>  <span class="at">--append-args</span><span class="op">=</span><span class="st">&quot;--no-imu-lpf&quot;</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 参考等价（run_all.sh:93 的口径）</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O2</span> <span class="at">-Iinclude</span> <span class="at">-Ilib</span>/eigen/src <span class="at">-Itest_host</span>/reference/coaxial <span class="at">-Itest_host</span>/stub <span class="dt">\</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  test_host/test_coaxial_reference_equivalence.cpp test_host/reference/coaxial/coax_reference.cpp <span class="at">-o</span> cxreq.exe</span></code></pre></div>
+<blockquote>
+<p>注：<code>build_and_run_coaxial.sh</code> 需含
+<code>lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp</code>（lead
+2026-10-30 未提交的 1 行修复）。缺这一行则 2ec50ac
+及之后<strong>链接失败</strong>。</p>
+</blockquote>
+<h3 id="14-判定标准">1.4 判定标准</h3>
+<table>
+<thead>
+<tr>
+<th>判定</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>等价</td>
+<td>数值/语义逐项一致（含符号约定）</td>
+</tr>
+<tr>
+<td>语义差异</td>
+<td>功能同名但算法/门控/量级不同 → 需评审</td>
+</tr>
+<tr>
+<td>新增</td>
+<td>原始没有的行为（可能是改进，也可能是新风险）</td>
+</tr>
+<tr>
+<td>缺失</td>
+<td>原始有、当前没有</td>
+</tr>
+<tr>
+<td>回归</td>
+<td>同一输入下当前行为劣化 → 本次<strong>未发现</strong>（见 §6.3）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-逐项对照总表">2. 逐项对照总表</h2>
+<h3 id="21-输入解锁模式判定">2.1 输入、解锁、模式判定</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始证据</th>
+<th>当前证据</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ch1–ch4 映射</td>
+<td><code>main.cpp:4143-4152</code></td>
+<td><code>flight_control.cpp:156-172</code></td>
+<td>等价</td>
+</tr>
+<tr>
+<td>ch5 解锁</td>
+<td><code>unlockMedian(7)&gt;1500</code>（<code>main.cpp:4154</code>）</td>
+<td>同 7 点中值，另加 <code>failsafe_in_flight</code>
+保持（<code>flight_control.cpp:183</code>）</td>
+<td>等价＋新增失效保持</td>
+</tr>
+<tr>
+<td>ch7 模式</td>
+<td><code>main.cpp:966</code> 五档</td>
+<td><code>math_utils.h:188-220</code></td>
+<td>等价</td>
+</tr>
+<tr>
+<td>ch8 手动 TVC</td>
+<td><code>raw[7] &lt; 1200</code>（<code>main.cpp:4159</code>）</td>
+<td><code>raw[7] &gt; 1750</code>（<code>flight_control.cpp:202</code>）</td>
+<td><strong>语义反转</strong>（D3）</td>
+</tr>
+<tr>
+<td>ch9 姿态/速率模式</td>
+<td><code>raw[8] &lt; 1500 → ATTITUDE</code>（<code>main.cpp:4162</code>）</td>
+<td>同（<code>flight_control.cpp:207</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>自动/GUIDED 进入</td>
+<td><code>main.cpp:966</code>、<code>:4304</code></td>
+<td><code>math_utils.h:188</code>、<code>flight_control.cpp:390</code></td>
+<td>等价</td>
+</tr>
+<tr>
+<td>GUIDED 超时</td>
+<td>500 ms → MANUAL（<code>main.cpp:4304</code>）</td>
+<td>500 ms → MANUAL（<code>flight_control.cpp:390</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>航向不可观降级</td>
+<td><strong>无</strong></td>
+<td>AUTO_POSITION/GUIDED →
+AUTO_ALTITUDE（<code>flight_control.cpp:402</code>、<code>HeadingAidingGate.h</code>）</td>
+<td>新增安全行为</td>
+</tr>
+<tr>
+<td>解锁上升沿重置</td>
+<td><code>main.cpp:4181-4261</code>（PID/滤波器/KF/原点）</td>
+<td><code>flight_control.cpp:235+</code>（同类，范围更大）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>解锁预检</td>
+<td>无（仅中值+链路）</td>
+<td>无（仅中值+链路）</td>
+<td>等价（都缺）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-姿态速率偏航控制律">2.2 姿态／速率／偏航控制律</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始证据</th>
+<th>当前证据</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>外环增益</td>
+<td>4.25/0（<code>main.cpp:343-345</code>）</td>
+<td><code>CoaxialVtvControl.h</code> 默认 4.25/0</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>速率环增益</td>
+<td>0.25 / 0.08×0.005（<code>:352-354</code>）</td>
+<td>0.25 / 0.08，积分乘
+dt（<code>CoaxialVtvControl.h:225-235</code>）</td>
+<td>数值等价仅当 dt=5 ms（D12）</td>
+</tr>
+<tr>
+<td>偏航增益</td>
+<td>3.8 / <strong>0.15</strong>（未乘 dt，<code>:367</code>）</td>
+<td>3.8 / <strong>30</strong>（乘 dt）</td>
+<td>数值等价仅当 dt=5 ms（D12）</td>
+</tr>
+<tr>
+<td>积分限幅</td>
+<td>40 / 5 / 50，阈值 40（<code>:5365-5395</code>）</td>
+<td>同（<code>CoaxialVtvControl.h</code> 默认）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>微分滤波</td>
+<td>0.2（<code>:5390</code>）</td>
+<td>0.2</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>输出限幅</td>
+<td>±80°/s、±10°、±180 µs</td>
+<td>同</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>姿态目标</td>
+<td>ATTITUDE：摇杆 ±30°（<code>:4945</code>）</td>
+<td>同（<code>flight_control.cpp:1404-1452</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>姿态误差</td>
+<td>恒 <code>2·sign·q·RAD2DEG</code>（<code>:5131-5132</code>）</td>
+<td><code>abs(q_v)&gt;0.25</code> 时精确
+<code>2·atan2(abs(v),w)/abs(v)</code>（<code>flight_control.cpp:1518-1537</code>）</td>
+<td>差异（D5）</td>
+</tr>
+<tr>
+<td>角速率滤波</td>
+<td>单级 α=0.3（<code>:452-454</code>、<code>:5103</code>）</td>
+<td>双级 α=0.4→0.99（<code>flight_control.cpp:1495-1514</code>）</td>
+<td>差异（D6）</td>
+</tr>
+<tr>
+<td>姿态环使能</td>
+<td><code>unlocked &amp;&amp; !manual_tvc</code>（<code>:5108</code>）</td>
+<td>另加
+<code>throttle_raw&gt;1050</code>（<code>flight_control.cpp:2187</code>）</td>
+<td>差异（D7）</td>
+</tr>
+<tr>
+<td>积分使能</td>
+<td>全轴 <code>throttle&gt;1100</code>（<code>:4344-4373</code>）</td>
+<td>1050，且速率环在 RATE_MODE
+禁用（<code>CoaxialVtvControl.h:297</code>）</td>
+<td>差异（D2／D10）</td>
+</tr>
+<tr>
+<td>RATE 目标速率</td>
+<td>线性 ±512 → ±80°/s（<code>:5155-5156</code>）</td>
+<td><code>rcRateCurve</code> 满杆
+333°/s（横滚/俯仰）、222°/s（偏航）（<code>flight_control.cpp:2174-2186</code>）</td>
+<td>差异（D4）</td>
+</tr>
+<tr>
+<td>RATE 复位范围</td>
+<td><strong>只</strong>
+<code>rollAnglePID/pitchAnglePID.reset()</code></td>
+<td><code>resetRollPitch()</code> 清 4 PID＋4
+滤波器（<code>CoaxialVtvControl.h:321-328</code>、<code>:417-427</code>）</td>
+<td><strong>语义差异</strong>（D1）</td>
+</tr>
+<tr>
+<td>手动 TVC</td>
+<td><code>map(±30°→±10°)</code>＋α=0.25（<code>:5173-5185</code>）</td>
+<td>摇杆直接
+<code>map(→±10°)</code>，无滤波（<code>flight_control.cpp:2191-2196</code>）</td>
+<td>差异（D3）</td>
+</tr>
+<tr>
+<td>偏航目标</td>
+<td><code>map(raw-1500,±512,±80)</code>（<code>:5201</code>）</td>
+<td><code>rcRateCurve</code> 满杆 222°/s（<code>:2182-2186</code>）</td>
+<td>差异（D4）</td>
+</tr>
+<tr>
+<td>偏航门控</td>
+<td><code>unlocked &amp;&amp; throttle&gt;1050</code>（<code>:5203</code>）</td>
+<td>同（<code>flight_control.cpp:2189</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>偏航输出</td>
+<td><code>1500+diff</code>，clamp
+1000–2000（<code>:5205-5225</code>）</td>
+<td>同（<code>CoaxialVtvControl.h:362-375</code>＋输出层）</td>
+<td>等价</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-垂直推力">2.3 垂直推力</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始证据</th>
+<th>当前证据</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>推力公式</td>
+<td><code>F=m(g+a_z)/cos</code>，cos≥0.5，clamp 0–14
+N，<code>throttle=F/14×100</code>（<code>main.cpp:4555-4582</code>）</td>
+<td><code>ThrustAllocation.h:67</code> 同式</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>重力常数</td>
+<td><code>G=9.79</code>（<code>main.cpp:296</code>）</td>
+<td><code>ekf_gravity_mps2</code>（Somigliana，约 9.806）</td>
+<td>差异约 0.2%（D14）</td>
+</tr>
+<tr>
+<td>手动油门</td>
+<td><code>map(988–2012→0–100)</code>（<code>main.cpp:4440</code>、<code>:4597</code>）</td>
+<td>同（<code>flight_control.cpp:858</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>未解锁油门</td>
+<td>0</td>
+<td>0（<code>flight_control.cpp:2226-2229</code>）</td>
+<td>等价</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-混控与输出">2.4 混控与输出</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始证据</th>
+<th>当前证据</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>舵机 ±15°→33.33–66.67%</td>
+<td><code>mapFloat(-corr,-15,15,66.67,33.33)</code>（<code>:5227-5245</code>）</td>
+<td><code>zero=50, span=16.667</code>（<code>VehicleProfile.h:212-217</code>）</td>
+<td>等价（符号已逐项核对）</td>
+</tr>
+<tr>
+<td>电机 base</td>
+<td><code>map(throttle,0–100,1000–2000)</code></td>
+<td><code>1000+throttle×10</code>（<code>ActuatorOutputMap.h:207</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>差速</td>
+<td>逐电机 <code>clamp(base±diff)</code>（<code>:5250-5257</code>）</td>
+<td>先按余量对称限幅，再逐电机 clamp</td>
+<td>轻微差异（D13）</td>
+</tr>
+<tr>
+<td>未解锁</td>
+<td>强制 base=1000</td>
+<td>同（<code>ActuatorOutputMap.h:212-215</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>45° 大倾角</td>
+<td><strong>无</strong></td>
+<td><code>base=1000</code>（<code>ActuatorOutputMap.h:209-215</code>）</td>
+<td>新增（D9）</td>
+</tr>
+<tr>
+<td>门控下差速是否归零</td>
+<td>—</td>
+<td>base=1000 后仍叠加 ±180 µs 差速</td>
+<td>残余推力（D9）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="25-失效安全与诊断">2.5 失效、安全与诊断</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始证据</th>
+<th>当前证据</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>地面断链</td>
+<td>CH1/2/4=1500、其余 988 → 上锁+MANUAL（<code>:702</code>）</td>
+<td>同上</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>空中断链</td>
+<td>CH5=988 → <strong>上锁、油门
+0</strong>、MANUAL（<code>:702</code>）</td>
+<td>保持解锁、CH7=1500 → <strong>AUTO_ALTITUDE
+定高</strong>（<code>communication.cpp:230-260</code>）</td>
+<td><strong>语义反转</strong>（D8）</td>
+</tr>
+<tr>
+<td>链路恢复</td>
+<td>仅复位通道值</td>
+<td>清
+<code>failsafe_in_flight</code>（<code>communication.cpp:215</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>倾角保护</td>
+<td>无</td>
+<td>45° 锁电机，无迟滞</td>
+<td>新增（D9）</td>
+</tr>
+<tr>
+<td>F3 双发损失／F4 舵机卡死</td>
+<td>无</td>
+<td>检测+遥测，无动作（<code>flight_control.cpp:2282-2318</code>）</td>
+<td>新增（仅上报）</td>
+</tr>
+<tr>
+<td>传感器失效自动处置</td>
+<td>无</td>
+<td>陀螺 NaN
+冻结上一拍（<code>flight_control.cpp:1894-1904</code>）、航向不可观降级</td>
+<td>新增</td>
+</tr>
+<tr>
+<td>低电量自动降落</td>
+<td>无</td>
+<td>无</td>
+<td>一致（都缺）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="26-时序与调度">2.6 时序与调度</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始证据</th>
+<th>当前证据</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GNC 周期</td>
+<td>5 ms / 200 Hz（<code>:450</code>）</td>
+<td>5 ms / 200 Hz（<code>main.cpp:450</code>）</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>IMU</td>
+<td>2 kHz（<code>:421</code> / 原始 <code>:5500</code>）</td>
+<td>2 kHz</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>气压计</td>
+<td>50 Hz（原始 <code>:5503</code>）</td>
+<td>默认约 129 Hz（<code>main.cpp:422</code>）</td>
+<td>差异（更高频，D14 附注）</td>
+</tr>
+<tr>
+<td>定时器</td>
+<td>TIM8 2 kHz</td>
+<td>同</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>控制 dt 来源</td>
+<td>硬编码由任务周期隐含</td>
+<td><code>coax.dt_s=0.005</code> 常量</td>
+<td>等价但脆弱（D12）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-关键差异明细d1d15">3. 关键差异明细（D1–D15）</h2>
+<h3 id="d1-rate_mode-每拍复位速率环p0与-d2d4-合并">D1 RATE_MODE
+每拍复位速率环（P0，与 D2／D4 合并）</h3>
+<ul>
+<li><strong>判定</strong>：语义差异／功能降级。</li>
+<li><strong>原始</strong>（<code>main.cpp:5140-5172</code>）：RATE
+分支只 <code>rollAnglePID.reset(); pitchAnglePID.reset();</code>，速率环
+PID
+状态、<code>rollAngleOutputFilter</code>/<code>rollOutputFilter</code>
+状态全部保留；随后 <code>rateTarget=α0.85 filter(...)</code>，内环
+<code>computeDerivativeOnMeasurement(...)</code>，输出
+<code>α0.25 filter(constrain(±10))</code>。</li>
+<li><strong>当前</strong>（<code>CoaxialVtvControl.h:321-328</code> →
+<code>:417-427</code>）：先 <code>resetRollPitch()</code>（清 angle
+PID、rate
+PID、<code>roll/pitch_rate_filter_</code>、<code>roll/pitch_corr_filter_</code>），再取目标速率；两级滤波在分支外无条件执行（<code>:336-348</code>）。</li>
+<li><strong>后果</strong>：一阶滤波状态每拍归零 ⇒ 单拍输出 =
+α·输入，两级串联后 <strong>稳态增益 0.85×0.25 =
+0.2125</strong>（相对原固件 1.0）；速率环无积分、无微分历史，纯
+P。即同样摇杆量下当前修正角只有原固件的约
+21%，且没有消除静差的能力。</li>
+<li><strong>影响</strong>：RATE_MODE 由 ch9 可切入，未做任何
+SIL/台架覆盖。若实飞误切，姿态响应显著变软且带静差——<strong>这是可导致失控的差异</strong>。</li>
+<li><strong>建议</strong>：RATE_MODE 恢复"只复位外环"语义（rate PID
+与两级滤波不 reset）；在恢复前，共轴配置应显式禁用 RATE_MODE
+或上锁告警。同时修正 <code>CoaxialVtvControl.h:20/:23/:323</code> 与
+CTL-003:39 的"实飞工程每拍复位速率 PID"错误注释。</li>
+</ul>
+<h3 id="d2-rate_mode-速率环积分被禁用p0并入-d1">D2 RATE_MODE
+速率环积分被禁用（P0，并入 D1）</h3>
+<ul>
+<li><strong>原始</strong>：<code>manage_pid_integrals</code>（<code>main.cpp:4344-4373</code>）令
+rate PID 积分使能 = <code>attitude_control_active</code>，RATE_MODE
+下同样积分。</li>
+<li><strong>当前</strong>：<code>CoaxialVtvControl.h:297-301</code>
+的积分使能 = <code>attitude_active &amp;&amp; !rate_mode</code>。</li>
+<li><strong>后果</strong>：RATE_MODE 无积分（与 D1 的纯 P 叠加）。</li>
+</ul>
+<h3 id="d4-rate_mode-目标速率量级p0并入-d1">D4 RATE_MODE
+目标速率量级（P0，并入 D1）</h3>
+<ul>
+<li><strong>原始</strong>：线性
+<code>map(raw, 988–2012, ±80)</code>；偏航
+<code>map(raw-1500, ±512, ±80)</code>（<code>main.cpp:5155</code>、<code>:5201</code>）。</li>
+<li><strong>当前</strong>：<code>rcRateCurve</code>（<code>RcCurve.h:72-90</code>）＋
+<code>MAX_MANUAL_*RATE=600</code>（<code>state_data.cpp:126-128</code>，注释自认"原
+80，行为变化 7.5×"）。满杆：横滚/俯仰 333.3°/s、偏航
+222.2°/s（<code>rc_rate=0.5</code>、<code>super=0.7/0.7/0.55</code>）。</li>
+<li><strong>后果</strong>：目标速率量级 <strong>4.2×/2.8×</strong>，叠加
+D1 的 0.21× 增益 ⇒
+大杆量下内环直接饱和（±10°），小杆量下响应又明显偏弱；曲线形状还引入
+expo 非线性。</li>
+</ul>
+<h3 id="d3-手动-tvcp2">D3 手动 TVC（P2）</h3>
+<ul>
+<li><strong>原始</strong>（<code>main.cpp:4159</code>、<code>:5173-5185</code>）：<code>raw[7] &lt; 1200</code>
+为手动 TVC；回中量由
+<code>rollTarget/pitchTarget</code>（±30°）<code>map</code> 到
+±10°，再过 α=0.25 输出滤波；RATE_MODE+手动时目标角为 0（回中）。</li>
+<li><strong>当前</strong>（<code>flight_control.cpp:202</code>、<code>:2191-2196</code>、<code>CoaxialVtvControl.h:304-316</code>）：<code>raw[7] &gt; 1750</code>（2026-08-10
+用户要求的反逻辑，已在代码注释记录）；摇杆直接 <code>map(→±10°)</code>
+后 clamp，<strong>无 α=0.25
+滤波</strong>；RATE_MODE+手动时给的是杆量而非回中。</li>
+<li><strong>影响</strong>：稳态一致，瞬态/换挡手感不同；极性反转若未同步到遥控器配置会直接反向。建议：补输出滤波、把极性写入机型配置说明。</li>
+</ul>
+<h3 id="d5-姿态误差算法p2">D5 姿态误差算法（P2）</h3>
+<ul>
+<li>原始恒用
+<code>2·sign(qw)·q·RAD2DEG</code>（小角近似，<code>main.cpp:5128-5132</code>）；当前在
+<code>|q_v|&gt;0.25</code>（≈28.6°）时改用精确
+<code>2·atan2(|v|,|w|)/|v|</code>（<code>flight_control.cpp:1518-1537</code>）。小误差逐位一致；大误差时当前输出略大（更"敢修"），属改进但改变了
+&gt;28.6° 段的环路增益。</li>
+</ul>
+<h3 id="d6-陀螺滤波p2">D6 陀螺滤波（P2）</h3>
+<ul>
+<li>原始单级 α=0.3（<code>main.cpp:452-454</code>）；当前双级
+α=0.4→0.99（<code>flight_control.cpp:1495-1514</code>、<code>state_data.cpp:323/328</code>）。等效带宽更低（相位滞后略增），与原始不是同一传递函数；在
+22° 超调问题中不可忽略。</li>
+</ul>
+<h3 id="d7-姿态环门控-throttle1050p1">D7 姿态环门控
+<code>throttle&gt;1050</code>（P1）</h3>
+<ul>
+<li>原始（<code>main.cpp:5108</code>）：<code>unlocked &amp;&amp; !manual_tvc</code>
+即进入姿态稳定，与油门无关（只有积分在 &gt;1100 才使能）。</li>
+<li>当前（<code>flight_control.cpp:2187-2188</code>）：<code>unlocked &amp;&amp; !manual_tvc &amp;&amp; throttle_raw&gt;1050</code>；不满足时走"手动回中/杆量"分支。</li>
+<li><strong>后果</strong>：飞行中把油门收到 1050 µs
+以下（下降/收油），<strong>姿态稳定整条链路退出</strong>，舵机转为开环杆量；原固件此时仍在稳姿态。这是一条未在文档声明的安全语义变化，建议改为"仅积分门控受油门约束，姿态
+P 通路常开"。</li>
+</ul>
+<h3 id="d8-空中断链策略反转p1">D8 空中断链策略反转（P1）</h3>
+<ul>
+<li>原始（<code>main.cpp:702</code>）：断链 → CH5=988 ⇒
+<strong>上锁</strong>、CH7=988 ⇒ MANUAL、油门 0。即"断链即停桨"。</li>
+<li>当前（<code>communication.cpp:230-260</code>）：若断链前在空中（<code>raw[4]&gt;1500 &amp;&amp; raw[2]&gt;1100</code>），CH5
+保持 1500、CH7=1500 ⇒ <strong>保持解锁并转 AUTO_ALTITUDE
+定高</strong>，水平位置随风漂移（VER-002:45 已记录无磁漂移 75/113
+m）。</li>
+<li><strong>后果</strong>：这是有意的设计选择（避免空中停桨），但属于<strong>安全策略反转</strong>，且没有"链路丢失超时后自动降落/上锁"的兜底。需项目
+owner 明确裁决并写入安全文档，否则不应声称"失效行为与实飞一致"。</li>
+</ul>
+<h3 id="d9-45-锁电机p1新增">D9 45° 锁电机（P1，新增）</h3>
+<ul>
+<li>原始
+mix（<code>main.cpp:5227-5257</code>）<strong>没有任何倾角保护</strong>；当前
+<code>ActuatorOutputMap.h:198-236</code> 在
+<code>!unlocked || |roll|≥45 || |pitch|≥45</code> 时把 <code>base</code>
+压到 1000 µs。</li>
+<li><strong>问题一</strong>：无迟滞/去抖，单帧 AHRS 角越 45°
+立即切油门；恢复也立即恢复，边界附近可能抖动。</li>
+<li><strong>问题二</strong>：门控只压
+<code>base</code>，<code>yaw_diff</code> 仍按 ±180 µs 叠加 —— 45°
+越界瞬间仍可能<strong>单电机 1000+180=1180 µs（约
+18%）在转</strong>，与"锁电机"语义不符。建议门控内强制
+<code>yaw_diff=0</code>。</li>
+<li><strong>问题三</strong>：SIL 全场景峰值 22°，该分支从未被覆盖（见
+§7）。</li>
+</ul>
+<h3 id="d10-积分门限-1050-vs-1100p2">D10 积分门限 1050 vs
+1100（P2）</h3>
+<ul>
+<li>原始：姿态/速率/偏航积分门 =
+<code>throttle&gt;1100</code>（<code>main.cpp:4344-4373</code>）；当前统一
+1050（<code>flight_control.cpp:2187-2189</code>）。差 50
+µs，影响积分起始点。</li>
+</ul>
+<h3 id="d11-航向不可观降级p2新增且已记录">D11
+航向不可观降级（P2，新增且已记录）</h3>
+<ul>
+<li>原始无此逻辑；当前 <code>HeadingAidingGate</code> +
+<code>flight_control.cpp:402</code> 在磁失效时把 AUTO_POSITION/GUIDED
+降为 AUTO_ALTITUDE，并关闭 heading
+hold。属合理新增，本文档仅记录"非等价"。</li>
+</ul>
+<h3 id="d12-积分-dt-语义p2">D12 积分 dt 语义（P2）</h3>
+<ul>
+<li>原始 <code>integral_ += error</code>（不乘 dt），Ki 在实例化时预乘
+0.005（速率环 0.0004、高度速度环 0.00625 等）；yaw 例外：Ki=0.15
+未预乘。</li>
+<li>当前 <code>integral_ += error*dt</code>、Ki 直接取
+0.08／30。<strong>只在 dt=5 ms 时数值等价</strong>；一旦调度或
+<code>coax.dt_s</code> 改变，增益错位。另：当前新增
+<code>clampIntegralState()</code>（限 ±|limit/Ki|）与 NaN
+冻结，属改进。</li>
+</ul>
+<h3 id="d13-混控数值等价性与差速预限幅p2">D13
+混控数值等价性与差速预限幅（P2）</h3>
+<ul>
+<li>等价已核实：<code>roll% = 50 + (corr/15)×16.667 ≡ map(-corr,-15,15,66.67,33.33)</code>；<code>pitch% = 50 - (corr/15)×16.667 ≡ map(corr,-15,15,66.67,33.33)</code>；电机
+<code>1000+throttle×10</code>、<code>base±diff</code> clamp 1000–2000
+与原始一致。</li>
+<li>差异：当前先把 <code>yaw_diff</code> 压进
+<code>[min-base, max-base]</code>
+余量（<code>ActuatorOutputMap.h:216-219</code>），高油门时偏航权限被对称削减；原始只做逐电机
+clamp，允许单侧饱和。功能上更保守，但与原固件不等价。</li>
+</ul>
+<h3 id="d14-垂直推力链p2">D14 垂直推力链（P2）</h3>
+<ul>
+<li>公式、cos 下限 0.5、0–14 N 钳位、<code>F/Fmax×100</code>
+全部等价。</li>
+<li>差异仅重力常数：原始
+<code>G=9.79</code>（<code>main.cpp:296</code>），当前取
+<code>ekf_gravity_mps2</code>（约 9.806，差 0.16%）；另气压计频率 50
+Hz→129 Hz（提高，但未验证对垂直 KF 的影响）。</li>
+</ul>
+<h3 id="d15-f3f4-只检测p2新增">D15 F3/F4 只检测（P2，新增）</h3>
+<ul>
+<li>原始无 F3/F4；当前
+<code>updateCoaxialFaultDiagnostics</code>（<code>flight_control.cpp:2282-2318</code>）只置
+<code>g_actuator_servo_jam/thrust_loss/controlled_descent_request</code>
+与
+<code>gnc_tel.coax_fault_flags</code>（0x01/0x02/0x04），全仓库无消费者。VER-002
+的描述（"只检测/上报，没有重构或安全降落"）与代码一致；但它不构成安全功能。</li>
+</ul>
+<hr />
+<h2 id="4-已核实等价项无需动作">4. 已核实等价项（无需动作）</h2>
+<ol type="1">
+<li>模式档位五档判定与
+<code>trajectoryPlanningStarted→GUIDED</code>（<code>main.cpp:966</code>
+↔︎ <code>math_utils.h:188-220</code>）。</li>
+<li>GUIDED 500 ms 超时回 MANUAL（<code>main.cpp:4304</code> ↔︎
+<code>flight_control.cpp:390</code>）。</li>
+<li>ch9 姿态/速率模式极性（<code>&lt;1500 → ATTITUDE</code>）。</li>
+<li>姿态外环增益 4.25/0、输出 ±80°/s、积分限 40。</li>
+<li>速率内环 0.25、输出 ±10°、积分限 5、微分滤波 0.2（dt=5 ms
+前提下）。</li>
+<li>偏航 3.8、输出 ±180 µs、积分限 50、阈值 40（dt=5 ms 前提下）。</li>
+<li>ATTITUDE 目标角 ±30° 映射与四元数合成顺序（yaw×tilt）。</li>
+<li>手动油门 <code>988–2012 → 0–100%</code>。</li>
+<li>垂直推力 <code>F=m(g+a)/cos</code>、cos≥0.5、14 N 满量程。</li>
+<li>舵机 ±15° → 33.33–66.67%，方向（roll 正→舵机百分比增大、pitch
+相反）。</li>
+<li>电机 1000–2000 µs、<code>base±diff</code>、未解锁/未使能强制
+1000。</li>
+<li>偏航 <code>1500±diff</code> clamp 1000–2000。</li>
+<li>未激活/手动分支的 ±10° 修正角限幅（稳态）。</li>
+<li>任务 200 Hz GNC、2 kHz IMU、2 kHz 定时器。</li>
+<li>解锁上升沿的重置动作（PID/滤波器/KF/原点）。</li>
+</ol>
+<blockquote>
+<p>位置/高度/速度外环增益抽检与原始一致（<code>FlightCtrlParams.h</code>
+的 <code>alt_pos/alt_vel/pos_n/pos_e/vel_n/vel_e</code> 对应
+<code>main.cpp:5396-5418</code>（高度）与
+<code>:4627-4650</code>（水平）：P 1.0／5.0／0.25／1.75，输出 ±1.0
+m/s／−18.75~12.5 m/s²／±1.5 m/s／±2.6 m/s²，积分限 10／0.75／1.3，滤波
+0.2／0.5），但<strong>未逐项穷举</strong>，列 §7。</p>
+</blockquote>
+<hr />
+<h2 id="5-参考等价测试的真实性p1">5. 参考等价测试的真实性（P1）</h2>
+<p><code>test_coaxial_reference_equivalence</code> 的结论是
+<code>max_err roll/pitch/yaw = 0.000000</code>，但<strong>参考侧不是原始固件</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>事实</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_host/reference/coaxial/coax_reference.cpp</code></td>
+<td>132
+行，逐行复刻<strong>当前</strong>实现：<code>reset_roll_pitch()</code>（:45-55）连速率环
+PID 与两级滤波一起清；积分使能
+<code>attitude_active &amp;&amp; !rate_mode</code>（:79-83）；手动分支
+<code>clamp(±10)</code> 无滤波（:85-92）</td>
+</tr>
+<tr>
+<td><code>test_host/reference/coaxial/PositionPID.h</code></td>
+<td>自述"逐字复制原头文件"为<strong>假</strong>：改为
+<code>compute(setpoint,input,dt)</code>、<code>integral_ += error*dt</code>（原为
+<code>+= error</code>）、新增
+<code>clampIntegralState</code>、<code>lastOutput_/nonFiniteCount_</code>
+NaN 冻结</td>
+</tr>
+<tr>
+<td><code>coax_reference.cpp:25-34</code> 增益</td>
+<td>已换算到当前域（rate ki=0.08、yaw ki=30；原始 0.0004／0.15）</td>
+</tr>
+<tr>
+<td><code>ComplementaryFilter.h</code></td>
+<td>基本未改（仅加 <code>setAlpha</code>）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论</strong>：该测试证明的是"<code>CoaxialVtvControl.h</code>
+与其同语义复刻体自洽"，<strong>不是与原固件等价</strong>；而且它恰好在本报告发现的差异维度（RATE
+复位范围、积分使能、手动滤波）上无鉴别力——复刻体里写的就是当前行为。VER-002:50-53
+与 CTL-003:39 中"直接编译原头文件做参考"的表述必须降级为"编译当前头文件
++ 同语义复刻体"。</p>
+<hr />
+<h2 id="6-1515-的复现与定性">6. "15/15" 的复现与定性</h2>
+<h3 id="61-复现矩阵全部实跑">6.1 复现矩阵（全部实跑）</h3>
+<table>
+<thead>
+<tr>
+<th>构建</th>
+<th>构建方式</th>
+<th>结果</th>
+<th>mag_nominal seed1</th>
+<th>关键数值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>3055ede</code>（10-24 16:49，VER-002 记录提交）</td>
+<td>自带脚本，依赖 <code>fw_sil_stubs.cpp</code> 的
+<code>Madgwick::Madgwick(){}</code> 空桩</td>
+<td><strong>15/15 PASS</strong></td>
+<td>PASS</td>
+<td>mag_clean max_roll 1.17/0.71/0.78/0.72/0.98°、mag_nominal max_roll
+14.23/13.28/10.83/11.79/8.59°（与 VER-002 的 0.71–1.17°／8.59–14.23°
+逐位吻合）；nomag hold_end 12.48/5.42/7.65/11.39/8.15 m</td>
+</tr>
+<tr>
+<td><code>db294ac</code>（10-29，2ec50ac 父）</td>
+<td>同上（空桩）</td>
+<td><strong>15/15 PASS</strong></td>
+<td>PASS</td>
+<td>mag_nominal max_roll 13.94/13.29/10.99/11.97/8.68°</td>
+</tr>
+<tr>
+<td><code>2ec50ac</code>（10-29 02:22，换 SIL 口径）</td>
+<td>补 lead 的 1 行 Madgwick 源后可链接</td>
+<td><strong>14/15</strong></td>
+<td><strong>FAIL：max_pitch=22.108°，roll 8.21°</strong></td>
+<td>其余 14 例 PASS</td>
+</tr>
+<tr>
+<td>HEAD <code>57be7ef</code>（纯净 worktree）</td>
+<td>同上</td>
+<td><strong>14/15</strong></td>
+<td><strong>FAIL：max_pitch=22.108°，roll 8.21°</strong></td>
+<td>与 2ec50ac 逐位相同</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-因果隔离ab2ec50ac-二进制全-15-场景">6.2
+因果隔离（A/B，2ec50ac 二进制，全 15 场景）</h3>
+<table>
+<thead>
+<tr>
+<th>变体</th>
+<th>结果</th>
+<th>mag_nominal seed1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线（生产 Madgwick + IMU 低通）</td>
+<td>14/15</td>
+<td>FAIL 22.108°</td>
+</tr>
+<tr>
+<td><code>--append-args="--no-imu-lpf"</code></td>
+<td><strong>15/15</strong></td>
+<td>PASS（roll 8.73°）</td>
+</tr>
+<tr>
+<td><code>--append-args="--no-sil-ahrs"</code></td>
+<td><strong>15/15</strong></td>
+<td>PASS（roll 14.11°）</td>
+</tr>
+<tr>
+<td>两者同时关</td>
+<td>15/15</td>
+<td>PASS（roll 14.15°）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>机理</strong>：2ec50ac 起 SIL 默认启用生产
+Madgwick（<code>g_sil_madgwick_enable=true</code>）与生产 IMU
+低通（<code>g_imu_lpf_enable=true</code>，陀螺 α=0.15、加计
+0.02/0.05），注释明说 <code>--no-sil-ahrs</code> 仅用于"复现旧 SIL 的
+backup_ahrs=0 口径"。旧口径下 <code>backup_ahrs_*</code> 恒
+0，相当于姿态被"拉平"，<strong>恰好掩盖了本次暴露的俯仰超调</strong>。</p>
+<p><strong>口径方向性（重要）</strong>：新口径的 IMU 低通参数（陀螺
+0.15、加计
+0.02/0.05）正是原始固件自己的传感器滤波（<code>main.cpp:444-447</code>），Madgwick
+也是原始工程采用的姿态解算；旧口径的 <code>backup_ahrs_*</code> 恒 0
+相当于"无传感器滤波、无姿态解算"的理想化条件。因此 <strong>14/15
+才是更接近实机的数字，旧 15/15 是乐观值</strong>。这也解释了为什么
+VER-002 记录的 <code>mag_nominal max_roll 8.59–14.23°</code>
+与我复跑的旧口径值（8.59–14.23°）逐位吻合、而新口径降到
+7.6–12.4°：姿态口径变了，闭环响应自然变。</p>
+<h3 id="63-定性文档证据漂移不是固件回归">6.3
+定性：文档证据漂移，不是固件回归</h3>
+<ol type="1">
+<li><code>git diff --stat db294ac 2ec50ac -- TandemVec_FCS/src TandemVec_FCS/include</code>
+<strong>输出为空</strong>：两提交之间固件控制律逐字节相同。2ec50ac 只改
+<code>test_host/</code>（<code>fw_sil_env_main.cpp</code>
++879、<code>missile_plant.h</code>
+新增、<code>sil_imu_filter.h</code>、<code>sil_vibration_isolator.h</code>、构建脚本
++5 行 EIGEN 宏、<code>fw_sil_stubs.cpp</code> −1
+行空桩、<code>run_real_acceptance.py</code> +5 行
+<code>--append-args</code>）。</li>
+<li>记录 15/15 的 <code>3055ede</code> 与同口径的
+<code>db294ac</code>（2ec50ac 父提交，10-29）都能逐位复现 →
+当时的记录是真实的，不是造假。</li>
+<li>2ec50ac 之后共轴 SIL <strong>无法链接</strong>（缺 Madgwick
+源），任何人按文档脚本复跑都会失败；本仓库提交记录中未见 10-29 02:22
+之后的重跑证据，文档数字因此停留在旧口径。</li>
+<li>新口径下的 22.108° 是<strong>真实的控制裕度问题</strong>（俯仰峰值超
+15° 指令上限 7.1°），但它是"被旧口径掩盖的既有问题"，不是 HEAD
+引入的回归。</li>
+</ol>
+<p><strong>结论表述（建议统一口径）</strong>：</p>
+<blockquote>
+<p>共轴 SIL 在旧传感器口径（AHRS 空桩）下 15/15，在 2026-10-29
+起启用的生产传感器口径下 14/15（<code>mag_nominal</code> seed1 俯仰峰值
+22.108° &gt; 20°）。失败与飞控固件代码无关（<code>src/include</code> 零
+diff），属<strong>验证口径变更导致的证据漂移</strong>，同时暴露了真实的俯仰超调裕度不足。</p>
+</blockquote>
+<p><strong>修复方向（不得改阈值）</strong>：提高俯仰/横滚阻尼或引入目标角速率前馈（外环
+4.25 在 15° 阶跃下的相位裕度不足），或给 ATTITUDE 外环加输出限速；重跑
+15/15 后再更新 VER-002。</p>
+<hr />
+<h2 id="7-未能核实项">7. 未能核实项</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原因</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_coaxial_sweep.py</code> 15/18</td>
+<td>脚本在工作树中被并发修改，未在纯净副本重跑</td>
+<td>低质量/低力臂边界结论仍是文档单方声称</td>
+</tr>
+<tr>
+<td><code>run_coaxial_mc.py</code> 60/100</td>
+<td>同上</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>120 s 长航时（VER-002:56）</td>
+<td>未见对应命令行参数记录</td>
+<td>无法核对 <code>hold_end 0.857 / max_pitch 2.53</code></td>
+</tr>
+<tr>
+<td>45° 锁电机实际行为</td>
+<td>SIL 全场景峰值 22°，未构造 &gt;45° 场景</td>
+<td>D9 的三个问题均未被测试覆盖</td>
+</tr>
+<tr>
+<td>F3/F4 触发</td>
+<td>未构造双发损失/舵机卡死场景</td>
+<td>仅读代码确认"无消费者"</td>
+</tr>
+<tr>
+<td>TVC 机械方向</td>
+<td>无台架</td>
+<td>VER-002 已列为未证明项</td>
+</tr>
+<tr>
+<td>实飞航向保持</td>
+<td>无实飞</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>当前工作树 <code>pio run -e CoaxialVTVL</code> 重编</td>
+<td>工作树被他人在改（<code>coax_jam_latched</code>），未重编；<code>.pio/build/CoaxialVTVL/firmware.elf</code>（2026-10-30
+00:17，656496 B）为既有产物</td>
+<td>编译成功仅代表 00:17 时点</td>
+</tr>
+<tr>
+<td>位置/高度/速度外环逐项穷举</td>
+<td>时间约束，仅抽检</td>
+<td>未发现差异但不排除细节</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8-p0p1p2-行动表">8. P0／P1／P2 行动表</h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>级别</th>
+<th>问题</th>
+<th>建议动作</th>
+<th>验收方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A-1</td>
+<td><strong>P0</strong></td>
+<td>RATE_MODE 语义不等价（D1/D2/D4）</td>
+<td>恢复"只复位外环＋速率环积分持续＋目标 ±80°/s"；或在共轴 profile
+显式禁用 RATE_MODE 并上锁告警</td>
+<td>新增 RATE_MODE 参考测试（以原始实现为独立参考），并加 SIL 场景</td>
+</tr>
+<tr>
+<td>A-2</td>
+<td><strong>P0</strong></td>
+<td>共轴 SIL 构建缺 <code>MadgwickAHRS.cpp</code>，文档 15/15
+不可复现</td>
+<td>采纳 lead 的 1 行脚本修复并提交；把"旧口径 15/15、新口径 14/15"写回
+VER-002/CTL-003</td>
+<td><code>build_and_run_coaxial.sh --build-only</code> 干净通过；15
+场景可重跑</td>
+</tr>
+<tr>
+<td>A-3</td>
+<td><strong>P0</strong></td>
+<td>14/15 的成因与定性未入档</td>
+<td>按 §6.3 的表述更新 VER-002，禁止再写"15/15 PASS"</td>
+<td>文档评审 + 复跑记录</td>
+</tr>
+<tr>
+<td>A-4</td>
+<td><strong>P1</strong></td>
+<td>参考等价测试自指（§5）</td>
+<td>改用<strong>原始固件</strong>
+<code>PositionPID.h</code>/<code>main.cpp</code>
+的独立移植体做参考；或在结论中降级为"当前实现内部一致性"</td>
+<td>新参考体应能检出 D1-D4（即测试必须变红）</td>
+</tr>
+<tr>
+<td>A-5</td>
+<td><strong>P1</strong></td>
+<td>俯仰 22.1° 超调、裕度仅 2.1°</td>
+<td>提高俯仰阻尼/前馈，或用原始增益组合做 A/B；<strong>不得改 20°
+阈值</strong></td>
+<td>15/15 且 <code>max_pitch</code> 有统计裕度（建议 ≤16°）</td>
+</tr>
+<tr>
+<td>A-6</td>
+<td><strong>P1</strong></td>
+<td>空中断链策略反转未声明（D8）</td>
+<td>安全文档明确记录；增加"链路丢失 N 秒后自动降落/上锁"兜底</td>
+<td>断链 SIL 场景（空中/地面各一）</td>
+</tr>
+<tr>
+<td>A-7</td>
+<td><strong>P1</strong></td>
+<td>姿态环 <code>throttle≤1050</code> 退出（D7）</td>
+<td>改为仅积分受油门门控，姿态 P 通路常开</td>
+<td>收油下降 SIL 场景</td>
+</tr>
+<tr>
+<td>A-8</td>
+<td><strong>P1</strong></td>
+<td>45° 锁电机无迟滞、未归零差速、未验证（D9）</td>
+<td>门控内 <code>yaw_diff=0</code>；加 3–5° 迟滞；构造 &gt;45°
+场景验证</td>
+<td>新 SIL 场景 + 单测</td>
+</tr>
+<tr>
+<td>A-9</td>
+<td>P2</td>
+<td>手动 TVC 无滤波、极性反转（D3）</td>
+<td>补 α=0.25 输出滤波；把 ch8 极性写入机型配置/遥控器说明</td>
+<td>参考测试 + 台架</td>
+</tr>
+<tr>
+<td>A-10</td>
+<td>P2</td>
+<td>yaw 积分门 1050 vs 1100（D10）</td>
+<td>对齐原始 1100，或记录为有意差异</td>
+<td>代码评审</td>
+</tr>
+<tr>
+<td>A-11</td>
+<td>P2</td>
+<td>姿态误差精确化、双级滤波、重力常数（D5/D6/D14）</td>
+<td>至少写入"非等价清单"，避免再声称"逐项对齐"</td>
+<td>文档</td>
+</tr>
+<tr>
+<td>A-12</td>
+<td>P2</td>
+<td>积分 dt 语义依赖 5 ms（D12）</td>
+<td>在 <code>coax.dt_s</code> 处加
+<code>static_assert</code>/运行期校验，或改回预乘口径</td>
+<td>单测</td>
+</tr>
+<tr>
+<td>A-13</td>
+<td>P2</td>
+<td>文档自相矛盾（C-9）</td>
+<td>修 CTL-003:39/:62/:71 与 VER-002:15/:20/:30/:49-55</td>
+<td>文档评审</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-附录">9. 附录</h2>
+<h3 id="a-原始固件关键行号索引srcmaincpp5542-行">A.
+原始固件关键行号索引（<code>src/main.cpp</code>，5542 行）</h3>
+<table>
+<thead>
+<tr>
+<th>行号</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>129/138</td>
+<td><code>ControlMode</code>／<code>AttitudeSubMode</code> 枚举</td>
+</tr>
+<tr>
+<td>296/302-312</td>
+<td><code>G=9.79</code>；<code>MAX_THRUST=14</code>、<code>MAX_TARGET_RATE=80</code>、<code>MAX_CORRECTION=10</code>、<code>MAX_ANGLE_COMMAND=30</code>、<code>MAX_MANUAL_*=80</code></td>
+</tr>
+<tr>
+<td>343-378</td>
+<td>姿态/速率/偏航 PID 实例（4.25/0、0.25/0.0004、yaw 3.8/0.15）</td>
+</tr>
+<tr>
+<td>444-472</td>
+<td>传感器/控制滤波器实例（陀螺 α=0.15、加计 α=0.02/0.05；速度
+α=0.3、角度 α=0.85、输出 α=0.25）</td>
+</tr>
+<tr>
+<td>5396-5418</td>
+<td>高度串级 PID 配置（输出 ±1.0 m/s、−18.75~12.5 m/s²、积分限 10、滤波
+0.2）</td>
+</tr>
+<tr>
+<td>4627-4650</td>
+<td>水平位置/速度环配置（±1.5 m/s、±2.6 m/s²、滤波 0.5）</td>
+</tr>
+<tr>
+<td>702</td>
+<td><code>linkDownCallback</code>（断链全通道→988，CH5 上锁）</td>
+</tr>
+<tr>
+<td>966</td>
+<td><code>getControlMode</code></td>
+</tr>
+<tr>
+<td>4154/4159/4162</td>
+<td>解锁／手动 TVC（<code>&lt;1200</code>）／姿态模式</td>
+</tr>
+<tr>
+<td>4344-4373</td>
+<td><code>manage_pid_integrals</code>（积分门
+<code>throttle&gt;1100</code>）</td>
+</tr>
+<tr>
+<td>4380-4600</td>
+<td>垂直推力链</td>
+</tr>
+<tr>
+<td>4777</td>
+<td><code>MAX_TILT_DEG=15</code></td>
+</tr>
+<tr>
+<td>4945-5090</td>
+<td><code>generate_attitude_target</code></td>
+</tr>
+<tr>
+<td>5099-5185</td>
+<td><code>execute_attitude_controller</code>（单级
+α0.3、四元数误差、RATE 只复位外环）</td>
+</tr>
+<tr>
+<td>5199-5225</td>
+<td><code>execute_yaw_controller</code></td>
+</tr>
+<tr>
+<td>5227-5257</td>
+<td><code>mix_and_output_commands</code>（无 45° 保护）</td>
+</tr>
+<tr>
+<td>5365-5395</td>
+<td><code>setup</code> 中 PID 配置（输出/积分限/阈值/滤波）</td>
+</tr>
+<tr>
+<td>5500-5513</td>
+<td>任务周期最终注册</td>
+</tr>
+</tbody>
+</table>
+<h3 id="b-当前实现关键行号索引2026-10-30-工作树">B.
+当前实现关键行号索引（2026-10-30 工作树）</h3>
+<table>
+<thead>
+<tr>
+<th>文件:行</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>include/CoaxialVtvControl.h:280-375</code></td>
+<td><code>update()</code> 全流程（门控、RATE 复位、两级滤波、yaw）</td>
+</tr>
+<tr>
+<td><code>include/CoaxialVtvControl.h:417-427</code></td>
+<td><code>resetRollPitch()</code>（清 4 PID＋4 滤波）</td>
+</tr>
+<tr>
+<td><code>include/FlightCtrlParams.h:73-125</code></td>
+<td><code>CoaxialCtrlParams</code> 默认值与
+<code>static_assert</code></td>
+</tr>
+<tr>
+<td><code>include/ActuatorOutputMap.h:198-236</code></td>
+<td><code>mapCoaxialVtvOutputs</code>（45° 门、差速、归一化）</td>
+</tr>
+<tr>
+<td><code>include/VehicleProfile.h:212-231</code></td>
+<td><code>kCoaxialVtvOutputs</code>／<code>kCoaxialVtvProfile</code></td>
+</tr>
+<tr>
+<td><code>include/ThrustAllocation.h:67</code></td>
+<td><code>allocateLinearThrustThrottle</code></td>
+</tr>
+<tr>
+<td><code>src/flight_control.cpp:1495-1514</code></td>
+<td>双级陀螺滤波</td>
+</tr>
+<tr>
+<td><code>src/flight_control.cpp:1518-1537</code></td>
+<td>姿态误差精确化</td>
+</tr>
+<tr>
+<td><code>src/flight_control.cpp:156-226</code></td>
+<td>输入装配/解锁/手动 TVC 极性</td>
+</tr>
+<tr>
+<td><code>src/flight_control.cpp:390-402</code></td>
+<td>GUIDED 超时／航向降级</td>
+</tr>
+<tr>
+<td><code>src/flight_control.cpp:2137-2319</code></td>
+<td><code>#ifdef BFS_COAXIAL_VTVL</code>（<code>run_coaxial_control</code>
++ 故障诊断）</td>
+</tr>
+<tr>
+<td><code>src/communication.cpp:215-260</code></td>
+<td>断链/恢复策略</td>
+</tr>
+<tr>
+<td><code>src/state_data.cpp:126-128</code></td>
+<td><code>MAX_MANUAL_*RATE=600</code></td>
+</tr>
+<tr>
+<td><code>src/state_data.cpp:323/328</code></td>
+<td>双级滤波 α=0.4／0.99</td>
+</tr>
+<tr>
+<td><code>test_host/fw_sil/build_and_run_coaxial.sh</code></td>
+<td>共轴 SIL 构建（需 Madgwick 源）</td>
+</tr>
+<tr>
+<td><code>test_host/fw_sil/run_real_acceptance.py</code></td>
+<td>15 场景验收与门限（max_pitch 20°）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="c-sil-结果摘录复跑2026-10-30">C. SIL
+结果摘录（复跑，2026-10-30）</h3>
+<ul>
+<li><code>2ec50ac</code>／HEAD：<code>mag_nominal seed1 max_pitch=22.108° (&gt;20.0)</code>、<code>max_roll=8.21°</code>、<code>hold_end≈0.96 m</code>；其余
+14 例 PASS。</li>
+<li><code>3055ede</code>：15/15；<code>mag_nominal</code> max_roll
+14.23/13.28/10.83/11.79/8.59°，hold_end 0.16/0.53/0.24/0.21/0.85
+m。</li>
+<li><code>--no-sil-ahrs</code>／<code>--no-imu-lpf</code>：各
+15/15。</li>
+<li>参考等价：<code>CX-REF max_err roll=0.000000 pitch=0.000000 yaw=0.000000</code>（自指，见
+§5）。</li>
+<li>单测：<code>test_coaxial_vtv_control</code> →
+<code>T8 final roll=0.000 pitch=0.000 yawrate=0.006 dps</code>
+全部通过。</li>
+</ul>
+<hr />
+<p><strong>审计限制声明</strong>：本报告为只读审计，未修改
+<code>src/</code>、<code>include/</code>、<code>test_host/</code>
+任何代码，未 commit。行号以 2026-10-30 工作树为准（HEAD
+<code>57be7ef</code> + 他人并发未提交改动）；控制语义与 HEAD
+一致（§1.1）。所有对照实验在 detached worktree
+中完成，未触碰工作树产物。</p>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
+</html>

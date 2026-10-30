@@ -1,0 +1,26 @@
+# 默认开关逐位等价性（改动前 vs 改动后）
+
+命令：cmp_default.py baseline default_new（baseline=HEAD 源码构建，default_new=本改动构建）
+
+```
+OK   mag_clean_s1.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_clean_s2.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_clean_s3.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_clean_s4.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_clean_s5.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_nominal_s1.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_nominal_s2.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_nominal_s3.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_nominal_s4.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   mag_nominal_s5.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   nomag_degraded_s1.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   nomag_degraded_s2.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   nomag_degraded_s3.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   nomag_degraded_s4.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+OK   nomag_degraded_s5.txt: pre_lines=True old_keys_missing=[] values_diff=[] new_keys=['coax_ground_mu', 'coax_loss1', 'coax_loss2', 'coax_motor_tau_s', 'coax_servo_rate_dps', 'coax_servojam']
+ALL_IDENTICAL
+```
+
+结论：15/15 场景 stdout 非 JSON 行逐字节一致；SIL_REAL_JSON 的全部既有字段数值完全一致；唯一差异是新增的 6 个 coax_* 追踪字段。
+
+默认开关验收：15 场景 14 PASS + 1 FAIL（mag_nominal seed1 max_pitch=22.108 > 20.0），与改动前基线逐项一致。

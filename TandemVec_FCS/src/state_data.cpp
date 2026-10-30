@@ -757,4 +757,9 @@ void applyFlightCtrlParams()
     if (mode > 2) mode = 2;
     g_heading_aid_mode = static_cast<uint8_t>(mode);
     g_heading_align_deg = kFlightCtrlParams.heading_align_deg;
+#ifdef BFS_COAXIAL_VTVL
+    // 共轴分支：把控制律 18 项推给 s_coaxial_controller（setParams 内部重置积分，
+    // 与 PID 在线调参语义一致）。物理/输出常量由 flight_control.cpp 每次使用时读取。
+    applyCoaxialCtrlFlightParams(kFlightCtrlParams.coax);
+#endif
 }

@@ -1,0 +1,18 @@
+[PASS] mag_clean seed1 alt=9.86 hold_end=0.87 hold_max=0.92 pos_rms=0.89 roll_max=1.26 resets=0 outliers=0 mag=391/1 imu_det=0
+[PASS] mag_clean seed2 alt=9.84 hold_end=0.27 hold_max=0.36 pos_rms=0.48 roll_max=1.68 resets=0 outliers=0 mag=391/1 imu_det=0
+[PASS] mag_clean seed3 alt=9.94 hold_end=0.44 hold_max=0.56 pos_rms=0.64 roll_max=1.60 resets=0 outliers=0 mag=392/0 imu_det=0
+[PASS] mag_clean seed4 alt=9.87 hold_end=0.30 hold_max=0.41 pos_rms=0.76 roll_max=1.45 resets=0 outliers=0 mag=391/1 imu_det=0
+[PASS] mag_clean seed5 alt=9.93 hold_end=0.35 hold_max=0.41 pos_rms=0.59 roll_max=1.17 resets=0 outliers=0 mag=392/0 imu_det=0
+[FAIL] mag_nominal seed1 alt=9.10 hold_end=0.96 hold_max=1.38 pos_rms=0.55 roll_max=8.21 resets=0 outliers=0 mag=390/2 imu_det=0
+       - max_pitch=22.108 > 20.0
+[PASS] mag_nominal seed2 alt=9.07 hold_end=0.31 hold_max=0.77 pos_rms=1.02 roll_max=8.14 resets=0 outliers=0 mag=390/2 imu_det=0
+[PASS] mag_nominal seed3 alt=9.03 hold_end=0.86 hold_max=1.18 pos_rms=0.77 roll_max=7.61 resets=0 outliers=0 mag=390/2 imu_det=0
+[PASS] mag_nominal seed4 alt=9.12 hold_end=0.50 hold_max=0.83 pos_rms=0.45 roll_max=12.42 resets=0 outliers=0 mag=390/2 imu_det=0
+[PASS] mag_nominal seed5 alt=9.10 hold_end=0.34 hold_max=1.12 pos_rms=0.70 roll_max=10.18 resets=0 outliers=0 mag=389/3 imu_det=0
+[PASS] nomag_degraded seed1 alt=9.87 hold_end=129.88 hold_max=152.62 pos_rms=0.44 roll_max=1.03 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed2 alt=9.88 hold_end=121.64 hold_max=142.84 pos_rms=0.55 roll_max=1.00 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed3 alt=9.91 hold_end=125.34 hold_max=147.29 pos_rms=0.53 roll_max=1.13 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed4 alt=9.83 hold_end=129.33 hold_max=151.72 pos_rms=0.25 roll_max=1.00 resets=0 outliers=0 mag=0/0 imu_det=0
+[PASS] nomag_degraded seed5 alt=9.92 hold_end=135.58 hold_max=159.14 pos_rms=0.38 roll_max=1.08 resets=0 outliers=0 mag=0/0 imu_det=0
+
+=== real-nav acceptance: 15 cases, 1 failed ===

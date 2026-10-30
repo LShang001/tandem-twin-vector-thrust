@@ -1,0 +1,16 @@
+commit=57be7ef
+dirty=21
+profiles=mag_clean,mag_nominal,mag_disturbed,nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof
+seeds=1,2,3,4,5
+seconds=40
+realistic=1
+madgwick=1
+build_mode=source
+build=0
+bin=/c/Users/12631/AppData/Local/Temp/tv_coax_final_bin/fw_coax.exe
+bin_mtime=2026-10-30 19:49:58
+acceptance=1
+acceptance_realistic=0
+mc_current=1
+mc_realistic=1
+sweep=1

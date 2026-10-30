@@ -2143,13 +2143,20 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
 //   是 MODEL-DEFAULT，未标定；不得把本分支输出当实机推力承诺。
 static bfs::CoaxialVtvController s_coaxial_controller;
 
+// ★ 2026-10-30 可标定化：在线参数写入后由 applyFlightCtrlParams() 调到这里，
+//   setParams 会 applyParams()+reset()（与 PID 在线调参的积分复位语义一致）。
+void applyCoaxialCtrlFlightParams(const CoaxialCtrlParams &p)
+{
+  s_coaxial_controller.setParams(p.ctrl);
+}
+
 static void run_coaxial_control(const ControlInputs_t &inputs,
                                 ControlOutputs_t &outputs,
                                 const Quaternion &q_target)
 {
-  constexpr float kCoaxMassKg = 0.84f;
-  constexpr float kCoaxMaxThrustN = 14.0f;
-  constexpr float kCoaxMaxCorrectionDeg = 10.0f;
+  // 物理/输出常量与增益统一取自 kFlightCtrlParams.coax（默认值逐位 = 原硬编码，
+  // 见 include/FlightCtrlParams.h 的 static_assert 与 test_host/test_coax_params.cpp）。
+  const CoaxialCtrlParams &coax = kFlightCtrlParams.coax;
 
   updateFilteredBodyRates();
   float error_roll_deg = 0.0f;
@@ -2180,16 +2187,24 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   control_in.yaw_active = inputs.is_unlocked && inputs.throttle_raw > 1050.0f;
   control_in.manual_tvc = inputs.is_manual_tvc;
   control_in.manual_roll_deg = mapFloat(
-      inputs.roll_raw, 988.0f, 2012.0f, -kCoaxMaxCorrectionDeg,
-      kCoaxMaxCorrectionDeg);
+      inputs.roll_raw, 988.0f, 2012.0f, -coax.ctrl.max_correction_deg,
+      coax.ctrl.max_correction_deg);
   control_in.manual_pitch_deg = mapFloat(
-      inputs.pitch_raw, 988.0f, 2012.0f, kCoaxMaxCorrectionDeg,
-      -kCoaxMaxCorrectionDeg);
-  control_in.dt_s = 0.005f;
+      inputs.pitch_raw, 988.0f, 2012.0f, coax.ctrl.max_correction_deg,
+      -coax.ctrl.max_correction_deg);
+  control_in.dt_s = coax.dt_s;
   const bfs::CoaxialVtvOutput control_out =
       s_coaxial_controller.update(control_in);
   gnc_tel.error_deg[0] = error_roll_deg;
   gnc_tel.error_deg[1] = error_pitch_deg;
+  // 共轴诊断遥测（每拍填写；无效输出回零，与输出级同口径）
+  gnc_tel.coax_roll_corr_deg =
+      control_out.valid ? control_out.roll_correction_deg : 0.0f;
+  gnc_tel.coax_pitch_corr_deg =
+      control_out.valid ? control_out.pitch_correction_deg : 0.0f;
+  gnc_tel.coax_yaw_diff_us =
+      control_out.valid ? control_out.yaw_diff_us : 0.0f;
+  gnc_tel.coax_saturated = control_out.saturated ? 1 : 0;
 
   float final_throttle_pct = outputs.throttle_percent;
   if (!outputs.throttle_direct)
@@ -2197,8 +2212,8 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     bfs::ThrustAllocationInput thrust_in;
     thrust_in.specific_force_up_mps2 = outputs.specific_force_up_mps2;
     thrust_in.thrust_axis_up_cos = outputs.thrust_cos_tilt;
-    thrust_in.mass_kg = kCoaxMassKg;
-    thrust_in.max_total_thrust_n = kCoaxMaxThrustN;
+    thrust_in.mass_kg = coax.mass_kg;
+    thrust_in.max_total_thrust_n = coax.max_total_thrust_n;
     const bfs::ThrustAllocationOutput thrust_out =
         bfs::allocateLinearThrustThrottle(thrust_in);
     final_throttle_pct = thrust_out.valid ? thrust_out.throttle_pct : 0.0f;
@@ -2218,14 +2233,14 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   output_in.attitude_roll_deg = AHRS_Packet.Roll;
   output_in.attitude_pitch_deg = AHRS_Packet.Pitch;
   output_in.unlocked = inputs.is_unlocked;
-  output_in.attitude_safe =
-      fabsf(AHRS_Packet.Roll) < 45.0f && fabsf(AHRS_Packet.Pitch) < 45.0f;
+  output_in.attitude_safe = fabsf(AHRS_Packet.Roll) < coax.attitude_limit_deg &&
+                            fabsf(AHRS_Packet.Pitch) < coax.attitude_limit_deg;
 
   bfs::CoaxialVtvOutputCalibration output_cal;
-  output_cal.servo_half_angle_deg = 15.0f;
-  output_cal.motor_min_us = 1000.0f;
-  output_cal.motor_max_us = 2000.0f;
-  output_cal.attitude_limit_deg = 45.0f;
+  output_cal.servo_half_angle_deg = coax.servo_half_angle_deg;
+  output_cal.motor_min_us = coax.motor_min_us;
+  output_cal.motor_max_us = coax.motor_max_us;
+  output_cal.attitude_limit_deg = coax.attitude_limit_deg;
   const bfs::OutputCommandSet commands =
       bfs::mapCoaxialVtvOutputs(output_in, output_cal);
   for (uint8_t i = 0; i < commands.count; ++i)
@@ -2275,6 +2290,7 @@ static void updateCoaxialFaultDiagnostics(const ControlInputs_t &inputs,
     g_actuator_servo_jam = false;
     g_actuator_thrust_loss = false;
     g_actuator_controlled_descent_request = false;
+    gnc_tel.coax_fault_flags = 0;
     return;
   }
   constexpr float kCoaxMaxCorrectionDeg = 10.0f;
@@ -2294,6 +2310,11 @@ static void updateCoaxialFaultDiagnostics(const ControlInputs_t &inputs,
   g_actuator_controlled_descent_request =
       (s_coax_fault_monitor.action() ==
        bfs::ActuatorFaultAction::ControlledDescent);
+  // 共轴故障位（只读遥测；判据/动作逻辑本身未改动，仅把既有标志打包）
+  gnc_tel.coax_fault_flags =
+      (g_actuator_servo_jam ? 0x01 : 0) |
+      (g_actuator_thrust_loss ? 0x02 : 0) |
+      (g_actuator_controlled_descent_request ? 0x04 : 0);
 }
 #endif // BFS_COAXIAL_VTVL
 

@@ -75,6 +75,64 @@ FILTER_WIRE = {
     'speed_filter_alpha2': 'spd2_alpha',
 }
 
+# ---- 共轴双桨 VTVL 机型参数（★2026-10-30 可标定化）----
+# 名称/顺序 = 固件 include/FlightCtrlParams.h::BFS_COAX_PARAM_LIST（ID 133-157），
+# 默认值 = 固件默认（原 flight_control.cpp 硬编码）；min/max 仅为地面站输入校验的
+# 保守包线，不改变固件默认值。安全关键项（PWM 范围/舵机半行程/修正角限幅）的
+# max 已按红线收紧，实机标定仍需评审。
+COAX_PARAMS = [
+    ('coax.att_kp_roll', 's⁻¹', 0.0, 20.0, 0.01,
+     'Roll 姿态外环比例增益（姿态角误差 → 目标角速率）'),
+    ('coax.att_kp_pitch', 's⁻¹', 0.0, 20.0, 0.01,
+     'Pitch 姿态外环比例增益（姿态角误差 → 目标角速率）'),
+    ('coax.rate_kp_roll', 's', 0.0, 2.0, 0.01,
+     'Roll 速率内环比例增益（角速率误差 → 修正角）'),
+    ('coax.rate_ki_roll', '', 0.0, 1.0, 0.005,
+     'Roll 速率内环积分增益（积分项输出限幅见 rate_int_lim）'),
+    ('coax.rate_kp_pitch', 's', 0.0, 2.0, 0.01,
+     'Pitch 速率内环比例增益（角速率误差 → 修正角）'),
+    ('coax.rate_ki_pitch', '', 0.0, 1.0, 0.005,
+     'Pitch 速率内环积分增益（积分项输出限幅见 rate_int_lim）'),
+    ('coax.rate_kp_yaw', 'µs/(°/s)', 0.0, 20.0, 0.01,
+     '偏航速率环比例增益（角速率误差 → PWM 差速）'),
+    ('coax.rate_ki_yaw', 'µs/°', 0.0, 100.0, 0.5,
+     '偏航速率环积分增益（积分项输出限幅见 yaw_int_lim）'),
+    ('coax.max_rate_dps', 'deg/s', 0.0, 200.0, 1.0,
+     '姿态外环目标角速率限幅（默认 80°/s）'),
+    ('coax.max_corr_deg', 'deg', 0.0, 10.0, 0.1,
+     'TVC 修正角限幅（红线默认 10°；手动 TVC 摇杆映射同用）'),
+    ('coax.max_yaw_us', 'µs', 0.0, 180.0, 1.0,
+     '偏航差速限幅（红线默认 180µs）'),
+    ('coax.att_int_lim', 'deg/s', 0.0, 80.0, 1.0,
+     '姿态外环积分项输出限幅'),
+    ('coax.rate_int_lim', 'deg', 0.0, 10.0, 0.1,
+     '速率内环积分项输出限幅'),
+    ('coax.yaw_int_lim', 'µs', 0.0, 100.0, 1.0,
+     '偏航速率环积分项输出限幅'),
+    ('coax.yaw_int_thr', 'deg/s', 0.0, 100.0, 1.0,
+     '偏航速率环积分分离阈值'),
+    ('coax.att_flt_alpha', '', 0.0, 1.0, 0.01,
+     '姿态外环目标角速率滤波 alpha'),
+    ('coax.corr_flt_alpha', '', 0.0, 1.0, 0.01,
+     'TVC 修正角输出滤波 alpha'),
+    ('coax.pid_deriv_alpha', '', 0.0, 1.0, 0.01,
+     '速率环微分项滤波 alpha'),
+    ('coax.mass_kg', 'kg', 0.1, 5.0, 0.01,
+     '等效质量（推力分配用；默认 0.84kg 未标定）'),
+    ('coax.max_thrust_n', 'N', 1.0, 40.0, 0.1,
+     '最大总推力（推力分配用；默认 14N 未标定）'),
+    ('coax.servo_half_deg', 'deg', 1.0, 30.0, 1.0,
+     'TVC 舵机半行程角（输出标定；默认 15°）'),
+    ('coax.motor_min_us', 'µs', 900.0, 1100.0, 1.0,
+     '电机最小 PWM（默认 1000µs，安全关键项）'),
+    ('coax.motor_max_us', 'µs', 1900.0, 2100.0, 1.0,
+     '电机最大 PWM（默认 2000µs，安全关键项）'),
+    ('coax.att_limit_deg', 'deg', 10.0, 60.0, 1.0,
+     '姿态安全限幅（超限锁输出；默认 45°）'),
+    ('coax.dt_s', 's', 0.001, 0.02, 0.001,
+     '共轴控制周期（默认 5ms；改动必须与调度周期一致）'),
+]
+
 # 按环的输出单位修正
 RATE_UNIT = 'deg/s'   # 姿态外环 out_min/out_max
 ANG_ACC_UNIT = 'deg/s²'  # 角速率内环 out_min/out_max/int_limit
@@ -177,6 +235,11 @@ def build_meta():
         meta[name] = dict(name=name, group='导航', loop='', field='',
                           unit='m', min=-5.0, max=5.0, step=0.01, type='float',
                           desc=f'GNSS 天线相对 IMU 的机体系杆臂 {desc}（0=不补偿）')
+    # ★ 2026-10-30 共轴双桨 VTVL 机型参数（固件 ID 133-157）
+    for name, unit, lo, hi, step, desc in COAX_PARAMS:
+        meta[name] = dict(name=name, group='共轴', loop='', field='',
+                          unit=unit, min=lo, max=hi, step=step, type='float',
+                          desc=desc)
     return meta
 
 
@@ -192,6 +255,7 @@ def group_order():
     for _, g, _ in FILTER_GROUPS:
         if g not in order:
             order.append(g)
+    order.append('共轴')  # ★2026-10-30 共轴双桨机型参数
     order.append('其他')
     return order
 
@@ -213,9 +277,9 @@ def is_float_name(name):
     return True
 
 
-# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 133 项）
+# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 158 项）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 133 项，跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 158 项，跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():
@@ -250,4 +314,8 @@ def expected_names():
     names.append('gnss_lever_x')
     names.append('gnss_lever_y')
     names.append('gnss_lever_z')
+    # ★ 2026-10-30 共轴双桨 VTVL（固件尾部追加，ID 133-157；名称/顺序单一事实源
+    #   见 include/FlightCtrlParams.h::BFS_COAX_PARAM_LIST）
+    for name, _unit, _lo, _hi, _step, _desc in COAX_PARAMS:
+        names.append(name)
     return names

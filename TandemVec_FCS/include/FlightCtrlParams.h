@@ -32,6 +32,7 @@
  */
 #pragma once
 #include <cstdint>  // uint8_t（inertia_comp_mask，2026-08-10）
+#include "CoaxialVtvControl.h"  // 共轴 DirectTvcRate 控制律参数（纯平台无关，2026-10-30）
 
 // ============================================================
 //  限幅常量（结构体初值的别名，供 state_data.cpp 保留符号兼容）
@@ -60,6 +61,70 @@ struct PidTuneParams
     float filter_alpha;      // 微分滤波系数（构造参数 9；0=1 直通，越小越强）
     bool  enabled;           // 该环是否参与控制（false = 僵尸参数，仅保留对象兼容）
 };
+
+/**
+ * @brief 共轴双桨 VTVL 机型参数（★ 2026-10-30 可标定化，默认值 = 原函数内硬编码）
+ * @note  仅 BFS_COAXIAL_VTVL 编译分支消费，但结构体放本文件以复用同一参数事实源：
+ *        `ctrl` = DirectTvcRate 控制律 18 项（字段/默认值见 CoaxialVtvControl.h），
+ *        其余 = 原 flight_control.cpp 共轴分支内的物理/输出常量。
+ *        ★ 默认值逐位不变：test_host/test_coax_params.cpp 逐字段比对旧常量位型；
+ *        PWM 范围/舵机半行程/修正角限幅/增益默认值均属安全关键项，不得改值。
+ */
+struct CoaxialCtrlParams
+{
+    bfs::CoaxialVtvParams ctrl;      // 控制律 18 项（增益/限幅/滤波，见 CoaxialVtvControl.h）
+    float mass_kg = 0.84f;           // 等效质量 [kg]（推力分配用，MODEL-DEFAULT 未标定）
+    float max_total_thrust_n = 14.0f;// 最大总推力 [N]（推力分配用，MODEL-DEFAULT 未标定）
+    float servo_half_angle_deg = 15.0f; // 舵机半行程角 [deg]（输出标定）
+    float motor_min_us = 1000.0f;    // 电机最小 PWM [µs]
+    float motor_max_us = 2000.0f;    // 电机最大 PWM [µs]
+    float attitude_limit_deg = 45.0f;// 姿态安全限幅 [deg]（超限锁输出）
+    float dt_s = 0.005f;             // 共轴控制周期 [s]（200Hz）
+};
+
+/**
+ * @brief 共轴参数注册表顺序（单一事实源：ano_params.cpp 与 host 测试共用）
+ * @note  X(线上名, CoaxialCtrlParams 成员路径)；名称 ≤20B，ID = 表尾追加顺序。
+ *        GCS/server/params.py::expected_names() 必须保持同序同拼写。
+ */
+#define BFS_COAX_PARAM_LIST(X)                    \
+    X(coax.att_kp_roll, ctrl.att_kp_roll)         \
+    X(coax.att_kp_pitch, ctrl.att_kp_pitch)       \
+    X(coax.rate_kp_roll, ctrl.rate_kp_roll)       \
+    X(coax.rate_ki_roll, ctrl.rate_ki_roll)       \
+    X(coax.rate_kp_pitch, ctrl.rate_kp_pitch)     \
+    X(coax.rate_ki_pitch, ctrl.rate_ki_pitch)     \
+    X(coax.rate_kp_yaw, ctrl.rate_kp_yaw)         \
+    X(coax.rate_ki_yaw, ctrl.rate_ki_yaw)         \
+    X(coax.max_rate_dps, ctrl.max_target_rate_dps)\
+    X(coax.max_corr_deg, ctrl.max_correction_deg) \
+    X(coax.max_yaw_us, ctrl.max_yaw_diff_us)      \
+    X(coax.att_int_lim, ctrl.att_integral_limit)  \
+    X(coax.rate_int_lim, ctrl.rate_integral_limit)\
+    X(coax.yaw_int_lim, ctrl.yaw_integral_limit)  \
+    X(coax.yaw_int_thr, ctrl.yaw_integral_threshold)\
+    X(coax.att_flt_alpha, ctrl.att_rate_filter_alpha)\
+    X(coax.corr_flt_alpha, ctrl.correction_filter_alpha)\
+    X(coax.pid_deriv_alpha, ctrl.pid_derivative_filter_alpha)\
+    X(coax.mass_kg, mass_kg)                      \
+    X(coax.max_thrust_n, max_total_thrust_n)      \
+    X(coax.servo_half_deg, servo_half_angle_deg)  \
+    X(coax.motor_min_us, motor_min_us)            \
+    X(coax.motor_max_us, motor_max_us)            \
+    X(coax.att_limit_deg, attitude_limit_deg)     \
+    X(coax.dt_s, dt_s)
+
+#define BFS_COAX_PARAM_COUNT 25
+
+// 安全关键默认值锁定（逐位；任何改动都必须走红线评审）
+static_assert(CoaxialCtrlParams{}.mass_kg == 0.84f, "共轴质量默认值必须保持 0.84kg");
+static_assert(CoaxialCtrlParams{}.max_total_thrust_n == 14.0f, "共轴最大推力默认值必须保持 14N");
+static_assert(CoaxialCtrlParams{}.servo_half_angle_deg == 15.0f, "共轴舵机半行程默认值必须保持 15deg");
+static_assert(CoaxialCtrlParams{}.motor_min_us == 1000.0f, "共轴电机最小 PWM 默认值必须保持 1000us");
+static_assert(CoaxialCtrlParams{}.motor_max_us == 2000.0f, "共轴电机最大 PWM 默认值必须保持 2000us");
+static_assert(CoaxialCtrlParams{}.attitude_limit_deg == 45.0f, "共轴姿态安全限幅默认值必须保持 45deg");
+static_assert(CoaxialCtrlParams{}.dt_s == 0.005f, "共轴控制周期默认值必须保持 5ms");
+static_assert(CoaxialCtrlParams{}.ctrl.max_correction_deg == 10.0f, "共轴修正角限幅默认值必须保持 10deg");
 
 /**
  * @brief 全部控制环参数集合（固件唯一可调参数块）
@@ -105,6 +170,8 @@ struct FlightCtrlParams
     float gnss_lever_x_m;
     float gnss_lever_y_m;
     float gnss_lever_z_m;
+    // ---- 共轴双桨 VTVL 机型参数（2026-10-30；仅 BFS_COAXIAL_VTVL 分支消费）----
+    CoaxialCtrlParams coax;           // 控制律 + 物理/输出常量（默认 = 原硬编码）
 };
 
 // ============================================================
@@ -179,6 +246,8 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* gnss_lever_x_m        */ 0.0f,
     /* gnss_lever_y_m        */ 0.0f,
     /* gnss_lever_z_m        */ 0.0f,
+    // ---- 共轴双桨 VTVL（2026-10-30）：默认值 = 原 flight_control.cpp 硬编码 ----
+    /* coax                  */ CoaxialCtrlParams{},
 };
 
 #ifdef TANDEMVEC_FIRMWARE

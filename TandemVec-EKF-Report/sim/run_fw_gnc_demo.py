@@ -66,7 +66,7 @@ def main():
     print("caps:", caps)
     check(caps["gnc_abi"] == 1, "GNC ABI v1")
     check("gnc_available" in caps["features"], "控制链编入库中")
-    check(caps["param_count"] == 133, f"参数注册表 133 项（实际 {caps['param_count']}）")
+    check(caps["param_count"] == 158, f"参数注册表 158 项（133 基础 + 25 共轴；实际 {caps['param_count']}）")
 
     # 参数注册表：读写往返（与 GCS/MAVLink 同一份）
     names = fwapi.param_names()

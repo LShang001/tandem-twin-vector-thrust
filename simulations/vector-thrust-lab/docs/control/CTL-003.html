@@ -162,18 +162,52 @@ seeds 通过（定高 9.17–9.29 m、max_roll
 4.25/0（±80°/s、积分限 40）、速率内环 0.25/0.08（±10°、积分限
 5、微分滤波 0.2）、偏航 3.8/30（±180 µs、积分限 50、阈值
 40），外加姿态目标 α=0.85、修正角 α=0.25
-两级滤波；<code>RATE_MODE</code> 与实飞工程一样每拍复位速率 PID。已通过
-<code>BFS_COAXIAL_VTVL</code> / <code>CoaxialVTVL</code> env 接入
-<code>runGNCExecutive</code>，共用输入/模式/定高/目标姿态层；<code>test_coaxial_reference_equivalence</code>
-用实飞工程 <code>PositionPID/ComplementaryFilter</code>
-原头文件做参考，600 拍（ATTITUDE/RATE/手动/失效）逐拍误差
-0；<code>run_coaxial_acceptance.sh</code> 用真实固件 + 近似共轴 plant
-跑出 mag_clean/mag_nominal/nomag_degraded ×5 seeds <strong>15/15
-PASS</strong>；18 组 plant 参数/故障扫描 15/18
-通过，边界为低质量/低力臂/高 Iy；双发损失/舵机卡死可触发 F3/F4
+两级滤波；<code>RATE_MODE</code>
+的复位范围与实飞工程<strong>不同</strong>：当前连速率环 PID
+与两级滤波一起清零，原固件只复位外环，见 <a
+href="../verification/VER-004.html">VER-004</a>
+D1/D2。已通过 <code>BFS_COAXIAL_VTVL</code> / <code>CoaxialVTVL</code>
+env 接入 <code>runGNCExecutive</code>，共用输入/模式/定高/目标姿态层。
+<ul>
+<li><code>test_coaxial_reference_equivalence</code> 的 600 拍逐拍误差
+0（ATTITUDE/RATE/手动/失效）<strong>只能证明当前实现与宿主复刻体内部自洽</strong>：该复刻体就是按当前语义写的，且参考
+<code>PositionPID.h</code> 已改积分/钳位/NaN
+语义，不是原始固件原头文件（见 VER-004 §5）。</li>
+<li><code>run_coaxial_acceptance.sh</code> 用真实固件 + 近似共轴
+plant：旧传感器口径（AHRS 空桩）3×5 = 15/15；2026-10-29
+起生产传感器口径（Madgwick + IMU 低通）3×5 =
+<strong>14/15</strong>（<code>mag_nominal</code> seed1 俯仰峰值 22.108°
+&gt; 20°），8 profile×5 = <strong>39/40</strong>（2026-10-30
+实测）。<code>git diff db294ac 2ec50ac -- src include</code> 为空 ⇒
+这是验证口径变更导致的证据漂移，不是固件回归；同时暴露真实的俯仰超调裕度不足（22.1°
+超 15° 指令上限 7.1°，离 20° 门只剩 2.1°）。</li>
+<li>18 组 plant 参数/故障扫描 15/18 通过，边界为低力臂/高
+Iy/组合低边界（低质量 mass=0.70 在 2026-10-30 复跑中通过）；随机 MC 100
+例 56/100，俯仰超调是最差 8 例的共同特征；双发损失/舵机卡死可触发 F3/F4
 检测但没有重构/安全降落。<strong>仍无共轴台架/HIL/实机；plant
 惯量/力臂/差速力矩是 L1
 假设，没有外部实飞日志做逐波形回放。</strong></li>
+</ul></li>
+<li><code>include/CoaxialVtvControl.h</code>
+的共轴参数与遥测（2026-10-30）：新增 25 项 <code>coax.*</code>
+参数，表尾追加 ID 133–157、<code>ANO_PARAMS_COUNT</code>
+133→158，默认值与旧硬编码逐位相同（8 条 <code>static_assert</code> +
+<code>test_host/test_coax_params.cpp</code> 422
+断言）；<code>GncTelemetry</code> 尾部新增 5 个共轴遥测字段，AnoVars 增
+<code>coax_sat</code>/<code>coax_flt</code>（109
+项）。共轴分支的安全关键物理常量（质量/推力/舵机半行程/电机脉宽/大倾角门/修正角限幅/<code>dt_s</code>）因此可在线读取与标定，但固件未加范围钳制，GCS
+输入校验不等价于固件保护——误写会改变输出映射与安全限幅，生产前需写保护/评审。</li>
+<li>共轴 SIL plant
+保真度（2026-10-30）：<code>test_host/fw_sil/fw_sil_env_main.cpp</code>
+新增默认关闭的
+<code>--coax-motor-tau</code>、<code>--coax-servo-rate</code>、<code>--coax-ground-mu</code>、<code>--coax-servojam roll|pitch</code>（+<code>-at</code>）、<code>--coax-motor-loss1/2</code>
+与预设 <code>--coax-realistic</code>（τ=0.28 s、300
+°/s、μ=0.5）。<strong>执行器一阶/舵机速率/0.1% PWM 量化原本就硬编码在 2
+kHz
+内环，属基线而非新增</strong>；缺省全部沿用旧行为（逐字节一致）。按用户
+2026-10-30 口径 <strong>VTVL 低速段不做气动阻尼</strong>，原 wind
+直接等效力语义保留。开关说明与 L1 依据见
+<code>test_host/fw_sil/README.md</code> §11。</li>
 <li><code>include/LiquidRocketModel.h</code>（2026-10-24）：L1
 液体火箭推进模型（点火/解锁互锁、阀门/推力速率、Tmin、比冲质量流、推进剂耗尽、变质量）与双轴喷管
 asin 几何；参数取自外部 <code>VTVL_LiquidRocket_FC</code> 的 CCAEGT
@@ -253,9 +287,12 @@ Arduino。自动分配路径走 <code>TandemVecAllocator</code>，manual/locked
 TVC）、增益/限幅/保护门限、参数表/遥测字段。</p>
 <p>本轮的 <code>kCoaxialVtvProfile</code> 与
 <code>mapCoaxialVtvOutputs()</code> 已能表达共轴输出表并复现外部 mix
-的舵机方向、PWM 差速和大倾角锁电机；但 <strong>DirectTvcRate
-控制律尚未接入当前
-<code>runGNCExecutive</code></strong>，因此仍不能把当前固件直接飞共轴机型。外部工程中的几何/三阶多项式
+的舵机方向、PWM 差速和大倾角锁电机；<code>DirectTvcRate</code>
+控制律已通过 <code>BFS_COAXIAL_VTVL</code> 接入
+<code>runGNCExecutive</code>。但 2026-10-30
+的逐行对照审计（VER-004）确认：RATE_MODE
+复位范围/积分使能/目标速率量级、空中断链策略、姿态环油门门控、45°
+锁电机行为相对原始固件存在语义差异，<strong>在处置前不得把当前固件直接飞共轴机型</strong>。外部工程中的几何/三阶多项式
 TVC 映射目前未被其实际 mix
 调用，暂作为可选运动学表保留，不冒充当前实现。燃料阀门/点火是独立安全输出，未纳入
 4 路姿态 mix；接入共轴整机时需把阀门/点火增加到 profile 或复用现有 fuel
@@ -268,7 +305,10 @@ TVC 映射目前未被其实际 mix
 电调，<code>DirectTvcRate</code> / <code>DifferentialPwmUs</code>；</li>
 <li>控制律使用 <code>CoaxialVtvControl.h</code>，已通过
 <code>BFS_COAXIAL_VTVL</code> 接入 <code>runGNCExecutive</code>
-并建立共轴近似 6DOF SIL（9/9 PASS）；下一步是共轴台架/HIL
+并建立共轴近似 6DOF SIL（2026-10-30
+生产传感器口径：3×5=14/15、8×5=39/40）；下一步先按 <a
+href="../verification/VER-004.html">VER-004</a>
+§8 行动表处置 RATE_MODE/断链/45° 门控差异，再做共轴台架/HIL
 标定惯量、力臂、差速力矩与 TVC 机械方向；</li>
 <li>输出层调用 <code>mapCoaxialVtvOutputs()</code>：复现
 ±15°→33.33–66.67%、1000–2000 µs 联合限幅、未解锁/45° 大倾角锁电机；</li>
@@ -371,5 +411,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 href="../verification/VER-002.html">VER-002
 三机型兼容性与虚拟验证</a>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
 </html>

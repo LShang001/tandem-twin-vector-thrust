@@ -69,7 +69,9 @@ mix 等价单测；液体：未接固件</td>
 <tr>
 <td>C4 闭环响应</td>
 <td>相同场景 → 高度/姿态/位置包线一致</td>
-<td>TandemVec SIL 24/24；共轴 SIL 15/15；液体 SIL 9/9 参数扫描</td>
+<td>TandemVec SIL 24/24；共轴 SIL 8 profile×5 seeds
+<strong>39/40</strong>（生产口径；旧口径 3×5=14/15）；液体 SIL 9/9
+参数扫描</td>
 </tr>
 </tbody>
 </table>
@@ -77,9 +79,13 @@ mix 等价单测；液体：未接固件</td>
 <ul>
 <li><strong>纵列双发（原飞行器）兼容性成立</strong>：新固件在
 <code>TandemVec_FCS</code> env 下与改造前基线逐位一致，SIL 24/24。</li>
-<li><strong>共轴 VTVL</strong>：控制律按实飞工程结构逐项对齐，真实固件 +
-近似 6DOF plant
-15/15；但<strong>没有外部实飞日志回放</strong>，不能证明逐波形一致。</li>
+<li><strong>共轴
+VTVL</strong>：控制律按实飞工程结构逐项移植，但原始固件对照审计（<a
+href="VER-004.html">VER-004</a>）发现
+RATE_MODE 复位/积分语义与目标量级不等价，属 P0 待处理项；真实固件 + 近似
+plant 生产口径 8 profile×5 seeds <strong>39/40</strong>、旧口径
+3×5=<strong>14/15</strong>（不是旧文档写的
+15/15）。<strong>没有外部实飞日志回放</strong>，不能证明逐波形一致。</li>
 <li><strong>液体火箭</strong>：只有 L1 推进/质量/喷管模型 + 自研简单回收
 SIL；<strong>实飞 CCAEGT
 制导未移植，不能声称飞行响应兼容</strong>。</li>
@@ -113,11 +119,14 @@ PASS</strong>；宿主/固件编译/GOV 全绿</td>
 3.8/30；±80°/s、±10°、±180 µs；α=0.85/0.25 滤波）</td>
 <td><code>CoaxialVTVL</code>
 env，<code>CoaxialVtvControl + mapCoaxialVtvOutputs</code></td>
-<td>实飞原头文件参考等价（600 拍 max_err=0）；宿主 6DOF 闭环；真实固件
-SIL <code>mag_clean/mag_nominal/nomag_degraded</code> ×5 <strong>15/15
-PASS</strong></td>
-<td>外部实飞日志逐波形回放；台架/HIL；plant 惯量/力臂/差速力矩为 L1
-假设；偏航无自动 heading hold</td>
+<td>8 profile×5 seeds
+<strong>39/40</strong>（生产传感器口径）、3×5=<strong>14/15</strong>；realistic
+plant 8×5=40/40（近门限，见 §3.2）；sweep 15/18；MC
+56/100；参考等价测试为<strong>按当前语义自写的自指测试</strong>（VER-004
+P1）</td>
+<td>实飞日志回放；台架/HIL；RATE_MODE 语义差异（VER-004 P0）；plant
+惯量/力臂/差速力矩为 L1 假设；偏航无自动 heading
+hold；参数不持久化（VER-005 P1）</td>
 </tr>
 <tr>
 <td>液体火箭</td>
@@ -151,44 +160,69 @@ s，属于既有位置保持-横滚/航向耦合边界；40 s 基线不能外推
 m；不计入位置保持验收。</li>
 </ul>
 <h3 id="32-共轴-vtvl">3.2 共轴 VTVL</h3>
+<blockquote>
+<p>口径说明（2026-10-30 更新）：本节数字全部来自 HEAD
+<code>57be7ef</code> + 未提交的共轴参数化/ plant 开关工作树，用
+<code>run_coaxial_suite.sh --realistic</code> 一次跑完，证据见
+<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-2026-10-30/</code>。旧文档的
+"15/15 / 60/100 / P95 64.93" 已被本轮实测替换。逐项语义差异与 P0/P1
+结论见 <a
+href="VER-004.html">VER-004</a>（控制与安全域）与
+<a
+href="VER-005.html">VER-005</a>（导航与系统域）。</p>
+</blockquote>
 <ul>
-<li><code>CoaxialVtvControl</code> 与实飞工程逐项对齐：外环/内环 PID
-增益、积分限幅（40/5/50）、输出限幅（±80/±10/±180）、微分滤波
-0.2、姿态目标 α=0.85、修正角 α=0.25、RATE_MODE 每拍复位速率 PID。</li>
-<li><strong>输出级参考等价</strong>：<code>test_coaxial_reference_equivalence</code>
-直接编译实飞工程的
-<code>PositionPID.h</code>/<code>ComplementaryFilter.h</code>
-原头文件做参考，在 600 拍确定性序列 （ATTITUDE/RATE/手动
-TVC/失效回中）上逐拍比较两轴修正角与偏航差速，
-<code>max_err roll/pitch/yaw = 0.000000</code>。</li>
-<li>真实固件（<code>BFS_COAXIAL_VTVL</code>）+ 近似
-plant：<code>mag_clean</code> hold_end 0.29–0.88 m、max_roll
-0.71–1.17°；<code>mag_nominal</code> hold_end 0.16–0.85 m、max_roll
-8.59–14.23°；<code>nomag_degraded</code> 定高 9.84–9.92
-m、<code>pos_degraded=1</code>。合计 <strong>15/15 PASS</strong>。</li>
-<li><code>run_coaxial_sweep.py</code> 18 组 plant 参数/故障扫描：质量
-0.70–1.00 kg、推力 12–16 N、力臂 0.08–0.22 m、Iy 0.03–0.08、Iz
-0.04–0.12、差速力矩 0.0002–0.001。<strong>15/18 通过</strong>；边界为
-mass=0.70 kg、lever=0.08
-m、Iy=0.08（位置保持/俯仰先失稳），说明当前实飞增益对低质量/低力臂/高转动惯量没有鲁棒裕度。双发
-60% 损失触发 F3、舵机卡死触发
-F4（只检测/上报，<strong>没有重构或安全降落</strong>）；30%
-单发损失仍能定高。严重参数失配时 F4
-也可能作为诊断触发。<strong>这些是参数边界，不是可忽略的噪声。</strong></li>
-<li><strong>120 s 长航时</strong>：<code>mag_clean</code> 通过（hold_end
-0.857 m、max_roll 1.17°、max_pitch 2.53°），未出现 TandemVec 的 60 s
-发散。</li>
-<li><strong>随机参数 MC</strong>（<code>run_coaxial_mc.py</code>，100
-例，宽范围）：<strong>60/100 通过</strong>； hold P50/P95 = 1.26/64.93
-m，roll P95=23.9°、pitch P95=55.8°。 敏感性：低质量（0.70–0.78 kg
-8/25）、高 Iy（0.09–0.10 1/11）、 低力臂（0.08–0.12 m
-10/33）显著降低通过率；名义 0.84 kg/0.05/0.15 本身通过。 该 MC
-说明当前实飞增益对 plant
-参数偏差没有宽裕度，<strong>必须台架标定</strong>。</li>
-<li><code>CoaxialVTVL</code> env 编译 SUCCESS；宿主 6DOF 闭环（初始
-5°/3°、10°/s 偏航）收敛。</li>
-<li>未证明：真实共轴惯量/力臂/差速力矩、TVC 机械方向、45°
-锁电机故障、实飞航向保持。</li>
+<li><strong>参数化与遥测（本轮新增）</strong>：共轴增益/限幅/滤波/物理常量共
+<strong>25 项</strong>注册为 <code>coax.*</code>（ID
+133–157，表尾追加、旧 ID 不动），默认值由 <code>static_assert</code> +
+<code>test_coax_params</code> 的 422
+条断言锁定为与原硬编码逐位相同；<code>GncTelemetry</code>
+尾部追加修正角/偏航差速/饱和/故障位 5 个字段，<code>AnoVars</code> 暴露
+<code>coax_sat</code>/<code>coax_flt</code>。风险：这些安全关键常量可在线写且固件无范围钳制，生产前需写保护与评审；<code>0xAB</code>
+保存仅改 RAM，重启回默认（VER-005 P1）。</li>
+<li><strong>SIL plant 保真度</strong>：执行器一阶滞后 τ=0.28 s、舵机 300
+°/s、0.1% PWM 量化自 <code>fd6e692</code> 起本来就在 2 kHz
+内环里；本轮把这三项显式参数化（<code>--coax-motor-tau/--coax-servo-rate/--coax-ground-mu</code>，默认哨兵保持原值），新增
+<code>--coax-realistic</code>、舵机卡死注入与电机持久损失。默认开关下 15
+场景输出与改动前逐字节一致。按用户口径（VTVL
+低速）<strong>不做气动阻尼</strong>，旧 <code>wind</code>
+直接力语义保留。</li>
+<li><strong>验收（生产传感器口径，8 profile×5
+seeds）</strong>：<strong>39/40 PASS</strong>；唯一失败
+<code>mag_nominal seed1</code>：<code>max_pitch=22.108° &gt; 20°</code>（roll
+8.21°、hold_end 0.96 m），两个纯净构建逐位同值。3 profile×5 seeds 口径为
+<strong>14/15</strong>（同一失败）。俯仰超调是当前主要裕度瓶颈：该场景指令上限
+15°，实测超 7.1°，距 20° 门仅 2.1°。</li>
+<li><strong>realistic 对照</strong>：8 profile×5 seeds
+<strong>40/40</strong>；同 seed 翻绿来自地面摩擦 μ
+对起飞前地面段的扰动，余量仅 0.085° ⇒ <strong>近门限敏感，不能解读为
+"realistic 更安全"</strong>。</li>
+<li><strong>随机参数 MC</strong>（100 例）：current
+<strong>56/100</strong>、realistic <strong>57/100</strong>；hold P50/P95
+= 1.27/27.59 m（realistic 0.99/21.23），roll P95 12.25°（11.74），pitch
+P95 58.13°（57.25）。最差 8 例全部是俯仰超调（case073 69.5°、014
+62.7°、046 54.8°），两套几乎同集合 ⇒ <strong>俯仰裕度问题在默认 plant
+就存在</strong>。该 MC 说明增益对 plant
+参数偏差没有宽裕度，必须台架标定。</li>
+<li><strong>plant 边界扫描</strong>（18 组）<strong>15/18</strong>：失败
+<code>lever_low</code>（pitch 45.03°）、<code>iy_high</code>（pitch
+35.39°）、<code>combined_low</code>（roll 34.75°/pitch 35.66° 且 F4
+触发）；<code>mass_low</code> 本轮 PASS（pitch 27.86°），旧文档
+"mass=0.70 必失败" 的笼统边界未复现。双发 60% 损失触发 F3、舵机卡死触发
+F4（只检测/上报，<strong>没有重构或安全降落</strong>）。</li>
+<li><strong>120 s 长航时</strong>：沿用旧口径记录（mag_clean
+通过，hold_end 0.857 m、max_pitch 2.53°），本轮 suite 未重跑长航时 ⇒
+该数字仍是旧证据。</li>
+<li><strong>参考等价测试</strong>：<code>test_coaxial_reference_equivalence</code>
+声称 "原头文件 600 拍 max_err=0"，但
+<code>reference/coaxial/coax_reference.cpp</code> 与
+<code>PositionPID.h</code> 是按当前控制器语义重写的（含 reset_roll_pitch
+清速率环、积分使能
+<code>!rate_mode</code>），<strong>是自指测试</strong>，不能独立证明与实飞工程等价（VER-004
+P1 已点名）。</li>
+<li><strong>未证明</strong>：真实共轴惯量/力臂/差速力矩、TVC
+机械方向、45° 锁电机故障行为、实飞航向保持、RATE_MODE
+语义差异的实机影响。</li>
 </ul>
 <h3 id="33-液体火箭">3.3 液体火箭</h3>
 <ul>
@@ -280,10 +314,14 @@ href="../control/CTL-003.html">CTL-003</a>）：</p>
 <hr />
 <h2 id="5-结论与下一步">5 结论与下一步</h2>
 <p><strong>可以确认</strong>：统一固件在 TandemVec
-配置下与改造前行为逐位一致；共轴控制律结构已对齐实飞工程并通过 15 个 SIL
-场景；液体推进/质量/喷管模型通过 9 组回收 SIL。</p>
+配置下与改造前行为逐位一致；共轴控制律结构已移植，共轴 SIL 8 profile×5
+seeds 39/40（旧口径 14/15）、realistic 40/40、sweep 15/18、MC
+56/100；液体推进/质量/喷管模型通过 9 组回收
+SIL。共轴原始固件对照审计已完成（VER-004/VER-005），发现 RATE_MODE
+语义差异等 P0/P1 项，处置前不得直接飞共轴。</p>
 <p><strong>不能确认</strong>：共轴/液体与各自实飞固件的逐波形响应一致；三机型在真实气动/推进/传感器/执行器/HIL
-下的稳定性；液体 CCAEGT 飞行模式兼容。</p>
+下的稳定性；液体 CCAEGT 飞行模式兼容；共轴在 RATE_MODE
+语义差异未处置前的可控性。</p>
 <p><strong>实飞日志检索结果</strong>：已检查两个外部工程的 git
 全历史、<code>outputs/</code>、<code>test/</code>、
 <code>tools/</code>、归档与 <code>.reasonix</code> 目录，未发现可回放的
@@ -293,10 +331,16 @@ SIL，不能做飞行波形回放；需要用户提供 原始黑匣子/遥测日
 级飞行响应对照。</p>
 <p>下一步按证据优先级：</p>
 <ol type="1">
+<li><strong>先处置 VER-004 的
+P0-4（RATE_MODE）</strong>：恢复实飞工程的复位范围/积分语义或显式禁用该模式，二选一需由机主裁决；同时处理
+P1（参考测试自指、俯仰裕度、空中断链策略、45°
+硬切）后再谈共轴台架；</li>
 <li>用两型实飞日志做传感器/指令回放，比较新固件执行器输出与原固件（最强兼容性证据）；</li>
 <li>移植/审查 CCAEGT 制导与液体双摆座/阀门/RCS
 输出，建立液体固件分支；</li>
-<li>共轴台架标定惯量、力臂、差速力矩、TVC 方向与 45° 锁；</li>
+<li>共轴台架标定惯量、力臂、差速力矩、TVC 方向与 45° 锁（VER-005 另列
+DETA100 直出、航向门控、参数持久化、GNSS 丢失兜底 4 项 P1
+需同步评审）；</li>
 <li>再做 HIL/系留，最后才谈实飞。</li>
 </ol>
 <hr />
@@ -306,9 +350,14 @@ SIL，不能做飞行波形回放；需要用户提供 原始黑匣子/遥测日
 多机型与执行器抽象</a></li>
 <li><a href="VER-001.html">VER-001
 验证确认与模型可信度</a></li>
+<li><a href="VER-004.html">VER-004
+共轴机型原始固件对照-控制与安全</a></li>
+<li><a href="VER-005.html">VER-005
+共轴机型原始固件对照-导航与系统</a></li>
+<li><code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-2026-10-30/summary.md</code>（本轮双套矩阵证据）</li>
 <li><code>TandemVec_FCS/test_host/fw_sil/README.md</code>（TandemVec/共轴
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
 </html>

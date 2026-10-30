@@ -1,0 +1,1357 @@
+{
+  "note": "共轴 L1 plant --coax-realistic 预设，15 场景（3 profiles × 5 seeds）",
+  "source": "TandemVec_FCS/test_host/fw_sil/fw_sil_env_main.cpp",
+  "source_sha256": "6b1c756cb41d2bfc1794aabc40d8c4d58a8baeadf846909d6446933ed63e4a26",
+  "records": [
+    {
+      "profile": "mag_clean",
+      "seed": 1,
+      "cmd": "fw_coax.exe --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 1 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.857,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.884,
+          "ok": true,
+          "limit": "<=1.5"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.894,
+          "ok": true,
+          "limit": "<=1.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 1.194,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 4.705,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 391,
+          "ok": true,
+          "limit": ">=100"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.857,
+        "hold_end_rms": 0.884,
+        "hold_max": 0.927,
+        "pos_rms": 0.894,
+        "pos_max": 1.132,
+        "max_roll": 1.194,
+        "max_pitch": 4.705,
+        "rms_roll": 0.319,
+        "rms_pitch": 1.318,
+        "mag_fused": 391,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 1.19,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.086
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_clean",
+      "seed": 2,
+      "cmd": "fw_coax.exe --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 2 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.84,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.268,
+          "ok": true,
+          "limit": "<=1.5"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.477,
+          "ok": true,
+          "limit": "<=1.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.992,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 2.032,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 391,
+          "ok": true,
+          "limit": ">=100"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.84,
+        "hold_end_rms": 0.268,
+        "hold_max": 0.358,
+        "pos_rms": 0.477,
+        "pos_max": 0.701,
+        "max_roll": 0.992,
+        "max_pitch": 2.032,
+        "rms_roll": 0.272,
+        "rms_pitch": 0.78,
+        "mag_fused": 391,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.99,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.102
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_clean",
+      "seed": 3,
+      "cmd": "fw_coax.exe --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 3 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.937,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.479,
+          "ok": true,
+          "limit": "<=1.5"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.644,
+          "ok": true,
+          "limit": "<=1.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.943,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 2.862,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 392,
+          "ok": true,
+          "limit": ">=100"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.937,
+        "hold_end_rms": 0.479,
+        "hold_max": 0.552,
+        "pos_rms": 0.644,
+        "pos_max": 0.827,
+        "max_roll": 0.943,
+        "max_pitch": 2.862,
+        "rms_roll": 0.257,
+        "rms_pitch": 0.613,
+        "mag_fused": 392,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.94,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.076
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_clean",
+      "seed": 4,
+      "cmd": "fw_coax.exe --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 4 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.87,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.295,
+          "ok": true,
+          "limit": "<=1.5"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.762,
+          "ok": true,
+          "limit": "<=1.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.751,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 2.005,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 391,
+          "ok": true,
+          "limit": ">=100"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.87,
+        "hold_end_rms": 0.295,
+        "hold_max": 0.403,
+        "pos_rms": 0.762,
+        "pos_max": 0.986,
+        "max_roll": 0.751,
+        "max_pitch": 2.005,
+        "rms_roll": 0.274,
+        "rms_pitch": 0.753,
+        "mag_fused": 391,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.75,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.096
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_clean",
+      "seed": 5,
+      "cmd": "fw_coax.exe --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 5 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.928,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.365,
+          "ok": true,
+          "limit": "<=1.5"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.586,
+          "ok": true,
+          "limit": "<=1.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.957,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 2.187,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 392,
+          "ok": true,
+          "limit": ">=100"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.928,
+        "hold_end_rms": 0.365,
+        "hold_max": 0.433,
+        "pos_rms": 0.586,
+        "pos_max": 0.704,
+        "max_roll": 0.957,
+        "max_pitch": 2.187,
+        "rms_roll": 0.251,
+        "rms_pitch": 0.66,
+        "mag_fused": 392,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.96,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.148
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_nominal",
+      "seed": 1,
+      "cmd": "fw_coax.exe --real-nav --profile mag_nominal --pos-hold --seconds 40 --seed 1 --coax-realistic",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.092,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.78,
+          "ok": true,
+          "limit": "<=8.0"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.548,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 8.942,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 19.915,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 390,
+          "ok": true,
+          "limit": ">=30"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 348,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.092,
+        "hold_end_rms": 0.78,
+        "hold_max": 1.354,
+        "pos_rms": 0.548,
+        "pos_max": 0.79,
+        "max_roll": 8.942,
+        "max_pitch": 19.915,
+        "rms_roll": 2.454,
+        "rms_pitch": 5.531,
+        "mag_fused": 390,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 348,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 8.94,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.579
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_nominal",
+      "seed": 2,
+      "cmd": "fw_coax.exe --real-nav --profile mag_nominal --pos-hold --seconds 40 --seed 2 --coax-realistic",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.071,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.297,
+          "ok": true,
+          "limit": "<=8.0"
+        },
+        {
+          "name": "pos_rms",
+          "value": 1.024,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 8.186,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 5.386,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 390,
+          "ok": true,
+          "limit": ">=30"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 348,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.071,
+        "hold_end_rms": 0.297,
+        "hold_max": 0.753,
+        "pos_rms": 1.024,
+        "pos_max": 1.772,
+        "max_roll": 8.186,
+        "max_pitch": 5.386,
+        "rms_roll": 2.4,
+        "rms_pitch": 1.964,
+        "mag_fused": 390,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 348,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 8.19,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.61
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_nominal",
+      "seed": 3,
+      "cmd": "fw_coax.exe --real-nav --profile mag_nominal --pos-hold --seconds 40 --seed 3 --coax-realistic",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.033,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.855,
+          "ok": true,
+          "limit": "<=8.0"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.767,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 7.502,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 5.321,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 390,
+          "ok": true,
+          "limit": ">=30"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 348,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.033,
+        "hold_end_rms": 0.855,
+        "hold_max": 1.158,
+        "pos_rms": 0.767,
+        "pos_max": 0.927,
+        "max_roll": 7.502,
+        "max_pitch": 5.321,
+        "rms_roll": 2.308,
+        "rms_pitch": 1.939,
+        "mag_fused": 390,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 348,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 7.5,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.511
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_nominal",
+      "seed": 4,
+      "cmd": "fw_coax.exe --real-nav --profile mag_nominal --pos-hold --seconds 40 --seed 4 --coax-realistic",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.117,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.519,
+          "ok": true,
+          "limit": "<=8.0"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.443,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 12.649,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 9.362,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 390,
+          "ok": true,
+          "limit": ">=30"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 348,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.117,
+        "hold_end_rms": 0.519,
+        "hold_max": 0.84,
+        "pos_rms": 0.443,
+        "pos_max": 0.801,
+        "max_roll": 12.649,
+        "max_pitch": 9.362,
+        "rms_roll": 2.722,
+        "rms_pitch": 3.37,
+        "mag_fused": 390,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 348,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 12.65,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.724
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "mag_nominal",
+      "seed": 5,
+      "cmd": "fw_coax.exe --real-nav --profile mag_nominal --pos-hold --seconds 40 --seed 5 --coax-realistic",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.1,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "hold_end_rms",
+          "value": 0.337,
+          "ok": true,
+          "limit": "<=8.0"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.705,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 10.143,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 5.003,
+          "ok": true,
+          "limit": "<=20.0"
+        },
+        {
+          "name": "mag_fused",
+          "value": 389,
+          "ok": true,
+          "limit": ">=30"
+        },
+        {
+          "name": "mag_cal",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 348,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.1,
+        "hold_end_rms": 0.337,
+        "hold_max": 1.105,
+        "pos_rms": 0.705,
+        "pos_max": 1.049,
+        "max_roll": 10.143,
+        "max_pitch": 5.003,
+        "rms_roll": 2.423,
+        "rms_pitch": 1.852,
+        "mag_fused": 389,
+        "mag_rej": 0,
+        "mag_cal": 1,
+        "pos_degraded": 0,
+        "nav_init": 1,
+        "fix3d": 348,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 10.14,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.488
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "nomag_degraded",
+      "seed": 1,
+      "cmd": "fw_coax.exe --real-nav --profile nomag_degraded --pos-hold --seconds 40 --seed 1 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.868,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.447,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.962,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 1.728,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "pos_degraded",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.868,
+        "hold_end_rms": 117.2,
+        "hold_max": 138.121,
+        "pos_rms": 0.447,
+        "pos_max": 0.777,
+        "max_roll": 0.962,
+        "max_pitch": 1.728,
+        "rms_roll": 0.796,
+        "rms_pitch": 1.454,
+        "mag_fused": 0,
+        "mag_rej": 0,
+        "mag_cal": 0,
+        "pos_degraded": 1,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.96,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.142
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "nomag_degraded",
+      "seed": 2,
+      "cmd": "fw_coax.exe --real-nav --profile nomag_degraded --pos-hold --seconds 40 --seed 2 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.875,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.548,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.938,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 1.529,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "pos_degraded",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.875,
+        "hold_end_rms": 109.302,
+        "hold_max": 128.741,
+        "pos_rms": 0.548,
+        "pos_max": 0.743,
+        "max_roll": 0.938,
+        "max_pitch": 1.529,
+        "rms_roll": 0.799,
+        "rms_pitch": 1.314,
+        "mag_fused": 0,
+        "mag_rej": 0,
+        "mag_cal": 0,
+        "pos_degraded": 1,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.94,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.107
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "nomag_degraded",
+      "seed": 3,
+      "cmd": "fw_coax.exe --real-nav --profile nomag_degraded --pos-hold --seconds 40 --seed 3 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.913,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.531,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 1.059,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 1.532,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "pos_degraded",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.913,
+        "hold_end_rms": 113.274,
+        "hold_max": 133.498,
+        "pos_rms": 0.531,
+        "pos_max": 0.682,
+        "max_roll": 1.059,
+        "max_pitch": 1.532,
+        "rms_roll": 0.905,
+        "rms_pitch": 1.324,
+        "mag_fused": 0,
+        "mag_rej": 0,
+        "mag_cal": 0,
+        "pos_degraded": 1,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 1.06,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.14
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "nomag_degraded",
+      "seed": 4,
+      "cmd": "fw_coax.exe --real-nav --profile nomag_degraded --pos-hold --seconds 40 --seed 4 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.833,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.247,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 0.932,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 1.66,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "pos_degraded",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.833,
+        "hold_end_rms": 116.732,
+        "hold_max": 137.338,
+        "pos_rms": 0.247,
+        "pos_max": 0.378,
+        "max_roll": 0.932,
+        "max_pitch": 1.66,
+        "rms_roll": 0.81,
+        "rms_pitch": 1.412,
+        "mag_fused": 0,
+        "mag_rej": 0,
+        "mag_cal": 0,
+        "pos_degraded": 1,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 0.93,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.087
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    },
+    {
+      "profile": "nomag_degraded",
+      "seed": 5,
+      "cmd": "fw_coax.exe --real-nav --profile nomag_degraded --pos-hold --seconds 40 --seed 5 --coax-realistic --no-wind",
+      "pass": true,
+      "checks": [
+        {
+          "name": "final_alt",
+          "value": 9.923,
+          "ok": true,
+          "limit": "[8.0,11.0]"
+        },
+        {
+          "name": "pos_rms",
+          "value": 0.375,
+          "ok": true,
+          "limit": "<=5.0"
+        },
+        {
+          "name": "max_roll",
+          "value": 1.015,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "max_pitch",
+          "value": 1.72,
+          "ok": true,
+          "limit": "<=25.0"
+        },
+        {
+          "name": "pos_degraded",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "nav_init",
+          "value": 1,
+          "ok": true,
+          "limit": "==1"
+        },
+        {
+          "name": "fix3d",
+          "value": 398,
+          "ok": true,
+          "limit": ">0"
+        }
+      ],
+      "metrics": {
+        "final_alt": 9.923,
+        "hold_end_rms": 123.199,
+        "hold_max": 145.004,
+        "pos_rms": 0.375,
+        "pos_max": 0.561,
+        "max_roll": 1.015,
+        "max_pitch": 1.72,
+        "rms_roll": 0.865,
+        "rms_pitch": 1.488,
+        "mag_fused": 0,
+        "mag_rej": 0,
+        "mag_cal": 0,
+        "pos_degraded": 1,
+        "nav_init": 1,
+        "fix3d": 398,
+        "land_t": -1.0,
+        "land_hold": -1.0,
+        "land_pos_err": -1.0,
+        "land_roll": 0.0,
+        "max_roll_preland": 1.01,
+        "land_vz_down": -1.0,
+        "max_desc_vz_down": 0.15
+      },
+      "plant": {
+        "coax_motor_tau_s": 0.28,
+        "coax_servo_rate_dps": 300.0,
+        "coax_ground_mu": 0.5,
+        "coax_servojam": 0,
+        "coax_loss1": 1.0,
+        "coax_loss2": 1.0
+      }
+    }
+  ]
+}

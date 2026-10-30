@@ -27,6 +27,11 @@
  *          `--calib-hold T`（前 T 秒电机不出力、固件油门 0，研究静置收敛）、
  *          `--wind-window A:B`（覆盖侧风时段）、`--bias-z-max R`
  *          （无磁离地陀螺零偏 z 限幅，0=关闭）；
+ *          共轴 L1 保真度开关（仅 `-DFW_SIL_COAXIAL`）：
+ *          `--coax-realistic`（预设）、`--coax-motor-tau S`、`--coax-servo-rate DPS`、
+ *          `--coax-ground-mu MU`、`--coax-servojam roll|pitch` + `--coax-servojam-at T`、
+ *          `--coax-motor-loss1|2 F`；缺省/零值=改动前的既有行为（逐位一致），
+ *          详见 README「共轴 plant 保真度开关」；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
  *          输出：每 1 s 打印高度/估计高度/位置/姿态/舵机/电机/GNSS 有效位
@@ -215,6 +220,21 @@ static float g_coax_lever_m = 0.15f;
 static float g_coax_yaw_nm_per_norm = 0.0005f;
 static float g_coax_motor_loss1 = 1.0f;
 static float g_coax_motor_loss2 = 1.0f;
+
+// —— 可切保真度开关（2026-10-30，task-5）——
+// 语义约定：**未指定 = 沿用改动前的 L1 行为**（执行器一阶、舵机 300°/s
+// 速率限幅与 0.1% PWM 量化本来就在 2 kHz 内环/控制帧里，属基线而非新增）。
+// 这里用 -1 作“未指定”哨兵，显式 0 才表示“无限快 / 无摩擦”，从而保证
+// 缺省路径的浮点运算与改动前逐位一致。
+// 气动阻尼按用户指示不在本 L1 plant 范围内（VTVL 低速段），wind 仍是
+// 直接等效加速度力（原语义不动）。
+static float g_coax_motor_tau_s = -1.0f;    // <0 未指定→0.28 s；0=立即跟踪
+static float g_coax_servo_rate_dps = -1.0f; // <0 未指定→300 °/s；0=无限速率
+static float g_coax_ground_mu = 0.0f;       // 地面水平摩擦系数，0=无（默认）
+static float g_coax_cli_loss1 = 1.0f;       // 前/尾电机长期损失保留比例
+static float g_coax_cli_loss2 = 1.0f;
+static int g_coax_servojam = 0;             // 0=无 1=roll(前摆) 2=pitch(尾摆)
+static float g_coax_servojam_at_s = -1.0f;  // <0 → 复用 --fault-at
 #endif
 
 struct Plant {
@@ -296,6 +316,23 @@ struct Plant {
         pos[2]=0.0f;
         if (vel[2] > 0.0f) vel[2]=0.0f;
         on_ground = true;
+#ifdef FW_SIL_COAXIAL
+        // 地面水平库仑摩擦（--coax-ground-mu，默认 0 = 完全跳过 → 逐位不变）。
+        // L1 假设：地面对机体的法向支撑力≈m·g，动摩擦加速度 μ·g，方向与
+        // 触地水平速度相反；每子步按 Δv=μ·g·h 比例消减，越过零点直接置零
+        // （不产生反冲/静摩擦黏滞）。只作用于已触地段，不动飞行段。
+        if (g_coax_ground_mu > 0.0f)
+        {
+          const float dv = g_coax_ground_mu * P.g * h;
+          const float vh = std::sqrt(vel[0]*vel[0] + vel[1]*vel[1]);
+          if (vh > 0.0f)
+          {
+            const float k = (vh > dv) ? (vh - dv) / vh : 0.0f;
+            vel[0] *= k;
+            vel[1] *= k;
+          }
+        }
+#endif
       } else {
         on_ground = false;
       }
@@ -308,8 +345,10 @@ struct Plant {
 // 两轴舵机修正角→推力方向与滚转/俯仰力矩。L1 集总模型，无真实桨距/反扭。
 static SixDOFWrench computeCoaxialWrench(const Plant &p)
 {
-  const float wf = p.motor_wf * g_coax_motor_loss1;
-  const float wt = p.motor_wt * g_coax_motor_loss2;
+  // 长期电机损失（--coax-motor-loss1/2）与故障注入的瞬时 loss 串联；
+  // 缺省 1.0f 的乘法在 IEEE 下精确等于原值，不改变基线结果。
+  const float wf = p.motor_wf * g_coax_motor_loss1 * g_coax_cli_loss1;
+  const float wt = p.motor_wt * g_coax_motor_loss2 * g_coax_cli_loss2;
   const float avg = 0.5f * (wf + wt) / P.wMax;
   const float diff = (wf - wt) / P.wMax;
   const float thrust =
@@ -820,6 +859,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   std::array<float, 32> flow_hist_vn{};
   std::array<float, 32> flow_hist_ve{};
   float servo_target_f = 0.0f, servo_target_t = 0.0f;
+  // 舵机卡死锁存（每次 run 独立，避免跨场景串扰）
+  bool coax_jam_latched = false;
+  float coax_jam_rad = 0.0f;
   float motor_target_wf = 0.0f, motor_target_wt = 0.0f;
 
   bool alt_cmd = false;
@@ -1666,15 +1708,54 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       }
       else
       {
-      const float rate_limit = 300.0f * 0.017453292f * dt_imu;
+      // 执行器动态（缺省=改动前的硬编码值：舵机 τ=0.05 s + 300 °/s 速率限幅、
+      // 电机 τ=0.28 s）。--coax-motor-tau / --coax-servo-rate 只在显式给出时
+      // 覆盖；τ=0 / rate=0 表示理想器件（仅作对照臂，不是实机值）。
+#ifdef FW_SIL_COAXIAL
+      const float servo_rate_dps =
+          (g_coax_servo_rate_dps >= 0.0f) ? g_coax_servo_rate_dps : 300.0f;
+      const float motor_tau_s =
+          (g_coax_motor_tau_s >= 0.0f) ? g_coax_motor_tau_s : 0.28f;
+#else
+      const float servo_rate_dps = 300.0f;
+      const float motor_tau_s = 0.28f;
+#endif
+      const float rate_limit = (servo_rate_dps > 0.0f)
+                                   ? servo_rate_dps * 0.017453292f * dt_imu
+                                   : 1.0e9f;  // 0 = 无限速率
       const float servo_step_f = std::fmax(-rate_limit, std::fmin(rate_limit,
           (servo_target_f - p.servo_f) * std::fmin(1.0f, dt_imu / 0.05f)));
       const float servo_step_t = std::fmax(-rate_limit, std::fmin(rate_limit,
           (servo_target_t - p.servo_t) * std::fmin(1.0f, dt_imu / 0.05f)));
       p.servo_f += servo_step_f;
       p.servo_t += servo_step_t;
-      p.motor_wf += (motor_target_wf - p.motor_wf) * std::fmin(1.0f, dt_imu / 0.28f);
-      p.motor_wt += (motor_target_wt - p.motor_wt) * std::fmin(1.0f, dt_imu / 0.28f);
+      const float motor_alpha = (motor_tau_s > 0.0f)
+                                    ? std::fmin(1.0f, dt_imu / motor_tau_s)
+                                    : 1.0f;
+      p.motor_wf += (motor_target_wf - p.motor_wf) * motor_alpha;
+      p.motor_wt += (motor_target_wt - p.motor_wt) * motor_alpha;
+
+#ifdef FW_SIL_COAXIAL
+      // 舵机卡死（--coax-servojam roll|pitch）：到达卡死时刻后锁存**当时的
+      // 实际角度**并强制保持（齿轮咬死/连杆卡滞的一阶近似）；缺省 0 跳过。
+      // 与 --fault 4（前摆 8° 硬偏置）同时启用时，下方 fault 4 覆盖 roll，
+      // 即故障注入优先级更高（文档已注明）。
+      if (g_coax_servojam != 0)
+      {
+        const float jam_at = (g_coax_servojam_at_s >= 0.0f)
+                                 ? g_coax_servojam_at_s : fault_at;
+        if (t >= jam_at)
+        {
+          if (!coax_jam_latched)
+          {
+            coax_jam_latched = true;
+            coax_jam_rad = (g_coax_servojam == 1) ? p.servo_f : p.servo_t;
+          }
+          if (g_coax_servojam == 1) p.servo_f = coax_jam_rad;
+          else                      p.servo_t = coax_jam_rad;
+        }
+      }
+#endif
 
       if (fault == 4 && t > fault_at) p.servo_f = 8.0f * 0.017453292f;
       p.wind[1] = (wind_on && t > cfg.wind_start_s && t < cfg.wind_end_s)
@@ -2202,7 +2283,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"nav_roll_rmse\":%.3f,\"nav_roll_max\":%.3f,"
               "\"nav_pitch_rmse\":%.3f,\"nav_pitch_max\":%.3f,"
               "\"nav_yaw_rmse\":%.3f,\"nav_yaw_max\":%.3f,"
-              "\"nav_vel_rms\":%.4f,\"nrfb\":%u,\"nav_bias_frames\":%u%s}\n",
+              "\"nav_vel_rms\":%.4f,\"nrfb\":%u,\"nav_bias_frames\":%u,"
+              "\"coax_motor_tau_s\":%.3f,\"coax_servo_rate_dps\":%.1f,"
+              "\"coax_ground_mu\":%.3f,\"coax_servojam\":%d,"
+              "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -2286,6 +2370,16 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               n_nav_att ? std::sqrt(sum_nav_vel2 / n_nav_att) : -1.0,
               static_cast<unsigned>(g_nav_raw_fb_frames),
               static_cast<unsigned>(g_nav_bias_frames),
+#ifdef FW_SIL_COAXIAL
+              static_cast<double>((g_coax_motor_tau_s >= 0.0f) ? g_coax_motor_tau_s : 0.28f),
+              static_cast<double>((g_coax_servo_rate_dps >= 0.0f) ? g_coax_servo_rate_dps : 300.0f),
+              static_cast<double>(g_coax_ground_mu),
+              g_coax_servojam,
+              static_cast<double>(g_coax_cli_loss1),
+              static_cast<double>(g_coax_cli_loss2),
+#else
+              0.28, 300.0, 0.0, 0, 1.0, 1.0,
+#endif
               nees_json);
   if (g_trace_csv_file != nullptr)
   {
@@ -2526,6 +2620,68 @@ int main(int argc, char** argv) {
       g_coax_iz = std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--coax-yawk")==0 && i+1<argc)
       g_coax_yaw_nm_per_norm = std::atof(argv[++i]);
+    // —— 可切保真度开关（task-5，2026-10-30）——
+    // 预设按 argv 顺序“就地”应用：--coax-realistic 之后显式给的参数覆盖预设，
+    // 之前给的会被预设覆盖（与命令行选项顺序语义一致）。
+    else if (std::strcmp(argv[i],"--coax-realistic")==0)
+    {
+      // L1 建议值（非实机辨识值；物理含义与依据见 README「共轴 plant 保真度开关」）：
+      // 电机一阶 τ=0.28 s、舵机 300 °/s + 0.1% PWM 量化、地面 μ=0.5。
+      // 注意：执行器动态与 0.1% 量化在改动前就硬编码在 SIL 中，属基线；
+      // 预设真正新增的只有“落地后水平摩擦”。
+      g_coax_motor_tau_s = 0.28f;
+      g_coax_servo_rate_dps = 300.0f;
+      g_coax_ground_mu = 0.5f;
+    }
+    else if (std::strcmp(argv[i],"--coax-motor-tau")==0 && i+1<argc)
+    {
+      const float v = static_cast<float>(std::atof(argv[++i]));
+      if (v < 0.0f)
+      {
+        std::fprintf(stderr, "[sil] --coax-motor-tau 需 ≥0，收到 %g\n", v);
+        return 2;
+      }
+      g_coax_motor_tau_s = v;  // 0 = 立即跟踪（理想电机）
+    }
+    else if (std::strcmp(argv[i],"--coax-servo-rate")==0 && i+1<argc)
+    {
+      const float v = static_cast<float>(std::atof(argv[++i]));
+      if (v < 0.0f)
+      {
+        std::fprintf(stderr, "[sil] --coax-servo-rate 需 ≥0，收到 %g\n", v);
+        return 2;
+      }
+      g_coax_servo_rate_dps = v;  // 0 = 无限速率（理想舵机）
+    }
+    else if (std::strcmp(argv[i],"--coax-ground-mu")==0 && i+1<argc)
+      g_coax_ground_mu = static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--coax-motor-loss1")==0 && i+1<argc)
+      g_coax_cli_loss1 = static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--coax-motor-loss2")==0 && i+1<argc)
+      g_coax_cli_loss2 = static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--coax-servojam")==0 && i+1<argc)
+    {
+      const char *m = argv[++i];
+      if (std::strcmp(m, "roll") == 0) g_coax_servojam = 1;       // 前摆/上摆
+      else if (std::strcmp(m, "pitch") == 0) g_coax_servojam = 2;  // 尾摆/下摆
+      else if (std::strcmp(m, "none") == 0) g_coax_servojam = 0;
+      else
+      {
+        std::fprintf(stderr,
+                     "[sil] --coax-servojam 只接受 roll|pitch|none，收到 %s\n", m);
+        return 2;
+      }
+    }
+    else if (std::strcmp(argv[i],"--coax-servojam-at")==0 && i+1<argc)
+    {
+      const float v = static_cast<float>(std::atof(argv[++i]));
+      if (v < 0.0f)
+      {
+        std::fprintf(stderr, "[sil] --coax-servojam-at 需 ≥0，收到 %g\n", v);
+        return 2;
+      }
+      g_coax_servojam_at_s = v;
+    }
 #endif
     else if (std::strcmp(argv[i],"--vib")==0 && i+1<argc) real_cfg.vib_g=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--vib-hz")==0 && i+1<argc) real_cfg.vib_hz=std::atof(argv[++i]);
@@ -2672,6 +2828,30 @@ int main(int argc, char** argv) {
                  "GNSS 失联请用 --gnss-outage A:B\n", loss);
     return 2;
   }
+#ifdef FW_SIL_COAXIAL
+  // 共轴保真度开关范围校验：非法值立即失败，避免静默产出“以为开了、其实
+  // 没开”的对照臂（与 --loss 校验同思路）。
+  if (g_coax_cli_loss1 < 0.0f || g_coax_cli_loss1 > 1.0f ||
+      g_coax_cli_loss2 < 0.0f || g_coax_cli_loss2 > 1.0f)
+  {
+    std::fprintf(stderr, "[sil] --coax-motor-loss1/2 是推力保留比例 [0,1]，"
+                         "收到 %g / %g\n", g_coax_cli_loss1, g_coax_cli_loss2);
+    return 2;
+  }
+  if (g_coax_ground_mu < 0.0f || g_coax_ground_mu > 5.0f)
+  {
+    std::fprintf(stderr, "[sil] --coax-ground-mu 应在 [0,5]，收到 %g\n",
+                 g_coax_ground_mu);
+    return 2;
+  }
+  if (g_coax_motor_tau_s > 5.0f || g_coax_servo_rate_dps > 2000.0f)
+  {
+    std::fprintf(stderr, "[sil] --coax-motor-tau 应 ≤5 s、--coax-servo-rate 应 "
+                         "≤2000 °/s，收到 %g s / %g °/s\n",
+                 g_coax_motor_tau_s, g_coax_servo_rate_dps);
+    return 2;
+  }
+#endif
   // 高频振动否决门限扫描（同二进制 runtime A/B）：只改进入门限，释放门限按比例缩放。
   if (vib_hf_enter_g > 0.0f)
   {
@@ -2755,6 +2935,9 @@ int main(int argc, char** argv) {
   float max_roll=0,max_pitch=0;
   double sum_roll2=0.0, sum_pitch2=0.0; int n_att=0;
   int last_gnss_update=-1, last_baro_update=-1, last_flow_update=-1;
+  // --coax-servojam 的卡死锁存（legacy 演示路径，与 --real-nav 路径互不影响）
+  bool coax_jam_latched = false;
+  float coax_jam_rad = 0.0f;
 
   for (int k=0;k<steps;++k) {
     const float t=k*dt;
@@ -2813,8 +2996,19 @@ int main(int argc, char** argv) {
       alt_cmd = true;
     }
 
-    // 舵机一阶 + 300°/s 速率限幅 + 0.1% PWM 量化（物理执行器约束）
-    const float rate_limit = 300.0f * 0.017453292f * dt;
+    // 舵机一阶 + 速率限幅（缺省 300°/s）+ 0.1% PWM 量化（物理执行器约束）
+#ifdef FW_SIL_COAXIAL
+    const float servo_rate_dps =
+        (g_coax_servo_rate_dps >= 0.0f) ? g_coax_servo_rate_dps : 300.0f;
+    const float motor_tau_s =
+        (g_coax_motor_tau_s >= 0.0f) ? g_coax_motor_tau_s : 0.28f;
+#else
+    const float servo_rate_dps = 300.0f;
+    const float motor_tau_s = 0.28f;
+#endif
+    const float rate_limit = (servo_rate_dps > 0.0f)
+                                 ? servo_rate_dps * 0.017453292f * dt
+                                 : 1.0e9f;  // 0 = 无限速率
 #ifdef FW_SIL_COAXIAL
     const float coax_roll_corr = (ch1_output - 50.0f) * 15.0f / 16.6667f;
     const float coax_pitch_corr = -(ch2_output - 50.0f) * 15.0f / 16.6667f;
@@ -2842,9 +3036,30 @@ int main(int argc, char** argv) {
     p.servo_t += dl * fminf(dt/0.05f,1.0f);
 
     const float wf_t=(ch3_output/100)*P.wMax, wt_t=(ch4_output/100)*P.wMax;
-    p.motor_wf += (wf_t-p.motor_wf)*fminf(dt/0.28f,1.0f);
-    p.motor_wt += (wt_t-p.motor_wt)*fminf(dt/0.28f,1.0f);
+    const float motor_alpha_legacy =
+        (motor_tau_s > 0.0f) ? fminf(dt/motor_tau_s,1.0f) : 1.0f;
+    p.motor_wf += (wf_t-p.motor_wf)*motor_alpha_legacy;
+    p.motor_wt += (wt_t-p.motor_wt)*motor_alpha_legacy;
 
+#ifdef FW_SIL_COAXIAL
+    // 舵机卡死（--coax-servojam）：到达卡死时刻后锁存当时实际角并保持；
+    // 下方 F4 会覆盖 roll，即故障注入优先级更高。
+    if (g_coax_servojam != 0)
+    {
+      const float jam_at = (g_coax_servojam_at_s >= 0.0f)
+                               ? g_coax_servojam_at_s : fault_at;
+      if (t >= jam_at)
+      {
+        if (!coax_jam_latched)
+        {
+          coax_jam_latched = true;
+          coax_jam_rad = (g_coax_servojam == 1) ? p.servo_f : p.servo_t;
+        }
+        if (g_coax_servojam == 1) p.servo_f = coax_jam_rad;
+        else                      p.servo_t = coax_jam_rad;
+      }
+    }
+#endif
     // 故障注入：F4 上摆卡死（冻结在 +8°）；F3/5 的推力损失在构造 PropulsionState 后
     // 乘到“有效转速”上（只作用于本拍 wrench，不改变电机状态，避免逐拍复利）。
     if (fault == 4 && t > fault_at) {

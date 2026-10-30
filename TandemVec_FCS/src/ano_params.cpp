@@ -142,7 +142,15 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
     { "gnss_lever_x", ANO_FLOAT, &kFlightCtrlParams.gnss_lever_x_m, nullptr, nullptr },
     { "gnss_lever_y", ANO_FLOAT, &kFlightCtrlParams.gnss_lever_y_m, nullptr, nullptr },
     { "gnss_lever_z", ANO_FLOAT, &kFlightCtrlParams.gnss_lever_z_m, nullptr, nullptr },
+    // ---- 共轴双桨 VTVL 机型参数（★2026-10-30 可标定化，ID 133-157）----
+    // 顺序/名称单一事实源 = FlightCtrlParams.h 的 BFS_COAX_PARAM_LIST（GCS 侧同序镜像）；
+    // 默认值逐位 = 原 flight_control.cpp 共轴分支硬编码，写入后由 apply flight 钩子推给控制器。
+#define COAX_PARAM_ENTRY(name, member) { #name, ANO_FLOAT, &kFlightCtrlParams.coax.member, nullptr, nullptr },
+    BFS_COAX_PARAM_LIST(COAX_PARAM_ENTRY)
+#undef COAX_PARAM_ENTRY
 };
+static_assert(ANO_PARAMS_COUNT == 133 + BFS_COAX_PARAM_COUNT,
+              "ano_params: 共轴参数追加后 ANO_PARAMS_COUNT 未同步（应为 133 + 25）");
 static_assert(sizeof(kAnoParams) / sizeof(kAnoParams[0]) == ANO_PARAMS_COUNT,
               "ano_params: 注册表数量与 ANO_PARAMS_COUNT 不一致");
 

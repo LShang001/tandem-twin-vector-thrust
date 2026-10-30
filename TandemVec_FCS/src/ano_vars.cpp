@@ -164,6 +164,10 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("gnss_cflw",        gnss_status.consistency_flow_res),
     ANO_VAR_FLOAT("gnss_cbar",        gnss_status.consistency_baro_span),
     ANO_VAR_U8("gnss_creas",          gnss_status.consistency_reason),
+    // ---- 共轴双桨 VTVL 诊断（★2026-10-30；非共轴构型字段恒 0）----
+    // 名称 ≤16B；MAVLink 9 字符可见名截断后 "coax_sat"/"coax_flt" 均唯一。
+    ANO_VAR_U8("coax_sat",            gnc_tel.coax_saturated),
+    ANO_VAR_U8("coax_flt",            gnc_tel.coax_fault_flags),
 };
 static_assert(sizeof(kAnoVars) / sizeof(kAnoVars[0]) <= ANO_VARS_MAX_COUNT,
               "ano_vars: 注册表超上限");

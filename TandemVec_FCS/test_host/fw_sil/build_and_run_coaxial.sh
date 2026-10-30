@@ -28,6 +28,7 @@ $CXX -std=c++17 $OPT ${EXTRA_CXXFLAGS:-} $EIGEN_SIL_FLAGS \
   src/flight_control.cpp \
   src/state_data.cpp \
   src/navigation_task.cpp \
+  lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp \
   lib/ublox-main/src/ubx.cpp \
   test_host/fw_sil/fw_sil_stubs.cpp \
   test_host/fw_sil/fw_sil_env_main.cpp \

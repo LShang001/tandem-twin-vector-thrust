@@ -495,3 +495,36 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
   6.4 g/451 m/s）；8000 N → 8.41 g/696 m/s 仍可用（位置 3.94 m）；10000 N → 10.13 g/844 m/s
   在生产 ICM ±8 g 量程下触顶、导航失效（636 m）；`--imu-fs-g 16` 仅作研究对照。
   生产 `sensor_imu.cpp` 是 ±8 g，SIL 默认已对齐 8 g。
+
+## 11 共轴 plant 可切保真度开关（2026-10-30，L1）
+
+共轴 VTVL 的 L1 plant（`--real-nav` 下的 `Plant`/`computeCoaxialWrench`，以及
+2 kHz 内环执行器动态）原本把电机 τ=0.28 s、舵机一阶 τ=0.05 s + 300 °/s、
+0.1% PWM 量化（±15°/1000 计数 ≈ 0.03°/计数）**硬编码**，且地面无水平摩擦。
+本轮把这些变成可切参数：**默认值等于原行为，默认开关下 15 场景输出逐位不变**
+（详见 `sim-data/coax-plant-2026-10-30/default_equivalence.txt`）。
+
+| 开关 | 物理含义 | 默认 | `--coax-realistic` |
+| --- | --- | --- | --- |
+| `--coax-motor-tau <s>` | 两电机推力一阶跟踪时间常数；`0`=理想瞬时 | 0.28（既有 L1 值） | 0.28 |
+| `--coax-servo-rate <deg/s>` | 舵机角速率上限；`0`=无限速率 | 300（既有 L1 值） | 300 |
+| `--coax-ground-mu <μ>` | 落地后水平库仑摩擦（μ·g 消减，过零置零不反冲） | 0（关闭） | 0.5 |
+| `--coax-realistic` | 预设：τ=0.28 / 300 °/s / μ=0.5（argv 顺序生效，后续显式开关可覆盖） | 关闭 | — |
+| `--coax-servojam roll\|pitch\|none` | 卡死对应舵机（锁存当时实际角并保持） | none | — |
+| `--coax-servojam-at <s>` | 卡死时刻 | = `--fault-at` | — |
+| `--coax-motor-loss1/2 <r>` | 电机 1/2 持久推力保留比例 [0,1]（区别于 `--fault 3/5` 的瞬时故障） | 1.0 | — |
+
+- `--coax-realistic` 相对基线**真正新增的物理只有地面摩擦**：执行器两项的预设值
+  就是原硬编码值。故 `--coax-motor-tau 0.28`/`--coax-servo-rate 300` 与默认逐位一致。
+- **气动阻尼/风相对速度按用户指示不在本 L1 plant 范围内**（VTVL 低速段气动阻尼
+  相对控制力矩很小）；现有 `--wind` 直接力语义保持不变。
+- 默认开关验收仍为 **14 PASS + 1 FAIL**，失败项与改动前逐字相同
+  （mag_nominal seed1 `max_pitch=22.108 > 20.0`）；`--coax-realistic` 15/15 PASS，
+  但 mag_nominal seed1 的 22.108→19.915 是地面摩擦对起飞前地面段的扰动导致的
+  混沌敏感性，**不是鲁棒性改善**，不应据此放宽门限或丢弃该 seed。
+- 边界：地面接触仍是点质量近似（无法向反力/接触力矩/姿态支撑），舵机卡死是确定性
+  离散事件（无卡滞前摩擦），`--coax-motor-loss1/2` 不含温升/电压动态；τ/速率/量化
+  沿用既有 L1 假设，本轮未做频响/台架标定。正常定高下 `--coax-servo-rate` 通常
+  不饱和（舵机一阶 τ=50 ms 主导），只在大指令误差的剧烈机动下起作用。
+- 证据：`sim-data/coax-plant-2026-10-30/`（15 场景 JSON/原始 JSONL、验收日志、
+  等价性对比、realistic 结果表与逐开关冒烟说明）。

@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-005 共轴原始固件对照-导航与系统 ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-005-共轴机型原始固件对照导航与系统">VER-005
+共轴机型原始固件对照——导航与系统</h1>
+<blockquote>
+<p>文档编号：VER-005（新建）｜版本：v1.0｜日期：2026-10-30｜性质：<strong>只读对照审计</strong>
+审计：nav-residual｜范围：<strong>导航 / 传感器 / 系统</strong>
+三域（控制律与安全策略的逐项差异见 <a
+href="VER-004.html">VER-004</a>，两文不重复）
+原始侧：<code>D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版</code>（<code>src/main.cpp</code>
+5542 行 + <code>include/</code> 14 个头文件 + <code>lib/</code> 16
+个库） 当前侧：本仓库工作树（HEAD
+<code>57be7ef</code>，2026-10-30；含并发进行中的"共轴参数可标定化"未提交改动）
+证据等级：<strong>L0（源码逐行）+
+L1（SIL/固件构建实跑）</strong>。没有台架、HIL、实飞数据；本报告不构成实机适航结论。</p>
+</blockquote>
+<p><strong>本报告回答三个问题</strong>：(1)
+原始共轴存档固件的导航/传感器/系统实际是怎么工作的（含"代码在但没启用"的死代码）；(2)
+当前固件在同一架共轴机上会有什么不同行为；(3) 哪些差异必须处理。为此区分
+<strong>等价／语义差异／新增／缺失／回归</strong>
+五类判定，并把"已核实"与"未能核实"分列。</p>
+<hr />
+<h2 id="0-结论速览">0. 结论速览</h2>
+<p><strong>一句话</strong>：<strong>导航/传感器/系统三域相对原始存档固件整体是"功能增强、语义有变"：没有发现导致失控的固件回归，但发现
+2 个 P0（共轴 SIL 构建链断裂、验收真实值 14/15）和 4 个 P1（DETA100
+数据源语义变化、航向基准由伪磁改为真实磁北+门控、GNSS
+丢失兜底路径改写、参数不持久化），其中 3 个 P0/P1 是"文档已声明
+15/15/已对齐"却不成立的部分。</strong></p>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>级别</th>
+<th>结论</th>
+<th>关键证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>N-1</td>
+<td><strong>P0</strong></td>
+<td>HEAD 的共轴 SIL 构建脚本缺
+<code>lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp</code>，2ec50ac
+起共轴 SIL <strong>链接必败</strong>；任何"共轴已验收"结论在 HEAD
+上不可复现</td>
+<td>§5.2 负向复现：5 个
+<code>undefined reference to Madgwick::*</code></td>
+</tr>
+<tr>
+<td>N-2</td>
+<td><strong>P0</strong></td>
+<td>共轴 SIL 验收真实值为
+<strong>14/15</strong>：<code>mag_nominal</code> seed1
+<code>max_pitch=22.108°</code> 超 20° 门；文档 "15/15" 不可复现</td>
+<td>§5.1 本次独立复跑 15 案例 1 失败，失败值 22.108</td>
+</tr>
+<tr>
+<td>N-3</td>
+<td><strong>P1</strong></td>
+<td><strong>DETA100 在原始存档里是死代码</strong>（ISR
+调用被注释、未注册任务 ⇒
+从未读取），当前固件却改为上电自动检测并"直出"模块姿态/位置；同一架机若有
+DETA100，控制姿态源从"固件 EKF"变为"外部模块"，SIL 未覆盖该路径</td>
+<td>原始
+<code>main.cpp:740</code>、<code>:2395</code>、<code>:5496-5513</code>；当前
+<code>main.cpp:180-216</code>、<code>:429</code>、<code>navigation_task.cpp:3166-3230</code></td>
+</tr>
+<tr>
+<td>N-4</td>
+<td><strong>P1</strong></td>
+<td><strong>航向基准改变</strong>：原始 EKF 初值用写死的伪磁矢量
+<code>{30,0,40} μT</code>（与真实北无关），当前用真实磁北（<code>MagCal</code>
+标定 + 磁偏角）；且新增 <code>HeadingAidingGate</code> 要求磁新鲜 ≤2 s
+才允许 <code>AUTO_POSITION</code>，无磁 20 s 后强制降级定高 ——
+新安全语义未在机型文档声明</td>
+<td>原始 <code>main.cpp:2659</code>；当前
+<code>navigation_task.cpp:2120-2122</code>、<code>include/HeadingAidingGate.h</code></td>
+</tr>
+<tr>
+<td>N-5</td>
+<td><strong>P1</strong></td>
+<td><strong>GNSS 丢失兜底改写</strong>：原始
+<code>handleHorizontalEstimation</code> 直接覆盖
+<code>relative_*</code>/<code>INS</code>
+水平速度；当前该任务已不排程，改由 EKF 光流速度融合
+<code>handleIndoorOpticalFlowVelocityFusion</code> 接管（前提
+<code>nav_system_initialized</code> 且光流新鲜）⇒
+<strong>无光流时水平位置无兜底</strong></td>
+<td>原始
+<code>main.cpp:3761</code>、<code>:3838-3856</code>、<code>:5507</code>；当前
+<code>navigation_task.cpp:790-795</code>、<code>main.cpp:444</code></td>
+</tr>
+<tr>
+<td>N-6</td>
+<td><strong>P1</strong></td>
+<td><strong>参数无持久化</strong>：158 项参数（133 + 25 共轴）可用
+<code>0xE0/0xE1</code> 在线读写，但 <code>0xAB</code> 保存只改
+RAM，重启回默认</td>
+<td><code>src/ano_params.cpp:28</code>、<code>:370</code>、<code>:159-162</code>；<code>include/FlightCtrlParams.h</code></td>
+</tr>
+<tr>
+<td>N-7</td>
+<td>P2</td>
+<td>调度顺序改变：<code>handleAnoCom</code> 从 GNC 之后移到 EKF
+之后、GNC 之前（同帧遥测延迟换控制环抖动余量）</td>
+<td>原始 <code>main.cpp:5513</code>；当前
+<code>main.cpp:435-436</code></td>
+</tr>
+<tr>
+<td>N-8</td>
+<td>P2</td>
+<td>增强项（不逐一列 P 级）：GNSS 接收机自动配置 + NMEA 兜底、IWDG 3
+s、MAVLink/CAN、电池 ADC 监测、Flash 黑匣子、气压 50→~129
+Hz、光流双传感器自动识别、15+ 个 <code>ins_*</code> 健康/门控头文件</td>
+<td>§2 总表</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1-审计对象与方法">1. 审计对象与方法</h2>
+<h3 id="11-两侧基线">1.1 两侧基线</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原始固件</th>
+<th>当前实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>仓库</td>
+<td><code>D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版</code></td>
+<td><code>D:\纵列双发矢量推力飞行器</code>（固件在
+<code>TandemVec_FCS/</code>）</td>
+</tr>
+<tr>
+<td>版本</td>
+<td>外部实飞存档，无 git 历史</td>
+<td>HEAD <code>57be7ef</code>（2026-10-30）+ 未提交改动</td>
+</tr>
+<tr>
+<td>结构</td>
+<td>单体 <code>src/main.cpp</code> 5542 行；无
+FreeRTOS，协作式任务表</td>
+<td>模块化 <code>src/*.cpp</code>（18 个）+ <code>include/</code>（70
+个头文件）</td>
+</tr>
+<tr>
+<td>导航库</td>
+<td><code>lib/navigation-main</code>（BFS 4.0.2 原样）</td>
+<td>同库但已大幅扩展：<code>ekf_15_state.h</code> 从 <strong>983 行 →
+5234 行</strong>，另加 <code>aid_source_status.h</code></td>
+</tr>
+<tr>
+<td>DETA100</td>
+<td><code>include/DETA100_module.h</code>（682 行，读帧在
+ISR，但调用被注释）</td>
+<td><code>include/DETA100_module.h</code>（526 行，类型移到
+<code>deta100_types.h</code>），上电自动检测</td>
+</tr>
+<tr>
+<td>平台</td>
+<td><code>platformio.ini</code> 单 env，stm32h743vit6 480
+MHz，<code>-O0</code>，无 <code>lib_deps</code></td>
+<td><code>[env:CoaxialVTVL]</code>（继承 <code>env:TandemVec_FCS</code>
++ <code>-DBFS_COAXIAL_VTVL</code>），<code>-O2</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>"当前"的口径（重要）</strong>：审计时工作树有另一 teammate
+的未提交改动（<code>include/FlightCtrlParams.h</code>、<code>src/flight_control.cpp</code>、<code>src/state_data.*</code>、<code>src/ano_params.*</code>、<code>test_host/fw_sil/*</code>），本报告行号均为
+<strong>2026-10-30
+工作树行号</strong>，函数名不受影响。其共轴参数外提的缺省值经
+<code>static_assert</code>
+锁定为与原硬编码逐位相同，导航/传感器语义未变；该 teammate 先把
+<code>coax_jam_latched</code> 引入 <code>fw_sil_env_main.cpp</code>
+时工作树一度构建失败，本报告全部实验均在其后完成（构建成功，见
+§5.2）。</p>
+<h3 id="12-方法">1.2 方法</h3>
+<ol type="1">
+<li><strong>逐行读原始源码</strong>：<code>setup()</code>/<code>loop()</code>/<code>timerCallback</code>、任务注册表、每个
+<code>handle*</code>
+函数、<code>DETA100_module.h</code>、<code>ubx</code>
+使用、磁/气压/光流初始化、EKF 初始化与 <code>relative_*</code>
+写入点、黑匣子/电池/CRSF、<code>platformio.ini</code>。</li>
+<li><strong>逐行读当前源码</strong>：<code>src/main.cpp</code>（初始化/任务表）、<code>sensor_imu.cpp</code>、<code>sensor_peripheral.cpp</code>、<code>navigation_task.cpp</code>、<code>flight_control.cpp</code>、<code>communication.cpp</code>、<code>can_bus.cpp</code>、<code>ano_params.cpp</code>、<code>include/FlightCtrlParams.h</code>、<code>include/CoaxialVtvControl.h</code>、<code>include/HeadingAidingGate.h</code>、<code>include/mag_measurement_gate.h</code>。</li>
+<li><strong>构建复跑</strong>：<code>pio run -e CoaxialVTVL</code>（固件）、<code>build_and_run_coaxial.sh --build-only</code>（共轴
+SIL）。</li>
+<li><strong>负向复现</strong>：把 HEAD 版共轴构建脚本复制到仓库外、删掉
+lead 未提交的 Madgwick 源那一行后重跑，验证"HEAD 必链接失败"。</li>
+<li><strong>验收复跑</strong>：用本次构建的 <code>fw_coax.exe</code> 跑
+3 profiles × 5 seeds，核对 15/15 声明。</li>
+</ol>
+<h3 id="13-复现命令">1.3 复现命令</h3>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 固件构建（在 TandemVec_FCS/ 下）</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">pio</span> run <span class="at">-e</span> CoaxialVTVL</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 共轴 SIL 构建（BIN_DIR 必须用 ASCII 路径）</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="va">BIN_DIR</span><span class="op">=</span>/c/Users/12631/AppData/Local/Temp/tv_paritysys_bin <span class="dt">\</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bash</span> test_host/fw_sil/build_and_run_coaxial.sh <span class="at">--build-only</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co"># 验收（3 profile × 5 seed）</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> test_host/fw_sil/run_real_acceptance.py <span class="dt">\</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">--bin</span> /c/Users/12631/AppData/Local/Temp/tv_paritysys_bin/fw_coax.exe <span class="dt">\</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>  <span class="at">--profiles</span> mag_clean,mag_nominal,nomag_degraded <span class="at">--seeds</span> 1,2,3,4,5</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co"># 负向复现（仓库外副本，删掉 MadgwickAHRS.cpp 一行；ROOT 改成绝对路径）</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="va">BIN_DIR</span><span class="op">=</span>/c/Users/12631/AppData/Local/Temp/tv_paritysys_neg <span class="dt">\</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>  <span class="fu">bash</span> /c/Users/12631/AppData/Local/Temp/neg_coax.sh <span class="at">--build-only</span></span></code></pre></div>
+<h3 id="14-判定标准">1.4 判定标准</h3>
+<table>
+<thead>
+<tr>
+<th>判定</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>等价</td>
+<td>功能与量级逐项一致（含禁用/未注册状态）</td>
+</tr>
+<tr>
+<td>语义差异</td>
+<td>功能同名但算法/门控/数据源/时基不同 → 需评审</td>
+</tr>
+<tr>
+<td>新增</td>
+<td>原始没有的行为（改进，或引入新风险）</td>
+</tr>
+<tr>
+<td>缺失</td>
+<td>原始有、当前没有</td>
+</tr>
+<tr>
+<td>回归</td>
+<td>同一输入下当前行为劣化 → 本次<strong>未发现</strong>（见 §5）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-逐项对照总表">2. 逐项对照总表</h2>
+<h3 id="21-导航域">2.1 导航域</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始（file:line）</th>
+<th>当前（file:line）</th>
+<th>判定</th>
+<th>证据</th>
+<th>影响建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EKF 15 态组合导航</td>
+<td><code>src/main.cpp:2607</code>
+<code>handleNavigationSystem</code>（BFS 库原样）</td>
+<td><code>src/navigation_task.cpp:1207</code> +
+<code>lib/navigation-main/src/ekf_15_state.h</code>（5234 行）</td>
+<td>增强</td>
+<td>库内新增零偏温补/门控/延迟估计等；<code>CTL-004 §6</code>
+有宿主逐拍对拍</td>
+<td>EKF 参数改动必须走 <code>check_fw_nav_parity</code> 回归</td>
+</tr>
+<tr>
+<td>EKF 初始化（真/假原点）</td>
+<td><code>src/main.cpp:2634-2809</code>：无 GPS 时假原点 + 写死伪磁
+<code>{30,0,40}</code>（<code>:2659</code>）</td>
+<td><code>src/navigation_task.cpp:1988-2153</code>：假原点
+28.2/112.9/50（<code>:2054</code>）、真磁时加磁偏角（<code>:2120-2122</code>）</td>
+<td>语义差异</td>
+<td>原始磁矢量与真实北无关；当前
+<code>mag_init_yaw_offset = declination</code></td>
+<td>见 N-4/D-N2</td>
+</tr>
+<tr>
+<td>GNSS 首帧重锚/导航原点</td>
+<td>无独立重锚，<code>relative_*</code> 由 EKF
+桥每拍计算（<code>:2990</code>）</td>
+<td><code>reanchorNavigationToGnss</code>
+<code>navigation_task.cpp:420</code>、<code>setNavigationOriginFromLlaRad:571</code>、<code>updateUbxRelativePosition:734</code></td>
+<td>新增</td>
+<td><code>CTL-004 §6.2.1</code> 给出逐拍原点切换证据</td>
+<td>保留；原点语义写入文档</td>
+</tr>
+<tr>
+<td>静止检测 / ZUPT</td>
+<td><code>src/main.cpp:2662-2904</code>（加速度/陀螺/GNSS 静止 + 500 ms
+去抖 + 无 GPS ZUPT）</td>
+<td><code>include/ins_static_detector.h</code> +
+<code>navigation_task.cpp</code> 静止辅助</td>
+<td>增强</td>
+<td>原始已有同类逻辑；当前加置信度/静止辅助档位</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>GNSS 丢失时水平兜底</td>
+<td><code>handleHorizontalEstimation</code>
+<code>main.cpp:3761</code>，<code>:3838-3856</code> 直接覆盖
+<code>relative_*</code>、<code>INS_GNSS_Packet</code> 水平速度；任务
+<code>:5505</code> 已注册</td>
+<td>同函数仍在
+<code>navigation_task.cpp:3880</code>，但<strong>未排程</strong>（<code>main.cpp:444</code>
+注解开）；改由 <code>handleIndoorOpticalFlowVelocityFusion</code>
+<code>navigation_task.cpp:790</code> 融合进 EKF</td>
+<td>语义差异（增强 + 边界）</td>
+<td>当前融合以 <code>nav_system_initialized</code>
+为前提（<code>:795</code>），光流陈旧即返回</td>
+<td>见 N-5/D-N3</td>
+</tr>
+<tr>
+<td>双矢量航向融合（GPS/光流速度比）</td>
+<td><code>main.cpp:2437</code>
+<code>handleDualVectorYawFusion</code></td>
+<td><code>navigation_task.cpp:601</code>（继承实现）+ 静止门控</td>
+<td>等价</td>
+<td>参数一致：<code>MIN_SPEED 1.0</code>、<code>MAX_TURN_RATE 0.35</code>、容差
+<code>0.35</code>、噪声 <code>0.08/0.03 rad</code></td>
+<td>保留</td>
+</tr>
+<tr>
+<td>磁矢量进 EKF</td>
+<td><strong>无</strong>：IST8310 驱动在 <code>main.cpp:1609</code> 被
+<code>if (false)</code> 跳过；EKF 初值用伪磁 <code>:2659</code></td>
+<td><code>include/mag_reference.h</code> +
+<code>include/mag_measurement_gate.h</code> +
+<code>navigation_task.cpp:2542</code></td>
+<td>增强</td>
+<td>门控含新鲜度/标定/模长/倾角/残差/油门；未标定则直通（失败静默）</td>
+<td>必须现场椭球标定，见 N-4</td>
+</tr>
+<tr>
+<td>航向辅助可用性门控</td>
+<td>无</td>
+<td><code>include/HeadingAidingGate.h</code>：仅 Mag（≤2 s）可作为
+<code>AUTO_POSITION</code> 绝对航向源；失效立即降级；恢复需 3 s
+磁新鲜；无磁 20 s 窗口只在离地后计时</td>
+<td>新增（安全语义）</td>
+<td>头注释 + <code>flight_control.cpp</code> 消费</td>
+<td>写入机型文档/操作程序，见 N-4</td>
+</tr>
+<tr>
+<td>GNSS 一致性/欺骗检测</td>
+<td>仅 EKF 内部 NIS</td>
+<td><code>include/ins_gnss_consistency.h</code> +
+<code>publishGnssConsistency</code>
+<code>navigation_task.cpp:983</code>；验收 <code>gnss_crej</code>
+位</td>
+<td>增强</td>
+<td>共轴验收 <code>gnss_spoof</code> profile 能置位（脚本声明）</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>GNSS 量测延迟自动估计</td>
+<td>无</td>
+<td><code>include/ins_gnss_delay_auto.h</code>（<code>BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE</code>）</td>
+<td>增强</td>
+<td><code>navigation_task.cpp:~876</code> 起</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>GNSS 天线杆臂</td>
+<td>无</td>
+<td>参数 <code>gnss_lever_x/y/z</code> →
+<code>nav_ekf.gnss_lever_arm_body_m</code>（<code>navigation_task.cpp:2147</code>）</td>
+<td>新增</td>
+<td>参数表内（2026-10-30 起 158 项）</td>
+<td>默认 0，实机需按安装填写</td>
+</tr>
+<tr>
+<td>气压/高度融合</td>
+<td><code>handleVerticalEstimation</code>
+<code>main.cpp:3389</code>（VerticalKF）+ EKF baro 更新</td>
+<td><code>navigation_task.cpp:3768</code>（并行、<strong>不覆盖</strong>
+EKF）+
+<code>ins_baro_health.h</code>/<code>ins_altitude_reference.h</code></td>
+<td>增强</td>
+<td><code>main.cpp:441</code> 注释明确"仅供遥测对比、不参与控制"</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>垂速估计</td>
+<td><code>updateEstimatedVerticalVelocity</code> 同类实现</td>
+<td><code>navigation_task.cpp:3659</code></td>
+<td>等价</td>
+<td>同输入同口径</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>dt 保护</td>
+<td><code>main.cpp:2607</code> 内 `dt&lt;=1e-4</td>
+<td></td>
+<td>dt&gt;0.1 → 0.005`</td>
+<td><code>navigation_task.cpp</code> 同口径</td>
+<td>等价</td>
+</tr>
+<tr>
+<td>IMU 健康/饱和/振动</td>
+<td>无</td>
+<td><code>include/ins_imu_health.h</code>、<code>ins_imu_saturation.h</code>、<code>ins_vibration_hf.h</code>、<code>ins_vibration_adaptive.h</code></td>
+<td>增强</td>
+<td>共轴验收 <code>imu_stuck/imu_nan/imu_drop</code> 只验证检测隔离</td>
+<td>2 kHz 振动通道不在 Nav ABI（<code>CTL-004 §6.2</code>
+已知边界）</td>
+</tr>
+<tr>
+<td>预发射对准</td>
+<td>无（上电即初始化）</td>
+<td><code>include/ins_prelaunch_align.h</code>（<code>BFS_PRELAUNCH_ALIGN_STABILITY_GATE</code>）</td>
+<td>增强</td>
+<td><code>navigation_task.cpp:~2115</code></td>
+<td>默认宏关闭时行为不变</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-传感器域">2.2 传感器域</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始（file:line）</th>
+<th>当前（file:line）</th>
+<th>判定</th>
+<th>证据</th>
+<th>影响建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>板载 IMU ICM42688</td>
+<td><code>initICM42688</code> <code>main.cpp:1402</code>（SPI 10 MHz
+Mode3、DLPF 陀螺 100 Hz/加计 50 Hz、±8 g/±2000 dps/2 kHz、100
+样本均值）、任务 <code>:1781</code>、注册 <code>:5500</code></td>
+<td><code>sensor_imu.cpp:112</code>、<code>:596</code>、<code>main.cpp:421</code></td>
+<td>等价</td>
+<td>量程/ODR/DLPF/初始化样本数逐项相同</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>IMU 在线自动校准</td>
+<td><code>IMU_AutoCalibrator</code> <code>main.cpp:1534</code>（每帧）+
+<code>:1541</code>（apply，仅未解锁）</td>
+<td><code>include/IMU_AutoCalibrator.h</code> +
+<code>state_data.cpp</code> 同调用点</td>
+<td>等价</td>
+<td>同一份实现</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>IMU 冻结/饱和隔离</td>
+<td>无</td>
+<td><code>ins_imu_health.h</code>/<code>ins_imu_saturation.h</code>；零偏跳变
+<code>ins_bias_jump_monitor.h</code>、温补
+<code>ins_bias_temp_observer.h</code></td>
+<td>增强</td>
+<td>验收三故障 profile</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>磁力计驱动</td>
+<td><code>initMagnetometer</code>
+<code>main.cpp:1291</code>（<code>compass.begin</code>
+<code>:1304</code>，IST8310，<strong>无校准</strong>）；<code>if(false)</code>
+<code>:1609</code> 后无任何使用</td>
+<td><code>sensor_imu.cpp:49</code>：Wire1 400 kHz、IST8310@0x0E /
+QMC5883L@0x0D 自动探测、<code>MagCal</code> 椭球标定 Flash
+持久化、未标定直通</td>
+<td>增强</td>
+<td>原始磁驱动=死代码；当前磁进 EKF（经门控）</td>
+<td>实机必须 <code>magcal fit/save</code>，见 N-4</td>
+</tr>
+<tr>
+<td>磁力计→Madgwick</td>
+<td><code>main.cpp:1609</code> <code>if (false)</code>（临时禁用）</td>
+<td><code>sensor_imu.cpp:46</code>
+<code>kMagFeedMadgwick=false</code></td>
+<td>等价</td>
+<td>两侧都禁用</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>气压计 DPS310</td>
+<td><code>initDPS310:1325</code>、<code>handleDPS310:1803</code>、注册
+50 Hz <code>:5501</code>；失败死循环闪绿灯 <code>:5444</code></td>
+<td><code>sensor_peripheral.cpp:1086</code>/<code>:1263</code>、~129 Hz
+<code>main.cpp:422</code>；失败<strong>降级继续</strong>
+<code>main.cpp:358-368</code></td>
+<td>增强</td>
+<td>频率 + 失败策略均改进</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>光流</td>
+<td>仅 LQS48：<code>handleLQS48Flow:3636</code>、注册 500 Hz
+<code>:5503</code>；MTF02P 头文件存在但未用</td>
+<td><code>sensor_peripheral.cpp:1592</code> 自动识别 LQS48/MTF02P、500
+Hz
+<code>main.cpp:423</code>、通道级陈旧清扫（<code>:1611-1624</code>）</td>
+<td>增强</td>
+<td>双传感器 + 新鲜度门控</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>TVC 角度传感器</td>
+<td><code>handleAngleSensors:2196</code>，注册被注释
+<code>:5511</code></td>
+<td><code>sensor_peripheral.cpp:1309</code>，注册被注释
+<code>main.cpp:475</code></td>
+<td>等价（均不启用）</td>
+<td>两侧都只做调试打印</td>
+<td>与原始一致；未闭环属已知</td>
+</tr>
+<tr>
+<td>DETA100 惯性/GNSS 模块</td>
+<td>驱动 <code>handleDeta100:2395</code>，但 ISR 调用 <code>:740</code>
+被注释、任务表 <code>:5496-5513</code> 无注册 ⇒
+<strong>从未读取</strong>；Serial4 实际接 UBX GNSS（<code>:425</code>
+注释）</td>
+<td><code>main.cpp:180-216</code>
+上电自动检测（帧轮换）、<code>:429</code> 200 Hz
+任务、<code>:3166</code> 起"直出模式"（模块 AHRS/INS/Geodetic
+直接给飞控，EKF 后台备份）</td>
+<td>新增/语义差异</td>
+<td>见 D-N1</td>
+<td>见 N-3</td>
+</tr>
+<tr>
+<td>GNSS 接收机配置</td>
+<td>仅 <code>ubx.Config(&amp;gpsSerialPort)</code>
+<code>main.cpp:5341</code></td>
+<td><code>ubx_config.cpp</code> +
+<code>main.cpp:228-246</code>：波特率探测→CFG-PRT→CFG-RATE 10
+Hz→NAV-PVT/EOE→回读；<code>ubx.SetProtocol(kAuto)</code>（<code>:166</code>）NMEA
+兜底</td>
+<td>增强</td>
+<td>失败不阻塞、回退"已预配置"</td>
+<td>保留；非 u-blox 模块首次上电需观察</td>
+</tr>
+<tr>
+<td>燃料液位/联锁</td>
+<td><code>main.cpp:4165-4168</code> <code>fuelOK</code>、CRSF 通道联锁
+<code>:2125</code></td>
+<td><code>flight_control.cpp:218</code>、<code>communication.cpp:1033</code></td>
+<td>等价</td>
+<td>阈值/语义相同（平滑值 &gt;0.5）</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>电池监测</td>
+<td>无（CRSF 电池帧把氧压 <code>receivedP1/P2</code>
+映射成电压/电流，<code>main.cpp:2152-2176</code>）</td>
+<td><code>communication.cpp:1293</code>
+<code>updateBatteryMonitor</code>（ADC_BATT PC5，10
+Hz）、<code>:1067</code>
+<code>sendElrsBatteryData</code>、<code>:1091</code> CRSF 电池帧</td>
+<td>增强</td>
+<td>原始无真实电池采样</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>遥控链路统计</td>
+<td>无</td>
+<td><code>elrsLinkStatsCallback</code>（<code>main.cpp:255</code>）</td>
+<td>增强</td>
+<td>ELRS LQ/弱信号灯效</td>
+<td>保留</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-系统域">2.3 系统域</h3>
+<table>
+<thead>
+<tr>
+<th>功能项</th>
+<th>原始（file:line）</th>
+<th>当前（file:line）</th>
+<th>判定</th>
+<th>证据</th>
+<th>影响建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>任务调度</td>
+<td>TIM8 2
+kHz：<code>timerCallback:738</code>、<code>setupTimer:767</code>；协作式
+<code>struct Task:195-202</code>、<code>addTask:791</code>、<code>taskExecutor:820</code>；12
+个任务 <code>:5496-5513</code>（另有 7 条注释）</td>
+<td><code>src/task_scheduler.cpp</code>（同 TIM8 2 kHz）+ 24 条注册
+<code>main.cpp:421-477</code>（含条件注册）</td>
+<td>增强</td>
+<td>频率表 <code>main.cpp:405-419</code></td>
+<td>保留</td>
+</tr>
+<tr>
+<td>调度顺序（AnoCom）</td>
+<td><code>addTask(handleAnoCom,5)</code> 在 GNC <strong>之后</strong>
+<code>:5510</code></td>
+<td>EKF 之后、GNC <strong>之前</strong>
+<code>main.cpp:435-436</code></td>
+<td>语义差异</td>
+<td>注释：同帧消费 EKF 输出；下行有 <code>availableForWrite</code>
+保护</td>
+<td>监控控制环抖动，P2（N-7）</td>
+</tr>
+<tr>
+<td>看门狗</td>
+<td><strong>无</strong>（<code>wdg/watchdog</code> 零命中）</td>
+<td>IWDG 3.0
+s：<code>main.cpp:59-75</code>（<code>initIwdg</code>，预分频
+256、reload 374），调用 <code>:484</code>；<code>kickIwdg</code> 供
+flash 导出</td>
+<td>增强</td>
+<td>主循环每轮喂狗</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>失控保护</td>
+<td><code>linkDownCallback</code> 仅置
+<code>isLinkUp=false</code>，无任何动作（<code>:702</code> 附近）</td>
+<td><code>communication.cpp:230-260</code>：飞行中保持解锁 +
+<code>AUTO_ALTITUDE</code>、摇杆归中；<code>flight_control.cpp:183</code>
+绕过解锁阈值</td>
+<td>增强/新安全语义</td>
+<td>与 <code>VER-004 C-7</code> 交叉</td>
+<td>写入操作手册，P1（VER-004 已列）</td>
+</tr>
+<tr>
+<td>参数系统</td>
+<td><strong>无</strong>（增益全是 <code>main.cpp</code>
+编译期常量，<code>VtvLParams.h</code> 不存在）</td>
+<td><code>src/ano_params.cpp</code> 158 项（133 + 25
+共轴，<code>static_assert</code> 锁
+<code>133 + BFS_COAX_PARAM_COUNT</code>）；<code>0xE0</code> 读 /
+<code>0xE1</code> 写（<code>:328/:380</code>）；<code>0xAB</code>
+保存<strong>只改
+RAM</strong>（<code>:28</code>、<code>:370</code>）；<code>include/FlightCtrlParams.h</code></td>
+<td>新增</td>
+<td>见 D-N5</td>
+<td>见 N-6</td>
+</tr>
+<tr>
+<td>黑匣子</td>
+<td><code>handleDataLogging:2281</code> 写 Serial3
+CSV（<code>#LOG_START</code> 分段、<code>isDatalogging</code>
+触发），任务注册被注释 <code>:5512</code> ⇒
+<strong>实际不记录</strong></td>
+<td><code>communication.cpp:108</code> 13
+通道（姿态/角速率/执行器/油门/目标姿态）；200 Hz 记录
+<code>main.cpp:476</code>；W25N01GV Flash + Serial3 双写；100 Hz flash
+服务 <code>main.cpp:466</code></td>
+<td>增强</td>
+<td>见 D-N7</td>
+<td>SIL 中 flash 为桩，需台架核实</td>
+</tr>
+<tr>
+<td>LED</td>
+<td><code>StatusLED</code> <code>main.cpp:4123</code>（PWM
+呼吸/闪烁）</td>
+<td><code>statusLed</code> + WS2812
+状态灯（<code>main.cpp:270-271</code>）+
+<code>Ws2812AppStatus.h</code></td>
+<td>增强</td>
+<td>—</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>蜂鸣器</td>
+<td>无（<code>beep/buzzer/tone</code> 零命中）</td>
+<td>无</td>
+<td>等价</td>
+<td>两侧均零命中</td>
+<td>—</td>
+</tr>
+<tr>
+<td>MAVLink / 地面站</td>
+<td>无（只有 AnoCom）</td>
+<td><code>src/mavlink_bridge.cpp</code> +
+STATUSTEXT（<code>main.cpp:66</code>）；<code>handleMavlink</code>
+可选未注册 <code>:464</code></td>
+<td>增强</td>
+<td>—</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>CAN 总线</td>
+<td><code>include/CAN.h</code> 引入但未调用（<code>arduino-CAN</code>
+库闲置）</td>
+<td><code>src/can_bus.cpp</code>（MCP2515 SPI2，200 Hz 广播
+<code>main.cpp:454</code>）</td>
+<td>增强</td>
+<td>—</td>
+<td>保留</td>
+</tr>
+<tr>
+<td>共轴机型分支</td>
+<td>无（单机型内联控制律 <code>:5099-5257</code>）</td>
+<td><code>BFS_COAXIAL_VTVL</code>：<code>flight_control.cpp:69</code>、<code>:2137-2319</code>、<code>:2534</code>；<code>include/CoaxialVtvControl.h</code>；<code>include/VehicleProfile.h</code>、<code>ActuatorOutputMap.h</code></td>
+<td>新增</td>
+<td>与原始实飞共轴工程结构对齐，参数 MODEL-DEFAULT 未再标定</td>
+<td>见 VER-004</td>
+</tr>
+<tr>
+<td>共轴 SIL 构建链</td>
+<td>无 SIL</td>
+<td><code>test_host/fw_sil/build_and_run_coaxial.sh</code>；<strong>HEAD
+缺 Madgwick 源 ⇒ 链接必败</strong>；lead 已补未提交</td>
+<td>新增（P0 缺陷）</td>
+<td>§5.2 负向复现</td>
+<td>提交该 1 行修复（N-1）</td>
+</tr>
+<tr>
+<td>固件构建</td>
+<td>—</td>
+<td><code>pio run -e CoaxialVTVL</code> SUCCESS 6.14 s，RAM
+189496/524288（36.1%）、Flash 366908/2097152（17.5%）</td>
+<td>新增</td>
+<td>§5.3</td>
+<td>—</td>
+</tr>
+<tr>
+<td>DETA100 掉线处理</td>
+<td>无检测（因为从不读取）</td>
+<td><code>deta100_online</code> + <code>DETA100_ONLINE_TIMEOUT_MS</code>
++ MAVLink 警告（<code>main.cpp:132-137</code>）</td>
+<td>增强</td>
+<td>—</td>
+<td>掉线不自动切回内置 IMU，P2</td>
+</tr>
+<tr>
+<td>共轴专属遥测</td>
+<td>无（单体固件只发通用姿态/INS 帧与 AnoCom；<code>main.cpp</code> 无
+coax 专属字段）</td>
+<td><code>gnc_tel.error_deg[3]</code>、<code>throttle_cmd_pct</code>（<code>src/state_data.h:410/423</code>）；<code>coax_roll_corr_deg</code>/<code>coax_pitch_corr_deg</code>/<code>coax_yaw_diff_us</code>/<code>coax_saturated</code>/<code>coax_fault_flags</code>（<code>:446-450</code>）；AnoVars
+<code>coax_sat</code>/<code>coax_flt</code>（<code>src/ano_vars.cpp:169-170</code>）</td>
+<td>增强</td>
+<td>名称 ≤16B/MAVLink 9 字符唯一性已在 <code>ano_vars.cpp:168</code>
+注明</td>
+<td>保留；F3/F4 在线辨识仍不可达（VER-004）</td>
+</tr>
+<tr>
+<td>地面检测</td>
+<td>无（只有静止检测，见 2.1）</td>
+<td>无（同靠静止检测/ZUPT；<code>grep ground</code> 在两侧
+<code>src/</code> 下零命中）</td>
+<td>等价</td>
+<td>两侧均无独立地面检测</td>
+<td>如需防误判离地可另立任务</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-关键差异详析">3. 关键差异详析</h2>
+<h3 id="d-n1-deta100原始是死代码当前是可选主数据源">D-N1
+DETA100：原始是死代码，当前是"可选主数据源"</h3>
+<ul>
+<li><strong>原始</strong>：<code>handleDeta100()</code> 定义在
+<code>main.cpp:2395</code>，但 <code>timerCallback</code>
+里的调用被注释（<code>:740</code>），任务表 <code>:5496-5513</code>
+也没有它。<code>loop()</code> 只做
+<code>crsf.loop()</code>、<code>ubx.Read()</code>、<code>taskExecutor()</code>（<code>:5529-5540</code>）。⇒
+存档固件<strong>从未读取 DETA100</strong>，Serial4 实际跑 UBX
+GNSS（<code>:425</code> 注释"GPS 连接在 Serial4 (原 DETA100
+接口)"），导航用板载 ICM42688 + DPS310 + UBX。</li>
+<li><strong>当前</strong>：<code>setup()</code> 开 200 ms
+探测窗，按帧轮换喂 DETA100/UBX
+两个解析器（<code>main.cpp:180-216</code>）；检测到 DETA100 后
+<code>nav_data_source=DETA100</code> 并注册 200 Hz
+任务（<code>:427-429</code>）。模块在线时
+<code>use_deta100_output=true</code>（<code>navigation_task.cpp:3166</code>），<strong>AHRS/INS/Geodetic
+直接写全局状态给飞控</strong>，EKF 只在后台预测；模块首次 3D 定位时用其
+LLA 重设导航原点（<code>:3200-3230</code>）。</li>
+<li><strong>影响</strong>：同一架共轴机，装不装 DETA100
+模块、模块在不在线，会改变控制姿态的来源（模块自带 EKF vs 固件
+EKF）。SIL 只覆盖 INTERNAL 路径，DETA100
+直出路径<strong>未能核实</strong>（见 §4）。</li>
+<li><strong>建议</strong>：机型文档必须写明"共轴机是否装
+DETA100"；若装，需单独做模块直出模式的台架/悬停验证。</li>
+</ul>
+<h3 id="d-n2-航向基准伪磁--真实磁北--门控">D-N2 航向基准：伪磁 →
+真实磁北 + 门控</h3>
+<ul>
+<li><strong>原始</strong>：<code>main.cpp:2659</code>
+<code>mag_ut &lt;&lt; 30,0,40</code>（写死），<code>nav_ekf.Initialize(..., mag_ut, ...)</code>（<code>:2809</code>）——EKF
+的航向初值来自"伪磁场"，与站点真实磁北无关；磁力计驱动被
+<code>if(false)</code>
+跳过（<code>:1609</code>），全程不融合磁。真实航向靠
+<code>handleDualVectorYawFusion</code>（<code>:2437</code>）在有水平速度时用
+GNSS/光流速度方向纠正。</li>
+<li><strong>当前</strong>：<code>mag_real_for_init</code> 时用真实磁样本
++
+站点磁偏角（<code>navigation_task.cpp:2130</code>、<code>mag_reference.h</code>），并新增
+<code>HeadingAidingGate</code>：<strong>只有 Mag 新鲜 ≤2 s 才允许
+<code>AUTO_POSITION</code>/航向保持</strong>；失效立即降级，恢复需连续 3
+s；无磁模式 20 s 保持窗口只在离地后计时。</li>
+<li><strong>影响</strong>：共轴悬停没有水平速度 ⇒
+双矢量航向融合无效，绝对航向只能靠磁。因此<strong>磁标定从"可选"变成"位置保持的前置条件"</strong>；未标定/磁干扰时会在
+2 s（有磁但被门控拒绝）或 20
+s（无磁模式）后失去水平位置闭环。这是安全改进，但必须写进操作程序，否则现场会表现为"莫名降级定高"。</li>
+</ul>
+<h3 id="d-n3-gnss-丢失时的水平兜底">D-N3 GNSS 丢失时的水平兜底</h3>
+<ul>
+<li><strong>原始</strong>：<code>handleHorizontalEstimation</code>（<code>:3761</code>）用加速度积分
++ 光流速度跑 <code>kf_north/kf_east</code>，并在 <code>:3838-3856</code>
+当 GNSS 无效时<strong>直接覆盖</strong> <code>relative_north/east</code>
+和 <code>INS_GNSS_Packet</code> 水平速度。</li>
+<li><strong>当前</strong>：<code>handleHorizontalEstimation</code>
+仍在（<code>navigation_task.cpp:3880</code>）但注册被注释（<code>main.cpp:444</code>，理由"纯加速度积分无闭环校正"）；<code>navigation_task.cpp:3962-3970</code>
+仍算 <code>fused_*</code> 但<strong>不再覆盖</strong>
+<code>relative_*</code>（注释写明"历史上曾整体覆盖、因漂移已移除，勿恢复"）。替代者是
+<code>handleIndoorOpticalFlowVelocityFusion</code>（<code>:790</code>）：只在
+EKF 初始化后、GNSS
+瞬时无效、非静止、光流新鲜时，以动态噪声把光流速度喂进 EKF
+速度量测；连续 50 次被拒则 <code>ResetVelocityToExternal</code>。</li>
+<li><strong>影响</strong>：有光流时，当前方案比原始"开环 KF
+覆盖"更严谨（有协方差、有门控、有失锁恢复）；<strong>无光流且无 GNSS
+时，水平位置没有任何兜底</strong>（原始至少还在用纯积分更新
+<code>relative_*</code>，虽然会漂移）。室内/无 GPS
+场景的机型文档必须标注"不可位置保持"。</li>
+</ul>
+<h3 id="d-n4-gnss-接收机自动配置--nmea-兜底">D-N4 GNSS 接收机自动配置 +
+NMEA 兜底</h3>
+<p>原始只
+<code>ubx.Config(&amp;gpsSerialPort)</code>（<code>:5341</code>），依赖接收机已预配置为
+921600/UBX/10 Hz。当前 <code>ubxAutoConfig</code> 做波特率探测（含出厂
+9600 NMEA）→ <code>CFG-PRT</code> 切 921600 → <code>CFG-RATE</code> 10
+Hz → <code>CFG-MSG</code> NAV-PVT/NAV-EOE →
+回读校验；失败回退"已预配置"模式；并且
+<code>ubx.SetProtocol(kAuto)</code> 支持 UBX 优先、NMEA
+兜底（<code>main.cpp:163-166</code>）。<strong>判定：增强</strong>；副作用是首次上电多花探测时间（不阻塞），且对非
+u-blox 模块走 NMEA 合成 epoch 路径（该路径本次未做 SIL 验证）。</p>
+<h3 id="d-n5-参数系统158-项可改但不持久化">D-N5 参数系统：158
+项可改，但不持久化</h3>
+<p><code>kAnoParams[]</code>
+由宏表生成（<code>ano_params.cpp:1-162</code>），<code>static_assert(ANO_PARAMS_COUNT == 133 + BFS_COAX_PARAM_COUNT)</code>；共轴参数
+25 项 ID 133-157（<code>include/FlightCtrlParams.h</code> 的
+<code>BFS_COAX_PARAM_LIST</code>，GCS 侧同序镜像）。<code>0xE0</code>
+读、<code>0xE1</code> 写都能生效，但 <code>0x10</code> 命令的
+<code>0xAB</code> 保存<strong>只改
+RAM</strong>（<code>ano_params.cpp:28</code> 注释、<code>:363-372</code>
+代码）——重启回默认。原始固件根本没有参数系统（编译期常量），所以不是"回归"，但共轴调参后断电即丢是操作性风险。</p>
+<h3 id="d-n6-看门狗与失控保护新增">D-N6 看门狗与失控保护（新增）</h3>
+<p>原始无 IWDG、<code>linkDownCallback</code> 只把 <code>isLinkUp</code>
+置 false（无动作），断链后依赖操作员。当前 IWDG 3.0
+s（<code>main.cpp:54-62</code>）并在 flash
+导出循环内显式喂狗（<code>kickIwdg</code>，避免 256
+页导出触发复位）；断链时若在飞行则保持解锁并切
+<code>AUTO_ALTITUDE</code>（<code>communication.cpp:230-260</code>）。两者都是安全增强，但"断链保持解锁"与原始"断链即无动作/最终上锁"语义不同——已由
+VER-004 C-7 记录，本文不重复评级。</p>
+<h3 id="d-n7-黑匣子原始根本不记录">D-N7 黑匣子：原始根本不记录</h3>
+<p>原始 <code>handleDataLogging</code>（<code>:2281</code>）以 CSV
+文本写 Serial3，靠 <code>isDatalogging</code>
+触发、<code>#LOG_START</code>
+分段，但注册行被注释（<code>:5512</code>）⇒
+<strong>存档版不产生黑匣子数据</strong>，任何"原始有黑匣子数据"的说法都不成立。当前是
+200 Hz 记录（<code>main.cpp:476</code>）+ 100 Hz 后台写
+Flash（<code>:466</code>），13 通道在 <code>communication.cpp:108</code>
+定义、CSV 与 Flash 双写（<code>:1394</code> 起），Flash 用
+W25N01GV（SPI3）并恢复写游标（<code>flashLog.begin()</code>）。<strong>增强</strong>，但
+SIL 中 Flash 是桩，写入正确性只能台架核实。</p>
+<h3 id="d-n8-调度顺序anocom-提前">D-N8 调度顺序：AnoCom 提前</h3>
+<p>原始 <code>handleAnoCom</code> 排在 GNC
+之后（<code>:5513</code>），当前移到 EKF 之后、GNC
+之前（<code>main.cpp:435-436</code>），并用
+<code>availableForWrite</code>
+非阻塞保护下行/回传。收益是同帧遥测延迟；风险是 200 Hz UART6
+发送若阻塞会挤压控制环。当前注释与实现都声称已防护，但<strong>这是唯一一处"控制环顺序被遥测任务改变"的地方</strong>，建议在
+200 Hz 抖动统计里持续监控。</p>
+<h3 id="d-n9-共轴-sil-构建链断裂p0">D-N9 共轴 SIL 构建链断裂（P0）</h3>
+<p>见
+§5.2：<code>git show HEAD:./test_host/fw_sil/build_and_run_coaxial.sh</code>
+的源文件列表里没有
+<code>lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp</code>；<code>git show HEAD:./test_host/fw_sil/fw_sil_stubs.cpp:73</code>
+只剩注释"Madgwick 由真实 lib/MadgwickAHRS-master
+提供"（空桩已删）。删掉工作树里 lead 未提交的那 1 行后重跑，链接报 5 个
+<code>undefined reference to Madgwick::*</code>。⇒ 自 2ec50ac 起，HEAD
+的共轴 SIL <strong>无法构建</strong>。</p>
+<hr />
+<h2 id="4-已核实--未能核实">4. 已核实 / 未能核实</h2>
+<h3 id="41-已核实l0-源码--l1-实跑">4.1 已核实（L0 源码 + L1 实跑）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>原始 DETA100 未被读取（ISR 注释 + 未注册）</td>
+<td>源码逐行（<code>main.cpp:740</code>、<code>:2395</code>、<code>:5496-5513</code>）</td>
+</tr>
+<tr>
+<td>原始磁力计未使用、EKF 用伪磁 <code>{30,0,40}</code></td>
+<td><code>main.cpp:1609</code>、<code>:2659</code>、<code>:2809</code></td>
+</tr>
+<tr>
+<td>原始无 IWDG / 无参数系统 / 黑匣子未排程 / 无失控保护动作</td>
+<td>全文 grep + 注册表逐行</td>
+</tr>
+<tr>
+<td>当前任务表、频率、条件注册</td>
+<td><code>main.cpp:405-477</code></td>
+</tr>
+<tr>
+<td>当前磁/光流/气压/GNSS 初始化与降级路径</td>
+<td><code>sensor_imu.cpp:49-160</code>、<code>sensor_peripheral.cpp:1086-1263</code>、<code>main.cpp:180-246</code></td>
+</tr>
+<tr>
+<td>当前 EKF 初始化、重锚、光流融合、DETA100 直出</td>
+<td><code>navigation_task.cpp:420/790/1988-2153/3166-3230</code></td>
+</tr>
+<tr>
+<td>参数表 158 项与 <code>0xAB</code> 不持久化</td>
+<td><code>ano_params.cpp:1-162</code>、<code>:363-372</code></td>
+</tr>
+<tr>
+<td>固件可构建</td>
+<td><code>pio run -e CoaxialVTVL</code> SUCCESS 6.14 s（§5.3）</td>
+</tr>
+<tr>
+<td>共轴 SIL 可构建（含 lead 未提交修复）</td>
+<td>本次构建 exit 0（§5.2）</td>
+</tr>
+<tr>
+<td>HEAD 缺 Madgwick 源 ⇒ 链接失败</td>
+<td>仓库外负向复现（§5.2）</td>
+</tr>
+<tr>
+<td>验收真实值 14/15</td>
+<td>本次 3 profile × 5 seed 复跑（§5.1）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-未能核实需硬件台架补充设施">4.2
+未能核实（需硬件/台架/补充设施）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原因</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DETA100 直出模式的实际行为（姿态/位置由模块给出）</td>
+<td><code>fw_sil</code> 无 DETA100 帧注入设施；该路径不进 SIL</td>
+<td>N-3 只能定性，不能定量</td>
+</tr>
+<tr>
+<td>Flash 黑匣子写入正确性（页对齐、掉电、游标恢复）</td>
+<td>SIL 中 W25N01GV 为桩</td>
+<td>只能台架验证；不要据 SIL 声明"黑匣子已验证"</td>
+</tr>
+<tr>
+<td>磁力计实际标定质量与轴映射</td>
+<td><code>MagCal</code> 默认未标定直通；需实机椭球标定</td>
+<td>N-4 的现场可用性无法在审计中确认</td>
+</tr>
+<tr>
+<td>IWDG 复位恢复、flash 导出 &gt;3 s 场景</td>
+<td>需硬件</td>
+<td>—</td>
+</tr>
+<tr>
+<td>原始固件的运行期行为（实跑）</td>
+<td>本次只读源码，未构建原始工程（无原始构建产物/工具链证据等级
+L0）</td>
+<td>原始侧全部结论为静态证据</td>
+</tr>
+<tr>
+<td>15/15 的"修复后"配置</td>
+<td>本次只复现 14/15；关 AHRS/IMU 低通的因果隔离属 VER-004 §6.2</td>
+<td>不要把 15/15 当当前基线</td>
+</tr>
+<tr>
+<td>原始每个编译期增益 → 当前参数项的逐字段落点映射</td>
+<td>需人工逐项对照；本次只核对参数总数
+158（<code>static_assert</code>）与共轴 25 项 ID，未逐字段映射</td>
+<td>迁移/回归风险由 VER-004 与参数任务承担，本报告不声称"100%
+有落点"</td>
+</tr>
+<tr>
+<td>NMEA 兜底 / 非 u-blox 接收机</td>
+<td>无对应模块与 SIL 注入</td>
+<td>首次上电行为需实机确认</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-实跑证据">5. 实跑证据</h2>
+<h3 id="51-共轴-sil-验收3-profiles--5-seeds">5.1 共轴 SIL 验收（3
+profiles × 5 seeds）</h3>
+<p>命令见 §1.3。退出码
+0（脚本自身不把单例失败当非零退出），输出结尾：</p>
+<pre><code>[FAIL] mag_nominal seed1 alt=9.10 hold_end=0.96 hold_max=1.38 pos_rms=0.55 roll_max=8.21 resets=0 outliers=0 mag=390/2 imu_det=0
+       - max_pitch=22.108 &gt; 20.0
+=== real-nav acceptance: 15 cases, 1 failed ===</code></pre>
+<p>其余 14 例 PASS（<code>mag_clean</code> seed1-5 <code>roll_max</code>
+1.26/1.68/1.60/1.45/1.17；<code>mag_nominal</code> seed2-5
+<code>roll_max</code> 8.14/7.61/12.42/10.18；<code>nomag_degraded</code>
+5 例只判高度/姿态、<code>hold_end</code> 121.64–135.58
+为"位置保持不计分"语义）。⇒ <strong>当前真实基线 14/15，与 VER-004 C-1
+一致</strong>。</p>
+<h3 id="52-共轴-sil-构建正向成功反向必败">5.2 共轴 SIL
+构建：正向成功、反向必败</h3>
+<p>正向（工作树含 lead 未提交的 1 行）：</p>
+<pre><code>$ BIN_DIR=/c/Users/12631/AppData/Local/Temp/tv_paritysys_bin bash test_host/fw_sil/build_and_run_coaxial.sh --build-only
+lib/ublox-main/src/minmea.c:671:24: warning: implicit declaration of function &#39;timegm&#39;; did you mean &#39;time&#39;? [-Wimplicit-function-declaration]
+built: /c/Users/12631/AppData/Local/Temp/tv_paritysys_bin/fw_coax.exe</code></pre>
+<p>反向（仓库外副本，删掉 <code>MadgwickAHRS.cpp</code>
+行，其余不变）：</p>
+<pre><code>ld.exe: state_data.cpp: undefined reference to `Madgwick::Madgwick()&#39;
+ld.exe: fw_sil_env_main.cpp: undefined reference to `Madgwick::Madgwick()&#39;
+ld.exe: fw_sil_env_main.cpp: undefined reference to `Madgwick::initializeFromAccelerometer(double,double,double)&#39;
+ld.exe: fw_sil_env_main.cpp: undefined reference to `Madgwick::updateIMU(double,...)&#39;
+ld.exe: fw_sil_env_main.cpp: undefined reference to `Madgwick::getEulerAngles_NED_FRD(double&amp;,double&amp;,double&amp;)&#39;
+collect2.exe: error: ld returned 1 exit status</code></pre>
+<p>⇒ N-1 成立；修复就是提交那一行。<strong>任何"共轴 SIL 15/15"的声明在
+HEAD 上无法复现，因为它连二进制都产不出来。</strong></p>
+<h3 id="53-固件构建">5.3 固件构建</h3>
+<pre><code>$ pio run -e CoaxialVTVL
+RAM:   [====      ]  36.1% (used 189496 bytes from 524288 bytes)
+Flash: [==        ]  17.5% (used 366908 bytes from 2097152 bytes)
+========================= [SUCCESS] Took 6.14 seconds =========================
+CoaxialVTVL    SUCCESS   00:00:06.141</code></pre>
+<hr />
+<h2 id="6-风险分级与建议">6. 风险分级与建议</h2>
+<table>
+<thead>
+<tr>
+<th>级别</th>
+<th>项</th>
+<th>建议动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0</td>
+<td>N-1 共轴 SIL 构建链缺 Madgwick 源</td>
+<td>提交 lead 的 1 行修复；CI/README 里把"共轴 SIL 可构建"作为门禁</td>
+</tr>
+<tr>
+<td>P0</td>
+<td>N-2 验收真实 14/15</td>
+<td>把 14/15 写成当前基线并注明失败场景；22.108° 超调另立
+P1（属控制域，见 VER-004 C-6）</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>N-3 DETA100 数据源语义变化</td>
+<td>机型文档声明是否装 DETA100；装则补模块直出模式的台架/悬停验证</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>N-4 航向基准 + 航向门控</td>
+<td>操作程序加入"飞行前磁标定 + 磁门控状态检查"；验收矩阵补
+<code>mag_disturbed</code>/<code>nomag_degraded</code> 的降级时序</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>N-5 GNSS 丢失兜底改写</td>
+<td>明确"无光流且无 GNSS 不可位置保持"；恢复
+<code>handleHorizontalEstimation</code> 前先做闭环对比</td>
+</tr>
+<tr>
+<td>P1</td>
+<td>N-6 参数不持久化</td>
+<td>文档写"0xAB 不写 Flash"；或另立任务实现持久化（不在本文范围）</td>
+</tr>
+<tr>
+<td>P2</td>
+<td>N-7 AnoCom 提前、DETA100 掉线不切源、NMEA 兜底未验</td>
+<td>持续监控 200 Hz 抖动；掉线加入"自动切内置 IMU"备选；NMEA 路径补 SIL
+场景</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7-与既有文档的关系">7. 与既有文档的关系</h2>
+<ul>
+<li><code>VER-004</code>（控制与安全域）：本文与其<strong>无重复评级</strong>；其
+C-1/C-2/C-3 与本报告 N-2/N-1
+是同一事实的不同侧面（它从控制验收角度，本文从导航/系统角度），结论一致：真实
+14/15、2ec50ac 链接断裂。</li>
+<li><code>CTL-004 §6.2.1</code>（导航 ABI 对拍）：本文 N-4/N-5
+涉及的磁/光流/重锚语义已在该节的逐拍证据中体现；本文不重复其数字。</li>
+<li><code>AGENTS.md</code>（导航 ABI 是控制层记账）：本文 D-N3/D-N4
+的结论与其"导航层状态 vs 控制层记账"边界一致。</li>
+</ul>
+<hr />
+<h2 id="8-参考">8. 参考</h2>
+<ol type="1">
+<li>原始：<code>D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版\src\main.cpp</code>（5542
+行）、<code>include/</code>（14）、<code>platformio.ini</code>。</li>
+<li>当前：<code>TandemVec_FCS/src/main.cpp</code>、<code>navigation_task.cpp</code>、<code>sensor_imu.cpp</code>、<code>sensor_peripheral.cpp</code>、<code>flight_control.cpp</code>、<code>communication.cpp</code>、<code>ano_params.cpp</code>、<code>include/*.h</code>。</li>
+<li><code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code>（控制与安全域对照）。</li>
+<li><code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code>
+§6.2（导航对拍证据）。</li>
+<li><code>TandemVec_FCS/test_host/fw_sil/run_real_acceptance.py</code>、<code>run_coaxial_acceptance.sh</code>、<code>build_and_run_coaxial.sh</code>。</li>
+</ol>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-005-共轴机型原始固件对照-导航与系统.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
+</html>
