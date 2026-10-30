@@ -16,6 +16,7 @@
 | `acceptance_alloc0.log` | legacy 3×5 验收（8/9，唯一 FAIL `mag_nominal seed1` 22.069°） |
 | `acceptance_alloc2.log` | α-native 3×5 验收（8/9，同一 FAIL 场景 22.764°） |
 | `acceptance_alloc2_8x5.log` | α-native 8 profile×5 seeds 验收（**39/40**，唯一 FAIL 仍 `mag_nominal seed1` 22.764°） |
+| `acc_inertia15_0.log` / `acc_inertia15_2.log` | 真实惯量×1.5：legacy 与 α-native 同一失败集（mag_clean/mag_nominal hold 超限）；α-native 未引入额外惯量敏感 |
 
 ## 自算对照（ab_metrics.json，峰值/上升/超调）
 

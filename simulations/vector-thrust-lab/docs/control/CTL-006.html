@@ -282,6 +282,12 @@ identity 结论外推。</li>
 <td>α-native <strong>39/40</strong>（同 legacy 失败集，唯一 FAIL 仍为
 <code>mag_nominal seed1</code> 22.764°）</td>
 </tr>
+<tr>
+<td>惯量失配 ×1.5（SIL 3×5）</td>
+<td>legacy 与 α-native
+<strong>同一失败集</strong>（mag_clean/mag_nominal
+保持超限，nomag_degraded 通过）；α-native 未引入额外惯量敏感</td>
+</tr>
 </tbody>
 </table>
 <p>证据：<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-alpha-native-2026-10-31/</code>
@@ -609,5 +615,5 @@ A/B 一致不能外推到实机。<code>coax.alloc_mode=2</code>
 <code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:36</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:37</footer></article></body>
 </html>
