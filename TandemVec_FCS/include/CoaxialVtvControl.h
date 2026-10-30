@@ -14,13 +14,15 @@
  * @frame   存档系：滚转绕 x_b、俯仰绕 y_b、偏航绕 z_b（推力轴）
  * @units   角度 deg、角速率 deg/s、修正角 deg、偏航差速 us、时间 s
  * @note    ★ 增益/限幅/滤波口径对齐外部实飞工程 `VTVL_ElectricDualRotor_FCS`：
- *          att 4.25/0（±80，积分限 40）；rate 0.25/0.08（±10，积分限 5，
- *          微分滤波 0.2，输出滤波 0.25）；yaw 3.8/30（±180，积分限 50，
+ *          att 4.25/0（±80，积分限 40）；rate 0.25/0.08*0.005（±10，积分限 5，
+ *          微分滤波 0.2，输出滤波 0.25）；yaw 3.8/0.15（±180，积分限 50，
  *          阈值 40）。位置式 PID 的积分限幅/抗饱和语义由本文件 `CoaxialLegacyPid` 保证。
- *          RATE_MODE 下实飞工程每拍重置 rate PID，本实现同样处理（速率环
- *          退化为纯 P），不要“顺手”改成积分保持。
+ *          ATTITUDE_MODE 走串级：姿态外环 → 目标角速率 → 速率内环；RATE_MODE
+ *          跳过外环、杆量直接给目标角速率，速率内环照常跟踪并保留积分/微分/
+ *          滤波状态（每拍只复位两个角度 PID，避免切回姿态模式携带旧积分）。
+ *          速率环 D 项当前 kd=0（等效 PI），参数保留，不改变串级结构。
  *          参数仍是外部工程的 MODEL-DEFAULT，未做本机台架/实机再标定。
- * @redline 修正角 ±10°、偏航差速 ±180 µs、RATE_MODE 每拍复位速率 PID
+ * @redline 修正角 ±10°、偏航差速 ±180 µs、RATE_MODE 只复位角度外环
  * @test    test_host/test_coaxial_vtv_control.cpp
  * @see     include/ActuatorOutputMap.h、CTL-003 §2.2
  */
@@ -66,8 +68,11 @@ struct CoaxialVtvInput
     bool rate_mode = false;
     float roll_rate_target_dps = 0.0f;
     float pitch_rate_target_dps = 0.0f;
-    bool attitude_active = false; // 解锁 && !手动TVC && 油门有效
-    bool yaw_active = false;      // 解锁 && 油门有效（手动TVC 也保留偏航）
+    bool attitude_active = false; // 闭环激活：解锁 && !手动TVC（不设油门门控）
+    bool attitude_integral_active = false; // 姿态外环积分：ATTITUDE && 油门>1100
+    bool rate_integral_active = false;     // 速率内环积分：两模式 && 油门>1100
+    bool yaw_active = false;      // 偏航闭环：解锁 && 油门>1050
+    bool yaw_integral_active = false;      // 偏航积分：解锁 && 油门>1100
     bool manual_tvc = false;
     float manual_roll_deg = 0.0f;
     float manual_pitch_deg = 0.0f;
@@ -86,6 +91,17 @@ struct CoaxialVtvOutput
 inline float coaxialVtvClamp(const float v, const float lo, const float hi)
 {
     return v < lo ? lo : (v > hi ? hi : v);
+}
+
+// 原始实飞工程杆量→目标角速率：mapFloat(raw, 988, 2012, ∓max, ±max)，
+// 即 (us-1500)/512*max_dps；俯仰轴反向。RATE_MODE 的滚转/俯仰与偏航共用。
+// 注意：实飞工程 RATE 杆量是 ±80 dps 线性，不是 600 dps 曲线。
+inline float coaxialVtvStickToRateDps(const float us, const float max_dps,
+                                      const bool invert)
+{
+    const float n = coaxialVtvClamp((us - 1500.0f) / 512.0f, -1.0f, 1.0f);
+    const float v = n * max_dps;
+    return invert ? -v : v;
 }
 
 // 与实飞工程 ComplementaryFilter 相同的一阶滤波公式。
@@ -293,26 +309,36 @@ public:
             return out;
         }
 
-        // 内环/偏航 PID 的积分使能：与实飞工程 manage_pid_integrals 一致。
-        roll_rate_pid_.setIntegralEnable(in.attitude_active && !in.rate_mode);
-        pitch_rate_pid_.setIntegralEnable(in.attitude_active && !in.rate_mode);
-        yaw_rate_pid_.setIntegralEnable(in.yaw_active);
-        roll_angle_pid_.setIntegralEnable(in.attitude_active && !in.rate_mode);
-        pitch_angle_pid_.setIntegralEnable(in.attitude_active && !in.rate_mode);
+        // 积分使能对齐实飞工程 manage_pid_integrals：外环积分只在 ATTITUDE
+        // 且油门>1100；内环积分在 ATTITUDE/RATE 两种模式都使能（油门>1100）；
+        // 偏航积分按油门>1100。RATE 下禁用内环积分是本次修正掉的错误语义。
+        roll_rate_pid_.setIntegralEnable(in.rate_integral_active);
+        pitch_rate_pid_.setIntegralEnable(in.rate_integral_active);
+        yaw_rate_pid_.setIntegralEnable(in.yaw_integral_active);
+        roll_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
+                                          !in.rate_mode);
+        pitch_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
+                                           !in.rate_mode);
 
         // ---- 滚转/俯仰 ----
         if (!in.attitude_active || in.manual_tvc)
         {
-            resetRollPitch();
-            out.roll_correction_deg = coaxialVtvClamp(
+            // 原始 execute_attitude_controller 的 else 分支：复位角度/速率 PID，
+            // 摇杆目标角映射到修正角后仍过 α0.25 输出滤波（滤波状态不清），
+            // 因此手动 TVC 切换没有阶跃。
+            resetAngleRatePids();
+            const float manual_roll = coaxialVtvClamp(
                 in.manual_roll_deg, -params_.max_correction_deg,
                 params_.max_correction_deg);
-            out.pitch_correction_deg = coaxialVtvClamp(
+            const float manual_pitch = coaxialVtvClamp(
                 in.manual_pitch_deg, -params_.max_correction_deg,
                 params_.max_correction_deg);
-            out.saturated =
-                (out.roll_correction_deg != in.manual_roll_deg) ||
-                (out.pitch_correction_deg != in.manual_pitch_deg);
+            out.roll_correction_deg = roll_corr_filter_.update(
+                manual_roll, params_.correction_filter_alpha);
+            out.pitch_correction_deg = pitch_corr_filter_.update(
+                manual_pitch, params_.correction_filter_alpha);
+            out.saturated = (manual_roll != in.manual_roll_deg) ||
+                            (manual_pitch != in.manual_pitch_deg);
         }
         else
         {
@@ -320,9 +346,11 @@ public:
             float pitch_rate_ref = 0.0f;
             if (in.rate_mode)
             {
-                // 实飞工程 RATE_MODE 每拍 reset 外环/内环，再直接给目标速率；
-                // 速率环因此退化为纯 P（不累计积分/微分历史）。
-                resetRollPitch();
+                // RATE_MODE 跳过姿态外环，只清外环历史；速率内环 PID 的积分、
+                // 微分历史与两级滤波（α0.85 目标、α0.25 输出）全部跨拍保持，
+                // 与原始 execute_attitude_controller 的 RATE 分支一致。
+                roll_angle_pid_.reset();
+                pitch_angle_pid_.reset();
                 roll_rate_ref = in.roll_rate_target_dps;
                 pitch_rate_ref = in.pitch_rate_target_dps;
             }
@@ -414,16 +442,23 @@ private:
             params_.pid_derivative_filter_alpha);
     }
 
+    // 全量复位：仅用于输入非法/控制器重建（会丢掉滤波状态）。
     void resetRollPitch()
+    {
+        resetAngleRatePids();
+        roll_rate_filter_.reset();
+        pitch_rate_filter_.reset();
+        roll_corr_filter_.reset();
+        pitch_corr_filter_.reset();
+    }
+
+    // 原始 else 分支的复位范围：角度+速率 PID；保留 α0.85/α0.25 滤波状态。
+    void resetAngleRatePids()
     {
         roll_angle_pid_.reset();
         pitch_angle_pid_.reset();
         roll_rate_pid_.reset();
         pitch_rate_pid_.reset();
-        roll_rate_filter_.reset();
-        pitch_rate_filter_.reset();
-        roll_corr_filter_.reset();
-        pitch_corr_filter_.reset();
     }
 
     CoaxialVtvParams params_{};

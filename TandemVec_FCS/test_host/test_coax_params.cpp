@@ -7,8 +7,9 @@
  *     flight_control.cpp 共轴分支内的硬编码字面量（不是"约等于"）；
  *  2) 参数注册表 coax.* 的 25 个名称、顺序与 BFS_COAX_PARAM_LIST 完全一致，
  *     名称 ≤20B，按 MAVLink 规则截断 15B 后唯一（param_id 冲突会让 QGC 写错参数）；
- *  3) 用默认参数构造的控制器跑 10 拍基准序列，输出位型逐拍等于改造前控制器
- *     （golden 由改造前源码生成），证明"只可标定化、默认行为零漂移"。
+ *  3) 用默认参数构造的控制器跑 10 拍基准序列，输出位型逐拍等于 2026-10-30
+ *     串级语义修正后的 golden（RATE 只复位角度外环、内环积分两模式使能、
+ *     手动 TVC 输出过 α0.25 滤波），锁定默认参数路径不再漂移。
  *
  * 纯平台无关：只依赖 include/FlightCtrlParams.h + include/CoaxialVtvControl.h。
  */
@@ -214,16 +215,18 @@ struct OutBits
     int saturated;
 };
 
-// golden：改造前源码（默认参数）逐拍输出的 float 位型，必须逐位保持
+// golden：2026-10-30 串级语义修正后（默认参数）逐拍浮点位型。
+// 与修正前的差异：RATE 步不再清零速率内环/两级滤波，手动 TVC 输出过 α0.25
+// 滤波；由修正后的控制器生成后冻结，后续改动必须显式说明理由并重生成。
 const OutBits kGolden[kSeqLen] = {
     {1, 0x00000000u, 0x00000000u, 0x00000000u, 0},
     {1, 0x3F90BB30u, 0x3F90BB30u, 0x00000000u, 0},
     {1, 0xBE6E2240u, 0xBE6E2240u, 0x00000000u, 0},
     {1, 0xBE4E27CDu, 0xBC1D7830u, 0x421E0000u, 0},
-    {1, 0x3FCC0000u, 0xBF880000u, 0x3FBFFFFFu, 0},
-    {1, 0x40800000u, 0xC0400000u, 0x3FBFFFFFu, 0},
-    {1, 0x40200000u, 0xC0200000u, 0x3FBFFFFFu, 0},
-    {1, 0x40214CECu, 0xC0214CECu, 0x43340000u, 1},
+    {1, 0x3FAC7763u, 0xBF7FD948u, 0x3FBFFFFFu, 0},
+    {1, 0x4000ACC5u, 0xBFBFF17Bu, 0x3FBFFFFFu, 0},
+    {1, 0x408040CAu, 0xC067FA8Eu, 0x3FBFFFFFu, 0},
+    {1, 0x406BDC57u, 0xC058BA9Fu, 0x43340000u, 1},
     {0, 0x00000000u, 0x00000000u, 0x00000000u, 0},
     {1, 0x3E6791E7u, 0xBE6791E7u, 0x00000000u, 0},
 };
@@ -247,7 +250,12 @@ void runSequence(const bfs::CoaxialVtvParams &p, OutBits out[kSeqLen])
         in.rate_mode = s.rate_mode;
         in.manual_tvc = s.manual_tvc;
         in.attitude_active = s.att;
+        // 旧语义映射（原始 manage_pid_integrals）：外环积分只在 ATTITUDE、
+        // 内环两模式都积分、偏航按油门>1100。
+        in.attitude_integral_active = s.att && !s.rate_mode;
+        in.rate_integral_active = s.att;
         in.yaw_active = s.yaw;
+        in.yaw_integral_active = s.yaw;
         in.manual_roll_deg = s.mr;
         in.manual_pitch_deg = s.mp;
         in.dt_s = s.dt;

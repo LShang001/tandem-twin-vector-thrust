@@ -28,7 +28,10 @@ struct CoaxRefInput
     float roll_rate_target_dps;
     float pitch_rate_target_dps;
     int attitude_active;
+    int attitude_integral_active;
+    int rate_integral_active;
     int yaw_active;
+    int yaw_integral_active;
     int manual_tvc;
     float manual_roll_deg;
     float manual_pitch_deg;

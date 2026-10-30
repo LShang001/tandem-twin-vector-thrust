@@ -2170,21 +2170,27 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   control_in.rate_pitch_dps = current_omega_dps_body_filtered.y;
   control_in.rate_yaw_dps = current_omega_dps_body_filtered.z;
   control_in.rate_mode = (inputs.attitude_mode == RATE_MODE);
-  control_in.roll_rate_target_dps = rcRateCurve(
-      rcNormFromUs(inputs.roll_raw), kFlightCtrlParams.rc_rate,
-      kFlightCtrlParams.rc_expo[0], kFlightCtrlParams.rc_super[0],
-      MAX_MANUAL_rollRATE);
-  control_in.pitch_rate_target_dps = -rcRateCurve(
-      rcNormFromUs(inputs.pitch_raw), kFlightCtrlParams.rc_rate,
-      kFlightCtrlParams.rc_expo[1], kFlightCtrlParams.rc_super[1],
-      MAX_MANUAL_pitchRATE);
-  control_in.yaw_rate_target_dps = rcRateCurve(
-      rcNormFromUs(inputs.yaw_raw), kFlightCtrlParams.rc_rate,
-      kFlightCtrlParams.rc_expo[2], kFlightCtrlParams.rc_super[2],
-      MAX_MANUAL_yawRATE);
-  control_in.attitude_active = inputs.is_unlocked && !inputs.is_manual_tvc &&
-                               inputs.throttle_raw > 1050.0f;
+  // 杆量→目标角速率：恢复实飞工程线性 ±max_target_rate(80 dps) 口径
+  // （mapFloat(raw,988,2012,∓80,±80)），不用 TandemVec 的 600 dps 曲线；
+  // 俯仰轴推杆=低头，取反。地面/未解锁时也保持同一映射，由闭环激活门控。
+  control_in.roll_rate_target_dps = bfs::coaxialVtvStickToRateDps(
+      inputs.roll_raw, coax.ctrl.max_target_rate_dps, false);
+  control_in.pitch_rate_target_dps = bfs::coaxialVtvStickToRateDps(
+      inputs.pitch_raw, coax.ctrl.max_target_rate_dps, true);
+  control_in.yaw_rate_target_dps = bfs::coaxialVtvStickToRateDps(
+      inputs.yaw_raw, coax.ctrl.max_target_rate_dps, false);
+  // 闭环激活只由解锁与手动 TVC 决定（原始 execute_attitude_controller 口径，
+  // 不含油门门控）；油门只门控积分：姿态外环只在 ATTITUDE 且油门>1100 积分，
+  // 速率内环在 ATTITUDE/RATE 两模式都积分（对齐原始 manage_pid_integrals）。
+  const bool coax_loop_active = inputs.is_unlocked && !inputs.is_manual_tvc;
+  const bool coax_throttle_integral = inputs.throttle_raw > 1100.0f;
+  control_in.attitude_active = coax_loop_active;
+  control_in.attitude_integral_active =
+      coax_loop_active && coax_throttle_integral &&
+      inputs.attitude_mode == ATTITUDE_MODE;
+  control_in.rate_integral_active = coax_loop_active && coax_throttle_integral;
   control_in.yaw_active = inputs.is_unlocked && inputs.throttle_raw > 1050.0f;
+  control_in.yaw_integral_active = inputs.is_unlocked && coax_throttle_integral;
   control_in.manual_tvc = inputs.is_manual_tvc;
   control_in.manual_roll_deg = mapFloat(
       inputs.roll_raw, 988.0f, 2012.0f, -coax.ctrl.max_correction_deg,

@@ -78,7 +78,11 @@ int main()
     in.roll_rate_target_dps = 25.0f * std::sin(1.3f * t);
     in.pitch_rate_target_dps = -20.0f * std::cos(1.7f * t);
     in.attitude_active = (mode == 0 || mode == 1);
+    // 序列模拟油门>1100：外环仅 ATTITUDE 积分，内环两模式积分。
+    in.attitude_integral_active = (mode == 0);
+    in.rate_integral_active = (mode == 0 || mode == 1);
     in.yaw_active = (mode != 3);
+    in.yaw_integral_active = (mode != 3);
     in.manual_tvc = (mode == 2);
     in.manual_roll_deg = 4.0f * std::sin(2.0f * t);
     in.manual_pitch_deg = -3.0f * std::cos(2.2f * t);
@@ -95,7 +99,10 @@ int main()
     ref_in.roll_rate_target_dps = in.roll_rate_target_dps;
     ref_in.pitch_rate_target_dps = in.pitch_rate_target_dps;
     ref_in.attitude_active = in.attitude_active ? 1 : 0;
+    ref_in.attitude_integral_active = in.attitude_integral_active ? 1 : 0;
+    ref_in.rate_integral_active = in.rate_integral_active ? 1 : 0;
     ref_in.yaw_active = in.yaw_active ? 1 : 0;
+    ref_in.yaw_integral_active = in.yaw_integral_active ? 1 : 0;
     ref_in.manual_tvc = in.manual_tvc ? 1 : 0;
     ref_in.manual_roll_deg = in.manual_roll_deg;
     ref_in.manual_pitch_deg = in.manual_pitch_deg;

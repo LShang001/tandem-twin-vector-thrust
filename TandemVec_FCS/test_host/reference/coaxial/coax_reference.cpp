@@ -42,16 +42,24 @@ float clampf(float v, float lo, float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+void reset_angle_rate_pids();
+
 void reset_roll_pitch()
+{
+    reset_angle_rate_pids();
+    roll_angle_filter.reset();
+    pitch_angle_filter.reset();
+    roll_output_filter.reset();
+    pitch_output_filter.reset();
+}
+
+// 原始 else 分支的复位范围：角度+速率 PID；滤波状态保留。
+void reset_angle_rate_pids()
 {
     roll_angle_pid.reset();
     pitch_angle_pid.reset();
     roll_rate_pid.reset();
     pitch_rate_pid.reset();
-    roll_angle_filter.reset();
-    pitch_angle_filter.reset();
-    roll_output_filter.reset();
-    pitch_output_filter.reset();
 }
 } // namespace
 
@@ -76,19 +84,23 @@ void coax_ref_update(const CoaxRefInput *in, CoaxRefOutput *out)
     out->pitch_correction_deg = 0.0f;
     out->yaw_diff_us = 0.0f;
 
-    roll_rate_pid.setIntegralEnable(in->attitude_active && !in->rate_mode);
-    pitch_rate_pid.setIntegralEnable(in->attitude_active && !in->rate_mode);
-    roll_angle_pid.setIntegralEnable(in->attitude_active && !in->rate_mode);
-    pitch_angle_pid.setIntegralEnable(in->attitude_active && !in->rate_mode);
-    yaw_rate_pid.setIntegralEnable(in->yaw_active != 0);
+    // 原始 manage_pid_integrals：外环积分只在 ATTITUDE 且油门>1100；内环积分
+    // ATTITUDE/RATE 两模式都使能（油门>1100）；偏航积分油门>1100。
+    roll_rate_pid.setIntegralEnable(in->rate_integral_active != 0);
+    pitch_rate_pid.setIntegralEnable(in->rate_integral_active != 0);
+    roll_angle_pid.setIntegralEnable(in->attitude_integral_active != 0 &&
+                                     !in->rate_mode);
+    pitch_angle_pid.setIntegralEnable(in->attitude_integral_active != 0 &&
+                                      !in->rate_mode);
+    yaw_rate_pid.setIntegralEnable(in->yaw_integral_active != 0);
 
     if (!in->attitude_active || in->manual_tvc)
     {
-        reset_roll_pitch();
-        out->roll_correction_deg =
-            clampf(in->manual_roll_deg, -10.0f, 10.0f);
-        out->pitch_correction_deg =
-            clampf(in->manual_pitch_deg, -10.0f, 10.0f);
+        reset_angle_rate_pids();
+        out->roll_correction_deg = roll_output_filter.filter(
+            clampf(in->manual_roll_deg, -10.0f, 10.0f));
+        out->pitch_correction_deg = pitch_output_filter.filter(
+            clampf(in->manual_pitch_deg, -10.0f, 10.0f));
     }
     else
     {
@@ -96,7 +108,9 @@ void coax_ref_update(const CoaxRefInput *in, CoaxRefOutput *out)
         float pitch_rate_ref = 0.0f;
         if (in->rate_mode)
         {
-            reset_roll_pitch();
+            // 只复位被跳过的角度外环；速率内环 PID/滤波状态跨拍保持。
+            roll_angle_pid.reset();
+            pitch_angle_pid.reset();
             roll_rate_ref = in->roll_rate_target_dps;
             pitch_rate_ref = in->pitch_rate_target_dps;
         }

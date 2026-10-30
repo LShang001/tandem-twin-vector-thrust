@@ -160,7 +160,7 @@ PASS</strong>，不是文档写的 15/15：<code>mag_nominal</code> seed1
 <code>resetRollPitch()</code> 把速率环 PID
 与两级滤波一起清零、且禁用速率环积分；目标速率由线性 ±80°/s 改为曲线满杆
 333°/s（偏航 222°/s）。原固件只清外环、速率环积分持续、目标 ±80°/s</td>
-<td>§3 D1／D2／D4</td>
+<td>§3 D1／D2／D4；<strong>2026-10-30 已修复（§10）</strong></td>
 </tr>
 <tr>
 <td>C-5</td>
@@ -486,21 +486,21 @@ dt（<code>CoaxialVtvControl.h:225-235</code>）</td>
 <td><code>unlocked &amp;&amp; !manual_tvc</code>（<code>:5108</code>）</td>
 <td>另加
 <code>throttle_raw&gt;1050</code>（<code>flight_control.cpp:2187</code>）</td>
-<td>差异（D7）</td>
+<td>差异（D7）→ 已修复（§10）</td>
 </tr>
 <tr>
 <td>积分使能</td>
 <td>全轴 <code>throttle&gt;1100</code>（<code>:4344-4373</code>）</td>
 <td>1050，且速率环在 RATE_MODE
 禁用（<code>CoaxialVtvControl.h:297</code>）</td>
-<td>差异（D2／D10）</td>
+<td>差异（D2／D10）→ 已修复（§10）</td>
 </tr>
 <tr>
 <td>RATE 目标速率</td>
 <td>线性 ±512 → ±80°/s（<code>:5155-5156</code>）</td>
 <td><code>rcRateCurve</code> 满杆
 333°/s（横滚/俯仰）、222°/s（偏航）（<code>flight_control.cpp:2174-2186</code>）</td>
-<td>差异（D4）</td>
+<td>差异（D4）→ 已修复（§10）</td>
 </tr>
 <tr>
 <td>RATE 复位范围</td>
@@ -508,20 +508,20 @@ dt（<code>CoaxialVtvControl.h:225-235</code>）</td>
 <code>rollAnglePID/pitchAnglePID.reset()</code></td>
 <td><code>resetRollPitch()</code> 清 4 PID＋4
 滤波器（<code>CoaxialVtvControl.h:321-328</code>、<code>:417-427</code>）</td>
-<td><strong>语义差异</strong>（D1）</td>
+<td><strong>语义差异</strong>（D1）→ 已修复（§10）</td>
 </tr>
 <tr>
 <td>手动 TVC</td>
 <td><code>map(±30°→±10°)</code>＋α=0.25（<code>:5173-5185</code>）</td>
 <td>摇杆直接
 <code>map(→±10°)</code>，无滤波（<code>flight_control.cpp:2191-2196</code>）</td>
-<td>差异（D3）</td>
+<td>差异（D3）→ 输出滤波已修复（§10）；CH8 极性仍为安全反逻辑</td>
 </tr>
 <tr>
 <td>偏航目标</td>
 <td><code>map(raw-1500,±512,±80)</code>（<code>:5201</code>）</td>
 <td><code>rcRateCurve</code> 满杆 222°/s（<code>:2182-2186</code>）</td>
-<td>差异（D4）</td>
+<td>差异（D4）→ 已修复（§10）</td>
 </tr>
 <tr>
 <td>偏航门控</td>
@@ -729,8 +729,10 @@ N，<code>throttle=F/14×100</code>（<code>main.cpp:4555-4582</code>）</td>
 </table>
 <hr />
 <h2 id="3-关键差异明细d1d15">3. 关键差异明细（D1–D15）</h2>
-<h3 id="d1-rate_mode-每拍复位速率环p0与-d2d4-合并">D1 RATE_MODE
-每拍复位速率环（P0，与 D2／D4 合并）</h3>
+<h3
+id="d1-rate_mode-每拍复位速率环p0与-d2d4-合并2026-10-30-已修复见-10">D1
+RATE_MODE 每拍复位速率环（P0，与 D2／D4 合并；2026-10-30 已修复，见
+§10）</h3>
 <ul>
 <li><strong>判定</strong>：语义差异／功能降级。</li>
 <li><strong>原始</strong>（<code>main.cpp:5140-5172</code>）：RATE
@@ -756,8 +758,9 @@ SIL/台架覆盖。若实飞误切，姿态响应显著变软且带静差——<
 或上锁告警。同时修正 <code>CoaxialVtvControl.h:20/:23/:323</code> 与
 CTL-003:39 的"实飞工程每拍复位速率 PID"错误注释。</li>
 </ul>
-<h3 id="d2-rate_mode-速率环积分被禁用p0并入-d1">D2 RATE_MODE
-速率环积分被禁用（P0，并入 D1）</h3>
+<h3 id="d2-rate_mode-速率环积分被禁用p0并入-d12026-10-30-已修复见-10">D2
+RATE_MODE 速率环积分被禁用（P0，并入 D1；2026-10-30 已修复，见
+§10）</h3>
 <ul>
 <li><strong>原始</strong>：<code>manage_pid_integrals</code>（<code>main.cpp:4344-4373</code>）令
 rate PID 积分使能 = <code>attitude_control_active</code>，RATE_MODE
@@ -766,8 +769,8 @@ rate PID 积分使能 = <code>attitude_control_active</code>，RATE_MODE
 的积分使能 = <code>attitude_active &amp;&amp; !rate_mode</code>。</li>
 <li><strong>后果</strong>：RATE_MODE 无积分（与 D1 的纯 P 叠加）。</li>
 </ul>
-<h3 id="d4-rate_mode-目标速率量级p0并入-d1">D4 RATE_MODE
-目标速率量级（P0，并入 D1）</h3>
+<h3 id="d4-rate_mode-目标速率量级p0并入-d12026-10-30-已修复见-10">D4
+RATE_MODE 目标速率量级（P0，并入 D1；2026-10-30 已修复，见 §10）</h3>
 <ul>
 <li><strong>原始</strong>：线性
 <code>map(raw, 988–2012, ±80)</code>；偏航
@@ -781,7 +784,8 @@ D1 的 0.21× 增益 ⇒
 大杆量下内环直接饱和（±10°），小杆量下响应又明显偏弱；曲线形状还引入
 expo 非线性。</li>
 </ul>
-<h3 id="d3-手动-tvcp2">D3 手动 TVC（P2）</h3>
+<h3 id="d3-手动-tvcp22026-10-30-输出滤波已修复见-10">D3 手动
+TVC（P2；2026-10-30 输出滤波已修复，见 §10）</h3>
 <ul>
 <li><strong>原始</strong>（<code>main.cpp:4159</code>、<code>:5173-5185</code>）：<code>raw[7] &lt; 1200</code>
 为手动 TVC；回中量由
@@ -1179,9 +1183,9 @@ diff），属<strong>验证口径变更导致的证据漂移</strong>，同时�
 <td>A-1</td>
 <td><strong>P0</strong></td>
 <td>RATE_MODE 语义不等价（D1/D2/D4）</td>
-<td>恢复"只复位外环＋速率环积分持续＋目标 ±80°/s"；或在共轴 profile
-显式禁用 RATE_MODE 并上锁告警</td>
-<td>新增 RATE_MODE 参考测试（以原始实现为独立参考），并加 SIL 场景</td>
+<td><strong>已处置（2026-10-30）</strong>：恢复"只复位外环＋内环积分两模式使能＋线性
+±80°/s"，不改增益/门限；详见 §10</td>
+<td>cxreq 600 拍 0 误差；cvc T9/T10；8×5 SIL 回归</td>
 </tr>
 <tr>
 <td>A-2</td>
@@ -1228,8 +1232,9 @@ VER-002/CTL-003</td>
 <td>A-7</td>
 <td><strong>P1</strong></td>
 <td>姿态环 <code>throttle≤1050</code> 退出（D7）</td>
-<td>改为仅积分受油门门控，姿态 P 通路常开</td>
-<td>收油下降 SIL 场景</td>
+<td><strong>已处置（2026-10-30，§10）</strong>：闭环激活只看解锁/手动
+TVC，姿态 P 通路常开；积分仍按 &gt;1100 门控</td>
+<td>cxreq + 8×5 SIL</td>
 </tr>
 <tr>
 <td>A-8</td>
@@ -1243,15 +1248,17 @@ VER-002/CTL-003</td>
 <td>A-9</td>
 <td>P2</td>
 <td>手动 TVC 无滤波、极性反转（D3）</td>
-<td>补 α=0.25 输出滤波；把 ch8 极性写入机型配置/遥控器说明</td>
-<td>参考测试 + 台架</td>
+<td><strong>滤波已补（2026-10-30，§10）</strong>；CH8 极性仍保留
+&gt;1750 安全反逻辑，需写入机型配置说明</td>
+<td>cvc T4；台架待做</td>
 </tr>
 <tr>
 <td>A-10</td>
 <td>P2</td>
 <td>yaw 积分门 1050 vs 1100（D10）</td>
-<td>对齐原始 1100，或记录为有意差异</td>
-<td>代码评审</td>
+<td><strong>已对齐（2026-10-30，§10）</strong>：积分 &gt;1100、闭环仍
+&gt;1050</td>
+<td>代码评审 + cxreq</td>
 </tr>
 <tr>
 <td>A-11</td>
@@ -1468,5 +1475,157 @@ m。</li>
 <code>57be7ef</code> + 他人并发未提交改动）；控制语义与 HEAD
 一致（§1.1）。所有对照实验在 detached worktree
 中完成，未触碰工作树产物。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
+<hr />
+<h2 id="10-2026-10-30-修复记录控制模式与手感对齐原始固件">10. 2026-10-30
+修复记录：控制模式与手感对齐原始固件</h2>
+<p>用户要求：<strong>控制模式和控制手感保持与原始实飞固件一致，包括角速度模式（RATE）和姿态模式（ATTITUDE）</strong>；并确认内环保留完整
+PID 结构、当前 D=0 等价 PI。据此处置
+A-1/A-3/A-7/A-9/A-10，<strong>不改任何增益、限幅门限、混控比例与安全阈值</strong>。</p>
+<h3 id="101-控制语义已修改">10.1 控制语义（已修改）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原始固件</th>
+<th>修复后实现</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ATTITUDE 串级</td>
+<td>姿态外环 → 目标角速率 → 速率内环</td>
+<td>同</td>
+<td><code>CoaxialVtvControl.h</code>；cxreq 600 拍 max_err=0</td>
+</tr>
+<tr>
+<td>RATE 串级</td>
+<td>跳过外环、摇杆给目标角速率、内环照常跟踪</td>
+<td>同</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>RATE 复位范围</td>
+<td>只
+<code>rollAnglePID.reset()</code>/<code>pitchAnglePID.reset()</code></td>
+<td>只复位两个角度 PID；速率 PID 积分/微分、α0.85 目标滤波、α0.25
+输出滤波跨拍保持</td>
+<td>cvc T10；cxreq RATE 段 0 误差</td>
+</tr>
+<tr>
+<td>内环积分</td>
+<td><code>attitude_control_active</code>（ATTITUDE/RATE
+都积分，油门&gt;1100）</td>
+<td><code>rate_integral_active</code>，两模式使能、油门&gt;1100</td>
+<td>cvc T10；cxreq</td>
+</tr>
+<tr>
+<td>外环积分</td>
+<td>仅 ATTITUDE 且油门&gt;1100</td>
+<td><code>attitude_integral_active</code></td>
+<td>cxreq</td>
+</tr>
+<tr>
+<td>偏航积分/闭环</td>
+<td>积分油门&gt;1100；闭环油门&gt;1050</td>
+<td>同（拆分两个标志）</td>
+<td>cxreq</td>
+</tr>
+<tr>
+<td>闭环激活</td>
+<td><code>unlocked &amp;&amp; !manual_tvc</code>（不含油门）</td>
+<td>同（<code>attitude_active</code> 只由解锁与手动决定）</td>
+<td>cxreq E4</td>
+</tr>
+<tr>
+<td>RATE 杆量</td>
+<td><code>map(raw,988,2012,∓80,±80)</code>（俯仰反向）</td>
+<td>同：<code>(us-1500)/512×max_target_rate_dps</code>，俯仰反向、偏航同</td>
+<td>cvc T9</td>
+</tr>
+<tr>
+<td>手动 TVC 输出</td>
+<td><code>map(±30°→±10°)</code> 后过 α0.25 滤波（状态不清）</td>
+<td>同；滤波状态保留</td>
+<td>cvc T4（首拍 1.0/-0.75，收敛 4.0/-3.0）</td>
+</tr>
+<tr>
+<td>未激活/手动复位范围</td>
+<td>只清角度+速率 PID，滤波状态保留</td>
+<td>同（<code>resetAngleRatePids()</code>）</td>
+<td>cxreq E3/E4</td>
+</tr>
+</tbody>
+</table>
+<h3 id="102-仍存在的差异未改需台架实飞或单独授权">10.2
+仍存在的差异（未改，需台架/实飞或单独授权）</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+<th>原因/处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CH8 手动 TVC 极性</td>
+<td>原始 <code>raw[7]&lt;1200</code> 为手动；当前 <code>&gt;1750</code>
+为手动</td>
+<td>2026-08-10
+用户明确要求的安全反逻辑，保留；写入机型配置/遥控器说明</td>
+</tr>
+<tr>
+<td>姿态误差算法（D5）</td>
+<td>原始恒小角近似 <code>2·sign(qw)·q</code>；当前 `</td>
+<td>q_v</td>
+</tr>
+<tr>
+<td>陀螺反馈滤波（D6）</td>
+<td>原始单级 α=0.3；当前两级 α=0.4→0.99</td>
+<td>属共享 EKF/传感器层，改它会同时改变 TandemVec
+与导航；需台架频响数据后再定</td>
+</tr>
+<tr>
+<td>重力常数（D14）</td>
+<td>9.79 vs EKF Somigliana ≈9.806</td>
+<td>0.2%，属共享导航层</td>
+</tr>
+<tr>
+<td>45° 锁电机（D9）、空中断链（D8）</td>
+<td>新增安全行为/策略反转</td>
+<td>与"手感"无关的安全语义，保留待专门评审</td>
+</tr>
+<tr>
+<td>速率遥测 <code>omega_ref_dps</code></td>
+<td>仍按 TandemVec 600 dps 曲线显示</td>
+<td>仅遥测显示口径，不影响共轴控制输出</td>
+</tr>
+</tbody>
+</table>
+<h3 id="103-验证口径">10.3 验证口径</h3>
+<ul>
+<li>口径说明：<code>cxreq</code> 的 0 误差是"当前实现 vs
+按原始语义重写的宿主参考体"对拍，证明两条实现路径一致，不替代原始固件二进制/实飞逐波形对比；语义依据是
+§10.1
+的逐行对照（<code>src/main.cpp:4344-4361</code>、<code>:5099-5186</code>、<code>:5199-5215</code>、<code>:4159-4162</code>）。</li>
+<li>宿主：<code>run_all.sh</code> 全绿（cvc/cparams/cxreq 均通过；422
+项参数断言、cxreq 600 拍 0 误差）。</li>
+<li>固件：<code>pio run -e TandemVec_FCS</code>、<code>pio run -e CoaxialVTVL</code>
+均 SUCCESS。</li>
+<li>SIL：<code>run_coaxial_suite.sh</code> 重跑 8 profiles×5 seeds + MC
+100 + sweep 18，证据落
+<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-fix-2026-10-30/</code>（summary.md
+/ acceptance.log / mc_current.* / sweep.json）。实测：验收
+<strong>39/40</strong>（唯一失败
+<code>mag_nominal seed1</code>，max_pitch=22.069°&gt;20°，roll
+8.17°、hold_end 0.96 m）；MC <strong>56/100</strong>（hold
+P50/P95=1.38/27.85 m，roll 1.67/13.43°，pitch 27.96/56.39°）；sweep
+<strong>15/18</strong>（<code>lever_low</code>
+45.04°、<code>iy_high</code> 35.37°、<code>combined_low</code> roll
+44.43°/pitch 36.96°）。与修复前基线（39/40、56/100、15/18）同集合，说明
+AUTO 定高/定点路径未受手动 ATTITUDE/RATE 修复影响；俯仰裕度 2.1°
+问题仍在。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 23:48</footer></article></body>
 </html>

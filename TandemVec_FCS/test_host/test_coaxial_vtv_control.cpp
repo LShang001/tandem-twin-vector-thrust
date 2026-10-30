@@ -15,8 +15,9 @@
  * @units   deg、deg/s、us、s
  * @note    6DOF plant 是简化 L1 模型（无气动/无电机滞后/无传感器），只验证
  *          控制律极性与闭环稳定性，不代表实机/台架结果。
- * @test    T1 零输入；T2 姿态 P 极性；T3 速率阻尼；T4 手动 TVC；
- *          T5 饱和；T6 偏航差速；T7 非法输入；T8 6DOF 闭环
+ * @test    T1 零输入；T2 姿态 P 极性；T3 速率阻尼；T4 手动 TVC（α0.25 滤波）；
+ *          T5 饱和；T6 偏航差速；T7 非法输入；T8 6DOF 闭环；T9 杆量映射；
+ *          T10 RATE 内环积分累积
  * @see     include/CoaxialVtvControl.h、include/ActuatorOutputMap.h、CTL-003 §2.2
  */
 #include <cmath>
@@ -52,7 +53,10 @@ static bfs::CoaxialVtvInput baseInput()
 {
   bfs::CoaxialVtvInput in;
   in.attitude_active = true;
+  in.attitude_integral_active = true;
+  in.rate_integral_active = true;
   in.yaw_active = true;
+  in.yaw_integral_active = true;
   in.dt_s = 0.005f;
   return in;
 }
@@ -104,16 +108,21 @@ int main()
     CHECK(out.pitch_correction_deg < 0.0f, "T3 pitch 速率阻尼");
   }
 
-  // T4 手动 TVC：直接映射手动修正，偏航差速 0，且积分复位。
+  // T4 手动 TVC：摇杆目标角映射后过 α0.25 输出滤波（原始 else 分支语义），
+  // 首拍 1.0/-0.75，持续输入收敛到 4.0/-3.0；偏航差速 0。
   {
     bfs::CoaxialVtvController c;
     auto in = baseInput();
     in.manual_tvc = true;
     in.manual_roll_deg = 4.0f;
     in.manual_pitch_deg = -3.0f;
-    const auto out = c.update(in);
-    CHECK(nearf(out.roll_correction_deg, 4.0f), "T4 手动 roll");
-    CHECK(nearf(out.pitch_correction_deg, -3.0f), "T4 手动 pitch");
+    const auto first = c.update(in);
+    CHECK(nearf(first.roll_correction_deg, 1.0f), "T4 手动 roll 首拍 1.0");
+    CHECK(nearf(first.pitch_correction_deg, -0.75f), "T4 手动 pitch 首拍 -0.75");
+    bfs::CoaxialVtvOutput out = first;
+    for (int i = 0; i < 40; ++i) out = c.update(in);
+    CHECK(nearf(out.roll_correction_deg, 4.0f), "T4 手动 roll 收敛");
+    CHECK(nearf(out.pitch_correction_deg, -3.0f), "T4 手动 pitch 收敛");
     CHECK(nearf(out.yaw_diff_us, 0.0f), "T4 手动 yaw=0");
     auto normal = baseInput();
     normal.error_roll_deg = 5.0f;
@@ -198,7 +207,10 @@ int main()
                               : 2.0f * static_cast<float>(RAD_TO_DEG);
       bfs::CoaxialVtvInput in;
       in.attitude_active = true;
+      in.attitude_integral_active = true;
+      in.rate_integral_active = true;
       in.yaw_active = true;
+      in.yaw_integral_active = true;
       in.dt_s = static_cast<float>(dt);
       in.error_roll_deg = sign_qw * static_cast<float>(q_err.x) * scale;
       in.error_pitch_deg = sign_qw * static_cast<float>(q_err.y) * scale;
@@ -252,6 +264,47 @@ int main()
     CHECK(std::fabs(omega.z * RAD_TO_DEG) < 5.0f, "T8 偏航速率收敛");
     CHECK(max_abs_roll < 30.0f && max_abs_pitch < 30.0f, "T8 姿态有界");
     CHECK(std::fabs(pos.z) < 3.0f, "T8 高度有界");
+  }
+
+  // T9 杆量→目标角速率线性映射（原始 mapFloat(raw,988,2012,∓80,±80)）。
+  {
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(988.0f, 80.0f, false), -80.0f),
+          "T9 988→-80 dps");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2012.0f, 80.0f, false), 80.0f),
+          "T9 2012→+80 dps");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1500.0f, 80.0f, false), 0.0f),
+          "T9 中位→0");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2012.0f, 80.0f, true), -80.0f),
+          "T9 俯仰反向");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1900.0f, 80.0f, false),
+                400.0f / 512.0f * 80.0f),
+          "T9 线性中点");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2100.0f, 80.0f, false), 80.0f),
+          "T9 越界钳位");
+  }
+
+  // T10 RATE 内环积分跨拍累积：两模式都使能；断开积分时输出停在 P 分量。
+  {
+    bfs::CoaxialVtvController a;
+    bfs::CoaxialVtvController b;
+    auto in = baseInput();
+    in.rate_mode = true;
+    in.roll_rate_target_dps = 30.0f;
+    in.rate_roll_dps = 0.0f;
+    bfs::CoaxialVtvOutput oa;
+    bfs::CoaxialVtvOutput ob;
+    for (int i = 0; i < 60; ++i)
+    {
+      oa = a.update(in);
+      in.rate_integral_active = false;
+      ob = b.update(in);
+      in.rate_integral_active = true;
+    }
+    CHECK(oa.roll_correction_deg > ob.roll_correction_deg + 0.5f,
+          "T10 RATE 内环积分持续累积");
+    CHECK(oa.roll_correction_deg > 7.5f && oa.roll_correction_deg < 10.2f,
+          "T10 积分累积叠加 P 分量（未饱和）");
+    CHECK(ob.roll_correction_deg > 0.0f, "T10 无积分仍有 P 响应");
   }
 
   if (g_fail == 0)
