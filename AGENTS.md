@@ -25,6 +25,8 @@ py -3.12 tools/sync-params.py --check  # 漂移检测
 # 测试
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
 node --test simulations/vector-thrust-lab/tests/propulsion.test.mjs # 单模块
+# 验证效率（2026-10-31 用户要求）：日常按改动范围只编/跑相关子测试，不每轮跑全量；
+# 全量 test_host/run_all.sh 与整套 SIL 矩阵留到里程碑提交前、跨模块改动或用户明确要求时。
 
 # 固件算法直调（仿真脚本直接调固件 EKF，不再复刻算法）
 bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh              # 生成共享库（导航+控制+参数，4 组 ABI，/tmp/tv_fw_algo）

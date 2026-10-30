@@ -158,7 +158,7 @@ liquid_rocket）、<code>feature_bits</code>（raw-imu、失联速度保持、
 </blockquote>
 <h3 id="32-参数注册表fw_param_">3.2
 参数注册表（<code>fw_param_*</code>）</h3>
-<p>直接复用固件 <code>ano_params.cpp</code> 的 <strong>158
+<p>直接复用固件 <code>ano_params.cpp</code> 的 <strong>164
 项注册表</strong>（与 GCS 0xE0–0xE3、MAVLink PARAM_SET
 同一份）：按名查找、读、写、写后 <code>applyFlightCtrlParams()</code>
 无扰同步。 ⇒ 仿真调参与实机在线调参语义一致，不再维护第二张参数表。
@@ -256,10 +256,10 @@ profile（<code>BFS_COAXIAL_VTVL</code> 等）+ <code>caps.vehicle</code>
 <ul>
 <li>构建：<code>bash test_host/fw_algo/build_fw_algo.sh</code> →
 <code>fw_algo.dll</code>（1.2 MB，冷构建约 4 min，增量约 3 s）。</li>
-<li><code>run_fw_gnc_demo.py</code>：caps（<code>gnc_abi=1</code>、<code>param_count=158</code>、<code>vehicle=tandemvec</code>；2026-10-30
-起表尾 +25 共轴）、参数往返、 上锁电机 &lt;5%、定高误差 0→5 m 时油门
-31.2%→43.1%、ABI 返回码 0/2/3/5 全通过； <code>python -m fwapi</code>
-selftest PASS。</li>
+<li><code>run_fw_gnc_demo.py</code>：caps（<code>gnc_abi=1</code>、<code>param_count=164</code>、<code>vehicle=tandemvec</code>；2026-10-30
+起表尾 +31 共轴（25 控制律 + 6 分配器））、参数往返、 上锁电机
+&lt;5%、定高误差 0→5 m 时油门 31.2%→43.1%、ABI 返回码 0/2/3/5 全通过；
+<code>python -m fwapi</code> selftest PASS。</li>
 <li><strong>SIL ↔︎
 直调库逐拍对拍</strong>（<code>sim/check_fw_gnc_parity.py</code> + SIL
 <code>--trace-ctrl</code>）： 5 个 profile（mag_clean 20 s；nominal /
@@ -569,5 +569,5 @@ profile 全部通过严格判据 （最差
 0.0057%）。<strong>余留</strong>：<code>alt_err</code>
 等诊断量在手动模式下是历史值，不能当控制等价信号。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-004-固件仿真一体化.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:42</footer></article></body>
 </html>

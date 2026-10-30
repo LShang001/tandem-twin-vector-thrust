@@ -189,7 +189,7 @@ DETA100，控制姿态源从"固件 EKF"变为"外部模块"，SIL 未覆盖该�
 <tr>
 <td>N-6</td>
 <td><strong>P1</strong></td>
-<td><strong>参数无持久化</strong>：158 项参数（133 + 25 共轴）可用
+<td><strong>参数无持久化</strong>：164 项参数（133 + 31 共轴）可用
 <code>0xE0/0xE1</code> 在线读写，但 <code>0xAB</code> 保存只改
 RAM，重启回默认</td>
 <td><code>src/ano_params.cpp:28</code>、<code>:370</code>、<code>:159-162</code>；<code>include/FlightCtrlParams.h</code></td>
@@ -464,7 +464,7 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="
 <td>参数 <code>gnss_lever_x/y/z</code> →
 <code>nav_ekf.gnss_lever_arm_body_m</code>（<code>navigation_task.cpp:2147</code>）</td>
 <td>新增</td>
-<td>参数表内（2026-10-30 起 158 项）</td>
+<td>参数表内（2026-10-31 起 164 项）</td>
 <td>默认 0，实机需按安装填写</td>
 </tr>
 <tr>
@@ -729,7 +729,7 @@ flash 导出</td>
 <td>参数系统</td>
 <td><strong>无</strong>（增益全是 <code>main.cpp</code>
 编译期常量，<code>VtvLParams.h</code> 不存在）</td>
-<td><code>src/ano_params.cpp</code> 158 项（133 + 25
+<td><code>src/ano_params.cpp</code> 164 项（133 + 31
 共轴，<code>static_assert</code> 锁
 <code>133 + BFS_COAX_PARAM_COUNT</code>）；<code>0xE0</code> 读 /
 <code>0xE1</code> 写（<code>:328/:380</code>）；<code>0xAB</code>
@@ -929,7 +929,7 @@ Hz → <code>CFG-MSG</code> NAV-PVT/NAV-EOE →
 <code>ubx.SetProtocol(kAuto)</code> 支持 UBX 优先、NMEA
 兜底（<code>main.cpp:163-166</code>）。<strong>判定：增强</strong>；副作用是首次上电多花探测时间（不阻塞），且对非
 u-blox 模块走 NMEA 合成 epoch 路径（该路径本次未做 SIL 验证）。</p>
-<h3 id="d-n5-参数系统158-项可改但不持久化">D-N5 参数系统：158
+<h3 id="d-n5-参数系统164-项可改但不持久化">D-N5 参数系统：164
 项可改，但不持久化</h3>
 <p><code>kAnoParams[]</code>
 由宏表生成（<code>ano_params.cpp:1-162</code>），<code>static_assert(ANO_PARAMS_COUNT == 133 + BFS_COAX_PARAM_COUNT)</code>；共轴参数
@@ -1011,7 +1011,7 @@ SIL 中 Flash 是桩，写入正确性只能台架核实。</p>
 <td><code>navigation_task.cpp:420/790/1988-2153/3166-3230</code></td>
 </tr>
 <tr>
-<td>参数表 158 项与 <code>0xAB</code> 不持久化</td>
+<td>参数表 164 项与 <code>0xAB</code> 不持久化</td>
 <td><code>ano_params.cpp:1-162</code>、<code>:363-372</code></td>
 </tr>
 <tr>
@@ -1200,5 +1200,5 @@ C-1/C-2/C-3 与本报告 N-2/N-1
 §6.2（导航对拍证据）。</li>
 <li><code>TandemVec_FCS/test_host/fw_sil/run_real_acceptance.py</code>、<code>run_coaxial_acceptance.sh</code>、<code>build_and_run_coaxial.sh</code>。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-005-共轴机型原始固件对照-导航与系统.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 19:57</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-005-共轴机型原始固件对照-导航与系统.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:42</footer></article></body>
 </html>

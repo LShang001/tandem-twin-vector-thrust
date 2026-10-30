@@ -65,6 +65,7 @@
 #include "ActuatorFaultMonitor.h" // 执行器故障检测（2026-10，只读诊断）
 #include "ActuatorOutputMap.h"    // 机型输出表 → 舵机/电调/阀门（通用层）
 #include "ThrustAllocation.h"     // 期望天向比力 → 总推力/油门（机型推进层）
+#include "PowerAllocation.h"      // 制导/位置环加速度 → 推力方向分量（机型无关）
 #include "TandemVecAllocator.h"   // 纵列双发 α/油门 → 摆角/差速（机型分配器）
 #ifdef BFS_COAXIAL_VTVL
 #include "CoaxialVtvControl.h"    // 共轴双桨 DirectTvcRate（机型选择分支）
@@ -1160,8 +1161,8 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
 
   // --- 5. 加速度矢量圆形限幅 ---
   // 避免 "方形限幅" (即 N 和 E 分别限幅) 导致斜向加速时总加速度过大
-  float accel_mag_sq = target_accel_n * target_accel_n + target_accel_e * target_accel_e;
 #ifdef BFS_GNSS_OUTAGE_VELOCITY_HOLD
+  float accel_mag_sq = target_accel_n * target_accel_n + target_accel_e * target_accel_e;
   // 失联阻尼阶段把水平加速度权限压到 1 m/s²（≈6°），保证加速度计仍能
   // 分辨重力方向；否则高速失联时刹车的 15° 倾角会把姿态估计再次带偏。
   if (velocity_hold_active)
@@ -1173,18 +1174,13 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
       const float scale = hold_limit / sqrtf(accel_mag_sq);
       target_accel_n *= scale;
       target_accel_e *= scale;
-      accel_mag_sq = hold_limit_sq;
     }
   }
 #endif
-  float max_accel_sq = MAX_ACCEL_CMD * MAX_ACCEL_CMD;
-
-  if (accel_mag_sq > max_accel_sq)
-  {
-    float scale = MAX_ACCEL_CMD / sqrtf(accel_mag_sq);
-    target_accel_n *= scale;
-    target_accel_e *= scale;
-  }
+  // 2026-10-31：圆形限幅收敛到 PowerAllocation 纯函数层（合成顺序不变）。
+  bool accel_saturated = false;
+  bfs::power::clampAccelCircle(target_accel_n, target_accel_e, MAX_ACCEL_CMD,
+                               accel_saturated);
 
   // ========================================================================
   // --- 6. 物理模型逆解：目标加速度矢量 -> 推力方向矢量 ---
@@ -1202,37 +1198,24 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   // 5. 三轴总比力矢量模长 (Total Force Norm):
   //    Norm = sqrt( Accel_N^2 + Accel_E^2 + (G + Accel_Up)^2 )
 
-  // 计算三轴合成比力矢量的模长
-  // 引入 target_accel_z_up_global 实现了水平环对垂直环动态的实时感知
-  float total_z_force_demand = ekf_gravity_mps2 + target_accel_z_up_global;
-  float total_force_norm = sqrtf(target_accel_n * target_accel_n +
-                                 target_accel_e * target_accel_e +
-                                 total_z_force_demand * total_z_force_demand);
-
-  // 安全保护：防止自由落体状态或计算异常导致的除零错误
-  if (total_force_norm < 0.5f)
-    total_force_norm = 0.5f;
-
-  // 计算单位推力矢量在水平方向的分量 (即目标倾角的 sin 值)
-  // 核心逻辑：当垂直推力需求增加时，total_force_norm 增大，水平分量会自动“收缩”，
-  // 从而在不改变总推力模长的情况下，精确维持目标的水平加速度。
-  float raw_thrust_comp_N = target_accel_n / total_force_norm;
-  float raw_thrust_comp_E = target_accel_e / total_force_norm;
+  // 计算单位推力矢量在水平方向的分量（PowerAllocation 纯函数，0.5 模长下限）
+  float total_force_norm = 0.0f;
+  float raw_thrust_comp_N = 0.0f;
+  float raw_thrust_comp_E = 0.0f;
+  bool force_degenerate = false;
+  bfs::power::thrustComponentsFromAccel(
+      target_accel_n, target_accel_e, target_accel_z_up_global,
+      ekf_gravity_mps2, 0.5f, raw_thrust_comp_N, raw_thrust_comp_E,
+      total_force_norm, force_degenerate);
 
   // --- 7. 滤波输出 ---
   // 对目标矢量进行低通滤波，使姿态变化更柔和，减少电机/舵机抖动
   thrust_comp_N = thrustCompN_filter.filter(raw_thrust_comp_N);
   thrust_comp_E = thrustCompE_filter.filter(raw_thrust_comp_E);
 
-  // 最终的安全检查 (防止数值误差导致 sin(theta) > 1)
-  // 实际上前面的加速度限幅已经保证了这一点，这里是双重保险
-  float thrust_comp_mag_sq = thrust_comp_N * thrust_comp_N + thrust_comp_E * thrust_comp_E;
-  if (thrust_comp_mag_sq > POS_CTRL_MAX_THRUST_COMP * POS_CTRL_MAX_THRUST_COMP)
-  {
-    float scale = POS_CTRL_MAX_THRUST_COMP / sqrtf(thrust_comp_mag_sq);
-    thrust_comp_N *= scale;
-    thrust_comp_E *= scale;
-  }
+  // 最终倾角限幅（PowerAllocation 纯函数；前面加速度限幅是双重保险）
+  bfs::power::clampTiltComponents(thrust_comp_N, thrust_comp_E,
+                                  POS_CTRL_MAX_THRUST_COMP);
   // 经过这一步，thrust_comp_N/E 就是最终要传递给姿态生成函数的输入。
   // constructTiltTargetQuaternion 函数内部会处理从这些分量到完整单位矢量的构造。
 }
@@ -1288,46 +1271,15 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
     float target_accel_n = guidance_accel_N_cmd;
     float target_accel_e = guidance_accel_E_cmd;
 
-    // --- 加速度矢量圆形限幅 ---
-    // 避免 "方形限幅" (即 N 和 E 分别限幅) 导致斜向加速时总加速度过大
-    float accel_mag_sq = target_accel_n * target_accel_n + target_accel_e * target_accel_e;
-    float max_accel_sq = MAX_ACCEL_CMD * MAX_ACCEL_CMD;
-
-    if (accel_mag_sq > max_accel_sq)
-    {
-      float scale = MAX_ACCEL_CMD / sqrtf(accel_mag_sq);
-      target_accel_n *= scale;
-      target_accel_e *= scale;
-    }
-
-    // --- GUIDED模式也必须使用全比力归一化 ---
-    // 此时 target_accel_z_up_global 已经被 compute_thrust_control 更新为 guidance_accel_U_cmd
-    // 重力项用 EKF 当地值 ekf_gravity_mps2（Somigliana，未初始化时回退 9.81）
-    float total_z_demand = ekf_gravity_mps2 + target_accel_z_up_global;
-
-    float total_force_norm = sqrtf(target_accel_n * target_accel_n +
-                                   target_accel_e * target_accel_e +
-                                   total_z_demand * total_z_demand);
-
-    // 计算单位推力矢量分量
-    float raw_thrust_comp_N = target_accel_n / total_force_norm;
-    float raw_thrust_comp_E = target_accel_e / total_force_norm;
-
-    // --- 滤波输出 ---
-    // GUIDED 模式刻意不做低通：制导计算机已给出平滑的加速度指令，
-    // 再滤波只会增加相位滞后（AUTO_POSITION 分支才用 thrustComp 滤波器）。
-    thrust_comp_N = raw_thrust_comp_N;
-    thrust_comp_E = raw_thrust_comp_E;
-
-    // 最终的安全检查 (防止数值误差导致 sin(theta) > 1)
-    // 实际上前面的加速度限幅已经保证了这一点，这里是双重保险
-    float thrust_comp_mag_sq = thrust_comp_N * thrust_comp_N + thrust_comp_E * thrust_comp_E;
-    if (thrust_comp_mag_sq > POS_CTRL_MAX_THRUST_COMP * POS_CTRL_MAX_THRUST_COMP)
-    {
-      float scale = POS_CTRL_MAX_THRUST_COMP / sqrtf(thrust_comp_mag_sq);
-      thrust_comp_N *= scale;
-      thrust_comp_E *= scale;
-    }
+    // 2026-10-31：制导加速度 → 推力方向统一走 PowerAllocation 纯函数层。
+    // GUIDED 刻意不做低通（制导计算机已给平滑指令），filter 只属于
+    // AUTO_POSITION 分支；min_force_norm=0 保持拆分前的数学边界。
+    const bfs::power::PowerAllocationOutput power_out =
+        bfs::power::allocatePowerFromAccel(
+            target_accel_n, target_accel_e, target_accel_z_up_global,
+            ekf_gravity_mps2, MAX_ACCEL_CMD, POS_CTRL_MAX_THRUST_COMP, 0.0f);
+    thrust_comp_N = power_out.thrust_comp_n;
+    thrust_comp_E = power_out.thrust_comp_e;
 
     // 重置内置位置PID
     if (positionHoldEnabled)

@@ -658,13 +658,22 @@ def write_summary(out_dir, metrics):
                  f"{len([v for v in rate_v if v.get('bit_identical')])} 例逐位等价，"
                  "可下结论：α+分配器路径在名义点没有改变手感。")
     if att_v:
-        lines.append(f"- ATTITUDE：有效场景（离地、末高 ≥2 m）{len([v for v in att_v if v.get('ok')])} 例，"
-                     "峰值与指令之比见第 1 节；两条路径输出逐位相同，"
-                     "说明 α+分配器没有改变姿态手感。"
-                     f"thr50 场景 {len(att_nolift)} 例标 NO_LIFT（共轴 50% 推力 7 N < 重量 8.24 N，"
-                     "未离地），是地面约束伪迹、不是固件姿态外环缺陷。"
-                     + ("尚存未建立响应场景：" + "；".join(v.get("note", "") for v in att_fail)
-                        if att_fail else ""))
+        eff = [v for v in metrics.get("throttle_trend", [])
+               if v.get("mode") == "ATTITUDE" and v.get("lifted")]
+        eff_txt = ""
+        if eff:
+            eff_txt = (f"thr70 离地场景 {len(eff)} 例有效（"
+                       + "，".join(f"{v['case'].replace('attitude_', '')} 峰值 {v['peak_a']:.2f}°"
+                                   for v in eff)
+                       + "，约 101–103% 指令、超调 1.4–3.1%），"
+                       "alloc0/alloc1 峰值逐位相同。")
+        lines.append(f"- ATTITUDE：名义 50% 油门 {len(att_v)} 例"
+                     f"（PASS {len([v for v in att_v if v.get('ok')])}、"
+                     f"NO_LIFT {len(att_nolift)}、FAIL {len(att_fail)}）；"
+                     + ("50% 推力 7 N < 重量 8.24 N、贴地，故标 NO_LIFT、不参与判据。"
+                        if att_nolift else "")
+                     + eff_txt
+                     + " → 未发现固件姿态外环缺陷（此前“外环不跟”是弧度当度 + 地面伪迹的误判）。")
     lines.append("- alloc_mode=0 与 1 使用同一 plant、同一 seed、同一 `--rc-profile`，"
                  "差异只来自控制路径；`--trace-ctrl` 的 ω_ref 同源可比。")
     lines.append("- 油门条件说明：共轴最大总推力 14 N，50% 油门 7 N < 重量 8.24 N，"

@@ -90,6 +90,9 @@ run_one "$ROOT/test_host/test_coax_params.cpp" cparams ""
 # 共轴分配器控制契约（ControlContracts.h / CoaxialAllocator.h，纯平台无关——
 # 逆解往返、轴序/符号对齐 SIL plant、低推力边界、非有限输入、残差语义、名义点手感）：
 run_one "$ROOT/test_host/test_allocator_contracts.cpp" aco ""
+# 制导/位置环加速度 → 推力方向纯函数（PowerAllocation.h，纯平台无关——
+# 圆形加速度限幅、比力归一化、倾角限幅；与拆分前 flight_control.cpp 内联代码等价）：
+run_one "$ROOT/test_host/test_power_allocation.cpp" pwa ""
 # 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
 # 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
 run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""

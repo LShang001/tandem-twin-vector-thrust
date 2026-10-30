@@ -203,11 +203,47 @@ comp_N = a_n/norm, comp_E = a_e/norm</code></pre>
 <code>specific_force_up_mps2</code> 与 <code>cos_tilt</code>。这套计算与
 GUIDED
 路径重复，且"加速度→推力/姿态"的饱和责任散落在三个函数与全局量里。</p>
-<p>契约化目标（尚未接线）：<code>GuidanceCommand → AttitudeSetpoint</code>
-由纯函数一次完成——<code>f_cmd=a_cmd-g_ned</code>、<code>T=m|f|</code>、倾角按
-max_tilt 限幅、推力按 <code>max_total_thrust_n</code>
-限幅、饱和位回报；<code>q_target</code>
-由推力方向与航向构造。接线前必须先证明与现有实现逐位一致（同一输入网格），否则不改飞行路径。</p>
+<p><strong>2026-10-31 已提取为纯函数层
+<code>include/PowerAllocation.h</code></strong>（无硬件依赖、可单测）：</p>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clampAccelCircle(an, ae, max_accel, sat)</code></td>
+<td>水平加速度矢量圆形限幅，置 <code>kSatAccelLimit</code></td>
+</tr>
+<tr>
+<td><code>thrustComponentsFromAccel(an, ae, az_up, g, min_norm, comp_n, comp_e, force, sat)</code></td>
+<td><code>f_up=g+az</code>、<code>T=sqrt(an²+ae²+f_up²)</code>、水平分量按
+<code>min_norm</code> 下限保护，置 <code>kSatDegenerate</code></td>
+</tr>
+<tr>
+<td><code>clampTiltComponents(comp_n, comp_e, sin(max_tilt))</code></td>
+<td>水平分量 ≤ <code>sin(max_tilt)</code>，等比缩放，置
+<code>kSatTiltLimit</code></td>
+</tr>
+<tr>
+<td><code>allocatePowerFromAccel(...)</code></td>
+<td>组合入口（GUIDED 路径使用：圆形限幅 + 推力分量 + 倾角限幅），返回
+<code>PowerAllocationOutput</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>handlePositionControl</code> 的 AUTO_POSITION
+路径已改为调用前两个函数（保持原滤波顺序与 <code>min_force=0.5</code>
+语义），GUIDED 路径改用
+<code>allocatePowerFromAccel(min_force_norm=0, 无滤波)</code>。等价性由
+<code>test_power_allocation.cpp</code> 用"拆分前内联代码逐字参考实现"对
+9×9×5×3 网格逐位比较（<strong>299 882 断言 0
+失败</strong>），并覆盖饱和位、退化、NaN 与滤波顺序。</p>
+<p><code>q_target</code> 仍由 <code>generate_attitude_target()</code>
+构造；<code>GuidanceCommand → AttitudeSetpoint</code>
+的显式结构体接线留待下一步（当前先保证纯函数与飞行路径逐位一致）。</p>
 <hr />
 <h2 id="5-通用性路线airframespec">5 通用性路线（AirframeSpec）</h2>
 <ol type="1">
@@ -275,8 +311,14 @@ max_pitch=22.069°（与 legacy 逐项相同）</td>
 <td>构建日志</td>
 </tr>
 <tr>
+<td>制导→动力分配纯函数</td>
+<td><code>test_power_allocation.cpp</code> <strong>299 882 断言 0
+失败</strong>（9×9×5×3 网格对拆分前内联实现逐位一致）</td>
+<td>run_all 注册 <code>pwa</code></td>
+</tr>
+<tr>
 <td>全量宿主回归</td>
-<td>run_all EXIT=0，"全部宿主机回归测试通过"（含 aco）</td>
+<td>run_all EXIT=0，"全部宿主机回归测试通过"（含 aco、pwa）</td>
 <td><code>tmp/host_alloc_recheck/run_all.log</code></td>
 </tr>
 </tbody>
@@ -284,7 +326,43 @@ max_pitch=22.069°（与 legacy 逐项相同）</td>
 <p>A/B 手感与 8×5/MC/sweep 矩阵由
 <code>sim-data/coax-alloc-2026-10-31/</code> 记录（脚本
 <code>run_coaxial_ab.py</code> 与
-<code>run_coaxial_suite.sh --alloc-mode 1</code>）。</p>
+<code>run_coaxial_suite.sh --alloc-mode 1</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A/B RATE</td>
+<td>12/12 PASS，alloc0/alloc1 上升时间与峰值逐位等价（差 &lt;1e-9）</td>
+</tr>
+<tr>
+<td>A/B ATTITUDE</td>
+<td>thr70 离地 4 例有效：峰值 101.0–103.0% 指令、超调
+1.41–3.10%，两路径逐位相同；thr50 4 例 NO_LIFT（7 N &lt; 重量 8.24
+N，地面伪迹，无判别力）</td>
+</tr>
+<tr>
+<td>矩阵 alloc0 vs alloc1</td>
+<td>验收 39/40 vs 39/40、realistic 40/40 vs 40/40、MC 56/100 vs
+56/100（realistic 58/100 vs 58/100）、sweep 15/18 vs
+15/18；通过集与失败集一致，个别场景存在浮点级差异（见 summary）</td>
+</tr>
+<tr>
+<td>失配</td>
+<td>惯量 ×0.67/×1.5、推力 ×0.8/×1.2 各 3
+seeds：两路径峰值逐位相同，失配只改变响应幅度</td>
+</tr>
+</tbody>
+</table>
+<p><strong>A/B 脚本更正</strong>：<code>--trace-ctrl</code> 的
+roll/pitch 是弧度、<code>alt_up</code> 是 cm；ATTITUDE 阶跃前末高 &lt;2
+m 记为 <code>NO_LIFT</code>（不计 FAIL）。早期按度读弧度、并把 50%
+油门（7 N &lt; 8.24 N）贴地响应误判为"姿态外环不跟"，均已修正；thr70
+离地场景证明 ATTITUDE 串级正常、两路径等价。</p>
 <h3 id="61-已知行为与风险">6.1 已知行为与风险</h3>
 <ul>
 <li><strong>低推力差速不门控</strong>：<code>T&lt;0.35 N</code>（含
@@ -302,7 +380,10 @@ throttle=0）时 TVC 归中并置
 <li><strong>遥测 ABI</strong>：<code>GncTelemetry</code> 尾部新增
 <code>coax_alloc_sat</code>、<code>coax_torque_residual_nm</code>；<code>AnoVars</code>
 尚未暴露分配器饱和位。</li>
-<li><strong>制导→动力分配契约尚未接线</strong>：当前仍是内联公式；提取纯函数并用网格证明逐位一致后才会替换。</li>
+<li><strong>制导→动力分配纯函数已接线、结构体契约未接</strong>：AUTO_POSITION/GUIDED
+已改为调用
+<code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
+结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:04</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:42</footer></article></body>
 </html>
