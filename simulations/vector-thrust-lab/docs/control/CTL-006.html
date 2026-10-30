@@ -222,6 +222,71 @@ identity 结论外推。</li>
 </tr>
 </tbody>
 </table>
+<h3 id="25-α-native-内环alloc_mode22026-10-31">2.5 α-native
+内环（alloc_mode=2，2026-10-31）</h3>
+<p>用户要求内环直接输出机体系目标角加速度，由分配器统一做机型逆解。实现方式：</p>
+<ul>
+<li>速率环 PI 的输入仍是角速率误差，输出量纲从 deg 换成 rad/s²：
+<code>kp_α = g_deg·kp_old</code>、<code>ki_α = g_deg·ki_old</code>，其中
+<code>g_deg = (l·T_est/I)·π/180</code>；积分状态上限保持
+<code>int_limit/ki_old</code>， 积分输出上限
+<code>g·int_limit</code>，输出限幅
+<code>α_max=(l·T/I)·sin(δ_max·π/180)</code>。</li>
+<li>偏航：<code>g_yaw = k_yaw/I_z</code>，<code>α_max_yaw = g_yaw·max_yaw_diff_us</code>。</li>
+<li><code>T_est = 0.01·throttle·T_max</code> 与分配器同源；α 经原 α0.25
+输出滤波后交 <code>CoaxialAllocator</code>，逆解
+<code>δ = asin(α·I/(l·T))</code>。ATTITUDE 外环、积分门控、 RATE
+只复位外环、手动 TVC 路径均不变。</li>
+<li>线性化边界：<code>α = g_deg·δ</code> 对 sin 做线性近似，逆解得到
+<code>δ' = asin(δ_rad)</code>；δ=10° 时 δ'=10.05°（+0.5%），δ=1° 时
++0.005%。</li>
+<li>切换：<code>coax.alloc_mode=2</code>（SIL
+<code>--coax-alloc-mode 2</code>）；手动/未激活仍走 legacy
+δ，<code>T_est ≤ 1e-3</code> 回退；默认仍为 0。</li>
+</ul>
+<p>验证（2026-10-31，同一 SIL 二进制
+<code>T:/sil_alpha/fw_coax.exe</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>宿主 <code>test_alpha_native.cpp</code></td>
+<td><strong>1452 断言 0 失败</strong>：ATTITUDE/RATE/偏航/手动/NaN 下 α
+与 g·legacy δ 逐拍一致（相对差 &lt;2e-4）</td>
+</tr>
+<tr>
+<td>SIL A/B，thr70 离地 12 例</td>
+<td>峰值差 ≤0.03%、上升时间差 0.00%、超调差 ≤0.04pp</td>
+</tr>
+<tr>
+<td>含地面档（thr30/50，未离地）</td>
+<td>峰值差 ≤0.33%；只作一致性检查，不作空中手感判据</td>
+</tr>
+<tr>
+<td>RATE 全档（thr30/50/70）</td>
+<td>峰值差 ≤0.10%、上升时间差 0.00%</td>
+</tr>
+<tr>
+<td>验收 3×5</td>
+<td>α-native <strong>8/9</strong>、legacy 同二进制
+<strong>8/9</strong>，唯一 FAIL 同为
+<code>mag_nominal seed1</code>（22.764° vs 22.069°；失败集一致）</td>
+</tr>
+<tr>
+<td>验收 8×5</td>
+<td>α-native <strong>39/40</strong>（同 legacy 失败集，唯一 FAIL 仍为
+<code>mag_nominal seed1</code> 22.764°）</td>
+</tr>
+</tbody>
+</table>
+<p>证据：<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-alpha-native-2026-10-31/</code>
+（<code>ab_summary.md</code>、<code>ab_metrics.json</code>、<code>acceptance_alloc0.log</code>、
+<code>acceptance_alloc2.log</code>）。</p>
 <hr />
 <h2 id="3-纵列分配器现状">3 纵列分配器现状</h2>
 <p>纵列路径已是 α 输入：<code>execute_attitude_controller()</code> 写
@@ -436,6 +501,31 @@ EXIT=0，末行"全部宿主机回归测试通过"，613 个 [PASS]（含
 aco/pwa/atrk/lra）</td>
 <td><code>BIN_DIR=T:/host_milestone bash test_host/run_all.sh</code></td>
 </tr>
+<tr>
+<td>α-native 等价性</td>
+<td><code>test_alpha_native.cpp</code> <strong>1452 断言 0
+失败</strong>：α 与 g·legacy δ
+逐拍一致（ATTITUDE/RATE/偏航/手动/NaN）</td>
+<td>run_all 注册 <code>anative</code></td>
+</tr>
+<tr>
+<td>α-native SIL A/B</td>
+<td>thr70 12 例峰值差 ≤0.03%、上升 0.00%、超调 ≤0.04pp；RATE 全档峰值差
+≤0.10%；thr30/50 地面档 ≤0.33%</td>
+<td><code>sim-data/coax-alpha-native-2026-10-31/</code></td>
+</tr>
+<tr>
+<td>α-native 验收</td>
+<td>3×5=8/9、8×5=39/40（均同 legacy 失败集；唯一 FAIL mag_nominal seed1
+22.764° vs 22.069°）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>固件构建（α-native）</td>
+<td><code>pio run -e TandemVec_FCS -e CoaxialVTVL</code> 均
+SUCCESS；CoaxialVTVL Flash 17.7%</td>
+<td>构建日志</td>
+</tr>
 </tbody>
 </table>
 <p>A/B 手感与 8×5/MC/sweep 矩阵由
@@ -510,10 +600,14 @@ throttle=0）时 TVC 归中并置
 <li><strong>遥测 ABI</strong>：<code>GncTelemetry</code> 尾部新增
 <code>coax_alloc_sat</code>、<code>coax_torque_residual_nm</code>；<code>AnoVars</code>
 尚未暴露分配器饱和位。</li>
+<li><strong>α-native 增益依赖 T_est
+与假设惯量</strong>：<code>g ∝ T_est/I_assumed</code>，实机惯量/推力偏差会直接改变内环增益；名义点
+A/B 一致不能外推到实机。<code>coax.alloc_mode=2</code>
+默认关闭，启用前需台架辨识惯量/推力并做系留。</li>
 <li><strong>制导→动力分配纯函数已接线、结构体契约未接</strong>：AUTO_POSITION/GUIDED
 已改为调用
 <code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:13</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:36</footer></article></body>
 </html>

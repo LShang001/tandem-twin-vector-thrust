@@ -67,7 +67,7 @@ usage() {
   --realistic       双套对照：额外跑 --coax-realistic 的 8×5 验收与 100 例 MC
                     （需该开关已编入二进制；未落地时脚本拒绝伪造）
   --bin PATH        复用已构建二进制（跳过构建；final 可指定冻结后产物）
-  --alloc-mode N    控制路径 0/1：透传 --coax-alloc-mode N 给验收/MC/sweep
+  --alloc-mode N    控制路径 0/1/2：透传 --coax-alloc-mode N 给验收/MC/sweep
                     （task-13 A/B 矩阵；二进制缺该开关时 rc=2）
   --extra-args STR  额外 SIL 开关（空格分隔），同样透传三阶段；可与 --alloc-mode 叠加
 
@@ -87,7 +87,7 @@ while [ $# -gt 0 ]; do
     --seconds=*) DURATION="${1#--seconds=}"; shift ;;
     --bin) SUITE_BIN="${2:?--bin 需要路径}"; shift 2 ;;
     --bin=*) SUITE_BIN="${1#--bin=}"; shift ;;
-    --alloc-mode) ALLOC_MODE="${2:?--alloc-mode 需要 0 或 1}"; shift 2 ;;
+    --alloc-mode) ALLOC_MODE="${2:?--alloc-mode 需要 0/1/2}"; shift 2 ;;
     --alloc-mode=*) ALLOC_MODE="${1#--alloc-mode=}"; shift ;;
     --extra-args) EXTRA_ARGS="${2:?--extra-args 需要字符串}"; shift 2 ;;
     --extra-args=*) EXTRA_ARGS="${1#--extra-args=}"; shift ;;
@@ -101,7 +101,7 @@ mkdir -p "$OUT_DIR"
 if [ -n "$ALLOC_MODE" ]; then
   case "$ALLOC_MODE" in
     0|1) ;;
-    *) echo "[suite] --alloc-mode 只接受 0 或 1（收到 $ALLOC_MODE）" >&2; exit 2 ;;
+    *) echo "[suite] --alloc-mode 只接受 0/1/2（收到 $ALLOC_MODE）" >&2; exit 2 ;;
   esac
 fi
 # 透传串：--alloc-mode 展开成 --coax-alloc-mode N，再拼 --extra-args。

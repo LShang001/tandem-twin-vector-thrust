@@ -79,6 +79,17 @@ struct CoaxialVtvInput
     float manual_roll_deg = 0.0f;
     float manual_pitch_deg = 0.0f;
     float dt_s = 0.005f;
+
+    // α-native（2026-10-31）：内环直接输出机体系目标角加速度时，
+    // 调用方按旧增益与机型物理量折算的换算系数（每 deg 舵机角 / 每 µs 差速
+    // 对应的角加速度）与 α 上限。alpha_native=false 时全部忽略。
+    bool alpha_native = false;
+    float alpha_per_deg_roll = 0.0f;   // (rad/s^2)/deg
+    float alpha_per_deg_pitch = 0.0f;  // (rad/s^2)/deg
+    float alpha_per_us_yaw = 0.0f;     // (rad/s^2)/us
+    float alpha_limit_roll = 0.0f;     // rad/s^2
+    float alpha_limit_pitch = 0.0f;    // rad/s^2
+    float alpha_limit_yaw = 0.0f;      // rad/s^2
 };
 
 struct CoaxialVtvOutput
@@ -88,6 +99,12 @@ struct CoaxialVtvOutput
     float pitch_correction_deg = 0.0f;
     float yaw_diff_us = 0.0f;
     bool saturated = false;
+
+    // α-native 输出（alpha_valid=true 时有效；legacy 路径为 false）
+    bool alpha_valid = false;
+    float alpha_roll_radps2 = 0.0f;
+    float alpha_pitch_radps2 = 0.0f;
+    float alpha_yaw_radps2 = 0.0f;
 };
 
 inline float coaxialVtvClamp(const float v, const float lo, const float hi)
@@ -291,6 +308,9 @@ public:
         pitch_rate_filter_.reset();
         roll_corr_filter_.reset();
         pitch_corr_filter_.reset();
+        alpha_roll_integral_ = 0.0f;
+        alpha_pitch_integral_ = 0.0f;
+        alpha_yaw_integral_ = 0.0f;
     }
 
     CoaxialVtvOutput update(const CoaxialVtvInput &in)
@@ -417,6 +437,174 @@ public:
         return out;
     }
 
+    // α-native 路径（2026-10-31 用户要求）：速率内环直接输出机体系目标角加速度
+    // α（rad/s^2，FRD），交由 CoaxialAllocator 逆解为摆角/差速。换算系数由调用方
+    // 按 g=(l*T/I)*(pi/180) 与 alpha_limit=(l*T/I)*sin(delta_max) 传入，使闭环在
+    // 名义点与旧 delta 环严格等价；积分状态/限幅/输出滤波沿用旧速率环口径，
+    // 只是量纲换成 α。
+    CoaxialVtvOutput updateAlpha(const CoaxialVtvInput &in)
+    {
+        CoaxialVtvOutput out;
+        if (!in.alpha_native)
+        {
+            return update(in);
+        }
+        if (!std::isfinite(in.error_roll_deg) ||
+            !std::isfinite(in.error_pitch_deg) ||
+            !std::isfinite(in.rate_roll_dps) ||
+            !std::isfinite(in.rate_pitch_dps) ||
+            !std::isfinite(in.rate_yaw_dps) ||
+            !std::isfinite(in.yaw_rate_target_dps) ||
+            !std::isfinite(in.roll_rate_target_dps) ||
+            !std::isfinite(in.pitch_rate_target_dps) ||
+            !std::isfinite(in.manual_roll_deg) ||
+            !std::isfinite(in.manual_pitch_deg) ||
+            !std::isfinite(in.dt_s) || !(in.dt_s > 0.0f) ||
+            !(in.alpha_per_deg_roll > 0.0f) ||
+            !(in.alpha_per_deg_pitch > 0.0f) ||
+            !(in.alpha_per_us_yaw > 0.0f) ||
+            !(in.alpha_limit_roll > 0.0f) ||
+            !(in.alpha_limit_pitch > 0.0f) ||
+            !(in.alpha_limit_yaw > 0.0f))
+        {
+            reset();
+            return out;
+        }
+
+        roll_rate_pid_.setIntegralEnable(in.rate_integral_active);
+        pitch_rate_pid_.setIntegralEnable(in.rate_integral_active);
+        yaw_rate_pid_.setIntegralEnable(in.yaw_integral_active);
+        roll_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
+                                          !in.rate_mode);
+        pitch_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
+                                           !in.rate_mode);
+
+        // 手动 TVC / 未激活：继续走旧 delta 路径（由调用方折 alpha），避免手动映射变化。
+        if (!in.attitude_active || in.manual_tvc)
+        {
+            resetAngleRatePids();
+            const float manual_roll = coaxialVtvClamp(
+                in.manual_roll_deg, -params_.max_correction_deg,
+                params_.max_correction_deg);
+            const float manual_pitch = coaxialVtvClamp(
+                in.manual_pitch_deg, -params_.max_correction_deg,
+                params_.max_correction_deg);
+            out.roll_correction_deg = roll_corr_filter_.update(
+                manual_roll, params_.correction_filter_alpha);
+            out.pitch_correction_deg = pitch_corr_filter_.update(
+                manual_pitch, params_.correction_filter_alpha);
+            out.saturated = (manual_roll != in.manual_roll_deg) ||
+                            (manual_pitch != in.manual_pitch_deg);
+            out.valid = std::isfinite(out.roll_correction_deg) &&
+                        std::isfinite(out.pitch_correction_deg);
+            return out;
+        }
+
+        float roll_rate_ref = 0.0f;
+        float pitch_rate_ref = 0.0f;
+        if (in.rate_mode)
+        {
+            roll_angle_pid_.reset();
+            pitch_angle_pid_.reset();
+            roll_rate_ref = in.roll_rate_target_dps;
+            pitch_rate_ref = in.pitch_rate_target_dps;
+        }
+        else
+        {
+            roll_rate_ref = roll_angle_pid_.computeWithExternalDerivative(
+                in.error_roll_deg, 0.0f, in.rate_roll_dps, in.dt_s);
+            pitch_rate_ref = pitch_angle_pid_.computeWithExternalDerivative(
+                in.error_pitch_deg, 0.0f, in.rate_pitch_dps, in.dt_s);
+        }
+        roll_rate_ref = roll_rate_filter_.update(
+            roll_rate_ref, params_.att_rate_filter_alpha);
+        pitch_rate_ref = pitch_rate_filter_.update(
+            pitch_rate_ref, params_.att_rate_filter_alpha);
+
+        bool sat = (std::fabs(roll_rate_ref) >=
+                    params_.max_target_rate_dps - 1e-4f) ||
+                   (std::fabs(pitch_rate_ref) >=
+                    params_.max_target_rate_dps - 1e-4f);
+
+        const auto alpha_pi = [&](const float kp_deg, const float ki_deg,
+                                  float &integral, const float int_limit,
+                                  const float g_per_unit,
+                                  const float alpha_limit, const float error,
+                                  const bool integral_active) {
+            const float p = g_per_unit * kp_deg * error;
+            float i = 0.0f;
+            if (integral_active && ki_deg > 0.0f)
+            {
+                integral += error * in.dt_s;
+                const float state_lim = int_limit / ki_deg;
+                integral = coaxialVtvClamp(integral, -state_lim, state_lim);
+                i = coaxialVtvClamp(g_per_unit * ki_deg * integral,
+                                    -g_per_unit * int_limit,
+                                    g_per_unit * int_limit);
+            }
+            else
+            {
+                integral = 0.0f;
+            }
+            float alpha = p + i;
+            if (std::fabs(alpha) >= alpha_limit - 1e-6f)
+            {
+                sat = true;
+            }
+            return coaxialVtvClamp(alpha, -alpha_limit, alpha_limit);
+        };
+
+        float roll_alpha = alpha_pi(
+            params_.rate_kp_roll, params_.rate_ki_roll, alpha_roll_integral_,
+            params_.rate_integral_limit, in.alpha_per_deg_roll,
+            in.alpha_limit_roll, roll_rate_ref - in.rate_roll_dps,
+            in.rate_integral_active);
+        float pitch_alpha = alpha_pi(
+            params_.rate_kp_pitch, params_.rate_ki_pitch, alpha_pitch_integral_,
+            params_.rate_integral_limit, in.alpha_per_deg_pitch,
+            in.alpha_limit_pitch, pitch_rate_ref - in.rate_pitch_dps,
+            in.rate_integral_active);
+
+        // 旧路径在 delta 上做 alpha0.25 输出滤波；alpha-native 在 alpha 上做同一滤波。
+        // g 恒定时两者严格等价（g 随 T_est 慢变，差异在 A/B 中量化）。
+        out.alpha_roll_radps2 = roll_corr_filter_.update(
+            roll_alpha, params_.correction_filter_alpha);
+        out.alpha_pitch_radps2 = pitch_corr_filter_.update(
+            pitch_alpha, params_.correction_filter_alpha);
+
+        if (in.yaw_active)
+        {
+            out.alpha_yaw_radps2 = alpha_pi(
+                params_.rate_kp_yaw, params_.rate_ki_yaw, alpha_yaw_integral_,
+                params_.yaw_integral_limit, in.alpha_per_us_yaw,
+                in.alpha_limit_yaw, in.yaw_rate_target_dps - in.rate_yaw_dps,
+                in.yaw_integral_active);
+            if (std::fabs(out.alpha_yaw_radps2) >= in.alpha_limit_yaw - 1e-4f)
+            {
+                sat = true;
+            }
+        }
+        else
+        {
+            yaw_rate_pid_.reset();
+            alpha_yaw_integral_ = 0.0f;
+            out.alpha_yaw_radps2 = 0.0f;
+        }
+
+        out.saturated = sat;
+        out.alpha_valid = std::isfinite(out.alpha_roll_radps2) &&
+                          std::isfinite(out.alpha_pitch_radps2) &&
+                          std::isfinite(out.alpha_yaw_radps2);
+        if (!out.alpha_valid)
+        {
+            reset();
+            out.alpha_roll_radps2 = 0.0f;
+            out.alpha_pitch_radps2 = 0.0f;
+            out.alpha_yaw_radps2 = 0.0f;
+        }
+        return out;
+    }
+
 private:
     void applyParams()
     {
@@ -470,6 +658,9 @@ private:
     CoaxialLegacyPid roll_rate_pid_;
     CoaxialLegacyPid pitch_rate_pid_;
     CoaxialLegacyPid yaw_rate_pid_;
+    float alpha_roll_integral_ = 0.0f;
+    float alpha_pitch_integral_ = 0.0f;
+    float alpha_yaw_integral_ = 0.0f;
     CoaxialFirstOrderFilter roll_rate_filter_;
     CoaxialFirstOrderFilter pitch_rate_filter_;
     CoaxialFirstOrderFilter roll_corr_filter_;

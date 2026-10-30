@@ -561,9 +561,10 @@ static void applyCoaxAllocModeTo(CoaxT &coax, int mode)
 {
   if constexpr (CoaxParamsHasAllocMode<CoaxT>::value)
   {
-    coax.alloc_mode = static_cast<uint8_t>(mode & 0x01);
-    std::fprintf(stderr, "[sil] 固件参数 coax.alloc_mode=%d（0=legacy 1=α+分配器）\n",
-                 mode);
+    coax.alloc_mode = static_cast<uint8_t>(mode);
+    std::fprintf(stderr,
+                 "[sil] 固件参数 coax.alloc_mode=%d（0=legacy 1=identity α 适配 "
+                 "2=α-native）\n", mode);
   }
   else
   {
@@ -2877,11 +2878,11 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--coax-alloc-mode")==0 && i+1<argc)
     {
       const int m = std::atoi(argv[++i]);
-      if (m != 0 && m != 1)
+      if (m < 0 || m > 2)
       {
         std::fprintf(stderr,
-                     "[sil] --coax-alloc-mode 只接受 0(legacy)|1(α+分配器)，"
-                     "收到 %d\n", m);
+                     "[sil] --coax-alloc-mode 接受 0(legacy)|1(identity α 适配)|"
+                     "2(α-native)，收到 %d\n", m);
         return 2;
       }
       g_coax_alloc_mode = m;

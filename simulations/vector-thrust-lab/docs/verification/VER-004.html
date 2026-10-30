@@ -1731,6 +1731,12 @@ max_pitch=22.069°（与 legacy 逐项相同）</td>
 </table>
 <h3 id="113-已知行为与待决">11.3 已知行为与待决</h3>
 <ul>
+<li><strong>α-native（<code>coax.alloc_mode=2</code>，2026-10-31）</strong>：速率内环直接输出机体系
+α， 增益按旧值乘 <code>g=(l·T_est/I)·π/180</code> 折算（偏航
+<code>k_yaw/I_z</code>），由分配器逆解。 宿主 1452 断言、SIL A/B thr70
+12 例峰值差 ≤0.03%/上升 0.00%/超调差 ≤0.04pp， 验收 8/9（与 legacy
+同失败集；近门限单例 22.764° vs 22.069°）。默认关闭，
+惯量/推力未辨识前不得当作实机可飞依据。</li>
 <li><strong>实飞增益/惯量关系</strong>：<code>alloc_mode=1</code> 的 α
 层不引入新控制器，实飞 PID/滤波原样保留；α 与逆解共用
 <code>I_assumed/l/k/T_est</code>，惯量在正逆变换中相消，因此惯量估计错不改变下发角度/差速，也不改变闭环响应（见
@@ -1753,5 +1759,5 @@ TVC 归中并置 <code>kSatLowThrust</code>，偏航指令仍驱动差速（m1=1
 结构体尚未替换函数签名。</li>
 <li>惯量/力臂/差速系数未台架标定，α 权限与残差只作设计值。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:13</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:36</footer></article></body>
 </html>

@@ -97,6 +97,7 @@ run_one "$ROOT/test_host/test_power_allocation.cpp" pwa ""
 run_one "$ROOT/test_host/test_alpha_tracking.cpp" atrk ""
 # 液体火箭分配器试点（α+油门→摆座/RCS/主阀；名义往返、饱和、零推力、非有限）：
 run_one "$ROOT/test_host/test_liquid_rocket_allocator.cpp" lra ""
+run_one "$ROOT/test_host/test_alpha_native.cpp" anative ""
 # 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
 # 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
 run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""
