@@ -2214,15 +2214,16 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     alloc_p.max_total_thrust_n = coax.max_total_thrust_n;
 
     bfs::CoaxialAllocatorInput alloc_in;
-    alloc_in.alpha_body_radps2[0] =
-        (coax.lever_m * thrust_est_n / coax.inertia_roll_kgm2) *
-        std::sin(applied_roll_corr_deg * kDeg2Rad);
-    alloc_in.alpha_body_radps2[1] =
-        (coax.lever_m * thrust_est_n / coax.inertia_pitch_kgm2) *
-        std::sin(applied_pitch_corr_deg * kDeg2Rad);
-    alloc_in.alpha_body_radps2[2] =
-        (coax.yaw_moment_nm_per_us * applied_yaw_diff_us) /
-        coax.inertia_yaw_kgm2;
+    // 旧控制器输出 → α 的严格逆变换（与分配器共用 I/L/k_yaw，正逆相消）。
+    if (!bfs::coaxialLegacyToAlpha(applied_roll_corr_deg,
+                                   applied_pitch_corr_deg,
+                                   applied_yaw_diff_us, thrust_est_n, alloc_p,
+                                   alloc_in.alpha_body_radps2))
+    {
+      alloc_in.alpha_body_radps2[0] = 0.0f;
+      alloc_in.alpha_body_radps2[1] = 0.0f;
+      alloc_in.alpha_body_radps2[2] = 0.0f;
+    }
     alloc_in.gyro_body_radps[0] = current_omega_dps_body_filtered.x * kDeg2Rad;
     alloc_in.gyro_body_radps[1] = current_omega_dps_body_filtered.y * kDeg2Rad;
     alloc_in.gyro_body_radps[2] = current_omega_dps_body_filtered.z * kDeg2Rad;

@@ -176,10 +176,20 @@ void testRoundTrip()
                         continue;
                     }
 
-                    // 电机行程：m1=base-y、m2=base+y；对称余量 = min(下行, 上行)
-                    const float headroom = std::fmin(base_us - p.motor_min_us,
-                                                    p.motor_max_us - base_us);
-                    const bool motor_clamp = std::fabs(y) > headroom + 1.0e-4f;
+                    // 与旧 mix 同口径：先把差速夹到 [motor_min-base,
+                    // motor_max-base]，再逐台钳位；因此可能只有一台电机撞限。
+                    const float diff_lo2 = p.motor_min_us - base_us;
+                    const float diff_hi2 = p.motor_max_us - base_us;
+                    const float y_clamped =
+                        std::fmin(std::fmax(y, diff_lo2), diff_hi2);
+                    const bool yaw_limited = std::fabs(y_clamped - y) > 1.0e-3f;
+                    const float m1_raw = base_us - y_clamped;
+                    const float m2_raw = base_us + y_clamped;
+                    const bool motor_clamp =
+                        m1_raw < p.motor_min_us - 1.0e-4f ||
+                        m1_raw > p.motor_max_us + 1.0e-4f ||
+                        m2_raw < p.motor_min_us - 1.0e-4f ||
+                        m2_raw > p.motor_max_us + 1.0e-4f;
                     const bool at_mech_limit =
                         std::fabs(dr) >= 9.999f || std::fabs(dp) >= 9.999f;
 
@@ -191,35 +201,32 @@ void testRoundTrip()
 
                     if (!at_mech_limit)
                     {
-                        // 机械行程内不得误报轴位饱和
                         const uint16_t axis_bits = static_cast<uint16_t>(
                             kSatAlphaRoll | kSatAlphaPitch | kSatTvcRoll | kSatTvcPitch);
                         expectf((out.sat_mask & axis_bits) == 0u,
                                 "往返: 未饱和不误报轴位饱和", ctx);
                     }
 
-                    if (motor_clamp)
+                    if (yaw_limited || motor_clamp)
                     {
-                        expectf((out.sat_mask & kSatMotorClamp) != 0u,
-                                "往返: 电机钳位必须置位", ctx);
-                        expectf(std::fabs(out.yaw_diff_us) <= std::fabs(y) + 0.5f,
+                        expectf((out.sat_mask & (kSatYawDiff | kSatMotorClamp)) != 0u,
+                                "往返: 差速限幅/电机钳位必须置位", ctx);
+                        expectf(std::fabs(out.yaw_diff_us) <=
+                                    std::fabs(y) + 0.5f,
                                 "往返: 钳位后差速不放大", ctx);
                     }
                     else
                     {
-                        expectf((out.sat_mask & kSatMotorClamp) == 0u,
-                                "往返: 未钳位不得误报电机钳位", ctx);
                         const float yaw_err = std::fabs(out.yaw_diff_us - y);
                         max_yaw_err_us = std::fmax(max_yaw_err_us, yaw_err);
                         expectf(yaw_err < 0.5f, "往返: yaw 误差<0.5µs", ctx);
-                        // 电机基准 = 1000 + throttle×10，差速对称
                         expectf(std::fabs(out.motor1_us - (base_us - y)) < 0.5f &&
                                     std::fabs(out.motor2_us - (base_us + y)) < 0.5f,
                                 "往返: 电机 µs 对称", ctx);
                     }
 
-                    // 电机未钳位时 τ_cmd 必须可达（残差≈0）
-                    if (!motor_clamp)
+                    // 差速/电机都未限幅时 τ_cmd 必须可达（残差≈0）
+                    if (!yaw_limited && !motor_clamp)
                     {
                         expectf(out.torque_residual_nm < 1.0e-6f,
                                 "往返: 未饱和残差≈0", ctx);
@@ -519,16 +526,16 @@ void testResidual()
         in.throttle_pct = 100.0f;
         in.thrust_estimate_n = p.max_total_thrust_n;
         const CoaxialAllocatorOutput out = allocateCoaxial(in, p);
-        expect(out.valid, "残差: 电机钳位 valid");
+        expect(out.valid, "残差: 满油门差速限幅 valid");
         expectf((out.sat_mask & kSatAlphaYaw) == 0u, "残差: 150µs 未越 α 权限");
-        expectf((out.sat_mask & kSatMotorClamp) != 0u, "残差: 置 kSatMotorClamp");
-        expectf(out.motor2_us == p.motor_max_us, "残差: motor2 撞上限");
-        expectf(std::fabs(out.yaw_diff_us - 75.0f) < 0.5f, "残差: 实际差速 = 75µs");
+        expectf((out.sat_mask & kSatYawDiff) != 0u, "残差: 置 kSatYawDiff");
+        expectf(out.motor2_us == p.motor_max_us, "残差: motor2 顶到上限");
+        expectf(std::fabs(out.yaw_diff_us) < 0.5f, "残差: 满油门实际差速 = 0µs");
         expectf(out.torque_residual_nm > 0.0f, "残差: 饱和时 residual>0");
         expectf(residualMatches(out, 0.05f * out.torque_residual_nm),
-                "残差: 与钳位差一致(±5%)");
-        // 外部核算：请求 150µs、实际 75µs → 残差 = k_yaw·75µs
-        const float expected = p.yaw_moment_nm_per_us * 75.0f;
+                "残差: 与不可达力矩一致(±5%)");
+        // 外部核算：请求 150µs、实际 0µs → 残差 = k_yaw·150µs
+        const float expected = p.yaw_moment_nm_per_us * 150.0f;
         expectf(std::fabs(out.torque_residual_nm - expected) < 0.05f * expected,
                 "残差: 差值 = k_yaw·Δyaw");
     }
@@ -539,15 +546,15 @@ void testResidual()
         in.throttle_pct = 0.0f;
         in.thrust_estimate_n = 0.0f;
         const CoaxialAllocatorOutput out = allocateCoaxial(in, p);
-        expectf((out.sat_mask & kSatMotorClamp) != 0u, "残差: 低油门钳位置位");
-        expectf(out.motor2_us == p.motor_min_us, "残差: motor2 撞下限");
-        expectf(std::fabs(out.yaw_diff_us + 30.0f) < 0.5f, "残差: 实际差速 = -30µs");
+        expectf((out.sat_mask & kSatYawDiff) != 0u, "残差: 零油门差速限幅置位");
+        expectf(out.motor2_us == p.motor_min_us, "残差: motor2 顶到下限");
+        expectf(std::fabs(out.yaw_diff_us) < 0.5f, "残差: 零油门实际差速 = 0µs");
         expectf(out.torque_residual_nm > 0.0f, "残差: 低油门 residual>0");
         expectf(residualMatches(out, 0.05f * out.torque_residual_nm),
-                "残差: 低油门与钳位差一致");
-        expectf(std::fabs(out.torque_residual_nm - p.yaw_moment_nm_per_us * 30.0f) <
-                    0.05f * p.yaw_moment_nm_per_us * 30.0f,
-                "残差: 低油门差值 = k_yaw·30µs");
+                "残差: 低油门与不可达力矩一致");
+        expectf(std::fabs(out.torque_residual_nm - p.yaw_moment_nm_per_us * 60.0f) <
+                    0.05f * p.yaw_moment_nm_per_us * 60.0f,
+                "残差: 零油门残差 = k_yaw·60µs");
     }
     // 6c) α 权限钳位（未撞电机行程）：残差以"未钳位请求"为基准，
     //     故 α 被钳位时 residual = |I·(α_req − α_applied)| > 0；

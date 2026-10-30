@@ -54,7 +54,10 @@ enum ControlSaturationBits : uint16_t
     kSatLowThrust = 1u << 6,  /**< 推力过低，TVC 权限按 0 处理 */
     kSatMotorClamp = 1u << 7, /**< 电机 µs 被行程钳位 */
     kSatInvalid = 1u << 8,    /**< 输入非有限/参数非法，输出已回零 */
-    kSatRateCoupling = 1u << 9 /**< 陀螺耦合项被限幅（保留位） */
+    kSatRateCoupling = 1u << 9, /**< 陀螺耦合项被限幅（保留位） */
+    /* 1<<10..1<<12 由 PowerAllocation.h 的 power:: 枚举占用（加速度/倾角/退化） */
+    kSatGimbalLimit = 1u << 13, /**< 火箭摆座被机械/控制限幅钳位（液体火箭试点） */
+    kSatRcsLimit = 1u << 14     /**< RCS 通道被行程钳位（液体火箭试点） */
 };
 
 /** @brief 机体系三维向量（FRD；单位见使用处） */
