@@ -68,6 +68,7 @@
 #include "TandemVecAllocator.h"   // 纵列双发 α/油门 → 摆角/差速（机型分配器）
 #ifdef BFS_COAXIAL_VTVL
 #include "CoaxialVtvControl.h"    // 共轴双桨 DirectTvcRate（机型选择分支）
+#include "CoaxialAllocator.h"     // 共轴 α+油门 → TVC/差速 机型分配器
 #endif
 #ifdef BFS_RATE_LEAD
 #include "RateLeadPredictor.h"    // 速率预测/超前补偿（opt-in，默认关闭）
@@ -2210,14 +2211,6 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
       s_coaxial_controller.update(control_in);
   gnc_tel.error_deg[0] = error_roll_deg;
   gnc_tel.error_deg[1] = error_pitch_deg;
-  // 共轴诊断遥测（每拍填写；无效输出回零，与输出级同口径）
-  gnc_tel.coax_roll_corr_deg =
-      control_out.valid ? control_out.roll_correction_deg : 0.0f;
-  gnc_tel.coax_pitch_corr_deg =
-      control_out.valid ? control_out.pitch_correction_deg : 0.0f;
-  gnc_tel.coax_yaw_diff_us =
-      control_out.valid ? control_out.yaw_diff_us : 0.0f;
-  gnc_tel.coax_saturated = control_out.saturated ? 1 : 0;
 
   float final_throttle_pct = outputs.throttle_percent;
   if (!outputs.throttle_direct)
@@ -2236,13 +2229,88 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     final_throttle_pct = 0.0f;
   }
 
-  bfs::CoaxialVtvOutputInput output_in;
-  output_in.roll_correction_deg =
+  // ★ 2026-10-31 α 路径（coax.alloc_mode≥0.5）：控制层输出仍是"修正角/差速"
+  //   （与旧控制器同口径，保持手感），按名义推力折算成机体系角加速度 α，
+  //   再由 CoaxialAllocator 做惯量/TVC/差速逆解。折算与逆解共用同一组参数，
+  //   名义点严格往返 ⇒ alloc_mode=0 的默认路径逐位不变。
+  float applied_roll_corr_deg =
       control_out.valid ? control_out.roll_correction_deg : 0.0f;
-  output_in.pitch_correction_deg =
+  float applied_pitch_corr_deg =
       control_out.valid ? control_out.pitch_correction_deg : 0.0f;
+  float applied_yaw_diff_us =
+      control_out.valid ? control_out.yaw_diff_us : 0.0f;
+  bool coax_out_saturated = control_out.saturated;
+  uint8_t alloc_sat_mask = 0u;
+  float alloc_torque_residual = 0.0f;
+  if (coax.alloc_mode >= 0.5f && inputs.is_unlocked)
+  {
+    constexpr float kDeg2Rad = 0.017453292519943295f;
+    const float thrust_est_n =
+        0.01f * final_throttle_pct * coax.max_total_thrust_n;
+    bfs::CoaxialAllocatorParams alloc_p;
+    alloc_p.lever_m = coax.lever_m;
+    alloc_p.yaw_moment_nm_per_us = coax.yaw_moment_nm_per_us;
+    alloc_p.inertia_kgm2[0] = coax.inertia_roll_kgm2;
+    alloc_p.inertia_kgm2[1] = coax.inertia_pitch_kgm2;
+    alloc_p.inertia_kgm2[2] = coax.inertia_yaw_kgm2;
+    alloc_p.servo_half_angle_deg = coax.servo_half_angle_deg;
+    alloc_p.max_correction_deg = coax.ctrl.max_correction_deg;
+    alloc_p.max_yaw_diff_us = coax.ctrl.max_yaw_diff_us;
+    alloc_p.motor_min_us = coax.motor_min_us;
+    alloc_p.motor_max_us = coax.motor_max_us;
+    alloc_p.mass_kg = coax.mass_kg;
+    alloc_p.max_total_thrust_n = coax.max_total_thrust_n;
+
+    bfs::CoaxialAllocatorInput alloc_in;
+    alloc_in.alpha_body_radps2[0] =
+        (coax.lever_m * thrust_est_n / coax.inertia_roll_kgm2) *
+        std::sin(applied_roll_corr_deg * kDeg2Rad);
+    alloc_in.alpha_body_radps2[1] =
+        (coax.lever_m * thrust_est_n / coax.inertia_pitch_kgm2) *
+        std::sin(applied_pitch_corr_deg * kDeg2Rad);
+    alloc_in.alpha_body_radps2[2] =
+        (coax.yaw_moment_nm_per_us * applied_yaw_diff_us) /
+        coax.inertia_yaw_kgm2;
+    alloc_in.gyro_body_radps[0] = current_omega_dps_body_filtered.x * kDeg2Rad;
+    alloc_in.gyro_body_radps[1] = current_omega_dps_body_filtered.y * kDeg2Rad;
+    alloc_in.gyro_body_radps[2] = current_omega_dps_body_filtered.z * kDeg2Rad;
+    alloc_in.throttle_pct = final_throttle_pct;
+    alloc_in.thrust_estimate_n = thrust_est_n;
+    alloc_in.dt_s = coax.dt_s;
+    const bfs::CoaxialAllocatorOutput alloc =
+        bfs::allocateCoaxial(alloc_in, alloc_p);
+    alloc_sat_mask = static_cast<uint8_t>(alloc.sat_mask & 0xFFu);
+    alloc_torque_residual = alloc.torque_residual_nm;
+    if (alloc.valid)
+    {
+      applied_roll_corr_deg = alloc.servo_roll_deg;
+      applied_pitch_corr_deg = alloc.servo_pitch_deg;
+      applied_yaw_diff_us = alloc.yaw_diff_us;
+      coax_out_saturated =
+          coax_out_saturated || (alloc.sat_mask != bfs::control::kSatNone);
+    }
+    else
+    {
+      applied_roll_corr_deg = 0.0f;
+      applied_pitch_corr_deg = 0.0f;
+      applied_yaw_diff_us = 0.0f;
+      alloc_sat_mask = 0xFFu;
+      coax_out_saturated = true;
+    }
+  }
+  // 诊断遥测与最终下发的执行器指令同源
+  gnc_tel.coax_roll_corr_deg = applied_roll_corr_deg;
+  gnc_tel.coax_pitch_corr_deg = applied_pitch_corr_deg;
+  gnc_tel.coax_yaw_diff_us = applied_yaw_diff_us;
+  gnc_tel.coax_saturated = coax_out_saturated ? 1 : 0;
+  gnc_tel.coax_alloc_sat = alloc_sat_mask;
+  gnc_tel.coax_torque_residual_nm = alloc_torque_residual;
+
+  bfs::CoaxialVtvOutputInput output_in;
+  output_in.roll_correction_deg = applied_roll_corr_deg;
+  output_in.pitch_correction_deg = applied_pitch_corr_deg;
   output_in.throttle_pct = final_throttle_pct;
-  output_in.yaw_diff_us = control_out.valid ? control_out.yaw_diff_us : 0.0f;
+  output_in.yaw_diff_us = applied_yaw_diff_us;
   output_in.attitude_roll_deg = AHRS_Packet.Roll;
   output_in.attitude_pitch_deg = AHRS_Packet.Pitch;
   output_in.unlocked = inputs.is_unlocked;

@@ -30,7 +30,13 @@
  *          共轴 L1 保真度开关（仅 `-DFW_SIL_COAXIAL`）：
  *          `--coax-realistic`（预设）、`--coax-motor-tau S`、`--coax-servo-rate DPS`、
  *          `--coax-ground-mu MU`、`--coax-servojam roll|pitch` + `--coax-servojam-at T`、
- *          `--coax-motor-loss1|2 F`；缺省/零值=改动前的既有行为（逐位一致），
+ *          `--coax-motor-loss1|2 F`；失配/分配器激励（task-11）：
+ *          `--coax-ix IX`、`--coax-inertia-scale F`（三轴惯量乘子）、
+ *          `--coax-thrust-scale F`（推力效能）、`--coax-yaw-scale F`（差速偏航）、
+ *          `--coax-alloc-mode 0|1`（0=legacy 1=α+分配器；固件字段落地后生效，
+ *          缺字段只警告不崩）；`--rc-profile PATH` 灌入 CSV 遥控激励表
+ *          （表头 `t,roll_us,pitch_us,yaw_us,throttle_us,mode_us,att_mode_us`，
+ *          行间线性插值、超末行保持）；缺省/零值=改动前的既有行为（逐位一致），
  *          详见 README「共轴 plant 保真度开关」；
  *          处理：本文件提供 6DOF 刚体、电机/舵机动态、IMU/GNSS/气压计注入、
  *          20–25 s 侧风 3 m/s、地面约束与 0.1% PWM 量化；
@@ -85,6 +91,10 @@
 #include <limits>
 #include <random>
 #include <array>
+// type_traits/utility：--coax-alloc-mode 的字段探测模板（SFINAE）无条件需要，
+// 不随 EKF_NAV_TELEMETRY 开关。
+#include <type_traits>
+#include <utility>
 #ifdef EKF_NAV_TELEMETRY
 #include <vector>
 #include <algorithm>
@@ -235,6 +245,168 @@ static float g_coax_cli_loss1 = 1.0f;       // 前/尾电机长期损失保留�
 static float g_coax_cli_loss2 = 1.0f;
 static int g_coax_servojam = 0;             // 0=无 1=roll(前摆) 2=pitch(尾摆)
 static float g_coax_servojam_at_s = -1.0f;  // <0 → 复用 --fault-at
+
+// —— 分配器/失配激励开关（2026-10-31，task-11）——
+// 语义：默认值 = 改动前的 plant 数值（Ix 0.05、三轴惯量系数 1、推力 1、
+// 差速偏航系数 1、alloc_mode 0=legacy），保证缺省路径逐位不变；
+// ×1.0f 的乘法在 IEEE 下精确，不引入舍入差。以上都只改 SIL plant 的
+// 力/力矩与惯量，不改固件控制律输出。
+static float g_coax_inertia_scale = 1.0f;  // 三轴惯量统一乘子 [0.25,4]
+static float g_coax_thrust_scale = 1.0f;   // 实际推力/指令推力 [0.5,1.5]
+static float g_coax_yaw_scale = 1.0f;      // 差速偏航力矩乘子 [0.25,4]
+static int g_coax_alloc_mode = 0;          // 0=legacy 1=α+分配器（写固件参数）
+
+// —— --rc-profile：CSV 遥控激励表（task-11 追加硬需求）——
+// 首行表头固定为 `t,roll_us,pitch_us,yaw_us,throttle_us,mode_us,att_mode_us`；
+// t 为 SIL 秒、其余列微秒。50 Hz 遥控节拍按行间线性插值取值，t 超过末行则
+// 保持末行；行数上限 4096（40 s 任务按 10 ms 采样也只需 4000 行）。表只改
+// 摇杆与 CH7(mode)/CH9(att_mode) 的注入值，CH5 解锁与链路时序仍走原逻辑。
+struct RcProfileRow
+{
+  double t;
+  uint16_t roll, pitch, yaw, thr, mode, att;
+};
+static constexpr int kRcProfileMaxRows = 4096;
+static RcProfileRow g_rc_profile[kRcProfileMaxRows];
+static int g_rc_profile_rows = 0;
+
+static bool rcProfileLoad(const char *path)
+{
+  std::FILE *f = std::fopen(path, "r");
+  if (f == nullptr)
+  {
+    std::fprintf(stderr, "[sil] --rc-profile 无法打开文件 %s\n", path);
+    return false;
+  }
+  char line[256] = {0};
+  if (std::fgets(line, sizeof(line), f) == nullptr)
+  {
+    std::fprintf(stderr, "[sil] --rc-profile %s 为空（缺表头）\n", path);
+    std::fclose(f);
+    return false;
+  }
+  int n = static_cast<int>(std::strlen(line));
+  while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r'))
+  {
+    line[--n] = '\0';
+  }
+  const char *expect =
+      "t,roll_us,pitch_us,yaw_us,throttle_us,mode_us,att_mode_us";
+  if (std::strcmp(line, expect) != 0)
+  {
+    std::fprintf(stderr, "[sil] --rc-profile 表头不符：期望 \"%s\"，实际 \"%s\"\n",
+                 expect, line);
+    std::fclose(f);
+    return false;
+  }
+  double last_t = -1.0;
+  while (std::fgets(line, sizeof(line), f) != nullptr)
+  {
+    n = static_cast<int>(std::strlen(line));
+    while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r'))
+    {
+      line[--n] = '\0';
+    }
+    if (n == 0)
+    {
+      continue;  // 允许空行
+    }
+    if (g_rc_profile_rows >= kRcProfileMaxRows)
+    {
+      std::fprintf(stderr, "[sil] --rc-profile 数据行超过上限 %d\n",
+                   kRcProfileMaxRows);
+      std::fclose(f);
+      return false;
+    }
+    RcProfileRow r{};
+    int c[6] = {0, 0, 0, 0, 0, 0};
+    if (std::sscanf(line, "%lf,%d,%d,%d,%d,%d,%d", &r.t, &c[0], &c[1],
+                    &c[2], &c[3], &c[4], &c[5]) != 7)
+    {
+      std::fprintf(stderr, "[sil] --rc-profile 第 %d 行格式非法（需 7 列）：%s\n",
+                   g_rc_profile_rows + 1, line);
+      std::fclose(f);
+      return false;
+    }
+    // t 非负、有限、单调不减；各 PWM 列范围按任务书校验（mode_us 1000–2000，
+    // 其余 988–2012，含 CH9 att_mode_us）。
+    if (!(r.t >= 0.0) || r.t > 1.0e6 || r.t < last_t)
+    {
+      std::fprintf(stderr,
+                   "[sil] --rc-profile 第 %d 行 t=%g 非法（需 0≤t 且单调不减，"
+                   "上一行 t=%g）\n", g_rc_profile_rows + 1, r.t, last_t);
+      std::fclose(f);
+      return false;
+    }
+    const int lim_lo = 988, lim_hi = 2012;
+    for (int j = 0; j < 6; ++j)
+    {
+      const int lo = (j == 4) ? 1000 : lim_lo;   // mode_us 允许 1000–2000
+      const int hi = (j == 4) ? 2000 : lim_hi;
+      if (c[j] < lo || c[j] > hi)
+      {
+        std::fprintf(stderr,
+                     "[sil] --rc-profile 第 %d 行第 %d 列=%d 越界 [%d,%d]\n",
+                     g_rc_profile_rows + 1, j + 2, c[j], lo, hi);
+        std::fclose(f);
+        return false;
+      }
+    }
+    r.roll = static_cast<uint16_t>(c[0]);
+    r.pitch = static_cast<uint16_t>(c[1]);
+    r.yaw = static_cast<uint16_t>(c[2]);
+    r.thr = static_cast<uint16_t>(c[3]);
+    r.mode = static_cast<uint16_t>(c[4]);
+    r.att = static_cast<uint16_t>(c[5]);
+    last_t = r.t;
+    g_rc_profile[g_rc_profile_rows++] = r;
+  }
+  std::fclose(f);
+  if (g_rc_profile_rows == 0)
+  {
+    std::fprintf(stderr, "[sil] --rc-profile %s 没有数据行\n", path);
+    return false;
+  }
+  std::fprintf(stderr, "[sil] --rc-profile 载入 %d 行（t=%.3f…%.3f s）\n",
+               g_rc_profile_rows, g_rc_profile[0].t,
+               g_rc_profile[g_rc_profile_rows - 1].t);
+  return true;
+}
+
+// 按 SIL 时间 t 插值取 PWM；cursor 为单调游标（稳定时间基准，只前进）。
+static void rcProfileAt(double t, int &cursor,
+                        uint16_t &roll, uint16_t &pitch, uint16_t &yaw,
+                        uint16_t &thr, uint16_t &mode, uint16_t &att)
+{
+  if (cursor < 0) cursor = 0;
+  if (cursor >= g_rc_profile_rows) cursor = g_rc_profile_rows - 1;
+  while (cursor + 1 < g_rc_profile_rows &&
+         g_rc_profile[cursor + 1].t <= t)
+  {
+    ++cursor;
+  }
+  const RcProfileRow &a = g_rc_profile[cursor];
+  const RcProfileRow &b =
+      g_rc_profile[(cursor + 1 < g_rc_profile_rows) ? cursor + 1 : cursor];
+  const double span = b.t - a.t;
+  double w = 0.0;
+  if (t > a.t && span > 1.0e-12)
+  {
+    w = (t - a.t) / span;
+    if (w > 1.0) w = 1.0;  // 超出末行 → 保持末行
+  }
+  const auto lerp = [w](uint16_t x, uint16_t y) {
+    return static_cast<uint16_t>(
+        std::lround(static_cast<double>(x) +
+                    (static_cast<double>(y) - static_cast<double>(x)) * w));
+  };
+  roll = lerp(a.roll, b.roll);
+  pitch = lerp(a.pitch, b.pitch);
+  yaw = lerp(a.yaw, b.yaw);
+  thr = lerp(a.thr, b.thr);
+  mode = lerp(a.mode, b.mode);
+  att = lerp(a.att, b.att);
+}
 #endif
 
 struct Plant {
@@ -269,7 +441,8 @@ struct Plant {
     Quaternion qq{q.w,q.x,q.y,q.z};
     quaternionToEuler(qq, roll, pitch, yaw);
   }
-  // ★ 本 plant 只有垂直地面约束：没有气动阻尼，也没有地面水平摩擦。
+  // ★ 本 plant 只有垂直地面约束：没有气动阻尼；地面水平摩擦仅在
+  // --coax-ground-mu>0 时启用（默认关闭），缺省落地后仍可滑行/翻滚。
   // 水平速度只能被推力改变，落地后仍可滑行/翻滚。长失联 hold/pos 与
   // 落地后位移是**上界**，不是实机漂移预测（2026-10-26，§7.11）。
   void step(const SixDOFWrench &w, float dt) {
@@ -279,7 +452,11 @@ struct Plant {
 
 #ifdef FW_SIL_COAXIAL
     // 共轴 L1 参数可由 CLI 覆盖（默认见 g_coax_*）；不是实机辨识值。
-    const float Ixx = g_coax_ix, Iyy = g_coax_iy, Izz = g_coax_iz;
+    // --coax-inertia-scale：三轴惯量统一乘子（默认 1.0f，×1.0 精确）。
+    // --coax-ix 只改 Ix，与 --coax-iy 相互独立。
+    const float Ixx = g_coax_ix * g_coax_inertia_scale;
+    const float Iyy = g_coax_iy * g_coax_inertia_scale;
+    const float Izz = g_coax_iz * g_coax_inertia_scale;
     const float mass = g_coax_mass_kg;
 #else
     const float Ixx = P.Ix, Iyy = P.Iy, Izz = P.Iz;
@@ -351,18 +528,49 @@ static SixDOFWrench computeCoaxialWrench(const Plant &p)
   const float wt = p.motor_wt * g_coax_motor_loss2 * g_coax_cli_loss2;
   const float avg = 0.5f * (wf + wt) / P.wMax;
   const float diff = (wf - wt) / P.wMax;
-  const float thrust =
-      std::fmax(0.0f, std::fmin(1.0f, avg)) * g_coax_max_thrust_n;
+  // --coax-thrust-scale：推力效能失配（默认 1.0f，×1.0 精确不改基线），
+  // 只缩放 plant 实际力/力矩，不动固件输出。
+  const float thrust = std::fmax(0.0f, std::fmin(1.0f, avg)) *
+                       g_coax_max_thrust_n * g_coax_thrust_scale;
   const float roll = p.servo_f;
   const float pitch = p.servo_t;
   SixDOFWrench w;
   w.Fx = thrust * std::cos(roll) * std::cos(pitch);
   w.Fy = thrust * std::sin(roll);
   w.Fz = thrust * std::sin(pitch);
-  w.Mx = g_coax_yaw_nm_per_norm * diff;      // body Mz = -w.Mx（差速反向）
+  // --coax-yaw-scale：差速偏航力矩乘子（默认 1.0f，×1.0 精确不改基线）
+  w.Mx = g_coax_yaw_nm_per_norm * g_coax_yaw_scale * diff;      // body Mz = -w.Mx（差速反向）
   w.My = g_coax_lever_m * thrust * std::sin(pitch); // body My
   w.Mz = -g_coax_lever_m * thrust * std::sin(roll); // body Mx = -w.Mz
   return w;
+}
+
+// —— 分配器模式接线（task-11）——
+// 固件侧 CoaxialCtrlParams.alloc_mode（0=legacy 1=α+分配器）由 task-10 分批
+// 落地；这里做编译期字段探测（SFINAE）：字段未出现时只打印警告、不阻止启动
+// （--coax-alloc-mode 1 仍可照常跑），字段落地后自动接线、无需再改本文件。
+template <typename T, typename = void>
+struct CoaxParamsHasAllocMode : std::false_type {};
+template <typename T>
+struct CoaxParamsHasAllocMode<
+    T, std::void_t<decltype(std::declval<T &>().alloc_mode)>>
+    : std::true_type {};
+
+template <typename CoaxT>
+static void applyCoaxAllocModeTo(CoaxT &coax, int mode)
+{
+  if constexpr (CoaxParamsHasAllocMode<CoaxT>::value)
+  {
+    coax.alloc_mode = static_cast<uint8_t>(mode & 0x01);
+    std::fprintf(stderr, "[sil] 固件参数 coax.alloc_mode=%d（0=legacy 1=α+分配器）\n",
+                 mode);
+  }
+  else
+  {
+    std::fprintf(stderr, "[sil] ★ 警告：固件参数尚无 coax.alloc_mode 字段，"
+                         "--coax-alloc-mode %d 本次未生效（字段落地后自动接线）\n",
+                 mode);
+  }
 }
 #endif
 
@@ -385,14 +593,17 @@ struct Sensors {
               flow_quality(100) {}
 };
 
+// yaw/att_mode 为 --rc-profile 追加的可选列：缺省 yaw=1500、att_mode=1000，
+// 与改动前写死的值完全相同（不传参的旧调用点行为逐位不变）。
 static void set_rc(uint16_t throttle, uint16_t mode, bool unlock,
-                   uint16_t roll = 1500, uint16_t pitch = 1500) {
+                   uint16_t roll = 1500, uint16_t pitch = 1500,
+                   uint16_t yaw = 1500, uint16_t att_mode = 1000) {
   for (int i=0;i<9;++i) raw_rc_values[i]=1500;
   raw_rc_values[0]=roll; raw_rc_values[1]=pitch;
-  raw_rc_values[2]=throttle; raw_rc_values[3]=1500;
+  raw_rc_values[2]=throttle; raw_rc_values[3]=yaw;
   raw_rc_values[4]=unlock?1800:1000;
   raw_rc_values[5]=1800;
-  raw_rc_values[6]=mode; raw_rc_values[7]=1000; raw_rc_values[8]=1000;
+  raw_rc_values[6]=mode; raw_rc_values[7]=1000; raw_rc_values[8]=att_mode;
 }
 
 static void update_sensors(Plant &p, Sensors &s, std::mt19937 &rng, float t) {
@@ -1025,6 +1236,9 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     }
   }
 
+  // --rc-profile 的单调游标：作为 profile 时间的稳定基准，仅在 50 Hz 节拍推进；
+  // 没有 profile 时完全不参与任何计算（缺省路径逐位不变）。
+  int rc_prof_cursor = 0;
   for (int k = 0; k < steps; ++k)
   {
     const float t = k * dt_ctrl;
@@ -1054,7 +1268,19 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     rc_lost_prev = rc_lost;
     if (!rc_lost && (k % 4) == 0)
     {
-      if (coupled)
+      if (g_rc_profile_rows > 0)
+      {
+        // --rc-profile：按 CSV 插值覆盖四根摇杆与 CH7(mode)/CH9(att_mode)；
+        // CH5 解锁时序仍沿用 t>=0.5 s，CH6/CH8 保持 set_rc 原值。
+        uint16_t prof_roll = 1500, prof_pitch = 1500, prof_yaw = 1500;
+        uint16_t prof_thr = 1000, prof_mode = 1000, prof_att = 1000;
+        rcProfileAt(static_cast<double>(t), rc_prof_cursor,
+                    prof_roll, prof_pitch, prof_yaw, prof_thr, prof_mode,
+                    prof_att);
+        set_rc(prof_thr, prof_mode, t >= 0.5f, prof_roll, prof_pitch,
+               prof_yaw, prof_att);
+      }
+      else if (coupled)
       {
         const uint16_t roll = (t > 10 && t < 12) ? 1530 : ((t > 12 && t < 14) ? 1470 : 1500);
         const uint16_t pitch = (t > 10 && t < 12) ? 1470 : ((t > 12 && t < 14) ? 1530 : 1500);
@@ -2286,7 +2512,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"nav_vel_rms\":%.4f,\"nrfb\":%u,\"nav_bias_frames\":%u,"
               "\"coax_motor_tau_s\":%.3f,\"coax_servo_rate_dps\":%.1f,"
               "\"coax_ground_mu\":%.3f,\"coax_servojam\":%d,"
-              "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f%s}\n",
+              "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f,\"coax_ix\":%.4f,\"coax_inertia_scale\":%.3f,\"coax_thrust_scale\":%.3f,\"coax_yaw_scale\":%.3f,\"coax_alloc_mode\":%d,\"rc_profile_rows\":%d,\"rc_profile_t_first\":%.3f,\"rc_profile_t_last\":%.3f%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -2377,8 +2603,19 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               g_coax_servojam,
               static_cast<double>(g_coax_cli_loss1),
               static_cast<double>(g_coax_cli_loss2),
+              static_cast<double>(g_coax_ix),
+              static_cast<double>(g_coax_inertia_scale),
+              static_cast<double>(g_coax_thrust_scale),
+              static_cast<double>(g_coax_yaw_scale),
+              g_coax_alloc_mode,
+              g_rc_profile_rows,
+              (g_rc_profile_rows > 0) ? g_rc_profile[0].t : 0.0,
+              (g_rc_profile_rows > 0)
+                  ? g_rc_profile[g_rc_profile_rows - 1].t
+                  : 0.0,
 #else
-              0.28, 300.0, 0.0, 0, 1.0, 1.0,
+              0.28, 300.0, 0.0, 0, 1.0, 1.0, 0.05, 1.0, 1.0, 1.0, 0,
+              0, 0.0, 0.0,
 #endif
               nees_json);
   if (g_trace_csv_file != nullptr)
@@ -2620,6 +2857,36 @@ int main(int argc, char** argv) {
       g_coax_iz = std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--coax-yawk")==0 && i+1<argc)
       g_coax_yaw_nm_per_norm = std::atof(argv[++i]);
+    // —— 分配器/失配激励（task-11，2026-10-31）——
+    // 均为 plant 侧激励，不写固件增益；缺省值 = 改动前数值（逐位一致）。
+    else if (std::strcmp(argv[i],"--coax-ix")==0 && i+1<argc)
+      g_coax_ix = static_cast<float>(std::atof(argv[++i]));  // 独立于 --coax-iy
+    else if (std::strcmp(argv[i],"--coax-inertia-scale")==0 && i+1<argc)
+      g_coax_inertia_scale = static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--coax-thrust-scale")==0 && i+1<argc)
+      g_coax_thrust_scale = static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--coax-yaw-scale")==0 && i+1<argc)
+      g_coax_yaw_scale = static_cast<float>(std::atof(argv[++i]));
+    else if (std::strcmp(argv[i],"--coax-alloc-mode")==0 && i+1<argc)
+    {
+      const int m = std::atoi(argv[++i]);
+      if (m != 0 && m != 1)
+      {
+        std::fprintf(stderr,
+                     "[sil] --coax-alloc-mode 只接受 0(legacy)|1(α+分配器)，"
+                     "收到 %d\n", m);
+        return 2;
+      }
+      g_coax_alloc_mode = m;
+    }
+    // --rc-profile：CSV 遥控激励表（行间线性插值，覆盖摇杆 + CH7/CH9）
+    else if (std::strcmp(argv[i],"--rc-profile")==0 && i+1<argc)
+    {
+      if (!rcProfileLoad(argv[++i]))
+      {
+        return 2;
+      }
+    }
     // —— 可切保真度开关（task-5，2026-10-30）——
     // 预设按 argv 顺序“就地”应用：--coax-realistic 之后显式给的参数覆盖预设，
     // 之前给的会被预设覆盖（与命令行选项顺序语义一致）。
@@ -2851,6 +3118,31 @@ int main(int argc, char** argv) {
                  g_coax_motor_tau_s, g_coax_servo_rate_dps);
     return 2;
   }
+  // task-11：失配激励参数范围（超出物理合理区间的输入直接拒绝，rc=2）
+  if (g_coax_ix <= 0.0f || g_coax_ix > 5.0f)
+  {
+    std::fprintf(stderr, "[sil] --coax-ix 应在 (0,5] kg·m²，收到 %g\n",
+                 g_coax_ix);
+    return 2;
+  }
+  if (g_coax_inertia_scale < 0.25f || g_coax_inertia_scale > 4.0f)
+  {
+    std::fprintf(stderr, "[sil] --coax-inertia-scale 应在 [0.25,4]，收到 %g\n",
+                 g_coax_inertia_scale);
+    return 2;
+  }
+  if (g_coax_thrust_scale < 0.5f || g_coax_thrust_scale > 1.5f)
+  {
+    std::fprintf(stderr, "[sil] --coax-thrust-scale 应在 [0.5,1.5]，收到 %g\n",
+                 g_coax_thrust_scale);
+    return 2;
+  }
+  if (g_coax_yaw_scale < 0.25f || g_coax_yaw_scale > 4.0f)
+  {
+    std::fprintf(stderr, "[sil] --coax-yaw-scale 应在 [0.25,4]，收到 %g\n",
+                 g_coax_yaw_scale);
+    return 2;
+  }
 #endif
   // 高频振动否决门限扫描（同二进制 runtime A/B）：只改进入门限，释放门限按比例缩放。
   if (vib_hf_enter_g > 0.0f)
@@ -2913,6 +3205,14 @@ int main(int argc, char** argv) {
     real_cfg.mag = real_cfg.mag || g_use_mag_yaw;
     g_gnss_consistency_reject_enabled = real_cfg.gnss_consistency_reject;
     kFlightCtrlParams.inertia_comp_mask = static_cast<uint8_t>(mask & 0x03);
+#ifdef FW_SIL_COAXIAL
+    // alloc_mode 默认 0=legacy 等于固件默认值：0 时不写、不打印，保证缺省
+    // 输出/行为逐位不变；只有显式请求非 legacy 模式才写固件参数。
+    if (g_coax_alloc_mode != 0)
+    {
+      applyCoaxAllocModeTo(kFlightCtrlParams.coax, g_coax_alloc_mode);
+    }
+#endif
     if (coupled) manual = true;
     return runRealNavLoop(real_cfg, seed, seconds, target_alt, manual, coupled,
                           fault, fault_at, loss, mask, wind_on);

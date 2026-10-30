@@ -80,6 +80,14 @@ struct CoaxialCtrlParams
     float motor_max_us = 2000.0f;    // 电机最大 PWM [µs]
     float attitude_limit_deg = 45.0f;// 姿态安全限幅 [deg]（超限锁输出）
     float dt_s = 0.005f;             // 共轴控制周期 [s]（200Hz）
+
+    // ---- ★ task-10 α+油门分配器参数（默认保持 legacy 角度路径，旧字段顺序/默认值不变）----
+    float alloc_mode = 0.0f;              // 0=legacy 角度路径，1=α+分配器路径
+    float lever_m = 0.15f;                // TVC 力臂 [m]（α→力矩换算）
+    float yaw_moment_nm_per_us = 1.0e-6f; // 差速 PWM→偏航力矩系数 [N·m/µs]（MODEL-DEFAULT，SIL 归一化 yaw 模型换算，非台架值）
+    float inertia_roll_kgm2 = 0.05f;      // 滚转轴转动惯量 [kg·m²]（力矩→角加速度）
+    float inertia_pitch_kgm2 = 0.05f;     // 俯仰轴转动惯量 [kg·m²]
+    float inertia_yaw_kgm2 = 0.08f;       // 偏航轴转动惯量 [kg·m²]
 };
 
 /**
@@ -112,9 +120,15 @@ struct CoaxialCtrlParams
     X(coax.motor_min_us, motor_min_us)            \
     X(coax.motor_max_us, motor_max_us)            \
     X(coax.att_limit_deg, attitude_limit_deg)     \
-    X(coax.dt_s, dt_s)
+    X(coax.dt_s, dt_s)                            \
+    X(coax.alloc_mode, alloc_mode)                \
+    X(coax.lever_m, lever_m)                      \
+    X(coax.yaw_nm_per_us, yaw_moment_nm_per_us)   \
+    X(coax.inertia_roll, inertia_roll_kgm2)       \
+    X(coax.inertia_pitch, inertia_pitch_kgm2)     \
+    X(coax.inertia_yaw, inertia_yaw_kgm2)
 
-#define BFS_COAX_PARAM_COUNT 25
+#define BFS_COAX_PARAM_COUNT 31
 
 // 安全关键默认值锁定（逐位；任何改动都必须走红线评审）
 static_assert(CoaxialCtrlParams{}.mass_kg == 0.84f, "共轴质量默认值必须保持 0.84kg");
@@ -125,6 +139,13 @@ static_assert(CoaxialCtrlParams{}.motor_max_us == 2000.0f, "共轴电机最大 P
 static_assert(CoaxialCtrlParams{}.attitude_limit_deg == 45.0f, "共轴姿态安全限幅默认值必须保持 45deg");
 static_assert(CoaxialCtrlParams{}.dt_s == 0.005f, "共轴控制周期默认值必须保持 5ms");
 static_assert(CoaxialCtrlParams{}.ctrl.max_correction_deg == 10.0f, "共轴修正角限幅默认值必须保持 10deg");
+// task-10 分配器参数默认值锁定（默认 alloc_mode=0 时控制律/输出与旧行为完全一致）
+static_assert(CoaxialCtrlParams{}.alloc_mode == 0.0f, "分配器路径默认必须为 0（legacy 角度路径）");
+static_assert(CoaxialCtrlParams{}.lever_m == 0.15f, "TVC 力臂默认值必须保持 0.15m");
+static_assert(CoaxialCtrlParams{}.yaw_moment_nm_per_us == 1.0e-6f, "差速力矩系数默认值必须保持 1e-6N·m/µs（SIL 归一化 yaw 模型）");
+static_assert(CoaxialCtrlParams{}.inertia_roll_kgm2 == 0.05f, "滚转惯量默认值必须保持 0.05kg·m²");
+static_assert(CoaxialCtrlParams{}.inertia_pitch_kgm2 == 0.05f, "俯仰惯量默认值必须保持 0.05kg·m²");
+static_assert(CoaxialCtrlParams{}.inertia_yaw_kgm2 == 0.08f, "偏航惯量默认值必须保持 0.08kg·m²");
 
 /**
  * @brief 全部控制环参数集合（固件唯一可调参数块）

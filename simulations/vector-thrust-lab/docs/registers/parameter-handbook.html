@@ -883,5 +883,74 @@ href="traceability-matrix.html"><code>模型-代码追溯矩阵</code></a>
 href="assumptions-log.html"><code>假设与局限日志</code></a>
 使用。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
+<hr />
+<h2 id="附录-a-固件共轴双桨机型参数coax固件在线参数">附录 A
+固件共轴双桨机型参数（coax.*，固件在线参数）</h2>
+<blockquote>
+<p>本节只记录固件侧共轴双桨 VTVL
+机型的在线参数，<strong>不属于</strong>上文 59 项仿真参数，也不参与
+<code>models/aircraft-model.json</code> 同步。真值源 =
+<code>TandemVec_FCS/include/FlightCtrlParams.h</code>（默认值）与
+<code>TandemVec_FCS/src/ano_params.cpp</code>（ID/顺序）；GCS 侧由
+<code>GCS/server/params.py::COAX_PARAMS</code> 同序镜像。前 25 项
+<code>coax.*</code>（ID 133–157）见 <code>CTL-003</code>，本附录只补
+task-10 新增的 6 项（ID 158–163）。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>字段名</th>
+<th>默认值</th>
+<th>单位</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ID 158</td>
+<td><code>coax.alloc_mode</code></td>
+<td>0</td>
+<td>-</td>
+<td>0=legacy 角度路径，1=α+油门分配器路径；默认保持旧行为</td>
+</tr>
+<tr>
+<td>ID 159</td>
+<td><code>coax.lever_m</code></td>
+<td>0.15</td>
+<td>m</td>
+<td>TVC 力臂（α→力矩换算）</td>
+</tr>
+<tr>
+<td>ID 160</td>
+<td><code>coax.yaw_nm_per_us</code></td>
+<td>1e-6</td>
+<td>N·m/µs</td>
+<td>差速 PWM→偏航力矩系数（MODEL-DEFAULT，由 SIL 归一化 yaw
+模型换算，非台架值）</td>
+</tr>
+<tr>
+<td>ID 161</td>
+<td><code>coax.inertia_roll</code></td>
+<td>0.05</td>
+<td>kg·m²</td>
+<td>滚转轴转动惯量（分配器力矩→角加速度）</td>
+</tr>
+<tr>
+<td>ID 162</td>
+<td><code>coax.inertia_pitch</code></td>
+<td>0.05</td>
+<td>kg·m²</td>
+<td>俯仰轴转动惯量</td>
+</tr>
+<tr>
+<td>ID 163</td>
+<td><code>coax.inertia_yaw</code></td>
+<td>0.08</td>
+<td>kg·m²</td>
+<td>偏航轴转动惯量</td>
+</tr>
+</tbody>
+</table>
+<footer class="provenance">源文件 <code>docs/registers/参数数据手册.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:04</footer></article></body>
 </html>

@@ -528,3 +528,58 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
   不饱和（舵机一阶 τ=50 ms 主导），只在大指令误差的剧烈机动下起作用。
 - 证据：`sim-data/coax-plant-2026-10-30/`（15 场景 JSON/原始 JSONL、验收日志、
   等价性对比、realistic 结果表与逐开关冒烟说明）。
+
+### 11.1 分配器/失配激励与遥控激励表（2026-10-31，task-11）
+
+为共轴「α+分配器」解耦改造的 A/B 与鲁棒性验证加的可配置激励。**默认值全部等于
+改动前数值**（`×1.0f` 在 IEEE 下精确、不加舍入差），默认开关下 15 场景 stdout
+与改动前逐字节相同（仅 `SIL_REAL_JSON` 末尾多 8 个追踪字段，既有字段与顺序不变）。
+
+| 开关 | 物理含义 | 默认 | 范围 |
+| --- | --- | --- | --- |
+| `--coax-ix <IX>` | plant 绕机体 x 轴（滚转）惯量，独立于 `--coax-iy` | 0.05 kg·m²（既有） | (0,5] |
+| `--coax-inertia-scale <F>` | 三轴惯量统一乘子（Ix/Iy/Iz × F），模拟载荷/惯量失配 | 1.0 | [0.25,4] |
+| `--coax-thrust-scale <F>` | 推力效能失配：实际推力 = 指令 × F（只改 plant 力/力矩，不动固件） | 1.0 | [0.5,1.5] |
+| `--coax-yaw-scale <F>` | 差速偏航力矩系数乘子（模拟 kQ/差速效率偏差） | 1.0 | [0.25,4] |
+| `--coax-alloc-mode <0\|1>` | SIL 启动写 `kFlightCtrlParams.coax.alloc_mode`（0=legacy 1=α+分配器） | 0（不写、不打印） | {0,1} |
+| `--rc-profile <CSV>` | 遥控激励表：50 Hz 节拍覆盖四根摇杆与 CH7/CH9 | 关闭（严格走原路径） | 见下 |
+
+- 实际惯量 = `--coax-ix` × `--coax-inertia-scale`（三轴同乘）；JSON 同时记录 IX 与乘子，
+  便于把「绝对惯量」与「相对失配」分开归因。
+- `--coax-alloc-mode` 用编译期字段探测（`std::void_t` SFINAE）接线：固件字段
+  `CoaxialCtrlParams::alloc_mode` 存在时直接写入（task-10 已落地则打印
+  `[sil] 固件参数 coax.alloc_mode=1`）；字段不存在时只打印警告并照常运行，字段
+  落地后自动接线、SIL 不需再改。默认 0 等于固件默认值，0 时不写也不打印，
+  缺省 stdout 不受影响。
+- **`--rc-profile` CSV**：首行表头固定
+  `t,roll_us,pitch_us,yaw_us,throttle_us,mode_us,att_mode_us`；`t` 为 SIL 秒
+  （非负、单调不减、≤1e6），其余列为 PWM 微秒；行数 ≤4096，允许空行。
+  50 Hz 遥控节拍按行间线性插值取值，`t` 超过末行保持末行（静态时间基准、单调游标）。
+  列范围：`mode_us`∈[1000,2000]，其余（含 `att_mode_us`）∈[988,2012]；
+  表头不符/文件缺失/解析失败/非单调/越界/无数据行均 `rc=2`。
+  语义：roll/pitch/yaw/throttle 覆盖原硬编码摇杆；`mode_us` 灌 CH7、`att_mode_us`
+  灌 CH9；CH5 解锁（t≥0.5 s）、CH6=1800、CH8=1000 与链路丢失/failsafe 时序保持原逻辑。
+  CH9 <1500 → `ATTITUDE_MODE`，≥1500 → `RATE_MODE`（`src/flight_control.cpp:208`）。
+- SIL_REAL_JSON 末尾新增追踪字段：`coax_ix`、`coax_inertia_scale`、`coax_thrust_scale`、
+  `coax_yaw_scale`、`coax_alloc_mode`、`rc_profile_rows`、`rc_profile_t_first`、
+  `rc_profile_t_last`；既有字段逐项不变（默认 rows=0、t_first=t_last=0）。
+
+证据（2026-10-31，`BIN_DIR=T:/sil_alloc`，干净基线同源码 HEAD）：
+- 默认一致性：3 profiles×5 seeds 仍 **14 PASS + 1 FAIL**，验收日志与改动前
+  **逐字节相同**（mag_nominal seed1 `max_pitch=22.069 > 20`，其余 14 项 PASS）；
+  15 场景 stdout 除上述 8 个新键外全部相同（`cmp_task11.py` 判 ALL_IDENTICAL）。
+- `--rc-profile` 6 行冒烟（10 s）：trace-ctrl `rc0`(roll) 按 1500→1600→1500 插值
+  （t=4.5 s 为 1575）、`rc8`(CH9) 按 1000→1600 插值（同一时刻 trace 与 CSV 一致）；
+  相同轨迹仅 CH9=1000 vs 1600（`ATTITUDE_MODE` vs `RATE_MODE`）时
+  `max_roll` 1.381° vs 32.501°、`final_alt` 4.366 m vs 4.101 m，证明 CH9 真进了控制律。
+- 单开关（mag_clean seed1，40 s）：默认 `final_alt=9.859` / `hold_end_rms=0.875` /
+  `max_roll=1.292` / `max_pitch=5.754`；`--coax-inertia-scale 2.0` →
+  `28.482 / 46.165`（2× 惯量下姿态环路明显变差）；`--coax-thrust-scale 0.8` →
+  `max_pitch=2.603` / `max_roll=1.028`；`--coax-ix 0.1` → `max_roll=1.457`；
+  `--coax-yaw-scale 2.0` 影响很小（定高段差速/偏航力矩很小，属预期）。
+- 非法值全部 `rc=2`：`--coax-alloc-mode 2`、`--coax-ix 0|9`、
+  `--coax-inertia-scale 0.1`、`--coax-thrust-scale 2.0`、`--coax-yaw-scale 9`，
+  以及 CSV 表头错/非单调 t/列越界/文件缺失/空文件。
+- 环境注记：本机 SIL 进程向 `%TEMP%`/用户根写 trace 会 `errno=13`（Permission
+  denied，宿主策略），trace 证据改写到 `T:/traces`（项目内 tmp 盘）；`--rc-profile`
+  用相对路径读取正常。

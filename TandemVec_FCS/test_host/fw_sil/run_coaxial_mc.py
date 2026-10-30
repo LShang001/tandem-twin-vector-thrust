@@ -9,6 +9,9 @@
          参数为 L1 假设，不是实机辨识；结论不能外推实机。
          --realistic 把 --coax-realistic 透传给二进制（task-1 的 plant 新开关；
          二进制内若不含该开关字面量则拒绝运行，避免伪造 realistic 证据）。
+         --append-args 追加到每例 SIL 命令末尾（如 "--coax-alloc-mode 1"），
+         用于 A/B 矩阵透传；与 --realistic 同用时 append 对两套命令都生效，
+         因此调参矩阵请分开调用，或接受 realistic 套也带同一开关（记录在 JSON）。
          --out 默认 test_host/fw_sil/sim-data/coax-mc-YYYY-MM-DD/coax_mc.json。
 
 用法（在 TandemVec_FCS 目录下）：
@@ -121,6 +124,9 @@ def main() -> int:
                     help="输出 JSON 路径；默认 sim-data/coax-mc-YYYY-MM-DD/coax_mc[_realistic].json")
     ap.add_argument("--realistic", action="store_true",
                     help="透传 --coax-realistic（task-1 plant 新开关；未落地时拒绝运行）")
+    ap.add_argument("--append-args", default="",
+                    help="追加到每例 SIL 命令末尾的开关（如 '--coax-alloc-mode 1'）；"
+                         "与 --realistic 同用时两套命令都带，见 JSON 的 append_args")
     args = ap.parse_args()
     if args.cases < 1:
         print("[FAIL] --cases 必须 >= 1")
@@ -136,6 +142,10 @@ def main() -> int:
                   "新开关尚未落地，拒绝生成 realistic 证据（避免伪造）。")
             return 2
         realistic_args = ["--coax-realistic"]
+    append_args = args.append_args.split()
+    if args.realistic and append_args:
+        print("[note] --append-args 与 --realistic 同用：append 会同时作用两套命令，"
+              "结果 JSON 记录 append_args 便于区分。")
 
     rng = random.Random(args.seed)
     rows = []
@@ -153,7 +163,7 @@ def main() -> int:
                "--coax-mass", f"{mass:.4f}", "--coax-thrust", f"{thrust:.2f}",
                "--coax-lever", f"{lever:.4f}", "--coax-iy", f"{iy:.4f}",
                "--coax-iz", f"{iz:.4f}", "--coax-yawk", f"{yawk:.6f}",
-               *realistic_args]
+               *realistic_args, *append_args]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         data = None
         for line in reversed(proc.stdout.splitlines()):
@@ -198,6 +208,7 @@ def main() -> int:
         pass_rate=passed / n if n else 0.0,
         realistic=bool(args.realistic), seconds=args.seconds,
         argv_realistic=realistic_args,
+        append_args=append_args,
         hold_p50=pct(holds, 0.5), hold_p95=pct(holds, 0.95),
         roll_p50=pct(rolls, 0.5), roll_p95=pct(rolls, 0.95),
         pitch_p50=pct(pitches, 0.5), pitch_p95=pct(pitches, 0.95),

@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CTL-006 控制-机型解耦契约与分配器 ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ctl-006-控制-机型解耦契约与分配器">CTL-006
+控制-机型解耦契约与分配器</h1>
+<blockquote>
+<p>目标：把"控制律"与"机型动力学/执行机构"之间的接口写成显式契约——姿态/角速度环只输出三轴角加速度指令，制导只输出三轴加速度指令，由机型分配器结合惯量、力臂、推力权限与硬件行程求逆到执行器。控制层不再出现"摆角/差速/舵机
+µs"。 关系：分层与红线见 <a
+href="CTL-003.html">CTL-003</a>；控制律见 <a
+href="CTL-001.html">CTL-001</a>；共轴原始固件对照见 <a
+href="../verification/VER-004.html">VER-004</a>。本文记录
+2026-10-31 落地的契约、共轴 α
+分配器与验证证据，并列出尚未接线的部分。</p>
+</blockquote>
+<hr />
+<h2 id="1-契约分层">1 契约分层</h2>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>输入</th>
+<th>输出</th>
+<th>坐标系/单位</th>
+<th>谁负责饱和</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>制导/位置环</td>
+<td>位置/速度误差、杆量</td>
+<td><code>GuidanceCommand.a_cmd_mps2_ned</code></td>
+<td>NED，m/s²</td>
+<td>制导层做加速度圆限幅</td>
+</tr>
+<tr>
+<td>姿态/角速度环</td>
+<td>姿态误差或杆量、角速度</td>
+<td><code>AlphaCommand.alpha_body_radps2</code></td>
+<td>机体系 FRD，rad/s²</td>
+<td>不饱和；只做增益与滤波</td>
+</tr>
+<tr>
+<td>机型分配器</td>
+<td>α、油门、角速度、惯量/力臂/行程</td>
+<td>舵机角、差速、电机 µs + <code>AllocatorStatus</code></td>
+<td>执行器物理量</td>
+<td>分配器钳位并回报 <code>sat_mask</code>/残差</td>
+</tr>
+<tr>
+<td>输出映射</td>
+<td>规范化通道值</td>
+<td>PWM/µs/百分比</td>
+<td>硬件槽</td>
+<td>映射层做量程保护</td>
+</tr>
+</tbody>
+</table>
+<p>结构体定义在
+<code>TandemVec_FCS/include/ControlContracts.h</code>（<code>bfs::control</code>
+命名空间）：</p>
+<ul>
+<li><code>GuidanceCommand{a_cmd_mps2_ned[3], yaw_cmd_rad, yaw_valid, valid}</code></li>
+<li><code>AttitudeSetpoint{q_w,q_x,q_y,q_z, thrust_n, valid}</code></li>
+<li><code>AlphaCommand{alpha_body_radps2[3], valid}</code></li>
+<li><code>AllocatorStatus{torque_cmd_nm[3], torque_achieved_nm[3], torque_residual_nm, sat_mask, valid}</code></li>
+<li><code>ActuatorCommand{channel[8], count, valid}</code></li>
+</ul>
+<p>饱和位（<code>sat_mask</code>）：<code>kSatAlphaRoll/Pitch/Yaw</code>（α
+请求超物理权限）、<code>kSatTvcRoll/Pitch</code>（摆角撞行程）、<code>kSatYawDiff</code>（差速撞行程；偏航
+α 权限即差速权限，故与 <code>kSatAlphaYaw</code>
+并列置位）、<code>kSatLowThrust</code>（推力不足以支撑
+TVC）、<code>kSatMotorClamp</code>（电机撞上下限）、<code>kSatInvalid</code>（非法输入/参数）、<code>kSatRateCoupling</code>（陀螺耦合补偿启用）。</p>
+<h3 id="11-为什么传-α-而不是力矩">1.1 为什么传 α 而不是力矩</h3>
+<p>力矩 <code>τ=I·α+ω×Iω</code> 需要惯量，而惯量是机型属性；传 α
+让控制层完全不知道
+<code>I</code>，由分配器统一做动力学逆解。代价是控制增益的物理正确性依赖惯量估计——当前
+<code>coax.inertia_*</code> 是 MODEL-DEFAULT（0.05/0.05/0.08
+kg·m²），文档与遥测必须保留这一前提。</p>
+<hr />
+<h2 id="2-共轴分配器α--油门--tvc差速">2 共轴分配器（α + 油门 →
+TVC/差速）</h2>
+<p>实现：<code>TandemVec_FCS/include/CoaxialAllocator.h::allocateCoaxial()</code>；固件接线：<code>src/flight_control.cpp</code>
+共轴分支，开关 <code>coax.alloc_mode</code>（0=legacy
+修正角路径，1=α+分配器，默认 0）。</p>
+<h3 id="21-正向模型">2.1 正向模型</h3>
+<p>机体系 FRD，<code>l</code> 为 TVC 力臂、<code>k</code>
+为差速力矩系数（N·m/µs）：</p>
+<pre><code>Mx =  l·T·sin(δ_roll)      （滚转，两个摆座同向）
+My =  l·T·sin(δ_pitch)     （俯仰）
+Mz = -k·diff_us            （偏航，差速反向）</code></pre>
+<h3 id="22-逆解与权限">2.2 逆解与权限</h3>
+<ol type="1">
+<li><code>T = thrust_estimate</code>（缺省
+<code>throttle%·max_total_thrust_n</code>）；</li>
+<li>α
+物理权限：<code>α_max_roll/pitch = l·T·sin(δ_max)/I_roll/pitch</code>，<code>α_max_yaw = k·diff_max/I_z</code>；</li>
+<li>钳位 α → <code>τ=I·α</code>（可选 <code>+ω×Iω</code>，默认关，保证与
+legacy 手感一致）；</li>
+<li>摆角：<code>δ=asin(τ/(l·T))</code>，<code>T&lt;min_thrust_for_tvc_n/l</code>
+时归中并置 <code>kSatLowThrust</code>；</li>
+<li>差速：<code>diff=τ_z/k</code>，夹在
+<code>±max_yaw_diff_us</code>；</li>
+<li>电机：<code>base=min+throttle%·span</code>，<code>m1=base-diff</code>、<code>m2=base+diff</code>，逐电机钳位；</li>
+<li>回报：<code>torque_requested_nm</code>（未钳位请求）、<code>torque_cmd_nm</code>（钳位后）、<code>torque_achieved_nm</code>（由实际摆角/差速反算）、<code>torque_residual_nm = max|requested-achieved|</code>。</li>
+</ol>
+<p>参数（<code>FlightCtrlParams.h::CoaxialCtrlParams</code>，注册表
+<code>coax.*</code>，ID 158–163）：</p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>coax.alloc_mode</code></td>
+<td>0</td>
+<td>0=legacy，1=α+分配器</td>
+</tr>
+<tr>
+<td><code>coax.lever_m</code></td>
+<td>0.15</td>
+<td>TVC 力臂 m</td>
+</tr>
+<tr>
+<td><code>coax.yaw_nm_per_us</code></td>
+<td>1.0e-6</td>
+<td>差速力矩系数，MODEL-DEFAULT（由 SIL 差分推力/力臂推导；任务书原稿
+0.0005 大 500 倍，已修正）</td>
+</tr>
+<tr>
+<td><code>coax.inertia_roll/pitch</code></td>
+<td>0.05</td>
+<td>kg·m²</td>
+</tr>
+<tr>
+<td><code>coax.inertia_yaw</code></td>
+<td>0.08</td>
+<td>kg·m²</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-identity-约束legacy-等价">2.3 identity 约束（legacy
+等价）</h3>
+<p><code>alloc_mode=1</code> 时固件把 legacy
+控制器输出的修正角/差速按同一组参数折回 α：</p>
+<pre><code>α_roll  = (l·T_est/I_x)·sin(δ_legacy_roll)
+α_pitch = (l·T_est/I_y)·sin(δ_legacy_pitch)
+α_yaw   =  k·diff_legacy/I_z</code></pre>
+<p>再走分配器逆解。只要参数一致，名义点严格往返，因此"换实现不改手感"可被逐点验证，而不是靠肉眼。</p>
+<hr />
+<h2 id="3-纵列分配器现状">3 纵列分配器现状</h2>
+<p>纵列路径已是 α 输入：<code>execute_attitude_controller()</code> 写
+<code>alpha_roll/pitch_radps2</code>，<code>execute_yaw_controller()</code>
+写 <code>alpha_yaw_radps2</code>，<code>TandemVecAllocator</code> 内做
+<code>Mx=-Ix·α_yaw、My=Iy·α_pitch、Mz=-Iz·α_roll</code> 后进入 BTRUE
+开方、摆角几何与差速。该路径未改动，见 <a
+href="CTL-001.html">CTL-001</a> §分配器。</p>
+<p>共轴与纵列的差异只在"分配器 +
+输出映射"两段；输入解析、模式、积分、定高、目标姿态生成完全共用（<code>flight_control.cpp</code>
+步 1–5）。</p>
+<hr />
+<h2 id="4-制导--动力分配">4 制导 → 动力分配</h2>
+<p>现状：<code>handlePositionControl()</code>
+输出目标加速度（NED），<code>generate_attitude_target()</code>
+内部用</p>
+<pre><code>f_up = g + a_up
+T_cmd/norm = sqrt(a_n² + a_e² + f_up²)
+comp_N = a_n/norm, comp_E = a_e/norm</code></pre>
+<p>构造倾斜四元数，<code>compute_thrust_control()</code> 给出
+<code>specific_force_up_mps2</code> 与 <code>cos_tilt</code>。这套计算与
+GUIDED
+路径重复，且"加速度→推力/姿态"的饱和责任散落在三个函数与全局量里。</p>
+<p>契约化目标（尚未接线）：<code>GuidanceCommand → AttitudeSetpoint</code>
+由纯函数一次完成——<code>f_cmd=a_cmd-g_ned</code>、<code>T=m|f|</code>、倾角按
+max_tilt 限幅、推力按 <code>max_total_thrust_n</code>
+限幅、饱和位回报；<code>q_target</code>
+由推力方向与航向构造。接线前必须先证明与现有实现逐位一致（同一输入网格），否则不改飞行路径。</p>
+<hr />
+<h2 id="5-通用性路线airframespec">5 通用性路线（AirframeSpec）</h2>
+<ol type="1">
+<li><strong>数据化</strong>：<code>AirframeSpec</code>
+作为唯一真值（机型
+id、后端枚举、引脚/输出通道、参数组掩码、安全策略、构建宏）；先做零行为变化的表
++ 宿主一致性测试。</li>
+<li><strong>输出合一</strong>：<code>applyAirframeOutputs(spec, cmd)</code>
+统一 4 槽写引脚；<code>mapTandemVecOutputs/mapCoaxialVtvOutputs</code>
+降为测试适配器。</li>
+<li><strong>后端接口</strong>：<code>IControlBackend</code> +
+编译期模板特化，单二进制只编一条链；共享只到归一化指令/执行器命令/生命周期。</li>
+<li><strong>参数与遥测 schema</strong>：<code>params.def</code> 生成 C++
+注册表与 GCS <code>expected_names</code>；遥测公共头 + 机型扩展块；ID
+只许尾部追加并用前缀哈希锁死。</li>
+<li><strong>第三机型试点</strong>：四旋翼 VTVL 接表 +
+<code>tools/airframe_matrix.py</code> 一键矩阵。</li>
+</ol>
+<p>边界：控制律/增益/故障阈值/模式状态机不共享；不做运行期热切换（一机型一二进制，可审计）；CTL-003
+§4 红线（BTRUE 开方、dMax/dwMax、航向门控）不迁移。</p>
+<hr />
+<h2 id="6-验证证据2026-10-31">6 验证证据（2026-10-31）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>契约/逆解单测</td>
+<td><strong>6151 断言 0 失败</strong>；900 组逆解往返 δ/yaw 误差
+0.000000；NaN→<code>kSatInvalid</code>+输出回零</td>
+<td><code>TandemVec_FCS/test_host/test_allocator_contracts.cpp</code>（run_all
+注册 <code>aco</code>）</td>
+</tr>
+<tr>
+<td>名义点 identity</td>
+<td>T=mg=8.2376 N 全组合往返误差 0.000000</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>轴序/符号</td>
+<td>α_roll→Mx、α_pitch→My、α_yaw→Mz，与 SIL plant
+<code>body M=[-w.Mz,w.My,-w.Mx]</code> 一致</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>SIL α 路径 3×5</td>
+<td><strong>14/15</strong>，唯一 FAIL <code>mag_nominal seed1</code>
+max_pitch=22.069°（与 legacy 逐项相同）</td>
+<td><code>T:/sil_alloc/fw_coax.exe --coax-alloc-mode 1</code></td>
+</tr>
+<tr>
+<td>默认路径不回退</td>
+<td>alloc=0 时 3×5=14/15、mag_nominal seed1 22.069/roll 8.17/hold_end
+0.96</td>
+<td>同前</td>
+</tr>
+<tr>
+<td>固件构建</td>
+<td><code>pio run -e TandemVec_FCS -e CoaxialVTVL</code> 均 SUCCESS</td>
+<td>构建日志</td>
+</tr>
+<tr>
+<td>全量宿主回归</td>
+<td>run_all EXIT=0，"全部宿主机回归测试通过"（含 aco）</td>
+<td><code>tmp/host_alloc_recheck/run_all.log</code></td>
+</tr>
+</tbody>
+</table>
+<p>A/B 手感与 8×5/MC/sweep 矩阵由
+<code>sim-data/coax-alloc-2026-10-31/</code> 记录（脚本
+<code>run_coaxial_ab.py</code> 与
+<code>run_coaxial_suite.sh --alloc-mode 1</code>）。</p>
+<h3 id="61-已知行为与风险">6.1 已知行为与风险</h3>
+<ul>
+<li><strong>低推力差速不门控</strong>：<code>T&lt;0.35 N</code>（含
+throttle=0）时 TVC 归中并置
+<code>kSatLowThrust</code>，但偏航指令仍驱动差速（实测 m1=1000
+µs、m2=1180 µs）。该行为与 legacy <code>mapCoaxialVtvOutputs</code>
+完全一致，属有意保留；风险已在 VER-004 登记，是否改为"TVC
+不可用即零差速"需实机安全评审，不在本次改动内。</li>
+<li><strong>饱和语义</strong>：<code>torque_cmd_nm</code>
+是钳位后力矩，<code>torque_requested_nm</code>
+是未钳位请求，残差按后者算；消费方不得用 <code>cmd-achieved</code>
+反推残差。</li>
+<li><strong>惯量/推力为 MODEL-DEFAULT</strong>：α 权限与逆解精度依赖
+<code>coax.inertia_*</code>、<code>coax.lever_m</code>、<code>coax.yaw_nm_per_us</code>，未台架标定前只作设计值。</li>
+<li><strong>遥测 ABI</strong>：<code>GncTelemetry</code> 尾部新增
+<code>coax_alloc_sat</code>、<code>coax_torque_residual_nm</code>；<code>AnoVars</code>
+尚未暴露分配器饱和位。</li>
+<li><strong>制导→动力分配契约尚未接线</strong>：当前仍是内联公式；提取纯函数并用网格证明逐位一致后才会替换。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:04</footer></article></body>
+</html>

@@ -1646,5 +1646,70 @@ P50/P95=1.38/27.85 m，roll 1.67/13.43°，pitch 27.96/56.39°）；sweep
 AUTO 定高/定点路径未受手动 ATTITUDE/RATE 修复影响；俯仰裕度 2.1°
 问题仍在。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 00:05</footer></article></body>
+<hr />
+<h2 id="11-2026-10-31-控制-机型解耦共轴-α-分配器">11. 2026-10-31
+控制-机型解耦：共轴 α 分配器</h2>
+<p>用户要求把控制律与机型硬件解耦；落地内容与契约见 <a
+href="../control/CTL-006.html">CTL-006</a>。本节只记与原始固件对照相关的结论。</p>
+<h3 id="111-新增实现默认不改变行为">11.1 新增实现（默认不改变行为）</h3>
+<ul>
+<li><code>CoaxialVtvControl</code> 仍输出修正角/差速；新增
+<code>CoaxialAllocator</code>（α + 油门 → 摆角/差速/电机 µs），由
+<code>coax.alloc_mode</code> 选择：0=legacy（默认），1=α 路径。</li>
+<li><code>alloc_mode=1</code> 时固件把 legacy 输出按同一组参数折回 α
+再逆解，构成"名义点 identity"约束；参数
+<code>coax.lever_m/yaw_nm_per_us/inertia_*</code> 已进注册表（ID
+158–163，总 164），默认值来自 SIL 模型，标记 MODEL-DEFAULT。</li>
+<li>遥测新增
+<code>coax_alloc_sat</code>、<code>coax_torque_residual_nm</code>；分配器输出提供
+<code>torque_requested_nm</code>（未钳位）与
+<code>torque_cmd_nm</code>（钳位后），残差按前者计算。</li>
+</ul>
+<h3 id="112-验证">11.2 验证</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>契约/逆解单测</td>
+<td>6151 断言 0 失败；900 组往返 δ/yaw
+0.000000°；NaN→0x100+输出回零</td>
+</tr>
+<tr>
+<td>轴序/符号</td>
+<td>与 SIL plant <code>body M=[-w.Mz, w.My, -w.Mx]</code> 一致</td>
+</tr>
+<tr>
+<td>SIL α 路径 3×5</td>
+<td>14/15，唯一失败仍是 <code>mag_nominal seed1</code>
+max_pitch=22.069°（与 legacy 逐项相同）</td>
+</tr>
+<tr>
+<td>默认路径</td>
+<td>alloc_mode=0 的 3×5 与 39/40 矩阵口径不变</td>
+</tr>
+<tr>
+<td>固件/宿主</td>
+<td>两 env SUCCESS；run_all EXIT=0</td>
+</tr>
+</tbody>
+</table>
+<h3 id="113-已知行为与待决">11.3 已知行为与待决</h3>
+<ul>
+<li><strong>低推力差速不门控</strong>：T&lt;0.35 N（含 throttle=0）时
+TVC 归中并置 <code>kSatLowThrust</code>，偏航指令仍驱动差速（m1=1000
+µs、m2=1180 µs）。与 legacy <code>mapCoaxialVtvOutputs</code>
+一致，属有意保留；是否改为"TVC
+不可用即零差速"需实机安全评审，本次不改。</li>
+<li><strong>杆量曲线与 α 路径叠加</strong>：<code>alloc_mode=1</code> 的
+α 来源仍是 legacy 控制器输出，因此曲线语义（满杆 333/222 dps）不变；A/B
+结果见 <code>sim-data/coax-alloc-2026-10-31/</code>。</li>
+<li><strong>制导→动力分配契约尚未接线</strong>：当前仍内联；提取纯函数并证明逐位一致后再替换。</li>
+<li>惯量/力臂/差速系数未台架标定，α 权限与残差只作设计值。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 01:04</footer></article></body>
 </html>

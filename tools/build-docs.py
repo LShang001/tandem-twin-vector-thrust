@@ -106,6 +106,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "CTL-003 多机型与执行器抽象", "机型/能力位/执行器输出表、N 输入分配、VTVL/液体火箭扩展边界"),
         ("docs/05-控制与分配/CTL-004-固件仿真一体化.md", "control/CTL-004.html",
          "CTL-004 固件-仿真一体化", "固件=唯一算法源：三层 ABI、统一源清单、能力查询、参数注册表、消费者登记与扩展步骤"),
+        ("docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md", "control/CTL-006.html",
+         "CTL-006 控制-机型解耦契约与分配器", "α/加速度契约、共轴分配器逆解、制导→动力分配、AirframeSpec 路线与 6151 断言证据"),
     ]),
     ("推进与执行机构", [
         ("docs/06-推进与执行机构/PROP-001-推进与摆座模型.md", "propulsion/PROP-001.html",

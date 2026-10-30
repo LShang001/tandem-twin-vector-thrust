@@ -87,6 +87,9 @@ run_one "$ROOT/test_host/test_coaxial_vtv_control.cpp" cvc ""
 # 共轴参数可标定化（FlightCtrlParams.h::CoaxialCtrlParams，纯平台无关——
 # 默认值逐位 = 旧硬编码、注册表 coax.* 顺序、默认参数逐拍输出与改造前一致）：
 run_one "$ROOT/test_host/test_coax_params.cpp" cparams ""
+# 共轴分配器控制契约（ControlContracts.h / CoaxialAllocator.h，纯平台无关——
+# 逆解往返、轴序/符号对齐 SIL plant、低推力边界、非有限输入、残差语义、名义点手感）：
+run_one "$ROOT/test_host/test_allocator_contracts.cpp" aco ""
 # 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
 # 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
 run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""

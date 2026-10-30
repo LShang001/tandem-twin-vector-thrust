@@ -2,10 +2,10 @@
  * @file    test_coax_params.cpp
  * @brief   共轴双桨 VTVL 参数可标定化回归（默认值逐位 / 注册表顺序 / 逐拍输出锁定）
  *
- * 验证目标（对应 task-6）：
- *  1) CoaxialCtrlParams 的 18 项控制律默认值 + 7 项物理/输出常量逐位等于原
- *     flight_control.cpp 共轴分支内的硬编码字面量（不是"约等于"）；
- *  2) 参数注册表 coax.* 的 25 个名称、顺序与 BFS_COAX_PARAM_LIST 完全一致，
+ * 验证目标（对应 task-6/task-10）：
+ *  1) CoaxialCtrlParams 的 18 项控制律默认值 + 13 项物理/输出/分配器常量逐位等于原
+ *     flight_control.cpp 共轴分支内的硬编码字面量/分配器默认（不是"约等于"）；
+ *  2) 参数注册表 coax.* 的 31 个名称、顺序与 BFS_COAX_PARAM_LIST 完全一致，
  *     名称 ≤20B，按 MAVLink 规则截断 15B 后唯一（param_id 冲突会让 QGC 写错参数）；
  *  3) 用默认参数构造的控制器跑 10 拍基准序列，输出位型逐拍等于 2026-10-30
  *     串级语义修正后的 golden（RATE 只复位角度外环、内环积分两模式使能、
@@ -104,11 +104,19 @@ struct LegacyPhysical
     float motor_max_us;
     float attitude_limit_deg;
     float dt_s;
+    // ★ task-10 分配器参数默认值（旧行为 = alloc_mode 0，不启用 α+分配器路径）
+    float alloc_mode;
+    float lever_m;
+    float yaw_moment_nm_per_us;
+    float inertia_roll_kgm2;
+    float inertia_pitch_kgm2;
+    float inertia_yaw_kgm2;
 };
 
 LegacyPhysical legacyPhysical()
 {
-    return LegacyPhysical{0.84f, 14.0f, 15.0f, 1000.0f, 2000.0f, 45.0f, 0.005f};
+    return LegacyPhysical{0.84f, 14.0f, 15.0f, 1000.0f, 2000.0f, 45.0f, 0.005f,
+                          0.0f, 0.15f, 1.0e-6f, 0.05f, 0.05f, 0.08f};
 }
 
 bool samePhysical(const CoaxialCtrlParams &p, const LegacyPhysical &l)
@@ -119,7 +127,13 @@ bool samePhysical(const CoaxialCtrlParams &p, const LegacyPhysical &l)
            same(p.motor_min_us, l.motor_min_us) &&
            same(p.motor_max_us, l.motor_max_us) &&
            same(p.attitude_limit_deg, l.attitude_limit_deg) &&
-           same(p.dt_s, l.dt_s);
+           same(p.dt_s, l.dt_s) &&
+           same(p.alloc_mode, l.alloc_mode) &&
+           same(p.lever_m, l.lever_m) &&
+           same(p.yaw_moment_nm_per_us, l.yaw_moment_nm_per_us) &&
+           same(p.inertia_roll_kgm2, l.inertia_roll_kgm2) &&
+           same(p.inertia_pitch_kgm2, l.inertia_pitch_kgm2) &&
+           same(p.inertia_yaw_kgm2, l.inertia_yaw_kgm2);
 }
 
 // ---- 注册表顺序：与 FlightCtrlParams.h 的 BFS_COAX_PARAM_LIST 单一事实源比对 ----
@@ -150,6 +164,13 @@ const char *const kExpectedNames[] = {
     "coax.motor_max_us",
     "coax.att_limit_deg",
     "coax.dt_s",
+    // ★ task-10 α+油门分配器参数（ID 158-163，GCS 同序）
+    "coax.alloc_mode",
+    "coax.lever_m",
+    "coax.yaw_nm_per_us",
+    "coax.inertia_roll",
+    "coax.inertia_pitch",
+    "coax.inertia_yaw",
 };
 
 const char *const kMacroNames[] = {
@@ -294,10 +315,10 @@ int main()
     check(samePhysical(def, legacy_phys), "CoaxialCtrlParams{} 物理/输出常量逐位相等");
     check(samePhysical(kFlightCtrlParamsDefaults.coax, legacy_phys),
           "kFlightCtrlParamsDefaults.coax 物理/输出常量逐位相等");
-    std::printf("  [2] 物理/输出常量 7 项默认值逐位比对完成\n");
+    std::printf("  [2] 物理/输出/分配器常量 13 项默认值逐位比对完成\n");
 
     // ---- 3. 注册表名称/顺序/长度/短名唯一 ----
-    check(BFS_COAX_PARAM_COUNT == 25, "BFS_COAX_PARAM_COUNT == 25");
+    check(BFS_COAX_PARAM_COUNT == 31, "BFS_COAX_PARAM_COUNT == 31");
     check((int)(sizeof(kExpectedNames) / sizeof(kExpectedNames[0])) ==
               BFS_COAX_PARAM_COUNT,
           "期望名称表长度 == BFS_COAX_PARAM_COUNT");
@@ -322,7 +343,7 @@ int main()
             check(std::strcmp(a, b) != 0, "MAVLink 短名两两唯一");
         }
     }
-    std::printf("  [3] 25 个参数名称/顺序/长度/短名唯一性检查完成\n");
+    std::printf("  [3] 31 个参数名称/顺序/长度/短名唯一性检查完成\n");
 
     // ---- 4. 默认参数控制器输出逐拍等于改造前 golden ----
     OutBits got[kSeqLen];

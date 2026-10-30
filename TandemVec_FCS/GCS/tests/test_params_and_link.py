@@ -22,23 +22,23 @@ import params as pm
 
 
 def test_param_count_matches_firmware():
-    """参数总数 = 158（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波+1 前馈掩码；★2026-08-11 +7 FPV 摇杆曲线；★2026-10-25 +2 航向源；★2026-10-26 +3 杆臂；★2026-10-30 +25 共轴双桨）"""
+    """参数总数 = 164（与固件 ANO_PARAMS_COUNT 一致；★2026-08-09 +3 二级滤波+1 前馈掩码；★2026-08-11 +7 FPV 摇杆曲线；★2026-10-25 +2 航向源；★2026-10-26 +3 杆臂；★2026-10-30 +25 共轴双桨；★task-10 +6 分配器）"""
     names = pm.expected_names()
-    assert len(names) == 158
+    assert len(names) == 164
     assert names.index('rate_pitch.kd') == 38
-    assert len(set(names)) == 158
+    assert len(set(names)) == 164
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
     # ★ 2026-08-10 全面审查修复：尾部顺序对齐固件注册表
     #   （inertia_comp_mask@117 → spd2_alpha[0..2]@118-120 → ★2026-08-11 rc 曲线@121-127）
-    assert names[-1] == 'coax.dt_s'
+    assert names[-1] == 'coax.inertia_yaw'
     assert names[117] == 'inertia_comp_mask'
     assert names[121:133] == ['rc_rate', 'rc_expo[0]', 'rc_expo[1]', 'rc_expo[2]',
                               'rc_super[0]', 'rc_super[1]', 'rc_super[2]',
                               'hdg_mode', 'hdg_align', 'gnss_lever_x',
                               'gnss_lever_y', 'gnss_lever_z']
     # ★ 2026-10-30 共轴双桨 VTVL：名称/顺序 = 固件 BFS_COAX_PARAM_LIST
-    assert names[133:158] == [
+    assert names[133:164] == [
         'coax.att_kp_roll', 'coax.att_kp_pitch', 'coax.rate_kp_roll',
         'coax.rate_ki_roll', 'coax.rate_kp_pitch', 'coax.rate_ki_pitch',
         'coax.rate_kp_yaw', 'coax.rate_ki_yaw', 'coax.max_rate_dps',
@@ -47,7 +47,9 @@ def test_param_count_matches_firmware():
         'coax.att_flt_alpha', 'coax.corr_flt_alpha', 'coax.pid_deriv_alpha',
         'coax.mass_kg', 'coax.max_thrust_n', 'coax.servo_half_deg',
         'coax.motor_min_us', 'coax.motor_max_us', 'coax.att_limit_deg',
-        'coax.dt_s']
+        'coax.dt_s', 'coax.alloc_mode', 'coax.lever_m',
+        'coax.yaw_nm_per_us', 'coax.inertia_roll', 'coax.inertia_pitch',
+        'coax.inertia_yaw']
     assert 'att_roll.falpha' in names
     assert all(len(n) <= 20 for n in names), [n for n in names if len(n) > 20]
 
@@ -303,8 +305,10 @@ def test_param_name_to_id_mapping():
     assert names.index('att_roll.kp') == 0
     assert names.index('att_pitch.kp') == 9
     assert names.index('rate_roll.kd') == 29
-    assert len(names) == 158
+    assert len(names) == 164
     assert names.index('rate_pitch.kd') == 38
-    # ★ 2026-10-30 共轴参数只在表尾追加，旧 ID 不得移动
+    # ★ 2026-10-30 共轴参数只在表尾追加，旧 ID 不得移动；★task-10 分配器 158-163
     assert names.index('coax.att_kp_roll') == 133
     assert names.index('coax.dt_s') == 157
+    assert names.index('coax.alloc_mode') == 158
+    assert names.index('coax.inertia_yaw') == 163

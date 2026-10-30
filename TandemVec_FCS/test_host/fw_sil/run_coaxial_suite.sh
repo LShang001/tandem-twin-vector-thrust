@@ -22,6 +22,10 @@
 #   - --realistic = 双套对照：额外跑 --coax-realistic 的 8×5 验收与 100 例 MC，
 #     与 current 并列写入 summary（sweep 仍只跑 current）；该开关须已编入二进制，
 #     未落地时脚本如实记录失败、不伪造数据。
+#   - --alloc-mode N（0/1）= 把 --coax-alloc-mode N 透传给验收/MC/sweep，
+#     用于控制路径 A/B 矩阵（task-13）；该开关须已编入二进制，否则 rc=2。
+#   - --extra-args "..." = 任意额外 SIL 开关（空格分隔），同样透传给三阶段；
+#     与 --alloc-mode 可叠加，拼成 --append-args 传下去。
 #   - 验收口径：8 profiles × 5 seeds = 40 场景（默认 seeds 1..5），不再用旧 3×5。
 #
 # 退出码：0=全部阶段通过；1=任一阶段失败（含 MC/sweep 未全过）。
@@ -42,6 +46,8 @@ SEEDS="1,2,3,4,5"
 DURATION=40
 REALISTIC=0
 SUITE_BIN=""
+ALLOC_MODE=""
+EXTRA_ARGS=""
 
 usage() {
   cat <<'EOF'
@@ -61,6 +67,9 @@ usage() {
   --realistic       双套对照：额外跑 --coax-realistic 的 8×5 验收与 100 例 MC
                     （需该开关已编入二进制；未落地时脚本拒绝伪造）
   --bin PATH        复用已构建二进制（跳过构建；final 可指定冻结后产物）
+  --alloc-mode N    控制路径 0/1：透传 --coax-alloc-mode N 给验收/MC/sweep
+                    （task-13 A/B 矩阵；二进制缺该开关时 rc=2）
+  --extra-args STR  额外 SIL 开关（空格分隔），同样透传三阶段；可与 --alloc-mode 叠加
 
 退出码：0=全部阶段通过；1=任一阶段失败（含 MC/sweep 未全过）。
 EOF
@@ -78,6 +87,10 @@ while [ $# -gt 0 ]; do
     --seconds=*) DURATION="${1#--seconds=}"; shift ;;
     --bin) SUITE_BIN="${2:?--bin 需要路径}"; shift 2 ;;
     --bin=*) SUITE_BIN="${1#--bin=}"; shift ;;
+    --alloc-mode) ALLOC_MODE="${2:?--alloc-mode 需要 0 或 1}"; shift 2 ;;
+    --alloc-mode=*) ALLOC_MODE="${1#--alloc-mode=}"; shift ;;
+    --extra-args) EXTRA_ARGS="${2:?--extra-args 需要字符串}"; shift 2 ;;
+    --extra-args=*) EXTRA_ARGS="${1#--extra-args=}"; shift ;;
     --realistic) REALISTIC=1; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "[suite] 未知参数：$1" >&2; usage; exit 2 ;;
@@ -85,9 +98,23 @@ while [ $# -gt 0 ]; do
 done
 
 mkdir -p "$OUT_DIR"
+if [ -n "$ALLOC_MODE" ]; then
+  case "$ALLOC_MODE" in
+    0|1) ;;
+    *) echo "[suite] --alloc-mode 只接受 0 或 1（收到 $ALLOC_MODE）" >&2; exit 2 ;;
+  esac
+fi
+# 透传串：--alloc-mode 展开成 --coax-alloc-mode N，再拼 --extra-args。
+APPEND=""
+[ -n "$ALLOC_MODE" ] && APPEND="--coax-alloc-mode $ALLOC_MODE"
+if [ -n "$EXTRA_ARGS" ]; then
+  APPEND="${APPEND:+$APPEND }$EXTRA_ARGS"
+fi
 STATUS="$OUT_DIR/.status"
 : > "$STATUS"
 record() { echo "$1=$2" >> "$STATUS"; }
+record alloc_mode "${ALLOC_MODE:-}"
+record extra_args "${EXTRA_ARGS:-}"
 COMMIT="$(git -C "$ROOT" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 DIRTY="$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
 record commit "$COMMIT"
@@ -139,16 +166,39 @@ if [ "$BUILD_RC" -ne 0 ] || [ ! -f "$BIN" ]; then
 else
   echo "[suite] 构建成功：$BIN"
 
+  # 控制路径 A/B（--alloc-mode）同 realistic 一样必须确认开关真编入二进制：
+  # SIL 对未知参数静默忽略，照跑会把 alloc 0/1 跑成同一路径（伪造证据）。
+  ALLOC_OK=1
+  if [ -n "$ALLOC_MODE" ] && ! grep -aq -- "--coax-alloc-mode" "$BIN"; then
+    ALLOC_OK=0
+    echo "binary lacks --coax-alloc-mode; alloc-mode stages refused" \
+         > "$OUT_DIR/alloc_probe.log"
+    echo "[suite] [FAIL] 二进制不含 --coax-alloc-mode（--alloc-mode $ALLOC_MODE），拒绝伪造 A/B 证据" >&2
+  fi
+  record alloc_ok "$ALLOC_OK"
+
   # ---- 2/4 验收（8 profiles × 5 seeds） -----------------------------------
+  ACC_ARGS=()
+  [ -n "$APPEND" ] && ACC_ARGS+=(--append-args "$APPEND")
   echo "[suite] [2/4] 验收 $PROFILES × seeds=$SEEDS ..."
-  /bin/bash "$ROOT/test_host/fw_sil/run_coaxial_acceptance.sh" \
-      --bin "$BIN" --profiles "$PROFILES" --seeds "$SEEDS" \
-      --seconds "$DURATION" 2>&1 | tee "$OUT_DIR/acceptance.log"
-  ACC_RC=${PIPESTATUS[0]}
+  if [ "$ALLOC_OK" -eq 0 ]; then
+    echo "binary lacks --coax-alloc-mode; acceptance refused" > "$OUT_DIR/acceptance.log"
+    echo "[suite] [FAIL] 跳过验收：--coax-alloc-mode 未落地" >&2
+    ACC_RC=2
+  else
+    /bin/bash "$ROOT/test_host/fw_sil/run_coaxial_acceptance.sh" \
+        --bin "$BIN" --profiles "$PROFILES" --seeds "$SEEDS" \
+        --seconds "$DURATION" "${ACC_ARGS[@]}" 2>&1 | tee "$OUT_DIR/acceptance.log"
+    ACC_RC=${PIPESTATUS[0]}
+  fi
   record acceptance "$ACC_RC"
 
   # 双套对照时，realistic 验收同一矩阵（只差 plant 开关），单独落日志。
-  if [ "$REALISTIC" -eq 1 ]; then
+  if [ "$REALISTIC" -eq 1 ] && [ "$ALLOC_OK" -eq 0 ]; then
+    echo "binary lacks --coax-alloc-mode; realistic acceptance refused" \
+         > "$OUT_DIR/acceptance_realistic.log"
+    ACC_REAL_RC=2
+  elif [ "$REALISTIC" -eq 1 ]; then
     # 防护：二进制必须真的编入 --coax-realistic。SIL 对未知参数是静默忽略的，
     # 若开关未落地却照跑，会得到“假 realistic”数据；这里直接拒绝并记 rc=2。
     if ! grep -aq -- "--coax-realistic" "$BIN"; then
@@ -158,7 +208,11 @@ else
       ACC_REAL_RC=2
     else
       echo "[suite] [2/4] 验收 realistic（--coax-realistic）..."
-      /bin/bash "$ROOT/test_host/fw_sil/run_coaxial_acceptance.sh" --bin "$BIN" --profiles "$PROFILES" --seeds "$SEEDS" --seconds "$DURATION" --append-args=--coax-realistic 2>&1 | tee "$OUT_DIR/acceptance_realistic.log"
+      # realistic 套同样带 alloc/extra 开关（单 token 拼接，避免 argparse 把
+      # 以 - 开头的第二个 argv 当成新选项）。
+      REAL_APPEND="--coax-realistic"
+      [ -n "$APPEND" ] && REAL_APPEND="$REAL_APPEND $APPEND"
+      /bin/bash "$ROOT/test_host/fw_sil/run_coaxial_acceptance.sh" --bin "$BIN" --profiles "$PROFILES" --seeds "$SEEDS" --seconds "$DURATION" --append-args="$REAL_APPEND" 2>&1 | tee "$OUT_DIR/acceptance_realistic.log"
       ACC_REAL_RC=${PIPESTATUS[0]}
     fi
   else
@@ -168,16 +222,26 @@ else
   record acceptance_realistic "$ACC_REAL_RC"
 
   # ---- 3/4 随机参数 MC 100（当前 plant，可选 realistic） ------------------
+  MC_ARGS=()
+  [ -n "$APPEND" ] && MC_ARGS+=(--append-args "$APPEND")
   echo "[suite] [3/4] MC 100 例（当前 plant）..."
-  py -3.12 "$ROOT/test_host/fw_sil/run_coaxial_mc.py" --bin "$BIN" \
-      --cases 100 --seconds "$DURATION" \
-      --out "$OUT_DIR/mc_current.json" 2>&1 | tee "$OUT_DIR/mc_current.log"
-  MC_RC=${PIPESTATUS[0]}
+  if [ "$ALLOC_OK" -eq 0 ]; then
+    echo "binary lacks --coax-alloc-mode; mc refused" > "$OUT_DIR/mc_current.log"
+    MC_RC=2
+  else
+    py -3.12 "$ROOT/test_host/fw_sil/run_coaxial_mc.py" --bin "$BIN" \
+        --cases 100 --seconds "$DURATION" "${MC_ARGS[@]}" \
+        --out "$OUT_DIR/mc_current.json" 2>&1 | tee "$OUT_DIR/mc_current.log"
+    MC_RC=${PIPESTATUS[0]}
+  fi
   record mc_current "$MC_RC"
-  if [ "$REALISTIC" -eq 1 ]; then
+  if [ "$REALISTIC" -eq 1 ] && [ "$ALLOC_OK" -eq 0 ]; then
+    echo "binary lacks --coax-alloc-mode; realistic mc refused" > "$OUT_DIR/mc_realistic.log"
+    REAL_RC=2
+  elif [ "$REALISTIC" -eq 1 ]; then
     echo "[suite] [3/4] MC 100 例（--coax-realistic）..."
     py -3.12 "$ROOT/test_host/fw_sil/run_coaxial_mc.py" --bin "$BIN" \
-        --cases 100 --seconds "$DURATION" --realistic \
+        --cases 100 --seconds "$DURATION" --realistic "${MC_ARGS[@]}" \
         --out "$OUT_DIR/mc_realistic.json" 2>&1 | tee "$OUT_DIR/mc_realistic.log"
     REAL_RC=${PIPESTATUS[0]}
   else
@@ -187,11 +251,18 @@ else
   record mc_realistic "$REAL_RC"
 
   # ---- 4/4 sweep 18（保留历史口径） ---------------------------------------
+  SW_ARGS=()
+  [ -n "$APPEND" ] && SW_ARGS+=(--append-args "$APPEND")
   echo "[suite] [4/4] sweep 18 组 ..."
-  py -3.12 "$ROOT/test_host/fw_sil/run_coaxial_sweep.py" --bin "$BIN" \
-      --seconds "$DURATION" \
-      --out "$OUT_DIR/sweep.json" 2>&1 | tee "$OUT_DIR/sweep.log"
-  SWEEP_RC=${PIPESTATUS[0]}
+  if [ "$ALLOC_OK" -eq 0 ]; then
+    echo "binary lacks --coax-alloc-mode; sweep refused" > "$OUT_DIR/sweep.log"
+    SWEEP_RC=2
+  else
+    py -3.12 "$ROOT/test_host/fw_sil/run_coaxial_sweep.py" --bin "$BIN" \
+        --seconds "$DURATION" "${SW_ARGS[@]}" \
+        --out "$OUT_DIR/sweep.json" 2>&1 | tee "$OUT_DIR/sweep.log"
+    SWEEP_RC=${PIPESTATUS[0]}
+  fi
   record sweep "$SWEEP_RC"
 fi
 
@@ -359,7 +430,7 @@ real_passed = sum(x["passed"] for x in by_profile_real.values())
 real_seeds = len({c["seed"] for c in cases_real})
 
 lines = []
-lines.append("# 共轴 VTVL 验证证据（coax-2026-10-30）")
+lines.append(f"# 共轴 VTVL 验证证据（{out.name}）")
 lines.append("")
 lines.append(f"- 生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 lines.append(f"- 仓库：`TandemVec_FCS` @ `{status.get('commit', 'unknown')}`"
@@ -372,6 +443,15 @@ lines.append(f"- `MadgwickAHRS.cpp` 构建补丁："
 lines.append(f"- 矩阵：profiles=`{profiles_arg}`；seeds=`{seeds_arg}`；"
              f"seconds={status.get('seconds', '?')}；"
              f"双套（--coax-realistic）={'是' if status.get('realistic') == '1' else '否'}")
+if status.get("alloc_mode") or status.get("extra_args"):
+    bits = []
+    if status.get("alloc_mode"):
+        bits.append(f"`--coax-alloc-mode {status['alloc_mode']}`")
+    if status.get("extra_args"):
+        bits.append(f"`{status['extra_args']}`")
+    lines.append("- 控制路径透传：" + "；".join(bits)
+                 + f"（alloc_ok={status.get('alloc_ok', '?')}；"
+                   "二进制缺开关时验收/MC/sweep 记 rc=2 并拒绝伪造）")
 if acc_total:
     scope = f"current {acc_total} 场景"
     if cases_real:
