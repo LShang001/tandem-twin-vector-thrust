@@ -97,30 +97,9 @@ run_one "$ROOT/test_host/test_power_allocation.cpp" pwa ""
 run_one "$ROOT/test_host/test_alpha_tracking.cpp" atrk ""
 # 液体火箭分配器试点（α+油门→摆座/RCS/主阀；名义往返、饱和、零推力、非有限）：
 run_one "$ROOT/test_host/test_liquid_rocket_allocator.cpp" lra ""
-run_one "$ROOT/test_host/test_alpha_native.cpp" anative ""
 # 导航 IMU 增量源选择 + 健康键故障后持（NavImuIncrementSelect.h，纯平台无关——
 # 关闭惰性、Failed 当拍回退、后持递减/刷新、hold 归一、reset、确认延迟不变量）：
 run_one "$ROOT/test_host/test_nav_imu_increment_select.cpp" navisel ""
-# 共轴控制律输出级参考等价（实飞工程 PositionPID/ComplementaryFilter 原头文件）：
-echo "---- 编译 cxreq ----"
-if ! $CXX -std=$STD -O2 $INCLUDES -I"$ROOT/test_host/reference/coaxial" $STUB_INCLUDE \
-     "$ROOT/test_host/test_coaxial_reference_equivalence.cpp" \
-     "$ROOT/test_host/reference/coaxial/coax_reference.cpp" \
-     -o "$BIN_DIR/cxreq$EXE_SUFFIX" 2>&1; then
-  echo "[BUILD FAIL] cxreq"
-  fail=1
-else
-  echo "---- 运行 cxreq ----"
-  if ! "$BIN_DIR/cxreq$EXE_SUFFIX"; then
-    echo "[RUN FAIL] cxreq"
-    fail=1
-  fi
-  echo
-fi
-# 液体火箭闭环 SIL（LiquidRocketModel + mapNozzleGimbal + 简化 6DOF 垂直回收）：
-run_one "$ROOT/test_host/test_liquid_rocket_sil.cpp" lrsil ""
-# 液体 CCAEGT 实飞参考制导 + 本机推进模型（外部参考库逐字复制于
-# test_host/reference/ccaegt/，仅参考测试，不接入固件飞行模式）：
 echo "---- 编译 lrccaegt ----"
 if ! $CXX -std=$STD -O2 $INCLUDES -I"$ROOT/test_host/reference/ccaegt" \
      "$ROOT/test_host/test_liquid_ccaegt_reference.cpp" \

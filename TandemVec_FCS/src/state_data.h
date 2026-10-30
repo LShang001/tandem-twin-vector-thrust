@@ -448,7 +448,7 @@ struct GncTelemetry
     float coax_yaw_diff_us;      // 偏航差速 [µs]（±max_yaw_us）
     uint8_t coax_saturated;      // 控制律饱和标记（0=未饱和 1=饱和）
     uint8_t coax_fault_flags;    // 执行器故障位：bit0 舵机卡死 bit1 推力损失 bit2 受控下降请求
-    // ---- ★2026-10-31 α 分配器诊断（alloc_mode=1 时每拍填写；legacy 路径恒 0）----
+    // ---- ★2026-10-31 α 分配器诊断（α-native 每拍填写；手动/未激活恒 0）----
     uint8_t coax_alloc_sat;      // 分配器饱和位（见 ControlContracts.h kSat*；legacy 恒 0）
     float coax_torque_residual_nm; // 分配器力矩残差（三轴最大绝对值，N·m）
 };

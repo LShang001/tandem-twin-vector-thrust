@@ -241,109 +241,6 @@ void testYawAuthority()
     expectf(std::isfinite(r.out.servo_roll_deg), "偏航权限：输出有限");
 }
 
-void testLegacyCommandIdentity()
-{
-    // alloc_mode=1 的语义证明：旧控制器修正角/差速 → α → 分配器逆解
-    // 在未饱和时严格回到原值；换 I、换 T、换参数都不影响回路指令。
-    const float servos[] = {-10.0f, -5.0f, -2.0f, 0.0f, 2.0f, 5.0f, 10.0f};
-    const float yaws[] = {-180.0f, -90.0f, 0.0f, 90.0f, 180.0f};
-    const float thrusts[] = {3.0f, 7.0f, 8.4f, 14.0f};
-    const float scales[] = {0.5f, 1.0f, 2.0f};
-    for (const float scale : scales)
-    {
-        CoaxialAllocatorParams p;
-        p.inertia_kgm2[0] = 0.05f * scale;
-        p.inertia_kgm2[1] = 0.05f * scale;
-        p.inertia_kgm2[2] = 0.08f * scale;
-        for (const float thrust : thrusts)
-        {
-            for (const float roll : servos)
-            {
-                for (const float pitch : servos)
-                {
-                    for (const float yaw : yaws)
-                    {
-                        float alpha[3] = {0.0f, 0.0f, 0.0f};
-                        const bool ok = coaxialLegacyToAlpha(
-                            roll, pitch, yaw, thrust, p, alpha);
-                        CoaxialAllocatorInput in;
-                        in.alpha_body_radps2[0] = alpha[0];
-                        in.alpha_body_radps2[1] = alpha[1];
-                        in.alpha_body_radps2[2] = alpha[2];
-                        in.gyro_body_radps[0] = 0.0f;
-                        in.gyro_body_radps[1] = 0.0f;
-                        in.gyro_body_radps[2] = 0.0f;
-                        in.throttle_pct =
-                            100.0f * thrust / p.max_total_thrust_n;
-                        in.thrust_estimate_n = thrust;
-                        in.dt_s = kDt;
-                        const CoaxialAllocatorOutput out =
-                            allocateCoaxial(in, p);
-                        // 旧 mix 先把差速夹到电机余量（满油门正向差速=0），
-                        // 因此期望值要与 mapCoaxialVtvOutputs 同口径。
-                        const float base_us =
-                            p.motor_min_us +
-                            in.throttle_pct * 0.01f *
-                                (p.motor_max_us - p.motor_min_us);
-                        const float expected_yaw =
-                            controlClamp(yaw, p.motor_min_us - base_us,
-                                         p.motor_max_us - base_us);
-                        const float expected_m1 = controlClamp(
-                            base_us - expected_yaw, p.motor_min_us,
-                            p.motor_max_us);
-                        const float expected_m2 = controlClamp(
-                            base_us + expected_yaw, p.motor_min_us,
-                            p.motor_max_us);
-                        const bool recovered =
-                            ok && out.valid &&
-                            std::fabs(out.servo_roll_deg - roll) < 1e-3f &&
-                            std::fabs(out.servo_pitch_deg - pitch) < 1e-3f &&
-                            std::fabs(out.motor1_us - expected_m1) < 1e-2f &&
-                            std::fabs(out.motor2_us - expected_m2) < 1e-2f;
-                        expectf(recovered,
-                                "legacy 指令→α→逆解：与旧 mix 逐值一致");
-                    }
-                }
-            }
-        }
-    }
-
-    // I 不同：α 的数值不同，但闭环指令相同（惯量在正逆中相消）。
-    CoaxialAllocatorParams p1;
-    CoaxialAllocatorParams p2;
-    p2.inertia_kgm2[0] = p1.inertia_kgm2[0] * 2.0f;
-    p2.inertia_kgm2[1] = p1.inertia_kgm2[1] * 2.0f;
-    p2.inertia_kgm2[2] = p1.inertia_kgm2[2] * 2.0f;
-    float a1[3] = {0.0f, 0.0f, 0.0f};
-    float a2[3] = {0.0f, 0.0f, 0.0f};
-    const bool ok1 = coaxialLegacyToAlpha(4.0f, -3.0f, 60.0f, 8.4f, p1, a1);
-    const bool ok2 = coaxialLegacyToAlpha(4.0f, -3.0f, 60.0f, 8.4f, p2, a2);
-    expectf(ok1 && ok2, "legacy→α：参数合法");
-    expectf(std::fabs(a1[0] - 2.0f * a2[0]) < 1e-6f,
-            "legacy→α：α 与 1/I 成正比（I×2 → α/2）");
-    expectf(std::fabs(a1[2] - 2.0f * a2[2]) < 1e-9f,
-            "legacy→α：偏航 α 与 1/Iz 成正比");
-
-    CoaxialAllocatorInput in1;
-    CoaxialAllocatorInput in2;
-    in1.alpha_body_radps2[0] = a1[0];
-    in1.alpha_body_radps2[1] = a1[1];
-    in1.alpha_body_radps2[2] = a1[2];
-    in2.alpha_body_radps2[0] = a2[0];
-    in2.alpha_body_radps2[1] = a2[1];
-    in2.alpha_body_radps2[2] = a2[2];
-    in1.throttle_pct = in2.throttle_pct = 60.0f;
-    in1.thrust_estimate_n = in2.thrust_estimate_n = 8.4f;
-    in1.dt_s = in2.dt_s = kDt;
-    const CoaxialAllocatorOutput o1 = allocateCoaxial(in1, p1);
-    const CoaxialAllocatorOutput o2 = allocateCoaxial(in2, p2);
-    expectf(o1.valid && o2.valid &&
-                std::fabs(o1.servo_roll_deg - o2.servo_roll_deg) < 1e-3f &&
-                std::fabs(o1.servo_pitch_deg - o2.servo_pitch_deg) < 1e-3f &&
-                std::fabs(o1.yaw_diff_us - o2.yaw_diff_us) < 1e-2f,
-            "I 估计不同：回路指令仍相同（惯量相消）");
-}
-
 } // namespace
 
 int main()
@@ -354,7 +251,6 @@ int main()
     testInertiaMismatch(0.67f, 1.0f / 0.67f, "惯量 ×0.67 失配");
     testSaturation();
     testYawAuthority();
-    testLegacyCommandIdentity();
     std::printf("--- %d passed, %d failed ---\n", g_pass, g_fail);
     return (g_fail == 0) ? 0 : 1;
 }

@@ -98,41 +98,6 @@ inline bool coaxialAllocParamsValid(const CoaxialAllocatorParams &p)
 }
 
 /**
- * @brief 旧控制器输出（修正角/差速）→ α；分配器逆解的严格逆变换
- * @details 与 allocateCoaxial 共用同一组 I/L/k_yaw，因此
- *          allocateCoaxial(coaxialLegacyToAlpha(x)) 在未饱和时逐位返回 x。
- *          这是 alloc_mode=1 保持实飞手感的关键：本层不引入新增益，
- *          α 只是"力矩语义"的中间量，惯量在正逆变换中相消。
- * @return false 时 alpha_out 清零（输入非有限或参数非法）
- */
-inline bool coaxialLegacyToAlpha(const float servo_roll_deg,
-                                 const float servo_pitch_deg,
-                                 const float yaw_diff_us,
-                                 const float thrust_n,
-                                 const CoaxialAllocatorParams &p,
-                                 float alpha_out[3])
-{
-    alpha_out[0] = 0.0f;
-    alpha_out[1] = 0.0f;
-    alpha_out[2] = 0.0f;
-    if (!std::isfinite(servo_roll_deg) || !std::isfinite(servo_pitch_deg) ||
-        !std::isfinite(yaw_diff_us) || !std::isfinite(thrust_n) ||
-        thrust_n < 0.0f || !coaxialAllocParamsValid(p))
-    {
-        return false;
-    }
-    constexpr float kDeg2Rad = 0.017453292519943295f;
-    const float tvc_authority = p.lever_m * thrust_n;
-    alpha_out[0] = (tvc_authority / p.inertia_kgm2[0]) *
-                   std::sin(servo_roll_deg * kDeg2Rad);
-    alpha_out[1] = (tvc_authority / p.inertia_kgm2[1]) *
-                   std::sin(servo_pitch_deg * kDeg2Rad);
-    alpha_out[2] = (p.yaw_moment_nm_per_us * yaw_diff_us) / p.inertia_kgm2[2];
-    return std::isfinite(alpha_out[0]) && std::isfinite(alpha_out[1]) &&
-           std::isfinite(alpha_out[2]);
-}
-
-/**
  * @brief 共轴机型分配：α + 油门 → 摆角/差速/电机
  * @return valid=false 时执行器输出已回零（电机 min、差值 0），sat_mask 含
  *         kSatInvalid
@@ -255,7 +220,7 @@ inline CoaxialAllocatorOutput allocateCoaxial(
 
     // 4) 差速逆解；与旧 mix 相同：先把差速夹到电机实际余量，
     //    再逐台钳位。这样满油门/偏置油门下的"偏航权限损失"与实飞一致，
-    //    alloc_mode=1 才能严格复现旧路径（不是理想化地保留 180 µs）。
+    //    与旧 mapCoaxialVtvOutputs 的电机余量语义一致（旧路径已退场，此处仅作历史口径）。
     const float yaw_gain = p.yaw_moment_nm_per_us;
     const float span = p.motor_max_us - p.motor_min_us;
     const float base_us = p.motor_min_us + throttle * 0.01f * span;

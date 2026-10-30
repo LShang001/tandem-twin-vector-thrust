@@ -82,8 +82,7 @@ struct CoaxialVtvInput
 
     // α-native（2026-10-31）：内环直接输出机体系目标角加速度时，
     // 调用方按旧增益与机型物理量折算的换算系数（每 deg 舵机角 / 每 µs 差速
-    // 对应的角加速度）与 α 上限。alpha_native=false 时全部忽略。
-    bool alpha_native = false;
+    // 对应的角加速度）与 α 上限。
     float alpha_per_deg_roll = 0.0f;   // (rad/s^2)/deg
     float alpha_per_deg_pitch = 0.0f;  // (rad/s^2)/deg
     float alpha_per_us_yaw = 0.0f;     // (rad/s^2)/us
@@ -301,9 +300,6 @@ public:
     {
         roll_angle_pid_.reset();
         pitch_angle_pid_.reset();
-        roll_rate_pid_.reset();
-        pitch_rate_pid_.reset();
-        yaw_rate_pid_.reset();
         roll_rate_filter_.reset();
         pitch_rate_filter_.reset();
         roll_corr_filter_.reset();
@@ -313,142 +309,14 @@ public:
         alpha_yaw_integral_ = 0.0f;
     }
 
-    CoaxialVtvOutput update(const CoaxialVtvInput &in)
-    {
-        CoaxialVtvOutput out;
-        if (!std::isfinite(in.error_roll_deg) ||
-            !std::isfinite(in.error_pitch_deg) ||
-            !std::isfinite(in.rate_roll_dps) ||
-            !std::isfinite(in.rate_pitch_dps) ||
-            !std::isfinite(in.rate_yaw_dps) ||
-            !std::isfinite(in.yaw_rate_target_dps) ||
-            !std::isfinite(in.roll_rate_target_dps) ||
-            !std::isfinite(in.pitch_rate_target_dps) ||
-            !std::isfinite(in.manual_roll_deg) ||
-            !std::isfinite(in.manual_pitch_deg) ||
-            !std::isfinite(in.dt_s) || !(in.dt_s > 0.0f))
-        {
-            reset();
-            return out;
-        }
-
-        // 积分使能对齐实飞工程 manage_pid_integrals：外环积分只在 ATTITUDE
-        // 且油门>1100；内环积分在 ATTITUDE/RATE 两种模式都使能（油门>1100）；
-        // 偏航积分按油门>1100。RATE 下禁用内环积分是本次修正掉的错误语义。
-        roll_rate_pid_.setIntegralEnable(in.rate_integral_active);
-        pitch_rate_pid_.setIntegralEnable(in.rate_integral_active);
-        yaw_rate_pid_.setIntegralEnable(in.yaw_integral_active);
-        roll_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
-                                          !in.rate_mode);
-        pitch_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
-                                           !in.rate_mode);
-
-        // ---- 滚转/俯仰 ----
-        if (!in.attitude_active || in.manual_tvc)
-        {
-            // 原始 execute_attitude_controller 的 else 分支：复位角度/速率 PID，
-            // 摇杆目标角映射到修正角后仍过 α0.25 输出滤波（滤波状态不清），
-            // 因此手动 TVC 切换没有阶跃。
-            resetAngleRatePids();
-            const float manual_roll = coaxialVtvClamp(
-                in.manual_roll_deg, -params_.max_correction_deg,
-                params_.max_correction_deg);
-            const float manual_pitch = coaxialVtvClamp(
-                in.manual_pitch_deg, -params_.max_correction_deg,
-                params_.max_correction_deg);
-            out.roll_correction_deg = roll_corr_filter_.update(
-                manual_roll, params_.correction_filter_alpha);
-            out.pitch_correction_deg = pitch_corr_filter_.update(
-                manual_pitch, params_.correction_filter_alpha);
-            out.saturated = (manual_roll != in.manual_roll_deg) ||
-                            (manual_pitch != in.manual_pitch_deg);
-        }
-        else
-        {
-            float roll_rate_ref = 0.0f;
-            float pitch_rate_ref = 0.0f;
-            if (in.rate_mode)
-            {
-                // RATE_MODE 跳过姿态外环，只清外环历史；速率内环 PID 的积分、
-                // 微分历史与两级滤波（α0.85 目标、α0.25 输出）全部跨拍保持，
-                // 与原始 execute_attitude_controller 的 RATE 分支一致。
-                roll_angle_pid_.reset();
-                pitch_angle_pid_.reset();
-                roll_rate_ref = in.roll_rate_target_dps;
-                pitch_rate_ref = in.pitch_rate_target_dps;
-            }
-            else
-            {
-                roll_rate_ref = roll_angle_pid_.computeWithExternalDerivative(
-                    in.error_roll_deg, 0.0f, in.rate_roll_dps, in.dt_s);
-                pitch_rate_ref = pitch_angle_pid_.computeWithExternalDerivative(
-                    in.error_pitch_deg, 0.0f, in.rate_pitch_dps, in.dt_s);
-            }
-            roll_rate_ref = roll_rate_filter_.update(
-                roll_rate_ref, params_.att_rate_filter_alpha);
-            pitch_rate_ref = pitch_rate_filter_.update(
-                pitch_rate_ref, params_.att_rate_filter_alpha);
-
-            float roll_corr = roll_rate_pid_.computeDerivativeOnMeasurement(
-                roll_rate_ref, in.rate_roll_dps, in.dt_s);
-            float pitch_corr = pitch_rate_pid_.computeDerivativeOnMeasurement(
-                pitch_rate_ref, in.rate_pitch_dps, in.dt_s);
-            roll_corr = roll_corr_filter_.update(
-                roll_corr, params_.correction_filter_alpha);
-            pitch_corr = pitch_corr_filter_.update(
-                pitch_corr, params_.correction_filter_alpha);
-            out.roll_correction_deg = roll_corr;
-            out.pitch_correction_deg = pitch_corr;
-            out.saturated = (std::fabs(roll_rate_ref) >=
-                             params_.max_target_rate_dps - 1e-4f) ||
-                            (std::fabs(pitch_rate_ref) >=
-                             params_.max_target_rate_dps - 1e-4f) ||
-                            (std::fabs(roll_corr) >=
-                             params_.max_correction_deg - 1e-4f) ||
-                            (std::fabs(pitch_corr) >=
-                             params_.max_correction_deg - 1e-4f);
-        }
-
-        // ---- 偏航 ----
-        if (in.yaw_active)
-        {
-            out.yaw_diff_us = yaw_rate_pid_.computeDerivativeOnMeasurement(
-                in.yaw_rate_target_dps, in.rate_yaw_dps, in.dt_s);
-            if (std::fabs(out.yaw_diff_us) >= params_.max_yaw_diff_us - 1e-4f)
-            {
-                out.saturated = true;
-            }
-        }
-        else
-        {
-            yaw_rate_pid_.reset();
-            out.yaw_diff_us = 0.0f;
-        }
-
-        out.valid = std::isfinite(out.roll_correction_deg) &&
-                    std::isfinite(out.pitch_correction_deg) &&
-                    std::isfinite(out.yaw_diff_us);
-        if (!out.valid)
-        {
-            reset();
-            out.roll_correction_deg = out.pitch_correction_deg = 0.0f;
-            out.yaw_diff_us = 0.0f;
-        }
-        return out;
-    }
-
     // α-native 路径（2026-10-31 用户要求）：速率内环直接输出机体系目标角加速度
     // α（rad/s^2，FRD），交由 CoaxialAllocator 逆解为摆角/差速。换算系数由调用方
     // 按 g=(l*T/I)*(pi/180) 与 alpha_limit=(l*T/I)*sin(delta_max) 传入，使闭环在
     // 名义点与旧 delta 环严格等价；积分状态/限幅/输出滤波沿用旧速率环口径，
     // 只是量纲换成 α。
-    CoaxialVtvOutput updateAlpha(const CoaxialVtvInput &in)
+    CoaxialVtvOutput update(const CoaxialVtvInput &in)
     {
         CoaxialVtvOutput out;
-        if (!in.alpha_native)
-        {
-            return update(in);
-        }
         if (!std::isfinite(in.error_roll_deg) ||
             !std::isfinite(in.error_pitch_deg) ||
             !std::isfinite(in.rate_roll_dps) ||
@@ -471,9 +339,6 @@ public:
             return out;
         }
 
-        roll_rate_pid_.setIntegralEnable(in.rate_integral_active);
-        pitch_rate_pid_.setIntegralEnable(in.rate_integral_active);
-        yaw_rate_pid_.setIntegralEnable(in.yaw_integral_active);
         roll_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
                                           !in.rate_mode);
         pitch_angle_pid_.setIntegralEnable(in.attitude_integral_active &&
@@ -482,7 +347,7 @@ public:
         // 手动 TVC / 未激活：继续走旧 delta 路径（由调用方折 alpha），避免手动映射变化。
         if (!in.attitude_active || in.manual_tvc)
         {
-            resetAngleRatePids();
+            resetAnglePids();
             const float manual_roll = coaxialVtvClamp(
                 in.manual_roll_deg, -params_.max_correction_deg,
                 params_.max_correction_deg);
@@ -586,7 +451,6 @@ public:
         }
         else
         {
-            yaw_rate_pid_.reset();
             alpha_yaw_integral_ = 0.0f;
             out.alpha_yaw_radps2 = 0.0f;
         }
@@ -602,6 +466,7 @@ public:
             out.alpha_pitch_radps2 = 0.0f;
             out.alpha_yaw_radps2 = 0.0f;
         }
+        out.valid = out.alpha_valid;
         return out;
     }
 
@@ -616,48 +481,28 @@ private:
             params_.att_kp_pitch, 0.0f, 0.0f, -params_.max_target_rate_dps,
             params_.max_target_rate_dps, true, params_.att_integral_limit, 0.0f,
             0.0f);
-        roll_rate_pid_ = CoaxialLegacyPid(
-            params_.rate_kp_roll, params_.rate_ki_roll, 0.0f,
-            -params_.max_correction_deg, params_.max_correction_deg, true,
-            params_.rate_integral_limit, 0.0f,
-            params_.pid_derivative_filter_alpha);
-        pitch_rate_pid_ = CoaxialLegacyPid(
-            params_.rate_kp_pitch, params_.rate_ki_pitch, 0.0f,
-            -params_.max_correction_deg, params_.max_correction_deg, true,
-            params_.rate_integral_limit, 0.0f,
-            params_.pid_derivative_filter_alpha);
-        yaw_rate_pid_ = CoaxialLegacyPid(
-            params_.rate_kp_yaw, params_.rate_ki_yaw, 0.0f,
-            -params_.max_yaw_diff_us, params_.max_yaw_diff_us, true,
-            params_.yaw_integral_limit, params_.yaw_integral_threshold,
-            params_.pid_derivative_filter_alpha);
     }
 
     // 全量复位：仅用于输入非法/控制器重建（会丢掉滤波状态）。
     void resetRollPitch()
     {
-        resetAngleRatePids();
+        resetAnglePids();
         roll_rate_filter_.reset();
         pitch_rate_filter_.reset();
         roll_corr_filter_.reset();
         pitch_corr_filter_.reset();
     }
 
-    // 原始 else 分支的复位范围：角度+速率 PID；保留 α0.85/α0.25 滤波状态。
-    void resetAngleRatePids()
+    // 手动/未激活复位角度外环；保留 α0.85/α0.25 滤波状态。
+    void resetAnglePids()
     {
         roll_angle_pid_.reset();
         pitch_angle_pid_.reset();
-        roll_rate_pid_.reset();
-        pitch_rate_pid_.reset();
     }
 
     CoaxialVtvParams params_{};
     CoaxialLegacyPid roll_angle_pid_;
     CoaxialLegacyPid pitch_angle_pid_;
-    CoaxialLegacyPid roll_rate_pid_;
-    CoaxialLegacyPid pitch_rate_pid_;
-    CoaxialLegacyPid yaw_rate_pid_;
     float alpha_roll_integral_ = 0.0f;
     float alpha_pitch_integral_ = 0.0f;
     float alpha_yaw_integral_ = 0.0f;

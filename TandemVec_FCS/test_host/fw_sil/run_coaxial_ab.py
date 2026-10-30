@@ -710,7 +710,12 @@ def main() -> int:
                     help="跳过惯量/推力失配扫描")
     args = ap.parse_args()
 
-    bin_path = Path(args.bin)
+    print("[DEPRECATED] 共轴旧 δ 路径已于 2026-10-31 从固件删除，"
+          "alloc_mode 0/1 不再是两条可切换路径；本脚本仅供历史证据复现，"
+          "当前固件请用 run_coaxial_suite.sh 或 run_real_acceptance.py。")
+    return 2
+
+    bin_path = Path(args.bin)  # noqa: unreachable
     if not bin_path.exists():
         print(f"[FAIL] binary not found: {bin_path}")
         return 2

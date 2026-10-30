@@ -241,15 +241,15 @@ struct OutBits
 // 滤波；由修正后的控制器生成后冻结，后续改动必须显式说明理由并重生成。
 const OutBits kGolden[kSeqLen] = {
     {1, 0x00000000u, 0x00000000u, 0x00000000u, 0},
-    {1, 0x3F90BB30u, 0x3F90BB30u, 0x00000000u, 0},
-    {1, 0xBE6E2240u, 0xBE6E2240u, 0x00000000u, 0},
-    {1, 0xBE4E27CDu, 0xBC1D7830u, 0x421E0000u, 0},
-    {1, 0x3FAC7763u, 0xBF7FD948u, 0x3FBFFFFFu, 0},
-    {1, 0x4000ACC5u, 0xBFBFF17Bu, 0x3FBFFFFFu, 0},
-    {1, 0x408040CAu, 0xC067FA8Eu, 0x3FBFFFFFu, 0},
-    {1, 0x406BDC57u, 0xC058BA9Fu, 0x43340000u, 1},
+    {1, 0x3EF27FDCu, 0x3EF27FDCu, 0x00000000u, 0},
+    {1, 0xBDC77F9Cu, 0xBDC77F9Cu, 0x00000000u, 0},
+    {1, 0xBDACB559u, 0xBB83EBC0u, 0x3E7CCCCEu, 0},
+    {1, 0x3F107C2Eu, 0xBED656E0u, 0x3C19999Au, 0},
+    {1, 0x3FB62E91u, 0xBF88304Au, 0x00000000u, 0},
+    {1, 0x4006FFC6u, 0xBFEB80D6u, 0x3C19999Au, 1},
+    {1, 0x3FEF0E32u, 0xBFD4810Fu, 0x3F900001u, 1},
     {0, 0x00000000u, 0x00000000u, 0x00000000u, 0},
-    {1, 0x3E6791E7u, 0xBE6791E7u, 0x00000000u, 0},
+    {1, 0x3DC1FFE5u, 0xBDC1FFE5u, 0x00000000u, 0},
 };
 
 void runSequence(const bfs::CoaxialVtvParams &p, OutBits out[kSeqLen])
@@ -280,11 +280,25 @@ void runSequence(const bfs::CoaxialVtvParams &p, OutBits out[kSeqLen])
         in.manual_roll_deg = s.mr;
         in.manual_pitch_deg = s.mp;
         in.dt_s = s.dt;
+        // α-native 单一内环：默认物理量下给出换算系数与执行机构全行程上限。
+        constexpr float kDeg2Rad = 0.017453292519943295f;
+        constexpr float kGBody = 0.15f * 8.0f / 0.05f;  // (rad/s²)/rad
+        in.alpha_per_deg_roll = kGBody * kDeg2Rad;
+        in.alpha_per_deg_pitch = kGBody * kDeg2Rad;
+        in.alpha_per_us_yaw = 5.0e-4f / 0.08f;
+        in.alpha_limit_roll = kGBody * std::sin(10.0f * kDeg2Rad);
+        in.alpha_limit_pitch = in.alpha_limit_roll;
+        in.alpha_limit_yaw = in.alpha_per_us_yaw * 180.0f;
         const bfs::CoaxialVtvOutput o = c.update(in);
         out[i].valid = o.valid ? 1 : 0;
-        out[i].roll_bits = bits(o.roll_correction_deg);
-        out[i].pitch_bits = bits(o.pitch_correction_deg);
-        out[i].yaw_bits = bits(o.yaw_diff_us);
+        // 闭环存 α（物理量）；手动/未激活存控制器直出的 δ。
+        const bool alpha_out = o.alpha_valid;
+        out[i].roll_bits = bits(alpha_out ? o.alpha_roll_radps2
+                                          : o.roll_correction_deg);
+        out[i].pitch_bits = bits(alpha_out ? o.alpha_pitch_radps2
+                                           : o.pitch_correction_deg);
+        out[i].yaw_bits = bits(alpha_out ? o.alpha_yaw_radps2
+                                         : o.yaw_diff_us);
         out[i].saturated = o.saturated ? 1 : 0;
     }
 }
@@ -298,8 +312,20 @@ bool sameBits(const OutBits &a, const OutBits &b)
 
 } // namespace
 
-int main()
+int main(int argc, char **argv)
 {
+    if (argc > 1 && std::strcmp(argv[1], "--emit-golden") == 0)
+    {
+        OutBits g[kSeqLen];
+        runSequence(bfs::CoaxialVtvParams{}, g);
+        for (int i = 0; i < kSeqLen; ++i)
+        {
+            std::printf("    {%d, 0x%08Xu, 0x%08Xu, 0x%08Xu, %d},\n",
+                        g[i].valid, g[i].roll_bits, g[i].pitch_bits,
+                        g[i].yaw_bits, g[i].saturated);
+        }
+        return 0;
+    }
     std::printf("==== 共轴参数可标定化回归 ====\n");
 
     // ---- 1. 控制律默认值逐位等于旧硬编码 ----

@@ -2178,44 +2178,31 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     final_throttle_pct = 0.0f;
   }
 
-  // ★ 2026-10-31 α-native（coax.alloc_mode≥1.5，用户 m02892 授权）：
-  //   内环直接输出机体系角加速度 α，速率环增益按旧增益乘 g=(l·T_est/I)
-  //   折算，α 由 CoaxialAllocator 逆解为摆角/差速。THR 过低（换算系数无意义）
-  //   时回退 legacy δ 路径，仍经同一分配器。
+  // 2026-10-31 单一 α-native 内环（旧 δ 环已移除，用户确认新架构后取代旧路径）：
+  // 速率环增益按 g=(l·T_est/I)·π/180 从实飞增益折算，α 上限对应执行机构全行程；
+  // 低油门时 T_est 取下限，保证换算系数有效，TVC 权限由分配器按真实推力收紧。
   constexpr float kAlphaDeg2Rad = 0.017453292519943295f;
-  const float alpha_thrust_est_n =
-      0.01f * final_throttle_pct * coax.max_total_thrust_n;
-  const bool coax_alpha_native = coax.alloc_mode >= 1.5f &&
-                                 inputs.is_unlocked &&
-                                 alpha_thrust_est_n > 1.0e-3f;
-  if (coax_alpha_native)
-  {
-    const float g_roll =
-        coax.lever_m * alpha_thrust_est_n / coax.inertia_roll_kgm2;
-    const float g_pitch =
-        coax.lever_m * alpha_thrust_est_n / coax.inertia_pitch_kgm2;
-    control_in.alpha_native = true;
-    control_in.alpha_per_deg_roll = g_roll * kAlphaDeg2Rad;
-    control_in.alpha_per_deg_pitch = g_pitch * kAlphaDeg2Rad;
-    control_in.alpha_per_us_yaw =
-        coax.yaw_moment_nm_per_us / coax.inertia_yaw_kgm2;
-    control_in.alpha_limit_roll =
-        g_roll * sinf(coax.ctrl.max_correction_deg * kAlphaDeg2Rad);
-    control_in.alpha_limit_pitch =
-        g_pitch * sinf(coax.ctrl.max_correction_deg * kAlphaDeg2Rad);
-    control_in.alpha_limit_yaw =
-        control_in.alpha_per_us_yaw * coax.ctrl.max_yaw_diff_us;
-  }
+  const float alpha_thrust_est_n = fmaxf(
+      0.01f * final_throttle_pct * coax.max_total_thrust_n, 0.35f);
+  const float g_roll =
+      coax.lever_m * alpha_thrust_est_n / coax.inertia_roll_kgm2;
+  const float g_pitch =
+      coax.lever_m * alpha_thrust_est_n / coax.inertia_pitch_kgm2;
+  control_in.alpha_per_deg_roll = g_roll * kAlphaDeg2Rad;
+  control_in.alpha_per_deg_pitch = g_pitch * kAlphaDeg2Rad;
+  control_in.alpha_per_us_yaw =
+      coax.yaw_moment_nm_per_us / coax.inertia_yaw_kgm2;
+  control_in.alpha_limit_roll =
+      g_roll * sinf(coax.ctrl.max_correction_deg * kAlphaDeg2Rad);
+  control_in.alpha_limit_pitch =
+      g_pitch * sinf(coax.ctrl.max_correction_deg * kAlphaDeg2Rad);
+  control_in.alpha_limit_yaw =
+      control_in.alpha_per_us_yaw * coax.ctrl.max_yaw_diff_us;
   const bfs::CoaxialVtvOutput control_out =
-      coax_alpha_native ? s_coaxial_controller.updateAlpha(control_in)
-                        : s_coaxial_controller.update(control_in);
+      s_coaxial_controller.update(control_in);
   gnc_tel.error_deg[0] = error_roll_deg;
   gnc_tel.error_deg[1] = error_pitch_deg;
 
-  // ★ 2026-10-31 α 路径（coax.alloc_mode≥0.5）：控制层输出仍是"修正角/差速"
-  //   （与旧控制器同口径，保持手感），按名义推力折算成机体系角加速度 α，
-  //   再由 CoaxialAllocator 做惯量/TVC/差速逆解。折算与逆解共用同一组参数，
-  //   名义点严格往返 ⇒ alloc_mode=0 的默认路径逐位不变。
   float applied_roll_corr_deg =
       control_out.valid ? control_out.roll_correction_deg : 0.0f;
   float applied_pitch_corr_deg =
@@ -2225,11 +2212,10 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   bool coax_out_saturated = control_out.saturated;
   uint8_t alloc_sat_mask = 0u;
   float alloc_torque_residual = 0.0f;
-  if (coax.alloc_mode >= 0.5f && inputs.is_unlocked)
+  // α 有效 = 闭环；手动/未激活时控制器直接给 δ（保持手动映射不变）。
+  if (inputs.is_unlocked && control_out.alpha_valid)
   {
     constexpr float kDeg2Rad = 0.017453292519943295f;
-    const float thrust_est_n =
-        0.01f * final_throttle_pct * coax.max_total_thrust_n;
     bfs::CoaxialAllocatorParams alloc_p;
     alloc_p.lever_m = coax.lever_m;
     alloc_p.yaw_moment_nm_per_us = coax.yaw_moment_nm_per_us;
@@ -2245,29 +2231,15 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     alloc_p.max_total_thrust_n = coax.max_total_thrust_n;
 
     bfs::CoaxialAllocatorInput alloc_in;
-    if (coax_alpha_native && control_out.alpha_valid)
-    {
-      // α-native：控制器直接给机体系 α，不再经过旧 δ 折 α。
-      alloc_in.alpha_body_radps2[0] = control_out.alpha_roll_radps2;
-      alloc_in.alpha_body_radps2[1] = control_out.alpha_pitch_radps2;
-      alloc_in.alpha_body_radps2[2] = control_out.alpha_yaw_radps2;
-    }
-    else if (!bfs::coaxialLegacyToAlpha(applied_roll_corr_deg,
-                                        applied_pitch_corr_deg,
-                                        applied_yaw_diff_us, thrust_est_n,
-                                        alloc_p,
-                                        alloc_in.alpha_body_radps2))
-    {
-      // 旧控制器输出 → α 的严格逆变换（与分配器共用 I/L/k_yaw，正逆相消）。
-      alloc_in.alpha_body_radps2[0] = 0.0f;
-      alloc_in.alpha_body_radps2[1] = 0.0f;
-      alloc_in.alpha_body_radps2[2] = 0.0f;
-    }
+    alloc_in.alpha_body_radps2[0] = control_out.alpha_roll_radps2;
+    alloc_in.alpha_body_radps2[1] = control_out.alpha_pitch_radps2;
+    alloc_in.alpha_body_radps2[2] = control_out.alpha_yaw_radps2;
     alloc_in.gyro_body_radps[0] = current_omega_dps_body_filtered.x * kDeg2Rad;
     alloc_in.gyro_body_radps[1] = current_omega_dps_body_filtered.y * kDeg2Rad;
     alloc_in.gyro_body_radps[2] = current_omega_dps_body_filtered.z * kDeg2Rad;
     alloc_in.throttle_pct = final_throttle_pct;
-    alloc_in.thrust_estimate_n = thrust_est_n;
+    alloc_in.thrust_estimate_n =
+        0.01f * final_throttle_pct * coax.max_total_thrust_n;
     alloc_in.dt_s = coax.dt_s;
     const bfs::CoaxialAllocatorOutput alloc =
         bfs::allocateCoaxial(alloc_in, alloc_p);

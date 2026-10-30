@@ -1653,13 +1653,18 @@ AUTO 定高/定点路径未受手动 ATTITUDE/RATE 修复影响；俯仰裕度 2
 href="../control/CTL-006.html">CTL-006</a>。本节只记与原始固件对照相关的结论。</p>
 <h3 id="111-新增实现默认不改变行为">11.1 新增实现（默认不改变行为）</h3>
 <ul>
-<li><code>CoaxialVtvControl</code> 仍输出修正角/差速；新增
-<code>CoaxialAllocator</code>（α + 油门 → 摆角/差速/电机 µs），由
-<code>coax.alloc_mode</code> 选择：0=legacy（默认），1=α 路径。</li>
-<li><code>alloc_mode=1</code> 时固件把 legacy 输出按同一组参数折回 α
-再逆解，构成"名义点 identity"约束；参数
-<code>coax.lever_m/yaw_nm_per_us/inertia_*</code> 已进注册表（ID
-158–163，总 164），默认值来自 SIL 模型，标记 MODEL-DEFAULT。</li>
+<li>2026-10-31 应用户要求，共轴旧 δ
+控制路径（<code>CoaxialVtvControl</code> 旧 <code>update()</code>）与
+<code>coaxialLegacyToAlpha</code>
+适配器已从固件删除；<code>CoaxialVtvControl</code> 只输出机体系
+α（<code>alpha_valid</code>），<code>CoaxialAllocator</code>（α + 油门 →
+摆角/差速/电机 µs）是唯一逆解。</li>
+<li><code>coax.alloc_mode</code>（ID 158）已废弃、固件忽略，仅为兼容旧
+GCS 保留；<code>coax.lever_m/yaw_nm_per_us/inertia_*</code>
+仍在注册表（ID 158–163，总 164），默认值来自 SIL 模型，标记
+MODEL-DEFAULT。</li>
+<li>旧路径退场前曾用"legacy 输出折回 α 再逆解"做名义点 identity
+证明；该适配器已删除，相关证据仅作历史对照，不再代表当前固件。</li>
 <li>遥测新增
 <code>coax_alloc_sat</code>、<code>coax_torque_residual_nm</code>；分配器输出提供
 <code>torque_requested_nm</code>（未钳位）与
@@ -1680,77 +1685,61 @@ href="../control/CTL-006.html">CTL-006</a>。本节只记与原始固件对照�
 0.000000°；NaN→0x100+输出回零</td>
 </tr>
 <tr>
-<td>实飞手感 identity</td>
-<td><code>test_alpha_tracking</code> 2970 断言：I ×0.5/1/2、T=3/7/8.4/14
-N、δ/yaw 全组合，与旧 <code>mapCoaxialVtvOutputs</code> 电机 µs
-逐值一致（&lt;1e-2 µs）</td>
+<td>实飞手感 identity（历史）</td>
+<td>旧路径退场前的 <code>test_alpha_tracking</code> 2970
+断言（适配器已删除，仅归档）</td>
 </tr>
 <tr>
 <td>轴序/符号</td>
 <td>与 SIL plant <code>body M=[-w.Mz, w.My, -w.Mx]</code> 一致</td>
 </tr>
 <tr>
-<td>SIL α 路径 3×5</td>
-<td>14/15，唯一失败仍是 <code>mag_nominal seed1</code>
-max_pitch=22.069°（与 legacy 逐项相同）</td>
-</tr>
-<tr>
-<td>默认路径</td>
-<td>alloc_mode=0 的 3×5 与 39/40 矩阵口径不变</td>
+<td>SIL 单一路径 3×5</td>
+<td><strong>8/9</strong>，唯一失败 <code>mag_nominal seed1</code>
+max_pitch=<strong>22.764°</strong>（旧路径 22.069°，同失败集）</td>
 </tr>
 <tr>
 <td>固件/宿主</td>
 <td>两 env SUCCESS；run_all EXIT=0</td>
 </tr>
 <tr>
-<td>A/B 手感（RATE，02:04 复跑）</td>
-<td>12/12 PASS，上升时间/峰值差
-0.0%，<strong>逐位等价</strong>（&lt;1e-9）</td>
+<td>历史 A/B（旧路径 vs α-native）</td>
+<td>RATE 12/12 逐位等价、ATTITUDE thr70 4/4 逐位等价、失配 4 档×3 seeds
+逐位相同；证据 <code>sim-data/coax-alpha-native-2026-10-31/</code></td>
 </tr>
 <tr>
-<td>A/B 原始证据</td>
-<td><code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-identity-2026-10-31/</code>（ab_summary.md/ab_metrics.json）</td>
+<td>共轴 8×5</td>
+<td><strong>39/40</strong>（α-native 归档；唯一失败
+<code>mag_nominal seed1</code> 22.764°）</td>
 </tr>
 <tr>
-<td>A/B 手感（ATTITUDE，离地 thr70）</td>
-<td>4 例有效：峰值 101.0–103.0% 指令、超调
-1.41–3.10%，两路径逐位相同；thr50 4 例为 NO_LIFT（50% 推力 7 N &lt; 重量
-8.24 N，地面伪迹，无判别力）</td>
-</tr>
-<tr>
-<td>大规模矩阵</td>
-<td>验收 39/40 vs 39/40、realistic 40/40 vs 40/40、MC 56/100 vs
-56/100（realistic 58/58）、sweep 15/18 vs 15/18，两路径同清单</td>
-</tr>
-<tr>
-<td>惯量/推力失配</td>
-<td>4 档×3 seeds：两路径同档同 seed 峰值逐位相同（最大相对差
-0.000%）</td>
+<td>惯量×1.5（3×5）</td>
+<td>与旧路径同一失败集，无额外惯量敏感</td>
 </tr>
 </tbody>
 </table>
 <h3 id="113-已知行为与待决">11.3 已知行为与待决</h3>
 <ul>
-<li><strong>α-native（<code>coax.alloc_mode=2</code>，2026-10-31）</strong>：速率内环直接输出机体系
-α， 增益按旧值乘 <code>g=(l·T_est/I)·π/180</code> 折算（偏航
-<code>k_yaw/I_z</code>），由分配器逆解。 宿主 1452 断言、SIL A/B thr70
-12 例峰值差 ≤0.03%/上升 0.00%/超调差 ≤0.04pp， 验收 8/9（与 legacy
-同失败集；近门限单例 22.764° vs 22.069°）。默认关闭，
+<li><strong>α-native
+是唯一路径（2026-10-31）</strong>：速率内环直接输出机体系 α，
+增益按旧值乘 <code>g=(l·T_est/I)·π/180</code> 折算（偏航
+<code>k_yaw/I_z</code>），由分配器逆解； 旧 δ 路径与适配器已删除。宿主
+cvc/cparams(605)/aco(5539)/atrk(26)/lra(24)/pwa(299 882) 全过；SIL
+单一路径 3×5=8/9（22.764°，同失败集）、8×5=39/40。
 惯量/推力未辨识前不得当作实机可飞依据。</li>
-<li><strong>实飞增益/惯量关系</strong>：<code>alloc_mode=1</code> 的 α
-层不引入新控制器，实飞 PID/滤波原样保留；α 与逆解共用
-<code>I_assumed/l/k/T_est</code>，惯量在正逆变换中相消，因此惯量估计错不改变下发角度/差速，也不改变闭环响应（见
-CTL-006 §2.4）。只有改成 α-native PID
-时惯量才进入增益，需台架辨识后重标定。SIL A/B 在同一套实飞逻辑下刷新（见
-§11.2）。</li>
+<li><strong>实飞增益/惯量关系</strong>：旧 identity 层已删除；当前
+α-native 的增益 <code>g ∝ T_est/I_assumed</code>，
+惯量与推力估计直接进入内环增益，因此名义点 A/B
+一致不能外推到实机。0.05/0.08 kg·m²、 0.15 m、1e-6 N·m/µs 均为
+MODEL-DEFAULT，飞行前需台架辨识并做系留/限高（见 CTL-006 §2.4）。</li>
 <li><strong>低推力差速不门控</strong>：T&lt;0.35 N（含 throttle=0）时
 TVC 归中并置 <code>kSatLowThrust</code>，偏航指令仍驱动差速（m1=1000
 µs、m2=1180 µs）。与 legacy <code>mapCoaxialVtvOutputs</code>
 一致，属有意保留；是否改为"TVC
 不可用即零差速"需实机安全评审，本次不改。</li>
-<li><strong>杆量曲线与 α 路径叠加</strong>：<code>alloc_mode=1</code> 的
-α 来源仍是 legacy 控制器输出，因此曲线语义（满杆 333/222 dps）不变；A/B
-结果见 <code>sim-data/coax-alloc-2026-10-31/</code>。</li>
+<li><strong>杆量曲线</strong>：α-native 与旧路径共用同一条 rc 曲线（满杆
+333/222 dps、600 dps 封顶），曲线语义不变；历史 A/B 证据见
+<code>sim-data/coax-alpha-native-2026-10-31/</code>。</li>
 <li><strong>制导→动力分配已提取纯函数、类型契约未接</strong>：AUTO_POSITION/GUIDED
 已改用
 <code>PowerAllocation.h</code>，<code>test_power_allocation.cpp</code>
@@ -1759,5 +1748,5 @@ TVC 归中并置 <code>kSatLowThrust</code>，偏航指令仍驱动差速（m1=1
 结构体尚未替换函数签名。</li>
 <li>惯量/力臂/差速系数未台架标定，α 权限与残差只作设计值。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 02:36</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:03</footer></article></body>
 </html>
