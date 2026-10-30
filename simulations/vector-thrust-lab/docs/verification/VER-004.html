@@ -160,16 +160,18 @@ PASS</strong>，不是文档写的 15/15：<code>mag_nominal</code> seed1
 <code>resetRollPitch()</code> 把速率环 PID
 与两级滤波一起清零、且禁用速率环积分；目标速率由线性 ±80°/s 改为曲线满杆
 333°/s（偏航 222°/s）。原固件只清外环、速率环积分持续、目标 ±80°/s</td>
-<td>§3 D1／D2／D4；<strong>2026-10-30 已修复（§10）</strong></td>
+<td>§3 D1／D2／D4；<strong>2026-10-30
+串级/积分已修复；杆量曲线按用户要求保留为有意差异（§10.2）</strong></td>
 </tr>
 <tr>
 <td>C-5</td>
 <td><strong>P1</strong></td>
-<td>"600 拍 max_err=0.000000" 是<strong>自指测试</strong>：参考侧
-<code>coax_reference.cpp</code> 复刻的是当前实现，参考
-<code>PositionPID.h</code> 也已改动（dt 参数、积分乘 dt、积分钳位、NaN
-冻结）</td>
-<td>§5</td>
+<td>"600 拍 max_err=0.000000" 曾是<strong>自指测试</strong>：参考侧
+<code>coax_reference.cpp</code> 复刻的是当时实现；2026-10-30
+修复时已把参考体重写为原始语义（RATE
+只复位外环、内环积分/滤波保持、手动输出滤波）并保持 0
+误差，但参考体仍是宿主重写、非原始二进制</td>
+<td>§5、§10.3</td>
 </tr>
 <tr>
 <td>C-6</td>
@@ -499,8 +501,9 @@ dt（<code>CoaxialVtvControl.h:225-235</code>）</td>
 <td>RATE 目标速率</td>
 <td>线性 ±512 → ±80°/s（<code>:5155-5156</code>）</td>
 <td><code>rcRateCurve</code> 满杆
-333°/s（横滚/俯仰）、222°/s（偏航）（<code>flight_control.cpp:2174-2186</code>）</td>
-<td>差异（D4）→ 已修复（§10）</td>
+333°/s（横滚/俯仰）、222°/s（偏航），600 dps
+封顶（<code>flight_control.cpp:2179-2192</code>）</td>
+<td>差异（D4）：串级/积分语义已修复；曲线幅度为有意保留（§10.2）</td>
 </tr>
 <tr>
 <td>RATE 复位范围</td>
@@ -1183,9 +1186,10 @@ diff），属<strong>验证口径变更导致的证据漂移</strong>，同时�
 <td>A-1</td>
 <td><strong>P0</strong></td>
 <td>RATE_MODE 语义不等价（D1/D2/D4）</td>
-<td><strong>已处置（2026-10-30）</strong>：恢复"只复位外环＋内环积分两模式使能＋线性
-±80°/s"，不改增益/门限；详见 §10</td>
-<td>cxreq 600 拍 0 误差；cvc T9/T10；8×5 SIL 回归</td>
+<td><strong>已处置（2026-10-30）</strong>：恢复"只复位外环＋内环积分两模式使能"，不改增益/门限；杆量曲线按用户要求接回（有意差异）；详见
+§10</td>
+<td>cxreq 600 拍 0 误差；cvc T9（曲线）/T10（内环积分）；8×5 SIL
+回归</td>
 </tr>
 <tr>
 <td>A-2</td>
@@ -1208,10 +1212,10 @@ VER-002/CTL-003</td>
 <td>A-4</td>
 <td><strong>P1</strong></td>
 <td>参考等价测试自指（§5）</td>
-<td>改用<strong>原始固件</strong>
-<code>PositionPID.h</code>/<code>main.cpp</code>
-的独立移植体做参考；或在结论中降级为"当前实现内部一致性"</td>
-<td>新参考体应能检出 D1-D4（即测试必须变红）</td>
+<td><strong>已部分处置（2026-10-30）</strong>：参考体重写为原始语义并与固件逐拍
+0 误差；仍缺原始固件二进制/实飞日志对拍</td>
+<td>新参考体已能区分"错误语义"（修复前 cxreq 会因 RATE
+复位/积分门控不同而红）</td>
 </tr>
 <tr>
 <td>A-5</td>
@@ -1462,7 +1466,7 @@ TVC，姿态 P 通路常开；积分仍按 &gt;1100 门控</td>
 m。</li>
 <li><code>--no-sil-ahrs</code>／<code>--no-imu-lpf</code>：各
 15/15。</li>
-<li>参考等价：<code>CX-REF max_err roll=0.000000 pitch=0.000000 yaw=0.000000</code>（自指，见
+<li>参考等价：<code>CX-REF max_err roll=0.000000 pitch=0.000000 yaw=0.000000</code>（参考体已按原始语义重写，非原始二进制，见
 §5）。</li>
 <li>单测：<code>test_coaxial_vtv_control</code> →
 <code>T8 final roll=0.000 pitch=0.000 yawrate=0.006 dps</code>
@@ -1540,8 +1544,10 @@ A-1/A-3/A-7/A-9/A-10，<strong>不改任何增益、限幅门限、混控比例�
 <tr>
 <td>RATE 杆量</td>
 <td><code>map(raw,988,2012,∓80,±80)</code>（俯仰反向）</td>
-<td>同：<code>(us-1500)/512×max_target_rate_dps</code>，俯仰反向、偏航同</td>
-<td>cvc T9</td>
+<td>TandemVec
+<code>rcRateCurve</code>（<code>rc_rate=0.5</code>、<code>expo=0.25</code>、<code>super=0.7/0.7/0.55</code>；满杆
+333/222 dps，600 封顶），俯仰反向</td>
+<td>cvc T9；<strong>有意差异</strong>（见 §10.2）</td>
 </tr>
 <tr>
 <td>手动 TVC 输出</td>
@@ -1597,9 +1603,15 @@ A-1/A-3/A-7/A-9/A-10，<strong>不改任何增益、限幅门限、混控比例�
 <td>与"手感"无关的安全语义，保留待专门评审</td>
 </tr>
 <tr>
+<td>RATE 杆量曲线幅度</td>
+<td>原始线性 ±80 dps；当前 <code>rcRateCurve</code> 满杆 333/222
+dps（用户 2026-10-30 要求接回）</td>
+<td>有意差异；曲线参数可在线调（<code>rc_rate/rc_expo/rc_super</code>），需实机确认手感与安全余量</td>
+</tr>
+<tr>
 <td>速率遥测 <code>omega_ref_dps</code></td>
-<td>仍按 TandemVec 600 dps 曲线显示</td>
-<td>仅遥测显示口径，不影响共轴控制输出</td>
+<td>已与控制目标同源（共轴分支写入，含曲线）；仅遥测</td>
+<td>已消除此前"遥测显示 TandemVec 曲线"的错位</td>
 </tr>
 </tbody>
 </table>
@@ -1613,6 +1625,13 @@ A-1/A-3/A-7/A-9/A-10，<strong>不改任何增益、限幅门限、混控比例�
 项参数断言、cxreq 600 拍 0 误差）。</li>
 <li>固件：<code>pio run -e TandemVec_FCS</code>、<code>pio run -e CoaxialVTVL</code>
 均 SUCCESS。</li>
+<li>杆量曲线版（2026-10-31 00:04
+构建，<code>sim-data/coax-curve-2026-10-31/</code>）：同一套
+8×5+MC100+sweep 复跑，结果与串级修复版逐项同集合（验收 39/40、MC
+56/100、sweep 15/18），说明 AUTO 定高/定点不受 RATE
+手动杆量曲线影响；<code>cvc T9</code>
+覆盖曲线端点/中点/反向/封顶（988→-333.33、2012→+333.33、1500→0、1900→139.25、2100→600、yaw
+1900→115.19 dps）。</li>
 <li>SIL：<code>run_coaxial_suite.sh</code> 重跑 8 profiles×5 seeds + MC
 100 + sweep 18，证据落
 <code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-fix-2026-10-30/</code>（summary.md
@@ -1627,5 +1646,5 @@ P50/P95=1.38/27.85 m，roll 1.67/13.43°，pitch 27.96/56.39°）；sweep
 AUTO 定高/定点路径未受手动 ATTITUDE/RATE 修复影响；俯仰裕度 2.1°
 问题仍在。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 23:48</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 00:05</footer></article></body>
 </html>

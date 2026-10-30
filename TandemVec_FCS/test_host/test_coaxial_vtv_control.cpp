@@ -16,7 +16,7 @@
  * @note    6DOF plant 是简化 L1 模型（无气动/无电机滞后/无传感器），只验证
  *          控制律极性与闭环稳定性，不代表实机/台架结果。
  * @test    T1 零输入；T2 姿态 P 极性；T3 速率阻尼；T4 手动 TVC（α0.25 滤波）；
- *          T5 饱和；T6 偏航差速；T7 非法输入；T8 6DOF 闭环；T9 杆量映射；
+ *          T5 饱和；T6 偏航差速；T7 非法输入；T8 6DOF 闭环；T9 杆量曲线；
  *          T10 RATE 内环积分累积
  * @see     include/CoaxialVtvControl.h、include/ActuatorOutputMap.h、CTL-003 §2.2
  */
@@ -266,21 +266,27 @@ int main()
     CHECK(std::fabs(pos.z) < 3.0f, "T8 高度有界");
   }
 
-  // T9 杆量→目标角速率线性映射（原始 mapFloat(raw,988,2012,∓80,±80)）。
+  // T9 杆量→目标角速率曲线（TandemVec rcRateCurve：rc_rate=0.5、expo=0.25、
+  // super=0.7，600 dps 封顶；满杆 333.33 dps。与线性 ±80 的差异属有意选择。）
   {
-    CHECK(nearf(bfs::coaxialVtvStickToRateDps(988.0f, 80.0f, false), -80.0f),
-          "T9 988→-80 dps");
-    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2012.0f, 80.0f, false), 80.0f),
-          "T9 2012→+80 dps");
-    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1500.0f, 80.0f, false), 0.0f),
-          "T9 中位→0");
-    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2012.0f, 80.0f, true), -80.0f),
-          "T9 俯仰反向");
-    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1900.0f, 80.0f, false),
-                400.0f / 512.0f * 80.0f),
-          "T9 线性中点");
-    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2100.0f, 80.0f, false), 80.0f),
-          "T9 越界钳位");
+    const float kRate = 0.5f;
+    const float kExpo = 0.25f;
+    const float kSuper = 0.7f;
+    const float kMax = 600.0f;
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(988.0f, kRate, kExpo, kSuper, kMax, false),
+                -333.3333f, 0.01f), "T9 988→-333.33 dps");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2012.0f, kRate, kExpo, kSuper, kMax, false),
+                333.3333f, 0.01f), "T9 2012→+333.33 dps");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1500.0f, kRate, kExpo, kSuper, kMax, false),
+                0.0f), "T9 中位→0");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2012.0f, kRate, kExpo, kSuper, kMax, true),
+                -333.3333f, 0.01f), "T9 俯仰反向");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1900.0f, kRate, kExpo, kSuper, kMax, false),
+                139.2478f, 0.01f), "T9 曲线中点");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(2100.0f, kRate, kExpo, kSuper, kMax, false),
+                600.0f, 0.01f), "T9 越界封顶");
+    CHECK(nearf(bfs::coaxialVtvStickToRateDps(1900.0f, kRate, kExpo, 0.55f, kMax, false),
+                115.1882f, 0.01f), "T9 偏航 super=0.55");
   }
 
   // T10 RATE 内环积分跨拍累积：两模式都使能；断开积分时输出停在 P 分量。

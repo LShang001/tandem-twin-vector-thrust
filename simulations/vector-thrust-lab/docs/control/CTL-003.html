@@ -164,8 +164,11 @@ seeds 通过（定高 9.17–9.29 m、max_roll
 40），外加姿态目标 α=0.85、修正角 α=0.25
 两级滤波；<code>RATE_MODE</code> 已于 <strong>2026-10-30
 恢复原始语义</strong>：只复位被跳过的姿态外环，速率内环 PID
-的积分/微分与 α0.85/α0.25 两级滤波跨拍保持；RATE 杆量恢复线性 ±80
-dps（原为 600 dps 曲线），内环 D=0（等效 PI），详见 <a
+的积分/微分与 α0.85/α0.25 两级滤波跨拍保持；RATE 杆量按用户要求接回
+TandemVec
+摇杆曲线（<code>rc_rate=0.5</code>、<code>expo=0.25</code>、<code>super=0.7/0.7/0.55</code>，满杆约
+333/222 dps、600 dps 封顶；原始固件为线性 ±80
+dps，曲线属有意差异），内环 D=0（等效 PI），详见 <a
 href="../verification/VER-004.html">VER-004</a>
 §10。已通过 <code>BFS_COAXIAL_VTVL</code> / <code>CoaxialVTVL</code> env
 接入 <code>runGNCExecutive</code>，共用输入/模式/定高/目标姿态层。
@@ -414,5 +417,5 @@ SIL/台架/实飞证据前，状态只能是“表结构可表达”，不是“
 href="../verification/VER-002.html">VER-002
 三机型兼容性与虚拟验证</a>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 23:48</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 00:05</footer></article></body>
 </html>

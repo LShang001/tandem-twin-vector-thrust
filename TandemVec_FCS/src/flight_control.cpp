@@ -2170,15 +2170,22 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   control_in.rate_pitch_dps = current_omega_dps_body_filtered.y;
   control_in.rate_yaw_dps = current_omega_dps_body_filtered.z;
   control_in.rate_mode = (inputs.attitude_mode == RATE_MODE);
-  // 杆量→目标角速率：恢复实飞工程线性 ±max_target_rate(80 dps) 口径
-  // （mapFloat(raw,988,2012,∓80,±80)），不用 TandemVec 的 600 dps 曲线；
-  // 俯仰轴推杆=低头，取反。地面/未解锁时也保持同一映射，由闭环激活门控。
+  // 杆量→目标角速率：按用户要求接回 TandemVec 摇杆曲线（rc_rate/expo/super，
+  // 600 dps 封顶），与 TandemVec RATE_MODE 同一套曲线；原始实飞工程为线性
+  // ±80 dps，曲线属有意差异（满杆默认约 333 dps、偏航 222 dps）。俯仰取反。
   control_in.roll_rate_target_dps = bfs::coaxialVtvStickToRateDps(
-      inputs.roll_raw, coax.ctrl.max_target_rate_dps, false);
+      inputs.roll_raw, kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[0],
+      kFlightCtrlParams.rc_super[0], MAX_MANUAL_rollRATE, false);
   control_in.pitch_rate_target_dps = bfs::coaxialVtvStickToRateDps(
-      inputs.pitch_raw, coax.ctrl.max_target_rate_dps, true);
+      inputs.pitch_raw, kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[1],
+      kFlightCtrlParams.rc_super[1], MAX_MANUAL_pitchRATE, true);
   control_in.yaw_rate_target_dps = bfs::coaxialVtvStickToRateDps(
-      inputs.yaw_raw, coax.ctrl.max_target_rate_dps, false);
+      inputs.yaw_raw, kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[2],
+      kFlightCtrlParams.rc_super[2], MAX_MANUAL_yawRATE, false);
+  // 遥测与共轴控制目标同源（此前 RATE 模式下 omega_ref 仍显示 TandemVec 曲线）。
+  gnc_tel.omega_ref_dps[0] = control_in.roll_rate_target_dps;
+  gnc_tel.omega_ref_dps[1] = control_in.pitch_rate_target_dps;
+  gnc_tel.omega_ref_dps[2] = control_in.yaw_rate_target_dps;
   // 闭环激活只由解锁与手动 TVC 决定（原始 execute_attitude_controller 口径，
   // 不含油门门控）；油门只门控积分：姿态外环只在 ATTITUDE 且油门>1100 积分，
   // 速率内环在 ATTITUDE/RATE 两模式都积分（对齐原始 manage_pid_integrals）。

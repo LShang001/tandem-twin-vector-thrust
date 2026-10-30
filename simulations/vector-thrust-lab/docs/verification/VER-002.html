@@ -83,8 +83,10 @@ mix 等价单测；液体：未接固件</td>
 VTVL</strong>：控制律按实飞工程结构逐项移植，但原始固件对照审计（<a
 href="VER-004.html">VER-004</a>）发现
 RATE_MODE 复位/积分语义与目标量级不等价；2026-10-30
-已按原始语义修复（VER-004 §10），其余 P1 待处理；真实固件 + 近似 plant
-生产口径 8 profile×5 seeds <strong>39/40</strong>、旧口径
+已恢复串级/积分语义（VER-004 §10）；杆量曲线按用户要求接回 TandemVec
+曲线（满杆 333/222 dps，原始为线性 ±80 dps，属有意差异），其余 P1
+待处理；真实固件 + 近似 plant 生产口径 8 profile×5 seeds
+<strong>39/40</strong>、旧口径
 3×5=<strong>14/15</strong>（不是旧文档写的
 15/15）。<strong>没有外部实飞日志回放</strong>，不能证明逐波形一致。</li>
 <li><strong>液体火箭</strong>：只有 L1 推进/质量/喷管模型 + 自研简单回收
@@ -123,11 +125,11 @@ env，<code>CoaxialVtvControl + mapCoaxialVtvOutputs</code></td>
 <td>8 profile×5 seeds
 <strong>39/40</strong>（生产传感器口径）、3×5=<strong>14/15</strong>；realistic
 plant 8×5=40/40（近门限，见 §3.2）；sweep 15/18；MC
-56/100；参考等价测试为<strong>按当前语义自写的自指测试</strong>（VER-004
-P1）</td>
-<td>实飞日志回放；台架/HIL；RATE_MODE 已修复（VER-004 §10）；其余 P1
-差异；plant 惯量/力臂/差速力矩为 L1 假设；偏航无自动 heading
-hold；参数不持久化（VER-005 P1）</td>
+56/100；参考实现已按原始语义重写、固件与参考逐拍 0
+误差（仍非原始二进制对拍，VER-004 C-5）</td>
+<td>实飞日志回放；台架/HIL；RATE_MODE 串级/积分已修复（VER-004
+§10）；杆量曲线为有意差异；其余 P1 差异；plant 惯量/力臂/差速力矩为 L1
+假设；偏航无自动 heading hold；参数不持久化（VER-005 P1）</td>
 </tr>
 <tr>
 <td>液体火箭</td>
@@ -197,7 +199,8 @@ seeds）</strong>：<strong>39/40 PASS</strong>；唯一失败
 手感修复后复跑同一矩阵：验收仍 <strong>39/40</strong>（同一
 seed，max_pitch=22.069°）、MC <strong>56/100</strong>、sweep
 <strong>15/18</strong>，与修复前同集合；证据见
-<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-fix-2026-10-30/</code>。</li>
+<code>TandemVec_FCS/test_host/fw_sil/sim-data/coax-fix-2026-10-30/</code>（串级修复版）与
+<code>coax-curve-2026-10-31/</code>（杆量曲线版，数字同集合）。</li>
 <li><strong>realistic 对照</strong>：8 profile×5 seeds
 <strong>40/40</strong>；同 seed 翻绿来自地面摩擦 μ
 对起飞前地面段的扰动，余量仅 0.085° ⇒ <strong>近门限敏感，不能解读为
@@ -219,15 +222,15 @@ F4（只检测/上报，<strong>没有重构或安全降落</strong>）。</li>
 通过，hold_end 0.857 m、max_pitch 2.53°），本轮 suite 未重跑长航时 ⇒
 该数字仍是旧证据。</li>
 <li><strong>参考等价测试</strong>：<code>test_coaxial_reference_equivalence</code>
-声称 "原头文件 600 拍 max_err=0"，但
-<code>reference/coaxial/coax_reference.cpp</code> 与
-<code>PositionPID.h</code> 是按当前控制器语义重写的（含 reset_roll_pitch
-清速率环、积分使能
-<code>!rate_mode</code>），<strong>是自指测试</strong>，不能独立证明与实飞工程等价（VER-004
-P1 已点名）。</li>
+2026-10-30 前是自指测试（参考体复刻当时的错误语义）。本次修复把
+<code>reference/coaxial/coax_reference.cpp</code>
+按原始固件语义重写（RATE 只复位外环、内环积分/滤波保持、手动输出 α0.25
+滤波），固件与参考 600 拍
+<code>max_err=0</code>；但参考体仍是宿主重写实现，<strong>不是原始固件二进制</strong>，不能替代实飞日志/原机逐波形对比。</li>
 <li><strong>未证明</strong>：真实共轴惯量/力臂/差速力矩、TVC
-机械方向、45° 锁电机故障行为、实飞航向保持；RATE_MODE
-语义差异的实机影响（代码已恢复原始语义，仍需台架/实飞确认手感）。</li>
+机械方向、45° 锁电机故障行为、实飞航向保持；RATE_MODE 杆量曲线（满杆
+333/222 dps）与原始线性 ±80 dps
+的实机手感/安全余量差异（串级语义已恢复，仍需台架/实飞确认）。</li>
 </ul>
 <h3 id="33-液体火箭">3.3 液体火箭</h3>
 <ul>
@@ -323,11 +326,11 @@ href="../control/CTL-003.html">CTL-003</a>）：</p>
 seeds 39/40（旧口径 14/15）、realistic 40/40、sweep 15/18、MC
 56/100；液体推进/质量/喷管模型通过 9 组回收
 SIL。共轴原始固件对照审计已完成（VER-004/VER-005），RATE_MODE
-语义差异已于 2026-10-30 修复（VER-004 §10），其余 P1
-差异处置前不得直接飞共轴。</p>
+串级/积分语义已于 2026-10-30 修复（VER-004
+§10），杆量曲线为有意差异；其余 P1 差异处置前不得直接飞共轴。</p>
 <p><strong>不能确认</strong>：共轴/液体与各自实飞固件的逐波形响应一致；三机型在真实气动/推进/传感器/执行器/HIL
 下的稳定性；液体 CCAEGT 飞行模式兼容；RATE_MODE
-手感与原始逐波形一致（仅控制律语义对齐）。</p>
+手感与原始逐波形一致（仅串级/积分语义对齐，杆量曲线有意不同）。</p>
 <p><strong>实飞日志检索结果</strong>：已检查两个外部工程的 git
 全历史、<code>outputs/</code>、<code>test/</code>、
 <code>tools/</code>、归档与 <code>.reasonix</code> 目录，未发现可回放的
@@ -337,9 +340,10 @@ SIL，不能做飞行波形回放；需要用户提供 原始黑匣子/遥测日
 级飞行响应对照。</p>
 <p>下一步按证据优先级：</p>
 <ol type="1">
-<li><strong>RATE_MODE/手动/门控已修复（VER-004
-§10，2026-10-30）</strong>；下一步处理剩余
-P1（参考测试自指、俯仰裕度、空中断链策略、45°
+<li><strong>RATE_MODE 串级/积分、手动、门控已修复（VER-004
+§10，2026-10-30）；杆量曲线按用户要求接回（满杆 333/222
+dps，属有意差异）</strong>；下一步处理剩余
+P1（参考测试仍非原始二进制、俯仰裕度、空中断链策略、45°
 硬切）后再谈共轴台架；</li>
 <li>用两型实飞日志做传感器/指令回放，比较新固件执行器输出与原固件（最强兼容性证据）；</li>
 <li>移植/审查 CCAEGT 制导与液体双摆座/阀门/RCS
@@ -365,5 +369,5 @@ DETA100 直出、航向门控、参数持久化、GNSS 丢失兜底 4 项 P1
 SIL 口径）</li>
 <li>外部实飞工程：<code>VTVL_ElectricDualRotor_FCS</code>、<code>VTVL_LiquidRocket_FC</code>（本地参考，未随本仓库分发）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 23:48</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 00:05</footer></article></body>
 </html>

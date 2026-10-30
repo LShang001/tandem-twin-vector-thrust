@@ -32,6 +32,8 @@
 
 #include <cmath>
 
+#include "RcCurve.h"
+
 namespace bfs
 {
 
@@ -93,14 +95,15 @@ inline float coaxialVtvClamp(const float v, const float lo, const float hi)
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-// 原始实飞工程杆量→目标角速率：mapFloat(raw, 988, 2012, ∓max, ±max)，
-// 即 (us-1500)/512*max_dps；俯仰轴反向。RATE_MODE 的滚转/俯仰与偏航共用。
-// 注意：实飞工程 RATE 杆量是 ±80 dps 线性，不是 600 dps 曲线。
-inline float coaxialVtvStickToRateDps(const float us, const float max_dps,
-                                      const bool invert)
+// 杆量→目标角速率：按用户要求（2026-10-30）接回 TandemVec 摇杆曲线
+// rcRateCurve（rc_rate 灵敏度 / expo 中心 / super 边缘，600 dps 封顶），
+// 与 TandemVec RATE_MODE 同一套曲线；原始实飞工程是线性 ±80 dps，曲线
+// 属有意差异（满杆默认约 333 dps，偏航约 222 dps）。俯仰轴取反（推杆低头）。
+inline float coaxialVtvStickToRateDps(const float us, const float rc_rate,
+                                      const float expo, const float super,
+                                      const float max_rate, const bool invert)
 {
-    const float n = coaxialVtvClamp((us - 1500.0f) / 512.0f, -1.0f, 1.0f);
-    const float v = n * max_dps;
+    const float v = rcRateCurve(rcNormFromUs(us), rc_rate, expo, super, max_rate);
     return invert ? -v : v;
 }
 
