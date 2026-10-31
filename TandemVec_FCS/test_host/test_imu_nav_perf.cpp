@@ -50,6 +50,7 @@ enum class Scenario
   Maneuver = 1,
   Cruise = 2,
   Vibration = 3,
+  VibrationOutage = 4,
 };
 
 const char *scenarioName(Scenario s)
@@ -59,6 +60,7 @@ const char *scenarioName(Scenario s)
   case Scenario::Static:   return "static";
   case Scenario::Maneuver: return "maneuver";
   case Scenario::Vibration: return "vibration";
+  case Scenario::VibrationOutage: return "vib_outage";
   default:                 return "cruise";
   }
 }
@@ -128,7 +130,8 @@ struct Truth
 Truth truthAt(double t, Scenario sc)
 {
   Truth tr{};
-  if (sc == Scenario::Static || sc == Scenario::Vibration)
+  if (sc == Scenario::Static || sc == Scenario::Vibration ||
+      sc == Scenario::VibrationOutage)
   {
     return tr; // 全零；Vibration 的 80Hz 激励只加在 IMU 测量侧
   }
@@ -189,6 +192,9 @@ struct RunResult
   double vel_rmse = 0.0;
   double pos_rmse = 0.0;
   int gnss_updates = 0;
+  double out_pos_rmse = 0.0;
+  double out_vel_rmse = 0.0;
+  int out_count = 0;
   bool finite = true;
 };
 
@@ -248,6 +254,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   const double latency_s = gnss.latency_ms / 1000.0;
 
   double sum_roll2 = 0.0, sum_pitch2 = 0.0, sum_vel2 = 0.0, sum_pos2 = 0.0;
+  double sum_out_pos2 = 0.0, sum_out_vel2 = 0.0;
+  int out_count = 0;
   int count = 0, gnss_updates = 0;
   const int start_eval = static_cast<int>(0.10 * nav_steps);
 
@@ -274,7 +282,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         accel_meas(a) += accel_bias(a) + accel_sigma * n01(rng);
         gyro_meas(a) += gyro_bias(a) + gyro_sigma * n01(rng);
       }
-      if (sc == Scenario::Vibration)
+      if (sc == Scenario::Vibration || sc == Scenario::VibrationOutage)
       {
         // 80Hz、0.5g 机体 z 轴振动（电机/桨叶高频激励），验证 LPF 对振动泄漏的抑制。
         accel_meas(2) += 0.5 * kGravity * std::sin(2.0 * kPi * 80.0 * ti);
@@ -308,7 +316,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                             dv1.cast<float>(), dv2.cast<float>(), kNavDt);
 
     // GNSS：按刷新率注入，测量对应 t−latency 的真值（体现定位延迟）。
-    if ((k % gnss_div) == 0)
+    if ((k % gnss_div) == 0 &&
+        !(sc == Scenario::VibrationOutage && t >= 10.0 && t < 20.0))
     {
       const double tm = std::fmax(0.0, t - latency_s);
       const Truth trm = truthAt(tm, sc);
@@ -374,6 +383,12 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       const Eigen::Vector3d pos_err(est_n - tr.pos_ned(0), est_e - tr.pos_ned(1),
                                     est_d - tr.pos_ned(2));
       sum_pos2 += pos_err.squaredNorm();
+      if (sc == Scenario::VibrationOutage && t >= 10.0 && t < 20.0)
+      {
+        sum_out_pos2 += pos_err.squaredNorm();
+        sum_out_vel2 += (est_vel.cast<double>() - tr.vel_ned).squaredNorm();
+        out_count++;
+      }
       count++;
     }
   }
@@ -389,6 +404,12 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   r.pitch_rmse_deg = std::sqrt(sum_pitch2 / count) * kRad2Deg;
   r.vel_rmse = std::sqrt(sum_vel2 / count);
   r.pos_rmse = std::sqrt(sum_pos2 / count);
+  r.out_count = out_count;
+  if (out_count > 0)
+  {
+    r.out_pos_rmse = std::sqrt(sum_out_pos2 / out_count);
+    r.out_vel_rmse = std::sqrt(sum_out_vel2 / out_count);
+  }
   const Truth tr_end = truthAt((nav_steps - 1) * kNavDt, sc);
   r.yaw_drift_deg = wrapPi(ekf.yaw_rad() - tr_end.yaw) * kRad2Deg;
   r.finite = std::isfinite(r.roll_rmse_deg) && std::isfinite(r.pitch_rmse_deg) &&
@@ -553,6 +574,23 @@ int main()
     const double n = static_cast<double>(kSeedCount);
     std::printf("[VIB] LPF %.0fHz: att=%.3f deg vel=%.4f m/s pos=%.4f m\n",
                 lpf_hz, sum_att / n, sum_vel / n, sum_pos / n);
+  }
+
+  if (const char *ab = std::getenv("IMUPERF_OUTAGE_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS 10-20s outage + 80Hz/0.5g vibration, M8N_10Hz ==\n");
+    std::printf("lpf_hz,seed,imu,out_pos_rmse,out_vel_rmse\n");
+    for (float hz : {50.0f, 100.0f, 400.0f})
+    {
+      ImuSpec spec = kIcm45686;
+      spec.lpf_accel_hz = hz;
+      spec.lpf_gyro_hz = hz;
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(spec, kGnssSpecs[2], Scenario::VibrationOutage, seed, false);
+        std::printf("%.0f,%d,45686,%.4f,%.4f\n", hz, seed, r.out_pos_rmse, r.out_vel_rmse);
+      }
+    }
   }
 
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
