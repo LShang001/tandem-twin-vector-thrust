@@ -200,6 +200,7 @@ struct RunResult
   double out_vel_rmse = 0.0;
   double out_alt_rmse = 0.0;
   double alt_rmse = 0.0;
+  double post_outage_rmse = 0.0;
   double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
@@ -221,7 +222,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int baro_mode = 0, double baro_std = 0.5, double vib_amp = 0.5,
                   double outage_start = 10.0, double outage_end = 20.0,
                   double baro_bias = 0.0, int baro_qnh_cal = 0, double baro_start_s = 0.0,
-                  double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05)
+                  double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05, float q_accel_outage = 0.0f)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -272,6 +273,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double sum_roll2 = 0.0, sum_pitch2 = 0.0, sum_vel2 = 0.0, sum_pos2 = 0.0;
   double sum_out_pos2 = 0.0, sum_out_vel2 = 0.0, sum_out_alt2 = 0.0;
   double sum_alt2 = 0.0;
+  double sum_post_pos2 = 0.0;
+  int post_count = 0;
   double nan_t_local = -1.0;
   double qnh_est = 0.0; // baro QNH 在线偏差估计（GNSS 高度差低通）
   bool qnh_inited = false;
@@ -335,6 +338,13 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       }
     }
 
+    // 失锁期过程噪声膨胀：让位置协方差增长更快，恢复时更信任新 GNSS。
+    if (q_accel_outage > 0.0f)
+    {
+      const bool in_outage =
+          (sc == Scenario::VibrationOutage && t >= outage_start && t < outage_end);
+      ekf.set_q_accel_scale(in_outage ? q_accel_outage : q_accel);
+    }
     ekf.TimeUpdateTwoSample(dtheta1.cast<float>(), dtheta2.cast<float>(),
                             dv1.cast<float>(), dv2.cast<float>(), kNavDt);
 
@@ -536,6 +546,11 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                                     est_d - tr.pos_ned(2));
       sum_pos2 += pos_err.squaredNorm();
       sum_alt2 += (est_d - tr.pos_ned(2)) * (est_d - tr.pos_ned(2));
+      if (sc == Scenario::VibrationOutage && t >= outage_end && t < (outage_end + 5.0))
+      {
+        sum_post_pos2 += pos_err.squaredNorm();
+        post_count++;
+      }
       if (sc == Scenario::VibrationOutage && t >= outage_start && t < outage_end)
       {
         sum_out_pos2 += pos_err.squaredNorm();
@@ -560,6 +575,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   r.vel_rmse = std::sqrt(sum_vel2 / count);
   r.pos_rmse = std::sqrt(sum_pos2 / count);
   r.alt_rmse = std::sqrt(sum_alt2 / count);
+  if (post_count > 0)
+  {
+    r.post_outage_rmse = std::sqrt(sum_post_pos2 / post_count);
+  }
   r.nan_t = nan_t_local;
   r.out_count = out_count;
   if (out_count > 0)
@@ -1149,6 +1168,24 @@ int main()
           std::printf("%d,%s,%d,%.4f,%.4f\n", gate, scenarioName(scn_e), seed,
                       r.alt_rmse, r.out_alt_rmse);
         }
+      }
+    }
+  }
+
+  // ★失锁恢复：失锁期 Q 膨胀 vs 基准，比较恢复后 5s 位置误差。
+  if (const char *ab = std::getenv("IMUPERF_OUTAGE_RECOVERY"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS outage recovery: q_accel_outage vs baseline ==\n");
+    std::printf("q_out,seed,out_pos_rmse,post_outage_rmse\n");
+    for (float qo : {0.0f, 5.0f, 10.0f})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, qo);
+        std::printf("%.1f,%d,%.4f,%.4f\n", qo, seed,
+                    r.out_pos_rmse, r.post_outage_rmse);
       }
     }
   }
