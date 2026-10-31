@@ -27,6 +27,7 @@
 #include <cstdint>
 #include "core/core.h"
 #endif
+#include <cstdio>
 #include <cstring>
 #include <limits>     // memcpy / memset
 #include <math.h>      // cosf / sinf（NMEA 速度分解）
@@ -585,6 +586,15 @@ namespace bfs
       nmea_bad_checksum_count_++;
       return;
     }
+    // GNS：minmea 无此枚举，自行解析；成功则直接消费，不再走 unknown。
+    if (strlen(sentence) > 6 && strncmp(sentence + 3, "GNS", 3) == 0)
+    {
+      nmea_gns_count_++;
+      if (nmeaParseGns(sentence))
+      {
+        return;
+      }
+    }
     switch (minmea_sentence_id(sentence, false))
     {
       case MINMEA_SENTENCE_GGA:
@@ -683,6 +693,19 @@ namespace bfs
            static_cast<double>(minutes) / (60.0 * static_cast<double>(f->scale));
   }
 
+  // NMEA ddmm.mmmm 坐标 → 度（double，不走 minmea 的 int32 value）。
+  static double NmeaDdmmToDeg(const char *ddmm)
+  {
+    const double v = strtod(ddmm, nullptr);
+    if (!std::isfinite(v))
+    {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double deg = (v >= 0.0) ? std::floor(v / 100.0) : std::ceil(v / 100.0);
+    const double min = v - deg * 100.0;
+    return deg + min / 60.0;
+  }
+
   // GGA 有效句（fix_quality>=1）：刷新位置/精度/高程快照。
   void Ubx::nmeaUpdateSnapshotFromGga(const struct minmea_sentence_gga &gga)
   {
@@ -739,6 +762,77 @@ namespace bfs
     nmea_snapshot_pos_tow_ms_ = nmea_snapshot_tow_ms_;  // 位置新鲜度基准
     nmea_fix_count_++;
     nmea_last_fix_ms_ = millis();
+  }
+
+  // GNS（多系统组合定位）：minmea 没有该枚举，自行解析。
+  // $GNGNS,hhmmss.ss,ddmm.mmmm,N,ddd.mmmm,E,mode,numSV,HDOP,alt,sep,age,stn*hh
+  // mode 任一字符为 'N' 表示该组合无效。
+  bool Ubx::nmeaParseGns(const char *sentence)
+  {
+    char buf[128];
+    const size_t len = strlen(sentence);
+    if (len >= sizeof(buf))
+    {
+      return false;
+    }
+    memcpy(buf, sentence, len + 1);
+    char *fields[16] = {nullptr};
+    int n = 0;
+    char *save = nullptr;
+    for (char *tok = strtok_r(buf, ",", &save); tok != nullptr && n < 16;
+         tok = strtok_r(nullptr, ",", &save))
+    {
+      fields[n++] = tok;
+    }
+    if (n < 10 || fields[2] == nullptr || fields[4] == nullptr ||
+        fields[6] == nullptr || strchr(fields[6], 'N') != nullptr ||
+        fields[9] == nullptr)
+    {
+      return false;
+    }
+    char num[32];
+    snprintf(num, sizeof(num), "%s%s",
+             (fields[3] != nullptr && fields[3][0] == 'S') ? "-" : "", fields[2]);
+    const double lat = NmeaDdmmToDeg(num);
+    snprintf(num, sizeof(num), "%s%s",
+             (fields[5] != nullptr && fields[5][0] == 'W') ? "-" : "", fields[4]);
+    const double lon = NmeaDdmmToDeg(num);
+    const double alt_msl = strtod(fields[9], nullptr);
+    if (!std::isfinite(lat) || !std::isfinite(lon) || !std::isfinite(alt_msl))
+    {
+      return false;
+    }
+    const double sep = (n >= 11 && fields[10] != nullptr) ? strtod(fields[10], nullptr) : 0.0;
+    nmea_snapshot_lat_rad_ = lat * DEG_TO_RAD;
+    nmea_snapshot_lon_rad_ = lon * DEG_TO_RAD;
+    nmea_snapshot_alt_valid_ = true;
+    nmea_snapshot_alt_msl_m_ = static_cast<float>(alt_msl);
+    nmea_snapshot_alt_wgs84_m_ = static_cast<float>(alt_msl + (std::isfinite(sep) ? sep : 0.0));
+    const long sv = strtol(fields[7], nullptr, 10);
+    if (sv > 0)
+    {
+      nmea_snapshot_sv_ = static_cast<int8_t>(sv);
+    }
+    const double hdop = strtod(fields[8], nullptr);
+    if (std::isfinite(hdop) && hdop > 0.0)
+    {
+      nmea_snapshot_hdop_ = static_cast<float>(hdop);
+    }
+    nmea_snapshot_fix_ = FIX_3D;
+    const double hhmmss = strtod(fields[1], nullptr);
+    if (std::isfinite(hhmmss) && hhmmss >= 0.0)
+    {
+      const int hh = static_cast<int>(hhmmss / 10000.0) % 24;
+      const int mm = static_cast<int>(hhmmss / 100.0) % 100;
+      const double ss = hhmmss - std::floor(hhmmss / 100.0) * 100.0;
+      nmea_snapshot_tow_ms_ = static_cast<uint32_t>(
+          (hh * 3600.0 + mm * 60.0 + ss) * 1000.0 + 0.5);
+    }
+    nmea_snapshot_valid_ = true;
+    nmea_snapshot_pos_tow_ms_ = nmea_snapshot_tow_ms_;
+    nmea_fix_count_++;
+    nmea_last_fix_ms_ = millis();
+    return true;
   }
 
   // RMC 有效句（valid=true）：刷新速度/时间快照（位置 RMC 也带，但以 GGA 为准）。

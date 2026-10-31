@@ -644,6 +644,23 @@ int main()
           "HIGHPREC 坐标 double 解析（<1e-8 rad）");
   }
 
+  // ================= 用例 25：GNS 解析（多系统组合定位） =================
+  printf("== 用例25 GNS 解析 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kNmea);
+  ubx.Reset();
+  {
+    char sent[160];
+    makeNmea("GNGNS,100000.00,4728.5231789,N,12130.1234567,E,AA,12,0.8,12.3,45.6,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep), "GNS 合成 epoch");
+    const double exp_lat = (47.0 + 28.5231789 / 60.0) * DEG_TO_RAD;
+    CHECK(fabs(ep.lat_rad - exp_lat) < 1e-8, "GNS 纬度 double 解析");
+    CHECK(fabs(ep.alt_wgs84_m - 57.9f) < 0.05f, "GNS 椭球高 = MSL 12.3 + sep 45.6");
+    CHECK(ep.num_sv == 12, "GNS 星数 12");
+  }
+
   printf("\n%s (失败 %d)\n", g_fail == 0 ? "全部通过" : "存在失败", g_fail);
   return g_fail;
 }

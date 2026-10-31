@@ -194,6 +194,7 @@ namespace bfs
     inline uint32_t nmea_last_fix_ms() const { return nmea_last_fix_ms_; }   // 最近有效 fix 的 MCU 时间
     inline uint32_t nmea_sentence_count() const { return nmea_sentence_count_; }      // 完整句子数
     inline uint32_t nmea_bad_checksum_count() const { return nmea_bad_checksum_count_; }  // 校验失败数
+    inline uint32_t nmea_gns_count() const { return nmea_gns_count_; }
     inline uint32_t nmea_gsv_count() const { return nmea_gsv_count_; }
     inline int32_t nmea_gsv_total_sats() const { return nmea_gsv_total_sats_; }
     inline float nmea_gsv_max_snr() const { return nmea_gsv_max_snr_; }
@@ -351,6 +352,7 @@ namespace bfs
     void nmeaParseSentence(const char *sentence);
     /* GGA 有效句：刷新位置/精度/高程快照。 */
     void nmeaUpdateSnapshotFromGga(const struct minmea_sentence_gga &gga);
+    bool nmeaParseGns(const char *sentence);
     /* RMC 有效句：刷新速度/时间快照。 */
     void nmeaUpdateSnapshotFromRmc(const struct minmea_sentence_rmc &rmc);
     /* GSA 句：刷新 PDOP/VDOP 快照。is_combined=true 表示主 talker（GN=组合解）优先。 */
@@ -408,6 +410,7 @@ namespace bfs
     uint32_t nmea_bad_checksum_count_ = 0;               // 校验失败句子数
     uint32_t nmea_overflow_count_ = 0;
     uint32_t nmea_pos_stale_count_ = 0;  // 位置过期拒绝合成次数
+    uint32_t nmea_gns_count_ = 0;        // GNS 句数（校验通过）
     uint32_t nmea_gsv_count_ = 0;        // GSV 句数（校验通过）
     int32_t nmea_gsv_total_sats_ = 0;    // 最近 GSV 的总星数
     float nmea_gsv_max_snr_ = 0.0f;      // 最近 GSV 最强信噪比                   // 超长残句丢弃数
