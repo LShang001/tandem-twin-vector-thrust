@@ -209,7 +209,8 @@ constexpr double kEarthR = 6378137.0;
 
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
-                  bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0)
+                  bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0,
+                  double hacc_gate_m = 1.0e9)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -330,7 +331,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       lla_meas(0) += dn / kEarthR;
       lla_meas(1) += de / (kEarthR * std::cos(lla0(0)));
       lla_meas(2) += -dd;
-      if (gnss_mode == 1)
+      if (gnss_mode == 1 || gnss.pos_std_m >= hacc_gate_m)
       {
         // 只融合速度，不注入位置（模拟低质量 GNSS 下关闭位置观测）；
         // 速度 R 与 full 模式保持一致，差异只来自“是否融合位置”。
@@ -658,6 +659,43 @@ int main()
                                     seed, false, nullptr, false, 80.0, mode);
         std::printf("%s,%d,%.3f,%.4f\n", mode == 0 ? "full" : "vel_only", seed,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
+  // ★hAcc 门控阈值扫描：低端 GNSS 位置标准差 5m，超过阈值时只融合速度。
+  if (const char *ab = std::getenv("IMUPERF_HACC_SWEEP"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== hAcc gate sweep: LowEnd_5Hz maneuver ==\n");
+    std::printf("gate_m,seed,att_rmse_deg,pos_rmse_m\n");
+    for (double gate : {2.0, 3.0, 5.0, 6.0, 1.0e9})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[5], Scenario::Maneuver,
+                                    seed, false, nullptr, false, 80.0, 0, gate);
+        std::printf("%.1f,%d,%.3f,%.4f\n", gate, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
+  // ★阈值 3m 的边界验证：M8N_5Hz(2.5m) 不应被误关，LowEnd_5Hz(5m) 应关闭位置。
+  if (const char *ab = std::getenv("IMUPERF_HACC_VALID"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== hAcc gate 3m validation (maneuver) ==\n");
+    std::printf("gnss,gate_m,seed,att_rmse_deg,pos_rmse_m\n");
+    for (int gi : {3, 5})
+    {
+      for (double gate : {3.0, 1.0e9})
+      {
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[gi], Scenario::Maneuver,
+                                      seed, false, nullptr, false, 80.0, 0, gate);
+          std::printf("%s,%.0f,%d,%.3f,%.4f\n", kGnssSpecs[gi].name, gate, seed,
+                      0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+        }
       }
     }
   }
