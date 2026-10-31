@@ -49,6 +49,7 @@ enum class Scenario
   Static = 0,
   Maneuver = 1,
   Cruise = 2,
+  Vibration = 3,
 };
 
 const char *scenarioName(Scenario s)
@@ -57,6 +58,7 @@ const char *scenarioName(Scenario s)
   {
   case Scenario::Static:   return "static";
   case Scenario::Maneuver: return "maneuver";
+  case Scenario::Vibration: return "vibration";
   default:                 return "cruise";
   }
 }
@@ -126,9 +128,9 @@ struct Truth
 Truth truthAt(double t, Scenario sc)
 {
   Truth tr{};
-  if (sc == Scenario::Static)
+  if (sc == Scenario::Static || sc == Scenario::Vibration)
   {
-    return tr; // 全零
+    return tr; // 全零；Vibration 的 80Hz 激励只加在 IMU 测量侧
   }
   if (sc == Scenario::Maneuver)
   {
@@ -271,6 +273,11 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       {
         accel_meas(a) += accel_bias(a) + accel_sigma * n01(rng);
         gyro_meas(a) += gyro_bias(a) + gyro_sigma * n01(rng);
+      }
+      if (sc == Scenario::Vibration)
+      {
+        // 80Hz、0.5g 机体 z 轴振动（电机/桨叶高频激励），验证 LPF 对振动泄漏的抑制。
+        accel_meas(2) += 0.5 * kGravity * std::sin(2.0 * kPi * 80.0 * ti);
       }
       accel_meas = Eigen::Vector3d(accel_lpf[0].update(accel_meas).x(),
                                    accel_lpf[1].update(accel_meas).y(),
@@ -419,19 +426,20 @@ int main()
     std::sscanf(e, "%d,%d,%d,%d", &tr_imu, &tr_gnss, &tr_sc, &tr_seed);
 
   const ImuSpec imus[2] = {kIcm42688p, kIcm45686};
-  const Scenario scenarios[3] = {Scenario::Static, Scenario::Maneuver, Scenario::Cruise};
+  const Scenario scenarios[4] = {Scenario::Static, Scenario::Maneuver,
+                                 Scenario::Cruise, Scenario::Vibration};
   int fail = 0, total = 0;
 
   // 汇总：每个 (imu, gnss, scenario) 的均值。
-  std::vector<double> sum_pos(2 * kGnssCount * 3, 0.0);
-  std::vector<double> sum_vel(2 * kGnssCount * 3, 0.0);
-  std::vector<double> sum_att(2 * kGnssCount * 3, 0.0);
+  std::vector<double> sum_pos(2 * kGnssCount * 4, 0.0);
+  std::vector<double> sum_vel(2 * kGnssCount * 4, 0.0);
+  std::vector<double> sum_att(2 * kGnssCount * 4, 0.0);
 
   for (int si = 0; si < 2; ++si)
   {
     for (int gi = 0; gi < kGnssCount; ++gi)
     {
-      for (int sc = 0; sc < 3; ++sc)
+      for (int sc = 0; sc < 4; ++sc)
       {
         const int idx = (si * kGnssCount + gi) * 3 + sc;
         for (int seed = 1; seed <= kSeedCount; ++seed)
@@ -480,7 +488,7 @@ int main()
   {
     for (int gi = 0; gi < kGnssCount; ++gi)
     {
-      for (int sc = 0; sc < 3; ++sc)
+      for (int sc = 0; sc < 4; ++sc)
       {
         const int idx = (si * kGnssCount + gi) * 3 + sc;
         std::printf("%-13s %-14s %-8s %8.4f %8.4f %8.4f\n", imus[si].name,
@@ -501,7 +509,7 @@ int main()
       for (int gi = 0; gi < kGnssCount; ++gi)
       {
         if (kGnssSpecs[gi].latency_ms <= 0.0) { continue; }
-        for (int sc = 0; sc < 3; ++sc)
+        for (int sc = 0; sc < 4; ++sc)
         {
           double sum_off = 0.0, sum_on = 0.0, vel_off = 0.0, vel_on = 0.0;
           for (int seed = 1; seed <= kSeedCount; ++seed)
@@ -522,6 +530,29 @@ int main()
         }
       }
     }
+  }
+
+  // ★振动场景下的 LPF 带宽对比：80Hz/0.5g 激励，比较 50/100/400Hz 一阶 LPF 的残余误差。
+  if (const char *lpf_env = std::getenv("IMUPERF_VIB_LPF_HZ"); lpf_env != nullptr)
+  {
+    const float lpf_hz = static_cast<float>(std::atof(lpf_env));
+    ImuSpec wide = kIcm45686;
+    wide.lpf_accel_hz = lpf_hz;
+    wide.lpf_gyro_hz = lpf_hz;
+    std::printf("== vibration 80Hz/0.5g, LPF %.0fHz, M8N_10Hz ==\n", lpf_hz);
+    double sum_att = 0.0, sum_vel = 0.0, sum_pos = 0.0;
+    for (int seed = 1; seed <= kSeedCount; ++seed)
+    {
+      const RunResult r = runCase(wide, kGnssSpecs[2], Scenario::Vibration, seed, false);
+      std::printf("seed=%d roll=%.3f pitch=%.3f vel=%.4f pos=%.4f\n", seed,
+                  r.roll_rmse_deg, r.pitch_rmse_deg, r.vel_rmse, r.pos_rmse);
+      sum_att += 0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg);
+      sum_vel += r.vel_rmse;
+      sum_pos += r.pos_rmse;
+    }
+    const double n = static_cast<double>(kSeedCount);
+    std::printf("[VIB] LPF %.0fHz: att=%.3f deg vel=%.4f m/s pos=%.4f m\n",
+                lpf_hz, sum_att / n, sum_vel / n, sum_pos / n);
   }
 
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
