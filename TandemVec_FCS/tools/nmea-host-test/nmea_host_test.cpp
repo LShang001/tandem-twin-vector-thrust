@@ -681,6 +681,23 @@ int main()
     CHECK(ubx.frame_timeout_count() >= 1U, "帧内超时计数 >=1");
   }
 
+  // ================= 用例 27：UBX payload 含 NMEA 文本不误解析 =================
+  printf("== 用例27 UBX payload 含 NMEA 文本 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kAuto);
+  ubx.Reset();
+  {
+    const char *fake = "$GPGGA,100000.00,3100.0000,N,12100.0000,E,1,08,1.0,10.0,M,0.0,M,,*00";
+    uint8_t payload[96] = {0};
+    memcpy(payload, fake, strlen(fake));
+    uint8_t frame[128];
+    makeUbxFrame(0x0A, 0x99, payload, static_cast<uint16_t>(strlen(fake)), frame);
+    serial.clear();
+    serial.feed(frame, 6 + strlen(fake) + 2);
+    ubx.Pump(0, g_sim_micros);
+    CHECK(ubx.nmea_gga_count() == 0, "UBX payload 内 NMEA 文本不误解析");
+    CHECK(ubx.nmea_sentence_count() == 0, "NMEA 句子计数为 0");
+  }
+
   printf("\n%s (失败 %d)\n", g_fail == 0 ? "全部通过" : "存在失败", g_fail);
   return g_fail;
 }
