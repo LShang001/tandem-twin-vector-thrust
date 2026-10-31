@@ -225,6 +225,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double baro_bias = 0.0, int baro_qnh_cal = 0, double baro_start_s = 0.0,
                   double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05, float q_accel_outage = 0.0f,
                   double reanchor_m = 0.0, int reanchor_streak = 1,
+                  int adapt_r = 0, double adapt_thresh_m = 5.0,
                   double gnss_spike_m = 0.0, double gnss_spike_t = 15.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
@@ -438,7 +439,21 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         // 模拟固件动态 R（navigation_task.cpp:2106）：位置噪声按该 GNSS 档次的
         // hAcc 设置，并钳到固件同款下限 0.15m；此前用 EKF 默认 3m 会低估 RTK、
         // 高估低端 GNSS 的权重，与实机行为不一致。
-        const float h_acc = static_cast<float>(std::fmax(gnss.pos_std_m, 0.15));
+        float h_acc = static_cast<float>(std::fmax(gnss.pos_std_m, 0.15));
+        if (adapt_r != 0)
+        {
+          // 中等新息自适应 R：新息 5-25m 时把位置 R 放大到新息的一半，
+          // 让 EKF 接受部分修正，而不是被 NIS 全部拒绝。
+          const double din = (lla_meas(0) - ekf.lat_rad()) * kEarthR;
+          const double die = (lla_meas(1) - ekf.lon_rad()) * kEarthR *
+                             std::cos(lla0(0));
+          const double innov = std::hypot(din, die);
+          if (innov > adapt_thresh_m)
+          {
+            h_acc = static_cast<float>(std::fmax(static_cast<double>(h_acc),
+                                                 innov * 0.5));
+          }
+        }
         const float v_std = static_cast<float>(std::fmax(gnss.vel_std_mps, 0.05));
         ekf.gnss_pos_ne_std_m(h_acc);
         ekf.gnss_pos_d_std_m(h_acc * 1.5f);
@@ -1317,6 +1332,25 @@ int main()
                                     0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
                                     25.0, st, 100.0, 15.0);
         std::printf("%d,%d,%.4f,%.4f\n", st, seed, r.pos_rmse, r.alt_rmse);
+      }
+    }
+  }
+
+  // ★R 自适应：中等新息放大位置 R，对比固定 R（均关闭硬重锚）。
+  if (const char *ab = std::getenv("IMUPERF_ADAPT_R"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== adaptive R (25s outage, no reanchor) ==\n");
+    std::printf("adapt,seed,out_pos_rmse,post_outage_rmse\n");
+    for (int ad : {0, 1})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 2, 0.0, 15.0, ad, 5.0);
+        std::printf("%d,%d,%.4f,%.4f\n", ad, seed,
+                    r.out_pos_rmse, r.post_outage_rmse);
       }
     }
   }
