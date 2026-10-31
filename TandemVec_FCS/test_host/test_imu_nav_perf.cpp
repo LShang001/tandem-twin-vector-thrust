@@ -221,7 +221,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int baro_mode = 0, double baro_std = 0.5, double vib_amp = 0.5,
                   double outage_start = 10.0, double outage_end = 20.0,
                   double baro_bias = 0.0, int baro_qnh_cal = 0, double baro_start_s = 0.0,
-                  double baro_spike_m = 0.0, int baro_gate = 0)
+                  double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -405,7 +405,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           // 低通收敛到 resid 的均值：qnh += α·(resid − qnh)。
           // 旧实现写成 qnh += α·resid 是积分器，会一路积到 clamp 上限。
           const double resid = std::clamp(baro_raw - lla_meas(2), -15.0, 15.0);
-          qnh_est = std::clamp(qnh_est + 0.02 * (resid - qnh_est), -15.0, 15.0);
+          qnh_est = std::clamp(qnh_est + qnh_alpha * (resid - qnh_est), -15.0, 15.0);
         }
       }
       ++gnss_updates;
@@ -1068,6 +1068,30 @@ int main()
                                       false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                       1, 0.2, 0.5, os, oe, 0.0, 0, 0.0, 3.0, gate);
           std::printf("%d,%s,%d,%.4f,%.4f\n", gate, scenarioName(scn_e), seed,
+                      r.alt_rmse, r.out_alt_rmse);
+        }
+      }
+    }
+  }
+
+  // ★QNH α 扫描：低通系数对高度残余的影响（bias=5m）。
+  if (const char *ab = std::getenv("IMUPERF_QNH_ALPHA"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== QNH alpha scan (bias=5m) ==\n");
+    std::printf("alpha,scenario,seed,alt_rmse,out_alt_rmse\n");
+    for (double alpha : {0.005, 0.01, 0.02, 0.05})
+    {
+      for (int scn = 0; scn <= 1; ++scn)
+      {
+        const Scenario scn_e = (scn == 0) ? Scenario::Static : Scenario::VibrationOutage;
+        const double os = (scn == 0) ? 100.0 : 5.0;
+        const double oe = (scn == 0) ? 101.0 : 30.0;
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], scn_e, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      1, 0.2, 0.5, os, oe, 5.0, 1, 2.0, 0.0, 0, alpha);
+          std::printf("%.3f,%s,%d,%.4f,%.4f\n", alpha, scenarioName(scn_e), seed,
                       r.alt_rmse, r.out_alt_rmse);
         }
       }
