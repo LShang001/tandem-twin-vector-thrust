@@ -219,7 +219,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0,
                   double hacc_gate_m = 1.0e9, int yaw_aid = 0, float q_accel = 2.0f,
                   int baro_mode = 0, double baro_std = 0.5, double vib_amp = 0.5,
-                  double outage_start = 10.0, double outage_end = 20.0)
+                  double outage_start = 10.0, double outage_end = 20.0,
+                  double baro_bias = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -387,7 +388,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
     // 气压计：25Hz 绝对高度观测（与固件 DPS310 节拍一致），仅用于高度通道。
     if (baro_mode != 0 && (k % 8) == 0)
     {
-      const double alt_abs = lla0(2) - truthAt(t, sc).pos_ned(2) +
+      const double alt_abs = lla0(2) - truthAt(t, sc).pos_ned(2) + baro_bias +
                              baro_std * baro_n01(baro_rng);
       (void)ekf.MeasurementUpdateBaroAltitudeDetailed(
           static_cast<float>(alt_abs), static_cast<float>(baro_std));
@@ -907,6 +908,30 @@ int main()
                                     1, bstd, 0.5, 5.0, 30.0);
         std::printf("%.1f,%d,%.4f,%.4f,%.4f,%.4f\n", bstd, seed,
                     r.alt_rmse, r.out_alt_rmse, r.out_vel_rmse, r.out_pos_rmse);
+      }
+    }
+  }
+
+  // ★QNH 偏置：baro 常值偏差 0/2/5/8m 对在线与失锁高度的影响。
+  if (const char *ab = std::getenv("IMUPERF_BARO_BIAS"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== baro QNH bias vs altitude (static & 25s outage) ==\n");
+    std::printf("bias_m,scenario,seed,alt_rmse,out_alt_rmse\n");
+    for (double bias : {0.0, 2.0, 5.0, 8.0})
+    {
+      for (int scn = 0; scn <= 1; ++scn)
+      {
+        const Scenario scn_e = (scn == 0) ? Scenario::Static : Scenario::VibrationOutage;
+        const double os = (scn == 0) ? 100.0 : 5.0;
+        const double oe = (scn == 0) ? 101.0 : 30.0;
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], scn_e, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      1, 0.2, 0.5, os, oe, bias);
+          std::printf("%.1f,%s,%d,%.4f,%.4f\n", bias, scenarioName(scn_e), seed,
+                      r.alt_rmse, r.out_alt_rmse);
+        }
       }
     }
   }
