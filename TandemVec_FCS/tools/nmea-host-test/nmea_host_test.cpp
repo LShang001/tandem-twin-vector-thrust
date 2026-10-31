@@ -661,6 +661,26 @@ int main()
     CHECK(ep.num_sv == 12, "GNS 星数 12");
   }
 
+  // ================= 用例 26：UBX 半帧超时复位 =================
+  printf("== 用例26 UBX 半帧超时复位 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kUbx);
+  ubx.Reset();
+  {
+    uint8_t frames[256];
+    size_t flen = 0;
+    makeUbxEpochFrames(frames, sizeof(frames), &flen);
+    serial.clear();
+    serial.feed(frames, 10);  // 只喂帧头+少量字节，停在帧内
+    ubx.Pump(0, g_sim_micros);
+    advance_ms(100);          // 超过 50ms 帧内超时
+    serial.feed(frames, flen);
+    ubx.Pump(0, g_sim_micros);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep) && ep.pvt_tow_ms == 100000U,
+          "半帧超时复位后新帧正常解析");
+    CHECK(ubx.frame_timeout_count() >= 1U, "帧内超时计数 >=1");
+  }
+
   printf("\n%s (失败 %d)\n", g_fail == 0 ? "全部通过" : "存在失败", g_fail);
   return g_fail;
 }

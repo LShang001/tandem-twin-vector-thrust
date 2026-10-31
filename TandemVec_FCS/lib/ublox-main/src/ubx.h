@@ -233,6 +233,7 @@ namespace bfs
     inline uint32_t valid_msg_count() const { return valid_msg_count_; }          // 累计校验通过的 UBX 报文数
     inline uint32_t checksum_fail_count() const { return checksum_fail_count_; }  // 累计校验失败数（应保持 0）
     inline uint32_t oversize_msg_count() const { return oversize_msg_count_; }    // 累计超长(>1024B)被丢弃数
+    inline uint32_t frame_timeout_count() const { return frame_timeout_count_; }  // 半帧超时复位次数
     inline uint32_t nav_pvt_count() const { return nav_pvt_count_; }              // 累计收到 NAV-PVT 数
     inline uint32_t nav_eoe_count() const { return nav_eoe_count_; }              // 累计收到 NAV-EOE 数
     inline uint32_t eoe_without_pvt_count() const { return eoe_without_pvt_count_; }  // EOE 到来但本历元无 PVT 的次数
@@ -423,6 +424,7 @@ namespace bfs
 
     /* ---- 解析参数与状态机 ---- */
     static constexpr size_t UBX_MAX_PAYLOAD_ = 1024;     // 支持的最大 payload 字节数（超过即判为异常丢弃）
+    static constexpr uint32_t UBX_FRAME_TIMEOUT_US_ = 50000;  // 半帧超时（50ms 无新字节即复位）
     static constexpr uint8_t UBX_HEADER_[2] = {0xB5, 0x62};  // UBX 帧头同步字 0xB5 0x62
     static constexpr uint8_t UBX_CLS_POS_ = 2;           // 状态机中 Class 字节所处的位置索引
     static constexpr uint8_t UBX_ID_POS_ = 3;            // ID 字节位置索引
@@ -434,12 +436,14 @@ namespace bfs
     uint8_t c_, len_, chk_rx_, chk_[2];                  // c_:当前字节 len_:长度低字节暂存 chk_rx_:收到的校验高字节前置
     uint16_t chk_cmp_rx_, chk_cmp_tx_;                   // 本地计算出的校验值（收/发）
     size_t parser_state_ = 0;                            // 状态机当前位置（0 起，跨调用保留以支持分块解析）
+    uint32_t last_rx_byte_us_ = 0;                       // 最近一次推进状态机的时刻
 
     /* ---- 链路健康统计（与上面同名 getter 对应）---- */
     uint32_t rx_byte_count_ = 0;
     uint32_t valid_msg_count_ = 0;
     uint32_t checksum_fail_count_ = 0;
     uint32_t oversize_msg_count_ = 0;
+    uint32_t frame_timeout_count_ = 0;  // 半帧超时复位次数
     uint32_t nav_pvt_count_ = 0;
     uint32_t nav_eoe_count_ = 0;
     uint32_t eoe_without_pvt_count_ = 0;

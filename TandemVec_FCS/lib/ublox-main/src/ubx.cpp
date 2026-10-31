@@ -65,6 +65,8 @@ namespace bfs
     chk_cmp_rx_ = 0;
     chk_cmp_tx_ = 0;
     parser_state_ = 0;
+    last_rx_byte_us_ = 0;
+    frame_timeout_count_ = 0;
     // --- 链路健康统计计数器 ---
     rx_byte_count_ = 0;
     valid_msg_count_ = 0;
@@ -253,6 +255,14 @@ namespace bfs
   bool Ubx::Pump(size_t max_bytes, uint32_t receive_time_us)
   {
     pump_receive_time_us_ = receive_time_us;
+    // 帧内超时：半帧悬挂（丢字节/断流）时，超过 50ms 没有新字节就复位
+    // 状态机，避免把后续数据当成 payload 吞掉（审计 P1-3）。
+    if (parser_state_ > 0 && last_rx_byte_us_ != 0 &&
+        (micros() - last_rx_byte_us_) > UBX_FRAME_TIMEOUT_US_)
+    {
+      parser_state_ = 0;
+      frame_timeout_count_++;
+    }
     const uint32_t before_count = queued_epoch_count_;  // 记录入队前的累计计数，用于判断本次是否新入队
     const uint32_t before_bytes = rx_byte_count_;       // 记录入队前的累计字节，用于核算本次预算用量
     // 协议分派（2026-08-09 双协议）：kNmea 跳过 UBX 状态机，kUbx 跳过 NMEA，kAuto 双流并行。
@@ -269,6 +279,7 @@ namespace bfs
       }
       const uint8_t b = static_cast<uint8_t>(raw_byte);
       rx_byte_count_++;
+      last_rx_byte_us_ = micros();
       const bool ubx_idle_before = (parser_state_ == 0);
       if (ubx_enabled)
       {
