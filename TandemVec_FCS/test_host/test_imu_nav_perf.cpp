@@ -654,6 +654,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
     const double est_n = (ekf.lat_rad() - lla0(0)) * kEarthR;
     const double est_e = (ekf.lon_rad() - lla0(1)) * kEarthR * std::cos(lla0(0));
     const double est_d = -(ekf.alt_m() - lla0(2));
+    if (std::getenv("IMUPERF_TRACE_POS") != nullptr && seed == 1 &&
+        sc == Scenario::VibrationOutage && t >= 24.9 && t <= 30.5)
+    {
+      const Truth tp = truthAt(t, sc);
+      std::printf("POS,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.1f\n", t, est_n, est_e,
+                  tp.pos_ned(0), tp.pos_ned(1), reanchor_cnt,
+                  static_cast<double>(last_gnss_t));
+    }
     if (!std::isfinite(est_d) || !std::isfinite(est_roll))
     {
       nan_t_local = t;
