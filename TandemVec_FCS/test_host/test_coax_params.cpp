@@ -239,6 +239,9 @@ struct OutBits
 // golden：2026-10-30 串级语义修正后（默认参数）逐拍浮点位型。
 // 与修正前的差异：RATE 步不再清零速率内环/两级滤波，手动 TVC 输出过 α0.25
 // 滤波；由修正后的控制器生成后冻结，后续改动必须显式说明理由并重生成。
+// ★2026-10-31 审计 P1-9 重生成：手动/未激活分支（第 6 拍）现在同时清 α 速度环
+//   积分，因此第 7/8 拍接管输出不再携带手动段之前累积的偏置（yaw 分量回零、
+//   roll/pitch 为 ~1e-3 相对量级的小幅差异）；属安全向修复，不是数值噪声。
 const OutBits kGolden[kSeqLen] = {
     {1, 0x00000000u, 0x00000000u, 0x00000000u, 0},
     {1, 0x3EF27FDCu, 0x3EF27FDCu, 0x00000000u, 0},
@@ -246,8 +249,8 @@ const OutBits kGolden[kSeqLen] = {
     {1, 0xBDACB559u, 0xBB83EBC0u, 0x3E7CCCCEu, 0},
     {1, 0x3F107C2Eu, 0xBED656E0u, 0x3C19999Au, 0},
     {1, 0x3FB62E91u, 0xBF88304Au, 0x00000000u, 0},
-    {1, 0x4006FFC6u, 0xBFEB80D6u, 0x3C19999Au, 1},
-    {1, 0x3FEF0E32u, 0xBFD4810Fu, 0x3F900001u, 1},
+    {1, 0x4006FFC6u, 0xBFEB80D6u, 0x00000000u, 1},
+    {1, 0x3FEEECE0u, 0xBFD46FF8u, 0x3F900001u, 1},
     {0, 0x00000000u, 0x00000000u, 0x00000000u, 0},
     {1, 0x3DC1FFE5u, 0xBDC1FFE5u, 0x00000000u, 0},
 };

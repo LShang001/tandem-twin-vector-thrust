@@ -43,6 +43,11 @@
 
  // [模块化] 类型定义和变量定义已迁移至 deta100_types.h 和 state_data.h/cpp
 
+// ================== 诊断计数 ==================
+// CRC16 拒帧计数（★2026-10-31 审计 P0-1 修复）：坏帧整帧丢弃时自增，供 DBG/遥测
+// 排查串口误码。static：本头文件只允许在 main.cpp 中包含，符号不跨编译单元。
+static uint32_t deta100_crc16_reject_count = 0;
+
  // ================== 函数实现 ==================
  
  // CRC8查找表
@@ -336,13 +341,18 @@ uint64_t parseTimestamp(const uint8_t *data) {
              }
  
              // 校验 CRC16
+             // ★2026-10-31 审计 P0-1：此前这里只算不比较（`ok = false;` 被注释），
+             //   任何长度正确的帧都会被接受，载荷完整性无任何保护；而文件头注释与
+             //   FW-INFRA 核查文档都记为“双 CRC 已核实正常”。恢复比较后坏帧整帧丢弃
+             //   （不进入下方拷贝分支），随后由 resyncBuffer 重新寻找 0xFC 帧头。
              if (ok)
              {
                  uint16_t crc16 = calculateCRC16(&Fd_data[5], expectedLength - 8);
                  uint16_t recv = (Fd_data[expectedLength - 3] << 8) | Fd_data[expectedLength - 2];
                  if (crc16 != recv)
                  {
-                     // ok = false;
+                     ok = false;
+                     ++deta100_crc16_reject_count;
                  }
              }
  

@@ -43,6 +43,10 @@
 #include "TandemVec_Config.h"
 #include "TandemVec_ControlAllocation.h"
 
+// 定点模式重入沿检测的复位入口（定义见 generate_attitude_target 之前的静态区）。
+// 解锁上升沿调用：把上一架次残留的目标点锁存与模式沿清掉。
+void resetPositionModeEntryLatch();
+
 // 无 GNSS 水平失效保护（opt-in，默认不定义，不改变出厂行为）。
 // 机理：位置环追一个纯惯导漂移的绝对位置，会持续要 10–15° 倾角；加速度计
 // 无法区分重力与持续推力加速度，EKF 姿态被拉平，位置环再以“错误姿态”继续
@@ -265,6 +269,9 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
     northVelPID.reset();
     eastVelPID.reset();
 
+    // 定点重入沿检测：解锁视为新的飞行会话，清掉上一架次残留的目标点锁存。
+    resetPositionModeEntryLatch();
+
     // 3. 初始化所有控制流滤波器 (防止滤波器初始阶跃)
     thrustCompN_filter.initialize(0.0f);
     thrustCompE_filter.initialize(0.0f);
@@ -451,7 +458,11 @@ ControlMode determine_control_mode(const ControlInputs_t &inputs)
 void manage_pid_integrals(const ControlInputs_t &inputs, ControlMode mode)
 {
   // 判断油门是否有效（大于1100表示有动力）
-  bool throttle_active = inputs.throttle_raw > 1100;
+  // ★2026-10-31 审计 P1-2/P1-3：断链期间 CH3 由断链通道合成接管（空中归中为
+  //   1500µs，地面压 988），不能再单独用油门杆代理“有动力”。空中失控保护是明确
+  //   的“保持解锁、由自动高度+姿态自稳接管”语义，积分必须使能；否则姿态环在
+  //   断链段退化成纯 P，叠加高度环的下降指令会让失控段姿态漂移。
+  bool throttle_active = (inputs.throttle_raw > 1100) || failsafe_in_flight;
 
   // 判断姿态控制是否激活：需满足解锁、非手动TVC、油门有效三个条件
   bool attitude_control_active = inputs.is_unlocked && !inputs.is_manual_tvc && throttle_active;
@@ -1234,25 +1245,51 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
  * @units 角度 rad（摇杆目标角先乘 DEG_TO_RAD）；杆量 PWM µs
  * @note  ① 存档系 z_b=推力轴 → 悬停静止 roll=pitch=0，直接叠 Rz(Heading) 即可，
  *          不加"悬停基态补偿"，天然避开欧拉奇异点（2026-08-07 恢复）。
- *        ② 定点模式切回时把 positionHoldEnabled 清掉，强制重锁当前点，
- *          否则会自主飞回上一段悬停点（2026-08-10 修复，见函数内注释）。
+ *        ② 定点模式重入时把 positionHoldEnabled 清掉，强制重锁当前点，否则会
+ *          自主飞回上一段悬停点（2026-10-31 修复：旧实现把模式记录写在
+ *          AUTO_POSITION 分支内，条件恒不成立，2026-08-10 那次修复实为空操作）。
  */
+// 定点模式重入沿检测状态（文件作用域：解锁上升沿也必须能复位它）
+static ControlMode s_prev_auto_position_mode = MANUAL;
+#ifdef FW_SIL_REAL_NAV
+static bool s_sil_pos_leg_applied = false;
+#endif
+
+/**
+ * @brief 复位定点模式重入沿检测（解锁上升沿调用）
+ *
+ * 清掉上一架次残留的 positionHoldEnabled 与模式沿；PID/滤波器复位仍由
+ * updateControlInputs 步骤 5.2 负责，此处不重复。
+ */
+void resetPositionModeEntryLatch()
+{
+  positionHoldEnabled = false;
+  s_prev_auto_position_mode = MANUAL;
+#ifdef FW_SIL_REAL_NAV
+  s_sil_pos_leg_applied = false;
+#endif
+}
+
 void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Quaternion &q_target)
 {
+  // ★2026-10-31 审计 P1-1：模式记录必须每拍更新，不能只在 AUTO_POSITION 分支内赋值。
+  //   旧写法 `s_prev_mode = mode;` 位于 if 内部 → 永远只记录 AUTO_POSITION；切出
+  //   定点后该静态量不再变化，再切回来时沿检测恒为假 → positionHoldEnabled 保持真
+  //   → handlePositionControl 跳过 initPositionHold → 目标点沿用上一段悬停点，
+  //   飞行器无操纵自主飞回旧点（位置环输出限幅 ±1.5 m/s）。
+  const bool entering_auto_position =
+      (mode == AUTO_POSITION) && (s_prev_auto_position_mode != AUTO_POSITION);
+  s_prev_auto_position_mode = mode;  // 每拍记录，供下一拍沿检测
+
   if (mode == AUTO_POSITION)
   {
-    // ★ 2026-08-10 全面审查修复：每次从其他模式切入 AUTO_POSITION 时重新锁当前点。
-    //   handlePositionControl 内部的复位分支（L565）不可达——函数只在 AUTO_POSITION
-    //   被调用，内部 currentMode 恒为 AUTO_POSITION，positionHoldEnabled 永不复位，
-    //   目标点残留 → 从手动/定高切回定点时飞行器自动飞回旧悬停点（无操纵自主机动）。
-    static ControlMode s_prev_mode = MANUAL;
-    static bool s_sil_leg_applied = false;
-    if (s_prev_mode != AUTO_POSITION)
+    if (entering_auto_position)
     {
       positionHoldEnabled = false;  // 触发 handlePositionControl 内重新 init + 锁当前点
-      s_sil_leg_applied = false;
+#ifdef FW_SIL_REAL_NAV
+      s_sil_pos_leg_applied = false;
+#endif
     }
-    s_prev_mode = mode;
     handlePositionControl(inputs.roll_raw, inputs.pitch_raw);
 #ifdef FW_SIL_REAL_NAV
     // SIL 前飞段测试：切入 AUTO_POSITION 后一次性叠加目标偏移（固件默认 0）。
@@ -1506,6 +1543,17 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
       yawSpeedFilter2.filter(yawSpeedFilter.filter(current_omega_rps_body.z * RAD_TO_DEG))};
 
   bool is_attitude_control_active = inputs.is_unlocked && !inputs.is_manual_tvc;
+
+  // ★2026-10-31 审计 P1-4：RATE_MODE 的 PID 复位只在“切入 RATE_MODE 的那一拍”执行。
+  //   旧实现把 4 个 reset 放在 RATE 分支内每拍执行，速率环积分被反复清零 → 等效
+  //   纯 P（无法消除配平误差），偏航速率环又不在复位列表内，三通道行为不对称；
+  //   与共轴路径（2026-10-30 恢复串级/积分语义）也不一致。本函数的原意是
+  //   “模式切换时避免携带旧积分”，不是每拍清零。
+  static bool s_prev_attitude_was_rate = false;
+  const bool in_rate_mode = (inputs.attitude_mode == RATE_MODE);
+  const bool entering_rate_mode = in_rate_mode && !s_prev_attitude_was_rate;
+  s_prev_attitude_was_rate = in_rate_mode;
+
   if (is_attitude_control_active)
   {
     // 姿态模式外环控制：姿态角 -> 目标角速度
@@ -1579,10 +1627,14 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
           rcNormFromUs(inputs.pitch_raw),
           kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[1],
           kFlightCtrlParams.rc_super[1], MAX_MANUAL_pitchRATE); // 推杆=低头负角速度（取反）
-      rollAnglePID.reset();
-      pitchAnglePID.reset();
-      rollRatePID.reset();
-      pitchRatePID.reset();
+      // 仅在切入 RATE_MODE 的那一拍复位（见函数开头 s_prev_attitude_was_rate 注释）。
+      if (entering_rate_mode)
+      {
+        rollAnglePID.reset();
+        pitchAnglePID.reset();
+        rollRatePID.reset();
+        pitchRatePID.reset();
+      }
     }
 
     // 滤波目标角速率
@@ -1895,13 +1947,26 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
     // ★2026-08-10 锁定状态（任何模式）：摇杆直通舵机摆动（地面标定摆座方向），
     //   电机绝不转——原逻辑仅手动TVC模式锁定可摆、自动模式锁定舵机中位，
     //   用户需求改为锁定即可摆，不必切手动 TVC。安全红线保持：锁定电机强制最低。
-    lower_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
-                                -MAX_CORRECTION, MAX_CORRECTION);
-    // ★ 2026-08-08 上摆(roll)映射取反：自控链路 Mz=-Iz·alpha_roll（负号）+
-    //   分配器 df=Mz/(a·T0)（正系数）→ front 摆角与 alpha_roll 反号；
-    //   手动直通映射须与自控最终摆角方向一致（右打摇杆→正摆角）。
-    upper_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
-                                MAX_CORRECTION, -MAX_CORRECTION);
+    // ★2026-10-31 审计 P2-5：本分支上方历史上曾声称“无链时落入全锁定分支（舵机
+    //   1500µs 中位 + 电机停）”，但实现是摇杆直通舵机；上电到首帧 CRSF 之间
+    //   raw_rc_values 全 0，mapFloat 只钳输出 → 舵机被钳到 ±MAX_CORRECTION 满偏。
+    //   现按链路状态门控：无链路（上电/断链）保持中位，建立链路后才允许地面直通标定。
+    if (isLinkUp)
+    {
+      lower_gimbal_deg  = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
+                                  -MAX_CORRECTION, MAX_CORRECTION);
+      // ★ 2026-08-08 上摆(roll)映射取反：自控链路 Mz=-Iz·alpha_roll（负号）+
+      //   分配器 df=Mz/(a·T0)（正系数）→ front 摆角与 alpha_roll 反号；
+      //   手动直通映射须与自控最终摆角方向一致（右打摇杆→正摆角）。
+      upper_gimbal_deg = mapFloat(inputs.roll_raw,  988.0f, 2012.0f,
+                                  MAX_CORRECTION, -MAX_CORRECTION);
+    }
+    else
+    {
+      // 无链路：舵机保持中位（等价 1500µs），不跟随上电默认的 0 通道值。
+      lower_gimbal_deg = 0.0f;
+      upper_gimbal_deg = 0.0f;
+    }
     motor1_pct = 0.0f;
     motor2_pct = 0.0f;
     // 差速/饱和标记同步（AnoCom 0x40 帧全模式显示）；重置 BTRUE 工作点（防 stale）

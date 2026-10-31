@@ -22,6 +22,7 @@
  */
 #include "mavlink_bridge.h"
 #include "ano_params.h"
+#include "state_data.h"   // g_is_unlocked / failsafe_in_flight（重启互锁）
 #include <cstring>
 
 // ---- 参数广播状态机 ----
@@ -157,6 +158,17 @@ static void mavHandleCommandLong(const mavlink_message_t &msg)
     switch (cmd.command)
     {
     case MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN:  // 246
+        // ★2026-10-31 审计 P1-6：补解锁/飞行互锁。ARM 与 SET_MODE 都按“地面站远程
+        //   控制是红线”安全拒绝，唯独重启命令没有判断 —— 飞行中一条 GCS/脚本命令
+        //   即可软复位飞控，电机停转、飞机坠落。失控保护期间 g_is_unlocked 被
+        //   failsafe 旁路为真，因此显式再排除 failsafe_in_flight。
+        if (g_is_unlocked || failsafe_in_flight)
+        {
+            mavlinkSendStatustext(MAV_SEVERITY_WARNING,
+                                  "Reboot denied: armed/in-flight");
+            mavSendCommandAck(cmd.command, MAV_RESULT_DENIED);
+            break;
+        }
         if ((int32_t)cmd.param1 == 1)  // 1 = 重启飞控
         {
             mavSendCommandAck(cmd.command, MAV_RESULT_ACCEPTED);

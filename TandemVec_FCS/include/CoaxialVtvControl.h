@@ -494,10 +494,16 @@ private:
     }
 
     // 手动/未激活复位角度外环；保留 α0.85/α0.25 滤波状态。
+    // ★2026-10-31 审计 P1-9：同时清速度环（α）积分。手动 TVC / 未激活分支此前
+    //   只清角度外环，α 环积分残留；重新接管时第一拍 α 指令带出偏置（审计复现：
+    //   约 7.6° 摆角、50µs 偏航差速偏置）。积分不属于滤波状态，清零不影响手感滤波。
     void resetAnglePids()
     {
         roll_angle_pid_.reset();
         pitch_angle_pid_.reset();
+        alpha_roll_integral_ = 0.0f;
+        alpha_pitch_integral_ = 0.0f;
+        alpha_yaw_integral_ = 0.0f;
     }
 
     CoaxialVtvParams params_{};

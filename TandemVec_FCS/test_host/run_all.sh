@@ -196,6 +196,14 @@ run_one "$ROOT/test_host/test_inertia_decoupling.cpp"    id ""
 # 按源码公式独立实现，驱动刚体角动力学 + 推进力矩闭环
 run_one "$ROOT/test_host/test_flight_control_axis.cpp"  fca ""
 
+# CRSF 断链通道合成（FailsafeLinkLossPlan.h，纯平台无关——在空中判据三维网格
+# 穷举/通道合成不变量/旧判据差异点；固件 linkDownCallback 与本测试共用同一份实现）：
+run_one "$ROOT/test_host/test_failsafe_plan.cpp"       fsplan ""
+
+# DETA100 帧校验防回退（源码守卫：CRC16 比较不得再被注释、失败必须计入拒帧计数；
+# 该模块只能在 main.cpp 中包含，运行时行为由上板联调覆盖）：
+run_one "$ROOT/test_host/test_deta100_crc_guard.cpp"  deta100g ""
+
 # PositionPID v3 回归测试（无 Arduino 依赖，纯平台无关）：
 run_one "$ROOT/test_host/test_position_pid.cpp" pp ""
 

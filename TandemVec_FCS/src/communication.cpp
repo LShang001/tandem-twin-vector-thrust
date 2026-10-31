@@ -24,6 +24,7 @@
  */
 #include "communication.h"
 #include "math_utils.h"
+#include "FailsafeLinkLossPlan.h"  // 断链通道合成（纯函数，宿主测试共用同一份判据）
 #include "navigation_task.h"
 #include "sensor_peripheral.h"
 #include "MAVLink.h"
@@ -219,50 +220,44 @@ void linkUpCallback()
 /**
  * @brief CRSF 断链回调（失控保护）：按“地面/飞行”两种语境改写通道值
  *
- * 判据：`raw_rc_values[4] > 1500`（解锁开关）且 `raw_rc_values[2] > 1100`（油门）
- * → 视为飞行中失控：保持解锁(1500)、滚转/俯仰/偏航摇杆（CH1/CH2/CH4）归中、
- * 模式开关（CH7）落 AUTO_ALTITUDE 中档(1500)，由自动高度+姿态自稳接管；
- * 其余通道压最低 988。
- * 地面状态则全部回锁定值（988），电机不转。
+ * 判据收敛在 `include/FailsafeLinkLossPlan.h`（纯平台无关，宿主测试穷举真值表）：
+ *   在空中 = 已解锁 AND (油门有动力 OR 已离地)。
+ * 空中：保持解锁(1500)、CH1/CH2/CH4 归中、CH3 归中（AUTO_ALTITUDE 下 50% 落在
+ * 中心死区内 → 目标垂速 0 → 定高）、CH7 落 AUTO_ALTITUDE 中档(1500)，
+ * 其余通道压最低 988；地面：全部 988，电机锁定。
+ *
+ * ★2026-10-31 审计修复（P1-2/P1-3）：
+ *   ① 旧判据用“油门 > 1100”代理“在空中”。AUTO_ALTITUDE 下油门杆是升降速率
+ *      指令（中心 50%、死区 ±10%，<40% 即下降，0% = -1 m/s），空中主动下降时
+ *      杆位与地面待机同形 → 被误判成地面 → CH5 写 988 → 空中上锁、电机停转。
+ *      现改为以臂状态为必要条件、油门动力或离地高度为佐证。
+ *   ② 旧实现把 CH3 压到 988（0%），空中被高度环解释成“以 1 m/s 稳定下降”，
+ *      与 VER-004 记载的“保持解锁并转 AUTO_ALTITUDE 定高”不一致；现改为归中。
+ *   ③ 旧实现只把 CH1/CH2/CH4 归中，THROTTLE 落在 else 分支，属实现与注释不符。
+ *
  * @note `failsafe_in_flight` 同时供灯效（FAILSAFE 红 SOS）判定；链路恢复时由
- *       `linkUpCallback()` 清除。
+ *       `linkUpCallback()` 清除。调用时 `raw_rc_values` 仍是断链前最后一帧有效值。
  */
 void linkDownCallback()
 {
+  static_assert(bfs::failsafe::kMaxChannels == RC_INPUT_MAX_CHANNELS,
+                "断链通道计划长度必须与 RC_INPUT_MAX_CHANNELS 一致");
+
   Serial8.println("Link is down! Failsafe activated.");
   isLinkUp = false;
 
-  /*
-   * 失控保护策略：
-   * - 地面状态（油门<1100或未解锁）：保持解锁开关关闭（988），电机锁定。
-   * - 飞行状态（油门>=1100且已解锁）：保持解锁开关打开（1500），摇杆归中，
-   *   模式切到 AUTO_ALTITUDE（中档 1500），让自动高度+姿态自稳接管。
-   *   操作者恢复操控后可重新接管。
-   */
-  bool was_in_flight = (raw_rc_values[4] > 1500) && (raw_rc_values[2] > 1100);
-  failsafe_in_flight = was_in_flight;  // 记录失控保护模式
+  bfs::failsafe::Inputs in;
+  in.arm_us = raw_rc_values[bfs::failsafe::kChArm];
+  in.throttle_us = raw_rc_values[bfs::failsafe::kChThrottle];
+  in.estimated_height_m = estimated_height;  // EKF 相对起飞点高度（向上为正）
+
+  bfs::failsafe::Plan plan{};
+  bfs::failsafe::computeLinkLossPlan(in, plan);
+  failsafe_in_flight = plan.in_flight;  // 记录失控保护模式
 
   for (int i = 0; i < RC_INPUT_MAX_CHANNELS; ++i)
   {
-    if (i == 0 || i == 1 || i == 3)
-    {
-      // 摇杆通道归中
-      raw_rc_values[i] = 1500;
-    }
-    else if (i == 4)
-    {
-      // 通道5（解锁开关）：飞行中保持解锁，地面锁定
-      raw_rc_values[i] = was_in_flight ? 1500 : 988;
-    }
-    else if (i == 6)
-    {
-      // 通道7（模式开关）：飞行中切到 AUTO_ALTITUDE（中档 1500）
-      raw_rc_values[i] = was_in_flight ? 1500 : 988;
-    }
-    else
-    {
-      raw_rc_values[i] = 988;
-    }
+    raw_rc_values[i] = plan.channels[i];
   }
 }
 
