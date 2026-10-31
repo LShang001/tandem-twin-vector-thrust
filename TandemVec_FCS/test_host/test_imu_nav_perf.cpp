@@ -42,6 +42,7 @@ constexpr double kDeg2Rad = kPi / 180.0;
 constexpr double kRad2Deg = 180.0 / kPi;
 constexpr float kNavDt = 0.005f;    // 导航 200Hz
 constexpr int kSeedCount = 4;
+constexpr int kScenarioCount = 4; // 主矩阵场景数（static/maneuver/cruise/vibration）
 constexpr double kDurationS = 30.0;
 
 enum class Scenario
@@ -115,6 +116,9 @@ const GnssSpec kGnssSpecs[] = {
     {"M8N_5Hz",          5.0, 2.50, 0.100,   0.0},
     {"M8N_1Hz",          1.0, 2.50, 0.150,   0.0},
     {"LowEnd_5Hz",       5.0, 5.00, 0.300,   0.0},
+    {"RTK_FLOAT_10Hz",  10.0, 0.20, 0.020,   0.0},
+    {"M8N_20Hz",        20.0, 1.50, 0.050,   0.0},
+    {"M8N_10Hz_50ms",   10.0, 1.50, 0.050,  50.0},
 };
 constexpr int kGnssCount = static_cast<int>(sizeof(kGnssSpecs) / sizeof(kGnssSpecs[0]));
 
@@ -470,9 +474,9 @@ int main()
   int fail = 0, total = 0;
 
   // 汇总：每个 (imu, gnss, scenario) 的均值。
-  std::vector<double> sum_pos(2 * kGnssCount * 4, 0.0);
-  std::vector<double> sum_vel(2 * kGnssCount * 4, 0.0);
-  std::vector<double> sum_att(2 * kGnssCount * 4, 0.0);
+  std::vector<double> sum_pos(2 * kGnssCount * kScenarioCount, 0.0);
+  std::vector<double> sum_vel(2 * kGnssCount * kScenarioCount, 0.0);
+  std::vector<double> sum_att(2 * kGnssCount * kScenarioCount, 0.0);
 
   for (int si = 0; si < 2; ++si)
   {
@@ -480,7 +484,7 @@ int main()
     {
       for (int sc = 0; sc < 4; ++sc)
       {
-        const int idx = (si * kGnssCount + gi) * 3 + sc;
+        const int idx = (si * kGnssCount + gi) * kScenarioCount + sc;
         for (int seed = 1; seed <= kSeedCount; ++seed)
         {
           const bool trace_this = (si == tr_imu && gi == tr_gnss &&
@@ -529,7 +533,7 @@ int main()
     {
       for (int sc = 0; sc < 4; ++sc)
       {
-        const int idx = (si * kGnssCount + gi) * 3 + sc;
+        const int idx = (si * kGnssCount + gi) * kScenarioCount + sc;
         std::printf("%-13s %-14s %-8s %8.4f %8.4f %8.4f\n", imus[si].name,
                     kGnssSpecs[gi].name, scenarioName(scenarios[sc]),
                     sum_att[idx] / kSeedCount, sum_vel[idx] / kSeedCount,
@@ -753,6 +757,30 @@ int main()
         }
       }
     }
+  }
+
+  // ★连续参数优化入口：CMA-ES 等优化器通过环境变量注入参数，目标值走 OPT_RESULT。
+  if (const char *opt = std::getenv("IMUPERF_OPT"); opt != nullptr && opt[0] == '1')
+  {
+    double lpf_g = 200.0, lpf_a = 100.0, hacc = 1.0e9;
+    if (const char *v = std::getenv("IMUPERF_LPF_GYRO")) { lpf_g = std::atof(v); }
+    if (const char *v = std::getenv("IMUPERF_LPF_ACCEL")) { lpf_a = std::atof(v); }
+    if (const char *v = std::getenv("IMUPERF_HACC")) { hacc = std::atof(v); }
+    ImuSpec spec = kIcm45686;
+    spec.lpf_gyro_hz = lpf_g;
+    spec.lpf_accel_hz = lpf_a;
+    double cost = 0.0;
+    for (int seed = 1; seed <= 2; ++seed)
+    {
+      const RunResult rs = runCase(spec, kGnssSpecs[2], Scenario::Static, seed,
+                                   false, nullptr, false, 80.0, 0, hacc);
+      const RunResult rm = runCase(spec, kGnssSpecs[5], Scenario::Maneuver, seed,
+                                   false, nullptr, false, 80.0, 0, hacc);
+      cost += 0.5 * (rs.roll_rmse_deg + rs.pitch_rmse_deg) +
+              0.5 * (rm.roll_rmse_deg + rm.pitch_rmse_deg) +
+              2.0 * rs.pos_rmse + 2.0 * rm.pos_rmse;
+    }
+    std::printf("OPT_RESULT,%.6f\n", cost / 2.0);
   }
 
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
