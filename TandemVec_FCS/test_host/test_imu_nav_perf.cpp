@@ -289,6 +289,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double max_att_jump_deg_local = 0.0;  // 重锚前后姿态跳变（安全校验）
   int baro_ok_streak = 0;     // 连续正常次数
   int reanchor_cnt = 0;       // 连续大新息计数
+  int gnss_update_seq = 0;     // GNSS 更新序号（野值按次数注入）
+  int spike_seq0 = -1;         // 首次进入野值时间的更新序号
   double last_re_dn = 0.0, last_re_de = 0.0;
   int out_count = 0;
   int count = 0, gnss_updates = 0;
@@ -371,10 +373,15 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       Eigen::Vector3d lla_meas = lla0;
       double dn_spike = dn;
       double de_spike = de;
-      if (gnss_spike_m > 0.0 && t >= gnss_spike_t &&
-          t < gnss_spike_t + gnss_spike_frames * 0.1)
+      if (gnss_spike_m > 0.0 && t >= gnss_spike_t && spike_seq0 < 0)
       {
-        dn_spike += gnss_spike_m;  // 连续 0.1s/帧 的水平野值（多路径/欺骗）
+        spike_seq0 = gnss_update_seq;  // 第一次到达野值时间，记录起点序号
+      }
+      if (gnss_spike_m > 0.0 && spike_seq0 >= 0 &&
+          gnss_update_seq >= spike_seq0 &&
+          gnss_update_seq < spike_seq0 + gnss_spike_frames)
+      {
+        dn_spike += gnss_spike_m;  // 按 GNSS 更新帧数注入水平野值（多路径/欺骗）
       }
       lla_meas(0) += dn_spike / kEarthR;
       lla_meas(1) += de_spike / (kEarthR * std::cos(lla0(0)));
@@ -493,6 +500,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           qnh_est = std::clamp(qnh_est + qnh_alpha * (resid - qnh_est), -15.0, 15.0);
         }
       }
+      ++gnss_update_seq;
       ++gnss_updates;
     }
 
