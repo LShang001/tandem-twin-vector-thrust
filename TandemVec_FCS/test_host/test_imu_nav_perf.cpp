@@ -227,7 +227,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double reanchor_m = 0.0, int reanchor_streak = 1,
                   int adapt_r = 0, double adapt_thresh_m = 5.0,
                   double gnss_spike_m = 0.0, double gnss_spike_t = 15.0,
-                  int gnss_spike_frames = 1)
+                  int gnss_spike_frames = 1, int reanchor_consist = 0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -291,6 +291,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   int reanchor_cnt = 0;       // 连续大新息计数
   int gnss_update_seq = 0;     // GNSS 更新序号（野值按次数注入）
   int spike_seq0 = -1;         // 首次进入野值时间的更新序号
+  double last_gnss_n = 0.0, last_gnss_e = 0.0;
+  double last_gnss_t = -1.0;
   double last_re_dn = 0.0, last_re_de = 0.0;
   int out_count = 0;
   int count = 0, gnss_updates = 0;
@@ -382,6 +384,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           gnss_update_seq < spike_seq0 + gnss_spike_frames)
       {
         dn_spike += gnss_spike_m;  // 按 GNSS 更新帧数注入水平野值（多路径/欺骗）
+        if (std::getenv("IMUPERF_TRACE_REANCHOR") != nullptr)
+        {
+          std::printf("SPIKE,%.2f,%.1f,%.1f\n", t, dn, dn_spike);
+        }
       }
       lla_meas(0) += dn_spike / kEarthR;
       lla_meas(1) += de_spike / (kEarthR * std::cos(lla0(0)));
@@ -390,14 +396,39 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       // 避免长失锁后位置协方差与状态发散导致 NIS 拒绝所有更新。
       if (reanchor_m > 0.0)
       {
+        static bool s_rcfg_printed = false;
+        if (!s_rcfg_printed && std::getenv("IMUPERF_TRACE_REANCHOR") != nullptr)
+        {
+          std::printf("RCFG,%.1f,%d\n", reanchor_m, reanchor_streak);
+          s_rcfg_printed = true;
+        }
         const double est_n = (ekf.lat_rad() - lla0(0)) * kEarthR;
         const double est_e = (ekf.lon_rad() - lla0(1)) * kEarthR * std::cos(lla0(0));
         const double meas_n = (lla_meas(0) - lla0(0)) * kEarthR;
         const double meas_e = (lla_meas(1) - lla0(1)) * kEarthR * std::cos(lla0(0));
         const double dn_err = est_n - meas_n;
         const double de_err = est_e - meas_e;
-        if (std::hypot(dn_err, de_err) > reanchor_m)
+        // 一致性门控：用“GNSS 位置变化率 vs GNSS 速度”识别位置跳变欺骗。
+        // 失锁恢复时上一帧 GNSS 已陈旧（>0.5s）→ 跳过该门控，不阻碍真实恢复。
+        bool consistent = true;
+        if (reanchor_consist != 0 && last_gnss_t >= 0.0 &&
+            (t - last_gnss_t) > 0.0 && (t - last_gnss_t) < 0.5)
         {
+          const double pos_rate = std::hypot(meas_n - last_gnss_n,
+                                             meas_e - last_gnss_e) /
+                                  (t - last_gnss_t);
+          const double speed = std::hypot(vel_meas(0), vel_meas(1));
+          if (std::fabs(pos_rate - speed) > 5.0 + 0.5 * speed)
+          {
+            consistent = false;
+          }
+        }
+        if (std::hypot(dn_err, de_err) > reanchor_m && consistent)
+        {
+          if (std::getenv("IMUPERF_TRACE_REANCHOR") != nullptr)
+          {
+            std::printf("RCNT,%.2f,%d,%.1f,%.1f\n", t, reanchor_cnt, dn_err, de_err);
+          }
           // 连续大新息且方向一致才重锚：单帧野值（多路径/欺骗）不会触发。
           if (reanchor_cnt > 0 &&
               (dn_err * last_re_dn + de_err * last_re_de) > 0.0)
@@ -500,6 +531,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           qnh_est = std::clamp(qnh_est + qnh_alpha * (resid - qnh_est), -15.0, 15.0);
         }
       }
+      // 记录本帧 GNSS 位置，供下一帧做“位置变化率 vs 速度”一致性检查。
+      last_gnss_n = (lla_meas(0) - lla0(0)) * kEarthR;
+      last_gnss_e = (lla_meas(1) - lla0(1)) * kEarthR * std::cos(lla0(0));
+      last_gnss_t = t;
       ++gnss_update_seq;
       ++gnss_updates;
     }
@@ -1378,7 +1413,7 @@ int main()
         const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static,
                                     seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                     0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
-                                    25.0, 2, 100.0, 15.0, fr);
+                                    25.0, 2, 0, 5.0, 100.0, 15.0, fr, 1);
         std::printf("%d,%d,%.4f,%.4f\n", fr, seed, r.pos_rmse, r.alt_rmse);
       }
     }
