@@ -390,14 +390,22 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       if (baro_qnh_cal != 0)
       {
         const double baro_raw = lla0(2) - truthAt(t, sc).pos_ned(2) + baro_bias;
+        if (std::getenv("IMUPERF_TRACE_QNH") != nullptr && seed == 2)
+        {
+          std::printf("QNHR,%.2f,%.3f,%.3f,%.3f,%.3f\n", t, baro_raw,
+                      lla_meas(2), baro_raw - lla_meas(2), qnh_est);
+        }
         if (!qnh_inited)
         {
-          qnh_est = baro_raw - lla_meas(2);
+          qnh_est = std::clamp(baro_raw - lla_meas(2), -15.0, 15.0);
           qnh_inited = true;
         }
         else
         {
-          qnh_est += 0.02 * (baro_raw - lla_meas(2));
+          // 低通收敛到 resid 的均值：qnh += α·(resid − qnh)。
+          // 旧实现写成 qnh += α·resid 是积分器，会一路积到 clamp 上限。
+          const double resid = std::clamp(baro_raw - lla_meas(2), -15.0, 15.0);
+          qnh_est = std::clamp(qnh_est + 0.02 * (resid - qnh_est), -15.0, 15.0);
         }
       }
       ++gnss_updates;
@@ -433,6 +441,12 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       else
       {
         baro_gate_rej = 0;
+      }
+      // 高度保护：EKF 高度已发散（偏离初始 >100m）时不再喂 baro，
+      // 防止数值爆炸继续被放大。
+      if (fuse && std::fabs(static_cast<double>(ekf.alt_m()) - lla0(2)) > 100.0)
+      {
+        fuse = false;
       }
       if (fuse)
       {
