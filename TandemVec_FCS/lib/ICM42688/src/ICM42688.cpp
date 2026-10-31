@@ -1,6 +1,7 @@
 #include "Arduino.h"
 #include "ICM42688.h"
 #include "registers.h"
+#include "imu_filter_math.h"
 #include <cmath>
 
 using namespace ICM42688reg;
@@ -60,114 +61,6 @@ float icm42688LpfCutoffHz(uint16_t odrHz, uint8_t code)
   case 7: return base / 40.0f;
   default: return 0.0f;          // 8..13 保留，14/15 低延迟选项不用
   }
-}
-/** 手册 §5.3 AAF：3dB 带宽 → DELT/DELTSQR/BITSHIFT（63 档，42..3979Hz）。 */
-struct AafEntry
-{
-  uint16_t bw_hz;
-  uint8_t delt;
-  uint16_t deltsqr;
-  uint8_t bitshift;
-};
-const AafEntry kAafTable[] = {
-    {  42,  1,    1, 15},
-    {  84,  2,    4, 13},
-    { 126,  3,    9, 12},
-    { 170,  4,   16, 11},
-    { 213,  5,   25, 10},
-    { 258,  6,   36, 10},
-    { 303,  7,   49,  9},
-    { 348,  8,   64,  9},
-    { 394,  9,   81,  9},
-    { 441, 10,  100,  8},
-    { 488, 11,  122,  8},
-    { 536, 12,  144,  8},
-    { 585, 13,  170,  8},
-    { 634, 14,  196,  7},
-    { 684, 15,  224,  7},
-    { 734, 16,  256,  7},
-    { 785, 17,  288,  7},
-    { 837, 18,  324,  7},
-    { 890, 19,  360,  6},
-    { 943, 20,  400,  6},
-    { 997, 21,  440,  6},
-    {1051, 22,  488,  6},
-    {1107, 23,  528,  6},
-    {1163, 24,  576,  6},
-    {1220, 25,  624,  6},
-    {1277, 26,  680,  6},
-    {1336, 27,  736,  5},
-    {1395, 28,  784,  5},
-    {1454, 29,  848,  5},
-    {1515, 30,  896,  5},
-    {1577, 31,  960,  5},
-    {1639, 32, 1024,  5},
-    {1702, 33, 1088,  5},
-    {1766, 34, 1152,  5},
-    {1830, 35, 1232,  5},
-    {1896, 36, 1296,  5},
-    {1962, 37, 1376,  4},
-    {2029, 38, 1440,  4},
-    {2097, 39, 1536,  4},
-    {2166, 40, 1600,  4},
-    {2235, 41, 1696,  4},
-    {2306, 42, 1760,  4},
-    {2377, 43, 1856,  4},
-    {2449, 44, 1952,  4},
-    {2522, 45, 2016,  4},
-    {2596, 46, 2112,  4},
-    {2671, 47, 2208,  4},
-    {2746, 48, 2304,  4},
-    {2823, 49, 2400,  4},
-    {2900, 50, 2496,  4},
-    {2978, 51, 2592,  4},
-    {3057, 52, 2720,  4},
-    {3137, 53, 2816,  3},
-    {3217, 54, 2944,  3},
-    {3299, 55, 3008,  3},
-    {3381, 56, 3136,  3},
-    {3464, 57, 3264,  3},
-    {3548, 58, 3392,  3},
-    {3633, 59, 3456,  3},
-    {3718, 60, 3584,  3},
-    {3805, 61, 3712,  3},
-    {3892, 62, 3840,  3},
-    {3979, 63, 3968,  3},
-};
-
-const AafEntry *nearestAaf(float bw_hz)
-{
-  const AafEntry *best = &kAafTable[0];
-  float best_err = 1.0e30f;
-  for (const AafEntry &e : kAafTable)
-  {
-    const float err = std::fabs(static_cast<float>(e.bw_hz) - bw_hz);
-    if (err < best_err) { best_err = err; best = &e; }
-  }
-  return best;
-}
-
-/** 手册 §5.2 notch：fdesired 单位 kHz（1..3），返回 9-bit COSWZ 与 SEL。 */
-bool notchCoefficients(float f_khz, uint16_t &coswz, uint8_t &sel)
-{
-  if (f_khz < 1.0f || f_khz > 3.0f) { return false; }
-  const float c = std::cos(2.0f * 3.14159265358979f * f_khz / 32.0f);
-  if (std::fabs(c) <= 0.875f)
-  {
-    coswz = static_cast<uint16_t>(std::lround(c * 256.0f));
-    sel = 0;
-  }
-  else if (c > 0.875f)
-  {
-    coswz = static_cast<uint16_t>(std::lround(8.0f * (1.0f - c) * 256.0f));
-    sel = 1;
-  }
-  else
-  {
-    coswz = static_cast<uint16_t>(std::lround(-8.0f * (1.0f + c) * 256.0f));
-    sel = 1;
-  }
-  return true;
 }
 } // namespace
 
@@ -385,7 +278,7 @@ int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
   //         STATIC4(0x05)=BITSHIFT[7:4]|DELTSQR[11:8]。
   const float target_hz = icm42688FilterFreqHz(freq);
   if (target_hz <= 0.0f) { return -1; }
-  const AafEntry *e = nearestAaf(target_hz);
+  const imu_filter::AafEntry *e = &imu_filter::aafForBandwidth(target_hz);
   if (isGyro)
   {
     if (setBank(1) < 0) { return -2; }
@@ -439,7 +332,7 @@ int ICM42688::setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth)
   if (bandwidth > 7U) { return -1; }
   uint16_t coswz = 0U;
   uint8_t sel = 0U;
-  if (!notchCoefficients(static_cast<float>(centerFreq), coswz, sel)) { return -2; }
+  if (!imu_filter::notchCoefficients(static_cast<float>(centerFreq), coswz, sel)) { return -2; }
   if (setBank(1) < 0) { return -3; }
   const uint8_t lo = static_cast<uint8_t>(coswz & 0xFFU);
   if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC6, lo) < 0) { return -4; }
