@@ -27,7 +27,8 @@
 #include <cstdint>
 #include "core/core.h"
 #endif
-#include <cstring>     // memcpy / memset
+#include <cstring>
+#include <limits>     // memcpy / memset
 #include <math.h>      // cosf / sinf（NMEA 速度分解）
 #include "ubx.h"
 #include "ubx_defs.h" // NOLINT
@@ -643,11 +644,26 @@ namespace bfs
     }
   }
 
+  // NMEA 坐标转 double：minmea_tocoord 返回 float，会量化 7 位小数（分米级）。
+  // 直接用整数 value/scale 做 double 运算，保留 HIGHPREC 精度。
+  static double NmeaCoordToDouble(const struct minmea_float *f)
+  {
+    if (f->scale == 0 || f->scale > (INT_LEAST32_MAX / 100) ||
+        f->scale < (INT_LEAST32_MIN / 100))
+    {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    const int_least32_t degrees = f->value / (f->scale * 100);
+    const int_least32_t minutes = f->value % (f->scale * 100);
+    return static_cast<double>(degrees) +
+           static_cast<double>(minutes) / (60.0 * static_cast<double>(f->scale));
+  }
+
   // GGA 有效句（fix_quality>=1）：刷新位置/精度/高程快照。
   void Ubx::nmeaUpdateSnapshotFromGga(const struct minmea_sentence_gga &gga)
   {
-    const float lat_deg = minmea_tocoord(&gga.latitude);
-    const float lon_deg = minmea_tocoord(&gga.longitude);
+    const double lat_deg = NmeaCoordToDouble(&gga.latitude);
+    const double lon_deg = NmeaCoordToDouble(&gga.longitude);
     const float hdop = minmea_tofloat(&gga.hdop);
     const float alt_msl_m = minmea_tofloat(&gga.altitude);
     const float geoid_m = minmea_tofloat(&gga.height);

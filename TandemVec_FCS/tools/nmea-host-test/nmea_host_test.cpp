@@ -628,6 +628,22 @@ int main()
     CHECK(!ubx.PopEpoch(&ep), "GGA 停发 3s 后 RMC-only 不合成旧位置");
   }
 
+  // ================= 用例 24：HIGHPREC 坐标 double 精度 =================
+  printf("== 用例24 HIGHPREC 坐标精度 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kNmea);
+  ubx.Reset();
+  {
+    char sent[160];
+    makeNmea("GNGGA,100000.000,4728.5231789,N,12130.1234567,E,1,08,1.0,10.0,M,0.0,M,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep), "HIGHPREC GGA 合成");
+    const double exp_lat = (47.0 + 28.5231789 / 60.0) * DEG_TO_RAD;
+    CHECK(fabs(ep.lat_rad - exp_lat) < 1e-8,
+          "HIGHPREC 坐标 double 解析（<1e-8 rad）");
+  }
+
   printf("\n%s (失败 %d)\n", g_fail == 0 ? "全部通过" : "存在失败", g_fail);
   return g_fail;
 }
