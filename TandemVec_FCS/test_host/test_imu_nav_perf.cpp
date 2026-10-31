@@ -725,6 +725,36 @@ int main()
     }
   }
 
+  // ★GNSS 波特率实验：UBX-NAV-PVT 约 100B，115200≈8.7ms、921600≈1.1ms。
+  if (const char *ab = std::getenv("IMUPERF_UART_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== UART baud effect on GNSS age (NAV-PVT ~100B, cruise) ==\n");
+    std::printf("gnss,solve_ms,baud,uart_ms,age_ms,comp,seed,pos_rmse_m\n");
+    for (int gi : {0, 2}) // 0=RTK_10Hz(2cm)、2=M8N_10Hz(1.5m)
+    {
+      for (double solve : {10.0, 26.0})
+      {
+        for (double baud : {115200.0, 921600.0})
+        {
+          const double uart_ms = 100.0 * 10.0 / baud * 1000.0; // 10 bit/byte（8N1）
+          for (int comp = 0; comp <= 1; ++comp)
+          {
+            for (int seed = 1; seed <= kSeedCount; ++seed)
+            {
+              ImuSpec spec = kIcm45686;
+              GnssSpec g = kGnssSpecs[gi];
+              g.latency_ms = solve + uart_ms;
+              const RunResult r = runCase(spec, g, Scenario::Cruise, seed, false,
+                                          nullptr, comp != 0);
+              std::printf("%s,%.0f,%.0f,%.2f,%.2f,%d,%d,%.4f\n", kGnssSpecs[gi].name,
+                          solve, baud, uart_ms, g.latency_ms, comp, seed, r.pos_rmse);
+            }
+          }
+        }
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
