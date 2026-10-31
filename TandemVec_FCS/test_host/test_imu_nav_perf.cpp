@@ -593,6 +593,24 @@ int main()
     }
   }
 
+  // ★零偏敏感性：固定其余参数，只看陀螺 1σ 零偏对姿态/位置的影响（M8N_10Hz + 机动）。
+  if (const char *ab = std::getenv("IMUPERF_BIAS_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== gyro bias sensitivity (M8N_10Hz, maneuver) ==\n");
+    std::printf("gyro_bias_dps,seed,att_rmse_deg,pos_rmse_m\n");
+    for (float dps : {0.05f, 0.1f, 0.2f, 0.4f, 0.8f})
+    {
+      ImuSpec spec = kIcm45686;
+      spec.gyro_bias_1sigma = dps * static_cast<double>(kDeg2Rad);
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(spec, kGnssSpecs[2], Scenario::Maneuver, seed, false);
+        std::printf("%.2f,%d,%.3f,%.4f\n", dps, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
