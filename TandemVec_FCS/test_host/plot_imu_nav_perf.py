@@ -199,6 +199,50 @@ def plot_trace_cruise():
     plt.close(fig)
 
 
+def plot_delay_ab():
+    """GNSS 100ms 延迟：观测年龄补偿 off/on 对比（解析 ab.txt 的 [AB] 行）。"""
+    path = os.path.join(DATA, "ab.txt")
+    if not os.path.exists(path):
+        print("skip delay A/B: ab.txt not found")
+        return
+    rows = []
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.startswith("[AB]"):
+                continue
+            # [AB] IMU GNSS scenario: pos a -> b (x%), vel c -> d
+            head, rest = line.split(":", 1)
+            parts = head.split()
+            imu, scenario = parts[1], parts[3]
+            seg = rest.split("pos")[1].split("(")[0]
+            a, b = [float(x) for x in seg.replace("->", " ").split()]
+            pct = rest.split("(")[1].split("%")[0]
+            rows.append((imu, scenario, a, b, float(pct)))
+    if not rows:
+        return
+    labels = [r[0].split("_")[0] + chr(10) + r[1] for r in rows]
+    x = np.arange(len(rows))
+    off = [r[2] for r in rows]
+    on = [r[3] for r in rows]
+    fig, ax = plt.subplots(figsize=(9.5, 4.2), constrained_layout=True)
+    w = 0.38
+    ax.bar(x - w / 2, off, w, label="no age compensation", color="#888888", alpha=0.85)
+    ax.bar(x + w / 2, on, w, label="age compensation (EKF replay)",
+           color=COLORS["ICM45686_3k2"], alpha=0.85)
+    ax.set_yscale("log")
+    ax.set_ylabel("Position RMSE [m]")
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, fontsize=7)
+    ax.grid(True, axis="y", alpha=0.3)
+    ax.legend(fontsize=8)
+    ax.set_ylim(1e-3, max(max(off), max(on)) * 4.0)
+    for i, r in enumerate(rows):
+        ax.text(i, max(r[2], r[3]) * 1.2, f"{r[4]:+.1f}%", ha="center", fontsize=7)
+    ax.set_title("GNSS 100 ms latency: observation-age compensation A/B")
+    fig.savefig(os.path.join(OUT, "07_delay_ab.png"), dpi=150)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     rows = load_matrix()
     print(f"loaded {len(rows)} rows")
@@ -208,4 +252,5 @@ if __name__ == "__main__":
     plot_box(rows)
     plot_trace_maneuver()
     plot_trace_cruise()
+    plot_delay_ab()
     print("figures written to", OUT)

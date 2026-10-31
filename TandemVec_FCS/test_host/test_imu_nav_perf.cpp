@@ -200,7 +200,8 @@ double wrapPi(double a)
 constexpr double kEarthR = 6378137.0;
 
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
-                  int seed, bool verbose, std::vector<double> *trace_buf = nullptr)
+                  int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
+                  bool compensate_delay = false)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -313,7 +314,17 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       lla_meas(0) += dn / kEarthR;
       lla_meas(1) += de / (kEarthR * std::cos(lla0(0)));
       lla_meas(2) += -dd;
-      ekf.MeasurementUpdate(vel_meas.cast<float>(), lla_meas, kNavDt);
+      if (compensate_delay && gnss.latency_ms > 0.0)
+      {
+        // ★2026-11-01 改进验证：把真实观测年龄传给 EKF，触发延迟快照回放
+        //   （四参数重载），而不是让 100ms 延迟当成“当前测量”。
+        (void)ekf.MeasurementUpdateDetailed(vel_meas.cast<float>(), lla_meas, kNavDt,
+                                           static_cast<float>(latency_s));
+      }
+      else
+      {
+        ekf.MeasurementUpdate(vel_meas.cast<float>(), lla_meas, kNavDt);
+      }
       ++gnss_updates;
     }
 
@@ -476,6 +487,39 @@ int main()
                     kGnssSpecs[gi].name, scenarioName(scenarios[sc]),
                     sum_att[idx] / kSeedCount, sum_vel[idx] / kSeedCount,
                     sum_pos[idx] / kSeedCount);
+      }
+    }
+  }
+
+  // ★2026-11-01 延迟补偿 A/B：仅对有观测延迟的 GNSS 档跑 comp=off / comp=on。
+  if (const char *ab = std::getenv("IMUPERF_DELAY_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== 延迟补偿 A/B（age=latency，仅延迟档）==\n");
+    std::printf("imu,gnss,scenario,seed,pos_off,pos_on,vel_off,vel_on\n");
+    for (int si = 0; si < 2; ++si)
+    {
+      for (int gi = 0; gi < kGnssCount; ++gi)
+      {
+        if (kGnssSpecs[gi].latency_ms <= 0.0) { continue; }
+        for (int sc = 0; sc < 3; ++sc)
+        {
+          double sum_off = 0.0, sum_on = 0.0, vel_off = 0.0, vel_on = 0.0;
+          for (int seed = 1; seed <= kSeedCount; ++seed)
+          {
+            const RunResult ro = runCase(imus[si], kGnssSpecs[gi], scenarios[sc], seed, false);
+            const RunResult rn = runCase(imus[si], kGnssSpecs[gi], scenarios[sc], seed, false, nullptr, true);
+            std::printf("%s,%s,%s,%d,%.4f,%.4f,%.4f,%.4f\n", imus[si].name,
+                        kGnssSpecs[gi].name, scenarioName(scenarios[sc]), seed,
+                        ro.pos_rmse, rn.pos_rmse, ro.vel_rmse, rn.vel_rmse);
+            sum_off += ro.pos_rmse; sum_on += rn.pos_rmse;
+            vel_off += ro.vel_rmse; vel_on += rn.vel_rmse;
+          }
+          const double n = static_cast<double>(kSeedCount);
+          std::printf("[AB] %s %s %s: pos %.4f -> %.4f (%+.1f%%), vel %.4f -> %.4f\n",
+                      imus[si].name, kGnssSpecs[gi].name, scenarioName(scenarios[sc]),
+                      sum_off / n, sum_on / n, 100.0 * (sum_on - sum_off) / sum_off,
+                      vel_off / n, vel_on / n);
+        }
       }
     }
   }
