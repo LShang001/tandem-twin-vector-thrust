@@ -209,7 +209,7 @@ constexpr double kEarthR = 6378137.0;
 
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
-                  bool compensate_delay = false, double vib_hz = 80.0)
+                  bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -330,7 +330,15 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       lla_meas(0) += dn / kEarthR;
       lla_meas(1) += de / (kEarthR * std::cos(lla0(0)));
       lla_meas(2) += -dd;
-      if (compensate_delay && gnss.latency_ms > 0.0)
+      if (gnss_mode == 1)
+      {
+        // 只融合速度，不注入位置（模拟低质量 GNSS 下关闭位置观测）；
+        // 速度 R 与 full 模式保持一致，差异只来自“是否融合位置”。
+        const float v_std = static_cast<float>(std::fmax(gnss.vel_std_mps, 0.05));
+        (void)ekf.MeasurementUpdateVelocity(vel_meas.cast<float>(), v_std,
+                                            static_cast<float>(v_std * 1.5));
+      }
+      else if (compensate_delay && gnss.latency_ms > 0.0)
       {
         // ★2026-11-01 改进验证：把真实观测年龄传给 EKF，触发延迟快照回放
         //   （四参数重载），而不是让 100ms 延迟当成“当前测量”。
@@ -339,6 +347,15 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       }
       else
       {
+        // 模拟固件动态 R（navigation_task.cpp:2106）：位置噪声按该 GNSS 档次的
+        // hAcc 设置，并钳到固件同款下限 0.15m；此前用 EKF 默认 3m 会低估 RTK、
+        // 高估低端 GNSS 的权重，与实机行为不一致。
+        const float h_acc = static_cast<float>(std::fmax(gnss.pos_std_m, 0.15));
+        const float v_std = static_cast<float>(std::fmax(gnss.vel_std_mps, 0.05));
+        ekf.gnss_pos_ne_std_m(h_acc);
+        ekf.gnss_pos_d_std_m(h_acc * 1.5f);
+        ekf.gnss_vel_ne_std_mps(v_std);
+        ekf.gnss_vel_d_std_mps(static_cast<float>(v_std * 1.5));
         ekf.MeasurementUpdate(vel_meas.cast<float>(), lla_meas, kNavDt);
       }
       ++gnss_updates;
@@ -623,6 +640,23 @@ int main()
         const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Vibration,
                                     seed, false, nullptr, false, hz);
         std::printf("%.0f,%d,%.3f,%.4f\n", hz, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
+  // ★GNSS 质量门控假设验证：低端 5m GNSS + 机动，比较全量更新与只更新速度。
+  if (const char *ab = std::getenv("IMUPERF_GNSS_GATE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS gate: LowEnd_5Hz maneuver (full vs velocity-only) ==\n");
+    std::printf("mode,seed,att_rmse_deg,pos_rmse_m\n");
+    for (int mode = 0; mode <= 1; ++mode)
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[5], Scenario::Maneuver,
+                                    seed, false, nullptr, false, 80.0, mode);
+        std::printf("%s,%d,%.3f,%.4f\n", mode == 0 ? "full" : "vel_only", seed,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
       }
     }
