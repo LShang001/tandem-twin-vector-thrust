@@ -91,6 +91,10 @@ public:
 
   int readWhoAmI(uint8_t &value) override;
 
+  /// 芯片温度 (°C)：用 dataReady() 最近一次读到的 UI 样本温度换算；
+  /// 尚未读到有效样本时返回 NAN（上层用 std::isfinite 过滤）。
+  float dieTempC() override;
+
   uint16_t actualAccelOdrHz() const override { return actualAccelOdr_; }
   uint16_t actualGyroOdrHz() const override { return actualGyroOdr_; }
 
@@ -152,5 +156,7 @@ private:
   float actualAccelLpfHz_ = 0.0f;
   float actualGyroLpfHz_ = 0.0f;
   bool started_ = false;
+  /// 是否已从 UI 样本读到过温度（dieTempC() 的有效性判据）。
+  bool temp_valid_ = false;
   const char *err_ = "";
 };

@@ -31,6 +31,8 @@ constexpr uint8_t kInt1Status0Reg = 0x19;
 constexpr uint8_t kInt1StatusDrdyMask = 0x04;
 } // namespace
 
+#include <cmath>
+
 int ICM45686_ImuDevice::begin(const ImuConfig &cfg)
 {
   // begin() 内部（inv_imu_adv_init，见 imu/inv_imu_driver_advanced.c）已完成：
@@ -160,7 +162,19 @@ int ICM45686_ImuDevice::dataReady()
     return 0;
   }
   last_ = d;
+  temp_valid_ = true; // 温度与六轴同帧读出，标记 dieTempC() 可用
   return 1;
+}
+
+float ICM45686_ImuDevice::dieTempC()
+{
+  // 温度来自 dataReady() 最近一次 UI 样本 burst 读（与 accel/gyro 同帧）。
+  // 字段名是 inv_imu_sensor_data_t::temp_data（int16 raw），换算走库内手册公式。
+  if (!temp_valid_)
+  {
+    return NAN;
+  }
+  return ICM456xx::rawRegisterTempToC(last_.temp_data);
 }
 
 int ICM45686_ImuDevice::readWhoAmI(uint8_t &value)

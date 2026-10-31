@@ -69,7 +69,9 @@ struct Vector3
 #include "common_rc.h"
 #include "MagSensor.h"
 #include "Dps310.h"
-#include "ICM42688.h"
+// ★2026-11-01 IMU 型号解耦：不再直接 include 具体芯片头，业务代码只依赖
+//   型号无关接口 ImuDevice.h；具体后端由 src/imu_factory.cpp 按编译期宏装配。
+#include "ImuDevice.h"
 #include "LQS48_Flow.h"
 #include "MTF02P.h"
 #include "navigation.h"
@@ -573,7 +575,10 @@ extern IMU_AutoCalibrator imuCalibrator;
  */
 extern MagSensor magSensor;               // 磁力计统一管理 (IST8310/QMC5883L 自动探测, Wire1)
 extern Dps310 Dps310Sensor;               // 气压计
-extern ICM42688 IMU;                      // 板载IMU (SPI, 10MHz)
+// ★2026-11-01 IMU 型号解耦：由具体类型 ICM42688 改为型号无关接口指针。
+//   实例由 src/imu_factory.cpp::createImuDevice() 在 setup() 中按
+//   platformio.ini 的 FCS_IMU_MODEL_* 宏创建；换型不改本文件。
+extern ImuDevice *IMU;                    // 板载IMU（型号由编译期宏决定）
 extern MTF02P mtf02pSensor;          // 光流传感器 (MTF02P)
 extern LQS48_Flow lqs48Sensor; // 光流传感器 (LQS48)
 

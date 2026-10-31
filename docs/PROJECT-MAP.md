@@ -24,7 +24,7 @@ flowchart TB
 
   subgraph FW["固件 TandemVec_FCS"]
     MAIN["main.cpp<br/>setup/loop 任务注册"]
-    SCHED["task_scheduler<br/>TIM8 2 kHz 分数 tick"]
+    SCHED["task_scheduler<br/>TIM8 6.4 kHz 分数 tick"]
     COMM["communication / mavlink_bridge<br/>AnoCom·CRSF·MAVLink·黑匣子·DBG"]
     SENS["sensor_imu / sensor_peripheral<br/>IMU·气压·光流·TVC 角度"]
     NAV["navigation_task<br/>15 状态 EKF + GNSS/光流/磁 + 延迟补偿"]
@@ -86,7 +86,7 @@ TandemVec_FCS/
 ├── platformio.ini              # 三个 env：TandemVec_FCS（飞行）/ CoaxialVTVL（共轴）/ test
 ├── src/                        # 固件主源码（16 230 行）
 │   ├── main.cpp                # setup/loop、任务注册、上电 DETA100/UBX 探测、IWDG
-│   ├── task_scheduler.cpp/.h   # TIM8 2 kHz 调度、分数 tick、[TASK]/[LOOP] 统计
+│   ├── task_scheduler.cpp/.h   # TIM8 6.4 kHz 调度（支持 3.2kHz IMU）、分数 tick、[TASK]/[LOOP] 统计
 │   ├── task_scheduler_interval.h
 │   ├── communication.cpp/.h    # AnoCom 遥测、CRSF、MAVLink 切换、黑匣子、DBG 控制台、断链回调
 │   ├── mavlink_bridge.cpp/.h   # MAVLink 参数/命令/STATUSTEXT
@@ -97,7 +97,8 @@ TandemVec_FCS/
 │   ├── navigation_task.cpp/.h  # 15 状态 EKF、GNSS/光流/磁、延迟补偿、健康门控、重锚
 │   ├── sensor_imu.cpp/.h       # ICM42688、磁力计、IMU 健康、轴映射
 │   ├── sensor_peripheral.cpp/.h# DPS310、光流、TVC 角度、电池监测
-│   ├── state_data.cpp/.h       # 全局状态、PID 实例、gnc_tel 遥测结构
+│   ├── state_data.cpp/.h       # 全局状态、PID 实例、gnc_tel 遥测结构；IMU 为 ImuDevice*
+│   ├── imu_factory.cpp/.h      # 按 FCS_IMU_MODEL_* 宏装配 ICM42688P / ICM45686 后端
 │   ├── ubx_config.cpp/.h       # UBX 接收机自动配置
 │   ├── math_utils.h            # 数学工具、getControlMode、CRSF_to_US
 │   ├── deta100_types.h         # DETA100 协议类型
@@ -124,12 +125,15 @@ TandemVec_FCS/
 │   ├── MAVLink、eigen、navigation-main、ublox-main、units   # 协议/数学/导航
 │   ├── ICM42688、DPS310-Pressure-Sensor、IST8310、QMC5883L、MagSensor、MagCal、
 │   │   LQS48_Flow、MTF02P                                   # 传感器
-│   ├── ICM45686                # ★自有驱动库 v2.0.0（底层 + FlightAdapter + ImuDevice），
-│   │                           #   2026-10-31 入库；**未接入固件**，src/sensor_imu.cpp 仍用 ICM42688
+│   ├── ImuAbstraction          # 型号无关接口 ImuDevice.h（ImuModel/ImuConfig/纯虚读取）
+│   ├── ICM45686                # ★自有驱动库 v2.0.0（底层 + FlightAdapter + ImuDevice）
+│   │                           #   2026-11-01 接入固件：-DFCS_IMU_MODEL_ICM45686 切换
 │   ├── AnoComProtocol、CrsfSerial、crsf、crc8、arduino-CAN  # 通信
 │   └── W25N01GV、WS2812Driver                               # 存储/灯效
 ├── test_host/                 # 宿主测试（19 406 行）
 │   ├── run_all.sh              # 平台无关回归总入口（BIN_DIR 可覆盖）
+│   ├── test_imu_nav_perf.cpp   # IMU×GNSS×场景 导航性能矩阵（真实 EKF，手册参数）
+│   ├── plot_imu_nav_perf.py    # 上述矩阵热图/柱状/CDF/箱线/时序/轨迹
 │   ├── test_*.cpp              # 83 个单元/闭环测试
 │   ├── fw_algo/                # C ABI 测试（fw_algo / fw_ctrl / fw_gnc / fw_nav）
 │   ├── fw_sil/                 # 真实固件源码 SIL
@@ -271,7 +275,7 @@ py -3.12 tools/build-docs.py
 
 ## 12 命名澄清：`icm45686` 前缀不是传感器驱动
 
-实机 IMU 是 **ICM42688**，现役驱动在 `TandemVec_FCS/lib/ICM42688/` + `TandemVec_FCS/src/sensor_imu.cpp`。`lib/` 下另有 `ICM45686/`（自有驱动库 v2.0.0，2026-10-31 入库），**尚未接入固件**——换传感器需要改引脚/SPI/CS/中断/量程并上板验证。
+实机 IMU 现役为 **ICM42688P**，经 `lib/ImuAbstraction/src/ImuDevice.h` 与 `src/imu_factory.cpp` 装配；`lib/ICM45686/`（自有库 v2.0.0）已接入同一抽象层，编译期宏 `-DFCS_IMU_MODEL_ICM45686` 切换（`[env:TandemVec_FCS_ICM45686]`）。6.4 kHz 时基下 IMU 任务周期按 `actualAccelOdrHz()` 反推（2k→0.5ms、3.2k→0.3125ms），Madgwick 同步跟随。换硬件仍需确认引脚/SPI/CS/中断/量程并上板验证。
 
 `Icm45686*` 是 2026-07-29 移植提交 `62124e9` 保留下来的**参考实现前缀**（来自某份 ICM45686 参考工程/文献实现），落在导航/INS 辅助模块里，与上述两个传感器驱动库都不互相引用：
 

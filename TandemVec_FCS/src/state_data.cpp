@@ -367,7 +367,9 @@ IMU_AutoCalibrator imuCalibrator;
 // --- 硬件传感器驱动对象 ---
 MagSensor magSensor;                  // 磁力计统一管理 (IST8310/QMC5883L 自动探测, I2C Wire1)
 Dps310 Dps310Sensor;                 // DPS310 气压计驱动 (I2C, IIC2, 0x77)
-ICM42688 IMU(SPI, SPI_CS, 10000000); // ICM42688 六轴IMU驱动 (SPI, CS=PA4, 10MHz)
+// ★2026-11-01 IMU 型号解耦：具体后端由 imu_factory 在 setup() 中创建。
+//   指针初值 nullptr，initICM42688()（现 initImu）负责装配；readIMUData() 有判空。
+ImuDevice *IMU = nullptr;
 MTF02P mtf02pSensor;            // MTF02P 光流传感器驱动 (Serial7)
 LQS48_Flow lqs48Sensor;   // LQS48 光流传感器驱动 (Serial7)
 

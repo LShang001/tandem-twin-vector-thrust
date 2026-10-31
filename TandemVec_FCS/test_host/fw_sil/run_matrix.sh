@@ -7,7 +7,7 @@ CXX="${CXX:-g++}"
 mkdir -p "$BIN_DIR"
 
 # 先构建一次（不跑默认场景）
-INC="-Itest_host/fw_sil/stub -Iinclude -Isrc -Itest_host/stub"
+INC="-Itest_host/fw_sil/stub -Iinclude -Isrc -Ilib/ImuAbstraction/src -Itest_host/stub"
 INC="$INC -Ilib/navigation-main/src -Ilib/units/src -Ilib/AnoComProtocol -Ilib/MAVLink -Ilib/eigen/src"
 for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 
@@ -18,6 +18,7 @@ $CXX -std=c++17 -O2 -DTANDEMVEC_FIRMWARE \
   src/flight_control.cpp src/state_data.cpp \
   test_host/fw_sil/fw_sil_stubs.cpp test_host/fw_sil/fw_sil_env_main.cpp \
   lib/DPS310-Pressure-Sensor/src/Dps310.cpp lib/DPS310-Pressure-Sensor/src/DpsClass.cpp \
+  lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp \
   lib/units/src/convang.cpp lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp \
   -o "$OUT_BASE"
 OUT="$OUT_BASE"

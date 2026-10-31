@@ -1,15 +1,15 @@
 /**
  * @file    task_scheduler.cpp
- * @module  固件/基础设施（任务调度器：TIM8 2kHz 时基）
+ * @module  固件/基础设施（任务调度器：TIM8 6.4kHz 时基）
  * @brief   实现标志位式协作调度、任务注册与调度统计
  *
  * 本文件实现了一个基于硬件定时器中断的协作式任务调度系统。
  * 核心设计思想：定时器中断只负责设置标志位，实际任务在主循环中执行，
  * 避免在中断上下文中执行耗时操作（如串口通信、浮点运算）。
  *
- * 时间基准：TIM8 硬件定时器，2kHz（0.5ms 周期）
+ * 时间基准：TIM8 硬件定时器，scheduler::kSchedulerTickHz（当前 6400Hz / 156.25µs）
  * 最大任务数：MAX_TASKS = 30
- * 调度精度：0.5ms（一个定时器滴答）
+ * 调度精度：scheduler::kTickUs（一个滴答，6400Hz 时 156.25µs）
  *
  * @details 输入：`addTaskNamed()` 注册表、`BFS_TASK_FRACTIONAL_INTERVALS` 下的 Q8 目标间隔；
  *          处理：ISR 累加 tick → 到期置 flag 并更新 lastRunTime（可选按 Q8 误差累积
@@ -17,11 +17,11 @@
  *          输出：任务执行计数、耗时、间隔抖动、迟到计数、CPU 负荷（常开累积，
  *                DBG `tasks` 打印后清零，形成观测窗口）。
  *          不变量：先清 flag 再执行（执行期间新到期请求不丢）；标志读改写临界区用
- *          `noInterrupts()/interrupts()` 保护；count 为 uint32 溢出周期约 248 天。
+ *          `noInterrupts()/interrupts()` 保护；count 为 uint32 溢出周期约 7.8 天（6400Hz）。
  * @theory  N/A（调度基础设施）
  * @ref     COMM-001 §3（200Hz 节奏）、GOV-004 §5（L1 文档要求）
  * @frame   N/A
- * @units   间隔 ms、tick = 0.5ms、耗时 µs、频率 Hz、负荷 %
+ * @units   间隔 ms、tick = scheduler::kTickUs、耗时 µs、频率 Hz、负荷 %
  * @note    统计口径即“软超时”：间隔 > 1.5×名义周期记一次迟到（漏拍）。硬件看门狗
  *          （IWDG 3.0s）在 main.cpp，本文件不涉及。
  */
@@ -64,7 +64,9 @@ void schedulerStatsReset()
   memset(s_stats, 0, sizeof(s_stats));
   for (uint8_t i = 0; i < taskCount; i++)
   {
-    s_stats[i].nominal_period_us = tasks[i].interval * 500U; // tick=0.5ms
+    // 1 tick = kTickUs（6400Hz 时 156.25µs）；用 ×16 定点避免整数截断。
+    s_stats[i].nominal_period_us = static_cast<uint32_t>(
+        (static_cast<uint64_t>(tasks[i].interval) * scheduler::kTickUsTimes16) / 16ULL);
     s_stats[i].gap_min_us = 0xFFFFFFFFu;
     s_stats[i].last_run_us = micros();
   }
@@ -134,7 +136,7 @@ void schedulerStatsPrint(arduino::Print &out)
 /**
  * @brief 定时器中断回调函数 (Timer Callback Function)
  *
- * 由 TIM8 硬件定时器以 2kHz (每 05ms) 频率触发。
+ * 由 TIM8 硬件定时器以 scheduler::kSchedulerTickHz（当前 6400Hz）频率触发。
  * 功能：遍历已注册的任务列表，检查每个任务是否到达预定执行时间点。
  * 如果到达，则设置该任务的执行标志位 (flag = true)，但不执行实际任务函数。
  *
@@ -144,12 +146,12 @@ void schedulerStatsPrint(arduino::Print &out)
  *   2. 任务函数之间不会相互中断
  *   3. 高优先级任务（如IMU采集）不会被低优先级任务阻塞
  *
- * 调用频率：2kHz (每 05ms 执行一次)
+ * 调用频率：scheduler::kSchedulerTickHz（当前 6400Hz）
  */
 void timerCallback()
 {
   static uint32_t currentCount = 0; // 静态中断计数器，作为全局时间基准 (单位: 定时器滴答)
-  currentCount++;                   // 每次中断递增，溢出周期约 248 天 (2^32 / 2000 / 86400)
+  currentCount++;                   // 每次中断递增，溢出周期约 7.8 天 (2^32 / 6400 / 86400)
 
   // 遍历所有已注册的任务
   for (uint8_t i = 0; i < taskCount; i++)
@@ -174,15 +176,18 @@ void timerCallback()
 /**
  * @brief 初始化硬件定时器 (TIM8)
  *
- * 配置 STM32H743 的 TIM8 定时器产生 2kHz 的周期性溢出中断。
- * 2kHz 频率的选择依据：
- *   - 足够高：可以精确调度 1ms 级别的任务 (如 IMU 2kHz 采集)
- *   - 足够低：中断开销可接受 (每次中断约 1-2us，CPU 占用约 02%-04%)
- *   - 整数倍：200Hz 任务 = 每 10 个滴答执行一次，50Hz = 每 40 个滴答
+ * 配置 STM32H743 的 TIM8 定时器产生 scheduler::kSchedulerTickHz 的周期性溢出中断。
+ * 时基选择依据（2026-11-01 由 2000Hz 提升到 6400Hz）：
+ *   - 必须能精确表达 3.2kHz：ICM-45686 无 2000Hz ODR 档，换型后需 312.5µs
+ *     周期，在 2kHz 时基下不足 1 tick（会被抬到 500µs），物理不可达。
+ *   - 整除性：6400Hz 下 3.2kHz=2 tick、2kHz=3.2 tick(Q8)、200Hz=32 tick、
+ *     500Hz=12.8 tick(Q8)、DPS310 7.735ms=49.504 tick(Q8)，全部准确表达。
+ *   - 中断开销：ISR 只遍历任务表并置标志；6400Hz 下理论占用约 1-2%，
+ *     ★ 上板必须用 DBG `tasks` 复核主循环余量与迟到计数。
  */
 void setupTimer()
 {
-  TaskTimer->setOverflow(2000, HERTZ_FORMAT); // 设置溢出频率为 2000Hz (2kHz)
+  TaskTimer->setOverflow(scheduler::kSchedulerTickHz, HERTZ_FORMAT); // 时基见 task_scheduler_interval.h
   TaskTimer->attachInterrupt(timerCallback);  // 将 timerCallback 附加到溢出中断
   TaskTimer->resume();                        // 启动定时器，开始产生中断
   schedulerStatsReset();                      // 调度统计观测窗口起点（任务随后注册）
@@ -212,15 +217,16 @@ bool addTaskNamed(void (*function)(), float interval, const char *name)
   tasks[taskCount].function = function; // 绑定任务函数指针
   tasks[taskCount].name = name;
   // 将毫秒间隔转换为定时器滴答数
-  // 计算公式：滴答数 = 间隔(ms) * 频率(kHz) = 间隔(ms) * 2
-  // 例如：5ms -> 5 * 2 = 10 滴答
+  // 计算公式：滴答数 = 间隔(ms) × kSchedulerTickHz/1000
+  // 时基 6400Hz 时 1ms = 6.4 滴答；例如 5ms -> 32 滴答，0.3125ms -> 2 滴答
 #ifdef BFS_TASK_FRACTIONAL_INTERVALS
   tasks[taskCount].interval_q8 = scheduler::intervalMsToTicksQ8(interval);
   tasks[taskCount].interval = scheduler::initialIntervalTicks(tasks[taskCount].interval_q8);
   tasks[taskCount].interval_error_q8 =
       scheduler::initialIntervalErrorQ8(tasks[taskCount].interval_q8);
 #else
-  tasks[taskCount].interval = static_cast<uint32_t>(interval * 2.0f);
+  tasks[taskCount].interval = static_cast<uint32_t>(
+      interval * (static_cast<float>(scheduler::kSchedulerTickHz) / 1000.0f) + 0.5f);
 #endif
   tasks[taskCount].lastRunTime = 0; // 初始化上次执行时间为 0 (首次执行在 interval 后)
   tasks[taskCount].enabled = true;  // 默认启用该任务
@@ -362,7 +368,8 @@ void taskExecutor()
     BFS_PROFILE_SERIAL.print(".");
     BFS_PROFILE_SERIAL.print(load_x10 % 10U);
     BFS_PROFILE_SERIAL.print("% task0_period=");
-    BFS_PROFILE_SERIAL.print(2000000UL / (s_task_count[0] > 0 ? s_task_count[0] : 1));
+    // 任务 0 实测周期 = 窗口时长 / 执行次数（与时基无关；原写死 2kHz 换算）。
+    BFS_PROFILE_SERIAL.print(window_us / (s_task_count[0] > 0 ? s_task_count[0] : 1));
     BFS_PROFILE_SERIAL.print("us task0_cnt=");
     BFS_PROFILE_SERIAL.print(s_task_count[0]);
     BFS_PROFILE_SERIAL.println();

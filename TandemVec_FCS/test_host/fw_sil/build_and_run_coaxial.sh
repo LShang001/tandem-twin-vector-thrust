@@ -12,7 +12,7 @@ OPT="${OPT:--O2}"
 EIGEN_SIL_FLAGS="${EIGEN_SIL_FLAGS:--DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE}"
 mkdir -p "$BIN_DIR"
 
-INC="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude -Isrc -Itest_host/stub"
+INC="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude -Isrc -Ilib/ImuAbstraction/src -Itest_host/stub"
 INC="$INC -Ilib/navigation-main/src -Ilib/units/src -Ilib/AnoComProtocol -Ilib/MAVLink -Ilib/eigen/src"
 for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 

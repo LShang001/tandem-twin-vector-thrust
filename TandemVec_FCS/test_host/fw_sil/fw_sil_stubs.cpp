@@ -68,7 +68,9 @@ void linkDownCallback()
 void mavlinkSendStatustext(unsigned char, const char*) {}
 
 MagSensor::MagSensor() {}
-ICM42688::ICM42688(SPIClass&, uint8_t, uint32_t) {}
+// ★2026-11-01：state_data 的 IMU 已改为型号无关指针（ImuDevice*），SIL 不再
+//   构造 ICM42688 对象，故删除该构造函数桩；保留会导致“ICM42688 未定义类型”
+//   （头文件已不再被 state_data.h 引入）。
 MTF02P::MTF02P() {}
 LQS48_Flow::LQS48_Flow() {}
 // Madgwick 由真实 lib/MadgwickAHRS-master 提供（SIL 需复现生产 AHRS，

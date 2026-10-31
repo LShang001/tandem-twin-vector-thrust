@@ -79,6 +79,22 @@ public:
   ICM42688(SPIClass &bus, uint8_t csPin, uint32_t SPI_HS_CLK = 8000000);
 
   /**
+   * @brief      ★ 2026-10-31 新增：公开的设备身份探测接口
+   *
+   *             whoAmI() 与 WHO_AM_I 常量位于 protected 区（供派生类使用）；
+   *             飞控的型号抽象层（lib/ImuAbstraction）采用组合而非继承，无法访问。
+   *             本函数把"切 bank0 + 读 0x75"封装成公开调用，供型号探测与
+   *             运行期健康检查使用。
+   *
+   * @param[out] value  读到的 WHO_AM_I 原始值（仅在返回 0 时有效）
+   * @return     0 = 读取成功（value 有效，但不代表型号匹配）
+   *             -1 = 总线读取失败
+   *
+   * @note       型号是否匹配请由调用方比对 0x47。
+   */
+  int readWhoAmIValue(uint8_t &value);
+
+  /**
    * @brief      Initialize the device.
    *
    * @return     ret < 0 if error

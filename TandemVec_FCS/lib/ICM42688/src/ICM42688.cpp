@@ -942,3 +942,18 @@ uint8_t ICM42688::whoAmI()
   // return the register value
   return _buffer[0];
 }
+
+// ★ 2026-10-31 新增：公开的设备身份探测接口。
+// 直接复用内部 whoAmI()（其内部已做 setBank(0)），并把"寄存器值 0xFF"识别为
+// 读取失败——因为 0xFF 不是任何 ICM 系列合法的 WHO_AM_I，可作为哨兵，
+// 避免 whoAmI() 返回 -1 被 uint8_t 截断后伪装成"读到了 0xFF"。
+int ICM42688::readWhoAmIValue(uint8_t &value)
+{
+  const uint8_t v = whoAmI();
+  if (v == 0xFFU)
+  {
+    return -1;
+  }
+  value = v;
+  return 0;
+}

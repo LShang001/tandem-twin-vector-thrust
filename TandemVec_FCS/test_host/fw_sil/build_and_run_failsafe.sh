@@ -23,7 +23,7 @@ esac
 mkdir -p "$BIN_DIR"
 
 cd "$ROOT"
-INC="-Iinclude -Isrc -Itest_host/fw_sil/stub -Itest_host/stub"
+INC="-Iinclude -Isrc -Ilib/ImuAbstraction/src -Itest_host/fw_sil/stub -Itest_host/stub"
 for d in $(find lib -maxdepth 3 -type d); do INC="$INC -I$d"; done
 
 FW_SRC="src/flight_control.cpp src/state_data.cpp test_host/fw_sil/fw_sil_stubs.cpp"

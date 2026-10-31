@@ -17,7 +17,7 @@ EIGEN_SIL_FLAGS="${EIGEN_SIL_FLAGS:--DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLEL
 mkdir -p "$OBJ_DIR"
 
 # 真实 ubx.h 必须排在 SIL 的 ubx 桩之前；-DARDUINO 让它使用 SIL 的 Arduino 桩。
-INC="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude -Isrc -Itest_host/stub"
+INC="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude -Isrc -Ilib/ImuAbstraction/src -Itest_host/stub"
 INC="$INC -Ilib/navigation-main/src -Ilib/units/src -Ilib/AnoComProtocol -Ilib/MAVLink -Ilib/eigen/src"
 for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 

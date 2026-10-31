@@ -29,14 +29,15 @@
 #include "math_utils.h"
 #include "QuaternionMath.h"
 #include "MagCalStore.h" // 标定参数内部 Flash 持久化（上电加载）
+#include "imu_factory.h" // IMU 型号无关实例创建（编译期选定后端，见 imu_factory.cpp）
 #include "imu_range.h"   // 量程常量：换 FS 时必须同步改这里
 #include "ins_vibration_hf.h" // 高频振动通道：用低通前/后之差测 80–120 Hz 机械振动
 #include "NavImuIncrementSelect.h" // 导航增量源选择（默认宏关闭时不参与累加）
 
 namespace
 {
-  constexpr uint32_t ICM42688_INIT_SAMPLE_TIMEOUT_MS = 20; // 单个初始化样本等待超时，避免IMU异常时卡死setup
-  constexpr int ICM42688_INIT_DATA_TIMEOUT_ERROR = -1001;  // 自定义错误码：初始化阶段等待数据超时
+  constexpr uint32_t IMU_INIT_SAMPLE_TIMEOUT_MS = 20; // 单个初始化样本等待超时，避免IMU异常时卡死setup
+  constexpr int IMU_INIT_DATA_TIMEOUT_ERROR = -1001;  // 自定义错误码：初始化阶段等待数据超时
 
   // ★ 磁力计馈入 Madgwick 的总开关（当前关闭，与既有"临时禁用磁力计"行为一致）。
   // 启用前必须完成：① 对应芯片轴映射上板标定（MagMath.h 常量表）；
@@ -118,31 +119,41 @@ int initICM42688()
   SPI.setSCLK(SPI_SCLK);                                            // PA5: 时钟线
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3)); // 10MHz, 高位先发, Mode3
 
-  // === 步骤 2: 初始化 IMU 驱动 ===
-  int status = IMU.begin(); // 通过 SPI 初始化 ICM42688，返回 0 表示成功
-  if (status < 0)
+  // === 步骤 2: 创建型号无关实例（编译期选定，见 imu_factory.cpp）===
+  IMU = createImuDevice(SPI, SPI_CS, 10000000);
+  if (IMU == nullptr)
   {
-    return status; // 初始化失败，返回错误码
+    Serial8.println("[Error] IMU device creation failed.");
+    return -1002;
   }
 
-  // === 步骤 3: 配置数字低通滤波器 (DLPF) ===
-  // 陀螺仪: 100Hz 截止频率 (true 表示陀螺仪通道)
-  // 目的: 滤除高频机械振动噪声，保留有用的角速度信号
-  IMU.setLowPassFilter(ICM42688::FREQ_100HZ, true);
-  // 加速度计: 50Hz 截止频率 (false 表示加速度计通道)
-  // 加速度计噪声通常比陀螺仪大，使用更激进的滤波
-  IMU.setLowPassFilter(ICM42688::FREQ_50HZ, false);
+  // === 步骤 3: 用统一配置初始化（ODR/FSR/LPF 一次配齐）===
+  // 默认配置 = 现役硬件参数（accel ±8g / gyro ±2000dps / ODR 目标 2000Hz /
+  // LPF 陀螺 100Hz + 加速度 50Hz），与改造前逐项等价。
+  // ★ 换 ICM-45686 后 ODR 会落到 3200Hz（该芯片无 2000Hz 档），
+  //   actualAccelOdrHz() 回报真实生效值；调度任务的 IMU 周期与 Madgwick
+  //   更新率都由它反推（见 main.cpp），不再写死 2kHz。
+  ImuConfig imu_cfg;
+  const int status = IMU->begin(imu_cfg);
+  if (status != 0)
+  {
+    Serial8.print("[Error] IMU init failed: ");
+    Serial8.print(IMU->modelName());
+    Serial8.print(" code=");
+    Serial8.print(status);
+    Serial8.print(" (");
+    Serial8.print(IMU->lastError());
+    Serial8.println(")");
+    return status;
+  }
 
-  // === 步骤 4: 配置量程和采样率 ===
-  // 加速度计: ±8G 量程, 2kHz 输出数据率 (ODR)
-  // ±8G 量程对应灵敏度: 4096 LSB/g，足够覆盖正常飞行加速度范围
-  IMU.setAccelFS(ICM42688::AccelFS::gpm8); // 必须与 bfs::kIcm42688AccelFullScaleG 一致
-  IMU.setAccelODR(ICM42688::ODR::odr2k);
-
-  // 陀螺仪: ±2000°/s 量程, 2kHz 输出数据率 (ODR)
-  // ±2000°/s 量程对应灵敏度: 164 LSB/(°/s)，覆盖快速旋转场景
-  IMU.setGyroFS(ICM42688::GyroFS::dps2000); // 必须与 bfs::kIcm42688GyroFullScaleDps 一致
-  IMU.setGyroODR(ICM42688::ODR::odr2k);
+  Serial8.print("[Init] IMU: ");
+  Serial8.print(IMU->modelName());
+  Serial8.print(" accelODR=");
+  Serial8.print(IMU->actualAccelOdrHz());
+  Serial8.print("Hz gyroODR=");
+  Serial8.print(IMU->actualGyroOdrHz());
+  Serial8.println("Hz");
 
   delay(500); // 等待 500ms，让传感器稳定并开始输出数据
 
@@ -153,20 +164,20 @@ int initICM42688()
   {
     // 带超时的数据等待，防止 SPI 总线异常时永久阻塞
     const uint32_t sample_wait_start_ms = millis();
-    while (IMU.getAGT() != 1) // 轮询数据就绪标志 (getAGT 返回 1 表示新数据可用)
+    while (IMU->dataReady() != 1) // 轮询数据就绪（型号无关接口；返回 1 表示有新样本）
     {
       // 超时保护: 单个样本等待超过 20ms 则认为传感器异常
       // 这避免了系统卡死在 setup() 中无法进入故障处理分支
-      if ((millis() - sample_wait_start_ms) > ICM42688_INIT_SAMPLE_TIMEOUT_MS)
+      if ((millis() - sample_wait_start_ms) > IMU_INIT_SAMPLE_TIMEOUT_MS)
       {
-        Serial8.println("[Error] ICM42688 init data timeout.");
-        return ICM42688_INIT_DATA_TIMEOUT_ERROR; // 返回自定义错误码 -1001
+        Serial8.println("[Error] IMU init data timeout.");
+        return IMU_INIT_DATA_TIMEOUT_ERROR; // 返回自定义错误码 -1001
       }
     }
     // 读取原始加速度数据 (单位: g，传感器 RUB 坐标系)
-    float axRaw = IMU.accX(); // X轴: 传感器板右方向
-    float ayRaw = IMU.accY(); // Y轴: 传感器板上方向
-    float azRaw = IMU.accZ(); // Z轴: 传感器板后方向
+    float axRaw = IMU->accX(); // X轴: 传感器板右方向
+    float ayRaw = IMU->accY(); // Y轴: 传感器板上方向
+    float azRaw = IMU->accZ(); // Z轴: 传感器板后方向
     ax += axRaw;              // 累加 X 轴
     ay += ayRaw;              // 累加 Y 轴
     az += azRaw;              // 累加 Z 轴
@@ -179,12 +190,12 @@ int initICM42688()
 
   // === 步骤 6: 初始化互补滤波器 ===
   // 使用原始 RUB 坐标系数据初始化，避免滤波器启动时的阶跃响应
-  accelXFilter.initialize(ax);        // X轴加速度滤波器初值
-  accelYFilter.initialize(ay);        // Y轴加速度滤波器初值
-  accelZFilter.initialize(az);        // Z轴加速度滤波器初值
-  gyroXFilter.initialize(IMU.gyrX()); // X轴陀螺仪滤波器初值 (单位: dps)
-  gyroYFilter.initialize(IMU.gyrY()); // Y轴陀螺仪滤波器初值
-  gyroZFilter.initialize(IMU.gyrZ()); // Z轴陀螺仪滤波器初值
+  accelXFilter.initialize(ax);         // X轴加速度滤波器初值
+  accelYFilter.initialize(ay);         // Y轴加速度滤波器初值
+  accelZFilter.initialize(az);         // Z轴加速度滤波器初值
+  gyroXFilter.initialize(IMU->gyrX()); // X轴陀螺仪滤波器初值 (单位: dps)
+  gyroYFilter.initialize(IMU->gyrY()); // Y轴陀螺仪滤波器初值
+  gyroZFilter.initialize(IMU->gyrZ()); // Z轴陀螺仪滤波器初值
 
   // === 步骤 7: 坐标系适配后初始化 Madgwick 滤波器 ===
   // 传感器物理安装坐标系为 RUB (右-上-后)
@@ -206,8 +217,15 @@ int initICM42688()
 
 bool readIMUData()
 {
-  // 检查IMU数据是否就绪 (数据准备好中断标志)
-  if (IMU.getAGT() == 1)
+  // ★2026-11-01 防御：IMU 已由全局对象改为 setup() 中创建的指针，
+  //   极端时序（初始化失败后仍有任务调用）下判空，按“无数据”处理。
+  if (IMU == nullptr)
+  {
+    return false;
+  }
+
+  // 检查 IMU 数据是否就绪（型号无关接口；1 = 有新样本）
+  if (IMU->dataReady() == 1)
   {
     // ========================================================================
     // 步骤 1: 计算时间差 (Delta Time)
@@ -228,15 +246,15 @@ bool readIMUData()
     // ========================================================================
     // 步骤 2: 读取原始数据 (Raw Data Acquisition)
     // ========================================================================
-    // 读取 ICM42688 的原始数据
+    // 读取 IMU 原始数据（型号无关接口，输出单位 g / dps）
     // 加速度计单位: g (重力加速度倍数)
-    float raw_ax_g = IMU.accX();
-    float raw_ay_g = IMU.accY();
-    float raw_az_g = IMU.accZ();
+    float raw_ax_g = IMU->accX();
+    float raw_ay_g = IMU->accY();
+    float raw_az_g = IMU->accZ();
     // 陀螺仪单位: dps (度/秒)
-    float raw_gx_dps = IMU.gyrX();
-    float raw_gy_dps = IMU.gyrY();
-    float raw_gz_dps = IMU.gyrZ();
+    float raw_gx_dps = IMU->gyrX();
+    float raw_gy_dps = IMU->gyrY();
+    float raw_gz_dps = IMU->gyrZ();
 
     // ========================================================================
     // 步骤 3: 自动校准与修正 (Auto-Calibration & Correction)
@@ -579,12 +597,12 @@ bool readIMUData()
     icm_accel_y = ayBody * G_TO_MS2;
     icm_accel_z = azBody * G_TO_MS2;
 
-    // ICM42688 芯片温度：1 Hz 更新，用于后续温漂建模/诊断。
+    // IMU 芯片温度：1 Hz 更新，用于后续温漂建模/诊断（型号无关接口）。
     static uint32_t last_temp_ms = 0;
     if (millis() - last_temp_ms >= 1000U)
     {
       last_temp_ms = millis();
-      const float t_c = IMU.temp();
+      const float t_c = IMU->dieTempC();
       if (std::isfinite(t_c)) imu_die_temp_c = t_c;
     }
 

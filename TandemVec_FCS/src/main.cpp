@@ -351,9 +351,16 @@ void setup()
       delay(200);
     }
   }
-  Serial8.println("Onboard ICM42688 initialized successfully.");
+  Serial8.print("Onboard IMU initialized successfully: ");
+  Serial8.print(IMU->modelName());
+  Serial8.print(" @");
+  Serial8.print(IMU->actualAccelOdrHz());
+  Serial8.println("Hz");
 
-  madgwick.begin(2000);
+  // ★2026-11-01 IMU 型号无关：Madgwick 更新率跟随后端回报的真实 ODR
+  //   （ICM42688=2000Hz，ICM45686=3200Hz），不再写死 2000。
+  const uint16_t imu_odr_hz = IMU->actualAccelOdrHz();
+  madgwick.begin(imu_odr_hz);
 
   if (initDPS310() != 0)
   {
@@ -401,11 +408,12 @@ void setup()
   // 例外: handleAnoCom 紧邻 EKF 注册（排在 GNC 之前），目的是同一帧内消费
   // 最新 EKF 输出以减少遥测延迟；其下行发送已加 availableForWrite 非阻塞保护，
   // 上行接收的 TX 回传同样有保护，不会阻塞后续 GNC。
-  // 间隔参数单位为毫秒，会被转换为 2kHz 定时器滴答数。
+  // 间隔参数单位为毫秒，会被转换为 scheduler::kSchedulerTickHz（6400Hz）滴答数。
   // 注释掉的任务为可选功能，按需启用。
   //
   // 频率总表（名义周期 → 与调度器/COMM-001 对照）：
-  //   2 kHz  = 0.5ms  handleICM42688（IMU 采样 + 姿态解算，最高频）
+  //   IMU ODR（运行时决定）handleICM42688：42688→2000Hz(0.5ms,3.2 tick)、
+  //                   45686→3200Hz(0.3125ms,2 tick)；周期由 actualAccelOdrHz() 反推
   //   ~129 Hz = 7.735ms handleDPS310（分数 tick，见 task_scheduler_interval.h）
   //   500 Hz = 2ms    handleOpticalFlowSensor、handleGuidanceCommands
   //   200 Hz = 5ms    handleDeta100 / handleNavigationSystem / handleAnoCom /
@@ -418,7 +426,10 @@ void setup()
   // 注：AnoCom 内部再按 tick 取模分成 100/50/25/10Hz 多档（COMM-001 双环）。
 
   // --- 传感器采集层 (高频) ---
-  BFS_ADD_TASK(handleICM42688, 0.5f, "ICM42688");                         // IMU 数据采集 (2kHz, 05ms) - 最高频率，姿态解算基础
+  // IMU 采样周期 = 1/实际 ODR（不写死 0.5ms）：2kHz→0.5ms(3.2 tick)，
+  // 3.2kHz→0.3125ms(2 tick)。若强制 2kHz 轮询 3.2kHz 器件会漏 37.5% 样本。
+  const float imu_task_ms = 1000.0f / static_cast<float>(imu_odr_hz);
+  BFS_ADD_TASK(handleICM42688, imu_task_ms, "ICM42688");                  // IMU 数据采集 + 姿态解算（周期随实际 ODR）
   BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz, 贴近128Hz压力输出且保留FIFO余量
   BFS_ADD_TASK(handleOpticalFlowSensor, 2.0f, "OpticalFlow");            // UART7 光流自动识别+采集 (500Hz, 2ms) - LQS48/MTF02P
 
