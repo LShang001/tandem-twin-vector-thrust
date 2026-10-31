@@ -395,24 +395,23 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     return r;
   }
 
-  // ★ 快路径：已在目标波特率（= 已固化过）→ 跳过全部配置
-  if (r.found_baud == o.target_baud)
-  {
-    r.prt_ok = r.rate_ok = r.msg_pvt_ok = r.msg_eoe_ok =
-      r.nav5_ok = r.gnss_ok = r.sbas_ok = r.save_ok = r.verify_ok = true;
-    s_last_cfg = r;
-    return r;
-  }
+  // 已在目标波特率 ≠ 已正确配置：接收机可能只固化了波特率，却缺
+  // NAV-PVT/NAV-EOE 或速率不对，此时跳过 CFG-MSG 会永久 0 epoch。
+  // 因此只跳过 CFG-PRT（改波特率），其余幂等配置每次启动都重发。
+  const bool already_at_target = (r.found_baud == o.target_baud);
 
   // 2. CFG-PRT：切波特率 + 协议掩码（先等 ACK 再切 MCU 波特率）
-  _cfg_prt(serial, o.target_baud, o.nmea_out);
-  r.cfg_frames_sent++;
-  if (_ubx_wait_ack(serial, 0x06, 0x00, kAckTimeoutMs))
+  if (!already_at_target)
   {
-    r.cfg_acks_received++;
+    _cfg_prt(serial, o.target_baud, o.nmea_out);
+    r.cfg_frames_sent++;
+    if (_ubx_wait_ack(serial, 0x06, 0x00, kAckTimeoutMs))
+    {
+      r.cfg_acks_received++;
+    }
+    delay(60);
+    serial.begin(o.target_baud);
   }
-  delay(60);
-  serial.begin(o.target_baud);
   r.prt_ok = true;
 
   // 3. CFG-RATE
