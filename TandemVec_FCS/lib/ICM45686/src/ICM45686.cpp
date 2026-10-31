@@ -460,6 +460,70 @@ int ICM456xx::flushFifo(void) {
   return inv_imu_flush_fifo(&icm_driver);
 }
 
+int ICM456xx::configureWom(const ICM45686WomConfig& config) {
+  if (config.duration_samples < 1U || config.duration_samples > 4U) {
+    return INV_IMU_ERROR_BAD_ARG;
+  }
+  // WOM 在低功耗下工作：先用推荐 ODR 启动加计（LN 模式），再写阈值/时长。
+  int rc = startAccel(config.accel_odr, ICM45686AccelFsr::G4);
+  const uint8_t x = womThresholdMgToReg(config.threshold_x_mg);
+  const uint8_t y = womThresholdMgToReg(config.threshold_y_mg);
+  const uint8_t z = womThresholdMgToReg(config.threshold_z_mg);
+  const tmst_wom_config_wom_int_mode_t mode =
+      config.use_or_mode ? TMST_WOM_CONFIG_WOM_INT_MODE_ORED
+                         : TMST_WOM_CONFIG_WOM_INT_MODE_ANDED;
+  const tmst_wom_config_wom_int_dur_t dur =
+      static_cast<tmst_wom_config_wom_int_dur_t>(config.duration_samples - 1U);
+  rc |= inv_imu_adv_configure_wom(&icm_driver, x, y, z, mode, dur);
+  return rc;
+}
+
+int ICM456xx::enableWom() {
+  return inv_imu_adv_enable_wom(&icm_driver);
+}
+
+int ICM456xx::disableWom() {
+  return inv_imu_adv_disable_wom(&icm_driver);
+}
+
+int ICM456xx::readWomStatus(bool& x, bool& y, bool& z) {
+  int1_status1_t st = {};
+  const int rc = inv_imu_read_reg(&icm_driver, INT1_STATUS1, 1, (uint8_t *)&st);
+  x = st.int1_status_wom_x != 0U;
+  y = st.int1_status_wom_y != 0U;
+  z = st.int1_status_wom_z != 0U;
+  return rc;
+}
+
+int ICM456xx::enablePedometer() {
+  return inv_imu_edmp_enable_pedometer(&icm_driver);
+}
+
+int ICM456xx::disablePedometer() {
+  return inv_imu_edmp_disable_pedometer(&icm_driver);
+}
+
+int ICM456xx::enableTilt() {
+  return inv_imu_edmp_enable_tilt(&icm_driver);
+}
+
+int ICM456xx::disableTilt() {
+  return inv_imu_edmp_disable_tilt(&icm_driver);
+}
+
+int ICM456xx::readApexStatus(inv_imu_edmp_int_state_t& status) {
+  return inv_imu_edmp_get_int_apex_status(&icm_driver, &status);
+}
+
+int ICM456xx::readPedometerSteps(uint16_t& steps) {
+  // 手册 DS-000577：APEX_DATA0(0x31)=STEP_CNT[7:0]、APEX_DATA1(0x32)=STEP_CNT[15:8]。
+  constexpr uint8_t kApexData0Reg = 0x31;
+  uint8_t buf[2] = {0U, 0U};
+  const int rc = inv_imu_read_reg(&icm_driver, kApexData0Reg, 2, buf);
+  steps = static_cast<uint16_t>(buf[0] | (static_cast<uint16_t>(buf[1]) << 8U));
+  return rc;
+}
+
 int ICM456xx::configureDataReadyInterrupt(uint8_t intpin, ICM456xx_irq_handler handler,
                                           inv_imu_int_num_t int_num) {
   inv_imu_int_state_t it_conf;

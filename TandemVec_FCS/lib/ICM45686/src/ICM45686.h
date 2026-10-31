@@ -299,6 +299,24 @@ class ICM456xx {
     int getDataFromFifoBatch(inv_imu_fifo_data_t *data, uint16_t frame_count);
     int getFifoFrameCount(uint16_t& frame_count);
     int flushFifo(void);
+    // ── WOM（wake-on-motion，APEX 低功耗路径）──────────────────────────────
+    // 阈值单位 mg（内部换算为 1g/256），duration 合法 1..4 个样本。
+    int configureWom(const ICM45686WomConfig& config);
+    int enableWom();
+    int disableWom();
+    // 读 INT1_STATUS1(0x1A) 的 WOM_X/Y/Z 位（读清）。
+    int readWomStatus(bool& x, bool& y, bool& z);
+
+    // ── APEX：计步 / 倾斜 / 事件状态 ───────────────────────────────────────
+    // 注意：APEX 与 FIFO/eDMP 共享 SRAM 和中断资源；启用前不要同时跑 FIFO 压缩模式。
+    int enablePedometer();
+    int disablePedometer();
+    int enableTilt();
+    int disableTilt();
+    // 读 INT_APEX_STATUS0/1 的事件位（步数溢出/步数检测/倾斜/唤醒等）。
+    int readApexStatus(inv_imu_edmp_int_state_t& status);
+    // 读 APEX_DATA0/1 的步数（0x31/0x32，低字节在前）。
+    int readPedometerSteps(uint16_t& steps);
 
     // 配置 UI DRDY 中断，适合后续飞控用中断驱动寄存器读取。默认输出到 INT1。
     int configureDataReadyInterrupt(uint8_t intpin, ICM456xx_irq_handler handler,

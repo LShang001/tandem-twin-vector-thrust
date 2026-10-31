@@ -1,8 +1,176 @@
 #include "Arduino.h"
 #include "ICM42688.h"
 #include "registers.h"
+#include <cmath>
 
 using namespace ICM42688reg;
+
+namespace
+{
+/** 42688 ODR 码（CONFIG0 低 4 位）→ Hz；0x07=200Hz、0x0F=500Hz 是手册的跳变档。 */
+uint16_t icm42688OdrCodeToHz(uint8_t code)
+{
+  switch (code)
+  {
+  case 0x01: return 32000;
+  case 0x02: return 16000;
+  case 0x03: return 8000;
+  case 0x04: return 4000;
+  case 0x05: return 2000;
+  case 0x06: return 1000;
+  case 0x07: return 200;
+  case 0x08: return 100;
+  case 0x09: return 50;
+  case 0x0A: return 25;
+  case 0x0B: return 12;
+  case 0x0C: return 6;
+  case 0x0D: return 3;
+  case 0x0E: return 1;
+  case 0x0F: return 500;
+  default: return 0;
+  }
+}
+
+float icm42688FilterFreqHz(ICM42688::FilterFrequency f)
+{
+  switch (f)
+  {
+  case ICM42688::FREQ_50HZ: return 50.0f;
+  case ICM42688::FREQ_100HZ: return 100.0f;
+  case ICM42688::FREQ_200HZ: return 200.0f;
+  case ICM42688::FREQ_400HZ: return 400.0f;
+  default: return 0.0f;
+  }
+}
+
+/** 手册 §14.40：LN 模式 GYRO/ACCEL_UI_FILT_BW 的 3dB 带宽（ODR<400 时用 400 为基）。 */
+float icm42688LpfCutoffHz(uint16_t odrHz, uint8_t code)
+{
+  const float odr = static_cast<float>(odrHz);
+  const float base = std::fmax(400.0f, odr);
+  switch (code)
+  {
+  case 0: return odr / 2.0f;      // BW=ODR/2
+  case 1: return base / 4.0f;
+  case 2: return base / 5.0f;
+  case 3: return base / 8.0f;
+  case 4: return base / 10.0f;
+  case 5: return base / 16.0f;
+  case 6: return base / 20.0f;
+  case 7: return base / 40.0f;
+  default: return 0.0f;          // 8..13 保留，14/15 低延迟选项不用
+  }
+}
+/** 手册 §5.3 AAF：3dB 带宽 → DELT/DELTSQR/BITSHIFT（63 档，42..3979Hz）。 */
+struct AafEntry
+{
+  uint16_t bw_hz;
+  uint8_t delt;
+  uint16_t deltsqr;
+  uint8_t bitshift;
+};
+const AafEntry kAafTable[] = {
+    {  42,  1,    1, 15},
+    {  84,  2,    4, 13},
+    { 126,  3,    9, 12},
+    { 170,  4,   16, 11},
+    { 213,  5,   25, 10},
+    { 258,  6,   36, 10},
+    { 303,  7,   49,  9},
+    { 348,  8,   64,  9},
+    { 394,  9,   81,  9},
+    { 441, 10,  100,  8},
+    { 488, 11,  122,  8},
+    { 536, 12,  144,  8},
+    { 585, 13,  170,  8},
+    { 634, 14,  196,  7},
+    { 684, 15,  224,  7},
+    { 734, 16,  256,  7},
+    { 785, 17,  288,  7},
+    { 837, 18,  324,  7},
+    { 890, 19,  360,  6},
+    { 943, 20,  400,  6},
+    { 997, 21,  440,  6},
+    {1051, 22,  488,  6},
+    {1107, 23,  528,  6},
+    {1163, 24,  576,  6},
+    {1220, 25,  624,  6},
+    {1277, 26,  680,  6},
+    {1336, 27,  736,  5},
+    {1395, 28,  784,  5},
+    {1454, 29,  848,  5},
+    {1515, 30,  896,  5},
+    {1577, 31,  960,  5},
+    {1639, 32, 1024,  5},
+    {1702, 33, 1088,  5},
+    {1766, 34, 1152,  5},
+    {1830, 35, 1232,  5},
+    {1896, 36, 1296,  5},
+    {1962, 37, 1376,  4},
+    {2029, 38, 1440,  4},
+    {2097, 39, 1536,  4},
+    {2166, 40, 1600,  4},
+    {2235, 41, 1696,  4},
+    {2306, 42, 1760,  4},
+    {2377, 43, 1856,  4},
+    {2449, 44, 1952,  4},
+    {2522, 45, 2016,  4},
+    {2596, 46, 2112,  4},
+    {2671, 47, 2208,  4},
+    {2746, 48, 2304,  4},
+    {2823, 49, 2400,  4},
+    {2900, 50, 2496,  4},
+    {2978, 51, 2592,  4},
+    {3057, 52, 2720,  4},
+    {3137, 53, 2816,  3},
+    {3217, 54, 2944,  3},
+    {3299, 55, 3008,  3},
+    {3381, 56, 3136,  3},
+    {3464, 57, 3264,  3},
+    {3548, 58, 3392,  3},
+    {3633, 59, 3456,  3},
+    {3718, 60, 3584,  3},
+    {3805, 61, 3712,  3},
+    {3892, 62, 3840,  3},
+    {3979, 63, 3968,  3},
+};
+
+const AafEntry *nearestAaf(float bw_hz)
+{
+  const AafEntry *best = &kAafTable[0];
+  float best_err = 1.0e30f;
+  for (const AafEntry &e : kAafTable)
+  {
+    const float err = std::fabs(static_cast<float>(e.bw_hz) - bw_hz);
+    if (err < best_err) { best_err = err; best = &e; }
+  }
+  return best;
+}
+
+/** 手册 §5.2 notch：fdesired 单位 kHz（1..3），返回 9-bit COSWZ 与 SEL。 */
+bool notchCoefficients(float f_khz, uint16_t &coswz, uint8_t &sel)
+{
+  if (f_khz < 1.0f || f_khz > 3.0f) { return false; }
+  const float c = std::cos(2.0f * 3.14159265358979f * f_khz / 32.0f);
+  if (std::fabs(c) <= 0.875f)
+  {
+    coswz = static_cast<uint16_t>(std::lround(c * 256.0f));
+    sel = 0;
+  }
+  else if (c > 0.875f)
+  {
+    coswz = static_cast<uint16_t>(std::lround(8.0f * (1.0f - c) * 256.0f));
+    sel = 1;
+  }
+  else
+  {
+    coswz = static_cast<uint16_t>(std::lround(-8.0f * (1.0f + c) * 256.0f));
+    sel = 1;
+  }
+  return true;
+}
+} // namespace
+
 
 /* ICM42688 object, input the I2C bus and address */
 ICM42688::ICM42688(TwoWire &bus, uint8_t address)
@@ -183,13 +351,21 @@ int ICM42688::setGyroODR(ODR odr)
  */
 int ICM42688::setFilters(bool gyroFilters, bool accFilters)
 {
-  // ★2026-11-01 手册核对：AAF 的截止频率由 GYRO/ACCEL_CONFIG_STATIC3/4/5 的
-  //   DELT/DELTSQR/BITSHIFT 共同决定（DS-000347 §14.38-14.40），只写 STATIC2 的
-  //   使能位会启用一个未定义带宽的 AAF。当前项目只用 UI DLPF（0x52），AAF 未用；
-  //   显式返回未实现，避免上层误配。
-  (void)gyroFilters;
-  (void)accFilters;
-  return -1;
+  // 只切换 AAF 使能位；带宽参数必须先经 setAntialiasFilter() 写入，
+  // 否则启用的是复位默认的 DELT/DELTSQR/BITSHIFT（带宽不可控）。
+  if (setBank(1) < 0) { return -1; }
+  uint8_t reg = 0U;
+  if (readRegisters(UB1_REG_GYRO_CONFIG_STATIC2, 1, &reg) < 0) { return -2; }
+  reg = gyroFilters ? static_cast<uint8_t>(reg & ~0x02U)   // bit1=GYRO_AAF_DIS
+                    : static_cast<uint8_t>(reg | 0x02U);
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, reg) < 0) { return -3; }
+  if (setBank(2) < 0) { return -4; }
+  if (readRegisters(UB2_REG_ACCEL_CONFIG_STATIC2, 1, &reg) < 0) { return -5; }
+  reg = accFilters ? static_cast<uint8_t>(reg & ~0x01U)    // bit0=ACCEL_AAF_DIS
+                   : static_cast<uint8_t>(reg | 0x01U);
+  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC2, reg) < 0) { return -6; }
+  if (setBank(0) < 0) { return -7; }
+  return 1;
 }
 
 /**
@@ -202,13 +378,45 @@ int ICM42688::setFilters(bool gyroFilters, bool accFilters)
  */
 int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
 {
-  // ★2026-11-01 手册核对：旧实现把频率枚举按位写进 GYRO/ACCEL_CONFIG_STATIC2
-  //   （那是 AAF/NF 的 DISABLE 位），既没有配置 DELT/DELTSQR/BITSHIFT，也不是
-  //   频率字段。当前项目不使用 AAF；显式返回未实现，避免“配置成功但带宽未定义”。
-  (void)enable;
-  (void)freq;
-  (void)isGyro;
-  return -1;
+  // ★2026-11-01 按 DS-000347 §5.3 重写：AAF 带宽由 DELT/DELTSQR/BITSHIFT 决定。
+  //   陀螺：bank1 STATIC3(0x0C)=DELT[5:0]、STATIC4(0x0D)=DELTSQR[7:0]、
+  //         STATIC5(0x0E)=BITSHIFT[7:4]|DELTSQR[11:8]；
+  //   加计：bank2 STATIC2(0x03)=DELT[6:1]|AAF_DIS[0]、STATIC3(0x04)=DELTSQR[7:0]、
+  //         STATIC4(0x05)=BITSHIFT[7:4]|DELTSQR[11:8]。
+  const float target_hz = icm42688FilterFreqHz(freq);
+  if (target_hz <= 0.0f) { return -1; }
+  const AafEntry *e = nearestAaf(target_hz);
+  if (isGyro)
+  {
+    if (setBank(1) < 0) { return -2; }
+    uint8_t dis = 0U;
+    if (readRegisters(UB1_REG_GYRO_CONFIG_STATIC2, 1, &dis) < 0) { return -3; }
+    dis = enable ? static_cast<uint8_t>(dis & ~0x02U)
+                 : static_cast<uint8_t>(dis | 0x02U);
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, dis) < 0) { return -4; }
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC3,
+                      static_cast<uint8_t>(e->delt & 0x3FU)) < 0) { return -5; }
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC4,
+                      static_cast<uint8_t>(e->deltsqr & 0xFFU)) < 0) { return -6; }
+    const uint8_t s5 = static_cast<uint8_t>(
+        ((e->bitshift & 0x0FU) << 4U) | ((e->deltsqr >> 8U) & 0x0FU));
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC5, s5) < 0) { return -7; }
+    if (setBank(0) < 0) { return -8; }
+    return 1;
+  }
+  if (setBank(2) < 0) { return -9; }
+  uint8_t reg = 0U;
+  if (readRegisters(UB2_REG_ACCEL_CONFIG_STATIC2, 1, &reg) < 0) { return -10; }
+  reg = static_cast<uint8_t>((reg & 0x01U) | ((e->delt & 0x3FU) << 1U));
+  if (!enable) { reg |= 0x01U; }
+  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC2, reg) < 0) { return -11; }
+  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC3,
+                    static_cast<uint8_t>(e->deltsqr & 0xFFU)) < 0) { return -12; }
+  const uint8_t s4 = static_cast<uint8_t>(
+      ((e->bitshift & 0x0FU) << 4U) | ((e->deltsqr >> 8U) & 0x0FU));
+  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC4, s4) < 0) { return -13; }
+  if (setBank(0) < 0) { return -14; }
+  return 1;
 }
 
 /**
@@ -225,14 +433,35 @@ int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
  */
 int ICM42688::setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth)
 {
-  // ★2026-11-01 手册核对：notch 在 bank1 的 STATIC6-9（COSWZ）与 STATIC10
-  //   （NF_BW_SEL）；STATIC2 bit0=GYRO_NF_DIS 且 1=禁用（与 enable 极性相反）。
-  //   旧实现把 centerFreq/bandwidth 写进 STATIC3/4（实为 AAF DELT/DELTSQR），
-  //   且 enable=true 时反而禁用 notch。当前未使用；显式返回未实现。
-  (void)enable;
-  (void)centerFreq;
-  (void)bandwidth;
-  return -1;
+  // ★2026-11-01 按 DS-000347 §5.2 重写：centerFreq 单位 kHz（1..3），
+  //   COSWZ = cos(2π·f/32)，按手册 Step2 处理 |COSWZ|>0.875 的 SEL 分支；
+  //   bandwidth 为 GYRO_NF_BW_SEL（0=1449Hz … 7=10Hz，三轴共用）。
+  if (bandwidth > 7U) { return -1; }
+  uint16_t coswz = 0U;
+  uint8_t sel = 0U;
+  if (!notchCoefficients(static_cast<float>(centerFreq), coswz, sel)) { return -2; }
+  if (setBank(1) < 0) { return -3; }
+  const uint8_t lo = static_cast<uint8_t>(coswz & 0xFFU);
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC6, lo) < 0) { return -4; }
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC7, lo) < 0) { return -5; }
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC8, lo) < 0) { return -6; }
+  // STATIC9：bit0-2 = X/Y/Z 的 COSWZ[8]；bit3-5 = X/Y/Z 的 COSWZ_SEL。
+  uint8_t s9 = static_cast<uint8_t>(((coswz >> 8U) & 0x01U) ? 0x07U : 0x00U);
+  if (sel != 0U) { s9 = static_cast<uint8_t>(s9 | 0x38U); }
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC9, s9) < 0) { return -7; }
+  uint8_t s10 = 0U;
+  if (readRegisters(UB1_REG_GYRO_CONFIG_STATIC10, 1, &s10) < 0) { return -8; }
+  s10 = static_cast<uint8_t>((s10 & 0x8FU) | ((bandwidth & 0x07U) << 4U));
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC10, s10) < 0) { return -9; }
+  // 使能位：STATIC2 bit0=GYRO_NF_DIS（0=启用，1=禁用）。
+  uint8_t dis = 0U;
+  if (readRegisters(UB1_REG_GYRO_CONFIG_STATIC2, 1, &dis) < 0) { return -10; }
+  dis = enable ? static_cast<uint8_t>(dis & ~0x01U)
+               : static_cast<uint8_t>(dis | 0x01U);
+  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, dis) < 0) { return -11; }
+  if (setBank(1) < 0) { return -12; }
+  if (setBank(0) < 0) { return -13; }
+  return 1;
 }
 
 /**
@@ -245,63 +474,6 @@ int ICM42688::setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth)
  * @param isGyro 布尔值，true表示设置陀螺仪的滤波器，false表示设置加速度计的滤波器
  * @return 返回-1表示读取寄存器失败，返回-2表示写入寄存器失败，返回1表示成功
  */
-namespace
-{
-/** 42688 ODR 码（CONFIG0 低 4 位）→ Hz；0x07=200Hz、0x0F=500Hz 是手册的跳变档。 */
-uint16_t icm42688OdrCodeToHz(uint8_t code)
-{
-  switch (code)
-  {
-  case 0x01: return 32000;
-  case 0x02: return 16000;
-  case 0x03: return 8000;
-  case 0x04: return 4000;
-  case 0x05: return 2000;
-  case 0x06: return 1000;
-  case 0x07: return 200;
-  case 0x08: return 100;
-  case 0x09: return 50;
-  case 0x0A: return 25;
-  case 0x0B: return 12;
-  case 0x0C: return 6;
-  case 0x0D: return 3;
-  case 0x0E: return 1;
-  case 0x0F: return 500;
-  default: return 0;
-  }
-}
-
-float icm42688FilterFreqHz(ICM42688::FilterFrequency f)
-{
-  switch (f)
-  {
-  case ICM42688::FREQ_50HZ: return 50.0f;
-  case ICM42688::FREQ_100HZ: return 100.0f;
-  case ICM42688::FREQ_200HZ: return 200.0f;
-  case ICM42688::FREQ_400HZ: return 400.0f;
-  default: return 0.0f;
-  }
-}
-
-/** 手册 §14.40：LN 模式 GYRO/ACCEL_UI_FILT_BW 的 3dB 带宽（ODR<400 时用 400 为基）。 */
-float icm42688LpfCutoffHz(uint16_t odrHz, uint8_t code)
-{
-  const float odr = static_cast<float>(odrHz);
-  const float base = std::fmax(400.0f, odr);
-  switch (code)
-  {
-  case 0: return odr / 2.0f;      // BW=ODR/2
-  case 1: return base / 4.0f;
-  case 2: return base / 5.0f;
-  case 3: return base / 8.0f;
-  case 4: return base / 10.0f;
-  case 5: return base / 16.0f;
-  case 6: return base / 20.0f;
-  case 7: return base / 40.0f;
-  default: return 0.0f;          // 8..13 保留，14/15 低延迟选项不用
-  }
-}
-} // namespace
 
 uint8_t ICM42688::selectLpfCode(uint16_t odrHz, float targetHz)
 {

@@ -137,10 +137,13 @@ public:
    */
   int setGyroODR(ODR odr);
 
-  // ★2026-11-01 手册核对：以下三个 AAF/notch 接口当前**未实现**（恒返回 -1）。
-  //   AAF 需要 DELT/DELTSQR/BITSHIFT（STATIC3/4/5），notch 需要 STATIC6-10 的
-  //   COSWZ/NF_BW_SEL；旧实现写错寄存器（写进 STATIC2 使能位/STATIC3-4），已改为
-  //   显式拒绝，避免“配置成功但带宽未定义”。本项目只用 UI DLPF（0x52）。
+  // ★2026-11-01 按 DS-000347 §5.2/§5.3 实现：
+  //   setAntialiasFilter：带宽查手册 63 档表（42..3979Hz）得到 DELT/DELTSQR/
+  //     BITSHIFT；陀螺写 bank1 STATIC3-5，加计写 bank2 STATIC2-4，并清/置 AAF_DIS。
+  //   setNotchFilter：COSWZ=cos(2π·f/32)（f 单位 kHz，1..3），按手册 Step2 处理
+  //     |COSWZ|>0.875 的 SEL 分支；bandwidth=GYRO_NF_BW_SEL（0=1449Hz…7=10Hz）。
+  //   setFilters：只切换 AAF 使能位，参数必须先由 setAntialiasFilter 配置。
+  //   本项目飞控主路径只用 UI DLPF（0x52），AAF/notch 供抗混叠/抑制陀螺感测峰。
   int setFilters(bool gyroFilters, bool accFilters);
 
   int setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro);
