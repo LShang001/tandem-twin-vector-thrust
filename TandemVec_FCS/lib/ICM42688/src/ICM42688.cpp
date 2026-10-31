@@ -337,27 +337,137 @@ int ICM42688::setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth)
  * @param isGyro 布尔值，true表示设置陀螺仪的滤波器，false表示设置加速度计的滤波器
  * @return 返回-1表示读取寄存器失败，返回-2表示写入寄存器失败，返回1表示成功
  */
+namespace
+{
+/** 42688 ODR 码（CONFIG0 低 4 位）→ Hz；0x07=200Hz、0x0F=500Hz 是手册的跳变档。 */
+uint16_t icm42688OdrCodeToHz(uint8_t code)
+{
+  switch (code)
+  {
+  case 0x01: return 32000;
+  case 0x02: return 16000;
+  case 0x03: return 8000;
+  case 0x04: return 4000;
+  case 0x05: return 2000;
+  case 0x06: return 1000;
+  case 0x07: return 200;
+  case 0x08: return 100;
+  case 0x09: return 50;
+  case 0x0A: return 25;
+  case 0x0B: return 12;
+  case 0x0C: return 6;
+  case 0x0D: return 3;
+  case 0x0E: return 1;
+  case 0x0F: return 500;
+  default: return 0;
+  }
+}
+
+float icm42688FilterFreqHz(ICM42688::FilterFrequency f)
+{
+  switch (f)
+  {
+  case ICM42688::FREQ_50HZ: return 50.0f;
+  case ICM42688::FREQ_100HZ: return 100.0f;
+  case ICM42688::FREQ_200HZ: return 200.0f;
+  case ICM42688::FREQ_400HZ: return 400.0f;
+  default: return 0.0f;
+  }
+}
+
+/** 手册 §14.40：LN 模式 GYRO/ACCEL_UI_FILT_BW 的 3dB 带宽（ODR<400 时用 400 为基）。 */
+float icm42688LpfCutoffHz(uint16_t odrHz, uint8_t code)
+{
+  const float odr = static_cast<float>(odrHz);
+  const float base = std::fmax(400.0f, odr);
+  switch (code)
+  {
+  case 0: return odr / 2.0f;      // BW=ODR/2
+  case 1: return base / 4.0f;
+  case 2: return base / 5.0f;
+  case 3: return base / 8.0f;
+  case 4: return base / 10.0f;
+  case 5: return base / 16.0f;
+  case 6: return base / 20.0f;
+  case 7: return base / 40.0f;
+  default: return 0.0f;          // 8..13 保留，14/15 低延迟选项不用
+  }
+}
+} // namespace
+
+uint8_t ICM42688::selectLpfCode(uint16_t odrHz, float targetHz)
+{
+  // 编码 0..7 → 截止 = ODR/2^(code+1)；取最接近目标带宽的档。
+  // 42688 的 UI 滤波是 ODR 倍率档，不是固定 Hz 档，因此低 ODR 时目标带宽
+  // 会被物理压低，actualLpfHz() 会回报真实值供上电日志核对。
+  if (odrHz == 0U || targetHz <= 0.0f)
+  {
+    return 0U;
+  }
+  uint8_t bestCode = 0U;
+  float bestErr = 1.0e30f;
+  for (uint8_t code = 0U; code <= 7U; ++code)
+  {
+    const float cutoff = icm42688LpfCutoffHz(odrHz, code);
+    const float err = std::fabs(cutoff - targetHz);
+    if (err < bestErr)
+    {
+      bestErr = err;
+      bestCode = code;
+    }
+  }
+  return bestCode;
+}
+
+uint16_t ICM42688::actualLpfHz(uint16_t odrHz, uint8_t bwCode) const
+{
+  if (odrHz == 0U || bwCode > 7U)
+  {
+    return 0U;
+  }
+  return static_cast<uint16_t>(icm42688LpfCutoffHz(odrHz, bwCode) + 0.5f);
+}
+
+int ICM42688::setLowPassFilterBw(uint8_t bwCode, bool isGyro)
+{
+  setBank(0);
+  uint8_t reg = 0U;
+  if (readRegisters(UB0_REG_GYRO_ACCEL_CONFIG0, 1, &reg) < 0)
+  {
+    return -1;
+  }
+  const uint8_t code = static_cast<uint8_t>(bwCode & 0x0FU);
+  if (isGyro)
+  {
+    reg = static_cast<uint8_t>((reg & 0xF0U) | code);          // bit3:0
+  }
+  else
+  {
+    reg = static_cast<uint8_t>((reg & 0x0FU) | (code << 4U));  // bit7:4
+  }
+  if (writeRegister(UB0_REG_GYRO_ACCEL_CONFIG0, reg) < 0)
+  {
+    return -2;
+  }
+  return 1;
+}
+
 int ICM42688::setLowPassFilter(FilterFrequency freq, bool isGyro)
 {
-  uint8_t regAddress;
-
-  // 确定目标寄存器
-  if (isGyro)
-    regAddress = UB0_REG_GYRO_CONFIG0; // 陀螺仪低通滤波器
-  else
-    regAddress = UB0_REG_ACCEL_CONFIG0; // 加速度计低通滤波器
-
-  // 配置滤波器频率
-  uint8_t reg;
-  if (readRegisters(regAddress, 1, &reg) < 0)
+  setBank(0);
+  const uint8_t cfg0 = isGyro ? UB0_REG_GYRO_CONFIG0 : UB0_REG_ACCEL_CONFIG0;
+  uint8_t reg = 0U;
+  if (readRegisters(cfg0, 1, &reg) < 0)
+  {
     return -1;
-
-  reg = (reg & 0xF0) | freq; // 设置频率位
-
-  if (writeRegister(regAddress, reg) < 0)
-    return -2;
-
-  return 1; // 成功
+  }
+  const uint16_t odrHz = icm42688OdrCodeToHz(static_cast<uint8_t>(reg & 0x0FU));
+  if (odrHz == 0U)
+  {
+    return -3;
+  }
+  const uint8_t code = selectLpfCode(odrHz, icm42688FilterFreqHz(freq));
+  return setLowPassFilterBw(code, isGyro);
 }
 
 /**

@@ -143,7 +143,25 @@ public:
 
   int setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth);
 
+  /**
+   * @brief 配置 UI 通道低通滤波器（按目标绝对截止频率选档）。
+   *
+   * ★2026-11-01 修复：旧实现把 `freq` 枚举直接写进 GYRO_CONFIG0/ACCEL_CONFIG0
+   * 的低 4 位（那是 ODR 字段），导致 LPF 从未真正生效、还把 ODR 改坏后再被
+   * setXxxODR 覆盖。ICM-42688-P 的 DLPF 在 GYRO_ACCEL_CONFIG0 (0x52)：
+   *   陀螺 bit3:0、加计 bit7:4，编码 0=ODR/2、1=ODR/4 … 7=ODR/256。
+   * 本函数读取当前 ODR，选最接近 `freq` 的 ODR/2^n 档写入 0x52。
+   */
   int setLowPassFilter(FilterFrequency freq, bool isGyro);
+
+  /// 直接写 UI 滤波档（0=ODR/2 … 7=ODR/256），陀螺 bit3:0 / 加计 bit7:4。
+  int setLowPassFilterBw(uint8_t bwCode, bool isGyro);
+
+  /// 选最接近 targetHz 的 ODR/2^(code+1) 档；odrHz 无效时返回 0。
+  static uint8_t selectLpfCode(uint16_t odrHz, float targetHz);
+
+  /// 当前配置下 UI LPF 的实际截止频率估算（Hz），供上电日志。
+  uint16_t actualLpfHz(uint16_t odrHz, uint8_t bwCode) const;
 
   int configureFilters(FilterType type, bool enable, FilterFrequency freq, bool isGyro, uint8_t centerFreq = 0, uint8_t bandwidth = 0);
 

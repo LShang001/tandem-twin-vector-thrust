@@ -51,16 +51,7 @@ int ICM42688_ImuDevice::begin(const ImuConfig &cfg)
     return rs;
   }
 
-  // LPF 先配（与改造前调用顺序一致：先滤波后量程/ODR）。
-  // ImuLpfBw 的枚举序号 0..3 与 ICM42688::FilterFrequency 的
-  // FREQ_50HZ..FREQ_400HZ 顺序一致，直接强转。
-  imu_.setLowPassFilter(static_cast<ICM42688::FilterFrequency>(cfg.gyroLpf), true);
-  imu_.setLowPassFilter(static_cast<ICM42688::FilterFrequency>(cfg.accelLpf), false);
-
-  // 记录实际生效的标称带宽（固定档位，与 cfg 的 Bw 一一对应）。
-  // 与 ICM45686 后端的同名接口对称，便于上层"型号无关地"打印滤波状态。
-  actualGyroLpfHz_ = lpfBwToHz(cfg.gyroLpf);
-  actualAccelLpfHz_ = lpfBwToHz(cfg.accelLpf);
+  // LPF 延后到 ODR 配置之后（选档依赖实际 ODR，见下方）。
 
   ICM42688::AccelFS accelFs;
   if (!accelFsrToEnum(cfg.accelFsrG, accelFs))
@@ -93,6 +84,21 @@ int ICM42688_ImuDevice::begin(const ImuConfig &cfg)
   imu_.setAccelODR(accelOdr);
   imu_.setGyroFS(gyroFs);
   imu_.setGyroODR(gyroOdr);
+
+  // ★2026-11-01 手册核对修复：ICM-42688-P 的 UI 低通在 GYRO_ACCEL_CONFIG0(0x52)：
+  //   陀螺 bit3:0、加计 bit7:4，编码 0=ODR/2 … 7=ODR/256；旧实现把档位写进
+  //   GYRO_CONFIG0/ACCEL_CONFIG0 的 ODR 字段，实际从未生效（还被随后的 ODR 覆盖）。
+  //   LPF 必须在 ODR 之后配，这里按实际 ODR 选最接近目标带宽的档并回报真实值。
+  const uint8_t gyroBw = ICM42688::selectLpfCode(gyroOdrHz, lpfBwToHz(cfg.gyroLpf));
+  const uint8_t accelBw = ICM42688::selectLpfCode(accelOdrHz, lpfBwToHz(cfg.accelLpf));
+  if (imu_.setLowPassFilterBw(gyroBw, true) < 0 ||
+      imu_.setLowPassFilterBw(accelBw, false) < 0)
+  {
+    err_ = "ICM42688 LPF write failed";
+    return -6;
+  }
+  actualGyroLpfHz_ = static_cast<float>(imu_.actualLpfHz(gyroOdrHz, gyroBw));
+  actualAccelLpfHz_ = static_cast<float>(imu_.actualLpfHz(accelOdrHz, accelBw));
 
   actualAccelOdr_ = accelOdrHz;
   actualGyroOdr_ = gyroOdrHz;
