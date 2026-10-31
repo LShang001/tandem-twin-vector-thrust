@@ -435,6 +435,11 @@ namespace bfs
     uint32_t pvt_duplicate_in_epoch_count_ = 0;
     uint32_t tow_mismatch_count_ = 0;
     uint32_t pump_receive_time_us_ = 0;
+    uint32_t eoe_receive_time_us_ = 0;  // EOE 帧完成时刻（比 Pump 开始时刻更接近真实到达）
+    uint32_t hp_pos_tow_ = 0;            // 本历元 HP 位置的 iTOW
+    bool hp_pos_ready_ = false;          // 本历元是否收到 HP 位置
+    bool hp_llh_ready_ = false;          // 本历元收到 HPPOSLLH
+    bool hp_ecef_ready_ = false;         // 本历元收到 HPPOSECEF
     uint32_t latest_epoch_tow_ms_ = 0;
     uint32_t latest_epoch_receive_time_us_ = 0;
     uint32_t queue_overflow_count_ = 0;
@@ -467,6 +472,7 @@ namespace bfs
     bool rel_pos_norm_ = false;
     bool svin_valid_ = false;
     bool svin_in_progress_ = false;
+    bool nmea_pdop_from_combined_ = false;  // 当前 PDOP 是否来自组合解（GN talker）
     int8_t carr_soln_ = 0;  // 载波相位解状态：0 无 / 1 浮点 / 2 固定（来自 PVT.flags 高 2 位）
 
     /* ---- 已换算的导航数据（与各 getter 一一对应）---- */

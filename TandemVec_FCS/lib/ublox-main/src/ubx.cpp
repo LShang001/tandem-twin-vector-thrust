@@ -73,6 +73,13 @@ namespace bfs
     eoe_without_pvt_count_ = 0;
     tow_mismatch_count_ = 0;
     pump_receive_time_us_ = 0;
+    eoe_receive_time_us_ = 0;
+    hp_pos_tow_ = 0;
+    hp_pos_ready_ = false;
+    hp_llh_ready_ = false;
+    hp_ecef_ready_ = false;
+    nmea_pdop_from_combined_ = false;
+    pvt_duplicate_in_epoch_count_ = 0;
     latest_epoch_tow_ms_ = 0;
     latest_epoch_receive_time_us_ = 0;
     queue_overflow_count_ = 0;
@@ -363,7 +370,9 @@ namespace bfs
       if (rx_msg_.len == ubx_nav_hp_pos_ecef_.len)
       {
         memcpy(&ubx_nav_hp_pos_ecef_.payload, rx_msg_.payload, rx_msg_.len);
-        use_hp_pos_ = true;  // 收到高精度位置：ProcessNavData 改用 HP 字段换算
+        hp_pos_tow_ = ubx_nav_hp_pos_ecef_.payload.i_tow;
+        hp_pos_ready_ = true;  // 延迟到 EOE 再按 iTOW 决定是否采用
+        hp_ecef_ready_ = true;
       }
       break;
     }
@@ -372,7 +381,9 @@ namespace bfs
       if (rx_msg_.len == ubx_nav_hp_pos_llh_.len)
       {
         memcpy(&ubx_nav_hp_pos_llh_.payload, rx_msg_.payload, rx_msg_.len);
-        use_hp_pos_ = true;
+        hp_pos_tow_ = ubx_nav_hp_pos_llh_.payload.i_tow;
+        hp_pos_ready_ = true;
+        hp_llh_ready_ = true;
       }
       break;
     }
@@ -417,6 +428,12 @@ namespace bfs
           return false;
         }
         pvt_ready_this_epoch_ = false;  // 复位，准备下一历元重新累计
+        // HP 位置只在与本历元 PVT 同一 iTOW 时采用，避免跨历元混帧。
+        // 接收机 HP 速率低于 PVT 时（F9P 常见），旧实现会一直用陈旧 HP。
+        use_hp_pos_ = hp_pos_ready_ &&
+                      (hp_pos_tow_ == ubx_nav_pvt_.payload.i_tow);
+        // EOE 帧刚组完，记录本历元的接收时刻（Pump 开始时刻可能早数 ms）。
+        eoe_receive_time_us_ = micros();
         ProcessNavData();               // 把各 NAV 缓存换算成物理量
         // PVT 与 EOE 的 iTOW 必须相等，否则说明发生了混帧（当前 PVT 不属于这个 EOE）。
         if (ubx_nav_pvt_.payload.i_tow != ubx_nav_eoe_.payload.i_tow)
@@ -428,6 +445,9 @@ namespace bfs
         {
           PushEpoch(MakeEpoch());  // Pump 路径：完整历元入队
         }
+        hp_pos_ready_ = false;  // 下一历元必须重新收到 HP 才允许使用
+        hp_llh_ready_ = false;
+        hp_ecef_ready_ = false;
         return true;  // 历元完整且一致：通知上层可消费
       }
       break;
@@ -447,7 +467,8 @@ namespace bfs
     UbxEpoch epoch = {};
     epoch.pvt_tow_ms = ubx_nav_pvt_.payload.i_tow;
     epoch.eoe_tow_ms = ubx_nav_eoe_.payload.i_tow;
-    epoch.receive_time_us = pump_receive_time_us_;
+    epoch.receive_time_us =
+        (eoe_receive_time_us_ != 0U) ? eoe_receive_time_us_ : pump_receive_time_us_;
     epoch.gps_tow_s = tow_s_;
     epoch.fix = static_cast<int8_t>(fix_);
     epoch.num_sv = num_sv_;
@@ -554,7 +575,7 @@ namespace bfs
     {
       return;  // 空句/残句（如仅 "$"）：不构成坏校验，静默忽略
     }
-    if (!minmea_check(sentence, false))
+    if (!minmea_check(sentence, true))
     {
       nmea_bad_checksum_count_++;
       return;
@@ -632,6 +653,12 @@ namespace bfs
     }
     // GGA quality → Fix 枚举（quality 3=PPS 罕见，按 3D 保守处理）：
     //   1=GPS → FIX_3D；2=DGPS → FIX_DGNSS；4=RTK Fixed → FIX_RTK_FIXED；5=RTK Float → FIX_RTK_FLOAT
+    // quality: 0 无效、1 GPS、2 DGPS、3 PPS、4 RTK Fixed、5 RTK Float；
+    // 6 推算、7 人工、8 模拟都不是真实 3D 解，必须拒绝。
+    if (gga.fix_quality >= 6)
+    {
+      return;  // 非真实定位解，不刷新快照
+    }
     int8_t fix = FIX_3D;
     if (gga.fix_quality == 2)
     {
@@ -740,12 +767,18 @@ namespace bfs
     {
       return;  // 未提供或无效
     }
-    if (!is_combined && nmea_snapshot_pdop_ > 0.0f)
+    if (is_combined)
     {
-      return;  // 已有组合解 PDOP，单星座 GSA 不覆盖
+      nmea_snapshot_pdop_ = pdop;
+      nmea_snapshot_vdop_ = isnan(vdop) ? 0.0f : vdop;
+      nmea_pdop_from_combined_ = true;
     }
-    nmea_snapshot_pdop_ = pdop;
-    nmea_snapshot_vdop_ = isnan(vdop) ? 0.0f : vdop;
+    else if (!nmea_pdop_from_combined_)
+    {
+      // 单星座接收机也持续更新（旧实现只写一次，PDOP 永久冻结）。
+      nmea_snapshot_pdop_ = pdop;
+      nmea_snapshot_vdop_ = isnan(vdop) ? 0.0f : vdop;
+    }
   }
 
   // NMEA 兜底合成入队：kNmea 直接合成；kAuto 需 UBX 失效窗口（防混合输出双通道重复融合）。
@@ -975,7 +1008,9 @@ namespace bfs
     invalid_llh_ = ubx_nav_pvt_.payload.flags3 & 0x01;
     if (!invalid_llh_)
     {
-      if (use_hp_pos_)
+      const bool use_hp_llh = use_hp_pos_ && hp_llh_ready_ &&
+                              ((ubx_nav_hp_pos_llh_.payload.flags & 0x01) == 0);
+      if (use_hp_llh)
       {
         // 高精度：主分量 + *_hp 补偿，再统一缩放到 度 / 米。
         // lat/lon：(1e-7度主分量 + 1e-9度补偿) → double 度；禁止中途转 float，
@@ -1020,7 +1055,8 @@ namespace bfs
     invalid_ecef_ = ubx_nav_hp_pos_ecef_.payload.flags & 0x01;
     if (!invalid_ecef_)
     {
-      if (use_hp_pos_)
+      const bool use_hp_ecef = use_hp_pos_ && hp_ecef_ready_;
+      if (use_hp_ecef)
       {
         // 高精度：(cm主分量 + 0.1mm补偿) → m，即 (ecef + ecef_hp*1e-2) cm * 1e-2。
         ecef_m_[0] = (static_cast<double>(ubx_nav_hp_pos_ecef_.payload.ecef_x) +
@@ -1153,7 +1189,9 @@ namespace bfs
       }
       else
       {
-        parser_state_ = 0;
+        // 重同步：当前字节若是同步字首字节 0xB5，把它当作新帧头起点，
+        // 否则回到空闲。处理 "B5 B5 62 ..." 这类连续同步字场景。
+        parser_state_ = (c_ == UBX_HEADER_[0]) ? 1U : 0U;
       }
       /* 阶段 2：Class 字节 */
     }
@@ -1183,7 +1221,7 @@ namespace bfs
       if (rx_msg_.len > UBX_MAX_PAYLOAD_)
       {
         oversize_msg_count_++;
-        parser_state_ = 0;
+        parser_state_ = (c_ == UBX_HEADER_[0]) ? 1U : 0U;
       }
       /* 阶段 6：payload 主体，按偏移写入 rx_msg_.payload。 */
     }
@@ -1214,6 +1252,8 @@ namespace bfs
         return true;  // 一帧有效报文就绪，交给 HandleValidMessage。
       }
       checksum_fail_count_++;  // 校验失败：丢弃本帧（应保持为 0，非 0 多为接线/波特率问题）。
+      // 坏帧的 CK_B 也可能恰是下一帧同步字首字节 0xB5，保留重同步机会。
+      parser_state_ = (c_ == UBX_HEADER_[0]) ? 1U : 0U;
     }
     return false;  // 本字节未组完整帧。
   }
