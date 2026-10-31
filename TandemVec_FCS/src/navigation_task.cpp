@@ -151,6 +151,21 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #define BFS_NAVIGATION_GNSS_HACC_GATE_M 3.0f
 #endif
 
+// ★大新息硬重锚（默认关闭）：长失锁后 EKF 位置协方差发散，NIS 门控会
+// 拒绝所有 GNSS 更新，位置永远拉不回。连续 N 帧水平新息超阈值且方向一致时，
+// 把位置/速度重置到 GNSS（姿态/零偏保持连续）。仿真依据：
+// test_imu_nav_perf 的 IMUPERF_REANCHOR/REANCHOR2（25s 失锁恢复后 86-3851m
+// → streak=2 时 4.5-25m；单帧 100m 野值不误触发）。
+#ifndef BFS_NAVIGATION_GNSS_REANCHOR
+#define BFS_NAVIGATION_GNSS_REANCHOR 0
+#endif
+#ifndef BFS_NAVIGATION_GNSS_REANCHOR_M
+#define BFS_NAVIGATION_GNSS_REANCHOR_M 25.0f
+#endif
+#ifndef BFS_NAVIGATION_GNSS_REANCHOR_STREAK
+#define BFS_NAVIGATION_GNSS_REANCHOR_STREAK 2
+#endif
+
 namespace
 {
 struct NavProfileBucket
@@ -2869,6 +2884,49 @@ void handleNavigationSystem()
       }
       else
       {
+#if BFS_NAVIGATION_GNSS_REANCHOR
+        // 大新息硬重锚：连续 N 帧水平新息超阈值且方向一致才触发，
+        // 单帧野值（多路径/欺骗）不会误触发。
+        {
+          static uint8_t s_reanchor_streak = 0;
+          static float s_last_reanchor_dn = 0.0f;
+          static float s_last_reanchor_de = 0.0f;
+          static uint32_t s_reanchor_count = 0;
+          const float est_lat = nav_ekf.lat_rad();
+          const float est_lon = nav_ekf.lon_rad();
+          const float dn = static_cast<float>(meas_lla(0) - est_lat) * 6378137.0f;
+          const float de = static_cast<float>(meas_lla(1) - est_lon) *
+                           6378137.0f * cosf(est_lat);
+          const float dist = sqrtf(dn * dn + de * de);
+          if (dist > BFS_NAVIGATION_GNSS_REANCHOR_M)
+          {
+            if (s_reanchor_streak > 0 &&
+                (dn * s_last_reanchor_dn + de * s_last_reanchor_de) > 0.0f)
+            {
+              ++s_reanchor_streak;
+            }
+            else
+            {
+              s_reanchor_streak = 1;
+            }
+            s_last_reanchor_dn = dn;
+            s_last_reanchor_de = de;
+            if (s_reanchor_streak >= BFS_NAVIGATION_GNSS_REANCHOR_STREAK)
+            {
+              nav_ekf.ResetPositionVelocityToGnss(meas_vel_ned, meas_lla);
+              s_reanchor_streak = 0;
+              ++s_reanchor_count;
+              Serial8.printf("[Nav] Large-innovation re-anchor %.1f m (#%lu)\n",
+                             static_cast<double>(dist),
+                             static_cast<unsigned long>(s_reanchor_count));
+            }
+          }
+          else
+          {
+            s_reanchor_streak = 0;
+          }
+        }
+#endif
         // ── GNSS 位置/速度联合更新（6 维量测）─────────────────────────
         // 公式：z = [p_gnss−p̂; v_gnss−v̂]（NED/LLA 混合残差），
         //       rᵀS⁻¹r ~ χ²(6) 门控，拒绝时退化为 3D 位置/3D 速度子集 χ² 检验
