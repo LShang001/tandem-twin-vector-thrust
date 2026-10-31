@@ -101,7 +101,7 @@ TandemVec_FCS/
 │   ├── ubx_config.cpp/.h       # UBX 接收机自动配置
 │   ├── math_utils.h            # 数学工具、getControlMode、CRSF_to_US
 │   ├── deta100_types.h         # DETA100 协议类型
-│   └── icm45686_ins_fast_covariance_blocks.h  # EKF 快速协方差块
+│   └── icm45686_ins_fast_covariance_blocks.h  # EKF 协方差块展开加速（Icm45686 是移植前缀，非传感器驱动）
 ├── include/                    # 平台无关头文件（13 927 行，73 个）
 │   ├── 控制与分配/             # TandemVecAllocator、TandemVec_ControlAllocation、TandemVec_Propulsion、
 │   │                           # TandemVec_Config、TandemVec_ServoModel、ThrustAllocation、PowerAllocation、
@@ -111,6 +111,8 @@ TandemVec_FCS/
 │   │                           # TandemVec_OnlineID、RateLeadPredictor、RateAccelFeedback、RatePhaseLead、
 │   │                           # AdaptiveGainDamper、YawOscillationDetector、HeadingAidingGate
 │   ├── 导航/EKF/               # ins_*.h（20 个：气圧/IMU 健康/振动/预置/延迟/PPS/一致性/增量选择…）、
+│   │                           # ins_static_detector / ins_static_aid_profile / ins_gnss_dynamic_weight
+│   │                           #   （导出 Icm45686* 前缀函数：静止检测、ZUPT 档位、GNSS 动态权重）、
 │   │                           # mag_measurement_gate、mag_reference、HorizontalKF、VerticalKF、
 │   │                           # VerticalKF_2State、ComplementaryFilter、NavAidLossDetector、
 │   │                           # NavImuIncrementSelect、imu_range
@@ -264,3 +266,18 @@ py -3.12 tools/build-docs.py
 | 参考资料 | books 6333 / papers 1834 文件 |
 | 仿真代码与数据 | 551 文件 / 698 MB |
 | 报告线证据 | EKF 报告 1668 文件 / 488 MB |
+
+## 12 命名澄清：`icm45686` 前缀不是传感器驱动
+
+实机 IMU 是 **ICM42688**，传感器驱动在 `TandemVec_FCS/lib/ICM42688/` + `TandemVec_FCS/src/sensor_imu.cpp`；`lib/` 内没有任何 45686 字样。
+
+`Icm45686*` 是 2026-07-29 移植提交 `62124e9` 保留下来的**参考实现前缀**（来自某份 ICM45686 参考工程/文献实现），落在导航/INS 辅助模块里，与实机传感器型号解耦：
+
+| 文件 | 内容 |
+|---|---|
+| `src/icm45686_ins_fast_covariance_blocks.h` | EKF 15 状态协方差块展开 `Icm45686FirstOrderCovarianceDeltaFromBlocks()` + 结构化过程噪声 `Icm45686StructuredContinuousQc()`；被 `lib/navigation-main/src/ekf_15_state.h:84` include |
+| `include/ins_static_detector.h` | 静止检测迟滞状态机 `Icm45686StaticDetectorUpdate()` |
+| `include/ins_static_aid_profile.h` | ZUPT 档位、残差自适应噪声、外参照门控 `Icm45686SelectStaticAidProfile()` 等 |
+| `include/ins_gnss_dynamic_weight.h` | GNSS 量测噪声 floor/cap/pDOP 缩放 `Icm45686ComputeGnssStd()` |
+
+结论：看到 `icm45686` 先按**导航/AHRS 模块**处理，不要当成 IMU 驱动去找寄存器配置。新增真实传感器驱动放 `lib/<型号>/`，并在 `src/sensor_imu.cpp` 接线，不要沿用该前缀。
