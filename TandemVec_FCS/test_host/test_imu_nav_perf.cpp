@@ -220,7 +220,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double hacc_gate_m = 1.0e9, int yaw_aid = 0, float q_accel = 2.0f,
                   int baro_mode = 0, double baro_std = 0.5, double vib_amp = 0.5,
                   double outage_start = 10.0, double outage_end = 20.0,
-                  double baro_bias = 0.0, int baro_qnh_cal = 0)
+                  double baro_bias = 0.0, int baro_qnh_cal = 0, double baro_start_s = 0.0,
+                  double baro_spike_m = 0.0, int baro_gate = 0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -273,6 +274,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double sum_alt2 = 0.0;
   double nan_t_local = -1.0;
   double qnh_est = 0.0; // baro QNH 在线偏差估计（GNSS 高度差低通）
+  bool qnh_inited = false;
+  int baro_gate_rej = 0; // 连续被残差门控拒绝次数（防锁死）
   int out_count = 0;
   int count = 0, gnss_updates = 0;
   const int start_eval = static_cast<int>(0.10 * nav_steps);
@@ -387,19 +390,55 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       if (baro_qnh_cal != 0)
       {
         const double baro_raw = lla0(2) - truthAt(t, sc).pos_ned(2) + baro_bias;
-        qnh_est += 0.02 * (baro_raw - lla_meas(2));
+        if (!qnh_inited)
+        {
+          qnh_est = baro_raw - lla_meas(2);
+          qnh_inited = true;
+        }
+        else
+        {
+          qnh_est += 0.02 * (baro_raw - lla_meas(2));
+        }
       }
       ++gnss_updates;
     }
 
     // 气压计：25Hz 绝对高度观测（与固件 DPS310 节拍一致），仅用于高度通道。
-    if (baro_mode != 0 && (k % 8) == 0)
+    if (baro_mode != 0 && (k % 8) == 0 && t >= baro_start_s)
     {
+      // 气流干扰：每 5 s 一个 0.5 s 尖峰（旋翼下洗/阵风），正负交替。
+      double spike = 0.0;
+      if (baro_spike_m != 0.0 && std::fmod(t, 5.0) < 0.5)
+      {
+        spike = ((static_cast<int>(t / 5.0) & 1) == 0) ? baro_spike_m : -baro_spike_m;
+      }
       const double alt_abs = lla0(2) - truthAt(t, sc).pos_ned(2) + baro_bias +
-                             baro_std * baro_n01(baro_rng) -
+                             baro_std * baro_n01(baro_rng) + spike -
                              ((baro_qnh_cal != 0) ? qnh_est : 0.0);
-      (void)ekf.MeasurementUpdateBaroAltitudeDetailed(
-          static_cast<float>(alt_abs), static_cast<float>(baro_std));
+      bool fuse = true;
+      if (baro_gate != 0 &&
+          std::fabs(alt_abs - static_cast<double>(ekf.alt_m())) > 2.0)
+      {
+        // 残差门控：尖峰/异常时跳过；连续 25 次（1 s）强制接受一次，
+        // 避免 EKF 高度已偏时残差恒超限导致 baro 永久被拒（锁死）。
+        if (++baro_gate_rej >= 25)
+        {
+          baro_gate_rej = 0;
+        }
+        else
+        {
+          fuse = false;
+        }
+      }
+      else
+      {
+        baro_gate_rej = 0;
+      }
+      if (fuse)
+      {
+        (void)ekf.MeasurementUpdateBaroAltitudeDetailed(
+            static_cast<float>(alt_abs), static_cast<float>(baro_std));
+      }
     }
 
     // 每拍统一取一次估计值（trace 与指标共用）。★ 2026-11-01 踩坑：trace 分支
@@ -962,6 +1001,54 @@ int main()
                                       false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                       1, 0.2, 0.5, os, oe, 5.0, cal);
           std::printf("%d,%s,%d,%.4f,%.4f\n", cal, scenarioName(scn_e), seed,
+                      r.alt_rmse, r.out_alt_rmse);
+        }
+      }
+    }
+  }
+
+  // ★QNH 校准修正版：首次 GNSS 高度差直接初始化 + baro 延迟 2s 融合。
+  if (const char *ab = std::getenv("IMUPERF_QNH_CAL2"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== QNH cal v2: init from first GNSS + baro delay 2s (bias=5m) ==\n");
+    std::printf("cal,scenario,seed,alt_rmse,out_alt_rmse\n");
+    for (int cal = 0; cal <= 1; ++cal)
+    {
+      for (int scn = 0; scn <= 1; ++scn)
+      {
+        const Scenario scn_e = (scn == 0) ? Scenario::Static : Scenario::VibrationOutage;
+        const double os = (scn == 0) ? 100.0 : 5.0;
+        const double oe = (scn == 0) ? 101.0 : 30.0;
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], scn_e, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      1, 0.2, 0.5, os, oe, 5.0, cal, cal ? 2.0 : 0.0);
+          std::printf("%d,%s,%d,%.4f,%.4f\n", cal, scenarioName(scn_e), seed,
+                      r.alt_rmse, r.out_alt_rmse);
+        }
+      }
+    }
+  }
+
+  // ★气流尖峰：3m/0.5s 每 5s，对比无门控 vs 残差门控（|残差|>2m 跳过）。
+  if (const char *ab = std::getenv("IMUPERF_BARO_SPIKE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== baro airflow spike 3m/0.5s: no gate vs residual gate ==\n");
+    std::printf("gate,scenario,seed,alt_rmse,out_alt_rmse\n");
+    for (int gate = 0; gate <= 1; ++gate)
+    {
+      for (int scn = 0; scn <= 1; ++scn)
+      {
+        const Scenario scn_e = (scn == 0) ? Scenario::Static : Scenario::VibrationOutage;
+        const double os = (scn == 0) ? 100.0 : 5.0;
+        const double oe = (scn == 0) ? 101.0 : 30.0;
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], scn_e, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      1, 0.2, 0.5, os, oe, 0.0, 0, 0.0, 3.0, gate);
+          std::printf("%d,%s,%d,%.4f,%.4f\n", gate, scenarioName(scn_e), seed,
                       r.alt_rmse, r.out_alt_rmse);
         }
       }
