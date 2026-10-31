@@ -51,6 +51,10 @@ run_one "$ROOT/test_host/test_actuator_fault_monitor.cpp" afm ""
 run_one "$ROOT/test_host/test_static_detector.cpp"     sd  ""
 run_one "$ROOT/test_host/test_ins_prelaunch_align.cpp" pla ""
 run_one "$ROOT/test_host/test_ins_ahrs_gravity_gate.cpp" ahg ""
+# IMU 滤波参数（ICM-42688-P AAF 表/notch 公式，纯头文件无 Arduino 依赖）：
+run_one "$ROOT/test_host/test_imu_filter_math.cpp" imufilter ""
+# ICM-45686 配置默认值/WOM 阈值换算（需 fw_sil 的 Arduino SPI/Wire 桩）：
+run_one "$ROOT/test_host/test_icm45686_config.cpp" icm45686cfg "-I$ROOT/test_host/fw_sil/stub -I$ROOT/lib/ICM45686/src -I$ROOT/lib/ICM45686/src/imu"
 # 弹载减震座传递率（SIL 研究设施，纯标量公式）：
 run_one "$ROOT/test_host/test_sil_vibration_isolator.cpp" iso "-I$ROOT/test_host/fw_sil"
 run_one "$ROOT/test_host/test_imu_health_monitor.cpp"  imuhealth ""
