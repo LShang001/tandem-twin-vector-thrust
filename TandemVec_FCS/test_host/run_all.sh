@@ -361,18 +361,29 @@ else
   echo
 fi
 
-# ICM-45686 FIFO 帧解析（mock transport：C 源 + C++ 测试混编）
+# ICM-45686 FIFO/WOM/APEX（mock transport：C 源 + C++ 测试混编）
 IMU45686_INC="-I$ROOT/lib/ICM45686/src -I$ROOT/lib/ICM45686/src/imu"
+IMU45686_SRCS="inv_imu_driver inv_imu_transport inv_imu_driver_advanced inv_imu_driver_aux1 inv_imu_edmp inv_imu_edmp_compass inv_imu_edmp_wearable inv_imu_i2cm inv_imu_selftest"
 echo "---- 编译 icm45686_fifo_mock ----"
-if ! $CC -std=c11 -O2 $IMU45686_INC -c "$ROOT/lib/ICM45686/src/imu/inv_imu_driver.c" -o "$BIN_DIR/imu_driver.o" 2>&1    || ! $CC -std=c11 -O2 $IMU45686_INC -c "$ROOT/lib/ICM45686/src/imu/inv_imu_transport.c" -o "$BIN_DIR/imu_transport.o" 2>&1    || ! $CXX -std=$STD -O2 $IMU45686_INC "$ROOT/test_host/test_icm45686_fifo_mock.cpp"         "$BIN_DIR/imu_driver.o" "$BIN_DIR/imu_transport.o" -o "$BIN_DIR/fifomock$EXE_SUFFIX" 2>&1; then
-  echo "[BUILD FAIL] icm45686_fifo_mock"
-  fail=1
-else
+build_ok=1
+for f in $IMU45686_SRCS; do
+  if ! $CC -std=c11 -O2 $IMU45686_INC -c "$ROOT/lib/ICM45686/src/imu/$f.c" -o "$BIN_DIR/$f.o" 2>&1; then
+    build_ok=0
+    break
+  fi
+done
+if [ "$build_ok" -eq 1 ] && ! $CXX -std=$STD -O2 $IMU45686_INC "$ROOT/test_host/test_icm45686_fifo_mock.cpp" "$BIN_DIR"/inv_imu_*.o -o "$BIN_DIR/fifomock$EXE_SUFFIX" 2>&1; then
+  build_ok=0
+fi
+if [ "$build_ok" -eq 1 ]; then
   echo "---- 运行 icm45686_fifo_mock ----"
   if ! "$BIN_DIR/fifomock$EXE_SUFFIX"; then
     echo "[RUN FAIL] icm45686_fifo_mock"
     fail=1
   fi
+else
+  echo "[BUILD FAIL] icm45686_fifo_mock"
+  fail=1
 fi
 echo
 
