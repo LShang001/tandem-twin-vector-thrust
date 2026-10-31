@@ -896,16 +896,16 @@ int main()
   // ★长失锁 + baro：5-30s GNSS 失锁（25s），比较无 baro / baro(0.5m,25Hz)。
   if (const char *ab = std::getenv("IMUPERF_BARO_LONG"); ab != nullptr && ab[0] == '1')
   {
-    std::printf("\n== long GNSS outage 5-30s: baro off/on ==\n");
-    std::printf("baro,seed,alt_rmse,out_alt_rmse,out_vel_rmse,out_pos_rmse\n");
-    for (int baro = 0; baro <= 1; ++baro)
+    std::printf("\n== baro noise scan: long GNSS outage 5-30s ==\n");
+    std::printf("baro_std,seed,alt_rmse,out_alt_rmse,out_vel_rmse,out_pos_rmse\n");
+    for (double bstd : {0.2, 0.5, 1.0, 2.0})
     {
       for (int seed = 1; seed <= kSeedCount; ++seed)
       {
         const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
                                     seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
-                                    baro, 0.5, 0.5, 5.0, 30.0);
-        std::printf("%d,%d,%.4f,%.4f,%.4f,%.4f\n", baro, seed,
+                                    1, bstd, 0.5, 5.0, 30.0);
+        std::printf("%.1f,%d,%.4f,%.4f,%.4f,%.4f\n", bstd, seed,
                     r.alt_rmse, r.out_alt_rmse, r.out_vel_rmse, r.out_pos_rmse);
       }
     }
