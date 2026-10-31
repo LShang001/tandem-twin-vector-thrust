@@ -202,6 +202,7 @@ struct RunResult
   double alt_rmse = 0.0;
   double post_outage_rmse = 0.0;
   double max_att_jump_deg = 0.0;
+  int reanchor_suspicious = 0;
   double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
@@ -287,6 +288,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   bool baro_suspect = false;  // gate=2：baro 健康 suspect（冻结融合）
   double last_good_baro = lla0(2);
   double max_att_jump_deg_local = 0.0;  // 重锚前后姿态跳变（安全校验）
+  int reanchor_suspicious_local = 0;
   int baro_ok_streak = 0;     // 连续正常次数
   int reanchor_cnt = 0;       // 连续大新息计数
   int gnss_update_seq = 0;     // GNSS 更新序号（野值按次数注入）
@@ -428,7 +430,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           const double speed = std::hypot(vel_meas(0), vel_meas(1));
           if (std::fabs(pos_rate - speed) > 5.0 + 0.5 * speed)
           {
-            consistent = false;
+            if (reanchor_consist == 2)
+            {
+              ++reanchor_suspicious_local;  // 只标记可疑，不阻断重锚
+            }
+            else
+            {
+              consistent = false;
+            }
           }
         }
         if (std::hypot(dn_err, de_err) > reanchor_m && consistent)
@@ -734,6 +743,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   }
   r.nan_t = nan_t_local;
   r.max_att_jump_deg = max_att_jump_deg_local;
+  r.reanchor_suspicious = reanchor_suspicious_local;
   r.out_count = out_count;
   if (out_count > 0)
   {
@@ -1424,17 +1434,18 @@ int main()
   // ★连续野值/欺骗：streak=2 在连续 1/3/5 帧 100m 偏移下是否误重锚。
   if (const char *ab = std::getenv("IMUPERF_GNSS_DECEPTION"); ab != nullptr && ab[0] == '1')
   {
-    std::printf("\n== GNSS deception: consecutive 100m spikes ==\n");
-    std::printf("frames,seed,pos_rmse,alt_rmse\n");
-    for (int fr : {1, 3, 5})
+    std::printf("\n== GNSS deception: 3x100m spikes, consist mode ==\n");
+    std::printf("cons,seed,pos_rmse,alt_rmse,suspicious\n");
+    for (int cons : {0, 2})
     {
       for (int seed = 1; seed <= kSeedCount; ++seed)
       {
         const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static,
                                     seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                     0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
-                                    25.0, 2, 0, 5.0, 100.0, 15.0, fr, 1);
-        std::printf("%d,%d,%.4f,%.4f\n", fr, seed, r.pos_rmse, r.alt_rmse);
+                                    25.0, 2, 0, 5.0, 100.0, 15.0, 3, cons);
+        std::printf("%d,%d,%.4f,%.4f,%d\n", cons, seed, r.pos_rmse,
+                    r.alt_rmse, r.reanchor_suspicious);
       }
     }
   }
