@@ -198,6 +198,9 @@ struct RunResult
   int gnss_updates = 0;
   double out_pos_rmse = 0.0;
   double out_vel_rmse = 0.0;
+  double out_alt_rmse = 0.0;
+  double alt_rmse = 0.0;
+  double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
 };
@@ -214,13 +217,18 @@ constexpr double kEarthR = 6378137.0;
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
                   bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0,
-                  double hacc_gate_m = 1.0e9, int yaw_aid = 0, float q_accel = 2.0f)
+                  double hacc_gate_m = 1.0e9, int yaw_aid = 0, float q_accel = 2.0f,
+                  int baro_mode = 0, double baro_std = 0.5, double vib_amp = 0.5,
+                  double outage_start = 10.0, double outage_end = 20.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
                       static_cast<uint64_t>(gnss.rate_hz * 100.0) +
                       static_cast<uint64_t>(sc));
   std::normal_distribution<double> n01(0.0, 1.0);
+  // baro 噪声用独立随机源：避免开/关 baro 改变 GNSS 噪声序列，保证 A/B 公平。
+  std::mt19937_64 baro_rng(static_cast<uint64_t>(seed) * 131ULL + 977ULL);
+  std::normal_distribution<double> baro_n01(0.0, 1.0);
 
   Eigen::Vector3d accel_bias(imu.accel_bias_1sigma * n01(rng),
                              imu.accel_bias_1sigma * n01(rng),
@@ -260,7 +268,9 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   const double latency_s = gnss.latency_ms / 1000.0;
 
   double sum_roll2 = 0.0, sum_pitch2 = 0.0, sum_vel2 = 0.0, sum_pos2 = 0.0;
-  double sum_out_pos2 = 0.0, sum_out_vel2 = 0.0;
+  double sum_out_pos2 = 0.0, sum_out_vel2 = 0.0, sum_out_alt2 = 0.0;
+  double sum_alt2 = 0.0;
+  double nan_t_local = -1.0;
   int out_count = 0;
   int count = 0, gnss_updates = 0;
   const int start_eval = static_cast<int>(0.10 * nav_steps);
@@ -291,7 +301,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       if (sc == Scenario::Vibration || sc == Scenario::VibrationOutage)
       {
         // 80Hz、0.5g 机体 z 轴振动（电机/桨叶高频激励），验证 LPF 对振动泄漏的抑制。
-        accel_meas(2) += 0.5 * kGravity * std::sin(2.0 * kPi * vib_hz * ti);
+        accel_meas(2) += vib_amp * kGravity * std::sin(2.0 * kPi * vib_hz * ti);
       }
       accel_meas = Eigen::Vector3d(accel_lpf[0].update(accel_meas).x(),
                                    accel_lpf[1].update(accel_meas).y(),
@@ -323,7 +333,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
 
     // GNSS：按刷新率注入，测量对应 t−latency 的真值（体现定位延迟）。
     if ((k % gnss_div) == 0 &&
-        !(sc == Scenario::VibrationOutage && t >= 10.0 && t < 20.0))
+        !(sc == Scenario::VibrationOutage && t >= outage_start && t < outage_end))
     {
       const double tm = std::fmax(0.0, t - latency_s);
       const Truth trm = truthAt(tm, sc);
@@ -374,6 +384,15 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       ++gnss_updates;
     }
 
+    // 气压计：25Hz 绝对高度观测（与固件 DPS310 节拍一致），仅用于高度通道。
+    if (baro_mode != 0 && (k % 8) == 0)
+    {
+      const double alt_abs = lla0(2) - truthAt(t, sc).pos_ned(2) +
+                             baro_std * baro_n01(baro_rng);
+      (void)ekf.MeasurementUpdateBaroAltitudeDetailed(
+          static_cast<float>(alt_abs), static_cast<float>(baro_std));
+    }
+
     // 每拍统一取一次估计值（trace 与指标共用）。★ 2026-11-01 踩坑：trace 分支
     // 里额外调用 roll_rad()/lat_rad() 等 getter 会让同一 seed 的结果发散（同二
     // 进制、仅环境变量不同），说明重复读取触发了状态相关路径；改为每拍只取一次。
@@ -383,6 +402,11 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
     const double est_n = (ekf.lat_rad() - lla0(0)) * kEarthR;
     const double est_e = (ekf.lon_rad() - lla0(1)) * kEarthR * std::cos(lla0(0));
     const double est_d = -(ekf.alt_m() - lla0(2));
+    if (!std::isfinite(est_d) || !std::isfinite(est_roll))
+    {
+      nan_t_local = t;
+      break;
+    }
 
     if (trace_buf != nullptr && (k % 20) == 0)
     {
@@ -413,10 +437,13 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       const Eigen::Vector3d pos_err(est_n - tr.pos_ned(0), est_e - tr.pos_ned(1),
                                     est_d - tr.pos_ned(2));
       sum_pos2 += pos_err.squaredNorm();
-      if (sc == Scenario::VibrationOutage && t >= 10.0 && t < 20.0)
+      sum_alt2 += (est_d - tr.pos_ned(2)) * (est_d - tr.pos_ned(2));
+      if (sc == Scenario::VibrationOutage && t >= outage_start && t < outage_end)
       {
         sum_out_pos2 += pos_err.squaredNorm();
         sum_out_vel2 += (est_vel.cast<double>() - tr.vel_ned).squaredNorm();
+        const double alt_err = est_d - tr.pos_ned(2);
+        sum_out_alt2 += alt_err * alt_err;
         out_count++;
       }
       count++;
@@ -434,11 +461,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   r.pitch_rmse_deg = std::sqrt(sum_pitch2 / count) * kRad2Deg;
   r.vel_rmse = std::sqrt(sum_vel2 / count);
   r.pos_rmse = std::sqrt(sum_pos2 / count);
+  r.alt_rmse = std::sqrt(sum_alt2 / count);
+  r.nan_t = nan_t_local;
   r.out_count = out_count;
   if (out_count > 0)
   {
     r.out_pos_rmse = std::sqrt(sum_out_pos2 / out_count);
     r.out_vel_rmse = std::sqrt(sum_out_vel2 / out_count);
+    r.out_alt_rmse = std::sqrt(sum_out_alt2 / out_count);
   }
   const Truth tr_end = truthAt((nav_steps - 1) * kNavDt, sc);
   r.yaw_drift_deg = wrapPi(ekf.yaw_rad() - tr_end.yaw) * kRad2Deg;
@@ -825,6 +855,58 @@ int main()
           std::printf("%.1f,%s,%d,%.3f,%.4f\n", q, scenarioName(scenarios[sc]), seed,
                       0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
         }
+      }
+    }
+  }
+
+  // ★气压计辅助：GNSS 10-20s 失锁窗口，比较无 baro / baro(0.5m,25Hz) 的高度与位置。
+  if (const char *ab = std::getenv("IMUPERF_BARO_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== baro aiding during GNSS outage (VibrationOutage) ==\n");
+    std::printf("baro,seed,out_pos_rmse,out_vel_rmse,out_alt_rmse\n");
+    for (int baro = 0; baro <= 1; ++baro)
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f, baro);
+        std::printf("%d,%d,%.4f,%.4f,%.4f\n", baro, seed,
+                    r.out_pos_rmse, r.out_vel_rmse, r.out_alt_rmse);
+      }
+    }
+  }
+
+  // ★baro NaN 定位：baro=1 下振动 0 / 0.5g × 失锁场景，输出 NaN 发生时刻。
+  if (const char *ab = std::getenv("IMUPERF_BARO_NAN"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== baro NaN isolation (baro=1, VibrationOutage) ==\n");
+    std::printf("vib_amp,seed,alt_rmse,nan_t\n");
+    for (double amp : {0.0, 0.5})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    1, 0.5, amp);
+        std::printf("%.1f,%d,%.4f,%.2f\n", amp, seed, r.alt_rmse, r.nan_t);
+      }
+    }
+  }
+
+  // ★长失锁 + baro：5-30s GNSS 失锁（25s），比较无 baro / baro(0.5m,25Hz)。
+  if (const char *ab = std::getenv("IMUPERF_BARO_LONG"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== long GNSS outage 5-30s: baro off/on ==\n");
+    std::printf("baro,seed,alt_rmse,out_alt_rmse,out_vel_rmse,out_pos_rmse\n");
+    for (int baro = 0; baro <= 1; ++baro)
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    baro, 0.5, 0.5, 5.0, 30.0);
+        std::printf("%d,%d,%.4f,%.4f,%.4f,%.4f\n", baro, seed,
+                    r.alt_rmse, r.out_alt_rmse, r.out_vel_rmse, r.out_pos_rmse);
       }
     }
   }
