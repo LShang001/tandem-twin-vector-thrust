@@ -435,15 +435,16 @@ namespace bfs
         // 接收机 HP 速率低于 PVT 时（F9P 常见），旧实现会一直用陈旧 HP。
         use_hp_pos_ = hp_pos_ready_ &&
                       (hp_pos_tow_ == ubx_nav_pvt_.payload.i_tow);
-        // EOE 帧刚组完，记录本历元的接收时刻（Pump 开始时刻可能早数 ms）。
-        eoe_receive_time_us_ = micros();
-        ProcessNavData();               // 把各 NAV 缓存换算成物理量
-        // PVT 与 EOE 的 iTOW 必须相等，否则说明发生了混帧（当前 PVT 不属于这个 EOE）。
+        // PVT 与 EOE 的 iTOW 必须相等；不匹配说明混帧，必须在 ProcessNavData
+        // 之前拒绝，否则 getter/遥测已被不属于本历元的 PVT 污染。
         if (ubx_nav_pvt_.payload.i_tow != ubx_nav_eoe_.payload.i_tow)
         {
           tow_mismatch_count_++;
           return false;
         }
+        // EOE 帧刚组完，记录本历元的接收时刻（Pump 开始时刻可能早数 ms）。
+        eoe_receive_time_us_ = micros();
+        ProcessNavData();               // 把各 NAV 缓存换算成物理量
         if (queue_output)
         {
           PushEpoch(MakeEpoch());  // Pump 路径：完整历元入队
@@ -695,6 +696,7 @@ namespace bfs
         static_cast<uint32_t>(gga.time.microseconds) / 1000U;
 
     nmea_snapshot_valid_ = true;
+    nmea_snapshot_pos_tow_ms_ = nmea_snapshot_tow_ms_;  // 位置新鲜度基准
     nmea_fix_count_++;
     nmea_last_fix_ms_ = millis();
   }
@@ -803,6 +805,13 @@ namespace bfs
     if (nmea_snapshot_tow_ms_ / 1000U == nmea_last_fused_tow_ms_ / 1000U)
     {
       return false;  // 同秒去重：无新句重复合成同一快照 / 同秒双句只合成一次
+    }
+    // 位置新鲜度：GGA 停发后 RMC 只更新时间，禁止用旧位置配新 tow 反复合成。
+    if (nmea_snapshot_pos_tow_ms_ != 0U &&
+        (nmea_snapshot_tow_ms_ - nmea_snapshot_pos_tow_ms_) > 2000U)
+    {
+      nmea_pos_stale_count_++;
+      return false;
     }
     if (nmea_epoch_seen_ &&
         (micros() - nmea_last_epoch_us_) < kNmeaEpochMinIntervalUs)
@@ -1004,12 +1013,15 @@ namespace bfs
     ned_vel_mps_[2] = static_cast<float>(ubx_nav_pvt_.payload.vel_d) / 1000.0f;
     s_acc_mps_ = static_cast<float>(ubx_nav_pvt_.payload.s_acc) / 1000.0f;
     /* ECEF 速度：NAV-VELECEF 原始 cm/s → m/s。 */
+    if (ubx_nav_vel_ecef_.payload.i_tow == pvt_tow_this)
+    {
     ecef_vel_mps_[0] = static_cast<float>(ubx_nav_vel_ecef_.payload.ecef_v_x) /
                        100.0f;
     ecef_vel_mps_[1] = static_cast<float>(ubx_nav_vel_ecef_.payload.ecef_v_y) /
                        100.0f;
     ecef_vel_mps_[2] = static_cast<float>(ubx_nav_vel_ecef_.payload.ecef_v_z) /
                        100.0f;
+    }
     /* 地速与运动航向：g_speed mm/s → m/s；head_mot / head_acc scale 1e-5 → 度。 */
     gnd_spd_mps_ = static_cast<float>(ubx_nav_pvt_.payload.g_speed) / 1000.0f;
     track_deg_ = static_cast<float>(ubx_nav_pvt_.payload.head_mot) / 100000.0f;
@@ -1082,7 +1094,7 @@ namespace bfs
         p_acc_m_ = static_cast<float>(ubx_nav_hp_pos_ecef_.payload.p_acc) /
                    10000.0f;
       }
-      else
+      else if (ubx_nav_pos_ecef_.payload.i_tow == pvt_tow_this)
       {
         // 标准精度：POSECEF 主分量 cm → m，p_acc cm → m。
         ecef_m_[0] = static_cast<double>(ubx_nav_pos_ecef_.payload.ecef_x) * 1e-2;
@@ -1140,7 +1152,7 @@ namespace bfs
       }
     }
     /* Survey-in：仅在收到过 NAV-SVIN 后处理，换算平均 ECEF 坐标与状态。 */
-    if (svin_data_)
+    if (svin_data_ && ubx_nav_svin_.payload.i_tow == pvt_tow_this)
     {
       svin_dur_s_ = ubx_nav_svin_.payload.dur;
       // 平均 ECEF：(cm主分量 + 0.1mm补偿) → m。

@@ -610,6 +610,24 @@ int main()
           "单星座 GSA PDOP 从 1.5 更新到 2.5");
   }
 
+  // ================= 用例 23：RMC-only 旧位置不合成（P0-3） =================
+  printf("== 用例23 RMC-only 旧位置不合成 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kNmea);
+  ubx.Reset();
+  {
+    char sent[160];
+    makeNmea("GPGGA,100000.000,3100.0000,N,12100.0000,E,1,08,1.0,10.0,M,0.0,M,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep), "GGA 建快照并合成 epoch");
+    advance_ms(3000);
+    makeNmea("GPRMC,100003.000,A,3150.0000,N,12100.0000,E,0.0,0.0,200806,,,A",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    CHECK(!ubx.PopEpoch(&ep), "GGA 停发 3s 后 RMC-only 不合成旧位置");
+  }
+
   printf("\n%s (失败 %d)\n", g_fail == 0 ? "全部通过" : "存在失败", g_fail);
   return g_fail;
 }

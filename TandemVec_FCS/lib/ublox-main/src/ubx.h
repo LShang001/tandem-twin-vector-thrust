@@ -397,12 +397,14 @@ namespace bfs
     float nmea_snapshot_alt_msl_m_ = 0.0f;
     float nmea_snapshot_vel_n_mps_ = 0.0f;
     float nmea_snapshot_vel_e_mps_ = 0.0f;
-    uint32_t nmea_snapshot_tow_ms_ = 0;                  // UTC 时间-of-day 伪 tow（毫秒）
+    uint32_t nmea_snapshot_tow_ms_ = 0;
+    uint32_t nmea_snapshot_pos_tow_ms_ = 0;  // 最近 GGA 位置时刻（新鲜度基准）                  // UTC 时间-of-day 伪 tow（毫秒）
     uint32_t nmea_last_fused_tow_ms_ = 0;                // 已合成消费的伪 tow（本地去重）
     uint32_t nmea_last_fix_ms_ = 0;                      // 最近有效 fix 的 MCU 时间【ms】
     uint32_t nmea_sentence_count_ = 0;                   // 完整句子数（含无效）
     uint32_t nmea_bad_checksum_count_ = 0;               // 校验失败句子数
-    uint32_t nmea_overflow_count_ = 0;                   // 超长残句丢弃数
+    uint32_t nmea_overflow_count_ = 0;
+    uint32_t nmea_pos_stale_count_ = 0;  // 位置过期拒绝合成次数                   // 超长残句丢弃数
     uint32_t nmea_gga_count_ = 0;                        // GGA 句数（校验通过）
     uint32_t nmea_rmc_count_ = 0;                        // RMC 句数
     uint32_t nmea_gsa_count_ = 0;                        // GSA 句数
