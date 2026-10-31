@@ -411,6 +411,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         // 一致性门控：用“GNSS 位置变化率 vs GNSS 速度”识别位置跳变欺骗。
         // 失锁恢复时上一帧 GNSS 已陈旧（>0.5s）→ 跳过该门控，不阻碍真实恢复。
         bool consistent = true;
+        if (std::getenv("IMUPERF_TRACE_REANCHOR") != nullptr)
+        {
+          const double speed_dbg = std::hypot(vel_meas(0), vel_meas(1));
+          const double dpos_dbg = std::hypot(meas_n - last_gnss_n,
+                                             meas_e - last_gnss_e);
+          std::printf("RCHK,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f\n", t, last_gnss_t,
+                      t - last_gnss_t, speed_dbg, dpos_dbg, reanchor_consist);
+        }
         if (reanchor_consist != 0 && last_gnss_t >= 0.0 &&
             (t - last_gnss_t) > 0.0 && (t - last_gnss_t) < 0.5)
         {
