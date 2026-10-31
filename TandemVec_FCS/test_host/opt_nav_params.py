@@ -56,8 +56,10 @@ def main():
     bounds = [[50.0, 25.0, 2.0], [400.0, 400.0, 12.0]]
     es = cma.CMAEvolutionStrategy(
         x0,
-        sigma0,
+        1.0,
         {
+            # cma 4.x 要求 sigma0 为标量；各维尺度用 CMA_stds 表达。
+            "CMA_stds": sigma0,
             "bounds": bounds,
             "popsize": 8,
             "maxfevals": 200,

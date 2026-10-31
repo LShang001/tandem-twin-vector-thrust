@@ -214,7 +214,7 @@ constexpr double kEarthR = 6378137.0;
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
                   bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0,
-                  double hacc_gate_m = 1.0e9)
+                  double hacc_gate_m = 1.0e9, int yaw_aid = 0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -362,6 +362,13 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         ekf.gnss_vel_ne_std_mps(v_std);
         ekf.gnss_vel_d_std_mps(static_cast<float>(v_std * 1.5));
         ekf.MeasurementUpdate(vel_meas.cast<float>(), lla_meas, kNavDt);
+      }
+      // ★GNSS 航迹角辅助：速度足够大时用 course 观测 yaw（无磁航向漂移的工程解）。
+      if (yaw_aid != 0 && vel_meas.head<2>().norm() >= 1.0)
+      {
+        const float course_rad = static_cast<float>(
+            std::atan2(vel_meas(1), vel_meas(0)));
+        (void)ekf.MeasurementUpdateYaw(course_rad, 0.15f);
       }
       ++gnss_updates;
     }
@@ -781,6 +788,24 @@ int main()
               2.0 * rs.pos_rmse + 2.0 * rm.pos_rmse;
     }
     std::printf("OPT_RESULT,%.6f\n", cost / 2.0);
+  }
+
+  // ★GNSS 航迹角辅助 yaw：cruise（1m/s）下对比无辅助/有辅助的 yaw 漂移与姿态。
+  if (const char *ab = std::getenv("IMUPERF_YAW_AID"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS course yaw aiding (cruise, M8N_10Hz) ==\n");
+    std::printf("aid,seed,att_rmse_deg,pos_rmse_m,yaw_drift_deg\n");
+    for (int aid = 0; aid <= 1; ++aid)
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Cruise,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, aid);
+        std::printf("%d,%d,%.3f,%.4f,%+.2f\n", aid, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse,
+                    r.yaw_drift_deg);
+      }
+    }
   }
 
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
