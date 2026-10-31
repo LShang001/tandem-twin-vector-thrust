@@ -615,3 +615,46 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
   **不是控制性能提升**；详见 `docs/04-数学建模/MOD-005-共轴双桨VTVL动力学模型.md` §8。
 - **积分器**：`Plant::step` 与 `coaxial_dynamics_model.h` 的 `step()` 均为经典 RK4
   （四 stage、`h/6` 加权、四元数每子步归一），不再使用欧拉积分；宿主刚体测试同步。
+
+## 12 断链失控保护矩阵（2026-10-31，L2）
+
+> 目的：把 2026-10-31 审计的 P1-2/P1-3 修复放到**真实导航闭环**里验证，而不是
+> 只看轻量垂向 plant。被测路径是真实 `runGNCExecutive()` + 真实
+> `linkDownCallback()`（经 `include/FailsafeLinkLossPlan.h` 与固件共用判据）。
+
+```bash
+cd TandemVec_FCS
+BIN_DIR=/c/Users/12631/AppData/Local/Temp/tv_fcs_sil \
+  bash test_host/fw_sil/run_failsafe_matrix.sh          # alt 10/20/30 × seed 1/2/3 × 3 场景
+```
+
+场景：
+
+| 场景 | 注入 | 判据 |
+|---|---|---|
+| `loss` | `--rc-loss 45:52`，无风、GNSS 正常 | `max_desc_vz_down < 0.6`、`final_alt > 0.85·alt`、不触地、`gnss_crej=0` |
+| `relink` | `--rc-loss 45:48`（3 s 后复链） | 同上，验证复链不引起掉高 |
+| `combo` | 断链 20–27 s 与侧风 20–25 s、GNSS 失联 20–25 s 叠加 | `max_desc_vz_down < 0.7`、`final_alt > 0.8·alt`、不触地 |
+
+修复后基线（27/27 PASS）：`loss`/`relink` 在 10/20/30 m 下 `max_desc_vz_down=0.24–0.36`、
+`final_alt=8.7/18.7/28.7 m`、`land_t=-1`；`combo` 三个 seed 为 9.10/9.19/9.14 m、
+`max_desc_vz=0.56–0.62`、`land_t=-1`。修复前同命令（git `dfdcb97` 的
+`flight_control.cpp` + 旧 `fw_sil_stubs.cpp`）为 `max_desc_vz=1.477`、
+10 m 目标最终 **1.61 m**，`combo` 下 **t=26.8 s 触地（final_alt=0.03 m）**。
+
+修复前对照的复现方式（把两个文件替换为 `dfdcb97` 版本，其余源文件与编译清单同
+`build_and_run_real.sh`）：
+
+```bash
+git show dfdcb97:TandemVec_FCS/src/flight_control.cpp  > /tmp/legacy_flight_control.cpp
+git show dfdcb97:TandemVec_FCS/test_host/fw_sil/fw_sil_stubs.cpp > /tmp/legacy_stubs.cpp
+# 本轮实测（10 m/seed1）：final_alt=1.61 m、max_desc_vz=1.477 m/s；
+# combo：final_alt=0.03 m、land_t=26.8 s。
+```
+
+★ **本轮同时修掉一个测试设施陷阱**：`fw_sil_stubs.cpp` 里的 `linkDownCallback`
+此前是手抄的旧判据副本，而真实 `communication.cpp` 不参与 SIL 链接 ——
+所以"真实导航 SIL"测的是桩，P1-2/P1-3 的修复在该 SIL 里不可见（表现为
+断链后仍以 1.15 m/s 下降）。现在桩直接调用 `FailsafeLinkLossPlan.h`，
+`test_host/test_failsafe_plan.cpp` T4 增加源码守卫（两边都必须引用共享判据、
+不得残留 `raw_rc_values[2] > 1100`），防止再次漂移。

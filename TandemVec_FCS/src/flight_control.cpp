@@ -1293,11 +1293,11 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
     handlePositionControl(inputs.roll_raw, inputs.pitch_raw);
 #ifdef FW_SIL_REAL_NAV
     // SIL 前飞段测试：切入 AUTO_POSITION 后一次性叠加目标偏移（固件默认 0）。
-    if (!s_sil_leg_applied)
+    if (!s_sil_pos_leg_applied)
     {
       targetNorth += g_sil_pos_leg_n_m;
       targetEast += g_sil_pos_leg_e_m;
-      s_sil_leg_applied = true;
+      s_sil_pos_leg_applied = true;
     }
 #endif
     // `handlePositionControl` 更新全局的 thrust_comp_N/E

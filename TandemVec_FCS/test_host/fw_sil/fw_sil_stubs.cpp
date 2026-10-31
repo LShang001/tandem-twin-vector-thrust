@@ -17,6 +17,7 @@
  */
 #include "state_data.h"
 #include "flight_control.h"
+#include "FailsafeLinkLossPlan.h"  // 断链判据与固件共用同一份实现（勿在本文件重写）
 #include <cstdio>
 #include <ctime>
 
@@ -36,10 +37,12 @@ void setNavigationOriginFromLlaRad(double, double, double) {}
 #endif
 void resetBaroAltitudeReference() {}
 
-// SIL 不链接 communication.cpp（其遥测/CRSF 依赖过重），这里按真实
-// linkUp/linkDown 策略提供行为替身：飞行中断链保持解锁、摇杆归中、
-// 模式落 AUTO_ALTITUDE；地面断链全部回锁定值。策略变更时必须同步
-// src/communication.cpp:linkDownCallback()。
+// SIL 不链接 communication.cpp（其遥测/CRSF 依赖过重），这里提供链接替身。
+// ★2026-10-31：断链/复链判据改为直接调用固件同一份实现
+//   `include/FailsafeLinkLossPlan.h`（`communication.cpp::linkDownCallback` 也调用它）。
+//   此前这里手抄旧判据（CH5>1500 && CH3>1100、CH3 落 988），与固件不同源 ——
+//   真实导航 SIL 实际测到的是桩而不是固件行为，P1-2/P1-3 的修复在该 SIL 中不可见。
+//   现在两边共用同一纯函数，编译器保证不会再次漂移。
 void linkUpCallback()
 {
   isLinkUp = true;
@@ -49,19 +52,17 @@ void linkUpCallback()
 void linkDownCallback()
 {
   isLinkUp = false;
-  const bool was_in_flight =
-      (raw_rc_values[4] > 1500) && (raw_rc_values[2] > 1100);
-  failsafe_in_flight = was_in_flight;
-  for (int i = 0; i < 9; ++i)
+
+  bfs::failsafe::Inputs in;
+  in.arm_us = raw_rc_values[bfs::failsafe::kChArm];
+  in.throttle_us = raw_rc_values[bfs::failsafe::kChThrottle];
+  in.estimated_height_m = estimated_height;
+
+  const bfs::failsafe::Plan plan = bfs::failsafe::makeLinkLossPlan(in);
+  failsafe_in_flight = plan.in_flight;
+  for (int i = 0; i < RC_INPUT_MAX_CHANNELS; ++i)
   {
-    if (i == 0 || i == 1 || i == 3)
-      raw_rc_values[i] = 1500;
-    else if (i == 4)
-      raw_rc_values[i] = was_in_flight ? 1500 : 988;
-    else if (i == 6)
-      raw_rc_values[i] = was_in_flight ? 1500 : 988;
-    else
-      raw_rc_values[i] = 988;
+    raw_rc_values[i] = plan.channels[i];
   }
 }
 void mavlinkSendStatustext(unsigned char, const char*) {}

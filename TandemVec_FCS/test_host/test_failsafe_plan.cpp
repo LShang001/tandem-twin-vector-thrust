@@ -18,7 +18,11 @@
  * @test    T1 真值表穷举；T2 通道不变量；T3 旧判据差异点；T4 通道越界防护
  * @see     include/FailsafeLinkLossPlan.h、src/communication.cpp::linkDownCallback
  */
+#include <cmath>
 #include <cstdio>
+#include <fstream>
+#include <iterator>
+#include <string>
 
 #include "FailsafeLinkLossPlan.h"
 
@@ -162,12 +166,46 @@ static void testLegacyDifference()
         "未解锁时即使油门高/高度大也必须判为地面");
 }
 
+// T4：固件回调与 SIL 桩必须调用同一份判据（防止再次手抄旧逻辑）。
+// 背景：2026-10-31 发现 `fw_sil_stubs.cpp` 手抄了旧判据并与固件漂移，
+// 真实导航 SIL 实际测的是桩；本检查锁住“两边都引用共享头”。
+static std::string readText(const char *rel)
+{
+  std::string f = __FILE__;
+  const std::string::size_type slash = f.find_last_of("/\\");
+  const std::string dir = (slash == std::string::npos) ? std::string(".") : f.substr(0, slash);
+  std::ifstream in(dir + "/../" + rel);
+  if (!in.good()) return std::string();
+  return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+}
+
+static void testSharedImplementation()
+{
+  const std::string comm = readText("src/communication.cpp");
+  const std::string stubs = readText("test_host/fw_sil/fw_sil_stubs.cpp");
+  CHECK(!comm.empty(), "能读取 src/communication.cpp");
+  CHECK(!stubs.empty(), "能读取 test_host/fw_sil/fw_sil_stubs.cpp");
+  if (comm.empty() || stubs.empty()) return;
+
+  CHECK(comm.find("computeLinkLossPlan") != std::string::npos,
+        "communication.cpp 必须调用共享断链判据 computeLinkLossPlan");
+  CHECK(stubs.find("makeLinkLossPlan") != std::string::npos ||
+            stubs.find("computeLinkLossPlan") != std::string::npos,
+        "SIL 桩必须调用共享断链判据（不得手抄旧逻辑）");
+  CHECK(comm.find("raw_rc_values[2] > 1100") == std::string::npos,
+        "communication.cpp 不得残留旧判据 raw_rc_values[2] > 1100");
+  CHECK(stubs.find("raw_rc_values[2] > 1100") == std::string::npos,
+        "SIL 桩不得残留旧判据 raw_rc_values[2] > 1100");
+  std::printf("T4 固件/SIL 桩共用判据：完成\n");
+}
+
 int main()
 {
   std::printf("== 断链通道合成回归（FailsafeLinkLossPlan.h）==\n");
   testTruthTable();
   testChannelInvariants();
   testLegacyDifference();
+  testSharedImplementation();
 
   if (g_fail == 0)
   {
