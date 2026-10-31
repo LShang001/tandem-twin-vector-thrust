@@ -45,7 +45,7 @@
 | `include/StatusLED.h` | 110 | 有（新） | 2 | 1 | 非阻塞闪烁 |
 | `include/Ws2812AppStatus.h` | 223 | 有（新） | 3 | 1 | 只渲染不判定；上电无信号 vs 断链 |
 | `include/MedianFilter.h` | 238 | 有（新） | 9 | 1 | 窗口奇偶/未填满语义/开销 |
-| `include/DETA100_module.h` | 526 | 有（补） | 12 | 1 | 双 CRC、帧定界靠长度；删除 4B 旧 `parseTimestamp` 注释代码 |
+| `include/DETA100_module.h` | 526 | 有（补） | 12 | 1 | 双 CRC、帧定界靠长度；删除 4B 旧 `parseTimestamp` 注释代码。★2026-10-31 复核：CRC16 比较曾被注释（见 §3 P0-1），已恢复并加拒帧计数 |
 | `analyze_ano.py` | 349 | 有（新） | 1 | 1 | 协议标签补全；4 个公共函数补 docstring；50Hz→100Hz 说明 |
 | `analyze_ano.js` | 184 | 有（新） | 1 | 1 | 同上（JS 头注释） |
 
@@ -150,9 +150,11 @@
 
 | 严重度 | 位置（符号） | 问题 | 影响 | 建议 |
 |--------|--------------|------|------|------|
+| **P0-1** | `include/DETA100_module.h` CRC16 分支 | **★2026-10-31 审计新发现**：CRC16 只算不比较（`// ok = false;` 被注释），任何长度正确的帧都被接受；而本表 §1 覆盖行与文件头注释都记为“双 CRC 已核实正常”——文档与实现相反 | 接 DETA100 模块时链路误码直接进导航/控制（home 点、姿态），最坏错误原点 | **已修复（2026-10-31）**：恢复 `ok = false;`、坏帧整帧丢弃并累加 `deta100_crc16_reject_count`；新增 `test_host/test_deta100_crc_guard.cpp` 源码守卫（运行时由 DETA100 联调覆盖） |
 | P1-1 | `handleDebugConsole` 的 `wsseq` 分支 | 参数解析语句被一次历史编辑并入了注释行（物理行内含字面 `\n`），`ms` 恒 500，`wsseq <ms>` 无效；整行还触发 R05 超长 | 仅 DBG 灯效诊断：4×500ms=2s 阻塞，逼近 IWDG 3.0s 窗口；不影响飞行 | 已在注释中登记现状；**未修**（本次红线：只改注释）。修复方式：把被并入的 `sscanf`+`constrain` 拆回语句（原表达式见 git 历史），并入 fw-infra 后续修复任务 |
 | P1-2 | `TandemVec_FCS/tools/test_mavlink_bridge.py`（来源：gcs 区域交叉核对） | `BAUD = 2000000` 与固件 921600 不一致（脚本自己 docstring 已注明需同步）；参数条数阈值写死 121，实际 128 | 联调会全乱码；参数收全判据误报 | **本区域不改**（属 gcs/tools）；建议改为从 `state_data.h` 读取宏或 128，并把 BAUD 默认改 921600 |
 | P1-3 | `GCS/server/params.py::build_meta`（来源：gcs 区域交叉核对） | `FIELD_META` 新增 `rc_*` 后，`build_meta` 仍按 PID 环展开 `out_*.rc_rate` 一类永不命中的 36 条元数据 | 前端“其他”组可能出现伪参数；不影响真参数读写 | **本区域不改**（GCS 侧已登记 P1） |
+| P1-4 | `src/mavlink_bridge.cpp` 的 `MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN` | **★2026-10-31 审计新发现**：同 switch 的 ARM / SET_MODE 都按“地面站远程控制是红线”安全拒绝，唯独 246 重启命令未查 `g_is_unlocked` | 飞行中一条 GCS/脚本命令即可软复位飞控 → 电机停转、飞机坠落 | **已修复（2026-10-31）**：`g_is_unlocked \|\| failsafe_in_flight` 时回 `MAV_RESULT_DENIED` + STATUSTEXT，未解锁才允许重启 |
 | P2-1 | `sendTargetAttitude`（0x0A 第 3 字段） | 承载目标航向**角速率**，官方手册为目标航向角 | 用官方上位机看“目标航向”会把 deg/s 当角度显示 | GCS 解码已同口径并注释；建议在 PROTOCOL-001 差异表补一行（文档侧，非代码） |
 | P2-2 | COMM-001 §3 频率表 | 把 0x0A 目标姿态列入 25Hz 组，实现（含 AGENTS.md 踩坑记录）为快环 100Hz | 读者按文档核对会误判不一致 | 以 AGENTS.md + 代码为准；建议 COMM-001 表加脚注 |
 | P2-3 | `analyze_ano.py` `--dt` 默认 0.02 | 注释/默认值仍按 50Hz；0x03 自 2026-08-10 起为 100Hz | 用它算 yaw 漂移率会低估一半 | 已在 docstring 与 docstring `@note` 标明；默认值属脚本行为，未改（待 owner 定） |
