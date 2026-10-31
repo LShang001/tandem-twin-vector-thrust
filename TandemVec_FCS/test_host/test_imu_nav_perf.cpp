@@ -282,6 +282,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   bool qnh_inited = false;
   int baro_gate_rej = 0; // 连续被残差门控拒绝次数（防锁死）
   bool baro_suspect = false;  // gate=2：baro 健康 suspect（冻结融合）
+  double last_good_baro = lla0(2);  // gate=3：最近一次通过门控的 baro 观测
   int baro_ok_streak = 0;     // 连续正常次数
   int reanchor_cnt = 0;       // 连续大新息计数
   double last_re_dn = 0.0, last_re_de = 0.0;
@@ -477,11 +478,31 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       {
         spike = ((static_cast<int>(t / 5.0) & 1) == 0) ? baro_spike_m : -baro_spike_m;
       }
-      const double alt_abs = lla0(2) - truthAt(t, sc).pos_ned(2) + baro_bias +
+      double alt_abs = lla0(2) - truthAt(t, sc).pos_ned(2) + baro_bias +
                              baro_std * baro_n01(baro_rng) + spike -
                              ((baro_qnh_cal != 0) ? qnh_est : 0.0);
       bool fuse = true;
-      if (baro_gate != 0 &&
+      // gate=3：维护最近一次“正常”观测；尖峰期间强制接受时用最后正常值，
+      // 避免把 3m 尖峰本身灌进 EKF。
+      if (baro_gate == 3 &&
+          std::fabs(alt_abs - static_cast<double>(ekf.alt_m())) <= 2.0)
+      {
+        last_good_baro = alt_abs;
+      }
+      if (baro_gate == 3 &&
+          std::fabs(alt_abs - static_cast<double>(ekf.alt_m())) > 2.0)
+      {
+        if (++baro_gate_rej >= 25)
+        {
+          baro_gate_rej = 0;
+          alt_abs = last_good_baro;  // 用最后正常值代替尖峰
+        }
+        else
+        {
+          fuse = false;
+        }
+      }
+      else if (baro_gate != 0 &&
           std::fabs(alt_abs - static_cast<double>(ekf.alt_m())) > 2.0)
       {
         // 残差门控：尖峰/异常时跳过；连续 25 次（1 s）强制接受一次，
@@ -1198,7 +1219,7 @@ int main()
   {
     std::printf("\n== baro gate 0/1/2, airflow spike 3m/0.5s ==\n");
     std::printf("gate,scenario,seed,alt_rmse,out_alt_rmse\n");
-    for (int gate = 0; gate <= 2; ++gate)
+    for (int gate : {0, 1, 3})
     {
       for (int scn = 0; scn <= 1; ++scn)
       {
