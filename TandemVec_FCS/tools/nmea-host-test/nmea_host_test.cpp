@@ -490,6 +490,126 @@ int main()
   feedNmea(ubx, serial, sent);   // 正常速度恢复
   CHECK(fabs(ubx.nmea_vel_e_mps() - 5.0f * 0.514444f) < 1e-3f, "正常速度恢复刷新");
 
+  // ================= 用例 19：UBX 重同步（B5 B5 62） =================
+  printf("== 用例19 UBX 重同步 B5 B5 62 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kUbx);
+  ubx.Reset();
+  {
+    uint8_t frames[256];
+    size_t flen = 0;
+    makeUbxEpochFrames(frames, sizeof(frames), &flen);
+    const uint8_t stray = 0xB5;
+    serial.clear();
+    serial.feed(&stray, 1);
+    serial.feed(frames, flen);
+    ubx.Pump(0, g_sim_micros);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep) && ep.pvt_tow_ms == 100000U,
+          "B5 B5 62 重同步后正常入队");
+  }
+
+  // ================= 用例 20：坏 CRC 后的帧头可重同步 =================
+  printf("== 用例20 坏 CRC 后重同步 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kUbx);
+  ubx.Reset();
+  {
+    uint8_t bad[64];
+    uint8_t payload[4] = {1, 2, 3, 4};
+    makeUbxFrame(0x01, 0x99, payload, 4, bad);
+    bad[6 + 4 + 1] = 0xB5;
+    uint8_t frames[256];
+    size_t flen = 0;
+    makeUbxEpochFrames(frames, sizeof(frames), &flen);
+    serial.clear();
+    serial.feed(bad, 6 + 4 + 2);
+    serial.feed(frames, flen);
+    ubx.Pump(0, g_sim_micros);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep) && ep.pvt_tow_ms == 100000U,
+          "坏帧 CK_B=0xB5 后下一帧仍可解析");
+  }
+
+  // ================= 用例 21：HP 位置 iTOW 不匹配回退 PVT =================
+  printf("== 用例21 HP 位置 iTOW 不匹配 ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kUbx);
+  ubx.Reset();
+  {
+    uint8_t pvt[92] = {0};
+    pvt[0] = 0xA0;
+    pvt[1] = 0x86;
+    pvt[2] = 0x01;
+    pvt[3] = 0x00;
+    pvt[20] = 3;
+    pvt[21] = 0x01;
+    pvt[23] = 8;
+    const int32_t lat = static_cast<int32_t>(31.5e7);
+    const int32_t lon = static_cast<int32_t>(121.5e7);
+    memcpy(pvt + 28, &lat, 4);
+    memcpy(pvt + 24, &lon, 4);
+    uint8_t hp[52] = {0};
+    hp[0] = 0x9F;
+    hp[1] = 0x86;
+    hp[2] = 0x01;
+    hp[3] = 0x00;
+    const int32_t hl = static_cast<int32_t>(40.0e7);
+    memcpy(hp + 4, &hl, 4);
+    memcpy(hp + 8, &hl, 4);
+    uint8_t eoe[4] = {0xA0, 0x86, 0x01, 0x00};
+    uint8_t frames[512];
+    size_t flen = 0;
+    makeUbxFrame(0x01, 0x07, pvt, 92, frames + flen);
+    flen += 6 + 92 + 2;
+    makeUbxFrame(0x01, 0x14, hp, 52, frames + flen);
+    flen += 6 + 52 + 2;
+    makeUbxFrame(0x01, 0x61, eoe, 4, frames + flen);
+    flen += 6 + 4 + 2;
+    serial.clear();
+    serial.feed(frames, flen);
+    ubx.Pump(0, g_sim_micros);
+    bfs::UbxEpoch ep;
+    CHECK(ubx.PopEpoch(&ep), "HP iTOW 不匹配时 epoch 仍入队");
+    CHECK(fabs(ep.lat_rad - 31.5 * DEG_TO_RAD) < 1e-6,
+          "回退 PVT 位置（31.5 度）而非 HP（40 度）");
+  }
+
+  // ================= 用例 22：NMEA quality/校验和/PDOP =================
+  printf("== 用例22 NMEA quality/校验和/PDOP ==\n");
+  ubx.SetProtocol(bfs::Ubx::GpsProtocol::kNmea);
+  ubx.Reset();
+  {
+    char sent[160];
+    makeNmea("GPGGA,100000.000,3100.0000,N,12100.0000,E,6,08,1.0,10.0,M,0.0,M,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    bfs::UbxEpoch ep;
+    CHECK(!ubx.PopEpoch(&ep), "quality=6 不合成 epoch");
+    const char *no_ck =
+        "$GPGGA,100001.000,3100.0000,N,12100.0000,E,1,08,1.0,10.0,M,0.0,M,,\r\n";
+    serial.clear();
+    serial.feed(no_ck, strlen(no_ck));
+    ubx.Pump(0, g_sim_micros);
+    CHECK(!ubx.PopEpoch(&ep), "无校验和句子被拒绝");
+    makeNmea("GPGGA,100002.000,3100.0000,N,12100.0000,E,1,08,1.0,10.0,M,0.0,M,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    makeNmea("GPGSA,A,3,,,,,,,,,,,,,1.5,1.0,1.2", sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    advance_ms(1000);
+    makeNmea("GPGGA,100003.000,3100.0000,N,12100.0000,E,1,08,1.0,10.0,M,0.0,M,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    makeNmea("GPGSA,A,3,,,,,,,,,,,,,2.5,1.0,1.2", sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    advance_ms(1000);
+    makeNmea("GPGGA,100004.000,3100.0000,N,12100.0000,E,1,08,1.0,10.0,M,0.0,M,,",
+             sent, sizeof(sent));
+    feedNmea(ubx, serial, sent);
+    bfs::UbxEpoch last = ep;
+    while (ubx.PopEpoch(&last)) {}
+    CHECK(fabs(last.pvt_pdop - 2.5f) < 0.01f,
+          "单星座 GSA PDOP 从 1.5 更新到 2.5");
+  }
+
   printf("\n%s (失败 %d)\n", g_fail == 0 ? "全部通过" : "存在失败", g_fail);
   return g_fail;
 }
