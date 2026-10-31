@@ -223,7 +223,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double outage_start = 10.0, double outage_end = 20.0,
                   double baro_bias = 0.0, int baro_qnh_cal = 0, double baro_start_s = 0.0,
                   double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05, float q_accel_outage = 0.0f,
-                  double reanchor_m = 0.0)
+                  double reanchor_m = 0.0, int reanchor_streak = 1,
+                  double gnss_spike_m = 0.0, double gnss_spike_t = 15.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -282,6 +283,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   int baro_gate_rej = 0; // 连续被残差门控拒绝次数（防锁死）
   bool baro_suspect = false;  // gate=2：baro 健康 suspect（冻结融合）
   int baro_ok_streak = 0;     // 连续正常次数
+  int reanchor_cnt = 0;       // 连续大新息计数
+  double last_re_dn = 0.0, last_re_de = 0.0;
   int out_count = 0;
   int count = 0, gnss_updates = 0;
   const int start_eval = static_cast<int>(0.10 * nav_steps);
@@ -361,8 +364,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       const double de = trm.pos_ned(1) + gnss.pos_std_m * n01(rng);
       const double dd = trm.pos_ned(2) + gnss.pos_std_m * 1.5 * n01(rng);
       Eigen::Vector3d lla_meas = lla0;
-      lla_meas(0) += dn / kEarthR;
-      lla_meas(1) += de / (kEarthR * std::cos(lla0(0)));
+      double dn_spike = dn;
+      double de_spike = de;
+      if (gnss_spike_m > 0.0 && std::fabs(t - gnss_spike_t) < 0.01)
+      {
+        dn_spike += gnss_spike_m;  // 单帧水平野值（模拟多路径/欺骗）
+      }
+      lla_meas(0) += dn_spike / kEarthR;
+      lla_meas(1) += de_spike / (kEarthR * std::cos(lla0(0)));
       lla_meas(2) += -dd;
       // GNSS 恢复硬重锚：位置新息超过阈值时直接把 EKF 位置/速度重置到 GNSS，
       // 避免长失锁后位置协方差与状态发散导致 NIS 拒绝所有更新。
@@ -372,9 +381,31 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         const double est_e = (ekf.lon_rad() - lla0(1)) * kEarthR * std::cos(lla0(0));
         const double meas_n = (lla_meas(0) - lla0(0)) * kEarthR;
         const double meas_e = (lla_meas(1) - lla0(1)) * kEarthR * std::cos(lla0(0));
-        if (std::hypot(est_n - meas_n, est_e - meas_e) > reanchor_m)
+        const double dn_err = est_n - meas_n;
+        const double de_err = est_e - meas_e;
+        if (std::hypot(dn_err, de_err) > reanchor_m)
         {
-          ekf.ResetPositionVelocityToGnss(vel_meas.cast<float>(), lla_meas);
+          // 连续大新息且方向一致才重锚：单帧野值（多路径/欺骗）不会触发。
+          if (reanchor_cnt > 0 &&
+              (dn_err * last_re_dn + de_err * last_re_de) > 0.0)
+          {
+            ++reanchor_cnt;
+          }
+          else
+          {
+            reanchor_cnt = 1;
+          }
+          last_re_dn = dn_err;
+          last_re_de = de_err;
+          if (reanchor_cnt >= reanchor_streak)
+          {
+            ekf.ResetPositionVelocityToGnss(vel_meas.cast<float>(), lla_meas);
+            reanchor_cnt = 0;
+          }
+        }
+        else
+        {
+          reanchor_cnt = 0;
         }
       }
       if (gnss_mode == 1 || gnss.pos_std_m >= hacc_gate_m)
@@ -1218,6 +1249,43 @@ int main()
                                     0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f, rm);
         std::printf("%.0f,%d,%.4f,%.4f\n", rm, seed,
                     r.out_pos_rmse, r.post_outage_rmse);
+      }
+    }
+  }
+
+  // ★连续大新息重锚：失锁恢复 streak 1 vs 3。
+  if (const char *ab = std::getenv("IMUPERF_REANCHOR2"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== reanchor streak 1 vs 3 (25s outage) ==\n");
+    std::printf("streak,seed,out_pos_rmse,post_outage_rmse\n");
+    for (int st : {1, 2, 3})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    25.0, st, 0.0, 15.0);
+        std::printf("%d,%d,%.4f,%.4f\n", st, seed,
+                    r.out_pos_rmse, r.post_outage_rmse);
+      }
+    }
+  }
+
+  // ★野值鲁棒性：static + 单帧 100m 野值，streak 1 vs 3。
+  if (const char *ab = std::getenv("IMUPERF_GNSS_SPIKE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS spike 100m robustness (static) ==\n");
+    std::printf("streak,seed,pos_rmse,alt_rmse\n");
+    for (int st : {1, 2, 3})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    25.0, st, 100.0, 15.0);
+        std::printf("%d,%d,%.4f,%.4f\n", st, seed, r.pos_rmse, r.alt_rmse);
       }
     }
   }
