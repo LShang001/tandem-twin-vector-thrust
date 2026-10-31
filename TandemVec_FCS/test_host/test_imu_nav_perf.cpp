@@ -276,6 +276,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double qnh_est = 0.0; // baro QNH 在线偏差估计（GNSS 高度差低通）
   bool qnh_inited = false;
   int baro_gate_rej = 0; // 连续被残差门控拒绝次数（防锁死）
+  bool baro_suspect = false;  // gate=2：baro 健康 suspect（冻结融合）
+  int baro_ok_streak = 0;     // 连续正常次数
   int out_count = 0;
   int count = 0, gnss_updates = 0;
   const int start_eval = static_cast<int>(0.10 * nav_steps);
@@ -441,6 +443,35 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       else
       {
         baro_gate_rej = 0;
+      }
+      // gate=2：健康监测状态机。连续 2 次残差超限判 suspect 并冻结；
+      // 连续 3 次残差正常才恢复。比单拍残差门控更能挡住气流尖峰串。
+      if (baro_gate == 2)
+      {
+        const double resid = std::fabs(alt_abs - static_cast<double>(ekf.alt_m()));
+        if (resid > 2.0)
+        {
+          ++baro_gate_rej;
+          baro_ok_streak = 0;
+        }
+        else
+        {
+          ++baro_ok_streak;
+          baro_gate_rej = 0;
+        }
+        if (baro_suspect)
+        {
+          fuse = (baro_ok_streak >= 3);
+          if (fuse)
+          {
+            baro_suspect = false;
+          }
+        }
+        else if (baro_gate_rej >= 2)
+        {
+          baro_suspect = true;
+          fuse = false;
+        }
       }
       // 高度保护：EKF 高度已发散（偏离初始 >100m）时不再喂 baro，
       // 防止数值爆炸继续被放大。
@@ -1092,6 +1123,30 @@ int main()
                                       false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                       1, 0.2, 0.5, os, oe, 5.0, 1, 2.0, 0.0, 0, alpha);
           std::printf("%.3f,%s,%d,%.4f,%.4f\n", alpha, scenarioName(scn_e), seed,
+                      r.alt_rmse, r.out_alt_rmse);
+        }
+      }
+    }
+  }
+
+  // ★baro 门控对比：0=无、1=残差门控、2=健康监测冻结。
+  if (const char *ab = std::getenv("IMUPERF_BARO_GATE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== baro gate 0/1/2, airflow spike 3m/0.5s ==\n");
+    std::printf("gate,scenario,seed,alt_rmse,out_alt_rmse\n");
+    for (int gate = 0; gate <= 2; ++gate)
+    {
+      for (int scn = 0; scn <= 1; ++scn)
+      {
+        const Scenario scn_e = (scn == 0) ? Scenario::Static : Scenario::VibrationOutage;
+        const double os = (scn == 0) ? 100.0 : 5.0;
+        const double oe = (scn == 0) ? 101.0 : 30.0;
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], scn_e, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      1, 0.2, 0.5, os, oe, 0.0, 0, 0.0, 3.0, gate);
+          std::printf("%d,%s,%d,%.4f,%.4f\n", gate, scenarioName(scn_e), seed,
                       r.alt_rmse, r.out_alt_rmse);
         }
       }
