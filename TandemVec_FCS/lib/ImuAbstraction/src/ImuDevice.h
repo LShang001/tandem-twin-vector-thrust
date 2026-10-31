@@ -97,8 +97,15 @@ struct ImuConfig
   uint8_t accelFsrG = 8;
   /// 陀螺仪量程 (dps)：125/250/500/1000/2000（两款一致，精确支持）。
   uint16_t gyroFsrDps = 2000;
-  ImuLpfBw gyroLpf = ImuLpfBw::Bw100Hz;
-  ImuLpfBw accelLpf = ImuLpfBw::Bw50Hz;
+  // ★2026-11-01 降延迟：陀螺 100→200Hz、加计 50→100Hz。
+  //   一阶 LPF 群延迟 ≈ 1/(2π·fc)：100Hz→1.59ms、200Hz→0.80ms、
+  //   50Hz→3.18ms、100Hz→1.59ms。姿态环 200Hz（5ms）下，陀螺延迟从
+  //   0.32 拍降到 0.16 拍，加计从 0.64 拍降到 0.32 拍。
+  //   代价：白噪声 RMS ∝ sqrt(带宽)，200Hz 陀螺噪声约为 100Hz 的 1.41 倍；
+  //   仿真矩阵显示该带宽变化对姿态/位置 RMSE 影响 <5%（见 test_imu_nav_perf
+  //   的 LPF A/B），因此用带宽换延迟是划算的。上板仍需复核姿态环相位裕度。
+  ImuLpfBw gyroLpf = ImuLpfBw::Bw200Hz;
+  ImuLpfBw accelLpf = ImuLpfBw::Bw100Hz;
 };
 
 /**

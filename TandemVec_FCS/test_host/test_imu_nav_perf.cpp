@@ -700,6 +700,31 @@ int main()
     }
   }
 
+  // ★LPF 降延迟 A/B：旧档 100/50Hz vs 新档 200/100Hz（45686 参数，M8N_10Hz）。
+  if (const char *ab = std::getenv("IMUPERF_LPF_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== LPF bandwidth A/B: old 100/50Hz vs new 200/100Hz ==\n");
+    std::printf("lpf,scenario,seed,att_rmse_deg,pos_rmse_m\n");
+    ImuSpec old_spec = kIcm45686;
+    old_spec.lpf_gyro_hz = 100.0;
+    old_spec.lpf_accel_hz = 50.0;
+    ImuSpec new_spec = kIcm45686;
+    new_spec.lpf_gyro_hz = 200.0;
+    new_spec.lpf_accel_hz = 100.0;
+    for (int sc = 0; sc <= 1; ++sc)
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult ro = runCase(old_spec, kGnssSpecs[2], scenarios[sc], seed, false);
+        const RunResult rn = runCase(new_spec, kGnssSpecs[2], scenarios[sc], seed, false);
+        std::printf("old,%s,%d,%.3f,%.4f\n", scenarioName(scenarios[sc]), seed,
+                    0.5 * (ro.roll_rmse_deg + ro.pitch_rmse_deg), ro.pos_rmse);
+        std::printf("new,%s,%d,%.3f,%.4f\n", scenarioName(scenarios[sc]), seed,
+                    0.5 * (rn.roll_rmse_deg + rn.pitch_rmse_deg), rn.pos_rmse);
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
