@@ -120,10 +120,12 @@ TandemVec_FCS/
 │   ├── 数学/工具/              # Quat4f、QuaternionMath、MedianFilter、GeoDisplacement
 │   ├── 传感器/协议/            # DETA100_module、AnoVars
 │   └── 历史/                  # TVC_Control_Geometric、TVC_Control_3rdOrder_Poly（已弃用）
-├── lib/                        # 第三方/本地库（1086 文件）
+├── lib/                        # 第三方/本地库（1100+ 文件）
 │   ├── MAVLink、eigen、navigation-main、ublox-main、units   # 协议/数学/导航
 │   ├── ICM42688、DPS310-Pressure-Sensor、IST8310、QMC5883L、MagSensor、MagCal、
 │   │   LQS48_Flow、MTF02P                                   # 传感器
+│   ├── ICM45686                # ★自有驱动库 v2.0.0（底层 + FlightAdapter + ImuDevice），
+│   │                           #   2026-10-31 入库；**未接入固件**，src/sensor_imu.cpp 仍用 ICM42688
 │   ├── AnoComProtocol、CrsfSerial、crsf、crc8、arduino-CAN  # 通信
 │   └── W25N01GV、WS2812Driver                               # 存储/灯效
 ├── test_host/                 # 宿主测试（19 406 行）
@@ -269,9 +271,9 @@ py -3.12 tools/build-docs.py
 
 ## 12 命名澄清：`icm45686` 前缀不是传感器驱动
 
-实机 IMU 是 **ICM42688**，传感器驱动在 `TandemVec_FCS/lib/ICM42688/` + `TandemVec_FCS/src/sensor_imu.cpp`；`lib/` 内没有任何 45686 字样。
+实机 IMU 是 **ICM42688**，现役驱动在 `TandemVec_FCS/lib/ICM42688/` + `TandemVec_FCS/src/sensor_imu.cpp`。`lib/` 下另有 `ICM45686/`（自有驱动库 v2.0.0，2026-10-31 入库），**尚未接入固件**——换传感器需要改引脚/SPI/CS/中断/量程并上板验证。
 
-`Icm45686*` 是 2026-07-29 移植提交 `62124e9` 保留下来的**参考实现前缀**（来自某份 ICM45686 参考工程/文献实现），落在导航/INS 辅助模块里，与实机传感器型号解耦：
+`Icm45686*` 是 2026-07-29 移植提交 `62124e9` 保留下来的**参考实现前缀**（来自某份 ICM45686 参考工程/文献实现），落在导航/INS 辅助模块里，与上述两个传感器驱动库都不互相引用：
 
 | 文件 | 内容 |
 |---|---|
