@@ -1356,18 +1356,21 @@ int main()
   // ★连续大新息重锚：失锁恢复 streak 1 vs 3。
   if (const char *ab = std::getenv("IMUPERF_REANCHOR2"); ab != nullptr && ab[0] == '1')
   {
-    std::printf("\n== reanchor streak 1 vs 3 (25s outage) ==\n");
-    std::printf("streak,seed,out_pos_rmse,post_outage_rmse\n");
-    for (int st : {1, 2, 3})
+    std::printf("\n== reanchor consistency/streak (25s outage) ==\n");
+    std::printf("cons,streak,seed,out_pos_rmse,post_outage_rmse,max_att_jump_deg\n");
+    for (int cons : {0, 1})
     {
-      for (int seed = 1; seed <= kSeedCount; ++seed)
+      for (int st : {1, 2})
       {
-        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
-                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
-                                    0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
-                                    25.0, st, 0.0, 15.0);
-        std::printf("%d,%d,%.4f,%.4f,%.3f\n", st, seed,
-                    r.out_pos_rmse, r.post_outage_rmse, r.max_att_jump_deg);
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                      seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                      25.0, st, 0, 0.0, 0.0, 15.0, 1, cons);
+          std::printf("%d,%d,%d,%.4f,%.4f,%.3f\n", cons, st, seed,
+                      r.out_pos_rmse, r.post_outage_rmse, r.max_att_jump_deg);
+        }
       }
     }
   }
