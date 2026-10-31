@@ -214,7 +214,7 @@ constexpr double kEarthR = 6378137.0;
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
                   bool compensate_delay = false, double vib_hz = 80.0, int gnss_mode = 0,
-                  double hacc_gate_m = 1.0e9, int yaw_aid = 0)
+                  double hacc_gate_m = 1.0e9, int yaw_aid = 0, float q_accel = 2.0f)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -251,6 +251,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   bfs::Ekf15State ekf;
   ekf.Initialize(f_body0.cast<float>(), Eigen::Vector3f::Zero(),
                  Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), lla0);
+  ekf.set_q_accel_scale(q_accel);
 
   const int nav_steps = static_cast<int>(kDurationS / kNavDt);
   const double dt_imu = 1.0 / fs;
@@ -804,6 +805,26 @@ int main()
         std::printf("%d,%d,%.3f,%.4f,%+.2f\n", aid, seed,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse,
                     r.yaw_drift_deg);
+      }
+    }
+  }
+
+  // ★EKF 过程噪声 q_accel_scale 敏感性：maneuver 与 vibration 两场景。
+  if (const char *ab = std::getenv("IMUPERF_Q_AB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== EKF q_accel_scale sensitivity (M8N_10Hz) ==\n");
+    std::printf("q,scenario,seed,att_rmse_deg,pos_rmse_m\n");
+    for (float q : {0.5f, 1.0f, 1.5f, 2.0f, 3.0f})
+    {
+      for (int sc = 1; sc <= 3; sc += 2) // maneuver=1, vibration=3
+      {
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2], scenarios[sc],
+                                      seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, q);
+          std::printf("%.1f,%s,%d,%.3f,%.4f\n", q, scenarioName(scenarios[sc]), seed,
+                      0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+        }
       }
     }
   }
