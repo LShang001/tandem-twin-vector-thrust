@@ -267,6 +267,7 @@ namespace bfs
       }
       const uint8_t b = static_cast<uint8_t>(raw_byte);
       rx_byte_count_++;
+      const bool ubx_idle_before = (parser_state_ == 0);
       if (ubx_enabled)
       {
         if (ProcessUbxByte(b))
@@ -278,9 +279,11 @@ namespace bfs
           }
         }
       }
-      if (nmea_enabled)
+      if (nmea_enabled && (!ubx_enabled || ubx_idle_before))
       {
-        nmeaProcessByte(b);  // NMEA 解析（有效句刷新快照）
+        // NMEA 只在 UBX 状态机空闲时收字节：UBX payload 里的 '$'(0x24)
+        // 不能误起 NMEA 句（手册要求 EOE 才是含 NMEA 的历元栅栏）。
+        nmeaProcessByte(b);
       }
       if (byte_tap_fn_)
       {
@@ -862,6 +865,9 @@ namespace bfs
   // 把各 NAV 缓存里的原始整数按协议缩放因子换算成物理量，写入各数据成员（即各 getter 的返回源）。
   void Ubx::ProcessNavData()
   {
+    // 本历元 PVT 的 iTOW：其余 NAV 消息必须与之一致才允许参与本历元输出，
+    // 否则会用上一历元的 DOP/TIMEGPS/RELPOSNED/SVIN（速率不同步时的混帧）。
+    const uint32_t pvt_tow_this = ubx_nav_pvt_.payload.i_tow;
     /* 定位类型：综合 PVT.flags 的 gnssFixOK/diffSoln/carrSoln 与 fixType，映射到本库 Fix 枚举。 */
     gnss_fix_ok_ = ubx_nav_pvt_.payload.flags & 0x01;  // bit0：解算是否在精度范围内
     diff_soln_ = ubx_nav_pvt_.payload.flags & 0x02;    // bit1：是否应用了差分改正
@@ -940,9 +946,11 @@ namespace bfs
     }
     t_acc_ns_ = ubx_nav_pvt_.payload.t_acc;
     /* GPS 时间：来自 NAV-TIMEGPS，各分量按 valid 位逐项判定有效性。 */
-    tow_valid_ = ubx_nav_time_gps_.payload.valid & 0x01;   // 周内时刻有效
-    week_valid_ = ubx_nav_time_gps_.payload.valid & 0x02;  // 周数有效
-    leap_valid_ = ubx_nav_time_gps_.payload.valid & 0x04;  // 闰秒有效
+    const bool timegps_fresh =
+        (ubx_nav_time_gps_.payload.i_tow == pvt_tow_this);
+    tow_valid_ = timegps_fresh && (ubx_nav_time_gps_.payload.valid & 0x01);
+    week_valid_ = timegps_fresh && (ubx_nav_time_gps_.payload.valid & 0x02);
+    leap_valid_ = timegps_fresh && (ubx_nav_time_gps_.payload.valid & 0x04);
     if (tow_valid_)
     {
       // iTOW(ms) + fTOW(ns) 合成高精度周内秒。
@@ -975,13 +983,16 @@ namespace bfs
       leap_s_ = 0;
     }
     /* DOP：来自 NAV-DOP，原始 u16 × 0.01 = 实际 DOP 值。接收机未开 NAV-DOP 时这些恒为 0。 */
-    gdop_ = static_cast<float>(ubx_nav_dop_.payload.g_dop) * 0.01f;
-    pdop_ = static_cast<float>(ubx_nav_dop_.payload.p_dop) * 0.01f;
-    tdop_ = static_cast<float>(ubx_nav_dop_.payload.t_dop) * 0.01f;
-    vdop_ = static_cast<float>(ubx_nav_dop_.payload.v_dop) * 0.01f;
-    hdop_ = static_cast<float>(ubx_nav_dop_.payload.h_dop) * 0.01f;
-    ndop_ = static_cast<float>(ubx_nav_dop_.payload.n_dop) * 0.01f;
-    edop_ = static_cast<float>(ubx_nav_dop_.payload.e_dop) * 0.01f;
+    if (ubx_nav_dop_.payload.i_tow == pvt_tow_this)
+    {
+      gdop_ = static_cast<float>(ubx_nav_dop_.payload.g_dop) * 0.01f;
+      pdop_ = static_cast<float>(ubx_nav_dop_.payload.p_dop) * 0.01f;
+      tdop_ = static_cast<float>(ubx_nav_dop_.payload.t_dop) * 0.01f;
+      vdop_ = static_cast<float>(ubx_nav_dop_.payload.v_dop) * 0.01f;
+      hdop_ = static_cast<float>(ubx_nav_dop_.payload.h_dop) * 0.01f;
+      ndop_ = static_cast<float>(ubx_nav_dop_.payload.n_dop) * 0.01f;
+      edop_ = static_cast<float>(ubx_nav_dop_.payload.e_dop) * 0.01f;
+    }
     /* pDOP from NAV-PVT (本地新增)：
      * NAV-PVT payload 自带 p_dop（scale 0.01），与 NAV-DOP 的 pdop_ 同义但无需额外消息。
      * 上面的 pdop_ 仅在接收机配置了 NAV-DOP 输出时才有效；很多最小输出配置只发 NAV-PVT，
@@ -1081,7 +1092,7 @@ namespace bfs
       }
     }
     /* 相对定位：仅在收到过 NAV-RELPOSNED 后处理；先取状态位，再在 relPosValid 时换算矢量。 */
-    if (rel_pos_data_)
+    if (rel_pos_data_ && ubx_nav_rel_pos_ned_.payload.i_tow == pvt_tow_this)
     {
       rel_pos_avail_ = ubx_nav_rel_pos_ned_.payload.flags & 0x04;          // bit2 relPosValid
       rel_pos_moving_baseline_ = ubx_nav_rel_pos_ned_.payload.flags & 0x20;// bit5 isMoving
