@@ -183,56 +183,13 @@ int ICM42688::setGyroODR(ODR odr)
  */
 int ICM42688::setFilters(bool gyroFilters, bool accFilters)
 {
-  // 设置寄存器组1
-  if (setBank(1) < 0)
-    return -1;
-
-  // 根据gyroFilters参数配置陀螺仪滤波器
-  if (gyroFilters == true)
-  {
-    // 启用陀螺仪噪声滤波器和抗混叠滤波器
-    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, GYRO_NF_ENABLE | GYRO_AAF_ENABLE) < 0)
-    {
-      return -2;
-    }
-  }
-  else
-  {
-    // 禁用陀螺仪噪声滤波器和抗混叠滤波器
-    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, GYRO_NF_DISABLE | GYRO_AAF_DISABLE) < 0)
-    {
-      return -3;
-    }
-  }
-
-  // 设置寄存器组2
-  if (setBank(2) < 0)
-    return -4;
-
-  // 根据accFilters参数配置加速度计滤波器
-  if (accFilters == true)
-  {
-    // 启用加速度计抗混叠滤波器
-    if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC2, ACCEL_AAF_ENABLE) < 0)
-    {
-      return -5;
-    }
-  }
-  else
-  {
-    // 禁用加速度计抗混叠滤波器
-    if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC2, ACCEL_AAF_DISABLE) < 0)
-    {
-      return -6;
-    }
-  }
-
-  // 重置寄存器组到默认
-  if (setBank(0) < 0)
-    return -7;
-
-  // 配置成功
-  return 1;
+  // ★2026-11-01 手册核对：AAF 的截止频率由 GYRO/ACCEL_CONFIG_STATIC3/4/5 的
+  //   DELT/DELTSQR/BITSHIFT 共同决定（DS-000347 §14.38-14.40），只写 STATIC2 的
+  //   使能位会启用一个未定义带宽的 AAF。当前项目只用 UI DLPF（0x52），AAF 未用；
+  //   显式返回未实现，避免上层误配。
+  (void)gyroFilters;
+  (void)accFilters;
+  return -1;
 }
 
 /**
@@ -245,47 +202,13 @@ int ICM42688::setFilters(bool gyroFilters, bool accFilters)
  */
 int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
 {
-  uint8_t regAddress;
-  uint8_t freqValue;
-
-  // 确定目标寄存器
-  if (isGyro)
-    regAddress = UB1_REG_GYRO_CONFIG_STATIC2; // 陀螺仪 AAF 配置
-  else
-    regAddress = UB2_REG_ACCEL_CONFIG_STATIC2; // 加速度计 AAF 配置
-
-  // 根据频率设置值
-  switch (freq)
-  {
-  case FREQ_50HZ:
-    freqValue = 0x01;
-    break;
-  case FREQ_100HZ:
-    freqValue = 0x02;
-    break;
-  case FREQ_200HZ:
-    freqValue = 0x03;
-    break;
-  case FREQ_400HZ:
-    freqValue = 0x04;
-    break;
-  default:
-    return -1; // 无效频率
-  }
-
-  // 读取原寄存器值
-  uint8_t reg;
-  if (readRegisters(regAddress, 1, &reg) < 0)
-    return -2;
-
-  // 启用/禁用滤波器，并设置频率
-  reg = enable ? (reg | freqValue) : (reg & ~freqValue);
-
-  // 写回寄存器
-  if (writeRegister(regAddress, reg) < 0)
-    return -3;
-
-  return 1; // 成功
+  // ★2026-11-01 手册核对：旧实现把频率枚举按位写进 GYRO/ACCEL_CONFIG_STATIC2
+  //   （那是 AAF/NF 的 DISABLE 位），既没有配置 DELT/DELTSQR/BITSHIFT，也不是
+  //   频率字段。当前项目不使用 AAF；显式返回未实现，避免“配置成功但带宽未定义”。
+  (void)enable;
+  (void)freq;
+  (void)isGyro;
+  return -1;
 }
 
 /**
@@ -302,29 +225,14 @@ int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
  */
 int ICM42688::setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth)
 {
-  // 设置寄存器组1
-  if (setBank(1) < 0)
-    return -1;
-
-  // 配置中心频率和带宽
-  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC3, centerFreq) < 0)
-    return -2;
-  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC4, bandwidth) < 0)
-    return -3;
-
-  // 启用或禁用 Notch 滤波器
-  uint8_t reg;
-  if (readRegisters(UB1_REG_GYRO_CONFIG_STATIC2, 1, &reg) < 0)
-    return -4;
-  reg = enable ? (reg | 0x01) : (reg & ~0x01);
-  if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, reg) < 0)
-    return -5;
-
-  // 返回寄存器组0
-  if (setBank(0) < 0)
-    return -6;
-
-  return 1; // 成功
+  // ★2026-11-01 手册核对：notch 在 bank1 的 STATIC6-9（COSWZ）与 STATIC10
+  //   （NF_BW_SEL）；STATIC2 bit0=GYRO_NF_DIS 且 1=禁用（与 enable 极性相反）。
+  //   旧实现把 centerFreq/bandwidth 写进 STATIC3/4（实为 AAF DELT/DELTSQR），
+  //   且 enable=true 时反而禁用 notch。当前未使用；显式返回未实现。
+  (void)enable;
+  (void)centerFreq;
+  (void)bandwidth;
+  return -1;
 }
 
 /**

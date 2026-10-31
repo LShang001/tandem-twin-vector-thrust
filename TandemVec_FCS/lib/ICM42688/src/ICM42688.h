@@ -137,6 +137,10 @@ public:
    */
   int setGyroODR(ODR odr);
 
+  // ★2026-11-01 手册核对：以下三个 AAF/notch 接口当前**未实现**（恒返回 -1）。
+  //   AAF 需要 DELT/DELTSQR/BITSHIFT（STATIC3/4/5），notch 需要 STATIC6-10 的
+  //   COSWZ/NF_BW_SEL；旧实现写错寄存器（写进 STATIC2 使能位/STATIC3-4），已改为
+  //   显式拒绝，避免“配置成功但带宽未定义”。本项目只用 UI DLPF（0x52）。
   int setFilters(bool gyroFilters, bool accFilters);
 
   int setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro);
