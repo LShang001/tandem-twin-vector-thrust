@@ -201,6 +201,7 @@ struct RunResult
   double out_alt_rmse = 0.0;
   double alt_rmse = 0.0;
   double post_outage_rmse = 0.0;
+  double max_att_jump_deg = 0.0;
   double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
@@ -282,7 +283,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   bool qnh_inited = false;
   int baro_gate_rej = 0; // 连续被残差门控拒绝次数（防锁死）
   bool baro_suspect = false;  // gate=2：baro 健康 suspect（冻结融合）
-  double last_good_baro = lla0(2);  // gate=3：最近一次通过门控的 baro 观测
+  double last_good_baro = lla0(2);
+  double max_att_jump_deg_local = 0.0;  // 重锚前后姿态跳变（安全校验）
   int baro_ok_streak = 0;     // 连续正常次数
   int reanchor_cnt = 0;       // 连续大新息计数
   double last_re_dn = 0.0, last_re_de = 0.0;
@@ -400,7 +402,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           last_re_de = de_err;
           if (reanchor_cnt >= reanchor_streak)
           {
+            const float roll_before = ekf.roll_rad();
+            const float pitch_before = ekf.pitch_rad();
             ekf.ResetPositionVelocityToGnss(vel_meas.cast<float>(), lla_meas);
+            const double jump = std::fmax(
+                std::fabs(static_cast<double>(ekf.roll_rad() - roll_before)),
+                std::fabs(static_cast<double>(ekf.pitch_rad() - pitch_before)));
+            max_att_jump_deg_local =
+                std::fmax(max_att_jump_deg_local, jump * kRad2Deg);
             reanchor_cnt = 0;
           }
         }
@@ -646,6 +655,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
     r.post_outage_rmse = std::sqrt(sum_post_pos2 / post_count);
   }
   r.nan_t = nan_t_local;
+  r.max_att_jump_deg = max_att_jump_deg_local;
   r.out_count = out_count;
   if (out_count > 0)
   {
@@ -1287,8 +1297,8 @@ int main()
                                     seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                     0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
                                     25.0, st, 0.0, 15.0);
-        std::printf("%d,%d,%.4f,%.4f\n", st, seed,
-                    r.out_pos_rmse, r.post_outage_rmse);
+        std::printf("%d,%d,%.4f,%.4f,%.3f\n", st, seed,
+                    r.out_pos_rmse, r.post_outage_rmse, r.max_att_jump_deg);
       }
     }
   }
