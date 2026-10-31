@@ -436,6 +436,11 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       }
       if (fuse)
       {
+        if (std::getenv("IMUPERF_TRACE_ALT") != nullptr && seed == 2)
+        {
+          std::printf("TRACE,%.2f,%.3f,%.3f,%.3f%s", t, ekf.alt_m(), qnh_est,
+                      alt_abs, "\n");
+        }
         (void)ekf.MeasurementUpdateBaroAltitudeDetailed(
             static_cast<float>(alt_abs), static_cast<float>(baro_std));
       }
