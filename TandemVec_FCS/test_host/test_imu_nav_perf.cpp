@@ -209,7 +209,7 @@ constexpr double kEarthR = 6378137.0;
 
 RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int seed, bool verbose, std::vector<double> *trace_buf = nullptr,
-                  bool compensate_delay = false)
+                  bool compensate_delay = false, double vib_hz = 80.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -285,7 +285,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       if (sc == Scenario::Vibration || sc == Scenario::VibrationOutage)
       {
         // 80Hz、0.5g 机体 z 轴振动（电机/桨叶高频激励），验证 LPF 对振动泄漏的抑制。
-        accel_meas(2) += 0.5 * kGravity * std::sin(2.0 * kPi * 80.0 * ti);
+        accel_meas(2) += 0.5 * kGravity * std::sin(2.0 * kPi * vib_hz * ti);
       }
       accel_meas = Eigen::Vector3d(accel_lpf[0].update(accel_meas).x(),
                                    accel_lpf[1].update(accel_meas).y(),
@@ -606,6 +606,23 @@ int main()
       {
         const RunResult r = runCase(spec, kGnssSpecs[2], Scenario::Maneuver, seed, false);
         std::printf("%.2f,%d,%.3f,%.4f\n", dps, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
+  // ★振动频率扫描：20/50/80/120/200/400Hz × 0.5g，M8N_10Hz + 45686。
+  if (const char *ab = std::getenv("IMUPERF_VIB_SWEEP"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== vibration frequency sweep (0.5g, M8N_10Hz, 45686) ==\n");
+    std::printf("vib_hz,seed,att_rmse_deg,pos_rmse_m\n");
+    for (double hz : {20.0, 50.0, 80.0, 120.0, 200.0, 400.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Vibration,
+                                    seed, false, nullptr, false, hz);
+        std::printf("%.0f,%d,%.3f,%.4f\n", hz, seed,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
       }
     }
