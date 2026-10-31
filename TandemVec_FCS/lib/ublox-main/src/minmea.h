@@ -41,8 +41,9 @@ enum minmea_sentence_id {
 };
 
 struct minmea_float {
-    int_least32_t value;
-    int_least32_t scale;
+    // ★2026-11-01：int32 → int64，容纳 7 位小数坐标（47.2852317°×1e7 超 int32）。
+    int_least64_t value;
+    int_least64_t scale;
 };
 
 struct minmea_date {
@@ -295,9 +296,9 @@ static inline float minmea_tocoord(const struct minmea_float *f)
 {
     if (f->scale == 0)
         return NAN;
-    if (f->scale  > (INT_LEAST32_MAX / 100))
+    if (f->scale  > (INT_LEAST64_MAX / 100))
         return NAN;
-    if (f->scale < (INT_LEAST32_MIN / 100))
+    if (f->scale < (INT_LEAST64_MIN / 100))
         return NAN;
     int_least32_t degrees = f->value / (f->scale * 100);
     int_least32_t minutes = f->value % (f->scale * 100);

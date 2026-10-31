@@ -640,8 +640,8 @@ int main()
     bfs::UbxEpoch ep;
     CHECK(ubx.PopEpoch(&ep), "HIGHPREC GGA 合成");
     const double exp_lat = (47.0 + 28.5231789 / 60.0) * DEG_TO_RAD;
-    CHECK(fabs(ep.lat_rad - exp_lat) < 1e-8,
-          "HIGHPREC 坐标 double 解析（<1e-8 rad）");
+    CHECK(fabs(ep.lat_rad - exp_lat) < 1e-10,
+          "HIGHPREC 坐标 double 解析（<1e-10 rad）");
   }
 
   // ================= 用例 25：GNS 解析（多系统组合定位） =================
@@ -656,7 +656,7 @@ int main()
     bfs::UbxEpoch ep;
     CHECK(ubx.PopEpoch(&ep), "GNS 合成 epoch");
     const double exp_lat = (47.0 + 28.5231789 / 60.0) * DEG_TO_RAD;
-    CHECK(fabs(ep.lat_rad - exp_lat) < 1e-8, "GNS 纬度 double 解析");
+    CHECK(fabs(ep.lat_rad - exp_lat) < 1e-10, "GNS 纬度 double 解析");
     CHECK(fabs(ep.alt_wgs84_m - 57.9f) < 0.05f, "GNS 椭球高 = MSL 12.3 + sep 45.6");
     CHECK(ep.num_sv == 12, "GNS 星数 12");
   }
