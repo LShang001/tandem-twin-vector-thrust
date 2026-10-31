@@ -194,6 +194,9 @@ namespace bfs
     inline uint32_t nmea_last_fix_ms() const { return nmea_last_fix_ms_; }   // 最近有效 fix 的 MCU 时间
     inline uint32_t nmea_sentence_count() const { return nmea_sentence_count_; }      // 完整句子数
     inline uint32_t nmea_bad_checksum_count() const { return nmea_bad_checksum_count_; }  // 校验失败数
+    inline uint32_t nmea_gsv_count() const { return nmea_gsv_count_; }
+    inline int32_t nmea_gsv_total_sats() const { return nmea_gsv_total_sats_; }
+    inline float nmea_gsv_max_snr() const { return nmea_gsv_max_snr_; }
     inline uint32_t nmea_overflow_count() const { return nmea_overflow_count_; }  // 超长残句丢弃数
     inline uint32_t nmea_gga_count() const { return nmea_gga_count_; }       // GGA 句数（校验通过）
     inline uint32_t nmea_rmc_count() const { return nmea_rmc_count_; }       // RMC 句数
@@ -404,7 +407,10 @@ namespace bfs
     uint32_t nmea_sentence_count_ = 0;                   // 完整句子数（含无效）
     uint32_t nmea_bad_checksum_count_ = 0;               // 校验失败句子数
     uint32_t nmea_overflow_count_ = 0;
-    uint32_t nmea_pos_stale_count_ = 0;  // 位置过期拒绝合成次数                   // 超长残句丢弃数
+    uint32_t nmea_pos_stale_count_ = 0;  // 位置过期拒绝合成次数
+    uint32_t nmea_gsv_count_ = 0;        // GSV 句数（校验通过）
+    int32_t nmea_gsv_total_sats_ = 0;    // 最近 GSV 的总星数
+    float nmea_gsv_max_snr_ = 0.0f;      // 最近 GSV 最强信噪比                   // 超长残句丢弃数
     uint32_t nmea_gga_count_ = 0;                        // GGA 句数（校验通过）
     uint32_t nmea_rmc_count_ = 0;                        // RMC 句数
     uint32_t nmea_gsa_count_ = 0;                        // GSA 句数

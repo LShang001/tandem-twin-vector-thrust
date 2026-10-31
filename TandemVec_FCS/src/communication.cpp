@@ -2732,6 +2732,12 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(ubx.nmea_rmc_count());
           serial.print(F(" gsa="));
           serial.print(ubx.nmea_gsa_count());
+          serial.print(F(" gsv="));
+          serial.print(ubx.nmea_gsv_count());
+          serial.print(F("/"));
+          serial.print(ubx.nmea_gsv_total_sats());
+          serial.print(F("/"));
+          serial.print(ubx.nmea_gsv_max_snr(), 0);
           serial.print(F(" unk="));
           serial.print(ubx.nmea_unknown_count());
           serial.print(F(") bad_ck="));

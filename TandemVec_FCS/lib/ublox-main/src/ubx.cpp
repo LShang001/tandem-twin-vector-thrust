@@ -623,6 +623,30 @@ namespace bfs
         }
         break;
       }
+      case MINMEA_SENTENCE_GSV:
+      {
+        // GSV：卫星视图（每句最多 4 星、多句拼接）。本库只做统计与最强信噪比，
+        // 不参与导航（GGA/GNS 已给星数）；多信号需按 Signal ID 再分组，
+        // minmea 结构体没有 Signal ID 字段（见 NMEA0183 要点 §2.4）。
+        nmea_gsv_count_++;
+        struct minmea_sentence_gsv gsv;
+        if (minmea_parse_gsv(&gsv, sentence))
+        {
+          if (gsv.total_sats > 0)
+          {
+            nmea_gsv_total_sats_ = gsv.total_sats;
+          }
+          for (int i = 0; i < 4; ++i)
+          {
+            const float snr = minmea_tofloat(&gsv.sats[i].snr);
+            if (!isnan(snr) && snr > nmea_gsv_max_snr_)
+            {
+              nmea_gsv_max_snr_ = snr;
+            }
+          }
+        }
+        break;
+      }
       case MINMEA_SENTENCE_GSA:
       {
         // 多星座接收机（u-blox M8/M9/M10）每个星座各输出一条 GSA（GPGSA/GLGSA…），
