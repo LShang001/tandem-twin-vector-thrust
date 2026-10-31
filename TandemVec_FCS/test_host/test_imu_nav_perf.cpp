@@ -658,9 +658,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         sc == Scenario::VibrationOutage && t >= 24.9 && t <= 30.5)
     {
       const Truth tp = truthAt(t, sc);
-      std::printf("POS,%.2f,%.2f,%.2f,%.2f,%.2f,%d,%.1f\n", t, est_n, est_e,
-                  tp.pos_ned(0), tp.pos_ned(1), reanchor_cnt,
-                  static_cast<double>(last_gnss_t));
+      const Eigen::Vector3f v = ekf.ned_vel_mps();
+      std::printf("POS,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%d\n",
+                  t, est_n, est_e, v(0), v(1), v(2), tp.pos_ned(0), tp.pos_ned(1),
+                  tp.vel_ned(0), tp.vel_ned(1), reanchor_cnt);
     }
     if (!std::isfinite(est_d) || !std::isfinite(est_roll))
     {
