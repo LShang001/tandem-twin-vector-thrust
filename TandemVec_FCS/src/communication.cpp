@@ -2129,6 +2129,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   gpsproto [ubx|nmea|auto] [baud] - GNSS 解析协议查看/切换"));
         serial.println(F("[DBG]   nmea              - NMEA 备用链路状态（fix/sv/pdop/句统计）"));
         serial.println(F("[DBG]   ubxcfg            - UBX 接收机自动配置（重跑）"));
+        serial.println(F("[DBG]   ubxstat           - UBX 解析器统计（rx/校验/超长/pvt/eoe/队列）"));
         serial.println(F("[DBG]   ubxcfg status     - 上次配置结果"));
         serial.println(F("[DBG]   ubxcfg rst        - GNSS 软复位"));
         serial.println(F("[DBG]   ubxcfg nmea       - 重跑（输出 UBX+NMEA 混合）"));
@@ -2331,6 +2332,32 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       else if (strncmp(line, "tasks", 5) == 0) {
         // 任务调度统计：实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷（打印后清零）
         schedulerStatsPrint(serial);
+      }
+      else if (strcmp(line, "ubxstat") == 0) {
+        // UBX 解析器健康统计：拒绝路径不再静默（审计 P1-7）
+        serial.println(F("[DBG] == UBX parser stats =="));
+        serial.print(F("[DBG] rx_bytes="));
+        serial.print(ubx.rx_byte_count());
+        serial.print(F(" valid_msgs="));
+        serial.println(ubx.valid_msg_count());
+        serial.print(F("[DBG] cksum_fail="));
+        serial.print(ubx.checksum_fail_count());
+        serial.print(F(" oversize="));
+        serial.println(ubx.oversize_msg_count());
+        serial.print(F("[DBG] pvt="));
+        serial.print(ubx.nav_pvt_count());
+        serial.print(F(" eoe="));
+        serial.print(ubx.nav_eoe_count());
+        serial.print(F(" eoe_no_pvt="));
+        serial.println(ubx.eoe_without_pvt_count());
+        serial.print(F("[DBG] pvt_dup="));
+        serial.print(ubx.pvt_duplicate_in_epoch_count());
+        serial.print(F(" tow_mismatch="));
+        serial.println(ubx.tow_mismatch_count());
+        serial.print(F("[DBG] queued="));
+        serial.print(ubx.queued_epoch_count());
+        serial.print(F(" queue_overflow="));
+        serial.println(ubx.queue_overflow_count());
       }
       else if (strncmp(line, "ubxcfg", 6) == 0) {
         // UBX 接收机自动配置（重跑 / 状态查询 / 固化）
