@@ -139,6 +139,18 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include <cmath>
 
 #ifdef BFS_NAV_PROFILE
+// ★2026-11-01 可选 hAcc 门控（默认关闭，保持既有行为）：
+//   GNSS 位置标准差 ≥ 阈值时，把该帧视为“非全质量”，交给下方
+//   gnss_downgrade_quality_for_nav 分支（位置 R=1e4、仅融合速度）。
+//   仿真依据：test_host/test_imu_nav_perf.cpp 的 IMUPERF_HACC_VALID
+//   （低端 5m GNSS 姿态 3.09°→1.31°、位置 2.00m→1.16m；M8N 2.5m 不受影响）。
+#ifndef BFS_NAVIGATION_GNSS_HACC_GATE
+#define BFS_NAVIGATION_GNSS_HACC_GATE 0
+#endif
+#ifndef BFS_NAVIGATION_GNSS_HACC_GATE_M
+#define BFS_NAVIGATION_GNSS_HACC_GATE_M 3.0f
+#endif
+
 namespace
 {
 struct NavProfileBucket
@@ -1873,7 +1885,15 @@ void handleNavigationSystem()
   }
 
   const bool gnss_data_fresh_for_nav = isGnssDataFreshForNav();
-  const bool gnss_full_quality_for_nav = has_gnss_epoch && gnssEpochPassesFullQuality(gnss_epoch);
+  const bool gnss_quality_ok = has_gnss_epoch && gnssEpochPassesFullQuality(gnss_epoch);
+#if BFS_NAVIGATION_GNSS_HACC_GATE
+  // hAcc 门控：位置精度差于阈值时不再按“全质量”融合，改走降级路径。
+  const bool hacc_gate_for_nav =
+      gnss_quality_ok && gnss_epoch.horz_acc_m >= BFS_NAVIGATION_GNSS_HACC_GATE_M;
+#else
+  const bool hacc_gate_for_nav = false;
+#endif
+  const bool gnss_full_quality_for_nav = gnss_quality_ok && !hacc_gate_for_nav;
   // 首次真实重锚必须使用高精度解；低精度/野值帧不能把 EKF 从假原点锚到错误位置。
   const bool gnss_quality_for_reanchor =
       gnss_full_quality_for_nav &&
