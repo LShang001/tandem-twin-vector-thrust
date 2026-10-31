@@ -222,7 +222,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int baro_mode = 0, double baro_std = 0.5, double vib_amp = 0.5,
                   double outage_start = 10.0, double outage_end = 20.0,
                   double baro_bias = 0.0, int baro_qnh_cal = 0, double baro_start_s = 0.0,
-                  double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05, float q_accel_outage = 0.0f)
+                  double baro_spike_m = 0.0, int baro_gate = 0, double qnh_alpha = 0.05, float q_accel_outage = 0.0f,
+                  double reanchor_m = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -363,6 +364,19 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       lla_meas(0) += dn / kEarthR;
       lla_meas(1) += de / (kEarthR * std::cos(lla0(0)));
       lla_meas(2) += -dd;
+      // GNSS 恢复硬重锚：位置新息超过阈值时直接把 EKF 位置/速度重置到 GNSS，
+      // 避免长失锁后位置协方差与状态发散导致 NIS 拒绝所有更新。
+      if (reanchor_m > 0.0)
+      {
+        const double est_n = (ekf.lat_rad() - lla0(0)) * kEarthR;
+        const double est_e = (ekf.lon_rad() - lla0(1)) * kEarthR * std::cos(lla0(0));
+        const double meas_n = (lla_meas(0) - lla0(0)) * kEarthR;
+        const double meas_e = (lla_meas(1) - lla0(1)) * kEarthR * std::cos(lla0(0));
+        if (std::hypot(est_n - meas_n, est_e - meas_e) > reanchor_m)
+        {
+          ekf.ResetPositionVelocityToGnss(vel_meas.cast<float>(), lla_meas);
+        }
+      }
       if (gnss_mode == 1 || gnss.pos_std_m >= hacc_gate_m)
       {
         // 只融合速度，不注入位置（模拟低质量 GNSS 下关闭位置观测）；
@@ -1185,6 +1199,24 @@ int main()
                                     seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                     0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, qo);
         std::printf("%.1f,%d,%.4f,%.4f\n", qo, seed,
+                    r.out_pos_rmse, r.post_outage_rmse);
+      }
+    }
+  }
+
+  // ★长失锁恢复：硬重锚阈值 0/50/100m，25s 失锁。
+  if (const char *ab = std::getenv("IMUPERF_REANCHOR"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS outage hard reanchor (25s outage) ==\n");
+    std::printf("reanchor_m,seed,out_pos_rmse,post_outage_rmse\n");
+    for (double rm : {0.0, 20.0, 30.0, 50.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage,
+                                    seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f, rm);
+        std::printf("%.0f,%d,%.4f,%.4f\n", rm, seed,
                     r.out_pos_rmse, r.post_outage_rmse);
       }
     }
