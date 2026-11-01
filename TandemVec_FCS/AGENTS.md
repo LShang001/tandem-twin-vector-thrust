@@ -85,7 +85,7 @@ bash test_host/run_all.sh  # 宿主全量（40+ 段，以脚本实际为准）
 - EKF 测试重力 `g=9.79`（`TandemVec_Config.h`），勿改 9.81。
 - 上传只在用户明确要求时：`pio run -t upload`；串口监视加超时。
 - 找不到 `pio` 必须明确报告，不得声称构建通过。
-- 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `pio test -e test`；无法运行必须说明原因。
+- 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `pio test -e test`；无法运行必须说明原因。chr(10)- **算法测试两阶段**：先理想模型（零噪声/零偏、WGS84 重力 `ins_test::GravityWgs84()`、解析真值）验证正确性，再真实噪声/零偏/振动/失锁评估工程效果；理想阶段失败修算法，真实阶段不达标先归因。
 - **不声称未执行的构建/测试/上板验证通过。**
 
 ## 仓库卫生
