@@ -52,6 +52,8 @@ run_one "$ROOT/test_host/test_actuator_fault_monitor.cpp" afm ""
 run_one "$ROOT/test_host/test_static_detector.cpp"     sd  ""
 run_one "$ROOT/test_host/test_ins_prelaunch_align.cpp" pla ""
 run_one "$ROOT/test_host/test_ins_ahrs_gravity_gate.cpp" ahg ""
+# 无 GNSS 运动段重力方向量测噪声（ins_gravity_aid_noise.h，纯标量公式）：
+run_one "$ROOT/test_host/test_ins_gravity_aid_noise.cpp" gan ""
 # IMU 滤波参数（ICM-42688-P AAF 表/notch 公式，纯头文件无 Arduino 依赖）：
 run_one "$ROOT/test_host/test_imu_filter_math.cpp" imufilter ""
 # ICM-45686 配置默认值/WOM 阈值换算（需 fw_sil 的 Arduino SPI/Wire 桩）：

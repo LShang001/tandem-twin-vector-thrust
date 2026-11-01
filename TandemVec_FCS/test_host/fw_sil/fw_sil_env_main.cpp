@@ -2807,6 +2807,7 @@ int main(int argc, char** argv) {
   float att_gain_scale=1.0f;  // 测试用：仅 att kp 缩放（覆盖 gain_scale）
   float ang_alpha=-1.0f;      // 测试用：姿态外环输出滤波 alpha（<0 用参数默认）
   int heading_aid_mode=0;     // 0=磁连续；1=磁仅初始对准；2=无磁手动对准
+  int att_aid_mode=-1;        // 运动段姿态辅助：-1=编译期默认；0=AHRS；1=重力直连；2=重力优先+AHRS 回退
   float heading_align_deg=0.0f; // 无磁/初始对准的机头真北航向 [deg]
   float pos_leg_n_m=0.0f;     // SIL 前飞段目标北向偏移 [m]
   float pos_leg_e_m=0.0f;     // SIL 前飞段目标东向偏移 [m]
@@ -2854,6 +2855,8 @@ int main(int argc, char** argv) {
       ang_alpha=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--heading-aid-mode")==0 && i+1<argc)
       heading_aid_mode=std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--att-aid-mode")==0 && i+1<argc)
+      att_aid_mode=std::atoi(argv[++i]);
     else if (std::strcmp(argv[i],"--heading-align-deg")==0 && i+1<argc)
       heading_align_deg=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--calib-hold")==0 && i+1<argc)
@@ -3348,6 +3351,11 @@ int main(int argc, char** argv) {
     nav_ekf.mag_yaw_jump_limit_rad(g_mag_yaw_jump_rad);
   }
   g_heading_aid_mode = static_cast<uint8_t>(heading_aid_mode);
+  if (att_aid_mode >= 0)
+  {
+    // 运动段姿态辅助模式（--att-aid-mode 0/1/2）；默认由 BFS_ATT_AID_MODE_DEFAULT 决定。
+    g_att_aid_mode = static_cast<uint8_t>(att_aid_mode);
+  }
   g_heading_align_deg = heading_align_deg;
   // 飞行段回归默认跳过地面 30 s 静置；测校准门控时显式传 --static-calib-s 30。
   g_static_calib_required_s = 0.0f;

@@ -471,7 +471,12 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
     **固件 IMU 健康状态 `Failed`**（导航侧镜像 `g_sil_nav_debug_imu_failed`）+ 5 s 后持，
     这是固件化时真正拿得到的触发源。用途：测误触发占空比（削顶/强振动会不会让它静默
     关掉高过载段需要的带宽收益）。判据 K1–K3 见报告 §4.24m；**结论未出，勿当已验证方案**。。
-- **AHRS 策略**：方向门默认开；`BFS_AHRS_GNSS_FRESH_GATE`（GNSS 新鲜时不用 AHRS，opt-in）修 5 Hz/200 ms/1 g 振动；`BFS_DISABLE_AHRS_ATTITUDE_AID` 完全关 AHRS。
+- **AHRS/重力姿态辅助策略（2026-11-01 更新）**：`BFS_AHRS_GNSS_FRESH_GATE` 已改**默认开**
+  （GNSS 新鲜时不做姿态辅助；旧行为 `-DBFS_AHRS_GNSS_FRESH_GATE=0`）；运动段量测源由
+  `--att-aid-mode 0|1|2` 同二进制切换（0=AHRS 旧行为、1=重力方向直连默认、2=重力优先+AHRS 回退），
+  默认值见 `BFS_ATT_AID_MODE_DEFAULT`；方向门默认开（15° 运动段 / 包线外才启用的 AHRS 门），
+  `BFS_DISABLE_AHRS_ATTITUDE_AID` 仍可完全关闭。A/B 数据见
+  `docs/04-数学建模/代码理论核查/AHRS姿态辅助与无GNSS重力融合-2026-11-01.md`。
 - 轨迹：50 m 起始、1 s 支撑、10 s 推力；最大 6.4 g、451 m/s、1987 m、27.8°/s。
 - 指标：JSON 增加 `ms_vmax/ms_altmax/ms_gmax/ms_rate_max/ms_qbar_max/ms_impact_t` 与分轴姿态误差 `nav_roll/pitch/yaw_rmse,max`；`[ms]` 每秒打印弹体状态。
 - 低/高零偏初始化：统一静止检测器 `|ω|<0.01 rad/s` 对 2×/5× 零偏档不成立；用

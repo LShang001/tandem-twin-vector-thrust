@@ -142,6 +142,8 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_BOOL("hdg_hold",          g_heading_hold_allowed),
     ANO_VAR_FLOAT("hdg_win",          g_nomag_hold_left_s),
     ANO_VAR_U8("hdg_mode",            g_heading_aid_mode),
+    // 运动段姿态辅助模式（0=AHRS/1=重力直连/2=重力优先+AHRS 回退）
+    ANO_VAR_U8("att_mode",            g_att_aid_mode),
     ANO_VAR_BOOL("static_cal",        g_imu_static_calibrated),
     ANO_VAR_FLOAT("static_cal_s",     g_static_calib_s),
 

@@ -909,6 +909,12 @@ extern bool g_heading_hold_allowed;
 // EKF/陀螺）；2=NO_MAG_MANUAL（无磁，起飞前手动对准 + 运动 EKF）。
 extern uint8_t g_heading_aid_mode;
 extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针）
+// 无 GNSS 运动段姿态辅助模式（2026-11-01，SIL 可 --att-aid-mode 覆盖）：
+// 0=仅 AHRS 姿态量测（旧行为，A/B 基线）；1=仅重力方向直连（默认，
+// BFS_ATT_AID_MODE_DEFAULT）；2=重力优先、被拒时回退 AHRS。
+// 语义只影响“无 GNSS 数据新鲜且非静止”这一段；EKF 未初始化时的
+// AHRS_Packet 填充（Madgwick 直填）不受此开关影响。
+extern uint8_t g_att_aid_mode;
 // 无磁离地时陀螺零偏 z 限幅 [rad/s]：防止 GNSS 更新把真实偏航率吸收成零偏。
 // 0.01 rad/s ≈ 0.57°/s，20 s 累积 ≤11.5°，落在短时保持窗口内。
 extern float g_nomag_bias_z_max_radps;
