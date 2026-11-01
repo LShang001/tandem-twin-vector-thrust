@@ -34,6 +34,8 @@ CONDITIONS = {
                       "--vib", "1.0"], 40.0, 50),
     "out10_noph":   (["--gnss-outage", "20:30"], 40.0, 50),
     "out20":        (["--pos-hold", "--gnss-outage", "20:40"], 55.0, 50),
+    # 长失联 + 理想光流：验证“外部速度参考是唯一让倾斜可观的物理途径”
+    "out20_flow":   (["--pos-hold", "--gnss-outage", "20:40", "--flow"], 55.0, 20),
 }
 MODES = (0, 1, 2)
 FIELDS = [
