@@ -150,7 +150,12 @@ int main()
       static_cast<float>(w_b_true(0) + gb(0)),
       static_cast<float>(w_b_true(1) + gb(1)),
       static_cast<float>(w_b_true(2) + gb(2)));
-  ekf.Initialize(f_b_init, w_b_init, Eigen::Vector3f::Zero(),
+  // 磁矢量用真值姿态投影（磁北为 x、含倾角），TiltCompass 才能得到真航向；
+  // 此前传伪磁 0 → 初始 yaw=0（真值 45°），地球自转补偿投影错 → 1 h 姿态漂 0.17°。
+  const Eigen::Vector3d mag_ned(35.075, -2.523, 34.079);  // IGRF 站点值
+  const Eigen::Matrix3f C_nb_f = C_bn_true.transpose().cast<float>();
+  const Eigen::Vector3f mag_b = C_nb_f * mag_ned.cast<float>();
+  ekf.Initialize(f_b_init, w_b_init, mag_b,
                  Eigen::Vector3f::Zero(), kLla);
   // 姿态由 Initialize（f_b_init 正确投影）给出；不再叠加 quat 覆盖
   // （覆盖会绕过 Initialize 的零偏/协方差一致性，端到端实测会引入 2° 级漂移）。
@@ -166,8 +171,9 @@ int main()
       accel(a2) += ab(a2) + kAccelNoise * static_cast<float>(n01(rng));
       gyro(a2) += gb(a2) + kGyroNoise * static_cast<float>(n01(rng));
     }
-    accel -= ab;  // 补偿加计零偏
-    gyro -= gb;   // 补偿陀螺零偏
+    // 零偏由 EKF 内部状态扣除（Initialize 已估）——外部再减一次会双补偿。
+    (void)ab;
+    (void)gb;
     ekf.TimeUpdate(accel, gyro, kNavDt);
   }
   const double dn = (ekf.lat_rad() - kLla(0)) * 6378137.0;
