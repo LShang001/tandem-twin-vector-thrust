@@ -2015,6 +2015,26 @@ int main()
     }
   }
 
+  // ★组合故障：GNSS 失锁 + 陀螺卡死（最坏场景）。
+  if (const char *ab = std::getenv("IMUPERF_COMBO_FAULT"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== combo fault: GNSS outage + gyro freeze ==\n");
+    std::printf("freeze_t,seed,detect_t,att_rmse_deg,pos_rmse\n");
+    for (double ft : {-1.0, 10.0, 20.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, ft, -1.0, 1.0, 0.0, 1.0, 0.0, 0.0);
+        std::printf("%.0f,%d,%.2f,%.3f,%.4f\n", ft, seed, r.gyro_freeze_detect_t,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
