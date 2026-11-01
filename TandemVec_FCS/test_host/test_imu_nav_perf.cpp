@@ -246,7 +246,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int gyro_temp_comp = 0, double temp_comp_err = 0.0,
                   double misalign_deg = 0.0, double lever_x = 0.0,
                   double lever_y = 0.0, double lever_z = 0.0,
-                  double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5)
+                  double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
+                  double gyro_freeze_t = -1.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -308,6 +309,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double max_att_jump_deg_local = 0.0;  // 重锚前后姿态跳变（安全校验）
   int reanchor_suspicious_local = 0;
   double nis_sum = 0.0;
+  Eigen::Vector3d frozen_gyro = Eigen::Vector3d::Zero();
+  bool have_frozen_gyro = false;
   int nis_cnt = 0;
   int nis_rej = 0;
   int baro_ok_streak = 0;     // 连续正常次数
@@ -380,6 +383,16 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         gyro_meas(a) = std::fmax(-imu.gyro_fs, std::fmin(imu.gyro_fs, gyro_meas(a)));
         accel_meas(a) = std::round(accel_meas(a) / accel_lsb) * accel_lsb;
         gyro_meas(a) = std::round(gyro_meas(a) / gyro_lsb) * gyro_lsb;
+      }
+      // 陀螺卡死：从 gyro_freeze_t 起输出冻结为最后一帧（故障注入）。
+      if (gyro_freeze_t >= 0.0 && ti >= gyro_freeze_t)
+      {
+        if (!have_frozen_gyro)
+        {
+          frozen_gyro = gyro_meas;
+          have_frozen_gyro = true;
+        }
+        gyro_meas = frozen_gyro;
       }
       if (i < half)
       {
@@ -1687,6 +1700,26 @@ int main()
                                     0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
                                     0.0, 0.0, 0.0, 0.0, vm);
         std::printf("%.1f,%d,%.4f,%.4f\n", vm, seed, r.alt_rmse, r.pos_rmse);
+      }
+    }
+  }
+
+  // ★陀螺卡死：freeze_t = -1/10/20s，看姿态与位置误差。
+  if (const char *ab = std::getenv("IMUPERF_GYRO_FREEZE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== gyro freeze fault (static) ==\n");
+    std::printf("freeze_t,seed,att_rmse_deg,pos_rmse\n");
+    for (double ft : {-1.0, 10.0, 20.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Maneuver, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, ft);
+        std::printf("%.0f,%d,%.3f,%.4f\n", ft, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
       }
     }
   }
