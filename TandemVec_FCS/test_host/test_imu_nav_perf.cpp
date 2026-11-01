@@ -122,6 +122,11 @@ const GnssSpec kGnssSpecs[] = {
     {"RTK_FLOAT_10Hz",  10.0, 0.20, 0.020,   0.0},
     {"M8N_20Hz",        20.0, 1.50, 0.050,   0.0},
     {"M8N_10Hz_50ms",   10.0, 1.50, 0.050,  50.0},
+    // u-blox NEO-F10N（REF-175，UBX-23002117）：多星座 10 Hz、CEP 1 m
+    // （1σ≈0.85 m）；单星座 20 Hz、CEP 1.5 m（1σ≈1.27 m）；速度 0.05 m/s。
+    {"F10N_10Hz",       10.0, 0.85, 0.050,   0.0},
+    {"F10N_10Hz_50ms",  10.0, 0.85, 0.050,  50.0},
+    {"F10N_20Hz",       20.0, 1.27, 0.050,   0.0},
 };
 constexpr int kGnssCount = static_cast<int>(sizeof(kGnssSpecs) / sizeof(kGnssSpecs[0]));
 
@@ -2167,7 +2172,7 @@ int main()
   if (const char *ab = std::getenv("IMUPERF_GRAND"); ab != nullptr && ab[0] == '1')
   {
     std::printf("\n== GRAND matrix ==\n");
-    std::printf("gnss,scene,vib,delay,seed,pos,att,alt\n");
+    std::printf("imu,gnss,scene,vib,delay,seed,pos,att,alt\n");
     auto ge = [](const char *k, double d) {
       const char *v = std::getenv(k);
       return v != nullptr ? std::atof(v) : d;
@@ -2177,12 +2182,14 @@ int main()
     const double g_eam = ge("IMUPERF_EKF_ACCEL_MARKOV", 0.010);
     const double g_egm = ge("IMUPERF_EKF_GYRO_MARKOV", 0.00524);
     const double g_qa = ge("IMUPERF_Q_ACCEL", 2.0);
-    const int gis[5] = {0, 2, 5, 7, 8};
+    const int gis[6] = {0, 2, 5, 7, 8, 9};  // +F10N
     const Scenario scs[6] = {Scenario::Static, Scenario::Maneuver, Scenario::Cruise,
                              Scenario::Vibration, Scenario::VibrationOutage,
                              Scenario::Accel};
     const double vibs[3] = {0.2, 0.5, 1.0};
     const double delays[3] = {0.0, 0.03, 0.10};
+    const ImuSpec grand_imus[2] = {kIcm42688p, kIcm45686};
+    for (const ImuSpec &gimu : grand_imus)
     for (int gi : gis)
     for (Scenario sc : scs)
     for (double vb : vibs)
@@ -2190,14 +2197,15 @@ int main()
     for (int seed = 1; seed <= 2; ++seed)
     {
       const bool comp = dl > 0.0;
-      const RunResult r = runCase(kIcm45686, kGnssSpecs[gi], sc, seed,
+      const RunResult r = runCase(gimu, kGnssSpecs[gi], sc, seed,
                                   false, nullptr, comp, 80.0, 0, 1.0e9, 0,
                                   static_cast<float>(g_qa), 0, 0.5, vb, 5.0, 25.0, 0.0, 0,
                                   0.0, 0.0, 0, 0.05, 0.0f, 0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0,
                                   g_eas, g_egs, g_eam, g_egm);
-      std::printf("%s,%s,%.1f,%.3f,%d,%.4f,%.3f,%.4f\n", kGnssSpecs[gi].name,
-                  scenarioName(sc), vb, dl, seed, r.pos_rmse,
-                  0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.alt_rmse);
+      std::printf("%s,%s,%s,%.1f,%.3f,%d,%.4f,%.3f,%.4f\n", gimu.name,
+                  kGnssSpecs[gi].name, scenarioName(sc), vb, dl, seed,
+                  r.pos_rmse, 0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg),
+                  r.alt_rmse);
     }
   }
 
