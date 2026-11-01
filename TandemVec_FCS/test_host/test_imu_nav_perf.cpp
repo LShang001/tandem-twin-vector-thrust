@@ -1724,6 +1724,26 @@ int main()
     }
   }
 
+  // ★无重锚时 NIS 门控对单帧大野值：0/50/200m。
+  if (const char *ab = std::getenv("IMUPERF_SPIKE_GATE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== NIS gate vs single-frame spike (static, no reanchor) ==\n");
+    std::printf("spike_m,seed,pos_rmse,reject_rate\n");
+    for (double sp : {0.0, 50.0, 200.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, sp, 15.0, 1, 0, 0.15, 0.0, 0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 0.0, 1.5, -1.0);
+        std::printf("%.0f,%d,%.4f,%.4f\n", sp, seed, r.pos_rmse,
+                    r.nis_reject_rate);
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
