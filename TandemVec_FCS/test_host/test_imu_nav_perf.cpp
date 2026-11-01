@@ -231,7 +231,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int adapt_r = 0, double adapt_thresh_m = 5.0,
                   double gnss_spike_m = 0.0, double gnss_spike_t = 15.0,
                   int gnss_spike_frames = 1, int reanchor_consist = 0,
-                  double r_floor = 0.15)
+                  double r_floor = 0.15, double gyro_tempc = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -327,7 +327,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       for (int a = 0; a < 3; ++a)
       {
         accel_meas(a) += accel_bias(a) + accel_sigma * n01(rng);
-        gyro_meas(a) += gyro_bias(a) + gyro_sigma * n01(rng);
+        // 温度漂移：开机发热 0.3°C/s（30s +9°C），零偏随温度线性变化。
+        const double temp_c = 25.0 + 0.3 * ti;
+        gyro_meas(a) += gyro_bias(a) + gyro_tempc * (temp_c - 25.0) +
+                        gyro_sigma * n01(rng);
       }
       if (sc == Scenario::Vibration || sc == Scenario::VibrationOutage)
       {
@@ -1505,6 +1508,25 @@ int main()
           std::printf("%.2f,%s,%d,%.3f,%.4f\n", fl, kGnssSpecs[gi].name, seed,
                       r.nis_mean, r.pos_rmse);
         }
+      }
+    }
+  }
+
+  // ★温度零偏：0/0.001/0.002 rad/s/°C（30s +9°C），看姿态与零偏估计。
+  if (const char *ab = std::getenv("IMUPERF_TEMP_BIAS"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== gyro temperature bias (static, +9C over 30s) ==\n");
+    std::printf("tempc,seed,att_rmse_deg,pos_rmse\n");
+    for (double tc : {0.0, 0.001, 0.002})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, tc);
+        std::printf("%.3f,%d,%.3f,%.4f\n", tc, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
       }
     }
   }
