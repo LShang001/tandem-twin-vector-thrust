@@ -2721,6 +2721,11 @@ void handleNavigationSystem()
       const float vib_g_now = s_vib_estimator.last().accel_rms_g;
       const bool mode3_like = (g_att_aid_mode == 3U || g_att_aid_mode == 4U);
       const bool vib_prefers_ahrs = (g_att_aid_mode == 4U && vib_g_now > 0.5f);
+      // mode 5：无外部参考时先纯陀螺（无偏但无界），倾斜 1σ 超过门限后启用
+      // AHRS 有界兜底（有偏但有界）——满足“无 GNSS 不发散、且不差于 AHRS”。
+      const bool tilt_sigma_fallback =
+          (g_att_aid_mode == 5U) &&
+          (nav_ekf.tilt_sigma_rad() > BFS_ATT_AID_TILT_FALLBACK_RAD);
       if (g_att_aid_mode != 0U && !vib_prefers_ahrs && motion_accel_trusted)
       {
         // 运动段方向门恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）：
@@ -2814,7 +2819,8 @@ void handleNavigationSystem()
         }
       }
       if (!tilt_aided &&
-          (g_att_aid_mode == 0U || g_att_aid_mode == 2U || vib_prefers_ahrs))
+          (g_att_aid_mode == 0U || g_att_aid_mode == 2U || vib_prefers_ahrs ||
+           tilt_sigma_fallback))
       {
         // AHRS 兜底 / 旧行为：Madgwick 的 roll/pitch 来自“陀螺积分 + 加速度
         // 重力修正”，作为 EKF 姿态量测可在运动中约束姿态漂移。

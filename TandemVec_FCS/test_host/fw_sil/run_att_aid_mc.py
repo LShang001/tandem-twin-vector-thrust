@@ -36,6 +36,8 @@ CONDITIONS = {
     "out20":        (["--pos-hold", "--gnss-outage", "20:40"], 55.0, 50),
     # 长失联 + 理想光流：验证“外部速度参考是唯一让倾斜可观的物理途径”
     "out20_flow":   (["--pos-hold", "--gnss-outage", "20:40", "--flow"], 55.0, 20),
+    # 长失联（30 s）：验证纯陀螺发散 vs AHRS/AHRS 有界兜底
+    "out30":        (["--pos-hold", "--gnss-outage", "20:50"], 55.0, 15),
 }
 MODES = (0, 1, 2)
 FIELDS = [

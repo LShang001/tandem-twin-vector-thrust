@@ -36,13 +36,16 @@
 
 // 无 GNSS 运动段姿态辅助模式（运行期全局 `g_att_aid_mode`，SIL 可覆盖）：
 //   0 = 仅 AHRS 姿态量测（2026-10 旧行为，保留作 A/B 基线）
-//   1 = 严格（默认）：仅在“独立证明确有 a≈0”的时段用比力方向——外部速度参考
+//   1 = 严格：仅在“独立证明确有 a≈0”的时段用比力方向——外部速度参考
 //       （GNSS/光流）新鲜且 1 s 内速度变化 < 0.5 m/s²；否则完全不做比力修正，
 //       姿态交给陀螺。依据：未知 a 时比力方向对姿态不可观（见文件头 @details）
 //   2 = 严格重力优先，不可用/NIS 拒绝时回退 AHRS 姿态量测（有偏但有界）
 //   3 = 控制加速度指令扣比力污染（2026-11-01 研究臂：用模型先验，不是观测）
+//   5 = 严格 + 有界回退（默认）：无外部参考时先纯陀螺；当 EKF 倾斜 1σ 超过
+//       BFS_ATT_AID_TILT_FALLBACK_RAD 后改用 AHRS 姿态量测做“有界兜底”
+//       （AHRS 有偏但有界，保证不发散；对应“无 GNSS 至少达到 AHRS 效果”的验收线）
 #ifndef BFS_ATT_AID_MODE_DEFAULT
-#define BFS_ATT_AID_MODE_DEFAULT 1U
+#define BFS_ATT_AID_MODE_DEFAULT 5U
 #endif
 
 // 加速度前馈开关（2026-11-02 的“EKF 速度差分扣比力”，默认 0=关）：
@@ -50,6 +53,13 @@
 // 实测：无位置环姿态 1.59°→4.26°、失联 10 s 2.26°→2.82°、振动 3.02°→2.93°
 // （仅风条线 4.91°→3.53° 有改善），整体劣于 AHRS 且全面劣于 mode 3。
 // 保留代码作研究对照，不默认启用。
+// mode 5 的倾斜 σ 兜底门限：无外部参考时纯陀螺漂移超过该 1σ 即启用 AHRS
+// 有界兜底（默认 3°，与“至少达到 AHRS 效果”的验收线量级一致；上板可按
+// 实测零偏反算：σ 增长 ≈ 残余零偏×t）。
+#ifndef BFS_ATT_AID_TILT_FALLBACK_RAD
+#define BFS_ATT_AID_TILT_FALLBACK_RAD 0.0523599f  // 3°
+#endif
+
 #ifndef BFS_GRAVITY_AID_VEL_FF
 #define BFS_GRAVITY_AID_VEL_FF 0
 #endif
