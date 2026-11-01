@@ -25,6 +25,7 @@
  * @see     lib/ICM45686/doc/DS-000489_ICM-45686_v1.1.md、src/imu_factory.cpp
  */
 #include <Eigen/Dense>
+#include "ins_test_gravity.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -36,7 +37,7 @@
 
 namespace
 {
-constexpr float kGravity = 9.79f;   // 与 TandemVec_Config.h 一致
+const float kGravity = ins_test::GravityWgs84();  // WGS84 正常重力（与 EKF 同口径）
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
 constexpr double kRad2Deg = 180.0 / kPi;
