@@ -158,6 +158,11 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 // → streak=2 时 4.5-25m；单帧 100m 野值不误触发）。
 #ifndef BFS_NAVIGATION_GNSS_REANCHOR
 #define BFS_NAVIGATION_GNSS_REANCHOR 0
+
+// IMU 卡死健康监测（默认关闭）：0.2s 窗口陀螺/加计方差≈0 判卡死并告警。
+#ifndef BFS_NAVIGATION_IMU_HEALTH
+#define BFS_NAVIGATION_IMU_HEALTH 0
+#endif
 #endif
 #ifndef BFS_NAVIGATION_GNSS_REANCHOR_M
 #define BFS_NAVIGATION_GNSS_REANCHOR_M 25.0f
@@ -2294,6 +2299,76 @@ void handleNavigationSystem()
         (bias_jump_hold || gnss_bias_freeze) ? 0.0001f : 0.010f);
 
     Eigen::Vector3f ekf_gyro_input = imu_gyro_radps;
+
+#if BFS_NAVIGATION_IMU_HEALTH
+    // ── IMU 卡死健康监测 ────────────────────────────────────────────────
+    // 0.2s 滑动窗口（40 拍 @200Hz）内陀螺/加计方差≈0 → 判卡死。
+    // 阈值与宿主仿真一致（test_imu_nav_perf IMUPERF_IMU_HEALTH：
+    // 陀螺 1e-12、加计 1e-8，0.12s 检出、强振动零误报）。
+    // 这里只做告警（打印一次）；隔离/降级动作留给上层策略。
+    {
+      static float s_hgyro[40][3];
+      static float s_haccel[40][3];
+      static uint16_t s_hidx = 0;
+      static uint16_t s_hcnt = 0;
+      static bool s_hgyro_frozen = false;
+      static bool s_haccel_frozen = false;
+      s_hgyro[s_hidx][0] = ekf_gyro_input.x();
+      s_hgyro[s_hidx][1] = ekf_gyro_input.y();
+      s_hgyro[s_hidx][2] = ekf_gyro_input.z();
+      s_haccel[s_hidx][0] = imu_accel_mps2.x();
+      s_haccel[s_hidx][1] = imu_accel_mps2.y();
+      s_haccel[s_hidx][2] = imu_accel_mps2.z();
+      s_hidx = static_cast<uint16_t>((s_hidx + 1U) % 40U);
+      if (s_hcnt < 40U)
+      {
+        ++s_hcnt;
+      }
+      if (s_hcnt >= 40U)
+      {
+        float gm[3] = {0.0f, 0.0f, 0.0f};
+        float am[3] = {0.0f, 0.0f, 0.0f};
+        for (uint16_t i = 0U; i < 40U; ++i)
+        {
+          for (int a = 0; a < 3; ++a)
+          {
+            gm[a] += s_hgyro[i][a];
+            am[a] += s_haccel[i][a];
+          }
+        }
+        for (int a = 0; a < 3; ++a)
+        {
+          gm[a] /= 40.0f;
+          am[a] /= 40.0f;
+        }
+        float gvar = 0.0f;
+        float avar = 0.0f;
+        for (uint16_t i = 0U; i < 40U; ++i)
+        {
+          for (int a = 0; a < 3; ++a)
+          {
+            const float dg = s_hgyro[i][a] - gm[a];
+            const float da = s_haccel[i][a] - am[a];
+            gvar += dg * dg;
+            avar += da * da;
+          }
+        }
+        gvar /= 40.0f;
+        avar /= 40.0f;
+        if (!s_hgyro_frozen && gvar < 1.0e-12f)
+        {
+          s_hgyro_frozen = true;
+          Serial8.println(F("[Nav] IMU fault: gyro frozen (0.2s variance ~0)"));
+        }
+        if (!s_haccel_frozen && avar < 1.0e-8f)
+        {
+          s_haccel_frozen = true;
+          Serial8.println(F("[Nav] IMU fault: accel frozen (0.2s variance ~0)"));
+        }
+      }
+    }
+#endif
+
 
     // [B] 时间更新 (预测) - 始终执行
     // 这一步负责 EKF 内部短时惯导外推；无 GNSS 时还会用 AHRS 姿态量测约束漂移。
