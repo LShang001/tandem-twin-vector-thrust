@@ -233,7 +233,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int gnss_spike_frames = 1, int reanchor_consist = 0,
                   double r_floor = 0.15, double gyro_tempc = 0.0,
                   int gyro_temp_comp = 0, double temp_comp_err = 0.0,
-                  double misalign_deg = 0.0)
+                  double misalign_deg = 0.0, double lever_x = 0.0,
+                  double lever_y = 0.0, double lever_z = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -398,9 +399,15 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       const Truth trm = truthAt(tm, sc);
       Eigen::Vector3d vel_meas = trm.vel_ned;
       for (int a = 0; a < 3; ++a) vel_meas(a) += gnss.vel_std_mps * n01(rng);
-      const double dn = trm.pos_ned(0) + gnss.pos_std_m * n01(rng);
-      const double de = trm.pos_ned(1) + gnss.pos_std_m * n01(rng);
-      const double dd = trm.pos_ned(2) + gnss.pos_std_m * 1.5 * n01(rng);
+      // 杆臂：GNSS 天线相对 IMU 的机体安装矢量，旋转到 NED 后加到真值位置。
+      Eigen::Vector3d lever_ned = Eigen::Vector3d::Zero();
+      if (lever_x != 0.0 || lever_y != 0.0 || lever_z != 0.0)
+      {
+        lever_ned = nedFromBody(trm) * Eigen::Vector3d(lever_x, lever_y, lever_z);
+      }
+      const double dn = trm.pos_ned(0) + lever_ned(0) + gnss.pos_std_m * n01(rng);
+      const double de = trm.pos_ned(1) + lever_ned(1) + gnss.pos_std_m * n01(rng);
+      const double dd = trm.pos_ned(2) + lever_ned(2) + gnss.pos_std_m * 1.5 * n01(rng);
       Eigen::Vector3d lla_meas = lla0;
       double dn_spike = dn;
       double de_spike = de;
@@ -1586,6 +1593,26 @@ int main()
                                     0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, mis);
         std::printf("%.1f,%d,%.3f,%.4f\n", mis, seed,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
+  // ★杆臂效应：天线相对 IMU 0/0.5/1.0m（x），maneuver 场景。
+  if (const char *ab = std::getenv("IMUPERF_LEVER"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS lever arm (maneuver, M8N_10Hz) ==\n");
+    std::printf("lever_m,seed,pos_rmse,att_rmse_deg\n");
+    for (double lv : {0.0, 0.5, 1.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Maneuver, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    lv, 0.0, 0.0);
+        std::printf("%.1f,%d,%.4f,%.3f\n", lv, seed, r.pos_rmse,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
       }
     }
   }
