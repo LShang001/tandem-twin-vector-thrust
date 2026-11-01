@@ -218,6 +218,8 @@ struct RunResult
   double nis_reject_rate = 0.0;
   double gyro_freeze_detect_t = -1.0;
   int gyro_freeze_hits = 0;
+  double accel_freeze_detect_t = -1.0;
+  int accel_freeze_hits = 0;
   double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
@@ -249,7 +251,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double misalign_deg = 0.0, double lever_x = 0.0,
                   double lever_y = 0.0, double lever_z = 0.0,
                   double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
-                  double gyro_freeze_t = -1.0)
+                  double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -317,7 +319,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   int gyro_hist_count = 0;
   double gyro_freeze_detect_local = -1.0;
   int gyro_freeze_hits_local = 0;
+  Eigen::Vector3d accel_hist[kHealthWin];
+  int accel_hist_idx = 0;
+  int accel_hist_count = 0;
+  double accel_freeze_detect_local = -1.0;
+  int accel_freeze_hits_local = 0;
   Eigen::Vector3d frozen_gyro = Eigen::Vector3d::Zero();
+  Eigen::Vector3d frozen_accel = Eigen::Vector3d::Zero();
+  bool have_frozen_accel = false;
   bool have_frozen_gyro = false;
   int nis_cnt = 0;
   int nis_rej = 0;
@@ -402,6 +411,16 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         }
         gyro_meas = frozen_gyro;
       }
+      // 加计卡死：从 accel_freeze_t 起输出冻结。
+      if (accel_freeze_t >= 0.0 && ti >= accel_freeze_t)
+      {
+        if (!have_frozen_accel)
+        {
+          frozen_accel = accel_meas;
+          have_frozen_accel = true;
+        }
+        accel_meas = frozen_accel;
+      }
       // IMU 健康监测：0.2s 滑动窗口内陀螺三轴方差 < 1e-12 判卡死。
       gyro_hist[gyro_hist_idx] = gyro_meas;
       gyro_hist_idx = (gyro_hist_idx + 1) % kHealthWin;
@@ -430,6 +449,36 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
             gyro_freeze_detect_local = ti;
           }
           ++gyro_freeze_hits_local;
+        }
+      }
+      // 加计健康监测：0.2s 窗口方差 < 1e-8（噪声方差约 1e-6）判卡死。
+      accel_hist[accel_hist_idx] = accel_meas;
+      accel_hist_idx = (accel_hist_idx + 1) % kHealthWin;
+      if (accel_hist_count < kHealthWin)
+      {
+        ++accel_hist_count;
+      }
+      if (accel_hist_count == kHealthWin)
+      {
+        Eigen::Vector3d amean = Eigen::Vector3d::Zero();
+        for (int h = 0; h < kHealthWin; ++h)
+        {
+          amean += accel_hist[h];
+        }
+        amean /= static_cast<double>(kHealthWin);
+        double avar = 0.0;
+        for (int h = 0; h < kHealthWin; ++h)
+        {
+          avar += (accel_hist[h] - amean).squaredNorm();
+        }
+        avar /= static_cast<double>(kHealthWin);
+        if (avar < 1.0e-8)
+        {
+          if (accel_freeze_detect_local < 0.0)
+          {
+            accel_freeze_detect_local = ti;
+          }
+          ++accel_freeze_hits_local;
         }
       }
       if (i < half)
@@ -853,6 +902,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   r.reanchor_suspicious = reanchor_suspicious_local;
   r.gyro_freeze_detect_t = gyro_freeze_detect_local;
   r.gyro_freeze_hits = gyro_freeze_hits_local;
+  r.accel_freeze_detect_t = accel_freeze_detect_local;
+  r.accel_freeze_hits = accel_freeze_hits_local;
   if (nis_cnt > 0)
   {
     r.nis_mean = nis_sum / nis_cnt;
@@ -1801,6 +1852,26 @@ int main()
         std::printf("%.0f,%d,%.2f,%d,%.3f\n", ft, seed,
                     r.gyro_freeze_detect_t, r.gyro_freeze_hits,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+      }
+    }
+  }
+
+  // ★加计卡死检测：Accel 场景，freeze -1/10/20s。
+  if (const char *ab = std::getenv("IMUPERF_ACCEL_FREEZE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== accelerometer freeze detection (accel scenario) ==\n");
+    std::printf("freeze_t,seed,detect_t,hits,pos_rmse\n");
+    for (double ft : {-1.0, 10.0, 20.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Accel, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 0.0, 1.5, -1.0, ft);
+        std::printf("%.0f,%d,%.2f,%d,%.4f\n", ft, seed,
+                    r.accel_freeze_detect_t, r.accel_freeze_hits, r.pos_rmse);
       }
     }
   }
