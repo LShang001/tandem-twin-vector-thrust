@@ -404,6 +404,8 @@ private:
   float max_gap_limit_s_ = BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_GAP_S;
   double max_tau_s_ = BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_TAU_S;
 
+  // 2026-11-02：窗口保持 20 s（5 s 实测可观测性不足：150 ms 估成 109 ms）。
+  // 参考漂移问题改由“每 2 s 从 EKF 重同步”解决（navigation_task 3667 行）。
   static constexpr size_t kMaxRef = 4000;  // 20 s @200Hz
   static constexpr size_t kMaxGnss = 200;  // 20 s @10Hz
   static constexpr double kTauStepS = 0.005;

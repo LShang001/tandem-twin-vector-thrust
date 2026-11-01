@@ -67,9 +67,11 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #if !defined(BFS_AHRS_GRAVITY_DIR_GATE) && !defined(BFS_DISABLE_AHRS_GRAVITY_DIR_GATE)
 #define BFS_AHRS_GRAVITY_DIR_GATE
 #endif
-#ifdef BFS_AHRS_GRAVITY_DIR_GATE
+// 方向门原语无条件包含：运动段重力方向量测（g_att_aid_mode=1）恒定用它，
+// 与 AHRS 门是否启用无关（2026-11-01）。
 #include "ins_ahrs_gravity_gate.h"
-#endif
+// 无 GNSS 运动段姿态辅助的噪声模型与模式默认值（2026-11-01）。
+#include "ins_gravity_aid_noise.h"
 // AHRS 姿态辅助的机型策略：VTOL 低倾角包线内它约束姿态漂移，保留；
 // 导弹/高动态构型在 GNSS 低刷新、延迟或振动下，Madgwick 重力参考会
 // 被持续比力/振动污染（2026-10-27 SIL：5 Hz 5.79°、1 g 振动 6.95°）。
@@ -78,6 +80,16 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #define BFS_AHRS_ATTITUDE_AID 0
 #else
 #define BFS_AHRS_ATTITUDE_AID 1
+#endif
+// AHRS/重力辅助的 GNSS 新鲜度门（2026-11-01 由 opt-in 改为默认启用）：
+// 旧行为用“本帧 GNSS 是否出队”作条件，10 Hz GNSS / 200 Hz 导航下辅助
+// 在 90% 的帧里都可尝试（导弹 SIL 2026-10-27：2022 次尝试/171 次融合）。
+// 改为 data-fresh（GNSS_NAV_DATA_TIMEOUT_MS 内）后：导弹 armed 21 格中
+// 19 格逐项相同、振动格 1 g 6.94→1.94°；VTOL 100 seeds 尾部 4 条
+// 9–24 m / 17–19° 消掉（291 vs 290 计数不可区分，见报告 §4.9）。
+// 复现旧行为：-DBFS_AHRS_GNSS_FRESH_GATE=0。
+#if !defined(BFS_AHRS_GNSS_FRESH_GATE)
+#define BFS_AHRS_GNSS_FRESH_GATE 1
 #endif
 // opt-in：IMU 非有限/健康失效时保持上一有效样本继续传播，并保留本帧
 // GNSS/磁/气压更新；默认关闭（实机未验证）。原行为是整帧 return，1 s 6 g
@@ -2638,51 +2650,89 @@ void handleNavigationSystem()
     }
     // 退出静止后重力累加器在下一次进入静止时由 static_gravity_acc=0,count=0 自然重置
     // ========================================================================
-    // 无 GNSS + 运动时：AHRS 姿态量测（利用重力融合约束姿态）
-    // 高动态构型可通过 BFS_DISABLE_AHRS_ATTITUDE_AID 关闭（见文件头）。
+    // 无 GNSS + 运动时：姿态辅助（模式可切，默认重力方向直连）
+    //   g_att_aid_mode = 0：仅 AHRS 姿态量测（2026-10 旧行为，A/B 基线）
+    //   g_att_aid_mode = 1：仅重力方向直连（默认）——EKF 直接用归一化比力方向，
+    //                        不经 Madgwick，避免同一陀螺既进 EKF 又进 AHRS 的
+    //                        信息重复计数（新息不白、NIS 统计不成立）
+    //   g_att_aid_mode = 2：重力优先，被门控/NIS 拒绝时回退 AHRS 姿态量测
+    // 高动态构型可通过 BFS_DISABLE_AHRS_ATTITUDE_AID 整体关闭（见文件头）。
     // ========================================================================
 #if BFS_AHRS_ATTITUDE_AID
     else if (
-#ifdef BFS_AHRS_GNSS_FRESH_GATE
-             // AHRS 是“无 GNSS”兜底，不是帧间填补：GNSS 10 Hz、导航 200 Hz 时
-             // gnss_instant_valid 只在出队帧为真，用它作条件会让 AHRS 在 90%
+#if BFS_AHRS_GNSS_FRESH_GATE
+             // 辅助是“无 GNSS”兜底，不是帧间填补：GNSS 10 Hz、导航 200 Hz 时
+             // gnss_instant_valid 只在出队帧为真，用它作条件会让辅助在 90%
              // 的帧里持续工作（导弹 SIL 2026-10-27 实测 2022 次尝试/171 次融合）。
              !gnss_data_fresh_for_nav
 #else
              !gnss_instant_valid_for_nav
 #endif
              && accel_gravity_trusted && angular_rate_quiet
-#ifdef BFS_AHRS_GRAVITY_DIR_GATE
-             // 比力模长≈g 不代表比力方向=重力：无坡度转弯/持续推力时升力沿
-             // 机体系 z，AHRS 会把机体拉平。要求实测比力方向与 EKF 预测重力
-             // 方向夹角 <10°，才把它当重力观测。
-             && ahrsGravityDirectionAllowed(nav_ekf.quat(), imu_accel_mps2,
-                                            nav_ekf.roll_rad(),
-                                            nav_ekf.pitch_rad())
-#endif
-#ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
-             && ahrsAttitudeAidAllowed(nav_ekf.roll_rad())
-#endif
             ) {
-      // 无 GNSS 时，运动中需要 AHRS 约束姿态漂移
-      // Madgwick 的 roll/pitch 来自”陀螺积分 + 加速度重力修正”，已经融合了重力信息
-      // 把它作为 EKF 姿态量测，可以在运动中持续约束姿态
-      Eigen::Vector3f ahrs_ypr_rad;
-      ahrs_ypr_rad << backup_ahrs_yaw, backup_ahrs_pitch, backup_ahrs_roll;
+      bool tilt_aided = false;
+      if (g_att_aid_mode != 0U)
+      {
+        // 运动段方向门恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）：
+        // 比力模长≈g 不代表比力方向=重力，无坡度转弯/持续推力时升力沿
+        // 机体系 z，裸喂会把机体拉平。门限 15° 见 ins_gravity_aid_noise.h。
+        // 依据：2026-10-27 导弹 SIL 加方向门后姿态 RMSE 9.80°→0.65–0.91°。
+        const Eigen::Vector3f expected_sf_dir_body =
+            bfs::quat2dcm(nav_ekf.quat()) * (-Eigen::Vector3f::UnitZ());
+        if (InsAhrsGravityDirectionAllowed(expected_sf_dir_body, imu_accel_mps2,
+                                           BFS_MOTION_GRAVITY_GATE_RAD))
+        {
+          // 噪声由比力模长反解的线加速度 + 振动 RMS 自适应给出；重力取 EKF
+          // 的当地重力（ekf_gravity_mps2），不硬编码 9.8。
+          const float grav_noise_rad =
+              InsGravityAidNoiseRad(accel_norm, s_vib_estimator.last().accel_rms_g,
+                                    ekf_gravity_mps2);
+          const bfs::MeasurementUpdateResult grav_result =
+              nav_ekf.MeasurementUpdateGravityDetailed(imu_accel_mps2,
+                                                       grav_noise_rad);
+          aid_tracker.RecordAttempt(bfs::AidSource::Gravity, grav_result);
+          tilt_aided = grav_result.fused;
+        }
+      }
+      if (!tilt_aided && g_att_aid_mode != 1U)
+      {
+        // AHRS 兜底 / 旧行为：Madgwick 的 roll/pitch 来自“陀螺积分 + 加速度
+        // 重力修正”，作为 EKF 姿态量测可在运动中约束姿态漂移。
+        const bool ahrs_gate_ok =
+#ifdef BFS_AHRS_GRAVITY_DIR_GATE
+            // 比力方向一致性检查（包线内不启用，保留原 AHRS 行为）
+            ahrsGravityDirectionAllowed(nav_ekf.quat(), imu_accel_mps2,
+                                        nav_ekf.roll_rad(), nav_ekf.pitch_rad());
+#else
+            true;
+#endif
+        const bool ahrs_outage_ok =
+#ifdef BFS_AHRS_ATT_GNSS_OUTAGE_GATE
+            ahrsAttitudeAidAllowed(nav_ekf.roll_rad());
+#else
+            true;
+#endif
+        if (ahrs_gate_ok && ahrs_outage_ok)
+        {
+          Eigen::Vector3f ahrs_ypr_rad;
+          ahrs_ypr_rad << backup_ahrs_yaw, backup_ahrs_pitch, backup_ahrs_roll;
 
-      // 动态噪声：加速度误差越大，对 AHRS 的信任越低
-      const float roll_pitch_noise_rad = linearInterpolate(accel_norm_error,
-                                                            0.3f, 2.0f,
-                                                            0.04f, 0.30f);
-      // yaw 噪声设为极大值 (≈π), 等效告诉 EKF "忽略 AHRS 的 yaw 量测, 只使用 roll/pitch"。
-      // Madgwick 无磁力计时 yaw 纯陀螺积分会漂移, 强行喂入 EKF 会反向污染 EKF 零偏估计。
-      // 参考 esp32-ins-gnss-fusion: yaw 残差恒设为 0 (nav.yaw_rad() 作为测量), 
-      // 这里用极高测量噪声达到同样效果。
-      const float yaw_noise_rad = 3.14159f;  // π rad, 等效忽略 yaw 量测
-      const bfs::MeasurementUpdateResult result = nav_ekf.MeasurementUpdateAttitudeDetailed(ahrs_ypr_rad,
-                                                                                              roll_pitch_noise_rad,
-                                                                                              yaw_noise_rad);
-      aid_tracker.RecordAttempt(bfs::AidSource::Attitude, result);
+          // 动态噪声：加速度误差越大，对 AHRS 的信任越低
+          const float roll_pitch_noise_rad = linearInterpolate(
+              accel_norm_error, 0.3f, 2.0f, 0.04f, 0.30f);
+          // yaw 噪声设为极大值 (≈π), 等效告诉 EKF "忽略 AHRS 的 yaw 量测,
+          // 只使用 roll/pitch"。Madgwick 无磁力计时 yaw 纯陀螺积分会漂移,
+          // 强行喂入 EKF 会反向污染 EKF 零偏估计。
+          // 参考 esp32-ins-gnss-fusion: yaw 残差恒设为 0 (nav.yaw_rad() 作为测量),
+          // 这里用极高测量噪声达到同样效果。
+          const float yaw_noise_rad = 3.14159f;  // π rad, 等效忽略 yaw 量测
+          const bfs::MeasurementUpdateResult result =
+              nav_ekf.MeasurementUpdateAttitudeDetailed(ahrs_ypr_rad,
+                                                        roll_pitch_noise_rad,
+                                                        yaw_noise_rad);
+          aid_tracker.RecordAttempt(bfs::AidSource::Attitude, result);
+        }
+      }
     }
 #endif  // BFS_AHRS_ATTITUDE_AID
     // 有 GNSS + 运动时：不需要 AHRS 辅助
@@ -3621,8 +3671,16 @@ void handleNavigationSystem()
     const Eigen::Vector3d p_nav(relative_north, relative_east, relative_down);
     const Eigen::Vector3d v_nav(fused_north_vel, fused_east_vel,
                                 INS_GNSS_Packet.velocity_down);
-    if (!s_ins_ref.valid()) {
-      s_ins_ref.Reset(p_nav, v_nav);
+    // 2026-11-02：参考是纯惯导积分，20 s 不重同步会漂 ~88 m（陀螺零偏
+    // 0.13°/s → 姿态 2.6°），粗差门（50 m）把 GNSS 样本剔光（OutlierStarved）。
+    // 每 2 s 从 EKF 位置/速度重同步（起点是 GNSS 更新后的状态），把窗内漂移
+    // 限制在 <1 m，同时保留 20 s 拟合窗的可观测性。
+    {
+      static uint32_t s_ins_ref_reset_ms = 0;
+      if (!s_ins_ref.valid() || (now_ms_auto - s_ins_ref_reset_ms) >= 2000U) {
+        s_ins_ref.Reset(p_nav, v_nav);
+        s_ins_ref_reset_ms = now_ms_auto;
+      }
     }
     s_ins_ref.Update(imu_accel_mps2, nav_ekf.quat(),
                      nav_ekf.accel_bias_mps2(), dt_s);

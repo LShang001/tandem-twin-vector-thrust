@@ -199,7 +199,11 @@
  * 中覆盖该宏，而不是改 EKF 源码。
  */
 #ifndef BFS_NAVIGATION_GNSS_DELAY_S
-#define BFS_NAVIGATION_GNSS_DELAY_S 0.015f
+// 2026-11-02：实机 GNSS 为 u-blox NEO-F10N（REF-175）。手册只给 PPS 精度
+// 30 ns RMS，未给解算/输出延迟。工程口径：单点解算 10–20 ms + 921600 串口
+// （NAV-PVT ≈100 B）1–2 ms ≈ 11–22 ms，取中位偏上 **25 ms** 作为无 PPS 的
+// 默认初始值；自动估计（ins_gnss_delay_auto）有效时由它替换。
+#define BFS_NAVIGATION_GNSS_DELAY_S 0.025f
 #endif
 
 namespace bfs
