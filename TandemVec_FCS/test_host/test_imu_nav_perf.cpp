@@ -253,7 +253,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
                   double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0,
                   double vel_noise_mult = 1.0, double accel_tempc = 0.0,
-                  double pos_noise_mult = 1.0)
+                  double pos_noise_mult = 1.0, double gnss_time_offset_s = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -511,7 +511,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
     if ((k % gnss_div) == 0 &&
         !(sc == Scenario::VibrationOutage && t >= outage_start && t < outage_end))
     {
-      const double tm = std::fmax(0.0, t - latency_s);
+      const double tm = std::fmax(0.0, t - latency_s + gnss_time_offset_s);
       const Truth trm = truthAt(tm, sc);
       // 速度与位置的时间对齐：速度可能比位置晚/早到达，用独立延迟的真值。
       const Truth trm_vel = truthAt(std::fmax(0.0, tm - vel_extra_delay_s), sc);
@@ -1966,6 +1966,26 @@ int main()
                                     0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
                                     0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, pn);
         std::printf("%.0f,%d,%.4f,%.4f\n", pn, seed, r.pos_rmse, r.alt_rmse);
+      }
+    }
+  }
+
+  // ★GNSS/IMU 时间同步误差：时间戳偏移 -20/0/+20ms（maneuver）。
+  if (const char *ab = std::getenv("IMUPERF_TIME_SYNC"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS time sync error (maneuver) ==\n");
+    std::printf("offset_ms,seed,pos_rmse,att_rmse_deg\n");
+    for (double off : {-0.02, 0.0, 0.02})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Accel, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, 1.0, off);
+        std::printf("%.0f,%d,%.4f,%.3f\n", off * 1000.0, seed, r.pos_rmse,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
       }
     }
   }
