@@ -54,6 +54,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "ins_bias_jump_monitor.h"
 #include "ins_bias_temp_observer.h"
 #include "ins_bias_temp_table.h"
+#include "ins_param_align.h"
 #include "ins_altitude_reference.h"
 #include "ins_static_detector.h"
 #include "ins_static_aid_profile.h"
@@ -166,6 +167,11 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 // IMU 温度补偿（默认关闭）：用温度-零偏表插值，补偿相对参考温度的增量。
 #ifndef BFS_NAVIGATION_IMU_TEMP_COMP
 #define BFS_NAVIGATION_IMU_TEMP_COMP 0
+
+// 参数辨识法精对准（默认关闭）：静止时用速度误差三次曲线估计失准角。
+#ifndef BFS_NAVIGATION_PARAM_ALIGN
+#define BFS_NAVIGATION_PARAM_ALIGN 0
+#endif
 #endif
 #endif
 #endif
@@ -1763,6 +1769,45 @@ void handleNavigationSystem()
   bool is_static_confirmed =
       (static_det.confirmed_static || prelaunch_align_ok) &&
       s_imu_health.staticAidsAllowed();
+
+#if BFS_NAVIGATION_PARAM_ALIGN
+  {
+    // 书本参数辨识法精对准（§9.9.2）：静止时速度误差做三次曲线拟合，
+    // 反解失准角与等效漂移。只记录/打印，不改姿态（上层决策）。
+    static InsParamAlign s_param_align;
+    static uint32_t s_param_start_ms = 0;
+    static bool s_param_reported = false;
+    if (is_static_confirmed)
+    {
+      if (s_param_align.count() == 0)
+      {
+        s_param_start_ms = millis();
+        s_param_reported = false;
+      }
+      const float t_s = static_cast<float>(millis() - s_param_start_ms) * 1e-3f;
+      const Eigen::Vector3f v = nav_ekf.ned_vel_mps();
+      (void)s_param_align.Update(t_s, v(1), v(0));
+    }
+    else
+    {
+      s_param_align.Reset();
+    }
+    if (!s_param_reported && s_param_align.full())
+    {
+      const InsParamAlign::Result r =
+          s_param_align.Solve(nav_ekf.lat_rad(), 9.79f);
+      if (r.valid)
+      {
+        Serial8.printf("[Nav] ParamAlign phi_e=%.3f phi_n=%.3f phi_u=%.3f deg (n=%d, res=%.4f)\n",
+                       static_cast<double>(r.phi_e_rad) * 57.2958,
+                       static_cast<double>(r.phi_n_rad) * 57.2958,
+                       static_cast<double>(r.phi_u_rad) * 57.2958,
+                       r.sample_count, static_cast<double>(r.fit_residual_rms));
+        s_param_reported = true;
+      }
+    }
+  }
+#endif
   // 地面静止校准：EKF 已初始化、油门未上量且检测器确认静止才累计。
   // 默认 30 s 后才允许无磁位置保持；陀螺零偏/水平初值需要长静置收敛，
   // 2 s 级静置不够（用户 2026-10-25 明确要求几十秒量级）。
