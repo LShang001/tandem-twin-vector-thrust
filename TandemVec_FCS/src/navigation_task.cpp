@@ -162,6 +162,11 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 // IMU 卡死健康监测（默认关闭）：0.2s 窗口陀螺/加计方差≈0 判卡死并告警。
 #ifndef BFS_NAVIGATION_IMU_HEALTH
 #define BFS_NAVIGATION_IMU_HEALTH 0
+
+// IMU 温度补偿（默认关闭）：用温度-零偏表插值，补偿相对参考温度的增量。
+#ifndef BFS_NAVIGATION_IMU_TEMP_COMP
+#define BFS_NAVIGATION_IMU_TEMP_COMP 0
+#endif
 #endif
 #endif
 #ifndef BFS_NAVIGATION_GNSS_REANCHOR_M
@@ -1349,6 +1354,35 @@ void handleNavigationSystem()
   const bfs::ImuHealthStatus imu_health_status =
       updateImuHealth(imu_accel_mps2, imu_gyro_radps,
                       static_cast<uint32_t>(local_imu_sample_count), dt_s);
+
+#if BFS_NAVIGATION_IMU_TEMP_COMP
+  // ── 温度补偿（默认关闭）────────────────────────────────────────────
+  // 用温度-零偏表插值，只补偿相对参考温度的增量，避免与 EKF 在线零偏
+  // 估计重复补偿。表由 navigation_task 在静止+GNSS 健康时采点（见
+  // s_bias_temp_table.AddPoint）。
+  {
+    static Eigen::Vector3f s_ref_gyro_bias = Eigen::Vector3f::Zero();
+    static Eigen::Vector3f s_ref_accel_bias = Eigen::Vector3f::Zero();
+    static bool s_ref_ready = false;
+    Eigen::Vector3f pred_gyro;
+    Eigen::Vector3f pred_accel;
+    if (s_bias_temp_table.Interpolate(imu_die_temp_c, &pred_gyro, &pred_accel))
+    {
+      if (!s_ref_ready)
+      {
+        s_ref_gyro_bias = pred_gyro;
+        s_ref_accel_bias = pred_accel;
+        s_ref_ready = true;
+      }
+      else
+      {
+        imu_gyro_radps -= (pred_gyro - s_ref_gyro_bias);
+        imu_accel_mps2 -= (pred_accel - s_ref_accel_bias);
+      }
+    }
+  }
+#endif
+
   // 传感器 NaN/Inf 安全门：跳过本帧传播，保持上一有效导航输出；控制侧另有
   // 陀螺有限值守卫。不能把 NaN 灌进 EKF/姿态环（SIL 故障注入已复现崩溃）。
 #ifdef BFS_NAV_IMU_OUTAGE_HOLD_LAST
