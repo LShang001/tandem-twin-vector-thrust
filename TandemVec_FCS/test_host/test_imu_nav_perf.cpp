@@ -2035,6 +2035,26 @@ int main()
     }
   }
 
+  // ★振动幅值对失锁姿态影响：0.2/0.5/1.0 g。
+  if (const char *ab = std::getenv("IMUPERF_VIB_AMP"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== vibration amplitude vs outage attitude ==\n");
+    std::printf("vib_amp,seed,att_rmse_deg,pos_rmse\n");
+    for (double va : {0.2, 0.5, 1.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::VibrationOutage, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, va, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, 1.0, 0.0, 0.0);
+        std::printf("%.1f,%d,%.3f,%.4f\n", va, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
