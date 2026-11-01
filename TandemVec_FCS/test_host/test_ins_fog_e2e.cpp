@@ -17,6 +17,7 @@
 
 #include "ekf_15_state.h"
 #include "ins_param_align.h"
+#include "earth_model.h"
 
 namespace
 {
@@ -76,7 +77,11 @@ int main()
                            kAccelBias * static_cast<float>(n01(rng)),
                            kAccelBias * static_cast<float>(n01(rng)));
 
-  const Eigen::Vector3d f_n(0.0, 0.0, -kG);
+  // ★ 比力必须用 EKF 机械编排的重力（WGS84 正常重力）构造，不能用 kG=9.79：
+  //   两者差 ~0.0038 m/s²，1 h 积分 = 24 km 级（端到端曾误判为“机械编排不自洽”）。
+  const double g_ekf =
+      bfs::normalgravity_mps2(kLat, kLla(2), bfs::AngPosUnit::RAD);
+  const Eigen::Vector3d f_n(0.0, 0.0, -g_ekf);
   const Eigen::Vector3d w_n(kOmegaIe * std::cos(kLat), 0.0,
                             -kOmegaIe * std::sin(kLat));
   const Eigen::Matrix3d C_bn_true = bodyFromNed(kTrueYaw);
@@ -145,7 +150,7 @@ int main()
   bfs::Ekf15State ekf;
   // 注意：Initialize 的 accel 必须是【静止时的真实比力】（FRD，含姿态投影），
   // 不是 (0,0,-g)；否则初始 tilt 与零偏初值错位（端到端实测 1 h 漂 1340 km）。
-  const Eigen::Vector3f f_b_init = f_b_true.cast<float>();
+  const Eigen::Vector3f f_b_init = f_b_true.cast<float>();  // 用 EKF 重力（同上）
   const Eigen::Vector3f w_b_init(
       static_cast<float>(w_b_true(0) + gb(0)),
       static_cast<float>(w_b_true(1) + gb(1)),
@@ -185,10 +190,9 @@ int main()
       180.0 / kPi;
   std::printf("1 h 纯惯导：位置漂移 %.1f m、姿态 %.4f°\n", pos_1h, att_1h);
 
-  // 当前 FOG 端到端：20.5 km/1 h、姿态 0.17°（理论加计 10 µg 应 ~0.6 km，
-  // 剩余误差来自初始零偏/姿态与双补偿路径，登记为待查；判据暂取 25 km/0.2°）。
-  const bool ok = (pos_1h < 25000.0) && (att_1h < 0.2);
-  std::printf(ok ? "FOG 端到端通过（<25 km、<0.2°，当前 20.5 km / 0.171°）\n"
+  // 用 EKF 同口径 WGS84 重力构造比力后：1 h 位置 96 m、姿态 0.0008°。
+  const bool ok = (pos_1h < 1000.0) && (att_1h < 0.01);
+  std::printf(ok ? "FOG 端到端通过（<1 km、<0.01°）\n"
                  : "FOG 端到端未达预期\n");
   return ok ? 0 : 1;
 }
