@@ -246,7 +246,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int gyro_temp_comp = 0, double temp_comp_err = 0.0,
                   double misalign_deg = 0.0, double lever_x = 0.0,
                   double lever_y = 0.0, double lever_z = 0.0,
-                  double vel_extra_delay_s = 0.0)
+                  double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -421,7 +421,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       }
       const double dn = trm.pos_ned(0) + lever_ned(0) + gnss.pos_std_m * n01(rng);
       const double de = trm.pos_ned(1) + lever_ned(1) + gnss.pos_std_m * n01(rng);
-      const double dd = trm.pos_ned(2) + lever_ned(2) + gnss.pos_std_m * 1.5 * n01(rng);
+      const double dd = trm.pos_ned(2) + lever_ned(2) +
+                       gnss.pos_std_m * vert_noise_mult * n01(rng);
       Eigen::Vector3d lla_meas = lla0;
       double dn_spike = dn;
       double de_spike = de;
@@ -1667,6 +1668,25 @@ int main()
                                     0.0, 0.0, 0.0, vd);
         std::printf("%.0f,%d,%.4f,%.3f\n", vd * 1000.0, seed, r.pos_rmse,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+      }
+    }
+  }
+
+  // ★GNSS 垂直通道质量：垂直噪声 1.5x/2x/3x，看高度与位置。
+  if (const char *ab = std::getenv("IMUPERF_VERT_NOISE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS vertical noise (static, M8N_10Hz) ==\n");
+    std::printf("mult,seed,alt_rmse,pos_rmse\n");
+    for (double vm : {1.5, 2.0, 3.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, vm);
+        std::printf("%.1f,%d,%.4f,%.4f\n", vm, seed, r.alt_rmse, r.pos_rmse);
       }
     }
   }
