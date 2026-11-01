@@ -8,6 +8,7 @@
  *   3) 全姿态扫描（roll/pitch/yaw 网格）TRIAD 输出与真值差 < 1e-3 rad。
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -20,7 +21,7 @@ namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
-constexpr float kG = 9.79f;
+const float kG = ins_test::GravityWgs84();
 
 float wrapPi(float a)
 {
