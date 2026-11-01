@@ -36,3 +36,16 @@
 - **ZCode agent shell PATH 被精简（2026-08-09 定位）**：Bash 工具默认 PATH 只有 `ZCode tools + %APPDATA%\npm` 三目录（连 System32 都没有），git/node/py 全不可用——**系统注册表 PATH（HKLM+HKCU）本身完整，勿去改系统环境变量**。修复：命令前缀 `call tools\shell-env.cmd && ...` 恢复完整 PATH（脚本在 `tools/shell-env.cmd`，ASCII 副本 `C:\Users\12631\.zcode\bin\`）。**★.cmd/.bat 批处理内容必须 ASCII（2026-08-11 编码统一升级）**：cmd 解析批处理文件用**进程启动时的代码页**——运行时 `chcp 65001` 只影响 echo/程序输出的编码，**不影响文件自身的解析**。UTF-8 中文/emoji 注释在 GBK 解析下会凑出特殊字节破坏整行（实测：`echo 🚀 中文` 崩出 `'cho' is not recognized`；含 `→` 的注释崩出 `'处理可写中文注释...' is not recognized`）。正确分工：**批处理内容（注释/命令/echo）一律英文 ASCII**；**中文输出走 Python**（`set PYTHONUTF8=1` 强制 UTF-8，console/管道一致）；`chcp 65001 >nul` 首行保留（对 echo 英文无影响、对调用的程序输出有益）。历史遗留：build.bat / GCS/start.bat 的中文 REM 经实测 GBK 解析安全（内容不含特殊字节），可保留但**新增注释一律英文**（来源：2026-08-09 shell 诊断；2026-08-11 编码统一实测：chcp 不救文件解析、emoji 必崩）
 
 - **pitchRatePID 复制粘贴 bug（2026-08-10 通读发现并修复）**：flight_control.cpp 内环 `alpha_pitch` 误用 `rollRatePID.compute`——pitchRatePID.compute 从未被调用：①pitch 积分恒 0 且与 roll 通道共享同一 PID 实例的积分状态互相污染；②在线辨识 `i_term[1]=pitchRatePID.getIntegral()` 恒 0 → pitch 通道 CG/配平力矩辨识失效。**kp 相同（0.28）掩盖了比例项错误**，实机调参稳定期未被发现。教训：同构代码（roll/pitch/yaw 三通道）逐一核对 PID 实例名，勿因参数相同想当然；在线辨识依赖的中间量要交叉验证非零（来源：2026-08-10 完整通读 flight_control.cpp）。**实机症状确认（2026-08-10 用户）**：pitch 控制一直飘、积分无法消除——正是 pitchRatePID 积分恒 0 的表现；且 rollRatePID.compute 被 roll/pitch 双通道交替调用，roll 积分项混入 pitch 误差（双向污染）
+
+## 2026-11-01 资料库早已入库却先上网搜（导航理论）
+
+- **现象**：研究静基座对准/可观测性时先 `web_search` 找资料，反复超时/碎片化；
+  实际上 `docs/08-参考资料/books/REF-120-Qin-2020-inertial-navigation-3e/` 已有
+  秦永元《惯性导航》第 3 版 MinerU 全文与 `chapters/ch7–ch10` 分章，
+  `notes/06-深读-对准与航向可观测性.md` 早已推导 `φ_U≈ε_E/(ω_ie cosL)`、
+  MEMS 边界、粗对准双矢量本质。
+- **根因**：未先读 `docs/08-参考资料/README.md` 与 `参考资料注册表.md`；
+  把“资料库”当成仅存 PDF 的目录。
+- **教训**：任何理论/文献任务先读 `docs/08-参考资料/README.md` + `notes/`（00–08）
+  + 对应 `books/REF-xxx/chapters/`，网络检索只用于补缺；引用用
+  `[REF-120 §9.9.2 (9.9.43c) p.334]` 格式。

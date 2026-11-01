@@ -29,7 +29,7 @@ node --test simulations/vector-thrust-lab/tests/propulsion.test.mjs # 单模块
 # 全量 test_host/run_all.sh 与整套 SIL 矩阵留到里程碑提交前、跨模块改动或用户明确要求时。
 
 # 固件算法直调（仿真脚本直接调固件 EKF，不再复刻算法）
-bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh              # 生成共享库（导航+控制+参数，4 组 ABI，/tmp/tv_fw_algo）
+bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh              # 生成共享库（导航+控制+参数，4 组 ABI，输出在仓库 tmp/tv_fw_algo）
 py -3.12 TandemVec-EKF-Report/sim/run_fw_gnc_demo.py               # 控制链直调冒烟（caps/参数/定高方向）
 py -3.12 TandemVec-EKF-Report/sim/run_fw_gnc_track_demo.py         # 姿态目标直驱 ABI 冒烟
 py -3.12 TandemVec-EKF-Report/sim/run_fw_nav_demo.py               # 导航步进 ABI 冒烟（对准/悬停/匀速）
@@ -76,8 +76,8 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 | `TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md` | 官方协议手册（MinerU 转换 26 页）+ **本工程差异对照表**（0x40/0x20/0x0D/0x30 占用约定；0xE0-0xE3 参数链路已验证逐项一致） |
 | `TandemVec_FCS/include/FlightCtrlParams.h` | 固件参数唯一事实源：`kFlightCtrlParamsDefaults`（出厂默认，static constexpr）+ 固件分支 `kFlightCtrlParams`（可变实例，0xE1 写入） |
 | `TandemVec_FCS/include/AirframeModel.h` | 机型数据驱动执行器模型（通用层）：换机型=填几何数据表；`computeEffectMatrixDataDriven` 数值差分生成 B（ta T11 等价回归锁定） |
-| `TandemVec_FCS/test_host/fw_algo/` | ★ 固件直调接口（C ABI + Python `sim/fwapi`）：仿真直接调固件 `Ekf15State`、控制分配、**`runGNCExecutive()` 控制链**（`fw_gnc_api.h`）与 **164 项参数注册表**（与 GCS 同源；2026-10-30 起表尾追加 25 项共轴 `coax.*`，2026-10-31 再追加 6 项分配器参数，共 31 项）。`build_fw_algo.sh` 的 `CORE_SOURCES` 是**唯一固件源清单**（SIL 与共享库共用；新增 .cpp 必须同步）；`fw_core_caps()` 回报 ABI/机型/特性位/构建号。第四组 `fw_nav_api.h` = **导航步进**（`handleNavigationSystem` + 真实 UBX 解析器/门控/重锚，输入=导航任务 200 Hz 消费的外部量，传感器层 2 kHz 低通/Madgwick 不在核心里）。**禁止在 `sim/` 再复刻一份算法**（`hifi_core.FirmwareControl` 已判定不可机械迁移，登记为"设计模型"，见 CTL-004 §7.5） |
-| `docs/08-参考资料/` | 文献库：两本秦永元教材（`books/REF-120/121`，MinerU 全文/章节）、论文、主题笔记 `notes/00–05`、索引/校验脚本；导航算法升级评估报告在 `TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md` |
+| `TandemVec_FCS/test_host/fw_algo/` | ★ 固件直调接口（C ABI + Python `sim/fwapi`）：仿真直接调固件 `Ekf15State`、控制分配、**`runGNCExecutive()` 控制链**（`fw_gnc_api.h`）与**参数注册表**（与 GCS 同源，数量以 `ano_params.cpp` 自检为准；表尾曾追加共轴 `coax.*` 与分配器参数）。`build_fw_algo.sh` 的 `CORE_SOURCES` 是**唯一固件源清单**（SIL 与共享库共用；新增 .cpp 必须同步）；`fw_core_caps()` 回报 ABI/机型/特性位/构建号。第四组 `fw_nav_api.h` = **导航步进**（`handleNavigationSystem` + 真实 UBX 解析器/门控/重锚，输入=导航任务 200 Hz 消费的外部量，传感器层 2 kHz 低通/Madgwick 不在核心里）。**禁止在 `sim/` 再复刻一份算法**（`hifi_core.FirmwareControl` 已判定不可机械迁移，登记为"设计模型"，见 CTL-004 §7.5） |
+| `docs/08-参考资料/` | ★ **理论资料第一入口（先读这里，再决定是否上网）**：`README.md` 体系说明；`参考资料注册表.md` REF-001–148 编号/状态；`books/REF-120` 秦永元《惯性导航》3e 全文+`chapters/ch7–ch10`（页映射=印刷页+8）；`books/REF-121` 《卡尔曼滤波与组合导航》3e；`notes/00–08` 主题深读（01 捷联惯导理论、02 卡尔曼、03 组合导航、06 对准与航向可观测性、07 一致性与故障检测）；`index/`（TEAM-BRIEF/bibliography/catalog.json）；`papers/` 16 篇。引用格式 `[REF-120 §9.9.2 (9.9.43c) p.334]`。导航算法升级评估报告在 `TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md` |
 | `docs/00-项目治理/GOV-004-代码注释与理论对照规范.md` | ★ 注释唯一标准：L0 文件头 / L1 符号文档块 / 理论对照五段式 / `@ref` 引用格式 / 机检规则 R01–R10；配套 `tools/check-code-comments.py` 与 `docs/04-数学建模/代码理论核查/` |
 
 ## 原则
@@ -87,6 +87,7 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 3. **外科手术式修改** — 只改目标代码，不顺手重构、不扩范围
 4. **修改后必须跑测试** — `node --test simulations/vector-thrust-lab/tests/`，全绿再提交
 5. **改代码必改注释（GOV-004）** — 公式性实现必须带 `@formula` + `@ref`（章节+式号+页码）；新文件必须有 L0 文件头；提交前跑 `py -3.12 tools/check-code-comments.py --check`
+6. **查理论先读本地资料库** — `docs/08-参考资料/`（`notes/` 主题深读 + `books/REF-120/121` 章节）优先于网络检索，网络只用于补缺（2026-11-01 教训）
 
 ## 行为红线
 
@@ -120,14 +121,17 @@ py -3.12 tools/check-code-comments.py --area fw-nav   # 单区域：sim/fw-ekf/f
 - **Skill**：创建/修改项目 Skill 时走 `skill-creator-plus` 流程（草稿→清单审查），不裸调 `install_skill`。Skill 存 `.agents/skills/`（Agentskills.io 标准），不存 `.reasonix/skills/`
 - **仿真可视化**：每组仿真结果至少配时序 / 3D 轨迹 / 分布（箱线或小提琴）/ CDF / 散点或热图；脚本统一 `sim/plot_*.py`，生成后逐张目视审查再写结论（图内文字、坐标尺度、NaN/空图都要查）
 
-## 踩坑记录（完整 19 条见 docs/registers/踩坑记录-AGENTS.md——改控制/通信/调试代码前先检索）
+## 踩坑记录（完整记录见 docs/registers/踩坑记录-AGENTS.md——改控制/通信/调试代码前先检索）
+
+> 以下条目按时间累积；与固件强相关的（执行器/差速/遥测/GNSS 延时/EKF）在 `TandemVec_FCS/AGENTS.md` 或 `TandemVec-EKF-Report/` 有摘要，**重复时以代码与固件文档为准**，本文件只保留跨仓通用或需要先检索的判据。
 
 - **断链判据不能拿油门杆代理"在空中"（2026-10-31 审计 P1-2/P1-3）**：AUTO_ALTITUDE 下油门是升降速率指令（中心 50%、死区 ±10%，<40% 即下降，0% = −1 m/s），空中主动下降与地面待机在通道值上同形。旧判据 `raw[4]>1500 && raw[2]>1100` 一旦油门低就判"地面" → CH5 写 988 → 空中上锁、电机 0%、自由落体（SIL 从 8.15 m 自由落体）；旧实现还把 CH3 压 988，空中被高度环读成"以 1 m/s 稳定下降"。**判据已收敛到 `TandemVec_FCS/include/FailsafeLinkLossPlan.h`（已解锁 AND（有油门动力 OR 离地 >0.5 m）），CH3 空中归中 1500**；`manage_pid_integrals` 的 `throttle_active` 同时并入 `failsafe_in_flight`（否则断链段姿态环退化为纯 P）。回归：`test_host/test_failsafe_plan.cpp`（576 组真值表）、`test_host/fw_sil/build_and_run_failsafe.sh`（空中低油门/正常油门/地面/复链四场景，`--legacy` 复现修复前失效）。
 - **模式沿检测的两个陷阱（2026-10-31）**：① `s_prev_mode` 若写在 `if (mode == AUTO_POSITION)` 内部，就永远只记录 AUTO_POSITION，条件恒不成立（2026-08-10 那次"重锁当前点"实为空操作）——模式记录必须每拍更新，解锁上升沿调 `resetPositionModeEntryLatch()` 清锁存；② RATE_MODE 的 PID 复位只能放在"切入 RATE 的那一拍"，每拍清零会让速率环退化纯 P。回归：`fw_sil_mode_main.cpp`（重入目标点 0→3 m、RATE 积分 0.083→20.03；旧源码 `T:/fe-fix/legacy` 差分复现）。
 - **飞行构建必须等于被回归覆盖的构建（2026-10-31）**：`BFS_NAVIGATION_EMBEDDED_FAST_STABILIZE/_PROPAGATION` 只切 float 协方差快路径，而 `[env:test]`/test_host/SIL 都不定义它们——已从飞行 env 移除；恢复前必须先把 float 路径纳入宿主回归并加协方差正定性断言。反向情况：`BFS_BARO_HEALTH_GATE` 的 Drift/Spike/Stuck 监测器早已实现，但飞行 env 未定义 → 门控恒 false，现已启用。DETA100 的 CRC16 比较曾被整段注释（P0-1），已恢复并加 `test_deta100_crc_guard.cpp` 源码守卫。
 - **测试替身层不得重写行为逻辑（2026-10-31）**：真实导航 SIL 的 `linkDownCallback` 原本是 `TandemVec_FCS/test_host/fw_sil/fw_sil_stubs.cpp` 里的手抄副本，而 `communication.cpp` 不参与 SIL 链接 —— 所谓"真实固件 SIL"实际测的是桩，断链修复在该 SIL 里完全不可见（表现为仍以 1.15 m/s 下降、7 s 掉 8 m）。现在桩与固件共用 `include/FailsafeLinkLossPlan.h`，`test_host/test_failsafe_plan.cpp` T4 加源码守卫（两边必须引用同一判据、不得残留旧判据）。**判据：凡是替身层自己实现的"行为"，都要么抽成纯函数共用，要么加源码守卫；否则验证结论无效。** 真实导航闭环矩阵 `test_host/fw_sil/run_failsafe_matrix.sh`（断链/复链/断链+风+GNSS失联叠加，10/20/30 m × 3 seeds）为该项验收。
 - **调度时基与 IMU 采样率必须解耦（2026-11-01）**：TIM8 时基由 2kHz 升到 6.4kHz，因为 ICM-45686 无 2000Hz ODR 档（序列 2 倍档，3.2kHz 需 312.5µs=0.625 tick，2kHz 时基会被 wholeTicksFromQ8 抬到 500µs，物理不可达）。IMU 任务周期与 `madgwick.begin()` 更新率都由 `IMU->actualAccelOdrHz()` 反推（2k→0.5ms/3.2 tick、3.2k→0.3125ms/2 tick），**不得再写死 0.5ms/2000**；换 45686 用 `[env:TandemVec_FCS_ICM45686]`（-DFCS_IMU_MODEL_ICM45686），未选中的后端不参与构建。改动时基必须同步 `task_scheduler_interval_test.cpp`（已改为按常量推导，不再硬编码 tick）。★ 中断负载 ×3.2，上板必须用 DBG `tasks` 复核迟到计数。
-- **连续参数优化默认用现代优化器（2026-11-01 用户要求）**：LPF 带宽、门限、Q/R 缩放、GNSS 延迟先验等**连续参数**的最终调参，必须用 CMA-ES（`cma` 包，本机已装 4.4.4）或 scipy 的 L-BFGS-B/Nelder-Mead；评估成本高时用贝叶斯优化（optuna/skopt，装了才用）或小种群 CMA-ES。网格/手扫只允许用于初值与可视化，不得作为最终调参结论。落地方式：仿真可执行文件加 `IMUPERF_OPT=1` 模式，参数经环境变量注入、目标值以 `OPT_RESULT,<cost>` 输出；Python 优化脚本放 `test_host/opt_*.py`；结果记录初值/边界/评估次数/收敛曲线，并说明优化目标与权重。- **写传感器驱动前先查手册的寄存器字段，别按函数名猜（2026-11-01）**：ICM-42688-P 的 `setLowPassFilter` 旧实现把档位写进 GYRO_CONFIG0/ACCEL_CONFIG0 的低 4 位（那是 ODR 字段），DTLP 真身在 GYRO_ACCEL_CONFIG0(0x52)：陀螺 bit3:0、加计 bit7:4，编码不是 ODR/2^n 而是 0=ODR/2、1=max(400,ODR)/4、2=/5、3=/8、4=/10、5=/16、6=/20、7=/40。结果 LPF 从未生效、还被随后的 ODR 写入覆盖。核对依据：DS-000347 Rev1.2 §14.40/14.41（已归档 `lib/ICM42688/doc/`）；ICM-45686 用 DS-000577 Rev1.0（`lib/ICM45686/doc/`）。**同类教训**：改驱动前先 grep 手册寄存器名，确认字段位置与编码表；不要凭“DLPF=0..3 对应 50..400Hz”这类经验假设。
+- **连续参数优化默认用现代优化器（2026-11-01 用户要求）**：LPF 带宽、门限、Q/R 缩放、GNSS 延迟先验等**连续参数**的最终调参，必须用 CMA-ES（`cma` 包，本机已装 4.4.4）或 scipy 的 L-BFGS-B/Nelder-Mead；评估成本高时用贝叶斯优化（optuna/skopt，装了才用）或小种群 CMA-ES。网格/手扫只允许用于初值与可视化，不得作为最终调参结论。落地方式：仿真可执行文件加 `IMUPERF_OPT=1` 模式，参数经环境变量注入、目标值以 `OPT_RESULT,<cost>` 输出；Python 优化脚本放 `test_host/opt_*.py`；结果记录初值/边界/评估次数/收敛曲线，并说明优化目标与权重。
+- **写传感器驱动前先查手册的寄存器字段，别按函数名猜（2026-11-01）**：ICM-42688-P 的 `setLowPassFilter` 旧实现把档位写进 GYRO_CONFIG0/ACCEL_CONFIG0 的低 4 位（那是 ODR 字段），DTLP 真身在 GYRO_ACCEL_CONFIG0(0x52)：陀螺 bit3:0、加计 bit7:4，编码不是 ODR/2^n 而是 0=ODR/2、1=max(400,ODR)/4、2=/5、3=/8、4=/10、5=/16、6=/20、7=/40。结果 LPF 从未生效、还被随后的 ODR 写入覆盖。核对依据：DS-000347 Rev1.2 §14.40/14.41（已归档 `lib/ICM42688/doc/`）；ICM-45686 用 DS-000577 Rev1.0（`lib/ICM45686/doc/`）。**同类教训**：改驱动前先 grep 手册寄存器名，确认字段位置与编码表；不要凭“DLPF=0..3 对应 50..400Hz”这类经验假设。
 - **仿真按设计意图建模 ≠ 实机行为（2026-11-01 延续）**：42688 LPF 缺陷意味着此前的仿真（一阶 50/100Hz）与实机（LPF 未生效）不一致；修复后群延迟增加约 1.6/3.2ms，需上板复核姿态环与 GNSS 延迟补偿。凡“驱动层修了但仿真没改参数”的改动，报告里必须写清“仿真结论对应的实机配置是否仍成立”。
 - **仿真里的运行期日志会改变数值路径（2026-11-01）**：IMU×GNSS 导航性能测试加 trace 后，同一 seed、同一二进制在“开 trace”时从 0.3° 发散到 170°、位置跑到 370 m，关 trace 完全正常；根因是运行期 `printf`（每 0.1s 一行）改变了浮点/栈路径。**trace 一律先在内存收集、运行结束一次性写文件**；判“仿真发散”前先排除日志路径，不要直接归因于 EKF/固件。
 
