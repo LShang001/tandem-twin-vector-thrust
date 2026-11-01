@@ -49,6 +49,10 @@ struct RunResult
   double mean_tau_s = 0.0;
   int tau_valid_count = 0;
   int reject = 0;
+  int diag_n = 0;
+  int diag_erased = 0;
+  double diag_speed = 0.0;
+  double diag_resid = 0.0;
   int steps = 0;
 };
 
@@ -93,6 +97,8 @@ RunResult run(const bool delay_known, const double delay_s,
   int samples = 0;
   double age_sum = 0.0;
   int last_reject = 0;
+  int last_n = 0, last_erased = 0;
+  double last_speed = 0.0, last_resid = 0.0;
   double tau_sum = 0.0;
   int tau_valid = 0;
 
@@ -192,6 +198,10 @@ RunResult run(const bool delay_known, const double delay_s,
       att_err_sq += att_err * att_err;
       age_sum += out.gnss_age_s;
       last_reject = out.auto_delay_reject;
+      last_n = out.auto_delay_n_gnss;
+      last_erased = out.auto_delay_n_erased;
+      last_speed = out.auto_delay_speed_max_mps;
+      last_resid = out.auto_delay_residual_mps;
       if (out.auto_delay_valid)
       {
         tau_sum += out.auto_delay_tau_s;
@@ -209,6 +219,10 @@ RunResult run(const bool delay_known, const double delay_s,
   r.mean_tau_s = tau_valid > 0 ? tau_sum / tau_valid : 0.0;
   r.tau_valid_count = tau_valid;
   r.reject = last_reject;
+  r.diag_n = last_n;
+  r.diag_erased = last_erased;
+  r.diag_speed = last_speed;
+  r.diag_resid = last_resid;
   r.steps = steps;
   fw_nav_destroy(nav);
   return r;
@@ -222,9 +236,11 @@ int main(int argc, char **argv)
   const bool fake = (argc > 2) && (std::atoi(argv[2]) != 0);
   const bool known = !fake;
   const double d = delay_ms * 1e-3;
-  std::printf("mode,pos_rmse,att_rmse_deg,mean_gnss_age_s,mean_tau_s,tau_valid%,reject\n");
+  std::printf("mode,pos_rmse,att_rmse_deg,age,tau,valid%,reject,n_gnss,n_erased,speed_max,resid\n");
   double pos = 0.0, att = 0.0, age = 0.0, tau = 0.0, tv = 0.0;
   int rej = 0;
+  int diag_n = 0, diag_erased = 0;
+  double diag_speed = 0.0, diag_resid = 0.0;
   const int seeds = 2;
   for (int s = 1; s <= seeds; ++s)
   {
@@ -235,10 +251,14 @@ int main(int argc, char **argv)
     tau += r.mean_tau_s;
     tv += r.tau_valid_count > 0 ? 1.0 : 0.0;
     rej = r.reject;
+    diag_n = r.diag_n;
+    diag_erased = r.diag_erased;
+    diag_speed = r.diag_speed;
+    diag_resid = r.diag_resid;
   }
   std::printf("%s_%.0fms,%.4f,%.3f,%.4f,%.4f,%.0f%%,%d\n",
               fake ? "fake_itow" : "known", delay_ms, pos / seeds,
-              att / seeds, age / seeds, tau / seeds,
-              tv / seeds * 100.0, rej);
+              att / seeds, age / seeds, tau / seeds, tv / seeds * 100.0, rej,
+              diag_n, diag_erased, diag_speed, diag_resid);
   return 0;
 }

@@ -236,6 +236,10 @@ void ReadOutputs(fw_nav_output_t *out)
   out->auto_delay_valid = gnss_status.auto_delay_valid ? 1 : 0;
   out->auto_delay_sharpness = gnss_status.auto_delay_sharpness;
   out->auto_delay_reject = gnss_status.auto_delay_reject;
+  out->auto_delay_n_gnss = gnss_status.auto_delay_n_gnss;
+  out->auto_delay_n_erased = gnss_status.auto_delay_n_erased;
+  out->auto_delay_speed_max_mps = gnss_status.auto_delay_speed_max_mps;
+  out->auto_delay_residual_mps = gnss_status.auto_delay_residual_mps;
   out->baro_fused = baro_ekf_fused ? 1 : 0;
   out->baro_innov_m = baro_ekf_innovation_m;
   out->heading_aiding = g_heading_hold_allowed ? 1 : 0;
