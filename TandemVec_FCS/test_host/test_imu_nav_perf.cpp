@@ -232,7 +232,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double gnss_spike_m = 0.0, double gnss_spike_t = 15.0,
                   int gnss_spike_frames = 1, int reanchor_consist = 0,
                   double r_floor = 0.15, double gyro_tempc = 0.0,
-                  int gyro_temp_comp = 0, double temp_comp_err = 0.0)
+                  int gyro_temp_comp = 0, double temp_comp_err = 0.0,
+                  double misalign_deg = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -325,6 +326,18 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
 
       Eigen::Vector3d accel_meas = f_body;
       Eigen::Vector3d gyro_meas(tr.p, tr.q, tr.r);
+      // 安装失准：绕 z 轴小角度旋转（片内测量 = R_mis * 真实体轴）。
+      if (misalign_deg != 0.0)
+      {
+        const double m = misalign_deg * kDeg2Rad;
+        Eigen::Matrix3d Rm;
+        // 绕 x 轴（水平轴）失准：静止重力会分到 y/z，能体现安装误差。
+        Rm << 1.0, 0.0, 0.0,
+              0.0, std::cos(m), -std::sin(m),
+              0.0, std::sin(m),  std::cos(m);
+        accel_meas = Rm * accel_meas;
+        gyro_meas = Rm * gyro_meas;
+      }
       for (int a = 0; a < 3; ++a)
       {
         accel_meas(a) += accel_bias(a) + accel_sigma * n01(rng);
@@ -1554,6 +1567,25 @@ int main()
           std::printf("%d,%.1f,%d,%.3f,%.4f\n", comp, err, seed,
                       0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
         }
+      }
+    }
+  }
+
+  // ★安装失准角：0/0.5/1/2° 绕 z，看姿态与位置误差。
+  if (const char *ab = std::getenv("IMUPERF_MISALIGN"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== IMU misalignment (static) ==\n");
+    std::printf("mis_deg,seed,att_rmse_deg,pos_rmse\n");
+    for (double mis : {0.0, 0.5, 1.0, 2.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, mis);
+        std::printf("%.1f,%d,%.3f,%.4f\n", mis, seed,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
       }
     }
   }
