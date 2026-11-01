@@ -18,6 +18,7 @@
  */
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <random>
 #include <vector>
@@ -214,48 +215,30 @@ RunResult run(const bool delay_known, const double delay_s,
 }
 }  // namespace
 
-int main()
+int main(int argc, char **argv)
 {
-  std::printf("== 真实固件导航链路（fw_nav_api）GNSS 延迟与自动估计 ==\n");
+  // 单模式单进程：避免 fw_nav 单例跨 run 的初始化状态污染。
+  const double delay_ms = (argc > 1) ? std::atof(argv[1]) : 0.0;
+  const bool fake = (argc > 2) && (std::atoi(argv[2]) != 0);
+  const bool known = !fake;
+  const double d = delay_ms * 1e-3;
   std::printf("mode,pos_rmse,att_rmse_deg,mean_gnss_age_s,mean_tau_s,tau_valid%,reject\n");
-
-  const double delays[] = {0.0, 0.05, 0.15, 0.3};
-  for (double d : delays)
+  double pos = 0.0, att = 0.0, age = 0.0, tau = 0.0, tv = 0.0;
+  int rej = 0;
+  const int seeds = 2;
+  for (int s = 1; s <= seeds; ++s)
   {
-    const int seeds = 2;
-    double pos = 0.0, att = 0.0, age = 0.0, tau = 0.0, tv = 0.0;
-    int reject_last = 0;
-    for (int s = 1; s <= seeds; ++s)
-    {
-      const RunResult r = run(true, d, false, static_cast<unsigned>(s));
-      pos += r.pos_rmse;
-      att += r.att_rmse_deg;
-      age += r.mean_gnss_age_s;
-      tau += r.mean_tau_s;
-      tv += r.tau_valid_count > 0 ? 1.0 : 0.0;
-      reject_last = r.reject;
-    }
-    std::printf("known_%.0fms,%.4f,%.3f,%.4f,%.4f,%.0f%%,%d\n", d * 1000.0,
-                tv / seeds * 100.0, reject_last);
+    const RunResult r = run(known, d, fake, static_cast<unsigned>(s));
+    pos += r.pos_rmse;
+    att += r.att_rmse_deg;
+    age += r.mean_gnss_age_s;
+    tau += r.mean_tau_s;
+    tv += r.tau_valid_count > 0 ? 1.0 : 0.0;
+    rej = r.reject;
   }
-  // 假 iTOW：数据延迟 150 ms 但时间标签写现在
-  {
-    const int seeds = 2;
-    double pos = 0.0, att = 0.0, age = 0.0, tau = 0.0, tv = 0.0;
-    int reject_last = 0;
-    for (int s = 1; s <= seeds; ++s)
-    {
-      const RunResult r = run(false, 0.15, true, static_cast<unsigned>(s));
-      pos += r.pos_rmse;
-      att += r.att_rmse_deg;
-      age += r.mean_gnss_age_s;
-      tau += r.mean_tau_s;
-      tv += r.tau_valid_count > 0 ? 1.0 : 0.0;
-      reject_last = r.reject;
-    }
-    std::printf("fake_itow_150ms,%.4f,%.3f,%.4f,%.4f,%.0f%%,%d\n", pos / seeds,
-                att / seeds, age / seeds, tau / seeds,
-                tv / seeds * 100.0, reject_last);
-  }
+  std::printf("%s_%.0fms,%.4f,%.3f,%.4f,%.4f,%.0f%%,%d\n",
+              fake ? "fake_itow" : "known", delay_ms, pos / seeds,
+              att / seeds, age / seeds, tau / seeds,
+              tv / seeds * 100.0, rej);
   return 0;
 }
