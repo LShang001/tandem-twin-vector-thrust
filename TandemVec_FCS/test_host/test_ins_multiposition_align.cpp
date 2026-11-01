@@ -15,6 +15,7 @@
  * 用已知转台角做最小二乘，输出零偏估计误差与补偿后 1 h 纯惯导漂移。
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <random>
 #include <Eigen/Core>
@@ -24,7 +25,7 @@ namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
-constexpr double kGravity = 9.79;
+const double kGravity = static_cast<double>(ins_test::GravityWgs84());
 constexpr double kOmegaIe = 7.292115e-5;
 constexpr double kLat = 31.2304 * kDeg2Rad;
 

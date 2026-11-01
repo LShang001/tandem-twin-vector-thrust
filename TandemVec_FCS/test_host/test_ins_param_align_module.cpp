@@ -3,6 +3,7 @@
  * @brief   ins_param_align.h 模块回归：书本参数辨识法（§9.9.2）。
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <random>
 
@@ -12,7 +13,7 @@ namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
-constexpr double kG = 9.79;
+const double kG = static_cast<double>(ins_test::GravityWgs84());
 constexpr double kOmega = 7.292115e-5;
 constexpr double kLat = 31.2304 * kDeg2Rad;
 

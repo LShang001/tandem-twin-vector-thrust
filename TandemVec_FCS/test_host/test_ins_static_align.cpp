@@ -18,6 +18,7 @@
  *       lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp -o t.exe
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <random>
 #include <Eigen/Core>
@@ -29,7 +30,7 @@ namespace
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
 constexpr float kNavDt = 0.005f;
-constexpr float kGravity = 9.79f;
+const float kGravity = ins_test::GravityWgs84();  // WGS84 正常重力（与 EKF 同口径）
 const Eigen::Vector3d kLla(31.2304 * kDeg2Rad, 121.4737 * kDeg2Rad, 5.0);
 
 const float kAccelBiasTrue = 0.005f * kGravity;  // 5 mg

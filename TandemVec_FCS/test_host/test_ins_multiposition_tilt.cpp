@@ -12,6 +12,7 @@
  * 最小二乘解 b_a(3)、b_g(3)，再补偿跑 1 h 纯惯导。
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <random>
 #include <Eigen/Core>
@@ -21,7 +22,7 @@ namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
-constexpr double kG = 9.7938;  // WGS84 正常重力（与机械编排同口径）
+const double kG = static_cast<double>(ins_test::GravityWgs84());
 constexpr double kOmegaIe = 7.292115e-5;
 constexpr double kLat = 31.2304 * kDeg2Rad;
 

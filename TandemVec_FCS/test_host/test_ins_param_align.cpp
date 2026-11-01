@@ -22,6 +22,7 @@
  *   2) 双位置用 ε_IN 修正后，方位精度明显提升。
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <random>
 #include <Eigen/Core>
@@ -31,7 +32,7 @@ namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
-constexpr double kG = 9.79;
+const double kG = static_cast<double>(ins_test::GravityWgs84());
 constexpr double kOmega = 7.292115e-5;
 constexpr double kLat = 31.2304 * kDeg2Rad;
 

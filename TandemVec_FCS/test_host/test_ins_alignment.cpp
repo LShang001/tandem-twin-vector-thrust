@@ -9,6 +9,7 @@
  * 输出：姿态误差、零偏估计误差、对准后 300 s 纯惯导漂移。
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <random>
 #include <Eigen/Core>
@@ -20,7 +21,7 @@ namespace
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
 constexpr float kNavDt = 0.005f;
-constexpr float kGravity = 9.79f;
+const float kGravity = ins_test::GravityWgs84();  // WGS84 正常重力（与 EKF 同口径）
 const Eigen::Vector3d kLla(31.2304 * kDeg2Rad, 121.4737 * kDeg2Rad, 5.0);
 
 const float kAccelBiasTrue = 0.005f * kGravity;  // 5 mg
@@ -120,8 +121,12 @@ int main()
         gyro(a) += gb(a) + kGyroNoise * static_cast<float>(n01(rng));
       }
       ekf_fine.TimeUpdate(accel, gyro, kNavDt);
-      (void)ekf_fine.MeasurementUpdateGravity(accel, 0.01f);
-      (void)ekf_fine.MeasurementUpdateStaticGyro(gyro, 0.01f);
+      // 书本静基座精对准三件套：重力方向（水平失准角）、零角速度（陀螺
+      // 零偏）、零速（速度误差 → 水平失准角与加计零偏）。
+      (void)ekf_fine.MeasurementUpdateGravity(accel, 0.001f);
+      (void)ekf_fine.MeasurementUpdateStaticGyro(gyro, 0.001f);
+      (void)ekf_fine.MeasurementUpdateVelocity(Eigen::Vector3f::Zero(), 0.01f,
+                                               0.01f);
     }
     const double fine_att = attErrorDeg(ekf_fine);
     const Eigen::Vector3f fine_ab = ekf_fine.accel_bias_mps2();
