@@ -252,7 +252,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double lever_y = 0.0, double lever_z = 0.0,
                   double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
                   double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0,
-                  double vel_noise_mult = 1.0, double accel_tempc = 0.0)
+                  double vel_noise_mult = 1.0, double accel_tempc = 0.0,
+                  double pos_noise_mult = 1.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -526,8 +527,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       {
         lever_ned = nedFromBody(trm) * Eigen::Vector3d(lever_x, lever_y, lever_z);
       }
-      const double dn = trm.pos_ned(0) + lever_ned(0) + gnss.pos_std_m * n01(rng);
-      const double de = trm.pos_ned(1) + lever_ned(1) + gnss.pos_std_m * n01(rng);
+      const double dn = trm.pos_ned(0) + lever_ned(0) +
+                        gnss.pos_std_m * pos_noise_mult * n01(rng);
+      const double de = trm.pos_ned(1) + lever_ned(1) +
+                        gnss.pos_std_m * pos_noise_mult * n01(rng);
       const double dd = trm.pos_ned(2) + lever_ned(2) +
                        gnss.pos_std_m * vert_noise_mult * n01(rng);
       Eigen::Vector3d lla_meas = lla0;
@@ -655,7 +658,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         // 模拟固件动态 R（navigation_task.cpp:2106）：位置噪声按该 GNSS 档次的
         // hAcc 设置，并钳到固件同款下限 0.15m；此前用 EKF 默认 3m 会低估 RTK、
         // 高估低端 GNSS 的权重，与实机行为不一致。
-        float h_acc = static_cast<float>(std::fmax(gnss.pos_std_m, r_floor));
+        float h_acc = static_cast<float>(
+            std::fmax(gnss.pos_std_m * pos_noise_mult, r_floor));
         if (adapt_r != 0)
         {
           // 中等新息自适应 R：新息 5-25m 时把位置 R 放大到新息的一半，
@@ -1943,6 +1947,25 @@ int main()
                                     0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, at);
         std::printf("%.3f,%d,%.4f,%.3f\n", at, seed, r.pos_rmse,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+      }
+    }
+  }
+
+  // ★GNSS 位置噪声：1x/2x/3x（R 同步匹配），static。
+  if (const char *ab = std::getenv("IMUPERF_POS_NOISE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS position noise (static, R matched) ==\n");
+    std::printf("mult,seed,pos_rmse,alt_rmse\n");
+    for (double pn : {1.0, 2.0, 3.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, pn);
+        std::printf("%.0f,%d,%.4f,%.4f\n", pn, seed, r.pos_rmse, r.alt_rmse);
       }
     }
   }
