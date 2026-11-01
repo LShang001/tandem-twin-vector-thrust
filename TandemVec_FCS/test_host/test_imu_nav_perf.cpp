@@ -1006,10 +1006,10 @@ int main()
     int n = 0;
     for (int seed = 1; seed <= 1; ++seed)
     {
-      const RunResult rs = run(Scenario::Static, 2, seed);        // M8N 10Hz
+      const RunResult rs = run(Scenario::Static, 9, seed);        // F10N 10Hz（实机）
       const RunResult rm = run(Scenario::Maneuver, 5, seed);      // 低端 5m 5Hz
-      const RunResult rv = run(Scenario::Vibration, 2, seed);     // 0.5g/80Hz
-      const RunResult ro = run(Scenario::VibrationOutage, 2, seed);  // 失锁（必含，否则过拟合）
+      const RunResult rv = run(Scenario::Vibration, 9, seed);     // F10N + 0.5g/80Hz
+      const RunResult ro = run(Scenario::VibrationOutage, 9, seed);  // F10N 失锁（必含）
       const RunResult ra = run(Scenario::Accel, 7, seed);  // M8N20 + 阶跃（硬约束场景）
       // 硬约束：M8N20 + accel 场景不得发散（历史教训：优化参数曾让该场景 0.2→157 m）
       if (ra.pos_rmse > 1.0 || !std::isfinite(ra.pos_rmse))
@@ -1358,10 +1358,10 @@ int main()
     int n = 0;
     for (int seed = 1; seed <= 1; ++seed)
     {
-      const RunResult rs = run(Scenario::Static, 2, seed);        // M8N 10Hz
+      const RunResult rs = run(Scenario::Static, 9, seed);        // F10N 10Hz（实机）
       const RunResult rm = run(Scenario::Maneuver, 5, seed);      // 低端 5m 5Hz
-      const RunResult rv = run(Scenario::Vibration, 2, seed);     // 0.5g/80Hz
-      const RunResult ro = run(Scenario::VibrationOutage, 2, seed);  // 失锁（必含，否则过拟合）
+      const RunResult rv = run(Scenario::Vibration, 9, seed);     // F10N + 0.5g/80Hz
+      const RunResult ro = run(Scenario::VibrationOutage, 9, seed);  // F10N 失锁（必含）
       cost += 0.5 * (rs.roll_rmse_deg + rs.pitch_rmse_deg) +
               0.5 * (rm.roll_rmse_deg + rm.pitch_rmse_deg) +
               2.0 * rs.pos_rmse + 2.0 * rm.pos_rmse +
@@ -2182,7 +2182,7 @@ int main()
     const double g_eam = ge("IMUPERF_EKF_ACCEL_MARKOV", 0.010);
     const double g_egm = ge("IMUPERF_EKF_GYRO_MARKOV", 0.00524);
     const double g_qa = ge("IMUPERF_Q_ACCEL", 2.0);
-    const int gis[6] = {0, 2, 5, 7, 8, 9};  // +F10N
+    const int gis[7] = {0, 2, 5, 7, 8, 9, 10};  // +F10N 10Hz/50ms
     const Scenario scs[6] = {Scenario::Static, Scenario::Maneuver, Scenario::Cruise,
                              Scenario::Vibration, Scenario::VibrationOutage,
                              Scenario::Accel};
