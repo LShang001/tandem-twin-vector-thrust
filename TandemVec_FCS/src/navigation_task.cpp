@@ -2670,6 +2670,7 @@ void handleNavigationSystem()
 #endif
              && accel_gravity_trusted && angular_rate_quiet
             ) {
+      Eigen::Vector3f gravity_aid_sf_body = imu_accel_mps2;  // 前馈后的比力
       bool tilt_aided = false;
       if (g_att_aid_mode != 0U)
       {
@@ -2677,9 +2678,30 @@ void handleNavigationSystem()
         // 比力模长≈g 不代表比力方向=重力，无坡度转弯/持续推力时升力沿
         // 机体系 z，裸喂会把机体拉平。门限 15° 见 ins_gravity_aid_noise.h。
         // 依据：2026-10-27 导弹 SIL 加方向门后姿态 RMSE 9.80°→0.65–0.91°。
+        // 2026-11-02：加速度前馈——运动时比力 = 重力 + 加速度，直接把比力当
+        // 重力方向会让姿态跟随加速度（ABI 自检：2 m/s² → pitch 漂 15°）。
+        // 用 EKF 速度差分估 NED 加速度，转到机体系后从比力中扣除，再判方向/
+        // 做重力更新；加速度估计低通 0.1 s 抑制差分噪声。
+        {
+          static Eigen::Vector3f s_prev_vel = Eigen::Vector3f::Zero();
+          static bool s_prev_vel_valid = false;
+          static Eigen::Vector3f s_acc_est_body = Eigen::Vector3f::Zero();
+          const Eigen::Vector3f vel_now = nav_ekf.ned_vel_mps();
+          if (s_prev_vel_valid && dt_s > 1e-5f)
+          {
+            const Eigen::Vector3f a_ned = (vel_now - s_prev_vel) / dt_s;
+            const Eigen::Vector3f a_body =
+                bfs::quat2dcm(nav_ekf.quat()) * a_ned;
+            s_acc_est_body = 0.9f * s_acc_est_body + 0.1f * a_body;
+          }
+          s_prev_vel = vel_now;
+          s_prev_vel_valid = true;
+          gravity_aid_sf_body = imu_accel_mps2 - s_acc_est_body;
+        }
         const Eigen::Vector3f expected_sf_dir_body =
             bfs::quat2dcm(nav_ekf.quat()) * (-Eigen::Vector3f::UnitZ());
-        if (InsAhrsGravityDirectionAllowed(expected_sf_dir_body, imu_accel_mps2,
+        if (InsAhrsGravityDirectionAllowed(expected_sf_dir_body,
+                                           gravity_aid_sf_body,
                                            BFS_MOTION_GRAVITY_GATE_RAD))
         {
           // 噪声由比力模长反解的线加速度 + 振动 RMS 自适应给出；重力取 EKF
@@ -2688,7 +2710,7 @@ void handleNavigationSystem()
               InsGravityAidNoiseRad(accel_norm, s_vib_estimator.last().accel_rms_g,
                                     ekf_gravity_mps2);
           const bfs::MeasurementUpdateResult grav_result =
-              nav_ekf.MeasurementUpdateGravityDetailed(imu_accel_mps2,
+              nav_ekf.MeasurementUpdateGravityDetailed(gravity_aid_sf_body,
                                                        grav_noise_rad);
           aid_tracker.RecordAttempt(bfs::AidSource::Gravity, grav_result);
           tilt_aided = grav_result.fused;
