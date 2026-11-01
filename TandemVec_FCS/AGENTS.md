@@ -33,6 +33,7 @@
 - 摇杆语义：ATTITUDE_MODE=roll/pitch 目标姿态角、yaw 目标角速度；RATE_MODE=三杆目标角速度。
 - `TVC_Control_Geometric.h`/`TVC_Control_3rdOrder_Poly.h` 已弃用；分配由 `TandemVec_ControlAllocation.h`。
 - **时基与 IMU 抽象（2026-11-01）**：TIM8 6.4kHz；IMU 任务周期与 Madgwick 由 `actualAccelOdrHz()` 反推（2k→0.5ms、3.2k→0.3125ms）；默认 42688P，45686 用 `-DFCS_IMU_MODEL_ICM45686`；LPF 陀螺 200/加计 100Hz；EKF `q_accel_scale=2.0`；hAcc 门控宏默认 0。
+- **导航宏一览（均默认关，宏=0/1 双状态编译通过）**：`BFS_NAV_TRIAD_INIT`（TRIAD 初始化，`include/tilt_compass_triad.h`）、`BFS_NAVIGATION_PARAM_ALIGN`（参数辨识精对准，`include/ins_param_align.h`）、`BFS_PRELAUNCH_ALIGN_STABILITY_GATE`（预对准窗口，`include/ins_prelaunch_align.h`）、`BFS_NAVIGATION_IMU_HEALTH`（卡死监测）、`BFS_NAVIGATION_IMU_TEMP_COMP`（温补）、`BFS_NAVIGATION_GNSS_REANCHOR`（硬重锚）、`BFS_NAVIGATION_GNSS_HACC_GATE`（hAcc 门控）。上板验证与验收标准见 `docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md`。
 
 ## 核心参数
 
