@@ -83,6 +83,14 @@
 #include "units.h"                               // NOLINT
 #include "icm45686_ins_fast_covariance_blocks.h" // NOLINT
 #include "tilt_compass.h"                        // NOLINT
+#include "tilt_compass_triad.h"                  // NOLINT
+#include "mag_reference.h"                       // NOLINT
+
+// TRIAD 双矢量初始化（默认 0=沿用 TiltCompass）：用 g + 磁参考双矢量构造
+// C_b^n，消除 TiltCompass 的 1/cosθ 奇点（REF-120 §9.9.1 p.323-324）。
+#ifndef BFS_NAV_TRIAD_INIT
+#define BFS_NAV_TRIAD_INIT 0
+#endif
 #include "eigen.h"                               // NOLINT
 #include "Eigen/Dense"
 #include <algorithm>
@@ -648,7 +656,24 @@ namespace bfs
        * - 加速度计 (重力矢量) -> 计算 Roll 和 Pitch (调平)
        * - 磁力计 -> 计算 Yaw (定向)
        */
+#if BFS_NAV_TRIAD_INIT
+      // TRIAD：mag 参考用项目 IGRF 站点值（NED），输出真北航向；
+      // 与 TiltCompass（磁北）差一个磁偏角，由 yaw_offset_rad 统一处理。
+      {
+        const Eigen::Vector3f mag_ned_ref(
+            bfs::kDefaultMagReference.field_ut[0],
+            bfs::kDefaultMagReference.field_ut[1],
+            bfs::kDefaultMagReference.field_ut[2]);
+        const Eigen::Vector3f ypr =
+            TiltCompassTRIAD(safe_accel, safe_mag, mag_ned_ref);
+        // 无效输入回退 TiltCompass（保持旧行为兜底）
+        ins_ypr_rad_ = (ypr.allFinite() && ypr.norm() > 1e-6f)
+                           ? ypr
+                           : TiltCompass(safe_accel, safe_mag);
+      }
+#else
       ins_ypr_rad_ = TiltCompass(safe_accel, safe_mag);
+#endif
       // 真实磁力计给出磁北航向；真北导航系需加磁偏角（东偏为正）。
       // 伪磁初始化保持 yaw_offset=0，避免改变历史确定性行为。
       if (std::isfinite(yaw_offset_rad))
