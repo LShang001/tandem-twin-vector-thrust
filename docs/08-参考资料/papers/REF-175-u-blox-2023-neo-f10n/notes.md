@@ -1,5 +1,6 @@
 # REF-175 · u-blox NEO-F10N 数据手册（UBX-23002117 R05）
 
+- 转换方式：MinerU 4.0.12（standard tier，`mineru parse paper.pdf --tier standard`）
 - 来源：https://content.u-blox.com/sites/default/files/documents/NEO-F10N_DataSheet_UBX-23002117.pdf
 - 器件：u-blox F10 双频（L1/L5）标准精度 GNSS 模组，22 页。
 - 与本项目关系：仿真 `test_imu_nav_perf.cpp` 的 F10N GNSS 档参数依据；

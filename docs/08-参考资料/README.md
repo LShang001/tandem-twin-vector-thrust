@@ -7,6 +7,12 @@
 
 ---
 
+## 0. PDF 转换规范（2026-11-01）
+
+所有 PDF 必须先用 MinerU 转换（`mineru parse <pdf> --tier standard`），转换产物作为
+`paper.md`/`book.md`；原始 PDF 保留，manifest 注明 `converter`。
+禁止 pypdf/pdftotext 直读作为正式入库文本（临时 grep 除外）。
+
 ## 1. 目录结构
 
 ```
