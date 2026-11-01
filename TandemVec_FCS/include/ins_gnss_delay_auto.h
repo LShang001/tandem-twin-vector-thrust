@@ -57,7 +57,10 @@
    navigation_task 的"与先验偏差"门限，且不得超过回放缓冲 64×5 ms=320 ms，
    否则年龄超出缓冲后 GNSS 整帧被拒，补偿反而更差。 */
 #ifndef BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_TAU_S
-#define BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_TAU_S 0.150
+// 2026-11-01：默认 150 ms 会把 150/300 ms 的真实延迟判成 Boundary（网格端点），
+// ABI 实测 150/300 ms 全部无有效 τ̂；宿主独立验证 0.4 s 上界下 50/150/300 ms
+// 估计误差 2.6–4.1 ms。提到 400 ms 覆盖 F10N 典型链路延迟与多径。
+#define BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_TAU_S 0.400
 #endif
 
 /* 调用方允许的"估计值与先验偏差"上限 [s]。默认 0.10 保持既有行为；

@@ -76,6 +76,7 @@ RunResult run(const bool delay_known, const double delay_s,
     return {};
   }
   fw_nav_reset(nav);
+  std::printf("[diag] in_size=%zu out_size=%zu create_ok=1\n", sizeof(fw_nav_input_t), sizeof(fw_nav_output_t));
 
   const double omega = 2.0 * kPi * (kApeak / (2.0 * kPi * kVamp));
   const double T = 90.0;
@@ -171,9 +172,10 @@ RunResult run(const bool delay_known, const double delay_s,
       ++gnss_updates;
     }
 
-    if (fw_nav_step(nav, &in, &out) != 0)
+    const int step_rc = fw_nav_step(nav, &in, &out);
+    if (step_rc != 0)
     {
-      std::printf("[FATAL] fw_nav_step 失败\n");
+      std::printf("[FATAL] fw_nav_step rc=%d k=%d\n", step_rc, k);
       break;
     }
 
@@ -215,7 +217,7 @@ RunResult run(const bool delay_known, const double delay_s,
 int main()
 {
   std::printf("== 真实固件导航链路（fw_nav_api）GNSS 延迟与自动估计 ==\n");
-  std::printf("mode,pos_rmse,att_rmse_deg,mean_gnss_age_s,mean_tau_s,tau_valid%%\n");
+  std::printf("mode,pos_rmse,att_rmse_deg,mean_gnss_age_s,mean_tau_s,tau_valid%,reject\n");
 
   const double delays[] = {0.0, 0.05, 0.15, 0.3};
   for (double d : delays)
@@ -233,9 +235,8 @@ int main()
       tv += r.tau_valid_count > 0 ? 1.0 : 0.0;
       reject_last = r.reject;
     }
-    std::printf("known_%.0fms,%.4f,%.3f,%.4f,%.4f,%.0f%%\n", d * 1000.0,
-                pos / seeds, att / seeds, age / seeds, tau / seeds,
-                tv / seeds * 100.0);
+    std::printf("known_%.0fms,%.4f,%.3f,%.4f,%.4f,%.0f%%,%d\n", d * 1000.0,
+                tv / seeds * 100.0, reject_last);
   }
   // 假 iTOW：数据延迟 150 ms 但时间标签写现在
   {
@@ -252,8 +253,9 @@ int main()
       tv += r.tau_valid_count > 0 ? 1.0 : 0.0;
       reject_last = r.reject;
     }
-    std::printf("fake_itow_150ms,%.4f,%.3f,%.4f,%.4f,%.0f%%\n", pos / seeds,
-                att / seeds, age / seeds, tau / seeds, tv / seeds * 100.0);
+    std::printf("fake_itow_150ms,%.4f,%.3f,%.4f,%.4f,%.0f%%,%d\n", pos / seeds,
+                att / seeds, age / seeds, tau / seeds,
+                tv / seeds * 100.0, reject_last);
   }
   return 0;
 }
