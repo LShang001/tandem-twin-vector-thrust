@@ -3,6 +3,18 @@
 本工程对纵列双发矢量推力飞行器固件（`TandemVec_FCS`）的 EKF 组合导航系统进行
 逐行级代码分析，输出一份专业论文风格的 80 页级 LaTeX 分析与设计报告。
 
+## 2026-11-01 惯导对准与精度研究
+
+- 主文档（主仓）：`../docs/04-数学建模/代码理论核查/捷联惯导初始对准理论与实现-2026-11-01.md`
+- 新增模块：`../TandemVec_FCS/include/ins_param_align.h`（参数辨识法精对准 + 双位置测漂）、`../TandemVec_FCS/include/tilt_compass_triad.h`（TRIAD 双矢量初始化）
+- 新增测试：`test_host/test_ins_param_align*.cpp`、`test_tilt_triad.cpp`、`test_ins_gyrocompass.cpp`、`test_ins_multiposition_align.cpp`、`test_ins_static_align.cpp`、`test_ins_mech_drift.cpp`、`test_ins_fog*.cpp`、`test_ins_alignment.cpp`、`test_ins_trajectory.cpp`、`test_gravity_models.cpp`
+- 结论要点：
+  - 单位置自对准：δφE=∇N/g、δφN=−∇E/g、δφU=εE/(ω_ie cosL)（与书 §9.9.2 数值一致）；
+  - 双位置测漂：ε_IN=0.010039 vs 真 0.010 °/h，φU 0.0471°→0.0025°（改善 19 倍）；
+  - FOG 纯罗经：60 s yaw 0.08–0.12°、300 s 0.0003–0.03°；MEMS 300 s 30°（不可用）；
+  - 机械编排：理想 IMU 300 s 位置 2.4 m；真实 MEMS 零偏 300 s 483 m；FOG 1 h 18.8 km（加计零偏主导）；
+  - 固件新增 7 个导航宏（默认关，双状态编译通过），见主仓上板清单 §7。
+
 ## 2026-10-24 超大规模仿真测试活动
 
 - 活动记录与结论：`仿真测试活动-2026-10-24.md`
