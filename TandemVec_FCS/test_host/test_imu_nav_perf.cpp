@@ -234,7 +234,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double r_floor = 0.15, double gyro_tempc = 0.0,
                   int gyro_temp_comp = 0, double temp_comp_err = 0.0,
                   double misalign_deg = 0.0, double lever_x = 0.0,
-                  double lever_y = 0.0, double lever_z = 0.0)
+                  double lever_y = 0.0, double lever_z = 0.0,
+                  double vel_extra_delay_s = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -397,7 +398,9 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
     {
       const double tm = std::fmax(0.0, t - latency_s);
       const Truth trm = truthAt(tm, sc);
-      Eigen::Vector3d vel_meas = trm.vel_ned;
+      // 速度与位置的时间对齐：速度可能比位置晚/早到达，用独立延迟的真值。
+      const Truth trm_vel = truthAt(std::fmax(0.0, tm - vel_extra_delay_s), sc);
+      Eigen::Vector3d vel_meas = trm_vel.vel_ned;
       for (int a = 0; a < 3; ++a) vel_meas(a) += gnss.vel_std_mps * n01(rng);
       // 杆臂：GNSS 天线相对 IMU 的机体安装矢量，旋转到 NED 后加到真值位置。
       Eigen::Vector3d lever_ned = Eigen::Vector3d::Zero();
@@ -1612,6 +1615,26 @@ int main()
                                     0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
                                     lv, 0.0, 0.0);
         std::printf("%.1f,%d,%.4f,%.3f\n", lv, seed, r.pos_rmse,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+      }
+    }
+  }
+
+  // ★速度/位置时间对齐：速度额外延迟 0/50/100ms，maneuver 场景。
+  if (const char *ab = std::getenv("IMUPERF_VEL_DELAY"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS velocity extra delay (maneuver) ==\n");
+    std::printf("vel_delay_ms,seed,pos_rmse,att_rmse_deg\n");
+    for (double vd : {0.0, 0.05, 0.10})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Maneuver, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, vd);
+        std::printf("%.0f,%d,%.4f,%.3f\n", vd * 1000.0, seed, r.pos_rmse,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
       }
     }
