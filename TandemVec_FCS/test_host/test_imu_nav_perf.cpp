@@ -253,7 +253,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
                   double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0,
                   double vel_noise_mult = 1.0, double accel_tempc = 0.0,
-                  double pos_noise_mult = 1.0, double gnss_time_offset_s = 0.0)
+                  double pos_noise_mult = 1.0, double gnss_time_offset_s = 0.0,
+                  double vert_spike_m = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -535,6 +536,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                        gnss.pos_std_m * vert_noise_mult * n01(rng);
       Eigen::Vector3d lla_meas = lla0;
       double dn_spike = dn;
+      double dd_spike = dd;
       double de_spike = de;
       if (gnss_spike_m > 0.0 && t >= gnss_spike_t && spike_seq0 < 0)
       {
@@ -545,6 +547,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           gnss_update_seq < spike_seq0 + gnss_spike_frames)
       {
         dn_spike += gnss_spike_m;  // 按 GNSS 更新帧数注入水平野值（多路径/欺骗）
+        if (vert_spike_m != 0.0)
+        {
+          dd_spike += vert_spike_m;  // 同时注入垂直野值
+        }
         if (std::getenv("IMUPERF_TRACE_REANCHOR") != nullptr)
         {
           std::printf("SPIKE,%.2f,%.1f,%.1f\n", t, dn, dn_spike);
@@ -552,7 +558,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       }
       lla_meas(0) += dn_spike / kEarthR;
       lla_meas(1) += de_spike / (kEarthR * std::cos(lla0(0)));
-      lla_meas(2) += -dd;
+      lla_meas(2) += -dd_spike;
       // GNSS 恢复硬重锚：位置新息超过阈值时直接把 EKF 位置/速度重置到 GNSS，
       // 避免长失锁后位置协方差与状态发散导致 NIS 拒绝所有更新。
       if (reanchor_m > 0.0)
@@ -1986,6 +1992,25 @@ int main()
                                     0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, 1.0, off);
         std::printf("%.0f,%d,%.4f,%.3f\n", off * 1000.0, seed, r.pos_rmse,
                     0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+      }
+    }
+  }
+
+  // ★垂直野值：单帧高度跳变 0/20/100m（static）。
+  if (const char *ab = std::getenv("IMUPERF_VERT_SPIKE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS vertical spike (static) ==\n");
+    std::printf("spike_m,seed,alt_rmse,pos_rmse\n");
+    for (double vs : {0.0, 20.0, 100.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    25.0, 1, 0, 5.0, 0.001, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, 1.0, 0.0, vs);
+        std::printf("%.0f,%d,%.4f,%.4f\n", vs, seed, r.alt_rmse, r.pos_rmse);
       }
     }
   }
