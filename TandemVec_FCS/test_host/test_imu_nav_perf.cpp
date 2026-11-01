@@ -2055,6 +2055,31 @@ int main()
     }
   }
 
+  // ★q_accel 扫描：1/2/3/4 × vibration/vib_outage。
+  if (const char *ab = std::getenv("IMUPERF_QAC_SCAN"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== q_accel scan ==\n");
+    std::printf("q_accel,scenario,seed,att_rmse_deg,pos_rmse\n");
+    for (float qa : {1.0f, 2.0f, 3.0f, 4.0f})
+    {
+      for (int sc : {3, 4})
+      {
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2],
+                                      sc == 3 ? Scenario::Vibration : Scenario::VibrationOutage,
+                                      seed, false, nullptr, false, 80.0, 0, 1.0e9, 0, qa,
+                                      0, 0.5, 0.5, 5.0, 25.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                      0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                      0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, 0.0, 1.0, 0.0, 0.0);
+          std::printf("%.1f,%s,%d,%.3f,%.4f\n", qa,
+                      sc == 3 ? "vibration" : "outage", seed,
+                      0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
+        }
+      }
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
