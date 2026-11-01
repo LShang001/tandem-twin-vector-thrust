@@ -70,6 +70,7 @@ py -3.12 tools/check-code-comments.py --check     # GOV-004 门禁；--area fw-n
 4. **修改后必须跑测试** — `node --test simulations/vector-thrust-lab/tests/`，全绿再提交
 5. **改代码必改注释（GOV-004）** — 公式性实现必须带 `@formula` + `@ref`（章节+式号+页码）；新文件必须有 L0 文件头；提交前跑 `py -3.12 tools/check-code-comments.py --check`
 6. **查理论先读本地资料库** — `docs/08-参考资料/`（`notes/` 主题深读 + `books/REF-120/121` 章节）优先于网络检索，网络只用于补缺（2026-11-01 教训）
+7. **改固件/宏/模块后同步文档** — 新增或删除宏、模块、测试后，同一提交内更新：`TandemVec_FCS/AGENTS.md` 导航宏一览、`docs/04-数学建模/代码理论核查/上板标定与验证清单` §7 宏状态表、`卫惯组合导航优化总结` §29 模块表、`代码理论核查/README.md` §0 研究文档索引；过时结论在原文标注“已并入/已废止”而非直接删（2026-11-01 用户要求）
 
 ## 行为红线
 
