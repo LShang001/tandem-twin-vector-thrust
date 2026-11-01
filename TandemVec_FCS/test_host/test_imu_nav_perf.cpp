@@ -251,7 +251,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double misalign_deg = 0.0, double lever_x = 0.0,
                   double lever_y = 0.0, double lever_z = 0.0,
                   double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
-                  double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0)
+                  double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0,
+                  double vel_noise_mult = 1.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -512,7 +513,11 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       // 速度与位置的时间对齐：速度可能比位置晚/早到达，用独立延迟的真值。
       const Truth trm_vel = truthAt(std::fmax(0.0, tm - vel_extra_delay_s), sc);
       Eigen::Vector3d vel_meas = trm_vel.vel_ned;
-      for (int a = 0; a < 3; ++a) vel_meas(a) += gnss.vel_std_mps * n01(rng);
+      // 速度噪声倍数（评估速度观测质量对姿态/位置的影响）。
+      for (int a = 0; a < 3; ++a)
+      {
+        vel_meas(a) += gnss.vel_std_mps * vel_noise_mult * n01(rng);
+      }
       // 杆臂：GNSS 天线相对 IMU 的机体安装矢量，旋转到 NED 后加到真值位置。
       Eigen::Vector3d lever_ned = Eigen::Vector3d::Zero();
       if (lever_x != 0.0 || lever_y != 0.0 || lever_z != 0.0)
@@ -630,7 +635,9 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       {
         // 只融合速度，不注入位置（模拟低质量 GNSS 下关闭位置观测）；
         // 速度 R 与 full 模式保持一致，差异只来自“是否融合位置”。
-        const float v_std = static_cast<float>(std::fmax(gnss.vel_std_mps, 0.05));
+        // R 与噪声同步放大（否则滤波过度自信，2x 噪声就会发散）。
+        const float v_std = static_cast<float>(
+            std::fmax(gnss.vel_std_mps * vel_noise_mult, 0.05));
         (void)ekf.MeasurementUpdateVelocity(vel_meas.cast<float>(), v_std,
                                             static_cast<float>(v_std * 1.5));
       }
@@ -661,7 +668,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                                                  innov * 0.5));
           }
         }
-        const float v_std = static_cast<float>(std::fmax(gnss.vel_std_mps, 0.05));
+        const float v_std = static_cast<float>(
+            std::fmax(gnss.vel_std_mps * vel_noise_mult, 0.05));
         ekf.gnss_pos_ne_std_m(h_acc);
         ekf.gnss_pos_d_std_m(h_acc * 1.5f);
         ekf.gnss_vel_ne_std_mps(v_std);
@@ -1889,6 +1897,31 @@ int main()
                                   0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
                                   0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0);
       std::printf("%d,%d,%d\n", seed, r.gyro_freeze_hits, r.accel_freeze_hits);
+    }
+  }
+
+  // ★GNSS 速度噪声：1x/2x/3x，static 与 maneuver。
+  if (const char *ab = std::getenv("IMUPERF_VEL_NOISE"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS velocity noise (M8N_10Hz) ==\n");
+    std::printf("mult,scenario,seed,pos_rmse,att_rmse_deg\n");
+    for (double vn : {1.0, 2.0, 3.0})
+    {
+      for (int sc : {0, 1})
+      {
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[2],
+                                      sc == 0 ? Scenario::Static : Scenario::Maneuver, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                      0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                      0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, vn);
+          std::printf("%.0f,%s,%d,%.4f,%.3f\n", vn,
+                      sc == 0 ? "static" : "maneuver", seed, r.pos_rmse,
+                      0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+        }
+      }
     }
   }
 
