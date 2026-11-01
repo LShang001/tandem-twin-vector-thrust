@@ -203,6 +203,8 @@ struct RunResult
   double post_outage_rmse = 0.0;
   double max_att_jump_deg = 0.0;
   int reanchor_suspicious = 0;
+  double nis_mean = 0.0;
+  double nis_reject_rate = 0.0;
   double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
@@ -228,7 +230,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double reanchor_m = 0.0, int reanchor_streak = 1,
                   int adapt_r = 0, double adapt_thresh_m = 5.0,
                   double gnss_spike_m = 0.0, double gnss_spike_t = 15.0,
-                  int gnss_spike_frames = 1, int reanchor_consist = 0)
+                  int gnss_spike_frames = 1, int reanchor_consist = 0,
+                  double r_floor = 0.15)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -289,6 +292,9 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double last_good_baro = lla0(2);
   double max_att_jump_deg_local = 0.0;  // 重锚前后姿态跳变（安全校验）
   int reanchor_suspicious_local = 0;
+  double nis_sum = 0.0;
+  int nis_cnt = 0;
+  int nis_rej = 0;
   int baro_ok_streak = 0;     // 连续正常次数
   int reanchor_cnt = 0;       // 连续大新息计数
   int gnss_update_seq = 0;     // GNSS 更新序号（野值按次数注入）
@@ -497,7 +503,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         // 模拟固件动态 R（navigation_task.cpp:2106）：位置噪声按该 GNSS 档次的
         // hAcc 设置，并钳到固件同款下限 0.15m；此前用 EKF 默认 3m 会低估 RTK、
         // 高估低端 GNSS 的权重，与实机行为不一致。
-        float h_acc = static_cast<float>(std::fmax(gnss.pos_std_m, 0.15));
+        float h_acc = static_cast<float>(std::fmax(gnss.pos_std_m, r_floor));
         if (adapt_r != 0)
         {
           // 中等新息自适应 R：新息 5-25m 时把位置 R 放大到新息的一半，
@@ -517,7 +523,14 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
         ekf.gnss_pos_d_std_m(h_acc * 1.5f);
         ekf.gnss_vel_ne_std_mps(v_std);
         ekf.gnss_vel_d_std_mps(static_cast<float>(v_std * 1.5));
-        ekf.MeasurementUpdate(vel_meas.cast<float>(), lla_meas, kNavDt);
+        const bfs::MeasurementUpdateResult res =
+            ekf.MeasurementUpdateDetailed(vel_meas.cast<float>(), lla_meas, kNavDt);
+        nis_sum += res.test_ratio;
+        ++nis_cnt;
+        if (!res.fused)
+        {
+          ++nis_rej;
+        }
       }
       // ★GNSS 航迹角辅助：速度足够大时用 course 观测 yaw（无磁航向漂移的工程解）。
       if (yaw_aid != 0 && vel_meas.head<2>().norm() >= 1.0)
@@ -744,6 +757,11 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   r.nan_t = nan_t_local;
   r.max_att_jump_deg = max_att_jump_deg_local;
   r.reanchor_suspicious = reanchor_suspicious_local;
+  if (nis_cnt > 0)
+  {
+    r.nis_mean = nis_sum / nis_cnt;
+    r.nis_reject_rate = static_cast<double>(nis_rej) / nis_cnt;
+  }
   r.out_count = out_count;
   if (out_count > 0)
   {
@@ -1446,6 +1464,47 @@ int main()
                                     25.0, 2, 0, 5.0, 100.0, 15.0, 3, cons);
         std::printf("%d,%d,%.4f,%.4f,%d\n", cons, seed, r.pos_rmse,
                     r.alt_rmse, r.reanchor_suspicious);
+      }
+    }
+  }
+
+  // ★NIS 一致性：不同 GNSS 档次的 NIS 均值（6 维量测应≈6）与拒绝率。
+  if (const char *ab = std::getenv("IMUPERF_NIS"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== NIS consistency by GNSS class (static) ==\n");
+    std::printf("gnss,seed,nis_mean,reject_rate,pos_rmse\n");
+    for (int gi : {0, 2, 5})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[gi], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0);
+        std::printf("%s,%d,%.3f,%.4f,%.4f\n", kGnssSpecs[gi].name, seed,
+                    r.nis_mean, r.nis_reject_rate, r.pos_rmse);
+      }
+    }
+  }
+
+  // ★R 地板：0.05/0.10/0.15 × RTK/M8N，看 NIS 一致性与位置精度。
+  if (const char *ab = std::getenv("IMUPERF_R_FLOOR"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== R floor scan (static) ==\n");
+    std::printf("floor,gnss,seed,nis_mean,pos_rmse\n");
+    for (double fl : {0.05, 0.10, 0.15})
+    {
+      for (int gi : {0, 2})
+      {
+        for (int seed = 1; seed <= kSeedCount; ++seed)
+        {
+          const RunResult r = runCase(kIcm45686, kGnssSpecs[gi], Scenario::Static, seed,
+                                      false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                      0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                      0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, fl);
+          std::printf("%.2f,%s,%d,%.3f,%.4f\n", fl, kGnssSpecs[gi].name, seed,
+                      r.nis_mean, r.pos_rmse);
+        }
       }
     }
   }
