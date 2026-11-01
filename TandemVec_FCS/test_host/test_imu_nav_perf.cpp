@@ -216,6 +216,8 @@ struct RunResult
   int reanchor_suspicious = 0;
   double nis_mean = 0.0;
   double nis_reject_rate = 0.0;
+  double gyro_freeze_detect_t = -1.0;
+  int gyro_freeze_hits = 0;
   double nan_t = -1.0;
   int out_count = 0;
   bool finite = true;
@@ -309,6 +311,12 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   double max_att_jump_deg_local = 0.0;  // 重锚前后姿态跳变（安全校验）
   int reanchor_suspicious_local = 0;
   double nis_sum = 0.0;
+  static constexpr int kHealthWin = 400;  // 0.2s @2kHz
+  Eigen::Vector3d gyro_hist[kHealthWin];
+  int gyro_hist_idx = 0;
+  int gyro_hist_count = 0;
+  double gyro_freeze_detect_local = -1.0;
+  int gyro_freeze_hits_local = 0;
   Eigen::Vector3d frozen_gyro = Eigen::Vector3d::Zero();
   bool have_frozen_gyro = false;
   int nis_cnt = 0;
@@ -393,6 +401,36 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
           have_frozen_gyro = true;
         }
         gyro_meas = frozen_gyro;
+      }
+      // IMU 健康监测：0.2s 滑动窗口内陀螺三轴方差 < 1e-12 判卡死。
+      gyro_hist[gyro_hist_idx] = gyro_meas;
+      gyro_hist_idx = (gyro_hist_idx + 1) % kHealthWin;
+      if (gyro_hist_count < kHealthWin)
+      {
+        ++gyro_hist_count;
+      }
+      if (gyro_hist_count == kHealthWin)
+      {
+        Eigen::Vector3d mean = Eigen::Vector3d::Zero();
+        for (int h = 0; h < kHealthWin; ++h)
+        {
+          mean += gyro_hist[h];
+        }
+        mean /= static_cast<double>(kHealthWin);
+        double var_sum = 0.0;
+        for (int h = 0; h < kHealthWin; ++h)
+        {
+          var_sum += (gyro_hist[h] - mean).squaredNorm();
+        }
+        var_sum /= static_cast<double>(kHealthWin);
+        if (var_sum < 1.0e-12)
+        {
+          if (gyro_freeze_detect_local < 0.0)
+          {
+            gyro_freeze_detect_local = ti;
+          }
+          ++gyro_freeze_hits_local;
+        }
       }
       if (i < half)
       {
@@ -813,6 +851,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
   r.nan_t = nan_t_local;
   r.max_att_jump_deg = max_att_jump_deg_local;
   r.reanchor_suspicious = reanchor_suspicious_local;
+  r.gyro_freeze_detect_t = gyro_freeze_detect_local;
+  r.gyro_freeze_hits = gyro_freeze_hits_local;
   if (nis_cnt > 0)
   {
     r.nis_mean = nis_sum / nis_cnt;
@@ -1740,6 +1780,27 @@ int main()
                                     0.0, 0.0, 0.0, 0.0, 0.0, 1.5, -1.0);
         std::printf("%.0f,%d,%.4f,%.4f\n", sp, seed, r.pos_rmse,
                     r.nis_reject_rate);
+      }
+    }
+  }
+
+  // ★IMU 健康监测：陀螺卡死检测（0.2s 窗口方差）与误报。
+  if (const char *ab = std::getenv("IMUPERF_IMU_HEALTH"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== IMU health: gyro freeze detection (maneuver) ==\n");
+    std::printf("freeze_t,seed,detect_t,hits,att_rmse_deg\n");
+    for (double ft : {-1.0, 10.0, 20.0})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Maneuver, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 0.0, 1.5, ft);
+        std::printf("%.0f,%d,%.2f,%d,%.3f\n", ft, seed,
+                    r.gyro_freeze_detect_t, r.gyro_freeze_hits,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
       }
     }
   }
