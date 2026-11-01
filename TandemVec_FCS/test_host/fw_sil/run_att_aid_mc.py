@@ -26,18 +26,22 @@ from pathlib import Path
 # 需要风时必须显式 --wind-force（N），并用 --wind-window 覆盖失联窗。
 CONDITIONS = {
     "clean":        (["--pos-hold"], 40.0, 20),
-    "out5":         (["--pos-hold", "--gnss-outage", "20:25"], 40.0, 50),
-    "out10":        (["--pos-hold", "--gnss-outage", "20:30"], 40.0, 100),
+    "out5":         (["--pos-hold", "--gnss-outage", "20:25"], 40.0, 30),
+    "out10":        (["--pos-hold", "--gnss-outage", "20:30"], 40.0, 60),
     "out10_wind":   (["--pos-hold", "--gnss-outage", "20:30",
                       "--wind-force", "1.5", "--wind-window", "20:30"], 40.0, 50),
     "out10_vib1g":  (["--pos-hold", "--gnss-outage", "20:30",
                       "--vib", "1.0"], 40.0, 50),
     "out10_noph":   (["--gnss-outage", "20:30"], 40.0, 50),
-    "out20":        (["--pos-hold", "--gnss-outage", "20:40"], 55.0, 50),
+    "out20":        (["--pos-hold", "--gnss-outage", "20:40"], 55.0, 30),
     # 长失联 + 理想光流：验证“外部速度参考是唯一让倾斜可观的物理途径”
     "out20_flow":   (["--pos-hold", "--gnss-outage", "20:40", "--flow"], 55.0, 20),
     # 长失联（30 s）：验证纯陀螺发散 vs AHRS/AHRS 有界兜底
-    "out30":        (["--pos-hold", "--gnss-outage", "20:50"], 55.0, 15),
+    "out30":        (["--pos-hold", "--gnss-outage", "20:50"], 55.0, 30),
+    "out30_wind":   (["--pos-hold", "--gnss-outage", "20:50",
+                      "--wind-force", "1.5", "--wind-window", "20:50"], 55.0, 20),
+    "out30_vib1g":  (["--pos-hold", "--gnss-outage", "20:50",
+                      "--vib", "1.0"], 55.0, 20),
 }
 MODES = (0, 1, 2)
 FIELDS = [

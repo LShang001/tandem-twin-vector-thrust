@@ -919,6 +919,8 @@ extern uint8_t g_att_aid_mode;
 // 时间增长；上层应据此设失联时限/降级（阈值得由实机零偏标定反算）。
 extern float g_nav_tilt_sigma_deg;
 extern float g_nav_gyro_bias_norm_dps;
+// mode 5 有界兜底当前是否处于激活态（倾斜 1σ 超门限）
+extern bool g_nav_tilt_fb_active;
 // 无磁离地时陀螺零偏 z 限幅 [rad/s]：防止 GNSS 更新把真实偏航率吸收成零偏。
 // 0.01 rad/s ≈ 0.57°/s，20 s 累积 ≤11.5°，落在短时保持窗口内。
 extern float g_nomag_bias_z_max_radps;

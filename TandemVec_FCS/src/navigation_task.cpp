@@ -2723,9 +2723,19 @@ void handleNavigationSystem()
       const bool vib_prefers_ahrs = (g_att_aid_mode == 4U && vib_g_now > 0.5f);
       // mode 5：无外部参考时先纯陀螺（无偏但无界），倾斜 1σ 超过门限后启用
       // AHRS 有界兜底（有偏但有界）——满足“无 GNSS 不发散、且不差于 AHRS”。
-      const bool tilt_sigma_fallback =
+      // 限频脉冲：每 500 ms 最多一次 AHRS 收口；用 σ 作为“滤波器自身不确定度”
+      // 的判据（2026-11-02 实测：换成“漂移预算=bias×t”会在长失联段持续打脉冲
+      // 把 AHRS 偏置累积进来，out30 1.19°→5.01°、风 1.23°→2.56°，已回退）。
+      static uint32_t s_tilt_fb_last_ms = 0;
+      const uint32_t tilt_fb_now_ms = millis();
+      const bool tilt_sigma_high =
           (g_att_aid_mode == 5U) &&
           (nav_ekf.tilt_sigma_rad() > BFS_ATT_AID_TILT_FALLBACK_RAD);
+      const bool tilt_sigma_fallback =
+          tilt_sigma_high &&
+          (s_tilt_fb_last_ms == 0U ||
+           (tilt_fb_now_ms - s_tilt_fb_last_ms) >= 500U);
+      g_nav_tilt_fb_active = tilt_sigma_high;
       if (g_att_aid_mode != 0U && !vib_prefers_ahrs && motion_accel_trusted)
       {
         // 运动段方向门恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）：
@@ -2857,6 +2867,10 @@ void handleNavigationSystem()
                                                         roll_pitch_noise_rad,
                                                         yaw_noise_rad);
           aid_tracker.RecordAttempt(bfs::AidSource::Attitude, result);
+          if (g_att_aid_mode == 5U)
+          {
+            s_tilt_fb_last_ms = tilt_fb_now_ms;  // 兜底脉冲时间戳
+          }
         }
       }
     }
