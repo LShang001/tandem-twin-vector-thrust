@@ -19,6 +19,7 @@
 #include <cmath>
 #include <cstdio>
 #include <random>
+#include <vector>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
@@ -56,7 +57,8 @@ struct Result
 
 /** 正弦速度轨迹：v(t)=v_amp·sin(2πf t)（北向），偏航慢转。 */
 Result run(const double gnss_hz, const double v_amp, const double a_peak,
-           const unsigned seed, const double ekf_accel_std = 0.25)
+           const unsigned seed, const double ekf_accel_std = 0.25,
+           const double gnss_delay_s = 0.0)
 {
   std::mt19937 rng(seed);
   std::normal_distribution<double> n01(0.0, 1.0);
@@ -82,6 +84,10 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
   std::normal_distribution<double> nv(0.0, kGnssVelStd);
 
   const double gnss_dt = 1.0 / gnss_hz;
+  // 延迟量测需要历史真值（pos_n / vel_n）
+  std::vector<double> hist_pos, hist_vel;
+  hist_pos.reserve(steps + 1);
+  hist_vel.reserve(steps + 1);
   double next_gnss = 0.0;
   int gnss_updates = 0;
 
@@ -104,6 +110,8 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
     vel_n = v;
     pos_n += v * kImuDt;
     yaw += 0.1 * kDeg2Rad * kImuDt;  // 0.1 °/s
+    hist_pos.push_back(pos_n);
+    hist_vel.push_back(v);
 
     const Eigen::Matrix3d C_bn =
         Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
@@ -136,21 +144,26 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
     if (t >= next_gnss)
     {
       next_gnss += gnss_dt;
-      // 真值位置（北向 pos_n、东向 0）→ LLA 量测（含噪声）
+      // 延迟量测：取 delay 秒前的真值（历史索引），age=delay 交给 EKF 回放
+      const int lag = static_cast<int>(std::round(gnss_delay_s / kImuDt));
+      const int hi = std::max(0, static_cast<int>(hist_pos.size()) - 1 - lag);
+      const double pos_delayed = hist_pos[hi];
+      const double vel_delayed = hist_vel[hi];
       const double r_north = 6378137.0;
       const double r_east = 6378137.0 * std::cos(kLla(0));
       const Eigen::Vector3d lla_meas(
-          kLla(0) + (pos_n + np(rng)) / r_north,
+          kLla(0) + (pos_delayed + np(rng)) / r_north,
           kLla(1) + np(rng) / r_east,
           kLla(2) + np(rng));
-      const Eigen::Vector3f vel_ned(static_cast<float>(vel_n + nv(rng)),
+      const Eigen::Vector3f vel_ned(static_cast<float>(vel_delayed + nv(rng)),
                                     static_cast<float>(nv(rng)),
                                     static_cast<float>(nv(rng)));
       ekf.gnss_pos_ne_std_m(static_cast<float>(kGnssPosStd));
       ekf.gnss_pos_d_std_m(static_cast<float>(kGnssPosStd));
       ekf.gnss_vel_ne_std_mps(static_cast<float>(kGnssVelStd));
       ekf.gnss_vel_d_std_mps(static_cast<float>(kGnssVelStd));
-      const auto res = ekf.MeasurementUpdateDetailed(vel_ned, lla_meas, kImuDt, 0.0f);
+      const auto res = ekf.MeasurementUpdateDetailed(
+          vel_ned, lla_meas, kImuDt, static_cast<float>(gnss_delay_s));
       if (seed == 1 && gnss_hz == 1.0 && v_amp == 5.0 && a_peak == 2.0 && gnss_updates < 3)
       {
         std::printf("[gnss] input_valid=%d attempted=%d fused=%d nis=%.2f\n",
@@ -203,6 +216,22 @@ int main()
     {
       const Result rq = run(hz2, 5.0, 2.0, 1, q);
       std::printf("%.2f,%.0f,%.4f,%.4f\n", q, hz2, rq.pos_rmse, rq.att_rmse_deg);
+    }
+  }
+  std::printf("\n");
+  // 延迟扫描：延迟 {0,10,20,50,100,200} ms × 更新率 {10,20} × 速度 {1,10}
+  std::printf("-- 延迟扫描 --\n");
+  std::printf("delay_ms,gnss_hz,v,pos_rmse,att_rmse_deg\n");
+  for (double dl : {0.0, 0.01, 0.02, 0.05, 0.1, 0.2})
+  {
+    for (double hz3 : {10.0, 20.0})
+    {
+      for (double vv : {1.0, 10.0})
+      {
+        const Result rd = run(hz3, vv, 2.0, 1, 0.25, dl);
+        std::printf("%.0f,%.0f,%.0f,%.4f,%.4f\n", dl * 1000.0, hz3, vv,
+                    rd.pos_rmse, rd.att_rmse_deg);
+      }
     }
   }
   std::printf("\n");
