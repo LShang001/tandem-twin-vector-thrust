@@ -2656,6 +2656,8 @@ void handleNavigationSystem()
     //                        不经 Madgwick，避免同一陀螺既进 EKF 又进 AHRS 的
     //                        信息重复计数（新息不白、NIS 统计不成立）
     //   g_att_aid_mode = 2：重力优先，被门控/NIS 拒绝时回退 AHRS 姿态量测
+    //   g_att_aid_mode = 3：重力方向直连 + 控制层加速度指令扣比力污染 + 比力 EMA
+    //                        （2026-11-01；指令不可用时退化为 EMA+方向门）
     // 高动态构型可通过 BFS_DISABLE_AHRS_ATTITUDE_AID 整体关闭（见文件头）。
     // ========================================================================
 #if BFS_AHRS_ATTITUDE_AID
@@ -2671,8 +2673,16 @@ void handleNavigationSystem()
              && accel_gravity_trusted && angular_rate_quiet
             ) {
       Eigen::Vector3f gravity_aid_sf_body = imu_accel_mps2;  // 前馈后的比力
+      // mode 3 的指令加速度残差噪声（|a_cmd| 的 25%，单位 m/s²）。
+      float gravity_aid_noise_base_mps2 = 0.25f;
+      float gravity_aid_vib_scale = 1.0f;  // mode 3 振动段的比力低通衰减
       bool tilt_aided = false;
-      if (g_att_aid_mode != 0U)
+      // mode 4：mode 3 + 强振动段（RMS>0.5 g）改回 AHRS 姿态量测。
+      // 依据 2026-11-01 MC：1 g 振动条线 AHRS 2.40°/0% 失败，重力直连 2.85°/14%。
+      const float vib_g_now = s_vib_estimator.last().accel_rms_g;
+      const bool mode3_like = (g_att_aid_mode == 3U || g_att_aid_mode == 4U);
+      const bool vib_prefers_ahrs = (g_att_aid_mode == 4U && vib_g_now > 0.5f);
+      if (g_att_aid_mode != 0U && !vib_prefers_ahrs)
       {
         // 运动段方向门恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）：
         // 比力模长≈g 不代表比力方向=重力，无坡度转弯/持续推力时升力沿
@@ -2680,9 +2690,46 @@ void handleNavigationSystem()
         // 依据：2026-10-27 导弹 SIL 加方向门后姿态 RMSE 9.80°→0.65–0.91°。
         // 2026-11-02：加速度前馈——运动时比力 = 重力 + 加速度，直接把比力当
         // 重力方向会让姿态跟随加速度（ABI 自检：2 m/s² → pitch 漂 15°）。
-        // 用 EKF 速度差分估 NED 加速度，转到机体系后从比力中扣除，再判方向/
-        // 做重力更新；加速度估计低通 0.1 s 抑制差分噪声。
+        if (mode3_like)
         {
+          // mode 3：用控制层的加速度指令（独立于 IMU 的反馈量）扣比力污染；
+          // 仅当振动 RMS > 0.25 g 时才对比力做 τ≈30 ms 一阶低通（σ 衰减约
+          // 0.285），静止/低振动的自由飞行段保持原始比力，避免低通滞后把
+          // 倾角信息抹掉（2026-11-01 MC：常开 60 ms 低通使无位置环条线
+          // 1.59°→2.67°）。
+          // 不用“EKF 速度差分”：速度由同一 IMU 积分，自参照会把真实倾角
+          // 信息一起扣掉（同批 MC：无位置环 1.59°→4.26°）。
+          static Eigen::Vector3f s_sf_lpf = imu_accel_mps2;
+          const float vib_g = vib_g_now;
+          const bool smooth_sf = (vib_g > 0.25f);
+          if (smooth_sf)
+          {
+            constexpr float kSfLpfAlpha = 0.15f;  // τ≈30 ms @200 Hz
+            s_sf_lpf += kSfLpfAlpha * (imu_accel_mps2 - s_sf_lpf);
+          }
+          else
+          {
+            s_sf_lpf = imu_accel_mps2;  // 同步状态，避免再进入振动段时阶跃
+          }
+          Eigen::Vector3f a_cmd_body = Eigen::Vector3f::Zero();
+          if (g_nav_cmd_accel_valid)
+          {
+            const Eigen::Vector3f a_cmd_ned(g_nav_cmd_accel_n_mps2,
+                                            g_nav_cmd_accel_e_mps2,
+                                            -g_nav_cmd_accel_up_mps2);
+            a_cmd_body = bfs::quat2dcm(nav_ekf.quat()) * a_cmd_ned;
+            // 指令跟踪残差按 25% 计入观测噪声；指令不可用（手动/速率）时
+            // 退化为纯比力 + 方向门。
+            gravity_aid_noise_base_mps2 += 0.25f * a_cmd_ned.norm();
+          }
+          gravity_aid_sf_body = s_sf_lpf - a_cmd_body;
+          gravity_aid_vib_scale = smooth_sf ? 0.3f : 1.0f;
+        }
+        else
+        {
+#if BFS_GRAVITY_AID_VEL_FF
+          // mode 1/2（2026-11-02 提交）：EKF 速度差分估 NED 加速度，转到机体系
+          // 后从比力中扣除；速度差分低通 0.1 s 抑制噪声。
           static Eigen::Vector3f s_prev_vel = Eigen::Vector3f::Zero();
           static bool s_prev_vel_valid = false;
           static Eigen::Vector3f s_acc_est_body = Eigen::Vector3f::Zero();
@@ -2697,6 +2744,11 @@ void handleNavigationSystem()
           s_prev_vel = vel_now;
           s_prev_vel_valid = true;
           gravity_aid_sf_body = imu_accel_mps2 - s_acc_est_body;
+#else
+          // 默认关闭速度差分前馈：速度由同一 IMU 积分，自参照会连同真实倾角
+          // 信息一起扣掉（见 BFS_GRAVITY_AID_VEL_FF 注释与 2026-11-01 MC）。
+          gravity_aid_sf_body = imu_accel_mps2;
+#endif
         }
         const Eigen::Vector3f expected_sf_dir_body =
             bfs::quat2dcm(nav_ekf.quat()) * (-Eigen::Vector3f::UnitZ());
@@ -2704,11 +2756,17 @@ void handleNavigationSystem()
                                            gravity_aid_sf_body,
                                            BFS_MOTION_GRAVITY_GATE_RAD))
         {
-          // 噪声由比力模长反解的线加速度 + 振动 RMS 自适应给出；重力取 EKF
-          // 的当地重力（ekf_gravity_mps2），不硬编码 9.8。
+          // 噪声由比力模长反解的线加速度 + 振动 RMS + 指令残差自适应给出；
+          // 重力取 EKF 的当地重力（ekf_gravity_mps2），不硬编码 9.8。
+          // mode 3 若开启比力低通，振动 RMS 按 √(α/(2−α))≈0.285 折减
+          // （取 0.3）后再计入噪声，否则振动下会被噪声模型整帧否决。
+          const float vib_for_noise =
+              gravity_aid_vib_scale * s_vib_estimator.last().accel_rms_g;
           const float grav_noise_rad =
-              InsGravityAidNoiseRad(accel_norm, s_vib_estimator.last().accel_rms_g,
-                                    ekf_gravity_mps2);
+              InsGravityAidNoiseRad(gravity_aid_sf_body.norm(),
+                                    vib_for_noise,
+                                    ekf_gravity_mps2,
+                                    gravity_aid_noise_base_mps2);
           const bfs::MeasurementUpdateResult grav_result =
               nav_ekf.MeasurementUpdateGravityDetailed(gravity_aid_sf_body,
                                                        grav_noise_rad);
@@ -2716,7 +2774,8 @@ void handleNavigationSystem()
           tilt_aided = grav_result.fused;
         }
       }
-      if (!tilt_aided && g_att_aid_mode != 1U)
+      if (!tilt_aided &&
+          (g_att_aid_mode == 0U || g_att_aid_mode == 2U || vib_prefers_ahrs))
       {
         // AHRS 兜底 / 旧行为：Madgwick 的 roll/pitch 来自“陀螺积分 + 加速度
         // 重力修正”，作为 EKF 姿态量测可在运动中约束姿态漂移。

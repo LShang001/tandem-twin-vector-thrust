@@ -962,6 +962,8 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   ControlMode currentMode = getControlMode(raw_rc_values[6]);
   if (currentMode != AUTO_POSITION && currentMode != AUTO_ALTITUDE)
   {
+    // 退出位置控制：加速度指令失效，导航层退回方向门控（2026-11-01）。
+    g_nav_cmd_accel_valid = false;
     if (positionHoldEnabled)
     {
       positionHoldEnabled = false;
@@ -1192,6 +1194,14 @@ void handlePositionControl(float roll_rc_raw, float pitch_rc_raw)
   bool accel_saturated = false;
   bfs::power::clampAccelCircle(target_accel_n, target_accel_e, MAX_ACCEL_CMD,
                                accel_saturated);
+
+  // 发布本拍加速度指令给导航层（2026-11-01）：无 GNSS 运动段若把控制纠偏
+  // 加速度当成重力方向，会形成“姿态偏→位置漂→更大纠偏”正反馈。导航层用
+  // 该指令从比力中扣除后再取重力方向（g_att_aid_mode=3）。
+  g_nav_cmd_accel_valid = true;
+  g_nav_cmd_accel_n_mps2 = target_accel_n;
+  g_nav_cmd_accel_e_mps2 = target_accel_e;
+  g_nav_cmd_accel_up_mps2 = target_accel_z_up_global;
 
   // ========================================================================
   // --- 6. 物理模型逆解：目标加速度矢量 -> 推力方向矢量 ---

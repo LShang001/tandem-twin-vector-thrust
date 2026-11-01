@@ -974,6 +974,14 @@ extern float target_vertical_velocity;
 extern float altitudeRateTarget;
 extern bool autoAltitudeMode;
 extern float target_accel_z_up_global;
+// 定点/制导层加速度指令（NED，m/s²；天向向上为正），供导航层在无 GNSS 运动段
+// 做“比力污染补偿”（2026-11-01）：把控制纠偏加速度从加速度计比力中扣除后再取
+// 重力方向，防止姿态-位置正反馈。valid=false（手动/速率/未进位置控制）时
+// 导航层退回方向门控。
+extern bool g_nav_cmd_accel_valid;
+extern float g_nav_cmd_accel_n_mps2;
+extern float g_nav_cmd_accel_e_mps2;
+extern float g_nav_cmd_accel_up_mps2;
 extern float tvcTargetAngle1, tvcTargetAngle2;
 extern float thrust_comp_N, thrust_comp_E;
 extern float throttlePercent;

@@ -473,7 +473,7 @@ BIN_DIR=/tmp/tv_fcs_missile bash test_host/fw_sil/build_incremental.sh --build-o
     关掉高过载段需要的带宽收益）。判据 K1–K3 见报告 §4.24m；**结论未出，勿当已验证方案**。。
 - **AHRS/重力姿态辅助策略（2026-11-01 更新）**：`BFS_AHRS_GNSS_FRESH_GATE` 已改**默认开**
   （GNSS 新鲜时不做姿态辅助；旧行为 `-DBFS_AHRS_GNSS_FRESH_GATE=0`）；运动段量测源由
-  `--att-aid-mode 0|1|2` 同二进制切换（0=AHRS 旧行为、1=重力方向直连默认、2=重力优先+AHRS 回退），
+  `--att-aid-mode 0|1|2|3|4` 同二进制切换（0=AHRS 旧行为、1=纯重力、2=重力+AHRS 回退、3=重力+控制加速度指令扣污染+振动低通（默认）、4=mode 3+强振动回退），
   默认值见 `BFS_ATT_AID_MODE_DEFAULT`；方向门默认开（15° 运动段 / 包线外才启用的 AHRS 门），
   `BFS_DISABLE_AHRS_ATTITUDE_AID` 仍可完全关闭。A/B 数据见
   `docs/04-数学建模/代码理论核查/AHRS姿态辅助与无GNSS重力融合-2026-11-01.md`。

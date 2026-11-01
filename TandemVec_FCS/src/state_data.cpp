@@ -625,6 +625,11 @@ float target_vertical_velocity = 0.0f;             // 目标垂直速度 (m/s, �
 float altitudeRateTarget = 0.0f;                   // 遥控器映射的目标垂直速度 (m/s)
 bool autoAltitudeMode = false;                     // 自动高度模式激活标志
 float target_accel_z_up_global = 0.0f;             // 天向运动目标加速度 (m/s^2, 向上为正)
+// 位置控制层的加速度指令（NED，m/s²）：供导航层扣比力污染（2026-11-01）。
+bool g_nav_cmd_accel_valid = false;
+float g_nav_cmd_accel_n_mps2 = 0.0f;
+float g_nav_cmd_accel_e_mps2 = 0.0f;
+float g_nav_cmd_accel_up_mps2 = 0.0f;
 
 // TVC 目标角度 (度)
 float tvcTargetAngle1 = 0.0f, tvcTargetAngle2 = 0.0f; // TVC 通道1/2 目标摆角 (deg)

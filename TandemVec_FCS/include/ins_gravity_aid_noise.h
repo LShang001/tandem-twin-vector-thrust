@@ -36,10 +36,22 @@
 
 // 无 GNSS 运动段姿态辅助模式（运行期全局 `g_att_aid_mode`，SIL 可覆盖）：
 //   0 = 仅 AHRS 姿态量测（2026-10 旧行为，保留作 A/B 基线）
-//   1 = 仅重力方向直连（默认；去 Madgwick 一跳，避免陀螺信息重复计数）
+//   1 = 仅重力方向直连（去 Madgwick 一跳；2026-11-02 该路径还带“EKF 速度差分”
+//       加速度前馈，但前馈是 opt-in、默认关闭，见 BFS_GRAVITY_AID_VEL_FF）
 //   2 = 重力方向优先，被 NIS/门控拒绝时回退 AHRS 姿态量测
+//   3 = 重力方向直连 + 控制层加速度指令扣比力污染 + 振动段比力低通（新默认：
+//       2026-11-01 MC 的失联/风/无位置环条线综合最优）
 #ifndef BFS_ATT_AID_MODE_DEFAULT
-#define BFS_ATT_AID_MODE_DEFAULT 1U
+#define BFS_ATT_AID_MODE_DEFAULT 3U
+#endif
+
+// 加速度前馈开关（2026-11-02 的“EKF 速度差分扣比力”，默认 0=关）：
+// 速度由同一 IMU 积分得到，用它扣比力属于自参照。2026-11-01 MC（250 runs）
+// 实测：无位置环姿态 1.59°→4.26°、失联 10 s 2.26°→2.82°、振动 3.02°→2.93°
+// （仅风条线 4.91°→3.53° 有改善），整体劣于 AHRS 且全面劣于 mode 3。
+// 保留代码作研究对照，不默认启用。
+#ifndef BFS_GRAVITY_AID_VEL_FF
+#define BFS_GRAVITY_AID_VEL_FF 0
 #endif
 
 // 运动段方向一致性门限：恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）。
