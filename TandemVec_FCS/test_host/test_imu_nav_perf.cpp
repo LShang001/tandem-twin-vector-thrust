@@ -1876,6 +1876,22 @@ int main()
     }
   }
 
+  // ★健康监测误报：强振动（80Hz/0.5g）下正常不应触发。
+  if (const char *ab = std::getenv("IMUPERF_HEALTH_VIB"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== health monitor false positives (vibration 80Hz/0.5g) ==\n");
+    std::printf("seed,gyro_hits,accel_hits\n");
+    for (int seed = 1; seed <= kSeedCount; ++seed)
+    {
+      const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Vibration, seed,
+                                  false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                  0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                  0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                  0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0);
+      std::printf("%d,%d,%d\n", seed, r.gyro_freeze_hits, r.accel_freeze_hits);
+    }
+  }
+
   std::printf("\n总计 %d 组，失败 %d 组\n", total, fail);
   if (fail == 0)
   {
