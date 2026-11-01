@@ -52,6 +52,7 @@ enum class Scenario
   Cruise = 2,
   Vibration = 3,
   VibrationOutage = 4,
+  Accel = 5,  // 正弦加速：5 m/s 峰值、0.2 Hz（评估速度延迟）
 };
 
 const char *scenarioName(Scenario s)
@@ -62,6 +63,7 @@ const char *scenarioName(Scenario s)
   case Scenario::Maneuver: return "maneuver";
   case Scenario::Vibration: return "vibration";
   case Scenario::VibrationOutage: return "vib_outage";
+  case Scenario::Accel:            return "accel";
   default:                 return "cruise";
   }
 }
@@ -134,6 +136,15 @@ struct Truth
 Truth truthAt(double t, Scenario sc)
 {
   Truth tr{};
+  if (sc == Scenario::Accel)
+  {
+    // 纯平动正弦加速：v_n = 5·sin(0.4πt)，a_n 峰值约 6.3 m/s²。
+    const double w = 2.0 * kPi * 0.2;
+    tr.vel_ned(0) = 5.0 * std::sin(w * t);
+    tr.pos_ned(0) = (5.0 / w) * (1.0 - std::cos(w * t));
+    tr.acc_ned(0) = 5.0 * w * std::cos(w * t);
+    return tr;
+  }
   if (sc == Scenario::Static || sc == Scenario::Vibration ||
       sc == Scenario::VibrationOutage)
   {
@@ -1630,6 +1641,26 @@ int main()
       for (int seed = 1; seed <= kSeedCount; ++seed)
       {
         const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Maneuver, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, vd);
+        std::printf("%.0f,%d,%.4f,%.3f\n", vd * 1000.0, seed, r.pos_rmse,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
+      }
+    }
+  }
+
+  // ★加速场景：正弦加速下速度延迟 0/50/100ms 的影响。
+  if (const char *ab = std::getenv("IMUPERF_VEL_DELAY2"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GNSS velocity delay on acceleration ==\n");
+    std::printf("vel_delay_ms,seed,pos_rmse,att_rmse_deg\n");
+    for (double vd : {0.0, 0.05, 0.10})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Accel, seed,
                                     false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
                                     0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
                                     0.0, 1, 0, 0.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
