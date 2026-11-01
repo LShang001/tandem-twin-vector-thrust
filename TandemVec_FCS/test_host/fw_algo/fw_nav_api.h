@@ -154,6 +154,11 @@ typedef struct
   uint32_t gnss_overflow;  /**< 解析器队列溢出数 */
   uint32_t last_epoch_tow_ms;/**< 最近一个原始历元的 iTOW [ms]（与注入序列对账用） */
   uint32_t steps;          /**< 已推进的拍数 */
+  // 自动 GNSS 延迟估计遥测（2026-11-01 追加；不改变既有字段）
+  float auto_delay_tau_s;    /**< 估计的 GNSS 延迟 τ̂ [s]（无效时为 0） */
+  int32_t auto_delay_valid;  /**< τ̂ 是否有效 */
+  float auto_delay_sharpness;/**< 代价曲线锐度（越大越可信） */
+  uint8_t auto_delay_reject; /**< 拒绝原因枚举 */
   /* ---- 观测专用（尾部追加，abi_version 不变；未定义 EKF_NAV_TELEMETRY 时
    *      为 NaN）：EKF 协方差对角。逐拍对拍要复算卡尔曼增益 K=PHᵀ(HPHᵀ+R)⁻¹
    *      必须能看到 P；该宏只加只读访问器、不参与滤波数学（见 run_all.sh）。 */

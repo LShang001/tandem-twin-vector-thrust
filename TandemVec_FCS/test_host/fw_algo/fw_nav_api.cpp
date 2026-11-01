@@ -232,6 +232,10 @@ void ReadOutputs(fw_nav_output_t *out)
   out->gnss_quality_fail = gnss_status.quality_fail_count;
   out->gnss_duplicate = gnss_status.duplicate_itow_count;
   out->gnss_age_s = gnss_status.last_measurement_age_s;
+  out->auto_delay_tau_s = gnss_status.auto_delay_tau_s;
+  out->auto_delay_valid = gnss_status.auto_delay_valid ? 1 : 0;
+  out->auto_delay_sharpness = gnss_status.auto_delay_sharpness;
+  out->auto_delay_reject = gnss_status.auto_delay_reject;
   out->baro_fused = baro_ekf_fused ? 1 : 0;
   out->baro_innov_m = baro_ekf_innovation_m;
   out->heading_aiding = g_heading_hold_allowed ? 1 : 0;
