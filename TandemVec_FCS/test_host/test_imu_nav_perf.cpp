@@ -252,7 +252,7 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   double lever_y = 0.0, double lever_z = 0.0,
                   double vel_extra_delay_s = 0.0, double vert_noise_mult = 1.5,
                   double gyro_freeze_t = -1.0, double accel_freeze_t = -1.0,
-                  double vel_noise_mult = 1.0)
+                  double vel_noise_mult = 1.0, double accel_tempc = 0.0)
 {
   std::mt19937_64 rng(static_cast<uint64_t>(seed) * 7919ULL +
                       static_cast<uint64_t>(imu.odr_hz) * 13ULL +
@@ -374,7 +374,9 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
       }
       for (int a = 0; a < 3; ++a)
       {
-        accel_meas(a) += accel_bias(a) + accel_sigma * n01(rng);
+        // 加计温漂：同一升温曲线（0.3°C/s）。
+        const double accel_temp_drift = accel_tempc * (25.0 + 0.3 * ti - 25.0);
+        accel_meas(a) += accel_bias(a) + accel_temp_drift + accel_sigma * n01(rng);
         // 温度漂移：开机发热 0.3°C/s（30s +9°C），零偏随温度线性变化。
         const double temp_c = 25.0 + 0.3 * ti;
         const double temp_drift = gyro_tempc * (temp_c - 25.0);
@@ -1921,6 +1923,26 @@ int main()
                       sc == 0 ? "static" : "maneuver", seed, r.pos_rmse,
                       0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
         }
+      }
+    }
+  }
+
+  // ★加计温漂：0/0.005/0.01 m/s²/°C（9°C → 0/0.045/0.09 m/s²）。
+  if (const char *ab = std::getenv("IMUPERF_ACCEL_TEMP"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== accelerometer temperature drift (static) ==\n");
+    std::printf("atc,seed,pos_rmse,att_rmse_deg\n");
+    for (double at : {0.0, 0.005, 0.01})
+    {
+      for (int seed = 1; seed <= kSeedCount; ++seed)
+      {
+        const RunResult r = runCase(kIcm45686, kGnssSpecs[2], Scenario::Static, seed,
+                                    false, nullptr, false, 80.0, 0, 1.0e9, 0, 2.0f,
+                                    0, 0.5, 0.5, 100.0, 101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f,
+                                    0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0, 0.15, 0.0, 0, 0.0, 0.0,
+                                    0.0, 0.0, 0.0, 0.0, 1.5, -1.0, -1.0, 1.0, at);
+        std::printf("%.3f,%d,%.4f,%.3f\n", at, seed, r.pos_rmse,
+                    0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg));
       }
     }
   }
