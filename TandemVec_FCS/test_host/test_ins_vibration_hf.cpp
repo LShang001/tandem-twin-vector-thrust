@@ -24,6 +24,7 @@
  * @see     TandemVec_FCS/include/ins_vibration_hf.h、ins_vibration_adaptive.h
  */
 #include <cmath>
+#include "ins_test_gravity.h"
 #include <cstdio>
 #include <limits>
 #include <Eigen/Dense>
@@ -103,7 +104,7 @@ int main()
       {
         mid_feed_acc = 0.0f;
         ++mid_updates;
-        const Eigen::Vector3f mps2 = filtered * 9.79f;
+        const Eigen::Vector3f mps2 = filtered * ins_test::GravityWgs84();
         mid.Update(mps2, Eigen::Vector3f::Zero(), 0.005f);
       }
     }

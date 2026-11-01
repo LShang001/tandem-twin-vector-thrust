@@ -22,6 +22,7 @@
  * @see     TandemVec_FCS/include/ins_vibration_adaptive.h
  */
 #include <cstdio>
+#include "ins_test_gravity.h"
 #include <cmath>
 #include <Eigen/Dense>
 #include "ins_vibration_adaptive.h"
@@ -36,8 +37,8 @@ int main()
     {
       const float t = k * dt;
       const float vib = quiet ? 0.0f
-                              : amp_g * 9.79f * std::sin(2.0f * 3.1415926f * 20.0f * t);
-      Eigen::Vector3f a(vib, 0.0f, -9.79f);
+                              : amp_g * ins_test::GravityWgs84() * std::sin(2.0f * 3.1415926f * 20.0f * t);
+      Eigen::Vector3f a(vib, 0.0f, -ins_test::GravityWgs84());
       Eigen::Vector3f g(0.0f, 0.0f, 0.0f);
       est.Update(a, g, dt);
     }
@@ -96,7 +97,7 @@ int main()
   // 若将来提高截止或改喂低通前信号，本断言必须被有意改掉。
   InsVibrationEstimator manoeuvre_est;
   constexpr float kManeuverRateRadps = 0.485f;  // 27.8 deg/s
-  constexpr float kManeuverAccelMps2 = 6.4f * 9.79f;
+  const float kManeuverAccelMps2 = 6.4f * ins_test::GravityWgs84();
   for (int k = 0; k < static_cast<int>(20.0f / dt); ++k)
   {
     const float t = k * dt;
