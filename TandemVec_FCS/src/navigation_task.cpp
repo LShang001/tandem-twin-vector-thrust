@@ -2513,6 +2513,45 @@ void handleNavigationSystem()
     //   运动下用 AHRS 约束姿态漂移。
     const bool angular_rate_quiet = (imu_gyro_radps.norm() < 0.5f); // ≈28 deg/s
 
+      // ── 独立于加速度计的“运动加速度可忽略”判据（2026-11-01 原理修正）──
+      // 加速度计输出是比力 f^b = a^b − g^b：未知 a 时姿态从 f 不可观（对任意
+      // 候选姿态都存在一个 a 使观测完全一致）。只有把 a 锚定在外部参考上，
+      // 比力方向才携带重力信息。这里要求“外部速度参考新鲜（GNSS 或光流）且
+      // 1 s 窗口内速度变化 < 0.5 m/s²”；没有外部参考（失联且无光流）时无法
+      // 证明 a≈0，本段不做任何比力方向修正，姿态交给陀螺并让协方差增长。
+      bool motion_accel_trusted = false;
+      {
+        // 必须用“fix 有效 + 数据新鲜”的即时判据：只有数据新鲜但 fix 失效时，
+        // 速度并没有被外界锚定，不能用来证明 a≈0。
+        const bool ext_vel_fresh =
+            gnss_instant_valid_for_nav ||
+            (flow_data.is_flow_valid &&
+             (millis() - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs);
+        static Eigen::Vector3f s_ext_vel_ref = Eigen::Vector3f::Zero();
+        static uint32_t s_ext_vel_ms = 0;
+        static bool s_ext_vel_valid = false;
+        const uint32_t now_ms = millis();
+        if (!ext_vel_fresh)
+        {
+          s_ext_vel_valid = false;
+        }
+        else if (!s_ext_vel_valid)
+        {
+          s_ext_vel_ref = nav_ekf.ned_vel_mps();
+          s_ext_vel_ms = now_ms;
+          s_ext_vel_valid = true;
+        }
+        else if ((now_ms - s_ext_vel_ms) >= 1000U)
+        {
+          const float span_s = static_cast<float>(now_ms - s_ext_vel_ms) * 1.0e-3f;
+          const Eigen::Vector3f a_ext =
+              (nav_ekf.ned_vel_mps() - s_ext_vel_ref) / span_s;
+          motion_accel_trusted = (a_ext.norm() < 0.5f) && angular_rate_quiet;
+          s_ext_vel_ref = nav_ekf.ned_vel_mps();
+          s_ext_vel_ms = now_ms;
+        }
+      }
+
     // ========================================================================
     // 静止辅助：分频调度 + 置信度自适应（ins_static_aid_profile.h）
     // 参考 esp32-ins-gnss-fusion: ZUPT 每 2 帧(100Hz), Gravity 每 4 帧(50Hz),
@@ -2682,7 +2721,7 @@ void handleNavigationSystem()
       const float vib_g_now = s_vib_estimator.last().accel_rms_g;
       const bool mode3_like = (g_att_aid_mode == 3U || g_att_aid_mode == 4U);
       const bool vib_prefers_ahrs = (g_att_aid_mode == 4U && vib_g_now > 0.5f);
-      if (g_att_aid_mode != 0U && !vib_prefers_ahrs)
+      if (g_att_aid_mode != 0U && !vib_prefers_ahrs && motion_accel_trusted)
       {
         // 运动段方向门恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）：
         // 比力模长≈g 不代表比力方向=重力，无坡度转弯/持续推力时升力沿
@@ -2901,6 +2940,7 @@ void handleNavigationSystem()
                                           accel_norm_safe));
             const float gravity_dir_error_rad = std::acos(dot);
             if (accel_norm_error < 0.5f && angular_rate_quiet &&
+                motion_accel_trusted &&
                 gravity_dir_error_rad < 15.0f * 0.017453292f)
             {
               const bfs::MeasurementUpdateResult grav_result =
