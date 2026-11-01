@@ -1,79 +1,142 @@
 #!/usr/bin/env python3
-"""连续参数优化：LPF 带宽与 hAcc 门限（CMA-ES）。
+"""EKF 连续参数全面优化（CMA-ES，8 维）。
 
-项目规范（AGENTS.md，2026-11-01）：连续参数最终调参默认用现代优化器，
-网格/手扫只用于初值与可视化。
+项目规范（AGENTS.md）：连续参数最终调参默认用现代优化器，网格/手扫仅用于
+初值与可视化。
 
-目标（越小越好，单位混合但权重固定）：
-    cost = att_static + att_lowend_maneuver + 2*(pos_static + pos_lowend_maneuver)
-其中姿态项取 roll/pitch RMSE 均值（deg）、位置项取 RMSE（m）；LowEnd_5Hz
-用来体现 hAcc 门控收益，static 用 M8N_10Hz 用来约束正常 GNSS 下的噪声。
+优化参数（8 个）：
+    1. LPF 陀螺带宽 [Hz]        [100, 500]
+    2. LPF 加计带宽 [Hz]        [50, 300]
+    3. hAcc 门限 [m]            [1.0, 10.0]（>9.5 视为关闭=1e9）
+    4. q_accel 缩放             [0.5, 4.0]
+    5. EKF accel_std            [0.10, 0.40] m/s²
+    6. EKF gyro_std             [0.0005, 0.005] rad/s
+    7. EKF accel_markov         [0.001, 0.05] m/s²
+    8. EKF gyro_markov          [0.001, 0.02] rad/s
+
+目标（test_imu_nav_perf 的 IMUPERF_OPT 模式）：
+    static(M8N10) + maneuver(LowEnd5Hz) + vibration(0.5g/80Hz) + vib_outage
+    cost = 加权姿态+位置 RMSE（详见 C++ 端）。
 
 用法：
-    python test_host/opt_nav_params.py
-环境变量：
-    IMUPERF_EXE  test_imu_nav_perf 编译产物路径（必填）
+    IMUPERF_EXE=<exe> python test_host/opt_nav_params.py
+输出：
+    tmp/opt_cma_log.csv   每代最优/均值
+    tmp/opt_cma_best.json 最优参数与 cost
 """
+import json
 import os
 import subprocess
 import sys
+import tempfile
 
 import cma
 
+BOUNDS = [
+    (100.0, 500.0),   # lpf_gyro
+    (50.0, 300.0),    # lpf_accel
+    (1.0, 10.0),      # hacc（>9.5 视为关闭）
+    (0.5, 4.0),       # q_accel
+    (0.10, 0.40),     # ekf_accel_std
+    (0.0005, 0.005),  # ekf_gyro_std
+    (0.001, 0.05),    # ekf_accel_markov
+    (0.001, 0.02),    # ekf_gyro_markov
+]
+ENVS = [
+    "IMUPERF_LPF_GYRO",
+    "IMUPERF_LPF_ACCEL",
+    "IMUPERF_HACC",
+    "IMUPERF_Q_ACCEL",
+    "IMUPERF_EKF_ACCEL_STD",
+    "IMUPERF_EKF_GYRO_STD",
+    "IMUPERF_EKF_ACCEL_MARKOV",
+    "IMUPERF_EKF_GYRO_MARKOV",
+]
 
-def make_cost(exe: str):
+
+def to_phys(x):
+    out = []
+    for (lo, hi), v in zip(BOUNDS, x):
+        out.append(lo + (hi - lo) * min(max(v, 0.0), 1.0))
+    if out[2] > 9.5:
+        out[2] = 1.0e9
+    return out
+
+
+def make_cost(exe):
     def cost(x):
-        lpf_g, lpf_a, hacc = x
+        p = to_phys(x)
         env = dict(os.environ)
-        env.update(
-            IMUPERF_OPT="1",
-            IMUPERF_LPF_GYRO=f"{lpf_g:.3f}",
-            IMUPERF_LPF_ACCEL=f"{lpf_a:.3f}",
-            IMUPERF_HACC=f"{hacc:.3f}",
-        )
-        proc = subprocess.run(
-            [exe], env=env, capture_output=True, text=True, timeout=1800
-        )
-        for line in proc.stdout.splitlines():
-            if line.startswith("OPT_RESULT,"):
-                return float(line.split(",")[1])
-        print("评估失败，stdout 尾部：", proc.stdout[-400:], file=sys.stderr)
-        print("stderr 尾部：", proc.stderr[-400:], file=sys.stderr)
-        return 1.0e9
-
+        env["IMUPERF_OPT"] = "1"
+        for name, v in zip(ENVS, p):
+            env[name] = f"{v:.9g}"
+        fd, out_path = tempfile.mkstemp(suffix=".csv")
+        os.close(fd)
+        try:
+            with open(out_path, "w", encoding="utf-8") as fout:
+                subprocess.run([exe], env=env, stdout=fout,
+                               stderr=subprocess.DEVNULL, timeout=120,
+                               check=False)
+            with open(out_path, encoding="utf-8") as fin:
+                for line in fin:
+                    if line.startswith("OPT_RESULT,"):
+                        return float(line.split(",")[1])
+        except subprocess.TimeoutExpired:
+            print("评估超时 120s", file=sys.stderr)
+            return 1.0e6
+        finally:
+            try:
+                os.unlink(out_path)
+            except OSError:
+                pass
+        print("评估未产出 OPT_RESULT", file=sys.stderr)
+        return 1.0e6
     return cost
 
 
 def main():
     exe = os.environ.get("IMUPERF_EXE")
-    if not exe or not os.path.isfile(exe):
-        print("需要 IMUPERF_EXE 指向 test_imu_nav_perf 的编译产物", file=sys.stderr)
-        return 2
+    if not exe:
+        sys.exit("请设置 IMUPERF_EXE")
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out_dir = os.path.join(repo, "tmp")
+    os.makedirs(out_dir, exist_ok=True)
+    log_path = os.path.join(out_dir, "opt_cma_log.csv")
+    best_path = os.path.join(out_dir, "opt_cma_best.json")
 
-    # 初值 = 当前默认（陀螺 200Hz / 加计 100Hz / 门限 5m），边界覆盖手册档位。
-    x0 = [200.0, 100.0, 5.0]
-    sigma0 = [80.0, 60.0, 2.5]
-    bounds = [[50.0, 25.0, 2.0], [400.0, 400.0, 12.0]]
+    dim = len(BOUNDS)
+    x0 = [0.5] * dim
+    cost = make_cost(exe)
     es = cma.CMAEvolutionStrategy(
-        x0,
-        1.0,
-        {
-            # cma 4.x 要求 sigma0 为标量；各维尺度用 CMA_stds 表达。
-            "CMA_stds": sigma0,
-            "bounds": bounds,
-            "popsize": 8,
-            "maxfevals": 200,
-            "verbose": -9,
-            "seed": 1,
-            "CMA_diagonal": False,
-        },
-    )
-    es.optimize(make_cost(exe))
-    best = es.result
-    print("BEST", [round(v, 2) for v in best.xbest], "cost", round(best.fbest, 4),
-          "evals", es.countevals)
-    return 0
+        x0, 0.3,
+        {"bounds": [[0.0] * dim, [1.0] * dim],
+         "popsize": 8, "maxfevals": 320, "seed": 20261101,
+         "verb_log": 0, "verbose": -9})
+
+    best = {"cost": float("inf"), "params": None}
+    n = 0
+    with open(log_path, "w", encoding="utf-8") as log:
+        log.write("eval,gen,best,mean\n")
+        while not es.stop():
+            xs = es.ask()
+            fs = [cost(x) for x in xs]
+            es.tell(xs, fs)
+            n += len(xs)
+            gen = es.countiter
+            best_i = min(range(len(fs)), key=lambda i: fs[i])
+            if fs[best_i] < best["cost"]:
+                best = {"cost": fs[best_i], "params": to_phys(xs[best_i])}
+            log.write(f"{n},{gen},{fs[best_i]:.6f},{sum(fs)/len(fs):.6f}\n")
+            log.flush()
+            print(f"gen {gen} best {fs[best_i]:.4f} (overall {best['cost']:.4f})",
+                  flush=True)
+
+    with open(best_path, "w", encoding="utf-8") as f:
+        json.dump({"cost": best["cost"],
+                   "params": dict(zip(ENVS, best["params"]))}, f,
+                  ensure_ascii=False, indent=2)
+    print("最优:", json.dumps(best, ensure_ascii=False, default=str))
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

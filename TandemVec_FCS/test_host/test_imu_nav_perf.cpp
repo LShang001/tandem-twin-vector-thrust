@@ -247,6 +247,8 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
                   int adapt_r = 0, double adapt_thresh_m = 5.0,
                   double gnss_spike_m = 0.0, double gnss_spike_t = 15.0,
                   int gnss_spike_frames = 1, int reanchor_consist = 0,
+                  double ekf_accel_std = 0.25, double ekf_gyro_std = 0.0015,
+                  double ekf_accel_markov = 0.010, double ekf_gyro_markov = 0.00524,
                   double r_floor = 0.15, double gyro_tempc = 0.0,
                   int gyro_temp_comp = 0, double temp_comp_err = 0.0,
                   double misalign_deg = 0.0, double lever_x = 0.0,
@@ -293,6 +295,10 @@ RunResult runCase(const ImuSpec &imu, const GnssSpec &gnss, Scenario sc,
 
   const Eigen::Vector3d lla0(31.2304 * kDeg2Rad, 121.4737 * kDeg2Rad, 5.0);
   bfs::Ekf15State ekf;
+  ekf.accel_std_mps2(static_cast<float>(ekf_accel_std));
+  ekf.gyro_std_radps(static_cast<float>(ekf_gyro_std));
+  ekf.accel_markov_bias_std_mps2(static_cast<float>(ekf_accel_markov));
+  ekf.gyro_markov_bias_std_radps(static_cast<float>(ekf_gyro_markov));
   ekf.Initialize(f_body0.cast<float>(), Eigen::Vector3f::Zero(),
                  Eigen::Vector3f::Zero(), Eigen::Vector3f::Zero(), lla0);
   ekf.set_q_accel_scale(q_accel);
@@ -965,6 +971,59 @@ bool passByGnss(const GnssSpec &g, const RunResult &r)
 
 int main()
 {
+  // ★连续参数优化入口：CMA-ES 等优化器通过环境变量注入参数，目标值走 OPT_RESULT。
+  //   参数（7 个）：LPF 陀螺/加计、hAcc 门限、q_accel、EKF accel/gyro 白噪声、
+  //   EKF 加计/陀螺零偏 Markov 驱动噪声（后 4 个是本次为“全面参数优化”新增）。
+  if (const char *opt = std::getenv("IMUPERF_OPT"); opt != nullptr && opt[0] == '1')
+  {
+    auto envv = [](const char *k, double d) {
+      const char *v = std::getenv(k);
+      return v != nullptr ? std::atof(v) : d;
+    };
+    const double lpf_g = envv("IMUPERF_LPF_GYRO", 200.0);
+    const double lpf_a = envv("IMUPERF_LPF_ACCEL", 100.0);
+    const double hacc = envv("IMUPERF_HACC", 1.0e9);
+    const double qa = envv("IMUPERF_Q_ACCEL", 2.0);
+    const double eas = envv("IMUPERF_EKF_ACCEL_STD", 0.25);
+    const double egs = envv("IMUPERF_EKF_GYRO_STD", 0.0015);
+    const double eam = envv("IMUPERF_EKF_ACCEL_MARKOV", 0.010);
+    const double egm = envv("IMUPERF_EKF_GYRO_MARKOV", 0.00524);
+    ImuSpec spec = kIcm45686;
+    spec.lpf_gyro_hz = lpf_g;
+    spec.lpf_accel_hz = lpf_a;
+    auto run = [&](Scenario sc, int gi, int seed) {
+      return runCase(spec, kGnssSpecs[gi], sc, seed, false, nullptr, false, 80.0,
+                     0, hacc, 0, static_cast<float>(qa), 0, 0.5, 0.5, 100.0,
+                     101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f, 0.0, 1, 0, 5.0, 0.0,
+                     15.0, 1, 0, eas, egs, eam, egm);
+    };
+    double cost = 0.0;
+    int n = 0;
+    for (int seed = 1; seed <= 1; ++seed)
+    {
+      const RunResult rs = run(Scenario::Static, 2, seed);        // M8N 10Hz
+      const RunResult rm = run(Scenario::Maneuver, 5, seed);      // 低端 5m 5Hz
+      const RunResult rv = run(Scenario::Vibration, 2, seed);     // 0.5g/80Hz
+      const RunResult ro = run(Scenario::VibrationOutage, 2, seed);  // 失锁（必含，否则过拟合）
+      const RunResult ra = run(Scenario::Accel, 7, seed);  // M8N20 + 阶跃（硬约束场景）
+      // 硬约束：M8N20 + accel 场景不得发散（历史教训：优化参数曾让该场景 0.2→157 m）
+      if (ra.pos_rmse > 1.0 || !std::isfinite(ra.pos_rmse))
+      {
+        cost += 100.0;
+      }
+      cost += 0.5 * (rs.roll_rmse_deg + rs.pitch_rmse_deg) +
+              0.5 * (rm.roll_rmse_deg + rm.pitch_rmse_deg) +
+              2.0 * rs.pos_rmse + 2.0 * rm.pos_rmse +
+              1.5 * 0.5 * (rv.roll_rmse_deg + rv.pitch_rmse_deg) +
+              1.5 * rv.pos_rmse +
+              0.5 * 0.5 * (ro.roll_rmse_deg + ro.pitch_rmse_deg) +
+              0.5 * ro.pos_rmse;
+      ++n;
+    }
+    std::printf("OPT_RESULT,%.6f\n", cost / n);
+    std::exit(0);  // 优化模式：只跑 OPT 场景，跳过后续矩阵
+  }
+
   std::printf("== IMU × GNSS 器件模型 × 真实 EKF 导航性能 ==\n");
   std::printf("imu,gnss,scenario,seed,roll_rmse_deg,pitch_rmse_deg,yaw_drift_deg,"
               "vel_rmse_mps,pos_rmse_m,gnss_updates\n");
@@ -1265,27 +1324,50 @@ int main()
   }
 
   // ★连续参数优化入口：CMA-ES 等优化器通过环境变量注入参数，目标值走 OPT_RESULT。
+  //   参数（7 个）：LPF 陀螺/加计、hAcc 门限、q_accel、EKF accel/gyro 白噪声、
+  //   EKF 加计/陀螺零偏 Markov 驱动噪声（后 4 个是本次为“全面参数优化”新增）。
   if (const char *opt = std::getenv("IMUPERF_OPT"); opt != nullptr && opt[0] == '1')
   {
-    double lpf_g = 200.0, lpf_a = 100.0, hacc = 1.0e9;
-    if (const char *v = std::getenv("IMUPERF_LPF_GYRO")) { lpf_g = std::atof(v); }
-    if (const char *v = std::getenv("IMUPERF_LPF_ACCEL")) { lpf_a = std::atof(v); }
-    if (const char *v = std::getenv("IMUPERF_HACC")) { hacc = std::atof(v); }
+    auto envv = [](const char *k, double d) {
+      const char *v = std::getenv(k);
+      return v != nullptr ? std::atof(v) : d;
+    };
+    const double lpf_g = envv("IMUPERF_LPF_GYRO", 200.0);
+    const double lpf_a = envv("IMUPERF_LPF_ACCEL", 100.0);
+    const double hacc = envv("IMUPERF_HACC", 1.0e9);
+    const double qa = envv("IMUPERF_Q_ACCEL", 2.0);
+    const double eas = envv("IMUPERF_EKF_ACCEL_STD", 0.25);
+    const double egs = envv("IMUPERF_EKF_GYRO_STD", 0.0015);
+    const double eam = envv("IMUPERF_EKF_ACCEL_MARKOV", 0.010);
+    const double egm = envv("IMUPERF_EKF_GYRO_MARKOV", 0.00524);
     ImuSpec spec = kIcm45686;
     spec.lpf_gyro_hz = lpf_g;
     spec.lpf_accel_hz = lpf_a;
+    auto run = [&](Scenario sc, int gi, int seed) {
+      return runCase(spec, kGnssSpecs[gi], sc, seed, false, nullptr, false, 80.0,
+                     0, hacc, 0, static_cast<float>(qa), 0, 0.5, 0.5, 100.0,
+                     101.0, 0.0, 0, 0.0, 0.0, 0, 0.05, 0.0f, 0.0, 1, 0, 5.0, 0.0,
+                     15.0, 1, 0, eas, egs, eam, egm);
+    };
     double cost = 0.0;
-    for (int seed = 1; seed <= 2; ++seed)
+    int n = 0;
+    for (int seed = 1; seed <= 1; ++seed)
     {
-      const RunResult rs = runCase(spec, kGnssSpecs[2], Scenario::Static, seed,
-                                   false, nullptr, false, 80.0, 0, hacc);
-      const RunResult rm = runCase(spec, kGnssSpecs[5], Scenario::Maneuver, seed,
-                                   false, nullptr, false, 80.0, 0, hacc);
+      const RunResult rs = run(Scenario::Static, 2, seed);        // M8N 10Hz
+      const RunResult rm = run(Scenario::Maneuver, 5, seed);      // 低端 5m 5Hz
+      const RunResult rv = run(Scenario::Vibration, 2, seed);     // 0.5g/80Hz
+      const RunResult ro = run(Scenario::VibrationOutage, 2, seed);  // 失锁（必含，否则过拟合）
       cost += 0.5 * (rs.roll_rmse_deg + rs.pitch_rmse_deg) +
               0.5 * (rm.roll_rmse_deg + rm.pitch_rmse_deg) +
-              2.0 * rs.pos_rmse + 2.0 * rm.pos_rmse;
+              2.0 * rs.pos_rmse + 2.0 * rm.pos_rmse +
+              1.5 * 0.5 * (rv.roll_rmse_deg + rv.pitch_rmse_deg) +
+              1.5 * rv.pos_rmse +
+              0.5 * 0.5 * (ro.roll_rmse_deg + ro.pitch_rmse_deg) +
+              0.5 * ro.pos_rmse;
+      ++n;
     }
-    std::printf("OPT_RESULT,%.6f\n", cost / 2.0);
+    std::printf("OPT_RESULT,%.6f\n", cost / n);
+    std::exit(0);  // 优化模式：只跑 OPT 场景，跳过后续矩阵
   }
 
   // ★GNSS 航迹角辅助 yaw：cruise（1m/s）下对比无辅助/有辅助的 yaw 漂移与姿态。
@@ -2078,6 +2160,44 @@ int main()
                       0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.pos_rmse);
         }
       }
+    }
+  }
+
+  // ★GRAND：超广覆盖矩阵（5 GNSS × 6 场景 × 3 振动 × 3 延迟 × 2 seeds）。
+  if (const char *ab = std::getenv("IMUPERF_GRAND"); ab != nullptr && ab[0] == '1')
+  {
+    std::printf("\n== GRAND matrix ==\n");
+    std::printf("gnss,scene,vib,delay,seed,pos,att,alt\n");
+    auto ge = [](const char *k, double d) {
+      const char *v = std::getenv(k);
+      return v != nullptr ? std::atof(v) : d;
+    };
+    const double g_eas = ge("IMUPERF_EKF_ACCEL_STD", 0.25);
+    const double g_egs = ge("IMUPERF_EKF_GYRO_STD", 0.0015);
+    const double g_eam = ge("IMUPERF_EKF_ACCEL_MARKOV", 0.010);
+    const double g_egm = ge("IMUPERF_EKF_GYRO_MARKOV", 0.00524);
+    const double g_qa = ge("IMUPERF_Q_ACCEL", 2.0);
+    const int gis[5] = {0, 2, 5, 7, 8};
+    const Scenario scs[6] = {Scenario::Static, Scenario::Maneuver, Scenario::Cruise,
+                             Scenario::Vibration, Scenario::VibrationOutage,
+                             Scenario::Accel};
+    const double vibs[3] = {0.2, 0.5, 1.0};
+    const double delays[3] = {0.0, 0.03, 0.10};
+    for (int gi : gis)
+    for (Scenario sc : scs)
+    for (double vb : vibs)
+    for (double dl : delays)
+    for (int seed = 1; seed <= 2; ++seed)
+    {
+      const bool comp = dl > 0.0;
+      const RunResult r = runCase(kIcm45686, kGnssSpecs[gi], sc, seed,
+                                  false, nullptr, comp, 80.0, 0, 1.0e9, 0,
+                                  static_cast<float>(g_qa), 0, 0.5, vb, 5.0, 25.0, 0.0, 0,
+                                  0.0, 0.0, 0, 0.05, 0.0f, 0.0, 1, 0, 5.0, 0.0, 15.0, 1, 0,
+                                  g_eas, g_egs, g_eam, g_egm);
+      std::printf("%s,%s,%.1f,%.3f,%d,%.4f,%.3f,%.4f\n", kGnssSpecs[gi].name,
+                  scenarioName(sc), vb, dl, seed, r.pos_rmse,
+                  0.5 * (r.roll_rmse_deg + r.pitch_rmse_deg), r.alt_rmse);
     }
   }
 
