@@ -104,7 +104,7 @@ py -3.12 tools/check-code-comments.py --check     # GOV-004 门禁；--area fw-n
 - **LaTeX**：TikZ 源码存 `fig/`，公式推导后对照 `src/core/` 验证符号一致性
 - **Skill**：创建/修改项目 Skill 时走 `skill-creator-plus` 流程（草稿→清单审查），不裸调 `install_skill`。Skill 存 `.agents/skills/`（Agentskills.io 标准），不存 `.reasonix/skills/`
 - **仿真可视化**：每组仿真结果至少配时序 / 3D 轨迹 / 分布（箱线或小提琴）/ CDF / 散点或热图；脚本统一 `sim/plot_*.py`，生成后逐张目视审查再写结论（图内文字、坐标尺度、NaN/空图都要查）
-- **PDF 必须先经 MinerU 转换**（2026-11-01 用户要求）：所有 PDF（器件手册、论文、标准）入库或阅读前统一 `mineru parse <pdf> --tier standard`，转换产物（paper.md）入 `docs/08-参考资料/papers/REF-xxx/` 并在 manifest 注明 `converter=MinerU`；禁止用 pypdf/pdftotext 直读作为正式入库文本（临时 grep 可，但不得作为交付/引用依据）。注意首次需 `mineru server start` 并等引擎预热（engine_unavailable 时等 15–30 s 重试）。
+- **PDF 必须先经 MinerU 转换**（2026-11-01 用户要求）：所有 PDF（器件手册、论文、标准）入库或阅读前统一 `mineru parse <pdf> --tier standard`，转换产物（paper.md）入 `docs/08-参考资料/papers/REF-xxx/` 并在 manifest 注明 `converter=MinerU`；禁止用 pypdf/pdftotext 直读作为正式入库文本（临时 grep 可，但不得作为交付/引用依据）。注意首次需 `mineru server start` 并等引擎预热（engine_unavailable 时等 15–30 s 重试）；**扫描件/影印书/低质量 PDF 用 `--tier advanced`**（普通电子版 PDF 用 standard），并在 notes/manifest 注明所选 tier。
 
 ## 踩坑记录（完整记录见 docs/registers/踩坑记录-AGENTS.md——改控制/通信/调试代码前先检索）
 
