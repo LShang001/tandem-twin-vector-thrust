@@ -111,7 +111,7 @@ TandemVec_FCS/
 │   ├── 控制律/PID/辅助/        # PositionPID、IncrementalPID、ControlUnits、RcCurve、TandemVec_ADRC、
 │   │                           # TandemVec_OnlineID、RateLeadPredictor、RateAccelFeedback、RatePhaseLead、
 │   │                           # AdaptiveGainDamper、YawOscillationDetector、HeadingAidingGate
-│   ├── 导航/EKF/               # ins_*.h（20 个：气圧/IMU 健康/振动/预置/延迟/PPS/一致性/增量选择…）、
+│   ├── 导航/EKF/               # ins_*.h（22 个：气圧/IMU 健康/振动/预置/延迟/PPS/一致性/增量选择/参数辨识/预对准…）、
 │   │                           # ins_static_detector / ins_static_aid_profile / ins_gnss_dynamic_weight
 │   │                           #   （导出 Icm45686* 前缀函数：静止检测、ZUPT 档位、GNSS 动态权重）、
 │   │                           # mag_measurement_gate、mag_reference、HorizontalKF、VerticalKF、
@@ -152,7 +152,7 @@ TandemVec_FCS/
 ├── docs/                       # 固件侧文档（557 文件）
 │   ├── COMM-001、GCS-001、C路径-参数集中与遥测结构化方案、barometric_altitude_optimization…
 │   ├── ano_ref/、mavlink-ref/、memory/
-│   └── 04-数学建模/代码理论核查/  # FW-CTRL / FW-INFRA / FW-NAV / FW-EKF 等台账
+│   └── 04-数学建模/代码理论核查/  # FW-CTRL / FW-INFRA / FW-NAV / FW-EKF 等台账 + 导航研究文档（总结/对准/延迟/协议/上板清单，索引见该目录 README §0）
 ├── tools/                      # 固件工具（38 文件）
 │   ├── verify_*.py             # 轴映射/符号/分配/地板一致性等出厂校验
 │   ├── plot_blackbox.py、audit_math.py、gen_mag_reference.py
