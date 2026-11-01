@@ -584,6 +584,8 @@ uint8_t g_heading_aid_mode =
 // 运动段姿态辅助模式（无 GNSS 数据新鲜且非静止）：
 // 默认 BFS_ATT_AID_MODE_DEFAULT=1（重力方向直连）；SIL --att-aid-mode 可覆盖。
 uint8_t g_att_aid_mode = static_cast<uint8_t>(BFS_ATT_AID_MODE_DEFAULT);
+float g_nav_tilt_sigma_deg = 0.0f;      // 倾斜 1σ（EKF，deg）
+float g_nav_gyro_bias_norm_dps = 0.0f;  // 陀螺零偏模长（EKF 估计，deg/s）
 float g_heading_align_deg = kFlightCtrlParams.heading_align_deg;
 float g_nomag_bias_z_max_radps = 0.01f;
 float g_gnss_outage_age_s = 0.0f;

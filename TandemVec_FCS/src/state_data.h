@@ -915,6 +915,10 @@ extern float g_heading_align_deg; // 手动对准航向（度，真北顺时针�
 // 语义只影响“无 GNSS 数据新鲜且非静止”这一段；EKF 未初始化时的
 // AHRS_Packet 填充（Madgwick 直填）不受此开关影响。
 extern uint8_t g_att_aid_mode;
+// 姿态健康遥测（2026-11-02）：无 GNSS/无光流时倾斜只有陀螺积分，倾斜 1σ 随
+// 时间增长；上层应据此设失联时限/降级（阈值得由实机零偏标定反算）。
+extern float g_nav_tilt_sigma_deg;
+extern float g_nav_gyro_bias_norm_dps;
 // 无磁离地时陀螺零偏 z 限幅 [rad/s]：防止 GNSS 更新把真实偏航率吸收成零偏。
 // 0.01 rad/s ≈ 0.57°/s，20 s 累积 ≤11.5°，落在短时保持窗口内。
 extern float g_nomag_bias_z_max_radps;

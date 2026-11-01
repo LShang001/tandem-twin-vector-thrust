@@ -3657,6 +3657,11 @@ void handleNavigationSystem()
         AHRS_Packet.Pitch = nav_ekf.pitch_rad();
         AHRS_Packet.Heading = wrapAngleTwoPi(nav_ekf.yaw_rad()); // 注意：这是真北航向
 
+        // 无 GNSS/无光流时倾斜只有陀螺：把倾斜 1σ 与零偏模长送遥测，
+        // 上层用它设失联时限/降级（物理下限判据，2026-11-02）。
+        g_nav_tilt_sigma_deg = nav_ekf.tilt_sigma_rad() * 57.29578f;
+        g_nav_gyro_bias_norm_dps = nav_ekf.gyro_bias_radps().norm() * 57.29578f;
+
         icm_Roll = AHRS_Packet.Roll;
         icm_Pitch = AHRS_Packet.Pitch;
         icm_Yaw = AHRS_Packet.Heading;

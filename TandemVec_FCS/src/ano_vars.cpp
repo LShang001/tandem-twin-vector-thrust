@@ -144,6 +144,9 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_U8("hdg_mode",            g_heading_aid_mode),
     // 运动段姿态辅助模式（0=AHRS/1=重力直连/2=重力优先+AHRS 回退）
     ANO_VAR_U8("att_mode",            g_att_aid_mode),
+    // 姿态健康：倾斜 1σ（deg）与陀螺零偏模长（deg/s）；无外部参考时的漂移预算
+    ANO_VAR_FLOAT("tilt_sig",        g_nav_tilt_sigma_deg),
+    ANO_VAR_FLOAT("bg_norm",         g_nav_gyro_bias_norm_dps),
     ANO_VAR_BOOL("static_cal",        g_imu_static_calibrated),
     ANO_VAR_FLOAT("static_cal_s",     g_static_calib_s),
 
