@@ -911,6 +911,11 @@ struct RealNavConfig
   // （报告 §9.4 #3 缺的那一次直接注入）。窗口 [start,end)，单位 m/s²，机体系。
   float nav_accel_bias_mps2[3] = {0.0f, 0.0f, 0.0f};
   float nav_accel_bias_start_s = -1.0f;
+  // 陀螺零偏阶跃注入（2026-11-02）：模拟“失联后零偏发生未标定变化”这一
+  // 唯一会真正累积成姿态发散的物理机制；只影响导航增量，不改控制/AHRS。
+  float nav_gyro_bias_dps[3] = {0.0f, 0.0f, 0.0f};
+  float nav_gyro_bias_start_s = -1.0f;
+  float nav_gyro_bias_end_s = -1.0f;
   float nav_accel_bias_end_s = -1.0f;
   float outage_start = 20.0f;
   float outage_end = 25.0f;
@@ -2331,6 +2336,15 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           }
           ++g_nav_bias_frames;
         }
+        if (cfg.nav_gyro_bias_start_s >= 0.0f &&
+            t >= cfg.nav_gyro_bias_start_s && t <= cfg.nav_gyro_bias_end_s)
+        {
+          for (int a = 0; a < 3; ++a)
+          {
+            nav_sample.gyro[a] += cfg.nav_gyro_bias_dps[a] * 0.017453292f;
+          }
+          ++g_nav_bias_frames;
+        }
         accumulateImuSample(nav_sample, sample_dt);
         icm_gyro_x = sample.gyro[0];
         icm_gyro_y = sample.gyro[1];
@@ -3211,6 +3225,19 @@ int main(int argc, char** argv) {
                       &real_cfg.nav_accel_bias_mps2[2]) != 5)
       {
         std::fprintf(stderr, "[sil] --nav-accel-bias-step 需要 t0:t1:ax:ay:az\n");
+        return 2;
+      }
+    }
+    else if (std::strcmp(argv[i],"--nav-gyro-bias-step")==0 && i+1<argc)
+    {
+      if (std::sscanf(argv[++i], "%f:%f:%f:%f:%f",
+                      &real_cfg.nav_gyro_bias_start_s,
+                      &real_cfg.nav_gyro_bias_end_s,
+                      &real_cfg.nav_gyro_bias_dps[0],
+                      &real_cfg.nav_gyro_bias_dps[1],
+                      &real_cfg.nav_gyro_bias_dps[2]) != 5)
+      {
+        std::fprintf(stderr, "[sil] --nav-gyro-bias-step 需要 t0:t1:gx:gy:gz (dps)\n");
         return 2;
       }
     }

@@ -921,6 +921,10 @@ extern float g_nav_tilt_sigma_deg;
 extern float g_nav_gyro_bias_norm_dps;
 // mode 5 有界兜底当前是否处于激活态（倾斜 1σ 超门限）
 extern bool g_nav_tilt_fb_active;
+// 无外部参考时的倾斜漂移预算（deg）与降级标志：预算 = max(bg, 0.12°/s)×无参考时长。
+// 这是“不发散”的物理判据——估计器无法凭空约束零偏漂移，只能把它量化上报。
+extern float g_nav_tilt_drift_deg;
+extern bool g_nav_tilt_degraded;
 // 无磁离地时陀螺零偏 z 限幅 [rad/s]：防止 GNSS 更新把真实偏航率吸收成零偏。
 // 0.01 rad/s ≈ 0.57°/s，20 s 累积 ≤11.5°，落在短时保持窗口内。
 extern float g_nomag_bias_z_max_radps;

@@ -3681,6 +3681,35 @@ void handleNavigationSystem()
         // 上层用它设失联时限/降级（物理下限判据，2026-11-02）。
         g_nav_tilt_sigma_deg = nav_ekf.tilt_sigma_rad() * 57.29578f;
         g_nav_gyro_bias_norm_dps = nav_ekf.gyro_bias_radps().norm() * 57.29578f;
+        // 无参考漂移预算（遥测/降级判据，不改飞控模式）：零偏漂移在无参考时
+        // 不可观测，唯一能“有界”的方式是把它量化并按任务时限降级。
+        {
+          static uint32_t s_no_ref_ms = 0;
+          const uint32_t budget_now_ms = millis();
+          const bool ext_ref_ok =
+              gnss_instant_valid_for_nav ||
+              (flow_data.is_flow_valid &&
+               (budget_now_ms - flow_data.last_update_ms) <= kFlowDataStaleTimeoutMs);
+          if (ext_ref_ok)
+          {
+            s_no_ref_ms = 0;
+          }
+          else if (s_no_ref_ms == 0U)
+          {
+            s_no_ref_ms = budget_now_ms;
+          }
+          const float t_no_ref_s =
+              (s_no_ref_ms == 0U)
+                  ? 0.0f
+                  : static_cast<float>(budget_now_ms - s_no_ref_ms) * 1.0e-3f;
+          // 零偏地板 0.12°/s：失联后零偏可能发生未标定变化（SIL 实测 0.6°/s
+          // 阶跃时纯陀螺 30 s 漂 7°），EKF 估计看不到这一步。
+          static constexpr float kBiasFloorRadps = 0.0020944f;
+          const float bias_budget =
+              std::fmax(nav_ekf.gyro_bias_radps().norm(), kBiasFloorRadps);
+          g_nav_tilt_drift_deg = bias_budget * t_no_ref_s * 57.29578f;
+          g_nav_tilt_degraded = (g_nav_tilt_drift_deg > 3.0f);
+        }
 
         icm_Roll = AHRS_Packet.Roll;
         icm_Pitch = AHRS_Packet.Pitch;

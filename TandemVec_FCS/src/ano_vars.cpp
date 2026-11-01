@@ -147,6 +147,9 @@ extern const AnoVarEntry kAnoVars[] = {
     // 姿态健康：倾斜 1σ（deg）与陀螺零偏模长（deg/s）；无外部参考时的漂移预算
     ANO_VAR_FLOAT("tilt_sig",        g_nav_tilt_sigma_deg),
     ANO_VAR_FLOAT("bg_norm",         g_nav_gyro_bias_norm_dps),
+    ANO_VAR_FLOAT("tilt_drift",      g_nav_tilt_drift_deg),
+    ANO_VAR_BOOL("tilt_dg",          g_nav_tilt_degraded),
+    ANO_VAR_BOOL("tilt_fb",          g_nav_tilt_fb_active),
     ANO_VAR_BOOL("static_cal",        g_imu_static_calibrated),
     ANO_VAR_FLOAT("static_cal_s",     g_static_calib_s),
 
