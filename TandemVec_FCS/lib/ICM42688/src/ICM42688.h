@@ -95,6 +95,22 @@ public:
   int readWhoAmIValue(uint8_t &value);
 
   /**
+   * @brief      Read back the four bank0 configuration registers.
+   *
+   * @param[out] pwr             PWR_MGMT0 (0x4E)
+   * @param[out] gyro_cfg        GYRO_CONFIG0 (0x4F)
+   * @param[out] accel_cfg       ACCEL_CONFIG0 (0x50)
+   * @param[out] gyro_accel_cfg  GYRO_ACCEL_CONFIG0 (0x52)
+   * @return     0 on success; negative if a register read failed.
+   *
+   * @note       Used by the device layer for power-on configuration verification
+   *             (guards against the historical "LPF written to the wrong field"
+   *             class of silent misconfiguration).
+   */
+  int readConfigSnapshot(uint8_t &pwr, uint8_t &gyro_cfg, uint8_t &accel_cfg,
+                         uint8_t &gyro_accel_cfg);
+
+  /**
    * @brief      Initialize the device.
    *
    * @return     ret < 0 if error

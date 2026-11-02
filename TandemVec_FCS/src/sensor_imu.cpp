@@ -154,6 +154,21 @@ int initICM42688()
   Serial8.print("Hz gyroODR=");
   Serial8.print(IMU->actualGyroOdrHz());
   Serial8.println("Hz");
+  // 配置回读校验：0=一致；非 0 时把位图和回读值打出来，便于上板核对
+  // （bit0 PWR_MGMT0 / bit1 GYRO_CONFIG0 / bit2 ACCEL_CONFIG0 / bit3 GYRO_ACCEL_CONFIG0）。
+  if (IMU->configCheckMask() != 0U)
+  {
+    Serial8.print("[Warn] IMU cfg readback mismatch mask=0x");
+    Serial8.print(IMU->configCheckMask(), HEX);
+    Serial8.print(" pwr=0x");
+    Serial8.print(static_cast<unsigned>(IMU->configReadbackByte(0)), HEX);
+    Serial8.print(" gyro=0x");
+    Serial8.print(static_cast<unsigned>(IMU->configReadbackByte(1)), HEX);
+    Serial8.print(" accel=0x");
+    Serial8.print(static_cast<unsigned>(IMU->configReadbackByte(2)), HEX);
+    Serial8.print(" lpf=0x");
+    Serial8.println(static_cast<unsigned>(IMU->configReadbackByte(3)), HEX);
+  }
 
   delay(500); // 等待 500ms，让传感器稳定并开始输出数据
 

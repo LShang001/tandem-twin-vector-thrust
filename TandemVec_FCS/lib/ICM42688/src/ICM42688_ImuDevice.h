@@ -68,6 +68,21 @@ public:
 
   int readWhoAmI(uint8_t &value) override;
 
+  /// 配置回读校验位图（见 ImuDevice::configCheckMask）。
+  uint32_t configCheckMask() const override { return config_check_mask_; }
+
+  /// 回读到的 bank0 寄存器原始值（0=PWR、1=GYRO_CONFIG0、2=ACCEL_CONFIG0、
+  /// 3=GYRO_ACCEL_CONFIG0），供上电日志/DBG 诊断。
+  uint8_t configReadback(size_t idx) const
+  {
+    return (idx < 4U) ? cfg_readback_[idx] : 0U;
+  }
+
+  uint8_t configReadbackByte(size_t idx) const override
+  {
+    return (idx < 4U) ? cfg_readback_[idx] : 0U;
+  }
+
   uint16_t actualAccelOdrHz() const override { return actualAccelOdr_; }
   uint16_t actualGyroOdrHz() const override { return actualGyroOdr_; }
 
@@ -100,6 +115,8 @@ private:
   uint16_t actualAccelOdr_ = 0;
   uint16_t actualGyroOdr_ = 0;
   float actualAccelLpfHz_ = 0.0f;
+  uint32_t config_check_mask_ = 0U;  ///< 回读不一致位图（0=一致）
+  uint8_t cfg_readback_[4] = {0U, 0U, 0U, 0U};  ///< PWR/GYRO/ACCEL/GYRO_ACCEL
   float actualGyroLpfHz_ = 0.0f;
   const char *err_ = "";
 };

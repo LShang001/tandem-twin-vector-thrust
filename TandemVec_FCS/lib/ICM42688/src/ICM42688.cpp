@@ -44,23 +44,10 @@ float icm42688FilterFreqHz(ICM42688::FilterFrequency f)
   }
 }
 
-/** 手册 §14.40：LN 模式 GYRO/ACCEL_UI_FILT_BW 的 3dB 带宽（ODR<400 时用 400 为基）。 */
+/** 手册 §14.40：UI 低通码→带宽；实现在 imu_filter_math.h，宿主测试共用。 */
 float icm42688LpfCutoffHz(uint16_t odrHz, uint8_t code)
 {
-  const float odr = static_cast<float>(odrHz);
-  const float base = std::fmax(400.0f, odr);
-  switch (code)
-  {
-  case 0: return odr / 2.0f;      // BW=ODR/2
-  case 1: return base / 4.0f;
-  case 2: return base / 5.0f;
-  case 3: return base / 8.0f;
-  case 4: return base / 10.0f;
-  case 5: return base / 16.0f;
-  case 6: return base / 20.0f;
-  case 7: return base / 40.0f;
-  default: return 0.0f;          // 8..13 保留，14/15 低延迟选项不用
-  }
+  return imu_filter::lpfCutoffHz(odrHz, code);
 }
 } // namespace
 
@@ -279,6 +266,7 @@ int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
   const float target_hz = icm42688FilterFreqHz(freq);
   if (target_hz <= 0.0f) { return -1; }
   const imu_filter::AafEntry *e = &imu_filter::aafForBandwidth(target_hz);
+  const imu_filter::AafRegisters r = imu_filter::aafRegisters(*e);
   if (isGyro)
   {
     if (setBank(1) < 0) { return -2; }
@@ -287,27 +275,20 @@ int ICM42688::setAntialiasFilter(bool enable, FilterFrequency freq, bool isGyro)
     dis = enable ? static_cast<uint8_t>(dis & ~0x02U)
                  : static_cast<uint8_t>(dis | 0x02U);
     if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC2, dis) < 0) { return -4; }
-    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC3,
-                      static_cast<uint8_t>(e->delt & 0x3FU)) < 0) { return -5; }
-    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC4,
-                      static_cast<uint8_t>(e->deltsqr & 0xFFU)) < 0) { return -6; }
-    const uint8_t s5 = static_cast<uint8_t>(
-        ((e->bitshift & 0x0FU) << 4U) | ((e->deltsqr >> 8U) & 0x0FU));
-    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC5, s5) < 0) { return -7; }
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC3, r.delt) < 0) { return -5; }
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC4, r.deltsqr_low) < 0) { return -6; }
+    if (writeRegister(UB1_REG_GYRO_CONFIG_STATIC5, r.deltsqr_high_bitshift) < 0) { return -7; }
     if (setBank(0) < 0) { return -8; }
     return 1;
   }
   if (setBank(2) < 0) { return -9; }
   uint8_t reg = 0U;
   if (readRegisters(UB2_REG_ACCEL_CONFIG_STATIC2, 1, &reg) < 0) { return -10; }
-  reg = static_cast<uint8_t>((reg & 0x01U) | ((e->delt & 0x3FU) << 1U));
+  reg = static_cast<uint8_t>((reg & 0x01U) | (r.delt << 1U));
   if (!enable) { reg |= 0x01U; }
   if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC2, reg) < 0) { return -11; }
-  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC3,
-                    static_cast<uint8_t>(e->deltsqr & 0xFFU)) < 0) { return -12; }
-  const uint8_t s4 = static_cast<uint8_t>(
-      ((e->bitshift & 0x0FU) << 4U) | ((e->deltsqr >> 8U) & 0x0FU));
-  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC4, s4) < 0) { return -13; }
+  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC3, r.deltsqr_low) < 0) { return -12; }
+  if (writeRegister(UB2_REG_ACCEL_CONFIG_STATIC4, r.deltsqr_high_bitshift) < 0) { return -13; }
   if (setBank(0) < 0) { return -14; }
   return 1;
 }
@@ -370,26 +351,9 @@ int ICM42688::setNotchFilter(bool enable, uint8_t centerFreq, uint8_t bandwidth)
 
 uint8_t ICM42688::selectLpfCode(uint16_t odrHz, float targetHz)
 {
-  // 编码 0..7 → 截止 = ODR/2^(code+1)；取最接近目标带宽的档。
-  // 42688 的 UI 滤波是 ODR 倍率档，不是固定 Hz 档，因此低 ODR 时目标带宽
-  // 会被物理压低，actualLpfHz() 会回报真实值供上电日志核对。
-  if (odrHz == 0U || targetHz <= 0.0f)
-  {
-    return 0U;
-  }
-  uint8_t bestCode = 0U;
-  float bestErr = 1.0e30f;
-  for (uint8_t code = 0U; code <= 7U; ++code)
-  {
-    const float cutoff = icm42688LpfCutoffHz(odrHz, code);
-    const float err = std::fabs(cutoff - targetHz);
-    if (err < bestErr)
-    {
-      bestErr = err;
-      bestCode = code;
-    }
-  }
-  return bestCode;
+  // 编码 0..7 → 截止 = ODR/2^(code+1)（ODR<400 时以 400 为基）；实现在
+  // imu_filter_math.h，与宿主测试共用同一份映射，避免驱动/测试两套逻辑。
+  return imu_filter::selectLpfCode(odrHz, targetHz);
 }
 
 uint16_t ICM42688::actualLpfHz(uint16_t odrHz, uint8_t bwCode) const
@@ -1030,6 +994,18 @@ uint8_t ICM42688::whoAmI()
 // 直接复用内部 whoAmI()（其内部已做 setBank(0)），并把"寄存器值 0xFF"识别为
 // 读取失败——因为 0xFF 不是任何 ICM 系列合法的 WHO_AM_I，可作为哨兵，
 // 避免 whoAmI() 返回 -1 被 uint8_t 截断后伪装成"读到了 0xFF"。
+int ICM42688::readConfigSnapshot(uint8_t &pwr, uint8_t &gyro_cfg,
+                                 uint8_t &accel_cfg, uint8_t &gyro_accel_cfg)
+{
+  // 上电回读校验用：只读 bank0 四个配置寄存器，失败区分到具体寄存器。
+  if (setBank(0) < 0) { return -1; }
+  if (readRegisters(UB0_REG_PWR_MGMT0, 1, &pwr) < 0) { return -2; }
+  if (readRegisters(UB0_REG_GYRO_CONFIG0, 1, &gyro_cfg) < 0) { return -3; }
+  if (readRegisters(UB0_REG_ACCEL_CONFIG0, 1, &accel_cfg) < 0) { return -4; }
+  if (readRegisters(UB0_REG_GYRO_ACCEL_CONFIG0, 1, &gyro_accel_cfg) < 0) { return -5; }
+  return 0;
+}
+
 int ICM42688::readWhoAmIValue(uint8_t &value)
 {
   const uint8_t v = whoAmI();

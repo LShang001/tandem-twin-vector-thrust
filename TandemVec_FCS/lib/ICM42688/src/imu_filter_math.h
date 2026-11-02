@@ -145,4 +145,64 @@ inline bool notchCoefficients(float f_khz, uint16_t &coswz, uint8_t &sel)
   return true;
 }
 
+/// 手册 §14.40：LN 模式 GYRO/ACCEL_UI_FILT_BW 码 → 3dB 带宽 (Hz)。
+/// ODR<400Hz 时手册以 400Hz 为基准，避免低 ODR 下带宽过窄。
+inline float lpfCutoffHz(uint16_t odr_hz, uint8_t code)
+{
+  if (odr_hz == 0U || code > 7U) { return 0.0f; }
+  const float odr = static_cast<float>(odr_hz);
+  const float base = std::fmax(400.0f, odr);
+  switch (code)
+  {
+  case 0: return odr / 2.0f;   // BW = ODR/2
+  case 1: return base / 4.0f;
+  case 2: return base / 5.0f;
+  case 3: return base / 8.0f;
+  case 4: return base / 10.0f;
+  case 5: return base / 16.0f;
+  case 6: return base / 20.0f;
+  case 7: return base / 40.0f;
+  default: return 0.0f;
+  }
+}
+
+/// 取最接近目标带宽的 UI 低通码（0..7）；ODR=0 或目标 ≤0 返回 0。
+inline uint8_t selectLpfCode(uint16_t odr_hz, float target_hz)
+{
+  if (odr_hz == 0U || target_hz <= 0.0f) { return 0U; }
+  uint8_t best = 0U;
+  float best_err = 1.0e30f;
+  for (uint8_t code = 0U; code <= 7U; ++code)
+  {
+    const float err = std::fabs(lpfCutoffHz(odr_hz, code) - target_hz);
+    if (err < best_err)
+    {
+      best_err = err;
+      best = code;
+    }
+  }
+  return best;
+}
+
+/// AAF 三个参数寄存器的字节打包（DS-000347 §5.3）：
+///   STATIC3/0x04 = DELT[5:0]（加计时调用方左移 1 位放到 bits6:1）
+///   STATIC4/0x05 = DELTSQR[7:0]
+///   STATIC5/0x06 = BITSHIFT[7:4] | DELTSQR[11:8]
+struct AafRegisters
+{
+  uint8_t delt;
+  uint8_t deltsqr_low;
+  uint8_t deltsqr_high_bitshift;
+};
+
+inline AafRegisters aafRegisters(const AafEntry &e)
+{
+  AafRegisters r{};
+  r.delt = static_cast<uint8_t>(e.delt & 0x3FU);
+  r.deltsqr_low = static_cast<uint8_t>(e.deltsqr & 0xFFU);
+  r.deltsqr_high_bitshift = static_cast<uint8_t>(
+      ((e.bitshift & 0x0FU) << 4U) | ((e.deltsqr >> 8U) & 0x0FU));
+  return r;
+}
+
 } // namespace imu_filter

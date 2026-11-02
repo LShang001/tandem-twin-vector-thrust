@@ -177,4 +177,13 @@ public:
 
   /// 最近一次失败的可读描述（成功时为空串）。
   virtual const char *lastError() const { return ""; }
+
+  /// 配置回读校验位图：0=一致。位定义由后端自定（ICM42688：bit0 PWR_MGMT0、
+  /// bit1 GYRO_CONFIG0、bit2 ACCEL_CONFIG0、bit3 GYRO_ACCEL_CONFIG0）。
+  /// 默认 0 = 该后端不做回读校验。
+  virtual uint32_t configCheckMask() const { return 0U; }
+
+  /// 配置回读的原始寄存器字节（idx 含义由后端定义；越界返回 0）。
+  /// 用于上电日志/DBG 展示“期望 vs 实际”，默认 0。
+  virtual uint8_t configReadbackByte(size_t idx) const { (void)idx; return 0U; }
 };

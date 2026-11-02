@@ -100,6 +100,32 @@ int ICM42688_ImuDevice::begin(const ImuConfig &cfg)
   actualGyroLpfHz_ = static_cast<float>(imu_.actualLpfHz(gyroOdrHz, gyroBw));
   actualAccelLpfHz_ = static_cast<float>(imu_.actualLpfHz(accelOdrHz, accelBw));
 
+  // ★2026-11-02 上电回读校验：历史上 LPF 曾写错字段（写进 ODR 域）而静默失效，
+  //   这里把 bank0 四个配置寄存器读回、与期望值逐位比对，把“不一致”变成可见
+  //   信号（位图交给 sensor_imu 日志/DBG），而不是靠飞行数据反推。
+  //   读回失败按初始化失败处理（-7）：写成功而读不回说明总线异常。
+  uint8_t pwr = 0U, gyro_cfg = 0U, accel_cfg = 0U, gyro_accel_cfg = 0U;
+  if (imu_.readConfigSnapshot(pwr, gyro_cfg, accel_cfg, gyro_accel_cfg) != 0)
+  {
+    err_ = "ICM42688 config readback failed";
+    return -7;
+  }
+  const uint8_t exp_pwr = 0x0FU;
+  const uint8_t exp_gyro = static_cast<uint8_t>(
+      (static_cast<uint8_t>(gyroFs) << 5U) | static_cast<uint8_t>(gyroOdr));
+  const uint8_t exp_accel = static_cast<uint8_t>(
+      (static_cast<uint8_t>(accelFs) << 5U) | static_cast<uint8_t>(accelOdr));
+  const uint8_t exp_lpf = static_cast<uint8_t>((accelBw << 4U) | (gyroBw & 0x0FU));
+  config_check_mask_ = 0U;
+  if (pwr != exp_pwr) { config_check_mask_ |= 1U << 0; }
+  if (gyro_cfg != exp_gyro) { config_check_mask_ |= 1U << 1; }
+  if (accel_cfg != exp_accel) { config_check_mask_ |= 1U << 2; }
+  if (gyro_accel_cfg != exp_lpf) { config_check_mask_ |= 1U << 3; }
+  cfg_readback_[0] = pwr;
+  cfg_readback_[1] = gyro_cfg;
+  cfg_readback_[2] = accel_cfg;
+  cfg_readback_[3] = gyro_accel_cfg;
+
   actualAccelOdr_ = accelOdrHz;
   actualGyroOdr_ = gyroOdrHz;
   err_ = "";
