@@ -152,7 +152,8 @@ static float g_sil_gnss_meas_ned[3] = {0.0f, 0.0f, 0.0f};
 static float g_sil_gnss_lever_ned[3] = {0.0f, 0.0f, 0.0f};
 static Quat4f g_ms_att_est{1.0f, 0.0f, 0.0f, 0.0f};
 static float g_ms_rate_est[3] = {0.0f, 0.0f, 0.0f};
-static std::string g_imu_grade = "icm";  // ideal/icm/low/adverse（导弹 SIL 研究档位）
+static std::string g_imu_grade = "icm";
+static float g_sil_tilt_dg_first_s = -1.0f;  // tilt_dg first-trigger time [s]  // ideal/icm/low/adverse（导弹 SIL 研究档位）
 // 导弹 plant 包线扫描（默认 5000 N/120 kg/10 s → 6.4 g/451 m/s）。
 static float g_ms_thrust_n = 5000.0f;
 static float g_ms_mass_kg = 120.0f;
@@ -2489,6 +2490,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
     // 1 Hz 诊断打印。
     if ((k % 200) == 0)
     {
+      if (g_nav_tilt_degraded && g_sil_tilt_dg_first_s < 0.0f)
+      {
+        g_sil_tilt_dg_first_s = t;
+      }
       const long age_ms = (last_gnss_data_ms > 0)
                               ? static_cast<long>(millis() - last_gnss_data_ms)
                               : -1;
@@ -2675,7 +2680,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"nav_vel_rms\":%.4f,\"nrfb\":%u,\"nav_bias_frames\":%u,"
               "\"coax_motor_tau_s\":%.3f,\"coax_servo_rate_dps\":%.1f,"
               "\"coax_ground_mu\":%.3f,\"coax_servojam\":%d,"
-              "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f,\"coax_ix\":%.4f,\"coax_inertia_scale\":%.3f,\"coax_thrust_scale\":%.3f,\"coax_yaw_scale\":%.3f,\"coax_alloc_mode\":%d,\"rc_profile_rows\":%d,\"rc_profile_t_first\":%.3f,\"rc_profile_t_last\":%.3f%s}\n",
+              "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f,\"coax_ix\":%.4f,\"coax_inertia_scale\":%.3f,\"coax_thrust_scale\":%.3f,\"coax_yaw_scale\":%.3f,\"coax_alloc_mode\":%d,\"rc_profile_rows\":%d,\"rc_profile_t_first\":%.3f,\"rc_profile_t_last\":%.3f,\"tilt_sig\":%.3f,\"tilt_drift\":%.3f,\"tilt_dg\":%d,\"tilt_dg_t\":%.2f%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
@@ -2780,6 +2785,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               0.28, 300.0, 0.0, 0, 1.0, 1.0, 0.05, 1.0, 1.0, 1.0, 0,
               0, 0.0, 0.0,
 #endif
+              static_cast<double>(g_nav_tilt_sigma_deg),
+              static_cast<double>(g_nav_tilt_drift_deg),
+              g_nav_tilt_degraded ? 1 : 0,
+              static_cast<double>(g_sil_tilt_dg_first_s),
               nees_json);
   if (g_trace_csv_file != nullptr)
   {

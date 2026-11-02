@@ -2731,11 +2731,15 @@ void handleNavigationSystem()
       const bool tilt_sigma_high =
           (g_att_aid_mode == 5U) &&
           (nav_ekf.tilt_sigma_rad() > BFS_ATT_AID_TILT_FALLBACK_RAD);
+      // 磁航向也失效时不要兜底：AHRS 的倾斜同样来自被污染的比力，且没有
+      // 航向参考时脉冲只会累积偏置（SIL：GNSS+磁同时失效 1.19°→4.01°）。
+      const bool fallback_heading_ref_ok =
+          aid_tracker.status(bfs::AidSource::Mag).age_s < 5.0f;
       const bool tilt_sigma_fallback =
-          tilt_sigma_high &&
+          tilt_sigma_high && fallback_heading_ref_ok &&
           (s_tilt_fb_last_ms == 0U ||
            (tilt_fb_now_ms - s_tilt_fb_last_ms) >= 500U);
-      g_nav_tilt_fb_active = tilt_sigma_high;
+      g_nav_tilt_fb_active = tilt_sigma_high && fallback_heading_ref_ok;
       if (g_att_aid_mode != 0U && !vib_prefers_ahrs && motion_accel_trusted)
       {
         // 运动段方向门恒定启用（不像 AHRS 门那样只在 VTOL 包线外启用）：
@@ -3702,11 +3706,13 @@ void handleNavigationSystem()
               (s_no_ref_ms == 0U)
                   ? 0.0f
                   : static_cast<float>(budget_now_ms - s_no_ref_ms) * 1.0e-3f;
-          // 零偏地板 0.12°/s：失联后零偏可能发生未标定变化（SIL 实测 0.6°/s
-          // 阶跃时纯陀螺 30 s 漂 7°），EKF 估计看不到这一步。
-          static constexpr float kBiasFloorRadps = 0.0020944f;
-          const float bias_budget =
-              std::fmax(nav_ekf.gyro_bias_radps().norm(), kBiasFloorRadps);
+          // 零偏预算 bias* = max(floor, ||bg|| + k·σ_b)：floor 覆盖“失联后零偏
+          // 突变”这一不可观部分（SIL 0.6 dps 阶跃时纯陀螺 30 s 漂 7°）；σ_b 按
+          // 随机游走增长，提供随无参考时长自校准的保守分量。
+          const float bias_budget = std::fmax(
+              BFS_TILT_DRIFT_BIAS_FLOOR_RADPS,
+              nav_ekf.gyro_bias_radps().norm() +
+                  BFS_TILT_DRIFT_SIGMA_K * nav_ekf.gyro_bias_sigma_radps());
           g_nav_tilt_drift_deg = bias_budget * t_no_ref_s * 57.29578f;
           g_nav_tilt_degraded = (g_nav_tilt_drift_deg > 3.0f);
         }

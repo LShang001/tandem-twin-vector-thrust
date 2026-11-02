@@ -1821,6 +1821,12 @@ namespace bfs
     {
       return std::sqrt(std::fmax(p_(6, 6) + p_(7, 7), 0.0f));
     }
+    // 陀螺零偏三轴合成 1σ（rad/s），供无参考漂移预算：(||bg||+k·σ_b)×t。
+    // 无 GNSS 时零偏不可观，σ_b 只按随机游走增长，正是预算需要的保守量。
+    inline float gyro_bias_sigma_radps() const
+    {
+      return std::sqrt(std::fmax(p_(12, 12) + p_(13, 13) + p_(14, 14), 0.0f));
+    }
 
     /* 只读诊断：最近一次 GNSS 量测更新里两条物理野值门的残差与判据结果。
        用于 SIL 归因"位置先越门还是速度先越门"，不参与滤波决策。 */

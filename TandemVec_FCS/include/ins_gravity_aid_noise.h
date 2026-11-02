@@ -59,6 +59,14 @@
 #ifndef BFS_ATT_AID_TILT_FALLBACK_RAD
 #define BFS_ATT_AID_TILT_FALLBACK_RAD 0.0523599f  // 3°
 #endif
+// 无参考倾斜漂移预算 bias* = max(floor, ||bg|| + k·σ_b)，单位 rad/s。
+// floor 是“失联后零偏可能突变”的悲观下限；σ_b 按随机游走增长提供自校准分量。
+#ifndef BFS_TILT_DRIFT_BIAS_FLOOR_RADPS
+#define BFS_TILT_DRIFT_BIAS_FLOOR_RADPS 0.0020944f  // 0.12°/s
+#endif
+#ifndef BFS_TILT_DRIFT_SIGMA_K
+#define BFS_TILT_DRIFT_SIGMA_K 1.0f
+#endif
 
 #ifndef BFS_GRAVITY_AID_VEL_FF
 #define BFS_GRAVITY_AID_VEL_FF 0

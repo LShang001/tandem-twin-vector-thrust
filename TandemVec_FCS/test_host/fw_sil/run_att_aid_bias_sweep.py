@@ -38,6 +38,14 @@ CONDITIONS = {
     "step20_xy_vib": dict(bias="20:55:0.3:0.3:0", extra=["--vib", "1.0"]),
     # 60 s 长失联 + 阶跃：看 mode 5 的触发是否随时间累积
     "step15_xy_60s": dict(bias="15:80:0.3:0.3:0", seconds=80.0, outage="15:75"),
+    # 预算触发验证：0/0.1/0.3/0.6 dps（30 s 失联）
+    "dg_b0":  dict(bias="20:55:0:0:0"),
+    "dg_b10": dict(bias="20:55:0.1:0.1:0"),
+    "dg_b30": dict(bias="20:55:0.3:0.3:0"),
+    "dg_b60": dict(bias="20:55:0.6:0.6:0"),
+    # 最坏情况：GNSS 与磁同时失效（全无参考）
+    "gnss_mag_lost": dict(bias="20:55:0:0:0", extra=["--mag-dropout", "20:50"]),
+    "gnss_mag_lost_b30": dict(bias="20:55:0.3:0.3:0", extra=["--mag-dropout", "20:50"]),
 }
 MODES = [1, 5]
 BASE = ["--real-nav", "--profile", "mag_clean", "--pos-hold"]
@@ -62,14 +70,16 @@ def main():
     ap.add_argument("--bin", required=True)
     ap.add_argument("--seeds", type=int, default=10)
     ap.add_argument("--out", default="", help="可选：逐 seed JSON 输出路径")
+    ap.add_argument("--only", default="", help="逗号分隔条件名（默认全部）")
     args = ap.parse_args()
     bin_path = Path(args.bin).resolve()
     cwd = str(bin_path.parents[2] / "TandemVec_FCS")
 
     print(f"{'cond':16s} {'mode':4s} {'n':>3s} {'att_med':>8s} {'att_max':>8s} "
-          f"{'pitch':>7s} {'yaw':>7s} {'pos':>8s} {'fuse':>6s}")
+          f"{'pitch':>7s} {'yaw':>7s} {'pos':>8s} {'fuse':>6s} {'dg_t':>6s}")
     all_recs = []
-    for cond in CONDITIONS:
+    conds = [c for c in CONDITIONS if (not args.only or c in args.only.split(","))]
+    for cond in conds:
         for mode in MODES:
             recs = [r for r in (run(bin_path, cwd, mode, s, cond)
                                 for s in range(1, args.seeds + 1))
@@ -86,7 +96,8 @@ def main():
                   f"{statistics.median(r['nav_pitch_rmse'] for r in recs):7.3f} "
                   f"{statistics.median(r['nav_yaw_rmse'] for r in recs):7.3f} "
                   f"{statistics.median(r['pos_rms'] for r in recs):8.2f} "
-                  f"{statistics.median(r['att_fused'] for r in recs):6.0f}")
+                  f"{statistics.median(r['att_fused'] for r in recs):6.0f} "
+                  f"{(statistics.median([r['tilt_dg_t'] for r in recs if r.get('tilt_dg_t', -1.0) >= 0.0]) if any(r.get('tilt_dg_t', -1.0) >= 0.0 for r in recs) else -1.0):6.1f}")
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
