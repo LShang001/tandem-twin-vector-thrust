@@ -149,6 +149,7 @@ extern const AnoVarEntry kAnoVars[] = {
     ANO_VAR_FLOAT("bg_norm",         g_nav_gyro_bias_norm_dps),
     ANO_VAR_FLOAT("tilt_drift",      g_nav_tilt_drift_deg),
     ANO_VAR_BOOL("tilt_dg",          g_nav_tilt_degraded),
+    ANO_VAR_BOOL("tilt_hard",        g_nav_tilt_hard),
     ANO_VAR_BOOL("tilt_fb",          g_nav_tilt_fb_active),
     ANO_VAR_BOOL("static_cal",        g_imu_static_calibrated),
     ANO_VAR_FLOAT("static_cal_s",     g_static_calib_s),

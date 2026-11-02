@@ -67,6 +67,13 @@
 #ifndef BFS_TILT_DRIFT_SIGMA_K
 #define BFS_TILT_DRIFT_SIGMA_K 1.0f
 #endif
+// 两级倾斜降级阈值（漂移预算，deg）：3° 告警、10° 硬降级建议。
+#ifndef BFS_TILT_DG_WARN_DEG
+#define BFS_TILT_DG_WARN_DEG 3.0f
+#endif
+#ifndef BFS_TILT_DG_HARD_DEG
+#define BFS_TILT_DG_HARD_DEG 10.0f
+#endif
 
 #ifndef BFS_GRAVITY_AID_VEL_FF
 #define BFS_GRAVITY_AID_VEL_FF 0

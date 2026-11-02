@@ -76,7 +76,7 @@ def main():
     cwd = str(bin_path.parents[2] / "TandemVec_FCS")
 
     print(f"{'cond':16s} {'mode':4s} {'n':>3s} {'att_med':>8s} {'att_max':>8s} "
-          f"{'pitch':>7s} {'yaw':>7s} {'pos':>8s} {'fuse':>6s} {'dg_t':>6s}")
+          f"{'pitch':>7s} {'yaw':>7s} {'pos':>8s} {'fuse':>6s} {'dg_t':>6s} {'hard_t':>7s}")
     all_recs = []
     conds = [c for c in CONDITIONS if (not args.only or c in args.only.split(","))]
     for cond in conds:
@@ -97,7 +97,8 @@ def main():
                   f"{statistics.median(r['nav_yaw_rmse'] for r in recs):7.3f} "
                   f"{statistics.median(r['pos_rms'] for r in recs):8.2f} "
                   f"{statistics.median(r['att_fused'] for r in recs):6.0f} "
-                  f"{(statistics.median([r['tilt_dg_t'] for r in recs if r.get('tilt_dg_t', -1.0) >= 0.0]) if any(r.get('tilt_dg_t', -1.0) >= 0.0 for r in recs) else -1.0):6.1f}")
+                  f"{(statistics.median([r['tilt_dg_t'] for r in recs if r.get('tilt_dg_t', -1.0) >= 0.0]) if any(r.get('tilt_dg_t', -1.0) >= 0.0 for r in recs) else -1.0):6.1f} "
+                  f"{(statistics.median([r['tilt_hard_t'] for r in recs if r.get('tilt_hard_t', -1.0) >= 0.0]) if any(r.get('tilt_hard_t', -1.0) >= 0.0 for r in recs) else -1.0):7.1f}")
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)

@@ -3714,7 +3714,9 @@ void handleNavigationSystem()
               nav_ekf.gyro_bias_radps().norm() +
                   BFS_TILT_DRIFT_SIGMA_K * nav_ekf.gyro_bias_sigma_radps());
           g_nav_tilt_drift_deg = bias_budget * t_no_ref_s * 57.29578f;
-          g_nav_tilt_degraded = (g_nav_tilt_drift_deg > 3.0f);
+          // 两级：3° 告警（尽早提示），10° 硬降级建议（配合自动动作）。
+          g_nav_tilt_degraded = (g_nav_tilt_drift_deg > BFS_TILT_DG_WARN_DEG);
+          g_nav_tilt_hard = (g_nav_tilt_drift_deg > BFS_TILT_DG_HARD_DEG);
         }
 
         icm_Roll = AHRS_Packet.Roll;
