@@ -243,10 +243,11 @@ void handleTelemetry();
 void handleDataLogging();
 
 /**
- * @brief 上位机数据发送任务 (50Hz)
+ * @brief 上位机数据发送任务 (100Hz)
  *
- * 通过 Serial5 向轨迹规划上位机发送 34 字节帧：
- * - 帧头 0xAA + 8个float (标志, 时间, 位置XYZ, 速度XYZ) + 帧尾 0x55
+ * 通过 Serial5 向制导机发送 74 字节帧（`UPLINK_18FLOAT=0` 编译回 34 字节旧帧）：
+ * - 帧头 0xAA + 18个float (auto/fire/时间, 位置 N/E/U, 速度 N/E/U, 姿态(rad),
+ *   角速度(rad/s), 加速度 U/E/N) + 帧尾 0x55
  */
 void sendPositionVelocityData();
 

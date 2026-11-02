@@ -48,6 +48,23 @@ void kickIwdg(void);
 // 通信模块局部定义
 // ========================================================================
 
+// ---- Serial5 上行帧（轨迹规划/观测回传）协议开关 ----
+// ★ 必须用 `#if` 不能用 `#ifdef`：`#define UPLINK_18FLOAT 0` 时 `#ifdef` 仍为真
+//   （AGENTS.md 踩坑记录「调试开关宏陷阱」）。
+//   1 = 74 B / 18 float：RL 定点着陆制导机（含姿态/角速度/加速度回显）；
+//   0 = 34 B / 8 float：旧 G1 轨迹接口，逐字节保持原行为。仅作回退用——
+//       新制导机固定按 73 B 载荷解析，34 B 分支不能驱动它。
+#ifndef UPLINK_18FLOAT
+#define UPLINK_18FLOAT 1
+#endif
+#if UPLINK_18FLOAT
+static constexpr int kPosVelFloatCount = 18;
+#else
+static constexpr int kPosVelFloatCount = 8;
+#endif
+// 帧长 = 1(帧头 0xAA) + N×4(float32 小端) + 1(帧尾 0x55)
+static constexpr int kPosVelFrameLen = 1 + kPosVelFloatCount * 4 + 1;
+
 // 调试用黑匣子强制记录超时（datalog 命令置位，handleFlashService 超时复位）
 static uint32_t s_dbgLogUntil = 0;
 // 诊断计数：logService 调用次数（flash stat 显示，验证后台任务是否在跑）
@@ -144,8 +161,9 @@ const char *bbSegmentNames()
 }
 
 // 串口5发送缓冲区，用于发送给上位机进行轨迹规划的数据
-// 缓冲区大小：1(帧头) + 8个float * 4字节/float + 1(帧尾) = 34字节
-uint8_t serial5Buffer[34];
+// 缓冲区大小由帧字段数派生：1(帧头) + kPosVelFloatCount×4 + 1(帧尾)
+//   UPLINK_18FLOAT=1 → 74 B；=0 → 34 B
+static uint8_t serial5Buffer[kPosVelFrameLen];
 
 // 高性能制导指令解析器状态枚举
 enum class PacketState : uint8_t
@@ -1445,18 +1463,59 @@ void handleDataLogging()
 // [已迁移至 main.cpp] handleDeta100 (依赖 DETA100_module.h 函数)
 
 /**
- * @brief 上位机轨迹规划数据发送（50Hz）：Serial5 34 字节帧
+ * @brief 上位机轨迹规划/观测数据发送（100Hz）：Serial5 74 字节帧（18×float32）
  *
- * 帧结构：`0xAA | 8×float32(本机小端) | 0x55`，float 依次为
- *  `[0] 轨迹规划开始标志(0/1)`、`[1] t_s`、`[2] north_m`、`[3] east_m`、
- *  `[4] -estimated_height`(向上为正)、`[5] vn`、`[6] ve`、`[7] -estimated_velocity`。
- * @note 位置为相对起飞点 NED，速度第 3 分量取反成“向上为正”——上位机若按 NED
- *       直读会把升降读反；缩放 1.0（SI 单位，无 ×100 缩放）。
+ * 帧结构：`0xAA | 18×float32(本机小端) | 0x55`（总长 74 B），字段顺序固定：
+ *  `[0] auto_flag`（已解锁且处于自动/制导意图 0/1）、`[1] fire_flag`（轨迹规划开始 0/1）、
+ *  `[2] fc_time`（s）、`[3..5] p_n/p_e/p_u`（m，N/E/U，第 3 分量向上为正，相对起飞点）、
+ *  `[6..8] v_n/v_e/v_u`（m/s，N/E/U，第 3 分量向上为正）、`[9..11] roll/pitch/yaw`（rad）、
+ *  `[12..14] wx/wy/wz`（rad/s，机体系 FRD）、
+ *  `[15..17] acc_u/acc_e/acc_n`（m/s²，U/E/N 顺序，净加速度不含 1g，指令无效时填 0）。
+ * @note ① 位置/速度第 3 分量向上为正（`+estimated_height`/`+estimated_velocity`）；
+ *           旧 34 B 分支是 NED 向下为正（带负号），两分支不可混用同一份字段表。
+ *        ② 末三轴刻意按 U/E/N 排列，与 `handleGuidanceCommands` 下行 14 B 帧同序。
+ *        ③ `auto_flag` 取"意图位"而非解析后的飞行模式：点火开关一开
+ *           `trajectoryPlanningStarted` 即为真，避免 `determine_control_mode()` 的
+ *           500 ms 超时把模式打回 MANUAL 后，本机不发 auto=1 → 制导机不发指令 →
+ *           时间戳永不刷新 → 永久停在 MANUAL 的死锁。
+ *        ④ `UPLINK_18FLOAT=0` 编译回 34 B/8 float 旧 G1 接口，字段与字节序逐字节不变。
+ * @ref  PROTOCOL-001（Serial6 AnoCom，本帧为 Serial5 私有协议，不在其内）
  */
 void sendPositionVelocityData()
 {
-  // 1. 准备8个float类型的数据
-  float data_to_send[8] = {
+  // auto_flag 取"意图位"（报告 §3.3）：模式通道无中值滤波，档位切换会抖，
+  // 用 raw_rc 判档会让制导机 _reset_guidance()；用同拍全局量最稳。
+  // 仅 18 字段分支使用；34 B 旧帧的 [0] 必须保持 trajectoryPlanningStarted 原义。
+#if UPLINK_18FLOAT
+  const bool auto_intent =
+      g_is_unlocked &&
+      (g_current_flight_mode == AUTO_POSITION ||
+       g_current_flight_mode == GUIDED ||
+       trajectoryPlanningStarted); // 请求 GUIDED 但被 500 ms 超时打回 MANUAL 的窗口
+#endif
+
+  // 1. 组帧：数组维度与下面的循环上界共用 kPosVelFloatCount，避免漏改一处
+  float data_to_send[kPosVelFloatCount] = {
+#if UPLINK_18FLOAT
+      auto_intent ? 1.0f : 0.0f,               // [0] 自动/制导意图标志
+      trajectoryPlanningStarted ? 1.0f : 0.0f, // [1] 点火/轨迹规划开始标志
+      millis() / 1000.0f,                      // [2] 本机时间 (秒)
+      relative_north,                          // [3] 相对北向位置 p_n (m)
+      relative_east,                           // [4] 相对东向位置 p_e (m)
+      estimated_height,                        // [5] 相对天向位置 p_u (m, Up+)
+      INS_GNSS_Packet.velocity_north,          // [6] 北向速度 v_n (m/s)
+      INS_GNSS_Packet.velocity_east,           // [7] 东向速度 v_e (m/s)
+      estimated_velocity,                      // [8] 天向速度 v_u (m/s, Up+)
+      AHRS_Packet.Roll,                        // [9] 滚转角 (rad)
+      AHRS_Packet.Pitch,                       // [10] 俯仰角 (rad)
+      AHRS_Packet.Heading,                     // [11] 航向角 (rad, [0,2π))
+      IMU_Packet.gyroscope_x,                  // [12] 机体 x 角速度 (rad/s)
+      IMU_Packet.gyroscope_y,                  // [13] 机体 y 角速度 (rad/s)
+      IMU_Packet.gyroscope_z,                  // [14] 机体 z 角速度 (rad/s)
+      g_nav_cmd_accel_valid ? g_nav_cmd_accel_up_mps2 : 0.0f, // [15] acc_u (m/s²)
+      g_nav_cmd_accel_valid ? g_nav_cmd_accel_e_mps2 : 0.0f,  // [16] acc_e (m/s²)
+      g_nav_cmd_accel_valid ? g_nav_cmd_accel_n_mps2 : 0.0f,  // [17] acc_n (m/s²)
+#else
       static_cast<float>(trajectoryPlanningStarted), // [0] 点火/轨迹规划开始标志 (0或1)
       millis() / 1000.0f,                            // [1] 时间 t (秒)
       // 位置数据使用相对位置
@@ -1467,41 +1526,30 @@ void sendPositionVelocityData()
       INS_GNSS_Packet.velocity_north, // [5] 北向速度 vx
       INS_GNSS_Packet.velocity_east,  // [6] 东向速度 vy
       -estimated_velocity             // [7] 地向速度 vz，使用气压计融合速度
-                                      // 加速度 (机体坐标系, m/s^2) - 来自DETA100 IMU_Packet
-                                      // IMU_Packet.accelerometer_x, // [8] 机体X轴加速度 ax
-                                      // IMU_Packet.accelerometer_y, // [9] 机体Y轴加速度 ay
-                                      // IMU_Packet.accelerometer_z, // [10] 机体Z轴加速度 az
-                                      // // 姿态欧拉角 (弧度) - 来自DETA100 AHRS_Packet
-                                      // AHRS_Packet.Roll,    // [11] 滚转角 roll
-                                      // AHRS_Packet.Pitch,   // [12] 俯仰角 pitch
-                                      // AHRS_Packet.Heading, // [13] 偏航角 yaw
-                                      // // 角速度 (机体坐标系, 弧度/秒) - 来自DETA100 AHRS_Packet
-                                      // AHRS_Packet.RollSpeed,   // [14] 滚转角速度
-                                      // AHRS_Packet.PitchSpeed,  // [15] 俯仰角速度
-                                      // AHRS_Packet.HeadingSpeed // [16] 偏航角速度
+#endif
   };
 
-  // 2. 构建帧头和帧尾
-  serial5Buffer[0] = 0xAA;         // 帧头
-  serial5Buffer[1 + 8 * 4] = 0x55; // 帧尾，位于所有数据之后 (索引33)
+  // 2. 构建帧头和帧尾（帧尾索引由字段数派生，不会写错位置）
+  serial5Buffer[0] = 0xAA;
+  serial5Buffer[1 + kPosVelFloatCount * 4] = 0x55;
 
   // 3. 将每个float数据直接填充到缓冲区
   //    字节序 = STM32 原生小端（memcpy 直拷内存字节）；早期 floatToBigEndianBytes
   //    大端版本已废止，上位机（GCS/server 轨迹接口、Serial5 解析脚本）须按小端解码。
-  for (int i = 0; i < 8; i++)
+  for (int i = 0; i < kPosVelFloatCount; i++)
   {
     // 数据从缓冲区的第1个字节开始存放 (索引1)，每个float占4字节
     memcpy(&serial5Buffer[1 + i * 4], &data_to_send[i], sizeof(float));
   }
 
-  // 4. 通过Serial5发送完整的数据帧 (总共34字节)
+  // 4. 通过Serial5发送完整数据帧（18 字段 74 字节 / 8 字段 34 字节）
   // 非阻塞保护：TX 缓冲不足时跳过本帧，避免阻塞控制环。
-  if (Serial5.availableForWrite() < 34)
+  if (Serial5.availableForWrite() < kPosVelFrameLen)
   {
     posvel_tx_skipped++;
     return;
   }
-  Serial5.write(serial5Buffer, 34);
+  Serial5.write(serial5Buffer, kPosVelFrameLen);
 }
 
 /**

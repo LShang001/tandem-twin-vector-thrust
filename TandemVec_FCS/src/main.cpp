@@ -419,8 +419,7 @@ void setup()
   //   200 Hz = 5ms    handleDeta100 / handleNavigationSystem / handleAnoCom /
   //                   handleDebugTask / handleVerticalEstimation / runGNCExecutive /
   //                   handleCANBus / handleDataLogging
-  //   100 Hz = 10ms   handleStatusLedTask、handleFlashService
-  //   50 Hz  = 20ms   sendPositionVelocityData
+  //   100 Hz = 10ms   handleStatusLedTask、handleFlashService、sendPositionVelocityData
   //   25 Hz  = 40ms   sendElrsBattery/Attitude/BaroAltitude/Vario
   //   10 Hz  = 100ms  sendElrsFlightMode/Gps/Temp、updateBatteryMonitor
   // 注：AnoCom 内部再按 tick 取模分成 100/50/25/10Hz 多档（COMM-001 双环）。
@@ -471,7 +470,7 @@ void setup()
   BFS_ADD_TASK(sendElrsVarioData, 40.0f, "ElrsVario");           // ELRS 垂直速度回传 (25Hz) - 遥控器变率计
   BFS_ADD_TASK(sendElrsTempData, 100.0f, "ElrsTemp");            // ELRS 温度回传 (10Hz) - 遥控器温度
   BFS_ADD_TASK(updateBatteryMonitor, 100.0f, "BattMon");          // 电池电压采样 (10Hz) - ADC_BATT PC5
-  BFS_ADD_TASK(sendPositionVelocityData, 20.0f, "PosVelTx");    // 上位机数据发送 (50Hz, 20ms) - 轨迹规划用
+  BFS_ADD_TASK(sendPositionVelocityData, 10.0f, "PosVelTx");    // 上位机数据发送 (100Hz, 10ms) - 18 字段 74B 制导机链路
   // addTask(handleMavlink, 5.0f);          // MAVLink 遥测 (200Hz, 5ms) - Mission Planner/QGC (与 AnoCom 二选一)
   BFS_ADD_TASK(handleStatusLedTask, 10.0f, "StatusLed");        // LED 状态指示 (100Hz, 10ms) - 呼吸灯/闪烁
   BFS_ADD_TASK(handleFlashService, 10.0f, "FlashLog");         // Flash 黑匣子后台写 (100Hz, 每tick≤2帧=190B) - 低优先级

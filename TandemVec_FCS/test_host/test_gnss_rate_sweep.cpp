@@ -24,6 +24,7 @@
 #include <Eigen/Geometry>
 
 #include "ekf_15_state.h"
+#include "ins_gnss_delay_auto.h"
 #include "ins_test_gravity.h"
 
 namespace
@@ -58,7 +59,7 @@ struct Result
 /** 正弦速度轨迹：v(t)=v_amp·sin(2πf t)（北向），偏航慢转。 */
 Result run(const double gnss_hz, const double v_amp, const double a_peak,
            const unsigned seed, const double ekf_accel_std = 0.25,
-           const double gnss_delay_s = 0.0)
+           const double gnss_delay_s = 0.0, const bool auto_delay = false)
 {
   std::mt19937 rng(seed);
   std::normal_distribution<double> n01(0.0, 1.0);
@@ -85,6 +86,9 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
 
   const double gnss_dt = 1.0 / gnss_hz;
   // 延迟量测需要历史真值（pos_n / vel_n）
+  InsGnssDelayAutoEstimator delay_est;
+  double delay_est_next = 1.0;
+  float applied_age = static_cast<float>(gnss_delay_s);
   std::vector<double> hist_pos, hist_vel;
   hist_pos.reserve(steps + 1);
   hist_vel.reserve(steps + 1);
@@ -112,6 +116,11 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
     yaw += 0.1 * kDeg2Rad * kImuDt;  // 0.1 °/s
     hist_pos.push_back(pos_n);
     hist_vel.push_back(v);
+    if (auto_delay)
+    {
+      delay_est.PushReference(t, Eigen::Vector3d(pos_n, 0.0, 0.0),
+                              Eigen::Vector3d(v, 0.0, 0.0));
+    }
 
     const Eigen::Matrix3d C_bn =
         Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()).toRotationMatrix();
@@ -140,6 +149,16 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
 
     ekf.TimeUpdate(accel, gyro, static_cast<float>(kImuDt));
 
+    // 自动延迟估计：每秒尝试一次，有效则用 tau_hat 作为 age
+    if (auto_delay && t >= delay_est_next)
+    {
+      delay_est_next = t + 1.0;
+      if (delay_est.TryEstimate())
+      {
+        applied_age = delay_est.last_result().tau_s;
+      }
+    }
+
     // GNSS 量测（位置+速度，F10N 噪声）
     if (t >= next_gnss)
     {
@@ -158,12 +177,19 @@ Result run(const double gnss_hz, const double v_amp, const double a_peak,
       const Eigen::Vector3f vel_ned(static_cast<float>(vel_delayed + nv(rng)),
                                     static_cast<float>(nv(rng)),
                                     static_cast<float>(nv(rng)));
+      if (auto_delay)
+      {
+        delay_est.PushGnss(
+            t - gnss_delay_s,
+            Eigen::Vector3d(pos_delayed + np(rng), np(rng), np(rng)),
+            Eigen::Vector3d(vel_delayed + nv(rng), nv(rng), nv(rng)));
+      }
       ekf.gnss_pos_ne_std_m(static_cast<float>(kGnssPosStd));
       ekf.gnss_pos_d_std_m(static_cast<float>(kGnssPosStd));
       ekf.gnss_vel_ne_std_mps(static_cast<float>(kGnssVelStd));
       ekf.gnss_vel_d_std_mps(static_cast<float>(kGnssVelStd));
       const auto res = ekf.MeasurementUpdateDetailed(
-          vel_ned, lla_meas, kImuDt, static_cast<float>(gnss_delay_s));
+          vel_ned, lla_meas, kImuDt, applied_age);
       if (seed == 1 && gnss_hz == 1.0 && v_amp == 5.0 && a_peak == 2.0 && gnss_updates < 3)
       {
         std::printf("[gnss] input_valid=%d attempted=%d fused=%d nis=%.2f\n",

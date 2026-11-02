@@ -16,7 +16,7 @@ plt.rcParams["axes.unicode_minus"] = False
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
-CSV = os.path.join(REPO, "tmp", "grand_matrix_v2.csv")
+CSV = os.path.join(REPO, "tmp", "grand_matrix_v3.csv")
 OUT1 = os.path.join(REPO, "tmp", "grand_v2_imu.png")
 OUT2 = os.path.join(REPO, "tmp", "grand_v2_f10n.png")
 

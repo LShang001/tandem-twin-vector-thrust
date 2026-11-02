@@ -338,6 +338,15 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
     fused_north_vel = 0.0f;
     fused_east_vel = 0.0f;
 
+    // 5.6 清上一架次的制导加速度指令（2026-11 上行帧 18 字段改造配套）
+    // 这三条指令只在 handleGuidanceCommands 收到合法帧时写入，全工程没有第二处
+    // 清零；上一架次的残值会在本架次刚进 GUIDED、尚未收到新指令的超时窗口
+    // （≤500 ms）内被 allocatePowerFromAccel 当成真指令执行。
+    // ★ 只清指令，不碰 last_guidance_command_millis：时间戳由超时保护
+    //   （GUIDANCE_CMD_TIMEOUT_MS）独占，任何一侧都不能放宽。
+    guidance_accel_U_cmd = guidance_accel_E_cmd = guidance_accel_N_cmd = 0.0f;
+    new_guidance_command_received = false;
+
     Serial8.println("[HorizontalKF] Filters Reset on Arming.");
   }
 
@@ -1327,6 +1336,17 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
             ekf_gravity_mps2, MAX_ACCEL_CMD, POS_CTRL_MAX_THRUST_COMP, 0.0f);
     thrust_comp_N = power_out.thrust_comp_n;
     thrust_comp_E = power_out.thrust_comp_e;
+
+    // 回显本拍实际施加的加速度指令（2026-11 上行帧 18 字段改造）：
+    // 水平两轴取 PowerAllocation 圆形限幅（MAX_ACCEL_CMD）之后的值，
+    // 天向取净天向加速度（不含 1g）。★ 这三个量不是纯遥测——导航层
+    // `g_att_aid_mode ∈ {3,4}` 会用它从比力中扣除控制加速度
+    // （navigation_task.cpp:2773），因此 GUIDED 下必须填真实值，
+    // 否则这两个模式只能拿到上一模式的残值。
+    g_nav_cmd_accel_valid = true;
+    g_nav_cmd_accel_n_mps2 = power_out.accel_n_mps2;
+    g_nav_cmd_accel_e_mps2 = power_out.accel_e_mps2;
+    g_nav_cmd_accel_up_mps2 = target_accel_z_up_global;
 
     // 重置内置位置PID
     if (positionHoldEnabled)
@@ -2701,6 +2721,33 @@ void runGNCExecutive()
 
   // 步骤 5: 根据模式和输入，生成目标姿态四元数
   generate_attitude_target(controller_inputs, current_mode, q_target_attitude);
+
+  // 步骤 5b: 按模式收口加速度指令回显（2026-11 上行帧 18 字段改造配套）
+  // 背景：handlePositionControl() 内的 `g_nav_cmd_accel_valid = false` 位于模式
+  // 检查分支，而该函数只在 `mode == AUTO_POSITION` 时被调用 → 分支恒假、
+  // 永不复位；首次进过 AUTO_POSITION 后 valid 恒为 true，MANUAL 里 acc_* 保持
+  // 上一段定点时的残值（方案里 `valid ? 值 : 0` 的门因此是空操作）。
+  // AUTO_POSITION 与 GUIDED 的三个分量由各自分支写入本拍真实值
+  // （GUIDED 见 generate_attitude_target 的 allocatePowerFromAccel 之后），
+  // 这里只兜其余两种模式：
+  //   ① MANUAL：无加速度指令 → 置零并 valid=false，导航层退回方向门控；
+  //   ② AUTO_ALTITUDE：水平无指令、垂直有真实指令 → 水平置零、valid 保持 true。
+  // ★ 副作用（审查报告 §5.2 R4）：这三个量不是纯遥测——导航层
+  //   `g_att_aid_mode ∈ {3,4}`（3=指令补偿研究臂，4=强振动回退，默认 5 不走
+  //   该分支）会用它们从比力中扣除控制加速度；本步把"上一架次残值"换成
+  //   "本拍真实指令/零"，改动方向是让两个使用者语义一致。
+  if (current_mode == MANUAL)
+  {
+    g_nav_cmd_accel_valid = false;
+    g_nav_cmd_accel_n_mps2 = g_nav_cmd_accel_e_mps2 =
+        g_nav_cmd_accel_up_mps2 = 0.0f;
+  }
+  else if (current_mode == AUTO_ALTITUDE)
+  {
+    g_nav_cmd_accel_valid = true;
+    g_nav_cmd_accel_n_mps2 = g_nav_cmd_accel_e_mps2 = 0.0f;
+    g_nav_cmd_accel_up_mps2 = target_accel_z_up_global;
+  }
 
 #ifdef BFS_COAXIAL_VTVL
   // 共轴双桨机型：DirectTvcRate（两轴修正角 + PWM 差速）→ 通用输出表。

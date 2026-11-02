@@ -197,7 +197,7 @@ loop()
 | `handleGuidanceCommands` | 500Hz | 2ms | 控制执行 |
 | `runGNCExecutive` | 200Hz | 5ms | 控制执行 |
 | `sendElrsBatteryData` | 25Hz | 40ms | 通信遥测 |
-| `sendPositionVelocityData` | 50Hz | 20ms | 通信遥测 |
+| `sendPositionVelocityData` | 100Hz | 10ms | 通信遥测 |
 | `handleStatusLedTask` | 100Hz | 10ms | 系统指示 |
 
 > 同频任务按注册顺序 FIFO 串行执行。当前 200Hz 帧内顺序：EKF导航 → AnoCom遥测 → 垂直KF → GNC控制；水平KF与 MAVLink 为可选任务，默认未注册。
