@@ -22,27 +22,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# name -> (bias step args 或 None, 附加环境参数)
+# name -> dict(bias, extra, seconds, outage)
 CONDITIONS = {
-    "step05_xy":  ("5:55:0.3:0.3:0", []),        # 阶跃在 GNSS 有效期内（可估计）
-    "step20_x":   ("20:55:0.3:0:0", []),          # 失联瞬间，单轴滚转
-    "step20_y":   ("20:55:0:0.3:0", []),          # 失联瞬间，单轴俯仰
-    "step20_xy":  ("20:55:0.3:0.3:0", []),        # 失联瞬间，双轴
-    "step20_z":   ("20:55:0:0:0.3", []),          # 失联瞬间，航向轴（磁可观测）
-    "step20_xy_t": ("20:35:0.3:0.3:0", []),       # 30 s 失联内只漂 15 s（热漂恢复）
-    "step20_xy_wind": ("20:55:0.3:0.3:0",
-                       ["--wind-force", "1.5", "--wind-window", "20:50"]),
-    "step20_xy_vib": ("20:55:0.3:0.3:0", ["--vib", "1.0"]),
+    "step05_xy":  dict(bias="5:55:0.3:0.3:0"),   # 阶跃在 GNSS 有效期内（可估计）
+    "step20_x":   dict(bias="20:55:0.3:0:0"),     # 失联瞬间，单轴滚转
+    "step20_y":   dict(bias="20:55:0:0.3:0"),     # 失联瞬间，单轴俯仰
+    "step20_xy":  dict(bias="20:55:0.3:0.3:0"),   # 失联瞬间，双轴
+    "step20_z":   dict(bias="20:55:0:0:0.3"),     # 失联瞬间，航向轴（磁可观测）
+    "step20_xy_t": dict(bias="20:35:0.3:0.3:0"),  # 30 s 失联内只漂 15 s（热漂恢复）
+    "step20_negx": dict(bias="20:55:-0.3:0:0"),   # 反向滚转阶跃
+    "step20_xz":  dict(bias="20:55:0.3:0:0.3"),   # 滚转+航向
+    "step20_yz":  dict(bias="20:55:0:0.3:0.3"),   # 俯仰+航向
+    "step20_xy_wind": dict(bias="20:55:0.3:0.3:0",
+                           extra=["--wind-force", "1.5", "--wind-window", "20:50"]),
+    "step20_xy_vib": dict(bias="20:55:0.3:0.3:0", extra=["--vib", "1.0"]),
+    # 60 s 长失联 + 阶跃：看 mode 5 的触发是否随时间累积
+    "step15_xy_60s": dict(bias="15:80:0.3:0.3:0", seconds=80.0, outage="15:75"),
 }
 MODES = [1, 5]
-BASE = ["--real-nav", "--profile", "mag_clean", "--pos-hold", "--seconds", "55",
-        "--gnss-outage", "20:50"]
+BASE = ["--real-nav", "--profile", "mag_clean", "--pos-hold"]
 
 
 def run(bin_path: Path, cwd: str, mode: int, seed: int, cond: str):
-    bias, extra = CONDITIONS[cond]
-    cmd = [str(bin_path), *BASE, "--seed", str(seed), "--att-aid-mode", str(mode),
-           "--nav-gyro-bias-step", bias, *extra]
+    cfg = CONDITIONS[cond]
+    cmd = [str(bin_path), *BASE,
+           "--seconds", "%.1f" % cfg.get("seconds", 55.0),
+           "--gnss-outage", cfg.get("outage", "20:50"),
+           "--seed", str(seed), "--att-aid-mode", str(mode),
+           "--nav-gyro-bias-step", cfg["bias"], *cfg.get("extra", [])]
     out = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=600)
     for line in out.stdout.splitlines():
         if line.startswith("SIL_REAL_JSON "):
