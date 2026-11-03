@@ -81,42 +81,11 @@ FILTER_WIRE = {
 # 保守包线，不改变固件默认值。安全关键项（PWM 范围/舵机半行程/修正角限幅）的
 # max 已按红线收紧，实机标定仍需评审。
 COAX_PARAMS = [
-    ('coax.att_kp_roll', 's⁻¹', 0.0, 20.0, 0.01,
-     'Roll 姿态外环比例增益（姿态角误差 → 目标角速率）'),
-    ('coax.att_kp_pitch', 's⁻¹', 0.0, 20.0, 0.01,
-     'Pitch 姿态外环比例增益（姿态角误差 → 目标角速率）'),
-    ('coax.rate_kp_roll', 's', 0.0, 2.0, 0.01,
-     'Roll 速率内环比例增益（角速率误差 → 修正角）'),
-    ('coax.rate_ki_roll', '', 0.0, 1.0, 0.005,
-     'Roll 速率内环积分增益（积分项输出限幅见 rate_int_lim）'),
-    ('coax.rate_kp_pitch', 's', 0.0, 2.0, 0.01,
-     'Pitch 速率内环比例增益（角速率误差 → 修正角）'),
-    ('coax.rate_ki_pitch', '', 0.0, 1.0, 0.005,
-     'Pitch 速率内环积分增益（积分项输出限幅见 rate_int_lim）'),
-    ('coax.rate_kp_yaw', 'µs/(°/s)', 0.0, 20.0, 0.01,
-     '偏航速率环比例增益（角速率误差 → PWM 差速）'),
-    ('coax.rate_ki_yaw', 'µs/°', 0.0, 100.0, 0.5,
-     '偏航速率环积分增益（积分项输出限幅见 yaw_int_lim）'),
-    ('coax.max_rate_dps', 'deg/s', 0.0, 200.0, 1.0,
-     '姿态外环目标角速率限幅（默认 80°/s）'),
+    # 只保留执行机构/硬件动力模型；PID 统一走 att_*/rate_*，不再有 coax.*kp/ki。
     ('coax.max_corr_deg', 'deg', 0.0, 10.0, 0.1,
-     'TVC 修正角限幅（红线默认 10°；手动 TVC 摇杆映射同用）'),
+     'TVC 修正角硬限幅（红线默认 10°；手动 TVC 摇杆映射同用）'),
     ('coax.max_yaw_us', 'µs', 0.0, 180.0, 1.0,
-     '偏航差速限幅（红线默认 180µs）'),
-    ('coax.att_int_lim', 'deg/s', 0.0, 80.0, 1.0,
-     '姿态外环积分项输出限幅'),
-    ('coax.rate_int_lim', 'deg', 0.0, 10.0, 0.1,
-     '速率内环积分项输出限幅'),
-    ('coax.yaw_int_lim', 'µs', 0.0, 100.0, 1.0,
-     '偏航速率环积分项输出限幅'),
-    ('coax.yaw_int_thr', 'deg/s', 0.0, 100.0, 1.0,
-     '偏航速率环积分分离阈值'),
-    ('coax.att_flt_alpha', '', 0.0, 1.0, 0.01,
-     '姿态外环目标角速率滤波 alpha'),
-    ('coax.corr_flt_alpha', '', 0.0, 1.0, 0.01,
-     'TVC 修正角输出滤波 alpha'),
-    ('coax.pid_deriv_alpha', '', 0.0, 1.0, 0.01,
-     '速率环微分项滤波 alpha'),
+     '偏航差速硬限幅（红线默认 180µs）'),
     ('coax.mass_kg', 'kg', 0.1, 5.0, 0.01,
      '等效质量（推力分配用；默认 0.84kg 未标定）'),
     ('coax.max_thrust_n', 'N', 1.0, 40.0, 0.1,
@@ -131,15 +100,14 @@ COAX_PARAMS = [
      '姿态安全限幅（超限锁输出；默认 45°）'),
     ('coax.dt_s', 's', 0.001, 0.02, 0.001,
      '共轴控制周期（默认 5ms；改动必须与调度周期一致）'),
-    # ★ task-10 α+油门分配器参数（ID 158-163；默认 alloc_mode=0 时控制律/输出与旧行为一致）
     ('coax.alloc_mode', '已废弃：固件忽略（α-native 唯一路径）', 0.0, 1.0, 1.0,
-     '分配器路径选择（0=legacy 角度路径，1=α+油门分配器路径；默认 0）'),
+     '分配器路径选择（保留 ID 兼容，固件忽略）'),
     ('coax.lever_m', 'm', 0.01, 1.0, 0.01,
      'TVC 力臂（α→力矩换算；默认 0.15m）'),
     ('coax.yaw_nm_per_us', 'N·m/µs', 0.0, 0.0001, 1e-7,
-     '差速 PWM→偏航力矩系数（MODEL-DEFAULT，SIL 归一化 yaw 模型换算，1e-6N·m/µs，非台架值）'),
+     '差速 PWM→偏航力矩系数（MODEL-DEFAULT，1e-6N·m/µs）'),
     ('coax.inertia_roll', 'kg·m²', 0.001, 1.0, 0.001,
-     '滚转轴转动惯量（分配器力矩→角加速度；默认 0.05kg·m²）'),
+     '滚转轴转动惯量（默认 0.05kg·m²）'),
     ('coax.inertia_pitch', 'kg·m²', 0.001, 1.0, 0.001,
      '俯仰轴转动惯量（默认 0.05kg·m²）'),
     ('coax.inertia_yaw', 'kg·m²', 0.001, 1.0, 0.001,
@@ -292,7 +260,7 @@ def is_float_name(name):
 
 # 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 164 项）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 164 项，跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 148 项，跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():

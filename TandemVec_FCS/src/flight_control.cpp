@@ -1629,6 +1629,7 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
       pitchTarget = AHRS_Packet.Pitch;
     }
   }
+
 }
 
 // ★ 2026-08-09 yaw 航向锁（ratchet hold）状态：
@@ -2359,9 +2360,45 @@ static bfs::CoaxialVtvController s_coaxial_controller;
 
 // ★ 2026-10-30 可标定化：在线参数写入后由 applyFlightCtrlParams() 调到这里，
 //   setParams 会 applyParams()+reset()（与 PID 在线调参的积分复位语义一致）。
+// 由通用 PID 派生共轴控制律参数（唯一 PID 变量 = kFlightCtrlParams.att_*/rate_*）。
+// 共轴内部仍以“deg 修正角/差速 us”为执行器量纲，因此按悬停点 g=l·T/I 做量纲换算；
+// 这不是独立 PID 变量，只是机型硬件缩放。
+static bfs::CoaxialVtvParams buildCoaxVtvParams(const CoaxialCtrlParams &hw)
+{
+  bfs::CoaxialVtvParams p;
+  const auto &fc = kFlightCtrlParams;
+  constexpr float kG = 9.79f; // 与 TandemVec_Config.h 一致
+  const float t_hover = hw.mass_kg * kG;
+  const float g_roll = hw.lever_m * t_hover / hw.inertia_roll_kgm2;   // rad/s² per rad
+  const float g_pitch = hw.lever_m * t_hover / hw.inertia_pitch_kgm2; // rad/s² per rad
+  const float g_roll_deg = g_roll * 0.017453292519943295f;            // rad/s² per deg
+  const float g_pitch_deg = g_pitch * 0.017453292519943295f;
+  const float alpha_per_us_yaw = hw.yaw_moment_nm_per_us / hw.inertia_yaw_kgm2;
+
+  p.att_kp_roll = fc.att_roll.kp;
+  p.att_kp_pitch = fc.att_pitch.kp;
+  p.rate_kp_roll = fc.rate_roll.kp * 0.017453292519943295f / g_roll_deg;
+  p.rate_ki_roll = fc.rate_roll.ki * 0.017453292519943295f / g_roll_deg;
+  p.rate_kp_pitch = fc.rate_pitch.kp * 0.017453292519943295f / g_pitch_deg;
+  p.rate_ki_pitch = fc.rate_pitch.ki * 0.017453292519943295f / g_pitch_deg;
+  p.rate_kp_yaw = fc.rate_yaw.kp * 0.017453292519943295f / alpha_per_us_yaw;
+  p.rate_ki_yaw = fc.rate_yaw.ki * 0.017453292519943295f / alpha_per_us_yaw;
+  p.max_target_rate_dps = fc.att_roll.out_max;
+  p.max_correction_deg = hw.ctrl.max_correction_deg;
+  p.max_yaw_diff_us = hw.ctrl.max_yaw_diff_us;
+  p.att_integral_limit = fc.att_roll.int_limit;
+  p.rate_integral_limit = fc.rate_roll.int_limit * 0.017453292519943295f / g_roll_deg;
+  p.yaw_integral_limit = fc.rate_yaw.int_limit * 0.017453292519943295f / alpha_per_us_yaw;
+  p.yaw_integral_threshold = fc.rate_yaw.threshold;
+  p.att_rate_filter_alpha = fc.angle_out_filter_alpha[0];
+  p.correction_filter_alpha = fc.output_filter_alpha[0];
+  p.pid_derivative_filter_alpha = fc.rate_roll.filter_alpha;
+  return p;
+}
+
 void applyCoaxialCtrlFlightParams(const CoaxialCtrlParams &p)
 {
-  s_coaxial_controller.setParams(p.ctrl);
+  s_coaxial_controller.setParams(buildCoaxVtvParams(p));
 }
 
 static void run_coaxial_control(const ControlInputs_t &inputs,

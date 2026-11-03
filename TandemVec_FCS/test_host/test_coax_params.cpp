@@ -5,7 +5,7 @@
  * 验证目标（对应 task-6/task-10）：
  *  1) CoaxialCtrlParams 的 18 项控制律默认值 + 13 项物理/输出/分配器常量逐位等于原
  *     flight_control.cpp 共轴分支内的硬编码字面量/分配器默认（不是"约等于"）；
- *  2) 参数注册表 coax.* 的 31 个名称、顺序与 BFS_COAX_PARAM_LIST 完全一致，
+ *  2) 参数注册表 coax.* 的 15 个硬件名称、顺序与 BFS_COAX_PARAM_LIST 完全一致，
  *     名称 ≤20B，按 MAVLink 规则截断 15B 后唯一（param_id 冲突会让 QGC 写错参数）；
  *  3) 用默认参数构造的控制器跑 10 拍基准序列，输出位型逐拍等于 2026-10-30
  *     串级语义修正后的 golden（RATE 只复位角度外环、内环积分两模式使能、
@@ -139,24 +139,8 @@ bool samePhysical(const CoaxialCtrlParams &p, const LegacyPhysical &l)
 // ---- 注册表顺序：与 FlightCtrlParams.h 的 BFS_COAX_PARAM_LIST 单一事实源比对 ----
 // ★ 本列表必须与 GCS/server/params.py::expected_names() 尾部逐项一致
 const char *const kExpectedNames[] = {
-    "coax.att_kp_roll",
-    "coax.att_kp_pitch",
-    "coax.rate_kp_roll",
-    "coax.rate_ki_roll",
-    "coax.rate_kp_pitch",
-    "coax.rate_ki_pitch",
-    "coax.rate_kp_yaw",
-    "coax.rate_ki_yaw",
-    "coax.max_rate_dps",
     "coax.max_corr_deg",
     "coax.max_yaw_us",
-    "coax.att_int_lim",
-    "coax.rate_int_lim",
-    "coax.yaw_int_lim",
-    "coax.yaw_int_thr",
-    "coax.att_flt_alpha",
-    "coax.corr_flt_alpha",
-    "coax.pid_deriv_alpha",
     "coax.mass_kg",
     "coax.max_thrust_n",
     "coax.servo_half_deg",
@@ -164,7 +148,6 @@ const char *const kExpectedNames[] = {
     "coax.motor_max_us",
     "coax.att_limit_deg",
     "coax.dt_s",
-    // ★ task-10 α+油门分配器参数（ID 158-163，GCS 同序）
     "coax.alloc_mode",
     "coax.lever_m",
     "coax.yaw_nm_per_us",
@@ -347,7 +330,7 @@ int main(int argc, char **argv)
     std::printf("  [2] 物理/输出/分配器常量 13 项默认值逐位比对完成\n");
 
     // ---- 3. 注册表名称/顺序/长度/短名唯一 ----
-    check(BFS_COAX_PARAM_COUNT == 31, "BFS_COAX_PARAM_COUNT == 31");
+    check(BFS_COAX_PARAM_COUNT == 15, "BFS_COAX_PARAM_COUNT == 15");
     check((int)(sizeof(kExpectedNames) / sizeof(kExpectedNames[0])) ==
               BFS_COAX_PARAM_COUNT,
           "期望名称表长度 == BFS_COAX_PARAM_COUNT");
@@ -372,7 +355,7 @@ int main(int argc, char **argv)
             check(std::strcmp(a, b) != 0, "MAVLink 短名两两唯一");
         }
     }
-    std::printf("  [3] 31 个参数名称/顺序/长度/短名唯一性检查完成\n");
+    std::printf("  [3] 15 个参数名称/顺序/长度/短名唯一性检查完成\n");
 
     // ---- 4. 默认参数控制器输出逐拍等于改造前 golden ----
     OutBits got[kSeqLen];

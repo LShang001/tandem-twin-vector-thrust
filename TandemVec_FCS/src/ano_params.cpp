@@ -150,7 +150,7 @@ static const AnoParamEntry kAnoParams[ANO_PARAMS_COUNT] = {
 #undef COAX_PARAM_ENTRY
 };
 static_assert(ANO_PARAMS_COUNT == 133 + BFS_COAX_PARAM_COUNT,
-              "ano_params: 共轴参数追加后 ANO_PARAMS_COUNT 未同步（应为 133 + 31）");
+              "ano_params: 共轴参数追加后 ANO_PARAMS_COUNT 未同步（应为 133 + 15）");
 static_assert(sizeof(kAnoParams) / sizeof(kAnoParams[0]) == ANO_PARAMS_COUNT,
               "ano_params: 注册表数量与 ANO_PARAMS_COUNT 不一致");
 

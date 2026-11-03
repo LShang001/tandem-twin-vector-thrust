@@ -95,40 +95,24 @@ struct CoaxialCtrlParams
  * @note  X(线上名, CoaxialCtrlParams 成员路径)；名称 ≤20B，ID = 表尾追加顺序。
  *        GCS/server/params.py::expected_names() 必须保持同序同拼写。
  */
-#define BFS_COAX_PARAM_LIST(X)                    \
-    X(coax.att_kp_roll, ctrl.att_kp_roll)         \
-    X(coax.att_kp_pitch, ctrl.att_kp_pitch)       \
-    X(coax.rate_kp_roll, ctrl.rate_kp_roll)       \
-    X(coax.rate_ki_roll, ctrl.rate_ki_roll)       \
-    X(coax.rate_kp_pitch, ctrl.rate_kp_pitch)     \
-    X(coax.rate_ki_pitch, ctrl.rate_ki_pitch)     \
-    X(coax.rate_kp_yaw, ctrl.rate_kp_yaw)         \
-    X(coax.rate_ki_yaw, ctrl.rate_ki_yaw)         \
-    X(coax.max_rate_dps, ctrl.max_target_rate_dps)\
+#define BFS_COAX_PARAM_LIST(X) \
     X(coax.max_corr_deg, ctrl.max_correction_deg) \
-    X(coax.max_yaw_us, ctrl.max_yaw_diff_us)      \
-    X(coax.att_int_lim, ctrl.att_integral_limit)  \
-    X(coax.rate_int_lim, ctrl.rate_integral_limit)\
-    X(coax.yaw_int_lim, ctrl.yaw_integral_limit)  \
-    X(coax.yaw_int_thr, ctrl.yaw_integral_threshold)\
-    X(coax.att_flt_alpha, ctrl.att_rate_filter_alpha)\
-    X(coax.corr_flt_alpha, ctrl.correction_filter_alpha)\
-    X(coax.pid_deriv_alpha, ctrl.pid_derivative_filter_alpha)\
-    X(coax.mass_kg, mass_kg)                      \
-    X(coax.max_thrust_n, max_total_thrust_n)      \
-    X(coax.servo_half_deg, servo_half_angle_deg)  \
-    X(coax.motor_min_us, motor_min_us)            \
-    X(coax.motor_max_us, motor_max_us)            \
-    X(coax.att_limit_deg, attitude_limit_deg)     \
-    X(coax.dt_s, dt_s)                            \
-    X(coax.alloc_mode, alloc_mode)                \
-    X(coax.lever_m, lever_m)                      \
-    X(coax.yaw_nm_per_us, yaw_moment_nm_per_us)   \
-    X(coax.inertia_roll, inertia_roll_kgm2)       \
-    X(coax.inertia_pitch, inertia_pitch_kgm2)     \
+    X(coax.max_yaw_us, ctrl.max_yaw_diff_us) \
+    X(coax.mass_kg, mass_kg) \
+    X(coax.max_thrust_n, max_total_thrust_n) \
+    X(coax.servo_half_deg, servo_half_angle_deg) \
+    X(coax.motor_min_us, motor_min_us) \
+    X(coax.motor_max_us, motor_max_us) \
+    X(coax.att_limit_deg, attitude_limit_deg) \
+    X(coax.dt_s, dt_s) \
+    X(coax.alloc_mode, alloc_mode) \
+    X(coax.lever_m, lever_m) \
+    X(coax.yaw_nm_per_us, yaw_moment_nm_per_us) \
+    X(coax.inertia_roll, inertia_roll_kgm2) \
+    X(coax.inertia_pitch, inertia_pitch_kgm2) \
     X(coax.inertia_yaw, inertia_yaw_kgm2)
 
-#define BFS_COAX_PARAM_COUNT 31
+#define BFS_COAX_PARAM_COUNT 15
 
 // 安全关键默认值锁定（逐位；任何改动都必须走红线评审）
 static_assert(CoaxialCtrlParams{}.mass_kg == 0.84f, "共轴质量默认值必须保持 0.84kg");
@@ -216,6 +200,27 @@ struct FlightCtrlParams
 #ifndef BFS_HEADING_ALIGN_DEG
 #define BFS_HEADING_ALIGN_DEG 0.0f
 #endif
+// ============================================================
+//  通用 PID 默认值（按机型编译期选择；变量仍是同一套 att_*/rate_*）
+//  共轴：控制环输出统一角加速度，硬件换算在 CoaxialAllocator；
+//  数值按共轴旧修正角口径在悬停点折算（不是独立 PID 变量）。
+// ============================================================
+#ifdef BFS_COAXIAL_VTVL
+#define BFS_ATT_ROLL_DEFAULT  {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
+#define BFS_ATT_PITCH_DEFAULT {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
+#define BFS_ATT_YAW_DEFAULT   {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
+#define BFS_RATE_ROLL_DEFAULT {6.168f, 1.974f, 0.0f, -4.306f, 4.306f, 123.4f, 60.0f, 0.2f, true}
+#define BFS_RATE_PITCH_DEFAULT {6.168f, 1.974f, 0.0f, -4.306f, 4.306f, 123.4f, 60.0f, 0.2f, true}
+#define BFS_RATE_YAW_DEFAULT  {0.00272f, 0.02149f, 0.0f, -0.129f, 0.129f, 0.0358f, 40.0f, 0.2f, true}
+#else
+#define BFS_ATT_ROLL_DEFAULT  {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
+#define BFS_ATT_PITCH_DEFAULT {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
+#define BFS_ATT_YAW_DEFAULT   {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
+#define BFS_RATE_ROLL_DEFAULT {16.042818f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
+#define BFS_RATE_PITCH_DEFAULT {16.042818f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
+#define BFS_RATE_YAW_DEFAULT  {11.459156f, 4.297184f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
+#endif
+
 static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ---- 姿态外环（deg 域：输入 deg、输出 deg/s）----
     // ★ 2026-08-09：2.5→2.3（提阻尼）→2.2（再降一档，先稳）
@@ -223,18 +228,18 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // att_yaw = 5.0 是航向锁（ratchet hold）比例增益：2026-08-09 启用，1.2 实测发散
     //   回退 1.0；τm 观测器 + 增益调度修复后 5.0 实机验证稳定，随 COMM-001 固化。
     //   int_limit = 0.3 × 80 = 24 deg/s（回中后最大航向纠偏角速率）。
-    /* att_roll  */ {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true},
-    /* att_pitch */ {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true},
-    /* att_yaw   */ {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true},
+    /* att_roll  */ BFS_ATT_ROLL_DEFAULT,
+    /* att_pitch */ BFS_ATT_PITCH_DEFAULT,
+    /* att_yaw   */ BFS_ATT_YAW_DEFAULT,
     // ---- 角速率内环（2026-08-11 量纲迁移：输入 deg/s → 输出 deg/s²）----
     // 数值由旧混合域参数整体乘 180/π，进入物理层再乘 π/180，控制行为严格等价：
     //   roll/pitch: 0.28 → 16.042818；yaw: 0.20 → 11.459156；ki: 0.10 → 5.729578。
     // ★2026-08-12 偏航 Ki 首轮保守下调 25%: 5.729578 → 4.297184 s^-2，
     //   Ti=Kp/Ki 由 2.0s 增至 2.67s，减弱差速电机通道的低频积分作用。
     // 输出/积分限幅同乘 180/π；积分分离阈值仍是 deg/s，不变。
-    /* rate_roll */ {16.042818f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true},
-    /* rate_pitch*/ {16.042818f, 5.729578f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true},
-    /* rate_yaw  */ {11.459156f, 4.297184f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true},
+    /* rate_roll */ BFS_RATE_ROLL_DEFAULT,
+    /* rate_pitch*/ BFS_RATE_PITCH_DEFAULT,
+    /* rate_yaw  */ BFS_RATE_YAW_DEFAULT,
     // ---- 垂直串级（m → m/s → m/s²）----
     /* alt_pos   */ {1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 250.0f, 0.0f, 0.0f, true},
     /* alt_vel   */ {5.0f, 1.25f, 0.0f, -18.75f, 12.5f, 10.0f, 0.0f, 0.2f, true},
@@ -249,10 +254,18 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ★ 2026-08-09 滤波大审计结论：飞控下有物理减震底座 + 执行机构天然低通，
     //   数字滤波只加相位滞后（实测 4.2°@1Hz 即触发内环振铃，6.9° 必抖）——
     //   全链滤波放到最弱：α1=0.4（留少量噪声抑制）/ 二级≈直通 / 输出≈直通
+#ifdef BFS_COAXIAL_VTVL
+    /* speed_filter_alpha     */ { 0.3f, 0.3f, 0.3f },
+#else
     /* speed_filter_alpha     */ { 0.4f, 0.4f, 0.4f },
+#endif
     /* speed_filter_alpha2    */ { 0.99f, 0.99f, 0.99f },
     /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
+#ifdef BFS_COAXIAL_VTVL
+    /* output_filter_alpha    */ { 0.25f, 0.25f, 0.25f },
+#else
     /* output_filter_alpha    */ { 0.9f, 0.9f, 0.9f },
+#endif
     /* inertia_comp_mask      */ 0x03,   // ★2026-08-10 前馈全开（陀螺耦合+转子陀螺）
     // ---- FPV 摇杆曲线（★2026-08-11 RATE_MODE 接入）----
     //   默认：rc_rate=0.5（★2026-08-11 用户指定，实机试手感后下调——满杆基准
