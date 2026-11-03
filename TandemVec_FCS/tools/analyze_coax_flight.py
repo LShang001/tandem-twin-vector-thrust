@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""共轴飞行记录快速分析（TandemVec GCS `tvc record` CSV）。
+"""@file    analyze_coax_flight.py
+@module  tools/共轴飞行记录分析
+@brief   汇总 `tvc record` CSV 的姿态/TVC/电机/饱和证据。
+@details 共轴飞行记录快速分析（TandemVec GCS `tvc record` CSV）。
 
 用法:
   py -3.12 TandemVec_FCS/tools/analyze_coax_flight.py flight.csv

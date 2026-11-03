@@ -1,5 +1,6 @@
 /**
  * @file    test_icm42688_fifo_packet.cpp
+ * @module  传感器库 / ICM-42688-P FIFO 解析测试
  * @brief   ICM-42688-P FIFO Packet 3 解析器宿主单测
  * @details 对照 DS-000347 §6.1/§6.2：header/accel/gyro/temp/timestamp 的字节序、
  *          header 合法性、短包拒绝，以及 ±8g/±2000dps 的原始 LSB 换算示例。

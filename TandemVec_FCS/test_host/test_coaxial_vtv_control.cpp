@@ -1,3 +1,8 @@
+/**
+ * @file    test_coaxial_vtv_control.cpp
+ * @module  控制 / 共轴 DirectTvcRate 回归
+ * @brief   共轴控制器宿主机回归。
+ */
 // 共轴控制器宿主机回归（α-native 单一路径，2026-10-31 旧 δ 环移除后）
 // 覆盖：零输入、极性、RATE 旁路外环、速率阻尼、手动 TVC、执行机构限幅、
 //       偏航权限、NaN、6DOF 简化闭环、杆量曲线、RATE 内环积分。
