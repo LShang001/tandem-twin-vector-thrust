@@ -594,7 +594,12 @@ uint8_t g_heading_aid_mode =
 // 运动段姿态辅助模式（无 GNSS 数据新鲜且非静止）：
 // 默认 BFS_ATT_AID_MODE_DEFAULT=1（重力方向直连）；SIL --att-aid-mode 可覆盖。
 uint8_t g_att_aid_mode = static_cast<uint8_t>(BFS_ATT_AID_MODE_DEFAULT);
-float g_nav_tilt_sigma_deg = 0.0f;      // 倾斜 1σ（EKF，deg）
+float g_nav_tilt_sigma_deg = 0.0f;
+bool g_ekf_converged = false;
+float g_ekf_converged_s = 0.0f;
+float g_ekf_pos_sigma_m = 0.0f;
+float g_ekf_vel_sigma_mps = 0.0f;
+float g_ekf_tilt_sigma_deg = 0.0f;      // 倾斜 1σ（EKF，deg）
 float g_nav_gyro_bias_norm_dps = 0.0f;  // 陀螺零偏模长（EKF 估计，deg/s）
 bool g_nav_tilt_fb_active = false;      // mode 5 有界兜底激活标志
 float g_nav_tilt_drift_deg = 0.0f;      // 无参考倾斜漂移预算（deg）

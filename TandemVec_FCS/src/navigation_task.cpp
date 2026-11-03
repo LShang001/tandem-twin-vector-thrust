@@ -1263,6 +1263,51 @@ static bool updateGnssVerticalReanchorGate(const bfs::UbxEpoch &epoch)
 }
 #endif
 
+/**
+ * @brief EKF 收敛监视：协方差健康 + 位置/速度/倾斜 σ + 静止确认连续 3 s
+ * @details 单帧“已初始化”不等于收敛；本函数把可观测的 P/σ、静止检测和
+ *          连续保持时间合成 g_ekf_converged，供首次解锁门/健康遥测使用。
+ *          任一条件失效立即清零保持计时，不锁存。
+ */
+static void updateEkfConvergence(const float dt_s)
+{
+  g_ekf_pos_sigma_m = 0.0f;
+  g_ekf_vel_sigma_mps = 0.0f;
+  g_ekf_tilt_sigma_deg = nav_ekf.tilt_sigma_rad() * 57.29578f;
+  g_ekf_converged = false;
+  if (!nav_system_initialized || !nav_ekf.covariance_is_healthy() ||
+      !(dt_s > 0.0f))
+  {
+    g_ekf_converged_s = 0.0f;
+    return;
+  }
+  float p_diag[3] = {0.0f, 0.0f, 0.0f};
+  float v_diag[3] = {0.0f, 0.0f, 0.0f};
+  for (int i = 0; i < 3; ++i)
+  {
+    p_diag[i] = std::sqrt(std::fmax(nav_ekf.covariance_diag(i), 0.0f));
+    v_diag[i] = std::sqrt(std::fmax(nav_ekf.covariance_diag(3 + i), 0.0f));
+  }
+  g_ekf_pos_sigma_m = std::fmax(p_diag[0], std::fmax(p_diag[1], p_diag[2]));
+  g_ekf_vel_sigma_mps = std::fmax(v_diag[0], std::fmax(v_diag[1], v_diag[2]));
+  const float speed = nav_ekf.ned_vel_mps().norm();
+  // 不用 is_static_confirmed 作硬条件：地面未解锁时静止检测器可能一直 false，
+  // 会永久阻止首次解锁。用速度/σ/连续时间判 EKF 收敛即可。
+  const bool ok = speed < 0.5f &&
+                  g_ekf_pos_sigma_m < 10.0f &&
+                  g_ekf_vel_sigma_mps < 1.0f &&
+                  g_ekf_tilt_sigma_deg < 3.0f;
+  if (ok)
+  {
+    g_ekf_converged_s += dt_s;
+    g_ekf_converged = g_ekf_converged_s >= 3.0f;
+  }
+  else
+  {
+    g_ekf_converged_s = 0.0f;
+  }
+}
+
 void handleNavigationSystem()
 {
   // EKF 总耗时测量 + 零偏诊断
@@ -3691,6 +3736,7 @@ void handleNavigationSystem()
         // 无 GNSS/无光流时倾斜只有陀螺：把倾斜 1σ 与零偏模长送遥测，
         // 上层用它设失联时限/降级（物理下限判据，2026-11-02）。
         g_nav_tilt_sigma_deg = nav_ekf.tilt_sigma_rad() * 57.29578f;
+        updateEkfConvergence(nav_update_dt_s);
         g_nav_gyro_bias_norm_dps = nav_ekf.gyro_bias_radps().norm() * 57.29578f;
         // 无参考漂移预算（遥测/降级判据，不改飞控模式）：零偏漂移在无参考时
         // 不可观测，唯一能“有界”的方式是把它量化并按任务时限降级。

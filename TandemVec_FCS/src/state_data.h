@@ -924,6 +924,12 @@ extern uint8_t g_att_aid_mode;
 // 姿态健康遥测（2026-11-02）：无 GNSS/无光流时倾斜只有陀螺积分，倾斜 1σ 随
 // 时间增长；上层应据此设失联时限/降级（阈值得由实机零偏标定反算）。
 extern float g_nav_tilt_sigma_deg;
+// EKF 收敛监视（2026-11-04）：不是单一 initialized，而是协方差/σ/静止连续判据。
+extern bool g_ekf_converged;
+extern float g_ekf_converged_s;
+extern float g_ekf_pos_sigma_m;
+extern float g_ekf_vel_sigma_mps;
+extern float g_ekf_tilt_sigma_deg;
 extern float g_nav_gyro_bias_norm_dps;
 // mode 5 有界兜底当前是否处于激活态（倾斜 1σ 超门限）
 extern bool g_nav_tilt_fb_active;

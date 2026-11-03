@@ -2085,6 +2085,15 @@ namespace bfs
       }
       return eigensolver.eigenvalues().minCoeff();
     }
+    inline float covariance_diag(const int idx) const
+    {
+      // 飞控健康监视只读：返回 P 的第 idx 个对角元（方差）。
+      if (idx < 0 || idx >= 15)
+      {
+        return std::numeric_limits<float>::quiet_NaN();
+      }
+      return p_(idx, idx);
+    }
     inline float covariance_trace() const
     {
       // 主机仿真/调参记录用：返回P矩阵迹，用于评估协方差数值尺度。

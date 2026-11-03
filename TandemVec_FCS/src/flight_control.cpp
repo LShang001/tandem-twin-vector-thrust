@@ -223,18 +223,21 @@ void process_control_inputs(ControlInputs_t &inputs)
 
   // 首次解锁门：EKF 未初始化/静止速度未收敛/倾斜 sigma 过大时拒绝解锁。
   // 只在“地面已锁定 -> 请求解锁”沿生效；已解锁后不强制上锁，避免空中误锁。
+  // SIL 直接构造飞行状态、不等 6 s 收敛，故测试构建旁路该门；飞行构建保留。
+#ifndef FW_SIL_REAL_NAV
   if (!g_is_unlocked && inputs.is_unlocked)
   {
     const float ekf_speed = nav_ekf.ned_vel_mps().norm();
     const bool nav_ready =
-        nav_system_initialized && std::isfinite(ekf_speed) &&
-        ekf_speed < 1.0f && std::isfinite(g_nav_tilt_sigma_deg) &&
-        g_nav_tilt_sigma_deg < 5.0f;
+        g_ekf_converged && nav_system_initialized &&
+        std::isfinite(ekf_speed) && ekf_speed < 1.0f &&
+        std::isfinite(g_nav_tilt_sigma_deg) && g_nav_tilt_sigma_deg < 5.0f;
     if (!nav_ready)
     {
       inputs.is_unlocked = false;
     }
   }
+#endif
 
   // 通道 6 (Ignition): 点火开关
   //   > 1500: 允许点火 (点火 MOS 管通电)

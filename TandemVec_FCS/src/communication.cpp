@@ -2542,6 +2542,14 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(relative_down, 2);
         serial.print(F(" fake_origin="));
         serial.print(nav_initialized_with_fake_origin ? 1 : 0);
+        serial.print(F(" conv="));
+        serial.print(g_ekf_converged ? 1 : 0);
+        serial.print(F(" conv_s="));
+        serial.print(g_ekf_converged_s, 1);
+        serial.print(F(" pos_sig="));
+        serial.print(g_ekf_pos_sigma_m, 2);
+        serial.print(F(" vel_sig="));
+        serial.print(g_ekf_vel_sigma_mps, 2);
         serial.print(F(" tilt_sig="));
         serial.println(g_nav_tilt_sigma_deg, 2);
 
