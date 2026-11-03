@@ -264,6 +264,31 @@ def cmd_param(a):
         m.g.write(anocom.cmd_param_restore_defaults())
         drain(0.5)
         print('✓ 已发送恢复默认（RAM 生效，重启回默认）')
+    elif a.action == 'dump':
+        # 导出当前全部参数为 JSON 快照；重启后用 load 一键写回。
+        import json as _json
+        path = a.spec or 'param_snapshot.json'
+        _param_list(a)
+        snap = {}
+        for pid, info in m.g.param_names.items():
+            name = info.get('name')
+            if name and pid in m.g.param_values:
+                snap[name] = m.g.param_values[pid]
+        with open(path, 'w', encoding='utf-8') as f:
+            _json.dump(snap, f, ensure_ascii=False, indent=2, sort_keys=True)
+        print(f'✓ 参数快照已写入 {path}（{len(snap)} 项）')
+    elif a.action == 'load':
+        if not a.spec:
+            print('✗ 用法: param load <snapshot.json>')
+            return
+        import json as _json
+        with open(a.spec, 'r', encoding='utf-8') as f:
+            snap = _json.load(f)
+        ok = 0
+        for name, value in snap.items():
+            _param_set(name, value, 'set')
+            ok += 1
+        print(f'✓ 参数快照已写回 {a.spec}（{ok} 项；RAM 生效）')
 
 
 def _val_close(a, b, is_float=True, tol=1e-4):
@@ -1066,7 +1091,7 @@ def main():
     sub.add_parser('device', help='探测设备/固件版本').set_defaults(fn=cmd_device)
 
     p = sub.add_parser('param', help='参数读写')
-    p.add_argument('action', choices=['list', 'get', 'set', 'verify', 'restore'])
+    p.add_argument('action', choices=['list', 'get', 'set', 'verify', 'restore', 'dump', 'load'])
     p.add_argument('spec', nargs='?', help='参数 ID 或名称（att_roll.kp）')
     p.add_argument('value', nargs='?', type=float, help='写入值')
     p.set_defaults(fn=cmd_param)
