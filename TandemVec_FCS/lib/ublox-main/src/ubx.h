@@ -154,6 +154,19 @@ namespace bfs
     /* 从固定队列取出最早的一帧完整 epoch；队列空或入参为空时返回 false。 */
     bool PopEpoch(UbxEpoch *epoch);
     /*
+     * 清空 epoch 队列与“本历元已收到 PVT”标志。
+     * 用途：DETA100 检测窗口/接收机自动配置期间会调用 Pump() 入队，但导航任务
+     * 尚未启动；不清理会让上电后先消费最多 1.5 s 前的过期历元，并触发队列溢出。
+     * 只清队列状态，不改统计计数器（诊断仍保留累计值）。
+     */
+    void ClearEpochQueue()
+    {
+      epoch_queue_head_ = 0;
+      epoch_queue_count_ = 0;
+      eoe_ = false;
+      pvt_ready_this_epoch_ = false;
+    }
+    /*
      * 字节旁路回调：解析器从串口读入的每个字节都会镜像到该回调（若已注册）。
      * 用途：与 NMEA 等非 UBX 协议共享同一根串口——UBX 泵按字节预算读空缓冲时，
      * 把每个字节同步镜像给第二个解析器，避免两个解析器竞争读串口互相偷字节。

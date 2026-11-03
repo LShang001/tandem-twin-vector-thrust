@@ -250,6 +250,10 @@ void setup()
     Serial8.print(cfg.msg_eoe_ok ? "OK" : "FAIL");
     Serial8.print(" verify=");
     Serial8.println(cfg.verify_ok ? "OK" : "FAIL");
+    // ★2026-11-03：检测窗口与配置轮询期间 ubx.Pump() 已把 epoch 入队，但导航
+    // 任务尚未注册；不清空会让上电先消费最多 1.5 s 前的过期历元（队列容量 4，
+    // 实测上电 queue_overflow=16）。只清队列，保留解析统计。
+    ubx.ClearEpochQueue();
   }
 
   // ====================================================================

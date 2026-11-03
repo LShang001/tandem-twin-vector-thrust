@@ -42,3 +42,13 @@
 | verify_frame_map.py | 帧映射 |
 | verify_slope_direct.py | 斜率直测 |
 | verify_yaw_authority.py / verify_yaw_gain_schedule.py / verify_yaw_vs_archive.py | yaw 通道权限/增益调度/与存档对比 |
+
+## 实机调试工具（2026-11-03）
+
+| 脚本 | 用途 | 用法 |
+|------|------|------|
+| `flash-daplink.ps1` | 可靠烧录：20/50/100 kHz 自动重试、`program verify`、结束 `reset run`；失败时提示物理拔插 DAPLink | `powershell -ExecutionPolicy Bypass -File tools\flash-daplink.ps1` |
+| `serial_check.py` | 串口自检：调 GCS CLI 跑 `dbg health` / `ubxstat` / `tasks`，可选测上行窗口 | `py -3.12 tools/serial_check.py --port COM9` |
+
+> 经验：本板 DAPLink 在 ≥500 kHz 偶发校验位翻转，**必须**低速 + 重试；`program`
+> 后不 `reset run` 会让板子停住。详见 `docs/registers/踩坑记录-AGENTS.md` 2026-11-03。

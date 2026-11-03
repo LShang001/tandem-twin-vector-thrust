@@ -542,6 +542,43 @@ void ubxResetReceiver(Uart &serial)
 
 // 消息输出速率（CFG-MSG；rate=0 关闭，1-127 为 1/n 秒）。
 // cls=0xF0 为 NMEA 句、cls=0x01 为 UBX 消息（NAV-PVT/EOE/DOP/SAT...）。
+// 从 MON-VER 固定/扩展字段复制并去尾部空格/NUL。
+static void _copy_trim_monver(const uint8_t *src, size_t n, char *dst, size_t cap)
+{
+  if (dst == nullptr || cap == 0) return;
+  size_t k = 0;
+  for (size_t i = 0; i < n && k + 1 < cap; ++i)
+  {
+    const char c = static_cast<char>(src[i]);
+    if (c == '\0') break;
+    dst[k++] = c;
+  }
+  while (k > 0 && (dst[k - 1] == ' ' || dst[k - 1] == '\r')) --k;
+  dst[k] = '\0';
+}
+
+bool ubxQueryMonVer(Uart &serial, char *sw, size_t sw_cap, char *hw, size_t hw_cap,
+                    char *protver, size_t pv_cap, char *antsup, size_t ant_cap)
+{
+  // UBX-MON-VER payload: swVersion[30] + hwVersion[10] + 重复 extension[30]。
+  uint8_t buf[300];
+  const uint16_t n = _ubx_poll_payload(serial, 0x0A, 0x04, buf, sizeof(buf), 800);
+  if (n < 40) return false;
+  _copy_trim_monver(buf, 30, sw, sw_cap);
+  _copy_trim_monver(buf + 30, 10, hw, hw_cap);
+  if (protver != nullptr && pv_cap > 0) protver[0] = '\0';
+  if (antsup != nullptr && ant_cap > 0) antsup[0] = '\0';
+  for (uint16_t off = 40; off + 30 <= n; off += 30)
+  {
+    const uint8_t *e = buf + off;
+    if (memcmp(e, "PROTVER=", 8) == 0)
+      _copy_trim_monver(e + 8, 22, protver, pv_cap);
+    else if (memcmp(e, "ANTSUPERV=", 10) == 0)
+      _copy_trim_monver(e + 10, 20, antsup, ant_cap);
+  }
+  return true;
+}
+
 bool ubxMsgRateConfig(Uart &serial, uint8_t cls, uint8_t msg_id,
                       uint8_t rate)
 {

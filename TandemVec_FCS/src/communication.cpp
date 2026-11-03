@@ -2183,6 +2183,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   health            - 一屏汇总：IMU/气压/GNSS/EKF/Serial5 上行"));
         serial.println(F("[DBG]   ubxstat           - UBX 解析器统计（rx/校验/超长/pvt/eoe/队列）"));
         serial.println(F("[DBG]   ubxcfg status     - 上次配置结果"));
+        serial.println(F("[DBG]   ubxcfg monver     - 读 MON-VER（SW/HW/PROTVER/ANTSUPERV）"));
         serial.println(F("[DBG]   ubxcfg rst        - GNSS 软复位"));
         serial.println(F("[DBG]   ubxcfg nmea       - 重跑（输出 UBX+NMEA 混合）"));
         serial.println(F("[DBG]   ubxcfg msg <句> <rate|off> - 消息速率（NMEA 句/UBX 诊断消息）"));
@@ -2540,6 +2541,29 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(r.cfg_frames_sent);
           serial.print(F(" ack="));
           serial.println(r.cfg_acks_received);
+        }
+        else if (strcmp(line, "ubxcfg monver") == 0)
+        {
+          char sw[31] = {0};
+          char hw[11] = {0};
+          char pv[16] = {0};
+          char ant[32] = {0};
+          if (ubxQueryMonVer(gpsSerialPort, sw, sizeof(sw), hw, sizeof(hw),
+                             pv, sizeof(pv), ant, sizeof(ant)))
+          {
+            serial.print(F("[DBG] MON-VER sw="));
+            serial.println(sw);
+            serial.print(F("[DBG] MON-VER hw="));
+            serial.println(hw);
+            serial.print(F("[DBG] MON-VER protver="));
+            serial.println(pv);
+            serial.print(F("[DBG] MON-VER antsuperv="));
+            serial.println(ant);
+          }
+          else
+          {
+            serial.println(F("[DBG] MON-VER 无响应（GNSS 未上电/波特率/协议？）"));
+          }
         }
         else if (strcmp(line, "ubxcfg rst") == 0)
         {

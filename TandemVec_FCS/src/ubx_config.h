@@ -88,6 +88,13 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt);
 /** @brief 上次配置结果（DBG `ubxcfg status` 读取） */
 const UbxCfgResult &ubxLastCfgResult();
 
+/**
+ * @brief 轮询 UBX-MON-VER 并解析 SW/HW/PROTVER/ANTSUPERV
+ * @return true=收到 ≥40B 的 MON-VER；各输出缓冲区允许为 nullptr/0
+ */
+bool ubxQueryMonVer(Uart &serial, char *sw, size_t sw_cap, char *hw, size_t hw_cap,
+                    char *protver, size_t pv_cap, char *antsup, size_t ant_cap);
+
 /** @brief CFG-RST 软复位接收机（DBG `ubxcfg rst`；GNSS 仅软件复位） */
 void ubxResetReceiver(Uart &serial);
 

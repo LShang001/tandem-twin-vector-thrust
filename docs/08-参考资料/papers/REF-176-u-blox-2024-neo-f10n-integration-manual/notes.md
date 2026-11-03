@@ -21,7 +21,7 @@
 
 ## 调试要点
 
-- 先 `UBX-MON-VER` 确认固件/协议版本与 ANTSUPERV 配置（固件目前用 `ubxcfg status`/串口工具读，`ubxcfg monver` 为待补命令）。
+- 先 `UBX-MON-VER` 确认固件/协议版本与 ANTSUPERV 配置（固件用 `ubxcfg monver` 读 SW/HW/PROTVER/ANTSUPERV）。
 - 室内/无天线时 `fix=0` 正常，但 NAV-PVT 仍应持续输出；**PVT 计数为 0 是配置/端口问题，不是无星问题**。
 - 天线 `SHORT/OPEN` 时先查天线与馈线，不要把 `fix=0` 归因于固件解析。
 - 配置成功后必须用 `ubxstat` 看 `pvt/eoe` 是否增长，不能只看 `ubxcfg status` 的 ACK。
