@@ -1276,6 +1276,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       std::fprintf(
           g_trace_csv_file,
           "t,truth_roll,truth_pitch,truth_yaw,ekf_roll,ekf_pitch,ekf_yaw,"
+          "tgt_roll,tgt_pitch,"
           "gyro_x,gyro_y,gyro_z,omega_ref_x,omega_ref_y,omega_ref_z,"
           "ekf_n,ekf_e,true_n,true_e,hold_n,hold_e,"
           "mag_kick,mag_kick_rp,mag_gate_reason,mode,reanchor,"
@@ -1953,6 +1954,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       std::fprintf(
           g_trace_csv_file,
           "%.4f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
+          "%.3f,%.3f,"
           "%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,"
           "%.3f,%.3f,%u,%d,%d,%d,%d,%.1f,%.1f,%.1f,%.1f,%.2f,%u,%.4f,"
@@ -1964,7 +1966,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
           "%.3f,%.3f,%.3f,%.3f,%u\n",
           t, tr * 57.29578f, tp * 57.29578f, ty * 57.29578f,
           nav_ekf.roll_rad() * 57.29578f, nav_ekf.pitch_rad() * 57.29578f,
-          nav_ekf.yaw_rad() * 57.29578f, g_sil_nav_debug_gyro[0],
+          nav_ekf.yaw_rad() * 57.29578f, rollTarget, pitchTarget,
+          g_sil_nav_debug_gyro[0],
           g_sil_nav_debug_gyro[1], g_sil_nav_debug_gyro[2],
           gnc_tel.omega_ref_dps[0], gnc_tel.omega_ref_dps[1],
           gnc_tel.omega_ref_dps[2], relative_north, relative_east,
