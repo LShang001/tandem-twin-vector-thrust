@@ -9,9 +9,9 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# 输出目录可用环境变量覆盖：MSYS/bash 下 g++ 无法写中文路径（Invalid argument），
-# PowerShell 环境请设 BIN_DIR 到英文路径（如 $env:TEMP\tv_fcs_bin）。
-BIN_DIR="${BIN_DIR:-$ROOT/test_host/bin}"
+# 输出目录默认 $ROOT/tmp/host_bin（临时产物不落 test_host/bin）。
+# MSYS/bash 下 g++ 无法写中文路径时，用 ASCII 路径覆盖（如 BIN_DIR=T:/host_bin）。
+BIN_DIR="${BIN_DIR:-$ROOT/tmp/host_bin}"
 mkdir -p "$BIN_DIR"
 
 INCLUDES="-I$ROOT/include -I$ROOT/lib/eigen/src"
