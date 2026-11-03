@@ -3393,7 +3393,10 @@ void handleNavigationSystem()
           kBaroHealthBlankingS;
       bool baro_ref_valid =
           s_baro_health_have_gnss &&
-          (health_now_ms - s_baro_health_gnss_ms) <= 1000U;
+          (health_now_ms - s_baro_health_gnss_ms) <= 1000U &&
+          !nav_initialized_with_fake_origin &&
+          gnss_status.last_obs_h_acc_m > 0.0f &&
+          gnss_status.last_obs_h_acc_m <= 5.0f;
 #ifdef BFS_GNSS_VERTICAL_REANCHOR_GATE
       if (g_gnss_vert_suspect)
       {
