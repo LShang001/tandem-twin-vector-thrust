@@ -309,7 +309,13 @@ float kf_h_outlier_gate = 4.0f;
 // --- 5.2 组合导航系统 ---
 Uart &gpsSerialPort = Serial4;
 bfs::Ubx ubx(&gpsSerialPort);
+// 可选：EKF 全状态放 DTCM（0 等待、不经 D-Cache），仅 [env:TandemVec_FCS_DTCM]
+// 构建启用；默认留在 RAM_D1，避免未验证的内存布局改变生产固件。
+#ifdef BFS_NAV_EKF_DTCM
+__attribute__((section(".dtcmram"))) bfs::Ekf15State nav_ekf;
+#else
 bfs::Ekf15State nav_ekf;
+#endif
 
 // --- 5.3 信号滤波器 ---
 // 传感器原始数据滤波 (alpha值越小滤波越强，响应越慢)

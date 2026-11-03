@@ -38,6 +38,14 @@
 // 避免 [TASK]/[LOOP] 文本污染正常 AnoCom 遥测流。
 bool isDebugModeActive();
 
+// 可选：同周期任务相位错开（默认关，见 platformio.ini [env:TandemVec_FCS_PHASE]）。
+// 动机：5ms 任务注册相位几乎相同，会在同一 tick 集中到期；主循环一次 pass
+// 若超过 5ms，标志位被下一次到期覆盖 → 实际频率下降（实测 200Hz→约155Hz）。
+// 错开只改首次到期相位，不改名义周期；需上板用 tasks 的迟到列 A/B。
+#ifndef BFS_TASK_PHASE_STAGGER
+#define BFS_TASK_PHASE_STAGGER 0
+#endif
+
 // ====================================================================
 // 任务调度统计（常开累积，DBG `tasks` 命令消费）
 // 每次执行累积：次数 / 耗时 / 相邻执行间隔 / 迟到次数；`tasks` 打印后清零。
@@ -148,10 +156,13 @@ void schedulerStatsPrint(arduino::Print &out)
  *
  * 调用频率：scheduler::kSchedulerTickHz（当前 6400Hz）
  */
+// 定时器自由运行 tick（6400 Hz）；相位错开需要读取当前 tick。
+static volatile uint32_t s_timerTicks = 0;
+
 void timerCallback()
 {
-  static uint32_t currentCount = 0; // 静态中断计数器，作为全局时间基准 (单位: 定时器滴答)
-  currentCount++;                   // 每次中断递增，溢出周期约 7.8 天 (2^32 / 6400 / 86400)
+  s_timerTicks++; // 每次中断递增，溢出周期约 7.8 天 (2^32 / 6400 / 86400)
+  const uint32_t currentCount = s_timerTicks;
 
   // 遍历所有已注册的任务
   for (uint8_t i = 0; i < taskCount; i++)
@@ -228,7 +239,24 @@ bool addTaskNamed(void (*function)(), float interval, const char *name)
   tasks[taskCount].interval = static_cast<uint32_t>(
       interval * (static_cast<float>(scheduler::kSchedulerTickHz) / 1000.0f) + 0.5f);
 #endif
+#if BFS_TASK_PHASE_STAGGER
+  // 仅对 >=5ms 的任务错开首次相位，避免高数率任务（IMU/500Hz）被扰动。
+  static uint8_t s_phase_seq = 0;
+  const uint32_t period_ticks = tasks[taskCount].interval;
+  if (period_ticks >= 32U)
+  {
+    const uint32_t spread = (period_ticks < 64U) ? 8U : 16U;
+    const uint32_t offset = static_cast<uint32_t>(s_phase_seq % spread);
+    s_phase_seq++;
+    tasks[taskCount].lastRunTime = s_timerTicks - offset;
+  }
+  else
+  {
+    tasks[taskCount].lastRunTime = 0;
+  }
+#else
   tasks[taskCount].lastRunTime = 0; // 初始化上次执行时间为 0 (首次执行在 interval 后)
+#endif
   tasks[taskCount].enabled = true;  // 默认启用该任务
   tasks[taskCount].flag = false;    // 初始标志位为 false (等待定时器置位)
   // 调度统计基线（首个间隔≈名义周期，不污染抖动统计）
