@@ -574,7 +574,13 @@ def cmd_dbg(a):
             _dbg_mode(True)
             time.sleep(0.4)
         m.g.dbg_cmd(a.cmdline)
-        for ln in _dbg_collect(1.5):
+        out = list(_dbg_collect(1.5))
+        if a.cmdline.strip().split()[0:1] != ['tasks']:
+            # 固件在 DBG 模式下每 2 s 自动打印一次 [TASK]/[LOOP] 调度统计，
+            # 会淹没本次命令的真实响应；非 tasks 命令把它当噪声过滤。
+            out = [ln for ln in out
+                   if not ln.startswith('[TASK ') and not ln.startswith('[LOOP]')]
+        for ln in out:
             print(ln)
         # ★ 2026-08-10 全面审查修复：命令执行完自动退出 DBG（原实现固件留调试模式，
         #   遥测停发直到下次连接）——cmdline=on 分支保留在 DBG（用户显式要求）
