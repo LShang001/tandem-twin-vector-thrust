@@ -25,6 +25,7 @@
 #include "TandemVec_Config.h"
 #include "Quat4f.h"
 #include "QuaternionMath.h"
+#include "fw_sil_plant_6dof.h"
 
 #include <cmath>
 #include <random>
@@ -83,91 +84,8 @@ struct Motor
  *  转动：I·ω̇ = M_b - ω×(I·ω)（对角惯量下退化为欧拉方程三分量）
  *  积分：四阶 Runge–Kutta（与项目红线「四元数 RK4 + 每阶段保范」一致）
  */
-#ifndef BFS_SIL_CDA
-#define BFS_SIL_CDA 0.0f // 等效阻力面积 Cd·A (m²)；0 = 忽略气动（用户要求先用无气动模型）
-#endif
-
-struct Body
-{
-  Quat4f q;
-  float omega[3];
-  float vel_n, vel_e, vel_d;
-  float pos_n, pos_e, pos_d;
-  float mass_now;
-
-  Body() : q(1, 0, 0, 0), omega{0, 0, 0},
-           vel_n(0), vel_e(0), vel_d(0),
-           pos_n(0), pos_e(0), pos_d(0), mass_now(P.m) {}
-
-  void deriv(const float *y, float Fx, const float *Mb, float *dy) const
-  {
-    const float qw = y[6], qx = y[7], qy = y[8], qz = y[9];
-    const float wx = y[10], wy = y[11], wz = y[12];
-    const float vn = y[3], ve = y[4], vd = y[5];
-
-    dy[0] = vn; dy[1] = ve; dy[2] = vd;
-
-    // 推力沿机体 -z：R 的第三列是 z_b 在 NED 的分量
-    const float R31 = 2.0f * (qx * qz + qw * qy);
-    const float R32 = 2.0f * (qy * qz - qw * qx);
-    const float R33 = 1.0f - 2.0f * (qx * qx + qy * qy);
-
-    const float sp = sqrtf(vn * vn + ve * ve + vd * vd);
-    const float kd = 0.5f * 1.225f * BFS_SIL_CDA;
-
-    dy[3] = (-Fx * R31 - kd * sp * vn) / mass_now;
-    dy[4] = (-Fx * R32 - kd * sp * ve) / mass_now;
-    dy[5] = (-Fx * R33 - kd * sp * vd) / mass_now + P.g;
-
-    // 四元数微分：q̇ = ½·q⊗ω
-    dy[6] = 0.5f * (-wx * qx - wy * qy - wz * qz);
-    dy[7] = 0.5f * (wx * qw + wz * qy - wy * qz);
-    dy[8] = 0.5f * (wy * qw - wz * qx + wx * qz);
-    dy[9] = 0.5f * (wz * qw + wy * qx - wx * qy);
-
-    // 完整欧拉方程（对角惯量）
-    dy[10] = (Mb[0] - (P.Iz - P.Iy) * wy * wz) / P.Ix;
-    dy[11] = (Mb[1] - (P.Ix - P.Iz) * wz * wx) / P.Iy;
-    dy[12] = (Mb[2] - (P.Iy - P.Ix) * wx * wy) / P.Iz;
-  }
-
-  void step(const SixDOFWrench &w, float dt)
-  {
-    // computeWrench 模型系 -> 机体 FRD（x'=-z_b, y'=+y_b, z'=+x_b）
-    const float Mb[3] = {-w.Mz, w.My, -w.Mx};
-    float y[13] = {pos_n, pos_e, pos_d, vel_n, vel_e, vel_d,
-                   q.w, q.x, q.y, q.z, omega[0], omega[1], omega[2]};
-    float k1[13], k2[13], k3[13], k4[13], tmp[13];
-
-    deriv(y, w.Fx, Mb, k1);
-    for (int i = 0; i < 13; ++i) tmp[i] = y[i] + 0.5f * dt * k1[i];
-    deriv(tmp, w.Fx, Mb, k2);
-    for (int i = 0; i < 13; ++i) tmp[i] = y[i] + 0.5f * dt * k2[i];
-    deriv(tmp, w.Fx, Mb, k3);
-    for (int i = 0; i < 13; ++i) tmp[i] = y[i] + dt * k3[i];
-    deriv(tmp, w.Fx, Mb, k4);
-
-    for (int i = 0; i < 13; ++i)
-    {
-      y[i] += (dt / 6.0f) * (k1[i] + 2.0f * k2[i] + 2.0f * k3[i] + k4[i]);
-    }
-
-    pos_n = y[0]; pos_e = y[1]; pos_d = y[2];
-    vel_n = y[3]; vel_e = y[4]; vel_d = y[5];
-
-    Quat4f qq{y[6], y[7], y[8], y[9]};
-    qq = qNorm(qq); // 每步保范
-    q = qq;
-
-    omega[0] = y[10]; omega[1] = y[11]; omega[2] = y[12];
-  }
-
-  void euler(float &roll, float &pitch, float &yaw) const
-  {
-    Quaternion qq{q.w, q.x, q.y, q.z};
-    quaternionToEuler(qq, roll, pitch, yaw);
-  }
-};
+// 高精度 6DOF plant：RK4 + 完整欧拉方程，见 fw_sil_plant_6dof.h
+using Body = SilBody6Dof;
 
 static void set_rc(uint16_t throttle, uint16_t mode, bool unlock,
                    uint16_t roll = 1500, uint16_t pitch = 1500,

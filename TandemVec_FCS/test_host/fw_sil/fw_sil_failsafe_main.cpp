@@ -28,6 +28,7 @@
 #include "QuaternionMath.h"
 #include "TandemVec_Config.h"
 #include "TandemVec_Propulsion.h"
+#include "fw_sil_plant_6dof.h"
 #include "flight_control.h"
 #include "state_data.h"
 
@@ -53,43 +54,8 @@ struct Motor
   }
 };
 
-struct Body
-{
-  Quat4f q;
-  float omega[3];
-  float vel_n, vel_e, vel_d;
-  float pos_n, pos_e, pos_d;
-  Body()
-      : q(1, 0, 0, 0), omega{0, 0, 0}, vel_n(0), vel_e(0), vel_d(0), pos_n(0),
-        pos_e(0), pos_d(0)
-  {
-  }
-  void step(const SixDOFWrench &w, float dt)
-  {
-    const float p = omega[0], qq = omega[1], r = omega[2];
-    omega[0] += (-w.Mz - (P.Iz - P.Iy) * qq * r) / P.Ix * dt;
-    omega[1] += (w.My - (P.Ix - P.Iz) * r * p) / P.Iy * dt;
-    omega[2] += (-w.Mx - (P.Iy - P.Ix) * p * qq) / P.Iz * dt;
-    const float wx = omega[0], wy = omega[1], wz = omega[2];
-    Quat4f dq{-0.5f * (q.x * wx + q.y * wy + q.z * wz),
-              0.5f * (q.w * wx + q.y * wz - q.z * wy),
-              0.5f * (q.w * wy - q.x * wz + q.z * wx),
-              0.5f * (q.w * wz + q.x * wy - q.y * wx)};
-    q.w += dq.w * dt;
-    q.x += dq.x * dt;
-    q.y += dq.y * dt;
-    q.z += dq.z * dt;
-    q = qNorm(q);
-    const float R33 = 1.0f - 2.0f * (q.x * q.x + q.y * q.y);
-    vel_d += (P.g - (w.Fx / P.m) * R33) * dt;
-    pos_d += vel_d * dt;
-  }
-  void euler(float &roll, float &pitch, float &yaw) const
-  {
-    Quaternion qq{q.w, q.x, q.y, q.z};
-    quaternionToEuler(qq, roll, pitch, yaw);
-  }
-};
+// 高精度 6DOF plant：RK4 + 完整欧拉方程，见 fw_sil_plant_6dof.h
+using Body = SilBody6Dof;
 
 static void set_rc(uint16_t throttle, uint16_t mode, bool unlock,
                    uint16_t roll = 1500, uint16_t pitch = 1500)
