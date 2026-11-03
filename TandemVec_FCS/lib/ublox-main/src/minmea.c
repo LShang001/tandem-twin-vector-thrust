@@ -662,6 +662,11 @@ int minmea_getdatetime(struct tm *tm, const struct minmea_date *date, const stru
     return 0;
 }
 
+#if defined(_WIN32) && !defined(timegm)
+// MinGW 的 time.h 不声明 POSIX timegm；宿主 SIL 的 fw_sil_stubs.cpp 提供定义。
+extern "C" time_t timegm(struct tm *tm);
+#endif
+
 int minmea_gettime(struct timespec *ts, const struct minmea_date *date, const struct minmea_time *time_)
 {
     struct tm tm;
