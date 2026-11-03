@@ -2430,6 +2430,12 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(g_is_unlocked ? 1 : 0);
         serial.print(F(" uptime_s="));
         serial.println(millis() / 1000UL);
+        serial.print(F("[DBG] loop cpu_permille="));
+        serial.print(schedulerCpuPermille());
+        serial.print(F(" max_pass_us="));
+        serial.print(schedulerLoopMaxPassUs());
+        serial.print(F(" win_s="));
+        serial.println(schedulerWindowMs() / 1000UL);
 
         serial.print(F("[DBG] imu state="));
         serial.print(g_imu_health_state);

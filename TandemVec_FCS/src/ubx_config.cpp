@@ -586,8 +586,17 @@ bool ubxMsgRateConfig(Uart &serial, uint8_t cls, uint8_t msg_id,
   {
     return false;
   }
+  // F10（protocol 40）文档路径：PVT/EOE 用 CFG-VALSET；两者同速率保证历元配对。
+  // 同时保留 CFG-MSG 兼容 M8N 等老接收机；两条任一 ACK 即成功。
+  bool valset_ok = false;
+  if (cls == 0x01U && (msg_id == 0x07U || msg_id == 0x61U))
+  {
+    _cfg_valset_pvt_eoe_uart1(serial, rate);
+    valset_ok = _ubx_wait_ack(serial, 0x06, 0x8A, kAckTimeoutMs);
+  }
   _cfg_msg(serial, cls, msg_id, rate);
-  return _ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
+  const bool legacy_ok = _ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
+  return valset_ok || legacy_ok;
 }
 
 // CFG-NMEA（0x06 0x17，20B V1）读改写公共骨架：轮询当前 → 改 offset → 回写 → 等 ACK

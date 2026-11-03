@@ -141,6 +141,28 @@ void schedulerStatsPrint(arduino::Print &out)
   schedulerStatsReset();
 }
 
+uint32_t schedulerWindowMs()
+{
+  return (micros() - s_stats_window_start_us) / 1000U;
+}
+
+uint32_t schedulerLoopMaxPassUs()
+{
+  return s_loop_max_pass_us;
+}
+
+uint32_t schedulerCpuPermille()
+{
+  const uint32_t window_us = micros() - s_stats_window_start_us;
+  if (window_us == 0U) return 0U;
+  uint64_t total = 0;
+  for (uint8_t i = 0; i < taskCount; ++i)
+  {
+    total += s_stats[i].exec_sum_us;
+  }
+  return static_cast<uint32_t>((total * 1000ULL) / window_us);
+}
+
 /**
  * @brief 定时器中断回调函数 (Timer Callback Function)
  *

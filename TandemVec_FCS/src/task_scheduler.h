@@ -57,6 +57,15 @@ bool addTask(void (*function)(), float interval);
  */
 bool addTaskNamed(void (*function)(), float interval, const char *name);
 
+/** @brief 当前统计窗口长度 [ms]（DBG tasks 消费后重置） */
+uint32_t schedulerWindowMs();
+
+/** @brief 窗口内 taskExecutor 单轮最大耗时 [us] */
+uint32_t schedulerLoopMaxPassUs();
+
+/** @brief 窗口内任务执行总时间占比 [千分比]，1000=100% CPU */
+uint32_t schedulerCpuPermille();
+
 /**
  * @brief 任务执行器
  *
