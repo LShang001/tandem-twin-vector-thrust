@@ -220,6 +220,7 @@ struct Task
 #endif
   uint32_t lastRunTime; // 上次执行时间
   bool enabled;         // 使能标志
+  bool deferrable;      // 可在超预算时推迟到下一轮（遥测/灯效/日志）
   volatile bool flag;   // 执行请求标志
 };
 

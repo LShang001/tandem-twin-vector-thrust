@@ -788,10 +788,14 @@ void handleDualVectorYawFusion()
 
 void updateUbxRelativePosition()
 {
-  // 1. 基础检查：原点已设置、导航已初始化，且GNSS必须是新鲜3D定位。
-  if (!is_origin_lla_set || !isGnssInstantValidForNav() || !nav_system_initialized)
+  // 1. 基础检查：原点已设置、导航已初始化、GNSS 新鲜，且不是“假原点未重锚”。
+  //    ★ 假原点（室内 hAcc>5m）下 GNSS 相对硬编码原点的偏移可达几 km，
+  //    发布出去会被 GUIDED/遥测当成真实相对位置；这里保持 0，等首次
+  //    高质量 GNSS 重锚（fake_origin→0）后再发布。
+  if (!is_origin_lla_set || !isGnssInstantValidForNav() || !nav_system_initialized ||
+      nav_initialized_with_fake_origin)
   {
-    // GNSS无效时不能用UBX缓存覆盖Home Point，只清零原始相对位移，保留已确认的导航原点。
+    // GNSS无效/假原点时不能用UBX缓存覆盖Home Point，只清零原始相对位移。
     ubx_relative_north = 0.0f;
     ubx_relative_east = 0.0f;
     ubx_relative_down = 0.0f;
@@ -3765,7 +3769,15 @@ void handleNavigationSystem()
       Geodetic_Pos_Packet.height = nav_ekf.alt_m();
 
       // --- 3. 注入融合相对位置 (每4帧计算一次, 桌面静止时位置几乎不变)
-      if (is_origin_lla_set)
+      if (is_origin_lla_set && nav_initialized_with_fake_origin)
+      {
+        // 假原点下 EKF 的 LLA 还在假原点附近，直接算 lla2ned 会得到几 km 偏移；
+        // 在首次高质量 GNSS 重锚前，相对位置保持 0（局部递推起点）。
+        relative_north = 0.0f;
+        relative_east = 0.0f;
+        relative_down = 0.0f;
+      }
+      else if (is_origin_lla_set)
       {
         // 垂直控制需要 200Hz 更新；局部飞行范围内高度差与 NED Down 严格反号。
         relative_down = static_cast<float>(origin_alt_m - nav_ekf.alt_m());

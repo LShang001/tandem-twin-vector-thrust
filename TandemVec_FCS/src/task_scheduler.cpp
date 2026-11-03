@@ -66,6 +66,10 @@ struct TaskStats
 };
 static TaskStats s_stats[MAX_TASKS] = {};
 static uint32_t s_stats_window_start_us = 0;  // 观测窗口起点
+// 单轮执行预算：超过后只推迟 deferrable 任务；控制/导航/IMU 不受影响。
+#ifndef BFS_TASK_PASS_BUDGET_US
+#define BFS_TASK_PASS_BUDGET_US 1200U
+#endif
 static uint32_t s_loop_max_pass_us = 0;       // taskExecutor 单轮最大耗时
 
 void schedulerStatsReset()
@@ -295,6 +299,7 @@ bool addTaskNamed(void (*function)(), float interval, const char *name)
   tasks[taskCount].lastRunTime = 0; // 初始化上次执行时间为 0 (首次执行在 interval 后)
 #endif
   tasks[taskCount].enabled = true;  // 默认启用该任务
+  tasks[taskCount].deferrable = false;
   tasks[taskCount].flag = false;    // 初始标志位为 false (等待定时器置位)
   // 调度统计基线（首个间隔≈名义周期，不污染抖动统计）
   s_stats[taskCount].nominal_period_us = static_cast<uint32_t>(interval * 1000.0f);
@@ -303,6 +308,23 @@ bool addTaskNamed(void (*function)(), float interval, const char *name)
   taskCount++;                      // 已注册任务计数递增
 
   return true; // 任务添加成功
+}
+
+bool setTaskDeferrable(const char *name, bool deferrable)
+{
+  if (name == nullptr)
+  {
+    return false;
+  }
+  for (uint8_t i = 0; i < taskCount; ++i)
+  {
+    if (tasks[i].name != nullptr && strcmp(tasks[i].name, name) == 0)
+    {
+      tasks[i].deferrable = deferrable;
+      return true;
+    }
+  }
+  return false;
 }
 
 bool addTask(void (*function)(), float interval)
@@ -348,6 +370,17 @@ void taskExecutor()
       should_run = true;
     }
     interrupts();
+
+    // 本轮预算：超过预算后，把遥测/灯效/日志等 deferrable 任务推迟到下一轮。
+    // 控制/导航/IMU 任务不标记，优先级由注册顺序 + 本预算共同保证。
+    if (should_run && tasks[i].deferrable &&
+        (micros() - t_pass0) > static_cast<uint32_t>(BFS_TASK_PASS_BUDGET_US))
+    {
+      noInterrupts();
+      tasks[i].flag = true;
+      interrupts();
+      continue;
+    }
 
     if (should_run)
     {

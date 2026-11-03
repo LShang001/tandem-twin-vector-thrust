@@ -47,6 +47,9 @@ void setupTimer();
  */
 bool addTask(void (*function)(), float interval);
 
+/// 标记任务为“超预算可推迟”（按任务名）。返回是否找到。
+bool setTaskDeferrable(const char *name, bool deferrable = true);
+
 /**
  * @brief 添加带诊断名称的任务到调度器
  *

@@ -2457,7 +2457,13 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       {
         // 一屏汇总：模式/IMU/气压/GNSS/EKF/Serial5 上行
         serial.println(F("[DBG] == HEALTH =="));
-        serial.print(F("[DBG] mode="));
+        serial.print(F("[DBG] veh="));
+#ifdef BFS_COAXIAL_VTVL
+        serial.print(F("CoaxialVTVL"));
+#else
+        serial.print(F("TandemVec"));
+#endif
+        serial.print(F(" mode="));
         serial.print(static_cast<int>(g_current_flight_mode));
         serial.print(F(" unlock="));
         serial.print(g_is_unlocked ? 1 : 0);
