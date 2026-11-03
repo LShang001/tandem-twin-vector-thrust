@@ -27,6 +27,15 @@
  *          README.md（模块化架构总览）
  */
 
+// ===== 当前硬件未安装的模块（2026-11-03 用户确认）=====
+// 默认关闭，避免空任务/空 SPI 占用调度与启动时间；装回硬件时改为 1 即可。
+#ifndef BFS_ENABLE_CAN
+#define BFS_ENABLE_CAN 0
+#endif
+#ifndef BFS_ENABLE_OPTICAL_FLOW
+#define BFS_ENABLE_OPTICAL_FLOW 0
+#endif
+
 // ===== 模块化头文件 =====
 #include "state_data.h"        // 全局变量声明、枚举/结构体定义
 #include "math_utils.h"        // 纯数学工具函数 (inline header-only)
@@ -388,16 +397,20 @@ void setup()
     Serial8.println("Onboard DPS310 initialized successfully.");
   }
 
+#if BFS_ENABLE_OPTICAL_FLOW
   lqs48Sensor.begin(opticalFlowSerial);
   mtf02pSensor.begin(opticalFlowSerial);
   Serial8.println("Optical Flow Sensor UART7 Initialized (auto-detect: LQS48 / MTF02P).");
+#endif
 
   // ====================================================================
   // 5.5 CAN 总线初始化 (MCP2515 on SPI2)
   // ====================================================================
   // 独立 SPI2 实例, 与 SPI1 (ICM42688) 完全隔离。
   // 初始化失败不阻塞系统, CAN 通信功能不可用但飞控正常运行。
+#if BFS_ENABLE_CAN
   initCAN();
+#endif
 
   // --- 滤波器初始化 ---
   flowDistanceFilter.initialize(0.0f);
@@ -446,7 +459,9 @@ void setup()
   const float imu_task_ms = 1000.0f / static_cast<float>(imu_odr_hz);
   BFS_ADD_TASK(handleICM42688, imu_task_ms, "ICM42688");                  // IMU 数据采集 + 姿态解算（周期随实际 ODR）
   BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz, 贴近128Hz压力输出且保留FIFO余量
+#if BFS_ENABLE_OPTICAL_FLOW
   BFS_ADD_TASK(handleOpticalFlowSensor, 2.0f, "OpticalFlow");            // UART7 光流自动识别+采集 (500Hz, 2ms) - LQS48/MTF02P
+#endif
 
   // --- DETA100 数据源 (仅当检测到 DETA100 时注册) ---
   // 必须在状态估计层之前注册，确保同周期内 handleNavigationSystem 读到本周期最新的 DETA100 数据。
@@ -477,7 +492,9 @@ void setup()
 
   // --- 通信遥测层 (低频) ---
   // 串口发送任务排在 GNC 之后，即使偶发阻塞也不影响控制环实时性。
+#if BFS_ENABLE_CAN
   BFS_ADD_TASK(handleCANBus, 5.0f, "CANBus");                       // CAN 总线发送 (200Hz, 5ms) - 飞控状态广播
+#endif
   BFS_ADD_TASK(sendElrsBatteryData, 40.0f, "ElrsBattery");      // ELRS 电量回传 (25Hz, 40ms) - 遥控器显示氧压
   BFS_ADD_TASK(sendElrsAttitudeData, 40.0f, "ElrsAttitude");    // ELRS 姿态回传 (25Hz) - 遥控器姿态球
   BFS_ADD_TASK(sendElrsBaroAltitudeData, 40.0f, "ElrsBaro");    // ELRS 高度+垂直速度回传 (25Hz) - 遥控器高度显示
