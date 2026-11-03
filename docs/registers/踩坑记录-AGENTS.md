@@ -185,3 +185,18 @@
   `g++` 源清单，重构后必然漂移。新增/修改 SIL 入口时，优先复用
   `build_and_run_env.sh` 或把源清单抽成单一变量；验收数字必须带“哪个入口 +
   哪个 commit”，否则“某个入口能跑”会掩盖另一个入口断链。
+
+## 2026-11-03 GNSS “能收不能配”：先查 FC→GNSS RX 线
+
+- **现象**：NEO-F10N 输出正常（fix=3、5 星、PVT/EOE 成对、qovf=0），但
+  `ubxcfg status` 的 `rate/msg/val` 全 FAIL、`帧=6 ack=0`；`ubxcfg rst`
+  发 CFG-RST 后接收机毫无反应（PVT 继续、波特率不变）。
+- **判定**：配置输入链路完全没通，不是波特率算法。CFG-RST 都不响应时，
+  不要再改 VALSET 键/顺序；先查 FC UART4 TX → GNSS RX（`Serial4(PD0,PD1)`
+  在 STM32 核心是 `Uart(rx,tx)`，所以 PD0=RX、PD1=TX）、共地、以及 UART4
+  上是否还并了 DETA100 等第二路驱动器。
+- **固件兜底**：切速失败时留在已检测波特率继续收数据（否则切 921600 会把
+  整条链路弄断）；`ubxcfg status` 的 ACK 计数是判断输入链路的第一指标。
+- **备选**：把 GNSS 直接接 PC USB-UART，用 u-center 设
+  `CFG-UART1-BAUDRATE=921600`、PVT/EOE 10Hz 并保存；FC 按 921600 直接收数，
+  不依赖 FC→GNSS 输入。
