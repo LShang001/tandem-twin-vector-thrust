@@ -88,3 +88,13 @@ Header（0x5F 配置为 accel+gyro、非 20-bit）：
 
 后续正确路径：SPI DMA + 独立采集任务/中断，把 FIFO 搬运与解析移出
 200 Hz 主循环；在没有独立采集通道前，不再把 FIFO 接回 `readIMUData`。
+
+
+## 7. 室内 GNSS 干扰（不是 FIFO）
+
+同批测试中 `health` 出现 `fix=3 sv=8 hAcc=23.4m` 但 EKF `pos_ned=3.5/9.1 km`：
+- hAcc 只有 23 m，3.5 km 不是定位噪声能解释的，指向**首次定位原点用了
+  不可信的 GNSS 快照**（室内多径/重置前缓存）或接收机当前解与原点不在同一处；
+- 这不是 FIFO 造成；FIFO 集成已撤销，默认 UI 轮询下仍出现；
+- 室内不应把 fix=3 当可信位置，定位/原点必须在室外复核；hAcc 门控默认关闭，
+  需要时用 `BFS_NAVIGATION_GNSS_HACC_GATE` 做 A/B。

@@ -2503,6 +2503,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(gnss_status.last_obs_fix_type, 0);
         serial.print(F(" sv="));
         serial.print(gnss_status.last_obs_num_sv, 0);
+        serial.print(F(" hacc_m="));
+        serial.print(gnss_status.last_obs_h_acc_m, 2);
         serial.print(F(" age_ms="));
         serial.print(gnss_status.last_measurement_age_s * 1000.0f, 0);
         serial.print(F(" pvt="));

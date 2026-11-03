@@ -239,3 +239,16 @@
 - **规则**：新 Agent 查器件/驱动前先读该索引 + `参考资料注册表.md` +
   `lib/<器件>/doc/`；只有索引/本地库都没有时才上网，下载后必须 MinerU 入库并
   更新索引。临时目录（`tmp/fe-fix/ds` 等）的副本不作权威引用。
+
+## 2026-11-03 FIFO 接入不能放在 200Hz 协作主循环
+
+- **尝试**：ICM42688 2KB FIFO，逐包 16B 读取和单次 burst 读取都上板验证。
+- **结果**：逐包 IMU 任务 avg136us/max531us，Navigation 183Hz/max10.3ms；
+  burst avg138us/max497us，Navigation 170Hz/max11.4ms；EKF 位置被污染。
+- **原因**：FIFO 搬运/解析仍在协作主循环里，与 Navigation 抢时间；批量平均
+  不能解决实时性。
+- **结论**：默认继续 UI 轮询；FIFO 驱动只保留 `imufifo` 地面自检。要接回
+  必须先做 SPI DMA/独立采集任务，不能直接在 `readIMUData` 里开 FIFO。
+- **另一个坑**：切换 `BFS_IMU_FIFO` 宏后，默认 env 可能残留旧对象；用
+  `pio run -e TandemVec_FCS -t clean` 清编后用 `strings firmware.elf | grep FIFO`
+  确认，避免把 FIFO 固件当默认固件烧。
