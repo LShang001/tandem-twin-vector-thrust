@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_gyrocompass.cpp
+ * @module   测试/宿主机
  * @brief   纯罗经解析对准（TRIAD 双矢量：重力 + 地球自转）。
  *
  * 原理（惯导教材静基座解析对准）：

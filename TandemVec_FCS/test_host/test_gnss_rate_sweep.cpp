@@ -1,5 +1,6 @@
 /**
  * @file    test_gnss_rate_sweep.cpp
+ * @module   测试/宿主机
  * @brief   GNSS 更新率 × 飞行速度 × 加速度 对导航精度的影响（真实 EKF）。
  *
  * 目的（2026-11-01 用户要求）：量化“不同 GNSS 更新频率”在“不同运动轨迹/

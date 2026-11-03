@@ -1,5 +1,6 @@
 /**
  * @file    test_tilt_triad.cpp
+ * @module   测试/宿主机
  * @brief   TRIAD 双矢量初始对准 vs TiltCompass 一致性 + 奇点规避验证。
  *
  * 判据：

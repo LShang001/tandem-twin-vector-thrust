@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""@file    rl_bridge.py
+@module  测试/宿主机
+@brief   rl_bridge.py 模块说明。
+
 rl_bridge.py — 强化学习着陆策略（PPO）与飞控 SIL 的 UDP 联合仿真桥
 
 策略与观测/动作映射与箭载机实机程序

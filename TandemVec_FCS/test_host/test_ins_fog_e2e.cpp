@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_fog_e2e.cpp
+ * @module   测试/宿主机
  * @brief   FOG 级端到端：罗经对准 → 参数辨识精对准 → 1 h 纯惯导。
  *
  * 链路（全部用 FOG 参数 0.01 °/h、10 µg）：

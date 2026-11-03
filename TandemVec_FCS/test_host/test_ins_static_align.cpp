@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_static_align.cpp
+ * @module   测试/宿主机
  * @brief   静止校准（零偏估计）与补偿效果验证。
  *
  * 思路：

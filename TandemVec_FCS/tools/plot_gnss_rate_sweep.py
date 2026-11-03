@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""GNSS 更新率 × 速度 × 加速度 扫描结果可视化。
+"""@file    plot_gnss_rate_sweep.py
+@module  工具
+@brief   plot_gnss_rate_sweep.py 模块说明。
+GNSS 更新率 × 速度 × 加速度 扫描结果可视化。
 
 输入：tmp/gnss_rate_sweep.csv（gnss_hz,v_amp,a_peak,seed,pos_rmse,att_rmse_deg,updates）
 输出：tmp/gnss_rate_vs_speed.png、tmp/gnss_rate_vs_accel.png

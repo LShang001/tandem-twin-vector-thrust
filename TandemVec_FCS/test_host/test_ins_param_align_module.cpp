@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_param_align_module.cpp
+ * @module   测试/宿主机
  * @brief   ins_param_align.h 模块回归：书本参数辨识法（§9.9.2）。
  */
 #include <cmath>

@@ -1,5 +1,6 @@
 /**
  * @file    test_coax_params.cpp
+ * @module   测试/宿主机
  * @brief   共轴双桨 VTVL 参数可标定化回归（默认值逐位 / 注册表顺序 / 逐拍输出锁定）
  *
  * 验证目标（对应 task-6/task-10）：

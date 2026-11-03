@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""TandemVec FCS serial health check (COM port -> GCS CLI -> DBG).
+"""@file    serial_check.py
+@module  工具
+@brief   serial_check.py 模块说明。
+TandemVec FCS serial health check (COM port -> GCS CLI -> DBG).
 
 Usage:
   py -3.12 TandemVec_FCS/tools/serial_check.py --port COM9

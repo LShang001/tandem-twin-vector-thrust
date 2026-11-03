@@ -1,5 +1,6 @@
 /**
  * @file    test_gravity_models.cpp
+ * @module   测试/宿主机
  * @brief   WGS84 正常重力 vs J2 引力模型对比。
  *
  * 目的：量化“高精度重力模型”相对 WGS84 正常重力的差异，判断当前

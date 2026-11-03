@@ -1,5 +1,6 @@
 /**
  * @file    test_gnss_delay_estimator.cpp
+ * @module   测试/宿主机
  * @brief   自动 GNSS 延迟估计器（ins_gnss_delay_auto.h）独立验证。
  *
  * 目的：绕开 fw_nav_api 的 ABI 集成问题，直接验证估计器本身：

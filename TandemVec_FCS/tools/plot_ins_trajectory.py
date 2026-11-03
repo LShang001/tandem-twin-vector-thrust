@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""捷联惯导真实轨迹可视化：真值 / 纯惯导 / GNSS 辅助 对比。
+"""@file    plot_ins_trajectory.py
+@module  工具
+@brief   plot_ins_trajectory.py 模块说明。
+捷联惯导真实轨迹可视化：真值 / 纯惯导 / GNSS 辅助 对比。
 
 输入：tmp/ins_trajectory.csv（test_ins_trajectory 生成）
 输出：tmp/ins_trajectory_v2.png

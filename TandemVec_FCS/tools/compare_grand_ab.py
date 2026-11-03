@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""GRAND 矩阵 A/B 对比：默认参数 vs CMA-ES 优化参数。
+"""@file    compare_grand_ab.py
+@module  工具
+@brief   compare_grand_ab.py 模块说明。
+GRAND 矩阵 A/B 对比：默认参数 vs CMA-ES 优化参数。
 
 输入：tmp/grand_default.csv、tmp/grand_opt.csv（IMUPERF_GRAND=1 输出）
 输出：tmp/grand_ab.png + 控制台汇总表

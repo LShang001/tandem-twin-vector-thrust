@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_alignment.cpp
+ * @module   测试/宿主机
  * @brief   初对准（单帧倾斜）vs 精对准（静基座多观测）对比。
  *
  * 初对准：Initialize() 用单帧加速度计定 roll/pitch（yaw 由磁/GNSS 定）。

@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_fog.cpp
+ * @module   测试/宿主机
  * @brief   光纤陀螺（FOG）级别 IMU 的纯惯导长航时漂移仿真。
  *
  * 目的：量化“换 FOG 能带来多少改善”，以及换完之后瓶颈变成什么。

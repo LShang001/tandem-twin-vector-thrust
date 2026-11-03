@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""EKF 连续参数全面优化（CMA-ES，8 维）。
+"""@file    opt_nav_params.py
+@module  测试/宿主机
+@brief   opt_nav_params.py 模块说明。
+EKF 连续参数全面优化（CMA-ES，8 维）。
 
 项目规范（AGENTS.md）：连续参数最终调参默认用现代优化器，网格/手扫仅用于
 初值与可视化。

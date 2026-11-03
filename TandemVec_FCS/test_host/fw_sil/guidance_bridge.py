@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
+"""@file    guidance_bridge.py
+@module  测试/宿主机
+@brief   guidance_bridge.py 模块说明。
+
 guidance_bridge.py — 制导算法（SOCP 轨迹规划 + 跟踪）与飞控 SIL 的 UDP 联合仿真桥
 
 协议（与飞控 Serial5 私有帧一致）：

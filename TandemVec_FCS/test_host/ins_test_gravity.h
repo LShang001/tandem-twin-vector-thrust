@@ -1,5 +1,6 @@
 /**
  * @file    ins_test_gravity.h
+ * @module   测试/宿主机
  * @brief   宿主惯导测试统一重力口径（WGS84 正常重力，与 EKF 机械编排一致）。
  *
  * 背景：测试曾用 kG=9.79 构造比力，而 EKF 用 WGS84 正常重力（≈9.7938），

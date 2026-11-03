@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""GRAND 超广覆盖矩阵可视化（GNSS × 场景 × 振动 × 延迟）。
+"""@file    plot_grand_matrix.py
+@module  工具
+@brief   plot_grand_matrix.py 模块说明。
+GRAND 超广覆盖矩阵可视化（GNSS × 场景 × 振动 × 延迟）。
 
 输入：tmp/grand_matrix.csv（gnss,scene,vib,delay,seed,pos,att,alt）
 输出：tmp/grand_heatmap.png、tmp/grand_curves.png

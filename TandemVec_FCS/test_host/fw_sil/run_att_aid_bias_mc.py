@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""run_att_aid_bias_mc.py — 失联瞬间陀螺零偏阶跃的姿态方案对比。
+"""@file    run_att_aid_bias_mc.py
+@module  测试/宿主机
+@brief   run_att_aid_bias_mc.py 模块说明。
+run_att_aid_bias_mc.py — 失联瞬间陀螺零偏阶跃的姿态方案对比。
 
 回放 `--nav-gyro-bias-step` 故障注入，比较 AHRS（mode 0）/纯陀螺（mode 1）/
 有界兜底（mode 5）在 0.15/0.3/0.6 dps 未标定零偏下的漂移。

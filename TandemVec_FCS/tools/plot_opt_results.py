@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""CMA-ES 优化结果可视化：收敛曲线 + 最优参数对照 + 参数敏感度扫描。
+"""@file    plot_opt_results.py
+@module  工具
+@brief   plot_opt_results.py 模块说明。
+CMA-ES 优化结果可视化：收敛曲线 + 最优参数对照 + 参数敏感度扫描。
 
 输入：tmp/opt_cma_log.csv（eval,gen,best,mean）
       tmp/opt_cma_best.json（cost/params）

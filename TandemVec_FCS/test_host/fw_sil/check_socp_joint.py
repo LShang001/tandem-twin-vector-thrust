@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
-"""check_socp_joint.py — SOCP+GUIDED 联合仿真结果的自动判定。
+"""@file    check_socp_joint.py
+@module  测试/宿主机
+@brief   check_socp_joint.py 模块说明。
+check_socp_joint.py — SOCP+GUIDED 联合仿真结果的自动判定。
 
 用法：
   py -3.12 TandemVec_FCS/test_host/fw_sil/check_socp_joint.py tmp/socp_joint2.csv

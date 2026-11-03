@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""GRAND v2 可视化：2 IMU（42688P/45686）× 6 GNSS（含 F10N）× 场景 × 振动 × 延迟。
+"""@file    plot_grand_v2.py
+@module  工具
+@brief   plot_grand_v2.py 模块说明。
+GRAND v2 可视化：2 IMU（42688P/45686）× 6 GNSS（含 F10N）× 场景 × 振动 × 延迟。
 
 输入：tmp/grand_matrix_v2.csv（imu,gnss,scene,vib,delay,seed,pos,att,alt）
 输出：tmp/grand_v2_imu.png、tmp/grand_v2_f10n.png

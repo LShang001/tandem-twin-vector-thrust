@@ -1,5 +1,6 @@
 /**
  * @file    test_nav_abi_delay.cpp
+ * @module   测试/宿主机
  * @brief   真实固件导航链路（fw_nav_api）验证 GNSS 延迟与自动估计。
  *
  * 单模式单进程（argv: delay_ms [fake_itow]），避免 fw_nav 单例跨 run 污染。

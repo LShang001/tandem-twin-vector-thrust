@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_mech_drift.cpp
+ * @module   测试/宿主机
  * @brief   捷联惯导机械编排长航时精度验证（纯惯导，无 GNSS）。
  *
  * 目的：检验 Ekf15State 的机械编排（四元数姿态 + 圆锥/划摇 + 地球自转/

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""run_att_aid_bias_sweep.py — 陀螺零偏阶跃的时机/方向/持续性扫描。
+"""@file    run_att_aid_bias_sweep.py
+@module  测试/宿主机
+@brief   run_att_aid_bias_sweep.py 模块说明。
+run_att_aid_bias_sweep.py — 陀螺零偏阶跃的时机/方向/持续性扫描。
 
 在前一版（固定 20 s、双轴、永久阶跃）基础上扩展，回答三个工程问题：
   1. 阶跃发生在 GNSS 有效期内（可被 EKF 在线估计）vs 失联瞬间（不可观测）

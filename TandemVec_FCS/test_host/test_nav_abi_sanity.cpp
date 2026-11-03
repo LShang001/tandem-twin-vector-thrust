@@ -1,5 +1,6 @@
 /**
  * @file    test_nav_abi_sanity.cpp
+ * @module   测试/宿主机
  * @brief   fw_nav_api 最小自检：静止 / AHRS / 运动 三阶段隔离 6° 姿态偏差来源。
  *
  * 用法：test_nav_abi_sanity <mode>

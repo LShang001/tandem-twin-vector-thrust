@@ -1,5 +1,6 @@
 /**
  * @file    test_coaxial_dynamics_model.cpp
+ * @module   测试/宿主机
  * @brief   共轴双桨 VTVL rigorous 动力学模型宿主回归（2026-10-31）
  *
  * 覆盖：kT 反标定/悬停转速、推力平方律、反扭（ω² 与 Jp·ω̇ 两项）、

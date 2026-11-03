@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_fog_align.cpp
+ * @module   测试/宿主机
  * @brief   FOG 级 IMU 的静基座罗经精对准 + 长航时纯惯导。
  *
  * 与 MEMS 的关键区别：FOG 陀螺能测到地球自转 ω_ie（0.00418 °/s），

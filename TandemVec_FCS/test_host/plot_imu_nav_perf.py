@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""IMU/GNSS 导航性能矩阵可视化（数据：tmp/imuperf/out.csv 与 trace_*.csv）。
+"""@file    plot_imu_nav_perf.py
+@module  测试/宿主机
+@brief   plot_imu_nav_perf.py 模块说明。
+IMU/GNSS 导航性能矩阵可视化（数据：tmp/imuperf/out.csv 与 trace_*.csv）。
 
 输出 PNG 到同目录，供人工/视觉模型审查。全部英文标签，避免中文字体缺失。
 """

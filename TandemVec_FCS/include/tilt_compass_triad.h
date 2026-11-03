@@ -1,5 +1,6 @@
 /**
  * @file    tilt_compass_triad.h
+ * @module   固件/头文件
  * @brief   TRIAD 双矢量静基座初始对准（替代 TiltCompass 欧拉角公式）。
  *
  * 动机：`TiltCompass` 用 `asin(a_x)`、`asin(-a_y/cosθ)` 求 roll/pitch，

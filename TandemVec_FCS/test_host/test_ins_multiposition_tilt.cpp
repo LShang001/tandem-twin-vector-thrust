@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_multiposition_tilt.cpp
+ * @module   测试/宿主机
  * @brief   倾斜多位置对准：4 个不同姿态分离全部 6 个零偏（转台角已知）。
  *
  * 理论：单位置（含绕 z 双位置）下，加计零偏 b_a 与姿态倾斜不可分离

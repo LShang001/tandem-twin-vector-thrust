@@ -1,5 +1,6 @@
 /**
  * @file    test_coning_three_sample.cpp
+ * @module   测试/宿主机
  * @brief   纯锥运动下双子样 vs 三子样圆锥补偿精度对比。
  *
  * 经典补偿（旋转矢量）：

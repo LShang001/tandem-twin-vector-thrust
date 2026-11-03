@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_trajectory.cpp
+ * @module   测试/宿主机
  * @brief   真实运动轨迹下的纯惯导 vs GNSS 辅助对比（输出 CSV 供可视化）。
  *
  * 轨迹（60 s）：

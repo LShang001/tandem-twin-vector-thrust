@@ -1,5 +1,6 @@
 /**
  * @file    test_ins_multiposition_align.cpp
+ * @module   测试/宿主机
  * @brief   多位置（转台）对准：分离并估计全部 6 个 IMU 零偏。
  *
  * 理论：静基座单位置对准中，加计零偏与水平失准角、陀螺零偏与方位失准角
