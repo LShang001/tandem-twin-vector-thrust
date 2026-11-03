@@ -92,6 +92,7 @@ bash test_host/run_all.sh  # 宿主全量（40+ 段，以脚本实际为准）
 - 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `pio test -e test`；无法运行必须说明原因。
 - **算法测试两阶段**：先理想模型（零噪声/零偏、WGS84 重力 `ins_test::GravityWgs84()`、解析真值）验证正确性，再真实噪声/零偏/振动/失锁评估工程效果；理想阶段失败修算法，真实阶段不达标先归因。
 - **不声称未执行的构建/测试/上板验证通过。**
+- **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `docs/registers/固件调试工具链-2026-11-01.md`。
 - **性能 A/B 环境（默认飞行 env 不变）**：`[env:TandemVec_FCS_PHASE]` 开 `BFS_TASK_PHASE_STAGGER`（只错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）；`[env:TandemVec_FCS_DTCM]` 开 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）。A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论；详见 `docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
 
 ## 仓库卫生
