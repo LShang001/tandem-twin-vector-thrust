@@ -173,3 +173,15 @@
 - **复位后读 SCB CCR 会误判 Cache 未开（2026-11-03）**：`reset halt` 后读 `0xE000ED14=0x00040200`（只有分支预测），但运行期是 `0x00070200`（I/D Cache 全开）——Arduino 核心 `premain()` 在 `setup()` 之前已调用 `SCB_EnableICache/DCache`。因此不要再在 `setup()` 里重复开 I-Cache；判断 Cache 要在**运行中** halt 读取。D-Cache 已开，DMA 缓冲一致性依赖现有驱动/MPU 约定，不要随手改。
 - **宏嵌套守卫会让“编译通过”变成静默无效（2026-11-03）**：`BFS_GUIDED_THRUST_ADAPT` 整段曾写在 `#ifdef BFS_GUIDED_ACCEL_TRIM` 内，单独编 adapt 版本时该分支根本没进编译，SIL 结果与开环逐位相同。修复：观测/自适应移出 trim 守卫，进入 GUIDED 的复位也独立。教训：**新增宏必须做“行为差异”验证**（同工况下开/关输出必须不同，或 objdump/预处理确认符号存在），不能只看 `pio run SUCCESS`。
 - **场景 SIL 的 plant 必须共用高精度 6DOF（2026-11-03）**：定高/失效保护/制导入口原先各自维护“只有垂向一阶积分”的简化 plant，姿态/水平动力学缺失，导致同一控制律在不同 SIL 结论不一致。现统一到 `test_host/fw_sil/fw_sil_plant_6dof.h`（RK4、完整欧拉方程、每步保范、可选二次气动）；env 入口保留其带风/地面/故障注入的 RK4 plant。新增仿真入口禁止再写简化垂向模型。
+
+## 2026-11-03 SIL 验收脚本源清单再次漂移
+
+- **现象**：`test_host/fw_sil/run_acceptance.sh` 编译失败，`real_cfg` 未声明、
+  `g_ins_hf_vibration` 未声明；脚本仍按旧版本只编 `flight_control/state_data`，
+  缺少 `navigation_task.cpp`、UBX 驱动与 `-DFW_SIL_REAL_NAV -DARDUINO`。
+- **修复**：按 `build_and_run_env.sh` 的当前口径补齐源与宏，重建后 3 seeds
+  全部 PASS（final_alt 9.16–9.23 m，8–11 m 判据）。
+- **教训（同一个坑第二次）**：SIL 有多个入口脚本时，每个入口都维护一份
+  `g++` 源清单，重构后必然漂移。新增/修改 SIL 入口时，优先复用
+  `build_and_run_env.sh` 或把源清单抽成单一变量；验收数字必须带“哪个入口 +
+  哪个 commit”，否则“某个入口能跑”会掩盖另一个入口断链。
