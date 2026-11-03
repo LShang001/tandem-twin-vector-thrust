@@ -389,6 +389,27 @@ else
 fi
 echo
 
+
+echo "---- 编译/运行 ubx_epoch_queue_clear ----"
+UBX_EXTRA=""
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) UBX_EXTRA="-Dtimegm=_mkgmtime" ;;
+esac
+if $CXX -std=$STD -O2 -DARDUINO -D_USE_MATH_DEFINES $UBX_EXTRA \
+  -I$ROOT/lib/ublox-main/src -I$ROOT/test_host/fw_sil/stub -I$ROOT/lib/eigen/src -I$ROOT/src \
+  "$ROOT/test_host/test_ubx_epoch_queue_clear.cpp" \
+  "$ROOT/lib/ublox-main/src/ubx.cpp" "$ROOT/lib/ublox-main/src/minmea.c" \
+  -o "$BIN_DIR/ubx_epoch_queue_clear$EXE_SUFFIX"; then
+  if ! "$BIN_DIR/ubx_epoch_queue_clear$EXE_SUFFIX"; then
+    echo "[RUN FAIL] ubx_epoch_queue_clear"
+    fail=1
+  fi
+else
+  echo "[BUILD FAIL] ubx_epoch_queue_clear"
+  fail=1
+fi
+echo
+
 if [ "$fail" -eq 0 ]; then
   echo "=== 全部宿主机回归测试通过 ==="
   exit 0
