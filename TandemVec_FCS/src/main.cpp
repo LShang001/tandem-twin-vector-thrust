@@ -160,7 +160,7 @@ void setup()
   Serial6.begin(SERIAL6_BAUDRATE);  // USART6: AnoCom/MAVLink 地面站通信 (波特率见 state_data.h SERIAL6_BAUDRATE)
   Serial5.begin(921600);           // UART5:  上位机轨迹规划接口 (921600 baud)
   // 与 UART4 同理：921600 下把上行串口 RX 中断提到最高优先级，避免高负载丢字节。
-  NVIC_SetPriority(UART5_IRQn, 0);
+  NVIC_SetPriority(UART5_IRQn, 1);  // 低于 UART4，保证 GNSS 可抢占
   setup_transmitter_uart();        // USART2: 发动机控制器/数据转发 (921600 baud)
   opticalFlowSerial.begin(921600); // UART7:  光流传感器 (921600 baud)
 
