@@ -1,8 +1,8 @@
 /**
  * @file    task_scheduler.h
- * @module  固件/基础设施（任务调度器：TIM8 2kHz 时基）
+ * @module  固件/基础设施（任务调度器：TIM8 6.4kHz 时基）
  * @brief   声明协作式任务调度器的注册、执行与统计接口
- * @details 定时器中断（2kHz）只置任务标志位，任务函数全部在主循环 `taskExecutor()`
+ * @details 定时器中断（6.4kHz）只置任务标志位，任务函数全部在主循环 `taskExecutor()`
  *          中执行——串口/SPI/I2C 等阻塞外设可在任务内安全使用。
  *          输入：`addTaskNamed()` 注册的函数指针 + 间隔（ms，浮点可表达 7.735ms 这类
  *          非整数 tick 周期，需 `BFS_TASK_FRACTIONAL_INTERVALS`）；
@@ -12,7 +12,7 @@
  * @theory  N/A（调度基础设施）
  * @ref     COMM-001 §3（200Hz 任务节奏来源）、AGENTS.md 踩坑记录（任务调度统计）
  * @frame   N/A
- * @units   间隔 ms、耗时 µs、频率 Hz；硬件 tick = 0.5ms（2kHz）
+ * @units   间隔 ms、耗时 µs、频率 Hz；硬件 tick = 156.25µs（6400Hz）
  * @note    ★ 超时/看门狗语义：调度器本身不检测超时、也不喂狗——
  *          ① “超时”只体现为统计口径：相邻执行间隔 > 1.5×名义周期记为“迟到”
  *            （`late_count`），供 DBG `tasks` 判读主循环是否过载；
@@ -26,7 +26,7 @@
 #include "state_data.h"
 
 /**
- * @brief 定时器中断回调函数 (2kHz)
+ * @brief 定时器中断回调函数 (scheduler::kSchedulerTickHz)
  *
  * 遍历任务列表，根据预设执行间隔设置任务执行标志位。
  * 实际任务函数在主循环的 taskExecutor() 中执行。
@@ -34,7 +34,7 @@
 void timerCallback();
 
 /**
- * @brief 初始化硬件定时器 (TIM8, 2kHz)
+ * @brief 初始化硬件定时器 (TIM8, 6400Hz)
  */
 void setupTimer();
 
