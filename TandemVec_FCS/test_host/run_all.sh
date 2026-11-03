@@ -9,9 +9,14 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-# 输出目录默认 $ROOT/tmp/host_bin（临时产物不落 test_host/bin）。
-# MSYS/bash 下 g++ 无法写中文路径时，用 ASCII 路径覆盖（如 BIN_DIR=T:/host_bin）。
-BIN_DIR="${BIN_DIR:-$ROOT/tmp/host_bin}"
+# 输出目录：英文根路径默认 $ROOT/tmp/host_bin；根路径含非 ASCII（如中文仓库名）时
+# MinGW g++/ld 会以 "Invalid argument" 拒绝写输出，自动退回 /tmp 的 ASCII 目录。
+if [ -z "${BIN_DIR:-}" ]; then
+  case "$ROOT" in
+    *[![:print:]]*) BIN_DIR="/tmp/tv_fcs_host_bin" ;;
+    *)              BIN_DIR="$ROOT/tmp/host_bin" ;;
+  esac
+fi
 mkdir -p "$BIN_DIR"
 
 INCLUDES="-I$ROOT/include -I$ROOT/lib/eigen/src"

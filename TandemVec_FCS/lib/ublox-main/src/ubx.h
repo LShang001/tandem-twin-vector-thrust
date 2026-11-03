@@ -165,6 +165,9 @@ namespace bfs
       epoch_queue_count_ = 0;
       eoe_ = false;
       pvt_ready_this_epoch_ = false;
+      // 上电检测/配置期间没有消费者，溢出计数属于预期启动行为；清零后
+      // 只统计导航任务启动之后的真实溢出，避免 health 误报。
+      queue_overflow_count_ = 0;
     }
     /*
      * 字节旁路回调：解析器从串口读入的每个字节都会镜像到该回调（若已注册）。

@@ -92,13 +92,24 @@ int main()
           "PVT/EOE 各计数一次");
   }
 
-  // 2) 清空后队列为空、Pop 失败；统计计数保留
+  // 2) 再灌入 5 个历元，验证容量 4 的溢出，然后清空
   {
+    for (uint32_t k = 0; k < 5; ++k)
+    {
+      const std::vector<uint8_t> f = make_epoch(1010 + k * 10);
+      serial.feed(f.data(), f.size());
+    }
+    g_sil_time_us = 1500;
+    (void)ubx.Pump(4096, g_sil_time_us);
+    check(ubx.pending_epoch_count() == 4, "容量 4 的队列被填满");
+    check(ubx.queue_overflow_count() > 0, "溢出计数 > 0");
+
     ubx.ClearEpochQueue();
     check(ubx.pending_epoch_count() == 0, "ClearEpochQueue 后 pending=0");
+    check(ubx.queue_overflow_count() == 0, "清队列同时归零溢出计数");
     bfs::UbxEpoch epoch{};
     check(!ubx.PopEpoch(&epoch), "清空后 PopEpoch 返回 false");
-    check(ubx.nav_pvt_count() == 1, "清队列不抹掉 PVT 统计");
+    check(ubx.nav_pvt_count() == 6, "清队列不抹掉 PVT 统计");
   }
 
   // 3) 清理后再来一个历元仍能正常入队/出队
