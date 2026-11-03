@@ -77,6 +77,10 @@ if [ "$full" -eq 1 ]; then
   # --full：核心与扩展 profile 一律 5 seeds（8×5=40 例）
   args+=(--seeds "1,2,3,4,5")
 fi
+# 默认使用严格共轴 plant（2026-11-04）：L1 集总 plant 的俯仰力矩/姿态约定
+# 会在 mag_clean/nominal 误报 max_pitch≈23°；严格模型 10° 原限幅下 24/24。
+# 用户显式 --append-args 放在最后可覆盖（如 --append-args=--coax-plant-model l1）。
+args+=("--append-args=--coax-plant-model rigorous")
 # 用户显式参数放在最后，argparse 后者覆盖前者。
 args+=(${passthrough[@]+"${passthrough[@]}"})
 
