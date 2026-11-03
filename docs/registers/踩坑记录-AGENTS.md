@@ -165,3 +165,11 @@
   `Initialize()` 之前设置（固件也是这样做的）。
 - **教训**：测试构造 EKF 噪声参数时先确认“Initialize 前”；否则会伪造出
   “更新率越高越差”这类反直觉结论，且难以自查（Q 设置看起来生效了）。
+
+## 2026-11-03 实机烧录、F10N GNSS 与性能观测
+
+- **DAPLink 高速烧录会“校验失败”但代码未必坏（2026-11-03）**：同一 ELF 在 adapter speed 1800/1000/500 kHz 下 `Verified OK` 与 `checksum mismatch` 间歇出现；`diff` 定位到 1–2 个位（如 `0x0801d8bb` 0x71 vs 0x61）。降到 **20–100 kHz**、`init; reset halt; program ... verify` 后稳定通过。判据：先看 `diff` 是否只有孤立位翻转，再回烧上一版已知固件；不要因 verify 失败就改代码。**OpenOCD `program` 后如果只 `shutdown` 不 `reset run`，板子会停住**（表现为无遥测、DBG 无响应）——烧录脚本必须显式 `reset run`。
+- **u-blox CFG-MSG 8 字节 payload 是“每端口 rate”，不是“全端口一个 rate”（2026-11-03）**：顺序 `msgClass,msgID,rateDDC,rateUART1,rateUART2,rateUSB,rateSPI,reserved`。旧实现 `{cls,id,rate,0,0,0,0,0}` 把 rate 写进 DDC，UART1/2 为 0；接收机仍回 ACK，但 `ubxstat` 的 `pvt` 恒 0、`last cls=0x1 id=0x4`（只剩默认 NAV-DOP）。修复为全端口同速率，并给 F10（protocol 40.00，CFG-MSG 已 deprecated）补 `CFG-MSGOUT-UBX_NAV_PVT_UART1=0x20910007`、`CFG-MSGOUT-UBX_NAV_EOE_UART1=0x20910160` 的 CFG-VALSET。教训：**配置 ACK 只证明消息被接受，必须用解析计数（pvt/eoe 增长）验收输出**。
+- **复位后读 SCB CCR 会误判 Cache 未开（2026-11-03）**：`reset halt` 后读 `0xE000ED14=0x00040200`（只有分支预测），但运行期是 `0x00070200`（I/D Cache 全开）——Arduino 核心 `premain()` 在 `setup()` 之前已调用 `SCB_EnableICache/DCache`。因此不要再在 `setup()` 里重复开 I-Cache；判断 Cache 要在**运行中** halt 读取。D-Cache 已开，DMA 缓冲一致性依赖现有驱动/MPU 约定，不要随手改。
+- **宏嵌套守卫会让“编译通过”变成静默无效（2026-11-03）**：`BFS_GUIDED_THRUST_ADAPT` 整段曾写在 `#ifdef BFS_GUIDED_ACCEL_TRIM` 内，单独编 adapt 版本时该分支根本没进编译，SIL 结果与开环逐位相同。修复：观测/自适应移出 trim 守卫，进入 GUIDED 的复位也独立。教训：**新增宏必须做“行为差异”验证**（同工况下开/关输出必须不同，或 objdump/预处理确认符号存在），不能只看 `pio run SUCCESS`。
+- **场景 SIL 的 plant 必须共用高精度 6DOF（2026-11-03）**：定高/失效保护/制导入口原先各自维护“只有垂向一阶积分”的简化 plant，姿态/水平动力学缺失，导致同一控制律在不同 SIL 结论不一致。现统一到 `test_host/fw_sil/fw_sil_plant_6dof.h`（RK4、完整欧拉方程、每步保范、可选二次气动）；env 入口保留其带风/地面/故障注入的 RK4 plant。新增仿真入口禁止再写简化垂向模型。

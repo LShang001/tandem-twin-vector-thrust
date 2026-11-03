@@ -59,6 +59,10 @@
 - **DBG 调试**：Serial6 收 `"DBG\n"` 进调试（`handleDebugConsole`），`exit` 退出；命令表与工具链见 `docs/registers/固件调试工具链-2026-11-01.md`。
 - **磁标定（DBG `magcal`）**：`start`/`fit`/`save`（写内部 Flash bank2 末扇区 0x081E0000）；★ 禁止 EEPROM 仿真（同用末扇区）；引导校准 `magcal guided`。
 
+- **DAPLink 烧录（2026-11-03）**：adapter speed 需降到 **20–100 kHz** 才稳定 `Verified OK`；高速下偶发 checksum mismatch（diff 为孤立位翻转）不是固件坏。OpenOCD `program` 后必须 `reset run`，否则板子停住。命令见 `docs/registers/踩坑记录-AGENTS.md` 2026-11-03 条。
+- **GNSS（NEO-F10N，protocol 40.00）**：F10 接口说明只收录 **CFG-VALSET/VALGET/VALDEL + CFG-MSGOUT**（PVT UART1 `0x20910007` p.143、EOE UART1 `0x20910160` p.142），**没有 CFG-MSG/CFG-PRT 章节**；固件保留 CFG-MSG 是实测兼容层（F10 仍 ACK）。CFG-MSG 8 字节 payload 的 rate 必须同时写 UART1/UART2。**配置 ACK 不等于有输出**，验收看 `ubxstat` 的 `pvt/eoe` 是否增长。详见 `docs/04-数学建模/代码理论核查/F10N-GNSS配置与调试-2026-11-03.md`。
+- **新增 `health` 命令**：一屏看模式/IMU 健康/气压/GNSS pvt-eoe-fix-sv/ EKF rpy-vel-pos/ Serial5 上行 rx-bad-age-txskip。
+
 ## 硬性代码边界
 
 - `DETA100_module.h` 只能在 `main.cpp` 包含（内含解析实现与静态状态）。
