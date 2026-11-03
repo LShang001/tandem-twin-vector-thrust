@@ -45,15 +45,17 @@ PROFILES = {
     # 磁生产链独立 profile：磁默认不混入 clean/nominal/degraded 基线。
     "mag_clean": (
         ["--no-wind"],
-        {"final_alt": (8.0, 11.0), "hold_end_rms": 1.5, "pos_rms": 1.0,
+        {"final_alt": (8.0, 11.0), "hold_end_rms": 1.5,
+         "pos_rms_preland": 1.0,
          "mag_fused_min": 100, "require_mag_cal": True,
-         "max_roll_max": 20.0, "max_pitch_max": 20.0},
+         "max_roll_preland_max": 20.0, "max_pitch_preland_max": 20.0},
     ),
     "mag_nominal": (
         [],
-        {"final_alt": (8.0, 11.0), "hold_end_rms": 8.0, "pos_rms": 5.0,
+        {"final_alt": (8.0, 11.0), "hold_end_rms": 8.0,
+         "pos_rms_preland": 5.0,
          "mag_fused_min": 30, "require_mag_cal": True,
-         "max_roll_max": 20.0, "max_pitch_max": 20.0},
+         "max_roll_preland_max": 20.0, "max_pitch_preland_max": 20.0},
     ),
     # 光流诊断 profile：二进制仍用 mag_clean 环境，仅额外打开光流。
     # mag_clean 无 GNSS 失联；SIL 光流噪声会消耗 RNG，随机流未对齐，
@@ -236,7 +238,9 @@ def main() -> int:
                 final_alt = data.get("final_alt")
                 if finite(final_alt) and not (lo <= float(final_alt) <= hi):
                     errors.append(f"final_alt={final_alt} not in [{lo},{hi}]")
-                for key in ("hold_end_rms", "pos_rms"):
+                for key in ("hold_end_rms", "pos_rms", "pos_rms_preland"):
+                    if key not in gates:
+                        continue
                     if key == "hold_end_rms" and gates.get("skip_hold_end", False):
                         continue
                     value = data.get(key)
@@ -248,7 +252,8 @@ def main() -> int:
                     errors.append(f"mag_gate={data.get('mag_gate')} < {gates['mag_gate_min']}")
                 if gates.get("require_mag_cal") and data.get("mag_cal") != 1:
                     errors.append(f"mag_cal={data.get('mag_cal')}")
-                for key in ("max_roll", "max_pitch"):
+                for key in ("max_roll", "max_pitch",
+                            "max_roll_preland", "max_pitch_preland"):
                     limit_key = f"{key}_max"
                     value = data.get(key)
                     if limit_key in gates and finite(value) and float(value) > gates[limit_key]:

@@ -1223,6 +1223,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   float land_pos_err = -1.0f;
   float land_roll_deg = 0.0f;
   float max_roll_preland = 0.0f;
+  float max_pitch_preland = 0.0f;
   // 接地垂直速度（NED 向下为正）与接地前最大下降速度：下降策略的
   // 触地硬度指标，不能只看落地时间/位移（2026-10-26 下降速率权衡）。
   float land_vz_down = -1.0f;
@@ -1233,6 +1234,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   bool gnss_outage_prev = false;
   double sum_roll2 = 0.0, sum_pitch2 = 0.0;
   double sum_pos2 = 0.0, max_pos = 0.0;
+  double sum_pos_preland2 = 0.0;
   double max_gnss_age = 0.0;  // 全程 GNSS 年龄峰值，用作失联注入的自证据
   int n_att = 0, n_pos = 0;
   double sum_nav_alt = 0.0;
@@ -1253,7 +1255,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   double sum_nav_roll2 = 0.0, sum_nav_pitch2 = 0.0, sum_nav_yaw2 = 0.0;
   double max_nav_roll = 0.0, max_nav_pitch = 0.0, max_nav_yaw = 0.0;
   int n_nav_att = 0;
-  int n_hold = 0, n_hold_end = 0;
+  int n_hold = 0, n_hold_end = 0, n_pos_preland = 0;
 #ifdef EKF_NAV_TELEMETRY
   // 闭环协方差一致性观测（仅 SIL 测试设施）：以 plant 真值为参照计算
   // NEES = e^T P^-1 e / 3，判断滤波器的自报不确定度是否可信。
@@ -2392,6 +2394,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
                                 double(relative_east) - double(p.pos[1]));
     }
     if (std::fabs(pitch * 57.29578f) > max_pitch) max_pitch = std::fabs(pitch * 57.29578f);
+    if (!landed && std::fabs(pitch * 57.29578f) > max_pitch_preland)
+    {
+      max_pitch_preland = std::fabs(pitch * 57.29578f);
+    }
     if (t > 9.0f)
     {
       sum_roll2 += double(r * 57.29578f) * double(r * 57.29578f);
@@ -2406,6 +2412,11 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       sum_pos2 += e2;
       if (std::sqrt(e2) > max_pos) max_pos = std::sqrt(e2);
       ++n_pos;
+      if (!landed)
+      {
+        sum_pos_preland2 += e2;
+        ++n_pos_preland;
+      }
       sum_nav_alt += nav_ekf.alt_m() - origin_alt_m;
       ++n_nav_alt;
       const Eigen::Quaternionf qe = nav_ekf.quat();
@@ -2598,6 +2609,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   const char *nees_json = "";
 #endif
   const double pos_rms = n_pos ? std::sqrt(sum_pos2 / n_pos) : -1.0;
+  const double pos_rms_preland =
+      n_pos_preland ? std::sqrt(sum_pos_preland2 / n_pos_preland) : -1.0;
   const double nav_alt_mean = n_nav_alt ? (sum_nav_alt / n_nav_alt) : 0.0;
   const double hold_rms = n_hold ? std::sqrt(sum_hold2 / n_hold) : -1.0;
   const double hold_end_rms = n_hold_end ? std::sqrt(sum_hold_end2 / n_hold_end) : -1.0;
@@ -2615,7 +2628,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "pre_acc=%.2f pre_astd=%.3f pre_gyr=%.3f pre_gstd=%.3f "
               "gnss_susp=%d gnss_crej=%u gnss_cres=%.3f\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
-              hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
+              hold_rms, max_hold, hold_end_rms,
+              max_roll, max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
               gnss_status.fix3d_count, gnss_status.quality_fail_count,
               gnss_status.tow_mismatch_count, gnss_status.duplicate_itow_count,
@@ -2645,8 +2659,10 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   std::printf("SIL_REAL_JSON {\"profile\":%d,\"seed\":%d,\"final_alt\":%.3f,"
               "\"nav_alt_mean\":%.3f,\"pos_rms\":%.3f,\"pos_max\":%.3f,"
               "\"hold_rms\":%.3f,\"hold_max\":%.3f,\"hold_end_rms\":%.3f,"
+              "\"pos_rms_preland\":%.3f,"
               "\"max_roll\":%.3f,"
-              "\"max_pitch\":%.3f,\"rms_roll\":%.3f,\"rms_pitch\":%.3f,"
+              "\"max_pitch\":%.3f,\"max_pitch_preland\":%.3f,"
+              "\"rms_roll\":%.3f,\"rms_pitch\":%.3f,"
               "\"nav_init\":%d,\"fix3d\":%u,\"gnss_age\":%.3f,"
               "\"gnss_stale_peak_s\":%.3f,"
               "\"gnss_tmap_invalid\":%u,\"quality_fail\":%u,"
@@ -2690,7 +2706,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"coax_ground_mu\":%.3f,\"coax_servojam\":%d,"
               "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f,\"coax_ix\":%.4f,\"coax_inertia_scale\":%.3f,\"coax_thrust_scale\":%.3f,\"coax_yaw_scale\":%.3f,\"coax_alloc_mode\":%d,\"rc_profile_rows\":%d,\"rc_profile_t_first\":%.3f,\"rc_profile_t_last\":%.3f,\"tilt_sig\":%.3f,\"tilt_drift\":%.3f,\"tilt_dg\":%d,\"tilt_dg_t\":%.2f,\"tilt_hard_t\":%.2f%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
-              hold_rms, max_hold, hold_end_rms, max_roll, max_pitch, rms_roll, rms_pitch,
+              hold_rms, max_hold, hold_end_rms, pos_rms_preland,
+              max_roll, max_pitch, max_pitch_preland, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
               gnss_status.fix3d_count,
               gnss_status.last_measurement_age_s,
@@ -3371,6 +3388,11 @@ int main(int argc, char** argv) {
     scale_pid(kFlightCtrlParams.rate_roll, rate_scale);
     scale_pid(kFlightCtrlParams.rate_pitch, rate_scale);
     scale_pid(kFlightCtrlParams.rate_yaw, rate_scale);
+#ifdef BFS_COAXIAL_VTVL
+    // 共轴控制器参数由通用 PID 派生；缩放后必须重新 apply，
+    // 否则 --att/--rate-gain-scale 对共轴完全无效（2026-11-04 发现）。
+    applyCoaxialCtrlFlightParams(kFlightCtrlParams.coax);
+#endif
   }
   kFlightCtrlParams.gnss_lever_x_m = g_gnss_lever_param[0];
   kFlightCtrlParams.gnss_lever_y_m = g_gnss_lever_param[1];
