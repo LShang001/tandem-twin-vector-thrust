@@ -197,6 +197,9 @@ int main()
     CHECK(std::fabs(tilt_out.commands[2].value) < 1e-4f &&
               std::fabs(tilt_out.commands[3].value) < 1e-4f,
           "P6 大倾角保护锁电机");
+    CHECK(std::fabs(tilt_out.commands[0].value - 50.0f) < 1e-4f &&
+              std::fabs(tilt_out.commands[1].value - 50.0f) < 1e-4f,
+          "P6 大倾角保护TVC回中50%");
 
     in.attitude_roll_deg = 0.0f;
     in.unlocked = false;
