@@ -250,10 +250,15 @@ void setup()
     Serial8.print(cfg.msg_eoe_ok ? "OK" : "FAIL");
     Serial8.print(" verify=");
     Serial8.println(cfg.verify_ok ? "OK" : "FAIL");
-    // ★2026-11-03：检测窗口与配置轮询期间 ubx.Pump() 已把 epoch 入队，但导航
-    // 任务尚未注册；不清空会让上电先消费最多 1.5 s 前的过期历元（队列容量 4，
-    // 实测上电 queue_overflow=16）。只清队列，保留解析统计。
-    ubx.ClearEpochQueue();
+    // ★2026-11-03：检测窗口与配置轮询期间 Serial4 已积压大量 UBX 字节，且
+    // ubx.Pump() 把 epoch 入队但导航任务尚未启动；只清队列不够——导航启动后
+    // 第一次 Pump 会把积压字节重新解析成历元，再次填满容量 4 的队列（实测
+    // 上电 qovf=16）。先排空 UART RX，再 Reset 解析器状态/统计/队列。
+    while (gpsSerialPort.available() > 0)
+    {
+      (void)gpsSerialPort.read();
+    }
+    ubx.Reset();
   }
 
   // ====================================================================
@@ -492,6 +497,18 @@ void setup()
 
   Serial8.println("VTVL_ElectricDualRotor_FC Initialized.");
   Serial8.println("System Setup Complete. Starting main loop...");
+
+  // ★2026-11-03：1.6 的排空之后还要初始化 Flash/CAN/传感器等数秒，期间
+  // Serial4 继续以 10 Hz 收数；若不在进 loop 前再排空，第一次 Pump 会把
+  // 十几帧积压一次解析，容量 4 的 epoch 队列仍会 qovf=16（实测）。
+  if (nav_data_source == NavDataSource::INTERNAL)
+  {
+    while (gpsSerialPort.available() > 0)
+    {
+      (void)gpsSerialPort.read();
+    }
+    ubx.ClearEpochQueue();
+  }
 
 #ifndef BFS_DISABLE_IWDG
   // 所有初始化完成后再启用看门狗（避免长初始化被 IWDG 误复位）
