@@ -83,6 +83,8 @@
 pio run                    # 编译固件
 pio test -e test           # 宿主回归
 bash test_host/run_all.sh  # 宿主全量（40+ 段，以脚本实际为准）
+bash test_host/fw_sil/run_acceptance.sh          # SIL 验收：真实固件+EKF，3 seeds
+bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 ```
 
 - 宿主构建用 `tools/with-ascii-bin.sh`（subst ASCII 盘符、`BIN_DIR`=仓库 `tmp/`，不写系统 %TEMP%）。
