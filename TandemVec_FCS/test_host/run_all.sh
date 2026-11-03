@@ -27,10 +27,10 @@ esac
 fail=0
 
 run_one() {
-  local src="$1" name="$2" extra_includes="$3"
+  local src="$1" name="$2" extra_includes="$3" extra_sources="${4:-}"
   local out="$BIN_DIR/$name$EXE_SUFFIX"
   echo "---- 编译 $name ----"
-  if ! $CXX -std=$STD $INCLUDES $extra_includes "$src" -o "$out" 2>&1; then
+  if ! $CXX -std=$STD $INCLUDES $extra_includes "$src" $extra_sources -o "$out" 2>&1; then
     echo "[BUILD FAIL] $name"
     fail=1
     return
@@ -130,8 +130,8 @@ run_one "$ROOT/test_host/test_gnss_epoch_timing.cpp"    get ""
 run_one "$ROOT/test_host/test_gnss_pps_latency.cpp"      pps ""
 run_one "$ROOT/test_host/test_gnss_delay_batch.cpp"      bdelay ""
 run_one "$ROOT/test_host/test_gnss_delay_auto.cpp"       dauto ""
-run_one "$ROOT/test_host/test_ins_vibration_adaptive.cpp" vib ""
-run_one "$ROOT/test_host/test_ins_vibration_hf.cpp"        vibhf ""
+run_one "$ROOT/test_host/test_ins_vibration_adaptive.cpp" vib "-I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src" "$ROOT/lib/units/src/convang.cpp $ROOT/lib/units/src/convangacc.cpp $ROOT/lib/units/src/convangvel.cpp"
+run_one "$ROOT/test_host/test_ins_vibration_hf.cpp"        vibhf "-I$ROOT/lib/navigation-main/src -I$ROOT/lib/units/src" "$ROOT/lib/units/src/convang.cpp $ROOT/lib/units/src/convangacc.cpp $ROOT/lib/units/src/convangvel.cpp"
 run_one "$ROOT/test_host/test_bias_temp_observer.cpp" btemp ""
 run_one "$ROOT/test_host/test_bias_temp_table.cpp" btable ""
 run_one "$ROOT/test_host/test_bias_temp_pipeline.cpp" btpipe ""

@@ -356,7 +356,8 @@ int main(int argc, char **argv)
   //     `set_max_tau_s()` 真的改变搜索范围（SIL `--delay-grid-max-ms` 的前置），
   //     并再次确认"大延迟估不出"首先是搜索范围问题、其次才是能不能应用。 */
   bool t10_clamped = false;
-  g_max_tau_override = 0.0;
+  // 默认上界已提到 400 ms（2026-11-01）；要验证“网格端点钳位”必须显式压回 150 ms。
+  g_max_tau_override = 0.15;
   HdRun(0.200, 45.0, -1.0, 5.0, 20261028u,
         [&](double, const InsGnssDelayAutoResult &,
             const InsGnssDelayAutoDiag &d) {
