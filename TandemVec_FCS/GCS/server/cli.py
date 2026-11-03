@@ -550,7 +550,7 @@ def _dbg_collect(dur):
             # 调试入口切换瞬间，串口/OS 缓冲区里常残留进入 DBG 前的 AnoCom
             # 遥测帧；drain_text 是纯 UTF-8 解码，若直接打印会把它们当乱码文本。
             # 只接受可打印文本行，二进制帧（含 NUL/控制字符）在此丢弃。
-            if ln.strip() and all(ord(ch) >= 32 or ch == '\t' for ch in ln):
+            if ln.strip() and all(ord(ch) >= 32 or ch in '\t\r' for ch in ln):
                 lines.append(ln)
     return lines
 
