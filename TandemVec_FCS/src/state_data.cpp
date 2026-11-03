@@ -519,6 +519,10 @@ volatile unsigned long last_guidance_command_millis = 0;
 float guidance_accel_E_cmd = 0.0f;
 float guidance_accel_N_cmd = 0.0f;
 float guidance_accel_U_cmd = 0.0f;
+uint32_t g_guidance_rx_frames = 0;
+uint32_t g_guidance_rx_bad = 0;
+uint32_t g_guidance_rx_last_ms = 0;
+uint32_t g_posvel_tx_skipped = 0;
 
 // --- 7.3 导航与状态估计结果 ---
 float estimated_height = 0.0f;

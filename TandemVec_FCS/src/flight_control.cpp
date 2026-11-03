@@ -47,6 +47,10 @@
 // 解锁上升沿调用：把上一架次残留的目标点锁存与模式沿清掉。
 void resetPositionModeEntryLatch();
 
+#ifdef BFS_GUIDED_THRUST_ADAPT
+static float s_thrust_gain_est = 1.0f; // 推力增益在线估计（1=名义）
+#endif
+
 // GUIDED 加速度慢积分修正状态（仅 BFS_GUIDED_ACCEL_TRIM 宏开启时参与编译）。
 // 油门-推力映射存在质量/电压/个体差异等不确定性，纯前馈无法精确实现制导
 // 加速度指令，故用低带宽积分修正稳态误差；默认关，不改变出厂行为。
@@ -69,9 +73,6 @@ void resetPositionModeEntryLatch();
 static float s_guid_accel_trim_up = 0.0f;
 static float s_guid_accel_meas_lpf = 0.0f;
 static int s_guid_accel_settle_steps = 0;
-#ifdef BFS_GUIDED_THRUST_ADAPT
-static float s_thrust_gain_est = 1.0f; // 推力增益在线估计（1=名义）
-#endif
 static constexpr float s_guid_accel_trim_ki = BFS_GUIDED_ACCEL_TRIM_KI;
 static constexpr float s_guid_accel_trim_limit = BFS_GUIDED_ACCEL_TRIM_LIMIT;
 static constexpr float s_guid_accel_meas_alpha = BFS_GUIDED_ACCEL_TRIM_ALPHA;
@@ -591,8 +592,8 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
       // 如果上位机发 0，代表垂直匀速运动；如果上位机发 >0，代表向上加速。
       target_acceleration_z = guidance_accel_U_cmd;
 
-#ifdef BFS_GUIDED_ACCEL_TRIM
-      // ── 加速度慢积分修正（默认关，宏开启后生效）───────────────────────
+#if defined(BFS_GUIDED_ACCEL_TRIM) || defined(BFS_GUIDED_THRUST_ADAPT)
+      // ── 加速度观测与慢积分/增益自适应（默认关，宏开启后生效）───────────
       // 动机：油门-推力映射存在不确定性（质量变化、电池电压下降、ESC 个体
       // 差异、气动阻力），纯前馈无法精确复现制导下发的运动学加速度。
       // 安全性优先（真实飞行振动会让加速度计噪声非常大）：
@@ -659,6 +660,7 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
             ekf_gravity_mps2;
       }
 #endif
+#ifdef BFS_GUIDED_ACCEL_TRIM
       // ① 强低通（进 GUIDED 首拍直接用实测值初始化，避免从 0 爬升造成启动过冲）
       if (s_guid_accel_settle_steps == 200)
       {
@@ -691,7 +693,8 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
                      ? -s_guid_accel_trim_limit
                      : s_guid_accel_trim_up);
       target_acceleration_z += s_guid_accel_trim_up;
-#endif
+#endif // BFS_GUIDED_ACCEL_TRIM
+#endif // BFS_GUIDED_ACCEL_TRIM || BFS_GUIDED_THRUST_ADAPT
 
       // [关键]：这里不调用 altitudeVelocityPIDController.compute()
       // 也不调用 reset()。PID 对象的内部状态（尤其是积分项 I_term）保持不变（冻结）。
@@ -1457,6 +1460,17 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
   }
   else if (mode == GUIDED)
   {
+#ifdef BFS_GUIDED_THRUST_ADAPT
+    // 进入 GUIDED 首拍把增益估计复位为名义值，避免上一段制导残值
+    {
+      static ControlMode s_prev_mode_adapt = MANUAL;
+      if (s_prev_mode_adapt != GUIDED)
+      {
+        s_thrust_gain_est = 1.0f;
+      }
+      s_prev_mode_adapt = mode;
+    }
+#endif
 #ifdef BFS_GUIDED_ACCEL_TRIM
     // 进入 GUIDED 的那一拍清零积分，避免上一段制导/其他模式的残值带进来
     static ControlMode s_prev_mode_for_trim = MANUAL;
@@ -1465,9 +1479,6 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
       s_guid_accel_trim_up = 0.0f;
       s_guid_accel_meas_lpf = 0.0f;
       s_guid_accel_settle_steps = 200; // 1 s @200 Hz：预热，不积分
-#ifdef BFS_GUIDED_THRUST_ADAPT
-      s_thrust_gain_est = 1.0f;
-#endif
     }
     s_prev_mode_for_trim = mode;
 #endif

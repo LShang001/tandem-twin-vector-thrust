@@ -240,10 +240,34 @@ static void _cfg_rate(Uart &serial, uint16_t meas_rate_ms)
 }
 
 // CFG-MSG（8B）：UART1 上使能指定消息
+// CFG-MSG（8 字节版）：payload = cls, id, rateDDC, rateUART1, rateUART2,
+// rateUSB, rateSPI, reserved。
+// ★2026-11-03 修复：旧实现把 rate 放在 rateDDC、UART1/UART2 全 0，接收机
+//   仍回 ACK，但串口（UART1/UART2）上根本不输出 NAV-PVT；现场表现为
+//   ubxcfg status 全 OK 而 ubxstat 的 pvt 恒为 0。这里对全部端口同速率。
 static void _cfg_msg(Uart &serial, uint8_t cls, uint8_t id, uint8_t rate)
 {
-  uint8_t p[8] = {cls, id, rate, 0, 0, 0, 0, 0};
+  uint8_t p[8] = {cls, id, rate, rate, rate, rate, 0, 0};
   _ubx_send(serial, 0x06, 0x01, p, 8);
+}
+
+// CFG-VALSET（0x06 0x8A，F10 SPG 6.00 / protocol 40 推荐路径）：
+// payload = version(1B)=0, layers(1B)=RAM(0x01), reserved(2B), 然后重复
+// [key(4B LE) + value(1B)]。按键 CFG_MSGOUT-UBX_NAV_PVT_UART1=0x20910007、
+// CFG_MSGOUT-UBX_NAV_EOE_UART1=0x20910160（F10 SPG 6.00 ID §4.9.10）。
+static void _cfg_valset_pvt_eoe_uart1(Uart &serial, uint8_t rate)
+{
+  uint8_t p[14] = {0x00, 0x01, 0x00, 0x00};
+  auto put = [&p](uint8_t off, uint32_t key, uint8_t value) {
+    p[off + 0] = static_cast<uint8_t>(key & 0xFFU);
+    p[off + 1] = static_cast<uint8_t>((key >> 8) & 0xFFU);
+    p[off + 2] = static_cast<uint8_t>((key >> 16) & 0xFFU);
+    p[off + 3] = static_cast<uint8_t>((key >> 24) & 0xFFU);
+    p[off + 4] = value;
+  };
+  put(4, 0x20910007U, rate);  // CFG_MSGOUT_UBX_NAV_PVT_UART1
+  put(9, 0x20910160U, rate);  // CFG_MSGOUT_UBX_NAV_EOE_UART1
+  _ubx_send(serial, 0x06, 0x8A, p, sizeof(p));
 }
 
 // CFG-NAV5（36B）读改写：mask 按需置位，只改指定字段（-1/0 表示不改）
@@ -437,6 +461,14 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   r.cfg_frames_sent++;
   r.msg_eoe_ok = _ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
   if (r.msg_eoe_ok) r.cfg_acks_received++;
+
+  // 5. CFG-VALSET（F10 SPG 6.00 / protocol 40）：CFG-MSG 已 deprecated，
+  //    官方推荐按键配置。老接收机（M8N）不认此消息会 NAK/超时，不影响前面的
+  //    CFG-MSG 兼容路径，因此失败只记录不阻断。
+  _cfg_valset_pvt_eoe_uart1(serial, 1);
+  r.cfg_frames_sent++;
+  r.valset_ok = _ubx_wait_ack(serial, 0x06, 0x8A, kAckTimeoutMs);
+  if (r.valset_ok) r.cfg_acks_received++;
 
   // 5. CFG-NAV5 动态模型（读改写；2026-08-09 修复 mask/dynModel 错位）
   if (o.airborne_g == 2 || o.airborne_g == 4)

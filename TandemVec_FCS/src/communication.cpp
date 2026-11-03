@@ -184,7 +184,7 @@ static const float MAX_SAFE_ACCEL_Z = 10.0f;
 // 统计各通道跳过次数，供调试参考（可通过 Serial8 查看）。
 static uint32_t ano_tx_skipped = 0;
 static uint32_t elrs_tx_skipped = 0;
-static uint32_t posvel_tx_skipped = 0;
+// g_posvel_tx_skipped 定义在 state_data.cpp，供 DBG health 观测
 
 // ===== ELRS 链路状态（2026-08-08 灯效扩展）=====
 // ELRS 链路质量 LQ (0-100)：onPacketLinkStatistics 回调更新，
@@ -1546,7 +1546,7 @@ void sendPositionVelocityData()
   // 非阻塞保护：TX 缓冲不足时跳过本帧，避免阻塞控制环。
   if (Serial5.availableForWrite() < kPosVelFrameLen)
   {
-    posvel_tx_skipped++;
+    g_posvel_tx_skipped++;
     return;
   }
   Serial5.write(serial5Buffer, kPosVelFrameLen);
@@ -1647,6 +1647,8 @@ void handleGuidanceCommands()
 
           new_guidance_command_received = true;
           last_guidance_command_millis = millis();
+          g_guidance_rx_frames++;
+          g_guidance_rx_last_ms = last_guidance_command_millis;
 
           // 诊断：需要观测指令逐帧值时用 DBG 命令读 guidance_accel_*_cmd，
           // 不要在 500Hz 任务内打印（Serial8 阻塞会挤占控制环时间片）。
@@ -1654,6 +1656,7 @@ void handleGuidanceCommands()
         else
         {
           // 可以在这里添加错误计数或警告，说明接收到了非法的加速度值
+          g_guidance_rx_bad++;
         }
 
         // 成功接收一帧后，回到寻找下一帧头的状态
@@ -2177,6 +2180,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   gpsproto [ubx|nmea|auto] [baud] - GNSS 解析协议查看/切换"));
         serial.println(F("[DBG]   nmea              - NMEA 备用链路状态（fix/sv/pdop/句统计）"));
         serial.println(F("[DBG]   ubxcfg            - UBX 接收机自动配置（重跑）"));
+        serial.println(F("[DBG]   health            - 一屏汇总：IMU/气压/GNSS/EKF/Serial5 上行"));
         serial.println(F("[DBG]   ubxstat           - UBX 解析器统计（rx/校验/超长/pvt/eoe/队列）"));
         serial.println(F("[DBG]   ubxcfg status     - 上次配置结果"));
         serial.println(F("[DBG]   ubxcfg rst        - GNSS 软复位"));
@@ -2404,10 +2408,100 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(ubx.pvt_duplicate_in_epoch_count());
         serial.print(F(" tow_mismatch="));
         serial.println(ubx.tow_mismatch_count());
+        serial.print(F("[DBG] last cls=0x"));
+        serial.print(ubx.last_msg_cls(), HEX);
+        serial.print(F(" id=0x"));
+        serial.print(ubx.last_msg_id(), HEX);
+        serial.print(F(" len="));
+        serial.println(ubx.last_msg_len());
         serial.print(F("[DBG] queued="));
         serial.print(ubx.queued_epoch_count());
         serial.print(F(" queue_overflow="));
         serial.println(ubx.queue_overflow_count());
+      }
+      else if (strcmp(line, "health") == 0)
+      {
+        // 一屏汇总：模式/IMU/气压/GNSS/EKF/Serial5 上行
+        serial.println(F("[DBG] == HEALTH =="));
+        serial.print(F("[DBG] mode="));
+        serial.print(static_cast<int>(g_current_flight_mode));
+        serial.print(F(" unlock="));
+        serial.print(g_is_unlocked ? 1 : 0);
+        serial.print(F(" uptime_s="));
+        serial.println(millis() / 1000UL);
+
+        serial.print(F("[DBG] imu state="));
+        serial.print(g_imu_health_state);
+        serial.print(F(" flags=0x"));
+        serial.print(g_imu_health_flags, HEX);
+        serial.print(F(" rate="));
+        serial.print(g_imu_health_sample_rate_hz, 1);
+        serial.print(F("Hz frz="));
+        serial.print(g_imu_health_frozen_s, 2);
+        serial.print(F(" drop="));
+        serial.print(g_imu_health_no_sample_s, 2);
+        serial.println(F("s"));
+
+        serial.print(F("[DBG] baro alt="));
+        serial.print(baro_altitude, 2);
+        serial.print(F("m est="));
+        serial.print(estimated_height, 2);
+        serial.print(F("m suspect="));
+        serial.print(g_baro_health_suspect ? 1 : 0);
+        serial.print(F(" flags=0x"));
+        serial.println(g_baro_health_flags, HEX);
+
+        serial.print(F("[DBG] gnss fix="));
+        serial.print(gnss_status.last_obs_fix_type, 0);
+        serial.print(F(" sv="));
+        serial.print(gnss_status.last_obs_num_sv, 0);
+        serial.print(F(" age_ms="));
+        serial.print(gnss_status.last_measurement_age_s * 1000.0f, 0);
+        serial.print(F(" pvt="));
+        serial.print(ubx.nav_pvt_count());
+        serial.print(F(" eoe="));
+        serial.print(ubx.nav_eoe_count());
+        serial.print(F(" q="));
+        serial.print(gnss_status.pending_epoch_count);
+        serial.print(F(" qovf="));
+        serial.println(gnss_status.parser_queue_overflow_count);
+
+        serial.print(F("[DBG] ekf rpy_deg="));
+        serial.print(AHRS_Packet.Roll * 57.29578f, 2);
+        serial.print(F("/"));
+        serial.print(AHRS_Packet.Pitch * 57.29578f, 2);
+        serial.print(F("/"));
+        serial.print(AHRS_Packet.Heading * 57.29578f, 2);
+        serial.print(F(" vel="));
+        serial.print(INS_GNSS_Packet.velocity_north, 2);
+        serial.print(F("/"));
+        serial.print(INS_GNSS_Packet.velocity_east, 2);
+        serial.print(F("/"));
+        serial.print(INS_GNSS_Packet.velocity_down, 2);
+        serial.print(F(" pos_ned="));
+        serial.print(relative_north, 2);
+        serial.print(F("/"));
+        serial.print(relative_east, 2);
+        serial.print(F("/"));
+        serial.print(relative_down, 2);
+        serial.print(F(" tilt_sig="));
+        serial.println(g_nav_tilt_sigma_deg, 2);
+
+        serial.print(F("[DBG] uplink rx="));
+        serial.print(g_guidance_rx_frames);
+        serial.print(F(" bad="));
+        serial.print(g_guidance_rx_bad);
+        serial.print(F(" age_ms="));
+        if (g_guidance_rx_last_ms == 0)
+        {
+          serial.print(-1);
+        }
+        else
+        {
+          serial.print(static_cast<uint32_t>(millis() - g_guidance_rx_last_ms));
+        }
+        serial.print(F(" txskip="));
+        serial.println(g_posvel_tx_skipped);
       }
       else if (strncmp(line, "ubxcfg", 6) == 0) {
         // UBX 接收机自动配置（重跑 / 状态查询 / 固化）
@@ -2430,6 +2524,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(r.msg_pvt_ok ? F("OK") : F("FAIL"));
           serial.print(F("/"));
           serial.print(r.msg_eoe_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" val="));
+          serial.print(r.valset_ok ? F("OK") : F("NA"));
           serial.print(F(" nav5="));
           serial.print(r.nav5_ok ? F("OK") : F("FAIL"));
           serial.print(F(" gnss="));

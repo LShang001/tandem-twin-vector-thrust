@@ -39,6 +39,7 @@ struct UbxCfgResult
   bool     rate_ok;           // CFG-RATE（导航频率）成功
   bool     msg_pvt_ok;        // CFG-MSG NAV-PVT 成功
   bool     msg_eoe_ok;        // CFG-MSG NAV-EOE 成功
+  bool     valset_ok;         // CFG-VALSET（F10/M10 推荐路径，UART1 PVT+EOE）成功
   bool     nav5_ok;           // CFG-NAV5（动态模型，读改写）成功
   bool     gnss_ok;           // CFG-GNSS（星座使能，读改写）成功
   bool     sbas_ok;           // CFG-SBAS（差分增强）成功

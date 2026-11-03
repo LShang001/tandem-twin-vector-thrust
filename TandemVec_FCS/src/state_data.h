@@ -744,6 +744,11 @@ extern volatile unsigned long last_guidance_command_millis;
 extern float guidance_accel_E_cmd;
 extern float guidance_accel_N_cmd;
 extern float guidance_accel_U_cmd;
+// Serial5 制导上行链路统计（DBG health 用；不参与控制）
+extern uint32_t g_guidance_rx_frames;   // 合法 14B 帧累计
+extern uint32_t g_guidance_rx_bad;      // 安全门拒绝的帧累计
+extern uint32_t g_guidance_rx_last_ms;  // 最近合法帧时刻
+extern uint32_t g_posvel_tx_skipped;    // 74B 下行因 TX 缓冲不足跳过次数
 
 // --- 7.3 导航与状态估计结果 ---
 extern float estimated_height;
