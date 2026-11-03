@@ -2382,6 +2382,35 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.println(F("[DBG] usage: wsstatic <0|1>"));
         }
       }
+      else if (strcmp(line, "imufifo") == 0) {
+        // 一次性 FIFO 自检：开 FIFO、等 20 ms、读最多 8 个 Packet 3、再关。
+        // 只用于地面诊断，不改变控制路径；数据用于确认 header/量纲/SPI 批量读。
+        if (IMU == nullptr) {
+          serial.println(F("[DBG] imufifo: IMU null"));
+        } else {
+          const int en = IMU->enableFifo();
+          if (en < 0) {
+            serial.println(F("[DBG] imufifo: enable failed"));
+          } else {
+            delay(20);
+            ImuFifoSample smp[8];
+            const int n = IMU->readFifo(smp, 8);
+            serial.print(F("[DBG] imufifo n="));
+            serial.println(n);
+            if (n > 0) {
+              for (int i = 0; i < n; ++i) {
+                serial.print(F("  ax=")); serial.print(smp[i].acc[0], 3);
+                serial.print(F(" ay=")); serial.print(smp[i].acc[1], 3);
+                serial.print(F(" az=")); serial.print(smp[i].acc[2], 3);
+                serial.print(F(" gx=")); serial.print(smp[i].gyr[0], 3);
+                serial.print(F(" gy=")); serial.print(smp[i].gyr[1], 3);
+                serial.print(F(" gz=")); serial.println(smp[i].gyr[2], 3);
+              }
+            }
+            IMU->disableFifo();
+          }
+        }
+      }
       else if (strncmp(line, "tasks", 5) == 0) {
         // 任务调度统计：实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷（打印后清零）
         schedulerStatsPrint(serial);

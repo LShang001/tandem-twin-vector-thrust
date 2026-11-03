@@ -54,6 +54,37 @@ public:
 
   int begin(const ImuConfig &cfg) override;
 
+  int enableFifo() override { return (imu_.enableFifoStream(true, true, true) == 0) ? 1 : -1; }
+  int disableFifo() override { return (imu_.disableFifoStream() == 0) ? 1 : -1; }
+  int readFifo(ImuFifoSample *out, size_t max) override
+  {
+    if (out == nullptr || max == 0U)
+    {
+      return -1;
+    }
+    if (max > 8U)
+    {
+      max = 8U;
+    }
+    ICM42688::FifoSample tmp[8];
+    size_t n = 0U;
+    const int rc = imu_.readFifoPackets(tmp, max, &n);
+    if (rc < 0)
+    {
+      return rc;
+    }
+    for (size_t i = 0; i < n; ++i)
+    {
+      out[i].acc[0] = tmp[i].acc[0];
+      out[i].acc[1] = tmp[i].acc[1];
+      out[i].acc[2] = tmp[i].acc[2];
+      out[i].gyr[0] = tmp[i].gyr[0];
+      out[i].gyr[1] = tmp[i].gyr[1];
+      out[i].gyr[2] = tmp[i].gyr[2];
+    }
+    return static_cast<int>(n);
+  }
+
   int dataReady() override { return imu_.getAGT(); }
 
   float accX() override { return imu_.accX(); }

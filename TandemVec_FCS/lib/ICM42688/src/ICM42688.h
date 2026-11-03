@@ -238,6 +238,23 @@ public:
    */
   float temp() const { return _t; }
 
+  /// FIFO Packet 3 输出（已按当前 FSR/校准换算成 g / dps）。
+  struct FifoSample
+  {
+    float acc[3];
+    float gyr[3];
+  };
+
+  /// 按 DS-000347 §6.4 开启 accel+gyro(+temp) 的 Stream-to-FIFO。
+  /// 返回 0 成功；<0 写寄存器失败。
+  int enableFifoStream(bool accel = true, bool gyro = true, bool temp = true);
+  /// 关闭 FIFO 并回到 Bypass 模式。
+  int disableFifoStream();
+
+  /// 批量读取 FIFO 中的 Packet 3（16B/包），最多 max 个；count 返回实际包数。
+  /// 返回 >=0 成功；<0 读失败/包 header 非法（调用方应 flush FIFO）。
+  int readFifoPackets(FifoSample *out, size_t max, size_t *count);
+
   int calibrateGyro();
   float getGyroBiasX();
   float getGyroBiasY();

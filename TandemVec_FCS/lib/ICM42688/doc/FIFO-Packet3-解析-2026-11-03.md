@@ -68,3 +68,23 @@ Header（0x5F 配置为 accel+gyro、非 20-bit）：
 4. 异常处理：FIFO overflow/header 非法时 flush，并计数上报。
 
 > 在完成 1–4 之前，飞控仍走现有 UI 轮询路径；本文件只证明包格式与解析正确。
+
+## 6. 上板集成试验（2026-11-03，失败，已回退）
+
+在 `[env:TandemVec_FCS_FIFO]` 下把 FIFO 批量平均接入 `readIMUData`：
+
+| 方案 | IMU 任务 | Navigation | 结果 |
+|---|---|---|---|
+| 逐包 16B 事务 | avg 136 µs、max 531 µs | 183 Hz、max 10.3 ms | 不可用 |
+| 单次 burst 读全部包 | avg 138 µs、max 497 µs | 170 Hz、max 11.4 ms | 不可用 |
+
+- FIFO 读数本身正确：`imufifo` 读到 8 包，静止 `ay≈0.994 g`、gyro≈0。
+- 但每任务读 FIFO + 批量平均把 IMU 任务从 ~105 µs 抬到 138 µs，
+  主循环 pass 变长，Navigation 从 200 Hz 掉到 170–183 Hz，EKF 位置发散。
+- 根因：FIFO 读/解析没有放到独立的高优先级/DMA 通道，仍在协作主循环里
+  与 Navigation 抢时间；单纯“批量平均”不能解决实时性。
+- **已撤销 `sensor_imu.cpp` 集成，默认固件继续 UI 轮询；FIFO 只保留
+  驱动接口 + `imufifo` 地面自检 + Packet 3 解析器/单测。**
+
+后续正确路径：SPI DMA + 独立采集任务/中断，把 FIFO 搬运与解析移出
+200 Hz 主循环；在没有独立采集通道前，不再把 FIFO 接回 `readIMUData`。

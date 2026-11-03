@@ -87,6 +87,13 @@ enum class ImuLpfBw : uint8_t
  *   现役硬件（ICM42688 @ 2000Hz）行为不变；若换 ICM45686，同一配置会落到
  *   3200Hz（最小且不小于 2000 的可用档），需重新评估 EKF 的 IMU 降采样假设。
  */
+/// FIFO 批量样本（已按驱动校准换算，acc 单位 g、gyr 单位 dps）。
+struct ImuFifoSample
+{
+  float acc[3];
+  float gyr[3];
+};
+
 struct ImuConfig
 {
   /// 加速度计 ODR 目标值 (Hz)，见上方 ODR 语义说明。
@@ -148,6 +155,12 @@ public:
   virtual int begin(const ImuConfig &cfg) = 0;
 
   /// 轮询数据就绪。返回 1 表示有新样本可取。
+  /// 可选 FIFO 能力：默认不支持（返回 -1）；支持的后端返回 >=0。
+  virtual int enableFifo() { return -1; }
+  virtual int disableFifo() { return -1; }
+  /// 批量读取 FIFO，返回包数（>=0）；负数表示错误。
+  virtual int readFifo(ImuFifoSample *out, size_t max) { (void)out; (void)max; return -1; }
+
   virtual int dataReady() = 0;
 
   /// 加速度 X/Y/Z，单位 g（芯片原生轴向，未做坐标系变换）。

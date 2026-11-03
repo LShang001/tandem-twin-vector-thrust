@@ -2,6 +2,7 @@
 #include "ICM42688.h"
 #include "registers.h"
 #include "imu_filter_math.h"
+#include "icm42688_fifo_packet.h"
 #include <cmath>
 
 using namespace ICM42688reg;
@@ -1015,4 +1016,100 @@ int ICM42688::readWhoAmIValue(uint8_t &value)
   }
   value = v;
   return 0;
+}
+
+
+int ICM42688::enableFifoStream(bool accel, bool gyro, bool temp)
+{
+  if (setBank(0) < 0)
+  {
+    return -1;
+  }
+  // FIFO_CONFIG(0x16) bits7:6 = 01 -> Stream-to-FIFO
+  if (writeRegister(0x16, 0x40) < 0)
+  {
+    return -2;
+  }
+  uint8_t cfg = 0;
+  if (accel) cfg |= 0x01;
+  if (gyro) cfg |= 0x02;
+  if (temp) cfg |= 0x04;
+  // FIFO_CONFIG1(0x5F): bit0 accel / bit1 gyro / bit2 temp
+  if (writeRegister(0x5F, cfg) < 0)
+  {
+    return -3;
+  }
+  return 0;
+}
+
+int ICM42688::disableFifoStream()
+{
+  if (setBank(0) < 0)
+  {
+    return -1;
+  }
+  if (writeRegister(0x5F, 0x00) < 0)
+  {
+    return -2;
+  }
+  if (writeRegister(0x16, 0x00) < 0) // Bypass
+  {
+    return -3;
+  }
+  return 0;
+}
+
+int ICM42688::readFifoPackets(FifoSample *out, size_t max, size_t *count)
+{
+  if (out == nullptr || count == nullptr)
+  {
+    return -1;
+  }
+  *count = 0;
+  if (setBank(0) < 0)
+  {
+    return -2;
+  }
+  _useSPIHS = true;
+  uint8_t count_buf[2] = {};
+  if (readRegisters(0x2E, 2, count_buf) < 0)
+  {
+    return -3;
+  }
+  const size_t bytes = (static_cast<size_t>(count_buf[0] & 0x0F) << 8) |
+                       static_cast<size_t>(count_buf[1]);
+  size_t packets = bytes / icm42688_fifo::kPacket3Size;
+  if (packets > max)
+  {
+    packets = max; // 剩余包留给下一次任务，不丢 FIFO
+  }
+  if (packets == 0U)
+  {
+    return 0;
+  }
+  // 一次 burst 读完本次要取的包（FIFO_DATA 是数据口，连续读自动前进）；
+  // 逐包 16B 事务会让 IMU 任务从 ~105us 涨到 ~136us 并拖慢主循环。
+  const size_t read_bytes = packets * icm42688_fifo::kPacket3Size;
+  uint8_t raw[8U * icm42688_fifo::kPacket3Size] = {};
+  if (read_bytes > sizeof(raw) || readRegisters(0x30, static_cast<uint8_t>(read_bytes), raw) < 0)
+  {
+    return -4;
+  }
+  for (size_t i = 0; i < packets; ++i)
+  {
+    icm42688_fifo::Packet3 parsed{};
+    if (!icm42688_fifo::parsePacket3(&raw[i * icm42688_fifo::kPacket3Size],
+                                     icm42688_fifo::kPacket3Size, parsed))
+    {
+      return -5; // header 非法：调用方 flush FIFO 后恢复
+    }
+    out[i].acc[0] = ((static_cast<float>(parsed.accel[0]) * _accelScale) - _accB[0]) * _accS[0];
+    out[i].acc[1] = ((static_cast<float>(parsed.accel[1]) * _accelScale) - _accB[1]) * _accS[1];
+    out[i].acc[2] = ((static_cast<float>(parsed.accel[2]) * _accelScale) - _accB[2]) * _accS[2];
+    out[i].gyr[0] = (static_cast<float>(parsed.gyro[0]) * _gyroScale) - _gyrB[0];
+    out[i].gyr[1] = (static_cast<float>(parsed.gyro[1]) * _gyroScale) - _gyrB[1];
+    out[i].gyr[2] = (static_cast<float>(parsed.gyro[2]) * _gyroScale) - _gyrB[2];
+    *count = i + 1;
+  }
+  return static_cast<int>(*count);
 }
