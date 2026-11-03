@@ -12,6 +12,12 @@ guidance_bridge.py — 制导算法（SOCP 轨迹规划 + 跟踪）与飞控 SIL
 用法：
   py guidance_bridge.py --gnc-dir "D:/电火箭制导控制/vtvl-gnc/latte-panda/tests" \
       --target 10 3 0 --duration 60 --out tmp/guidance_joint.csv
+
+终端前馈：SOCP 只约束终端 jerk（a_N=a_{N-1}），不保证 a_N=g；t>tf 若继续用
+规划末端 app_acc 当前馈，会形成 kp·Δr=a_ff 的假平衡（实测停在 1.21 m）。
+本脚本在 t>=tf 后把前馈归零，只留 PD，详见
+docs/04-数学建模/代码理论核查/SOCP制导联合仿真-2026-11-03.md。
+
 """
 import argparse
 import os
@@ -110,7 +116,14 @@ class Bridge:
         idx = min(max(idx, 0), len(times) - 1)
         r_ref = self.plan["position"][idx]
         v_ref = self.plan["velocity"][idx]
-        a_ff = self.plan["app_acc"][idx] - np.array([self.g0, 0.0, 0.0])
+        # SOCP 只约束终端 jerk（a_N=a_{N-1}），不约束 a_N=g；实测规划末端
+        # app_acc=11.24（悬停应为 9.79），t>tf 继续用它作前馈会形成
+        # kp*Δr=a_ff 的假平衡（SIL 实测停在 1.21 m）。规划结束后前馈归零，
+        # 只留位置/速度反馈把终端误差拉回 0。
+        if t_rel >= float(times[-1]):
+            a_ff = np.zeros(3)
+        else:
+            a_ff = self.plan["app_acc"][idx] - np.array([self.g0, 0.0, 0.0])
 
         r_err = r_ref - state["r"]
         v_err = v_ref - state["v"]
