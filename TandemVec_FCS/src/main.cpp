@@ -154,6 +154,9 @@ void setup()
   Serial3.begin(1500000);          // USART3: 黑匣子数据记录 (15Mbaud, 最高速)
   Serial8.begin(921600);           // UART8:  USB Type-C 调试输出 (921600 baud)
   Serial4.begin(921600);           // UART4:  DETA100 IMU/GNSS 模块数据输入 (921600 baud)
+  // 921600 高速下把 UART4 RX 中断提到最高优先级，避免被 TIM8/SPI/串口其他
+  // 中断延迟导致 RDR 溢出（实测 921600 PVT 长帧 bad_pvt 约 25%）。
+  NVIC_SetPriority(UART4_IRQn, 0);
   Serial6.begin(SERIAL6_BAUDRATE);  // USART6: AnoCom/MAVLink 地面站通信 (波特率见 state_data.h SERIAL6_BAUDRATE)
   Serial5.begin(921600);           // UART5:  上位机轨迹规划接口 (921600 baud)
   setup_transmitter_uart();        // USART2: 发动机控制器/数据转发 (921600 baud)

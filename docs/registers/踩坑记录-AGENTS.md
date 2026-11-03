@@ -200,3 +200,16 @@
 - **备选**：把 GNSS 直接接 PC USB-UART，用 u-center 设
   `CFG-UART1-BAUDRATE=921600`、PVT/EOE 10Hz 并保存；FC 按 921600 直接收数，
   不依赖 FC→GNSS 输入。
+
+## 2026-11-03 921600 GNSS 丢帧根因：UART4 RX 中断优先级太低
+
+- **现象**：NEO-F10N 在 921600 下 `bad_pvt` 约 25%（250/897），
+  `eoe_no_pvt` 281，PVT/EOE 不成对；降到 460800 后基本正常。
+- **误判方向**：先怀疑接线/波特率误差/F10 输入保护，甚至准备降速；实际
+  **UART4 RX 中断被其他中断延迟**，921600 下 10.8 µs/字节，延迟超过一字节
+  就丢字节，表现为 PVT 长帧校验失败。
+- **修复**：`Serial4.begin(921600)` 后 `NVIC_SetPriority(UART4_IRQn, 0)`。
+  上板静默 60 s：`bad_pvt=4`、`bad_other=1`、PVT/EOE=594/596、qovf=0，
+  921600 配置全 OK（val/rate/msg/verify 全绿）。
+- **教训**：高速 UART 丢帧先看中断优先级/临界区，不要先降速；`bad_pvt`
+  与 `bad_other` 分开计数能区分长帧误码和其他帧问题。
