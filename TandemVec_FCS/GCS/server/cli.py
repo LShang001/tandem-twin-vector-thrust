@@ -429,8 +429,10 @@ def cmd_link(a):
         ('0x02 读值', anocom.cmd_read_param_value(0), anocom.FUNC_PARAM_WRITE_READ),
         ('0x03 读信息', anocom.cmd_read_param_info(0), anocom.FUNC_PARAM_INFO),
     ]
+    rates = []
     for name, frame, target in tests:
         ok = sum(1 for _ in range(5) if probe(frame, target))
+        rates.append(ok)
         print(f'{name} 成功率: {ok}/5（每轮最多 3 发）')
 
     # ---- 3. 写确认率（读当前值写回，不改值） ----
@@ -456,10 +458,12 @@ def cmd_link(a):
         print('写确认率: 读参考值失败，跳过')
 
     # ---- 结论 ----
-    if frames > 50:
-        print('结论: 遥测正常；成功率低 = 2M 间歇丢帧（CLI param 已重试兜底）')
-    else:
+    if frames <= 50:
         print('结论: 遥测异常（<50 帧/s）——检查波特率/接线，或固件处于 DBG 模式（cli.py dbg off）')
+    elif all(r == 5 for r in rates) and (val is None or ok_w == 5):
+        print('结论: 链路健康（遥测与参数命令全部通过）')
+    else:
+        print('结论: 遥测正常，但参数/写确认存在丢帧（CLI param 已重试兜底）')
 
 
 def _param_read_single(pid, timeout=1.5, tries=3):
