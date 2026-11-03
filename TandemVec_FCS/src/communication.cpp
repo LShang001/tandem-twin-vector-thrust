@@ -2528,12 +2528,14 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(INS_GNSS_Packet.velocity_east, 2);
         serial.print(F("/"));
         serial.print(INS_GNSS_Packet.velocity_down, 2);
-        serial.print(F(" pos_ned="));
+        serial.print(F(" rel_ned="));
         serial.print(relative_north, 2);
         serial.print(F("/"));
         serial.print(relative_east, 2);
         serial.print(F("/"));
         serial.print(relative_down, 2);
+        serial.print(F(" fake_origin="));
+        serial.print(nav_initialized_with_fake_origin ? 1 : 0);
         serial.print(F(" tilt_sig="));
         serial.println(g_nav_tilt_sigma_deg, 2);
 
