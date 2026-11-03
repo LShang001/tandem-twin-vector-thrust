@@ -42,7 +42,10 @@ private:
 
     // 3. 陀螺仪阈值：0.02 rad/s (约 1.1 deg/s)
     // ICM-42688 的陀螺仪也非常稳，可以设得更严
-    const float STABILITY_GYRO_THRESH = 0.02f;
+    // 2026-11-03：原 0.02 rad/s(1.15 dps) 会让零偏 1.46 dps 的本机永远无法
+    // 进入静止标定（acc 方差/静止时长都满足也没用），heading 以零偏速率漂移。
+    // 放宽到 0.1 rad/s(5.7 dps) 只用于“粗静止”判定；标定仍要求 3 s 静止+4000 样本。
+    const float STABILITY_GYRO_THRESH = 0.1f;
 
     // 4. 需保持静止的持续时间 (ms)
     const int STABILITY_DURATION_MS = 3000;
