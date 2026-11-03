@@ -2463,6 +2463,10 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(estimated_height, 2);
         serial.print(F("m suspect="));
         serial.print(g_baro_health_suspect ? 1 : 0);
+        serial.print(F(" p_hpa="));
+        serial.print(pressure / 100.0f, 2);
+        serial.print(F(" t_c="));
+        serial.print(temperature, 2);
         serial.print(F(" flags=0x"));
         serial.println(g_baro_health_flags, HEX);
 
