@@ -45,6 +45,8 @@ def main():
 
     show("health", run_cli(a.port, "dbg", "health"))
     show("ubxstat", run_cli(a.port, "dbg", "ubxstat"))
+    show("monver", run_cli(a.port, "dbg", "ubxcfg monver"))
+    show("gpsproto", run_cli(a.port, "dbg", "gpsproto"))
     show("tasks", run_cli(a.port, "dbg", "tasks"), keep=8)
 
     if a.uplink_seconds > 0:
