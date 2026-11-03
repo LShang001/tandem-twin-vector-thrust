@@ -2447,7 +2447,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(g_imu_health_flags, HEX);
         serial.print(F(" rate="));
         serial.print(g_imu_health_sample_rate_hz, 1);
-        serial.print(F("Hz frz="));
+        serial.print(F("Hz cal="));
+        serial.print(imuCalibrator.isCalibrated() ? 1 : 0);
+        serial.print(F(" gz_bias_dps="));
+        serial.print(imuCalibrator.gyroBiasDps(2), 3);
+        serial.print(F(" frz="));
         serial.print(g_imu_health_frozen_s, 2);
         serial.print(F(" drop="));
         serial.print(g_imu_health_no_sample_s, 2);

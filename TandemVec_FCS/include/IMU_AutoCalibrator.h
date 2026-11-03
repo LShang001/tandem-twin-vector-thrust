@@ -116,6 +116,11 @@ public:
 
     bool isCalibrated() const { return _is_calibrated; }
     bool isCalibrating() const { return current_state == CALIBRATING; }
+    // 诊断用：返回已标定的某轴陀螺零偏 [dps]，供 health 直接显示。
+    float gyroBiasDps(int axis) const
+    {
+        return (axis >= 0 && axis < 3) ? gyro_bias[axis] * 57.2957795f : 0.0f;
+    }
 
     /**
      * @brief 核心更新函数
