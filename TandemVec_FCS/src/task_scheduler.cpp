@@ -61,6 +61,7 @@ struct TaskStats
   uint32_t gap_max_us;         // 最大执行间隔（抖动上界）
   uint32_t gap_min_us;         // 最小执行间隔（抖动下界）
   uint32_t late_count;         // 迟到次数（间隔 > 1.5×名义周期 = 漏拍）
+  uint32_t missed_count;       // 上次 flag 未消费又被 ISR 置位的次数（真正丢执行）
   uint32_t nominal_period_us;  // 名义周期
 };
 static TaskStats s_stats[MAX_TASKS] = {};
@@ -89,7 +90,7 @@ void schedulerStatsPrint(arduino::Print &out)
   uint64_t total_exec_us = 0;
 
   out.println(F("[DBG] == 任务调度统计 =="));
-  out.println(F("[DBG] 名称         名义Hz 实际Hz 平均us 最大us 间隔min 间隔avg 间隔max 迟到 负荷%"));
+  out.println(F("[DBG] 名称         名义Hz 实际Hz 平均us 最大us 间隔min 间隔avg 间隔max 迟到 丢执行 负荷%"));
   for (uint8_t i = 0; i < taskCount; i++)
   {
     const TaskStats &st = s_stats[i];
@@ -127,9 +128,19 @@ void schedulerStatsPrint(arduino::Print &out)
     out.print(F("   "));
     out.print(st.late_count);
     out.print(F("   "));
+    out.print(st.missed_count);
+    out.print(F("   "));
     out.print(load_pct, 1);
     out.println();
   }
+  out.print(F("[DBG] TIM8 clk="));
+  out.print(TaskTimer->getTimerClkFreq());
+  out.print(F("Hz psc="));
+  out.print(TaskTimer->getPrescaleFactor());
+  out.print(F(" arr="));
+  out.print(TaskTimer->getOverflow(TICK_FORMAT));
+  out.print(F(" tick_hz="));
+  out.println(TaskTimer->getOverflow(HERTZ_FORMAT));
   const float cpu_pct = window_us > 0 ? static_cast<float>(total_exec_us) * 100.0f / static_cast<float>(window_us) : 0.0f;
   out.print(F("[DBG] LOOP 窗口="));
   out.print(window_ms);
@@ -196,6 +207,10 @@ void timerCallback()
     //      使用无符号减法，即使 currentCount 溢出也能正确计算时间差
     if (tasks[i].enabled && (currentCount - tasks[i].lastRunTime >= tasks[i].interval))
     {
+      if (tasks[i].flag)
+      {
+        s_stats[i].missed_count++;  // 上一拍还没被主循环消费：本次到期被合并
+      }
       tasks[i].flag = true;                // 设置任务可执行标志，通知主循环执行该任务
       tasks[i].lastRunTime = currentCount; // 更新上次执行时间戳，为下次调度做准备
 #ifdef BFS_TASK_FRACTIONAL_INTERVALS
