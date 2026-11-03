@@ -71,6 +71,8 @@ namespace bfs
     rx_byte_count_ = 0;
     valid_msg_count_ = 0;
     checksum_fail_count_ = 0;
+    pvt_checksum_fail_count_ = 0;
+    other_checksum_fail_count_ = 0;
     oversize_msg_count_ = 0;
     nav_pvt_count_ = 0;
     nav_eoe_count_ = 0;
@@ -1420,6 +1422,14 @@ namespace bfs
         return true;  // 一帧有效报文就绪，交给 HandleValidMessage。
       }
       checksum_fail_count_++;  // 校验失败：丢弃本帧（应保持为 0，非 0 多为接线/波特率问题）。
+      if (rx_msg_.cls == 0x01U && rx_msg_.id == 0x07U)
+      {
+        pvt_checksum_fail_count_++;  // 92B 的长帧，误码下比 EOE 更容易整帧失败
+      }
+      else
+      {
+        other_checksum_fail_count_++;
+      }
       // 坏帧的 CK_B 也可能恰是下一帧同步字首字节 0xB5，保留重同步机会。
       parser_state_ = (c_ == UBX_HEADER_[0]) ? 1U : 0U;
     }

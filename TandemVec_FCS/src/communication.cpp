@@ -2399,6 +2399,10 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(ubx.oversize_msg_count());
         serial.print(F(" frame_timeout="));
         serial.println(ubx.frame_timeout_count());
+        serial.print(F("[DBG] bad_pvt="));
+        serial.print(ubx.pvt_checksum_fail_count());
+        serial.print(F(" bad_other="));
+        serial.println(ubx.other_checksum_fail_count());
         serial.print(F("[DBG] pvt="));
         serial.print(ubx.nav_pvt_count());
         serial.print(F(" eoe="));

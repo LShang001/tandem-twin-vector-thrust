@@ -248,6 +248,8 @@ namespace bfs
     inline uint32_t rx_byte_count() const { return rx_byte_count_; }              // 累计读入字节数
     inline uint32_t valid_msg_count() const { return valid_msg_count_; }          // 累计校验通过的 UBX 报文数
     inline uint32_t checksum_fail_count() const { return checksum_fail_count_; }  // 累计校验失败数（应保持 0）
+    inline uint32_t pvt_checksum_fail_count() const { return pvt_checksum_fail_count_; }      // 坏帧中 NAV-PVT 数
+    inline uint32_t other_checksum_fail_count() const { return other_checksum_fail_count_; }  // 坏帧中其他消息数
     inline uint32_t oversize_msg_count() const { return oversize_msg_count_; }    // 累计超长(>1024B)被丢弃数
     inline uint32_t frame_timeout_count() const { return frame_timeout_count_; }  // 半帧超时复位次数
     inline uint32_t nav_pvt_count() const { return nav_pvt_count_; }              // 累计收到 NAV-PVT 数
@@ -458,6 +460,8 @@ namespace bfs
     uint32_t rx_byte_count_ = 0;
     uint32_t valid_msg_count_ = 0;
     uint32_t checksum_fail_count_ = 0;
+    uint32_t pvt_checksum_fail_count_ = 0;    // 校验失败的 NAV-PVT 帧数（长帧更易受 UART 误码影响）
+    uint32_t other_checksum_fail_count_ = 0;  // 校验失败的其他 UBX 帧数
     uint32_t oversize_msg_count_ = 0;
     uint32_t frame_timeout_count_ = 0;  // 半帧超时复位次数
     uint32_t nav_pvt_count_ = 0;
