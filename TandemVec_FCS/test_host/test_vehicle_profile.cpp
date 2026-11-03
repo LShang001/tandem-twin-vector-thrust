@@ -205,6 +205,9 @@ int main()
     CHECK(std::fabs(lock_out.commands[2].value) < 1e-4f &&
               std::fabs(lock_out.commands[3].value) < 1e-4f,
           "P6 未解锁锁电机");
+    CHECK(std::fabs(lock_out.commands[0].value - 50.0f) < 1e-4f &&
+              std::fabs(lock_out.commands[1].value - 50.0f) < 1e-4f,
+          "P6 未解锁TVC回中50%");
   }
 
   // P7 非有限输入：不丢通道，回落零点并置 valid=false。

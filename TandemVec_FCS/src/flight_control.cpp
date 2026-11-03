@@ -2681,8 +2681,12 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     }
   }
 
-  g_tvc_upper_deg = output_in.roll_correction_deg;
-  g_tvc_lower_deg = output_in.pitch_correction_deg;
+  // 0xF1 遥测必须与最终下发一致：未解锁/姿态不安全时 mapCoaxialVtvOutputs
+  // 已把两轴舵机回中，这里也写 0，不能把原始开关映射值当实际 TVC 角度。
+  const bool tvc_telemetry_enabled =
+      inputs.is_unlocked && output_in.attitude_safe;
+  g_tvc_upper_deg = tvc_telemetry_enabled ? applied_roll_corr_deg : 0.0f;
+  g_tvc_lower_deg = tvc_telemetry_enabled ? applied_pitch_corr_deg : 0.0f;
   outputs.throttle_percent = final_throttle_pct;
   throttlePercent = final_throttle_pct;
   gnc_tel.throttle_cmd_pct = final_throttle_pct;

@@ -211,10 +211,15 @@ inline OutputCommandSet mapCoaxialVtvOutputs(
         in.attitude_safe &&
         std::fabs(in.attitude_roll_deg) < cal.attitude_limit_deg &&
         std::fabs(in.attitude_pitch_deg) < cal.attitude_limit_deg;
-    if (!in.unlocked || !attitude_ok)
+    const bool output_enabled = in.unlocked && attitude_ok;
+    if (!output_enabled)
     {
         base_us = cal.motor_min_us;
     }
+    // 未解锁/姿态不安全时 TVC 必须回机械中位（50%），不能沿用遥控/手动映射；
+    // 无 RC 链路时 raw stick=0 会被映射成 -10°，曾导致地面舵机顶到限位。
+    const float roll_deg = output_enabled ? in.roll_correction_deg : 0.0f;
+    const float pitch_deg = output_enabled ? in.pitch_correction_deg : 0.0f;
     const float yaw_diff = clampOutput(in.yaw_diff_us,
                                        cal.motor_min_us - base_us,
                                        cal.motor_max_us - base_us);
@@ -226,8 +231,8 @@ inline OutputCommandSet mapCoaxialVtvOutputs(
     const float motor2_pct = (motor2_us - cal.motor_min_us) / safe_span * 100.0f;
 
     float normalized[4] = {
-        in.roll_correction_deg / half,   // 上摆方向：roll 正 → 舵机百分比增大
-        -in.pitch_correction_deg / half, // 外部工程 pitch 映射方向相反
+        roll_deg / half,   // 上摆方向：roll 正 → 舵机百分比增大
+        -pitch_deg / half, // 外部工程 pitch 映射方向相反
         motor1_pct / 100.0f,
         motor2_pct / 100.0f,
     };
