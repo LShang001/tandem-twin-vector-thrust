@@ -102,6 +102,14 @@
 #define BFS_NAVIGATION_EMBEDDED_FAST_PROPAGATION 0
 #endif
 
+// 协方差传播中间量类型（默认 double，保持既有逐值行为）。
+// 打开 BFS_NAVIGATION_EMBEDDED_FLOAT_COVARIANCE=1 后，Phi·P·Phiᵀ 与 Simpson Qd
+// 改用 float 中间量，公式与顺序完全不变，仅替换中间计算精度。用于 Cortex-M7
+// 上消除软件 double 稠密矩阵乘法造成的 5 ms 级协方差传播瓶颈。
+#ifndef BFS_NAVIGATION_EMBEDDED_FLOAT_COVARIANCE
+#define BFS_NAVIGATION_EMBEDDED_FLOAT_COVARIANCE 0
+#endif
+
 #ifndef BFS_NAVIGATION_EMBEDDED_FAST_STABILIZE
 #define BFS_NAVIGATION_EMBEDDED_FAST_STABILIZE 0
 #endif
@@ -3693,9 +3701,14 @@ namespace bfs
       // ─────────────────────────────────────────────────────────────────────
       // 离散过程噪声必须自身保持正半定；使用二阶状态转移的Simpson积分近似
       // Qd = ∫ Phi(t) G Rw G^T Phi(t)^T dt，比零阶保持更接近高频子步传播。
-      const Eigen::Matrix<double, 15, 15> identity_d =
-          Eigen::Matrix<double, 15, 15>::Identity();
-      const Eigen::Matrix<double, 15, 15> fs_d = fs_.cast<double>();
+#if BFS_NAVIGATION_EMBEDDED_FLOAT_COVARIANCE
+      using NavCovScalar = float;
+#else
+      using NavCovScalar = double;
+#endif
+      const Eigen::Matrix<NavCovScalar, 15, 15> identity_d =
+          Eigen::Matrix<NavCovScalar, 15, 15>::Identity();
+      const Eigen::Matrix<NavCovScalar, 15, 15> fs_d = fs_.cast<NavCovScalar>();
 #if BFS_NAVIGATION_EMBEDDED_STRUCTURED_SIMPSON_QC
       /*
        * 高精度 Simpson 路径的等价性能优化：
@@ -3709,38 +3722,38 @@ namespace bfs
        * 所以 Gs * Rw * Gs^T 与下面 4 个 3x3 对角块完全等价。
        * 这里仍继续使用 double Simpson Qd 和 double P 传播，只省掉固定稀疏矩阵的稠密乘法。
        */
-      const Eigen::Matrix<double, 15, 15> qc_d =
+      const Eigen::Matrix<NavCovScalar, 15, 15> qc_d =
           Icm45686StructuredContinuousQc(
               static_cast<double>(accel_std_mps2_ * q_accel_scale_),
               static_cast<double>(gyro_std_radps_),
               static_cast<double>(accel_markov_bias_std_mps2_),
               static_cast<double>(accel_tau_s_),
               static_cast<double>(gyro_markov_bias_std_radps_),
-              static_cast<double>(gyro_tau_s_));
+              static_cast<double>(gyro_tau_s_)).cast<NavCovScalar>();
 #else
-      const Eigen::Matrix<double, 15, 12> gs_d = gs_.cast<double>();
-      const Eigen::Matrix<double, 12, 12> rw_d = rw_.cast<double>();
-      const Eigen::Matrix<double, 15, 15> qc_d = gs_d * rw_d * gs_d.transpose();
+      const Eigen::Matrix<NavCovScalar, 15, 12> gs_d = gs_.cast<NavCovScalar>();
+      const Eigen::Matrix<NavCovScalar, 12, 12> rw_d = rw_.cast<NavCovScalar>();
+      const Eigen::Matrix<NavCovScalar, 15, 15> qc_d = gs_d * rw_d * gs_d.transpose();
 #endif
-      const auto phi_at_time = [&](const double tau_s)
+      const auto phi_at_time = [&](const NavCovScalar tau_s)
       {
-        const Eigen::Matrix<double, 15, 15> f_tau = fs_d * tau_s;
-        return identity_d + f_tau + 0.5 * f_tau * f_tau;
+        const Eigen::Matrix<NavCovScalar, 15, 15> f_tau = fs_d * tau_s;
+        return identity_d + f_tau + NavCovScalar(0.5) * f_tau * f_tau;
       };
-      const double dt_d = static_cast<double>(dt_s);
-      const Eigen::Matrix<double, 15, 15> phi_half_d = phi_at_time(0.5 * dt_d);
-      const Eigen::Matrix<double, 15, 15> phi_full_d = phi_.cast<double>();
-      const Eigen::Matrix<double, 15, 15> q_d =
-          (dt_d / 6.0) *
+      const NavCovScalar dt_d = static_cast<NavCovScalar>(dt_s);
+      const Eigen::Matrix<NavCovScalar, 15, 15> phi_half_d = phi_at_time(NavCovScalar(0.5) * dt_d);
+      const Eigen::Matrix<NavCovScalar, 15, 15> phi_full_d = phi_.cast<NavCovScalar>();
+      const Eigen::Matrix<NavCovScalar, 15, 15> q_d =
+          (dt_d / NavCovScalar(6.0)) *
           (qc_d +
-           4.0 * (phi_half_d * qc_d * phi_half_d.transpose()) +
+           NavCovScalar(4.0) * (phi_half_d * qc_d * phi_half_d.transpose()) +
            (phi_full_d * qc_d * phi_full_d.transpose()));
       q_ = q_d.cast<float>();
       q_ = 0.5f * (q_ + q_.transpose().eval());
 
       // 协方差传播使用double中间量，降低15x15矩阵乘法在高动态大协方差下的舍入误差。
-      const Eigen::Matrix<double, 15, 15> phi_d = phi_.cast<double>();
-      const Eigen::Matrix<double, 15, 15> p_d = p_.cast<double>();
+      const Eigen::Matrix<NavCovScalar, 15, 15> phi_d = phi_.cast<NavCovScalar>();
+      const Eigen::Matrix<NavCovScalar, 15, 15> p_d = p_.cast<NavCovScalar>();
       p_ = (phi_d * p_d * phi_d.transpose() + q_d).cast<float>();
 #endif
 #if BFS_NAVIGATION_EMBEDDED_PROFILE_ENABLED
