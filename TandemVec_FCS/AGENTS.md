@@ -2,6 +2,18 @@
 
 > 基于 PlatformIO 的 STM32H743 **纵列双发矢量推力 VTOL 飞控固件**（从共轴双桨 VTVL 移植重构）。安全关键嵌入式控制软件，不是普通应用代码。
 
+## 当前实机机型与构建（2026-11-04，优先级高于默认描述）
+
+- **当前飞控装在共轴双桨电火箭上**，不是纵列双发。构建 env 必须是
+  `[env:CoaxialVTVL]`（`-DBFS_COAXIAL_VTVL`）；**禁止把 `[env:TandemVec_FCS]`
+  当飞行固件烧到共轴机**。
+- 上板先核对 `health`：`veh=CoaxialVTVL`；纵列固件会打印 `veh=TandemVec`。
+- 共轴 PID 已统一为通用 `att_*`/`rate_*`，不再有 `coax.att_kp_*`/`coax.rate_kp_*`；
+  `coax.*` 只剩质量/推力/舵机/PWM/力臂/惯量/限幅等硬件参数。
+- 共轴 SIL 默认使用 `--coax-plant-model rigorous`；L1 集总 plant 的俯仰/姿态约定
+  有误，会误报 max_pitch≈23°，不要再用 L1 结果判共轴。
+- 目前证据：统一 PID + 10° 限幅，rigorous SIL 24/24；仍无共轴台架/实飞数据。
+
 ## 坐标系与执行器（2026-08-02 钉死；权威 = mix 层 `flight_control.cpp` 1202–1252）
 
 - **机体系 FRD**：`x_b` 前（前电机 +x 拉力式、尾电机 −x 推进式）、`y_b` 右、`z_b` 下；★ **电机推力轴 = z_b**（悬停机头朝天时 z_b 竖直指地）。旧"x_b=推力轴"错误（2026-08-09 修正）。
