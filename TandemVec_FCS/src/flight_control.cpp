@@ -47,6 +47,38 @@
 // 解锁上升沿调用：把上一架次残留的目标点锁存与模式沿清掉。
 void resetPositionModeEntryLatch();
 
+// GUIDED 加速度慢积分修正状态（仅 BFS_GUIDED_ACCEL_TRIM 宏开启时参与编译）。
+// 油门-推力映射存在质量/电压/个体差异等不确定性，纯前馈无法精确实现制导
+// 加速度指令，故用低带宽积分修正稳态误差；默认关，不改变出厂行为。
+#ifdef BFS_GUIDED_ACCEL_TRIM
+#ifndef BFS_GUIDED_ACCEL_TRIM_KI
+#define BFS_GUIDED_ACCEL_TRIM_KI 0.3f // 1/s，约 3.3 s 时间常数
+#endif
+#ifndef BFS_GUIDED_ACCEL_TRIM_LIMIT
+#define BFS_GUIDED_ACCEL_TRIM_LIMIT 2.0f // m/s²，覆盖 20% 质量/推力偏差
+#ifndef BFS_GUIDED_ACCEL_TRIM_LEAK
+#define BFS_GUIDED_ACCEL_TRIM_LEAK 0.0005f // 每拍泄漏，τ≈10 s，防长期漂移
+#endif
+#endif
+#ifndef BFS_GUIDED_ACCEL_TRIM_ALPHA
+#define BFS_GUIDED_ACCEL_TRIM_ALPHA 0.003f // 一阶低通 @200 Hz，fc≈0.1 Hz（强压振动噪声）
+#endif
+#ifndef BFS_GUIDED_ACCEL_TRIM_DEADBAND
+#define BFS_GUIDED_ACCEL_TRIM_DEADBAND 0.5f // m/s²，噪声残差不积分
+#endif
+static float s_guid_accel_trim_up = 0.0f;
+static float s_guid_accel_meas_lpf = 0.0f;
+static int s_guid_accel_settle_steps = 0;
+#ifdef BFS_GUIDED_THRUST_ADAPT
+static float s_thrust_gain_est = 1.0f; // 推力增益在线估计（1=名义）
+#endif
+static constexpr float s_guid_accel_trim_ki = BFS_GUIDED_ACCEL_TRIM_KI;
+static constexpr float s_guid_accel_trim_limit = BFS_GUIDED_ACCEL_TRIM_LIMIT;
+static constexpr float s_guid_accel_meas_alpha = BFS_GUIDED_ACCEL_TRIM_ALPHA;
+static constexpr float s_guid_accel_trim_deadband = BFS_GUIDED_ACCEL_TRIM_DEADBAND;
+static constexpr float s_guid_accel_trim_leak = BFS_GUIDED_ACCEL_TRIM_LEAK;
+#endif
+
 // 无 GNSS 水平失效保护（opt-in，默认不定义，不改变出厂行为）。
 // 机理：位置环追一个纯惯导漂移的绝对位置，会持续要 10–15° 倾角；加速度计
 // 无法区分重力与持续推力加速度，EKF 姿态被拉平，位置环再以“错误姿态”继续
@@ -558,6 +590,108 @@ void compute_thrust_control(const ControlInputs_t &inputs, ControlMode mode, Con
       // 注意：这里假设 guidance_accel_U_cmd 是运动学加速度 (Kinematic Accel)，不包含抵消重力的 1g
       // 如果上位机发 0，代表垂直匀速运动；如果上位机发 >0，代表向上加速。
       target_acceleration_z = guidance_accel_U_cmd;
+
+#ifdef BFS_GUIDED_ACCEL_TRIM
+      // ── 加速度慢积分修正（默认关，宏开启后生效）───────────────────────
+      // 动机：油门-推力映射存在不确定性（质量变化、电池电压下降、ESC 个体
+      // 差异、气动阻力），纯前馈无法精确复现制导下发的运动学加速度。
+      // 安全性优先（真实飞行振动会让加速度计噪声非常大）：
+      //   ① 实测加速度先过一阶低通（α=0.003，fc≈0.1 Hz @200 Hz），压掉振动；
+      //   ② 误差死区 ±0.5 m/s²：噪声残差落在死区内不积分；
+      //   ③ 积分增益仅 0.3 s⁻¹（时间常数≈3.3 s），远低于姿态/高度环带宽；
+      //   ④ 修正量限幅 ±2.0 m/s²，覆盖 20% 质量/推力偏差；
+      //   ⑤ 带泄漏（τ≈10 s），防止噪声残差把积分长期推到限幅。
+      // 设计判据：开环已有平方推力曲线前馈，闭环只修"慢漂移"；任何情况下
+      // 闭环修正不得让加速度跟踪的 RMS 误差比开环更差（SIL 噪声扫描验证）。
+      // 比力（两种观测方法共用）：机体 FRD 比力 → NED → 向上为正
+      const float qw_ = AHRS_Packet.Qw, qx_ = AHRS_Packet.Qx;
+      const float qy_ = AHRS_Packet.Qy, qz_ = AHRS_Packet.Qz;
+      const float R31_ = 2.0f * (qx_ * qz_ + qw_ * qy_);
+      const float R32_ = 2.0f * (qy_ * qz_ - qw_ * qx_);
+      const float R33_ = 1.0f - 2.0f * (qx_ * qx_ + qy_ * qy_);
+      const float f_ned_down =
+          R31_ * icm_accel_x + R32_ * icm_accel_y + R33_ * icm_accel_z;
+
+#ifdef BFS_GUIDED_ACCEL_TRIM_VEL
+      // 速度差分观测：a = Δv/Δt。缺点是在 200 Hz 下把速度噪声放大 200 倍，
+      // 因此必须依赖强低通；实测在飞行级振动下明显劣于比力观测。
+      static float s_v_prev_trim = 0.0f;
+      static bool s_v_init_trim = false;
+      const float v_now_trim = estimated_velocity;
+      float a_meas_up = 0.0f;
+      if (!s_v_init_trim)
+      {
+        s_v_prev_trim = v_now_trim;
+        s_v_init_trim = true;
+      }
+      else
+      {
+        a_meas_up = (v_now_trim - s_v_prev_trim) * 200.0f;
+        s_v_prev_trim = v_now_trim;
+      }
+#else
+      const float a_meas_up = -(f_ned_down + ekf_gravity_mps2);
+#endif
+
+#ifdef BFS_GUIDED_THRUST_ADAPT
+      // ── 推力增益在线辨识（乘性前馈修正）─────────────────────────────
+      // 期望视加速度 a_ff = a_cmd + g；实测视比力 f_up = -f_ned_down。
+      // 执行器/质量/电压偏差会让 k = f_up / a_ff 偏离 1，用低带宽一阶估计 k̂，
+      // 再把指令除以 k̂。相比加性积分：①直接补偿乘性误差（质量/推力曲线）；
+      // ②不靠误差积分，相位滞后小；③限幅 [0.6, 1.6] 只允许 ±40% 修正。
+      {
+        const float a_ff_cmd = guidance_accel_U_cmd + ekf_gravity_mps2;
+        const float f_up_meas = -f_ned_down;
+        if (fabsf(a_ff_cmd) > 3.0f) // 小信号信噪比差，不更新
+        {
+          const float k_meas = f_up_meas / a_ff_cmd;
+          if (k_meas > 0.4f && k_meas < 2.5f)
+          {
+            s_thrust_gain_est += 0.01f * (k_meas - s_thrust_gain_est);
+            s_thrust_gain_est = s_thrust_gain_est < 0.6f
+                                    ? 0.6f
+                                    : (s_thrust_gain_est > 1.6f ? 1.6f
+                                                               : s_thrust_gain_est);
+          }
+        }
+        target_acceleration_z =
+            (guidance_accel_U_cmd + ekf_gravity_mps2) / s_thrust_gain_est -
+            ekf_gravity_mps2;
+      }
+#endif
+      // ① 强低通（进 GUIDED 首拍直接用实测值初始化，避免从 0 爬升造成启动过冲）
+      if (s_guid_accel_settle_steps == 200)
+      {
+        s_guid_accel_meas_lpf = a_meas_up;
+      }
+      s_guid_accel_meas_lpf +=
+          BFS_GUIDED_ACCEL_TRIM_ALPHA * (a_meas_up - s_guid_accel_meas_lpf);
+      // ② 死区
+      float trim_err = guidance_accel_U_cmd - s_guid_accel_meas_lpf;
+      if (trim_err < BFS_GUIDED_ACCEL_TRIM_DEADBAND &&
+          trim_err > -BFS_GUIDED_ACCEL_TRIM_DEADBAND)
+      {
+        trim_err = 0.0f;
+      }
+      // 预热期（前 1 s）只让低通收敛，不积分，避免启动瞬态把修正量推满
+      if (s_guid_accel_settle_steps > 0)
+      {
+        s_guid_accel_settle_steps--;
+        trim_err = 0.0f;
+      }
+      // ③ 慢积分 + 泄漏（防止噪声残差长期把修正量推到限幅）
+      s_guid_accel_trim_up +=
+          s_guid_accel_trim_ki * trim_err * 0.005f;
+      s_guid_accel_trim_up -= s_guid_accel_trim_leak * s_guid_accel_trim_up * 0.005f;
+      // ④ 限幅
+      s_guid_accel_trim_up =
+          s_guid_accel_trim_up > s_guid_accel_trim_limit
+              ? s_guid_accel_trim_limit
+              : (s_guid_accel_trim_up < -s_guid_accel_trim_limit
+                     ? -s_guid_accel_trim_limit
+                     : s_guid_accel_trim_up);
+      target_acceleration_z += s_guid_accel_trim_up;
+#endif
 
       // [关键]：这里不调用 altitudeVelocityPIDController.compute()
       // 也不调用 reset()。PID 对象的内部状态（尤其是积分项 I_term）保持不变（冻结）。
@@ -1323,6 +1457,20 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
   }
   else if (mode == GUIDED)
   {
+#ifdef BFS_GUIDED_ACCEL_TRIM
+    // 进入 GUIDED 的那一拍清零积分，避免上一段制导/其他模式的残值带进来
+    static ControlMode s_prev_mode_for_trim = MANUAL;
+    if (s_prev_mode_for_trim != GUIDED)
+    {
+      s_guid_accel_trim_up = 0.0f;
+      s_guid_accel_meas_lpf = 0.0f;
+      s_guid_accel_settle_steps = 200; // 1 s @200 Hz：预热，不积分
+#ifdef BFS_GUIDED_THRUST_ADAPT
+      s_thrust_gain_est = 1.0f;
+#endif
+    }
+    s_prev_mode_for_trim = mode;
+#endif
     // --- 制导计算机输出期望物理加速度 (Target Acceleration) ---
     float target_accel_n = guidance_accel_N_cmd;
     float target_accel_e = guidance_accel_E_cmd;
@@ -1967,6 +2115,13 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
     thrust_in.thrust_axis_up_cos = outputs.thrust_cos_tilt;
     thrust_in.mass_kg = initial_mass;
     thrust_in.max_total_thrust_n = MAX_THRUST;
+    // 推力/油门口径（默认线性，实机行为不变）：
+    // GUIDED 没有高度/速度闭环兜底，制导给的是运动学加速度，若仍按线性口径
+    // 换算，电机转速被系统性低估（SIL 实测：指令 +3 m/s² 时电机 32.6%，
+    // 需求约 57%），表现为"指令越晚反而越掉高度"。打开该宏后按 F∝w² 反解。
+#ifdef BFS_THRUST_CURVE_QUADRATIC
+    thrust_in.throttle_curve_exponent = 2.0f;
+#endif
     const bfs::ThrustAllocationOutput thrust_out =
         bfs::allocateLinearThrustThrottle(thrust_in);
     final_throttle_pct = thrust_out.valid ? thrust_out.throttle_pct : 0.0f;

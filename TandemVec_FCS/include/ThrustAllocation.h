@@ -34,6 +34,10 @@ struct ThrustAllocationInput
     float mass_kg = 0.0f;                // 当前质量
     float max_total_thrust_n = 0.0f;     // 最大总推力（机型能力）
     float min_cos_tilt = 0.5f;           // 倾角补偿下限（cos60°）
+    // 油门-推力曲线指数：1.0 = 既有线性口径（默认，行为不变）；2.0 = 物理口径
+    // F∝w²、油门∝√F。GUIDED 等无位置/速度闭环补偿的通道必须用物理口径，
+    // 否则制导加速度会被系统性低估（见 docs/04-数学建模 与 SIL 联仿记录）。
+    float throttle_curve_exponent = 1.0f;
 };
 
 struct ThrustAllocationOutput
@@ -94,7 +98,18 @@ inline ThrustAllocationOutput allocateLinearThrustThrottle(
         thrustAllocationClamp(total_thrust, 0.0f, in.max_total_thrust_n);
 
     out.total_thrust_n = total_thrust;
-    out.throttle_pct = total_thrust * 100.0f / in.max_total_thrust_n;
+    // 油门映射口径：指数 1.0 保持既有线性行为（F·100/F_max，先乘后除，逐值不变）；
+    // 指数 2.0 走物理口径 F∝w² → w/w_max = √(F/F_max)，用于 GUIDED 这类
+    // 没有位置/速度闭环兜底的通道；默认仍为线性，实机行为不受影响。
+    if (in.throttle_curve_exponent > 1.0f)
+    {
+        const float ratio = total_thrust / in.max_total_thrust_n;
+        out.throttle_pct = std::sqrt(ratio) * 100.0f;
+    }
+    else
+    {
+        out.throttle_pct = total_thrust * 100.0f / in.max_total_thrust_n;
+    }
     out.valid = std::isfinite(out.throttle_pct);
     return out;
 }
