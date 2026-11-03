@@ -270,6 +270,21 @@ static void _cfg_valset_pvt_eoe_uart1(Uart &serial, uint8_t rate)
   _ubx_send(serial, 0x06, 0x8A, p, sizeof(p));
 }
 
+// CFG-VALSET 改 UART1 波特率（F10 文档路径）：key=CFG-UART1-BAUDRATE
+// (0x40520001, U4)，value 为 baud（4B LE）。F10 接口说明没有 CFG-PRT，
+// legacy CFG-PRT 虽回 ACK 但不改波特率；实测从 460800 切 921600 会断链。
+static void _cfg_valset_baud_uart1(Uart &serial, uint32_t baud)
+{
+  uint8_t p[12] = {0x00, 0x01, 0x00, 0x00,
+                   0x01, 0x00, 0x52, 0x40,  // 0x40520001 LE
+                   0, 0, 0, 0};
+  p[8] = static_cast<uint8_t>(baud & 0xFFU);
+  p[9] = static_cast<uint8_t>((baud >> 8) & 0xFFU);
+  p[10] = static_cast<uint8_t>((baud >> 16) & 0xFFU);
+  p[11] = static_cast<uint8_t>((baud >> 24) & 0xFFU);
+  _ubx_send(serial, 0x06, 0x8A, p, sizeof(p));
+}
+
 // CFG-NAV5（36B）读改写：mask 按需置位，只改指定字段（-1/0 表示不改）
 //   dyn_model  动态模型：2=Airborne<2g(6)，4=Airborne<4g(7)；0=不改
 //   fix_mode   定位模式：-1 不改，0=2D，1=3D，2=auto
@@ -401,8 +416,9 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   memset(&s_last_cfg, 0, sizeof(s_last_cfg));
 
   // 1. 波特率探测：目标波特率优先（已固化接收机 300ms 快路径）
-  const uint32_t scan_order[6] = {o.target_baud, 9600U, 38400U, 57600U, 115200U, 921600U};
-  for (uint8_t i = 0; i < 6; i++)
+  const uint32_t scan_order[8] = {o.target_baud, 921600U, 460800U,
+                                  230400U, 115200U, 57600U, 38400U, 9600U};
+  for (uint8_t i = 0; i < 8; i++)
   {
     const uint32_t b = scan_order[i];
     if (b == 0U || (i > 0 && b == o.target_baud)) continue;
@@ -419,22 +435,61 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     return r;
   }
 
+  // F10 手册 §3.2 p.21：1 s 内 >100 个帧错误会关闭 UART RX 约 1 s。波特率
+  // 探测阶段的错误波特率会触发该保护，若立刻发配置会被整体丢弃（实测
+  // ack=0、rate/msg/val 全 FAIL）。检测到后先等保护窗口结束并清积压。
+  delay(1200);
+  while (serial.available() > 0)
+  {
+    (void)serial.read();
+  }
+
   // 已在目标波特率 ≠ 已正确配置：接收机可能只固化了波特率，却缺
   // NAV-PVT/NAV-EOE 或速率不对，此时跳过 CFG-MSG 会永久 0 epoch。
   // 因此只跳过 CFG-PRT（改波特率），其余幂等配置每次启动都重发。
   const bool already_at_target = (r.found_baud == o.target_baud);
 
-  // 2. CFG-PRT：切波特率 + 协议掩码（先等 ACK 再切 MCU 波特率）
+  // 2. 先用 F10 文档键 CFG-UART1-BAUDRATE 通过 VALSET 切目标波特率。
+  //    不能先发 legacy CFG-PRT：部分 F10 固件收到 CFG-PRT 会重启接口，把
+  //    紧随其后的 VALSET 吞掉（实测 ack=0、随后断链）。VALSET 成功即跳过
+  //    CFG-PRT，失败才回退老路径（M8N 等）。
   if (!already_at_target)
   {
-    _cfg_prt(serial, o.target_baud, o.nmea_out);
+    _cfg_valset_baud_uart1(serial, o.target_baud);
     r.cfg_frames_sent++;
-    if (_ubx_wait_ack(serial, 0x06, 0x00, kAckTimeoutMs))
+    bool baud_valset_ok = _ubx_wait_ack(serial, 0x06, 0x8A, kAckTimeoutMs);
+    if (baud_valset_ok)
     {
       r.cfg_acks_received++;
     }
-    delay(60);
-    serial.begin(o.target_baud);
+    else
+    {
+      _cfg_prt(serial, r.found_baud, o.nmea_out);
+      r.cfg_frames_sent++;
+      if (_ubx_wait_ack(serial, 0x06, 0x00, kAckTimeoutMs))
+      {
+        r.cfg_acks_received++;
+      }
+    }
+    // 只有确认接收机收到切速命令才切 MCU 波特率；输入链路故障（实测
+    // CFG-RST/CFG-MSG/CFG-VALSET 全无 ACK）时留在已检测波特率继续收数据，
+    // 不能盲目切到目标速率把整条 GNSS 链路弄断。
+    const bool baud_switch_confirmed =
+        baud_valset_ok || (r.cfg_acks_received > 0);
+    if (baud_switch_confirmed)
+    {
+      // F10 手册：改波特率后至少等约 100 ms，再按新速率通信。
+      delay(120);
+      serial.begin(o.target_baud);
+    }
+    else
+    {
+      serial.begin(r.found_baud);
+    }
+    while (serial.available() > 0)
+    {
+      (void)serial.read();
+    }
   }
   r.prt_ok = true;
 

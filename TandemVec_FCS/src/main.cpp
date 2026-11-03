@@ -227,6 +227,8 @@ void setup()
   // 目标值见下方常量；详见 src/ubx_config.cpp 与 docs/reference/sparkfun-ublox-gnss。
   if (nav_data_source == NavDataSource::INTERNAL)
   {
+    // 921600 高速率；bad_pvt 的诊断要避免频繁 DBG 打印（会阻塞主循环导致
+    // Serial4 RX 缓冲溢出），静默窗口内测试才反映真实链路质量。
     const uint32_t GPS_TARGET_BAUD = 921600UL;
     const uint16_t GPS_NAV_RATE_MS = 100;    // 10Hz
     const uint8_t  GPS_AIRBORNE_G = 0;       // 0=不改动态模型（如需: 2/4 = Airborne<2g/<4g）
