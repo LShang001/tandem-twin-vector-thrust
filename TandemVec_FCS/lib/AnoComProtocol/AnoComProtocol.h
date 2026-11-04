@@ -377,7 +377,18 @@ private:
     // ★ 2026-08-10 组帧模式（COMM-001 A3）：组缓冲 + 状态（beginGroup/endGroup 管理）
     uint8_t _groupBuf[256];                  // 组缓冲（快环 ~72B / 慢环 ~114B，256 足够）
     uint16_t _groupLen;
-    uint32_t _txDropped = 0; // 非阻塞保护丢弃的组/帧累计                      // 组缓冲已用字节
+    uint32_t _txDropped = 0; // 非阻塞保护丢弃的组/帧累计
+
+    // 宿主单元测试的 Stream 桩没有 availableForWrite；固件 Uart 才有。
+    // 宿主侧视为始终可写，保持组帧字节等价测试不受影响。
+    int txFree() const
+    {
+#if defined(ARDUINO)
+      return _serial->availableForWrite();
+#else
+      return 1 << 20;
+#endif
+    }                      // 组缓冲已用字节
     bool _groupActive;                       // 组模式激活标志
     bool _dataReceived;                      // 数据接收标志
 

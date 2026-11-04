@@ -53,7 +53,7 @@ void AnoComProtocol::sendData(uint8_t destAddr, uint8_t funcCode, uint8_t *data,
             // 单帧装不下组缓冲：flush 已有组，直发该帧
             if (_groupLen > 0)
             {
-                if (_serial->availableForWrite() >= static_cast<int>(_groupLen))
+                if (txFree() >= static_cast<int>(_groupLen))
                 {
                     _serial->write(_groupBuf, _groupLen);
                 }
@@ -71,7 +71,7 @@ void AnoComProtocol::sendData(uint8_t destAddr, uint8_t funcCode, uint8_t *data,
         if (_groupLen + frame_len > sizeof(_groupBuf))
         {
             // 组缓冲满：先非阻塞flush已有帧再入组（正常组远小于 256B）
-            if (_serial->availableForWrite() >= static_cast<int>(_groupLen))
+            if (txFree() >= static_cast<int>(_groupLen))
             {
                 _serial->write(_groupBuf, _groupLen);
             }
@@ -87,7 +87,7 @@ void AnoComProtocol::sendData(uint8_t destAddr, uint8_t funcCode, uint8_t *data,
     {
         uint8_t txBuffer[ANO_MAX_DATA_LEN + 8];
         uint16_t flen = buildFrame(txBuffer, 0, destAddr, funcCode, data, len);
-        if (_serial->availableForWrite() < static_cast<int>(flen))
+        if (txFree() < static_cast<int>(flen))
         {
             _txDropped++;
             return; // 非阻塞：缓冲不足丢弃本帧，绝不卡控制环
@@ -110,7 +110,7 @@ void AnoComProtocol::endGroup()
     {
         // 非阻塞保护：组帧期间TX缓冲可能已被占满，直接write会阻塞主循环，
         // 导致IMU ring积压。缓冲不足时整组丢弃，不能卡控制环。
-        if (_serial->availableForWrite() < static_cast<int>(_groupLen))
+        if (txFree() < static_cast<int>(_groupLen))
         {
             _txDropped++;
             _groupLen = 0;
