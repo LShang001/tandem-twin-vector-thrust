@@ -25,9 +25,7 @@
   `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
 - **日志/诊断（2026-11-04）**：Navigation 60s一次的多段 Serial8 打印默认关闭（`BFS_NAV_EKF_VERBOSE`），它是300s数传/P1长停顿根因；需要时显式打开。**协议调试接口（2026-11-04）**：0xF5 1Hz上报 `link_seq/ano_skip/proto_drop/mav_skip/nav_gap/ring`；DBG `health` 现在含 AnoCom/MAVLink
   tx-skip、AnoCom组丢帧、P1 ring水位/溢出/空读、Navigation最大入口间隔，以及
-  `navprof` 的 EKF预测/位置量测/GNSS更新最大耗时。MAVLink 模式可用 `DBG
-`
-  转义切回 AnoCom；不再需要物理复位。
+  `navprof` 的 EKF预测/位置量测/GNSS更新最大耗时。MAVLink 模式可用 `DBG\n` 转义切回 AnoCom；不再需要物理复位。
 - **P1 是采样架构阶段名，不是 env 名**：生产 P1 = `[env:CoaxialVTVL]`；
   不保留单独的 P1 实验 env（临时 profiling 用编译宏按需开启）。纯轮询回退 =
   `[env:CoaxialVTVL_UI]`。
