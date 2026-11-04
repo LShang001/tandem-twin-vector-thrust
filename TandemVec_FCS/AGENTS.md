@@ -84,7 +84,7 @@
 
 - **DAPLink 烧录（2026-11-03）**：adapter speed 需降到 **20–100 kHz** 才稳定 `Verified OK`；高速下偶发 checksum mismatch（diff 为孤立位翻转）不是固件坏。OpenOCD `program` 后必须 `reset run`，否则板子停住。命令见 `docs/registers/踩坑记录-AGENTS.md` 2026-11-03 条。
 - **GNSS（NEO-F10N，protocol 40.00）**：F10 接口说明只收录 **CFG-VALSET/VALGET/VALDEL + CFG-MSGOUT**（PVT UART1 `0x20910007` p.143、EOE UART1 `0x20910160` p.142），**没有 CFG-MSG/CFG-PRT 章节**；固件保留 CFG-MSG 是实测兼容层（F10 仍 ACK）。CFG-MSG 8 字节 payload 的 rate 必须同时写 UART1/UART2。**配置 ACK 不等于有输出**，验收看 `ubxstat` 的 `pvt/eoe` 是否增长。详见 `docs/04-数学建模/代码理论核查/F10N-GNSS配置与调试-2026-11-03.md`。
-- **调度统计口径（2026-11-03）**：`tasks` 新增 `丢执行` 列（flag 未消费又被 ISR 置位次数）并打印 `TIM8 clk/psc/arr`；当前 240 MHz/PSC1/ARR37500/6.4 kHz。**`tasks`/`health` 走 DBG，打印会显著加剧丢拍，飞行速率必须用非 DBG 的 AnoVars `imu_rate`（`tvc vars watch imu_rate -t 60`）核对。** IMU 2 kHz 仍受协作式主循环限制（实测丢执行约 448 次/s），FIFO 批量采样为待做专项；详见 `docs/04-数学建模/代码理论核查/任务调度器与TIM8配置-2026-11-03.md`。
+- **调度统计口径（2026-11-03）**：`tasks` 新增 `丢执行` 列（flag 未消费又被 ISR 置位次数）并打印 `TIM8 clk/psc/arr`；当前 240 MHz/PSC1/ARR37500/6.4 kHz。**`tasks`/`health` 走 DBG，打印会显著加剧丢拍，高频采样速率必须用非 DBG 的 0xF4 `imu_rate_hz`（`tvc record`）核对。** IMU 2 kHz 已由 P1（2kHz ISR+SPSC ring+Navigation 排空）解决，默认实测 mean≈2000、std≈70、ring_drop=0；详见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
 - **新增 `health` 命令**：一屏看模式/IMU 健康/气压/GNSS pvt-eoe-fix-sv/ EKF rpy-vel-pos/ Serial5 上行 rx-bad-age-txskip，以及 loop CPU/max_pass/window（不重置 tasks 统计）。
 
 ## 硬性代码边界
