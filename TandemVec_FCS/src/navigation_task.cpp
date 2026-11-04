@@ -4007,7 +4007,10 @@ void handleNavigationSystem()
 #endif
       // 诊断字段无论估计成功与否都要刷新：失败原因（没激励/被粗差门饿死/
       // 代价平底）正是判断"为什么补偿没生效"的唯一线索。
+      const uint32_t _delay_t0 = micros();
       const bool auto_ok = s_gnss_delay_auto.TryEstimate();
+      const uint32_t _delay_us = micros() - _delay_t0;
+      if (_delay_us > g_nav_prof_delay_max_us) { g_nav_prof_delay_max_us = _delay_us; }
       const auto &d = s_gnss_delay_auto.diag();
       gnss_status.auto_delay_reject = static_cast<uint8_t>(d.reject);
       gnss_status.auto_delay_n_gnss = d.n_gnss;

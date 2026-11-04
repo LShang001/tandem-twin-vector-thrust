@@ -629,6 +629,7 @@ volatile uint32_t g_nav_gap_max_us = 0;
 volatile uint32_t g_nav_prof_tu_max_us = 0;
 volatile uint32_t g_nav_prof_pos_max_us = 0;
 volatile uint32_t g_nav_prof_gnss_max_us = 0;
+volatile uint32_t g_nav_prof_delay_max_us = 0;
 volatile uint32_t g_nav_stage_max_us[4] = {0,0,0,0};
 uint32_t g_nav_increment_raw_ticks = 0U;
 uint32_t g_nav_increment_fallback_ticks = 0U;

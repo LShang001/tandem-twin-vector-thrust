@@ -974,6 +974,7 @@ extern volatile uint32_t g_nav_gap_max_us;
 extern volatile uint32_t g_nav_prof_tu_max_us;
 extern volatile uint32_t g_nav_prof_pos_max_us;
 extern volatile uint32_t g_nav_prof_gnss_max_us;
+extern volatile uint32_t g_nav_prof_delay_max_us;
 extern volatile uint32_t g_nav_stage_max_us[4];
 
 // 导航 IMU 增量源诊断（NavImuIncrementSelect.h，仅

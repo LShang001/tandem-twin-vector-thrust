@@ -2714,7 +2714,9 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(F(" pos_max_ms="));
         serial.print(g_nav_prof_pos_max_us / 1000.0f, 2);
         serial.print(F(" gnss_max_ms="));
-        serial.println(g_nav_prof_gnss_max_us / 1000.0f, 2);
+        serial.print(g_nav_prof_gnss_max_us / 1000.0f, 2);
+        serial.print(F(" delay_max_ms="));
+        serial.println(g_nav_prof_delay_max_us / 1000.0f, 2);
 #ifdef BFS_IMU_ISR_RING
         serial.print(F("[DBG] p1 ring_size="));
         serial.print(imuRingSize());
