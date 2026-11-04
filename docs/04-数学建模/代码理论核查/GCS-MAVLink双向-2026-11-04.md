@@ -27,6 +27,12 @@
    否则记录列为空。
 5. **pymavlink 版本签名差异**：`command_ack_send`/`timesync_send` 参数随版本不同；
    GCS 代码按 v2.4.50 实际签名调用，测试覆盖。
+6. **uvicorn 缺 websockets**：远端只装 uvicorn 时 `/ws` 全部 404，页面显示
+   “后端断开”；`requirements.txt` 必须含 `websockets>=12`。
+7. **多标签/重复 connect 互踢**：同一串口/协议/波特率改为幂等复用，避免第二次
+   connect 断开第一次的会话。
+8. **参数少1项**：Web 读取 3.5s 后若少于 `param_count`，自动补读一次；实测
+   148/148。
 
 ## 3. CLI / 前端
 
@@ -51,7 +57,9 @@ py -3.12 server/cli.py --port COM9 --protocol mavlink record start -o out.csv -d
 - PING/TIMESYNC：均收到回复帧；MISSION_REQUEST_LIST → MISSION_COUNT=0。
 - 记录：MAVLink模式10s CSV **316行**，`roll/heading/vel_n_ms/rel_h_m/rc1/
   gps_fix/unlocked` 均有值。
-- 自动化：`GCS/tests` **52 passed**（服务、TX泵、GCS集成、字段映射）。
+- Web 端到端：MAVLink 实时遥测 30–31帧/s、63字段；参数页 **148/148**、
+  att_roll.kp=4.25 可见；连接幂等。
+- 自动化：`GCS/tests` **53 passed**（服务、TX泵、GCS集成、字段映射、幂等连接）。
 
 ## 5. 边界
 
