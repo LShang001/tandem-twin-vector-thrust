@@ -162,6 +162,9 @@ static void testRateIntegral()
   failsafe_in_flight = false;
   nav_system_initialized = true;
   is_origin_lla_set = true;
+  // 本测试不走真实EKF，显式满足首次解锁门；否则解锁被拒，积分恒0。
+  g_ekf_converged = true;
+  g_nav_tilt_sigma_deg = 1.0f;
   target_altitude = 10.0f;
 
   const float dt = 0.005f;

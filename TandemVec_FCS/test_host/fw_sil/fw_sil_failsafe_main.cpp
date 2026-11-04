@@ -189,6 +189,10 @@ static Result runScenario(const Scenario &sc)
   isLinkUp = true;
   failsafe_in_flight = false;
   nav_system_initialized = true;
+  // 断链测试不走真实EKF：显式满足首次解锁门（收敛/倾斜σ），否则解锁被拒，
+  // 空中场景全变成“未解锁坠落”，与断链逻辑无关。
+  g_ekf_converged = true;
+  g_nav_tilt_sigma_deg = 1.0f;
   is_origin_lla_set = true;
   origin_lat_deg = 28.2;
   origin_lon_deg = 112.9;
