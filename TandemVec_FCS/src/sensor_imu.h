@@ -70,6 +70,7 @@ bool readIMUData();
 void imuSampleIsr();
 uint32_t imuRingDropCount();
 uint32_t imuIsrEmptyCount();
+uint32_t imuRingSize();
 #endif
 #ifdef BFS_IMU_PROF
 extern float g_imu_prof_total_us;

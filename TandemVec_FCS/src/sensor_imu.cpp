@@ -257,6 +257,11 @@ uint32_t imuIsrEmptyCount()
   return s_imu_isr_empty;
 }
 
+uint32_t imuRingSize()
+{
+  return static_cast<uint32_t>(s_imu_ring.size());
+}
+
 void imuSampleIsr()
 {
   if (!s_imu_ring_ready || IMU == nullptr) { return; }

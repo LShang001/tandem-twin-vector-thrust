@@ -376,7 +376,8 @@ private:
                                              //  8 位时溢出保护恒不触发——2026-09-01 修复）
     // ★ 2026-08-10 组帧模式（COMM-001 A3）：组缓冲 + 状态（beginGroup/endGroup 管理）
     uint8_t _groupBuf[256];                  // 组缓冲（快环 ~72B / 慢环 ~114B，256 足够）
-    uint16_t _groupLen;                      // 组缓冲已用字节
+    uint16_t _groupLen;
+    uint32_t _txDropped = 0; // 非阻塞保护丢弃的组/帧累计                      // 组缓冲已用字节
     bool _groupActive;                       // 组模式激活标志
     bool _dataReceived;                      // 数据接收标志
 
@@ -387,6 +388,7 @@ public:
     //   永远凑不齐 → 上行永久哑火（下行 0xF2 照发，实测 DBG 进出/噪声可触发）。
     //   调用方（handleAnoCom）周期检查，stall >100ms 强制复位。
     bool rxStalled() const { return _rxIndex != 0; }
+    uint32_t txDropped() const { return _txDropped; }
     void rxReset() { _rxIndex = 0; }
 
 private:

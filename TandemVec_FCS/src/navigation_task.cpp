@@ -1313,6 +1313,14 @@ void handleNavigationSystem()
 {
   // EKF 总耗时测量 + 零偏诊断
   const uint32_t _ekf_t0 = micros();
+  // 任务入口间隔上界：调试接口 health/linkstat 用，定位长停顿。
+  static uint32_t s_nav_last_entry_us = 0;
+  if (s_nav_last_entry_us != 0U)
+  {
+    const uint32_t gap_us = _ekf_t0 - s_nav_last_entry_us;
+    if (gap_us > g_nav_gap_max_us) { g_nav_gap_max_us = gap_us; }
+  }
+  s_nav_last_entry_us = _ekf_t0;
 #ifdef BFS_NAV_PROFILE
   const uint32_t _nav_profile_total_start = _ekf_t0;
   uint32_t _nav_profile_stage_start = _ekf_t0;
@@ -1902,8 +1910,11 @@ void handleNavigationSystem()
           s_static_pos_anchor = nav_ekf.lla_rad_m();
           s_static_pos_anchor_valid = true;
         }
+        const uint32_t _pos_start_us = micros();
         nav_ekf.MeasurementUpdatePositionDetailed(
             s_static_pos_anchor, 0.5f, 1.0f);
+        const uint32_t _pos_us = micros() - _pos_start_us;
+        if (_pos_us > g_nav_prof_pos_max_us) { g_nav_prof_pos_max_us = _pos_us; }
       }
       else
       {
@@ -2553,6 +2564,7 @@ void handleNavigationSystem()
     //       @ref MOD-002 §2；旋转效应只允许计一次（2026-10 P0-0 修复）
     // 数值证据：test_host/test_ekf_15state.cpp T7（速度增量残差 1.25e-4）
     // ────────────────────────────────────────────────────────────────
+    const uint32_t _tu_start_us = micros();
     if (use_two_sample_imu)
     {
       nav_ekf.TimeUpdateTwoSample(delta_theta_1_rad,
@@ -2564,6 +2576,10 @@ void handleNavigationSystem()
     else
     {
       nav_ekf.TimeUpdate(imu_accel_mps2, ekf_gyro_input, nav_update_dt_s);
+    }
+    {
+      const uint32_t _tu_us = micros() - _tu_start_us;
+      if (_tu_us > g_nav_prof_tu_max_us) { g_nav_prof_tu_max_us = _tu_us; }
     }
 #ifdef BFS_NAV_PROFILE
     {
@@ -3370,10 +3386,13 @@ void handleNavigationSystem()
         //       过渡/大倾斜+速度>3 m/s 时启用 consider_heading（P1-5，按相位）
         // 数值证据：test_host/test_ekf_15state.cpp T9–T11（子集 FDI）
         // ──────────────────────────────────────────────────────────────
+        const uint32_t _gnss_start_us = micros();
         const bfs::MeasurementUpdateResult result =
             nav_ekf.MeasurementUpdateDetailed(meas_vel_ned, meas_lla,
                                               nav_update_dt_s,
                                               gnss_measurement_age_s);
+        const uint32_t _gnss_us = micros() - _gnss_start_us;
+        if (_gnss_us > g_nav_prof_gnss_max_us) { g_nav_prof_gnss_max_us = _gnss_us; }
         gnss_status.last_test_ratio = result.test_ratio;
         aid_tracker.RecordAttempt(bfs::AidSource::Gnss, result);
         if (result.reacquired)

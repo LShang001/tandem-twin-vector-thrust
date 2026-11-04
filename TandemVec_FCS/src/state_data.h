@@ -970,6 +970,10 @@ extern uint16_t g_imu_health_flags;
 extern float g_imu_health_frozen_s;
 extern float g_imu_health_no_sample_s;
 extern float g_imu_health_sample_rate_hz;
+extern volatile uint32_t g_nav_gap_max_us;
+extern volatile uint32_t g_nav_prof_tu_max_us;
+extern volatile uint32_t g_nav_prof_pos_max_us;
+extern volatile uint32_t g_nav_prof_gnss_max_us;
 
 // 导航 IMU 增量源诊断（NavImuIncrementSelect.h，仅
 // BFS_NAVIGATION_RAW_IMU_INCREMENT 打开时累加；宏关闭恒为 0）。

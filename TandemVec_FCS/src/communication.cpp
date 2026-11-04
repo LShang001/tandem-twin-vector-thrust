@@ -185,6 +185,16 @@ static const float MAX_SAFE_ACCEL_Z = 10.0f;
 // 统计各通道跳过次数，供调试参考（可通过 Serial8 查看）。
 static uint32_t ano_tx_skipped = 0;
 static uint32_t elrs_tx_skipped = 0;
+static uint32_t s_mav_tx_skipped = 0;
+
+uint32_t anoTelemetryTxSkipCount()
+{
+  return ano_tx_skipped;
+}
+uint32_t mavTelemetryTxSkipCount()
+{
+  return s_mav_tx_skipped;
+}
 // g_posvel_tx_skipped 定义在 state_data.cpp，供 DBG health 观测
 
 // ===== ELRS 链路状态（2026-08-08 灯效扩展）=====
@@ -665,14 +675,39 @@ void handleAnoCom()
   // 切换不重烧。
   if (s_mav_active) {
     // 上行：逐字节喂 mavlink_parse_char（MAVLINK_COMM_0 静态零初始化即用）
-    while (Serial6.available()) {
-      uint8_t c = (uint8_t)Serial6.read();
+    // 同时识别 DBG 转义序列：MAVLink 模式无 AnoCom DBG 扫描，若不识别，
+    // 只能物理复位才能切回 AnoCom。转义字节不喂 MAVLink。
+    static uint8_t esc_idx = 0;
+    static uint8_t esc_buf[4] = {0};
+    static const char kEsc[4] = {'D', 'B', 'G', '\n'};
+    auto feed = [](uint8_t c) {
       mavlink_message_t msg;
       mavlink_status_t status;
       if (mavlink_parse_char(MAVLINK_COMM_0, c, &msg, &status) == MAVLINK_FRAMING_OK)
       {
         mavlinkHandleRx(msg);
       }
+    };
+    while (Serial6.available()) {
+      const uint8_t c = (uint8_t)Serial6.read();
+      if (esc_idx > 0 || c == (uint8_t)kEsc[0]) {
+        if (c == (uint8_t)kEsc[esc_idx]) {
+          esc_buf[esc_idx++] = c;
+          if (esc_idx == 4) {
+            esc_idx = 0;
+            s_mav_active = false;
+            s_dbg_mode = true;
+            Serial6.println(F("[DBG] Debug mode ON (from MAVLink). Type 'help'."));
+            return;
+          }
+          continue;
+        }
+        // 不匹配：把已缓存前缀原样喂 MAVLink，再处理当前字节
+        for (uint8_t i = 0; i < esc_idx; ++i) { feed(esc_buf[i]); }
+        esc_idx = 0;
+        if (c == (uint8_t)kEsc[0]) { esc_buf[esc_idx++] = c; continue; }
+      }
+      feed(c);
     }
     mavlinkSendTelemetry();
     return;
@@ -1864,6 +1899,19 @@ void handleFlashService()
  *       不足则整拍不发，避免多帧中途阻塞 200Hz 任务。
  * @ref  docs/mavlink-ref/（各消息字段与枚举）；AGENTS.md 踩坑记录（MAVLink 切换）
  */
+// MAVLink逐帧非阻塞写：缓冲不足丢弃本帧，绝不阻塞200Hz主循环。
+static void mavWriteNonBlocking(const uint8_t *buf, uint16_t len)
+{
+  if (Serial6.availableForWrite() >= static_cast<int>(len) + 4)
+  {
+    Serial6.write(buf, len);
+  }
+  else
+  {
+    s_mav_tx_skipped++;
+  }
+}
+
 static void mavlinkSendTelemetry()
 {
   static uint32_t call_count = 0; // uint32 防止 200Hz 下快速溢出
@@ -1909,7 +1957,7 @@ static void mavlinkSendTelemetry()
                                MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_GENERIC,
                                base_mode, custom_mode, system_status);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -1924,7 +1972,7 @@ static void mavlinkSendTelemetry()
                        MAV_SYS_STATUS_SENSOR_GPS |
                        MAV_SYS_STATUS_SENSOR_OPTICAL_FLOW;
 
-    uint16_t vbat_mv = 12600; // 12.6V = 3S LiPo (mV)
+    uint16_t vbat_mv = (uint16_t)constrain((float)bat_voltage_mv, 0.0f, 65535.0f);
     int16_t ibat_ca = -1;     // 电流未知 (cA)
 
     mavlink_msg_sys_status_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
@@ -1933,7 +1981,7 @@ static void mavlinkSendTelemetry()
                                 0, 0, 0, 0, 0, 0,        // drop, errors
                                 0, 0, 0);                // extended
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -1950,7 +1998,7 @@ static void mavlinkSendTelemetry()
                               IMU_Packet.gyroscope_y,
                               IMU_Packet.gyroscope_z);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -1969,7 +2017,7 @@ static void mavlinkSendTelemetry()
                                          IMU_Packet.gyroscope_z,
                                          repr_offset_q);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -2004,7 +2052,33 @@ static void mavlinkSendTelemetry()
                                          lat, lon, alt_ellipsoid, relative_alt,
                                          vx, vy, vz, hdg);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
+  }
+
+  // ====================================================================
+  // GPS_RAW_INT (5Hz) — QGC/MP 卫星数/fix/精度
+  // ====================================================================
+  if (call_count % 40 == 6)
+  {
+    const int8_t raw_fix = static_cast<int8_t>(ubx.fix());
+    uint8_t fix_type = 0;
+    if (raw_fix >= 3) fix_type = 3;
+    else if (raw_fix == 2) fix_type = 2;
+    const int32_t lat_i = (int32_t)(ubx.lat_deg() * 1e7);
+    const int32_t lon_i = (int32_t)(ubx.lon_deg() * 1e7);
+    const int32_t alt_mm = (int32_t)(ubx.alt_msl_m() * 1000.0f);
+    const float vn = ubx.north_vel_mps();
+    const float ve = ubx.east_vel_mps();
+    const uint16_t vel_cms = (uint16_t)constrain(sqrtf(vn * vn + ve * ve) * 100.0f, 0.0f, 65535.0f);
+    const uint16_t cog_cdeg = (uint16_t)constrain(AHRS_Packet.Heading * RAD_TO_DEG * 100.0f, 0.0f, 35999.0f);
+    const uint16_t eph = (uint16_t)constrain(ubx.pvt_pdop() * 100.0f, 0.0f, 65535.0f);
+    mavlink_msg_gps_raw_int_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                                 0, fix_type, lat_i, lon_i, alt_mm,
+                                 eph, 65535, vel_cms, cog_cdeg,
+                                 (uint8_t)constrain((float)ubx.num_sv(), 0.0f, 255.0f),
+                                 alt_mm, 0, 0, 0, 0, 0);
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -2023,7 +2097,7 @@ static void mavlinkSendTelemetry()
                              (uint16_t)throttlePercent,
                              estimated_height, climb_rate);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -2043,7 +2117,7 @@ static void mavlinkSendTelemetry()
                                      (uint16_t)raw_rc_values[7],
                                      255);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -2063,7 +2137,7 @@ static void mavlinkSendTelemetry()
                              ax, ay, az, gx, gy, gz,
                              0, 0, 0, 0, 0);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -2083,7 +2157,7 @@ static void mavlinkSendTelemetry()
                                     MAV_BATTERY_CHARGE_STATE_UNDEFINED,
                                     voltages_ext, 0, 0);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-    Serial6.write(buf, len);
+    mavWriteNonBlocking(buf, len);
   }
 
   // ====================================================================
@@ -2105,7 +2179,7 @@ static void mavlinkSendTelemetry()
       mavlink_msg_named_value_float_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
                                          millis(), nm, v);
       uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-      Serial6.write(buf, len);
+      mavWriteNonBlocking(buf, len);
       mav_var_idx++;
     }
   }
@@ -2136,7 +2210,7 @@ static void mavlinkSendTelemetry()
       mavlink_msg_debug_vect_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
                                   name10, millis(), vec[0], vec[1], vec[2]);
       uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
-      Serial6.write(buf, len);
+      mavWriteNonBlocking(buf, len);
       vec_idx++;
     }
   }
@@ -2578,6 +2652,29 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(F(" drop="));
         serial.print(g_imu_health_no_sample_s, 2);
         serial.println(F("s"));
+
+        serial.print(F("[DBG] link ano_skip="));
+        serial.print(anoTelemetryTxSkipCount());
+        serial.print(F(" proto_drop="));
+        serial.print(AnoCom.txDropped());
+        serial.print(F(" mav_skip="));
+        serial.print(mavTelemetryTxSkipCount());
+        serial.print(F(" nav_gap_max_ms="));
+        serial.println(g_nav_gap_max_us / 1000.0f, 1);
+        serial.print(F("[DBG] navprof tu_max_ms="));
+        serial.print(g_nav_prof_tu_max_us / 1000.0f, 2);
+        serial.print(F(" pos_max_ms="));
+        serial.print(g_nav_prof_pos_max_us / 1000.0f, 2);
+        serial.print(F(" gnss_max_ms="));
+        serial.println(g_nav_prof_gnss_max_us / 1000.0f, 2);
+#ifdef BFS_IMU_ISR_RING
+        serial.print(F("[DBG] p1 ring_size="));
+        serial.print(imuRingSize());
+        serial.print(F(" ring_drop="));
+        serial.print(imuRingDropCount());
+        serial.print(F(" isr_empty="));
+        serial.println(imuIsrEmptyCount());
+#endif
 
         serial.print(F("[DBG] baro alt="));
         serial.print(baro_altitude, 2);
