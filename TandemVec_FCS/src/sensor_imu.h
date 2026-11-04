@@ -68,6 +68,7 @@ int initICM42688();
 bool readIMUData();
 #ifdef BFS_IMU_ISR_RING
 void imuSampleIsr();
+uint32_t imuRingDropCount();
 #endif
 #ifdef BFS_IMU_PROF
 extern float g_imu_prof_total_us;

@@ -31,7 +31,7 @@ RECORD_FIELDS = [
     'rel_n_m', 'rel_e_m', 'rel_h_m',
     'alt_bar_m', 'alt_fu_m', 'imu_rate_hz',
     'imu_prof_total_us', 'imu_prof_mag_us', 'imu_prof_madg_us',
-    'imu_prof_pre_us', 'imu_prof_delta_us', 'imu_prof_spi_us',
+    'imu_prof_pre_us', 'imu_prof_delta_us', 'imu_prof_spi_us', 'imu_ring_drop',
     'flight_mode', 'unlocked',
     'ctrl_roll', 'ctrl_pitch', 'ctrl_thr_pct', 'ctrl_yaw',
     'ctrl_roll_dps2', 'ctrl_pitch_dps2', 'ctrl_yaw_dps2',

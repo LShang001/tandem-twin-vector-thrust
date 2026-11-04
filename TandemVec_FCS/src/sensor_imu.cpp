@@ -245,6 +245,11 @@ static ImuSampleRing s_imu_ring;
 static volatile bool s_imu_ring_ready = false;
 static bool s_ring_processing = false;
 
+uint32_t imuRingDropCount()
+{
+  return s_imu_ring.drop_count();
+}
+
 void imuSampleIsr()
 {
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
