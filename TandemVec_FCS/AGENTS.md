@@ -22,6 +22,9 @@
   非 DBG 0xF4 实测 mean=1999.5/std=71.4，conv=1、vel=0、CPU41.5%；
   全量宿主 rc=0、共轴 SIL 40/40。默认 `[env:CoaxialVTVL]` 已启用，
   `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
+- **P1 是采样架构阶段名，不是 env 名**：生产 P1 = `[env:CoaxialVTVL]`；
+  `CoaxialVTVL_P1` 是含 profiling 的实验环境，不能当飞行固件。纯轮询回退 =
+  `[env:CoaxialVTVL_UI]`。
   **高频采样/时序测量仍禁止用 DBG**，只用 `tvc record` 0xF4 或逻辑分析仪；调试经验见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
 
 ## 坐标系与执行器（2026-08-02 钉死；权威 = mix 层 `flight_control.cpp` 1202–1252）
