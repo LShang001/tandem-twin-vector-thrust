@@ -91,18 +91,28 @@ async function readAll() {
   $('pmInfo').textContent = '正在读取全部参数…';
   // MAVLink 模式走 MAV_PARAM_REQUEST_LIST；AnoCom 走 0xE0 流程
   send({ cmd: state.protocol === 'mavlink' ? 'mav_param_list' : 'param_read_all' });
-  // 后端全量读取：前端等待 3s 后渲染（值逐帧到达）
-  setTimeout(() => {
+  // 后端全量读取：前端等待 3.5s 后渲染（值逐帧到达）。
+  // MAVLink 偶发丢一帧时，若少于 param_count 自动补读一次。
+  let retried = false;
+  const settle = () => {
     params = Object.entries(state.paramValues || {}).map(([id, value]) => ({
       id: Number(id), name: (state.paramMeta || {})[id]?.name || `id${id}`,
       type: (state.paramMeta || {})[id]?.type || 'float', value,
     }));
-    // 后端 param_value 事件也会填充；未收到 E2 名称时用本地名称补全
     render();
+    const total = Number(state.paramCount || 0);
+    if (state.protocol === 'mavlink' && total > 0 && params.length < total && !retried) {
+      retried = true;
+      send({ cmd: 'mav_param_list' });
+      setTimeout(settle, 1800);
+      $('pmInfo').textContent = `已收 ${params.length}/${total}，补读一次…`;
+      return;
+    }
     $('pmInfo').textContent = state.protocol === 'mavlink'
-      ? `已显示 ${params.length} 个参数（MAVLink PARAM_VALUE）`
+      ? `已显示 ${params.length}/${total || '?'} 个参数（MAVLink PARAM_VALUE）`
       : `已显示 ${params.length} 个参数（名称自 E2 信息帧）`;
-  }, 3500);
+  };
+  setTimeout(settle, 3500);
 }
 
 function groupOf(name) {
