@@ -18,8 +18,9 @@
 - 目前证据：统一 PID + 10° 限幅，rigorous SIL 24/24；扩展矩阵 160 例 158/160；
   仍无共轴台架/实飞数据。
 - **IMU 2 kHz 已达标（2026-11-04 P1）**：2kHz TIM8 ISR 单包入 SPSC ring，
-  Navigation 200Hz 排空；SPI 缓冲传输+24MHz、备份姿态200Hz，单样本约16µs。
-  非 DBG 0xF4 实测 mean=1999.5/std=71.4，conv=1、vel=0、CPU41.5%；
+  Navigation 200Hz 按 elapsed 限流排空；SPI 缓冲传输+24MHz、备份姿态200Hz，
+  单样本约16µs。非 DBG 0xF4 实测 120s：mean=2024.5/std=43.8、
+  min1870.6/max2192.0、ring_drop=0；conv=1、vel=0、CPU41.5%。
   全量宿主 rc=0、共轴 SIL 40/40。默认 `[env:CoaxialVTVL]` 已启用，
   `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
 - **P1 是采样架构阶段名，不是 env 名**：生产 P1 = `[env:CoaxialVTVL]`；
