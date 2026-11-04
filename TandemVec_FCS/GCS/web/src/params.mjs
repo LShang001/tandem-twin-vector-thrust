@@ -167,10 +167,13 @@ function render() {
         return;
       }
       const p = params.find(x => x.id === id);
-      if (p && p.type === 'uint8') {
-        send({ cmd: 'param_write', id, value: val !== 0 ? 1 : 0 });
+      const writeValue = (p && p.type === 'uint8') ? (val !== 0 ? 1 : 0) : val;
+      if (state.protocol === 'mavlink') {
+        send({ cmd: 'mav_param_set', name: p?.name || '', value: writeValue });
+      } else if (p && p.type === 'uint8') {
+        send({ cmd: 'param_write', id, value: writeValue });
       } else {
-        send({ cmd: 'param_write', id, value: val });
+        send({ cmd: 'param_write', id, value: writeValue });
       }
       inp.classList.add('p-write-pending');
     });

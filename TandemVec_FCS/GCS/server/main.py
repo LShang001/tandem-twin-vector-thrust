@@ -346,6 +346,9 @@ def _on_telemetry_rx(chunk: bytes):
                             'type': 'float', 'name': ev['name']})
                 g.send_all({'type': 'param_value', 'id': ev['id'],
                             'name': ev['name'], 'value': ev['value']})
+                # MAVLink 的 PARAM_VALUE 回显即写入确认；AnoCom 有独立校验帧。
+                g.send_all({'type': 'param_written', 'id': ev['id'],
+                            'name': ev['name'], 'value': ev['value']})
             if g.recorder and g.recorder.active and not g.replay:
                 g.recorder.write(g.snap)
             now = time.time()
