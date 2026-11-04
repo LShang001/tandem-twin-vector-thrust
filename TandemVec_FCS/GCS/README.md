@@ -102,3 +102,5 @@ GCS/
 - 上行：参数列表/单参数读写、COMMAND_LONG、心跳、MISSION 请求。
 - CLI：`cli.py --port COM9 --protocol mavlink mav status|params|param-set|cmd`。
 - 固件安全策略仍拒绝 MAVLink 解锁/改模式（RC 硬判定）。
+
+详见 `docs/04-数学建模/代码理论核查/GCS-MAVLink双向-2026-11-04.md`。
