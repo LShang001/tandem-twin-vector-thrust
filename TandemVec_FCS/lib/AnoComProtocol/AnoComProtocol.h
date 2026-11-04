@@ -383,7 +383,7 @@ private:
     // 宿主侧视为始终可写，保持组帧字节等价测试不受影响。
     int txFree() const
     {
-#if defined(ARDUINO)
+#if defined(ARDUINO) && !defined(FW_SIL_REAL_NAV)
       return _serial->availableForWrite();
 #else
       return 1 << 20;
