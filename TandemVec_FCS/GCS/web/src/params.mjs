@@ -53,6 +53,10 @@ export function activate() {
 
   $('pmReadAll').addEventListener('click', readAll);
   $('pmRestore').addEventListener('click', () => {
+    if (state.protocol === 'mavlink') {
+      flashAlarm('warn', 'MAVLink 模式未提供恢复出厂默认；请用 AnoCom 或参数快照');
+      return;
+    }
     if (!confirm('确认将所有参数恢复为出厂默认值？')) return;
     send({ cmd: 'param_restore' });
     setTimeout(readAll, 800);
@@ -95,7 +99,9 @@ async function readAll() {
     }));
     // 后端 param_value 事件也会填充；未收到 E2 名称时用本地名称补全
     render();
-    $('pmInfo').textContent = `已显示 ${params.length} 个参数（名称自 E2 信息帧）`;
+    $('pmInfo').textContent = state.protocol === 'mavlink'
+      ? `已显示 ${params.length} 个参数（MAVLink PARAM_VALUE）`
+      : `已显示 ${params.length} 个参数（名称自 E2 信息帧）`;
   }, 3500);
 }
 
