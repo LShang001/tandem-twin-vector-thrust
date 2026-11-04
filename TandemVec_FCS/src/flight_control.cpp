@@ -2648,10 +2648,11 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   output_in.unlocked = inputs.is_unlocked;
   // 手动 RATE 模式可能做翻跟头/横滚等特技，45° 姿态保护不能切电机；
   // AUTO/ATTITUDE 仍保留 45° 保护。这里只改保护门，不改 TVC/电机输出映射。
-  const bool manual_rate_mode =
-      (inputs.attitude_mode == RATE_MODE) && (mode == MANUAL);
+  // 手动模式（RATE/ATTITUDE）不再因姿态角切电机：风扰/特技姿态超过 45°
+  // 不应直接断动力。AUTO/GUIDED 仍保留较高的保护角（默认 90°）。
+  const bool manual_mode = (mode == MANUAL);
   output_in.attitude_safe =
-      manual_rate_mode ||
+      manual_mode ||
       (fabsf(AHRS_Packet.Roll) < coax.attitude_limit_deg &&
        fabsf(AHRS_Packet.Pitch) < coax.attitude_limit_deg);
 

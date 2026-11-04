@@ -116,7 +116,7 @@ struct LegacyPhysical
 
 LegacyPhysical legacyPhysical()
 {
-    return LegacyPhysical{0.84f, 14.0f, 15.0f, 1000.0f, 2000.0f, 45.0f, 0.005f,
+    return LegacyPhysical{0.84f, 14.0f, 15.0f, 1000.0f, 2000.0f, 90.0f, 0.005f,
                           0.0f, 0.15f, 1.0e-6f, 0.05f, 0.05f, 0.08f};
 }
 

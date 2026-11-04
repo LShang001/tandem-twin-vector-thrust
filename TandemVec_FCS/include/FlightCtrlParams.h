@@ -78,7 +78,7 @@ struct CoaxialCtrlParams
     float servo_half_angle_deg = 15.0f; // 舵机半行程角 [deg]（输出标定）
     float motor_min_us = 1000.0f;    // 电机最小 PWM [µs]
     float motor_max_us = 2000.0f;    // 电机最大 PWM [µs]
-    float attitude_limit_deg = 45.0f;// 姿态安全限幅 [deg]（超限锁输出）
+    float attitude_limit_deg = 90.0f;// 姿态安全限幅 [deg]（仅非手动模式超限锁输出）
     float dt_s = 0.005f;             // 共轴控制周期 [s]（200Hz）
 
     // ---- ★ task-10 α+油门分配器参数（默认保持 legacy 角度路径，旧字段顺序/默认值不变）----
@@ -120,7 +120,7 @@ static_assert(CoaxialCtrlParams{}.max_total_thrust_n == 14.0f, "共轴最大推�
 static_assert(CoaxialCtrlParams{}.servo_half_angle_deg == 15.0f, "共轴舵机半行程默认值必须保持 15deg");
 static_assert(CoaxialCtrlParams{}.motor_min_us == 1000.0f, "共轴电机最小 PWM 默认值必须保持 1000us");
 static_assert(CoaxialCtrlParams{}.motor_max_us == 2000.0f, "共轴电机最大 PWM 默认值必须保持 2000us");
-static_assert(CoaxialCtrlParams{}.attitude_limit_deg == 45.0f, "共轴姿态安全限幅默认值必须保持 45deg");
+static_assert(CoaxialCtrlParams{}.attitude_limit_deg == 90.0f, "共轴姿态安全限幅默认值必须保持 90deg（手动模式旁路）");
 static_assert(CoaxialCtrlParams{}.dt_s == 0.005f, "共轴控制周期默认值必须保持 5ms");
 static_assert(CoaxialCtrlParams{}.ctrl.max_correction_deg == 10.0f, "共轴修正角限幅默认值必须保持 10deg");
 // 分配器物理参数默认值锁定（MODEL-DEFAULT）；alloc_mode 已废弃，固件不再读取

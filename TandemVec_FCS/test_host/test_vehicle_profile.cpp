@@ -192,14 +192,23 @@ int main()
 
     in.yaw_diff_us = 0.0f;
     in.attitude_roll_deg = 50.0f;
+    bfs::CoaxialVtvOutputCalibration cal90 = cal;
+    cal90.attitude_limit_deg = 90.0f;
     const bfs::OutputCommandSet tilt_out =
-        bfs::mapCoaxialVtvOutputs(in, cal);
-    CHECK(std::fabs(tilt_out.commands[2].value) < 1e-4f &&
-              std::fabs(tilt_out.commands[3].value) < 1e-4f,
-          "P6 大倾角保护锁电机");
-    CHECK(std::fabs(tilt_out.commands[0].value - 50.0f) < 1e-4f &&
-              std::fabs(tilt_out.commands[1].value - 50.0f) < 1e-4f,
-          "P6 大倾角保护TVC回中50%");
+        bfs::mapCoaxialVtvOutputs(in, cal90);
+    CHECK(std::fabs(tilt_out.commands[2].value - 50.0f) < 1e-2f &&
+              std::fabs(tilt_out.commands[3].value - 50.0f) < 1e-2f,
+          "P6 50°在90°保护内不锁电机");
+    in.attitude_roll_deg = 100.0f;
+    const bfs::OutputCommandSet hard_tilt_out =
+        bfs::mapCoaxialVtvOutputs(in, cal90);
+    CHECK(std::fabs(hard_tilt_out.commands[2].value) < 1e-4f &&
+              std::fabs(hard_tilt_out.commands[3].value) < 1e-4f,
+          "P6 100°超过90°保护锁电机");
+    CHECK(std::fabs(hard_tilt_out.commands[0].value - 50.0f) < 1e-4f &&
+              std::fabs(hard_tilt_out.commands[1].value - 50.0f) < 1e-4f,
+          "P6 超90°保护TVC回中50%");
+    in.attitude_roll_deg = 50.0f;
 
     in.attitude_roll_deg = 0.0f;
     in.unlocked = false;
