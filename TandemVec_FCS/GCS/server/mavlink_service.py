@@ -170,6 +170,8 @@ class MavlinkService:
             s['last_ack_result'] = msg.result
         elif t == 'MISSION_ACK':
             s['mission_ack_type'] = msg.type
+        elif t == 'MISSION_COUNT':
+            s['mission_count'] = msg.count
 
     # ---------------- 发送 ----------------
     def drain_tx(self) -> bytes:
@@ -217,6 +219,13 @@ class MavlinkService:
 
     def mission_request_list(self):
         self.mav.mission_request_list_send(self.target_sys, self.target_comp)
+
+    def ping(self, seq: int = 1):
+        self.mav.ping_send(int(time.time() * 1e6), seq,
+                           self.target_sys, self.target_comp)
+
+    def timesync(self):
+        self.mav.timesync_send(0, int(time.time() * 1e9))
 
 
 def _deg(rad: float) -> float:

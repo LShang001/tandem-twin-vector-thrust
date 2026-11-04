@@ -407,6 +407,21 @@ def cmd_mav(a):
         m.g.mav_pump()
         drain(1.0)
         print(f'requested {a.name}={a.value}; current={m.g.mav.params.get(a.name)}')
+    elif action == 'ping':
+        m.g.mav.ping()
+        m.g.mav_pump()
+        drain(0.8)
+        print(f'ping sent, msgs={m.g.mav.msg_counts}')
+    elif action == 'timesync':
+        m.g.mav.timesync()
+        m.g.mav_pump()
+        drain(0.8)
+        print(f'timesync sent, msgs={m.g.mav.msg_counts}')
+    elif action == 'mission':
+        m.g.mav.mission_request_list()
+        m.g.mav_pump()
+        drain(0.8)
+        print(f'mission request sent, snap={m.g.mav.snap}')
     elif action == 'cmd':
         m.g.mav.command_long(a.command, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7)
         m.g.mav_pump()
@@ -1176,7 +1191,7 @@ def main():
     p.set_defaults(fn=cmd_baudscan)
 
     p = sub.add_parser('mav', help='MAVLink：status/params/param-set/cmd')
-    p.add_argument('action', choices=['status', 'params', 'param-set', 'cmd'])
+    p.add_argument('action', choices=['status', 'params', 'param-set', 'cmd', 'ping', 'timesync', 'mission'])
     p.add_argument('name', nargs='?', default='')
     p.add_argument('value', nargs='?', type=float, default=0.0)
     p.add_argument('--command', type=int, default=0)
