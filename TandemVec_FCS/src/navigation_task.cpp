@@ -4075,6 +4075,7 @@ void handleNavigationSystem()
   // EKF 总耗时统计
   _ekf_time_sum += micros() - _ekf_t0;
   _ekf_time_cnt++;
+#ifdef BFS_NAV_EKF_VERBOSE
   if (millis() - _ekf_last >= 60000) { // 60秒一次, 基本静默
     _ekf_last = millis();
     Serial8.print("[EKF] avg=");
@@ -4096,6 +4097,7 @@ void handleNavigationSystem()
     _ekf_time_sum = _ekf_time_cnt = 0;
     _sg_attempt = _sg_fused = 0;
   }
+#endif // BFS_NAV_EKF_VERBOSE
 
   // GNSS 失联 → 重捕获：请求位置保持把当前点重设为目标，避免失联期间
   // 累积的位置误差在重捕获后变成大姿态指令（seed7 的 runaway 触发条件）。
