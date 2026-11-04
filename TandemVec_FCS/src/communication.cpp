@@ -2411,6 +2411,43 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           }
         }
       }
+      else if (strcmp(line, "imufifohist") == 0) {
+        // FIFO 包数直方图：未解锁时临时开 FIFO，每 1ms 读 8 包上限，统计
+        // 每次实际拿到的包数，再关闭。只做地面诊断，不接控制路径。
+        if (IMU == nullptr) {
+          serial.println(F("[DBG] imufifohist: IMU null"));
+        } else if (g_is_unlocked) {
+          serial.println(F("[DBG] imufifohist refused: locked required"));
+        } else if (IMU->enableFifo() < 0) {
+          serial.println(F("[DBG] imufifohist: enable failed"));
+        } else {
+          uint16_t hist[9] = {0};
+          uint32_t total = 0;
+          const uint32_t t0 = micros();
+          for (int i = 0; i < 200; ++i) {
+            delay(1);
+            ImuFifoSample smp[8];
+            const int n = IMU->readFifo(smp, 8);
+            if (n >= 0 && n <= 8) {
+              ++hist[n];
+              total += static_cast<uint32_t>(n);
+            }
+          }
+          const uint32_t dt_us = micros() - t0;
+          IMU->disableFifo();
+          serial.print(F("[DBG] imufifohist calls=200 n="));
+          for (int i = 0; i <= 8; ++i) {
+            serial.print(hist[i]);
+            if (i < 8) serial.print('/');
+          }
+          serial.print(F(" total="));
+          serial.print(total);
+          serial.print(F(" avg="));
+          serial.print(total / 200.0f, 3);
+          serial.print(F(" elapsed_ms="));
+          serial.println(dt_us / 1000.0f, 1);
+        }
+      }
       else if (strncmp(line, "tasks", 5) == 0) {
         // 任务调度统计：实际/名义Hz、耗时、间隔抖动、迟到、CPU负荷（打印后清零）
         schedulerStatsPrint(serial);
