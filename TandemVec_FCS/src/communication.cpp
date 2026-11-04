@@ -2689,6 +2689,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(mavTelemetryTxSkipCount());
         serial.print(F(" nav_gap_max_ms="));
         serial.println(g_nav_gap_max_us / 1000.0f, 1);
+        serial.print(F("[DBG] navstage pre/post/static/tail max_ms="));
+        serial.print(g_nav_stage_max_us[0] / 1000.0f, 1); serial.print(F("/"));
+        serial.print(g_nav_stage_max_us[1] / 1000.0f, 1); serial.print(F("/"));
+        serial.print(g_nav_stage_max_us[2] / 1000.0f, 1); serial.print(F("/"));
+        serial.println(g_nav_stage_max_us[3] / 1000.0f, 1);
         serial.print(F("[DBG] navprof tu_max_ms="));
         serial.print(g_nav_prof_tu_max_us / 1000.0f, 2);
         serial.print(F(" pos_max_ms="));

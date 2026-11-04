@@ -1326,6 +1326,10 @@ void handleNavigationSystem()
   uint32_t _nav_profile_stage_start = _ekf_t0;
 #endif
   static uint32_t _ekf_time_sum = 0, _ekf_time_cnt = 0, _ekf_last = 0;
+  uint32_t t_nav_stage = micros();
+  auto nav_stage = [](int i, uint32_t us) {
+    if (i >= 0 && i < 4 && us > g_nav_stage_max_us[i]) { g_nav_stage_max_us[i] = us; }
+  };
   static uint32_t _sg_attempt = 0, _sg_fused = 0;
 
   // 1. 获取当前时间与 dt
@@ -2580,6 +2584,8 @@ void handleNavigationSystem()
     {
       const uint32_t _tu_us = micros() - _tu_start_us;
       if (_tu_us > g_nav_prof_tu_max_us) { g_nav_prof_tu_max_us = _tu_us; }
+      nav_stage(0, micros() - t_nav_stage);
+      t_nav_stage = micros();
     }
 #ifdef BFS_NAV_PROFILE
     {
@@ -3689,6 +3695,8 @@ void handleNavigationSystem()
   // ====================================================================
   // 5. 将 EKF 结果注入全局状态 (Bridge to Global State)
   // ====================================================================
+  nav_stage(2, micros() - t_nav_stage);
+  t_nav_stage = micros();
   // 核心策略：DETA100 在线时直接透传其数据给飞控，EKF 输出桥跳过写入；
   //           DETA100 离线时 EKF 始终作为唯一姿态输出源（参考 esp32-ins-gnss-fusion 架构），
   //           无 GNSS 时靠静止辅助(ZUPT+Gravity)和 AHRS 姿态量测持续闭环修正，
@@ -4223,6 +4231,7 @@ void handleNavigationSystem()
                                               : 0.05f);
     }
   }
+  nav_stage(3, micros() - t_nav_stage);
 }
 
 /**
