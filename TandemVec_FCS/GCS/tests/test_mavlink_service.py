@@ -55,6 +55,9 @@ def test_attitude_and_global_position():
     assert svc.snap['v_north_mps'] == pytest.approx(1.0)
     assert svc.snap['v_down_mps'] == pytest.approx(-0.5)
     assert svc.snap['heading_deg'] == pytest.approx(90.0)
+    assert svc.snap['vel_n_ms'] == pytest.approx(1.0)
+    assert svc.snap['vel_up_ms'] == pytest.approx(0.5)
+    assert svc.snap['rel_h_m'] == pytest.approx(45.678)
 
 
 def test_status_rc_and_raw_imu():
@@ -68,6 +71,7 @@ def test_status_rc_and_raw_imu():
     assert svc.snap['bat_voltage_v'] == pytest.approx(12.6)
     assert svc.snap['bat_current_a'] == pytest.approx(12.34)
     assert svc.snap['rc_channels'][:3] == [1000, 1100, 1200]
+    assert svc.snap['rc1'] == 1000
     assert svc.snap['acc_x_ms2'] == pytest.approx(9.80665)
     assert svc.snap['gyro_z_dps'] == pytest.approx(17.1887, abs=1e-3)
 
@@ -81,6 +85,7 @@ def test_heartbeat_armed_mode_and_gps():
     feed_vehicle(svc, lambda v: v.mav.gps_raw_int_send(
         0, 3, 300000000, 1200000000, 100000, 120, 200, 500, 9000, 12, 100000))
     assert svc.snap['armed'] is True
+    assert svc.snap['unlocked'] == 1
     assert svc.snap['flight_mode'] == 7
     assert svc.snap['fix_type'] == 3
     assert svc.snap['sats'] == 12

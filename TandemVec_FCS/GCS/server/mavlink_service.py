@@ -173,6 +173,38 @@ class MavlinkService:
         elif t == 'MISSION_COUNT':
             s['mission_count'] = msg.count
 
+        self._alias_record_fields()
+
+    def _alias_record_fields(self):
+        """把 MAVLink 字段映射到 GCS 现有 AnoCom/CSV 字段名。"""
+        s = self.snap
+        if 'armed' in s:
+            s['unlocked'] = 1 if s['armed'] else 0
+        if 'v_down_mps' in s:
+            s['vel_n_ms'] = s.get('v_north_mps', 0.0)
+            s['vel_e_ms'] = s.get('v_east_mps', 0.0)
+            s['vel_up_ms'] = -s['v_down_mps']
+        if 'rel_alt_m' in s:
+            s['rel_h_m'] = s['rel_alt_m']
+            s['alt_fu_m'] = s['rel_alt_m']
+        if 'baro_alt_m' in s:
+            s['alt_bar_m'] = s['baro_alt_m']
+        if 'gps_lat_deg' not in s and 'lat_deg' in s:
+            s['gps_lat_deg'] = s['lat_deg']
+            s['gps_lon_deg'] = s['lon_deg']
+        if 'fix_type' in s:
+            s['gps_fix'] = s['fix_type']
+        if 'sats' in s:
+            s['gps_sats'] = s['sats']
+        if 'alt_msl_m' in s:
+            s['gps_alt_m'] = s['alt_msl_m']
+        ch = s.get('rc_channels')
+        if isinstance(ch, list) and len(ch) >= 8:
+            for i in range(8):
+                s[f'rc{i + 1}'] = ch[i]
+        if 'flight_mode' in s:
+            s['mode'] = s['flight_mode']
+
     # ---------------- 发送 ----------------
     def drain_tx(self) -> bytes:
         out = bytes(self.sink.buf)
