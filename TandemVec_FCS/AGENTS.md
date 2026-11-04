@@ -150,3 +150,5 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 ## 实机安全注意事项
 
 建议任何实机测试前，必须提醒断开电机动力电源（除非请求明确不涉及实时输出）。飞控逻辑改动分阶段：编译检查 → 传感器初始化/遥测 → 断动力查执行机构方向与限位 → 系留低功率 → 自由飞。
+
+- **数传链路验收（2026-11-04）**：0xF4从100Hz降至10Hz、0x0A/0x21/0xF1从100Hz降至50Hz后，120s记录行率39.8Hz、gap p99=41.6ms、max47.7ms、无>100ms；参数148项load双确认148/148。验收脚本 `tools/verify_telemetry.py`（rate≥35、p99≤60ms、max≤100ms、ring_drop=0）。

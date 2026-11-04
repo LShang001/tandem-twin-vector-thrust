@@ -773,6 +773,7 @@ void handleAnoCom()
   // ---- tick 分档判定 ----
   const uint32_t t = s_tele_tick++;
   const bool fast_tick = (t % 2 == 1);       // 快环 100Hz（奇数 tick）
+  const bool fast_aux_tick = (t % 4 == 1);   // 显示帧 50Hz（0x0A/0x21/0xF1）
   const bool pos_tick  = (t % 4 == 2);       // 位置 50Hz
   const bool rc_tick   = (t % 8 == 4);       // RC 25Hz
   const bool disp_tick = (t % 8 == 6);       // 显示帧 25Hz（高度/模式/速度/PWM/目标速度）
@@ -805,13 +806,19 @@ void handleAnoCom()
         // 0x0A 目标姿态（6B）：3×int16 ×100。★ 第 3 字段在官方手册是目标航向角，
         // 本工程承载的是目标航向**角速率** [deg/s]（航向为纯速率指令，无角度回中），
         // GCS 侧 decode_target_attitude 同口径；字节/缩放不变。@ref PROTOCOL-001 §二.1.9
-        AnoCom.sendTargetAttitude(target_roll_ano, target_pitch_ano, target_yaw_ano);
+        if (fast_aux_tick)
+        {
+          AnoCom.sendTargetAttitude(target_roll_ano, target_pitch_ano, target_yaw_ano);
+        }
         // 参数顺序必须与 AnoComProtocol::sendAttitudeControl(ctrlRol, ctrlPit, ctrlThr, ctrlYaw) 一致：
         // 第3个参数是油门、第4个是偏航（曾错位传成 yaw, throttle，导致地面站油门/偏航字段互换）
         // 0x21 姿态控制量（8B）：4×int16，统一 ±5000 量程。本工程语义为
         // alpha_ref_radps2×10 [rad/s²]（角加速度指令）+ thr%×10，非官方“控制量”。
         // @ref PROTOCOL-001 §二.2.2 + 本工程差异对照表（0x21 行）
-        AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
+        if (fast_aux_tick)
+        {
+          AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
+        }
         // 0xF4 IMU 健康帧（4B float，Hz）：把 imu_rate 放进普通遥测，
         // 用于非 DBG 的采样率/调度测量（DBG 会暂停任务/改变时序，禁止用于此）。
         {
@@ -834,12 +841,18 @@ void handleAnoCom()
 #endif
           };
           std::memcpy(imu_health, imu_health_f, sizeof(imu_health));
-          AnoCom.sendData(ANO_GND_STATION_ADDR,
-                          static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
-                          imu_health, sizeof(imu_health));
+          // 0xF4诊断帧降载：100Hz→约10Hz（空口反压会阻塞主循环，实测导致P1 ring积压）。
+          static uint32_t s_imu_health_div = 0;
+          if ((++s_imu_health_div % 10U) == 0U)
+          {
+            AnoCom.sendData(ANO_GND_STATION_ADDR,
+                            static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
+                            imu_health, sizeof(imu_health));
+          }
         }
         // 执行器输出帧（手册用户自定义帧 0xF1）：前/下摆角 deg×100 int16、
         // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
+        if (fast_aux_tick)
         {
           uint8_t act[12];
           auto put16 = [](uint8_t *p, int32_t v) { p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF; };
