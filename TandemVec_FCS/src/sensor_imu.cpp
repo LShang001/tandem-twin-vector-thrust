@@ -276,7 +276,13 @@ bool readIMUData()
     if (!s_fifo_fallback)
     {
     bool any = false;
-    for (int k = 0; k < 10; ++k)
+    static uint32_t s_ring_last_us = 0;
+    const uint32_t now_us = micros();
+    if (s_ring_last_us == 0) { s_ring_last_us = now_us; }
+    const uint32_t elapsed_us = now_us - s_ring_last_us;
+    int allowed = 1 + static_cast<int>((static_cast<uint64_t>(elapsed_us) * 2000ULL) / 1000000ULL);
+    if (allowed > 10) { allowed = 10; }
+    for (int k = 0; k < allowed; ++k)
     {
       ImuRingSample rs{};
       if (!s_imu_ring.pop(rs)) { break; }
@@ -288,6 +294,7 @@ bool readIMUData()
       any = readIMUData() || any;
       s_ring_processing = false;
     }
+    s_ring_last_us = now_us;
     return any;
     }
   }
