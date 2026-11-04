@@ -23,7 +23,7 @@
   min1870.6/max2192.0、ring_drop=0；conv=1、vel=0、CPU41.5%。
   全量宿主 rc=0、共轴 SIL 40/40。默认 `[env:CoaxialVTVL]` 已启用，
   `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
-- **日志/诊断（2026-11-04）**：Navigation 60s一次的多段 Serial8 打印默认关闭（`BFS_NAV_EKF_VERBOSE`），它是300s数传/P1长停顿根因；需要时显式打开。**协议调试接口（2026-11-04）**：0xF5 1Hz上报 `link_seq/ano_skip/proto_drop/mav_skip/nav_gap/ring`；：DBG `health` 现在含 AnoCom/MAVLink
+- **日志/诊断（2026-11-04）**：Navigation 60s一次的多段 Serial8 打印默认关闭（`BFS_NAV_EKF_VERBOSE`），它是300s数传/P1长停顿根因；需要时显式打开。**协议调试接口（2026-11-04）**：0xF5 1Hz上报 `link_seq/ano_skip/proto_drop/mav_skip/nav_gap/ring`；DBG `health` 现在含 AnoCom/MAVLink
   tx-skip、AnoCom组丢帧、P1 ring水位/溢出/空读、Navigation最大入口间隔，以及
   `navprof` 的 EKF预测/位置量测/GNSS更新最大耗时。MAVLink 模式可用 `DBG
 `
@@ -33,13 +33,24 @@
   `[env:CoaxialVTVL_UI]`。
   **高频采样/时序测量仍禁止用 DBG**，只用 `tvc record` 0xF4 或逻辑分析仪；调试经验见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
 
-## 坐标系与执行器（2026-08-02 钉死；权威 = mix 层 `flight_control.cpp` 1202–1252）
+## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
 
-- **机体系 FRD**：`x_b` 前（前电机 +x 拉力式、尾电机 −x 推进式）、`y_b` 右、`z_b` 下；★ **电机推力轴 = z_b**（悬停机头朝天时 z_b 竖直指地）。旧"x_b=推力轴"错误（2026-08-09 修正）。
-- **执行器→力矩（悬停构型语义）**：上摆 δf（前电机最高点）→滚转主控；下摆 δt（尾电机）→俯仰主控；差速 Δω→偏航主控。旧"前摆=偏航、差速反扭滚转"是巡航读法，已废止。
-- **悬停构型**：机头朝天（x_b ∥ NED −z）——差速（绕 x_b）=世界航向；z_b 悬停时水平。
-- **RATE_MODE**：三轴经 `RcCurve.h`（rc_rate/expo/super），满杆 roll/pitch 333°/s、yaw 222°/s（限幅 600°/s）；**ATTITUDE_MODE**：q_err.x→上摆、q_err.y→下摆、q_err.z→差速。
-- **NED z ≠ 机体 z_b**：推力垂直补偿用 R13（x_b 投影）；激光斜距用 R33（沿 −z_b）。推导见 `docs/04-数学建模/MOD-002` §1.2。
+> ★ **全仓有两套轴名**，是同一机械布局的纯旋转置换 `x' = −z_b, y' = +y_b, z' = +x_b`（det=+1，`tools/verify_frame_map.py` 已校验）。写任何轴/通道注释必须标注「存档系」或「模型系」，**不得只写 x/y/z**。下表是唯一对照口径。
+
+| 项 | 固件存档系（本文件 / 固件源码 / `ControlContracts.h` / `CoaxialAllocator.h` / `FlightCtrlParams.h`） | 仿真模型系（`MOD-002` / `MOD-001` / `CTL-001 §3` / 论文 / `TandemVec_Propulsion.h`） |
+|---|---|---|
+| 推力轴 = 机身纵轴 | **z_b**（悬停竖直指地；推力沿 −z_b 朝上） | **x′**（朝机头；悬停竖直朝天） |
+| 其余两轴 | x_b / y_b 为横向轴（悬停水平）；滚转绕 x_b、俯仰绕 y_b | y′ = 右 / 尾摆轴，z′ = 上摆轴 |
+| 悬停姿态 | **roll=pitch=0，q=Rz(Heading)**，R33=1（判据：机头朝天静止 acc≈(0,0,−1)g） | q_hover = 绕 +y′ 转 90°，x′ ∥ NED −z，R13=±1 |
+| 通道→执行器 | 上摆 δf→滚转（Mx，绕 x_b）、下摆 δt→俯仰（My）、差速 Δω→偏航（Mz，**绕 z_b = 推力轴 = 世界航向**） | 前摆 δf→Mz 偏航、尾摆 δt→My 俯仰、差速 Δω→Mx 滚转 |
+| 倾角补偿 | **\|R33\| = \|1−2(qx²+qy²)\|**：推力倾斜补偿与光流/激光斜距反投影都用 | **R13 = 2(xz+wy)**（仅仿真模型） |
+| 四元数分量 | `{w,x,y,z}`（`QuaternionMath.h:49`） | `{x,y,z,w}`（THREE） |
+
+- **机体系（存档系）**：`z_b` = 推力轴 = 机身纵轴；`x_b`/`y_b` 为两条横向轴。旧表述「x_b 前 = 机身纵轴 = 推力轴」是模型系读法，2026-08-09 已废止（`FW-CTRL` P2-1）。
+- **执行器→力矩（悬停构型语义）**：上摆 δf（前电机最高点）→滚转主控；下摆 δt（尾电机最低点）→俯仰主控；差速 Δω→偏航主控。旧"前摆=偏航、差速反扭滚转"是仿真模型系/巡航读法，已废止。
+- **悬停构型**：机身竖立、机头朝天；推力轴 z_b 竖直指地（与 NED +z 平行），差速绕 z_b 即世界航向；x_b/y_b 水平。旧表述「差速绕 x_b、z_b 悬停时水平」是模型系读法，勿再引用。
+- **RATE_MODE**：三轴经 `RcCurve.h`（rc_rate/expo/super），满杆 roll/pitch 333°/s、yaw 222°/s（限幅 600°/s）；**ATTITUDE_MODE**：q_err.x→上摆、q_err.y→下摆、q_err.z→差速（航向由 `execute_yaw_controller` 统一处理）。
+- **倾角补偿只用 R33**：固件 `compute_thrust_control()`、`sensor_peripheral.cpp` 两处斜距反投影全部走 `|R33|`（钳 0.5 / 0.1）。2026-08-07 误用 R13（x_b 投影）导致悬停 cos_tilt≈0 → 油门×2，已回退。**`MOD-002 §1.2` 的 R13 只适用于仿真模型系，不得作为固件依据**。
 - **AnoVars**（0xF2/0xF3/MAVLink/DBG vars）：加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏；MAVLink 名 9 字符截断须唯一。
 - **编码**：批处理内容必须 ASCII（cmd 启动代码页解析）；中文输出走 Python（PYTHONUTF8=1）。
 
