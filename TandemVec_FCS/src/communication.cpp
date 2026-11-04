@@ -27,6 +27,7 @@
 #include "FailsafeLinkLossPlan.h"  // 断链通道合成（纯函数，宿主测试共用同一份判据）
 #include "navigation_task.h"
 #include "sensor_peripheral.h"
+#include "sensor_imu.h"
 #include "MAVLink.h"
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
 #include "ano_vars.h"     // 通用变量上报（0xF2 值帧 / 0xF3 清单 / DBG vars）
@@ -814,9 +815,16 @@ void handleAnoCom()
         // 0xF4 IMU 健康帧（4B float，Hz）：把 imu_rate 放进普通遥测，
         // 用于非 DBG 的采样率/调度测量（DBG 会暂停任务/改变时序，禁止用于此）。
         {
-          uint8_t imu_health[4];
-          const float imu_rate_hz = g_imu_health_sample_rate_hz;
-          std::memcpy(imu_health, &imu_rate_hz, sizeof(imu_health));
+          uint8_t imu_health[16];
+          const float imu_health_f[4] = {
+              g_imu_health_sample_rate_hz,
+#ifdef BFS_IMU_PROF
+              g_imu_prof_total_us, g_imu_prof_mag_us, g_imu_prof_madg_us
+#else
+              0.0f, 0.0f, 0.0f
+#endif
+          };
+          std::memcpy(imu_health, imu_health_f, sizeof(imu_health));
           AnoCom.sendData(ANO_GND_STATION_ADDR,
                           static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
                           imu_health, sizeof(imu_health));

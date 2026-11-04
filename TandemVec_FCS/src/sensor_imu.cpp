@@ -47,6 +47,12 @@ namespace
   constexpr bool kMagFeedMadgwick = false;
 }
 
+#ifdef BFS_IMU_PROF
+float g_imu_prof_total_us = 0.0f;
+float g_imu_prof_mag_us = 0.0f;
+float g_imu_prof_madg_us = 0.0f;
+#endif
+
 bool initMagnetometer()
 {
   Serial8.println("----------------------------------------");
@@ -232,6 +238,11 @@ int initICM42688()
 
 bool readIMUData()
 {
+#ifdef BFS_IMU_PROF
+  const uint32_t t_prof_start = micros();
+  uint32_t t_prof_mag = 0;
+  uint32_t t_prof_madg = 0;
+#endif
   // ★2026-11-01 防御：IMU 已由全局对象改为 setup() 中创建的指针，
   //   极端时序（初始化失败后仍有任务调用）下判空，按“无数据”处理。
   if (IMU == nullptr)
@@ -458,6 +469,9 @@ bool readIMUData()
     //     驱动内部 FSM 限速，绝大多数调用只做一次 micros() 比较（~微秒级）；
     //     I2C 事务仅在采样点发生（IST8310 约每 7ms、QMC5883L 约每 10ms 一次突发读）。
     //     输出已由 MagSensor 层完成椭球标定（若有效）并对齐到机体 FRD。
+#ifdef BFS_IMU_PROF
+    const uint32_t t_mag_start = micros();
+#endif
     if (magSensor.isPresent())
     {
       magSensor.update();
@@ -471,7 +485,13 @@ bool readIMUData()
       const float gyrFrd[3] = {gxBody * DEG_TO_RAD, gyBody * DEG_TO_RAD, gzBody * DEG_TO_RAD};
       magSensor.guideUpdate(accFrd, gyrFrd, micros());
     }
+#ifdef BFS_IMU_PROF
+    t_prof_mag = micros() - t_mag_start;
+#endif
 
+#ifdef BFS_IMU_PROF
+    const uint32_t t_madg_start = micros();
+#endif
     if (kMagFeedMadgwick)
     {
       // 7.2 磁力计馈入路径（开关 kMagFeedMadgwick，见文件头）
@@ -525,6 +545,9 @@ bool readIMUData()
           deltaTimeSecs);
     }
 
+#ifdef BFS_IMU_PROF
+    t_prof_madg = micros() - t_madg_start;
+#endif
     // ========================================================================
     // 步骤 8: 获取并打包姿态数据 (Data Packing)
     // ========================================================================
@@ -621,6 +644,14 @@ bool readIMUData()
       if (std::isfinite(t_c)) imu_die_temp_c = t_c;
     }
 
+#ifdef BFS_IMU_PROF
+    {
+      const float total = static_cast<float>(micros() - t_prof_start);
+      g_imu_prof_total_us = 0.9f * g_imu_prof_total_us + 0.1f * total;
+      g_imu_prof_mag_us = 0.9f * g_imu_prof_mag_us + 0.1f * static_cast<float>(t_prof_mag);
+      g_imu_prof_madg_us = 0.9f * g_imu_prof_madg_us + 0.1f * static_cast<float>(t_prof_madg);
+    }
+#endif
     return true; // 返回成功标志，表示姿态已更新
   }
   return false;

@@ -66,6 +66,11 @@ int initICM42688();
  * @return true 数据读取和处理成功, false 无新数据
  */
 bool readIMUData();
+#ifdef BFS_IMU_PROF
+extern float g_imu_prof_total_us;
+extern float g_imu_prof_mag_us;
+extern float g_imu_prof_madg_us;
+#endif
 
 /**
  * @brief ICM42688 任务调度入口 (2kHz)
