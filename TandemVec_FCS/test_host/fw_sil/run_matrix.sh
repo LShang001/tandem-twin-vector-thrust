@@ -12,15 +12,7 @@ INC="$INC -Ilib/navigation-main/src -Ilib/units/src -Ilib/AnoComProtocol -Ilib/M
 for d in $(find lib -maxdepth 2 -type d); do INC="$INC -I$d"; done
 
 OUT_BASE="$BIN_DIR/fw_env"
-$CXX -std=c++17 -O2 -DTANDEMVEC_FIRMWARE \
-  -Wno-address-of-packed-member -Wno-psabi \
-  $INC \
-  src/flight_control.cpp src/state_data.cpp \
-  test_host/fw_sil/fw_sil_stubs.cpp test_host/fw_sil/fw_sil_env_main.cpp \
-  lib/DPS310-Pressure-Sensor/src/Dps310.cpp lib/DPS310-Pressure-Sensor/src/DpsClass.cpp \
-  lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp \
-  lib/units/src/convang.cpp lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp \
-  -o "$OUT_BASE"
+$CXX -std=c++17 -O2 -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO   -Wno-address-of-packed-member -Wno-psabi   -Ilib/ublox-main/src $INC   src/flight_control.cpp src/state_data.cpp src/navigation_task.cpp   test_host/fw_sil/fw_sil_stubs.cpp test_host/fw_sil/fw_sil_env_main.cpp   lib/DPS310-Pressure-Sensor/src/Dps310.cpp lib/DPS310-Pressure-Sensor/src/DpsClass.cpp   lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp   lib/ublox-main/src/ubx.cpp lib/ublox-main/src/minmea.c   lib/units/src/convang.cpp lib/units/src/convangacc.cpp lib/units/src/convangvel.cpp   -o "$OUT_BASE"
 OUT="$OUT_BASE"
 [ -f "$OUT_BASE.exe" ] && OUT="$OUT_BASE.exe"
 
