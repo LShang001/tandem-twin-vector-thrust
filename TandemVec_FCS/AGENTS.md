@@ -17,13 +17,12 @@
   10–180°）保护。禁止把 45° 硬切电机重新加到手动路径。
 - 目前证据：统一 PID + 10° 限幅，rigorous SIL 24/24；扩展矩阵 160 例 158/160；
   仍无共轴台架/实飞数据。
-- **IMU 2 kHz 未闭环（2026-11-04）**：默认轮询实测约1.43 kHz；FIFO2 平均2.1k
-  但 std571，不稳；TIM8 6.4→12.8k、任务推迟、Madgwick降频均无效。
-  **高频采样/时序测量禁止用 DBG**（会阻塞任务、造成假象），只用 `tvc record`
-  的 0xF4 `imu_rate_hz` 或逻辑分析仪。下一步按
-  `docs/04-数学建模/代码理论核查/IMU采样架构设计-2026-11-04.md` 做 P1：
-  2kHz ISR/定时器单包入 SPSC ring，主循环处理；验收 mean≥1950、std<100、
-  Navigation max<15ms、conv=1。架构版通过前不飞。
+- **IMU 2 kHz 已达标（2026-11-04 P1）**：2kHz TIM8 ISR 单包入 SPSC ring，
+  Navigation 200Hz 排空；SPI 缓冲传输+24MHz、备份姿态200Hz，单样本约16µs。
+  非 DBG 0xF4 实测 mean=1999.5/std=71.4，conv=1、vel=0、CPU41.5%；
+  全量宿主 rc=0、共轴 SIL 40/40。默认 `[env:CoaxialVTVL]` 已启用，
+  `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
+  **高频采样/时序测量仍禁止用 DBG**，只用 `tvc record` 0xF4 或逻辑分析仪。
 
 ## 坐标系与执行器（2026-08-02 钉死；权威 = mix 层 `flight_control.cpp` 1202–1252）
 
