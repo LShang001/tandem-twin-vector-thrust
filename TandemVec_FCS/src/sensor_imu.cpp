@@ -557,10 +557,14 @@ bool readIMUData()
 #endif
 #ifdef BFS_IMU_ATT_DECIMATE
     static uint16_t s_att_div = 0;
+    static float s_att_dt = 0.0f;
+    s_att_dt += static_cast<float>(deltaTimeSecs);
     const bool do_attitude = (++s_att_div >= 7U);
-    if (do_attitude) { s_att_div = 0; }
+    const float attitude_dt_s = do_attitude ? s_att_dt : 0.0f;
+    if (do_attitude) { s_att_div = 0; s_att_dt = 0.0f; }
 #else
     const bool do_attitude = true;
+    const float attitude_dt_s = static_cast<float>(deltaTimeSecs);
 #endif
     if (do_attitude)
     {
@@ -589,7 +593,7 @@ bool readIMUData()
             mx_flu,
             my_flu,
             mz_flu,
-            deltaTimeSecs);
+            attitude_dt_s);
       }
       else
       {
@@ -601,7 +605,7 @@ bool readIMUData()
             axForMadgwick,
             ayForMadgwick,
             azForMadgwick,
-            deltaTimeSecs);
+            attitude_dt_s);
       }
     }
     else
