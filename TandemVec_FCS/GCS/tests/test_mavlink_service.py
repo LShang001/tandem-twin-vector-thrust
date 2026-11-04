@@ -151,3 +151,39 @@ def test_missing_pymavlink(monkeypatch):
     monkeypatch.setattr(m, 'mavlink2', None)
     with pytest.raises(RuntimeError):
         MavlinkService()
+
+
+def test_vfr_hud_and_mission_ack():
+    svc = MavlinkService()
+    feed_vehicle(svc, lambda v: v.mav.vfr_hud_send(12.5, 15.0, 90, 45, 120.0, 1.2))
+    feed_vehicle(svc, lambda v: v.mav.mission_ack_send(
+        TARGET_SYSID, TARGET_COMPID, 3))
+    assert svc.snap['airspeed_mps'] == pytest.approx(12.5)
+    assert svc.snap['groundspeed_mps'] == pytest.approx(15.0)
+    assert svc.snap['heading_deg'] == 90
+    assert svc.snap['mission_ack_type'] == 3
+
+
+def test_mission_count_zero():
+    svc = MavlinkService()
+    feed_vehicle(svc, lambda v: v.mav.mission_count_send(
+        TARGET_SYSID, TARGET_COMPID, 0))
+    assert svc.snap['mission_count'] == 0
+
+
+def test_ping_and_timesync_tx():
+    svc = MavlinkService()
+    svc.ping(7)
+    svc.timesync()
+    tx = svc.drain_tx()
+    assert tx.count(b'\xfd') == 2
+    assert len(tx) >= 20
+
+
+def test_param_request_list_and_set_tx_are_v2():
+    svc = MavlinkService()
+    svc.request_params()
+    svc.set_param('att_roll.kp', 2.6)
+    tx = svc.drain_tx()
+    assert tx[0] == 0xFD
+    assert tx.count(b'\xfd') == 2
