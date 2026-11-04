@@ -1886,6 +1886,30 @@ void handleNavigationSystem()
       g_imu_static_calibrated = true;
     }
   }
+    // 静止零位移伪量测（相对定位）：p(t)=p(t0)，锚点只在静止确认后保存。
+    // 仅无GNSS新鲜量测、fake origin、油门<3%时启用；运动/恢复GNSS立即退出。
+    // 注意：这是相对位置保持，不是绝对位置；不能替代GNSS。
+    {
+      static Eigen::Vector3d s_static_pos_anchor = Eigen::Vector3d::Zero();
+      static bool s_static_pos_anchor_valid = false;
+      const bool static_pos_hold =
+          is_static_confirmed && throttlePercent < 3.0f &&
+          nav_initialized_with_fake_origin;
+      if (static_pos_hold)
+      {
+        if (!s_static_pos_anchor_valid)
+        {
+          s_static_pos_anchor = nav_ekf.lla_rad_m();
+          s_static_pos_anchor_valid = true;
+        }
+        nav_ekf.MeasurementUpdatePositionDetailed(
+            s_static_pos_anchor, 0.5f, 1.0f);
+      }
+      else
+      {
+        s_static_pos_anchor_valid = false;
+      }
+    }
   const float static_confidence = static_det.confidence;
 #ifdef FW_SIL_REAL_NAV
   g_sil_nav_debug_static = is_static_confirmed;

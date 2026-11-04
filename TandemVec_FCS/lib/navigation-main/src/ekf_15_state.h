@@ -1356,6 +1356,58 @@ namespace bfs
     }
 
     /**
+     * @brief 静止零位移伪量测（相对位置保持）。
+     *
+     * 静止段真实相对位置不变：z_p = lla2ned(p_anchor, p_ins) ≈ 0。
+     * 只应在静态确认、无外部绝对位置、未解锁小油门下启用；锚点由上层保存。
+     * @formula H_p=[I₃ 0]，S=H P Hᵀ+R，K=P Hᵀ S⁻¹，x=K(z−p̂)，Joseph 更新 P
+     * @ref REF-121 §2.2.1 (2.2.4b–e) p.33–34；相对定位，不替代 GNSS
+     */
+    MeasurementUpdateResult MeasurementUpdatePositionDetailed(
+        const Eigen::Vector3d &anchor_lla,
+        const float pos_ne_std_m,
+        const float pos_d_std_m)
+    {
+      MeasurementUpdateResult result;
+      if (!IsValidLlaForEarthModel(anchor_lla) ||
+          !IsValidNoiseStd(pos_ne_std_m) || !IsValidNoiseStd(pos_d_std_m))
+      {
+        return result;
+      }
+      result.input_valid = true;
+      result.attempted = true;
+      const Eigen::Vector3f y =
+          lla2ned(anchor_lla, ins_lla_rad_m_, bfs::AngPosUnit::RAD).cast<float>();
+      Eigen::Matrix<float, 3, 15> h = Eigen::Matrix<float, 3, 15>::Zero();
+      h.block<3, 3>(0, 0) = Eigen::Matrix3f::Identity();
+      Eigen::Matrix3f r = Eigen::Matrix3f::Zero();
+      r(0, 0) = r(1, 1) = pos_ne_std_m * pos_ne_std_m;
+      r(2, 2) = pos_d_std_m * pos_d_std_m;
+      Eigen::Matrix3f s = h * p_ * h.transpose() + r;
+      Eigen::Matrix3f s_inv;
+      if (!InvertSymmetricPositiveDefiniteMatrix(s, &s_inv))
+      {
+        return result;
+      }
+      const float nis = (y.transpose() * s_inv * y)(0, 0);
+      result.test_ratio = std::isfinite(nis) ? nis / VELOCITY_NIS_REJECT_THRESHOLD : 0.0f;
+      if (!std::isfinite(nis) || nis > VELOCITY_NIS_REJECT_THRESHOLD)
+      {
+        return result;
+      }
+      Eigen::Matrix<float, 15, 3> k = p_ * h.transpose() * s_inv;
+      Eigen::Matrix<float, 15, 15> identity = Eigen::Matrix<float, 15, 15>::Identity();
+      p_ = (identity - k * h) * p_ * (identity - k * h).transpose() +
+           k * r * k.transpose();
+      StabilizeCovarianceAfterStaticAidUpdate();
+      x_ = k * y;
+      InjectErrorState();
+      result.fused = true;
+      result.innovation_norm = y.norm();
+      return result;
+    }
+
+    /**
      * @brief 外部测速源（光流等持续测速辅助）速度量测更新。
      *
      * 与 MeasurementUpdateVelocityDetailed（ZUPT 导向）的区别仅在下层守卫：

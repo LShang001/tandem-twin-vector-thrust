@@ -63,6 +63,10 @@
 
 ## 核心参数
 
+- **静止相对位置保持（2026-11-04）**：EKF 新增零位移伪量测
+  `MeasurementUpdatePositionDetailed`；仅 `is_static_confirmed && throttle<3%
+  && fake_origin` 时用静止锚点做相对位置更新，运动/恢复绝对参考立即退出。
+  室内80s实测 pos_sig0.44、conv1；这是相对定位，不替代GNSS。
 - **参数无Flash持久化（2026-11-04审计）**：`param save 0xAB` 只回校验帧，不写Flash；
   重启回 `kFlightCtrlParamsDefaults`。调参后用 GCS `param dump` 保存快照，
   下次上电用 `param load` 重放并回读确认。需要掉电保存时必须单独设计独立扇区+CRC+
