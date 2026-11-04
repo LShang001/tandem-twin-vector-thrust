@@ -405,8 +405,12 @@ def cmd_mav(a):
     elif action == 'param-set':
         m.g.mav.set_param(a.name, a.value)
         m.g.mav_pump()
-        drain(1.0)
-        print(f'requested {a.name}={a.value}; current={m.g.mav.params.get(a.name)}')
+        # 等固件回 PARAM_VALUE 确认，而不是固定睡1s；超时也报告。
+        deadline = time.time() + 2.0
+        while time.time() < deadline and a.name not in m.g.mav.params:
+            drain(0.2)
+        cur = m.g.mav.params.get(a.name)
+        print(f'requested {a.name}={a.value}; confirmed={cur}')
     elif action == 'ping':
         m.g.mav.ping()
         m.g.mav_pump()
