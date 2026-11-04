@@ -276,7 +276,7 @@ bool readIMUData()
     if (!s_fifo_fallback)
     {
     bool any = false;
-    for (int k = 0; k < 64; ++k)
+    for (int k = 0; k < 10; ++k)
     {
       ImuRingSample rs{};
       if (!s_imu_ring.pop(rs)) { break; }
