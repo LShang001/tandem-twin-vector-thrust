@@ -90,6 +90,7 @@ function handleMsg(msg) {
       break;
     case 'conn':
       state.connected = msg.status === 'connected';
+      if (msg.protocol) state.protocol = msg.protocol;
       if (state.connected) connectTs = Date.now();
       emit('conn', msg);
       break;

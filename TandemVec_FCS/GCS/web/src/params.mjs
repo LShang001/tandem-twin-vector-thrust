@@ -85,7 +85,8 @@ export function activate() {
 async function readAll() {
   if (!state.connected) { flashAlarm('warn', '请先连接飞控'); return; }
   $('pmInfo').textContent = '正在读取全部参数…';
-  send({ cmd: 'param_read_all' });
+  // MAVLink 模式走 MAV_PARAM_REQUEST_LIST；AnoCom 走 0xE0 流程
+  send({ cmd: state.protocol === 'mavlink' ? 'mav_param_list' : 'param_read_all' });
   // 后端全量读取：前端等待 3s 后渲染（值逐帧到达）
   setTimeout(() => {
     params = Object.entries(state.paramValues || {}).map(([id, value]) => ({

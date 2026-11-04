@@ -65,6 +65,7 @@ class MavlinkService:
         self.status_text: list[str] = []
         self.last_ack: Optional[tuple[int, int]] = None
         self.msg_counts: dict[int, int] = {}
+        self.param_events: list[dict] = []
         self.frames = 0
         self.last_rx_ts: Optional[float] = None
         self._last_hb = 0.0
@@ -155,6 +156,10 @@ class MavlinkService:
                 s['param_count'] = msg.param_count
                 s['param_index'] = msg.param_index
                 self.param_count = msg.param_count
+                self.param_events.append({'id': int(msg.param_index),
+                                          'name': name, 'value': float(msg.param_value),
+                                          'count': int(msg.param_count),
+                                          'index': int(msg.param_index)})
         elif t == 'STATUSTEXT':
             text = msg.text
             if isinstance(text, bytes):
@@ -206,6 +211,11 @@ class MavlinkService:
             s['mode'] = s['flight_mode']
 
     # ---------------- 发送 ----------------
+    def drain_param_events(self):
+        out = self.param_events
+        self.param_events = []
+        return out
+
     def drain_tx(self) -> bytes:
         out = bytes(self.sink.buf)
         self.sink.buf.clear()

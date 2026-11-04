@@ -340,6 +340,12 @@ def _on_telemetry_rx(chunk: bytes):
             g.last_tele_ts = time.time()
             g.snap['t_ms'] = time.time() * 1000
             g.stat_tele += 1
+            for ev in g.mav.drain_param_events():
+                g.send_all({'type': 'param_count', 'count': ev['count']})
+                g.send_all({'type': 'param_info', 'id': ev['id'],
+                            'type': 'float', 'name': ev['name']})
+                g.send_all({'type': 'param_value', 'id': ev['id'],
+                            'name': ev['name'], 'value': ev['value']})
             if g.recorder and g.recorder.active and not g.replay:
                 g.recorder.write(g.snap)
             now = time.time()
