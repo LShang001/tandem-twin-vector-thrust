@@ -48,7 +48,7 @@ def main() -> int:
             errs.append(f"imu_rate未达标 mean={mean:.1f}/std={std:.1f}")
     if drop and max(drop) != 0.0:
         errs.append(f"ring_drop={max(drop):.0f}")
-    for key, limit in (("unlocked", 0.01), ("tvc_upper_deg", 0.1),
+    for key, limit in (("flight_mode", 0.01), ("unlocked", 0.01), ("tvc_upper_deg", 0.1),
                        ("tvc_lower_deg", 0.1), ("motor_front_pct", 0.1),
                        ("motor_rear_pct", 0.1)):
         v = fvals(rows, key)
