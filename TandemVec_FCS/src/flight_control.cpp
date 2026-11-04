@@ -2421,7 +2421,8 @@ void applyCoaxialCtrlFlightParams(const CoaxialCtrlParams &p)
 
 static void run_coaxial_control(const ControlInputs_t &inputs,
                                 ControlOutputs_t &outputs,
-                                const Quaternion &q_target)
+                                const Quaternion &q_target,
+                                const ControlMode mode)
 {
   // 物理/输出常量与增益统一取自 kFlightCtrlParams.coax（默认值逐位 = 原硬编码，
   // 见 include/FlightCtrlParams.h 的 static_assert 与 test_host/test_coax_params.cpp）。
@@ -2645,8 +2646,14 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   output_in.attitude_roll_deg = AHRS_Packet.Roll;
   output_in.attitude_pitch_deg = AHRS_Packet.Pitch;
   output_in.unlocked = inputs.is_unlocked;
-  output_in.attitude_safe = fabsf(AHRS_Packet.Roll) < coax.attitude_limit_deg &&
-                            fabsf(AHRS_Packet.Pitch) < coax.attitude_limit_deg;
+  // 手动 RATE 模式可能做翻跟头/横滚等特技，45° 姿态保护不能切电机；
+  // AUTO/ATTITUDE 仍保留 45° 保护。这里只改保护门，不改 TVC/电机输出映射。
+  const bool manual_rate_mode =
+      (inputs.attitude_mode == RATE_MODE) && (mode == MANUAL);
+  output_in.attitude_safe =
+      manual_rate_mode ||
+      (fabsf(AHRS_Packet.Roll) < coax.attitude_limit_deg &&
+       fabsf(AHRS_Packet.Pitch) < coax.attitude_limit_deg);
 
   bfs::CoaxialVtvOutputCalibration output_cal;
   output_cal.servo_half_angle_deg = coax.servo_half_angle_deg;
@@ -2979,7 +2986,8 @@ void runGNCExecutive()
   // 仍然复用步骤 1–5 的输入/模式/定高/目标姿态层；姿态外环/速率环由
   // CoaxialVtvControl 负责，不再走 TandemVec 的 BTRUE/差速开方。F3/F4
   // 诊断与在线辨识是 TandemVec 专用观测，不能在共轴分支复用。
-  run_coaxial_control(controller_inputs, controller_outputs, q_target_attitude);
+  run_coaxial_control(controller_inputs, controller_outputs, q_target_attitude,
+                      current_mode);
   updateCoaxialFaultDiagnostics(controller_inputs, controller_outputs,
                                 current_mode);
 #else
