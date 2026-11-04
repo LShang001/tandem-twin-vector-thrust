@@ -67,3 +67,12 @@ py -3.12 server/cli.py --port COM9 --protocol mavlink record start -o out.csv -d
 - 不假装支持航线上传：MISSION_COUNT=0 / MISSION_ACK UNSUPPORTED。
 - 未做动态/室外空口长测；当前只验证静态 USB/数传链路。
 - `pymavlink` 已加入 `requirements.txt`，无依赖时 AnoCom 路径仍可运行。
+
+## 6. MAVLink 300s 长时记录（2026-11-04）
+
+- GCS CLI `record` + `--protocol mavlink` 连续300s：**9010行，约30Hz**，
+  CSV 69列。
+- 快照时间戳 gap：p95=47.7ms、max=60.0ms、无>100ms。
+- 关键字段完整：`roll_deg/pitch_deg/heading_deg/vel_n_ms/rel_h_m/rc1/
+  gps_fix/unlocked` 每行有值（unlocked 前18行因心跳尚未到达为空）。
+- 说明：MAVLink 前端/记录链路可长时运行；未覆盖动态/室外空口。
