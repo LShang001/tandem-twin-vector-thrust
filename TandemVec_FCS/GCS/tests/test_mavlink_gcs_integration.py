@@ -67,3 +67,15 @@ def test_gcs_mavlink_param_value_updates_params(monkeypatch):
     m._on_telemetry_rx(frame)
     assert g.mav.params['att_roll.kp'] == pytest.approx(2.4)
     assert g.snap['param_count'] == 148
+
+
+def test_connect_idempotent_same_port_protocol():
+    g = m.GCS()
+    from server.serial_link import FakeSerialLink
+    g.link = FakeSerialLink(port='COMX', baud=921600)
+    g.link.connect()
+    g.protocol = 'mavlink'
+    # 应直接返回，不得 disconnect 掉已有链路
+    g.connect('COMX', 921600, protocol='mavlink')
+    assert g.link is not None
+    assert g.link.is_open

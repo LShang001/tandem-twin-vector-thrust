@@ -129,8 +129,16 @@ class GCS:
 
     # ---------------- 串口 ----------------
     def connect(self, port, baud, consume_thread: bool = True, protocol: str = 'anocom'):
+        # 幂等：同一端口/协议/波特率已连接时直接复用，避免多标签页或重复点击
+        # 的第二次 connect 把第一次的串口会话断开。
+        protocol = protocol if protocol in ('anocom', 'mavlink') else 'anocom'
+        if (self.link and self.link.is_open and
+                getattr(self.link, 'port', None) == port and
+                getattr(self.link, 'baud', None) == baud and
+                self.protocol == protocol):
+            return
         self.disconnect()
-        self.protocol = protocol if protocol in ('anocom', 'mavlink') else 'anocom'
+        self.protocol = protocol
         self.link = SerialLink(port, baud, self._on_rx)
         self.link.connect()
         self.mav = MavlinkService() if self.protocol == 'mavlink' else None
