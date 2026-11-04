@@ -3285,7 +3285,12 @@ void handleNavigationSystem()
       nav_ekf.set_gnss_vertical_reanchor_allowed(
           !(g_baro_health_gate_enable && s_baro_health_distrust));
 
-      if (InsGnssShouldReanchor(has_gnss_epoch,
+      // 带fake origin且已解锁：无GNSS姿态模式，首次GNSS不硬重锚（会重置位置/
+      // 速度）；等上锁后再锚定。位置保持功能在无GNSS时不可用。
+      const bool defer_reanchor_while_armed =
+          g_is_unlocked && nav_initialized_with_fake_origin;
+      if (!defer_reanchor_while_armed &&
+          InsGnssShouldReanchor(has_gnss_epoch,
                                 gnss_quality_for_reanchor,
                                 gnss_time_mapping_valid,
                                 gnss_measurement_age_s,

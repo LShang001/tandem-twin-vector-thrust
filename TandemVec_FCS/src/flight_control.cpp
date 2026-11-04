@@ -228,12 +228,10 @@ void process_control_inputs(ControlInputs_t &inputs)
   if (!g_is_unlocked && inputs.is_unlocked)
   {
     const float ekf_speed = nav_ekf.ned_vel_mps().norm();
-    // 首次解锁必须有真实GNSS锚点：否则可能带fake origin起飞，飞行中首次
-    // GNSS触发硬重锚（位置/速度重置），造成不可接受的导航突变。
-    // 无GNSS室内飞行必须显式走单独模式，不能靠默认解锁。
+    // 无GNSS允许解锁并退化到姿态模式（无定点）；但飞行中首次GNSS不得硬重锚。
+    // 重锚推迟到上锁后（见 navigation_task.cpp），避免位置/速度突变。
     const bool nav_ready =
         g_ekf_converged && nav_system_initialized &&
-        nav_has_real_gnss_anchor &&
         std::isfinite(ekf_speed) && ekf_speed < 1.0f &&
         std::isfinite(g_nav_tilt_sigma_deg) && g_nav_tilt_sigma_deg < 5.0f;
     if (!nav_ready)
