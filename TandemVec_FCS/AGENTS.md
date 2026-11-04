@@ -63,6 +63,9 @@
 
 ## 核心参数
 
+- **EKF位置语义（2026-11-04）**：内部状态是绝对LLA；`rel_ned` 是
+  `lla2ned(EKF_LLA, origin)` 的输出。首次GNSS且未解锁时重锚并令origin=当前点、
+  相对位置归0；已解锁后保留真实起飞origin。不要把相对位置当EKF输入。
 - **静止相对位置保持（2026-11-04）**：EKF 新增零位移伪量测
   `MeasurementUpdatePositionDetailed`；仅 `is_static_confirmed && throttle<3%
   && fake_origin` 时用静止锚点做相对位置更新，运动/恢复绝对参考立即退出。
