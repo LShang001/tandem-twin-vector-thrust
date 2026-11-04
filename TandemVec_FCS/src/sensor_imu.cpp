@@ -244,6 +244,7 @@ int initICM42688()
 static ImuSampleRing s_imu_ring;
 static volatile bool s_imu_ring_ready = false;
 static bool s_ring_processing = false;
+static bool s_fifo_fallback = false;
 
 uint32_t imuRingDropCount()
 {
@@ -265,13 +266,15 @@ void imuSampleIsr()
 bool readIMUData()
 {
 #ifdef BFS_IMU_ISR_RING
-  if (!s_ring_processing)
+  if (!s_ring_processing && !s_fifo_fallback)
   {
     if (!s_imu_ring_ready)
     {
       if (IMU != nullptr && IMU->enableFifo() >= 0) { s_imu_ring_ready = true; }
-      else { return false; }
+      else { s_fifo_fallback = true; }
     }
+    if (!s_fifo_fallback)
+    {
     bool any = false;
     for (int k = 0; k < 64; ++k)
     {
@@ -280,12 +283,13 @@ bool readIMUData()
       ImuFifoSample one{};
       for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
       one.timestamp = rs.timestamp;
-      if (IMU->injectFifo(one) < 0) { break; }
+      if (IMU->injectFifo(one) < 0) { s_fifo_fallback = true; break; }
       s_ring_processing = true;
       any = readIMUData() || any;
       s_ring_processing = false;
     }
     return any;
+    }
   }
 #endif
 #ifdef BFS_IMU_PROF
