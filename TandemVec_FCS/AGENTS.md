@@ -63,6 +63,9 @@
 
 ## 核心参数
 
+- **首次解锁门（2026-11-04）**：首次解锁还要求 `nav_has_real_gnss_anchor`；
+  fake origin/无GNSS不能默认解锁，避免飞行中首次GNSS硬重锚导致位置/速度突变。
+  无GNSS室内飞行需单独模式；SIL 构建旁路该门。
 - **EKF位置语义（2026-11-04）**：内部状态是绝对LLA；`rel_ned` 是
   `lla2ned(EKF_LLA, origin)` 的输出。首次GNSS且未解锁时重锚并令origin=当前点、
   相对位置归0；已解锁后保留真实起飞origin。不要把相对位置当EKF输入。
