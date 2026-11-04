@@ -25,7 +25,7 @@ struct ImuRingSample
 class ImuSampleRing
 {
 public:
-  static constexpr size_t kCapacity = 256U;
+  static constexpr size_t kCapacity = 128U;
 
   /// 生产端（ISR）：写入一个样本；满时返回 false 并累加 drop_count。
   bool push(const ImuRingSample &sample)
