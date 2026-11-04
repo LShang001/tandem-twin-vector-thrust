@@ -81,6 +81,7 @@ public:
       out[i].gyr[0] = tmp[i].gyr[0];
       out[i].gyr[1] = tmp[i].gyr[1];
       out[i].gyr[2] = tmp[i].gyr[2];
+      out[i].timestamp = tmp[i].timestamp;
     }
     return static_cast<int>(n);
   }

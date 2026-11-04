@@ -1109,6 +1109,7 @@ int ICM42688::readFifoPackets(FifoSample *out, size_t max, size_t *count)
     out[i].gyr[0] = (static_cast<float>(parsed.gyro[0]) * _gyroScale) - _gyrB[0];
     out[i].gyr[1] = (static_cast<float>(parsed.gyro[1]) * _gyroScale) - _gyrB[1];
     out[i].gyr[2] = (static_cast<float>(parsed.gyro[2]) * _gyroScale) - _gyrB[2];
+    out[i].timestamp = parsed.timestamp;
     *count = i + 1;
   }
   return static_cast<int>(*count);

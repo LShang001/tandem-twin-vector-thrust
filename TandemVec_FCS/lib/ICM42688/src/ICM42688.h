@@ -243,6 +243,7 @@ public:
   {
     float acc[3];
     float gyr[3];
+    uint16_t timestamp = 0;
   };
 
   /// 按 DS-000347 §6.4 开启 accel+gyro(+temp) 的 Stream-to-FIFO。

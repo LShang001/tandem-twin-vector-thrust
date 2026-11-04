@@ -2423,6 +2423,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         } else {
           uint16_t hist[9] = {0};
           uint32_t total = 0;
+          uint16_t ts_first = 0, ts_last = 0;
+          bool ts_seen = false;
           const uint32_t t0 = micros();
           for (int i = 0; i < 200; ++i) {
             delay(1);
@@ -2431,6 +2433,10 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
             if (n >= 0 && n <= 8) {
               ++hist[n];
               total += static_cast<uint32_t>(n);
+              if (n > 0) {
+                if (!ts_seen) { ts_first = smp[0].timestamp; ts_seen = true; }
+                ts_last = smp[n - 1].timestamp;
+              }
             }
           }
           const uint32_t dt_us = micros() - t0;
@@ -2445,7 +2451,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(F(" avg="));
           serial.print(total / 200.0f, 3);
           serial.print(F(" elapsed_ms="));
-          serial.println(dt_us / 1000.0f, 1);
+          serial.print(dt_us / 1000.0f, 1);
+          serial.print(F(" ts0="));
+          serial.print(ts_first);
+          serial.print(F(" ts1="));
+          serial.println(ts_last);
         }
       }
       else if (strncmp(line, "tasks", 5) == 0) {

@@ -92,6 +92,7 @@ struct ImuFifoSample
 {
   float acc[3];
   float gyr[3];
+  uint16_t timestamp = 0; ///< FIFO Packet3 timestamp（用于弹出/重复判定）
 };
 
 struct ImuConfig
