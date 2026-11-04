@@ -885,6 +885,34 @@ void handleAnoCom()
                             imu_health, sizeof(imu_health));
           }
         }
+        // 0xF5 链路诊断（1Hz）：序列/运行时间/发送跳过/丢组/导航与ring状态。
+        // 空口/PC丢帧时序列仍连续；板子停或协议丢帧时序列/计数会暴露。
+        if ((t % 200U) == 1U)
+        {
+          uint8_t diag[32];
+          static uint32_t s_diag_seq = 0;
+          auto put32 = [](uint8_t *p, uint32_t v) {
+            p[0] = v & 0xFF; p[1] = (v >> 8) & 0xFF;
+            p[2] = (v >> 16) & 0xFF; p[3] = (v >> 24) & 0xFF;
+          };
+          put32(diag + 0, s_diag_seq++);
+          put32(diag + 4, millis());
+          put32(diag + 8, anoTelemetryTxSkipCount());
+          put32(diag + 12, AnoCom.txDropped());
+          put32(diag + 16, mavTelemetryTxSkipCount());
+          put32(diag + 20, g_nav_gap_max_us / 1000U);
+          uint32_t ring_drop = 0, isr_empty = 0;
+#ifdef BFS_IMU_ISR_RING
+          ring_drop = imuRingDropCount();
+          isr_empty = imuIsrEmptyCount();
+#endif
+          put32(diag + 24, ring_drop);
+          put32(diag + 28, isr_empty);
+          AnoCom.sendData(ANO_GND_STATION_ADDR,
+                          static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 4),
+                          diag, sizeof(diag));
+        }
+
         // 执行器输出帧（手册用户自定义帧 0xF1）：前/下摆角 deg×100 int16、
         // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
         if (fast_aux_tick)

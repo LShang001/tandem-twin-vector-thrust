@@ -23,7 +23,7 @@
   min1870.6/max2192.0、ring_drop=0；conv=1、vel=0、CPU41.5%。
   全量宿主 rc=0、共轴 SIL 40/40。默认 `[env:CoaxialVTVL]` 已启用，
   `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
-- **协议调试接口（2026-11-04）**：DBG `health` 现在含 AnoCom/MAVLink
+- **协议调试接口（2026-11-04）**：0xF5 1Hz上报 `link_seq/ano_skip/proto_drop/mav_skip/nav_gap/ring`；：DBG `health` 现在含 AnoCom/MAVLink
   tx-skip、AnoCom组丢帧、P1 ring水位/溢出/空读、Navigation最大入口间隔，以及
   `navprof` 的 EKF预测/位置量测/GNSS更新最大耗时。MAVLink 模式可用 `DBG
 `
