@@ -220,9 +220,13 @@ inline OutputCommandSet mapCoaxialVtvOutputs(
     // 无 RC 链路时 raw stick=0 会被映射成 -10°，曾导致地面舵机顶到限位。
     const float roll_deg = output_enabled ? in.roll_correction_deg : 0.0f;
     const float pitch_deg = output_enabled ? in.pitch_correction_deg : 0.0f;
-    const float yaw_diff = clampOutput(in.yaw_diff_us,
-                                       cal.motor_min_us - base_us,
-                                       cal.motor_max_us - base_us);
+    // 安全门控内必须同时归零差速：仅压 base 时正差速仍会叠加到电机2
+    // （原 45°/未解锁门控遗留缺陷，VER-004 D9）。TVC 回中、差速归零。
+    const float yaw_diff = output_enabled
+                               ? clampOutput(in.yaw_diff_us,
+                                             cal.motor_min_us - base_us,
+                                             cal.motor_max_us - base_us)
+                               : 0.0f;
     const float motor1_us =
         clampOutput(base_us - yaw_diff, cal.motor_min_us, cal.motor_max_us);
     const float motor2_us =

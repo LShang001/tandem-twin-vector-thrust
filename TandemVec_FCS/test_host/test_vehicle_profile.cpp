@@ -220,6 +220,23 @@ int main()
     CHECK(std::fabs(lock_out.commands[0].value - 50.0f) < 1e-4f &&
               std::fabs(lock_out.commands[1].value - 50.0f) < 1e-4f,
           "P6 未解锁TVC回中50%");
+
+    // 安全门控必须同时归零差速：不能只压base而让正差速给电机2加速。
+    in.unlocked = true;
+    in.attitude_roll_deg = 100.0f;
+    in.yaw_diff_us = 600.0f;
+    const bfs::OutputCommandSet tilt_yaw_out =
+        bfs::mapCoaxialVtvOutputs(in, cal90);
+    CHECK(std::fabs(tilt_yaw_out.commands[2].value) < 1e-4f &&
+              std::fabs(tilt_yaw_out.commands[3].value) < 1e-4f,
+          "P6 超90°保护差速必须归零");
+    in.attitude_roll_deg = 0.0f;
+    in.unlocked = false;
+    const bfs::OutputCommandSet lock_yaw_out =
+        bfs::mapCoaxialVtvOutputs(in, cal);
+    CHECK(std::fabs(lock_yaw_out.commands[2].value) < 1e-4f &&
+              std::fabs(lock_yaw_out.commands[3].value) < 1e-4f,
+          "P6 未解锁差速必须归零");
   }
 
   // P7 非有限输入：不丢通道，回落零点并置 valid=false。
