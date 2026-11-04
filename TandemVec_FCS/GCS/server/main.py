@@ -338,7 +338,15 @@ def _on_telemetry_rx(chunk: bytes):
         if g.mav.snap:
             g.snap.update(g.mav.snap)
             g.last_tele_ts = time.time()
+            g.snap['t_ms'] = time.time() * 1000
             g.stat_tele += 1
+            if g.recorder and g.recorder.active and not g.replay:
+                g.recorder.write(g.snap)
+            now = time.time()
+            last = getattr(g, '_last_tele_push', 0)
+            if now - last >= TELEMETRY_PERIOD:
+                g._last_tele_push = now
+                g.send_all({'type': 'telemetry', 'data': g.snap})
         return
     g.tele_buf.extend(chunk)
     # ★ 2026-08-08 卡顿根因修复：旧实现 find_frames 全缓冲扫描 + 找到帧才
