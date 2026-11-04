@@ -29,7 +29,7 @@ RECORD_FIELDS = [
     'gyro_x_dps', 'gyro_y_dps', 'gyro_z_dps',
     'vel_n_ms', 'vel_e_ms', 'vel_up_ms',
     'rel_n_m', 'rel_e_m', 'rel_h_m',
-    'alt_bar_m', 'alt_fu_m',
+    'alt_bar_m', 'alt_fu_m', 'imu_rate_hz',
     'flight_mode', 'unlocked',
     'ctrl_roll', 'ctrl_pitch', 'ctrl_thr_pct', 'ctrl_yaw',
     'ctrl_roll_dps2', 'ctrl_pitch_dps2', 'ctrl_yaw_dps2',

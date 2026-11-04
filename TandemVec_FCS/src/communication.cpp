@@ -811,6 +811,16 @@ void handleAnoCom()
         // alpha_ref_radps2×10 [rad/s²]（角加速度指令）+ thr%×10，非官方“控制量”。
         // @ref PROTOCOL-001 §二.2.2 + 本工程差异对照表（0x21 行）
         AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
+        // 0xF4 IMU 健康帧（4B float，Hz）：把 imu_rate 放进普通遥测，
+        // 用于非 DBG 的采样率/调度测量（DBG 会暂停任务/改变时序，禁止用于此）。
+        {
+          uint8_t imu_health[4];
+          const float imu_rate_hz = g_imu_health_sample_rate_hz;
+          std::memcpy(imu_health, &imu_rate_hz, sizeof(imu_health));
+          AnoCom.sendData(ANO_GND_STATION_ADDR,
+                          static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
+                          imu_health, sizeof(imu_health));
+        }
         // 执行器输出帧（手册用户自定义帧 0xF1）：前/下摆角 deg×100 int16、
         // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
         {

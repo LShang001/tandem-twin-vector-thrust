@@ -57,6 +57,7 @@ FUNC_RC_DATA = 0x40            # 遥控器数据（手册定义：10×int16 us�
 FUNC_ACTUATOR_OUT = 0xF1       # 本工程自定义（手册灵活格式帧）：执行器输出（TVC 摆角/电机推力/差速）
 FUNC_VARS_VALUE = 0xF2         # 本工程自定义（手册灵活格式帧）：通用变量值帧 [id u16 LE] + [float LE]
 FUNC_VARS_LIST = 0xF3          # 本工程自定义（手册灵活格式帧）：变量清单请求/应答（仿 0xE0/0xE2）
+FUNC_IMU_HEALTH = 0xF4         # 本工程自定义：IMU 采样率 float Hz（非 DBG 测量用）
 FUNC_PARAM_CMD = 0xE0
 FUNC_PARAM_WRITE_READ = 0xE1
 FUNC_PARAM_INFO = 0xE2
@@ -263,6 +264,14 @@ def decode_rc(p: bytes) -> dict:
     return {f'rc{i + 1}': int(v) for i, v in enumerate(vals)}
 
 
+def decode_imu_health(p: bytes) -> dict:
+    """0xF4: IMU 健康遥测 [float LE imu_rate_hz]（非 DBG；用于采样率测量）。"""
+    if len(p) < 4:
+        return {}
+    (rate,) = struct.unpack('<f', p[0:4])
+    return {'imu_rate_hz': rate}
+
+
 def decode_attitude_control(p: bytes) -> dict:
     """0x21 保持线缆协议为 rad/s²，同时派生 deg/s² 供人机界面显示。"""
     if len(p) < 8:
@@ -343,6 +352,7 @@ DECODERS = {
     FUNC_ATTITUDE_CONTROL: decode_attitude_control,
     FUNC_RC_DATA: decode_rc,
     FUNC_ACTUATOR_OUT: decode_actuator,
+    FUNC_IMU_HEALTH: decode_imu_health,
     FUNC_GPS_INFO1: decode_gps,
     FUNC_DEVICE_INFO: decode_device_info,
 }
