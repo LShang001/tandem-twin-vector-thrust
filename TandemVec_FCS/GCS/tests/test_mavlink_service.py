@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
-"""MAVLink 服务单元测试（无硬件）。"""
+"""MAVLink服务解析/发送/字段映射
+
+@file    test_mavlink_service.py
+@module  GCS/测试（MAVLink 服务与集成）
+@brief   MAVLink服务解析/发送/字段映射
+@details 无硬件单元测试；用 pymavlink 构造/解析 MAVLink 帧，验证 GCS 双向链路。
+@theory  N/A
+@ref     mavlink.io services/parameter
+@frame   MAVLink v1/v2 测试帧
+@units   测试断言单位随字段后缀
+"""
 import struct
 
 import pytest

@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
-"""GCS MAVLink 集成测试：TX 泵到串口、RX 快照进入 GCS。"""
+"""GCS MAVLink TX泵/RX快照/幂等连接
+
+@file    test_mavlink_gcs_integration.py
+@module  GCS/测试（MAVLink 服务与集成）
+@brief   GCS MAVLink TX泵/RX快照/幂等连接
+@details 无硬件单元测试；用 pymavlink 构造/解析 MAVLink 帧，验证 GCS 双向链路。
+@theory  N/A
+@ref     GCS-MAVLink双向-2026-11-04.md
+@frame   MAVLink v1/v2 测试帧
+@units   测试断言单位随字段后缀
+"""
 import pytest
 
 pymavlink = pytest.importorskip('pymavlink')
