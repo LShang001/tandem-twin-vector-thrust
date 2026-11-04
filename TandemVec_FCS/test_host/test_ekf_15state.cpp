@@ -919,6 +919,25 @@ int main()
           off2 > 1.2 && off2 < 3.0);
   }
 
+  // ---- T27 静止零位移伪量测：锚点应把位置误差拉回 ----
+  {
+    Ekf15State ekf = makeInit();
+    const Eigen::Vector3d anchor = ekf.lla_rad_m();
+    ekf.ResetPositionVelocityToGnss(Eigen::Vector3f(0.5f, 0.0f, 0.0f), kLla);
+    for (int i = 0; i < 20; ++i)
+      ekf.TimeUpdate(kGravity, Eigen::Vector3f::Zero(), 0.005f);
+    const double before =
+        bfs::lla2ned(anchor, ekf.lla_rad_m(), bfs::AngPosUnit::RAD).norm();
+    const auto r = ekf.MeasurementUpdatePositionDetailed(anchor, 0.5f, 1.0f);
+    const double after =
+        bfs::lla2ned(anchor, ekf.lla_rad_m(), bfs::AngPosUnit::RAD).norm();
+    CHECK("T27 零位移量测融合成功", r.fused);
+    CHECK("T27 位置误差减小", after < before);
+    const auto bad = ekf.MeasurementUpdatePositionDetailed(
+        Eigen::Vector3d(0.0, 0.0, 1.0e9), 0.5f, 1.0f);
+    CHECK("T27 非法锚点被拒绝", !bad.input_valid);
+  }
+
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
