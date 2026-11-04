@@ -92,3 +92,13 @@ GCS/
 - DBG 检测 peek 修复：AnoCom 上行帧不再被 DBG 检测吞掉（旧固件参数读写从未真正生效的根因）
 - export 循环分块写 + 持续喂狗：2M 满速发送不再触发 IWDG 复位
 - P 帧 21 增量修正（p2 通道曾被 CRC 污染）
+
+## MAVLink 双向（2026-11-04）
+
+- 连接时可选择 `AnoCom` 或 `MAVLink`；MAVLink 使用 pymavlink v2。
+- 支持下行解析：HEARTBEAT/SYS_STATUS/ATTITUDE/GLOBAL_POSITION_INT/VFR_HUD/
+  RAW_IMU/RC_CHANNELS_RAW/GPS_RAW_INT/HOME_POSITION/AUTOPILOT_VERSION/
+  PARAM_VALUE/STATUSTEXT/COMMAND_ACK。
+- 上行：参数列表/单参数读写、COMMAND_LONG、心跳、MISSION 请求。
+- CLI：`cli.py --port COM9 --protocol mavlink mav status|params|param-set|cmd`。
+- 固件安全策略仍拒绝 MAVLink 解锁/改模式（RC 硬判定）。

@@ -151,8 +151,8 @@ def cmd_connect(a):
     """@brief 子命令 connect：保持串口会话（CLI 进程退出即断开）
     @param a.port 串口名；a.baud 波特率
     """
-    m.g.connect(a.port, a.baud)
-    print(f'✓ 已连接 {a.port} @ {a.baud}')
+    m.g.connect(a.port, a.baud, protocol=getattr(a, 'protocol', 'anocom'))
+    print(f'✓ 已连接 {a.port} @ {a.baud} ({m.g.protocol})')
     # 自动拉取设备信息
     m.g.write(anocom.encode_frame(anocom.FUNC_PARAM_CMD, bytes([0x00, 0, 0, 0, 0])))
     drain(1.0)
@@ -382,6 +382,38 @@ def _param_set(spec, value, mode, use_json=False):
             print(f'✗ 写入 id={pid} ({name}) = {value}：确认帧未到且读回 {after}——'
                   f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
 
+
+def cmd_mav(a):
+    """@brief MAVLink 调试：status/params/param-set/cmd"""
+    if not (m.g.link and m.g.link.is_open and m.g.mav):
+        print('✗ MAVLink 未连接：cli.py --port COMx --protocol mavlink mav status')
+        sys.exit(1)
+    action = a.action
+    if action == 'status':
+        drain(1.5)
+        print(f'frames={m.g.mav.frames} params={len(m.g.mav.params)} '
+              f'tx_buf={len(m.g.mav.sink.buf)} msgs={m.g.mav.msg_counts}')
+        for k, v in sorted(m.g.mav.snap.items()):
+            print(f'{k:20s} {v}')
+    elif action == 'params':
+        m.g.mav.request_params()
+        m.g.mav_pump()
+        drain(2.0)
+        for k, v in sorted(m.g.mav.params.items()):
+            print(f'{k:20s} {v:.6g}')
+        print(f'-- {len(m.g.mav.params)} params msgs={m.g.mav.msg_counts}')
+    elif action == 'param-set':
+        m.g.mav.set_param(a.name, a.value)
+        m.g.mav_pump()
+        drain(1.0)
+        print(f'requested {a.name}={a.value}; current={m.g.mav.params.get(a.name)}')
+    elif action == 'cmd':
+        m.g.mav.command_long(a.command, a.p1, a.p2, a.p3, a.p4, a.p5, a.p6, a.p7)
+        m.g.mav_pump()
+        drain(0.8)
+        print(f'command={a.command} ack={m.g.mav.last_ack}')
+    else:
+        print('✗ 未知 mav 动作')
 
 def cmd_diag(a):
     """一键系统诊断：固件版本 + 任务调度 + GNSS 协议 + 链路健康（走 dbg 通道）"""
@@ -1067,6 +1099,8 @@ def main():
     # 全局自动连接：每条命令独立进程，提供 --port 则命令前后自动 连接/断开
     ap.add_argument('--port', help='自动连接串口（如 COM10），命令结束自动断开')
     ap.add_argument('--baud', type=int, default=DEFAULT_BAUD)
+    ap.add_argument('--protocol', choices=['anocom', 'mavlink'], default='anocom',
+                    help='链路协议（默认 anocom）')
     ap.add_argument('--json', action='store_true', help='JSON 结构化输出（Agent 调用友好）')
     sub = ap.add_subparsers(dest='cmd', required=True)
 
@@ -1081,6 +1115,7 @@ def main():
     p = sub.add_parser('connect', help='连接串口')
     p.add_argument('port')
     p.add_argument('--baud', type=int, default=DEFAULT_BAUD)
+    p.add_argument('--protocol', choices=['anocom', 'mavlink'], default='anocom')
     p.set_defaults(fn=cmd_connect)
 
     p = sub.add_parser('telemetry', help='收集遥测快照')
@@ -1140,6 +1175,20 @@ def main():
                    help='候选波特率（逗号分隔）')
     p.set_defaults(fn=cmd_baudscan)
 
+    p = sub.add_parser('mav', help='MAVLink：status/params/param-set/cmd')
+    p.add_argument('action', choices=['status', 'params', 'param-set', 'cmd'])
+    p.add_argument('name', nargs='?', default='')
+    p.add_argument('value', nargs='?', type=float, default=0.0)
+    p.add_argument('--command', type=int, default=0)
+    p.add_argument('--p1', type=float, default=0.0)
+    p.add_argument('--p2', type=float, default=0.0)
+    p.add_argument('--p3', type=float, default=0.0)
+    p.add_argument('--p4', type=float, default=0.0)
+    p.add_argument('--p5', type=float, default=0.0)
+    p.add_argument('--p6', type=float, default=0.0)
+    p.add_argument('--p7', type=float, default=0.0)
+    p.set_defaults(fn=cmd_mav)
+
     p = sub.add_parser('raw', help='发送原始帧（hex）')
     p.add_argument('hex')
     p.set_defaults(fn=cmd_raw)
@@ -1150,7 +1199,7 @@ def main():
     if auto_conn:
         # CLI 自消费（drain/_param_read_single），不启动后端消费线程——
         # 否则 DBG 文本/参数响应会被消费线程取走，CLI 读不到
-        m.g.connect(a.port, a.baud, consume_thread=False)
+        m.g.connect(a.port, a.baud, consume_thread=False, protocol=getattr(a, 'protocol', 'anocom'))
         # ★ 2026-08-11 串口问题根治：等待遥测就绪（固件回到遥测分支、上行可处理）
         #   根因：固件若残留 DBG 模式（上会话异常退出），connect 的 exit\n 需要
         #   handleDebugTask 处理后 handleAnoCom 才恢复遥测——首请求必超时。

@@ -147,14 +147,27 @@ static void mavSendCommandAck(uint16_t command, uint8_t result)
     mavSend(msg);
 }
 
+// AUTOPILOT_VERSION（QGC/MP 连接能力协商；不宣称任务/遥控接管）
+static void mavSendAutopilotVersion()
+{
+    static const uint8_t custom[8] = {'T','V','E','C',0,0,0,0};
+    static const uint8_t uid2[18] = {0};
+    mavlink_message_t msg;
+    mavlink_msg_autopilot_version_pack(
+        1, MAV_COMP_ID_AUTOPILOT1, &msg,
+        0,                    // capabilities：无 mission/command-int 之外的承诺
+        0x00010000U,          // flight_sw_version 1.0
+        0, 0, 0,
+        custom, custom, custom,
+        0, 0, 0, uid2);
+    mavSend(msg);
+}
+
 // ------------------------------------------------------------------
 //  COMMAND_LONG 处理
 // ------------------------------------------------------------------
-static void mavHandleCommandLong(const mavlink_message_t &msg)
+static void mavHandleCommand(const mavlink_command_long_t &cmd)
 {
-    mavlink_command_long_t cmd;
-    mavlink_msg_command_long_decode(&msg, &cmd);
-
     switch (cmd.command)
     {
     case MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN:  // 246
@@ -192,15 +205,81 @@ static void mavHandleCommandLong(const mavlink_message_t &msg)
         mavSendCommandAck(cmd.command, MAV_RESULT_UNSUPPORTED);
         break;
 
+    case MAV_CMD_REQUEST_MESSAGE:              // 512：请求指定消息
+    case MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES: // 520
+        mavSendAutopilotVersion();
+        mavSendCommandAck(cmd.command, MAV_RESULT_ACCEPTED);
+        break;
+
     default:
         mavSendCommandAck(cmd.command, MAV_RESULT_UNSUPPORTED);
         break;
     }
 }
 
+static void mavHandleCommandLong(const mavlink_message_t &msg)
+{
+    mavlink_command_long_t cmd;
+    mavlink_msg_command_long_decode(&msg, &cmd);
+    mavHandleCommand(cmd);
+}
+
+static void mavHandleCommandInt(const mavlink_message_t &msg)
+{
+    mavlink_command_int_t ci;
+    mavlink_msg_command_int_decode(&msg, &ci);
+    // 现有命令只使用 param1/param2/command；转换为统一结构处理。
+    mavlink_command_long_t cmd{};
+    cmd.command = ci.command;
+    cmd.param1 = ci.param1;
+    cmd.param2 = ci.param2;
+    cmd.param3 = ci.param3;
+    cmd.param4 = ci.param4;
+    cmd.param5 = static_cast<float>(ci.x);
+    cmd.param6 = static_cast<float>(ci.y);
+    cmd.param7 = ci.z;
+    mavHandleCommand(cmd);
+}
+
 // ------------------------------------------------------------------
 //  上行分发（handleAnoCom mavlink 分支调用）
 // ------------------------------------------------------------------
+static void mavSendMissionAck(const mavlink_message_t &src, uint8_t type)
+{
+    mavlink_message_t msg;
+    mavlink_msg_mission_ack_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                                 src.sysid, src.compid, type, 0, 0);
+    mavSend(msg);
+}
+
+static void mavSendMissionCountZero(const mavlink_message_t &src)
+{
+    mavlink_message_t msg;
+    mavlink_msg_mission_count_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                                   src.sysid, src.compid, 0, 0, 0);
+    mavSend(msg);
+}
+
+static void mavSendPingReply(const mavlink_message_t &src)
+{
+    mavlink_ping_t ping;
+    mavlink_msg_ping_decode(&src, &ping);
+    mavlink_message_t msg;
+    mavlink_msg_ping_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                          ping.time_usec, ping.seq, src.sysid, src.compid);
+    mavSend(msg);
+}
+
+static void mavSendTimesyncReply(const mavlink_message_t &src)
+{
+    mavlink_timesync_t ts;
+    mavlink_msg_timesync_decode(&src, &ts);
+    mavlink_message_t msg;
+    mavlink_msg_timesync_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
+                              ts.tc1, 0, src.sysid, src.compid);
+    mavSend(msg);
+}
+
 void mavlinkHandleRx(const mavlink_message_t &msg)
 {
     switch (msg.msgid)
@@ -244,8 +323,32 @@ void mavlinkHandleRx(const mavlink_message_t &msg)
         break;
     }
 
+    case MAVLINK_MSG_ID_PING:  // 4：时间同步探测
+        mavSendPingReply(msg);
+        break;
+
+    case MAVLINK_MSG_ID_TIMESYNC:  // 111：时间同步
+        mavSendTimesyncReply(msg);
+        break;
+
     case MAVLINK_MSG_ID_COMMAND_LONG:  // 76
         mavHandleCommandLong(msg);
+        break;
+
+    case MAVLINK_MSG_ID_COMMAND_INT:  // 75
+        mavHandleCommandInt(msg);
+        break;
+
+    case MAVLINK_MSG_ID_MISSION_REQUEST_LIST:  // 43：无任务，回0条
+        mavSendMissionCountZero(msg);
+        break;
+
+    case MAVLINK_MSG_ID_MISSION_COUNT:          // 44
+    case MAVLINK_MSG_ID_MISSION_REQUEST:        // 40
+    case MAVLINK_MSG_ID_MISSION_REQUEST_INT:    // 51
+    case MAVLINK_MSG_ID_MISSION_ITEM_INT:       // 73
+    case MAVLINK_MSG_ID_MISSION_CLEAR_ALL:      // 45
+        mavSendMissionAck(msg, MAV_MISSION_UNSUPPORTED);
         break;
 
     default:
@@ -260,6 +363,12 @@ void mavlinkBridgeTick()
 {
     static uint32_t s_tick = 0;
     s_tick++;
+
+    // 0) AUTOPILOT_VERSION 1Hz：QGC/MP 连接时可靠获取能力，不依赖请求帧丢失
+    if ((s_tick % 200U) == 50U)
+    {
+        mavSendAutopilotVersion();
+    }
 
     // 1) PARAM_VALUE 广播状态机：每拍 1 条（200Hz → 全部参数约 0.6s 收全）
     if (s_param_broadcast_active)

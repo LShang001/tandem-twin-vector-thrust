@@ -2084,6 +2084,21 @@ static void mavlinkSendTelemetry()
   }
 
   // ====================================================================
+  // HOME_POSITION (1Hz) — QGC/MP Home 点
+  // ====================================================================
+  if ((call_count % 200U) == 7U && is_origin_lla_set)
+  {
+    const float q[4] = {1.0f, 0.0f, 0.0f, 0.0f};
+    mavlink_msg_home_position_pack(
+        1, MAV_COMP_ID_AUTOPILOT1, &msg,
+        (int32_t)(origin_lat_deg * 1e7), (int32_t)(origin_lon_deg * 1e7),
+        (int32_t)(origin_alt_m * 1000.0f),
+        0.0f, 0.0f, 0.0f, q, 0.0f, 0.0f, 0.0f, 0);
+    uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
+    mavWriteNonBlocking(buf, len);
+  }
+
+  // ====================================================================
   // GPS_RAW_INT (5Hz) — QGC/MP 卫星数/fix/精度
   // ====================================================================
   if (call_count % 40 == 6)

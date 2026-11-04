@@ -50,12 +50,14 @@ try:
     from . import params as pm
     from .datalog import CsvRecorder, ReplaySource, list_recordings
     from .serial_link import SerialLink, list_ports
+    from .mavlink_service import MavlinkService
 except ImportError:
     import anocom
     import blackbox as bb
     import params as pm
     from datalog import CsvRecorder, ReplaySource, list_recordings
     from serial_link import SerialLink, list_ports
+    from mavlink_service import MavlinkService
 
 log = logging.getLogger('gcs')
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s: %(message)s')
@@ -82,6 +84,8 @@ class GCS:
 
     def __init__(self):
         self.link = None
+        self.protocol = 'anocom'   # anocom | mavlink
+        self.mav = None
         self.mode = 'telemetry'          # telemetry | dbg
         self.dbgs = None
         self.tele_buf = bytearray()      # AnoCom 原始流缓冲
@@ -124,10 +128,12 @@ class GCS:
         self.last_tele_ts = None
 
     # ---------------- 串口 ----------------
-    def connect(self, port, baud, consume_thread: bool = True):
+    def connect(self, port, baud, consume_thread: bool = True, protocol: str = 'anocom'):
         self.disconnect()
+        self.protocol = protocol if protocol in ('anocom', 'mavlink') else 'anocom'
         self.link = SerialLink(port, baud, self._on_rx)
         self.link.connect()
+        self.mav = MavlinkService() if self.protocol == 'mavlink' else None
         self.tele_buf.clear()
         self.snap = {}
         self.mode = 'telemetry'
@@ -237,6 +243,13 @@ class GCS:
         if self.link and self.link.is_open:
             self.link.write(data)
 
+    def mav_pump(self):
+        """把 MavlinkService 积累的 TX 字节真正写到串口。"""
+        if self.mav is not None and self.link and self.link.is_open:
+            data = self.mav.drain_tx()
+            if data:
+                self.link.write(data)
+
     # ---------------- 串口读线程 → 队列 ----------------
     def _on_rx(self, chunk):
         if chunk:
@@ -319,6 +332,14 @@ def _emit_dbg_text(text: str):
 
 def _on_telemetry_rx(chunk: bytes):
     g.stat_bytes += len(chunk)
+    if g.protocol == 'mavlink' and g.mav is not None:
+        g.mav.feed(chunk)
+        g.mav_pump()
+        if g.mav.snap:
+            g.snap.update(g.mav.snap)
+            g.last_tele_ts = time.time()
+            g.stat_tele += 1
+        return
     g.tele_buf.extend(chunk)
     # ★ 2026-08-08 卡顿根因修复：旧实现 find_frames 全缓冲扫描 + 找到帧才
     #   整体 clear——错波特率/固件卡 DBG 发文本时缓冲无限膨胀，每块都对
@@ -531,13 +552,43 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
     elif cmd == 'connect':
         port, baud = msg.get('port'), int(msg.get('baud') or DEFAULT_BAUD)
         try:
-            await asyncio.to_thread(g.connect, port, baud)
+            await asyncio.to_thread(g.connect, port, baud, True, str(msg.get('protocol', 'anocom')))
         except Exception as exc:
             await ws.send_json({'type': 'conn', 'status': 'error', 'reason': str(exc)})
             return
-        await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud})
+        await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud, 'protocol': g.protocol})
         log.info('connected %s @ %d', port, baud)
 
+    elif cmd == 'mav_param_list':
+        if g.mav is None:
+            await ws.send_json({'type': 'error', 'msg': 'MAVLink 未连接'})
+        else:
+            g.mav.request_params()
+            g.mav_pump()
+            await ws.send_json({'type': 'mav_tx', 'cmd': 'param_list'})
+    elif cmd == 'mav_param_set':
+        if g.mav is None:
+            await ws.send_json({'type': 'error', 'msg': 'MAVLink 未连接'})
+        else:
+            g.mav.set_param(str(msg.get('name', '')), float(msg.get('value', 0)))
+            g.mav_pump()
+            await ws.send_json({'type': 'mav_tx', 'cmd': 'param_set', 'name': msg.get('name')})
+    elif cmd == 'mav_cmd':
+        if g.mav is None:
+            await ws.send_json({'type': 'error', 'msg': 'MAVLink 未连接'})
+        else:
+            g.mav.command_long(int(msg.get('command', 0)),
+                              float(msg.get('p1', 0)), float(msg.get('p2', 0)),
+                              float(msg.get('p3', 0)), float(msg.get('p4', 0)),
+                              float(msg.get('p5', 0)), float(msg.get('p6', 0)),
+                              float(msg.get('p7', 0)))
+            g.mav_pump()
+            await ws.send_json({'type': 'mav_tx', 'cmd': 'command', 'command': msg.get('command')})
+    elif cmd == 'mav_status':
+        await ws.send_json({'type': 'mav_status', 'connected': g.mav is not None,
+                            'params': len(g.mav.params) if g.mav else 0,
+                            'frames': g.mav.frames if g.mav else 0,
+                            'snap': g.mav.snap if g.mav else {}})
     elif cmd == 'disconnect':
         g.disconnect()
         await ws.send_json({'type': 'conn', 'status': 'disconnected'})

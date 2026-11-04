@@ -251,7 +251,7 @@ $('btnConnect').addEventListener('click', () => {
   } else {
     const port = $('portSelect').value;
     if (!port) { flashAlarm('warn', '请先选择串口'); return; }
-    send({ cmd: 'connect', port, baud: parseInt($('baudSelect').value) });
+    send({ cmd: 'connect', port, baud: parseInt($('baudSelect').value), protocol: $('protocolSelect').value });
   }
 });
 
