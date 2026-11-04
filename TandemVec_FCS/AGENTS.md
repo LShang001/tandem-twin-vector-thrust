@@ -63,6 +63,10 @@
 
 ## 核心参数
 
+- **参数无Flash持久化（2026-11-04审计）**：`param save 0xAB` 只回校验帧，不写Flash；
+  重启回 `kFlightCtrlParamsDefaults`。调参后用 GCS `param dump` 保存快照，
+  下次上电用 `param load` 重放并回读确认。需要掉电保存时必须单独设计独立扇区+CRC+
+  掉电测试，不能直接复用磁标定末扇区。
 - **控制增益/限幅/滤波唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（static constexpr，固件与宿主测试共用）；速率环 kp 单位 s⁻¹、ki s⁻²；旧参数 0.28/0.20/0.10 不得导入。
 - 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）。
 - 差速增益调度/工作点下限/零油门门控：`flight_control.cpp` 层2（改后跑 `tools/verify_*.py`）。
