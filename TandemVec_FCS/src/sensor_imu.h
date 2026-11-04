@@ -66,10 +66,16 @@ int initICM42688();
  * @return true 数据读取和处理成功, false 无新数据
  */
 bool readIMUData();
+#ifdef BFS_IMU_ISR_RING
+void imuSampleIsr();
+#endif
 #ifdef BFS_IMU_PROF
 extern float g_imu_prof_total_us;
 extern float g_imu_prof_mag_us;
 extern float g_imu_prof_madg_us;
+extern float g_imu_prof_pre_us;
+extern float g_imu_prof_delta_us;
+extern float g_imu_prof_spi_us;
 #endif
 
 /**

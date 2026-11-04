@@ -255,6 +255,7 @@ public:
   /// 批量读取 FIFO 中的 Packet 3（16B/包），最多 max 个；count 返回实际包数。
   /// 返回 >=0 成功；<0 读失败/包 header 非法（调用方应 flush FIFO）。
   int readFifoPackets(FifoSample *out, size_t max, size_t *count);
+  void setFifoInjected(const FifoSample &sample);
 
   int calibrateGyro();
   float getGyroBiasX();
@@ -296,6 +297,7 @@ protected:
   float _t = 0.0f;
   float _acc[3] = {};
   float _gyr[3] = {};
+  bool _fifo_injected = false;
 
   ///\brief Full scale resolution factors
   float _accelScale = 0.0f;

@@ -268,11 +268,16 @@ def decode_imu_health(p: bytes) -> dict:
     """0xF4: IMU 健康遥测 [float LE imu_rate_hz]（非 DBG；用于采样率测量）。"""
     if len(p) < 4:
         return {}
+    if len(p) >= 32:
+        vals = struct.unpack('<8f', p[0:32])
+        return {'imu_rate_hz': vals[0], 'imu_prof_total_us': vals[1],
+                'imu_prof_mag_us': vals[2], 'imu_prof_madg_us': vals[3],
+                'imu_prof_pre_us': vals[4], 'imu_prof_delta_us': vals[5],
+                'imu_prof_spi_us': vals[6]}
     vals = struct.unpack('<4f', p[0:16]) if len(p) >= 16 else (struct.unpack('<f', p[0:4])[0],)
     out = {'imu_rate_hz': vals[0]}
     if len(vals) >= 4:
-        out.update({'imu_prof_total_us': vals[1],
-                    'imu_prof_mag_us': vals[2],
+        out.update({'imu_prof_total_us': vals[1], 'imu_prof_mag_us': vals[2],
                     'imu_prof_madg_us': vals[3]})
     return out
 

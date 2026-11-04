@@ -86,6 +86,13 @@ public:
     return static_cast<int>(n);
   }
 
+  int injectFifo(const ImuFifoSample &sample) override
+  {
+    ICM42688::FifoSample s{};
+    for (int i = 0; i < 3; ++i) { s.acc[i] = sample.acc[i]; s.gyr[i] = sample.gyr[i]; }
+    imu_.setFifoInjected(s);
+    return 0;
+  }
   int dataReady() override { return imu_.getAGT(); }
 
   float accX() override { return imu_.accX(); }

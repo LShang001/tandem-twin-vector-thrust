@@ -41,6 +41,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
   recordNavProfileStage(static_cast<uint8_t>(stage), static_cast<uint32_t>(elapsed_us))
 #endif
 
+#include "sensor_imu.h"
 #include "navigation_task.h"
 #include "math_utils.h"
 #include "QuaternionMath.h"
@@ -1359,6 +1360,9 @@ void handleNavigationSystem()
   float local_delta_v_z[NAV_IMU_DELTA_BUFFER_SIZE];
   float local_delta_dt_s[NAV_IMU_DELTA_BUFFER_SIZE];
 
+#ifdef BFS_IMU_ISR_RING
+  readIMUData(); // 每次Navigation排空ISR ring（≤64），消费全部2k样本
+#endif
   noInterrupts();
   const int local_imu_sample_count = imu_sample_count;
 #ifdef FW_SIL_REAL_NAV

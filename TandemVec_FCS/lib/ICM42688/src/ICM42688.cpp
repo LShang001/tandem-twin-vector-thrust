@@ -508,6 +508,7 @@ int ICM42688::disableDataReadyInterrupt()
  */
 int ICM42688::getAGT()
 {
+  if (_fifo_injected) { _fifo_injected = false; return 1; }
   _useSPIHS = true; // 使用高速SPI进行数据读取
 
   // 检查数据是否就绪
@@ -927,12 +928,12 @@ int ICM42688::readRegisters(uint8_t subAddress, uint8_t count, uint8_t *dest)
     // }
     digitalWrite(_csPin, LOW);         // 选择ICM42688芯片
     _spi->transfer(subAddress | 0x80); // 指定起始寄存器地址
-    for (uint8_t i = 0; i < count; i++)
-    {
-      dest[i] = _spi->transfer(0x00); // 读取数据
-    }
+    // 缓冲区传输：避免逐字节 transfer 的循环/函数调用开销（实测14B逐字节
+    // 读取约52µs，远高于10MHz理论时间）。
+    _spi->transfer(dest, count);
     digitalWrite(_csPin, HIGH); // 取消选择ICM42688芯片
-    _spi->endTransaction();     // 结束事务
+    // SPI1 只挂 ICM42688：初始化时 beginTransaction 一次即可，读寄存器不再
+    // 逐次 endTransaction（实测每次事务开销远大于 14B@10MHz 的理论时间）。
     return 1;
   }
   else
@@ -1057,6 +1058,12 @@ int ICM42688::disableFifoStream()
     return -3;
   }
   return 0;
+}
+
+void ICM42688::setFifoInjected(const FifoSample &sample)
+{
+  for (int i = 0; i < 3; ++i) { _acc[i] = sample.acc[i]; _gyr[i] = sample.gyr[i]; }
+  _fifo_injected = true;
 }
 
 int ICM42688::readFifoPackets(FifoSample *out, size_t max, size_t *count)

@@ -31,7 +31,8 @@
 #include "MagCalStore.h" // 标定参数内部 Flash 持久化（上电加载）
 #include "imu_factory.h" // IMU 型号无关实例创建（编译期选定后端，见 imu_factory.cpp）
 #include "imu_range.h"   // 量程常量：换 FS 时必须同步改这里
-#include "ins_vibration_hf.h" // 高频振动通道：用低通前/后之差测 80–120 Hz 机械振动
+#include "ins_vibration_hf.h"
+#include "ImuSampleRing.h" // 高频振动通道：用低通前/后之差测 80–120 Hz 机械振动
 #include "NavImuIncrementSelect.h" // 导航增量源选择（默认宏关闭时不参与累加）
 
 namespace
@@ -51,6 +52,9 @@ namespace
 float g_imu_prof_total_us = 0.0f;
 float g_imu_prof_mag_us = 0.0f;
 float g_imu_prof_madg_us = 0.0f;
+float g_imu_prof_pre_us = 0.0f;
+float g_imu_prof_delta_us = 0.0f;
+float g_imu_prof_spi_us = 0.0f;
 #endif
 
 bool initMagnetometer()
@@ -123,10 +127,10 @@ int initICM42688()
   SPI.setMISO(SPI_MISO);                                            // PA6: 主入从出
   SPI.setMOSI(SPI_MOSI);                                            // PA7: 主出从入
   SPI.setSCLK(SPI_SCLK);                                            // PA5: 时钟线
-  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3)); // 10MHz, 高位先发, Mode3
+  SPI.beginTransaction(SPISettings(24000000, MSBFIRST, SPI_MODE3)); // 10MHz, 高位先发, Mode3
 
   // === 步骤 2: 创建型号无关实例（编译期选定，见 imu_factory.cpp）===
-  IMU = createImuDevice(SPI, SPI_CS, 10000000);
+  IMU = createImuDevice(SPI, SPI_CS, 24000000);
   if (IMU == nullptr)
   {
     Serial8.println("[Error] IMU device creation failed.");
@@ -236,8 +240,49 @@ int initICM42688()
   return 0; // 初始化成功
 }
 
+#ifdef BFS_IMU_ISR_RING
+static ImuSampleRing s_imu_ring;
+static volatile bool s_imu_ring_ready = false;
+static bool s_ring_processing = false;
+
+void imuSampleIsr()
+{
+  if (!s_imu_ring_ready || IMU == nullptr) { return; }
+  ImuFifoSample one{};
+  if (IMU->readFifo(&one, 1U) <= 0) { return; }
+  ImuRingSample s{};
+  for (int i = 0; i < 3; ++i) { s.acc[i] = one.acc[i]; s.gyr[i] = one.gyr[i]; }
+  s.timestamp = one.timestamp;
+  s_imu_ring.push(s);
+}
+#endif
+
 bool readIMUData()
 {
+#ifdef BFS_IMU_ISR_RING
+  if (!s_ring_processing)
+  {
+    if (!s_imu_ring_ready)
+    {
+      if (IMU != nullptr && IMU->enableFifo() >= 0) { s_imu_ring_ready = true; }
+      else { return false; }
+    }
+    bool any = false;
+    for (int k = 0; k < 64; ++k)
+    {
+      ImuRingSample rs{};
+      if (!s_imu_ring.pop(rs)) { break; }
+      ImuFifoSample one{};
+      for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
+      one.timestamp = rs.timestamp;
+      if (IMU->injectFifo(one) < 0) { break; }
+      s_ring_processing = true;
+      any = readIMUData() || any;
+      s_ring_processing = false;
+    }
+    return any;
+  }
+#endif
 #ifdef BFS_IMU_PROF
   const uint32_t t_prof_start = micros();
   uint32_t t_prof_mag = 0;
@@ -253,6 +298,9 @@ bool readIMUData()
   // 检查 IMU 数据是否就绪（型号无关接口；1 = 有新样本）
   if (IMU->dataReady() == 1)
   {
+#ifdef BFS_IMU_PROF
+    const uint32_t t_spi_end = micros();
+#endif
     // ========================================================================
     // 步骤 1: 计算时间差 (Delta Time)
     // ========================================================================
@@ -417,6 +465,9 @@ bool readIMUData()
     const float gyro_body_z_radps = nav_body.gyro_dps[2] * DEG_TO_RAD;
 #endif
 
+#ifdef BFS_IMU_PROF
+    const uint32_t t_pre_end = micros();
+#endif
     noInterrupts();
     acc_sum_x += accel_body_x_mps2;
     acc_sum_y += accel_body_y_mps2;
@@ -446,6 +497,9 @@ bool readIMUData()
 
     imu_sample_count++;
     interrupts();
+#ifdef BFS_IMU_PROF
+    const uint32_t t_delta_end = micros();
+#endif
 
     // ========================================================================
     // 步骤 6: 第二次坐标变换 (Body Frame -> Madgwick Frame)
@@ -492,6 +546,15 @@ bool readIMUData()
 #ifdef BFS_IMU_PROF
     const uint32_t t_madg_start = micros();
 #endif
+#ifdef BFS_IMU_ATT_DECIMATE
+    static uint16_t s_att_div = 0;
+    const bool do_attitude = (++s_att_div >= 7U);
+    if (do_attitude) { s_att_div = 0; }
+#else
+    const bool do_attitude = true;
+#endif
+    if (do_attitude)
+    {
     if (kMagFeedMadgwick)
     {
       // 7.2 磁力计馈入路径（开关 kMagFeedMadgwick，见文件头）
@@ -614,7 +677,7 @@ bool readIMUData()
     icm_Roll = backup_ahrs_roll; // 同步至后台 AHRS 调试变量
     icm_Pitch = backup_ahrs_pitch;
     icm_Yaw = wrapAngleTwoPi(backup_ahrs_yaw);
-
+    }
     // ========================================================================
     // 步骤 9: 打包处理后的传感器数据 (IMU Packet)
     // ========================================================================
@@ -650,6 +713,12 @@ bool readIMUData()
       g_imu_prof_total_us = 0.9f * g_imu_prof_total_us + 0.1f * total;
       g_imu_prof_mag_us = 0.9f * g_imu_prof_mag_us + 0.1f * static_cast<float>(t_prof_mag);
       g_imu_prof_madg_us = 0.9f * g_imu_prof_madg_us + 0.1f * static_cast<float>(t_prof_madg);
+      const float spi_us = static_cast<float>(t_spi_end - t_prof_start);
+      const float pre_us = static_cast<float>(t_pre_end - t_spi_end);
+      g_imu_prof_spi_us = 0.9f * g_imu_prof_spi_us + 0.1f * spi_us;
+      const float delta_us = static_cast<float>(t_delta_end - t_pre_end);
+      g_imu_prof_pre_us = 0.9f * g_imu_prof_pre_us + 0.1f * pre_us;
+      g_imu_prof_delta_us = 0.9f * g_imu_prof_delta_us + 0.1f * delta_us;
     }
 #endif
     return true; // 返回成功标志，表示姿态已更新
@@ -659,7 +728,13 @@ bool readIMUData()
 
 void handleICM42688()
 {
+#ifdef BFS_IMU_ISR_RING
+  // 采样/处理由 2k ISR 捕获、Navigation 每5ms排空；本任务不再抢消费。
+  imu_read_success = true;
+  return;
+#else
   imu_read_success = readIMUData(); // 读取并处理ICM42688数据
+#endif
 
   // 如果IMU读取失败，点亮黄灯作为指示；成功则熄灭 (或根据其他传感器状态决定)
   if (!imu_read_success)

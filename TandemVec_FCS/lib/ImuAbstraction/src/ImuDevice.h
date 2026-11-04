@@ -161,6 +161,7 @@ public:
   virtual int disableFifo() { return -1; }
   /// 批量读取 FIFO，返回包数（>=0）；负数表示错误。
   virtual int readFifo(ImuFifoSample *out, size_t max) { (void)out; (void)max; return -1; }
+  virtual int injectFifo(const ImuFifoSample &sample) { (void)sample; return -1; }
 
   virtual int dataReady() = 0;
 

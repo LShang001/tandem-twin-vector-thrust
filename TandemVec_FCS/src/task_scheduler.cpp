@@ -26,6 +26,7 @@
  *          （IWDG 3.0s）在 main.cpp，本文件不涉及。
  */
 #include "task_scheduler.h"
+#include "sensor_imu.h"
 #include "task_scheduler_interval.h"
 
 #ifdef BFS_PROFILE_TO_ANOCOM_SERIAL
@@ -199,6 +200,11 @@ static volatile uint32_t s_timerTicks = 0;
 void timerCallback()
 {
   s_timerTicks++; // 每次中断递增，溢出周期约 7.8 天 (2^32 / 6400 / 86400)
+#ifdef BFS_IMU_ISR_RING
+  static uint16_t s_imu_phase = 0;
+  s_imu_phase += 2000U;
+  if (s_imu_phase >= 6400U) { s_imu_phase -= 6400U; imuSampleIsr(); }
+#endif
   const uint32_t currentCount = s_timerTicks;
 
   // 遍历所有已注册的任务

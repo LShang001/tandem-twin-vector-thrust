@@ -815,13 +815,14 @@ void handleAnoCom()
         // 0xF4 IMU 健康帧（4B float，Hz）：把 imu_rate 放进普通遥测，
         // 用于非 DBG 的采样率/调度测量（DBG 会暂停任务/改变时序，禁止用于此）。
         {
-          uint8_t imu_health[16];
-          const float imu_health_f[4] = {
+          uint8_t imu_health[32];
+          const float imu_health_f[8] = {
               g_imu_health_sample_rate_hz,
 #ifdef BFS_IMU_PROF
-              g_imu_prof_total_us, g_imu_prof_mag_us, g_imu_prof_madg_us
+              g_imu_prof_total_us, g_imu_prof_mag_us, g_imu_prof_madg_us,
+              g_imu_prof_pre_us, g_imu_prof_delta_us, g_imu_prof_spi_us
 #else
-              0.0f, 0.0f, 0.0f
+              0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f
 #endif
           };
           std::memcpy(imu_health, imu_health_f, sizeof(imu_health));
