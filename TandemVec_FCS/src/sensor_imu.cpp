@@ -245,17 +245,27 @@ static ImuSampleRing s_imu_ring;
 static volatile bool s_imu_ring_ready = false;
 static bool s_ring_processing = false;
 static bool s_fifo_fallback = false;
+static volatile uint32_t s_imu_isr_empty = 0;
 
 uint32_t imuRingDropCount()
 {
   return s_imu_ring.drop_count();
 }
 
+uint32_t imuIsrEmptyCount()
+{
+  return s_imu_isr_empty;
+}
+
 void imuSampleIsr()
 {
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
   ImuFifoSample one{};
-  if (IMU->readFifo(&one, 1U) <= 0) { return; }
+  if (IMU->readFifo(&one, 1U) <= 0)
+  {
+    s_imu_isr_empty++;
+    return;
+  }
   ImuRingSample s{};
   for (int i = 0; i < 3; ++i) { s.acc[i] = one.acc[i]; s.gyr[i] = one.gyr[i]; }
   s.timestamp = one.timestamp;
@@ -281,7 +291,7 @@ bool readIMUData()
     if (s_ring_last_us == 0) { s_ring_last_us = now_us; }
     const uint32_t elapsed_us = now_us - s_ring_last_us;
     int allowed = 1 + static_cast<int>((static_cast<uint64_t>(elapsed_us) * 2000ULL) / 1000000ULL);
-    if (allowed > 10) { allowed = 10; }
+    if (allowed > 32) { allowed = 32; }
     for (int k = 0; k < allowed; ++k)
     {
       ImuRingSample rs{};

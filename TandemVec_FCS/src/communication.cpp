@@ -817,17 +817,20 @@ void handleAnoCom()
         {
           uint8_t imu_health[36];
           float imu_ring_drop = 0.0f;
+          float imu_isr_empty = 0.0f;
 #ifdef BFS_IMU_ISR_RING
           imu_ring_drop = static_cast<float>(imuRingDropCount());
+          imu_isr_empty = static_cast<float>(imuIsrEmptyCount());
 #endif
           const float imu_health_f[9] = {
               g_imu_health_sample_rate_hz,
 #ifdef BFS_IMU_PROF
               g_imu_prof_total_us, g_imu_prof_mag_us, g_imu_prof_madg_us,
               g_imu_prof_pre_us, g_imu_prof_delta_us, g_imu_prof_spi_us,
-              imu_ring_drop
+              imu_ring_drop, imu_isr_empty
 #else
-              0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, imu_ring_drop
+              0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+              imu_ring_drop, imu_isr_empty
 #endif
           };
           std::memcpy(imu_health, imu_health_f, sizeof(imu_health));
