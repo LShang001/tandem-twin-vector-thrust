@@ -268,9 +268,35 @@ public:
         }
       }
     }
+    // GNSS 自报速度是比参考积分更可靠的静止判据：地面静止时参考速度会因
+    // 加速度计噪声缓慢漂移，单看 vmax 仍会误触发225ms级网格搜索。
+    double gnss_vmax = 0.0;
+    for (size_t i = 0; i < gnss_.size(); ++i)
+    {
+      gnss_vmax = std::max(gnss_vmax,
+                           static_cast<double>(gnss_[i].vel.norm()));
+    }
+    if (gnss_vmax < 0.5)
+    {
+      diag_.speed_max_mps = 0.0f;
+      diag_.reject = InsGnssDelayAutoReject::NoExcitation;
+      return false;
+    }
     diag_.speed_span_mps = static_cast<float>(vmax - vmin);
     diag_.speed_max_mps = static_cast<float>(vmax);
     diag_.accel_max_mps2 = static_cast<float>(amax);
+    // 静止/近悬停：没有延时激励，且昂贵的粗差 InterpRef* 循环与网格搜索
+    // 会把200Hz导航拖住（地面实测单次302ms）。必须在进入重计算前退出。
+    if (vmax < 0.5)
+    {
+      diag_.reject = InsGnssDelayAutoReject::NoExcitation;
+      return false;
+    }
+    if (vmax - vmin < 0.5)
+    {
+      diag_.reject = InsGnssDelayAutoReject::NoExcitation;
+      return false;
+    }
     double pos_gate = 50.0;
     double vel_gate = 20.0;
 #if BFS_NAVIGATION_GNSS_DELAY_AUTO_ADAPTIVE_FDI
@@ -305,12 +331,6 @@ public:
       diag_.reject = InsGnssDelayAutoReject::OutlierStarved;
       return false;
     }
-    if (vmax - vmin < 0.5)
-    {
-      diag_.reject = InsGnssDelayAutoReject::NoExcitation;
-      return false; // 匀速/悬停不可观测
-    }
-
     InsGnssDelayAutoResult out;
     /* 搜索网格：0 ~ max_tau_s_，步长 kTauStepS。
        上界必须与两个物理约束一起看：①回放缓冲 64×5 ms=320 ms，年龄再大就整帧
