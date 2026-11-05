@@ -2443,7 +2443,9 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
 
   // ---- 层2c：四舵分配 ----
   bfs::SingleEdf4VaneAllocationParams alloc_p;
-  alloc_p.vane_max_deg = P.vane_max_deg;
+  // 联合限幅：机械满偏角是硬上限，控制舵角上限是软件上限，取更保守者
+  alloc_p.vane_max_deg = (P.ctrl_vane_deg < P.vane_max_deg) ? P.ctrl_vane_deg
+                                                          : P.vane_max_deg;
   alloc_p.vane_moment_nm_per_deg = P.vane_moment_nm_per_deg;
   alloc_p.inertia_roll_kgm2 = P.inertia_roll_kgm2;
   alloc_p.inertia_pitch_kgm2 = P.inertia_pitch_kgm2;

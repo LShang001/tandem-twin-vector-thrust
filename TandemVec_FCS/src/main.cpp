@@ -463,6 +463,11 @@ void setup()
   BFS_ADD_TASK(handleOpticalFlowSensor, 2.0f, "OpticalFlow");            // UART7 光流自动识别+采集 (500Hz, 2ms) - LQS48/MTF02P
 #endif
 
+  // ★ 上电应用一次控制参数：让单涵道机型 ctrl_vane_deg（控制舵角上限）折算出的
+  //   速率环 α 限幅生效；否则 PID 一直是结构体默认的 ±5729 deg/s²，与"舵角上限"
+  //   的物理语义脱节。其它机型该函数只是把参数原样同步给 PID，行为不变。
+  applyFlightCtrlParams();
+
   // --- DETA100 数据源 (仅当检测到 DETA100 时注册) ---
   // 必须在状态估计层之前注册，确保同周期内 handleNavigationSystem 读到本周期最新的 DETA100 数据。
   if (nav_data_source == NavDataSource::DETA100)

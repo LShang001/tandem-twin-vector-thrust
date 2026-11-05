@@ -22,11 +22,11 @@ import params as pm
 
 
 def test_param_count_matches_firmware():
-    """参数总数 = 168（与固件 ANO_PARAMS_COUNT 一致；共轴 15 + 单涵道 20 个硬件参数）"""
+    """参数总数 = 169（与固件 ANO_PARAMS_COUNT 一致；共轴 15 + 单涵道 21 个硬件参数）"""
     names = pm.expected_names()
-    assert len(names) == 168
+    assert len(names) == 169
     assert names.index('rate_pitch.kd') == 38
-    assert len(set(names)) == 168
+    assert len(set(names)) == 169
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
     # ★ 2026-08-10 全面审查修复：尾部顺序对齐固件注册表
@@ -45,8 +45,9 @@ def test_param_count_matches_firmware():
         'coax.alloc_mode', 'coax.lever_m', 'coax.yaw_nm_per_us',
         'coax.inertia_roll', 'coax.inertia_pitch', 'coax.inertia_yaw']
     # ★ 2026-11-05 单涵道 + X 型四燃气舵：名称/顺序 = 固件 BFS_SINGLE_EDF_PARAM_LIST
-    assert names[148:168] == [
+    assert names[148:169] == [
         'sedf.mass_kg', 'sedf.max_thrust_n', 'sedf.vane_max_deg',
+        'sedf.ctrl_vane_deg',
         'sedf.vane_moment', 'sedf.inertia_roll', 'sedf.inertia_pitch',
         'sedf.inertia_yaw', 'sedf.yaw_trim_deg',
         'sedf.vane_dir1', 'sedf.vane_dir2', 'sedf.vane_dir3', 'sedf.vane_dir4',
@@ -308,7 +309,7 @@ def test_param_name_to_id_mapping():
     assert names.index('att_roll.kp') == 0
     assert names.index('att_pitch.kp') == 9
     assert names.index('rate_roll.kd') == 29
-    assert len(names) == 168
+    assert len(names) == 169
     assert names.index('rate_pitch.kd') == 38
     # ★ 2026-10-30 共轴参数只在表尾追加，旧 ID 不得移动；★task-10 分配器 158-163
     assert names.index('coax.max_corr_deg') == 133
@@ -317,12 +318,12 @@ def test_param_name_to_id_mapping():
     assert names.index('coax.inertia_yaw') == 147
     # ★ 2026-11-05 单涵道参数追加在共轴之后（ID 148-167）
     assert names.index('sedf.mass_kg') == 148
-    assert names.index('sedf.vane_dir1') == 156
-    assert names.index('sedf.dt_s') == 167
+    assert names.index('sedf.vane_dir1') == 157
+    assert names.index('sedf.dt_s') == 168
 
 
 def test_single_edf_param_envelope():
-    """单涵道 20 项参数：meta 齐全、包线有效、固件默认值都能被 GCS 写回。
+    """单涵道 21 项参数：meta 齐全、包线有效、固件默认值都能被 GCS 写回。
 
     ★ 固件只拒 NaN/Inf、**不做 min/max 校验**；GCS 的 param set 按 meta 包线拦截。
     若包线写窄到装不下固件默认值，param restore/load 会把固件自己的默认值拒掉——
@@ -330,7 +331,8 @@ def test_single_edf_param_envelope():
     """
     defaults = {
         'sedf.mass_kg': 1.15, 'sedf.max_thrust_n': 35.0,
-        'sedf.vane_max_deg': 20.0, 'sedf.vane_moment': 0.02,
+        'sedf.vane_max_deg': 20.0, 'sedf.ctrl_vane_deg': 20.0,
+        'sedf.vane_moment': 0.02,
         'sedf.inertia_roll': 0.02, 'sedf.inertia_pitch': 0.02,
         'sedf.inertia_yaw': 0.03, 'sedf.yaw_trim_deg': 0.0,
         'sedf.vane_dir1': 1.0, 'sedf.vane_dir2': -1.0,

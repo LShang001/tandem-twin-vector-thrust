@@ -104,10 +104,10 @@ def test_heartbeat_armed_mode_and_gps():
 def test_param_value_and_count():
     svc = MavlinkService()
     feed_vehicle(svc, lambda v: v.mav.param_value_send(
-        b'att_roll.kp\x00\x00\x00\x00\x00', 2.5, 9, 168, 3))
+        b'att_roll.kp\x00\x00\x00\x00\x00', 2.5, 9, 169, 3))
     assert svc.params['att_roll.kp'] == pytest.approx(2.5)
     assert svc.params_received == 1
-    assert svc.snap['param_count'] == 168
+    assert svc.snap['param_count'] == 169
     assert svc.snap['param_index'] == 3
 
 

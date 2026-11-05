@@ -136,6 +136,12 @@ struct SingleEdf4VaneHwParams
     float mass_kg = 1.15f;                  // 整机质量 [kg]（MODEL-DEFAULT，未实测）
     float max_total_thrust_n = 35.0f;       // 单涵道最大推力 [N]（MODEL-DEFAULT）
     float vane_max_deg = 20.0f;             // 单舵机械满偏角 [deg]（待实测替换）
+    // ★ 控制舵角上限 [deg]：调参界面上直观的“舵面最多偏多少度”。
+    //   速率环的角加速度限幅由它折算（见 state_data.cpp applyFlightCtrlParams）：
+    //     alpha_full = ctrl_vane_deg * (4k / I) * (180/pi)
+    //   分配器的联合限幅取 min(vane_max_deg, ctrl_vane_deg)：机械限位是硬上限，
+    //   本值是软件上限（可调小做保守飞行）。
+    float ctrl_vane_deg = 20.0f;
     float vane_moment_nm_per_deg = 0.02f;   // 额定推力点舵效 [N·m/deg]（MODEL-DEFAULT）
     float inertia_roll_kgm2 = 0.02f;        // 滚转轴惯量 [kg·m²]（MODEL-DEFAULT）
     float inertia_pitch_kgm2 = 0.02f;       // 俯仰轴惯量 [kg·m²]（MODEL-DEFAULT）
@@ -188,6 +194,7 @@ static_assert(kSingleEdf4VaneHwParamsDefaults.attitude_limit_deg == 45.0f,
     X(sedf.mass_kg, mass_kg) \
     X(sedf.max_thrust_n, max_total_thrust_n) \
     X(sedf.vane_max_deg, vane_max_deg) \
+    X(sedf.ctrl_vane_deg, ctrl_vane_deg) \
     X(sedf.vane_moment, vane_moment_nm_per_deg) \
     X(sedf.inertia_roll, inertia_roll_kgm2) \
     X(sedf.inertia_pitch, inertia_pitch_kgm2) \
@@ -206,7 +213,7 @@ static_assert(kSingleEdf4VaneHwParamsDefaults.attitude_limit_deg == 45.0f,
     X(sedf.att_limit_deg, attitude_limit_deg) \
     X(sedf.dt_s, dt_s)
 
-#define BFS_SINGLE_EDF_PARAM_COUNT 20
+#define BFS_SINGLE_EDF_PARAM_COUNT 21
 
 // 安全关键默认值锁定（逐位；任何改动都必须走红线评审）
 static_assert(CoaxialCtrlParams{}.mass_kg == 0.84f, "共轴质量默认值必须保持 0.84kg");
