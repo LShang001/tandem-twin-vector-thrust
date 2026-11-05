@@ -2461,6 +2461,40 @@ static void debugParamCmd(Uart &serial, char *args)
   serial.println(F("[DBG] unknown subcommand (get|set)"));
 }
 
+// ---- DBG `vanes` 命令（2026-11-05）----
+// 打印三轴摇杆原始值与四舵当前输出，用于远程确认"摇杆 → 舵面"映射
+// （实机排查通道方向时，不需要看舵面也能判断固件内部映射是否正确）。
+static void debugVanesCmd(Uart &serial)
+{
+  serial.print(F("[DBG] stick roll/pitch/yaw="));
+  serial.print(raw_rc_values[0]);
+  serial.print('/');
+  serial.print(raw_rc_values[1]);
+  serial.print('/');
+  serial.println(raw_rc_values[2]);
+
+  serial.print(F("[DBG] unlock="));
+  serial.print(g_is_unlocked ? 1 : 0);
+  serial.print(F(" link="));
+  serial.print(isLinkUp ? 1 : 0);
+  serial.print(F(" manual_tvc="));
+  serial.println(raw_rc_values[7] < 1200 ? 1 : 0);
+
+  serial.print(F("[DBG] vane pct="));
+  serial.print(ch1_output, 2);
+  serial.print('/');
+  serial.print(ch2_output, 2);
+  serial.print('/');
+  serial.print(ch3_output, 2);
+  serial.print('/');
+  serial.println(ch4_output, 2);
+
+  serial.print(F("[DBG] vane deg="));
+  serial.print(g_tvc_upper_deg, 3);
+  serial.print('/');
+  serial.println(g_tvc_lower_deg, 3);
+}
+
 void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
                         uint8_t maxLen, bool &dbgMode)
 {
@@ -2475,6 +2509,9 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       // ★ 2026-11-05：param 子命令（读写参数注册表，与 AnoCom 0xE0/0xE1 同语义）
       if (strncmp(line, "param", 5) == 0 && (line[5] == '\0' || line[5] == ' ')) {
         debugParamCmd(serial, line + 5);
+      }
+      else if (strcmp(line, "vanes") == 0) {
+        debugVanesCmd(serial);
       }
       else if (strncmp(line, "help", 4) == 0) {
         serial.println(F("[DBG] Commands:"));
