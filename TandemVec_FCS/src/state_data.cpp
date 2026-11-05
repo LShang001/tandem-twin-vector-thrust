@@ -755,26 +755,18 @@ uint8_t Fd_data[256];                             // 通用帧接收缓冲区
  */
 void applyFlightCtrlParams()
 {
-    // ★ 单涵道机型：把“控制舵角上限”折算成速率环的角加速度限幅，使参数表上的
-    //   限幅具有直接的物理意义——设 ctrl_vane_deg=20 就表示舵面最多偏 20°。
-    //   换算：δ = I·α/(4k)  ⇒  α = δ·4k/I；再乘 180/π 换成 deg/s²。
-    //   （k=单舵舵效、I=该轴惯量；两个 MODEL-DEFAULT 值实测更新后限幅自动跟随）
+    // ★ 单涵道机型：速率环工作在“舵角域”，控制舵角上限直接就是 PID 输出限幅
+    //   ——设 ctrl_vane_deg=20 表示舵面最多偏 20°，与源机型口径一致。
 #ifdef BFS_SINGLE_EDF_4VANE
     {
         const SingleEdf4VaneHwParams &P = kFlightCtrlParams.single_edf;
-        const float rad2deg = 57.2957795f;
-        const float alpha_full_roll =
-            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_roll_kgm2) * rad2deg;
-        const float alpha_full_pitch =
-            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_pitch_kgm2) * rad2deg;
-        const float alpha_full_yaw =
-            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_yaw_kgm2) * rad2deg;
-        kFlightCtrlParams.rate_roll.out_max = alpha_full_roll;
-        kFlightCtrlParams.rate_roll.out_min = -alpha_full_roll;
-        kFlightCtrlParams.rate_pitch.out_max = alpha_full_pitch;
-        kFlightCtrlParams.rate_pitch.out_min = -alpha_full_pitch;
-        kFlightCtrlParams.rate_yaw.out_max = alpha_full_yaw;
-        kFlightCtrlParams.rate_yaw.out_min = -alpha_full_yaw;
+        // 舵角域：限幅直接就是“舵面最多偏多少度”，无需任何换算。
+        kFlightCtrlParams.rate_roll.out_max = P.ctrl_vane_deg;
+        kFlightCtrlParams.rate_roll.out_min = -P.ctrl_vane_deg;
+        kFlightCtrlParams.rate_pitch.out_max = P.ctrl_vane_deg;
+        kFlightCtrlParams.rate_pitch.out_min = -P.ctrl_vane_deg;
+        kFlightCtrlParams.rate_yaw.out_max = P.ctrl_vane_deg;
+        kFlightCtrlParams.rate_yaw.out_min = -P.ctrl_vane_deg;
     }
 #endif
     // 单个 PID 环同步（enabled=false 会清积分，与构造函数语义一致）

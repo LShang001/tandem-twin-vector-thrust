@@ -336,9 +336,15 @@ struct FlightCtrlParams
 #define BFS_ATT_ROLL_DEFAULT  {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_PITCH_DEFAULT {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_YAW_DEFAULT   {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
-#define BFS_RATE_ROLL_DEFAULT {57.3f, 18.3f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
-#define BFS_RATE_PITCH_DEFAULT {57.3f, 18.3f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
-#define BFS_RATE_YAW_DEFAULT  {11.459156f, 4.297184f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
+// ★ 单涵道使用“舵角域”内环：速率环输出直接是三轴舵角需求 [deg]，
+//   限幅就是舵面最大偏角（默认 ±20°），与源机型 Universal-EDF 一致。
+//   kp 单位 = deg 舵角 / (deg/s 角速率误差)，源机型实测增益 0.25。
+//   这样调参界面上的限幅可直接按“度”理解，不再出现 ±4583 deg/s² 这种折算值。
+//   注：out_max 会在 applyFlightCtrlParams() 里被 sedf.ctrl_vane_deg 覆盖，
+//   改舵角上限只需改那一个参数。
+#define BFS_RATE_ROLL_DEFAULT {0.25f, 0.08f, 0.0f, -20.0f, 20.0f, 5.0f, 60.0f, 0.2f, true}
+#define BFS_RATE_PITCH_DEFAULT {0.25f, 0.08f, 0.0f, -20.0f, 20.0f, 5.0f, 60.0f, 0.2f, true}
+#define BFS_RATE_YAW_DEFAULT  {0.25f, 0.05f, 0.0f, -20.0f, 20.0f, 3.0f, 60.0f, 0.2f, true}
 #else
 #define BFS_ATT_ROLL_DEFAULT  {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_PITCH_DEFAULT {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}

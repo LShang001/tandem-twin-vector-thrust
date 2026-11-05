@@ -2495,12 +2495,25 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
   }
   else
   {
-    // 姿态闭环（自动舵）：**内环统一输出目标角加速度 α**，与纵列/共轴同一契约；
-    // 机型差异全部由 SingleEdf4VaneAllocator 按机型参数（I、k、满舵角、矩阵、
-    // 逐舵方向、yaw 轴正方向）换算成四舵偏角——flight_control 只负责分派。
-    alloc_in.alpha_roll_radps2 = outputs.alpha_roll_radps2;
-    alloc_in.alpha_pitch_radps2 = outputs.alpha_pitch_radps2;
-    alloc_in.alpha_yaw_radps2 = outputs.alpha_yaw_radps2;
+    // 姿态闭环（自动舵）：**单涵道速率环工作在舵角域**——PID 输出直接就是三轴
+    // 舵角需求 [deg]（与源机型 Universal-EDF 一致），再由机型矩阵折到四舵。
+    // 这样参数表上的限幅（rate_*.out_max）就是“舵面最大偏角（度）”，直观可调。
+    // 机型知识：本机型 yaw 轴正方向与“右打偏航=正”的通道约定相反，故取负。
+    const float vane_req_deg[3] = {
+        gnc_tel.alpha_ref_dps2[0],
+        gnc_tel.alpha_ref_dps2[1],
+        -gnc_tel.alpha_ref_dps2[2],
+    };
+    alloc_in.direct_vane_enabled = true;
+    for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
+    {
+      float sum = 0.0f;
+      for (uint8_t j = 0; j < 3; ++j)
+      {
+        sum += bfs::kSingleEdf4VaneManualMatrix[j][i] * vane_req_deg[j];
+      }
+      alloc_in.direct_vane_deg[i] = sum;
+    }
   }
 
   const bfs::SingleEdf4VaneAllocationOutput alloc =
