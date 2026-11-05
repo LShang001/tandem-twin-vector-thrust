@@ -73,14 +73,14 @@ int main()
   p.inertia_yaw_kgm2 = 0.03f;
 
   // ---- P2：单轴 α → 四舵偏角解析值 ----
-  // 滚转：τx=Ix·α=0.02 ⇒ d=τ/(4k)=0.25° ⇒ δ=H[0]ᵀ·0.25=(-,+,−,+)
+  // 滚转：τx=Ix·α=0.02 ⇒ d=τ/(4k)=0.25° ⇒ δ=Mx 行·0.25 = (+,−,+,−)
   {
     bfs::SingleEdf4VaneAllocationInput in;
     in.alpha_roll_radps2 = 1.0f;
     const auto out = bfs::allocateSingleEdf4Vane(in, p);
     CHECK(out.valid, "P2 滚转输入有效");
-    CHECK(near(out.vane_deg[0], -0.25f) && near(out.vane_deg[1], 0.25f) &&
-              near(out.vane_deg[2], -0.25f) && near(out.vane_deg[3], 0.25f),
+    CHECK(near(out.vane_deg[0], 0.25f) && near(out.vane_deg[1], -0.25f) &&
+              near(out.vane_deg[2], 0.25f) && near(out.vane_deg[3], -0.25f),
           "P2 滚转 α=1 的四舵偏角解析值");
     CHECK(!out.saturated, "P2 小指令不触发联合限幅");
     CHECK(near(out.torque_cmd_nm[0], 0.02f), "P2 滚转力矩 = Ix·α");
@@ -94,13 +94,13 @@ int main()
               near(out.vane_deg[2], -0.25f) && near(out.vane_deg[3], -0.25f),
           "P2 俯仰 α=1 的四舵偏角解析值");
   }
-  // 偏航：τz=Iz·α=0.03 ⇒ d=0.375° ⇒ δ=（−,+,+,−）
+  // 偏航：τz=Iz·α=0.03 ⇒ d=0.375° ⇒ δ=Mz 行·0.375 = (+,−,−,+)
   {
     bfs::SingleEdf4VaneAllocationInput in;
     in.alpha_yaw_radps2 = 1.0f;
     const auto out = bfs::allocateSingleEdf4Vane(in, p);
-    CHECK(near(out.vane_deg[0], -0.375f) && near(out.vane_deg[1], 0.375f) &&
-              near(out.vane_deg[2], 0.375f) && near(out.vane_deg[3], -0.375f),
+    CHECK(near(out.vane_deg[0], 0.375f) && near(out.vane_deg[1], -0.375f) &&
+              near(out.vane_deg[2], -0.375f) && near(out.vane_deg[3], 0.375f),
           "P2 偏航 α=1 的四舵偏角解析值（对角分组）");
     CHECK(near(out.torque_cmd_nm[2], 0.03f), "P2 偏航力矩 = Iz·α");
   }
@@ -118,14 +118,14 @@ int main()
       peak = std::fmax(peak, std::fabs(out.vane_deg[i]));
     }
     // 解析：τ=(Ix·40, Iy·40, Iz·40)=(0.8,0.8,1.2)；d=τ/(4k)=(10,10,15)；
-    // δ_raw = (-15, +35, -5, -15)；peak=35 ⇒ scale=20/35；δ=(-8.571,+20,-2.857,-8.571)
+    // δ_raw = (+35, −15, −15, −5)；peak=35 ⇒ scale=20/35
     const float scale = 20.0f / 35.0f;
     CHECK(out.saturated, "P3 大指令触发联合限幅");
     CHECK(near(peak, 20.0f, 1.0e-3f), "P3 限幅后最大舵角恰为满偏角");
-    CHECK(near(out.vane_deg[0], -15.0f * scale, 1.0e-3f) &&
-              near(out.vane_deg[1], 35.0f * scale, 1.0e-3f) &&
-              near(out.vane_deg[2], -5.0f * scale, 1.0e-3f) &&
-              near(out.vane_deg[3], -15.0f * scale, 1.0e-3f),
+    CHECK(near(out.vane_deg[0], 35.0f * scale, 1.0e-3f) &&
+              near(out.vane_deg[1], -15.0f * scale, 1.0e-3f) &&
+              near(out.vane_deg[2], -15.0f * scale, 1.0e-3f) &&
+              near(out.vane_deg[3], -5.0f * scale, 1.0e-3f),
           "P3 联合等比缩放后的四舵解析值");
     CHECK(out.residual_nm > 0.0f, "P3 饱和时力矩残差 > 0");
   }
@@ -163,8 +163,8 @@ int main()
     trimmed.yaw_trim_deg = 5.0f;
     bfs::SingleEdf4VaneAllocationInput in; // 三轴 α 全 0
     const auto out = bfs::allocateSingleEdf4Vane(in, trimmed);
-    CHECK(near(out.vane_deg[0], -5.0f) && near(out.vane_deg[1], 5.0f) &&
-              near(out.vane_deg[2], 5.0f) && near(out.vane_deg[3], -5.0f),
+    CHECK(near(out.vane_deg[0], 5.0f) && near(out.vane_deg[1], -5.0f) &&
+              near(out.vane_deg[2], -5.0f) && near(out.vane_deg[3], 5.0f),
           "P6 配平角按偏航行分布到四舵");
     CHECK(near(out.torque_cmd_nm[0], 0.0f) && near(out.torque_cmd_nm[1], 0.0f),
           "P6 配平不产生滚转/俯仰力矩指令");
@@ -259,6 +259,28 @@ int main()
     CHECK(out10.vane_deg[0] > 0.0f && out10.vane_deg[3] > 0.0f &&
               out10.vane_deg[1] < 0.0f && out10.vane_deg[2] < 0.0f,
           "P10 默认方向符号下纯俯仰的四舵执行量符号");
+  }
+
+  // ---- P11：手动直通矩阵 = 源机型混控器逐字一致 ----
+  // 源公式（Universal-EDF airframe_mixer_single_edf_4vane.cpp）：
+  //   defl1 = −roll + pitch + yaw
+  //   defl2 = +roll + pitch − yaw
+  //   defl3 = +roll − pitch + yaw
+  //   defl4 = −roll − pitch − yaw
+  {
+    const float expect_pure_roll[4] = {-1.0f, +1.0f, +1.0f, -1.0f};
+    const float expect_pure_pitch[4] = {+1.0f, +1.0f, -1.0f, -1.0f};
+    const float expect_pure_yaw[4] = {+1.0f, -1.0f, +1.0f, -1.0f};
+    for (int i = 0; i < 4; ++i)
+    {
+      CHECK(near(bfs::kSingleEdf4VaneManualMatrix[0][i], expect_pure_roll[i]),
+            "P11 手动矩阵 roll 行 = 源 defl 公式");
+      CHECK(near(bfs::kSingleEdf4VaneManualMatrix[1][i], expect_pure_pitch[i]),
+            "P11 手动矩阵 pitch 行 = 源 defl 公式");
+      CHECK(near(bfs::kSingleEdf4VaneManualMatrix[2][i], expect_pure_yaw[i]),
+            "P11 手动矩阵 yaw 行 = 源 defl 公式");
+    }
+    CHECK(bfs::singleEdfVaneManualRowsOrthogonal(), "P11 手动矩阵行正交");
   }
 
   // ---- P9：非有限输入 → 分配无效、四舵回中位 ----

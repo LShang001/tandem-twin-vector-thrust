@@ -2471,9 +2471,12 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
       for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
       {
         float sum = 0.0f;
+        // ★ 2026-11-05：手动/标定直通走**源机型矩阵**（源 roll/pitch/yaw 行），
+        //   与 Universal-EDF 混控器逐字一致——保证打杆时舵面摆动可逐项对照源固件。
+        //   自动模式仍走 kSingleEdf4VaneMatrix（α 是存档系角加速度，力矩轴按存档系分）。
         for (uint8_t j = 0; j < 3; ++j)
         {
-          sum += bfs::kSingleEdf4VaneMatrix[j][i] * stick_deg[j];
+          sum += bfs::kSingleEdf4VaneManualMatrix[j][i] * stick_deg[j];
         }
         alloc_in.direct_vane_deg[i] = sum;
       }

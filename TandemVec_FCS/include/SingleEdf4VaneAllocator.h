@@ -50,13 +50,21 @@ namespace bfs
 constexpr uint8_t kSingleEdfVaneCount = 4;
 
 /**
- * @brief 分配矩阵 H（行 = 存档系三轴力矩 Mx/My/Mz，列 = 舵1..舵4）
- * @details 由源机型 Universal-EDF 的实测矩阵（其轴序 roll/pitch/yaw = 绕 x/y/z_EDF）
- *          经轴置换 x_EDF→z_b、y_EDF→y_b、z_EDF→−x_b 得到：
- *            Mx（滚转，绕 x_b） = −M_yaw_EDF  → [−1, +1, −1, +1]
- *            My（俯仰，绕 y_b） = +M_pitch_EDF → [+1, +1, −1, −1]
- *            Mz（偏航，绕 z_b） = +M_roll_EDF  → [−1, +1, +1, −1]
+ * @brief 自动模式分配矩阵 H（行 = 存档系三轴力矩 Mx/My/Mz，列 = 舵1..舵4）
+ * @details 源机型 Universal-EDF 的实测矩阵按源轴序 roll/pitch/yaw = 绕 x/y/z_EDF：
+ *            roll_EDF  = [−1, +1, +1, −1]
+ *            pitch_EDF = [+1, +1, −1, −1]
+ *            yaw_EDF   = [+1, −1, +1, −1]
+ *          本固件存档系与源 FRD 的关系（模型系右手：x'=前、y'=右、z'=z_FRD）：
+ *            x_b = z_EDF、y_b = y_EDF、z_b = −x_EDF  （det = +1）
+ *          力矩分量随轴同向/反向同步：
+ *            Mx（绕 x_b） = +τ_z_EDF = +yaw_EDF   → [+1, −1, +1, −1]
+ *            My（绕 y_b） = +τ_y_EDF = +pitch_EDF → [+1, +1, −1, −1]
+ *            Mz（绕 z_b） = −τ_x_EDF = −roll_EDF  → [+1, −1, −1, +1]
  *          行两两内积为 0（行正交），故三轴可独立分配、互不耦合。
+ *          **★ 2026-11-05 修正**：原实现把 Mx 写成 −yaw_EDF、Mz 写成 +roll_EDF，
+ *          即把"换轴"当成了"换符号"，导致滚转/偏航两轴的舵面摆动方向反了
+ *          （用户实机打杆发现）。分组不变（{1,3}vs{2,4} / {1,4}vs{2,3}），只是极性。
  *          四舵在存档系的方位：舵1 (+x_b,+y_b)、舵2 (−x_b,+y_b)、舵3 (−x_b,−y_b)、
  *          舵4 (+x_b,−y_b)——飞控与传感器安装与共轴 VTVL 完全一致（用户 2026-11-05
  *          确认，同机体同安装）。对应分组：俯仰 {1,2}vs{3,4}、滚转 {1,4}vs{2,3}、
@@ -66,9 +74,27 @@ constexpr uint8_t kSingleEdfVaneCount = 4;
  *        TandemVec_FCS `AGENTS.md` §坐标系与执行器（存档系 z_b=推力轴）
  */
 static constexpr float kSingleEdf4VaneMatrix[3][kSingleEdfVaneCount] = {
-    {-1.0f, +1.0f, -1.0f, +1.0f}, // Mx 滚转 = −M_yaw_EDF
-    {+1.0f, +1.0f, -1.0f, -1.0f}, // My 俯仰 = +M_pitch_EDF
-    {-1.0f, +1.0f, +1.0f, -1.0f}, // Mz 偏航 = +M_roll_EDF
+    {+1.0f, -1.0f, +1.0f, -1.0f}, // Mx 滚转（绕 x_b）= +τ_z_EDF = +yaw_EDF 行
+    {+1.0f, +1.0f, -1.0f, -1.0f}, // My 俯仰（绕 y_b）= +τ_y_EDF = +pitch_EDF 行
+    {+1.0f, -1.0f, -1.0f, +1.0f}, // Mz 偏航（绕 z_b）= −τ_x_EDF = −roll_EDF 行
+};
+
+/**
+ * @brief 手动/地面标定直通用的源机型矩阵（行 = 源 roll/pitch/yaw 通道）
+ * @details 与源机型混控器**逐字一致**（`airframe_mixer_single_edf_4vane.cpp`）：
+ *            defl1 = −roll + pitch + yaw
+ *            defl2 = +roll + pitch − yaw
+ *            defl3 = +roll − pitch + yaw
+ *            defl4 = −roll − pitch − yaw
+ *          用途：CH1/CH2/CH4 摇杆直通时，舵面摆动与源固件完全一致（用户按源固件调试
+ *          手册核对），不经过存档系轴置换——这样"打杆看到的动作"可逐项对照源工程。
+ *          ★ 自动模式仍用上面的 kSingleEdf4VaneMatrix（α 是存档系角加速度，力矩轴
+ *          必须按存档系分配）；两套矩阵的分组相同、仅轴标签与极性不同。
+ */
+static constexpr float kSingleEdf4VaneManualMatrix[3][kSingleEdfVaneCount] = {
+    {-1.0f, +1.0f, +1.0f, -1.0f}, // 源 roll（绕 x_EDF）
+    {+1.0f, +1.0f, -1.0f, -1.0f}, // 源 pitch（绕 y_EDF）
+    {+1.0f, -1.0f, +1.0f, -1.0f}, // 源 yaw（绕 z_EDF）
 };
 
 /**
@@ -318,6 +344,30 @@ constexpr bool singleEdfVaneRowsOrthogonal()
 
 static_assert(singleEdfVaneRowsOrthogonal(),
               "单涵道四舵分配矩阵必须三行正交（H·Hᵀ = 4I），否则三轴耦合");
+
+/** @brief 手动直通矩阵同样必须行正交（源机型矩阵本身正交，防止后续误改） */
+constexpr bool singleEdfVaneManualRowsOrthogonal()
+{
+    for (uint8_t a = 0; a < 3; ++a)
+    {
+        for (uint8_t b = a + 1; b < 3; ++b)
+        {
+            float dot = 0.0f;
+            for (uint8_t i = 0; i < kSingleEdfVaneCount; ++i)
+            {
+                dot += kSingleEdf4VaneManualMatrix[a][i] * kSingleEdf4VaneManualMatrix[b][i];
+            }
+            if (dot != 0.0f)
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static_assert(singleEdfVaneManualRowsOrthogonal(),
+              "手动直通矩阵（源机型矩阵）必须三行正交");
 
 } // namespace bfs
 
