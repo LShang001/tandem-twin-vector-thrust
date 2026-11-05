@@ -78,12 +78,12 @@ static bool s_dbg_mode = false;
 //   BFS_DBG_USB_SERIAL8 时，USB 调试口（Serial8）收到 "DBG\n" 也能进控制台，
 //   命令回显与打印走进入时的那个口——没有数传接线时也能做参数/健康检查。
 static Uart *s_dbg_port = &Serial6;
-#ifdef BFS_ANOCOM_ON_USB
-// ★ 2026-11-05：USB 调试口（Serial8）也承载 AnoCom 上行/参数链路。
-//   回调 onAnoRxFrame 是全局函数指针（无上下文），用这个指针记录“当前正在处理哪个
-//   串口的帧”，回调里的应答就会发回同一个口（参数读写在 USB 口即可用匿名上位机）。
+// ★ 2026-11-05：AnoCom 应答口的当前实例。默认指向 Serial6（数传）上的 AnoCom；
+//   开启 BFS_ANOCOM_ON_USB 时，处理 USB 口帧期间临时切到 AnoComUsb、处理完切回。
+//   回调 onAnoRxFrame 是全局函数指针（无上下文），靠这个指针把应答发回来源口。
+// ★ 2026-11-06：定义必须**无条件编译**——onAnoRxFrame 在三种机型下都参与编译，
+//   曾把定义裹进 BFS_ANOCOM_ON_USB，导致共轴 env（无此宏）报 s_ano_port 未声明。
 static AnoComProtocol *s_ano_port = &AnoCom;
-#endif
 // 遥测协议切换标志（DBG `proto` 命令置位）：false=AnoCom（GCS 默认）/
 // true=MAVLink v2（QGC/MP 可连）。运行时切换不重烧。
 static bool s_mav_active = false;
@@ -2905,7 +2905,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         // 一屏汇总：模式/IMU/气压/GNSS/EKF/Serial5 上行
         serial.println(F("[DBG] == HEALTH =="));
         serial.print(F("[DBG] veh="));
-#ifdef BFS_COAXIAL_VTVL
+// 机型标签必须与构建 env 一致，便于上板后一眼确认烧的是哪一型。
+// 三种宏互斥（platformio.ini 里各自独立 env），单涵道优先判定。
+#if defined(BFS_SINGLE_EDF_4VANE)
+        serial.print(F("SingleEdf4Vane"));
+#elif defined(BFS_COAXIAL_VTVL)
         serial.print(F("CoaxialVTVL"));
 #else
         serial.print(F("TandemVec"));
