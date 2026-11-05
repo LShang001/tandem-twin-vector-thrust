@@ -161,6 +161,29 @@ git -c http.proxy=http://127.0.0.1:7897 push origin main
   有前置断言会中止，旧工具链靠未定义行为静默返回 0。本机过 ≠ 目标机过。
 - 烧录前再 `git fetch` 确认远端未变，避免把别人的修复烧成旧版。
 
+### 跨机同步（git bundle）
+
+magicbook 访问不了 GitHub，revo ↔ magicbook 走 bundle：
+
+```bash
+# 1) 先问对端当前 HEAD（起点必须是它，不是本地上次推送点）
+ssh magicbook "cd D:/tandem-twin-vector-thrust; git rev-parse --short HEAD"
+# 2) 以对端 HEAD 为起点建增量包
+git bundle create tmp\sync.bundle <对端HEAD>..main
+scp tmp\sync.bundle magicbook:D:/tandem-twin-vector-thrust/tmp/
+# 3) 对端拉取并**立刻核对 HEAD**
+ssh magicbook "cd D:/tandem-twin-vector-thrust; git pull --ff-only tmp/sync.bundle main; git rev-parse --short HEAD"
+```
+
+**2026-11-06 实际踩坑**：本机用 `70dd518..main` 建包，对端停在 `704c655`，
+`git pull` 报 `Repository lacks these prerequisite commits` 而**脚本没检查返回值**，
+继续编译烧录——烧进去的是旧固件，参数读回仍是旧行为（out_max=20 而不是换算后的 4583）。
+三条硬规则：
+
+- bundle 起点一律用**对端 HEAD**；不确定就用 `git bundle create x.bundle --all`（全量，体积换确定性）。
+- `git pull` 后必须 `git rev-parse --short HEAD` 与预期一致才能继续；`pull` 的输出不要用 `Select-Object -Last 1` 截断掉错误。
+- **烧录后必须用参数读回验证新行为**（改默认值→读回应变化；改换算→读回应等于新公式值），`Verified OK` 只证明写进了 Flash，不证明固件是新的。
+
 ## 踩坑记录（完整记录见 docs/registers/踩坑记录-AGENTS.md——改控制/通信/调试代码前先检索）
 
 > 完整条目（130+ 条，按时间累积）已外移到 `docs/registers/踩坑记录-AGENTS.md`
