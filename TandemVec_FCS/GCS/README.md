@@ -30,7 +30,7 @@ py -3.12 app.py
 
 ## 连接与模式
 
-- **串口**：Serial6 地面站口（固件 `SERIAL6_BAUDRATE`，默认 **2 000 000**；数传模块换波特率后在此改）
+- **串口**：Serial6 地面站口（固件 `SERIAL6_BAUDRATE`，默认 **921600**；唯一事实源为 `TandemVec_FCS/src/state_data.h::SERIAL6_BAUDRATE`）
 - **两种模式互斥**（固件行为）：
   - **遥测模式**（默认）：AnoCom 4 组轮发（IMU/姿态/高度/模式/速度/PWM/位置/压力/GPS），200Hz 组轮 → 各帧约 50Hz
   - **调试模式**（DBG）：发 `DBG\n` 进入，遥测暂停，控制台/黑匣子命令接管；`exit` 退出恢复遥测

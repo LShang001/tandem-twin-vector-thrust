@@ -766,13 +766,19 @@ void applyFlightCtrlParams()
         //   推导：三轴舵角需求 δ → 力矩 τ=I·α；δ = Hᵀ·τ/(4k) ⇒ α = δ·4k/I。
         //   默认 20° → roll/pitch 4583.66、yaw 3055.78（yaw 惯量 0.03）。
         //   两个物理量（k、I）标定更新后，这组限幅自动跟随，不需要重调增益。
+        // ★ 2026-11-06 审计修复：换算取 min(ctrl_vane_deg, vane_max_deg)。
+        //   分配器联合限幅（flight_control.cpp）本就取两者较小值，派生限幅若只看
+        //   ctrl_vane_deg，用户把软件限幅设到 45° 时会派生出 ~10313 deg/s²，超过
+        //   GCS 为 rate_*.out_max 设的 10000 上限 → param load 回放快照中途被拦。
+        const float vane_eff_deg =
+            (P.ctrl_vane_deg < P.vane_max_deg) ? P.ctrl_vane_deg : P.vane_max_deg;
         const float rad2deg = 57.2957795f;
         const float alpha_full_roll =
-            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_roll_kgm2) * rad2deg;
+            vane_eff_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_roll_kgm2) * rad2deg;
         const float alpha_full_pitch =
-            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_pitch_kgm2) * rad2deg;
+            vane_eff_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_pitch_kgm2) * rad2deg;
         const float alpha_full_yaw =
-            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_yaw_kgm2) * rad2deg;
+            vane_eff_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_yaw_kgm2) * rad2deg;
         kFlightCtrlParams.rate_roll.out_max = alpha_full_roll;
         kFlightCtrlParams.rate_roll.out_min = -alpha_full_roll;
         kFlightCtrlParams.rate_pitch.out_max = alpha_full_pitch;

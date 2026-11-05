@@ -31,9 +31,12 @@ const FIELD_LABEL = {
   int_limit: '积分钳位', threshold: '分离阈值', filter_alpha: '滤波α', enabled: '启用',
 };
 const FIELD_RANGE = {
-  kp: [0, 50, 0.01], ki: [0, 1, 0.0001], kd: [0, 50, 0.01],
-  out_min: [-1000, 0, 0.1], out_max: [0, 1000, 0.1],
-  int_limit: [0, 1000, 1], threshold: [0, 1000, 0.1], filter_alpha: [0, 1, 0.01],
+  // ★ 2026-11-06 审计修复：与 GCS/server/params.py 的 META 对齐。
+  //   原先 kp[0,50]/ki[0,1]/out_*[±1000]/int_limit[0,1000] 窄于固件默认值
+  //   （rate_*.out_max=5729.578、int_limit=1145.9、单涵道 kp=57.3），Web 会把合法写入判越界。
+  kp: [0, 100, 0.01], ki: [0, 100, 0.0001], kd: [0, 100, 0.01],
+  out_min: [-10000, 0, 0.1], out_max: [0, 10000, 0.1],
+  int_limit: [0, 10000, 1], threshold: [0, 1000, 0.1], filter_alpha: [0, 1, 0.01],
   enabled: [0, 1, 1],
 };
 
