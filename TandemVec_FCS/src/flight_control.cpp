@@ -2491,10 +2491,14 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
     //   手动打杆与自动修正的通道→舵面映射完全一致（同一张表、同一限幅）。
     //   α 满量程取速率环输出限幅 5729.578 deg/s²（与 PID 默认值同源）。
     const float alpha_to_deg = P.vane_max_deg / 5729.578f;
+    // ★ 2026-11-05 第三次修正（实机）：俯仰/横滚方向已正确，仅“绕中轴自旋”（yaw）
+    //   修正方向反。原因是纵列的 alpha_yaw 定义在存档系 z_b（悬停时指地）上，
+    //   其正方向与“右打偏航 = 正”的摇杆/通道约定相反；手动直通用的是摇杆符号
+    //   （已验证正确），因此自动路径的 yaw 分量需要取反，才能与手动通道一致。
     const float alpha_deg[3] = {
         outputs.alpha_roll_radps2 * RAD_TO_DEG * alpha_to_deg,
         outputs.alpha_pitch_radps2 * RAD_TO_DEG * alpha_to_deg,
-        outputs.alpha_yaw_radps2 * RAD_TO_DEG * alpha_to_deg,
+        -outputs.alpha_yaw_radps2 * RAD_TO_DEG * alpha_to_deg,
     };
     alloc_in.direct_vane_enabled = true;
     for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
