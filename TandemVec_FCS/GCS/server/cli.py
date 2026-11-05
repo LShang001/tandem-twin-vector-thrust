@@ -257,9 +257,11 @@ def cmd_param(a):
             else:
                 print('✗ 读取 id=%d 超时（3 轮重试）——可能是固件处于 DBG 模式（参数链路暂停）或串口丢帧。先执行: cli.py dbg off' % pid)
     elif a.action == 'set':
-        _param_set(a.spec, a.value, 'set', use_json=getattr(a, 'json', False))
+        if not _param_set(a.spec, a.value, 'set', use_json=getattr(a, 'json', False)):
+            sys.exit(1)
     elif a.action == 'verify':
-        _param_set(a.spec, a.value, 'verify', use_json=getattr(a, 'json', False))
+        if not _param_set(a.spec, a.value, 'verify', use_json=getattr(a, 'json', False)):
+            sys.exit(1)
     elif a.action == 'restore':
         m.g.write(anocom.cmd_param_restore_defaults())
         drain(0.5)
@@ -285,9 +287,16 @@ def cmd_param(a):
         with open(a.spec, 'r', encoding='utf-8') as f:
             snap = _json.load(f)
         ok = 0
+        failed = []
         for name, value in snap.items():
-            _param_set(name, value, 'set')
-            ok += 1
+            if _param_set(name, value, 'set'):
+                ok += 1
+            else:
+                failed.append(name)
+        if failed:
+            print(f'✗ 参数快照部分失败：成功 {ok} 项，失败 {len(failed)} 项')
+            print('  失败项：' + ', '.join(failed[:10]) + ('…' if len(failed) > 10 else ''))
+            sys.exit(1)
         print(f'✓ 参数快照已写回 {a.spec}（{ok} 项；RAM 生效）')
 
 
@@ -399,6 +408,9 @@ def _param_set(spec, value, mode, use_json=False):
         else:
             print(f'✗ 写入 id={pid} ({name}) = {value}：确认帧未到且读回 {after}——'
                   f'固件处于 DBG 模式（参数链路暂停）？先执行: cli.py dbg off')
+
+    # ★ 2026-11-06 审计修复：返回可判定的结果，供 set/verify 设退出码、load 统计成败。
+    return good if mode == 'verify' else success
 
 
 def cmd_mav(a):

@@ -354,8 +354,13 @@ def decode_gps(p: bytes) -> dict:
 
 
 def decode_device_info(p: bytes) -> dict:
-    """0xE3: dev_id u8, hw/sw/bl/pt 4×int16, name 20B"""
-    if len(p) < 29:
+    """0xE3: dev_id u8, hw/sw/bl/pt 4×int16, name 变长（≤20B，不含补零）。
+
+    ★ 2026-11-06 审计修复：固件自 99c4fe6 起 DEV_NAME 变长（只发实际字符数，
+    当前设备名 18 字符 → 帧 DATA 仅 27B）。旧实现按定长 29B 判断，任何真实帧
+    都会被丢弃，device_info 永不显示。门槛降为固定段 9B，名称按剩余字节解析。
+    """
+    if len(p) < 9:
         return {}
     dev_id, hw, sw, bl, pt = p[0], *struct.unpack('<4h', p[1:9])
     name = p[9:29].split(b'\x00')[0].decode('ascii', errors='replace')

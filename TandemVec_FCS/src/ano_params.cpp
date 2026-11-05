@@ -342,6 +342,10 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
             uint16_t n;
             if (legacy)
             {
+                // ★ 2026-11-06 审计修复：这里必须补写 ID 首字节。
+                //   原实现只序列化到 &tx[1]，tx[0] 从未赋值（tx 是未初始化数组），
+                //   老版上位机按 [ID u8, 值] 解析会把值挂到栈垃圾 ID 上。
+                tx[0] = (uint8_t)(id & 0xFF);
                 n = anoParamSerialize(id, &tx[1], sizeof(tx) - 1);
                 if (n > 0)
                     ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_WRITE_READ, tx, 1 + n);

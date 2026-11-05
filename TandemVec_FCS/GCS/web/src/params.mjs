@@ -154,7 +154,7 @@ function render() {
       const isEnabled = p.name.endsWith('.enabled');
       const readonly = isEnabled;
       html += `<tr>
-        <td class="p-name">${p.id}</td>
+        <td class="p-name" data-name="${p.name}">${p.id}</td>
         <td>${p.name}<div class="p-desc">${labelOf(p.name)}</div></td>
         <td><input type="number" data-id="${p.id}" value="${p.value ?? ''}"
           ${readonly ? 'disabled' : ''} min="${min}" max="${max}" step="${step}"></td>
@@ -171,7 +171,9 @@ function render() {
       const id = Number(inp.dataset.id);
       const val = parseFloat(inp.value);
       if (Number.isNaN(val)) return;
-      const [min, max] = rangeOf(inp.closest('tr').querySelector('.p-name').textContent || '');
+      // ★ 2026-11-06 审计修复：.p-name 单元格装的是参数 ID，取它会让 rangeOf 落到
+      //   filter_alpha 分支（[0,1]），导致所有 |值|>1 的合法写入被误判越界。改取 data-name。
+      const [min, max] = rangeOf(inp.closest('tr').querySelector('.p-name').dataset.name || '');
       if (val < min || val > max) {
         flashAlarm('warn', `参数 ${id} 超出范围 [${min}, ${max}]，未发送`);
         return;
