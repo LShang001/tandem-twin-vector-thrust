@@ -74,6 +74,10 @@ static uint32_t s_flashServiceCount = 0;
 static uint32_t s_flashPushCount = 0;
 // 调试模式标志（文件级，handleDebugTask 置位，handleAnoCom 读取跳过遥测）
 static bool s_dbg_mode = false;
+// ★ 2026-11-05：DBG 控制台的当前串口。默认 Serial6（数传）；编译期开启
+//   BFS_DBG_USB_SERIAL8 时，USB 调试口（Serial8）收到 "DBG\n" 也能进控制台，
+//   命令回显与打印走进入时的那个口——没有数传接线时也能做参数/健康检查。
+static Uart *s_dbg_port = &Serial6;
 // 遥测协议切换标志（DBG `proto` 命令置位）：false=AnoCom（GCS 默认）/
 // true=MAVLink v2（QGC/MP 可连）。运行时切换不重烧。
 static bool s_mav_active = false;
@@ -586,7 +590,7 @@ void handleDebugTask()
   static uint8_t dbg_line_len = 0;
 
   if (s_dbg_mode) {
-    handleDebugConsole(Serial6, dbg_line, &dbg_line_len, sizeof(dbg_line), s_dbg_mode);
+    handleDebugConsole(*s_dbg_port, dbg_line, &dbg_line_len, sizeof(dbg_line), s_dbg_mode);
   }
 }
 
@@ -663,6 +667,29 @@ void handleAnoCom()
       }
     }
   }
+
+#ifdef BFS_DBG_USB_SERIAL8
+  // ★ 2026-11-05：USB 调试口（Serial8）DBG 入口——没有数传接线时也能进控制台。
+  // Serial8 只用于 printf 输出、不承载 AnoCom 帧，因此可直接 read（无需 Serial6 的
+  // peek/帧头保护）；进入后 s_dbg_port 指向 Serial8，命令回显与打印都走 USB。
+  if (!s_dbg_mode) {
+    while (Serial8.available() && !s_dbg_mode) {
+      const int c = Serial8.read();
+      if (c == '\n') {
+        if (dbg_line_len == 3 && dbg_line[0] == 'D' && dbg_line[1] == 'B' && dbg_line[2] == 'G') {
+          s_dbg_mode = true;
+          s_dbg_port = &Serial8;
+          dbg_line_len = 0;
+          Serial8.println(F("[DBG] Debug mode ON (USB Serial8). Type 'help' / 'exit'."));
+          return;
+        }
+        dbg_line_len = 0;
+      } else if (dbg_line_len < (int)(sizeof(dbg_line) - 1)) {
+        dbg_line[dbg_line_len++] = (char)c;
+      }
+    }
+  }
+#endif
 
   // 调试模式下跳过所有遥测逻辑（RX/TX 都由 handleDebugTask 接管）
   if (s_dbg_mode) {
@@ -2308,6 +2335,132 @@ void handleMavlink()
  * @note 阻塞型命令（wsseq/flash 导出）会长时间占住主循环：`wsseq` 单色上限被压到
  *       150ms 以免累积超过 IWDG 3.0s 窗口；flash export 在循环内主动 `kickIwdg()`。
  */
+// ---- DBG `param` 命令（2026-11-05）----
+// 与 AnoCom 0xE0/0xE1 共用同一注册表（anoParams），写入后 applyFlightCtrlParams()
+// 与地面站写参数完全同语义；用于没有数传接线时通过 USB 调试口做参数检查/标定。
+static int16_t dbgParamIdOf(const char *tok)
+{
+  if (tok == nullptr || tok[0] == '\0')
+  {
+    return -1;
+  }
+  bool numeric = true;
+  for (const char *p = tok; *p != '\0'; ++p)
+  {
+    if (*p < '0' || *p > '9')
+    {
+      numeric = false;
+      break;
+    }
+  }
+  if (numeric)
+  {
+    const long v = strtol(tok, nullptr, 10);
+    return (v >= 0 && v < (long)anoParamCount()) ? (int16_t)v : -1;
+  }
+  for (uint16_t i = 0; i < anoParamCount(); ++i)
+  {
+    const char *n = anoParamNameAt(i);
+    if (n != nullptr && strcmp(n, tok) == 0)
+    {
+      return (int16_t)i;
+    }
+  }
+  return -1;
+}
+
+static void debugParamCmd(Uart &serial, char *args)
+{
+  while (*args == ' ')
+  {
+    ++args;
+  }
+  char *sub = args;
+  while (*args != '\0' && *args != ' ')
+  {
+    ++args;
+  }
+  if (*args != '\0')
+  {
+    *args++ = '\0';
+  }
+  while (*args == ' ')
+  {
+    ++args;
+  }
+  char *name = args;
+  while (*args != '\0' && *args != ' ')
+  {
+    ++args;
+  }
+  if (*args != '\0')
+  {
+    *args++ = '\0';
+  }
+  while (*args == ' ')
+  {
+    ++args;
+  }
+
+  if (sub[0] == '\0')
+  {
+    serial.print(F("[DBG] param count="));
+    serial.println(anoParamCount());
+    serial.println(F("[DBG] usage: param get <name|id> | param set <name|id> <value>"));
+    return;
+  }
+  if (name[0] == '\0')
+  {
+    serial.println(F("[DBG] usage: param get <name|id> | param set <name|id> <value>"));
+    return;
+  }
+  const int16_t id = dbgParamIdOf(name);
+  if (id < 0)
+  {
+    serial.print(F("[DBG] unknown param: "));
+    serial.println(name);
+    return;
+  }
+  if (strcmp(sub, "get") == 0)
+  {
+    float v = 0.0f;
+    if (anoParamReadFloat((uint16_t)id, &v))
+    {
+      serial.print(F("[DBG] "));
+      serial.print(id);
+      serial.print(' ');
+      serial.print(anoParamNameAt(id));
+      serial.print('=');
+      serial.println(v, 4);
+    }
+    else
+    {
+      serial.println(F("[DBG] param read failed"));
+    }
+    return;
+  }
+  if (strcmp(sub, "set") == 0)
+  {
+    if (args[0] == '\0')
+    {
+      serial.println(F("[DBG] usage: param set <name|id> <value>"));
+      return;
+    }
+    const float val = (float)strtod(args, nullptr);
+    const bool ok = anoParamWriteFloat((uint16_t)id, val);
+    float back = 0.0f;
+    anoParamReadFloat((uint16_t)id, &back);
+    serial.print(F("[DBG] "));
+    serial.print(id);
+    serial.print(' ');
+    serial.print(anoParamNameAt(id));
+    serial.print(ok ? F(" set -> ") : F(" set FAILED -> "));
+    serial.println(back, 4);
+    return;
+  }
+  serial.println(F("[DBG] unknown subcommand (get|set)"));
+}
+
 void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
                         uint8_t maxLen, bool &dbgMode)
 {
@@ -2319,8 +2472,13 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       *lineLen = 0;
 
       // ---- 解析命令 ----
-      if (strncmp(line, "help", 4) == 0) {
+      // ★ 2026-11-05：param 子命令（读写参数注册表，与 AnoCom 0xE0/0xE1 同语义）
+      if (strncmp(line, "param", 5) == 0 && (line[5] == '\0' || line[5] == ' ')) {
+        debugParamCmd(serial, line + 5);
+      }
+      else if (strncmp(line, "help", 4) == 0) {
         serial.println(F("[DBG] Commands:"));
+        serial.println(F("[DBG]   param [get|set] <name|id> [value] - 参数读写（与 AnoCom 0xE0/0xE1 同一张注册表）"));
         serial.println(F("[DBG]   ws <r> <g> <b>   - send color frame (0-255)"));
         serial.println(F("[DBG]   wsoff             - turn WS2812 off"));
         serial.println(F("[DBG]   wsseq [ms]        - auto test sequence (default 500)"));

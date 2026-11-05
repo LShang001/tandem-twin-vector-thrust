@@ -2454,11 +2454,17 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
     alloc_in.direct_vane_enabled = true;
     if (isLinkUp)
     {
+      // 三轴摇杆 → 有向舵角需求（deg）。方向与纵列/源机型一致：
+      //   roll ：右打 = 正（988→−max，2012→+max）
+      //   pitch：前推 = 正（988→+max，2012→−max）★ 2026-11-05 修正：
+      //          原实现写成 988→−max，与纵列 generate_attitude_target 和源机型
+      //          Universal-EDF 的手动映射都相反（两者均为“前推=正”）。
+      //   yaw  ：右打 = 正
       const float stick_deg[3] = {
           mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -P.vane_max_deg,
                    P.vane_max_deg),
-          mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, -P.vane_max_deg,
-                   P.vane_max_deg),
+          mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, P.vane_max_deg,
+                   -P.vane_max_deg),
           mapFloat(inputs.yaw_raw, 988.0f, 2012.0f, -P.vane_max_deg,
                    P.vane_max_deg),
       };
