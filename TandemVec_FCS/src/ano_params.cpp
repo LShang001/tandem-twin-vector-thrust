@@ -254,6 +254,19 @@ const char *anoParamNameAt(uint16_t id)
     return e ? e->name : nullptr;
 }
 
+int16_t anoParamIdByName(const char *name)
+{
+    if (!name || !name[0])
+        return -1;
+    for (uint16_t i = 0; i < ANO_PARAMS_COUNT; ++i)
+    {
+        const char *n = kAnoParams[i].name;
+        if (n && strcmp(n, name) == 0)
+            return (int16_t)i;
+    }
+    return -1;
+}
+
 bool anoParamReadFloat(uint16_t id, float *out)
 {
     const AnoParamEntry *e = anoParamAt(id);

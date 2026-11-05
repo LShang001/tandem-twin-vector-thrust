@@ -31,6 +31,11 @@ import struct
 from dataclasses import dataclass
 
 FRAME_HEAD = 0xAB
+# ★ 2026-11-06 审计记录（不改代码）：AnoCom 官方手册要求上位机→飞控的帧为
+#   S_ADDR=0xFE、D_ADDR=0x05；本实现沿用源地址 0x05、目标 0xFF，方向与手册相反。
+#   但匿名助手 2.0.11 与固件解析器均只认帧头 `AB 05 FF`（固件侧按 data[] 内容分派，
+#   不校验源地址），实机链路已验证可用。改成本按手册发帧会同时影响两代上位机，
+#   故保持现状，仅在此记录偏离，改动需与固件解析侧一起评估。
 LOCAL_ADDR = 0x05   # 飞控
 GND_ADDR = 0xFF     # 地面站
 

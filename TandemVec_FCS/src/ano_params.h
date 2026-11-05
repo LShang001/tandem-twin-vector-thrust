@@ -70,3 +70,13 @@ bool anoParamReadFloat(uint16_t id, float *out);
 
 // 写参数值（统一 float；写后 applyFlightCtrlParams；无效 ID/类型不匹配返回 false）
 bool anoParamWriteFloat(uint16_t id, float value);
+
+/**
+ * @brief 按线上名反查参数 ID（供 fw_algo 直调库与 MAVLink 桥按名寻址）
+ * @param name 线上参数名（与注册表逐字一致，区分大小写）
+ * @return 参数 ID（0..ANO_PARAMS_COUNT-1）；未找到返回 -1
+ * @note  ★ 2026-11-06 审计修复：fw_gnc_api.cpp:408 一直在调用本函数，但固件侧
+ *        从未声明/实现它 —— fw_algo 共享库因此构建失败，SIL 与直调仿真全部无法
+ *        重建。这里补齐声明与实现，线性查找 169 项（调用频率低，不需要索引）。
+ */
+int16_t anoParamIdByName(const char *name);

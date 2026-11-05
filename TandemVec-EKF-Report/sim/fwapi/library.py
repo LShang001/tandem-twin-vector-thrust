@@ -495,6 +495,19 @@ class FwNavOutput(ctypes.Structure):
         ("gnss_overflow", ctypes.c_uint32),
         ("last_epoch_tow_ms", ctypes.c_uint32),
         ("steps", ctypes.c_uint32),
+        # ★ 2026-11-06 审计修复：fw_nav_api.h:157-165 在 steps 之后还有 8 个
+        #   自动 GNSS 延迟估计遥测字段（2026-11-01 追加）。Python 侧原缺这一段，
+        #   导致 struct_size 偏小，固件 fw_nav_api.cpp 的尺寸校验返回 rc=4，
+        #   Nav.step 直接抛异常。字段顺序与类型必须与头文件逐字一致
+        #   （uint8 后接 float 的自然对齐由 ctypes 对齐规则自动处理）。
+        ("auto_delay_tau_s", ctypes.c_float),
+        ("auto_delay_valid", ctypes.c_int32),
+        ("auto_delay_sharpness", ctypes.c_float),
+        ("auto_delay_n_gnss", ctypes.c_uint16),
+        ("auto_delay_n_erased", ctypes.c_uint16),
+        ("auto_delay_speed_max_mps", ctypes.c_float),
+        ("auto_delay_residual_mps", ctypes.c_float),
+        ("auto_delay_reject", ctypes.c_uint8),
         # 观测专用（尾部追加，见 fw_nav_api.h）：P 对角，未开
         # EKF_NAV_TELEMETRY 的构建为 NaN。复算卡尔曼增益用。
         ("pos_cov_m2", ctypes.c_float * 3),
