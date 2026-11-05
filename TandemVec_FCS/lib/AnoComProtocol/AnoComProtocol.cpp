@@ -721,15 +721,13 @@ void AnoComProtocol::sendDeviceInfo(uint8_t devId, int16_t hwVer, int16_t swVer,
     // PT_VER
     data[idx++] = (uint8_t)(ptVer & 0xFF);
     data[idx++] = (uint8_t)((ptVer >> 8) & 0xFF);
-    // DEV_NAME: 最多 20 字节, 不足补 0x00
+    // DEV_NAME: 变长，只发实际字符数（官方协议：最长 20 字节，N 表示字符串长度）。
+    // 2026-11-05：原实现补 0 到定长 20，与官方“N 表示字符串长度”不符，
+    // 最新版匿名助手按变长解析会判定该帧长度错误。
     uint8_t nameLen = 0;
     while (devName && devName[nameLen] && nameLen < 20)
     {
         data[idx++] = (uint8_t)devName[nameLen++];
-    }
-    while (nameLen++ < 20)
-    {
-        data[idx++] = 0x00;
     }
     sendData(ANO_GND_STATION_ADDR, ANO_FUNC_DEVICE_INFO, data, idx);
 }
