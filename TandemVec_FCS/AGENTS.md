@@ -2,12 +2,19 @@
 
 > 基于 PlatformIO 的 STM32H743 **纵列双发矢量推力 VTOL 飞控固件**（从共轴双桨 VTVL 移植重构）。安全关键嵌入式控制软件，不是普通应用代码。
 
-## 当前实机机型与构建（2026-11-04，优先级高于默认描述）
+## 当前实机机型与构建（2026-11-06 更新；优先级高于默认描述）
 
-- **当前飞控装在共轴双桨电火箭上**，不是纵列双发。构建 env 必须是
-  `[env:CoaxialVTVL]`（`-DBFS_COAXIAL_VTVL`）；**禁止把 `[env:TandemVec_FCS]`
-  当飞行固件烧到共轴机**。
-- 上板先核对 `health`：`veh=CoaxialVTVL`；纵列固件会打印 `veh=TandemVec`。
+- **同一块 WeAct MiniSTM32H743 板可烧三种机型，env 选错等于烧错飞机**：
+
+  | 机型 | 构建 env | 首次实飞 | `health` 输出 |
+  |---|---|---|---|
+  | 纵列双发矢量推力 | `[env:TandemVec_FCS]` | 2026-08 | `veh=TandemVec` |
+  | 共轴双桨 VTVL | `[env:CoaxialVTVL]`（`-DBFS_COAXIAL_VTVL`） | 2026-11-04 | `veh=CoaxialVTVL` |
+  | 单涵道 + X 型四燃气舵 | `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`） | 2026-11-05 | `veh=TandemVec`（标签待改） |
+
+- **烧录前必须先确认这次飞哪一型**，再选 env；上板后第一件事是 `health` 核对 `veh=` 与预期一致。
+  `veh=` 只区分纵列与共轴，**单涵道当前仍打印 `veh=TandemVec`**（已知遗留，靠 `param get sedf.ctrl_vane_deg`
+  能否读到值来区分，或直接看是否打印 `sedf.*` 参数）。
 - 共轴 PID 已统一为通用 `att_*`/`rate_*`，不再有 `coax.att_kp_*`/`coax.rate_kp_*`；
   `coax.*` 只剩质量/推力/舵机/PWM/力臂/惯量/限幅等硬件参数。
 - 共轴 SIL 默认使用 `--coax-plant-model rigorous`；L1 集总 plant 的俯仰/姿态约定
@@ -70,7 +77,10 @@
 - 执行器映射：δf→PA0(TVC_ROLL)、δt→PA1(TVC_PITCH)、Δω→PA2/PA3。
 - 齿轮 30T/40T=1.333:1（PWM 映射已含）。
 - **单涵道机型（`BFS_SINGLE_EDF_4VANE`）**：执行器换成 4 片燃气舵 + 1 路推进器油门（无差速通道）。
-  三轴 α → τ=I·α → 3×4 矩阵 `δ = Hᵀ·τ/(4k)`（`include/SingleEdf4VaneAllocator.h`，行正交编译期断言）；
+  ★ **实际飞控路径是舵角域直通**：速率环输出即三轴舵角需求 [deg]，经 3×4 矩阵折到四舵
+  （`alloc_in.direct_vane_enabled`），限幅 = `sedf.ctrl_vane_deg`（默认 ±20°）；与源机型口径一致。
+  分配器 `include/SingleEdf4VaneAllocator.h` 仍保留 α 入口（三轴 α → τ=I·α → `δ = Hᵀ·τ/(4k)`，
+  行正交编译期断言），供宿主测试与其它调用方使用——**不要把 α 入口当成当前飞行路径**；
   矩阵已按存档系重构——纵列"偏航"（绕 z_b=推力轴）对应源机型的"滚转"，物理上是世界航向。
   四舵 PA0–PA3 只做语义重映射，PC8 为推进器油门，PE6 为推进使能。
 
@@ -106,7 +116,10 @@
   重启回 `kFlightCtrlParamsDefaults`。调参后用 GCS `param dump` 保存快照，
   下次上电用 `param load` 重放并回读确认。需要掉电保存时必须单独设计独立扇区+CRC+
   掉电测试，不能直接复用磁标定末扇区。
-- **控制增益/限幅/滤波唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`（static constexpr，固件与宿主测试共用）；速率环 kp 单位 s⁻¹、ki s⁻²；旧参数 0.28/0.20/0.10 不得导入。
+- **控制增益/限幅/滤波唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`
+  （static constexpr，固件与宿主测试共用）；旧参数 0.28/0.20/0.10 不得导入。
+  **速率环单位按机型分两套**：纵列/共轴 kp 单位 s⁻¹、ki 单位 s⁻²（输出 deg/s²）；
+  **单涵道为舵角域**（输出 deg，kp 无量纲，限幅 = `sedf.ctrl_vane_deg`）——见 §当前实机机型。
 - 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）。
 - 差速增益调度/工作点下限/零油门门控：`flight_control.cpp` 层2（改后跑 `tools/verify_*.py`）。
 - 控制链遥测：`state_data.h` §4.0b `gnc_tel`。
