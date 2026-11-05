@@ -372,29 +372,34 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
             e = anoParamAt(id);
             if (!e)
                 return true;
-            // ★ 2026-11-05：PAR_NAME 改为**变长**（官方协议：ID + TYPE + NAME，NAME 为
-            //   字符串、最长 20 字节、N 表示实际长度；老版上位机上限 16）。原实现补 0
-            //   到定长，匿名助手 2.x 按变长解析会判定该帧长度错误 → 参数名全 LenErr。
+            // ★ 2026-11-05 定棺（实机 2.0.11 验证）：**参数名是定长**——
+            //   官方参数信息帧 = ID + TYPE + NAME（定长 20，新版 / 16，1.x 老版），
+            //   不足补 0；只有设备信息帧的 DEV_NAME 才是变长。
+            //   实测证据：改成变长后匿名助手 2.0.11 只认得名称恰好 20 字符的两项
+            //   （rate_pitch.int_limit / rate_pitch.threshold），其余全部无名称；
+            //   改回定长 20 后整表才能读出。
             const size_t nameCap = legacy ? 16U : 20U;
             size_t nameLen = strlen(e->name);
             if (nameLen > nameCap)
+            {
                 nameLen = nameCap;
+            }
             if (legacy)
             {
                 tx[0] = id & 0xFF;
                 tx[1] = e->type;
+                memset(&tx[2], 0, 16);
                 memcpy(&tx[2], e->name, nameLen);
-                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx,
-                             (uint16_t)(2 + nameLen));
+                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx, 18);
             }
             else
             {
                 tx[0] = id & 0xFF;
                 tx[1] = (id >> 8) & 0xFF;
                 tx[2] = e->type;
+                memset(&tx[3], 0, 20);
                 memcpy(&tx[3], e->name, nameLen);
-                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx,
-                             (uint16_t)(3 + nameLen));
+                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx, 23);
             }
             return true;
         }
