@@ -73,10 +73,10 @@ def test_gcs_mavlink_param_value_updates_params(monkeypatch):
     monkeypatch.setattr(m, 'g', g)
 
     frame = _vehicle_frame(lambda v: v.param_value_send(
-        b'att_roll.kp\x00\x00\x00\x00\x00', 2.4, 9, 148, 2))
+        b'att_roll.kp\x00\x00\x00\x00\x00', 2.4, 9, 168, 2))
     m._on_telemetry_rx(frame)
     assert g.mav.params['att_roll.kp'] == pytest.approx(2.4)
-    assert g.snap['param_count'] == 148
+    assert g.snap['param_count'] == 168
 
 
 def test_connect_idempotent_same_port_protocol():

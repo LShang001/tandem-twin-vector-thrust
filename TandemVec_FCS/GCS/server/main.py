@@ -845,9 +845,12 @@ async def _param_read_all(ws: WebSocket):
     g.param_names = {}
     g.param_values = {}
     failed = []
-    # ★ 2026-08-10 全面审查修复：硬编码 117 → 动态（固件实际 121，
-    #   0xE0 CMD 0x01 已应答过则用之，否则回退 121）
-    total = g.param_count_seen or 121
+    # ★ 2026-08-10 全面审查修复：硬编码 117 → 动态（0xE0 CMD 0x01 已应答过则用之）
+    # ★ 2026-11-05：兜底改用本地参数表长度（与固件同序镜像，现 168 项）并截断固件上报值——
+    #   避免“count 未回退”时只读前 121 项、或未来固件扩容后越界读不存在的 ID。
+    local_count = len(pm.expected_names())
+    seen = int(g.param_count_seen) if g.param_count_seen else local_count
+    total = min(seen, local_count)
     for pid in range(total):
         if not await _param_read_single_async(pid):
             failed.append(pid)
