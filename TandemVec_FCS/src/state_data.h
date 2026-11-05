@@ -265,16 +265,17 @@ extern Uart &opticalFlowSerial; // 光流
 //   PA0..PA3 = 四片燃气舵（源机型 Universal-EDF 的 VANE1..VANE4）
 //   PC8      = 单涵道推进器油门（原燃料阀门通道）
 //   PE6      = 推进使能（沿用 ignition 全局量，语义由"点火"改为"允许推进"）
-// 舵编号沿用源机型 Universal-EDF 的物理编号，方位按**源机型机体 FRD 口径**
-// （x=推力轴/机头朝天、y=右、z=下；从喷管向机头看）：
-//   舵1 右前(+Y,-Z)、舵2 右后(+Y,+Z)、舵3 左后(-Y,+Z)、舵4 左前(-Y,-Z)。
-// ★ 本固件控制层用存档系（x_b=滚转、y_b=俯仰、z_b=推力轴），两套轴名的置换已由
-//   SingleEdf4VaneAllocator 的分配矩阵吸收——**不得用存档系轴名重述上面的象限**。
+// 舵编号沿用源机型 Universal-EDF 的物理编号（PA0..PA3 顺序不变）；方位按本固件
+// **存档系**（x_b=滚转、y_b=俯仰、z_b=推力轴）表述——飞控与传感器安装方向与共轴
+// VTVL 完全一致（用户 2026-11-05 确认，同机体同安装），故与纵列/共轴共用同一套轴名：
+//   舵1 (+x_b,+y_b)、舵2 (−x_b,+y_b)、舵3 (−x_b,−y_b)、舵4 (+x_b,−y_b)。
+//   等价于源机型机体 FRD 的 (+Y,−Z)/(+Y,+Z)/(−Y,+Z)/(−Y,−Z)。
+// 分组（源台架实测 2026-09-23）：俯仰 {1,2}vs{3,4}、滚转 {1,4}vs{2,3}、偏航 {1,3}vs{2,4}。
 // ★ 烧录纪律：不同机型必须显式 pio run -e <env> -t upload；烧错构型 = 舵机行程与油门映射全错。
-#define VANE1_PIN TVC_ROLL_SERVO_PIN  // 舵1（源编号：右前）
-#define VANE2_PIN TVC_PITCH_SERVO_PIN // 舵2（源编号：右后）
-#define VANE3_PIN MOTOR1_PIN          // 舵3（源编号：左后）
-#define VANE4_PIN MOTOR2_PIN          // 舵4（源编号：左前）
+#define VANE1_PIN TVC_ROLL_SERVO_PIN  // 舵1（+x_b,+y_b）
+#define VANE2_PIN TVC_PITCH_SERVO_PIN // 舵2（−x_b,+y_b）
+#define VANE3_PIN MOTOR1_PIN          // 舵3（−x_b,−y_b）
+#define VANE4_PIN MOTOR2_PIN          // 舵4（+x_b,−y_b）
 #define THRUSTER_PIN FUEL_VALVE_PIN   // 单涵道推进器油门（0%=1000µs，100%=2000µs）
 
 // --- 2.3 传感器与ADC引脚 ---

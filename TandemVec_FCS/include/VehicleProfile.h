@@ -235,16 +235,15 @@ static constexpr VehicleProfile kCoaxialVtvProfile = {
 };
 
 // ---- 单涵道推进器 + X 型四燃气舵：4 片舵机（PA0–PA3）+ 1 路推进器油门（PC8）----
-// 舵机通道按源机型 Universal-EDF 的物理编号，方位用**源机型机体 FRD 口径**
-// （x=推力轴/机头朝天、y=右、z=下）：舵1右前(+Y,-Z)/舵2右后(+Y,+Z)/舵3左后(-Y,+Z)/
-// 舵4左前(-Y,-Z)；中位 50%（1500µs）、满舵 ±16.67% 占空比。
-// ★ 本固件的三轴力矩行序是存档系（Mx 绕 x_b、My 绕 y_b、Mz 绕 z_b=推力轴），
-//   与源 FRD 的置换由 SingleEdf4VaneAllocator 的分配矩阵吸收，勿在此重述轴名。
+// 舵编号沿用源机型 Universal-EDF 的物理编号；方位按本固件**存档系**
+// （x_b=滚转、y_b=俯仰、z_b=推力轴）表述——飞控与传感器安装与共轴 VTVL 完全一致
+// （用户 2026-11-05 确认）：舵1 (+x_b,+y_b)、舵2 (−x_b,+y_b)、舵3 (−x_b,−y_b)、
+// 舵4 (+x_b,−y_b)；中位 50%（1500µs）、满舵 ±16.67% 占空比。
 static constexpr OutputChannelSpec kSingleEdf4VaneOutputs[] = {
-    {OutputKind::ServoPwmPct, 0U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵1（源编号右前）
-    {OutputKind::ServoPwmPct, 1U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵2（源编号右后）
-    {OutputKind::ServoPwmPct, 2U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵3（源编号左后）
-    {OutputKind::ServoPwmPct, 3U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵4（源编号左前）
+    {OutputKind::ServoPwmPct, 0U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵1（+x_b,+y_b）
+    {OutputKind::ServoPwmPct, 1U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵2（−x_b,+y_b）
+    {OutputKind::ServoPwmPct, 2U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵3（−x_b,−y_b）
+    {OutputKind::ServoPwmPct, 3U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵4（+x_b,−y_b）
     {OutputKind::EscPwmPct, 4U, 0.0f, 100.0f, 0.0f, 100.0f},      // 推进器油门
 };
 

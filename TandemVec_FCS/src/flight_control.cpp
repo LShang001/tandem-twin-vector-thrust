@@ -2509,19 +2509,19 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
     const bfs::OutputCommand &cmd = commands.commands[i];
     switch (cmd.hardware_slot)
     {
-    case 0: // 舵1（源编号右前，口径见 state_data.h）
+    case 0: // 舵1（+x_b,+y_b）
       SetServoPos(cmd.value, VANE1_PIN);
       ch1_output = cmd.value;
       break;
-    case 1: // 舵2（源编号右后）
+    case 1: // 舵2（−x_b,+y_b）
       SetServoPos(cmd.value, VANE2_PIN);
       ch2_output = cmd.value;
       break;
-    case 2: // 舵3（源编号左后）
+    case 2: // 舵3（−x_b,−y_b）
       SetServoPos(cmd.value, VANE3_PIN);
       ch3_output = cmd.value;
       break;
-    case 3: // 舵4（源编号左前）
+    case 3: // 舵4（+x_b,−y_b）
       SetServoPos(cmd.value, VANE4_PIN);
       ch4_output = cmd.value;
       break;
