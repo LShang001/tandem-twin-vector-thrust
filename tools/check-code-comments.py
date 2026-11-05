@@ -517,8 +517,18 @@ def check_file(rel: str, text: str) -> FileResult:
                 name = m.group(1) or m.group(2)
                 if name.startswith("_"):
                     continue
-                # docstring 检查：本行或后续 1–2 行出现三引号
-                window = "\n".join(lines[i : i + 3])
+                # docstring 检查：先定位签名结束行（括号配平且以冒号结尾），
+                # 再看其后 1–2 行；多行签名的 docstring 不会被误判缺失
+                j = i
+                depth = 0
+                while j < len(lines):
+                    line = lines[j]
+                    depth += sum(line.count(c) for c in "([{")
+                    depth -= sum(line.count(c) for c in ")]}")
+                    if depth <= 0 and line.rstrip().endswith(":"):
+                        break
+                    j += 1
+                window = "\n".join(lines[i : min(len(lines), j + 3)])
                 if '"""' not in window and "'''" not in window:
                     findings.append(
                         Finding("R08", "warning", i + 1, f"公共符号 {name} 缺少 docstring")
