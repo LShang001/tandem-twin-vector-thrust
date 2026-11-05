@@ -22,21 +22,22 @@ import params as pm
 
 
 def test_param_count_matches_firmware():
-    """参数总数 = 148（与固件 ANO_PARAMS_COUNT 一致；共轴已统一到 att_*/rate_*，仅保留 15 个硬件参数）"""
+    """参数总数 = 168（与固件 ANO_PARAMS_COUNT 一致；共轴 15 + 单涵道 20 个硬件参数）"""
     names = pm.expected_names()
-    assert len(names) == 148
+    assert len(names) == 168
     assert names.index('rate_pitch.kd') == 38
-    assert len(set(names)) == 148
+    assert len(set(names)) == 168
     # 首个与末个（线上名 ≤20B 协议限制：filter_alpha→falpha，滤波数组短名）
     assert names[0] == 'att_roll.kp'
     # ★ 2026-08-10 全面审查修复：尾部顺序对齐固件注册表
     #   （inertia_comp_mask@117 → spd2_alpha[0..2]@118-120 → ★2026-08-11 rc 曲线@121-127）
-    assert names[-1] == 'coax.inertia_yaw'
+    assert names[-1] == 'sedf.dt_s'
     assert names[117] == 'inertia_comp_mask'
     assert names[121:133] == ['rc_rate', 'rc_expo[0]', 'rc_expo[1]', 'rc_expo[2]',
                               'rc_super[0]', 'rc_super[1]', 'rc_super[2]',
                               'hdg_mode', 'hdg_align', 'gnss_lever_x',
                               'gnss_lever_y', 'gnss_lever_z']
+    # ★ 2026-10-30 共轴双桨 VTVL：名称/顺序 = 固件 BFS_COAX_PARAM_LIST
     # ★ 2026-10-30 共轴双桨 VTVL：名称/顺序 = 固件 BFS_COAX_PARAM_LIST
     assert names[133:148] == [
         'coax.max_corr_deg', 'coax.max_yaw_us', 'coax.mass_kg',
@@ -44,6 +45,15 @@ def test_param_count_matches_firmware():
         'coax.motor_max_us', 'coax.att_limit_deg', 'coax.dt_s',
         'coax.alloc_mode', 'coax.lever_m', 'coax.yaw_nm_per_us',
         'coax.inertia_roll', 'coax.inertia_pitch', 'coax.inertia_yaw']
+    # ★ 2026-11-05 单涵道 + X 型四燃气舵：名称/顺序 = 固件 BFS_SINGLE_EDF_PARAM_LIST
+    assert names[148:168] == [
+        'sedf.mass_kg', 'sedf.max_thrust_n', 'sedf.vane_max_deg',
+        'sedf.vane_moment', 'sedf.inertia_roll', 'sedf.inertia_pitch',
+        'sedf.inertia_yaw', 'sedf.yaw_trim_deg',
+        'sedf.vane_dir1', 'sedf.vane_dir2', 'sedf.vane_dir3', 'sedf.vane_dir4',
+        'sedf.vane_center', 'sedf.vane_span', 'sedf.vane_min_pct',
+        'sedf.vane_max_pct', 'sedf.thr_min_us', 'sedf.thr_max_us',
+        'sedf.att_limit_deg', 'sedf.dt_s']
     assert 'att_roll.falpha' in names
     assert all(len(n) <= 20 for n in names), [n for n in names if len(n) > 20]
 
@@ -299,10 +309,14 @@ def test_param_name_to_id_mapping():
     assert names.index('att_roll.kp') == 0
     assert names.index('att_pitch.kp') == 9
     assert names.index('rate_roll.kd') == 29
-    assert len(names) == 148
+    assert len(names) == 168
     assert names.index('rate_pitch.kd') == 38
     # ★ 2026-10-30 共轴参数只在表尾追加，旧 ID 不得移动；★task-10 分配器 158-163
     assert names.index('coax.max_corr_deg') == 133
     assert names.index('coax.dt_s') == 141
     assert names.index('coax.alloc_mode') == 142
     assert names.index('coax.inertia_yaw') == 147
+    # ★ 2026-11-05 单涵道参数追加在共轴之后（ID 148-167）
+    assert names.index('sedf.mass_kg') == 148
+    assert names.index('sedf.vane_dir1') == 156
+    assert names.index('sedf.dt_s') == 167

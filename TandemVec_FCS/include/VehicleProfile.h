@@ -34,6 +34,7 @@ enum class VehicleKind : uint8_t
     CoaxialVTVL,     // 共轴双桨 VTVL（两个对转电机 + 两轴 TVC 舵机）
     MultirotorVTVL,  // 多旋翼 VTVL
     LiquidRocket,    // 液体火箭（发动机+摆座/阀门/RCS）
+    SingleEdf4Vane,  // 单涵道推进器 + X 型四燃气舵（2026-11-05 新增）
     Count
 };
 
@@ -43,6 +44,7 @@ enum class ControlArchitecture : uint8_t
     Unspecified = 0,   // 仅有输出表骨架，控制链未接入
     MomentAllocation,  // 力矩指令 → BTRUE/N 输入分配（纵列双发）
     DirectTvcRate,     // 角速率环直接输出 TVC 摆角/差速 PWM（共轴 VTVL）
+    FourVaneMatrix,    // 三轴力矩 → 固定 3×4 矩阵分配（单涵道四燃气舵）
 };
 
 enum class YawMixStrategy : uint8_t
@@ -50,6 +52,7 @@ enum class YawMixStrategy : uint8_t
     None = 0,
     DifferentialOmega, // Δω → w0√(1±Δω)
     DifferentialPwmUs, // 偏航 PID → 电机 PWM 微秒差
+    VaneMatrix,        // 偏航力矩 → 四舵偏航分量（单涵道）
 };
 
 enum class TvcKinematics : uint8_t
@@ -57,6 +60,7 @@ enum class TvcKinematics : uint8_t
     None = 0,          // 无 TVC 舵机
     LinearServo,       // 角度 → 舵机百分比线性映射（共轴 VTVL 当前实现）
     NozzleGeometric,   // 喷管几何/推杆长度映射（可选）
+    GasVaneLinear,     // 燃气舵：舵偏角 → 占空比线性映射（单涵道四舵）
 };
 
 enum class CapabilityFlag : uint16_t
@@ -228,6 +232,30 @@ static constexpr VehicleProfile kCoaxialVtvProfile = {
     ControlArchitecture::DirectTvcRate,
     YawMixStrategy::DifferentialPwmUs,
     TvcKinematics::LinearServo,
+};
+
+// ---- 单涵道推进器 + X 型四燃气舵：4 片舵机（PA0–PA3）+ 1 路推进器油门（PC8）----
+// 舵机通道按源机型 Universal-EDF 的编号：舵1右前(+Y,-Z)/舵2右后(+Y,+Z)/
+// 舵3左后(-Y,+Z)/舵4左前(-Y,-Z)；中位 50%（1500µs）、满舵 ±16.67% 占空比。
+static constexpr OutputChannelSpec kSingleEdf4VaneOutputs[] = {
+    {OutputKind::ServoPwmPct, 0U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵1（右前）
+    {OutputKind::ServoPwmPct, 1U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵2（右后）
+    {OutputKind::ServoPwmPct, 2U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵3（左后）
+    {OutputKind::ServoPwmPct, 3U, 33.33f, 66.66f, 50.0f, 16.67f}, // 舵4（左前）
+    {OutputKind::EscPwmPct, 4U, 0.0f, 100.0f, 0.0f, 100.0f},      // 推进器油门
+};
+
+static constexpr VehicleProfile kSingleEdf4VaneProfile = {
+    "SingleEdf4Vane",
+    VehicleKind::SingleEdf4Vane,
+    static_cast<uint16_t>(CapabilityFlag::EscThrottle) |
+        static_cast<uint16_t>(CapabilityFlag::Rcs),
+    kSingleEdf4VaneOutputs,
+    static_cast<uint8_t>(sizeof(kSingleEdf4VaneOutputs) /
+                         sizeof(kSingleEdf4VaneOutputs[0])),
+    ControlArchitecture::FourVaneMatrix,
+    YawMixStrategy::VaneMatrix,
+    TvcKinematics::GasVaneLinear,
 };
 
 // ---- 多旋翼 VTVL 示例：4 电调、无舵机；仅用于扩展表/测试，当前固件未接 ----

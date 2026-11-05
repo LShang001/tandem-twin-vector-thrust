@@ -114,6 +114,100 @@ struct CoaxialCtrlParams
 
 #define BFS_COAX_PARAM_COUNT 15
 
+/**
+ * @brief 单涵道 + X 型四燃气舵机型硬件/输出参数（★ 2026-11-05 新增）
+ * @note  仅 BFS_SINGLE_EDF_4VANE 编译分支消费；控制环增益仍走通用 att_ 与 rate_ 两组
+ *        （速率环输出 deg/s²，与纵列/共轴同一量纲），本结构只放"构型硬件与
+ *        输出标定"这类机型专属常量：
+ *          - 质量/最大推力：推力分配（ThrustAllocation）用；
+ *          - 满舵角/舵效/惯量：SingleEdf4VaneAllocator 的 α→力矩→舵偏换算；
+ *          - 偏航配平：抵消涵道风扇反扭矩（绕推力轴 = 存档系 z_b = 偏航轴）；
+ *          - PWM 中位/半行程/硬限位：四舵与推进器的输出标定；
+ *          - 大倾角阈值：推进切断联锁（与源机型一致，默认 45°）。
+ *        ★ 默认值来源：源机型 Universal-EDF 的 `kParamsSingleEdf4Vane`（质量 1.15 kg /
+ *        最大推力 35 N / 满舵角 45°）与默认参数表；其中满舵角在本固件取 **20°**
+ *        （源机型文档与代码存在 20°/45° 口径冲突，本固件按"机械行程保守值"取 20°，
+ *        标定后按实测替换）。所有数值均为 MODEL-DEFAULT，未标定。
+ * @units  kg、N、deg、N·m/deg、kg·m²、%、µs、s
+ * @redline 满舵角与舵效系数直接决定控制权限，改动需按标定流程记录依据
+ */
+struct SingleEdf4VaneHwParams
+{
+    float mass_kg = 1.15f;                  // 整机质量 [kg]（MODEL-DEFAULT，未实测）
+    float max_total_thrust_n = 35.0f;       // 单涵道最大推力 [N]（MODEL-DEFAULT）
+    float vane_max_deg = 20.0f;             // 单舵机械满偏角 [deg]（待实测替换）
+    float vane_moment_nm_per_deg = 0.02f;   // 额定推力点舵效 [N·m/deg]（MODEL-DEFAULT）
+    float inertia_roll_kgm2 = 0.02f;        // 滚转轴惯量 [kg·m²]（MODEL-DEFAULT）
+    float inertia_pitch_kgm2 = 0.02f;       // 俯仰轴惯量 [kg·m²]（MODEL-DEFAULT）
+    float inertia_yaw_kgm2 = 0.03f;         // 偏航轴惯量 [kg·m²]（MODEL-DEFAULT）
+    float yaw_trim_deg = 0.0f;              // 涵道反扭矩配平 [deg]（未标定，0=不配平）
+    // 逐舵物理方向符号（+1/-1）：标定时只改这里，不动分配矩阵。
+    // ★ 默认值 = 源机型 Universal-EDF 的头文件 VANE1..4_DIR（+1,−1,+1,−1），
+    //   已由用户在 2026-10-12 台架逐舵核对确认（源 docs/knowledge/vane-motion-paths.md）。
+    //   轴置换不改变"哪个舵机正转为哪个物理方向"，故该组合可直接沿用；若换舵机/换
+    //   安装方向，必须按 CTL-008 §7 重新标定。
+    float vane_dir[4] = {+1.0f, -1.0f, +1.0f, -1.0f};
+    float vane_center_pct = 50.0f;          // 舵机中位占空比 [%]（50% = 1500µs）
+    float vane_span_pct = 16.67f;           // 满舵角对应占空比增量 [%]
+    float vane_min_pct = 33.33f;            // 舵机占空比硬下限 [%]（防撞结构）
+    float vane_max_pct = 66.66f;            // 舵机占空比硬上限 [%]
+    float thruster_min_us = 1000.0f;        // 推进器最低油门脉宽 [µs]（0% 出力）
+    float thruster_max_us = 2000.0f;        // 推进器满油门脉宽 [µs]
+    float attitude_limit_deg = 45.0f;       // 大倾角切推进阈值 [deg]
+    float dt_s = 0.005f;                    // 控制周期 [s]（200Hz）
+};
+
+// 单涵道机型默认实例（固件与宿主测试共用同一数值；不接入 AnoCom 在线参数表——
+// 首次移植阶段先固定编译期常量，待标定稳定后再按 BFS_COAX_PARAM_LIST 的模式注册）。
+static constexpr SingleEdf4VaneHwParams kSingleEdf4VaneHwParamsDefaults{};
+
+// 安全关键默认值锁定（逐位）：满舵角/舵效/惯量/中位/行程/限幅改动必须走红线评审
+static_assert(kSingleEdf4VaneHwParamsDefaults.vane_max_deg == 20.0f,
+              "单涵道满舵角默认值必须保持 20deg（源机型 45° 待标定，本固件取保守值）");
+static_assert(kSingleEdf4VaneHwParamsDefaults.vane_center_pct == 50.0f,
+              "舵机中位默认值必须保持 50%（1500µs）");
+static_assert(kSingleEdf4VaneHwParamsDefaults.vane_min_pct == 33.33f &&
+                  kSingleEdf4VaneHwParamsDefaults.vane_max_pct == 66.66f,
+              "舵机占空比硬限幅默认值必须保持 33.33–66.66%");
+static_assert(kSingleEdf4VaneHwParamsDefaults.thruster_min_us == 1000.0f &&
+                  kSingleEdf4VaneHwParamsDefaults.thruster_max_us == 2000.0f,
+              "推进器脉宽默认值必须保持 1000–2000µs");
+static_assert(kSingleEdf4VaneHwParamsDefaults.attitude_limit_deg == 45.0f,
+              "大倾角切推进阈值默认值必须保持 45deg");
+
+/**
+ * @brief 单涵道机型参数注册表顺序（单一事实源：ano_params.cpp 与 host 测试共用）
+ * @note  X(线上名, SingleEdf4VaneHwParams 成员路径)；名称 ≤20B，ID = 表尾追加顺序。
+ *        GCS/server/params.py::expected_names() 必须保持同序同拼写。
+ *        ★ 这 20 项全部可经 AnoCom 0xE1 在线读写；写入后下一次 200Hz 控制拍即生效
+ *        （混控器每拍读 kFlightCtrlParams.single_edf，无缓存、无重建）。
+ *        ★ 安全关键：vane_max_deg / vane_dirx / vane_moment 直接改变控制权限，
+ *        GCS 侧已给保守范围；改动仍须按 CTL-008 §7 标定流程逐项记录依据。
+ */
+#define BFS_SINGLE_EDF_PARAM_LIST(X) \
+    X(sedf.mass_kg, mass_kg) \
+    X(sedf.max_thrust_n, max_total_thrust_n) \
+    X(sedf.vane_max_deg, vane_max_deg) \
+    X(sedf.vane_moment, vane_moment_nm_per_deg) \
+    X(sedf.inertia_roll, inertia_roll_kgm2) \
+    X(sedf.inertia_pitch, inertia_pitch_kgm2) \
+    X(sedf.inertia_yaw, inertia_yaw_kgm2) \
+    X(sedf.yaw_trim_deg, yaw_trim_deg) \
+    X(sedf.vane_dir1, vane_dir[0]) \
+    X(sedf.vane_dir2, vane_dir[1]) \
+    X(sedf.vane_dir3, vane_dir[2]) \
+    X(sedf.vane_dir4, vane_dir[3]) \
+    X(sedf.vane_center, vane_center_pct) \
+    X(sedf.vane_span, vane_span_pct) \
+    X(sedf.vane_min_pct, vane_min_pct) \
+    X(sedf.vane_max_pct, vane_max_pct) \
+    X(sedf.thr_min_us, thruster_min_us) \
+    X(sedf.thr_max_us, thruster_max_us) \
+    X(sedf.att_limit_deg, attitude_limit_deg) \
+    X(sedf.dt_s, dt_s)
+
+#define BFS_SINGLE_EDF_PARAM_COUNT 20
+
 // 安全关键默认值锁定（逐位；任何改动都必须走红线评审）
 static_assert(CoaxialCtrlParams{}.mass_kg == 0.84f, "共轴质量默认值必须保持 0.84kg");
 static_assert(CoaxialCtrlParams{}.max_total_thrust_n == 14.0f, "共轴最大推力默认值必须保持 14N");
@@ -177,6 +271,10 @@ struct FlightCtrlParams
     float gnss_lever_z_m;
     // ---- 共轴双桨 VTVL 机型参数（2026-10-30；仅 BFS_COAXIAL_VTVL 分支消费）----
     CoaxialCtrlParams coax;           // 控制律 + 物理/输出常量（默认 = 原硬编码）
+    // ---- 单涵道 + X 型四燃气舵机型参数（2026-11-05；仅 BFS_SINGLE_EDF_4VANE 分支消费）----
+    // ★ 可经 AnoCom 0xE1 在线读写（20 项，见 BFS_SINGLE_EDF_PARAM_LIST）；
+    //   混控器每拍从 kFlightCtrlParams.single_edf 读取，写入即生效。
+    SingleEdf4VaneHwParams single_edf; // 质量/推力/舵角/舵效/惯量/PWM/联锁阈值
 };
 
 // ============================================================
@@ -282,6 +380,8 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     /* gnss_lever_z_m        */ 0.0f,
     // ---- 共轴双桨 VTVL（2026-10-30）：默认值 = 原 flight_control.cpp 硬编码 ----
     /* coax                  */ CoaxialCtrlParams{},
+    // ---- 单涵道 + X 型四燃气舵（2026-11-05）：默认值见 SingleEdf4VaneHwParams ----
+    /* single_edf            */ SingleEdf4VaneHwParams{},
 };
 
 #ifdef TANDEMVEC_FIRMWARE

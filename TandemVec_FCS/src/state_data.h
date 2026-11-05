@@ -260,6 +260,19 @@ extern Uart &opticalFlowSerial; // 光流
 #define SERVO4_PIN MOTOR2_PIN
 #define SERVO7_PIN FUEL_VALVE_PIN
 
+// --- 2.2b 单涵道 + X 型四燃气舵机型引脚（BFS_SINGLE_EDF_4VANE 分支，2026-11-05 新增）---
+// 与纵列双发型共用同一块板的 TIM2 四通道 + TIM3_CH3，只做语义重映射，不改物理引脚：
+//   PA0..PA3 = 四片燃气舵（源机型 Universal-EDF 的 VANE1..VANE4）
+//   PC8      = 单涵道推进器油门（原燃料阀门通道）
+//   PE6      = 推进使能（沿用 ignition 全局量，语义由"点火"改为"允许推进"）
+// 舵编号（从喷管向机头看）：舵1 右前(+Y,-Z)、舵2 右后(+Y,+Z)、舵3 左后(-Y,+Z)、舵4 左前(-Y,-Z)。
+// ★ 烧录纪律：不同机型必须显式 pio run -e <env> -t upload；烧错构型 = 舵机行程与油门映射全错。
+#define VANE1_PIN TVC_ROLL_SERVO_PIN  // 舵1（右前）
+#define VANE2_PIN TVC_PITCH_SERVO_PIN // 舵2（右后）
+#define VANE3_PIN MOTOR1_PIN          // 舵3（左后）
+#define VANE4_PIN MOTOR2_PIN          // 舵4（左前）
+#define THRUSTER_PIN FUEL_VALVE_PIN   // 单涵道推进器油门（0%=1000µs，100%=2000µs）
+
 // --- 2.3 传感器与ADC引脚 ---
 #define TVC_FEEDBACK_PIN_1 PB0 // [ADC] TVC角度传感器1
 #define TVC_FEEDBACK_PIN_2 PB1 // [ADC] TVC角度传感器2

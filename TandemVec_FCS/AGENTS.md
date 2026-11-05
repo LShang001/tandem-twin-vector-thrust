@@ -30,6 +30,12 @@
   不保留单独的 P1 实验 env（临时 profiling 用编译宏按需开启）。纯轮询回退 =
   `[env:CoaxialVTVL_UI]`。
   **高频采样/时序测量仍禁止用 DBG**，只用 `tvc record` 0xF4 或逻辑分析仪；调试经验见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
+- **单涵道 + X 型四燃气舵机型（2026-11-05 新增，从外部工程 `Universal-EDF` 移植）**：
+  `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`）；四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6，
+  与纵列双发共用同一块板，只换引脚语义。**无实机、无标定**：质量/推力/满舵角/舵效/惯量
+  全部 MODEL-DEFAULT，四舵物理方向未标定 → **禁止带推进动力测试**。移植说明、轴系映射与
+  验证阶梯见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`。
+  分配内核 = `include/SingleEdf4VaneAllocator.h`（3×4 矩阵，行正交编译期断言）。
 
 ## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
 
@@ -58,6 +64,10 @@
 - 物理逆解：α(deg/s²)→`ControlUnits::dps2ToRadps2`→I×α(rad/s²)→M_cmd→`allocateMoments(BTRUE)`→δf/δt/Δω。
 - 执行器映射：δf→PA0(TVC_ROLL)、δt→PA1(TVC_PITCH)、Δω→PA2/PA3。
 - 齿轮 30T/40T=1.333:1（PWM 映射已含）。
+- **单涵道机型（`BFS_SINGLE_EDF_4VANE`）**：执行器换成 4 片燃气舵 + 1 路推进器油门（无差速通道）。
+  三轴 α → τ=I·α → 3×4 矩阵 `δ = Hᵀ·τ/(4k)`（`include/SingleEdf4VaneAllocator.h`，行正交编译期断言）；
+  矩阵已按存档系重构——纵列"偏航"（绕 z_b=推力轴）对应源机型的"滚转"，物理上是世界航向。
+  四舵 PA0–PA3 只做语义重映射，PC8 为推进器油门，PE6 为推进使能。
 
 ## 当前约定（含已修复遗留）
 

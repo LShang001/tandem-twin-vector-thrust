@@ -103,6 +103,9 @@ static constexpr float s_guid_accel_trim_leak = BFS_GUIDED_ACCEL_TRIM_LEAK;
 #include "ActuatorOutputMap.h"    // 机型输出表 → 舵机/电调/阀门（通用层）
 #include "ThrustAllocation.h"     // 期望天向比力 → 总推力/油门（机型推进层）
 #include "PowerAllocation.h"      // 制导/位置环加速度 → 推力方向分量（机型无关）
+#ifdef BFS_SINGLE_EDF_4VANE
+#include "SingleEdf4VaneAllocator.h" // 单涵道四燃气舵：α→力矩→3×4 矩阵分配内核
+#endif
 #include "TandemVecAllocator.h"   // 纵列双发 α/油门 → 摆角/差速（机型分配器）
 #ifdef BFS_COAXIAL_VTVL
 #include "CoaxialVtvControl.h"    // 共轴双桨 DirectTvcRate（机型选择分支）
@@ -424,7 +427,13 @@ inputs.is_manual_tvc = isLinkUp && (raw_rc_values[7] > 1750);
   }
 
   // 辅助执行机构控制 (燃料阀门、点火)
+#ifndef BFS_SINGLE_EDF_4VANE
   SetServoPos(inputs.is_manual_tvc ? 100.0f : 0.0f, SERVO7_PIN); // 控制燃料阀门 (SERVO7)
+#else
+  // ★ 单涵道机型（BFS_SINGLE_EDF_4VANE）：PC8 已重定义为推进器油门，由
+  //   mix_and_output_single_edf() 独占输出。这里绝不能再按"燃料阀门"写 0/100%——
+  //   手动舵（CH8 低位）时 100% 会把推进器直接推到满油门，属一级安全问题。
+#endif
   // 点火控制 (ignition 引脚)
   // 条件：必须已解锁 (isUnlocked 为 true) 且点火开关已打开 (isIgnitionEnabled 为 true)
   digitalWrite(ignition, (inputs.is_unlocked && inputs.is_ignition_enabled) ? HIGH : LOW);
@@ -2369,6 +2378,183 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
   gnc_tel.throttle_cmd_pct = final_throttle_pct;
 }
 
+#ifdef BFS_SINGLE_EDF_4VANE
+// ════════════════════════════════════════════════════════════════════════
+// 单涵道 + X 型四燃气舵机型后端（编译期选择，2026-11-05 新增）
+// ------------------------------------------------------------------------
+// 与纵列/共轴共用同一套输入、模式判定、定高/定点、目标姿态与姿态/速率环
+// （控制层输出 α，角度域）。差异只在层2/层3：
+//   层2a 油门：期望天向比力 → 总推力 → 油门百分比（单推进器，无差速）
+//   层2b 联锁：未解锁 / CH6 使能关 / 大倾角 → 压最低油门（舵面仍受控）
+//   层2c 四舵：α → τ=I·α → 3×4 矩阵 → 四舵偏角（联合等比限幅）
+//   层3  输出：四舵 PA0–PA3 + 推进器 PC8（通用输出表，槽位 0–3 舵、4 油门）
+// ★ 轴系：本机型按固件存档系（x_b=滚转、y_b=俯仰、z_b=推力轴=偏航）。源机型
+//   Universal-EDF 的机体 FRD（x=推力轴）与本系的置换已由分配矩阵吸收，见
+//   SingleEdf4VaneAllocator.h 的矩阵说明；实物符号仍须按标定流程逐舵核对。
+// ★ 地面标定：未解锁或 CH8 手动舵时，三轴摇杆经同一矩阵直通四舵；无链路时
+//   四舵保持中位（上电瞬间 raw_rc_values 全 0，直接映射会被钳到满偏）。
+// ════════════════════════════════════════════════════════════════════════
+static void mix_and_output_single_edf(const ControlInputs_t &inputs,
+                                      ControlOutputs_t &outputs)
+{
+  // ★ 运行时可变实例：经 AnoCom 0xE1 写入后下一拍即生效（kFlightCtrlParams.single_edf）。
+  const SingleEdf4VaneHwParams &P = kFlightCtrlParams.single_edf;
+
+  // ---- 层2a：油门（期望天向比力 → 总推力 → 油门百分比）----
+  // 参数取单涵道机型自己的质量/最大推力；默认线性口径（未标定），
+  // 打开 BFS_THRUST_CURVE_QUADRATIC 后按 F∝w² 的物理口径反解。
+  float final_throttle_pct = outputs.throttle_percent;
+  if (!outputs.throttle_direct)
+  {
+    bfs::ThrustAllocationInput thrust_in;
+    thrust_in.specific_force_up_mps2 = outputs.specific_force_up_mps2;
+    thrust_in.thrust_axis_up_cos = outputs.thrust_cos_tilt;
+    thrust_in.mass_kg = P.mass_kg;
+    thrust_in.max_total_thrust_n = P.max_total_thrust_n;
+#ifdef BFS_THRUST_CURVE_QUADRATIC
+    thrust_in.throttle_curve_exponent = 2.0f;
+#endif
+    const bfs::ThrustAllocationOutput thrust_out =
+        bfs::allocateLinearThrustThrottle(thrust_in);
+    final_throttle_pct = thrust_out.valid ? thrust_out.throttle_pct : 0.0f;
+  }
+
+  // ---- 层2b：推进联锁（三条：未解锁 / 使能关 / 大倾角 > 阈值）----
+  // 与源机型同语义：只切推进器油门，四舵保持受控（地面检查需要舵能动）。
+  // ★ 大倾角判据用"推力轴偏离天向的夹角" acos|R33|，不用 AHRS_Packet.Roll/Pitch：
+  //   ① 欧拉角字段单位是 rad，源实现拿 45.0f 直接比较 → 该联锁在源机型从未生效；
+  //   ② 竖直构型正常飞行时 pitch≈90°，用 |Pitch|>45° 会恒切推进器（源文档已指出）；
+  //   ③ acos|R33| 自旋不变、无欧拉奇异：竖直=0°，倒扣=180°。
+  const float r33 = 1.0f - 2.0f * (AHRS_Packet.Qx * AHRS_Packet.Qx +
+                                   AHRS_Packet.Qy * AHRS_Packet.Qy);
+  const float tilt_from_up_deg = acosf(constrain(fabsf(r33), 0.0f, 1.0f)) * RAD_TO_DEG;
+  const bool thruster_enable = bfs::singleEdf4VaneThrusterEnable(
+      inputs.is_unlocked, inputs.is_ignition_enabled, tilt_from_up_deg,
+      P.attitude_limit_deg);
+
+  // ---- 层2c：四舵分配 ----
+  bfs::SingleEdf4VaneAllocationParams alloc_p;
+  alloc_p.vane_max_deg = P.vane_max_deg;
+  alloc_p.vane_moment_nm_per_deg = P.vane_moment_nm_per_deg;
+  alloc_p.inertia_roll_kgm2 = P.inertia_roll_kgm2;
+  alloc_p.inertia_pitch_kgm2 = P.inertia_pitch_kgm2;
+  alloc_p.inertia_yaw_kgm2 = P.inertia_yaw_kgm2;
+  alloc_p.yaw_trim_deg = P.yaw_trim_deg;
+  for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
+  {
+    alloc_p.vane_dir[i] = P.vane_dir[i];
+  }
+
+  bfs::SingleEdf4VaneAllocationInput alloc_in;
+  const bool direct_mode = (!inputs.is_unlocked) || inputs.is_manual_tvc;
+  if (direct_mode)
+  {
+    // 地面标定/手动舵：三轴摇杆 → 三轴角度需求 → 同一矩阵折到四舵。
+    // 无链路时保持四舵中位（全 0），不跟随上电默认的 0 通道值。
+    alloc_in.direct_vane_enabled = true;
+    if (isLinkUp)
+    {
+      const float stick_deg[3] = {
+          mapFloat(inputs.roll_raw, 988.0f, 2012.0f, -P.vane_max_deg,
+                   P.vane_max_deg),
+          mapFloat(inputs.pitch_raw, 988.0f, 2012.0f, -P.vane_max_deg,
+                   P.vane_max_deg),
+          mapFloat(inputs.yaw_raw, 988.0f, 2012.0f, -P.vane_max_deg,
+                   P.vane_max_deg),
+      };
+      for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
+      {
+        float sum = 0.0f;
+        for (uint8_t j = 0; j < 3; ++j)
+        {
+          sum += bfs::kSingleEdf4VaneMatrix[j][i] * stick_deg[j];
+        }
+        alloc_in.direct_vane_deg[i] = sum;
+      }
+    }
+  }
+  else
+  {
+    // 姿态闭环：控制层已输出三轴目标角加速度（rad/s²，存档系）
+    alloc_in.alpha_roll_radps2 = outputs.alpha_roll_radps2;
+    alloc_in.alpha_pitch_radps2 = outputs.alpha_pitch_radps2;
+    alloc_in.alpha_yaw_radps2 = outputs.alpha_yaw_radps2;
+  }
+
+  const bfs::SingleEdf4VaneAllocationOutput alloc =
+      bfs::allocateSingleEdf4Vane(alloc_in, alloc_p);
+
+  // ---- 层3：四舵 + 推进器输出（通用输出表，槽位 0–3 舵、4 油门）----
+  bfs::SingleEdf4VaneOutputInput out_in;
+  for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
+  {
+    // 分配无效（参数/输入非法）时四舵回中位，不保留上一拍偏置
+    out_in.vane_norm[i] = alloc.valid ? alloc.vane_norm[i] : 0.0f;
+  }
+  out_in.throttle_pct = final_throttle_pct;
+  out_in.thruster_cut = !thruster_enable;
+
+  bfs::SingleEdf4VaneOutputCalibration out_cal;
+  out_cal.vane_center_pct = P.vane_center_pct;
+  out_cal.vane_span_pct = P.vane_span_pct;
+  out_cal.vane_min_pct = P.vane_min_pct;
+  out_cal.vane_max_pct = P.vane_max_pct;
+  out_cal.thruster_min_us = P.thruster_min_us;
+  out_cal.thruster_max_us = P.thruster_max_us;
+
+  const bfs::OutputCommandSet commands =
+      bfs::mapSingleEdf4VaneOutputs(out_in, out_cal);
+  for (uint8_t i = 0; i < commands.count; ++i)
+  {
+    const bfs::OutputCommand &cmd = commands.commands[i];
+    switch (cmd.hardware_slot)
+    {
+    case 0: // 舵1（右前）
+      SetServoPos(cmd.value, VANE1_PIN);
+      ch1_output = cmd.value;
+      break;
+    case 1: // 舵2（右后）
+      SetServoPos(cmd.value, VANE2_PIN);
+      ch2_output = cmd.value;
+      break;
+    case 2: // 舵3（左后）
+      SetServoPos(cmd.value, VANE3_PIN);
+      ch3_output = cmd.value;
+      break;
+    case 3: // 舵4（左前）
+      SetServoPos(cmd.value, VANE4_PIN);
+      ch4_output = cmd.value;
+      break;
+    case 4: // 推进器油门
+      SetServoPos(cmd.value, THRUSTER_PIN);
+      break;
+    default:
+      break;
+    }
+  }
+
+  // ---- 遥测：三轴力矩指令 + 前两舵角（四舵全量需要扩展 0x40 帧，暂不扩）----
+  for (uint8_t j = 0; j < 3; ++j)
+  {
+    gnc_tel.M_cmd[j] = alloc.torque_cmd_nm[j];
+    gnc_tel.M_ff[j] = 0.0f;
+    gnc_tel.alloc_sat[j] = alloc.saturated;
+  }
+  gnc_tel.delta_f_deg = alloc.vane_deg[0];
+  gnc_tel.delta_t_deg = alloc.vane_deg[1];
+  g_tvc_upper_deg = alloc.vane_deg[0];
+  g_tvc_lower_deg = alloc.vane_deg[1];
+  gnc_tel.dw = 0.0f;
+  gnc_tel.w0_eff = 0.0f;
+  gnc_tel.yaw_gain_sched = 1.0f;
+
+  // 回填本拍最终油门（联锁生效时为 0，与输出表一致）
+  outputs.throttle_percent = thruster_enable ? final_throttle_pct : 0.0f;
+  throttlePercent = outputs.throttle_percent;
+  gnc_tel.throttle_cmd_pct = outputs.throttle_percent;
+}
+#endif // BFS_SINGLE_EDF_4VANE
+
 #ifdef BFS_COAXIAL_VTVL
 // ── 共轴双桨 VTVL 机型后端（编译期选择）──────────────────────────────
 // 与 TandemVec 共用输入/模式/定高/目标姿态层，但从姿态误差开始走
@@ -2994,6 +3180,16 @@ void runGNCExecutive()
                       current_mode);
   updateCoaxialFaultDiagnostics(controller_inputs, controller_outputs,
                                 current_mode);
+#elif defined(BFS_SINGLE_EDF_4VANE)
+  // 单涵道 + X 型四燃气舵机型：共用姿态外环/速率环（输出 α），
+  // 分配与执行器输出由 mix_and_output_single_edf 完成（四舵 + 单油门）。
+  // 注：执行器故障诊断（ActuatorFaultMonitor）按纵列 dMax 口径标定，单涵道
+  // 首次移植未接入；在线辨识是 TandemVec 差速/摆座专用观测，本机型不适用。
+  execute_attitude_controller(controller_inputs, q_target_attitude,
+                              controller_outputs);
+  execute_yaw_controller(controller_inputs, q_target_attitude,
+                         controller_outputs);
+  mix_and_output_single_edf(controller_inputs, controller_outputs);
 #else
   // 步骤 6: 执行Roll/Pitch姿态控制器，计算TVC舵机修正量
   execute_attitude_controller(controller_inputs, q_target_attitude, controller_outputs);

@@ -243,6 +243,107 @@ inline OutputCommandSet mapCoaxialVtvOutputs(
     return mapNormalizedOutputs(kCoaxialVtvProfile, normalized, 4U);
 }
 
+/**
+ * @brief 单涵道 + X 型四燃气舵机型的输出标定（2026-11-05 新增）
+ * @note  center/span/min/max 描述"舵偏角归一化量 → 舵机占空比"的线性映射；
+ *        thruster_min/max_us 只作标定记录（SetServoPos 已固定 0%=1000µs、50%=1500µs、
+ *        100%=2000µs，因此推进器输出以百分比往返，脉宽只是其物理含义）。
+ */
+struct SingleEdf4VaneOutputCalibration
+{
+    float vane_center_pct = 50.0f;  // 舵机中位占空比 [%]（50% = 1500µs）
+    float vane_span_pct = 16.67f;   // 满舵归一化量 1.0 对应的占空比增量 [%]
+    float vane_min_pct = 33.33f;    // 机械安全硬下限 [%]
+    float vane_max_pct = 66.66f;    // 机械安全硬上限 [%]
+    float thruster_min_us = 1000.0f; // 推进器最低油门脉宽 [µs]（标定记录用）
+    float thruster_max_us = 2000.0f; // 推进器满油门脉宽 [µs]（标定记录用）
+};
+
+struct SingleEdf4VaneOutputInput
+{
+    float vane_norm[4] = {0.0f, 0.0f, 0.0f, 0.0f}; // 四舵归一化量 [-1,1]（含逐舵方向符号）
+    float throttle_pct = 0.0f;                      // 推进器油门需求 [%]（0–100）
+    bool thruster_cut = true;                       // 联锁：未解锁/未使能/大倾角 → 压最低
+};
+
+/**
+ * @brief 单涵道四舵 + 单推进器的输出映射
+ * @param[in] in  四舵归一化量与油门需求、联锁标志
+ * @param[in] cal 舵机中位/半行程/硬限位标定
+ * @return 5 路输出命令（槽位 0–3 舵机、4 推进器）
+ * @formula servo_pct = clamp(center + norm·span, min, max)；
+ *          esc_pct = cut ? 0 : clamp(throttle, 0, 100)
+ * @ref Universal-EDF `airframe_mixer_single_edf_4vane.cpp`（VANE_CENTER_PERCENT/SPAN/限幅）；
+ *      本固件 CTL-001 §8.6（执行器输出限幅）
+ * @note ① 硬限位与"满行程"重合时只起保护兜底作用，真正的机械保护应把 min/max
+ *          收窄到实测行程（标定步骤见 docs/单涵道四燃气舵机型移植-2026-11-05.md）；
+ *       ② 联锁只压推进器，舵面始终受控（地面检查与姿态失控恢复都需要舵可动）；
+ *       ③ 非有限输入按 0 处理（回中位）。
+ */
+inline OutputCommandSet mapSingleEdf4VaneOutputs(
+    const SingleEdf4VaneOutputInput &in,
+    const SingleEdf4VaneOutputCalibration &cal)
+{
+    const OutputChannelSpec *slot0 =
+        (kSingleEdf4VaneProfile.output_count >= 5U) ? &kSingleEdf4VaneProfile.outputs[0]
+                                                   : nullptr;
+    if (slot0 == nullptr)
+    {
+        return OutputCommandSet{};
+    }
+    const float safe_span = (std::fabs(slot0->span) > 1.0e-3f) ? slot0->span : 16.67f;
+
+    float normalized[5] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    for (uint8_t i = 0; i < 4U; ++i)
+    {
+        const float norm = std::isfinite(in.vane_norm[i])
+                               ? clampOutput(in.vane_norm[i], -1.0f, 1.0f)
+                               : 0.0f;
+        const float percent = clampOutput(cal.vane_center_pct + norm * cal.vane_span_pct,
+                                          cal.vane_min_pct, cal.vane_max_pct);
+        // 反解回 profile 归一化域，仍由通用映射统一做二次钳位（保持单一出口）
+        normalized[i] = (percent - slot0->zero_value) / safe_span;
+    }
+    const float throttle = std::isfinite(in.throttle_pct)
+                               ? clampOutput(in.throttle_pct, 0.0f, 100.0f)
+                               : 0.0f;
+    normalized[4] = in.thruster_cut ? 0.0f : throttle / 100.0f;
+    return mapNormalizedOutputs(kSingleEdf4VaneProfile, normalized, 5U);
+}
+
+/**
+ * @brief 单涵道机型推进器联锁判定（未解锁 / 使能关 / 大倾角 → 压最低油门）
+ * @param[in] unlocked        已解锁
+ * @param[in] ignition_enabled 推进使能开关（CH6）打开
+ * @param[in] tilt_from_up_deg 推力轴偏离天向的角度（度，0=竖直向上；调用方按
+ *                            acos|R33| 计算，见 flight_control.cpp 的单涵道 mix 分支）
+ * @param[in] attitude_limit_deg 大倾角阈值（度）
+ * @return true = 允许输出油门；false = 压最低油门（舵面仍受控）
+ * @note 与源机型三条联锁同语义（未解锁/使能关/大倾角），但**修正了源实现的两个缺陷**：
+ *       ① 源直接比较 `|AHRS_Packet.Roll| > 45.0f`，而该字段单位是 **弧度**
+ *          （deta100_types.h）→ 阈值 45 rad 永不触发，该联锁实际从未生效；
+ *       ② 即使修好单位，"竖直箭体正常飞行时 pitch≈90°"会让 |Pitch|>45° 恒成立，
+ *          从而恒切推进器。正确判据是"推力轴偏离天向的夹角"（acos|R33|）：
+ *          自旋不变、无欧拉奇异，竖直=0°、倒扣=180°。
+ *       本函数只接受换算好的角度，单位混用不可能再发生。
+ */
+inline bool singleEdf4VaneThrusterEnable(const bool unlocked,
+                                         const bool ignition_enabled,
+                                         const float tilt_from_up_deg,
+                                         const float attitude_limit_deg)
+{
+    if (!unlocked || !ignition_enabled)
+    {
+        return false;
+    }
+    if (!std::isfinite(tilt_from_up_deg))
+    {
+        return false;
+    }
+    const float limit = (attitude_limit_deg > 0.0f) ? attitude_limit_deg : 45.0f;
+    return std::fabs(tilt_from_up_deg) <= limit;
+}
+
 } // namespace bfs
 
 #endif // TANDEMVEC_ACTUATOR_OUTPUT_MAP_H

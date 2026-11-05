@@ -114,6 +114,54 @@ COAX_PARAMS = [
      '偏航轴转动惯量（默认 0.08kg·m²）'),
 ]
 
+# ---- 单涵道 + X 型四燃气舵机型参数（★2026-11-05 新增）----
+# 名称/顺序 = 固件 include/FlightCtrlParams.h::BFS_SINGLE_EDF_PARAM_LIST（ID 148-167）。
+# 20 项全部可在线读写；写入后下一个 200Hz 控制拍生效（混控器每拍读 kFlightCtrlParams.single_edf）。
+# min/max 为地面站输入校验的保守包线，不改变固件默认值；安全关键项（满舵角/舵效/方向/
+# PWM 中位与行程）的包线已按机械安全收紧，标定仍需按 CTL-008 §7 流程记录依据。
+SINGLE_EDF_PARAMS = [
+    ('sedf.mass_kg', 'kg', 0.1, 5.0, 0.01,
+     '整机质量（推力分配用；默认 1.15kg，MODEL-DEFAULT 未称重）'),
+    ('sedf.max_thrust_n', 'N', 1.0, 80.0, 0.5,
+     '单涵道最大推力（推力分配用；默认 35N，MODEL-DEFAULT）'),
+    ('sedf.vane_max_deg', 'deg', 5.0, 45.0, 1.0,
+     '单舵机械满偏角（默认 20°，标定后按实测替换；控制权限上限）'),
+    ('sedf.vane_moment', 'N·m/deg', 0.0, 0.5, 0.001,
+     '额定推力点单舵舵效系数 k（默认 0.02，必须冷流实测）'),
+    ('sedf.inertia_roll', 'kg·m²', 0.001, 1.0, 0.001,
+     '滚转轴转动惯量（默认 0.02kg·m²，MODEL-DEFAULT）'),
+    ('sedf.inertia_pitch', 'kg·m²', 0.001, 1.0, 0.001,
+     '俯仰轴转动惯量（默认 0.02kg·m²，MODEL-DEFAULT）'),
+    ('sedf.inertia_yaw', 'kg·m²', 0.001, 1.0, 0.001,
+     '偏航轴转动惯量（默认 0.03kg·m²，MODEL-DEFAULT）'),
+    ('sedf.yaw_trim_deg', 'deg', -20.0, 20.0, 0.1,
+     '涵道反扭矩配平（绕推力轴；默认 0=不配平，未标定）'),
+    ('sedf.vane_dir1', '±1', -1.0, 1.0, 2.0,
+     '舵1（右前）物理方向符号：+1/-1，标定时翻转此项'),
+    ('sedf.vane_dir2', '±1', -1.0, 1.0, 2.0,
+     '舵2（右后）物理方向符号：+1/-1'),
+    ('sedf.vane_dir3', '±1', -1.0, 1.0, 2.0,
+     '舵3（左后）物理方向符号：+1/-1'),
+    ('sedf.vane_dir4', '±1', -1.0, 1.0, 2.0,
+     '舵4（左前）物理方向符号：+1/-1'),
+    ('sedf.vane_center', '%', 40.0, 60.0, 0.5,
+     '舵机中位占空比（默认 50% = 1500µs，安全关键项）'),
+    ('sedf.vane_span', '%', 1.0, 40.0, 0.1,
+     '满舵角对应占空比增量（默认 16.67%，安全关键项）'),
+    ('sedf.vane_min_pct', '%', 20.0, 50.0, 0.1,
+     '舵机占空比硬下限（默认 33.33%，防撞结构，安全关键项）'),
+    ('sedf.vane_max_pct', '%', 50.0, 80.0, 0.1,
+     '舵机占空比硬上限（默认 66.66%，防撞结构，安全关键项）'),
+    ('sedf.thr_min_us', 'µs', 900.0, 1100.0, 1.0,
+     '推进器最低油门脉宽（默认 1000µs，安全关键项）'),
+    ('sedf.thr_max_us', 'µs', 1900.0, 2100.0, 1.0,
+     '推进器满油门脉宽（默认 2000µs，安全关键项）'),
+    ('sedf.att_limit_deg', 'deg', 10.0, 90.0, 1.0,
+     '大倾角切推进阈值（默认 45°；超限只切油门，舵仍受控）'),
+    ('sedf.dt_s', 's', 0.001, 0.02, 0.001,
+     '控制周期（默认 5ms；改动必须与调度周期一致）'),
+]
+
 # 按环的输出单位修正
 RATE_UNIT = 'deg/s'   # 姿态外环 out_min/out_max
 ANG_ACC_UNIT = 'deg/s²'  # 角速率内环 out_min/out_max/int_limit
@@ -221,6 +269,11 @@ def build_meta():
         meta[name] = dict(name=name, group='共轴', loop='', field='',
                           unit=unit, min=lo, max=hi, step=step, type='float',
                           desc=desc)
+    # ★ 2026-11-05 单涵道 + X 型四燃气舵机型参数（固件 ID 148-167）
+    for name, unit, lo, hi, step, desc in SINGLE_EDF_PARAMS:
+        meta[name] = dict(name=name, group='单涵道', loop='', field='',
+                          unit=unit, min=lo, max=hi, step=step, type='float',
+                          desc=desc)
     return meta
 
 
@@ -237,6 +290,7 @@ def group_order():
         if g not in order:
             order.append(g)
     order.append('共轴')  # ★2026-10-30 共轴双桨机型参数
+    order.append('单涵道')  # ★2026-11-05 单涵道 + X 型四燃气舵机型参数
     order.append('其他')
     return order
 
@@ -298,5 +352,9 @@ def expected_names():
     # ★ 2026-10-30 共轴双桨 VTVL（固件尾部追加，ID 133-157；名称/顺序单一事实源
     #   见 include/FlightCtrlParams.h::BFS_COAX_PARAM_LIST）
     for name, _unit, _lo, _hi, _step, _desc in COAX_PARAMS:
+        names.append(name)
+    # ★ 2026-11-05 单涵道 + X 型四燃气舵（固件尾部追加，ID 148-167；单一事实源
+    #   见 include/FlightCtrlParams.h::BFS_SINGLE_EDF_PARAM_LIST）
+    for name, _unit, _lo, _hi, _step, _desc in SINGLE_EDF_PARAMS:
         names.append(name)
     return names
