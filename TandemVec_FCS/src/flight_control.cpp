@@ -2387,8 +2387,9 @@ static bfs::CoaxialVtvParams buildCoaxVtvParams(const CoaxialCtrlParams &hw)
 {
   bfs::CoaxialVtvParams p;
   const auto &fc = kFlightCtrlParams;
-  constexpr float kG = 9.79f; // 与 TandemVec_Config.h 一致
-  const float t_hover = hw.mass_kg * kG;
+  // 悬停推力基准用 EKF 的 WGS-84 当地重力（未初始化时即回退到
+  // G_ACCEL_CONST = 模型默认 9.79），不再在本处硬编码重力值。
+  const float t_hover = hw.mass_kg * ekf_gravity_mps2;
   const float g_roll = hw.lever_m * t_hover / hw.inertia_roll_kgm2;   // rad/s² per rad
   const float g_pitch = hw.lever_m * t_hover / hw.inertia_pitch_kgm2; // rad/s² per rad
   const float g_roll_deg = g_roll * 0.017453292519943295f;            // rad/s² per deg

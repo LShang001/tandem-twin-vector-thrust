@@ -144,7 +144,7 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 ```
 
 - 宿主构建用 `tools/with-ascii-bin.sh`（subst ASCII 盘符、`BIN_DIR`=仓库 `tmp/`，不写系统 %TEMP%）。
-- EKF 测试重力 `g=9.79`（`TandemVec_Config.h`），勿改 9.81。
+- **重力口径**：导航/估计/控制的真值统一用 WGS-84 正常重力——固件侧 `nav_ekf.gravity_mps2()` / `ekf_gravity_mps2`（Somigliana，随经纬高），宿主测试侧 `ins_test::GravityWgs84()`（31.2304°N、5 m ≈9.794 m/s²）。`TandemVec_Config.h` 的 `g=9.79` 只作 1g 量程换算（`G_TO_MS2`）与 EKF 未初始化时的回退值，**不作导航真值**；用 9.79 构造比力会注入 ~0.004 m/s²，1 h 纯惯导可伪造出 24 km 级假漂移。
 - 上传只在用户明确要求时：`pio run -t upload`；串口监视加超时。
 - 找不到 `pio` 必须明确报告，不得声称构建通过。
 - 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `pio test -e test`；无法运行必须说明原因。

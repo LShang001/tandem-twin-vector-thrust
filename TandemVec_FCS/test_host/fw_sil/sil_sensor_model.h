@@ -28,10 +28,14 @@
 #include <cstring>
 #include <random>
 
+#include "../ins_test_gravity.h"
+
 namespace sil
 {
 
-constexpr float kGravity = 9.79f;  // 与 TandemVec_Config.h 一致（项目唯一事实源）
+// 站点 WGS-84 正常重力（31.2304°N、5 m，与 EKF 机械编排同口径）；
+// mg/µg 级零偏噪声按它换算成 m/s²，不再硬编码 9.79。
+const float kGravity = ins_test::GravityWgs84();
 
 /* 8 阶 Butterworth 幅频响应；用于模拟 IMU 模拟前端在 ODR 前的抗混叠衰减。
  * SIL 的 2 kHz ODR 对应 fc≈0.4·ODR=800 Hz；200 Hz MC 台才用 80 Hz。 */

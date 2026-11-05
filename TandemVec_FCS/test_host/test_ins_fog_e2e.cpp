@@ -29,13 +29,14 @@
 #include "ekf_15_state.h"
 #include "ins_param_align.h"
 #include "earth_model.h"
+#include "ins_test_gravity.h"
 
 namespace
 {
 constexpr double kPi = 3.14159265358979323846;
 constexpr double kDeg2Rad = kPi / 180.0;
 constexpr float kNavDt = 0.005f;
-constexpr float kG = 9.79f;
+const float kG = ins_test::GravityWgs84();  // 与比力同口径（WGS84 正常重力）
 constexpr double kOmegaIe = 7.292115e-5;
 constexpr double kLat = 31.2304 * kDeg2Rad;
 const Eigen::Vector3d kLla(31.2304 * kDeg2Rad, 121.4737 * kDeg2Rad, 5.0);

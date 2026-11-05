@@ -1533,7 +1533,8 @@ void handleNavigationSystem()
     else
     {
       imu_accel_mps2 = nav_ekf.quat().conjugate() *
-                       Eigen::Vector3f(0.0f, 0.0f, -G_ACCEL_CONST);
+                       Eigen::Vector3f(0.0f, 0.0f,
+                                       -static_cast<float>(nav_ekf.gravity_mps2()));
       imu_gyro_radps.setZero();
       imu_coast_active = true;
     }
@@ -1579,7 +1580,8 @@ void handleNavigationSystem()
     // 等速滑行：用“抵消重力的比力 + 零角速率”代替冻结样本；EKF 继续推进
     // 时间并保留 GNSS/磁/气压更新。姿态仍由 EKF 维持，GNSS 修正位置/速度。
     imu_accel_mps2 = nav_ekf.quat().conjugate() *
-                     Eigen::Vector3f(0.0f, 0.0f, -G_ACCEL_CONST);
+                     Eigen::Vector3f(0.0f, 0.0f,
+                                     -static_cast<float>(nav_ekf.gravity_mps2()));
     imu_gyro_radps.setZero();
     s_imu_coast_s += dt_s;
     imu_coast_active = true;
@@ -2604,7 +2606,10 @@ void handleNavigationSystem()
     //              静止时用重力方向辅助 + ZUPT，运动时用 AHRS 姿态量测
     const float accel_norm = imu_accel_mps2.norm();
     //
-    const float accel_norm_error = fabsf(accel_norm - G_ACCEL_CONST);
+    // 重力取 EKF 的 WGS-84 当地值（随经纬高），不用固定 9.79：静止判据是
+    // “比力模长 ≈ 当地重力”，口径不一致会把正常帧判成异常。
+    const float accel_norm_error =
+        fabsf(accel_norm - static_cast<float>(nav_ekf.gravity_mps2()));
     const bool accel_gravity_trusted = (accel_norm_error < 2.0f);
     // ★ 2026-08-13 升级修复：原 1.2 rad/s(≈69°/s) 门限近乎恒真——剧烈机动时
     //   Madgwick roll/pitch 本身不准，作为 EKF 姿态量测等于周期灌入低质量姿态。
@@ -4406,8 +4411,9 @@ void handleVerticalEstimation()
   Vector3 accel_ned = rotateVector(q_N_from_B, accel_body);
 
   // 4. 从世界系下的总加速度中减去重力，得到纯粹的线性加速度。
-  //    在NED坐标系中，重力沿着+Z轴（地向），大小为 G_ACCEL_CONST，加表测量值为 -G_ACCEL_CONST。。
-  float linear_accel_z_ned = accel_ned.z + G_ACCEL_CONST;
+  //    在NED坐标系中，重力沿 +Z 轴（地向），取 WGS-84 当地重力
+  //    ekf_gravity_mps2（未初始化时回退 G_ACCEL_CONST），加表测量值取其负值。
+  float linear_accel_z_ned = accel_ned.z + ekf_gravity_mps2;
 
   // 5. 适配卡尔曼滤波器的坐标系。
   //    我们的KF模型假设Z轴向上为正，而NED系的Z轴向下为正，因此需要取反。

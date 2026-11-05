@@ -25,13 +25,14 @@
 #include <Eigen/Geometry>
 
 #include "fw_nav_api.h"
+#include "ins_test_gravity.h"
 
 namespace
 {
 constexpr double kDeg2Rad = 3.14159265358979323846 / 180.0;
 constexpr double kLat = 31.2304 * kDeg2Rad;
 constexpr double kLon = 121.4737 * kDeg2Rad;
-constexpr double kG = 9.7938;
+const double kG = static_cast<double>(ins_test::GravityWgs84());  // WGS84 正常重力，与 EKF 同口径
 constexpr double kDt = 0.005;
 }  // namespace
 
