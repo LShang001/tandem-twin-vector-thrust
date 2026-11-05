@@ -536,7 +536,7 @@ static uint32_t ano_rx_device_info_sent = 0;
  * - 0x00 校验帧：DATA = `ID_GET(1B) | SC_GET(1B) | AC_GET(1B)`，把源帧的功能码与
  *   两个校验字节原样回传，上位机比对成功才算本次写入完成。@ref PROTOCOL-001 §一.2.1
  * - 0xE3 设备信息：DATA = `DEV_ID u8 | HW_VER i16 | SW_VER i16 | BL_VER i16 |
- *   PT_VER i16 | DEV_NAME nB`（本机 29B：1+8+20）。@ref PROTOCOL-001 §四.4
+ *   PT_VER i16 | DEV_NAME nB`（长度 = 9 + nameLen；本机 DEV_NAME 18 字符 → 27B，变长不补零）。@ref PROTOCOL-001 §四.4
  * - 0xF3 变量清单：只读、不回校验帧（仿 0xE2 语义），由 `anoVarsHandleRx` 应答。
  *   应答帧 20B = CMD(1)+ID(2)+TYPE(1)+NAME(16)。@ref AGENTS.md 踩坑记录（AnoVars 三坑③）
  * - 0xF2 为下行值帧，无上行分支。
@@ -561,7 +561,7 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
     // 协议定义 DATA[0] 为 CMD 码: 0x00=读取设备信息, 0x01=读取参数个数, 0x02=读取参数值, 0x03=读取参数信息
     if (funcCode == ANO_FUNC_PARAM_CMD && len >= 1 && data[0] == 0x00)
     {
-      // 0xE3 设备信息帧 = 8 帧开销 + 29 DATA (1+8+20)
+      // 0xE3 设备信息帧 = 8 帧开销 + DATA(9 + nameLen)，本机 27B
       if (Serial6.availableForWrite() >= 40)
       {
         s_ano_port->sendDeviceInfo(ANO_DEVICE_ID, ANO_HW_VERSION, ANO_SW_VERSION,
@@ -613,7 +613,8 @@ void handleDebugTask()
  *          频率表（t = 200Hz tick 计数器，COMM-001 §3 与本实现的唯一对照）：
  *          | 档位 | 频率 | 判定 | 功能码 |
  *          |------|------|------|--------|
- *          | 快环 | 100Hz | t%2==1（奇数 tick） | 0x01 0x03 0x0A 0x21 0xF1 |
+ *          | 快环 | 100Hz | t%2==1（奇数 tick） | 0x01 0x03 |
+ *          | 辅环 | 50Hz  | t%4==1（fast_aux_tick） | 0x0A 0x21 0xF1 |
  *          | 位置 | 50Hz  | t%4==2 | 0x08 |
  *          | 遥控 | 25Hz  | t%8==4 | 0x40 |
  *          | 显示 | 25Hz  | t%8==6 | 0x05 0x06 0x07 0x20 0x0B |

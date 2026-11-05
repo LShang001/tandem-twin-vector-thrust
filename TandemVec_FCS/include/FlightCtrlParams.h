@@ -123,7 +123,7 @@ struct CoaxialCtrlParams
  *          - 满舵角/舵效/惯量：SingleEdf4VaneAllocator 的 α→力矩→舵偏换算；
  *          - 偏航配平：抵消涵道风扇反扭矩（绕推力轴 = 存档系 z_b = 偏航轴）；
  *          - PWM 中位/半行程/硬限位：四舵与推进器的输出标定；
- *          - 大倾角阈值：推进切断联锁（与源机型一致，默认 45°）。
+ *          - 大倾角阈值：推进切断联锁（与源机型一致，默认 120°（2026-11-05 由源机型 45° 放宽，可在线调 10–180°））。
  *        ★ 默认值来源：源机型 Universal-EDF 的 `kParamsSingleEdf4Vane`（质量 1.15 kg /
  *        最大推力 35 N / 满舵角 45°）与默认参数表；其中满舵角在本固件取 **20°**
  *        （源机型文档与代码存在 20°/45° 口径冲突，本固件按"机械行程保守值"取 20°，
@@ -314,6 +314,12 @@ struct FlightCtrlParams
 //  共轴：控制环输出统一角加速度，硬件换算在 CoaxialAllocator；
 //  数值按共轴旧修正角口径在悬停点折算（不是独立 PID 变量）。
 // ============================================================
+// ★ 2026-11-06 审计补强：机型宏必须三选一。同时定义会让参数表、控制分支、
+//   health 车型标签互相错位（例如 COAXIAL + SINGLE_EDF 同时开时，标签打
+//   SingleEdf4Vane 而控制走共轴）——这类错误编译期就该拦住，不留到上板。
+#if defined(BFS_COAXIAL_VTVL) && defined(BFS_SINGLE_EDF_4VANE)
+#error "BFS_COAXIAL_VTVL 与 BFS_SINGLE_EDF_4VANE 互斥，不能同时定义（见 platformio.ini 各 env）"
+#endif
 #ifdef BFS_COAXIAL_VTVL
 #define BFS_ATT_ROLL_DEFAULT  {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_PITCH_DEFAULT {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}

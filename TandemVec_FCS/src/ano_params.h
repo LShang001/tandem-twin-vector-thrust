@@ -18,7 +18,7 @@
  * @details 协议（匿名通信协议 v1，PROTOCOL-001 §四）：
  *    0xE0 DATA=[CMD, VAL...]
  *      CMD 0x00 读设备信息 → 回 0xE3（由 communication.cpp onAnoRxFrame 处理）
- *      CMD 0x01 读参数个数 → 回 0xE0 [0x01, count u32 LE]
+ *      CMD 0x01 读参数个数 → 回 0xE0 [0x01, count u16 LE]（DATA 共 3B；2.x 匿名助手按 3B 解析）
  *      CMD 0x02 读参数值 (VAL=ID u16) → 回 0xE1 [ID u16, PAR_VAL]
  *      CMD 0x03 读参数信息 (VAL=ID u16) → 回 0xE2 [ID u16, TYPE u8, NAME 20B]
  *      CMD 0x10 VAL=0xAA 恢复默认值 / 0xAB 保存（无持久化，仅确认）

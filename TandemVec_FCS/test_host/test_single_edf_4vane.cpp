@@ -248,6 +248,34 @@ int main()
     CHECK(hw.vane_center_pct == 50.0f && near(hw.vane_span_pct, 16.67f) &&
               near(hw.vane_min_pct, 33.33f) && near(hw.vane_max_pct, 66.66f),
           "P10 默认舵机中位/半行程/硬限位与源机型一致");
+    // ★ 2026-11-06 审计补强：原先只锁满舵角/方向/阈值/中位 12 项，以下 9 项
+    //   既无 static_assert 也无断言 —— 标定或误改默认值不会让回归变红。
+    CHECK(near(hw.mass_kg, 1.15f), "P10 默认质量 1.15 kg（MODEL-DEFAULT 未称重）");
+    CHECK(near(hw.max_total_thrust_n, 35.0f), "P10 默认最大总推力 35 N（MODEL-DEFAULT 未实测）");
+    CHECK(near(hw.ctrl_vane_deg, 20.0f),
+          "P10 默认软件控制舵角上限 20°（= vane_max_deg；内环限幅由它换算）");
+    CHECK(near(hw.vane_moment_nm_per_deg, 0.02f), "P10 默认单舵舵效 0.02 N·m/deg");
+    CHECK(near(hw.inertia_roll_kgm2, 0.02f) && near(hw.inertia_pitch_kgm2, 0.02f) &&
+              near(hw.inertia_yaw_kgm2, 0.03f),
+          "P10 默认三轴转动惯量 0.02/0.02/0.03 kg·m²");
+    CHECK(near(hw.yaw_trim_deg, 0.0f), "P10 默认航向配平 0°（未标定）");
+    CHECK(near(hw.dt_s, 0.005f), "P10 默认控制周期 5 ms（200 Hz）");
+    CHECK(near(hw.thruster_min_us, 1000.0f) && near(hw.thruster_max_us, 2000.0f),
+          "P10 默认推进器 PWM 行程 1000–2000 µs");
+    // 换算式复算：固件 applyFlightCtrlParams() 用 min(ctrl_vane_deg, vane_max_deg)·(4k/I)·180/π
+    // 派生 PID 输出限幅。这里用默认参数复算，锁住"默认值 → 期望限幅"这条一致性；
+    // 任一项默认值变动都会让下面两条断言变红。
+    {
+      const float rad2deg = 57.2957795f;
+      const float vane_eff = (hw.ctrl_vane_deg < hw.vane_max_deg)
+                                 ? hw.ctrl_vane_deg : hw.vane_max_deg;
+      const float k_over_i_roll = 4.0f * hw.vane_moment_nm_per_deg / hw.inertia_roll_kgm2;
+      const float k_over_i_yaw = 4.0f * hw.vane_moment_nm_per_deg / hw.inertia_yaw_kgm2;
+      CHECK(near(vane_eff * k_over_i_roll * rad2deg, 4583.66f, 0.5f),
+            "P10 换算式复算：20° + 默认 k/I → roll/pitch 输出限幅 4583.66 deg/s²");
+      CHECK(near(vane_eff * k_over_i_yaw * rad2deg, 3055.78f, 0.5f),
+            "P10 换算式复算：20° + 默认 k/I → yaw 输出限幅 3055.78 deg/s²（yaw 惯量 0.03）");
+    }
     // 默认方向符号下的纯俯仰执行量：舵1/4 同号、舵2/3 同号且相反
     bfs::SingleEdf4VaneAllocationParams p10;
     for (int i = 0; i < 4; ++i)

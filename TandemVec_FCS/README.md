@@ -61,7 +61,7 @@
 
 | 传感器 | 型号 | 接口 | 频率 | 用途 |
 |--------|------|------|------|------|
-| 板载 IMU (六轴) | ICM42688 | SPI (PA4 CS, 10MHz Mode3) | 2kHz | 角速度 + 加速度 |
+| 板载 IMU (六轴) | ICM42688 | SPI (PA4 CS, **24MHz** Mode3) | 2kHz | 角速度 + 加速度 |
 | 板载 IMU/GNSS (扩展) | DETA100 | UART4 (921600 baud) | — | 备选惯导源（上电检测后可切换） |
 | 磁力计 | IST8310 | I2C1 (PB7/PB6, 400kHz) | — | 航向初始化参考 |
 | 气压计 | DPS310 | I2C2 (PB11/PB10, 1MHz Fm+) | 约129Hz任务读取 / 128Hz压力输出 | 气压高度 |
@@ -188,7 +188,7 @@ pio device monitor
 | `src/main.cpp` | 系统初始化、`setup()`、`loop()`、主循环调度、DETA100 探测/接收任务（条件注册） |
 | `src/state_data.h/cpp` | 全局变量声明/定义、枚举、结构体、跨模块共享状态 |
 | `src/math_utils.h` | 纯数学工具函数，`inline` header-only |
-| `src/task_scheduler.h/cpp` | 2kHz 定时器驱动的协作式任务调度器 |
+| `src/task_scheduler.h/cpp` | TIM8 6.4kHz 时基驱动的协作式任务调度器（任务按 200Hz/50Hz 等分频执行） |
 | `src/sensor_imu.h/cpp` | ICM42688 IMU、磁力计初始化与数据采集 |
 | `src/sensor_peripheral.h/cpp` | DPS310 气压计、光流传感器自动识别（LQS48 / MTF02P）、角度传感器 |
 | `src/navigation_task.h/cpp` | EKF 组合导航、垂直/水平 KF、GNSS 处理 |
@@ -197,7 +197,7 @@ pio device monitor
 
 #### 任务调度
 
-基于 TIM8 硬件定时器的 2kHz 协作式调度系统：
+基于 TIM8 硬件定时器（**6.4kHz 时基**，2kHz 为 IMU ISR 分频）的协作式调度系统：
 
 ```
 TIM8 中断 (2kHz)

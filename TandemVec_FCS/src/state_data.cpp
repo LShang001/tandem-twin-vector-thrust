@@ -341,9 +341,10 @@ ComplementaryFilter rollAngleOutputFilter(kFlightCtrlParams.angle_out_filter_alp
 ComplementaryFilter rollOutputFilter(kFlightCtrlParams.output_filter_alpha[0]),
                    pitchOutputFilter(kFlightCtrlParams.output_filter_alpha[1]);          // TVC摆角输出滤波
 // ★ 2026-08-07：yawOutputFilter 作用于 alpha_yaw（=差速通道）。
-//   差速回路串联 τm=0.28s 电机滞后，对高频指令既无响应能力又引入
-//   相位滞后（震荡源）。α 0.25→0.12（截止频约减半）滤掉高频分量，
-//   代价是响应略慢——但本通道本就被电机时常数限制，无实质损失。
+//   差速回路串联 τm=0.28s 电机滞后，对高频指令既无响应能力又引入相位滞后
+//   （震荡源），故该通道需要较强的输出滤波。
+//   ★ 2026-11-06 审计订正：α 取值以 kFlightCtrlParams.output_filter_alpha[2]
+//   为准（当前 0.9；早期文字里写过的 0.25→0.12 已过时，勿再引用具体数字）。
 ComplementaryFilter yawOutputFilter(kFlightCtrlParams.output_filter_alpha[2]);          // 差速输出滤波（2026-08-07 加强）
 ComplementaryFilter thrustCompN_filter(0.6f), thrustCompE_filter(0.6f);                  // 水平推力补偿滤波
 
@@ -596,7 +597,9 @@ bool g_heading_hold_allowed = false;
 uint8_t g_heading_aid_mode =
     static_cast<uint8_t>(kFlightCtrlParams.heading_aid_mode);
 // 运动段姿态辅助模式（无 GNSS 数据新鲜且非静止）：
-// 默认 BFS_ATT_AID_MODE_DEFAULT=1（重力方向直连）；SIL --att-aid-mode 可覆盖。
+// 默认 BFS_ATT_AID_MODE_DEFAULT=5（严格 + 倾斜 σ 超 3° 后 AHRS 有界兜底）；
+// 1=纯严格、0=AHRS 旧行为、2=严格+AHRS 回退、3=控制加速度指令补偿（研究臂）、
+// 4=强振动回退。SIL --att-aid-mode 可覆盖。
 uint8_t g_att_aid_mode = static_cast<uint8_t>(BFS_ATT_AID_MODE_DEFAULT);
 float g_nav_tilt_sigma_deg = 0.0f;
 bool g_ekf_converged = false;
