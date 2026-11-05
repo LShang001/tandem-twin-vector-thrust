@@ -48,6 +48,7 @@ cd simulations/vector-thrust-lab && python -m http.server 8080
 cd TandemVec-Paper && build.bat
 py -3.12 tools/build-docs.py && py -3.12 tools/check-links.py
 py -3.12 tools/check-code-comments.py --check     # GOV-004 门禁；--area fw-nav 单区域
+py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释识别判据）
 ```
 
 ## 关键路径（AI 无法自行推断的）

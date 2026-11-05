@@ -331,13 +331,38 @@ def header_tags(header: str) -> set[str]:
 
 
 def comment_run(lines: list[str], ext: str) -> list[tuple[int, int, list[str]]]:
-    """返回连续注释块 (start, end, lines)（0 基，含端点）。"""
+    """返回连续注释块 (start, end, lines)（0 基，含端点）。
+
+    只认真注释行，避免把代码误判成注释（2026-11-05 修正）：
+    - 行首 `//`：注释行；
+    - 处于 `/* ... */` 块内：注释行（含行首 `*` 的 Doxygen 续行）；
+    - 块外的 `*` 开头行：C/C++ 解引用赋值或乘法续行，是代码，不是注释；
+    - `/* 标签 */ { 0.9f },` 这类行内标签后仍有代码的行：不是纯注释行。
+    """
     prefixes = COMMENT_LINE.get(ext, ("//",))
     runs: list[tuple[int, int, list[str]]] = []
     cur: list[int] = []
+    in_block = False
     for i, raw in enumerate(lines):
         s = raw.strip()
-        is_comment = bool(s) and any(s.startswith(p) for p in prefixes)
+        is_comment = False
+        if in_block:
+            is_comment = True
+            if "*/" in s:
+                in_block = False
+                # `*/` 之后还有内容 → 该行实际以代码结尾，不算注释行
+                if s.split("*/", 1)[1].strip():
+                    is_comment = False
+        elif s.startswith("//"):
+            is_comment = True
+        elif s.startswith("/*"):
+            body, sep, tail = s.partition("*/")
+            if sep:
+                # 同行闭合：闭合后仍有代码则是行内标签，不是注释正文
+                is_comment = not tail.strip()
+            else:
+                in_block = True
+                is_comment = True
         if is_comment:
             cur.append(i)
         else:
@@ -347,6 +372,23 @@ def comment_run(lines: list[str], ext: str) -> list[tuple[int, int, list[str]]]:
     if len(cur) >= 2:
         runs.append((cur[0], cur[-1], [lines[j] for j in cur]))
     return runs
+
+
+def doxygen_code_lines(lines: list[str]) -> set[int]:
+    """返回 Doxygen `@code`…`@endcode` 区段的行号（0 基，含标记行）。
+
+    示例代码是合法注释内容，既不该判成「注释掉的代码」，也不该参与英文注释统计。
+    """
+    exempt: set[int] = set()
+    in_code = False
+    for i, raw in enumerate(lines):
+        if "@code" in raw:
+            in_code = True
+        if in_code:
+            exempt.add(i)
+        if "@endcode" in raw:
+            in_code = False
+    return exempt
 
 
 def has_doc_above(lines: list[str], idx: int, lookback: int = 6) -> bool:
@@ -407,10 +449,15 @@ def check_file(rel: str, text: str) -> FileResult:
                 Finding("R03", "error", i, "TODO/FIXME 缺少 (owner, YYYY-MM-DD)")
             )
 
+    # Doxygen @code 示例区段豁免（示例代码不是被注释掉的代码）
+    code_exempt = doxygen_code_lines(lines)
+
     # R04 注释掉的代码
     for start, end, block in comment_run(lines, ext):
         code_like = 0
-        for raw in block:
+        for offset, raw in enumerate(block):
+            if start + offset in code_exempt:
+                continue
             body = re.sub(r"^\s*(//+|#+|\*+|/\*+)+", "", raw).strip()
             if not body or body.startswith("@"):
                 continue
@@ -430,7 +477,11 @@ def check_file(rel: str, text: str) -> FileResult:
 
     # R06 纯英文注释块
     for start, _end, block in comment_run(lines, ext):
-        text_block = "\n".join(block)
+        text_block = "\n".join(
+            raw for offset, raw in enumerate(block) if start + offset not in code_exempt
+        )
+        if not text_block.strip():
+            continue
         if CJK.search(text_block):
             continue
         words = EN_WORD.findall(text_block)
