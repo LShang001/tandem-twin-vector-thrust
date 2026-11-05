@@ -2484,10 +2484,28 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
   }
   else
   {
-    // 姿态闭环：控制层已输出三轴目标角加速度（rad/s²，存档系）
-    alloc_in.alpha_roll_radps2 = outputs.alpha_roll_radps2;
-    alloc_in.alpha_pitch_radps2 = outputs.alpha_pitch_radps2;
-    alloc_in.alpha_yaw_radps2 = outputs.alpha_yaw_radps2;
+    // 姿态闭环（自动舵）：α → 等效舵角需求 → **与手动直通同一张源矩阵**。
+    // ★ 2026-11-05 第二次修正：原实现走 allocator 的"τ=I·α → H_存档系"路径，
+    //   力矩轴与源机型的通道轴相差 90°，实机看到自动修正方向与打杆方向相反。
+    //   现改为：α 按"满 α 对应满舵角"归一化后，直接进手动那张源矩阵——
+    //   手动打杆与自动修正的通道→舵面映射完全一致（同一张表、同一限幅）。
+    //   α 满量程取速率环输出限幅 5729.578 deg/s²（与 PID 默认值同源）。
+    const float alpha_to_deg = P.vane_max_deg / 5729.578f;
+    const float alpha_deg[3] = {
+        outputs.alpha_roll_radps2 * RAD_TO_DEG * alpha_to_deg,
+        outputs.alpha_pitch_radps2 * RAD_TO_DEG * alpha_to_deg,
+        outputs.alpha_yaw_radps2 * RAD_TO_DEG * alpha_to_deg,
+    };
+    alloc_in.direct_vane_enabled = true;
+    for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
+    {
+      float sum = 0.0f;
+      for (uint8_t j = 0; j < 3; ++j)
+      {
+        sum += bfs::kSingleEdf4VaneManualMatrix[j][i] * alpha_deg[j];
+      }
+      alloc_in.direct_vane_deg[i] = sum;
+    }
   }
 
   const bfs::SingleEdf4VaneAllocationOutput alloc =
