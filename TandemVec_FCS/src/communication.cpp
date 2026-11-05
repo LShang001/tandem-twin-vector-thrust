@@ -2466,12 +2466,23 @@ static void debugParamCmd(Uart &serial, char *args)
 // （实机排查通道方向时，不需要看舵面也能判断固件内部映射是否正确）。
 static void debugVanesCmd(Uart &serial)
 {
-  serial.print(F("[DBG] stick roll/pitch/yaw="));
+  serial.print(F("[DBG] ch1-4 roll/pitch/thr/yaw="));
   serial.print(raw_rc_values[0]);
   serial.print('/');
   serial.print(raw_rc_values[1]);
   serial.print('/');
-  serial.println(raw_rc_values[2]);
+  serial.print(raw_rc_values[2]);
+  serial.print('/');
+  serial.println(raw_rc_values[3]);
+
+  serial.print(F("[DBG] ch5-8 arm/ign/mode/manual="));
+  serial.print(raw_rc_values[4]);
+  serial.print('/');
+  serial.print(raw_rc_values[5]);
+  serial.print('/');
+  serial.print(raw_rc_values[6]);
+  serial.print('/');
+  serial.println(raw_rc_values[7]);
 
   serial.print(F("[DBG] unlock="));
   serial.print(g_is_unlocked ? 1 : 0);
