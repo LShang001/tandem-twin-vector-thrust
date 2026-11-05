@@ -332,7 +332,11 @@ inline bool singleEdf4VaneThrusterEnable(const bool unlocked,
                                          const float tilt_from_up_deg,
                                          const float attitude_limit_deg)
 {
-    if (!unlocked || !ignition_enabled)
+    // ★ 2026-11-05 用户要求：**停用 CH6 推进使能条件**——解锁即允许推进，
+    //   倾角保护保留（大倾角仍切推进）。恢复方法：删掉下面的 (void) 行，
+    //   并把 `if (!unlocked)` 改回 `if (!unlocked || !ignition_enabled)`。
+    (void)ignition_enabled;
+    if (!unlocked)
     {
         return false;
     }

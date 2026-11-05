@@ -176,8 +176,8 @@ int main()
   {
     CHECK(!bfs::singleEdf4VaneThrusterEnable(false, true, 0.0f, 45.0f),
           "P7 未解锁 → 切断推进");
-    CHECK(!bfs::singleEdf4VaneThrusterEnable(true, false, 0.0f, 45.0f),
-          "P7 使能开关关 → 切断推进");
+    CHECK(bfs::singleEdf4VaneThrusterEnable(true, false, 0.0f, 45.0f),
+          "P7 CH6 使能已停用：解锁 + 倾角内 → 允许推进（CH6 置 false 不影响）");
     CHECK(!bfs::singleEdf4VaneThrusterEnable(true, true, 60.0f, 45.0f),
           "P7 偏离天向 60° → 切断推进");
     CHECK(!bfs::singleEdf4VaneThrusterEnable(true, true, 180.0f, 45.0f),
