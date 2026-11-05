@@ -316,20 +316,13 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
         const bool legacy = (len == 2);
         switch (cmd)
         {
-        case 0x01: // 读参数个数 → 老版回 [0x01, count u16] / 新版回 [0x01, count u32]
+        case 0x01: // 读参数个数 → 官方协议：DATA = CMD(1) + VAL(u16) = 3 字节
+                   // ★ 2026-11-05：原实现回 5 字节（CMD + u32），多出的 2 个 0 会被
+                   //   匿名助手 2.x 当成下一帧的帧头/垃圾字节，造成帧错位、参数列表读不出。
             tx[0] = 0x01;
             tx[1] = ANO_PARAMS_COUNT & 0xFF;
             tx[2] = (ANO_PARAMS_COUNT >> 8) & 0xFF;
-            if (legacy)
-            {
-                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_CMD, tx, 3);
-            }
-            else
-            {
-                tx[3] = 0;
-                tx[4] = 0;
-                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_CMD, tx, 5);
-            }
+            ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_CMD, tx, 3);
             return true;
 
         case 0x02: // 读参数值（VAL=ID）→ 老版回 [ID u8, 值] / 新版回 [ID u16, 值]
@@ -379,27 +372,30 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
             e = anoParamAt(id);
             if (!e)
                 return true;
+            // ★ 2026-11-05：PAR_NAME 改为**变长**（官方协议：ID + TYPE + NAME，NAME 为
+            //   字符串、最长 20 字节、N 表示实际长度；老版上位机上限 16）。原实现补 0
+            //   到定长，匿名助手 2.x 按变长解析会判定该帧长度错误 → 参数名全 LenErr。
             const size_t nameCap = legacy ? 16U : 20U;
-            size_t base = legacy ? 2U : 3U;
+            size_t nameLen = strlen(e->name);
+            if (nameLen > nameCap)
+                nameLen = nameCap;
             if (legacy)
             {
                 tx[0] = id & 0xFF;
                 tx[1] = e->type;
+                memcpy(&tx[2], e->name, nameLen);
+                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx,
+                             (uint16_t)(2 + nameLen));
             }
             else
             {
                 tx[0] = id & 0xFF;
                 tx[1] = (id >> 8) & 0xFF;
                 tx[2] = e->type;
+                memcpy(&tx[3], e->name, nameLen);
+                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx,
+                             (uint16_t)(3 + nameLen));
             }
-            memset(&tx[base], 0, nameCap); // PAR_NAME 定长（老 16 / 新 20），不足补 0
-            {
-                size_t nameLen = strlen(e->name);
-                if (nameLen > nameCap)
-                    nameLen = nameCap;
-                memcpy(&tx[base], e->name, nameLen);
-            }
-            ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx, (uint16_t)(base + nameCap));
             return true;
         }
 

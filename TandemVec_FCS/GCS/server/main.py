@@ -459,9 +459,11 @@ async def _stat_loop():
 
 # ---------------- 参数响应处理 ----------------
 def _on_param_info(f: anocom.Frame):
-    """E2 信息帧：payload = [ID u16, TYPE u8, NAME 20B]"""
+    """E2 信息帧：payload = [ID u16, TYPE u8, NAME N]
+    NAME 为变长（官方协议 N=实际长度；老版上位机上限 16、新版上限 20），
+    统一按 \x00 截断兜底，兼容定长补 0 与变长两种发法。"""
     p = f.payload
-    if len(p) < 23:
+    if len(p) < 3:
         return
     pid = p[0] | (p[1] << 8)
     ptype = p[2]
@@ -486,8 +488,9 @@ def _on_param_value(pid: int, payload: bytes):
 def _on_param_cmd(f: anocom.Frame):
     """0xE0 回传帧（参数个数等）"""
     p = f.payload
-    if p and p[0] == 0x01 and len(p) >= 5:
-        count = p[1] | (p[2] << 8) | (p[3] << 16) | (p[4] << 24)
+    if p and p[0] == 0x01 and len(p) >= 3:
+        # 官方协议 VAL 为 u16（3 字节 DATA）；兼容早期 5 字节 u32 版本
+        count = int.from_bytes(p[1:5], "little") if len(p) >= 5 else p[1] | (p[2] << 8)
         g.param_count_seen = count
         g.send_all({'type': 'param_count', 'count': count})
 
