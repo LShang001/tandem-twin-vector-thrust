@@ -3160,12 +3160,18 @@ void runGNCExecutive()
   //   典型是 CRSF 未配置通道时的 999）时，把输入强制成"已解锁 + 自动舵"，
   //   用于地面验证姿态闭环与舵面修正方向——不需要先修好遥控器通道。
   //   安全边界：
-  //     ① 只有 CH5–CH8 **全部**无效才生效；任一个通道恢复有效即自动退出旁路；
+  //     ① 只有 CH5–CH8 **全部**处于无效值区间（990–1010，典型是 CRSF 未配置
+  //        通道时的 999）才生效；任一个通道恢复有效即自动退出旁路；
   //     ② 推进器油门仍按原始输入联锁（CH6 无效 → ignition_enabled=false → 最低油门），
   //        不会因为旁路而意外出推力；
   //     ③ 实飞前必须关闭本宏，否则等于绕过解锁开关。
-  if (raw_rc_values[4] < 900 && raw_rc_values[5] < 900 &&
-      raw_rc_values[6] < 900 && raw_rc_values[7] < 900)
+  //   ★ 无效值判据用 990–1010 区间：CRSF 未配置通道实测返回 999（见 2026-11-05
+  //     实机日志 ch5-8=999/999/999/999），而正常满低位是 988，二者必须分开。
+  const auto rc_switch_invalid = [](const uint16_t v) {
+    return v >= 990U && v <= 1010U;
+  };
+  if (rc_switch_invalid(raw_rc_values[4]) && rc_switch_invalid(raw_rc_values[5]) &&
+      rc_switch_invalid(raw_rc_values[6]) && rc_switch_invalid(raw_rc_values[7]))
   {
     static bool s_bench_mode_warned = false;
     if (!s_bench_mode_warned)
