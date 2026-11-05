@@ -42,8 +42,9 @@
   `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE -DBFS_DBG_USB_SERIAL8 -DBFS_ANOCOM_ON_USB`）；
   四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6，与纵列双发共用同一块板，只换引脚语义。
   **飞控与传感器安装方向、机体外形与共轴 VTVL 完全一致**（用户确认）→ IMU 轴映射与存档系
-  直接复用。四舵物理方向沿用源机型台架确认值 (+1,−1,+1,−1)。速率环工作在**舵角域**
-  （输出直接是舵角需求 deg，kp=0.25、限幅 = `sedf.ctrl_vane_deg`，与源机型口径一致），
+  直接复用。四舵物理方向沿用源机型台架确认值 (+1,−1,+1,−1)。速率环工作在**角加速度域**
+  （输出目标 α [deg/s²]，与纵列/共轴同一契约，kp=57.3 s⁻¹ = 源机型舵角域 0.25 的等价换算），
+  限幅口径由机械摆角换算：`out_max = ctrl_vane_deg·(4k/I)·180/π`（20° → 4583.66 deg/s²），
   手动直通与自动修正共用同一张源机型矩阵（矩阵、yaw 轴符号属机型知识，收在
   `SingleEdf4VaneAllocator.h`）。质量/推力/舵效/惯量仍为 MODEL-DEFAULT（未称重未实测），
   但默认值实飞可稳定控制；参数 169 项（`sedf.*` 21 项）可经匿名上位机在线调。
@@ -77,10 +78,10 @@
 - 执行器映射：δf→PA0(TVC_ROLL)、δt→PA1(TVC_PITCH)、Δω→PA2/PA3。
 - 齿轮 30T/40T=1.333:1（PWM 映射已含）。
 - **单涵道机型（`BFS_SINGLE_EDF_4VANE`）**：执行器换成 4 片燃气舵 + 1 路推进器油门（无差速通道）。
-  ★ **实际飞控路径是舵角域直通**：速率环输出即三轴舵角需求 [deg]，经 3×4 矩阵折到四舵
-  （`alloc_in.direct_vane_enabled`），限幅 = `sedf.ctrl_vane_deg`（默认 ±20°）；与源机型口径一致。
-  分配器 `include/SingleEdf4VaneAllocator.h` 仍保留 α 入口（三轴 α → τ=I·α → `δ = Hᵀ·τ/(4k)`，
-  行正交编译期断言），供宿主测试与其它调用方使用——**不要把 α 入口当成当前飞行路径**；
+  ★ **飞控路径与其他机型统一**：速率环输出三轴角加速度 α [deg/s²]，
+  分配器 `include/SingleEdf4VaneAllocator.h` 做 α → τ=I·α → `δ = Hᵀ·τ/(4k)` → 联合限幅
+  （行正交编译期断言），限幅由上节的机械摆角换算而来。
+  直通路径（`alloc_in.direct_vane_enabled`）只用于**未解锁/手动 TVC 的地面标定**，不是飞行闭环路径；
   矩阵已按存档系重构——纵列"偏航"（绕 z_b=推力轴）对应源机型的"滚转"，物理上是世界航向。
   四舵 PA0–PA3 只做语义重映射，PC8 为推进器油门，PE6 为推进使能。
 
@@ -118,8 +119,9 @@
   掉电测试，不能直接复用磁标定末扇区。
 - **控制增益/限幅/滤波唯一入口**：`include/FlightCtrlParams.h` `kFlightCtrlParams`
   （static constexpr，固件与宿主测试共用）；旧参数 0.28/0.20/0.10 不得导入。
-  **速率环单位按机型分两套**：纵列/共轴 kp 单位 s⁻¹、ki 单位 s⁻²（输出 deg/s²）；
-  **单涵道为舵角域**（输出 deg，kp 无量纲，限幅 = `sedf.ctrl_vane_deg`）——见 §当前实机机型。
+  **三机型速率环统一为 α 域**：kp 单位 s⁻¹、ki 单位 s⁻²（输出 deg/s²）；
+  单涵道的限幅由机械摆角 `sedf.ctrl_vane_deg` 经 `applyFlightCtrlParams()` 内部换算，
+  用户不需要也不应该直接改 `rate_*.out_max`（下次 apply 会覆盖）。
 - 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）。
 - 差速增益调度/工作点下限/零油门门控：`flight_control.cpp` 层2（改后跑 `tools/verify_*.py`）。
 - 控制链遥测：`state_data.h` §4.0b `gnc_tel`。
