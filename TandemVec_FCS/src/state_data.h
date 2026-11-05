@@ -611,7 +611,10 @@ extern Ws2812AppStatus ws2812AppStatus; // WS2812 应用状态机 (呼吸/闪烁
 extern SPIClass FLASH_SPI;    // Flash 专用 SPI3 实例
 extern W25N01GV flash;        // W25N01GV NAND Flash (SPI3)
 extern W25N01GVLog flashLog;  // Flash 日志层 (环形缓冲+后台写)
-extern AnoComProtocol AnoCom; // 匿名地面站协议
+extern AnoComProtocol AnoCom;
+#ifdef BFS_ANOCOM_ON_USB
+extern AnoComProtocol AnoComUsb; // USB 调试口的 AnoCom 上行实例
+#endif // 匿名地面站协议
 extern CrsfSerial crsf;       // CRSF遥控协议
 
 /*

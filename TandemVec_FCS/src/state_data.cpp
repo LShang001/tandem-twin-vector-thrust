@@ -399,7 +399,11 @@ SPIClass FLASH_SPI(FLASH_SPI_MOSI, FLASH_SPI_MISO, FLASH_SPI_SCK);
 W25N01GV flash(FLASH_SPI, FLASH_CS_PIN);
 W25N01GVLog flashLog(flash);
 
-AnoComProtocol AnoCom(&Serial6);                // 匿名地面站协议驱动 (Serial6)
+AnoComProtocol AnoCom(&Serial6);
+#ifdef BFS_ANOCOM_ON_USB
+// USB 调试口上的 AnoCom 上行（参数读写）；下行遥测仍只走 Serial6。
+AnoComProtocol AnoComUsb(&Serial8);
+#endif                // 匿名地面站协议驱动 (Serial6)
 CrsfSerial crsf(receiverSerial, CRSF_BAUDRATE); // CRSF遥控协议驱动 (Serial1, 420kbaud)
 
 /*

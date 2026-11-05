@@ -78,6 +78,12 @@ static bool s_dbg_mode = false;
 //   BFS_DBG_USB_SERIAL8 时，USB 调试口（Serial8）收到 "DBG\n" 也能进控制台，
 //   命令回显与打印走进入时的那个口——没有数传接线时也能做参数/健康检查。
 static Uart *s_dbg_port = &Serial6;
+#ifdef BFS_ANOCOM_ON_USB
+// ★ 2026-11-05：USB 调试口（Serial8）也承载 AnoCom 上行/参数链路。
+//   回调 onAnoRxFrame 是全局函数指针（无上下文），用这个指针记录“当前正在处理哪个
+//   串口的帧”，回调里的应答就会发回同一个口（参数读写在 USB 口即可用匿名上位机）。
+static AnoComProtocol *s_ano_port = &AnoCom;
+#endif
 // 遥测协议切换标志（DBG `proto` 命令置位）：false=AnoCom（GCS 默认）/
 // true=MAVLink v2（QGC/MP 可连）。运行时切换不重烧。
 static bool s_mav_active = false;
@@ -547,7 +553,7 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
     // TX 非阻塞保护: 缓冲不足时跳过回传, 避免阻塞控制环
     if (Serial6.availableForWrite() >= 12) // 0x00 校验帧 = 8 帧开销 + 3 DATA + 1 余量
     {
-      AnoCom.sendDataCheck(funcCode, rxSumCheck, rxAddCheck);
+      s_ano_port->sendDataCheck(funcCode, rxSumCheck, rxAddCheck);
       ano_rx_check_sent++;
     }
 
@@ -558,7 +564,7 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
       // 0xE3 设备信息帧 = 8 帧开销 + 29 DATA (1+8+20)
       if (Serial6.availableForWrite() >= 40)
       {
-        AnoCom.sendDeviceInfo(ANO_DEVICE_ID, ANO_HW_VERSION, ANO_SW_VERSION,
+        s_ano_port->sendDeviceInfo(ANO_DEVICE_ID, ANO_HW_VERSION, ANO_SW_VERSION,
                               ANO_BL_VERSION, ANO_PT_VERSION, ANO_DEVICE_NAME);
         ano_rx_device_info_sent++;
       }
@@ -566,14 +572,14 @@ static void onAnoRxFrame(uint8_t funcCode, uint8_t *data, uint16_t len,
     else
     {
       // 其余参数命令 / 参数写入 → 注册表读写（ano_params.cpp）
-      anoParamsHandleRx(AnoCom, funcCode, data, len);
+      anoParamsHandleRx(*s_ano_port, funcCode, data, len);
     }
   }
 
   // 0xF3 变量清单请求（AnoVars，只读不回 0x00 校验帧——仿 0xE2 语义）
   if (funcCode == 0xF3)
   {
-    anoVarsHandleRx(AnoCom, funcCode, data, len);
+    anoVarsHandleRx(*s_ano_port, funcCode, data, len);
   }
 }
 
@@ -674,7 +680,14 @@ void handleAnoCom()
   // peek/帧头保护）；进入后 s_dbg_port 指向 Serial8，命令回显与打印都走 USB。
   if (!s_dbg_mode) {
     while (Serial8.available() && !s_dbg_mode) {
-      const int c = Serial8.read();
+      const int c = Serial8.peek();
+      // AnoCom 帧头：停止消费，整帧留给 AnoComUsb.receiveData() 解析
+      // （BFS_ANOCOM_ON_USB 时该口同时承载参数链路，不能用 DBG 扫描器吞字节）
+      if (c == ANO_FRAME_HEAD) {
+        dbg_line_len = 0;
+        break;
+      }
+      Serial8.read();
       if (c == '\n') {
         if (dbg_line_len == 3 && dbg_line[0] == 'D' && dbg_line[1] == 'B' && dbg_line[2] == 'G') {
           s_dbg_mode = true;
@@ -750,6 +763,19 @@ void handleAnoCom()
     rx_callback_registered = true;
   }
   AnoCom.receiveData();
+#ifdef BFS_ANOCOM_ON_USB
+  // ★ USB 调试口的 AnoCom 上行（参数读写/变量请求）：匿名上位机插 USB 也能调参。
+  //   下行遥测仍只走 Serial6（避免 USB 口被 200Hz 遥测占满、影响 DBG 文本可读性）。
+  static bool usb_rx_callback_registered = false;
+  if (!usb_rx_callback_registered)
+  {
+    AnoComUsb.setRxCallback(onAnoRxFrame);
+    usb_rx_callback_registered = true;
+  }
+  s_ano_port = &AnoComUsb;
+  AnoComUsb.receiveData();
+  s_ano_port = &AnoCom;
+#endif
   // ★ 2026-08-10 上行自愈：_rxIndex 半帧冻结（available()=0 时退出循环，
   //   _rxIndex 卡 1-7 → 后续帧头错位永凑不齐 → 上行哑火，下行照发）。
   //   冻结 >100ms 强制复位——正常半帧间隙（CLI 连续发帧）远小于此。
