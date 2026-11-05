@@ -308,51 +308,100 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
         if (len < 1)
             return true; // 空帧视为已消费（避免重复处理）
         const uint8_t cmd = data[0];
+        // ★ 2026-11-05 协议版本自适应：匿名助手 1.x（如 1.1.5）用 **1 字节**参数 ID、
+        //   NAME 定长 16；新版（V7+）用 2 字节 ID、NAME 定长 20。
+        //   用请求帧 DATA 长度区分：老版 = CMD + 1 字节 VAL（len==2），
+        //   新版 = CMD + 2 字节 VAL（len>=3）。应答格式跟随请求，
+        //   同一份注册表可同时服务两代上位机，不需要两套固件。
+        const bool legacy = (len == 2);
         switch (cmd)
         {
-        case 0x01: // 读参数个数 → 回 0xE0 [0x01, count u32 LE]
+        case 0x01: // 读参数个数 → 老版回 [0x01, count u16] / 新版回 [0x01, count u32]
             tx[0] = 0x01;
             tx[1] = ANO_PARAMS_COUNT & 0xFF;
             tx[2] = (ANO_PARAMS_COUNT >> 8) & 0xFF;
-            tx[3] = 0;
-            tx[4] = 0;
-            ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_CMD, tx, 5);
+            if (legacy)
+            {
+                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_CMD, tx, 3);
+            }
+            else
+            {
+                tx[3] = 0;
+                tx[4] = 0;
+                ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_CMD, tx, 5);
+            }
             return true;
 
-        case 0x02: // 读参数值（VAL=ID u16）→ 回 0xE1 [ID u16, PAR_VAL]
-            if (len < 3)
-                return true;
-            id = (uint16_t)(data[1] | (data[2] << 8));
+        case 0x02: // 读参数值（VAL=ID）→ 老版回 [ID u8, 值] / 新版回 [ID u16, 值]
+        {
+            if (legacy)
+            {
+                id = data[1];
+            }
+            else
+            {
+                if (len < 3)
+                    return true;
+                id = (uint16_t)(data[1] | (data[2] << 8));
+            }
             if (!anoParamAt(id))
                 return true;
-            tx[0] = id & 0xFF;
-            tx[1] = (id >> 8) & 0xFF;
+            uint16_t n;
+            if (legacy)
             {
-                uint16_t n = anoParamSerialize(id, &tx[2], sizeof(tx) - 2);
+                n = anoParamSerialize(id, &tx[1], sizeof(tx) - 1);
+                if (n > 0)
+                    ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_WRITE_READ, tx, 1 + n);
+            }
+            else
+            {
+                tx[0] = id & 0xFF;
+                tx[1] = (id >> 8) & 0xFF;
+                n = anoParamSerialize(id, &tx[2], sizeof(tx) - 2);
                 if (n > 0)
                     ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_WRITE_READ, tx, 2 + n);
             }
             return true;
+        }
 
-        case 0x03: // 读参数信息（VAL=ID u16）→ 回 0xE2 [ID u16, TYPE u8, NAME 20B]
-            if (len < 3)
-                return true;
-            id = (uint16_t)(data[1] | (data[2] << 8));
+        case 0x03: // 读参数信息 → 老版 [ID u8, TYPE u8, NAME 16B] / 新版 [ID u16, TYPE, NAME 20B]
+        {
+            if (legacy)
+            {
+                id = data[1];
+            }
+            else
+            {
+                if (len < 3)
+                    return true;
+                id = (uint16_t)(data[1] | (data[2] << 8));
+            }
             e = anoParamAt(id);
             if (!e)
                 return true;
-            tx[0] = id & 0xFF;
-            tx[1] = (id >> 8) & 0xFF;
-            tx[2] = e->type;
-            memset(&tx[3], 0, 20); // PAR_NAME 定长 20 字节，不足补 0
+            const size_t nameCap = legacy ? 16U : 20U;
+            size_t base = legacy ? 2U : 3U;
+            if (legacy)
+            {
+                tx[0] = id & 0xFF;
+                tx[1] = e->type;
+            }
+            else
+            {
+                tx[0] = id & 0xFF;
+                tx[1] = (id >> 8) & 0xFF;
+                tx[2] = e->type;
+            }
+            memset(&tx[base], 0, nameCap); // PAR_NAME 定长（老 16 / 新 20），不足补 0
             {
                 size_t nameLen = strlen(e->name);
-                if (nameLen > 20)
-                    nameLen = 20;
-                memcpy(&tx[3], e->name, nameLen);
+                if (nameLen > nameCap)
+                    nameLen = nameCap;
+                memcpy(&tx[base], e->name, nameLen);
             }
-            ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx, 23);
+            ano.sendData(ANO_GND_ADDR, ANO_FUNC_PARAM_INFO, tx, (uint16_t)(base + nameCap));
             return true;
+        }
 
         case 0x10: // 命令类：VAL=0xAA 恢复默认 / 0xAB 保存
             if (len >= 2 && data[1] == 0xAA)
@@ -373,10 +422,16 @@ bool anoParamsHandleRx(AnoComProtocol &ano, uint8_t funcCode,
 
     if (funcCode == ANO_FUNC_PARAM_WRITE_READ) // 0xE1 参数写入
     {
-        if (len < 3)
+        // 长度 → 格式（无歧义）：6=新 float / 5=老 float / 3=新 u8 / 2=老 u8
+        const bool legacy = (len == 5 || len == 2);
+        if (len < 2)
             return true;
-        id = (uint16_t)(data[0] | (data[1] << 8));
-        if (anoParamDeserialize(id, &data[2], len - 2))
+        id = legacy ? data[0] : (uint16_t)(data[0] | (data[1] << 8));
+        const uint8_t *val = legacy ? &data[1] : &data[2];
+        const uint16_t vlen = (uint16_t)(len - (legacy ? 1 : 2));
+        if (vlen == 0)
+            return true;
+        if (anoParamDeserialize(id, val, vlen))
             applyFlightCtrlParams(); // 无扰同步到全部 PID/滤波器实例
         return true;
     }
