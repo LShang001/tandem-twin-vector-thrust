@@ -76,7 +76,7 @@ FILTER_WIRE = {
 }
 
 # ---- 共轴双桨 VTVL 机型参数（★2026-10-30 可标定化）----
-# 名称/顺序 = 固件 include/FlightCtrlParams.h::BFS_COAX_PARAM_LIST（ID 133-163），
+# 名称/顺序 = 固件 include/FlightCtrlParams.h::BFS_COAX_PARAM_LIST（ID 133-147，15 项），
 # 默认值 = 固件默认（原 flight_control.cpp 硬编码 + task-10 分配器默认）；min/max 为地面站输入校验的
 # 保守包线，不改变固件默认值。安全关键项（PWM 范围/舵机半行程/修正角限幅）的
 # max 已按红线收紧，实机标定仍需评审。
@@ -115,8 +115,8 @@ COAX_PARAMS = [
 ]
 
 # ---- 单涵道 + X 型四燃气舵机型参数（★2026-11-05 新增）----
-# 名称/顺序 = 固件 include/FlightCtrlParams.h::BFS_SINGLE_EDF_PARAM_LIST（ID 148-167）。
-# 20 项全部可在线读写；写入后下一个 200Hz 控制拍生效（混控器每拍读 kFlightCtrlParams.single_edf）。
+# 名称/顺序 = 固件 include/FlightCtrlParams.h::BFS_SINGLE_EDF_PARAM_LIST（ID 148-168，21 项）。
+# 21 项全部可在线读写；写入后下一个 200Hz 控制拍生效（混控器每拍读 kFlightCtrlParams.single_edf）。
 # min/max 为地面站输入校验的保守包线，不改变固件默认值；安全关键项（满舵角/舵效/方向/
 # PWM 中位与行程）的包线已按机械安全收紧，标定仍需按 CTL-008 §7 流程记录依据。
 SINGLE_EDF_PARAMS = [
@@ -159,7 +159,7 @@ SINGLE_EDF_PARAMS = [
     ('sedf.thr_max_us', 'µs', 1900.0, 2100.0, 1.0,
      '推进器满油门脉宽（默认 2000µs，安全关键项）'),
     ('sedf.att_limit_deg', 'deg', 10.0, 180.0, 1.0,
-     '大倾角切推进阈值（默认 45°；超限只切油门，舵仍受控）'),
+     '大倾角切推进阈值（默认 120°；2026-11-05 由 45° 放宽，可调至 180 等效关闭；超限只切油门，舵仍受控）'),
     ('sedf.dt_s', 's', 0.001, 0.02, 0.001,
      '控制周期（默认 5ms；改动必须与调度周期一致）'),
 ]
@@ -266,12 +266,12 @@ def build_meta():
         meta[name] = dict(name=name, group='导航', loop='', field='',
                           unit='m', min=-5.0, max=5.0, step=0.01, type='float',
                           desc=f'GNSS 天线相对 IMU 的机体系杆臂 {desc}（0=不补偿）')
-    # ★ 2026-10-30 共轴双桨 VTVL 机型参数（固件 ID 133-163；task-10 追加分配器 6 项）
+    # ★ 2026-10-30 共轴双桨 VTVL 机型参数（固件 ID 133-147，15 项；其中 task-10 分配器 6 项 142-147）
     for name, unit, lo, hi, step, desc in COAX_PARAMS:
         meta[name] = dict(name=name, group='共轴', loop='', field='',
                           unit=unit, min=lo, max=hi, step=step, type='float',
                           desc=desc)
-    # ★ 2026-11-05 单涵道 + X 型四燃气舵机型参数（固件 ID 148-167）
+    # ★ 2026-11-05 单涵道 + X 型四燃气舵机型参数（固件 ID 148-168）
     for name, unit, lo, hi, step, desc in SINGLE_EDF_PARAMS:
         meta[name] = dict(name=name, group='单涵道', loop='', field='',
                           unit=unit, min=lo, max=hi, step=step, type='float',
@@ -314,9 +314,9 @@ def is_float_name(name):
     return True
 
 
-# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 164 项）
+# 固件注册表同序参数名列表（校验用：线上名逐项与固件一致，当前 169 项）
 def expected_names():
-    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 148 项，跨实现校验）"""
+    """按固件 ano_params.cpp 注册表顺序返回线上参数名（当前 169 项，跨实现校验）"""
     names = []
     for loop, _, _ in PID_GROUPS:
         for field, _ in FIELD_META.items():

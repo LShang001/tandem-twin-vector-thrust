@@ -840,7 +840,7 @@ def _param_id_of(msg: dict):
 
 
 async def _param_read_all(ws: WebSocket):
-    """拉取固件全部注册表参数（当前 128；逐 ID 发送 + 等待该 ID 双全，超时重试。
+    """拉取固件全部注册表参数（当前 169；逐 ID 发送 + 等待该 ID 双全，超时重试。
     ★ 2M 速率下 USB 串口偶发丢字节（固件 CRC 失败静默丢弃）——
       批量灌发会系统性丢参数，必须逐 ID 确认）"""
     if not (g.link and g.link.is_open):
@@ -849,7 +849,7 @@ async def _param_read_all(ws: WebSocket):
     g.param_values = {}
     failed = []
     # ★ 2026-08-10 全面审查修复：硬编码 117 → 动态（0xE0 CMD 0x01 已应答过则用之）
-    # ★ 2026-11-05：兜底改用本地参数表长度（与固件同序镜像，现 168 项）并截断固件上报值——
+    # ★ 2026-11-05：兜底改用本地参数表长度（与固件同序镜像，现 169 项）并截断固件上报值——
     #   避免“count 未回退”时只读前 121 项、或未来固件扩容后越界读不存在的 ID。
     local_count = len(pm.expected_names())
     seen = int(g.param_count_seen) if g.param_count_seen else local_count

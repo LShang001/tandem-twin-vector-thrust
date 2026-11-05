@@ -598,7 +598,7 @@ def _param_list(a):
     m.g.param_values = {}
     m.g.write(anocom.cmd_read_param_count())
     drain(0.5)
-    # ★ 2026-11-05：兜底改用本地参数表长度（与固件同序镜像，现 168 项）并截断上报值，
+    # ★ 2026-11-05：兜底改用本地参数表长度（与固件同序镜像，现 169 项）并截断上报值，
     #   避免旧回退值 121 导致只列前 121 项、或固件扩容后越界读。
     local_count = len(pm.expected_names())
     seen = int(getattr(m.g, 'param_count_seen', 0) or 0)

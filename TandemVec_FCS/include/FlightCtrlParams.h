@@ -238,7 +238,7 @@ static_assert(CoaxialCtrlParams{}.inertia_yaw_kgm2 == 0.08f, "偏航惯量默认
 
 /**
  * @brief 全部控制环参数集合（固件唯一可调参数块）
- * @note  11 个 PidTuneParams + 4 组滤波 alpha + 前馈掩码 + FPV 曲线三参数；
+ * @note  12 个 PidTuneParams（12×9 = 108 项）+ 4 组滤波 alpha + 前馈掩码 + FPV 曲线三参数；
  *        被 state_data.cpp 的 PID 构造、flight_control.cpp 的调度与
  *        test_host 的宿主机回归共同读取（同一数值，杜绝两侧漂移）。
  */

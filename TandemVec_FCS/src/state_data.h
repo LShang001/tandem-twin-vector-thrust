@@ -490,7 +490,7 @@ extern GncTelemetry gnc_tel;
 //  同步到全部 PID/滤波器实例（无扰，保留控制状态）。
 // ============================================================
 extern FlightCtrlParams kFlightCtrlParams;
-void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 9 控制滤波器
+void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 12 控制滤波器（4 组×3，含 3 个二级滤波）
 #ifdef BFS_COAXIAL_VTVL
 // 共轴分支参数同步（定义于 flight_control.cpp：推给 s_coaxial_controller）；
 // 仅共轴宏编译，TandemVec 路径零改动。

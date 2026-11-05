@@ -311,12 +311,12 @@ def test_param_name_to_id_mapping():
     assert names.index('rate_roll.kd') == 29
     assert len(names) == 169
     assert names.index('rate_pitch.kd') == 38
-    # ★ 2026-10-30 共轴参数只在表尾追加，旧 ID 不得移动；★task-10 分配器 158-163
+    # ★ 2026-10-30 共轴参数只在表尾追加，旧 ID 不得移动；★task-10 分配器 142-147（共轴 PID 并入通用表后前移）
     assert names.index('coax.max_corr_deg') == 133
     assert names.index('coax.dt_s') == 141
     assert names.index('coax.alloc_mode') == 142
     assert names.index('coax.inertia_yaw') == 147
-    # ★ 2026-11-05 单涵道参数追加在共轴之后（ID 148-167）
+    # ★ 2026-11-05 单涵道参数追加在共轴之后（ID 148-168，21 项）
     assert names.index('sedf.mass_kg') == 148
     assert names.index('sedf.vane_dir1') == 157
     assert names.index('sedf.dt_s') == 168
@@ -340,7 +340,7 @@ def test_single_edf_param_envelope():
         'sedf.vane_center': 50.0, 'sedf.vane_span': 16.67,
         'sedf.vane_min_pct': 33.33, 'sedf.vane_max_pct': 66.66,
         'sedf.thr_min_us': 1000.0, 'sedf.thr_max_us': 2000.0,
-        'sedf.att_limit_deg': 45.0, 'sedf.dt_s': 0.005,
+        'sedf.att_limit_deg': 120.0, 'sedf.dt_s': 0.005,
     }
     names = [n for n, _u, _lo, _hi, _st, _d in pm.SINGLE_EDF_PARAMS]
     assert names == list(defaults.keys()), '参数名/顺序与固件注册表不一致'
