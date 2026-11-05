@@ -760,13 +760,25 @@ void applyFlightCtrlParams()
 #ifdef BFS_SINGLE_EDF_4VANE
     {
         const SingleEdf4VaneHwParams &P = kFlightCtrlParams.single_edf;
-        // 舵角域：限幅直接就是“舵面最多偏多少度”，无需任何换算。
-        kFlightCtrlParams.rate_roll.out_max = P.ctrl_vane_deg;
-        kFlightCtrlParams.rate_roll.out_min = -P.ctrl_vane_deg;
-        kFlightCtrlParams.rate_pitch.out_max = P.ctrl_vane_deg;
-        kFlightCtrlParams.rate_pitch.out_min = -P.ctrl_vane_deg;
-        kFlightCtrlParams.rate_yaw.out_max = P.ctrl_vane_deg;
-        kFlightCtrlParams.rate_yaw.out_min = -P.ctrl_vane_deg;
+        // ★ 限幅口径换算（内部自动完成，用户只设机械摆角）：
+        //   用户参数 = sedf.ctrl_vane_deg [deg]（舵面最多偏多少度）
+        //   PID 限幅 = 满舵角对应角加速度 = δ·(4k/I)·(180/π) [deg/s²]
+        //   推导：三轴舵角需求 δ → 力矩 τ=I·α；δ = Hᵀ·τ/(4k) ⇒ α = δ·4k/I。
+        //   默认 20° → roll/pitch 4583.66、yaw 3055.78（yaw 惯量 0.03）。
+        //   两个物理量（k、I）标定更新后，这组限幅自动跟随，不需要重调增益。
+        const float rad2deg = 57.2957795f;
+        const float alpha_full_roll =
+            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_roll_kgm2) * rad2deg;
+        const float alpha_full_pitch =
+            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_pitch_kgm2) * rad2deg;
+        const float alpha_full_yaw =
+            P.ctrl_vane_deg * (4.0f * P.vane_moment_nm_per_deg / P.inertia_yaw_kgm2) * rad2deg;
+        kFlightCtrlParams.rate_roll.out_max = alpha_full_roll;
+        kFlightCtrlParams.rate_roll.out_min = -alpha_full_roll;
+        kFlightCtrlParams.rate_pitch.out_max = alpha_full_pitch;
+        kFlightCtrlParams.rate_pitch.out_min = -alpha_full_pitch;
+        kFlightCtrlParams.rate_yaw.out_max = alpha_full_yaw;
+        kFlightCtrlParams.rate_yaw.out_min = -alpha_full_yaw;
     }
 #endif
     // 单个 PID 环同步（enabled=false 会清积分，与构造函数语义一致）
