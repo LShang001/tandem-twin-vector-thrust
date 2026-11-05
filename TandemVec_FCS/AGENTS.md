@@ -10,11 +10,10 @@
   |---|---|---|---|
   | 纵列双发矢量推力 | `[env:TandemVec_FCS]` | 2026-08 | `veh=TandemVec` |
   | 共轴双桨 VTVL | `[env:CoaxialVTVL]`（`-DBFS_COAXIAL_VTVL`） | 2026-11-04 | `veh=CoaxialVTVL` |
-  | 单涵道 + X 型四燃气舵 | `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`） | 2026-11-05 | `veh=TandemVec`（标签待改） |
+  | 单涵道 + X 型四燃气舵 | `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`） | 2026-11-05 | `veh=SingleEdf4Vane` |
 
-- **烧录前必须先确认这次飞哪一型**，再选 env；上板后第一件事是 `health` 核对 `veh=` 与预期一致。
-  `veh=` 只区分纵列与共轴，**单涵道当前仍打印 `veh=TandemVec`**（已知遗留，靠 `param get sedf.ctrl_vane_deg`
-  能否读到值来区分，或直接看是否打印 `sedf.*` 参数）。
+- **烧录前必须先确认这次飞哪一型**，再选 env；上板后第一件事是 `health` 核对 `veh=` 与预期一致
+  （2026-11-06 起三种机型各自打印自己的标签，不再共用 `TandemVec`）。
 - 共轴 PID 已统一为通用 `att_*`/`rate_*`，不再有 `coax.att_kp_*`/`coax.rate_kp_*`；
   `coax.*` 只剩质量/推力/舵机/PWM/力臂/惯量/限幅等硬件参数。
 - 共轴 SIL 默认使用 `--coax-plant-model rigorous`；L1 集总 plant 的俯仰/姿态约定
