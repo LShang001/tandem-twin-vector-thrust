@@ -172,7 +172,7 @@ int main()
           "P6 配平产生的偏航力矩 = 4k·trim");
   }
 
-  // ---- P7：推进联锁三条件（未解锁 / 使能关 / 大倾角），倾角用"偏离天向角"----
+  // ---- P7：推进联锁（未解锁 / 大倾角），倾角用"偏离天向角"；CH6 使能已于 2026-11-05 停用 ----
   {
     CHECK(!bfs::singleEdf4VaneThrusterEnable(false, true, 0.0f, 45.0f),
           "P7 未解锁 → 切断推进");
@@ -243,7 +243,8 @@ int main()
     CHECK(near(hw.vane_dir[0], 1.0f) && near(hw.vane_dir[1], -1.0f) &&
               near(hw.vane_dir[2], 1.0f) && near(hw.vane_dir[3], -1.0f),
           "P10 默认舵方向 = 源机型 2026-10-12 台架确认值 (+1,-1,+1,-1)");
-    CHECK(hw.attitude_limit_deg == 45.0f, "P10 默认大倾角阈值 45°");
+    CHECK(hw.attitude_limit_deg == 120.0f,
+          "P10 默认大倾角切推进阈值 120°（2026-11-05 用户要求 45°->120° 放宽）");
     CHECK(hw.vane_center_pct == 50.0f && near(hw.vane_span_pct, 16.67f) &&
               near(hw.vane_min_pct, 33.33f) && near(hw.vane_max_pct, 66.66f),
           "P10 默认舵机中位/半行程/硬限位与源机型一致");

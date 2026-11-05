@@ -104,7 +104,6 @@ int main(int argc, char **argv) {
   const float drop_start = (argc > 10) ? std::atof(argv[10]) : -1.0f;
   const float drop_len = (argc > 11) ? std::atof(argv[11]) : 0.0f;
   std::mt19937 rng(seed);
-  std::normal_distribution<float> accel_noise(0.0f, 0.0f);
   std::normal_distribution<float> gnss_noise(0.0f, gnss_sigma);
   std::normal_distribution<float> vel_noise(0.0f, vel_sigma);
 
@@ -135,10 +134,11 @@ int main(int argc, char **argv) {
     // 真值
     v_true += a_cmd * kDt;
     p_true += v_true * kDt;
-    // 参考：IMU 加速度积分（含白噪声 + 20 mg x 零偏）
-    const Eigen::Vector3d a_meas = a_cmd +
-        Eigen::Vector3d(accel_noise(rng), accel_noise(rng), accel_noise(rng)) +
-        Eigen::Vector3d(accel_bias, bias_y, bias_z);
+    // 参考：IMU 加速度积分（仅注入 20 mg x 零偏；加计白噪声 σ=0 不注入）。
+    // 注：std::normal_distribution(0,0) 在 GCC 15 的 libstdc++ 会命中
+    //     "_M_stddev > 0" 前置断言（旧工具链靠 UB 静默返回 0），故显式置零。
+    const Eigen::Vector3d a_meas =
+        a_cmd + Eigen::Vector3d(accel_bias, bias_y, bias_z);
     v_ref += a_meas * kDt;
     p_ref += v_ref * kDt;
     true_pos[k + 1] = p_true;

@@ -167,8 +167,8 @@ struct SingleEdf4VaneHwParams
     float dt_s = 0.005f;                    // 控制周期 [s]（200Hz）
 };
 
-// 单涵道机型默认实例（固件与宿主测试共用同一数值；不接入 AnoCom 在线参数表——
-// 首次移植阶段先固定编译期常量，待标定稳定后再按 BFS_COAX_PARAM_LIST 的模式注册）。
+// 单涵道机型默认实例（固件与宿主测试共用同一数值；21 项已注册 AnoCom 0xE1
+// 在线参数表，见下方 BFS_SINGLE_EDF_PARAM_LIST；标定可直接在线进行）。
 static constexpr SingleEdf4VaneHwParams kSingleEdf4VaneHwParamsDefaults{};
 
 // 安全关键默认值锁定（逐位）：满舵角/舵效/惯量/中位/行程/限幅改动必须走红线评审
@@ -189,7 +189,7 @@ static_assert(kSingleEdf4VaneHwParamsDefaults.attitude_limit_deg == 120.0f,
  * @brief 单涵道机型参数注册表顺序（单一事实源：ano_params.cpp 与 host 测试共用）
  * @note  X(线上名, SingleEdf4VaneHwParams 成员路径)；名称 ≤20B，ID = 表尾追加顺序。
  *        GCS/server/params.py::expected_names() 必须保持同序同拼写。
- *        ★ 这 20 项全部可经 AnoCom 0xE1 在线读写；写入后下一次 200Hz 控制拍即生效
+ *        ★ 这 21 项全部可经 AnoCom 0xE1 在线读写；写入后下一次 200Hz 控制拍即生效
  *        （混控器每拍读 kFlightCtrlParams.single_edf，无缓存、无重建）。
  *        ★ 安全关键：vane_max_deg / vane_dirx / vane_moment 直接改变控制权限，
  *        GCS 侧已给保守范围；改动仍须按 CTL-008 §7 标定流程逐项记录依据。
@@ -283,7 +283,7 @@ struct FlightCtrlParams
     // ---- 共轴双桨 VTVL 机型参数（2026-10-30；仅 BFS_COAXIAL_VTVL 分支消费）----
     CoaxialCtrlParams coax;           // 控制律 + 物理/输出常量（默认 = 原硬编码）
     // ---- 单涵道 + X 型四燃气舵机型参数（2026-11-05；仅 BFS_SINGLE_EDF_4VANE 分支消费）----
-    // ★ 可经 AnoCom 0xE1 在线读写（20 项，见 BFS_SINGLE_EDF_PARAM_LIST）；
+    // ★ 可经 AnoCom 0xE1 在线读写（21 项，见 BFS_SINGLE_EDF_PARAM_LIST）；
     //   混控器每拍从 kFlightCtrlParams.single_edf 读取，写入即生效。
     SingleEdf4VaneHwParams single_edf; // 质量/推力/舵角/舵效/惯量/PWM/联锁阈值
 };
