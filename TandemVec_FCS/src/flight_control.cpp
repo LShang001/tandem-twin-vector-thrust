@@ -1663,8 +1663,11 @@ void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Q
       q_target = {AHRS_Packet.Qw, AHRS_Packet.Qx, AHRS_Packet.Qy, AHRS_Packet.Qz};
 
       // 目标姿态保持当前实际姿态，因为角速度模式下不使用姿态角控制
-      rollTarget = AHRS_Packet.Roll;
-      pitchTarget = AHRS_Packet.Pitch;
+      // ★ 2026-11-06 审计修复：rollTarget/pitchTarget 是 deg 口径（下游按
+      //   *DEG_TO_RAD 使用、0x0A 帧按 0.01° 发送），AHRS_Packet 是 rad，
+      //   直接赋值会让遥测/黑匣子角度小 57.3 倍。
+      rollTarget = AHRS_Packet.Roll * RAD_TO_DEG;
+      pitchTarget = AHRS_Packet.Pitch * RAD_TO_DEG;
     }
   }
 
@@ -2863,10 +2866,13 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   // 手动模式（RATE/ATTITUDE）不再因姿态角切电机：风扰/特技姿态超过 45°
   // 不应直接断动力。AUTO/GUIDED 仍保留较高的保护角（默认 90°）。
   const bool manual_mode = (mode == MANUAL);
+  // ★ 2026-11-06 审计修复：AHRS_Packet.Roll/Pitch 单位是 rad（deta100_types.h），
+  //   coax.attitude_limit_deg 是 deg（默认 90）。原先直接比较，|rad| ≤ 3.14 恒小于 90，
+  //   该保护永不触发——AUTO/GUIDED 下姿态超限切电机的安全门形同虚设。先转 deg 再比。
   output_in.attitude_safe =
       manual_mode ||
-      (fabsf(AHRS_Packet.Roll) < coax.attitude_limit_deg &&
-       fabsf(AHRS_Packet.Pitch) < coax.attitude_limit_deg);
+      (fabsf(AHRS_Packet.Roll * RAD_TO_DEG) < coax.attitude_limit_deg &&
+       fabsf(AHRS_Packet.Pitch * RAD_TO_DEG) < coax.attitude_limit_deg);
 
   bfs::CoaxialVtvOutputCalibration output_cal;
   output_cal.servo_half_angle_deg = coax.servo_half_angle_deg;
