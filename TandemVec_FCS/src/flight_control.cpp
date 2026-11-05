@@ -3137,6 +3137,29 @@ void runGNCExecutive()
   // 步骤 1: 处理遥控输入、开关状态，并处理解锁时的原点设置
   process_control_inputs(controller_inputs);
 
+#ifdef BFS_SINGLE_EDF_BENCH_AUTONOMY
+  // ★ 台架专用旁路（编译期开关，默认不编译）：遥控器 CH5–CH8 全部无效（<900，
+  //   典型是 CRSF 未配置通道时的 999）时，把输入强制成"已解锁 + 自动舵"，
+  //   用于地面验证姿态闭环与舵面修正方向——不需要先修好遥控器通道。
+  //   安全边界：
+  //     ① 只有 CH5–CH8 **全部**无效才生效；任一个通道恢复有效即自动退出旁路；
+  //     ② 推进器油门仍按原始输入联锁（CH6 无效 → ignition_enabled=false → 最低油门），
+  //        不会因为旁路而意外出推力；
+  //     ③ 实飞前必须关闭本宏，否则等于绕过解锁开关。
+  if (raw_rc_values[4] < 900 && raw_rc_values[5] < 900 &&
+      raw_rc_values[6] < 900 && raw_rc_values[7] < 900)
+  {
+    static bool s_bench_mode_warned = false;
+    if (!s_bench_mode_warned)
+    {
+      s_bench_mode_warned = true;
+      Serial8.println("[BENCH] CH5-CH8 invalid -> force UNLOCKED + AUTO (bench only)");
+    }
+    controller_inputs.is_unlocked = true;
+    controller_inputs.is_manual_tvc = false;
+  }
+#endif
+
   // 步骤 2: 决定当前飞行模式，并处理GUIDED模式的超时故障保护
   ControlMode current_mode = determine_control_mode(controller_inputs);
   g_current_flight_mode = current_mode; // 暴露到全局供 handleAnoCom 遥测发送

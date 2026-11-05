@@ -2489,7 +2489,18 @@ static void debugVanesCmd(Uart &serial)
   serial.print(F(" link="));
   serial.print(isLinkUp ? 1 : 0);
   serial.print(F(" manual_tvc="));
-  serial.println(raw_rc_values[7] < 1200 ? 1 : 0);
+  // ★ 固件判据是“高位=手动”（CH8 > 1750），不是低位；此处与 process_control_inputs 对齐
+  serial.println(isLinkUp && (raw_rc_values[7] > 1750) ? 1 : 0);
+
+  // 首次解锁门的四个前置条件（nav_ready），用于定位“拨了解锁但不解锁”
+  serial.print(F("[DBG] nav_ready conv="));
+  serial.print(g_ekf_converged ? 1 : 0);
+  serial.print(F(" init="));
+  serial.print(nav_system_initialized ? 1 : 0);
+  serial.print(F(" speed="));
+  serial.print(nav_ekf.ned_vel_mps().norm(), 3);
+  serial.print(F(" tilt_sig="));
+  serial.println(g_nav_tilt_sigma_deg, 2);
 
   serial.print(F("[DBG] vane pct="));
   serial.print(ch1_output, 2);

@@ -310,6 +310,28 @@ struct FlightCtrlParams
 #define BFS_RATE_ROLL_DEFAULT {6.168f, 1.974f, 0.0f, -4.306f, 4.306f, 123.4f, 60.0f, 0.2f, true}
 #define BFS_RATE_PITCH_DEFAULT {6.168f, 1.974f, 0.0f, -4.306f, 4.306f, 123.4f, 60.0f, 0.2f, true}
 #define BFS_RATE_YAW_DEFAULT  {0.00272f, 0.02149f, 0.0f, -0.129f, 0.129f, 0.0358f, 40.0f, 0.2f, true}
+#elif defined(BFS_SINGLE_EDF_4VANE)
+// ============================================================
+//  单涵道 + X 型四燃气舵：按源机型 Universal-EDF 的等效增益折算
+// ------------------------------------------------------------
+//  源机型控制律输出的是**舵角**（deg）：rate kp=0.25（deg per deg/s，
+//  即角速率误差 1°/s → 0.25° 舵偏；att kp=4.25）。
+//  本固件控制层输出**角加速度** α，经 allocator 换算：
+//      δ[rad] = I·α[rad/s²] / (4k)，I=0.02 kg·m²、k=0.02 N·m/deg
+//             ⇒ δ[deg] ≈ 0.00436 · α[deg/s²]
+//  要让闭环响应与源一致（δ = 0.25·rate_err），需
+//      α = 0.25/0.00436 · rate_err = 57.3 · rate_err  ⇒ kp_rate = 57.3 s⁻¹
+//      ki_rate = 0.08/0.00436 = 18.3 s⁻²（源连续域 ki=0.08）
+//  ★ 这组数值随 I/k 的标定值变化：I 或 k 实测更新后必须同步重算本组
+//    （公式写在这里，不把数字当物理常量）。
+//  ★ 输出限幅仍取 ±5729.578 deg/s²（与纵列同量纲上限），由 allocator 的
+//    联合限幅兜底，不会因增益变大而打满舵机。
+#define BFS_ATT_ROLL_DEFAULT  {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
+#define BFS_ATT_PITCH_DEFAULT {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
+#define BFS_ATT_YAW_DEFAULT   {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
+#define BFS_RATE_ROLL_DEFAULT {57.3f, 18.3f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
+#define BFS_RATE_PITCH_DEFAULT {57.3f, 18.3f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
+#define BFS_RATE_YAW_DEFAULT  {11.459156f, 4.297184f, 0.0f, -5729.578f, 5729.578f, 1145.9156f, 60.0f, 0.2f, true}
 #else
 #define BFS_ATT_ROLL_DEFAULT  {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_PITCH_DEFAULT {2.8f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
