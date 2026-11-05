@@ -228,19 +228,28 @@ void process_control_inputs(ControlInputs_t &inputs)
   // 只在“地面已锁定 -> 请求解锁”沿生效；已解锁后不强制上锁，避免空中误锁。
   // SIL 直接构造飞行状态、不等 6 s 收敛，故测试构建旁路该门；飞行构建保留。
 #ifndef FW_SIL_REAL_NAV
-  if (!g_is_unlocked && inputs.is_unlocked)
+  // ★ 2026-11-05：空中误上锁必须能立刻重新解锁（用户要求）。
+  //   一旦本次上电成功解锁过（含起飞后），后续所有重新解锁都**不再走首次解锁门**——
+  //   空中上锁时飞机已在飞，EKF 状态可能因机动/失锁暂时不满足门控条件，
+  //   此时拒绝解锁会让人失去控制通道，比放行危险得多。
+  //   首次解锁（上电后第一次）仍保留门控，防止地面 EKF 未就绪就起飞。
+  static bool s_has_armed_once = false;
+  if (!g_is_unlocked && inputs.is_unlocked && !s_has_armed_once)
   {
-    const float ekf_speed = nav_ekf.ned_vel_mps().norm();
-    // 无GNSS允许解锁并退化到姿态模式（无定点）；但飞行中首次GNSS不得硬重锚。
-    // 重锚推迟到上锁后（见 navigation_task.cpp），避免位置/速度突变。
-    const bool nav_ready =
-        g_ekf_converged && nav_system_initialized &&
-        std::isfinite(ekf_speed) && ekf_speed < 1.0f &&
-        std::isfinite(g_nav_tilt_sigma_deg) && g_nav_tilt_sigma_deg < 5.0f;
+    // ★ 2026-11-05 用户要求：**去掉加速度（静止速度）与倾角 σ 限制**。
+    //   原设计四项：EKF 收敛 / 系统初始化 / 静止速度 <1 m/s / 倾角 σ <5°。
+    //   地面调试阶段后两项会因手持/倾斜箭体持续不满足而拒绝解锁，现只保留
+    //   系统就绪两项（EKF 已收敛 + 导航系统已初始化）。
+    //   恢复方法：把 nav_ready 改回四项表达式（原式见 git 历史 4dadd75 之前）。
+    const bool nav_ready = g_ekf_converged && nav_system_initialized;
     if (!nav_ready)
     {
       inputs.is_unlocked = false;
     }
+  }
+  if (inputs.is_unlocked)
+  {
+    s_has_armed_once = true;
   }
 #endif
 
