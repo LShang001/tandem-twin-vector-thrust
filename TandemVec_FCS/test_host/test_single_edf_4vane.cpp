@@ -73,13 +73,13 @@ int main()
   p.inertia_yaw_kgm2 = 0.03f;
 
   // ---- P2：单轴 α → 四舵偏角解析值 ----
-  // 滚转：τx=Ix·α=0.02 ⇒ d=τ/(4k)=0.25° ⇒ δ=Mx 行·0.25 = (+,−,+,−)
+  // 滚转：τx=+Ix·α=0.02 ⇒ d=τ/(4k)=0.25° ⇒ δ=roll 行·0.25 = (−,+,+,−)
   {
     bfs::SingleEdf4VaneAllocationInput in;
     in.alpha_roll_radps2 = 1.0f;
     const auto out = bfs::allocateSingleEdf4Vane(in, p);
     CHECK(out.valid, "P2 滚转输入有效");
-    CHECK(near(out.vane_deg[0], 0.25f) && near(out.vane_deg[1], -0.25f) &&
+    CHECK(near(out.vane_deg[0], -0.25f) && near(out.vane_deg[1], 0.25f) &&
               near(out.vane_deg[2], 0.25f) && near(out.vane_deg[3], -0.25f),
           "P2 滚转 α=1 的四舵偏角解析值");
     CHECK(!out.saturated, "P2 小指令不触发联合限幅");
@@ -94,15 +94,15 @@ int main()
               near(out.vane_deg[2], -0.25f) && near(out.vane_deg[3], -0.25f),
           "P2 俯仰 α=1 的四舵偏角解析值");
   }
-  // 偏航：τz=Iz·α=0.03 ⇒ d=0.375° ⇒ δ=Mz 行·0.375 = (+,−,−,+)
+  // 偏航：τz=−Iz·α=−0.03（机型知识：yaw 取反）⇒ d=−0.375° ⇒ δ=yaw 行·(−0.375) = (−,+,−,+)
   {
     bfs::SingleEdf4VaneAllocationInput in;
     in.alpha_yaw_radps2 = 1.0f;
     const auto out = bfs::allocateSingleEdf4Vane(in, p);
-    CHECK(near(out.vane_deg[0], 0.375f) && near(out.vane_deg[1], -0.375f) &&
+    CHECK(near(out.vane_deg[0], -0.375f) && near(out.vane_deg[1], 0.375f) &&
               near(out.vane_deg[2], -0.375f) && near(out.vane_deg[3], 0.375f),
           "P2 偏航 α=1 的四舵偏角解析值（对角分组）");
-    CHECK(near(out.torque_cmd_nm[2], 0.03f), "P2 偏航力矩 = Iz·α");
+    CHECK(near(out.torque_cmd_nm[2], -0.03f), "P2 偏航力矩 = −Iz·α（yaw 轴取反）");
   }
 
   // ---- P3：联合等比限幅（三轴同时给大指令，方向不畸变、幅值到满偏）----
@@ -117,13 +117,13 @@ int main()
     {
       peak = std::fmax(peak, std::fabs(out.vane_deg[i]));
     }
-    // 解析：τ=(Ix·40, Iy·40, Iz·40)=(0.8,0.8,1.2)；d=τ/(4k)=(10,10,15)；
-    // δ_raw = (+35, −15, −15, −5)；peak=35 ⇒ scale=20/35
+    // 解析：τ=(0.8, 0.8, −1.2)；d=τ/(4k)=(10,10,−15)；
+    // δ_raw = (−15, +35, −15, −5)；peak=35 ⇒ scale=20/35
     const float scale = 20.0f / 35.0f;
     CHECK(out.saturated, "P3 大指令触发联合限幅");
     CHECK(near(peak, 20.0f, 1.0e-3f), "P3 限幅后最大舵角恰为满偏角");
-    CHECK(near(out.vane_deg[0], 35.0f * scale, 1.0e-3f) &&
-              near(out.vane_deg[1], -15.0f * scale, 1.0e-3f) &&
+    CHECK(near(out.vane_deg[0], -15.0f * scale, 1.0e-3f) &&
+              near(out.vane_deg[1], 35.0f * scale, 1.0e-3f) &&
               near(out.vane_deg[2], -15.0f * scale, 1.0e-3f) &&
               near(out.vane_deg[3], -5.0f * scale, 1.0e-3f),
           "P3 联合等比缩放后的四舵解析值");
@@ -164,7 +164,7 @@ int main()
     bfs::SingleEdf4VaneAllocationInput in; // 三轴 α 全 0
     const auto out = bfs::allocateSingleEdf4Vane(in, trimmed);
     CHECK(near(out.vane_deg[0], 5.0f) && near(out.vane_deg[1], -5.0f) &&
-              near(out.vane_deg[2], -5.0f) && near(out.vane_deg[3], 5.0f),
+              near(out.vane_deg[2], 5.0f) && near(out.vane_deg[3], -5.0f),
           "P6 配平角按偏航行分布到四舵");
     CHECK(near(out.torque_cmd_nm[0], 0.0f) && near(out.torque_cmd_nm[1], 0.0f),
           "P6 配平不产生滚转/俯仰力矩指令");

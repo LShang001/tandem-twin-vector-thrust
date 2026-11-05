@@ -2493,32 +2493,12 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
   }
   else
   {
-    // 姿态闭环（自动舵）：α → 等效舵角需求 → **与手动直通同一张源矩阵**。
-    // ★ 2026-11-05 第二次修正：原实现走 allocator 的"τ=I·α → H_存档系"路径，
-    //   力矩轴与源机型的通道轴相差 90°，实机看到自动修正方向与打杆方向相反。
-    //   现改为：α 按"满 α 对应满舵角"归一化后，直接进手动那张源矩阵——
-    //   手动打杆与自动修正的通道→舵面映射完全一致（同一张表、同一限幅）。
-    //   α 满量程取速率环输出限幅 5729.578 deg/s²（与 PID 默认值同源）。
-    const float alpha_to_deg = P.vane_max_deg / 5729.578f;
-    // ★ 2026-11-05 第三次修正（实机）：俯仰/横滚方向已正确，仅“绕中轴自旋”（yaw）
-    //   修正方向反。原因是纵列的 alpha_yaw 定义在存档系 z_b（悬停时指地）上，
-    //   其正方向与“右打偏航 = 正”的摇杆/通道约定相反；手动直通用的是摇杆符号
-    //   （已验证正确），因此自动路径的 yaw 分量需要取反，才能与手动通道一致。
-    const float alpha_deg[3] = {
-        outputs.alpha_roll_radps2 * RAD_TO_DEG * alpha_to_deg,
-        outputs.alpha_pitch_radps2 * RAD_TO_DEG * alpha_to_deg,
-        -outputs.alpha_yaw_radps2 * RAD_TO_DEG * alpha_to_deg,
-    };
-    alloc_in.direct_vane_enabled = true;
-    for (uint8_t i = 0; i < bfs::kSingleEdfVaneCount; ++i)
-    {
-      float sum = 0.0f;
-      for (uint8_t j = 0; j < 3; ++j)
-      {
-        sum += bfs::kSingleEdf4VaneManualMatrix[j][i] * alpha_deg[j];
-      }
-      alloc_in.direct_vane_deg[i] = sum;
-    }
+    // 姿态闭环（自动舵）：**内环统一输出目标角加速度 α**，与纵列/共轴同一契约；
+    // 机型差异全部由 SingleEdf4VaneAllocator 按机型参数（I、k、满舵角、矩阵、
+    // 逐舵方向、yaw 轴正方向）换算成四舵偏角——flight_control 只负责分派。
+    alloc_in.alpha_roll_radps2 = outputs.alpha_roll_radps2;
+    alloc_in.alpha_pitch_radps2 = outputs.alpha_pitch_radps2;
+    alloc_in.alpha_yaw_radps2 = outputs.alpha_yaw_radps2;
   }
 
   const bfs::SingleEdf4VaneAllocationOutput alloc =

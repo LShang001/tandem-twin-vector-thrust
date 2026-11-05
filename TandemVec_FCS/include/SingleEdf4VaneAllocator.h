@@ -50,52 +50,38 @@ namespace bfs
 constexpr uint8_t kSingleEdfVaneCount = 4;
 
 /**
- * @brief 自动模式分配矩阵 H（行 = 存档系三轴力矩 Mx/My/Mz，列 = 舵1..舵4）
- * @details 源机型 Universal-EDF 的实测矩阵按源轴序 roll/pitch/yaw = 绕 x/y/z_EDF：
- *            roll_EDF  = [−1, +1, +1, −1]
- *            pitch_EDF = [+1, +1, −1, −1]
- *            yaw_EDF   = [+1, −1, +1, −1]
- *          本固件存档系与源 FRD 的关系（模型系右手：x'=前、y'=右、z'=z_FRD）：
- *            x_b = z_EDF、y_b = y_EDF、z_b = −x_EDF  （det = +1）
- *          力矩分量随轴同向/反向同步：
- *            Mx（绕 x_b） = +τ_z_EDF = +yaw_EDF   → [+1, −1, +1, −1]
- *            My（绕 y_b） = +τ_y_EDF = +pitch_EDF → [+1, +1, −1, −1]
- *            Mz（绕 z_b） = −τ_x_EDF = −roll_EDF  → [+1, −1, −1, +1]
- *          行两两内积为 0（行正交），故三轴可独立分配、互不耦合。
- *          **★ 2026-11-05 修正**：原实现把 Mx 写成 −yaw_EDF、Mz 写成 +roll_EDF，
- *          即把"换轴"当成了"换符号"，导致滚转/偏航两轴的舵面摆动方向反了
- *          （用户实机打杆发现）。分组不变（{1,3}vs{2,4} / {1,4}vs{2,3}），只是极性。
- *          四舵在存档系的方位：舵1 (+x_b,+y_b)、舵2 (−x_b,+y_b)、舵3 (−x_b,−y_b)、
- *          舵4 (+x_b,−y_b)——飞控与传感器安装与共轴 VTVL 完全一致（用户 2026-11-05
- *          确认，同机体同安装）。对应分组：俯仰 {1,2}vs{3,4}、滚转 {1,4}vs{2,3}、
- *          偏航 {1,3}vs{2,4}（源机型台架实测 2026-09-23）。
- *          ★ 该置换只保证"轴语义对齐"，不保证实物符号；实物符号由 vane_dir 标定。
- * @ref   Universal-EDF `docs/修改方案-单涵道四燃气舵构型.md` §4.1（台架实测矩阵）；
- *        TandemVec_FCS `AGENTS.md` §坐标系与执行器（存档系 z_b=推力轴）
+ * @brief 机型分配矩阵 H（行 = 本机型三轴力矩 roll/pitch/yaw，列 = 舵1..舵4）
+ * @details **架构定位**：本固件所有机型统一为“内环输出目标角加速度 α → 机型分配器
+ *          按机型参数与执行机构特性换算控制量”。本文件就是单涵道机型的那个换算层：
+ *              τ = I · α                         （动力学：力矩需求）
+ *              δ = Hᵀ · τ / (4k)                 （执行机构：四舵偏角，k=单舵舵效）
+ *              max|δ| > δ_max 时整体等比缩放      （联合限幅，方向不畸变）
+ *          H 与源机型 Universal-EDF 混控器**逐字一致**（其台架实测矩阵）：
+ *            roll  = [−1, +1, +1, −1]   （绕推力轴）
+ *            pitch = [+1, +1, −1, −1]
+ *            yaw   = [+1, −1, +1, −1]
+ *          **★ 机型知识（与纵列存档系的差异，很重要）**：
+ *            本机型的 roll 轴是“绕推力轴”（源机型语义），而纵列共轴机型的 roll 是
+ *            绕存档系 x_b（横向倾覆轴）——两者不是同一根轴。因此这里**不做存档系
+ *            轴置换**，直接把控制层 alpha_roll/pitch/yaw 当作本机型三轴力矩需求，
+ *            与源机型混控器一字不差地分配。实物验证（2026-11-05）：手动直通与自动
+ *            修正的方向均与源固件一致；仅 alpha_yaw 的正方向与“右打偏航=正”相反，
+ *            需在力矩换算时取反（见 allocateSingleEdf4Vane 的 torque[2]）。
+ * @ref   Universal-EDF `docs/修改方案-单涵道四燃气舵构型.md` §4.1（台架实测矩阵）
  */
 static constexpr float kSingleEdf4VaneMatrix[3][kSingleEdfVaneCount] = {
-    {+1.0f, -1.0f, +1.0f, -1.0f}, // Mx 滚转（绕 x_b）= +τ_z_EDF = +yaw_EDF 行
-    {+1.0f, +1.0f, -1.0f, -1.0f}, // My 俯仰（绕 y_b）= +τ_y_EDF = +pitch_EDF 行
-    {+1.0f, -1.0f, -1.0f, +1.0f}, // Mz 偏航（绕 z_b）= −τ_x_EDF = −roll_EDF 行
+    {-1.0f, +1.0f, +1.0f, -1.0f}, // roll（绕推力轴）
+    {+1.0f, +1.0f, -1.0f, -1.0f}, // pitch
+    {+1.0f, -1.0f, +1.0f, -1.0f}, // yaw
 };
 
 /**
- * @brief 手动/地面标定直通用的源机型矩阵（行 = 源 roll/pitch/yaw 通道）
- * @details 与源机型混控器**逐字一致**（`airframe_mixer_single_edf_4vane.cpp`）：
- *            defl1 = −roll + pitch + yaw
- *            defl2 = +roll + pitch − yaw
- *            defl3 = +roll − pitch + yaw
- *            defl4 = −roll − pitch − yaw
- *          用途：CH1/CH2/CH4 摇杆直通时，舵面摆动与源固件完全一致（用户按源固件调试
- *          手册核对），不经过存档系轴置换——这样"打杆看到的动作"可逐项对照源工程。
- *          ★ 自动模式仍用上面的 kSingleEdf4VaneMatrix（α 是存档系角加速度，力矩轴
- *          必须按存档系分配）；两套矩阵的分组相同、仅轴标签与极性不同。
+ * @brief 手动/地面标定直通用的矩阵别名（与上面同一张表）
+ * @note  手动直通把摇杆直接解释成三轴“角度需求”，自动模式把 α 换算成“力矩需求”；
+ *        两者走同一张 H、同一套限幅与逐舵方向符号，保证“打杆看到的动作”与
+ *        “自动修正的动作”方向一致（2026-11-05 用户实机逐项核对通过）。
  */
-static constexpr float kSingleEdf4VaneManualMatrix[3][kSingleEdfVaneCount] = {
-    {-1.0f, +1.0f, +1.0f, -1.0f}, // 源 roll（绕 x_EDF）
-    {+1.0f, +1.0f, -1.0f, -1.0f}, // 源 pitch（绕 y_EDF）
-    {+1.0f, -1.0f, +1.0f, -1.0f}, // 源 yaw（绕 z_EDF）
-};
+static constexpr auto &kSingleEdf4VaneManualMatrix = kSingleEdf4VaneMatrix;
 
 /**
  * @brief 结构体说明：单涵道机型的可标定参数（由 FlightCtrlParams 提供实例）
@@ -227,11 +213,13 @@ allocateSingleEdf4Vane(const SingleEdf4VaneAllocationInput &in,
         return out;
     }
 
-    // ---- 1) α → 三轴力矩（存档系，τ = I·α）----
+    // ---- 1) α → 三轴力矩（本机型轴语义，τ = I·α）----
+    // ★ 机型知识：本机型 yaw（绕中轴自旋）的正方向与“右打偏航=正”的通道约定相反，
+    //   力矩取反后才能与手动直通的手感/方向一致（2026-11-05 实机逐项核对）。
     const float torque[3] = {
         p.inertia_roll_kgm2 * in.alpha_roll_radps2,
         p.inertia_pitch_kgm2 * in.alpha_pitch_radps2,
-        p.inertia_yaw_kgm2 * in.alpha_yaw_radps2,
+        -p.inertia_yaw_kgm2 * in.alpha_yaw_radps2,
     };
     out.torque_cmd_nm[0] = torque[0];
     out.torque_cmd_nm[1] = torque[1];
