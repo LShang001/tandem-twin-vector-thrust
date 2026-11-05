@@ -254,20 +254,6 @@ const char *anoParamNameAt(uint16_t id)
     return e ? e->name : nullptr;
 }
 
-int16_t anoParamIdByName(const char *name)
-{
-    if (!name)
-        return -1;
-    for (uint16_t i = 0; i < ANO_PARAMS_COUNT; i++)
-    {
-        // ★ MAVLink param_id 是截断 15B 的名称——按前缀匹配即可
-        // （截断唯一性已核实：int_lim vs thresho 第 2 字符即不同）
-        if (strncmp(kAnoParams[i].name, name, 16) == 0)
-            return (int16_t)i;
-    }
-    return -1;
-}
-
 bool anoParamReadFloat(uint16_t id, float *out)
 {
     const AnoParamEntry *e = anoParamAt(id);

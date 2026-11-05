@@ -65,9 +65,6 @@ uint16_t anoParamCount();
 // 参数线上名（≤20B，MAVLink 侧截断 15B 使用）
 const char *anoParamNameAt(uint16_t id);
 
-// 按线上名查 ID（返回 -1 未找到；MAVLink 用截断名匹配）
-int16_t anoParamIdByName(const char *name);
-
 // 读参数值（统一 float；无效 ID 返回 0 且 ok=false）
 bool anoParamReadFloat(uint16_t id, float *out);
 

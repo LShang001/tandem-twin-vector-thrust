@@ -38,7 +38,6 @@ def test_param_count_matches_firmware():
                               'hdg_mode', 'hdg_align', 'gnss_lever_x',
                               'gnss_lever_y', 'gnss_lever_z']
     # ★ 2026-10-30 共轴双桨 VTVL：名称/顺序 = 固件 BFS_COAX_PARAM_LIST
-    # ★ 2026-10-30 共轴双桨 VTVL：名称/顺序 = 固件 BFS_COAX_PARAM_LIST
     assert names[133:148] == [
         'coax.max_corr_deg', 'coax.max_yaw_us', 'coax.mass_kg',
         'coax.max_thrust_n', 'coax.servo_half_deg', 'coax.motor_min_us',
@@ -320,3 +319,33 @@ def test_param_name_to_id_mapping():
     assert names.index('sedf.mass_kg') == 148
     assert names.index('sedf.vane_dir1') == 156
     assert names.index('sedf.dt_s') == 167
+
+
+def test_single_edf_param_envelope():
+    """单涵道 20 项参数：meta 齐全、包线有效、固件默认值都能被 GCS 写回。
+
+    ★ 固件只拒 NaN/Inf、**不做 min/max 校验**；GCS 的 param set 按 meta 包线拦截。
+    若包线写窄到装不下固件默认值，param restore/load 会把固件自己的默认值拒掉——
+    本测试防这个（默认值取自 include/FlightCtrlParams.h::SingleEdf4VaneHwParams）。
+    """
+    defaults = {
+        'sedf.mass_kg': 1.15, 'sedf.max_thrust_n': 35.0,
+        'sedf.vane_max_deg': 20.0, 'sedf.vane_moment': 0.02,
+        'sedf.inertia_roll': 0.02, 'sedf.inertia_pitch': 0.02,
+        'sedf.inertia_yaw': 0.03, 'sedf.yaw_trim_deg': 0.0,
+        'sedf.vane_dir1': 1.0, 'sedf.vane_dir2': -1.0,
+        'sedf.vane_dir3': 1.0, 'sedf.vane_dir4': -1.0,
+        'sedf.vane_center': 50.0, 'sedf.vane_span': 16.67,
+        'sedf.vane_min_pct': 33.33, 'sedf.vane_max_pct': 66.66,
+        'sedf.thr_min_us': 1000.0, 'sedf.thr_max_us': 2000.0,
+        'sedf.att_limit_deg': 45.0, 'sedf.dt_s': 0.005,
+    }
+    names = [n for n, _u, _lo, _hi, _st, _d in pm.SINGLE_EDF_PARAMS]
+    assert names == list(defaults.keys()), '参数名/顺序与固件注册表不一致'
+    for name, unit, lo, hi, step, desc in pm.SINGLE_EDF_PARAMS:
+        meta = pm.meta_for(name)
+        assert meta is not None and meta['group'] == '单涵道'
+        assert lo < hi and step > 0
+        assert desc, f'{name} 缺少说明'
+        assert lo <= defaults[name] <= hi, (
+            f'{name} 默认值 {defaults[name]} 不在包线 [{lo},{hi}]——固件默认值会被 GCS 拒写')

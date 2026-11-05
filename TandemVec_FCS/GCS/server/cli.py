@@ -305,8 +305,26 @@ def _param_set(spec, value, mode, use_json=False):
     写入实际生效但确认帧没抓到）。set 与 verify 都加写后读回验证：
       set    确认帧 或 读回相符 任一即判成功（读回更权威）
       verify 写前读 → 写 → 写后读 三态报告（链路诊断）
+    ★ 2026-11-05 增范围校验（GCS 侧护栏）：固件只拒 NaN/Inf、**不做 min/max 检查**，
+    超范围值会真的写进 RAM 并立刻生效（如 sedf.vane_max_deg=1000 会改变控制权限）。
+    meta 里登记了 min/max 的参数一律先校验；未登记的参数放行（以固件为准）。
     """
     pid = _param_id_of(spec)
+    names = pm.expected_names()
+    meta_name = spec if isinstance(spec, str) else (
+        names[pid] if 0 <= pid < len(names) else '')
+    meta_pre = pm.meta_for(meta_name) or {}
+    if meta_pre and 'min' in meta_pre and 'max' in meta_pre:
+        try:
+            want = float(value)
+        except (TypeError, ValueError):
+            print(f'✗ {spec} 需要数值，收到 {value!r}')
+            sys.exit(1)
+        if want < float(meta_pre['min']) or want > float(meta_pre['max']):
+            print(f'✗ {spec} = {want} 超出允许范围 '
+                  f'[{meta_pre["min"]}, {meta_pre["max"]}] {meta_pre.get("unit", "")}'
+                  f'——固件不做范围校验，越界会立刻生效，已拦截')
+            sys.exit(1)
     # 先取名称/类型（E2），确认 float/uint8——重试（丢帧/时序）
     info = {}
     for _ in range(3):
