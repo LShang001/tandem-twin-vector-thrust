@@ -10,7 +10,9 @@
 #define ANO_MAX_DATA_LEN 256
 
 // 定义硬件地址 (根据需要修改)
-#define ANO_LOCAL_ADDR 0x05       // 本机地址 (飞控)
+#ifndef ANO_LOCAL_ADDR
+#define ANO_LOCAL_ADDR 0x0A
+#endif       // 本机地址 (飞控)
 #define ANO_GND_STATION_ADDR 0xFF // 地面站地址
 
 // 定义功能码 (根据协议文档定义所有功能码)
