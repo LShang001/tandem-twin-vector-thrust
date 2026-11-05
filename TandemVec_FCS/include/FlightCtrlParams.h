@@ -159,7 +159,11 @@ struct SingleEdf4VaneHwParams
     float vane_max_pct = 66.66f;            // 舵机占空比硬上限 [%]
     float thruster_min_us = 1000.0f;        // 推进器最低油门脉宽 [µs]（0% 出力）
     float thruster_max_us = 2000.0f;        // 推进器满油门脉宽 [µs]
-    float attitude_limit_deg = 45.0f;       // 大倾角切推进阈值 [deg]
+    // 大倾角切推进阈值 [deg]：
+    // ★ 2026-11-05 用户要求：45° 太保守，大机动/翻跟头时一超就切推力反而危险。
+    //   放宽到 120°——只有明显倒扣才切；要完全关闭就在上位机设 180
+    //   （门控写作 `tilt <= limit`，180° 恒成立）。
+    float attitude_limit_deg = 120.0f;
     float dt_s = 0.005f;                    // 控制周期 [s]（200Hz）
 };
 
@@ -178,8 +182,8 @@ static_assert(kSingleEdf4VaneHwParamsDefaults.vane_min_pct == 33.33f &&
 static_assert(kSingleEdf4VaneHwParamsDefaults.thruster_min_us == 1000.0f &&
                   kSingleEdf4VaneHwParamsDefaults.thruster_max_us == 2000.0f,
               "推进器脉宽默认值必须保持 1000–2000µs");
-static_assert(kSingleEdf4VaneHwParamsDefaults.attitude_limit_deg == 45.0f,
-              "大倾角切推进阈值默认值必须保持 45deg");
+static_assert(kSingleEdf4VaneHwParamsDefaults.attitude_limit_deg == 120.0f,
+              "大倾角切推进阈值默认值必须保持 120deg（用户 2026-11-05 要求放宽，可在线调至 180 关闭）");
 
 /**
  * @brief 单涵道机型参数注册表顺序（单一事实源：ano_params.cpp 与 host 测试共用）
