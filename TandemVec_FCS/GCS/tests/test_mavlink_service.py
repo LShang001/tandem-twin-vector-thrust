@@ -186,12 +186,29 @@ def test_mission_count_zero():
     assert svc.snap['mission_count'] == 0
 
 
+def _count_v2_frames(buf: bytes) -> int:
+    """按 MAVLink v2 帧结构计数（0xFD + LEN + 4 头 + 3 msgid + payload + 2 CRC）。
+
+    直接 buf.count(b'\xfd') 会把 payload 里恰好等于 0xFD 的字节也算进去，
+    导致本测试随 timesync 时间戳取值偶发失败（2026-11-05 实测）。
+    """
+    n = 0
+    i = 0
+    while i + 10 <= len(buf):
+        if buf[i] == 0xFD:
+            n += 1
+            i += 10 + buf[i + 1] + 2
+        else:
+            i += 1
+    return n
+
+
 def test_ping_and_timesync_tx():
     svc = MavlinkService()
     svc.ping(7)
     svc.timesync()
     tx = svc.drain_tx()
-    assert tx.count(b'\xfd') == 2
+    assert _count_v2_frames(tx) == 2
     assert len(tx) >= 20
 
 
