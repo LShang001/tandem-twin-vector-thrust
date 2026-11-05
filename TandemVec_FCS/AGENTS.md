@@ -171,6 +171,11 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 ## 仓库卫生
 
 - 改前后 `git status --short`；提交前 `git diff --check`。
+- **动仓库前先 `git fetch` 比对 `origin/main`**（revo 与 magicbook 两会话共用本仓库）。
+  远端领先时用 `git show --stat` 逐个看过再 `merge --ff-only`；禁止 `push --force`
+  与 `reset --hard origin/main`。完整规范见根 `AGENTS.md` §多会话并发与变更联动规范。
+- 改机型默认值/参数数量时，按根 `AGENTS.md` 的联动清单同步宿主测试、GCS 参数表与文档，
+  并跑全量 `test_host/run_all.sh`（2026-11-06 曾因只跑单文件漏改 P10 断言）。
 - `.pio/`、`compile_commands.json`、本地 VS Code 索引/调试产物不提交。
 - 上下文文件不改成参数流水账。
 - COM 口独占：`pio device monitor` 加 timeout；PowerShell 串口脚本 `try/finally` + `ReadTimeout=500ms`。

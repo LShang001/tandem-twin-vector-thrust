@@ -108,6 +108,55 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 - **仿真可视化**：每组仿真结果至少配时序 / 3D 轨迹 / 分布（箱线或小提琴）/ CDF / 散点或热图；脚本统一 `sim/plot_*.py`，生成后逐张目视审查再写结论（图内文字、坐标尺度、NaN/空图都要查）
 - **PDF 必须先经 MinerU 转换**（2026-11-01 用户要求）：所有 PDF（器件手册、论文、标准）入库或阅读前统一 `mineru parse <pdf> --tier standard`，转换产物（paper.md）入 `docs/08-参考资料/papers/REF-xxx/` 并在 manifest 注明 `converter=MinerU`；禁止用 pypdf/pdftotext 直读作为正式入库文本（临时 grep 可，但不得作为交付/引用依据）。注意首次需 `mineru server start` 并等引擎预热（engine_unavailable 时等 15–30 s 重试）；**扫描件/影印书/低质量 PDF 用 `--tier advanced`**（普通电子版 PDF 用 standard），并在 notes/manifest 注明所选 tier。
 
+## 多会话并发与变更联动规范（2026-11-06）
+
+> 背景：revo 主力机与 magicbook 上各有一个 agent 会话，共用同一个 GitHub 仓库。2026-11-06 凌晨，
+> 本地准备推送 README 时远端已有另一会话的 `704c655`（修 `test_single_edf_4vane` P10 断言与
+> GCC15 `normal_distribution(0,0)` 中止问题）。后知后觉才发现：它补的两处正是前者改默认值时
+> 漏改的。教训不是"运气好"，而是流程缺失。
+
+### 开工三步（动仓库前必做）
+
+```bash
+git -c http.proxy=http://127.0.0.1:7897 fetch origin
+git status --short                      # 有未提交改动先确认归属
+git log --oneline HEAD..origin/main     # 远端领先的提交，逐个 git show 看过再合
+git merge --ff-only origin/main         # 本地无新提交时
+```
+
+- 远端领先时**禁止** `git reset --hard origin/main`（丢弃本地未推提交）与 `git push --force`（永久丢远端提交）。
+- 本地有未推提交时要 rebase 或手工合并，不要用新版本硬盖对端。
+- 合入前必须 `git show --stat <hash>` 看对方改了什么；看不懂就先不推，先问。
+
+### 收工三步
+
+```bash
+git status --short        # 只允许预期文件；无关改动不入本提交
+git diff --check          # 空白/行尾问题
+git -c http.proxy=http://127.0.0.1:7897 push origin main
+```
+
+同一文件被两端同时改（README/AGENTS.md/CTL 文档高发）：按 2026-10-20 用户指令，先读对端改动、
+判断价值、手工并入、再提交；不复用 `stash + 覆盖`。
+
+### 参数与默认值变更的联动清单
+
+改一处默认值往往牵动六处，2026-11-05→06 实测漏改两处（P10 断言、GCC15 测试）：
+
+| 变更类型 | 必须同步的位置 |
+|---|---|
+| 机型默认值（例：`attitude_limit_deg` 45→120） | `FlightCtrlParams.h` 默认值 + `static_assert` + **宿主测试里的默认值断言**（`test_single_edf_4vane` P10 曾漏） |
+| 参数数量（168→169、单涵道 20→21 项） | `ano_params.h` `ANO_PARAMS_COUNT` 与注释；`FlightCtrlParams.h` 参数表宏与"N 项"注释；GCS `params.py` 名字表与包线；GCS 测试的数量断言；对应 CTL 文档；AGENTS.md 相关条目 |
+| 新增参数 | 注册表插入位置会移动其后所有参数 ID → 必须同步 GCS 测试里的 ID 断言（`vane_dir1` 156→157、`dt_s` 167→168 这类） |
+| 协议帧格式（AnoCom 0xE0/0xE1/0xE2/0xE3） | 固件发送侧 + GCS `anocom.py` 解析 + 匿名上位机实测抓帧（三方一致才算改完） |
+
+### 测试口径
+
+- **改默认值后必须跑全量** `bash TandemVec_FCS/test_host/run_all.sh`：只跑单文件会漏跨文件断言。
+- **必须在目标工具链上跑**：本机与 magicbook 的 g++ 版本不同；GCC 15 对 `normal_distribution(0,0)`
+  有前置断言会中止，旧工具链靠未定义行为静默返回 0。本机过 ≠ 目标机过。
+- 烧录前再 `git fetch` 确认远端未变，避免把别人的修复烧成旧版。
+
 ## 踩坑记录（完整记录见 docs/registers/踩坑记录-AGENTS.md——改控制/通信/调试代码前先检索）
 
 > 完整条目（130+ 条，按时间累积）已外移到 `docs/registers/踩坑记录-AGENTS.md`
