@@ -35,6 +35,11 @@ ARMS = [("off", "v_off"), ("on", "v_on")]
 
 
 def load(tag):
+    """读一条臂的归因证据 JSONL，返回 {(thrust_n, seed): 记录}。
+
+    输入：tag 为臂名（sim-data/attrib305_2026-10-28_<tag>.jsonl）；文件缺失即退出。
+    键同时含推力档与 seed，因为同一文件里混着 22.5 kN 与 23.5 kN 两档。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -49,6 +54,11 @@ def load(tag):
 
 
 def stat(d, thr):
+    """取指定推力档（thr，单位 N）全部 seed 的统计量。
+
+    返回：样本数 n、>25 m 失效数 fail_gt25、pos_rms 的 p90 与最大值（m），
+    以及 nav_att_rmse 的中位数（deg）。
+    """
     v = [float(r["pos_rms"]) for (t, _s), r in d.items() if t == thr]
     p = np.array(v)
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
@@ -59,6 +69,13 @@ def stat(d, thr):
 
 
 def main():
+    """命令行入口：载入 22.5 kN / 23.5 kN 两档 × 子集关/开两臂证据，按预登记判据
+    裁决并落盘 sim-data/vel_subset_lowerloads_2026-10-28.json。
+
+    判据：V1 两臂各收满 100 条；V2 每档开臂的 >25 m 发生率不高于关臂、且 max 不
+    超过关臂 max+5 m；V3 若关臂在 28.8 g 档已有 ≥3 个 >25 m 失效，则开臂必须变少
+    （该档无失效时只要求 V2）。返回：V1∧V2∧V3 时 0，否则 1。
+    """
     data = {a: load(t) for a, t in ARMS}
     rep = {"per_cell": {}, "V1": {}}
     v1 = {a: len(d) for a, d in data.items()}

@@ -27,6 +27,11 @@ import fwapi  # noqa: E402
 
 
 def replay(trace):
+    """用 fwapi.Gnc 逐帧重放 SIL --trace-ctrl 轨迹，返回 [(t, 库输出, SIL 原始行)]。
+
+    dt 取相邻帧时间差（首帧或非正值回退 0.005 s）；RC 只传前 9 通道，其余补 988
+    的失效默认值。返回的三元组供调用方把库输出与 SIL 落盘列逐通道比对。
+    """
     rows = list(pd.read_csv(trace).to_dict("records"))
     g = fwapi.Gnc()
     rec = []
@@ -58,6 +63,12 @@ def replay(trace):
 
 
 def main():
+    """命令行入口：重放轨迹并画 A/B 两面板（比力时序 + 各通道最大偏差）。
+
+    需要 --trace（SIL --trace-ctrl 的 CSV）与 --out（PNG 路径）。A 面板画期望天向
+    比力 SIL 与直调库曲线并叠差值；B 面板按通道给全程最大绝对偏差（对数纵轴）。
+    保存路径与比力最大差值打印到 stdout。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace", required=True)
     ap.add_argument("--out", required=True)

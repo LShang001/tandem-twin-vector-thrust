@@ -4,6 +4,8 @@
 @file    run_liquid_sweep.py
 @module  固件/宿主 SIL（液体推进参数扫描）
 @brief   液体火箭 L1 回收 SIL 的推进参数扰动扫描
+@frame   NED（着陆高度/速度/姿态）
+@units   m、m/s、kg、s（Isp 以 s 计）
 @details 只改变推进模型参数（Isp/Tmax/Tmin/阀门/推力速率/高度/推进剂），
          制导与 plant 不变；输出逐案例 PASS/FAIL，失败退出码非 0。
 

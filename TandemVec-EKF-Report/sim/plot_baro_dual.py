@@ -3,6 +3,11 @@
 @file    plot_baro_dual.py
 @brief   落地计数、pos_max、final_alt 三联图。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 读 v4dual/v4reg 两臂 jsonl，按 gate=0（水平-only 重锚关）/1（开）分组画三联图：
+         落地计数（final_alt<0.5 m 计落地）、pos_max 箱线、final_alt 箱线，
+         输出 nav_baro_dual_2026-10-27.png。
+@frame   NED（pos_max 取水平 N/E 合成峰值；final_alt 为天向真高，越大越高）
+@units   m（pos_max / final_alt）、次（落地计数）
 """
 import json
 import os
@@ -26,6 +31,7 @@ ARMS = [("drift+spoof", "漂移+spoof"), ("outage+drift", "失联+漂移"),
 
 
 def rows_by(tag):
+    """读一条臂的 jsonl 证据文件，返回记录列表（空行跳过）。"""
     rows = []
     with open(os.path.join(DATA, f"baro_health_ab_{tag}.jsonl"), encoding="utf-8") as f:
         for line in f:
@@ -35,6 +41,7 @@ def rows_by(tag):
 
 
 def main():
+    """命令行入口：合并两臂（水平-only 重锚关/开）证据，画落地计数（final_alt<0.5 m）、pos_max 箱线与 final_alt 箱线三联图，输出 nav_baro_dual_2026-10-27.png。"""
     rows = []
     for t in TAGS:
         rows += rows_by(t)

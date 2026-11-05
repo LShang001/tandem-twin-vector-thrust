@@ -30,6 +30,8 @@ ZETAS = [0.05, 0.10, 0.15, 0.25, 0.40]
 
 
 def resolve_bin(path):
+    """解析仿真可执行路径：原样存在就用它；若给的是 Git Bash 风格 `/tmp/...`，
+    再按 Windows 的 %TEMP% 拼一次；都不存在时返回原路径（由后续调用报错暴露）。"""
     if os.path.exists(path):
         return path
     if path.startswith("/tmp/"):
@@ -40,6 +42,7 @@ def resolve_bin(path):
 
 
 def md5(path):
+    """算文件 md5（分块读，1 MiB/块），用于在汇总里锁定本次用的构建产物。"""
     h = hashlib.md5()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -48,6 +51,12 @@ def md5(path):
 
 
 def one(job):
+    """跑一条扫描作业（配置名、可执行、seed、振动幅值/频率、减震座固有频率与阻尼比）。
+
+    固有频率 fn=0 表示"未装减震座"，此时不传 `--vib-iso-*` 参数；振动从 1.5 s 起。
+    返回：解析出的 SIL_REAL_JSON 字典并回填该作业参数；超时或无 JSON 时返回带
+    no_json=True 的字典（超时另带 timeout=True、无 JSON 另带 stderr 尾巴）。
+    """
     name, exe, seed, vib_g, vib_hz, fn, zeta = job
     cmd = [exe] + BASE + ["--seed", str(seed), "--vib", f"{vib_g:.3f}",
                           "--vib-hz", f"{vib_hz:.1f}", "--vib-start", "1.5"]
@@ -68,6 +77,8 @@ def one(job):
 
 
 def stat(v):
+    """对指标序列求 n / 中位 / p95 / 最大值，先剔除非数值与非有限值；
+    全空时只返回 {"n": 0}。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)],
                  float)
     if not v.size:
@@ -77,6 +88,13 @@ def stat(v):
 
 
 def main():
+    """命令行入口：按三段矩阵（1 g 扫频 × 固有频率、2 g/120 Hz × 固有频率、
+    80 Hz/fn=25 扫阻尼比）展开作业，进程池并行跑后按配置分组汇总姿态/位置/速度
+    统计，逐行写 sim-data/vib-iso-<tag>.jsonl、汇总写同名 .json（含 bin_md5 溯源）。
+
+    返回：无（产物路径打印到 stdout）；--seeds/--seeds-2g/--seeds-zeta 分别控制
+    三段各自的 seed 数。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default="/tmp/tv_fcs_missile_prod_fresh_iso/fw_real.exe")
     ap.add_argument("--seeds", type=int, default=5)

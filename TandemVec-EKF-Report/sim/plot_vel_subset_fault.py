@@ -38,6 +38,11 @@ CELLS = ["nan1s", "out5", "out20", "vib1g"]
 
 
 def load_fault():
+    """读 §4.24u 故障交互证据 JSONL，返回 {(故障格, 臂): {seed: pos_rms}}。
+
+    格取自 CELLS（IMU NaN 1 s / 失联 5 s / 失联 20 s / 振动 1 g）、臂为 off/on，
+    四格×两臂先预置空字典；证据文件缺失直接退出，不出"空数据也画得出来"的图。
+    """
     path = os.path.join(SD, "vel_subset_fault_2026-10-28_z.jsonl")
     if not os.path.exists(path):
         raise SystemExit("缺证据：%s" % path)
@@ -52,6 +57,10 @@ def load_fault():
 
 
 def load_lowerloads():
+    """读弱失稳档两臂（v_off / v_on）证据，返回 {"off"|"on": {(推力 N, seed): pos_rms}}。
+
+    同一文件里混着两档推力，故键用 (推力, seed)；任一臂证据缺失直接退出。
+    """
     out = {}
     for arm, tag in (("off", "v_off"), ("on", "v_on")):
         path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
@@ -69,6 +78,14 @@ def load_lowerloads():
 
 
 def main():
+    """命令行入口：出两张安全性验证图，关臂与开臂始终画在同一坐标上。
+
+    图 1（§4.24u 故障交互）：四故障格的 >25 m 发生率、pos_rms 经验 CDF、
+    逐 seed 散点——看放宽上限后故障格是否被引入新失效；
+    图 2（§4.24v 弱失稳档）：22.5/23.5 kN 两档的发生率、两档 max、
+    首档逐 seed 配对散点（对角线下方=变好）。
+    分别存 figs/nav_velsubset_fault_2026-10-28.png 与 nav_velsubset_lowerloads_2026-10-28.png。
+    """
     # 图 1：故障交互
     fd = load_fault()
     fig, ax = plt.subplots(1, 3, figsize=(17.0, 5.2))
@@ -182,6 +199,11 @@ if __name__ == "__main__":
 
 
 def load_tag(tag):
+    """读一条 attrib305 臂，只取 pos_rms，返回 {seed: pos_rms}。
+
+    与 load_lowerloads() 的区别：这里扁平化为单值索引（不按推力分档），供配额门
+    对比图按 seed 直接配对。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         raise SystemExit("缺证据：%s" % path)

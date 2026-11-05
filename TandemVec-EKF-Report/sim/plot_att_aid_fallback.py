@@ -8,6 +8,8 @@
 @details 两张图：
          1 `nav_att_aid_fallback_vs_duration.png`  5/10/20/30 s 失联 × 三种模式
          2 `nav_att_aid_fallback_disturb.png`       30 s 失联 × 风/振动 × 三种模式
+@frame   N/A（统计姿态角误差，不涉坐标变换）
+@units   deg（nav_att_rmse）、s（失联时长）、m/s²（风/振动幅值）
 """
 import json
 import os
@@ -28,6 +30,7 @@ MODE_COLOR = {0: "#c44e52", 1: "#4c72b0", 5: "#55a868"}
 
 
 def setup_font():
+    """按优先级挑选可用的中文字体（雅黑/黑体/Noto CJK）设为 matplotlib 全局字体，并关闭 unicode 负号变体。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -39,6 +42,7 @@ def setup_font():
 
 
 def load_all():
+    """读 matrix/final 两份 MC JSON（跳过 _error 记录），按 condition/mode/seed 去重取最后一条，返回记录列表。"""
     recs = []
     for fn in ("mc_fb_matrix.json", "mc_fb_final.json"):
         p = os.path.join(DATA, fn)
@@ -54,6 +58,7 @@ def load_all():
 
 
 def stats(recs, cond, mode):
+    """取指定条件与模式的姿态 RMSE 列表，返回（中位数, 最大值, 样本数）；无样本返回 None。"""
     xs = [r["nav_att_rmse"] for r in recs
           if r["_cond"] == cond and r["_mode"] == mode
           and isinstance(r.get("nav_att_rmse"), (int, float))]
@@ -63,6 +68,7 @@ def stats(recs, cond, mode):
 
 
 def plot_duration(recs):
+    """画失联时长扫描（5/10/20/30 s × 三种模式）：左图姿态 RMSE 中位、右图最大，输出 nav_att_aid_fallback_vs_duration.png。"""
     conds = ["out5", "out10", "out20", "out30"]
     labels = ["5 s", "10 s", "20 s", "30 s"]
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
@@ -94,6 +100,7 @@ def plot_duration(recs):
 
 
 def plot_disturb(recs):
+    """画 30 s 失联 + 风/振动干扰的对比图（柱=中位、须=最大），输出 nav_att_aid_fallback_disturb.png。"""
     conds = ["out30", "out30_wind", "out30_vib1g"]
     labels = ["30 s 失联", "+ 风 1.5 m/s²", "+ 1 g 振动"]
     fig, ax = plt.subplots(figsize=(9, 4.6))
@@ -122,6 +129,7 @@ def plot_disturb(recs):
 
 
 def main():
+    """命令行入口：设字体、建输出目录、载入并去重记录，依次生成时长与干扰两张图。"""
     setup_font()
     os.makedirs(FIG, exist_ok=True)
     recs = load_all()

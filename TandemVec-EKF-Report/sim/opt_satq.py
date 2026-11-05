@@ -35,6 +35,11 @@ CASES = [
 
 
 def resolve_bin(path):
+    """把 Git Bash 风格的 /tmp 可执行文件路径还原成 Windows 下可读的真实路径。
+
+    参数：path 为原路径。存在则原样返回；对 /tmp/ 前缀改用 `%TEMP%` 重新拼接；
+    两者都不存在时也原样返回，交给下游在运行时失败。
+    """
     if path and os.path.exists(path):
         return path
     if path and path.startswith("/tmp/"):
@@ -45,6 +50,12 @@ def resolve_bin(path):
 
 
 def one(job):
+    """跑一次 SIL 评估，返回该次运行的 SIL_REAL_JSON 指标字典。
+
+    参数：job 为 (可执行文件, seed, 追加参数列表)。
+    返回：指标字典；超时（300 s）、日志无该行或 JSON 解析失败时返回 None。
+    说明：解析前把裸 `nan`/`inf` 替换成 Python 能接受的 `NaN`/`Infinity`。
+    """
     exe, seed, extra = job
     cmd = ([exe] + BASE + [str(seed), "--profile", "mag_clean",
                            "--imu-grade", "icm"] + extra)
@@ -62,11 +73,13 @@ def one(job):
 
 
 def med(vals):
+    """取有限数值的中位数；无有效值返回 NaN。"""
     v = [x for x in vals if isinstance(x, (int, float)) and np.isfinite(x)]
     return float(np.median(v)) if v else float("nan")
 
 
 def summarize(rows):
+    """把若干次运行的逐项指标压成 pos/att/yaw/vel 四个中位数。"""
     return dict(
         pos=med([r["pos_rms"] for r in rows]),
         att=med([r["nav_att_rmse"] for r in rows]),
@@ -76,6 +89,14 @@ def summarize(rows):
 
 
 class Evaluator:
+    """SIL 目标函数：跑三档工况（10.1 g / 8.4 g / 洁净）、按加权代价 J 打分并缓存。
+
+    构造参数：exe 为待优化二进制、off_exe 为无 Q 膨胀的基线二进制；workers 为并发
+    线程数、seeds 为训练种子数、cache_path 为缓存 JSON 路径。
+    行为：缓存里没有 baseline 时先跑一遍基线档并落盘；objective(params) 返回 J 并
+    按参数键缓存，score() 是它的别名。代价以 10.1 g 位置为主，8.4 g/洁净的姿态、
+    航向、速度、位置退化按权重加罚，并对 log10 位置单独限超。
+    """
     def __init__(self, exe, off_exe, workers, seeds, cache_path):
         self.exe = resolve_bin(exe)
         self.off_exe = resolve_bin(off_exe)
@@ -159,6 +180,12 @@ class Evaluator:
 
 
 def decode(x):
+    """把 [0,1]³ 的无量纲优化变量映射成物理三参数。
+
+    参数：x 为长度 3 的向量，先钳到 [0,1]。
+    返回：[Q, enter_s, release_s]；Q 对数均匀覆盖 1–40，enter 覆盖 0.02–0.50 s，
+    release 覆盖 0.2–3.0 s，与 SIL 命令行参数同一单位。
+    """
     x = np.clip(np.asarray(x, float), 0.0, 1.0)
     q = 10.0 ** (x[0] * 1.60206)          # 1 .. 40
     enter = 0.02 + x[1] * 0.48            # 0.02 .. 0.50 s
@@ -167,6 +194,10 @@ def decode(x):
 
 
 def run_cma(ev, maxfevals):
+    """用 CMA-ES 在 [0,1]³ 上最小化代价，返回 (最优物理参数, 最优 J, 逐代最优历史)。
+
+    参数：ev 为 Evaluator；maxfevals 为函数评估上限。固定 popsize=6、seed=11。
+    """
     import cma
     es = cma.CMAEvolutionStrategy([0.55, 0.15, 0.2], 0.22,
                                   {"popsize": 6, "bounds": [0, 1],
@@ -183,6 +214,11 @@ def run_cma(ev, maxfevals):
 
 
 def run_tpe(ev, n_trials):
+    """用 Optuna TPE 采样在 [0,1]³ 上最小化代价。
+
+    参数：ev 为 Evaluator；n_trials 为试验次数，前 12 次为随机启动。
+    返回：(最优物理参数, 最优 J, 逐 trial 的最优历史)。
+    """
     import optuna
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     hist = []
@@ -201,6 +237,11 @@ def run_tpe(ev, n_trials):
 
 
 def run_de(ev, maxiter):
+    """用差分进化在 [0,1]³ 上最小化代价，返回 (参数, J, 空历史)。
+
+    参数：ev 为 Evaluator；maxiter 为迭代代数。Sobol 初始化、popsize=5、seed=23，
+    且 polish=False（不做局部收尾）；历史列表恒空，仅为与其它优化器同接口。
+    """
     from scipy.optimize import differential_evolution
     counter = {"n": 0}
 
@@ -215,6 +256,10 @@ def run_de(ev, maxiter):
 
 
 def run_nm(ev, x0, maxiter):
+    """从已知最优点出发用 Nelder-Mead 局部精修，返回 (参数, J, 空历史)。
+
+    参数：x0 为 [0,1]³ 初值；maxiter 为迭代上限（xatol=0.01、fatol=0.005）。
+    """
     from scipy.optimize import minimize
 
     def obj(x):
@@ -226,6 +271,13 @@ def run_nm(ev, x0, maxiter):
 
 
 def main():
+    """命令行入口：全局搜索（CMA-ES/TPE/DE）→ Nelder-Mead 精修 → 独立种子复核。
+
+    参数：--bin/--off-bin 两个二进制路径、--workers 并发、--seeds 训练种子数、
+    各优化器预算（--cma-fevals/--tpe-trials/--de-iter/--nm-iter）、--out 输出名。
+    输出：`sim-data/<out>.json`，含 baseline、全部评估缓存、各优化器结果与耗时、
+    最优参数，以及用训练集以外 seeds 复核的 top-5（防过拟合）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default="/tmp/tv_fcs_missile_satq_on/fw_real.exe")
     ap.add_argument("--off-bin", default="/tmp/tv_fcs_missile_satq_off/fw_real.exe")

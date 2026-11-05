@@ -23,6 +23,12 @@ SCALES = [1.0, 1.5, 2.0, 3.0]
 
 
 def one(scale, seed):
+    """以 `--gnss-r-scale scale` 跑一次 40 s SIL（定点保持 + 光流），取回汇总。
+
+    参数：scale 为 GNSS 自报精度 R 的放大系数（只改 h_acc/v_acc/s_acc，不改实际
+    噪声），seed 为随机种子。返回：SIL_REAL_JSON 字典（补 scale/seed 字段）；
+    没有输出时返回 {scale, seed, no_json=True}，计入失败列。
+    """
     cmd = [EXE, "--real-nav", "--profile", "mag_clean", "--pos-hold",
            "--flow", "--seed", str(seed), "--seconds", "40",
            "--gnss-r-scale", f"{scale:g}"]
@@ -36,6 +42,8 @@ def one(scale, seed):
 
 
 def stats(v):
+    """对指标序列求中位/p90/最大值，剔除非数值与非有限值；全空时三项均为 nan，
+    以免把"没有样本"读成"误差为 0"。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)],
                  float)
     if not len(v):
@@ -45,6 +53,12 @@ def stats(v):
 
 
 def main():
+    """命令行入口：对 4 档 R 缩放（1.0/1.5/2.0/3.0）× 20 seeds 逐个跑，逐行写
+    sim-data/nees_r_scale_<TAG>.jsonl，再按档汇总 NEES 中位/p95、pos_rms、
+    保持末端误差、最大滚转与 quality_fail 的统计，落盘同名 .json 并打印。
+
+    EXE / TAG / SEEDS 由环境变量给，便于换构建产物复跑同一扫描。
+    """
     rows = []
     for scale in SCALES:
         for seed in SEEDS:

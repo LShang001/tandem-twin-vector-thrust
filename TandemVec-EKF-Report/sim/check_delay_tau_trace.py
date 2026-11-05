@@ -12,6 +12,8 @@
          位置 RMSE 38.6→22.8 m——判断"估得准不准"只能看逐历元分布。
          迹线里 `ad_app` 是累计计数 ⇒ 差分 > 0 的历元就是"这一拍真的用了 τ̂"，
          取这些历元上的 `ad_tau_ms` 分布才是正确答案。
+@frame   NED（位置 RMSE 为北东地水平误差；τ̂ 与计数为标量，无坐标系）
+@units   s（t）、ms（ad_tau_ms、真值延时、命中判据 ±15 ms）、次（ad_app 累计应用次数）
 """
 import json
 import os
@@ -38,6 +40,12 @@ BIND = int(os.environ.get("BIND", "6"))
 
 
 def read_trace(path):
+    """读 200 Hz 迹线 CSV，抽时间、τ̂、累计应用次数三列。
+
+    参数：path 为迹线路径，表头须含 t / ad_tau_ms / ad_app（缺列抛 KeyError）。
+    返回：(t, tau, app) 三个等长列表；t 为 s，tau 为 ms，app 为累计次数，
+    因此 app 逐历元差分 >0 即表示"这一拍真的应用了 τ̂"。
+    """
     with open(path, encoding="utf-8") as fh:
         hdr = fh.readline().strip().split(",")
         rows = [ln.strip().split(",") for ln in fh if ln.strip()]
@@ -49,6 +57,12 @@ def read_trace(path):
 
 
 def run(grid, lat, seed):
+    """跑一条延时档 SIL 用例，并把 200 Hz 迹线写到固定目录。
+
+    参数：grid 为延时网格上限（ms，150 表示沿用默认档、不加覆盖参数）；
+    lat 为真实注入的 GNSS 延时（ms）；seed 为随机种子。
+    返回：(末次 SIL_REAL_JSON 指标字典或 None, 迹线路径)；超时（900 s）返回 None。
+    """
     os.makedirs(TRACES, exist_ok=True)
     tp = os.path.join(TRACES, f"g{grid}_L{lat}_s{seed}.csv").replace("\\", "/")
     cmd = [EXE] + BASE + ["--gnss-latency-ms", str(lat)]
@@ -71,6 +85,13 @@ def run(grid, lat, seed):
 
 
 def main():
+    """命令行入口：遍历网格×延时×种子，按历元差分统计"被应用的 τ̂"分布。
+
+    对每档打印应用历元数、τ̂ 中位与 IQR、命中率（|τ̂−真|≤15 ms）、末帧 τ̂ 与位置 RMSE；
+    3 s 之前的历元不参与统计（初始化段无机动激励）。
+    输出：`sim-data/delay_traces/tau_by_epoch_2026-10-28.json`。
+    返回 0 正常结束，2 表示 SIL 可执行文件不存在。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

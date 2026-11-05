@@ -27,6 +27,7 @@ ARMS = {
 
 
 def one(arm, seed):
+    """跑一次有色/白噪声臂的 NEES SIL（给定 seed），解析 SIL_REAL_JSON；无输出返回 no_json 记录。"""
     cmd = [EXE, "--real-nav", "--profile", "mag_clean", "--pos-hold",
            "--flow", "--seed", str(seed), "--seconds", str(SECONDS)]
     cmd += ARMS[arm]
@@ -41,11 +42,13 @@ def one(arm, seed):
 
 
 def med(vals):
+    """只对有限数值求中位数，空集返回 NaN。"""
     vals = [v for v in vals if isinstance(v, (int, float)) and np.isfinite(v)]
     return float(np.median(vals)) if vals else float("nan")
 
 
 def main():
+    """命令行入口：两臂×seeds 跑 NEES A/B，写 jsonl 与按臂/配对汇总的 JSON，并打印每 seed 的 NEES 与位置指标。"""
     rows = []
     for arm in ARMS:
         for seed in SEEDS:

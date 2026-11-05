@@ -15,6 +15,8 @@
            （检验"挡住"与"误差"之间的关系是否真的存在）；
          6 `nav_vib_hf_ab_heat.png`     工况×臂 的 pos_rms / A 臂比值热图。
          生成后必须逐张目视审查（空图、NaN、坐标尺度、标签重叠）。
+@frame   NED（pos_rms 位置误差）；振动量是标量 RMS，无方向；机体系不参与本脚本
+@units   g（振动 RMS/门限）、m（pos_rms）、s（时间）、%（占空比）、历元数（ad_app）
 """
 import json
 import os
@@ -28,6 +30,7 @@ import numpy as np  # noqa: E402
 
 
 def setup_font():
+    """按候选顺序探测可用中文字体（雅黑/黑体/Noto），命中即设为全局字体；都不命中则退回默认。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -50,6 +53,7 @@ COLORS = ["#4C72B0", "#DD8452", "#55A868"]
 
 
 def load_json(path):
+    """读 JSON 结果；文件不存在返回 None（由 main 打印 skip 并继续出其余图）。"""
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8") as fh:
@@ -57,6 +61,10 @@ def load_json(path):
 
 
 def read_trace(name):
+    """读 vibhf_traces 下一条 200 Hz 迹线，返回 {列名: 一维数组}；文件缺失返回 None。
+
+    单行列数据会被 reshape 成 1 行，保证下游按列取用；文件头行本身不参与数值加载。
+    """
     path = os.path.join(TRACES, name)
     if not os.path.exists(path):
         return None
@@ -69,6 +77,10 @@ def read_trace(name):
 
 
 def fig_timeseries():
+    """三分面纵向时序图（洁净/振 1 g/振 2 g）：HF 高频通道与旧中频通道 RMS 对照，并画 0.15 g 进入门限。
+
+    缺迹线的面板画"缺迹线"占位而不报错；末帧时间来自数据本身，不硬编码。
+    """
     panels = [("洁净_1.csv", "洁净（无振动，6.4 g 机动）"),
               ("振1g_8.4g_1.csv", "振 1 g@80 Hz + 8.4 g"),
               ("振2g_8.4g_1.csv", "振 2 g@120 Hz + 8.4 g")]
@@ -105,6 +117,7 @@ def fig_timeseries():
 
 
 def fig_separation(ch):
+    """可分性图：左为两通道 RMS 中位点图（对数横轴，对照 0.15 g 门限），右为 vib_high 置位占空比。"""
     conds = list(ch["rows"].keys())
     x = np.arange(len(conds))
     fig, (ax1, a2) = plt.subplots(1, 2, figsize=(11, 4.2))
@@ -149,6 +162,7 @@ def fig_separation(ch):
 
 
 def fig_ab_box(ab):
+    """三臂 × 8 工况的 pos_rms 箱线（对数纵轴），每组内三臂并排、组间虚线分隔。"""
     conds = list(ab["rows"].keys())
     n_arm = len(ARMS)
     fig, ax = plt.subplots(figsize=(13.0, 5.6))
@@ -184,6 +198,7 @@ def fig_ab_box(ab):
 
 
 def fig_ab_cdf(ab):
+    """关键工况（洁净/振1g/振2g/延100ms）的三臂 pos_rms 经验 CDF，对数横轴、显式少数刻度防标签重叠。"""
     key_conds = [c for c in ("洁净", "振1g_8.4g", "振2g_8.4g", "延100ms")
                  if c in ab["rows"]]
     fig, axes = plt.subplots(1, len(key_conds), figsize=(4.1 * len(key_conds), 4.0),
@@ -223,6 +238,7 @@ def fig_ab_cdf(ab):
 
 
 def fig_ab_scatter(ab):
+    """ad_app（延时估计被应用的历元数）对 pos_rms 散点，按工况着色：检验"挡住"与"误差"是否相关。"""
     fig, ax = plt.subplots(figsize=(9, 6))
     cmap = plt.get_cmap("tab10")
     for i, c in enumerate(ab["rows"]):
@@ -249,6 +265,7 @@ def fig_ab_scatter(ab):
 
 
 def fig_ab_heat(ab):
+    """工况 × 臂 的相对倍数热图：每格 pos_rms 除以 A 臂中位，1.0 即与默认相同。"""
     conds = list(ab["rows"].keys())
     mat = np.zeros((len(conds), len(ARMS)))
     for i, c in enumerate(conds):
@@ -320,6 +337,10 @@ def fig_enter_scan(scan):
 
 
 def main():
+    """入口：设字体、按三份结果 JSON 是否存在分别出通道图/A-B 图/门限扫描图，缺数据只打印 skip。
+
+    返回 0 恒成立——缺哪份数据只是少出对应图，不算失败，避免批处理脚本误判。
+    """
     setup_font()
     os.makedirs(FIGS, exist_ok=True)
     ch = load_json(CHANNEL_JSON)

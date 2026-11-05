@@ -27,6 +27,8 @@
      接近 C（说明否决确实由振动触发而非机动）。
   有效性前置：每臂每格记录 `ad_blk` 与 `ad_app`；失联档仍用 `gnss_stale_peak_s`
      校验注入；不满足的档标 INVALID 不判定。
+@frame   NED（pos_rms/pos_max 为水平位置误差；姿态为欧拉角）
+@units   m（位置）、deg（姿态）、m/s（速度）、ms（注入延时）、s（失联时长）、个（计数）
 """
 import concurrent.futures as cf
 import hashlib
@@ -69,6 +71,11 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms", "ad_app", "ad_blk",
 
 
 def run(extra, arm, seed):
+    """跑一次 SIL（单 seed），返回 SIL_REAL_JSON 指标字典。
+
+    参数：extra 为工况参数，arm 为该臂的 veto/HF 源开关，seed 为随机种子；进程尽力
+    绑 CPU2。超时 900 s 杀掉返回 None，输出无 JSON 也返回 None（该 seed 不计入中位）。
+    """
     cmd = [EXE] + BASE + extra + arm + ["--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -86,11 +93,18 @@ def run(extra, arm, seed):
 
 
 def med(rows, key):
+    """取该臂全部 seed 某字段的中位数；字段缺失或为 None 按 0 计，空集返回 NaN。"""
     vals = [r.get(key, 0) or 0 for r in rows]
     return st.median(vals) if vals else float("nan")
 
 
 def main():
+    """命令行入口：三臂 × 8 工况 A/B，打印各指标中位与配对差，按 J1–J4 裁定。
+
+    失联档先用 gnss_stale_peak_s 校验注入有效性（不足期望的 0.8 倍标 INVALID 不判定），
+    再把 J1 保护恢复、J2 延时收益保留、J3 无能力损失、J4 机制自证逐条打分；
+    结论与全量明细写 sim-data/vib_hf_ab_2026-10-28.json。EXE 缺失时返回 2。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

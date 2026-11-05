@@ -22,6 +22,9 @@
      且 ad_app 不得归零（缺口门不能把功能永久关掉）；
   选档规则：满足 G1+G2+G3 的档里取**阈值最大**者（阈值越大越不敏感、越不容易
   误伤正常丢帧）；若无一档同时满足，则默认保持 0（关闭）并记录为负结果。
+@frame   NED（pos_rms/pos_max 为北东地水平位置误差，nav_att_rmse 为姿态角误差）
+@units   m（位置）、deg（姿态）、次（ad_app 应用次数、reacquire_resets 重锚次数）、
+         s（gnss_stale_peak_s 与缺口门阈值）
 """
 import concurrent.futures as cf
 import hashlib
@@ -55,6 +58,12 @@ CONDS = [
 
 
 def run(extra, gap, seed):
+    """跑一条缺口门 A/B 用例，返回末次 SIL_REAL_JSON 指标。
+
+    参数：extra 为该工况的追加参数；gap 为缺口门阈值字符串（s，`0` 表示关闭）；
+    seed 为随机种子。进程尽量绑到 CPU 2 以降干扰。
+    返回：指标字典；超时（600 s）或日志无该行时返回 None。
+    """
     cmd = [EXE] + BASE + extra + ["--delay-max-gap", gap, "--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -72,11 +81,19 @@ def run(extra, gap, seed):
 
 
 def med(rows, key):
+    """取某指标在若干次运行间的中位数；缺字段按 0 计，空列表返回 NaN。"""
     vals = [r.get(key, 0) or 0 for r in rows]
     return st.median(vals) if vals else float("nan")
 
 
 def main():
+    """命令行入口：六工况 × 三档缺口门做 runtime A/B，并落盘逐档证据。
+
+    参数：argv[1] 为 SIL 可执行文件（缺省取 Temp 下的 fw_real.exe）、argv[2] 为
+    输出名中缀。每工况先用 gnss_stale_peak_s 校验失联是否真的发生（低于预期 80%
+    标 INVALID），再打印三臂各指标中位与相对"门关"臂的逐 seed 配对差值。
+    输出：`sim-data/gap_gate_ab_2026-10-27_<OUT_TAG>.json`；可执行文件缺失返回 2。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

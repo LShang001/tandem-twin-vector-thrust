@@ -17,6 +17,12 @@ from ekf_core import Ekf15, cfg as base_cfg, HOME_LLA, G_MPS2
 OUT = os.path.join(HERE, "..", "sim-data", "q_pos_sweep_2026-10-26.json")
 
 def make_filter(qpos, p0scale):
+    """构造并初始化为静止的 15 态 EKF，注入位置过程噪声与初始位置协方差倍率。
+
+    参数：qpos 为位置过程噪声谱密度（写入 `q_pos_psd_m2ps`）；
+    p0scale 为初始位置协方差倍率（写入 `p0_pos_scale`）。
+    返回：以 HOME_LLA 为原点、零速度、比力 (0,0,−g) 初始化的 Ekf15 实例。
+    """
     c = dict(base_cfg)
     c["q_pos_psd_m2ps"] = qpos
     c["p0_pos_scale"] = p0scale
@@ -26,6 +32,12 @@ def make_filter(qpos, p0scale):
     return e
 
 def run_scenario(name, qpos, p0scale, seeds=10, duration=60.0):
+    """跑一个场景档的多随机种子仿真，返回各指标的中位与尾部聚合。
+
+    参数：name 为场景名（nominal/highnoise/delay/outage5，决定量测噪声、量测年龄与
+    失联窗）；qpos/p0scale 见 make_filter；seeds 为种子数；duration 为时长（s）。
+    返回：{指标+"_seedmed": 各 seed 之间的中位}；NEES 的 p95/max 另给 "_seedmax"。
+    """
     R.make_ekf = lambda: make_filter(qpos, p0scale)
     if name == "nominal":
         noise, age, outage = None, 0.0, (None, None)
@@ -62,6 +74,12 @@ def run_scenario(name, qpos, p0scale, seeds=10, duration=60.0):
     return agg
 
 def main():
+    """命令行入口：Q_pos × P0_pos × 四场景做网格扫描并落盘。
+
+    网格：Q_pos ∈ {0, 1e-4, 1e-3, 1e-2, 3e-2}，P0_pos 倍率 ∈ {1, 2}，
+    场景 ∈ {nominal, highnoise, delay, outage5}。
+    输出：`sim-data/q_pos_sweep_2026-10-26.json`，键为 `q<Q>_p0<P0>_<场景>`。
+    """
     scales = [0.0, 1e-4, 1e-3, 1e-2, 3e-2]
     p0s = [1.0, 2.0]
     out = {}

@@ -41,6 +41,10 @@ ARMS = [("默认", "nr_base", "_nrb", "#2b8a3e"),
 
 
 def load(tag, suf):
+    """读一臂 jsonl，按 config 去掉后缀 suf 分组，返回 {故障格: {seed: 记录}}。
+
+    后缀不符即 assert 失败——同一文件混入别的臂会让中位数不可比。
+    """
     path = os.path.join(SD, f"missile-sil-2026-10-28_{tag}.jsonl")
     out = {}
     with open(path, encoding="utf-8") as f:
@@ -56,6 +60,7 @@ def load(tag, suf):
 
 
 def trace(name):
+    """读 stuck_tr_<name>.csv 追踪，返回含 t/ekf_n/ekf_e/true_n/true_e 与水平误差 err 的 dict。"""
     with open(os.path.join(SD, f"stuck_tr_{name}.csv"), encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     a = {k: np.array([float(r[k]) for r in rows])
@@ -65,6 +70,11 @@ def trace(name):
 
 
 def main():
+    """出 4 张 K 组图（timeseries/median_bar/cdf/duty）并写 nav_raw_healthkey_summary_2026-10-28.json。
+
+    前三张基于四故障格 × 四臂的 pos_rms；第 4 张用 k2_risk 批次的 nrfb 帧数换算占空比
+    （90000 帧 = 45 s @ 2 kHz），用于验证非故障格零误触发。
+    """
     D = {lab: load(tag, suf) for lab, tag, suf, _ in ARMS}
     fault = ["imu_stuck_icm_full", "imu_stuck2s_icm_full",
              "imu_nan_icm_full", "imu_nan2s_icm_full"]

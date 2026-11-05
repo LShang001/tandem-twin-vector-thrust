@@ -10,6 +10,8 @@
          判读要点：①纯失联两档在取消否决后 20/20 一致变差（陈旧 τ̂ 应用），
          ②"失联+真延时"组合 10/10 大幅变好，③缺口门修好助推档却把
          "失联5s+延100ms"档推差 +37% ⇒ 门不是净收益。
+@frame   NED（位置误差取水平 N/E 合成，不做新的坐标变换）
+@units   m（pos_rms/pos_max）、%（相对变化）、s（缺口门时长）
 """
 import json
 
@@ -28,6 +30,7 @@ ARM_OFF = "veto关(默认)"
 
 
 def setup_font():
+    """按优先级挑中文字体（雅黑/黑体/Noto CJK）设为 matplotlib 全局字体，并关闭 unicode 负号变体。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -39,6 +42,7 @@ def setup_font():
 
 
 def main():
+    """命令行入口：读 veto 翻转与缺口门两份 JSON，画六面板（中位对比、逐 seed 配对、缺口门时长代价等），输出 nav_outage_gate_ab_2026-10-27.png。"""
     setup_font()
     ov = json.load(open(OV, encoding="utf-8"))["rows"]
     gg = json.load(open(GG, encoding="utf-8"))["rows"]

@@ -115,6 +115,13 @@ KEYS = ["pos_rms", "pos_max", "max_roll", "outlier_rejects", "reacquire_resets",
 
 
 def run_one(exe, name, profile, extra, seed, log):
+    """跑一次速度子集 A/B 用例，返回附加 arm/seed 标签的指标字典。
+
+    参数：exe 为 SIL 可执行文件；name 为臂名；profile 为该臂的导航配置（当前未被
+    本函数使用，配置已写在 BASE 里）；extra 为 (参数, 值) 对列表；seed 为种子；
+    log 为文件对象，无 JSON 时写入 rc 与日志尾部。
+    返回：指标字典（裸 nan/inf 已归一）；无 JSON 行时返回 None。
+    """
     cmd = [exe] + BASE + ["--seed", str(seed)] + [
         tok for pair in extra for tok in pair]
     env = os.environ.copy()
@@ -140,6 +147,13 @@ def run_one(exe, name, profile, extra, seed, log):
 
 
 def main():
+    """命令行入口：按 ARMS 矩阵跑 A/B，逐行落盘并汇总每臂统计。
+
+    参数：--exe 必填（/tmp 写法会回退到系统临时目录）、--workers 并发数、
+    --out-tag 输出名、--arms 只跑指定臂（逗号分隔）、--extra 为所有作业追加的参数对。
+    输出：`sim-data/sil32g_velrec_<tag>.jsonl`（逐次记录）、同名 `.json`（每臂
+    mean/med/max、尾部计数与 p95）与 `.jsonl.log`（无 JSON 的诊断日志）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--workers", type=int, default=4)

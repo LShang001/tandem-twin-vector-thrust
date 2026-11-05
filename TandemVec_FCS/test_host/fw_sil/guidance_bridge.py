@@ -2,9 +2,13 @@
 # -*- coding: utf-8 -*-
 """@file    guidance_bridge.py
 @module  测试/宿主机
-@brief   guidance_bridge.py 模块说明。
-
-guidance_bridge.py — 制导算法（SOCP 轨迹规划 + 跟踪）与飞控 SIL 的 UDP 联合仿真桥
+@brief   制导算法（SOCP 轨迹规划 + 跟踪）与飞控 SIL 的 UDP 联合仿真桥
+@details 状态上行 0xAA + 18×float + 0x55（74 B：auto/fire/t/pn/pe/pu/vn/ve/vu/
+         roll/pitch/yaw/gx/gy/gz/acc_u/acc_e/acc_n），指令下行 0xAA + 3×float(U,E,N)
+         + 0x55（14 B），与飞控 Serial5 私有帧一致；t≥tf 后把前馈归零只留 PD，
+         避免 kp·Δr=a_ff 的假平衡。CSV 供 check_socp_joint.py 判定。
+@frame   NED（上行状态的位置/速度/姿态）
+@units   m、m/s、deg、s
 
 协议（与飞控 Serial5 私有帧一致）：
   状态上行（SIL → 本脚本）：0xAA + 18×float + 0x55（74 B）

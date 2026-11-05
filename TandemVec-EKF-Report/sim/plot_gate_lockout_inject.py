@@ -29,6 +29,11 @@ FIG = os.path.abspath(os.path.join(HERE, "..", "figs"))
 
 
 def main():
+    """命令行入口：--tag 选结果批次、--seed 选时序代表 seed，出左右两面板并写 PNG。
+
+    左图是代表 seed 的 vz 误差时序（灰带为 15.0–15.3 s 注入窗，虚线为 ±8 m/s 物理门）；
+    右图是状态级剂量（已减同 seed 基线）对整段 pos_rms 的散点。只读落盘结果，不重算指标。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="2026-10-29")
     ap.add_argument("--seed", type=int, default=2)

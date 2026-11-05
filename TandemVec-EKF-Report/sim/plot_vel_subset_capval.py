@@ -45,6 +45,10 @@ ARMS = [("20 Hz 子集关", "y20_off", "#7f7f7f"),
 
 
 def load(tag):
+    """读 attrib305_2026-10-28_<tag>.jsonl，返回 {seed: 记录}。
+
+    缺文件或 seeds 51–100 不齐直接退出：泛化结论只认这 50 个独立 seed 的满样本。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         raise SystemExit("缺证据文件：%s" % path)
@@ -62,10 +66,17 @@ def load(tag):
 
 
 def vec(d, key="pos_rms"):
+    """按固定 seeds 51–100 的顺序抽某字段，返回可直接进绘图/统计的 float 数组。"""
     return np.array([float(d[s][key]) for s in SEEDS])
 
 
 def main():
+    """命令行入口：画两张图（七臂发生率/阈值敏感性/箱线 + 配对/CDF/直方）并打印汇总。
+
+    图 1 回答阈值 15 m 在独立 seeds 51–100 上是否泛化（发生率与 nocap 臂之差）以及
+    阈值是否落平台（cap 12/15/21）；图 2 用配对散点、CDF、直方确认改善发生在失效簇
+    而非整体精度。两张 PNG 写入 figs/，stdout 打印各臂 >25 m 计数与 cap 臂 max。
+    """
     arms = {tag: load(tag) for _, tag, _ in ARMS}
 
     # 图 1：发生率条形 + 阈值敏感性 + 箱线

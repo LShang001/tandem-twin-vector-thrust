@@ -36,6 +36,12 @@ DEG2RAD = math.pi / 180.0
 
 
 def main():
+    """命令行入口：读 SIL `--trace-ctrl` 轨迹，逐拍把同一组输入重放给 fwapi.Gnc，
+    按 C1–C6 判据比较控制输出，打印各判据 PASS/FAIL 与各通道最大偏差。
+
+    返回：全判据通过返回 0，否则 1（C1–C4a + C6 决定退出码；C4b 严格逐位的结果
+    只如实打印、不做事后调整）。--json 时把对拍指标落盘作证据。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace", required=True)
     ap.add_argument("--tol", type=float, default=1e-2,

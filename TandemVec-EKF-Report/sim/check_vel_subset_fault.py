@@ -41,6 +41,11 @@ FAIL_M = 25.0
 
 
 def load():
+    """读故障矩阵的逐 seed 证据 jsonl，整理成 {(格, 臂): {seed: 记录}}。
+
+    数据源：`sim-data/vel_subset_fault_<TAG>.jsonl`，每行一条含 cell/arm/seed 的 JSON。
+    缺文件直接退出；同格同臂的种子以 seed 为键覆盖写入。
+    """
     path = os.path.join(SD, "vel_subset_fault_%s.jsonl" % TAG)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -55,6 +60,7 @@ def load():
 
 
 def stats(d):
+    """汇总单臂的位置误差分布：样本数、>25 m 计数、p90、最大值与姿态 RMSE 中位。"""
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -63,6 +69,13 @@ def stats(d):
 
 
 def main():
+    """命令行入口：按预登记判据 Z1–Z3 裁决放宽触发上限后故障格是否仍不劣化。
+
+    Z1 要求八格（4 故障 × 2 臂）各收满同数种子；Z2 要求每格子集开臂的 >25 m 发生率
+    不高于关臂，且不存在逐 seed「变差>20% 且绝对增量>2 m」；Z3 用 worse_seeds 里的
+    拒帧/重锚/姿态区分"子集造成"与"故障本底"。
+    输出：`sim-data/vel_subset_fault_<TAG>_verdict.json`；全通过返回 0，否则返回 1。
+    """
     data = load()
     rep = {"per_cell": {}, "Z1": {}, "Z2": {}}
 

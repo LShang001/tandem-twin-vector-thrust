@@ -4,6 +4,8 @@
 @file    run_coaxial_sweep.py
 @module  固件/宿主 SIL（共轴 plant 参数/故障扫描）
 @brief   共轴 SIL 的 plant 参数与执行器故障扰动扫描
+@frame   NED（真值位置/高度/姿态）
+@units   kg、N、m、kg·m²、s
 @details 只改变 plant 的质量/推力/惯量/力臂/差速力矩与执行器故障，固件控制律不变；
          输出逐案例 PASS/FAIL、指标与 JSON 汇总，失败退出码非 0。
          --append-args 追加到每次 SIL 命令（如 "--coax-realistic"），

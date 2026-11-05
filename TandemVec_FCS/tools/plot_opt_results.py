@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """@file    plot_opt_results.py
 @module  工具
-@brief   plot_opt_results.py 模块说明。
+@brief   CMA-ES 8 维导航参数优化的结果可视化（收敛曲线 + 最优参数对照）
 CMA-ES 优化结果可视化：收敛曲线 + 最优参数对照 + 参数敏感度扫描。
 
 输入：tmp/opt_cma_log.csv（eval,gen,best,mean）
       tmp/opt_cma_best.json（cost/params）
 输出：tmp/opt_convergence.png、tmp/opt_params.png
+@details 读 CSV 画每代最优/均值收敛曲线（cost 对数轴）；再读 best.json 画"默认值 vs 优化值"
+         分组柱。缺日志直接报错退出并提示先跑 opt_nav_params.py；缺 best.json 只出收敛图。
+         只读已落盘结果，不重算 cost。
+@frame   N/A（纯优化结果作图，不涉坐标系）
+@units   cost 为原始量纲（越小越好）；参数值沿用各 IMUPERF_* 定义的原始量纲
+         （Hz / m·s⁻² / 标准差 / 无量纲），脚本不做换算
 """
 import json
 import os

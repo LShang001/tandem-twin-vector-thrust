@@ -125,6 +125,7 @@ CONFIGS = [
 
 def resolve_bin(path):
     # Git Bash 的 /tmp 在 Windows Python 下不是同一路径；回退到 TEMP。
+    """解析二进制路径：Git Bash 的 /tmp/... 在 Windows 上映射到 %TEMP%，命中存在的路径即返回，否则原样返回。"""
     if path and os.path.exists(path):
         return path
     if path and path.startswith("/tmp/"):
@@ -135,6 +136,7 @@ def resolve_bin(path):
 
 
 def md5(path):
+    """分块读文件算 MD5 十六进制串（跨轮 A/B 追溯二进制用）。"""
     h = hashlib.md5()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1 << 20), b""):
@@ -143,6 +145,7 @@ def md5(path):
 
 
 def one(job):
+    """跑单个 SIL 任务（场景配置 + seed），解析末条 SIL_REAL_JSON 并补 config/seed/profile/imu_grade/extra；超时或无 JSON 返回 no_json 记录。"""
     name, exe, profile, grade, extra, seed, suffix = job
     cmd = [exe] + BASE + [str(seed), "--profile", profile,
                           "--imu-grade", grade] + extra
@@ -161,6 +164,7 @@ def one(job):
 
 
 def stat(v):
+    """对指标序列做有限值统计，返回 {n, med, p90, p95, mx}；无有效值返回 {n: 0}。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)],
                  float)
     if not len(v):
@@ -171,6 +175,7 @@ def stat(v):
 
 
 def main():
+    """命令行入口：解析二进制/seed/并发/覆盖参数，记录 md5 与编译上下文，跑 CONFIGS×seeds 矩阵，写 jsonl 并按 config 汇总写 JSON。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin-full", default="/tmp/tv_fcs_missile/fw_real.exe")
     ap.add_argument("--bin-mcu", default="/tmp/tv_fcs_missile_mcu/fw_real.exe")

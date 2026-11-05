@@ -35,10 +35,12 @@ CASES = [
 
 
 def load_json(name):
+    """读 sim-data 下的分组汇总 JSON，返回其 `groups` 字段（{配置: 统计}）。"""
     return json.load(open(os.path.join(DATA, name), encoding="utf-8"))["groups"]
 
 
 def load_rows(name):
+    """读逐 seed 结果 JSONL，按 {配置: {seed: 记录}} 归组（同键后写覆盖）。"""
     rows = {}
     with open(os.path.join(DATA, name), encoding="utf-8") as f:
         for line in f:
@@ -48,6 +50,12 @@ def load_rows(name):
 
 
 def main():
+    """命令行入口：生成饱和 Q 膨胀的 A/B 对照、Q 扫描与尾部/量程权衡图。
+
+    参数：--sweep 为 Q 扫描汇总文件名（默认 satq_qsweep_2026-10-27）。
+    输出：`figs/` 下五张图——nav_sat_q_ab / nav_sat_q_sweep / nav_sat_q_opt /
+    nav_sat_q_tail / nav_sat_q_range（均为 2026-10-27 批）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--sweep", default="satq_qsweep_2026-10-27")
     args = ap.parse_args()

@@ -37,6 +37,11 @@ def rc_frame(throttle=1500, mode=1500, arm=2000):
 
 
 def fly(gnc, seconds, alt_up, target_alt, arm=2000):
+    """按 DT 纯静止导航状态连续推 gnc 若干拍，返回每拍输出 dict 列表。
+
+    pos 取 (0,0,-alt_up) 与 alt_up 保持 NED 下同一点（alt_up 为向上为正的高度）；
+    arm=988 表示 CH5 低档（未解锁），用于验证上锁时的输出边界。
+    """
     n = int(round(seconds / DT))
     outs = []
     for _ in range(n):
@@ -55,6 +60,10 @@ def fly(gnc, seconds, alt_up, target_alt, arm=2000):
 
 
 def main():
+    """冒烟入口：能力/参数注册表/上锁边界/定高油门方向/输出范围/ABI 非法输入拒收。
+
+    每项打印 [PASS]/[FAIL] 并累计失败列表；全部通过返回 0，任一失败返回 1（供 run_all 判据）。
+    """
     fails = []
 
     def check(cond, msg):

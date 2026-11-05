@@ -35,6 +35,11 @@ ARMS = {
 
 
 def one(arm, seed):
+    """跑一个垂直 spoof 臂的单 seed，返回 SIL_REAL_JSON 指标字典。
+
+    固定 --pos-hold --flow 且水平 spoof=0 以隔离垂直通道，spoof 从 START 秒开始；
+    VSPOOF_GATE 非空时追加 --gnss-v-gate。输出无 JSON 时返回带 no_json=True 的占位。
+    """
     cmd = [EXE, "--real-nav", "--profile", "mag_clean", "--pos-hold",
            "--flow", "--gnss-spoof", "0", "--gnss-spoof-start", f"{START:g}",
            "--seed", str(seed), "--seconds", f"{SECONDS:g}"]
@@ -51,6 +56,7 @@ def one(arm, seed):
 
 
 def stats(v):
+    """对一组数值算 med/p10/p90/min/max；剔除 NaN/Inf 与非数值，空集各值返回 NaN。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)],
                  float)
     if not len(v):
@@ -62,6 +68,11 @@ def stats(v):
 
 
 def main():
+    """命令行入口：8 个 spoof 臂 × SEEDS 逐条跑，打印逐条摘要并落盘 jsonl/json。
+
+    臂为 ±30/±50/±100 m 高度台阶与 ±0.5 m/s 慢偏；汇总 final_alt、nav_alt_mean、
+    pos_rms、max_roll、land_t、拒帧/重锚计数等分位数，并统计各臂落地次数与有效样本数。
+    """
     rows = []
     for arm in ARMS:
         for seed in SEEDS:

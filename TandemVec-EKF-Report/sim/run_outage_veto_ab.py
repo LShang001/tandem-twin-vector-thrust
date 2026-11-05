@@ -8,6 +8,8 @@
          `--fault 3/5` 才生效），实为洁净弹道重复 ⇒ 作废。本脚本用 `--gnss-outage A:B`
          重做，并同时记录 `gnss_age` 与 `reacquire_resets`，确保失联注入真的发生
          （判据：失联臂的 gnss_age 峰值必须 ≥ 失联时长，否则该臂无效、不看结论）。
+@frame   NED（pos_rms/pos_max 为水平位置误差）
+@units   m（位置）、deg（姿态 RMSE）、m/s（速度 RMS）、s（gnss_age/失联时长）
 
 预登记问题与判据（跑前写死）：
   Q1 翻转在真实失联下是否有害？—— 失联段应用侧本应有 `age>5 s` 新鲜度闸（block bit 1），
@@ -47,6 +49,12 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms",
 
 
 def run(extra, veto, seed):
+    """跑一次 SIL：基线参数 + 该条件的附加参数（如 `--gnss-outage A:B`）+
+    `--vib-veto 0|1` + seed，返回解析出的 SIL_REAL_JSON 字典。
+
+    600 s 超时先 kill 并返回 None；没抓到 JSON 也返回 None（调用方按缺失剔除）。
+    尽力把进程绑到 CPU2，减少并发时的时序抖动。
+    """
     cmd = [EXE] + BASE + extra + ["--vib-veto", veto, "--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -64,6 +72,13 @@ def run(extra, veto, seed):
 
 
 def main():
+    """命令行入口：对 5 种条件 × 两臂（veto 开/关）× seeds 并行跑，逐条件先判有效性
+    （gnss_age 峰值须 ≥ 预期失联时长×0.8，否则标 INVALID、该档不参与判定），再逐指标
+    打印两臂中位与相对变化、配对 Δpos 的变好/变差/持平计数。
+
+    返回：0 正常跑完；2 仿真 EXE 缺失。结果连 exe md5 一并落盘
+    sim-data/outage_veto_ab_2026-10-27.json，供报告引用时效性溯源。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

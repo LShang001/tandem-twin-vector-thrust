@@ -47,6 +47,7 @@ MODE_COLOR = {0: "#c44e52", 1: "#4c72b0", 2: "#55a868"}
 
 
 def setup_font():
+    """按优先级挑选可用的中文字体（雅黑/黑体/Noto CJK）设为 matplotlib 全局字体，并关闭 unicode 负号变体。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -58,6 +59,7 @@ def setup_font():
 
 
 def load():
+    """读 mc2.json，丢弃含 _error 的记录后返回列表；文件缺失直接退出。"""
     if not os.path.exists(DATA):
         sys.exit(f"missing {DATA}")
     with open(DATA, encoding="utf-8") as fh:
@@ -66,6 +68,7 @@ def load():
 
 
 def vals(recs, cond, mode, key):
+    """按条件与模式筛出某一指标的数值数组（非数值/缺失跳过），供箱线与 CDF 复用。"""
     xs = [r[key] for r in recs
           if r["_cond"] == cond and r["_mode"] == mode
           and isinstance(r.get(key), (int, float))]
@@ -73,6 +76,7 @@ def vals(recs, cond, mode, key):
 
 
 def box_by_condition(recs, key, ylabel, title, fname, log=False):
+    """画「条件 × 模式」分组箱线并叠加逐 seed 散点：x 为条件、按模式错位配色；log=True 时 y 轴取对数，结果存 fname。"""
     fig, ax = plt.subplots(figsize=(11, 5.2))
     width = 0.26
     for mi, mode in enumerate(MODE_ORDER):
@@ -109,6 +113,7 @@ def box_by_condition(recs, key, ylabel, title, fname, log=False):
 
 
 def plot_cdf(recs):
+    """画失联 10 s / 20 s 的姿态 RMSE 经验 CDF（尾部可读），输出 nav_att_aid_cdf.png。"""
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
     for ax, cond in zip(axes, ["out10", "out20"]):
         for mode in MODE_ORDER:
@@ -129,6 +134,7 @@ def plot_cdf(recs):
 
 
 def plot_pitch_pos(recs):
+    """画失联 10 s 下俯仰 RMSE 与水平位置 RMS 的模式对比箱线，输出 nav_att_aid_pitch_pos.png。"""
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.6))
     for ax, key, ylabel, title in (
             (axes[0], "nav_pitch_rmse", "俯仰 RMSE [deg]", "俯仰误差"),
@@ -155,6 +161,7 @@ def plot_pitch_pos(recs):
 
 
 def plot_paired(recs):
+    """画 mode0 与 mode1/2 的逐 seed 配对散点（对角线以下=新模式更低），标题给出更低的 seed 数。"""
     fig, axes = plt.subplots(1, 2, figsize=(10, 4.8), sharey=False)
     for ax, base in zip(axes, [1, 2]):
         d0 = {r["_seed"]: r for r in recs if r["_cond"] == "out10" and r["_mode"] == 0}
@@ -209,6 +216,7 @@ def plot_fail_rate(recs):
 
 
 def main():
+    """命令行入口：设字体、建目录、载入记录，依次出姿态箱线、CDF、俯仰/位置、配对散点、失败率与航向箱线六张图。"""
     setup_font()
     os.makedirs(FIG, exist_ok=True)
     recs = load()

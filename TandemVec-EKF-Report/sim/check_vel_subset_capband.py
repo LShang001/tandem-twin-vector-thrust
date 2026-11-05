@@ -53,6 +53,7 @@ TAG_ALIAS = {"p20_c15": "q20"}
 
 
 def load(tag, start):
+    """读一条臂的 jsonl 证据（tag 经 TAG_ALIAS 映射到实际文件），按 seed 建索引，并断言 start 起连续 50 个 seed 齐全。"""
     real = TAG_ALIAS.get(tag, tag)
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % real)
     if not os.path.exists(path):
@@ -71,6 +72,7 @@ def load(tag, start):
 
 
 def stat(d):
+    """对一条臂的位置 RMS 做统计：样本数、>25 m 失效数、p90/p95/max，以及姿态 RMSE 中位数。"""
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -86,6 +88,7 @@ def identical(a, b):
 
 
 def main():
+    """命令行入口：载入 9 条 cap 臂，按 Y5a（12→15 单调性与首个零发生率 cap）、Y5b（cap25 相对 cap15 是否劣化）、Y5c（口径）给判定，写 sim-data JSON，通过返回 0、不通过返回 1。"""
     arms = {tag: load(tag, start) for tag, _, start, _ in ARMS}
     per = {}
     for tag, seg, _start, cap in ARMS:

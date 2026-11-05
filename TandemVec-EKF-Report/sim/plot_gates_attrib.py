@@ -39,6 +39,12 @@ ARMS = [("默认", "g6base", "bs0", "#2b8a3e"),
 
 
 def load(tag, suf):
+    """读某一实验批的 jsonl 证据，按配置名去掉固定后缀归组为 {格: {seed: 记录}}。
+
+    参数：tag 为 `missile-sil-2026-10-28_<tag>.jsonl` 的中缀；suf 为该批 config
+    名的固定后缀（bs0/vf0/both），不匹配立即断言失败以免跨批混比。
+    返回：{格名: {seed: 记录}}，格名为 config 去掉后缀与尾部下划线后的部分。
+    """
     out = {}
     with open(os.path.join(SD, f"missile-sil-2026-10-28_{tag}.jsonl"), encoding="utf-8") as f:
         for line in f:
@@ -53,6 +59,12 @@ def load(tag, suf):
 
 
 def main():
+    """命令行入口：三臂（默认/仅 HF 否决/HF+互锁）× 十格生成归因四图并落盘汇总。
+
+    先断言三臂的格名集合一致且恰为 10 格，否则说明键映射错、比对无效。
+    输出：`figs/nav_gates_*.png` 四张与
+    `sim-data/gates_attribution_figs_2026-10-28.json`（各格中位与逐 seed 相同数）。
+    """
     data = {lab: load(tag, suf) for lab, tag, suf, _ in ARMS}
     cells = sorted(data["默认"])
     assert len(cells) == 10, f"格数 {len(cells)} != 10 => 键映射错，比对无效"

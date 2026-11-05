@@ -39,6 +39,7 @@ VARIANTS = [("none", "无注入(基线)", "#4a4a4a"),
 
 
 def setup_font():
+    """优先启用系统中文字体（雅黑/黑体/Noto），并关闭负号转义。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -50,6 +51,7 @@ def setup_font():
 
 
 def load(path):
+    """逐行解析 JSONL 证据文件，返回记录列表（空行跳过，解析异常向上抛）。"""
     rows = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
@@ -60,6 +62,12 @@ def load(path):
 
 
 def sel(rows, case, variant, key="pos_rms"):
+    """取某「工况_臂」的指标数值与 seed，供各图型复用。
+
+    参数：rows 为记录列表；臂名由 `<case>_<variant>` 拼成；key 为指标字段名。
+    返回：(指标数组, seed 数组)；非有限值被丢弃，seed 数组按升序排好，
+    但指标数组保持记录在文件中的原始顺序（两者不重排，配对须用同序）。
+    """
     arm = f"{case}_{variant}"
     out, seeds = [], []
     for r in rows:
@@ -74,6 +82,12 @@ def sel(rows, case, variant, key="pos_rms"):
 
 
 def main():
+    """命令行入口：读杆臂 A/B 的 JSONL 证据，绘制 2×3 六面板对比图。
+
+    参数：--jsonl 证据文件名（默认 gnss_lever_2026-10-27.jsonl）、--tag 决定输出图名。
+    输出：`figs/nav_gnss_lever_<tag>.png`，面板依次为分组条形、箱线、CDF、
+    逐 seed 配对散点、工况×臂中位热图、速度误差条形。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--jsonl", default="gnss_lever_2026-10-27.jsonl")
     ap.add_argument("--tag", default="2026-10-27")

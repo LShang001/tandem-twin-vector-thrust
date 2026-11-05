@@ -32,6 +32,11 @@ SD = os.path.abspath(os.path.join(HERE, "..", "sim-data"))
 
 
 def spearman(a, b):
+    """算两组样本的 Spearman 秩相关：转秩后求皮尔逊相关，无分散时返回 0。
+
+    返回 [-1, 1] 的秩相关系数；不要求样本服从正态，故用于"抖动大小 vs 误差大小"这类
+    单调性检验（本脚本的 J2/J3 判据）。
+    """
     a = np.asarray(a, float); b = np.asarray(b, float)
     ra = np.argsort(np.argsort(a)).astype(float)
     rb = np.argsort(np.argsort(b)).astype(float)
@@ -41,6 +46,13 @@ def spearman(a, b):
 
 
 def one(path):
+    """汇总单个 seed 的 trace：τ̂ 的 p10/中位/p90、抖动(p90−p10)、应用次数、
+    阻塞位图、水平位置误差 RMS/峰值。
+
+    输入：一个 CSV 路径（需含 ad_tau_ms/ad_valid/ad_app/ad_blk 与 ekf_n/true_n 等列）。
+    返回：指标字典；行数 <8000 或 ad_valid>0 的有效历元 <200 时按 J1 作废，返回 None。
+    抖动与偏差的统计只在 ad_valid>0 且 τ̂>0 的历元上做。
+    """
     with open(path, newline="") as f:
         r = csv.reader(f)
         h = next(r)
@@ -66,6 +78,13 @@ def one(path):
 
 
 def main():
+    """命令行入口：扫 --dir/--prefix 下的多 seed CSV，逐 seed 算指标，再算
+    抖动、|中位偏差| 与 pos_rms 的秩相关，按 J2–J4 给出 JITTER_DOMINANT /
+    NO_TREND / AMBIGUOUS 结论，打印并落盘 sim-data/delay_jitter_vs_failure_<tag>.json。
+
+    --true-ms 为该档真实延迟（ms），用于把 τ̂ 中位换算成中位偏差；作废 seed 的
+    CSV 只打印提示不参与相关；有效 seed 少于 5 个时直接退出。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default=os.path.join(os.environ.get("TEMP", "/tmp")))
     ap.add_argument("--prefix", default="j_s")

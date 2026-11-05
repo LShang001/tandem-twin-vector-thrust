@@ -1,8 +1,13 @@
 # -*- coding: utf-8 -*-
 """@file    check_socp_joint.py
 @module  测试/宿主机
-@brief   check_socp_joint.py 模块说明。
-check_socp_joint.py — SOCP+GUIDED 联合仿真结果的自动判定。
+@brief   SOCP 轨迹规划 + GUIDED 跟踪联合仿真结果的自动判定（逐场景阈值）
+@details 读 guidance_bridge.py --out 生成的 CSV，按场景比对终端精度：最终高度
+         |up|≤0.05 m、横向 |east|/|north|≤0.10 m、过程中最低高度 ≥-0.60 m
+         （SIL 无地面，负值表示超调）、最大垂直速度 ≤6.0 m/s；阈值可命令行覆盖，
+         退出码 0=PASS / 1=FAIL。
+@frame   NED（位置/速度/姿态误差取自 SIL 真值对比）
+@units   m、m/s、deg、s
 
 用法：
   py -3.12 TandemVec_FCS/test_host/fw_sil/check_socp_joint.py tmp/socp_joint2.csv

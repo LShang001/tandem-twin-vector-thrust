@@ -24,6 +24,10 @@
   S5 若无臂满足 S1+S2 ⇒ 默认保持"否决关"，高频通道仅作遥测；
   无论选到哪一档，默认值决策都必须由独立配置（21 格 × 40 seeds）确认，
   不得仅凭本表翻转固件默认。
+@frame   NED（pos_rms/pos_max 为北东地水平位置误差，nav_att_rmse 为姿态角误差）
+@units   m（位置）、m/s（速度）、deg（姿态）、
+         次/个（ad_app 累计应用次数、ad_blk 锁窗等待历元数）、
+         g（--vib-hf-enter 进入门限与振动幅值）
 """
 import concurrent.futures as cf
 import hashlib
@@ -68,6 +72,12 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms", "ad_app", "ad_blk"]
 
 
 def run(extra, arm_args, seed):
+    """跑一条「工况 + 门限臂」用例，返回末次 SIL_REAL_JSON 指标。
+
+    参数：extra 为该工况参数；arm_args 为该臂的否决开关/通道源/进入门限参数；
+    seed 为随机种子。进程尽量绑到 CPU 2。
+    返回：指标字典；超时（900 s）或日志无该行时返回 None。
+    """
     cmd = [EXE] + BASE + extra + arm_args + ["--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -85,11 +95,20 @@ def run(extra, arm_args, seed):
 
 
 def med(rows, key):
+    """取某指标在若干次运行间的中位数；缺字段按 0 计，空列表返回 NaN。"""
     vals = [r.get(key, 0) or 0 for r in rows]
     return st.median(vals) if vals else float("nan")
 
 
 def main():
+    """命令行入口：8 工况 × 5 臂 × 20 seeds 扫高频否决进入门限，按 S1–S5 选档。
+
+    先逐工况打印各臂指标中位与 pos_rms 相对 A 臂的百分比，再按预登记规则裁决：
+    S1 振 2 g 保护仍在、S2 五格零代价、S3 振 1 g 也零代价；S4 在满足 S1+S2 的臂里
+    取进入门限最大者，S5 若无臂满足则默认保持否决关。裁决只回答"是否占优当前默认"，
+    不被当作独立验证。
+    输出：`sim-data/vib_hf_enter_scan_2026-10-28.json`；可执行文件缺失返回 2。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

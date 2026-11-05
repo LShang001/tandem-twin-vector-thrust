@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """@file    compare_grand_ab.py
 @module  工具
-@brief   compare_grand_ab.py 模块说明。
-GRAND 矩阵 A/B 对比：默认参数 vs CMA-ES 优化参数。
+@brief   GRAND 矩阵 A/B 对比：默认参数 vs CMA-ES 优化参数（位置/姿态改善率）
+@details 按 (gnss, scene) 聚合 pos/att 均值，逐格打印改善率，并输出位置改善率热图。
+@frame   N/A（只比对误差指标，不做坐标变换）
+@units   m（位置 RMSE）、deg（姿态 RMSE）、%（改善率）
 
 输入：tmp/grand_default.csv、tmp/grand_opt.csv（IMUPERF_GRAND=1 输出）
 输出：tmp/grand_ab.png + 控制台汇总表
@@ -23,6 +25,7 @@ OUT = os.path.join(REPO, "tmp", "grand_ab.png")
 
 
 def load(path):
+    """读 GRAND 矩阵 CSV：从 `== GRAND matrix ==` 行起、跳过表头与列数≠8 的行，只保留第 3 列可转 float 的行，返回七元组列表；文件缺失返回空列表。"""
     rows = []
     if not os.path.exists(path):
         return rows
@@ -48,6 +51,7 @@ def load(path):
 
 
 def agg(rows):
+    """按 (gnss, scene) 分组对 pos/att 求均值，返回 {(gnss, scene): (pos 均值, att 均值)}。"""
     d = {}
     for g, s, vb, dl, seed, pos, att in rows:
         key = (g, s)

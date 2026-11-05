@@ -33,22 +33,26 @@ C_PURPLE = "#8e44ad"
 
 
 def load(name):
+    """读 sim-data 下的 JSONL 结果，返回记录列表，跳过 `no_json` 标记的无效行。"""
     return [json.loads(l) for l in open(os.path.join(DATA, name), encoding="utf-8")
             if not json.loads(l).get("no_json")]
 
 
 def vals(rows, cfg, key):
+    """取某 config 的某字段值数组，滤掉非数值与 NaN/Inf，供统计与作图直接使用。"""
     return np.array([r[key] for r in rows if r["config"] == cfg and
                      isinstance(r.get(key), (int, float)) and np.isfinite(r[key])],
                     float)
 
 
 def med(rows, cfg, key):
+    """取某 config 某字段的中位数；没有有效样本时返回 NaN（图上自然断开，不伪造 0）。"""
     v = vals(rows, cfg, key)
     return float(np.median(v)) if v.size else np.nan
 
 
 def trace(name):
+    """按列名读 200 Hz trace CSV（文件在系统 TEMP 下），返回结构化数组。"""
     return np.genfromtxt(os.path.join(TMP, name), delimiter=",", names=True)
 
 

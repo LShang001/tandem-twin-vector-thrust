@@ -66,6 +66,12 @@ PLANT = [
 
 
 def run(name, args, seed):
+    """跑一条共轴 SIL 场景，返回附加 scenario/seed/rc 的指标字典。
+
+    参数：name 为场景名；args 为该场景的追加参数（已含 --profile 与专项注入）；
+    seed 为随机种子。取 stdout 中最后一行 `SIL_REAL_JSON ` 之后的 JSON。
+    返回：指标字典；没有该行时返回只含 rc 与 error（日志尾部）的字典。
+    """
     cmd = [BIN] + BASE + args + ["--seed", str(seed)]
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     line = None
@@ -81,6 +87,12 @@ def run(name, args, seed):
 
 
 def main():
+    """命令行入口：按 sensor/command/plant 三组场景各跑 3 个种子并汇总落盘。
+
+    BIN 由环境变量 COAX_SIL_BIN 指定（默认取 Temp 下的 fw_coax.exe），单例超时 180 s。
+    输出：`tmp/coax_sil_campaign.json`（逐例指标 + 分组 + rc，失败时带 error 日志尾部）
+    与控制台逐例摘要；单例失败只记录、不中断整批。
+    """
     rows = []
     for group, cases in (("sensor", SENSORS), ("command", COMMANDS),
                          ("plant", PLANT)):

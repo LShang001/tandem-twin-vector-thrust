@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """@file    plot_ins_trajectory.py
 @module  工具
-@brief   plot_ins_trajectory.py 模块说明。
-捷联惯导真实轨迹可视化：真值 / 纯惯导 / GNSS 辅助 对比。
+@brief   捷联惯导真实轨迹可视化：真值 / 纯惯导 / GNSS 辅助 2×2 对比图
+@details 捷联惯导真实轨迹可视化：真值 / 纯惯导 / GNSS 辅助 对比。读
+         tmp/ins_trajectory.csv（test_ins_trajectory 生成），画 2×2 面板：
+         水平轨迹、高度剖面、水平位置误差（对数）、航向角；PNG 存
+         tmp/ins_trajectory_v2.png，stdout 打印首末位置与最大误差摘要。
+@frame   水平位置取 NED 北/东分量；高度列在本 CSV 中已转成向上为正；姿态取航向角
+@units   m、s、deg
 
 输入：tmp/ins_trajectory.csv（test_ins_trajectory 生成）
 输出：tmp/ins_trajectory_v2.png

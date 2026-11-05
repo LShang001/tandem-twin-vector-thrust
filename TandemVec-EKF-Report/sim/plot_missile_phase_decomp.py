@@ -9,6 +9,12 @@
           (c) 真值俯仰/高度剖面 + 窗边界（标定飞行阶段）
           (d) 两条代表 seed 的 200 Hz 姿态误差时间线
 @module  TandemVec-EKF-Report/绘图（L2 研究设施）
+@details 输入 sim-data/missile_phase_decomp_*.json（逐 seed 分窗 att_rms/pos_rms 与
+         200 Hz 时间线），输出 figs/nav_missile_phase_decomp_*.png 4 面板：
+         姿态 RMS 分窗曲线、位置 RMS 分窗（对数）、飞行剖面与窗边界、
+         代表 seed 的姿态误差时间线。
+@frame   NED 水平（pos_rms）；姿态为 roll/pitch 合成误差
+@units   deg（姿态）、m（位置/高度）、s（时间）
 @note    图内文字用中文（项目约定）；生成后必须逐张目视审查（NaN/空图/尺度）。
 """
 import argparse
@@ -31,6 +37,12 @@ KEYS = ["0-10", "10-20", "20-30", "30-45"]
 
 
 def main():
+    """命令行入口：读分窗统计 JSON，画 4 面板误差分解图并保存 PNG。
+
+    用全程 pos_rms>20 m 把 seed 分成失效/通过两簇；面板依次为姿态 RMS 分窗曲线、
+    位置 RMS 分窗（对数轴）、飞行剖面 + 窗边界、代表 seed 的姿态误差时间线。
+    --json/--out 均有默认路径，图路径打印到 stdout。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default=os.path.join(
         SD, "missile_phase_decomp_2026-10-28_am.json"))

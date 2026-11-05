@@ -12,6 +12,9 @@
          4 `nav_305g_factor2x2.png`     LPF × AHRS 2×2 中位（位置 + 速度两面板）
          5 `nav_305g_metrics_heat.png`  臂 × 指标 归一化热图（拒帧/陈旧峰值/τ̂ 等）
          6 `nav_305g_timeseries.png`    seed1 追踪：位置误差与 GNSS 新息随时间
+@frame   NED（pos_rms/nav_vel_rms 为北东地水平误差；其余指标为计数或标量）
+@units   m（位置）、m/s（速度）、deg（姿态 RMSE）、ms（ad_tau_ms）、
+         次（拒帧 outlier_rejects / 重锚 reacquire_resets）、个 seed（尾部计数）
 """
 import json
 import os
@@ -48,6 +51,7 @@ ARM_LABEL = {
 
 
 def setup_font():
+    """优先启用系统中文字体（雅黑/黑体/Noto），并关闭负号转义。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -59,6 +63,11 @@ def setup_font():
 
 
 def load(tags):
+    """读若干 tag 的 `attrib305_<tag>.jsonl` 证据，返回合并后的记录列表。
+
+    参数：tags 为 tag 名列表；缺文件只打印 [skip] 后跳过，不报错。
+    返回：逐行解析出的字典列表（每行是一条臂 × 种子的指标记录）。
+    """
     rows = []
     for t in tags:
         p = os.path.join(SIM, f"attrib305_{t}.jsonl")
@@ -85,10 +94,17 @@ def series(rows, key):
 
 
 def vals(d, arm):
+    """从 series() 的 {臂: [(seed, 值)]} 取出指定臂的值列表；缺该臂返回空列表。"""
     return [v for _, v in d.get(arm, [])]
 
 
 def main(tags):
+    """命令行入口：读证据并生成 §4.24 归因所需的全部图型。
+
+    参数：tags 为要合并的证据 tag（如 2026-10-28/fixcand/wide200）。
+    输出：`figs/` 下的七张 png（箱线、CDF、配对散点、2×2 因子、指标热图、
+    seed1 时序、双峰直方图）；生成后须逐张目视审查空图/NaN/坐标尺度/标签。
+    """
     setup_font()
     os.makedirs(FIG, exist_ok=True)
     rows = load(tags)

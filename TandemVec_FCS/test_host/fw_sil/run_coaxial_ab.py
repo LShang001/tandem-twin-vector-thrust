@@ -5,6 +5,8 @@
 @module  固件/宿主 SIL（共轴控制路径 A/B 手感 + 安全包线 + 失配扫描）
 @brief   同一 plant、同一 seed、同一杆量剖面下分别跑 alloc_mode 0/1，比较
          姿态/角速率响应、饱和与安全包线，并做惯量/推力失配扫描。
+@frame   NED（SIL 真值位置/姿态误差；角速率在机体系）
+@units   deg、deg/s、s、%（通过率为无量纲比例）
 @details 依赖 SIL 必须编入以下开关（缺失时 exit 2，绝不伪造数据）：
            --coax-alloc-mode 0|1    控制路径选择（coax-sil-plant，task-11）
            --rc-profile PATH        杆量剖面注入（同批契约，见下）

@@ -24,6 +24,11 @@ plt.rcParams["axes.unicode_minus"] = False
 
 
 def load(tag):
+    """读某一批导航在环结果，按 (配置, seed) 建索引。
+
+    参数：tag 定位 `missile-sil-2026-10-27_<tag>.jsonl`。
+    返回：{(config, seed): 记录}；同键重复时后者覆盖前者。
+    """
     rows = {}
     path = os.path.join(DATA, f"missile-sil-2026-10-27_{tag}.jsonl")
     for line in open(path, encoding="utf-8"):
@@ -33,6 +38,12 @@ def load(tag):
 
 
 def main():
+    """命令行入口：对比真值自驾与导航在环自驾的末端位置偏差，绘制中位与 CDF。
+
+    四个臂各读「真值闭环」与「导航在环」两批结果，按 seed 1–20 求两者末端位置的
+    三维模差，作为导航在环引入的弹道偏差。
+    输出：`figs/nav_navloop_2026-10-27.png`（中位条形 + 经验 CDF）与逐臂统计。
+    """
     arms = [
         ("6.4 g 基线", "nl_clean_truth", "nl_clean_nav", "clean_icm_full",
          "#2c3e50"),

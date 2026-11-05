@@ -3,6 +3,11 @@
 @file    plot_highg_fs.py
 @brief   pos/att vs 过载，按 IMU 量程分线。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 读 highg_fs_2026-10-27.jsonl（协调转弯）与 highg_pull_2026-10-27.json（纯拉杆），
+         按 (过载档, IMU 量程) 取各 seed 的 pos_rmse/att_rmse_deg 中位数，画 2×2 折线：
+         上排转弯、下排拉杆，左位置、右姿态，纵轴 symlog 兼顾跨量级。只画图不判裁决。
+@frame   NED（pos_rmse 为位置误差范数）；att_rmse_deg 为固件欧拉角误差范数，不做坐标换算
+@units   g（过载/量程）、m（位置 RMSE）、deg（姿态 RMSE）、m/s（仿真空速 300 m/s）
 """
 import json
 import os
@@ -21,6 +26,10 @@ FIGS = os.path.join(HERE, "..", "figs")
 
 
 def load_rows(name, key="fs_g"):
+    """读协调转弯 jsonl，返回 (过载档列表, {(过载, 量程): (位置 RMSE 中位, 姿态 RMSE 中位)})。
+
+    key 是量程字段名（默认 fs_g），同格多 seed 取中位数。
+    """
     rows = [json.loads(l) for l in open(os.path.join(DATA, name), encoding="utf-8") if l.strip()]
     loads = sorted({r["load"] for r in rows})
     out = {}
@@ -35,6 +44,10 @@ def load_rows(name, key="fs_g"):
 
 
 def main():
+    """出 2×2 高过载量程试点图（转弯/拉杆 × 位置/姿态），写 figs/nav_highg_fs_2026-10-27.png。
+
+    纯拉杆只有 16/32 g 两档数据，缺档自动少一条线；横轴过载档来自数据本身，不硬编码。
+    """
     turn_loads, turn = load_rows("highg_fs_2026-10-27.jsonl")
     pull = json.load(open(os.path.join(DATA, "highg_pull_2026-10-27.json"),
                           encoding="utf-8"))

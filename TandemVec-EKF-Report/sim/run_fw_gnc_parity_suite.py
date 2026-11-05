@@ -41,6 +41,13 @@ CASES = [
 
 
 def main():
+    """命令行入口：逐 profile 跑 SIL 落逐拍控制输入，再对拍固件控制链并汇总判据。
+
+    参数：--exe 为 SIL 可执行文件、--out-dir 为证据输出目录、--tag 为证据名中缀、
+    --only 只跑指定 profile（逗号分隔）。
+    输出：`<out-dir>/fw_gnc_parity_<tag>_<profile>.json`，并打印各 profile 的通道与
+    角加速度最大差。任一 profile 失败返回 1，全部通过返回 0。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=os.path.join(tempfile.gettempdir(),
                                                   "inc", "fw_real.exe"))

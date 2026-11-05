@@ -11,6 +11,8 @@
             相对默认只在真强振动格不同，其余格逐位相同。
          中位数相同不代表逐 seed 相同，因此这里同时报
           `n_diff`（有多少 seed 的 pos_rms 差 > 1e-6）与 `max|Δ|`。
+@frame   N/A（只比较 SIL 汇总 JSON 的标量指标，不涉坐标系）
+@units   m（pos_rms/pos_max）、deg（nav_att_rmse）、m/s（nav_vel_rms）、次（ad_app/ad_blk 计数）
 """
 import json
 import os
@@ -23,6 +25,10 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms", "ad_app", "ad_blk"]
 
 
 def load(path):
+    """读一份 SIL 矩阵 jsonl，返回 {config: {seed: 记录}}。
+
+    每行一条仿真结果；无 config 字段的行跳过，缺 seed 时以 None 为键。
+    """
     out = {}
     with open(path, encoding="utf-8") as fh:
         for ln in fh:
@@ -38,6 +44,13 @@ def load(path):
 
 
 def main():
+    """命令行入口：`compare_hfconf.py <A.jsonl> <B.jsonl> [key]`（相对路径按
+    sim-data 解析），逐 config 对齐同 seed 配对，打印 key 指标中位数与
+    逐 seed 不同数 n_diff、max|Δ|。
+
+    config 标签对不上时先去掉末段 `_tag` 再对齐；仍无交集则返回 2，拒绝产出
+    "交集 0 ⇒ 逐项不变"的空洞绿灯。
+    """
     if len(sys.argv) < 3:
         print("用法: compare_hfconf.py <A.jsonl> <B.jsonl> [key]")
         return 2

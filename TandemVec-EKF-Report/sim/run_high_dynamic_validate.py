@@ -22,6 +22,7 @@ SEEDS = list(range(1, int(os.environ.get("HIGHDYN_SEEDS", "51"))))
 
 
 def build():
+    """构造 50-seed 定向验证用例：正过载基线（turn/sturn/pull × 2/4/6/8 g × 80/150 m/s）、滚转/圆锥、负 g、杆臂 A/B、20 s 失联×IMU 误差档与饱和边界。"""
     cs = []
     # 正过载基线
     for prof in ("turn", "sturn", "pull"):
@@ -71,6 +72,7 @@ def build():
 
 
 def main():
+    """命令行入口：进程池跑全部用例，写 high-dyn-<tag>.jsonl；按基线/杆臂/失联/饱和分组做 pos/att/NEES 统计并落盘 JSON。"""
     cases = build()
     print("cases", len(cases), flush=True)
     rows = []

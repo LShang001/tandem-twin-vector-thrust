@@ -31,18 +31,24 @@ C_NOGATE = "#e45756"
 
 
 def load(name):
+    """读 sim-data 下的结果 JSONL，丢弃带 `no_json` 标记的无效行。
+
+    参数：name 为文件名；返回每条有效行解析出的字典列表。
+    """
     path = os.path.join(DATA, name)
     return [json.loads(l) for l in open(path, encoding="utf-8")
             if not json.loads(l).get("no_json")]
 
 
 def vals(rows, cfg, key):
+    """取某配置下某指标的有限数值数组；缺失或非有限值跳过，无数据返回空数组。"""
     return np.array([r[key] for r in rows if r["config"] == cfg and
                      isinstance(r.get(key), (int, float)) and np.isfinite(r[key])],
                     float)
 
 
 def med(rows, cfg, key):
+    """取某配置下该指标的中位数；无有效样本时返回 NaN。"""
     v = vals(rows, cfg, key)
     return float(np.median(v)) if v.size else np.nan
 
@@ -53,6 +59,11 @@ wrong = load("missile-sil-2026-10-27_lpfab_wrongaxis20.jsonl")
 goff = load("missile-sil-2026-10-27_prod_gateoff20.jsonl")
 gon = load("missile-sil-2026-10-27_prod_gateon20.jsonl")
 def resolve_tmp(path):
+    """把 Git Bash 风格的 /tmp 路径还原成 Windows 下可读的真实路径。
+
+    参数：path 为原路径。原路径存在则原样返回；否则对 /tmp/ 前缀改用
+    `%TEMP%` 重新拼接；两者都不存在时仍返回原路径，交给下游报错。
+    """
     # Git Bash 的 /tmp 与 Windows Python 的 TEMP 是同一目录，但路径写法不同。
     if os.path.exists(path):
         return path

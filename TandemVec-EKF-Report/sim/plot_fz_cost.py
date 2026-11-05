@@ -46,6 +46,7 @@ KEYS = {"pos_rms": "位置 RMSE [m]", "pos_max": "位置峰值 [m]",
 
 
 def load(path, arm):
+    """读一臂的 jsonl 结果，返回记录列表，并为每条记录打上 `_arm` 标签（臂名）用于后续分组。"""
     out = []
     with open(os.path.join(SD, path), encoding="utf-8") as f:
         for line in f:
@@ -59,6 +60,11 @@ def load(path, arm):
 
 
 def main():
+    """出 §4.24h 六张图（paired/box/cdf/window/timeseries/heat）并写 fz_cost_summary_2026-10-28.json。
+
+    三臂 × 四格取 pos_rms/pos_max/nav_att_rmse；窗口分解用 seed1 的 200 Hz 追踪，
+    水平误差按 hypot(ekf-true) 只算北东分量（不含 ctl_alt 定义量）。
+    """
     recs = {}
     for label, tag, col in ARMS:
         recs[label] = load(f"missile-sil-2026-10-28_{tag}.jsonl", label)

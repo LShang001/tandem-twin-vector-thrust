@@ -29,6 +29,7 @@ from matplotlib import font_manager
 
 
 def setup_font():
+    """按优先级挑可用的中文字体（雅黑/黑体/思源），并关闭负号乱码。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -50,6 +51,11 @@ FIELDS = ["t", "v", "ok", "rej", "nref", "ng", "er", "span", "smax",
 
 
 def load_probe(path):
+    """解析一份探针文本（p_fdi*_t*.txt），返回逐行记录列表。
+
+    只收命中 LINE 正则的行（t/v/ok/rej/nref/ng/er/span/smax/tau_hat/cost 等），
+    除 rej 保留原始串外全部转 float；不匹配的日志行直接跳过。
+    """
     rows = []
     with open(path, encoding="utf-8", errors="replace") as fh:
         for ln in fh:
@@ -65,10 +71,17 @@ def load_probe(path):
 
 
 def series(rows, key):
+    """从记录列表抽出某个数值字段，返回可直接进 matplotlib 的 float ndarray。"""
     return np.array([r[key] for r in rows], dtype=float)
 
 
 def main():
+    """命令行入口：读探针目录与可选 A/B JSON，画 6 面板诊断图并保存 PNG。
+
+    必须给 --probe-dir（内含 p_fdi*_t*.txt 探针文件）与 --out；给 --ab-json 时
+    第 (f) 面板改为 SIL 三臂的位置 RMSE 分组条形，否则画速度-代价比与锐度散点。
+    图落到 --out 并把路径打印到 stdout；探针目录为空直接报错退出。
+    """
     setup_font()
     ap = argparse.ArgumentParser()
     ap.add_argument("--probe-dir", required=True)

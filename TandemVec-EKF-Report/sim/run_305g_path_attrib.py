@@ -44,6 +44,9 @@
      未参与（ad_app=0），放宽的收益范围仅限"估计器被应用"的格。
   边界：全部 L2 SIL，不写实机；两开关只是研究用的反事实口径，固件生产配置
      始终是 LPF+Madgwick 全开。
+@frame   NED（pos_rms/pos_max）；姿态量 rms_pitch/max_roll 为固件欧拉角（deg），不做坐标换算
+@units   m（pos_rms/pos_max）、deg（姿态）、N（ms-thrust 推力）、ms（ad_tau_ms）、
+         帧/次（outlier_rejects/reacquire_resets/vel_sub_rec/ad_app/ad_blk）
 """
 import argparse
 import concurrent.futures as cf
@@ -95,6 +98,10 @@ KEYS = ["pos_rms", "pos_max", "rms_pitch", "max_roll", "outlier_rejects",
 
 
 def run_one(exe, arm, seed, nseed, log):
+    """跑一次 SIL（绑 CORE），返回该臂该 seed 的指标 dict；无 SIL_REAL_JSON 时记日志并返回 None。
+
+    nseed 只用于日志编排（同一批的规模），不参与计算；命令 = BASE + 该臂运行时开关 + seed。
+    """
     extra = dict(ARMS).get(arm, [])
     cmd = [exe] + BASE + ["--seed", str(seed)] + list(extra)
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -133,6 +140,7 @@ def pct(vals, q):
 
 
 def stats(rows):
+    """一臂汇总：KEYS 各字段的 med/mean/p95/max，加上 >25 m/>15 m 尾部计数、拒帧种子数、导航未初始化数。"""
     s = {"n": len(rows)}
     for k in KEYS:
         vals = [r[k] for r in rows if isinstance(r.get(k), (int, float))
@@ -153,6 +161,11 @@ def stats(rows):
 
 
 def main():
+    """命令行入口：按臂 × seeds 并行跑 30.5 g 归因矩阵，落 jsonl 与按臂汇总的 JSON。
+
+    该批先校验二进制 md5 并写日志（可复现锚），再逐 seed 与参考臂（默认 A_prod）配对求
+    pos_rms 差，给出中位/均值/极值与改善、变差 seed 数，供 F1–F10 判据逐条对照。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default="/tmp/tv_32g/fw_real.exe")
     ap.add_argument("--seeds", type=int, default=50)

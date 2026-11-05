@@ -29,6 +29,12 @@ NEES_RE = re.compile(r"\[nees\] t=\s*([0-9.]+).*?nees=\s*([-0-9.]+)")
 
 
 def parse_log(path):
+    """从 SIL 日志里抽 `[nees] t=<秒> ... nees=<值>` 行的时间与 NEES 序列。
+
+    参数：path 为日志路径，逐行正则匹配，无匹配的行忽略。
+    返回：(t, 空数组, 空数组, nees)；中间两个空数组是历史四元组返回值的占位，
+    调用方只用第 1、4 项。
+    """
     t, ne = [], []
     for line in open(path, encoding="utf-8", errors="ignore"):
         m = NEES_RE.search(line)

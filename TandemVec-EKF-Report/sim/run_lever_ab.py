@@ -27,6 +27,12 @@ CASES = [
 
 
 def one(args):
+    """跑一次高动态杆臂 A/B 用例，返回该次 JSON 指标并回填用例标签。
+
+    参数：args 为 (剖面, 过载 g, 角速度 dps, 杆臂 m, 补偿模式 0/1/2, seed)。
+    返回：指标字典；日志里没有 `HIGH_DYN_JSON` 行时返回只含 `no_json: True`
+    的字典，其余标签字段仍照常回填，便于后续过滤。
+    """
     prof, load, rate, lever, mode, seed = args
     cmd = [EXE, "--profile", prof, "--load", str(load), "--speed", "80",
            "--rate-dps", str(rate), "--duration", "30", "--latency-ms", "20",
@@ -40,6 +46,7 @@ def one(args):
 
 
 def stat(v):
+    """把一组数值压成 {n, med, p90, mx}；无有效值时返回空字典。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)], float)
     if not len(v):
         return {}
@@ -48,6 +55,13 @@ def stat(v):
 
 
 def main():
+    """命令行入口：五剖面 × 三补偿模式 × 10 种子跑 A/B 矩阵，落盘并逐组合汇总。
+
+    模式 0=不补偿、1=仅位置预补偿、2=EKF 完整杆臂补偿；EXE 由环境变量
+    HIGHDYN_EXE 指定（默认 /tmp/highdyn.exe）。
+    输出：`sim-data/high-dyn-lever-ab-2026-10-26.jsonl`（逐次原始记录）与同名
+    `.json`（按 `剖面_L过载_R角速度_lev杆臂` × mode0/1/2 的位置/速度/姿态/NEES 统计）。
+    """
     tasks = [(p, l, r, lv, m, s) for p, l, r, lv in CASES
              for m in (0, 1, 2) for s in SEEDS]
     with cf.ProcessPoolExecutor(max_workers=10) as ex:

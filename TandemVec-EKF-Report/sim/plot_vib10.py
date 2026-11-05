@@ -32,6 +32,9 @@ CASES = [
 
 
 def main():
+    """命令行入口：读 5 份 vib10 矩阵（1 g/80 Hz、2 g/120 Hz 的 off/on 与 on+导航在环），
+    各取 `thrust10g_icm_full` 格的 pos_rmse / att_rmse 中位与最大值，出双栏柱状图
+    （位置、姿态，纵轴对数+最大值误差棒），存 figs/nav_vib10_2026-10-27.png。"""
     groups = {}
     for _, tag, _c in CASES:
         path = os.path.join(DATA, f"missile-sil-2026-10-27_{tag}.json")

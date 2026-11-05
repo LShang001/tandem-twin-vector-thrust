@@ -12,6 +12,7 @@
              r = ekf.gnss_update(vel_ned, lla, 0.005, age_s=0.0)
              s = ekf.state()
          所有 update 返回 dict：input_valid/fused/nis_*/innovation_norm/... 。
+@frame   NED（位置/速度/磁北分量）与机体系（比力/角速度/磁矢量）
 @units  SI：m、m/s、m/s²、rad、rad/s、s；LLA=(纬度 rad, 经度 rad, 椭球高 m)。
 @see    TandemVec_FCS/lib/navigation-main/src/ekf_15_state.h
 """

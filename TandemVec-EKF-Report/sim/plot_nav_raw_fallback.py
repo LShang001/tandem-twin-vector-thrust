@@ -40,6 +40,11 @@ FAULT = ["imu_stuck_icm_full", "imu_stuck2s_icm_full",
 
 
 def load(tag, suf):
+    """读 missile-sil-2026-10-28_<tag>.jsonl，按故障格归组返回 {格: {seed: 记录}}。
+
+    config 必须以 suf 结尾（如 _nrb/_nrr），剥掉后缀即故障格名；文件缺失直接退出，
+    便于在图上暴露"证据文件没跑"而不是静默画空。
+    """
     path = os.path.join(SD, f"missile-sil-2026-10-28_{tag}.jsonl")
     if not os.path.exists(path):
         raise SystemExit(f"缺证据文件：{path}")
@@ -57,6 +62,12 @@ def load(tag, suf):
 
 
 def main():
+    """命令行入口：读五臂 JSONL，画 §4.24m 的 4 张图并打印 J4 惰性对照。
+
+    图 1 四故障格 × 三臂中位条形（标注相对默认臂的百分比），图 2 逐 seed 配对散点，
+    图 3 三臂经验 CDF，图 4 非故障格 raw 与 raw+回退的位置差（应恒 0、nrfb=0）。
+    配对不足 20 seeds 直接断言失败——判据只在满配对时成立。
+    """
     D = {lab: load(tag, suf) for lab, tag, suf, _ in ARMS}
     for lab in D:
         assert set(D[lab]) == set(FAULT), (lab, sorted(D[lab]))

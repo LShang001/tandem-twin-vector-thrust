@@ -3,6 +3,8 @@
 @file    check_lever_sign.py
 @brief   比较 SIL 实际注入的 lever_ned、量测−真值偏置、以及滤波器位置误差响应。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 逐文件报三项均值：SIL 注入 lever_ned、量测−真值偏置、ekf−真值位置误差；
+         再用真值位置差分求平均沿航迹单位向量，判 20 m 杆臂注入方向是否与航迹一致。
 @frame   NED
 @units   m
 
@@ -15,11 +17,13 @@ import sys
 
 
 def mean(vals):
+    """去 NaN 后求算术均值，无有效值返回 NaN。"""
     vals = [v for v in vals if v == v]
     return sum(vals) / len(vals) if vals else float("nan")
 
 
 def load(path, t_min=10.0):
+    """读 trace CSV，只保留 t ≥ t_min（默认 10 s，跳过初始收敛段）的行；缺列或非数值的行跳过。"""
     rows = []
     with open(path, encoding="utf-8") as fh:
         for r in csv.DictReader(fh):
@@ -33,6 +37,7 @@ def load(path, t_min=10.0):
 
 
 def f(r, k):
+    """按列名取浮点值，缺列或不可解析返回 NaN（统一缺失列统计口径）。"""
     try:
         return float(r[k])
     except (KeyError, ValueError):
@@ -40,6 +45,7 @@ def f(r, k):
 
 
 def report(path):
+    """汇总单个 trace 的杆臂符号证据：SIL 注入 lever_ned、量测−真值偏置、ekf−真值位置误差的均值，以及平均沿航迹单位向量（20 m 杆臂应沿此方向）。"""
     rows = load(path)
     if not rows:
         print(os.path.basename(path), "no rows")

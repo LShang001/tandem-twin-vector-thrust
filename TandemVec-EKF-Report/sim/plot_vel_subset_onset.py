@@ -39,6 +39,7 @@ CELLS = [(22500, 20), (23000, 20), (23500, 20), (23700, 20), (23800, 20), (23900
 
 
 def load(tags):
+    """读若干 tag 的 jsonl 证据，按 (推力 N, seed) 合并建索引。"""
     out = {}
     for t in tags:
         path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % t)
@@ -52,6 +53,7 @@ def load(tags):
 
 
 def main():
+    """命令行入口：载入基线/子集两臂，画发生率曲线、逐 seed 配对、簇迁移与自证据计数四图，打印两臂优于/劣于/相同的 seed 数。"""
     base, vel = load(BASE.keys()), load(VEL.keys())
     os.makedirs(FIG, exist_ok=True)
 

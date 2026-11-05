@@ -13,6 +13,8 @@
          判据（跑前写死）：I1 配对数 = 旧文件行数（470）；I2 `pos_rms`/`pos_max`/
          `nav_att_rmse`/`nrfb` 四个字段逐 seed 完全相等 ⇒ 身份成立；
          任一不等即列出差异格与最大相对偏差，判"实现不等价"。
+@frame   NED（pos_rms/pos_max 为位置误差）；nav_att_rmse 为固件导航输出的滚转/俯仰/航向
+         误差范数。本脚本只做逐字段数值比对，不做任何坐标换算
 @units   长度 m、姿态 deg、计数帧；相对偏差无量纲
 @note    两份 jsonl 的 config 后缀必须一致（同一 `--name-suffix`），否则配对为 0
 """
@@ -24,6 +26,7 @@ FIELDS = ("pos_rms", "pos_max", "nav_att_rmse", "nrfb")
 
 
 def load(path):
+    """读 jsonl 矩阵，返回 {(config, seed): 记录}；同键后写覆盖先写。"""
     out = {}
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -36,6 +39,12 @@ def load(path):
 
 
 def main():
+    """命令行入口：<old.jsonl> <new.jsonl> <out.json>。
+
+    I1 要求配对键数 == 两侧行数（不等即判无效、退出码 1，防空洞绿灯）；
+    I2 要求 pos_rms/pos_max/nav_att_rmse/nrfb 四字段逐 seed 完全相等，
+    并给出各字段差异数与最大相对偏差。全过退出码 0。
+    """
     if len(sys.argv) != 4:
         sys.exit("用法: py compare_nav_raw_module_identity.py <old.jsonl> <new.jsonl> <out.json>")
     old_path, new_path, out_path = sys.argv[1:4]

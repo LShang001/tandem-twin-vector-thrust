@@ -36,6 +36,11 @@ OUTAGE = ["--outage", "10:30"]
 
 
 def run(exe, extra, seed):
+    """跑高动态台架的单 seed（--json 输出），返回解析后的指标字典。
+
+    参数：exe 为宿主台架二进制，extra 为该臂的杆臂/补偿/子集参数，seed 为随机种子；
+    从输出中取最后一个 JSON 对象。无输出或解析失败返回 None（该 seed 被跳过）。
+    """
     cmd = [exe] + BASE + OUTAGE + ["--seed", str(seed), "--json"] + extra
     out = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     txt = out.stdout + out.stderr
@@ -51,6 +56,12 @@ def run(exe, extra, seed):
 
 
 def main():
+    """命令行入口：5 个杆臂/补偿/子集臂 × seeds，聚合打印并落盘 JSON。
+
+    --exe 必填；--extra 追加台架参数（如换工况），--no-outage 去掉失联段。
+    按臂打印 n 与 pos/vel/姿态 RMSE 均值、pos_max、融合/拒帧均值与失败 seed 数，
+    明细写 sim-data/lever_highdyn_<tag>.json。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", type=int, default=10)

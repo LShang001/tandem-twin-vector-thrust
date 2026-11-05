@@ -3,6 +3,13 @@
 @file    plot_tail30.py
 @brief   展示 19.5–21.4 s 有界瞬态与 21.5 s 重锚回落。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 读 trace-sil32g-30g-seed21-2026-10-27.csv（200 Hz trace），画三联图：
+         (a) 水平位置误差并叠 50 m 野值门线；(b) 真高与真垂速双纵轴；
+         (c) 气压新息与 baro_fused×2 融合位。时间轴截 15–26 s，用于展示
+         19.5–21.4 s 的有界瞬态与 21.5 s 重锚回落；输出
+         figs/nav_tail30_2026-10-27.png。
+@frame   NED（水平误差取 N/E 合成；高度向上为正）
+@units   m（位置/高度/气压新息）、m/s（垂速）、s（时间）
 """
 import csv
 import os

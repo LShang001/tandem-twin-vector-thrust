@@ -10,6 +10,8 @@
              rows = run_matrix(cases, workers=10, cores=[2,3,5,...])
          每个 case = {"exe":..., "args":[...], "seed":int}；结果 dict 含原始 JSON
          字段，另加 seed/args。
+@frame   N/A（只驱动进程并原样透传 SIL 的 JSON 字段，不做任何坐标换算）
+@units   N/A（不解释、不转换单位，单位语义归各研究脚本与固件输出）
 @note    只做进程驱动与结果解析；算法全部在固件 SIL 内，本文件不得加入滤波/
          控制/传播公式。
 """
@@ -77,6 +79,7 @@ def run_matrix(cases, workers: int = 10, cores=None,
 
 
 def save_jsonl(path: str, rows: list[dict]) -> None:
+    """把结果列表写成 JSONL（一行一条、UTF-8 不转义中文），覆盖写并自动建父目录。"""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         for r in rows:
@@ -84,6 +87,7 @@ def save_jsonl(path: str, rows: list[dict]) -> None:
 
 
 def md5_of(path: str) -> str:
+    """分块（1 MiB）计算文件 MD5，返回十六进制串；用于给 SIL 二进制留可复现指纹。"""
     import hashlib
 
     h = hashlib.md5()

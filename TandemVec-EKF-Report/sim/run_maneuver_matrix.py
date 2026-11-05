@@ -1,17 +1,14 @@
 # -*- coding: utf-8 -*-
-"""Step-maneuver navigation matrix for the real-nav SIL.
+"""机动导航矩阵驱动（真实导航 SIL）。
 @file    run_maneuver_matrix.py
 @brief   SIL 速度/机动导航矩阵驱动。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
-@details 驱动 fw_real.exe 的多方向/腿长/故障组合。
-@frame   N/A
-@units   N/A
-
-Each run: altitude hold until t=20 s, then AUTO_POSITION with a one-shot
-horizontal target offset (--pos-leg).  Optional 5 s GNSS outage / crosswind
-overlaps the maneuver at t=25..30 s.  The JSON emitted by the SIL only covers
-EKF-vs-truth error and attitude; target tracking and speed are recovered from
-the 1 Hz truth samples printed to stdout.
+@details 驱动 fw_real.exe 的多方向/腿长/故障组合。每条用例：先定高飞到 t=20 s，
+         再切 AUTO_POSITION 给一次性水平目标偏移（--pos-leg）；可选 5 s GNSS
+         失联或横风在 t=25..30 s 与机动重叠。SIL 输出的 JSON 只含 EKF 对真值
+         的误差与姿态，目标跟踪与速度从 stdout 打印的 1 Hz 真值样本回捞。
+@frame   NED（水平位置目标 leg_n/leg_e；误差为 EKF 对真值）
+@units   m、m/s、s、deg（姿态/航向误差）
 """
 import argparse
 import concurrent.futures as cf
@@ -37,6 +34,12 @@ JSON_RE = re.compile(r"SIL_REAL_JSON (\{.*\})")
 
 
 def one(task):
+    """跑一次 SIL 机动任务，返回一行结果 dict（含 leg_n/leg_e、峰值速度、终点误差与失效判据）。
+
+    task = (工况, 方向, 腿长 m, seed)：腿长按方向单位向量分解成 N/E 目标偏移传给 --pos-leg。
+    从 stdout 的 1 Hz 真值重算峰值速度与终点相对目标误差；JSON 指标原样展开。
+    超时（180 s）或无 JSON 时返回带 timeout/no_json 标记的记录，不抛异常以免中断整批。
+    """
     cond, direction, dist, seed = task
     dn, de = DIRS[direction]
     norm = math.hypot(dn, de)
@@ -93,6 +96,10 @@ def one(task):
 
 
 def main():
+    """入口：枚举全矩阵（4 工况 × 21 个方向-腿长组合 × 40 seeds = 3360 次），进程池跑并写 jsonl。
+
+    --limit 只截前 N 个任务用于冒烟；结果逐行 flush 到 OUTDIR/results.jsonl，便于长跑中断续看。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--limit", type=int, default=0)

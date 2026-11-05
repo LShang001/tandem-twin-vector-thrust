@@ -267,6 +267,9 @@ def decode_rc(p: bytes) -> dict:
 
 
 def decode_link_diag(p: bytes) -> dict:
+    """0xF5: 链路诊断遥测 [8×uint32 LE：link_seq/link_uptime_ms/ano_skip/
+    ano_proto_drop/mav_skip/nav_gap_ms/imu_ring_drop/imu_isr_empty]。
+    """
     if len(p) < 32:
         return {}
     vals = struct.unpack('<8I', p[0:32])

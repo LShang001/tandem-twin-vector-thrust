@@ -28,6 +28,7 @@ SEEDS = 5
 
 
 def resolve_bin(path):
+    """解析二进制路径：原路径存在即用；/tmp/ 前缀的路径回退到 Windows %TEMP% 下同名文件。"""
     if os.path.exists(path):
         return path
     if path.startswith("/tmp/"):
@@ -38,6 +39,11 @@ def resolve_bin(path):
 
 
 def one(job):
+    """跑一次减震座容差 SIL（超时 300 s），返回该格的指标 dict（附 fn/ζ/振动参数标签）。
+
+    job = (组名, exe, seed, 振动 g, 振动 Hz, 隔振 fn Hz, ζ, 推力 N)；
+    推力为 0 表示不追加 --ms-thrust（1 g/80 Hz 档）。超时/无 JSON 返回带标记的记录。
+    """
     name, exe, seed, vib_g, vib_hz, fn, zeta, thrust = job
     cmd = [exe] + BASE + ["--seed", str(seed), "--vib", f"{vib_g:.2f}",
                           "--vib-hz", f"{vib_hz:.1f}", "--vib-start", "1.5",
@@ -59,6 +65,11 @@ def one(job):
 
 
 def main():
+    """入口：五档 fn × 三档 ζ × 两种振动工况 × 5 seeds 并行跑，落 jsonl 与按格汇总的 JSON。
+
+    汇总给每格的 seed 数、姿态/位置/速度误差中位与姿态峰值；无 JSON 的格只计数不上表中位数
+    （n_ok 与 n_jobs 之差即失败格数）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default="/tmp/tv_fcs_missile_prod_fresh_iso/fw_real.exe")
     ap.add_argument("--workers", type=int, default=8)

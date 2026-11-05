@@ -36,6 +36,11 @@ FAIL_M = 25.0
 
 
 def load():
+    """读配额门故障矩阵的逐 seed 证据 jsonl，整理成 {(格, 臂): {seed: 记录}}。
+
+    数据源：`sim-data/vel_subset_quota_fault_<TAG>.jsonl`；缺文件直接退出。
+    臂名 q1 为配额门新默认（1 次）、q255 为取消配额门。
+    """
     path = os.path.join(SD, "vel_subset_quota_fault_%s.jsonl" % TAG)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -50,6 +55,7 @@ def load():
 
 
 def stat(d):
+    """汇总单臂的位置误差分布：样本数、>25 m 计数、p90、最大值与姿态 RMSE 中位。"""
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -58,6 +64,13 @@ def stat(d):
 
 
 def main():
+    """命令行入口：按预登记判据 Y1–Y3 裁决配额门在故障格上是否安全、是否惰性。
+
+    Y1 要求五格两臂各收满 20 条；Y2 要求配额 1 臂的 >25 m 发生率不高于配额 255 臂，
+    且无逐 seed「变差>20% 且绝对增量>2 m」；Y3 逐格描述两臂是否逐 seed 完全相同
+    （完全相同即配额门在该格惰性）。
+    输出：`sim-data/vel_subset_quota_fault_<TAG>_verdict.json`；全通过返回 0，否则 1。
+    """
     data = load()
     rep = {"per_cell": {}, "Y1": {}, "Y2": {}, "Y3": {}}
     counts = {"%s|%s" % (c, a): len(data[(c, a)]) for c in CELLS for a in ARMS}

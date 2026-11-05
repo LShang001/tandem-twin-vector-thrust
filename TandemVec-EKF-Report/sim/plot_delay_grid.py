@@ -12,6 +12,8 @@
          3 `nav_delay_grid_cdf.png`      延 150/200/250 ms 三格 G0/G1 的 pos_rms 经验 CDF；
          4 `nav_delay_grid_apps.png`     应用历元数 `ad_app` 热图（开关位置的另一半证据）。
          生成后逐张目视审查（空图、NaN、刻度重叠、被裁的柱/线）。
+@frame   NED（pos_rms 只取水平 NE 分量）
+@units   ms（真延迟/网格上界/tau）、m（pos_rms）、个（应用历元数/整帧拒绝次数）
 """
 import json
 import os
@@ -35,6 +37,8 @@ LATS = [150, 200, 250, 300, 330]
 
 
 def setup_font():
+    """按 微软雅黑 → SimHei → Noto Sans CJK SC 的顺序挑第一个可用中文字体设给
+    matplotlib，并关闭 unicode 负号替换，避免图上中文/负号变方框。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -46,10 +50,13 @@ def setup_font():
 
 
 def load(p):
+    """读 JSON 产物；文件不存在返回 None，让 main() 跳过对应图而不是报错中断。"""
     return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else None
 
 
 def mat(sweep, key):
+    """把扫描 JSON 的 `med[f"{lat}_{grid}"][key]` 铺成 (真延迟 × 网格上界) 的
+    二维数组，行序 LATS、列序 GRIDS；缺该格的组合留 NaN（图上显示为空白）。"""
     m = np.full((len(LATS), len(GRIDS)), np.nan)
     for i, lat in enumerate(LATS):
         for j, g in enumerate(GRIDS):
@@ -60,6 +67,9 @@ def mat(sweep, key):
 
 
 def fig_surface(sweep):
+    """出决策面图 nav_delay_grid_surface.png：左为 5×5 的 pos_rms 中位热图（逐格
+    标数值），右为各网格上界下 pos_rms 中位随真延迟的折线——用来看"放宽从哪一档
+    开始有收益、到哪里饱和"，以及网格须 ≥ 约 1.2× 真延迟才起作用的门槛。"""
     pos = mat(sweep, "pos_rms")
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.0, 5.0))
     im = ax1.imshow(pos, cmap="viridis_r", aspect="auto",
@@ -97,6 +107,13 @@ def fig_surface(sweep):
 
 
 def fig_mechanism(sweep, tau):
+    """出机制图 nav_delay_tau_mechanism.png：被应用历元上 tau 中位 vs 真延迟，
+    叠 y=x 参考线、末帧 tau 标注，并把同一真延迟的默认/放宽网格用竖线连起来，
+    用来说明"为什么不能用末帧 tau 判断命中"（末帧比中位差 50–100 ms）。
+
+    参数：tau 为逐格逐 seed 的历元取证（{f"{grid}_{lat}": [记录]}）；sweep 目前未
+    参与绘图，保留形参以与其余三张图统一调用签名。
+    """
     fig, ax = plt.subplots(figsize=(7.4, 6.4))
     ax.plot([0, 360], [0, 360], ls="--", color="k", lw=1.0, label="tau = 真延迟")
     xs, ys, ls_ = [], [], []
@@ -147,11 +164,15 @@ def fig_mechanism(sweep, tau):
 
 
 def st_median(v):
+    """取中位数（此处延迟导入 statistics，避免顶部为单个函数多引一个模块）。"""
     import statistics
     return statistics.median(v)
 
 
 def fig_apps(sweep):
+    """出开关侧证据图 nav_delay_grid_apps.png：左为 tau 被应用历元数（ad_app）中位
+    热图，右为 GNSS 整帧拒绝次数（outlier_rejects）中位热图——应用次数随网格放宽
+    跳变、整帧拒绝多数档反而下降，是"开关位置"的另一半证据。"""
     app = mat(sweep, "ad_app")
     rej = mat(sweep, "outlier_rejects")
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13.0, 4.8))
@@ -182,6 +203,8 @@ def fig_apps(sweep):
 
 
 def fig_cdf(ab):
+    """出分布图 nav_delay_grid_cdf.png：延 150/200/250 ms 三格各一栏，画 G0（默认
+    网格 150 + CAP100）与 G1（网格 300 + CAP300）两臂 pos_rms 的经验 CDF（对数横轴）。"""
     cells = [c for c in ("延150ms", "延200ms", "延250ms") if c in ab["rows"]]
     fig, axes = plt.subplots(1, len(cells), figsize=(4.6 * len(cells), 4.2))
     if len(cells) == 1:
@@ -212,6 +235,9 @@ def fig_cdf(ab):
 
 
 def main():
+    """命令行入口：设中文字体并确保 figs 目录后，按三份产物是否存在分别出图——
+    扫描 JSON 出曲面与应用两张、逐历元 tau 出机制图、三臂 A/B 出 CDF 图；
+    缺哪份只打印跳过，不中断其余图。返回 0。"""
     setup_font()
     os.makedirs(FIGS, exist_ok=True)
     sweep, tau, ab = load(SWEEP), load(TAU), load(AB)

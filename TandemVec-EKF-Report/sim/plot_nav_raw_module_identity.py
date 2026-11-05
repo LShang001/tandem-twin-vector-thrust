@@ -42,6 +42,7 @@ FIELDS = ("pos_rms", "pos_max", "nav_att_rmse", "nrfb")
 
 
 def load(name):
+    """读一份矩阵 jsonl，返回 {(config, seed): 记录}；同键后写覆盖先写。"""
     out = {}
     with open(os.path.join(SD, name), encoding="utf-8") as f:
         for line in f:
@@ -53,6 +54,11 @@ def load(name):
 
 
 def main():
+    """对 N1/N2 两组改前-改后矩阵各出四张证据图（差值条形/差值箱线/配对散点/nrfb 时序）。
+
+    配对必须满（keys == old == new），否则 assert 中止——交集不足时画出的"全零"是假绿灯。
+    零差值统一画在 1e-6 处，避免 symlog 下"空图"被误读成脚本没跑。
+    """
     os.makedirs(FIG, exist_ok=True)
     for title, old_name, new_name, fig_name in PAIRS:
         old, new = load(old_name), load(new_name)

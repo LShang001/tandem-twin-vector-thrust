@@ -7,6 +7,11 @@
           (b) 各窗越门历元数中位（速度门/位置门 × 两簇）；
           (c) 子集关/开逐 seed 位置 RMS 配对散点；(d) 两臂位置 RMS 的 CDF
 @module  TandemVec-EKF-Report/绘图（L2 研究设施）
+@details 输入 sim-data 的 A/B jsonl 与 --trace-dir 下逐 seed 的 trace CSV，输出
+         4 面板 PNG：(a) 速度残差历元时间线、(b) 各窗越门历元数、(c) 子集关/开
+         逐 seed 位置 RMS 配对散点、(d) 两臂位置 RMS 的 CDF。
+@frame   NED 水平（残差与 pos_rms 为北东向合成量）
+@units   m（pos_rms）、m/s（速度残差）、s（时间）、个（历元数）
 @note    图内文字中文；生成后逐面板目视审查（空图/尺度/图例遮挡）。
 """
 import argparse
@@ -32,6 +37,12 @@ WINDOWS = ((0, 10), (10, 20), (20, 30), (30, 45))
 
 
 def load_epochs(path):
+    """读 SIL 历元级 CSV，只保留 GNSS 量测更新所在的历元行。
+
+    参数 path 为 trace CSV，需含 t/msr_n/msr_e/gate_vel/gate_pos/
+    gnss_resid_vel_ne/gnss_resid_pos_ne 列。用 msr 位置发生变化识别新历元
+    （首帧之后），返回 (历元时刻数组, 各列同长度子数组)。
+    """
     with open(path, newline="") as f:
         r = csv.reader(f)
         h = next(r)
@@ -48,6 +59,12 @@ def load_epochs(path):
 
 
 def main():
+    """命令行入口：画 §4.24an 的 4 面板图（残差时间线 + 越门统计 + 配对散点 + CDF）。
+
+    --trace-dir 取失败/通过 seed 的 trace CSV（缺文件的 seed 自动跳过）；
+    --off/--on 为 10 Hz 子集关/开两臂 jsonl；--level 可按推力档筛选；
+    图存到 --out（默认 figs/nav_missile_epoch_channels_2026-10-28.png）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace-dir",
                     default=os.path.join(os.environ.get("TEMP", "/tmp"),

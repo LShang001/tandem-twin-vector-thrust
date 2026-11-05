@@ -26,6 +26,11 @@ SCEN = {
 
 
 def one(gate, scen, seed):
+    """跑一个门控档 × 场景的单 seed，返回 SIL_REAL_JSON 指标字典。
+
+    gate 为 --gnss-v-gate 取值（0/1），scen 为 SCEN 中的场景名（决定时长与追加参数），
+    seed 为随机种子。输出无 JSON 时返回带 no_json=True 的占位行。
+    """
     secs, extra = SCEN[scen]
     cmd = [EXE, "--real-nav", "--profile", "mag_clean", "--pos-hold",
            "--flow", "--gnss-v-gate", str(gate), "--seed", str(seed),
@@ -40,6 +45,7 @@ def one(gate, scen, seed):
 
 
 def stats(v):
+    """对一组值算 med/p90/max；剔除 NaN/Inf 与非数值，空集各值返回 NaN。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)],
                  float)
     if not len(v):
@@ -49,6 +55,11 @@ def stats(v):
 
 
 def main():
+    """命令行入口：gate 0/1 × 4 场景 × SEEDS，打印逐条摘要并落盘 jsonl/json。
+
+    场景为正常/失联 5 s/失联 20 s/风扰；汇总 final_alt、pos_rms、hold_end_rms、
+    max_roll、land_t 与重锚次数，并统计各格落地次数与 vgsus 触发计数。
+    """
     rows = []
     for gate in (0, 1):
         for scen in SCEN:

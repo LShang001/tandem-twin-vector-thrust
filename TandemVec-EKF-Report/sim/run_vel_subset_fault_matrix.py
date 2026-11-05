@@ -40,6 +40,7 @@ ARMS = [("off", "--gnss-vel-subset 0"), ("on", "--gnss-vel-subset 1")]
 
 
 def main():
+    """命令行入口：四类故障格 × 子集关/开 × seeds 并发跑 SIL，写 vel_subset_fault_<tag>.jsonl（含 cell/arm/seed）。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", type=int, default=20)

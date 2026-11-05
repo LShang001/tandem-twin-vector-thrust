@@ -115,6 +115,12 @@ def wrench_model(df, dt, dw, w0):
 
 
 def main():
+    """命令行入口：对 24 个真旋转候选逐一做物理符号判定，打印并可选落盘 JSON。
+
+    每个候选把模型系 +err_deg 姿态误差映射到固件系后喂 GncTrack，再用返回的
+    摆角/差速按 computeWrench 算模型系物理力矩 M；要求三轴均 M·e > 0（力矩指向
+    减小误差的方向）。返回 0 仅当恰好一个候选通过（映射唯一），否则返回 1。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default=None)
     ap.add_argument("--err-deg", type=float, default=1.0)

@@ -28,6 +28,8 @@
      G1 与 G2 同样差 ⇒ 放宽本身有害 ⇒ 维持 §4.19 决定不放宽。
   默认值：只有 P1+P2+P3 同时成立才讨论把 `MAX_TAU_S` 从 0.150 提高；
   即便如此仍需实机接收机延迟标定，不得凭 SIL 下默认。
+@frame   NED（pos_rms/pos_max 为水平位置误差；姿态为欧拉角）
+@units   ms（注入/估计延时）、m（位置）、deg（姿态）、m/s（速度）、个（拒帧/重锚）
 """
 import concurrent.futures as cf
 import hashlib
@@ -70,6 +72,11 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms", "ad_tau_ms",
 
 
 def run(extra, arm, seed):
+    """跑一次 SIL 二进制（单 seed），返回解析后的 SIL_REAL_JSON 指标字典。
+
+    参数：extra 为该工况参数，arm 为三臂的追加参数，seed 为随机种子；进程尽力绑
+    CPU2 减少并发抢核。超时 900 s 杀掉并返回 None，输出中无 JSON 也返回 None。
+    """
     cmd = [EXE] + BASE + extra + arm + ["--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -87,11 +94,18 @@ def run(extra, arm, seed):
 
 
 def med(rows, key):
+    """取该臂全部 seed 某字段的中位数；字段缺失或为 None 按 0 计，空集返回 NaN。"""
     vals = [r.get(key, 0) or 0 for r in rows]
     return st.median(vals) if vals else float("nan")
 
 
 def main():
+    """命令行入口：三臂 × 9 工况 A/B，按预登记判据 P1–P3 出结论并落盘 JSON。
+
+    逐工况打印各指标中位与 G1/G0、G2/G0 比值；随后按 P1（τ̂ 命中注入值）、P2（收益）、
+    P3（无副作用、拒帧不增）汇总，给出"可讨论放宽 MAX_TAU_S"或"维持不放宽"的判决。
+    EXE 不存在时返回 2，正常结束返回 0。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

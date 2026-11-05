@@ -68,6 +68,11 @@ def param_names() -> list[str]:
 
 
 def param_get(name: str) -> float:
+    """按参数名查 ID 并读库内当前值（float）。
+
+    名字不在 kFlightCtrlParams 中抛 KeyError，读取失败抛 RuntimeError；
+    与 param_set 一样只作用于共享库的运行值，不涉 Flash 持久化。
+    """
     lib = _lib()
     pid = lib.fw_param_find(name.encode())
     if pid < 0:
@@ -91,6 +96,10 @@ def param_dump() -> dict[str, float]:
 
 
 def param_set(name: str, value: float) -> None:
+    """按参数名写入库内运行值；名字未知抛 KeyError，库拒绝（NaN/Inf 或越界）抛 RuntimeError。
+
+    只改本进程共享库中的参数单例，不写 Flash：跑完实验需用 param_dump 落盘才能复现。
+    """
     lib = _lib()
     pid = lib.fw_param_find(name.encode())
     if pid < 0:

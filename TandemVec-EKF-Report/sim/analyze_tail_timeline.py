@@ -18,6 +18,10 @@ import numpy as np
 
 
 def load(path):
+    """读 trace CSV，返回 {列名: np.ndarray}。
+
+    只保留字段数与表头一致的行（半行、结尾空行直接跳过），全部按 float 解析。
+    """
     with open(path, encoding="utf-8") as fh:
         header = fh.readline().strip().split(",")
         rows = []
@@ -87,6 +91,13 @@ def gate_summary(col):
 
 
 def timeline(col, thr_ne=30.0, vel_thr=10.0):
+    """统计失效时间线：误差越门时刻、越门瞬间增长率、重锚次数与姿态峰值。
+
+    参数：col 为 load() 的列字典；thr_ne 为水平位置误差门限（m），
+    vel_thr 为垂速误差门限（m/s）。
+    返回：可直接 JSON 化的字典，含越 10 m/30 m 时刻、30 m 前 2 s 的平均
+    增长斜率（剔除单次尖峰）、重锚次数与时刻、高度与滚转峰值。
+    """
     t = col["t"]
     err_ne = np.hypot(col["ekf_n"] - col["true_n"], col["ekf_e"] - col["true_e"])
     vel_err_d = np.abs(col["ekf_vz"] - col["truth_vz"])
@@ -126,6 +137,7 @@ def timeline(col, thr_ne=30.0, vel_thr=10.0):
 
 
 def main():
+    """命令行入口：逐条 CSV 打印时间线统计；指定 --json 时把全部结果汇总落盘。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("csv", nargs="+")
     ap.add_argument("--json", default="")

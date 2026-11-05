@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """@file    plot_imu_nav_perf.py
 @module  测试/宿主机
-@brief   plot_imu_nav_perf.py 模块说明。
-IMU/GNSS 导航性能矩阵可视化（数据：tmp/imuperf/out.csv 与 trace_*.csv）。
-
-输出 PNG 到同目录，供人工/视觉模型审查。全部英文标签，避免中文字体缺失。
+@brief   IMU/GNSS 导航性能矩阵可视化（tmp/imuperf/out.csv 与 trace_*.csv）
+@frame   NED（位置/速度误差分量）
+@units   m、m/s、deg、g、ms
+@details 读 tmp/imuperf/out.csv 与 trace_*.csv，按 IMU × GNSS × 场景 × 振动 × 延迟
+         分格画位置/姿态误差对比图；输出 PNG 到同目录，供人工/视觉模型审查，
+         全部英文标签，避免中文字体缺失。
 """
 import csv
 import math

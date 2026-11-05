@@ -6,6 +6,8 @@
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 关键指标是 ad_app（估计值真正替换固定先验的历元数）——上一轮四臂 A/B 里
          base 臂 ad_app=0 却报 ad_valid=1，说明"锁存标志"不能当"在用"证据。
+@frame   NED（pos_rms 为水平位置误差）
+@units   ms（注入延迟/τ̂）、m（pos_rms）、个（ad_app 历元数/ad_blk 计数）
 
 用法：
   py -3.12 sim/read_apply_block.py --arm full=C:/.../fw_real.exe \
@@ -31,6 +33,12 @@ DATA = os.path.join(os.path.dirname(HERE), "sim-data")
 
 
 def run(exe, seed, lat):
+    """跑一次 SIL 仿真（45 s、GNSS 10 Hz、注入延迟 lat ms），返回解析后的
+    SIL_REAL_JSON 字典（补上 seed 字段）；进程无输出或超时返回 None。
+
+    细节：先把 JSON 里的 nan/inf 换成 Python 可解析的 NaN/Infinity；尽力把进程
+    绑到 CPU2，避免多进程抢核影响时序。
+    """
     cmd = [exe] + ARGS + ["--seed", str(seed), "--gnss-latency-ms", str(lat)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -49,11 +57,17 @@ def run(exe, seed, lat):
 
 
 def med(vals):
+    """取中位数：排序后取中间下标（偶数个取上中位）；空序列返回 nan。"""
     v = sorted(vals)
     return v[len(v) // 2] if v else float("nan")
 
 
 def main():
+    """命令行入口：对每个注入延迟档 × 每个 `名字=exe` 臂并行跑 N seeds，打印
+    pos_rms / τ̂ / ad_app 中位、app=0 的 seed 数与 ad_blk 分布（判"估计有没有
+    真被应用"），并把逐 seed 原始行连同 exe 的 md5 落盘
+    sim-data/apply_block_<tag>.json。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", action="append", required=True)
     ap.add_argument("--lat", type=int, action="append", default=[200])

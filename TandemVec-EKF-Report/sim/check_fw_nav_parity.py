@@ -41,6 +41,13 @@ DELTA_COLS = ["tx", "ty", "tz", "vx", "vy", "vz", "dt"]
 
 
 def main():
+    """命令行入口：回放 SIL `--trace-nav` 的调用前输入给 fwapi.Nav，逐拍比对
+    EKF 状态，按 N1–N6 判据打印 PASS/FAIL 并返回 0/1。
+
+    关键语义：dt 取 SIL 微秒时钟差分（不用外层 t），解锁沿两侧各自平移后比较
+    （消除导航原点差）；GNSS 输入优先用带 `_1e7`/`_mm` 后缀的线格式整数列，
+    缺列时退回浮点度换算（精度受 float32 限制）。--json 时把最大偏差落盘。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace", required=True)
     ap.add_argument("--json", default="")

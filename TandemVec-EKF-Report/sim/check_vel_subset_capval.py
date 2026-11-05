@@ -54,6 +54,7 @@ ARMS = ["y20_off", "y20_nocap", "y20_c12", "y20_c15", "y20_c21", "y10_nocap", "y
 
 
 def load(tag):
+    """读一臂证据 jsonl，返回 {seed: 记录}；文件缺失直接退出（缺证据即判定作废）。"""
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -68,6 +69,7 @@ def load(tag):
 
 
 def stat(d):
+    """一臂统计：样本数、>25 m 失效数、位置 RMS 的 med/p90/p95/max（m）与姿态 RMSE 中位（deg）。"""
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > 25).sum()),
             "med": round(float(np.median(p)), 3),
@@ -78,6 +80,12 @@ def stat(d):
 
 
 def main():
+    """在独立 seeds 51–100 上逐条裁决 Y1–Y4 并落 JSON。
+
+    Y1 七臂各 50 条完整性；Y2 20 Hz cap15 不劣于 nocap 且 max≤30 m（nocap 不可达记 N/A）；
+    Y3 10 Hz 两臂逐 seed 比对，任一变差 >5% 即 FAIL；Y4 cap 12/15/21 发生率差 ≤1 seed 且 max 差 ≤5 m。
+    输出 sim-data/vel_subset_capval_51_100_2026-10-28.json；Y1∧Y2∧Y3∧Y4 全过退出码 0。
+    """
     arms = {a: load(a) for a in ARMS}
     rep = {}
 

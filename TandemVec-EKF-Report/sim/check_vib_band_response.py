@@ -10,6 +10,9 @@
          若 80 Hz 振动的 RMS 增量远小于低频振动，则该检测器对弹上真实振动频段
          几乎无响应，`vib_high` 的含义就不是"有振动"而是"机动剧烈"。
          基线用同二进制零振动档，逐档给增量 Δrms[g]/每 1 g，避免跨二进制比较。
+@frame   NED（pos_rms 为北东地水平位置误差；振动 RMS 为加速度标量模长，无轴向）
+@units   g（vib_rms_g 与振动幅值）、m（pos_rms）、Hz（振动频率）、
+         g/g（每 1 g 振动的 RMS 灵敏度）、无量纲（vib_high 占空比）
 """
 import json
 import os
@@ -32,6 +35,12 @@ SEEDS = [1, 2]
 
 
 def run(tag, hz, amp):
+    """对一个振动档跑全部种子，取每个种子的振动 RMS、vib_high 占空比与位置 RMSE。
+
+    参数：tag 为档名兼迹线文件名前缀；hz 为振动频率（Hz，None=零振动基线）；
+    amp 为振幅（g）。只统计 t>3 s 的飞行段，避免初始化段稀释统计量。
+    返回：长度等于 SEEDS 的列表，每项 (vib_rms_g 中位, vib_high 均值, pos_rms 或 NaN)。
+    """
     os.makedirs(TR, exist_ok=True)
     extra = [] if hz is None else ["--vib", str(amp), "--vib-hz", str(hz),
                                    "--vib-start", "1.5"]
@@ -61,6 +70,12 @@ def run(tag, hz, amp):
 
 
 def main():
+    """命令行入口：逐档测振动估计器的频段响应，打印增量/灵敏度并落盘 JSON。
+
+    以同一二进制、同一弹道的零振动档为基线，逐档打印振动频率、RMS 中位、
+    相对零振动的增量 Δrms、vib_high 占空比、位置 RMSE 与每 1 g 的灵敏度（g/g）。
+    输出：`sim-data/vib_band_response_2026-10-27.json`。
+    """
     print(f"{'档':<10}{'rms_med[g]':>12}{'Δ vs 零':>10}{'vib_high':>10}"
           f"{'pos_rms':>10}")
     print("-" * 54)

@@ -27,6 +27,13 @@ SEEDS = list(range(1, int(os.environ.get("HIGHDYN_SEEDS", "11"))))
 def case(profile, load, speed=80.0, rate=0.0, duration=40.0,
          latency=20.0, outage=None, a_scale=1.0, g_scale=1.0,
          misalign=0.0, lever=0.0, lever_comp=0, vib_g=0.0, extra=None):
+    """构造一条台架用例的参数字典（未显式给出的维度取默认值）。
+
+    参数：profile 机动剖面（turn/sturn/pull/roll/coning/negg）；load 过载 g；
+    speed 速度 m/s；rate 角速率 °/s；latency GNSS 延迟 ms；outage 失联窗 (t0,t1) s；
+    a_scale/g_scale 加计/陀螺尺度因子误差；misalign 失准角 deg；lever 杆臂 m 与
+    lever_comp 是否补偿；vib_g 振动幅值 g；extra 追加的命令行参数。
+    """
     return dict(profile=profile, load=load, speed=speed, rate=rate,
                 duration=duration, latency=latency, outage=outage,
                 a_scale=a_scale, g_scale=g_scale, misalign=misalign,
@@ -35,6 +42,13 @@ def case(profile, load, speed=80.0, rate=0.0, duration=40.0,
 
 
 def build_cases():
+    """按矩阵维度展开全部用例并给每条附上 seed，返回用例列表。
+
+    覆盖：协调转弯/S 转弯/拉杆-推杆的 2–8 g × 80/150 m/s、连续滚转 180–1080 °/s、
+    圆锥运动 120–900 °/s、负 g 专项、5/20 s 失联、IMU 尺度+失准 4 档、GNSS 延迟
+    20–500 ms、杆臂 0.5/1.0 m（补偿/不补偿）、振动 1/2 g、±8 g 量程下的 9/10/12 g
+    饱和边界。
+    """
     cs = []
     # 基线：协调转弯/S 转弯/拉杆-推杆，2–8 g × 80/150 m/s
     for profile in ("turn", "sturn", "pull"):
@@ -105,6 +119,11 @@ def build_cases():
 
 
 def one(c):
+    """把一条用例展成 test_ekf_high_dynamic.exe 的命令行并执行（180 s 超时）。
+
+    返回：解析出的 HIGH_DYN_JSON 结果字典，并回填该用例的全部参数便于分组；
+    没抓到 JSON 时返回带 no_json=True 的字典——计入失败列，不静默丢弃。
+    """
     cmd = [EXE, "--profile", c["profile"], "--load", str(c["load"]),
            "--speed", str(c["speed"]), "--rate-dps", str(c["rate"]),
            "--duration", str(c["duration"]), "--latency-ms", str(c["latency"]),
@@ -127,6 +146,8 @@ def one(c):
 
 
 def stat(v):
+    """对指标序列求 n / 中位 / p90 / p99 / 最大值，先剔除非数值与非有限值；
+    全空时只返回 {"n": 0}（不给假的 0 值统计）。"""
     v = np.array([x for x in v if isinstance(x, (int, float)) and np.isfinite(x)], float)
     if not len(v):
         return dict(n=0)
@@ -135,6 +156,12 @@ def stat(v):
 
 
 def main():
+    """命令行入口：展开矩阵 → 进程池并行跑（进程数取 HIGHDYN_WORKERS）→ 逐行写
+    sim-data/high-dyn-mc-<TAG>.jsonl，再汇总全局与 (剖面×过载×角速率×速度) 分组
+    统计，落盘同名 .json 并打印用例数、失败数与位置/姿态误差关键分位。
+
+    EXE / TAG / SEEDS / WORKERS 均从环境变量取，便于换构建产物复跑。
+    """
     cases = build_cases()
     print("cases", len(cases), flush=True)
     rows = []

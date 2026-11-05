@@ -36,10 +36,18 @@ WINDOWS = ((0, 10), (10, 20), (20, 30), (30, 45))
 
 
 def wrap_deg(a):
+    """把角度折算到 [−180°, 180°)，消除 ±360° 回绕对误差统计的污染。"""
     return (a + 180.0) % 360.0 - 180.0
 
 
 def one(path):
+    """读单条 200 Hz 追踪 CSV，按四个时间窗统计速度/姿态/零偏/位置指标。
+
+    参数：path 为追踪 CSV，须含 t、truth_*、ekf_*、abx_mps2/aby_mps2、
+    gbx_dps/gby_dps、ekf_tilt_sigma 列（缺列直接退出）。
+    返回：{"0-10": {...}, "10-20": ..., "_n": 行数}；真值速度由真值位置对时间求梯度，
+    各窗输出速度/姿态/位置的 RMS 与中位、ab/gb 模长、零偏分量中位与倾角 1σ 中位。
+    """
     with open(path, newline="") as f:
         r = csv.reader(f)
         h = next(r)
@@ -86,6 +94,13 @@ def one(path):
 
 
 def main():
+    """命令行入口：对比失效簇与通过簇的逐窗指标，按预登记判据给出归因结论。
+
+    参数：--trace-dir/--prefix 定位追踪文件，--fail/--pass-seeds 指定两组种子，
+    --tag 决定输出文件名。结论码：10–20 s 窗 d_ab≥0.3 m/s² 记 BIAS_CARRIED；
+    |d_ab|<0.15 m/s² 且 d_att≥0.5° 记 TILT_CARRIED；其余 INCONCLUSIVE。
+    输出：`sim-data/missile_vel_error_source_<tag>.json`，并打印汇总与判定。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace-dir", default="/tmp")
     ap.add_argument("--prefix", default="d_s")

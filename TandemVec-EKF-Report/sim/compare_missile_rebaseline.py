@@ -9,6 +9,8 @@
          会影响所有曾被该否决封住应用的格子，因此归档数字必须逐格重述或明确"未变"。
          比对口径：同 runner、同 seeds、同条件表，只有二进制不同；差值按 med 的相对
          百分比给出，并标出 med 变化 >5% 或 mx 变化 >15% 的格子。
+@frame   N/A（只比对结果表里的统计指标，不做坐标变换）
+@units   m（pos_rmse/pos_max）、deg（att_rmse）、m/s（vel_rmse）、%（相对变化）
 """
 import json
 import sys
@@ -21,6 +23,7 @@ METRICS = ["pos_rmse", "pos_max", "att_rmse", "vel_rmse"]
 
 
 def load(path):
+    """读一份 SIL MC 结果 JSON，返回其解析后的 dict（取 groups 前用）。"""
     with open(path, encoding="utf-8") as fh:
         return json.load(fh)
 
@@ -29,11 +32,13 @@ SUFFIX = sys.argv[2] if len(sys.argv) > 2 else "defreb"
 
 
 def strip_suffix(key):
+    """去掉键名结尾的 _<SUFFIX>（新二进制臂后缀），用于与归档主表对齐条件名。"""
     suf = "_" + SUFFIX
     return key[: -len(suf)] if key.endswith(suf) else key
 
 
 def main():
+    """命令行入口：逐条件比较新旧两臂 pos/att/vel 的 med 与 mx 相对变化，标出 |Δmed|>5% 或 |Δmx|>15% 的格子；无可比格子返回 1。"""
     old = load(OLD)["groups"]
     new = load(NEW)["groups"]
     newmap = {strip_suffix(k): v for k, v in new.items()

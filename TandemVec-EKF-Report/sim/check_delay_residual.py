@@ -9,6 +9,9 @@
          延时档同一切换拿到 −12.75 m。说明"该不该应用 τ̂"需要一个**与振动无关、
          来自估计器自身拟合质量**的判据。本脚本量出各格的自报残差分布，检验
          是否存在干净的分隔带（有害格残差显著大于有益格，且与 100 ms 档不重叠）。
+@frame   NED（pos_rms 为北东地水平位置误差；ad_* 为估计器内部标量，无坐标系）
+@units   m（pos_rms）、m/s（ad_resid 为最小二乘拟合自报残差）、
+         ms（ad_tau_ms）、无量纲（ad_sharp 相对锐度）、次（ad_app 累计应用次数）
 """
 import concurrent.futures as cf
 import hashlib
@@ -44,6 +47,12 @@ CONDS = [
 
 
 def run(extra, seed):
+    """跑一条 SIL 用例（固定基准参数 + 工况追加参数 + 种子），返回末次 JSON 指标。
+
+    参数：extra 为该工况追加的命令行参数；seed 为随机种子。
+    返回：从标准输出/错误里取最后一条 `SIL_REAL_JSON` 解析出的字典；
+    超时（600 s）或没有该行时返回 None。进程会尽量绑到 CPU 2 以降干扰。
+    """
     cmd = [EXE] + BASE + extra + ["--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -61,6 +70,12 @@ def run(extra, seed):
 
 
 def main():
+    """命令行入口：逐工况×种子跑仿真，打印自报残差对比表并落盘 JSON。
+
+    无命令行参数。表格列：pos_rms 位置 RMSE、ad_resid 估计器自报拟合残差、
+    res_p90 为其 90 分位、ad_sharp 相对锐度、ad_app 累计应用次数、ad_valid 有效标志。
+    输出：`sim-data/delay_residual_separation_2026-10-27.json`（含逐种子原始指标）。
+    """
     print("exe md5", hashlib.md5(open(EXE, "rb").read()).hexdigest()[:8])
     print(f"{'工况':<14}{'类别':<8}{'pos_rms':>10}{'ad_resid':>11}"
           f"{'res_p90':>9}{'ad_sharp':>10}{'ad_app':>8}{'ad_valid':>9}")

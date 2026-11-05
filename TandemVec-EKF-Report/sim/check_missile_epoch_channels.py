@@ -36,6 +36,7 @@ WINDOWS = ((0, 10), (10, 20), (20, 30), (30, 45))
 
 
 def epochs(csv_path):
+    """把 trace 抽成 GNSS 历元序列：以 msr_n/msr_e 发生变化处为历元边界，返回时间、位置/速度越门标志与新息幅值；缺必需列直接退出。"""
     with open(csv_path, newline="") as f:
         r = csv.reader(f)
         h = next(r)
@@ -59,6 +60,7 @@ def epochs(csv_path):
 
 
 def main():
+    """命令行入口：按相位分解 JSON 把 seed 分成 fail/pass 两簇，逐 seed 逐窗（0–10/10–20/20–30/30–45 s）统计越门率与新息中位数，按 E2–E4 判据给出 VEL_LEADS/POS_ONLY/MIXED 与 EARLY_TRIP，写 sim-data JSON。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--trace-dir",
                     default=os.path.join(os.environ.get("TEMP", "/tmp"),

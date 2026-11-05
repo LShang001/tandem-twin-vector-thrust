@@ -16,6 +16,8 @@
   D3 边界无害：25/50 ms 档相对无死区劣化 ≤10%（若超过，说明死区吞掉了真延时）；
   D4 死区 10 ms 只作为敏感性对照，不参与默认值决策。
   D1–D3 同时成立才把默认死区设为 5 ms；任一不成立则默认保持 0 并记录代价。
+@frame   NED（pos_rms 为全程位置 RMSE，位置误差取 N/E/D 合成）
+@units   ms（注入延迟/死区）、m（pos_rms/pos_max）、deg（nav_att_rmse）、次（计数）
 """
 import concurrent.futures as cf
 import hashlib
@@ -44,6 +46,7 @@ CONDS = [
 
 
 def run(extra, db, seed):
+    """以指定死区与 seed 跑一次 SIL（--delay-deadband），返回末条 SIL_REAL_JSON；超时或无输出返回 None。"""
     cmd = [EXE] + BASE + extra + ["--delay-deadband", db, "--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -61,6 +64,7 @@ def run(extra, db, seed):
 
 
 def main():
+    """命令行入口：5 个延迟工况 × 3 个死区臂各跑 10 seeds，打印中位指标与相对无死区的 Δpos，结果写 delay_deadband_ab_2026-10-27.json。"""
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

@@ -9,6 +9,9 @@
          输出：figs/nav_vib_audit_2026-10-27.png（6 面板：时序/条形/频段响应/箱线/散点/CDF）。
          判读要点：零振动弹道上 accel_rms_g 随过载档位上升、vib_high 占空比 63–72%，
          而 1 g 机械振动只在 10–20 Hz 才有效响应（80/120 Hz 仅 +0.04/+0.01 g）。
+@frame   无坐标量（纯振动/延时统计；迹线里的陀螺为机体系三轴，仅取模长）
+@units   g（vib_rms_g 加速度 RMS）、dps（陀螺角速度）、ms（ad_tau_ms）、
+         无量纲（vib_q/vib_gq 为 Q 倍率、vib_high/ad_valid 为 0/1 标志）
 """
 import glob
 import json
@@ -30,6 +33,7 @@ VIB = "6.4g_振1g80"
 
 
 def setup_font():
+    """优先启用系统中文字体（雅黑/黑体/Noto），并关闭负号转义。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -41,6 +45,11 @@ def setup_font():
 
 
 def read_trace(tag, seed=1):
+    """读一条 200 Hz 迹线，只取审计用到的列并转成 float 数组。
+
+    参数：tag 为工况名（文件 `%TEMP%/vibq/<tag>_s<seed>.csv`）；seed 为种子。
+    返回：{列名: np.ndarray}；仅保留 want 中且表头确实存在的列。
+    """
     path = f"{TR}/{tag}_s{seed}.csv"
     with open(path, encoding="utf-8") as fh:
         head = fh.readline().strip().split(",")
@@ -53,6 +62,12 @@ def read_trace(tag, seed=1):
 
 
 def main():
+    """命令行入口：把占空比与频段响应证据画成 6 面板审计图。
+
+    输入：`sim-data/vib_q_duty_2026-10-27.json`、`vib_band_response_2026-10-27.json`
+    与 `%TEMP%/vibq/` 下的 200 Hz 迹线（缺迹线会直接抛错）。
+    输出：`figs/nav_vib_audit_2026-10-27.png`（时序/条形/频段响应/箱线/散点/CDF）。
+    """
     setup_font()
     duty = json.load(open(DUTY, encoding="utf-8"))
     band = json.load(open(BAND, encoding="utf-8"))

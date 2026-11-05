@@ -35,6 +35,7 @@ FAIL_M = 25.0
 
 
 def load(tag):
+    """读一条臂的 jsonl 证据，按 (推力 N, seed) 建索引；文件缺失直接退出。"""
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -49,6 +50,7 @@ def load(tag):
 
 
 def stat(d, thr):
+    """按推力档筛选后统计位置 RMS：样本数、>25 m 失效数、p90/max 与姿态 RMSE 中位数。"""
     p = np.array([float(r["pos_rms"]) for (t, _s), r in d.items() if t == thr])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -58,6 +60,7 @@ def stat(d, thr):
 
 
 def main():
+    """命令行入口：对齐默认臂与推荐臂在 22/25.5/28.1 g 三档的逐 seed 结果，按 Z1（每臂 150 条）、Z2（推荐臂发生率与 max 不劣化）出 CLEAN_BAND_SAFE/CLEAN_BAND_HARMS，写 JSON，通过返回 0、不通过返回 1。"""
     data = {a: load(t) for a, t in ARMS}
     rep = {"per_thrust": {}, "Z1": {}, "Z2": {}, "Z3": {}}
     counts = {a: len(d) for a, d in data.items()}

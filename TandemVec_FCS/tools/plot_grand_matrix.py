@@ -1,11 +1,17 @@
 #!/usr/bin/env python3
 """@file    plot_grand_matrix.py
 @module  工具
-@brief   plot_grand_matrix.py 模块说明。
+@brief   GRAND 超广覆盖矩阵可视化（GNSS × 场景 × 振动 × 延迟）
 GRAND 超广覆盖矩阵可视化（GNSS × 场景 × 振动 × 延迟）。
 
 输入：tmp/grand_matrix.csv（gnss,scene,vib,delay,seed,pos,att,alt）
 输出：tmp/grand_heatmap.png、tmp/grand_curves.png
+@details 处理流程：跳过 "== GRAND matrix ==" 之前的行，按 8 列解析并丢弃列数不符或
+         振动列非数值的行；① 取 vib=0.5 g、delay=0 时 GNSS × 场景的位置 RMSE 均值，
+         画对数色标热图并逐格标数值；② 取 M8N_10Hz 在 static/vibration/vib_outage
+         三场景下位置 RMSE 随振动幅值、GNSS 延迟的变化（对数纵轴）画曲线。
+@frame   NED（位置误差为 NED 口径的 RMSE；脚本本身不做坐标变换）
+@units   m（位置 RMSE）、deg（姿态误差）、g（振动幅值）；CSV 内 delay 为 s，图上换算成 ms
 """
 import os
 

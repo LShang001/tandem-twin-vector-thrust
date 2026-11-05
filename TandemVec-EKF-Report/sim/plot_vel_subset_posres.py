@@ -46,6 +46,7 @@ ARMS = [("10 Hz 子集关", "onset50"), ("10 Hz 旧口径", "vel50sub"),
 
 
 def load_jsonl(tag):
+    """读一臂 jsonl，返回 {seed: 记录}；tag 为文件名中去掉公共前缀的部分。"""
     out = {}
     with open(os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag), encoding="utf-8") as f:
         for line in f:
@@ -57,6 +58,7 @@ def load_jsonl(tag):
 
 
 def seed_from(name):
+    """从追踪文件名（如 fire_s16_sub1.csv）解析 seed 号；取不到即 assert 失败。"""
     m = re.search(r"_s(\d+)(?:_|\.)", name)
     assert m, "文件名里取不到 seed：%s" % name
     return int(m.group(1))
@@ -81,6 +83,11 @@ def first_fire_residual(path):
 
 
 def main():
+    """出 §4.24q 四张证据图并打印首次触发表（时间/位置残差/次数/后果 Δ pos_rms）。
+
+    图 1 从 200 Hz 追踪重算触发时刻的 GNSS 位置残差（不硬编码），与 SIL 的 pos_rms 差值配对，
+    展示"残差小⇒有益、残差大⇒有害"的分离带；图 2–4 是 X2/X3 判据的图形化。
+    """
     os.makedirs(FIG, exist_ok=True)
     data = {label: load_jsonl(tag) for label, tag in ARMS}
     off10 = data["10 Hz 子集关"]

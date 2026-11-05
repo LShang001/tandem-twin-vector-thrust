@@ -32,6 +32,12 @@ HEALTH_FB = ["--nav-raw-imu", "--nav-raw-fault-fallback", "--nav-raw-fb-health"]
 
 
 def main():
+    """命令行入口：跑 30.5 g 格两臂 × --seeds 个种子，判 J6 惰性并落盘判决。
+
+    --exe 为 SIL 二进制；--fb-flags health 时第二臂换成"回退键在固件 IMU 健康
+    Failed 上"的变体。逐 seed 解析 SIL_REAL_JSON 写 jsonl；末段要求两臂逐 seed
+    pos_rms 完全相同且 nrfb=0（有差异即断言失败），判决写 *_verdict.json。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", type=int, default=20)

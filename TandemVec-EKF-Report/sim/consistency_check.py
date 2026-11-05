@@ -22,6 +22,12 @@ NPZ = os.path.join(HERE, "..", "sim-data", "consistency_check_2026-10-26.npz")
 
 
 def make_filter(qpos=0.0, p0scale=1.0):
+    """造一个 15 态 EKF 实例：在基准配置上覆写位置过程噪声 PSD 与初始位置方差缩放，
+    再按 HOME_LLA 与静止比力 [0,0,−g] 完成初始化。
+
+    参数：qpos 为位置过程噪声谱密度（m²/s，0=按基准配置）；p0scale 为初始位置
+    协方差缩放系数。返回：已初始化的 Ekf15 对象（供 run() 替换为仿真用滤波器）。
+    """
     c = dict(base_cfg)
     c["q_pos_psd_m2ps"] = qpos
     c["p0_pos_scale"] = p0scale
@@ -32,6 +38,14 @@ def make_filter(qpos=0.0, p0scale=1.0):
 
 
 def run(scenario, seeds, qpos=0.0):
+    """在指定场景下跑多 seed 60 s 仿真，汇总 NEES/NIS 与位置 RMSE。
+
+    参数：scenario ∈ {nominal, highnoise, delay, outage5}——highnoise 注入
+    (5,8,0.5,0.8) 的 GNSS 噪声档，delay 给 15 ms 量测龄期，outage5 在 20–25 s
+    断 GNSS 后恢复；seeds 为随机种子列表；qpos 透传给 make_filter 的位置 PSD。
+    返回：{nees_p, nees_v, nis}（多 seed 拼接的一维数组）+ per_seed 逐 seed 摘要
+    （NEES 中位/p95/max 与位置 RMSE）。
+    """
     R.make_ekf = lambda: make_filter(qpos)
     noise, age, outage = None, 0.0, (None, None)
     if scenario == "highnoise":
@@ -76,6 +90,13 @@ def chi2_over_df_quantiles(df, n_mc, trials=4000):
 
 
 def main():
+    """命令行入口：对 4 个场景各跑 10 个 seed（nominal 另加旧 5 seed 组），输出
+    NEES/NIS 的中位、p95、max、越 3 的比例，并按相同样本量做 χ²(df)/df 蒙特卡洛，
+    给出"单步 max 是否属正常尾部"的参照分位数。
+
+    结果落盘 sim-data/consistency_check_2026-10-26.json（指标）与同名 .npz
+    （逐历元数组），供报告复算与作图。
+    """
     seeds_main = list(range(100, 110))
     seeds_old = list(range(0, 5))
     out = dict(meta=dict(seeds_main=seeds_main, seeds_old=seeds_old, duration_s=60.0,

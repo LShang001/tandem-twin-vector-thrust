@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """@file    plot_grand_v2.py
 @module  工具
-@brief   plot_grand_v2.py 模块说明。
-GRAND v2 可视化：2 IMU（42688P/45686）× 6 GNSS（含 F10N）× 场景 × 振动 × 延迟。
+@brief   GRAND v2 可视化：2 IMU（42688P/45686）× 6 GNSS（含 F10N）× 场景 × 振动 × 延迟
+@details 读矩阵 CSV（脚本内 CSV 常量）后出 IMU×GNSS 位置 RMSE 热图，以及 F10N/M8N/低端
+         接收机在振动/延迟下的位置 RMSE 曲线两图。
+@frame   N/A（只画误差统计，不做坐标变换）
+@units   m（位置 RMSE）、g（振动幅值）、ms（GNSS 延迟）
 
 输入：tmp/grand_matrix_v2.csv（imu,gnss,scene,vib,delay,seed,pos,att,alt）
 输出：tmp/grand_v2_imu.png、tmp/grand_v2_f10n.png

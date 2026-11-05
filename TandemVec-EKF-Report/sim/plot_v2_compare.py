@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Compare the baseline and v2-clamp maneuver matrices.
+"""v2 偏航零偏钳制前后机动矩阵对比（基线 vs v2）。
 @file    plot_v2_compare.py
 @brief   v2 偏航零偏钳制前后对比图。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
@@ -24,6 +24,7 @@ DISTS = [0, 3, 10, 25, 50]
 
 
 def load(path):
+    """逐行解析结果 JSONL，跳过解析失败的行（中途被截断的行不参与统计）。"""
     rows = []
     for line in open(path, encoding="utf-8"):
         try:
@@ -34,25 +35,34 @@ def load(path):
 
 
 def nf(r):
+    """导航失效判据：pos_rms 缺失/NaN/>3 m，或 pos_max>10 m ⇒ True。"""
     p = r.get("pos_rms")
     return bool(p is None or p != p or p > 3.0 or (r.get("pos_max") or 0) > 10.0)
 
 
 def sf(r):
+    """稳定性失效判据：末高偏离 10 m 目标超 ±3 m，或最大滚转 >45° ⇒ True。"""
     return bool(abs((r.get("final_alt") or 0) - 10.0) > 3.0
                 or (r.get("max_roll") or 0) > 45.0)
 
 
 def r90(r):
+    """翻转判据：最大滚转 >90°（姿态翻越）⇒ True。"""
     return bool((r.get("max_roll") or 0) > 90.0)
 
 
 def counts(rows, cond):
+    """按工况 cond 聚合，返回 (总条数, 导航失效数, 稳定性失效数, 翻转数)。"""
     g = [r for r in rows if r["cond"] == cond]
     return (len(g), sum(nf(r) for r in g), sum(sf(r) for r in g), sum(r90(r) for r in g))
 
 
 def main():
+    """出 3360 次阶跃机动矩阵的 2×2 对比图：失效类型×工况、失联方位依赖、v2 方向×航程热图。
+
+    读 man2（基线）与 man_v2（偏航零偏钳制）两份 results.jsonl，
+    图上标各柱计数，末尾打印每工况的 (总条数, nf, sf, r90)。
+    """
     base = load(BASE)
     v2 = load(V2)
     print("base", len(base), "v2", len(v2))

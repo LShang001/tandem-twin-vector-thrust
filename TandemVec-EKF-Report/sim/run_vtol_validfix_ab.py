@@ -8,6 +8,8 @@
          应用 τ̂。VTOL 悬停段常年 `NoExcitation` 拒绝 ⇒ 修复前可能一直在用陈旧的
          导弹式 τ̂；这会在主机型上改变行为，必须量化而不是假设"VTOL 用不到"。
          判据沿用标准验收门：hold_end ≤5 m、max_roll ≤20°、pos_rms ≤3 m。
+@frame   NED（hold_end_rms / pos_rms 为位置误差）；max_roll 为机体滚转角（deg）
+@units   m（位置误差）、deg（滚转）、s（仿真时长）；通过数/seed 数为计数
 """
 import concurrent.futures as cf
 import hashlib
@@ -29,6 +31,7 @@ NSEED = 10
 
 
 def run(exe, prof, seed):
+    """跑一次 VTOL 悬停 SIL（绑 CPU2，超时 600 s 则 kill），返回末行 SIL_REAL_JSON 指标；无则 None。"""
     cmd = [exe, "--real-nav", "--profile", prof, "--pos-hold", "--flow",
            "--seconds", "40", "--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -47,11 +50,17 @@ def run(exe, prof, seed):
 
 
 def passed(r):
+    """单例验收判据：hold_end_rms ≤5 m 且 max_roll ≤20° 且 pos_rms ≤3 m 才算通过。"""
     return (r["hold_end_rms"] <= 5.0 and r["max_roll"] <= 20.0 and
             r["pos_rms"] <= 3.0)
 
 
 def main():
+    """命令行入口：三磁剖面 × 两臂 × 10 seeds，打印通过数与 hold/roll/pos 指标中位数。
+
+    任一臂二进制缺失直接返回 2（不猜结果）；结果写
+    sim-data/vtol_validfix_ab_2026-10-27.json（含逐条原始记录与失败 seed 列表）。
+    """
     for n, e in ARMS:
         if not os.path.exists(e):
             print("MISSING:", n, e)

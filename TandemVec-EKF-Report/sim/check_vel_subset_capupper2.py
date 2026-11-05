@@ -40,6 +40,12 @@ SEG_OF = {51: "51-100", 1: "1-50"}
 
 
 def load(tag, start):
+    """读 attrib305_2026-10-28_<tag>.jsonl，按 seed 建索引并校验 50 个种子齐全。
+
+    参数：tag 为证据文件臂名，start 为期望 seed 起点（51 或 1）。
+    返回：{seed: 该 seed 的完整记录字典}，覆盖 start..start+49；文件缺失即退出，
+    缺种子触发断言——上界判定只认满 50 种子的档，残缺样本不许参与。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -57,6 +63,11 @@ def load(tag, start):
 
 
 def stat(d):
+    """把一批 seed 的 pos_rms 汇总成 Y7b 判定需要的统计量。
+
+    返回 dict：n 样本数、fail_gt25 位置 RMS 超 25 m 的种子数、p90/p95/max
+    位置 RMS（m）、att 姿态 RMSE 中位数（deg）。
+    """
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -66,6 +77,13 @@ def stat(d):
 
 
 def main():
+    """命令行入口：以归档 cap25 为唯一基线，判 cap 40/50 是否已出现劣化。
+
+    劣化定义与 Y6b 完全相同：任一段失效数上升，或 max 相对 cap25 抬升 >5 m。
+    首个劣化档即上界 U；两档都不劣化则记 "U > 50 m（本数据集未界定）"。
+    Y7a/Y7b/Y7c 三段结论写入 sim-data JSON，Y7c 给出下界 14 m 与上界的区间
+    宽度及是否允许提默认值；全部判据通过退出码 0，否则 1。
+    """
     ref_path = os.path.join(SD, BASE_REF)
     if not os.path.exists(ref_path):
         sys.exit("缺 Y6 基线 %s ⇒ 不允许换基线，本轮作废" % BASE_REF)

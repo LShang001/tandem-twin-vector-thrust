@@ -19,6 +19,8 @@
      中位不劣化超过 5%。
   四条里 P1 是唯一"收益"判据；P1 不成立即按"无可测收益完整撤回"处理，
   不得改用 pos_max/单 seed 等次要量补判据。
+@frame   NED（位置/速度）；姿态通道为欧拉角（roll/pitch/yaw）
+@units   deg（姿态误差）、m（位置）、m/s（速度）、rad/s（--gyro-q-cap 噪声上界）
 """
 import concurrent.futures as cf
 import hashlib
@@ -53,6 +55,12 @@ KEY = ["pos_rms", "pos_max", "nav_att_rmse", "nav_roll_rmse", "nav_pitch_rmse",
 
 
 def run(kind, extra, cap, seed):
+    """跑一次 SIL（单 seed），返回 SIL_REAL_JSON 指标字典。
+
+    参数：kind='m' 用导弹基础参数、其余用 VTOL 悬停参数；extra 为工况追加参数；
+    cap 为 --gyro-q-cap 的噪声上界；seed 为随机种子。超时 600 s 杀掉返回 None，
+    输出无 JSON 也返回 None（该 seed 不计入中位）。
+    """
     base = MBASE if kind == "m" else VBASE
     cmd = [EXE] + base + extra + ["--gyro-q-cap", cap, "--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -71,6 +79,11 @@ def run(kind, extra, cap, seed):
 
 
 def main():
+    """命令行入口：三档 gyro-q-cap × 7 工况的 runtime A/B，打印中位对照并落盘 JSON。
+
+    逐工况按导弹/VTOL 各选 4 个指标打印三档中位，再给相对历史档（0.010）的逐 seed
+    配对中位差与"姿态变好"计数；明细与 exe md5 写入 sim-data JSON。
+    """
     print("exe md5", hashlib.md5(open(EXE, "rb").read()).hexdigest()[:8])
     print(f"{'工况':<13}{'指标':<14}" + "".join(f"{c[0]:>16}" for c in CAPS))
     print("-" * 76)

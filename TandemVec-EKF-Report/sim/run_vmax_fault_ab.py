@@ -20,6 +20,8 @@
      记录 `nrfb` 帧数并单独报告（不得当作默认惰性）。
 边界：L2 SIL；20 seeds/格；单一弹道（10 s 燃烧、24600 N，g_max 32.34 略超 32 g 满量程）；
      不写实机。
+@frame   NED（pos_rms 为水平位置误差；姿态为欧拉角）
+@units   N（推力）、m（位置）、deg（姿态）、m/s（速度）、个（计数）
 """
 from __future__ import annotations
 
@@ -74,6 +76,11 @@ FAIL_M = 25.0
 
 
 def run_seed(exe: str, seed: int, core: int) -> list[dict]:
+    """对给定 seed 跑全部故障格 × 三臂，返回该 seed 的记录列表。
+
+    exe 为 SIL 二进制，core 为绑定的核号；每条记录由 sil_matrix.run_case 产出后
+    补上 arm/cell 标签，供 summarize 与 paired 聚合。
+    """
     rows = []
     for cell, fargs in FAULTS:
         for arm, extra in ARMS:
@@ -85,6 +92,11 @@ def run_seed(exe: str, seed: int, core: int) -> list[dict]:
 
 
 def summarize(rows):
+    """按故障格 × 臂汇总：失效数/率、pos_rms 中位/p90/max、姿态中位与各计数。
+
+    失效判据为 pos_rms > FAIL_M（25 m）；nrfb_max 取该格最大回退帧数。
+    返回 {cell: {arm: 指标字典}}。
+    """
     out = {}
     for cell, _ in FAULTS:
         out[cell] = {}
@@ -108,6 +120,11 @@ def summarize(rows):
 
 
 def paired(rows, cell, arm_a, arm_b):
+    """逐 seed 配对比较两臂 pos_rms（arm_b − arm_a），返回更好/更差/相同计数与最大劣化。
+
+    只在两臂都存在的 seed 上配对；差值绝对值 ≤1e-6 记为相同，worst_degradation_m
+    为劣化 seed 中 arm_b 相对 arm_a 增加量的最大值。
+    """
     a = {r["seed"]: r for r in rows if r["cell"] == cell and r["arm"] == arm_a}
     b = {r["seed"]: r for r in rows if r["cell"] == cell and r["arm"] == arm_b}
     better = worse = same = 0
@@ -126,6 +143,7 @@ def paired(rows, cell, arm_a, arm_b):
 
 
 def plot(summary, rows, out_png):
+    """画三联图并保存：各故障格失效率条形、pos_rms CDF、姿态 RMSE 中位。"""
     cells = [c for c, _ in FAULTS]
     labels = ["无故障", "振 1g@80", "失联 5 s", "振动+失联"]
     arms = [("A_default", "默认"), ("B_navraw", "nav-raw"),
@@ -175,6 +193,12 @@ def plot(summary, rows, out_png):
 
 
 def main():
+    """命令行入口：4 故障格 × 3 臂 × seeds 的大矩阵，按 F1–F5 裁定并落盘/出图。
+
+    --exe 默认取系统临时目录下的 tv_vmax/fw_real.exe，--seeds/--seed-start 调整样本；
+    结果写 sim-data/<tag>.jsonl 与 <tag>_verdict.json，图写 figs/<tag>.png。
+    正常结束返回 0；exe 不存在时抛 SystemExit。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=exe_in_temp(os.path.join("tv_vmax", "fw_real.exe")))
     ap.add_argument("--seeds", type=int, default=SEEDS)

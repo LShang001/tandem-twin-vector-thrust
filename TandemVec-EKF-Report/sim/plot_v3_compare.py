@@ -24,6 +24,7 @@ DISTS = [0, 3, 10, 25, 50]
 
 
 def load(path):
+    """逐行读 jsonl 结果，跳过解析失败的行，返回记录列表。"""
     rows = []
     for line in open(path, encoding="utf-8"):
         try:
@@ -34,25 +35,30 @@ def load(path):
 
 
 def nf(r):
+    """判「导航失效」：pos_rms 缺失或 NaN 或超 3 m，或 pos_max 超 10 m。"""
     p = r.get("pos_rms")
     return bool(p is None or p != p or p > 3.0 or (r.get("pos_max") or 0) > 10.0)
 
 
 def sf(r):
+    """判「失稳」：final_alt 偏离 10 m 超 3 m，或 max_roll 超 45°。"""
     return bool(abs((r.get("final_alt") or 0) - 10.0) > 3.0
                 or (r.get("max_roll") or 0) > 45.0)
 
 
 def r90(r):
+    """判「滚转超 90°」（翻覆）。"""
     return bool((r.get("max_roll") or 0) > 90.0)
 
 
 def counts(rows, cond):
+    """统计某条件下的 (总数, 导航失效数, 失稳数, 滚转>90° 数) 四项计数。"""
     g = [r for r in rows if r["cond"] == cond]
     return (len(g), sum(nf(r) for r in g), sum(sf(r) for r in g), sum(r90(r) for r in g))
 
 
 def main():
+    """命令行入口：读 baseline 与 v3 两份结果，画按条件/方向的失效计数和「失联+风」失效热图，输出 nav_maneuver_v3_compare.png 并打印各条件计数。"""
     base = load(BASE)
     v2 = load(V2)
     print("base", len(base), "v3", len(v2))

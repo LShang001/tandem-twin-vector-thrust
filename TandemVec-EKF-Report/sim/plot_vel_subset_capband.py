@@ -44,6 +44,7 @@ LADDER = [("12", "y20_c12", None), ("13", "y20_c13", None), ("14", "y20_c14", No
 
 
 def load(tag):
+    """读一条 cap 臂的 jsonl 证据并按 seed 建索引；文件缺失返回 None（调用方跳过该档）。"""
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         return None
@@ -58,10 +59,12 @@ def load(tag):
 
 
 def arr(d):
+    """按 seed 升序取该臂的 pos_rms 数组。"""
     return np.array([float(d[s]["pos_rms"]) for s in sorted(d)])
 
 
 def main():
+    """命令行入口：按 LADDER 载入两段 seeds 的 cap 臂，画发生率阶梯、右尾 max 与 CDF 三联图，打印逐档计数并输出 nav_velsubset_capband_2026-10-28.png。"""
     fig, ax = plt.subplots(1, 3, figsize=(17.0, 5.4))
     labels, r51, r150, m51, m150 = [], [], [], [], []
     got = {}

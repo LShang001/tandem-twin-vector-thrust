@@ -38,6 +38,12 @@ ARMS = {
 
 
 def one(exe, arm, gate, seed, seconds, core):
+    """跑一次 SIL 并取回汇总：固定基线参数 + 气压健康门控开关（gate）+ 场景臂附加参数。
+
+    参数：gate=1 时传 `--baro-health-gate 1`（A/B 的自变量）；core≥0 时把进程绑到
+    该逻辑核。返回：SIL_REAL_JSON 字典（补 arm/gate/seed 字段）；无 JSON 输出时返回
+    {arm, gate, seed, no_json=True}。240 s 超时先杀进程再收残输出。
+    """
     cmd = [exe, "--real-nav", "--profile", "mag_clean", "--pos-hold",
            "--flow", "--gnss-spoof", "0", "--gnss-spoof-start", "25",
            "--gnss-v-gate", "1", "--baro-health-gate", "1" if gate else "0",
@@ -65,6 +71,11 @@ def one(exe, arm, gate, seed, seconds, core):
 
 
 def stats(vals):
+    """对数值序列求中位/p95/最大值与有效样本数。
+
+    非数值（None/字符串）与非有限值先剔除；全空时返回 med/p95/mx 均为 nan、n=0，
+    以免把"没数据"当成 0 参与比较。
+    """
     v = np.array([x for x in vals
                   if isinstance(x, (int, float)) and np.isfinite(x)], float)
     if not len(v):
@@ -75,6 +86,11 @@ def stats(vals):
 
 
 def main():
+    """命令行入口：按 场景臂 × 门控(0/1) × seeds 逐个跑 one()，逐行追加写
+    sim-data/baro_health_ab_<tag>.jsonl 并打印 alt/pos/roll/健康标志；跑完按
+    (臂, 门控) 汇总 final_alt/pos_max/hold_max/max_roll/bh_skips 等统计与落地、
+    bh_sus/vgsus 计数，落盘同名 .json。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=os.environ.get("BH_EXE", DEFAULT_EXE))
     ap.add_argument("--seeds", type=int, default=10)

@@ -3,6 +3,11 @@
 @file    plot_baro_health.py
 @brief   箱线/CDF/散点/条形四联图，读 baro_health_ab_<tag>.json/jsonl。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 输入 sim-data/baro_health_ab_<tag>.jsonl 的逐 seed 结果（arm × gate 两臂），
+         输出 figs/nav_baro_health_ab_<tag>.png 四联图：位置峰值箱线、CDF、
+         baro 健康跳帧次数散点、滚转 p95 与末端真高对比。只读数据，不改固件。
+@frame   NED 水平（pos_max 为水平位置峰值）；姿态取 roll 欧拉角
+@units   m（pos_max/final_alt）、deg（max_roll）、次（bh_skips）
 """
 import argparse
 import json
@@ -22,6 +27,11 @@ FIGS = os.path.join(HERE, "..", "figs")
 
 
 def load(tag):
+    """读 sim-data/baro_health_ab_<tag>.jsonl，返回逐 seed 记录列表。
+
+    每行一个字典，键含 arm/gate/pos_max/max_roll/final_alt/bh_skips 等指标；
+    文件缺失时抛 OSError（说明该 tag 的 A/B 还没跑过）。
+    """
     jl = os.path.join(DATA, f"baro_health_ab_{tag}.jsonl")
     rows = []
     with open(jl, encoding="utf-8") as f:
@@ -33,11 +43,18 @@ def load(tag):
 
 
 def finite(vals):
+    """剔除 None、非数值项与 NaN/Inf，返回可直接进箱线图/分位数的 float 数组。"""
     return np.array([v for v in vals
                      if isinstance(v, (int, float)) and np.isfinite(v)], float)
 
 
 def main():
+    """命令行入口：读指定 tag 的 A/B 结果，画四联图并保存到 figs/。
+
+    四联图依次为 pos_max 箱线（按 arm × gate 区分红蓝）、pos_max CDF、
+    baro 健康跳帧次数与 pos_max 的散点、max_roll p95 与 final_alt 中位数对比；
+    输出 PNG 的路径打印到 stdout，供报告引用。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="2026-10-27")
     args = ap.parse_args()

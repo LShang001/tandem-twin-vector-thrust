@@ -30,12 +30,18 @@ C_80 = "#e45756"
 
 
 def trans(f, fn, zeta=0.10):
+    """单自由度减震座的位移传递率：按频率比 r=f/fn 与阻尼比 ζ 算幅频响应。
+
+    参数 f/fn 可为标量或 Hz 数组（f 为激励频率、fn 为固有频率），zeta 默认 0.10；
+    返回同形状的 T（>1 放大、<1 衰减），用于画扫频曲线与 120 Hz 传递率。
+    """
     r = np.asarray(f, float) / fn
     c = 2.0 * zeta * r
     return np.sqrt((1.0 + c * c) / ((1.0 - r * r) ** 2 + c * c))
 
 
 def load(name):
+    """读 sim-data 下的 JSON 证据文件（name 为相对该目录的文件名），返回解析后的字典。"""
     return json.load(open(os.path.join(DATA, name), encoding="utf-8"))
 
 

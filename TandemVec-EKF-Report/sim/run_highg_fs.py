@@ -5,6 +5,9 @@
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 调用 test_ekf_high_dynamic.exe（纯 Ekf15State，无健康/Q 膨胀），
          评估“换 32 g 量程能买到多少包线”，不是固件端到端 SIL。
+@frame   NED（pos_rmse 位置误差）；load 为协调转弯的机体法向过载，姿态量为欧拉角误差
+@units   g（过载/量程）、m（pos_rmse）、deg（att_rmse_deg/att_max_deg）、m/s（speed）、
+         s（duration）、计数（rejected/fail）
 """
 import argparse
 import json
@@ -24,6 +27,10 @@ FS = [8.0, 16.0, 32.0]
 
 
 def one(exe, load, fs, seed, speed, duration):
+    """跑一次协调转弯台架（超时 180 s），返回该格的 HIGH_DYN_JSON 指标。
+
+    无 JSON 时返回带 no_json=True 的占位记录（不抛异常），便于统计时按缺失处理。
+    """
     cmd = [exe, "--profile", "turn", "--load", f"{load:g}",
            "--speed", f"{speed:g}", "--duration", f"{duration:g}",
            "--accel-fs-g", f"{fs:g}", "--seed", str(seed), "--json"]
@@ -37,6 +44,7 @@ def one(exe, load, fs, seed, speed, duration):
 
 
 def stat(v):
+    """取一列的中位数，先滤掉非数值与 NaN/Inf；全无效返回 NaN（不伪造 0）。"""
     v = np.array([x for x in v if isinstance(x, (int, float))
                   and np.isfinite(x)], float)
     if not len(v):
@@ -45,6 +53,11 @@ def stat(v):
 
 
 def main():
+    """命令行入口：按 过载档 × 量程 × seeds 全格跑台架，落 jsonl 与按格中位汇总的 JSON。
+
+    同时开结果文件逐行 flush，便于长跑中查看进度；汇总含 pos/att 中位、att 峰值、
+    拒帧与失败计数，供"32 g 量程买到多少包线"的对比。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=DEFAULT_EXE)
     ap.add_argument("--seeds", type=int, default=3)

@@ -41,6 +41,11 @@ SOURCES = {
 
 
 def load(tag):
+    """读一档证据 jsonl，返回 {推力 N: {seed: 该行记录}}。
+
+    tag 对应文件名后缀（ab_hz10 / z_default 等）；文件不存在直接退出，
+    不做静默降级——缺证据即本轮作废。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -55,6 +60,7 @@ def load(tag):
 
 
 def stat(rows):
+    """汇总一档一刷新率的 50 条记录：样本数、>25 m 失效数、p90/max 位置 RMS（m）、野值剔除中位数。"""
     p = np.array([float(r["pos_rms"]) for r in rows.values()])
     rej = np.array([float(r.get("outlier_rejects", 0) or 0) for r in rows.values()])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
@@ -64,6 +70,13 @@ def stat(rows):
 
 
 def main():
+    """按预登记 AB1/AB2/AB3 判据裁决交越点并落 JSON。
+
+    AB1 查每档两臂各 50 条；AB2 取 ratio=p90(20Hz)/p90(10Hz) 连续两档 <1 的最小档位；
+    AB3 要求交越点起 20 Hz 的 >25 m 发生率不高于 10 Hz。
+    输出 sim-data/gnss_rate_crossover_2026-10-28.json；
+    退出码 0 = RATE_CROSSOVER_LOCATED，1 = 未定位/不可用（供驱动脚本判成败）。
+    """
     data = {}
     for rate, srcs in SOURCES.items():
         per_thr = {}

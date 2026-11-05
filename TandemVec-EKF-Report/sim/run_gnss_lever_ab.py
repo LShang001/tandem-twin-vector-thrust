@@ -70,6 +70,7 @@ KEYS = ["pos_rms", "pos_max", "nav_vel_rms", "nav_att_rmse", "nav_yaw_rmse",
 
 
 def run_one(exe, name, extra, seed, log):
+    """跑一次 SIL（exe + 工况参数 + seed），解析末条 SIL_REAL_JSON 并补 arm/seed；无 JSON 时写日志并返回 None。"""
     cmd = [exe] + BASE + ["--seed", str(seed)] + [
         tok for pair in extra for tok in pair]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -92,6 +93,7 @@ def run_one(exe, name, extra, seed, log):
 
 
 def stats(sel, key):
+    """对某指标取有限值，返回 {n, 中位, p95, 最大}；无有效值返回 None。"""
     vals = [r.get(key) for r in sel
             if isinstance(r.get(key), (int, float))
             and math.isfinite(r.get(key, float("nan")))]
@@ -106,6 +108,7 @@ def stats(sel, key):
 
 
 def main():
+    """命令行入口：按工况×seed 并发跑杆臂注入/补偿 A/B（--vtol 切悬停档），写 jsonl 与按臂汇总的 JSON 及对照表。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", type=int, default=20)

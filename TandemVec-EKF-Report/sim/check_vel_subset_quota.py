@@ -41,6 +41,7 @@ SEGS = [("51-100", "w_q1_s51", "w_q255_s51", "u25_s51"),
 
 
 def load(tag):
+    """读一臂证据 jsonl，返回 {seed: 记录}；文件缺失直接退出，不静默跳过。"""
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -55,6 +56,7 @@ def load(tag):
 
 
 def stat(d):
+    """一臂统计：样本数、>25 m 失效数、p90/max 位置 RMS（m）、姿态 RMSE 中位（deg）。"""
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -63,6 +65,12 @@ def stat(d):
 
 
 def main():
+    """逐段裁决配额门 W1–W3：先验等价性，再谈收益。
+
+    W1 四臂各 50 条；W2 maxfires=255 臂必须与旧二进制 cap25 臂在五个字段上逐 seed 相同，
+    否则本轮所有结论作废；W3 配额 1 臂发生率不升且 max 不超 255 臂 +3 m。
+    输出 sim-data/vel_subset_quota_2026-10-28.json；W1∧W2∧W3 ⇒ QUOTA_GATE_SAFE（退出码 0）。
+    """
     rep = {"per_seg": {}, "W1": {}, "W2": {}}
     counts = {}
     eq_bad = []

@@ -30,6 +30,9 @@
   P6 尾部：B 全矩阵 max(pos_max) 不得比 A 的 max 高 >10%。
 边界：L2 SIL、单一弹道族（10 s 燃烧）、seeds 101–130（独立于归档 51–100）、
      无故障注入（故障格见 §4.24h/bb）；不写实机。
+@frame   NED（pos_rms 位置误差）；ms_vmax/ms_gmax 为弹道速度与过载幅值（标量，无方向）
+@units   m（pos_rms/pos_max）、m/s（v_max）、g（过载）、deg（姿态 RMSE）、N（推力）、
+         帧/次（outlier_rejects/reacquire_resets/nrfb）
 """
 from __future__ import annotations
 
@@ -80,6 +83,10 @@ FAIL_M = 25.0
 
 
 def run_seed(exe: str, seed: int, core: int) -> list[dict]:
+    """单个 seed 跑满 推力阶梯 × 三臂，返回记录列表（每条补 arm 与 thrust_n 字段）。
+
+    同一 seed 的三臂只差运行时开关，噪声序列不受影响，因此可逐 seed 配对。
+    """
     rows = []
     for thr in LADDER:
         for arm, extra in ARMS:
@@ -92,6 +99,10 @@ def run_seed(exe: str, seed: int, core: int) -> list[dict]:
 
 
 def summarize(rows):
+    """按臂 × 推力档汇总：样本数、>25 m 失效数/率、v_max/g_max 中位、两簇中位、p90/max。
+
+    另给姿态 RMSE 中位、拒帧中位、有硬重锚的 seed 数与 nrfb 最大值（回退惰性判据用）。
+    """
     out = {}
     for arm, _ in ARMS:
         out[arm] = {}
@@ -119,6 +130,10 @@ def summarize(rows):
 
 
 def threshold(arm_summary):
+    """按预登记 P3 定义求失效门槛：失效率 ≥25% 的**最低**推力点。
+
+    返回 (推力 N, 该档 v_max 中位)；扫描范围内没有达到 25% 的档返回 (None, None)（门槛未定位）。
+    """
     for thr in LADDER:
         s = arm_summary[thr]
         if s["rate"] >= 0.25:
@@ -127,6 +142,7 @@ def threshold(arm_summary):
 
 
 def paired(rows, arm_a: str, arm_b: str):
+    """逐 seed 配对比较两臂：每推力档统计 pos_rms 变好/变差/相同 seed 数与最大变差（m）。"""
     out = {}
     for thr in LADDER:
         a = {r["seed"]: r for r in rows if r["arm"] == arm_a and r["thrust_n"] == thr}
@@ -149,6 +165,10 @@ def paired(rows, arm_a: str, arm_b: str):
 
 
 def plot(summary, paired_ba, out_png):
+    """出三联图并写 out_png：失效率-v_max 门槛曲线、全矩阵 pos_rms CDF、各档姿态代价柱。
+
+    paired_ba 当前不参与绘图（保留参数以便按配对差扩展），summary 需带 "_raw" 全量行用于 CDF。
+    """
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.3))
     xs = [summary["A_default"][t]["vmax_med"] for t in LADDER]
 
@@ -195,6 +215,11 @@ def plot(summary, paired_ba, out_png):
 
 
 def main():
+    """命令行入口：跑 5 档推力 × 三臂 × seeds 101–130，判定 P2–P6 并出 JSON 与图。
+
+    --anchor 模式只跑 seeds 51–60 @23900 默认臂，与归档逐位比对（P1 构建锚），
+    不跑矩阵；普通模式汇总后写 <tag>_verdict.json 与 figs/<tag>.png。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", default=exe_in_temp(os.path.join("tv_vmax", "fw_real.exe")))
     ap.add_argument("--seeds", type=int, default=SEEDS)

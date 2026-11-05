@@ -3,6 +3,8 @@
 @module  tools/IMU P1验收
 @brief   读取 tvc record CSV，判定 IMU 2kHz/P1 是否达标。
 @details 只读 CSV；要求 imu_rate_hz 均值≥1950、std≤100、imu_ring_drop 全 0。
+@frame   N/A（只统计采样速率与丢帧计数，不涉坐标系）
+@units   Hz（imu_rate_hz）、个（imu_ring_drop 丢帧计数）
 """
 from __future__ import annotations
 
@@ -13,6 +15,11 @@ import sys
 
 
 def main() -> int:
+    """命令行入口：读 tvc record CSV，统计 imu_rate_hz 的均值/标准差与
+    imu_ring_drop 最大值，按 P1 判据（均值≥1950 Hz、std≤100、drop=0）打印 PASS/FAIL。
+
+    返回：0 达标、1 未达标、2 读不到文件或没有 imu_rate_hz 数据（需新固件 0xF4 遥测）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("csv")
     args = ap.parse_args()

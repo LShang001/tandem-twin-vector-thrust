@@ -48,10 +48,18 @@ WINDOWS_S = [0.0, 10.0, 20.0, 30.0, 45.0]
 
 
 def wrap_deg(a):
+    """把角度差折算到 [−180°, 180°)，避免航向 ±360° 回绕污染误差统计。"""
     return (a + 180.0) % 360.0 - 180.0
 
 
 def run_one(exe, seed, thrust_n, extra, out_csv, bind_core):
+    """跑一次导弹 SIL 并落 200 Hz 迹线，返回末次 SIL_REAL_JSON 指标。
+
+    参数：exe 为 SIL 可执行文件；seed 为种子；thrust_n 为主级推力（N）；
+    extra 为追加参数；out_csv 为迹线输出路径；bind_core 目前未被本函数使用
+    （CPU 绑定在 main() 里统一设置）。
+    返回：指标字典并附加 seed/ok/csv；日志没有 JSON 行时返回 ok=False 与日志尾部。
+    """
     cmd = [exe] + BASE + ["--ms-thrust", str(thrust_n), "--seed", str(seed),
                           "--trace-csv", out_csv] + extra
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
@@ -67,6 +75,13 @@ def run_one(exe, seed, thrust_n, extra, out_csv, bind_core):
 
 
 def window_stats(csv_path):
+    """按固定时间窗（0–10/10–20/20–30/30–45 s 及全程 0–45 s）统计单条迹线的误差。
+
+    参数：csv_path 为 200 Hz 迹线；必需列缺失直接退出，可选列（速度误差、GNSS 残差、
+    门标志、累计计数器等）存在才统计，累计计数器按逐帧增量取。
+    返回：{"<窗>": {...}, "_n_rows": 行数, "_timeline": 降采样约 100 点的时间线}；
+    每窗含姿态/位置 RMS、滚转俯仰偏置、航向 RMS、真值阶段量与可选通道统计。
+    """
     with open(csv_path, newline="") as f:
         rdr = csv.reader(f)
         hdr = next(rdr)
@@ -176,6 +191,14 @@ def window_stats(csv_path):
 
 
 def main():
+    """命令行入口：跑 N 个 seed 做误差时间窗分解，按 P1–P5 预登记判据给出裁决。
+
+    参数：--exe 必填；--seed-start/--seeds 指定种子范围；--ms-thrust 主级推力；
+    --extra-args 追加参数；--workers 并发；--bind-core 主进程绑核（负数不绑）；
+    --trace-dir 迹线目录；--tag 输出名；--keep-csv 保留迹线。
+    输出：`sim-data/missile_phase_decomp_<tag>.json`（summary 含逐窗 fail/pass 中位、
+    倍率与 P3/P4/P5 裁决；rows 含逐 seed 窗口统计与降采样时间线）。行数 <8000 作废。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seed-start", type=int, default=51)

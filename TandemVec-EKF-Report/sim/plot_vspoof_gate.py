@@ -24,6 +24,7 @@ LINE = re.compile(r"t=\s*([0-9.]+) alt=\s*([-0-9.]+) nav_alt=\s*([-0-9.]+)"
 
 
 def parse(path):
+    """用正则从 trace 文本逐行抽时间/高度/导航高度/滚转角，返回四个 numpy 数组（不匹配行跳过）。"""
     t, alt, nal, roll = [], [], [], []
     for line in open(path, encoding="utf-8", errors="ignore"):
         m = LINE.search(line)

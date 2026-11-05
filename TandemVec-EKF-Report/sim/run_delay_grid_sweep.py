@@ -24,6 +24,8 @@
      并明确它只在 SIL 的"数据+iTOW 同时后移"模型下成立；
   默认值：只有存在一档同时满足 Q1–Q3 且在全部 5 个延迟档都不劣于默认档，
      才把 `BFS_NAVIGATION_GNSS_DELAY_AUTO_MAX_TAU_S` 提上去；否则保留 0.150 并记录边界。
+@frame   NED（pos_rms/pos_max 为位置误差，不涉新增坐标变换）
+@units   ms（网格上界/注入延迟）、m（pos_rms/pos_max）、deg（nav_att_rmse）、次（拒帧/重锚）
 """
 import concurrent.futures as cf
 import hashlib
@@ -50,6 +52,7 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "ad_tau_ms", "ad_app", "ad_blk",
 
 
 def run(grid_ms, lat_ms, seed):
+    """以指定网格上界与注入延迟跑一次 SIL；网格非默认时同时放宽 --delay-grid-max-ms 与 --delay-cap-ms，返回末条 SIL_REAL_JSON（超时/无输出为 None）。"""
     cmd = [EXE] + BASE + ["--gnss-latency-ms", str(lat_ms)]
     if grid_ms != 150:
         cmd += ["--delay-grid-max-ms", str(grid_ms), "--delay-cap-ms", str(grid_ms)]
@@ -70,11 +73,13 @@ def run(grid_ms, lat_ms, seed):
 
 
 def med(rows, key):
+    """取指定字段的中位数（缺失按 0），空列表返回 NaN。"""
     vals = [r.get(key, 0) or 0 for r in rows]
     return st.median(vals) if vals else float("nan")
 
 
 def main():
+    """命令行入口：5×5 网格×延迟扫描（20 seeds/格），按 Q1 命中、Q3 撞缓冲、Q2/Q4 最优档判读，打印表格并写 delay_grid_sweep_2026-10-28.json。"""
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

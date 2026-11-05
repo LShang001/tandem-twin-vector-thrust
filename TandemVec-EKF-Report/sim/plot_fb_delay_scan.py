@@ -34,6 +34,7 @@ CELLS = ["imu_stuck_icm_full", "imu_stuck2s_icm_full"]
 
 
 def load(path):
+    """读 jsonl 证据，按 config 去掉 _wd/_wh 后缀归组，返回 {基准组: [记录…]}（组内按 seed 排序）。"""
     d = {}
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -47,6 +48,7 @@ def load(path):
 
 
 def arms(pattern, strip):
+    """按通配取文件，从文件名截出 tag 并去掉 strip 前缀作为臂名，返回 {臂名: load() 结果}。"""
     out = {}
     for p in sorted(glob.glob(os.path.join(SD, pattern))):
         tag = os.path.basename(p)[len("missile-sil-2026-10-28_"):-len(".jsonl")]
@@ -55,6 +57,7 @@ def arms(pattern, strip):
 
 
 def main():
+    """命令行入口：载入 D/H 两组扫描臂、校验两个故障单元齐全，画代价曲线、逐档箱线与后持反证三图，并落盘中位数汇总 JSON。"""
     D = arms("missile-sil-2026-10-28_w_d*.jsonl", "w_d")
     H = arms("missile-sil-2026-10-28_w_h*.jsonl", "w_h")
     assert D, "没有 _w_d* 证据"

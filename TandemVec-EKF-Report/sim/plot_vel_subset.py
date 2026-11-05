@@ -37,6 +37,7 @@ C_ON = "#2b7fc8"
 
 
 def setup_font():
+    """优先启用系统中文字体（雅黑/黑体/Noto），并关闭负号转义。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -48,6 +49,7 @@ def setup_font():
 
 
 def load(path):
+    """逐行解析 JSONL 证据文件，返回记录列表（空行跳过，解析异常向上抛）。"""
     rows = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
@@ -58,6 +60,7 @@ def load(path):
 
 
 def finite(rows, key):
+    """从记录列表里抽某字段的有限数值，返回 float 数组；缺失或非有限值跳过。"""
     out = []
     for r in rows:
         v = r.get(key)
@@ -67,6 +70,13 @@ def finite(rows, key):
 
 
 def main():
+    """命令行入口：读速度子集软恢复的 A/B 证据，绘制多面板对比图。
+
+    参数：--tag 选择 `sil32g_velrec_<tag>.jsonl`；--extra-jsonl 追加证据文件
+    （相对 sim-data 或绝对路径），合并进同一分组。
+    输出：`figs/nav_vel_subset_<tag>.png`（按 PAIRS 六组两臂画条形、配对散点、
+    箱线与 CDF）。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="2026-10-27")
     ap.add_argument("--extra-jsonl", nargs="*", default=[],

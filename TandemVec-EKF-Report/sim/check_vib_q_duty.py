@@ -9,6 +9,8 @@
          判据：0.5 Hz 高通的截止远低于导弹 27.8°/s（≈0.48 Hz）机动频率，
          若 `accel_rms_g` 随过载档位（零注入振动）上升，则"振动"其实是确定性机动，
          自适应 Q 在弹道上被机动而非振动决定。同时输出 τ̂ 分布用于选死区。
+@frame   NED（pos_rms 位置）/ 机体系（gyro_* 机体系角速率）；振动量本身是标量幅值，无方向
+@units   g（振动 RMS）、dps（陀螺 RMS/角速率）、ms（延时估计）、m（pos_rms）、%（占空比）
 """
 import json
 import os
@@ -36,6 +38,10 @@ CONDS = [
 
 
 def run(extra, seed, tag):
+    """跑一次 SIL（绑 CPU2，超时 900 s），返回 (trace CSV 路径, 末行 SIL_REAL_JSON 指标或 None)。
+
+    日志里没有 JSON 指标时第二项为 None，由调用方决定是否仍用 trace。
+    """
     csv = f"{TR}/{tag}_s{seed}.csv"
     os.makedirs(TR, exist_ok=True)
     cmd = [EXE] + BASE + extra + ["--seed", str(seed), "--trace-csv", csv]
@@ -51,6 +57,7 @@ def run(extra, seed, tag):
 
 
 def load(csv):
+    """读 trace CSV，返回逐行 dict 列表（键为表头列名，值为原始字符串）。"""
     with open(csv, encoding="utf-8") as fh:
         head = fh.readline().strip().split(",")
         rows = [dict(zip(head, ln.strip().split(","))) for ln in fh if ln.strip()]
@@ -105,6 +112,11 @@ def duty(rows):
 
 
 def main():
+    """遍历 6 个工况各 3 seeds，汇总占空比/τ̂ 统计并写 sim-data/vib_q_duty_2026-10-27.json。
+
+    每 seed 打印一屏中位数；核心输出是 r_rms_omg——高通"振动" RMS 与机体角速率幅值的
+    相关系数，接近 1 即说明所谓振动实为确定性机动。
+    """
     print(f"exe md5-ish exists: {os.path.exists(EXE)}")
     all_res = {}
     for tag, extra, nseed in CONDS:

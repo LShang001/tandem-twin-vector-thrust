@@ -26,16 +26,19 @@ COL = {"nominal": "tab:blue", "outage": "tab:red",
 
 
 def nav_fail(r):
+    """导航失败判据：pos_rms 缺失或非有限、>3 m，或 pos_max >10 m 即判失败。"""
     p = r.get("pos_rms")
     return bool(p is None or p != p or p > 3.0 or (r.get("pos_max") or 0) > 10.0)
 
 
 def stab_fail(r):
+    """稳定性失败判据：末高度偏离 10 m 超过 3 m，或最大滚转超过 45°。"""
     return bool(abs((r.get("final_alt") or 0) - 10.0) > 3.0
                 or (r.get("max_roll") or 0) > 45.0)
 
 
 def load():
+    """读取机动矩阵结果 JSONL，返回记录列表；源文件缺失返回空表，坏行跳过。"""
     rows = []
     if not os.path.exists(SRC):
         return rows
@@ -48,15 +51,18 @@ def load():
 
 
 def finite(v):
+    """过滤 None 与 NaN，返回只含有限数值的列表。"""
     return [x for x in v if x is not None and x == x]
 
 
 def median_of(v):
+    """先剔除 None/NaN 再取中位数；全部无效时返回 NaN（不抛空列表异常）。"""
     v = finite(v)
     return st.median(v) if v else float("nan")
 
 
 def pct(v, q):
+    """取分位数：剔除无效值并升序后按 q∈[0,1] 取最近秩；空序列返回 NaN。"""
     v = sorted(finite(v))
     if not v:
         return float("nan")
@@ -65,10 +71,16 @@ def pct(v, q):
 
 
 def group(rows, cond, dist):
+    """按工况名与投放距离筛出记录子集（dist 字段转 int 后比较）。"""
     return [r for r in rows if r["cond"] == cond and int(r["dist"]) == dist]
 
 
 def main():
+    """命令行入口：打印各工况导航/稳定失败率与位置、滚转统计，并绘制 2×3 矩阵图。
+
+    无命令行参数；数据源固定为 `%TEMP%/man2/results.jsonl`，缺失时按 0 行处理。
+    输出：控制台按工况一行统计，以及 `figs/nav_maneuver_matrix.png`。
+    """
     rows = load()
     print(f"rows={len(rows)}")
     print("cond     n  navfail stabfail  pos_rms_med p95 max  roll_p95 max  peak_med")

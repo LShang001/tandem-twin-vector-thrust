@@ -28,6 +28,10 @@ TRACE_FIX = os.path.join(os.environ.get("TEMP", ""), "msl_fixed_trace.csv")
 
 
 def load(path):
+    """读一份 SIL 矩阵 JSONL，返回逐行解析出的记录列表（每行一条仿真结果）。
+
+    本脚本在导入期调用两次，分别取修复前 base 与修复后 final2 两份矩阵。
+    """
     return [json.loads(l) for l in open(path, encoding="utf-8")]
 
 
@@ -40,14 +44,21 @@ LABELS = ["理想 IMU", "ICM 标称", "无磁", "5 s 失联", "GNSS 2.5 m/0.3",
 
 
 def pick(rows, prefix):
+    """挑出 config 以 prefix 开头的记录——本脚本用 config 前缀当工况（条件）筛选，
+    返回记录列表。"""
     return [r for r in rows if r["config"].startswith(prefix)]
 
 
 def vals(rows, prefix, key):
+    """取某工况（config 前缀）下 key 字段的全部有限数值，返回列表。
+
+    缺该字段或值为 NaN/inf 的记录跳过；该工况无样本时返回空列表。
+    """
     return [r[key] for r in pick(rows, prefix) if np.isfinite(r.get(key, np.nan))]
 
 
 def med(rows, prefix, key):
+    """取某工况（config 前缀）下 key 的中位数；无有效样本时返回 nan（图上留空位）。"""
     v = vals(rows, prefix, key)
     return float(np.median(v)) if v else np.nan
 

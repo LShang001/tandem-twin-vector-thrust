@@ -4,6 +4,8 @@
 @file    run_coaxial_mc.py
 @module  固件/宿主 SIL（共轴 plant 随机参数 MC）
 @brief   在 L1 plant 参数空间随机采样，统计共轴控制律的定高/位置保持包线
+@frame   NED（真值高度与水平位置；姿态取 roll/pitch）
+@units   kg（质量）、N（推力）、m（力臂/高度）、kg·m²（惯量）、s（时长）
 @details 采样质量、最大推力、力臂、横向/轴向惯量、差速力矩；固定 mag_clean、
          --pos-hold、40 s。输出 JSON/CSV 与 P50/P95、通过率、最坏案例。
          参数为 L1 假设，不是实机辨识；结论不能外推实机。

@@ -39,6 +39,11 @@ ARMS = [("q1", "--gnss-vel-subset-maxfires 1"), ("q255", "--gnss-vel-subset-maxf
 
 
 def main():
+    """命令行入口：四故障格 + 10 Hz 主格 × 两臂（配额 1 / 255）× seeds，写 jsonl。
+
+    --exe 必填；--bind-core≥0 时把本进程绑核，--seed-start/--seeds 控制种子区间。
+    未解析到 SIL_REAL_JSON 的 job 丢弃，最后打印实际行数与期望 job 数以便核对完整性。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", type=int, default=20)

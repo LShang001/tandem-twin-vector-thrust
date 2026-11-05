@@ -10,6 +10,8 @@
 
 输出：姿态峰值、气压/融合高度范围、TVC 两轴/电机范围、饱和计数、
 解锁/模式分布；数据缺失列自动跳过。不做控制结论，只做证据汇总。
+@frame   固件存档系（roll/pitch/heading 为机体系欧拉角）；高度取气压/融合值
+@units   deg、m、%、ms（时长）、个（计数）
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from pathlib import Path
 
 
 def fnum(row, key):
+    """取 CSV 行的浮点值：字段缺失、非数值或 NaN/Inf 一律返回 None（供上层跳过该行）。"""
     try:
         v = float(row.get(key, ""))
     except (TypeError, ValueError):
@@ -31,6 +34,7 @@ def fnum(row, key):
 
 
 def stats(rows, key):
+    """统计某列有限值的 min/max/mean/总体标准差；整列没有有效值时返回 None。"""
     vals = [v for r in rows if (v := fnum(r, key)) is not None]
     if not vals:
         return None
@@ -43,6 +47,7 @@ def stats(rows, key):
 
 
 def count_true(rows, key):
+    """数某列被判为真的行数：1/true/yes 计一次（大小写与首尾空白不敏感），其余不算。"""
     n = 0
     for r in rows:
         v = str(r.get(key, "")).strip().lower()
@@ -52,6 +57,10 @@ def count_true(rows, key):
 
 
 def main() -> int:
+    """命令行入口：解析 tvc record CSV，打印证据汇总或 --json 输出完整字典。
+
+    文件不存在、CSV 为空返回 2，正常返回 0；缺列自动跳过。只做数据汇总，不判定控制行为。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("csv", type=Path)
     ap.add_argument("--json", action="store_true")

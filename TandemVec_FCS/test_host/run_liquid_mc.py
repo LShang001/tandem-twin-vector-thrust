@@ -4,6 +4,8 @@
 @file    run_liquid_mc.py
 @module  固件/宿主 SIL（液体推进随机参数 MC）
 @brief   在推进/回收参数空间随机采样，统计 CCAEGT/自研制导下的着陆包线
+@frame   NED（着陆高度/速度/姿态）
+@units   m（高度）、m/s（速度）、kg（推进剂/质量）、s、%（通过率）
 @details 采样高度、推进剂、Isp、Tmax/Tmin、阀门/推力速率、初始姿态；
          调用 test_liquid_rocket_sil 二进制，记录着陆速度/姿态/通过率。
          参数为 L1 模型假设，不是本机标定值。

@@ -27,6 +27,8 @@ FIGS = os.path.join(ROOT, "figs")
 
 
 def setup_font():
+    """按 微软雅黑 → SimHei → Noto Sans CJK SC 的顺序挑第一个可用中文字体设给
+    matplotlib，并关闭 unicode 负号替换，避免图上中文/负号变方框。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -38,6 +40,10 @@ def setup_font():
 
 
 def load(path):
+    """读 200 Hz trace CSV，返回 {列名: ndarray}（全部按 float64 解析）。
+
+    要求每行列数与表头一致，否则 np.array 转换会直接报错——这里不做静默丢行。
+    """
     with open(path, encoding="utf-8") as fh:
         header = fh.readline().strip().split(",")
         rows = [ln.strip().split(",") for ln in fh if ln.strip()]
@@ -46,6 +52,13 @@ def load(path):
 
 
 def main():
+    """命令行入口：读 trace CSV 与 analyze_tail_timeline.py 产出的时间线 JSON，
+    画三联时序（水平位置误差叠 30 m 位置野值门与 10 m 参考线、垂速误差叠 10 m/s
+    速度门、真高/EKF 高度/目标高度），按 JSON 里的越门时刻画竖线并标注，
+    存 figs/nav_tail_timeline_<tag>.png。
+
+    判读要点：速度门先越、位置门后越 ⇒ 速度子集软恢复通道有机会触发。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--csv", default="trace-sil32g-30g-seed21-2026-10-27.csv")
     ap.add_argument("--json", default="tail_timeline_2026-10-27.json")

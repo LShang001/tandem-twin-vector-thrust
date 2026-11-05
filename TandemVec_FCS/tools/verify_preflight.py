@@ -3,6 +3,8 @@
 @module  tools/飞前状态验收
 @brief   读取 tvc record CSV，检查未解锁状态安全 + IMU P1 采样。
 @details 默认只检查软件/输出安全；--expect-powered 额外要求电池>0且RC有脉宽。
+@frame   N/A（只做未解锁状态与采样率的数值门限检查，不涉坐标系）
+@units   Hz（imu_rate）、V（bat_voltage）、us（rc 脉宽）、deg（tvc 摆角）、%（电机油门）
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ import sys
 
 
 def fvals(rows, key):
+    """取 CSV 某列能解析为 float 的值，返回列表；缺失或非数值的行静默跳过。"""
     out = []
     for r in rows:
         try:
@@ -23,6 +26,11 @@ def fvals(rows, key):
 
 
 def main() -> int:
+    """命令行入口：检查未解锁安全与 IMU P1 采样，返回 0 通过 / 1 不通过 / 2 读不到。
+
+    判据：imu_rate 均值 ≥1950 Hz 且 std ≤100、ring_drop 全为 0、未解锁时 flight_mode/
+    unlocked/tvc 两轴/电机两路保持零；--expect-powered 额外要求电池>1 V 且 RC 有脉宽。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("csv")
     ap.add_argument("--expect-powered", action="store_true")

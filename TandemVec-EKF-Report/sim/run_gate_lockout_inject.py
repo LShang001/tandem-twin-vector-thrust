@@ -46,6 +46,14 @@ D_GATE = 8.0
 
 
 def run_one(exe, seed, bias, tag_dir):
+    """跑一次注入实验：在 15.0–15.3 s 给**导航输入**加速度加 bias（机体系 x，m/s²）
+    台阶，落 trace CSV 并取回该 seed 的指标。
+
+    返回字典含 dose_mps=bias×0.3 s（理论速度增量）、nav_bias_frames（注入自证据，
+    真实生效的帧数）、pos_rms 等 SIL 汇总量、rejects/reanchors，以及由 trace 现算的
+    注入结束时刻 vz 误差、[t1, t1+5 s) 内 gate_vel 占比、t1+5 s 的 vz 误差。
+    无 SIL_REAL_JSON 或进程返回码非 0 时返回 None。
+    """
     out = os.path.join(tag_dir, f"trace_s{seed}_b{int(bias)}.csv")
     cmd = [exe] + BASE + ["--ms-thrust", str(THRUST_N), "--seed", str(seed),
                           "--trace-csv", out,
@@ -80,6 +88,13 @@ def run_one(exe, seed, bias, tag_dir):
 
 
 def main():
+    """命令行入口：对 4 档加速度偏置（0/20/40/80 m/s² ⇒ 0/6/12/24 m/s 剂量）× seeds
+    逐个跑注入，按预登记判据逐臂裁决并落盘 sim-data/gate_lockout_inject_<tag>.json。
+
+    判据：I1 注入自证据 nav_bias_frames>0；I2 实测 vz 误差 ≈ bias×窗长（±35%）；
+    I3 过门臂在 5 s 内 gate_vel 占比>0.5 且末端误差>4 m/s 或出现重锚 ⇒ 锁死；
+    I4 零臂不得持续拒绝（占比<0.1、rejects≤3）；I5 若过门臂自行恢复则证伪"必然锁死"。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", default="1,2,3")

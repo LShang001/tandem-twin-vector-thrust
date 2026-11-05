@@ -34,6 +34,7 @@ PRIOR_MS = 15.0
 
 
 def setup_font():
+    """按优先级挑中文字体（雅黑/黑体/Noto CJK）设为 matplotlib 全局字体，并关闭 unicode 负号变体。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -45,6 +46,7 @@ def setup_font():
 
 
 def load(tag):
+    """读 latency_auto_<tag>.jsonl 证据，返回非空 JSON 记录列表。"""
     rows = []
     with open(os.path.join(DATA, f"latency_auto_{tag}.jsonl"),
               encoding="utf-8") as fh:
@@ -56,6 +58,7 @@ def load(tag):
 
 
 def sel(rows, arm, lat, key):
+    """筛出 (arm, lat) 组合下某指标的有限值数组，缺失/NaN/非数值的 seed 跳过。"""
     out = []
     for r in rows:
         if r["arm"] != arm or r["lat"] != lat:
@@ -67,6 +70,7 @@ def sel(rows, arm, lat, key):
 
 
 def main():
+    """命令行入口：解析 --tag，画六个面板（位置 RMSE—延迟与理论线、τ 估计箱线、姿态 RMSE、逐 seed 配对、延迟×臂热图、拒帧计数），输出 nav_latency_auto_<tag>.png。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--tag", default="2026-10-27")
     args = ap.parse_args()

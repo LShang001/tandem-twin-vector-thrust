@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """@file    opt_nav_params.py
 @module  测试/宿主机
-@brief   opt_nav_params.py 模块说明。
-EKF 连续参数全面优化（CMA-ES，8 维）。
-
-项目规范（AGENTS.md）：连续参数最终调参默认用现代优化器，网格/手扫仅用于
+@brief   EKF 连续参数 CMA-ES 优化（8 维：LPF 带宽 / hAcc 门限 / q_accel 等）
+@frame   N/A（在参数空间搜索，不处理位姿序列）
+@units   Hz（LPF 带宽）、m（hAcc 门限），其余为无量纲比例
+@details 项目规范（AGENTS.md）：连续参数最终调参默认用现代优化器，网格/手扫仅用于
 初值与可视化。
 
 优化参数（8 个）：

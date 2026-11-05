@@ -10,6 +10,8 @@
          （`vib_high` 恒 1）。新通道 hp = raw − lp 的可用频段是 fc≈6/16 Hz 到
          1 kHz，理论上应反过来：机动低、振动高。本脚本是判通道本身成立与否的
          前置取证——不成立就不必跑三臂 A/B。
+@frame   N/A（只统计标量振动幅值，不涉坐标系）
+@units   g（振动幅值/加速度）、s（trace 时间）、m（pos_rms）
 
 预登记判据（跑前写死，不成立则通道否决）：
   C1 机动可分：洁净弹道（无振动）`vib_hf_g` 的 p95 < 进入门限 0.15 g，
@@ -61,6 +63,12 @@ ENTER_G, RELEASE_G = 0.15, 0.10
 
 
 def run(extra, seed, trace_path):
+    """跑一次 fw_real.exe 仿真：基线参数 + 该工况附加参数 + seed，开高频通道
+    `--vib-hf-source 1` 并把逐拍数据写 `--trace-csv`（尽力绑到 CPU2）。
+
+    返回：(SIL_REAL_JSON 汇总 dict 或 None, trace 路径)；超时被强制结束时返回
+    (None, None)。单次仿真超时上限 900 s。
+    """
     cmd = [EXE] + BASE + extra + ["--seed", str(seed),
                                   "--vib-hf-source", "1",
                                   "--trace-csv", trace_path]
@@ -80,6 +88,10 @@ def run(extra, seed, trace_path):
 
 
 def series(path):
+    """读 `--trace-csv` 写的多列 CSV，返回 {列名: 浮点列表}。
+
+    列数与会话表头不一致的行丢弃（半行/空行）；整列解析不出浮点时该列退化为空列表。
+    """
     with open(path, encoding="utf-8") as fh:
         hdr = fh.readline().strip().split(",")
         rows = [ln.strip().split(",") for ln in fh if ln.strip()]
@@ -93,6 +105,13 @@ def series(path):
 
 
 def main():
+    """命令行入口：对 5 种工况（洁净/振 1 g/振 2 g/GNSS 延 200 ms/5 Hz）× 3 seeds
+    逐个跑仿真、读回 trace，统计高频通道中位/p95/max、旧通道中位、`vib_high`
+    占空与 pos_rms，按 C1'–C4' 判定"机械振动 vs 确定性机动"是否可分。
+
+    返回：0 判据通过（通道成立）、1 不通过（否决，不必跑 A/B）、2 仿真 EXE 缺失。
+    结果落盘 sim-data/vib_hf_channel_2026-10-27.json。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

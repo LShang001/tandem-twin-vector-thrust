@@ -7,6 +7,8 @@
 @details 为什么必须做：归档导弹主表全部在"否决开"下产出，而翻转默认值会让自动延时
          估计在高过载段真的被应用；若洁净基线（0 ms 注入）被推离 1.5 m 级，
          整份报告的基线数字都要重述。判据：逐 seed 配对差 + 中位数，不看单点。
+@frame   NED（pos_rms/pos_max 为水平位置误差；nav_att_rmse 为欧拉角）
+@units   m / m/s / deg / ms（--gnss-latency-ms 注入延时）
 """
 import collections
 import concurrent.futures as cf
@@ -42,6 +44,12 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms", "outlier_rejects",
 
 
 def run(exe, extra, seed):
+    """跑一次 SIL 二进制的单 seed，取其最后一条 SIL_REAL_JSON 结果。
+
+    参数：exe 为待测 fw_real.exe，extra 为该工况的追加参数，seed 为随机种子；
+    进程尽力绑 CPU2，减少两臂并行时的抢核干扰。返回解析后的指标字典，
+    输出中找不到 JSON 标记时返回 None（该 seed 不计入配对）。
+    """
     cmd = [exe] + BASE + extra + ["--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -57,6 +65,12 @@ def run(exe, extra, seed):
 
 
 def main():
+    """命令行入口：7 类导弹主工况 × 两臂隔离 A/B，打印逐 seed 配对差并落盘。
+
+    先打印两臂 exe 的 md5 证明只差被测宏；随后每种工况用 10 路线程池跑两臂，
+    统计 pos_rms 中位数、变差/变好/持平的 seed 数、拒帧总数与 ad_app 中位数。
+    逐 seed 明细与两臂 md5 写入 sim-data JSON，供报告复算。
+    """
     for name, exe in ARMS:
         print(f"arm {name}: md5 "
               f"{hashlib.md5(open(exe,'rb').read()).hexdigest()[:8]}")

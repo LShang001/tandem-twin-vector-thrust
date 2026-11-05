@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """@file    run_att_aid_mc.py
 @module  测试/宿主机
-@brief   run_att_aid_mc.py 模块说明。
-run_att_aid_mc.py — 无 GNSS 运动段姿态辅助量测源的大规模蒙特卡洛。
-
-对比三种 `g_att_aid_mode`（0=AHRS 姿态量测、1=重力方向直连、2=重力优先+AHRS 回退），
+@brief   无 GNSS 运动段姿态辅助量测源的大规模蒙特卡洛（g_att_aid_mode 0/1/2）
+@frame   NED + 机体系（姿态角）
+@units   deg、s
+@details 对比三种 `g_att_aid_mode`（0=AHRS 姿态量测、1=重力方向直连、2=重力优先+AHRS 回退），
 在 GNSS 失联/风/振动/失联时长等条线下跑同一 SIL 二进制（real-nav，VTOL mag_clean），
 输出逐 seed JSON 与汇总统计。
 

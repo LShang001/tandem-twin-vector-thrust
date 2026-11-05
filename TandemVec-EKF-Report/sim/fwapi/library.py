@@ -7,6 +7,8 @@
 @details 共享库由 TandemVec_FCS/test_host/fw_algo/fw_algo_api.cpp 编译而来，
          源码就是固件 Ekf15State，本包不做任何算法复刻。
          默认输出到系统临时目录（ASCII 路径），避免 MinGW 在中文路径下链接失败。
+@frame   输入/输出沿用固件约定：NED 导航系、FRD 机体系，四元数 (w,x,y,z)
+@units   SI：m、m/s、m/s²、rad、rad/s、s、µT、kg、kg·m²（结构体字段后缀自明）
 @note    源码比库新时自动重建（可用 FW_ALGO_NO_BUILD=1 禁用、FW_ALGO_LIB 指定现成库）。
 @see     TandemVec_FCS/test_host/fw_algo/fw_algo_api.h
 """
@@ -29,6 +31,7 @@ def repo_root() -> Path:
 
 
 def fcs_root() -> Path:
+    """固件工程根 <仓库>/TandemVec_FCS：构建脚本、源码清单与头文件都在其下。"""
     return repo_root() / "TandemVec_FCS"
 
 
@@ -58,6 +61,7 @@ def build_dir() -> Path:
 
 
 def library_name() -> str:
+    """当前平台的共享库文件名：Windows 为 fw_algo.dll，其余平台为 libfw_algo.so。"""
     return "fw_algo.dll" if sys.platform.startswith("win") else "libfw_algo.so"
 
 
@@ -124,6 +128,12 @@ def build(force: bool = False) -> Path:
 
 
 class FwEkfInit(ctypes.Structure):
+    """EKF 初始化参数（对应 fw_ekf_init_t）。
+
+    比力/角速度/磁场为机体系初值（m/s²、rad/s、µT），vel 为 NED 速度（m/s），
+    lla 为（纬度 rad, 经度 rad, 椭球高 m）；mag 全 0 时航向由 yaw_offset_rad 指定。
+    """
+
     _fields_ = [
         ("accel_mps2", ctypes.c_float * 3),
         ("gyro_radps", ctypes.c_float * 3),
@@ -135,6 +145,12 @@ class FwEkfInit(ctypes.Structure):
 
 
 class FwUpdateResult(ctypes.Structure):
+    """单次量测更新结果（对应 fw_update_result），与固件 MeasurementUpdateResult 一一对应。
+
+    标志位依次为输入有效、进入流程、实际融合、重锚、野值拒绝、位置子集、速度子集；
+    标量为位置/速度子集 NIS、新息模长、NIS 与门限之比、限幅前的航向修正（rad）。
+    """
+
     _fields_ = [
         ("input_valid", ctypes.c_int32),
         ("attempted", ctypes.c_int32),
@@ -153,6 +169,12 @@ class FwUpdateResult(ctypes.Structure):
 
 
 class FwNavState(ctypes.Structure):
+    """导航状态快照（对应 fw_nav_state）：位置/速度/姿态/零偏/1σ 与各项计数器。
+
+    cov_diag 是 P 的对角线，顺序与固件误差状态一致：位置(m²)、速度(m²/s²)、
+    失准角(rad²)、加计零偏、陀螺零偏；结构体末尾另有最近一次 GNSS 水平残差与门控标志。
+    """
+
     _fields_ = [
         ("lla_rad_m", ctypes.c_double * 3),
         ("vel_ned_mps", ctypes.c_float * 3),
@@ -180,6 +202,13 @@ class FwNavState(ctypes.Structure):
 
 
 class FwTvParams(ctypes.Structure):
+    """纵列双发机型参数（对应 fw_tv_params，与固件 TandemVecParams 逐字段对应）。
+
+    kT/kQ 为推力（T=kT·ω²）与反扭系数，Jp 为桨+转子惯量，wMax 为最大转速；
+    a/b 为前/尾电机力臂，tauM 为电机一阶滞后，Ix/Iy/Iz 为三轴惯量，
+    dMax 摆角限幅、dwMax 差速限幅，m 质量、g 重力。
+    """
+
     _fields_ = [
         ("kT", ctypes.c_float), ("kQ", ctypes.c_float), ("Jp", ctypes.c_float),
         ("wMax", ctypes.c_float), ("a", ctypes.c_float), ("b", ctypes.c_float),
@@ -190,16 +219,31 @@ class FwTvParams(ctypes.Structure):
 
 
 class FwPropState(ctypes.Structure):
+    """执行器上一拍状态（对应 fw_prop_state）：前/尾电机转速与上/下摆角。"""
+
     _fields_ = [("wf", ctypes.c_float), ("wt", ctypes.c_float),
                 ("delta_f", ctypes.c_float), ("delta_t", ctypes.c_float)]
 
 
 class FwTvAllocState(ctypes.Structure):
+    """分配器内部状态（对应 fw_tv_alloc_state）：BTRUE 工作点与 τm 观测器状态。
+
+    保存上一拍执行器状态 prev，以及观测器估计的前/尾转速 wf_est/wt_est；
+    跨拍调用 fw_tandemvec_alloc 时原样回传，保证差速动态连贯。
+    """
+
     _fields_ = [("prev", FwPropState), ("wf_est", ctypes.c_float),
                 ("wt_est", ctypes.c_float)]
 
 
 class FwTvAllocInput(ctypes.Structure):
+    """分配器输入（对应 fw_tv_alloc_input）。
+
+    三轴角加速度指令为存档系（rad/s²），throttle_pct 为油门百分比，
+    gyro 为已减零偏的机体系角速度（rad/s），dt 为步长（s），
+    inertia_comp_mask 为惯量解耦前馈掩码。
+    """
+
     _fields_ = [
         ("alpha_roll_radps2", ctypes.c_float),
         ("alpha_pitch_radps2", ctypes.c_float),
@@ -212,6 +256,12 @@ class FwTvAllocInput(ctypes.Structure):
 
 
 class FwTvAllocOutput(ctypes.Structure):
+    """分配器输出（对应 fw_tv_alloc_output）。
+
+    含有效标志、摆角（rad）、两路电机油门（%）、差速 dw、指令/前馈力矩、
+    有效工作点 w0_eff、偏航增益调度值、三处饱和标志，以及回传给下一拍的 next 状态。
+    """
+
     _fields_ = [
         ("valid", ctypes.c_int32),
         ("delta_f_rad", ctypes.c_float), ("delta_t_rad", ctypes.c_float),
@@ -226,6 +276,13 @@ class FwTvAllocOutput(ctypes.Structure):
 
 
 class FwThrustAllocInput(ctypes.Structure):
+    """垂直推力分配输入（对应 fw_thrust_alloc_input）。
+
+    specific_force_up_mps2 为天向比力（m/s²），thrust_axis_up_cos 为推力轴在
+    天向的投影余弦（固件存档系用 |R33|），mass_kg 为质量（kg），
+    max_total_thrust_n 为总推力上限（N），min_cos_tilt 为倾角余弦下限。
+    """
+
     _fields_ = [
         ("specific_force_up_mps2", ctypes.c_float),
         ("thrust_axis_up_cos", ctypes.c_float),
@@ -236,6 +293,8 @@ class FwThrustAllocInput(ctypes.Structure):
 
 
 class FwThrustAllocOutput(ctypes.Structure):
+    """垂直推力分配输出（对应 fw_thrust_alloc_output）：总推力（N）、油门（%）与上下饱和标志。"""
+
     _fields_ = [
         ("valid", ctypes.c_int32),
         ("total_thrust_n", ctypes.c_float),
@@ -581,12 +640,14 @@ def load(force_build: bool = False) -> ctypes.CDLL:
 
 
 def library_path() -> Path:
+    """返回当前已加载共享库的磁盘路径；尚未加载时先触发一次 load()。"""
     load()
     assert _LIB_PATH is not None
     return _LIB_PATH
 
 
 def build_info() -> str:
+    """返回库内构建信息字符串（编译器、标量 Eigen 开关、编译时间），用于证据可追溯。"""
     lib = load()
     return lib.fw_algo_build_info().decode("utf-8", "replace")
 

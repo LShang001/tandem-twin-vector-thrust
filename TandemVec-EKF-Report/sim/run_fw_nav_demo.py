@@ -116,6 +116,11 @@ def run_case(name, seconds, vel_ned=(0.0, 0.0, 0.0), expect_vel=None):
 
 
 def main():
+    """命令行入口：固件导航步进 ABI 的冒烟验证器，按预登记的 N1–N5 逐项打印
+    PASS/FAIL（caps 版本与能力位、静止悬停、2 m/s 北向匀速、ABI 返回码、reset 语义）。
+
+    返回：全部通过 0，否则 1；--json 时把 hover/cruise 指标、失败项与 caps 落盘作证据。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default="")
     args = ap.parse_args()

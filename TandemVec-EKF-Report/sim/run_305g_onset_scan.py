@@ -56,6 +56,12 @@ THRUST_LADDER_N = [17200, 18500, 19500, 20500, 21500, 22000, 22500, 23000, 23500
 
 
 def main():
+    """命令行入口：按推力阶梯 × seeds 并行跑 SIL，落 jsonl 与按档汇总的 verdict。
+
+    每档统计 >25 m 发生率、两簇（≤15 m 正常簇 / >25 m 失效簇）中位、p90，
+    以及 ad_app/拒帧/硬重锚的种子数——用于定位分叉发生档与"哪个量先越界"。
+    O1 要求每档 seed 全收，缺档在 summary 里标 O1_ok=False 并整体判不完整。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--exe", required=True)
     ap.add_argument("--seeds", type=int, default=20)

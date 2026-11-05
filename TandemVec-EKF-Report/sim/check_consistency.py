@@ -28,6 +28,11 @@ from ekf_core import Ekf15, cfg as base_cfg, HOME_LLA, G_MPS2  # noqa: E402
 
 
 def make_filter(scale):
+    """构造并初始化为静止对准的 15 态 EKF，供一致性用例复用。
+
+    参数：scale 为加速度计过程噪声倍率（写入 `q_accel_scale`）。
+    返回：以 HOME_LLA 为原点、零速度、比力 (0,0,−g) 初始化的 Ekf15 实例。
+    """
     c = dict(base_cfg)
     c["q_accel_scale"] = scale
     e = Ekf15(c)
@@ -37,6 +42,13 @@ def make_filter(scale):
 
 
 def run_case(name, noise, scale, seeds, duration):
+    """跑一组 GNSS 量测噪声下的多随机种子仿真，返回各项指标的中位数。
+
+    参数：name 用例名；noise 为 6 维 GNSS 量测噪声 σ（None=标称配置）；
+    scale 为 q_accel_scale；seeds 为种子数（种子从 0 起）；duration 为时长（s）。
+    返回：pos_rmse [m]、vel_rmse [m/s]、位置/速度 NEES（三维归一化误差平方均值）
+    与 NIS 的中位数；NEES/NIS 无量纲，一致时分别趋近 1 与 6。
+    """
     R.make_ekf = lambda: make_filter(scale)
     rows = []
     for seed in range(seeds):
@@ -63,6 +75,11 @@ def run_case(name, noise, scale, seeds, duration):
 
 
 def main():
+    """命令行入口：跑标称/高噪声两组用例，按 RMSE、NEES、NIS 判定一致性回归。
+
+    通过条件：位置 RMSE ≤2 m 且速度 RMSE ≤0.4 m/s；`--strict` 额外要求
+    NEES∈[0.5,2.0]、NIS∈[4,8]。返回 0 表示全部通过，1 表示有指标越界。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--seeds", type=int, default=5)
     ap.add_argument("--seconds", type=float, default=60.0)

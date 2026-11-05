@@ -36,6 +36,10 @@ TAGS = {
 
 
 def load(tag):
+    """读 attrib305_2026-10-28_<tag>.jsonl，返回 {seed: 记录}。
+
+    文件缺失直接退出：臂不齐时 W1–W4 的配对比较全部无效，不做降级处理。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -50,6 +54,11 @@ def load(tag):
 
 
 def stats(d):
+    """把一个臂的 pos_rms 汇总为判定统计量。
+
+    返回 n（种子数）、fail（位置 RMS > 25 m 的种子数）、med/p95（m）、
+    max（m）与 att（nav_att_rmse 中位数，deg）。
+    """
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail": int((p > 25).sum()), "med": round(float(np.median(p)), 3),
             "p95": round(float(np.percentile(p, 95)), 3), "max": round(float(p.max()), 3),
@@ -57,6 +66,13 @@ def stats(d):
 
 
 def main():
+    """命令行入口：7 个臂按 §4.24p 预登记的 W1–W4 逐条判定并落盘。
+
+    W1 完整性（各臂 50 seeds）、W2 20 Hz 修复有效（max 至少砍半，且无一 seed
+    比 20 Hz 基线差 >10%）、W3 10 Hz 不吃收益（发生率与 p95 不劣于旧触发）、
+    W4 父通道关闭时子开关零副作用（逐 seed 位相同）。任一配对不足 50 即断言
+    失败——跨二进制归因只认同 seed 集。四条 pass 汇总成 verdict 写 sim-data JSON。
+    """
     arms = {k: load(v) for k, v in TAGS.items()}
     rep = {}
 

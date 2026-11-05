@@ -24,6 +24,12 @@ SUF = {"base": "_nrb", "raw": "_nrr", "fb": "_nrf", "inert": "_nri",
 
 
 def load(tag, suf):
+    """读一条 SIL 证据 JSONL，返回 {格名: {seed: 记录}}。
+
+    输入：tag 为证据文件名的臂名（sim-data/missile-sil-2026-10-28_<tag>.jsonl），
+    suf 为该臂 config 的后缀；格名 = config 去掉后缀后的前缀。
+    文件缺失或 config 不以 suf 结尾时直接退出/断言，避免张冠李戴。
+    """
     path = os.path.join(SD, f"missile-sil-2026-10-28_{tag}.jsonl")
     if not os.path.exists(path):
         sys.exit(f"缺证据文件：{path}")
@@ -41,12 +47,24 @@ def load(tag, suf):
 
 
 def med(recs, cell, key="pos_rms"):
+    """取某格全部 seed 的 key 指标中位数，返回 (中位数, 样本数)。
+
+    样本数 <15 时断言失败——小样本中位数不足以当判据，宁可中止也不出空洞绿灯。
+    """
     v = np.array([r[key] for r in recs[cell].values()], float)
     assert len(v) >= 15, f"{cell} 样本 {len(v)} < 15 ⇒ 口径异常"
     return float(np.median(v)), int(len(v))
 
 
 def main():
+    """命令行入口：载入 base/raw/fb/inert/rin 五臂证据，按 §4.24m 预登记的
+    J1–J5 逐条裁决并落盘 JSON（sim-data/nav_raw_fallback_verdict_2026-10-28.json）。
+
+    判据口径：J1/J2 回退臂中位位置误差 ≤1.1×base；J3 NaN 两格相对纯 raw 不劣化
+    超 5%；J4 非故障格逐 seed 与纯 raw 完全相同且 nrfb=0；J4b 故障格 nrfb>0
+    （确认回退分支真被执行，否则 J1/J2 是空洞绿灯）；J5 raw 臂与旧臂 seeds 1–20
+    逐位相同。打印裁决明细与总判定。
+    """
     B = load("nr_base", SUF["base"])
     R = load("nr_raw", SUF["raw"])
     F = load("nr_fb", SUF["fb"])

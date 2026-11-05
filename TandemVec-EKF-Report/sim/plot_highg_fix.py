@@ -3,6 +3,12 @@
 @file    plot_highg_fix.py
 @brief   16/32 g 量程在 12–25 g 协调转弯下的 pos/att，修复前 vs 修复后。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 读修复前 highg_fs_2026-10-27.jsonl（逐 seed 行）与修复后
+         highg_fix_2026-10-27.json（按组），按 (过载, 量程 16/32 g) 求位置 RMSE 与
+         姿态 RMSE 的中位，出双栏折线图（纵轴 symlog）到
+         figs/nav_highg_fix_2026-10-27.png。
+@frame   NED（误差量取自 SIL 汇总的 NED 口径，本脚本只做归组与作图）
+@units   m（位置 RMSE）、°（姿态 RMSE）、g（过载）
 """
 import json
 import os
@@ -21,6 +27,12 @@ FIGS = os.path.join(HERE, "..", "figs")
 
 
 def summary(rows):
+    """把逐条结果按 (过载 load, 量程 fs_g∈{16,32}) 归组求中位。
+
+    参数：rows 为记录列表（需含 load / fs_g / pos_rmse / att_rmse_deg）。
+    返回：{(load, 16.0|32.0): (位置 RMSE 中位 [m], 姿态 RMSE 中位 [°])}，
+    该组合无样本时不出键（作图时按缺失跳过）。
+    """
     out = {}
     for load in sorted({r["load"] for r in rows}):
         for fs in (16.0, 32.0):
@@ -34,6 +46,9 @@ def summary(rows):
 
 
 def main():
+    """命令行入口：读修复前/修复后两份结果 → 各自 summary() 归组 → 画双栏折线
+    （左位置 RMSE、右姿态 RMSE，4 条线=量程 16/32 g × 修复前/后，纵轴 symlog），
+    存 figs/nav_highg_fix_2026-10-27.png 并打印路径。"""
     old = [json.loads(l) for l in
            open(os.path.join(DATA, "highg_fs_2026-10-27.jsonl"),
                 encoding="utf-8") if l.strip()]

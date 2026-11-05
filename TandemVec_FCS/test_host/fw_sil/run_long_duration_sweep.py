@@ -4,6 +4,8 @@
 @file    run_long_duration_sweep.py
 @module  固件/宿主 SIL（长航时边界）
 @brief   对同一机型/场景跑 40/60/80/100/120 s，记录高度/位置/姿态/IMU 健康
+@frame   NED（高度/水平位置/姿态取对应分量）
+@units   s（扫描时长）、m、deg、Hz（IMU 采样率）
 @details 只调用现有 SIL 二进制，不改固件；用于找“从哪个时长开始失效”。
          结果仅对该 SIL 场景有效，不是实机长航时结论。
 """

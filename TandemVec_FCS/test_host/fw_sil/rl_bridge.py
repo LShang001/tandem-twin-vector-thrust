@@ -2,9 +2,13 @@
 # -*- coding: utf-8 -*-
 """@file    rl_bridge.py
 @module  测试/宿主机
-@brief   rl_bridge.py 模块说明。
-
-rl_bridge.py — 强化学习着陆策略（PPO）与飞控 SIL 的 UDP 联合仿真桥
+@brief   强化学习着陆策略（PPO）与飞控 SIL 的 UDP 联合仿真桥
+@details 观测 obs=clip(env_state−TARGET_STATE)，env_state=[x(天),y(东),z(北),vx,vy,vz]；
+         动作 a∈[-1,1] 映射为 ux=AMIN+(a0+1)/2·(AMAX−AMIN)、uy=a1·HORIZ_GAIN、
+         uz=a2·HORIZ_GAIN，下发加速度=(ux−GRAVITY, uy, uz)；策略与观测/动作映射
+         与箭载机实机程序 main.py 保持一致。
+@frame   NED（观测与动作的状态量）
+@units   m、m/s、deg、N（推力）
 
 策略与观测/动作映射与箭载机实机程序
 `D:/电火箭制导控制/箭载机/Projects/Electric_Rocket/main.py` 保持一致：

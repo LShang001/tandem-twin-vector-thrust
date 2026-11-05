@@ -22,6 +22,9 @@
   （振 2 g −80% → −20%，R1 的 IMU 冻结不由本门解决，见 §4.22.1d）。
   `--delay-disc-hold` 开关对应的 `Discontinuity` 重锚保持门因六格无可测收益已删除，
   用当前二进制再跑本脚本会被"未识别参数硬失败"拦下——这是设施的正确行为。
+@frame   NED（pos_rms 位置误差）；ad_app 为历元计数，无方向
+@units   m（pos_rms）、帧（ad_app/ad_blk）、ms（--gnss-latency-ms 注入延迟）、
+         g（--vib 振动幅值）；两个门参数沿用 SIL 的运行时口径
 """
 import concurrent.futures as cf
 import hashlib
@@ -61,6 +64,10 @@ NSEED = 8
 
 
 def run(extra, arm, seed):
+    """跑一次 SIL（绑 CPU2，超时 600 s 则 kill），返回末行 SIL_REAL_JSON 指标；无则 None。
+
+    extra 是工况参数、arm 是门开关组合，两者拼在 BASE 之后；同 seed 的四臂因此严格可比。
+    """
     cmd = [EXE] + BASE + extra + arm + ["--seed", str(seed)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -78,6 +85,11 @@ def run(extra, arm, seed):
 
 
 def main():
+    """命令行入口：8 工况 × 4 臂 × 8 seeds 跑门控 A/B，打印 pos_rms 与 ad_app 中位表。
+
+    缺二进制直接返回 2（不假装跑过）；结果连同 exe md5 写
+    sim-data/apply_gate_ab_2026-10-27.json，供 R1–R4 判据复核。
+    """
     if not os.path.exists(EXE):
         print("MISSING EXE:", EXE)
         return 2

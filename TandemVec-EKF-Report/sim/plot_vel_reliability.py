@@ -37,6 +37,7 @@ C_ON = "#2b7fc8"
 
 
 def setup_font():
+    """按优先级挑可用的中文字体（雅黑/黑体/思源），并关闭负号乱码。"""
     for name in ("Microsoft YaHei", "SimHei", "Noto Sans CJK SC"):
         try:
             font_manager.findfont(name, fallback_to_default=False)
@@ -48,6 +49,7 @@ def setup_font():
 
 
 def load(path):
+    """读 JSONL 证据文件，返回逐行解析的记录列表（空行跳过）。"""
     rows = []
     with open(path, encoding="utf-8") as fh:
         for line in fh:
@@ -58,6 +60,7 @@ def load(path):
 
 
 def vals(rows, arm, key):
+    """抽取指定臂某字段的有限值，返回 float ndarray（剔除缺失、非数值与 NaN/Inf）。"""
     out = []
     for r in rows:
         if r["arm"] != arm:
@@ -69,6 +72,12 @@ def vals(rows, arm, key):
 
 
 def main():
+    """命令行入口：读同二进制的 off/on 多工况 jsonl，画 6 面板可靠性矩阵并打印汇总。
+
+    面板依次为逐 seed 配对散点、p95/max 条形、分布箱线、CDF、seed×工况的 log10
+    位置 RMSE 热图、门控/恢复事件计数。图存 figs/nav_vel_reliability_<tag>.png；
+    stdout 按工况打印 off/on 的 n、中位、p95、max，缺数据工况单独提示。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--jsonl", default="sil32g_velrec_rel8_2026-10-27.jsonl")
     ap.add_argument("--tag", default="2026-10-27")

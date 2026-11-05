@@ -4,6 +4,8 @@
 @brief   读取 tvc record CSV，检查遥测帧率、帧间隔、IMU ring 溢出。
 @details 通过条件：行率≥35Hz；gap p99≤60ms；最大gap≤100ms；无>100ms gap；
           imu_ring_drop=0。仅读 CSV，不连接设备。
+@frame   N/A（纯链路时序统计，不涉坐标系）
+@units   ms（t_ms/gap）、Hz（行率）
 """
 from __future__ import annotations
 
@@ -13,6 +15,7 @@ import sys
 
 
 def percentile(values, p):
+    """取分位数（最近秩法）：排序后按 p 取下标，空序列返回 0.0。"""
     if not values:
         return 0.0
     s = sorted(values)
@@ -21,6 +24,7 @@ def percentile(values, p):
 
 
 def main() -> int:
+    """命令行入口：解析 CSV 并打印链路指标，通过返回 0、不通过返回 1、读不到返回 2。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("csv")
     args = ap.parse_args()

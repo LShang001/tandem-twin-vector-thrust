@@ -53,6 +53,11 @@ ARMS = [("u25_s51", "51-100", 51, "25", "y20_c25"),
 
 
 def load(tag):
+    """读一条臂的归因证据 JSONL，返回 {seed: 记录}。
+
+    输入：tag 为臂名（sim-data/attrib305_2026-10-28_<tag>.jsonl）；文件缺失即退出，
+    避免静默当空数据算出"没有失效"的假绿灯。
+    """
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -67,10 +72,13 @@ def load(tag):
 
 
 def want(start):
+    """返回该段应有的 seed 列表（start 起连续 50 个），供缺号校验与统计取键。"""
     return list(range(start, start + 50))
 
 
 def stat(d, keys):
+    """对给定 seed 集合统计该臂水平位置误差：样本数、>25 m 失效数、p90/p95、
+    最大值（m），以及姿态 RMSE 的中位数（deg）。"""
     p = np.array([float(d[s]["pos_rms"]) for s in keys])
     return {"n": len(keys), "fail_gt25": int((p > FAIL_M).sum()),
             "p90": round(float(np.percentile(p, 90)), 3),
@@ -80,6 +88,14 @@ def stat(d, keys):
 
 
 def main():
+    """命令行入口：按 6 条臂（两段 seeds × cap 25/30/35）统计，裁决三条预登记判据
+    并落盘 sim-data/vel_subset_capupper_2026-10-28.json。
+
+    判据：Y6a cap25 臂须与 §4.24s 归档逐 seed 相同（否则本轮作废）；Y6b 找使
+    "任一段出现 >25 m 失效或 max 抬升 >5 m"的最小 cap∈{30,35} 作上界 U，都不满足
+    记 U>35；Y6c 仅当 U−L≥5 m（L=14 为已测下界）才允许把结论写成平台区间。
+    返回：全判据通过返回 0，否则 1。
+    """
     data = {tag: load(tag) for tag, _seg, _start, _cap, _ref in ARMS}
     per = {}
     for tag, seg, start, cap, ref in ARMS:

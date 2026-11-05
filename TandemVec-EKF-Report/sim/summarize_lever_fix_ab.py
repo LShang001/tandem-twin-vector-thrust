@@ -4,6 +4,9 @@
 @brief   合并 revlv/fixlv 两份 jsonl，按 (二进制, 子集开关) 四组给出位置统计与
          逐 seed 配对差值，回答"修复前 ON 是否比 OFF 更差、修复后 ON 是否恢复"。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
+@details 四组来自 revcmp（修复前）与 fixcmp（修复后）两份 jsonl：逐组给位置中位/p95/max、
+         >25 m 计数与拒帧/重锚/子集恢复次数；再按 seed 配对给 ON−OFF 的中位差与
+         变差/变好 seed 数，用于回答"修复前 ON 是否比 OFF 差、修复后 ON 是否恢复"。
 @frame   NED
 @units   m
 
@@ -21,6 +24,7 @@ TAGS = {"revlv": "revcmp_2026-10-27", "fixlv": "fixcmp_2026-10-27"}
 
 
 def load(tag):
+    """读 sil32g_velrec_<tag>.jsonl，按 arm 分组、seed 索引，返回 {arm: {seed: 记录}}；文件缺失返回空 dict。"""
     rows = {}
     path = os.path.join(DATA, f"sil32g_velrec_{tag}.jsonl")
     if not os.path.exists(path):
@@ -36,6 +40,7 @@ def load(tag):
 
 
 def q(vals, p):
+    """取分位数（最近秩法：排序后按 p 取下标），空序列返回 NaN。"""
     if not vals:
         return float("nan")
     v = sorted(vals)
@@ -44,6 +49,7 @@ def q(vals, p):
 
 
 def main():
+    """命令行入口：按修复前/后 × 子集关/开四组打印位置统计，并打印两轮 ON−OFF 的逐 seed 配对中位差与变差/变好 seed 数。"""
     cache = {t: load(TAGS[t]) for t in TAGS}
     print(f"{'组':<16}{'n':>4}{'中位':>9}{'p95':>9}{'max':>9}{'>25m':>7}"
           f"{'拒帧':>8}{'重锚':>7}{'vsub':>7}")

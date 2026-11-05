@@ -30,6 +30,7 @@ MID_CELLS = [(22500, 20), (23000, 20), (23500, 20), (23700, 20), (23800, 20)]
 
 
 def load(files):
+    """合并读多个 jsonl，键为 (推力 N, seed)，后读的覆盖先读的；缺文件即退出。"""
     out = {}
     for fn in files:
         path = os.path.join(SD, fn)
@@ -45,15 +46,23 @@ def load(files):
 
 
 def cell(d, thr, n):
+    """取某推力档下 seed 1..n 的记录子集；缺的 seed 不补，由调用方 assert 配对数。"""
     return {s: d[(thr, s)] for s in range(1, n + 1) if (thr, s) in d}
 
 
 def rate_gt25(c):
+    """统计一组 seed 的失效发生率，返回 (>25 m 个数, 样本数, pos_rms 中位, p90)，长度单位 m。"""
     v = np.array([float(r["pos_rms"]) for r in c.values()])
     return int((v > 25.0).sum()), len(v), float(np.median(v)), float(np.percentile(v, 90))
 
 
 def main():
+    """比对基线臂与 --gnss-vel-subset 1 臂，逐条裁决 V1–V4 并落 JSON。
+
+    V1 各格两臂配对数一致；V2 30.5 g/50 seeds 上发生率 ≤6/50 且无 seed 变差 >10%；
+    V3 非失效区（17.2/22.0 kN）逐 seed 值必须完全相同；V4 只登记中间档代价面，不参与判定。
+    输出 sim-data/vel_subset_onset_verdict_2026-10-28.json（V1∧V2∧V3 ⇒ UPGRADE_RECOMMENDED）。
+    """
     base, vel = load(BASE_FILES), load(VEL_FILES)
     rep = {}
 

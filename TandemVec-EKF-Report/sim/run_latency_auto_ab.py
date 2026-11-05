@@ -41,6 +41,10 @@ KEYS = ["pos_rms", "pos_max", "nav_att_rmse", "nav_vel_rms", "ad_tau_ms",
 
 
 def run_one(exe, lat, seed, log):
+    """跑一次 SIL（绑 CORE，超时 900 s），返回该臂/延迟/seed 的指标 dict；无 JSON 记日志返回 None。
+
+    返回记录追加 lat 与 seed 字段，便于后续按 (臂, 延迟, seed) 精确配对。
+    """
     cmd = [exe] + BASE + ["--seed", str(seed), "--gnss-latency-ms", str(lat)]
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                          text=True, env=os.environ.copy())
@@ -61,6 +65,7 @@ def run_one(exe, lat, seed, log):
 
 
 def stat(rows, key):
+    """对某字段取 (中位, p95, 有效样本数)，先滤掉非数值与非有限值；空集返回 (nan, nan, 0)。"""
     vals = [r.get(key) for r in rows
             if isinstance(r.get(key), (int, float))
             and math.isfinite(r.get(key, float("nan")))]
@@ -72,6 +77,11 @@ def stat(rows, key):
 
 
 def main():
+    """命令行入口：--arm 标签=二进制（可多个）或 --exe-def/--exe-wide，逐延迟档 × seeds 跑两臂。
+
+    每臂先算 md5 写日志（可复现锚），结果落 jsonl；按 (延迟, 臂) 打印中位/p95/τ 与拒帧、
+    剔除计数并写 latency_auto_<tag>.json，用于判"延迟 >150 ms 时默认臂是否欠补偿"等三条判据。
+    """
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", action="append", default=[],
                     help="标签=可执行文件路径，可重复；替代 --exe-def/--exe-wide")

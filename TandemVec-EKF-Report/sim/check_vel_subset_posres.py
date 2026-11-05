@@ -37,6 +37,7 @@ FILES = {
 
 
 def load(tag):
+    """读一条臂的 jsonl 证据，按 seed 建索引；文件缺失直接退出。"""
     path = os.path.join(SD, "attrib305_2026-10-28_%s.jsonl" % tag)
     if not os.path.exists(path):
         sys.exit("缺证据文件：%s" % path)
@@ -51,6 +52,7 @@ def load(tag):
 
 
 def stat(d):
+    """统计一条臂的位置 RMS：样本数、>25 m 失效数、中位/p95/max 与姿态 RMSE 中位数。"""
     p = np.array([float(v["pos_rms"]) for v in d.values()])
     return {"n": len(p), "fail_gt25": int((p > 25).sum()),
             "med": round(float(np.median(p)), 3),
@@ -60,12 +62,14 @@ def stat(d):
 
 
 def pair(a, b, label):
+    """取两臂共有的 seed 并断言恰为 50 对（不足即判无效），返回排序后的 seed 列表。"""
     keys = sorted(set(a) & set(b))
     assert len(keys) == 50, "%s 配对 %d != 50 ⇒ 判定无效" % (label, len(keys))
     return keys
 
 
 def main():
+    """命令行入口：按 X1（各臂 50 条）、X2（10 Hz 收益保全）、X3（20 Hz 伤害消除）、X4（取消上限与旧口径逐 seed 相同）给出 CRITERION_ACCEPTED/REVERT_CRITERION，写 JSON，通过返回 0、不通过返回 1。"""
     arms = {k: load(v) for k, v in FILES.items()}
     rep = {}
 

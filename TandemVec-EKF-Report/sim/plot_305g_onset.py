@@ -39,6 +39,7 @@ GOOD_M = 15.0
 
 
 def load(path):
+    """逐行读 jsonl 证据，返回非空 JSON 对象列表（空行跳过）。"""
     rows = []
     with open(path, encoding="utf-8") as f:
         for line in f:
@@ -49,6 +50,7 @@ def load(path):
 
 
 def main():
+    """命令行入口：读 onset jsonl，按推力档校验 seeds 数一致后，画发生率/簇中位、逐档直方图、散点、门限计数与箱线五张图，并打印各档汇总 JSON。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("--pc", default="2026-10-28_onset")
     args = ap.parse_args()

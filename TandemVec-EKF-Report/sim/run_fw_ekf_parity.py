@@ -9,6 +9,8 @@
 @details 输入：确定性静态+小幅正弦激励，GNSS 10 Hz；无磁/无气压/无静止辅助，
          只比较传播 + GNSS 6 维更新的差异。
          输出：sim-data/fw_ekf_parity_<date>.json（指标）与 figs/*.png。
+@frame   NED（位置/速度为 NED 分量）；姿态另有 FRD 机体系 roll/pitch/yaw
+@units   m（位置差）、m/s（速度差）、deg（姿态/倾角/航向差）、s（时间）
 @note    两者不可能逐位相同：Python 侧 Qd 用 Simpson（固件飞行构建为 ZOH）、
          地球模型/P0 有独立实现。本脚本的目的是把差异量化成可跟踪的基线，
          并作为后续"用 fwapi 替代 Python 实现"的验收依据。
@@ -45,6 +47,11 @@ ACCEL0 = np.array([0.0, 0.0, -9.79], dtype=np.float64)
 
 
 def imu_sample(t: float):
+    """生成 t 时刻的确定性 IMU 激励：静止重力 −9.79 m/s² 上叠小幅正弦比力与角速度。
+
+    返回 (accel, gyro)：比力单位 m/s²（z 轴 −9.79+0.01sin2.1t），角速度单位 rad/s
+    （1e-3 量级）。同一 t 下固件与 Python 两侧喂完全相同的一份，保证对拍输入一致。
+    """
     accel = np.array([
         0.02 * np.sin(1.3 * t),
         0.015 * np.cos(0.7 * t),
@@ -69,6 +76,11 @@ def lla_to_ned(lla, home):
 
 
 def quat_angle_deg(q1, q2):
+    """两个四元数之间的旋转夹角，单位 deg。
+
+    各自归一化后取 |点积| 做 2·arccos，故与四元数符号无关（q 与 −q 表示同一姿态），
+    结果落在 [0, 180]。用于比较固件与 Python 侧姿态是否一致。
+    """
     q1 = np.asarray(q1, dtype=np.float64)
     q2 = np.asarray(q2, dtype=np.float64)
     q1 /= np.linalg.norm(q1)
@@ -86,6 +98,15 @@ def _quat_to_ypr(q):
 
 
 def run(duration_s: float):
+    """把同一条 IMU/GNSS 序列同时喂给固件 EKF（fwapi.Ekf）与 Python 复刻版
+    （ekf_core.Ekf15），逐拍记录两者的位置/速度/姿态差异。
+
+    时序：200 Hz 传播（双子样增量），每 GNSS_DIV=20 拍（10 Hz）注入同一时刻的
+    GNSS 位置（home 附近 2e-7° 量级扰动）与速度量测；两侧都用同一 home 与初始比力。
+    返回：{t, pos_h, pos_d, vel, att, tilt, yaw} 差异时序 + fw_final/py_final 状态
+    + fw_build/fw_lib 溯源信息。倾角差与航向差单列——无磁场景下 yaw 不可观，
+    混进总姿态差会让指标被 yaw 漂移主导。
+    """
     home = HOME_LLA.copy()
     fw = fwapi.Ekf()
     fw.initialize(ACCEL0, (0, 0, 0), lla=home)
@@ -156,6 +177,11 @@ def run(duration_s: float):
 
 
 def summarize(r):
+    """把 run() 的差异时序压成可落盘指标。
+
+    对水平/垂直位置差、速度差、姿态差、倾角差、航向差各给 max、p95、RMS，
+    并另记末拍值（final_*），便于跨版本跟踪基线是否漂移。
+    """
     def stat(a):
         return {
             "max": float(np.max(a)),
@@ -178,6 +204,8 @@ def summarize(r):
 
 
 def plot(r, out_png: str):
+    """出三联诊断图并存到 out_png：①位置/速度差时序；②倾角/航向差时序；
+    ③四类差异的经验 CDF（横轴 symlog，便于看 1e-3 量级的小残差）。"""
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.2))
 
     ax = axes[0]
@@ -216,6 +244,9 @@ def plot(r, out_png: str):
 
 
 def main():
+    """命令行入口：跑一次固件↔Python EKF 对拍，把指标、固件构建信息与口径说明写
+    sim-data/fw_ekf_parity_<日期>.json，同时出图 figs/fw_ekf_parity_<日期>.png，
+    并打印 summary 与两个产物路径。"""
     ap = argparse.ArgumentParser(description="固件 EKF 与 Python 复刻版对拍")
     ap.add_argument("--duration", type=float, default=20.0, help="时长 [s]")
     ap.add_argument("--out-dir", default=os.path.join(HERE, "..", "sim-data"))

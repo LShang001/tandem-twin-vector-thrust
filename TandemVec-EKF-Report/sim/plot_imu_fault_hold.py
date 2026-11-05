@@ -24,6 +24,10 @@ plt.rcParams["axes.unicode_minus"] = False
 
 
 def load(name):
+    """读 sim-data 下某份 SIL 汇总 JSON，返回其 `groups`（{格名: 各臂统计}）。
+
+    本函数在导入期即被调用四次（BASE1/BASE2/COAST/FB），缺文件会直接抛错。
+    """
     return json.load(open(os.path.join(DATA, name), encoding="utf-8"))["groups"]
 
 
@@ -55,6 +59,12 @@ w = 0.26
 
 
 def bars(a, key, title, ylabel, log=False):
+    """在子图 a 上按 4 个故障工况分组，画三臂（默认整帧 return / coast / 组合
+    fallback）的 key["med"] 柱状图。
+
+    参数：key 为统计量名（pos_rmse / pos_max / vel_rms / att_rmse）；log=True 时
+    纵轴取对数，便于同栏比较差 1–2 个量级的修复前后。
+    """
     series = [[c[i][key]["med"] for c in CASES] for i in (1, 2, 3)]
     for i, (vals, c, lab) in enumerate(zip(series, (C_BASE, C_COAST, C_FB),
                                            LABELS)):

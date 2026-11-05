@@ -23,11 +23,13 @@ plt.rcParams["axes.unicode_minus"] = False
 
 
 def load(name):
+    """读一条 jsonl 证据，丢弃带 no_json 标记的行，返回记录列表。"""
     return [json.loads(l) for l in open(os.path.join(DATA, name), encoding="utf-8")
             if not json.loads(l).get("no_json")]
 
 
 def vals(rows, cfg, key):
+    """取某 config 下指定数值列的有效值（非数值/非有限跳过），返回 numpy 数组。"""
     return np.array([r[key] for r in rows if r["config"] == cfg and
                      isinstance(r.get(key), (int, float)) and np.isfinite(r[key])],
                     float)
