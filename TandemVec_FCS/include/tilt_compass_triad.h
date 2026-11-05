@@ -2,6 +2,11 @@
  * @file    tilt_compass_triad.h
  * @module   固件/头文件
  * @brief   TRIAD 双矢量静基座初始对准（替代 TiltCompass 欧拉角公式）。
+ * @details 由"重力方向 + 磁北方向"两条矢量直接构造 C_b^n，再转四元数；替代
+ *         TiltCompass 的 asin(a_x)/asin(−a_y/cosθ) 欧拉角公式，消除 |pitch|→90°
+ *         时 1/cosθ 的奇异。失败（两矢量退化/共线）返回零向量。
+ * @frame  输入为 FRD 机体系比力与磁场；输出为 NED 姿态角 [yaw, pitch, roll]
+ * @units  m/s²（比力）、µT（磁场）、rad（姿态角）
  *
  * 动机：`TiltCompass` 用 `asin(a_x)`、`asin(-a_y/cosθ)` 求 roll/pitch，
  * 在 |pitch|→90° 时 `1/cosθ` 奇异（REF-120 §9.5.1 p.284–285）。TRIAD 双矢量

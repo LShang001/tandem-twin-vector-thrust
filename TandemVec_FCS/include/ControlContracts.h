@@ -12,6 +12,8 @@
  *          （悬停时 z 指地）。固件历史文档里的"悬停存档系"与本 FRD 的
  *          x/y/z 轴名一致；TandemVec 分配器内部的模型系置换只发生在
  *          分配器内部，不得泄漏到契约里。
+ * @frame  机体系 FRD（x=滚转轴、y=俯仰轴、z=偏航/推力轴，悬停时 z 指地）；
+ *         GuidanceCommand / AttitudeSetpoint 的加速度与航向用 NED
  * @units  加速度 m/s²、角加速度 rad/s²、力矩 N·m、推力 N、角度 rad、时间 s
  * @note    契约是"行为边界"，不是配置表：所有字段的坐标系/单位/饱和责任
  *          必须写在这里；机型参数（力臂、惯量、增益）放各机型 allocator。

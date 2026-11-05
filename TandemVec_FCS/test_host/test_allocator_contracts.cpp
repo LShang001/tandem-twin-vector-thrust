@@ -9,6 +9,13 @@
  *          与 computeCoaxialWrench()（Mx=l·T·sinδ_roll、My=l·T·sinδ_pitch、
  *          Mz=k_yaw·yaw_diff），因此若“分配器逆解”与“plant 正向模型”轴序/符号
  *          不一致，本测试会直接失败，而不是靠文档自述。
+ * @frame   固件存档系 / FRD：Mx=滚转绕 x_b、My=俯仰绕 y_b、Mz=偏航绕 z_b
+ *          （z_b=推力轴=机身纵轴，悬停竖直指地）；α/τ 三轴同序。
+ *          plant 正向模型的中间量 w 用仿真模型系轴名（w.Mx′=差速（偏航）项、w.My′=俯仰、
+ *          w.Mz′=−滚转），经 mix 层置换 x′=−z_b / y′=+y_b / z′=+x_b 映回 FRD，
+ *          见 plantBodyMoment() 与 fw_sil_plant_6dof.h:78
+ * @units   α rad/s²、ω rad/s、τ N·m、T N、δ deg（进 sin 前乘 kDeg2Rad）、差速与
+ *          电机 µs、油门 %、力臂 m、惯量 kg·m²、质量 kg、dt s
  * @note    本文件只做复核，不修改被测实现；发现不一致只报告，不在此修补。
  * @see     docs/07-验证与确认/VER-004、CTL-003 §2
  */

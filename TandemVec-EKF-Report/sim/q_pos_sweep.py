@@ -4,8 +4,8 @@
 @brief   位置过程噪声 Q_pos 扫描。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 分析位置协方差与 RMSE 的权衡。
-@frame   N/A
-@units   N/A
+@frame   NED（pos_rmse / vel_rmse 为北东地三轴误差范数）；NEES 无量纲
+@units   m（位置 RMSE）、m/s（速度 RMSE）；NEES / NIS 为归一化比值
 """
 import json, os, sys
 import numpy as np

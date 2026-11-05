@@ -14,7 +14,7 @@
          ③ Z3 是"若 Z2 不成立必须定位"的强制条款：任何变差 seed 都要打印其
             `outlier_rejects / reacquire_resets / nav_att_rmse`，区分是子集自身造成
             还是故障本底。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
 @units   米 / 度 / 次 / 个 seed
 @note    预登记判据（跑前写死）：
          Z1 完整性：八格（4 故障 × 2 臂）各收满 N seeds，否则整体作废。

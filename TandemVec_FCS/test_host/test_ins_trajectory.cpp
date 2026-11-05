@@ -2,6 +2,15 @@
  * @file    test_ins_trajectory.cpp
  * @module   测试/宿主机
  * @brief   真实运动轨迹下的纯惯导 vs GNSS 辅助对比（输出 CSV 供可视化）。
+ * @details 输入：60 s 轨迹（0–5 s 静止、5–10 s 以 10 m/s 垂直爬升至 50 m、
+ *          10–40 s 半径 80 m/15 m/s 盘旋、40–50 s 以 1 m/s² 加速到 25 m/s、
+ *          50–60 s 继续直线并以 7 m/s 爬升到 120 m）、MEMS 零偏与噪声；处理：
+ *          真值加速度→比力 f_b=R^T(a_ned−g_ned)，纯惯导与 GNSS(10 Hz) EKF
+ *          并行时间/量测更新；输出：../tmp/ins_trajectory.csv（10 Hz 采样）。
+ *          判定：无断言，只输出 CSV 供 plot 脚本与人工复核。
+ * @frame   NED：轨迹与位置输出（北/东/地），航向绕 NED +D 轴；机体系比力与
+ *          角速度（简化假设无 roll/pitch，机体系只含航向旋转）；GNSS 量测为 LLA。
+ * @units   位置 m、速度 m/s、加速度 m/s²、角度 rad（内部）/deg（CSV 与打印）、时间 s。
  *
  * 轨迹（60 s）：
  *   0–5 s    静止

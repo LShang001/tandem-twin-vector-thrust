@@ -10,7 +10,7 @@
          drift+spoof     气压漂移 + GNSS 垂直 spoof（无仲裁真值）
          Outage+drift    GNSS 20 s 失联 + 气压漂移（无参照，健康监测暂停）
          指标：final_alt/pos_max/hold_max/max_roll/bh_skips。
-@frame   N/A
+@frame   N/A（只解析 SIL 汇总的 final_alt / pos_max / max_roll 标量，脚本不做坐标变换）
 @units   m、m/s、deg
 """
 import argparse

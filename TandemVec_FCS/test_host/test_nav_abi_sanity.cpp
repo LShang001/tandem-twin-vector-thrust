@@ -2,6 +2,14 @@
  * @file    test_nav_abi_sanity.cpp
  * @module   测试/宿主机
  * @brief   fw_nav_api 最小自检：静止 / AHRS / 运动 三阶段隔离 6° 姿态偏差来源。
+ * @details 输入：argv[1]=mode（0 静止无 AHRS/无 GNSS、1 静止 + AHRS 真值、
+ *          2 正弦加速度 + AHRS 真值），30 s；比力取 [a, 0, −9.7938]、气压高 0、
+ *          油门 50%；处理：逐 5 ms 调 fw_nav_step 驱动真实固件导航，每 5 s
+ *          打印一次；输出：roll/pitch/yaw（deg）与 pos_ned、initialized。
+ *          判定：诊断用，无断言（隔离姿态偏差来源）。
+ * @frame   机体系（FRD）比力输入；输出 euler_rpy_deg（deg）与 pos_ned_m（NED）；
+ *          AHRS 四元数 wxyz 为 FRD←NED（C_n^b）。
+ * @units   比力 m/s²（kG=9.7938 为站点近似重力）、姿态 deg、位置 m、时间 s。
  *
  * 用法：test_nav_abi_sanity <mode>
  *   mode=0 静止、无 AHRS、无 GNSS

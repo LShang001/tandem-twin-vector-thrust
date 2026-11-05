@@ -4,7 +4,7 @@
 @brief   绘制 6.4/8.4/10.1 g、故障注入、GNSS 失联时长与 20-seed 位置尾部。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 读取 missile-sil-2026-10-27_{fix,highg,fault,outrate}.jsonl。
-@frame   N/A
+@frame   N/A（只汇总 missile-sil JSONL 的 pos_rms / nav_att_rmse 标量，不做坐标变换）
 @units   g、m、m/s、s
 """
 import json

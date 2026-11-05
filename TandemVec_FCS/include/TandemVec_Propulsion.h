@@ -61,8 +61,8 @@ struct PropulsionState
 // 机体系六维力/力矩
 struct SixDOFWrench
 {
-    float Fx, Fy, Fz; // N    机体系力（NED：x前/y右/z下）
-    float Mx, My, Mz; // N·m  机体系力矩（对应 roll/pitch/yaw）
+    float Fx, Fy, Fz; // N    模型系力（x_b=推力轴、y_b=右、z_b=上摆轴；轴名见 @frame）
+    float Mx, My, Mz; // N·m  模型系力矩（x 反扭差、y 俯仰、z 偏航）
 };
 
 // 差速分配结果

@@ -5,6 +5,11 @@
  *          圆形加速度限幅、比力归一化、倾角限幅、退化输入与饱和位。
  * @details 参考实现按 2026-10-31 之前的 flight_control.cpp 内联代码逐字复刻；
  *          本文件只比较、不修改被测实现。
+ * @frame   NED：北/东水平加速度（an/ae）与天向比力（up）；倾角限幅以竖直方向为
+ *          基准，不涉及机体系轴名
+ * @units   m/s²（加速度/比力/重力，含 min_norm=0.5 的比力下限）、
+ *          无量纲（thrust_comp_n/e 为 sin 倾角分量）、rad（kMaxComp=sin 15°）、
+ *          deg（倾角限幅 15°）
  */
 #include <cmath>
 #include <cstdint>

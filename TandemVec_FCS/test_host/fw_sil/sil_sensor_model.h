@@ -11,7 +11,8 @@
  * @theory  ICM-42688 标称噪声密度、16 bit 量化；振动混叠按连续域 8 阶 Butterworth
  *          （fc=80 Hz）幅频响应先衰减再采样，避免 199.9 Hz 单频伪装成准直流。
  *          零偏不稳定性用 OU 过程 `db=-b·dt/τ+σ·sqrt(1-e^(-2dt/τ))·N(0,1)`。
- * @frame   FRD 机体系（x 前 / y 右 / z 下）；NED 真值由调用方转换后传入。
+ * @frame   FRD 机体系（固件存档系：z_b=推力轴=机身纵轴，悬停竖直指地，推力沿 −z_b；
+ *          x_b/y_b 为横向轴）；NED 真值由调用方转换后传入。
  * @units   角速率 rad/s，比力 m/s²，振动 g，频率 Hz，时间 s。
  * @note    UBX 帧布局按 u-blox M8 NAV-PVT(92 B)/NAV-EOE(4 B) 固定偏移生成；
  *          解析正确性由真实 `lib/ublox-main` parser 验证，不在本文件重复实现。

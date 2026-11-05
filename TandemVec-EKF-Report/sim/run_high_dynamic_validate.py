@@ -4,8 +4,8 @@
 @brief   大过载/大机动 EKF 宿主台架 50-seed 验证。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 读取矩阵结果并做分组统计与可视化输入。
-@frame   N/A
-@units   N/A
+@frame   N/A（复用 run_high_dynamic_mc 的标量结果做分组统计，不做坐标变换）
+@units   m（位置）、°（姿态角）；NEES 为归一化比值
 """
 import concurrent.futures as cf
 import json, os, sys

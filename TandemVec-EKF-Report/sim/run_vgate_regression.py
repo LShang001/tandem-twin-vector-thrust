@@ -4,8 +4,8 @@
 @brief   垂直 spoof 门控回归。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 驱动门控开/关的常规场景 A/B。
-@frame   N/A
-@units   N/A
+@frame   N/A（只驱动门控开 / 关场景并汇总 SIL 汇总标量，不做坐标变换）
+@units   m（高度 / 位置）、°（滚转角）、s（着陆时间）
 """
 import json, os, re, subprocess
 import numpy as np

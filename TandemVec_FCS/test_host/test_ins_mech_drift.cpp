@@ -2,11 +2,20 @@
  * @file    test_ins_mech_drift.cpp
  * @module   测试/宿主机
  * @brief   捷联惯导机械编排长航时精度验证（纯惯导，无 GNSS）。
+ * @details 输入：理想 IMU（零偏零噪声，300/1800 s）与带 MEMS 量级零偏
+ *          （加计 5 mg、陀螺 kGyroBias，常量含 /180 因子，实际 ≈0.0022 °/s；
+ *          60/300 s）两种情形；处理：Ekf15State 纯惯导机械编排（四元数姿态、
+ *          圆锥/划摇补偿、地球自转与哥氏项、WGS84 正常重力、中点积分）；
+ *          输出：位置/高度/速度/姿态漂移。判据：理想 IMU 300 s 位置 <5 m 且
+ *          速度 <2 m/s；高度通道为纯惯导固有发散（Schuler 负阻尼），不作判据。
+ * @frame   机体系（FRD）比力/角速度输入 → NED 姿态与 LLA 位置；重力沿 NED +D
+ *          （向下为正）。
+ * @units   比力 m/s²、角速度 rad/s、时间 s、位置 m、速度 m/s、姿态 deg（打印）。
  *
  * 目的：检验 Ekf15State 的机械编排（四元数姿态 + 圆锥/划摇 + 地球自转/
  * 哥氏 + WGS84 正常重力 + 中点积分）在长时间纯惯导下的自洽性：
  *   1) 理想 IMU（无零偏无噪声）静止 30 min：位置/姿态漂移应≈0；
- *   2) 加真实 MEMS 零偏（加计 5 mg、陀螺 0.4 °/s）：量化物理边界
+ *   2) 加真实 MEMS 零偏（加计 5 mg、陀螺 kGyroBias，按常量定义实际 ≈0.0022 °/s）：量化物理边界
  *      （零偏主导，不是算法误差）。
  *
  * 编译：
@@ -31,7 +40,7 @@ const float kGravity = ins_test::GravityWgs84();  // WGS84 正常重力（与 EK
 const Eigen::Vector3d kLla(31.2304 * kDeg2Rad, 121.4737 * kDeg2Rad, 5.0);
 
 const float kAccelBias = 0.005f * kGravity;   // 5 mg
-const float kGyroBias = 0.4f * kDeg2Rad / 180.0 * 180.0 / 180.0;  // 0.4 °/s → rad/s
+const float kGyroBias = 0.4f * kDeg2Rad / 180.0 * 180.0 / 180.0;  // 字面量按 0.4 °/s 写，/180 因子使实际值 ≈0.0022 °/s（疑似笔误，待评估）
 } // namespace
 
 int main()

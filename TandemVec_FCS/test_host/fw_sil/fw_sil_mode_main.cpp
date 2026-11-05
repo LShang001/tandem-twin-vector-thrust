@@ -12,6 +12,10 @@
  *
  * @note 本文件直接调用固件 `runGNCExecutive()`，不复制控制律；被测对象是
  *       `generate_attitude_target` 的沿检测与 `execute_attitude_controller` 的复位口径。
+ * @frame 固件存档系：姿态四元数 {w,x,y,z} 与 Euler 按 z_b=推力轴口径（悬停指地）；
+ *       NED 惯导/位置量用 relative_north/east/down 与 INS_GNSS location_north/east/down
+ * @units RC PWM µs（988–2012；油门杆/解锁开关用 1000–1800）、姿态 deg 与角速率 deg/s、
+ *       高度/位置 m、速度 m/s、时间 s、dt s（0.005）
  * @see  src/flight_control.cpp::generate_attitude_target / execute_attitude_controller
  */
 #include "Quat4f.h"

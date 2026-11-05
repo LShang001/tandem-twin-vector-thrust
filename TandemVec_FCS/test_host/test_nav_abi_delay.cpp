@@ -2,6 +2,18 @@
  * @file    test_nav_abi_delay.cpp
  * @module   测试/宿主机
  * @brief   真实固件导航链路（fw_nav_api）验证 GNSS 延迟与自动估计。
+ * @details 输入：北向正弦速度真值（v_amp 5 m/s、a_peak 2 m/s²）、ICM-45686
+ *          噪声（70 µg/√Hz、0.0038 °/s/√Hz + 零偏）、F10N GNSS 量测
+ *          （0.85 m/0.05 m/s，10 Hz）；argv[1]=延迟 ms、argv[2]=fake_itow；
+ *          处理：逐 5 ms 调 fw_nav_step 驱动真实固件导航，GNSS 取延迟时刻真值
+ *          注入并按 age 回放；输出：pos RMSE、att、gnss_age、τ̂、valid%、
+ *          reject、n_gnss、n_erased、speed_max、residual。判定：只打印 CSV，
+ *          无断言（供延迟/自动估计 A/B 对比）。
+ * @frame   NED：位置/速度取北向（LLA 站点 31.2304°N/121.4737°E/5 m）；机体系
+ *          输入为比力/角速度（C_b^n 由航向 0.1 °/s 慢转）；AHRS 四元数按
+ *          FRD←NED（C_n^b）传入，与固件 ABI 约定一致。
+ * @units   位置 m、速度 m/s、比力 m/s²、角速度 rad/s、姿态 deg（输出接口）、
+ *          延迟与 τ 以 ms 打印、时间 s；GNSS 整型接口用 1e-7 deg、mm、mm/s。
  *
  * 单模式单进程（argv: delay_ms [fake_itow]），避免 fw_nav 单例跨 run 污染。
  * 输出：pos RMSE、gnss_age、τ̂、valid、reject、n_gnss、n_erased、speed_max、residual。

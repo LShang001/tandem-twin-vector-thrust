@@ -13,6 +13,11 @@
  *          Mz=k_yaw·diff → body M={-w.Mz, w.My, -w.Mx}；再用积分器
  *          ω_{k+1}=ω_k+α·dt、α=M/I_true 推进。默认关闭 ω×Iω 前馈，
  *          与 CoaxialAllocatorParams::compensate_rate_coupling=false 一致。
+ * @frame   固件存档系 / FRD：α 与 M 三轴同序（滚转绕 x_b、俯仰绕 y_b、偏航绕
+ *          z_b=推力轴，悬停竖直指地）；正向模型沿用 test_allocator_contracts.cpp
+ *          的 plantBodyMoment（模型系 w → FRD 置换），ω_{k+1}=ω_k+α·dt 在 FRD 下积分
+ * @units   α rad/s²、ω rad/s、M N·m、I kg·m²、T N、δ deg、力臂 m、差速 µs、k_yaw
+ *          N·m/µs、dt s（kDt=0.005）
  * @note    本测试不修改实现；只验证契约与敏感度。惯量仍为 MODEL-DEFAULT。
  * @see     docs/05-控制与分配/CTL-006、docs/07-验证与确认/VER-004 §11
  */

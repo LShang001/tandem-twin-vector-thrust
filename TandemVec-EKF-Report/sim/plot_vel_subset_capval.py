@@ -12,8 +12,8 @@
             还是悬崖上的一点（12 与 21 分处两侧）。
          分布类面板必须同时出现：双峰格只看聚合数会把"失效簇被消掉"读成"精度提升"，
          所以直方图与 CDF 用来确认改善发生在哪一簇。
-@frame   NED；pos_rms [m]、nav_att_rmse [deg]
-@units   米 / 个 seed / 比例
+@frame   NED（pos_rms 为水平位置误差；nav_att_rmse 为欧拉角误差）
+@units   米 / 度 / 个 seed / 比例
 @note    图内文字避免使用 U+21D2（微软雅黑缺字，会渲染成方框）
 @see     sim/check_vel_subset_capval.py（Y1–Y4 裁决）、sim/run_vel_subset_capval_matrix.sh
 """

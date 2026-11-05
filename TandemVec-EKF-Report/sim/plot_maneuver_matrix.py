@@ -4,8 +4,8 @@
 @brief   速度/机动矩阵可视化。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 绘制方向/条件失败率与位置/姿态分布。
-@frame   N/A
-@units   N/A
+@frame   N/A（只读机动矩阵 results.jsonl 的既有 pos_rms / max_roll 标量作图，不做坐标变换）
+@units   m（位置误差）、°（滚转角）、m/s（峰值速度）
 """
 import json
 import os

@@ -8,7 +8,8 @@
          输出 CSV 行并在任一指标越界时返回码 1。默认 5 seeds、60 s。
 @theory  NEES = eᵀP⁻¹e / n，一致时均值≈1；NIS = rᵀS⁻¹r，6 维 GNSS 一致时≈6。
          @ref REF-121 §7.3.1 p.255–259（NIS/χ² 门控）
-@frame   NED + FRD；@units SI
+@frame   NED（导航系）/ FRD（机体系）
+@units   SI（位置 m、速度 m/s、角度 rad）；NEES / NIS 为归一化比值
 @note    本门禁是**研究模型**（非固件 SIL），用于 EKF 改动前的基础一致性回归；
          阈值按 2026-10-25 基线（NEES_vel 0.4、NIS 4.8）留出改进空间，不承诺实机。
 @test    正常基线应 PASS；把 Q 调大/量测 R 调小应触发 FAIL。

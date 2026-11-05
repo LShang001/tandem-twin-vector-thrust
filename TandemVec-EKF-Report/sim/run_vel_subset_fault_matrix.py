@@ -12,7 +12,7 @@
          因此**必须重跑同一类故障格**，确认放宽没有把那类回归重新引回来。
          四格覆盖"预测通道失效"（nan/stuck）、"量测缺失"（GNSS 失联 5/20 s）、
          "量测被振动污染"（1 g/80 Hz）——正好是 §4.16 里出现过分歧的几类。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
 @units   米 / 度 / 次 / 个 seed
 @note    口径：两臂共用同一二进制 `tv_32g_q2`（md5 499495e5…，编译期默认 cap=25 m），
          只差运行时 `--gnss-vel-subset 0|1` ⇒ 同二进制 A/B。

@@ -4,8 +4,8 @@
 @brief   v3 偏航零偏钳制前后对比图。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 读取 v3 A/B 结果绘图。
-@frame   N/A
-@units   N/A
+@frame   N/A（只读基线 / v3 两份机动矩阵 results.jsonl 的既有 pos_rms / max_roll 标量，不做坐标变换）
+@units   m（位置误差）、°（滚转角）
 """
 import json
 import os

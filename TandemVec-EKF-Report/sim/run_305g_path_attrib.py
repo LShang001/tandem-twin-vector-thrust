@@ -44,7 +44,7 @@
      未参与（ad_app=0），放宽的收益范围仅限"估计器被应用"的格。
   边界：全部 L2 SIL，不写实机；两开关只是研究用的反事实口径，固件生产配置
      始终是 LPF+Madgwick 全开。
-@frame   NED（pos_rms/pos_max）；姿态量 rms_pitch/max_roll 为固件欧拉角（deg），不做坐标换算
+@frame   NED（pos_rms / pos_max 为水平位置误差）；rms_pitch / max_roll 为固件欧拉角，不做坐标换算
 @units   m（pos_rms/pos_max）、deg（姿态）、N（ms-thrust 推力）、ms（ad_tau_ms）、
          帧/次（outlier_rejects/reacquire_resets/vel_sub_rec/ad_app/ad_blk）
 """

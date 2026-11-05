@@ -4,8 +4,8 @@
 @brief   6DOF 导弹 SIL（真实固件导航）结果可视化。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 读取 missile-sil JSONL 与 trace CSV，输出姿态/速度/位置与弹道图。
-@frame   N/A
-@units   N/A
+@frame   NED（航迹图横轴北 / 纵轴东、高度沿天向；误差量取自 SIL 汇总标量）
+@units   m（位置 / 高度）、°（姿态角）、s（时间）
 """
 import json
 import os

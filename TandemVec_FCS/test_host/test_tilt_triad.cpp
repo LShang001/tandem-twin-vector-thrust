@@ -2,10 +2,22 @@
  * @file    test_tilt_triad.cpp
  * @module   测试/宿主机
  * @brief   TRIAD 双矢量初始对准 vs TiltCompass 一致性 + 奇点规避验证。
+ * @details 输入：网格姿态（yaw 0–330°、pitch −80…80°、roll −60…60°）下由 C_n^b
+ *          反投影得到的比力与磁测，磁参考取 bfs::kDefaultMagReference（NED µT）；
+ *          处理：(1) 非奇异 5 组姿态比对 TiltCompass 与 TiltCompassTRIAD；
+ *          (2) pitch=89.9° 奇点；(3) 全姿态扫描 TRIAD 与真值差；输出：三个角
+ *          差值与最大误差。判据：一致性差≈磁偏角（<1e-3 rad）、TRIAD 奇点有限
+ *          且 yaw/pitch 误差 <1e-3 rad、扫描最大误差 <1e-3 rad。
+ * @frame   NED（重力 up_n=[0,0,−G]、地磁矢量 mag_ned）→ 机体系：accel=C_nb^T·up_n、
+ *          mag=C_nb^T·mag_ned（C_nb 为 rz·ry·rx 组合，测试按其转置把 NED 矢量
+ *          投到机体系）；TRIAD 反解回 NED 姿态角，输出 yaw/pitch/roll 为 rad。
+ * @units   比力 m/s²、磁场 µT、角度 rad（内部与判据）/deg（打印）、磁偏角 rad。
  *
  * 判据：
- *   1) 非奇异姿态（pitch ±60° 内）两者 yaw/pitch/roll 差 < 1e-3 rad；
- *   2) pitch≈89.9° 时 TiltCompass 出现 NaN/大误差，TRIAD 仍有限且正确；
+ *   1) 非奇异 5 组姿态下 |TiltCompass−TRIAD| 角差与磁偏角之差 < 1e-3 rad
+ *      （TRIAD 用真北参考、TiltCompass 用磁北，两者天然差一个 declination）；
+ *   2) pitch≈89.9° 时 TiltCompass 可出现 NaN/大误差，TRIAD 仍须有限且
+ *      pitch/yaw 误差 < 1e-3 rad；
  *   3) 全姿态扫描（roll/pitch/yaw 网格）TRIAD 输出与真值差 < 1e-3 rad。
  */
 #include <cmath>
@@ -36,7 +48,7 @@ Eigen::Matrix3f CbnFromYpr(float yaw, float pitch, float roll)
   const Eigen::AngleAxisf rz(yaw, Eigen::Vector3f::UnitZ());
   const Eigen::AngleAxisf ry(pitch, Eigen::Vector3f::UnitY());
   const Eigen::AngleAxisf rx(roll, Eigen::Vector3f::UnitX());
-  // C_n^b（NED→body），转置即 C_b^n
+  // C_b^n（body→NED）= Rz(yaw)·Ry(pitch)·Rx(roll)；调用处取转置把 NED 矢量投到机体系
   return (rz * ry * rx).matrix();
 }
 

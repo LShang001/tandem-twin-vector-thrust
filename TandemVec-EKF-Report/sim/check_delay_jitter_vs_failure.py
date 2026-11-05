@@ -9,7 +9,7 @@
 @details 动机（§4.24aw，单 seed）：20 ms 档 seed73 的 τ̂ 中位 18.5（几乎准）但 p10/p90
          15.2/63.1，而 30 ms 档同一 seed 抖动仅 9 ms 且干净。若抖动是驱动量，则在**同一配置**
          的不同 seed 之间也应看到"抖动大 ⇒ 误差大"。本脚本只做相关，不做因果。
-@frame   N/A
+@frame   NED（pos_rms 取水平 N/E 分量合成；τ̂ / ad_* 为估计器内部标量）
 @units   ms / m
 @note    预登记判据：
          J1 每个 CSV ≥8000 行、且 `ad_valid>0` 的历元 ≥200，否则该 seed 作废；

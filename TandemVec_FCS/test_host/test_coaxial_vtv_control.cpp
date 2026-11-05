@@ -2,6 +2,18 @@
  * @file    test_coaxial_vtv_control.cpp
  * @module  控制 / 共轴 DirectTvcRate 回归
  * @brief   共轴控制器宿主机回归。
+ * @details 输入：CoaxialVtvInput（姿态误差 deg、机体角速率 deg/s、速率目标、手动 TVC
+ *          杆量、α 换算系数与限幅、dt_s）；
+ *          处理：CoaxialVtvController::update() 依次跑姿态外环→速率内环 α_cmd→
+ *          限幅/饱和位；覆盖零输入、极性、RATE 旁路外环、速率阻尼、手动 TVC 一阶
+ *          滤波、执行机构限幅、偏航权限、NaN、简化 6DOF 闭环、杆量曲线、内环积分；
+ *          输出：失败计数 g_fail，main 返回非零即失败。
+ *          不变量：只调被测控制器，不复制控制律、不链接固件。
+ * @frame   固件存档系（共轴机型）：滚转绕 x_b、俯仰绕 y_b、偏航差速绕 z_b=推力轴；
+ *          输出 α 为机体 FRD 三轴角加速度，手动分支输出 TVC 修正角 δ
+ * @units   姿态误差 deg、角速率与目标 deg/s、α rad/s²、修正角 deg、差速 µs、
+ *          α 换算系数 (rad/s²)/deg 与 (rad/s²)/µs、N（推力）、m（力臂）、
+ *          kg·m²（惯量）、N·m/µs（k_yaw）、s（dt_s=0.005）
  */
 // 共轴控制器宿主机回归（α-native 单一路径，2026-10-31 旧 δ 环移除后）
 // 覆盖：零输入、极性、RATE 旁路外环、速率阻尼、手动 TVC、执行机构限幅、

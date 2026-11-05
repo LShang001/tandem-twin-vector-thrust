@@ -2,6 +2,20 @@
  * @file    test_coaxial_dynamics_model.cpp
  * @module   测试/宿主机
  * @brief   共轴双桨 VTVL rigorous 动力学模型宿主回归（2026-10-31）
+ * @details 输入：makeParams(maxT=14 N, wMax=1150 rad/s) 的 MODEL-DEFAULT 参数 +
+ *          合成初值/指令（转速、ω̇、摆角、角速率）；
+ *          处理：解析式校验（kT=maxT/(2wMax²)、kQ=0.027kT、2kTωh²=mg）→ computeWrench
+ *          核对推力平方律/反扭/陀螺/摆座力矩 → step() 半隐式 6DOF 子步积分
+ *          （自由落体、悬停保持、地面接触、摩擦、舵机速率限幅）；
+ *          输出：g_checks/g_fail 计数，main 返回非零即失败。
+ *          不变量：模型纯函数、不读全局、不写硬件；参数是 L1 存档量级，非共轴辨识值。
+ * @frame   机体系 FRD（固件存档系）：z_b=推力轴=机身纵轴（悬停竖直指地，推力沿 −z_b），
+ *          x_b/y_b 为横向轴；平动状态用 NED 惯性系（z 下）。
+ *          摆座：δf 绕 x_b→+Mx（滚转）、δt 绕 y_b→+My（俯仰）、差速→−Mz（偏航，
+ *          wf>wt 时 Mz<0）
+ * @units   T N、τ N·m、kT N/(rad/s)²、kQ N·m/(rad/s)²、Jp kg·m²、ω/ω̇ rad/s 与 rad/s²、
+ *          质量 kg、惯量 kg·m²、力臂/位移 m、速度 m/s、加速度 m/s²、时间 s、
+ *          摆角与姿态 rad（舵机速率限幅 servo_rate_dps=300 deg/s，转 rad/s 后钳位）、能量 J
  *
  * 覆盖：kT 反标定/悬停转速、推力平方律、反扭（ω² 与 Jp·ω̇ 两项）、
  *       陀螺耦合符号与等速反转抵消、摆座力矩、半隐式 6DOF 积分、

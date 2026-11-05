@@ -4,8 +4,8 @@
 @brief   6DOF 导弹弹体 + 真实固件导航 SIL 矩阵驱动。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 按 seeds×IMU 档×GNSS 条件调用 fw_real.exe --missile，解析 SIL_REAL_JSON。
-@frame   N/A
-@units   N/A
+@frame   N/A（只按种子 × 档位驱动 fw_real.exe 并解析 SIL_REAL_JSON 标量，不做坐标变换）
+@units   m（位置）、°（姿态角）、m/s（速度）、g（过载）
 
 只注入传感器（IMU/UBX/气压/磁），固件跑真实 handleNavigationSystem()；
 plant 为 test_host/fw_sil/missile_plant.h（6DOF 刚体 + 气动 + 理想自驾）。

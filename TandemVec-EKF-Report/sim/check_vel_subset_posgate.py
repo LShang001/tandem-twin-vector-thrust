@@ -12,7 +12,7 @@
          修复＝要求位置门同时越门（`--gnss-vel-subset-posgate 1`，代码默认 true）。
          所有比较先 assert 配对数；posgate 两臂必须来自**同一二进制**，
          否则比较无效（本工程已多次因跨二进制归因出错）。
-@frame   NED；pos_rms / pos_max [m]，nav_att_rmse [deg]
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
 @units   米 / 度
 @note    W2 的"不差于 20 Hz 基线"用逐 seed 配对；W3 的"不吃收益"用发生率与 p95
 """

@@ -4,8 +4,8 @@
 @brief   SIL 在飞 NEES 白噪声/有色 A/B。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 驱动 EKF_NAV_TELEMETRY 二进制的噪声臂。
-@frame   N/A
-@units   N/A
+@frame   N/A（只切换噪声臂并统计 SIL 日志的无量纲 NEES / NIS 与位置标量）
+@units   m（位置 / 保持误差）、°（滚转角）；NEES / NIS 为归一化比值
 
 用法：NEES_EXE=/tmp/tv_fcs_nees/fw_real.exe py -3.12 sim/run_nees_sil_ab.py
 """

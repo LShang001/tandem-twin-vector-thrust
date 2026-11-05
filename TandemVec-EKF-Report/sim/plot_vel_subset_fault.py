@@ -10,7 +10,7 @@
          ★ 图必须把"关臂"和"开臂"画在一起、同一坐标；只看开臂的绝对水平无法判断"是否被引入"。
          ★ 故障格的 pos_rms 分布常常是双峰（一部分 seed 正常、一部分被故障拖走），
            因此箱线只作形状参考，判读用散点与发生率。
-@frame   NED；pos_rms [m]
+@frame   NED（pos_rms 为水平位置误差）
 @units   米 / 个 seed
 @note    图内文字避免 U+21D2（微软雅黑缺字）
 @see     sim/check_vel_subset_fault.py（Z1–Z3）、sim/check_vel_subset_lowerloads.py（V1–V3）、报告 §4.24u/§4.24v

@@ -11,8 +11,8 @@
          没有"推荐配置（20 Hz + 子集）"的对照**。若推荐配置在干净档上把精度拉差，
          那它就不是"可以提升"而是"要权衡"。
          ★ 两臂同二进制 `tv_32g_w2`（md5 `fbac7fe9…`，含配额门默认 1），只差运行时参数。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
-@units   米 / 度 / 个 seed / 牛顿
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
+@units   米 / 度 / 个 seed / 推力牛顿（JSONL 列 thrust_n：17 200 / 20 000 / 22 000 N，按 781.8 N/g 换算）
 @note    预登记判据（跑前写死）：
          Z1 完整性：3 档 × 2 臂各收满 50 条。
          Z2 不添乱：每档推荐配置的 `>25 m` 发生率 ≤ 默认臂，且 `max` ≤ 默认臂 `max` + 3 m。

@@ -12,7 +12,7 @@
          作为一致性代理，12 个触发 seed 的分离带是 12.0 → 21.3 m。
          ★ X2 与 X3 必须同时成立——只验有害侧会误杀有益端，这是 §4.24p 的直接教训。
          所有比较先 assert 配对数，交集不足直接判无效。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
 @units   米 / 度 / 次
 @see     sim/run_305g_onset_scan.py（数据）、报告 §4.24q
 """

@@ -21,7 +21,7 @@
          b) 任何比较先 assert 配对数 == 50，交集不足直接判无效；
          c) 判"有收益"之前必须先证明被比的那个开关真的被触发（子集触发次数 >0），
             否则"两臂相同"可能是构造性相同（§4.23b 的教训）。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
 @units   米 / 度 / 次
 @note    预登记判据（跑前写死，不看结果不改）：
          Y1 完整性：七臂在 seeds 51–100 上各收满 50 条，否则整体作废。

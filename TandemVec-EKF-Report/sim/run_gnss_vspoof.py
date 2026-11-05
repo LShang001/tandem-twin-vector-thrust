@@ -4,8 +4,8 @@
 @brief   GNSS 垂直 spoof 矩阵驱动。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 驱动 fw_real.exe 的 --gnss-spoof-z 组合。
-@frame   N/A
-@units   N/A
+@frame   N/A（只驱动 fw_real.exe 并统计垂直通道标量；水平 spoof 固定为 0）
+@units   m（高度 / 垂直偏移）、°（滚转角）、s（时间）、m/s（垂向速度）
 
 垂直偏移正值 = 报得更高；水平 spoof 设为 0 以隔离垂直通道。
 """

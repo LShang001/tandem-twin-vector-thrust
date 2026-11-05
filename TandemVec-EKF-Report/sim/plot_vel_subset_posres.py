@@ -10,7 +10,7 @@
          以及 15 m 上限落在哪里。残差从 200 Hz 追踪里**重新计算**（不硬编码），
          后果 Δ 从 SIL JSON 的 pos_rms 差取。
          图 2–4 是判据 X2/X3 的图形化：两端（10 Hz 收益、20 Hz 伤害）必须同时可见。
-@frame   NED；pos_rms [m]，触发时刻位置残差 [m]
+@frame   NED（pos_rms 与触发时刻位置残差均为水平位置量）
 @units   米 / 秒 / 个 seed
 @note    若 X 组裁决为回退，图 1 仍成立（它是对旧数据的新读法），图 2–4 用于说明回退理由
 @see     sim/check_vel_subset_posres.py（X1–X4 裁决）、报告 §4.24q

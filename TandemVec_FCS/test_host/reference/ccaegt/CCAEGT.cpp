@@ -2,6 +2,18 @@
  * @file CCAEGT.cpp
  * @module 固件/宿主参考（CC-AEGT 实飞制导库，逐字复制，仅测试用）
  * @brief CC-AEGT 制导算法核心实现
+ * @details 输入：CCAEGT_State_t（离地高度/竖直速度/质量/剩余燃料/当前推力/时间）；
+ *          处理：阶段机 IDLE→ASCENT→FREEFALL→BRAKE→LANDED/CRASHED →
+ *          临界捕获预测器（推力/质量/延迟保守因子 + 前向 Euler 预测）→ 自适应包线
+ *          （v_lim/a_cap）→ 前馈 + PI 反馈推力指令 → 执行机构一阶延迟与推力变化率限幅；
+ *          输出：CCAEGT_Output_t（T_cmd/v_lim/a_cap/T_ff/T_fb/v_err）与阶段、统计。
+ *          第三方参考库（箭载机智导）逐字复制，**仅测试用、不参与固件构建**；
+ *          固件控制链不包含、不链接本文件。
+ * @frame   1D 竖直剖面：h 为离地高度（向上为正），v 沿同一竖直轴（向上为正、下降为负，
+ *          v_lim 是以负值给出的速度包络下限）。无姿态/横侧向自由度，不涉及机体三轴轴名。
+ * @units   h m、v/v_lim/v_err/v_final m/s、a_cap/CCAEGT_GRAVITY m/s²、m/prop kg、
+ *          T/T_ff/T_fb/T_cmd N、t/延迟/预测时域 s、Isp s、推力变化率 N/s、
+ *          CCAEGT_DT/PRED_DT s、耗时 µs、计数
  */
 
 #include "CCAEGT.h"

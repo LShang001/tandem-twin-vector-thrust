@@ -9,7 +9,7 @@
 @details 判据原文见报告 §4.24p。所有比较先 assert 配对数，交集不足直接判无效——
          本工程已 4 次踩"交集为 0 仍打印逐项相同"这一类空洞绿灯。
          同二进制只差 runtime 开关 ⇒ 差异只能来自该通道本身。
-@frame   NED；pos_rms [m]、nav_att_rmse [deg]、outlier_rejects/reacquire_resets [次]
+@frame   NED（pos_rms 为水平位置误差；nav_att_rmse 为欧拉角误差；outlier_rejects / reacquire_resets 为历元计数）
 @units   米 / 度 / 计数
 @note    V2 的"无一变差 >10%"按逐 seed 相对差判定；基线为 0 时跳过（不可比）
 """

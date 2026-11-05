@@ -4,8 +4,8 @@
 @brief   GNSS 杆臂补偿 A/B 矩阵。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 同种子对比补偿/不补偿的位置/速度误差。
-@frame   N/A
-@units   N/A
+@frame   N/A（只解析台架 JSON 的位置 / 速度 / 姿态误差标量做 A/B，不做坐标变换）
+@units   m（位置）、m/s（速度）、°（姿态角）；NEES 为归一化比值
 """
 import concurrent.futures as cf
 import json, os, re, subprocess

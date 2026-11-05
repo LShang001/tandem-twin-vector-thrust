@@ -21,6 +21,10 @@
  * @note 本文件**不复制**断链判据：判据来自 `include/FailsafeLinkLossPlan.h`，与固件
  *       `communication.cpp::linkDownCallback` 调用同一份实现。`--legacy` 分支只用于
  *       差分对照，代码形状与 2026-10-31 之前的历史实现一致，不代表现行行为。
+ * @frame 固件存档系：控制链姿态/角速率按 z_b=推力轴（悬停竖直指地）口径；
+ *       plant 平动 NED、转动/力矩机体 FRD（见 fw_sil_plant_6dof.h）
+ * @units RC PWM µs（1000–2000）、估计高度/位移 m、速度 m/s、姿态 deg 与角速率 deg/s、
+ *       推力 N、油门 %、时间 s、dt s（0.005）
  * @see  include/FailsafeLinkLossPlan.h、src/communication.cpp、VER-004 §断链保护
  */
 #include "FailsafeLinkLossPlan.h"

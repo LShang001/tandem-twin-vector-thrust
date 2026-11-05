@@ -4,8 +4,8 @@
 @brief   EKF 协方差一致性核验。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 用 Python 同构 15 态 EKF 做 NEES/NIS 分布级检查。
-@frame   N/A
-@units   N/A
+@frame   NED（pos_rmse 为北东地三轴位置误差范数）；NEES / NIS 无量纲
+@units   m（位置误差）；NEES / NIS 为归一化比值
 
 NEES 按 3 自由度归一化（除以 3），因此一致时中位≈0.789、p95≈2.60；
 单步 max 随样本数增长，必须用同样本量的卡方蒙特卡洛分布判断，不能直接当尾部失配。

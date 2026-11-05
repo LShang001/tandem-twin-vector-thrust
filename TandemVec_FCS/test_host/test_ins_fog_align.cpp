@@ -2,6 +2,16 @@
  * @file    test_ins_fog_align.cpp
  * @module   测试/宿主机
  * @brief   FOG 级 IMU 的静基座罗经精对准 + 长航时纯惯导。
+ * @details 输入：FOG 参数（陀螺 0.01 °/h、加计 10 µg）、水平静止、航向 0，
+ *          3 个种子；处理：TiltCompass 初对准 → 1200 s 静基座精对准（重力 +
+ *          零速 + 零角速度，每 20 步补一次航向量测）→ 补偿零偏后 3600 s 纯惯导；
+ *          输出：对准姿态/航向误差、陀螺零偏误差、1 h 位置/姿态漂移。
+ *          判据：对准姿态 <0.05°、1 h 位置漂移 <5 km。
+ * @frame   机体系（FRD，heading=0 时与 NED 三轴对齐）比力/角速度输入，含地球
+ *          自转投影 ω_ie^n=[ΩcosL, 0, −ΩsinL]；输出 NED 姿态与 LLA
+ *          （站点 31.2304°N/121.4737°E/5 m）。
+ * @units   陀螺零偏 °/h、加计零偏 µg、角速度 rad/s、比力 m/s²、地球自转 rad/s、
+ *          时间 s、位置 m、角度 deg（打印）。
  *
  * 与 MEMS 的关键区别：FOG 陀螺能测到地球自转 ω_ie（0.00418 °/s），
  * 静基座下方位（yaw）因此可观测——这是罗经对准（gyrocompassing）的
@@ -13,7 +23,7 @@
  *
  * 流程：
  *   1) 初对准（TiltCompass，accel+伪磁，yaw=0）；
- *   2) 精对准 600 s：重力 + 零速 + 零角速度（含 ω_ie 投影）→ 方位/零偏收敛；
+ *   2) 精对准 1200 s：重力 + 零速 + 零角速度（含 ω_ie 投影）→ 方位/零偏收敛；
  *   3) 补偿零偏后 1 h 纯惯导 → 位置/姿态漂移。
  */
 #include <cmath>
@@ -81,7 +91,7 @@ int main()
     ekf.Initialize(accel0, gyro0, Eigen::Vector3f::Zero(),
                    Eigen::Vector3f::Zero(), kLla);
 
-    // 精对准 600 s（罗经：零角速度观测里含 C^b_n(ω_ie+ω_en) 模型）
+    // 精对准 1200 s（罗经：零角速度观测里含 C^b_n(ω_ie+ω_en) 模型）
     const int align_steps = static_cast<int>(1200.0 / kNavDt);
     for (int k = 0; k < align_steps; ++k)
     {

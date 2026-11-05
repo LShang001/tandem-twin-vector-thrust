@@ -4,8 +4,8 @@
 @brief   SIL NEES 结果可视化。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 绘制 NEES/NIS 分布与门控对照。
-@frame   N/A
-@units   N/A
+@frame   N/A（输入为 SIL 日志 [nees] 行的无量纲 NEES / NIS 标量，无坐标分量）
+@units   N/A（NEES / NIS 为归一化比值，非物理量）
 """
 import json, os, re
 import numpy as np

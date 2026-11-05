@@ -4,8 +4,8 @@
 @brief   SIL R 缩放一致性扫描。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 驱动 --gnss-r-scale 并统计 NEES/保持误差。
-@frame   N/A
-@units   N/A
+@frame   N/A（只缩放 UBX 自报精度 R 并统计 NEES / 保持误差标量，无坐标分量）
+@units   m（位置 / 保持误差）、°（滚转角）；NEES 为归一化比值
 
 只改 UBX h_acc/v_acc/s_acc，不改实际噪声；1.0 为固件当前口径。
 """

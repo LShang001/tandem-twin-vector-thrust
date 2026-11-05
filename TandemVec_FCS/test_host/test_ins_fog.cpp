@@ -2,6 +2,15 @@
  * @file    test_ins_fog.cpp
  * @module   测试/宿主机
  * @brief   光纤陀螺（FOG）级别 IMU 的纯惯导长航时漂移仿真。
+ * @details 输入：FOG 参数（陀螺 0.01 °/h、加计 10 µg、ARW 0.001 °/√h、
+ *          VRW 0.01 m/s/√h）与 MEMS 参数（0.4 °/s、5 mg）两档，各 2 个种子；
+ *          处理：静止 60 s 均值校准零偏 → 补偿 → 3600 s 纯惯导（Ekf15State
+ *          机械编排）；输出：加计零偏估计误差 µg、1 h 位置/姿态漂移。
+ *          判据：FOG 1 h 位置漂移 ≤ 30 km（超出即判 FAIL）。
+ * @frame   机体系（FRD）比力/角速度输入；Ekf15State 输出 NED 姿态与 LLA 位置，
+ *          重力为 WGS84 正常重力（ins_test::GravityWgs84，沿 NED +D 向下）。
+ * @units   陀螺零偏 °/h、加计零偏 µg、角速度 rad/s、比力 m/s²、时间 s、位置 m、
+ *          姿态 deg（打印）。
  *
  * 目的：量化“换 FOG 能带来多少改善”，以及换完之后瓶颈变成什么。
  *

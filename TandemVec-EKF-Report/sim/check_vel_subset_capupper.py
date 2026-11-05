@@ -17,8 +17,8 @@
          ★ 纪律：不改 §4.24s 的判据再跑（那是移动门柱）；本轮是新判据 Y6，跑前写死。
          ★ 若 U 与 L 之间宽度足够，默认值改动的验收必须包含"默认值变更 → 宿主 T25 断言同步"，
            不能只改代码注释。
-@frame   NED；pos_rms [m]、pos_max [m]、nav_att_rmse [deg]
-@units   米 / 个 seed
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
+@units   米 / 度 / 个 seed
 @note    预登记判据（跑前写死，不看结果改）：
          Y6a 参照一致性：本轮的 cap25 臂必须与 §4.24s 归档的 cap25 **逐 seed 完全相同**
               （两段各 50 条、5 个字段），否则说明构建或参数漂了，本轮整体作废。

@@ -11,8 +11,8 @@
          若在弱失稳档反而制造失效，就不能算改进。** 这两档正好是"少数 seed 失效"的区间，
          既检验子集能不能修，也检验它会不会把本来干净的 seed 弄坏。
          ★ 两臂同二进制 `tv_32g_q2`（md5 499495e5…，编译期默认 25 m），只差 `--gnss-vel-subset`。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
-@units   米 / 度 / 个 seed / 牛顿
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
+@units   米 / 度 / 个 seed / 推力牛顿（JSONL 列 thrust_n：22 500 / 23 500 N，按 781.8 N/g 换算）
 @note    预登记判据（跑前写死）：
          V1 完整性：2 档 × 2 臂各收满 50 条。
          V2 不添乱：每档内，子集开臂的 `>25 m` 发生率 ≤ 关臂，且 `max` ≤ 关臂 `max` + 5 m。

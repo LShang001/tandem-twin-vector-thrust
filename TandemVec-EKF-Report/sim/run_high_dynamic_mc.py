@@ -4,8 +4,8 @@
 @brief   大过载/大机动 EKF 宿主台架矩阵。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 驱动 test_ekf_high_dynamic.exe，按机动/负载/延迟/失联/杆臂组合采样。
-@frame   N/A
-@units   N/A
+@frame   N/A（只采集宿主台架 JSON 的 pos / att 误差标量，脚本不做坐标变换）
+@units   m（位置）、°（姿态角）；NEES 为归一化比值
 
 用法：
   HIGHDYN_EXE='C:/.../highdyn.exe' py -3.12 sim/run_high_dynamic_mc.py

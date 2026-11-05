@@ -11,7 +11,7 @@
          图 3 簇迁移（下簇不动、上簇从 ~27 m 压到 ~17 m）、图 4 自证据计数。
          双峰格的中位数无物理含义（§4.24），所以图 3 画的是"按基线簇分组后的各自中位"，
          不是整体中位。
-@frame   NED；pos_rms [m]
+@frame   NED（pos_rms 为水平位置误差）
 @units   米 / 次 / g（781.8 N/g 名义换算）
 @note    数据由 run_305g_onset_scan.py 产出；两臂只差 --gnss-vel-subset 1
 @see     sim/check_vel_subset_onset.py（V1–V4 裁决）、报告 §4.24p

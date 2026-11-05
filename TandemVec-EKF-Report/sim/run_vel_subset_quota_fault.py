@@ -12,7 +12,7 @@
          ② 10 Hz：§4.24q 表明 10 Hz 的触发本来就是每 seed 1 次，配额理应惰性，
             但"理应"不是证据。
          ★ 两臂共用同一二进制（`tv_32g_w2` md5 `fbac7fe9…`），只差 `--gnss-vel-subset-maxfires`。
-@frame   NED；pos_rms / pos_max [m]、nav_att_rmse [deg]
+@frame   NED（pos_rms / pos_max 为水平位置误差；nav_att_rmse 为欧拉角误差）
 @units   米 / 度 / 次 / 个 seed
 @note    口径：SIL 未识别参数会硬失败（§4.21.3），所以每个臂的参数都显式给出。
 @see     sim/check_vel_subset_quota_fault.py（Y1–Y3）、报告 §4.24y

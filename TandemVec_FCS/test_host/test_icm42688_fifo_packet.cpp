@@ -4,6 +4,11 @@
  * @brief   ICM-42688-P FIFO Packet 3 解析器宿主单测
  * @details 对照 DS-000347 §6.1/§6.2：header/accel/gyro/temp/timestamp 的字节序、
  *          header 合法性、短包拒绝，以及 ±8g/±2000dps 的原始 LSB 换算示例。
+ * @frame   N/A（只解析 FIFO 原始字节与芯片三轴 LSB，未做 IMU→机体轴映射、
+ *          不含机体/导航系变换；轴映射在 sensor_imu.cpp 步骤5，不在本测试范围）
+ * @units   字节（Packet 3 共 16 B）、LSB（accel/gyro 原始码值）、g（±8g 档
+ *          4096 LSB/g）、dps（±2000dps 档 16.4 LSB/dps）、计数（timestamp 高低
+ *          字节拼接值）
  */
 #include "icm42688_fifo_packet.h"
 

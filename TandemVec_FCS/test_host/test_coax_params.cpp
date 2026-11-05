@@ -2,6 +2,19 @@
  * @file    test_coax_params.cpp
  * @module   测试/宿主机
  * @brief   共轴双桨 VTVL 参数可标定化回归（默认值逐位 / 注册表顺序 / 逐拍输出锁定）
+ * @details 输入：CoaxialCtrlParams{} / kFlightCtrlParamsDefaults.coax 与 legacyParams()/
+ *          legacyPhysical() 参考真值 + 10 拍基准输入序列 kSeq；
+ *          处理：按 float 位型逐字段比较（bits()/same()，不带容差）→ coax.* 注册表
+ *          名称/顺序与 BFS_COAX_PARAM_LIST 比对（含 ≤20B 与 MAVLink 15B 短名唯一）→
+ *          默认参数跑 kSeq，输出位型与冻结的 kGolden 逐拍比对；
+ *          输出：g_checks/g_fail 计数，main 返回非零即失败；`--emit-golden` 只打印
+ *          当前位型供人工粘贴，不自动改写基准。
+ *          不变量：只读被测默认值，不写参数、不链接固件。
+ * @frame   固件存档系（共轴机型）：滚转绕 x_b、俯仰绕 y_b、偏航差速绕 z_b=推力轴；
+ *          输入为姿态误差角/机体角速率，输出为 TVC 修正角与差速
+ * @units   deg（姿态误差/修正角/机械限幅）、deg/s（角速率与目标）、µs（电机 PWM
+ *          与差速）、(rad/s²)/deg 与 (rad/s²)/µs（α 换算系数）、N（推力）、kg（质量）、
+ *          m（力臂）、kg·m²（惯量）、N·m/µs（k_yaw）、s（dt=0.005）、%（油门）
  *
  * 验证目标（对应 task-6/task-10）：
  *  1) CoaxialCtrlParams 的 18 项控制律默认值 + 13 项物理/输出/分配器常量逐位等于原

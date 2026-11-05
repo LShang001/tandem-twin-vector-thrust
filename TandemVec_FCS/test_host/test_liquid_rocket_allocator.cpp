@@ -7,6 +7,10 @@
  * @details 正向模型只复刻分配器文件头声明的 pilot 约定：
  *          My=L·T·sinδy、Mz=L·T·sinδx、Mx=k_rcs·(left−right)/100；
  *          T=throttle×Tmax。该模型不替代实机台架/喷管安装极性核对。
+ * @frame   机体系 FRD（固件存档系）：x=滚转绕 x_b、y=俯仰绕 y_b、z=偏航绕 z_b，
+ *          推力沿 −z_b；pilot 符号约定：+δy→+My、+δx→+Mz、左右 RCS 差动→Mx
+ * @units   α rad/s²、τ N·m、T N、摆角 deg、RCS 百分比 0–100、力臂 m、
+ *          惯量 kg·m²、油门 %、dt s
  * @note    本测试不修改实现；RCS/摆座符号若与实机相反，应先在文档登记，
  *          再改 pilot 约定，而不是让测试去迁就实现。
  * @see     docs/05-控制与分配/CTL-006、include/LiquidRocketAllocator.h

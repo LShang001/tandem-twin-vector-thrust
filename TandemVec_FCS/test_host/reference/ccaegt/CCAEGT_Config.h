@@ -3,6 +3,15 @@
  * @module 固件/宿主参考（CC-AEGT 实飞制导库，逐字复制，仅测试用）
  * @brief CC-AEGT 算法配置参数定义
  * @details 所有制导参数集中管理，便于整定和移植
+ *          第三方参考库（箭载机智导）逐字复制，**仅测试用、不参与固件构建**。
+ * @frame   1D 竖直剖面参数：高度/速度/加速度均沿竖直轴，h 向上为正、v 向上为正；
+ *          无姿态/横侧向参数，不涉及机体三轴轴名
+ * @units   CCAEGT_GRAVITY m/s²、CCAEGT_Isp s、CCAEGT_T_MAX/T_MIN N、
+ *          CCAEGT_T_RATE_LIMIT N/s、CCAEGT_M0/M_DRY kg、CCAEGT_H_MARGIN/
+ *          MIN_ALTITUDE/MAX_ALTITUDE m、CCAEGT_V_FINAL/V_MAX_DESC/
+ *          LAND_VELOCITY_TOL m/s、CCAEGT_DT/DELAY/PRED_HORIZON/PRED_DT s；
+ *          CCAEGT_ETA 与预测器三因子无量纲；CCAEGT_Kp s⁻¹、CCAEGT_Ki s⁻²
+ *          （T_fb = m·(Kp·v_err + Ki·∫v_err dt)）
  */
 
 #ifndef CCAEGT_CONFIG_H

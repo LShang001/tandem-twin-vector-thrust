@@ -2,6 +2,13 @@
  * @file    test_ins_param_align_module.cpp
  * @module   测试/宿主机
  * @brief   ins_param_align.h 模块回归：书本参数辨识法（§9.9.2）。
+ * @details 输入：真失准角（0.5/0.3/1.0°）与等效零偏（∇E=10 µg、∇N=−5 µg、
+ *          εE/N/U=0.01/−0.02/0.005 °/h），600 s@2 Hz 共 1200 样本；处理：
+ *          InsParamAlign::Update 逐样本喂入 → Solve(kLat, kG) 反解 φ0/u →
+ *          ApplyDualPosition 修正方位；输出：φE/φN/φU、拟合残差、修正后 δφU。
+ *          判据：Update 全部接受、Solve valid、水平 <0.01°、双位置方位 <0.05°。
+ * @frame   NED：失准角与东/北速度误差均相对导航系；双位置为绕 z（垂直轴）转 90°。
+ * @units   角度 rad（内部）/deg（打印）、速度 m/s、比力 m/s²、重力 m/s²、时间 s。
  */
 #include <cmath>
 #include "ins_test_gravity.h"

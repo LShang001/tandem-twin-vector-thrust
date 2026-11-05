@@ -12,7 +12,7 @@
          ② 平台有多宽——cap15 到 cap25（以及 §4.24t 的 30/35）之间发生率一直是 0，
             直到"无上限"才出现尾部。区间宽度决定默认值该放在哪里。
          右尾必须单独放大画：主分布挤在 5–25 m，线性轴上看不出 44–105 m 的灾难来自哪一档。
-@frame   NED；pos_rms [m]
+@frame   NED（pos_rms 为水平位置误差）
 @units   米 / 个 seed / 比例
 @note    图内文字避免 U+21D2（微软雅黑缺字）
 @see     sim/check_vel_subset_capband.py（Y5）、sim/check_vel_subset_capupper.py（Y6）、报告 §4.24s/§4.24t

@@ -4,8 +4,8 @@
 @brief   GNSS 垂直 spoof 门控可视化。
 @module  TandemVec-EKF-Report/分析脚本（L2 研究设施）
 @details 绘制台阶/慢偏与门控前后结果。
-@frame   N/A
-@units   N/A
+@frame   N/A（只解析 trace 行里的天向高度 alt / nav_alt 与滚转角标量，无水平坐标变换）
+@units   m（高度）、°（滚转角）、s（时间）
 """
 import json, os, re
 import numpy as np

@@ -2,6 +2,14 @@
  * @file    test_ins_gyrocompass.cpp
  * @module   测试/宿主机
  * @brief   纯罗经解析对准（TRIAD 双矢量：重力 + 地球自转）。
+ * @details 输入：真值姿态水平、航向 45°，FOG 噪声（ARW 0.001 °/√h）与 MEMS
+ *          噪声（0.02 rad/√s）两档，时长 60/300/600 s × 3 个种子；处理：TRIAD
+ *          双矢量（NED 的重力/地球自转 vs 机体系测量）求 C_b^n，按 3-2-1 提取
+ *          欧拉角，再以 MEMS 档做对照；输出：roll/pitch/yaw 误差（°）。
+ *          判据：FOG 各时长 yaw 误差 <1°（MEMS 只打印不判）。
+ * @frame   NED（f^n=[0,0,−g]、ω_ie^n=[ΩcosL, 0, −ΩsinL]）→ 机体系 FRD（静止
+ *          测量）；TRIAD 输出 C_b^n，姿态角按 ZYX 顺序提取。
+ * @units   比力 m/s²、角速度 rad/s、ARW °/√h 与 rad/√s、时间 s、角度 deg（打印）。
  *
  * 原理（惯导教材静基座解析对准）：
  *   静止时加速度计测重力方向 f^b，陀螺测地球自转 ω_ie^b：
