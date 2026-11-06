@@ -50,8 +50,12 @@
   移植说明与验证记录见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`。
   采样架构（2026-11-06 统一下沉，commit 324004c）：2kHz TIM8 ISR 单包入 SPSC ring
   （`BFS_IMU_ISR_RING`）+ 备份姿态 200Hz 分频（`BFS_IMU_ATT_DECIMATE`）已从共轴专属下沉到
-  主 env，三机型全部继承；实机实测 imu rate=2000.0Hz、ring_drop=0、Navigation 200Hz、
-  loop CPU=49.3%。`[env:CoaxialVTVL_UI]` 用 `-U` 显式取消，保持纯轮询回退。
+  主 env，三机型全部继承；`[env:CoaxialVTVL_UI]` 用 `-U` 显式取消，保持纯轮询回退。
+  ★ 单涵道 120s 完整实测（2026-11-06，0xF4 遥测走 USB 调试口，全程不进 DBG）：
+  1106 帧 / 120s（9.22Hz，设计 10Hz 降载）；imu_rate_hz mean=1979.9、std=60.6、
+  min=1817.4、max=2137.2；**ring_drop=0**（全程无积压）。对照共轴 P1 基线
+  mean=2024.5/std=43.8。均值低约 2% 源于单涵道额外开启 BFS_DBG_USB_SERIAL8 +
+  BFS_ANOCOM_ON_USB（CPU 49.3% vs 共轴 41.5%），非采样架构差异。
 
 ## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
 
