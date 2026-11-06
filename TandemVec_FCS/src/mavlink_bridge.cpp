@@ -24,6 +24,20 @@
 #include "ano_params.h"
 #include "state_data.h"   // g_is_unlocked / failsafe_in_flight（重启互锁）
 #include <cstring>
+#include <cmath>
+
+// ★ 2026-11-06 补齐下行消息所需的导航/控制量（定义在 communication.cpp / navigation_task.cpp）
+extern float relative_north;
+extern float relative_east;
+extern float relative_down;
+extern float rollTarget;
+extern float pitchTarget;
+extern float ch3_output;
+extern float ch4_output;
+extern float baro_altitude;
+extern float temperature;
+extern float g_tvc_upper_deg;
+extern float g_tvc_lower_deg;
 
 // ---- 参数广播状态机 ----
 static bool  s_param_broadcast_active = false;
@@ -363,6 +377,79 @@ void mavlinkBridgeTick()
 {
     static uint32_t s_tick = 0;
     s_tick++;
+
+    // ================================================================
+    // ★ 2026-11-06 补齐的下行消息（QGC/MP 面板需要，此前缺失）
+    // ================================================================
+
+    // LOCAL_POSITION_NED 50Hz —— QGC「本地坐标」面板只读这条
+    if ((s_tick % 4U) == 1U)
+    {
+        mavlink_message_t m;
+        mavlink_msg_local_position_ned_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
+            relative_north, relative_east, -relative_down,
+            (float)INS_GNSS_Packet.velocity_north,
+            (float)INS_GNSS_Packet.velocity_east,
+            (float)(-INS_GNSS_Packet.velocity_down));
+        mavSend(m);
+    }
+
+    // ATTITUDE_TARGET 20Hz —— QGC「目标姿态」面板
+    // type_mask=0xE7：只认 q，忽略体轴角速率与推力（本机是角速率指令）
+    if ((s_tick % 10U) == 6U)
+    {
+        mavlink_message_t m;
+        const float h = 0.00872664626f;   // deg → rad 再乘 0.5
+        const float cr = cosf(rollTarget * h), sr = sinf(rollTarget * h);
+        const float cp = cosf(pitchTarget * h), sp = sinf(pitchTarget * h);
+        // 航向无绝对目标（本机 yaw 是速率指令），目标四元数取航向 0
+        const float cy = 1.0f, sy = 0.0f;
+        float q[4];
+        q[0] = cr * cp * cy + sr * sp * sy;
+        q[1] = sr * cp * cy - cr * sp * sy;
+        q[2] = cr * sp * cy + sr * cp * sy;
+        q[3] = cr * cp * sy - sr * sp * cy;
+        mavlink_msg_attitude_target_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
+            0xE7, q, 0.0f, 0.0f, 0.0f, 0.0f);
+        mavSend(m);
+    }
+
+    // SERVO_OUTPUT_RAW 10Hz —— QGC 舵机输出面板
+    // 摆角 ±25° → 1000..2000us；电机 0..100% → 1000..2000us
+    if ((s_tick % 20U) == 8U)
+    {
+        mavlink_message_t m;
+        auto deg2pwm = [](float d) -> uint16_t {
+            return (uint16_t)constrain(1500.0f + constrain(d, -25.0f, 25.0f) * 20.0f,
+                                       1000.0f, 2000.0f);
+        };
+        auto pct2pwm = [](float p) -> uint16_t {
+            return (uint16_t)constrain(1000.0f + constrain(p, 0.0f, 100.0f) * 10.0f,
+                                       1000.0f, 2000.0f);
+        };
+        mavlink_msg_servo_output_raw_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)micros(), 0,
+            deg2pwm(g_tvc_upper_deg), deg2pwm(g_tvc_lower_deg),
+            pct2pwm(ch3_output), pct2pwm(ch4_output),
+            0, 0, 0, 0,      // servo5..8
+            0, 0, 0, 0,      // servo9..12
+            0, 0, 0, 0);     // servo13..16
+        mavSend(m);
+    }
+
+    // SCALED_PRESSURE 10Hz —— 气压高度/温度（由气压高度按 ISA 反算绝对压强）
+    if ((s_tick % 20U) == 10U)
+    {
+        mavlink_message_t m;
+        const float ratio = 1.0f - baro_altitude / 44330.7f;
+        const float press = (ratio > 0.05f) ? 1013.25f * powf(ratio, 5.255f) : 1013.25f;
+        mavlink_msg_scaled_pressure_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
+            press, 0.0f, (int16_t)(temperature * 100.0f), 0);
+        mavSend(m);
+    }
 
     // 0) AUTOPILOT_VERSION 1Hz：QGC/MP 连接时可靠获取能力，不依赖请求帧丢失
     if ((s_tick % 200U) == 50U)
