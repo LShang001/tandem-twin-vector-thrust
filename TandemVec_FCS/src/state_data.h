@@ -237,6 +237,13 @@ extern Uart Serial2; // USART2: 发动机控制器 / 数据转发
 extern Uart Serial3; // USART3: 黑匣子数据记录 (高速)
 extern Uart Serial4; // UART4:  DETA100 IMU/GNSS模块
 extern Uart Serial5; // UART5:  上位机轨迹规划接口
+
+// ★ 2026-11-07 Serial5 机载电脑链路协议选择：
+//   0 = 私有协议（74 B 下行 / 14 B 上行，现有默认，回退用）
+//   1 = MAVLink v2（LOCAL_POSITION_NED + ATTITUDE 下行，
+//       SET_POSITION_TARGET_LOCAL_NED 上行，只开加速度位）
+//   运行期用 DBG `onboard mavlink|private` 切换，不重烧固件。
+extern uint8_t g_onboard_link_proto;
 extern Uart Serial6; // USART6: AnoCom地面站通信
 extern Uart Serial7; // UART7:  光流传感器接口
 extern Uart Serial8; // UART8:  USB Type-C 调试输出

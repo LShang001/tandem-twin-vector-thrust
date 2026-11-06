@@ -41,6 +41,9 @@ Uart Serial2(PD6, PD5);  // USART2: 发动机控制器 / 数据转发 [921600 ba
 Uart Serial3(PD9, PD8);  // USART3: 黑匣子数据记录 (高速) [1500000 baud]
 Uart Serial4(PD0, PD1);  // UART4:  DETA100 IMU/GNSS模块 (输入) [921600 baud]
 Uart Serial5(PD2, PC12); // UART5:  上位机轨迹规划接口 [921600 baud]
+
+// 机载电脑链路协议：默认私有协议（保持既有行为），DBG `onboard` 切换
+uint8_t g_onboard_link_proto = 0;
 Uart Serial6(PC7, PC6);  // USART6: AnoCom地面站通信 (数传) [波特率见 state_data.h SERIAL6_BAUDRATE]
 Uart Serial7(PE7, PE8);  // UART7:  光流传感器接口 [921600 baud]
 Uart Serial8(PE0, PE1);  // UART8:  USB Type-C 调试输出 [921600 baud]

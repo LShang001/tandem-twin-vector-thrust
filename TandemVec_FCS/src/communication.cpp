@@ -1706,8 +1706,129 @@ void handleDataLogging()
  *        ④ `UPLINK_18FLOAT=0` 编译回 34 B/8 float 旧 G1 接口，字段与字节序逐字节不变。
  * @ref  PROTOCOL-001（Serial6 AnoCom，本帧为 Serial5 私有协议，不在其内）
  */
+/**
+ * @brief 机载电脑下行（MAVLink 版，100Hz）：LOCAL_POSITION_NED + ATTITUDE
+ *
+ * @details 与私有 74 B 帧承载同样的量，但用两条标准消息：
+ *          - LOCAL_POSITION_NED(32)：位置 N/E/D + 速度 N/E/D
+ *          - ATTITUDE(30)：欧拉角 + 机体角速度
+ *          900 Kbaud 下两条 40 B 帧 @100Hz = 8 KB/s，与私有帧 7.4 KB/s 相当，
+ *          但每帧自带 CRC-16，串口误码可检出（私有帧没有校验）。
+ *
+ * @note    MAVLink 的 z 轴是 NED 的下（Down），本机 estimated_height / 
+ *          estimated_velocity 是 Up 正，所以取负。
+ *          通道号 MAVLINK_COMM_1：COMM_0 被 Serial6 地面站占用，
+ *          COMM_2 被 sensor_peripheral 的 GNSS 解析占用。
+ */
+static void sendPositionVelocityDataMavlink()
+{
+  // 两条帧各 40 B，留够 100 B 余量再发，避免半帧写出
+  if (Serial5.availableForWrite() < 100)
+  {
+    g_posvel_tx_skipped++;
+    return;
+  }
+
+  mavlink_message_t m;
+  uint8_t buf[MAVLINK_MAX_PACKET_LEN];
+  uint16_t len;
+
+  mavlink_msg_local_position_ned_pack(
+      1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
+      relative_north, relative_east, -estimated_height,
+      INS_GNSS_Packet.velocity_north, INS_GNSS_Packet.velocity_east,
+      -estimated_velocity);
+  len = mavlink_msg_to_send_buffer(buf, &m);
+  Serial5.write(buf, len);
+
+  mavlink_msg_attitude_pack(
+      1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
+      AHRS_Packet.Roll, AHRS_Packet.Pitch, AHRS_Packet.Heading,
+      IMU_Packet.gyroscope_x, IMU_Packet.gyroscope_y,
+      IMU_Packet.gyroscope_z);
+  len = mavlink_msg_to_send_buffer(buf, &m);
+  Serial5.write(buf, len);
+}
+
+/**
+ * @brief 机载电脑上行（MAVLink 版，250Hz）：解析 SET_POSITION_TARGET_LOCAL_NED
+ *
+ * @details 只接受「纯加速度」模式：type_mask 必须把位置/速度/偏航/偏航率
+ *          全部置为 IGNORE（bit0|bit1|bit4|bit5 = 0x33）。
+ *          带位置或速度目标的帧一律拒收并计入 g_guidance_rx_bad——
+ *          本机不支持位置闭环，静默接受会让上层以为位置控制生效。
+ *
+ * @note    MAVLink 的 afx/afy/afz 是 NED：afz 向下为正，转成 Up 需取负。
+ *          安全口径与私有协议完全一致：NaN/Inf + MAX_SAFE_ACCEL_XY/Z 限幅。
+ */
+static void handleGuidanceCommandsMavlink()
+{
+  mavlink_message_t msg;
+  mavlink_status_t status;
+  uint8_t processed = 0;
+
+  while (Serial5.available() && processed < MAX_BYTES_PER_LOOP)
+  {
+    const uint8_t byte_in = (uint8_t)Serial5.read();
+    processed++;
+
+    if (mavlink_parse_char(MAVLINK_COMM_1, byte_in, &msg, &status) !=
+        MAVLINK_FRAMING_OK)
+    {
+      continue;
+    }
+    if (msg.msgid != MAVLINK_MSG_ID_SET_POSITION_TARGET_LOCAL_NED)
+    {
+      continue;
+    }
+
+    mavlink_set_position_target_local_ned_t sp;
+    mavlink_msg_set_position_target_local_ned_decode(&msg, &sp);
+
+    // 只认加速度：位置/速度/偏航/偏航率必须全部 IGNORE
+    const uint16_t kAccelOnlyMask = (1u << 0) | (1u << 1) | (1u << 4) | (1u << 5);
+    if ((sp.type_mask & kAccelOnlyMask) != kAccelOnlyMask)
+    {
+      g_guidance_rx_bad++;   // 带位置/速度目标的帧：不支持，明确拒收
+      continue;
+    }
+
+    // NED -> 本机口径：afx=N, afy=E, afz=D（向下），转 Up 取负
+    const float acc_N = sp.afx;
+    const float acc_E = sp.afy;
+    const float acc_U = -sp.afz;
+
+    const bool is_valid =
+        isfinite(acc_U) && isfinite(acc_E) && isfinite(acc_N) &&
+        (fabsf(acc_E) < MAX_SAFE_ACCEL_XY) &&
+        (fabsf(acc_N) < MAX_SAFE_ACCEL_XY) &&
+        (fabsf(acc_U) < MAX_SAFE_ACCEL_Z);
+
+    if (!is_valid)
+    {
+      g_guidance_rx_bad++;
+      continue;
+    }
+
+    guidance_accel_U_cmd = acc_U;
+    guidance_accel_E_cmd = acc_E;
+    guidance_accel_N_cmd = acc_N;
+    new_guidance_command_received = true;
+    last_guidance_command_millis = millis();
+    g_guidance_rx_frames++;
+    g_guidance_rx_last_ms = last_guidance_command_millis;
+  }
+}
+
 void sendPositionVelocityData()
 {
+  // 机载电脑链路走 MAVLink 时改发标准消息（DBG `onboard mavlink` 切换）
+  if (g_onboard_link_proto == 1)
+  {
+    sendPositionVelocityDataMavlink();
+    return;
+  }
+
   // auto_flag 取"意图位"（报告 §3.3）：模式通道无中值滤波，档位切换会抖，
   // 用 raw_rc 判档会让制导机 _reset_guidance()；用同拍全局量最稳。
   // 仅 18 字段分支使用；34 B 旧帧的 [0] 必须保持 trajectoryPlanningStarted 原义。
@@ -1793,6 +1914,13 @@ void sendPositionVelocityData()
 void handleGuidanceCommands()
 {
   // --- 静态状态保持 (Static State Persistence) ---
+  // 机载电脑链路走 MAVLink 时改走 MAVLink 解包
+  if (g_onboard_link_proto == 1)
+  {
+    handleGuidanceCommandsMavlink();
+    return;
+  }
+
   static PacketState current_state = PacketState::WAIT_HEADER;
   static uint8_t payload_buffer[GUIDANCE_CMD_PAYLOAD_LEN];
   static uint8_t payload_index = 0;
@@ -3647,7 +3775,25 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         // 配置 watch 集合后 exit 恢复遥测，0xF2 值帧自动轮发（AnoVars）
         anoVarsDebugCommand(serial, line + 4);
       }
-      else if (strncmp(line, "proto", 5) == 0) {
+      else if (strncmp(line, "onboard", 7) == 0) {
+    // ★ 2026-11-07 机载电脑（Serial5）链路协议切换：不重烧固件
+    //   private = 私有协议（74B/14B）；mavlink = MAVLink offboard
+    const char *oarg = line + 7;
+    while (*oarg == ' ') oarg++;
+    if (strncmp(oarg, "mavlink", 7) == 0) {
+      g_onboard_link_proto = 1;
+      serial.println(F("[DBG] onboard: MAVLink（LOCAL_POSITION_NED+ATTITUDE 下行 / SET_POSITION_TARGET_LOCAL_NED 上行）"));
+    } else if (strncmp(oarg, "private", 7) == 0) {
+      g_onboard_link_proto = 0;
+      serial.println(F("[DBG] onboard: 私有协议（74B 下行 / 14B 上行）"));
+    } else {
+      serial.print(F("[DBG] onboard: 当前="));
+      serial.println(g_onboard_link_proto == 1 ? F("mavlink") : F("private"));
+      serial.println(F("[DBG]   onboard private  - 私有协议（默认）"));
+      serial.println(F("[DBG]   onboard mavlink  - MAVLink offboard 通道"));
+    }
+  }
+  else if (strncmp(line, "proto", 5) == 0) {
         // ★2026-08-10 遥测协议运行时切换（不重烧）：anocom=AnoCom（GCS 默认）/
         // mavlink=MAVLink v2（QGC/MP 可连）。上行解析随协议切换禁用。
         const char *arg = line + 5;
