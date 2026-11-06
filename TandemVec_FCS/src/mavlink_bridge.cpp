@@ -38,6 +38,7 @@ extern float baro_altitude;
 extern float temperature;
 extern float g_tvc_upper_deg;
 extern float g_tvc_lower_deg;
+extern double origin_lat_deg, origin_lon_deg, origin_lat_rad, origin_lon_rad, origin_alt_m;
 
 // ---- 参数广播状态机 ----
 static bool  s_param_broadcast_active = false;
@@ -448,6 +449,84 @@ void mavlinkBridgeTick()
         mavlink_msg_scaled_pressure_pack(
             1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
             press, 0.0f, (int16_t)(temperature * 100.0f), 0);
+        mavSend(m);
+    }
+
+    // ================================================================
+    // ★ 2026-11-06 第三批补齐：HIGHres IMU / EKF 健康 / 电源 / VTOL 状态 / 高度
+    // ================================================================
+
+    // HIGHRES_IMU 10Hz —— QGC「传感器 → 高频 IMU」图表（带温度与气压）
+    if ((s_tick % 20U) == 12U)
+    {
+        mavlink_message_t m;
+        const float ratio = 1.0f - baro_altitude / 44330.7f;
+        const float press = (ratio > 0.05f) ? 1013.25f * powf(ratio, 5.255f) : 1013.25f;
+        mavlink_msg_highres_imu_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m,
+            (uint64_t)micros() * 1000ULL,
+            (float)IMU_Packet.accelerometer_x, (float)IMU_Packet.accelerometer_y,
+            (float)IMU_Packet.accelerometer_z,
+            (float)IMU_Packet.gyroscope_x, (float)IMU_Packet.gyroscope_y,
+            (float)IMU_Packet.gyroscope_z,
+            0.0f, 0.0f, 0.0f,           // 无磁力计
+            press, 0.0f,
+            (float)baro_altitude, (float)temperature,
+            0x07,                        // fields_updated: accel|gyro|mag 有效
+            0);
+        mavSend(m);
+    }
+
+    // ESTIMATOR_STATUS 2Hz —— QGC「EKF 状态」面板
+    // flags: bit0 attitude / bit1 vel_horiz / bit2 vel_vert / bit3 pos_horiz / bit4 pos_vert
+    if ((s_tick % 100U) == 14U)
+    {
+        mavlink_message_t m;
+        const uint16_t flags = g_ekf_converged ? 0x001Fu : 0x0000u;
+        mavlink_msg_estimator_status_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m,
+            (uint64_t)micros() * 1000ULL, flags,
+            0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+            g_ekf_pos_sigma_m,          // pos_horiz_accuracy（m）
+            g_ekf_pos_sigma_m);         // pos_vert_accuracy（m）
+        mavSend(m);
+    }
+
+    // POWER_STATUS 1Hz —— QGC 电源面板（5V 轨按 5.0V 估算）
+    if ((s_tick % 200U) == 16U)
+    {
+        mavlink_message_t m;
+        mavlink_msg_power_status_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m,
+            5000,                                            // Vcc 5.00V
+            (uint16_t)constrain(bat_voltage_mv, 0.0f, 65535.0f), // Vservo = 电池
+            0);
+        mavSend(m);
+    }
+
+    // EXTENDED_SYS_STATE 1Hz —— 告诉地面站这是 VTOL 且当前在地面/空中
+    // vtol_state: 1=transition_to_fw 2=transition_to_mc 3=MC 4=FW
+    // landed_state: 1=on_ground 2=in_air
+    if ((s_tick % 200U) == 18U)
+    {
+        mavlink_message_t m;
+        mavlink_msg_extended_sys_state_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m,
+            3,                                    // 多旋翼/VTVL 模式
+            g_is_unlocked ? 2 : 1);               // 解锁视为在空中
+        mavSend(m);
+    }
+
+    // ALTITUDE 20Hz —— QGC 高度显示（相对/绝对/本地三套口径）
+    if ((s_tick % 10U) == 4U)
+    {
+        mavlink_message_t m;
+        const float alt_msl = (float)(estimated_height + (float)origin_alt_m);
+        mavlink_msg_altitude_pack(
+            1, MAV_COMP_ID_AUTOPILOT1, &m,
+            (uint32_t)millis(),
+            (float)baro_altitude, alt_msl, (float)baro_altitude,
+            (float)estimated_height, 0.0f, 0.0f);
         mavSend(m);
     }
 
