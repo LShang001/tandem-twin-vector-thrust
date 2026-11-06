@@ -869,14 +869,19 @@ void handleAnoCom()
   //   模块内部丢弃约 79% 的帧 —— 实测所有功能码统一掉到 21.24 Hz 就是这个原因
   //   （固件侧 ano_skip=0、调度 200Hz 均正常，问题在无线侧容量）。
   //   降载后 1847 B/s（14.8 kbps），留 26% 余量；姿态/控制保 20Hz，低频帧降到 1–5Hz。
-  const bool fast_tick = (t % 10 == 1);      // 姿态/状态 20Hz（原 100Hz）
-  const bool fast_aux_tick = (t % 10 == 1);  // 控制量 20Hz，与姿态同拍（原 50Hz）
-  const bool pos_tick  = (t % 40 == 2);      // 位置 5Hz（原 50Hz）
-  const bool rc_tick   = (t % 100 == 4);     // RC 2Hz（原 25Hz）
-  const bool disp_tick = (t % 100 == 6);     // 显示组 2Hz（原 25Hz）
-  const bool gps_tick  = (t % 200 == 10);    // GPS/氧压 1Hz（原 10Hz）
+  // ★ 2026-11-06 按飞行安全重要性重新分层（原实现把核心状态挤在 2Hz 档）：
+  //   核心飞行状态（姿态/角速度/控制量/执行器/模式解锁）高帧率，
+  //   辅助量（PWM/目标速度/GPS）低频，中间量按需。
+  const bool fast_tick = (t % 4 == 1);       // 50Hz 姿态/IMU/控制/执行器/目标姿态
+  const bool fast_aux_tick = (t % 4 == 1);   // 50Hz 与姿态同拍（组模式合并一次 write）
+  const bool state_tick = (t % 10 == 3);     // 20Hz 模式解锁/速度/高度
+  const bool pos_tick  = (t % 20 == 2);      // 10Hz 位置
+  const bool bat_tick  = (t % 40 == 4);      //  5Hz 电池
+  const bool rc_tick   = (t % 40 == 6);      //  5Hz 遥控
+  const bool disp_tick = (t % 100 == 8);     //  2Hz PWM/目标速度（调参用）
+  const bool gps_tick  = (t % 200 == 10);    //  1Hz GPS/氧压
 
-  if (fast_tick || pos_tick || rc_tick || disp_tick || gps_tick)
+  if (fast_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
   {
     // 非阻塞保护：按本 tick 最大组需求检查 TX 缓冲，不足跳过本 tick 发送。
     // ★ 2026-08-10 全面审查修复：最坏组（t≡30 同拍）= RC(20) + disp(86) +
@@ -1006,11 +1011,11 @@ void handleAnoCom()
         AnoCom.sendRCData(raw_rc_values);
       }
 
-      // ---- 显示帧 25Hz：高度 + 模式 + 速度 + PWM + 目标速度 ----
-      if (disp_tick)
+      // ---- 核心飞行状态 20Hz：模式解锁 + 速度 + 高度 ----
+      // ★ 2026-11-06 从原 disp_tick(2Hz) 拆出：这三项是判断"现在飞什么状态、
+      //   有没有在动、掉没掉高度"的直接依据，2Hz 在地面站上看不出起飞瞬间变化。
+      if (state_tick)
       {
-        // 高度：气压 / 2状态垂直KF / EKF融合（与 EKF 对比用，激光通道空闲）
-        AnoCom.sendAltitudeData(baro_altitude, vfk_height, estimated_height, 1);
         // 飞控模式 + 解锁状态（GNC 判定结果，与飞控实际状态一致）
         AnoCom.sendFlightMode(static_cast<uint8_t>(g_current_flight_mode),
                               g_is_unlocked ? 1 : 0, 0, 0, 0);
@@ -1018,6 +1023,13 @@ void handleAnoCom()
         AnoCom.sendFlightSpeed(INS_GNSS_Packet.velocity_north * 100,
                                INS_GNSS_Packet.velocity_east * 100,
                                -INS_GNSS_Packet.velocity_down * 100);
+        // 高度：气压 / 2状态垂直KF / EKF融合（与 EKF 对比用，激光通道空闲）
+        AnoCom.sendAltitudeData(baro_altitude, vfk_height, estimated_height, 1);
+      }
+
+      // ---- 辅助显示帧 2Hz：PWM + 目标速度（调参观察用，无需高频）----
+      if (disp_tick)
+      {
         // 0x20 手册语义 = PWM 控制量（0.01% 油门）：mix 输出级电机指令 % → ×100
         AnoCom.sendPWMOutput((uint16_t)constrain(ch3_output * 100.0f, 0.0f, 10000.0f),
                              (uint16_t)constrain(ch4_output * 100.0f, 0.0f, 10000.0f),
@@ -1088,6 +1100,14 @@ void handleAnoCom()
         // 0x0D 电压电流（10B）：5×u16 = bat_V×100、bat_A×100、fc_V×100、fc_A×100、flags。
         // ★ 本工程 fc 两字段被占用为发动机氧压 P1/P2（`receivedP1/P2`，官方上位机忽略），
         // 电池侧为真实 ADC 采样值。@ref PROTOCOL-001 §二.1.13 + 差异对照表（0x0D 行）
+        // ★ 2026-11-06：0x0D 已拆到下方 bat_tick(5Hz) 单独发，此处不再重复发送。
+      }
+
+      // ---- 电池/氧压 5Hz（★ 2026-11-06 从 gps_tick 的 1Hz 档拆出）----
+      //   低压告警与氧压监控不该等 1 秒——起飞前电池掉压要立刻看见。
+      //   与 GPS 解耦后，GPS 数据源本身 10Hz，仍按 1Hz 发（高频只是重复旧值）。
+      if (bat_tick)
+      {
         AnoCom.sendVoltCurr(bat_voltage_mv / 1000.0f, bat_current_ca / 10.0f,
                             receivedP1, receivedP2, 0);
       }
