@@ -49,6 +49,17 @@ void kickIwdg(void);
 // 通信模块局部定义
 // ========================================================================
 
+// ---- 机载电脑链路串口选择（2026-11-07）----
+// 默认 UART5（Serial5，PD2/PC12）＝正式的上位机轨迹规划接口。
+// 定义 BFS_ONBOARD_LINK_ON_UART8 时改走 UART8（Serial8，PE0/PE1，USB Type-C 口）。
+//   ★ 仅用于 UART5 未接线时的临时协议验证；接线到位后必须改回默认。
+//   ★ 该 env 不能同时开 BFS_DBG_USB_SERIAL8——DBG 文本会和二进制帧混流。
+#ifdef BFS_ONBOARD_LINK_ON_UART8
+#define ONBOARD_LINK_UART Serial8
+#else
+#define ONBOARD_LINK_UART Serial5
+#endif
+
 // ---- Serial5 上行帧（轨迹规划/观测回传）协议开关 ----
 // ★ 必须用 `#if` 不能用 `#ifdef`：`#define UPLINK_18FLOAT 0` 时 `#ifdef` 仍为真
 //   （AGENTS.md 踩坑记录「调试开关宏陷阱」）。
@@ -1723,7 +1734,7 @@ void handleDataLogging()
 static void sendPositionVelocityDataMavlink()
 {
   // 两条帧各 40 B，留够 100 B 余量再发，避免半帧写出
-  if (Serial5.availableForWrite() < 100)
+  if (ONBOARD_LINK_UART.availableForWrite() < 100)
   {
     g_posvel_tx_skipped++;
     return;
@@ -1739,7 +1750,7 @@ static void sendPositionVelocityDataMavlink()
       INS_GNSS_Packet.velocity_north, INS_GNSS_Packet.velocity_east,
       -estimated_velocity);
   len = mavlink_msg_to_send_buffer(buf, &m);
-  Serial5.write(buf, len);
+  ONBOARD_LINK_UART.write(buf, len);
 
   mavlink_msg_attitude_pack(
       1, MAV_COMP_ID_AUTOPILOT1, &m, (uint32_t)millis(),
@@ -1747,7 +1758,7 @@ static void sendPositionVelocityDataMavlink()
       IMU_Packet.gyroscope_x, IMU_Packet.gyroscope_y,
       IMU_Packet.gyroscope_z);
   len = mavlink_msg_to_send_buffer(buf, &m);
-  Serial5.write(buf, len);
+  ONBOARD_LINK_UART.write(buf, len);
 }
 
 /**
@@ -1767,9 +1778,9 @@ static void handleGuidanceCommandsMavlink()
   mavlink_status_t status;
   uint8_t processed = 0;
 
-  while (Serial5.available() && processed < MAX_BYTES_PER_LOOP)
+  while (ONBOARD_LINK_UART.available() && processed < MAX_BYTES_PER_LOOP)
   {
-    const uint8_t byte_in = (uint8_t)Serial5.read();
+    const uint8_t byte_in = (uint8_t)ONBOARD_LINK_UART.read();
     processed++;
 
     if (mavlink_parse_char(MAVLINK_COMM_1, byte_in, &msg, &status) !=
@@ -1890,12 +1901,12 @@ void sendPositionVelocityData()
 
   // 4. 通过Serial5发送完整数据帧（18 字段 74 字节 / 8 字段 34 字节）
   // 非阻塞保护：TX 缓冲不足时跳过本帧，避免阻塞控制环。
-  if (Serial5.availableForWrite() < kPosVelFrameLen)
+  if (ONBOARD_LINK_UART.availableForWrite() < kPosVelFrameLen)
   {
     g_posvel_tx_skipped++;
     return;
   }
-  Serial5.write(serial5Buffer, kPosVelFrameLen);
+  ONBOARD_LINK_UART.write(serial5Buffer, kPosVelFrameLen);
 }
 
 /**
@@ -1930,9 +1941,9 @@ void handleGuidanceCommands()
   uint8_t processed_count = 0;
 
   // 循环读取串口，直到缓冲区空或达到单次处理上限
-  while (Serial5.available() && processed_count < MAX_BYTES_PER_LOOP)
+  while (ONBOARD_LINK_UART.available() && processed_count < MAX_BYTES_PER_LOOP)
   {
-    byte_in = Serial5.read(); // 读取一个字节
+    byte_in = ONBOARD_LINK_UART.read(); // 读取一个字节
     processed_count++;        // 计数器累加
 
     switch (current_state)
