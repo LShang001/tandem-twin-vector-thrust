@@ -2116,11 +2116,25 @@ static void mavlinkSendTelemetry()
       break;
     }
 
-    uint32_t custom_mode = (uint32_t)mode;
+    // ★ 2026-11-06 custom_mode 改用 ArduPilot Copter 标准编号：
+    //   QGC 的模式名映射表只对 ARDUPILOTMEGA/PX4 生效，GENERIC 下只会显示数字。
+    //   映射：MANUAL→0(STABILIZE) / AUTO_ALTITUDE→2(ALT_HOLD) /
+    //         AUTO_POSITION→5(LOITER) / GUIDED→4(GUIDED)。
+    //   代价：QGC 会显示 "ArduCopter"。参数、消息、命令全走标准 MAVLink，
+    //   功能不受影响——这是为了让人在 QGC 里直接看懂当前模式，而不是猜 "Mode 0"。
+    uint32_t custom_mode;
+    switch (mode)
+    {
+    case MANUAL:        custom_mode = 0U; break;   // STABILIZE
+    case AUTO_ALTITUDE: custom_mode = 2U; break;   // ALT_HOLD
+    case AUTO_POSITION: custom_mode = 5U; break;   // LOITER
+    case GUIDED:        custom_mode = 4U; break;   // GUIDED
+    default:            custom_mode = 0U; break;
+    }
     uint8_t system_status = armed ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
 
     mavlink_msg_heartbeat_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
-                               MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_GENERIC,
+                               MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_ARDUPILOTMEGA,
                                base_mode, custom_mode, system_status);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     mavWriteNonBlocking(buf, len);
