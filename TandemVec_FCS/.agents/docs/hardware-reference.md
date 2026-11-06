@@ -13,7 +13,7 @@
 | Serial5 | UART5 | 上位机轨迹规划接口 + 制导指令接收（921600 baud） |
 | Serial6 | USART6 | AnoCom / MAVLink 地面站通信，互斥使用（**波特率见 `state_data.h` 的 `SERIAL6_BAUDRATE`**，2026-08-07 对齐 2.4G 数传为 2M，随数传模块可调；调试模式入口 "DBG\n"，见 AGENTS.md §调试工具链） |
 | Serial7 | UART7 | 光流传感器接口（自动识别：LQS48@921600 / MTF02P@115200） |
-| Serial8 | UART8 | USB Type-C 调试输出（921600 baud）；板载 CH343 USB 转串口芯片，数据线直连 PC 即可监视 |
+| Serial8 | UART8 | USB Type-C 调试输出（921600 baud）；**CH343 是板载贴片芯片**，UART8(PE0/PE1) 到板边 C 口走 **PCB 走线**，不是外部杜邦线或 USB-TTL 模块 → 该口通信异常时**不要先怀疑接线接触不良**，先查软件/配置（2026-11-07 用户确认） |
 
 ## 已验证关键事实（不得随意修改）
 
@@ -23,6 +23,7 @@
 | DPS310 PE15 用作 **I2C 地址选择** (HIGH→0x77) | 原理图网络名 `BARO_INT` 有误导性，实际是 I2C 地址选择引脚 |
 | ICM42688 在原理图中位号为 **R12** | 非电阻，是 LGA-14 IMU 芯片。`GYRO_INT` 连接 PC4，但固件用轮询未使用中断 |
 | **全部 8 路 UART / 4 路 SPI / 2 路 I2C / 8 路 PWM 引脚** 已于 2026-06-30 EDA 实测交叉验证一致 | — |
+| **UART8 双向链路 2026-11-07 实测通过** | 下行 100 Hz×74 B = 7.4 KB/s 零丢帧；上行 10 Hz 发 20 帧收 20 帧、demo 发 62 帧收 62 帧（100%）。★ 踩坑：`BFS_ANOCOM_ON_USB` 会让 `AnoComProtocol AnoComUsb(&Serial8)` 也挂到 Serial8，与 `BFS_ONBOARD_LINK_ON_UART8` 抢同一串口，上行帧被当非 0xAB 垃圾吃掉（实测只剩 30%，且 `bad=0` 因为帧根本没到解析器）。同口跑两种协议时只能有一个消费者。 |
 
 ## 未使用硬件资源（扩展开发时优先查阅）
 
