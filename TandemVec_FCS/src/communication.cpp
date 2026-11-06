@@ -2134,7 +2134,9 @@ static void mavlinkSendTelemetry()
     uint8_t system_status = armed ? MAV_STATE_ACTIVE : MAV_STATE_STANDBY;
 
     mavlink_msg_heartbeat_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
-                               MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_ARDUPILOTMEGA,
+                               // 本机是 VTVL 火箭，用 MAV_TYPE_ROCKET(9) 而不是
+                               // QUADROTOR(2)：语义准确，地面站机型图标/识别才对得上。
+                               MAV_TYPE_ROCKET, MAV_AUTOPILOT_ARDUPILOTMEGA,
                                base_mode, custom_mode, system_status);
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     mavWriteNonBlocking(buf, len);
