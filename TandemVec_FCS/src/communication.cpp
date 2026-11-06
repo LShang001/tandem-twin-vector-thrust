@@ -2099,7 +2099,7 @@ static void mavlinkSendTelemetry()
     ControlMode mode = getControlMode((float)raw_rc_values[6]);
     bool armed = (raw_rc_values[4] > 1500);
 
-    uint8_t base_mode = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED;
+    uint8_t base_mode = MAV_MODE_FLAG_CUSTOM_MODE_ENABLED | MAV_MODE_FLAG_STABILIZE_ENABLED;
     if (armed)
       base_mode |= MAV_MODE_FLAG_SAFETY_ARMED;
     switch (mode)

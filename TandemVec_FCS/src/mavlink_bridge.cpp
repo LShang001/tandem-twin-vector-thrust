@@ -291,6 +291,24 @@ static void mavHandleCommand(const mavlink_command_long_t &cmd)
     }
 
     case MAV_CMD_REQUEST_MESSAGE:              // 512：请求指定消息
+    {
+        // ★ 2026-11-06：原来不区分请求哪条，一律回 AUTOPILOT_VERSION——
+        //   QGC 请求 HOME_POSITION 却收到能力帧会困惑。这里明确区分：
+        //   支持的按需补发，不支持的明确回 UNSUPPORTED。
+        const uint32_t mid = (uint32_t)cmd.param1;
+        if (mid == MAVLINK_MSG_ID_AUTOPILOT_VERSION || mid == 0U)
+        {
+            mavSendAutopilotVersion();
+            mavSendCommandAck(cmd.command, MAV_RESULT_ACCEPTED);
+        }
+        else
+        {
+            // 其余消息由各自的周期分频发送，不支持单次点播
+            mavSendCommandAck(cmd.command, MAV_RESULT_UNSUPPORTED);
+        }
+        break;
+    }
+
     case MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES: // 520
         mavSendAutopilotVersion();
         mavSendCommandAck(cmd.command, MAV_RESULT_ACCEPTED);
