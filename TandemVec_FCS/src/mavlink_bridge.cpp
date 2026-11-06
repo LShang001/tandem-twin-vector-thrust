@@ -79,7 +79,7 @@ static uint32_t s_msg_interval_us[256];
 static uint32_t s_msg_last_us[256];
 
 /** 该消息本拍是否允许发送。未设置间隔时返回 true，沿用原有 tick 分频。 */
-static bool mavIntervalOk(uint32_t id)
+bool mavIntervalOk(uint32_t id)
 {
     if (id >= 256U || !mavIsTunable(id))
     {

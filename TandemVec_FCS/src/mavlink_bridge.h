@@ -23,6 +23,9 @@
 // 上行消息分发（handleAnoCom 的 mavlink 分支调用，帧已通过 CRC 校验）
 void mavlinkHandleRx(const mavlink_message_t &msg);
 
+/** 该消息本拍是否允许发送（SET_MESSAGE_INTERVAL / 511 控制）。 */
+bool mavIntervalOk(uint32_t id);
+
 // 下行周期发送（mavlinkSendTelemetry 内调用）：
 //   - PARAM_VALUE 广播状态机（REQUEST_LIST 触发后逐条发，200Hz 每拍 1 条）
 //   - STATUSTEXT 队列轮发（1Hz）
