@@ -869,17 +869,20 @@ void handleAnoCom()
   //   模块内部丢弃约 79% 的帧 —— 实测所有功能码统一掉到 21.24 Hz 就是这个原因
   //   （固件侧 ano_skip=0、调度 200Hz 均正常，问题在无线侧容量）。
   //   降载后 1847 B/s（14.8 kbps），留 26% 余量；姿态/控制保 20Hz，低频帧降到 1–5Hz。
-  // ★ 2026-11-06 恢复原设计档位（此前因误判带宽把核心帧砍到 20Hz，砍过头了）：
-  //   实测 20K 档 6.4KB/s 校验率 99.98%，完全撑得住原设计 100/50Hz。
-  //   保留本次真正有价值的改动：把 0x05/0x06/0x07 从 disp 拆出、电池从 gps 拆出。
-  const bool fast_tick = (t % 2 == 1);       // 100Hz 0x01 IMU / 0x03 欧拉（原设计）
-  const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制 / 0xF1 执行器（原设计）
-  const bool state_tick = (t % 8 == 3);      //  25Hz 0x05 模式解锁 / 0x06 速度 / 0x07 高度
-  const bool pos_tick  = (t % 4 == 2);       //  50Hz 0x08 位置（原设计）
-  const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压（从 gps 的 10Hz 拆出同频）
-  const bool rc_tick   = (t % 8 == 4);       //  25Hz 0x40 遥控（原设计）
-  const bool disp_tick = (t % 8 == 6);       //  25Hz 0x20 PWM / 0x30 目标速度（原设计）
-  const bool gps_tick  = (t % 20 == 10);     //  10Hz GPS（原设计）
+  // ★ 2026-11-06 榨干 20K 档余量（实测 558 帧/s 只占 58%，还有 42% 没用）：
+  //   原则——核心状态（IMU 原始/姿态/位置/速度/控制）应尽量贴近控制环频率，
+  //   辅助量（PWM/角速度副本/状态字）降频腾带宽。
+  //   估算：IMU 200Hz(4.2KB/s) + 欧拉 100Hz(1.5) + 位置/控制/执行器/目标 50Hz(4.2)
+  //        + 模式速度高度 50Hz(0.6) + 其余 ≤10Hz(1.0) ≈ 11.6 KB/s = 58% 占用。
+  const bool fast_tick = true;               // 200Hz 0x01 IMU 原始（与控制环同频）
+  const bool euler_tick = (t % 2 == 1);      // 100Hz 0x03 欧拉角（地面站显示够，不占满）
+  const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制 / 0xF1 执行器
+  const bool state_tick = (t % 4 == 3);      //  50Hz 0x05 模式解锁 / 0x06 速度 / 0x07 高度
+  const bool pos_tick  = (t % 4 == 2);       //  50Hz 0x08 位置（与 EKF 输入同频）
+  const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压
+  const bool rc_tick   = (t % 20 == 6);      //  10Hz 0x40 遥控（观察摇杆，无需 25Hz）
+  const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x30 目标速度 / 0x0B 角速度
+  const bool gps_tick  = (t % 100 == 10);    //   2Hz GPS（数据源本身 10Hz，高频只是重复）
 
   if (fast_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
   {
@@ -904,7 +907,12 @@ void handleAnoCom()
         // 0x03 飞控姿态欧拉角（7B）：ROL/PIT/YAW int16 ×100 [deg] + FUSION_STA u8。
         // FUSION_STA 为固件自定义位域：bit7=DETA100 在线、bit6=数据源=DETA100、
         // 低 6 位=nav_system_initialized（EKF 融合状态）。@ref PROTOCOL-001 §二.1.3
-        AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
+        // ★ 2026-11-06：0x01 提到 200Hz 后，欧拉角单独按 100Hz 发——地面站显示
+        //   100Hz 已足够平滑，把省下的带宽让给 IMU 原始量与位置。
+        if (euler_tick)
+        {
+          AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
+        }
         // 0x0A 目标姿态（6B）：3×int16 ×100。★ 第 3 字段在官方手册是目标航向角，
         // 本工程承载的是目标航向**角速率** [deg/s]（航向为纯速率指令，无角度回中），
         // GCS 侧 decode_target_attitude 同口径；字节/缩放不变。@ref PROTOCOL-001 §二.1.9
