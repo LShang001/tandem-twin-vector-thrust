@@ -30,7 +30,8 @@
  *
  * 优先级（高→低）：
  *   FAULT > FAILSAFE > CALIBRATING > NO_RECEIVER > LINK_DOWN
- *   > LOW_LQ > LOW_VOLTAGE > ARMED_*(模式) > STANDBY
+ *   > BAT_CRITICAL > LOW_LQ > LOW_VOLTAGE
+ *   > EKF_NOT_CONVERGED > GNSS_NO_FIX > ARMED_*(模式) > STANDBY
  */
 enum class FcsLedState {
     BOOT,          // 上电自检：白→蓝→绿 渐变 1.2s（首次 update 自动播放）
@@ -41,6 +42,9 @@ enum class FcsLedState {
     LINK_DOWN,     // 地面断链（曾建链）：品红慢闪 ~0.8Hz
     LOW_LQ,        // 弱信号（LQ<40%）：橙慢闪 1Hz
     LOW_VOLTAGE,   // 低压：红慢呼吸 2s
+    BAT_CRITICAL,  // 电池危险（<10.5V）：红极快闪 20Hz（比低压更急）
+    EKF_NOT_CONVERGED, // EKF 未收敛（导航未初始化）：紫慢脉冲 1.2s
+    GNSS_NO_FIX,   // 无 GNSS 定位：蓝紫交替 0.6s
     ARMED_MANUAL,  // 解锁+手动模式：绿呼吸 2s
     ARMED_ALT,     // 解锁+高度保持：青呼吸 2s
     ARMED_POS,     // 解锁+定点：白呼吸 2s
@@ -136,6 +140,16 @@ public:
             case FcsLedState::LOW_VOLTAGE:
                 renderBreathing(RED_R, RED_G, RED_B, now_ms, 2000, 0.40f);  // 红慢呼吸
                 break;
+            case FcsLedState::BAT_CRITICAL:
+                renderBlinking(RED_R, RED_G, RED_B, now_ms, 25);      // 红极快闪 20Hz
+                break;
+            case FcsLedState::EKF_NOT_CONVERGED:
+                renderBreathing(PPL_R, PPL_G, PPL_B, now_ms, 1200, 0.30f);  // 紫慢脉冲
+                break;
+            case FcsLedState::GNSS_NO_FIX:
+                renderAlternate(BLU_R, BLU_G, BLU_B,
+                                PPL_R, PPL_G, PPL_B, now_ms, 300);    // 蓝紫交替
+                break;
             case FcsLedState::ARMED_MANUAL:
                 renderBreathing(GRN_R, GRN_G, GRN_B, now_ms, 2000, 0.50f);  // 绿呼吸
                 break;
@@ -169,6 +183,23 @@ private:
         _strip.setPixelColor(0, (uint8_t)(r * brightness),
                                 (uint8_t)(g * brightness),
                                 (uint8_t)(b * brightness));
+        _strip.show();
+    }
+
+    // 双色交替：half_period 内显示颜色 A，下一个 half_period 显示颜色 B。
+    // 用于表达"不满足但也不到告警"的中间态（如无 GNSS 定位、EKF 未收敛），
+    // 单色无法与"待机/正常"区分时用双色。亮度统一减半，与 renderBlinking 一致。
+    void renderAlternate(uint8_t r1, uint8_t g1, uint8_t b1,
+                         uint8_t r2, uint8_t g2, uint8_t b2,
+                         unsigned long t, unsigned long half_period) {
+        if ((t / half_period) % 2 == 0)
+        {
+            _strip.setPixelColor(0, r1 >> 1, g1 >> 1, b1 >> 1);
+        }
+        else
+        {
+            _strip.setPixelColor(0, r2 >> 1, g2 >> 1, b2 >> 1);
+        }
         _strip.show();
     }
 

@@ -218,6 +218,9 @@ static bool s_ever_linked = false;
 static const float ELRS_LQ_WARN_THRESHOLD = 40.0f;
 // 低压告警阈值 (mV)：3S LiPo 满电 12.6V，11.1V 以下提示（按电池配置可调）
 static const float LED_LOW_VOLTAGE_MV = 11100.0f;
+// ★ 2026-11-06 电池危险阈值（低于低压告警一档，用极快闪区分紧急程度）：
+//   4S 电池 3.0V/cell 已接近放电终止，此时必须立即降落。
+static const float LED_CRIT_VOLTAGE_MV = 10500.0f;
 
 /**
  * @brief CRSF 通道回调：把 16 通道 PWM(988-2012) 拷入 `raw_rc_values`
@@ -1888,6 +1891,10 @@ void handleStatusLedTask()
   {
     state = FcsLedState::LINK_DOWN;       // 地面断链：品红慢闪
   }
+  else if (bat_voltage_mv > 0 && bat_voltage_mv < LED_CRIT_VOLTAGE_MV)
+  {
+    state = FcsLedState::BAT_CRITICAL;    // 电池危险：红极快闪（比低压更急）
+  }
   else if (s_elrs_lq < ELRS_LQ_WARN_THRESHOLD)
   {
     state = FcsLedState::LOW_LQ;          // 弱信号：橙慢闪
@@ -1895,6 +1902,18 @@ void handleStatusLedTask()
   else if (bat_voltage_mv > 0 && bat_voltage_mv < LED_LOW_VOLTAGE_MV)
   {
     state = FcsLedState::LOW_VOLTAGE;     // 低压：红慢呼吸
+  }
+  else if (!nav_system_initialized)
+  {
+    // 导航未收敛：紫慢脉冲。与 GNSS_NO_FIX 的区别在于——EKF 已建但尚未收敛
+    // （传感器在跑但状态不可信），此时解锁飞行风险更高，优先于 GNSS 指示。
+    state = FcsLedState::EKF_NOT_CONVERGED;
+  }
+  else if (Status_Packet.filter_status.gnss_fix_status < DETA100_GPS_FIX_TYPE_3D_FIX)
+  {
+    // 无 3D 定位：蓝紫交替。已收敛但只有 2D/无定位，定位相关功能不可用。
+    // 数据源与 flight_control.cpp 的定位使能判据同源，避免两处口径不一。
+    state = FcsLedState::GNSS_NO_FIX;
   }
   else if (is_armed)
   {
