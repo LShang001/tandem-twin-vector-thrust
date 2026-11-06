@@ -207,3 +207,77 @@ Agent 只读其他 Agent 的产出文件。修改权归对应 Agent 所有：
 
 本文件（GOV-003）是**完整规范**，包含 Agent 角色定义、工作流、交接协议。
 两者互补：AGENTS.md 快速上手，GOV-003 深度参考。
+
+---
+
+## 6. 多会话并发与变更联动规范（2026-11-06）
+
+> 背景：revo 主力机与 magicbook 上各有一个 agent 会话，共用同一个 GitHub 仓库。2026-11-06 凌晨，
+> 本地准备推送 README 时远端已有另一会话的 `704c655`（修 `test_single_edf_4vane` P10 断言与
+> GCC15 `normal_distribution(0,0)` 中止问题）。后知后觉才发现：它补的两处正是前者改默认值时
+> 漏改的。教训不是"运气好"，而是流程缺失。
+
+### 6.开工三步（动仓库前必做）
+
+```bash
+git -c http.proxy=http://127.0.0.1:7897 fetch origin
+git status --short                      # 有未提交改动先确认归属
+git log --oneline HEAD..origin/main     # 远端领先的提交，逐个 git show 看过再合
+git merge --ff-only origin/main         # 本地无新提交时
+```
+
+- 远端领先时**禁止** `git reset --hard origin/main`（丢弃本地未推提交）与 `git push --force`（永久丢远端提交）。
+- 本地有未推提交时要 rebase 或手工合并，不要用新版本硬盖对端。
+- 合入前必须 `git show --stat <hash>` 看对方改了什么；看不懂就先不推，先问。
+
+### 6.收工三步
+
+```bash
+git status --short        # 只允许预期文件；无关改动不入本提交
+git diff --check          # 空白/行尾问题
+git -c http.proxy=http://127.0.0.1:7897 push origin main
+```
+
+同一文件被两端同时改（README/AGENTS.md/CTL 文档高发）：按 2026-10-20 用户指令，先读对端改动、
+判断价值、手工并入、再提交；不复用 `stash + 覆盖`。
+
+### 6.参数与默认值变更的联动清单
+
+改一处默认值往往牵动六处，2026-11-05→06 实测漏改两处（P10 断言、GCC15 测试）：
+
+| 变更类型 | 必须同步的位置 |
+|---|---|
+| 机型默认值（例：`attitude_limit_deg` 45→120） | `FlightCtrlParams.h` 默认值 + `static_assert` + **宿主测试里的默认值断言**（`test_single_edf_4vane` P10 曾漏） |
+| 参数数量（168→169、单涵道 20→21 项） | `ano_params.h` `ANO_PARAMS_COUNT` 与注释；`FlightCtrlParams.h` 参数表宏与"N 项"注释；GCS `params.py` 名字表与包线；GCS 测试的数量断言；对应 CTL 文档；AGENTS.md 相关条目 |
+| 新增参数 | 注册表插入位置会移动其后所有参数 ID → 必须同步 GCS 测试里的 ID 断言（`vane_dir1` 156→157、`dt_s` 167→168 这类） |
+| 协议帧格式（AnoCom 0xE0/0xE1/0xE2/0xE3） | 固件发送侧 + GCS `anocom.py` 解析 + 匿名上位机实测抓帧（三方一致才算改完） |
+
+### 6.测试口径
+
+- **改默认值后必须跑全量** `bash TandemVec_FCS/test_host/run_all.sh`：只跑单文件会漏跨文件断言。
+- **必须在目标工具链上跑**：本机与 magicbook 的 g++ 版本不同；GCC 15 对 `normal_distribution(0,0)`
+  有前置断言会中止，旧工具链靠未定义行为静默返回 0。本机过 ≠ 目标机过。
+- 烧录前再 `git fetch` 确认远端未变，避免把别人的修复烧成旧版。
+
+### 6.跨机同步（git bundle）
+
+magicbook 访问不了 GitHub，revo ↔ magicbook 走 bundle：
+
+```bash
+# 1) 先问对端当前 HEAD（起点必须是它，不是本地上次推送点）
+ssh magicbook "cd D:/tandem-twin-vector-thrust; git rev-parse --short HEAD"
+# 2) 以对端 HEAD 为起点建增量包
+git bundle create tmp\sync.bundle <对端HEAD>..main
+scp tmp\sync.bundle magicbook:D:/tandem-twin-vector-thrust/tmp/
+# 3) 对端拉取并**立刻核对 HEAD**
+ssh magicbook "cd D:/tandem-twin-vector-thrust; git pull --ff-only tmp/sync.bundle main; git rev-parse --short HEAD"
+```
+
+**2026-11-06 实际踩坑**：本机用 `70dd518..main` 建包，对端停在 `704c655`，
+`git pull` 报 `Repository lacks these prerequisite commits` 而**脚本没检查返回值**，
+继续编译烧录——烧进去的是旧固件，参数读回仍是旧行为（out_max=20 而不是换算后的 4583）。
+三条硬规则：
+
+- bundle 起点一律用**对端 HEAD**；不确定就用 `git bundle create x.bundle --all`（全量，体积换确定性）。
+- `git pull` 后必须 `git rev-parse --short HEAD` 与预期一致才能继续；`pull` 的输出不要用 `Select-Object -Last 1` 截断掉错误。
+- **烧录后必须用参数读回验证新行为**（改默认值→读回应变化；改换算→读回应等于新公式值），`Verified OK` 只证明写进了 Flash，不证明固件是新的。

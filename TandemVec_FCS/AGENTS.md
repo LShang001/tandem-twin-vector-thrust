@@ -2,70 +2,28 @@
 
 > 基于 PlatformIO 的 STM32H743 **纵列双发矢量推力 VTOL 飞控固件**（从共轴双桨 VTVL 移植重构）。安全关键嵌入式控制软件，不是普通应用代码。
 
-## 当前实机机型与构建（2026-11-06 更新；优先级高于默认描述）
+## 当前实机机型与构建
 
 - **同一块 WeAct MiniSTM32H743 板可烧三种机型，env 选错等于烧错飞机**：
 
-  | 机型 | 构建 env | 首次实飞 | `health` 输出 |
-  |---|---|---|---|
-  | 纵列双发矢量推力 | `[env:TandemVec_FCS]` | 2026-08 | `veh=TandemVec` |
-  | 共轴双桨 VTVL | `[env:CoaxialVTVL]`（`-DBFS_COAXIAL_VTVL`） | 2026-11-04 | `veh=CoaxialVTVL` |
-  | 单涵道 + X 型四燃气舵 | `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`） | 2026-11-05 | `veh=SingleEdf4Vane` |
+  | 机型 | 构建 env | `health` 输出 |
+  |---|---|---|
+  | 纵列双发矢量推力 | `[env:TandemVec_FCS]` | `veh=TandemVec` |
+  | 共轴双桨 VTVL | `[env:CoaxialVTVL]`（`-DBFS_COAXIAL_VTVL`） | `veh=CoaxialVTVL` |
+  | 单涵道 + X 型四燃气舵 | `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`） | `veh=SingleEdf4Vane` |
 
-- **烧录前必须先确认这次飞哪一型**，再选 env；上板后第一件事是 `health` 核对 `veh=` 与预期一致
-  （2026-11-06 起三种机型各自打印自己的标签，不再共用 `TandemVec`）。
-- 共轴 PID 已统一为通用 `att_*`/`rate_*`，不再有 `coax.att_kp_*`/`coax.rate_kp_*`；
-  `coax.*` 只剩质量/推力/舵机/PWM/力臂/惯量/限幅等硬件参数。
-- 共轴 SIL 默认使用 `--coax-plant-model rigorous`；L1 集总 plant 的俯仰/姿态约定
-  有误，会误报 max_pitch≈23°，不要再用 L1 结果判共轴。
-- **手动模式不做姿态切电机**：手动 RATE/ATTITUDE 可能翻跟头或被风扰超过 45°，
-  不因姿态角切电机；AUTO/GUIDED 保留 `coax.att_limit_deg`（默认 90°，可调
-  10–180°）保护。禁止把 45° 硬切电机重新加到手动路径。
-- 目前证据：统一 PID + 10° 限幅，rigorous SIL 24/24；扩展矩阵 160 例 158/160；
-  仍无共轴台架/实飞数据。
-- **IMU 2 kHz 已达标（2026-11-04 P1）**：2kHz TIM8 ISR 单包入 SPSC ring，
-  Navigation 200Hz 按 elapsed 限流排空；SPI 缓冲传输+24MHz、备份姿态200Hz，
-  单样本约16µs。非 DBG 0xF4 实测 120s：mean=2024.5/std=43.8、
-  min1870.6/max2192.0、ring_drop=0；conv=1、vel=0、CPU41.5%。
-  全量宿主 rc=0、共轴 SIL 40/40。默认 `[env:CoaxialVTVL]` 已启用，
-  `[env:CoaxialVTVL_UI]` 保留纯轮询回退。
-- **日志/诊断（2026-11-04）**：Navigation 60s一次的多段 Serial8 打印默认关闭（`BFS_NAV_EKF_VERBOSE`），它是300s数传/P1长停顿根因；需要时显式打开。**协议调试接口（2026-11-04）**：0xF5 1Hz上报 `link_seq/ano_skip/proto_drop/mav_skip/nav_gap/ring`；DBG `health` 现在含 AnoCom/MAVLink
-  tx-skip、AnoCom组丢帧、P1 ring水位/溢出/空读、Navigation最大入口间隔，以及
-  `navprof` 的 EKF预测/位置量测/GNSS更新最大耗时。MAVLink 模式可用 `DBG\n` 转义切回 AnoCom；不再需要物理复位。
-- **P1 是采样架构阶段名，不是 env 名**：生产 P1 = `[env:CoaxialVTVL]`；
-  不保留单独的 P1 实验 env（临时 profiling 用编译宏按需开启）。纯轮询回退 =
-  `[env:CoaxialVTVL_UI]`。
-  **高频采样/时序测量仍禁止用 DBG**，只用 `tvc record` 0xF4 或逻辑分析仪；调试经验见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
-- **单涵道 + X 型四燃气舵机型（2026-11-05 从外部工程 `Universal-EDF` 移植；
-  ★ 当晚实飞验证通过：飞行稳定、出厂默认控制参数无需调整）**：
-  `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE -DBFS_DBG_USB_SERIAL8 -DBFS_ANOCOM_ON_USB`）；
-  四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6，与纵列双发共用同一块板，只换引脚语义。
-  **飞控与传感器安装方向、机体外形与共轴 VTVL 完全一致**（用户确认）→ IMU 轴映射与存档系
-  直接复用。四舵物理方向沿用源机型台架确认值 (+1,−1,+1,−1)。速率环工作在**角加速度域**
-  （输出目标 α [deg/s²]，与纵列/共轴同一契约，kp=57.3 s⁻¹ = 源机型舵角域 0.25 的等价换算），
-  限幅口径由机械摆角换算：`out_max = ctrl_vane_deg·(4k/I)·180/π`（20° → 4583.66 deg/s²），
-  手动直通与自动修正共用同一张源机型矩阵（矩阵、yaw 轴符号属机型知识，收在
-  `SingleEdf4VaneAllocator.h`）。质量/推力/舵效/惯量仍为 MODEL-DEFAULT（未称重未实测），
-  但默认值实飞可稳定控制；参数 169 项（`sedf.*` 21 项）可经匿名上位机在线调。
-  移植说明与验证记录见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`。
-  采样架构（2026-11-06 统一下沉，commit 324004c）：2kHz TIM8 ISR 单包入 SPSC ring
-  （`BFS_IMU_ISR_RING`）+ 备份姿态 200Hz 分频（`BFS_IMU_ATT_DECIMATE`）已从共轴专属下沉到
-  主 env，三机型全部继承；`[env:CoaxialVTVL_UI]` 用 `-U` 显式取消，保持纯轮询回退。
-  ★ 单涵道 120s 完整实测（2026-11-06，0xF4 遥测走 USB 调试口，全程不进 DBG）：
-  1106 帧 / 120s（9.22Hz，设计 10Hz 降载）；imu_rate_hz mean=1979.9、std=60.6、
-  min=1817.4、max=2137.2；**ring_drop=0**（全程无积压）。对照共轴 P1 基线
-  mean=2024.5/std=43.8。均值低约 2% 源于单涵道额外开启 BFS_DBG_USB_SERIAL8 +
-  BFS_ANOCOM_ON_USB（CPU 49.3% vs 共轴 41.5%），非采样架构差异。
-  **实飞版 env = `[env:SingleEdf4Vane_Flight]`**（2026-11-06 新增，commit d01ac8d）：
-  不带 BFS_DBG_USB_SERIAL8、-U BFS_TASK_PROFILE / -U BFS_NAV_PROFILE /
-  -U BFS_PROFILE_TO_ANOCOM_SERIAL；保留 2kHz ISR ring、AnoCom USB 参数链路、
-  0xF4/0xF5 遥测、全部联锁与限幅。编译 RAM 63.2% / Flash 18.5%。
-  实机验收（烧 d01ac8d）：参数读回 ctrl_vane_deg=20.0 与 out_max=4583.66 正确；
-  发 DBG\n 无 [DBG] 回显（通路已关，符合预期）；0xF4 30s 采样
-  mean=2020.9 / min=1913.1 / max=2111.5 / ring_drop=0，比调试版的
-  mean=1979.9/std=60.6 更接近 2000——去掉剖析计时与 DBG 通路确实降低了 CPU 争用。
-  **烧实飞版前的必查清单**：①参数链路读回；②0xF4 采样率；③断动力核对四舵
-  方向与限位；④CH5 解锁/上锁；⑤倾角保护阈值；⑥CH6 使能已停用（解锁即出油门）。
+- **烧录前先确认飞哪一型**；上板第一件事 `health` 核对 `veh=`。
+- **单涵道实飞用 `[env:SingleEdf4Vane_Flight]`**：不带 `BFS_DBG_USB_SERIAL8`、`-U BFS_TASK_PROFILE`/`BFS_NAV_PROFILE`/`BFS_PROFILE_TO_ANOCOM_SERIAL`；保留 2kHz ISR ring、AnoCom USB 参数链路、0xF4/0xF5 遥测、全部联锁限幅。烧前六项自查见 CTL-008。
+- **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
+- **手动模式不做姿态切电机**：手动 RATE/ATTITUDE 可能翻跟头或被风扰超 45°，不因姿态角切电机；AUTO/GUIDED 保留 `coax.att_limit_deg`（默认 90°，可调 10–180°）。禁止把 45° 硬切电机加回手动路径。
+- **`BFS_NAV_EKF_VERBOSE` 默认关**：Navigation 60s 一次的多段 Serial8 打印是 300s 数传/P1 长停顿的根因，需要时才显式打开。
+- **P1 是采样架构阶段名，不是 env 名**：生产 = `[env:CoaxialVTVL]`，纯轮询回退 = `[env:CoaxialVTVL_UI]`；临时 profiling 用编译宏。
+- **高频采样/时序测量禁用 DBG**：只用 0xF4（`tvc record`）或逻辑分析仪；MAVLink 模式可用 `DBG\n` 切回 AnoCom，不需物理复位。
+- **单涵道机型要点**（完整移植说明见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`）：
+  四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6；速率环 α 域，kp=57.3 s⁻¹ 是源机型舵角域 0.25 的等价换算；限幅由 `sedf.ctrl_vane_deg` 换算（20° → 4583.66 deg/s²），**不要直接改 `rate_*.out_max`**（下次 apply 会覆盖）；矩阵与 yaw 轴符号属机型知识，收在 `SingleEdf4VaneAllocator.h`。
+
+> 三机型历次实飞/实测完整数据（IMU 2kHz 基线、单涵道 120s 采样、验收读数）见 `docs/memory/2026-11-04-IMU-2kHz攻关.md`、`docs/memory/2026-11-05-单涵道四燃气舵首飞.md`、`docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
+
 
 ## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
 
@@ -116,7 +74,7 @@
 - 摇杆语义：ATTITUDE_MODE=roll/pitch 目标姿态角、yaw 目标角速度；RATE_MODE=三杆目标角速度。
 - `TVC_Control_Geometric.h`/`TVC_Control_3rdOrder_Poly.h` 已弃用；分配由 `TandemVec_ControlAllocation.h`。
 - **时基与 IMU 抽象（2026-11-04 P1）**：TIM8 6.4kHz；P1 用 2kHz ISR 单包入 SPSC ring，Navigation 200Hz 排空；备份 Madgwick/欧拉约200Hz，IMU 增量/EKF 每样本；默认 42688P，45686 用 `-DFCS_IMU_MODEL_ICM45686`；LPF 陀螺 200/加计 100Hz；EKF `q_accel_scale=2.0`；hAcc 门控宏默认 0。
-- **导航宏一览（除注明外均默认关，宏=0/1 双状态编译通过）**：`BFS_NAV_TRIAD_INIT`（TRIAD 初始化，`include/tilt_compass_triad.h`）、`BFS_NAVIGATION_PARAM_ALIGN`（参数辨识精对准，`include/ins_param_align.h`）、`BFS_PRELAUNCH_ALIGN_STABILITY_GATE`（预对准窗口，`include/ins_prelaunch_align.h`）、`BFS_NAVIGATION_IMU_HEALTH`（卡死监测）、`BFS_NAVIGATION_IMU_TEMP_COMP`（温补）、`BFS_NAVIGATION_GNSS_REANCHOR`（硬重锚）、`BFS_NAVIGATION_GNSS_HACC_GATE`（hAcc 门控）、**`BFS_AHRS_GNSS_FRESH_GATE`（默认 1，GNSS 新鲜时不做 AHRS/重力姿态辅助）**、**`BFS_ATT_AID_MODE_DEFAULT`（默认 5=严格 + 倾斜 σ 超 3° 后 AHRS 有界兜底：无外部参考时先纯陀螺，σ 超限后用 AHRS 保证不发散；1=纯严格 /0=AHRS 旧行为 /2=严格+AHRS 回退 /3=控制加速度指令补偿（研究臂，先验非观测，已被严格门控拦截）/4=强振动回退，运行期 `g_att_aid_mode`、ANO `att_mode`、SIL `--att-aid-mode`）**、`BFS_GRAVITY_AID_VEL_FF`（默认 0，2026-11-02 的“EKF 速度差分扣比力”自参照前馈，MC 证伪后仅作对照）、`BFS_MOTION_GRAVITY_GATE_RAD`（默认 15°，运动段方向门）、**`BFS_TILT_DG_WARN_DEG`/`BFS_TILT_DG_HARD_DEG`（默认 3°/10°，无参考漂移预算两级阈值，ANO 变量 `tilt_dg`/`tilt_hard`）、**`BFS_NAVIGATION_EMBEDDED_FLOAT_COVARIANCE`（默认 0，飞行 env=1：协方差传播中间量改 float，Phi·P·Phiᵀ 与 Simpson Qd 公式不变；上板 cov_avg 5.20→0.97 ms、Navigation avg 5.66→1.52 ms）**、**`BFS_GUIDED_ACCEL_TRIM`（默认 0，GUIDED 比力慢积分：0.1 Hz LPF、±0.5 死区、0.3 增益、±2.0 限幅、泄漏、进 GUIDED 预热 1 s）**、**`BFS_GUIDED_ACCEL_TRIM_VEL`（默认 0，速度差分输入，噪声下已证伪，仅对照）**、**`BFS_GUIDED_THRUST_ADAPT`（默认 0，推力增益在线辨识，乘性前馈补偿）**、**`BFS_THRUST_CURVE_QUADRATIC`（默认 0，仅 ESC 呈 F∝ω² 平方特性时启用；现役线性 ESC 不启用）**。上板验证与验收标准见 `docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md`；AHRS/重力融合的 A/B 见 `代码理论核查/AHRS姿态辅助与无GNSS重力融合-2026-11-01.md`。
+- **导航宏（18 个，除注明外默认关）**：完整表格（宏名 / 默认值 / 作用 / 开启前提）见 `docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md` §7——改导航宏或判 EKF 行为前先查那张表，别只凭记忆里的默认值；上板标定流程见同文档 §1–§6、§8。
 
 ## 核心参数
 
