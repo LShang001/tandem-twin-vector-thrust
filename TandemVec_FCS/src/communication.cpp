@@ -875,10 +875,9 @@ void handleAnoCom()
   //   估算：IMU 200Hz(4.2KB/s) + 欧拉 100Hz(1.5) + 位置/控制/执行器/目标 50Hz(4.2)
   //        + 模式速度高度 50Hz(0.6) + 其余 ≤10Hz(1.0) ≈ 11.6 KB/s = 58% 占用。
   const bool fast_tick = true;               // 200Hz 0x01 IMU 原始（与控制环同频）
-  const bool euler_tick = (t % 2 == 1);      // 100Hz 0x03 欧拉角（地面站显示够，不占满）
   const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制 / 0xF1 执行器
   const bool state_tick = (t % 4 == 3);      //  50Hz 0x05 模式解锁 / 0x06 速度 / 0x07 高度
-  const bool pos_tick  = (t % 4 == 2);       //  50Hz 0x08 位置（与 EKF 输入同频）
+  const bool pos_tick  = (t % 2 == 0);       // 100Hz 0x08 位置（与 EKF 输出同步）
   const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压
   const bool rc_tick   = (t % 20 == 6);      //  10Hz 0x40 遥控（观察摇杆，无需 25Hz）
   const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x30 目标速度 / 0x0B 角速度
@@ -909,10 +908,9 @@ void handleAnoCom()
         // 低 6 位=nav_system_initialized（EKF 融合状态）。@ref PROTOCOL-001 §二.1.3
         // ★ 2026-11-06：0x01 提到 200Hz 后，欧拉角单独按 100Hz 发——地面站显示
         //   100Hz 已足够平滑，把省下的带宽让给 IMU 原始量与位置。
-        if (euler_tick)
-        {
-          AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
-        }
+        // ★ 2026-11-06 提到 200Hz（与 IMU 同拍）：欧拉角是姿态主显示，
+        //   200Hz 下地面站曲线在任何缩放级别都不会出现台阶。
+        AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
         // 0x0A 目标姿态（6B）：3×int16 ×100。★ 第 3 字段在官方手册是目标航向角，
         // 本工程承载的是目标航向**角速率** [deg/s]（航向为纯速率指令，无角度回中），
         // GCS 侧 decode_target_attitude 同口径；字节/缩放不变。@ref PROTOCOL-001 §二.1.9
@@ -939,16 +937,37 @@ void handleAnoCom()
           imu_ring_drop = static_cast<float>(imuRingDropCount());
           imu_isr_empty = static_cast<float>(imuIsrEmptyCount());
 #endif
+          // ★ 2026-11-06 充实：Flight 版未开 BFS_IMU_PROF，原 6 个 prof 槽恒 0，
+          //   白白浪费 24B/帧。改为装运行时健康指标——不连 DBG 就能在地面站上看
+          //   CPU 负载、单趟最大耗时、主循环实际频率、遥测跳过和 ring 丢帧。
+          //   字段含义（按顺序，全部 float）：
+          //   [0] IMU 采样率 Hz   [1] CPU 千分比   [2] 单趟最大耗时 us
+          //   [3] 主循环频率 Hz   [4] 统计窗口 ms  [5] 遥测发送跳过次数
+          //   [6] ring 丢帧       [7] ring 空读   [8] 本帧序号（检测自身丢帧）
+          static uint32_t s_loop_cnt = 0;
+          static uint32_t s_loop_win_ms = 0;
+          static float s_loop_hz = 0.0f;
+          static uint32_t s_health_seq = 0;
+          s_loop_cnt++;
+          const uint32_t now_ms = static_cast<uint32_t>(millis());
+          if (s_loop_win_ms == 0) { s_loop_win_ms = now_ms; }
+          if (now_ms - s_loop_win_ms >= 1000U)
+          {
+            s_loop_hz = s_loop_cnt * 1000.0f /
+                        static_cast<float>(now_ms - s_loop_win_ms);
+            s_loop_cnt = 0;
+            s_loop_win_ms = now_ms;
+          }
           const float imu_health_f[9] = {
               g_imu_health_sample_rate_hz,
-#ifdef BFS_IMU_PROF
-              g_imu_prof_total_us, g_imu_prof_mag_us, g_imu_prof_madg_us,
-              g_imu_prof_pre_us, g_imu_prof_delta_us, g_imu_prof_spi_us,
-              imu_ring_drop, imu_isr_empty
-#else
-              0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
-              imu_ring_drop, imu_isr_empty
-#endif
+              static_cast<float>(schedulerCpuPermille()),
+              static_cast<float>(schedulerLoopMaxPassUs()),
+              s_loop_hz,
+              static_cast<float>(schedulerWindowMs()),
+              static_cast<float>(anoTelemetryTxSkipCount()),
+              imu_ring_drop,
+              imu_isr_empty,
+              static_cast<float>(s_health_seq++)
           };
           std::memcpy(imu_health, imu_health_f, sizeof(imu_health));
           // 0xF4诊断帧降载：100Hz→约10Hz（空口反压会阻塞主循环，实测导致P1 ring积压）。
