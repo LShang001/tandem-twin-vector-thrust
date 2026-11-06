@@ -184,8 +184,7 @@
 
 ```powershell
 pio run                    # 编译固件
-pio test -e test           # 宿主回归
-bash test_host/run_all.sh  # 宿主全量（40+ 段，以脚本实际为准）
+bash test_host/run_all.sh  # 宿主回归全量（40+ 段，以脚本实际为准）
 bash test_host/fw_sil/run_acceptance.sh          # SIL 验收：真实固件+EKF，3 seeds
 bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 ```
@@ -194,7 +193,8 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 - **重力口径**：导航/估计/控制的真值统一用 WGS-84 正常重力——固件侧 `nav_ekf.gravity_mps2()` / `ekf_gravity_mps2`（Somigliana，随经纬高），宿主测试侧 `ins_test::GravityWgs84()`（31.2304°N、5 m ≈9.794 m/s²）。`TandemVec_Config.h` 的 `g=9.79` 只作 1g 量程换算（`G_TO_MS2`）与 EKF 未初始化时的回退值，**不作导航真值**；用 9.79 构造比力会注入 ~0.004 m/s²，1 h 纯惯导可伪造出 24 km 级假漂移。
 - 上传只在用户明确要求时：`pio run -t upload`；串口监视加超时。
 - 找不到 `pio` 必须明确报告，不得声称构建通过。
-- 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `pio test -e test`；无法运行必须说明原因。
+- 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `bash test_host/run_all.sh`（可按改动面只跑其中相关段）；无法运行必须说明原因。
+- **不要用 `pio test -e test` 做回归**：`[env:test]` 是 STM32 板载自检固件环境（用 `pio run -e test`），PlatformIO 的 `test/` 只认嵌入式 Unity 单测；本项目所有回归都是宿主测试（g++ 直编，见 `test_host/run_all.sh`）。历史上 `test/ekf_host_regression.cpp`（4798 行宿主测试，自带 main）误放此处，导致 `pio test` 把固件源码 + 宿主 main + Unity 框架一起链接而报 `ld` 错误；2026-11-07 已归位 `test_host/legacy/`（该文件 `-fsyntax-only` 编译通过，但未被 `run_all.sh` 收录，作归档）。
 - **算法测试两阶段**：先理想模型（零噪声/零偏、WGS84 重力 `ins_test::GravityWgs84()`、解析真值）验证正确性，再真实噪声/零偏/振动/失锁评估工程效果；理想阶段失败修算法，真实阶段不达标先归因。
 - **不声称未执行的构建/测试/上板验证通过。**
 - **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `docs/registers/固件调试工具链-2026-11-01.md`。
