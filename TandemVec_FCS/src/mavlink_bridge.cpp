@@ -55,11 +55,63 @@ static uint8_t s_status_q_send = 0;   // 下一个发送位置
 // ---- 重启挂起 ----
 static bool s_reboot_pending = false;
 
+// ==================================================================
+// ★ 2026-11-06 消息间隔控制（MAV_CMD_SET_MESSAGE_INTERVAL / 511）
+// ------------------------------------------------------------------
+// 固件原本按 s_tick 硬分频，地面站无法干预。实现这条命令后，QGC 的
+// 「消息间隔」面板可直接调每条消息频率（-1 停发），带宽按需分配。
+// 只拦截可调遥测；ACK / PARAM_VALUE / STATUSTEXT 等协议必需帧一律不拦。
+// ==================================================================
+static bool mavIsTunable(uint32_t id)
+{
+    switch (id)
+    {
+    case 27:  case 30:  case 31:  case 32:  case 33:
+    case 35:  case 36:  case 74:  case 83:  case 105:
+    case 141: case 230: case 250: case 251:
+        return true;
+    default:
+        return false;
+    }
+}
+
+static uint32_t s_msg_interval_us[256];
+static uint32_t s_msg_last_us[256];
+
+/** 该消息本拍是否允许发送。未设置间隔时返回 true，沿用原有 tick 分频。 */
+static bool mavIntervalOk(uint32_t id)
+{
+    if (id >= 256U || !mavIsTunable(id))
+    {
+        return true;
+    }
+    const uint32_t iv = s_msg_interval_us[id];
+    if (iv == 0U)
+    {
+        return true;                      // 未设置 → 默认分频
+    }
+    if (iv == 0xFFFFFFFFu)
+    {
+        return false;                     // -1 → 停发
+    }
+    const uint32_t now = (uint32_t)micros();
+    if ((uint32_t)(now - s_msg_last_us[id]) < iv)
+    {
+        return false;                     // 还没到点
+    }
+    s_msg_last_us[id] = now;
+    return true;
+}
+
 // ------------------------------------------------------------------
 //  发送工具
 // ------------------------------------------------------------------
 static void mavSend(const mavlink_message_t &msg)
 {
+    if (!mavIntervalOk(msg.msgid))
+    {
+        return;                            // 地面站把这条调停了 / 还没到间隔
+    }
     uint8_t buf[MAVLINK_MAX_PACKET_LEN];
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     extern Uart Serial6;
@@ -219,6 +271,24 @@ static void mavHandleCommand(const mavlink_command_long_t &cmd)
                           "Mode via RC CH6 only (MAVLink mode denied)");
         mavSendCommandAck(cmd.command, MAV_RESULT_UNSUPPORTED);
         break;
+
+    case MAV_CMD_SET_MESSAGE_INTERVAL:         // 511：地面站设置消息频率
+    {
+        const uint32_t mid = (uint32_t)cmd.param1;
+        const int32_t iv = (int32_t)cmd.param2;   // 微秒；-1 停发；0 恢复默认
+        if (mid < 256U && mavIsTunable(mid))
+        {
+            s_msg_interval_us[mid] = (iv < 0) ? 0xFFFFFFFFu : (uint32_t)iv;
+            s_msg_last_us[mid] = 0;               // 重置计时，立即生效
+            mavSendCommandAck(cmd.command, MAV_RESULT_ACCEPTED);
+        }
+        else
+        {
+            // 不在可调列表（协议必需帧或未知 ID）：明确拒绝，别让地面站空等
+            mavSendCommandAck(cmd.command, MAV_RESULT_UNSUPPORTED);
+        }
+        break;
+    }
 
     case MAV_CMD_REQUEST_MESSAGE:              // 512：请求指定消息
     case MAV_CMD_REQUEST_AUTOPILOT_CAPABILITIES: // 520
