@@ -937,15 +937,6 @@ void handleAnoCom()
             AnoCom.sendData(ANO_GND_STATION_ADDR,
                             static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
                             imu_health, sizeof(imu_health));
-#ifdef BFS_ANOCOM_ON_USB
-            // ★ 2026-11-06：USB 调试口也镜像一份 0xF4。
-            //   目的：没有数传接线时，仍可用「不碰 DBG」的方式做采样率长时间统计
-            //   （DBG 会暂停任务并改变时序，AGENTS 明确禁止用它测高频采样）。
-            //   开销：10Hz × 44B ≈ 440B/s，对 921600 的 USB 口可忽略。
-            AnoComUsb.sendData(ANO_GND_STATION_ADDR,
-                               static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
-                               imu_health, sizeof(imu_health));
-#endif
           }
         }
         // 0xF5 链路诊断（1Hz）：序列/运行时间/发送跳过/丢组/导航与ring状态。
