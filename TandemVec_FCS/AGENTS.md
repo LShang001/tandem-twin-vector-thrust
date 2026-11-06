@@ -48,6 +48,10 @@
   `SingleEdf4VaneAllocator.h`）。质量/推力/舵效/惯量仍为 MODEL-DEFAULT（未称重未实测），
   但默认值实飞可稳定控制；参数 169 项（`sedf.*` 21 项）可经匿名上位机在线调。
   移植说明与验证记录见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`。
+  采样架构（2026-11-06 统一下沉，commit 324004c）：2kHz TIM8 ISR 单包入 SPSC ring
+  （`BFS_IMU_ISR_RING`）+ 备份姿态 200Hz 分频（`BFS_IMU_ATT_DECIMATE`）已从共轴专属下沉到
+  主 env，三机型全部继承；实机实测 imu rate=2000.0Hz、ring_drop=0、Navigation 200Hz、
+  loop CPU=49.3%。`[env:CoaxialVTVL_UI]` 用 `-U` 显式取消，保持纯轮询回退。
 
 ## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
 
