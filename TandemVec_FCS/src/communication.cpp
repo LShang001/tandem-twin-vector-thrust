@@ -876,14 +876,16 @@ void handleAnoCom()
   //        + 模式速度高度 50Hz(0.6) + 其余 ≤10Hz(1.0) ≈ 11.6 KB/s = 58% 占用。
   const bool fast_tick = true;               // 200Hz 0x01 IMU 原始（与控制环同频）
   const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制 / 0xF1 执行器
-  const bool state_tick = (t % 4 == 3);      //  50Hz 0x05 模式解锁 / 0x06 速度 / 0x07 高度
+  const bool state_tick = (t % 4 == 3);      //  50Hz 0x06 速度 / 0x07 高度
+  const bool mode_tick  = (t % 2 == 0);       // 100Hz 0x05 模式解锁（飞行状态判断最关键）
+
   const bool pos_tick  = (t % 2 == 0);       // 100Hz 0x08 位置（与 EKF 输出同步）
   const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压
   const bool rc_tick   = (t % 20 == 6);      //  10Hz 0x40 遥控（观察摇杆，无需 25Hz）
   const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x30 目标速度 / 0x0B 角速度
   const bool gps_tick  = (t % 100 == 10);    //   2Hz GPS（数据源本身 10Hz，高频只是重复）
 
-  if (fast_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
+  if (fast_tick || mode_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
   {
     // 非阻塞保护：按本 tick 最大组需求检查 TX 缓冲，不足跳过本 tick 发送。
     // ★ 2026-08-10 全面审查修复：最坏组（t≡30 同拍）= RC(20) + disp(86) +
@@ -927,8 +929,10 @@ void handleAnoCom()
         {
           AnoCom.sendAttitudeControl(roll_ctrl_ano, pitch_ctrl_ano, throttle_ctrl_ano, yaw_ctrl_ano);
         }
-        // 0xF4 IMU 健康帧（4B float，Hz）：把 imu_rate 放进普通遥测，
-        // 用于非 DBG 的采样率/调度测量（DBG 会暂停任务/改变时序，禁止用于此）。
+#ifdef BFS_ANOCOM_DIAG
+        // 0xF4 运行时健康帧（灵活格式帧）——**仅调试环境编译**。
+        // 匿名助手 2.0.11 不解析 0xF4/0xF5 这类灵活格式帧，实飞固件发了也看不到，
+        // 白占约 250 B/s。Flight 环境不定义 BFS_ANOCOM_DIAG，这两帧整个不编译。
         {
           uint8_t imu_health[36];
           float imu_ring_drop = 0.0f;
@@ -982,6 +986,7 @@ void handleAnoCom()
           }
         }
         // 0xF5 链路诊断（1Hz）：序列/运行时间/发送跳过/丢组/导航与ring状态。
+        // 与 0xF4 同属 BFS_ANOCOM_DIAG（匿名助手不解析灵活格式帧）。
         // 空口/PC丢帧时序列仍连续；板子停或协议丢帧时序列/计数会暴露。
         if ((t % 200U) == 1U)
         {
@@ -1008,6 +1013,7 @@ void handleAnoCom()
                           static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 4),
                           diag, sizeof(diag));
         }
+#endif  // BFS_ANOCOM_DIAG —— 0xF4/0xF5 到此为止，0xF1 执行器帧用户已配，必须保留
 
         // 执行器输出帧（手册用户自定义帧 0xF1）：前/下摆角 deg×100 int16、
         // 前/尾电机 %×10 u16、差速 Δω×1000 int16、饱和标记 u8、预留 u8
@@ -1043,11 +1049,16 @@ void handleAnoCom()
       // ---- 核心飞行状态 20Hz：模式解锁 + 速度 + 高度 ----
       // ★ 2026-11-06 从原 disp_tick(2Hz) 拆出：这三项是判断"现在飞什么状态、
       //   有没有在动、掉没掉高度"的直接依据，2Hz 在地面站上看不出起飞瞬间变化。
-      if (state_tick)
+      // ★ 2026-11-06 0x05 模式/解锁独立提到 100Hz：它是判断"当前能不能起飞/
+      //   有没有解锁"的第一手信息，比速度和高度更关键，不该和它们绑在同一档。
+      if (mode_tick)
       {
-        // 飞控模式 + 解锁状态（GNC 判定结果，与飞控实际状态一致）
         AnoCom.sendFlightMode(static_cast<uint8_t>(g_current_flight_mode),
                               g_is_unlocked ? 1 : 0, 0, 0, 0);
+      }
+
+      if (state_tick)
+      {
         // NED 速度（EKF 输出，向上为正；无 GNSS 时 ZUPT/Gravity 闭环约束）
         AnoCom.sendFlightSpeed(INS_GNSS_Packet.velocity_north * 100,
                                INS_GNSS_Packet.velocity_east * 100,
