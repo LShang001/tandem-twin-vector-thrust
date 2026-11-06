@@ -56,6 +56,16 @@
   min=1817.4、max=2137.2；**ring_drop=0**（全程无积压）。对照共轴 P1 基线
   mean=2024.5/std=43.8。均值低约 2% 源于单涵道额外开启 BFS_DBG_USB_SERIAL8 +
   BFS_ANOCOM_ON_USB（CPU 49.3% vs 共轴 41.5%），非采样架构差异。
+  **实飞版 env = \[env:SingleEdf4Vane_Flight]\**（2026-11-06 新增，commit d01ac8d）：
+  不带 BFS_DBG_USB_SERIAL8、-U BFS_TASK_PROFILE / -U BFS_NAV_PROFILE /
+  -U BFS_PROFILE_TO_ANOCOM_SERIAL；保留 2kHz ISR ring、AnoCom USB 参数链路、
+  0xF4/0xF5 遥测、全部联锁与限幅。编译 RAM 63.2% / Flash 18.5%。
+  实机验收（烧 d01ac8d）：参数读回 ctrl_vane_deg=20.0 与 out_max=4583.66 正确；
+  发 DBG\n 无 [DBG] 回显（通路已关，符合预期）；0xF4 30s 采样
+  mean=2020.9 / min=1913.1 / max=2111.5 / ring_drop=0，比调试版的
+  mean=1979.9/std=60.6 更接近 2000——去掉剖析计时与 DBG 通路确实降低了 CPU 争用。
+  **烧实飞版前的必查清单**：①参数链路读回；②0xF4 采样率；③断动力核对四舵
+  方向与限位；④CH5 解锁/上锁；⑤倾角保护阈值；⑥CH6 使能已停用（解锁即出油门）。
 
 ## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
 
