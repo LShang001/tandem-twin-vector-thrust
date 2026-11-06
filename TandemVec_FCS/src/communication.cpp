@@ -953,7 +953,9 @@ void handleAnoCom()
           std::memcpy(imu_health, imu_health_f, sizeof(imu_health));
           // 0xF4诊断帧降载：100Hz→约10Hz（空口反压会阻塞主循环，实测导致P1 ring积压）。
           static uint32_t s_imu_health_div = 0;
-          if ((++s_imu_health_div % 10U) == 0U)
+          // ★ 2026-11-06：0xF4 挂在 fast_tick 里，而 fast_tick 已从 100Hz 提到 200Hz。
+          //   分频从 %10 改成 %40 才能维持 5Hz（改前实测跑到了 19Hz，白占 600B/s）。
+          if ((++s_imu_health_div % 40U) == 0U)
           {
             AnoCom.sendData(ANO_GND_STATION_ADDR,
                             static_cast<uint8_t>(ANO_FUNC_FLEX_DATA_START + 3),
