@@ -861,12 +861,17 @@ void handleAnoCom()
 
   // ---- tick 分档判定 ----
   const uint32_t t = s_tele_tick++;
-  const bool fast_tick = (t % 2 == 1);       // 快环 100Hz（奇数 tick）
-  const bool fast_aux_tick = (t % 4 == 1);   // 显示帧 50Hz（0x0A/0x21/0xF1）
-  const bool pos_tick  = (t % 4 == 2);       // 位置 50Hz
-  const bool rc_tick   = (t % 8 == 4);       // RC 25Hz
-  const bool disp_tick = (t % 8 == 6);       // 显示帧 25Hz（高度/模式/速度/PWM/目标速度）
-  const bool gps_tick  = (t % 20 == 10);     // GPS/氧压 10Hz
+  // ★ 2026-11-06 遥测降载（微空 LR24 空速 20K = 2.5 KB/s）：
+  //   原分频按 921600 全速链路设计，总发送量 6.9 KB/s（约 55 kbps），超出空速 2.7 倍，
+  //   模块内部丢弃约 79% 的帧 —— 实测所有功能码统一掉到 21.24 Hz 就是这个原因
+  //   （固件侧 ano_skip=0、调度 200Hz 均正常，问题在无线侧容量）。
+  //   降载后 1847 B/s（14.8 kbps），留 26% 余量；姿态/控制保 20Hz，低频帧降到 1–5Hz。
+  const bool fast_tick = (t % 10 == 1);      // 姿态/状态 20Hz（原 100Hz）
+  const bool fast_aux_tick = (t % 10 == 1);  // 控制量 20Hz，与姿态同拍（原 50Hz）
+  const bool pos_tick  = (t % 40 == 2);      // 位置 5Hz（原 50Hz）
+  const bool rc_tick   = (t % 100 == 4);     // RC 2Hz（原 25Hz）
+  const bool disp_tick = (t % 100 == 6);     // 显示组 2Hz（原 25Hz）
+  const bool gps_tick  = (t % 200 == 10);    // GPS/氧压 1Hz（原 10Hz）
 
   if (fast_tick || pos_tick || rc_tick || disp_tick || gps_tick)
   {
