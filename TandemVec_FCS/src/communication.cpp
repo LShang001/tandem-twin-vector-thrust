@@ -2123,7 +2123,7 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   // ATTITUDE (40Hz) — 姿态欧拉角
   // ====================================================================
-  if (call_count % 5 == 0)
+  if (call_count % 4 == 0)
   {
     mavlink_msg_attitude_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
                               millis(),
@@ -2140,7 +2140,7 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   // ATTITUDE_QUATERNION (40Hz) — 四元数姿态
   // ====================================================================
-  if (call_count % 5 == 1)
+  if (call_count % 20 == 1)
   {
     static const float repr_offset_q[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 
@@ -2159,7 +2159,7 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   // GLOBAL_POSITION_INT (20Hz) — GPS + 速度 + 航向
   // ====================================================================
-  if (call_count % 10 == 2)
+  if (call_count % 4 == 2)
   {
     // ★ 2026-08-10 全面审查修复：GLOBAL_POSITION_INT 数据源按 nav_data_source 分流
     //   （原实现恒取 DETA100 包——INTERNAL 模式下经纬高恒 0/0）
@@ -2254,7 +2254,7 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   // RC_CHANNELS_RAW (20Hz)
   // ====================================================================
-  if (call_count % 10 == 4)
+  if (call_count % 20 == 4)
   {
     mavlink_msg_rc_channels_raw_pack(1, MAV_COMP_ID_AUTOPILOT1, &msg,
                                      millis(), 0,
@@ -2274,7 +2274,7 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   // RAW_IMU (40Hz) — 加速度计 + 陀螺仪原始值
   // ====================================================================
-  if (call_count % 5 == 3)
+  if (call_count % 2 == 1)
   {
     int16_t ax = (int16_t)constrain(IMU_Packet.accelerometer_x * 1000.0f / G_ACCEL_CONST, -32767.0f, 32767.0f);
     int16_t ay = (int16_t)constrain(IMU_Packet.accelerometer_y * 1000.0f / G_ACCEL_CONST, -32767.0f, 32767.0f);
@@ -2316,7 +2316,7 @@ static void mavlinkSendTelemetry()
   // ====================================================================
   // 与 AnoCom 0xF2 共用同一 watch 集合（DBG `vars add` 配置），MAVLink 侧
   // 独立轮转索引。名称截断 9 字符（协议 char[10]）。空 watch 时零开销。
-  if (call_count % 5 == 2 && !anoVarWatchEmpty())
+  if (call_count % 10 == 5 && !anoVarWatchEmpty())
   {
     static uint8_t mav_var_idx = 0;
     uint16_t id = g_ano_var_watch.ids[mav_var_idx % g_ano_var_watch.count];
@@ -2336,10 +2336,11 @@ static void mavlinkSendTelemetry()
   }
 
   // ====================================================================
-  // DEBUG_VECT (40Hz) — 3 元素向量轮转（M_ff / alpha_ref / error_deg）
+  // DEBUG_VECT (10Hz) — 3 元素向量轮转（M_ff / alpha_ref / error_deg）
+// ★2026-11-06 40→10Hz：调试向量不该占 1.7KB/s，省给核心帧。
   // ====================================================================
   // 按注册表名称查 ID（抗表序重排）。向量不在 watch 集合中也能发。
-  if (call_count % 5 == 4)
+  if (call_count % 20 == 6)
   {
     static const char *kVecNames[][4] = {
         {"M_ff", "m_ff_x", "m_ff_y", "m_ff_z"},
