@@ -869,17 +869,17 @@ void handleAnoCom()
   //   模块内部丢弃约 79% 的帧 —— 实测所有功能码统一掉到 21.24 Hz 就是这个原因
   //   （固件侧 ano_skip=0、调度 200Hz 均正常，问题在无线侧容量）。
   //   降载后 1847 B/s（14.8 kbps），留 26% 余量；姿态/控制保 20Hz，低频帧降到 1–5Hz。
-  // ★ 2026-11-06 按飞行安全重要性重新分层（原实现把核心状态挤在 2Hz 档）：
-  //   核心飞行状态（姿态/角速度/控制量/执行器/模式解锁）高帧率，
-  //   辅助量（PWM/目标速度/GPS）低频，中间量按需。
-  const bool fast_tick = (t % 4 == 1);       // 50Hz 姿态/IMU/控制/执行器/目标姿态
-  const bool fast_aux_tick = (t % 4 == 1);   // 50Hz 与姿态同拍（组模式合并一次 write）
-  const bool state_tick = (t % 10 == 3);     // 20Hz 模式解锁/速度/高度
-  const bool pos_tick  = (t % 20 == 2);      // 10Hz 位置
-  const bool bat_tick  = (t % 40 == 4);      //  5Hz 电池
-  const bool rc_tick   = (t % 40 == 6);      //  5Hz 遥控
-  const bool disp_tick = (t % 100 == 8);     //  2Hz PWM/目标速度（调参用）
-  const bool gps_tick  = (t % 200 == 10);    //  1Hz GPS/氧压
+  // ★ 2026-11-06 恢复原设计档位（此前因误判带宽把核心帧砍到 20Hz，砍过头了）：
+  //   实测 20K 档 6.4KB/s 校验率 99.98%，完全撑得住原设计 100/50Hz。
+  //   保留本次真正有价值的改动：把 0x05/0x06/0x07 从 disp 拆出、电池从 gps 拆出。
+  const bool fast_tick = (t % 2 == 1);       // 100Hz 0x01 IMU / 0x03 欧拉（原设计）
+  const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制 / 0xF1 执行器（原设计）
+  const bool state_tick = (t % 8 == 3);      //  25Hz 0x05 模式解锁 / 0x06 速度 / 0x07 高度
+  const bool pos_tick  = (t % 4 == 2);       //  50Hz 0x08 位置（原设计）
+  const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压（从 gps 的 10Hz 拆出同频）
+  const bool rc_tick   = (t % 8 == 4);       //  25Hz 0x40 遥控（原设计）
+  const bool disp_tick = (t % 8 == 6);       //  25Hz 0x20 PWM / 0x30 目标速度（原设计）
+  const bool gps_tick  = (t % 20 == 10);     //  10Hz GPS（原设计）
 
   if (fast_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
   {
