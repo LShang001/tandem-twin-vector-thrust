@@ -672,6 +672,23 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
                                 'msg': f'未知参数名: {name}'})
             return
         value = msg.get('value')
+        # ★ 2026-11-06 审计修复：WebSocket 写参数也要过包线。
+        #   此前只有 CLI（cli.py::_param_set）和前端（params.mjs）做校验，后端直接转发；
+        #   固件侧 anoParamDeserialize 只拒 NaN/Inf、不做 min/max，超范围值会真的写进
+        #   RAM 并立刻生效（如 sedf.vane_max_deg 直接改变控制权限）。
+        #   这里复用 params.py 的 META，与 CLI 同一份规则。
+        meta = pm.meta_for(name or '') or {}
+        if 'min' in meta and 'max' in meta:
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                await ws.send_json({'type': 'log', 'level': 'error',
+                                    'msg': f'{name} 需要数值，收到 {value!r}'})
+                return
+            if v < meta['min'] or v > meta['max']:
+                await ws.send_json({'type': 'log', 'level': 'warn',
+                                    'msg': f'{name}={v} 超出包线 [{meta["min"]}, {meta["max"]}]，未发送'})
+                return
         name_info = g.param_names.get(pid, {})
         # ★ 2026-08-09：名字寻址时类型按 params.py 元数据（未读 E2 也能写对 float/uint8）
         is_float = (name_info.get('type') == 'float' if name_info
