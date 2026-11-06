@@ -56,7 +56,7 @@
   min=1817.4、max=2137.2；**ring_drop=0**（全程无积压）。对照共轴 P1 基线
   mean=2024.5/std=43.8。均值低约 2% 源于单涵道额外开启 BFS_DBG_USB_SERIAL8 +
   BFS_ANOCOM_ON_USB（CPU 49.3% vs 共轴 41.5%），非采样架构差异。
-  **实飞版 env = \[env:SingleEdf4Vane_Flight]\**（2026-11-06 新增，commit d01ac8d）：
+  **实飞版 env = `[env:SingleEdf4Vane_Flight]`**（2026-11-06 新增，commit d01ac8d）：
   不带 BFS_DBG_USB_SERIAL8、-U BFS_TASK_PROFILE / -U BFS_NAV_PROFILE /
   -U BFS_PROFILE_TO_ANOCOM_SERIAL；保留 2kHz ISR ring、AnoCom USB 参数链路、
   0xF4/0xF5 遥测、全部联锁与限幅。编译 RAM 63.2% / Flash 18.5%。
