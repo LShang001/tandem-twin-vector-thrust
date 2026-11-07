@@ -10,7 +10,9 @@
  * @theory  N/A（诊断遥测接线，无理论模型）
  * @ref     PROTOCOL-001 §六（0xF1~0xFA 灵活格式帧的用户自定义语义）、
  *          AGENTS.md 踩坑记录（AnoVars 通用变量上报 + 三坑）
- * @frame   变量值沿用其原始语义（姿态 deg、角加速度 rad/s² 或 deg/s² 见变量名后缀）
+ * @frame   变量值沿用其原始语义（姿态 deg、角加速度 rad/s² 或 deg/s² 见变量名后缀）；
+ *          本文件只做转发表，不改变坐标系：姿态/角速率为机体系 FRD，
+ *          位置/速度为 NED，逐变量以其注释为准
  * @units   帧内统一 float32，无缩放；单位由具体变量决定
  * @note    watch 为空时 0xF2 零开销返回；与双环遥测相互独立，不占组缓冲。
  * @see     include/AnoVars.h、src/ano_vars.cpp、src/communication.cpp（handleAnoCom）
