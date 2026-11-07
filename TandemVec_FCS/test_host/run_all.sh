@@ -441,6 +441,23 @@ else
 fi
 echo
 
+# ★ 2026-11-08 补入：液体火箭机型的 SIL 测试（14 项断言，测 LiquidRocketModel
+#   的推进/质量/喷管几何 + 简化 6DOF 着陆）。此前从未被 run_all.sh 调用，
+#   是 test_host/ 下唯一「有 PASS/FAIL 断言却没进回归」的文件。
+echo "---- 编译/运行 test_liquid_rocket_sil ----"
+if g++ -std=c++17 -O2 -I"$ROOT/include" -I"$ROOT/src" -I"$ROOT/lib/eigen/src" -I"$ROOT/lib/units/src" \
+  "$ROOT/test_host/test_liquid_rocket_sil.cpp" \
+  -o "$BIN_DIR/test_liquid_rocket_sil$EXE_SUFFIX"; then
+  if ! "$BIN_DIR/test_liquid_rocket_sil$EXE_SUFFIX"; then
+    echo "[RUN FAIL] test_liquid_rocket_sil"
+    fail=1
+  fi
+else
+  echo "[BUILD FAIL] test_liquid_rocket_sil"
+  fail=1
+fi
+echo
+
 if [ "$fail" -eq 0 ]; then
   echo "=== 全部宿主机回归测试通过 ==="
   exit 0
