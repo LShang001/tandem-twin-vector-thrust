@@ -85,12 +85,13 @@ static constexpr auto &kSingleEdf4VaneManualMatrix = kSingleEdf4VaneMatrix;
 
 /**
  * @brief 结构体说明：单涵道机型的可标定参数（由 FlightCtrlParams 提供实例）
- * @note  ★ **本结构的默认值只作编译自洽示例，不参与运行**——真实默认值锁在
- *        `FlightCtrlParams.h` 的 `SingleEdf4VaneHwParams` 里，调用方必须传入后者。
- *        ⚠ 两者**没有**编译期自动比对（本文件只有矩阵行正交的两个 static_assert），
- *        所以要改默认值时两处都得改，否则示例值会与真实值漂移、误导读者。
- *        2026-11-08：发现本结构 vane_dir 示例值原为 {+1,+1,+1,+1}，与真实值
- *        {+1,−1,+1,−1} 不一致（照它实现会让两只舵反向），已改成与真实值一致。
+ * @note  ★ **本结构的默认值是测试基准，不是飞行配置**——飞行用的真实默认值在
+ *        `FlightCtrlParams.h` 的 `SingleEdf4VaneHwParams` 里。
+ *        vane_dir 特意保持全 `+1`（便于 `test_single_edf_4vane.cpp` 手算解析值），
+ *        真实配置是 `{+1,−1,+1,−1}`（源机型 2026-10-12 台架逐舵确认）。
+ *        ⚠ 两者**没有**编译期自动比对（本文件只有矩阵行正交的两个 static_assert）。
+ *        2026-11-08 曾把这里改成与真实值一致，结果那 6 项按全 `+1` 手算的
+ *        解析值断言全部失败——已回退。要改这里必须先同步改测试的期望值。
  */
 struct SingleEdf4VaneAllocationParams
 {
@@ -100,7 +101,7 @@ struct SingleEdf4VaneAllocationParams
     float inertia_pitch_kgm2 = 0.02f;       // 俯仰轴惯量 [kg·m²]
     float inertia_yaw_kgm2 = 0.03f;         // 偏航轴惯量 [kg·m²]
     float yaw_trim_deg = 0.0f;              // 涵道反扭矩配平（舵角域）[deg]
-    float vane_dir[kSingleEdfVaneCount] = {+1.0f, -1.0f, +1.0f, -1.0f}; // 逐舵物理方向（须与 FlightCtrlParams.h 一致）
+    float vane_dir[kSingleEdfVaneCount] = {+1.0f, +1.0f, +1.0f, +1.0f}; // 测试基准（真实配置见 FlightCtrlParams.h）
 };
 
 /** @brief 分配输入 */
