@@ -2,6 +2,7 @@
  * @file    TandemVec_ADRC.h
  * @module  固件/控制（自抗扰控制候选模块，尚未接入生产控制链）
  * @brief   二阶 ESO（扩张状态观测器）+ PD 的 ADRC 速率环实现（角度域）
+ * @warning ★ **本模块未接入固件**：零引用。与 `AdrcController.h` 并存，两者均为 ADRC 备选实现、待择一。接线状态见 VER-011 A 类。
  * @details 输入：ω [deg/s]、ω_ref [deg/s]、ω̇_ref [deg/s²]、dt；
  *          处理：ESO 估计 z1→ω、z2→总扰动，控制律
  *          u = (ω̇_ref + Kp(ω_ref−z1) − z2)/b0；输出：α_ref [deg/s²]。

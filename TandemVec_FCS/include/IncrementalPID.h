@@ -2,6 +2,7 @@
  * @file    IncrementalPID.h
  * @module  固件/控制（增量式 PID，历史实现）
  * @brief   增量式 PID：Δu(k) 递推后累加成绝对输出，带输出限幅
+ * @warning ★ **本模块未接入固件**：`include/IncrementalPID.h` 目前零引用、无测试，是备选实现。接线状态见 `docs/07-验证与确认/VER-011-未接线模块清单-2026-11-08.md` A 类。
  * @details 输入：设定值与反馈值（同一单位）；处理：一阶/二阶误差差分 → Δu；
  *          输出：u(k) = u(k−1) + Δu(k)，钳到 [out_min, out_max] 并回写历史。
  *          与 PositionPID（位置式 v3）并存：本类无积分状态、无微分滤波、
