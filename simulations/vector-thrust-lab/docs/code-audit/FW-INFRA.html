@@ -350,7 +350,8 @@ fw-control / fw-tests）， 本记录只对本区域 29
 <td>12</td>
 <td>1</td>
 <td>双 CRC、帧定界靠长度；删除 4B 旧 <code>parseTimestamp</code>
-注释代码</td>
+注释代码。★2026-10-31 复核：CRC16 比较曾被注释（见 §3
+P0-1），已恢复并加拒帧计数</td>
 </tr>
 <tr>
 <td><code>analyze_ano.py</code></td>
@@ -1053,6 +1054,21 @@ reload 374 = 2.99s）；长阻塞任务需自行喂狗</td>
 </thead>
 <tbody>
 <tr>
+<td><strong>P0-1</strong></td>
+<td><code>include/DETA100_module.h</code> CRC16 分支</td>
+<td><strong>★2026-10-31 审计新发现</strong>：CRC16
+只算不比较（<code>// ok = false;</code>
+被注释），任何长度正确的帧都被接受；而本表 §1
+覆盖行与文件头注释都记为“双 CRC 已核实正常”——文档与实现相反</td>
+<td>接 DETA100 模块时链路误码直接进导航/控制（home
+点、姿态），最坏错误原点</td>
+<td><strong>已修复（2026-10-31）</strong>：恢复
+<code>ok = false;</code>、坏帧整帧丢弃并累加
+<code>deta100_crc16_reject_count</code>；新增
+<code>test_host/test_deta100_crc_guard.cpp</code> 源码守卫（运行时由
+DETA100 联调覆盖）</td>
+</tr>
+<tr>
 <td>P1-1</td>
 <td><code>handleDebugConsole</code> 的 <code>wsseq</code> 分支</td>
 <td>参数解析语句被一次历史编辑并入了注释行（物理行内含字面
@@ -1083,6 +1099,17 @@ reload 374 = 2.99s）；长阻塞任务需自行喂狗</td>
 一类永不命中的 36 条元数据</td>
 <td>前端“其他”组可能出现伪参数；不影响真参数读写</td>
 <td><strong>本区域不改</strong>（GCS 侧已登记 P1）</td>
+</tr>
+<tr>
+<td>P1-4</td>
+<td><code>src/mavlink_bridge.cpp</code> 的
+<code>MAV_CMD_PREFLIGHT_REBOOT_SHUTDOWN</code></td>
+<td><strong>★2026-10-31 审计新发现</strong>：同 switch 的 ARM / SET_MODE
+都按“地面站远程控制是红线”安全拒绝，唯独 246 重启命令未查
+<code>g_is_unlocked</code></td>
+<td>飞行中一条 GCS/脚本命令即可软复位飞控 → 电机停转、飞机坠落</td>
+<td><strong>已修复（2026-10-31）</strong>：<code>g_is_unlocked || failsafe_in_flight</code>
+时回 <code>MAV_RESULT_DENIED</code> + STATUSTEXT，未解锁才允许重启</td>
 </tr>
 <tr>
 <td>P2-1</td>
@@ -1268,5 +1295,5 @@ CRLF；<code>main.cpp</code> 去 BOM（见 P2-4）。</li>
 <li><code>git diff</code>
 自查：无帧格式、字节序、缩放系数、频率、缓冲区尺寸、逻辑改动。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

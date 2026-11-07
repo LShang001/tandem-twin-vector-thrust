@@ -18,6 +18,7 @@
 @see     sim/check_fw_gnc_parity.py、TandemVec_FCS/test_host/fw_algo/fw_gnc_api.h
 """
 import argparse
+import datetime
 import json
 import os
 import pathlib
@@ -52,7 +53,11 @@ def main():
     ap.add_argument("--exe", default=os.path.join(tempfile.gettempdir(),
                                                   "inc", "fw_real.exe"))
     ap.add_argument("--out-dir", default=str(HERE.parent / "sim-data"))
-    ap.add_argument("--tag", default="2026-10-29")
+    # ★ tag 默认取当天日期，不能硬编码：产物文件名带 tag，硬编码会让每次运行都
+    #   覆盖同一批文件——历史上 2026-10-29 的快照（param_count=133）就是这样被
+    #   2026-11-07 的运行（param_count=169）冲掉的，文件名还留着旧日期，误导读者。
+    #   需要复现某次历史运行时显式传 --tag 2026-10-29。
+    ap.add_argument("--tag", default=datetime.date.today().isoformat())
     ap.add_argument("--only", default="", help="只跑指定 profile（逗号分隔）")
     args = ap.parse_args()
 

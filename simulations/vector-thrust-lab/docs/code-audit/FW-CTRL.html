@@ -1046,8 +1046,11 @@ PID）</td>
 <td>RATE_MODE 下速率环积分每拍清零 → 等效纯 P；与论文 ch07"固件 Rate
 模式采用 PI 并输出角加速度指令"不一致；若依赖积分消除配平误差，RATE_MODE
 下不存在</td>
-<td>文档/注释写明该口径（本轮已在函数 L0 注明"RATE_MODE 复位内环
-PID"）；是否改为保留积分属行为变更，需评审</td>
+<td><strong>已修复（2026-10-31）</strong>：复位改为"仅切入 RATE_MODE
+的那一拍"（<code>s_prev_attitude_was_rate</code> 沿检测），与 2026-10-30
+共轴串级语义一致；<code>test_coax_params</code> golden
+同步重生成并注明理由；SIL <code>fw_mode</code> 场景 B：旧源码积分恒
+0.083、新源码 3.39→20.03</td>
 </tr>
 <tr>
 <td>P1-2</td>
@@ -1060,6 +1063,61 @@ PID"）；是否改为保留积分属行为变更，需评审</td>
 截断，读数"稳定"但无物理意义</td>
 <td>用 <code>inertia_comp_mask=0</code> + 已知 α
 方波做一次开环合成数据回归（host 可做），确认 b 的符号与量级</td>
+</tr>
+<tr>
+<td>P1-3</td>
+<td><code>generate_attitude_target</code> 的定点重入沿检测</td>
+<td><code>s_prev_mode</code> 是函数内 static，且
+<code>s_prev_mode = mode;</code> 写在
+<code>if (mode == AUTO_POSITION)</code> 内部 → 永远只记录
+AUTO_POSITION；切出后不再更新</td>
+<td>2026-08-10
+的"重锁当前点"修复实为空操作：手动/定高切回定点时沿用上一段
+<code>targetNorth/East</code>，位置环限幅 ±1.5 m/s
+内<strong>自主飞回旧点</strong></td>
+<td><strong>已修复（2026-10-31）</strong>：模式记录移到文件作用域每拍更新，解锁上升沿调
+<code>resetPositionModeEntryLatch()</code>；SIL <code>fw_mode</code>
+场景 A（旧源码重入后目标 0 m、新源码 3 m）</td>
+</tr>
+<tr>
+<td>P1-4</td>
+<td><code>communication.cpp::linkDownCallback</code>
+的"是否在空中"判据</td>
+<td>用 <code>raw[2] &gt; 1100</code> 代理"在空中"。AUTO_ALTITUDE
+下油门杆是升降速率指令（中心 50%、死区 ±10%，&lt;40% 即下降、0% = −1
+m/s），空中主动下降与地面待机在通道值上同形</td>
+<td>低油门断链被判成地面 → CH5 写 988 → <code>is_unlocked</code> 变假 →
+混控走锁定分支 → <strong>空中上锁、电机 0%、自由落体</strong>（SIL
+复现：8.15 m 起自由落体）</td>
+<td><strong>已修复（2026-10-31）</strong>：判据收敛到
+<code>include/FailsafeLinkLossPlan.h</code>（已解锁 AND（油门有动力 OR
+离地 &gt;0.5 m））；SIL 四场景 + 576 组真值表 + 真实 EKF 闭环矩阵
+27/27（修复前同命令 7 s 掉到 1.61 m）</td>
+</tr>
+<tr>
+<td>P1-5</td>
+<td>同上，CH3 通道合成</td>
+<td>旧实现只把 CH1/CH2/CH4 归中，CH3 落进 else 被压
+988（0%），空中被高度环解释成"以 1 m/s 稳定下降"；与 VER-004
+记载的"定高"相反</td>
+<td>空中断链后持续 1 m/s 下降，无触地检测/flare/超时兜底</td>
+<td><strong>已修复（2026-10-31）</strong>：CH3 在空中归中 1500（AUTO
+中心死区 → 目标垂速 0），<code>manage_pid_integrals</code> 在 failsafe
+期间使能姿态积分；SIL 实测 target_vz=0.00、下沉 0.38 m；真实 EKF 闭环
+<code>max_desc_vz_down</code> 1.477→0.24–0.36 m/s、叠加风+GNSS失联仍保持
+9.1 m</td>
+</tr>
+<tr>
+<td>P1-6</td>
+<td><code>platformio.ini</code> 飞行
+env（<code>BFS_BARO_HEALTH_GATE</code> 未定义）</td>
+<td>气压 Drift/Spike/Stuck
+监测器（<code>ins_baro_health.h</code>）在跑但门控开关恒
+false，只写遥测不生效；DPS310 冻结时 baro <code>R=0.1225</code>（σ≈0.35
+m）以约 73:1 权重压过 GNSS 高度 <code>R≥9</code></td>
+<td>EKF 高度被冻结气压慢慢拖走 → 定高环按错误高度动作</td>
+<td><strong>已改为启用（2026-10-31）</strong>：<code>[env:TandemVec_FCS]</code>
+定义该宏；宏为编译期开关，A/B 与上板复核待台架，暂未改 R</td>
 </tr>
 <tr>
 <td>P2-1</td>
@@ -1329,5 +1387,5 @@ include/静态对象/<code>updateActuatorFaultDiagnostics</code>/调用点，以
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-CTRL-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-CTRL-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

@@ -188,6 +188,18 @@ href="../theory/03-dynamics-allocation-modes.html">THY-003</a>
 href="CTL-002.html">CTL-002</a> §5）。</p>
 <hr />
 <h2 id="3-三通道控制机理">3 三通道控制机理</h2>
+<blockquote>
+<p>⚠️ <strong>口径：本节表格是「仿真模型系」（<code>x_b</code> =
+机身纵轴 = 推力轴，<code>MOD-002</code> §1.2），仅适用于
+<code>simulations/vector-thrust-lab</code>。</strong> 固件
+<code>TandemVec_FCS</code>
+用<strong>存档系</strong>（<code>z_b</code>=推力轴）：同一个物理执行器在固件里读作
+<strong>上摆 δf→滚转 / 下摆 δt→俯仰 / 差速
+Δω→偏航</strong>，与本表通道名相反，但数值等价。 固定置换
+<code>x' = −z_b, y' = +y_b, z' = +x_b</code>，见 <code>GOV-004</code>
+§7.2、<code>FW-CTRL-代码理论核查.md</code> A-02/P2-3、§8.6
+固件实现对照。<strong>不得按本表通道名去改固件控制律符号。</strong></p>
+</blockquote>
 <table>
 <thead>
 <tr>
@@ -628,10 +640,17 @@ Hz）：</p>
 <tr>
 <td>角速率内环</td>
 <td>rateKq/rateKr/rateKp（1.2/1.2/1.5）</td>
-<td>输入 <code>deg/s</code>、输出 <code>deg/s²</code>；roll/pitch
+<td>输入 <code>deg/s</code>、输出
+<code>deg/s²</code>；<strong>纵列默认</strong>（<code>FlightCtrlParams.h</code>
+的 <code>#else</code> 分支）roll/pitch
 <code>kp=16.042818 s⁻¹</code>、<code>ki=5.729578 s⁻²</code>；yaw
 <code>kp=11.459156 s⁻¹</code>、<code>ki=4.297184 s⁻²</code>（2026-08-12
-下调25%）；输出限幅 ±5729.578 deg/s²，积分分离阈值 60 deg/s</td>
+下调25%）；输出限幅 ±5729.578 deg/s²，积分隔离阈值 60
+deg/s。<strong>另两机型按分支各自定义</strong>：共轴
+<code>BFS_COAXIAL_VTVL</code> 为 <code>kp=6.168</code>，单涵道
+<code>BFS_SINGLE_EDF_4VANE</code> 为
+<code>kp=57.3 / ki=18.3</code>（舵角域 0.25
+的等价换算）——上表数值不可跨机型套用</td>
 </tr>
 <tr>
 <td>差速增益调度</td>
@@ -771,5 +790,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 16:07</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

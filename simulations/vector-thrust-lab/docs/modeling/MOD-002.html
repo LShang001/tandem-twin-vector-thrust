@@ -97,13 +97,245 @@
 <body><article><a class="back" href="../index.html">← 返回文档中心</a>
 <h1 id="mod-002-坐标系与符号约定">MOD-002 坐标系与符号约定</h1>
 <blockquote>
-<p>定位：代码 ↔︎ 文档的接口契约。凡阅读
-<code>simulations/vector-thrust-lab/src/core</code>
-源码或基于源码进行推导者，以本文档为符号与坐标约定准绳。本文档与
+<p>定位：代码 ↔︎
+文档的接口契约，<strong>全仓坐标系的唯一正本</strong>（见
+§0）。凡阅读固件、仿真、SIL、上位机任一端的源码或基于源码推导者，以本文档为符号与坐标约定准绳。本文档与
 THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重复推导过程。</p>
 </blockquote>
 <hr />
-<h2 id="1-坐标系定义">1. 坐标系定义</h2>
+<h2 id="0-全仓坐标系唯一正本必读">0. 全仓坐标系唯一正本（必读）</h2>
+<blockquote>
+<p>本节是整个仓库坐标系定义的<strong>唯一权威</strong>。任何模块、任何机型、任何文档在写轴名或做轴变换时以本节为准；其余位置只允许<strong>引用</strong>本节，不得自行定义、复述或改写。</p>
+</blockquote>
+<h3 id="01-三套坐标系">0.1 三套坐标系</h3>
+<p>同一个机械布局，存在两套"机体系"命名，外加惯性系：</p>
+<table>
+<thead>
+<tr>
+<th>代号</th>
+<th>名称</th>
+<th>推力轴</th>
+<th>其余两轴</th>
+<th>谁在用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>{A}</code></td>
+<td><strong>存档系</strong>（固件机体系）</td>
+<td><strong>z_b</strong>：悬停时竖直指地，推力沿 −z_b 朝上</td>
+<td>x_b / y_b 为两条横向轴（滚转绕 x_b、俯仰绕 y_b）</td>
+<td>固件全部源码（<code>flight_control.cpp</code>、各
+<code>*Allocator.h</code>、<code>FlightCtrlParams.h</code>、<code>state_data.h</code>）、SIL
+plant（<code>fw_sil_plant_6dof.h</code>）、GCS 遥测字段</td>
+</tr>
+<tr>
+<td><code>{M}</code></td>
+<td><strong>模型系</strong>（仿真/论文机体系）</td>
+<td><strong>x_b</strong>：朝机头，推力沿 +x_b</td>
+<td>y_b 右、z_b 上摆轴</td>
+<td><code>simulations/vector-thrust-lab/src/core/*</code>、<code>TandemVec-Paper/</code>、<code>TandemVec_FCS/include/TandemVec_Propulsion.h</code>、<code>AirframeModel.h</code></td>
+</tr>
+<tr>
+<td><code>{I}</code></td>
+<td><strong>惯性系</strong> NED</td>
+<td>—（无推力轴）</td>
+<td>x 北 / y 东 / z 下</td>
+<td>位置与速度积分、地面约束、导航</td>
+</tr>
+</tbody>
+</table>
+<p><strong>两套机体系是同一台飞机的纯旋转置换</strong>，不是两个不同的物理对象。</p>
+<h3 id="02-转换关系唯一写法">0.2 转换关系（唯一写法）</h3>
+<p>从模型系 <code>{M}</code> 到存档系 <code>{A}</code>：</p>
+<pre><code>x_A = +z_M
+y_A = +y_M
+z_A = −x_M</code></pre>
+<p>矩阵形式 <code>S_{M→A}</code>（第 i 行第 j 列 = 新轴 i 在原轴 j
+上的投影）：</p>
+<pre><code>        x_M   y_M   z_M
+x_A  [   0     0    +1  ]
+y_A  [   0    +1     0  ]
+z_A  [  −1     0     0  ]</code></pre>
+<p>性质：<code>det(S) = +1</code>（纯旋转、右手系保持）、<code>S⁻¹ = Sᵀ</code>。</p>
+<p>逆变换（存档系 → 模型系）：</p>
+<pre><code>x_M = −z_A
+y_M = +y_A
+z_M = +x_A</code></pre>
+<h3 id="03-逐量转换表不要口算照抄本表">0.3
+逐量转换表（不要口算，照抄本表）</h3>
+<p>向量在同一旋转下变换，<strong>力、力矩、角速度、位置、速度的规律完全相同</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>物理量</th>
+<th>模型系 → 存档系</th>
+<th>存档系 → 模型系</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>力 F</td>
+<td><code>F_xA = +F_zM</code>、<code>F_yA = +F_yM</code>、<code>F_zA = −F_xM</code></td>
+<td><code>F_xM = −F_zA</code>、<code>F_yM = +F_yA</code>、<code>F_zM = +F_xA</code></td>
+</tr>
+<tr>
+<td>力矩 M</td>
+<td><code>M_xA = +M_zM</code>、<code>M_yA = +M_yM</code>、<code>M_zA = −M_xM</code></td>
+<td><code>M_xM = −M_zA</code>、<code>M_yM = +M_yA</code>、<code>M_zM = +M_xA</code></td>
+</tr>
+<tr>
+<td>角速度 ω</td>
+<td><code>ω_xA = +ω_zM</code>、<code>ω_yA = +ω_yM</code>、<code>ω_zA = −ω_xM</code></td>
+<td><code>ω_xM = −ω_zA</code>、<code>ω_yM = +ω_yA</code>、<code>ω_zM = +ω_xA</code></td>
+</tr>
+<tr>
+<td>位置/速度</td>
+<td>同上（<code>p_xA=+p_zM</code> 等）</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>四元数</td>
+<td>分量顺序两套都是 <code>{w,x,y,z}</code>，但 <code>{M}</code> 与
+<code>{A}</code>
+的姿态四元数<strong>不是同一个量</strong>，跨端传递必须经 §0.2
+的旋转重新表达，不得直接赋值</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="04-各端使用约定改代码前先确认自己在哪一栏">0.4
+各端使用约定（改代码前先确认自己在哪一栏）</h3>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>用哪套</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/flight_control.cpp</code>、<code>include/*Allocator.h</code>、<code>FlightCtrlParams.h</code></td>
+<td><code>{A}</code> 存档系</td>
+<td>含"上摆=滚转（Mx，绕 x_b）"这类描述</td>
+</tr>
+<tr>
+<td><code>include/TandemVec_Propulsion.h</code>、<code>include/AirframeModel.h</code></td>
+<td><code>{M}</code> 模型系</td>
+<td>含"x_b=推力轴"、六维公式 <code>Fx=Tf·cf+Tt·ct</code></td>
+</tr>
+<tr>
+<td><code>test_host/fw_sil/fw_sil_plant_6dof.h</code></td>
+<td><code>{A}</code> 存档系</td>
+<td>推力沿 −z_b、用 R31/R32/R33</td>
+</tr>
+<tr>
+<td><code>simulations/vector-thrust-lab/src/core/*</code></td>
+<td><code>{M}</code> 模型系</td>
+<td>推力沿 +x_b、四元数 <code>{x,y,z,w}</code>（THREE 顺序）</td>
+</tr>
+<tr>
+<td>跨端接口（SIL 输入输出、遥测字段）</td>
+<td>由接口函数显式转换</td>
+<td>转换只允许经 §0.2，且必须写明方向</td>
+</tr>
+</tbody>
+</table>
+<p><strong>★
+通道索引语义是跨两套系一致的（容易误解，单独说明）</strong>：
+<code>TandemVec_Propulsion.h</code> 的
+<code>SixDOFWrench</code>／<code>EffectMatrix</code> 虽标
+<code>{M}</code>，但它那三个力矩分量 与固件 <code>{A}</code> 的
+<code>M_cmd</code>
+<strong>在"哪个通道"这一层上是同一套</strong>，不需要做轴变换：</p>
+<table>
+<thead>
+<tr>
+<th>分量索引</th>
+<th><code>{M}</code> 里的物理含义</th>
+<th><code>{A}</code> 里对应的控制通道</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第 0 分量</td>
+<td>反扭差（差速 Δω 引起）</td>
+<td>偏航通道（<code>M_cmd[0] = -Ix·alpha_yaw</code>）</td>
+</tr>
+<tr>
+<td>第 1 分量</td>
+<td>俯仰（尾摆 δ_t + 前摆反扭耦合）</td>
+<td>俯仰通道（<code>M_cmd[1] = +Iy·alpha_pitch</code>）</td>
+</tr>
+<tr>
+<td>第 2 分量</td>
+<td>上摆力臂（前摆 δ_f 引起）</td>
+<td>滚转通道（<code>M_cmd[2] = -Iz·alpha_roll</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>所以 <code>TandemVec_ControlAllocation.h</code> 的 BTRUE 分支可以直接
+<code>u = B⁻¹·M_cmd</code>， 把 <code>{M}</code> 矩阵与 <code>{A}</code>
+力矩向量相乘而<strong>不需要插一次 §0.2
+的旋转</strong>——因为两者在这一层
+对齐的是"通道"，不是"几何轴"。<strong>判据</strong>：需要换轴（做方向/长度投影）才用
+§0.2； 做通道级的分配/求逆时看的是分量索引，不是轴名。</p>
+<h3 id="05-禁止事项违反即为缺陷">0.5 禁止事项（违反即为缺陷）</h3>
+<ol type="1">
+<li>代码或文档里<strong>只写 x/y/z 而不标注属于哪套系</strong>。</li>
+<li><strong>跨文档平移轴名</strong>：源机型的"roll
+绕推力轴"不等于本固件的 roll——本固件推力轴是 z_b，绕它是偏航。单涵道机型
+2026-11-07 的 SIL 发散就是这条引发的。</li>
+<li>在 <code>{A}</code> 语境里引用 <code>{M}</code>
+的结论（例如把模型系的 R13 当作固件倾角补偿依据——固件必须用 R33，见
+§1.2）。</li>
+<li>新增机型或新模块不声明坐标系、不在 <code>@frame</code>
+里写清用哪套。</li>
+<li>用"应该差不多"代替 §0.3 的转换表。</li>
+<li><strong>把"几何变换"与"控制通道符号"混为一谈</strong>。实例：SIL
+plant 写的是 <code>Mb = {-w.Mz, w.My, -w.Mx}</code>，而纯几何按 §0.2
+给出 <code>{+w.Mz, +w.My, -w.Mx}</code>， 两者在 Mx
+分量上差一个符号。那个符号<strong>不是笔误</strong>——它与固件 mix 层约定
+<code>Mx' = -Ix·alpha_roll</code>（模型系 Mx'
+自带负号）配对，构成完整符号链。 2026-11-07 实测：把 plant
+改成纯几何后，纵列 SIL 手动阶跃在 t=11 s 打到 −84°、 t=12 s −142°、t=15
+s 发散成 NaN；恢复后回到 5.86° 稳定。 判据：<strong>需要方向/长度时用
+§0.2 的几何变换；构造力链时符号必须连同 mix 层一起核对。</strong></li>
+</ol>
+<h3 id="06-校验手段">0.6 校验手段</h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TandemVec_FCS/tools/verify_frame_map.py</code></td>
+<td>从基向量推导 §0.2 的置换并验 <code>det=+1</code></td>
+</tr>
+<tr>
+<td><code>TandemVec_FCS/include/FrameConventions.h</code></td>
+<td><strong>代码正本</strong>：置换常量与
+<code>modelToArchive/archiveToModel</code>，编译期断言
+<code>det=+1</code>、<code>S·Sᵀ=I</code></td>
+</tr>
+<tr>
+<td><code>py -3.12 tools/check-frame-refs.py</code></td>
+<td>扫描全仓 <code>@frame</code> 声明，检查是否标注了所属坐标系</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1-坐标系定义本节描述的是模型系-m">1.
+坐标系定义（本节描述的是模型系 <code>{M}</code>）</h2>
+<blockquote>
+<p>★ 本节及其后续各节沿用<strong>模型系 <code>{M}</code></strong>（x_b =
+推力轴），即仿真域口径。固件存档系 <code>{A}</code> 与本节的换算见
+§0。凡是固件代码的轴名，一律以 §0.4 判据为准。</p>
+</blockquote>
 <table>
 <thead>
 <tr>
@@ -139,13 +371,13 @@ THY-001（纯理论推导）、MOD-001（整机动力学推导）互补，不重
 </tbody>
 </table>
 <p>坐标系关系图示：</p>
-<div class="sourceCode" id="cb1"><pre
-class="sourceCode mermaid"><code class="sourceCode mermaid"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">graph</span> <span class="cn">LR</span></span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accTitle</span> <span class="er">坐</span><span class="dt">标系关系</span></span>
-<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accDescr</span> <span class="er">惯</span><span class="dt">性系</span> <span class="er">N</span><span class="dt">ED</span><span class="er">、</span><span class="dt">机体系与前后摆座系的层级关系</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">I</span>[<span class="st">&quot;{I} 地面 NED</span><span class="sc">&lt;br/&gt;</span><span class="st">x北 y东 z下&quot;</span>] <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;姿态四元数 q&quot;</span><span class="vs">|</span> <span class="dt">B</span>[<span class="st">&quot;{B} 机体</span><span class="sc">&lt;br/&gt;</span><span class="st">x_b前 y_b右 z_b下&quot;</span>]</span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">B</span> <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;前摆角 δ_f 绕 z_b&quot;</span><span class="vs">|</span> <span class="dt">Mf</span>[<span class="st">&quot;{M_f} 前摆座&quot;</span>]</span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">B</span> <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;尾摆角 δ_t 绕 y_b&quot;</span><span class="vs">|</span> <span class="dt">Mt</span>[<span class="st">&quot;{M_t} 尾摆座&quot;</span>]</span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode mermaid"><code class="sourceCode mermaid"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="kw">graph</span> <span class="cn">LR</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accTitle</span> <span class="er">坐</span><span class="dt">标系关系</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="dt">accDescr</span> <span class="er">惯</span><span class="dt">性系</span> <span class="er">N</span><span class="dt">ED</span><span class="er">、</span><span class="dt">机体系与前后摆座系的层级关系</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="dt">I</span>[<span class="st">&quot;{I} 地面 NED</span><span class="sc">&lt;br/&gt;</span><span class="st">x北 y东 z下&quot;</span>] <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;姿态四元数 q&quot;</span><span class="vs">|</span> <span class="dt">B</span>[<span class="st">&quot;{B} 机体</span><span class="sc">&lt;br/&gt;</span><span class="st">x_b前 y_b右 z_b下&quot;</span>]</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="dt">B</span> <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;前摆角 δ_f 绕 z_b&quot;</span><span class="vs">|</span> <span class="dt">Mf</span>[<span class="st">&quot;{M_f} 前摆座&quot;</span>]</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="dt">B</span> <span class="pp">--&gt;</span><span class="vs">|</span><span class="st">&quot;尾摆角 δ_t 绕 y_b&quot;</span><span class="vs">|</span> <span class="dt">Mt</span>[<span class="st">&quot;{M_t} 尾摆座&quot;</span>]</span></code></pre></div>
 <h3 id="11-关键方向约定">1.1 关键方向约定</h3>
 <ul>
 <li><strong>重力</strong>：在 {I} 中表示为
@@ -174,9 +406,19 @@ NED −z 对齐）</strong>——推力沿 x_b 竖直向上承担重力；此时
 Mx=滚转、Mz=偏航；<strong>VTOL 悬停时 x_b 竖直 → Mx（差速）=
 世界航向</strong>、Mz/My 为水平倾斜通道。</li>
 <li>⚠️ <strong>NED 的 z（世界竖直）≠ 机体 z_b</strong>（悬停时 z_b
-水平）。凡"竖直方向"投影必须明确是 NED
-竖直（重力方向）还是机体系轴：推力垂直补偿 cos_tilt 用 R13（x_b 在 NED
-竖直投影）；激光测距斜距补偿用 R33（z_b 投影——激光沿 −z_b 安装）。</li>
+水平）。凡"竖直方向"投影必须先确认坐标系：
+<ul>
+<li><strong>模型系 <code>{M}</code></strong>（本节口径，x_b =
+推力轴）：推力垂直补偿用 <strong>R13</strong>（x_b 在 NED
+竖直投影）；激光斜距补偿用 R33（激光沿 −z_b 安装）。</li>
+<li><strong>存档系 <code>{A}</code></strong>（固件口径，z_b =
+推力轴）：推力垂直补偿<strong>必须用 R33</strong>（z_b 在 NED
+竖直投影），模型系的 R13 <strong>不得</strong>作为固件依据。2026-08-07
+曾因在固件里误用 R13 导致悬停 cos_tilt≈0、油门×2。</li>
+<li>判据：先问「这根轴是推力轴吗」。推力轴的 NED
+竖直投影分量就是倾角余弦——模型系取 R13、存档系取
+R33，两者是同一物理量的两种表达。</li>
+</ul></li>
 </ul>
 <hr />
 <h2 id="2-方向余弦矩阵dcm语义">2. 方向余弦矩阵（DCM）语义</h2>
@@ -318,11 +560,11 @@ psi   = atan2(R_12, R_11)</code></pre>
 显示的俯仰角与实际几何角符号相反。</li>
 </ul>
 <p>示例（已固化在 <code>tests/math.test.mjs</code>）：</p>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> a0 <span class="op">=</span> <span class="fl">0.3</span><span class="op">;</span> <span class="co">// rad</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> q <span class="op">=</span> { <span class="dt">x</span><span class="op">:</span><span class="dv">0</span><span class="op">,</span> <span class="dt">y</span><span class="op">:</span><span class="fu">sin</span>(a0<span class="op">/</span><span class="dv">2</span>)<span class="op">,</span> <span class="dt">z</span><span class="op">:</span><span class="dv">0</span><span class="op">,</span> <span class="dt">w</span><span class="op">:</span><span class="fu">cos</span>(a0<span class="op">/</span><span class="dv">2</span>) }<span class="op">;</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> e <span class="op">=</span> <span class="fu">eulerFromQuat</span>(q)<span class="op">;</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co">// e.theta ≈ -0.3, e.phi ≈ 0, e.psi ≈ 0</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> a0 <span class="op">=</span> <span class="fl">0.3</span><span class="op">;</span> <span class="co">// rad</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> q <span class="op">=</span> { <span class="dt">x</span><span class="op">:</span><span class="dv">0</span><span class="op">,</span> <span class="dt">y</span><span class="op">:</span><span class="fu">sin</span>(a0<span class="op">/</span><span class="dv">2</span>)<span class="op">,</span> <span class="dt">z</span><span class="op">:</span><span class="dv">0</span><span class="op">,</span> <span class="dt">w</span><span class="op">:</span><span class="fu">cos</span>(a0<span class="op">/</span><span class="dv">2</span>) }<span class="op">;</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="kw">const</span> e <span class="op">=</span> <span class="fu">eulerFromQuat</span>(q)<span class="op">;</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="co">// e.theta ≈ -0.3, e.phi ≈ 0, e.psi ≈ 0</span></span></code></pre></div>
 <h3 id="43-为何保持锁定">4.3 为何保持锁定</h3>
 <p>该符号约定已深入以下环节，变更会改变闭环行为：</p>
 <ol type="1">
@@ -783,5 +1025,5 @@ class="sourceCode javascript"><code class="sourceCode javascript"><span id="cb7-
 theta 符号这一锁定行为的事实记录。</li>
 </ul>
 <p>两者结合，方可避免“文档公式与源码实现不一致”的歧义。</p>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-002-坐标系与符号约定.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

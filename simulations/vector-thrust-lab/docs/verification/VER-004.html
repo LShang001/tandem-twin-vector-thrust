@@ -649,9 +649,10 @@ N，<code>throttle=F/14×100</code>（<code>main.cpp:4555-4582</code>）</td>
 <td>空中断链</td>
 <td>CH5=988 → <strong>上锁、油门
 0</strong>、MANUAL（<code>:702</code>）</td>
-<td>保持解锁、CH7=1500 → <strong>AUTO_ALTITUDE
-定高</strong>（<code>communication.cpp:230-260</code>）</td>
-<td><strong>语义反转</strong>（D8）</td>
+<td>保持解锁、CH3 归中、CH7=1500 → <strong>AUTO_ALTITUDE
+定高</strong>（<code>communication.cpp::linkDownCallback</code> ＋
+<code>include/FailsafeLinkLossPlan.h</code>）</td>
+<td><strong>语义反转</strong>（D8）；判据 2026-10-31 修正</td>
 </tr>
 <tr>
 <td>链路恢复</td>
@@ -828,12 +829,25 @@ P 通路常开"。</li>
 <ul>
 <li>原始（<code>main.cpp:702</code>）：断链 → CH5=988 ⇒
 <strong>上锁</strong>、CH7=988 ⇒ MANUAL、油门 0。即"断链即停桨"。</li>
-<li>当前（<code>communication.cpp:230-260</code>）：若断链前在空中（<code>raw[4]&gt;1500 &amp;&amp; raw[2]&gt;1100</code>），CH5
-保持 1500、CH7=1500 ⇒ <strong>保持解锁并转 AUTO_ALTITUDE
-定高</strong>，水平位置随风漂移（VER-002:45 已记录无磁漂移 75/113
+<li>当前（<code>communication.cpp::linkDownCallback</code> ＋
+<code>include/FailsafeLinkLossPlan.h</code>）：判据为 “已解锁
+AND（油门有动力 OR 已离地 &gt;0.5 m）”；CH5 保持 1500、<strong>CH3 归中
+1500</strong> （AUTO_ALTITUDE 中心死区内 → 目标垂速 0 →
+定高）、CH7=1500，水平位置随风漂移 （VER-002:45 已记录无磁漂移 75/113
 m）。</li>
-<li><strong>后果</strong>：这是有意的设计选择（避免空中停桨），但属于<strong>安全策略反转</strong>，且没有"链路丢失超时后自动降落/上锁"的兜底。需项目
-owner 明确裁决并写入安全文档，否则不应声称"失效行为与实飞一致"。</li>
+<li><strong>★2026-10-31 审计修正（P1-2/P1-3）</strong>：旧实现用
+<code>raw[4]&gt;1500 &amp;&amp; raw[2]&gt;1100</code> 判“在空中”， 而
+AUTO_ALTITUDE 下油门是升降速率指令（&lt;40% 即下降，0% = −1
+m/s）——空中主动下降时 被误判成地面 → CH5 写 988 → <strong>空中上锁、电机
+0%、自由落体</strong>（SIL 已复现）；同一实现还把 CH3 压到
+988，空中被高度环解释成“以 1 m/s 稳定下降”，与本行“定高”的记载不一致。
+现在判据收敛到纯函数 <code>FailsafeLinkLossPlan.h</code>（宿主真值表 576
+组＋SIL 四场景）， CH3 归中，<code>manage_pid_integrals</code> 在
+failsafe 期间同时使能姿态积分。</li>
+<li><strong>后果</strong>：语义反转仍属有意的设计选择（避免空中停桨）；本轮只修“误判地面”的实现缺陷，
+不引入“链路丢失 N 秒后自动降落”——复用
+<code>BFS_LONG_GNSS_OUTAGE_DESCENT</code> 是可行路线， 但该宏在 420
+次矩阵中因落点/姿态尾部被否决为默认。</li>
 </ul>
 <h3 id="d9-45-锁电机p1新增">D9 45° 锁电机（P1，新增）</h3>
 <ul>
@@ -849,6 +863,12 @@ mix（<code>main.cpp:5227-5257</code>）<strong>没有任何倾角保护</strong
 越界瞬间仍可能<strong>单电机 1000+180=1180 µs（约
 18%）在转</strong>，与"锁电机"语义不符。建议门控内强制
 <code>yaw_diff=0</code>。</li>
+<li><strong>2026-11-04 D9-2
+修复</strong>：<code>mapCoaxialVtvOutputs()</code> 在
+<code>output_enabled=false</code> （未解锁/大倾角）时<strong>同时把
+yaw_diff 置 0</strong>，不再只压 base；新增
+<code>test_vehicle_profile</code> 断言“超90°/未解锁差速必须归零”。TVC
+仍在门控内回中。 剩余：3–5° 迟滞与 &gt;45° 专项 SIL 场景尚未实现。</li>
 <li><strong>问题三</strong>：SIL 全场景峰值 22°，该分支从未被覆盖（见
 §7）。</li>
 </ul>
@@ -1229,8 +1249,14 @@ VER-002/CTL-003</td>
 <td>A-6</td>
 <td><strong>P1</strong></td>
 <td>空中断链策略反转未声明（D8）</td>
-<td>安全文档明确记录；增加"链路丢失 N 秒后自动降落/上锁"兜底</td>
-<td>断链 SIL 场景（空中/地面各一）</td>
+<td><strong>已处置（2026-10-31）</strong>：安全文档记录 D8
+并修正判据（臂状态＋油门/离地证据、CH3
+归中）；自动降落兜底仍不默认启用（<code>BFS_LONG_GNSS_OUTAGE_DESCENT</code>
+已被 420 次矩阵否决）</td>
+<td><code>test_host/fw_sil/build_and_run_failsafe.sh</code>（轻量四场景）＋<code>run_failsafe_matrix.sh</code>（真实
+EKF 闭环：10/20/30 m × 3 seeds × 断链/复链/三重叠加，27/27
+PASS；修复前同命令 7 s 掉到 1.61 m、叠加场景 t=26.8 s
+触地）＋<code>test_failsafe_plan.cpp</code> 576 组真值表</td>
 </tr>
 <tr>
 <td>A-7</td>
@@ -1763,5 +1789,5 @@ rigorous 下 3×5=9/9、8×5=40/40，但闭环被 plant 的推力-油门口径�
 缺省路径逐行不变， 验收基线仍以 legacy 为准。rigorous
 只作研究/灵敏度/标定前检查。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-31 03:59</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

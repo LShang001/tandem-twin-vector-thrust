@@ -693,6 +693,29 @@ ZUPT/重力、标量航向分别实现；门限常量与固件逐个核对</td>
 <p>用途：防止把仿真结论直接外推实机。<strong>左侧是代码里的现值，右侧是固件事实源</strong>；凡不一致处均已在对应
 L0/L1 注释里标注。</p>
 </blockquote>
+<blockquote>
+<p><strong>2026-11-07 全表核对（固件侧事实源逐条验证）</strong></p>
+<p>已验证一致：<strong>D-01</strong>（dMax 15° = 0.2618 rad，与
+<code>check-param-parity.py</code> 白名单同源）、
+<strong>D-02</strong>（<code>dwMax</code>
+0.7）、<strong>D-03</strong>（<code>earth_model.h</code>
+Somigliana，REF-120 §7.2.4 (7.2.17) p.178）、
+<strong>D-04</strong>（<code>navigation_task.cpp:2321</code> 显式
+<code>init_heading_err_std_rad(0.2f)</code>；类默认 π 被覆盖，
+<code>p_(8,8)</code> 存的是方差
+0.04；<code>test_ekf_bias_static.cpp</code> 覆盖该值）、
+<strong>D-05</strong>（<code>ekf_15_state.h:5024</code> =
+<code>16.3f</code>）、 <strong>D-06</strong>（五项全对：GNSS 30 / 重力
+18 / 静止陀螺 24 / 航向 12 / 气压 16）、
+<strong>D-08</strong>（<code>FlightCtrlParams.h:393</code>
+<code>alt_vel</code> ki = 1.25）、<strong>D-14</strong>（速率环
+16.042818）。</p>
+<p>已修正：<strong>D-09</strong>（原写"固件位置环未完成"，实为已实现 +
+单测/SIL 验证，仅实机未飞）。</p>
+<p>不做机器核对：D-07、D-10~D-13、D-15
+属描述性或方法学条目（气压相位差、理想传感器、
+积分器精度、种子数），没有单一代码事实源可 grep。</p>
+</blockquote>
 <table>
 <thead>
 <tr>
@@ -782,7 +805,12 @@ MAX_CORRECTION，2026-08-07 收紧）</td>
 <td>水平位置环</td>
 <td><code>--pos-hold</code> 是<strong>仿真
 P-D</strong>（北=pitch、东=roll(z)）；默认闭环<strong>无</strong>水平位置环</td>
-<td>固件位置环未完成/未验证</td>
+<td>固件是<strong>串级位置环</strong>：<code>initPositionHold()</code> +
+<code>handlePositionControl()</code> + <code>PositionPID</code>（位置环
+m→m/s、速度环 m/s→m/s²，限幅/积分/滤波统一读
+<code>kFlightCtrlParams</code>），单元测试
+<code>test_host/test_position_pid.cpp</code>；SIL 有前飞段
+<code>--pos-leg N:E</code>。<strong>实机定点尚未飞过</strong>（实飞记录覆盖定高与姿态）</td>
 <td>无 <code>--pos-hold</code> 时 A2/A3/A5 的 <code>pos_ne</code>
 不能单独当失败判据</td>
 <td>已登记；<code>run_full_envelope</code> L0 明写</td>
@@ -1242,5 +1270,5 @@ m（无水平位置环，符合 P1-5）</td>
 只改分析工具与文档，不动 <code>aircraft-model.json</code> /
 <code>vTrim</code> / <code>dMax</code>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/ANALYSIS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/ANALYSIS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

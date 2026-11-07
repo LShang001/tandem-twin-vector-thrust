@@ -37,12 +37,17 @@ THY/MOD/CTL 系列文档。</p>
 </blockquote>
 <hr />
 <h2 id="1-项目定位与目标">1. 项目定位与目标</h2>
-<p>本项目是一个<strong>纵列双发矢量推力飞行器整机工程</strong>，研究对象为纵列双发布局、正交单轴矢量推力
-+ 差速反扭驱动的固定翼/VTOL
-混合构型，当前由四个相互耦合的子系统组成：Web
+<p>本项目是 <strong>UniGNC ——
+机型无关的通用飞控平台</strong>的整机工程。核心资产是一套<strong>可插拔分配层的
+GNC 内核</strong>（<code>TandemVec_FCS</code>）：姿态环、15
+状态组合导航、200 Hz
+调度对所有机型是同一份代码，机型差异收敛在分配层（<code>*Allocator.h</code>）内。该内核已在四类飞行器上完成实飞验证：VTVL
+液体火箭、纵列双发矢量推力（基型）、共轴双桨 VTVL、单涵道四燃气舵。</p>
+<p>围绕该内核，工程由五个相互耦合的子系统组成：Web
 六自由度仿真（<code>simulations/vector-thrust-lab</code>）、Python
 高保真分析（<code>simulations/high-fidelity-analysis</code>、<code>py-web-lab</code>）、<strong>实机飞控固件</strong>（<code>TandemVec_FCS</code>，2026-08
-实机首飞验证通过，进入调参优化阶段）、<strong>上位机地面站</strong>（<code>TandemVec_FCS/GCS</code>）与
+基型首飞、2026-11-05
+单涵道首飞验证通过，进入调参优化阶段）、<strong>上位机地面站</strong>（<code>TandemVec_FCS/GCS</code>）与
 <strong>LaTeX 论文工程</strong>（<code>TandemVec-Paper</code>）。</p>
 <p><strong>执行器轴映射</strong>（2026-08-07
 轴置换后锚定，悬停构型语义）：</p>
@@ -681,5 +686,5 @@ System，增稳系统；本项目为速率+姿态比例+积分反馈</td>
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-001-项目范围与术语.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-001-项目范围与术语.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

@@ -762,6 +762,18 @@ AGENTS.md 轴映射踩坑记录。</li>
 <p>评分：文件基准 100 分，error −20，warning −5，下限
 0。门禁：<strong>error = 0</strong>；warning
 数量逐轮下降并记录在核查报告。</p>
+<p><strong>注释识别判据（2026-11-05
+修正）</strong>：机检只把这些行算作注释——行首
+<code>//</code>、<code>/* ... */</code> 块内（含 Doxygen <code>*</code>
+续行）、同行闭合且其后无代码的
+<code>/* 标签 */</code>。以下按代码处理，不计 R04/R06：块注释外以
+<code>*</code> 开头的行（<code>*ptr = ...</code>
+解引用、乘法续行）、<code>/* 标签 */ code,</code>
+行内标签行；<code>@code</code>…<code>@endcode</code>
+区段是合法注释内容，既不判「注释掉的代码」也不参与英文注释统计。R08 检查
+docstring 时先定位签名结束行（括号配平且以冒号结尾）再看其后 1–2
+行，多行签名的函数不会被误判缺失。回归测试锁在
+<code>tools/tests/test_check_code_comments.py</code>（<code>py -3.12 -m pytest tools/tests/ -q</code>）。</p>
 <hr />
 <h2 id="10-维护规则">10 维护规则</h2>
 <ol type="1">
@@ -1043,5 +1055,5 @@ R01–R10</td>
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-004-代码注释与理论对照规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/00-项目治理/GOV-004-代码注释与理论对照规范.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>

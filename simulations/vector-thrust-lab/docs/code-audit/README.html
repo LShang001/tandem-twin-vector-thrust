@@ -113,6 +113,147 @@ href="../governance/GOV-004.html">GOV-004
 href="../registers/traceability-matrix.html">模型-代码追溯矩阵</a></p>
 </blockquote>
 <hr />
+<h2 id="0-导航研究文档索引2026-11-01-更新">0
+导航研究文档索引（2026-11-01 更新）</h2>
+<table>
+<thead>
+<tr>
+<th>文档</th>
+<th>内容</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a
+href="卫惯组合导航优化总结-2026-11-01.md">卫惯组合导航优化总结</a></td>
+<td>30+ 专题总结（IMU/GNSS/baro/对准/解析库）+
+新增模块与宏表（§29）</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a
+href="AHRS姿态辅助与无GNSS重力融合-2026-11-01.md">AHRS姿态辅助与无GNSS重力融合</a></td>
+<td>fresh gate 默认开、无 GNSS 运动段重力方向直连（mode 0/1/2）、SIL A/B
+数据</td>
+<td>当前正本（L2）</td>
+</tr>
+<tr>
+<td><a
+href="捷联惯导初始对准理论与实现-2026-11-01.md">捷联惯导初始对准理论与实现</a></td>
+<td>对准三阶段、参数辨识法、双位置测漂、TRIAD（§11）</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a
+href="纯IMU-GNSS-BARO组合导航研究-2026-11-01.md">纯IMU-GNSS-BARO组合导航研究</a></td>
+<td>矩阵/延迟/气压/失锁的详细数据</td>
+<td>详细数据（结论已并入总结）</td>
+</tr>
+<tr>
+<td><a
+href="GNSS接收机延迟调研-2026-11-01.md">GNSS接收机延迟调研</a></td>
+<td>接收机延迟范围与补偿证据</td>
+<td>调研记录</td>
+</tr>
+<tr>
+<td><a href="UBX协议要点-2026-11-01.md">UBX协议要点</a> / <a
+href="NMEA0183协议要点-2026-11-01.md">NMEA0183协议要点</a></td>
+<td>解析库缺陷清单与协议要点</td>
+<td>协议参考</td>
+</tr>
+<tr>
+<td><a href="F10N-GNSS配置与调试-2026-11-03.md">F10N GNSS
+配置与调试</a></td>
+<td>F10 SPG 6.00/protocol 40：VALSET 键、CFG-MSG
+端口字段坑、天线/队列实测与调试命令</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a href="飞控实时性能基线-2026-11-03.md">飞控实时性能基线</a></td>
+<td>任务耗时/CPU/200Hz 实跑 155Hz 的机理假设与优化顺序</td>
+<td>性能基线</td>
+</tr>
+<tr>
+<td><a href="SOCP制导联合仿真-2026-11-03.md">SOCP制导联合仿真</a></td>
+<td>GUIDED+SOCP 完整着陆；规划末端前馈假平衡的发现与修正</td>
+<td>联合验证记录</td>
+</tr>
+<tr>
+<td><a
+href="IMU采样调度与导航消费-2026-11-03.md">IMU采样调度与导航消费</a></td>
+<td>TIM8 协作调度/64 深增量缓冲/200Hz EKF；2kHz 丢拍根因与 FIFO
+方案</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a
+href="任务调度器与TIM8配置-2026-11-03.md">任务调度器与TIM8配置</a></td>
+<td>240MHz/PSC1/ARR37500/6.4kHz；丢执行统计与调度升级顺序</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a href="GNSS原点与假原点-2026-11-03.md">GNSS原点与假原点</a></td>
+<td>室内 hAcc&gt;5m 用假原点；rel_ned 3.5km 不是 EKF 发散</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a href="EKF收敛判据-2026-11-04.md">EKF收敛判据</a></td>
+<td>协方差/σ/速度/连续3s；conv/conv_s/pos_sig/vel_sig/tilt_sig
+与首次解锁门</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a href="IMU采样架构设计-2026-11-04.md">IMU采样架构设计</a></td>
+<td>2kHz ISR+SPSC ring+DMA分阶段；含实测基线与验收/回退</td>
+<td>当前设计</td>
+</tr>
+<tr>
+<td><a href="IMU采样调试经验-2026-11-04.md">IMU采样调试经验</a></td>
+<td>测量方法论、有效优化、P1架构、错误路线、验收命令</td>
+<td>当前正本</td>
+</tr>
+<tr>
+<td><a
+href="EKF静止ZUPT与位置可观测性-2026-11-04.md">EKF静止ZUPT与位置可观测性</a></td>
+<td>ZUPT只观测速度；无外部参考30s停用；室内conv0设计边界</td>
+<td>判EKF收敛前必读</td>
+</tr>
+<tr>
+<td><a href="数传链路稳定性-2026-11-04.md">数传链路稳定性</a></td>
+<td>发送反压/降载/120s gap/参数压测；含验收脚本</td>
+<td>数传/遥测调优必读</td>
+</tr>
+<tr>
+<td><a href="GCS-MAVLink双向-2026-11-04.md">GCS MAVLink双向</a></td>
+<td>双协议接入、TX泵、字段映射、52测试/实机证据</td>
+<td>改GCS MAVLink必读</td>
+</tr>
+<tr>
+<td><a
+href="上板标定与验证清单-2026-11-01.md">上板标定与验证清单</a></td>
+<td>六项标定步骤 + 宏状态表</td>
+<td>上板执行清单</td>
+</tr>
+<tr>
+<td><a
+href="EKF参数优化与超广覆盖仿真-2026-11-01.md">EKF参数优化与超广覆盖仿真</a></td>
+<td>EKF 参数在线优化 + 超广包线覆盖仿真的数据与收敛过程</td>
+<td>详细数据（结论已并入总结）</td>
+</tr>
+<tr>
+<td><a
+href="GNSS更新率与运动状态影响-2026-11-01.md">GNSS更新率与运动状态影响</a></td>
+<td>GNSS 速率/速度/加速度对导航误差的影响矩阵</td>
+<td>详细数据（结论已并入总结）</td>
+</tr>
+<tr>
+<td><a href="通信与配置验收-2026-11-03.md">通信与配置验收</a></td>
+<td>AnoCom 通信链路与参数配置的验收项与实测结果</td>
+<td>验收记录</td>
+</tr>
+</tbody>
+</table>
 <h2 id="1-区域划分与记录文件">1 区域划分与记录文件</h2>
 <table>
 <thead>
@@ -224,5 +365,5 @@ P0/P1 并上报，不擅自改行为。</li>
 <li><strong>数值证据优先</strong>：测试断言、复算命令、回归夹具；没有证据写“未验证”，不要写“应该一致”。</li>
 <li><strong>不做机械翻译</strong>：行内注释只写“为什么/单位/边界/出处”，不复述代码。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/README.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-10-30 01:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/README.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
 </html>
