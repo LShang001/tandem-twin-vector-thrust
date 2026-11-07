@@ -62,15 +62,31 @@
 
 ## 未收录文件（研究/专项工具，`run_all.sh` 不编译）
 
-| 文件 | 用途 |
-|---|---|
-| `dps310_fifo_policy_test.cpp` / `dps_profile_parser_test.js` / `dps_profile_runner_test.js` | DPS310 采样策略/profile 工具链测试（配合 `tools/dps_profile_*.js`，需 node） |
-| `test_integrator_compare.cpp` / `test_integrator_sweep.cpp` | 积分器数值研究（对拍/扫描） |
-| `test_mpc_emb.cpp` / `mpc_emb.h` / `optimizer_runner.cpp` | 嵌入式 MPC 研究 |
-| `test_optimal_gains.cpp` | 最优增益研究 |
-| `task_scheduler_interval_test.cpp` | 任务调度器小数 tick 研究 |
+★ **判据**：这些文件**没有 PASS/FAIL 断言**（或虽有 main 但只打印分析结果），
+是研究/对比/分析工具，不是回归测试。2026-11-08 盘点时确认：
+35 个未收录文件里 34 个属此类，唯 `test_liquid_rocket_sil.cpp` 有 14 项断言
+却被漏掉，已补入 `run_all.sh`。
 
-> `static_aid_profile_test.cpp` 已于 2026-08-08 删除：其独有覆盖（帧边界精确值）已并入 `test_static_aid_profile.cpp`，Action 优先级与 ZUPT 噪声自适应已被收录版覆盖。
+按用途分组（共 34 个）：
+
+| 分组 | 文件 |
+|---|---|
+| 初对准/精对准对比 | `test_ins_alignment`、`test_ins_static_align`、`test_ins_multiposition_align`、`test_ins_multiposition_tilt`、`test_ins_param_align`、`test_ins_param_align_module`、`test_ins_gyrocompass`、`test_tilt_triad` |
+| 惯导机械编排/漂移研究 | `test_ins_fog`、`test_ins_fog_align`、`test_ins_fog_e2e`、`test_ins_mech_drift`、`test_ins_trajectory` |
+| 圆锥/划摇补偿对比 | `test_coning_three_sample` |
+| 重力模型对比 | `test_gravity_models`（WGS84 vs J2） |
+| GNSS 延迟估计（在线辨识） | `test_gnss_delay_batch_ekf`、`test_gnss_delay_batch_vel`、`test_gnss_delay_estimator`、`test_gnss_rate_sweep`、`test_ekf_delay_mmae` |
+| EKF 专项研究 | `test_bias_jump_monitor`、`test_ekf_bias_static`、`test_ekf_covariance_float_parity` |
+| 导航 ABI 检查 | `test_nav_abi_delay`、`test_nav_abi_sanity` |
+| IMU 性能/采样环 | `test_imu_nav_perf`、`test_imu_sample_ring` |
+| 积分器数值研究 | `test_integrator_compare`、`test_integrator_sweep` |
+| 嵌入式 MPC 研究 | `test_mpc_emb`（+ `mpc_emb.h`）、`optimizer_runner` |
+| 最优增益研究 | `test_optimal_gains` |
+| 调度器小数 tick 研究 | `task_scheduler_interval_test` |
+| DPS310 工具链测试 | `dps310_fifo_policy_test`（+ `tools/dps_profile_*.js` 两个 .js） |
+
+> `static_aid_profile_test.cpp` 已于 2026-08-08 删除：其独有覆盖（帧边界精确值）
+> 已并入 `test_static_aid_profile.cpp`。
 
 ## 运行方式
 
