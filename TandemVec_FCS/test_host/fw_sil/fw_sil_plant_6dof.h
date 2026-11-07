@@ -74,7 +74,14 @@ struct SilBody6Dof
 
   void step(const SixDOFWrench &w, float dt)
   {
-    // computeWrench 模型系 -> 机体 FRD
+    // computeWrench 模型系 -> 机体 FRD。
+    // ★ 这里的 Mx 分量是 −w.Mz 而不是纯几何的 +w.Mz，**不是笔误**：
+    //   2026-11-07 实测把本行换成 {w.Mz, w.My, -w.Mx}（纯几何）后，纵列 SIL
+    //   手动阶跃在 t=11 s 打到 −84°、t=12 s −142°、t=15 s 发散成 NaN；
+    //   恢复 −w.Mz 后回到 5.86° 稳定。原因是固件 mix 层约定
+    //   `Mx' = -Ix·alpha_roll`（模型系 Mx' 带负号），plant 这侧的 −w.Mz
+    //   与之配对构成完整的符号链。几何归 FrameConventions（纯旋转），
+    //   控制通道符号归 mix 层，这一行是两个语义的合成点，改任一处都会翻转滚转。
     const float Mb[3] = {-w.Mz, w.My, -w.Mx};
     float y[13] = {pos_n, pos_e, pos_d, vel_n, vel_e, vel_d,
                    q.w, q.x, q.y, q.z, omega[0], omega[1], omega[2]};
