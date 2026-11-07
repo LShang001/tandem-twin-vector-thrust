@@ -1,19 +1,19 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """bb_tool.analyze_overshoot（姿态阶跃超调分析）的单元测试。
 
-2026-11-08 补：bb_tool.py 此前零测试覆盖。BbTool 类需要 WebSocket 难测，
-但 analyze_overshoot 是纯函数，可脱离硬件验证。
-
-★ 数据结构的正确理解（第一次写测试时搞错，记下来）：
-  - 固件黑匣子通道表第一项是 ``t_ms``，**没有 seq**（communication.cpp:135）
-  - 后端 preview = ``[r[0](seq), r[1](t_ms), *vals, r[3](seg)]``（main.py:838）
-    即前两格是 seq/t_ms，然后才是 22 个通道值
-  - 所以 ``analyze_overshoot`` 用 ``r[2 + columns.index(name)]`` 是对的：
-    columns[0]='t_ms' 对应 vals[0] 即 preview[2]
-
-所以构造测试数据时：rows 每行 = [seq, t_ms, t_ms_again, roll, pitch, tgt_roll, tgt_pitch]，
-columns = ['t_ms', 'roll_deg', 'pitch_deg', 'target_roll_deg', 'target_pitch_deg']。
+@file    TandemVec_FCS/GCS/tests/test_bb_tool.py
+@module  上位机/黑匣子分析
+@brief   验证阶跃超调分析：无目标列提示、无阶跃、正/负向超调、小阶跃忽略。
+@details 被测：`server/bb_tool.py` 的 `analyze_overshoot`（纯函数，脱离硬件可测）。
+         ★ 数据结构的正确理解（第一版测试因此全挂）：
+         - 固件黑匣子通道表第一项是 t_ms、**没有 seq**（communication.cpp:135）
+         - 后端 preview = [seq, t_ms, *vals, seg]（main.py:838）
+         - 所以 r[2 + columns.index(name)] 是对的，columns[0]=t_ms → preview[2]
+@theory  N/A（分析工具回归）
+@frame   N/A
+@units   N/A
 """
+
 from __future__ import annotations
 
 import os

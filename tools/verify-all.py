@@ -64,6 +64,10 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
           "g++ -std=c++17 -ITandemVec_FCS/include "
           "TandemVec_FCS/test_host/test_frame_conventions.cpp "
           "-o tmp/_frame_check.exe && tmp/_frame_check.exe"], ROOT),
+        # GCS（上位机）单元测试：68 项、约 0.4 s，足够快，放进快档。
+        # 2026-11-08 加：此前 GCS 测试只有人记得才跑，不在任何守卫里。
+        ("GCS 单元测试", [PY, "-m", "pytest", "tests/", "-q"],
+         ROOT / "TandemVec_FCS" / "GCS"),
     ]
     if include_sil:
         # cwd 已经是 TandemVec_FCS，路径不能再带前缀（2026-11-07 首次跑慢档才发现）

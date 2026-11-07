@@ -1,10 +1,18 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """datalog（遥测 CSV 记录器）的单元测试。
 
-2026-11-08 补：该模块此前零测试覆盖，但它是飞行数据落盘的唯一通道——
-列顺序、缺列填空、类型格式化（bool→0/1、float→4 位小数）一旦出错，
-记录下来的数据就不可信，而记录本身是事后分析的全部依据。
+@file    TandemVec_FCS/GCS/tests/test_datalog.py
+@module  上位机/遥测记录
+@brief   锁定 CSV 落盘的列顺序、缺列填空与类型格式化，防止记录数据不可信。
+@details 被测：`server/datalog.py` 的 `CsvRecorder` / `_fmt` / `list_recordings`。
+         该模块此前零测试覆盖，但它是飞行数据落盘的唯一通道——列顺序、
+         缺列填空、bool→0/1、float→4 位小数一旦出错，记录下来的数据看起来
+         正常却不可信，而记录本身是事后分析的全部依据。
+@theory  N/A（数据落盘契约回归）
+@frame   N/A
+@units   N/A
 """
+
 from __future__ import annotations
 
 import csv
