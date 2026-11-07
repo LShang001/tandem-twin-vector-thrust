@@ -50,7 +50,12 @@ bash TandemVec_FCS/test_host/run_all.sh                              # 宿主全
 bash TandemVec_FCS/test_host/fw_sil/run_all_airframes.sh             # ★ 三机型 SIL 统一跑批（纵列/共轴/单涵道，逐项判据+汇总）
 
 # 固件算法直调（仿真脚本调固件 EKF/控制，不在 sim/ 复刻算法）
-bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh   # 共享库（4 组 ABI，输出 tmp/tv_fw_algo）
+# ★ 输出盘符必须是 ASCII：MinGW 的 ld/g++ 都处理不了含中文的路径。
+#   用 subst 把项目 tmp 映射成盘符即可（本机已有 T: -> tmp）：
+#     subst T: "D:\纵列双发矢量推力飞行器\tmp"
+#     BIN_DIR=T:/tv_fw_algo bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh
+#     FW_ALGO_BIN_DIR=T:/tv_fw_algo py -3.12 TandemVec-EKF-Report/sim/run_fw_gnc_demo.py
+bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh   # 共享库（4 组 ABI；BIN_DIR 指向 ASCII 盘符）
 py -3.12 TandemVec-EKF-Report/sim/run_fw_gnc_demo.py    # 控制链冒烟
 py -3.12 TandemVec-EKF-Report/sim/run_fw_nav_demo.py    # 导航步进冒烟
 py -3.12 TandemVec-EKF-Report/sim/run_fw_gnc_parity_suite.py  # SIL↔直调库逐拍对拍
