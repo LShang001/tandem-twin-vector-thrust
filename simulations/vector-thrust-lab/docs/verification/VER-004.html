@@ -96,8 +96,17 @@
   <link rel="stylesheet" href="../docstyle.css" />
 <style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
 <body><article><a class="back" href="../index.html">← 返回文档中心</a>
-<h1 id="ver-004-共轴机型原始固件对照控制与安全">VER-004
-共轴机型原始固件对照——控制与安全</h1>
+<p>原命令（<strong>现已跑不通，故不再以可复制代码块给出</strong>）：用
+g++ 编译 <code>test_host/test_coaxial_reference_equivalence.cpp</code>
+与 <code>test_host/reference/coaxial/coax_reference.cpp</code>，生成
+<code>cxreq.exe</code> 跑逐拍等价。</p>
+<blockquote>
+<p>★ 这两个文件已随提交 <code>c255d7a</code>「refactor(coax): 删除旧 δ
+控制路径， α-native 成为唯一控制路径」一并删除——参考体存在的前提（旧 δ
+路径）被移除后， 它失去了比较对象。要复现当年的结论需从
+<code>c255d7a</code> 之前的 git 历史取回。# VER-004
+共轴机型原始固件对照——控制与安全</p>
+</blockquote>
 <blockquote>
 <p>文档编号：VER-004（新建）｜版本：v1.0｜日期：2026-10-30｜性质：<strong>只读对照审计</strong>｜审计：parity-control
 原始侧：<code>D:\PIO_Projects\VTVL_ElectricDualRotor_FCS_原始飞行存档版</code>（<code>src/main.cpp</code>
@@ -301,7 +310,16 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co"># 参考等价（run_all.sh:93 的口径）</span></span>
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="ex">g++</span> <span class="at">-std</span><span class="op">=</span>c++17 <span class="at">-O2</span> <span class="at">-Iinclude</span> <span class="at">-Ilib</span>/eigen/src <span class="at">-Itest_host</span>/reference/coaxial <span class="at">-Itest_host</span>/stub <span class="dt">\</span></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  test_host/test_coaxial_reference_equivalence.cpp test_host/reference/coaxial/coax_reference.cpp <span class="at">-o</span> cxreq.exe</span></code></pre></div>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>  （原命令已失效：这两个文件随 c255d7a 删除，详见本节开头说明）</span></code></pre></div>
+<blockquote>
+<p>★
+<strong>上面这条命令现在跑不通</strong>：<code>test_coaxial_reference_equivalence.cpp</code>
+与 <code>reference/coaxial/coax_reference.cpp</code> 已随提交
+<code>c255d7a</code> 「refactor(coax): 删除旧 δ 控制路径，α-native
+成为唯一控制路径」一并删除—— 参考体存在的前提（旧 δ
+路径）被移除后，它失去了比较对象。 要复现当年的结论需从
+<code>c255d7a</code> 之前的 git 历史取回这两个文件。</p>
+</blockquote>
 <blockquote>
 <p>注：<code>build_and_run_coaxial.sh</code> 需含
 <code>lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp</code>（lead
@@ -1789,5 +1807,5 @@ rigorous 下 3×5=9/9、8×5=40/40，但闭环被 plant 的推力-油门口径�
 缺省路径逐行不变， 验收基线仍以 legacy 为准。rigorous
 只作研究/灵敏度/标定前检查。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 23:59</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 00:05</footer></article></body>
 </html>
