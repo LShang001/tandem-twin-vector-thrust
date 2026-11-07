@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -59,9 +60,18 @@ def main() -> int:
     print(f"=== 实机自检 port={port} ===")
 
     # 1) 固件参数表在位（版本判据：数量对得上才算当前固件）
-    out = cli(port, "device")
-    m = re.search(r"(\d+)\s*参数", out)
-    got = int(m.group(1)) if m else -1
+    # ★ 2026-11-08 加重试：device 偶发读不到（串口忙 / 首帧丢失）时原来直接
+    #   记 -1 并误报 FAIL。实测连续两次调用，第一次 -1、第二次 169。
+    #   这类暂时性失败不该判成版本不对。
+    got = -1
+    for attempt in range(3):
+        out = cli(port, "device")
+        m = re.search(r"(\d+)\s*参数", out)
+        if m:
+            got = int(m.group(1))
+            break
+        if attempt < 2:
+            time.sleep(1.0)
     check("参数表数量", got == EXPECT_PARAM_COUNT,
           f"{got} 项（期望 {EXPECT_PARAM_COUNT}）", results)
 
