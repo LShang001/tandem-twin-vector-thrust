@@ -55,6 +55,52 @@ def load_json_params() -> dict[str, float]:
     return out
 
 
+def check_coax_parity() -> list[str]:
+    """核对共轴参数在三处的默认值是否一致。
+
+    三处分别定义（见 VER-009 §2.7）：固件参数表、分配器、SIL plant。
+    plant 故意不依赖固件头，所以只能靠这种文本层校验来防漂移。
+    """
+    fw_path = ROOT / "TandemVec_FCS" / "include" / "FlightCtrlParams.h"
+    alloc_path = ROOT / "TandemVec_FCS" / "include" / "CoaxialAllocator.h"
+    plant_path = ROOT / "TandemVec_FCS" / "test_host" / "fw_sil" / "coaxial_dynamics_model.h"
+
+    # 只比较三处都有的、语义相同的字段
+    keys = ["mass_kg", "max_total_thrust_n", "servo_half_angle_deg"]
+
+    def grab(path: Path, start_marker: str, stop_marker: str) -> dict[str, float]:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        s = text.find(start_marker)
+        if s < 0:
+            return {}
+        e = text.find(stop_marker, s + len(start_marker))
+        body = text[s:e] if e > 0 else text[s:]
+        out: dict[str, float] = {}
+        for m in re.finditer(
+            r"\b([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([-+]?[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?)f?",
+            body,
+        ):
+            out.setdefault(m.group(1), float(m.group(2)))
+        return out
+
+    a = grab(fw_path, "struct CoaxialCtrlParams", "struct ")
+    b = grab(alloc_path, "float servo_half_angle_deg", "};")
+    c = grab(plant_path, "struct Params", "};")
+
+    problems: list[str] = []
+    for key in keys:
+        vals = {name: d[key] for name, d in (("固件参数表", a), ("分配器", b), ("SIL plant", c))
+                if key in d}
+        if len(vals) < 3:
+            continue  # 某处没有该字段就不比（例如 plant 无 servo_half_angle_deg）
+        lo, hi = min(vals.values()), max(vals.values())
+        denom = max(abs(lo), abs(hi), 1e-12)
+        if (hi - lo) / denom > REL_TOL:
+            detail = " / ".join(f"{k}={v:g}" for k, v in vals.items())
+            problems.append(f"{key}: {detail}")
+    return problems
+
+
 def load_cfg_params() -> dict[str, float]:
     """从 kDefaultTandemVecParams 抓 `/* name */ value f,` 形式的数值。"""
     text = CFG_PATH.read_text(encoding="utf-8", errors="replace")
@@ -133,6 +179,21 @@ def main() -> int:
             print(f"  - {key}: 仿真 {a:.6g} vs 固件 {b:.6g}")
         return 1
     print("[PASS] 除白名单外无漂移：两个事实源在同一量上给出同一个数")
+
+    # ---- 共轴三方一致性（2026-11-08 补）------------------------------------
+    # 共轴参数在三个地方各写一份，当前数值一致但没有校验。这里补上，
+    # 防止某天只改了其中一处。
+    #   A) TandemVec_FCS/include/FlightCtrlParams.h 的 CoaxialCtrlParams
+    #   B) TandemVec_FCS/include/CoaxialAllocator.h 的分配器参数结构
+    #   C) TandemVec_FCS/test_host/fw_sil/coaxial_dynamics_model.h 的 Params
+    coax_drift = check_coax_parity()
+    print()
+    if coax_drift:
+        print(f"[FAIL] 共轴参数 {len(coax_drift)} 项在三处之间不一致：")
+        for item in coax_drift:
+            print(f"  - {item}")
+        return 1
+    print("[PASS] 共轴参数三处一致（FlightCtrlParams / CoaxialAllocator / SIL plant）")
     return 0
 
 
