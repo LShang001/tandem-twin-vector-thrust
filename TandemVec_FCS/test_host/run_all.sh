@@ -205,6 +205,10 @@ run_one "$NROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 # 通过 stub 的 WS2812Driver mock 记录像素断言）：
 run_one "$NROOT/test_host/test_led_status.cpp"          led "$STUB_INCLUDE"
 
+# 坐标系正本（FrameConventions.h，MOD-002 §0 唯一正本的代码实现——
+# S·Sᵀ=I、det=+1、往返恒等、基向量映射；只验几何，不掺控制通道符号约定）：
+run_one "$NROOT/test_host/test_frame_conventions.cpp" frame ""
+
 # 单涵道 + X 型四燃气舵机型（SingleEdf4VaneAllocator.h + ActuatorOutputMap，纯平台无关——
 # 3×4 矩阵正交/单轴解析映射/联合等比限幅/手动直通/逐舵方向/偏航配平/推进联锁/输出映射）：
 run_one "$NROOT/test_host/test_single_edf_4vane.cpp" sedf ""

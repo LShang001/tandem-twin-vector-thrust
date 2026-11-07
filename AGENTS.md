@@ -74,7 +74,7 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 | `TandemVec_FCS/include/FlightCtrlParams.h` | ★ 固件参数唯一事实源（`kFlightCtrlParams`），固件与宿主测试共用 |
 | `TandemVec_FCS/test_host/fw_algo/` | ★ 固件直调接口（C ABI + Python `sim/fwapi`）：`build_fw_algo.sh` 的 `CORE_SOURCES` 是唯一固件源清单；**禁止在 `sim/` 复刻算法** |
 | `docs/08-参考资料/` | ★ 理论/器件资料第一入口：`books/REF-120/121`（秦永元教材 MinerU 全文+分章）、`notes/00–08`、`参考资料注册表.md`、**`器件手册与驱动资产索引.md`（ICM42688/45686/DPS310/F10N 手册+驱动+审计）**；引用格式 `[REF-120 §9.9.2 (9.9.43c) p.334]` |
-| `docs/04-数学建模/MOD-002-坐标系与符号约定.md` | NED 右手系、`theta=-asin(R13)`、渲染力臂≠物理力臂 |
+| `docs/04-数学建模/MOD-002-坐标系与符号约定.md` **§0** | ★★ **全仓坐标系唯一正本**：三套系（存档系/模型系/NED）定义、`{M}↔{A}` 转换表、逐量转换、分端使用表、禁止事项。写任何轴名、做任何轴变换、或读到"roll/推力轴"歧义前**必读**；代码正本＝`TandemVec_FCS/include/FrameConventions.h` |
 | `TandemVec_FCS/GCS/` + `TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md` | 上位机协议唯一实现（`anocom.py`）+ 官方协议手册与差异对照表 |
 
 其它：`TandemVec-Paper/`（论文工程，XeLaTeX×5 构建）、`simulations/vector-thrust-lab/src/core/`（仿真纯计算层，Node 可单测）、`TandemVec_FCS/include/AirframeModel.h`（机型数据驱动执行器模型）、`docs/00-项目治理/GOV-004-代码注释与理论对照规范.md`（注释五段式 + `@ref` 格式，改公式性代码前读）。

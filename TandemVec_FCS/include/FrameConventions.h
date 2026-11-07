@@ -1,0 +1,126 @@
+/**
+ * @file    FrameConventions.h
+ * @module  固件/坐标系正本（全仓唯一的轴置换定义）
+ * @brief   存档系 `{A}` 与模型系 `{M}` 之间的唯一转换实现，附编译期自检
+ * @details 输入：三元素向量（力/力矩/角速度/位置/速度，同一旋转下同律变换）；
+ *          处理：按 MOD-002 §0.2 的置换矩阵做一次基变换；
+ *          输出：另一套坐标系下的同名分量。
+ *          本文件是**代码正本**：任何模块需要跨系转换时调用这里的函数，
+ *          不得各自手写 `-w.Mz, w.My, -w.Mx` 之类的就地表达式。
+ * @theory  两套机体系是同一机械布局的纯旋转置换：
+ *              x_A = +z_M、y_A = +y_M、z_A = −x_M
+ *          写成矩阵 S_{M→A}（第 i 行第 j 列 = 新轴 i 在原轴 j 上的投影）：
+ *              [ 0  0  +1 ]
+ *              [ 0 +1   0 ]
+ *              [−1  0   0 ]
+ *          det(S) = +1 ⇒ 纯旋转、右手系保持；S⁻¹ = Sᵀ。
+ * @ref     MOD-002 §0（全仓坐标系唯一正本）、§0.2（转换）、§0.3（逐量转换表）
+ * @frame   本文件定义的就是这两套系本身：`{A}` 存档系 z_b=推力轴（固件口径）、
+ *          `{M}` 模型系 x_b=推力轴（仿真/论文口径）
+ * @units   N/A（纯线性变换，输入输出同量纲）
+ * @note    ★ 为什么要有这个文件（2026-11-07 用户指令「坐标系一开始就严格确认规范」）：
+ *          此前转换式散落在 plant、allocator、测试各处，写法各异（有的写在
+ *          `const float Mb[3] = {-w.Mz, w.My, -w.Mx};`，有的内联进表达式），
+ *          单涵道 SIL 就是因为把"源机型 roll 绕推力轴"平移到本固件而发散。
+ *          统一到这里以后，转换只有一个出处，改一次全仓生效。
+ *          ★ 本文件只做**坐标变换**，不做物理判断：调用方必须自己知道传进来的是
+ *          哪套系的量、要的是哪套系。
+ * @see     TandemVec_FCS/tools/verify_frame_map.py（同一置换的独立推导校验）、
+ *          docs/04-数学建模/MOD-002-坐标系与符号约定.md §0
+ * @test    test_host/test_frame_conventions.cpp（S·Sᵀ=I、det=+1、往返恒等、
+ *          与历史内联写法 `{-Mz, My, -Mx}` 逐项一致）
+ */
+#pragma once
+
+#include <cmath>
+#include <cstddef>
+
+namespace bfs
+{
+namespace frames
+{
+
+/**
+ * @brief 置换矩阵 S_{M→A}：模型系 → 存档系
+ * @details S[i][j] = 新轴 i 在原轴 j 上的投影。
+ *          行 0（x_A）= 原 z_M；行 1（y_A）= 原 y_M；行 2（z_A）= −原 x_M。
+ */
+constexpr float kModelToArchive[3][3] = {
+    {0.0f, 0.0f, 1.0f},
+    {0.0f, 1.0f, 0.0f},
+    {-1.0f, 0.0f, 0.0f},
+};
+
+/// 模型系 `{M}` 下的三分量向量（力/力矩/角速度/位置/速度均适用）
+struct Vec3Model
+{
+  float x = 0.0f;
+  float y = 0.0f;
+  float z = 0.0f;
+};
+
+/// 存档系 `{A}` 下的三分量向量
+struct Vec3Archive
+{
+  float x = 0.0f;
+  float y = 0.0f;
+  float z = 0.0f;
+};
+
+/**
+ * @brief 模型系 → 存档系：x_A=+z_M、y_A=+y_M、z_A=−x_M
+ */
+inline Vec3Archive modelToArchive(const Vec3Model &m)
+{
+  Vec3Archive a;
+  a.x = m.z;
+  a.y = m.y;
+  a.z = -m.x;
+  return a;
+}
+
+/**
+ * @brief 存档系 → 模型系：x_M=−z_A、y_M=+y_A、z_M=+x_A
+ */
+inline Vec3Model archiveToModel(const Vec3Archive &a)
+{
+  Vec3Model m;
+  m.x = -a.z;
+  m.y = a.y;
+  m.z = a.x;
+  return m;
+}
+
+// ============================================================
+//  编译期自检：置换必须是纯旋转（det=+1）且正交（S·Sᵀ=I）
+// ============================================================
+namespace detail
+{
+
+constexpr float det3(const float m[3][3])
+{
+  return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) -
+         m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0]) +
+         m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+}
+
+constexpr float dotRow(const float m[3][3], int i, int j)
+{
+  return m[i][0] * m[j][0] + m[i][1] * m[j][1] + m[i][2] * m[j][2];
+}
+
+} // namespace detail
+
+static_assert(detail::det3(kModelToArchive) > 0.999f &&
+                  detail::det3(kModelToArchive) < 1.001f,
+              "S_{M→A} 必须是纯旋转（det=+1），否则会翻转手性");
+
+static_assert(detail::dotRow(kModelToArchive, 0, 0) > 0.999f &&
+                  detail::dotRow(kModelToArchive, 0, 1) > -0.001f &&
+                  detail::dotRow(kModelToArchive, 0, 1) < 0.001f &&
+                  detail::dotRow(kModelToArchive, 0, 2) > -0.001f &&
+                  detail::dotRow(kModelToArchive, 0, 2) < 0.001f,
+              "S_{M→A} 必须正交（行两两正交、模长为 1）");
+
+} // namespace frames
+} // namespace bfs
