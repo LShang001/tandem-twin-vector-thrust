@@ -175,6 +175,25 @@ int main()
     check("T10 正误差（爬升）不触发 ThrustBoost", !m.thrust_loss());
   }
 
+  // ── F4 门限与实测摆角的边界（2026-11-08）────────────────────────────
+  // SIL 实测（--fault 4，单舵卡死在 +8° 或满舵位都是这个量级）：
+  // 固件的摆角指令只到 **44.4% dMax**（servo 72.2% → (72.2-50)/50），
+  // 远低于 servo_cmd_frac 的 0.90。所以即便姿态误差已 114°、持续数秒，
+  // F4 也不触发——这是判据的结构性盲区，不是参数没调好。
+  // T11/T12 把这条边界锁进测试：差的是「指令」，不是「误差」。
+  {
+    bfs::ActuatorFaultMonitor m;
+    step_for(m, 114.0f, 3.0f, 0.444f, 0.368f, 0.6f, 0.0f, 2.0f);
+    check("T11 指令 44% dMax + 误差 114° → F4 不触发（实测摆角）",
+          !m.servo_jam());
+  }
+  {
+    bfs::ActuatorFaultMonitor m;
+    step_for(m, 114.0f, 3.0f, 0.97f, 0.1f, 0.6f, 0.0f, 2.0f);
+    check("T12 同样误差、指令 97% → 触发（对照，证明差的是指令）",
+          m.servo_jam());
+  }
+
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
