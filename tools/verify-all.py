@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
 
 
-def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
+def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[str, list[str], Path]]:
     # ★ Node 的测试发现要显式给文件列表：在无 shell 的 subprocess 里，
     #   `node --test <目录>` 与 `*.test.mjs` 都不会被展开（2026-11-07 踩过）。
     import glob
@@ -72,21 +72,36 @@ def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
              ["bash", "test_host/fw_sil/run_all_airframes.sh"],
              ROOT / "TandemVec_FCS")
         )
+    if include_host:
+        # 完整宿主回归（73 段，约 15 min）。★ 2026-11-08 加的：那之前改代码
+        # 只跑 pio run 就提交，把 test_single_edf_4vane 弄坏了整整两周没人发现
+        # （源码在 TandemVec_FCS/test_host/run_all.sh）。
+        checks.append(
+            ("完整宿主回归",
+             ["bash", "test_host/run_all.sh"],
+             ROOT / "TandemVec_FCS")
+        )
     return checks
 
 
 def main(argv: list[str]) -> int:
     include_sil = "--include-sil" in argv
+    include_host = "--include-host" in argv
     quick = "--quick" in argv
-    if quick and include_sil:
-        print("[FAIL] --quick 与 --include-sil 互斥")
+    if quick and (include_sil or include_host):
+        print("[FAIL] --quick 与 --include-sil / --include-host 互斥")
         return 2
 
-    # quick 是默认行为；只有显式 --include-sil 才跑慢档
-    checks = build_checks(include_sil=include_sil)
+    # quick 是默认行为；只有显式慢档开关才跑完整回归
+    checks = build_checks(include_sil=include_sil, include_host=include_host)
 
+    slow = []
+    if include_sil:
+        slow.append("SIL")
+    if include_host:
+        slow.append("宿主回归")
     print("=" * 74)
-    print("UniGNC 全仓总守卫" + ("（含 SIL 慢档）" if include_sil else "（快档）"))
+    print("UniGNC 全仓总守卫" + (f"（含慢档：{' + '.join(slow)}）" if slow else "（快档）"))
     print("=" * 74)
     print()
 

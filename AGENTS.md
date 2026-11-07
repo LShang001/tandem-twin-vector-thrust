@@ -33,6 +33,10 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 # ★ 总守卫（改完代码先跑这条，~2 s；7 项全绿再提交）
 py -3.12 tools/verify-all.py                 # 参数/推进/分配/坐标系/注释/仿真域/坐标系实现
 py -3.12 tools/verify-all.py --include-sil   # 追加三机型 SIL 跑批（慢档 ~10–20 min）
+py -3.12 tools/verify-all.py --include-host  # 追加完整宿主回归 run_all.sh（慢档 ~15 min）
+# ★ 改共享结构体默认值 / 混控 / 分配 / 估计等「行为可能变」的代码时，
+#   只跑快档不够——2026-11-08 就因只跑 pio run 编过、没跑 run_all.sh，
+#   把 test_single_edf_4vane 的 6 项解析值断言弄坏了两周才发现。
 
 # 参数同步（修改 aircraft-model.json 后必须执行）
 py -3.12 tools/sync-params.py          # 生成 parameters.mjs
