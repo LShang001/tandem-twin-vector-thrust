@@ -71,6 +71,11 @@ def check_html(path: Path, broken: list[str]) -> int:
         target = m.group(1).split("#", 1)[0]
         if not target or is_skip(m.group(1)):
             continue
+        # 构建产物保留正文里的 `.md` 原引用，但站点树只含转换后的 html，
+        # 源 md 不在站点目录内——这些引用天然点不开，不是断链。
+        # （build-docs.py 只转换部分文档，跨目录的 md 引用更是点不到。）
+        if target.lower().endswith(".md"):
+            continue
         n += 1
         if not (path.parent / target).exists():
             broken.append(f"{path.relative_to(ROOT)} -> {m.group(1)}")
