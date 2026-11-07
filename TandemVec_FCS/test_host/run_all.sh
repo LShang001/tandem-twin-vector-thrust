@@ -208,6 +208,9 @@ run_one "$NROOT/test_host/test_led_status.cpp"          led "$STUB_INCLUDE"
 # 单涵道 + X 型四燃气舵机型（SingleEdf4VaneAllocator.h + ActuatorOutputMap，纯平台无关——
 # 3×4 矩阵正交/单轴解析映射/联合等比限幅/手动直通/逐舵方向/偏航配平/推进联锁/输出映射）：
 run_one "$NROOT/test_host/test_single_edf_4vane.cpp" sedf ""
+# 单涵道 SIL plant 与分配器的往返一致性（分配器逆解 α→δ 与 plant 正解 δ→τ 必须互逆；
+# 2026-11-07 轴向/符号错误曾在定高模式下不暴露、只有手动打杆才发散，此测试锁死该不变量）：
+run_one "$NROOT/test_host/test_single_edf_plant.cpp" sedfplant ""
 
 # 纵列双发矢量推力飞行器控制分配（纯平台无关头文件，无 Arduino 依赖）：
 run_one "$NROOT/test_host/test_tandemvec_allocation.cpp" ta ""

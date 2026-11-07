@@ -9,6 +9,7 @@
 | `test_gnss_dynamic_weight.cpp` | `ins_gnss_dynamic_weight.h` — GNSS 动态权重 R 矩阵 | 无 | 28 |
 | `test_static_aid_profile.cpp` | `ins_static_aid_profile.h` — 静止辅助强度调度（含帧边界精确值；2026-10 加 ZUPT 外部参照门控测试） | 无 | 55 |
 | `test_imu_raw_channel.cpp` | `ImuRawChannel.h` — IMU 原始值诊断通道（留档/按年龄取样本/满容量覆盖/清零，2026-11-07 配 DBG `imuraw`） | 无 | 14 |
+| `test_single_edf_plant.cpp` | `fw_sil/single_edf_plant.h` — 单涵道 SIL plant 与分配器的往返一致性（α→δ→τ 互逆、轴向不串扰、悬停油门解析值；2026-11-07 锁死轴向/符号不变量） | 无 | 8 |
 | `test_actuator_fault_monitor.cpp` | `ActuatorFaultMonitor.h` — 舵机卡死/单发推力损失检测（误差+饱和+持续时间；2026-10 F3/F4 故障矩阵配套） | 无 | 9 |
 | `test_static_detector.cpp` | `ins_static_detector.h` — 静止检测器状态机 | Eigen/Dense | 22 |
 | `test_altitude_reference.cpp` | `ins_altitude_reference.h` — 气压/GNSS/控制高度参考系转换 | 无 | 8 |

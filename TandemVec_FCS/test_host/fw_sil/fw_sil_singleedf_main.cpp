@@ -12,8 +12,8 @@
  *          运行（TandemVec_FCS 目录）：bash test_host/fw_sil/build_and_run_singleedf.sh
  * @theory  闭环即真实固件的姿态环/定高环；plant 侧 Wrench 见 single_edf_plant.h
  *          （τ_j = k·Σ_i H[j][i]·δ_i，是分配器逆解的严格对偶）。@ref CTL-008 §3
- * @frame   plant 的 NED 位置/速度 + 机体系角速率；单涵道沿用"roll 绕推力轴"语义，
- *          不做存档系轴置换（与 SingleEdf4VaneAllocator 一致）
+ * @frame   plant 的 NED 位置/速度 + 机体系角速率；轴向按 CTL-008 §轴系对照
+ *          （H[0]→Mx 绕 x_b、H[1]→My、H[2]→Mz 绕 z_b 推力轴），不做轴名平移
  * @units   高度 m，姿态 deg，舵机 PWM%，油门 %，时间 s
  * @note    与实机差异：无气动、无风、无传感器噪声与延迟、舵机理想瞬时；
  *          是"控制律与分配链能否收敛"的最小闭环证据，**不是**飞行品质证据。
