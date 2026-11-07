@@ -86,7 +86,25 @@ def main() -> int:
 
     rate_m = re.search(r"rate=([\d.]+)Hz", out)
     hz = float(rate_m.group(1)) if rate_m else -1.0
-    check("ISR 采样率", IMU_RATE_MIN <= hz <= IMU_RATE_MAX, f"{hz:.1f} Hz", results)
+    # ★ 2026-11-08 加复测：ISR 读数实测有 ±7% 抖动（同一块板连测三次得
+    #   1887 / 2000 / 2033 Hz，而 CPU 恒定 48.6%）。单次偏低不代表性能下降。
+    #   判据外时再测最多 2 次，取其中位数，避免把抖动误报成故障。
+    if not (IMU_RATE_MIN <= hz <= IMU_RATE_MAX):
+        samples = [hz]
+        for _ in range(2):
+            time.sleep(1.0)
+            out2 = cli(port, "device")
+            m2 = re.search(r"rate=([\d.]+)Hz", out2)
+            if m2:
+                samples.append(float(m2.group(1)))
+        samples.sort()
+        med = samples[len(samples) // 2]
+        if med != hz:
+            print(f"  [信息] ISR 复测：{samples} → 取中位数 {med:.1f} Hz")
+        hz = med
+    check("ISR 采样率", IMU_RATE_MIN <= hz <= IMU_RATE_MAX,
+          f"{hz:.1f} Hz" + ("" if IMU_RATE_MIN <= hz <= IMU_RATE_MAX else "（复测后仍越界）"),
+          results)
 
     cal_m = re.search(r"cal=(\d+)", out)
     cal = cal_m.group(1) if cal_m else "?"
