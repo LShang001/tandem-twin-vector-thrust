@@ -251,7 +251,8 @@ static float g_coax_servo_rate_dps = -1.0f; // <0 未指定→300 °/s；0=无�
 static float g_coax_ground_mu = 0.0f;       // 地面水平摩擦系数，0=无（默认）
 static float g_coax_cli_loss1 = 1.0f;       // 前/尾电机长期损失保留比例
 static float g_coax_cli_loss2 = 1.0f;
-static int g_coax_servojam = 0;             // 0=无 1=roll(前摆) 2=pitch(尾摆)static float g_coax_servojam_at_s = -1.0f;  // <0 → 复用 --fault-at
+static int g_coax_servojam = 0;             // 0=无 1=roll(前摆) 2=pitch(尾摆)
+static float g_coax_servojam_at_s = -1.0f;  // <0 → 复用 --fault-at
 
 // —— 分配器/失配激励开关（2026-10-31，task-11）——
 // 语义：默认值 = 改动前的 plant 数值（Ix 0.05、三轴惯量系数 1、推力 1、
