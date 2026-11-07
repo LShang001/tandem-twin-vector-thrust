@@ -221,6 +221,12 @@ static float g_flow_scale = 0.95f; // 在线标定后的光流尺度
 static const Eigen::Vector3d kHomeLla(28.2 * M_PI / 180.0,
                                       112.9 * M_PI / 180.0, 50.0);
 
+// ★ 2026-11-08 加：--fault 4 的卡死角度（默认 8°，可调）。
+//   原实现硬编码 +8°，无法验证「卡在满舵位时 F4 是否触发」这条判据边界。
+//   ★ 放在 #ifdef FW_SIL_COAXIAL 之外：纵列环境（build_and_run_env.sh）
+//     也要能编到，否则 --fault 4 那条路径引用不到这个变量。
+static float g_fault4_deg = 8.0f;
+
 #ifdef FW_SIL_COAXIAL
 // 共轴 L1 plant 参数（CLI 可覆盖）；默认值见 CTL-003/VER-002。
 static float g_coax_mass_kg = 0.84f;
@@ -245,8 +251,7 @@ static float g_coax_servo_rate_dps = -1.0f; // <0 未指定→300 °/s；0=无�
 static float g_coax_ground_mu = 0.0f;       // 地面水平摩擦系数，0=无（默认）
 static float g_coax_cli_loss1 = 1.0f;       // 前/尾电机长期损失保留比例
 static float g_coax_cli_loss2 = 1.0f;
-static int g_coax_servojam = 0;             // 0=无 1=roll(前摆) 2=pitch(尾摆)
-static float g_coax_servojam_at_s = -1.0f;  // <0 → 复用 --fault-at
+static int g_coax_servojam = 0;             // 0=无 1=roll(前摆) 2=pitch(尾摆)static float g_coax_servojam_at_s = -1.0f;  // <0 → 复用 --fault-at
 
 // —— 分配器/失配激励开关（2026-10-31，task-11）——
 // 语义：默认值 = 改动前的 plant 数值（Ix 0.05、三轴惯量系数 1、推力 1、
@@ -2134,7 +2139,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       }
 #endif
 
-      if (fault == 4 && t > fault_at) p.servo_f = 8.0f * 0.017453292f;
+      if (fault == 4 && t > fault_at) p.servo_f = g_fault4_deg * 0.017453292f;
       p.wind[1] = (wind_on && t > cfg.wind_start_s && t < cfg.wind_end_s)
                        ? cfg.wind_force_mps2 * P.m
                        : 0.0f;
@@ -2903,6 +2908,8 @@ int main(int argc, char** argv) {
     else if (std::strcmp(argv[i],"--ekf")==0) g_use_ekf=true;
     else if (std::strcmp(argv[i],"--no-wind")==0) wind_on=false;
     else if (std::strcmp(argv[i],"--fault")==0 && i+1<argc) fault=std::atoi(argv[++i]);
+    else if (std::strcmp(argv[i],"--fault4-deg")==0 && i+1<argc)
+      g_fault4_deg = std::strtof(argv[++i], nullptr);
     else if (std::strcmp(argv[i],"--fault-at")==0 && i+1<argc) fault_at=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--loss")==0 && i+1<argc) loss=std::atof(argv[++i]);
     else if (std::strcmp(argv[i],"--alt")==0 && i+1<argc) target_alt=std::atof(argv[++i]);
@@ -3620,7 +3627,9 @@ int main(int argc, char** argv) {
     // 故障注入：F4 上摆卡死（冻结在 +8°）；F3/5 的推力损失在构造 PropulsionState 后
     // 乘到“有效转速”上（只作用于本拍 wrench，不改变电机状态，避免逐拍复利）。
     if (fault == 4 && t > fault_at) {
-      p.servo_f = 8.0f * 0.017453292f;
+      // ★ 2026-11-08：用 g_fault4_deg 而非硬编码 8°，与 runRealNavLoop 一致。
+      //   此前有两处独立实现，只改一处会导致 --fault4-deg 在纵列环境无效。
+      p.servo_f = g_fault4_deg * 0.017453292f;
     }
 
     // 阵风：20-25s 侧风 3 m/s（以 NED 侧向力体现）；--no-wind 时关闭
