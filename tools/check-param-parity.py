@@ -66,7 +66,11 @@ def check_coax_parity() -> list[str]:
     plant_path = ROOT / "TandemVec_FCS" / "test_host" / "fw_sil" / "coaxial_dynamics_model.h"
 
     # 只比较三处都有的、语义相同的字段
-    keys = ["mass_kg", "max_total_thrust_n", "servo_half_angle_deg"]
+    # 2026-11-08 补 lever_m：此前只比三项，力臂三处都定义了却没被守护。
+    # ★ inertia 没进来：SIL plant 写成数组 `inertia_kgm2[3] = {..}`，
+    #   而 grab() 只认 `name = value` 形式，抓不到数组；强行解析会增加
+    #   误报风险，暂留在人工核对（三处当前都是 0.05/0.05/0.08）。
+    keys = ["mass_kg", "max_total_thrust_n", "servo_half_angle_deg", "lever_m"]
 
     def grab(path: Path, start_marker: str, stop_marker: str) -> dict[str, float]:
         text = path.read_text(encoding="utf-8", errors="replace")
@@ -84,7 +88,10 @@ def check_coax_parity() -> list[str]:
         return out
 
     a = grab(fw_path, "struct CoaxialCtrlParams", "struct ")
-    b = grab(alloc_path, "float servo_half_angle_deg", "};")
+    # ★ 2026-11-08 修：原来从 "float servo_half_angle_deg" 起抓，而 lever_m
+    #   定义在它之前（:39 vs :42），抓不到 → len(vals)<3 → 静默跳过不报。
+    #   改从结构体开头抓，覆盖全部字段。
+    b = grab(alloc_path, "struct CoaxialAllocatorParams", "};")
     c = grab(plant_path, "struct Params", "};")
 
     problems: list[str] = []
