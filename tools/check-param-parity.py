@@ -92,7 +92,11 @@ def check_coax_parity() -> list[str]:
     #   定义在它之前（:39 vs :42），抓不到 → len(vals)<3 → 静默跳过不报。
     #   改从结构体开头抓，覆盖全部字段。
     b = grab(alloc_path, "struct CoaxialAllocatorParams", "};")
-    c = grab(plant_path, "struct Params", "};")
+    # ★ 2026-11-08 修：stop_marker 用 "};" 会被数组结束符
+    #   `float inertia_kgm2[3] = {0.05f, ...};` 命中最先的 `};`，
+    #   导致只抓到 mass_kg 一个字段、lever_m 抓不到 → 静默跳过不比较。
+    #   改用行首的 "\n};" 才对应结构体真正的收尾。
+    c = grab(plant_path, "struct Params", "\n};")
 
     problems: list[str] = []
     for key in keys:
