@@ -52,6 +52,7 @@ def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
         ("坐标系 @frame 标注", [PY, "tools/check-frame-refs.py"], ROOT),
         ("SIL 覆盖审计", [PY, "tools/check-sil-coverage.py"], ROOT),
         ("注释门禁 GOV-004", [PY, "tools/check-code-comments.py", "--check"], ROOT),
+        ("文档链接完整性", [PY, "tools/check-links.py"], ROOT),
         ("仿真域单测（Node）", ["node", "--test"] + node_tests, ROOT),
         ("坐标系实现自检",
          ["bash", "-c",
@@ -60,9 +61,10 @@ def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
           "-o tmp/_frame_check.exe && tmp/_frame_check.exe"], ROOT),
     ]
     if include_sil:
+        # cwd 已经是 TandemVec_FCS，路径不能再带前缀（2026-11-07 首次跑慢档才发现）
         checks.append(
             ("三机型 SIL 跑批",
-             ["bash", "TandemVec_FCS/test_host/fw_sil/run_all_airframes.sh"],
+             ["bash", "test_host/fw_sil/run_all_airframes.sh"],
              ROOT / "TandemVec_FCS")
         )
     return checks

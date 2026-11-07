@@ -33,7 +33,14 @@ SITE = ROOT / "simulations" / "vector-thrust-lab"
 
 MD_LINK = re.compile(r'\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)')
 HTML_LINK = re.compile(r'(?:href|src)="([^"]+)"')
-SKIP = ("http://", "https://", "mailto:", "data:", "javascript:")
+SKIP = (
+    "http://", "https://", "mailto:", "data:", "javascript:",
+    # MinerU 分块引用（doc:<hash>/tier:<t>/page:N/block:M）指向解析器内部的
+    # 文档块标识，不是文件路径，永远不可能被本地文件系统解析。
+    # 器件手册产物（TandemVec_FCS/lib/*/doc/*.md）里大量出现，
+    # 不跳过会报出上百条假阳性，把真正的断链淹没（2026-11-07 实测 81 条）。
+    "doc:",
+)
 
 
 def is_skip(target: str) -> bool:
@@ -82,6 +89,12 @@ def main() -> int:
             continue
         # 文献库的 MinerU 提取稿（book.md/paper.md）引用未入库的 images/，不属于站点文档，跳过
         if "08-参考资料" in md.parts and ({"books", "papers"} & set(md.parts)):
+            continue
+        # TandemVec_FCS/lib/ 是第三方 vendor 目录（器件驱动、MAVLink、units、eigen 等），
+        # 其 README 与 MinerU 提取稿引用的是上游自带的图片/资源，多数未随库入库。
+        # 它们不属于项目文档，检查它们只会产出手册/上游图片的噪音，
+        # 掩盖项目文档自身的断链（2026-11-07 实测：跳过前 81 条全是这类假阳性）。
+        if "lib" in md.parts:
             continue
         n_md += check_md(md, broken)
     for html in sorted(SITE.rglob("*.html")):
