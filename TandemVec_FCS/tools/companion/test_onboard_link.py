@@ -2,6 +2,13 @@
 # -*- coding: utf-8 -*-
 """test_onboard_link.py —— 协议层往返自测（不需要硬件）。
 
+@file    test_onboard_link.py
+@module  工具/协议自测
+@brief   协议层往返自测（不需要硬件）：验证编解码与 ACK 往返
+@details 输入/处理/输出见正文；本文件只做链路与协议层验证
+@frame   N/A（协议层，不解算姿态/位置）
+@units   帧、字节、毫秒（按正文）
+@note    这是自测而非性能测量；性能口径请看 measure_link.py。
 验证三件事：
   1. 私有协议 74 B 下行帧的字段顺序与固件 sendPositionVelocityData 一致
   2. 私有协议 14 B 上行帧的打包/解包对称

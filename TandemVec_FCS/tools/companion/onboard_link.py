@@ -2,6 +2,13 @@
 # -*- coding: utf-8 -*-
 """onboard_link.py —— 机载电脑（香橙派）与飞控的链路参考实现。
 
+@file    onboard_link.py
+@module  工具/机载链路
+@brief   机载电脑（香橙派）与飞控之间的 AnoCom 链路参考实现
+@details 输入/处理/输出见正文；本文件只做链路与协议层验证
+@frame   N/A（链路/协议层，不解算姿态/位置）
+@units   Hz、帧、字节、秒（按正文）
+@note    正文含 2026-11-07 实测口径与分路原因，改动前先读正文。
 支持两种协议，自动识别：
   · 私有协议（默认）：下行 74 B / 18 float，上行 14 B / 3 float 加速度
   · MAVLink v2（onboard_link_proto=1）：下行 LOCAL_POSITION_NED + ATTITUDE，

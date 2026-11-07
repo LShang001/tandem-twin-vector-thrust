@@ -1,7 +1,18 @@
 #!/usr/bin/env python3
 """链路帧率与完整性测量（匿名助手协议 / AnoCom）。
 
-★ 2026-11-06 血的教训：本工具的前身写成 `extract_frames(chunk)` 并丢掉返回值，
+@file    measure_link.py
+@module  工具/链路测量（TandemVec_FCS/tools）
+@brief   AnoCom 链路各帧类型的实测频率、丢帧与带宽
+@details 输入：串口名、测量时长、`--raw` 原始字节扫描开关；
+         处理：流式解帧（半帧留在缓冲区等下一块）、按帧类型统计频率与完整性，
+         `--raw` 走原始字节扫描做独立交叉验证；
+         输出：逐帧类型的实测 Hz、字节率与异常计数。
+@theory  AnoCom 帧 = 0xAB + LEN + ...；流式解帧必须消费掉已解析长度并保留余量
+@ref     PROTOCOL-001, docs/registers/固件调试工具链-2026-11-01.md
+@frame   N/A（只做字节与时间统计，不解算姿态/位置）
+@units   频率 Hz、带宽 B/s、时长 s
+@note    ★ 2026-11-06 血的教训：本工具的前身写成 `extract_frames(chunk)` 并丢掉返回值，
   每个 512B 读块边界上的帧全被丢弃，测出「20Hz 只剩 10Hz」「6.9KB/s 只过 21%」，
   误判成链路带宽不足、白改了一轮固件分频。extract_frames 是**流式**接口，必须：
 
@@ -67,6 +78,7 @@ def scan_raw(buf: bytes):
 
 
 def main() -> int:
+    """命令行入口：解析参数 → 打开串口 → 按时长统计各帧类型 → 打印实测结果。"""
     ap = argparse.ArgumentParser()
     ap.add_argument("port")
     ap.add_argument("--baud", type=int, default=921600)

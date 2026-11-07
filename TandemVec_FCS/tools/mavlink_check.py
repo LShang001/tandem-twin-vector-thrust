@@ -1,5 +1,12 @@
 """MAVLink 链路体检：pymavlink 做断言 + MAVProxy 做报文可视化。
 
+@file    mavlink_check.py
+@module  工具/链路体检
+@brief   MAVLink 链路体检：pymavlink 做断言 + MAVProxy 做报文可视化
+@details 输入/处理/输出见正文；本文件只做链路与协议层验证
+@frame   N/A（链路/协议层，不解算姿态/位置）
+@units   Hz、帧、字节、秒（按正文）
+@note    两条路分工见正文 2026-11-07 实测结论；不要用可视化输出替代断言。
 为什么分成两条路（2026-11-07 实测结论）：
   · pymavlink 能精确控制每条消息、解析每个 ACK 字段 → 适合做断言
   · MAVProxy 的 command_long 命令实测不生效（ARM/SET_MODE/999 都没有 ACK），
