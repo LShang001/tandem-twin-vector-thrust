@@ -33,11 +33,13 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 # 参数同步（修改 aircraft-model.json 后必须执行）
 py -3.12 tools/sync-params.py          # 生成 parameters.mjs
 py -3.12 tools/sync-params.py --check  # 漂移检测
+py -3.12 tools/check-param-parity.py   # 仿真 JSON ⇄ 固件 TandemVec_Config.h 机型参数逐项核对（除白名单 dMax 外必须一致）
 
 # 测试（日常按改动范围只跑相关子测试；全量 run_all.sh 与 SIL 矩阵留到里程碑/跨模块改动/用户要求）
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
 node --test simulations/vector-thrust-lab/tests/propulsion.test.mjs # 单模块
 bash TandemVec_FCS/test_host/run_all.sh                              # 宿主全量回归（耗时）
+bash TandemVec_FCS/test_host/fw_sil/run_all_airframes.sh             # ★ 三机型 SIL 统一跑批（纵列/共轴/单涵道，逐项判据+汇总）
 
 # 固件算法直调（仿真脚本调固件 EKF/控制，不在 sim/ 复刻算法）
 bash TandemVec_FCS/test_host/fw_algo/build_fw_algo.sh   # 共享库（4 组 ABI，输出 tmp/tv_fw_algo）
