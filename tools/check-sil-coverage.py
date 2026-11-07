@@ -65,11 +65,26 @@ def main() -> int:
     unregistered = [p for p in not_covered if Path(p).name not in EXEMPT]
     exempted = [p for p in not_covered if Path(p).name in EXEMPT]
 
+    # ★ 2026-11-08 加：检测「死豁免」——同一个文件同时出现在核心清单与豁免表里。
+    #   这种文件会被算作 covered（因为它在 core_src 里），豁免表那条就永远不会出现在
+    #   「已登记豁免」清单中，等于一条看得到却从不生效的记录。更糟的是读者会以为
+    #   该模块「已豁免不需要 SIL」，而实际它已进 SIL——两个结论互相矛盾。
+    dead_exempt = sorted({Path(p).name for p in core_src} & set(EXEMPT))
+
     print("=" * 70)
     print("固件源 ⇄ SIL 覆盖清单审计")
     print("=" * 70)
     print(f"src/*.cpp 共 {len(all_src)} 个；清单里出现 {len(core_src)} 个；未覆盖 {len(not_covered)} 个")
     print()
+
+    if dead_exempt:
+        print(f"[FAIL] {len(dead_exempt)} 个源同时出现在核心清单和豁免表里：")
+        for n in dead_exempt:
+            print(f"  ★ {n} —— 豁免理由「{EXEMPT[n]}」永远不会生效")
+        print()
+        print("处理：从一个清单里删掉。进了 SIL 就不该再登记豁免；")
+        print("      确实不该进 SIL，就从 core_sources.sh 里移除。")
+        return 1
 
     print(f"已进 SIL（{len(covered)}）：")
     for p in covered:
