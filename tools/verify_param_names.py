@@ -25,6 +25,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,18 +45,28 @@ def main() -> int:
     want = list(expected_names())
     print(f"GCS 期望：{len(want)} 项")
 
-    proc = subprocess.run(
-        [sys.executable, "-X", "utf8", "server/cli.py", "--port", port, "param", "list"],
-        cwd=str(GCS_DIR), capture_output=True, text=True,
-        encoding="utf-8", errors="replace", timeout=300,
-    )
-    text = (proc.stdout or "") + (proc.stderr or "")
-
+    # ★ 2026-11-08 加重试：param list 要读 169 项，串口忙或首帧丢失会导致
+    #   解析到 0 项（进而误报「板上缺少 169 项」）。最多试 3 次，
+    #   任一解析出参数即用。（verify_board 的 device 读取有同类问题，已同样修复）
+    text = ""
     got: list[str] = []
-    for line in text.splitlines():
-        m = re.match(r"\s*\[\s*\d+\]\s+([A-Za-z_][A-Za-z0-9_.]*(?:\[\d+\])?)\s+[-+]?[0-9.]", line)
-        if m:
-            got.append(m.group(1))
+    for attempt in range(3):
+        proc = subprocess.run(
+            [sys.executable, "-X", "utf8", "server/cli.py", "--port", port, "param", "list"],
+            cwd=str(GCS_DIR), capture_output=True, text=True,
+            encoding="utf-8", errors="replace", timeout=300,
+        )
+        text = (proc.stdout or "") + (proc.stderr or "")
+        got = []
+        for line in text.splitlines():
+            m = re.match(r"\s*\[\s*\d+\]\s+([A-Za-z_][A-Za-z0-9_.]*(?:\[\d+\])?)\s+[-+]?[0-9.]", line)
+            if m:
+                got.append(m.group(1))
+        if got:
+            break
+        if attempt < 2:
+            print(f"  第 {attempt + 1} 次未解析到参数行，1 s 后重试")
+            time.sleep(1.0)
 
     print(f"实机读回：{len(got)} 项")
     if not got:
