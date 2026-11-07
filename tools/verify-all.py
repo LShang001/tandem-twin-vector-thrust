@@ -47,6 +47,10 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
     )
     checks: list[tuple[str, list[str], Path]] = [
         ("参数层一致性", [PY, "tools/check-param-parity.py"], ROOT),
+        # 2026-11-08 加：aircraft-model.json → parameters.mjs 的生成物同步。
+        # 此前只有人记得才跑 `sync-params.py --check`；漏跑会让仿真用的参数
+        # 与源 JSON 漂移，而两边都不会自己报。
+        ("参数生成物同步", [PY, "tools/sync-params.py", "--check"], ROOT),
         ("推进层对拍", [PY, "tools/check-propulsion-parity.py"], ROOT),
         ("分配层对拍", [PY, "tools/check-allocation-parity.py"], ROOT),
         ("坐标系 @frame 标注", [PY, "tools/check-frame-refs.py"], ROOT),
