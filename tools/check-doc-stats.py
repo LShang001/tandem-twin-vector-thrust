@@ -54,6 +54,16 @@ def count_host_segments() -> int:
     return len(re.findall(r"^run_one ", text, re.MULTILINE))
 
 
+def count_fw_params() -> int:
+    """实测固件参数总数（ano_params.h 的 ANO_PARAMS_COUNT）。"""
+    h = ROOT / "TandemVec_FCS" / "src" / "ano_params.h"
+    if not h.exists():
+        return -1
+    m = re.search(r"#define\s+ANO_PARAMS_COUNT\s+(\d+)",
+                  h.read_text(encoding="utf-8", errors="replace"))
+    return int(m.group(1)) if m else -1
+
+
 # 每项：名称 / 实测函数 / 文档中的写法（捕获组 1 是数字）
 FACTS = [
     {
@@ -76,6 +86,18 @@ FACTS = [
         "actual": count_host_segments,
         "patterns": [
             r"宿主回归全量（(\d+)\+?\s*段",
+        ],
+    },
+    {
+        "name": "固件参数总数",
+        "actual": count_fw_params,
+        "patterns": [
+            # ★ 只匹配明确指「固件参数总数」的写法。早期用宽泛的 `(\d+) 项参数`
+            #   会误报：`18 项参数扫描`（sweep 脚本的扫描维度）、
+            #   `422 项参数断言`（cparams 测试的断言条数）都不是参数总数。
+            r"参数总数以\s*`ANO_PARAMS_COUNT`\s*为准（\d{4}-\d{2}-\d{2}\s*时点\s*(\d+)\s*项",
+            r"参数总数以\s*`ANO_PARAMS_COUNT`\s*为准（\s*(\d+)\s*项",
+            r"`ano_params\.cpp`\s*(\d+)\s*项注册表",
         ],
     },
 ]
