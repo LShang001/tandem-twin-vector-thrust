@@ -205,6 +205,10 @@ run_one "$NROOT/test_host/test_vertical_kf.cpp"         vkf "$STUB_INCLUDE"
 # 通过 stub 的 WS2812Driver mock 记录像素断言）：
 run_one "$NROOT/test_host/test_led_status.cpp"          led "$STUB_INCLUDE"
 
+# 行为红线值锁定（docs/registers/行为保持红线清单.md）：此前固件侧只有行为测试，
+# 把 dMax 从 15° 改成 5° 那些测试照样全绿——红线值本身没人守护：
+run_one "$NROOT/test_host/test_behaviour_redlines.cpp" redlines ""
+
 # 坐标系正本（FrameConventions.h，MOD-002 §0 唯一正本的代码实现——
 # S·Sᵀ=I、det=+1、往返恒等、基向量映射；只验几何，不掺控制通道符号约定）：
 run_one "$NROOT/test_host/test_frame_conventions.cpp" frame ""
