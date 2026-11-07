@@ -1,6 +1,6 @@
 # AGENTS.md — TandemVec_FCS 飞控固件
 
-> 基于 PlatformIO 的 STM32H743 **纵列双发矢量推力 VTOL 飞控固件**（从共轴双桨 VTVL 移植重构）。安全关键嵌入式控制软件，不是普通应用代码。
+> 基于 PlatformIO 的 STM32H743 **UniGNC 固件**：一套 GNC 内核（姿态环 + 15 状态组合导航 + 200 Hz 调度）+ 可插拔机型分配层。同一块板可烧纵列双发、共轴双桨 VTVL、单涵道四燃气舵。安全关键嵌入式控制软件，不是普通应用代码。
 
 ## 当前实机机型与构建
 
@@ -38,11 +38,11 @@
 | 倾角补偿 | **\|R33\| = \|1−2(qx²+qy²)\|**：推力倾斜补偿与光流/激光斜距反投影都用 | **R13 = 2(xz+wy)**（仅仿真模型） |
 | 四元数分量 | `{w,x,y,z}`（`QuaternionMath.h:49`） | `{x,y,z,w}`（THREE） |
 
-- **机体系（存档系）**：`z_b` = 推力轴 = 机身纵轴；`x_b`/`y_b` 为两条横向轴。旧表述「x_b 前 = 机身纵轴 = 推力轴」是模型系读法，2026-08-09 已废止（`FW-CTRL` P2-1）。
-- **执行器→力矩（悬停构型语义）**：上摆 δf（前电机最高点）→滚转主控；下摆 δt（尾电机最低点）→俯仰主控；差速 Δω→偏航主控。旧"前摆=偏航、差速反扭滚转"是仿真模型系/巡航读法，已废止。
-- **悬停构型**：机身竖立、机头朝天；推力轴 z_b 竖直指地（与 NED +z 平行），差速绕 z_b 即世界航向；x_b/y_b 水平。旧表述「差速绕 x_b、z_b 悬停时水平」是模型系读法，勿再引用。
+- **机体系（存档系）**：`z_b` = 推力轴 = 机身纵轴；`x_b`/`y_b` 为两条横向轴（轴序校验见 `FW-CTRL` P2-1）。
+- **执行器→力矩（悬停构型语义）**：上摆 δf（前电机最高点）→滚转主控；下摆 δt（尾电机最低点）→俯仰主控；差速 Δω→偏航主控。
+- **悬停构型**：机身竖立、机头朝天；推力轴 z_b 竖直指地（与 NED +z 平行），差速绕 z_b 即世界航向；x_b/y_b 水平。
 - **RATE_MODE**：三轴经 `RcCurve.h`（rc_rate/expo/super），满杆 roll/pitch 333°/s、yaw 222°/s（限幅 600°/s）；**ATTITUDE_MODE**：q_err.x→上摆、q_err.y→下摆、q_err.z→差速（航向由 `execute_yaw_controller` 统一处理）。
-- **倾角补偿只用 R33**：固件 `compute_thrust_control()`、`sensor_peripheral.cpp` 两处斜距反投影全部走 `|R33|`（钳 0.5 / 0.1）。2026-08-07 误用 R13（x_b 投影）导致悬停 cos_tilt≈0 → 油门×2，已回退。**`MOD-002 §1.2` 的 R13 只适用于仿真模型系，不得作为固件依据**。
+- **倾角补偿只用 R33**：固件 `compute_thrust_control()`、`sensor_peripheral.cpp` 两处斜距反投影全部走 `|R33|`（钳 0.5 / 0.1）。**`MOD-002 §1.2` 的 R13 只适用于仿真模型系，不得作为固件依据**。
 - **AnoVars**（0xF2/0xF3/MAVLink/DBG vars）：加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏；MAVLink 名 9 字符截断须唯一。
 - **编码**：批处理内容必须 ASCII（cmd 启动代码页解析）；中文输出走 Python（PYTHONUTF8=1）。
 
@@ -60,10 +60,10 @@
   矩阵已按存档系重构——纵列"偏航"（绕 z_b=推力轴）对应源机型的"滚转"，物理上是世界航向。
   四舵 PA0–PA3 只做语义重映射，PC8 为推进器油门，PE6 为推进使能。
 
-## 当前约定（含已修复遗留）
+## 当前约定
 
 - 机体系 = 固件存档系（`z_b`=推力轴=机身纵轴，悬停竖直指地）；★ 判据：机身竖立、机头朝天静止时解算 roll=pitch=0，即 `q=Rz(Heading)`、R33=1。
-- 推力垂直投影（含光流/激光斜距反投影）用 **R33**=1−2(qx²+qy²)；**勿改 R13**（2026-08-07「x_b 竖直」错误轴映射时期产物；仿真模型系的 R13 不适用固件）。
+- 推力垂直投影（含光流/激光斜距反投影）用 **R33**=1−2(qx²+qy²)；仿真模型系的 R13 不适用固件，不得作为固件依据。
 - 目标姿态合成 = `Rz(Heading)⊗Rxy(rollTarget,pitchTarget)`；勿加悬停基态补偿。
 - **调试开关宏陷阱**：`#define XXX_TEST 0` 时 `#ifdef` 仍为真——调试开关一律用 `#if`。
 - **IMU 轴映射**（`sensor_imu.cpp` 步骤5，与存档逐字一致，勿改）：`bX=-sZ`、`bY=+sX`、`bZ=-sY`；判据：机头朝天静止 `acc≈(0,0,-1)g` 且 roll=pitch≈0。改前先问：是否与存档一致？
@@ -72,7 +72,7 @@
 - **mix 层轴置换**（`flight_control.cpp` 层1）：`x'=-z_b, y'=+y_b, z'=+x_b`；`Mx'=-Ix·alpha_yaw`、`My'=+Iy·alpha_pitch`、`Mz'=-Iz·alpha_roll`；勿改 `computeEffectMatrix`。
 - 通道↔执行器：roll→上摆、pitch→下摆、yaw→差速；TVC 轴可高带宽、差速轴受电机 τm=0.28s 限带必须保守。
 - 摇杆语义：ATTITUDE_MODE=roll/pitch 目标姿态角、yaw 目标角速度；RATE_MODE=三杆目标角速度。
-- `TVC_Control_Geometric.h`/`TVC_Control_3rdOrder_Poly.h` 已弃用；分配由 `TandemVec_ControlAllocation.h`。
+- 力矩分配由 `TandemVec_ControlAllocation.h` 负责。
 - **时基与 IMU 抽象（2026-11-04 P1）**：TIM8 6.4kHz；P1 用 2kHz ISR 单包入 SPSC ring，Navigation 200Hz 排空；备份 Madgwick/欧拉约200Hz，IMU 增量/EKF 每样本；默认 42688P，45686 用 `-DFCS_IMU_MODEL_ICM45686`；LPF 陀螺 200/加计 100Hz；EKF `q_accel_scale=2.0`；hAcc 门控宏默认 0。
 - **导航宏（18 个，除注明外默认关）**：完整表格（宏名 / 默认值 / 作用 / 开启前提）见 `docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md` §7——改导航宏或判 EKF 行为前先查那张表，别只凭记忆里的默认值；上板标定流程见同文档 §1–§6、§8。
 
@@ -100,7 +100,6 @@
 - 单一定义源：`include/TandemVec_Config.h`（kT/kQ/wMax/I/a/b/dMax/m/g/ServoConfig）。
 - 差速增益调度/工作点下限/零油门门控：`flight_control.cpp` 层2（改后跑 `tools/verify_*.py`）。
 - 控制链遥测：`state_data.h` §4.0b `gnc_tel`。
-- CascadeCtrl 半成品架构已废弃删除（2026-08-08）。
 - 舵机行程/方向/中位：`TandemVec_Config.h` §ServoConfig。
 
 ## 执行原则
