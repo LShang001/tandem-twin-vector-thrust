@@ -52,7 +52,9 @@ check_hover() {
   fi
 }
 
-# 手动阶跃：峰值姿态必须落在 4..8°（固件姿态环对 1600µs 摇杆的既定响应）
+# 手动阶跃：只判姿态响应（roll 峰值落在 4..8°）。
+# ★ 手动模式油门直通、**不控高**，掉高度是设计行为，不能当发散判据——
+#   2026-11-07 统一跑批首次运行时曾因看到 alt=-458 误判为失败。
 check_step() {
   local log="$1" tag="$2"
   local peak
@@ -63,12 +65,14 @@ check_step() {
     fail=1
     return
   fi
+  local unlock
+  unlock="$(grep -o 'unlock=[01]' "$log" | tail -1 | sed 's/unlock=//')"
   local ok
   ok=$(awk -v p="$peak" 'BEGIN{ print ((p>=4.0)&&(p<=8.0))?"1":"0" }')
-  if [ "$ok" = "1" ]; then
-    RESULTS+=("PASS  $tag：roll 峰值 ${peak}°（4..8° 窗口内，未发散）")
+  if [ "$ok" = "1" ] && [ "$unlock" = "1" ]; then
+    RESULTS+=("PASS  $tag：roll 峰值 ${peak}°（4..8° 窗口内），已解锁（手动不控高，掉高度属设计）")
   else
-    RESULTS+=("FAIL  $tag：roll 峰值 ${peak}°（期望 4..8°，疑似方向错或发散）")
+    RESULTS+=("FAIL  $tag：roll 峰值 ${peak}°（期望 4..8°，疑似方向错或发散）或 unlock=${unlock}")
     fail=1
   fi
 }
