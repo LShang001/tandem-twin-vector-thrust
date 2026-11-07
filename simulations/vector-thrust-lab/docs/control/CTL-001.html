@@ -680,15 +680,55 @@ rcRateCurve（rc_rate=0.5/expo=0.25/super 0.7·0.7·0.55，满杆 roll/pitch
 </tr>
 </tbody>
 </table>
-<p><strong>模式与门控</strong>（state_data.h + flight_control.cpp）：CH7
-模式开关（&lt;1300 MANUAL / 1300-1650 AUTO_ALTITUDE / &gt;1650
-AUTO_POSITION/GUIDED，GUIDED 超时 500 ms 强制 MANUAL）；姿态子模式 CH9
-切换 ATTITUDE_MODE/RATE_MODE；手动 TVC 旁路
-<code>is_manual_tvc = isLinkUp &amp;&amp; CH8&gt;1750</code>（<strong>isLinkUp
-门控兜底</strong>——上电无信号时 raw_rc 全 0 曾致开关误判、舵机钳满偏，见
-AGENTS.md 踩坑记录）。姿态控制器门控
+<p><strong>遥控通道语义</strong>（<code>flight_control.cpp</code>
+的开关判据，全部以 <code>isLinkUp</code> 门控兜底）：</p>
+<table>
+<thead>
+<tr>
+<th>通道</th>
+<th>索引</th>
+<th>判据（代码位置）</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CH5</td>
+<td><code>raw_rc_values[4]</code></td>
+<td><code>&gt; 1500</code> 解锁（<code>flight_control.cpp:225</code>，经
+<code>unlockMedian</code> 中值滤波）</td>
+<td><strong>高位解锁</strong>。上电无信号时 raw=0 → 上锁，安全默认</td>
+</tr>
+<tr>
+<td>CH7</td>
+<td><code>raw_rc_values[6]</code></td>
+<td><code>&lt;1300</code> MANUAL / 1300–1650 AUTO_ALTITUDE /
+<code>&gt;1650</code> AUTO_POSITION·GUIDED</td>
+<td>模式开关，GUIDED 超时 500 ms 强制 MANUAL</td>
+</tr>
+<tr>
+<td>CH8</td>
+<td><code>raw_rc_values[7]</code></td>
+<td><code>&gt; 1750</code> 手动
+TVC（<code>flight_control.cpp:273</code>）</td>
+<td><strong>高位才是手动</strong>（2026-08-10
+用户要求的安全反逻辑）；低位=飞控自稳介入</td>
+</tr>
+<tr>
+<td>CH9</td>
+<td><code>raw_rc_values[8]</code></td>
+<td><code>&lt; 1500</code> ATTITUDE_MODE，否则
+RATE_MODE（<code>flight_control.cpp:278</code>）</td>
+<td>姿态子模式</td>
+</tr>
+</tbody>
+</table>
+<p><strong>模式与门控</strong>（state_data.h +
+flight_control.cpp）：姿态控制器门控
 <code>is_attitude_control_active = is_unlocked &amp;&amp; !is_manual_tvc</code>；锁定态摆角直通
-+ 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。</p>
++ 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。CH8 的
+<code>isLinkUp</code> 门控兜底是必须的——上电无信号时 raw_rc 全 0
+曾致开关误判、舵机钳满偏（见 AGENTS.md 踩坑记录）。</p>
 <p><strong>摆角限幅</strong>：仿真 <code>P.dMax</code>
 为<strong>模型概念窗口 ±25°（仿真域）</strong>；固件实机包线
 ±15°（<code>TandemVec_Config.h</code> 0.2618 rad +
@@ -790,5 +830,5 @@ href="../modeling.html">MOD-001</a>
 §7.3），不表示全包线稳定；</li>
 <li>限幅策略为「积分与指令限幅」，不含抗饱和、速率限制或执行器位置动态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 00:38</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-001-控制架构与SAS.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 00:42</footer></article></body>
 </html>

@@ -317,7 +317,16 @@ q_error = q_current⁻¹ ⊗ q_target        （L1010；短弧 + qe.w<0 取反�
 | yaw 航向 | 无航向锁（ψ̇ 指令松手停转） | ratchet hold：解锁上升沿锁航向；摇杆偏离 40 μs 死区→恒角速度；回中→att_yaw.kp×短弧误差→限幅 ±24°/s |
 | FPV 曲线 | 无（滑块线性） | RATE_MODE 走 Betaflight 三参数曲线 rcRateCurve（rc_rate=0.5/expo=0.25/super 0.7·0.7·0.55，满杆 roll/pitch 333°/s、yaw 222°/s，上限 600°/s） |
 
-**模式与门控**（state_data.h + flight_control.cpp）：CH7 模式开关（<1300 MANUAL / 1300-1650 AUTO_ALTITUDE / >1650 AUTO_POSITION/GUIDED，GUIDED 超时 500 ms 强制 MANUAL）；姿态子模式 CH9 切换 ATTITUDE_MODE/RATE_MODE；手动 TVC 旁路 `is_manual_tvc = isLinkUp && CH8>1750`（**isLinkUp 门控兜底**——上电无信号时 raw_rc 全 0 曾致开关误判、舵机钳满偏，见 AGENTS.md 踩坑记录）。姿态控制器门控 `is_attitude_control_active = is_unlocked && !is_manual_tvc`；锁定态摆角直通 + 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。
+**遥控通道语义**（`flight_control.cpp` 的开关判据，全部以 `isLinkUp` 门控兜底）：
+
+| 通道 | 索引 | 判据（代码位置） | 语义 |
+|---|---|---|---|
+| CH5 | `raw_rc_values[4]` | `> 1500` 解锁（`flight_control.cpp:225`，经 `unlockMedian` 中值滤波） | **高位解锁**。上电无信号时 raw=0 → 上锁，安全默认 |
+| CH7 | `raw_rc_values[6]` | `<1300` MANUAL / 1300–1650 AUTO_ALTITUDE / `>1650` AUTO_POSITION·GUIDED | 模式开关，GUIDED 超时 500 ms 强制 MANUAL |
+| CH8 | `raw_rc_values[7]` | `> 1750` 手动 TVC（`flight_control.cpp:273`） | **高位才是手动**（2026-08-10 用户要求的安全反逻辑）；低位=飞控自稳介入 |
+| CH9 | `raw_rc_values[8]` | `< 1500` ATTITUDE_MODE，否则 RATE_MODE（`flight_control.cpp:278`） | 姿态子模式 |
+
+**模式与门控**（state_data.h + flight_control.cpp）：姿态控制器门控 `is_attitude_control_active = is_unlocked && !is_manual_tvc`；锁定态摆角直通 + 电机强制 0；手动 TVC 态 RC 直通 ±MAX_CORRECTION=15°。CH8 的 `isLinkUp` 门控兜底是必须的——上电无信号时 raw_rc 全 0 曾致开关误判、舵机钳满偏（见 AGENTS.md 踩坑记录）。
 
 **摆角限幅**：仿真 `P.dMax` 为**模型概念窗口 ±25°（仿真域）**；固件实机包线 ±15°（`TandemVec_Config.h` 0.2618 rad + `state_data.cpp` MAX_CORRECTION=15），两套口径不可互相外推（[DEC-002](../09-决策记录/DEC-002-六项P0修复决策.md) A-04、[ASM-017](../registers/假设与局限日志.md)）。悬停模式摆角基准为 0，不受配平偏置影响；但巡航配平（dtTrim=−18.702°）超出固件 15°——**28 m/s 实机巡航不可达**，15° 可行巡航下限≈29.8 m/s（30–40 m/s 可行，30 m/s 时 −14.76°、裕度仅 0.24°），见 MOD-003 §3.2。
 
