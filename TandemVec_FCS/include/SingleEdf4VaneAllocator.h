@@ -85,8 +85,12 @@ static constexpr auto &kSingleEdf4VaneManualMatrix = kSingleEdf4VaneMatrix;
 
 /**
  * @brief 结构体说明：单涵道机型的可标定参数（由 FlightCtrlParams 提供实例）
- * @note  字段默认值只作结构体自洽示例，真实默认值在 FlightCtrlParams.h 的
- *        SingleEdf4VaneParams 中锁定（static_assert 逐位比对）。
+ * @note  ★ **本结构的默认值只作编译自洽示例，不参与运行**——真实默认值锁在
+ *        `FlightCtrlParams.h` 的 `SingleEdf4VaneHwParams` 里，调用方必须传入后者。
+ *        ⚠ 两者**没有**编译期自动比对（本文件只有矩阵行正交的两个 static_assert），
+ *        所以要改默认值时两处都得改，否则示例值会与真实值漂移、误导读者。
+ *        2026-11-08：发现本结构 vane_dir 示例值原为 {+1,+1,+1,+1}，与真实值
+ *        {+1,−1,+1,−1} 不一致（照它实现会让两只舵反向），已改成与真实值一致。
  */
 struct SingleEdf4VaneAllocationParams
 {
@@ -96,7 +100,7 @@ struct SingleEdf4VaneAllocationParams
     float inertia_pitch_kgm2 = 0.02f;       // 俯仰轴惯量 [kg·m²]
     float inertia_yaw_kgm2 = 0.03f;         // 偏航轴惯量 [kg·m²]
     float yaw_trim_deg = 0.0f;              // 涵道反扭矩配平（舵角域）[deg]
-    float vane_dir[kSingleEdfVaneCount] = {+1.0f, +1.0f, +1.0f, +1.0f}; // 逐舵物理方向
+    float vane_dir[kSingleEdfVaneCount] = {+1.0f, -1.0f, +1.0f, -1.0f}; // 逐舵物理方向（须与 FlightCtrlParams.h 一致）
 };
 
 /** @brief 分配输入 */
