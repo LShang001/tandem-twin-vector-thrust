@@ -54,15 +54,18 @@ test_host/fw_algo/fw_gnc_api.cpp
 test_host/fw_algo/fw_nav_api.cpp
 "
 
-INCS="-I$ROOT/lib/ublox-main/src -I$ROOT/test_host/fw_sil/stub -I$ROOT/include"
-INCS="$INCS -I$ROOT/src -I$ROOT/test_host/stub -I$ROOT/lib/navigation-main/src"
-INCS="$INCS -I$ROOT/lib/units/src -I$ROOT/lib/AnoComProtocol -I$ROOT/lib/MAVLink"
-INCS="$INCS -I$ROOT/lib/eigen/src"
+INCS="-Ilib/ublox-main/src -Itest_host/fw_sil/stub -Iinclude"
+INCS="$INCS -Isrc -Itest_host/stub -Ilib/navigation-main/src"
+INCS="$INCS -Ilib/units/src -Ilib/AnoComProtocol -Ilib/MAVLink"
+INCS="$INCS -Ilib/eigen/src"
 # 导航 ABI 复用 SIL 的 UBX 帧生成（sil_sensor_model.h::BuildNavPvt/EOE），
 # 不在这里再抄一份 NAV-PVT 布局。
-INCS="$INCS -I$ROOT/test_host/fw_sil"
+INCS="$INCS -Itest_host/fw_sil"
 # 与 SIL 构建同口径：lib 下两层目录都进头文件搜索路径（ICM42688/src、MagSensor 等）。
-for d in $(cd "$ROOT" && find lib -maxdepth 2 -type d); do INCS="$INCS -I$ROOT/$d"; done
+for d in $(cd "$ROOT" && find lib -maxdepth 2 -type d); do INCS="$INCS -I$d"; done
+# ★ 以上一律用**相对路径**：MinGW g++ 的 -I 不接受含中文的绝对路径
+#   （实测 -I"D:/纵列双发矢量推力飞行器/..." 找不到 Arduino.h，相对路径正常）。
+#   编译前先 cd 到 $ROOT，源文件也用相对路径（2026-11-07 修复本脚本一直编不过的问题）。
 
 # 与 SIL 同口径的宏：TANDEMVEC_FIRMWARE（可变参数实例）、FW_SIL_REAL_NAV（SIL 研究
 # 接缝，控制/导航里# ifdef 的行为必须与 SIL 一致）、ARDUINO=300（Arduino 桩）。
@@ -95,6 +98,9 @@ if [ ! -f "$ID_STAMP" ] || [ "$(cat "$ID_STAMP")" != "$BUILD_ID" ]; then
 fi
 
 OBJS=""
+# ★ 编译期一律在 $ROOT 下跑相对路径：MinGW g++ 的 -I 不接受含中文的绝对路径。
+#   上面的 -nt 时间比较仍用绝对路径（那是 shell/文件系统，不受 g++ 限制）。
+cd "$ROOT" || { echo "[fwcore] 无法进入 $ROOT" >&2; exit 3; }
 for src in $CORE_SOURCES $API_SOURCES; do
   obj="$OBJ_DIR/$(obj_name "$src").o"
   force=0
@@ -105,7 +111,7 @@ for src in $CORE_SOURCES $API_SOURCES; do
   fi
   if [ "$force" = "1" ] || [ ! -f "$obj" ] || [ "$ROOT/$src" -nt "$obj" ] || [ -n "$(find "$ROOT/include" "$ROOT/src" "$ROOT/lib/navigation-main/src" "$ROOT/test_host/fw_algo" -newer "$obj" -name '*.h' 2>/dev/null | head -1)" ]; then
     echo "[fwcore] $src"
-    $CXX $FLAGS $INCS $extra -c "$ROOT/$src" -o "$obj"
+    $CXX $FLAGS $INCS $extra -c "$src" -o "$obj"
   fi
   OBJS="$OBJS $obj"
 done
@@ -113,7 +119,7 @@ for src in $CORE_C_SOURCES; do
   obj="$OBJ_DIR/$(obj_name "$src").o"
   if [ ! -f "$obj" ] || [ "$ROOT/$src" -nt "$obj" ]; then
     echo "[fwcore] $src"
-    $CC -std=c11 -O2 -I"$ROOT/lib/ublox-main/src" -c "$ROOT/$src" -o "$obj"
+    $CC -std=c11 -O2 -Ilib/ublox-main/src -c "$src" -o "$obj"
   fi
   OBJS="$OBJS $obj"
 done
