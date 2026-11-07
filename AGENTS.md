@@ -35,6 +35,7 @@ py -3.12 tools/sync-params.py          # 生成 parameters.mjs
 py -3.12 tools/sync-params.py --check  # 漂移检测
 py -3.12 tools/check-param-parity.py   # 仿真 JSON ⇄ 固件 TandemVec_Config.h 机型参数逐项核对（除白名单 dMax 外必须一致）
 py -3.12 tools/check-propulsion-parity.py  # 仿真 propulsion.mjs ⇄ 固件 computeWrench 六维对拍（三端同构守卫）
+py -3.12 tools/check-allocation-parity.py  # 仿真 computeBTrue ⇄ 固件 computeEffectMatrix 3×3 控制效能矩阵对拍
 
 # 测试（日常按改动范围只跑相关子测试；全量 run_all.sh 与 SIL 矩阵留到里程碑/跨模块改动/用户要求）
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
