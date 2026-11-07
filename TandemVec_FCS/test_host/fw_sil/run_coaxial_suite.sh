@@ -705,8 +705,7 @@ SUITE_RC=0
 for code in "${BUILD_RC:-2}" "${ACC_RC:-2}" "${ACC_REAL_RC:-2}" "${MC_RC:-2}" "${REAL_RC:-2}" "${SWEEP_RC:-2}"; do
   [ "$code" -gt 0 ] && SUITE_RC=1
 done
-echo "[suite] 各阶段：build=${BUILD_RC:-?} acceptance=${ACC_RC:-?} " \
-     "acceptance_realistic=${ACC_REAL_RC:-?} " \
-     "mc=${MC_RC:-?} realistic=${REAL_RC:-?} sweep=${SWEEP_RC:-?}"
+# ★ 不用续行符：本文件是 CRLF， 后跟 \r 会让 bash 不认续行，下一行被当成命令（实测报 command not found）
+echo "[suite] 各阶段：build=${BUILD_RC:-?} acceptance=${ACC_RC:-?} acceptance_realistic=${ACC_REAL_RC:-?} mc=${MC_RC:-?} realistic=${REAL_RC:-?} sweep=${SWEEP_RC:-?}"
 echo "[suite] 证据与 summary：$OUT_DIR"
 exit "$SUITE_RC"
