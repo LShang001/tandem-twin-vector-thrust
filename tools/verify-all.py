@@ -50,6 +50,7 @@ def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
         ("推进层对拍", [PY, "tools/check-propulsion-parity.py"], ROOT),
         ("分配层对拍", [PY, "tools/check-allocation-parity.py"], ROOT),
         ("坐标系 @frame 标注", [PY, "tools/check-frame-refs.py"], ROOT),
+        ("SIL 覆盖审计", [PY, "tools/check-sil-coverage.py"], ROOT),
         ("注释门禁 GOV-004", [PY, "tools/check-code-comments.py", "--check"], ROOT),
         ("仿真域单测（Node）", ["node", "--test"] + node_tests, ROOT),
         ("坐标系实现自检",

@@ -41,6 +41,7 @@ py -3.12 tools/check-param-parity.py   # 仿真 JSON ⇄ 固件 TandemVec_Config
 py -3.12 tools/check-propulsion-parity.py  # 仿真 propulsion.mjs ⇄ 固件 computeWrench 六维对拍（三端同构守卫）
 py -3.12 tools/check-allocation-parity.py  # 仿真 computeBTrue ⇄ 固件 computeEffectMatrix 3×3 控制效能矩阵对拍
 py -3.12 tools/check-frame-refs.py         # 坐标系规范落地：全仓 @frame 是否都标注了所属坐标系（MOD-002 §0.5 第 1 条）
+py -3.12 tools/check-sil-coverage.py       # SIL 覆盖审计：每个 src/*.cpp 要么进 SIL 核心源清单、要么登记豁免原因
 
 # 测试（日常按改动范围只跑相关子测试；全量 run_all.sh 与 SIL 矩阵留到里程碑/跨模块改动/用户要求）
 node --test "simulations/vector-thrust-lab/tests/*.test.mjs"         # 全量
