@@ -53,6 +53,7 @@ def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
         ("SIL 覆盖审计", [PY, "tools/check-sil-coverage.py"], ROOT),
         ("注释门禁 GOV-004", [PY, "tools/check-code-comments.py", "--check"], ROOT),
         ("文档链接完整性", [PY, "tools/check-links.py"], ROOT),
+        ("文档产物同步", [PY, "tools/build-docs.py", "--check"], ROOT),
         ("仿真域单测（Node）", ["node", "--test"] + node_tests, ROOT),
         ("坐标系实现自检",
          ["bash", "-c",

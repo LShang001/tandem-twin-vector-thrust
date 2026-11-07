@@ -669,14 +669,15 @@ FRD：<code>bX=-sZ</code>、<code>bY=+sX</code>、<code>bZ=-sY</code>；<code>q_
 <tr>
 <td>P1</td>
 <td><code>params.py::build_meta</code></td>
-<td><code>FIELD_META</code> 加入 <code>rc_rate/rc_expo/rc_super</code>
-后，<code>build_meta</code> 仍对每个 PID 环展开这些字段，生成 36
-个永不命中的 <code>att_roll.rc_rate</code> 等条目（META 实际 164 项 vs
-固件 128）；<code>expected_names()</code> 已用
-<code>field.startswith('rc_')</code> 跳过，两函数口径不一致</td>
-<td>无功能影响（前端按固件 E2 名查表），但误导核查、增大元数据表</td>
-<td>给 <code>build_meta</code> 加同样的 <code>rc_*</code>
-跳过；属行为相邻改动，本轮登记不动，建议随下次参数变更一起做并补测试</td>
+<td><code>build_meta</code> 原先对每个 PID 环展开
+<code>rc_rate/rc_expo/rc_super</code>，生成 36 个永不命中的
+<code>att_roll.rc_rate</code> 等条目，与 <code>expected_names()</code>
+口径不一致（后者已用 <code>field.startswith('rc_')</code> 跳过）</td>
+<td><strong>已修复（2026-11-07）</strong>：<code>build_meta</code>
+补同样的跳过，现在
+<code>len(build_meta()) == len(expected_names()) == 169</code>，GCS 54
+项测试全过</td>
+<td></td>
 </tr>
 <tr>
 <td>P1</td>
@@ -797,5 +798,5 @@ warning</strong>（R01=42、R08=47、R09=28、R04=2），平均分 70.8，0
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/GCS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:11</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/GCS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-07 21:28</footer></article></body>
 </html>
