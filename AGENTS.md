@@ -30,6 +30,10 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 ## 命令
 
 ```bash
+# ★ 总守卫（改完代码先跑这条，~2 s；7 项全绿再提交）
+py -3.12 tools/verify-all.py                 # 参数/推进/分配/坐标系/注释/仿真域/坐标系实现
+py -3.12 tools/verify-all.py --include-sil   # 追加三机型 SIL 跑批（慢档 ~10–20 min）
+
 # 参数同步（修改 aircraft-model.json 后必须执行）
 py -3.12 tools/sync-params.py          # 生成 parameters.mjs
 py -3.12 tools/sync-params.py --check  # 漂移检测
