@@ -107,7 +107,7 @@
 | D-06 | 其余 NIS 门限 | GNSS 30 / 重力 18 / 静止陀螺 24 / 航向 12 / 气压 16 | 同值 | 无 | 一致 |
 | D-07 | 气压更新率/相位 | 需 `--baro-hz 2 --baro-phase 2` 才稳（A2 定高） | 固件 baro 实际速率不同（BMP/DPS310 配置） | 仿真"稳定"依赖这两项口径；直接照搬实机会错配相位 | 已登记（AGENTS 2026-10-21） |
 | D-08 | 高度环积分 `alt_vel.ki` | `hifi_core.CTRL["alt_vel_ki"]=1.25`（=固件现值）；候选 `--a2-alt-ki 0.5` | 1.25（`FlightCtrlParams.h`） | ki=1.25 时仿真 A2 seed2/3 出现 74.8/818.5 m 发散；0.5 仅仿真候选，**未回写** | 已登记（验收报告 §3.1） |
-| D-09 | 水平位置环 | `--pos-hold` 是**仿真 P-D**（北=pitch、东=roll(z)）；默认闭环**无**水平位置环 | 固件位置环未完成/未验证 | 无 `--pos-hold` 时 A2/A3/A5 的 `pos_ne` 不能单独当失败判据 | 已登记；`run_full_envelope` L0 明写 |
+| D-09 | 水平位置环 | `--pos-hold` 是**仿真 P-D**（北=pitch、东=roll(z)）；默认闭环**无**水平位置环 | 固件是**串级位置环**：`initPositionHold()` + `handlePositionControl()` + `PositionPID`（位置环 m→m/s、速度环 m/s→m/s²，限幅/积分/滤波统一读 `kFlightCtrlParams`），单元测试 `test_host/test_position_pid.cpp`；SIL 有前飞段 `--pos-leg N:E`。**实机定点尚未飞过**（实飞记录覆盖定高与姿态） | 无 `--pos-hold` 时 A2/A3/A5 的 `pos_ne` 不能单独当失败判据 | 已登记；`run_full_envelope` L0 明写 |
 | D-10 | 磁/光流辅助 | `--mag-vector`（理想三轴磁，NIS 10）、`--flow-aiding`（理想光流速度） | 真实磁需标定/门控；光流需尺度/延迟/失效处理 | 理想传感器结论不能宣称实机可用（磁不标定不上机：SC3 受扰磁 647 m） | 已登记（验收报告 §4、`notes/05` §7.1） |
 | D-11 | 静止辅助陀螺门控 | 无油门门控（`StaticDetector` 只看四条件） | 2026-10 追加：`throttlePercent>=3%` 时跳过 static gyro 融合 | 仿真会把电机出力/缓慢漂移当成零角速率估零偏 | 已登记（AGENTS 2026-10-21 ⑥），仿真侧未建模 |
 | D-12 | 闭环验收结论 | `run_full_envelope`（EKF 进控制）**10/10 FAIL**；`run_nav_envelope`（真值稳控）仅评导航链 | C++ 固件由 `test_host` + `pio run` 验证 | 两类结论不可互换：truth-stabilized 通过 ≠ 固件闭环通过 | 已在 L0 分别声明 |
