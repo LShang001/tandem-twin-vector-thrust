@@ -55,6 +55,7 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         ("文档链接完整性", [PY, "tools/check-links.py"], ROOT),
         ("文档产物同步", [PY, "tools/build-docs.py", "--check"], ROOT),
         ("文档统计数字", [PY, "tools/check-doc-stats.py"], ROOT),
+        ("文档编号引用", [PY, "tools/check-doc-refs.py"], ROOT),
         ("代码块路径", [PY, "tools/check-codeblock-paths.py"], ROOT),
         ("IMU 轴映射", [PY, "tools/check_imu_axis_map.py"], ROOT),
         ("解锁门判据", [PY, "tools/check_unlock_gate.py"], ROOT),
