@@ -509,15 +509,14 @@ build_flags =
 - `FAST_STATIC_AID_UPDATE` 利用 ZUPT 只观测速度块、Gravity 只观测姿态块的事实，直接用 `P[:,v]` / `P[:,att]` 块公式计算 `S`、`K` 和协方差更新，避免构造完整 `H` 与通用 Joseph 形式 15x15 中间矩阵。
 - `FAST_STABILIZE` 和运行时 `propagation_stabilize_divider(8)` / `static_aid_stabilize_divider(8)` 将完整 LDLT/特征值稳定化降到约 25Hz；每步仍保留对称化、有限值、对角下限和快速 PSD 判据。
 
-已做的主机 A/B 复核：使用同一份 `test/ekf_host_regression.cpp` 分别编译全精度路径和正式 FAST 路径，两者均通过 60 个场景。关键指标没有显示精度退化：Monte Carlo 最大位置误差 `0.099477m -> 0.095582m`，旋转比力捷联传播位置误差两者均为 `0.008957m`，双子样 GNSS 延迟回放后位置误差约 `0.004295m`。可复核命令如下：
+已做的主机 A/B 复核（**2026-06 当时**）：使用 `test/ekf_host_regression.cpp` 分别编译全精度路径和正式 FAST 路径，两者均通过 60 个场景。关键指标没有显示精度退化：Monte Carlo 最大位置误差 `0.099477m -> 0.095582m`，旋转比力捷联传播位置误差两者均为 `0.008957m`，双子样 GNSS 延迟回放后位置误差约 `0.004295m`。
 
-```powershell
-$unitSources = Get-ChildItem lib\units\src -Filter *.cpp | ForEach-Object { $_.FullName }
-g++ -std=c++17 -O2 -Wl,--stack,16777216 -Iinclude -Isrc -Ilib/navigation-main/src -Ilib/eigen/src -Ilib/units/src test/ekf_host_regression.cpp @unitSources -o $env:TEMP\ekf_host_regression_full.exe
-& $env:TEMP\ekf_host_regression_full.exe
-g++ -std=c++17 -O2 -Wl,--stack,16777216 -Iinclude -Isrc -Ilib/navigation-main/src -Ilib/eigen/src -Ilib/units/src -DBFS_NAVIGATION_EMBEDDED_FAST_STATIC_AID_UPDATE=1 -DBFS_NAVIGATION_EMBEDDED_FAST_STABILIZE=1 -DBFS_NAVIGATION_EMBEDDED_FAST_PROPAGATION=1 test/ekf_host_regression.cpp @unitSources -o $env:TEMP\ekf_host_regression_fast.exe
-& $env:TEMP\ekf_host_regression_fast.exe
-```
+> ★ **复核脚本 `test/ekf_host_regression.cpp` 已于 2026-11-07 删除**
+> （4798 行 / 248 KB，能编译但运行必崩：默认栈下 `0xC0000409` 栈溢出，
+> 加 `-Wl,--stack,67108864` 后报告文件打不开；3 次尝试均失败）。
+> 上面的 A/B 数字是**当时的结果记录**，不是当前可复现的证据。
+> 该文件的功能已由 `test_host/` 下拆分后的 `test_ekf_*.cpp` 系列覆盖，
+> FAST 路径的守护改由这些测试承担。要重跑当年的对照，需从 git 历史取回该文件。
 
 风险边界：FAST 路径主要改变协方差、Kalman 增益、NIS 门控和 PSD 检查时机，不直接降低名义惯导机械编排精度。若后续增加高动态机动、改变 IMU 噪声模型、放宽量测门控或打开一阶 `Phi` / 一阶协方差宏，必须重新做主机 A/B 回归和上板 profile；保守回退方法是在 `platformio.ini` 中关闭 `FAST_PROPAGATION` 和 `FAST_STABILIZE`，若诊断构建曾显式打开 `FAST_STATIC_AID_UPDATE` 也应一并关闭。
 
