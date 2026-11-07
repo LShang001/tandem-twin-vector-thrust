@@ -37,7 +37,7 @@ from pathlib import Path
 ROW_FIELDS = [
     "case", "mass", "thrust", "lever", "iy", "iz", "yawk", "seed",
     "ok", "nav_init", "final_alt", "hold_end", "max_roll", "max_pitch",
-    "max_pitch_preland", "severity", "reasons",
+    "max_pitch_preland", "t_max_pitch", "phase_max_pitch", "severity", "reasons",
 ]
 
 HOLD_GATE = 6.0       # 位置保持末端 RMS 上限 [m]
@@ -194,6 +194,9 @@ def main() -> int:
                 max_roll=num_or_none(data.get("max_roll")),
                 max_pitch=num_or_none(data.get("max_pitch")),
                 max_pitch_preland=num_or_none(data.get("max_pitch_preland")),
+                t_max_pitch=num_or_none(data.get("t_max_pitch")),
+                phase_max_pitch=(int(data["phase_max_pitch"])
+                                 if data.get("phase_max_pitch") is not None else None),
             )
             evaluate(row)
         rows.append({k: row.get(k) for k in ROW_FIELDS})
@@ -206,6 +209,13 @@ def main() -> int:
     # ★ 2026-11-08 加：着陆段排除后的俯仰峰值。SIL 一直有输出这个字段
     #   (fw_sil_env_main.cpp:2664)，但 MC 统计此前只汇总 max_pitch，
     #   导致 "48% 失败" 无法区分「飞行段控制不足」和「着陆段瞬态」。
+    # 阶段分布：pitch 峰值落在哪个飞行阶段（0 未离地 / 1 上升 / 2 悬停 / 3 下降 / 4 着陆）
+    ph_counts = {}
+    for r in rows:
+        ph = r.get("phase_max_pitch")
+        if ph is None:
+            continue
+        ph_counts[ph] = ph_counts.get(ph, 0) + 1
     pitches_pre = sorted(float(r["max_pitch_preland"])
                          for r in rows if finite(r.get("max_pitch_preland")))
     worst = sorted(rows, key=lambda r: (1 - r["ok"], r["severity"]),
@@ -224,6 +234,7 @@ def main() -> int:
         pitch_preland_p50=pct(pitches_pre, 0.5),
         pitch_preland_p95=pct(pitches_pre, 0.95),
         pitch_preland_samples=len(pitches_pre),
+        phase_max_pitch_counts={str(k): v for k, v in sorted(ph_counts.items())},
         worst8=worst, rows=rows)
     if not args.out:
         tag = "_realistic" if args.realistic else ""
