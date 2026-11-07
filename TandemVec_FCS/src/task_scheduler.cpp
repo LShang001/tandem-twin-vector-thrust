@@ -66,7 +66,14 @@ struct TaskStats
   uint32_t nominal_period_us;  // 名义周期
 };
 static TaskStats s_stats[MAX_TASKS] = {};
-static uint32_t s_stats_window_start_us = 0;  // 观测窗口起点
+static uint32_t s_stats_window_start_ms = 0;  // 观测窗口起点（毫秒）
+// ★ 2026-11-08 修复：窗口基准从 micros() 改为 millis()。
+//   micros() 在 32 位上 71.6 分钟就回绕一次，长航时后「窗口」被算小、
+//   而 exec_sum_us 是 u64 累加不受回绕影响，于是 CPU 负载被放大成
+//   不可能的值（实测 93 分钟后 hp_permille=4090 即 409%）。
+//   改用 millis()（49.7 天回绕）后该失真是数量级上的改善；
+//   窗口精度降到 1 ms，对几百秒的窗口完全够用。
+//   注意：这只是统计口径，不参与任何调度决策，不影响控制时序。
 // 单轮执行预算：超过后只推迟 deferrable 任务；控制/导航/IMU 不受影响。
 #ifndef BFS_TASK_PASS_BUDGET_US
 #define BFS_TASK_PASS_BUDGET_US 1200U
@@ -84,14 +91,14 @@ void schedulerStatsReset()
     s_stats[i].gap_min_us = 0xFFFFFFFFu;
     s_stats[i].last_run_us = micros();
   }
-  s_stats_window_start_us = micros();
+  s_stats_window_start_ms = millis();
   s_loop_max_pass_us = 0;
 }
 
 void schedulerStatsPrint(arduino::Print &out)
 {
-  const uint32_t window_us = micros() - s_stats_window_start_us;
-  const uint32_t window_ms = window_us / 1000U;
+  const uint32_t window_ms = millis() - s_stats_window_start_ms;
+  const uint64_t window_us = static_cast<uint64_t>(window_ms) * 1000ULL;
   uint64_t total_exec_us = 0;
 
   out.println(F("[DBG] == 任务调度统计 =="));
@@ -159,7 +166,7 @@ void schedulerStatsPrint(arduino::Print &out)
 
 uint32_t schedulerWindowMs()
 {
-  return (micros() - s_stats_window_start_us) / 1000U;
+  return millis() - s_stats_window_start_ms;
 }
 
 uint32_t schedulerLoopMaxPassUs()
@@ -169,7 +176,7 @@ uint32_t schedulerLoopMaxPassUs()
 
 uint32_t schedulerCpuPermille()
 {
-  const uint32_t window_us = micros() - s_stats_window_start_us;
+  const uint64_t window_us = static_cast<uint64_t>(millis() - s_stats_window_start_ms) * 1000ULL;
   if (window_us == 0U) return 0U;
   uint64_t total = 0;
   for (uint8_t i = 0; i < taskCount; ++i)
