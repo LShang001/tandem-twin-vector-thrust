@@ -101,6 +101,22 @@ static SingleEdfActuators decode_actuators(const float ch_pct[4], float throttle
 int main(int argc, char **argv)
 {
   const bool manual = (argc > 1 && std::strcmp(argv[1], "--manual") == 0);
+
+  // ★ 未知参数告警（2026-11-07）：本入口只支持 --manual，其余参数一律忽略。
+  //   静默忽略曾导致真实误判——传 --gain-scale 2.0 后输出逐字符不变，
+  //   被当成「增益参数不生效」查了三轮，最后发现参数根本没被读
+  //   （build_and_run_singleedf.sh 用 "$OUT" "$@" 透传，二进制又不校验）。
+  //   这里显式告警：不改变行为（仍忽略），但让使用者立刻看见。
+  for (int i = 1; i < argc; ++i)
+  {
+    if (std::strcmp(argv[i], "--manual") != 0)
+    {
+      std::fprintf(stderr,
+                   "[warn] 未识别的参数被忽略: %s"
+                   "（本 SIL 入口仅支持 --manual；增益/故障/时长等参数见 fw_sil_env_main.cpp）\n",
+                   argv[i]);
+    }
+  }
   Body body;
 
   isLinkUp = true;
