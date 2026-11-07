@@ -55,6 +55,24 @@ test('限幅关系自洽', () => {
   assert.ok(P.dMax > 0 && P.dMax < Math.PI / 2, '摆角限幅合理');
 });
 
+// ★ 红线值精确锁定（2026-11-07 补）
+// 为什么需要这一组：此前测试只断言「执行器不超限」（`|dtAct| <= P.dMax`），
+// 那是行为断言——把 dMax 改成 0.1 测试照样通过。行为红线清单要求「改值必须
+// 重采基线并记录」，但没有任何测试会发现值被悄悄改了。下面这些数字来自
+// docs/registers/行为保持红线清单.md，改它们就必须同步改这里并重采基线。
+test('行为红线值精确锁定', () => {
+  assert.equal(P.frameCap, 0.05, '帧 delta 上限 0.05 s');
+  assert.equal(P.maxStep, 0.004, '积分子步上限 0.004 s');
+  assert.equal(P.tauM, 0.28, '电机一阶滞后 0.28 s');
+  assert.equal(P.dwMax, 0.7, 'SAS 差速限幅 ±0.7');
+  assert.equal(P.dwUiMax, 0.55, 'UI 差速幅值 ±0.55');
+  assert.equal(P.vMin, 0.5, '空速分母保护 0.5 m/s');
+  assert.equal(P.groundZ, 6.2, '地面基准 -6.2 m（NED 记法）');
+  // dMax 在 JSON 里存的是弧度近似值，用角度换算后比，避免 0.4363 的舍入歧义
+  assert.ok(Math.abs(P.dMax - (25 * Math.PI) / 180) < 1e-6,
+    `SAS 摆角限幅应为 25° = 0.43633 rad，实际 ${P.dMax}`);
+});
+
 test('参数对象冻结', () => {
   assert.ok(Object.isFrozen(P));
 });
