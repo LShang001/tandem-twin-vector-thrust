@@ -55,6 +55,7 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         ("分配层对拍", [PY, "tools/check-allocation-parity.py"], ROOT),
         ("坐标系 @frame 标注", [PY, "tools/check-frame-refs.py"], ROOT),
         ("SIL 覆盖审计", [PY, "tools/check-sil-coverage.py"], ROOT),
+        ("头文件接线审计", [PY, "tools/check-module-wiring.py"], ROOT),
         ("注释门禁 GOV-004", [PY, "tools/check-code-comments.py", "--check"], ROOT),
         ("文档链接完整性", [PY, "tools/check-links.py"], ROOT),
         ("文档产物同步", [PY, "tools/build-docs.py", "--check"], ROOT),
