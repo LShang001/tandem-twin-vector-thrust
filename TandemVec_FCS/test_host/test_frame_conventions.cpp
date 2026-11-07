@@ -124,6 +124,51 @@ int main()
             "T5: 模型系纯 ωz 应整体落到存档系 ωx（与力矩同律）");
   }
 
-  std::printf("[PASS] test_frame_conventions: 5 组几何性质断言全部通过\n");
+  // T6 推力轴竖直投影（R33）必须等于完整旋转矩阵的第三行第三列
+  //    四元数 {w,x,y,z} 的旋转矩阵 R[2][2] = 1 − 2(x² + y²)
+  //    这里用完整矩阵公式独立算一遍再比对，防止"公式抄错但自己跟自己对上"
+  {
+    // ★ 样本必须都是单位四元数：R33 = 1−2(x²+y²) 等于旋转矩阵元素的前提是 q 已归一化；
+    //   非单位四元数算出来的只是一个代数式，不再具备正交性（本测试第一版就栽在这）。
+    const float samples[][4] = {
+        {1.0f, 0.0f, 0.0f, 0.0f},              // 单位四元数 → 1
+        {0.70710678f, 0.0f, 0.70710678f, 0.0f}, // 绕 y 转 90° → 0
+        {0.70710678f, 0.70710678f, 0.0f, 0.0f}, // 绕 x 转 90° → 0
+        {0.5f, 0.5f, 0.5f, 0.5f},              // 一般姿态
+        {0.8f, 0.0f, 0.0f, 0.6f},              // 绕 z 转 73.7°（单位，第三行应仍为单位向量）
+    };
+    for (const auto &s : samples)
+    {
+      const float w = s[0], x = s[1], y = s[2], z = s[3];
+      // 完整旋转矩阵元素 R33（独立展开，不复用被测函数）
+      const float r33 = 1.0f - 2.0f * (x * x + y * y);
+      const float got = thrustAxisVerticalCos(x, y);
+      require(near(got, r33, 1e-6f), "T6: thrustAxisVerticalCos 必须等于 R33");
+      // 交叉检验：R33 也等于 z 轴在 NED 竖直方向的分量（由矩阵第三行算）
+      const float r32 = 2.0f * (y * z + w * x);
+      const float r31 = 2.0f * (x * z - w * y);
+      require(near(r31 * r31 + r32 * r32 + r33 * r33, 1.0f, 1e-4f),
+              "T6: 旋转矩阵第三行必须是单位向量（自检 R33 展开无误）");
+    }
+  }
+
+  // T7 钳位版本：绝对值 + 下限
+  {
+    require(near(thrustAxisVerticalCosClamped(0.0f, 0.0f), 1.0f),
+            "T7: 水平姿态应钳出 1.0");
+    // 绕 y 转 90° 时 R33=0，钳位后应等于保守下限 0.1
+    const float sq = 0.70710678f;
+    require(near(thrustAxisVerticalCosClamped(0.0f, sq), 0.1f),
+            "T7: 90° 倾斜时应钳到下限 0.1（防止斜距换算除零）");
+    require(near(thrustAxisVerticalCosClamped(0.0f, sq, 0.05f), 0.05f),
+            "T7: 下限应可配置");
+    // 负 R33 取绝对值
+    const float c = thrustAxisVerticalCos(0.9f, 0.0f); // 1-2*0.81 = -0.62
+    require(c < 0.0f, "T7: 构造负 R33 的样本");
+    require(near(thrustAxisVerticalCosClamped(0.9f, 0.0f), 0.62f),
+            "T7: 负 R33 应取绝对值");
+  }
+
+  std::printf("[PASS] test_frame_conventions: 7 组几何性质断言全部通过\n");
   return 0;
 }

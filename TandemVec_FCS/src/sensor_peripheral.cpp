@@ -26,6 +26,7 @@
 #include "sensor_peripheral.h"
 #include "math_utils.h"
 #include "Dps310FifoPolicy.h"
+#include "FrameConventions.h" // 推力轴竖直投影（R33）的唯一实现，勿在本文件重写
 #include "MAVLink.h" // MAVLink APM 光流传感器自动识别（UART7 发心跳 + 解 OPTICAL_FLOW/DISTANCE_SENSOR）
 
 #include <cmath>
@@ -469,14 +470,9 @@ namespace
       }
       else
       {
-        float qx = AHRS_Packet.Qx;
-        float qy = AHRS_Packet.Qy;
-        float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
-        cos_tilt = fabsf(cos_tilt);
-        if (cos_tilt < 0.1f)
-        {
-          cos_tilt = 0.1f;
-        }
+        // 推力轴竖直投影（R33，含绝对值与 0.1 钳位）——实现收在 FrameConventions.h
+        const float cos_tilt =
+            bfs::frames::thrustAxisVerticalCosClamped(AHRS_Packet.Qx, AHRS_Packet.Qy);
         if (estimated_height > 0.08f)
         {
           slant_m = estimated_height / cos_tilt;
@@ -484,9 +480,9 @@ namespace
       }
 
       // 高度/测距有效性独立更新：测距数据有效就记录，不因 8cm 光流最小工作距离而丢弃。
-      float qx = AHRS_Packet.Qx;
-      float qy = AHRS_Packet.Qy;
-      float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
+      // 推力轴竖直投影（R33）——实现收在 FrameConventions.h
+      const float cos_tilt =
+          bfs::frames::thrustAxisVerticalCos(AHRS_Packet.Qx, AHRS_Packet.Qy);
       if (s_msp_distance_mm > 0)
       {
         float vertical_m = slant_m * fabsf(cos_tilt);
@@ -743,9 +739,9 @@ namespace
 
       if (flow.ground_distance > 0.0f)
       {
-        float qx = AHRS_Packet.Qx;
-        float qy = AHRS_Packet.Qy;
-        float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
+        // 推力轴竖直投影（R33）——实现收在 FrameConventions.h
+        const float cos_tilt =
+            bfs::frames::thrustAxisVerticalCos(AHRS_Packet.Qx, AHRS_Packet.Qy);
         float vertical_m = flow.ground_distance * fabsf(cos_tilt);
         flow_data.distance_m = flowDistanceMedianFilter.filter(vertical_m);
         flow_data.distance_m = flowDistanceFilter.filter(flow_data.distance_m);
@@ -776,9 +772,9 @@ namespace
       if (dist.current_distance > 0 && dist.current_distance != 65535U)
       {
         float slant_m = static_cast<float>(dist.current_distance) / 100.0f;
-        float qx = AHRS_Packet.Qx;
-        float qy = AHRS_Packet.Qy;
-        float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
+        // 推力轴竖直投影（R33）——实现收在 FrameConventions.h
+        const float cos_tilt =
+            bfs::frames::thrustAxisVerticalCos(AHRS_Packet.Qx, AHRS_Packet.Qy);
         float vertical_m = slant_m * fabsf(cos_tilt);
         flow_data.distance_m = flowDistanceMedianFilter.filter(vertical_m);
         flow_data.distance_m = flowDistanceFilter.filter(flow_data.distance_m);
@@ -1362,12 +1358,10 @@ void handleMTF02PFlow()
       // 应用精确的四元数补偿公式: H = S * (1 - 2*(x^2 + y^2))
       // 补偿因子 (1 - 2*(qx*qx + qy*qy)) 在数学上等价于机体Z轴在导航系垂直轴上的投影长度，
       // 即飞机整体倾斜角度的余弦值 cos(tilt)。
-      float height_compensation_factor = 1.0f - 2.0f * (qx * qx + qy * qy);
-
-      // 安全性检查：在极端姿态（如接近90度倾斜）下，补偿因子可能因浮点误差变为负数。
-      // 物理上高度总是正值，因此我们使用浮点绝对值函数 fabsf() 来确保结果的正确性。
-      // 这对应于数学推导中的 H = S * |(L_n)_z|。
-      height_compensation_factor = fabsf(height_compensation_factor);
+      // 推力轴竖直投影取绝对值（实现收在 FrameConventions.h）。
+      // 物理上高度总是正值，用 |R33| 对应数学推导里的 H = S * |(L_n)_z|。
+      const float height_compensation_factor =
+          std::fabs(bfs::frames::thrustAxisVerticalCos(qx, qy));
 
       // 用斜距乘以补偿因子，计算出最终的、精确的对地垂直高度 H。
       float vertical_height_m = slant_distance_m * height_compensation_factor;
@@ -1480,9 +1474,8 @@ void handleLQS48Flow()
     {
       float raw_dist = (float)raw_data.height_mm / 1000.0f;
       // 简单的倾斜补偿用于记录
-      float qx = AHRS_Packet.Qx;
-      float qy = AHRS_Packet.Qy;
-      float tilt_cos = 1.0f - 2.0f * (qx * qx + qy * qy);
+      const float tilt_cos =
+          bfs::frames::thrustAxisVerticalCos(AHRS_Packet.Qx, AHRS_Packet.Qy);
       flow_data.distance_m = raw_dist * fabsf(tilt_cos);
       flow_data.is_range_valid = true;
       flow_data.range_quality = raw_data.quality;
@@ -1516,12 +1509,9 @@ void handleLQS48Flow()
     float calc_distance_m = 0.0f;
 
     // 计算 cos(tilt)
-    float qx = AHRS_Packet.Qx;
-    float qy = AHRS_Packet.Qy;
-    float cos_tilt = 1.0f - 2.0f * (qx * qx + qy * qy);
-    cos_tilt = fabsf(cos_tilt);
-    if (cos_tilt < 0.1f)
-      cos_tilt = 0.1f; // 防止除以0 (极端倾斜保护)
+    // 推力轴竖直投影（R33，含绝对值与 0.1 钳位防止除零）——实现收在 FrameConventions.h
+    const float cos_tilt =
+        bfs::frames::thrustAxisVerticalCosClamped(AHRS_Packet.Qx, AHRS_Packet.Qy);
 
     // 只有当融合高度在有效范围内 (例如 > 5cm) 才计算速度
     if (estimated_height > 0.05f)

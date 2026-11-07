@@ -103,6 +103,39 @@ inline Vec3Model archiveToModel(const Vec3Archive &a)
 }
 
 // ============================================================
+//  推力轴的竖直投影（倾角余弦）
+// ============================================================
+
+/**
+ * @brief 推力轴在 NED 竖直方向的投影分量，即姿态矩阵元素 R33
+ * @details 存档系里推力轴是 z_b，所以推力轴竖直投影就是 R33：
+ *              R33 = 1 − 2(qx² + qy²)
+ *          四元数分量顺序 {w,x,y,z}（与 QuaternionMath.h、AHRS_Packet 一致）。
+ *          **模型系**里推力轴是 x_b，对应的是 R13（= 2(xz + wy)），两者是同一个
+ *          物理量在两套轴名下的表达——见 MOD-002 §1.2。
+ * @param qx 四元数 x 分量；@param qy 四元数 y 分量
+ * @return 投影余弦，范围 [−1, 1]；悬停（机头朝天）时接近 ±1
+ * @note 本函数只做几何计算，不含任何钳位或绝对值——调用方按需处理。
+ */
+inline float thrustAxisVerticalCos(float qx, float qy)
+{
+  return 1.0f - 2.0f * (qx * qx + qy * qy);
+}
+
+/**
+ * @brief 推力轴竖直投影的绝对值，并钳到下限（供高度/斜距换算的除法使用）
+ * @details 倾角接近 90° 时 R33→0，斜距换算会出现除零；固件侧统一钳 0.1
+ *          （对应约 84° 倾角）。把「取绝对值 + 钳位」收在一处，避免每个调用点
+ *          各写一遍 clamp 阈值。
+ * @param floor 钳位下限，默认 0.1（与 sensor_peripheral.cpp 的历史取值一致）
+ */
+inline float thrustAxisVerticalCosClamped(float qx, float qy, float floor = 0.1f)
+{
+  const float c = std::fabs(thrustAxisVerticalCos(qx, qy));
+  return (c < floor) ? floor : c;
+}
+
+// ============================================================
 //  编译期自检：置换必须是纯旋转（det=+1）且正交（S·Sᵀ=I）
 // ============================================================
 namespace detail
