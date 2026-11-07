@@ -837,11 +837,17 @@ m）</td>
 <tr>
 <td>D-12</td>
 <td>闭环验收结论</td>
-<td><code>run_full_envelope</code>（EKF 进控制）<strong>10/10
-FAIL</strong>；<code>run_nav_envelope</code>（真值稳控）仅评导航链</td>
+<td><code>run_full_envelope</code>（EKF 进控制）<strong>默认配置 10/10
+FAIL</strong>——默认闭环只有姿态/定高、<strong>无水平位置环</strong>，A2/A3/A5
+的 <code>pos_ne</code> 因此不能单独当失败判据；加
+<code>--pos-hold --mag-vector --flow-aiding --nis-mag 10</code> 后
+3/5/10 种子有效场景均 <strong>9/9</strong>（A8
+目标定义不成立，单列）。<code>run_nav_envelope</code>（真值稳控）仅评导航链</td>
 <td>C++ 固件由 <code>test_host</code> + <code>pio run</code> 验证</td>
-<td>两类结论不可互换：truth-stabilized 通过 ≠ 固件闭环通过</td>
-<td>已在 L0 分别声明</td>
+<td>两类结论不可互换：truth-stabilized 通过 ≠ 固件闭环通过。★
+只引「10/10
+FAIL」会误读成仿真闭环完全失败——那是默认配置口径，不是最佳配置下的能力上限</td>
+<td>已在 L0 分别声明；配置差异见踩坑记录 2026-10-21</td>
 </tr>
 <tr>
 <td>D-13</td>
@@ -1270,5 +1276,5 @@ m（无水平位置环，符合 P1-5）</td>
 只改分析工具与文档，不动 <code>aircraft-model.json</code> /
 <code>vTrim</code> / <code>dMax</code>。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/ANALYSIS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 01:11</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/ANALYSIS-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 01:22</footer></article></body>
 </html>

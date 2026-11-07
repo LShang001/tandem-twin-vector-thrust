@@ -470,9 +470,12 @@ project 场景在 HEAD 基线即挂 3743 断言，与本轮无关，待单独定
 </tr>
 <tr>
 <td>闭环结论</td>
-<td><code>run_full_envelope</code> 10/10 FAIL</td>
+<td><code>run_full_envelope</code> <strong>默认配置 10/10
+FAIL</strong>（默认无水平位置环）；加
+<code>--pos-hold --mag-vector --flow-aiding</code> 后 3/5/10 种子均
+<strong>9/9</strong></td>
 <td><code>test_host</code> + <code>pio run</code></td>
-<td>两类结论不可互换</td>
+<td>两类结论不可互换；只引 FAIL 会误读</td>
 </tr>
 <tr>
 <td>A8 / F4</td>
@@ -894,5 +897,5 @@ notes/04 一致）；磁偏角未建模。</li>
 </tr>
 </tbody>
 </table>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-004-代码理论对照核查报告.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 01:11</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-004-代码理论对照核查报告.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 01:22</footer></article></body>
 </html>
