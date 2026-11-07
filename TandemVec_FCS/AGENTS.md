@@ -126,6 +126,15 @@
 - **调度统计口径（2026-11-03）**：`tasks` 新增 `丢执行` 列（flag 未消费又被 ISR 置位次数）并打印 `TIM8 clk/psc/arr`；当前 240 MHz/PSC1/ARR37500/6.4 kHz。**`tasks`/`health` 走 DBG，打印会显著加剧丢拍，高频采样速率必须用非 DBG 的 0xF4 `imu_rate_hz`（`tvc record`）核对。** IMU 2 kHz 已由 P1（2kHz ISR+SPSC ring+Navigation 排空）解决，默认实测 mean≈2000、std≈70、ring_drop=0；详见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
 - **新增 `health` 命令**：一屏看模式/IMU 健康/气压/GNSS pvt-eoe-fix-sv/ EKF rpy-vel-pos/ Serial5 上行 rx-bad-age-txskip，以及 loop CPU/max_pass/window（不重置 tasks 统计）。
 
+## 内存占用（2026-11-08 实测，SingleEdf4Vane）
+
+- **RAM 335720 / 524288（64.0%）**，Flash 395408 / 2097152（18.9%）。
+- RAM 大户（`arm-none-eabi-nm --size-sort`）：`nav_ekf` 84.3 KB（15 状态 EKF）、
+  **5 个 Arduino Serial 实例各 20.7 KB 共 103 KB**、`flashLog` 25.0 KB。
+- ★ **可优化但未做**：`SerialLP1`（LPUART1）当前**零引用**却占 20.7 KB；
+  禁用可把 RAM 从 64% 降到约 60%。不做是因为要改 Arduino 框架的 UART 实例配置，
+  为 4% 余量动框架不划算——等真需要更多 RAM 时再评估。
+
 ## 硬性代码边界
 
 - `DETA100_module.h` 只能在 `main.cpp` 包含（内含解析实现与静态状态）。
