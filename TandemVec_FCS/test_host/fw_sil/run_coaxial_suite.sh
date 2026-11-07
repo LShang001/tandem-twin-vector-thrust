@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 共轴 VTVL 一键验证套件：build → 8 profiles×5 seeds 验收 → MC 100 → sweep 18。
 #
-# 证据默认写入 test_host/fw_sil/sim-data/coax-2026-10-30/：
+# 证据默认写入 test_host/fw_sil/sim-data/coax-<当天日期>/（默认带日期，避免覆盖历史证据）：
 #   build.log             构建输出
 #   acceptance.log        current plant 的 8 profiles × 5 seeds 验收逐例表
 #   acceptance_realistic.log  可选：--coax-realistic 的同矩阵验收（两栏对照）
@@ -39,7 +39,7 @@
 #   bash test_host/fw_sil/run_coaxial_suite.sh --out /tmp/coax-evidence
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-OUT_DIR="${OUT_DIR:-$ROOT/test_host/fw_sil/sim-data/coax-2026-10-30}"
+OUT_DIR="${OUT_DIR:-$ROOT/test_host/fw_sil/sim-data/coax-$(date +%Y-%m-%d)}"
 BIN_DIR="${BIN_DIR:-${TMPDIR:-/tmp}/tv_fcs_fw_sil_coax}"
 PROFILES="mag_clean,mag_nominal,mag_disturbed,nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof"
 SEEDS="1,2,3,4,5"
@@ -60,7 +60,7 @@ usage() {
   bash test_host/fw_sil/run_coaxial_suite.sh --out /tmp/coax-evidence
 
 选项：
-  --out DIR         证据目录（默认 test_host/fw_sil/sim-data/coax-2026-10-30）
+  --out DIR         证据目录（默认 test_host/fw_sil/sim-data/coax-<当天日期>）
   --profiles LIST   验收 profile 列表（逗号分隔，默认 8 个）
   --seeds LIST      随机种子列表（默认 1,2,3,4,5）
   --seconds N       每次仿真时长 [s]（默认 40）
