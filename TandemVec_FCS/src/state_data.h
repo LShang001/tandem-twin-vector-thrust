@@ -681,6 +681,21 @@ extern Vector3 current_omega_dps_body_filtered;
 
 // 气压计数据：高度统一为起飞点向上为正的相对高度 (m)
 extern float imu_die_temp_c;               // ICM42688 芯片温度 (°C)，1 Hz 更新
+
+// ===== IMU 原始值通道（诊断，2026-11-07）=====
+// readIMUData() 步骤 2 取到的**未校准、未滤波**六轴，供 DBG `imuraw` 与
+// AnoVars watch 使用；传感器原始轴序 RUB，acc=g、gyr=dps。
+// ★ 不参与任何解算（校准/滤波仍走原链路），只为"是滤波吃掉了信号还是传感器
+//   本来就抖"这类争论提供可证伪的证据（对照 FMT 的 sensor_imu0_0 双通道做法）。
+extern volatile float g_imu_raw_acc_g[3];
+extern volatile float g_imu_raw_gyr_dps[3];
+
+// ===== 分配层饱和次数（可观测，2026-11-07）=====
+// 各机型的分配器只给出饱和 bool（纵列三轴分开、单涵道/共轴是综合位）；
+// 这里累加触发次数，用于回答"真机分配饱和有多频繁"。★ 只加计数，不改输出。
+// 下标：0=δf 上摆（纵列滚转）、1=δt 下摆（纵列俯仰）、2=Δω 差速（纵列偏航）、
+//       3=任一通道饱和（三机型都累加，跨机型可比的唯一指标）。
+extern uint32_t g_alloc_sat_count[4];
 extern float temperature_raw, pressure_raw;
 extern float temperature, pressure;
 extern float baro_altitude_raw, baro_altitude;

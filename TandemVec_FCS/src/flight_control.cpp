@@ -2328,6 +2328,15 @@ void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &ou
         gnc_tel.alloc_sat[0] = alloc.sat_delta_f;
         gnc_tel.alloc_sat[1] = alloc.sat_delta_t;
         gnc_tel.alloc_sat[2] = alloc.sat_dw;
+        // 2026-11-07：饱和只报 bool 无法回答"真机饱和有多频繁"，这里累加次数。
+        // ★ 只加计数，不改分配输出；下标 0=δf 1=δt 2=Δω，[3]=任一通道（见 state_data.h）。
+        if (alloc.sat_delta_f) { ++g_alloc_sat_count[0]; }
+        if (alloc.sat_delta_t) { ++g_alloc_sat_count[1]; }
+        if (alloc.sat_dw)      { ++g_alloc_sat_count[2]; }
+        if (alloc.sat_delta_f || alloc.sat_delta_t || alloc.sat_dw)
+        {
+          ++g_alloc_sat_count[3];
+        }
       }
 #endif  // GYRO_DIRECT_TEST
     }
@@ -2566,6 +2575,8 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
     gnc_tel.M_ff[j] = 0.0f;
     gnc_tel.alloc_sat[j] = alloc.saturated;
   }
+  // 2026-11-07：单涵道分配器只有综合饱和位，计入 [3]（与纵列/共轴跨机型可比）。
+  if (alloc.saturated) { ++g_alloc_sat_count[3]; }
   gnc_tel.delta_f_deg = alloc.vane_deg[0];
   gnc_tel.delta_t_deg = alloc.vane_deg[1];
   g_tvc_upper_deg = alloc.vane_deg[0];
@@ -2850,6 +2861,8 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   gnc_tel.coax_pitch_corr_deg = applied_pitch_corr_deg;
   gnc_tel.coax_yaw_diff_us = applied_yaw_diff_us;
   gnc_tel.coax_saturated = coax_out_saturated ? 1 : 0;
+  // 2026-11-07：共轴综合饱和位计入 [3]（与纵列/单涵道跨机型可比）。
+  if (coax_out_saturated) { ++g_alloc_sat_count[3]; }
   gnc_tel.coax_alloc_sat = alloc_sat_mask;
   gnc_tel.coax_torque_residual_nm = alloc_torque_residual;
 

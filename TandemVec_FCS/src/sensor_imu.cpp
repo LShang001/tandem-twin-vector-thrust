@@ -33,6 +33,7 @@
 #include "imu_range.h"   // 量程常量：换 FS 时必须同步改这里
 #include "ins_vibration_hf.h"
 #include "ImuSampleRing.h" // 高频振动通道：用低通前/后之差测 80–120 Hz 机械振动
+#include "ImuRawChannel.h" // 原始值诊断通道：留档校准/滤波之前的六轴（2026-11-07）
 #include "NavImuIncrementSelect.h" // 导航增量源选择（默认宏关闭时不参与累加）
 
 namespace
@@ -240,6 +241,16 @@ int initICM42688()
   return 0; // 初始化成功
 }
 
+// IMU 原始值诊断通道（2026-11-07）：无条件编译，不依赖 ISR ring 架构。
+// 用途是回答"信号差异来自传感器本身还是来自校准/滤波"，不参与解算。
+static ImuRawChannel s_imu_raw_channel;
+
+/// DBG `imuraw` 的只读入口（主循环同线程访问，见 ImuRawChannel.h 的并发说明）
+const ImuRawChannel &imuRawChannel()
+{
+  return s_imu_raw_channel;
+}
+
 #ifdef BFS_IMU_ISR_RING
 static ImuSampleRing s_imu_ring;
 static volatile bool s_imu_ring_ready = false;
@@ -360,6 +371,29 @@ bool readIMUData()
     float raw_gx_dps = IMU->gyrX();
     float raw_gy_dps = IMU->gyrY();
     float raw_gz_dps = IMU->gyrZ();
+
+    // ---- 原始值留档（2026-11-07，诊断用）--------------------------------
+    // 这里是校准/滤波/轴变换**之前**唯一的位置：存的是传感器原始轴序 RUB、
+    // acc=g、gyr=dps。目的：让"是滤波吃掉了信号还是传感器本来就抖"可证伪。
+    // ★ 只做全局赋值与环形入档，不改变本函数后续任何数据通路；
+    //   DBG `imuraw` 与 AnoVars watch 都在主循环读，无并发问题。
+    g_imu_raw_acc_g[0] = raw_ax_g;
+    g_imu_raw_acc_g[1] = raw_ay_g;
+    g_imu_raw_acc_g[2] = raw_az_g;
+    g_imu_raw_gyr_dps[0] = raw_gx_dps;
+    g_imu_raw_gyr_dps[1] = raw_gy_dps;
+    g_imu_raw_gyr_dps[2] = raw_gz_dps;
+    {
+      ImuRawSample raw_sample{};
+      raw_sample.acc_g[0] = raw_ax_g;
+      raw_sample.acc_g[1] = raw_ay_g;
+      raw_sample.acc_g[2] = raw_az_g;
+      raw_sample.gyr_dps[0] = raw_gx_dps;
+      raw_sample.gyr_dps[1] = raw_gy_dps;
+      raw_sample.gyr_dps[2] = raw_gz_dps;
+      raw_sample.stamp_us = static_cast<uint32_t>(currentTimeMicros);
+      s_imu_raw_channel.push(raw_sample);
+    }
 
     // ========================================================================
     // 步骤 3: 自动校准与修正 (Auto-Calibration & Correction)

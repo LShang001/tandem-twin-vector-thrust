@@ -945,6 +945,15 @@ static uint32_t s_bias_temp_table_last_ms = 0;
 // 与宿主 SIL（复刻软件低通处）都无条件更新，导航侧按 `BFS_VIB_HIGH_SOURCE_HF`
 // 或 SIL 运行时开关选择读哪个通道，避免两个编译分支下的链接不对称。
 InsHfVibrationMonitor g_ins_hf_vibration;
+
+// 运行时站点磁偏副本（说明见 include/mag_reference.h）。
+// 默认值与 kDefaultMagReference 完全一致：未执行 DBG `magdec` 时，
+// 航向初始化与磁门控参考都与改前逐位相同。
+namespace bfs
+{
+MagReferenceNed g_mag_reference = kDefaultMagReference;
+}
+
 static InsVibrationEstimator s_vib_estimator;
 static uint32_t s_vib_gnss_bad_until_ms = 0;
 static bfs::MagMeasurementGate s_mag_gate;
@@ -2342,9 +2351,11 @@ void handleNavigationSystem()
 
       // 执行初始化。真实磁样本给的是磁北航向，需加站点磁偏角转到真北；
       // 伪磁/不可用磁保持 offset=0，避免改变历史确定性行为。
+      // 2026-11-07：磁偏改用运行时副本（默认值与 kDefaultMagReference 相同，
+      // 异地飞行可用 DBG `magdec` 现场修正；未设置时行为不变）。
       const float mag_init_yaw_offset =
           mag_real_for_init
-              ? bfs::kDefaultMagReference.declination_rad
+              ? bfs::g_mag_reference.declination_rad
               : ((g_heading_aid_mode >= 1U)
                      ? g_heading_align_deg * 0.0174532925f
                      : 0.0f);
@@ -3026,7 +3037,7 @@ void handleNavigationSystem()
         gate_input.sample_seq = mag_sample.seq;
         gate_input.last_consumed_seq = s_mag_last_consumed_seq;
         gate_input.cal_valid = mag_cal_valid;
-        gate_input.ref = &bfs::kDefaultMagReference;
+        gate_input.ref = &bfs::g_mag_reference;
         gate_input.c_n_b = bfs::quat2dcm(nav_ekf.quat());
         gate_input.gnss_course_valid = gnss_course_valid;
         gate_input.gnss_course_rad = gnss_course_rad;

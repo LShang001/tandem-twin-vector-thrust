@@ -28,6 +28,7 @@
 #include "navigation_task.h"
 #include "sensor_peripheral.h"
 #include "sensor_imu.h"
+#include "mag_reference.h" // 站点磁偏运行时副本（DBG magdec，2026-11-07）
 #include "MAVLink.h"
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
 #include "ano_vars.h"     // 通用变量上报（0xF2 值帧 / 0xF3 清单 / DBG vars）
@@ -2821,6 +2822,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   gpsproto [ubx|nmea|auto] [baud] - GNSS 解析协议查看/切换"));
         serial.println(F("[DBG]   nmea              - NMEA 备用链路状态（fix/sv/pdop/句统计）"));
         serial.println(F("[DBG]   ubxcfg            - UBX 接收机自动配置（重跑）"));
+        serial.println(F("[DBG]   imuraw [n]        - IMU 原始值 vs 处理值对比（未校准/未滤波, RUB g/dps）"));
+        serial.println(F("[DBG]   magdec [deg]      - 站点磁偏查看/设置（东偏为正, 默认 -4.114° 长沙）"));
         serial.println(F("[DBG]   health            - 一屏汇总：IMU/气压/GNSS/EKF/Serial5 上行"));
         serial.println(F("[DBG]   ubxstat           - UBX 解析器统计（rx/校验/超长/pvt/eoe/队列）"));
         serial.println(F("[DBG]   ubxcfg status     - 上次配置结果"));
@@ -3140,6 +3143,82 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(ubx.queued_epoch_count());
         serial.print(F(" queue_overflow="));
         serial.println(ubx.queue_overflow_count());
+      }
+      else if (strncmp(line, "imuraw", 6) == 0)
+      {
+        // IMU 原始值对比（2026-11-07）：留档的**未校准/未滤波**六轴 vs 当前处理值。
+        // 判据：raw 与 processed 的差异只出现在高频段 → 是滤波/校准所为；
+        //       raw 本身就抖 → 传感器/供电/机械问题，调滤波器无效。
+        // 用法：imuraw [n]，n 默认 8，上限 32（留档深度 64 拍）。
+        int n = 8;
+        if (line[6] == ' ') { n = atoi(line + 7); }
+        if (n < 1) { n = 1; }
+        if (n > 32) { n = 32; }
+        const ImuRawChannel &raw_ch = imuRawChannel();
+        serial.println(F("[DBG] == IMU raw (未校准/未滤波, 原始轴序 RUB, acc=g gyr=dps) =="));
+        serial.print(F("[DBG] total="));
+        serial.print(raw_ch.total());
+        serial.print(F(" held="));
+        serial.println(raw_ch.count());
+        serial.println(F("[DBG] # age_ms rax ray raz rgx rgy rgz"));
+        const uint32_t raw_now_us = micros();
+        for (int i = 0; i < n; ++i)
+        {
+          ImuRawSample s{};
+          if (!raw_ch.byAge(static_cast<size_t>(i), s)) { break; }
+          serial.print(F("[DBG] "));
+          serial.print(i);
+          serial.print(' ');
+          serial.print((raw_now_us - s.stamp_us) / 1000U);
+          for (int k = 0; k < 3; ++k) { serial.print(' '); serial.print(s.acc_g[k], 3); }
+          for (int k = 0; k < 3; ++k) { serial.print(' '); serial.print(s.gyr_dps[k], 3); }
+          serial.println();
+        }
+        serial.print(F("[DBG] processed acc="));
+        serial.print(IMU_Packet.accelerometer_x, 4);
+        serial.print('/');
+        serial.print(IMU_Packet.accelerometer_y, 4);
+        serial.print('/');
+        serial.print(IMU_Packet.accelerometer_z, 4);
+        serial.print(F(" m/s2 gyr="));
+        serial.print(IMU_Packet.gyroscope_x * 57.2957795f, 3);
+        serial.print('/');
+        serial.print(IMU_Packet.gyroscope_y * 57.2957795f, 3);
+        serial.print('/');
+        serial.print(IMU_Packet.gyroscope_z * 57.2957795f, 3);
+        serial.println(F(" dps (FRD)"));
+      }
+      else if (strncmp(line, "magdec", 6) == 0)
+      {
+        // 站点磁偏角查看/设置（2026-11-07）：deg，东偏为正。
+        // 默认 -4.114°（长沙 IGRF-14）。异地飞行先查当地磁偏再现场设置，
+        // 免去重新跑 tools/gen_mag_reference.py 生成站点表。
+        // ★ 只影响航向初始化与磁门控参考；未设置时行为与改前一致。
+        bool magdec_ok = true;
+        if (line[6] == ' ')
+        {
+          const float deg = atof(line + 7);
+          if (deg > -90.0f && deg < 90.0f)
+          {
+            bfs::g_mag_reference.declination_rad = deg * 0.017453292519943295f;
+          }
+          else
+          {
+            magdec_ok = false;
+            serial.println(F("[DBG] magdec: 超范围，允许 -90..90 deg（东偏为正）"));
+          }
+        }
+        if (magdec_ok)
+        {
+          serial.print(F("[DBG] magdec_deg="));
+          serial.print(bfs::g_mag_reference.declination_rad * 57.29577951308232f, 4);
+          serial.print(F(" default_deg="));
+          serial.print(bfs::kDefaultMagReference.declination_rad * 57.29577951308232f, 4);
+          serial.print(F(" site_deg="));
+          serial.print(bfs::g_mag_reference.site_lat_deg, 2);
+          serial.print('/');
+          serial.println(bfs::g_mag_reference.site_lon_deg, 2);
+        }
       }
       else if (strcmp(line, "health") == 0)
       {

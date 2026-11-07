@@ -22,6 +22,7 @@
  */
 #pragma once
 #include "state_data.h"
+#include "ImuRawChannel.h" // 原始值诊断通道类型（纯头文件、无外部依赖）
 
 /**
  * @brief 初始化磁力计（IST8310 / QMC5883L 自动探测）
@@ -66,6 +67,17 @@ int initICM42688();
  * @return true 数据读取和处理成功, false 无新数据
  */
 bool readIMUData();
+
+/**
+ * @brief IMU 原始值诊断通道（只读）
+ *
+ * 留档 `readIMUData()` 在步骤 2 取到的**未校准、未滤波**六轴样本，
+ * 供 DBG `imuraw` 打印"原始值 vs 当前处理值"的并排对比。
+ *
+ * @return 原始值环形通道的只读引用（深度 64 拍，覆盖式）
+ * @note   不参与任何解算；样本为传感器原始轴序 RUB，acc=g、gyr=dps。
+ */
+const ImuRawChannel &imuRawChannel();
 #ifdef BFS_IMU_ISR_RING
 void imuSampleIsr();
 uint32_t imuRingDropCount();

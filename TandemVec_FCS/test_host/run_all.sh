@@ -58,6 +58,8 @@ run_one() {
 # 平台无关算法（include/ins_*.h，不依赖 Arduino）：
 run_one "$NROOT/test_host/test_gnss_dynamic_weight.cpp" gdw ""
 run_one "$NROOT/test_host/test_static_aid_profile.cpp"  sap ""
+# IMU 原始值诊断通道（include/ImuRawChannel.h，纯头文件，2026-11-07）
+run_one "$NROOT/test_host/test_imu_raw_channel.cpp"     imraw ""
 # 执行器故障监测（ActuatorFaultMonitor.h，纯平台无关——舵机卡死/单发推力损失
 # 的“误差+饱和+持续时间”检测与动作建议；F3/F4 故障矩阵的固件侧最小模块）：
 run_one "$NROOT/test_host/test_actuator_fault_monitor.cpp" afm ""

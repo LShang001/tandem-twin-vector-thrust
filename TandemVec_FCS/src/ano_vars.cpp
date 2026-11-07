@@ -177,6 +177,25 @@ extern const AnoVarEntry kAnoVars[] = {
     // 名称 ≤16B；MAVLink 9 字符可见名截断后 "coax_sat"/"coax_flt" 均唯一。
     ANO_VAR_U8("coax_sat",            gnc_tel.coax_saturated),
     ANO_VAR_U8("coax_flt",            gnc_tel.coax_fault_flags),
+
+    // ---- IMU 原始值 + 分配饱和次数（2026-11-07）----
+    // 原始值：readIMUData 步骤 2 的未校准/未滤波六轴，传感器原始轴序 RUB
+    // （acc=g、gyr=dps）。与上面的 gyro_* 处理值并排即可判断"信号差异来自
+    // 传感器本身还是来自校准/滤波"；不参与任何解算。
+    ANO_VAR_FLOAT("imu_raw_ax",       g_imu_raw_acc_g[0]),
+    ANO_VAR_FLOAT("imu_raw_ay",       g_imu_raw_acc_g[1]),
+    ANO_VAR_FLOAT("imu_raw_az",       g_imu_raw_acc_g[2]),
+    ANO_VAR_FLOAT("imu_raw_gx",       g_imu_raw_gyr_dps[0]),
+    ANO_VAR_FLOAT("imu_raw_gy",       g_imu_raw_gyr_dps[1]),
+    ANO_VAR_FLOAT("imu_raw_gz",       g_imu_raw_gyr_dps[2]),
+    // 分配层饱和**次数**（原 sat_* 只是 bool）：回答"真机饱和有多频繁"。
+    // 下标 0=δf 上摆(滚转) 1=δt 下摆(俯仰) 2=Δω 差速(偏航)。
+    ANO_VAR_U32("sat_cnt_f",          g_alloc_sat_count[0]),
+    ANO_VAR_U32("sat_cnt_t",          g_alloc_sat_count[1]),
+    ANO_VAR_U32("sat_cnt_w",          g_alloc_sat_count[2]),
+    // [3] = 任一通道饱和次数：三个机型分支都累加，是对比不同机型/不同
+    // 调参下"执行器够不够用"的唯一可比指标。
+    ANO_VAR_U32("sat_cnt_any",        g_alloc_sat_count[3]),
 };
 static_assert(sizeof(kAnoVars) / sizeof(kAnoVars[0]) <= ANO_VARS_MAX_COUNT,
               "ano_vars: 注册表超上限");

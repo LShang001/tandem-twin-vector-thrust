@@ -457,6 +457,14 @@ volatile int imu_delta_sample_count = 0;
 volatile bool imu_delta_overflow = false;
 
 float imu_die_temp_c = 0.0f;
+
+// IMU 原始值通道（诊断）：readIMUData() 每拍写入，不参与解算。
+volatile float g_imu_raw_acc_g[3] = {0.0f, 0.0f, 0.0f};
+volatile float g_imu_raw_gyr_dps[3] = {0.0f, 0.0f, 0.0f};
+
+// 分配层饱和次数：三个机型分支各自在最终输出处累加。
+// [0..2] 纵列三轴；[3] 任一通道饱和（三机型都写，跨机型可比）。
+uint32_t g_alloc_sat_count[4] = {0U, 0U, 0U, 0U};
 float temperature_raw = 0.0f, pressure_raw = 0.0f;
 float temperature = 0.0f, pressure = 0.0f;
 float baro_altitude_raw = 0.0f, baro_altitude = 0.0f;

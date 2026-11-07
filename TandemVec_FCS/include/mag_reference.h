@@ -61,6 +61,22 @@ static constexpr MagReferenceNed kDefaultMagReference = {
     112.9f,                      // site longitude
     true};
 
+/*
+ * 运行时站点磁偏副本（2026-11-07）。
+ *
+ * 为什么需要：上面 kDefaultMagReference 是长沙站点的**编译期常量**，磁偏角
+ * 固定为 −4.114°。异地飞行时站点磁偏与长沙可差数度到十几度，用固定常数会在
+ * 航向初始化与磁门控参考里留下等量的系统偏差。这里给出一条"现场可改"的通路，
+ * 而不必重新跑 tools/gen_mag_reference.py 再生表。
+ *
+ * 口径：默认值 = kDefaultMagReference，**默认行为与改前逐位一致**；只有显式执行
+ * DBG `magdec <deg>` 才会改变。改的只有 declination_rad，场强/倾角/站点坐标
+ * 仍取长沙表（磁偏是航向解算唯一用到的位置相关量）。
+ *
+ * @note 定义在 src/navigation_task.cpp（该 TU 已包含本头文件）。
+ */
+extern MagReferenceNed g_mag_reference;
+
 namespace magref
 {
 
