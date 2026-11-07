@@ -37,6 +37,9 @@ py -3.12 tools/verify-all.py --include-host  # 追加完整宿主回归 run_all.
 # ★ 改共享结构体默认值 / 混控 / 分配 / 估计等「行为可能变」的代码时，
 #   只跑快档不够——2026-11-08 就因只跑 pio run 编过、没跑 run_all.sh，
 #   把 test_single_edf_4vane 的 6 项解析值断言弄坏了两周才发现。
+# ★ 改 SIL 公共代码（fw_sil_env_main.cpp / fw_sil_plant_6dof.h 等）必须加
+#   --include-sil：那三个机型共用同一份源码，2026-11-08 就因只编了纵列环境
+#   （build_and_run_env.sh），漏掉共轴环境里一个未声明变量，共轴 SIL 坏了两周。
 
 # 参数同步（修改 aircraft-model.json 后必须执行）
 py -3.12 tools/sync-params.py          # 生成 parameters.mjs
