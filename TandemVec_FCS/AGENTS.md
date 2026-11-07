@@ -151,6 +151,19 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 - 宿主构建用 `tools/with-ascii-bin.sh`（subst ASCII 盘符、`BIN_DIR`=仓库 `tmp/`，不写系统 %TEMP%）。
 - **重力口径**：导航/估计/控制的真值统一用 WGS-84 正常重力——固件侧 `nav_ekf.gravity_mps2()` / `ekf_gravity_mps2`（Somigliana，随经纬高），宿主测试侧 `ins_test::GravityWgs84()`（31.2304°N、5 m ≈9.794 m/s²）。`TandemVec_Config.h` 的 `g=9.79` 只作 1g 量程换算（`G_TO_MS2`）与 EKF 未初始化时的回退值，**不作导航真值**；用 9.79 构造比力会注入 ~0.004 m/s²，1 h 纯惯导可伪造出 24 km 级假漂移。
 - 上传只在用户明确要求时：`pio run -t upload`；串口监视加超时。
+  **两种烧录方式**（2026-11-07 实测都可用）：
+  1. `pio run -e <env> -t upload` —— 走 `upload_protocol = cmsis-dap`，
+     速率由根 `platformio.ini` 的 `[env] upload_speed = 100000` 统一设（100 kHz）。
+  2. **OpenOCD 直烧**（目标机没有项目仓库时最省事，只需 bin + OpenOCD）：
+     ```bash
+     openocd -f interface/cmsis-dap.cfg -f target/stm32h7x.cfg \
+       -c "adapter speed 100" \
+       -c "program firmware.bin 0x08000000 verify reset exit"
+     ```
+     输出 `Verified OK` 即写入成功。
+  ★ **`Verified OK` 只证明字节写进了 Flash，不证明固件是新的**。
+    烧完必须读回验证：`py -3.12 tools/verify_board.py COM6 <期望机型>`
+    （8 项判据，只读），其中「参数表数量 = `ANO_PARAMS_COUNT`」是版本锚点。
 - 找不到 `pio` 必须明确报告，不得声称构建通过。
 - 验证选择：文档改动 `git diff --check`；代码整理 `pio run`；控制/导航/通信/安全改动 `pio run` + `bash test_host/run_all.sh`（可按改动面只跑其中相关段）；无法运行必须说明原因。
 - **不要用 `pio test -e test` 做回归**：`[env:test]` 是 STM32 板载自检固件环境（用 `pio run -e test`），PlatformIO 的 `test/` 只认嵌入式 Unity 单测；本项目所有回归都是宿主测试（g++ 直编，见 `test_host/run_all.sh`）。历史上 `test/ekf_host_regression.cpp`（4798 行宿主测试，自带 main）误放此处，导致 `pio test` 把固件源码 + 宿主 main + Unity 框架一起链接而报 `ld` 错误；2026-11-07 已彻底移除。
@@ -177,4 +190,4 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 
 建议任何实机测试前，必须提醒断开电机动力电源（除非请求明确不涉及实时输出）。飞控逻辑改动分阶段：编译检查 → 传感器初始化/遥测 → 断动力查执行机构方向与限位 → 系留低功率 → 自由飞。
 
-- **数传链路验收（2026-11-04）**：0xF4从100Hz降至10Hz、0x0A/0x21/0xF1从100Hz降至50Hz后，120s记录行率39.8Hz、gap p99=41.6ms、max47.7ms、无>100ms；参数148项load双确认148/148。验收脚本 `tools/verify_telemetry.py`（rate≥35、p99≤60ms、max≤100ms、ring_drop=0）。
+- **数传链路验收（2026-11-04）**：0xF4从100Hz降至10Hz、0x0A/0x21/0xF1从100Hz降至50Hz后，120s记录行率39.8Hz、gap p99=41.6ms、max47.7ms、无>100ms；参数（当时 148 项）load 双确认 148/148。验收脚本 `tools/verify_telemetry.py`（rate≥35、p99≤60ms、max≤100ms、ring_drop=0）。

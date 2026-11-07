@@ -69,6 +69,12 @@ cd TandemVec_FCS/GCS && py -3.12 -m pytest tests/ -q
 cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 param get|set <name> [value]
 cd TandemVec_FCS/GCS && py -3.12 server/cli.py --port COM10 link|sniff euler|stick|baudscan
 
+# ★ 实机烧录后自检（只读：不解锁/不给油/不写参数，8 项判据）
+py -3.12 tools/verify_board.py COM6 SingleEdf4Vane   # 参数数量/机型/IMU/CPU/ring
+#   判据：参数表=169（版本锚点）、机型匹配、ISR 1800–2200 Hz、cal=1、drop=0、
+#   ring_drop=0、CPU≤85%、IMU 真实速率走 vars watch（非 DBG 路径）
+#   磁力计只报告不判 FAIL（装不装看机型配置）
+
 # 仿真 / LaTeX / 文档 / 注释门禁
 cd simulations/vector-thrust-lab && python -m http.server 8080
 cd TandemVec-Paper && build.bat
