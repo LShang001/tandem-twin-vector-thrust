@@ -137,7 +137,7 @@ cd simulations/vector-thrust-lab
 node --test "tests/*.test.mjs"
 ```
 
-测试覆盖核心模块：数学工具、状态初始化、SAS 增稳、推进系统、气动力、六自由度积分、悬停级联/定高/B_true（`vtol.test.mjs`、`control-allocation.test.mjs`）及四条回归基线（配平直飞 / 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）。2026-10-30 实测 91 项全绿。
+测试覆盖核心模块：数学工具、状态初始化、SAS 增稳、推进系统、气动力、六自由度积分、悬停级联/定高/B_true（`vtol.test.mjs`、`control-allocation.test.mjs`）及四条回归基线（配平直飞 / 俯仰阶跃 / 滚转阶跃 / 偏航阶跃）。2026-11-07 实测 92 项全绿。
 
 ---
 

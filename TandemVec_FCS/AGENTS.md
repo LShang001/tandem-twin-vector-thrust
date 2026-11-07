@@ -143,7 +143,7 @@
 
 ```powershell
 pio run                    # 编译固件
-bash test_host/run_all.sh  # 宿主回归全量（40+ 段，以脚本实际为准）
+bash test_host/run_all.sh  # 宿主回归全量（73 段，以脚本实际为准；test_host/ 下共 119 个 .cpp）
 bash test_host/fw_sil/run_acceptance.sh          # SIL 验收：真实固件+EKF，3 seeds
 bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 ```
