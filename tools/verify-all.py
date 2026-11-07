@@ -56,6 +56,7 @@ def build_checks(include_sil: bool) -> list[tuple[str, list[str], Path]]:
         ("文档产物同步", [PY, "tools/build-docs.py", "--check"], ROOT),
         ("文档统计数字", [PY, "tools/check-doc-stats.py"], ROOT),
         ("代码块路径", [PY, "tools/check-codeblock-paths.py"], ROOT),
+        ("IMU 轴映射", [PY, "tools/check_imu_axis_map.py"], ROOT),
         ("仿真域单测（Node）", ["node", "--test"] + node_tests, ROOT),
         ("坐标系实现自检",
          ["bash", "-c",
