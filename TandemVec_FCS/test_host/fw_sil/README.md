@@ -14,6 +14,23 @@ BIN_DIR=/c/Users/12631/AppData/Local/Temp/tv_fcs_fw_sil \
   bash test_host/fw_sil/build_and_run.sh --manual # 手动 roll/pitch 阶跃
 ```
 
+**单涵道四燃气舵机型**（2026-11-07 补，第三机型闭环）：
+
+```bash
+cd TandemVec_FCS
+bash test_host/fw_sil/build_and_run_singleedf.sh            # 定高 10 m
+bash test_host/fw_sil/build_and_run_singleedf.sh --manual   # roll/pitch 阶跃
+```
+
+plant 在 `single_edf_plant.h`：1 路涵道推力（沿 −z_b）+ 4 片燃气舵力矩
+（`τ_j = k·Σ_i H[j][i]·(δ_i/dir_i)`，是分配器逆解的严格对偶）。轴向映射以
+CTL-008 的 **2026-11-06 审计订正段**为准：矩阵行序直接对应本固件存档系
+（roll→Mx、pitch→My、yaw=绕推力轴→Mz）。
+
+> ⚠️ 这里有两处坑：① 文档更上方「Mz = +M_roll_EDF」是被订正推翻的旧表述；
+> ② `vane_dir` 漏乘会翻转 2、4 号舵力矩。两者任一未修，**定高模式都不暴露**
+> （舵面不动），只有手动打杆才触发正反馈发散。
+
 - 编译**真实源码**：`src/flight_control.cpp`、`src/state_data.cpp`；
 - `test_host/fw_sil/fw_sil_main.cpp`：刚体 plant + 传感器注入 + 执行器解算；
 - `test_host/fw_sil/fw_sil_stubs.cpp`：硬件对象/外设/MAVLink 等链接桩；
