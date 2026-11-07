@@ -1224,6 +1224,12 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
   float land_roll_deg = 0.0f;
   float max_roll_preland = 0.0f;
   float max_pitch_preland = 0.0f;
+  // ★ 2026-11-08 加：pitch 峰值出现的时刻与当时的飞行阶段。
+  //   共轴 MC 里 pitch_p50 贴着 30° 判据而 roll 只有 1.26°，需要知道峰值
+  //   落在起飞/悬停/下降/着陆哪一段，才能判断是控制不足还是着陆瞬态。
+  float t_max_pitch = -1.0f;
+  int phase_max_pitch = -1;  // 0=起飞前 1=上升 2=悬停 3=下降 4=已着陆
+  float max_pitch_preland_t = -1.0f;
   // 接地垂直速度（NED 向下为正）与接地前最大下降速度：下降策略的
   // 触地硬度指标，不能只看落地时间/位移（2026-10-26 下降速率权衡）。
   float land_vz_down = -1.0f;
@@ -2393,10 +2399,21 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
       land_pos_err = std::hypot(double(relative_north) - double(p.pos[0]),
                                 double(relative_east) - double(p.pos[1]));
     }
-    if (std::fabs(pitch * 57.29578f) > max_pitch) max_pitch = std::fabs(pitch * 57.29578f);
+    if (std::fabs(pitch * 57.29578f) > max_pitch)
+    {
+      max_pitch = std::fabs(pitch * 57.29578f);
+      t_max_pitch = t;
+      // 阶段判定：用高度趋势与 landed 标志粗分（够定位问题即可）
+      if (landed) phase_max_pitch = 4;
+      else if (relative_down > -0.3) phase_max_pitch = 0;   // 尚未离地
+      else if (p.vel[2] < -0.1f) phase_max_pitch = 1;   // NED 下 vel[2]<0 = 上升
+      else if (p.vel[2] > 0.1f) phase_max_pitch = 3;    // vel[2]>0 = 下降
+      else phase_max_pitch = 2;                              // 悬停
+    }
     if (!landed && std::fabs(pitch * 57.29578f) > max_pitch_preland)
     {
       max_pitch_preland = std::fabs(pitch * 57.29578f);
+      max_pitch_preland_t = t;
     }
     if (t > 9.0f)
     {
@@ -2662,6 +2679,7 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"pos_rms_preland\":%.3f,"
               "\"max_roll\":%.3f,"
               "\"max_pitch\":%.3f,\"max_pitch_preland\":%.3f,"
+              "\"t_max_pitch\":%.2f,\"phase_max_pitch\":%d,"
               "\"rms_roll\":%.3f,\"rms_pitch\":%.3f,"
               "\"nav_init\":%d,\"fix3d\":%u,\"gnss_age\":%.3f,"
               "\"gnss_stale_peak_s\":%.3f,"
@@ -2707,7 +2725,8 @@ static int runRealNavLoop(const RealNavConfig &cfg, int seed, float seconds,
               "\"coax_loss1\":%.3f,\"coax_loss2\":%.3f,\"coax_ix\":%.4f,\"coax_inertia_scale\":%.3f,\"coax_thrust_scale\":%.3f,\"coax_yaw_scale\":%.3f,\"coax_alloc_mode\":%d,\"rc_profile_rows\":%d,\"rc_profile_t_first\":%.3f,\"rc_profile_t_last\":%.3f,\"tilt_sig\":%.3f,\"tilt_drift\":%.3f,\"tilt_dg\":%d,\"tilt_dg_t\":%.2f,\"tilt_hard_t\":%.2f%s}\n",
               cfg.profile, seed, -p.pos[2], nav_alt_mean, pos_rms, max_pos,
               hold_rms, max_hold, hold_end_rms, pos_rms_preland,
-              max_roll, max_pitch, max_pitch_preland, rms_roll, rms_pitch,
+              max_roll, max_pitch, max_pitch_preland, t_max_pitch,
+              phase_max_pitch, rms_roll, rms_pitch,
               nav_system_initialized ? 1 : 0,
               gnss_status.fix3d_count,
               gnss_status.last_measurement_age_s,
