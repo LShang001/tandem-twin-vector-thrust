@@ -166,7 +166,7 @@ git -c http.proxy=http://127.0.0.1:7897 push origin main
 | 变更类型 | 必须同步的位置 |
 |---|---|
 | 机型默认值 | `FlightCtrlParams.h` 默认值 + `static_assert` + **宿主测试里的默认值断言** |
-| 参数数量 | `ano_params.h` `ANO_PARAMS_COUNT`；`FlightCtrlParams.h` 参数表宏与「N 项」注释；GCS `params.py` 名字表与包线；GCS 测试数量断言；CTL 文档；本文件 |
+| 参数数量 | `ano_params.h` `ANO_PARAMS_COUNT`；`FlightCtrlParams.h` 参数表宏与「N 项」注释；GCS `params.py` 名字表与包线；GCS 测试数量断言；CTL 文档；本文件。**三重守护已就位**：①编译期 `ano_params.cpp` 的 `static_assert(ANO_PARAMS_COUNT == 133 + BFS_COAX_PARAM_COUNT + BFS_SINGLE_EDF_PARAM_COUNT)`；②GCS 测试断言；③`check-doc-stats.py` 比对文档数字。改表时三道都会报 |
 | 新增参数 | 注册表插入位置会移动其后所有参数 ID → 必须同步 GCS 测试里的 ID 断言 |
 | 协议帧格式 | 固件发送侧 + GCS `anocom.py` 解析 + 匿名上位机实测抓帧（三方一致才算改完） |
 
