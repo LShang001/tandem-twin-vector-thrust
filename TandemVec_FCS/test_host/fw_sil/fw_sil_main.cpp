@@ -102,6 +102,13 @@ int main(int argc, char **argv) {
   isLinkUp = true;
   failsafe_in_flight = false;
   nav_system_initialized = true;
+  // 2026-11-07 修复：首次解锁门（flight_control.cpp `#ifndef FW_SIL_REAL_NAV`）
+  // 要求 `g_ekf_converged && nav_system_initialized`；本 SIL 用注入传感器直接
+  // 构造飞行状态，语义上等价于"EKF 已收敛"。不显式置位时，该入口在 2026-11-05
+  // 升级后一直无法解锁（实测 unlock=0、电机 0%、自由落体），README 里的定高
+  // 数据是加门之前测的。
+  g_ekf_converged = true;
+  g_ekf_converged_s = 10.0f;
   is_origin_lla_set = true;
   origin_lat_deg = 28.2; origin_lon_deg = 112.9; origin_alt_m = 50.0;
 
