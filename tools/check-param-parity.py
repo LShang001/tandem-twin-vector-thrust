@@ -60,6 +60,14 @@ def check_coax_parity() -> list[str]:
 
     三处分别定义（见 VER-009 §2.7）：固件参数表、分配器、SIL plant。
     plant 故意不依赖固件头，所以只能靠这种文本层校验来防漂移。
+
+    ★ 实际只比较「三处都存在」的字段。当前能比的是：
+        mass_kg（三处都有）
+        lever_m（三处都有，2026-11-08 补）
+      而 max_total_thrust_n / servo_half_angle_deg 在 SIL plant 里**不是
+      结构体字段**（前者是 makeParams() 的入参、后者 plant 压根不用），
+      所以只有 1/3 处有，会被跳过并打印 [跳过]。
+      这两项的守护靠别处：编译期 static_assert + 宿主测试。
     """
     fw_path = ROOT / "TandemVec_FCS" / "include" / "FlightCtrlParams.h"
     alloc_path = ROOT / "TandemVec_FCS" / "include" / "CoaxialAllocator.h"
@@ -103,7 +111,13 @@ def check_coax_parity() -> list[str]:
         vals = {name: d[key] for name, d in (("固件参数表", a), ("分配器", b), ("SIL plant", c))
                 if key in d}
         if len(vals) < 3:
-            continue  # 某处没有该字段就不比（例如 plant 无 servo_half_angle_deg）
+            # ★ 2026-11-08：这里原来只 continue 静默跳过，导致「某处抓不到字段」
+            #   与「三处真的一致」在输出上完全一样——Round 134 就是被这个假 PASS
+            #   骗了一次（lever_m 在 plant 侧没抓到，检查器照样报三处一致）。
+            #   现在把「跳过」也打印出来，让少抓一处变得可见。
+            have = "、".join(sorted(vals))
+            print(f"  [跳过] {key}: 只有 {len(vals)}/3 处有这个字段（{have}）")
+            continue
         lo, hi = min(vals.values()), max(vals.values())
         denom = max(abs(lo), abs(hi), 1e-12)
         if (hi - lo) / denom > REL_TOL:
