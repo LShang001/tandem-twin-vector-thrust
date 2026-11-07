@@ -193,6 +193,12 @@ def build_meta():
     meta = {}
     for loop, group, desc in PID_GROUPS:
         for field, fm in FIELD_META.items():
+            # ★ 与 expected_names() 同口径：FPV 摇杆曲线字段（rc_rate/rc_expo/rc_super）
+            #   只在固件注册表尾部独立注册一次，不随 12 个 PID 环展开。
+            #   原先这里漏了跳过，为每个环生成 `<loop>.rc_rate` 等 36 个永不命中的条目，
+            #   与 expected_names() 口径不一致，误导核查（2026-11-07 修复）。
+            if field.startswith('rc_'):
+                continue
             wire = fm.get('wire_name', field)
             name = f'{loop}.{wire}'
             m = dict(fm)

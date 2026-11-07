@@ -112,7 +112,7 @@
 | 严重度 | 位置（符号） | 问题 | 影响 | 建议 |
 |--------|--------------|------|------|------|
 | — | — | 未发现 P0（帧格式/校验/缩放/参数 ID 与固件无安全级不一致） | — | — |
-| P1 | `params.py::build_meta` | `FIELD_META` 加入 `rc_rate/rc_expo/rc_super` 后，`build_meta` 仍对每个 PID 环展开这些字段，生成 36 个永不命中的 `att_roll.rc_rate` 等条目（META 实际 164 项 vs 固件 128）；`expected_names()` 已用 `field.startswith('rc_')` 跳过，两函数口径不一致 | 无功能影响（前端按固件 E2 名查表），但误导核查、增大元数据表 | 给 `build_meta` 加同样的 `rc_*` 跳过；属行为相邻改动，本轮登记不动，建议随下次参数变更一起做并补测试 |
+| P1 | `params.py::build_meta` | `build_meta` 原先对每个 PID 环展开 `rc_rate/rc_expo/rc_super`，生成 36 个永不命中的 `att_roll.rc_rate` 等条目，与 `expected_names()` 口径不一致（后者已用 `field.startswith('rc_')` 跳过） | **已修复（2026-11-07）**：`build_meta` 补同样的跳过，现在 `len(build_meta()) == len(expected_names()) == 169`，GCS 54 项测试全过 |
 | P1 | 参数计数注释（固件 `ano_params.h`/`ano_params.cpp`/`communication.cpp`，本区 `params.py`） | 注释仍写"117/121 参数"，实际注册表 128（C 路径后两次追加：spd2_alpha 3 项、FPV 摇杆曲线 7 项） | 维护者误判参数总数，排查 ID 错位时走弯路 | GCS 侧已去掉写死数字并注明当前 128；固件侧属其他 Agent 范围，登记 |
 | P2 | `anocom.py::decode_volt_curr` | 旧注释称 bat 电压/电流为"占位常量 12.6/16.8、无真实采样"；固件早已改为真实 ADC（`bat_voltage_mv/1000`、`bat_current_ca/10`） | 注释与实现相反，易误判遥测来源 | 本轮已修正注释（行为未动） |
 | P2 | `main.py::_on_vars_value` | docstring 写"随 20Hz telemetry 推送"，实际 `TELEMETRY_PERIOD=0.02`（50Hz） | 频率口径错误 | 本轮已改为 50Hz |
