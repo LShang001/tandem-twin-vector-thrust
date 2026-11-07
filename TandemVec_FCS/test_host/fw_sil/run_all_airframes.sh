@@ -89,6 +89,20 @@ else
   RESULTS+=("FAIL  纵列·手动阶跃：构建或运行失败"); fail=1
 fi
 
+# ★ 2026-11-08 补：纵列的 3-seeds 定高闭环验收（真实固件 + 真实 EKF）。
+#   此前只跑 build_and_run.sh 的两项基础检查，而基型最深的那一层验收
+#   （run_acceptance.sh，81 s）根本不在三机型跑批里——共轴有 40 例矩阵，
+#   纵列反倒只有 2 项，覆盖不成比例。
+if bash test_host/fw_sil/run_acceptance.sh > "$BIN_DIR/tandemvec_accept.log" 2>&1; then
+  if grep -q "SIL acceptance PASSED" "$BIN_DIR/tandemvec_accept.log"; then
+    RESULTS+=("PASS  纵列·3seeds 定高闭环（真实固件 + EKF）")
+  else
+    RESULTS+=("FAIL  纵列·3seeds 定高闭环：未见 PASSED 标记"); fail=1
+  fi
+else
+  RESULTS+=("FAIL  纵列·3seeds 定高闭环：构建或运行失败"); fail=1
+fi
+
 echo "======== 2/3 共轴双桨 VTVL ========"
 if bash test_host/fw_sil/run_coaxial_acceptance.sh > "$BIN_DIR/coax_accept.log" 2>&1; then
   failed_n="$(grep -o 'real-nav acceptance: [0-9]* cases, [0-9]* failed' "$BIN_DIR/coax_accept.log" \
