@@ -53,6 +53,33 @@ def main() -> int:
     print("文档站点收录审计（build-docs.py 的清单是否覆盖 docs/）")
     print("=" * 70)
 
+    # ① 编号唯一性：同一前缀+序号不能出现两份文档
+    #   2026-11-08 发现两个 VER-007（场景矩阵 / 摄动测试），站点只收了前一个，
+    #   而 VER-009 的引用指向后一个——读者点进去看到的是另一份文档。
+    from collections import defaultdict
+    import re as _re
+
+    by_id: dict[str, list[str]] = defaultdict(list)
+    for md in sorted(DOCS.rglob("*.md")):
+        rel = md.relative_to(ROOT).as_posix()
+        if rel.startswith("docs/08-参考资料/") or rel.startswith("docs/reference/"):
+            continue
+        m = _re.match(r"([A-Z]+-\d{3})", md.name)
+        if m:
+            by_id[m.group(1)].append(rel)
+
+    dup = {k: v for k, v in by_id.items() if len(v) > 1}
+    if dup:
+        print("[FAIL] 文档编号重复：")
+        for k, v in sorted(dup.items()):
+            print(f"  ★ {k}:")
+            for f in v:
+                print(f"      {f}")
+        print("处理：给其中一份换新编号，并更新所有引用。")
+        return 1
+    print(f"编号唯一性：{len(by_id)} 个编号，无重复")
+    print()
+
     src = BUILD.read_text(encoding="utf-8", errors="replace")
     included = set(re.findall(r'"docs/([^"]+\.md)"', src))
 
