@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-012 目标达成度评估 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1
+id="目标达成度评估2026-11-08round-175">目标达成度评估（2026-11-08，Round
+175）</h1>
+<blockquote>
+<p>目标原文：「反正真实实飞固件已经成功飞行过了，飞行没有问题。你自己想办法通过
+全面仿真分析确认修复所有问题和矛盾，结合实机烧录测试」</p>
+<p>本文是对这个目标的<strong>诚实评估</strong>——哪些做到了、哪些没做到、哪些做不到。</p>
+</blockquote>
+<h2 id="1-按目标的三个子句逐条对账">1 按目标的三个子句逐条对账</h2>
+<h3 id="11-全面仿真分析">1.1 「全面仿真分析」</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>状态</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>守卫项数</td>
+<td><strong>19 项快档 + 2 项慢档 = 21 项</strong></td>
+<td><code>verify-all.py --include-sil --include-host</code> 21/21，769
+s</td>
+</tr>
+<tr>
+<td>能失败验证</td>
+<td><strong>13/21 做过违规实验</strong></td>
+<td>VER-009 §2.16 的逐条表</td>
+</tr>
+<tr>
+<td>三机型 SIL</td>
+<td>纵列 3 项、共轴 40 例矩阵、单涵道 2 项</td>
+<td><code>run_all_airframes.sh</code> 6 项全过</td>
+</tr>
+<tr>
+<td>宿主回归</td>
+<td>全量</td>
+<td><code>run_all.sh</code> 330 s</td>
+</tr>
+<tr>
+<td>仿真域单测</td>
+<td>92 项</td>
+<td>Node test 全过</td>
+</tr>
+<tr>
+<td>参数/推进/分配对拍</td>
+<td>三层同构</td>
+<td>3 个 parity 脚本</td>
+</tr>
+</tbody>
+</table>
+<p><strong>做到了</strong>：覆盖是宽的，且有 21 项常设守卫持续守。</p>
+<p><strong>没做到</strong>：8
+项守卫没做过「能失败」验证（多数是运行时对拍，造违规成本高）。</p>
+<h3 id="12-确认修复所有问题和矛盾">1.2 「确认修复所有问题和矛盾」</h3>
+<p><strong>做到了的</strong>（按轮次，有实测支撑）：</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>典型例子</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>真 bug</td>
+<td>共轴 SIL 编译回归（两行声明被合并，坏了两周）</td>
+</tr>
+<tr>
+<td>结构性缺陷</td>
+<td>F4 检测的「指令饱和」条件在真实卡死场景永不成立</td>
+</tr>
+<tr>
+<td>单位混用</td>
+<td>原始共轴固件 `</td>
+</tr>
+<tr>
+<td>覆盖缺口</td>
+<td>纵列 3-seeds 验收不在跑批里</td>
+</tr>
+<tr>
+<td>文档腐坏</td>
+<td>AGENTS.md 写「7 项」实际 19 项；CTL-007 状态过时；<code>2/6</code>
+数字已不适用</td>
+</tr>
+<tr>
+<td>静默失效</td>
+<td><code>check_coax_parity</code> 的
+<code>len(vals)&lt;3: continue</code> 让「没抓到」等于「真一致」</td>
+</tr>
+</tbody>
+</table>
+<p><strong>明确没做到的</strong>：</p>
+<ol type="1">
+<li><strong>F4
+判据仍是结构性的缺陷</strong>——知道它不工作，但改它需要重新评估误报率，
+且它不执行任何动作（影响仅限遥测），故本轮只记录不改。</li>
+<li><strong><code>NavAidLossDetector</code>
+仍未接线</strong>——有实现、有单测、固件不调用。</li>
+<li><strong><code>IncrementalPID</code> 等 3
+个模块仍零引用</strong>——已加 <code>@warning</code> 标注，未删除。</li>
+<li><strong>迟滞未加</strong>（A-8
+剩余项）——需权衡，当前实飞未观察到边界抖动。</li>
+<li><strong><code>alpha_ref</code>
+因果链仍未验证</strong>——「不能外推」有实验支持，「为什么不能」仍是推测。</li>
+</ol>
+<h3 id="13-结合实机烧录测试">1.3 「结合实机烧录测试」</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>持续运行</td>
+<td><strong>33498 s（9.3 小时）</strong>，跨过 <code>micros()</code>
+回绕点 7.9 倍</td>
+</tr>
+<tr>
+<td>CPU 稳定</td>
+<td>48.5–49.2%（修复前会在 71.6 分钟跳到 409%）</td>
+</tr>
+<tr>
+<td>自检</td>
+<td>8 项全 PASS，重复多次</td>
+</tr>
+<tr>
+<td>参数表</td>
+<td>169 项逐项对上</td>
+</tr>
+<tr>
+<td>专用工具验证</td>
+<td><code>verify_cpu_longrun.py COM6 30000</code> → PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>做到了</strong>：长时间稳定性有五次独立观测 +
+一次工具化验证。</p>
+<p><strong>没做到</strong>：<strong>没有新的实飞</strong>。所有实机证据都是「地面通电运行」，不是飞行。</p>
+<h2 id="2-三个做不到--不该做的">2 三个做不到 / 不该做的</h2>
+<ol type="1">
+<li><strong>「所有问题」不可能穷尽</strong>——本文档只能说「已发现的都处理了」，
+不能证明「没有未发现的」。这个区别必须保留。</li>
+<li><strong>不给实飞结论</strong>——本轮没有任何新的飞行数据。用户说固件已飞过，
+本轮的实机测试是地面自检，不能用来支持或否定飞行结论。</li>
+<li><strong>不改固件默认行为</strong>——所有改动都在工具层、文档层、SIL
+判据层。 <code>FlightCtrlParams.h</code>
+的默认值一个没动，<code>BFS_*</code> 宏默认状态一个没改。</li>
+</ol>
+<h2 id="3-一句话总结">3 一句话总结</h2>
+<p><strong>仿真侧</strong>：覆盖从 7 项守卫扩到 21 项，其中 13
+项验过能失败，全量 21/21。 <strong>实机侧</strong>：板子连续跑 9.3
+小时、跨回绕点 7.9 倍，8 项自检反复通过。
+<strong>问题侧</strong>：发现并处理了 6 类问题，但<strong>仍有 5
+项明确未完成</strong>（见 §1.2）， 其中 F4 判据是结构性的。</p>
+<p><strong>没有做到「所有」——做到了「已发现的都有结论，未完成的都写明了」。</strong></p>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:07</footer></article></body>
+</html>
