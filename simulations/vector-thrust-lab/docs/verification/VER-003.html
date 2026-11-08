@@ -1158,6 +1158,35 @@ seed1/2/3（roll 59.9/76.4/26.9°，hold_end 89.7/224.1/105.6 m，seed2 37
 用实测」这个对比在<strong>取值来源</strong>上成立。 但要注意变量名
 <code>alpha_ref_dps2</code> 容易读成「参考角加速度」并联想到传感器，
 实际它是控制器输出。这个命名容易误导，已记录但不改（改名会影响遥测链路）。</p>
+<p><strong>Round 233
+加探针实测了两者的量级差</strong>（<code>-DFW_SIL_PROBE_ALPHA</code>）：</p>
+<pre><code>[ALPHAPROBE] ref=(-3.6, 3.0)  meas=( 3.7, -5.8)
+[ALPHAPROBE] ref=(-5.5, 4.4)  meas=(11.8, -4.1)
+[ALPHAPROBE] ref=(-2.7, 3.8)  meas=(-24.9, -1.5)</code></pre>
+<table>
+<thead>
+<tr>
+<th>量</th>
+<th>范围</th>
+<th>特性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>alpha_ref_dps2</code>（固件用）</td>
+<td><strong>−5.5 ~ +4.4</strong></td>
+<td>平滑（PID 输出）</td>
+</tr>
+<tr>
+<td>实测角加速度（fast MC 用）</td>
+<td><strong>−24.9 ~ +11.8</strong></td>
+<td>跳变（未滤波差分）</td>
+</tr>
+</tbody>
+</table>
+<p>两者性质完全不同，量级差 3–5 倍。这解释了为什么 fast MC 的 lead
+参数搬到 固件会失效——它面对的是噪声水平完全不同的输入。
+<strong>这一条从「推测」升级为「实测支持」。</strong></p>
 <p><strong>已有的对照实验（2026-11-08
 复跑）</strong>：<code>RateLeadPredictor.h</code> 的 <code>@note</code>
 记录 的是 <strong>2026-10-24</strong> 的数：基线 6/6 PASS，加
@@ -1536,17 +1565,17 @@ T/W）上得到一致收益；共轴中性、液体净负，
 驾驶品质/扰动抑制；不能直接写实机调参，必须 SIL/台架验证。</li>
 </ul>
 <h2 id="5-复现">5 复现</h2>
-<div class="sourceCode" id="cb2"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulations/three_vehicle_mc</span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 2000 <span class="at">--nominal</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--osc-window</span> 0.15 <span class="dt">\</span></span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">--osc-threshold</span> 4 <span class="at">--osc-decay</span> 0.85 <span class="at">--osc-recovery</span> 1.01 <span class="at">--osc-floor</span> 0.45 <span class="dt">\</span></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>tuned-dir<span class="op">&gt;</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> analyze_mega.py <span class="at">--dir</span> <span class="op">&lt;</span>dir<span class="op">&gt;</span> --compare-dir <span class="op">&lt;</span>reference<span class="op">&gt;</span></span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> compare_casewise.py <span class="at">--baseline</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span> --candidate <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_boundary_grid.py <span class="at">--out</span> sim-data/boundary-grid-2026-10-24</span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> simulations/three_vehicle_mc</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 2000 <span class="at">--nominal</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_mega.py <span class="at">--cases</span> 100000 <span class="at">--variant</span> osc <span class="at">--osc-window</span> 0.15 <span class="dt">\</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">--osc-threshold</span> 4 <span class="at">--osc-decay</span> 0.85 <span class="at">--osc-recovery</span> 1.01 <span class="at">--osc-floor</span> 0.45 <span class="dt">\</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="at">--seed</span> 20261024 <span class="at">--out</span> <span class="op">&lt;</span>tuned-dir<span class="op">&gt;</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> analyze_mega.py <span class="at">--dir</span> <span class="op">&lt;</span>dir<span class="op">&gt;</span> --compare-dir <span class="op">&lt;</span>reference<span class="op">&gt;</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> compare_casewise.py <span class="at">--baseline</span> <span class="op">&lt;</span>fixed-dir<span class="op">&gt;</span> --candidate <span class="op">&lt;</span>osc-dir<span class="op">&gt;</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> run_boundary_grid.py <span class="at">--out</span> sim-data/boundary-grid-2026-10-24</span></code></pre></div>
 <p>数据：<code>sim-data/mega-fixed-300k-v2-2026-10-24/</code>、
 <code>sim-data/mega-osc-default-300k-v2-2026-10-24/</code>、
 <code>sim-data/mega-osc-tuned-300k-v2-2026-10-24/</code>（修正后权威
@@ -1554,5 +1583,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:54</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:59</footer></article></body>
 </html>
