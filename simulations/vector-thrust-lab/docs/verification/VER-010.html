@@ -1083,6 +1083,42 @@ PASS。抓原始输出核对后确认是 <strong>终端字形显示问题</stron
 但地面长时间通电（调试、等待发射窗口）会累计到小时级。
 这个测试证明了计数回绕不会在此类场景下误报 CPU 过载。</p>
 </blockquote>
+<h2 id="517-连续运行-1174-小时2026-11-08">5.17 连续运行 11.74
+小时（2026-11-08）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uptime</td>
+<td><strong>42272 s（11.74 小时）</strong></td>
+</tr>
+<tr>
+<td>8 项自检</td>
+<td>全部 PASS</td>
+</tr>
+<tr>
+<td>磁力计</td>
+<td><code>chip=NONE</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>CPU 统计修复的第九次验证</strong>：4403 → 11073 → 25162 →
+30341 → 33498 → 36229 → 37891 → 39951 → <strong>42272 s</strong>，跨过
+<code>micros()</code> 回绕点 <strong>9.9 倍</strong>。</p>
+<p>九次读数的 CPU 占空全部落在 48.5–49.2%，没有一次异常。</p>
+<blockquote>
+<p>★ 一个读数路径的坑：<code>uptime_s</code> <strong>只在
+<code>dbg health</code> 输出里</strong>，不在 <code>vars watch</code> 的
+可订阅变量中（试过会报「未找到 uptime_s」）。另外
+<code>dbg health</code> 偶发返回空 （本次第一次调用 exit
+1、无输出），重试即正常——判断板子状态时不要把「一次读不到」
+当成「板子挂了」，先重试。</p>
+</blockquote>
 <h2 id="6-复现步骤">6 复现步骤</h2>
 <div class="sourceCode" id="cb7"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) 编译（本机）</span></span>
@@ -1109,5 +1145,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:19</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:22</footer></article></body>
 </html>
