@@ -32,6 +32,16 @@ SRC_DIR = FW / "src"
 
 # 未进 SIL 的源：必须在这里登记原因，否则本脚本报错。
 # 分类原则：① 需要真实硬件才能跑 ② 与算法无关的外设/通信 ③ SIL 有自己的等价实现
+# ★ 2026-11-08：豁免文件对应的 SIL 替身。豁免只说「这个文件不编进 SIL」，
+#   但必须有东西顶替它——否则 SIL 要么编译失败，要么跑的是残缺逻辑。
+#   本表只登记「有明确替身文件」的几项；其余豁免（如 communication.cpp
+#   与算法无关）不需要替身，留空即视为不需要。
+SIL_STANDIN: dict[str, str] = {
+    "sensor_imu.cpp": "test_host/fw_sil/fw_sil_stubs.cpp",
+    "sensor_peripheral.cpp": "test_host/fw_sil/sil_sensor_model.h",
+    "ubx_config.cpp": "test_host/fw_sil/stub/ubx.h",
+}
+
 EXEMPT: dict[str, str] = {
     "sensor_imu.cpp": "IMU 驱动与校准链，需真实器件；SIL 用 fw_sil_stubs.cpp 注入理想 IMU",
     "sensor_peripheral.cpp": "气压/磁/光流/激光等外设读取，需真实器件；SIL 由传感器模型注入",
@@ -95,6 +105,25 @@ def main() -> int:
     for p in exempted:
         print(f"  - {p:<28} {EXEMPT[Path(p).name]}")
     print()
+
+    # 替身存在性：登记的替身文件必须真的在
+    missing_standin = [
+        (src, rel) for src, rel in SIL_STANDIN.items()
+        if not (FW / rel).exists()
+    ]
+    print()
+    print("替身存在性：")
+    if SIL_STANDIN:
+        for src, rel in SIL_STANDIN.items():
+            ok = (FW / rel).exists()
+            print(f"  [{'ok' if ok else '缺失'}] {src} -> {rel}")
+    else:
+        print("  （无登记）")
+    if missing_standin:
+        print()
+        for src, rel in missing_standin:
+            print(f"  ★ {src} 的替身 {rel} 不存在")
+        return 1
 
     if unregistered:
         print(f"[FAIL] 有 {len(unregistered)} 个固件源既没进 SIL、也没登记豁免：")
