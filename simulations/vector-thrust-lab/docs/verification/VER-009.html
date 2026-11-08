@@ -839,14 +839,44 @@ F4（舵机卡死）检测的门限盲区（2026-11-08）</h2>
 <p>所以此前那句「F4
 对卡死在满舵位的场景有效」的推测<strong>不成立</strong>。
 真正的原因不是「卡死角度不够大」。</p>
-<p><strong><code>df_frac</code> 到底到多少：本轮未测出</strong>。判据是
-<code>|delta_f_deg| / dMax &gt;= 0.90</code>，而
-<code>dMax = 15°</code>（<code>TandemVec_Config.h</code>）， 卡死 20°
-会被限幅到 15°，理论上 <code>df_frac</code> 应 = 1.0 并触发。实测却是
-0， <strong>两者矛盾，原因待查</strong>。</p>
-<p>已尝试用 <code>--trace-csv</code> 导出 <code>delta_f</code> 列，但
-CSV 未生成（参数可能另有所需）， 本轮未完成。<strong>下轮应从「为什么
-df_frac 到不了 0.90」入手</strong>，而不是继续 调卡死角度。</p>
+<p><strong>为什么 <code>f4</code> 一直是 0 —— 根因已查到（Round
+221）</strong>：</p>
+<p><code>updateActuatorFaultDiagnostics()</code> 的开头是</p>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(!</span>inputs<span class="op">.</span>is_unlocked<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">s_actuator_fault_monitor</span><span class="op">.</span>reset<span class="op">();</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">g_actuator_servo_jam</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>    <span class="va">g_actuator_thrust_loss</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">...</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<p><strong>未解锁就直接 reset 并返回</strong>。而这两组 SIL 实测跑的是
+<code>mode=0</code>（未解锁）， 所以 F4
+的积分计时器每拍都被清零——<strong>它根本没有机会累积到 0.5
+s</strong>。</p>
+<p>所以「卡死 8° / 20° 都
+<code>f4=0</code>」不是判据失效，是<strong>测试场景没解锁</strong>。
+这与此前对该判据的「结构性缺陷」判断是<strong>两件事</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>判断</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>「F4 在未解锁时不会触发」</td>
+<td><strong>设计如此</strong>（安全：地面调试不该报舵机卡死）</td>
+</tr>
+<tr>
+<td>「F4 的 <code>df_cmd_frac</code> 在真实卡死场景到不了 0.90」</td>
+<td><strong>仍是有效怀疑</strong>，但需要用<strong>解锁后</strong>的场景重测</td>
+</tr>
+</tbody>
+</table>
+<p><strong>下一步</strong>：在 SIL 里构造「已解锁 + 卡死」的场景，再看
+F4 是否触发。 这才是能判定第二条的那组实验。</p>
 <p>★
 但「靠这条判据检出满舵卡死」这条路已经实测否定——这一点不受上述待查影响：
 两组实测（8° / 20°）都是 <code>f4=0</code>，而姿态发散到 158°。</p>
@@ -2654,11 +2684,11 @@ m」</strong>：两端都有边界，
 一旦触地就判失败，避免 「掉到地上但高度指标还勉强够」的假通过。</li>
 </ul>
 <h2 id="4-复现">4 复现</h2>
-<div class="sourceCode" id="cb9"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
-<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
-<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
-<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
 <p>Windows/MinGW 下统一经 <code>tools/with-ascii-bin.sh</code>
 包装（ASCII 盘符 + <code>BIN_DIR</code>）。</p>
 <h2 id="5-参考">5 参考</h2>
@@ -2669,5 +2699,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:54</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:58</footer></article></body>
 </html>
