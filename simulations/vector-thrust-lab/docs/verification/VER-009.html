@@ -1488,14 +1488,14 @@ SIL 里 plant
 </tr>
 </tbody>
 </table>
-<p><strong>能失败验证情况：18/22 做过违规实验</strong>（另有
+<p><strong>能失败验证情况：19/22 做过违规实验</strong>（另有
 <code>run_real_acceptance</code> 单体验过）。 做过违规实验的 14 项明细见
 §2.16 的上一张表；<strong>本节只列没做的 8 项</strong>，
 逐条写明为什么不验。</p>
 <table>
 <thead>
 <tr>
-<th>未做违规实验的 4 项</th>
+<th>未做违规实验的 3 项</th>
 <th>原因</th>
 </tr>
 </thead>
@@ -1509,11 +1509,6 @@ Node），改公式风险高；机制上比静态检查可靠</td>
 <td>坐标系 @frame 标注</td>
 <td><strong>有意宽松</strong>：正文出现轴名符号即算已标注（Round 82
 实测）</td>
-</tr>
-<tr>
-<td>完整宿主回归</td>
-<td>跑一次 5 min，造违规成本高；Round 138
-的真实回归证明它会报（19/20）</td>
 </tr>
 </tbody>
 </table>
@@ -2317,6 +2312,12 @@ id="检查器的能失败验证状态2026-11-08-盘点1113-已实测">检查器�
 <code>FAIL ... outside ... m</code>，<code>SIL acceptance FAILED</code></td>
 </tr>
 <tr>
+<td>完整宿主回归</td>
+<td>把 <code>test_frame_conventions.cpp</code> 的一处
+<code>require(...)</code> 改成 <code>require(false, "probe")</code></td>
+<td>✓ <code>run_all.sh</code> 报「存在失败项」</td>
+</tr>
+<tr>
 <td><code>run_real_acceptance</code></td>
 <td>把 <code>mag_clean</code> 的 <code>hold_end_rms</code> 从 1.5 收紧到
 0.01</td>
@@ -2562,5 +2563,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:00</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:08</footer></article></body>
 </html>
