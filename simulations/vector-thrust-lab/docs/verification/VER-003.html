@@ -1159,11 +1159,38 @@ seed1/2/3（roll 59.9/76.4/26.9°，hold_end 89.7/224.1/105.6 m，seed2 37
 <code>alpha_ref_dps2</code> 容易读成「参考角加速度」并联想到传感器，
 实际它是控制器输出。这个命名容易误导，已记录但不改（改名会影响遥测链路）。</p>
 <p><strong>已有的对照实验（2026-11-08
-补记）</strong>：<code>RateLeadPredictor.h</code> 的 <code>@note</code>
-记录了 一次固件 SIL 对照——基线 <strong>6/6 PASS</strong>，加
-<code>-DBFS_RATE_LEAD</code> 后只剩 <strong>2/6</strong> （mag_nominal
-全失败）。这证明「把 fast MC 的 lead 方案直接搬到固件会让结果
-显著变差」，与「L1 的 lead 收益不能外推到固件」的结论一致。</p>
+复跑）</strong>：<code>RateLeadPredictor.h</code> 的 <code>@note</code>
+记录 的是 <strong>2026-10-24</strong> 的数：基线 6/6 PASS，加
+<code>-DBFS_RATE_LEAD</code> 后剩 2/6 （mag_nominal 全失败）。</p>
+<p><strong>本轮复跑（2026-11-08，SIL 已迭代数轮后）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>结果</th>
+<th>失败项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线（不带 lead）</td>
+<td><strong>9/9 PASS</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>EXTRA_CXXFLAGS=-DBFS_RATE_LEAD</code></td>
+<td><strong>8/9 PASS</strong></td>
+<td><code>mag_clean seed1</code></td>
+</tr>
+</tbody>
+</table>
+<p>失败项 <code>mag_clean seed1</code> 的 <code>hold_end</code> 从基线
+<strong>2.58 m</strong> 掉到 <strong>1.89 m</strong>。</p>
+<p><strong>所以「lead 有害」的定性结论仍成立</strong>（同一 case
+明显变差），但<strong>程度远轻于 2026-10-24 的 2/6</strong>——说明这一年
+SIL 的其他改动（滤波、EKF、调度）让系统 对 lead
+的敏感度下降了。<strong>「2/6」这个数字已不适用于当前代码</strong>，引用时应
+标日期或用本轮实测。</p>
 <p>★
 但它<strong>没有</strong>验证「根因是固件用了指令而非实测」：那次实验改的是
 「有没有 lead」，不是「lead
@@ -1527,5 +1554,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 09:13</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 09:20</footer></article></body>
 </html>
