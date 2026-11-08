@@ -130,8 +130,16 @@ s</td>
 且它不执行任何动作（影响仅限遥测），故本轮只记录不改。</li>
 <li><strong><code>NavAidLossDetector</code>
 仍未接线</strong>——有实现、有单测、固件不调用。</li>
-<li><strong><code>IncrementalPID</code> 等 3
-个模块仍零引用</strong>——已加 <code>@warning</code> 标注，未删除。</li>
+<li><strong>3 个模块完全未用 + 2 个仅测试引用</strong>——都已在
+<code>check-module-wiring.py</code> 登记：
+<ul>
+<li>完全未用：<code>AdaptiveGainDamper</code>、<code>AdrcController</code>、<code>GenericControlAllocation</code></li>
+<li>仅测试：<code>IncrementalPID</code>、<code>ins_gnss_pps_latency</code>
+等 9 项</li>
+<li><code>MedianFilter</code> / <code>IMU_AutoCalibrator</code>
+<strong>不是死代码</strong>（经 <code>state_data.h</code> 间接在用，
+只看直接 include 会误判）</li>
+</ul></li>
 <li><strong>迟滞未加</strong>（A-8
 剩余项）——需权衡，当前实飞未观察到边界抖动。</li>
 <li><strong><code>alpha_ref</code>
@@ -189,5 +197,5 @@ s</td>
 <strong>问题侧</strong>：发现并处理了 6 类问题，但<strong>仍有 5
 项明确未完成</strong>（见 §1.2）， 其中 F4 判据是结构性的。</p>
 <p><strong>没有做到「所有」——做到了「已发现的都有结论，未完成的都写明了」。</strong></p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:43</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:46</footer></article></body>
 </html>
