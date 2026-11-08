@@ -1142,6 +1142,69 @@ FAIL。本轮验证它真会重试：</p>
 反过来说，正常板子上如果看到耗时明显变长，就是有调用在重试——
 这本身是个可观测的信号。</p>
 </blockquote>
+<h2 id="519-连续运行-1379-小时--f4-修复未上机的边界2026-11-08">5.19
+连续运行 13.79 小时 + F4 修复未上机的边界（2026-11-08）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uptime</td>
+<td><strong>49640 s（13.79 小时）</strong></td>
+</tr>
+<tr>
+<td>8 项自检</td>
+<td>全部 PASS</td>
+</tr>
+<tr>
+<td>磁力计</td>
+<td><code>chip=NONE</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>CPU 统计修复的第十二次验证</strong>：4403 → 11073 → 25162 →
+30341 → 33498 → 36229 → 37891 → 39951 → 42272 → 42818 → 46579 →
+<strong>49640 s</strong>，跨过回绕点 <strong>11.7 倍</strong>。</p>
+<h3 id="-边界f4-的-nan-修复没有烧进这块板子">★ 边界：F4 的 NaN
+修复<strong>没有烧进这块板子</strong></h3>
+<p>Round 224 修的 <code>ActuatorFaultMonitor</code> NaN 短路只在
+<strong>SIL 与宿主单测</strong>里验证过：</p>
+<ul>
+<li>单元测试 T13：21/21</li>
+<li>SIL 端到端：<code>f4=0</code> → <code>f4=1</code></li>
+</ul>
+<p><strong>这块实机板子上跑的仍是修复前的固件</strong>。所以：</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>F4 修复状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SIL / 宿主单测</td>
+<td>✅ 已验证</td>
+</tr>
+<tr>
+<td>实机固件</td>
+<td>❌ <strong>未烧录</strong></td>
+</tr>
+</tbody>
+</table>
+<p>本节的 8 项自检只能说明「板子上那份旧固件连续跑了 13.79 小时稳定」，
+<strong>不能说明修复后的固件也稳定</strong>。</p>
+<blockquote>
+<p>★ 为什么不顺手烧：烧录是破坏性操作，会中断当前 13.79
+小时的连续运行记录； 且修复改动在
+<code>ActuatorFaultMonitor.h</code>（纯 header，被多处 include），
+上机前应再跑一次全量验证（含三机型 SIL 与宿主回归）再决定。
+在那之前，「F4 已修复」只对仿真与单测成立。</p>
+</blockquote>
 <h2 id="6-复现步骤">6 复现步骤</h2>
 <div class="sourceCode" id="cb8"><pre
 class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) 编译（本机）</span></span>
@@ -1168,5 +1231,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:20</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:22</footer></article></body>
 </html>
