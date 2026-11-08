@@ -10,6 +10,10 @@
   `git push ... > log 2>&1; rc=$?; [ $rc -eq 0 ]`，再看 `log` 里的
   `main -> main` 字样。
   **同源**：其他「管道吞退出码」的场合（`cmd | grep` 判断成败）一样危险。
+  **已审计的范围（2026-11-08）**：`verify-all.py` 用 `proc.returncode`（正确）；
+  `run_all_airframes.sh` / `run_coaxial_suite.sh` / `run_real_acceptance.sh` 里的
+  管道全用于**取文本**（`| tail -1 | grep -o ...`）而非判成败，且无
+  `if cmd | grep` 形式。本仓目前未发现第二处「管道吞退出码」。
 
 - **本仓 `origin` 是 SSH 且不可达，所以 `origin/main` 的本地缓存永远陈旧（2026-11-08）**：
   `git remote get-url origin` = `git@github.com:...`（SSH，本机不通）。
