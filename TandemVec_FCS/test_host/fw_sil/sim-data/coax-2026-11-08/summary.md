@@ -1,11 +1,11 @@
 # 共轴 VTVL 验证证据（coax-2026-11-08）
 
-- 生成时间：2026-11-08 04:04:56
-- 仓库：`TandemVec_FCS` @ `688bc0a`（工作区未提交文件 2 个）
-- 二进制：`U:/suite1/fw_coax.exe`（构建时间 2026-11-08 03:59:34）
+- 生成时间：2026-11-08 10:51:29
+- 仓库：`TandemVec_FCS` @ `3ca82e86`（工作区未提交文件 1 个）
+- 二进制：`U:/cs2/fw_coax.exe`（构建时间 2026-11-08 10:41:24）
 - `MadgwickAHRS.cpp` 构建补丁：已包含（lead 在冻结前补入，修复 HEAD 链接失败）
-- 矩阵：profiles=`mag_clean,mag_nominal,mag_disturbed,nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof`；seeds=`1,2,3,4,5`；seconds=40；双套（--coax-realistic）=否
-- 验收口径：8 profiles × 5 seeds，current 40 场景（不使用旧文档的 3×5=15 口径）。
+- 矩阵：profiles=`mag_clean,mag_nominal,mag_disturbed,nomag_degraded,imu_stuck,imu_nan,imu_drop,gnss_spoof`；seeds=`1,2,3,4,5`；seconds=40；双套（--coax-realistic）=是
+- 验收口径：8 profiles × 5 seeds，current 40 场景 + realistic 40 场景 = **80 场景**（不使用旧文档的 3×5=15 口径）。
 - 口径：真实固件（`BFS_COAXIAL_VTVL`）+ 近似 6DOF plant，不是台架/实机证据；plant 质量/惯量/力臂/差速力矩为 L1 假设。
 
 ## 阶段结果与退出码
@@ -14,31 +14,35 @@
 | --- | --- | --- | --- |
 | 构建 | 0 | PASS | `build.log` |
 | 验收 8 profiles（current） | 0 | PASS | `acceptance.log` |
+| 验收 8 profiles（realistic） | 1 | FAIL | `acceptance_realistic.log` |
 | MC 100（current） | 1 | FAIL | `mc_current.json` |
-| MC 100（realistic） | — | 未运行（未指定 --realistic） | `mc_realistic.json`（未生成） |
+| MC 100（realistic） | 1 | FAIL | `mc_realistic.json` |
 | sweep 18 组（current） | 1 | FAIL | `sweep.json` |
 
 **套件退出码：1**（0=全部通过；1=任一阶段失败。注意：历史基线 MC/sweep 未达 100%，默认运行即返回 1，是真实门禁。）
 
 ## 验收矩阵（8 profiles，5 seeds）
 
-| 场景 | current 通过 | realistic 通过 | hold_end 范围 [m] | max_roll 范围 [°] | 说明 |
-| --- | --- | --- | --- | --- | --- |
-| mag_clean | 5/5 | — | 0.28–0.89 | 0.75–1.12 | — |
-| mag_nominal | 5/5 | — | 0.61–1.44 | 7.03–9.39 | — |
-| mag_disturbed | 5/5 | — | 5.27–6.92（不判） | 11.48–14.25 | 位置保持不判（skip_hold_end） |
-| nomag_degraded | 5/5 | — | 41.82–44.88（不判） | 0.33–0.43 | 位置保持不判（skip_hold_end） |
-| imu_stuck | 5/5 | — | — | — | 仅判故障检测（skip_motion） |
-| imu_nan | 5/5 | — | — | — | 仅判故障检测（skip_motion） |
-| imu_drop | 5/5 | — | — | — | 仅判故障检测（skip_motion） |
-| gnss_spoof | 5/5 | — | — | — | 仅判故障检测（skip_motion） |
-| **合计** | **40/40** | — | — | — | — |
+| 场景 | current 通过 | realistic 通过 | current hold_end [m] | realistic hold_end [m] | current max_roll [°] | realistic max_roll [°] | 说明 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| mag_clean | 5/5 | 0/5 | 0.28–0.89 | 0.34–0.93 | 0.75–1.12 | 0.83–1.35 | —; realistic: max_pitch_preland=23.13 > 20.0; max_pitch_preland=23.41 > 20.0; max_pitch_preland=24.268 > 20.0 |
+| mag_nominal | 5/5 | 0/5 | 0.61–1.44 | 0.19–1.12 | 7.03–9.39 | 6.96–10.16 | —; realistic: max_pitch_preland=24.122 > 20.0; max_pitch_preland=23.3 > 20.0; max_pitch_preland=24.068 > 20.0 |
+| mag_disturbed | 5/5 | 5/5 | 5.27–6.92（不判） | 3.08–8.16（不判） | 11.48–14.25 | 9.76–16.13 | 位置保持不判（skip_hold_end） |
+| nomag_degraded | 5/5 | 5/5 | 41.82–44.88（不判） | 36.96–41.02（不判） | 0.33–0.43 | 0.35–0.44 | 位置保持不判（skip_hold_end） |
+| imu_stuck | 5/5 | 5/5 | — | — | — | — | 仅判故障检测（skip_motion） |
+| imu_nan | 5/5 | 5/5 | — | — | — | — | 仅判故障检测（skip_motion） |
+| imu_drop | 5/5 | 5/5 | — | — | — | — | 仅判故障检测（skip_motion） |
+| gnss_spoof | 5/5 | 5/5 | — | — | — | — | 仅判故障检测（skip_motion） |
+| **合计** | **40/40** | **30/40** | — | — | — | — | — |
 
 ## 随机参数 MC（100 例）
 
 | 组 | 通过数 | 通过率 | hold P50/P95 [m] | roll P50/P95 [°] | pitch P50/P95 [°] |
 | --- | --- | --- | --- | --- | --- |
 | current（默认 plant） | 52/100 | 52% | 1.47/28.67 | 1.26/8.50 | 29.35/58.38 |
+| realistic（--coax-realistic） | 52/100 | 52% | 1.47/28.35 | 1.06/9.20 | 28.75/56.75 |
+
+realistic 相对 current 通过数变化：+0 例。
 
 ### MC 最差 8 例（current（默认 plant））
 
@@ -52,6 +56,19 @@
 | 89 | 0.87 | 15.8 | 0.10 | 0.08 | 0.06 | 0.00114 | 4 | 9.96 | 28.82 | 9.17 | 52.13 | hold_end=28.825>6.0; max_pitch=52.128>30.0 |
 | 37 | 0.75 | 13.0 | 0.10 | 0.06 | 0.06 | 0.00061 | 7 | 10.06 | 26.46 | 1.27 | 49.95 | hold_end=26.463>6.0; max_pitch=49.950>30.0 |
 | 95 | 0.72 | 13.3 | 0.11 | 0.05 | 0.08 | 0.00093 | 5 | 9.78 | 19.98 | 1.09 | 45.56 | hold_end=19.975>6.0; max_pitch=45.560>30.0 |
+
+### MC 最差 8 例（realistic（--coax-realistic））
+
+| 案例 | mass | T | L | Iy | Iz | yawk | seed | alt | hold_end | max_roll | max_pitch | 原因 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 73 | 0.75 | 15.8 | 0.10 | 0.10 | 0.11 | 0.00064 | 5 | 10.63 | 101.61 | 6.46 | 71.42 | hold_end=101.611>6.0; max_pitch=71.417>30.0 |
+| 41 | 0.85 | 14.9 | 0.10 | 0.09 | 0.10 | 0.00108 | 6 | 9.83 | 68.38 | 1.08 | 54.62 | hold_end=68.383>6.0; max_pitch=54.624>30.0 |
+| 5 | 0.81 | 13.3 | 0.09 | 0.09 | 0.07 | 0.00028 | 8 | 10.44 | 62.21 | 9.04 | 57.97 | hold_end=62.206>6.0; max_pitch=57.971>30.0 |
+| 46 | 0.88 | 13.6 | 0.09 | 0.10 | 0.08 | 0.00044 | 1 | 9.41 | 47.30 | 12.26 | 55.80 | hold_end=47.301>6.0; max_pitch=55.800>30.0 |
+| 16 | 0.86 | 13.0 | 0.08 | 0.10 | 0.05 | 0.00106 | 1 | 10.69 | 31.41 | 2.71 | 56.69 | hold_end=31.415>6.0; max_pitch=56.689>30.0 |
+| 14 | 0.73 | 14.9 | 0.11 | 0.09 | 0.10 | 0.00088 | 1 | 10.55 | 28.19 | 6.13 | 66.75 | hold_end=28.189>6.0; max_pitch=66.747>30.0 |
+| 23 | 0.77 | 15.1 | 0.08 | 0.07 | 0.12 | 0.00050 | 6 | 10.21 | 26.57 | 1.49 | 63.36 | hold_end=26.573>6.0; max_pitch=63.361>30.0 |
+| 59 | 0.75 | 15.5 | 0.14 | 0.09 | 0.06 | 0.00090 | 3 | 10.06 | 22.53 | 13.48 | 60.19 | hold_end=22.531>6.0; max_pitch=60.192>30.0 |
 
 ## plant 参数/故障扫描（18 组）
 
@@ -86,6 +103,7 @@
 | --- | --- | --- | --- |
 | 验收（历史 3 profiles×5 seeds） | 15/15 | **14/15** | mag_nominal seed1 `max_pitch=22.108° > 20°` 失败 |
 | 验收（本套件 8 profiles×5 seeds = 40 场景） | — | **40/40** | 全过 |
+| 验收（realistic 8×5 = 40 场景） | — | **30/40** | realistic 下同矩阵 |
 | 随机 MC 100 例（current） | 60/100 | **56/100** | hold P50/P95 1.26/64.93 → 1.27/27.59 m；roll P95 23.9 → 12.25°；pitch P95 55.8 → 58.13° |
 | sweep 18 组 | 15/18 | **15/18** | 一致（失败：lever_low、iy_high、combined_low） |
 
@@ -105,8 +123,8 @@
 
 ## 遗留风险
 
-1. 验收失败 0 例（current 40/40；realistic 0/0）与 MC current 52/100：失败集中在俯仰裕度，需台架标定后重评。
+1. 验收失败 0 例（current 40/40；realistic 30/40）与 MC current 52/100：失败集中在俯仰裕度，需台架标定后重评。
 2. plant 质量/惯量/力臂/差速力矩为 L1 假设，无外部实飞日志逐波形回放；本证据不能外推实机。
-3. `--coax-realistic`（电机 τ=0.28 s、舵机 300°/s、地面 μ=0.5）已由 task-1 加入源但尚未冻结；本次默认未加该开关，待 lead 通知 `plant/firmware frozen` 后用 `--realistic` 重跑覆盖。
+3. `--coax-realistic`（电机 τ=0.28 s、舵机 300°/s、地面 μ=0.5）本次已两套对照；其预设值仍需 lead 冻结确认，实时/台架数据才能最终标定。
 4. 本套件默认退出码为 1（MC/sweep 未全过），是真实门禁，不是脚本错误。
 
