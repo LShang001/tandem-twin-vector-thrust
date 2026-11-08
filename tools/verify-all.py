@@ -57,6 +57,7 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         ("SIL 覆盖审计", [PY, "tools/check-sil-coverage.py"], ROOT),
         ("头文件接线审计", [PY, "tools/check-module-wiring.py"], ROOT),
         ("角度单位审计", [PY, "tools/check-angle-units.py"], ROOT),
+        ("文档站点收录", [PY, "tools/check-doc-site-coverage.py"], ROOT),
         ("注释门禁 GOV-004", [PY, "tools/check-code-comments.py", "--check"], ROOT),
         ("文档链接完整性", [PY, "tools/check-links.py"], ROOT),
         ("文档产物同步", [PY, "tools/build-docs.py", "--check"], ROOT),

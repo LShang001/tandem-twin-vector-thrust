@@ -316,7 +316,7 @@ run_coaxial_suite.sh 首次完整执行（2026-11-08）</h2>
 <p>套件退出码：1（0=全部通过；1=任一阶段失败。注意：<strong>历史基线
 MC/sweep 未达 100%， 默认运行即返回 1，是真实门禁。</strong>）</p>
 </blockquote>
-<p>共轴对「力臂变小 / 俯仰惯量变大」敏感，与 VER-007
+<p>共轴对「力臂变小 / 俯仰惯量变大」敏感，与 VER-013
 的摄动结论一致（惯量×1.1 → 5/5 FAIL， max_pitch 25–26°）。力臂 0.15→0.08
 会让同一舵角产生的力矩降 47%， 姿态权限不足属物理预期。</p>
 <p><strong>物理原因定量验证</strong>：力臂 L 从 0.15 → 0.08
@@ -420,7 +420,7 @@ s」
 判据，不是偶发超标； 而
 <code>roll_p50 = 1.26°</code>、<code>hold_p50 = 1.47 m</code>
 都远低于判据。</p>
-<p>说明共轴的<strong>俯仰轴在下降/着陆段普遍偏大</strong>——VER-007 的
+<p>说明共轴的<strong>俯仰轴在下降/着陆段普遍偏大</strong>——VER-013 的
 <code>max_pitch_preland</code> 也是 23–26°，是同一现象。</p>
 <p><strong>两个判据口径并存</strong>（严格度不同，不是矛盾）：</p>
 <table>
@@ -2086,7 +2086,7 @@ Node），改公式风险高，未构造违规；机制上比静态检查更可�
 </tr>
 </tbody>
 </table>
-<p><strong>五跑（21/21）是当前基线</strong>：19 项快档守卫 + 三机型 SIL
+<p><strong>五跑（21/21）是当前基线</strong>：20 项快档守卫 + 三机型 SIL
 跑批（408.2 s）</p>
 <ul>
 <li>完整宿主回归（324.6 s）。</li>
@@ -2225,5 +2225,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:10</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:18</footer></article></body>
 </html>

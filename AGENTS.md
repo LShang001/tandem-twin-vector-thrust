@@ -30,12 +30,12 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 ## 命令
 
 ```bash
-# ★ 总守卫（改完代码先跑这条，~13 s；19 项全绿再提交；全景见 VER-009 §2.16）
+# ★ 总守卫（改完代码先跑这条，~15 s；20 项全绿再提交；全景见 VER-009 §2.16）
 #   参数层一致性/生成物同步 · 推进六维对拍 · 分配 3×3 对拍 · 坐标系 @frame 标注
 #   SIL 覆盖审计 · 头文件接线审计 · 角度单位审计 · 注释门禁 GOV-004
 #   文档链接/产物同步/统计数字/编号引用/代码块路径 · IMU 轴映射 · 解锁门判据
 #   仿真域单测(92 项) · 坐标系实现自检 · GCS 单测
-py -3.12 tools/verify-all.py                 # 19 项快档
+py -3.12 tools/verify-all.py                 # 20 项快档
 py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 20 项
 py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 20 项
 py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 21 项，746 s

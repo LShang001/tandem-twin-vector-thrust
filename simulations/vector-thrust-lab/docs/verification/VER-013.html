@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-013 共轴随机种子与模型摄动测试 ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-013-共轴随机种子与模型摄动测试2026-11-04">VER-013
+共轴随机种子与模型摄动测试（2026-11-04）</h1>
+<blockquote>
+<p>对象：<code>CoaxialVTVL</code> + rigorous plant，SIL 40 s。<br />
+目的：在 40/40
+基线之外扩大随机种子、做模型参数摄动，找边界而非重复基线。</p>
+</blockquote>
+<h2 id="1-80-随机种子8-profiles--10-seeds">1. 80 随机种子（8 profiles ×
+10 seeds）</h2>
+<ul>
+<li><strong>80 例：78/80 PASS</strong>；</li>
+<li><strong>160 例（20 seeds）：158/160 PASS</strong>，失败仍是同一
+<code>mag_clean seed8/9</code>：
+<code>pos_rms_preland=1.03/1.06 &gt; 1.0</code>；扩展 seeds
+没有新增失败；</li>
+<li>无姿态、高度、故障隔离、磁门控失败；</li>
+<li>这两例 <code>hold_end_rms=0.55</code>，属于 40 s
+内缓慢水平漂移边界，不是发散。</li>
+</ul>
+<h2 id="2-模型单项摄动mag_clean5-seeds">2. 模型单项摄动（mag_clean，5
+seeds）</h2>
+<table>
+<thead>
+<tr>
+<th>摄动</th>
+<th>结果</th>
+<th>max_pitch_preland</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>质量 0.9 / 推力 0.95</td>
+<td>5/5 PASS</td>
+<td>&lt;20°</td>
+</tr>
+<tr>
+<td>质量 0.9 / 推力 0.90</td>
+<td>10/10 PASS（含 mag_nominal）</td>
+<td>&lt;20°</td>
+</tr>
+<tr>
+<td>惯量 ×1.1</td>
+<td>5/5 FAIL</td>
+<td>25–26°</td>
+</tr>
+<tr>
+<td>舵机速率 300→250 dps</td>
+<td>5/5 FAIL</td>
+<td>24°</td>
+</tr>
+<tr>
+<td>电机 τ 0.28→0.32 s</td>
+<td>5/5 FAIL</td>
+<td>23–24°</td>
+</tr>
+<tr>
+<td>轻度组合（质量0.9/推力0.95/惯量1.1/舵机250/τ0.32）</td>
+<td>3/5 FAIL</td>
+<td>20.5–21.6°</td>
+</tr>
+</tbody>
+</table>
+<p>这些峰值都出现在
+<strong>下降/着陆前</strong>（<code>max_pitch_preland</code>），不是水平飞行段；但仍属于飞行包线内的下降段，不能忽略。</p>
+<blockquote>
+<p><strong>复现方法说明</strong>：本表的 <code>max_pitch_preland</code>
+来自 <code>run_coaxial_acceptance.sh</code>
+的完整着陆流程。<strong>不能用</strong>
+<code>build_and_run_coaxial.sh --seconds N</code> 这类简化场景
+复现——后者只跑定高悬停，实测
+<code>--coax-inertia-scale 1.1 --seconds 120</code> 时 max_pitch 仅
+0.04°、final_alt 7.61 m，从不进入「下降/着陆前」那个阶段。
+要复现必须跑验收脚本（或构造带降落段的场景）。</p>
+</blockquote>
+<h2 id="3-增益鲁棒性mag_clean5-seeds">3. 增益鲁棒性（mag_clean，5
+seeds）</h2>
+<table>
+<thead>
+<tr>
+<th>增益乘子</th>
+<th>标称</th>
+<th>轻度组合</th>
+<th>惯量×1.1</th>
+<th>舵机250</th>
+<th>τ0.32</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1.0</td>
+<td>5/5</td>
+<td>3/5</td>
+<td>5/5 FAIL</td>
+<td>5/5 FAIL</td>
+<td>5/5 FAIL</td>
+</tr>
+<tr>
+<td>0.8</td>
+<td>5/5</td>
+<td>5/5</td>
+<td>3/5</td>
+<td>未测</td>
+<td>未测</td>
+</tr>
+<tr>
+<td>0.7</td>
+<td>5/5</td>
+<td>未测</td>
+<td>4/5（1 例 20.66°）</td>
+<td>5/5</td>
+<td>5/5</td>
+</tr>
+<tr>
+<td>0.6</td>
+<td>未测</td>
+<td>未测</td>
+<td>5/5</td>
+<td>未测</td>
+<td>未测</td>
+</tr>
+</tbody>
+</table>
+<p><strong>80 例在 0.7 增益下仍是
+78/80</strong>，剩余仍是水平位置漂移；说明降增益改善姿态/下降段鲁棒性，不改变位置环慢漂。</p>
+<h2 id="4-结论与操作建议">4. 结论与操作建议</h2>
+<ol type="1">
+<li>当前 1.0 增益对<strong>标称/质量推力 ±10%</strong>
+有裕度；对惯量/舵机速率/电机时间常数约 10% 失配，下降段 pitch 会到
+23–26°，超出 20° 门。</li>
+<li>若首飞前无法准确标定惯量/舵机速率/电机 τ，建议 GCS 用
+<code>param dump</code> 后临时把
+<code>att_pitch.kp</code>、<code>rate_pitch.kp</code>（以及 roll
+对应）降到 <strong>0.7–0.8 倍</strong>，再低高度试飞；不要直接改 10° TVC
+限幅。</li>
+<li>质量/推力是主要配平量：<code>coax.mass_kg</code>、<code>coax.max_thrust_n</code>
+必须按实机更新，否则定高/配平会偏。</li>
+<li>位置漂移 1.03–1.06 m 是 40 s
+慢漂边界；首飞先手动姿态，不要直接定点悬停。</li>
+<li>本测试不替代台架/实飞；参数仍是 MODEL-DEFAULT。</li>
+</ol>
+<h2 id="5-口径澄清2026-11-04-补充">5. 口径澄清（2026-11-04 补充）</h2>
+<p><code>pos_rms_preland</code> 是 <strong>EKF 估计相对位置 vs
+真值</strong>的 RMS，不是位置保持误差； <code>hold_end_rms</code>
+才是真值相对保持点的误差。seed8 复测：
+<code>hold_end_rms=0.54</code>（控制可接受）而
+<code>pos_rms_preland=1.06</code>（EKF 水平估计误差）， 所以 2/80
+失败应归因到<strong>导航位置精度边界</strong>，不是姿态/位置环发散。</p>
+<ul>
+<li>标准 8×5 = <strong>40/40</strong> 仍通过；</li>
+<li>扩展 8×10 = <strong>78/80</strong>，失败仅此 2 例；</li>
+<li>无姿态、高度、故障隔离失败。</li>
+</ul>
+<h2 id="6-seed189-位置误差对比2026-11-04">6. seed1/8/9
+位置误差对比（2026-11-04）</h2>
+<p>同一 rigorous/SIL 配置，EKF 水平误差随时间增长：</p>
+<table>
+<thead>
+<tr>
+<th>seed</th>
+<th>10–20 s RMS</th>
+<th>20–40 s RMS</th>
+<th>终值 (n,e) m</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>0.49–0.66</td>
+<td>0.93–1.09</td>
+<td>(0.09, 1.06)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>0.88–0.98</td>
+<td>1.07–1.17</td>
+<td>(−1.03, −0.07)</td>
+</tr>
+<tr>
+<td>9</td>
+<td>0.92–1.13</td>
+<td>0.92–1.13</td>
+<td>(−0.86, 0.19)</td>
+</tr>
+</tbody>
+</table>
+<p>seed1 终值也有 1.06 m，只是 RMS 略低；因此 2/160 不是控制发散，而是
+<strong>40 s 内 EKF 水平位置精度约 1 m 的验收边界</strong>。GNSS 残差
+0.8–1.2 m、 无重锚/门控拒绝，符合该解释。首飞室外 hAcc 优于 SIL
+时再看实际定点精度； 不要把该边界误读为姿态/位置环故障。</p>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-013-共轴随机与摄动测试-2026-11-04.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:18</footer></article></body>
+</html>
