@@ -24,6 +24,8 @@ $CXX -std=c++17 -O2 -DTANDEMVEC_FIRMWARE -DFW_SIL_REAL_NAV -DARDUINO \
 OUT="$OUT_BASE"
 [ -f "$OUT_BASE.exe" ] && OUT="$OUT_BASE.exe"
 
+ALT_LO="${ALT_LO:-8.0}"
+ALT_HI="${ALT_HI:-11.0}"
 fail=0
 for s in 1 2 3; do
   line="$("$OUT" --seed "$s" --ekf | tail -1)"
@@ -32,8 +34,12 @@ for s in 1 2 3; do
   case "$alt" in
     ""|nan|-nan|*[!0-9.-]*) echo "FAIL seed$s: non-numeric altitude"; fail=1 ;;
     *)
-      awk -v a="$alt" 'BEGIN { if (a < 8.0 || a > 11.0) exit 1 }' \
-        || { echo "FAIL seed$s: altitude $alt outside 8..11 m"; fail=1; }
+      # ★ 2026-11-08：阈值提成变量，提示文案跟着变量走。
+      #   此前文案硬编码「8..11」——改判据时提示会撒谎（验证时实测过：
+      #   把阈值收紧到 9.99..10.01，报错仍写「outside 8..11 m」）。
+      awk -v a="$alt" -v lo="$ALT_LO" -v hi="$ALT_HI" \
+        'BEGIN { if (a < lo || a > hi) exit 1 }' \
+        || { echo "FAIL seed$s: altitude $alt outside ${ALT_LO}..${ALT_HI} m"; fail=1; }
       ;;
   esac
 done
@@ -42,4 +48,4 @@ if [ "$fail" -ne 0 ]; then
   echo "SIL acceptance FAILED"
   exit 1
 fi
-echo "SIL acceptance PASSED (real firmware + real EKF, 3 seeds, 8..11 m)"
+echo "SIL acceptance PASSED (real firmware + real EKF, 3 seeds, ${ALT_LO}..${ALT_HI} m)"
