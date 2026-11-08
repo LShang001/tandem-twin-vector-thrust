@@ -1187,6 +1187,40 @@ seed1/2/3（roll 59.9/76.4/26.9°，hold_end 89.7/224.1/105.6 m，seed2 37
 <p>两者性质完全不同，量级差 3–5 倍。这解释了为什么 fast MC 的 lead
 参数搬到 固件会失效——它面对的是噪声水平完全不同的输入。
 <strong>这一条从「推测」升级为「实测支持」。</strong></p>
+<p><strong>对照实验（Round 235）</strong>：加开关
+<code>-DBFS_ALPHA_FROM_MEASURED</code>，把 PID 的 setpoint
+换成实测速率（等价于「derivative 输入取实测」），其余不变：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th><code>max_roll</code></th>
+<th><code>rms_roll</code></th>
+<th><code>final_alt</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线（setpoint = <code>omega_ref</code>）</td>
+<td><strong>2.72°</strong></td>
+<td><strong>1.47°</strong></td>
+<td>9.23 m</td>
+</tr>
+<tr>
+<td>换实测（setpoint = 实测速率）</td>
+<td><strong>3.40°</strong></td>
+<td><strong>1.73°</strong></td>
+<td>9.23 m</td>
+</tr>
+</tbody>
+</table>
+<p>姿态抖动 <strong>+25%</strong>，高度不变。</p>
+<p><strong>结论</strong>：把噪声更大的实测值喂进这条路径，控制确实变差——与「lead
+失效源于 输入噪声」的解释一致。</p>
+<p>★ <strong>证据强度</strong>：只跑了 <code>--seed 1</code>
+一个种子，不足以给统计结论。
+这条只算「方向一致的单点对照」，不是「已验证的因果」。要升级成因果结论，
+需要多 seed 跑批并看分布是否显著。</p>
 <p><strong>已有的对照实验（2026-11-08
 复跑）</strong>：<code>RateLeadPredictor.h</code> 的 <code>@note</code>
 记录 的是 <strong>2026-10-24</strong> 的数：基线 6/6 PASS，加
@@ -1583,5 +1617,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:01</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:10</footer></article></body>
 </html>
