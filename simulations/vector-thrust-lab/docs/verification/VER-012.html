@@ -144,8 +144,14 @@ s</td>
 <strong>不是死代码</strong>（经 <code>state_data.h</code> 间接在用，
 只看直接 include 会误判）</li>
 </ul></li>
-<li><strong>迟滞未加</strong>（A-8
-剩余项）——需权衡，当前实飞未观察到边界抖动。</li>
+<li><del><strong>迟滞未加</strong>（A-8 剩余项）</del> →
+<strong>判定为不需要加（Round 231）</strong>。
+实机参数读数：<code>sedf.att_limit_deg = **120°**</code>（不是文档里常见引用的
+45°）。 120° 意味着「几乎倒扣才切推进」——正常飞行不可能在 120°
+附近来回穿越， 边界抖动的前提不成立。所以 A-8
+的迟滞不是漏项，是<strong>适用条件不满足</strong>。
+（<code>coax.att_limit_deg</code> 是
+90°，同样远高于正常姿态包线。）</li>
 <li><strong><code>alpha_ref</code>
 因果链仍未验证</strong>——「不能外推」有实验支持，「为什么不能」仍是推测。</li>
 </ol>
@@ -245,5 +251,5 @@ s</td>
 <strong>问题侧</strong>：发现并处理了 6 类问题，但<strong>仍有 5
 项明确未完成</strong>（见 §1.2）， 其中 F4 判据是结构性的。</p>
 <p><strong>没有做到「所有」——做到了「已发现的都有结论，未完成的都写明了」。</strong></p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:46</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:52</footer></article></body>
 </html>
