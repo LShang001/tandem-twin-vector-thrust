@@ -1300,7 +1300,17 @@ TVC，姿态 P 通路常开；积分仍按 &gt;1100 门控</td>
 备注</strong>：<code>singleEdf4VaneThrusterEnable()</code>
 目前是硬阈值判据（<code>tilt &gt; limit</code> 即切），没有 3–5°
 迟滞。是否要加需权衡：迟滞能防边界抖动，但会让「刚超过阈值一点点」的状态仍给油。当前实飞未观察到边界抖动，暂不加。
-| A-9 | P2 | 手动 TVC 无滤波、极性反转（D3） |
+| A-10 | — | <strong>单位混用专项审计（2026-11-08）</strong>：A-8
+暴露的「弧度当度用」是一类隐蔽
+bug——代码能跑、不报错、只是保护从未生效。据此核对
+<code>AHRS_Packet.Roll/Pitch</code> 的每一处使用 |
+三处均正确：①<code>communication.cpp</code> 的
+<code>bbRoll/bbPitch</code> 返回弧度，但注册表里带
+<code>RAD_TO_DEG</code>
+换算（<code>roll_deg</code>/<code>pitch_deg</code>）；②MAVLink
+<code>attitude_pack</code> 按规范本就传弧度；③CAN
+<code>sendFloatPair</code> 传原始弧度，与协议侧一致 | 无需修改 | | A-9 |
+P2 | 手动 TVC 无滤波、极性反转（D3） |
 <strong>滤波已补（2026-10-30，§10）</strong>；CH8 极性仍保留 &gt;1750
 安全反逻辑，需写入机型配置说明 | cvc T4；台架待做 | | A-10 | P2 | yaw
 积分门 1050 vs 1100（D10） |
@@ -1788,5 +1798,5 @@ rigorous 下 3×5=9/9、8×5=40/40，但闭环被 plant 的推力-油门口径�
 缺省路径逐行不变， 验收基线仍以 legacy 为准。rigorous
 只作研究/灵敏度/标定前检查。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 08:01</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 08:05</footer></article></body>
 </html>
