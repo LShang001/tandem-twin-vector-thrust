@@ -806,12 +806,46 @@ F4（舵机卡死）检测的门限盲区（2026-11-08）</h2>
 <p>差异的根源：场景 A 里「卡死的位置」本身就是满舵，控制律为了抵消它会
 把指令打到反向满舵；场景 B 里卡死位置只有 44%，控制律也就不必打满。</p>
 <blockquote>
-<p>★ <strong>这是推理不是实测</strong>。要确认场景 A
-真能触发，需要构造「卡死在 ±dMax」 的注入并观察 <code>f4</code>
-是否置位。当前 <code>--fault 4</code> 硬编码 +8°，
-<code>--coax-servojam</code>
-锁存当时位置（可能落在任何位置），都不便于精确构造。
-在补齐这个实验之前，<strong>不应断言「F4 对满舵卡死有效」</strong>。</p>
+<p>★ <strong>2026-11-08 已补做实验，结论推翻了上面的推理</strong>：</p>
+<p>发现 <code>--fault4-deg</code>
+参数已存在（<code>fw_sil_env_main.cpp:2912</code>），可以直接
+构造「卡死在任意角度」。实测两组：</p>
+<table>
+<thead>
+<tr>
+<th>卡死角度</th>
+<th><code>f4</code></th>
+<th><code>max_roll</code></th>
+<th><code>final_alt</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>+8°（原默认）</td>
+<td><strong>0</strong></td>
+<td>158.7°</td>
+<td>nan（已坠）</td>
+</tr>
+<tr>
+<td><strong>+20°（满舵）</strong></td>
+<td><strong>0</strong></td>
+<td>158.9°</td>
+<td>nan（已坠）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>满舵卡死时 F4 依然不触发</strong>，而姿态已经发散到
+158°、高度丢失。</p>
+<p>所以此前那句「F4
+对卡死在满舵位的场景有效」的推测<strong>不成立</strong>。
+真正的原因不是「卡死角度不够大」，而是 <code>df_cmd_frac</code>
+这个输入本身在 发散过程中没有到达
+0.90——需要加遥测打印才能确认它到底到多少，
+但无论如何，「靠这条判据检出满舵卡死」这条路已实测否定。</p>
+<p><strong>修正后的结论</strong>：F4
+这条判据在<strong>任一</strong>卡死角度下都不触发（实测 8° 与 20°
+两组），
+不是「只对小偏置无效」。这是原判据（用指令饱和度当输入）的结构性问题。</p>
 </blockquote>
 <blockquote>
 <p>★
@@ -2627,5 +2661,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:33</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:43</footer></article></body>
 </html>
