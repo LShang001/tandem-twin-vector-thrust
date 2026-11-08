@@ -1169,8 +1169,44 @@ FAIL。本轮验证它真会重试：</p>
 <p><strong>CPU 统计修复的第十二次验证</strong>：4403 → 11073 → 25162 →
 30341 → 33498 → 36229 → 37891 → 39951 → 42272 → 42818 → 46579 →
 <strong>49640 s</strong>，跨过回绕点 <strong>11.7 倍</strong>。</p>
-<h3 id="-边界f4-的-nan-修复没有烧进这块板子">★ 边界：F4 的 NaN
-修复<strong>没有烧进这块板子</strong></h3>
+<h3 id="-已于-round-228-烧录边界已解除">★ 已于 Round 228
+烧录（边界已解除）</h3>
+<p>先跑全量验证 <strong>23/23 通过</strong>（747.9 s），再烧
+<code>SingleEdf4Vane</code>（204.7 s SUCCESS）。</p>
+<p><strong>烧录后验证</strong>（判据不是「Verified OK」，是 uptime
+归零）：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>烧录前</th>
+<th>烧录后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uptime</td>
+<td>49640 s</td>
+<td><strong>64 s</strong>（已重启）</td>
+</tr>
+<tr>
+<td>8 项自检</td>
+<td>PASS</td>
+<td><strong>PASS</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>uptime_s</code> 从 49640 掉到
+64，证明跑的是新固件——<code>Verified OK</code> 只说明 Flash
+写进去了。</p>
+<blockquote>
+<p>★ 只同步了 <code>ActuatorFaultMonitor.h</code> 一个头文件：magicbook
+上有 3 个它自己的 本地提交（硬件文档、链路脚本、UART8 修复），按 GOV-003
+不能硬覆盖。 烧录只需要这一个文件，其余保持对端原状。</p>
+</blockquote>
+<h3
+id="历史边界记录round-227f4-的-nan-修复当时没有烧进这块板子">历史边界记录（Round
+227）：F4 的 NaN 修复当时<strong>没有烧进这块板子</strong></h3>
 <p>Round 224 修的 <code>ActuatorFaultMonitor</code> NaN 短路只在
 <strong>SIL 与宿主单测</strong>里验证过：</p>
 <ul>
@@ -1231,5 +1267,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:22</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:43</footer></article></body>
 </html>
