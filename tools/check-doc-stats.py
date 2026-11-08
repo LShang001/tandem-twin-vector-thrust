@@ -88,6 +88,18 @@ FACTS = [
     },
 
     {
+        # ★ 2026-11-08：VER-009 §2.16 的「能失败验证 N/M」会随守卫增加漂移。
+        #   M 必须等于全量守卫数（快档 + 两个慢档），N 是人工维护的实测计数。
+        "name": "能失败验证的分母",
+        "actual": lambda: count_verify_items() + 2,
+        "patterns": [
+            r"能失败验证[^\n]{0,12}(\d+)/(\d+)",
+            r"(\d+)/(\d+)\s*做过违规实验",
+        ],
+        "group": 2,
+    },
+
+    {
         "name": "Node 测试项数",
         "actual": count_node_tests,
         "patterns": [
@@ -151,7 +163,11 @@ def main() -> int:
             for pat in fact["patterns"]:
                 for m in re.finditer(pat, text):
                     hits += 1
-                    got = int(m.group(1))
+                    # ★ 2026-11-08：支持 group 参数（N/M 这类只想核对分母的写法）
+                    try:
+                        got = int(m.group(fact.get("group", 1)))
+                    except (IndexError, ValueError):
+                        continue
                     if got != actual:
                         rel = md.relative_to(ROOT)
                         problems.append(
