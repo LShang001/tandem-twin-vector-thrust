@@ -1196,6 +1196,17 @@ FAIL。本轮验证它真会重试：</p>
 </tr>
 </tbody>
 </table>
+<p><strong>烧录后持续运行确认（Round
+229）</strong>：再审一次，<code>uptime_s=183</code>、<code>veh=SingleEdf4Vane</code>、
+8 项全过。新固件从 0 开始稳定计数，行为与旧固件一致（除 F4 的 NaN
+修复外无其他改动）。</p>
+<blockquote>
+<p>★ 实机这块板子是<strong>单涵道四燃气舵</strong>，舵机通道与 TandemVec
+不同，F4 的 NaN 修复
+在实机上<strong>不会实际触发</strong>（没有对应的舵机卡死场景）。所以实机这一层只能证明
+「修复没有破坏任何东西」，「修复在真实卡死时确实会报警」仍只有 SIL
+与单测证据。</p>
+</blockquote>
 <p><code>uptime_s</code> 从 49640 掉到
 64，证明跑的是新固件——<code>Verified OK</code> 只说明 Flash
 写进去了。</p>
@@ -1267,5 +1278,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:43</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:45</footer></article></body>
 </html>
