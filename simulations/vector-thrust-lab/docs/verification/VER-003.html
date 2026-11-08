@@ -1217,10 +1217,45 @@ seed1/2/3（roll 59.9/76.4/26.9°，hold_end 89.7/224.1/105.6 m，seed2 37
 <p>姿态抖动 <strong>+25%</strong>，高度不变。</p>
 <p><strong>结论</strong>：把噪声更大的实测值喂进这条路径，控制确实变差——与「lead
 失效源于 输入噪声」的解释一致。</p>
-<p>★ <strong>证据强度</strong>：只跑了 <code>--seed 1</code>
-一个种子，不足以给统计结论。
-这条只算「方向一致的单点对照」，不是「已验证的因果」。要升级成因果结论，
-需要多 seed 跑批并看分布是否显著。</p>
+<p>★ <strong>Round 236 补到 3 seeds
+后，上轮的结论被推翻了</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>seed</th>
+<th>基线 <code>max_roll</code></th>
+<th>换实测 <code>max_roll</code></th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>2.72°</td>
+<td>3.40°</td>
+<td><strong>+25%</strong>（变差）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2.21°</td>
+<td><strong>1.50°</strong></td>
+<td><strong>−32%</strong>（变好）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>4.17°</td>
+<td><strong>2.67°</strong></td>
+<td><strong>−36%</strong>（变好）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>方向不一致</strong>：1 个变差、2 个变好。</p>
+<p>所以「把实测喂进去会变差」这个结论<strong>不成立</strong>——它是我从单个
+seed 上
+看到的错觉。当前能说的只是：<strong>换输入会改变结果，但方向取决于种子</strong>。</p>
+<p>★ 这是一次典型的方法论教训：单个种子的 +25% 看起来像趋势， 3
+个种子一跑就散了。<strong>SIL 结果的对比必须以多 seed 为前提</strong>，
+这条在 AGENTS.md 与踩坑记录里都写过，这轮又踩了一次。</p>
 <p><strong>已有的对照实验（2026-11-08
 复跑）</strong>：<code>RateLeadPredictor.h</code> 的 <code>@note</code>
 记录 的是 <strong>2026-10-24</strong> 的数：基线 6/6 PASS，加
@@ -1617,5 +1652,5 @@ A/B，含 casewise）、
 <code>sim-data/boundary-grid-2026-10-24/</code>、<code>sim-data/mega-nominal-150k-2026-10-24/</code>。
 早期修正前目录在 <code>sim-data/README.md</code> 标注，仅无故障桶有效；
 完整 110 MB CSV 不入库，可由上述命令复现。</p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:10</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-003-三机型等效模型反演与巨型MC.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:15</footer></article></body>
 </html>
