@@ -30,7 +30,10 @@ ROOT = Path(__file__).resolve().parent.parent
 GCS_DIR = ROOT / "TandemVec_FCS" / "GCS"
 
 OLD_WRAP_S = 4260.0      # micros() 的 32 位回绕点（4294.97 s，留一点余量）
-DEFAULT_TARGET_S = 4400.0
+# ★ 2026-11-08：默认目标从 4400 提到 20000。4400 只比 4260 回绕点多 3%，
+#   跨过去再多跑几秒也可能碰上别的阈值，证据不够硬。20000 s（4.7 倍回绕点）
+#   才是有说服力的「长期稳定」；真要短测可显式传小值。
+DEFAULT_TARGET_S = 20000.0
 CPU_LIMIT_PERMILLE = 850
 
 
