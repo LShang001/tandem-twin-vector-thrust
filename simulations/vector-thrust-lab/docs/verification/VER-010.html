@@ -1196,10 +1196,45 @@ FAIL。本轮验证它真会重试：</p>
 </tr>
 </tbody>
 </table>
-<p><strong>烧录后持续运行确认（Round
-229）</strong>：再审一次，<code>uptime_s=183</code>、<code>veh=SingleEdf4Vane</code>、
-8 项全过。新固件从 0 开始稳定计数，行为与旧固件一致（除 F4 的 NaN
+<p><strong>烧录后持续运行确认</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>复检时刻</th>
+<th>uptime</th>
+<th>8 项自检</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Round 229</td>
+<td>183 s</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>Round 231</td>
+<td>401 s</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td>Round 233</td>
+<td>844 s</td>
+<td>PASS</td>
+</tr>
+<tr>
+<td><strong>Round 239</strong></td>
+<td><strong>3406 s（57 分钟）</strong></td>
+<td><strong>PASS</strong></td>
+</tr>
+</tbody>
+</table>
+<p>新固件从 0 开始稳定计数，行为与旧固件一致（除 F4 的 NaN
 修复外无其他改动）。</p>
+<blockquote>
+<p>★ 新固件的连续运行时长是<strong>重新开始累积</strong>的。旧固件创下的
+49640 s（11.7 倍回绕点）
+记录不适用于这份新固件——它要在新固件上重新跑一遍才有可比性。</p>
+</blockquote>
 <blockquote>
 <p>★ 实机这块板子是<strong>单涵道四燃气舵</strong>，舵机通道与 TandemVec
 不同，F4 的 NaN 修复
@@ -1278,5 +1313,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:36</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:38</footer></article></body>
 </html>
