@@ -1119,24 +1119,46 @@ PASS。抓原始输出核对后确认是 <strong>终端字形显示问题</stron
 1、无输出），重试即正常——判断板子状态时不要把「一次读不到」
 当成「板子挂了」，先重试。</p>
 </blockquote>
+<h2 id="518-verify_board-自动重试的验证2026-11-08">5.18
+<code>verify_board</code> 自动重试的验证（2026-11-08）</h2>
+<p>Round 202 给 <code>cli()</code> 加了 <code>retries=2</code>（间隔 0.6
+s），理由是 <code>dbg health</code> 偶发 返回空会让检查报假
+FAIL。本轮验证它真会重试：</p>
+<pre><code>py -3.12 tools/verify_board.py COM99 SingleEdf4Vane
+  [FAIL] 8 项未通过：参数表数量, 机型匹配, ISR 采样率, ...
+  real 0m29.436s</code></pre>
+<p>用<strong>不存在的端口 COM99</strong> 跑：</p>
+<ul>
+<li>8 项全部 FAIL（预期，端口不对）</li>
+<li>耗时 <strong>29.4 s</strong>——约等于单次的 3 倍（8 项 × 3
+次尝试）</li>
+</ul>
+<p><strong>结论</strong>：重试确实在跑，不是写了没生效。</p>
+<blockquote>
+<p>★ 判据说明：重试只在「输出为空或不含
+<code>[DBG]</code>/<code>veh=</code> 且退出码非 0」时触发。 COM99
+的失败属这一类，所以每次调用都试满 3 遍。
+反过来说，正常板子上如果看到耗时明显变长，就是有调用在重试——
+这本身是个可观测的信号。</p>
+</blockquote>
 <h2 id="6-复现步骤">6 复现步骤</h2>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) 编译（本机）</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS <span class="kw">&amp;&amp;</span> <span class="ex">pio</span> run <span class="at">-e</span> SingleEdf4Vane</span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2) 传固件到目标机</span></span>
-<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="fu">scp</span> .pio/build/SingleEdf4Vane/firmware.bin magicbook:D:/.../tmp_fw.bin</span>
-<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 3) 烧录（目标机，OpenOCD 直烧）</span></span>
-<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="ex">openocd</span> <span class="at">-f</span> interface/cmsis-dap.cfg <span class="at">-f</span> target/stm32h7x.cfg <span class="dt">\</span></span>
-<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">-c</span> <span class="st">&quot;adapter speed 100&quot;</span> <span class="dt">\</span></span>
-<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">-c</span> <span class="st">&quot;program D:/.../tmp_fw.bin 0x08000000 verify reset exit&quot;</span></span>
-<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) 验证（目标机，GCS CLI）</span></span>
-<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS/GCS</span>
-<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 device        <span class="co"># → 169 参数</span></span>
-<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 dbg health     <span class="co"># → veh / IMU / EKF</span></span>
-<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 vars watch imu_rate <span class="at">-t</span> 6   <span class="co"># → 2000 Hz</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) 编译（本机）</span></span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS <span class="kw">&amp;&amp;</span> <span class="ex">pio</span> run <span class="at">-e</span> SingleEdf4Vane</span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2) 传固件到目标机</span></span>
+<span id="cb8-5"><a href="#cb8-5" aria-hidden="true" tabindex="-1"></a><span class="fu">scp</span> .pio/build/SingleEdf4Vane/firmware.bin magicbook:D:/.../tmp_fw.bin</span>
+<span id="cb8-6"><a href="#cb8-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-7"><a href="#cb8-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 3) 烧录（目标机，OpenOCD 直烧）</span></span>
+<span id="cb8-8"><a href="#cb8-8" aria-hidden="true" tabindex="-1"></a><span class="ex">openocd</span> <span class="at">-f</span> interface/cmsis-dap.cfg <span class="at">-f</span> target/stm32h7x.cfg <span class="dt">\</span></span>
+<span id="cb8-9"><a href="#cb8-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">-c</span> <span class="st">&quot;adapter speed 100&quot;</span> <span class="dt">\</span></span>
+<span id="cb8-10"><a href="#cb8-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">-c</span> <span class="st">&quot;program D:/.../tmp_fw.bin 0x08000000 verify reset exit&quot;</span></span>
+<span id="cb8-11"><a href="#cb8-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb8-12"><a href="#cb8-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) 验证（目标机，GCS CLI）</span></span>
+<span id="cb8-13"><a href="#cb8-13" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS/GCS</span>
+<span id="cb8-14"><a href="#cb8-14" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 device        <span class="co"># → 169 参数</span></span>
+<span id="cb8-15"><a href="#cb8-15" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 dbg health     <span class="co"># → veh / IMU / EKF</span></span>
+<span id="cb8-16"><a href="#cb8-16" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 vars watch imu_rate <span class="at">-t</span> 6   <span class="co"># → 2000 Hz</span></span></code></pre></div>
 <h2 id="7-参考">7 参考</h2>
 <ul>
 <li><code>TandemVec_FCS/AGENTS.md</code> §调度统计口径（DBG
@@ -1145,5 +1167,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:22</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:26</footer></article></body>
 </html>
