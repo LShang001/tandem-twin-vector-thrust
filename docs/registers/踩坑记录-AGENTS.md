@@ -4,6 +4,21 @@
 > 控制分配/差速调度/滤波/通信链路（GCS/AnoCom/黑匣子）/GNSS/构建/灯效。
 > 2026-08-10 从 AGENTS.md 外移（上下文膨胀修复，AGENTS.md 保留 5 条最高频）。
 
+- **`git push` 的成败不能用管道后的 `$?` 判断（2026-11-08）**：
+  `git push ... 2>&1 | tail -2; if [ $? -eq 0 ]` 里的 `$?` 是 **`tail` 的退出码**，
+  永远是 0——于是失败被当成成功，连报「重试 1/2/3 成功」。正确写法：
+  `git push ... > log 2>&1; rc=$?; [ $rc -eq 0 ]`，再看 `log` 里的
+  `main -> main` 字样。
+  **同源**：其他「管道吞退出码」的场合（`cmd | grep` 判断成败）一样危险。
+
+- **本仓 `origin` 是 SSH 且不可达，所以 `origin/main` 的本地缓存永远陈旧（2026-11-08）**：
+  `git remote get-url origin` = `git@github.com:...`（SSH，本机不通）。
+  推送实际走 `git -c http.proxy=... push https://github.com/...`（HTTPS）。
+  因此 `git fetch origin main` 会失败且**静默**，`git rev-parse origin/main` 一直指向旧提交——
+  **不能用它判断推送是否成功**。正确验证：
+  `git ls-remote https://github.com/LShang001/tandem-twin-vector-thrust.git main`
+  （加同一代理参数），比对返回的 SHA。
+
 - **「改了没生效」与「检查不生效」长得一模一样（2026-11-08，一天内踩两次）**：
   ①验证 `check-param-parity` 的 `lever_m` 守护时，改了 `grab()` 的起点却仍 PASS——
   实际是 plant 侧的停止标记 `"};"` 撞上了数组 `inertia_kgm2[3] = {...};` 的收尾，
