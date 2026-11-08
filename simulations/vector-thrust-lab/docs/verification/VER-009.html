@@ -2189,6 +2189,68 @@ py -3.12 tools/check-frame-refs.py
 <p>所以 21/22 里的那个 1
 不是「还没做」，是「这项的判据性质决定了它不可这样验」。</p>
 </blockquote>
+<h2 id="226-nan-静默短路同类审计2026-11-08">2.26 「NaN
+静默短路」同类审计（2026-11-08）</h2>
+<p>Round 224 修了 <code>ActuatorFaultMonitor</code> 的 NaN
+短路。顺着查全仓所有 <code>std::fabs(x) &gt; 阈值</code>
+形式的安全判据：</p>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>形式</th>
+<th>NaN 处理</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ActuatorFaultMonitor.h:136-141</code></td>
+<td><code>fabs(roll_err) &gt; servo_err &amp;&amp; ...</code></td>
+<td><strong>曾无</strong></td>
+<td><strong>已修</strong>（<code>!isfinite</code> 按故障）</td>
+</tr>
+<tr>
+<td><code>ActuatorOutputMap.h:348</code></td>
+<td><code>fabs(tilt) &lt;= limit</code></td>
+<td>入口有 <code>!isfinite → return false</code></td>
+<td>✓ 安全方向</td>
+</tr>
+<tr>
+<td><code>HeadingAidingGate.h</code></td>
+<td>多处</td>
+<td><strong>10 处 <code>isfinite</code></strong></td>
+<td>✓ 已覆盖</td>
+</tr>
+<tr>
+<td><code>NavImuIncrementSelect.h</code></td>
+<td><code>select(bool imu_failed)</code></td>
+<td>输入是 bool，无浮点比较</td>
+<td>✓ 不适用</td>
+</tr>
+<tr>
+<td><code>AdaptiveGainDamper</code> /
+<code>CoaxialVtvControl</code></td>
+<td><code>fabs(...) &lt; 阈值</code> 等</td>
+<td>无</td>
+<td>非安全告警，NaN 只影响输出本身</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论</strong>：只有 <code>ActuatorFaultMonitor</code>
+一处是「NaN 会导致判据永假」的形态，已修。</p>
+<blockquote>
+<p>★ 判据：<strong>安全告警类判据必须显式处理非有限输入</strong>。
+关键区别在「判据为假意味着什么」：</p>
+<ul>
+<li><code>ActuatorOutputMap</code>：为假 = <strong>不使能推进</strong> =
+安全方向 → NaN 无害</li>
+<li><code>ActuatorFaultMonitor</code>：为假 = <strong>不报警</strong> =
+危险方向 → NaN 必须当故障</li>
+</ul>
+<p>同样是
+<code>fabs(x) &gt; 阈值</code>，因为「假」的含义相反，需要的处理也相反。</p>
+</blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
 <p>排查三轮后的最终结论：--gain-scale 系列在 SIL
@@ -2791,5 +2853,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href=
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:13</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:17</footer></article></body>
 </html>
