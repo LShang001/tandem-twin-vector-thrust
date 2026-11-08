@@ -898,19 +898,50 @@ NaN，<code>servo_bad</code> 恒 false，F4
 就永远不可能触发——<strong>即使真实故障正在发生</strong>。</p>
 <p>这确实是<strong>结构性缺陷</strong>，但与 Round 219 猜的「指令到不了
 90%」不是同一个原因： 指令到了 100%，是 NaN 把它废掉了。</p>
-<p><strong>修复方向</strong>（未实施）：在 <code>update()</code>
-入口把非有限输入当作「不满足」但要
-<strong>保持计时不重置</strong>，或者更保守地——非有限时直接判定为故障。需要权衡误报风险。</p>
+<p><strong>已修复（Round 224）</strong>：在 <code>update()</code>
+里把非有限输入按「条件成立」处理：</p>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">bool</span> roll_finite <span class="op">=</span> <span class="bu">std::</span>isfinite<span class="op">(</span>roll_err_deg<span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="bu">std::</span>isfinite<span class="op">(</span>df_cmd_frac<span class="op">);</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="at">const</span> <span class="dt">bool</span> roll_bad <span class="op">=</span> <span class="op">!</span>roll_finite <span class="op">||</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="op">(</span><span class="bu">std::</span>fabs<span class="op">(</span>roll_err_deg<span class="op">)</span> <span class="op">&gt;</span> <span class="va">cfg_</span><span class="op">.</span>servo_err_deg <span class="op">&amp;&amp;</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>     <span class="bu">std::</span>fabs<span class="op">(</span>df_cmd_frac<span class="op">)</span> <span class="op">&gt;=</span> <span class="va">cfg_</span><span class="op">.</span>servo_cmd_frac<span class="op">);</span></span></code></pre></div>
+<p>理由：NaN/Inf 说明姿态解算已经失效，这比「误差略大于门限」更严重，
+所以按故障方向处理，而不是按「不满足」处理。</p>
+<p><strong>验证（三层）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单元测试</td>
+<td>新增 T13「姿态误差为 NaN → 判故障」，<strong>21/21
+通过</strong></td>
+</tr>
+<tr>
+<td>SIL 端到端</td>
+<td><code>--fault 4 --fault4-deg 20</code>：修复前 <code>f4=0</code> →
+<strong>修复后 <code>f4=1</code></strong></td>
+</tr>
+<tr>
+<td>原有 20 项单测</td>
+<td>全部仍通过（T11/T12 边界未被破坏）</td>
+</tr>
+</tbody>
+</table>
 <p>下面是 Round 221 的错误推断，保留作为记录：</p>
 <p><code>updateActuatorFaultDiagnostics()</code> 的开头是</p>
-<div class="sourceCode" id="cb4"><pre
-class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(!</span>inputs<span class="op">.</span>is_unlocked<span class="op">)</span> <span class="op">{</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">s_actuator_fault_monitor</span><span class="op">.</span>reset<span class="op">();</span></span>
-<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">g_actuator_servo_jam</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
-<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="va">g_actuator_thrust_loss</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
-<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">...</span></span>
-<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span><span class="op">;</span></span>
-<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(!</span>inputs<span class="op">.</span>is_unlocked<span class="op">)</span> <span class="op">{</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>    <span class="va">s_actuator_fault_monitor</span><span class="op">.</span>reset<span class="op">();</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>    <span class="va">g_actuator_servo_jam</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>    <span class="va">g_actuator_thrust_loss</span> <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>    <span class="op">...</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span><span class="op">;</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a><span class="op">}</span></span></code></pre></div>
 <p><strong>未解锁就直接 reset 并返回</strong>。而这两组 SIL 实测跑的是
 <code>mode=0</code>（未解锁）， 所以 F4
 的积分计时器每拍都被清零——<strong>它根本没有机会累积到 0.5
@@ -2745,11 +2776,11 @@ m」</strong>：两端都有边界，
 一旦触地就判失败，避免 「掉到地上但高度指标还勉强够」的假通过。</li>
 </ul>
 <h2 id="4-复现">4 复现</h2>
-<div class="sourceCode" id="cb11"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
-<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
-<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
-<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
+<span id="cb12-4"><a href="#cb12-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
 <p>Windows/MinGW 下统一经 <code>tools/with-ascii-bin.sh</code>
 包装（ASCII 盘符 + <code>BIN_DIR</code>）。</p>
 <h2 id="5-参考">5 参考</h2>
@@ -2760,5 +2791,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb11-1"><a href=
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:08</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:13</footer></article></body>
 </html>

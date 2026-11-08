@@ -120,12 +120,25 @@ public:
       return;
     }
 
+    // ★ 2026-11-08 修复：非有限输入视为「满足条件」而不是「不满足」。
+    //   原实现里 |nan| > 25 恒为 false，一旦姿态发散到 NaN，roll_bad/pitch_bad
+    //   就是 false，计时器每拍被清零 → F4 永远不可能触发，**即使真实故障正在发生**。
+    //   SIL 探针实测：卡死 20° 后 roll_err 从 51.98 迅速转 nan，df_frac 到过 -1.000，
+    //   两个条件都满足过，但 F4 始终 0——根因就是这个 NaN 短路。
+    //
+    //   判据：NaN/Inf 本身说明姿态解算已经失效，这比「误差略大于门限」更严重，
+    //   因此按「条件成立」处理（故障方向）。若输入是非有限的 df_cmd_frac，
+    //   同样视为指令已不可信。
+    const bool roll_finite = std::isfinite(roll_err_deg) && std::isfinite(df_cmd_frac);
+    const bool pitch_finite = std::isfinite(pitch_err_deg) && std::isfinite(dt_cmd_frac);
     const bool roll_bad =
-        std::fabs(roll_err_deg) > cfg_.servo_err_deg &&
-        std::fabs(df_cmd_frac) >= cfg_.servo_cmd_frac;
+        !roll_finite ||
+        (std::fabs(roll_err_deg) > cfg_.servo_err_deg &&
+         std::fabs(df_cmd_frac) >= cfg_.servo_cmd_frac);
     const bool pitch_bad =
-        std::fabs(pitch_err_deg) > cfg_.servo_err_deg &&
-        std::fabs(dt_cmd_frac) >= cfg_.servo_cmd_frac;
+        !pitch_finite ||
+        (std::fabs(pitch_err_deg) > cfg_.servo_err_deg &&
+         std::fabs(dt_cmd_frac) >= cfg_.servo_cmd_frac);
     const bool servo_bad = roll_bad || pitch_bad;
     servo_timer_s_ = servo_bad ? (servo_timer_s_ + dt_s) : 0.0f;
     if (servo_timer_s_ >= cfg_.servo_time_s)

@@ -194,6 +194,18 @@ int main()
           m.servo_jam());
   }
 
+  // T13：非有限输入（NaN）必须判故障，而不是静默不触发。
+  //   2026-11-08 SIL 探针实测：卡死 20° 后 roll_err 从 51.98 迅速转 nan，
+  //   而 |nan| > 25 返回 false → 计时器每拍清零 → F4 永远不触发。
+  //   修复后：非有限输入按「条件成立」处理。
+  {
+    bfs::ActuatorFaultMonitor m;
+    const float nan_v = std::nanf("");
+    // 先喂 nan 姿态误差 + 正常指令，持续 2 s
+    step_for(m, nan_v, 3.0f, 0.05f, 0.1f, 0.6f, 0.0f, 2.0f);
+    check("T13 姿态误差为 NaN → 判故障（NaN 说明解算已失效）", m.servo_jam());
+  }
+
   std::printf("\n=== 结果: %d 通过, %d 失败 ===\n", g_pass, g_fail);
   return g_fail == 0 ? 0 : 1;
 }
