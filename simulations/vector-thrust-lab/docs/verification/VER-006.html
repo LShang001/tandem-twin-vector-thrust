@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-006 共轴首飞前检查 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-006-共轴首飞前检查单2026-11-04">VER-006
+共轴首飞前检查单（2026-11-04）</h1>
+<blockquote>
+<p>对象：共轴双桨电火箭，飞控 WeAct H743，固件
+<code>CoaxialVTVL</code>。
+本检查单不替代台架/系留；没有共轴实飞数据，首飞按风险递减执行。
+配套证据：<a href="VER-007-共轴随机与摄动测试-2026-11-04.md">VER-007
+共轴随机与摄动测试</a>、<a
+href="VER-008.html">VER-008
+共轴执行器故障仿真</a>。</p>
+</blockquote>
+<h2 id="1-固件与机型">1. 固件与机型</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>要求</th>
+<th>检查方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>构建 env</td>
+<td><code>[env:CoaxialVTVL]</code>（<code>-DBFS_COAXIAL_VTVL</code>）</td>
+<td>构建日志</td>
+</tr>
+<tr>
+<td>机型标识</td>
+<td><code>veh=CoaxialVTVL</code></td>
+<td>DBG <code>health</code></td>
+</tr>
+<tr>
+<td>PID 架构</td>
+<td>只用通用 <code>att_*</code>/<code>rate_*</code>；无
+<code>coax.att_kp_*</code></td>
+<td>GCS 参数页</td>
+</tr>
+<tr>
+<td>共轴硬件参数</td>
+<td><code>coax.max_corr_deg=10</code>、<code>coax.mass_kg=0.84</code></td>
+<td><code>param get</code></td>
+</tr>
+<tr>
+<td>安全限幅</td>
+<td>修正角 10°、差速 180µs；手动模式不因姿态角切电机，AUTO 默认 90°
+保护</td>
+<td>参数/断桨</td>
+</tr>
+</tbody>
+</table>
+<p>当前板已烧统一 PID 的 <code>CoaxialVTVL</code>；<code>health</code>
+已确认 <code>veh=CoaxialVTVL</code>。</p>
+<h2 id="2-软件证据">2. 软件证据</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>共轴 SIL（rigorous plant，8 profile×3 seed）</td>
+<td><strong>24/24 PASS</strong></td>
+</tr>
+<tr>
+<td>共轴 SIL 全量（8 profile×5 seed）</td>
+<td><strong>40/40 PASS（2026-11-04）</strong></td>
+</tr>
+<tr>
+<td>共轴控制律</td>
+<td><code>test_coaxial_vtv_control</code> 通过</td>
+</tr>
+<tr>
+<td>分配器契约</td>
+<td>5539/0</td>
+</tr>
+<tr>
+<td>共轴参数回归</td>
+<td>197/197</td>
+</tr>
+<tr>
+<td>GCS 参数测试</td>
+<td>12/12</td>
+</tr>
+<tr>
+<td>宿主全量</td>
+<td><code>run_all.sh</code> rc=0</td>
+</tr>
+</tbody>
+</table>
+<p>复现：</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_coaxial_acceptance.sh   <span class="co"># 默认 rigorous plant</span></span></code></pre></div>
+<blockquote>
+<p>L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°；不得再用 L1
+结果判共轴。严格模型在 <strong>10° 原限幅</strong> 下 24/24，不需要改
+15°。</p>
+</blockquote>
+<h2 id="3-断桨地面检查必须">3. 断桨/地面检查（必须）</h2>
+<ol type="1">
+<li><strong>断电机动力</strong>，只给飞控/舵机供电；</li>
+<li>遥控/地面站看 <code>ch1/ch2</code>：零修正应为
+<strong>50%</strong>（33.33–66.67% 量程）；</li>
+<li>无 TVC
+角度传感器：不做舵机摆角方向/中位数据判读；只确认机械无卡滞、线束不干涉；</li>
+<li>未解锁：电机输出必须 1000µs，TVC 不应有大幅动作；</li>
+<li>解锁但零油门：手动模式不因姿态角切电机；AUTO 模式确认 90°
+保护/失控保护路径；</li>
+<li>检查差速偏航方向：电机 1/2 差速方向与 yaw 指令一致；</li>
+<li>记录舵机中位/端点 PWM，确认没有机械卡滞；</li>
+</ol>
+<h2 id="4-首飞建议风险递减">4. 首飞建议（风险递减）</h2>
+<ul>
+<li>先 <strong>系留/限高</strong>，ATTITUDE
+模式，小角度（≤5–8°）测试姿态响应；</li>
+<li>再低高度悬停（1–2 m），确认配平/漂移和 <code>ch2</code>
+不长期贴限幅；</li>
+<li>不要首飞直接切
+AUTO_POSITION/GUIDED；先手动姿态稳定，再定高，再定点；</li>
+<li>全程准备
+Kill/上锁；出现持续单侧修正、姿态不跟随、电机异常立即断动力。</li>
+</ul>
+<h2 id="5-证据边界">5. 证据边界</h2>
+<ul>
+<li>目前只有 SIL +
+源码/参数回归，<strong>没有共轴台架、HIL、实飞数据</strong>；</li>
+<li>质量/推力/力臂/惯量仍是 MODEL-DEFAULT（0.84 kg / 14 N / 0.15 m /
+0.05 kg·m²）；</li>
+<li>首飞数据应记录：<code>ch1..ch4</code>、IMU/EKF
+姿态、高度、<code>coax_alloc_sat</code>、电流/电压；</li>
+<li>飞后把实际配平/增益/振动写入
+<code>CTL-007</code>/<code>FlightCtrlParams</code>，不要只留在临时参数。</li>
+</ul>
+<h2 id="6-气压-drift-参照修正2026-11-04">6. 气压 Drift
+参照修正（2026-11-04）</h2>
+<p>室内 <code>hAcc=12–15 m、fake_origin=1</code>
+时，气压健康监测曾用不可信 GNSS 高度做 Drift 参照，出现
+<code>suspect=1 flags=1</code>。已收紧为：</p>
+<ul>
+<li>只有 <strong>非假原点且 hAcc∈(0,5m]</strong> 才允许用 GNSS
+高度判气压 Drift；</li>
+<li>无可信绝对高度时不做 Drift 判定（保留 Spike/Stuck）；</li>
+<li>室内复测：<code>baro alt≈0.95m、est=0、suspect=0、flags=0</code>。</li>
+</ul>
+<p>室外首飞前仍需确认：hAcc≤5m、fake_origin=0、baro suspect=0，并检查
+baro alt 随实际升降变化。</p>
+<h2 id="7-上电后必须等待-ekf-静止收敛">7. 上电后必须等待 EKF
+静止收敛</h2>
+<p>2026-11-04 复测：上电 22 s 时
+<code>vel=-20.99/8.20/-16.55 m/s</code>（未解锁、静止）， 60 s 后回到
+<code>vel=0</code>；这是 EKF 初始化/静止确认的启动瞬态。首飞前必须：</p>
+<ul>
+<li>上电静置 ≥60 s；</li>
+<li><code>health</code> 的 <code>vel</code>
+三轴都≈0、<code>tilt_sig</code> 正常、<code>imu cal=1</code>；</li>
+<li>否则不上锁/不起飞。</li>
+</ul>
+<p>同时 <code>baro suspect=0</code>；室内 <code>fake_origin=1</code>
+属正常，室外应变为 0。</p>
+<h2 id="8-首次解锁-ekf-门2026-11-04">8. 首次解锁 EKF
+门（2026-11-04）</h2>
+<p>固件已加入首次解锁门：地面锁定状态下请求解锁时，必须满足
+<code>nav_system_initialized &amp;&amp; |v_ned|&lt;1 m/s &amp;&amp; tilt_sigma&lt;5°</code>；否则本次解锁被拒绝。
+已解锁后不强制上锁，避免空中因速度瞬态误锁。</p>
+<ul>
+<li>共轴 24 例 SIL 加门后仍 24/24；</li>
+<li>上电 14 s
+<code>vel=0</code>、<code>tilt_sig=0.54</code>，板子在线；</li>
+<li>仍建议按 §7 静置 ≥60 s，门是兜底，不替代操作纪律。</li>
+</ul>
+<h2 id="9-飞行日志新增共轴执行器列2026-11-04">9.
+飞行日志新增共轴执行器列（2026-11-04）</h2>
+<p><code>tvc record</code> 的 CSV
+已增加：<code>tvc_upper_deg</code>、<code>tvc_lower_deg</code>、
+<code>motor_front_pct</code>、<code>motor_rear_pct</code>、<code>sat_df/sat_dt/sat_dw</code>。
+飞后可直接看两轴喷管、前后电机百分比和输出饱和位。</p>
+<h2 id="10-参数快照ram-调参不丢操作">10. 参数快照（RAM
+调参不丢操作）</h2>
+<p>在线 PID 只写 RAM，重启恢复默认。调参前后使用：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">tvc</span> param dump params_before.json     <span class="co"># 148 项全量快照</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="ex">tvc</span> param load params_before.json     <span class="co"># 重启后写回（RAM）</span></span></code></pre></div>
+<p>2026-11-04 实测 <code>param dump</code> 导出 148
+项，<code>att_pitch.kp=4.25</code>、
+<code>coax.mass_kg=0.84</code>。<code>load</code>
+会逐项写回并读回确认，不写 Flash。</p>
+<h2 id="11-未解锁-tvc-回中修复2026-11-04">11. 未解锁 TVC
+回中修复（2026-11-04）</h2>
+<p>发现无 RC 链路/未解锁时 <code>raw stick=0</code> 被手动 TVC 映射成
+±10°，虽然电机已锁， 但两轴舵机会顶到限位；0xF1 遥测也误报
+<code>tvc_upper=-9.99/tvc_lower=+9.99</code>。</p>
+<p>修复：</p>
+<ul>
+<li><code>mapCoaxialVtvOutputs</code>：<code>!unlocked || !attitude_safe</code>
+时两轴修正角强制 0（50%）；</li>
+<li>0xF1 遥测同步写最终值（未使能时 0），不再把原始手动映射当实际
+TVC；</li>
+<li>断桨复测：<code>tvc_upper/lower=0.000</code>、电机 0%、sat 全
+0；</li>
+<li><code>test_vehicle_profile</code> 新增“未解锁 TVC 回中
+50%”断言，通过。</li>
+</ul>
+<h2 id="12-imu-2khzp1-飞前检查2026-11-04">12. IMU 2kHz/P1
+飞前检查（2026-11-04）</h2>
+<ul>
+<li>默认 <code>CoaxialVTVL</code> 使用 P1：2kHz ISR→SPSC ring→Navigation
+200Hz 排空；</li>
+<li>用 <code>tvc record</code>（不得用 DBG 测时序）记录 10s，然后：</li>
+</ul>
+<div class="sourceCode" id="cb3"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> TandemVec_FCS/tools/verify_imu_p1.py <span class="op">&lt;</span>csv<span class="op">&gt;</span></span></code></pre></div>
+<ul>
+<li>通过条件：<code>mean≥1950</code>、<code>std≤100</code>、<code>imu_ring_drop=0</code>；</li>
+<li>同时检查 <code>conv=1</code>、<code>vel=0</code>、姿态稳定；</li>
+<li>若 FIFO 初始化失败，固件自动回退 UI
+轮询（<code>CoaxialVTVL_UI</code> 为整机回退环境）；</li>
+<li>当前默认实测 mean≈1998、std≈72、ring_drop=0。</li>
+</ul>
+<h2 id="13-飞前状态自动验收2026-11-04">13.
+飞前状态自动验收（2026-11-04）</h2>
+<div class="sourceCode" id="cb4"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="ex">tvc</span> record start <span class="at">-o</span> preflight.csv <span class="at">-d</span> 5</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> TandemVec_FCS/tools/verify_preflight.py preflight.csv</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="co"># 接好动力电池/RC后：</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.12</span> TandemVec_FCS/tools/verify_preflight.py preflight.csv <span class="at">--expect-powered</span></span></code></pre></div>
+<ul>
+<li>默认检查：未解锁、TVC中位、电机0、IMU P1 mean/std/ring_drop；</li>
+<li><code>--expect-powered</code> 额外要求电池&gt;1V、RC有效脉宽；</li>
+<li>当前USB供电实测：软件 PASS；--expect-powered 按预期
+FAIL（电池0/RC0）。</li>
+</ul>
+<h3 id="131-负例自检2026-11-04">13.1 负例自检（2026-11-04）</h3>
+<p>构造 <code>flight_mode=1、unlocked=1、motor_front_pct=5</code> 的坏
+CSV，脚本按预期 返回 exit=1 并列出三项违规，证明飞前检查不是空检查。</p>
+<h2 id="14-参数加载ekf收敛检查2026-11-04">14.
+参数加载/EKF收敛检查（2026-11-04）</h2>
+<ul>
+<li>批量 <code>param load</code> 会逐项 apply，实测加载148项后 EKF
+<code>conv=0</code>（pos_sig27.5）； 重启后恢复
+<code>conv=1</code>（pos_sig9.03、vel=0）。</li>
+<li>飞前流程：<code>param load</code> → <strong>重启飞控</strong> →
+等GNSS/对准 → <code>health</code> 确认
+<code>conv=1、pos_sig&lt;10m、vel≈0</code>，才能进入解锁检查。</li>
+<li>禁止在空中/解锁状态批量加载参数。</li>
+</ul>
+<h2 id="15-首次解锁必须真实gnss锚点2026-11-04">15.
+首次解锁必须真实GNSS锚点（2026-11-04）</h2>
+<p>原首次解锁门只要求
+<code>g_ekf_converged + nav_system_initialized + vel&lt;1 + tilt&lt;5°</code>，
+室内 fake origin 也可能满足；若带 fake origin 起飞、飞行中才首次
+GNSS，会触发 硬重锚（位置/速度重置），造成导航突变。</p>
+<p>已改为首次解锁还要求
+<code>nav_has_real_gnss_anchor</code>。无GNSS室内飞行必须显式走
+单独模式，不能靠默认解锁。SIL 构建 <code>FW_SIL_REAL_NAV</code>
+仍旁路该门。</p>
+<h3 id="151-修正2026-11-04无gnss可解锁">15.1
+修正（2026-11-04）：无GNSS可解锁</h3>
+<p>用户明确：无GNSS应允许解锁，退化到姿态模式，只是没有定点功能。因此撤回
+“首次解锁必须真实GNSS锚点”的硬门；改为：</p>
+<ul>
+<li>无GNSS/fake origin 可解锁，姿态模式可用；</li>
+<li>已解锁且fake
+origin时，首次GNSS<strong>不硬重锚</strong>，等上锁后再锚定；</li>
+<li>这段飞行没有绝对位置/定点，不能宣称位置保持。</li>
+</ul>
+<h2 id="16-断链模式-sil-前置修复2026-11-04">16. 断链/模式 SIL
+前置修复（2026-11-04）</h2>
+<p><code>build_and_run_failsafe.sh</code>
+之前全空中场景失败，根因是测试夹具没有设置
+<code>g_ekf_converged/g_nav_tilt_sigma_deg</code>，首次解锁门拒绝解锁；补上后：</p>
+<ul>
+<li>断链4场景全PASS（air_low/normal、ground、air_relink）；</li>
+<li>RATE积分/模式重入全PASS。 这是测试前置缺失，不是断链逻辑回归。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-006-共轴首飞前检查-2026-11-04.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:10</footer></article></body>
+</html>

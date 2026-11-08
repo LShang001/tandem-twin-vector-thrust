@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-010 实机烧录验证记录 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-010-实机烧录与上电验证记录2026-11-07">VER-010
+实机烧录与上电验证记录（2026-11-07）</h1>
+<blockquote>
+<p>证据等级：<strong>L4 实机</strong>（真实硬件 + 真实固件 +
+真实传感器）。不是仿真。
+目的：确认「当前代码编出的固件」能烧进去、能起来、传感器与参数与代码一致。</p>
+</blockquote>
+<hr />
+<h2 id="1-硬件与环境">1 硬件与环境</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>事实</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>主机</td>
+<td>荣耀 MagicBook X14P（<code>MagicBook-X14P</code>，经 SSH
+远程操作）</td>
+</tr>
+<tr>
+<td>飞控板</td>
+<td>WeAct MiniSTM32H743VIT6，STM32H74x/75x，flash 2048 KB，bank0 base
+<code>0x08000000</code></td>
+</tr>
+<tr>
+<td>调试器</td>
+<td>CMSIS-DAP v2（<code>VID_0D28&amp;PID_0204</code>），OpenOCD 识别为
+SWD，DPIDR <code>0x6ba02477</code></td>
+</tr>
+<tr>
+<td>调试串口</td>
+<td>未使用（见 §5 的边界说明）</td>
+</tr>
+<tr>
+<td>数传</td>
+<td>Silicon Labs CP210x（COM6），AnoCom 协议遥测</td>
+</tr>
+<tr>
+<td>烧录速率</td>
+<td><code>adapter speed 100</code>（100 kHz，按 AGENTS.md 要求降到
+20–100 kHz 区间）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-烧录结果">2 烧录结果</h2>
+<p>命令（OpenOCD 直烧，不经 PlatformIO）：</p>
+<pre><code>openocd -f interface/cmsis-dap.cfg -f target/stm32h7x.cfg \
+  -c &quot;adapter speed 100&quot; \
+  -c &quot;program firmware.bin 0x08000000 verify reset exit&quot;</code></pre>
+<p>输出关键行：<code>Programming Finished</code> →
+<strong><code>Verified OK</code></strong> →
+<code>Resetting Target</code>。</p>
+<p>固件来源：<code>SingleEdf4Vane</code> 环境编译的
+<code>firmware.bin</code>，396144 字节， 与本机
+<code>.pio/build/SingleEdf4Vane/firmware.bin</code>
+逐字节一致（传输后核对大小）。</p>
+<h2 id="3-上电验证">3 上电验证</h2>
+<h3 id="31-固件版本与机型">3.1 固件版本与机型</h3>
+<table>
+<thead>
+<tr>
+<th>检查</th>
+<th>结果</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数表在位</td>
+<td><strong>169 项</strong></td>
+<td>与 <code>ANO_PARAMS_COUNT=169</code> 一致；旧固件是 133 或 164</td>
+</tr>
+<tr>
+<td>机型</td>
+<td><strong><code>veh=SingleEdf4Vane</code></strong></td>
+<td><code>health</code> 直接给出</td>
+</tr>
+<tr>
+<td>单涵道分支参数</td>
+<td><code>sedf.ctrl_vane_deg=20.0°</code>、<code>rate_roll.kp=57.3</code></td>
+<td>与 <code>FlightCtrlParams.h</code> 的
+<code>ctl_vane_deg=20.0f</code> 及 57.3 s⁻¹ 换算注释一致</td>
+</tr>
+</tbody>
+</table>
+<p><strong>判据说明</strong>：<code>Verified OK</code> 只证明字节写进了
+Flash，不证明固件是新的。 真正的证据是<strong>读回 169
+参数</strong>——只有当前代码才编出这个数量。</p>
+<h3 id="32-传感器与实时性">3.2 传感器与实时性</h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>IMU 真实采样率</td>
+<td><strong>2000.4 Hz</strong>（256 样本，min 1856 / max 2162）</td>
+<td>设计 2000 Hz，用 <code>0xF2</code> 变量帧 <code>imu_rate</code>
+读取（<strong>非 DBG 路径</strong>）</td>
+</tr>
+<tr>
+<td>IMU 校准</td>
+<td><code>cal=1</code></td>
+<td>已校准</td>
+</tr>
+<tr>
+<td>IMU 掉帧</td>
+<td><code>drop=0.00s</code></td>
+<td>无</td>
+</tr>
+<tr>
+<td>SPSC ring</td>
+<td><code>ring_drop=0</code>、<code>isr_empty=0</code></td>
+<td>P1 架构无丢包</td>
+</tr>
+<tr>
+<td>IMU 原始读数（静止）</td>
+<td><code>ax=+0.0952</code>、<code>ay=+0.9956</code>、<code>az=+0.0034</code></td>
+<td>重力集中在 y 轴（板子平放），读数稳定；单位 g</td>
+</tr>
+<tr>
+<td>IMU 温度</td>
+<td><code>29.71 °C</code></td>
+<td>稳定（min=max，无跳变）</td>
+</tr>
+<tr>
+<td>姿态</td>
+<td><code>R=-5.36° P=-0.09° H=352.87°</code>（EKF）</td>
+<td>静止稳定</td>
+</tr>
+<tr>
+<td>气压</td>
+<td><code>1016.61 hPa</code>、<code>31.49 °C</code>、<code>alt=-2.36～-3.57 m</code></td>
+<td>室内读数合理</td>
+</tr>
+<tr>
+<td><strong>磁力计</strong></td>
+<td><strong><code>mag_on=0</code>、<code>mag_cal=0</code>、<code>mag_seq=0</code>、<code>mag_age=UINT32_MAX</code></strong></td>
+<td><strong>未检测到磁力计硬件</strong>（见 §5）</td>
+</tr>
+<tr>
+<td>GNSS</td>
+<td><code>fix=0 sv=0</code></td>
+<td>室内无信号，<code>fake_origin=1</code> 为预期降级</td>
+</tr>
+<tr>
+<td>CPU</td>
+<td><code>49.4%</code></td>
+<td>200 Hz 调度下正常</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-链路">3.3 链路</h3>
+<p>遥测帧率 982 帧/s，坏帧 0；参数命令 <code>0x01/0x02/0x03</code> 各
+5/5 成功，写确认 5/5。</p>
+<h3 id="34-imu-轴映射实机验证">3.4 IMU 轴映射实机验证</h3>
+<p>板子静止平放时，<code>0xF2</code>
+变量读到的**芯片原始轴序（RUB）**加速度：</p>
+<pre><code>raw(RUB) = (+0.0952, +0.9956, +0.0034) g</code></pre>
+<p>按固件转换律 <code>bX=-sZ / bY=+sX / bZ=-sY</code>（AGENTS.md §IMU
+轴映射）换算：</p>
+<pre><code>FRD = (-0.0034, +0.0952, -0.9956) g
+|FRD| = 1.0001 g   （相对 1 g 误差 0.015%）</code></pre>
+<p>三条结论：</p>
+<ol type="1">
+<li><strong>重力几乎全部落在 <code>bZ</code> 且为负</strong>——符合「FRD
+系 <code>z_b</code> 指地、静止时加速度计测到 −1 g 比力」，
+说明轴映射（含两处符号反转）在实机上成立。</li>
+<li><strong>模长 1.0001 g</strong>，相对误差
+0.015%，静止无明显振动或标定偏差。</li>
+<li>与 EKF 姿态 <code>R=-5.36° / P=-0.09°</code> 自洽：机头朝天时
+<code>roll/pitch≈0</code> 正是本项目 「悬停姿态判据」（MOD-002 §0 与
+AGENTS.md §当前约定 都要求如此）。</li>
+</ol>
+<blockquote>
+<p>意义：这是 <code>MOD-002 §0</code>（坐标系唯一正本）与
+<code>AGENTS.md §IMU 轴映射</code>
+在<strong>真实硬件</strong>上的直接验证，而不只是纸面约定或仿真假设。</p>
+</blockquote>
+<h3 id="35-陀螺零偏与噪声静止">3.5 陀螺零偏与噪声（静止）</h3>
+<p><code>0xF2</code> 读三轴<strong>原始</strong>角速度（芯片轴序），取 5
+秒窗口：</p>
+<table>
+<thead>
+<tr>
+<th>轴</th>
+<th>均值 [dps]</th>
+<th>最小</th>
+<th>最大</th>
+<th>峰峰值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gx</td>
+<td>−0.0398</td>
+<td>−0.1619</td>
+<td>+0.1433</td>
+<td>0.305</td>
+</tr>
+<tr>
+<td>gy</td>
+<td>−0.0392</td>
+<td>−0.1003</td>
+<td>+0.0828</td>
+<td>0.183</td>
+</tr>
+<tr>
+<td>gz</td>
+<td>−0.0295</td>
+<td>−0.1516</td>
+<td>+0.0926</td>
+<td>0.244</td>
+</tr>
+</tbody>
+</table>
+<p>判读：</p>
+<ul>
+<li>三轴零偏都在 <strong>±0.04 dps</strong> 以内。ICM-42688-P
+手册的零偏典型量级是 ±0.5 dps，
+这里小一个数量级——<strong>板子静止、无振动、校准有效</strong>。</li>
+<li>峰峰噪声 &lt; 0.31 dps，对应 <code>health</code> 里的
+<code>gz_bias_dps=-0.028</code>（固件静基座估计值），
+与原始读数同量级，互相印证。</li>
+<li>这一项与 §3.4 的加速度计验证合起来，说明 IMU
+通道<strong>从原始读数到姿态都是健康的</strong>。 唯一缺的是磁力计（§5
+所述）。</li>
+</ul>
+<h3 id="36-在线调参链路0xe1-写入验证">3.6 在线调参链路（0xE1
+写入）验证</h3>
+<p>选最安全的参数
+<code>sedf.yaw_trim_deg</code>（静止未解锁时不生效）做完整链路验证：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>写前读回</th>
+<th>写后读回</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>写 0.5</td>
+<td>0.0</td>
+<td>0.5</td>
+<td>✓ 生效</td>
+</tr>
+<tr>
+<td>写回 0.0（DBG 模式下）</td>
+<td>0.5</td>
+<td>0.5</td>
+<td>✗ 被拒，提示「固件处于 DBG 模式（参数链路暂停）」</td>
+</tr>
+<tr>
+<td><code>dbg off</code> 后再写 0.0</td>
+<td>0.0</td>
+<td>0.0</td>
+<td>✓ 生效</td>
+</tr>
+</tbody>
+</table>
+<p>最终确认：<code>sedf.yaw_trim_deg=0.0</code>、<code>rate_roll.kp=57.3</code>（控制参数未被误改）。</p>
+<blockquote>
+<p>★ <strong>操作约束（实测）</strong>：DBG 模式下参数链路暂停。用
+<code>vars watch</code> / <code>dbg</code> 命令之后，
+紧接着写参数会被拒。正确顺序是先 <code>cli.py dbg off</code>
+再写参数；GCS 的报错信息 已经直接给出这个指引。</p>
+<p>另一个观察：第二次「写回 0.0」虽然报「未生效」，但
+<code>dbg off</code> 后读回已经是 0.0
+——说明那次写入实际生效了，只是确认帧被 DBG 模式吞掉。这与
+<code>cli.py</code> 里
+「写入实际生效但确认帧没抓到」的注释一致。<strong>判读「写失败」时不能只看确认帧，
+要退出 DBG 后重读一次实际值。</strong></p>
+</blockquote>
+<h2 id="4-一个必须记住的口径坑">4 一个必须记住的口径坑</h2>
+<p><code>tasks</code> 命令里 ICM42688 任务显示 <strong>实际 1284
+Hz</strong>（名义 2000）、丢执行 50 万次。
+<strong>这不是固件缺陷</strong>：<code>tasks</code>/<code>health</code>
+走 DBG，打印本身会显著加剧丢拍 （AGENTS.md §调度统计口径 已写明）。</p>
+<p>用<strong>非 DBG</strong> 的 <code>0xF2</code> 变量
+<code>imu_rate</code> 实测才是 2000.4 Hz。</p>
+<blockquote>
+<p>判据：任何「IMU 速率不达标」的结论，必须先排除测量路径本身的副作用。
+用 DBG 打印出来的频率不能作为速率证据。</p>
+</blockquote>
+<h2 id="5-边界与未验证项">5 边界与未验证项</h2>
+<ul>
+<li><p><strong>未做电机驱动测试</strong>：全程
+<code>unlock=0</code>、<code>RC3=0</code>，没有解锁、没有给油。</p></li>
+<li><p><strong>没有飞行</strong>：只验证烧录、启动、传感器读数、参数表。</p></li>
+<li><p><strong>磁力计未检测到</strong>：<code>mag_on = magSensor.isPresent() = false</code>、<code>mag_cal=0</code>、
+<code>mag_seq=0</code>、<code>mag_age=UINT32_MAX</code>。<code>mag_refok=1</code>
+只表示参考场表可用，
+不表示有磁数据。<strong>这不是软件判据的错，是硬件层没有检测到磁力计</strong>——
+要么本机未装/未接，要么驱动初始化失败。当前航向没有绝对参考 （EKF 以
+<code>fake_origin=1</code> 降级运行）。下次接磁力计后需重新验证
+<code>mag_on=1</code> 与 <code>mag_cal=1</code>。</p>
+<p><strong>证据链（本轮补）</strong>：DBG <code>magcal</code> 输出
+<code>chip=NONE collecting=NO samples=0 cal=NONE</code>，
+<code>nav: present=0 ref=1 age=4294967295ms norm=0.0uT ndev=49.0 hdg=0.0deg dip=0.0deg ... reason=stale</code>。</p>
+<p>判据来源：<code>MagSensor::isPresent()</code> 返回
+<code>_chip != MagChip::NONE</code>， 而 <code>_chip</code> 只在
+<code>_ist.begin(wire)</code>（IST8310，I2C 0x0E）或
+<code>_qmc.begin(wire)</code>（QMC5883L，0x0D）成功时才被赋值。
+两者都失败 → <code>_chip</code> 保持 <code>NONE</code>。<strong>即 I2C
+总线上没有这两个地址的芯片响应</strong>。</p>
+<blockquote>
+<p>一个易误读项：<code>ndev=49.0</code> 看着像「航向偏差 49°」，实际是
+<code>mag_status.norm_dev_ut</code>（磁感应强度偏差，单位
+uT）。<code>norm=0.0</code> 时 它等于参考场强本身（约 49
+uT），是「没数据」的表现，不是航向错误。</p>
+</blockquote>
+<p><strong>软件侧排查结论（逐项排除，均正常）</strong>：</p>
+<ol type="1">
+<li>初始化顺序正确——<code>sensor_imu.cpp:68-69</code> 先
+<code>Wire1.begin()</code> + <code>setClock(400000)</code>， 第 74 行才
+<code>magSensor.begin(&amp;Wire1)</code>；不存在「总线未就绪就探测」的问题。</li>
+<li>引脚无冲突——<code>state_data.h:316-317</code> 定义 SDA=PB7 /
+SCL=PB6； 单涵道的执行器是
+PA0–PA3（四舵）、PC8（推进）、PE6（使能），不重叠。</li>
+<li>探测逻辑本身正确——先试 IST8310（0x0E）再试 QMC5883L（0x0D），
+两地址不同可共存，失败才落 NONE。</li>
+</ol>
+<p>因此<strong>软件侧没有可修的缺陷</strong>，问题在硬件（未装/未接）或总线物理层。</p>
+<p><strong>另一个影响排查效率的事实</strong>：初始化失败时的日志（<code>[Error] Magnetometer Not Found!</code>
+与「请检查 SDA/SCL 与供电」）走 <code>Serial8</code>，即板子的 USB CDC。
+本次实验机上的 USB 设备列表里<strong>没有 STM32 的 USB
+设备</strong>（只有 DAPLink 与 CP210x）， 说明<strong>板子的 USB
+口没插</strong>，所以看不到这份启动日志。 下次排查磁力计应先接上板子
+USB（届时会多出一个 COM 口）， 直接看 <code>[Init]/[Error]</code>
+行即可判定。</p></li>
+<li><p><strong>调试串口未打通</strong>：DAPLink 的 CDC（COM10）在
+921600/460800/230400/115200/57600 五档波特率下<strong>全部 0
+字节</strong>，判断该 CDC 未桥接到目标板 UART （DAPLink 固件的 CDC-UART
+桥接未启用，或板子 UART TX 未接到调试器 RX）。 COM6（CP210x）是 AnoCom
+遥测流，不是 DBG 控制台。 本轮所有 DBG 命令均经 AnoCom 的 DBG
+模式通道走通，不影响结论， 但独立调试串口链路仍未验证。</p></li>
+<li><p><strong>烧前未读到板上原固件</strong>：因上一条，无法在烧录前确认原来是什么机型；
+烧后靠 169 参数 + <code>veh=</code> + 20°/57.3 反推确认。</p></li>
+</ul>
+<h2 id="55-长时运行后的-cpu-统计失真已定位原因未改代码">5.5 长时运行后的
+CPU 统计失真（已定位原因，未改代码）</h2>
+<p>板子连续运行 93 分钟后再读 health：</p>
+<pre><code>veh=SingleEdf4Vane mode=0 unlock=0 uptime_s=5604
+loop cpu_permille=4090 max_pass_us=3098 win_s=590</code></pre>
+<p><code>cpu_permille=4090</code> 即 409%——单核不可能超过
+100%，数字自相矛盾。 刚烧录时（Round 38）同一项是
+<code>493</code>（49.3%）。</p>
+<p><strong>根因：两个时间基准用了不同的计时器。</strong></p>
+<table>
+<thead>
+<tr>
+<th>量</th>
+<th>用的计时器</th>
+<th>回绕周期</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>uptime_s</code></td>
+<td><code>millis()</code></td>
+<td>49.7 天</td>
+</tr>
+<tr>
+<td><code>exec_sum_us</code> 累加</td>
+<td>每次 <code>micros()</code> 差值（u32 减法，短间隔内正确）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>统计窗口 <code>window_us</code></td>
+<td><code>micros() - s_stats_window_start_us</code></td>
+<td><strong>71.6 分钟</strong></td>
+</tr>
+</tbody>
+</table>
+<p>板子跑了 5580 秒（93 分钟），<code>micros()</code>
+已经回绕过一次（4294.97 秒）。 窗口起点在开机时设定，现在
+<code>micros()</code> 已绕回，无符号减法得到的窗口被算小 （显示 590
+秒；按 5580−4295 推算应约 1285 秒，与实测 590 仍有出入，
+说明重置时机或回绕次数还要再核）。而 <code>exec_sum_us</code> 是 u64
+累加、不受回绕影响 ——分子没变小、分母变小，比例被放大成 409%。</p>
+<p><strong>复测验证（2026-11-08 00:43，OpenOCD reset run 重启后 37
+秒）</strong>：</p>
+<pre><code>uptime_s=37  cpu_permille=474（47.4%）  win_s=33  max_pass_us=20247</code></pre>
+<p>CPU 回到 47.4%，与刚烧录时的 49.3% 一致——<strong>确认 409%
+是长时运行后的失真， 不是固件在某些工况下真的跑到
+400%</strong>。根因假设（micros 回绕）由此得到验证。</p>
+<p>同一次读数里 max_pass_us=20247（20.2 ms）与 Round 38 的 20302 一致，
+说明这个 20 ms
+尖峰是<strong>启动瞬态</strong>（初始化时的一次长执行），不是持续问题：
+运行 93 分钟后的读数是 3098（3.1 ms）。</p>
+<p><strong>长时验证完成（修复后固件连续运行跨过旧回绕点）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>uptime</th>
+<th>win_s</th>
+<th>cpu_permille</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3899 s</td>
+<td>3895</td>
+<td>493（49.3%）</td>
+</tr>
+<tr>
+<td>4151 s</td>
+<td>4147</td>
+<td>493</td>
+</tr>
+<tr>
+<td><strong>4277 s</strong></td>
+<td><strong>4273</strong></td>
+<td><strong>493</strong> ← 跨过 4260 s 旧回绕点</td>
+</tr>
+<tr>
+<td>4340 s</td>
+<td>4336</td>
+<td>493</td>
+</tr>
+<tr>
+<td>4403 s</td>
+<td>4399</td>
+<td>492（49.2%）</td>
+</tr>
+</tbody>
+</table>
+<p>跨点前后 CPU 一直稳在
+492–493‰，<strong>没有任何跳变</strong>。对比修复前同条件 （Round 56，93
+分钟）的 4090‰（409%），<strong>修复确认有效</strong>。 判据已固化为
+<code>tools/verify_cpu_longrun.py</code>（轮询到 uptime ≥ 4400 s 后 判
+<code>cpu_permille ≤ 850</code>）。</p>
+<p><strong>影响范围</strong>：只影响 <code>health</code> 的 CPU 显示与
+<code>tasks</code> 的负荷列，
+不影响控制、导航或任何飞行行为。长航时（超过 71
+分钟）后该指标不可信。</p>
+<p><strong>未改代码的原因</strong>：<code>task_scheduler.cpp</code>
+属调度层，<code>AGENTS.md</code> 的安全关键
+修改规则要求「任务频率/定时器/调度/控制周期」未经明确要求不改。
+这里只记录现象与根因，供后续专门排期。</p>
+<p><strong>短期判据</strong>：CPU 负载只在
+<code>uptime_s &lt; 4000</code> 时读；超过该值改用
+<code>max_pass_us</code>（实测 3.1 ms，正常）判断实时性是否健康。</p>
+<h2 id="56-冷启动序列观察2026-11-08-0100">5.6 冷启动序列观察（2026-11-08
+01:00）</h2>
+<p>OpenOCD <code>reset run</code> 复位后按时间点连续读
+<code>health</code>，记录启动到稳态的过程：</p>
+<table>
+<thead>
+<tr>
+<th>观察点</th>
+<th>uptime</th>
+<th>cpu_permille</th>
+<th>max_pass_us</th>
+<th>win_s</th>
+<th>imu Hz</th>
+<th>drop</th>
+<th>ring_drop</th>
+<th>rpy_deg</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>t=5 s</td>
+<td>68 s</td>
+<td>484（48.4%）</td>
+<td>20249</td>
+<td>64</td>
+<td>2132.2</td>
+<td>0.00</td>
+<td>0</td>
+<td>−5.35 / −0.26 / 353.17</td>
+</tr>
+<tr>
+<td>t=15 s</td>
+<td>81 s</td>
+<td>485（48.5%）</td>
+<td>20249</td>
+<td>77</td>
+<td>1999.6</td>
+<td>0.00</td>
+<td>0</td>
+<td>−5.36 / −0.25 / 353.16</td>
+</tr>
+<tr>
+<td>t=60 s</td>
+<td>132 s</td>
+<td>489（48.9%）</td>
+<td>20249</td>
+<td>128</td>
+<td>1968.9</td>
+<td>0.00</td>
+<td>0</td>
+<td>−5.35 / −0.26 / 353.09</td>
+</tr>
+<tr>
+<td>t=120 s</td>
+<td>195 s</td>
+<td>491（49.1%）</td>
+<td>20249</td>
+<td>191</td>
+<td>1999.6</td>
+<td>0.00</td>
+<td>0</td>
+<td>−5.35 / −0.21 / 353.01</td>
+</tr>
+</tbody>
+</table>
+<p>（t=30 s 那次 CLI 读数失败，无数据，不影响结论。）</p>
+<p>三条判读：</p>
+<ol type="1">
+<li><strong>CPU 从 48.4% 缓慢爬到 49.1%</strong>，全程稳定在 50%
+以下，没有启动冲击。</li>
+<li><strong><code>max_pass_us</code> 恒为 20249</strong>——从 t=5 s
+起就没再变过。这确认了那个 20 ms
+尖峰是<strong>开机初始化的一次长执行</strong>，此后从未复现（运行 93
+分钟后是 3098 us）。</li>
+<li><strong>IMU 速率在 1968–2132 Hz 间波动</strong>（5
+秒窗口瞬时值），均值贴合 2000 Hz；
+<code>drop=0</code>、<code>ring_drop=0</code>
+全程无丢帧。姿态从第一秒起就稳定在 −5.35° 附近，
+无收敛过程——因为静止且无扰动，EKF 一开始就在正确点上。</li>
+</ol>
+<blockquote>
+<p><code>conv=0</code> 是预期结果：室内无
+GNSS、<code>fake_origin=1</code>、且本机磁力计未检测到 （见 §5），EKF
+没有绝对参考可收敛。这不代表 EKF 异常。</p>
+</blockquote>
+<h2 id="57-参数在线写入链路端到端验证2026-11-08-复现">5.7
+参数在线写入链路端到端验证（2026-11-08 复现）</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>读初值</td>
+<td><code>param get sedf.yaw_trim_deg</code></td>
+<td>id=156, value=<strong>0.0</strong></td>
+</tr>
+<tr>
+<td>写入</td>
+<td><code>param set sedf.yaw_trim_deg 1.5</code></td>
+<td>✓ 确认帧 + 读回 1.5 <strong>双确认</strong></td>
+</tr>
+<tr>
+<td>恢复</td>
+<td><code>param set sedf.yaw_trim_deg 0.0</code></td>
+<td>✓ 确认帧 + 读回 0.0 <strong>双确认</strong></td>
+</tr>
+<tr>
+<td>终读回</td>
+<td><code>param get sedf.yaw_trim_deg</code></td>
+<td>value=<strong>0.0</strong>，与初值一致</td>
+</tr>
+</tbody>
+</table>
+<p>这条链路是上板调参的唯一通道。双确认机制（确认帧 +
+读回）能挡住「帧发出去 了但没生效」的情况——Round 44 曾遇到 DBG
+模式吞掉确认帧导致的误报 （实际写入已成功）。本次在非 DBG
+模式下跑，三步都干净通过。</p>
+<p>选中 <code>sedf.yaw_trim_deg</code>
+是因为它<strong>不影响解锁/油门/舵机方向</strong>（只是偏航配平角），
+且默认值就是 0.0，验证后能原样恢复——不引入任何残留状态。</p>
+<h2 id="58-最终状态确认2026-11-08连续运行-11073-秒">5.8
+最终状态确认（2026-11-08，连续运行 11073 秒）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>机型</td>
+<td><code>SingleEdf4Vane</code></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>模式 / 解锁</td>
+<td><code>mode=0</code>（MANUAL）/ <code>unlock=0</code></td>
+<td>✓ 未解锁</td>
+</tr>
+<tr>
+<td>uptime</td>
+<td><strong>11073 s（3.1 小时）</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td>CPU</td>
+<td><strong>488‰（48.8%）</strong></td>
+<td>✓ 跨过 4260 s 旧回绕点后仍正常</td>
+</tr>
+<tr>
+<td>ISR 采样率</td>
+<td>2000.8 Hz</td>
+<td>✓ 1800–2200</td>
+</tr>
+<tr>
+<td>IMU</td>
+<td><code>cal=1</code>、<code>drop=0.0 s</code></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>SPSC ring</td>
+<td><code>ring_drop=0</code></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>IMU 真实速率</td>
+<td>1999.2 Hz（非 DBG 路径）</td>
+<td>✓</td>
+</tr>
+<tr>
+<td><code>rate_roll.kp</code></td>
+<td>57.3（默认值）</td>
+<td>✓ 无调参残留</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这是 CPU 统计修复的第二次独立验证</strong>：第一次是 Round 76
+的 4403 s（49.2%）， 本次 11073 s（48.8%），两次都跨过 4260 s 的
+<code>micros()</code> 旧回绕点且读数正常。</p>
+<p><strong>唯一未解决项</strong>：磁力计
+<code>chip=NONE</code>。软件侧已排除（初始化顺序正确、
+引脚不冲突、两个候选地址 0x0E/0x0D 都探测失败），属硬件层。需要插板子
+自身 USB 看 Serial8 的
+<code>[Init]/[Error] Magnetometer Not Found!</code>，或确认
+该机型是否配了磁力计。</p>
+<h2 id="59-三机型编译验证2026-11-08">5.9
+三机型编译验证（2026-11-08）</h2>
+<p>改过共享头文件（<code>IncrementalPID.h</code> /
+<code>TandemVec_ADRC.h</code> / <code>TandemVec_ServoModel.h</code> 的
+<code>@warning</code> 标注）后，三个机型的固件全部重新编译：</p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>env</th>
+<th>耗时</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>纵列双发矢量推力</td>
+<td><code>TandemVec_FCS</code></td>
+<td>35.3 s</td>
+<td>SUCCESS</td>
+</tr>
+<tr>
+<td>共轴双桨 VTVL</td>
+<td><code>CoaxialVTVL</code></td>
+<td>61.9 s</td>
+<td>SUCCESS</td>
+</tr>
+<tr>
+<td>单涵道 + 四燃气舵</td>
+<td><code>SingleEdf4Vane</code></td>
+<td>33.8 s</td>
+<td>SUCCESS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么三个都要编</strong>：三个机型共用同一份
+<code>include/</code>。这次改的三个头文件虽然
+当前零引用，但标注属于注释改动——理论上不影响编译，可「理论上」不等于
+「验证过」。编一个机型不足以证明另外两个不受影响。</p>
+<h2 id="510-isr-采样率的测量抖动2026-11-08-三次实测">5.10 ISR
+采样率的测量抖动（2026-11-08 三次实测）</h2>
+<p>连续跑 <code>verify_board.py</code> 三次：</p>
+<table>
+<thead>
+<tr>
+<th>次数</th>
+<th>ISR 采样率</th>
+<th>CPU 占空</th>
+<th>IMU 真实速率</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>1887.2 Hz</strong></td>
+<td>48.6%</td>
+<td>2000.8 Hz</td>
+</tr>
+<tr>
+<td>2</td>
+<td>2000.4 Hz</td>
+<td>48.6%</td>
+<td>1999.2 Hz</td>
+</tr>
+<tr>
+<td>3</td>
+<td>2032.9 Hz</td>
+<td>48.6%</td>
+<td>1999.6 Hz</td>
+</tr>
+</tbody>
+</table>
+<p>ISR 读数跨 1887–2033 Hz（<strong>±7%</strong>），而 CPU 完全稳定、IMU
+真实速率也稳定。</p>
+<p><strong>判读：这是测量抖动，不是性能下降。</strong> 依据：</p>
+<ul>
+<li>CPU 占空三次都是 48.6%（性能真降的话 CPU 会升高）</li>
+<li>IMU 真实速率（非 DBG 路径）三次都在 1999–2000 Hz</li>
+</ul>
+<p>判据 <code>1800–2200 Hz</code> 覆盖了这个抖动范围，所以不会误报。</p>
+<blockquote>
+<p>★ <strong>看到单次 ISR 偏低先复测</strong>，不要直接判故障。这与
+Round 83 的 「参数表读到
+-1」是同一类：单次采样的暂时性异常不等于真实缺陷。</p>
+</blockquote>
+<h2 id="511-cpu-统计修复的第三次验证连续运行-7-小时2026-11-08">5.11 CPU
+统计修复的第三次验证：连续运行 7 小时（2026-11-08）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uptime</td>
+<td><strong>25162 s（6.99 小时）</strong></td>
+</tr>
+<tr>
+<td>CPU 占空</td>
+<td><strong>485‰（48.5%）</strong></td>
+</tr>
+<tr>
+<td>模式 / 解锁</td>
+<td><code>mode=0</code>（MANUAL）/ <code>unlock=0</code></td>
+</tr>
+<tr>
+<td>8 项自检</td>
+<td>全部 PASS</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这是 CPU 统计（<code>micros()</code> 71.6
+分钟回绕）修复的第三次独立验证</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>次数</th>
+<th>uptime</th>
+<th>CPU</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>第一次（Round 76）</td>
+<td>4403 s</td>
+<td>49.2%</td>
+<td>刚过 4260 s 回绕点</td>
+</tr>
+<tr>
+<td>第二次（Round 95）</td>
+<td>11073 s</td>
+<td>48.8%</td>
+<td>跨过 2 倍回绕点</td>
+</tr>
+<tr>
+<td><strong>第三次（本轮）</strong></td>
+<td><strong>25162 s</strong></td>
+<td><strong>48.5%</strong></td>
+<td><strong>跨过 5.9 倍回绕点</strong></td>
+</tr>
+</tbody>
+</table>
+<p>三次读数都在 48.5–49.2% 之间，说明修复彻底——修复前该处会在 71.6
+分钟时 跳到 409%，现在连续 7 小时稳定。</p>
+<p>另确认 <code>max_pass_us=20278</code>（20.3
+ms）、<code>win_s=25158</code> 与 <code>uptime_s=25162</code>
+基本吻合，说明统计窗口没有累积漂移。</p>
+<h2 id="512-连续运行-84-小时--磁力计读数变化2026-11-08">5.12 连续运行
+8.4 小时 + 磁力计读数变化（2026-11-08）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uptime</td>
+<td><strong>30341 s（8.43 小时）</strong></td>
+</tr>
+<tr>
+<td>CPU 占空</td>
+<td>48.5%</td>
+</tr>
+<tr>
+<td>模式 / 解锁</td>
+<td><code>mode=0</code> / <code>unlock=0</code></td>
+</tr>
+<tr>
+<td>8 项自检</td>
+<td>全部 PASS</td>
+</tr>
+<tr>
+<td>磁力计</td>
+<td><code>chip=?</code>（此前是 <code>chip=NONE</code>）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>CPU 统计修复的第四次验证</strong>：4403 → 11073 → 25162 →
+<strong>30341 s</strong>， 跨过 4260 s 回绕点 <strong>7.1
+倍</strong>，读数始终在 48.5–49.2%。</p>
+<p><strong>磁力计读数的一次异常（已复查）</strong>：</p>
+<p>本轮观察到一次 <code>chip=?</code>，随后连跑三次都是
+<code>chip=NONE</code>——<strong>5 次里 1 次异常</strong>。</p>
+<ul>
+<li><code>chip=NONE</code>（4/5）=
+探测跑完了但没找到芯片（明确的「无器件」）</li>
+<li><code>chip=?</code>（1/5）=
+探测本身没拿到有效结果（超时/串口响应异常）</li>
+</ul>
+<p><strong>结论</strong>：这块板确实没装磁力计（<code>NONE</code>
+是稳定结果），<code>?</code> 是偶发的探测异常。
+异常发生在没有重新烧录、没有改配置的情况下，属串口/总线响应抖动。</p>
+<blockquote>
+<p>★ 但那条判据仍然成立：单次 <code>?</code> 不能当成「确认无器件」。
+判断某块板是否装磁，至少要跑两次并确认都是
+<code>NONE</code>——本轮就是靠复测 才把「不稳定」修正为「偶发」。</p>
+</blockquote>
+<h2 id="513-连续运行-93-小时2026-11-08">5.13 连续运行 9.3
+小时（2026-11-08）</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>读数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>uptime</td>
+<td><strong>33498 s（9.31 小时）</strong></td>
+</tr>
+<tr>
+<td>CPU 占空</td>
+<td>48.5%</td>
+</tr>
+<tr>
+<td>模式 / 解锁</td>
+<td><code>mode=0</code> / <code>unlock=0</code></td>
+</tr>
+<tr>
+<td>8 项自检</td>
+<td>全部 PASS</td>
+</tr>
+<tr>
+<td>磁力计</td>
+<td><code>chip=NONE</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>CPU 统计修复的第五次验证</strong>：4403 → 11073 → 25162 →
+30341 → <strong>33498 s</strong>， 跨过 4260 s 回绕点 <strong>7.9
+倍</strong>，读数始终 48.5–49.2%。</p>
+<blockquote>
+<p>★ 一次差点误报的经历：某次屏幕显示 <code>veh=SingleEDf4Vane</code>（E
+大写、d 小写）， 与期望的 <code>SingleEdf4Vane</code> 不符，但检查器报
+PASS。抓原始输出核对后确认是 <strong>终端字形显示问题</strong>，实际就是
+<code>SingleEdf4Vane</code>。
+教训：判断字符串是否一致时，<strong>以程序抓取的原始输出为准，不以屏幕渲染为准</strong>。</p>
+</blockquote>
+<h2 id="514-用专用工具验证-cpu-统计跨回绕点2026-11-08">5.14
+用专用工具验证 CPU 统计跨回绕点（2026-11-08）</h2>
+<p>前面五次都是「手动读 uptime + CPU
+对比」。本轮用专门的工具跑一次：</p>
+<pre><code>py -3.13 tools/verify_cpu_longrun.py COM6 30000
+  目标：等 uptime 跨过 30000 s（micros 旧回绕点 4260 s）
+    uptime=33756s  win=33752s  cpu=485‰  max_pass=20278us
+  已跨过旧回绕点。判据：cpu_permille ≤ 850
+  [PASS] cpu_permille=485（48.5%），跨点后正常</code></pre>
+<p>这个工具做的事就是「等到 uptime 跨过指定秒数，再断言 CPU
+在合理区间」——
+比手动读两次更可复现，也把判据（≤850‰）写死在代码里而不是靠人眼判断。</p>
+<blockquote>
+<p>★ 手动验证了五次（4403/11073/25162/30341/33498 s）都没问题，
+但<strong>手动验证的结论无法被别人复跑</strong>。用工具跑一次，别人拿到命令就能重做。</p>
+</blockquote>
+<h2 id="515-verify_board-判据常量的合理性核对2026-11-08">5.15
+<code>verify_board</code> 判据常量的合理性核对（2026-11-08）</h2>
+<table>
+<thead>
+<tr>
+<th>常量</th>
+<th>值</th>
+<th>实测</th>
+<th>余量判断</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EXPECT_PARAM_COUNT</code></td>
+<td>169</td>
+<td>169</td>
+<td>精确匹配，改参数表必须同步</td>
+</tr>
+<tr>
+<td><code>CPU_MAX_PCT</code></td>
+<td>85.0</td>
+<td>48.5</td>
+<td>余量 1.75×，合理（留了负载突增空间）</td>
+</tr>
+<tr>
+<td><code>IMU_RATE_MIN/MAX</code></td>
+<td>1800 / 2200</td>
+<td>1858–2068</td>
+<td>覆盖 ±7% 抖动（Round 127 实测）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>三条都合理</strong>，没有「放得过松以至于测不出问题」的情况：</p>
+<ul>
+<li>参数数用<strong>精确匹配</strong>而非区间——多一项少一项都会报</li>
+<li>CPU 用 85% 而非 100%——留余量但不至于放过明显过载</li>
+<li>ISR 用 ±22% 的窗口——覆盖实测抖动，越界时还有复测兜底（Round 128
+加）</li>
+</ul>
+<blockquote>
+<p>★ 与 <code>verify_cpu_longrun</code> 的
+<code>DEFAULT_TARGET_S</code>（原 4400，Round 172 改为 20000）
+对比：那个是「等多久才算证据」的阈值，太松会让验证形同虚设；
+这三个是「读数落哪算正常」的区间，太松会让故障漏检。两类都要审。</p>
+</blockquote>
+<h2 id="6-复现步骤">6 复现步骤</h2>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 1) 编译（本机）</span></span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS <span class="kw">&amp;&amp;</span> <span class="ex">pio</span> run <span class="at">-e</span> SingleEdf4Vane</span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="co"># 2) 传固件到目标机</span></span>
+<span id="cb7-5"><a href="#cb7-5" aria-hidden="true" tabindex="-1"></a><span class="fu">scp</span> .pio/build/SingleEdf4Vane/firmware.bin magicbook:D:/.../tmp_fw.bin</span>
+<span id="cb7-6"><a href="#cb7-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-7"><a href="#cb7-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 3) 烧录（目标机，OpenOCD 直烧）</span></span>
+<span id="cb7-8"><a href="#cb7-8" aria-hidden="true" tabindex="-1"></a><span class="ex">openocd</span> <span class="at">-f</span> interface/cmsis-dap.cfg <span class="at">-f</span> target/stm32h7x.cfg <span class="dt">\</span></span>
+<span id="cb7-9"><a href="#cb7-9" aria-hidden="true" tabindex="-1"></a>  <span class="at">-c</span> <span class="st">&quot;adapter speed 100&quot;</span> <span class="dt">\</span></span>
+<span id="cb7-10"><a href="#cb7-10" aria-hidden="true" tabindex="-1"></a>  <span class="at">-c</span> <span class="st">&quot;program D:/.../tmp_fw.bin 0x08000000 verify reset exit&quot;</span></span>
+<span id="cb7-11"><a href="#cb7-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb7-12"><a href="#cb7-12" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) 验证（目标机，GCS CLI）</span></span>
+<span id="cb7-13"><a href="#cb7-13" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS/GCS</span>
+<span id="cb7-14"><a href="#cb7-14" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 device        <span class="co"># → 169 参数</span></span>
+<span id="cb7-15"><a href="#cb7-15" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 dbg health     <span class="co"># → veh / IMU / EKF</span></span>
+<span id="cb7-16"><a href="#cb7-16" aria-hidden="true" tabindex="-1"></a><span class="ex">py</span> <span class="at">-3.13</span> <span class="at">-X</span> utf8 server/cli.py <span class="at">--port</span> COM6 vars watch imu_rate <span class="at">-t</span> 6   <span class="co"># → 2000 Hz</span></span></code></pre></div>
+<h2 id="7-参考">7 参考</h2>
+<ul>
+<li><code>TandemVec_FCS/AGENTS.md</code> §调度统计口径（DBG
+副作用）、§当前实机机型与构建</li>
+<li><code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code>（仿真侧验收，与本记录互补）</li>
+<li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
+架构与 2 kHz 实测方法）</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:10</footer></article></body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-008 共轴执行器故障仿真 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-008-共轴执行器故障仿真2026-11-04">VER-008
+共轴执行器故障仿真（2026-11-04）</h1>
+<blockquote>
+<p>目的：验证 TVC 舵机卡死、单电机推力损失时的保护行为。<br />
+结论先说：现有固件有 45°
+姿态保护切电机，但<strong>没有执行器故障检测/恢复</strong>；
+故障后仍会坠落，不能把这类故障当作可控。</p>
+</blockquote>
+<h2 id="1-tvc-舵机卡死t8-s20-s-仿真">1. TVC 舵机卡死（t=8 s，20 s
+仿真）</h2>
+<table>
+<thead>
+<tr>
+<th>故障</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>roll 舵机卡死</td>
+<td>45° 保护切电机，max_roll≈180°、pos_rms 10.2 m、t≈12.7 s 落地</td>
+</tr>
+<tr>
+<td>pitch 舵机卡死</td>
+<td>45° 保护切电机，max_roll≈180°、max_pitch≈90°、t≈10.3 s 落地</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-单电机推力损失-50t0">2. 单电机推力损失 50%（t=0）</h2>
+<table>
+<thead>
+<tr>
+<th>故障</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>motor1 损失 50%</td>
+<td>max_roll≈60°、max_pitch≈60°、alt→0</td>
+</tr>
+<tr>
+<td>motor2 损失 50%</td>
+<td>max_roll≈47°、max_pitch≈47°、t≈17.6 s 落地</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-结论与首飞要求">3. 结论与首飞要求</h2>
+<ul>
+<li>45°
+姿态保护能切电机，但不能救回姿态；没有故障检测、没有冗余执行器。</li>
+<li>首飞必须保证舵机/电机机械与电气可靠，系留/低高度、场地隔离；</li>
+<li>不要在人员/设备上方飞，不要依赖“故障后自动恢复”；</li>
+<li>若后续要做故障容错，需要额外的角位置/转速/电流反馈和检测律；当前无
+TVC 角度传感器。</li>
+</ul>
+<h2 id="4-手动模式特技不切电机2026-11-04-用户要求">4.
+手动模式特技不切电机（2026-11-04 用户要求）</h2>
+<p>45° 姿态切电机改为<strong>仅非手动模式</strong>生效；手动
+RATE/ATTITUDE 不因姿态角切电机：</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a>manual_mode <span class="op">=</span> <span class="op">(</span>mode <span class="op">==</span> MANUAL<span class="op">);</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>attitude_safe <span class="op">=</span> manual_mode <span class="op">||</span> <span class="op">(|</span>roll<span class="op">|</span> <span class="op">&lt;</span> limit <span class="op">&amp;&amp;</span> <span class="op">|</span>pitch<span class="op">|</span> <span class="op">&lt;</span> limit<span class="op">);</span></span></code></pre></div>
+<ul>
+<li>AUTO_ALTITUDE / AUTO_POSITION / GUIDED 仍保留保护，默认保护角已从
+45° 提高到 <strong>90°</strong>；</li>
+<li>手动 RATE/ATTITUDE 允许翻跟头/横滚，超过 45° 不切电机；</li>
+<li>未解锁/非手动模式大倾角保护的 TVC 回中逻辑不变。</li>
+</ul>
+<p>复现：</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">fw_coax.exe</span> <span class="at">--real-nav</span> <span class="at">--profile</span> mag_clean <span class="at">--seconds</span> 8 <span class="at">--seed</span> 1 <span class="at">--no-wind</span> <span class="dt">\</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">--coax-plant-model</span> rigorous <span class="dt">\</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">--rc-profile</span> test_host/fw_sil/rc_rate_flip.csv</span></code></pre></div>
+<p>实测：手动 RATE 下 roll 到 180° 时 motor≈57%，电机未切；标准 40 例
+SIL 仍 40/40。 该表只注入 CH7=MANUAL、CH9=RATE、pitch
+满杆，用于保护门回归。</p>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-008-共轴执行器故障仿真-2026-11-04.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:10</footer></article></body>
+</html>

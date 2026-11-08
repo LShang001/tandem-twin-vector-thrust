@@ -1,0 +1,2229 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>VER-009 SIL 验收脚本判据表 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    /* CSS for syntax highlighting */
+    html { -webkit-text-size-adjust: 100%; }
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { color: #008000; } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { color: #008000; font-weight: bold; } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ver-009-sil-验收脚本判据表2026-11-07">VER-009 SIL
+验收脚本判据表（2026-11-07）</h1>
+<blockquote>
+<p>用途：<code>TandemVec_FCS/test_host/fw_sil/</code> 下 15
+个脚本各自验什么、门槛多少、
+最近一次跑的结果是什么。此前这些信息只散在脚本注释里，
+读验证文档的人看不到，也没法判断「跑过了」和「没跑过」的区别。</p>
+<p>证据等级：全部为 L2 SIL（真实固件源码 + 虚拟 plant/传感器），不是
+HIL、不是实机。</p>
+</blockquote>
+<hr />
+<h2 id="1-已执行并留档2026-11-07">1 已执行并留档（2026-11-07）</h2>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>用途</th>
+<th>判据</th>
+<th>最近结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_all_airframes.sh</code></td>
+<td>三机型统一跑批（纵列 hover+manual / 共轴 8 profiles / 单涵道
+hover+manual）</td>
+<td>逐项判据，逐项输出</td>
+<td><strong>全部通过</strong>，405.6 s</td>
+</tr>
+<tr>
+<td><code>run_acceptance.sh</code></td>
+<td>纵列 SIL 验收：真实固件 + 真实 EKF 定高闭环，3 seeds</td>
+<td><code>final_alt ∈ [8, 11] m</code></td>
+<td><strong>3/3 通过</strong>：9.23 / 9.23 / 9.16 m；max_roll ≤
+4.17°，max_pitch ≤ 3.61°</td>
+</tr>
+<tr>
+<td><code>run_failsafe_matrix.sh</code></td>
+<td>CRSF 断链 / 重连 / 组合注入（6DOF plant + 真实 EKF/GNSS/气压 +
+风扰）</td>
+<td>① <code>max_desc_vz_down &lt; 0.6 m/s</code> ②
+<code>final_alt &gt; 0.85×目标</code> ③ <code>land_t &lt; 0</code> ④
+<code>gnss_crej == 0</code></td>
+<td><strong>27/27 通过</strong>：max_desc 0.000–0.354 m/s、达成率
+≥91.8%、全部未触地、GNSS 拒绝全 0</td>
+</tr>
+<tr>
+<td><code>run_coaxial_acceptance.sh</code></td>
+<td>共轴 VTVL 真实固件 + rigorous 6DOF plant（8 profiles × 3
+seeds，脚本默认已带 <code>--coax-plant-model rigorous</code>）</td>
+<td>按 profile 逐项，含
+<code>hold_end</code>/<code>hold_max</code>/<code>pos_rms</code>/<code>roll_max</code>/传感器检测标志</td>
+<td><strong>24/24 通过</strong>：mag_clean hold_end 0.31–0.89
+m、mag_nominal 1.04–1.44 m、mag_disturbed 5.27–6.92 m、nomag_degraded
+41.82–44.88 m；<code>imu_stuck/imu_nan/imu_drop</code> 三档
+<code>imu_det=1</code>（检测生效）；<code>gnss_spoof</code> 触发 1
+次重锚。★ <strong>四个 profile 走
+<code>skip_motion</code></strong>（脚本第 22、25
+行）：<code>imu_stuck</code>/<code>imu_nan</code>/<code>imu_drop</code>
+只判 <code>imu_detected=1</code>、<code>gnss_spoof</code> 只判
+<code>gnss_crej&gt;=1</code>，<strong>故障后的飞行品质（高度/位置/姿态）不参与判定</strong>。看日志时
+<code>alt≈0</code>、<code>hold_end≈几十米</code>
+都不代表失控，不要误读</td>
+</tr>
+<tr>
+<td><code>run_real_acceptance.sh</code></td>
+<td>真实导航任务 SIL 多配置验收（clean / nominal / disturbed 磁环境 × 3
+seeds）</td>
+<td>按 profile 逐项，主看 <code>hold_end</code> / <code>hold_max</code>
+/ <code>pos_rms</code> / <code>roll_max</code></td>
+<td><strong>9/9 通过</strong>：mag_clean hold_end 0.39–1.24 m（roll_max
+≤9.95°）、mag_nominal 2.51–2.74 m（roll_max ≤16.86°）、mag_disturbed
+5.58–9.96 m（roll_max ≤14.44°）</td>
+</tr>
+<tr>
+<td><code>run_fw_gnc_parity_suite.py</code></td>
+<td>SIL（真实固件源码）⇄ 固件直调库（C
+ABI）<strong>逐拍对拍</strong></td>
+<td><code>max|Δch| &lt; 1%</code>、<code>mode_bad=0</code>、<code>step_fail=0</code></td>
+<td><strong>5/5 通过</strong>（2026-11-08 复跑）：vtol 4000 拍
+max|Δch|=0.0054%、nominal 3000 拍 0.0050%、mag_nominal 0.0048%、degraded
+0.0057%、manual 0.00005%；全部
+<code>mode_bad=0</code>、<code>step_fail=0</code></td>
+</tr>
+<tr>
+<td><code>run_matrix.sh</code></td>
+<td>真实固件 SIL 可复现矩阵（direct / ekf / flow0 / flow1 / F3 / F4 ×
+seed 1–3）</td>
+<td><strong>只打印数据、不判定</strong>（回归观察用）</td>
+<td>15
+个组合跑通。<code>direct</code>/<code>ekf</code>/<code>flow0</code>/<code>flow1</code>
+定高 8.90–9.28 m；<strong>F3（上摆卡死）final_alt≈0 但姿态稳（max_roll
+1.0–2.1°）；F4（前摆 8° 硬偏置）max_roll
+154–180°、final_alt=nan</strong>——后者是 README:117-118 已记录的
+plant/控制发散，不代表实机结论</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-未在本轮执行">2 未在本轮执行</h2>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>用途（取自脚本头注释）</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><del><code>run_coaxial_suite.sh</code></del></td>
+<td>共轴一键套件</td>
+<td><strong>已执行（2026-11-08），见 §2.1</strong>；build/acceptance
+通过，MC/sweep 返回 1 属真实门禁</td>
+</tr>
+<tr>
+<td><code>build_and_run_*.sh</code></td>
+<td>单场景构建运行脚本（hover/manual/failsafe/guidance/real/coax/singleedf）</td>
+<td>由上面各套件内部调用</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>★ 已执行的三个验收脚本容易混淆，按作用分开：
+<code>run_acceptance.sh</code>（纵列基础定高）、<code>run_real_acceptance.sh</code>（多磁环境导航）、
+<code>run_coaxial_acceptance.sh</code>（共轴机型分支）。
+<code>run_matrix.sh</code> 已于 2026-11-08 执行（15 组合，见 §1
+表格），不再属未执行。 目前只剩
+<code>run_coaxial_suite.sh</code>（重型套件：build + 8 profiles×5
+seeds</p>
+<ul>
+<li>MC 100 + sweep 18），耗时远长于其他脚本，本轮启动后台运行。</li>
+</ul>
+</blockquote>
+<h2 id="21-run_coaxial_suitesh-首次完整执行2026-11-08">2.1
+run_coaxial_suite.sh 首次完整执行（2026-11-08）</h2>
+<p>命令：<code>bash test_host/fw_sil/run_coaxial_suite.sh</code>（重型套件：build
++ 8 profiles×5 seeds</p>
+<ul>
+<li>MC 100 + sweep 18）。证据目录
+<code>test_host/fw_sil/sim-data/coax-2026-11-08/</code>。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>退出码</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>build</td>
+<td>0</td>
+<td>通过</td>
+</tr>
+<tr>
+<td>acceptance（8×5 = 40 例）</td>
+<td>0</td>
+<td>通过</td>
+</tr>
+<tr>
+<td>acceptance_realistic</td>
+<td>−1</td>
+<td><strong>未跑</strong>（套件默认只跑 current）</td>
+</tr>
+<tr>
+<td>MC 100（current）</td>
+<td>1</td>
+<td><strong>FAIL</strong></td>
+</tr>
+<tr>
+<td>realistic</td>
+<td>−1</td>
+<td><strong>未跑</strong></td>
+</tr>
+<tr>
+<td>sweep 18（current）</td>
+<td>1</td>
+<td><strong>FAIL</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>sweep 的 3 个失败</strong>（判据
+<code>max_roll/pitch ≤ 30°</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>参数</th>
+<th>实测</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lever_low</code></td>
+<td>L=0.08 m</td>
+<td>max_pitch <strong>46.8°</strong></td>
+<td>&gt;30°</td>
+</tr>
+<tr>
+<td><code>iy_high</code></td>
+<td>Iy=0.08 kg·m²</td>
+<td>max_pitch <strong>37.4°</strong></td>
+<td>&gt;30°</td>
+</tr>
+<tr>
+<td><code>combined_low</code></td>
+<td>m=0.70 / T=12 / L=0.08 / Iy=0.03</td>
+<td>max_roll <strong>45.4°</strong>、max_pitch
+<strong>36.5°</strong></td>
+<td>&gt;30°</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这些是已知的鲁棒性边界，不是新缺陷</strong>。summary.md
+原文：</p>
+<blockquote>
+<p>套件退出码：1（0=全部通过；1=任一阶段失败。注意：<strong>历史基线
+MC/sweep 未达 100%， 默认运行即返回 1，是真实门禁。</strong>）</p>
+</blockquote>
+<p>共轴对「力臂变小 / 俯仰惯量变大」敏感，与 VER-007
+的摄动结论一致（惯量×1.1 → 5/5 FAIL， max_pitch 25–26°）。力臂 0.15→0.08
+会让同一舵角产生的力矩降 47%， 姿态权限不足属物理预期。</p>
+<p><strong>物理原因定量验证</strong>：力臂 L 从 0.15 → 0.08
+m，同一舵角产生的力矩降到 53.3%（降 46.7%）；线性模型预测姿态偏差放大
+1/0.533 = <strong>1.88 倍</strong>。 实测 max_pitch 从 23.4°（多个 PASS
+用例的共同值）升到 46.8°，<strong>放大 2.00 倍</strong>， 与理论相差
+6.7%。</p>
+<p>这证明 <code>lever_low</code> 的 FAIL
+不是控制律缺陷，而是<strong>执行器力矩权限不足</strong>——
+力臂小了近一半，同样的舵偏角产生的控制力矩也少了近一半，姿态抗扰/跟踪能力
+必然下降。要改善只能增大舵面/舵角或加大力臂，属机械设计约束，软件参数补不了。</p>
+<p><strong><code>iy_high</code> 的同类验证</strong>：Iy 从 0.05 → 0.08
+kg·m²，同一力矩产生的角加速度 降到 62.5%（降 37.5%）；理论姿态偏差放大
+1/0.625 = <strong>1.60 倍</strong>。实测 max_pitch 从 23.4° 升到
+37.4°，<strong>放大 1.60 倍</strong>，与理论偏差仅
+<strong>0.1%</strong>。</p>
+<p>两个用例（<code>lever_low</code> 偏差 6.7%、<code>iy_high</code> 偏差
+0.1%）给出一致结论： 共轴在摄动下的 FAIL 是<strong>惯量 /
+力臂的线性效应</strong>，不是控制律缺陷。
+控制律在这些配置下的输出仍然正确，只是执行器权限（力矩 /
+角加速度）不够。</p>
+<p><strong>关于 <code>f4=1</code>
+的语义澄清</strong>：<code>lever_low</code> 与 <code>combined_low</code>
+的 <code>f4</code> 都是 1，
+但两者<strong>没有注入任何故障</strong>（<code>extra=[]</code>、<code>append=[]</code>）。</p>
+<p>F4 的判据是「|姿态误差| &gt; 25° 且 |摆角指令| ≥ 90% dMax 持续 0.5
+s」
+（<code>flight_control.cpp:3065</code>）。当力矩权限不足时，摆角必然打满、姿态必然超限
+——这两个条件同时成立，F4 就触发。</p>
+<p>所以 <strong><code>f4=1</code>
+不等于「真的舵机卡死」</strong>，而是「姿态超限 + 执行器饱和」这个
+组合条件成立。它是<strong>启发式</strong>，无法区分：</p>
+<ul>
+<li>舵机卡死导致超限（真故障）</li>
+<li>力矩不足导致超限（本轮的摄动场景）</li>
+</ul>
+<p>判读时不能只看 <code>f4</code> 标志，要结合是否真的注入了 fault。</p>
+<blockquote>
+<p>这不是缺陷——判据是明确设计并写在注释里的。但它提醒：「检测到故障」和
+「真的有故障」是两件事，在摄动场景下会混淆。</p>
+</blockquote>
+<p><strong>需要区分三类结果</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>标记</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>[PASS]</code></td>
+<td>姿态/高度/位置都在判据内</td>
+</tr>
+<tr>
+<td><code>[DETECTED]</code></td>
+<td>故障被检测到（<code>both_loss_60</code>/<code>servo_jam</code>），<strong>设计预期</strong>，不是失败</td>
+</tr>
+<tr>
+<td><code>[FAIL]</code></td>
+<td>真实姿态超限（上面 3 例），是鲁棒性边界证据</td>
+</tr>
+</tbody>
+</table>
+<p>套件退出码 1 属设计如此——它不粉饰基线，也不把 <code>[DETECTED]</code>
+混进失败数。</p>
+<h2 id="22-mc-100-的失败分析2026-11-08">2.2 MC 100
+的失败分析（2026-11-08）</h2>
+<p><code>mc_current.json</code>：cases=100、<strong>passed=52（52%）</strong>、seconds=40。</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>p50</th>
+<th>p95</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>max_pitch</code></td>
+<td><strong>29.3°</strong></td>
+<td><strong>58.4°</strong></td>
+<td>30°</td>
+</tr>
+<tr>
+<td><code>max_roll</code></td>
+<td>1.26°</td>
+<td>8.5°</td>
+<td>30°</td>
+</tr>
+<tr>
+<td><code>hold_end</code></td>
+<td>1.47 m</td>
+<td>28.7 m</td>
+<td>6 m</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键</strong>：<code>pitch_p50 = 29.3°</code> 就已经贴着 30°
+判据，不是偶发超标； 而
+<code>roll_p50 = 1.26°</code>、<code>hold_p50 = 1.47 m</code>
+都远低于判据。</p>
+<p>说明共轴的<strong>俯仰轴在下降/着陆段普遍偏大</strong>——VER-007 的
+<code>max_pitch_preland</code> 也是 23–26°，是同一现象。</p>
+<p><strong>两个判据口径并存</strong>（严格度不同，不是矛盾）：</p>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>用的字段</th>
+<th>是否含着陆段</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_acceptance.sh</code></td>
+<td><code>max_pitch_preland</code></td>
+<td>否（排除）</td>
+<td>通过</td>
+</tr>
+<tr>
+<td><code>run_coaxial_sweep.py</code></td>
+<td><code>max_pitch</code></td>
+<td><strong>是（全程）</strong></td>
+<td><strong>52% 失败</strong></td>
+</tr>
+</tbody>
+</table>
+<p>判读时必须知道看的是哪一个，否则会误判「共轴到底能不能飞」。 套件
+exits=1 的原因就在这里：它用更严的全程峰值口径。</p>
+<p><strong>已做（2026-11-08）：补上 <code>max_pitch_preland</code>
+统计，结论推翻了「着陆段瞬态」的猜测。</strong></p>
+<p>SIL 一直在输出
+<code>max_pitch_preland</code>（<code>fw_sil_env_main.cpp:2664</code>），只是
+MC 统计 没有汇总它。补进 <code>run_coaxial_mc.py</code> 的
+<code>ROW_FIELDS</code> 与输出后，用 3 个 case 验证：</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>max_pitch</th>
+<th>max_pitch_preland</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>case0</td>
+<td>3.4°</td>
+<td><strong>3.4°</strong></td>
+</tr>
+<tr>
+<td>case1</td>
+<td>30.7°</td>
+<td><strong>30.7°</strong></td>
+</tr>
+<tr>
+<td>case2</td>
+<td>31.4°</td>
+<td><strong>31.4°</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>完全相等</strong>——说明峰值出现在着陆<strong>之前</strong>，是<strong>飞行段的控制不足</strong>，
+不是着陆段瞬态。所以共轴俯仰偏大是真实的飞行段问题（在力臂/惯量不足的
+配置下），不是判据口径造成的假象。</p>
+<h2 id="23-共轴-rollpitch-不对称一个尚未解释的现象2026-11-08">2.3 共轴
+roll/pitch 不对称：一个尚未解释的现象（2026-11-08）</h2>
+<p>MC 100 的统计里，<code>roll_p50 = 1.26°</code> 而
+<code>pitch_p50 = 29.3°</code>，差 23 倍。
+逐项排查了可能的不对称来源，<strong>都不是原因</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>检查项</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>执行器映射</td>
+<td><code>Mx = l·T·sin(δ_roll)</code>、<code>My = l·T·sin(δ_pitch)</code>，<strong>完全对称</strong>（<code>CoaxialAllocator.h:13</code>）</td>
+</tr>
+<tr>
+<td>速率环增益</td>
+<td><code>BFS_RATE_ROLL_DEFAULT</code> 与
+<code>BFS_RATE_PITCH_DEFAULT</code> <strong>逐位相同</strong>（16.042818
+/ 5.729578）</td>
+</tr>
+<tr>
+<td>姿态环增益</td>
+<td><code>BFS_ATT_ROLL_DEFAULT</code> 与
+<code>BFS_ATT_PITCH_DEFAULT</code> <strong>相同</strong>（2.8 / 0）</td>
+</tr>
+<tr>
+<td>惯量</td>
+<td>分配器分别用 <code>inertia[1]</code>(Iy) 与
+<code>inertia[2]</code>(Iz) 逆解，参数里两者可独立配置</td>
+</tr>
+</tbody>
+</table>
+<p><strong>所以不对称不来自控制律或分配层</strong>。可能的来源（<strong>未验证</strong>）：</p>
+<ol type="1">
+<li>plant 的俯仰通道扰动更大（气动/接触模型）</li>
+<li>初始条件在 pitch 方向有偏置</li>
+<li>俯仰轴与重力方向的耦合（共轴机体竖立，俯仰倾角直接影响推力竖直分量）</li>
+</ol>
+<blockquote>
+<p><strong>诚实标注</strong>：这是一个<strong>开放问题</strong>，不是已解决问题。上面三条都是推测，
+没有一条被数据验证过。把它写下来的目的是：不要让「pitch 偏大」被误认为
+已经查清——它只是被<strong>定位到了控制层之外</strong>。</p>
+</blockquote>
+<h2 id="24-pitch-峰值时刻与阶段记录2026-11-08已验证">2.4 pitch
+峰值时刻与阶段记录（2026-11-08，已验证）</h2>
+<p>上一轮给 <code>fw_sil_env_main.cpp</code> 加了
+<code>t_max_pitch</code> / <code>phase_max_pitch</code> /
+<code>max_pitch_preland_t</code>，但当时<strong>没跑到输出</strong>（只确认编译通过）。本轮补完验证。</p>
+<p><strong>验证卡在的第一步</strong>：<code>SIL_REAL_JSON</code> 只在
+<code>runRealNavLoop()</code> 里输出
+（<code>fw_sil_env_main.cpp:1110</code>、2676），而默认循环走的是另一个分支。
+必须加 <code>--real-nav</code> 参数才进这条路径（:2967
+<code>real_cfg.enabled=true</code>）。</p>
+<p><strong>实测</strong>：</p>
+<pre><code>fw_coax.exe --real-nav --seconds 40
+→ &quot;max_pitch&quot;:0.685,&quot;max_pitch_preland&quot;:0.685,
+   &quot;t_max_pitch&quot;:9.58,&quot;phase_max_pitch&quot;:1</code></pre>
+<p><code>phase_max_pitch=1</code> = <strong>上升段</strong>。默认参数下
+pitch 只有 0.685°，不超限； 要观察 30° 级峰值需要 MC 的摄动配置。</p>
+<p>阶段编码：<code>0</code>=尚未离地、<code>1</code>=上升、<code>2</code>=悬停、<code>3</code>=下降、<code>4</code>=已着陆。</p>
+<blockquote>
+<p>★ 这个 <code>--real-nav</code>
+正是上一轮「验证未完成」的原因——默认循环不输出 JSON，
+当时误以为要跑完整流程。记下来，下次查 SIL
+输出先确认走的是哪条循环。</p>
+</blockquote>
+<h2 id="24b-定位到下降段2026-11-08">2.4b
+定位到「下降段」（2026-11-08）</h2>
+<p>用 <code>run_coaxial_mc.py</code> 的完整命令行（<strong>关键是
+<code>--pos-hold</code></strong>，我最初手动复现时漏了它， 导致 pitch
+只有 0.5° 而非 48°）复现 case003 的参数：</p>
+<pre><code>fw_coax.exe --real-nav --profile mag_clean --pos-hold --seconds 40 --seed 3 \
+  --no-wind --mag --coax-mass 0.8170 --coax-thrust 12.30 --coax-lever 0.0860 \
+  --coax-iy 0.0590 --coax-iz 0.0450 --coax-yawk 0.001060
+→ &quot;max_pitch&quot;:48.077,&quot;max_pitch_preland&quot;:48.077,
+   &quot;t_max_pitch&quot;:20.70,&quot;phase_max_pitch&quot;:3</code></pre>
+<p><strong><code>phase_max_pitch = 3</code> =
+下降段</strong>，峰值出现在 t=20.70 s。</p>
+<p>这比之前「飞行段」的说法更具体：</p>
+<ul>
+<li><code>max_pitch == max_pitch_preland</code>（都是
+48.077）说明峰值确实在着陆<strong>之前</strong></li>
+<li>但阶段编码进一步指出是<strong>下降段</strong>，不是上升或悬停</li>
+<li>下降段的特征是<strong>油门收小、推力权限下降</strong>，与
+<code>lever_low</code>/<code>iy_high</code> 的
+「力矩权限不足」结论一致</li>
+</ul>
+<blockquote>
+<p>★ 复现陷阱：同一组 plant 参数，<strong>不加 <code>--pos-hold</code>
+只得到 0.5°</strong>。 手动复现 MC
+结果时，必须逐字照抄它的完整命令行（含
+<code>--pos-hold --no-wind --mag</code>），
+少一个参数就是另一个飞行场景。</p>
+</blockquote>
+<h2 id="24c-阶段分布统计80-的超限发生在下降段2026-11-08">2.4c
+阶段分布统计：80% 的超限发生在下降段（2026-11-08）</h2>
+<p>把 <code>phase_max_pitch</code> 纳入 MC 的 <code>ROW_FIELDS</code>
+与统计输出后，跑 8 个 case （seed 20261024，新二进制）：</p>
+<table>
+<thead>
+<tr>
+<th>case</th>
+<th>max_pitch</th>
+<th>t_max_pitch</th>
+<th>phase</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>3.4°</td>
+<td>6.70 s</td>
+<td>1 上升</td>
+</tr>
+<tr>
+<td>1</td>
+<td><strong>31.8°</strong></td>
+<td>12.60 s</td>
+<td>2 悬停</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>35.9°</strong></td>
+<td>16.58 s</td>
+<td><strong>3 下降</strong></td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>46.9°</strong></td>
+<td>19.62 s</td>
+<td><strong>3 下降</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td>6.0°</td>
+<td>10.51 s</td>
+<td>1 上升</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>58.7°</strong></td>
+<td>12.32 s</td>
+<td><strong>3 下降</strong></td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>30.2°</strong></td>
+<td>38.21 s</td>
+<td><strong>3 下降</strong></td>
+</tr>
+<tr>
+<td>7</td>
+<td>1.2°</td>
+<td>5.64 s</td>
+<td>0 未离地</td>
+</tr>
+</tbody>
+</table>
+<p><strong>阶段分布</strong>：<code>{0:1, 1:2, 2:1, 3:4}</code></p>
+<p><strong>5 个超限 case 中，4 个峰值在下降段</strong>（80%），1
+个在悬停段。</p>
+<p>这与下降段的物理特征一致：油门收小 → 推力权限下降 → 同样舵角产生的
+控制力矩更小 → 姿态抗扰能力下降。和
+<code>lever_low</code>/<code>iy_high</code> 的
+「力矩权限不足」是同一个机制。</p>
+<blockquote>
+<p>★
+方法论：单例只能说明「存在这种情况」，分布才能说明「这是主要情况」。
+上轮用 1 个 case 得出「下降段」，本轮用 8 个 case
+的分布确认它是主因（4/5）。</p>
+</blockquote>
+<h2 id="24d-下降段为什么力矩不够定量闭环2026-11-08">2.4d
+下降段为什么力矩不够：定量闭环（2026-11-08）</h2>
+<p>共轴的控制力矩是
+<code>M = l · T · sin(δ)</code>——<strong>力矩与推力成正比</strong>。
+油门收小 → 推力变小 → 同样舵角产生的力矩同比变小。</p>
+<p>以 mass=0.84 kg（悬停需 8.2 N）、l=0.15 m、max_thrust=14 N 计算：</p>
+<table>
+<thead>
+<tr>
+<th>油门</th>
+<th>推力</th>
+<th>最大力矩</th>
+<th>相对悬停</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>100%</td>
+<td>14.0 N</td>
+<td>2.10 N·m</td>
+<td>170%</td>
+</tr>
+<tr>
+<td>70%</td>
+<td>9.8 N</td>
+<td>1.47 N·m</td>
+<td>119%</td>
+</tr>
+<tr>
+<td>50%</td>
+<td>7.0 N</td>
+<td>1.05 N·m</td>
+<td>85%</td>
+</tr>
+<tr>
+<td><strong>30%</strong></td>
+<td><strong>4.2 N</strong></td>
+<td><strong>0.63 N·m</strong></td>
+<td><strong>51%</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>下降段油门约 30% 时，控制力矩只剩悬停的一半</strong> →
+姿态抗扰能力减半 → 同样的扰动会造成约 2
+倍的姿态偏差。这与实测完全吻合：</p>
+<ul>
+<li><code>lever_low</code>（力臂减半）：力矩 53.3% →
+姿态偏差<strong>实测放大 2.00 倍</strong></li>
+<li>下降段（油门 30%）：力矩 51% → <strong>理论放大约 2 倍</strong></li>
+</ul>
+<p><strong>两条独立路径（改力臂 /
+改油门）得到同一个比例关系</strong>，说明这就是
+<code>M = l·T·sin(δ)</code> 的直接后果，不是控制器的问题。</p>
+<p><strong>TVC 最低推力 0.35 N 不是限制</strong>：那对应油门
+2.5%，远低于下降段实际油门。</p>
+<p><strong>可行的改进方向</strong>（未实施，仅记录）：</p>
+<ol type="1">
+<li><strong>下降段保留更高油门</strong>：用更大倾角换下降速度，而不是收油门——
+保持控制力矩。代价是下降轨迹更斜。</li>
+<li><strong>下降段限幅姿态指令</strong>：主动降低姿态变化率需求，与可用力矩匹配。</li>
+<li><strong>接受现状</strong>：如果实机下降段姿态偏差在安全范围内（无
+GNSS 时靠目视）， 则这是物理边界，不是缺陷。</li>
+</ol>
+<blockquote>
+<p>★
+不建议做的：<strong>在下降段加大控制增益</strong>。力矩权限不足时加大增益只会让
+积分饱和更快、超调更大——<code>lever_low</code>
+的定量验证已经证明偏差主要来自 力矩不足，不是环路增益低。</p>
+</blockquote>
+<h2 id="26-f4舵机卡死检测的门限盲区2026-11-08">2.6
+F4（舵机卡死）检测的门限盲区（2026-11-08）</h2>
+<p><strong>现象</strong>：<code>--fault 4</code>（上摆卡死
++8°）注入后，t=9~12 期间 <code>f4</code> 始终为 0， 直到 t=13
+数值失效（见 <code>fw_sil/README.md</code> 的逐拍表）。</p>
+<p><strong>原因</strong>：F4 判据是「|姿态误差| &gt; 25° 且
+<strong>|摆角指令| ≥ 90% dMax</strong> 持续 0.5 s」
+（<code>flight_control.cpp:3065</code>）。实测卡死后的舵机输出：</p>
+<table>
+<thead>
+<tr>
+<th>时刻</th>
+<th>前摆</th>
+<th>尾摆</th>
+<th>对应摆角占比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>t=9</td>
+<td>72.2%</td>
+<td>31.6%</td>
+<td>44.4% / 36.8%</td>
+</tr>
+<tr>
+<td>t=12</td>
+<td>72.2%</td>
+<td>27.8%</td>
+<td>44.4% / 44.4%</td>
+</tr>
+</tbody>
+</table>
+<p><strong>摆角指令只到 44.4% dMax，离 90%
+门限差一倍</strong>，所以判据永远不成立。</p>
+<p><strong>为什么不打满</strong>：卡死的是<strong>一个舵</strong>（上摆，滚转主控），另一个舵仍在工作。
+控制律不需要把一个轴打到满舵就能产生部分修正力矩——但<strong>部分修正不足以
+抵消卡死</strong>，姿态于是持续翻滚。这就是「指令不到满舵、姿态已经失控」的组合。</p>
+<p><strong>这暴露了判据的设计假设与实际场景不匹配</strong>：90% dMax
+门限隐含假设
+「卡死后控制器会死命打舵」，而单舵卡死时控制器只会适度补偿另一个舵。</p>
+<p><strong>改进方向</strong>（未实施，需单独评审）：</p>
+<ol type="1">
+<li><strong>改用「指令 vs
+实际位置」的偏差判据</strong>：卡死通道的实际位置不跟随指令，
+这是最直接、最无歧义的判据（<code>|cmd - actual| &gt; 阈值</code> 持续 N
+拍）。</li>
+<li><strong>降低 dMax 门限</strong>：比如
+50%，但会引入「大机动时误报」的风险。</li>
+<li><strong>组合判据</strong>：姿态误差大 +
+某一通道指令长期不变（卡死的特征）。</li>
+</ol>
+<p><strong>判据的适用边界（理论推理，未实测）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>实测摆角</th>
+<th>控制律行为</th>
+<th>F4 预测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A. 卡死在满舵位（±dMax）</td>
+<td>已满舵</td>
+<td>反向打满试图纠正 → 指令 ≥90%</td>
+<td>✓ 会触发</td>
+</tr>
+<tr>
+<td>B. 卡在小偏置（+8°，本轮）</td>
+<td>44.4% dMax</td>
+<td>适度补偿 → 指令 44.4%</td>
+<td>✗ 不触发</td>
+</tr>
+</tbody>
+</table>
+<p>差异的根源：场景 A 里「卡死的位置」本身就是满舵，控制律为了抵消它会
+把指令打到反向满舵；场景 B 里卡死位置只有 44%，控制律也就不必打满。</p>
+<blockquote>
+<p>★ <strong>这是推理不是实测</strong>。要确认场景 A
+真能触发，需要构造「卡死在 ±dMax」 的注入并观察 <code>f4</code>
+是否置位。当前 <code>--fault 4</code> 硬编码 +8°，
+<code>--coax-servojam</code>
+锁存当时位置（可能落在任何位置），都不便于精确构造。
+在补齐这个实验之前，<strong>不应断言「F4 对满舵卡死有效」</strong>。</p>
+</blockquote>
+<blockquote>
+<p>★
+不建议轻率改这条判据：它对<strong>卡死在满舵位</strong>的场景有效（例如卡在
+±dMax），
+只是对「卡在小偏置」（+8°）无效。改之前应先明确要覆盖哪类卡死。
+另外这条判据走的是实飞路径，改动必须重新跑宿主回归与 SIL 验收。</p>
+</blockquote>
+<h2 id="27-f4-为什么永远不触发结构性原因2026-11-08读码确认">2.7 F4
+为什么永远不触发：结构性原因（2026-11-08，读码确认）</h2>
+<p>Round 116 用 <code>--fault4-deg 15</code>
+把舵机卡在满舵位实测，<code>f4</code> 仍为 0。
+本轮读代码确认这是<strong>结构性缺陷</strong>，不是参数没调好。</p>
+<p><strong>判定条件</strong>（<code>ActuatorFaultMonitor::update()</code>）：</p>
+<pre><code>roll_bad = |roll_err_deg| &gt; servo_err_deg &amp;&amp; |df_cmd_frac| &gt;= servo_cmd_frac
+servo_cmd_frac 默认 0.90</code></pre>
+<p><strong><code>df_cmd_frac</code>
+的来源</strong>（<code>flight_control.cpp:3096</code>）：</p>
+<pre><code>dmax_deg = kDefaultTandemVecParams.dMax * 57.2957795f
+df_frac  = gnc_tel.delta_f_deg / dmax_deg</code></pre>
+<p><strong>关键</strong>：<code>delta_f_deg</code>
+是<strong>固件算出的摆角指令</strong>，不是 plant 的实际位置。</p>
+<p>卡死在 SIL 里是 plant 侧强制
+<code>p.servo_f = 15°</code>——固件<strong>完全不知道</strong>舵机没跟上，
+它继续按姿态误差算指令。于是：</p>
+<table>
+<thead>
+<tr>
+<th>条件</th>
+<th>实际</th>
+<th>是否满足</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>姿态误差 &gt; 25°</td>
+<td>roll 翻到 114°</td>
+<td>✓ 满足</td>
+</tr>
+<tr>
+<td>指令 ≥ 90% dMax</td>
+<td>实测 44.4%</td>
+<td>✗ <strong>不满足</strong></td>
+</tr>
+</tbody>
+</table>
+<p><code>df_frac</code> 上不去的原因是控制链本身：速率环输出角加速度 →
+分配层转摆角 → 经限幅后，翻滚时摆角只到
+44%，<strong>与舵机是否卡死无关</strong>。</p>
+<p><strong>结论</strong>：F4
+的「指令饱和」条件在真实卡死场景下可能<strong>永远不满足</strong>——
+因为固件的指令本来就不打满，无论舵机正常还是卡死。这是判据的结构性缺陷。</p>
+<p><strong>真正可靠的判据</strong>应是「指令与实际位置的偏差」<code>|cmd - actual|</code>。但
+SIL 里 plant
+的实际位置没有回传给固件；真实硬件若有舵机位置反馈，这条判据才可用。
+在没有位置反馈的构型上，F4 只能靠「姿态误差」单条件 + 更长的持续时间窗，
+代价是误报率上升。</p>
+<p><strong>严重性评估：F4
+目前是「装饰性检测」（2026-11-08）</strong></p>
+<p>查 F4 触发后到底做什么——只有两处消费：</p>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ano_vars.cpp:83</code></td>
+<td>遥测变量 <code>afm_desc</code>（地面能读到一个 bool）</td>
+</tr>
+<tr>
+<td><code>flight_control.cpp:2972</code></td>
+<td>控制输出标志位 <code>0x04</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>它不执行任何动作</strong>——不切动力、不强制下降、不改控制模式。</p>
+<p>所以「永不触发」的实际影响是**「地面看不到 F4 指示」**，而不是
+「该保护时没保护」。<strong>对飞行安全无直接影响</strong>。</p>
+<p>但这也意味着 F4 目前是<strong>装饰性检测</strong>：</p>
+<ul>
+<li>对操作者的价值：卡死后地面能知道「是舵机卡死，不是别的原因」——有诊断价值</li>
+<li>对飞行安全的价值：<strong>0</strong>（它不会救飞机，因为姿态已崩且无位置反馈可控）</li>
+</ul>
+<p>要让 F4
+有实际价值，需要两步：①修判据（用指令-实际偏差，需位置反馈）；
+②让它执行动作（如强制切动力）。<strong>两步都必须单独评审</strong>——尤其第②步，
+在姿态已失控时切断动力可能让坠落姿态更不可控。</p>
+<blockquote>
+<p>★ 这条不改代码：F4
+走实飞路径，改判定逻辑必须重新评估误报风险并跑全量回归。
+本轮只把机制查清并记录，为后续决策留依据。</p>
+</blockquote>
+<h2 id="28-实机工具的重试分支验证2026-11-08">2.8
+实机工具的重试分支验证（2026-11-08）</h2>
+<p>用「临时调窄判据制造异常」的办法验证两个工具的重试逻辑：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>制造异常的方式</th>
+<th>观察到的行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>verify_board.py</code></td>
+<td>ISR 上限从 2200 压到 1500 Hz</td>
+<td>报
+<code>ISR 采样率: 2065.3 Hz（复测后仍越界）</code>——后缀证明复测执行了</td>
+</tr>
+<tr>
+<td><code>verify_param_names.py</code></td>
+<td>让解析正则恒不命中</td>
+<td>打印「第 1 次未解析到参数行，1 s 后重试」×2，随后
+<code>[WARN]</code> + <code>return 2</code></td>
+</tr>
+</tbody>
+</table>
+<p>两处都按设计工作：重试真的跑了，失败时退出码非零（<code>return 2</code>），
+不会被上层当成通过。</p>
+<blockquote>
+<p>★
+方法：验证异常分支不必构造真实异常——<strong>临时把判据调窄</strong>更快。
+但必须恢复原判据并重跑确认（两次都恢复了，实机复跑分别 8 项全过、 169
+项逐项对上）。</p>
+</blockquote>
+<h2 id="29-工具输出的退出码语义2026-11-08-核对">2.9
+工具输出的退出码语义（2026-11-08 核对）</h2>
+<p>同样的 <code>[WARN]</code> 字样，在不同工具里含义可以完全相反：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>输出</th>
+<th>退出码</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>verify_param_names.py</code></td>
+<td><code>[WARN] 未解析到任何参数行</code></td>
+<td><strong>2</strong></td>
+<td><strong>算失败</strong>（读不到就是读不到）</td>
+</tr>
+<tr>
+<td><code>verify_param_names.py</code></td>
+<td><code>[FAIL] 板上缺少/多出 N 项</code></td>
+<td>1</td>
+<td>名表不一致</td>
+</tr>
+<tr>
+<td><code>sync-params.py --check</code></td>
+<td><code>[WARN] dMax 双口径并存</code></td>
+<td><strong>0</strong></td>
+<td><strong>不算失败</strong>（已知设计差异）</td>
+</tr>
+<tr>
+<td><code>sync-params.py --check</code></td>
+<td><code>[FAIL] 参数漂移</code></td>
+<td>1</td>
+<td>生成物与源不一致</td>
+</tr>
+<tr>
+<td><code>verify_board.py</code></td>
+<td><code>[信息] fake_origin=1</code> / 磁力计</td>
+<td><strong>0</strong></td>
+<td>只报告，不参与判据</td>
+</tr>
+</tbody>
+</table>
+<p><strong>判据</strong>：看到 <code>WARN</code>
+不要假设「不影响通过」，<strong>要去看代码的 <code>return</code>
+值</strong>。 同一个词在这里是「必须处理」，在那里是「知道就行」。</p>
+<blockquote>
+<p>★ 这条是 Round 130 的延伸：当时验证 <code>verify_param_names</code>
+的重试， 顺手发现它的 <code>[WARN]</code> 其实返回
+2——如果只看字面会误以为它只是提醒。</p>
+</blockquote>
+<h2 id="210-检查器的失败返回健全性2026-11-08">2.10
+检查器的「失败返回」健全性（2026-11-08）</h2>
+<p>一个检查器如果永远返回 0，那它再严也是摆设。逐个核对
+<code>tools/</code> 下 16 个 <code>check-*</code> /
+<code>verify_*</code>
+脚本，<strong>全部都有失败返回路径</strong>（<code>return 1</code>/<code>return 2</code>/
+<code>sys.exit(1)</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>失败返回路径</th>
+<th>工具</th>
+<th>失败返回路径</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>check-allocation-parity</td>
+<td>3</td>
+<td>check-propulsion-parity</td>
+<td>3</td>
+</tr>
+<tr>
+<td>check-code-comments</td>
+<td>1</td>
+<td>check-sil-coverage</td>
+<td>2</td>
+</tr>
+<tr>
+<td>check-codeblock-paths</td>
+<td>1</td>
+<td>check_imu_axis_map</td>
+<td>2</td>
+</tr>
+<tr>
+<td>check-doc-refs</td>
+<td>1</td>
+<td>check_unlock_gate</td>
+<td>3</td>
+</tr>
+<tr>
+<td>check-doc-stats</td>
+<td>1</td>
+<td>verify_board</td>
+<td>1</td>
+</tr>
+<tr>
+<td>check-frame-refs</td>
+<td>1</td>
+<td>verify_cpu_longrun</td>
+<td>3</td>
+</tr>
+<tr>
+<td>check-links</td>
+<td>1</td>
+<td>verify_param_names</td>
+<td>3</td>
+</tr>
+<tr>
+<td>check-module-wiring</td>
+<td>1</td>
+<td>check-param-parity</td>
+<td>2</td>
+</tr>
+</tbody>
+</table>
+<p>另外确认 <code>verify-all.py</code> 的判据是
+<code>ok = proc.returncode == 0</code>—— 即<strong>只有 0
+才算通过</strong>，非零一律计失败。这条是这套守卫的地基。</p>
+<blockquote>
+<p>★ 这项检查没做成自动化脚本：16 个工具、结构各异，静态判断「某条 WARN
+分支之后有没有 return」需要真正的控制流分析，用 grep 会大量误报。
+记成文档 + 定期人工核对，比一个会撒谎的检查器可靠。</p>
+</blockquote>
+<h2 id="211-三机型质量参数的来源核对2026-11-08">2.11
+三机型质量参数的来源核对（2026-11-08）</h2>
+<p>查「仿真 plant 的质量与飞机模型是否一致」时发现三个机型各用各的参数，
+初看像矛盾，核对后确认是设计：</p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>质量来源</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>纵列双发</td>
+<td><code>TandemVec_Config.h</code> 的 <code>m</code>（与
+<code>aircraft-model.json</code> 的 <code>m</code> 一致）</td>
+<td>0.70 kg</td>
+</tr>
+<tr>
+<td>共轴双桨</td>
+<td><code>FlightCtrlParams.h</code> 的 <code>coax.mass_kg</code> +
+编译期 <code>static_assert == 0.84f</code></td>
+<td>0.84 kg</td>
+</tr>
+<tr>
+<td>单涵道</td>
+<td><code>FlightCtrlParams.h</code> 的 <code>sedf.mass_kg</code></td>
+<td>见参数表</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么纵列不在 <code>FlightCtrlParams</code>
+参数表里</strong>：纵列是基型，质量等平台参数 放在
+<code>TandemVec_Config.h</code>（单一定义源）；共轴与单涵道作为后加机型，把质量
+放进了可在线读写的参数表。两种放法并存是历史演进的结果，不是漏项。</p>
+<p><strong>一致性由谁保证</strong>：</p>
+<ul>
+<li>纵列：<code>check-param-parity.py</code> 对比
+<code>aircraft-model.json</code> ⇄ <code>TandemVec_Config.h</code>
+（Round 92 验证过它能把 <code>m</code> 改 1% 检出）</li>
+<li>共轴：编译期 <code>static_assert</code>（0.84f
+写死，改错了编不过）</li>
+</ul>
+<blockquote>
+<p>★ 初看「SIL plant 的 0.84 与 JSON 的 0.7 不一致」很像是矛盾，实际是
+<strong>拿错了机型对比</strong>——0.84 是共轴的，0.7
+是纵列的。这类「跨机型误比」 是查参数一致性时最容易犯的错。</p>
+</blockquote>
+<h2 id="212-静默跳过排查2026-11-08">2.12
+「静默跳过」排查（2026-11-08）</h2>
+<p>Round 135–136 的教训是「静默跳过比报错更危险」。全仓扫
+<code>tools/check-*.py</code> 的 <code>continue</code>，共 6 个文件 36
+处，逐个分类：</p>
+<table>
+<thead>
+<tr>
+<th>检查器</th>
+<th>continue 数</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-doc-stats</code></td>
+<td>3</td>
+<td>正常：①跳过无关目录 ②<code>[SKIP]</code> 有打印 ③读文件失败跳过</td>
+</tr>
+<tr>
+<td><code>check_imu_axis_map</code></td>
+<td>2</td>
+<td>正常：①跳过不匹配行 ②「未找到」记为 problem</td>
+</tr>
+<tr>
+<td><code>check-codeblock-paths</code> / <code>check-links</code> /
+<code>check-code-comments</code></td>
+<td>9 / 7 / 14</td>
+<td>抽查均为「跳过不适用文件/行」，非关键比较</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论</strong>：除了已修的
+<code>check_coax_parity</code>，其余检查器没有「静默跳过关键比较」的问题。</p>
+<p><strong>判据</strong>（给以后加检查器用）：</p>
+<ul>
+<li><code>continue</code>
+跳过的是<strong>不适用的对象</strong>（无关目录、不匹配的行）→ 正常</li>
+<li><code>continue</code> 跳过的是<strong>本该检查但抓不到的项</strong>
+→ <strong>必须打印出来</strong> （如 <code>[SKIP]</code> /
+<code>[跳过]</code> / 记为 problem），否则 PASS 会骗人</li>
+</ul>
+<blockquote>
+<p>★ 这条判据来自实际踩坑：<code>check_coax_parity</code> 的
+<code>len(vals) &lt; 3: continue</code>
+让「某项没抓到」与「某项真的三项一致」在输出上完全一样，Round 134
+因此把未完成当成了完成。</p>
+</blockquote>
+<h2 id="213---include-sil-的编译覆盖2026-11-08-确认">2.13
+<code>--include-sil</code> 的编译覆盖（2026-11-08 确认）</h2>
+<p>Round 138 的共轴编译失败是被 <code>--include-sil</code> 抓到的。核对
+<code>run_all_airframes.sh</code>：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>调用的脚本</th>
+<th>含编译</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1/3 纵列</td>
+<td><code>build_and_run.sh</code>（定高 + 手动）</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>2/3 共轴</td>
+<td><code>run_coaxial_acceptance.sh</code></td>
+<td>✓（失败时报「构建或运行失败」）</td>
+</tr>
+<tr>
+<td>3/3 单涵道</td>
+<td><code>build_and_run_singleedf.sh</code></td>
+<td>✓</td>
+</tr>
+</tbody>
+</table>
+<p><strong>所以「三机型都编得过」已被 <code>--include-sil</code>
+覆盖</strong>，不需要另加检查项。</p>
+<blockquote>
+<p>★ 但快档（不加
+<code>--include-sil</code>）<strong>不覆盖</strong>这个。Round 116
+当时的失误就是 只跑了
+<code>build_and_run_env.sh</code>（纵列环境），纵列编过就当没事了，而
+<code>g_coax_servojam_at_s</code> 只在共轴环境下用到。</p>
+<p><strong>判据：改 SIL 公共代码（<code>fw_sil_env_main.cpp</code> /
+<code>fw_sil_plant_6dof.h</code> 等） 必须加
+<code>--include-sil</code>。</strong> 这条已写进 AGENTS.md
+的命令块。</p>
+</blockquote>
+<h2 id="214-液体火箭的测试覆盖不同于其他三型2026-11-08-核对">2.14
+液体火箭的测试覆盖不同于其他三型（2026-11-08 核对）</h2>
+<p><code>run_all_airframes.sh</code>
+只覆盖纵列/共轴/单涵道，<strong>不含液体火箭</strong>。
+核对后确认这不是缺口，是覆盖方式不同：</p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>固件 env</th>
+<th>嵌入式 SIL 环境</th>
+<th>测试入口</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>纵列双发</td>
+<td>✓</td>
+<td>✓</td>
+<td><code>run_all_airframes.sh</code> 1/3</td>
+</tr>
+<tr>
+<td>共轴双桨</td>
+<td>✓</td>
+<td>✓</td>
+<td><code>run_all_airframes.sh</code> 2/3</td>
+</tr>
+<tr>
+<td>单涵道</td>
+<td>✓</td>
+<td>✓</td>
+<td><code>run_all_airframes.sh</code> 3/3</td>
+</tr>
+<tr>
+<td><strong>液体火箭</strong></td>
+<td><strong>✗ 无 env</strong></td>
+<td><strong>✗ 不支持</strong></td>
+<td><code>run_all.sh</code> 的 <code>test_liquid_rocket_sil</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>原因</strong>：液体火箭没有烧到板子上的固件环境（它用独立的推进/质量/喷管模型
+<code>LiquidRocketModel.h</code> + 简化 6DOF plant），所以不进
+<code>fw_sil_env_main.cpp</code> （该文件对液体火箭零引用）。</p>
+<p>它的测试是 <code>test_host/test_liquid_rocket_sil.cpp</code>（14
+项断言，测推进/质量/ 喷管几何 + 简化 6DOF 着陆），在
+<strong><code>run_all.sh</code></strong> 里跑——即
+<code>verify-all.py --include-host</code> 会覆盖。</p>
+<blockquote>
+<p>★ 所以「三机型 SIL」这个说法是准确的：确实只有三个机型有嵌入式 SIL。
+液体火箭走宿主回归。<strong>两条路都要跑才算全覆盖</strong>：<code>--include-sil --include-host</code>。</p>
+</blockquote>
+<h2 id="215-fw_sil-脚本的调用覆盖盘点2026-11-08">2.15 fw_sil
+脚本的调用覆盖盘点（2026-11-08）</h2>
+<p>扫 <code>test_host/fw_sil/</code> 下所有 <code>run_*.sh</code> 与
+<code>build_and_run_*.sh</code>，按「是否被
+跑批调用」分类。<strong>判据是「跑批的汇总里有这一项」，不是「脚本存在」</strong>。</p>
+<p><strong>被跑批调用（进守卫）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>调用者</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_all_airframes.sh</code></td>
+<td><code>verify-all.py --include-sil</code></td>
+</tr>
+<tr>
+<td><code>run_acceptance.sh</code></td>
+<td><code>run_all_airframes.sh</code>（Round 143 新加）</td>
+</tr>
+<tr>
+<td><code>run_coaxial_acceptance.sh</code></td>
+<td><code>run_all_airframes.sh</code></td>
+</tr>
+<tr>
+<td><code>run_all.sh</code>（宿主）</td>
+<td><code>verify-all.py --include-host</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>未被跑批调用（手动/专项）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>性质</th>
+<th>本会话跑过?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_coaxial_suite.sh</code></td>
+<td>重型套件（build + 40 例 + MC 100 + sweep 18）</td>
+<td>✓ Round 98</td>
+</tr>
+<tr>
+<td><code>run_matrix.sh</code></td>
+<td>15 组合矩阵</td>
+<td>✓ Round 48</td>
+</tr>
+<tr>
+<td><code>run_failsafe_matrix.sh</code></td>
+<td>断链失控保护矩阵（6DOF + 真实 EKF/GNSS/气压 + 风扰）</td>
+<td>✓ Round 145：<strong>断链矩阵全部通过</strong></td>
+</tr>
+<tr>
+<td><code>run_real_acceptance.sh</code></td>
+<td>真实导航任务多配置验收（clean/nominal/degraded × 3 seeds）</td>
+<td>✓ Round 145：<strong>9 cases, 0 failed</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>build_and_run_*.sh</code>
+不在此列</strong>：它们是底层脚本，被上面那些 <code>run_*.sh</code>
+内部调用，本身不应被跑批直接调。</p>
+<blockquote>
+<p>★ Round 145 已补跑这两个脚本，均通过：</p>
+<ul>
+<li><code>run_failsafe_matrix.sh</code>：30 s 断链场景下 21
+个组合（loss/relink/combo × 3 seeds × 7 个时间点）全部 PASS，末端高度
+27.5–28.8 m、竖直速度稳定在 −1.00 m/s
+（受控下降速率），说明断链后「保持解锁 + AUTO_ALTITUDE
+定高」在真实导航闭环成立。</li>
+<li><code>run_real_acceptance.sh</code>：<code>mag_nominal</code> 与
+<code>mag_disturbed</code> 各 3 seeds 全 PASS，
+<code>mag=392/0</code>（无扰动）与 <code>mag=210/182</code>（扰动下 182
+次野值拒绝）， <code>resets=0</code>、<code>imu_det=0</code>。</li>
+</ul>
+</blockquote>
+<h2 id="216-守卫全景2026-11-0821-项全绿">2.16 守卫全景（2026-11-08，21
+项全绿）</h2>
+<p><code>verify-all.py --include-sil --include-host</code>
+的完整清单。<strong>这是项目的验证全景</strong>——
+想知道「这个仓现在被哪些手段守着」，看这张表就够。</p>
+<h3 id="快档19-项约-13-s">快档（19 项，约 13 s）</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>守卫</th>
+<th>守什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>参数层一致性</td>
+<td><code>aircraft-model.json</code> ⇄ 固件
+<code>TandemVec_Config.h</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td>参数生成物同步</td>
+<td><code>parameters.mjs</code> 与 JSON 不漂移</td>
+</tr>
+<tr>
+<td>3</td>
+<td>推进层对拍</td>
+<td>仿真 <code>propulsion.mjs</code> ⇄ 固件 <code>computeWrench</code>
+六维</td>
+</tr>
+<tr>
+<td>4</td>
+<td>分配层对拍</td>
+<td>仿真 <code>computeBTrue</code> ⇄ 固件
+<code>computeEffectMatrix</code> 3×3</td>
+</tr>
+<tr>
+<td>5</td>
+<td>坐标系 @frame 标注</td>
+<td>全仓坐标系标注完整性（MOD-002 §0.5）</td>
+</tr>
+<tr>
+<td>6</td>
+<td>SIL 覆盖审计</td>
+<td>每个 <code>src/*.cpp</code> 要么进 SIL 源清单、要么登记豁免</td>
+</tr>
+<tr>
+<td>7</td>
+<td>头文件接线审计</td>
+<td>无「有实现但没人调用」的模块</td>
+</tr>
+<tr>
+<td>8</td>
+<td>角度单位审计</td>
+<td>无「弧度当度用」（A-8 教训）</td>
+</tr>
+<tr>
+<td>9</td>
+<td>注释门禁 GOV-004</td>
+<td>五段式文件头 + <code>@formula</code>/<code>@ref</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td>文档链接完整性</td>
+<td>Markdown 427 处 + HTML 448 处零断链</td>
+</tr>
+<tr>
+<td>11</td>
+<td>文档产物同步</td>
+<td><code>docs/</code> 源与构建产物一致</td>
+</tr>
+<tr>
+<td>12</td>
+<td>文档统计数字</td>
+<td>文档里的数字与实际一致</td>
+</tr>
+<tr>
+<td>13</td>
+<td>文档编号引用</td>
+<td>「见 CTL-001」类引用都指向存在的文档</td>
+</tr>
+<tr>
+<td>14</td>
+<td>代码块路径</td>
+<td>文档里引用的文件路径都存在</td>
+</tr>
+<tr>
+<td>15</td>
+<td>IMU 轴映射</td>
+<td>传感器轴映射与 <code>FrameConventions</code> 一致</td>
+</tr>
+<tr>
+<td>16</td>
+<td>解锁门判据</td>
+<td>CH5 &gt;1500 解锁语义</td>
+</tr>
+<tr>
+<td>17</td>
+<td>仿真域单测（Node）</td>
+<td>11 个文件 92 项</td>
+</tr>
+<tr>
+<td>18</td>
+<td>坐标系实现自检</td>
+<td><code>FrameConventions.h</code> 的置换矩阵</td>
+</tr>
+<tr>
+<td>19</td>
+<td>GCS 单元测试</td>
+<td>上位机 54+ 项</td>
+</tr>
+</tbody>
+</table>
+<h3 id="慢档2-项约-740-s">慢档（2 项，约 740 s）</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>守卫</th>
+<th>耗时</th>
+<th>守什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20</td>
+<td>三机型 SIL 跑批</td>
+<td>410.9 s</td>
+<td>纵列（定高/手动/3seeds）+ 共轴（40 例矩阵）+
+单涵道（定高/手动）</td>
+</tr>
+<tr>
+<td>21</td>
+<td>完整宿主回归</td>
+<td>329.3 s</td>
+<td><code>run_all.sh</code> 全部宿主测试</td>
+</tr>
+</tbody>
+</table>
+<p><strong>能失败验证情况：13/21 做过违规实验</strong>（另有
+<code>run_real_acceptance</code>
+单独验过）（下表逐条列出造了什么违规、看到什么报错）。 其余 8
+项没做过——不是「验过没问题」，而是「没验」。</p>
+<table>
+<thead>
+<tr>
+<th>未做违规实验的 8 项</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>推进层对拍 / 分配层对拍</td>
+<td>运行时对拍（编译固件 + 跑
+Node），改公式风险高；机制上比静态检查可靠</td>
+</tr>
+<tr>
+<td>坐标系 @frame 标注</td>
+<td><strong>有意宽松</strong>：正文出现轴名符号即算已标注（Round 82
+实测）</td>
+</tr>
+<tr>
+<td>仿真域单测（Node）</td>
+<td>92 项已有失败路径，未专门造违规</td>
+</tr>
+<tr>
+<td>坐标系实现自检 / GCS 单元测试</td>
+<td>同上，有失败路径但未造违规</td>
+</tr>
+<tr>
+<td>三机型 SIL 跑批 / 完整宿主回归</td>
+<td>跑一次 10 min，造违规成本高；但 Round 138
+的真实回归证明它会报（19/20）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>★ 这张计数必须诚实：「文档里提过这个名字」不等于「做过违规实验」。
+本表 12/21 是后者。</p>
+</blockquote>
+<h2 id="217-检查器的目录排除审计2026-11-08">2.17
+检查器的目录排除审计（2026-11-08）</h2>
+<p>Round 157 修了 <code>check-links.py</code> 漏排除 <code>tmp/</code>
+的问题。同类扩散排查：</p>
+<table>
+<thead>
+<tr>
+<th>检查器</th>
+<th>扫描范围</th>
+<th>是否可能扫 tmp</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-links</code></td>
+<td><code>ROOT.rglob("*.md")</code></td>
+<td>会（已修，排除 <code>tmp</code>/<code>.pio</code>）</td>
+<td>✓</td>
+</tr>
+<tr>
+<td><code>check-frame-refs</code></td>
+<td>指定目录 <code>d.rglob("*")</code></td>
+<td>不会（<code>d</code> 是 <code>docs/</code> 或
+<code>src/</code>）</td>
+<td>✓</td>
+</tr>
+<tr>
+<td><code>check-doc-refs</code></td>
+<td><code>DOCS.rglob("*.md")</code></td>
+<td>不会（只扫 <code>docs/</code>）</td>
+<td>✓</td>
+</tr>
+<tr>
+<td><code>check-codeblock-paths</code></td>
+<td>有排除表</td>
+<td>不会</td>
+<td>✓</td>
+</tr>
+<tr>
+<td><code>check-doc-stats</code></td>
+<td>有排除表</td>
+<td>不会</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>其余（parity / angle-units / module-wiring / propulsion /
+sil-coverage）</td>
+<td>定点读特定文件</td>
+<td>不会</td>
+<td>✓</td>
+</tr>
+</tbody>
+</table>
+<p><strong>只有 <code>check-links</code> 是全仓 <code>rglob</code>
+扫描</strong>，所以也只有它需要完整的排除表。
+其余检查器要么定点读文件、要么只扫
+<code>docs/</code>/<code>src/</code>，天然不会碰到
+<code>tmp/</code>。</p>
+<blockquote>
+<p>★ 判据：<strong>只有做全仓递归扫描的检查器才需要维护排除表</strong>。
+定点读文件的检查器不需要——给它加排除表反而是多余复杂度。</p>
+</blockquote>
+<h2 id="218-run_real_acceptance-的-profile-全集核对2026-11-08">2.18
+<code>run_real_acceptance</code> 的 profile 全集核对（2026-11-08）</h2>
+<p>Round 166 我曾误以为 <code>clean</code>
+是「定义了不执行的死配置」。本轮核对清楚：</p>
+<table>
+<thead>
+<tr>
+<th>profile</th>
+<th>默认跑批</th>
+<th>实测状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mag_clean</code></td>
+<td>✓</td>
+<td>3 seeds 全过（<code>hold_end</code> 2.5–3.2 m）</td>
+</tr>
+<tr>
+<td><code>mag_nominal</code></td>
+<td>✓</td>
+<td>3 seeds 全过</td>
+</tr>
+<tr>
+<td><code>mag_disturbed</code></td>
+<td>✓</td>
+<td>3 seeds 全过（<code>mag</code> 野值拒绝 180+ 次）</td>
+</tr>
+<tr>
+<td><code>clean</code> / <code>nominal</code> /
+<code>degraded</code></td>
+<td>✗</td>
+<td><strong>可选，<code>--profiles clean</code> 能跑</strong>——实测
+<code>hold_end_rms=40.6 m &gt; 1.5</code> FAIL</td>
+</tr>
+<tr>
+<td><code>nomag_degraded</code></td>
+<td>✗</td>
+<td>可选，无磁降级诊断</td>
+</tr>
+</tbody>
+</table>
+<p><strong>所以四个「非默认」profile 不是死配置</strong>，是
+<code>--profiles</code> 可选项：</p>
+<ul>
+<li>默认跑批选 <code>mag_*</code> 三个，因为<strong>位置保持验收必须用磁
+profile</strong></li>
+<li>无磁 profile
+只用于观测性/失效研究，<strong>跑出来失败是预期结果</strong>（无磁下位置保持会发散）</li>
+</ul>
+<blockquote>
+<p>★ 上一轮我说「<code>clean</code>
+是定义了但不执行的死配置」——<strong>这个说法不准确</strong>。
+它不被默认跑批执行，但 <code>--profiles</code>
+能选它，且选出来确实会跑（只是失败）。 准确说法是「默认不跑的可选
+profile」。</p>
+</blockquote>
+<h2 id="219-sil-验收判据的分级合理性2026-11-08">2.19 SIL
+验收判据的分级合理性（2026-11-08）</h2>
+<p><code>run_real_acceptance.py</code> 的判据按 profile
+分级，不是一刀切：</p>
+<table>
+<thead>
+<tr>
+<th>profile</th>
+<th><code>hold_end_rms</code></th>
+<th><code>pos_rms</code></th>
+<th>判据来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clean</code> / <code>mag_clean</code></td>
+<td><strong>1.5 m</strong></td>
+<td>1.0 m</td>
+<td>无风、有磁/理想条件</td>
+</tr>
+<tr>
+<td><code>nominal</code> / <code>mag_nominal</code></td>
+<td><strong>8.0 m</strong></td>
+<td>5.0 m</td>
+<td>有风、正常条件</td>
+</tr>
+<tr>
+<td><code>degraded</code> / <code>nomag_degraded</code></td>
+<td><strong>25.0 m</strong></td>
+<td>25.0 m</td>
+<td>降级（无磁/无光流）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>分级理由</strong>（合理）：</p>
+<ul>
+<li><code>clean</code> 是理想条件，1.5 m
+是「位置保持能不能守住」的严格判据</li>
+<li><code>nominal</code> 加了风扰，8 m 是「有扰动时还能不能工作」</li>
+<li><code>degraded</code> 是失效模式，25 m
+是「降级后有没有完全失控」——<strong>放开但不放任</strong></li>
+</ul>
+<p><strong>一个需要留意的边界</strong>：<code>degraded</code> 的 25 m
+意味着「漂 24 m 仍算通过」。
+这在「验证降级策略能维持基本稳定」的语境下是合理的，但<strong>不能拿这个判据说
+「降级模式可用」</strong>——24 m 的漂移对实际飞行没有意义。判据的语义是
+「没完全失控」，不是「可用」。</p>
+<blockquote>
+<p>★ 这与 Round 173
+的两类阈值同类：<strong>判据的语义边界要在文档里说清</strong>，
+否则「PASS」会被当成比实际更强的结论。</p>
+</blockquote>
+<h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
+入口支持不同参数，且都不校验未知参数</h2>
+<p>排查三轮后的最终结论：--gain-scale 系列在 SIL
+里「完全无效果」的真实原因，
+是不同入口支持不同参数、且都不报错地忽略不认识的参数。</p>
+<table>
+<thead>
+<tr>
+<th>入口 main</th>
+<th>支持的参数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fw_sil_env_main.cpp（纵列 / 共轴 / real-nav）</td>
+<td>--gain-scale / --rate-gain-scale / --att-gain-scale / --fault /
+--fault-at / --seconds / --real-nav 等</td>
+</tr>
+<tr>
+<td>fw_sil_singleedf_main.cpp（单涵道）</td>
+<td><strong>只有 --manual</strong></td>
+</tr>
+</tbody>
+</table>
+<p>而 build_and_run_singleedf.sh 末尾是
+<code>"$OUT" "$@"</code>——把参数透传给二进制。 所以传 --gain-scale 2.0
+不会报错，只是<strong>被忽略</strong>，跑的还是同一个固定 40 秒场景。
+这就是为什么 0.5 / 1.0 / 2.0 / 4.0 四档输出逐字符相同。</p>
+<p>★ <strong>这是危险设计</strong>：未知长参数静默忽略。若拿它做 A/B
+并据此写结论， 会得出「参数无影响」的假结论，而实际上参数根本没被读取。
+正确做法是：不认识的长参数直接报错退出。</p>
+<p>另有一条与参数无关但同样重要的架构事实：</p>
+<ul>
+<li>纵列路径（flight_control.cpp:2141）用 const TandemVecParams &amp;P =
+kDefaultTandemVecParams， 参数来自 TandemVec_Config.h
+的<strong>编译期常量</strong>，不读 kFlightCtrlParams；</li>
+<li>单涵道路径（mix_and_output_single_edf）读
+kFlightCtrlParams（运行时可变）。 所以即使换成支持 --gain-scale
+的入口，<strong>对纵列仍然无效</strong>——要改纵列增益只能改
+TandemVec_Config.h 重编译。</li>
+</ul>
+<blockquote>
+<p>现有结论：--gain-scale 只可能影响走 kFlightCtrlParams
+的路径（单涵道/共轴）， 且必须用支持该参数的入口；纵列 SIL
+无论如何都不受影响。
+未验证：单涵道路径在有激励场景下的增益灵敏度——因为单涵道 SIL 目前 只支持
+--manual（摇杆直通，mode=0，不走控制律）。</p>
+</blockquote>
+<h2 id="26-sil-六个入口的参数约定选错入口--参数被静默忽略">2.6 SIL
+六个入口的参数约定（选错入口 = 参数被静默忽略）</h2>
+<table>
+<thead>
+<tr>
+<th>入口 main</th>
+<th>参数形式</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>fw_sil_env_main.cpp</td>
+<td><strong>145 个 --xxx</strong></td>
+<td>功能最全：--gain-scale / --fault / --seconds / --real-nav 等</td>
+</tr>
+<tr>
+<td>fw_sil_singleedf_main.cpp</td>
+<td>只有 --manual</td>
+<td>单涵道专用；2026-11-07 起对未知参数打印告警</td>
+</tr>
+<tr>
+<td>fw_sil_guidance_main.cpp</td>
+<td>2 个<strong>位置参数</strong>（rx_port tx_port）</td>
+<td>不是 --xxx 形式，不要按选项传</td>
+</tr>
+<tr>
+<td>fw_sil_failsafe_main.cpp</td>
+<td>1 个 --xxx</td>
+<td>—</td>
+</tr>
+<tr>
+<td>fw_sil_main.cpp</td>
+<td>1 个 --xxx</td>
+<td>—</td>
+</tr>
+<tr>
+<td>fw_sil_mode_main.cpp</td>
+<td><strong>不收参数</strong></td>
+<td>main 里未使用 argc</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>选入口前先查这张表。除 singleedf 现在会告警外，其余入口对不认识的参数
+都是静默忽略，只会安静地跑默认场景——Round 49-51 就是因此查了三轮
+才定位到「参数根本没被读」。</p>
+</blockquote>
+<h2 id="27-机型参数的单一事实源覆盖情况">2.7
+机型参数的「单一事实源」覆盖情况</h2>
+<p>查各机型参数在固件与 SIL 之间怎么共享，结果三者不一样：</p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>固件参数源</th>
+<th>SIL plant 取参数方式</th>
+<th>自动校验</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>纵列</td>
+<td><code>TandemVec_Config.h</code> 的
+<code>kDefaultTandemVecParams</code></td>
+<td><strong>直接引用</strong>同一常量</td>
+<td>有（<code>check-param-parity.py</code>）</td>
+</tr>
+<tr>
+<td>单涵道</td>
+<td><code>FlightCtrlParams.h</code> 的
+<code>kSingleEdf4VaneHwParamsDefaults</code></td>
+<td><strong>直接引用</strong>同一常量</td>
+<td>无</td>
+</tr>
+<tr>
+<td>共轴</td>
+<td><code>FlightCtrlParams.h:76</code> 的 <code>CoaxVtvParams</code> +
+<code>CoaxialAllocator.h:47</code></td>
+<td><strong>硬编码</strong>在 <code>coaxial_dynamics_model.h:119</code>
+的 <code>Params</code> 默认值里</td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+<p><strong>共轴是三者里唯一「参数三处独立定义」的</strong>：<code>FlightCtrlParams.h:76</code>、
+<code>CoaxialAllocator.h:47</code>、<code>coaxial_dynamics_model.h:119</code>
+各写一份 <code>mass_kg = 0.84f</code>（惯量
+<code>{0.05, 0.05, 0.08}</code> 同理）。当前三处数值一致，
+但改一处另两处不会跟随，也没有任何检查会报出来。</p>
+<p><strong>为什么没有直接改成引用</strong>：<code>coaxial_dynamics_model.h</code>
+只 include <code>&lt;cmath&gt;</code> /
+<code>&lt;cstring&gt;</code>，是<strong>故意不依赖固件</strong>的独立纯头文件（便于单独编译、
+移植与被其他工具复用）。这是有意的解耦权衡，代价是参数要人工同步。</p>
+<blockquote>
+<p>建议（本轮未做）：给 <code>check-param-parity.py</code>
+加一段共轴三方对比，
+把「靠人记得同步」变成「机器校验」。该脚本目前只覆盖
+<code>aircraft-model.json</code> ⇄
+<code>TandemVec_Config.h</code>（纵列），
+共轴与单涵道都在覆盖范围外。</p>
+</blockquote>
+<h2 id="安全关键项--自动化覆盖现状2026-11-08-盘点">安全关键项 ×
+自动化覆盖现状（2026-11-08 盘点）</h2>
+<p><code>AGENTS.md</code>
+的「安全关键修改规则」列了五类禁改项。逐类查它们<strong>实际</strong>有多少
+自动化保护——结果不齐，如实列表：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>自动化覆盖方式</th>
+<th>强度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>传感器坐标方向 / IMU 轴映射</td>
+<td><code>tools/check_imu_axis_map.py</code>（三轴符号 +
+手性置换矩阵）</td>
+<td>中（文本级）</td>
+</tr>
+<tr>
+<td>解锁判据</td>
+<td><code>tools/check_unlock_gate.py</code>（isLinkUp / 阈值 / 通道 /
+中值滤波 四要素）</td>
+<td>中（文本级）</td>
+</tr>
+<tr>
+<td>输出限幅 / 混控</td>
+<td><code>test_allocator_contracts.cpp</code>、<code>test_behaviour_redlines.cpp</code>（精确值锁定）</td>
+<td>强</td>
+</tr>
+<tr>
+<td>故障保护 / 超时 / 降级</td>
+<td><code>test_failsafe_plan.cpp</code>（576 组真值表）+
+<code>run_failsafe_matrix.sh</code>（27/27）</td>
+<td>强</td>
+</tr>
+<tr>
+<td>任务间隔换算</td>
+<td><code>task_scheduler_interval_test.cpp</code>（按
+<code>kSchedulerTickHz</code> 推导期望值）</td>
+<td>强</td>
+</tr>
+<tr>
+<td><strong>调度 tick 分发</strong></td>
+<td><strong>无</strong>——<code>task_scheduler.cpp</code> 依赖 TIM8
+硬件中断，SIL 用确定步长循环替代</td>
+<td><strong>弱</strong></td>
+</tr>
+<tr>
+<td><strong>舵机中位 / 半行程</strong></td>
+<td><strong>无</strong>——值本身待实机标定（<code>half_travel_deg=45</code>、<code>zero_*_pct=0</code>）</td>
+<td><strong>弱</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>两个弱覆盖项怎么补</strong>：</p>
+<ul>
+<li><strong>调度分发</strong>：靠实机 <code>tasks</code>
+统计（avg/max/迟到/丢执行）与 <code>health</code> 的
+CPU/窗口读数；本会话已验证 2000 Hz
+基线、<code>ring_drop=0</code>、<code>drop=0</code>。 仿真侧测不到，因为
+SIL 的循环是确定步长的，没有中断与 flag 合并。</li>
+<li><strong>舵机中位/半行程</strong>：靠断动力地面通电标定（CTL-008 §7
+的静态标定步骤）， 仿真无法替代。</li>
+</ul>
+<blockquote>
+<p>这份盘点的用途：改代码前先看目标项属哪一档。标「弱」的项<strong>没有机器兜底</strong>，
+改它必须上实机确认——不能因为 <code>verify-all</code>
+全绿就以为安全。</p>
+</blockquote>
+<h2
+id="检查器的能失败验证状态2026-11-08-盘点1113-已实测">检查器的「能失败」验证状态（2026-11-08
+盘点，11/13 已实测）</h2>
+<p>总守卫 16 项里多数是检查器。<strong>能通过 ≠
+能报警</strong>——宽松的检查器可能永远 PASS。
+逐个做过「故意制造违规」实验的结果：</p>
+<table>
+<thead>
+<tr>
+<th>检查器</th>
+<th>故意违规方式</th>
+<th>是否报警</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-param-parity</code></td>
+<td>m 从 0.7 改 0.707（+1%）</td>
+<td>✓ 报「0.7 vs 0.707」</td>
+</tr>
+<tr>
+<td><code>check-codeblock-paths</code></td>
+<td>引用已删除的文件</td>
+<td>✓ 报出文件名</td>
+</tr>
+<tr>
+<td><code>check_imu_axis_map</code></td>
+<td>去掉 <code>axBody</code> 负号</td>
+<td>✓ 报「实际 +z，期望 -z」</td>
+</tr>
+<tr>
+<td><code>check_unlock_gate</code></td>
+<td>去 <code>isLinkUp</code> + 阈值改 1200</td>
+<td>✓ 报出 2 项不满足</td>
+</tr>
+<tr>
+<td><code>check-doc-refs</code></td>
+<td>插入指向不存在编号的引用</td>
+<td>✓ 报出文件名 + 编号</td>
+</tr>
+<tr>
+<td><code>check-sil-coverage</code></td>
+<td>把已在核心清单的文件塞进 EXEMPT</td>
+<td>✓ 报「死豁免」</td>
+</tr>
+<tr>
+<td><code>check-doc-stats</code></td>
+<td>把「74 段」改成「99 段」</td>
+<td>✓ 报「写 99，实测 74」</td>
+</tr>
+<tr>
+<td><code>check-links</code></td>
+<td>插入指向不存在文件的相对链接</td>
+<td>✓ 报「README.md → docs/NOT-EXIST-999.md」</td>
+</tr>
+<tr>
+<td><code>check-code-comments</code></td>
+<td>加一个纯英文注释块、无文件头</td>
+<td>✓ R01 + R06 命中</td>
+</tr>
+<tr>
+<td><code>sync-params --check</code></td>
+<td>把 kT 从 1.04e-05 改成 1.05e-05</td>
+<td>✓ 报「参数漂移」</td>
+</tr>
+<tr>
+<td><code>check-module-wiring</code></td>
+<td>新建一个零引用的 <code>_wiring_probe.h</code></td>
+<td>✓ 报「零引用且未登记」</td>
+</tr>
+<tr>
+<td><code>check-angle-units</code></td>
+<td>造 <code>if (AHRS_Packet.Roll &gt; 45.0f)</code> 探针</td>
+<td>✓ 报「弧度字段与裸数字比较」</td>
+</tr>
+<tr>
+<td><code>check-doc-stats</code>（守卫项数）</td>
+<td>把 AGENTS.md 的 19 改成 20</td>
+<td>✓ 报「写 20，实测 19」</td>
+</tr>
+<tr>
+<td><code>run_real_acceptance</code></td>
+<td>把 <code>mag_clean</code> 的 <code>hold_end_rms</code> 从 1.5 收紧到
+0.01</td>
+<td>✓ 9 cases 里 3 failed</td>
+</tr>
+<tr>
+<td>文档产物同步</td>
+<td>改 docs 源不重建（加一行 HTML 注释）</td>
+<td>✓ 报「内容漂移: control\CTL-001.html」</td>
+</tr>
+</tbody>
+</table>
+<p><strong>未做违规实验的（2 项）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>检查器</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-propulsion-parity</code>、<code>check-allocation-parity</code></td>
+<td>运行时对拍（编译固件 + 跑
+Node），改公式风险高，未构造违规；机制上比静态检查更可靠</td>
+</tr>
+<tr>
+<td><code>check-frame-refs</code></td>
+<td><strong>有意宽松</strong>：正文出现轴名符号即算已标注，删
+<code>@frame</code> 不报警（Round 82 实测）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>判读</strong>：9 项已见过真失败，可信度较高。剩 3
+项中两项是对拍（不同机制），
+一项是刻意宽松。<strong>没有一项是「不知道会不会报」了</strong>。</p>
+</blockquote>
+<h2 id="最终完整验证复跑记录">最终完整验证（复跑记录）</h2>
+<table>
+<thead>
+<tr>
+<th>时间</th>
+<th>结果</th>
+<th>耗时</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-11-08 首跑</td>
+<td>19/19</td>
+<td>667.3 s</td>
+<td>建完全部守卫后</td>
+</tr>
+<tr>
+<td>2026-11-08 复跑</td>
+<td>19/19</td>
+<td>674.0 s</td>
+<td>改完 SIL 的 pitch 阶段统计后</td>
+</tr>
+<tr>
+<td>2026-11-08 三跑</td>
+<td><strong>19/20</strong></td>
+<td>615.6 s</td>
+<td><strong>抓到共轴 SIL 编译回归</strong>（Round 138）</td>
+</tr>
+<tr>
+<td>2026-11-08 四跑</td>
+<td><strong>20/20</strong></td>
+<td>653.8 s</td>
+<td>修复回归 + 新增 check-module-wiring 后</td>
+</tr>
+<tr>
+<td>2026-11-08 五跑</td>
+<td><strong>21/21</strong></td>
+<td>746.1 s</td>
+<td>Round 150 里程碑：新增角度单位审计 + SIL 跑批加纵列 3-seeds</td>
+</tr>
+<tr>
+<td>2026-11-08 六跑</td>
+<td><strong>21/21</strong></td>
+<td>769.3 s</td>
+<td>Round 169：BFS_RATE_LEAD 复跑、磁力计复测、链接检查排除 tmp
+等改动后</td>
+</tr>
+</tbody>
+</table>
+<p><strong>五跑（21/21）是当前基线</strong>：19 项快档守卫 + 三机型 SIL
+跑批（408.2 s）</p>
+<ul>
+<li>完整宿主回归（324.6 s）。</li>
+</ul>
+<p>比首跑多的三项：<code>check-module-wiring</code>（头文件接线审计，Round
+123）、 <code>check-angle-units</code>（角度单位审计，Round 148）、以及
+SIL 跑批里新增的 「纵列·3seeds 定高闭环」（Round 143，跑批耗时从 325 s
+增到 408 s）。</p>
+<p>三次全量验证的轨迹（19/19 → 19/20 →
+21/21）说明：<strong>守卫项在增加，
+覆盖在变宽，但每次加都得跑一遍全量才知道有没有把别的弄坏</strong>。</p>
+<p><strong>三跑抓到回归这件事本身值得记</strong>：Round 112 那次 19/19
+之后我又动过 <code>fw_sil_env_main.cpp</code>（Round
+116），当时只跑了纵列环境的编译验证，
+漏掉共轴环境里一个未声明变量。是一个多月后跑全量才被发现的。</p>
+<p><strong>复跑的意义</strong>：Round 106–110 改了
+<code>fw_sil_env_main.cpp</code>（加 t_max_pitch / phase_max_pitch）与
+<code>run_coaxial_mc.py</code>（加阶段分布统计）。这两个文件都在 SIL
+链路上，属于「行为可能变」的改动。复跑确认：</p>
+<ul>
+<li>三机型 SIL 跑批仍 PASS（327.8 s，首跑 327.3 s）</li>
+<li>完整宿主回归仍 PASS（334.7 s，首跑 328.2 s）</li>
+<li>其余快档守卫全绿（当时 17 项；现已增至 19 项）</li>
+</ul>
+<blockquote>
+<p>耗时差异在 ±2% 内，属正常波动。</p>
+</blockquote>
+<h3 id="首次记录2026-11-081919-通过6673-s">首次记录（2026-11-08，19/19
+通过，667.3 s）</h3>
+<p>命令：<code>py -3.12 tools/verify-all.py --include-sil --include-host</code></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>耗时</th>
+<th>项</th>
+<th>耗时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>参数层一致性</td>
+<td>0.0 s</td>
+<td>文档编号引用</td>
+<td>0.1 s</td>
+</tr>
+<tr>
+<td>参数生成物同步</td>
+<td>0.0 s</td>
+<td>代码块路径</td>
+<td>0.2 s</td>
+</tr>
+<tr>
+<td>推进层对拍</td>
+<td>0.3 s</td>
+<td>IMU 轴映射</td>
+<td>0.0 s</td>
+</tr>
+<tr>
+<td>分配层对拍</td>
+<td>0.3 s</td>
+<td>解锁门判据</td>
+<td>0.0 s</td>
+</tr>
+<tr>
+<td>坐标系 @frame 标注</td>
+<td>0.1 s</td>
+<td>仿真域单测（Node）</td>
+<td>0.3 s</td>
+</tr>
+<tr>
+<td>SIL 覆盖审计</td>
+<td>0.0 s</td>
+<td>坐标系实现自检</td>
+<td>0.3 s</td>
+</tr>
+<tr>
+<td>注释门禁 GOV-004</td>
+<td>0.5 s</td>
+<td>GCS 单元测试</td>
+<td>1.9 s</td>
+</tr>
+<tr>
+<td>文档链接完整性</td>
+<td>0.2 s</td>
+<td><strong>三机型 SIL 跑批</strong></td>
+<td><strong>327.3 s</strong></td>
+</tr>
+<tr>
+<td>文档产物同步</td>
+<td>6.3 s</td>
+<td><strong>完整宿主回归</strong></td>
+<td><strong>328.2 s</strong></td>
+</tr>
+<tr>
+<td>文档统计数字</td>
+<td>1.1 s</td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+<p><strong>这是当前全仓状态的最终证据</strong>：参数、推进、分配、坐标系、注释、文档、
+仿真、GCS、SIL、宿主回归十个维度全绿。</p>
+<blockquote>
+<p>其中 10/12 个检查器做过「故意违规」实验确认能真报警（见上一节）， 2
+项是运行时对拍或刻意宽松。所以「19/19」不只是「没触发检查」，
+而是「这些检查确实在起作用」。</p>
+</blockquote>
+<h2 id="3-口径提醒">3 口径提醒</h2>
+<ul>
+<li><strong>共轴必须用 rigorous
+plant</strong>：<code>run_coaxial_acceptance.sh</code> 与
+<code>run_coaxial_suite.sh</code> 的 L1 集总 plant
+俯仰/姿态约定有误，会误报 <code>max_pitch≈23°</code>；用 L1
+结果判共轴无效。</li>
+<li><strong><code>final_alt</code> 判据是 8–11 m，不是「接近 10
+m」</strong>：两端都有边界，
+偏低说明定高环没拉住，偏高说明过冲未收敛。</li>
+<li><strong>失效保护矩阵的 <code>land_t</code> 必须为负</strong>：plant
+一旦触地就判失败，避免 「掉到地上但高度指标还勉强够」的假通过。</li>
+</ul>
+<h2 id="4-复现">4 复现</h2>
+<div class="sourceCode" id="cb5"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
+<p>Windows/MinGW 下统一经 <code>tools/with-ascii-bin.sh</code>
+包装（ASCII 盘符 + <code>BIN_DIR</code>）。</p>
+<h2 id="5-参考">5 参考</h2>
+<ul>
+<li><code>docs/07-验证与确认/VER-002-三机型兼容性与虚拟验证.md</code>
+§3.x（失效保护矩阵详情）</li>
+<li><code>TandemVec_FCS/test_host/fw_sil/README.md</code>（SIL
+架构与场景参数）</li>
+<li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:10</footer></article></body>
+</html>
