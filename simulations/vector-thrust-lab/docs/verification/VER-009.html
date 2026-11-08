@@ -1940,6 +1940,50 @@ SIL。 这不是缺口，是它没有固件分支这一事实的自然结果。<
 「液体火箭呢」。答案是它在另一条路径上。<strong>判覆盖要先确认「这个东西有没有
 固件实现」，没有就不可能在固件 SIL 里被测。</strong></p>
 </blockquote>
+<h2 id="224-判据改了提示没改的同类审计2026-11-08">2.24
+「判据改了、提示没改」的同类审计（2026-11-08）</h2>
+<p>Round 211 发现 <code>run_acceptance.sh</code> 的报错文案硬编码
+<code>"outside 8..11 m"</code>， 改阈值后提示会撒谎。顺着查其他 SIL
+脚本：</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>报错怎么拼</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_acceptance.sh</code></td>
+<td>曾硬编码 <code>8..11</code></td>
+<td><strong>已修</strong>（<code>ALT_LO</code>/<code>ALT_HI</code>
+变量）</td>
+</tr>
+<tr>
+<td><code>run_real_acceptance.py</code></td>
+<td><code>f"{key}={value} &gt; {gates[key]}"</code></td>
+<td>✓ 用变量</td>
+</tr>
+<tr>
+<td><code>run_coaxial_acceptance.sh</code></td>
+<td>只有「二进制不存在」与「默认 8 profiles × 3 seeds」</td>
+<td>✓ 无判据提示</td>
+</tr>
+<tr>
+<td><code>build_and_run_singleedf.sh</code></td>
+<td>只有「40 s，200 Hz」</td>
+<td>✓ 无判据提示</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论</strong>：只有 <code>run_acceptance.sh</code>
+一处，已修。其余三处要么用变量、要么根本没有 判据类提示。</p>
+<blockquote>
+<p>★ 判据：<strong>报错文案里的数字必须是变量，不能是字面量</strong>。
+否则改判据的那天，提示就开始撒谎——而看提示的人不会去查源码，
+会被引向错误的方向。这种 bug 比「没有提示」更坏。</p>
+</blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
 <p>排查三轮后的最终结论：--gain-scale 系列在 SIL
@@ -2518,5 +2562,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:56</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:00</footer></article></body>
 </html>
