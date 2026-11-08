@@ -137,8 +137,21 @@ def main() -> int:
     out = cli(port, "dbg", "magcal")
     mag_m = re.search(r"chip=(\w+)", out)
     chip = mag_m.group(1) if mag_m else "?"
-    print(f"       [信息] 磁力计 chip={chip}"
-          + ("（未检测到，航向无绝对参考）" if chip == "NONE" else ""))
+    # ★ 2026-11-08：chip=? 不是「探测异常」，是**正则没匹配到 chip= 字段**
+    #   （magcal 输出为空/超时/格式不同）。5 次实测里出现 1 次。
+    #   它是「这次没读到」，不是「确认没有芯片」——所以复测一次再下结论。
+    if chip == "?":
+        time.sleep(0.5)
+        out2 = cli(port, "dbg", "magcal")
+        m2 = re.search(r"chip=(\w+)", out2)
+        if m2:
+            chip = m2.group(1)
+            print(f"       [信息] 磁力计首次读到 ?，复测得 chip={chip}")
+    if chip == "?":
+        print("       [信息] 磁力计 chip=? （本次未读到 chip= 字段，不能据此判断有无器件）")
+    else:
+        print(f"       [信息] 磁力计 chip={chip}"
+              + ("（未检测到，航向无绝对参考）" if chip == "NONE" else ""))
 
     # ---- 汇总 ----
     failed = [n for n, ok, _ in results if not ok]
