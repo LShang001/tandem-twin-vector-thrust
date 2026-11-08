@@ -39,12 +39,24 @@ IMU_RATE_MIN, IMU_RATE_MAX = 1800.0, 2200.0
 CPU_MAX_PCT = 85.0
 
 
-def cli(port: str, *args: str, timeout: int = 60) -> str:
-    """调用 GCS CLI，返回 stdout+stderr。"""
+def cli(port: str, *args: str, timeout: int = 60, retries: int = 2) -> str:
+    """调用 GCS CLI，返回 stdout+stderr。
+
+    ★ 2026-11-08：加自动重试。实测 `dbg health` 偶发返回空（exit 1、无输出），
+      重试即正常——这不是板子的问题，是串口/CLI 的一次性抖动。
+      不重试的话，「一次读不到」会被误判成「板子挂了」。
+      判据：输出里既没有 `veh=` 也没有任何 `[DBG]` 行 → 视为这次没读到，重试。
+    """
     cmd = [PY, "-X", "utf8", "server/cli.py", "--port", port, *args]
-    p = subprocess.run(cmd, cwd=str(GCS), capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", timeout=timeout)
-    return (p.stdout or "") + (p.stderr or "")
+    for attempt in range(retries + 1):
+        p = subprocess.run(cmd, cwd=str(GCS), capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=timeout)
+        out = (p.stdout or "") + (p.stderr or "")
+        if out.strip() and ("[DBG]" in out or "veh=" in out or p.returncode == 0):
+            return out
+        if attempt < retries:
+            time.sleep(0.6)
+    return out
 
 
 def check(name: str, ok: bool, detail: str, results: list) -> None:
