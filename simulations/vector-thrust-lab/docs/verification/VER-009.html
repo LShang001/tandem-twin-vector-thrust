@@ -839,8 +839,45 @@ F4（舵机卡死）检测的门限盲区（2026-11-08）</h2>
 <p>所以此前那句「F4
 对卡死在满舵位的场景有效」的推测<strong>不成立</strong>。
 真正的原因不是「卡死角度不够大」。</p>
-<p><strong>为什么 <code>f4</code> 一直是 0 —— 根因已查到（Round
-221）</strong>：</p>
+<p><strong>为什么 <code>f4</code> 一直是 0 ——
+两次判断都错了，如实记录（Round 222 更正）</strong>：</p>
+<p>Round 221 我写「根因是未解锁就
+reset」。<strong>这个结论是错的</strong>。</p>
+<p>核查后发现两个不同的解锁变量：</p>
+<table>
+<thead>
+<tr>
+<th>变量</th>
+<th>来源</th>
+<th>SIL 里的值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>g_is_unlocked</code></td>
+<td><strong>SIL 侧</strong>，只在 <code>g_missile_mode</code> 下由
+<code>launched</code> 更新</td>
+<td>TandemVec 模式<strong>恒 false</strong></td>
+</tr>
+<tr>
+<td><code>inputs.is_unlocked</code></td>
+<td><strong>固件侧</strong>，<code>failsafe_in_flight || (isLinkUp &amp;&amp; CH5 &gt; 1500)</code></td>
+<td><strong>t≥0.5 s 后 = true</strong>（<code>set_rc</code> 把 CH5 设
+1800）</td>
+</tr>
+</tbody>
+</table>
+<p>我看的是 <code>dbg health</code> 里的
+<code>unlock=0</code>，那对应的是 <code>g_is_unlocked</code>（SIL
+侧那个）， <strong>不是固件实际用的
+<code>inputs.is_unlocked</code></strong>。所以固件在 SIL 里是解锁的， F4
+的 reset 分支并不会走。</p>
+<p><strong>所以「为什么
+f4=0」目前仍然是未解问题</strong>。两次归因（判据结构性缺陷、 未解锁
+reset）都被否掉了。下轮应从「解锁后 <code>df_frac</code> 与
+<code>roll_err</code> 各自
+实际到多少」入手，用打印把这两个输入量出来，而不是继续靠代码推断。</p>
+<p>下面是 Round 221 的错误推断，保留作为记录：</p>
 <p><code>updateActuatorFaultDiagnostics()</code> 的开头是</p>
 <div class="sourceCode" id="cb3"><pre
 class="sourceCode cpp"><code class="sourceCode cpp"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="cf">if</span> <span class="op">(!</span>inputs<span class="op">.</span>is_unlocked<span class="op">)</span> <span class="op">{</span></span>
@@ -2699,5 +2736,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb10-1"><a href=
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:58</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:03</footer></article></body>
 </html>
