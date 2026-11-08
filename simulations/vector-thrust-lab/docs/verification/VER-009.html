@@ -1757,20 +1757,29 @@ id="220-共轴重型套件复跑4-阶段报失败其中-3-项已知1-项待查20
 </table>
 <p>summary 自己写明：「历史基线 MC/sweep 未达 100%，默认运行即返回
 1，是真实门禁。」</p>
-<p><strong>待查的那一项</strong>：<code>acceptance_realistic</code> 里
-<code>mag_clean</code> 四个 seed 全 FAIL，但读数看起来很好：</p>
-<pre><code>hold_end=0.34–0.93 m（判据 1.5）
-roll_max=0.83–1.35°（判据 20）
-alt=9.85–9.95 m（判据 8–11）</code></pre>
-<p>三项主判据都远优于门限，却仍判
-FAIL——说明卡在<strong>别的字段</strong>上 （可能是
-<code>mag_fused_min</code> / <code>require_mag_cal</code> /
-<code>skip_hold_end</code> 之类的附加判据）。
-本轮时间不够未查清，<strong>如实记录为待办</strong>。</p>
+<p><strong>待查项已查清（Round
+183）</strong>：<code>acceptance_realistic</code> 的失败原因是</p>
+<pre><code>- max_pitch_preland=23.13 &gt; 20.0</code></pre>
+<p>不是 <code>hold_end</code>/<code>roll</code>/<code>alt</code>
+那三项（它们都远优于门限），而是<strong>着陆前俯仰角</strong>。</p>
+<p>复现路径（两步）：</p>
+<pre><code># 不带 realistic → PASS（max_pitch_preland 未参与判定）
+bash run_coaxial_acceptance.sh --profiles mag_clean --seeds 1 --seconds 40
+# 带 realistic → FAIL
+bash run_coaxial_acceptance.sh --profiles mag_clean --seeds 1 --seconds 40 \
+     --append-args=&quot;--coax-realistic&quot;</code></pre>
+<p><strong>为什么 23.13° 会超 20°</strong>：这正是 Round 105–111
+已解释的现象——
+共轴在<strong>下降/着陆段的力矩权限不足</strong>（油门降到 30%
+时力矩只剩悬停的 51%， 姿态偏差约放大 2 倍）。realistic 模式让 plant
+更接近真实（舵机动态/延迟）， 这个边界就暴露出来了。</p>
+<p><strong>所以这一项不是新缺陷</strong>，是已有结论在新配置下的复现。但要注意：</p>
 <blockquote>
-<p>★ 这条不写「已知问题」——三项确实是已知的历史基线，但第四项（realistic
-验收）
-的失败原因<strong>没查清</strong>。把它和已知项混在一起说，等于用已知掩盖未知。</p>
+<p>★ <code>run_coaxial_acceptance.sh</code> <strong>默认不带</strong>
+<code>max_pitch_preland</code> 判据， 只有 realistic
+模式才带。也就是说<strong>默认跑批看不出这个边界</strong>。
+这不是判据错，是「默认口径不问这一项」。想知道着陆段姿态就没法绕开
+realistic。</p>
 </blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
@@ -2292,11 +2301,11 @@ m」</strong>：两端都有边界，
 一旦触地就判失败，避免 「掉到地上但高度指标还勉强够」的假通过。</li>
 </ul>
 <h2 id="4-复现">4 复现</h2>
-<div class="sourceCode" id="cb6"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
+<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
+<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
 <p>Windows/MinGW 下统一经 <code>tools/with-ascii-bin.sh</code>
 包装（ASCII 盘符 + <code>BIN_DIR</code>）。</p>
 <h2 id="5-参考">5 参考</h2>
@@ -2307,5 +2316,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb6-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:55</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:02</footer></article></body>
 </html>
