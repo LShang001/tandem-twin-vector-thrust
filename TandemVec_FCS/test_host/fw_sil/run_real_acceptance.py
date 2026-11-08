@@ -43,6 +43,11 @@ PROFILES = {
         {"final_alt": (6.0, 12.0), "hold_end_rms": 25.0, "pos_rms": 25.0},
     ),
     # 磁生产链独立 profile：磁默认不混入 clean/nominal/degraded 基线。
+    # ★ 2026-11-08：注意 `max_pitch_preland_max` 只在 mag_clean / mag_nominal 里。
+    #   共轴在 realistic 模式下这项会到 23.13° > 20°——那是下降段力矩权限不足
+    #   的已知特性（VER-009 §2.20、docs/memory/2026-11-08-共轴roll-pitch不对称排查.md），
+    #   不是新缺陷。默认（非 realistic）跑批不触发这条，因为 plant 更理想。
+    #   想知道着陆段姿态边界，必须带 --coax-realistic 跑。
     "mag_clean": (
         ["--no-wind"],
         {"final_alt": (8.0, 11.0), "hold_end_rms": 1.5,
