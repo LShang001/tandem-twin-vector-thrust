@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CTL-007 共轴 PID 统一架构 · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ctl-007-共轴-pid-统一架构2026-11-04">CTL-007 共轴 PID
+统一架构（2026-11-04）</h1>
+<blockquote>
+<p>决策：<strong>共轴不再保留独立 PID
+参数变量</strong>。上层姿态/速率/位置算法共用
+<code>kFlightCtrlParams.att_* / rate_*</code>；机型只描述执行机构与硬件动力模型
+（质量、推力、力臂、惯量、舵机行程、PWM、差速力矩）。
+本文是首飞前统一改造的设计基线；改造完成并重跑 SIL/台架前，飞机停飞。
+<strong>改造状态（2026-11-08 核对）：已完成。</strong>
+当前固件参数表中已不存在 <code>coax.att_kp_*</code> /
+<code>coax.rate_kp_*</code> 独立 PID 变量， <code>coax.*</code>
+只剩硬件参数（质量、推力、伺服行程、PWM、力臂、惯量、差速力矩）。 GCS
+<code>expected_names()</code> 169 项与固件参数表逐项一致。 下文第 1
+节「当前架构债」描述的是 2026-11-04 改造前的问题状态，
+保留作为改造动因的记录，不代表现状。</p>
+</blockquote>
+<blockquote>
+<p>无磁航向 / 仅磁对准配置下的运动 EKF 方案见 <a
+href="CTL-005.html">CTL-005</a>（证据等级
+L2，未实机验证）。</p>
+</blockquote>
+<h2 id="1-当前架构债">1. 当前架构债</h2>
+<p><code>CoaxialCtrlParams.ctrl</code>（<code>BFS_COAX_PARAM_LIST</code>
+中 18 项）同时包含：</p>
+<ul>
+<li>控制参数：att/rate PID 增益、积分/输出限幅、滤波
+alpha、max_rate；</li>
+<li>硬件参数：mass、thrust、servo、PWM、lever、inertia、yaw
+moment。</li>
+</ul>
+<p>GCS 因此出现
+<code>coax.att_kp_pitch</code>、<code>coax.rate_kp_pitch</code> 等独立
+PID； 这与“上层算法通用、机型只换执行机构”冲突。</p>
+<h2 id="2-为什么不能直接改名">2. 为什么不能直接改名</h2>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>通用 TandemVec</th>
+<th>当前共轴</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>姿态外环输出</td>
+<td>deg/s</td>
+<td>deg/s（同量纲，可直接共享）</td>
+</tr>
+<tr>
+<td>速率内环输出</td>
+<td>deg/s²（角加速度）</td>
+<td><strong>deg 修正角</strong>（再经 <code>g=l·T/I</code> 转 α）</td>
+</tr>
+<tr>
+<td>执行机构</td>
+<td>BTRUE 力矩分配</td>
+<td>TVC 摆角/差速 PWM</td>
+</tr>
+</tbody>
+</table>
+<p>共轴速率环 <code>rate_kp=0.25</code> 的量纲是“deg 修正 /
+(deg/s)”，通用 <code>rate_kp=16.04</code> 是“deg/s² /
+(deg/s)”；直接改名会让共轴增益变化约 <code>g·0.25</code> 与
+<code>16.04</code> 的比值（随推力变化），不可首飞。</p>
+<h2 id="3-目标架构">3. 目标架构</h2>
+<pre><code>姿态外环（通用 att_*） → 目标角速率 [deg/s]
+        ↓
+速率内环（通用 rate_*） → 机体系角加速度 α [deg/s²]
+        ↓
+CoaxialAllocator：α + 推力 + 硬件参数 → TVC 摆角 / 差速 µs / 电机 µs
+        ↓
+ActuatorOutputMap：PWM/舵机百分比（机型 profile）</code></pre>
+<ul>
+<li><strong>唯一 PID
+变量</strong>：<code>att_roll/pitch/yaw</code>、<code>rate_roll/pitch/yaw</code>（kFlightCtrlParams）。</li>
+<li><strong>共轴硬件参数</strong>：mass、max_thrust、servo_half、motor_min/max、attitude_limit、
+lever、yaw_moment、inertia；不再包含 PID/滤波/积分限幅。</li>
+<li>通用 rate PID 的输出统一为 deg/s²；<code>CoaxialAllocator</code> 用
+<code>τ=I·α</code> 和 <code>δ=asin(τ/(l·T))</code> 做机型逆解。</li>
+<li>速率环输出限幅由<strong>物理 α
+权限</strong>（<code>α_max=(l·T/I)·sin(δ_max)</code>）在分配器/出口
+做硬限幅；通用 PID 的 out_max
+作为软件上限，两者都保留，避免只靠一个静态值。</li>
+</ul>
+<h2 id="4-迁移步骤">4. 迁移步骤</h2>
+<ol type="1">
+<li><strong>控制器</strong>：共轴 <code>run_coaxial_control</code>
+改用通用 <code>PositionPID</code>（att/rate）， 速率输出
+<code>deg/s²</code> 后转 rad/s²；删除 <code>CoaxialVtvController</code>
+内部 PID 状态 （或改为只做滤波/限幅的薄层）。</li>
+<li><strong>参数表</strong>：删除 <code>BFS_COAX_PARAM_LIST</code> 中的
+PID/滤波/积分项； <code>CoaxialCtrlParams</code> 只留硬件字段；GCS
+不再出现 <code>coax.*kp/ki/alpha</code>。</li>
+<li><strong>默认值</strong>：通用 PID 默认值保持 TandemVec
+基线；共轴首飞值通过 <strong>机型 profile 的硬件参数 +
+一套通用增益</strong>标定，不新增变量。</li>
+<li><strong>限幅</strong>：<code>max_corr_deg</code>/<code>max_yaw_us</code>
+作为硬件/安全限幅保留； 速率环软件限幅由通用 rate <code>out_max</code>
+与分配器 α 权限共同约束。</li>
+<li><strong>验证</strong>：
+<ul>
+<li>逐拍参考等价测试改成“通用 PID + 共轴分配器”新参考；</li>
+<li>共轴 24 例 SIL：<code>max_pitch &lt;20°</code>（当前
+22.9–23.5°，必须解决）；</li>
+<li>台架/断桨：TVC 方向、差速方向、45° 锁电机、未解锁输出；</li>
+<li>上板 <code>health veh=CoaxialVTVL</code> + 参数表确认无 coax PID
+副本。</li>
+</ul></li>
+</ol>
+<h2 id="5-首飞门">5. 首飞门</h2>
+<p>在步骤 1–5 完成前：</p>
+<ul>
+<li>不把当前共轴 PID 副本当最终架构；</li>
+<li>不进行自由飞；最多断桨/系留检查；</li>
+<li>旧 <code>VTVL_ElectricDualRotor_FCS_原始飞行存档版</code>
+仅作控制语义参考，不直接 替代新多机型固件。</li>
+</ul>
+<h2 id="6-已知风险">6. 已知风险</h2>
+<ul>
+<li>通用 rate 环与共轴 <code>α</code> 分配器的耦合需要重新标定；现有
+TandemVec 增益 不能直接用于共轴。</li>
+<li>当前 SIL 俯仰超调 23° 是改造前遗留问题；统一后必须重新验收，不能沿用
+“旧参数等价”作为通过依据。</li>
+<li>参数在线写入仍会 <code>apply</code> 到统一 PID；共轴硬件参数变更单独
+apply。</li>
+</ul>
+<h2 id="7-2026-11-04-实施进度">7. 2026-11-04 实施进度</h2>
+<ul>
+<li>已实施：共轴 <code>coax.*</code> PID 副本从参数注册表/GCS
+删除，只保留 15 项硬件参数； 共轴控制律参数由通用
+<code>att_*</code>/<code>rate_*</code> 在悬停点按 <code>g=l·T/I</code>
+派生，不再有独立 PID 变量。</li>
+<li>已实施：GCS <code>expected_names()</code>/<code>COAX_PARAMS</code>
+与固件注册表同序（项数以 <code>ANO_PARAMS_COUNT</code> 为准，2026-11-07
+时点 169 项）、15 项共轴硬件； <code>test_coax_params</code>
+197/197、GCS 参数测试 12/12。</li>
+<li><strong>未通过</strong>：共轴 SIL <code>mag_clean/mag_nominal</code>
+6 例仍 <code>max_pitch 22.9–23.5° &gt; 20°</code>； 已确认峰值时
+<code>omega_ref≈0</code>、舵机接近限幅，是位置保持目标/分配耦合，不是简单
+PID 跟踪超调。该门未解决前不首飞。</li>
+<li>当前板子已烧统一 PID 的
+CoaxialVTVL，<code>health veh=CoaxialVTVL</code>；仅断桨检查。</li>
+</ul>
+<h2 id="8-2026-11-04-sil-定位补充">8. 2026-11-04 SIL 定位补充</h2>
+<p>在 SIL CSV 增加 <code>tgt_roll/tgt_pitch</code> 后发现：23° 峰值时
+<strong>目标俯仰≈0°、实际−23°</strong>， <code>ch2≈39%</code> 已接近 TVC
+修正限幅。这说明不是位置环目标 23°，也不是 PID 跟踪超调，
+而是<strong>共轴俯仰配平/TVC 权限方向在 SIL 中已饱和</strong>。统一 PID
+后该现象不变，属于 改造前遗留的执行机构/plant 配平问题。</p>
+<p>首飞前必须先在地面断桨确认：</p>
+<ol type="1">
+<li>两轴 TVC 中位对应舵机 50%（33.33–66.67%）；</li>
+<li>正俯仰修正产生的力矩方向与 IMU 俯仰角变化符号一致；</li>
+<li>共轴电机/舵机安装中位没有持续偏置；若存在，先在台架做机械/软件配平，
+不能靠把 <code>att_pitch.kp</code> 调大硬顶。</li>
+</ol>
+<h2 id="9-俯仰符号-ab2026-11-04">9. 俯仰符号 A/B（2026-11-04）</h2>
+<p>为排除“共轴俯仰力矩符号反了”，只在 SIL plant 中把 <code>w.My</code>
+取反后重跑：
+<code>max_roll=178.8°、max_pitch=89.4°、alt=0</code>，系统直接发散。说明<strong>原符号正确</strong>，
+23° 不是符号反，也不能靠翻混控符号解决。恢复 plant 后仍是
+<code>tgt_pitch≈0、 truth_pitch=-23、ch2≈39%</code>，指向：</p>
+<ul>
+<li>共轴俯仰存在持续配平力矩（推力线/CG/舵机中位偏置）；</li>
+<li>或 TVC 可用权限不足以在该配平下回零。</li>
+</ul>
+<p>下一步必须是断桨/台架测量舵机中位、推力线相对
+CG、正俯仰修正的力矩方向； 不能再用 SIL 或 PID 调参替代机械配平。</p>
+<h2 id="10-2026-11-04-模型修正推翻-89-的配平权限结论">10. 2026-11-04
+模型修正（推翻 §8/§9 的配平/权限结论）</h2>
+<ul>
+<li><strong>L1 集总 plant 的共轴俯仰力矩/姿态约定有误</strong>：它会在
+<code>mag_clean/mag_nominal</code> 误报
+<code>max_pitch≈23°</code>；用户实测零修正舵机≈50%、喷管机械中位，说明不存在
+机械配平偏置。</li>
+<li>改用
+<code>--coax-plant-model rigorous</code>（刚体/摆座/转子耦合）后，保持
+<strong><code>max_correction_deg=10°</code> 原限幅</strong>，24
+例全部通过（max_pitch&lt;20°）。</li>
+<li>因此：
+<ul>
+<li>不把限幅改成 15°；15° 只是把 L1 模型误差顶过去的错误做法；</li>
+<li>不再把 23° 当配平/权限问题；</li>
+<li><strong>共轴 SIL 默认强制 rigorous plant</strong>，L1
+仅保留作对照。</li>
+</ul></li>
+<li>结论：统一 PID + 原 10° 限幅在严格模型下闭环稳定；首飞前仍需断桨确认
+TVC 中位/方向（用户已确认中位≈50%），不再需要“机械配平”这一步。</li>
+</ul>
+<hr />
+<p>首飞前检查单见 <a
+href="../verification/VER-006.html"><code>VER-006</code></a>。</p>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-007-共轴PID统一架构-2026-11-04.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:22</footer></article></body>
+</html>

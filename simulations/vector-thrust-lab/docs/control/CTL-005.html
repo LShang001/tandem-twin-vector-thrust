@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>CTL-005 无磁航向与运动 EKF · 纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1 id="ctl-005-无磁航向与运动-ekf">CTL-005 无磁航向与运动 EKF</h1>
+<blockquote>
+<p>2026-10-25。适用范围：短期不加磁力计、仅磁初始对准、或起飞前手动对准
+航向的飞行配置。证据等级 L2（真实固件源码 + SIL），未做实机验证。</p>
+</blockquote>
+<h2 id="1-三种航向源模式">1. 三种航向源模式</h2>
+<p><code>g_heading_aid_mode</code>（编译期默认
+<code>BFS_HEADING_AID_MODE</code>，SIL 可
+<code>--heading-aid-mode</code> 覆盖）：</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>含义</th>
+<th>磁融合</th>
+<th>初始航向</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>MAG_ONLY（默认，保持原行为）</td>
+<td>连续</td>
+<td>真实磁（含磁偏角）或伪磁</td>
+</tr>
+<tr>
+<td>1</td>
+<td>MAG_INIT_ONLY</td>
+<td>仅初始化，之后停止</td>
+<td>真实磁（含磁偏角）；无磁时手动</td>
+</tr>
+<tr>
+<td>2</td>
+<td>NO_MAG_MANUAL</td>
+<td>不融合</td>
+<td>手动 <code>heading_align_deg</code></td>
+</tr>
+</tbody>
+</table>
+<p>手动对准角 <code>g_heading_align_deg</code>（默认
+0°，机头真北顺时针）。模式 1/2 在无真实磁时，EKF 初始航向不确定度取 0.05
+rad（约 3°）；模式 1 有真实 磁时取 0.1 rad。</p>
+<h2 id="2-航向可观性">2. 航向可观性</h2>
+<ul>
+<li><strong>纯悬停</strong>：无绝对航向源；陀螺积分只能短时维持，航向 1σ
+随时间增长。</li>
+<li><strong>纯平移（风推、无倾斜）</strong>：GNSS
+速度方向不等于机头方向，航向仍不可观。 SIL seed1 在 4 m/s²
+侧风、定高模式下，真实 yaw 保持 0°，EKF yaw 漂到 −147°（40
+s）。<strong>不能把 GNSS 速度方向直接当航向。</strong></li>
+<li><strong>速度 + 倾斜运动</strong>：前飞时推力方向随姿态倾斜，GNSS
+速度/加速度与 机体系比力联合可观测航向；EKF 才会收敛。</li>
+</ul>
+<h2 id="3-位置保持门控20-s-短时窗口">3. 位置保持门控（20 s
+短时窗口）</h2>
+<p>模式 1/2 下 <code>HeadingAidingGate</code> 允许 <strong>20 s
+内的位置保持与 heading hold</strong>， 前提是 EKF 航向 1σ
+≤20°；窗口结束或σ超限立即降级 <code>AUTO_ALTITUDE</code>，
+回中只做零角速率阻尼。依据：短时陀螺零偏有限，用户接受短时定点； SIL
+也显示窗口内可完成 15 m 前飞并保持在 ~16.5 m，窗口后（21 s 起）
+航向与位置开始漂移。</p>
+<p><strong>窗口只在离地后计时</strong>（<code>airborne = 解锁 &amp;&amp; throttlePercent ≥3%</code>）：上电、
+地面等待、磁标定不消耗 20 s；落地（油门回到 0）清零，再次起飞重新计 20
+s。 <strong>窗口从离地起算，不从进入 AUTO_POSITION
+起算</strong>：手动爬升/等待会消耗
+同一段陀螺漂移预算，起飞后应尽快切定点。</p>
+<p><strong>静止校准前置（2026-10-25）</strong>：门控/遥测已实现（累计条件
+= EKF 已初始化</p>
+<ul>
+<li>油门 &lt;3% + 静止检测确认；未完成 <code>pos_degraded=1</code>；遥测
+<code>static_cal</code>、
+<code>static_cal_s</code>；重新初始化清零），但<strong>默认阈值设为
+0（关闭）</strong>。原因： SIL 静置时长扫描（2/10/30/60 s ×10
+seeds，控制冻结）显示<strong>静置越久起飞后 越差</strong>——|yaw| 中位
+8.6/17.4/28.6/41.0°，60 s 位置最大 58 m；而零偏 z 在 ~1 s
+已收敛到真值。机制指向长静止把姿态协方差压得过小、GNSS 新息经
+<code>P(φ,v)</code> 把航向拉回
+0，不是校准时间不足。<strong>待起飞瞬间协方差膨胀/航向 解耦修复后再启用
+30 s 级要求</strong>。详见
+<code>TandemVec-EKF-Report/无磁EKF收敛仿真-2026-10-25.md</code>。 SIL
+飞行段回归用
+<code>--static-calib-s 0</code>；<code>--calib-hold T</code> 让前 T
+秒电机不出力、 固件油门置 0、控制冻结，专用于静置收敛研究。 SIL 的
+<code>--takeoff-at</code> 长地面等待场景无效：地面只约束
+z、无摩擦，位置环会 让机体积滑（30 s 等待实测滑 80
+m），不能用来判窗口时序；窗口语义由 门控单元测试 T9b/T9c
+锁定。曾试“估计高度&gt;1 m”判离地，SIL 中窗口仅从 20.5→21.1 s
+且地面高度信号会误判，已回退到油门判据。 此前按导航初始化计时，地面准备
+20 s 就会让起飞即降级，属于使用性缺陷， 2026-10-25 已修正。</li>
+</ul>
+<p><strong>这不是长时定点能力</strong>：超过 20 s
+必须转手动/定高或重新对准；磁连续模式 （0）不受此窗口限制。</p>
+<h2 id="4-sil-证据2026-10-25">4. SIL 证据（2026-10-25）</h2>
+<ul>
+<li><p>模式 0（磁连续）mag_clean 3 seeds：hold_end 1.15/0.71/1.10
+m；前飞段 15 m 目标 hold_end 14.64 m、max_roll 10.5°。</p></li>
+<li><p>模式 1/2 + 20 s 窗口：clean/mag_clean 悬停高度 9.97–9.99
+m、max_roll 0， 窗口内保持、20 s 后
+<code>pos_degraded=1</code>。</p></li>
+<li><p>20 s 窗口内 <code>--pos-leg 15:0</code>（10 seeds，t=19）：相对
+15 m 目标误差最大 4.48 m、max_roll 10.3°；|yaw 误差|典型 6–16°，但 seed6
+达 47.2°。<strong>15 m
+前飞段可完成并保持，但运动并不保证航向收敛</strong>——观测性需要非重力加速度
+激励，风/侧滑会污染；不要把“飞一段”当成航向校准手段。 21 s
+后漂移（后窗口漂移，不是窗口内失败）。</p></li>
+<li><p><strong>运动收敛矩阵（2026-10-25，20 seeds/工况，t=19
+s）</strong>：悬停 |yaw 误差| 中位 1.9°/最大 10.8°、位置 ≤1.54 m；前飞
+15 m 中位 13.7°/最大 40.8°、 位置 ≤4.48 m；侧飞 15 m 中位 6.8°/最大
+22.6°、位置 ≤1.9 m。
+<strong>运动激励没有改善航向，前飞反而最差</strong>（滚转-偏航耦合与风/侧滑误差）；
+位置都能到点，不要指望“飞一段”让航向收敛。</p></li>
+<li><p>侧风 3 m/s² + 20 s 窗口：窗口后风推漂 225
+m；短时使用需在窗口内完成 任务/降落。</p></li>
+<li><p><strong>50 seeds 窗口复核（clean/no-wind，t=19
+s）</strong>：50/50 仍在窗口内且 100% 采样处于
+AUTO_POSITION；最大位置误差 1.54 m、max_roll 8.50°、 最大 |yaw 误差|
+14.97°、窗口末最大 2.18 m；窗口后正常漂移（t=25 最大 11.4 m、t=40 最大
+377 m，必须降落/切手动）。零偏限幅 + 离地计时版， 说明 20 s 窗口不是
+seed1 偶然可用。</p></li>
+<li><p><strong>窗口后余量（mode2）</strong>：t=20.5 s 全体 0–1.8 m；但
+4/10 种子 t=25 s 漂 1.3–8 m、 t=40 s 达 29–127 m（3/10 &gt;50 m），其余
+6 个种子保持 0 m。20 s 到点必须立即降落/切 手动，不能继续定点。</p></li>
+<li><p><strong>手动航向对准端到端（2026-10-25，SIL 初始真值 45°，10
+seeds）</strong>： <code>--heading-align-deg 45</code> 时 EKF 初始航向
+44.2–44.3°（真值 45°），15 m 前飞段 t=19 相对目标误差 ≤6.61
+m；<code>--heading-align-deg 0</code>（45° 误差） 时 EKF 初始航向
+0.3°，同样前飞段位置误差 58–88 m、yaw 误差达 170°。
+<strong>对准角必须等于机体实际朝向</strong>；45° 误差就会让 20 s
+窗口内的位置保持 失效。对准只固定初始航向，不阻止后续漂移（对准组 yaw
+误差仍可达 72°）。</p></li>
+<li><p><strong>mode1（磁仅初始）10 seeds（零偏限幅 +
+离地计时）</strong>：t=19 s 最大位置误差 1.50 m、max_roll 8.7°、|yaw
+误差|≤11.7°、全部 <code>pos_degraded=0</code>；窗口后 最坏 t=40 s 漂 313
+m。与 mode2（1.54 m / 7.2° / 10.8°）同量级，磁初始
+只改善起始航向，不改变 20 s 短时边界。</p></li>
+<li><p><strong>侧风包线（2026-10-25，10 seeds/档，2 m/s² 侧向加速度
+10–15 s）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">侧向加速度</th>
+<th style="text-align: right;">窗口内最大位置误差</th>
+<th style="text-align: right;">max_roll</th>
+<th style="text-align: right;">最大 |yaw 误差|</th>
+<th style="text-align: left;">判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0.5 m/s²</td>
+<td style="text-align: right;">2.34 m（50 seeds）</td>
+<td style="text-align: right;">11.4°</td>
+<td style="text-align: right;">21.6°</td>
+<td style="text-align: left;">可用（20 s 内；位置 ≤2.4 m）</td>
+</tr>
+<tr>
+<td style="text-align: right;">1.0 m/s²</td>
+<td style="text-align: right;">3.82 m</td>
+<td style="text-align: right;">13.2°</td>
+<td style="text-align: right;">43.8°</td>
+<td style="text-align: left;">位置有界，航向已不可靠</td>
+</tr>
+<tr>
+<td style="text-align: right;">1.5 m/s²</td>
+<td style="text-align: right;">18.14 m</td>
+<td style="text-align: right;">13.4°</td>
+<td style="text-align: right;">42.5°</td>
+<td style="text-align: left;">不可用（部分种子 18.5–19.6 s
+提前降级）</td>
+</tr>
+<tr>
+<td style="text-align: right;">2.0 m/s²</td>
+<td style="text-align: right;">32.71 m</td>
+<td style="text-align: right;">14.3°</td>
+<td style="text-align: right;">30.1°</td>
+<td style="text-align: left;">不可用（4/10 种子 20–41 m）</td>
+</tr>
+</tbody>
+</table>
+<p>风停后位置可回拢一部分，但窗口后仍按门控降级。<strong>操作建议：无磁
+20 s 定点只在 ≤0.5 m/s² 等效侧向加速度（约 3° 配平倾角）下使用；≤1 m/s²
+只保证位置有界，航向可能偏 40°+；≥1.5 m/s² 不要进入定点。</strong>
+强侧风下
+剩余误差来自机体偏航-位置耦合与偏航权限，不是估计器（见上节消融）。</p></li>
+<li><p><strong>根因（GNSS
+吸收真实偏航率）</strong>：无磁时航向不可观，GNSS 位置/速度更新经
+<code>P(φ,v)</code> 耦合把机体真实 yaw rate 估成陀螺零偏 z。消融：GNSS
+正常时 <code>bias_z</code> 40 s 从 0.008 涨到 0.406 rad/s，EKF 航向积分
+468° 却只变 −20°； 9–21 s 断 GNSS 时 <code>bias_z</code> 保持 0.008，EKF
+航向与真值误差 &lt;2°。 修复：无磁离地
+<code>ClampGyroBiasZ(0.01 rad/s)</code>。默认磁连续模式 0 不变。
+<strong>曾试 GNSS <code>consider_heading</code>（K
+航向行清零）并撤回</strong>：1 m/s² 侧风下 窗口内最大位置误差 3.82→8.14
+m、|yaw 误差| 43.8→61.6°，2 m/s² 下 航向误差 30.1→57.4° 且 4 个种子在
+16.8–18.3 s 提前降级（yaw σ 增长更快）。 说明剩余侧风误差不是 GNSS
+航向耦合，而是机体偏航/位置耦合与偏航权限； 不要再加“无磁全局禁 GNSS
+修航向”类门控。</p></li>
+<li><p>门控单元测试 T9/T9b/T9c：窗口内允许、&gt;20 s
+降级、地面不计时、落地复位。</p></li>
+<li><p>模式 0 默认行为未改变；<code>test_heading_aiding_gate</code> 与
+<code>test_ekf_15state</code> （T17 零偏限幅）全绿。</p></li>
+<li><p><strong>GNSS 质量/刷新率（2026-10-25，磁连续 SIL，20
+seeds/档，有光流）</strong>： 速度噪声 1.0 m/s 使位置保持 20/20
+失败（hold 最大 750 m），位置噪声 5 m 为 13/20，200 ms
+延迟无恶化（1/20）——<strong>速度质量是门控重点</strong>。刷新率
+无单调收益：无失联 5/10/20/50 Hz 失败 1/1/0/1，20 Hz 唯一 0/20； 5 s
+失联为 2/1/1/2，5 Hz 出现 178.4° 滚转尾部（10 次野值拒绝 + 1 次
+重锚，其他档 0），20 Hz 最大 hold 6.05 m、roll 12.4° 最优，50 Hz 反而
+2/20。<strong>建议 ≥10 Hz、优先 20 Hz，5 Hz 不作为可接受配置；20 seeds
+只定 方向与尾部，不能给精确失效率。</strong> 详见报告
+§7.2/§7.3。</p></li>
+<li><p><strong>速度/机动矩阵（2026-10-25，3360 次 SIL，磁连续 +
+光流）</strong>：5 方向 × 5 腿长（0/3/10/25/50 m）× 4 条件 × 40
+seeds。导航中位 pos_rms 0.50–0.56 m、p95 0.93–1.06
+m，机动不降低中位精度；失败在尾部： 稳定性失败 nominal 5/840、outage
+34/840、wind 8/840、both 42/840。 <strong>outage 稳定性失败 S 17/200、N
+10/200、NE 6/200、W 1/200、E 0/160</strong>
+——前/后向俯仰轴平移最危险，E/W 侧向几乎免疫；179° 多在 GNSS 恢复后 9–14
+s。trace 定位：磁门控降级后 <code>gyro_bias_z</code> 被 GNSS
+姿态-速度耦合拉到 −37 rad/s，EKF 航向与真值反向，差速饱和。
+<strong>修复（v2 已改源码，未实机）</strong>：航向源陈旧 &gt;0.5 s 或
+position_hold_degraded 时钳制 bias_z（原仅无磁离地）。 N10/S10 outage +
+nominal N10 各 200 seeds：v1 为 3/11/4、4/10/4、 0/3/1（max roll
+179.9/179.9/179.6°）→ v2 全 0/0/0（max 36.7/ 33.5/25.1°）。10 个已知
+179° seed：基线 9/10 &gt;89°、v1 1/10 98°、 v2 0/10（max 27°）。首轮
+2000 次 A/B 的 opt 二进制同 seed 不可 复现（seed10 13.17 vs
+7.97），该批计数作废；长 A/B 必须记录 二进制哈希。<strong>跨条件
+case-control</strong>：基线 3360 矩阵全部 90 个失败样本用 v2 重跑，仅 3
+例残差、0 例 roll&gt;90°（最大 61.2°），nominal 全修复；case-control
+不能发现新失败。<strong>v2 全 3360 矩阵</strong>：unique
+90→7、roll&gt;90° 55→0、max pos 2.06e13→39.8
+m。<strong>v3（采用）</strong>：正常磁模式 bias_z 硬限 0.05 rad/s（降级
+0.01），全 3360 unique <strong>90→2（−97.8%）</strong>、roll&gt;90°
+55→0、max pos→10.0 m；nominal/both 0/840、outage/wind 各 1/840。残差 2
+例均 NE3 边际（39.6°/10.0 m、46.7°/9.7 m），不再 179°/km；独立 seeds
+41–80 复现 0/3360，seeds 1–40 的 2 例未复现；合并
+2/6720（0.03%）、roll90 0。三 PIO 环境 SUCCESS，实机未验证。v3 GNSS
+质量回归（240 次）：base/5/20 Hz/200 ms 均 0，5 Hz 失联 178°
+尾部消失（max 17°）；5 m 位置噪声/1 m/s 速度噪声仍导航失败但无 90°
+姿态尾部，需上游质量门控。v3 强风包线（各 420 次）：1.5 m/s² 0 失败（max
+roll 44°/1.5 m）；2.0 m/s² 1/420 nav（max roll 38.7°/8.4 m），无 90°
+尾部。 标准 real-nav 验收 v3：3 seeds 9/9；10 seeds 27/30（mag_clean
+seed6 hold 5.42 m、seed8/9 pos_rms 1.06/1.03；seed6 baseline 也
+FAIL；seeds8/9 v2 也 FAIL（同 pos_rms），v3 roll 与磁门拒绝更优，非 v3
+回归）。 v3 长失联+光流：10 s 0/20（hold max 29.9 m）、20 s 0/20
+门限失败但 hold p95 160 m/max 272 m，光流不保绝对位置，20 s
+必须降落/切手动。<strong>NE3 边界</strong>：bias 已限在
+2.9°/s、mag_gate_reason 多为 0，但 mag_age 涨到 18 s，是 EKF 磁更新 NIS
+拒绝；29 s heading 降级、位置环失效。固定倍率软重试已试：2× 修
+outage、4× 修 wind，渐进 2×→4× 也只修 wind，均剩 1/292，不采用；v3+0.25
+s 也只改善 outage、wind 仍败（1/292），保留 0.5；test_ratio 自适应 R
+两例仍都败；3D NIS 后标量 yaw 回退、补 RecordAttempt(Mag)
+均无效；<strong>v8d/v9d 计数两例
+<code>yawfb=0/0</code>，回退从未执行</strong>，v9 的 outage
+改善属构建/运行差异。20 Hz gate trace 两例
+mag_age≈0、source_fresh/hold=1、hdg=1，两例都通过；与旧失败 trace
+矛盾，NE3 是构建/运行敏感的边际不稳定，不是确定性 gate
+条件，不能按固定根因改 R/yaw。wind_S_10_s10 trace：t=25–27.5 s 真值 yaw
+0→180° 时 heading_aiding 仍=1、bias_z 先冲到 96°/s，27.5 s
+门控才降级；是风致偏航旋转+门控滞后，需要角速率/航向一致性保护或风扰前馈。阈值扫描
+0.25/0.5/1.0 s：0.25 与 0.5 同平台（无 90°+，残差 2/1 vs 2/3），1.0 重开
+179.8°；保留 0.5（全矩阵验证），0.25
+仅研究候选。实机未完成。自动定点峰值速度上限 约 2.3 m/s；50 m 腿 25 s
+内到不了，末端误差不能当导航失败。 详见报告 §7.4/§7.5。</p></li>
+<li><p><strong>SIL 边际可复现性（2026-10-25）</strong>：固定 v3
+二进制/命令，wind NE3 seed2 在一次批量 0/100 通过、冷启动串行 20/20
+失败；outage seed31 19/20 失败、1/20 通过。<code>millis/micros</code>
+已虚拟、fw_sil 无线程/chrono/sleep，隐藏时序依赖未定位。<strong>2/6720
+只能作量级参考，NE3 单 seed A/B 不作因果</strong>；先修 SIL
+可复现性再做尾部调参。 <strong>核心亲和性</strong>：同一 v3
+二进制/seed31，core0/1/10/23 10/10 失败（39.6°），core2/3/8/16 10/10
+通过（14.1°）；同核逐位一致。未绑核调度跨核 → 14° vs 46.7° 双吸引子；属
+SIL 设施问题。所有 A/B 固定同一逻辑核（本机 core2）并记录核号；未绑核的
+2/6720、27/30 只是混合核平均。core0 trace：t≈27.5 后 mag_fused
+停增、mag_age 4.67 s、gate 29.5 s 降级；core2 持续融合、gate 不降——是
+SIL 核相关磁事件流停止，不是磁门/R。</p></li>
+<li><p><strong>SIL 复现性根因：Eigen
+向量化（2026-10-26，取代上条“未定位”）</strong>：宿主 SIL 加
+<code>-DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE</code>
+后双吸引子消失。seed31（outage NE3）向量化 core0
+<code>mag_fused=267/mag_gate=174/heading_aiding=0/roll 39.61°</code>、core2
+<code>427/14/1/14.12°</code>；关闭向量化两核均
+<code>436/5/1/16.89°</code>，9000 个 200 Hz 样本逐行一致。全 3360
+矩阵：向量化 nav 2/stab 1/max pos 10.02 m/max roll 46.7° → 关闭向量化
+<strong>0/0/2.35 m/21.2°</strong>。10-seed 验收
+27/30→26/30（失败种子换成 seed1/seed3，seed8/9 相同；seed3
+是控制极限环、EKF 误差 &lt;1
+m），<strong>不是导航算法回归</strong>。口径：SIL 默认标量
+Eigen（<code>EIGEN_SIL_FLAGS</code>，可覆盖），固件不变（Cortex-M7 无
+NEON，本就标量）；历史向量化计数只作历史口径。报告 §7.10。</p></li>
+<li><p><strong>几何滤波评估（2026-10-26）</strong>：EKF 的
+<code>F(v,θ)=−C[f]×</code> 依赖姿态；L-IEKF/L-TFG/L-TG 的 C 敏感度为
+0（group-affine）。<strong>TFG 并非完全零偏独立</strong>——式(34)的
+<code>F(v,v)/F(r,r)</code> 仍用去偏
+<code>ω̂</code>，只有姿态/速度-姿态耦合用原始；TG 式(54)
+导航块才全用原始，代价 18 维 1.73×。ZUPT
+只观测参考系速度，航向/垂向陀螺零偏不可观，几何滤波不增加信息；正常初始化四者打平，60°
+初始横滚才有线性化优势。论文式(5)速度行两处符号与式(11)不自洽、式(53)/(55)噪声顺序冲突、初始姿态单位阵与加计调平歧义；复现为合成数据。<strong>本工程
+15 态 ESKF 的 F(v,β) 仍依赖
+C，但主要失效不是线性化，暂不换几何滤波</strong>；先做离线左-IEKF 同日志
+NEES/RMSE。报告 §7.14。</p></li>
+<li><p><strong>协方差一致性：白噪声一致、有色 GNSS
+过度自信（2026-10-26）</strong>：Python 同构 15 态、10 seeds×60 s（12
+万历元）：NEES_pos 中位 <strong>0.76</strong>（χ²(3)/3 理论 0.79）、p95
+<strong>2.37</strong>（理论 2.60）、单步 max 5.55（同样本量理论 max 中位
+8.98）——<strong>位置协方差一致；旧 §4/§6.2 的“尾部偏乐观”是 5-seed/单步
+max 误读</strong>。速度 NEES 0.26–0.34、NIS 4.1–4.6 仍偏保守。Q_pos/P0
+扫描为负：q=1e-3 仅 +0.8% RMSE，q≥1e-2 需 +4–16% RMSE
+换尾部；<strong>不修改固件 P_pos/Q_pos</strong>。SIL 在飞
+NEES（<code>-DEKF_NAV_TELEMETRY</code> 只读
+P、单独二进制、默认不含；原点变化即记录真值基准、t&gt;10 s/10
+Hz）：零噪声对照 0.028、白噪声臂 1.05、默认<strong>有色臂
+2.22</strong>（p95 1.33→3.84，38/50 seeds 更高）。SIL 的 20 s 相关 GNSS
+误差让 P 过度自信，但闭环 hold 中位仅 0.80→0.86
+m（控制器共用同一估计），<strong>不能用 NEES
+变差推断控制失效</strong>。seed1 有色 NIS≈0.02 而
+NEES≈20：<strong>慢变有色偏差对新息/NIS 不可见</strong>，与 spoof
+慢偏不可检测同源。<code>--gnss-r-scale</code> 放大自报精度（只改
+R）：R×2/×3 使 NEES 降到 1.52/0.78，但 hold 1.5 m 失败 1→5/9/20（R×2
+只把 12 m 尾部压到 3.3 m、5 m 门限
+1→0/20），是平滑/跟随交换，<strong>固件 R
+不改</strong>。若门控需要诚实协方差，应在门控侧加有色误差裕度，不要放大滤波
+R。报告 §7.16。</p></li>
+<li><p><strong>GNSS 垂直 spoof
+与气压重锚门控（opt-in，2026-10-26）</strong>：SIL 新增
+<code>--gnss-spoof-z</code>/<code>--gnss-spoof-z-ramp</code>。25 s 起
++50/+100 m 高度台阶 10 seeds <strong>10/10 下降到地面</strong>（上偏
+roll 47–59°），−50/−100 m 爬到 32 m；30 m 台阶无影响。机制：物理野值门
+<code>|Δz|&gt;40 m</code>
+整帧拒绝→持续拒绝→<code>TryResetAfterPersistentImplausibleGnss</code>
+硬重锚到欺骗值→气压新息被 NIS
+拒绝、高度锁在假值。<code>BFS_GNSS_VERTICAL_REANCHOR_GATE</code>（默认不定义）用气压绝对高度对比
+GNSS，连续 3 帧 &gt;25 m 可疑、10 帧 &lt;10 m 恢复；可疑时把
+<code>meas_lla(2)</code>
+替换为气压高度、<code>gnss_pos_d_std=1e4</code>、禁止重锚，水平/速度仍融合。10
+seeds 同二进制 A/B：±50/100 m 台阶 <strong>0/10 落地、final_alt 9.99
+m、roll≤15.4°、rst 0</strong>；nominal/5/20 s 失联/风门控 0/1
+逐项相同。<strong>但快速气压漂移（0.5
+m/s）时门控会灌入错误气压、可更差；默认不启用</strong>，需三源仲裁/气压健康。报告
+§7.17。</p></li>
+<li><p><strong>大过载/大机动与 GNSS
+杆臂补偿（2026-10-26）</strong>：新增固件 <code>Ekf15State</code>
+高动态宿主台架（2 kHz 真值、400 Hz IMU 双子样、±8 g/±2000 dps 饱和、GNSS
+延迟/失联/杆臂；协调转弯/S 转弯/纯正拉杆/负 g/滚转/圆锥），1420
+次探索（10 seeds/组）+ 4250 次定向（50 seeds/组）：2–8
+g、180–1080°/s、GNS 20 ms 下位置 RMSE 中位 0.20–0.25 m、姿态
+0.3–2.2°。<strong>硬边界</strong>：9/10/12 g 使 ±8 g 加计饱和（139–391
+m，非算法可修）；GNSS 延迟 ≥330 ms 超出 64×5 ms=320 ms 回放缓冲（399/399
+全拒、244–296 m）；20 s 失联 1% 尺度/0.5° 失准中位 2.61/p90 28.17/max
+29.84 m（S 转弯尾部 104.4 m）；负 g
+姿态二义性（无磁不承诺倒飞）。<strong>固件改进</strong>：<code>gnss_lever_arm_body_m</code>
+在量测回溯快照上用历史姿态/陀螺同时补偿天线位置 <code>C_b^n r</code>
+与速度 <code>C_b^n(ω×r)</code>；运行时参数
+<code>gnss_lever_x/y/z</code>（默认 0）。10 seeds A/B：8 g 转弯+2 m
+杆臂位置 1.98→0.21 m、速度 1.96→0.07 m/s、NEES
+62/171→0.86/0.17；仅位置预补偿无效；圆锥 600°/s+1 m 50 seeds 309.4→0.26
+m（max 2.73）。<strong>高动态台架必须标量
+Eigen</strong>（向量化构建会伪发散 0.84→750 m）。报告
+<code>TandemVec-EKF-Report/高动态卫惯组合导航-大过载大机动-2026-10-26.md</code>。</p></li>
+<li><p><strong>无 GNSS 水平失效与保护（2026-10-26）</strong>：5 s 失联 +
+10 m 阶跃即可让位置环持续要 15° 倾角；加速度计无法区分重力/推力，EKF
+pitch 真值 −15°/估计 −2.5°，重捕获后仍 10–12° 误差，真值漂 190 m（SIL
+plant 无气动阻尼/地面摩擦，米数为上界）。<strong>速度保持</strong>
+<code>BFS_GNSS_OUTAGE_VELOCITY_HOLD</code>（0.5 s/1
+m/s²，无新鲜光流时零速度目标）：5 s 失联 0/60（基线 50/60，hold 中位
+139→1.9 m、roll 16.1°；30 seeds/场景 180/180、hold max 13.6 m）；1 m/s²
+风 10/60（基线 40/60），roll 19.5°。<strong>定高降级</strong>
+<code>BFS_GNSS_OUTAGE_ALT_HOLD</code>：20 s 失联 0.5 s 降级 49/60、hold
+中位 92 m/roll 21.7°；2 s 为 311 m；5/10 s 太晚（降级 0/60、32/60）→
+阈值 ≤2 s。<strong>倾角限幅 5°
+无效</strong>。<strong>长失联组合</strong>：速度保持 0.5 s + 6 s
+定高降级 + 1 m/s 下降 → 20 s 失联 <strong>60/60 落地</strong>、roll
+24.6°、hold 中位 167 m（落地后滑行，不能当飞行漂移）；30 seeds/场景
+<strong>180/180 落地、roll 25.2°</strong>；20 s + 1 m/s² 风 60/60
+落地但落地前 roll max 32.9°（final 52.5° 含落地后滑行/翻倒）；悬停 hold
+1.5 m；6 s 优于 10 s。<strong>下降锁存（2026-10-26）</strong>：原
+age-only 下降在 GNSS 中途恢复时停半空（20 m 高度停在 5.9 m；10 s 失联
+0/120 落地）；改为触发后锁存到上锁/落地，&gt;0.3 m 恢复不清锁存；修复后
+10 s 120/120 落地、20 s 高度 5/10/20/30 m 各 60/60 落地、60 s 20/30 m 各
+60/60 落地，preland roll ≤27.2°，land_hold
+随高度/时长增长（物理无参照）。<strong>6900 次矩阵</strong>：5 s
+clean/5/20 Hz/200 ms 速度保持 0/120；20 s combo6 全质量档 90/90
+落地。<strong>最坏组合 720 次</strong>：720/720 落地，风下 30 m 落地前
+roll 44.9°、落点中位 317–563 m，无
+90°+——保护保证落地/姿态有界，不保证落点。<strong>默认全关</strong>；短失联用速度保持，&gt;6
+s 下降/切手动。报告 §7.11/§7.12。</p></li>
+<li><p><strong>下降目标起点与触地速度（2026-10-26）</strong>：原下降把目标从<strong>起飞目标高度</strong>按
+1 m/s 下压；20 s 失联若还在爬升（<code>--alt 30</code> 实际约 15
+m），触地后残余目标会把飞机拉回 12–16 m（1 m/s 臂
+15/120）。修复：触发时目标取 <code>min(目标, 当前高度)</code>，落地+GNSS
+恢复时目标锁到地面；修复后 1/2/3 m/s 四格 <strong>1080/1080
+留地</strong>。20 s/30 m/风下 1/2/3 m/s 的落点中位 169/109/107 m、触地
+vz 中位 1.30/1.68/1.63 m/s、p95 1.84/2.85/2.75 m/s、preland roll 中位
+32/26/25°；<strong>默认保持 1 m/s，2 m/s 仅作落点-触地权衡候选，3 m/s
+否决</strong>。这是目标斜坡不是实际下降率：EKF 垂速在失联段滞后（trace
+真值 −4.11 / EKF +0.68 m/s），0.5 s 气压回归垂速替代方案在 20 seeds 下 1
+m/s 反而 1.25→3.53 m/s，否决。<code>--alt</code>
+是目标高度不是实际失联高度；SIL 20 s 失联真值约 8 m、触发约 14.6
+m，旧高度数字需按此口径重读。<strong>真实高度 720
+次</strong>（10/20/30/40 m，3 速率×6 方向×10 seeds）：720/720 留地；1
+m/s 触地中位 0.96/0.94/0.85/0.87 m/s，但 p95 1.45/3.21/1.02/1.19、40 m
+max 6.94；2/3 m/s 的 20–40 m p95 3.8–6.5，3 m/s
+无落点收益且更硬——<strong>中位不是安全指标</strong>。<strong>60 s
+失联、GNSS 触地前不恢复</strong>（30 m，180 次）：60/60 留地但触地中位
+3.35/3.56/3.88 m/s（1/2/3 m/s）、p95 4.48/4.64/5.06；20 s 的软触地来自
+GNSS
+在触地前恢复，<strong>不能外推长失联</strong>。<strong>ground-dwell</strong>：连续
+1 s &lt;0.3 m 视为落地并锁目标到当前高度，避免触地时目标仍 13.4 m
+持续给爬升指令；SIL 无地面摩擦，风下落地机体仍会翻，是 plant
+边界。气压斜率垂速覆盖（60 s/1 m/s，60 次）触地中位 3.35→1.84 但落点中位
+432→714 m，交换而非修复，未采用。<strong>末段 flare（opt-in
+<code>BFS_LONG_GNSS_OUTAGE_DESCENT_FLARE</code>，默认关）</strong>：仅
+<code>GNSS age&gt;20 s</code> 且 &lt;8 m 时用气压斜率垂速、目标 0.5
+m/s；same-binary 2×2 更正：flare-only 3.35→3.17
+m/s（几乎无效）、aid-only 1.10/1.52/1.65、aid+flare 1.34（比 aid-only
+差）；跨二进制 1.48 为布局混淆，flare 不采用，aid-only 最优。20 s
+格不变。2 m/s 斜坡+同 flare 为跨二进制历史记录；same-binary 显示 flare
+在 aid 下更差，不推荐。<strong>长失联 1 m/s
+只保证落地，不保证软着陆；需着陆段减速/触地检测/起落架。</strong> 证据
+<code>sim-data/descent-rate-2026-10-26.jsonl.gz</code>、<code>altitude-rate-2026-10-26.jsonl.gz</code>、<code>altitude-rate60-{baseline,baromin,flare8age}-2026-10-26.jsonl.gz</code>、<code>figs/nav_descent_rate_*.png</code>、<code>figs/nav_alt_rate.png</code>、<code>figs/nav_altitude_outage60.png</code>。</p></li>
+<li><p><strong>EKF 气压垂速伪量测（opt-in，2026-10-26）</strong>：长失联
+v_d 可被倾斜/滚转污染到符号相反（真值 −1.91、EKF +0.76
+m/s）。<code>BFS_BARO_VERTICAL_VELOCITY_AID</code>：0.5 s
+气压高度回归垂速，5 Hz 只更新 v_d（σ=1.0 m/s，水平 1e3 忽略），age&gt;8
+s、高度&gt;1 m 启用；SIL <code>--baro-vel-aid 0|1</code> 同二进制
+A/B。360 次（30 m、风、6 方向×10 seeds）：5 s 两臂逐 seed 相同；20 s aid
+off→on 触地 0.85/1.02/3.29→0.82/0.99/1.09 m/s、落点中位 530→190 m、roll
+max 43.5→31.2°（净收益）；60 s 触地 3.35/4.48/4.96→1.10/1.52/1.65
+m/s，但落点 432→545 m、p95 554→1127
+m（安全-落点权衡）。默认关，实机未验证；时长×风 960 次：10 s
+中性；20/30/60 s 有风触地 3.29/3.35/3.35→1.09/0.88/1.10 m/s；30/60 s
+有风落点 p95 579/554→1196/1127 m；10 s 不启用、≥20 s 安全优先时启用。4
+高度 480 次：20–40 m 触地 p95/ max 显著改善（40 m max 6.94→1.18
+m/s），30/40 m 落点减半；10 m 触地中位 0.96→1.41 m/s
+变差；已加激活瞬间高度 ≥10 m 锁存，10 m 格 aid on/off 逐 seed
+相同、attempts=0，20 m/60 s 收益保留。气压位置与斜率垂速相关。已有 2
+状态 VKF 对照（临时接线）：55 s 真值 −4.27/EKF +0.67/VKF −2.42，仍滞后 2
+m/s、触地后 −4.9，Q/R 为遥测调参，未用于控制。证据
+<code>sim-data/baro-vel-aid-runtime-ab-2026-10-26.jsonl.gz</code>、<code>figs/nav_baro_vel_aid_ab.png</code>。</p></li>
+<li><p><strong>长失联 opt-in
+下降（2026-10-25）</strong>：<code>BFS_LONG_GNSS_OUTAGE_DESCENT</code>（默认关）GNSS
+age&gt;10 s、高度&gt;0.3 m 时 1 m/s 降高。core2 20 s 失联 <strong>100
+seeds</strong>：基线 hold 26.9/164.4/205.2 m、落地 0/100；下降
+13.3/143.0/210.0 m、落地 100/100，但 pos_max 374 m（2/100）、roll
+38.8°；gate-triggered 版本 0/100 落地（未触发）。20 s
+失联全方向矩阵（420/臂）：基线 1/420 失败（NE 263.5 m）；下降全落地但 NE
+反噬 427 m/179.9°/4888 m，N/E/S/W 尚可。下降否决，默认关闭。</p></li>
+</ul>
+<h2 id="5-待办">5. 待办</h2>
+<ol type="1">
+<li><p><code>heading_aid_mode</code> / <code>heading_align_deg</code>
+已注册为 GCS 参数 <code>hdg_mode</code> / <code>hdg_align</code>（0xE1
+在线写）；对准角在<strong>下一次导航初始化前</strong>设置才生效。</p></li>
+<li><p>长时无磁定点前置研究：运动 EKF 航向质量（GNSS
+双矢量、空速/侧滑约束、 协方差一致性）；当前 20 s
+窗口是经验安全边界，不是长时能力。 强侧风（≥1 m/s²
+等效侧向加速度）下窗口内仍会偏航/漂移：偏航估计已冻结
+零偏吸收，剩余误差来自机体偏航-位置耦合与偏航权限，下一步查分配/舵面
+权限，而不是继续加估计器门控。</p></li>
+<li><p>无磁窗口遥测已加入 AnoVars（0xF2 /
+<code>DBG vars</code>）：<code>hdg_hold</code>（当前是否 允许 heading
+hold）、<code>hdg_win</code>（剩余窗口秒数，-1=非无磁模式）、<code>hdg_mode</code>。
+地面站应把 <code>hdg_win≤3 s</code> 或 <code>pos_deg=1</code>
+作为“立即降落/切手动”告警； <code>yaw_drift_dps</code>
+仍只在上层计算，未注册。</p></li>
+<li><p>若后续恢复磁融合，保持磁仅作慢速绝对基准，不与运动航向争夺。</p></li>
+<li><p><strong>短时 GNSS
+失联与姿态/站位（2026-10-25）</strong>：<code>mag_clean --pos-hold</code>
+20–25 s 失联 10 seeds 6/10 超 5 m（最大 602.7 m）；失联段真值 pitch
+−31°、 EKF ≈0°，位置估计冻在 −2.5 m。根因之一是无 GNSS 运动时的 AHRS
+姿态量测 （Madgwick
+把持续推力当重力）；<code>BFS_AHRS_ATT_GNSS_OUTAGE_GATE</code> 默认关：
+10 seeds 6/10→4/10，<strong>50/100 seeds 复核 5 s 失联 65/100→22/100、
+p95 259→18.3 m、max_roll 179.9→27.7°；10 s 46/50→39/49、 20 s
+48/48→47/50，中位 327→39 m</strong>。但 20 s 出现 seed6 roll 179.7°
+（默认同种子 71.3°）尾部反噬；时间上界 &gt;10 s 恢复 AHRS 后 20 s
+max_roll 52.6°、max hold 260 m，但中位 103 m（全门控 39 m）——
+用站位换姿态安全。<strong>roll60 保护</strong>（|roll|&gt;60° 时恢复
+AHRS）：5 s 10/50→8/50、20 s 失败数不变但 max_roll 179.7→33.9°、max hold
+418→233 m；10 s 39→40/49（多 1 例）。尾部最佳折中，仍 opt-in； 45°
+保护在 5 s 10→12/50，已否决。<strong>禁用 reanchor 否决</strong>：5 s 仍
+8/50，中位 2.26→1.36 m，但 p95 21→34.7 m、max_roll
+27.7→178.9°；重捕获大位置误差会转成大幅姿态，reanchor 保留。
+<strong>水平陀螺零偏钳制否决</strong>：失联时 bias_x/y 钳到 0.02 rad/s
+后 5 s 8→11/50（新增 seed1/5/38/50），等效 bias_y≈0.14 rad/s
+不是可简单钳制的伪量；代码回退。<strong>纯陀螺控制姿态否决</strong>：5 s
+8→15/50、max_roll 44.1°；失联瞬间 EKF 姿态已有约 9° 误差，
+陀螺零偏直接进控制环，比 EKF 锁平更差；代码回退。 保持
+opt-in，绝不默认启用。22 s 时 <code>HeadingAidingGate</code>
+仍把位置保持降为定高，
+残余速度造成站位丢失。下一步：磁/陀螺短时可信时保留位置保持
+（或降级时主动刹车），并把站位丢失与姿态发散分开验收。 <strong>gyro-tilt
+变体否决</strong>：50 seeds 11/50（AHRS-only 10/50）， seed6 222.6→179.4
+m、roll 19.5→15.3°，但新增 seed5 12.7 m；
+失败数不降，仅转移严重度，代码未保留。</p></li>
+<li><p><strong>5 s
+磁宽限已否决（2026-10-25）</strong>：<code>BFS_MAG_AGE_GRACE_5S</code>
+（<code>kMagMaxAgeS</code> 2→5 s）与 AHRS 门控联测：GNSS 失联仍 4/10，
+seed6 hold 222.6→256.4 m；真磁丢 5/10→4/10 但新增 seed3 31 m； NaN seed1
+163→236 m、max_roll 118.5°。放宽 mag_age 没有修好失联，
+反而扩大其他故障暴露时间；后续优先做“降级时主动刹车/零速保持”。</p></li>
+<li><p><strong>失联段磁航向断供（trace，2026-10-25）</strong>：SIL trace
+新增 <code>mag_age</code> / <code>heading_age</code> 后，seed6 失联段
+<code>mag_age</code> 0.04→5.04 s 线性增长， 49 次磁门尝试全部为
+<code>DipDeviation</code>（reason=9；14 才是 EkfRejected），
+无成功融合；2.0 s 时
+<code>heading_aiding=1→0</code>、<code>pos_degraded=0→1</code>。
+直接触发是姿态误差把倾角观测推出 10° 门限、磁矢量被整帧拒绝， 不是单纯
+mag_age 阈值。dip 重试 10× 噪声仍被 NIS 拒（mag_fused 不变）； 固定 50
+µT 能融合，seed6 hold 222.6→157.8 m，但 max_roll 19.5→22.3°、 总失败仍
+4/10；只减轻站位、不修复姿态/航向耦合，重试未保留。
+<code>MagGateResult.heading_error_rad</code> 是场一致性误差（参考场方位
+− 用 EKF 姿态反旋的实测方位），<strong>不是航向残差</strong>，不能直接做
+yaw 回退； 需从 <code>mag_body</code> 与 roll/pitch 单独构造 yaw
+残差，或放宽 3D 更新 R/NIS。 朴素 <code>angle2dcm(0,pitch,roll)</code>
+反旋也不行：离线真航向 30°、 pitch −20°、roll 10° 算出
+14.7°（倾角把垂直场混入水平投影）。 正确形式
+<code>n=(Rx(roll)Ry(pitch))^T m_ned</code>，
+<code>ψ=atan2(n_y,n_x)−atan2(m_by,m_bx)</code>，已实现
+<code>magTiltCompensatedHeadingRad()</code> 并由 G10 单测锁定。 但“AHRS
+门控 + 失联段标量 yaw 回退”10 seeds（0.15/0.5 rad 噪声 各一组）与
+AHRS-only 逐项相同（失联 4/10、hold 3.02/222.60 m、 roll
+19.5°）。回退在磁门 <code>gate.pass</code> 的 else 分支内，失联姿态误差
+会让磁门先以 Residual/Tilt 拒绝，回退没有机会执行——不是 yaw NIS。
+回退代码未保留，下一步先保证姿态/磁门通过（AHRS 门控或放宽
+tilt/residual），再谈 yaw 回退。</p></li>
+<li><p><strong>GNSS 失联首选光流速度辅助（2026-10-25，SIL 100
+seeds）</strong>： 默认 <code>mag_clean --pos-hold</code> 加
+<code>--flow</code> 后，5 s 失联 <strong>65/100→4/100</strong>、20 s
+<strong>100/100→6/100</strong>；hold 中位 1.31/1.43 m、 p95 2.96/5.12
+m；AHRS+roll60+flow（5 s 100 seeds）<strong>2/100</strong>、 中位 1.17
+m、max 10.4 m，20 s 50 seeds 1/50。光流让 EKF 速度/位置
+在失联段保持可观，位置环能看到漂移并刹车。<strong>有光流时不需要</strong>
+AHRS/roll60 宏；无光流时才用 opt-in 组合（5 s 8/50、20 s 47/49）。 SIL
+光流理想/低噪声且 <code>--flow</code> 改变同一 RNG，不是严格因果配对；
+真机需下视光流+测距、纹理/光照/高度、质量门/延迟/尺度误差验证。
+<strong>光流+GNSS
+同时中断</strong>（<code>--flow-dropout 20:25</code>，50 seeds）：5 s
+5/50 失败但 max_roll 177.6°；20 s 48/50 失败、中位 54.6 m、 max 205.5
+m。光流是主通道，必须单独做新鲜度/质量/惯导一致性
+检测与失效保护，不能当作必然可用。<strong>仅光流中断、GNSS 正常 50 seeds
+0/50、max 1.4 m</strong>；失效保护触发必须是 AND（GNSS 陈旧</p>
+<ul>
+<li>光流失效），单独光流丢失不能误触发降级。 <strong>AND
+检测器</strong>：<code>include/NavAidLossDetector.h</code>，0.5 s 降级 /
+2 s 请求下降 / 1 s 恢复，D1–D8 单测通过并加入
+<code>run_all.sh</code>。</li>
+</ul>
+<blockquote>
+<p><strong>接线状态（2026-11-08
+核对）</strong>：<code>include/NavAidLossDetector.h</code> 已实现、
+单测通过，但<strong>在 <code>src/</code>
+里零引用</strong>——固件从未实例化这个检测器。
+所以现状不是「检测在跑但不动作」，而是「检测器根本没被调用」。
+要真正用起来需要：①在主循环或导航任务里实例化并每拍投喂 GNSS 新鲜度
+与光流质量；②把 <code>request_descent()</code> 接到模式切换或油门限制；
+③重新评估误报率——本节 50/600 seeds 的数据是离线跑出来的，
+接线后行为会变。</p>
+</blockquote></li>
+</ol>
+<ul>
+<li><strong>GNSS spoof 飞行中台阶（2026-10-26）</strong>：25 s 注入 20 m
+台阶 pos_rms 0.88 m（旧 20 m 结论来自 10 s、EKF 未稳）；30 m 台阶
+pos_rms 25.4 m、20 次 EKF 野值拒绝、1 次重锚仍在飞。硬
+consistency-reject 触发 305 次后 434.7 m/坠落；邻帧位置速率门 200 次后
+200.9 m/坠落，均已回退。<strong>持续 spoof 无外部基准不可硬拒绝，保留
+NIS/重锚有界响应。</strong> 420 次幅度/速率矩阵：20 m 台阶
+0/60；30/50/100 m 误差 ≈0.83×台阶；0.1/0.5/1.0 m/s 慢偏
+0/60、60/60、60/60（~1/5/10 m）。有界但非抗欺骗。光流辅助检测（480
+次，SIL 理想 flow）：susp 无 spoof 6/60、30 m 台阶 15/60、0.5/1.0 m/s
+慢偏 8/45/60，crej=0，位置误差不变，不能自动响应。速度保持有界响应（600
+次，已回退）：正常/20 m 无触发；30/50/100 m 中位真值位移
+24/30/31→16/16/16 m，但 p95/max 变差、pos_rms 不变，不采用。</li>
+</ul>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-005-无磁航向与运动EKF.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 10:22</footer></article></body>
+</html>
