@@ -157,8 +157,14 @@ s</td>
 <code>output_cal.attitude_limit_deg = coax.attitude_limit_deg;</code>——<strong>正确赋值</strong>，
 默认 45° 从未生效。这个默认值只是「结构体字段必须有初值」的产物，
 不是实际口径。</p></li>
-<li><p><strong><code>alpha_ref</code>
-因果链仍未验证</strong>——「不能外推」有实验支持，「为什么不能」仍是推测。</p></li>
+<li><p><del><strong><code>alpha_ref</code> 因果链仍未验证</strong></del>
+→ <strong>部分验证（Round 233）</strong>。
+「不能外推」此前已有实验支持（<code>-DBFS_RATE_LEAD</code> 基线 9/9 →
+8/9）； 本轮加探针实测了两者的量级差：<code>alpha_ref_dps2</code> 在
+−5.5~+4.4 内平滑， 实测角加速度在 −24.9~+11.8 内跳变——<strong>量级差 3–5
+倍</strong>。 这解释了「为什么不能」：fast MC 的 lead
+面对的是噪声水平完全不同的输入。
+仍未验证的部分：没有做「把固件输入换成实测」的对照实验（那需要改控制路径）。</p></li>
 </ol>
 <h3 id="13-结合实机烧录测试">1.3 「结合实机烧录测试」</h3>
 <table>
@@ -256,5 +262,5 @@ s</td>
 <strong>问题侧</strong>：发现并处理了 6 类问题，但<strong>仍有 5
 项明确未完成</strong>（见 §1.2）， 其中 F4 判据是结构性的。</p>
 <p><strong>没有做到「所有」——做到了「已发现的都有结论，未完成的都写明了」。</strong></p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:59</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 15:01</footer></article></body>
 </html>
