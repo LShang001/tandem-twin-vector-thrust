@@ -65,7 +65,28 @@ def count_fw_params() -> int:
 
 
 # 每项：名称 / 实测函数 / 文档中的写法（捕获组 1 是数字）
+def count_verify_items() -> int:
+    """数 verify-all.py 里快档守卫的项数（不含 --include-sil/--include-host 两项）。"""
+    import re as _re
+    src = (ROOT / "tools" / "verify-all.py").read_text(encoding="utf-8", errors="replace")
+    # 守卫清单是以 (名字, 命令, cwd) 三元组形式列出的
+    items = _re.findall(r'^\s{4,8}\(\s*"([^"]+)",\s*\[', src, _re.MULTILINE)
+    # 去掉两个慢档。★ 用精确名称而不是 "SIL" 子串——"SIL 覆盖审计"是快档，
+    #   之前用子串匹配把它也过滤了，导致算出来少 1 项（2026-11-08 踩过）。
+    slow = {"三机型 SIL 跑批", "完整宿主回归"}
+    return len([n for n in items if n not in slow])
+
+
 FACTS = [
+    {
+        "name": "快档守卫项数",
+        "actual": count_verify_items,
+        "patterns": [
+            r"(\d+)\s*项快档",
+            r"(\d+)\s*项全绿再提交",
+        ],
+    },
+
     {
         "name": "Node 测试项数",
         "actual": count_node_tests,
