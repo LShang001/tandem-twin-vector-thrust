@@ -1886,6 +1886,59 @@ realistic。</p>
 本轮第一版跑出三个「缺失」，如果直接采信，就会得出「三个替身文件都不存在」
 的结论——而它们就在那里。<strong>报错未必是被检查对象的错。</strong></p>
 </blockquote>
+<h2 id="223-四机型覆盖矩阵2026-11-08-核对">2.23
+四机型覆盖矩阵（2026-11-08 核对）</h2>
+<p>四种机型走<strong>两条不同的测试路径</strong>，容易误以为液体火箭没被测：</p>
+<table>
+<thead>
+<tr>
+<th>机型</th>
+<th>固件 env</th>
+<th>SIL 入口</th>
+<th>覆盖内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>纵列双发</td>
+<td><code>TandemVec_FCS</code></td>
+<td><code>run_acceptance.sh</code></td>
+<td>定高 + 手动阶跃 + 3-seeds</td>
+</tr>
+<tr>
+<td>共轴双桨</td>
+<td><code>CoaxialVTVL</code></td>
+<td><code>run_coaxial_acceptance.sh</code></td>
+<td>8 profiles × 3 seeds（40 例矩阵）</td>
+</tr>
+<tr>
+<td>单涵道四燃气舵</td>
+<td><code>SingleEdf4Vane</code></td>
+<td><code>build_and_run_singleedf.sh</code></td>
+<td>定高 + 手动阶跃</td>
+</tr>
+<tr>
+<td><strong>VTVL 液体火箭</strong></td>
+<td><strong>无</strong></td>
+<td><strong><code>run_all.sh</code> 里的 3 个宿主单测</strong></td>
+<td><code>test_liquid_rocket_model</code> / <code>_allocator</code> /
+<code>_ccaegt_reference</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>前三个</strong>走 <code>run_all_airframes.sh</code>（三机型
+SIL 跑批，<code>--include-sil</code> 触发）。 <strong>液体火箭没有固件
+env</strong>，所以不进那个跑批——它的模型、分配器与 CCAEGT 参考
+比对都是宿主单测，在
+<code>run_all.sh</code>（<code>--include-host</code> 触发）里跑。</p>
+<p><strong>结论</strong>：四种机型都有测试覆盖，只是液体火箭走宿主单测而非固件
+SIL。 这不是缺口，是它没有固件分支这一事实的自然结果。</p>
+<blockquote>
+<p>★ 误判风险：只看 <code>run_all_airframes.sh</code>
+的输出会说「三机型」，然后问
+「液体火箭呢」。答案是它在另一条路径上。<strong>判覆盖要先确认「这个东西有没有
+固件实现」，没有就不可能在固件 SIL 里被测。</strong></p>
+</blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
 <p>排查三轮后的最终结论：--gain-scale 系列在 SIL
@@ -2438,5 +2491,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:28</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:30</footer></article></body>
 </html>
