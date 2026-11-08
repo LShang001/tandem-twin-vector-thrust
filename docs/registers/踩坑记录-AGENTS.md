@@ -3,6 +3,22 @@
 > **触发条件**：修改/调试以下任何领域前，先在本文件检索相关条目——
 > 控制分配/差速调度/滤波/通信链路（GCS/AnoCom/黑匣子）/GNSS/构建/灯效。
 > 2026-08-10 从 AGENTS.md 外移（上下文膨胀修复，AGENTS.md 保留 5 条最高频）。
+
+- **「改了没生效」与「检查不生效」长得一模一样（2026-11-08，一天内踩两次）**：
+  ①验证 `check-param-parity` 的 `lever_m` 守护时，改了 `grab()` 的起点却仍 PASS——
+  实际是 plant 侧的停止标记 `"};"` 撞上了数组 `inertia_kgm2[3] = {...};` 的收尾，
+  只抓到 1 个字段，`len(vals)<3` 静默跳过。改成行首 `"\n};"` 才对。
+  ②验证 `run_real_acceptance` 的判据时，把 `clean` profile 的 `pos_rms` 收紧到 0.01
+  仍 `0 failed`——实际是 9 个 case 跑的是 `mag_clean/mag_disturbed/nomag_degraded`，
+  `clean` 是**定义了但不执行**的死配置；且 `mag_clean` 的字段是 `pos_rms_preland`
+  不是 `pos_rms`。改对 profile 后立刻 3 failed。
+
+  **判据**：改完一处配置/判据后仍通过时，先问「**这段代码这次真的被执行了吗**」，
+  再问「判据是不是失效了」。常用验证手段：故意改成必然失败的极端值（0.01、1e9）、
+  在目标分支加一句 print、或 grep 确认该字段确实在被执行的那个 profile 里。
+
+  **同类根因**：改之前没确认「改的地方是不是生效路径」。这与「grep 到名字 ≠ 在用」
+  （`check-module-wiring` 那条）、「文档提到 ≠ 验证过」（VER-009 能失败计数）是同一族。
 > 新增踩坑：追加到对应主题段落，标注（来源：YYYY-MM-DD）。
 
 - `dyn.Fx = Tf*cf + Tt*ct`（尾推正贡献，非负）
