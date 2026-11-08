@@ -1781,6 +1781,58 @@ bash run_coaxial_acceptance.sh --profiles mag_clean --seeds 1 --seconds 40 \
 这不是判据错，是「默认口径不问这一项」。想知道着陆段姿态就没法绕开
 realistic。</p>
 </blockquote>
+<h2 id="221-sil-豁免文件的替身核对2026-11-08">2.21 SIL
+豁免文件的替身核对（2026-11-08）</h2>
+<p><code>check-sil-coverage.py</code> 报 4
+个固件源豁免，每个都写了原因。但「有原因」
+不等于「有替身」——本轮逐个核对替身确实存在：</p>
+<table>
+<thead>
+<tr>
+<th>豁免源</th>
+<th>豁免原因</th>
+<th>替身</th>
+<th>核对</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sensor_imu.cpp</code></td>
+<td>需真实器件</td>
+<td><code>fw_sil_stubs.cpp</code></td>
+<td>✓ 存在</td>
+</tr>
+<tr>
+<td><code>sensor_peripheral.cpp</code></td>
+<td>气压/磁/光流需器件</td>
+<td><code>sil_sensor_model.h</code></td>
+<td>✓ 存在</td>
+</tr>
+<tr>
+<td><code>task_scheduler.cpp</code></td>
+<td>TIM8 调度器</td>
+<td><code>fw_sil_env_main.cpp</code> 的确定步长循环</td>
+<td>✓ 存在</td>
+</tr>
+<tr>
+<td><code>ubx_config.cpp</code></td>
+<td>需真实接收机</td>
+<td><code>stub/ubx.h</code></td>
+<td>✓ 存在</td>
+</tr>
+</tbody>
+</table>
+<p>另有 Arduino
+库替身：<code>stub/Arduino.h</code>、<code>SPI.h</code>、<code>Stream.h</code>、<code>Wire.h</code>。</p>
+<p><strong>结论</strong>：4
+个豁免都不是「偷懒跳过」——每一个都有对应的模型或桩件在跑。</p>
+<blockquote>
+<p>★ 这条核对的意义：<code>check-sil-coverage.py</code>
+只查「文件要么进清单、要么登记豁免」，
+它<strong>不查替身是否存在</strong>。如果有人删了
+<code>stub/ubx.h</code> 却没删豁免登记， 那个脚本仍然 PASS，而 SIL
+会编译失败——这是两道不同的关。 本轮人工核对补上了这个缺口。</p>
+</blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
 <p>排查三轮后的最终结论：--gain-scale 系列在 SIL
@@ -2316,5 +2368,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:06</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:08</footer></article></body>
 </html>
