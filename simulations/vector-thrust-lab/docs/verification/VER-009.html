@@ -1495,7 +1495,7 @@ SIL 里 plant
 <table>
 <thead>
 <tr>
-<th>未做违规实验的 8 项</th>
+<th>未做违规实验的 6 项</th>
 <th>原因</th>
 </tr>
 </thead>
@@ -1511,12 +1511,8 @@ Node），改公式风险高；机制上比静态检查可靠</td>
 实测）</td>
 </tr>
 <tr>
-<td>仿真域单测（Node）</td>
-<td>92 项已有失败路径，未专门造违规</td>
-</tr>
-<tr>
-<td>坐标系实现自检 / GCS 单元测试</td>
-<td>同上，有失败路径但未造违规</td>
+<td>坐标系实现自检</td>
+<td>有失败路径但未专门造违规</td>
 </tr>
 <tr>
 <td>三机型 SIL 跑批 / 完整宿主回归</td>
@@ -1525,6 +1521,10 @@ Node），改公式风险高；机制上比静态检查可靠</td>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>仿真域 Node 测试与 GCS 单元测试已于 Round 207/208
+补验（插必然失败断言）， 已从本表移出，计入 16/22。</p>
+</blockquote>
 <blockquote>
 <p>★ 这张计数必须诚实：「文档里提过这个名字」不等于「做过违规实验」。
 本表 <strong>14/22</strong> 是后者（做过违规实验的 14 项明细见 §2.16
@@ -2508,5 +2508,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:42</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:44</footer></article></body>
 </html>
