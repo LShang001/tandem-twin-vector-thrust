@@ -1933,6 +1933,11 @@ env</strong>，所以不进那个跑批——它的模型、分配器与 CCAEGT 
 <code>run_all.sh</code>（<code>--include-host</code> 触发）里跑。</p>
 <p><strong>结论</strong>：四种机型都有测试覆盖，只是液体火箭走宿主单测而非固件
 SIL。 这不是缺口，是它没有固件分支这一事实的自然结果。</p>
+<p><strong>实测确认（2026-11-08）</strong>：跑
+<code>bash test_host/run_all.sh</code>，输出里有</p>
+<pre><code>=== test_liquid_rocket_sil: 全部通过 ===
+=== 全部宿主机回归测试通过 ===</code></pre>
+<p>所以那份覆盖矩阵不是「看代码推断的」，是实跑确认过的。</p>
 <blockquote>
 <p>★ 误判风险：只看 <code>run_all_airframes.sh</code>
 的输出会说「三机型」，然后问
@@ -2476,11 +2481,11 @@ m」</strong>：两端都有边界，
 一旦触地就判失败，避免 「掉到地上但高度指标还勉强够」的假通过。</li>
 </ul>
 <h2 id="4-复现">4 复现</h2>
-<div class="sourceCode" id="cb7"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
-<span id="cb7-3"><a href="#cb7-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
-<span id="cb7-4"><a href="#cb7-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
+<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
+<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
 <p>Windows/MinGW 下统一经 <code>tools/with-ascii-bin.sh</code>
 包装（ASCII 盘符 + <code>BIN_DIR</code>）。</p>
 <h2 id="5-参考">5 参考</h2>
@@ -2491,5 +2496,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:30</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 12:37</footer></article></body>
 </html>
