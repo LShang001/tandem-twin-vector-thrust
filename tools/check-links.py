@@ -88,7 +88,10 @@ def main() -> int:
     n_md = n_html = 0
     for md in sorted(ROOT.rglob("*.md")):
         if any(
-            part in {"node_modules", ".git", "vendor"} or part.startswith(".")
+            # ★ 2026-11-08：加 "tmp"——临时文件不该参与文档链接检查。
+            #   上轮验证「文档产物同步」时把备份放在 tmp/，链接检查连带报 FAIL。
+            part in {"node_modules", ".git", "vendor", "tmp", ".pio"}
+            or part.startswith(".")
             for part in md.parts
         ):
             continue
