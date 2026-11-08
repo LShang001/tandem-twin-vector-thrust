@@ -1502,8 +1502,7 @@ SIL 里 plant
 <tbody>
 <tr>
 <td>坐标系 @frame 标注</td>
-<td><strong>有意宽松</strong>：正文出现轴名符号即算已标注（Round 82
-实测）。判据本身就是「宽松」的，不存在「造违规让它报」这回事——要检的是它会不会漏，不是它会不会报</td>
+<td><strong>有意宽松</strong>（详见 §2.25，已量化验证）</td>
 </tr>
 </tbody>
 </table>
@@ -1973,6 +1972,58 @@ SIL。 这不是缺口，是它没有固件分支这一事实的自然结果。<
 <p>★ 判据：<strong>报错文案里的数字必须是变量，不能是字面量</strong>。
 否则改判据的那天，提示就开始撒谎——而看提示的人不会去查源码，
 会被引向错误的方向。这种 bug 比「没有提示」更坏。</p>
+</blockquote>
+<h2 id="225-frame-标注审计的宽泛度量化2026-11-08">2.25
+<code>@frame</code> 标注审计的宽泛度量化（2026-11-08）</h2>
+<p><code>check-frame-refs.py</code>
+的判据是<strong>有意宽松</strong>的：文件里有 <code>@frame</code> 行，
+<strong>或</strong>正文出现轴名符号（<code>z_b</code> / <code>{A}</code>
+/ <code>{M}</code> 等），都算已标注。</p>
+<p>本轮把它量化验证了一遍：</p>
+<pre><code># 从 ActuatorOutputMap.h 抽掉 @frame 行（正文仍有 z_b 等轴名）
+py -3.12 tools/check-frame-refs.py
+  已标注 279 处 / 待补 0 处
+  [PASS] 全部 @frame 均已标注坐标系（或有轴名符号 / 明示 N/A）</code></pre>
+<p><strong>结论</strong>：抽掉 <code>@frame</code>
+不会报警——只要正文还有轴名。</p>
+<p><strong>这不是 bug，是设计取舍</strong>：</p>
+<ul>
+<li>收益：不会因为「作者用了 <code>z_b</code>
+这种明确到轴的写法」而误报</li>
+<li>代价：<strong>抽掉 <code>@frame</code>
+且正文仍有轴名时检不出来</strong></li>
+</ul>
+<p><strong>所以这项能力边界要说清楚</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>想检的东西</th>
+<th>这个守卫能不能检</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>有没有 <code>@frame</code> 声明</td>
+<td>能（没有且无轴名时报）</td>
+</tr>
+<tr>
+<td>声明是否指向正确坐标系</td>
+<td><strong>不能</strong>（只看有没有，不看对不对）</td>
+</tr>
+<tr>
+<td>抽掉 <code>@frame</code> 但正文有轴名</td>
+<td><strong>不能</strong>（有意宽松）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>★
+这一项在「能失败验证」表里永远会是「未验」——因为它<strong>宽松到没有
+反例可造</strong>。硬要造一个让它报的例子，只能写一个既没
+<code>@frame</code> 又没轴名的
+文件，那验的是「空文件会不会报」，没有意义。</p>
+<p>所以 21/22 里的那个 1
+不是「还没做」，是「这项的判据性质决定了它不可这样验」。</p>
 </blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
@@ -2555,11 +2606,11 @@ m」</strong>：两端都有边界，
 一旦触地就判失败，避免 「掉到地上但高度指标还勉强够」的假通过。</li>
 </ul>
 <h2 id="4-复现">4 复现</h2>
-<div class="sourceCode" id="cb8"><pre
-class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
-<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
-<span id="cb8-3"><a href="#cb8-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
-<span id="cb8-4"><a href="#cb8-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre
+class="sourceCode bash"><code class="sourceCode bash"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> TandemVec_FCS</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_all_airframes.sh      <span class="co"># 三机型（约 7 min）</span></span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_acceptance.sh         <span class="co"># 纵列基础验收（3 seeds）</span></span>
+<span id="cb9-4"><a href="#cb9-4" aria-hidden="true" tabindex="-1"></a><span class="fu">bash</span> test_host/fw_sil/run_failsafe_matrix.sh    <span class="co"># 失效保护矩阵（27 例）</span></span></code></pre></div>
 <p>Windows/MinGW 下统一经 <code>tools/with-ascii-bin.sh</code>
 包装（ASCII 盘符 + <code>BIN_DIR</code>）。</p>
 <h2 id="5-参考">5 参考</h2>
@@ -2570,5 +2621,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:12</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 13:15</footer></article></body>
 </html>
