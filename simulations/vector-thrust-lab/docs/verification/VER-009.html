@@ -1833,6 +1833,53 @@ realistic。</p>
 <code>stub/ubx.h</code> 却没删豁免登记， 那个脚本仍然 PASS，而 SIL
 会编译失败——这是两道不同的关。 本轮人工核对补上了这个缺口。</p>
 </blockquote>
+<h2 id="222-工具路径基准审计2026-11-08">2.22
+工具路径基准审计（2026-11-08）</h2>
+<p>Round 187 修 <code>check-sil-coverage</code> 时踩了一个错：用
+<code>ROOT</code>（项目根）拼替身路径， 而替身都在
+<code>TandemVec_FCS/</code>
+下，导致三个文件全报「不存在」。顺着查全仓工具：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>同时有 ROOT+FW</th>
+<th>用法</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-angle-units</code></td>
+<td>✓</td>
+<td><code>FW / "src"</code></td>
+<td>✓ 正确</td>
+</tr>
+<tr>
+<td><code>check-module-wiring</code></td>
+<td>✓</td>
+<td><code>FW / "src"</code>/<code>"include"</code>/<code>"test_host"</code></td>
+<td>✓ 正确</td>
+</tr>
+<tr>
+<td><code>check-sil-coverage</code></td>
+<td>✓</td>
+<td><strong>曾用 <code>ROOT</code> 拼替身路径</strong></td>
+<td>已修</td>
+</tr>
+</tbody>
+</table>
+<p>另复查 <code>check-module-wiring</code> 的 Windows
+路径分隔符问题（Round 123）： <code>p.relative_to(FW).as_posix()</code>
+已就位，没退化。</p>
+<p><strong>结论</strong>：只有 <code>check-sil-coverage</code>
+一处用错基准，已修。其余两个正确。</p>
+<blockquote>
+<p>★
+这类错的特征：<strong>检查器报「不存在」时，先怀疑检查器的路径，再怀疑被查对象</strong>。
+本轮第一版跑出三个「缺失」，如果直接采信，就会得出「三个替身文件都不存在」
+的结论——而它们就在那里。<strong>报错未必是被检查对象的错。</strong></p>
+</blockquote>
 <h2 id="25-不同-sil-入口支持不同参数且都不校验未知参数">2.5 不同 SIL
 入口支持不同参数，且都不校验未知参数</h2>
 <p>排查三轮后的最终结论：--gain-scale 系列在 SIL
@@ -2368,5 +2415,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb7-1"><a href="
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:08</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 11:16</footer></article></body>
 </html>
