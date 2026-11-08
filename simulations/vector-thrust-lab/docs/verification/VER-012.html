@@ -125,9 +125,13 @@ s</td>
 </table>
 <p><strong>明确没做到的</strong>：</p>
 <ol type="1">
-<li><strong>F4
-判据仍是结构性的缺陷</strong>——知道它不工作，但改它需要重新评估误报率，
-且它不执行任何动作（影响仅限遥测），故本轮只记录不改。</li>
+<li><del><strong>F4 判据仍是结构性的缺陷</strong></del> →
+<strong>已修复并烧录上机（Round 224/228）</strong>。 根因是 NaN
+短路（<code>|nan| &gt; 阈值</code> 恒为 false → 计时器每拍清零 →
+永不触发）， 不是此前猜的「指令到不了
+90%」。修复：非有限输入按故障方向处理。 证据：单测 T13（21/21）、SIL
+<code>f4=0→1</code>、全量 23/23、实机烧录后 <code>uptime</code> 49640→64
+且 8 项全过。明细见 VER-009 §2.26 与 VER-010 §5.19。</li>
 <li><strong><code>NavAidLossDetector</code>
 仍未接线</strong>——有实现、有单测、固件不调用。</li>
 <li><strong>3 个模块完全未用 + 2 个仅测试引用</strong>——都已在
@@ -241,5 +245,5 @@ s</td>
 <strong>问题侧</strong>：发现并处理了 6 类问题，但<strong>仍有 5
 项明确未完成</strong>（见 §1.2）， 其中 F4 判据是结构性的。</p>
 <p><strong>没有做到「所有」——做到了「已发现的都有结论，未完成的都写明了」。</strong></p>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:45</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-012-目标达成度评估-2026-11-08.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-08 14:46</footer></article></body>
 </html>
