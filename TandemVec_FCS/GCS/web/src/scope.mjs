@@ -269,6 +269,23 @@ function renderStats(d) {
     return;
   }
   const f = (v, n = 3) => (v === null || v === undefined ? '--' : Number(v).toFixed(n));
+  // 主频：把「抖多大」和「抖在哪个频率」放在一行里。
+  // 没有主频（区间太短、或信号是常量）时显示 -- 并给出原因，不静默留空。
+  let freqPart = '<span>主频 <b>--</b></span>';
+  if (d.dominant_band === 'low') {
+    // 主成分低于频率分辨率时，报"低频主导"而不是某个次峰频率。
+    // 给出错误的主频比不给更糟——会让人去查一个不存在的振动源。
+    freqPart = `<span>主频 <b>低频主导</b> <i class="hint">${d.main_freq_note || ''}</i></span>`;
+  } else if (d.main_freq_hz !== undefined && d.main_freq_hz !== null) {
+    const share = d.main_freq_share_pct != null ? ` (${f(d.main_freq_share_pct, 1)}%)` : '';
+    freqPart = `<span>主频 <b>${f(d.main_freq_hz, 2)} Hz</b>${share}</span>`;
+  } else if (d.spectrum_reason) {
+    freqPart = `<span>主频 <b>--</b> <i class="hint">${d.spectrum_reason}</i></span>`;
+  }
+  const b = d.bands;
+  const bandPart = b
+    ? `<span>频带 <b>&lt;1Hz ${f(b.low_lt1hz_pct, 0)}% · 1–10Hz ${f(b.mid_1_10hz_pct, 0)}% · &gt;10Hz ${f(b.high_gt10hz_pct, 0)}%</b></span>`
+    : '';
   box.innerHTML = `
     <span class="ss-ch">${d.channel}</span>
     <span>区间 <b>${f(d.duration_s, 2)} s</b></span>
@@ -277,7 +294,9 @@ function renderStats(d) {
     <span>峰峰 <b>${f(d.peak_to_peak)}</b></span>
     <span>均值 <b>${f(d.mean)}</b></span>
     <span>标准差 <b>${f(d.std)}</b></span>
-    <span>峰因数 <b>${f(d.crest_factor, 2)}</b></span>`;
+    <span>峰因数 <b>${f(d.crest_factor, 2)}</b></span>
+    ${freqPart}
+    ${bandPart}`;
 }
 
 function drawCard(card) {

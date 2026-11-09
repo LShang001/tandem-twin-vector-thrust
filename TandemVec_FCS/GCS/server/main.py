@@ -812,12 +812,53 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
                                 'ok': False, 'reason': f'通道 {ch} 样本不足'})
             return
         from .stats import series_stats
+        series = list(dq)
         try:
-            r = series_stats(list(dq), msg.get('t0'), msg.get('t1'))
+            r = series_stats(series, msg.get('t0'), msg.get('t1'))
         except Exception as exc:
             await ws.send_json({'type': 'scope_stats', 'channel': ch,
                                 'ok': False, 'reason': str(exc)})
             return
+        # 顺手把该区间的频谱主峰也算出来：现场问"这段抖得厉害"时，
+        # 下一个问题必然是"抖在哪个频率"——时域强度和频域来源要在一屏里。
+        # 用同一段数据、同一次请求，避免用户再切页面、再选一次区间。
+        if r.get('ok'):
+            try:
+                from .spectrum import spectrum_summary
+                t0 = r['t0']
+                t1 = r['t1']
+                seg = [(tt, vv) for tt, vv in series if t0 <= tt <= t1]
+                # 窗长按选区长度自适应：默认 256，但选区短时缩到 len//2，
+                # 否则短选区永远报"样本不足"，而短选区恰恰是现场最常用的
+                # （看到一个毛刺想立刻知道它是什么频率）。
+                # 下限 64：再小频率分辨率太差，主频没有参考价值。
+                nperseg = max(64, min(256, len(seg) // 2))
+                sp = spectrum_summary(seg, nperseg=nperseg)
+                if sp.get('ok'):
+                    peaks = sp.get('peaks') or []
+                    banks = sp.get('bands') or {}
+                    low = banks.get('low_lt1hz_pct') or 0.0
+                    # ★ 关键判断：如果绝大部分能量在 <1 Hz，说明主成分**低于频率
+                    #   分辨率**（分辨率 = fs/nperseg ≈ 0.13 Hz）。这时第一个
+                    #   局部峰其实是次峰，报出来会严重误导——实测 pitch_deg 的
+                    #   0.072 Hz 慢摆被报成 4.9 Hz。宁可报"低频主导"也不给错频率。
+                    if low >= 80.0:
+                        r['main_freq_hz'] = None
+                        r['dominant_band'] = 'low'
+                        r['main_freq_note'] = (
+                            f'能量 {low:.1f}% 在 <1 Hz（低于 '
+                            f'{sp.get("resolution_hz")} Hz 分辨率，主成分是慢漂）')
+                        r['main_freq_share_pct'] = low
+                    else:
+                        r['main_freq_hz'] = peaks[0]['freq_hz'] if peaks else None
+                        r['main_freq_share_pct'] = peaks[0]['share_pct'] if peaks else None
+                        r['dominant_band'] = 'peak'
+                    r['bands'] = banks
+                    r['spectrum_fs'] = sp.get('fs')
+                else:
+                    r['spectrum_reason'] = sp.get('reason')
+            except Exception as exc:
+                r['spectrum_reason'] = str(exc)
         await ws.send_json({'type': 'scope_stats', 'channel': ch, **r})
 
     elif cmd == 'tuning_channels':
