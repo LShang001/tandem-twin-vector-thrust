@@ -3264,6 +3264,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         // calg：角速度模长（dps）。静止判据第三条件，阈值 0.1。
         serial.print(F(" calg="));
         serial.print(imuCalibrator.diagGyroNorm() * 57.29578f, 4);
+
         serial.print(F(" gz_bias_dps="));
         serial.print(imuCalibrator.gyroBiasDps(2), 3);
         serial.print(F(" frz="));

@@ -233,18 +233,32 @@ int ICM45686_ImuDevice::readFifo(ImuFifoSample *out, size_t max)
   {
     return -1;
   }
+  // ★ 2026-11-09：按 header 的 accel_bit/gyro_bit 过滤，只保留两者都有效的包。
+  //   45686 的 fifo_header_t 没有 empty 位，但 accel_bit/gyro_bit 标明该包
+  //   实际含哪些数据。无数据的包仍占满 fifo_frame_size，直接按 16 字节布局
+  //   解码会读到残留字节，解出一份"假样本"。
+  //   实机症状：isr_f/isr_c 算出的帧率比配置 ODR 高约 20%（3867 vs 3200），
+  //   多出来的就是这类假帧；EKF 拿它积分后 vel 炸到 -633 m/s。
+  size_t out_n = 0;
   for (size_t i = 0; i < n; ++i)
   {
+    const fifo_header_t hdr = s_batch[i].header;
+    if (!hdr.bits.accel_bit || !hdr.bits.gyro_bit)
+    {
+      fifo_bad_header_count_++;
+      continue;
+    }
     for (int a = 0; a < 3; ++a)
     {
-      out[i].acc[a] =
+      out[out_n].acc[a] =
           ICM456xx::rawRegisterAccelToG(s_batch[i].byte_16.accel_data[a], accelFsr_);
-      out[i].gyr[a] =
+      out[out_n].gyr[a] =
           ICM456xx::rawRegisterGyroToDps(s_batch[i].byte_16.gyro_data[a], gyroFsr_);
     }
-    out[i].timestamp = s_batch[i].byte_16.timestamp;
+    out[out_n].timestamp = s_batch[i].byte_16.timestamp;
+    out_n++;
   }
-  return static_cast<int>(n);
+  return static_cast<int>(out_n);
 }
 
 float ICM45686_ImuDevice::dieTempC()

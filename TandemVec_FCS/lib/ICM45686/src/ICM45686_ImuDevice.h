@@ -88,6 +88,9 @@ public:
   int enableFifo() override;
   int readFifo(ImuFifoSample *out, size_t max) override;
 
+  /// 被 header 丢弃的无效 FIFO 包累计数（accel_bit 或 gyro_bit 为 0）。
+  uint32_t fifoBadHeaderCount() const { return fifo_bad_header_count_; }
+
   // ★ 2026-11-09：injectFifo 是 ring 架构的必需接口。
   //   上层 ISR 从硬件 FIFO 取出样本后，通过本方法注入"当前样本"，
   //   随后 accX()/gyrX() 等访问器返回该样本。基类默认返回 -1，
@@ -183,6 +186,7 @@ private:
   float inj_acc_[3] = {0.0f, 0.0f, 0.0f};   // ISR 注入的加速度（g）
   float inj_gyr_[3] = {0.0f, 0.0f, 0.0f};   // ISR 注入的角速度（dps）
   bool inj_valid_ = false;
+  uint32_t fifo_bad_header_count_ = 0;   // 无效 FIFO 包计数（诊断用）
   /// 是否已从 UI 样本读到过温度（dieTempC() 的有效性判据）。
   bool temp_valid_ = false;
   const char *err_ = "";

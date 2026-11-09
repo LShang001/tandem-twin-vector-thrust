@@ -212,7 +212,10 @@ void timerCallback()
   // ★ 2026-11-09：45686 走 FIFO 批量读，ISR 1kHz 每拍取约 3 帧（ODR 3.2k）；
   //   42688 保持 2kHz 每拍 1 帧。生产速率由芯片 ODR 决定，ISR 只决定取数节奏。
 #if defined(FCS_IMU_MODEL_ICM45686)
-  s_imu_phase += 1000U;
+  // 45686 ODR 3.2kHz：ISR 也按 3.2kHz 触发（TIM8 6400 / 步进 3200 → 每 2 拍一次），
+  // 一拍取一包。不用「低 ISR 频率 + 批量读」——那条路在 42688 上已被证否
+  // （docs/memory/2026-11-04-IMU-2kHz攻关.md §4：批量读 EKF 退化、重复计数不可靠）。
+  s_imu_phase += 3200U;
 #else
   s_imu_phase += 2000U;
 #endif

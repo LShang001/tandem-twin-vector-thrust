@@ -315,29 +315,28 @@ void imuSampleIsr()
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
 
   s_isr_calls++;
-  // ★ 2026-11-09：批量取。ODR 高于 ISR 频率时（45686 3.2k ODR / 1k ISR），
-  //   每拍 FIFO 里积压约 3 帧，只取 1 帧会让余下的永远读不走。
-  static constexpr size_t kIsrBatchMax = 16U;
-  ImuFifoSample batch[kIsrBatchMax];
-  const int n = IMU->readFifo(batch, kIsrBatchMax);
-  if (n <= 0)
+  // ★ 2026-11-09：恢复「单包读」——这是 P1 架构不变量（见
+  //   docs/memory/2026-11-04-IMU-2kHz攻关.md §6：ISR 只 readFifo(1包) + push，
+  //   只搬运不做浮点）。该文档的「无效路线」第一条明确记录：
+  //   FIFO 批量一次读 8 包 → 4218 Hz 但 EKF 退化、批量消费/重复计数不可靠。
+  //   正确做法是把 ISR 频率提到 ODR 水平（TIM8 6400 / 步进 2000 = 3200 Hz），
+  //   一拍取一包，而不是降低 ISR 频率去批量取。
+  ImuFifoSample one{};
+  if (IMU->readFifo(&one, 1U) <= 0)
   {
     s_imu_isr_empty++;
     return;
   }
-  s_isr_frames += static_cast<uint32_t>(n);
-  if (static_cast<uint32_t>(n) > s_isr_batch_max) { s_isr_batch_max = static_cast<uint32_t>(n); }
-  for (int k = 0; k < n; ++k)
+  s_isr_frames += 1U;
+  if (s_isr_batch_max < 1U) { s_isr_batch_max = 1U; }
+  ImuRingSample s{};
+  for (int i = 0; i < 3; ++i)
   {
-    ImuRingSample s{};
-    for (int i = 0; i < 3; ++i)
-    {
-      s.acc[i] = batch[k].acc[i];
-      s.gyr[i] = batch[k].gyr[i];
-    }
-    s.timestamp = batch[k].timestamp;
-    s_imu_ring.push(s);
+    s.acc[i] = one.acc[i];
+    s.gyr[i] = one.gyr[i];
   }
+  s.timestamp = one.timestamp;
+  s_imu_ring.push(s);
 }
 #endif
 
