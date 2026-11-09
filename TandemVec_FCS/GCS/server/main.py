@@ -159,6 +159,8 @@ class GCS:
         self.hist_start = time.time()
         # 磁标定向导状态：累积固件回传的字段，供判读使用
         self.calib = {}
+        # 回放倍速：0=最快（纯灌数据给分析），1.0=原始速率，2.0=两倍
+        self.replay_speed = 0.5
         self.calib_step = 0
         self.recorder = None
         self.replay = None               # ReplaySource（回放中）
@@ -417,19 +419,23 @@ def _emit_dbg_text(text: str):
                 pass
 
 
-def _record_hist(snap: dict):
+def _record_hist(snap: dict, ts: float | None = None):
     """@brief 把一份快照写进时序缓冲 g.hist（实时与回放共用同一入口）
 
     @details 为什么必须共用：频谱/调参/选区统计全都读 g.hist。如果回放不写，
              那"导入 tlog 做频域分析"这条路根本走不通——数据只到 g.snap
              给界面看，分析类功能全空。抽成一个函数就不会漏。
 
-    @note 时间戳统一用 time.time()（Unix 秒），与前端 snap.t_ms/1000 同基准。
-          回放时**不用**记录里的原始时间戳：那个时间可能是几天前飞的，
-          与"当前会话"的其它数据混在一个缓冲里会让时间轴错乱。
+    @note 默认用 time.time()，但**回放时必须传记录的原始时间戳**：
+          回放是快速推进的墙钟，若用 time.time()，一秒钟的墙钟里灌进几千帧，
+          算出来的采样率会是几百 Hz 的假值，频域分析全错。
+          用原始时间戳则 fs 反映的是**记录时的真实采样率**，这才是分析要的。
+
+          （早期版本用"距启动秒数"，后来为了让曲线页历史对齐改成 Unix 秒；
+           回放传原始 t_ms 也是 Unix 秒，两者同量级，能混在一起画。）
     """
     try:
-        now = time.time()
+        now = time.time() if ts is None else float(ts)
         for k, v in snap.items():
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 continue
@@ -1137,6 +1143,11 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         g.replay_task = asyncio.create_task(_replay_loop(ws))
         await ws.send_json({'type': 'replay_state', 'on': True, 'file': fn})
 
+    elif cmd == 'replay_speed':
+        sp = float(msg.get('speed', 0.5))
+        g.replay_speed = max(0.0, min(50.0, sp))
+        await ws.send_json({'type': 'replay_speed', 'speed': g.replay_speed})
+
     elif cmd == 'replay_stop':
         if g.replay_task:
             g.replay_task.cancel()
@@ -1160,16 +1171,26 @@ async def _replay_loop(ws: WebSocket):
             g.replay = None
             return
         t_now = row.get('t_ms')
-        if t_last is not None and t_now is not None:
+        if t_last is not None and t_now is not None and g.replay_speed > 0:
             dt = (t_now - t_last) / 1000.0
             if dt > 0:
-                await asyncio.sleep(max(0.0, dt * 0.5))  # 半速回放，便于观察
+                # 按倍速缩放：speed=1 时按原始节奏，2 时快一倍。
+                # 快速模式（speed=0）跳过这里，直接灌数据。
+                await asyncio.sleep(max(0.0, dt / max(0.01, g.replay_speed)))
         t_last = t_now
         g.snap = {k: v for k, v in row.items() if v is not None}
         # 回放也写时序缓冲：不写的话「导入 tlog 做频域分析」走不通，
         # 数据只到界面、分析类功能（频谱/统计/调参）全空。
-        _record_hist(g.snap)
-        await asyncio.sleep(TELEMETRY_PERIOD)
+        # 用记录里的原始时间戳（t_ms）——见 _record_hist 的说明。
+        _raw_ts = row.get('t_ms')
+        _record_hist(g.snap, ts=(float(_raw_ts) / 1000.0) if _raw_ts else None)
+        # 倍速：speed=0 表示"最快"（不等待，纯灌数据给分析用）；
+        # 1.0 = 原始速率；2.0 = 两倍速。半速回放（原来的 0.5）保留为默认，
+        # 因为它最适合"看画面"，而 0 适合"跑完再分析"。
+        if g.replay_speed <= 0:
+            await asyncio.sleep(0)
+        else:
+            await asyncio.sleep(TELEMETRY_PERIOD / max(0.01, g.replay_speed))
         g.send_all({'type': 'telemetry', 'data': g.snap, 'replay': True})
         # 进度每 10 帧发一次即可：50Hz 下每帧推进度纯属浪费带宽
         n = getattr(g, '_replay_n', 0) + 1
