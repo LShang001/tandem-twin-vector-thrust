@@ -20,7 +20,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from server.spectrum import estimate_fs, spectrum_summary, welch_psd  # noqa: E402
+from server.spectrum import (  # noqa: E402
+    compare_channels,
+    estimate_fs,
+    spectrum_summary,
+    welch_psd,
+)
 
 FS = 50.0     # 50 Hz 采样（与遥测推送频率一致）
 DT = 1.0 / FS
@@ -128,3 +133,50 @@ def test_welch_returns_metadata():
     assert abs(fs - FS) < 1e-6
     assert n_seg >= 4
     assert len(freqs) == len(psd)
+
+
+def test_common_peak_detected():
+    """@brief 三个通道都有 8 Hz 分量 → 必须被识别为共模峰"""
+    def mk(extra_hz, extra_amp):
+        return _gen(20.0, lambda t: (math.sin(2 * math.pi * 8.0 * t)
+                                     + extra_amp * math.sin(2 * math.pi * extra_hz * t)))
+    chans = {
+        'gyro_x': mk(1.5, 0.3),
+        'gyro_y': mk(2.5, 0.3),
+        'gyro_z': mk(3.5, 0.3),
+    }
+    r = compare_channels(chans, nperseg=256)
+    assert r['ok'], r
+    assert r['n_compared'] == 3
+    fr = [c['freq_hz'] for c in r['common']]
+    assert any(abs(f - 8.0) < 0.4 for f in fr), fr
+    # 8 Hz 这一项应该被三个通道同时命中
+    hit8 = [c for c in r['common'] if abs(c['freq_hz'] - 8.0) < 0.4]
+    assert hit8 and hit8[0]['n_channels'] == 3, hit8
+
+
+def test_no_common_peak_when_distinct():
+    """@brief 三个通道频率完全错开 → 不应报出「三通道共模」的峰"""
+    chans = {
+        'a': _gen(20.0, lambda t: math.sin(2 * math.pi * 3.0 * t)),
+        'b': _gen(20.0, lambda t: math.sin(2 * math.pi * 9.0 * t)),
+        'c': _gen(20.0, lambda t: math.sin(2 * math.pi * 16.0 * t)),
+    }
+    r = compare_channels(chans, nperseg=256)
+    assert r['ok']
+    assert all(c['n_channels'] < 3 for c in r['common']), r['common']
+
+
+def test_compare_empty():
+    """@brief 没选通道要明确返回原因"""
+    r = compare_channels({})
+    assert r['ok'] is False and 'reason' in r
+
+
+def test_compare_limits_to_four():
+    """@brief 最多取 4 个通道（再多图上分不清）"""
+    chans = {f'ch{i}': _gen(20.0, lambda t, i=i: math.sin(2 * math.pi * (2 + i) * t))
+             for i in range(6)}
+    r = compare_channels(chans, nperseg=256)
+    assert r['ok']
+    assert r['n_compared'] <= 4

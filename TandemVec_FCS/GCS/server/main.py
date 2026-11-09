@@ -753,6 +753,23 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'spectrum', 'channel': ch, **r})
 
+    elif cmd == 'spectrum_multi':
+        names = msg.get('channels') or []
+        nperseg = int(msg.get('nperseg') or 256)
+        chans = {}
+        for n in names:
+            dq = g.hist.get(n)
+            if dq is not None and len(dq) >= 64:
+                chans[n] = list(dq)
+        from .spectrum import compare_channels
+        try:
+            r = compare_channels(chans, nperseg=nperseg)
+        except Exception as exc:
+            await ws.send_json({'type': 'spectrum_multi', 'ok': False,
+                                'reason': str(exc)})
+            return
+        await ws.send_json({'type': 'spectrum_multi', **r})
+
     elif cmd == 'tuning_channels':
         # 列出可用于分析的通道（有足够样本的）
         chans = []

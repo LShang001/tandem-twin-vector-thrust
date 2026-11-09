@@ -343,10 +343,12 @@
         <label class="tune-field">通道
           <select id="specChannel"></select>
         </label>
-        <button class="btn primary small" id="specRun">频谱</button>
+        <button class="btn primary small" id="specRun">单通道频谱</button>
+        <button class="btn small" id="specMultiRun">多通道对比</button>
         <button class="btn small" id="specRefresh">刷新通道</button>
         <span class="hint">Welch 法 · 汉宁窗 · 分段平均</span>
       </div>
+      <div class="spec-multi-list" id="specMultiList"></div>
       <canvas id="specChart"></canvas>
       <div class="spec-info" id="specInfo"></div>
     </div>

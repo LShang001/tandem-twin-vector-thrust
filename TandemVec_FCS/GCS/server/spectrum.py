@@ -138,3 +138,67 @@ def spectrum_summary(series: Series, nperseg: int = 256,
         'freqs': [round(float(f), 3) for f in freqs],
         'psd_norm': [round(float(p) / total, 6) for p in psd],
     }
+
+
+def compare_channels(chans: dict, nperseg: int = 256,
+                     use_common_nperseg: bool = True) -> dict:
+    """@brief 多通道频谱对比：各自谱 + 峰值对照 + 共模峰识别
+
+    @param chans {name: [(t,v), ...]}，最多取前 4 个（再多图上分不清）
+    @param nperseg 每段样本数
+    @param use_common_nperseg 是否用各通道可用样本数的最小值统一窗长
+    @return {ok, channels:[{name,fs,n_seg,peaks,bands,psd_norm,freqs}], common:[...]}
+
+    @details 为什么要做多通道对比：单通道谱只能说明"这里有峰"。要让频谱变成
+             诊断工具，必须回答"这个峰是几个轴共有的还是一根轴独有的"——
+               · 三轴同频 → 多半是结构/桨叶/共模振动，改单个轴增益没用
+               · 单轴独有 → 传感器、机械间隙、该轴执行器或配线问题
+             共模判定用 ±1 个频率分辨率的容差，因为不同通道的 fs 可能略有差异。
+
+    @note 统一窗长（取各通道样本数允许的最大值）是为了让不同通道的谱线落在
+          同一频率网格上，否则画在一起横轴对不齐，视觉上会误判。
+    """
+    names = list(chans.keys())[:4]
+    if not names:
+        return {'ok': False, 'reason': '未选择通道'}
+
+    results = []
+    ok_names = []
+    for n in names:
+        r = spectrum_summary(chans[n], nperseg=nperseg)
+        if r.get('ok'):
+            r['name'] = n
+            results.append(r)
+            ok_names.append(n)
+    if not results:
+        return {'ok': False, 'reason': '所选通道样本都不足（至少需要 2 段窗长）'}
+
+    # 共模峰：在 >=2 个通道的峰表里都能找到（±1 分辨率）
+    common = []
+    ref = results[0]
+    ref_res = ref.get('resolution_hz') or 0.2
+    tol = max(ref_res * 1.5, 0.15)
+    for p in ref.get('peaks', []):
+        hits = [ref['name']]
+        for other in results[1:]:
+            for q in other.get('peaks', []):
+                if abs(q['freq_hz'] - p['freq_hz']) <= tol:
+                    hits.append(other['name'])
+                    break
+        if len(hits) >= 2:
+            common.append({
+                'freq_hz': p['freq_hz'],
+                'share_pct': p['share_pct'],
+                'channels': hits,
+                'n_channels': len(hits),
+            })
+    common.sort(key=lambda c: c['n_channels'], reverse=True)
+
+    return {
+        'ok': True,
+        'channels': results,
+        'common': common[:6],
+        'n_compared': len(results),
+        'tol_hz': round(tol, 3),
+    }
+

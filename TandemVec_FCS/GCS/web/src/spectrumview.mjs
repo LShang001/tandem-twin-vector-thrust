@@ -21,9 +21,13 @@ const $ = (id) => document.getElementById(id);
 
 const spec = {
   result: null,
+  multi: null,
   channel: '',
+  selected: [],        // 多通道对比时选中的通道名（最多 4）
   activated: false,
 };
+
+const MULTI_COLORS = ['#3ea6ff', '#29d3a2', '#ffb547', '#b987ff'];
 
 function draw() {
   const cv = $('specChart');
@@ -140,6 +144,124 @@ function run() {
   if (st) st.textContent = `分析 ${sel.value}…`;
 }
 
+
+
+/** 多通道叠加谱：同一频率网格上叠 2–4 条，便于看共模还是单轴 */
+function drawMulti() {
+  const cv = $('specChart');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const w = cv.clientWidth || 640;
+  const h = cv.clientHeight || 220;
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  ctx.clearRect(0, 0, w, h);
+
+  const r = spec.multi;
+  if (!r || !r.ok) {
+    ctx.fillStyle = 'rgba(150,170,195,0.6)';
+    ctx.font = '12px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(r && r.reason ? r.reason : '勾选 2–4 个通道后点「多通道对比」', w / 2, h / 2);
+    ctx.textAlign = 'left';
+    return;
+  }
+  const chans = r.channels || [];
+  if (!chans.length) return;
+
+  let fMax = 0;
+  for (const c of chans) {
+    const f = (c.freqs || []);
+    if (f.length) fMax = Math.max(fMax, f[f.length - 1]);
+  }
+  if (!(fMax > 0)) return;
+
+  // 各通道归一化到自身最大值——不同通道幅值差一个量级时，共用一根纵轴会把
+  // 小的压平；对比看的是**峰的位置**，不是绝对幅值。
+  const X = (f) => (f / fMax) * (w - 8) + 4;
+
+  ctx.strokeStyle = 'rgba(120,160,255,0.10)';
+  for (let i = 1; i < 5; i++) {
+    const x = (w / 5) * i;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h - 14); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(140,170,200,0.75)';
+  ctx.font = '10px ui-monospace, monospace';
+  for (let i = 0; i <= 5; i++) {
+    ctx.fillText(`${((fMax / 5) * i).toFixed(1)}`,
+      Math.min(w - 26, (w / 5) * i + 2), h - 3);
+  }
+  ctx.fillText('Hz', w - 18, h - 3);
+
+  chans.forEach((c, i) => {
+    const freqs = c.freqs || [];
+    const psd = c.psd_norm || [];
+    let pMax = 0;
+    for (const p of psd) if (p > pMax) pMax = p;
+    if (pMax <= 0) return;
+    ctx.strokeStyle = MULTI_COLORS[i % MULTI_COLORS.length];
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (let k = 0; k < freqs.length; k++) {
+      const x = X(freqs[k]);
+      const y = h - 14 - (psd[k] / pMax) * (h - 26);
+      if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  });
+
+  // 共模峰竖线
+  for (const cp of (r.common || []).slice(0, 4)) {
+    const x = X(cp.freq_hz);
+    ctx.strokeStyle = `rgba(255,93,108,${0.25 + 0.15 * cp.n_channels})`;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h - 14); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  const box = $('specInfo');
+  if (box) {
+    const legend = chans.map((c, i) =>
+      `<span style="color:${MULTI_COLORS[i % MULTI_COLORS.length]}">■ ${c.name}</span>`).join(' ');
+    const common = (r.common || []).map((cp) =>
+      `<span class="spec-peak">${cp.freq_hz.toFixed(2)} Hz <i>${cp.n_channels} 通道</i></span>`).join('');
+    box.innerHTML = `
+      <div class="spec-row">${legend}</div>
+      <div class="spec-row"><span>共模峰（≥2 通道同频，±${r.tol_hz} Hz）</span>${common || '<b>未发现</b>'}</div>
+      <div class="hint">共模峰多半是结构/桨叶/共模振动，调单轴增益无效；单轴独有的峰才优先查该轴的传感器与机械</div>`;
+  }
+}
+
+/** 多选通道（最多 4 个） */
+function toggleSelect(name) {
+  const i = spec.selected.indexOf(name);
+  if (i >= 0) spec.selected.splice(i, 1);
+  else {
+    if (spec.selected.length >= 4) spec.selected.shift();
+    spec.selected.push(name);
+  }
+  renderMultiSelect();
+}
+
+function renderMultiSelect() {
+  const box = $('specMultiList');
+  if (!box) return;
+  const sel = $('specChannel');
+  const names = sel ? [...sel.options].map((o) => o.value) : [];
+  box.innerHTML = names.map((n) => {
+    const on = spec.selected.includes(n);
+    return `<label class="spec-chk${on ? ' on' : ''}" data-name="${n}">
+      <input type="checkbox" ${on ? 'checked' : ''}> ${n}</label>`;
+  }).join('');
+  box.querySelectorAll('.spec-chk').forEach((el) => {
+    el.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      toggleSelect(el.dataset.name);
+    });
+  });
+  const st = $('specState');
+  if (st && spec.selected.length) st.textContent = `已选 ${spec.selected.length} 个通道`;
+}
+
 export function activate() {
   if (spec.activated) return;
   spec.activated = true;
@@ -152,6 +274,7 @@ export function activate() {
     sel.innerHTML = list.map((c) =>
       `<option value="${c.name}">${c.name}（${c.n}）</option>`).join('');
     if (cur && list.some((c) => c.name === cur)) sel.value = cur;
+    renderMultiSelect();
   });
 
   bus.addEventListener('spectrum', (e) => {
@@ -168,6 +291,29 @@ export function activate() {
 
   const btn = $('specRun');
   if (btn) btn.addEventListener('click', run);
+  const mbtn = $('specMultiRun');
+  if (mbtn) {
+    mbtn.addEventListener('click', () => {
+      if (spec.selected.length < 2) {
+        const st = $('specState');
+        if (st) st.textContent = '请先勾选 2–4 个通道';
+        return;
+      }
+      send({ cmd: 'spectrum_multi', channels: spec.selected, nperseg: 256 });
+      const st = $('specState');
+      if (st) st.textContent = `多通道对比 ${spec.selected.length} 个…`;
+    });
+  }
+  bus.addEventListener('spectrum_multi', (e) => {
+    spec.multi = e.detail || {};
+    drawMulti();
+    const st = $('specState');
+    if (st) {
+      st.textContent = spec.multi.ok
+        ? `共模峰 ${(spec.multi.common || []).length} 个 · ${spec.multi.n_compared} 通道`
+        : (spec.multi.reason || '失败');
+    }
+  });
   const refresh = $('specRefresh');
   if (refresh) {
     refresh.addEventListener('click', () => send({ cmd: 'tuning_channels' }));
