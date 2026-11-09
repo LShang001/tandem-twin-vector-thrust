@@ -1,0 +1,10 @@
+// 顶层构建：只声明插件版本，具体配置在 app/build.gradle
+//
+// 版本搭配说明（这三者互相约束，改一个要一起验证）：
+//   Gradle 8.7  ·  AGP 8.2.2  ·  Chaquopy 16.0.0
+// Chaquopy 负责把 CPython 与 pip 依赖打进 APK；它是本工程存在的唯一理由——
+// 没有它就只能把 AnoCom/MAVLink 解析器重写成 Java，那是另一条路。
+plugins {
+    id 'com.android.application' version '8.2.2' apply false
+    id 'com.chaquo.python' version '16.0.0' apply false
+}

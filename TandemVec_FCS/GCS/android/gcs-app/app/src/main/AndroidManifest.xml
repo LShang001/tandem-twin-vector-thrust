@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  UniGNC GCS 安卓版。
+  usesCleartextTraffic：WebView 要加载 http://127.0.0.1:8091（明文），不开启会被拦。
+  minSdk 24：Chaquopy 与 numpy 的 aarch64 wheel 要求。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.unignc.gcs">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-feature android:name="android.hardware.usb.host" android:required="false" />
+
+    <application
+        android:label="UniGNC 地面站"
+        android:usesCleartextTraffic="true"
+        android:allowBackup="false"
+        android:largeHeap="true"
+        android:theme="@android:style/Theme.Material.NoActionBar">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

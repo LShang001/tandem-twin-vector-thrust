@@ -1,0 +1,23 @@
+pluginManagement {
+    repositories {
+        // 国内优先：Chaquopy 与 AGP 在阿里云 maven 上都有，避免直连 chaquo.com 超时
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://jitpack.io' }
+        google()
+        mavenCentral()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://jitpack.io' }
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = 'UniGNC-GCS'
+include ':app'

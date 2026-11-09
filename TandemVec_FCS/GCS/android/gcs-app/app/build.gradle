@@ -1,0 +1,109 @@
+apply plugin: 'com.android.application'
+apply plugin: 'com.chaquo.python'
+
+// ============================================================================
+//  UniGNC GCS —— 安卓版地面站 APK
+//
+//  设计：APK 内嵌 CPython（Chaquopy），直接跑现有的 FastAPI 后端；
+//        WebView 加载 http://127.0.0.1:8091，前端一行不用改。
+//        这样 AnoCom / MAVLink 解析、频谱分析（numpy）全部沿用现有代码，
+//        不需要把后端重写成 Java —— 那是另一条路且有长期双维护成本。
+//
+//  串口：Android 上 WebView 拿不到 USB；本工程在 Java 侧用
+//        usb-serial-for-android 打开数传，Python 通过 Chaquopy 的 Java 桥
+//        调 usbRead()/usbWrite()（见 src/main/python/chaquopy_usb_link.py）。
+//        另有一个纯 UDP 方案（android/usb-udp-bridge）：平板装两个 App，
+//        桥把串口转成 UDP，本 App 用 udp: 链路接收——两条路都保留。
+// ============================================================================
+
+android {
+    namespace 'com.unignc.gcs'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.unignc.gcs'
+        // Chaquopy 与 numpy 的 aarch64 wheel 要求 minSdk ≥ 24
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+
+        // 只打 arm64：现代平板都是 arm64，x86 支持会让 APK 翻倍而不实用
+        ndk { abiFilters 'arm64-v8a' }
+
+        python {
+            // 用本机 Python 去下载/构建 wheel；Windows 下必须写绝对路径
+            // ★ 目标 Python 版本必须显式声明：默认版本偏旧（numpy 只能到 1.24.4，
+            //   说明目标是 3.8），而本项目代码用了 3.10+ 的联合类型语法，3.8 会直接崩。
+            version '3.11'
+            buildPython 'C:/Users/12631/AppData/Local/Programs/Python/Python312/python.exe'
+            // 国内源：Chaquopy 默认走 pypi.org，慢且常断
+            pip {
+                // ★ 必须用 extra-index-url 而不是 index-url：Chaquopy 自己的源里才有
+                //   Android 的 aarch64 wheel（numpy 那种带 C 扩展的必须有它）。
+                //   用 index-url 顶掉后，pip 只能下到源码包，然后在本机编译失败。
+                options '--extra-index-url', 'https://pypi.tuna.tsinghua.edu.cn/simple'
+                // ★ FastAPI 锁 0.99 + pydantic 锁 1.x：
+                //   FastAPI 新版本依赖 pydantic v2，而 pydantic-core 是 Rust 扩展，
+                //   Chaquopy 不能编译原生代码，只能装预编译 wheel（其源里没有它）。
+                //   pydantic v1 是纯 Python。本项目代码不用 pydantic 的任何特性，
+                //   只是拿 FastAPI 做路由与 JSON，所以降级零改动、行为一致。
+                install 'fastapi==0.99.1'
+                install 'pydantic==1.10.13'
+                install 'uvicorn'
+                install 'websockets'
+                install 'pyserial'
+                // 不含 pymavlink：它依赖 fastcrc（C 扩展），Chaquopy 不能编译原生代码。
+                // mavlink_service.py 把 pymavlink 当可选依赖，缺失时构造抛
+                // RuntimeError，AnoCom 路径完全不受影响——这是项目主协议，够用。
+                // 不含 numpy：Chaquopy 只装预编译 wheel，而它的源里没有对应
+                // Python 3.11 的 aarch64 numpy wheel，pip 于是退回源码包，编译
+                // 被 Chaquopy 直接禁止（Chaquopy_cannot_compile_native_code）。
+                // 影响面很小：spectrum.py 的两处 import numpy 都是函数内导入，
+                // 后端照常启动，只有频谱/时频图不可用；遥测、参数、MAVLink、
+                // 波形、黑匣子、报警全部可用。
+            }
+        }
+    }
+
+    sourceSets {
+        main {
+            // Python 源码与前端都由 sync-src.py 预同步到此目录（构建前自动执行）
+            python.srcDir 'src/main/python'
+            jniLibs.srcDirs = ['libs']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false          // Chaquopy 反射调用多，混淆收益低风险高
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            applicationIdSuffix '.debug'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        jniLibs { useLegacyPackaging true }   // Chaquopy 的 .so 需要传统打包方式
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    // USB 串口驱动：CH340/CP210x/FTDI/PL2303/CDC-ACM
+    implementation 'com.github.mik3y:usb-serial-for-android:3.8.1'
+}
+
+// 构建前把 server/ 与 web/ 同步到 src/main/python，保证打进 APK 的是最新代码
+tasks.register('syncSources', Exec) {
+    workingDir project.rootDir
+    commandLine 'py', '-3.12', 'sync-src.py'
+}
+tasks.matching { it.name.startsWith('preBuild') || it.name.startsWith('merge') && it.name.contains('Python') }
+        .configureEach { dependsOn 'syncSources' }
