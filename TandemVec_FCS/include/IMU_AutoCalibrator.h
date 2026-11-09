@@ -73,6 +73,7 @@ private:
     // --- 动态统计变量 ---
     float acc_norm_mean;     // 加速度模值的“移动平均”
     float acc_norm_variance; // 加速度模值的“移动方差”
+    float last_gyro_norm_diag = 0.0f;  // 最近一次角速度模长（静止判据第三条件，诊断用）
 
     // --- 累加器 (用于计算最终校准值) ---
     double sum_gyro[3];
@@ -119,6 +120,7 @@ public:
     // ★ 2026-11-09 诊断：3.2kHz 下 cal 一直不置 1，需要看它卡在哪个条件。
     //   静止判据三条：模值在 0.5~1.5g、方差 < 2e-5、角速度模长 < 0.1。
     int diagSampleCount() const { return sample_count; }
+    float diagGyroNorm() const { return last_gyro_norm_diag; }
     int diagState() const { return static_cast<int>(current_state); }
     float diagAccVariance() const { return acc_norm_variance; }
     // 诊断用：返回已标定的某轴陀螺零偏 [dps]，供 health 直接显示。
@@ -153,6 +155,7 @@ public:
         // 2. 计算当前模值
         float acc_norm = sqrtf(ax * ax + ay * ay + az * az);
         float gyro_norm = sqrtf(gx * gx + gy * gy + gz * gz);
+        last_gyro_norm_diag = gyro_norm;   // 诊断用：静止判据的第三条件
 
         // 3. 更新递归统计滤波器 (计算方差)
         // 步骤 A: 更新均值 (低通滤波)
