@@ -417,7 +417,21 @@ bool readIMUData()
   }
 
   // 检查 IMU 数据是否就绪（型号无关接口；1 = 有新样本）
-  if (IMU->dataReady() == 1)
+  //
+  // ★ 2026-11-09 关键修复：ring 模式下不能再判 DRDY。
+  //   样本由 ISR 从硬件 FIFO 取出（readFifo 返回 >0 才入 ring，本身就是"有新数据"
+  //   的证明）。而 dataReady() 读的 INT1_STATUS0 是**读清**寄存器：同一拍内处理
+  //   16 帧时，第 1 帧把 DRDY 读清，余下 15 帧全部在这里被拒。
+  //   后果有两层：①ins_imu_health 的 sample_count 每 5ms 只 +1 → rate 显示 200Hz；
+  //   ②EKF 实际只用到 1/16 的样本，固定 dt 却按每帧给，动态下积分时间不足。
+  bool sample_ready = false;
+#ifdef BFS_IMU_ISR_RING
+  // 递归处理 ring 样本时，注入的就是刚取到的新帧，直接放行。
+  sample_ready = s_ring_processing ? true : (IMU->dataReady() == 1);
+#else
+  sample_ready = (IMU->dataReady() == 1);
+#endif
+  if (sample_ready)
   {
 #ifdef BFS_IMU_PROF
     const uint32_t t_spi_end = micros();
