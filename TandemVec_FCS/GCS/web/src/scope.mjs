@@ -65,12 +65,13 @@ const PRESETS = {
   ],
 };
 
-const WIN_SEC = 20;          // 窗口时长
+const WIN_DEFAULT = 20;      // 默认窗口时长（可切 5/10/20/60 s）
 const HISTORY = 6000;        // 每通道历史点数（20s @ 帧率约 50Hz → 1000 点；留余量）
 const MAX_CARDS = 4;
 
-let cards = [];              // {key,label,color,hist:[...],el,canvas,ctx,lastV}
+let cards = [];              // {chans,el,canvas,hist,last,cursor}
 let paused = false;
+let winSec = WIN_DEFAULT;    // 当前窗口时长（秒）
 let pageVisible = true;        // 页面不可见时停止重绘（scope 在后台白烧 CPU）
 let initialized = false;
 
@@ -90,7 +91,15 @@ export function activate() {
   presetSel.addEventListener('change', () => buildCards(presetSel.value));
   $('scopePause').addEventListener('change', (e) => { paused = e.target.checked; });
   $('scopeClear').addEventListener('click', () => cards.forEach(c => c.hist.length = 0));
-  $('scopeInfo').textContent = `窗口 ${WIN_SEC}s · ${Object.keys(PRESETS).length} 组预设`;
+  const winSel = $('scopeWin');
+  if (winSel) {
+    for (const w of [5, 10, 20, 60]) winSel.add(new Option(`${w}s`, String(w)));
+    winSel.value = String(WIN_DEFAULT);
+    winSel.addEventListener('change', () => { winSec = Number(winSel.value) || WIN_DEFAULT; });
+  }
+  const expBtn = $('scopeExport');
+  if (expBtn) expBtn.addEventListener('click', exportCsv);
+  $('scopeInfo').textContent = `${Object.keys(PRESETS).length} 组预设`;
 
   buildCards(presetSel.value);
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
@@ -112,7 +121,17 @@ function buildCards(presetName) {
       <canvas></canvas>`;
     wrap.appendChild(card);
     const cv = card.querySelector('canvas');
-    cards.push({ chans: ch, el: card, canvas: cv, hist: ch.map(() => []), last: ch.map(() => null) });
+    const cardObj = { chans: ch, el: card, canvas: cv, hist: ch.map(() => []),
+                      last: ch.map(() => null), cursor: null };
+    // 游标：鼠标横向位置 → 该时刻各通道读数。
+    // 用 mouseleave 清空而不是保存最后一次位置——鼠标移走后还留着竖线，
+    // 会和"实时值"混淆，示波器上这是歧义。
+    cv.addEventListener('mousemove', (e) => {
+      const r = cv.getBoundingClientRect();
+      cardObj.cursor = e.clientX - r.left;
+    });
+    cv.addEventListener('mouseleave', () => { cardObj.cursor = null; });
+    cards.push(cardObj);
   });
   window.dispatchEvent(new Event('resize'));
 }
@@ -162,23 +181,37 @@ function drawCard(card) {
     if (Array.isArray(last) && last[0] > tEnd) tEnd = last[0];
   }
   if (!tEnd) return;
-  const tStart = tEnd - WIN_SEC;
+  const tStart = tEnd - winSec;
 
-  // 量程
-  let vmin = Infinity, vmax = -Infinity;
-  for (const h of card.hist) for (const p of h) if (Array.isArray(p)) { if (p[1] < vmin) vmin = p[1]; if (p[1] > vmax) vmax = p[1]; }
-  if (!isFinite(vmin) || vmin === vmax) { vmin = -1; vmax = 1; }
-  const pad = (vmax - vmin) * 0.15 || 1;
-  vmin -= pad; vmax += pad;
+  // 量程：逐通道独立。
+  // 共用一根 Y 轴时，航向(0~360°)会把横滚/俯仰(±6°)压成一条直线——实测
+  // 三条线全部贴在底边分不出形状。专业示波器每个通道各自归一化，
+  // 绝对值由图例与游标读数给出，形状才看得见。
+  const ranges = card.chans.map((_, i) => {
+    let lo = Infinity, hi = -Infinity;
+    for (const p of card.hist[i]) {
+      if (Array.isArray(p)) { if (p[1] < lo) lo = p[1]; if (p[1] > hi) hi = p[1]; }
+    }
+    if (!isFinite(lo)) return [-1, 1];
+    if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.15;
+    return [lo - pad, hi + pad];
+  });
 
-  const X = (t) => (t - tStart) / WIN_SEC * W;
-  const Y = (v) => H - (v - vmin) / (vmax - vmin) * H;
+  const X = (t) => (t - tStart) / winSec * W;
+  const Y = (v, i) => {
+    const [lo, hi] = ranges[i];
+    return H - (v - lo) / (hi - lo) * H;
+  };
 
-  // 零线
-  if (vmin < 0 && vmax > 0) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.beginPath(); ctx.moveTo(0, Y(0)); ctx.lineTo(W, Y(0)); ctx.stroke();
-  }
+  // 零线：逐通道画（各自量程下 0 的位置不同）
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+  ranges.forEach(([lo, hi], i) => {
+    if (lo < 0 && hi > 0) {
+      const y0 = Y(0, i);
+      ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(W, y0); ctx.stroke();
+    }
+  });
 
   // 读数标题
   const reads = card.chans.map(([, label, color], i) => {
@@ -198,9 +231,109 @@ function drawCard(card) {
     for (const p of h) {
       if (!Array.isArray(p)) { pen = false; continue; }
       if (p[0] < tStart) continue;
-      const x = X(p[0]), y = Y(p[1]);
+      const x = X(p[0]), y = Y(p[1], i);
       if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y);
     }
     ctx.stroke();
   });
+
+  drawCursor(card, ctx, W, H, tStart, tEnd, X, Y);
+}
+
+/** 在时间轴上二分查找最接近 tCur 的采样点 */
+function nearestAt(hist, tCur) {
+  if (!hist.length) return null;
+  let lo = 0, hi = hist.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (hist[mid][0] < tCur) lo = mid + 1; else hi = mid;
+  }
+  // 命中的点与它前一个点里挑更近的
+  let best = hist[lo];
+  if (lo > 0) {
+    const prev = hist[lo - 1];
+    if (Math.abs(prev[0] - tCur) < Math.abs(best[0] - tCur)) best = prev;
+  }
+  // 距离超过半个采样周期就当没有数据（窗口边缘外/丢帧处不该硬画读数）
+  if (Math.abs(best[0] - tCur) > 0.5) return null;
+  return best;
+}
+
+/**
+ * @brief 画鼠标游标：竖虚线 + 各通道交点 + 标题区游标读数
+ * @note  游标存在时标题读数显示"游标时刻值"而不是"最新值"，并在前面标 ⌖，
+ *        否则两个数在视觉上无法区分，容易把历史值当成实时值读。
+ */
+function drawCursor(card, ctx, W, H, tStart, tEnd, X, Y) {
+  const cx = card.cursor;
+  if (cx === null || cx < 0 || cx > W) return;
+  const tCur = tStart + (cx / W) * winSec;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(210,225,245,0.45)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath();
+  ctx.moveTo(cx, 0);
+  ctx.lineTo(cx, H);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  const reads = [];
+  card.chans.forEach(([key, label, color], i) => {
+    const p = nearestAt(card.hist[i], tCur);
+    if (!p) { reads.push(`<span style="opacity:.4">${label} --</span>`); return; }
+    const y = Y(p[1], i);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    reads.push(`<span style="color:${color}">⌖ ${label} ${p[1].toFixed(2)}</span>`);
+  });
+
+  // 时间标签贴底
+  const rel = (tCur - tEnd).toFixed(1);
+  ctx.fillStyle = 'rgba(200,215,235,0.75)';
+  ctx.font = '10px ui-monospace, monospace';
+  const txt = `${rel}s`;
+  const tw = ctx.measureText(txt).width;
+  const lx = Math.min(Math.max(2, cx - tw / 2), W - tw - 2);
+  ctx.fillText(txt, lx, H - 4);
+  ctx.restore();
+
+  card.el.querySelector('.sc-read').innerHTML = reads.join(' &nbsp;');
+}
+
+/**
+ * @brief 导出当前所有通道历史为 CSV
+ * @note  合并导出：一张卡内的通道共用时间基准，跨卡之间不保证采样点对齐，
+ *        所以按「时间戳,通道1,通道2…」逐卡分段写，而不是强行做时间轴对齐——
+ *        伪对齐会伪造出并不存在的同步采样。
+ */
+function exportCsv() {
+  if (!cards.length) return;
+  const lines = [];
+  cards.forEach((card, ci) => {
+    lines.push(`# card${ci + 1}: ${card.chans.map(c => c[1]).join(' / ')}`);
+    lines.push(['t_s', ...card.chans.map(c => c[0])].join(','));
+    // 以第一通道为时间主轴，其余通道按时间就近取样
+    const base = card.hist[0] || [];
+    for (const p of base) {
+      if (!Array.isArray(p)) continue;
+      const row = [p[0].toFixed(3)];
+      for (let i = 0; i < card.chans.length; i++) {
+        if (i === 0) { row.push(p[1].toFixed(4)); continue; }
+        const q = nearestAt(card.hist[i], p[0]);
+        row.push(q ? q[1].toFixed(4) : '');
+      }
+      lines.push(row.join(','));
+    }
+    lines.push('');
+  });
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `scope_${new Date().toISOString().replace(/[:.]/g, '-')}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 3000);
 }

@@ -578,6 +578,15 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         await ws.send_json({'type': 'hex_state', 'on': False})
 
     elif cmd == 'connect':
+        # 演示模式下拒绝连真实串口：合成遥测与真实链路共用 g.protocol/g.mav，
+        # 一旦被改成 anoCom，DEMO 的 MAVLink 帧就会走 AnoCom 解析路径而全部解析失败，
+        # 表现为「数据还在流、波形却冻住」——这类静默降级极难排查，所以直接挡住。
+        if DEMO_MODE:
+            await ws.send_json({
+                'type': 'conn', 'status': 'error',
+                'reason': '当前是演示模式（GCS_DEMO=1）：请重启去掉该环境变量后再连真实设备',
+            })
+            return
         port, baud = msg.get('port'), int(msg.get('baud') or DEFAULT_BAUD)
         try:
             await asyncio.to_thread(g.connect, port, baud, True, str(msg.get('protocol', 'anocom')))
@@ -899,6 +908,80 @@ async def _param_read_single_async(pid, timeout=1.5, tries=3):
 # ========================================================================
 #  WebSocket 端点
 # ========================================================================
+
+# ---------------------------------------------------------------
+# 无硬件演示模式（GCS_DEMO=1）
+# 为什么做：没有数传/飞控时，波形、GNSS、Inspector 这些页面全是空的，
+# 既没法验收也没法给人演示。这里合成一条标准 MAVLink 遥测——姿态缓慢摆动、
+# GNSS 3D 定位绕小圈、星数波动——走的是和真实设备完全相同的解析与广播链路
+# （_on_telemetry_rx），因此验证的是真链路，不是另写一套假前端。
+# 只在环境变量显式置 1 时启用，不影响正常连接流程。
+# ---------------------------------------------------------------
+DEMO_MODE = os.environ.get('GCS_DEMO') == '1'
+
+
+async def _demo_loop():
+    """@brief 以 50Hz 合成 MAVLink 遥测并喂进 _on_telemetry_rx"""
+    import math
+
+    from pymavlink import mavutil
+
+    g.protocol = 'mavlink'
+    g.mav = MavlinkService()
+
+    buf = bytearray()
+
+    class _Sink:
+        def write(self, data):
+            buf.extend(data)
+            return len(data)
+
+    v = mavutil.mavlink.MAVLink(_Sink())
+    v.srcSystem = 1
+    v.srcComponent = 1
+
+    t0 = time.time()
+    while True:
+        t = time.time() - t0
+        ms = int(t * 1000) & 0xFFFFFFFF
+
+        # 姿态：两个不同频率的摆动，横滚与俯仰不同相（避免看起来像单轴）
+        roll = math.radians(6.0 * math.sin(0.7 * t))
+        pitch = math.radians(4.0 * math.sin(0.45 * t + 1.0))
+        yaw = math.radians(25.0 * math.sin(0.12 * t))
+        v.attitude_send(ms, roll, pitch, yaw,
+                        0.01 * math.cos(0.7 * t),
+                        0.01 * math.cos(0.45 * t),
+                        0.002 * math.cos(0.12 * t))
+
+        # GNSS：3D 定位，位置绕 4 mm 级小圈（看散布图能否收成一点）
+        lat = 28.230000 + 0.0000040 * math.sin(0.30 * t)
+        lon = 112.940000 + 0.0000040 * math.cos(0.30 * t)
+        alt_mm = int((120.0 + 2.0 * math.sin(0.5 * t)) * 1000)
+        sats = int(12 + 2 * math.sin(0.8 * t))
+        v.gps_raw_int_send(ms * 1000, 3,
+                           int(lat * 1e7), int(lon * 1e7), alt_mm,
+                           90, 120, 350, 90, sats)
+
+        # 速度/高度：与姿态同节奏，便于肉眼核对曲线关系
+        v.vfr_hud_send(3.5 + 0.4 * math.sin(0.6 * t),
+                       4.2 + 0.3 * math.sin(0.6 * t),
+                       int((25.0 * math.sin(0.12 * t)) % 360),
+                       78, 120.0 + 2.0 * math.sin(0.5 * t), 0.4)
+
+        if buf:
+            _on_telemetry_rx(bytes(buf))
+            buf.clear()
+        await asyncio.sleep(0.02)
+
+
+@app.on_event('startup')
+async def _demo_boot():
+    """启动钩子：DEMO 模式下起合成遥测任务"""
+    if DEMO_MODE:
+        log.info('GCS_DEMO=1：注入合成遥测（无硬件演示模式，连真实设备前请关掉）')
+        asyncio.create_task(_demo_loop())
+
 
 @app.websocket('/ws')
 async def ws_endpoint(ws: WebSocket):
