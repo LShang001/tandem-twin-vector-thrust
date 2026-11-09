@@ -30,15 +30,15 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 ## 命令
 
 ```bash
-# ★ 总守卫（改完代码先跑这条，~15 s；24 项全绿再提交；全景见 VER-009 §2.16）
+# ★ 总守卫（改完代码先跑这条，~45 s；25 项全绿再提交；全景见 VER-009 §2.16）
 #   参数层一致性/生成物同步 · 推进六维对拍 · 分配 3×3 对拍 · 坐标系 @frame 标注
 #   SIL 覆盖审计 · 头文件接线审计 · 角度单位审计 · 注释门禁 GOV-004
 #   文档链接/产物同步/统计数字/编号引用/代码块路径 · IMU 轴映射 · 解锁门判据
 #   仿真域单测(92 项) · 坐标系实现自检 · GCS 单测
-py -3.12 tools/verify-all.py                 # 24 项快档
-py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 25 项
-py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 25 项
-py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 26 项，~910 s
+py -3.12 tools/verify-all.py                 # 25 项快档
+py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 26 项
+py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 26 项
+py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 27 项，~920 s
 # ★ 改共享结构体默认值 / 混控 / 分配 / 估计等「行为可能变」的代码时，
 #   只跑快档不够——2026-11-08 就因只跑 pio run 编过、没跑 run_all.sh，
 #   把 test_single_edf_4vane 的 6 项解析值断言弄坏了两周才发现。
@@ -104,6 +104,7 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 
 | 文件 | 内容 | 何时读 |
 |------|------|--------|
+| `2026-11-10-GCS平板可点性验收.md` | 平板可点性实测：导航 31px / 按钮 28px / 选择器 24px 全部低于 40px 下限；**Playwright 必须开 `has_touch=True`** 否则 `pointer: coarse` 不生效、量出来仍是桌面尺寸；触控放大用 `pointer: coarse` 而非宽度断点 | 改 GCS 前端 CSS / 布局 / 控件尺寸 / 做平板适配验收时 |
 | `2026-11-08-共轴roll-pitch不对称排查.md` | 共轴 pitch 偏大：**已解释 = 下降段力矩权限不足**（80% 峰值在下降段，力矩只剩悬停 51% → 偏差约 2 倍），非控制律缺陷；附「分轴不对称排查顺序」方法论 | 查共轴姿态不对称 / 想调增益前 |
 | `2026-11-05-单涵道四燃气舵首飞.md` | 单涵道四燃气舵首飞成功（默认参数即稳定）、舵面映射三轮定案、速率环 α 域（源机型增益等价换算）、匿名助手协议对齐、解锁门放宽；4 项待补 | 改单涵道机型 / 调 `sedf.*` 参数 / 匿名助手链路 |
 | `2026-11-09-ICM45686换型适配.md` | ICM-45686 换型全记录：两个真因（`injectFifo` 从未实现 → 排空第 2 次永久降级；批量帧用 `micros()` 差分致 dt 小 39 倍 → EKF 发散）、3.2kHz 最终方案（单包读 + ISR=ODR）、`conv=0` 为何是室内预期、`cal=0` 决策树 | 改 45686 驱动 / IMU 换型 / 调采样率或 FIFO / 判 EKF 发散前 |

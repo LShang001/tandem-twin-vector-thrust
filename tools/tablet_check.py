@@ -44,8 +44,46 @@ TOUCH_SELECTORS = [
 ]
 
 
+def _ensure_server() -> "subprocess.Popen | None":
+    """@brief 需要时自己起一个演示后端，返回句柄（调用方负责关）
+    @return None 表示已有服务在跑（不接管别人的进程）
+    """
+    import socket
+    import subprocess
+    import time as _t
+
+    with socket.socket() as s:
+        if s.connect_ex(('127.0.0.1', 8091)) == 0:
+            return None      # 已有服务，不重复起也不去关
+    env = {**__import__('os').environ, 'GCS_DEMO': '1'}
+    proc = subprocess.Popen(
+        [sys.executable, '-m', 'uvicorn', 'server.main:app',
+         '--host', '127.0.0.1', '--port', '8091'],
+        cwd=str(Path(__file__).resolve().parent.parent / 'TandemVec_FCS' / 'GCS'),
+        env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(60):
+        with socket.socket() as s:
+            if s.connect_ex(('127.0.0.1', 8091)) == 0:
+                return proc
+        _t.sleep(0.5)
+    return proc
+
+
 def main() -> int:
     OUT.mkdir(exist_ok=True)
+    proc = _ensure_server()
+    try:
+        return _run_checks()
+    finally:
+        if proc is not None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=8)
+            except Exception:
+                proc.kill()
+
+
+def _run_checks() -> int:
     bad = 0
     with sync_playwright() as p:
         b = p.chromium.launch()
