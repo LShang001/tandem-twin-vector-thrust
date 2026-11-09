@@ -96,12 +96,24 @@ static Uart *s_dbg_port = &Serial6;
 // ★ 2026-11-06：定义必须**无条件编译**——onAnoRxFrame 在三种机型下都参与编译，
 //   曾把定义裹进 BFS_ANOCOM_ON_USB，导致共轴 env（无此宏）报 s_ano_port 未声明。
 static AnoComProtocol *s_ano_port = &AnoCom;
-// 遥测协议切换标志（DBG `proto` 命令置位）：false=AnoCom（GCS 默认）/
-// true=MAVLink v2（QGC/MP 可连）。运行时切换不重烧。
+// 遥测协议切换标志：false=AnoCom（GCS 默认）/ true=MAVLink v2（QGC/MP 可连）。
+// 两种设置方式：
+//   ① 编译时定默认值——platformio env 里加 -DBFS_DEFAULT_PROTO_MAVLINK，
+//      开机即 MAVLink，适合固定接 QGC/MP 的机器；
+//   ② 运行时切换——DBG 命令 `proto mavlink` / `proto anocom`，不重烧。
+// MAVLink 模式下若要回 AnoCom/DBG，往数传口发 4 字节 "DBG\n" 即可（见下方
+// 转义识别），无需物理复位。
+#if defined(BFS_DEFAULT_PROTO_MAVLINK)
+static bool s_mav_active = true;
+#else
 static bool s_mav_active = false;
+#endif
 
 // MAVLink 遥测发送（定义在 handleMavlink 处，handleAnoCom 的 proto 切换先调用）
 static void mavlinkSendTelemetry();
+// MAVLink 下行帧/字节累计（定义在 mavlink_bridge.cpp，供 DBG `proto` 显示）
+uint32_t mavlinkTxFrameCount();
+uint32_t mavlinkTxByteCount();
 
 /**
  * @brief 查询当前是否处于 DBG 调试模式（供任务调度器画像输出门控）
@@ -3929,7 +3941,13 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.println(F("[DBG] proto: AnoCom（GCS 遥测恢复）"));
         } else {
           serial.print(F("[DBG] proto: 当前="));
-          serial.println(s_mav_active ? F("mavlink") : F("anocom"));
+          serial.print(s_mav_active ? F("mavlink") : F("anocom"));
+          // MAVLink 下行累计（不接数传也能证明帧真的发出去了：TX 计数与
+          // 对端是否在线无关）。切到 mavlink 后等几秒再看，应持续增长。
+          serial.print(F(" tx_frames="));
+          serial.print(mavlinkTxFrameCount());
+          serial.print(F(" tx_bytes="));
+          serial.println(mavlinkTxByteCount());
           serial.println(F("[DBG] proto: 用法 proto mavlink|anocom"));
         }
       }

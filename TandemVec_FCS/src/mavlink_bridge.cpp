@@ -106,6 +106,13 @@ bool mavIntervalOk(uint32_t id)
 // ------------------------------------------------------------------
 //  发送工具
 // ------------------------------------------------------------------
+// MAVLink 下行统计（不接数传也能证明帧真的发出去了：DBG `proto` 会显示）
+static uint32_t s_mav_tx_frames = 0;
+static uint32_t s_mav_tx_bytes = 0;
+
+uint32_t mavlinkTxFrameCount() { return s_mav_tx_frames; }
+uint32_t mavlinkTxByteCount() { return s_mav_tx_bytes; }
+
 static void mavSend(const mavlink_message_t &msg)
 {
     if (!mavIntervalOk(msg.msgid))
@@ -116,7 +123,13 @@ static void mavSend(const mavlink_message_t &msg)
     uint16_t len = mavlink_msg_to_send_buffer(buf, &msg);
     extern Uart Serial6;
     if (Serial6.availableForWrite() >= len + 4)
+    {
         Serial6.write(buf, len);
+        // 只有真正写进数传口才计数——用于验证「MAVLink 确实在发」，
+        // 不依赖是否接了数传（TX 计数与对端是否在线无关）。
+        s_mav_tx_frames++;
+        s_mav_tx_bytes += len;
+    }
 }
 
 // 参数线上名 → MAVLink param_id（≤15B 唯一短名）
