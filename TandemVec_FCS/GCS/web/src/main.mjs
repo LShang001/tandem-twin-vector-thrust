@@ -253,7 +253,7 @@ function renderLinkStat(m) {
 }
 
 // ---------------- 页面路由 ----------------
-const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'alarms', 'tuning', 'calib', 'inspector', 'blackbox', 'params', 'console'];
+const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'video', 'alarms', 'tuning', 'calib', 'inspector', 'blackbox', 'params', 'console'];
 let activePage = 'dashboard';
 /** @brief 切换到指定页面（非法页面名忽略）
  *  @param {string} name 页面名（dashboard/scope/params/blackbox/console/view3d）
@@ -389,6 +389,7 @@ const PAGE_LOADERS = {
   scope: () => import('./scope.mjs'),
   gnss: () => import('./gnss.mjs'),
   map: () => import('./map.mjs'),
+  video: () => import('./video.mjs'),
   alarms: () => import('./alarms.mjs'),
   tuning: () => import('./tuning.mjs'),
   calib: () => import('./calib.mjs'),

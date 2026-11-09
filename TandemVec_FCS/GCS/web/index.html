@@ -9,6 +9,8 @@
 <!-- Leaflet 走本地 vendor：无网也能起界面，只有瓦片需要网络 -->
 <link rel="stylesheet" href="./vendor/leaflet-1.9.4/leaflet.css">
 <script src="./vendor/leaflet-1.9.4/leaflet.js"></script>
+<!-- HLS 播放（RTSP 需先转码成 HLS/MJPEG，浏览器不解 RTSP） -->
+<script src="./vendor/hls/hls.min.js"></script>
 
 <!-- PWA：让手机/平板「添加到主屏幕」后得到独立图标与全屏窗口（无需构建 APK） -->
 <link rel="manifest" href="./manifest.webmanifest">
@@ -59,6 +61,7 @@
     <button class="nav-btn" data-page="scope">实时曲线</button>
     <button class="nav-btn" data-page="gnss">GNSS</button>
     <button class="nav-btn" data-page="map">地图</button>
+    <button class="nav-btn" data-page="video">视频</button>
     <button class="nav-btn" data-page="alarms">报警</button>
     <button class="nav-btn" data-page="tuning">调参</button>
     <button class="nav-btn" data-page="calib">校准</button>
@@ -333,6 +336,39 @@
         <span class="hint">上升时间=10%→90%；超调=(峰值-目标)/幅值；调节时间=进入 ±2% 并保持</span>
       </div>
       <div id="tuneMetrics"></div>
+    </div>
+  </section>
+
+  <!-- 视频流：MJPEG / HLS / 本机摄像头 -->
+  <section class="page" id="page-video">
+    <div class="glass panel">
+      <div class="panel-title">视频 VIDEO <span class="hint" id="videoStatus">未启动</span></div>
+      <div class="video-tools">
+        <label class="tune-field">源类型
+          <select id="videoMode">
+            <option value="mjpeg">MJPEG（推荐，浏览器原生）</option>
+            <option value="hls">HLS（.m3u8，RTSP 转码后）</option>
+            <option value="camera">本机摄像头</option>
+          </select>
+        </label>
+        <label class="tune-field" style="flex:1">源地址
+          <input type="text" id="videoUrl" placeholder="http://…/stream.mjpg">
+        </label>
+        <button class="btn primary small" id="videoStart">开始</button>
+        <button class="btn small" id="videoStop">停止</button>
+        <button class="btn small" id="videoTest">内置测试流</button>
+      </div>
+      <div class="video-stage">
+        <img id="videoImg" alt="视频流">
+        <video id="videoEl" playsinline muted></video>
+      </div>
+      <div class="video-note">
+        <b>RTSP 不能直接播放</b>——浏览器不支持 rtsp:// 协议，必须先用 ffmpeg 转成
+        HLS 或 MJPEG。示例：
+        <code>ffmpeg -rtsp_transport tcp -i rtsp://… -c:v libx264 -f hls out.m3u8</code>
+        或
+        <code>ffmpeg -i rtsp://… -f mjpeg http://0.0.0.0:8080/stream.mjpg</code>
+      </div>
     </div>
   </section>
 

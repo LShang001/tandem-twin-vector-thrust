@@ -32,6 +32,7 @@ DBG 模式与遥测互斥（固件行为），进入 DBG 后固件停止遥测�
 import asyncio
 import json
 import logging
+import math
 import os
 import queue
 import struct
@@ -40,7 +41,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 # 相对导入（python -m uvicorn server.main:app）；直接运行本文件时回退绝对导入
@@ -1330,6 +1331,52 @@ async def api_upload_log(file: UploadFile = File(...)):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
     log.info('uploaded log: %s (%d bytes)', dest.name, size)
     return {'ok': True, 'name': dest.name, 'bytes': size}
+
+
+@app.get('/video/test.mjpg')
+async def video_test_stream():
+    """@brief 内置测试视频流（MJPEG），用于无硬件时验证播放器链路
+    @details 为什么后端自己生成：视频页要在没有图传硬件的情况下也能验证，
+             否则这块功能"写完就没法验收"。画面内容是动态的（时间戳 +
+             旋转指针 + 渐变背景），一眼能看出是实时流还是卡住的静帧——
+             这是判断播放器是否真的在解码的最快办法。
+    @note   输出是 multipart/x-mixed-replace（MJPEG 标准封装），
+             浏览器 <img src> 直接就能播，不需要任何 JS 解码库。
+    """
+    boundary = 'unignc'
+
+    async def gen():
+        import io as _io
+
+        from PIL import Image, ImageDraw
+        t0 = time.time()
+        for _ in range(600):     # 约 60 s（10 fps），够验证
+            el = time.time() - t0
+            img = Image.new('RGB', (480, 270), (12, 20, 34))
+            d = ImageDraw.Draw(img)
+            # 渐变背景条：随时间水平移动
+            for x in range(0, 480, 8):
+                shade = int(30 + 40 * math.sin((x / 480.0) * 6.28 + el * 2.0))
+                d.rectangle([x, 0, x + 7, 270], fill=(shade // 3, shade // 2, shade))
+            # 旋转指针：角度直接反映时间，肉眼可判是否在动
+            ang = el * 1.2
+            cx, cy, r = 240, 135, 70
+            d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=(90, 140, 200), width=2)
+            d.line([cx, cy, cx + r * math.cos(ang), cy + r * math.sin(ang)],
+                   fill=(255, 93, 108), width=3)
+            d.text((10, 8), f'UniGNC test pattern  t={el:6.2f}s', fill=(220, 235, 255))
+            d.text((10, 250), 'MJPEG / multipart', fill=(140, 170, 200))
+            buf = _io.BytesIO()
+            img.save(buf, 'JPEG', quality=70)
+            data = buf.getvalue()
+            yield (b'--' + boundary.encode() + b'\r\n'
+                   b'Content-Type: image/jpeg\r\n'
+                   b'Content-Length: ' + str(len(data)).encode() + b'\r\n\r\n'
+                   + data + b'\r\n')
+            await asyncio.sleep(0.1)   # 10 fps
+    return StreamingResponse(
+        gen(),
+        media_type=f'multipart/x-mixed-replace; boundary={boundary}')
 
 
 @app.get('/tiles/{z}/{x}/{y}.png')
