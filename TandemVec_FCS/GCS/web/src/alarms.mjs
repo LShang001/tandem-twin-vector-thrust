@@ -78,6 +78,12 @@ function renderBanner() {
     return;
   }
   document.body.classList.add('has-alarm');
+  // 按横幅**实际**渲染高度设让位，而不是写死像素：告警多时横幅会折行，
+  // 固定高度会让下面的按钮被盖住（实测点不到「频谱」按钮）。
+  // 直接读 offsetHeight：此时横幅刚被加上 .show，但脱离文档流（position:fixed）
+  // 的元素本身已有布局尺寸，不需要等下一帧。RMA 里做实测拿不到值（会读到 0）。
+  const h = el.offsetHeight;
+  if (h > 0) document.body.style.setProperty('--alarm-h', `${h + 2}px`);
   // 严重优先、其次警告、最后提示
   const order = { crit: 0, warn: 1, info: 2 };
   const sorted = [...alarmState.active].sort(

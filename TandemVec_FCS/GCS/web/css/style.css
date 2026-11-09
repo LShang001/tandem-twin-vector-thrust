@@ -642,8 +642,11 @@ tr.ev-clear td:nth-child(2) { color: #29d3a2; }
 
 /* 横幅出现时给页面让出高度，否则会盖住标题栏。
    用 transition 而不是瞬间跳，避免告警频繁出现/消失时页面抖动。 */
+/* 让位高度用 CSS 变量，由 alarms.mjs 按横幅**实际**渲染高度设置。
+   原来写死 32px，实测横幅折行时会到 40+px，下面的按钮就被盖住点不到。
+   写死像素在字体/缩放/多行告警下都不成立。 */
 body { transition: padding-top .16s ease; }
-body.has-alarm { padding-top: 32px; }
+body.has-alarm { padding-top: var(--alarm-h, 36px); }
 
 /* ══════════ PID 调参可视化（2026-11-10） ══════════ */
 .tune-tools {
