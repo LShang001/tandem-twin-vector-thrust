@@ -76,6 +76,15 @@ START_TS = time.time()      # 后端启动时间（/api/status 用）
 HEX_FLUSH_PERIOD = 0.35     # hex 监听推送节流
 HEX_FLUSH_MAX = 512         # 单次 hex 推送最大字节
 
+# PWA 清单的 MIME 类型：Python 的 mimetypes 不认 .webmanifest，
+# 不注册的话 StaticFiles 会按 application/octet-stream 返回，
+# 部分浏览器会因此拒绝把页面识别为可安装的 PWA。
+import mimetypes as _mimetypes
+
+_mimetypes.add_type('application/manifest+json', '.webmanifest')
+_mimetypes.add_type('text/javascript', '.js')
+_mimetypes.add_type('text/javascript', '.mjs')
+
 app = FastAPI(title='UniGNC GCS', version='0.3.0')
 
 

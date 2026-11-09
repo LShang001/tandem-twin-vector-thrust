@@ -4,8 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>UniGNC GCS · UniGNC 通用飞控平台地面站</title>
-<link rel="icon" href="data:,">
+<link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="stylesheet" href="./css/style.css">
+
+<!-- PWA：让手机/平板「添加到主屏幕」后得到独立图标与全屏窗口（无需构建 APK） -->
+<link rel="manifest" href="./manifest.webmanifest">
+<meta name="theme-color" content="#0b1220">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="UniGNC">
+<link rel="apple-touch-icon" href="./icon-192.png">
 </head>
 <body>
 
@@ -317,5 +326,15 @@
 {"imports":{"three":"./vendor/three-r170/three.module.js","three/addons/":"./vendor/three-r170/addons/"}}
 </script>
 <script type="module-shim" src="./src/main.mjs"></script>
+<script>
+// Service Worker 注册。
+// 只在 secure context（https 或 localhost）会成功——局域网 http 地址下浏览器
+// 直接拒绝，这里失败是预期的，不弹任何提示以免误导（"添加到主屏幕"仍可用）。
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(() => { /* 非 secure context，忽略 */ });
+  });
+}
+</script>
 </body>
 </html>
