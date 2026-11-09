@@ -193,6 +193,9 @@ function handleMsg(msg) {
     case 'spectrum_multi':
       emit('spectrum_multi', msg);
       break;
+    case 'spectrogram':
+      emit('spectrogram', msg);
+      break;
     case 'calib_wizard':
       emit('calib-wizard', msg);
       break;

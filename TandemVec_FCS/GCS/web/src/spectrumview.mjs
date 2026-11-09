@@ -22,6 +22,7 @@ const $ = (id) => document.getElementById(id);
 const spec = {
   result: null,
   multi: null,
+  spec2d: null,
   channel: '',
   selected: [],        // 多通道对比时选中的通道名（最多 4）
   activated: false,
@@ -262,6 +263,92 @@ function renderMultiSelect() {
   if (st && spec.selected.length) st.textContent = `已选 ${spec.selected.length} 个通道`;
 }
 
+
+
+/** 时频图：把频率（纵向）× 时间（横向）画成热力图 */
+function drawSpectro() {
+  const cv = $('specChart');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const w = cv.clientWidth || 640;
+  const h = cv.clientHeight || 220;
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  ctx.clearRect(0, 0, w, h);
+
+  const r = spec.spec2d;
+  if (!r || !r.ok) {
+    ctx.fillStyle = 'rgba(150,170,195,0.6)';
+    ctx.font = '12px ui-monospace, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(r && r.reason ? r.reason : '选通道后点「时频图」', w / 2, h / 2);
+    ctx.textAlign = 'left';
+    return;
+  }
+  const freqs = r.freqs || [];
+  const times = r.times || [];
+  const mag = r.mag || [];
+  if (!freqs.length || !times.length) return;
+
+  const left = 34;
+  const bottom = 16;
+  const pw = w - left - 4;
+  const ph = h - bottom - 4;
+  const nF = freqs.length;
+  const nT = times.length;
+  const cw = pw / nT;
+  const chh = ph / nF;
+
+  // 只画到奈奎斯特的一半以上会太挤：按实际 fMax 铺满纵向
+  const fMax = freqs[nF - 1] || 1;
+  for (let ti = 0; ti < nT; ti++) {
+    for (let fi = 0; fi < nF; fi++) {
+      const v = mag[fi] ? mag[fi][ti] : 0;
+      if (v <= 0.02) continue;
+      // 用蓝→青→黄→红 的工程色标；低值压暗，避免整片发亮看不出结构
+      const a = Math.min(1, Math.pow(v, 0.6));
+      const hue = 210 - 190 * a;      // 210(蓝) → 20(橙红)
+      const light = 8 + 52 * a;
+      ctx.fillStyle = `hsl(${hue}, 85%, ${light}%)`;
+      ctx.fillRect(left + ti * cw, ph - (fi + 1) * chh, Math.ceil(cw) + 0.5,
+        Math.ceil(chh) + 0.5);
+    }
+  }
+
+  // 坐标轴
+  ctx.strokeStyle = 'rgba(120,160,255,0.25)';
+  ctx.beginPath();
+  ctx.moveTo(left, h - bottom); ctx.lineTo(w - 4, h - bottom);
+  ctx.moveTo(left, 4); ctx.lineTo(left, h - bottom);
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(140,170,200,0.8)';
+  ctx.font = '10px ui-monospace, monospace';
+  // 频率刻度（0 / 中 / 顶）
+  [0, 0.5, 1].forEach((f) => {
+    const y = ph - f * ph + 3;
+    ctx.fillText(`${(fMax * f).toFixed(0)}`, 2, Math.max(10, y));
+  });
+  ctx.fillText('Hz', 2, 8);
+  // 时间刻度
+  [0, 0.5, 1].forEach((f) => {
+    const i = Math.min(nT - 1, Math.round(f * (nT - 1)));
+    const tx = left + i * cw;
+    ctx.fillText(`${times[i].toFixed(1)}s`, Math.min(w - 34, tx), h - 4);
+  });
+
+  const box = $('specInfo');
+  if (box) {
+    box.innerHTML = `
+      <div class="spec-row"><span>通道</span><b>${r.channel || ''}</b>
+        <span>采样率</span><b>${r.fs} Hz</b>
+        <span>窗长</span><b>${r.nperseg}</b>
+        <span>步进</span><b>${r.hop}</b>
+        <span>列数</span><b>${r.n_cols}</b></div>
+      <div class="hint">纵轴频率、横轴时间；亮点表示该时刻该频率能量强。
+        用来回答「某个频率的振动是什么时候出现的」——单帧频谱看不出来</div>`;
+  }
+}
+
 export function activate() {
   if (spec.activated) return;
   spec.activated = true;
@@ -304,6 +391,28 @@ export function activate() {
       if (st) st.textContent = `多通道对比 ${spec.selected.length} 个…`;
     });
   }
+  const sbtn = $('spec2dRun');
+  if (sbtn) {
+    sbtn.addEventListener('click', () => {
+      const sel = $('specChannel');
+      if (!sel || !sel.value) return;
+      spec.channel = sel.value;
+      send({ cmd: 'spectrogram', channel: sel.value, nperseg: 128, hop: 64 });
+      const st = $('specState');
+      if (st) st.textContent = `时频图 ${sel.value}…`;
+    });
+  }
+  bus.addEventListener('spectrogram', (e) => {
+    spec.spec2d = e.detail || {};
+    drawSpectro();
+    const st = $('specState');
+    if (st) {
+      st.textContent = spec.spec2d.ok
+        ? `${spec.channel} 时频图 · ${spec.spec2d.n_cols} 列`
+        : (spec.spec2d.reason || '失败');
+    }
+  });
+
   bus.addEventListener('spectrum_multi', (e) => {
     spec.multi = e.detail || {};
     drawMulti();

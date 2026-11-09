@@ -770,6 +770,25 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'spectrum_multi', **r})
 
+    elif cmd == 'spectrogram':
+        ch = str(msg.get('channel') or '')
+        nperseg = int(msg.get('nperseg') or 128)
+        hop = int(msg.get('hop') or 64)
+        max_cols = int(msg.get('max_cols') or 160)
+        dq = g.hist.get(ch)
+        if dq is None or len(dq) < 128:
+            await ws.send_json({'type': 'spectrogram', 'channel': ch,
+                                'ok': False, 'reason': f'通道 {ch} 样本不足'})
+            return
+        from .spectrum import spectrogram
+        try:
+            r = spectrogram(list(dq), nperseg=nperseg, hop=hop, max_cols=max_cols)
+        except Exception as exc:
+            await ws.send_json({'type': 'spectrogram', 'channel': ch,
+                                'ok': False, 'reason': str(exc)})
+            return
+        await ws.send_json({'type': 'spectrogram', 'channel': ch, **r})
+
     elif cmd == 'tuning_channels':
         # 列出可用于分析的通道（有足够样本的）
         chans = []

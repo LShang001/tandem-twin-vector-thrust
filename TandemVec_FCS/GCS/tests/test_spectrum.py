@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from server.spectrum import (  # noqa: E402
     compare_channels,
     estimate_fs,
+    spectrogram,
     spectrum_summary,
     welch_psd,
 )
@@ -180,3 +181,66 @@ def test_compare_limits_to_four():
     r = compare_channels(chans, nperseg=256)
     assert r['ok']
     assert r['n_compared'] <= 4
+
+
+def test_spectrogram_shape():
+    """@brief 时频矩阵维度自洽：freqs 行数 × times 列数"""
+    s = _gen(20.0, lambda t: math.sin(2 * math.pi * 5.0 * t))
+    r = spectrogram(s, nperseg=128, hop=64)
+    assert r['ok'], r
+    assert len(r['mag']) == len(r['freqs'])
+    assert len(r['mag'][0]) == len(r['times'])
+    assert len(r['times']) == r['n_cols']
+
+
+def test_spectrogram_detects_frequency_switch():
+    """@brief 前半段 4 Hz、后半段 14 Hz —— 时频图应能看出切换
+
+    @details 这是时频图存在的意义：单帧频谱会把两段平均成两个峰，
+             看不出「谁先谁后」；时频图能。
+    """
+    def f(t):
+        return math.sin(2 * math.pi * (4.0 if t < 10.0 else 14.0) * t)
+    s = _gen(20.0, f)
+    r = spectrogram(s, nperseg=128, hop=64)
+    assert r['ok'], r
+    freqs = r['freqs']
+    try:
+        i4 = min(range(len(freqs)), key=lambda i: abs(freqs[i] - 4.0))
+        i14 = min(range(len(freqs)), key=lambda i: abs(freqs[i] - 14.0))
+    except ValueError:
+        return
+    mag = r['mag']
+    half = len(r['times']) // 2
+    # 前半段 4 Hz 更强，后半段 14 Hz 更强
+    first4 = max(mag[i4][0:half])
+    first14 = max(mag[i14][0:half])
+    second4 = max(mag[i4][half:])
+    second14 = max(mag[i14][half:])
+    assert first4 > first14 * 1.5, (first4, first14)
+    assert second14 > second4 * 1.5, (second14, second4)
+
+
+def test_spectrogram_respects_max_cols():
+    """@brief 列数超限时要池化合并，不能返回上万列"""
+    s = _gen(60.0, lambda t: math.sin(2 * math.pi * 5.0 * t))
+    r = spectrogram(s, nperseg=64, hop=8, max_cols=50)
+    assert r['ok']
+    assert r['n_cols'] <= 50
+
+
+def test_spectrogram_normalized():
+    """@brief 幅值必须归一化到 0–1"""
+    s = _gen(15.0, lambda t: 1000.0 * math.sin(2 * math.pi * 5.0 * t))
+    r = spectrogram(s, nperseg=128, hop=64)
+    assert r['ok']
+    flat = [x for row in r['mag'] for x in row]
+    assert max(flat) <= 1.0 + 1e-6
+    assert max(flat) > 0.9      # 归一化后最大值应为 1
+
+
+def test_spectrogram_insufficient():
+    """@brief 样本不足明确返回原因"""
+    s = _gen(1.0, lambda t: math.sin(2 * math.pi * 5.0 * t))
+    r = spectrogram(s, nperseg=128)
+    assert r['ok'] is False and 'reason' in r

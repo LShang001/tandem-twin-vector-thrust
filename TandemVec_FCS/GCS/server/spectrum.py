@@ -202,3 +202,75 @@ def compare_channels(chans: dict, nperseg: int = 256,
         'tol_hz': round(tol, 3),
     }
 
+
+def spectrogram(series: Series, nperseg: int = 128, hop: int = 64,
+                max_cols: int = 160) -> dict:
+    """@brief 短时傅里叶时频图（谱图）
+
+    @param series [(t, v), ...]
+    @param nperseg 每段样本数（决定频率分辨率）
+    @param hop 段间步进（越小时间分辨率越高、列数越多）
+    @param max_cols 最大时间列数，超出时按池化合并（否则前端要画上万列）
+    @return {ok, times:[s], freqs:[Hz], mag:[[0..1]], fs, n_cols}
+
+    @details 为什么需要它：单帧频谱只说明"现在有哪些频率"。
+             要回答"某个频率的振动是什么时候出现的"——比如"起飞后第 12 秒
+             开始出现 28 Hz 的抖动"——必须把频谱按时间摊开。
+             这类问题在时域上看不出来（时域只有一条糊在一起的曲线），
+             在单帧频谱上也看不出来（整段平均成一个谱）。
+
+    @note 幅值按全图最大值归一化到 0–1，只用于**看相对强弱与随时间的变化**，
+          不是物理量纲。列数超限时用**最大值池化**合并（不是平均）——
+          平均会把短暂出现的窄带峰值摊薄，恰好抹掉要找的东西。
+    """
+    import numpy as np
+
+    xs = np.asarray([v for _t, v in series], dtype=float)
+    fs = estimate_fs(series)
+    if fs is None or len(xs) < nperseg * 2:
+        return {'ok': False, 'reason': '样本不足（至少需要 2 段窗长）'}
+    xs = xs - xs.mean()
+
+    win = np.hanning(nperseg)
+    win_pow = float((win ** 2).sum())
+    if win_pow <= 0:
+        return {'ok': False, 'reason': '窗函数异常'}
+
+    starts = list(range(0, len(xs) - nperseg + 1, max(1, hop)))
+    if not starts:
+        return {'ok': False, 'reason': '样本不足以切分'}
+
+    # 列数超限时池化合并：对幅值取最大，保住短暂出现的窄带峰
+    n_cols = len(starts)
+    group = max(1, int(np.ceil(n_cols / max_cols)))
+    cols = []
+    t_marks = []
+    for i in range(0, len(starts), group):
+        chunk = starts[i:i + group]
+        acc = None
+        for s0 in chunk:
+            seg = xs[s0:s0 + nperseg] * win
+            mag = np.abs(np.fft.rfft(seg)) / np.sqrt(win_pow)
+            acc = mag if acc is None else np.maximum(acc, mag)
+        cols.append(acc)
+        mid = chunk[len(chunk) // 2]
+        t_marks.append(mid / fs)
+
+    mat = np.asarray(cols).T          # [freq, time]
+    peak = float(mat.max())
+    if peak <= 0:
+        return {'ok': False, 'reason': '信号为常量（无波动）'}
+    mat = mat / peak
+    freqs = np.fft.rfftfreq(nperseg, d=1.0 / fs)
+
+    return {
+        'ok': True,
+        'fs': round(fs, 2),
+        'n_cols': len(cols),
+        'nperseg': nperseg,
+        'hop': hop,
+        'times': [round(float(x), 3) for x in t_marks],
+        'freqs': [round(float(f), 3) for f in freqs],
+        # 保留 3 位小数即可：0–1 的图像量，再多位是浪费带宽
+        'mag': [[round(float(x), 3) for x in row] for row in mat.tolist()],
+    }
