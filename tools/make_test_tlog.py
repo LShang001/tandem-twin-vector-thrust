@@ -84,12 +84,104 @@ def build(path: Path, fs_hz: int = 100, seconds: float = 60.0) -> dict:
     }
 
 
+
+
+def build_dynamics(path: Path, fs_hz: int = 200, seconds: float = 20.0,
+                   zeta: float = 0.55, wn: float = 7.0) -> dict:
+    """@brief 生成带真实二阶动力学响应的 tlog（阶跃指令 + 结构振动）
+
+    @param zeta 阻尼比（与 server 演示模式同一组：0.55）
+    @param wn 自然频率 rad/s（7.0）
+    @return 生成摘要，含理论超调与上升时间，供断言用
+
+    @details 为什么要有这个场景：纯正弦只能证明"峰值频率识别得对"，
+             证明不了"时域指标算得对"。这里让 roll 跟随一个**解析可算的
+             二阶阶跃响应**，于是：
+               · 调参页的阶跃分析应给出上升时间/超调/调节时间
+               · 频谱页应看到叠加的 28 Hz 结构振动峰
+               · 两边的数字都能和理论值对账
+
+    @theory 二阶系统阶跃响应：
+            y(t) = A·[1 − e^(−ζωn t)·(cos(ωd t) + ζ/√(1−ζ²)·sin(ωd t))]，
+            ωd = ωn·√(1−ζ²)；超调 Mp = exp(−πζ/√(1−ζ²))；上升时间约 1.8/ωn
+    """
+    import math as _m
+
+    mav = mavutil.mavlink.MAVLink(None)
+    mav.srcSystem = 1
+    mav.srcComponent = 1
+
+    wd = wn * _m.sqrt(1.0 - zeta ** 2)
+    n = int(seconds * fs_hz)
+    dt = 1.0 / fs_hz
+    t0_us = 1_690_000_000 * 1_000_000
+
+    # 阶跃序列：2 s 时 0→10°，8 s 时 10→0°（来回各一次，便于验证双向）
+    steps = [(2.0, 10.0), (8.0, 0.0)]
+    amp = 0.0
+    osc_hits = []      # 记录每次阶跃的时刻与幅度
+
+    def resp(tau, a):
+        """二阶阶跃响应（tau 为距阶跃时刻的秒数）"""
+        if tau <= 0:
+            return 0.0
+        e = _m.exp(-zeta * wn * tau)
+        return a * (1.0 - e * (_m.cos(wd * tau) + (zeta / _m.sqrt(1 - zeta ** 2))
+                               * _m.sin(wd * tau)))
+
+    with open(path, 'wb') as f:
+        for i in range(n):
+            tt = i * dt
+            # 当前所处的阶跃段：把每个阶跃的响应叠起来（前一阶跃保持）
+            y = 0.0
+            for (ts, target) in steps:
+                if tt >= ts:
+                    prev = sum(v for (s2, v) in steps if s2 < ts)
+                    y += resp(tt - ts, target - prev)
+            # 叠加 28 Hz 结构振动（幅值 0.3°，模拟桨叶通过频率）
+            vib = 0.3 * _m.sin(2 * _m.pi * 28.0 * tt)
+            # 再叠加一点 50 Hz 电噪（幅值 0.1°）
+            noise = 0.1 * _m.sin(2 * _m.pi * 50.0 * tt)
+
+            roll_rad = _m.radians(y + vib + noise)
+            pitch_rad = _m.radians(0.5 * _m.sin(2 * _m.pi * 0.5 * tt))
+
+            ts_us = t0_us + int(round(tt * 1_000_000))
+            f.write(struct.pack('>Q', ts_us))
+            msg = mav.attitude_encode(
+                int(tt * 1000) & 0xFFFFFFFF, roll_rad, pitch_rad, 0.0,
+                0.0, 0.0, 0.0)
+            f.write(msg.pack(mav))
+
+    mp = _m.exp(-_m.pi * zeta / _m.sqrt(1 - zeta ** 2)) * 100.0
+    return {
+        'path': str(path),
+        'scenario': 'dynamics',
+        'fs_hz': fs_hz,
+        'seconds': seconds,
+        'frames': n,
+        'dt_ms': round(dt * 1000, 3),
+        'zeta': zeta,
+        'wn_rad_s': wn,
+        'wn_hz': round(wn / (2 * _m.pi), 4),
+        'theory_overshoot_pct': round(mp, 2),
+        'theory_rise_time_s': round(1.8 / wn, 3),
+        'steps': steps,
+        'vib': {'freq_hz': 28.0, 'amp_deg': 0.3},
+        'bytes': path.stat().st_size,
+    }
+
+
 def main(argv: list[str]) -> int:
     out = Path(argv[1]) if len(argv) > 1 else Path('output/test_100hz.tlog')
     fs = int(argv[2]) if len(argv) > 2 else 100
     secs = float(argv[3]) if len(argv) > 3 else 60.0
+    scenario = argv[4] if len(argv) > 4 else 'tone'
     out.parent.mkdir(parents=True, exist_ok=True)
-    info = build(out, fs, secs)
+    if scenario == 'dynamics':
+        info = build_dynamics(out, fs, secs)
+    else:
+        info = build(out, fs, secs)
     for k, v in info.items():
         print(f'  {k}: {v}')
     return 0
