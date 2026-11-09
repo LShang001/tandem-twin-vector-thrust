@@ -106,8 +106,26 @@ int ICM45686_ImuDevice::begin(const ImuConfig &cfg)
   // 故按**实际生效的 ODR** 换算成最接近的 2^n 档（手册 §20/§21）。
   // 同时记录实际截止频率：低 ODR + 高目标带宽时会被芯片能力压到远低于目标
   // （如 ODR=200Hz + 目标 400Hz → 只能 50Hz），必须可观测，详见头文件说明。
-  const uint8_t gyroShift = lpfShiftForTarget(gyroOdrHz, lpfTargetHz(cfg.gyroLpf));
-  const uint8_t accelShift = lpfShiftForTarget(accelOdrHz, lpfTargetHz(cfg.accelLpf));
+  // ★ 2026-11-09：45686 在 3.2kHz ODR 下把 LPF 收窄一档。
+  //   物理原因：200Hz 轮询后端每次只取"最新值"，等效带宽窄；改成 3.2kHz
+  //   逐样本采样后，同样 200Hz 的 LPF 每秒喂给 EKF 的独立噪声样本是 16 倍，
+  //   速度随机游走方差随之放大，实测 vel_sig 从 0.37 涨到 1.94，超过 EKF
+  //   收敛判据的 1.0（flight_control.cpp 里 conv=0 会强制上锁，等于飞不了）。
+  //   陀螺 200→100Hz、加计 100→50Hz 是飞控常用带宽，兼顾抗振与相位滞后。
+  //   只在请求值高于该档时才降，不动调用方显式指定的更窄设置。
+  ImuLpfBw gyroLpfReq = cfg.gyroLpf;
+  ImuLpfBw accelLpfReq = cfg.accelLpf;
+  if (gyroLpfReq == ImuLpfBw::Bw200Hz || gyroLpfReq == ImuLpfBw::Bw400Hz)
+  {
+    gyroLpfReq = ImuLpfBw::Bw100Hz;
+  }
+  if (accelLpfReq == ImuLpfBw::Bw100Hz || accelLpfReq == ImuLpfBw::Bw200Hz ||
+      accelLpfReq == ImuLpfBw::Bw400Hz)
+  {
+    accelLpfReq = ImuLpfBw::Bw50Hz;
+  }
+  const uint8_t gyroShift = lpfShiftForTarget(gyroOdrHz, lpfTargetHz(gyroLpfReq));
+  const uint8_t accelShift = lpfShiftForTarget(accelOdrHz, lpfTargetHz(accelLpfReq));
   actualGyroLpfHz_ = (gyroShift == 0U)
                          ? 0.0f
                          : static_cast<float>(gyroOdrHz) / static_cast<float>(1U << gyroShift);
@@ -233,32 +251,24 @@ int ICM45686_ImuDevice::readFifo(ImuFifoSample *out, size_t max)
   {
     return -1;
   }
-  // ★ 2026-11-09：按 header 的 accel_bit/gyro_bit 过滤，只保留两者都有效的包。
-  //   45686 的 fifo_header_t 没有 empty 位，但 accel_bit/gyro_bit 标明该包
-  //   实际含哪些数据。无数据的包仍占满 fifo_frame_size，直接按 16 字节布局
-  //   解码会读到残留字节，解出一份"假样本"。
-  //   实机症状：isr_f/isr_c 算出的帧率比配置 ODR 高约 20%（3867 vs 3200），
-  //   多出来的就是这类假帧；EKF 拿它积分后 vel 炸到 -633 m/s。
-  size_t out_n = 0;
+  // ★ 2026-11-09：不做 header 过滤。
+  //   曾按 fifo_header_t 的 accel_bit/gyro_bit 丢弃"无效包"，实机在单包读
+  //   路径下丢了约 10% 的样本（isr_empty 占比），导致帧间 dt 不一致、
+  //   EKF 速度不确定度从 0.37 涨到 1.94、收敛标志 conv 一直为 0。
+  //   P1 架构不变量（docs/memory/2026-11-04-IMU-2kHz攻关.md §6）验证过的
+  //   路径就是 readFifo(1包) 直接 push，不在这里做筛选。
   for (size_t i = 0; i < n; ++i)
   {
-    const fifo_header_t hdr = s_batch[i].header;
-    if (!hdr.bits.accel_bit || !hdr.bits.gyro_bit)
-    {
-      fifo_bad_header_count_++;
-      continue;
-    }
     for (int a = 0; a < 3; ++a)
     {
-      out[out_n].acc[a] =
+      out[i].acc[a] =
           ICM456xx::rawRegisterAccelToG(s_batch[i].byte_16.accel_data[a], accelFsr_);
-      out[out_n].gyr[a] =
+      out[i].gyr[a] =
           ICM456xx::rawRegisterGyroToDps(s_batch[i].byte_16.gyro_data[a], gyroFsr_);
     }
-    out[out_n].timestamp = s_batch[i].byte_16.timestamp;
-    out_n++;
+    out[i].timestamp = s_batch[i].byte_16.timestamp;
   }
-  return static_cast<int>(out_n);
+  return static_cast<int>(n);
 }
 
 float ICM45686_ImuDevice::dieTempC()
