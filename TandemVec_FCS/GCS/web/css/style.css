@@ -471,3 +471,77 @@ body {
   background: linear-gradient(90deg, #3ea6ff, #29d3a2);
   transition: width .18s linear;
 }
+
+/* ══════════ 地图与航点（2026-11-09） ══════════ */
+.map-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 14px;
+  height: calc(100vh - 210px);
+  min-height: 460px;
+}
+.map-canvas-panel { display: flex; flex-direction: column; min-height: 0; padding-bottom: 12px; }
+.map-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+#mapCanvas {
+  flex: 1;
+  min-height: 320px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #0e1624;
+}
+/* Leaflet 默认配色偏亮，压暗以贴合工程深色风格 */
+.leaflet-container { background: #0e1624; font-family: inherit; }
+.leaflet-control-attribution {
+  background: rgba(12, 20, 34, 0.82) !important;
+  color: #7d92ad !important;
+  font-size: 10px;
+}
+.leaflet-control-attribution a { color: #3ea6ff !important; }
+.leaflet-bar a {
+  background: rgba(18, 30, 48, 0.95);
+  color: #c9d8ea;
+  border-color: rgba(120, 160, 255, 0.22);
+}
+.leaflet-bar a:hover { background: rgba(30, 48, 74, 0.98); }
+
+/* 航点序号标记 */
+.wp-marker { background: none; border: none; }
+.wp-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #06121f;
+  background: #3ea6ff;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.map-wp-panel { display: flex; flex-direction: column; min-height: 0; }
+.wp-alt {
+  width: 72px;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: rgba(18, 30, 48, 0.9);
+  color: #dbe7f5;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  text-align: right;
+}
+
+@media (max-width: 1000px) {
+  .map-grid { grid-template-columns: 1fr; height: auto; }
+  #mapCanvas { height: 380px; flex: none; }
+  .map-wp-panel { max-height: 40vh; }
+}

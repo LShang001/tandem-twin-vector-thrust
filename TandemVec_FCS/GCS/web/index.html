@@ -6,6 +6,9 @@
 <title>UniGNC GCS · UniGNC 通用飞控平台地面站</title>
 <link rel="icon" type="image/png" href="./icon-192.png">
 <link rel="stylesheet" href="./css/style.css">
+<!-- Leaflet 走本地 vendor：无网也能起界面，只有瓦片需要网络 -->
+<link rel="stylesheet" href="./vendor/leaflet-1.9.4/leaflet.css">
+<script src="./vendor/leaflet-1.9.4/leaflet.js"></script>
 
 <!-- PWA：让手机/平板「添加到主屏幕」后得到独立图标与全屏窗口（无需构建 APK） -->
 <link rel="manifest" href="./manifest.webmanifest">
@@ -52,6 +55,7 @@
     <button class="nav-btn" data-page="view3d">3D 姿态</button>
     <button class="nav-btn" data-page="scope">实时曲线</button>
     <button class="nav-btn" data-page="gnss">GNSS</button>
+    <button class="nav-btn" data-page="map">地图</button>
     <button class="nav-btn" data-page="inspector">Inspector</button>
     <button class="nav-btn" data-page="blackbox">黑匣子</button>
     <button class="nav-btn" data-page="params">参数</button>
@@ -224,6 +228,32 @@
         <div class="insp-legend" id="inspLegend"></div>
         <div class="insp-tools">
           <button class="btn small" id="inspClear">清空选择</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 地图与航点：航点编辑 + 飞行器实时位置 -->
+  <section class="page" id="page-map">
+    <div class="map-grid">
+      <div class="glass panel map-canvas-panel">
+        <div class="map-tools">
+          <span class="hint" id="mapTileHint">左键点击加航点 · 拖动移动 · 右键删除</span>
+          <span class="hint" id="mapCoord">--</span>
+          <button class="btn small" id="mapCenterVehicle">定位飞行器</button>
+          <button class="btn small" id="mapClearWp">清空航点</button>
+        </div>
+        <div id="mapCanvas"></div>
+      </div>
+      <div class="glass panel map-wp-panel">
+        <div class="panel-title">航点 WAYPOINTS <span class="hint" id="mapWpStat">0 个航点</span></div>
+        <div class="insp-table-wrap">
+          <table class="insp-table">
+            <thead>
+              <tr><th>#</th><th>纬度</th><th>经度</th><th>高度 m</th><th></th></tr>
+            </thead>
+            <tbody id="mapWpRows"></tbody>
+          </table>
         </div>
       </div>
     </div>
