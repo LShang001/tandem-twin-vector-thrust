@@ -1,2 +1,4 @@
 # 构建中间产物与临时盘符映射，不入库
 build/
+# apksigner v4 的签名辅助文件，Android 14+ 才用，装包不需要
+*.idsig
