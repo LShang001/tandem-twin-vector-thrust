@@ -166,6 +166,9 @@ function handleMsg(msg) {
     case 'replay_progress':
       emit('replay-progress', msg);
       break;
+    case 'mission_state':
+      emit('mission-state', msg);
+      break;
     case 'recordings':
       emit('recordings', msg.files || []);
       break;
@@ -174,6 +177,8 @@ function handleMsg(msg) {
       break;
     case 'link_stat':
       renderLinkStat(msg);
+      // 同时广播给订阅方：地图页要用其中的 mission 字段判断任务上传结果
+      emit('link-stat', msg);
       break;
     case 'rx_hex':
       emit('rx-hex', msg);

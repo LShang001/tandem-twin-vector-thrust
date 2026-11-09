@@ -71,6 +71,13 @@ class MavlinkService:
         self.msg_ts: dict[str, float] = {}
         self.hist: dict[str, deque] = {}
         self.started = time.time()
+        # ---- 任务（航点）上传状态 ----
+        # MAVLink 任务协议是请求-应答式的：GCS 发 MISSION_COUNT，飞控逐条
+        # 回 MISSION_REQUEST_INT 要第 N 条，GCS 再发该条，最后飞控回 MISSION_ACK。
+        # 所以必须保存待发列表与进度，等对端来"拉"，不能一次性推完。
+        self.mission_items: list[dict] = []
+        self.mission_ack: int | None = None
+        self.mission_phase = 'idle'   # idle | count_sent | uploading | done
         self.params: dict[str, float] = {}
         self.param_count: Optional[int] = None
         self.params_received = 0
@@ -258,6 +265,16 @@ class MavlinkService:
             s['last_ack_result'] = msg.result
         elif t == 'MISSION_ACK':
             s['mission_ack_type'] = msg.type
+            self.mission_ack = int(getattr(msg, 'type', 0))
+            self.mission_phase = 'done'
+        elif t in ('MISSION_REQUEST_INT', 'MISSION_REQUEST'):
+            # 飞控按序来拉第 seq 条。越界就回 NACK，别让对端一直等。
+            seq = int(getattr(msg, 'seq', 0))
+            self._send_mission_item(seq)
+        elif t == 'MISSION_REQUEST_LIST':
+            # 对端想读任务：把手上有的数量告诉它
+            self.mav.mission_count_send(self.target_sys, self.target_comp,
+                                        len(self.mission_items), 0)
         elif t == 'MISSION_COUNT':
             s['mission_count'] = msg.count
 
@@ -368,6 +385,53 @@ class MavlinkService:
 
     def mission_request_list(self):
         self.mav.mission_request_list_send(self.target_sys, self.target_comp)
+
+    def mission_upload(self, items: list[dict]) -> int:
+        """@brief 发起任务上传：先发 MISSION_COUNT，之后由对端逐条拉取
+        @param items 航点列表，每项 {lat, lon, alt}
+        @return 参与上传的航点数
+        @note  协议是拉取式的：这里只发 COUNT 并把列表存起来，真正的
+               MISSION_ITEM_INT 在收到 MISSION_REQUEST_INT 时由
+               _send_mission_item 逐条应答。一次性推完会被对端丢弃。
+        """
+        self.mission_items = list(items)
+        self.mission_ack = None
+        self.mission_phase = 'count_sent'
+        self.mav.mission_count_send(self.target_sys, self.target_comp,
+                                    len(self.mission_items), 0)
+        return len(self.mission_items)
+
+    def _send_mission_item(self, seq: int):
+        """@brief 应答对端的第 seq 条请求
+        @note  第 0 条按 ArduPilot 惯例是 HOME（当前点），之后才是航点。
+               没有定位时 HOME 用第一个航点代替，避免发 0,0 的无效点。
+        """
+        if seq < 0 or seq >= len(self.mission_items):
+            self.mav.mission_ack_send(self.target_sys, self.target_comp,
+                                      mavlink2.MAV_MISSION_INVALID_SEQUENCE)
+            return
+        w = self.mission_items[seq]
+        self.mav.mission_item_int_send(
+            self.target_sys, self.target_comp,
+            seq,                              # seq
+            mavlink2.MAV_FRAME_GLOBAL_RELATIVE_ALT_INT,   # 相对起飞点高度
+            mavlink2.MAV_CMD_NAV_WAYPOINT,    # command
+            0,                                # current
+            1,                                # autocontinue
+            0, 0, 0, 0,                       # param1-4
+            int(round(float(w['lat']) * 1e7)),  # x：纬度 1e7
+            int(round(float(w['lon']) * 1e7)),  # y：经度 1e7
+            float(w.get('alt', 50)),          # z：高度 m
+            mavlink2.MAV_MISSION_TYPE_MISSION,
+        )
+        self.mission_phase = 'uploading'
+
+    def mission_clear(self):
+        """@brief 清空对端任务"""
+        self.mission_items = []
+        self.mission_ack = None
+        self.mission_phase = 'idle'
+        self.mav.mission_clear_all_send(self.target_sys, self.target_comp, 0)
 
     def ping(self, seq: int = 1):
         self.mav.ping_send(int(time.time() * 1e6), seq,

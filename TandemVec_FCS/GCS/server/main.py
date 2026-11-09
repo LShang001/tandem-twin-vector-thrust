@@ -507,6 +507,13 @@ async def _stat_loop():
             'tele_s': cur[3] - prev[3],
             'tele_age_s': round(tele_age, 1) if tele_age is not None else None,
             'fields': len(g.snap),
+            # 任务上传是请求-应答式，状态必须回传给界面，否则用户不知道
+            # 卡在"等飞控来拉"还是"飞控已拒绝"
+            'mission': ({
+                'phase': g.mav.mission_phase,
+                'ack': g.mav.mission_ack,
+                'want': len(g.mav.mission_items),
+            } if g.mav is not None else None),
         })
         prev = cur
 
@@ -649,6 +656,24 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud, 'protocol': g.protocol})
         log.info('connected %s @ %d', port, baud)
+
+    elif cmd == 'mission_upload':
+        if g.mav is None:
+            await ws.send_json({'type': 'error',
+                                'msg': 'MAVLink 未连接（任务上传需要 MAVLink 模式）'})
+            return
+        items = msg.get('items') or []
+        if not items:
+            await ws.send_json({'type': 'error', 'msg': '航点为空'})
+            return
+        n = g.mav.mission_upload(items)
+        await ws.send_json({'type': 'mission_state', 'phase': 'count_sent', 'count': n})
+        log.info('mission upload requested: %d waypoints', n)
+
+    elif cmd == 'mission_clear':
+        if g.mav is not None:
+            g.mav.mission_clear()
+        await ws.send_json({'type': 'mission_state', 'phase': 'cleared', 'count': 0})
 
     elif cmd == 'inspector':
         # MAVLink Inspector：消息清单（类型/帧数/频率/多久没更新/字段值）。

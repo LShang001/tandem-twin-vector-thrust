@@ -21,7 +21,7 @@
  * @ref     GCS-001 §上位机、MAVLink MISSION_ITEM_INT（下一期）
  */
 
-import { bus, state } from './main.mjs';
+import { bus, send, state } from './main.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -39,6 +39,29 @@ const mapState = {
   tileOk: true,
   coordEl: null,
 };
+
+// MAV_MISSION_RESULT 取值 → 文案。固件当前对任务协议一律回 UNSUPPORTED（3），
+// 必须把这件事明确显示出来，否则用户会以为「点了上传但没反应」。
+const MISSION_RESULT_TEXT = {
+  0: '任务已接受',
+  1: '任务被拒绝（拒绝接受）',
+  2: '任务被拒绝（无内存）',
+  3: '固件不支持任务协议（当前固件对 MISSION_* 一律回 UNSUPPORTED）',
+  4: '任务项无效',
+  5: '任务项无效（frame）',
+  6: '任务项无效（命令）',
+  7: '任务项无效（坐标）',
+  8: '任务项无效（高度）',
+  9: '任务项无效（参数）',
+  13: '任务项序号非法',
+};
+
+function setUploadState(text, color = '') {
+  const el = $('mapUploadState');
+  if (!el) return;
+  el.textContent = text;
+  el.style.color = color || '';
+}
 
 /** 生成航点图标（带序号，避免用默认图钉分不清顺序） */
 function wpIcon(L, idx) {
@@ -216,6 +239,19 @@ export function activate() {
   });
   mapState.coordEl = $('mapCoord');
 
+  const up = $('mapUpload');
+  if (up) up.addEventListener('click', () => {
+    if (!mapState.waypoints.length) {
+      setUploadState('没有航点可上传', '#ffb547');
+      return;
+    }
+    const items = mapState.waypoints.map((w) => ({
+      lat: w.lat, lon: w.lon, alt: w.alt,
+    }));
+    send({ cmd: 'mission_upload', items });
+    setUploadState(`已请求上传 ${items.length} 个航点，等待飞控…`, '#3ea6ff');
+  });
+
   const clr = $('mapClearWp');
   if (clr) {
     clr.addEventListener('click', () => {
@@ -231,6 +267,30 @@ export function activate() {
   }
 
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail || {}));
+
+  bus.addEventListener('mission-state', (e) => {
+    const d = e.detail || {};
+    if (d.phase === 'count_sent') {
+      setUploadState(`已发 COUNT（${d.count} 条），等待飞控逐条请求…`, '#3ea6ff');
+    } else if (d.phase === 'cleared') {
+      setUploadState('已请求清空任务', '#7d92ad');
+    }
+  });
+
+  // link_stat 里带 mission 状态：用 phase + ack 判最终结果
+  bus.addEventListener('link-stat', (e) => {
+    const m = (e.detail || {}).mission;
+    if (!m) return;
+    if (m.phase === 'done') {
+      const ok = m.ack === 0;
+      setUploadState(MISSION_RESULT_TEXT[m.ack] || `任务结果码 ${m.ack}`,
+                     ok ? '#29d3a2' : '#ff5d6c');
+    } else if (m.phase === 'uploading') {
+      setUploadState('逐条上传中…', '#3ea6ff');
+    } else if (m.phase === 'count_sent') {
+      setUploadState('已发 COUNT，等待飞控请求…', '#3ea6ff');
+    }
+  });
   window.addEventListener('resize', () => map.invalidateSize());
 
   renderTable();
