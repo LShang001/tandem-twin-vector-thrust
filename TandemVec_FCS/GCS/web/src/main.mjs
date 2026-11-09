@@ -17,6 +17,12 @@ import { fmt, fmtInt } from './widget.mjs';
 
 export const bus = new EventTarget();
 
+// 供子模块主动发命令（如 Inspector 的轮询）。各模块私接 WebSocket 会造成
+// 多条连接、后端 ws_clients 计数失真，统一走这个钩子。
+window.__gcsSend = (obj) => {
+  if (ws.sock && ws.sock.readyState === 1) ws.sock.send(JSON.stringify(obj));
+};
+
 const ws = { sock: null, retry: 0 };
 const BACKEND_VERSION = '0.3.0';   // 前端期望的后端版本（hello 握手比对）
 export const state = {
@@ -100,6 +106,12 @@ function handleMsg(msg) {
     case 'telemetry':
       state.snap = msg.data || {};
       emit('telemetry', state.snap);
+      break;
+    case 'inspector':
+      emit('inspector', msg);
+      break;
+    case 'inspector_series':
+      emit('inspector-series', msg);
       break;
     case 'dbg_out':
       emit('dbg-out', msg.line);
@@ -209,7 +221,7 @@ function renderLinkStat(m) {
 }
 
 // ---------------- 页面路由 ----------------
-const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'blackbox', 'params', 'console'];
+const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'inspector', 'blackbox', 'params', 'console'];
 let activePage = 'dashboard';
 /** @brief 切换到指定页面（非法页面名忽略）
  *  @param {string} name 页面名（dashboard/scope/params/blackbox/console/view3d）
@@ -344,6 +356,7 @@ const PAGE_LOADERS = {
   view3d: () => import('./view3d.mjs'),
   scope: () => import('./scope.mjs'),
   gnss: () => import('./gnss.mjs'),
+  inspector: () => import('./inspector.mjs'),
   blackbox: () => import('./blackbox.mjs'),
   params: () => import('./params.mjs'),
   console: () => import('./console.mjs'),
