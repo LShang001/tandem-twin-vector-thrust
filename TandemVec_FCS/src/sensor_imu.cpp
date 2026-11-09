@@ -349,7 +349,7 @@ bool readIMUData()
     if (!s_imu_ring_ready)
     {
       if (IMU != nullptr && IMU->enableFifo() >= 0) { s_imu_ring_ready = true; }
-      else { s_fifo_fallback = true; }
+      else { s_fifo_frame_dt_s = 0.0; s_fifo_fallback = true; }
     }
     if (!s_fifo_fallback)
     {
@@ -375,7 +375,14 @@ bool readIMUData()
       ImuFifoSample one{};
       for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
       one.timestamp = rs.timestamp;
-      if (IMU->injectFifo(one) < 0) { s_fifo_fallback = true; break; }
+      if (IMU->injectFifo(one) < 0)
+      {
+        // 降级回轮询：固定 dt 必须清掉，否则轮询路径继续按 1/3200 算 dt，
+        // 而实际节奏是 200Hz，增量会被严重低估。
+        s_fifo_frame_dt_s = 0.0;
+        s_fifo_fallback = true;
+        break;
+      }
       // 按后端 ODR 给批量帧固定 dt（与 kTargetRateHz 同源）
 #if defined(FCS_IMU_MODEL_ICM45686)
       s_fifo_frame_dt_s = 1.0 / 3200.0;

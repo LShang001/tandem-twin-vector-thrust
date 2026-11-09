@@ -175,6 +175,11 @@ int ICM45686_ImuDevice::dataReady()
   }
   last_ = d;
   temp_valid_ = true; // 温度与六轴同帧读出，标记 dieTempC() 可用
+  // ★ 2026-11-09：清掉 FIFO 注入标志。
+  //   若 ring 架构中途降级回轮询（s_fifo_fallback），访问器必须回到从
+  //   last_ 换算的路径；否则 inj_valid_ 会一直为 true，accX()/gyrX()
+  //   永远返回最后一次注入的陈旧值，姿态就冻在降级那一刻。
+  inj_valid_ = false;
   return 1;
 }
 
