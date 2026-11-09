@@ -130,6 +130,19 @@ class TlogReplaySource:
                 return row
         return None
 
+    def progress(self):
+        """@brief 进度：tlog 是流式读取，没有可靠总行数，用文件读取位置估算
+        @note  这里宁可给 0 也不编一个假百分比——进度条卡在 0 比给出错误进度好。
+        """
+        try:
+            size = os.path.getsize(self.path)
+            f = getattr(self._conn, 'f', None)
+            pos = f.tell() if f is not None else 0
+            pct = (pos / size * 100.0) if size else 0.0
+            return {'index': pos, 'total': size, 'pct': round(min(100.0, pct), 1)}
+        except Exception:
+            return {'index': 0, 'total': 0, 'pct': 0.0}
+
     def close(self):
         if self._conn is not None:
             try:
@@ -161,9 +174,19 @@ class ReplaySource:
         self._f = None
         self._r = None
         self._t0 = None
+        self._total = 0
+        self._index = 0
 
     def open(self):
         self._f = open(self.path, 'r', newline='', encoding='utf-8')
+        # 预数总行数用于进度显示。大文件会有一点启动延迟（顺序读一遍），
+        # 换来的是进度条能显示真实百分比而不是估算——对复盘场景值得。
+        try:
+            with open(self.path, 'r', encoding='utf-8', errors='ignore') as f:
+                self._total = max(0, sum(1 for _ in f) - 1)
+        except Exception:
+            self._total = 0
+        self._index = 0
         self._r = csv.DictReader(self._f)
         self._t0 = None
 

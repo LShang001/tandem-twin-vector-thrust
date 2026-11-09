@@ -163,6 +163,9 @@ function handleMsg(msg) {
     case 'replay_state':
       emit('replay-state', msg);
       break;
+    case 'replay_progress':
+      emit('replay-progress', msg);
+      break;
     case 'recordings':
       emit('recordings', msg.files || []);
       break;

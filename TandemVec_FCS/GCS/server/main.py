@@ -777,6 +777,7 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             await ws.send_json({'type': 'log', 'level': 'error', 'msg': f'文件不存在: {fn}'})
             return
         is_tlog = path.suffix.lower() in ('.tlog', '.bin')
+        g._replay_n = 0
         try:
             g.replay = TlogReplaySource(str(path)) if is_tlog else ReplaySource(str(path))
         except Exception as exc:
@@ -819,6 +820,14 @@ async def _replay_loop(ws: WebSocket):
         g.snap = {k: v for k, v in row.items() if v is not None}
         await asyncio.sleep(TELEMETRY_PERIOD)
         g.send_all({'type': 'telemetry', 'data': g.snap, 'replay': True})
+        # 进度每 10 帧发一次即可：50Hz 下每帧推进度纯属浪费带宽
+        n = getattr(g, '_replay_n', 0) + 1
+        g._replay_n = n
+        if n % 10 == 0 and hasattr(g.replay, 'progress'):
+            try:
+                g.send_all({'type': 'replay_progress', **g.replay.progress()})
+            except Exception:
+                pass
 
 
 async def _dbg_ensure():

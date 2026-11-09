@@ -29,6 +29,14 @@ let initialized = false;
  *  @ref     GCS-001 §上位机
  */
 
+/** 更新回放进度条（pct 0-100） */
+function setProgress(pct, text) {
+  const fill = $('bbProgressFill');
+  const label = $('bbProgressText');
+  if (fill) fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+  if (label) label.textContent = text;
+}
+
 /** 回放相关控件绑定（导入 / 停止） */
 function bindReplay() {
   const file = $('bbReplayFile');
@@ -68,6 +76,16 @@ function bindReplay() {
   bus.addEventListener('replay-state', (e) => {
     const d = e.detail || {};
     if (hint) hint.textContent = d.on ? `回放中：${d.file || ''}` : '未回放';
+    if (!d.on) setProgress(0, '未回放');
+  });
+
+  bus.addEventListener('replay-progress', (e) => {
+    const d = e.detail || {};
+    const pct = Number(d.pct) || 0;
+    const detail = d.total
+      ? `${d.index} / ${d.total}`
+      : '（tlog 流式，按读取位置估算）';
+    setProgress(pct, `${pct.toFixed(0)}% · ${detail}`);
   });
 }
 
