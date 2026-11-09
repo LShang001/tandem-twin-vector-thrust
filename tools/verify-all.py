@@ -55,6 +55,12 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         ("分配层对拍", [PY, "tools/check-allocation-parity.py"], ROOT),
         ("坐标系 @frame 标注", [PY, "tools/check-frame-refs.py"], ROOT),
         ("SIL 覆盖审计", [PY, "tools/check-sil-coverage.py"], ROOT),
+        # 2026-11-09 加：同一个物理串口不能被两个用途抢（DBG 文本 vs 协议二进制）。
+        # 调 MAVLink 时往 USB 调试口叠镜像帧，导致抓包三流混杂、误判「不发心跳」。
+        ("串口用途冲突", [PY, "tools/check-uart-conflicts.py"], ROOT),
+        # 2026-11-09 加：docs/memory/ 沉淀索引完整性。此前沉淀写了却不写"何时读"、也不登记索引，导致改模块时想不起来查——当天就因此在
+        # ICM-45686 采样率上重走了文档里明写的「无效路线」，耗掉大半天。
+        ("沉淀索引完整性", [PY, "tools/check-memory-index.py"], ROOT),
         ("头文件接线审计", [PY, "tools/check-module-wiring.py"], ROOT),
         ("角度单位审计", [PY, "tools/check-angle-units.py"], ROOT),
         ("文档站点收录", [PY, "tools/check-doc-site-coverage.py"], ROOT),
@@ -77,6 +83,11 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         # 2026-11-08 加：此前 GCS 测试只有人记得才跑，不在任何守卫里。
         ("GCS 单元测试", [PY, "-m", "pytest", "tests/", "-q"],
          ROOT / "TandemVec_FCS" / "GCS"),
+        # GCS 冒烟：真起一个演示后端，验资源可达 + WS 命令应答 + 视频流 + 多机。
+        # 2026-11-10 加：前面十几轮的功能验证一直是"起服务开浏览器点一遍"，
+        # 一旦某轮改动把某页或某条 WS 命令弄坏，只有下次恰好点到才发现。
+        # 约 8 s，放进快档。
+        ("GCS 冒烟", [PY, str(ROOT / "tools" / "gcs_smoke.py")], ROOT),
     ]
     if include_sil:
         # cwd 已经是 TandemVec_FCS，路径不能再带前缀（2026-11-07 首次跑慢档才发现）

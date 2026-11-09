@@ -149,6 +149,18 @@ FACTS = [
 ]
 
 
+def _is_history_line(line: str) -> bool:
+    """@brief 判断是否历史跑批记录行（数字是当时的事实，不参与漂移检查）
+
+    @details 识别依据：Markdown 表格行，且含「跑」或「Round」这类历史标识。
+             这些行的语义是「某年某月某次跑的结果」，随守卫增加而改变反而是错的。
+    """
+    s = line.strip()
+    if not s.startswith('|'):
+        return False
+    return ('跑' in s) or ('Round' in s) or ('实测' in s and '/20' in s)
+
+
 def iter_markdown():
     for p in ROOT.rglob("*.md"):
         if any(part in SKIP_PARTS or part.startswith(".") for part in p.parts):
@@ -173,19 +185,26 @@ def main() -> int:
                 text = md.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            for pat in fact["patterns"]:
-                for m in re.finditer(pat, text):
-                    hits += 1
-                    # ★ 2026-11-08：支持 group 参数（N/M 这类只想核对分母的写法）
-                    try:
-                        got = int(m.group(fact.get("group", 1)))
-                    except (IndexError, ValueError):
-                        continue
-                    if got != actual:
-                        rel = md.relative_to(ROOT)
-                        problems.append(
-                            f"{fact['name']}：{rel} 写 {got}，实测 {actual}"
-                        )
+            # ★ 2026-11-10：按行扫而不是全文扫，并跳过「历史跑批表」的行。
+            #   那些行记的是**当时**的实测数字（如「2026-11-08 九跑 22/22」），
+            #   守卫项数后来变了，但历史记录本身是事实，不该被改成今天的值。
+            #   之前全文扫导致历史表一直误报，逼着人去改历史记录——那是错的。
+            for line in text.splitlines():
+                if _is_history_line(line):
+                    continue
+                for pat in fact["patterns"]:
+                    for m in re.finditer(pat, line):
+                        hits += 1
+                        # ★ 2026-11-08：支持 group 参数（N/M 这类只想核对分母的写法）
+                        try:
+                            got = int(m.group(fact.get("group", 1)))
+                        except (IndexError, ValueError):
+                            continue
+                        if got != actual:
+                            rel = md.relative_to(ROOT)
+                            problems.append(
+                                f"{fact['name']}：{rel} 写 {got}，实测 {actual}"
+                            )
         print(f"[实测] {fact['name']} = {actual}（文档命中 {hits} 处）")
 
     print()
