@@ -110,11 +110,40 @@ curl -s -X POST http://127.0.0.1:8091/api/cmd \
 2. **`close()` 默认不关 fd**。fd 的属主是 `termux-usb` 的父进程，我们只是借用，
    关掉它会让 termux-usb 侧的设备句柄状态变脏。
 
-**还缺的一步（必须实机）**：把 `termux-usb` 传进来的 fd 接到 `connect` 上。
-现在链路已经能接受任意 fd，但"进程启动时自动带上 termux-usb 给的 fd 并自动
-连接"还没做——目前仍需在界面里手动触发一次 `connect`（`port=fd:<fd号>`）。
-原因是 `termux-usb -e` 只在启动命令那一刻传 fd，需要一个 `--usb-fd` 启动参数
-把它接进 `app.py`；这块等拿到真平板能验证时再做，避免写出无法验证的分支。
+**fd 之后的整条链路已端到端验证**（`tests/test_usb_fd_e2e.py`，3 项）：
+
+- 从 fd 写入真实 MAVLink 字节 → 后端收下 3030 字节 → 解析出 `roll=166.16`、
+  `lat=28.23` 等具体字段 → 快照可用；
+- UDP 端点同样端到端：模拟飞控发 15 组帧 → 后端学会对端并解析出 28 个字段；
+- `g.link.info()` 正确报告 `kind=termux-usb-fd`。
+
+这说明「termux-usb 把设备 fd 交给我们」**之后**的所有环节都是通的——
+剩下的唯一未知是 termux-usb 本身在你那台平板上能否成功授权并读到数传字节，
+那是 USB 硬件/系统权限层，必须在真机上确认。
+
+**一键脚本**：`android/termux-setup.sh`
+
+```bash
+bash termux-setup.sh              # 装依赖 + 自检（pkg 装 numpy，pip 装 fastapi/uvicorn/pyserial）
+bash termux-setup.sh --run        # 起服务，浏览器开 127.0.0.1:8091
+bash termux-setup.sh --usb        # 列出 USB 设备 → 指定后授权并自动接上数传
+```
+
+`--usb` 的内部流程（也是 termux-usb 的用法要点）：脚本用
+`termux-usb -r -e "$0" "$USB_DEV"` 重新调用自己，termux-usb 把 **fd 号作为最后
+一个参数**追加；脚本识别到纯数字参数就走「起后端 → POST /api/cmd 让它用
+`port=fd:<号>` 连接」这条，然后打开浏览器。
+
+**为什么服务只绑 127.0.0.1**：平板自己就是后端，浏览器访问 `localhost` 是
+secure context，PWA 的 Service Worker 才能生效；而且不把控制面暴露到网络。
+
+**启动即接链路的通用参数**（不限于 USB，`app.py`）：
+
+```bash
+py -3.12 app.py --link udp:14550             # 启动就监听 UDP 并自动连
+py -3.12 app.py --link COM5 --proto anocom   # 启动就连串口
+py -3.12 app.py --usb-fd 7                   # Termux：用 termux-usb 给的 fd
+```
 
 风险与前提：
 

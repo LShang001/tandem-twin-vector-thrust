@@ -86,6 +86,31 @@ def start_server(port: int):
     return server, th
 
 
+def auto_connect(link: str | None, usb_fd: int | None, protocol: str = 'anocom') -> bool:
+    """@brief 后端就绪后自动建立一条链路（不必在界面里再点连接）
+    @param link    端点描述：COM5 / udp:14550 / udp:14550@ip:port / fd:3
+    @param usb_fd  Termux 场景：termux-usb 传进来的 USB 设备 fd（等价 -link fd:<n>）
+    @param protocol anocom 或 mavlink
+    @return True = 链路已建立
+    @note 为什么要在启动时接：`termux-usb -e` 只在启动命令那一刻把 fd 传进来，
+          之后就拿不到了。所以平板独立运行的场景必须让地面站在启动时就用上它，
+          否则要手动从界面/HTTP 再触发一次——多一步就多一个失败点。
+    """
+    port = f'fd:{usb_fd}' if usb_fd is not None else link
+    if not port:
+        return False
+    from server.main import DEFAULT_BAUD, g
+    try:
+        g.connect(port, 0 if (usb_fd is not None or port.startswith(('udp:', 'fd:'))) else DEFAULT_BAUD,
+                  protocol=protocol)
+        info = g.link.info() if hasattr(getattr(g, 'link', None), 'info') else {}
+        print(f'[GCS] 已自动连接链路 {port}（协议 {protocol}）{info or ""}')
+        return True
+    except Exception as exc:
+        print(f'[GCS] 自动连接 {port} 失败：{type(exc).__name__}: {exc}')
+        return False
+
+
 def lan_urls(port: int) -> list[str]:
     """@brief 枚举本机所有可用于局域网访问的地址
     @return 形如 ['http://192.168.0.208:8091/']
@@ -122,6 +147,12 @@ def main():
                     help='允许局域网访问（平板/手机用 http://<本机IP>:端口 打开同一个界面）')
     ap.add_argument('--host', default=None,
                     help='显式指定绑定地址（默认 127.0.0.1；--lan 等价于 0.0.0.0）')
+    ap.add_argument('--link', default=None,
+                    help='启动即连接的端点：COM5 / udp:14550 / udp:14550@ip:port / fd:3')
+    ap.add_argument('--usb-fd', type=int, default=None,
+                    help='Termux：termux-usb 传入的 USB 设备 fd（等价 --link fd:<n>）')
+    ap.add_argument('--proto', default='anocom', choices=['anocom', 'mavlink'],
+                    help='自动连接时使用的协议（默认 anocom）')
     args = ap.parse_args()
 
     global HOST
@@ -142,6 +173,10 @@ def main():
         server.should_exit = True
         sys.exit(1)
     print(f'[GCS] 后端已启动 {url}（关闭窗口即停止服务）')
+
+    # 启动即接链路：Termux 的 USB fd 只能在这一刻拿到，过了就没了
+    if args.link or args.usb_fd is not None:
+        auto_connect(args.link, args.usb_fd, args.proto)
     if HOST not in ('127.0.0.1', 'localhost'):
         urls = lan_urls(args.port)
         print('[GCS] 局域网访问已开启，平板/手机用下面任一地址打开（同一 WiFi/网段）：')
