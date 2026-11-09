@@ -40,7 +40,7 @@ import time
 from pathlib import Path
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 # 相对导入（python -m uvicorn server.main:app）；直接运行本文件时回退绝对导入
@@ -65,7 +65,52 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name
 ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = ROOT / 'web'
 OUTPUT_DIR = ROOT / 'output'
+# 瓦片缓存目录：地图底图按 z/x/y 落盘，可离线复用
+TILE_DIR = OUTPUT_DIR / 'tiles'
+# 瓦片源：CartoCDN 深色底图。实测 OSM 官源与 OpenTopoMap 在本机都超时，
+# CartoCDN 可达且本身就是深色，贴合工程风。坐标系是标准 Web Mercator/WGS-84，
+# 没有 GCJ-02 偏移（国内厂商瓦片有，会与飞控坐标差几十米）。
 OUTPUT_DIR.mkdir(exist_ok=True)
+
+# ---- 瓦片源配置（2026-11-09 实测后的结论）----
+# 实测：OSM 官源 / OpenTopoMap / openstreetmap.fr / openstreetmap.bzh 在本机
+# 全部超时或 404；wikimedia 403；CartoCDN 能连但返回 "API KEY REQUIRED"
+# 占位图。即**国内环境没有可直接用的境外免费瓦片源**，这不是代码能绕过的。
+#
+# 因此瓦片源做成可配置，三条路都留好：
+#   ① GCS_TILE_SOURCE=tianditu + GCS_TILE_KEY=<天地图 key>
+#      天地图是国内官方源，坐标系 CGCS2000（与 WGS-84 差米级，地面站可接受）。
+#      key 免费申请：https://console.tianditu.gov.cn/
+#   ② GCS_TILE_SOURCE=<自定义 URL 模板，含 {z}/{x}/{y}>
+#   ③ 都不配 → 只用本地缓存（把离线瓦片包按 z/x/y 放进 output/tiles/ 即可），
+#      没有缓存时地图是灰底 + 航点照常工作。
+TILE_SOURCE = os.environ.get('GCS_TILE_SOURCE', '').strip()
+TILE_KEY = os.environ.get('GCS_TILE_KEY', '').strip()
+
+TIANDITU_TMPL = ('https://t{s}.tianditu.gov.cn/vec_w/wmts?SERVICE=WMTS'
+                 '&REQUEST=GetTile&VERSION=1.0.0&LAYER=vec&STYLE=default'
+                 '&TILEMATRIXSET=w&FORMAT=tiles'
+                 '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk={key}')
+
+
+def _tile_url(z: int, x: int, y: int):
+    """@brief 按配置生成瓦片 URL；未配置源时返回 None（只用本地缓存）"""
+    if not TILE_SOURCE:
+        return None
+    if TILE_SOURCE == 'tianditu':
+        if not TILE_KEY:
+            return None
+        return (TIANDITU_TMPL
+                .replace('{s}', str((x + y) % 8))
+                .replace('{z}', str(z)).replace('{x}', str(x)).replace('{y}', str(y))
+                .replace('{key}', TILE_KEY))
+    if '{z}' in TILE_SOURCE and '{x}' in TILE_SOURCE and '{y}' in TILE_SOURCE:
+        return (TILE_SOURCE.replace('{z}', str(z))
+                .replace('{x}', str(x)).replace('{y}', str(y))
+                .replace('{key}', TILE_KEY))
+    return None
+
+
 
 DEFAULT_BAUD = 921600      # = 固件 SERIAL6_BAUDRATE（★ 2026-08-10 COMM-001：2M→921600）
 TELEMETRY_PERIOD = 0.02    # 遥测推送节流 50Hz（★ COMM-001：20Hz→50Hz 跟上快环 100Hz）
@@ -1107,6 +1152,47 @@ async def api_upload_log(file: UploadFile = File(...)):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
     log.info('uploaded log: %s (%d bytes)', dest.name, size)
     return {'ok': True, 'name': dest.name, 'bytes': size}
+
+
+@app.get('/tiles/{z}/{x}/{y}.png')
+async def get_tile(z: int, x: int, y: int):
+    """@brief 地图瓦片：本地缓存优先，未命中则从瓦片源拉取并缓存
+    @details 为什么做代理而不是前端直连瓦片源：
+             ① 前端直连会带 Referer 且无法缓存到本机，野外断网就彻底没有底图；
+             ② 走代理可以把用过的瓦片全部落盘，一次去过的地方下次离线也能用；
+             ③ 也便于换源（源不可达时只改后端一处）。
+    @note   缓存键是 z/x/y 三元组，不做过期——地图底图变化极慢，过期策略
+             带来的复杂度不值得。上层目录按 z 分，避免单目录几十万文件。
+    """
+    cache = TILE_DIR / str(z) / str(x) / f'{y}.png'
+    if cache.is_file():
+        return FileResponse(str(cache), media_type='image/png')
+
+    url = _tile_url(z, x, y)
+    if url is None:
+        # 未配置瓦片源：直接 404 让前端进入「灰底 + 航点可用」降级态，
+        # 而不是去连一个注定失败的地址再等超时。
+        return Response(status_code=404)
+    try:
+        import urllib.request
+        req = urllib.request.Request(url, headers={'User-Agent': 'UniGNC-GCS/0.3'})
+
+        def _fetch():
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                return resp.read()
+
+        data = await asyncio.to_thread(_fetch)
+    except Exception as exc:
+        log.debug('tile %s/%s/%s fetch failed: %r', z, x, y, exc)
+        # 返回 404 而不是 500：Leaflet 对 404 只是不画这块，控制台不会刷错误
+        return Response(status_code=404)
+
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        cache.write_bytes(data)
+    except Exception:
+        pass
+    return Response(content=data, media_type='image/png')
 
 
 @app.get('/api/status')

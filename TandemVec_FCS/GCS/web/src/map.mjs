@@ -186,9 +186,12 @@ export function activate() {
   });
   mapState.map = map;
 
-  const tiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // 瓦片走后端代理：/tiles/{z}/{x}/{y}.png。
+  // 后端缓存优先、未命中再向瓦片源取，用过的区域落盘后可离线复用；
+  // 前端直连瓦片源则无法缓存到本机，野外断网就彻底没有底图。
+  const tiles = L.tileLayer('/tiles/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '&copy; OpenStreetMap contributors',
+    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
   });
   tiles.on('tileerror', () => {
     // 无网/被拦时只提示一次，不要刷屏；航点编辑与飞行器位置仍然可用
@@ -196,7 +199,7 @@ export function activate() {
     mapState.tileOk = false;
     const hint = $('mapTileHint');
     if (hint) {
-      hint.textContent = '底图瓦片加载失败（可能无网络）——航点编辑与飞行器位置仍可用';
+      hint.textContent = '底图瓦片未取到（本地无缓存且瓦片源不可达）——航点编辑与飞行器位置仍可用';
       hint.style.color = '#ffb547';
     }
   });
