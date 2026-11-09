@@ -417,6 +417,32 @@ def _emit_dbg_text(text: str):
                 pass
 
 
+def _record_hist(snap: dict):
+    """@brief 把一份快照写进时序缓冲 g.hist（实时与回放共用同一入口）
+
+    @details 为什么必须共用：频谱/调参/选区统计全都读 g.hist。如果回放不写，
+             那"导入 tlog 做频域分析"这条路根本走不通——数据只到 g.snap
+             给界面看，分析类功能全空。抽成一个函数就不会漏。
+
+    @note 时间戳统一用 time.time()（Unix 秒），与前端 snap.t_ms/1000 同基准。
+          回放时**不用**记录里的原始时间戳：那个时间可能是几天前飞的，
+          与"当前会话"的其它数据混在一个缓冲里会让时间轴错乱。
+    """
+    try:
+        now = time.time()
+        for k, v in snap.items():
+            if isinstance(v, bool) or not isinstance(v, (int, float)):
+                continue
+            dq = g.hist.get(k)
+            if dq is None:
+                from collections import deque as _deque
+                dq = _deque(maxlen=4000)
+                g.hist[k] = dq
+            dq.append((now, float(v)))
+    except Exception:
+        pass
+
+
 def _on_telemetry_rx(chunk: bytes):
     g.stat_bytes += len(chunk)
     if g.protocol == 'mavlink' and g.mav is not None:
@@ -449,20 +475,7 @@ def _on_telemetry_rx(chunk: bytes):
             except Exception:
                 evs = []
             g._alarm_prev_ts = now
-            # 写时序缓冲：只留数值字段，deque 有界（maxlen）。按需创建，
-            # 不做白名单——字段会随固件版本变，白名单会漏字段。
-            # 用 Unix 秒而不是"距启动秒数"：前端曲线页的时间轴来自 snap.t_ms/1000,
-            # 两者基准若不同，后端历史填进画布会全挤在最左侧（实测踩过）。
-            _t = now
-            for _k, _v in g.snap.items():
-                if isinstance(_v, bool) or not isinstance(_v, (int, float)):
-                    continue
-                _dq = g.hist.get(_k)
-                if _dq is None:
-                    from collections import deque as _deque
-                    _dq = _deque(maxlen=4000)   # 200Hz 下约 20 s
-                    g.hist[_k] = _dq
-                _dq.append((_t, float(_v)))
+            _record_hist(g.snap)
             for ev in evs:
                 g.send_all({'type': 'alarm', **ev})
             last = getattr(g, '_last_tele_push', 0)
@@ -1109,6 +1122,10 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         is_tlog = path.suffix.lower() in ('.tlog', '.bin')
         g._replay_n = 0
+        # 开始回放前清空时序缓冲：不清的话上一段（可能是实时数据）会和
+        # 这次回放的文件混在同一个缓冲里，频谱/统计结果没有意义。
+        g.hist = {}
+        g.hist_start = time.time()
         try:
             g.replay = TlogReplaySource(str(path)) if is_tlog else ReplaySource(str(path))
         except Exception as exc:
@@ -1149,6 +1166,9 @@ async def _replay_loop(ws: WebSocket):
                 await asyncio.sleep(max(0.0, dt * 0.5))  # 半速回放，便于观察
         t_last = t_now
         g.snap = {k: v for k, v in row.items() if v is not None}
+        # 回放也写时序缓冲：不写的话「导入 tlog 做频域分析」走不通，
+        # 数据只到界面、分析类功能（频谱/统计/调参）全空。
+        _record_hist(g.snap)
         await asyncio.sleep(TELEMETRY_PERIOD)
         g.send_all({'type': 'telemetry', 'data': g.snap, 'replay': True})
         # 进度每 10 帧发一次即可：50Hz 下每帧推进度纯属浪费带宽
