@@ -209,7 +209,13 @@ void timerCallback()
   s_timerTicks++; // 每次中断递增，溢出周期约 7.8 天 (2^32 / 6400 / 86400)
 #ifdef BFS_IMU_ISR_RING
   static uint16_t s_imu_phase = 0;
+  // ★ 2026-11-09：45686 走 FIFO 批量读，ISR 1kHz 每拍取约 3 帧（ODR 3.2k）；
+  //   42688 保持 2kHz 每拍 1 帧。生产速率由芯片 ODR 决定，ISR 只决定取数节奏。
+#if defined(FCS_IMU_MODEL_ICM45686)
+  s_imu_phase += 1000U;
+#else
   s_imu_phase += 2000U;
+#endif
   if (s_imu_phase >= 6400U) { s_imu_phase -= 6400U; imuSampleIsr(); }
 #endif
   const uint32_t currentCount = s_timerTicks;

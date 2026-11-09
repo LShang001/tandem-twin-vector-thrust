@@ -38,7 +38,8 @@ EXPECT_PARAM_COUNT = 169
 #   42688 走硬件 FIFO + 2kHz 定时器 ISR；45686 目前是轮询后端（每 5ms 读寄存器），
 #   2kHz 定时器 ISR 拿不到 FIFO 就回退，实测稳定在 200Hz。
 #   两个区间都是设计内状态，不是故障；落在别处才算异常。
-IMU_RATE_FIFO = (1800.0, 2200.0)   # 硬件 FIFO 后端（ICM-42688-P）
+IMU_RATE_FIFO_32K = (2900.0, 3500.0)  # 硬件 FIFO 后端 3.2kHz（ICM-45686）
+IMU_RATE_FIFO = (1800.0, 2200.0)   # 硬件 FIFO 后端 2kHz（ICM-42688-P）
 IMU_RATE_POLL = (150.0, 260.0)     # 轮询后端（ICM-45686）
 IMU_RATE_MIN, IMU_RATE_MAX = IMU_RATE_FIFO
 # 判据：CPU 占空比上限（%）
@@ -102,8 +103,20 @@ def main() -> int:
     else:
         check("机型可读", veh != "?", f"{veh}", results)
 
+    # ★ 2026-11-09：优先用固件探针的 real_hz=（窗口差分算出的**真实处理帧率**）。
+    #   rate= 走 ins_imu_health 的 sample_count/dt，在批量 FIFO 下只反映
+    #   排空调用频率（200Hz），不反映实际处理的 3200 帧/s，会误导判据。
+    real_m = re.search(r"real_hz=(\d+)", out)
     rate_m = re.search(r"rate=([\d.]+)Hz", out)
-    hz = float(rate_m.group(1)) if rate_m else -1.0
+    if real_m:
+        hz = float(real_m.group(1))
+        hz_source = "real_hz 探针"
+    elif rate_m:
+        hz = float(rate_m.group(1))
+        hz_source = "rate 字段"
+    else:
+        hz = -1.0
+        hz_source = "无"
     # ★ 2026-11-08 加复测：ISR 读数实测有 ±7% 抖动（同一块板连测三次得
     #   1887 / 2000 / 2033 Hz，而 CPU 恒定 48.6%）。单次偏低不代表性能下降。
     #   判据外时再测最多 2 次，取其中位数，避免把抖动误报成故障。
@@ -112,7 +125,7 @@ def main() -> int:
         for _ in range(2):
             time.sleep(1.0)
             out2 = cli(port, "device")
-            m2 = re.search(r"rate=([\d.]+)Hz", out2)
+            m2 = re.search(r"real_hz=(\d+)", out2) or re.search(r"rate=([\d.]+)Hz", out2)
             if m2:
                 samples.append(float(m2.group(1)))
         samples.sort()
@@ -120,8 +133,11 @@ def main() -> int:
         if med != hz:
             print(f"  [信息] ISR 复测：{samples} → 取中位数 {med:.1f} Hz")
         hz = med
-    if IMU_RATE_FIFO[0] <= hz <= IMU_RATE_FIFO[1]:
-        tier = "FIFO 后端"
+    if IMU_RATE_FIFO_32K[0] <= hz <= IMU_RATE_FIFO_32K[1]:
+        tier = "FIFO 后端 3.2k"
+        rate_ok = True
+    elif IMU_RATE_FIFO[0] <= hz <= IMU_RATE_FIFO[1]:
+        tier = "FIFO 后端 2k"
         rate_ok = True
     elif IMU_RATE_POLL[0] <= hz <= IMU_RATE_POLL[1]:
         tier = "轮询后端"
@@ -129,7 +145,7 @@ def main() -> int:
     else:
         tier = "越界"
         rate_ok = False
-    check("ISR 采样率", rate_ok, f"{hz:.1f} Hz（{tier}）", results)
+    check("ISR 采样率", rate_ok, f"{hz:.1f} Hz（{tier}，源={hz_source}）", results)
 
     cal_m = re.search(r"cal=(\d+)", out)
     cal = cal_m.group(1) if cal_m else "?"

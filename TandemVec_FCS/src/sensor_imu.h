@@ -68,6 +68,16 @@ int initICM42688();
  */
 bool readIMUData();
 
+// ★ 2026-11-09 探针访问器：实测 ISR 生产/消费速率与单帧处理耗时。
+uint32_t imuIsrCallCount();
+uint32_t imuIsrFrameCount();
+uint32_t imuIsrBatchMax();
+uint32_t imuDrainCallCount();
+uint32_t imuDrainFrameCount();
+uint32_t imuDrainAllowedAvg();
+uint32_t imuFrameUsMax();
+uint32_t imuFrameUsAvg();
+
 /**
  * @brief IMU 原始值诊断通道（只读）
  *

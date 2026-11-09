@@ -82,12 +82,35 @@ public:
 
   int dataReady() override;
 
-  float accX() override { return convertAccel(0); }
-  float accY() override { return convertAccel(1); }
-  float accZ() override { return convertAccel(2); }
-  float gyrX() override { return convertGyro(0); }
-  float gyrY() override { return convertGyro(1); }
-  float gyrZ() override { return convertGyro(2); }
+  // ★ 2026-11-09：硬件 FIFO 接口（手册 DS-000577：FIFO_COUNT 0x12/0x13、
+  //   FIFO_DATA 0x14、FIFO_CONFIG3 0x21 的 FIFO_IF_EN/ACCEL_EN/GYRO_EN）。
+  //   上层 ISR 一次 getFifoFrameCount + 一次 getDataFromFifoBatch 批量取。
+  int enableFifo() override;
+  int readFifo(ImuFifoSample *out, size_t max) override;
+
+  // ★ 2026-11-09：injectFifo 是 ring 架构的必需接口。
+  //   上层 ISR 从硬件 FIFO 取出样本后，通过本方法注入"当前样本"，
+  //   随后 accX()/gyrX() 等访问器返回该样本。基类默认返回 -1，
+  //   而 sensor_imu.cpp 的排空循环一遇到 -1 就置 s_fifo_fallback=true
+  //   并永久降级到轮询——这正是此前 3.2kHz 一直上不去的真正原因
+  //   （实测探针：drain_c=2、drain_f=0，第 2 次排空就永久 fallback）。
+  int injectFifo(const ImuFifoSample &sample) override
+  {
+    for (int i = 0; i < 3; ++i)
+    {
+      inj_acc_[i] = sample.acc[i];
+      inj_gyr_[i] = sample.gyr[i];
+    }
+    inj_valid_ = true;
+    return 0;
+  }
+
+  float accX() override { return inj_valid_ ? inj_acc_[0] : convertAccel(0); }
+  float accY() override { return inj_valid_ ? inj_acc_[1] : convertAccel(1); }
+  float accZ() override { return inj_valid_ ? inj_acc_[2] : convertAccel(2); }
+  float gyrX() override { return inj_valid_ ? inj_gyr_[0] : convertGyro(0); }
+  float gyrY() override { return inj_valid_ ? inj_gyr_[1] : convertGyro(1); }
+  float gyrZ() override { return inj_valid_ ? inj_gyr_[2] : convertGyro(2); }
 
   int readWhoAmI(uint8_t &value) override;
 
@@ -156,6 +179,10 @@ private:
   float actualAccelLpfHz_ = 0.0f;
   float actualGyroLpfHz_ = 0.0f;
   bool started_ = false;
+  bool fifo_enabled_ = false;
+  float inj_acc_[3] = {0.0f, 0.0f, 0.0f};   // ISR 注入的加速度（g）
+  float inj_gyr_[3] = {0.0f, 0.0f, 0.0f};   // ISR 注入的角速度（dps）
+  bool inj_valid_ = false;
   /// 是否已从 UI 样本读到过温度（dieTempC() 的有效性判据）。
   bool temp_valid_ = false;
   const char *err_ = "";

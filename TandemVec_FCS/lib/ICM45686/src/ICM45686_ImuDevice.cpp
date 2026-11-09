@@ -178,6 +178,70 @@ int ICM45686_ImuDevice::dataReady()
   return 1;
 }
 
+int ICM45686_ImuDevice::enableFifo()
+{
+  if (!started_)
+  {
+    return -1;
+  }
+  ICM45686FifoConfig cfg;
+  cfg.enable_accel = true;
+  cfg.enable_gyro = true;
+  cfg.high_resolution_20bit = false;   // 16-bit 帧布局，换算与寄存器路径一致
+  cfg.timestamp_or_fsync = true;
+  cfg.watermark = 1;
+  cfg.mode = ICM45686FifoMode::Stream;
+  cfg.depth = ICM45686FifoDepth::Depth8KB;
+  cfg.accel_decimation = 1;
+  cfg.gyro_decimation = 1;
+  if (imu_.configureFifo(cfg) != 0)
+  {
+    return -1;
+  }
+  fifo_enabled_ = true;
+  return 0;
+}
+
+int ICM45686_ImuDevice::readFifo(ImuFifoSample *out, size_t max)
+{
+  if (!fifo_enabled_ || (out == nullptr) || (max == 0U))
+  {
+    return -1;
+  }
+  uint16_t count = 0;
+  if (imu_.getFifoFrameCount(count) != 0)
+  {
+    return -1;
+  }
+  if (count == 0U)
+  {
+    return 0;
+  }
+  static constexpr size_t kBatchMax = 16U;
+  static inv_imu_fifo_data_t s_batch[kBatchMax];
+  size_t n = (count > max) ? max : count;
+  if (n > kBatchMax)
+  {
+    n = kBatchMax;
+  }
+  if (imu_.getDataFromFifoBatch(s_batch, static_cast<uint16_t>(n)) != 0)
+  {
+    return -1;
+  }
+  for (size_t i = 0; i < n; ++i)
+  {
+    for (int a = 0; a < 3; ++a)
+    {
+      out[i].acc[a] =
+          ICM456xx::rawRegisterAccelToG(s_batch[i].byte_16.accel_data[a], accelFsr_);
+      out[i].gyr[a] =
+          ICM456xx::rawRegisterGyroToDps(s_batch[i].byte_16.gyro_data[a], gyroFsr_);
+    }
+    out[i].timestamp = s_batch[i].byte_16.timestamp;
+  }
+  return static_cast<int>(n);
+}
+
 float ICM45686_ImuDevice::dieTempC()
 {
   // 温度来自 dataReady() 最近一次 UI 样本 burst 读（与 accel/gyro 同帧）。

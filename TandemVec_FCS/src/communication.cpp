@@ -3290,7 +3290,46 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(F(" ring_drop="));
         serial.print(imuRingDropCount());
         serial.print(F(" isr_empty="));
-        serial.println(imuIsrEmptyCount());
+        serial.print(imuIsrEmptyCount());
+        // ★ 2026-11-09 探针：isr_c(调用数)/isr_f(取帧数)/isr_bmax(单拍最多帧)
+        //   drain_c(排空次数)/drain_f(处理帧数)/allow_avg(平均每拍允许帧)
+        //   fus_avg/fus_max(单帧处理平均/最大耗时 µs)
+        serial.print(F(" isr_c="));
+        serial.print(imuIsrCallCount());
+        serial.print(F(" isr_f="));
+        serial.print(imuIsrFrameCount());
+        serial.print(F(" isr_bmax="));
+        serial.print(imuIsrBatchMax());
+        serial.print(F(" drain_c="));
+        serial.print(imuDrainCallCount());
+        serial.print(F(" drain_f="));
+        serial.print(imuDrainFrameCount());
+        serial.print(F(" allow_avg="));
+        serial.print(imuDrainAllowedAvg());
+        serial.print(F(" fus_avg="));
+        serial.print(imuFrameUsAvg());
+        serial.print(F(" fus_max="));
+        serial.print(imuFrameUsMax());
+        // ★ 2026-11-09：用探针累计值做窗口差分，算**真实帧率**。
+        //   既有 imu rate= 走 sample_count/dt，实测只反映排空调用频率（200Hz），
+        //   不反映实际处理帧率——3.2kHz 下会误导判据。
+        {
+          static uint32_t s_prev_drain_f = 0;
+          static uint32_t s_prev_ms = 0;
+          const uint32_t now_ms = millis();
+          const uint32_t cur_f = imuDrainFrameCount();
+          uint32_t hz_x10 = 0;
+          if ((s_prev_ms != 0U) && (now_ms > s_prev_ms))
+          {
+            const uint32_t d_f = cur_f - s_prev_drain_f;
+            const uint32_t d_ms = now_ms - s_prev_ms;
+            hz_x10 = (d_f * 10000U) / d_ms;
+          }
+          s_prev_drain_f = cur_f;
+          s_prev_ms = now_ms;
+          serial.print(F(" real_hz="));
+          serial.println(hz_x10 / 10U);
+        }
 #endif
 
         serial.print(F("[DBG] baro alt="));

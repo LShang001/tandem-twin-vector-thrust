@@ -258,6 +258,34 @@ static bool s_ring_processing = false;
 static bool s_fifo_fallback = false;
 static volatile uint32_t s_imu_isr_empty = 0;
 
+// ── ★ 2026-11-09 探针：实测生产/消费两侧的真实速率，定位 3.2kHz 丢包瓶颈 ──
+//   背景：ODR 3.2k 时 ring_drop 持续增长，但按 elapsed_us 算 allowed 理论够用。
+//   不测就没法定性（是 ISR 生产太快、还是单帧处理太慢、还是 allowed 算错）。
+static volatile uint32_t s_isr_calls = 0;      // ISR 调用次数
+static volatile uint32_t s_isr_frames = 0;     // ISR 累计取到帧数
+static volatile uint32_t s_isr_batch_max = 0;  // 单次 ISR 最多取到几帧
+static uint32_t s_drain_calls = 0;             // readIMUData 排空入口次数
+static uint32_t s_drain_frames = 0;            // 排空累计处理帧数
+static uint32_t s_drain_allowed_sum = 0;       // allowed 累计（算平均每拍允许几帧）
+static uint32_t s_frame_us_max = 0;            // 单帧处理最大耗时
+static uint32_t s_frame_us_sum = 0;            // 单帧处理累计耗时
+static uint32_t s_frame_cycles = 0;            // 计时过的帧数
+
+uint32_t imuIsrCallCount() { return s_isr_calls; }
+uint32_t imuIsrFrameCount() { return s_isr_frames; }
+uint32_t imuIsrBatchMax() { return s_isr_batch_max; }
+uint32_t imuDrainCallCount() { return s_drain_calls; }
+uint32_t imuDrainFrameCount() { return s_drain_frames; }
+uint32_t imuDrainAllowedAvg()
+{
+  return (s_drain_calls == 0U) ? 0U : (s_drain_allowed_sum / s_drain_calls);
+}
+uint32_t imuFrameUsMax() { return s_frame_us_max; }
+uint32_t imuFrameUsAvg()
+{
+  return (s_frame_cycles == 0U) ? 0U : (s_frame_us_sum / s_frame_cycles);
+}
+
 uint32_t imuRingDropCount()
 {
   return s_imu_ring.drop_count();
@@ -276,16 +304,30 @@ uint32_t imuRingSize()
 void imuSampleIsr()
 {
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
-  ImuFifoSample one{};
-  if (IMU->readFifo(&one, 1U) <= 0)
+  s_isr_calls++;
+  // ★ 2026-11-09：批量取。ODR 高于 ISR 频率时（45686 3.2k ODR / 1k ISR），
+  //   每拍 FIFO 里积压约 3 帧，只取 1 帧会让余下的永远读不走。
+  static constexpr size_t kIsrBatchMax = 16U;
+  ImuFifoSample batch[kIsrBatchMax];
+  const int n = IMU->readFifo(batch, kIsrBatchMax);
+  if (n <= 0)
   {
     s_imu_isr_empty++;
     return;
   }
-  ImuRingSample s{};
-  for (int i = 0; i < 3; ++i) { s.acc[i] = one.acc[i]; s.gyr[i] = one.gyr[i]; }
-  s.timestamp = one.timestamp;
-  s_imu_ring.push(s);
+  s_isr_frames += static_cast<uint32_t>(n);
+  if (static_cast<uint32_t>(n) > s_isr_batch_max) { s_isr_batch_max = static_cast<uint32_t>(n); }
+  for (int k = 0; k < n; ++k)
+  {
+    ImuRingSample s{};
+    for (int i = 0; i < 3; ++i)
+    {
+      s.acc[i] = batch[k].acc[i];
+      s.gyr[i] = batch[k].gyr[i];
+    }
+    s.timestamp = batch[k].timestamp;
+    s_imu_ring.push(s);
+  }
 }
 #endif
 
@@ -306,8 +348,16 @@ bool readIMUData()
     const uint32_t now_us = micros();
     if (s_ring_last_us == 0) { s_ring_last_us = now_us; }
     const uint32_t elapsed_us = now_us - s_ring_last_us;
-    int allowed = 1 + static_cast<int>((static_cast<uint64_t>(elapsed_us) * 2000ULL) / 1000000ULL);
-    if (allowed > 32) { allowed = 32; }
+    // ★ 2026-11-09：按后端 ODR 算"这段时间该有多少帧"。
+#if defined(FCS_IMU_MODEL_ICM45686)
+    static constexpr uint64_t kTargetRateHz = 3200ULL;
+#else
+    static constexpr uint64_t kTargetRateHz = 2000ULL;
+#endif
+    int allowed = 1 + static_cast<int>((static_cast<uint64_t>(elapsed_us) * kTargetRateHz) / 1000000ULL);
+    if (allowed > 64) { allowed = 64; }
+    s_drain_calls++;
+    s_drain_allowed_sum += static_cast<uint32_t>(allowed);
     for (int k = 0; k < allowed; ++k)
     {
       ImuRingSample rs{};
@@ -316,9 +366,15 @@ bool readIMUData()
       for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
       one.timestamp = rs.timestamp;
       if (IMU->injectFifo(one) < 0) { s_fifo_fallback = true; break; }
+      const uint32_t t_frame0 = micros();
       s_ring_processing = true;
       any = readIMUData() || any;
       s_ring_processing = false;
+      const uint32_t dt_frame = micros() - t_frame0;
+      s_frame_us_sum += dt_frame;
+      s_frame_cycles++;
+      if (dt_frame > s_frame_us_max) { s_frame_us_max = dt_frame; }
+      s_drain_frames++;
     }
     s_ring_last_us = now_us;
     return any;
