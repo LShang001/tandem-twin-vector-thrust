@@ -13,6 +13,17 @@
   | 单涵道 + X 型四燃气舵 | `[env:SingleEdf4Vane]`（`-DBFS_SINGLE_EDF_4VANE`） | `veh=SingleEdf4Vane` |
 
 - **烧录前先确认飞哪一型**；上板第一件事 `health` 核对 `veh=`。
+
+- **IMU 型号也是构建期二选一（2026-11-09 起）**：`FCS_IMU_MODEL_ICM45686` 选后端，不带则默认 ICM-42688-P。两个后端**互相独立、可随意切换**——改的都是 `lib/ICM45686/` 与 `lib/ICM42688/` 各自的驱动，上层 `imu_factory.cpp` 按宏分派，共用同一套 SPI 引脚与 `ImuDevice` 抽象。
+
+  | IMU 后端 | 机型 env + IMU env | 采样率 |
+  |---|---|---|
+  | ICM-42688-P（默认，实飞验证） | `[env:SingleEdf4Vane]` / `[env:SingleEdf4Vane_Flight]` | 2000 Hz（硬件 FIFO） |
+  | ICM-45686（换型验证） | `[env:SingleEdf4Vane_ICM45686]` / `[env:TandemVec_FCS_ICM45686]` | 200 Hz（轮询） |
+
+  **切换就是换 env 烧录**：`pio run -e <env> -t upload`。两套 env 编译产物互不覆盖（各自 `.pio/build/<env>/`）。
+
+  ★ **45686 后端当前只到 200 Hz**，不是 2000 Hz —— 它没实现硬件 FIFO，靠 `dataReady()` 轮询寄存器。想让 45686 也上 2 kHz 得实现 FIFO 批量读（试过在 2 kHz ISR 里直接读寄存器，实机过载、DBG 无响应，已回退）。详见 `docs/memory/2026-11-09-ICM45686换型适配.md`。
 - **单涵道实飞用 `[env:SingleEdf4Vane_Flight]`**：不带 `BFS_DBG_USB_SERIAL8`、`-U BFS_TASK_PROFILE`/`BFS_NAV_PROFILE`/`BFS_PROFILE_TO_ANOCOM_SERIAL`；保留 2kHz ISR ring、AnoCom USB 参数链路、0xF4/0xF5 遥测、全部联锁限幅。烧前六项自查见 CTL-008。
 - **0xF4/0xF5 诊断帧只在调试 env 编译**：这两个帧包在 `#ifdef BFS_ANOCOM_DIAG` 里（`communication.cpp:945–1028`）。调试 env（`[env:SingleEdf4Vane]` 等）带 `-DBFS_ANOCOM_DIAG`，实飞 env（`[env:SingleEdf4Vane_Flight]`）不带。所以烧实飞固件时 GCS 看不到 0xF4/0xF5 是**正常降载**，不是链路故障——实飞靠 0xF1/0x0A/0x21 等标准帧。
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
