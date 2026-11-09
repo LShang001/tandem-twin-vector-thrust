@@ -39,7 +39,7 @@ import threading
 import time
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -48,14 +48,14 @@ try:
     from . import anocom
     from . import blackbox as bb
     from . import params as pm
-    from .datalog import CsvRecorder, ReplaySource, list_recordings
+    from .datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from .serial_link import SerialLink, list_ports
     from .mavlink_service import MavlinkService
 except ImportError:
     import anocom
     import blackbox as bb
     import params as pm
-    from datalog import CsvRecorder, ReplaySource, list_recordings
+    from datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from serial_link import SerialLink, list_ports
     from mavlink_service import MavlinkService
 
@@ -764,11 +764,24 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
 
     elif cmd == 'replay_start':
         fn = str(msg.get('file', ''))
-        path = OUTPUT_DIR / fn
+        # 支持两种来源：①本机录制目录里的文件（原来只支持这种）；
+        # ②外部导入的 tlog（QGC / Mission Planner 录的），可用绝对路径。
+        # 外部路径只做存在性检查，不做目录限制——这是本地单用户工具，
+        # 限制目录只会让"导入我自己录的日志"变得别扭。
+        raw = Path(fn)
+        if raw.is_absolute() and raw.is_file():
+            path = raw
+        else:
+            path = OUTPUT_DIR / fn
         if not path.exists():
             await ws.send_json({'type': 'log', 'level': 'error', 'msg': f'文件不存在: {fn}'})
             return
-        g.replay = ReplaySource(str(path))
+        is_tlog = path.suffix.lower() in ('.tlog', '.bin')
+        try:
+            g.replay = TlogReplaySource(str(path)) if is_tlog else ReplaySource(str(path))
+        except Exception as exc:
+            await ws.send_json({'type': 'log', 'level': 'error', 'msg': f'打开失败: {exc}'})
+            return
         g.replay.open()
         if g.replay_task:
             g.replay_task.cancel()
@@ -1055,6 +1068,36 @@ async def ws_endpoint(ws: WebSocket):
         pass
     finally:
         g.ws_clients.discard(ws)
+
+
+@app.post('/api/upload_log')
+async def api_upload_log(file: UploadFile = File(...)):
+    """@brief 上传日志文件（tlog/bin/csv）到录制目录，供回放使用
+    @details 为什么需要上传：浏览器 <input type=file> 出于安全只给 File 对象，
+             拿不到本地绝对路径，而回放需要后端能打开的文件。与其让用户手输
+             路径，不如直接传上来。
+    @note   同名文件不覆盖，自动加序号——覆盖用户已有的飞行记录是不可接受的。
+    """
+    name = Path(file.filename or 'upload.log').name
+    safe = ''.join(c for c in name if c.isalnum() or c in '._-') or 'upload.log'
+    dest = OUTPUT_DIR / safe
+    n = 1
+    while dest.exists():
+        dest = OUTPUT_DIR / f'{Path(safe).stem}_{n}{Path(safe).suffix}'
+        n += 1
+    size = 0
+    try:
+        with dest.open('wb') as f:
+            while True:
+                chunk = await file.read(1 << 20)
+                if not chunk:
+                    break
+                f.write(chunk)
+                size += len(chunk)
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+    log.info('uploaded log: %s (%d bytes)', dest.name, size)
+    return {'ok': True, 'name': dest.name, 'bytes': size}
 
 
 @app.get('/api/status')

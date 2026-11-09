@@ -242,6 +242,12 @@
           <span class="hint" id="bbHint"></span>
         </div>
       </div>
+      <div class="bb-replay-row">
+        <input type="file" id="bbReplayFile" accept=".tlog,.bin,.csv,.log" hidden>
+        <button class="btn" id="bbReplayPick">导入日志回放</button>
+        <button class="btn" id="bbReplayStop">停止回放</button>
+        <span class="hint" id="bbReplayHint">支持本机录制 CSV 与外部 .tlog（QGC / Mission Planner 记录）</span>
+      </div>
       <div class="bb-segments" id="bbSegments"><span class="hint">尚未获取飞行段列表——点击「列出飞行段」</span></div>
       <div class="bb-body">
         <div class="bb-left">

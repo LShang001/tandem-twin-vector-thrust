@@ -104,6 +104,27 @@ class MavlinkService:
             self._last_hb = now
             self.send_heartbeat()
 
+    def feed_message(self, msg):
+        """@brief 直接投喂一条已解析的 pymavlink 消息（tlog 回放用）
+        @details 正常链路是字节流 → parse_char → _handle；回放场景下
+                 pymavlink 的 tlog 读取器已经给出消息对象，不必再走字节解析，
+                 直接复用 _handle 即可保证「回放」与「实时」走同一套字段映射。
+        """
+        try:
+            mt = msg.get_type()
+        except Exception:
+            return
+        # BAD_DATA 是 tlog 解析失败的占位对象（时间戳错位、截断帧都会产生）。
+        # 统计它会让人误以为"收到这么多帧"，实际全是垃圾。
+        if mt == 'BAD_DATA':
+            return
+        try:
+            self.frames += 1
+            self.msg_counts[mt] = self.msg_counts.get(mt, 0) + 1
+        except Exception:
+            pass
+        self._handle(msg)
+
     def _handle(self, msg):
         t = msg.get_type()
         s = self.snap

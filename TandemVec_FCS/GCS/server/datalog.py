@@ -90,6 +90,55 @@ def _fmt(v):
     return v
 
 
+class TlogReplaySource:
+    """MAVLink tlog 回放：与 ReplaySource 同接口（open/next_row/close）
+
+    @details 为什么复用 MavlinkService：回放与实时必须走同一套字段映射，
+             否则同一个 .tlog 回放出来的字段名会和实时链路不一致，图上就会出现
+             "回放看得到、实时看不到"的诡异现象。
+    @note  tlog 里一条消息不一定产生新快照（比如只更新了 msg_counts），
+           所以 next_row 允许跳过多条；上限 200 条防止空转。
+    """
+
+    def __init__(self, path):
+        self.path = str(path)
+        self._conn = None
+        self._mav = None
+
+    def open(self):
+        from pymavlink import mavutil
+
+        from .mavlink_service import MavlinkService
+        self._mav = MavlinkService()
+        self._conn = mavutil.mavlink_connection(self.path)
+
+    def next_row(self):
+        if self._conn is None or self._mav is None:
+            return None
+        for _ in range(200):
+            msg = self._conn.recv_match(blocking=False)
+            if msg is None:
+                return None
+            try:
+                self._mav.feed_message(msg)
+            except Exception:
+                continue
+            row = dict(self._mav.snap)
+            if row:
+                ts = getattr(msg, '_timestamp', None)
+                row['t_ms'] = (ts * 1000.0) if ts else (time.time() * 1000.0)
+                return row
+        return None
+
+    def close(self):
+        if self._conn is not None:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
+            self._conn = None
+
+
 def list_recordings(dir_path):
     """列出记录目录下 .csv 文件（按修改时间倒序）"""
     if not os.path.isdir(dir_path):

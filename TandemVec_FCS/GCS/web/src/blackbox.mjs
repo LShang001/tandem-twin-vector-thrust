@@ -28,7 +28,51 @@ let initialized = false;
  *  @units   列单位随固件通道表
  *  @ref     GCS-001 §上位机
  */
+
+/** 回放相关控件绑定（导入 / 停止） */
+function bindReplay() {
+  const file = $('bbReplayFile');
+  const pick = $('bbReplayPick');
+  const stop = $('bbReplayStop');
+  const hint = $('bbReplayHint');
+  if (!file || !pick) return;
+
+  pick.addEventListener('click', () => file.click());
+
+  file.addEventListener('change', async () => {
+    const f = file.files && file.files[0];
+    if (!f) return;
+    if (hint) hint.textContent = `上传中… ${f.name}`;
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const resp = await fetch('/api/upload_log', { method: 'POST', body: fd });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || '上传失败');
+      if (hint) hint.textContent = `已上传 ${j.name}（${(j.bytes / 1024).toFixed(0)} KB），开始回放`;
+      send({ cmd: 'replay_start', file: j.name });
+    } catch (e) {
+      if (hint) hint.textContent = `上传失败：${e.message || e}`;
+    } finally {
+      file.value = '';
+    }
+  });
+
+  if (stop) {
+    stop.addEventListener('click', () => {
+      send({ cmd: 'replay_stop' });
+      if (hint) hint.textContent = '回放已停止';
+    });
+  }
+
+  bus.addEventListener('replay-state', (e) => {
+    const d = e.detail || {};
+    if (hint) hint.textContent = d.on ? `回放中：${d.file || ''}` : '未回放';
+  });
+}
+
 export function activate() {
+  bindReplay();
   if (initialized) return;
   initialized = true;
 
