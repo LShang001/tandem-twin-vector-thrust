@@ -17,6 +17,7 @@ mavlink_service.py — GCS 的 MAVLink v2 双向服务
 from __future__ import annotations
 
 import time
+from collections import deque
 from typing import Any, Optional
 
 try:
@@ -59,6 +60,17 @@ class MavlinkService:
         self.mav.srcComponent = GCS_COMPID
         self.mav.robust_parsing = True
         self.snap: dict[str, Any] = {}
+        # ---- MAVLink Inspector 支撑（2026-11-09）----
+        # msg_counts 已有（类型→计数）；这里补三样：
+        #   msg_fields：每个消息类型的字段名与最新值（Inspector 列表用）
+        #   msg_ts    ：每个类型最近一次收到的时刻（算「多久没更新」）
+        #   hist      ："类型.字段" → (时刻, 值) 环形缓冲（画曲线用）
+        # 用 deque(maxlen) 是为了在 200Hz 级流量下内存有界——不设上限会在
+        # 几分钟内吃掉几百 MB，地面站不能因为看曲线把自己跑崩。
+        self.msg_fields: dict[str, dict[str, Any]] = {}
+        self.msg_ts: dict[str, float] = {}
+        self.hist: dict[str, deque] = {}
+        self.started = time.time()
         self.params: dict[str, float] = {}
         self.param_count: Optional[int] = None
         self.params_received = 0
@@ -95,6 +107,24 @@ class MavlinkService:
     def _handle(self, msg):
         t = msg.get_type()
         s = self.snap
+
+        # Inspector 采集：字段值 + 历史。只收数值字段（bool 会把 True 当 1 混进来，
+        # 曲线里没有意义，单独在列表里显示原值即可）。
+        now_i = time.time()
+        try:
+            d = msg.to_dict()
+        except Exception:
+            d = {}
+        if d:
+            self.msg_fields[t] = d
+            self.msg_ts[t] = now_i
+            for k, v in d.items():
+                if isinstance(v, (int, float)) and not isinstance(v, bool):
+                    key = f"{t}.{k}"
+                    dq = self.hist.get(key)
+                    if dq is None:
+                        dq = self.hist[key] = deque(maxlen=1500)
+                    dq.append((now_i, float(v)))
         if t == 'HEARTBEAT':
             base_mode = getattr(msg, 'base_mode', 0)
             s['armed'] = bool(base_mode & 128)
@@ -215,6 +245,30 @@ class MavlinkService:
         out = self.param_events
         self.param_events = []
         return out
+
+    def inspector(self) -> dict:
+        """@brief 返回 Inspector 快照：消息列表（含频率/字段）+ 字段历史序列
+        @note  频率用「累计计数 / 启动至今秒数」算，是平均值而不是滑动窗口；
+               对判断"某条消息停了"够用，判断瞬时抖动看 age_s 更直接。
+        """
+        now = time.time()
+        elapsed = max(1e-3, now - self.started)
+        msgs = []
+        for typ, cnt in sorted(self.msg_counts.items(), key=lambda kv: -kv[1]):
+            msgs.append({
+                'type': typ,
+                'count': cnt,
+                'hz': round(cnt / elapsed, 2),
+                'age_s': round(now - self.msg_ts.get(typ, now), 2),
+                'fields': {k: v for k, v in self.msg_fields.get(typ, {}).items()
+                           if isinstance(v, (int, float, str, bool))},
+            })
+        series: dict[str, list] = {}
+        for key, dq in self.hist.items():
+            if dq:
+                series[key] = [[round(ts - self.started, 3), v] for ts, v in dq]
+        return {'messages': msgs, 'series': series,
+                'elapsed_s': round(elapsed, 1), 'frames': self.frames}
 
     def drain_tx(self) -> bytes:
         out = bytes(self.sink.buf)

@@ -42,6 +42,7 @@
     <button class="nav-btn active" data-page="dashboard">仪表盘</button>
     <button class="nav-btn" data-page="view3d">3D 姿态</button>
     <button class="nav-btn" data-page="scope">实时曲线</button>
+    <button class="nav-btn" data-page="gnss">GNSS</button>
     <button class="nav-btn" data-page="blackbox">黑匣子</button>
     <button class="nav-btn" data-page="params">参数</button>
     <button class="nav-btn" data-page="console">控制台</button>
@@ -155,6 +156,39 @@
         </div>
       </div>
       <div id="scopeWrap"></div>
+    </div>
+  </section>
+
+  <!-- GNSS 专项：定位状态 + 北东散点 + 时序 -->
+  <section class="page" id="page-gnss">
+    <div class="gnss-grid">
+      <div class="glass panel gnss-status-panel">
+        <div class="panel-title">定位状态 FIX</div>
+        <div class="gnss-badge" id="gnssFixBadge">无数据</div>
+        <div class="gnss-kv-grid">
+          <div class="kv"><span>卫星数</span><b id="gnssSats">--</b></div>
+          <div class="kv"><span>PDOP</span><b id="gnssPdop">--</b></div>
+          <div class="kv"><span>水平精度</span><b id="gnssSacc">--</b></div>
+          <div class="kv"><span>垂直精度</span><b id="gnssVacc">--</b></div>
+          <div class="kv"><span>纬度</span><b id="gnssLat">--</b></div>
+          <div class="kv"><span>经度</span><b id="gnssLon">--</b></div>
+          <div class="kv"><span>高度</span><b id="gnssAlt">--</b></div>
+          <div class="kv"><span>散点数</span><b id="gnssPts">0</b></div>
+        </div>
+        <div class="gnss-tools">
+          <span class="hint" id="gnssRate">等待 3D 定位</span>
+          <button class="btn small" id="gnssPause">暂停</button>
+          <button class="btn small" id="gnssClear">清空</button>
+        </div>
+      </div>
+      <div class="glass panel">
+        <div class="panel-title">定位散布 SCATTER <span class="hint">相对首个 3D 定位点 · 看是否收敛成一点</span></div>
+        <canvas id="gnssScatter"></canvas>
+      </div>
+      <div class="glass panel gnss-series-panel">
+        <div class="panel-title">GNSS 时序 SERIES <span class="hint">高度 / 地速 / 星数 / PDOP（各自归一化）</span></div>
+        <canvas id="gnssSeries"></canvas>
+      </div>
     </div>
   </section>
 

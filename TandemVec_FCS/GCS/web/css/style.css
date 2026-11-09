@@ -280,3 +280,73 @@ body {
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: rgba(120,160,255,0.2); border-radius: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
+
+/* ══════════ GNSS 专项视图（2026-11-09） ══════════ */
+/* 左侧状态栏固定宽、右侧散点与时序上下叠；窄屏（平板竖放）退回单列 */
+.gnss-grid {
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr);
+  grid-auto-rows: min-content;
+  gap: 14px;
+}
+.gnss-status-panel { grid-row: span 2; }
+.gnss-series-panel { grid-column: 2; }
+
+.gnss-badge {
+  margin: 10px 0 14px;
+  padding: 10px 14px;
+  border: 1.5px solid #2b3a52;
+  border-radius: 10px;
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 1px;
+  color: #8fa8c4;
+  background: rgba(16, 26, 42, 0.6);
+}
+
+.gnss-kv-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 12px;
+}
+.gnss-kv-grid .kv {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(20, 32, 50, 0.55);
+}
+.gnss-kv-grid .kv span { font-size: 11px; opacity: 0.62; }
+.gnss-kv-grid .kv b { font-family: ui-monospace, monospace; font-size: 14px; }
+
+.gnss-tools {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+#gnssScatter {
+  display: block;
+  width: 100%;
+  height: 320px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 50% 50%, rgba(24, 40, 62, 0.9), rgba(12, 20, 34, 0.95));
+}
+#gnssSeries {
+  display: block;
+  width: 100%;
+  height: 190px;
+  border-radius: 8px;
+  background: rgba(14, 22, 36, 0.85);
+}
+
+@media (max-width: 900px) {
+  .gnss-grid { grid-template-columns: 1fr; }
+  .gnss-status-panel { grid-row: auto; }
+  .gnss-series-panel { grid-column: auto; }
+  #gnssScatter { height: 260px; }
+}
