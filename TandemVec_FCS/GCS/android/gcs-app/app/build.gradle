@@ -53,9 +53,11 @@ android {
                 install 'uvicorn'
                 install 'websockets'
                 install 'pyserial'
-                // 不含 pymavlink：它依赖 fastcrc（C 扩展），Chaquopy 不能编译原生代码。
-                // mavlink_service.py 把 pymavlink 当可选依赖，缺失时构造抛
-                // RuntimeError，AnoCom 路径完全不受影响——这是项目主协议，够用。
+                // pymavlink 不在这里装：它的 setup.py 把 fastcrc/lxml 写进
+                // install_requires，两者都是 C 扩展，Chaquopy 禁止编译 → 必然失败。
+                // 但源码里 fastcrc 是可选的（缺失时回退纯 Python CRC，已实测
+                // HEARTBEAT 打包/解析回环正确），所以改由 sync-src.py 把 pymavlink
+                // 的纯 Python 子集直接复制进 src/main/python。
                 // 不含 numpy：Chaquopy 只装预编译 wheel，而它的源里没有对应
                 // Python 3.11 的 aarch64 numpy wheel，pip 于是退回源码包，编译
                 // 被 Chaquopy 直接禁止（Chaquopy_cannot_compile_native_code）。
