@@ -106,26 +106,12 @@ int ICM45686_ImuDevice::begin(const ImuConfig &cfg)
   // 故按**实际生效的 ODR** 换算成最接近的 2^n 档（手册 §20/§21）。
   // 同时记录实际截止频率：低 ODR + 高目标带宽时会被芯片能力压到远低于目标
   // （如 ODR=200Hz + 目标 400Hz → 只能 50Hz），必须可观测，详见头文件说明。
-  // ★ 2026-11-09：45686 在 3.2kHz ODR 下把 LPF 收窄一档。
-  //   物理原因：200Hz 轮询后端每次只取"最新值"，等效带宽窄；改成 3.2kHz
-  //   逐样本采样后，同样 200Hz 的 LPF 每秒喂给 EKF 的独立噪声样本是 16 倍，
-  //   速度随机游走方差随之放大，实测 vel_sig 从 0.37 涨到 1.94，超过 EKF
-  //   收敛判据的 1.0（flight_control.cpp 里 conv=0 会强制上锁，等于飞不了）。
-  //   陀螺 200→100Hz、加计 100→50Hz 是飞控常用带宽，兼顾抗振与相位滞后。
-  //   只在请求值高于该档时才降，不动调用方显式指定的更窄设置。
-  ImuLpfBw gyroLpfReq = cfg.gyroLpf;
-  ImuLpfBw accelLpfReq = cfg.accelLpf;
-  if (gyroLpfReq == ImuLpfBw::Bw200Hz || gyroLpfReq == ImuLpfBw::Bw400Hz)
-  {
-    gyroLpfReq = ImuLpfBw::Bw100Hz;
-  }
-  if (accelLpfReq == ImuLpfBw::Bw100Hz || accelLpfReq == ImuLpfBw::Bw200Hz ||
-      accelLpfReq == ImuLpfBw::Bw400Hz)
-  {
-    accelLpfReq = ImuLpfBw::Bw50Hz;
-  }
-  const uint8_t gyroShift = lpfShiftForTarget(gyroOdrHz, lpfTargetHz(gyroLpfReq));
-  const uint8_t accelShift = lpfShiftForTarget(accelOdrHz, lpfTargetHz(accelLpfReq));
+  // 按调用方指定的 LPF 目标换算成 ODR/2^n 档位，不做额外改写。
+  // （2026-11-09 曾试过在此把 45686 的 LPF 收窄一档去压 vel_sig，
+  //   实测 1.94→1.95 无改善，已回退——vel_sig 偏大的真实原因是室内无 GNSS
+  //   时 EKF 没有绝对参考，属预期状态，见 VER-010 §5.6 与 §5。）
+  const uint8_t gyroShift = lpfShiftForTarget(gyroOdrHz, lpfTargetHz(cfg.gyroLpf));
+  const uint8_t accelShift = lpfShiftForTarget(accelOdrHz, lpfTargetHz(cfg.accelLpf));
   actualGyroLpfHz_ = (gyroShift == 0U)
                          ? 0.0f
                          : static_cast<float>(gyroOdrHz) / static_cast<float>(1U << gyroShift);
