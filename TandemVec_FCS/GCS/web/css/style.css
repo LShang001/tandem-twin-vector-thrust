@@ -981,3 +981,32 @@ body.has-alarm { padding-top: var(--alarm-h, 36px); }
 }
 .scope-stats b { color: #dbe7f5; font-weight: 600; }
 .scope-stats .ss-ch { color: #3ea6ff; font-weight: 600; }
+
+/* ══════════ 阶跃分析的振动提示（2026-11-10） ══════════ */
+.vib-hint {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 179, 71, 0.35);
+  background: rgba(255, 179, 71, 0.08);
+}
+.vib-title { color: #ffb347; font-weight: 600; font-size: 12.5px; margin-bottom: 4px; }
+.vib-body { color: #d6e2f0; font-size: 12px; line-height: 1.55; }
+.vib-chips { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }
+.vib-chip {
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  background: rgba(255, 179, 71, 0.16);
+  color: #ffd08a;
+}
+.vib-clean {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(41, 211, 162, 0.28);
+  background: rgba(41, 211, 162, 0.07);
+  color: #9fe8cd;
+  font-size: 12px;
+}

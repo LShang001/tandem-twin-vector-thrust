@@ -175,7 +175,26 @@ function renderResult() {
       <td class="num">${x.ring_crossings ?? '--'}</td>
     </tr>`).join('');
 
+  // ★ 振动提示：超调偏大有两条完全相反的处置——降增益，或先排除振动污染。
+  //   把候选频段直接摆在超调数字旁边，用户不用切页面自己拼结论。
+  let vibBox = '';
+  const vib = r.vibration;
+  if (vib) {
+    const cands = (vib.candidates || []).map((c) =>
+      `<span class="vib-chip">${Number(c.freq_hz).toFixed(1)} Hz · ${c.share_pct}%</span>`).join('');
+    vibBox = `
+      <div class="vib-hint">
+        <div class="vib-title">⚠ 检测到可能的振动污染</div>
+        <div class="vib-body">${vib.hint}</div>
+        <div class="vib-chips">${cands}</div>
+      </div>`;
+  } else if (r.spectrum_bands) {
+    vibBox = `<div class="vib-clean">✓ 未发现 &gt;2 Hz 的显著成分，
+      超调更可能来自控制律本身（可考虑调整增益或增加阻尼）</div>`;
+  }
+
   box.innerHTML = `<div class="tune-metrics-grid">${cards}</div>`
+    + vibBox
     + (detail
       ? `<table class="insp-table" style="margin-top:12px">
            <thead><tr><th>#</th><th>时刻 s</th><th>上升 s</th><th>超调 %</th>

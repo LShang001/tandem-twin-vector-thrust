@@ -153,6 +153,22 @@ def build_dynamics(path: Path, fs_hz: int = 200, seconds: float = 20.0,
                 0.0, 0.0, 0.0)
             f.write(msg.pack(mav))
 
+            # 目标姿态（ATTITUDE_TARGET）——阶跃分析的 cmd 通道靠它。
+            # 只发实际值（ATTITUDE）而没有目标值时，GCS 的调参页无从配对
+            # cmd/fb，会报"通道不存在"（实测踩过）。
+            # 四元数只绕 x 轴转指令角：q = (cos(θ/2), sin(θ/2), 0, 0)
+            cmd_deg = 0.0
+            for (ts_s, target) in steps:
+                if tt >= ts_s:
+                    prev = sum(v for (s2, v) in steps if s2 < ts_s)
+                    cmd_deg += (target - prev)
+            half = _m.radians(cmd_deg) / 2.0
+            q = (_m.cos(half), _m.sin(half), 0.0, 0.0)
+            f.write(struct.pack('>Q', ts_us))
+            tmsg = mav.attitude_target_encode(
+                int(tt * 1000) & 0xFFFFFFFF, 0, q, 0.0, 0.0, 0.0, 0.5)
+            f.write(tmsg.pack(mav))
+
     mp = _m.exp(-_m.pi * zeta / _m.sqrt(1 - zeta ** 2)) * 100.0
     return {
         'path': str(path),

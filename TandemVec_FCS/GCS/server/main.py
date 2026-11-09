@@ -909,6 +909,35 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         for name in (cmd_ch, fb_ch):
             dq = g.hist.get(name) or []
             waves[name] = [[t, v] for t, v in list(dq)[-4000:]]
+
+        # ★ 顺带对反馈通道做一次频谱，把"超调是被什么污染的"直接算出来。
+        #   动机：超调偏大有两条完全相反的处置——控制律增益过大（该降 kp），
+        #   或结构/电气振动把峰值抬起来（降 kp 只会让系统变慢、问题依旧）。
+        #   让用户自己去别的页面看频谱再拼结论，是把这个判断推给了人；
+        #   这里直接在阶跃结果里给出候选频段。
+        #   只报 >2 Hz 的峰：低频峰是阶跃响应本身的频谱成分，不是污染。
+        try:
+            from .spectrum import spectrum_summary
+            fb_series = list(g.hist[fb_ch] or [])
+            if len(fb_series) >= 128:
+                sp = spectrum_summary(fb_series, nperseg=min(512, max(64, len(fb_series) // 4)))
+                if sp.get('ok'):
+                    cand = [pk for pk in (sp.get('peaks') or [])
+                            if pk['freq_hz'] >= 2.0 and pk['share_pct'] >= 0.01]
+                    if cand:
+                        top = cand[0]
+                        out['vibration'] = {
+                            'freq_hz': top['freq_hz'],
+                            'share_pct': top['share_pct'],
+                            'n_candidates': len(cand),
+                            'candidates': cand[:3],
+                            'hint': (f'该段数据在 {top["freq_hz"]:.1f} Hz 有清晰成分'
+                                     f'（占 {top["share_pct"]}%），超调可能被它抬高了'
+                                     f'——先排除结构/电气振动，再考虑降增益'),
+                        }
+                    out['spectrum_bands'] = sp.get('bands')
+        except Exception:
+            pass
         await ws.send_json({'type': 'tuning_result', **out, 'waves': waves})
 
     elif cmd == 'alarm_state':
