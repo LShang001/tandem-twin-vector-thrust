@@ -169,6 +169,12 @@ function handleMsg(msg) {
     case 'mission_state':
       emit('mission-state', msg);
       break;
+    case 'alarm':
+      emit('alarm', msg);
+      break;
+    case 'alarm_state':
+      emit('alarm-state', msg);
+      break;
     case 'recordings':
       emit('recordings', msg.files || []);
       break;
@@ -229,7 +235,7 @@ function renderLinkStat(m) {
 }
 
 // ---------------- 页面路由 ----------------
-const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'inspector', 'blackbox', 'params', 'console'];
+const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'alarms', 'inspector', 'blackbox', 'params', 'console'];
 let activePage = 'dashboard';
 /** @brief 切换到指定页面（非法页面名忽略）
  *  @param {string} name 页面名（dashboard/scope/params/blackbox/console/view3d）
@@ -365,6 +371,7 @@ const PAGE_LOADERS = {
   scope: () => import('./scope.mjs'),
   gnss: () => import('./gnss.mjs'),
   map: () => import('./map.mjs'),
+  alarms: () => import('./alarms.mjs'),
   inspector: () => import('./inspector.mjs'),
   blackbox: () => import('./blackbox.mjs'),
   params: () => import('./params.mjs'),
@@ -398,6 +405,9 @@ const loader = $('loader');
 setTimeout(() => loader.classList.add('hide'), 3000);   // 兜底隐藏（不依赖 load）
 connectWs();
 switchPage('dashboard');
+// 报警模块必须常驻加载，不能等用户切到报警页——顶部横幅要覆盖所有页面，
+// 否则在仪表盘飞行时报警根本不显示（这是最危险的失效模式）。
+loadPageModule('alarms');
 setInterval(refreshPorts, 15000);  // 周期刷新端口列表
 
 // load 事件兜底（若在 load 前执行则提前隐藏 loader）

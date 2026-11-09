@@ -48,6 +48,7 @@ try:
     from . import anocom
     from . import blackbox as bb
     from . import params as pm
+    from .alarms import AlarmEngine
     from .datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from .serial_link import SerialLink, list_ports
     from .mavlink_service import MavlinkService
@@ -55,6 +56,7 @@ except ImportError:
     import anocom
     import blackbox as bb
     import params as pm
+    from alarms import AlarmEngine
     from datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from serial_link import SerialLink, list_ports
     from mavlink_service import MavlinkService
@@ -144,6 +146,9 @@ class GCS:
         self.dbgs = None
         self.tele_buf = bytearray()      # AnoCom 原始流缓冲
         self.snap = {}                   # 最新遥测快照（键 = datalog.RECORD_FIELDS + 附加）
+        # 报警引擎放服务端：告警必须与当前页面无关（切页就丢是最危险的失效），
+        # 事件历史也要能持久保存，不能只活在前端内存里。
+        self.alarms = AlarmEngine()
         self.recorder = None
         self.replay = None               # ReplaySource（回放中）
         self.replay_task = None
@@ -414,6 +419,18 @@ def _on_telemetry_rx(chunk: bytes):
             if g.recorder and g.recorder.active and not g.replay:
                 g.recorder.write(g.snap)
             now = time.time()
+            # 报警引擎：每条新快照都喂，但事件只在状态跳变时产生，
+            # 所以 50 Hz 喂入不会产生 50 Hz 推送。
+            _prev = getattr(g, '_alarm_prev_ts', 0)
+            try:
+                evs = g.alarms.feed(g.snap,
+                                    link_age_s=(now - _prev) if _prev else None,
+                                    now=now)
+            except Exception:
+                evs = []
+            g._alarm_prev_ts = now
+            for ev in evs:
+                g.send_all({'type': 'alarm', **ev})
             last = getattr(g, '_last_tele_push', 0)
             if now - last >= TELEMETRY_PERIOD:
                 g._last_tele_push = now
@@ -656,6 +673,13 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud, 'protocol': g.protocol})
         log.info('connected %s @ %d', port, baud)
+
+    elif cmd == 'alarm_state':
+        await ws.send_json({'type': 'alarm_state', **g.alarms.snapshot()})
+
+    elif cmd == 'alarm_clear_events':
+        g.alarms.clear_events()
+        await ws.send_json({'type': 'alarm_state', **g.alarms.snapshot()})
 
     elif cmd == 'mission_upload':
         if g.mav is None:
@@ -1083,7 +1107,9 @@ async def _demo_loop():
         lat = 28.230000 + 0.0000040 * math.sin(0.30 * t)
         lon = 112.940000 + 0.0000040 * math.cos(0.30 * t)
         alt_mm = int((120.0 + 2.0 * math.sin(0.5 * t)) * 1000)
-        sats = int(12 + 2 * math.sin(0.8 * t))
+        # 卫星数周期起伏：让报警链路在演示模式下也能被真实触发，
+        # 否则「报警页永远显示无告警」等于这条链路从未被验证过。
+        sats = 12 if (int(t) % 30) < 22 else 4
         v.gps_raw_int_send(ms * 1000, 3,
                            int(lat * 1e7), int(lon * 1e7), alt_mm,
                            90, 120, 350, 90, sats)

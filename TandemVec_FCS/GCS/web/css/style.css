@@ -545,3 +545,102 @@ body {
   #mapCanvas { height: 380px; flex: none; }
   .map-wp-panel { max-height: 40vh; }
 }
+
+/* ══════════ 报警与事件（2026-11-10） ══════════ */
+/* 顶部常驻横幅：不占布局流（fixed），否则会让每个页面重新排版 */
+.alarm-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 900;
+  display: none;
+  padding: 7px 16px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #0b1220;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+}
+.alarm-banner.show { display: block; }
+.alarm-banner.level-crit { background: linear-gradient(90deg, #ff5d6c, #ff8a65); }
+.alarm-banner.level-warn { background: linear-gradient(90deg, #ffb547, #ffd166); }
+.alarm-banner.level-info { background: linear-gradient(90deg, #8fa8c4, #b9cde3); }
+.alarm-item { margin-right: 4px; }
+.alarm-item b {
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(11, 18, 32, 0.22);
+}
+.alarm-sep { margin: 0 6px; opacity: .55; }
+
+.alarm-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: 14px;
+}
+.alarm-active { display: flex; flex-direction: column; gap: 8px; }
+.alarm-ok {
+  padding: 14px;
+  text-align: center;
+  color: #29d3a2;
+  font-size: 13px;
+}
+.alarm-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid;
+  background: rgba(18, 30, 48, 0.85);
+}
+.alarm-card.level-crit { border-left-color: #ff5d6c; background: rgba(255, 93, 108, 0.10); }
+.alarm-card.level-warn { border-left-color: #ffb547; background: rgba(255, 181, 71, 0.09); }
+.alarm-card.level-info { border-left-color: #7d92ad; }
+.alarm-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  white-space: nowrap;
+  color: #0b1220;
+}
+.alarm-badge.level-crit { background: #ff5d6c; }
+.alarm-badge.level-warn { background: #ffb547; }
+.alarm-badge.level-info { background: #8fa8c4; }
+.alarm-badge.small { font-size: 10px; padding: 1px 6px; }
+.alarm-text { color: #dbe7f5; font-size: 12.5px; }
+
+.alarm-tools {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.alarm-chk {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #b9cde3;
+  cursor: pointer;
+}
+.alarm-rules-panel { margin-top: 14px; }
+.alarm-rules-panel .insp-table-wrap { max-height: 260px; }
+
+/* 事件行按类型着色 */
+tr.ev-crit td:nth-child(2) { color: #ff5d6c; }
+tr.ev-warn td:nth-child(2) { color: #ffb547; }
+tr.ev-clear td:nth-child(2) { color: #29d3a2; }
+
+@media (max-width: 1000px) {
+  .alarm-grid { grid-template-columns: 1fr; }
+}
+
+/* 横幅出现时给页面让出高度，否则会盖住标题栏。
+   用 transition 而不是瞬间跳，避免告警频繁出现/消失时页面抖动。 */
+body { transition: padding-top .16s ease; }
+body.has-alarm { padding-top: 32px; }
