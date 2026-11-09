@@ -106,6 +106,14 @@ export function activate() {
   $('scopeInfo').textContent = `${Object.keys(PRESETS).length} 组预设`;
 
   buildCards(presetSel.value);
+  // 调试出口：曲线页的历史/实时数据是模块私有的，出问题时从外面看不到
+  // 实际点数与时间跨度，只能靠猜。挂到 window 上便于一次性核对。
+  window.__scopeDebug = () => cards.map((c) => ({
+    chans: c.chans,
+    pts: c.hist.map((h) => h.length),
+    spans: c.hist.map((h) => (h.length > 1 ? +(h[h.length - 1][0] - h[0][0]).toFixed(2) : 0)),
+    hasNull: c.hist.map((h) => h.some((p) => p === null || !Array.isArray(p))),
+  }));
   bus.addEventListener('scope-history', (e) => fillHistory((e.detail || {}).series || {}));
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
   // 首次进入就先拉一段后端历史：否则刚打开曲线页要等十几秒才看得见东西。
@@ -120,10 +128,14 @@ export function activate() {
  * 前端攒的历史一切页或刷新就没了，"先看波形再切去分析"会断。
  */
 function requestHistory() {
+  // ★ card.chans 的元素是 [名字, 标签, 颜色] 三元组，不是字符串。
+  //   早期按字符串用，导致发给后端的通道名是 "[object ...]" 之类，
+  //   后端查不到键、静默返回空 series——历史永远填不进来（实测踩过）。
   const chans = [];
   for (const c of cards) {
-    for (const n of c.chans) {
-      if (!chans.includes(n)) chans.push(n);
+    for (const ch of c.chans) {
+      const name = Array.isArray(ch) ? ch[0] : ch;
+      if (name && !chans.includes(name)) chans.push(name);
     }
   }
   if (chans.length) send({ cmd: 'scope_history', channels: chans });
@@ -140,8 +152,9 @@ function requestHistory() {
  */
 function fillHistory(series) {
   for (const card of cards) {
-    card.chans.forEach((n, i) => {
-      const s = series[n];
+    card.chans.forEach((chSpec, i) => {
+      const name = Array.isArray(chSpec) ? chSpec[0] : chSpec;
+      const s = series[name];
       if (!Array.isArray(s) || s.length < 2) return;
       const live = card.hist[i] || [];
       if (!live.length) {
