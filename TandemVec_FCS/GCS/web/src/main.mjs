@@ -392,6 +392,7 @@ const PAGE_LOADERS = {
   alarms: () => import('./alarms.mjs'),
   tuning: () => import('./tuning.mjs'),
   calib: () => import('./calib.mjs'),
+  layout: () => import('./layout.mjs'),
   inspector: () => import('./inspector.mjs'),
   blackbox: () => import('./blackbox.mjs'),
   params: () => import('./params.mjs'),
@@ -428,6 +429,8 @@ switchPage('dashboard');
 // 报警模块必须常驻加载，不能等用户切到报警页——顶部横幅要覆盖所有页面，
 // 否则在仪表盘飞行时报警根本不显示（这是最危险的失效模式）。
 loadPageModule('alarms');
+// 布局要在仪表盘渲染前应用，否则会先按默认顺序画一遍再跳位（肉眼可见的闪动）
+loadPageModule('layout');
 setInterval(refreshPorts, 15000);  // 周期刷新端口列表
 
 // load 事件兜底（若在 load 前执行则提前隐藏 loader）

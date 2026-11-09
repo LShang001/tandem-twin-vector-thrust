@@ -771,3 +771,60 @@ body.has-alarm { padding-top: 32px; }
 @media (max-width: 1000px) {
   .calib-grid { grid-template-columns: 1fr; }
 }
+
+/* ══════════ 仪表盘布局管理（2026-11-10） ══════════ */
+.layout-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+  position: relative;
+}
+#layoutBtn.active { background: rgba(62, 166, 255, 0.22); border-color: #3ea6ff; }
+.layout-editor {
+  display: none;
+  position: absolute;
+  top: 34px;
+  left: 0;
+  z-index: 60;
+  width: min(340px, 92vw);
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(14, 24, 38, 0.98);
+  border: 1px solid rgba(120, 160, 255, 0.22);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+.layout-editor.show { display: block; }
+.layout-list { display: flex; flex-direction: column; gap: 6px; }
+.layout-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: rgba(18, 30, 48, 0.8);
+}
+.layout-item.off { opacity: .45; }
+.layout-chk {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: #dbe7f5;
+  cursor: pointer;
+  flex: 1;
+}
+.layout-btns { display: flex; gap: 4px; }
+.layout-btns .btn.small { padding: 1px 8px; min-width: 26px; }
+.layout-btns .btn:disabled { opacity: .3; cursor: default; }
+.layout-presets {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(120, 160, 255, 0.14);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}

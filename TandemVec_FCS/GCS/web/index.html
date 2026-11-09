@@ -77,6 +77,21 @@
 
   <!-- 仪表盘 -->
   <section class="page active" id="page-dashboard">
+    <div class="layout-bar">
+      <button class="btn small" id="layoutBtn">布局</button>
+      <span class="hint">面板可显隐与排序，设置保存在本机</span>
+      <div class="layout-editor" id="layoutEditor">
+        <div class="layout-list" id="layoutList"></div>
+        <div class="layout-presets">
+          <span class="hint">预设</span>
+          <button class="btn small" data-preset="flight">飞行</button>
+          <button class="btn small" data-preset="debug">调试</button>
+          <button class="btn small" data-preset="full">全部</button>
+          <button class="btn small" data-preset="minimal">极简</button>
+          <button class="btn small" id="layoutReset">恢复默认</button>
+        </div>
+      </div>
+    </div>
     <div class="dash-grid">
       <div class="glass panel ai-panel">
         <div class="panel-title">人工地平线 ATTITUDE</div>
