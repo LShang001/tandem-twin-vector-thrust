@@ -168,9 +168,26 @@ class MavlinkService:
         elif t == 'RC_CHANNELS_RAW':
             s['rc_channels'] = [getattr(msg, f'chan{i}_raw') for i in range(1, 9)]
         elif t == 'GPS_RAW_INT':
+            # 位置与精度必须一并映射：GNSS 页的定位散点全靠经纬高，
+            # 只给 fix/sats/eph 的话页面会显示「3D 定位」却画不出任何点。
+            # 单位换算不能省——MAVLink 里 eph/epv 是 cm、alt 是 mm，
+            # 直接当米/毫米用会差 100/1000 倍（实测 90 cm 被显示成 90.0 m）。
             s['fix_type'] = msg.fix_type
             s['sats'] = msg.satellites_visible
-            s['gps_eph'] = msg.eph
+            s['gps_fix'] = msg.fix_type
+            s['gps_sats'] = msg.satellites_visible
+            s['gps_lat'] = msg.lat / 1e7 if msg.lat is not None else None
+            s['gps_lon'] = msg.lon / 1e7 if msg.lon is not None else None
+            s['gps_alt_m'] = msg.alt / 1000.0 if msg.alt is not None else None
+            # 65535 / 65534 是 MAVLink 的"未知"哨兵值，不能当成真实精度
+            s['gps_eph'] = (msg.eph / 100.0) if msg.eph not in (0, 65535, 65534) else None
+            s['gps_epv'] = (msg.epv / 100.0) if getattr(msg, 'epv', 65535) not in (0, 65535, 65534) else None
+            s['gps_sacc'] = s['gps_eph']      # 水平精度：GNSS 页读 gps_sacc
+            s['gps_vacc'] = s['gps_epv']      # 垂直精度
+            if getattr(msg, 'vel', None) is not None and msg.vel not in (0, 65535):
+                s['gps_groundspeed_ms'] = msg.vel / 100.0   # cm/s → m/s
+            if getattr(msg, 'cog', None) is not None and msg.cog not in (0, 65535):
+                s['gps_cog_deg'] = msg.cog / 100.0          # cdeg → deg
         elif t == 'HOME_POSITION':
             s['home_lat_deg'] = msg.latitude / 1e7
             s['home_lon_deg'] = msg.longitude / 1e7
