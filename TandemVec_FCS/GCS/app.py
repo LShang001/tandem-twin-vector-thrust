@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-app.py — TandemVec GCS 桌面启动器（独立窗口，无需手动开浏览器）
+app.py — UniGNC GCS 桌面启动器（独立窗口，无需手动开浏览器）
 
 @file    app.py
 @module  GCS/桌面启动
@@ -87,7 +87,7 @@ def start_server(port: int):
 
 def main():
     """@brief 解析参数并启动桌面窗口/浏览器（阻塞到窗口关闭后停后端）"""
-    ap = argparse.ArgumentParser(description='TandemVec GCS 桌面启动器')
+    ap = argparse.ArgumentParser(description='UniGNC GCS 桌面启动器')
     ap.add_argument('--port', type=int, default=DEFAULT_PORT)
     ap.add_argument('--browser', action='store_true', help='强制系统浏览器模式（不用原生窗口）')
     args = ap.parse_args()
@@ -127,7 +127,7 @@ def _ensure_fresh_backend(port: int) -> bool:
         print(f'[GCS] 端口 {port} 被占用且不是 GCS 后端，请换端口（--port）或手动释放。')
         _open_window(base + '/', False)
         return False
-    if 'TandemVec GCS' not in html:
+    if 'UniGNC GCS' not in html:
         print(f'[GCS] 端口 {port} 被其他服务占用，请换端口（--port）。')
         _open_window(base + '/', False)
         return False
@@ -180,7 +180,7 @@ def _open_window(url: str, force_browser: bool):
         try:
             import webview
             webview.create_window(
-                'TandemVec GCS · 纵列双发矢量推力飞行器地面站',
+                'UniGNC GCS · UniGNC 通用飞控平台地面站',
                 url, width=1440, height=900, min_size=(1100, 700),
                 background_color='#0b1019',
             )

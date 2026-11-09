@@ -76,7 +76,7 @@ START_TS = time.time()      # 后端启动时间（/api/status 用）
 HEX_FLUSH_PERIOD = 0.35     # hex 监听推送节流
 HEX_FLUSH_MAX = 512         # 单次 hex 推送最大字节
 
-app = FastAPI(title='TandemVec GCS', version='0.3.0')
+app = FastAPI(title='UniGNC GCS', version='0.3.0')
 
 
 class GCS:
@@ -595,6 +595,30 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud, 'protocol': g.protocol})
         log.info('connected %s @ %d', port, baud)
+
+    elif cmd == 'inspector':
+        # MAVLink Inspector：消息清单（类型/帧数/频率/多久没更新/字段值）。
+        # 不在这里带历史序列——字段历史总量随消息种类线性增长，
+        # 一次全塞进 WS 会让低频客户端也被大包拖住，历史另走 inspector_series。
+        if g.mav is None:
+            await ws.send_json({'type': 'error', 'msg': 'MAVLink 未连接（Inspector 需要 MAVLink 模式）'})
+            return
+        data = g.mav.inspector()
+        await ws.send_json({
+            'type': 'inspector',
+            'messages': data['messages'],
+            'elapsed_s': data['elapsed_s'],
+            'frames': data['frames'],
+        })
+
+    elif cmd == 'inspector_series':
+        keys = msg.get('keys') or []
+        if g.mav is None or not keys:
+            await ws.send_json({'type': 'inspector_series', 'series': {}})
+            return
+        full = g.mav.inspector()['series']
+        picked = {k: full.get(k, []) for k in keys}
+        await ws.send_json({'type': 'inspector_series', 'series': picked})
 
     elif cmd == 'mav_param_list':
         if g.mav is None:

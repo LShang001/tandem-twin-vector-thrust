@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TandemVec GCS · 纵列双发矢量推力飞行器地面站</title>
+<title>UniGNC GCS · UniGNC 通用飞控平台地面站</title>
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="./css/style.css">
 </head>
@@ -14,8 +14,8 @@
   <div class="brand">
     <div class="brand-mark">T</div>
     <div>
-      <h1>TandemVec GCS</h1>
-      <p>纵列双发矢量推力飞行器 · 地面站</p>
+      <h1>UniGNC GCS</h1>
+      <p>UniGNC 通用飞控平台 · 地面站</p>
     </div>
   </div>
   <div class="conn-box">
@@ -43,6 +43,7 @@
     <button class="nav-btn" data-page="view3d">3D 姿态</button>
     <button class="nav-btn" data-page="scope">实时曲线</button>
     <button class="nav-btn" data-page="gnss">GNSS</button>
+    <button class="nav-btn" data-page="inspector">Inspector</button>
     <button class="nav-btn" data-page="blackbox">黑匣子</button>
     <button class="nav-btn" data-page="params">参数</button>
     <button class="nav-btn" data-page="console">控制台</button>
@@ -190,6 +191,31 @@
       <div class="glass panel gnss-series-panel">
         <div class="panel-title">GNSS 时序 SERIES <span class="hint">高度 / 地速 / 星数 / PDOP（各自归一化）</span></div>
         <canvas id="gnssSeries"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- MAVLink Inspector：消息清单 + 任意字段实时绘图 -->
+  <section class="page" id="page-inspector">
+    <div class="insp-grid">
+      <div class="glass panel insp-list-panel">
+        <div class="panel-title">接收消息 MESSAGES <span class="hint" id="inspStats">--</span></div>
+        <div class="insp-table-wrap">
+          <table class="insp-table">
+            <thead>
+              <tr><th>消息</th><th>帧数</th><th>频率 Hz</th><th>未更新 s</th><th>字段</th></tr>
+            </thead>
+            <tbody id="inspRows"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="glass panel insp-chart-panel">
+        <div class="panel-title">字段曲线 PLOT <span class="hint">展开消息 → 勾选字段（最多 8 条）</span></div>
+        <canvas id="inspChart"></canvas>
+        <div class="insp-legend" id="inspLegend"></div>
+        <div class="insp-tools">
+          <button class="btn small" id="inspClear">清空选择</button>
+        </div>
       </div>
     </div>
   </section>

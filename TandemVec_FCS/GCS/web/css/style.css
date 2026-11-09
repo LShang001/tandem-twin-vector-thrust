@@ -1,5 +1,5 @@
 /* ============================================================
-   TandemVec GCS — 深色专业主题（玻璃拟态，继承 vector-thrust-lab 风格）
+   UniGNC GCS — 深色专业主题（玻璃拟态，继承 vector-thrust-lab 风格）
    ============================================================ */
 :root {
   --bg0: #0a0e14;
@@ -349,4 +349,103 @@ body {
   .gnss-status-panel { grid-row: auto; }
   .gnss-series-panel { grid-column: auto; }
   #gnssScatter { height: 260px; }
+}
+
+/* ══════════ MAVLink Inspector（2026-11-09） ══════════ */
+/* 左侧消息清单可滚动、右侧曲线固定高度；窄屏退成上下 */
+.insp-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+  height: calc(100vh - 220px);
+  min-height: 420px;
+}
+.insp-list-panel, .insp-chart-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.insp-table-wrap {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+.insp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+}
+.insp-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: 6px 8px;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: .4px;
+  text-transform: uppercase;
+  color: #8fa8c4;
+  background: rgba(14, 24, 38, 0.96);
+  border-bottom: 1px solid rgba(120, 160, 255, 0.18);
+}
+.insp-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid rgba(120, 160, 255, 0.07);
+}
+.insp-table td.num { text-align: right; color: #c9d8ea; }
+.insp-table th:nth-child(n+2) { text-align: right; }
+.insp-row { cursor: pointer; }
+.insp-row:hover { background: rgba(62, 166, 255, 0.09); }
+.insp-row.open { background: rgba(62, 166, 255, 0.07); }
+.insp-type { color: #dbe7f5; white-space: nowrap; }
+.insp-empty { text-align: center; color: #7d92ad; padding: 18px; font-family: sans-serif; }
+
+.insp-fields-row td { padding: 6px 8px 10px; border-bottom: 1px solid rgba(120,160,255,0.12); }
+.insp-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.insp-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border: 1px solid rgba(120, 160, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(18, 30, 48, 0.7);
+  cursor: pointer;
+  font-size: 11.5px;
+}
+.insp-field:hover { border-color: rgba(62, 166, 255, 0.55); }
+.insp-field.on { border-color: #29d3a2; background: rgba(41, 211, 162, 0.12); }
+.insp-field .fname { color: #b9cde3; }
+.insp-field .fval { color: #8fa8c4; font-family: ui-monospace, monospace; }
+
+#inspChart {
+  display: block;
+  width: 100%;
+  flex: 1;
+  min-height: 220px;
+  border-radius: 8px;
+  background: rgba(14, 22, 36, 0.85);
+}
+.insp-legend {
+  margin-top: 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 11.5px;
+  line-height: 1.7;
+  min-height: 20px;
+}
+.insp-tools { margin-top: 8px; display: flex; justify-content: flex-end; }
+
+@media (max-width: 1000px) {
+  /* 单列时父容器高度是 auto，flex:1 不再有可分配空间，canvas 会按内容无限长高。
+     这里改成显式高度，曲线区不至于把整页推得没法看。 */
+  .insp-grid { grid-template-columns: 1fr; height: auto; }
+  .insp-list-panel { max-height: 42vh; }
+  .insp-chart-panel { min-height: 0; }
+  #inspChart { flex: none; height: 300px; min-height: 0; }
 }

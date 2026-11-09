@@ -1148,7 +1148,7 @@ def main():
     """@brief 命令行入口：解析全局/子命令参数，可选自动连接后执行，最后断开
     @note  baudscan 跳过预连接；连接后等 stat_tele>0（防固件 DBG 残留导致首请求超时）
     """
-    ap = argparse.ArgumentParser(description='TandemVec GCS CLI（复用 server.main 链路）')
+    ap = argparse.ArgumentParser(description='UniGNC GCS CLI（复用 server.main 链路）')
     # 全局自动连接：每条命令独立进程，提供 --port 则命令前后自动 连接/断开
     ap.add_argument('--port', help='自动连接串口（如 COM10），命令结束自动断开')
     ap.add_argument('--baud', type=int, default=DEFAULT_BAUD)
