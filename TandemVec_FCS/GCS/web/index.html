@@ -60,6 +60,7 @@
     <button class="nav-btn" data-page="gnss">GNSS</button>
     <button class="nav-btn" data-page="map">地图</button>
     <button class="nav-btn" data-page="alarms">报警</button>
+    <button class="nav-btn" data-page="tuning">调参</button>
     <button class="nav-btn" data-page="inspector">Inspector</button>
     <button class="nav-btn" data-page="blackbox">黑匣子</button>
     <button class="nav-btn" data-page="params">参数</button>
@@ -262,6 +263,34 @@
           </table>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- PID 调参可视化：阶跃响应分析 -->
+  <section class="page" id="page-tuning">
+    <div class="glass panel">
+      <div class="panel-title">阶跃响应 STEP RESPONSE <span class="hint" id="tuneState">--</span></div>
+      <div class="tune-tools">
+        <label class="tune-field">指令通道
+          <select id="tuneCmdCh"></select>
+        </label>
+        <label class="tune-field">反馈通道
+          <select id="tuneFbCh"></select>
+        </label>
+        <label class="tune-field">最小阶跃幅值
+          <input type="number" id="tuneMinDelta" value="5" step="1" min="0.1">
+        </label>
+        <button class="btn primary small" id="tuneRun">分析</button>
+        <button class="btn small" id="tuneRefresh">刷新通道</button>
+      </div>
+      <canvas id="tuneChart"></canvas>
+      <div class="insp-legend" id="tuneLegend"></div>
+    </div>
+    <div class="glass panel" style="margin-top:14px">
+      <div class="panel-title">指标 METRICS
+        <span class="hint">上升时间=10%→90%；超调=(峰值-目标)/幅值；调节时间=进入 ±2% 并保持</span>
+      </div>
+      <div id="tuneMetrics"></div>
     </div>
   </section>
 

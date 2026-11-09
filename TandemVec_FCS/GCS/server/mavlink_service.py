@@ -16,6 +16,7 @@ mavlink_service.py — GCS 的 MAVLink v2 双向服务
 """
 from __future__ import annotations
 
+import math
 import time
 from collections import deque
 from typing import Any, Optional
@@ -202,6 +203,17 @@ class MavlinkService:
             s['vel_n_ms'] = msg.vx
             s['vel_e_ms'] = msg.vy
             s['vel_up_ms'] = -msg.vz
+        elif t == 'ATTITUDE_TARGET':
+            # 目标姿态：调参页的"指令通道"来源。协议给的是目标四元数，
+            # 这里转成欧拉角，与反馈通道（ATTITUDE 的 roll_deg/pitch_deg）
+            # 同一量纲，才能直接做阶跃响应对比。
+            q = msg.q
+            w, x, y, z = q[0], q[1], q[2], q[3]
+            s['target_roll_deg'] = math.degrees(
+                math.atan2(2.0 * (w * x + y * z), 1.0 - 2.0 * (x * x + y * y)))
+            s['target_pitch_deg'] = math.degrees(
+                math.asin(max(-1.0, min(1.0, 2.0 * (w * y - z * x)))))
+            s['target_thrust'] = msg.thrust
         elif t == 'RAW_IMU':
             # mG → m/s²，mrad/s → deg/s
             for i, k in enumerate(('acc_x_ms2', 'acc_y_ms2', 'acc_z_ms2')):

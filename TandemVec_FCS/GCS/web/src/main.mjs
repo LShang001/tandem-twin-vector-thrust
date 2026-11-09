@@ -175,6 +175,12 @@ function handleMsg(msg) {
     case 'alarm_state':
       emit('alarm-state', msg);
       break;
+    case 'tuning_channels':
+      emit('tuning-channels', msg);
+      break;
+    case 'tuning_result':
+      emit('tuning-result', msg);
+      break;
     case 'recordings':
       emit('recordings', msg.files || []);
       break;
@@ -235,7 +241,7 @@ function renderLinkStat(m) {
 }
 
 // ---------------- 页面路由 ----------------
-const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'alarms', 'inspector', 'blackbox', 'params', 'console'];
+const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'alarms', 'tuning', 'inspector', 'blackbox', 'params', 'console'];
 let activePage = 'dashboard';
 /** @brief 切换到指定页面（非法页面名忽略）
  *  @param {string} name 页面名（dashboard/scope/params/blackbox/console/view3d）
@@ -372,6 +378,7 @@ const PAGE_LOADERS = {
   gnss: () => import('./gnss.mjs'),
   map: () => import('./map.mjs'),
   alarms: () => import('./alarms.mjs'),
+  tuning: () => import('./tuning.mjs'),
   inspector: () => import('./inspector.mjs'),
   blackbox: () => import('./blackbox.mjs'),
   params: () => import('./params.mjs'),

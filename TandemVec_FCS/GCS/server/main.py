@@ -149,6 +149,11 @@ class GCS:
         # 报警引擎放服务端：告警必须与当前页面无关（切页就丢是最危险的失效），
         # 事件历史也要能持久保存，不能只活在前端内存里。
         self.alarms = AlarmEngine()
+        # 统一时序缓冲（双协议通用，供阶跃响应分析/事后查数用）。
+        # 为什么不用 mav.hist：那是 MAVLink 专属，AnoCom 模式下就没有；
+        # 调参界面必须在两种协议下都能用。每条 deque 有界，总量可控。
+        self.hist = {}
+        self.hist_start = time.time()
         self.recorder = None
         self.replay = None               # ReplaySource（回放中）
         self.replay_task = None
@@ -429,6 +434,18 @@ def _on_telemetry_rx(chunk: bytes):
             except Exception:
                 evs = []
             g._alarm_prev_ts = now
+            # 写时序缓冲：只留数值字段，deque 有界（maxlen）。按需创建，
+            # 不做白名单——字段会随固件版本变，白名单会漏字段。
+            _t = now - g.hist_start
+            for _k, _v in g.snap.items():
+                if isinstance(_v, bool) or not isinstance(_v, (int, float)):
+                    continue
+                _dq = g.hist.get(_k)
+                if _dq is None:
+                    from collections import deque as _deque
+                    _dq = _deque(maxlen=4000)   # 200Hz 下约 20 s
+                    g.hist[_k] = _dq
+                _dq.append((_t, float(_v)))
             for ev in evs:
                 g.send_all({'type': 'alarm', **ev})
             last = getattr(g, '_last_tele_push', 0)
@@ -673,6 +690,37 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud, 'protocol': g.protocol})
         log.info('connected %s @ %d', port, baud)
+
+    elif cmd == 'tuning_channels':
+        # 列出可用于分析的通道（有足够样本的）
+        chans = []
+        for k, dq in sorted(g.hist.items()):
+            if len(dq) >= 20:
+                chans.append({'name': k, 'n': len(dq)})
+        await ws.send_json({'type': 'tuning_channels', 'channels': chans})
+
+    elif cmd == 'tuning_analyze':
+        cmd_ch = str(msg.get('cmd_ch') or '')
+        fb_ch = str(msg.get('fb_ch') or '')
+        min_delta = float(msg.get('min_delta') or 0.0)
+        window_s = float(msg.get('window_s') or 3.0)
+        if cmd_ch not in g.hist or fb_ch not in g.hist:
+            await ws.send_json({'type': 'tuning_result',
+                                'error': f'通道不存在或样本不足：{cmd_ch} / {fb_ch}'})
+            return
+        from .stepresponse import analyze_pair
+        try:
+            out = analyze_pair(list(g.hist[cmd_ch]), list(g.hist[fb_ch]),
+                               min_delta=min_delta, window_s=window_s)
+        except Exception as exc:
+            await ws.send_json({'type': 'tuning_result', 'error': str(exc)})
+            return
+        # 回传一段原始波形，前端画图用（截取最近 20 s）
+        waves = {}
+        for name in (cmd_ch, fb_ch):
+            dq = g.hist.get(name) or []
+            waves[name] = [[t, v] for t, v in list(dq)[-4000:]]
+        await ws.send_json({'type': 'tuning_result', **out, 'waves': waves})
 
     elif cmd == 'alarm_state':
         await ws.send_json({'type': 'alarm_state', **g.alarms.snapshot()})
@@ -1066,6 +1114,25 @@ async def _param_read_single_async(pid, timeout=1.5, tries=3):
 # （_on_telemetry_rx），因此验证的是真链路，不是另写一套假前端。
 # 只在环境变量显式置 1 时启用，不影响正常连接流程。
 # ---------------------------------------------------------------
+# 演示用二阶跟随状态。为什么需要：调参页要分析「指令→响应」，
+# 如果反馈是正弦而指令是方波，两者没有因果关系，算出来的指标毫无意义。
+# 这里用一个真正的二阶系统（可调 ζ/ωn）跟随方波指令，
+# 于是超调、上升时间、调节时间都是这套"虚拟控制器"的真实表现。
+_DEMO_2ND = {'y': 0.0, 'yd': 0.0}
+
+
+def _demo_second_order(target: float, dt: float,
+                       wn: float = 7.0, zeta: float = 0.55) -> float:
+    """@brief 二阶系统一步跟随（y'' = wn²(target−y) − 2ζwn·y'）
+    @note ζ=0.55 → 理论超调约 12.6%，正好让调参页算得出非零超调。
+    """
+    st = _DEMO_2ND
+    err = target - st['y']
+    acc = wn * wn * err - 2.0 * zeta * wn * st['yd']
+    st['yd'] += acc * dt
+    st['y'] += st['yd'] * dt
+    return st['y']
+
 DEMO_MODE = os.environ.get('GCS_DEMO') == '1'
 
 
@@ -1098,7 +1165,16 @@ async def _demo_loop():
         roll = math.radians(6.0 * math.sin(0.7 * t))
         pitch = math.radians(4.0 * math.sin(0.45 * t + 1.0))
         yaw = math.radians(25.0 * math.sin(0.12 * t))
-        v.attitude_send(ms, roll, pitch, yaw,
+        # 目标姿态方波（3 s 一个平台）+ 二阶跟随，供调参页做阶跃响应分析。
+        # 顺序很重要：_roll_fb 必须先算再喂给 ATTITUDE，否则 UnboundLocalError
+        # 会让整个演示循环挂掉（实测踩过，只报在 asyncio 的 task exception 里，
+        # 表面现象只是"没有数据"）。
+        _tgt = 8.0 if (int(t) % 6) < 3 else 0.0
+        _roll_fb = _demo_second_order(_tgt, 0.02)
+
+        # roll 用二阶跟随结果（与 ATTITUDE_TARGET 的方波构成指令→响应对），
+        # pitch/yaw 仍保留各自的正弦摆动，便于其它页面观察多通道行为。
+        v.attitude_send(ms, math.radians(_roll_fb), pitch, yaw,
                         0.01 * math.cos(0.7 * t),
                         0.01 * math.cos(0.45 * t),
                         0.002 * math.cos(0.12 * t))
@@ -1114,6 +1190,15 @@ async def _demo_loop():
                            int(lat * 1e7), int(lon * 1e7), alt_mm,
                            90, 120, 350, 90, sats)
 
+        # 目标姿态：方波指令（3 s 一个平台），供调参页做阶跃响应分析。
+        # 没有这段，调参页在演示模式下永远是"没有可评估的阶跃"，
+        # 等于这条链路从未被验证过。
+        _tgt = 8.0 if (int(t) % 6) < 3 else 0.0
+        _half = math.radians(_tgt) * 0.5
+        v.attitude_target_send(
+            ms * 1000, 0,
+            (math.cos(_half), math.sin(_half), 0.0, 0.0),   # 绕 x 转 target
+            0.0, 0.0, 0.0, 0.5)
         # 相对位置与速度（LOCAL_POSITION_NED）：前端「相对北/东」「垂直速度」
         # 直接读这组字段。协议里 z 向下为正，这里给负值表示在上方。
         v.local_position_ned_send(
