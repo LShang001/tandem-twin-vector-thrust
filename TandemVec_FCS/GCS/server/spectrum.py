@@ -256,6 +256,12 @@ def spectrogram(series: Series, nperseg: int = 128, hop: int = 64,
         mid = chunk[len(chunk) // 2]
         t_marks.append(mid / fs)
 
+    # 时间刻度转成"相对第一列"的秒数：数据的时间戳可能是 Unix 秒（两个来源
+    # 里更常见），直接显示会是 1.7e9 这种没人看得懂的数。
+    if t_marks:
+        t0 = t_marks[0]
+        t_marks = [x - t0 for x in t_marks]
+
     mat = np.asarray(cols).T          # [freq, time]
     peak = float(mat.max())
     if peak <= 0:

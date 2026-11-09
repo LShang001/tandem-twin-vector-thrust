@@ -451,7 +451,9 @@ def _on_telemetry_rx(chunk: bytes):
             g._alarm_prev_ts = now
             # 写时序缓冲：只留数值字段，deque 有界（maxlen）。按需创建，
             # 不做白名单——字段会随固件版本变，白名单会漏字段。
-            _t = now - g.hist_start
+            # 用 Unix 秒而不是"距启动秒数"：前端曲线页的时间轴来自 snap.t_ms/1000,
+            # 两者基准若不同，后端历史填进画布会全挤在最左侧（实测踩过）。
+            _t = now
             for _k, _v in g.snap.items():
                 if isinstance(_v, bool) or not isinstance(_v, (int, float)):
                     continue
@@ -788,6 +790,19 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
                                 'ok': False, 'reason': str(exc)})
             return
         await ws.send_json({'type': 'spectrogram', 'channel': ch, **r})
+
+    elif cmd == 'scope_history':
+        # 曲线页的数据源改走后端：前端自己攒的历史一切页/刷新就没了，
+        # 而频谱/调参页用的都是 g.hist。共用一个源，才能「先看波形再切去分析」。
+        chans = msg.get('channels') or []
+        series = {}
+        for n in chans:
+            dq = g.hist.get(n)
+            if dq:
+                # 只回最近 2000 点（约 60 s@32Hz），够铺满 60 s 窗口
+                series[n] = [[round(float(tt), 3), float(vv)]
+                             for tt, vv in list(dq)[-2000:]]
+        await ws.send_json({'type': 'scope_history', 'series': series})
 
     elif cmd == 'tuning_channels':
         # 列出可用于分析的通道（有足够样本的）

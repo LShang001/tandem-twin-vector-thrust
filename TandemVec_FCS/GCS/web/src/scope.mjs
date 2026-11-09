@@ -11,7 +11,7 @@
  * @units   通道单位见 PRESETS 标签（deg、deg/s、m/s²、m/s、m、%、V）
  * @ref     GCS-001 §上位机（实时曲线页）、COMM-001 §4 C 层（推送 50Hz）
  */
-import { bus, state } from './main.mjs';
+import { bus, send, state } from './main.mjs';
 
 const $ = (id) => document.getElementById(id);
 
@@ -88,7 +88,11 @@ export function activate() {
   const presetSel = $('scopePreset');
   for (const name of Object.keys(PRESETS)) presetSel.add(new Option(name, name));
   presetSel.value = '姿态 ATT';
-  presetSel.addEventListener('change', () => buildCards(presetSel.value));
+  presetSel.addEventListener('change', () => {
+    buildCards(presetSel.value);
+    // 换预设后通道变了，重新补一次历史，否则新卡片是空的
+    requestHistory();
+  });
   $('scopePause').addEventListener('change', (e) => { paused = e.target.checked; });
   $('scopeClear').addEventListener('click', () => cards.forEach(c => c.hist.length = 0));
   const winSel = $('scopeWin');
@@ -102,9 +106,61 @@ export function activate() {
   $('scopeInfo').textContent = `${Object.keys(PRESETS).length} 组预设`;
 
   buildCards(presetSel.value);
+  bus.addEventListener('scope-history', (e) => fillHistory((e.detail || {}).series || {}));
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
+  // 首次进入就先拉一段后端历史：否则刚打开曲线页要等十几秒才看得见东西。
+  requestHistory();
   bus.addEventListener('page', (e) => { pageVisible = (e.detail === 'scope'); });
   setInterval(() => { if (pageVisible) cards.forEach(drawCard); }, 100);
+}
+
+/**
+ * 向后端要当前可见通道的历史，用来在刚打开页面时把画布铺满。
+ * 数据源是后端的 g.hist（与频谱/调参页同一个），不是前端自己攒——
+ * 前端攒的历史一切页或刷新就没了，"先看波形再切去分析"会断。
+ */
+function requestHistory() {
+  const chans = [];
+  for (const c of cards) {
+    for (const n of c.chans) {
+      if (!chans.includes(n)) chans.push(n);
+    }
+  }
+  if (chans.length) send({ cmd: 'scope_history', channels: chans });
+}
+
+/**
+ * 把后端历史并进各卡片。
+ *
+ * ★ 必须**合并**而不是「空才填」：切到这个页面时前端已经开始收实时数据了，
+ *   如果只在历史为空时填充，就永远填不进去——画布上只有刚进来那几秒的数据，
+ *   看起来像"历史功能没生效"（实测踩过）。
+ *
+ * 合并规则按时间排序，同一时刻（差值 < 1 ms）以后来的（实时）为准。
+ */
+function fillHistory(series) {
+  for (const card of cards) {
+    card.chans.forEach((n, i) => {
+      const s = series[n];
+      if (!Array.isArray(s) || s.length < 2) return;
+      const live = card.hist[i] || [];
+      if (!live.length) {
+        card.hist[i] = s.slice(-HISTORY);
+      } else {
+        const merged = s.concat(live).sort((a, b) => a[0] - b[0]);
+        const dedup = [];
+        for (const p of merged) {
+          const prev = dedup[dedup.length - 1];
+          if (prev && Math.abs(prev[0] - p[0]) < 0.001) dedup[dedup.length - 1] = p;
+          else dedup.push(p);
+        }
+        card.hist[i] = dedup.slice(-HISTORY);
+      }
+      const h = card.hist[i];
+      const lastV = h.length ? h[h.length - 1][1] : null;
+      if (Number.isFinite(lastV)) card.last[i] = lastV;
+    });
+  }
 }
 
 function buildCards(presetName) {

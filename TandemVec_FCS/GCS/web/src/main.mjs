@@ -196,6 +196,9 @@ function handleMsg(msg) {
     case 'spectrogram':
       emit('spectrogram', msg);
       break;
+    case 'scope_history':
+      emit('scope-history', msg);
+      break;
     case 'calib_wizard':
       emit('calib-wizard', msg);
       break;
