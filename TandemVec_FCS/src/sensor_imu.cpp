@@ -258,6 +258,15 @@ static bool s_ring_processing = false;
 static bool s_fifo_fallback = false;
 static volatile uint32_t s_imu_isr_empty = 0;
 
+// ★ 2026-11-09：批量 FIFO 帧的固定时间增量（秒），0 表示不用。
+//   背景：readIMUData 原用 micros() 差分算 dt。单帧轮询时这没问题，
+//   但批量排空时 16 帧在同一拍内处理完，每帧差只有几微秒（实测 8µs），
+//   而真实帧间隔是 1/ODR（3.2kHz → 312.5µs），dt 小 39 倍会把
+//   角速度/加速度增量积分得严重偏小，EKF 直接发散（实测 vel=-139 m/s、
+//   pos_sig=529）。这里在排空循环里按后端 ODR 写入固定 dt。
+static double s_fifo_frame_dt_s = 0.0;
+
+
 // ── ★ 2026-11-09 探针：实测生产/消费两侧的真实速率，定位 3.2kHz 丢包瓶颈 ──
 //   背景：ODR 3.2k 时 ring_drop 持续增长，但按 elapsed_us 算 allowed 理论够用。
 //   不测就没法定性（是 ISR 生产太快、还是单帧处理太慢、还是 allowed 算错）。
@@ -304,6 +313,7 @@ uint32_t imuRingSize()
 void imuSampleIsr()
 {
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
+
   s_isr_calls++;
   // ★ 2026-11-09：批量取。ODR 高于 ISR 频率时（45686 3.2k ODR / 1k ISR），
   //   每拍 FIFO 里积压约 3 帧，只取 1 帧会让余下的永远读不走。
@@ -366,6 +376,12 @@ bool readIMUData()
       for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
       one.timestamp = rs.timestamp;
       if (IMU->injectFifo(one) < 0) { s_fifo_fallback = true; break; }
+      // 按后端 ODR 给批量帧固定 dt（与 kTargetRateHz 同源）
+#if defined(FCS_IMU_MODEL_ICM45686)
+      s_fifo_frame_dt_s = 1.0 / 3200.0;
+#else
+      s_fifo_frame_dt_s = 1.0 / 2000.0;
+#endif
       const uint32_t t_frame0 = micros();
       s_ring_processing = true;
       any = readIMUData() || any;
@@ -405,8 +421,18 @@ bool readIMUData()
     static unsigned long lastTimeMicros = 0;    // 静态变量，记录上次调用的时间
     unsigned long currentTimeMicros = micros(); // 获取当前时间（微秒）
 
-    // 如果是首次运行，则使用一个小的默认时间差；否则，计算实际时间差
-    double deltaTimeSecs = (lastTimeMicros == 0) ? 0.0001 : (currentTimeMicros - lastTimeMicros) / 1000000.0;
+    // ★ 2026-11-09：批量 FIFO 帧走固定 dt（=1/ODR），不用 micros() 差分。
+    //   差分会把"同一拍内处理 16 帧"误算成每帧只隔几微秒，积分严重偏小。
+    double deltaTimeSecs;
+    if (s_fifo_frame_dt_s > 0.0)
+    {
+      deltaTimeSecs = s_fifo_frame_dt_s;
+    }
+    else
+    {
+      // 如果是首次运行，则使用一个小的默认时间差；否则，计算实际时间差
+      deltaTimeSecs = (lastTimeMicros == 0) ? 0.0001 : (currentTimeMicros - lastTimeMicros) / 1000000.0;
+    }
     lastTimeMicros = currentTimeMicros; // 更新上次时间戳
 
     // 防御性编程：防止因系统计时问题导致时间差为零或负数，这会破坏姿态解算

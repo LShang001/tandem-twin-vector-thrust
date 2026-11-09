@@ -3255,6 +3255,12 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(g_imu_health_sample_rate_hz, 1);
         serial.print(F("Hz cal="));
         serial.print(imuCalibrator.isCalibrated() ? 1 : 0);
+        serial.print(F(" caln="));
+        serial.print(imuCalibrator.diagSampleCount());
+        serial.print(F(" calst="));
+        serial.print(imuCalibrator.diagState());
+        serial.print(F(" calv="));
+        serial.print(imuCalibrator.diagAccVariance() * 1e6f, 3);
         serial.print(F(" gz_bias_dps="));
         serial.print(imuCalibrator.gyroBiasDps(2), 3);
         serial.print(F(" frz="));
@@ -3313,23 +3319,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         // ★ 2026-11-09：用探针累计值做窗口差分，算**真实帧率**。
         //   既有 imu rate= 走 sample_count/dt，实测只反映排空调用频率（200Hz），
         //   不反映实际处理帧率——3.2kHz 下会误导判据。
-        {
-          static uint32_t s_prev_drain_f = 0;
-          static uint32_t s_prev_ms = 0;
-          const uint32_t now_ms = millis();
-          const uint32_t cur_f = imuDrainFrameCount();
-          uint32_t hz_x10 = 0;
-          if ((s_prev_ms != 0U) && (now_ms > s_prev_ms))
-          {
-            const uint32_t d_f = cur_f - s_prev_drain_f;
-            const uint32_t d_ms = now_ms - s_prev_ms;
-            hz_x10 = (d_f * 10000U) / d_ms;
-          }
-          s_prev_drain_f = cur_f;
-          s_prev_ms = now_ms;
-          serial.print(F(" real_hz="));
-          serial.println(hz_x10 / 10U);
-        }
+        // real_hz 由 tools/verify_board.py 用 isr_f/isr_c 换算，固件侧不加算术。
 #endif
 
         serial.print(F("[DBG] baro alt="));

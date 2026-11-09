@@ -116,6 +116,11 @@ public:
 
     bool isCalibrated() const { return _is_calibrated; }
     bool isCalibrating() const { return current_state == CALIBRATING; }
+    // ★ 2026-11-09 诊断：3.2kHz 下 cal 一直不置 1，需要看它卡在哪个条件。
+    //   静止判据三条：模值在 0.5~1.5g、方差 < 2e-5、角速度模长 < 0.1。
+    int diagSampleCount() const { return sample_count; }
+    int diagState() const { return static_cast<int>(current_state); }
+    float diagAccVariance() const { return acc_norm_variance; }
     // 诊断用：返回已标定的某轴陀螺零偏 [dps]，供 health 直接显示。
     float gyroBiasDps(int axis) const
     {
