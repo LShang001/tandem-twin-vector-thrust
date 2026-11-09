@@ -152,13 +152,28 @@ class MavlinkService:
             s['v_east_mps'] = msg.vy / 100.0
             s['v_down_mps'] = msg.vz / 100.0
             s['heading_deg'] = msg.hdg / 100.0 if msg.hdg != 65535 else s.get('yaw_deg', 0.0)
+            # AnoCom 别名：前端只认一套字段名，双协议才能在同一个界面里工作。
+            # NED 的 z 向下，前端按"上为正"显示，这里统一翻转。
+            s['vel_n_ms'] = s['v_north_mps']
+            s['vel_e_ms'] = s['v_east_mps']
+            s['vel_up_ms'] = -s['v_down_mps']
         elif t == 'VFR_HUD':
             s['airspeed_mps'] = msg.airspeed
             s['groundspeed_mps'] = msg.groundspeed
             s['throttle_pct'] = msg.throttle
             s['baro_alt_m'] = msg.alt
+            s['alt_fu_m'] = msg.alt      # AnoCom 别名：界面"高度（融合）"
             s['climb_mps'] = msg.climb
             s['heading_deg'] = msg.heading
+        elif t == 'LOCAL_POSITION_NED':
+            # 相对位置与速度：这是前端"相对北/东""垂直速度"的直接来源。
+            # 协议里 z/vz 向下为正，界面按"上为正"显示，因此取负。
+            s['rel_n_m'] = msg.x
+            s['rel_e_m'] = msg.y
+            s['rel_h_m'] = -msg.z
+            s['vel_n_ms'] = msg.vx
+            s['vel_e_ms'] = msg.vy
+            s['vel_up_ms'] = -msg.vz
         elif t == 'RAW_IMU':
             # mG → m/s²，mrad/s → deg/s
             for i, k in enumerate(('acc_x_ms2', 'acc_y_ms2', 'acc_z_ms2')):

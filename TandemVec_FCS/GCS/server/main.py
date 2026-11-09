@@ -996,6 +996,18 @@ async def _demo_loop():
                            int(lat * 1e7), int(lon * 1e7), alt_mm,
                            90, 120, 350, 90, sats)
 
+        # 相对位置与速度（LOCAL_POSITION_NED）：前端「相对北/东」「垂直速度」
+        # 直接读这组字段。协议里 z 向下为正，这里给负值表示在上方。
+        v.local_position_ned_send(
+            ms,
+            0.5 * math.sin(0.30 * t),
+            0.5 * math.cos(0.30 * t),
+            -120.0 - 2.0 * math.sin(0.5 * t),
+            0.15 * math.cos(0.30 * t),
+            -0.15 * math.sin(0.30 * t),
+            -1.0 * math.cos(0.5 * t),
+        )
+
         # 速度/高度：与姿态同节奏，便于肉眼核对曲线关系
         v.vfr_hud_send(3.5 + 0.4 * math.sin(0.6 * t),
                        4.2 + 0.3 * math.sin(0.6 * t),
