@@ -1424,6 +1424,13 @@ async def _demo_loop():
 
     t0 = time.time()
     while True:
+        # 回放进行中就跳过本轮合成：否则演示数据和回放数据会同时写进
+        # g.hist，分析结果被两路数据污染（实测：记录 209 行的文件，回放后
+        # 历史里却有 255 点——多出来的 46 点全是演示循环偷偷推的）。
+        # 用 continue 而不是停掉任务：回放结束后自然恢复，没有"忘了重启"的风险。
+        if g.replay is not None:
+            await asyncio.sleep(0.2)
+            continue
         t = time.time() - t0
         ms = int(t * 1000) & 0xFFFFFFFF
 
