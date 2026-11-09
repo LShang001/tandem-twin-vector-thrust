@@ -442,7 +442,14 @@ def _record_hist(snap: dict, ts: float | None = None):
             dq = g.hist.get(k)
             if dq is None:
                 from collections import deque as _deque
-                dq = _deque(maxlen=4000)
+                # ★ 容量必须够装下"一次完整的回放"。原值 4000 按 200 Hz 只有
+                #   20 s，看似够；但回放是**快速灌数据**，一份 40 s 的日志就是
+                #   8000 帧，前一半会被静默挤掉——阶跃发生在开头时就再也找不到，
+                #   表现为"阶跃数 0 个"且"低频能量 0%"，两个症状同源（实测踩过，
+                #   为此查了四轮）。
+                #   20000 @ 200 Hz = 100 s；实时 50 Hz 下约 400 s，内存约
+                #   320 KB/通道，可接受。
+                dq = _deque(maxlen=20000)
                 g.hist[k] = dq
             dq.append((now, float(v)))
     except Exception:
