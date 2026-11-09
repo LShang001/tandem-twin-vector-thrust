@@ -49,6 +49,7 @@ try:
     from . import blackbox as bb
     from . import params as pm
     from .alarms import AlarmEngine
+    from .calibration import MAG_WIZARD, assess_magcal, parse_magcal_line
     from .datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from .serial_link import SerialLink, list_ports
     from .mavlink_service import MavlinkService
@@ -57,6 +58,7 @@ except ImportError:
     import blackbox as bb
     import params as pm
     from alarms import AlarmEngine
+    from calibration import MAG_WIZARD, assess_magcal, parse_magcal_line
     from datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from serial_link import SerialLink, list_ports
     from mavlink_service import MavlinkService
@@ -154,6 +156,9 @@ class GCS:
         # 调参界面必须在两种协议下都能用。每条 deque 有界，总量可控。
         self.hist = {}
         self.hist_start = time.time()
+        # 磁标定向导状态：累积固件回传的字段，供判读使用
+        self.calib = {}
+        self.calib_step = 0
         self.recorder = None
         self.replay = None               # ReplaySource（回放中）
         self.replay_task = None
@@ -400,6 +405,15 @@ def _emit_dbg_text(text: str):
     for line in text.split('\n'):
         if line.strip():
             g.send_all({'type': 'dbg_out', 'line': line})
+            # 顺手喂给校准解析器：向导不需要用户在控制台里自己找数字，
+            # 而是把这些行变成进度与判读结论。
+            try:
+                if parse_magcal_line(line, g.calib):
+                    g.send_all({'type': 'calib_state',
+                                'data': dict(g.calib),
+                                'assess': assess_magcal(g.calib)})
+            except Exception:
+                pass
 
 
 def _on_telemetry_rx(chunk: bytes):
@@ -690,6 +704,34 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
             return
         await ws.send_json({'type': 'conn', 'status': 'connected', 'port': port, 'baud': baud, 'protocol': g.protocol})
         log.info('connected %s @ %d', port, baud)
+
+    elif cmd == 'calib_wizard':
+        await ws.send_json({'type': 'calib_wizard', 'steps': MAG_WIZARD})
+
+    elif cmd == 'calib_step':
+        step_id = str(msg.get('id') or '')
+        step = next((s for s in MAG_WIZARD if s['id'] == step_id), None)
+        if step is None:
+            await ws.send_json({'type': 'log', 'level': 'error',
+                                'msg': f'未知步骤 {step_id}'})
+            return
+        # 清空上一轮累积：否则上一次的 samples 会和这一次混在一起判读
+        g.calib = {}
+        await _dbg_ensure()
+        g.dbg_cmd(step['cmd'])
+        await ws.send_json({'type': 'calib_progress', 'id': step_id,
+                            'phase': 'sent', 'cmd': step['cmd']})
+        log.info('calib step %s -> %s', step_id, step['cmd'])
+
+    elif cmd == 'calib_assess':
+        await ws.send_json({'type': 'calib_assess',
+                            'data': dict(g.calib),
+                            'assess': assess_magcal(g.calib)})
+
+    elif cmd == 'calib_reset':
+        g.calib = {}
+        await ws.send_json({'type': 'calib_state', 'data': {},
+                            'assess': assess_magcal({})})
 
     elif cmd == 'tuning_channels':
         # 列出可用于分析的通道（有足够样本的）

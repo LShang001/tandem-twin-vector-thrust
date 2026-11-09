@@ -61,6 +61,7 @@
     <button class="nav-btn" data-page="map">地图</button>
     <button class="nav-btn" data-page="alarms">报警</button>
     <button class="nav-btn" data-page="tuning">调参</button>
+    <button class="nav-btn" data-page="calib">校准</button>
     <button class="nav-btn" data-page="inspector">Inspector</button>
     <button class="nav-btn" data-page="blackbox">黑匣子</button>
     <button class="nav-btn" data-page="params">参数</button>
@@ -263,6 +264,32 @@
           </table>
         </div>
       </div>
+    </div>
+  </section>
+
+  <!-- 传感器校准向导 -->
+  <section class="page" id="page-calib">
+    <div class="calib-grid">
+      <div class="glass panel">
+        <div class="panel-title">校准向导 WIZARD
+          <span class="hint">磁罗盘：必须在地面未解锁状态下操作</span></div>
+        <div class="calib-steps" id="calibSteps"></div>
+        <div class="calib-tools">
+          <button class="btn small" id="calibReset">重置</button>
+          <button class="btn small" id="calibReassess">重新判读</button>
+        </div>
+      </div>
+      <div class="glass panel">
+        <div class="panel-title">标定数据 DATA</div>
+        <div id="calibData"></div>
+        <div class="panel-title" style="margin-top:14px">质量判读 ASSESS</div>
+        <div id="calibAssess"></div>
+      </div>
+    </div>
+    <div class="glass panel" style="margin-top:14px">
+      <div class="panel-title">固件回传 FIRMWARE OUTPUT
+        <span class="hint">只显示与磁标定相关的行</span></div>
+      <div class="calib-log" id="calibLog"></div>
     </div>
   </section>
 

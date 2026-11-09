@@ -181,6 +181,18 @@ function handleMsg(msg) {
     case 'tuning_result':
       emit('tuning-result', msg);
       break;
+    case 'calib_wizard':
+      emit('calib-wizard', msg);
+      break;
+    case 'calib_state':
+      emit('calib-state', msg);
+      break;
+    case 'calib_assess':
+      emit('calib-assess', msg);
+      break;
+    case 'calib_progress':
+      emit('calib-progress', msg);
+      break;
     case 'recordings':
       emit('recordings', msg.files || []);
       break;
@@ -241,7 +253,7 @@ function renderLinkStat(m) {
 }
 
 // ---------------- 页面路由 ----------------
-const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'alarms', 'tuning', 'inspector', 'blackbox', 'params', 'console'];
+const pages = ['dashboard', 'view3d', 'scope', 'gnss', 'map', 'alarms', 'tuning', 'calib', 'inspector', 'blackbox', 'params', 'console'];
 let activePage = 'dashboard';
 /** @brief 切换到指定页面（非法页面名忽略）
  *  @param {string} name 页面名（dashboard/scope/params/blackbox/console/view3d）
@@ -379,6 +391,7 @@ const PAGE_LOADERS = {
   map: () => import('./map.mjs'),
   alarms: () => import('./alarms.mjs'),
   tuning: () => import('./tuning.mjs'),
+  calib: () => import('./calib.mjs'),
   inspector: () => import('./inspector.mjs'),
   blackbox: () => import('./blackbox.mjs'),
   params: () => import('./params.mjs'),

@@ -698,3 +698,76 @@ body.has-alarm { padding-top: 32px; }
   color: #dbe7f5;
   font-weight: 600;
 }
+
+/* ══════════ 传感器校准向导（2026-11-10） ══════════ */
+.calib-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 14px;
+}
+.calib-steps { display: flex; flex-direction: column; gap: 8px; }
+.calib-step {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 3px solid rgba(120, 160, 255, 0.3);
+  background: rgba(18, 30, 48, 0.7);
+}
+.calib-step.cur { border-left-color: #3ea6ff; background: rgba(62, 166, 255, 0.10); }
+.calib-step.done { border-left-color: #29d3a2; }
+.calib-step-head {
+  display: flex; align-items: center; gap: 10px;
+}
+.calib-num {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #06121f; background: #8fa8c4;
+}
+.calib-step.cur .calib-num { background: #3ea6ff; }
+.calib-step.done .calib-num { background: #29d3a2; }
+.calib-title { flex: 1; font-size: 12.5px; color: #dbe7f5; }
+.calib-hint { margin-top: 5px; font-size: 11.5px; color: #8fa8c4; line-height: 1.55; }
+.calib-tools { margin-top: 12px; display: flex; gap: 8px; }
+
+.calib-kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.calib-kv-item {
+  display: flex; flex-direction: column; gap: 3px;
+  padding: 8px 10px; border-radius: 7px;
+  background: rgba(18, 30, 48, 0.8);
+}
+.calib-kv-item .k { font-size: 10.5px; color: #8fa8c4; }
+.calib-kv-item .v {
+  font-family: ui-monospace, monospace; font-size: 14px;
+  color: #dbe7f5; font-weight: 600;
+}
+.calib-verdict {
+  padding: 8px 12px; border-radius: 7px; font-size: 12.5px;
+  font-weight: 600; margin-bottom: 8px;
+}
+.calib-verdict.ok { background: rgba(41, 211, 162, 0.14); color: #29d3a2; }
+.calib-verdict.bad { background: rgba(255, 93, 108, 0.14); color: #ff5d6c; }
+.calib-check {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 8px; font-size: 11.5px;
+  border-bottom: 1px solid rgba(120, 160, 255, 0.07);
+}
+.calib-check .ck { font-weight: 700; }
+.calib-check.ok .ck { color: #29d3a2; }
+.calib-check.bad .ck { color: #ff5d6c; }
+.calib-check .cn { color: #b9cde3; min-width: 62px; }
+.calib-check .cv {
+  font-family: ui-monospace, monospace; color: #dbe7f5; min-width: 70px;
+}
+.calib-check .cm { color: #8fa8c4; flex: 1; }
+
+.calib-log {
+  height: 200px; overflow: auto;
+  font-family: ui-monospace, monospace; font-size: 11.5px;
+  line-height: 1.6; color: #b9cde3;
+  background: rgba(10, 16, 26, 0.7);
+  border-radius: 8px; padding: 8px 10px;
+}
+.calib-log-line { white-space: pre-wrap; word-break: break-all; }
+
+@media (max-width: 1000px) {
+  .calib-grid { grid-template-columns: 1fr; }
+}
