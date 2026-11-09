@@ -118,6 +118,30 @@ def _run_checks() -> int:
                     return out;
                 }''',
                 [[c, l] for c, l in TOUCH_SELECTORS])
+            # 面板「死空白」：面板底边 − 最后一个可见子元素底边。
+            # 网格把面板拉高了但内容没撑满时，仪表盘会出现大片空区——
+            # 这是"看着丑"最常见的成因，且截图缩略图看不出来，只能量。
+            dead = pg.evaluate(
+                '''() => {
+                    const out = [];
+                    document.querySelectorAll('.page.active .glass.panel').forEach(el => {
+                      const pr = el.getBoundingClientRect();
+                      let last = pr.top;
+                      for (const ch of el.children) {
+                        if (getComputedStyle(ch).display === 'none') continue;
+                        last = Math.max(last, ch.getBoundingClientRect().bottom);
+                      }
+                      const gap = Math.round(pr.bottom - last);
+                      if (gap > 40) {
+                        const cls = Array.from(el.classList).find(c => c.endsWith('-panel')) || el.className;
+                        out.push({panel: cls, gap});
+                      }
+                    });
+                    return out;
+                }''')
+            if dead:
+                print('  面板死空白偏大：' + '、'.join(f"{d['panel']} {d['gap']}px" for d in dead))
+                bad += 1
             under = [x for x in small if x['w'] < MIN_TOUCH or x['h'] < MIN_TOUCH]
             print(f'  触控尺寸（判据 {MIN_TOUCH}px）：')
             for x in small:

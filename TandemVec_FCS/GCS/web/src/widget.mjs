@@ -116,13 +116,16 @@ export function drawAttitude(cv, rollDeg, pitchDeg, headingDeg) {
     ctx.lineTo(cx + R * Math.cos(a), cy + R * Math.sin(a));
     ctx.stroke();
   }
-  // 顶部横滚指针
-  const rp = -(rollDeg || 0) * Math.PI / 180;
+  // 顶部横滚指针（小三角，指向当前滚转方向）
+  // ★ 角度必须减去 90°：canvas 的 Math.cos/sin 以 3 点钟方向为 0，而指针基准在 12 点钟。
+  //   原实现直接用 rp=-(roll) 当数学角，roll=0 时顶点落在正右方、底边朝左张开 166°，
+  //   画出一个半径 0.95R 的巨型三角盖住半个地平线——这是仪表盘"丑"的主因（2026-11-10 修）。
+  const rp = -Math.PI / 2 - (rollDeg || 0) * Math.PI / 180;
   ctx.fillStyle = '#ffd34d';
   ctx.beginPath();
-  ctx.moveTo(cx + R * Math.cos(rp) * 0.95, cy + R * Math.sin(rp) * 0.95);
-  ctx.lineTo(cx + R * Math.cos(rp + 2.9) * 0.8, cy + R * Math.sin(rp + 2.9) * 0.8);
-  ctx.lineTo(cx + R * Math.cos(rp - 2.9) * 0.8, cy + R * Math.sin(rp - 2.9) * 0.8);
+  ctx.moveTo(cx + (R - 2) * Math.cos(rp), cy + (R - 2) * Math.sin(rp));
+  ctx.lineTo(cx + (R - 14) * Math.cos(rp + 0.10), cy + (R - 14) * Math.sin(rp + 0.10));
+  ctx.lineTo(cx + (R - 14) * Math.cos(rp - 0.10), cy + (R - 14) * Math.sin(rp - 0.10));
   ctx.closePath(); ctx.fill();
 
   // 航向显示（底部）

@@ -1038,3 +1038,106 @@ body.has-alarm { padding-top: var(--alarm-h, 36px); }
     padding-bottom: 8px;
   }
 }
+
+/* ============================================================
+   仪表盘 v2 — 工程仪表风格
+   ------------------------------------------------------------
+   判据：信息分层靠「尺寸与结构」，不靠边框与玻璃模糊。
+   一级=KPI 大数字（26px）；二级=状态带/读数（14–17px）；三级=标签（10px 大写）；
+   面板之间用 1px 分隔线做「同一块仪表面板上的分区」，而不是给每个小块套卡片。
+   ============================================================ */
+
+/* ---- 顶部状态带：一行看全"这架飞机现在什么状态" ---- */
+.dash-strip { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+.dstat {
+  display: flex; align-items: center; gap: 10px; min-width: 0;
+  background: linear-gradient(180deg, rgba(24, 33, 47, 0.92), rgba(13, 19, 29, 0.92));
+  border: 1px solid var(--glass-edge); border-left: 3px solid #33465c;
+  border-radius: 6px; padding: 8px 12px;
+}
+.dstat i { flex: none; width: 9px; height: 9px; border-radius: 50%; background: #33465c; }
+.dstat .k { display: block; font-size: 10px; letter-spacing: 0.1em; color: var(--txt-dim); text-transform: uppercase; }
+.dstat b { display: block; font-family: var(--mono); font-size: 15px; font-weight: 600; color: #e8eef7; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dstat.ok { border-left-color: var(--ok); }
+.dstat.ok i { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+.dstat.warn { border-left-color: var(--warn); }
+.dstat.warn i { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+.dstat.bad { border-left-color: var(--danger); }
+.dstat.bad i { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.dstat.off { opacity: 0.5; }
+
+/* ---- 主网格：左仪表 / 中数据 / 右控制，执行器与变量通栏 ---- */
+.dash-grid {
+  display: grid; gap: 14px;
+  grid-template-columns: 340px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas:
+    "ai  hud  tvc"
+    "rc  gps  act"
+    "vars vars vars";
+}
+.ai-panel { grid-area: ai; }
+.hud-panel { grid-area: hud; }
+.tvc-panel { grid-area: tvc; }
+.gps-panel { grid-area: gps; }
+.rc-panel { grid-area: rc; }
+.act-panel { grid-area: act; }
+.vars-panel { grid-area: vars; }
+
+/* ---- 姿态：地平线 + 三轴读数 ---- */
+#cvAttitude { display: block; margin: 10px auto 4px; max-width: 100%; }
+.att-axis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: rgba(120, 160, 255, 0.10); border-top: 1px solid rgba(120, 160, 255, 0.10); }
+.att-axis > div { background: #0d131b; padding: 8px 4px; text-align: center; }
+.att-axis .k { display: block; font-size: 9px; letter-spacing: 0.12em; color: var(--txt-dim); }
+.att-axis b { font-family: var(--mono); font-size: 17px; font-weight: 600; color: var(--acc2); }
+.att-rate { text-align: center; font-family: var(--mono); font-size: 11px; color: var(--txt-dim); padding: 7px 8px 10px; }
+
+/* ---- KPI 大数字：一级信息，占最大字号 ---- */
+.kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: rgba(120, 160, 255, 0.10); }
+.kpi { background: #0d131b; padding: 11px 14px 12px; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.kpi span { font-size: 10px; letter-spacing: 0.1em; color: var(--txt-dim); text-transform: uppercase; }
+.kpi b { font-family: var(--mono); font-size: 26px; font-weight: 600; line-height: 1.1; color: #f2f7ff; font-variant-numeric: tabular-nums; }
+.kpi i { font-style: normal; font-size: 10px; color: #4b5a6e; }
+
+/* ---- 姿态跟踪：指令 / 实际 / 误差 三列对齐，误差按超差着色 ---- */
+.track-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 11px 14px 7px; font-size: 10px; letter-spacing: 0.12em; color: var(--txt-dim); border-top: 1px solid var(--glass-edge); }
+.track-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: rgba(120, 160, 255, 0.10); }
+.tk { background: #0d131b; padding: 7px 13px 9px; }
+.tk .k { display: block; font-size: 10px; color: var(--txt-dim); }
+.tk b { font-family: var(--mono); font-size: 15px; color: #dbe4f0; font-variant-numeric: tabular-nums; }
+.tk b.err.ok { color: var(--ok); }
+.tk b.err.warn { color: var(--warn); }
+.tk b.err.bad { color: var(--danger); }
+
+/* ---- 执行器：无该链路数据时给一句人话，不留空仪表和 "--" ---- */
+.act-nodata { display: none; padding: 26px 16px; text-align: center; font-size: 12px; color: var(--txt-dim); }
+.act-body.no-data { display: block; }
+.act-body.no-data .act-dials,
+.act-body.no-data .act-bars-wrap,
+.act-body.no-data .act-sats { display: none; }
+.act-body.no-data .act-nodata { display: block; }
+.act-bars-wrap { display: flex; flex-direction: column; }
+
+@media (max-width: 1200px) {
+  .dash-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dash-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "ai  hud"
+      "tvc gps"
+      "rc  act"
+      "vars vars";
+  }
+}
+@media (max-width: 900px) {
+  .dash-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dash-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "ai" "hud" "tvc" "gps" "rc" "act" "vars"; }
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi b { font-size: 22px; }
+}
+
+/* ---- 面板高度：不在面板内部堆空白，让每块只占自己内容的高度 ---- */
+.dash-grid { align-items: start; }
+.rc-nodata { display: none; padding: 22px 16px; text-align: center; font-size: 12px; color: var(--txt-dim); }
+.rc-panel .panel-title { margin-bottom: 0; }
+/* 变量面板同理：无变量时只剩一行提示，不撑满一整块 */
+.vars-panel .vars-empty { padding: 18px 0; }

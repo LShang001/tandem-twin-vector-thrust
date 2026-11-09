@@ -1495,6 +1495,17 @@ async def _demo_loop():
                        int((25.0 * math.sin(0.12 * t)) % 360),
                        78, 120.0 + 2.0 * math.sin(0.5 * t), 0.4)
 
+        # 心跳与系统状态：真实飞控（ArduPilot/PX4）都持续上报这两帧。
+        # 不补的话演示模式下「模式/解锁/电池」三块永远是空的，那三条 UI 链路
+        # 就从未被验证过——演示模式的价值就是让这些链路真的跑起来。
+        v.heartbeat_send(2, 3,   # MAV_TYPE_QUADROTOR, MAV_AUTOPILOT_ARDUPILOTMEGA
+                         128 if (int(t) % 40) < 30 else 0,   # base_mode bit7=已解锁，周期切换
+                         4,        # custom_mode = GUIDED
+                         4)        # MAV_STATE_ACTIVE
+        v.sys_status_send(0, 0, 0, 450,
+                          22200 - int(150 * math.sin(0.1 * t)),   # 电压 mV（缓慢变化）
+                          1500, 78, 0, 0, 0, 0, 0, 0)
+
         if buf:
             _on_telemetry_rx(bytes(buf))
             buf.clear()

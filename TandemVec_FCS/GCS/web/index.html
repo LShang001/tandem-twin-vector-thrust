@@ -100,39 +100,55 @@
         </div>
       </div>
     </div>
+
+    <!-- 顶部状态带：一眼看全「这架飞机现在什么状态」，不占用面板布局 -->
+    <div class="dash-strip" id="dashStrip">
+      <div class="dstat" id="stProto"><i></i><div><span class="k">链路协议</span><b>--</b></div></div>
+      <div class="dstat" id="stMode"><i></i><div><span class="k">飞行模式</span><b>--</b></div></div>
+      <div class="dstat" id="stArm"><i></i><div><span class="k">解锁状态</span><b>--</b></div></div>
+      <div class="dstat" id="stGps"><i></i><div><span class="k">定位</span><b>--</b></div></div>
+      <div class="dstat" id="stFusion"><i></i><div><span class="k">机载健康</span><b>--</b></div></div>
+      <div class="dstat" id="stLink"><i></i><div><span class="k">遥测</span><b>--</b></div></div>
+    </div>
+
     <div class="dash-grid">
       <div class="glass panel ai-panel">
-        <div class="panel-title">人工地平线 ATTITUDE</div>
+        <div class="panel-title">姿态 ATTITUDE</div>
         <canvas id="cvAttitude" width="360" height="360"></canvas>
-        <div class="att-readout" id="attReadout">--° / --° / --°</div>
+        <div class="att-axis">
+          <div><span class="k">ROLL</span><b id="attRoll">--</b></div>
+          <div><span class="k">PITCH</span><b id="attPitch">--</b></div>
+          <div><span class="k">HEADING</span><b id="attHead">--</b></div>
+        </div>
+        <div class="att-rate" id="attRate">角速率 --</div>
       </div>
+
       <div class="glass panel hud-panel">
-        <div class="panel-title">飞行数据 HUD</div>
-        <div class="hud-kv">
-          <div class="kv"><span>空速 V</span><b id="hudSpeed">--</b><i>m/s</i></div>
-          <div class="kv"><span>垂直速度</span><b id="hudVspeed">--</b><i>m/s</i></div>
-          <div class="kv"><span>高度（融合）</span><b id="hudAlt">--</b><i>m</i></div>
-          <div class="kv"><span>相对北 / 东</span><b id="hudPos">--</b><i>m</i></div>
-          <div class="kv"><span>油门</span><b id="hudThr">--</b><i>%</i></div>
-          <div class="kv"><span>电池电压</span><b id="hudBat">--</b><i>V</i></div>
-          <div class="kv"><span>目标姿态 R/P</span><b id="hudTar">--</b><i>°</i></div>
+        <div class="panel-title">飞行数据 FLIGHT DATA</div>
+        <div class="kpi-grid">
+          <div class="kpi"><span>地速</span><b id="kSpeed">--</b><i>m/s</i></div>
+          <div class="kpi"><span>垂直速度</span><b id="kVspeed">--</b><i>m/s</i></div>
+          <div class="kpi"><span>高度</span><b id="kAlt">--</b><i>m</i></div>
+          <div class="kpi"><span>油门</span><b id="kThr">--</b><i>%</i></div>
+          <div class="kpi"><span>电池</span><b id="kBat">--</b><i>V</i></div>
+          <div class="kpi"><span>位移 N/E</span><b id="kPos">--</b><i>m</i></div>
         </div>
-        <div class="status-row" id="statusRow">
-          <div class="status-chip" id="chipMode"><i class="dot"></i><span>模式 --</span></div>
-          <div class="status-chip" id="chipUnlock"><i class="dot"></i><span>锁定</span></div>
-          <div class="status-chip" id="chipGps"><i class="dot"></i><span>GPS --</span></div>
-          <div class="status-chip" id="chipFusion"><i class="dot"></i><span>融合 --</span></div>
-          <div class="status-chip" id="chipDeta"><i class="dot"></i><span>DETA100 --</span></div>
+        <div class="track-head">姿态跟踪 TRACKING <span class="hint" id="trackHint">等待指令帧</span></div>
+        <div class="track-grid">
+          <div class="tk"><span class="k">Roll 指令</span><b id="tkRollCmd">--</b></div>
+          <div class="tk"><span class="k">Roll 实际</span><b id="tkRollAct">--</b></div>
+          <div class="tk"><span class="k">误差</span><b id="tkRollErr" class="err">--</b></div>
+          <div class="tk"><span class="k">Pitch 指令</span><b id="tkPitchCmd">--</b></div>
+          <div class="tk"><span class="k">Pitch 实际</span><b id="tkPitchAct">--</b></div>
+          <div class="tk"><span class="k">误差</span><b id="tkPitchErr" class="err">--</b></div>
         </div>
       </div>
-      <div class="glass panel rc-panel">
-        <div class="panel-title">遥控通道 RC</div>
-        <div id="rcBars"></div>
-      </div>
+
       <div class="glass panel tvc-panel">
-        <div class="panel-title">控制输出 CONTROL</div>
+        <div class="panel-title">控制输出 CONTROL <span class="hint" id="ctrlHint"></span></div>
         <div id="ctrlBars"></div>
       </div>
+
       <div class="glass panel gps-panel">
         <div class="panel-title">GNSS</div>
         <div class="gps-readout" id="gpsReadout">
@@ -141,30 +157,38 @@
           <div class="kv"><span>经度</span><b id="gpsLon">--</b></div>
           <div class="kv"><span>纬度</span><b id="gpsLat">--</b></div>
           <div class="kv"><span>高度(大地)</span><b id="gpsAlt">--</b></div>
-          <div class="kv"><span>PDOP</span><b id="gpsPdop">--</b></div>
+          <div class="kv"><span id="gpsAccLabel">PDOP</span><b id="gpsPdop">--</b></div>
         </div>
       </div>
 
-      <!-- 执行器输出（AnoCom 0xF1 自定义帧：TVC 摆角 + 电机推力 + 差速 + 饱和标记） -->
+      <div class="glass panel rc-panel">
+        <div class="panel-title">遥控通道 RC</div>
+        <div id="rcBars"></div>
+        <div class="rc-nodata" id="rcNoData">当前链路不上报遥控通道</div>
+      </div>
+
+      <!-- 执行器输出：AnoCom 机型帧（0xF1）有专有字段时才显示仪表；
+           通用 MAVLink 链路不报执行器状态，改为提示文字，不显示假数据 -->
       <div class="glass panel act-panel">
-        <div class="panel-title">执行器 ACTUATOR <span class="hint">0xF1 帧 · 摆角限幅 ±15° · 箭头方向=摆角，长度=推力</span></div>
-        <div class="act-body">
-          <div class="act-dials">
+        <div class="panel-title">执行器 ACTUATOR <span class="hint" id="actHint">--</span></div>
+        <div class="act-body" id="actBody">
+          <div class="act-dials" id="actDials">
             <div class="act-dial">
               <canvas id="cvTvcFront" width="200" height="124"></canvas>
-              <div class="act-caption" id="tvcFrontText">δf --° · --%</div>
+              <div class="act-caption" id="tvcFrontText">--</div>
             </div>
             <div class="act-dial">
               <canvas id="cvTvcRear" width="200" height="124"></canvas>
-              <div class="act-caption" id="tvcRearText">δt --° · --%</div>
+              <div class="act-caption" id="tvcRearText">--</div>
             </div>
           </div>
-          <div class="act-bars" id="actBars"></div>
-          <div class="act-sats">
-            <div class="status-chip" id="satDf"><i class="dot"></i><span>δf 饱和</span></div>
-            <div class="status-chip" id="satDt"><i class="dot"></i><span>δt 饱和</span></div>
-            <div class="status-chip" id="satDw"><i class="dot"></i><span>Δω 饱和</span></div>
+          <div class="act-bars-wrap" id="actBars"></div>
+          <div class="act-sats" id="actSats">
+            <div class="status-chip" id="satDf"><i class="dot"></i><span>通道 1 饱和</span></div>
+            <div class="status-chip" id="satDt"><i class="dot"></i><span>通道 2 饱和</span></div>
+            <div class="status-chip" id="satDw"><i class="dot"></i><span>通道 3 饱和</span></div>
           </div>
+          <div class="act-nodata" id="actNoData">当前链路不上报执行器状态</div>
         </div>
       </div>
 
@@ -172,7 +196,7 @@
       <div class="glass panel vars-panel">
         <div class="panel-title">变量监视 VARS <span class="hint">0xF2 帧 · CLI vars watch 配置 · 上限 16</span></div>
         <div class="vars-body" id="varsBody">
-          <div class="vars-empty" id="varsEmpty">无上报变量 — 用 CLI 配置:<br><code>tvc-cli vars watch wf_est adps2_x</code></div>
+          <div class="vars-empty" id="varsEmpty">无上报变量 — 用 CLI 配置:<br><code>gcs-cli vars watch wf_est adps2_x</code></div>
         </div>
       </div>
     </div>
