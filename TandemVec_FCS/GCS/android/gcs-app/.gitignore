@@ -7,3 +7,5 @@ app/build/
 # 只忽略"同步进来的副本"，保留手写的 Python 入口
 app/src/main/python/server/
 app/src/main/python/web/
+# pymavlink 是第三方源码的同步副本，由 sync-src.py 从 site-packages 复制
+app/src/main/python/pymavlink/
