@@ -87,6 +87,7 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         # 2026-11-10 加：前面十几轮的功能验证一直是"起服务开浏览器点一遍"，
         # 一旦某轮改动把某页或某条 WS 命令弄坏，只有下次恰好点到才发现。
         # 约 8 s，放进快档。
+        ("GCS 能力清单", [PY, str(ROOT / "tools" / "check-gcs-caps.py")], ROOT),
         ("GCS 冒烟", [PY, str(ROOT / "tools" / "gcs_smoke.py")], ROOT),
         # 平板可点性：CSS 改动很容易把控件缩回 24px 而没人发现，
         # 这条把它钉住（脚本自己起服务、自己关）。

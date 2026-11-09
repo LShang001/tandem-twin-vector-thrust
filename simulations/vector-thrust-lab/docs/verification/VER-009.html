@@ -138,7 +138,7 @@ hover+manual）</td>
 <td>① <code>max_desc_vz_down &lt; 0.6 m/s</code> ②
 <code>final_alt &gt; 0.85×目标</code> ③ <code>land_t &lt; 0</code> ④
 <code>gnss_crej == 0</code></td>
-<td><strong>27/27 通过</strong>：max_desc 0.000–0.354 m/s、达成率
+<td><strong>27/28 通过</strong>：max_desc 0.000–0.354 m/s、达成率
 ≥91.8%、全部未触地、GNSS 拒绝全 0</td>
 </tr>
 <tr>
@@ -1506,12 +1506,12 @@ SIL 里 plant
 次野值拒绝）， <code>resets=0</code>、<code>imu_det=0</code>。</li>
 </ul>
 </blockquote>
-<h2 id="216-守卫全景2026-11-10全量-27-项全绿">2.16
-守卫全景（2026-11-10，全量 27 项全绿）</h2>
+<h2 id="216-守卫全景2026-11-10全量-28-项全绿">2.16
+守卫全景（2026-11-10，全量 28 项全绿）</h2>
 <p><code>verify-all.py --include-sil --include-host</code>
 的完整清单。<strong>这是项目的验证全景</strong>——
 想知道「这个仓现在被哪些手段守着」，看这张表就够。</p>
-<h3 id="快档25-项约-45-s">快档（25 项，约 45 s）</h3>
+<h3 id="快档26-项约-46-s">快档（26 项，约 46 s）</h3>
 <table>
 <thead>
 <tr>
@@ -1652,7 +1652,7 @@ SIL 里 plant
 </tr>
 </tbody>
 </table>
-<p><strong>能失败验证情况：22/27 做过违规实验</strong>（另有
+<p><strong>能失败验证情况：22/28 做过违规实验</strong>（另有
 <code>run_real_acceptance</code> 单体验过）。 做过违规实验的 14 项明细见
 §2.16 的上一张表；<strong>本节只列没做的 8 项</strong>，
 逐条写明为什么不验。</p>
@@ -2433,7 +2433,7 @@ TandemVec_Config.h 重编译。</li>
 <tr>
 <td>故障保护 / 超时 / 降级</td>
 <td><code>test_failsafe_plan.cpp</code>（576 组真值表）+
-<code>run_failsafe_matrix.sh</code>（27/27）</td>
+<code>run_failsafe_matrix.sh</code>（27/28）</td>
 <td>强</td>
 </tr>
 <tr>
@@ -2724,7 +2724,7 @@ Node），改公式风险高，未构造违规；机制上比静态检查更可�
 </tr>
 </tbody>
 </table>
-<p><strong>当前基线（2026-11-10）</strong>：25 项快档守卫 + 三机型 SIL
+<p><strong>当前基线（2026-11-10）</strong>：26 项快档守卫 + 三机型 SIL
 跑批 + 完整宿主回归</p>
 <ul>
 <li>完整宿主回归（324.6 s）。</li>
@@ -2863,5 +2863,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href=
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-09 23:22</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 01:17</footer></article></body>
 </html>

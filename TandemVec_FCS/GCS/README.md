@@ -1,3 +1,8 @@
+
+> 局域网（平板/手机）访问：`py -3.12 app.py --lan`，启动时会打印可访问地址。
+> 调试接口：`GET /api/caps` 列出全部能力；`py -3.12 tools/gcs_ctl.py caps`。
+> 扩展方法见 `TandemVec_FCS/GCS/docs/GCS-扩展指南.md`。
+
 # TandemVec GCS — 纵列双发矢量推力飞行器地面站
 
 实机飞控（TandemVec_FCS）配套上位机：Python 后端 + Web 前端，串口走 **AnoCom 匿名地面站协议**（与官方 Ano 上位机生态兼容，同一飞控两套上位机可换用）。

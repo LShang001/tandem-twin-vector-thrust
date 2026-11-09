@@ -40,7 +40,8 @@ import threading
 import time
 import urllib.request
 
-HOST = '127.0.0.1'
+HOST = '127.0.0.1'          # 默认只绑本机：不主动把飞控控制面暴露到局域网
+LAN_HOST = '0.0.0.0'       # --lan 时绑全网卡：平板/手机通过局域网访问同一个界面
 DEFAULT_PORT = 8091
 
 log = logging.getLogger('gcs-app')
@@ -85,12 +86,49 @@ def start_server(port: int):
     return server, th
 
 
+def lan_urls(port: int) -> list[str]:
+    """@brief 枚举本机所有可用于局域网访问的地址
+    @return 形如 ['http://192.168.0.208:8091/']
+    @note 为什么枚举而不是猜：一台机器常有多个网卡（有线/无线/WireGuard），
+          用户不知道自己平板上该输哪个。全列出来，让用户直接试。
+          UDP connect 只用来让系统选出主路由网卡的地址，不发包。
+    """
+    out = []
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(('8.8.8.8', 80))
+            out.append(s.getsockname()[0])
+        finally:
+            s.close()
+    except Exception:
+        pass
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if ip not in out and not ip.startswith('127.'):
+                out.append(ip)
+    except Exception:
+        pass
+    return [f'http://{ip}:{port}/' for ip in out]
+
+
 def main():
     """@brief 解析参数并启动桌面窗口/浏览器（阻塞到窗口关闭后停后端）"""
     ap = argparse.ArgumentParser(description='UniGNC GCS 桌面启动器')
     ap.add_argument('--port', type=int, default=DEFAULT_PORT)
     ap.add_argument('--browser', action='store_true', help='强制系统浏览器模式（不用原生窗口）')
+    ap.add_argument('--lan', action='store_true',
+                    help='允许局域网访问（平板/手机用 http://<本机IP>:端口 打开同一个界面）')
+    ap.add_argument('--host', default=None,
+                    help='显式指定绑定地址（默认 127.0.0.1；--lan 等价于 0.0.0.0）')
     args = ap.parse_args()
+
+    global HOST
+    if args.host:
+        HOST = args.host
+    elif args.lan:
+        HOST = LAN_HOST
 
     if not port_free(args.port):
         if not _ensure_fresh_backend(args.port):
@@ -104,6 +142,14 @@ def main():
         server.should_exit = True
         sys.exit(1)
     print(f'[GCS] 后端已启动 {url}（关闭窗口即停止服务）')
+    if HOST not in ('127.0.0.1', 'localhost'):
+        urls = lan_urls(args.port)
+        print('[GCS] 局域网访问已开启，平板/手机用下面任一地址打开（同一 WiFi/网段）：')
+        for u in urls:
+            print(f'         {u}')
+        if not urls:
+            print('         （未检测到非回环地址，检查网络连接）')
+        print('[GCS] 提醒：此时局域网内任何设备都能看到遥测并操作连接/参数，不要在不可信网络开启。')
 
     try:
         _open_window(url, args.browser)

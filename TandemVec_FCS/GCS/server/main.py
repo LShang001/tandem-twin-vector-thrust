@@ -48,11 +48,13 @@ from fastapi.staticfiles import StaticFiles
 try:
     from . import anocom
     from . import blackbox as bb
+    from . import caps
     from . import params as pm
     from .alarms import AlarmEngine
     from .calibration import MAG_WIZARD, assess_magcal, parse_magcal_line
     from .datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from .serial_link import SerialLink, list_ports
+    from .udp_link import open_link
     from .mavlink_service import MavlinkService
 except ImportError:
     import anocom
@@ -62,6 +64,7 @@ except ImportError:
     from calibration import MAG_WIZARD, assess_magcal, parse_magcal_line
     from datalog import CsvRecorder, ReplaySource, TlogReplaySource, list_recordings
     from serial_link import SerialLink, list_ports
+    from udp_link import open_link
     from mavlink_service import MavlinkService
 
 log = logging.getLogger('gcs')
@@ -204,14 +207,18 @@ class GCS:
         # 幂等：同一端口/协议/波特率已连接时直接复用，避免多标签页或重复点击
         # 的第二次 connect 把第一次的串口会话断开。
         protocol = protocol if protocol in ('anocom', 'mavlink') else 'anocom'
+        is_udp = isinstance(port, str) and port.lower().startswith('udp:')
         if (self.link and self.link.is_open and
                 getattr(self.link, 'port', None) == port and
-                getattr(self.link, 'baud', None) == baud and
+                # UDP 没有波特率概念，比 baud 会让同一端点每次都被判成"变了"而重连
+                (is_udp or getattr(self.link, 'baud', None) == baud) and
                 self.protocol == protocol):
             return
         self.disconnect()
         self.protocol = protocol
-        self.link = SerialLink(port, baud, self._on_rx)
+        # 链路类型按端点描述自动选择（串口 / UDP）——上层不关心底层是线还是网，
+        # 因此遥测解析、参数、DBG 全部代码对两种链路完全同一份。
+        self.link = open_link(port, baud, self._on_rx)
         self.link.connect()
         self.mav = MavlinkService() if self.protocol == 'mavlink' else None
         self.tele_buf.clear()
@@ -768,6 +775,11 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         ch = str(msg.get('channel') or '')
         nperseg = int(msg.get('nperseg') or 256)
         dq = g.hist.get(ch)
+        # 窗长随数据量自适应：分段平均至少要 2 段窗长，而刚连上时缓冲里只有
+        # 一两百点，按默认 256 会一直报"样本不足"——这条命令就没法用来调。
+        # 下限 32：再小频率分辨率没有参考价值。
+        if dq is not None and len(dq) < nperseg * 2:
+            nperseg = max(32, len(dq) // 2)
         if dq is None or len(dq) < 64:
             await ws.send_json({'type': 'spectrum', 'channel': ch,
                                 'ok': False, 'reason': f'通道 {ch} 样本不足'})
@@ -784,6 +796,9 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
     elif cmd == 'spectrum_multi':
         names = msg.get('channels') or []
         nperseg = int(msg.get('nperseg') or 256)
+        _lens = [len(g.hist[n]) for n in names if n in g.hist]
+        if _lens and min(_lens) < nperseg * 2:
+            nperseg = max(32, min(_lens) // 2)     # 以最短通道为准，否则它必然报不足
         chans = {}
         for n in names:
             dq = g.hist.get(n)
@@ -804,7 +819,12 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         hop = int(msg.get('hop') or 64)
         max_cols = int(msg.get('max_cols') or 160)
         dq = g.hist.get(ch)
-        if dq is None or len(dq) < 128:
+        # 时频图至少要装下一个窗 + 一帧移；数据短时同时收窗长与帧移，
+        # 否则"刚连上就问时频图"永远无结果。
+        if dq is not None and len(dq) < nperseg + hop:
+            nperseg = max(16, len(dq) // 2)
+            hop = max(8, nperseg // 2)
+        if dq is None or len(dq) < 32:
             await ws.send_json({'type': 'spectrogram', 'channel': ch,
                                 'ok': False, 'reason': f'通道 {ch} 样本不足'})
             return
@@ -1697,6 +1717,73 @@ def download(name: str):
     if not p.exists():
         return JSONResponse({'error': 'not found'}, status_code=404)
     return FileResponse(str(p), filename=safe)
+
+
+
+# ========================================================================
+#  调试 / 自动化 API
+#  为什么有这一层：界面上能做的每件事，都应该能被一条 HTTP 或一条命令行调用，
+#  否则"自动化测试"和"agent 自行调试"就只能靠模拟点击。这里不新增业务逻辑——
+#  全部复用 handle_ws_message，保证 API 与界面走的是同一条路径（同一条路径才不会
+#  出现"界面能改、脚本改不了"或反之的分叉）。
+# ========================================================================
+class _Collector:
+    """@brief 假 WebSocket：把 send_json 收集成列表，供 HTTP 同步返回
+    @note  handle_ws_message 只用到 ws.send_json 这一个方法，所以适配器只需它。
+    """
+    __slots__ = ('msgs',)
+
+    def __init__(self):
+        self.msgs: list[dict] = []
+
+    async def send_json(self, obj):
+        self.msgs.append(obj)
+
+
+@app.get('/api/caps')
+def api_caps():
+    """@brief 能力清单（机器可读）：模块、命令、参数、回复类型、是否只读"""
+    return caps.as_dict()
+
+
+@app.get('/api/snap')
+def api_snap():
+    """@brief 当前遥测快照（一次性拉取，不订阅）
+    @note  与 WS 的 telemetry 推送是同一份 g.snap，所以字段完全一致。
+    """
+    return {
+        'connected': bool(g.link and g.link.is_open),
+        'protocol': g.protocol,
+        'mode': g.mode,
+        'n_fields': len(g.snap),
+        'snap': g.snap,
+        'link': (g.link.info() if hasattr(g.link, 'info') and g.link else None),
+    }
+
+
+@app.post('/api/cmd')
+async def api_cmd(payload: dict):
+    """@brief 执行任意 WS 命令并同步返回它产生的回复消息
+    @param payload 与 WS 命令同形，如 {"cmd":"spectrum","channel":"pitch_deg"}
+    @return {"ok":bool, "cmd":str, "replies":[与界面收到的完全相同的消息]}
+    @note  有副作用的命令（改参数/重启/解锁）也会真的执行——这是给自动化用的
+           能力，不做二次拦截；但 caps 里标了 readonly 供调用方自行约束。
+    """
+    if not isinstance(payload, dict) or 'cmd' not in payload:
+        return JSONResponse({'ok': False, 'error': "缺少 cmd 字段"}, status_code=400)
+    name = str(payload.get('cmd'))
+    known = caps.all_cmds()
+    if name not in known:
+        return JSONResponse({'ok': False, 'error': f'未知命令 {name}',
+                             'hint': '用 GET /api/caps 查可用命令'}, status_code=400)
+    col = _Collector()
+    try:
+        await handle_ws_message(col, payload)
+    except Exception as exc:                     # 命令内部异常不该变成 500
+        return JSONResponse({'ok': False, 'cmd': name, 'error': str(exc)},
+                            status_code=200)
+    return {'ok': True, 'cmd': name, 'module': known[name]['module'],
+            'replies': col.msgs}
 
 
 # 静态前端（开发阶段禁用缓存：浏览器刷新即取最新 JS，避免改代码后白屏）
