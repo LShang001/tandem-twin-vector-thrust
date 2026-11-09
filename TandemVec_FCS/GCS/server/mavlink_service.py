@@ -76,6 +76,15 @@ class MavlinkService:
         # MAVLink 任务协议是请求-应答式的：GCS 发 MISSION_COUNT，飞控逐条
         # 回 MISSION_REQUEST_INT 要第 N 条，GCS 再发该条，最后飞控回 MISSION_ACK。
         # 所以必须保存待发列表与进度，等对端来"拉"，不能一次性推完。
+        # ---- 多机：按 sysid 分快照 ----
+        # 一条链路可能是多机共用（同一 MAVLink 网络上多台），所以按源 sysid
+        # 分开存。active_sys 是界面当前选中的那台，self.snap 始终指向它，
+        # 这样所有既有视图（仪表盘/曲线/GNSS/map）都不用改就支持多机切换。
+        self.snaps: dict[int, dict] = {}
+        self.snap_ts: dict[int, float] = {}
+        self.active_sys = 0
+        self.sys_seen: set[int] = set()
+
         self.mission_items: list[dict] = []
         self.mission_ack: int | None = None
         self.mission_phase = 'idle'   # idle | count_sent | uploading | done
@@ -135,7 +144,22 @@ class MavlinkService:
 
     def _handle(self, msg):
         t = msg.get_type()
-        s = self.snap
+        try:
+            sysid = int(msg.get_srcSystem())
+        except Exception:
+            sysid = 0
+        if sysid not in self.snaps:
+            self.snaps[sysid] = {}
+            self.snap_ts[sysid] = 0.0
+        self.sys_seen.add(sysid)
+        s = self.snaps[sysid]
+        self.snap_ts[sysid] = time.time()
+        # 第一台自动选中；后续切换由界面控制（见 select_vehicle）
+        if not self.active_sys:
+            self.active_sys = sysid
+            self.snap = s
+        elif sysid == self.active_sys:
+            self.snap = s
 
         # Inspector 采集：字段值 + 历史。只收数值字段（bool 会把 True 当 1 混进来，
         # 曲线里没有意义，单独在列表里显示原值即可）。
@@ -394,6 +418,30 @@ class MavlinkService:
 
     def request_autopilot_version(self):
         self.command_long(520)
+
+    def vehicles(self) -> list[dict]:
+        """@brief 已知的机号列表（含最后活跃时间与是否当前选中）"""
+        now = time.time()
+        out = []
+        for sid, snap in self.snaps.items():
+            out.append({
+                'sysid': sid,
+                'active': sid == self.active_sys,
+                'age_s': round(now - self.snap_ts.get(sid, 0.0), 2),
+                'fields': len(snap),
+            })
+        return sorted(out, key=lambda x: x['sysid'])
+
+    def select_vehicle(self, sysid: int) -> bool:
+        """@brief 切换界面选中的机；不存在返回 False
+        @note  切换后 self.snap 指向新机，所有既有视图在下一帧就渲染新机的数据，
+               不需要各视图自己处理机号。
+        """
+        if sysid not in self.snaps:
+            return False
+        self.active_sys = sysid
+        self.snap = self.snaps[sysid]
+        return True
 
     def mission_request_list(self):
         self.mav.mission_request_list_send(self.target_sys, self.target_comp)

@@ -201,6 +201,15 @@ class AlarmEngine:
             del self.events[:len(self.events) - MAX_EVENTS]
         return out
 
+    def reset(self):
+        """@brief 清空引擎状态（切机时用）
+        @note  活动告警也必须清——上一台机的欠压告警对新选中的机不成立，
+               留着会造成误判。
+        """
+        self.active.clear()
+        self.events.clear()
+        self._last_push.clear()
+
     def snapshot(self) -> dict:
         """@brief 当前状态：活动告警 + 最近事件 + 规则说明"""
         return {

@@ -175,6 +175,12 @@ function handleMsg(msg) {
     case 'alarm_state':
       emit('alarm-state', msg);
       break;
+    case 'vehicles':
+      emit('vehicles', msg);
+      break;
+    case 'vehicle_selected':
+      emit('vehicle-selected', msg);
+      break;
     case 'tuning_channels':
       emit('tuning-channels', msg);
       break;
@@ -432,6 +438,25 @@ switchPage('dashboard');
 loadPageModule('alarms');
 // 布局要在仪表盘渲染前应用，否则会先按默认顺序画一遍再跳位（肉眼可见的闪动）
 loadPageModule('layout');
+
+// 多机：机号列表与切换。单串口只能连一台机，但一条 MAVLink 网络/链路
+// 可以承载多台，按 sysid 区分；只有一台时选择器隐藏，不给界面添乱。
+bus.addEventListener('vehicles', (e) => {
+  const sel = document.getElementById('vehSelect');
+  const wrap = document.getElementById('vehPicker');
+  if (!sel || !wrap) return;
+  const list = (e.detail || {}).vehicles || [];
+  wrap.style.display = list.length > 1 ? '' : 'none';
+  sel.innerHTML = list.map((v) =>
+    `<option value="${v.sysid}">${v.sysid}${v.active ? ' ●' : ''}</option>`).join('');
+  const active = list.find((v) => v.active);
+  if (active) sel.value = String(active.sysid);
+});
+document.getElementById('vehSelect')?.addEventListener('change', (ev) => {
+  send({ cmd: 'vehicle_select', sysid: Number(ev.target.value) });
+});
+// 定期刷新：新机上线/离线要能反映出来
+setInterval(() => send({ cmd: 'vehicles' }), 3000);
 setInterval(refreshPorts, 15000);  // 周期刷新端口列表
 
 // load 事件兜底（若在 load 前执行则提前隐藏 loader）

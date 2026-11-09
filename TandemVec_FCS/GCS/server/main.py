@@ -556,6 +556,8 @@ async def _stat_loop():
             'tele_s': cur[3] - prev[3],
             'tele_age_s': round(tele_age, 1) if tele_age is not None else None,
             'fields': len(g.snap),
+            'sysid': (g.mav.active_sys if g.mav is not None else None),
+            'n_vehicles': (len(g.mav.snaps) if g.mav is not None else 0),
             # 任务上传是请求-应答式，状态必须回传给界面，否则用户不知道
             # 卡在"等飞控来拉"还是"飞控已拒绝"
             'mission': ({
@@ -771,6 +773,25 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
     elif cmd == 'alarm_clear_events':
         g.alarms.clear_events()
         await ws.send_json({'type': 'alarm_state', **g.alarms.snapshot()})
+
+    elif cmd == 'vehicles':
+        await ws.send_json({
+            'type': 'vehicles',
+            'vehicles': (g.mav.vehicles() if g.mav is not None else []),
+        })
+
+    elif cmd == 'vehicle_select':
+        sysid = int(msg.get('sysid') or 0)
+        ok = (g.mav is not None and g.mav.select_vehicle(sysid))
+        if ok:
+            # 清空旧机的通用状态：hist/calib 都是按"当前机"累积的，
+            # 不清会让切换后的曲线里混进上一台的数据
+            g.hist = {}
+            g.hist_start = time.time()
+            g.calib = {}
+            g.alarms.reset()
+            g.snap = dict(g.mav.snap)
+        await ws.send_json({'type': 'vehicle_selected', 'sysid': sysid, 'ok': ok})
 
     elif cmd == 'mission_upload':
         if g.mav is None:
@@ -1232,6 +1253,11 @@ async def _demo_loop():
         v.gps_raw_int_send(ms * 1000, 3,
                            int(lat * 1e7), int(lon * 1e7), alt_mm,
                            90, 120, 350, 90, sats)
+
+        # 多机演示：交替用 sysid 1 / 2 发送，模拟一条链路承载两台机。
+        # 这样顶栏的机号选择器会出现，切换后各视图数据确实换成另一台——
+        # 单机演示无法验证多机链路是否真的按 sysid 分离。
+        v.srcSystem = 1 + (int(t * 10) % 2)
 
         # 目标姿态：方波指令（3 s 一个平台），供调参页做阶跃响应分析。
         # 没有这段，调参页在演示模式下永远是"没有可评估的阶跃"，

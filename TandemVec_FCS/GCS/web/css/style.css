@@ -880,3 +880,39 @@ body.has-alarm { padding-top: 32px; }
   color: #8fd4ff;
   word-break: break-all;
 }
+
+/* ══════════ 多机机号选择（2026-11-10） ══════════ */
+.veh-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #8fa8c4;
+}
+.veh-picker select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: rgba(18, 30, 48, 0.9);
+  color: #dbe7f5;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+
+/* ══════════ 多机机号选择（2026-11-10） ══════════ */
+.veh-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #8fa8c4;
+}
+.veh-picker select {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 160, 255, 0.25);
+  background: rgba(18, 30, 48, 0.9);
+  color: #dbe7f5;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}

@@ -51,6 +51,11 @@
       <option value="115200">115 200</option>
     </select>
     <button id="btnConnect" class="btn primary">连接</button>
+    <!-- 多机：单串口只能连一台，但一条 MAVLink 链路可承载多台，按 sysid 区分 -->
+    <label class="veh-picker" id="vehPicker" style="display:none" title="多机：按 MAVLink sysid 区分">
+      <span>机号</span>
+      <select id="vehSelect"></select>
+    </label>
     <div class="link-led" id="linkLed" title="串口链路状态">●</div>
     <div class="link-info" id="linkInfo">未连接</div>
     <div class="link-stat" id="linkStat" title="链路健康：接收速率 · 完整帧率 · CRC失败率"></div>
