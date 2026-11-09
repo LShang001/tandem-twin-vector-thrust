@@ -199,6 +199,9 @@ function handleMsg(msg) {
     case 'scope_history':
       emit('scope-history', msg);
       break;
+    case 'scope_stats':
+      emit('scope-stats', msg);
+      break;
     case 'calib_wizard':
       emit('calib-wizard', msg);
       break;

@@ -804,6 +804,22 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
                              for tt, vv in list(dq)[-2000:]]
         await ws.send_json({'type': 'scope_history', 'series': series})
 
+    elif cmd == 'scope_stats':
+        ch = str(msg.get('channel') or '')
+        dq = g.hist.get(ch)
+        if dq is None or len(dq) < 4:
+            await ws.send_json({'type': 'scope_stats', 'channel': ch,
+                                'ok': False, 'reason': f'通道 {ch} 样本不足'})
+            return
+        from .stats import series_stats
+        try:
+            r = series_stats(list(dq), msg.get('t0'), msg.get('t1'))
+        except Exception as exc:
+            await ws.send_json({'type': 'scope_stats', 'channel': ch,
+                                'ok': False, 'reason': str(exc)})
+            return
+        await ws.send_json({'type': 'scope_stats', 'channel': ch, **r})
+
     elif cmd == 'tuning_channels':
         # 列出可用于分析的通道（有足够样本的）
         chans = []

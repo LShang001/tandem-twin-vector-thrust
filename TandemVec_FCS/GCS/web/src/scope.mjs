@@ -115,6 +115,7 @@ export function activate() {
     hasNull: c.hist.map((h) => h.some((p) => p === null || !Array.isArray(p))),
   }));
   bus.addEventListener('scope-history', (e) => fillHistory((e.detail || {}).series || {}));
+  bus.addEventListener('scope-stats', (e) => renderStats(e.detail || {}));
   bus.addEventListener('telemetry', (e) => onTelemetry(e.detail));   // ★ CustomEvent，快照在 detail
   // 首次进入就先拉一段后端历史：否则刚打开曲线页要等十几秒才看得见东西。
   requestHistory();
@@ -195,9 +196,42 @@ function buildCards(presetName) {
     // 游标：鼠标横向位置 → 该时刻各通道读数。
     // 用 mouseleave 清空而不是保存最后一次位置——鼠标移走后还留着竖线，
     // 会和"实时值"混淆，示波器上这是歧义。
+    // 拖拽选区做区间统计：mousedown 记起点、mousemove 跟手、mouseup 出结果。
+    // 为什么不用「点两下」：现场单手操作时拖比点两次快，且视觉上能立刻看到范围。
+    cardObj.sel = null;      // {a, b} 像素横坐标
+    cv.addEventListener('mousedown', (e) => {
+      const r = cv.getBoundingClientRect();
+      cardObj.sel = { a: e.clientX - r.left, b: e.clientX - r.left };
+    });
     cv.addEventListener('mousemove', (e) => {
       const r = cv.getBoundingClientRect();
       cardObj.cursor = e.clientX - r.left;
+      if (cardObj.sel) cardObj.sel.b = e.clientX - r.left;
+    });
+    cv.addEventListener('mouseup', () => {
+      if (!cardObj.sel) return;
+      const { a, b } = cardObj.sel;
+      // 选区太窄视为误触，清掉不请求
+      if (Math.abs(b - a) < 6) { cardObj.sel = null; return; }
+      // 像素 → 时间：选区按当前窗口（末尾 winSec 秒）换算
+      let tEnd = 0;
+      for (const h of cardObj.hist) {
+        const last = h[h.length - 1];
+        if (Array.isArray(last) && last[0] > tEnd) tEnd = last[0];
+      }
+      const tStart = tEnd - winSec;
+      const W = cv.getBoundingClientRect().width;
+      const toT = (px) => tStart + (px / W) * winSec;
+      const t0 = toT(Math.min(a, b));
+      const t1 = toT(Math.max(a, b));
+      const firstCh = cardObj.chans[0];
+      const name = Array.isArray(firstCh) ? firstCh[0] : firstCh;
+      send({ cmd: 'scope_stats', channel: name, t0, t1 });
+      cardObj.selDone = { a, b };
+    });
+    cv.addEventListener('mouseleave', () => {
+      cardObj.cursor = null;
+      if (cardObj.sel) cardObj.sel = null;
     });
     cv.addEventListener('mouseleave', () => { cardObj.cursor = null; });
     cards.push(cardObj);
@@ -224,6 +258,26 @@ function onTelemetry(s) {
       if (card.hist[i].length > HISTORY * 1.5) card.hist[i] = card.hist[i].slice(-HISTORY);
     });
   }
+}
+
+/** 区间统计结果：显示在曲线页顶部条 */
+function renderStats(d) {
+  const box = $('scopeStats');
+  if (!box) return;
+  if (!d.ok) {
+    box.innerHTML = `<span class="hint">${d.reason || '统计失败'}</span>`;
+    return;
+  }
+  const f = (v, n = 3) => (v === null || v === undefined ? '--' : Number(v).toFixed(n));
+  box.innerHTML = `
+    <span class="ss-ch">${d.channel}</span>
+    <span>区间 <b>${f(d.duration_s, 2)} s</b></span>
+    <span>点数 <b>${d.n}</b></span>
+    <span>RMS <b>${f(d.rms)}</b></span>
+    <span>峰峰 <b>${f(d.peak_to_peak)}</b></span>
+    <span>均值 <b>${f(d.mean)}</b></span>
+    <span>标准差 <b>${f(d.std)}</b></span>
+    <span>峰因数 <b>${f(d.crest_factor, 2)}</b></span>`;
 }
 
 function drawCard(card) {
