@@ -736,6 +736,23 @@ async def handle_ws_message(ws: WebSocket, msg: dict):
         await ws.send_json({'type': 'calib_state', 'data': {},
                             'assess': assess_magcal({})})
 
+    elif cmd == 'spectrum':
+        ch = str(msg.get('channel') or '')
+        nperseg = int(msg.get('nperseg') or 256)
+        dq = g.hist.get(ch)
+        if dq is None or len(dq) < 64:
+            await ws.send_json({'type': 'spectrum', 'channel': ch,
+                                'ok': False, 'reason': f'通道 {ch} 样本不足'})
+            return
+        from .spectrum import spectrum_summary
+        try:
+            r = spectrum_summary(list(dq), nperseg=nperseg)
+        except Exception as exc:
+            await ws.send_json({'type': 'spectrum', 'channel': ch,
+                                'ok': False, 'reason': str(exc)})
+            return
+        await ws.send_json({'type': 'spectrum', 'channel': ch, **r})
+
     elif cmd == 'tuning_channels':
         # 列出可用于分析的通道（有足够样本的）
         chans = []

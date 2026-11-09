@@ -916,3 +916,24 @@ body.has-alarm { padding-top: 32px; }
   font-family: ui-monospace, monospace;
   font-size: 12px;
 }
+
+/* ══════════ 频谱分析（2026-11-10） ══════════ */
+#specChart {
+  display: block;
+  width: 100%;
+  height: 220px;
+  border-radius: 8px;
+  background: rgba(14, 22, 36, 0.85);
+}
+.spec-info { margin-top: 8px; font-family: ui-monospace, monospace; font-size: 11.5px; }
+.spec-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 5px;
+  color: #8fa8c4;
+}
+.spec-row b { color: #dbe7f5; font-weight: 600; }
+.spec-peak { color: #ff8a95; }
+.spec-peak i { color: #8fa8c4; font-style: normal; }

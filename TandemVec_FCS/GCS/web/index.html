@@ -337,6 +337,20 @@
       <div class="insp-legend" id="tuneLegend"></div>
     </div>
     <div class="glass panel" style="margin-top:14px">
+      <div class="panel-title">频谱分析 SPECTRUM
+        <span class="hint" id="specState">--</span></div>
+      <div class="tune-tools">
+        <label class="tune-field">通道
+          <select id="specChannel"></select>
+        </label>
+        <button class="btn primary small" id="specRun">频谱</button>
+        <button class="btn small" id="specRefresh">刷新通道</button>
+        <span class="hint">Welch 法 · 汉宁窗 · 分段平均</span>
+      </div>
+      <canvas id="specChart"></canvas>
+      <div class="spec-info" id="specInfo"></div>
+    </div>
+    <div class="glass panel" style="margin-top:14px">
       <div class="panel-title">指标 METRICS
         <span class="hint">上升时间=10%→90%；超调=(峰值-目标)/幅值；调节时间=进入 ±2% 并保持</span>
       </div>

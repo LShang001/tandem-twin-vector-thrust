@@ -187,6 +187,9 @@ function handleMsg(msg) {
     case 'tuning_result':
       emit('tuning-result', msg);
       break;
+    case 'spectrum':
+      emit('spectrum', msg);
+      break;
     case 'calib_wizard':
       emit('calib-wizard', msg);
       break;
@@ -398,6 +401,7 @@ const PAGE_LOADERS = {
   video: () => import('./video.mjs'),
   alarms: () => import('./alarms.mjs'),
   tuning: () => import('./tuning.mjs'),
+  spectrumview: () => import('./spectrumview.mjs'),
   calib: () => import('./calib.mjs'),
   layout: () => import('./layout.mjs'),
   inspector: () => import('./inspector.mjs'),
@@ -438,6 +442,10 @@ switchPage('dashboard');
 loadPageModule('alarms');
 // 布局要在仪表盘渲染前应用，否则会先按默认顺序画一遍再跳位（肉眼可见的闪动）
 loadPageModule('layout');
+// 频谱视图的 DOM 在调参页里，但它有自己的通道选择器，与调参页的语义无关
+// （一个是阶跃响应、一个是频域）。放在这里常驻加载，不依赖调参页先被访问
+// ——实测过「在 tuning.activate() 里动态 import」会静默失效，排查成本远高于收益。
+loadPageModule('spectrumview');
 
 // 多机：机号列表与切换。单串口只能连一台机，但一条 MAVLink 网络/链路
 // 可以承载多台，按 sysid 区分；只有一台时选择器隐藏，不给界面添乱。

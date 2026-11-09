@@ -206,6 +206,7 @@ export function activate() {
   if (tuning.activated) return;
   tuning.activated = true;
 
+
   bus.addEventListener('tuning-channels', (e) => {
     tuning.channels = (e.detail || {}).channels || [];
     fillChannelSelects();
@@ -235,4 +236,5 @@ export function activate() {
   send({ cmd: 'tuning_channels' });
   renderResult();
   drawWave();
+
 }
