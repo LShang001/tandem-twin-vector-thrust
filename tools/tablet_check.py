@@ -29,6 +29,20 @@ SIZES = [
     ('android_1280x800', 1280, 800),
 ]
 
+# 人机工程判据：触控目标最小 44×44 CSS px（iOS HIG）／48×48 dp（Material）。
+# 取 40 作判据下限——低于它误触率明显上升，而 40–43 在平板上还能接受。
+MIN_TOUCH = 40
+
+# 关键交互元素：漏了哪一个都可能在平板上点不准
+TOUCH_SELECTORS = [
+    ('.nav-btn', '顶部导航'),
+    ('.btn', '通用按钮'),
+    ('#connectBtn', '连接按钮'),
+    ('#vehSelect', '机号选择'),
+    ('#scopeWrap canvas', '曲线画布'),
+    ('#specRun', '频谱按钮'),
+]
+
 
 def main() -> int:
     OUT.mkdir(exist_ok=True)
@@ -36,7 +50,12 @@ def main() -> int:
     with sync_playwright() as p:
         b = p.chromium.launch()
         for name, w, h in SIZES:
-            pg = b.new_page(viewport={'width': w, 'height': h})
+            # has_touch=True 让浏览器按「粗指针」设备处理，
+            # 否则 @media (pointer: coarse) 的触控放大部分根本不生效，
+            # 测出来的仍是桌面尺寸（那样验证等于没验证）。
+            pg = b.new_page(viewport={'width': w, 'height': h}, has_touch=True,
+                            is_mobile=False)
+
             pg.goto(URL, wait_until='networkidle')
             pg.wait_for_timeout(3500)
             m = pg.evaluate(
@@ -47,6 +66,27 @@ def main() -> int:
             over = m['sw'] > m['cw']
             print(f"[{name}] viewport {w}x{h}  scrollW={m['sw']} clientW={m['cw']}  "
                   f"横向溢出={over}  导航溢出={m['navOverflow']}")
+            # 触控尺寸：逐选择器量第一个可见元素的渲染尺寸
+            small = pg.evaluate(
+                '''(sel) => {
+                    const out = [];
+                    for (const [css, label] of sel) {
+                      const el = document.querySelector(css);
+                      if (!el) continue;
+                      const r = el.getBoundingClientRect();
+                      if (r.width < 1 && r.height < 1) continue;
+                      out.push({label, css, w: Math.round(r.width), h: Math.round(r.height)});
+                    }
+                    return out;
+                }''',
+                [[c, l] for c, l in TOUCH_SELECTORS])
+            under = [x for x in small if x['w'] < MIN_TOUCH or x['h'] < MIN_TOUCH]
+            print(f'  触控尺寸（判据 {MIN_TOUCH}px）：')
+            for x in small:
+                mark = '  <-- 偏小' if x in under else ''
+                print(f"    {x['label']:<10} {x['w']:>4}x{x['h']:<4}{mark}")
+            if under:
+                bad += 1
             pg.screenshot(path=str(OUT / f'tablet_{name}.png'))
             pg.close()
             if over:

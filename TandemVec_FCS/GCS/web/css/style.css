@@ -1010,3 +1010,31 @@ body.has-alarm { padding-top: var(--alarm-h, 36px); }
   color: #9fe8cd;
   font-size: 12px;
 }
+
+
+/* ══════════ 触控设备（平板）可点性（2026-11-10） ══════════
+   实测桌面尺寸在平板上偏小：导航 31px、按钮 28px、选择器 24px，
+   都低于 40px 的可点性下限，误触率高。
+   只在 pointer: coarse 生效——鼠标设备保持紧凑，不为了平板把桌面撑胖。 */
+@media (pointer: coarse) {
+  .nav-btn {
+    min-height: 42px;
+    padding: 0 14px;
+  }
+  .btn {
+    min-height: 42px;
+    padding: 0 16px;
+  }
+  .nav-btn, .btn, select, input[type="text"], input[type="number"] {
+    min-height: 42px;
+  }
+  /* 选择器还要额外保证宽度够点 */
+  select {
+    min-width: 84px;
+  }
+  /* 表格行也给够高度，参数页/Inspector 都是密集表格 */
+  .insp-table td, .insp-table th {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
