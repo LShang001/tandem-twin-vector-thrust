@@ -90,6 +90,18 @@ int ICM45686_ImuDevice::begin(const ImuConfig &cfg)
     return -21;
   }
 
+  // ★ 2026-11-09 修复：使能 INT1 的 DRDY **状态**位（不接 MCU 引脚也能工作）。
+  //   此前 dataReady() 读 INT1_STATUS0 的 drdy 位判断新数据，但 begin() 从没
+  //   使能 int1_status_en_drdy —— 该状态位恒 0，导致 dataReady() 永远返回 0，
+  //   sensor_imu.cpp 的初始样本采集 20ms 超时，报 "IMU init data timeout"，
+  //   上层因此进 while(1) 闪黄灯。实机实测（2026-11-09）确认此现象。
+  step = imu_.enableIntStatusDrdy(INV_IMU_INT1);
+  if (step != 0)
+  {
+    err_ = "ICM45686 INT1 DRDY status enable failed";
+    return -24;
+  }
+
   // LPF：ImuLpfBw 是"目标绝对 Hz"语义，而 ICM45686 只有 ODR/2^n 倍率档，
   // 故按**实际生效的 ODR** 换算成最接近的 2^n 档（手册 §20/§21）。
   // 同时记录实际截止频率：低 ODR + 高目标带宽时会被芯片能力压到远低于目标

@@ -533,6 +533,16 @@ int ICM456xx::configureDataReadyInterrupt(uint8_t intpin, ICM456xx_irq_handler h
   return setup_irq(intpin, handler, int_num, it_conf);
 }
 
+int ICM456xx::enableIntStatusDrdy(inv_imu_int_num_t int_num) {
+  // 只写 INTx_CONFIG0 的 status 使能位，不动 pin config、不 attachInterrupt。
+  // 这样即使板子没把 INT 引脚接到 MCU，INTx_STATUS0.drdy 也能正常置位，
+  // 轮询式 dataReady() 就能工作。
+  inv_imu_int_state_t it_conf;
+  memset(&it_conf, INV_IMU_DISABLE, sizeof(it_conf));
+  it_conf.INV_UI_DRDY = INV_IMU_ENABLE;
+  return inv_imu_set_config_int(&icm_driver, int_num, &it_conf);
+}
+
 #if INV_IMU_INT2_PIN_SUPPORTED
 int ICM456xx::configureInt2PinUsage(ioc_pad_scenario_ovrd_pads_int2_cfg_ovrd_val_t usage) {
   return inv_imu_adv_set_int2_pin_usage(&icm_driver, usage);

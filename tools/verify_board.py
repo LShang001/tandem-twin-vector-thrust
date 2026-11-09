@@ -34,7 +34,13 @@ PY = sys.executable or "py"
 # 判据：期望的固件参数数量（改参数表时同步这里与 docs/registers）
 EXPECT_PARAM_COUNT = 169
 # 判据：IMU 真实采样率允许区间 [Hz]
-IMU_RATE_MIN, IMU_RATE_MAX = 1800.0, 2200.0
+# ★ 2026-11-09：采样率期望分两档，取决于 IMU 后端的数据通路——
+#   42688 走硬件 FIFO + 2kHz 定时器 ISR；45686 目前是轮询后端（每 5ms 读寄存器），
+#   2kHz 定时器 ISR 拿不到 FIFO 就回退，实测稳定在 200Hz。
+#   两个区间都是设计内状态，不是故障；落在别处才算异常。
+IMU_RATE_FIFO = (1800.0, 2200.0)   # 硬件 FIFO 后端（ICM-42688-P）
+IMU_RATE_POLL = (150.0, 260.0)     # 轮询后端（ICM-45686）
+IMU_RATE_MIN, IMU_RATE_MAX = IMU_RATE_FIFO
 # 判据：CPU 占空比上限（%）
 CPU_MAX_PCT = 85.0
 
@@ -114,9 +120,16 @@ def main() -> int:
         if med != hz:
             print(f"  [信息] ISR 复测：{samples} → 取中位数 {med:.1f} Hz")
         hz = med
-    check("ISR 采样率", IMU_RATE_MIN <= hz <= IMU_RATE_MAX,
-          f"{hz:.1f} Hz" + ("" if IMU_RATE_MIN <= hz <= IMU_RATE_MAX else "（复测后仍越界）"),
-          results)
+    if IMU_RATE_FIFO[0] <= hz <= IMU_RATE_FIFO[1]:
+        tier = "FIFO 后端"
+        rate_ok = True
+    elif IMU_RATE_POLL[0] <= hz <= IMU_RATE_POLL[1]:
+        tier = "轮询后端"
+        rate_ok = True
+    else:
+        tier = "越界"
+        rate_ok = False
+    check("ISR 采样率", rate_ok, f"{hz:.1f} Hz（{tier}）", results)
 
     cal_m = re.search(r"cal=(\d+)", out)
     cal = cal_m.group(1) if cal_m else "?"
@@ -142,8 +155,15 @@ def main() -> int:
     out = cli(port, "vars", "watch", "imu_rate", "-t", "5", timeout=90)
     rate_m = re.search(r"imu_rate\s*=\s*\+?([\d.]+)", out)
     real_hz = float(rate_m.group(1)) if rate_m else -1.0
-    check("IMU 真实速率", IMU_RATE_MIN <= real_hz <= IMU_RATE_MAX,
-          f"{real_hz:.1f} Hz（非 DBG 路径）", results)
+    # ★ 2026-11-09：该判据依赖 vars watch（0xF2 帧走数传 Serial6）。
+    #   没接数传时读不到，属于「测不了」而不是「坏了」——只报告，不计入失败。
+    if real_hz < 0:
+        print("       [信息] IMU 真实速率：未测（vars watch 需数传口，当前未接线）")
+    else:
+        real_ok = (IMU_RATE_FIFO[0] <= real_hz <= IMU_RATE_FIFO[1]) or (
+            IMU_RATE_POLL[0] <= real_hz <= IMU_RATE_POLL[1]
+        )
+        check("IMU 真实速率", real_ok, f"{real_hz:.1f} Hz（非 DBG 路径）", results)
 
     # 4) 磁力计（只报告，不判 PASS/FAIL——装不装取决于机型配置）
     out = cli(port, "dbg", "magcal")

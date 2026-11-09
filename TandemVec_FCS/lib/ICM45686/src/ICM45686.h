@@ -322,6 +322,13 @@ class ICM456xx {
     int configureDataReadyInterrupt(uint8_t intpin, ICM456xx_irq_handler handler,
                                     inv_imu_int_num_t int_num=INV_IMU_INT1);
 
+    // ★ 2026-11-09 新增：只使能 INTx_CONFIG0 的 DRDY **状态**位，不配置也不绑定
+    //   任何 MCU GPIO 引脚。用途：INTx_STATUS0 寄存器的 drdy 位只有在
+    //   intx_status_en_drdy 使能后才会置位。飞控用轮询 INT1_STATUS0 判新数据
+    //   （见 ICM45686_ImuDevice::dataReady），若板子没把 INT 引脚接到 MCU，
+    //   就必须走本方法——否则状态位恒 0，dataReady() 永远返回 0。
+    int enableIntStatusDrdy(inv_imu_int_num_t int_num=INV_IMU_INT1);
+
 #if INV_IMU_INT2_PIN_SUPPORTED
     // 配置 INT2 引脚用途：INT2/FSYNC/CLKIN/DRDY_INTR。AUX 场景会影响 INT2 可用性，使用前请对照硬件连接。
     int configureInt2PinUsage(ioc_pad_scenario_ovrd_pads_int2_cfg_ovrd_val_t usage);
