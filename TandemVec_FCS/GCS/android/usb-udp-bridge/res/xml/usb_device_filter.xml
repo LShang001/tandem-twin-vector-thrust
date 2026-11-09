@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  插上数传时系统会拿这张表匹配，匹配到就会提示「用 UniGNC USB桥 打开」。
+  列的是国内常见 USB 数传/串口芯片的 VID：
+    CH340/CH341 0x1A86   CP210x 0x10C4   FTDI 0x0403
+    PL2303 0x067B        CDC-ACM（很多 4G/无线数传）0x0483 / 0x2341 / 0x2E8A
+  任何一项匹配即可，不要求 PID 全列（同 VID 下 PID 变体很多）。
+  没有匹配到的设备 App 里仍然能手动搜索到，这张表只是让「插上就提示打开」生效。
+-->
+<resources>
+    <usb-device vendor-id="6790" />   <!-- 0x1A86 CH340/CH341 -->
+    <usb-device vendor-id="4292" />   <!-- 0x10C4 CP210x -->
+    <usb-device vendor-id="1027" />   <!-- 0x0403 FTDI -->
+    <usb-device vendor-id="1659" />   <!-- 0x067B PL2303 -->
+    <usb-device vendor-id="1155" />   <!-- 0x0483 STMicro CDC-ACM -->
+    <usb-device vendor-id="9025" />   <!-- 0x2341 Arduino CDC-ACM -->
+    <usb-device vendor-id="11914" />  <!-- 0x2E8A Raspberry Pi Pico -->
+</resources>

@@ -173,3 +173,58 @@ py -3.12 app.py --usb-fd 7                   # Termux：用 termux-usb 给的 fd
    （`server/udp_link.py` 已实现并测过），平板仍走路 1；
 3. 只有确实需要「平板单独拎着走、不依赖电脑」时，才投入路 3，
    并且必须先在真平板上跑通 `termux-usb` 那一步再补代码——否则写了也是未验证代码。
+
+---
+
+## 路 2b：APK —— 已构建成功（USB 串口转 UDP）
+
+`android/` 下有一个最小 APK 工程，解决「平板插数传」里**最硬的那一环**：
+Android 上只有原生 App 能通过 USB Host API 打开串口，WebView 拿不到。
+
+**做法**：APK 只做一件事——把 USB 串口字节转成 UDP，反向也转。
+不解析协议、不改字节。后端（电脑或平板上的 Termux）用已有的 `udp:<端口>`
+链路接收即可，那条链路已端到端验证。
+
+```
+数传 --USB--> 平板 App --UDP--> 地面站后端    （遥测）
+数传 <--USB-- 平板 App <--UDP-- 地面站后端    （命令/参数）
+```
+
+**已构建产物**：`TandemVec_FCS/GCS/android/dist/unignc-usb-bridge.apk`
+（49626 B，debug 自签，`apksigner verify` 通过）。实测 badging：
+包名 `com.unignc.usbbridge`、minSdk 21、targetSdk 34、INTERNET 权限；
+`classes.dex`（83364 B）内含 `MainActivity` 与 `Ch34xSerialDriver`、`UsbSerialProber`。
+
+**装机步骤**：
+
+1. `adb install -r dist/unignc-usb-bridge.apk`，或拷进平板点击安装（允许未知来源）
+2. 平板插 OTG 数传 → 打开「UniGNC USB桥」
+3. 填目标 IP（跑后端那台机器）与 UDP 端口
+4. 点「开始转发」→ 系统弹 USB 授权 → 允许；日志区会打印「串口已打开」和收发计数
+
+**后端侧**：`py -3.12 app.py --link udp:14550`（启动即监听），
+或在界面里连 `udp:14550`。后端会自动学习平板这个对端地址。
+
+**重新构建**：`cd TandemVec_FCS/GCS/android && bash build-apk.sh`
+不需要 Gradle，只用 build-tools 里的 aapt2 / javac / d8 / apksigner。
+脚本自动处理三个坑：
+
+- **中文路径**：Windows 的 aapt2/javac/d8 处理不了，用 subst 映射到空闲 ASCII 盘符；
+- **CRLF**：bash 里 `\` 续行会被 `\r` 截断，表现为 aapt2 报「missing required flag -o」这类
+  与真因无关的错；
+- **Gradle 才会生成的桩**：`androidx.annotation.IntDef` 与库的 `BuildConfig`，
+  放在 `android/stubs/` 下随构建一起编译；`core-lambda-stubs.jar` 加到 bootclasspath。
+
+**驱动覆盖**：CH340/CH341、CP210x、FTDI、PL2303、CDC-ACM
+（库 `usb-serial-for-android` 3.11.0，源码在构建时 clone 到 `android/build/`）。
+
+**已验证 / 未验证**：
+
+- 已验证：APK 构建成功、包结构完整（manifest + res + resources.arsc + dex + 签名）、
+  dex 含所需类、签名校验通过；
+- 未验证：真平板上的 USB 授权框与串口读写（本机无 Android 设备）。
+  UDP 侧由 `tests/test_usb_fd_e2e.py` 与 `tools/tests/test_serial_udp_bridge.py` 覆盖。
+
+**实机第一步的判据**：点「开始转发」后是否弹 USB 授权框 → 不弹说明数传没被系统
+识别或未装 OTG 驱动；日志出现「串口已打开 921600 8N1」→ 说明串口通了；
+`串口→UDP N B` 的计数在涨 → 说明飞控数据真的进来了。

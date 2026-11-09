@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  UniGNC USB-UDP 桥 —— 平板插数传用的最小 APK。
+
+  只需要 USB host 能力：数传是 USB 设备，App 通过 Android USB Host API 打开它。
+  不申请 INTERNET 之外的敏感权限；UDP 发送需要 INTERNET。
+  minSdk 21（Android 5.0）覆盖绝大多数平板；targetSdk 34 对齐本机 SDK。
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.unignc.usbbridge"
+    android:versionCode="1"
+    android:versionName="1.0">
+
+    <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="34" />
+
+    <!-- UDP 转发需要网络 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 数传是 USB 从设备；没有这条系统不会把设备暴露给应用 -->
+    <uses-feature android:name="android.hardware.usb.host" android:required="true" />
+
+    <application
+        android:label="UniGNC USB桥"
+        android:allowBackup="false"
+        android:theme="@android:style/Theme.Material.Light">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="fullSensor">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- 插上数传时允许用户选本 App 打开（可选，便于直接启动） -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
+        </activity>
+    </application>
+</manifest>
