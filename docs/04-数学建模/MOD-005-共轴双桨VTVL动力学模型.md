@@ -1,4 +1,13 @@
 # MOD-005 共轴双桨 VTVL 动力学模型（rigorous）
+> ## ⚠️ 参数现状（2026-11-11 核对）
+> 本文的 L1 集总参数（`I=(0.05,0.05,0.08) kg·m²`、`l=0.15 m`、`k_yaw=1e-6 N·m/µs`）是
+> **2026-10-31 的 SIL 存档基准**，用于复现历史验收基线，**不等于当前固件实参**。
+> 固件现行值（`FlightCtrlParams.h::CoaxialCtrlParams`）已改为：
+> `inertia_roll/pitch=0.015`、`inertia_yaw=0.02` kg·m²、`lever_m=0.21 m`、
+> `yaw_moment_nm_per_us=2.0e-4`，且 `CoaxialAllocatorParams` 的默认值已同步为该组数。
+> 做 SIL 与实机对比时必须用同一组参数，否则结论不可外推（分配器增益 `g ∝ T_est/I`，
+> 惯量差 3.3 倍会直接改变内环增益）。
+
 
 - 状态：研究模型（SIL 可选，默认关闭）
 - 日期：2026-10-31
