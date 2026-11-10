@@ -29,7 +29,7 @@
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
 - **手动模式不做姿态切电机**：手动 RATE/ATTITUDE 可能翻跟头或被风扰超 45°，不因姿态角切电机；AUTO/GUIDED 保留 `coax.att_limit_deg`（默认 90°，可调 10–180°）。禁止把 45° 硬切电机加回手动路径。
 - **`BFS_NAV_EKF_VERBOSE` 默认关**：Navigation 60s 一次的多段 Serial8 打印是 300s 数传/P1 长停顿的根因，需要时才显式打开。
-- **P1 是采样架构阶段名，不是 env 名**：生产 = `[env:CoaxialVTVL]`，纯轮询回退 = `[env:CoaxialVTVL_UI]`；临时 profiling 用编译宏。
+- **P1 是采样架构阶段名，不是 env 名**：共轴只有一个环境 `[env:CoaxialVTVL]`，即 P1 架构（2kHz ISR ring）。纯轮询回退环境 2026-11-10 已删除——它与主 env 的语义曾恰好互换（主 env 带 -U 实际跑轮询、_UI 实际跑 ring），保留只会烧错。临时 profiling 用编译宏。
 - **高频采样/时序测量禁用 DBG**：只用 0xF4（`tvc record`）或逻辑分析仪；MAVLink 模式可用 `DBG\n` 切回 AnoCom，不需物理复位。
 - **单涵道机型要点**（完整移植说明见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`）：
   四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6；速率环 α 域，kp=57.3 s⁻¹ 是源机型舵角域 0.25 的等价换算；限幅由 `sedf.ctrl_vane_deg` 换算（20° → 4583.66 deg/s²），**不要直接改 `rate_*.out_max`**（下次 apply 会覆盖）；矩阵与 yaw 轴符号属机型知识，收在 `SingleEdf4VaneAllocator.h`。

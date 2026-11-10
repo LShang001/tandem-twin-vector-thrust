@@ -100,3 +100,6 @@ tools/nmea-host-test/minmea.o
 tools/nmea-host-test/nmea_test.exe
 TandemVec_FCS/tools/nmea-host-test/minmea.o
 TandemVec_FCS/tools/nmea-host-test/nmea_test.exe
+# GCS 桌面打包产物（PyInstaller 输出，含第三方库源码，非项目代码）
+TandemVec_FCS/GCS/dist/
+TandemVec_FCS/GCS/build/

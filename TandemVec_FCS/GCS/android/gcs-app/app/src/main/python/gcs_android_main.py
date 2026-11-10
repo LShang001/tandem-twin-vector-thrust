@@ -1,4 +1,9 @@
-"""APK 内的 Python 入口：在应用进程里把现有 FastAPI 后端跑起来。
+"""
+@file    gcs_android_main.py
+@module  Android/APK 入口
+@brief   APK 内的 Python 入口：在应用进程里把现有 FastAPI 后端跑起来
+
+APK 内的 Python 入口。
 
 为什么这样接：地面站后端（AnoCom/MAVLink 解析、频谱、参数、黑匣子）全是
 Python，重写成 Java 等于维护第二套实现。Chaquopy 把 CPython 打进 APK 后，

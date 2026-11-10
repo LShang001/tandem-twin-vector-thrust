@@ -1,4 +1,9 @@
-"""Chaquopy 环境下的 USB 串口链路：Python 侧调用 Java 的 USB Host 桥。
+"""
+@file    chaquopy_usb_link.py
+@module  GCS/USB 链路
+@brief   Android 内经 Java USB Host API 访问 OTG 串口，与 SerialLink 同接口
+
+Chaquopy 环境下的 USB 串口链路：Python 侧调用 Java 的 USB Host 桥。
 
 为什么不能在 Android 上用 pyserial：普通应用看不到 /dev/ttyUSB0，
 `serial.tools.list_ports.comports()` 返回空列表、直接 open 也无权限。

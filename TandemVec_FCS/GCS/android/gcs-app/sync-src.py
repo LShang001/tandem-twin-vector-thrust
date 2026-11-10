@@ -1,4 +1,9 @@
-"""把 GCS 的 server/ 与 web/ 同步进 APK 构建目录，附带 pymavlink 精简副本。
+"""
+@file    sync-src.py
+@module  Android/APK 构建
+@brief   把 GCS 的 server/ 与 web/ 同步进 APK 构建目录，附带 pymavlink 精简副本
+
+把 GCS 的 server/ 与 web/ 同步进 APK 构建目录。
 
 为什么需要这一步：Chaquopy 只打包 `src/main/python` 下的内容，而真正的代码
 在 `TandemVec_FCS/GCS/` 下。与其维护两份副本，不如每次构建前同步一次——
