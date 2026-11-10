@@ -498,11 +498,6 @@ extern GncTelemetry gnc_tel;
 // ============================================================
 extern FlightCtrlParams kFlightCtrlParams;
 void applyFlightCtrlParams();   // 同步 kFlightCtrlParams → 12 PID + 12 控制滤波器（4 组×3，含 3 个二级滤波）
-#ifdef BFS_COAXIAL_VTVL
-// 共轴分支参数同步（定义于 flight_control.cpp：推给 s_coaxial_controller）；
-// 仅共轴宏编译，TandemVec 路径零改动。
-void applyCoaxialCtrlFlightParams(const CoaxialCtrlParams &p);
-#endif
 
 // --- 4.1 姿态控制 (Roll/Pitch/Yaw) — FRD 体轴映射（x_b=前/y_b=右/z_b=下）---
 // ★ 2026-08-07 轴置换后执行器分配（旧注释"VTOL x_b朝上/Roll=体轴z"已废止；

@@ -44,6 +44,7 @@
 - **单涵道实飞用 `[env:SingleEdf4Vane_Flight]`**：不带 `BFS_DBG_USB_SERIAL8`、`-U BFS_TASK_PROFILE`/`BFS_NAV_PROFILE`/`BFS_PROFILE_TO_ANOCOM_SERIAL`；保留 2kHz ISR ring、AnoCom USB 参数链路、0xF4/0xF5 遥测、全部联锁限幅。烧前六项自查见 CTL-008。
 - **0xF4/0xF5 诊断帧只在调试 env 编译**：这两个帧包在 `#ifdef BFS_ANOCOM_DIAG` 里（`communication.cpp:945–1028`）。调试 env（`[env:SingleEdf4Vane]` 等）带 `-DBFS_ANOCOM_DIAG`，实飞 env（`[env:SingleEdf4Vane_Flight]`）不带。所以烧实飞固件时 GCS 看不到 0xF4/0xF5 是**正常降载**，不是链路故障——实飞靠 0xF1/0x0A/0x21 等标准帧。
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
+- **共轴控制链 2026-11-10 已统一到通用层**：与纵列/单涵道同一套 `execute_attitude_controller` + `execute_yaw_controller`（输出 α[rad/s²]）→ `CoaxialAllocator`（α→τ→摆角 `asin(τ/(l·T))` / 差速 `τ/k_yaw`）→ `mapCoaxialVtvOutputs`。生产路径**不再**引用 `CoaxialVtvController` / `CoaxialVtvParams`（文件与宿主测试保留作历史对照）。共轴参数走通用 `att_*`/`rate_*` 表（deg/s² 域：kp 353.4、ki 113.1 是旧 rad 域 6.168/1.974 ×57.3）；`rate_*.out_max` 由 `coax` 物理量在 `applyFlightCtrlParams()` 里自动换算（10° 舵角 ≈246.7 deg/s²、180 µs ≈0.1289 deg/s²），**不要手改 out_max**——要收权限就改 `coax.max_corr_deg` / `coax.max_yaw_us`，要调响应就改 `rate_*.kp/ki`。
 - **手动模式不做姿态切电机**：手动 RATE/ATTITUDE 可能翻跟头或被风扰超 45°，不因姿态角切电机；AUTO/GUIDED 保留 `coax.att_limit_deg`（默认 90°，可调 10–180°）。禁止把 45° 硬切电机加回手动路径。
 - **`BFS_NAV_EKF_VERBOSE` 默认关**：Navigation 60s 一次的多段 Serial8 打印是 300s 数传/P1 长停顿的根因，需要时才显式打开。
 - **P1 是采样架构阶段名，不是 env 名**：共轴没有叫 P1/P1_UI 的环境，机型 env 是 `[env:CoaxialVTVL]` 及其 `_ICM45686` / `_MAVLink` 变体，全部跑 P1 架构（2kHz ISR ring）。纯轮询回退环境 2026-11-10 已删除——它与主 env 的语义曾恰好互换（主 env 带 -U 实际跑轮询、_UI 实际跑 ring），保留只会烧错。临时 profiling 用编译宏。

@@ -801,6 +801,35 @@ void applyFlightCtrlParams()
         kFlightCtrlParams.rate_yaw.out_min = -alpha_full_yaw;
     }
 #endif
+#ifdef BFS_COAXIAL_VTVL
+    {
+        // ★ 共轴机型（2026-11-10 统一到通用控制链）：速率环 PID 工作在通用
+        //   deg/s² 域，输出限幅必须等于"舵面全行程对应的角加速度"。
+        //   TVC 摆角 δ → 角加速度 α（悬停点线性化，T 取 mg）：
+        //     α[rad/s²] = (lever_m·T/I)·δ[rad]
+        //     α[deg/s²] = (lever_m·T/I)·δ[deg]      ← (π/180)·(180/π)=1，两次换算抵消
+        //   所以 roll/pitch 直接 (lever·T/I)·max_corr_deg，默认 0.15·8.22/0.05·10
+        //   ≈ 246.7 deg/s²（10° 舵角）。
+        //   偏航走差速：α_yaw = (k_yaw/I_yaw)·diff_us，需乘 180/π 转 deg/s²，
+        //   默认 (1e-6/0.08)·180·57.2958 ≈ 0.1289 deg/s²（180 µs 差速）。
+        //   物理量标定后限幅自动跟随；用户只调 coax.max_corr_deg / coax.max_yaw_us。
+        const CoaxialCtrlParams &P = kFlightCtrlParams.coax;
+        const float t_hover = P.mass_kg * ekf_gravity_mps2;
+        const float rad2deg = 57.2957795f;
+        const float roll_full_deg_s2 =
+            (P.lever_m * t_hover / P.inertia_roll_kgm2) * P.ctrl.max_correction_deg;
+        const float pitch_full_deg_s2 =
+            (P.lever_m * t_hover / P.inertia_pitch_kgm2) * P.ctrl.max_correction_deg;
+        const float yaw_full_deg_s2 =
+            (P.yaw_moment_nm_per_us / P.inertia_yaw_kgm2) * P.ctrl.max_yaw_diff_us * rad2deg;
+        kFlightCtrlParams.rate_roll.out_max = roll_full_deg_s2;
+        kFlightCtrlParams.rate_roll.out_min = -roll_full_deg_s2;
+        kFlightCtrlParams.rate_pitch.out_max = pitch_full_deg_s2;
+        kFlightCtrlParams.rate_pitch.out_min = -pitch_full_deg_s2;
+        kFlightCtrlParams.rate_yaw.out_max = yaw_full_deg_s2;
+        kFlightCtrlParams.rate_yaw.out_min = -yaw_full_deg_s2;
+    }
+#endif
     // 单个 PID 环同步（enabled=false 会清积分，与构造函数语义一致）
     auto applyPid = [](PositionPID &pid, const PidTuneParams &p)
     {
@@ -845,9 +874,7 @@ void applyFlightCtrlParams()
     if (mode > 2) mode = 2;
     g_heading_aid_mode = static_cast<uint8_t>(mode);
     g_heading_align_deg = kFlightCtrlParams.heading_align_deg;
-#ifdef BFS_COAXIAL_VTVL
-    // 共轴分支：把控制律 18 项推给 s_coaxial_controller（setParams 内部重置积分，
-    // 与 PID 在线调参语义一致）。物理/输出常量由 flight_control.cpp 每次使用时读取。
-    applyCoaxialCtrlFlightParams(kFlightCtrlParams.coax);
-#endif
+    // ★ 2026-11-10：共轴已统一到通用控制链，不再向 CoaxialVtvController 推送参数。
+    //   共轴的物理/输出常量由 flight_control.cpp 每拍从 kFlightCtrlParams.coax 读取，
+    //   增益走上面已同步的通用 att_*/rate_* 实例。
 }

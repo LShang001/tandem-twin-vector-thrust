@@ -321,12 +321,31 @@ struct FlightCtrlParams
 #error "BFS_COAXIAL_VTVL 与 BFS_SINGLE_EDF_4VANE 互斥，不能同时定义（见 platformio.ini 各 env）"
 #endif
 #ifdef BFS_COAXIAL_VTVL
+// ============================================================
+//  共轴双桨 VTVL：★ 2026-11-10 统一到通用控制链
+// ------------------------------------------------------------
+//  控制结构已与纵列/单涵道一致：execute_attitude_controller（姿态外环 + 速率内环）
+//  → execute_yaw_controller（偏航速率环）→ CoaxialAllocator（α → 摆角/差速）
+//  → mapCoaxialVtvOutputs。生产路径不再有独立的 CoaxialVtvController 实例。
+//
+//  本组速率环参数是**通用 PID 的 deg/s² 域**（输入 deg/s、输出 deg/s²）：
+//    旧共轴参数是 rad 域（6.168 / 1.974 / 0.00272 / 0.02149），整体乘 180/π 即本组。
+//    物理含义不变：折算回舵角域仍是 0.25 deg舵角/(deg/s)、ki 0.08，与原始共轴固件一致。
+//  ★ out_max / int_limit 会被 applyFlightCtrlParams() 按 coax 物理量重算：
+//    out_max_roll = g_deg · max_corr_deg · (180/π) ≈ 246.7 deg/s²（10° 舵角全行程）
+//    out_max_yaw  = (k_yaw/I_yaw) · max_yaw_us · (180/π) ≈ 0.1289 deg/s²（180 µs 差速）
+//    用户只调物理量与 coax.max_corr_deg / coax.max_yaw_us；不要手改 out_max（下次
+//    apply 会被覆盖）。
+//  ★ 姿态外环（att_*）本来就是 deg 域，数值不变（4.25 = 原始共轴外环增益）。
+// ============================================================
 #define BFS_ATT_ROLL_DEFAULT  {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_PITCH_DEFAULT {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_YAW_DEFAULT   {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
-#define BFS_RATE_ROLL_DEFAULT {6.168f, 1.974f, 0.0f, -4.306f, 4.306f, 123.4f, 60.0f, 0.2f, true}
-#define BFS_RATE_PITCH_DEFAULT {6.168f, 1.974f, 0.0f, -4.306f, 4.306f, 123.4f, 60.0f, 0.2f, true}
-#define BFS_RATE_YAW_DEFAULT  {0.00272f, 0.02149f, 0.0f, -0.129f, 0.129f, 0.0358f, 40.0f, 0.2f, true}
+// 速率环 roll/pitch：kp 353.4（= 旧 6.168 rad × 57.2958）、ki 113.1（= 旧 1.974 × 57.2958）
+#define BFS_RATE_ROLL_DEFAULT {353.4f, 113.1f, 0.0f, -246.73f, 246.73f, 7070.3f, 60.0f, 0.2f, true}
+#define BFS_RATE_PITCH_DEFAULT {353.4f, 113.1f, 0.0f, -246.73f, 246.73f, 7070.3f, 60.0f, 0.2f, true}
+// 偏航：kp 0.15585、ki 1.2313、上限 0.1289 deg/s²（= 180 µs 差速的 α）
+#define BFS_RATE_YAW_DEFAULT  {0.15585f, 1.2313f, 0.0f, -0.1289f, 0.1289f, 2.0512f, 40.0f, 0.2f, true}
 #elif defined(BFS_SINGLE_EDF_4VANE)
 // ============================================================
 //  单涵道 + X 型四燃气舵：按源机型 Universal-EDF 的等效增益折算

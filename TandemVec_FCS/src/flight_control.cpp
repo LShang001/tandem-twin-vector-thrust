@@ -2599,111 +2599,21 @@ static void mix_and_output_single_edf(const ControlInputs_t &inputs,
 // 映射到 33.33–66.67% 舵机与 1000–2000 µs 电机。
 // ★ 质量/最大推力取外部 VTVL_ElectricDualRotor_FCS 的 0.84 kg / 14 N，
 //   是 MODEL-DEFAULT，未标定；不得把本分支输出当实机推力承诺。
-static bfs::CoaxialVtvController s_coaxial_controller;
-
-// ★ 2026-10-30 可标定化：在线参数写入后由 applyFlightCtrlParams() 调到这里，
-//   setParams 会 applyParams()+reset()（与 PID 在线调参的积分复位语义一致）。
-// 由通用 PID 派生共轴控制律参数（唯一 PID 变量 = kFlightCtrlParams.att_*/rate_*）。
-// 共轴内部仍以“deg 修正角/差速 us”为执行器量纲，因此按悬停点 g=l·T/I 做量纲换算；
-// 这不是独立 PID 变量，只是机型硬件缩放。
-static bfs::CoaxialVtvParams buildCoaxVtvParams(const CoaxialCtrlParams &hw)
-{
-  bfs::CoaxialVtvParams p;
-  const auto &fc = kFlightCtrlParams;
-  // 悬停推力基准用 EKF 的 WGS-84 当地重力（未初始化时即回退到
-  // G_ACCEL_CONST = 模型默认 9.79），不再在本处硬编码重力值。
-  const float t_hover = hw.mass_kg * ekf_gravity_mps2;
-  const float g_roll = hw.lever_m * t_hover / hw.inertia_roll_kgm2;   // rad/s² per rad
-  const float g_pitch = hw.lever_m * t_hover / hw.inertia_pitch_kgm2; // rad/s² per rad
-  const float g_roll_deg = g_roll * 0.017453292519943295f;            // rad/s² per deg
-  const float g_pitch_deg = g_pitch * 0.017453292519943295f;
-  const float alpha_per_us_yaw = hw.yaw_moment_nm_per_us / hw.inertia_yaw_kgm2;
-
-  p.att_kp_roll = fc.att_roll.kp;
-  p.att_kp_pitch = fc.att_pitch.kp;
-  p.rate_kp_roll = fc.rate_roll.kp * 0.017453292519943295f / g_roll_deg;
-  p.rate_ki_roll = fc.rate_roll.ki * 0.017453292519943295f / g_roll_deg;
-  p.rate_kp_pitch = fc.rate_pitch.kp * 0.017453292519943295f / g_pitch_deg;
-  p.rate_ki_pitch = fc.rate_pitch.ki * 0.017453292519943295f / g_pitch_deg;
-  p.rate_kp_yaw = fc.rate_yaw.kp * 0.017453292519943295f / alpha_per_us_yaw;
-  p.rate_ki_yaw = fc.rate_yaw.ki * 0.017453292519943295f / alpha_per_us_yaw;
-  p.max_target_rate_dps = fc.att_roll.out_max;
-  p.max_correction_deg = hw.ctrl.max_correction_deg;
-  p.max_yaw_diff_us = hw.ctrl.max_yaw_diff_us;
-  p.att_integral_limit = fc.att_roll.int_limit;
-  p.rate_integral_limit = fc.rate_roll.int_limit * 0.017453292519943295f / g_roll_deg;
-  p.yaw_integral_limit = fc.rate_yaw.int_limit * 0.017453292519943295f / alpha_per_us_yaw;
-  p.yaw_integral_threshold = fc.rate_yaw.threshold;
-  p.att_rate_filter_alpha = fc.angle_out_filter_alpha[0];
-  p.correction_filter_alpha = fc.output_filter_alpha[0];
-  p.pid_derivative_filter_alpha = fc.rate_roll.filter_alpha;
-  return p;
-}
-
-void applyCoaxialCtrlFlightParams(const CoaxialCtrlParams &p)
-{
-  s_coaxial_controller.setParams(buildCoaxVtvParams(p));
-}
-
+// ★ 2026-11-10：共轴控制链统一到 UniGNC 通用层（用户要求，与纵列/单涵道同构）。
+//   旧实现在本文件内维护独立 CoaxialVtvController（DirectTvcRate，输出修正角/差速），
+//   与 execute_attitude_controller + execute_yaw_controller 是两套实现。现在统一为：
+//     通用姿态外环 + 速率内环（输出 α[rad/s²]）→ allocateCoaxial（α→τ→摆角/差速）
+//     → mapCoaxialVtvOutputs（33.33–66.67% 舵机 + 1000–2000 µs 电机）。
+//   机型差异只剩分配层/输出层与参数表（FlightCtrlParams.h 的 BFS_COAXIAL_VTVL 分支）。
+//   CoaxialVtvController/CoaxialVtvParams 保留给宿主回归与历史对照，生产路径不再引用。
 static void run_coaxial_control(const ControlInputs_t &inputs,
                                 ControlOutputs_t &outputs,
                                 const Quaternion &q_target,
                                 const ControlMode mode)
 {
-  // 物理/输出常量与增益统一取自 kFlightCtrlParams.coax（默认值逐位 = 原硬编码，
-  // 见 include/FlightCtrlParams.h 的 static_assert 与 test_host/test_coax_params.cpp）。
   const CoaxialCtrlParams &coax = kFlightCtrlParams.coax;
 
-  updateFilteredBodyRates();
-  float error_roll_deg = 0.0f;
-  float error_pitch_deg = 0.0f;
-  computeAttitudeErrorsDeg(q_target, error_roll_deg, error_pitch_deg);
-
-  bfs::CoaxialVtvInput control_in;
-  control_in.error_roll_deg = error_roll_deg;
-  control_in.error_pitch_deg = error_pitch_deg;
-  control_in.rate_roll_dps = current_omega_dps_body_filtered.x;
-  control_in.rate_pitch_dps = current_omega_dps_body_filtered.y;
-  control_in.rate_yaw_dps = current_omega_dps_body_filtered.z;
-  control_in.rate_mode = (inputs.attitude_mode == RATE_MODE);
-  // 杆量→目标角速率：按用户要求接回 TandemVec 摇杆曲线（rc_rate/expo/super，
-  // 600 dps 封顶），与 TandemVec RATE_MODE 同一套曲线；原始实飞工程为线性
-  // ±80 dps，曲线属有意差异（满杆默认约 333 dps、偏航 222 dps）。俯仰取反。
-  control_in.roll_rate_target_dps = bfs::coaxialVtvStickToRateDps(
-      inputs.roll_raw, kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[0],
-      kFlightCtrlParams.rc_super[0], MAX_MANUAL_rollRATE, false);
-  control_in.pitch_rate_target_dps = bfs::coaxialVtvStickToRateDps(
-      inputs.pitch_raw, kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[1],
-      kFlightCtrlParams.rc_super[1], MAX_MANUAL_pitchRATE, true);
-  control_in.yaw_rate_target_dps = bfs::coaxialVtvStickToRateDps(
-      inputs.yaw_raw, kFlightCtrlParams.rc_rate, kFlightCtrlParams.rc_expo[2],
-      kFlightCtrlParams.rc_super[2], MAX_MANUAL_yawRATE, false);
-  // 遥测与共轴控制目标同源（此前 RATE 模式下 omega_ref 仍显示 TandemVec 曲线）。
-  gnc_tel.omega_ref_dps[0] = control_in.roll_rate_target_dps;
-  gnc_tel.omega_ref_dps[1] = control_in.pitch_rate_target_dps;
-  gnc_tel.omega_ref_dps[2] = control_in.yaw_rate_target_dps;
-  // 闭环激活只由解锁与手动 TVC 决定（原始 execute_attitude_controller 口径，
-  // 不含油门门控）；油门只门控积分：姿态外环只在 ATTITUDE 且油门>1100 积分，
-  // 速率内环在 ATTITUDE/RATE 两模式都积分（对齐原始 manage_pid_integrals）。
-  const bool coax_loop_active = inputs.is_unlocked && !inputs.is_manual_tvc;
-  const bool coax_throttle_integral = inputs.throttle_raw > 1100.0f;
-  control_in.attitude_active = coax_loop_active;
-  control_in.attitude_integral_active =
-      coax_loop_active && coax_throttle_integral &&
-      inputs.attitude_mode == ATTITUDE_MODE;
-  control_in.rate_integral_active = coax_loop_active && coax_throttle_integral;
-  control_in.yaw_active = inputs.is_unlocked && inputs.throttle_raw > 1050.0f;
-  control_in.yaw_integral_active = inputs.is_unlocked && coax_throttle_integral;
-  control_in.manual_tvc = inputs.is_manual_tvc;
-  control_in.manual_roll_deg = mapFloat(
-      inputs.roll_raw, 988.0f, 2012.0f, -coax.ctrl.max_correction_deg,
-      coax.ctrl.max_correction_deg);
-  control_in.manual_pitch_deg = mapFloat(
-      inputs.pitch_raw, 988.0f, 2012.0f, coax.ctrl.max_correction_deg,
-      -coax.ctrl.max_correction_deg);
-  control_in.dt_s = coax.dt_s;
-
-  // 推力/油门与控制器输出无关，先算出来供 α-native 换算系数使用。
+  // ---- 层 1：油门（与控制器无关，先算出来供分配器估计推力）----
   float final_throttle_pct = outputs.throttle_percent;
   if (!outputs.throttle_direct)
   {
@@ -2721,43 +2631,61 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     final_throttle_pct = 0.0f;
   }
 
-  // 2026-10-31 单一 α-native 内环（旧 δ 环已移除，用户确认新架构后取代旧路径）：
-  // 速率环增益按 g=(l·T_est/I)·π/180 从实飞增益折算，α 上限对应执行机构全行程；
-  // 低油门时 T_est 取下限，保证换算系数有效，TVC 权限由分配器按真实推力收紧。
-  constexpr float kAlphaDeg2Rad = 0.017453292519943295f;
-  const float alpha_thrust_est_n = fmaxf(
-      0.01f * final_throttle_pct * coax.max_total_thrust_n, 0.35f);
-  const float g_roll =
-      coax.lever_m * alpha_thrust_est_n / coax.inertia_roll_kgm2;
-  const float g_pitch =
-      coax.lever_m * alpha_thrust_est_n / coax.inertia_pitch_kgm2;
-  control_in.alpha_per_deg_roll = g_roll * kAlphaDeg2Rad;
-  control_in.alpha_per_deg_pitch = g_pitch * kAlphaDeg2Rad;
-  control_in.alpha_per_us_yaw =
-      coax.yaw_moment_nm_per_us / coax.inertia_yaw_kgm2;
-  control_in.alpha_limit_roll =
-      g_roll * sinf(coax.ctrl.max_correction_deg * kAlphaDeg2Rad);
-  control_in.alpha_limit_pitch =
-      g_pitch * sinf(coax.ctrl.max_correction_deg * kAlphaDeg2Rad);
-  control_in.alpha_limit_yaw =
-      control_in.alpha_per_us_yaw * coax.ctrl.max_yaw_diff_us;
-  const bfs::CoaxialVtvOutput control_out =
-      s_coaxial_controller.update(control_in);
-  gnc_tel.error_deg[0] = error_roll_deg;
-  gnc_tel.error_deg[1] = error_pitch_deg;
-
-  float applied_roll_corr_deg =
-      control_out.valid ? control_out.roll_correction_deg : 0.0f;
-  float applied_pitch_corr_deg =
-      control_out.valid ? control_out.pitch_correction_deg : 0.0f;
-  float applied_yaw_diff_us =
-      control_out.valid ? control_out.yaw_diff_us : 0.0f;
-  bool coax_out_saturated = control_out.saturated;
+  // ---- 层 2：控制律 ----
+  // 地面标定/未解锁：摇杆直通舵机（与原版共轴固件对齐），电机恒停；
+  // 闭环：与纵列/单涵道同一套 execute_attitude_controller + execute_yaw_controller。
+  const bool direct_mode = (!inputs.is_unlocked) || inputs.is_manual_tvc;
+  float applied_roll_corr_deg = 0.0f;
+  float applied_pitch_corr_deg = 0.0f;
+  float applied_yaw_diff_us = 0.0f;
+  bool coax_out_saturated = false;
   uint8_t alloc_sat_mask = 0u;
   float alloc_torque_residual = 0.0f;
-  // α 有效 = 闭环；手动/未激活时控制器直接给 δ（保持手动映射不变）。
-  if (inputs.is_unlocked && control_out.alpha_valid)
+
+  // 手动直通的一阶滤波：与旧 CoaxialVtvController 手动分支同系数（输出滤波 α0.25）。
+  static bfs::CoaxialFirstOrderFilter s_manual_roll_filter;
+  static bfs::CoaxialFirstOrderFilter s_manual_pitch_filter;
+
+  if (direct_mode)
   {
+    float manual_roll_deg = 0.0f;
+    float manual_pitch_deg = 0.0f;
+    // 无链路时保持中位：上电瞬间 raw_rc_values 全 0，直接映射会被钳到满偏。
+    if (isLinkUp)
+    {
+      manual_roll_deg = mapFloat(inputs.roll_raw, 988.0f, 2012.0f,
+                                 -coax.ctrl.max_correction_deg,
+                                 coax.ctrl.max_correction_deg);
+      manual_pitch_deg = mapFloat(inputs.pitch_raw, 988.0f, 2012.0f,
+                                  coax.ctrl.max_correction_deg,
+                                  -coax.ctrl.max_correction_deg);
+    }
+    applied_roll_corr_deg = s_manual_roll_filter.update(
+        manual_roll_deg, kFlightCtrlParams.output_filter_alpha[0]);
+    applied_pitch_corr_deg = s_manual_pitch_filter.update(
+        manual_pitch_deg, kFlightCtrlParams.output_filter_alpha[1]);
+
+    // 通用 PID 全部复位：避免下次闭环接管时带出手动段的积分/滤波状态。
+    rollAnglePID.reset();
+    pitchAnglePID.reset();
+    rollRatePID.reset();
+    pitchRatePID.reset();
+    yawAnglePID.reset();
+    yawRatePID.reset();
+    gnc_tel.omega_ref_dps[0] = gnc_tel.omega_ref_dps[1] = 0.0f;
+    gnc_tel.alpha_ref_dps2[0] = gnc_tel.alpha_ref_dps2[1] = 0.0f;
+    gnc_tel.error_deg[0] = gnc_tel.error_deg[1] = 0.0f;
+    outputs.alpha_roll_radps2 = 0.0f;
+    outputs.alpha_pitch_radps2 = 0.0f;
+    outputs.alpha_yaw_radps2 = 0.0f;
+  }
+  else
+  {
+    // 通用姿态外环 + 速率内环（内部会刷新 current_omega_dps_body_filtered）。
+    execute_attitude_controller(inputs, q_target, outputs);
+    // 通用偏航环：摇杆角速率 + 回中航向锁 → α_yaw。
+    execute_yaw_controller(inputs, q_target, outputs);
+
     constexpr float kDeg2Rad = 0.017453292519943295f;
     bfs::CoaxialAllocatorParams alloc_p;
     alloc_p.lever_m = coax.lever_m;
@@ -2774,9 +2702,9 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     alloc_p.max_total_thrust_n = coax.max_total_thrust_n;
 
     bfs::CoaxialAllocatorInput alloc_in;
-    alloc_in.alpha_body_radps2[0] = control_out.alpha_roll_radps2;
-    alloc_in.alpha_body_radps2[1] = control_out.alpha_pitch_radps2;
-    alloc_in.alpha_body_radps2[2] = control_out.alpha_yaw_radps2;
+    alloc_in.alpha_body_radps2[0] = outputs.alpha_roll_radps2;
+    alloc_in.alpha_body_radps2[1] = outputs.alpha_pitch_radps2;
+    alloc_in.alpha_body_radps2[2] = outputs.alpha_yaw_radps2;
     alloc_in.gyro_body_radps[0] = current_omega_dps_body_filtered.x * kDeg2Rad;
     alloc_in.gyro_body_radps[1] = current_omega_dps_body_filtered.y * kDeg2Rad;
     alloc_in.gyro_body_radps[2] = current_omega_dps_body_filtered.z * kDeg2Rad;
@@ -2793,11 +2721,11 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
       applied_roll_corr_deg = alloc.servo_roll_deg;
       applied_pitch_corr_deg = alloc.servo_pitch_deg;
       applied_yaw_diff_us = alloc.yaw_diff_us;
-      coax_out_saturated =
-          coax_out_saturated || (alloc.sat_mask != bfs::control::kSatNone);
+      coax_out_saturated = (alloc.sat_mask != bfs::control::kSatNone);
     }
     else
     {
+      // 分配失败：三轴回中并标记饱和（输出层再按姿态/解锁门控处理）。
       applied_roll_corr_deg = 0.0f;
       applied_pitch_corr_deg = 0.0f;
       applied_yaw_diff_us = 0.0f;
@@ -2805,6 +2733,7 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
       coax_out_saturated = true;
     }
   }
+
   // ★ 直观执行机构限幅（2026-10-31 用户要求）：α-native 的控制器层用 α 限幅
   //   （α_max=(l·T/I)·sin(δmax)），但最终下发前仍保留一层按执行机构量纲的硬限幅：
   //   舵机 ±max_correction_deg、差速 ±max_yaw_diff_us。分配器内部已做同等约束，
