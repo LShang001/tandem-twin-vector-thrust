@@ -37,7 +37,7 @@ namespace bfs
 struct CoaxialAllocatorParams
 {
     float lever_m = 0.15f;                 /**< 舵机轴到推力线力臂 */
-    float yaw_moment_nm_per_us = 1.0e-6f;  /**< 差速 1 µs 产生的偏航力矩 */
+    float yaw_moment_nm_per_us = 2.0e-4f;  /**< 差速 1 µs 产生的偏航力矩（2026-11-10 物理估算，实机以 FlightCtrlParams 为准） */
     float inertia_kgm2[3] = {0.05f, 0.05f, 0.08f}; /**< Ixx/Iyy/Izz */
     float servo_half_angle_deg = 15.0f;    /**< 舵机机械半行程 */
     float max_correction_deg = 10.0f;      /**< 控制/安全允许的 TVC 上限 */

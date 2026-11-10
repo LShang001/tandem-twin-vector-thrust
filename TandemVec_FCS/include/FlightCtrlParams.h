@@ -84,7 +84,13 @@ struct CoaxialCtrlParams
     // ---- ★ task-10 α+油门分配器参数（默认保持 legacy 角度路径，旧字段顺序/默认值不变）----
     float alloc_mode = 0.0f;              // 已废弃：固件忽略（α-native 为唯一路径），ID 保留兼容
     float lever_m = 0.21f;                 // TVC 力臂 [m]（α→力矩换算）★2026-11-10 用户确认实测 21 cm（原 0.15 估值偏低 40%）
-    float yaw_moment_nm_per_us = 1.0e-6f; // 差速 PWM→偏航力矩系数 [N·m/µs]（MODEL-DEFAULT，SIL 归一化 yaw 模型换算，非台架值）
+    // ★ 2026-11-10 重标定：1.0e-6 是 SIL 归一化模型的巧合值，没有物理依据。
+//   按电机差速力矩估算：单电机悬停扭矩≈0.123 N·m（推力 4.11N × 扭矩/推力比 0.03），
+//   差速 ±180µs 对应油门 ±31%，力矩差 ≈2×0.123×0.31 ≈0.076 N·m → 4.2e-4 N·m/µs，
+//   考虑电机非线性与桨效衰减取一半，定 2.0e-4。
+//   注意：该系数与 inertia_yaw 只以比值 I/k 进入换算（diff = I·α/k），
+//   本次同时把 rate_yaw 的 kp/ki/out_max/int_limit 按 200 倍补偿，等效闭环增益不变。
+float yaw_moment_nm_per_us = 2.0e-4f; // 差速 PWM→偏航力矩系数 [N·m/µs]（2026-11-10 物理估算值）
     // ★ 2026-11-10 惯量重估：原 0.05/0.05/0.08 是按"0.85 m 均质杆"量级给的，对 0.84 kg
     //   级共轴双桨大了 10~20 倍，导致分配器 δ=asin(I·α/(l·T)) 算出的舵角远大于实际需要
     //   （等效把控制增益放大了十几倍），这是此前"原始等效增益也抖到无法起飞"的根因之一。
@@ -245,7 +251,7 @@ static_assert(CoaxialCtrlParams{}.ctrl.max_correction_deg == 10.0f, "共轴修�
 // 分配器物理参数默认值锁定（MODEL-DEFAULT）；alloc_mode 已废弃，固件不再读取
 static_assert(CoaxialCtrlParams{}.alloc_mode == 0.0f, "alloc_mode 已废弃，保留默认 0 兼容旧 GCS");
 static_assert(CoaxialCtrlParams{}.lever_m == 0.21f, "TVC 力臂默认值必须与实测一致（当前 0.21m，2026-11-10 实测）");
-static_assert(CoaxialCtrlParams{}.yaw_moment_nm_per_us == 1.0e-6f, "差速力矩系数默认值必须保持 1e-6N·m/µs（SIL 归一化 yaw 模型）");
+static_assert(CoaxialCtrlParams{}.yaw_moment_nm_per_us == 2.0e-4f, "差速力矩系数默认值必须与物理估算一致（当前 2.0e-4 N·m/µs）");
 static_assert(CoaxialCtrlParams{}.inertia_roll_kgm2 == 0.015f, "滚转惯量默认值必须与实飞反推值一致（当前 0.015kg·m²）");
 static_assert(CoaxialCtrlParams{}.inertia_pitch_kgm2 == 0.015f, "俯仰惯量默认值必须与实飞反推值一致（当前 0.015kg·m²）");
 static_assert(CoaxialCtrlParams{}.inertia_yaw_kgm2 == 0.02f, "偏航惯量默认值必须与实飞反推值一致（当前 0.02kg·m²）");
@@ -369,7 +375,7 @@ struct FlightCtrlParams
 // 偏航：diff/α = I_yaw/k_yaw = 0.001/1e-6 = 1000 µs per rad/s²（=17.45 µs per deg/s²）。
 //   原始共轴 3.8 µs/(deg/s) 对应 kp=0.218；实飞手感偏猛，取约一半 → kp=0.1（≈1.75 µs）。
 //   ki=0.8 同比例偏温和。
-#define BFS_RATE_YAW_DEFAULT  {0.0109f, 0.086f, 0.0f, -0.516f, 0.516f, 0.143f, 40.0f, 0.2f, true}
+#define BFS_RATE_YAW_DEFAULT  {2.18f, 17.2f, 0.0f, -103.2f, 103.2f, 28.6f, 40.0f, 0.2f, true}
 #elif defined(BFS_SINGLE_EDF_4VANE)
 // ============================================================
 //  单涵道 + X 型四燃气舵：按源机型 Universal-EDF 的等效增益折算
