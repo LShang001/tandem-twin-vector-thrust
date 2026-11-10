@@ -181,6 +181,21 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 
 ## 多会话并发与变更联动规范
 
+> **铁律（2026-11-10 用户指令）：改代码、改项目一律在 revo 上做，再经 Git 同步到其他电脑。**
+
+- **revo = 唯一开发机**：源码修改、编译、commit 全部在 revo 完成。
+- **其他机器 = 只读构建/烧录节点**：不直接改源码、不本地编译。实测证据：同一份源码、
+  同一个 env，revo 编译的共轴+45686 固件烧录后 IMU 3200Hz 正常启动；magicbook 编译的
+  同配置固件启动即 `IMU init data timeout` 并卡进 `while(1)` 死循环（根因是两边 HEAD
+  不同，那边代码落后）。**"编译在哪台机器"会实际改变固件行为。**
+- **同步方式**：revo `git bundle create tmp/sync.bundle <对端HEAD>..HEAD` → scp 到对端 →
+  对端 `git fetch <bundle> HEAD` + `git merge --ff-only FETCH_HEAD`（先 stash 本地改动）。
+- **烧录方式**：revo 编译出 `firmware.elf` → 传到对端 → 对端用 openocd 直接烧：
+  `openocd -f interface/cmsis-dap.cfg -f target/stm32h7x.cfg -c "program <elf> verify reset exit"`
+  （绕过对端重编，避免用到那边落后的代码）。
+- 未跟踪的工具脚本（`tools/verify_*.py` 等）必须入库——两边各存一份、版本不同，正是
+  反复冲突和误判的来源。
+
 > revo 与 magicbook 各有一个 agent 会话共用本仓库。完整规范（含 2026-11-06 案例、测试口径、跨机同步细则）见 `docs/00-项目治理/GOV-003-多Agent协作规范.md` §6。
 
 **开工三步**（动仓库前必做）：
