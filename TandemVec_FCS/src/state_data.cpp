@@ -323,13 +323,12 @@ bfs::Ekf15State nav_ekf;
 // --- 5.3 信号滤波器 ---
 // 传感器原始数据滤波 (alpha值越小滤波越强，响应越慢)
 ComplementaryFilter accelXFilter(0.02f), accelYFilter(0.02f), accelZFilter(0.05f); // 加速度计低通滤波 (alpha=0.02/0.05)
-// ★ 2026-11-10 延迟优化：alpha 0.15→0.30。
-//   该滤波在 readIMUData 里按 ODR 每帧执行，一阶低通时间常数 τ=(1-α)/(α·fs)。
-//   ODR 从 3200 降到 1600 后，α=0.15 的 τ 从 1.8ms 涨到 3.4ms，成为速率环最大延迟源。
-//   α=0.30 时 τ≈1.4ms（截止约 80Hz），噪声 RMS ∝ √带宽约升 1.4 倍：
-//   ICM-45686 噪声密度 0.0035 dps/√Hz，截止 80Hz 对应约 0.03 dps RMS，
-//   折算舵角 0.25×0.03≈0.008°，对执行机构可忽略，用带宽换延迟是划算的。
-ComplementaryFilter gyroXFilter(0.30f), gyroYFilter(0.30f), gyroZFilter(0.30f);    // 陀螺仪低通滤波 (alpha=0.30, τ≈1.4ms)
+// 陀螺一阶低通：alpha=0.15 是各机型实飞基线，保持统一（2026-11-11 按要求回归）。
+// 注意时间常数随采样率变化：τ=(1-α)/(α·fs)。
+//   ICM-45686 @1600Hz(实测1683) → τ≈3.4ms；ICM-42688 @2000Hz → τ≈2.8ms。
+// 该滤波在 readIMUData 里按 ODR 每帧执行，是速率环里除输出/反馈滤波外的主要延迟项。
+// 若要按采样率自适应调整，属于独立任务，需实飞验证后再改，不在采样率切换范围内。
+ComplementaryFilter gyroXFilter(0.15f), gyroYFilter(0.15f), gyroZFilter(0.15f);    // 陀螺仪低通滤波 (alpha=0.15)
 ComplementaryFilter baro_altitude_filter(0.4f);                                    // 气压高度低通滤波 (alpha=0.4, 较快响应)
 ComplementaryFilter temperature_filter(0.1f);                                      // 温度低通滤波 (alpha=0.1)
 ComplementaryFilter pressure_filter(0.2f);                                         // 气压低通滤波 (alpha=0.2)

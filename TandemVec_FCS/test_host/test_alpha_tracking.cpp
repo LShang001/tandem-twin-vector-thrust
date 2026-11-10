@@ -69,7 +69,7 @@ void expectf(const bool ok, const char *name)
 /** @brief 3DOF 刚体转动状态（FRD，rad/s、rad/s²） */
 struct Rigid3Dof
 {
-    float inertia_kgm2[3] = {0.05f, 0.05f, 0.08f};
+    float inertia_kgm2[3] = {0.015f, 0.015f, 0.02f};   // 与 CoaxialAllocatorParams 默认值一致（2026-11-11 对齐实机）
     float omega_radps[3] = {0.0f, 0.0f, 0.0f};
     float alpha_radps2[3] = {0.0f, 0.0f, 0.0f};
 };
@@ -178,8 +178,15 @@ float relError(const float actual, const float cmd)
 void testNominalTracking()
 {
     CoaxialAllocatorParams p;
-    Rigid3Dof s; // 真实惯量 = 分配器认知惯量
-    const float cmd[3] = {2.0f, -2.0f, 0.001f};
+    Rigid3Dof s;
+    // 真实惯量 = 分配器认知惯量（显式同步，避免两处默认值各自漂移）
+    for (int i = 0; i < 3; ++i) { s.inertia_kgm2[i] = p.inertia_kgm2[i]; }
+    // ★ 2026-11-11：偏航指令改为 0.8 rad/s²（对应 80µs 差速）。
+    //   原因：k_yaw 由 1e-6 重标定为 2e-4 后，1µs 差速对应的角加速度从 5e-5 变成 0.01 rad/s²，
+    //   原来的 0.001 rad/s² 只对应 0.1µs 差速，低于 PWM 量化分辨率，跟踪误差必然超限。
+    //   注意这只影响"直接注入 α"的测试语义：实飞链路上 rate_yaw.kp 已同步 ×200，
+    //   PID 输出的 α 与差速数值与旧参数一致，量化影响不变。
+    const float cmd[3] = {2.0f, -2.0f, 0.8f};
     float avg[3] = {0.0f, 0.0f, 0.0f};
     CoaxialAllocatorOutput last;
     uint16_t sat = kSatNone;
@@ -197,13 +204,18 @@ void testNominalTracking()
 void testInertiaMismatch(const float factor, const float expected_ratio,
                          const char *name)
 {
-    CoaxialAllocatorParams p; // 分配器仍用名义 0.05/0.05/0.08
+    CoaxialAllocatorParams p; // 分配器用其默认名义惯量，plant 按 factor 放大
     Rigid3Dof s;
     for (int i = 0; i < 3; ++i)
     {
         s.inertia_kgm2[i] = p.inertia_kgm2[i] * factor;
     }
-    const float cmd[3] = {2.0f, -2.0f, 0.001f};
+    // ★ 2026-11-11：偏航指令改为 0.8 rad/s²（对应 80µs 差速）。
+    //   原因：k_yaw 由 1e-6 重标定为 2e-4 后，1µs 差速对应的角加速度从 5e-5 变成 0.01 rad/s²，
+    //   原来的 0.001 rad/s² 只对应 0.1µs 差速，低于 PWM 量化分辨率，跟踪误差必然超限。
+    //   注意这只影响"直接注入 α"的测试语义：实飞链路上 rate_yaw.kp 已同步 ×200，
+    //   PID 输出的 α 与差速数值与旧参数一致，量化影响不变。
+    const float cmd[3] = {2.0f, -2.0f, 0.8f};
     float avg[3] = {0.0f, 0.0f, 0.0f};
     CoaxialAllocatorOutput last;
     uint16_t sat = kSatNone;
@@ -241,7 +253,9 @@ void testYawAuthority()
 {
     CoaxialAllocatorParams p;
     Rigid3Dof s;
-    const float cmd[3] = {0.0f, 0.0f, 0.01f};
+    // ★ 2026-11-11：偏航 α 权限现为 k_yaw·max_diff/I_yaw = 2e-4×180/0.02 = 1.8 rad/s²
+    //   （旧参数是 2.25e-3），原指令 0.01 已不足以越权，改为 10 rad/s²。
+    const float cmd[3] = {0.0f, 0.0f, 10.0f};
     const StepResult r = step(s, p, cmd, 60.0f);
     expectf((r.out.sat_mask & kSatAlphaYaw) != 0,
             "偏航权限：置 kSatAlphaYaw");

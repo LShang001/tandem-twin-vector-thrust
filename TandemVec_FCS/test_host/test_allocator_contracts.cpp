@@ -383,10 +383,14 @@ void testLowThrust()
         // 零油门下差速仍会抬起一只电机，行程钳位后回报减半。
         expectf(out.motor1_us == p.motor_min_us, "低推力: motor1 撞下限并置位");
         expectf((out.sat_mask & kSatMotorClamp) != 0u, "低推力: 电机钳位置位");
-        expectf(std::fabs(out.yaw_diff_us - 90.0f) < 0.5f,
-                "低推力: 差速仍生效、钳位后回报 90µs（文档化行为）");
-        expectf(std::fabs(out.motor2_us - p.motor_min_us - 180.0f) < 0.5f,
-                "低推力: motor2 相对 base 抬升 180µs（单侧起转）");
+        // ★ 2026-11-11 期望值更新：α_yaw=0.5 rad/s² 经 diff = I_yaw·α/k_yaw 换算，
+        //   新参数下 diff_req = 0.02×0.5/2e-4 = 50µs（旧参数是 40000µs 被钳到 180），
+        //   未触发 max_yaw_diff 钳位；但 motor1 单侧撞下限，实际可达差速减半 → 25µs，
+        //   motor2 相对 base 抬升 50µs。语义仍是"低推力只关 TVC、不关差速"。
+        expectf(std::fabs(out.yaw_diff_us - 25.0f) < 0.5f,
+                "低推力: 差速仍生效、单侧撞限后回报 25µs（文档化行为）");
+        expectf(std::fabs(out.motor2_us - p.motor_min_us - 50.0f) < 0.5f,
+                "低推力: motor2 相对 base 抬升 50µs（单侧起转）");
         expectf(out.motor2_us <= p.motor_max_us, "低推力: motor2 不越上限");
         // 残差口径 = 未钳位请求 − 实际可实现：TVC 不可达 ⇒ 残差 = |I·α_req|
         // （α_req 已被 α 权限钳位，但残差以未钳位的原始请求为基准）
@@ -529,7 +533,7 @@ void testResidual()
     //     请求 150µs（在 α 权限内，避免被 α 钳位遮蔽），base=2000 只能给到 75µs
     {
         CoaxialAllocatorInput in;
-        in.alpha_body_radps2[2] = 150.0e-6f / p.inertia_kgm2[2];
+        in.alpha_body_radps2[2] = p.yaw_moment_nm_per_us * 150.0f / p.inertia_kgm2[2];
         in.throttle_pct = 100.0f;
         in.thrust_estimate_n = p.max_total_thrust_n;
         const CoaxialAllocatorOutput out = allocateCoaxial(in, p);
@@ -549,7 +553,7 @@ void testResidual()
     // 6b) 低油门 + 负差速 → motor2 撞 1000µs
     {
         CoaxialAllocatorInput in;
-        in.alpha_body_radps2[2] = -60.0e-6f / p.inertia_kgm2[2];
+        in.alpha_body_radps2[2] = -p.yaw_moment_nm_per_us * 60.0f / p.inertia_kgm2[2];
         in.throttle_pct = 0.0f;
         in.thrust_estimate_n = 0.0f;
         const CoaxialAllocatorOutput out = allocateCoaxial(in, p);
@@ -583,7 +587,8 @@ void testResidual()
                     0.01f * expected_res,
                 "残差: α 钳位 residual = I·Δα");
         // 新契约：未钳位请求单独输出，residual 可由 requested/achieved 直接复算
-        expectf(std::fabs(out.torque_requested_nm[0] - 5.0f) < 1.0e-4f,
+        // ★ 2026-11-11：改为按参数自适应（原写死 5.0 = 旧惯量 0.05 × α=100）。
+    expectf(std::fabs(out.torque_requested_nm[0] - p.inertia_kgm2[0] * 100.0f) < 1.0e-4f,
                 "残差: requested 记录未钳位 τ_req");
         expectf(residualMatches(out, 1.0e-6f),
                 "残差: residual 可由 requested-achieved 复算(±1e-6)");
@@ -603,7 +608,7 @@ void testResidual()
     //     保证偏航饱和位可达（不再被 α 钳位遮蔽）
     {
         CoaxialAllocatorInput in;
-        in.alpha_body_radps2[2] = 200.0e-6f / p.inertia_kgm2[2]; // 请求 200µs > 180µs
+        in.alpha_body_radps2[2] = p.yaw_moment_nm_per_us * 200.0f / p.inertia_kgm2[2]; // 请求 200µs > 180µs
         in.throttle_pct = 100.0f;
         in.thrust_estimate_n = p.max_total_thrust_n;
         const CoaxialAllocatorOutput out = allocateCoaxial(in, p);
@@ -688,11 +693,13 @@ void testContractShape()
     }
     // 默认参数与 SIL plant L1 集总参数一致（改参数需同步 plant 与验收）
     const CoaxialAllocatorParams p = defaultParams();
-    expect(std::fabs(p.lever_m - 0.15f) < 1e-9f);
-    expect(std::fabs(p.inertia_kgm2[0] - 0.05f) < 1e-9f);
-    expect(std::fabs(p.inertia_kgm2[1] - 0.05f) < 1e-9f);
-    expect(std::fabs(p.inertia_kgm2[2] - 0.08f) < 1e-9f);
-    expect(std::fabs(p.yaw_moment_nm_per_us - 1.0e-6f) < 1e-12f);
+    // ★ 2026-11-11：物理参数改为与实机 FlightCtrlParams 一致（此前 SIL 默认值 0.15/0.05/0.05/0.08
+    //   与实机 0.21/0.015/0.015/0.02 不一致，会让 SIL 与上板行为对不上）。
+    expect(std::fabs(p.lever_m - 0.21f) < 1e-9f);
+    expect(std::fabs(p.inertia_kgm2[0] - 0.015f) < 1e-9f);
+    expect(std::fabs(p.inertia_kgm2[1] - 0.015f) < 1e-9f);
+    expect(std::fabs(p.inertia_kgm2[2] - 0.02f) < 1e-9f);
+    expect(std::fabs(p.yaw_moment_nm_per_us - 2.0e-4f) < 1e-12f);
     expect(p.max_correction_deg <= p.servo_half_angle_deg);
     expect(coaxialAllocParamsValid(p));
     // 契约默认值：单位/语义（α 为 FRD rad/s²，默认零指令）

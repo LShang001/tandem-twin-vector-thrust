@@ -237,8 +237,13 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 
 ## IMU 数据链与延迟排查（2026-11-10 实飞结论）
 
-**不变量**：`imu_cfg` 的 ODR、`sensor_imu.cpp` 的 `kTargetRateHz`、批量帧 `s_fifo_frame_dt_s`
-三者必须一致。不一致时 EKF 每帧积分欠量，表现同样是"姿态响应慢"，且极难从现象反推。
+**采样率只有一个真源**：`src/imu_odr_config.h` 的 `bfs_imu_odr::kOdrHz`。
+ODR 配置、排空 `kTargetRateHz`、批量帧 `s_fifo_frame_dt_s`、ISR 抽点频率**全部由它派生**，
+禁止再在任何地方手写 1600/2000/3200。换档位只改那里，或编译期覆盖 `-DBFS_IMU_ODR_HZ=800`；
+不在型号支持列表内会触发 `static_assert` 编译失败，不会烧出跑错档位的固件。
+后端的 ODR 映射已改**严格匹配、禁止吸附**——不支持就直接 `begin()` 失败而不是跑到相邻档，
+因为静默吸附会让"请求值"与"实际生效值"不同，正是 2026-11-10 延迟事故的成因之一。
+ISR 抽点频率 == ODR：若两者不等，`health` 的 `isr_empty` 会立刻暴露（对齐后应为 0）。
 
 **排查判据（`health` 直接看）**：
 - `ring_size` 应长期为 0；持续非零＝排空欠量，控制用的就是旧数据

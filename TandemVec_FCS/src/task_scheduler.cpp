@@ -28,6 +28,7 @@
 #include "task_scheduler.h"
 #include "sensor_imu.h"
 #include "task_scheduler_interval.h"
+#include "imu_odr_config.h"   // IMU 采样率唯一真源（ISR 抽点频率由它派生）
 
 #ifdef BFS_PROFILE_TO_ANOCOM_SERIAL
 #define BFS_PROFILE_SERIAL Serial6
@@ -211,15 +212,16 @@ void timerCallback()
   static uint16_t s_imu_phase = 0;
   // ★ 2026-11-09：45686 走 FIFO 批量读，ISR 1kHz 每拍取约 3 帧（ODR 3.2k）；
   //   42688 保持 2kHz 每拍 1 帧。生产速率由芯片 ODR 决定，ISR 只决定取数节奏。
-#if defined(FCS_IMU_MODEL_ICM45686)
-  // 45686 ODR 3.2kHz：ISR 也按 3.2kHz 触发（TIM8 6400 / 步进 3200 → 每 2 拍一次），
-  // 一拍取一包。不用「低 ISR 频率 + 批量读」——那条路在 42688 上已被证否
-  // （docs/memory/2026-11-04-IMU-2kHz攻关.md §4：批量读 EKF 退化、重复计数不可靠）。
-  s_imu_phase += 3200U;
-#else
-  s_imu_phase += 2000U;
-#endif
-  if (s_imu_phase >= 6400U) { s_imu_phase -= 6400U; imuSampleIsr(); }
+  // ★ 2026-11-10：ISR 抽点频率直接等于采样率，由唯一真源派生（src/imu_odr_config.h）。
+  //   原来这里按型号手写 3200/2000，与 ODR 分开维护：45686 改到 1600Hz 后 ISR 仍跑
+  //   3200Hz，一半中断是空转（实测 isr_empty 约等于 isr_f），既浪费又容易掩盖失配。
+  //   现在 ISR 频率 == ODR，一拍一包；若两侧不等，health 的 isr_empty 会立刻暴露。
+  s_imu_phase += bfs_imu_odr::kOdrHz;
+  if (s_imu_phase >= scheduler::kSchedulerTickHz)
+  {
+    s_imu_phase = static_cast<uint16_t>(s_imu_phase - scheduler::kSchedulerTickHz);
+    imuSampleIsr();
+  }
 #endif
   const uint32_t currentCount = s_timerTicks;
 

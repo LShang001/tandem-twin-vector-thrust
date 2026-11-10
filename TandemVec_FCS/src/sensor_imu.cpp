@@ -31,6 +31,7 @@
 #include "MagCalStore.h" // 标定参数内部 Flash 持久化（上电加载）
 #include "imu_factory.h" // IMU 型号无关实例创建（编译期选定后端，见 imu_factory.cpp）
 #include "imu_range.h"   // 量程常量：换 FS 时必须同步改这里
+#include "imu_odr_config.h" // 采样率唯一真源：ODR/排空速率/帧 dt/ISR 频率全部由它派生
 #include "ins_vibration_hf.h"
 #include "ImuSampleRing.h" // 高频振动通道：用低通前/后之差测 80–120 Hz 机械振动
 #include "ImuRawChannel.h" // 原始值诊断通道：留档校准/滤波之前的六轴（2026-11-07）
@@ -149,8 +150,8 @@ int initICM42688()
   //   不一致会让 EKF 每帧积分时间错配——dt 偏小会让姿态/速度积分欠量，
   //   表现就是"姿态响应变慢"，这是排查传感器驱动时最容易漏掉的一处。
   ImuConfig imu_cfg;
-  imu_cfg.accelOdrHz = 1600;
-  imu_cfg.gyroOdrHz = 1600;
+  imu_cfg.accelOdrHz = bfs_imu_odr::kOdrHz;   // ★ 唯一真源（src/imu_odr_config.h）
+  imu_cfg.gyroOdrHz = bfs_imu_odr::kOdrHz;    //   换档位只改那里或用 -DBFS_IMU_ODR_HZ
   const int status = IMU->begin(imu_cfg);
   if (status != 0)
   {
@@ -369,11 +370,8 @@ bool readIMUData()
     if (s_ring_last_us == 0) { s_ring_last_us = now_us; }
     const uint32_t elapsed_us = now_us - s_ring_last_us;
     // ★ 2026-11-09：按后端 ODR 算"这段时间该有多少帧"。
-#if defined(FCS_IMU_MODEL_ICM45686)
-    static constexpr uint64_t kTargetRateHz = 1600ULL;   // 与 ODR 一致（实测 1601.3Hz）
-#else
-    static constexpr uint64_t kTargetRateHz = 2000ULL;
-#endif
+    // ★ 采样率来自唯一真源，不再按型号手写（曾因三处数值不一致导致 73ms 延迟）
+    static constexpr uint64_t kTargetRateHz = bfs_imu_odr::kOdrHz;
     // ★ 2026-11-10 实测根因：原式 `1 + elapsed*rate` 在排空频率略低于 200Hz 时是欠量的
     //   （实测 ISR 取帧 1683Hz，排空 191Hz×8 帧=1528Hz），生产>消费导致 ring 积压到 123 帧、
     //   开始 ring_drop 丢帧。ring 是 FIFO，积压 123 帧意味着控制环用的是 73ms 前的 IMU 数据，
@@ -421,11 +419,8 @@ bool readIMUData()
         break;
       }
       // 按后端 ODR 给批量帧固定 dt（与 kTargetRateHz 同源）
-#if defined(FCS_IMU_MODEL_ICM45686)
-      s_fifo_frame_dt_s = 1.0 / 1600.0;   // 与 ODR 一致（实测 1601.3Hz）
-#else
-      s_fifo_frame_dt_s = 1.0 / 2000.0;
-#endif
+      // ★ 同上：帧 dt 由唯一真源派生，避免与 ODR 失配导致 EKF 每帧积分欠量
+      s_fifo_frame_dt_s = 1.0 / static_cast<double>(bfs_imu_odr::kOdrHz);
       const uint32_t t_frame0 = micros();
       s_ring_processing = true;
       any = readIMUData() || any;

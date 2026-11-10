@@ -36,9 +36,9 @@ namespace bfs
 /** @brief 共轴机型分配参数；默认值 = SIL plant 的 L1 集总参数 */
 struct CoaxialAllocatorParams
 {
-    float lever_m = 0.15f;                 /**< 舵机轴到推力线力臂 */
+    float lever_m = 0.21f;                 /**< 舵机轴到推力线力臂（2026-11-10 用户实测 21cm） */
     float yaw_moment_nm_per_us = 2.0e-4f;  /**< 差速 1 µs 产生的偏航力矩（2026-11-10 物理估算，实机以 FlightCtrlParams 为准） */
-    float inertia_kgm2[3] = {0.05f, 0.05f, 0.08f}; /**< Ixx/Iyy/Izz */
+    float inertia_kgm2[3] = {0.015f, 0.015f, 0.02f}; /**< Ixx/Iyy/Izz（2026-11-10 由原版实飞响应反推） */
     float servo_half_angle_deg = 15.0f;    /**< 舵机机械半行程 */
     float max_correction_deg = 10.0f;      /**< 控制/安全允许的 TVC 上限 */
     float max_yaw_diff_us = 180.0f;        /**< 差速上限 */
@@ -204,11 +204,15 @@ inline CoaxialAllocatorOutput allocateCoaxial(
         const float sy = controlClamp(tau[1] / tvc_authority, -sin_limit, sin_limit);
         delta_roll = std::asin(sx);
         delta_pitch = std::asin(sy);
-        if (std::fabs(tau[0] / tvc_authority) > sin_limit)
+        // ★ 2026-11-11 语义修正：判据用"未钳位的请求力矩" tau_req，而不是钳位后的 tau。
+        //   原实现用 tau：当 α 已被 alpha_max 钳位时，tau = I·alpha_max = tvc_authority·sin_limit，
+        //   比值恰好等于 sin_limit，置位与否落在浮点误差边界上——旧参数组合碰巧略过线，
+        //   换参数后立刻漏报。诊断位的语义应是"请求是否超出 TVC 能力"，用 tau_req 才正确。
+        if (std::fabs(tau_req[0] / tvc_authority) > sin_limit)
         {
             out.sat_mask |= kSatTvcRoll;
         }
-        if (std::fabs(tau[1] / tvc_authority) > sin_limit)
+        if (std::fabs(tau_req[1] / tvc_authority) > sin_limit)
         {
             out.sat_mask |= kSatTvcPitch;
         }

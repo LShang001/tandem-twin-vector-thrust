@@ -337,18 +337,12 @@ bool ICM45686_ImuDevice::accelOdrToEnum(uint16_t hz, ICM45686AccelOdr &out, uint
       return true;
     }
   }
-  for (size_t i = 0; i < n; ++i)
-  {
-    if (kTable[i].hz > hz)
-    {
-      out = kTable[i].odr;
-      actualHz = kTable[i].hz;
-      return true;
-    }
-  }
-  out = kTable[n - 1].odr;
-  actualHz = kTable[n - 1].hz;
-  return true;
+  // ★ 2026-11-10：严格匹配，不再吸附到相邻档位。
+  //   吸附的害处是"请求值"与"实际生效值"静默不同：上层按请求值算排空速率与帧 dt，
+  //   芯片却以另一档输出，长期形成 FIFO 积压，控制律吃到几十毫秒前的数据，
+  //   表现就是"响应慢一拍"（2026-11-10 事故根因之一）。不支持就直接失败，
+  //   由调用方打印 [Error] IMU init failed 并中止初始化，绝不带病起飞。
+  return false;
 }
 
 bool ICM45686_ImuDevice::gyroOdrToEnum(uint16_t hz, ICM45686GyroOdr &out, uint16_t &actualHz)
@@ -375,18 +369,12 @@ bool ICM45686_ImuDevice::gyroOdrToEnum(uint16_t hz, ICM45686GyroOdr &out, uint16
       return true;
     }
   }
-  for (size_t i = 0; i < n; ++i)
-  {
-    if (kTable[i].hz > hz)
-    {
-      out = kTable[i].odr;
-      actualHz = kTable[i].hz;
-      return true;
-    }
-  }
-  out = kTable[n - 1].odr;
-  actualHz = kTable[n - 1].hz;
-  return true;
+  // ★ 2026-11-10：严格匹配，不再吸附到相邻档位。
+  //   吸附的害处是"请求值"与"实际生效值"静默不同：上层按请求值算排空速率与帧 dt，
+  //   芯片却以另一档输出，长期形成 FIFO 积压，控制律吃到几十毫秒前的数据，
+  //   表现就是"响应慢一拍"（2026-11-10 事故根因之一）。不支持就直接失败，
+  //   由调用方打印 [Error] IMU init failed 并中止初始化，绝不带病起飞。
+  return false;
 }
 
 uint8_t ICM45686_ImuDevice::lpfShiftForTarget(uint16_t odrHz, float targetHz)

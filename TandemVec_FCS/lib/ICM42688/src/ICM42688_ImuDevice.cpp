@@ -192,18 +192,9 @@ bool ICM42688_ImuDevice::odrToEnum(uint16_t hz, ICM42688::ODR &out, uint16_t &ac
       return true;
     }
   }
-  // 否则取第一个 ≥ hz 的档。
-  for (size_t i = 0; i < n; ++i)
-  {
-    if (kTable[i].hz > hz)
-    {
-      out = kTable[i].odr;
-      actualHz = kTable[i].hz;
-      return true;
-    }
-  }
-  // 超出最高档：取最高档（并让上层通过 actualHz 观察到偏差）。
-  out = kTable[n - 1].odr;
-  actualHz = kTable[n - 1].hz;
-  return true;
+  // ★ 2026-11-10：严格匹配，不再吸附到相邻档位。
+  //   本型号没有 1600Hz 档，旧实现在请求 1600 时会静默跑到 2000；上层若仍按 1600
+  //   计算排空速率与帧 dt，就会形成持续欠量、控制吃旧数据（2026-11-10 事故根因之一）。
+  //   现在不支持就直接失败，由调用方打印 [Error] IMU init failed 并中止初始化。
+  return false;
 }

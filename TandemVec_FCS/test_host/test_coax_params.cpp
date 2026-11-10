@@ -130,7 +130,7 @@ struct LegacyPhysical
 LegacyPhysical legacyPhysical()
 {
     return LegacyPhysical{0.84f, 14.0f, 15.0f, 1000.0f, 2000.0f, 90.0f, 0.005f,
-                          0.0f, 0.15f, 1.0e-6f, 0.05f, 0.05f, 0.08f};
+                          0.0f, 0.21f, 2.0e-4f, 0.015f, 0.015f, 0.02f};
 }
 
 bool samePhysical(const CoaxialCtrlParams &p, const LegacyPhysical &l)
