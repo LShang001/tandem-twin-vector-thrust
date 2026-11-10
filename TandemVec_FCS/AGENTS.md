@@ -2,6 +2,15 @@
 
 > 基于 PlatformIO 的 STM32H743 **UniGNC 固件**：一套 GNC 内核（姿态环 + 15 状态组合导航 + 200 Hz 调度）+ 可插拔机型分配层。同一块板可烧纵列双发、共轴双桨 VTVL、单涵道四燃气舵。安全关键嵌入式控制软件，不是普通应用代码。
 
+## 路径约定（本文所有路径都按此解析）
+
+- `docs/...` = **固件侧** `TandemVec_FCS/docs/`（电路拓扑、PROTOCOL-001、mavlink-ref、08-08/08-10 的 memory 等）。
+- `../docs/...` = **项目级** 仓库根 `docs/`（GOV/MOD/CTL/VER/DEC 系列、11 月的 memory、registers）。
+- `.agents/docs/hardware-reference.md` = 固件侧硬件参考。
+- 两边都有 `memory/` 子目录，**写路径前先确认这份文档在哪边**（查项目级总索引
+  [`../docs/README.md`](../docs/README.md)）。项目级文档导航一律以 `../docs/README.md` 为准；
+  固件侧 `docs/` 只有 8 篇独立文档 + 6 篇 memory，见其 [`docs/`](../docs/) 目录。
+
 ## 当前实机机型与构建
 
 - **同一块 WeAct MiniSTM32H743 板可烧三种机型，env 选错等于烧错飞机**：
@@ -31,7 +40,7 @@
   ★ 编译产物按 env 各自独立（`.pio/build/<env>/`），换 env 不需要 clean。
 
   ★ **45686 = 3.2 kHz FIFO 单包，ISR 每 2 拍取一包**（2026-11-10 定稿），不是 200 Hz 轮询。ODR 取 3200，一个 FIFO 包即一次满量程样本，2 kHz ISR 每隔一拍取一包——这就是「3.2k 采样率」的落地方式。
-  ★ **绝不给 45686 构建加 `-UBFS_IMU_ISR_RING`**：该宏关掉 ISR ring、退回 200 Hz 轮询寄存器，是用户 2026-11-10 明确拒绝的方案。判断有没有被误加：看 `pio run -e <env> -v` 的 `-U` 列表，或启动日志 `[Init] IMU: ICM-45686 ... 3200Hz` 后 `isr_f≈3200`。详见 `docs/memory/2026-11-09-ICM45686换型适配.md`。
+  ★ **绝不给 45686 构建加 `-UBFS_IMU_ISR_RING`**：该宏关掉 ISR ring、退回 200 Hz 轮询寄存器，是用户 2026-11-10 明确拒绝的方案。判断有没有被误加：看 `pio run -e <env> -v` 的 `-U` 列表，或启动日志 `[Init] IMU: ICM-45686 ... 3200Hz` 后 `isr_f≈3200`。详见 `../docs/memory/2026-11-09-ICM45686换型适配.md`。
 - **单涵道实飞用 `[env:SingleEdf4Vane_Flight]`**：不带 `BFS_DBG_USB_SERIAL8`、`-U BFS_TASK_PROFILE`/`BFS_NAV_PROFILE`/`BFS_PROFILE_TO_ANOCOM_SERIAL`；保留 2kHz ISR ring、AnoCom USB 参数链路、0xF4/0xF5 遥测、全部联锁限幅。烧前六项自查见 CTL-008。
 - **0xF4/0xF5 诊断帧只在调试 env 编译**：这两个帧包在 `#ifdef BFS_ANOCOM_DIAG` 里（`communication.cpp:945–1028`）。调试 env（`[env:SingleEdf4Vane]` 等）带 `-DBFS_ANOCOM_DIAG`，实飞 env（`[env:SingleEdf4Vane_Flight]`）不带。所以烧实飞固件时 GCS 看不到 0xF4/0xF5 是**正常降载**，不是链路故障——实飞靠 0xF1/0x0A/0x21 等标准帧。
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
@@ -39,10 +48,10 @@
 - **`BFS_NAV_EKF_VERBOSE` 默认关**：Navigation 60s 一次的多段 Serial8 打印是 300s 数传/P1 长停顿的根因，需要时才显式打开。
 - **P1 是采样架构阶段名，不是 env 名**：共轴没有叫 P1/P1_UI 的环境，机型 env 是 `[env:CoaxialVTVL]` 及其 `_ICM45686` / `_MAVLink` 变体，全部跑 P1 架构（2kHz ISR ring）。纯轮询回退环境 2026-11-10 已删除——它与主 env 的语义曾恰好互换（主 env 带 -U 实际跑轮询、_UI 实际跑 ring），保留只会烧错。临时 profiling 用编译宏。
 - **高频采样/时序测量禁用 DBG**：只用 0xF4（`tvc record`）或逻辑分析仪；MAVLink 模式可用 `DBG\n` 切回 AnoCom，不需物理复位。
-- **单涵道机型要点**（完整移植说明见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`）：
+- **单涵道机型要点**（完整移植说明见 `../docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`）：
   四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6；速率环 α 域，kp=57.3 s⁻¹ 是源机型舵角域 0.25 的等价换算；限幅由 `sedf.ctrl_vane_deg` 换算（20° → 4583.66 deg/s²），**不要直接改 `rate_*.out_max`**（下次 apply 会覆盖）；矩阵与 yaw 轴符号属机型知识，收在 `SingleEdf4VaneAllocator.h`。
 
-> 三机型历次实飞/实测完整数据（IMU 2kHz 基线、单涵道 120s 采样、验收读数）见 `docs/memory/2026-11-04-IMU-2kHz攻关.md`、`docs/memory/2026-11-05-单涵道四燃气舵首飞.md`、`docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
+> 三机型历次实飞/实测完整数据（IMU 2kHz 基线、单涵道 120s 采样、验收读数）见 `../docs/memory/2026-11-04-IMU-2kHz攻关.md`、`../docs/memory/2026-11-05-单涵道四燃气舵首飞.md`、`../docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
 
 
 ## 坐标系与执行器（2026-11-04 审查定稿；权威 = `src/flight_control.cpp` `mix_and_output_commands()` + `GOV-004` §7.2）
@@ -94,7 +103,7 @@
 - 摇杆语义：ATTITUDE_MODE=roll/pitch 目标姿态角、yaw 目标角速度；RATE_MODE=三杆目标角速度。
 - 力矩分配由 `TandemVec_ControlAllocation.h` 负责。
 - **时基与 IMU 抽象（2026-11-04 P1）**：TIM8 6.4kHz；P1 用 2kHz ISR 单包入 SPSC ring，Navigation 200Hz 排空；备份 Madgwick/欧拉约200Hz，IMU 增量/EKF 每样本；默认 42688P，45686 用 `-DFCS_IMU_MODEL_ICM45686`；LPF 陀螺 200/加计 100Hz；EKF `q_accel_scale=2.0`；hAcc 门控宏默认 0。
-- **导航宏（18 个，除注明外默认关）**：完整表格（宏名 / 默认值 / 作用 / 开启前提）见 `docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md` §7——改导航宏或判 EKF 行为前先查那张表，别只凭记忆里的默认值；上板标定流程见同文档 §1–§6、§8。
+- **导航宏（18 个，除注明外默认关）**：完整表格（宏名 / 默认值 / 作用 / 开启前提）见 `../docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md` §7——改导航宏或判 EKF 行为前先查那张表，别只凭记忆里的默认值；上板标定流程见同文档 §1–§6、§8。
 
 ## 核心参数
 
@@ -125,7 +134,7 @@
 ## 执行原则
 
 - 先读上下文再动手（`git status --short` + 相关源码 + `platformio.ini` + 本文件）；先诊断后行动。
-- **器件手册/驱动先查资产索引**：`docs/08-参考资料/器件手册与驱动资产索引.md` + `TandemVec_FCS/lib/<器件>/doc/`；项目已有 ICM-42688-P（DS-000347 v1.2）、ICM-45686（DS-000577）、DPS310（V1.1）官方手册及核对报告，**禁止未查就上网重复下载**（2026-11-03 教训）。
+- **器件手册/驱动先查资产索引**：`../docs/08-参考资料/器件手册与驱动资产索引.md` + `TandemVec_FCS/lib/<器件>/doc/`；项目已有 ICM-42688-P（DS-000347 v1.2）、ICM-45686（DS-000577）、DPS310（V1.1）官方手册及核对报告，**禁止未查就上网重复下载**（2026-11-03 教训）。
 - 小步、聚焦、可验证；不覆盖用户未提交改动（`main.cpp`/`.vscode`/`lib`/当前打开文件）。
 - 新增/修改的注释、文档、提交说明用中文；命令/路径/标识符原样。全部思考过程用中文。
 - 同一问题连续改 3 次未解决 → 停下，重新按工程式分析根因/约束/影响面/验证方案。
@@ -156,16 +165,16 @@
   手动 TVC 打开时**未解锁也出舵**（地面标定必需），但电机始终停——与原版一致。
   ★ **CRSF 未配置通道返回 999**（实测 `ch5-8=999/999/999/999`），不是满低位 988；无效值判据用
   990–1010 区间（`flight_control.cpp` 的 `rc_switch_invalid`）。`999 > 1750` 为假 ⇒ 无信号时自动落到自稳分支，安全。
-  ★ 对照记录：`docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md` §2.1 与 D3／A-9。
+  ★ 对照记录：`../docs/07-验证与确认/VER-004-共轴机型原始固件对照-控制与安全.md` §2.1 与 D3／A-9。
 - **Serial6(USART6) 波特率** = `state_data.h` `SERIAL6_BAUDRATE`（当前 921600；2M 在 VCP 丢帧 ~15%）。
-- **DBG 调试**：Serial6 收 `"DBG\n"` 进调试（`handleDebugConsole`），`exit` 退出；命令表与工具链见 `docs/registers/固件调试工具链-2026-11-01.md`。
+- **DBG 调试**：Serial6 收 `"DBG\n"` 进调试（`handleDebugConsole`），`exit` 退出；命令表与工具链见 `../docs/registers/固件调试工具链-2026-11-01.md`。
 - **站点磁偏（2026-11-07）**：磁偏默认取长沙 IGRF-14 常数 −4.114°（`include/mag_reference.h` 的 `kDefaultMagReference`）。异地飞行前用 DBG `magdec <deg>` 现场修正（改 `bfs::g_mag_reference` 运行时副本的 `declination_rad`，场强/倾角仍用长沙表）；**未执行 `magdec` 时行为与改前逐位一致**。判据：跨纬度转场仍用长沙值，航向会带等量的系统偏差。
 - **IMU 原始值（2026-11-07）**：`DBG imuraw [n]` 打印未校准/未滤波六轴（原始轴序 RUB，g/dps）与当前处理值（FRD）并排；判据是"差异只在频段高端 → 滤波/校准所为；raw 本身就抖 → 传感器/供电/机械问题，调滤波器无效"。对应 AnoVars `imu_raw_*`；另 `sat_cnt_f/t/w` 是分配层饱和**次数**（`gnc_tel.alloc_sat[]` 只是当拍 bool）。
 - **磁标定（DBG `magcal`）**：`start`/`fit`/`save`（写内部 Flash bank2 末扇区 0x081E0000）；★ 禁止 EEPROM 仿真（同用末扇区）；引导校准 `magcal guided`。
 
-- **DAPLink 烧录（2026-11-03）**：adapter speed 需降到 **20–100 kHz** 才稳定 `Verified OK`；高速下偶发 checksum mismatch（diff 为孤立位翻转）不是固件坏。OpenOCD `program` 后必须 `reset run`，否则板子停住。命令见 `docs/registers/踩坑记录-AGENTS.md` 2026-11-03 条。
-- **GNSS（NEO-F10N，protocol 40.00）**：F10 接口说明只收录 **CFG-VALSET/VALGET/VALDEL + CFG-MSGOUT**（PVT UART1 `0x20910007` p.143、EOE UART1 `0x20910160` p.142），**没有 CFG-MSG/CFG-PRT 章节**；固件保留 CFG-MSG 是实测兼容层（F10 仍 ACK）。CFG-MSG 8 字节 payload 的 rate 必须同时写 UART1/UART2。**配置 ACK 不等于有输出**，验收看 `ubxstat` 的 `pvt/eoe` 是否增长。详见 `docs/04-数学建模/代码理论核查/F10N-GNSS配置与调试-2026-11-03.md`。
-- **调度统计口径（2026-11-03）**：`tasks` 新增 `丢执行` 列（flag 未消费又被 ISR 置位次数）并打印 `TIM8 clk/psc/arr`；当前 240 MHz/PSC1/ARR37500/6.4 kHz。**`tasks`/`health` 走 DBG，打印会显著加剧丢拍，高频采样速率必须用非 DBG 的 0xF4 `imu_rate_hz`（`tvc record`）核对。** IMU 2 kHz 已由 P1（2kHz ISR+SPSC ring+Navigation 排空）解决，默认实测 mean≈2000、std≈70、ring_drop=0；详见 `docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
+- **DAPLink 烧录（2026-11-03）**：adapter speed 需降到 **20–100 kHz** 才稳定 `Verified OK`；高速下偶发 checksum mismatch（diff 为孤立位翻转）不是固件坏。OpenOCD `program` 后必须 `reset run`，否则板子停住。命令见 `../docs/registers/踩坑记录-AGENTS.md` 2026-11-03 条。
+- **GNSS（NEO-F10N，protocol 40.00）**：F10 接口说明只收录 **CFG-VALSET/VALGET/VALDEL + CFG-MSGOUT**（PVT UART1 `0x20910007` p.143、EOE UART1 `0x20910160` p.142），**没有 CFG-MSG/CFG-PRT 章节**；固件保留 CFG-MSG 是实测兼容层（F10 仍 ACK）。CFG-MSG 8 字节 payload 的 rate 必须同时写 UART1/UART2。**配置 ACK 不等于有输出**，验收看 `ubxstat` 的 `pvt/eoe` 是否增长。详见 `../docs/04-数学建模/代码理论核查/F10N-GNSS配置与调试-2026-11-03.md`。
+- **调度统计口径（2026-11-03）**：`tasks` 新增 `丢执行` 列（flag 未消费又被 ISR 置位次数）并打印 `TIM8 clk/psc/arr`；当前 240 MHz/PSC1/ARR37500/6.4 kHz。**`tasks`/`health` 走 DBG，打印会显著加剧丢拍，高频采样速率必须用非 DBG 的 0xF4 `imu_rate_hz`（`tvc record`）核对。** IMU 2 kHz 已由 P1（2kHz ISR+SPSC ring+Navigation 排空）解决，默认实测 mean≈2000、std≈70、ring_drop=0；详见 `../docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md`。
 - **新增 `health` 命令**：一屏看模式/IMU 健康/气压/GNSS pvt-eoe-fix-sv/ EKF rpy-vel-pos/ Serial5 上行 rx-bad-age-txskip，以及 loop CPU/max_pass/window（不重置 tasks 统计）。
 
 ## 内存占用（2026-11-08 实测，SingleEdf4Vane）
@@ -222,8 +231,8 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 - **旧 `ekf_host_regression.cpp` 已删除，不要恢复**（2026-11-07）：它 4798 行 / 248 KB，能编译（需补链接 `lib/units/src/convang*.cpp`）但运行时必崩——默认栈下 `0xC0000409` 栈溢出；加 `-Wl,--stack,67108864` 后 `assert(report.is_open())` 失败（`.pio/ekf_host_regression_report.txt` 在 ASCII 盘符与中文路径下都打不开）；3 次尝试均失败。功能已被 `test_host/` 里拆分后的 `test_ekf_*.cpp` 系列覆盖，无需保留。
 - **算法测试两阶段**：先理想模型（零噪声/零偏、WGS84 重力 `ins_test::GravityWgs84()`、解析真值）验证正确性，再真实噪声/零偏/振动/失锁评估工程效果；理想阶段失败修算法，真实阶段不达标先归因。
 - **不声称未执行的构建/测试/上板验证通过。**
-- **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `docs/registers/固件调试工具链-2026-11-01.md`。
-- **性能 A/B 宏（常驻 env 已于 2026-11-10 清理）**：`BFS_TASK_PHASE_STAGGER`（错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）与 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）两个宏仍保留在代码里，但**不再有常驻 env**——当时的 A/B 一直没做完（2026-11-03 挂起），且 P1 架构已改变调度负载，旧基线不再可比。要做时按 `platformio.ini` §新增组合 加两行临时 env；A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论。详见 `docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
+- **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `../docs/registers/固件调试工具链-2026-11-01.md`。
+- **性能 A/B 宏（常驻 env 已于 2026-11-10 清理）**：`BFS_TASK_PHASE_STAGGER`（错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）与 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）两个宏仍保留在代码里，但**不再有常驻 env**——当时的 A/B 一直没做完（2026-11-03 挂起），且 P1 架构已改变调度负载，旧基线不再可比。要做时按 `platformio.ini` §新增组合 加两行临时 env；A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论。详见 `../docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
 
 ## 仓库卫生
 

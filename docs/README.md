@@ -47,6 +47,7 @@
 | [`memory/`](memory/) | 13 | 攻坚全过程沉淀（每篇首行标「触发条件」） | 动手前按触发条件扫 |
 | [`registers/`](registers/) | 9 | 受控登记册：踩坑正本、参数手册、假设日志、危害日志、追溯矩阵、红线清单、工具链 | 查参数值、查覆盖、查红线 |
 | [`PROJECT-MAP.md`](PROJECT-MAP.md) | 1 | 仓库结构与文件树、成熟度、命名澄清 | 找东西在哪 |
+| [`../TandemVec_FCS/docs/`](../TandemVec_FCS/docs/) | 8+6 | 固件侧文档：电路拓扑、AnoCom 协议正本、MAVLink 参考、8 月的固件攻坚记录 | 动硬件/协议/固件外设时 |
 
 ---
 
@@ -227,6 +228,29 @@
 | 文档 | 内容 |
 |---|---|
 | [PROJECT-MAP.md](PROJECT-MAP.md) | 架构总览、文件树、成熟度、规模数字、命名澄清（`icm45686` 前缀不是驱动） |
+
+### 2.14 固件侧文档 `TandemVec_FCS/docs/`（8 篇 + 6 篇 memory）
+
+> **路径注意**：这些文档在固件子工程里，不是本文所在目录。从固件目录看是 `docs/xxx`，
+> 从仓库根看是 `TandemVec_FCS/docs/xxx`。两边都有 `memory/` 子目录，写路径前先确认在哪边。
+
+| 文档 | 内容 |
+|---|---|
+| [PROTOCOL-001-AnoCom官方通信协议](../TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md) | ★ **AnoCom 协议正本**（官方手册 MinerU 转换 + 本工程差异对照表）。改固件发送侧、GCS 解析、遥测帧格式前必读 |
+| [电路拓扑参考](../TandemVec_FCS/docs/电路拓扑参考.md) | ★ 52 引脚 / 器件型号 / 连接器定义。**改引脚前必读** |
+| [GCS-001-上位机与参数在线读写方案](../TandemVec_FCS/docs/GCS-001-上位机与参数在线读写方案.md) | 上位机与参数在线读写的方案设计与实现取舍 |
+| [COMM-001-数传通信链路优化方案](../TandemVec_FCS/docs/COMM-001-数传通信链路优化方案.md) | 数传链路优化方案（2026-08-10），对应 [memory/2026-08-10](../TandemVec_FCS/docs/memory/2026-08-10-COMM001数传链路优化与PID固化.md) |
+| [cascade-ctrl-接入规划](../TandemVec_FCS/docs/cascade-ctrl-接入规划.md) | 级联控制链接入固件的规划（统一调参入口） |
+| [C路径-参数集中与遥测结构化方案](../TandemVec_FCS/docs/C路径-参数集中与遥测结构化方案.md) | 实机控制参数集中 + 遥测结构化的零行为变化重构方案 |
+| [elrs-telemetry-research](../TandemVec_FCS/docs/elrs-telemetry-research.md) | ELRS 遥测机制调研与 CrsfSerial 三方对比 |
+| [barometric_altitude_optimization](../TandemVec_FCS/docs/barometric_altitude_optimization.md) | 气压高度计算优化 |
+| `mavlink-ref/` | MAVLink 协议与帧格式、命令服务、参数服务、枚举表（4 篇参考） |
+
+**固件侧攻坚记录 `TandemVec_FCS/docs/memory/`（6 篇，2026-08）**：WS2812 驱动调试、
+W25N01GV 黑匣子、RGB 灯效状态机与上电 TVC 归中、ELRS 遥测扩展与电池电压采样、
+COMM-001 数传链路优化与 PID 固化、THY-004 论文审查修订。入口：
+[WS2812 驱动调试](../TandemVec_FCS/docs/memory/2026-08-08-WS2812驱动调试.md) 是其中最高频的一篇
+（RGB 不亮、灯效模式问题先读它）。
 
 ---
 
