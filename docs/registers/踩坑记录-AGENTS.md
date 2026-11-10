@@ -298,3 +298,35 @@
 - **另一个坑**：切换 `BFS_IMU_FIFO` 宏后，默认 env 可能残留旧对象；用
   `pio run -e TandemVec_FCS -t clean` 清编后用 `strings firmware.elf | grep FIFO`
   确认，避免把 FIFO 固件当默认固件烧。
+
+## 2026-11-10 openocd 烧录用反斜杠路径必失败（Tcl 转义）
+
+- **现象**：`openocd ... -c "program C:\Users\12631\fw42688.elf verify reset exit"` 报
+  `Error: couldn't open C:UsersV31w42688.elf` + `** Programming Failed **`，
+  但前面的 `SWD DPIDR` / `Examination succeed` 全部正常，看着像「引号没转义」。
+- **原因**：`-c` 的字符串交给 **Tcl** eval，**反斜杠是转义符**——
+  `\U`→`U`、`\126`→八进制 126=`V`、`\f`→换页符 0x0C。三段全中，路径就废了。
+- **正确**：路径换正斜杠 `program "C:/Users/12631/fw42688.elf" verify reset exit`。
+  备选 Tcl 花括号 `program {C:\...}`，但它与 PowerShell 引号嵌套更容易出事，首选正斜杠。
+- **判据**：报 `couldn't open` 时先把 openocd 打印的路径与真实路径**逐字符比对**，
+  差异处就是被吃掉的转义——30 秒定位，比反复重写引号快一个数量级。
+- **同批踩到的**：`Start-Process` 的 `-NoNewWindow` 与 `-WindowStyle` 互斥，同时给
+  直接抛 `InvalidOperationException`，`-PassThru` 返回 `$null`，后面 `WaitForExit()` 报
+  「不能对 Null 值表达式调用方法」；内联 `powershell -Command "...\"...\""` 多层引号必炸，
+  一律写 `.ps1` 再用 `-ExecutionPolicy Bypass -File` 执行。
+
+## 2026-11-10 RGB 灯「不亮」：先读 `wsstat` 的 driver 字段，别改驱动
+
+- **现象**：新板（ICM-45686 版）固件正常运行，WS2812 一连串「白/红/绿/蓝」测试全无反应；
+  寄存器全对（PD15 AFR=2、MODER 能在 AF/输出间切换、`wsstatic` 打电平 IDR bit15 跟随翻转、
+  TIM4 ARR=299、DMAMUX Ch6 CCR=0x20=32=TIM4_UP）。
+- **真因**：`wsstatic` 的前置副作用把驱动强制切到 `MODE_BITBANG` 且**不自动恢复**。
+  之后所有点灯测试都跑在 bitbang 路径上——其时序靠 NOP 估算、T0H 偏短，整帧被判无效，
+  看起来就像「灯坏了」。**软件和硬件都没问题。**
+- **判据与修复**：`wsstat` 的 `driver` 字段 `1`=TIM4_DMA（正常）、`0`=bitbang（残留）；
+  发一条 `wsmode 1` 回 DMA，再 `ws <r> <g> <b>` 即亮。复位后默认就是 DMA。
+- **误判过程（值得记）**：曾用「换回旧板、同一份 elf 亮」做 A/B，据此断定「新板硬件坏」。
+  **A/B 只能证明「另一块板好」，不能证明「这块板坏」**——这次就是测试过程自己
+  把驱动留在 bitbang，换板只是碰巧拿到了干净状态。
+- **通用教训**：带副作用的调试命令必须写进命令说明、测完必须复原并复查状态字段；
+  否则后续所有测试的结论都建立在错误前提上。

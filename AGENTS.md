@@ -104,6 +104,7 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 
 | 文件 | 内容 | 何时读 |
 |------|------|--------|
+| `2026-11-10-openocd烧录Tcl路径转义.md` | openocd `-c` 的字符串由 **Tcl** 解析，**反斜杠是转义符**：`C:\Users\12631\fw42688.elf` 被吃成 `C:UsersV31<FF>w42688.elf`（`\U`→U、`\126`→八进制V、`\f`→换页符）→ 报 `couldn't open` / `Programming Failed`。**传路径一律用正斜杠**。附：`Start-Process` 的 `-NoNewWindow` 与 `-WindowStyle` 互斥（同给则返回 `$null`）；内联多层引号必出事，写 `.ps1` 走 `-File` | 跨机烧录 / 用 openocd `-c` 传绝对路径 / 写 PowerShell 启动子进程脚本时 |
 | `2026-11-10-GCS仪表盘重做.md` | 「丑」多半是**大面积空数据**不是配色：换协议后 AnoCom 专有字段（0xF1/0xF2/DETA100）全缺 → 满屏 `--`；同物理量两协议字段名/单位不同（模式编号、油门、精度）不能共表；**几何只认像素测量不认缩略图**（量天地分界左右高度差）；`drawAttitude` 横滚指针数学角≠屏幕角；内联 `display=''` 会回落 CSS 而非恢复显示 | 改 GCS 仪表盘 / 面板布局 / 任何 canvas 仪表绘制 / 判界面丑不丑时 |
 | `2026-11-10-GCS平板可点性验收.md` | 平板可点性实测：导航 31px / 按钮 28px / 选择器 24px 全部低于 40px 下限；**Playwright 必须开 `has_touch=True`** 否则 `pointer: coarse` 不生效、量出来仍是桌面尺寸；触控放大用 `pointer: coarse` 而非宽度断点 | 改 GCS 前端 CSS / 布局 / 控件尺寸 / 做平板适配验收时 |
 | `2026-11-08-共轴roll-pitch不对称排查.md` | 共轴 pitch 偏大：**已解释 = 下降段力矩权限不足**（80% 峰值在下降段，力矩只剩悬停 51% → 偏差约 2 倍），非控制律缺陷；附「分轴不对称排查顺序」方法论 | 查共轴姿态不对称 / 想调增益前 |
@@ -193,6 +194,12 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 - **烧录方式**：revo 编译出 `firmware.elf` → 传到对端 → 对端用 openocd 直接烧：
   `openocd -f interface/cmsis-dap.cfg -f target/stm32h7x.cfg -c "program <elf> verify reset exit"`
   （绕过对端重编，避免用到那边落后的代码）。
+  ★ **`<elf>` 必须用正斜杠** `C:/Users/xx/fw.elf`：`-c` 字符串由 **Tcl** 解析，
+  反斜杠会被当转义序列吃掉（`\U`→`U`、`\126`→八进制 `V`、`\f`→换页符），
+  报 `couldn't open C:UsersV31<FF>w42688.elf` 的 `Programming Failed`。
+  相关坑与排查顺序见 `docs/memory/2026-11-10-openocd烧录Tcl路径转义.md`。
+  ★ 烧完**必须抓一次启动日志**（`[Init] IMU:` / `System Setup Complete`）——
+  `Verified OK` 只证明字节写进 Flash，不证明固件能启动。
 - 未跟踪的工具脚本（`tools/verify_*.py` 等）必须入库——两边各存一份、版本不同，正是
   反复冲突和误判的来源。
 

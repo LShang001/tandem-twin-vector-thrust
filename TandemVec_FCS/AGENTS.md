@@ -19,11 +19,12 @@
   | IMU 后端 | 机型 env + IMU env | 采样率 |
   |---|---|---|
   | ICM-42688-P（默认，实飞验证） | `[env:SingleEdf4Vane]` / `[env:SingleEdf4Vane_Flight]` | 2000 Hz（硬件 FIFO） |
-  | ICM-45686（换型验证） | `[env:SingleEdf4Vane_ICM45686]` / `[env:TandemVec_FCS_ICM45686]` | 200 Hz（轮询） |
+  | ICM-45686（换型验证） | `[env:CoaxialVTVL_ICM45686]` / `[env:SingleEdf4Vane_ICM45686]` / `[env:TandemVec_FCS_ICM45686]` | 3200 Hz（硬件 FIFO 单包，ISR 每 2 拍取一包） |
 
   **切换就是换 env 烧录**：`pio run -e <env> -t upload`。两套 env 编译产物互不覆盖（各自 `.pio/build/<env>/`）。
 
-  ★ **45686 后端当前只到 200 Hz**，不是 2000 Hz —— 它没实现硬件 FIFO，靠 `dataReady()` 轮询寄存器。想让 45686 也上 2 kHz 得实现 FIFO 批量读（试过在 2 kHz ISR 里直接读寄存器，实机过载、DBG 无响应，已回退）。详见 `docs/memory/2026-11-09-ICM45686换型适配.md`。
+  ★ **45686 = 3.2 kHz FIFO 单包，ISR 每 2 拍取一包**（2026-11-10 定稿），不是 200 Hz 轮询。ODR 取 3200，一个 FIFO 包即一次满量程样本，2 kHz ISR 每隔一拍取一包——这就是「3.2k 采样率」的落地方式。
+  ★ **绝不给 45686 构建加 `-UBFS_IMU_ISR_RING`**：该宏关掉 ISR ring、退回 200 Hz 轮询寄存器，是用户 2026-11-10 明确拒绝的方案。判断有没有被误加：看 `pio run -e <env> -v` 的 `-U` 列表，或启动日志 `[Init] IMU: ICM-45686 ... 3200Hz` 后 `isr_f≈3200`。详见 `docs/memory/2026-11-09-ICM45686换型适配.md`。
 - **单涵道实飞用 `[env:SingleEdf4Vane_Flight]`**：不带 `BFS_DBG_USB_SERIAL8`、`-U BFS_TASK_PROFILE`/`BFS_NAV_PROFILE`/`BFS_PROFILE_TO_ANOCOM_SERIAL`；保留 2kHz ISR ring、AnoCom USB 参数链路、0xF4/0xF5 遥测、全部联锁限幅。烧前六项自查见 CTL-008。
 - **0xF4/0xF5 诊断帧只在调试 env 编译**：这两个帧包在 `#ifdef BFS_ANOCOM_DIAG` 里（`communication.cpp:945–1028`）。调试 env（`[env:SingleEdf4Vane]` 等）带 `-DBFS_ANOCOM_DIAG`，实飞 env（`[env:SingleEdf4Vane_Flight]`）不带。所以烧实飞固件时 GCS 看不到 0xF4/0xF5 是**正常降载**，不是链路故障——实飞靠 0xF1/0x0A/0x21 等标准帧。
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
@@ -125,6 +126,12 @@
 ## 硬件与串口
 
 - 电路权威参考：`docs/电路拓扑参考.md`（52 引脚/型号/连接器）；改引脚前必读。
+- **WS2812 灯效（PD15 / TIM4_CH4）正本 = `docs/memory/2026-08-08-WS2812驱动调试.md`**：
+  H743 的 DMAMUX1 **没有 TIM4_CH4 请求**（只有 CH1-3 + UP），驱动走 TIM4_UP DMA 写 `CCR4`。
+  ★ **灯不亮第一步读 `wsstat` 的 `driver` 字段**：`1`=TIM4_DMA（正常）、`0`=bitbang（残留）。
+  `wsstatic` 会把驱动强制切 BITBANG 且不自动恢复——测过一次就必须 `wsmode 1` 复原，
+  否则后面所有点灯测试都跑在 bitbang 上，看起来像「灯坏了」（2026-11-10 实际踩到，白查一轮）。
+  复位后默认即 DMA；`wsmode 1` + `ws <r> <g> <b>` 能直接点亮。
 - 串口/引脚/传感器驱动：改前读 `.agents/docs/hardware-reference.md`。
 - **Serial6(USART6) 波特率** = `state_data.h` `SERIAL6_BAUDRATE`（当前 921600；2M 在 VCP 丢帧 ~15%）。
 - **DBG 调试**：Serial6 收 `"DBG\n"` 进调试（`handleDebugConsole`），`exit` 退出；命令表与工具链见 `docs/registers/固件调试工具链-2026-11-01.md`。
