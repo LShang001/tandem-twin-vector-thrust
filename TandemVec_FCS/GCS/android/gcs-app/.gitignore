@@ -9,3 +9,5 @@ app/src/main/python/server/
 app/src/main/python/web/
 # pymavlink 是第三方源码的同步副本，由 sync-src.py 从 site-packages 复制
 app/src/main/python/pymavlink/
+# message_definitions 也是从 pymavlink 同步来的副本
+app/src/main/python/message_definitions/

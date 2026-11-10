@@ -32,8 +32,12 @@ IGNORE = shutil.ignore_patterns('__pycache__', '*.pyc', '.pytest_cache',
 #   dialects/v20/common.py —— GCS 实际用的 dialect（1.6 MB，其余 45 MB 用不到）
 PYMAVLINK_KEEP = [
     '*.py',
-    'generator/mavcrc.py',
-    'generator/__init__.py',
+    # generator 整个顶层都要：mavutil 与 mavwp 都 import mavparse，
+    # 只给 mavcrc 会在  上直接 ImportError
+    # （2026-11-10 平板实测：报 pymavlink 未安装，真因就是缺 mavparse）。
+    # 顶层共 19 个文件 349 KB；子目录 C/CPP11/CS/java/swift 是代码生成模板，
+    # 运行期用不到，不复制。
+    'generator/*.py',
     'dialects/__init__.py',
     'dialects/v20/__init__.py',
     'dialects/v20/common.py',
@@ -63,6 +67,17 @@ def sync_pymavlink() -> int:
             out.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(f, out)
             n += 1
+    # message_definitions 必须放在 python/ 下与 pymavlink 平级：
+    # mavparse 按「包父目录/message_definitions/v1.0/xml」找定义文件，
+    # 缺了会在 import mavutil 时抛 FileNotFoundError（0.88 MB，全带上）。
+    md_src = src_root / 'message_definitions'   # 在 pymavlink 包内
+    md_dst = DST / 'message_definitions'
+    if md_src.exists():
+        if md_dst.exists():
+            shutil.rmtree(md_dst)
+        shutil.copytree(md_src, md_dst)
+        nmd = sum(1 for f in md_dst.rglob('*') if f.is_file())
+        n += nmd
     size = sum(f.stat().st_size for f in dst_root.rglob('*') if f.is_file())
     print(f'  同步 pymavlink: {n} 个文件（{size/1024/1024:.1f} MB，已排除其余 dialects）')
     return n

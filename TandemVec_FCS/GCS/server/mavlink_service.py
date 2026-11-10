@@ -21,12 +21,25 @@ import time
 from collections import deque
 from typing import Any, Optional
 
+import os
+
+# ★ 必须在 import pymavlink 之前设：mavutil 在模块级就会 set_dialect()，
+#   默认 dialect 是 ardupilotmega，缺失时会回退到从 XML 现场生成（APK 里没 XML）。
+#   本模块实际用的就是 v20.common，显式声明既正确又避免那条回退路径。
+os.environ.setdefault('MAVLINK20', '1')
+os.environ.setdefault('MAVLINK_DIALECT', 'common')
+
 try:
     from pymavlink import mavutil
     from pymavlink.dialects.v20 import common as mavlink2
-except ImportError:  # pragma: no cover - 无 pymavlink 的环境仍可 import
+except Exception as _mav_import_err:  # pragma: no cover - 无 pymavlink 的环境仍可 import
+    # 注意 catch Exception 而不是 ImportError：缺 dialect/XML 时 pymavlink 抛的是
+    # FileNotFoundError，只 catch ImportError 会让整个后端启动失败。
     mavutil = None
     mavlink2 = None
+    _PYMAVLINK_ERROR = f'{type(_mav_import_err).__name__}: {_mav_import_err}'
+else:
+    _PYMAVLINK_ERROR = ''
 
 
 GCS_SYSID = 255
@@ -52,7 +65,8 @@ class MavlinkService:
     def __init__(self, target_sysid: int = TARGET_SYSID,
                  target_compid: int = TARGET_COMPID):
         if mavlink2 is None:
-            raise RuntimeError('pymavlink 未安装（pip install pymavlink）')
+            detail = globals().get('_PYMAVLINK_ERROR') or '未知原因'
+            raise RuntimeError(f'pymavlink 不可用：{detail}')
         self.target_sys = target_sysid
         self.target_comp = target_compid
         self.sink = _Sink()
