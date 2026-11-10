@@ -178,6 +178,8 @@ struct CoaxialVtvOutputInput
     float attitude_pitch_deg = 0.0f;
     bool unlocked = false;
     bool attitude_safe = true;
+    /** @brief 手动 TVC 直通（CH8 高位）：地面做舵机方向/限位标定，未解锁也要出舵 */
+    bool manual_tvc = false;
 };
 
 /**
@@ -211,18 +213,22 @@ inline OutputCommandSet mapCoaxialVtvOutputs(
         in.attitude_safe &&
         std::fabs(in.attitude_roll_deg) < cal.attitude_limit_deg &&
         std::fabs(in.attitude_pitch_deg) < cal.attitude_limit_deg;
-    const bool output_enabled = in.unlocked && attitude_ok;
-    if (!output_enabled)
+    const bool motor_enabled = in.unlocked && attitude_ok;
+    // ★ 2026-11-10 与原版 VTVL_ElectricDualRotor_FCS 对齐：手动 TVC（CH8 高位）
+    //   是地面舵机方向/限位标定路径，**不受解锁门控**——原版未解锁时 TVC 仍
+    //   跟随手动映射。仅放开舵机，电机仍必须停（base=min），不引入推力。
+    const bool servo_enabled = in.manual_tvc || motor_enabled;
+    if (!motor_enabled)
     {
         base_us = cal.motor_min_us;
     }
-    // 未解锁/姿态不安全时 TVC 必须回机械中位（50%），不能沿用遥控/手动映射；
+    // 非手动且未解锁/姿态不安全时 TVC 回机械中位（50%），不能沿用遥控映射；
     // 无 RC 链路时 raw stick=0 会被映射成 -10°，曾导致地面舵机顶到限位。
-    const float roll_deg = output_enabled ? in.roll_correction_deg : 0.0f;
-    const float pitch_deg = output_enabled ? in.pitch_correction_deg : 0.0f;
+    const float roll_deg = servo_enabled ? in.roll_correction_deg : 0.0f;
+    const float pitch_deg = servo_enabled ? in.pitch_correction_deg : 0.0f;
     // 安全门控内必须同时归零差速：仅压 base 时正差速仍会叠加到电机2
     // （原 45°/未解锁门控遗留缺陷，VER-004 D9）。TVC 回中、差速归零。
-    const float yaw_diff = output_enabled
+    const float yaw_diff = motor_enabled
                                ? clampOutput(in.yaw_diff_us,
                                              cal.motor_min_us - base_us,
                                              cal.motor_max_us - base_us)

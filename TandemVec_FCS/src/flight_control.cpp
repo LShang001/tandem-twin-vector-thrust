@@ -2886,6 +2886,10 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
       manual_mode ||
       (fabsf(AHRS_Packet.Roll * RAD_TO_DEG) < coax.attitude_limit_deg &&
        fabsf(AHRS_Packet.Pitch * RAD_TO_DEG) < coax.attitude_limit_deg);
+  // ★ 2026-11-10：手动 TVC 直通（CH8 高位）用于地面舵机方向/限位标定，
+  //   原版 VTVL_ElectricDualRotor_FCS 在未解锁时就出舵；这里显式传下去，
+  //   由 mapCoaxialVtvOutputs 只放开舵机、电机仍停。
+  output_in.manual_tvc = inputs.is_manual_tvc;
 
   bfs::CoaxialVtvOutputCalibration output_cal;
   output_cal.servo_half_angle_deg = coax.servo_half_angle_deg;
@@ -2923,7 +2927,7 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   // 0xF1 遥测必须与最终下发一致：未解锁/姿态不安全时 mapCoaxialVtvOutputs
   // 已把两轴舵机回中，这里也写 0，不能把原始开关映射值当实际 TVC 角度。
   const bool tvc_telemetry_enabled =
-      inputs.is_unlocked && output_in.attitude_safe;
+      output_in.manual_tvc || (inputs.is_unlocked && output_in.attitude_safe);
   g_tvc_upper_deg = tvc_telemetry_enabled ? applied_roll_corr_deg : 0.0f;
   g_tvc_lower_deg = tvc_telemetry_enabled ? applied_pitch_corr_deg : 0.0f;
   outputs.throttle_percent = final_throttle_pct;
