@@ -50,6 +50,9 @@ android {
                 //   只是拿 FastAPI 做路由与 JSON，所以降级零改动、行为一致。
                 install 'fastapi==0.99.1'
                 install 'pydantic==1.10.13'
+                // FastAPI 的 File() 路由（/api/upload_log）在注册期就要求它，
+                // 缺失会让后端启动直接抛 RuntimeError。纯 Python，可安全安装。
+                install 'python-multipart'
                 install 'uvicorn'
                 install 'websockets'
                 install 'pyserial'

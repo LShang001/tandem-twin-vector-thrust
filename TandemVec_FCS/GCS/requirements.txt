@@ -1,4 +1,5 @@
 fastapi>=0.110
+python-multipart>=0.0.9    # /api/upload_log 的 File() 路由需要；缺失会导致后端启动即失败
 uvicorn>=0.27
 pyserial>=3.5
 pywebview>=5.0    # 桌面独立窗口（缺失时 app.py 自动回退浏览器模式）
