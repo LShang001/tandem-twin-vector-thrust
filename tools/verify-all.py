@@ -71,6 +71,10 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         ("文档统计数字", [PY, "tools/check-doc-stats.py"], ROOT),
         ("文档编号引用", [PY, "tools/check-doc-refs.py"], ROOT),
         ("代码块路径", [PY, "tools/check-codeblock-paths.py"], ROOT),
+        # ★ 2026-11-10 新增：链接检查只能证明「链接不指向空处」，不能证明「文档能被找到」。
+        #   整理文档时实测 docs/ 下 191 篇从入口只能走到 2 篇，其余全是孤儿，
+        #   而 check-links 当时报的是「零断链」——没被链接的文档连断链的机会都没有。
+        ("文档可达性", [PY, "tools/check-doc-reach.py"], ROOT),
         ("IMU 轴映射", [PY, "tools/check_imu_axis_map.py"], ROOT),
         ("解锁门判据", [PY, "tools/check_unlock_gate.py"], ROOT),
         ("仿真域单测（Node）", ["node", "--test"] + node_tests, ROOT),

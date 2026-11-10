@@ -72,6 +72,30 @@ UniGNC 反过来做——**让控制律看不见执行机构**。内环只输出
 | `blender-test/` | Blender 三维渲染实验脚本 |
 | `tools/` | 文档构建、standalone 打包、参数同步、链接检查脚本 |
 
+## 📚 文档地图
+
+项目文档按域组织，**全部 192 篇的唯一入口是 [`docs/README.md`](docs/README.md)**——里面有分域清单、
+每篇一句话摘要，以及「我要改 X → 先读哪几篇」的任务索引。
+
+新会话（人或 agent）建议按这个顺序进场：
+
+| 顺序 | 读什么 | 解决什么 |
+|---|---|---|
+| 1 | 本文件 | 项目是什么、验证到什么程度 |
+| 2 | [`docs/00-项目治理/GOV-005-项目全景与历史.md`](docs/00-项目治理/GOV-005-项目全景与历史.md) | **至今做过什么、现在停在哪、哪些坑已踩过、哪些结论还不能当定论** |
+| 3 | [`docs/README.md`](docs/README.md) | 全部文档的导航中枢 + 按任务索引 |
+| 4 | [`docs/PROJECT-MAP.md`](docs/PROJECT-MAP.md) | 东西在哪、哪些能改、哪些是生成物 |
+| 5 | [`AGENTS.md`](AGENTS.md) | 必跑命令、行为红线、动手前必查清单 |
+| 6 | [`TandemVec_FCS/AGENTS.md`](TandemVec_FCS/AGENTS.md) | 固件侧：env 体系、IMU 采样、遥控通道语义、串口映射、烧录 |
+
+三个「动手前先查」的正本：
+
+- [`docs/registers/踩坑记录-AGENTS.md`](docs/registers/踩坑记录-AGENTS.md) — 130+ 条历史踩坑，按关键词检索
+- [`docs/memory/`](docs/memory/) — 13 篇攻坚全过程，每篇首行标了「触发条件」
+- [`docs/08-参考资料/器件手册与驱动资产索引.md`](docs/08-参考资料/器件手册与驱动资产索引.md) — ICM-42688/45686、DPS310、F10N 的手册与驱动资产
+
+> ★ **文档是前置输入，不是事后记录。** 改任何模块前先按关键词扫上面三处，比翻代码快，也比重新踩坑快。
+
 ## 🚀 快速开始
 
 零依赖直接运行：双击 `simulations/vector-thrust-lab/standalone.html`（单文件版，无需服务器）。

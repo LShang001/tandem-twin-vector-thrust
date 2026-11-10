@@ -1506,12 +1506,14 @@ SIL 里 plant
 次野值拒绝）， <code>resets=0</code>、<code>imu_det=0</code>。</li>
 </ul>
 </blockquote>
-<h2 id="216-守卫全景2026-11-10全量-28-项全绿">2.16
-守卫全景（2026-11-10，全量 28 项全绿）</h2>
+<h2 id="216-守卫全景2026-11-10全量-29-项全绿">2.16
+守卫全景（2026-11-10，全量 29 项全绿）</h2>
 <p><code>verify-all.py --include-sil --include-host</code>
 的完整清单。<strong>这是项目的验证全景</strong>——
-想知道「这个仓现在被哪些手段守着」，看这张表就够。</p>
-<h3 id="快档26-项约-46-s">快档（26 项，约 46 s）</h3>
+想知道「这个仓现在被哪些手段守着」，看这张表就够。表内顺序即执行顺序，
+与 <code>tools/verify-all.py</code> 的 <code>build_checks()</code>
+一一对应（新增守卫必须同时改两处）。</p>
+<h3 id="快档27-项约-50-s">快档（27 项，约 50 s）</h3>
 <table>
 <thead>
 <tr>
@@ -1556,77 +1558,123 @@ SIL 里 plant
 </tr>
 <tr>
 <td>7</td>
+<td>串口用途冲突</td>
+<td>同一 UART 不被两个用途占用</td>
+</tr>
+<tr>
+<td>8</td>
+<td>沉淀索引完整性</td>
+<td>每篇 <code>docs/memory/</code> 有触发条件且登记进 AGENTS.md
+索引表</td>
+</tr>
+<tr>
+<td>9</td>
 <td>头文件接线审计</td>
 <td>无「有实现但没人调用」的模块</td>
 </tr>
 <tr>
-<td>8</td>
+<td>10</td>
 <td>角度单位审计</td>
 <td>无「弧度当度用」（A-8 教训）</td>
 </tr>
 <tr>
-<td>9</td>
+<td>11</td>
+<td>文档站点收录</td>
+<td>docs/ 下文档要么进站点、要么白名单写明原因；编号唯一</td>
+</tr>
+<tr>
+<td>12</td>
+<td>告警判据 NaN 防护</td>
+<td>阈值比较不被 NaN 静默通过</td>
+</tr>
+<tr>
+<td>13</td>
 <td>注释门禁 GOV-004</td>
 <td>五段式文件头 + <code>@formula</code>/<code>@ref</code></td>
 </tr>
 <tr>
-<td>10</td>
+<td>14</td>
 <td>文档链接完整性</td>
-<td>Markdown 427 处 + HTML 448 处零断链</td>
+<td>Markdown 723 处 + HTML 487 处零断链</td>
 </tr>
 <tr>
-<td>11</td>
+<td>15</td>
 <td>文档产物同步</td>
 <td><code>docs/</code> 源与构建产物一致</td>
 </tr>
 <tr>
-<td>12</td>
+<td>16</td>
 <td>文档统计数字</td>
 <td>文档里的数字与实际一致</td>
 </tr>
 <tr>
-<td>13</td>
+<td>17</td>
 <td>文档编号引用</td>
 <td>「见 CTL-001」类引用都指向存在的文档</td>
 </tr>
 <tr>
-<td>14</td>
+<td>18</td>
 <td>代码块路径</td>
 <td>文档里引用的文件路径都存在</td>
 </tr>
 <tr>
-<td>15</td>
+<td>19</td>
+<td>文档可达性</td>
+<td><strong>每篇项目文档都能从入口走到</strong>（无孤儿）——2026-11-10
+新增</td>
+</tr>
+<tr>
+<td>20</td>
 <td>IMU 轴映射</td>
 <td>传感器轴映射与 <code>FrameConventions</code> 一致</td>
 </tr>
 <tr>
-<td>16</td>
+<td>21</td>
 <td>解锁门判据</td>
 <td>CH5 &gt;1500 解锁语义</td>
 </tr>
 <tr>
-<td>17</td>
+<td>22</td>
 <td>仿真域单测（Node）</td>
 <td>11 个文件 92 项</td>
 </tr>
 <tr>
-<td>18</td>
+<td>23</td>
 <td>坐标系实现自检</td>
 <td><code>FrameConventions.h</code> 的置换矩阵</td>
 </tr>
 <tr>
-<td>19</td>
+<td>24</td>
 <td>GCS 单元测试</td>
 <td>上位机 54+ 项</td>
 </tr>
 <tr>
-<td>20</td>
-<td>文档站点收录</td>
-<td>docs/ 下文档要么进站点、要么白名单写明原因；编号唯一</td>
+<td>25</td>
+<td>GCS 能力清单</td>
+<td>后端能力清单与前端调用一致</td>
+</tr>
+<tr>
+<td>26</td>
+<td>GCS 冒烟</td>
+<td>后端启动 + 关键 API 可响应</td>
+</tr>
+<tr>
+<td>27</td>
+<td>GCS 平板可点性</td>
+<td>触控目标 ≥40 px（Playwright 真实视口）</td>
 </tr>
 </tbody>
 </table>
-<h3 id="慢档2-项约-875-s">慢档（2 项，约 875 s）</h3>
+<blockquote>
+<p>★ 「文档可达性」为什么必须单独立项（2026-11-10）：
+<code>check-links</code>
+只证明「写出来的链接不指向空处」，证明不了「文档能被找到」。
+整理文档时实测：<code>docs/</code> 下 193 篇，从入口只能走到 <strong>2
+篇</strong>，其余全是孤儿，
+而链接检查当时报的是「零断链」——<strong>没被链接的文档连断链的机会都没有</strong>。
+孤儿文档对新会话等于不存在，正是「每次都要重新学一遍」的根因。</p>
+</blockquote>
+<h3 id="慢档2-项约-740-s">慢档（2 项，约 740 s）</h3>
 <table>
 <thead>
 <tr>
@@ -1638,51 +1686,32 @@ SIL 里 plant
 </thead>
 <tbody>
 <tr>
-<td>20</td>
+<td>28</td>
 <td>三机型 SIL 跑批</td>
 <td>410.9 s</td>
 <td>纵列（定高/手动/3seeds）+ 共轴（40 例矩阵）+
 单涵道（定高/手动）</td>
 </tr>
 <tr>
-<td>21</td>
+<td>29</td>
 <td>完整宿主回归</td>
 <td>329.3 s</td>
-<td><code>run_all.sh</code> 全部宿主测试</td>
+<td><code>run_all.sh</code> 全部宿主测试（116 个测试程序 / 74 段）</td>
 </tr>
 </tbody>
 </table>
-<p><strong>能失败验证情况：22/28 做过违规实验</strong>（另有
-<code>run_real_acceptance</code> 单体验过）。 做过违规实验的 14 项明细见
-§2.16 的上一张表；<strong>本节只列没做的 8 项</strong>，
-逐条写明为什么不验。</p>
-<table>
-<thead>
-<tr>
-<th>未做违规实验的 1 项</th>
-<th>原因</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>坐标系 @frame 标注</td>
-<td><strong>有意宽松</strong>（详见 §2.25，已量化验证）</td>
-</tr>
-</tbody>
-</table>
+<h3 id="能失败验证情况">能失败验证情况</h3>
+<p>判据：<strong>这个守卫真的报错过吗？</strong>
+「文档里提过这个名字」不算证据， 「造过违规输入、亲眼见过它
+FAIL」才算。当前 <strong>23/29 项做过违规实验</strong>
+（新增的「文档可达性」用「造一个孤儿文档 → FAIL」验证过）。</p>
+<p>有意不做违规实验的：<strong>坐标系 @frame
+标注</strong>——它有意宽松，详见 §2.25，已量化验证。</p>
 <blockquote>
-<p>仿真域 Node 测试与 GCS 单元测试已于 Round 207/208
-补验（插必然失败断言）， 已从本表移出，计入 16/22。</p>
-</blockquote>
-<blockquote>
-<p>★ 这张计数必须诚实：「文档里提过这个名字」不等于「做过违规实验」。
-本表 <strong>14/24</strong> 是后者（做过违规实验的 14 项明细见 §2.16
-的上一张表； 本节只列<strong>没做</strong>的 8 项）。</p>
-</blockquote>
-<blockquote>
-<p>★ 2026-11-08 修正：本段此前写「12/21」，与正文的「13/22」不一致， 且
-12/21 是更早的口径。现在三处统一为 <strong>14/24</strong>：
-正文开头、本节、§2.16 表尾。</p>
+<p>★
+计数只写能核实的部分。<strong>未在本节登记的项不代表已验</strong>；补验一项就在此加一行。
+历史口径（12/21、13/22、14/24、16/22、22/22）是不同时期的快照，
+已被本节取代，不再并存。</p>
 </blockquote>
 <h2 id="217-检查器的目录排除审计2026-11-08">2.17
 检查器的目录排除审计（2026-11-08）</h2>
@@ -2724,7 +2753,7 @@ Node），改公式风险高，未构造违规；机制上比静态检查更可�
 </tr>
 </tbody>
 </table>
-<p><strong>当前基线（2026-11-10）</strong>：26 项快档守卫 + 三机型 SIL
+<p><strong>当前基线（2026-11-10）</strong>：27 项快档守卫 + 三机型 SIL
 跑批 + 完整宿主回归</p>
 <ul>
 <li>完整宿主回归（324.6 s）。</li>
@@ -2863,5 +2892,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href=
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 01:17</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 19:03</footer></article></body>
 </html>

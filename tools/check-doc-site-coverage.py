@@ -35,6 +35,9 @@ SKIP = {
     "docs/00-项目治理/": "治理规范，面向协作者而非产品文档读者",
     "docs/reference/": "第三方 SDK/协议文档原文（vendor），非本项目产出",
     "docs/PROJECT-MAP.md": "仓库结构速查表，面向协作者",
+    "docs/README.md": "文档总索引/导航中枢，面向 agent 与协作者",
+    "docs/00-项目治理/GOV-005-项目全景与历史.md":
+        "项目历史与当前状态，面向 agent 入场与协作者，不是产品文档",
     "docs/01-方案设计/CFG-001-py-web-lab统一架构设计.md":
         "py-web-lab 实验台架构说明，面向开发环境搭建，非产品文档",
 }

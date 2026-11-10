@@ -78,7 +78,7 @@
 - **接收机侧 GNSS 配置（`ubxcfg` 扩展，2026-08-09）**：DBG `ubxcfg msg <句> <rate|off>`（CFG-MSG，NMEA 句 0xF0 + UBX 诊断消息 pvt/eoe/dop/sat/status/svin）、`ubxcfg core <on|off>`（GGA+RMC+GSA 一键）、`ubxcfg nav5 <dyn 2|4|fix 0|1|2|elev 0-90|pdop 0-100>`（CFG-NAV5 读改写）、`ubxcfg itfm <on|off>`（CW 干扰检测 0x06 0x39）、`ubxcfg ant`（天线短路/开路查询 0x06 0x13）、`ubxcfg nmver/nmtalker/nmfilter`（CFG-NMEA 0x06 0x17）、`ubxcfg proto <ubx|nmea|both>`（CFG-PRT outProtoMask）。**★ 2026-08-09 修复 `_cfg_nav5` 错位 bug：dynModel 在 payload[2]、mask bit0 在 payload[0]，旧实现把枚举值 6/7 写进 mask 字节致 Airborne 配置从未生效**（对照 SparkFun setDynamicModel 确认）。NMEA 消息 ID 表在 `ubx_config.h`；只改 RAM，固化 `ubxcfg save`。与 `gpsproto`（解析侧）配合 = 全链路双协议双保险（来源：2026-08-09）
 - **minmea 的两个真实坑**：① u-blox 等真实接收机 RMC 尾部为 `,,A`（variation 空 + FAA mode 'A'），官方 `minmea_parse_rmc` 格式 `"tTcfdfdffDfd"` 会把 'A' 当 variation 方向字符而 parse_error（'A' 不在 N/E/S/W）→ 整句丢弃。修复范式：库内自实现，用 `minmea_scan(sentence, "tTcfdfdffD", ...)` 截断到 date（NMEA 2.3 后字段皆可选）；② 状态机内部 `micros()==0` 时 `!=0U` 判断失效（首帧/上电瞬间跳过节流/backoff）——用独立布尔标志（`nmea_epoch_seen_`/`nmea_ubx_seen_`）而非时刻值判空（来源：2026-08-09 库级双协议调试，测试先跑出 13 个失败定位）
 - **AirframeModel 机型通用层（2026-08-10）**：`include/AirframeModel.h` 数据驱动执行器模型——执行器=物理电机（kRotor/kGimbal）+ 控制输入映射（u_spd 转速源/u_angle 摆角源/spd_sign 差速联动符号）；**差速 Δω 是两电机的联动转速输入（w=w0√(1±Δω)）不是独立执行器**——初版把它建成独立执行器双重计数，被 T11 等价测试抓出修正。`computeJacobianNumeric` 数值中心差分生成 B（机型无关），**相对步长 h·max(1,|u|) 对 ω² 大量级自适应**（固定小步长差值会被 float 精度吞没→全零，曾致四旋翼 demo 全零 B）。纵列双发 `computeEffectMatrixDataDriven` 与解析式逐元素等价（ta T11，绝对 <5e-4）。**换机型=填几何数据表**，四旋翼 demo `test_host/test_airframe_generic.cpp` 验证。解析 `computeEffectMatrix` 保留为运行时实现（实机已验证），切换时机=下次几何变更（来源：2026-08-10 机型通用化）
-- **上电无信号时 `raw_rc_values` 全 0 → 任何 `raw_rc[x] < 阈值` 的开关判定误触发低档分支**：CH8=0<1200 → 手动 TVC 旁路 → 舵机钳到满偏 ±15°（PWM 72%/28%），直到首帧通道到达。修复范式：**开关/模式判定一律以 `isLinkUp` 门控兜底**（`is_manual_tvc = isLinkUp && ...`，来源：2026-08-08 灯效扩展时发现并修复）
+- **上电无信号时 `raw_rc_values` 全 0 → 任何「低位触发」的开关判定会误入低档分支**：共轴原始固件 CH8 用 `raw[7] < 1200` 判手动，上电 raw=0 会直接旁路进手动 TVC、把舵机钳到满偏 ±15°（PWM 72%/28%），直到首帧通道到达。本项目 2026-08-10 起共轴 CH8 反转为 `raw[7] > 1750` 才进手动（低位=飞控自稳），raw=0 不再误触发；但**任何「低位=特殊模式」的机型或历史逻辑依然会踩**。两条修复范式：①**开关/模式判定一律以 `isLinkUp` 门控兜底**（`is_manual_tvc = isLinkUp && ...`）；②特殊模式统一设计成「高位启用」（来源：2026-08-08 灯效扩展发现并修复；2026-08-10 共轴反转；2026-11-10 复核去重）
 - **ZCode agent shell PATH 被精简（2026-08-09 定位）**：Bash 工具默认 PATH 只有 `ZCode tools + %APPDATA%\npm` 三目录（连 System32 都没有），git/node/py 全不可用——**系统注册表 PATH（HKLM+HKCU）本身完整，勿去改系统环境变量**。修复：命令前缀 `call tools\shell-env.cmd && ...` 恢复完整 PATH（脚本在 `tools/shell-env.cmd`，ASCII 副本 `C:\Users\12631\.zcode\bin\`）。**★.cmd/.bat 批处理内容必须 ASCII（2026-08-11 编码统一升级）**：cmd 解析批处理文件用**进程启动时的代码页**——运行时 `chcp 65001` 只影响 echo/程序输出的编码，**不影响文件自身的解析**。UTF-8 中文/emoji 注释在 GBK 解析下会凑出特殊字节破坏整行（实测：`echo 🚀 中文` 崩出 `'cho' is not recognized`；含 `→` 的注释崩出 `'处理可写中文注释...' is not recognized`）。正确分工：**批处理内容（注释/命令/echo）一律英文 ASCII**；**中文输出走 Python**（`set PYTHONUTF8=1` 强制 UTF-8，console/管道一致）；`chcp 65001 >nul` 首行保留（对 echo 英文无影响、对调用的程序输出有益）。历史遗留：build.bat / GCS/start.bat 的中文 REM 经实测 GBK 解析安全（内容不含特殊字节），可保留但**新增注释一律英文**（来源：2026-08-09 shell 诊断；2026-08-11 编码统一实测：chcp 不救文件解析、emoji 必崩）
 
 - **pitchRatePID 复制粘贴 bug（2026-08-10 通读发现并修复）**：flight_control.cpp 内环 `alpha_pitch` 误用 `rollRatePID.compute`——pitchRatePID.compute 从未被调用：①pitch 积分恒 0 且与 roll 通道共享同一 PID 实例的积分状态互相污染；②在线辨识 `i_term[1]=pitchRatePID.getIntegral()` 恒 0 → pitch 通道 CG/配平力矩辨识失效。**kp 相同（0.28）掩盖了比例项错误**，实机调参稳定期未被发现。教训：同构代码（roll/pitch/yaw 三通道）逐一核对 PID 实例名，勿因参数相同想当然；在线辨识依赖的中间量要交叉验证非零（来源：2026-08-10 完整通读 flight_control.cpp）。**实机症状确认（2026-08-10 用户）**：pitch 控制一直飘、积分无法消除——正是 pitchRatePID 积分恒 0 的表现；且 rollRatePID.compute 被 roll/pitch 双通道交替调用，roll 积分项混入 pitch 误差（双向污染）
@@ -114,7 +114,6 @@
 - **AnoVars 通用变量上报（2026-08-10，0xF2/0xF3 + MAVLink + DBG vars）**：平台无关注册表（`include/AnoVars.h`）+ 多协议输出（0xF2 值帧/0xF3 清单/MAVLink NAMED_VALUE_FLOAT+DEBUG_VECT/DBG vars）。**加变量 = `src/ano_vars.cpp` kAnoVars 加一行宏**（预注册 52 个：gnc_tel 全字段/w_est 观测器/EKF/辨识/执行器故障 afm_*；角度域角加速度名为 `adps2_x/y/z`，保证 MAVLink 9 字符截断后仍唯一）。CLI：`vars list`/`vars watch <name>... -t 5 --json`。**★ 三坑**：①注册表 const 数组定义必须 `extern` 且**不带大小**（否则 sizeof 虚高、遍历空项 segfault）；②volatile 变量（bat_voltage_mv）fptr 需 `const volatile float*`；③0xF3 应答 20B。**MAVLink**：DBG `proto mavlink|anocom` 运行时切换（不重烧），AnoCom 与 MAVLink 互斥由该标志保证（来源：2026-08-10，host segfault 三层定位）
 - **FPV 摇杆曲线（2026-08-11，RATE_MODE）**：Betaflight 三参数模型（`include/RcCurve.h` 平台无关）——`rc_rate` 全局灵敏度、`rc_expo[3]` 输入中心曲线、`rc_super[3]` 输出边缘双曲曲线；默认 0.5/0.25/0.7·0.7·0.55（满杆 roll/pitch 333°/s、yaw 222°/s）。**调参走 CLI `param set rc_rate 0.6`**（在线，不重烧）；RATE_MODE 限幅 MAX_MANUAL_*RATE=600（2026-08-11 由 80 解耦——旧 80 复用姿态外环限幅会把曲线在 ~半杆削平）。曲线图 `rc-curve.png`（项目根）。**实机注意：RATE_MODE 满杆从存档 80°/s 变 333°/s，先低杆量试**（来源：2026-08-11）
 - **编码统一（2026-08-11）**：批处理（.cmd/.bat）**内容必须 ASCII**——cmd 用进程启动代码页解析文件，运行时 `chcp 65001` 只影响输出编码、不救文件解析（UTF-8 中文/emoji 注释会凑出特殊字节崩行，实测）；首行 `chcp 65001 >nul` 保留（对调用的 Python 输出有益）；**中文输出走 Python + `PYTHONUTF8=1`**（tvc-cli.cmd 已设，console/管道一致）。`启动.bat` 等已 ASCII 化（来源：2026-08-11 编码统一实测）
-- **上电无信号时 `raw_rc_values` 全 0 → 任何 `raw_rc[x] < 阈值` 的开关判定误触发低档分支**：CH8=0<1200 → 手动 TVC 旁路 → 舵机钳到满偏 ±15°，直到首帧通道到达。修复范式：**开关/模式判定一律以 `isLinkUp` 门控兜底**（`is_manual_tvc = isLinkUp && ...`，来源：2026-08-08 灯效扩展时发现并修复）
 - **单通道 LMI 不得外推为实机增益裕度**：Petersen LMI（cvxpy/CLARABEL）在无积分、无滤波、无执行器动态、无饱和的标量乘性摄动模型中得到 $\bar\gamma=0.968$（仿真比例模型）和 $0.897$（固件比例项等效口径）。该模型不覆盖 $\tau_m$ 瞬态工作点失配、BTRUE 非对角耦合和离散PI闭环，不得据此解释实机调参或给出实机裕度（来源：2026-08-11 论文证据审计）
 - **速率环量纲已统一（2026-08-11，旧“rate.kp 是混单位增益”描述已废止）**：控制器输入 `deg/s`、输出 `deg/s²`，仅在写入 `ControlOutputs_t` 的惯量逆解边界乘 `π/180` 转为 `rad/s²`。现值 roll/pitch `kp=16.042818 s⁻¹`、yaw `kp=11.459156 s⁻¹`、`ki=5.729578 s⁻²`（**2026-08-12 偏航 Ki 首轮保守下调 25% → 4.297184 s⁻²，以 `FlightCtrlParams.h` 为准**），分别与迁移前混合域 `0.28/0.20/0.10` 行为严格等价；外部参数文件若继续写旧值会使物理增益降低 57.3 倍。`kd` 当前为 0，PositionPID 仍按每拍差分（未除 dt）实现，非零值迁移也须乘 57.3。0x21/CAN/旧 `alpha_ref_*` 继续保持 `rad/s²` 兼容，新增 `adps2_x/y/z` 提供角度域观测（来源：2026-08-11 用户要求统一单位并完成行为保持迁移；2026-08-12 偏航 Ki 调整；2026-10-23 核查同步）
 - **论文修订必须保留完整长稿**：`TandemVec-Paper/` 的17章、原有推导、图表和历史研究过程属于论文资产；优化时以证据分层、勘误和重写为主，不得用压缩稿覆盖或大规模删减。历史结果若与当前固件不一致，应保留并明确标注“历史原型/待复核”，而不是直接删除（来源：2026-08-11 用户纠正）
@@ -330,3 +329,35 @@
   把驱动留在 bitbang，换板只是碰巧拿到了干净状态。
 - **通用教训**：带副作用的调试命令必须写进命令说明、测完必须复原并复查状态字段；
   否则后续所有测试的结论都建立在错误前提上。
+
+---
+
+## 2026-11-10 文档门禁的「跳过规则」过宽 —— 零断链可能是假证据
+
+**现象**：`tools/check-links.py` 一直报「零断链」，但 `docs/08-参考资料/books/README.md` 里
+18 处分章链接**全部是断链**（写成 `chapters/ch1-绪论.md`，真实位置在
+`books/REF-120-Qin-2020-inertial-navigation-3e/chapters/`）。守卫从来没检查过它们。
+
+**根因**：为跳过来自 MinerU 的 `book.md`/`paper.md`（它们引用未入库的 `images/`），
+代码写成了按目录整跳：
+
+```python
+if "08-参考资料" in md.parts and ({"books", "papers"} & set(md.parts)):
+    continue          # ← 连 books/README.md、papers/*/notes.md 一起跳了
+```
+
+**判据**：「跳过」必须按**产物的具体形态**判断（文件名 / 子目录），不能按「它属于某个目录」判断。
+目录里永远会混进人写的文件（README、notes、勘误、审计），那些才是最需要检查的东西。
+
+**修法**：只跳 MinerU 提取产物 —— 文件名属于 `book.md` / `paper.md` / `full.md`，
+或位于 `part*/` `chunk*/` `toc_probe/` `chapters/`。`README.md` / `notes.md` /
+`ocr-errata.md` / `conversion-audit.md` 等团队产出仍然检查。
+
+**验证方法（必须做）**：改完守卫后**故意造一条断链**，确认它真的报 FAIL。
+不造负例就无法区分「守卫通过」与「守卫没在看」——这次就是后者。
+
+**同类风险**：其他 `check-*.py` 里的 `continue` / `SKIP` / `PENDING` 白名单。
+白名单每加一条，就等于放弃一片区域的检查能力；加的时候必须问：
+**这片区域里有没有人写的东西？** 有就细化到文件名，不要细化到目录。
+
+**关联**：`docs/README.md` §4「维护规则」、`AGENTS.md` 原则 11（守卫要有证明力）。

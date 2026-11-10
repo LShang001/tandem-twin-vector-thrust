@@ -95,9 +95,19 @@ def main() -> int:
             for part in md.parts
         ):
             continue
-        # 文献库的 MinerU 提取稿（book.md/paper.md）引用未入库的 images/，不属于站点文档，跳过
+        # 文献库的 MinerU 提取稿引用未入库的 images/，不属于站点文档，跳过。
+        # ★ 2026-11-10 修正：只跳过「MinerU 提取产物」，不再按目录整跳。
+        #   此前 `{"books","papers"} & set(md.parts)` 把 books/README.md、papers/*/notes.md、
+        #   papers/*/conversion-audit.md 也一起跳过了——books/README.md 里 18 处分章链接
+        #   因此从未被检查，实际全部是断链（写成 `chapters/chX.md`，真实位置在 `REF-120-*/chapters/`）。
+        #   守卫漏检比断链本身更危险：它让人把「零断链」当成证据。
+        #   提取产物 = book.md / paper.md / full.md，或位于 part*/chunk*/toc_probe/chapters/。
+        #   notes.md / README.md / ocr-errata.md / conversion-audit.md 是团队产出，仍然检查。
+        MINERU_DIRS = {"part0", "part1", "part2", "chunkA", "chunkB", "chunkC",
+                       "toc_probe", "chapters"}
         if "08-参考资料" in md.parts and ({"books", "papers"} & set(md.parts)):
-            continue
+            if md.name in {"book.md", "paper.md", "full.md"} or (MINERU_DIRS & set(md.parts)):
+                continue
         # TandemVec_FCS/lib/ 是第三方 vendor 目录（器件驱动、MAVLink、units、eigen 等），
         # 其 README 与 MinerU 提取稿引用的是上游自带的图片/资源，多数未随库入库。
         # 它们不属于项目文档，检查它们只会产出手册/上游图片的噪音，

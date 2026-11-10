@@ -311,8 +311,9 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb3-1"><a href="
 <ul>
 <li>通过条件：<code>mean≥1950</code>、<code>std≤100</code>、<code>imu_ring_drop=0</code>；</li>
 <li>同时检查 <code>conv=1</code>、<code>vel=0</code>、姿态稳定；</li>
-<li>若 FIFO 初始化失败，固件自动回退 UI
-轮询（<code>CoaxialVTVL_UI</code> 为整机回退环境）；</li>
+<li>若 FIFO
+初始化失败，固件运行时自动降级为轮询读寄存器（<code>s_fifo_fallback</code>；共轴无独立轮询回退
+env）；</li>
 <li>当前默认实测 mean≈1998、std≈72、ring_drop=0。</li>
 </ul>
 <h2 id="13-飞前状态自动验收2026-11-04">13.
@@ -371,5 +372,5 @@ origin时，首次GNSS<strong>不硬重锚</strong>，等上锁后再锚定；</
 <li>断链4场景全PASS（air_low/normal、ground、air_relink）；</li>
 <li>RATE积分/模式重入全PASS。 这是测试前置缺失，不是断链逻辑回归。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-006-共轴首飞前检查-2026-11-04.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 01:17</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-006-共轴首飞前检查-2026-11-04.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 19:03</footer></article></body>
 </html>

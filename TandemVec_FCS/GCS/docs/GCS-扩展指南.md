@@ -164,7 +164,7 @@ py -3.12 tools/gcs_ctl.py selftest                    # 端到端自检（会自
 | 加/改命令 | `tools/check-gcs-caps.py` + `gcs_ctl.py selftest` + `pytest tests/ -q` |
 | 改链路层 | `pytest tests/test_udp_link.py -q`（真实 socket 回环） |
 | 改前端 | 浏览器实测 + `tools/tablet_check.py`（平板视口/触控/死空白） |
-| 提交前 | `py -3.12 tools/verify-all.py`（26 项快档，含 GCS 单测与冒烟） |
+| 提交前 | `py -3.12 tools/verify-all.py`（27 项快档，含 GCS 单测与冒烟） |
 
 ---
 

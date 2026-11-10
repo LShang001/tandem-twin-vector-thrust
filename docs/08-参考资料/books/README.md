@@ -14,12 +14,12 @@
 - 页码映射：**印刷页 + 8 = PDF 页**（例：Ch7 p.170 → PDF 178）。
 - 文件：
   - `book.md`：合并全文（Ch1–Ch10 + 前置页，约 100 万字符）
-  - `chapters/ch1-绪论.md`、`ch2-陀螺仪.md`、`ch3-摆式加速度计.md`、
-    `ch4-陀螺稳定平台工作原理.md`、`ch5-三轴陀螺稳定平台.md`、`ch6-双轴陀螺稳定平台.md`
-  - `chapters/ch7-惯导基本关系.md`（§7.1–7.5）
-  - `chapters/ch8-平台式惯导系统.md`（§8.1–8.5）
-  - `chapters/ch9-捷联式惯导系统.md`（§9.1–9.11；**本项目最重要**）
-  - `chapters/ch10-极区惯性导航.md`（§10.1–10.3，本机不涉及）
+  - [ch1-绪论.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch1-绪论.md)、[ch2-陀螺仪.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch2-陀螺仪.md)、[ch3-摆式加速度计.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch3-摆式加速度计.md)、
+    [ch4-陀螺稳定平台工作原理.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch4-陀螺稳定平台工作原理.md)、[ch5-三轴陀螺稳定平台.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch5-三轴陀螺稳定平台.md)、[ch6-双轴陀螺稳定平台.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch6-双轴陀螺稳定平台.md)
+  - [ch7-惯导基本关系.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch7-惯导基本关系.md)（§7.1–7.5）
+  - [ch8-平台式惯导系统.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch8-平台式惯导系统.md)（§8.1–8.5）
+  - [ch9-捷联式惯导系统.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch9-捷联式惯导系统.md)（§9.1–9.11；**本项目最重要**）
+  - [ch10-极区惯性导航.md](REF-120-Qin-2020-inertial-navigation-3e/chapters/ch10-极区惯性导航.md)（§10.1–10.3，本机不涉及）
   - `notes.md`：书籍级笔记（版本、章节导览、精读范围、关键结论）
   - `ocr-errata.md`：OCR 校订记录（对照 PDF 原页；覆盖范围/残余风险）
   - `part0/`、`part1/`、`part2/`：MinerU 原始分卷输出
@@ -41,14 +41,14 @@
   - `part2/`：PDF 221–408（Ch6.2–Ch8 + 附录）
 - 文件：
   - `book.md`：合并全文（约 123 万字符）
-  - `chapters/ch1-绪论.md`
-  - `chapters/ch2-最优估计与KF基本方程.md`
-  - `chapters/ch3-滤波技术处理.md`（有色噪声/序贯/发散抑制/平方根/UD/自适应/误差分析/H∞）
-  - `chapters/ch4-滤波稳定性.md`（随机可控/可观、定理 4.1–4.5）
-  - `chapters/ch5-滤波系统校正.md`
-  - `chapters/ch6-滤波推广EKF-UKF-PF.md`
-  - `chapters/ch7-容错组合导航设计.md`（联邦/残差 χ²/系统级 FDI/GLR/风险分析）
-  - `chapters/ch8-组合导航系统设计.md`（直接/间接法、GPS/气压/磁航向误差模型、
+  - [ch1-绪论.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch1-绪论.md)
+  - [ch2-最优估计与KF基本方程.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch2-最优估计与KF基本方程.md)
+  - [ch3-滤波技术处理.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch3-滤波技术处理.md)（有色噪声/序贯/发散抑制/平方根/UD/自适应/误差分析/H∞）
+  - [ch4-滤波稳定性.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch4-滤波稳定性.md)（随机可控/可观、定理 4.1–4.5）
+  - [ch5-滤波系统校正.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch5-滤波系统校正.md)
+  - [ch6-滤波推广EKF-UKF-PF.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch6-滤波推广EKF-UKF-PF.md)
+  - [ch7-容错组合导航设计.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch7-容错组合导航设计.md)（联邦/残差 χ²/系统级 FDI/GLR/风险分析）
+  - [ch8-组合导航系统设计.md](REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/chapters/ch8-组合导航系统设计.md)（直接/间接法、GPS/气压/磁航向误差模型、
     INS 误差模型、对准）
   - `notes.md`：书籍级笔记（版本、章节导览、精读范围、关键结论）
   - `ocr-errata.md`：OCR 校订记录（对照 PDF 原页；覆盖范围/残余风险）

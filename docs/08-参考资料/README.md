@@ -196,7 +196,7 @@ py -3.12 docs/08-参考资料/scripts/check-refs.py --update-catalog
 | 专著 | REF-121 秦永元等《卡尔曼滤波与组合导航原理（第3版）》 | ✅ 全文 408 页 OCR；`ocr-errata.md`：p84/255/291 抽查+全库字符扫描，未发现系统性语义错误 |
 | 论文 | 既有 8 篇控制类文献（REF-104~119） | 已就位 |
 | 论文 | 导航/EKF 方向开放获取论文（REF-136/138/140/144/145/154/163/169） | ✅ 8 篇已入库（PDF+MD+notes） |
-| 主题笔记 | `notes/00`–`07` | ✅ 全部完成（00 地图/01 SINS/02 KF/03 组合导航/04 航向磁/05 仿真/06 对准与可观测性/07 一致性与 FDI） |
+| 主题笔记 | `notes/00`–`09`（10 篇） | ✅ 全部完成（00 地图/01 SINS/02 KF/03 组合导航/04 航向磁/05 仿真/06 对准与可观测性/07 一致性与 FDI/08 F4 舵机卡死边界/09 LR24 数传电台）；逐篇链接见 §10 |
 | 主报告 | `TandemVec-EKF-Report/导航算法升级评估-专业文献调研-2026-10.md` | ✅ 已出（含证据冲突/负面结果） |
 | 索引 | `index/bibliography.md` / `index/TEAM-BRIEF.md` / `index/catalog.json` / `index/registry_pending.md` | ✅ 已建立 |
 | 校验 | `scripts/check-refs.py` | ✅ PASS（0 error / 15 warning，2026-10-21） |
@@ -221,3 +221,75 @@ py -3.12 docs/08-参考资料/scripts/check-refs.py --update-catalog
 2. **导航/估计线**（REF-120 起）：SINS、KF/ESKF、组合导航、鲁棒/容错、磁/光流辅助。
 
 两条线共用注册表与转换工具，但主题笔记分开，避免“控制论文的结论”污染导航判断。
+
+---
+
+## 10. 文件索引（逐篇可点，2026-11-10 补）
+
+> 本节存在的理由：上面的目录结构和注册表都是**文字描述**，新会话想直接打开某份笔记时找不到落点。
+> 这里给出实际入库文件的直接链接。**新增文献后在本节补一行**，否则它会不可发现。
+
+### 10.1 主题笔记 `notes/`（10 篇，团队产出）
+
+| 文档 | 内容 |
+|---|---|
+| [00-文献地图与结论](notes/00-文献地图与结论.md) | 全库文献地图、章节切分、可直接引用的结论清单（**查文献先看这篇**） |
+| [01-捷联惯导理论](notes/01-捷联惯导理论.md) | SINS 编排、圆锥/划摇补偿、静基座对准边界（含"罗经粗对准在本机不可用"的量化论证） |
+| [02-卡尔曼滤波理论](notes/02-卡尔曼滤波理论.md) | KF/ESKF 方程、稳定性、可观测性 |
+| [03-组合导航与鲁棒性](notes/03-组合导航与鲁棒性.md) | 组合导航结构、鲁棒滤波、容错与故障检测 |
+| [04-航向与磁辅助](notes/04-航向与磁辅助.md) | 航向可观测性、磁辅助、无磁方案边界 |
+| [05-仿真验证](notes/05-仿真验证.md) | 仿真验证方法、一致性检验（NEES/NIS） |
+| [06-深读-对准与航向可观测性](notes/06-深读-对准与航向可观测性.md) | 对准与航向可观测性深读 |
+| [07-深读-一致性与故障检测](notes/07-深读-一致性与故障检测.md) | 一致性与 FDI 深读 |
+| [08-F4单舵机卡死能力边界](notes/08-F4单舵机卡死能力边界.md) | 单舵机卡死时的可控性边界（对应 F4 缺陷评估） |
+| [09-LR24数传电台要点](notes/09-LR24数传电台要点.md) | LR24 数传电台链路要点 |
+
+### 10.2 检索层 `index/`
+
+| 文档 | 内容 |
+|---|---|
+| [bibliography（题录地图）](index/bibliography.md) | 按主题分组的全部题录与本地状态 |
+| [TEAM-BRIEF（研究组基线）](index/TEAM-BRIEF.md) | 分工、写作规范、主题笔记格式要求 |
+| [registry_pending（待并入条目）](index/registry_pending.md) | 成员提交的待合并登记 |
+
+### 10.3 专著 `books/`
+
+| 文献 | 入口 |
+|---|---|
+| REF-120 秦永元《惯性导航（第三版）》 | [书籍笔记与章节导览](books/REF-120-Qin-2020-inertial-navigation-3e/notes.md) ｜ [MinerU 全文](books/REF-120-Qin-2020-inertial-navigation-3e/book.md) ｜ [OCR 勘误](books/REF-120-Qin-2020-inertial-navigation-3e/ocr-errata.md) ｜ 分章：ch1–ch10 见 [books/README](books/README.md) |
+| REF-121 秦永元等《卡尔曼滤波与组合导航原理（第3版）》 | [书籍笔记与章节导览](books/REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/notes.md) ｜ [MinerU 全文](books/REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/book.md) ｜ [OCR 勘误](books/REF-121-Qin-2015-kalman-filter-integrated-navigation-3e/ocr-errata.md) ｜ 分章：ch1–ch8 见 [books/README](books/README.md) |
+
+> `part*/full.md`、`chunk*/full.md`、`toc_probe/full.md` 是 MinerU 的**分卷/探测原始产物**，不单独建索引；
+> 阅读与引用一律走 `book.md`（合并全文）或 `chapters/`（分章）。
+
+### 10.4 论文 `papers/`（20 篇，入口优先给项目自己写的 `notes.md`）
+
+| REF | 主题 | 入口 |
+|---|---|---|
+| REF-104 | 四元数反馈推力矢量四旋翼 | [notes](papers/REF-104-Kumar-2020-quaternion-thrust-vectoring/notes.md) ｜ [全文](papers/REF-104-Kumar-2020-quaternion-thrust-vectoring/paper.md) |
+| REF-105 | 过驱动固定翼矢量推力全包线（NDI+QP 分配） | [notes](papers/REF-105-Enenakpogbe-2024-full-envelope-vectored-thrust/notes.md) ｜ [全文](papers/REF-105-Enenakpogbe-2024-full-envelope-vectored-thrust/paper.md) |
+| REF-107 | EINDI 增强角速率反馈（飞翼摇摆抑制） | [全文](papers/REF-107-Jiang-2026-enhanced-INDI-flying-wing/paper.md) |
+| REF-108 | INDI 参考控制器设计评估 | [全文](papers/REF-108-Milz-2020-INDI-reference-controller/paper.md) |
+| REF-109 | INDI 控制律鲁棒稳定性分析 | [全文](papers/REF-109-Pollack-2023-INDI-stability/paper.md) |
+| REF-110 | 运载器 INDI 飞控（与本项目 VTVL 最接近） | [全文](papers/REF-110-Simplicio-2025-INDI-launcher/paper.md) |
+| REF-111 | 倾转旋翼混合 INDI | [全文](papers/REF-111-Jeong-2022-hybrid-INDI-tiltrotor/paper.md) |
+| REF-119 | ESO + 强化学习最优跟踪（USV） | [notes](papers/REF-119-Li-2026-usv-eso-rl-optimal-tracking/notes.md) ｜ [全文](papers/REF-119-Li-2026-usv-eso-rl-optimal-tracking/paper.md) ｜ [复现](papers/REF-119-Li-2026-usv-eso-rl-optimal-tracking/reproduction.md) |
+| REF-136 | 四元数 ESKF（Sola 2017，姿态滤波标准参考） | [notes](papers/REF-136-Sola-2017-quaternion-eskf/notes.md) ｜ [全文](papers/REF-136-Sola-2017-quaternion-eskf/paper.md) |
+| REF-138 | 视觉辅助 INS 一致性（Hesch 2014） | [notes](papers/REF-138-Hesch-2014-consistency-vision-aided-ins/notes.md) ｜ [全文](papers/REF-138-Hesch-2014-consistency-vision-aided-ins/paper.md) |
+| REF-140 | Invariant EKF 稳定观测器（Barrau 2017） | [notes](papers/REF-140-Barrau-2017-inekf-stable-observer/notes.md) ｜ [全文](papers/REF-140-Barrau-2017-inekf-stable-observer/paper.md) |
+| REF-144 | GNSS/INS 可观测性分析 | [notes](papers/REF-144-Cui-2023-observability-ckf-gnss-ins/notes.md) ｜ [全文](papers/REF-144-Cui-2023-observability-ckf-gnss-ins/paper.md) |
+| REF-145 | 多模联邦 IEKF | [notes](papers/REF-145-Zhao-2025-mf-iekf-federated/notes.md) ｜ [全文](papers/REF-145-Zhao-2025-mf-iekf-federated/paper.md) |
+| REF-154 | GNSS/INS 保护级（robust protection level） | [notes](papers/REF-154-Liu-2023-robust-protection-level-gnss-ins/notes.md) ｜ [全文](papers/REF-154-Liu-2023-robust-protection-level-gnss-ins/paper.md) |
+| REF-163 | 变分四元数滤波 VQF | [notes](papers/REF-163-Laidig-2023-vqf/notes.md) ｜ [全文](papers/REF-163-Laidig-2023-vqf/paper.md) |
+| REF-169 | 流形上的预积分（Forster 2017） | [notes](papers/REF-169-Forster-2017-on-manifold-preintegration/notes.md) ｜ [全文](papers/REF-169-Forster-2017-on-manifold-preintegration/paper.md) |
+| REF-175 | u-blox NEO-F10N 数据手册 | [全文](papers/REF-175-u-blox-2023-neo-f10n/paper.md) |
+| REF-176 | NEO-F10N 集成手册 | [notes](papers/REF-176-u-blox-2024-neo-f10n-integration-manual/notes.md) ｜ [全文](papers/REF-176-u-blox-2024-neo-f10n-integration-manual/paper.md) ｜ [转换审计](papers/REF-176-u-blox-2024-neo-f10n-integration-manual/conversion-audit.md) |
+| REF-177 | F10 SPG 6.00 接口说明 | [notes](papers/REF-177-u-blox-2024-f10-spg600-interface-description/notes.md) ｜ [全文](papers/REF-177-u-blox-2024-f10-spg600-interface-description/paper.md) ｜ [转换审计](papers/REF-177-u-blox-2024-f10-spg600-interface-description/conversion-audit.md) |
+
+> 器件手册（ICM-42688-P / ICM-45686 / DPS310 / F10N 驱动资产）不在这里，见
+> [`器件手册与驱动资产索引.md`](器件手册与驱动资产索引.md)。
+
+### 10.5 第三方原文（vendor，非本项目产出）
+
+`docs/reference/` 下是第三方 SDK/协议文档原文，只读参考、不要修改、不建逐篇索引。
+已登记的条目见 [`参考资料注册表.md`](参考资料注册表.md)（如 REF-115 SparkFun u-blox 库）。

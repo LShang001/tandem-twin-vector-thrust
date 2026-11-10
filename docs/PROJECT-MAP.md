@@ -1,23 +1,26 @@
 # 项目总览：架构与文件树
 
-> 本文由实际目录扫描生成（2026-11-01），规模数字来自 `find`/`du` 与 `git ls-files`。
+> 本文由实际目录扫描生成（初版 2026-11-01，规模数字 2026-11-10 重采）。
 > 用途：快速定位"东西在哪、哪些能改、哪些是生成物"。
 > 维护：结构变动（新增顶层目录、改变构建产物流向）时同步更新本文。
 
 ## 1. 定位与成熟度
 
-纵列双发、正交单轴矢量推力、差速反扭滚转的 VTOL 概念项目，包含**飞控固件、地面站、仿真/分析工具、论文与验证文档**四块。
+**UniGNC —— 机型无关的通用飞控平台**（2026-11-07 由「纵列双发矢量推力飞行器」更名；仓库目录名沿用旧名，两者指同一个项目）。
+一套 GNC 内核 + 可插拔机型分配层，已实飞验证四类飞行器：纵列双发矢量推力（基型，2026-08 首飞）、
+共轴双桨 VTVL、单涵道四燃气舵（2026-11-05）、VTVL 液体火箭。包含**飞控固件、地面站、仿真/分析工具、论文与验证文档**四块。
 
-- 前电机（拉力式）绕机体系 z 轴摆动 → 滚转主控；尾电机（推进式）绕 y 轴摆动 → 俯仰主控；差速反扭 → 偏航主控。
-- 固件已进入实机飞行验证阶段（2026-08 首飞）；`models/aircraft-model.json` 参数仍为默认/估算值。
-- 规模：`git ls-files` 4411 个跟踪文件、519 次提交；固件 `src/` 16 230 行 C++、`include/` 13 927 行、`test_host/` 19 406 行。
+- 基型执行器语义（悬停构型）：前电机（拉力式）绕机体 z 轴摆动 → 滚转主控；尾电机（推进式）绕 y 轴摆动 → 俯仰主控；差速反扭 → 偏航主控。详见 [MOD-002](04-数学建模/MOD-002-坐标系与符号约定.md)。
+- 固件域已过多机型实飞验证，进入调参优化阶段；`models/aircraft-model.json` 参数仍为 `MODEL-DEFAULT`/`ESTIMATED`。
+- 规模见本文 §11（数字随开发漂移，以重采命令的输出为准）。
+- 文档导航入口：[`docs/README.md`](README.md)；项目历史与当前状态：[GOV-005](00-项目治理/GOV-005-项目全景与历史.md)。
 
 ## 2. 架构总览
 
 ```mermaid
 flowchart TB
   subgraph HW["硬件层"]
-    MCU["STM32H743 飞控板<br/>ICM42688 / DPS310 / 磁力计<br/>TVC 舵机 / 电调 / MCP2515 / NAND"]
+    MCU["STM32H743 飞控板<br/>ICM42688 或 ICM45686 / DPS310 / 磁力计<br/>TVC 舵机 / 电调 / MCP2515 / NAND / WS2812"]
     RC["CRSF/ELRS 遥控"]
     GCS["地面站（本地浏览器）"]
   end
@@ -84,7 +87,7 @@ flowchart TB
 ```text
 TandemVec_FCS/
 ├── platformio.ini              # 三个 env：TandemVec_FCS（飞行）/ CoaxialVTVL（共轴）/ test
-├── src/                        # 固件主源码（16 230 行）
+├── src/                        # 固件主源码（23 208 行）
 │   ├── main.cpp                # setup/loop、任务注册、上电 DETA100/UBX 探测、IWDG
 │   ├── task_scheduler.cpp/.h   # TIM8 6.4 kHz 调度（支持 3.2kHz IMU）、分数 tick、[TASK]/[LOOP] 统计
 │   ├── task_scheduler_interval.h
@@ -130,7 +133,7 @@ TandemVec_FCS/
 │   │                           #   2026-11-01 接入固件：-DFCS_IMU_MODEL_ICM45686 切换
 │   ├── AnoComProtocol、CrsfSerial、crsf、crc8、arduino-CAN  # 通信
 │   └── W25N01GV、WS2812Driver                               # 存储/灯效
-├── test_host/                 # 宿主测试（19 406 行）
+├── test_host/                 # 宿主测试（37 063 行）
 │   ├── run_all.sh              # 平台无关回归总入口（BIN_DIR 可覆盖）
 │   ├── test_imu_nav_perf.cpp   # IMU×GNSS×场景 导航性能矩阵（真实 EKF，手册参数）
 │   ├── plot_imu_nav_perf.py    # 上述矩阵热图/柱状/CDF/箱线/时序/轨迹
@@ -234,7 +237,7 @@ pio run                                  # 编译 TandemVec_FCS（默认 env）
 pio run -e CoaxialVTVL                   # 共轴机型
 pio test -e test                         # PlatformIO 单元测试
 
-# 宿主回归（83 个用例）
+# 宿主回归（116 个测试程序 / 74 段）
 bash TandemVec_FCS/test_host/run_all.sh
 
 # 真实固件 SIL
@@ -266,21 +269,35 @@ py -3.12 tools/build-docs.py
 
 ## 11. 规模速览
 
-| 指标 | 数值 |
+> 数字会漂移。**维护方式：改结构后重跑下面这段命令，直接抄结果**，不要凭印象改。
+
+```bash
+git ls-files | wc -l                                   # Git 跟踪文件
+git rev-list --count HEAD                              # 提交数
+find TandemVec_FCS/src -name '*.cpp' -o -name '*.h' | xargs wc -l | tail -1
+find TandemVec_FCS/include -name '*.h' | xargs wc -l | tail -1
+find TandemVec_FCS/test_host -name '*.cpp' -o -name '*.h' | xargs wc -l | tail -1
+ls TandemVec_FCS/test_host/test_*.cpp | wc -l          # 测试程序数
+find docs -name '*.md' | wc -l                         # 文档篇数
+```
+
+| 指标 | 数值（2026-11-10） |
 |---|---|
-| Git 跟踪文件 | 4411 |
-| 提交数 | 519 |
-| 固件源码（src） | 16 230 行 |
-| 固件平台无关头（include） | 13 927 行 |
-| 宿主测试（test_host） | 19 406 行 / 83 个用例 |
-| 文档正文（docs 00–09 + memory + registers） | 61 篇 |
-| 参考资料 | books 6333 / papers 1834 文件 |
-| 仿真代码与数据 | 551 文件 / 698 MB |
-| 报告线证据 | EKF 报告 1668 文件 / 488 MB |
+| Git 跟踪文件 | 4 803 |
+| 提交数 | 1 302 |
+| 固件源码（src） | 23 208 行 |
+| 固件平台无关头（include） | 15 523 行 |
+| 宿主测试（test_host） | 37 063 行 / 116 个测试程序 / `run_all.sh` 74 段回归 |
+| SIL 跑批脚本 | 15（`test_host/fw_sil/*.sh`，判据见 VER-009） |
+| 文档正文（docs 全域 md） | 192 篇 |
+| 参考资料 | books 6 333 / papers 1 848 文件 |
+| 仿真代码与数据 | 562 文件 / 698 MB |
+| 报告线证据（TandemVec-EKF-Report） | 1 780 文件 / 503 MB |
+| 仓库工作树总大小 | 约 3.3 GB（不含 `.git`） |
 
 ## 12 命名澄清：`icm45686` 前缀不是传感器驱动
 
-实机 IMU 现役为 **ICM42688P**，经 `lib/ImuAbstraction/src/ImuDevice.h` 与 `src/imu_factory.cpp` 装配；`lib/ICM45686/`（自有库 v2.0.0）已接入同一抽象层，编译期宏 `-DFCS_IMU_MODEL_ICM45686` 切换（`[env:TandemVec_FCS_ICM45686]`）。6.4 kHz 时基下 IMU 任务周期按 `actualAccelOdrHz()` 反推（2k→0.5ms、3.2k→0.3125ms），Madgwick 同步跟随。换硬件仍需确认引脚/SPI/CS/中断/量程并上板验证。
+实机飞控板有 **ICM-42688-P** 与 **ICM-45686** 两个版本（都是自有板），共用 `lib/ImuAbstraction/src/ImuDevice.h` 抽象层，由编译期宏 `-DFCS_IMU_MODEL_ICM45686` 切换；默认构建面向 45686（3.2 kHz FIFO 单包 + ISR 每 2 拍取一包），42688 走 2 kHz 硬件 FIFO。6.4 kHz 时基下 IMU 任务周期按 `actualAccelOdrHz()` 反推（2k→0.5ms、3.2k→0.3125ms），Madgwick 同步跟随。换硬件仍需确认引脚/SPI/CS/中断/量程并上板验证。
 
 `Icm45686*` 是 2026-07-29 移植提交 `62124e9` 保留下来的**参考实现前缀**（来自某份 ICM45686 参考工程/文献实现），落在导航/INS 辅助模块里，与上述两个传感器驱动库都不互相引用：
 

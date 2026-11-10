@@ -1,7 +1,14 @@
 # AGENTS.md — UniGNC 通用飞控平台
 
 > 项目背景见 `README.md`——不在这里重复。
-> 多 Agent 协作问题或新 Agent 入场时，读 `docs/00-项目治理/GOV-003-多Agent协作规范.md`。
+> **★ 新会话入场顺序**（照这个顺序走，20 分钟建立完整判断，别一进来就翻代码）：
+> ① `README.md`（项目是什么）→
+> ② [`docs/00-项目治理/GOV-005-项目全景与历史.md`](docs/00-项目治理/GOV-005-项目全景与历史.md)（**做过什么、现在停在哪、哪些坑已踩过、哪些结论还不能当定论**）→
+> ③ [`docs/README.md`](docs/README.md)（**全部 192 篇文档的导航中枢 + 按任务索引**）→
+> ④ [`docs/PROJECT-MAP.md`](docs/PROJECT-MAP.md)（东西在哪、哪些能改、哪些是生成物）→
+> ⑤ 本文件（必跑命令、行为红线、动手前必查）→
+> ⑥ [`TandemVec_FCS/AGENTS.md`](TandemVec_FCS/AGENTS.md)（固件侧：env 体系、IMU 采样、遥控通道语义、串口、烧录）。
+> 多 Agent 协作问题、跨机同步细则读 [`docs/00-项目治理/GOV-003-多Agent协作规范.md`](docs/00-项目治理/GOV-003-多Agent协作规范.md)。
 
 ---
 
@@ -13,8 +20,8 @@
 
 已完成实飞验证的四类飞行器（用户 2026-11-05 确认）：**纵列双发矢量推力（2026-08，基型）**、
 **共轴双桨 VTVL**、**单涵道四燃气舵**（2026-11-05，出厂默认控制参数首飞即稳）、
-**VTVL 液体火箭**。其中纵列与单涵道有独立记录，共轴以用户确认为准（固件文档 2026-11-04 的
-"尚无共轴实飞数据"是当时时点状态，待补记录）。
+**VTVL 液体火箭**。纵列双发与单涵道各有独立飞行记录（见 `docs/memory/`、`VER-010`）；
+共轴双桨以用户确认为准，独立飞行记录待补。
 
 同一块板可烧多种机型，**烧录前必须先确认这次飞哪一型**；env 与机型对应见
 `TandemVec_FCS/AGENTS.md` §当前实机机型与构建。
@@ -30,15 +37,15 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 ## 命令
 
 ```bash
-# ★ 总守卫（改完代码先跑这条，~46 s；26 项全绿再提交；全景见 VER-009 §2.16）
+# ★ 总守卫（改完代码先跑这条，~50 s；27 项全绿再提交；全景见 VER-009 §2.16）
 #   参数层一致性/生成物同步 · 推进六维对拍 · 分配 3×3 对拍 · 坐标系 @frame 标注
 #   SIL 覆盖审计 · 头文件接线审计 · 角度单位审计 · 注释门禁 GOV-004
-#   文档链接/产物同步/统计数字/编号引用/代码块路径 · IMU 轴映射 · 解锁门判据
+#   文档链接/产物同步/统计数字/编号引用/代码块路径/可达性 · IMU 轴映射 · 解锁门判据
 #   仿真域单测(92 项) · 坐标系实现自检 · GCS 单测
-py -3.12 tools/verify-all.py                 # 26 项快档
-py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 27 项
-py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 27 项
-py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 28 项，~920 s
+py -3.12 tools/verify-all.py                 # 27 项快档
+py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 28 项
+py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 28 项
+py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 29 项，~920 s
 # ★ 改共享结构体默认值 / 混控 / 分配 / 估计等「行为可能变」的代码时，
 #   只跑快档不够——2026-11-08 就因只跑 pio run 编过、没跑 run_all.sh，
 #   把 test_single_edf_4vane 的 6 项解析值断言弄坏了两周才发现。
