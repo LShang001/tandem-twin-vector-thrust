@@ -16,12 +16,19 @@
 
 - **IMU 型号也是构建期二选一（2026-11-09 起）**：`FCS_IMU_MODEL_ICM45686` 选后端，不带则默认 ICM-42688-P。两个后端**互相独立、可随意切换**——改的都是 `lib/ICM45686/` 与 `lib/ICM42688/` 各自的驱动，上层 `imu_factory.cpp` 按宏分派，共用同一套 SPI 引脚与 `ImuDevice` 抽象。
 
-  | IMU 后端 | 机型 env + IMU env | 采样率 |
-  |---|---|---|
-  | ICM-42688-P（默认，实飞验证） | `[env:SingleEdf4Vane]` / `[env:SingleEdf4Vane_Flight]` | 2000 Hz（硬件 FIFO） |
-  | ICM-45686（换型验证） | `[env:CoaxialVTVL_ICM45686]` / `[env:SingleEdf4Vane_ICM45686]` / `[env:TandemVec_FCS_ICM45686]` | 3200 Hz（硬件 FIFO 单包，ISR 每 2 拍取一包） |
+  **env 是「四维正交」的（2026-11-10 重整）：别背组合名，只记四个维度 + 命名规约 `‹机型›[_ICM45686][_MAVLink][_Flight]`。速查表在 `platformio.ini` 文件头。**
 
-  **切换就是换 env 烧录**：`pio run -e <env> -t upload`。两套 env 编译产物互不覆盖（各自 `.pio/build/<env>/`）。
+  | 维度 | 取值 | 对应宏 |
+  |---|---|---|
+  | 机型（必选） | 纵列 / 共轴 / 单涵道 | （无宏=纵列）/ `-DBFS_COAXIAL_VTVL` / `-DBFS_SINGLE_EDF_4VANE` |
+  | IMU | 42688（缺省）/ 45686 | — / `-DFCS_IMU_MODEL_ICM45686` |
+  | 默认遥测协议 | AnoCom（缺省，配本项目 GCS）/ MAVLink | — / `-DBFS_DEFAULT_PROTO_MAVLINK` |
+  | 用途 | 调试（缺省，带 DBG 控制台）/ 实飞 | — / `-UBFS_TASK_PROFILE -UBFS_NAV_PROFILE -UBFS_PROFILE_TO_ANOCOM_SERIAL` |
+
+  ★ **上层全共用**：板级/CPU-FPU/编译优化/调度时基/IMU 采样架构/导航与 EKF 宏/看门狗全部收在 `[env:unignc]`；三个机型 env 各自只差一个机型宏。**新增机型或组合 = 两行**，不许复制基座里的宏（照 `platformio.ini` 末尾「新增组合」抄）。
+  ★ **采样率**：42688 = 2000 Hz（硬件 FIFO）；45686 = 3200 Hz（FIFO 单包 + ISR 每 2 拍取一包）。
+  ★ `default_envs` 指向当前实机（现为 `CoaxialVTVL_ICM45686`）；**换板/换机型必须同步改这一行**，否则 `pio run -t upload` 会刷错机型。
+  ★ 编译产物按 env 各自独立（`.pio/build/<env>/`），换 env 不需要 clean。
 
   ★ **45686 = 3.2 kHz FIFO 单包，ISR 每 2 拍取一包**（2026-11-10 定稿），不是 200 Hz 轮询。ODR 取 3200，一个 FIFO 包即一次满量程样本，2 kHz ISR 每隔一拍取一包——这就是「3.2k 采样率」的落地方式。
   ★ **绝不给 45686 构建加 `-UBFS_IMU_ISR_RING`**：该宏关掉 ISR ring、退回 200 Hz 轮询寄存器，是用户 2026-11-10 明确拒绝的方案。判断有没有被误加：看 `pio run -e <env> -v` 的 `-U` 列表，或启动日志 `[Init] IMU: ICM-45686 ... 3200Hz` 后 `isr_f≈3200`。详见 `docs/memory/2026-11-09-ICM45686换型适配.md`。
@@ -30,7 +37,7 @@
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
 - **手动模式不做姿态切电机**：手动 RATE/ATTITUDE 可能翻跟头或被风扰超 45°，不因姿态角切电机；AUTO/GUIDED 保留 `coax.att_limit_deg`（默认 90°，可调 10–180°）。禁止把 45° 硬切电机加回手动路径。
 - **`BFS_NAV_EKF_VERBOSE` 默认关**：Navigation 60s 一次的多段 Serial8 打印是 300s 数传/P1 长停顿的根因，需要时才显式打开。
-- **P1 是采样架构阶段名，不是 env 名**：共轴只有一个环境 `[env:CoaxialVTVL]`，即 P1 架构（2kHz ISR ring）。纯轮询回退环境 2026-11-10 已删除——它与主 env 的语义曾恰好互换（主 env 带 -U 实际跑轮询、_UI 实际跑 ring），保留只会烧错。临时 profiling 用编译宏。
+- **P1 是采样架构阶段名，不是 env 名**：共轴没有叫 P1/P1_UI 的环境，机型 env 是 `[env:CoaxialVTVL]` 及其 `_ICM45686` / `_MAVLink` 变体，全部跑 P1 架构（2kHz ISR ring）。纯轮询回退环境 2026-11-10 已删除——它与主 env 的语义曾恰好互换（主 env 带 -U 实际跑轮询、_UI 实际跑 ring），保留只会烧错。临时 profiling 用编译宏。
 - **高频采样/时序测量禁用 DBG**：只用 0xF4（`tvc record`）或逻辑分析仪；MAVLink 模式可用 `DBG\n` 切回 AnoCom，不需物理复位。
 - **单涵道机型要点**（完整移植说明见 `docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md`）：
   四舵 PA0–PA3 + 推进器 PC8 + 推进使能 PE6；速率环 α 域，kp=57.3 s⁻¹ 是源机型舵角域 0.25 的等价换算；限幅由 `sedf.ctrl_vane_deg` 换算（20° → 4583.66 deg/s²），**不要直接改 `rate_*.out_max`**（下次 apply 会覆盖）；矩阵与 yaw 轴符号属机型知识，收在 `SingleEdf4VaneAllocator.h`。
@@ -199,7 +206,7 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 - **算法测试两阶段**：先理想模型（零噪声/零偏、WGS84 重力 `ins_test::GravityWgs84()`、解析真值）验证正确性，再真实噪声/零偏/振动/失锁评估工程效果；理想阶段失败修算法，真实阶段不达标先归因。
 - **不声称未执行的构建/测试/上板验证通过。**
 - **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `docs/registers/固件调试工具链-2026-11-01.md`。
-- **性能 A/B 环境（默认飞行 env 不变）**：`[env:TandemVec_FCS_PHASE]` 开 `BFS_TASK_PHASE_STAGGER`（只错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）；`[env:TandemVec_FCS_DTCM]` 开 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）。A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论；详见 `docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
+- **性能 A/B 宏（常驻 env 已于 2026-11-10 清理）**：`BFS_TASK_PHASE_STAGGER`（错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）与 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）两个宏仍保留在代码里，但**不再有常驻 env**——当时的 A/B 一直没做完（2026-11-03 挂起），且 P1 架构已改变调度负载，旧基线不再可比。要做时按 `platformio.ini` §新增组合 加两行临时 env；A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论。详见 `docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
 
 ## 仓库卫生
 
