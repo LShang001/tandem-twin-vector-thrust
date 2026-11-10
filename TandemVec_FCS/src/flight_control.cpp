@@ -38,6 +38,7 @@
 #include "navigation_task.h"
 #include "QuaternionMath.h"
 #include "sensor_peripheral.h"
+#include "sensor_imu.h"      // readIMUData()：GNC 前强制排空 IMU ring，保证用最新采样
 // 纵列双发矢量推力：推进正向映射 + 差速分配 + 物理模型逆解控制分配
 #include "TandemVec_Propulsion.h"
 #include "TandemVec_Config.h"
@@ -1720,6 +1721,10 @@ static Vector3 getSanitizedBodyGyro();
 [[maybe_unused]] static Vector3 updateFilteredBodyRates()
 {
   Vector3 current_omega_rps_body = getSanitizedBodyGyro();
+  // ★ A/B 开关：定义 -DBFS_NO_EKF_GYRO_BIAS 可关掉 EKF 在线零偏扣除，退回原版行为
+  //   （只保留上电校准零偏）。EKF 每次更新零偏都会在速率环反馈里产生台阶，
+  //   机动时零偏被观测推动，等于持续往内环注入扰动；原版固件没有这一步。
+#ifndef BFS_NO_EKF_GYRO_BIAS
   if (nav_system_initialized)
   {
     const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
@@ -1727,6 +1732,7 @@ static Vector3 getSanitizedBodyGyro();
     current_omega_rps_body.y -= gb(1);
     current_omega_rps_body.z -= gb(2);
   }
+#endif
   current_omega_dps_body_filtered = {
       rollSpeedFilter2.filter(rollSpeedFilter.filter(current_omega_rps_body.x * RAD_TO_DEG)),
       pitchSpeedFilter2.filter(pitchSpeedFilter.filter(current_omega_rps_body.y * RAD_TO_DEG)),
@@ -1761,6 +1767,10 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
 {
   // 获取当前角速率
   Vector3 current_omega_rps_body = getSanitizedBodyGyro();
+  // ★ A/B 开关：定义 -DBFS_NO_EKF_GYRO_BIAS 可关掉 EKF 在线零偏扣除，退回原版行为
+  //   （只保留上电校准零偏）。EKF 每次更新零偏都会在速率环反馈里产生台阶，
+  //   机动时零偏被观测推动，等于持续往内环注入扰动；原版固件没有这一步。
+#ifndef BFS_NO_EKF_GYRO_BIAS
   if (nav_system_initialized)
   {
     const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
@@ -1768,6 +1778,7 @@ void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion
     current_omega_rps_body.y -= gb(1);
     current_omega_rps_body.z -= gb(2);
   }
+#endif
   current_omega_dps_body_filtered = {
       rollSpeedFilter2.filter(rollSpeedFilter.filter(current_omega_rps_body.x * RAD_TO_DEG)),
       pitchSpeedFilter2.filter(pitchSpeedFilter.filter(current_omega_rps_body.y * RAD_TO_DEG)),
@@ -2028,6 +2039,13 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
       {
         s_yaw_hold_ref_rad = AHRS_Packet.Heading;  // 持续刷新：回中即锁当时航向
       }
+    }
+    else if (inputs.attitude_mode == RATE_MODE)
+    {
+      // ★ 2026-11-10：RATE_MODE 下航向也走纯角速率（无外环航向锁）。
+      //   用户要求 RATE 模式三通道统一只有内环：摇杆回中即零角速率（仅速率阻尼），
+      //   航向随差速反扭矩缓慢漂移属预期；要锁航向请回 ATTITUDE_MODE。
+      gnc_tel.omega_ref_dps[2] = 0.0f;
     }
     else if (heading_hold_allowed)
     {
@@ -2709,8 +2727,12 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
     alloc_in.gyro_body_radps[1] = current_omega_dps_body_filtered.y * kDeg2Rad;
     alloc_in.gyro_body_radps[2] = current_omega_dps_body_filtered.z * kDeg2Rad;
     alloc_in.throttle_pct = final_throttle_pct;
-    alloc_in.thrust_estimate_n =
-        0.01f * final_throttle_pct * coax.max_total_thrust_n;
+    // ★ 2026-11-10 A/B 实验：推力估计固定为悬停推力 m·g，切断"油门→T→舵角增益"调制。
+    //   原版内环直接输出舵角，舵角与油门无关；统一后 δ=asin(I·α/(l·T))，
+    //   T=0.01·油门·14N 随油门实时变化，于是油门抖动直接变成舵角抖动。
+    //   静止悬停时定高环一直在微调油门，这条回路正是"不打杆也抖"的结构性来源。
+    //   固定后舵角只由 α 决定；确认抖动是否消失后，再换成"油门低通后的 T"折中。
+    alloc_in.thrust_estimate_n = coax.mass_kg * ekf_gravity_mps2;
     alloc_in.dt_s = coax.dt_s;
     const bfs::CoaxialAllocatorOutput alloc =
         bfs::allocateCoaxial(alloc_in, alloc_p);
@@ -3094,6 +3116,12 @@ static bfs::ActuatorFaultMonitor s_actuator_fault_monitor;
 
 void runGNCExecutive()
 {
+  // ★ 2026-11-10 延迟优化（用户要求"控制必须使用新传感器数据"）：
+  //   handleICM42688 完成排空后到本函数执行之间，IMU 的 ISR 仍会往 ring 里 push
+  //   1~2 帧（1600Hz 下 0.6~1.2ms）。不取走这些帧，控制律用的就是上一时刻的数据。
+  //   这里补一次排空，把这段时间新到的帧全部消费掉，确保控制环用的是最新采样。
+  //   代价：每次多处理 1~2 帧（约 30us），远小于换来的一拍新鲜度。
+  readIMUData();
   // --- 1. 数据准备 ---
   ControlInputs_t controller_inputs;
   ControlOutputs_t controller_outputs = {0}; // 初始化输出结构体

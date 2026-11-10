@@ -3848,6 +3848,21 @@ void handleNavigationSystem()
           g_nav_tilt_hard = (g_nav_tilt_drift_deg > BFS_TILT_DG_HARD_DEG);
         }
 
+#ifdef BFS_AHRS_BACKUP_ONLY
+      // ★ 2026-11-10 临时 A/B 调试开关（仅共轴调试构建定义）：
+      //   姿态输出强制改用 Madgwick 后台姿态 backup_ahrs，用于判定"响应延迟是否来自
+      //   EKF 姿态估计"。EKF 本体照常运行，只覆盖输出，不影响其他逻辑。
+      //   ★ 不可用于飞行：Madgwick 无 GNSS/磁位置修正，航向会漂；本开关只做地面 A/B。
+      use_ekf_attitude_output = false;
+      AHRS_Packet.Qw = backup_ahrs_Qw;
+      AHRS_Packet.Qx = backup_ahrs_Qx;
+      AHRS_Packet.Qy = backup_ahrs_Qy;
+      AHRS_Packet.Qz = backup_ahrs_Qz;
+      AHRS_Packet.Roll = backup_ahrs_roll;
+      AHRS_Packet.Pitch = backup_ahrs_pitch;
+      AHRS_Packet.Heading = wrapAngleTwoPi(backup_ahrs_yaw);
+#endif
+
         icm_Roll = AHRS_Packet.Roll;
         icm_Pitch = AHRS_Packet.Pitch;
         icm_Yaw = AHRS_Packet.Heading;

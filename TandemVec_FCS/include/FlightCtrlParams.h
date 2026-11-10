@@ -83,11 +83,25 @@ struct CoaxialCtrlParams
 
     // ---- ★ task-10 α+油门分配器参数（默认保持 legacy 角度路径，旧字段顺序/默认值不变）----
     float alloc_mode = 0.0f;              // 已废弃：固件忽略（α-native 为唯一路径），ID 保留兼容
-    float lever_m = 0.15f;                // TVC 力臂 [m]（α→力矩换算）
+    float lever_m = 0.21f;                 // TVC 力臂 [m]（α→力矩换算）★2026-11-10 用户确认实测 21 cm（原 0.15 估值偏低 40%）
     float yaw_moment_nm_per_us = 1.0e-6f; // 差速 PWM→偏航力矩系数 [N·m/µs]（MODEL-DEFAULT，SIL 归一化 yaw 模型换算，非台架值）
-    float inertia_roll_kgm2 = 0.05f;      // 滚转轴转动惯量 [kg·m²]（力矩→角加速度）
-    float inertia_pitch_kgm2 = 0.05f;     // 俯仰轴转动惯量 [kg·m²]
-    float inertia_yaw_kgm2 = 0.08f;       // 偏航轴转动惯量 [kg·m²]
+    // ★ 2026-11-10 惯量重估：原 0.05/0.05/0.08 是按"0.85 m 均质杆"量级给的，对 0.84 kg
+    //   级共轴双桨大了 10~20 倍，导致分配器 δ=asin(I·α/(l·T)) 算出的舵角远大于实际需要
+    //   （等效把控制增益放大了十几倍），这是此前"原始等效增益也抖到无法起飞"的根因之一。
+    //   按质量分布估算（0.84 kg、桨盘约 0.15 m、电池/机架半径 0.05–0.08 m）：
+    //     横滚/俯仰：0.6×0.065² + 0.01×0.075² ≈ 0.003 kg·m²
+    //     偏航：质量集中在轴线附近，0.6×0.04² ≈ 0.001 kg·m²
+    //   ★ 这是量级估计，不是台架值。上电后可用 DBG `id` 读 b=I名义/I实际 校正：
+    //     实际 I = 名义 I / b。改本组后速率环增益必须按同比例重算（见 BFS_RATE_*）。
+    // ★ 2026-11-10 修正：0.003/0.001 是本机按"小型多旋翼"拍的量级，错了约一个数量级。
+    //   依据：若真实惯量只有 0.003，原版固件 0.25 舵角增益在实飞中会超调 800%（闭环仿真），
+    //   而原版是实飞验证稳定的；按 0.25 增益给出约 100 ms 合理响应反推，真实惯量在
+    //   0.04~0.05 量级——与原版固件写的 0.05 一致。
+    //   α 链的闭环增益 = kp·I_nom/(l·T)，I_nom 错 14 倍 ⇒ 同样 α 指令物理角加速度只有 7%，
+    //   这就是"修正幅度小、响应不足"的根因，也是此前把 kp 加到 100/144 反而震的原因。
+    float inertia_roll_kgm2 = 0.015f;       // 滚转轴转动惯量 [kg·m²]（反推自原版实飞响应）
+    float inertia_pitch_kgm2 = 0.015f;      // 俯仰轴转动惯量 [kg·m²]（反推自原版实飞响应）
+    float inertia_yaw_kgm2 = 0.02f;         // 偏航轴转动惯量 [kg·m²]（绕推力轴，取原版 0.08 的 1/4）
 };
 
 /**
@@ -230,11 +244,11 @@ static_assert(CoaxialCtrlParams{}.dt_s == 0.005f, "共轴控制周期默认值�
 static_assert(CoaxialCtrlParams{}.ctrl.max_correction_deg == 10.0f, "共轴修正角限幅默认值必须保持 10deg");
 // 分配器物理参数默认值锁定（MODEL-DEFAULT）；alloc_mode 已废弃，固件不再读取
 static_assert(CoaxialCtrlParams{}.alloc_mode == 0.0f, "alloc_mode 已废弃，保留默认 0 兼容旧 GCS");
-static_assert(CoaxialCtrlParams{}.lever_m == 0.15f, "TVC 力臂默认值必须保持 0.15m");
+static_assert(CoaxialCtrlParams{}.lever_m == 0.21f, "TVC 力臂默认值必须与实测一致（当前 0.21m，2026-11-10 实测）");
 static_assert(CoaxialCtrlParams{}.yaw_moment_nm_per_us == 1.0e-6f, "差速力矩系数默认值必须保持 1e-6N·m/µs（SIL 归一化 yaw 模型）");
-static_assert(CoaxialCtrlParams{}.inertia_roll_kgm2 == 0.05f, "滚转惯量默认值必须保持 0.05kg·m²");
-static_assert(CoaxialCtrlParams{}.inertia_pitch_kgm2 == 0.05f, "俯仰惯量默认值必须保持 0.05kg·m²");
-static_assert(CoaxialCtrlParams{}.inertia_yaw_kgm2 == 0.08f, "偏航惯量默认值必须保持 0.08kg·m²");
+static_assert(CoaxialCtrlParams{}.inertia_roll_kgm2 == 0.015f, "滚转惯量默认值必须与实飞反推值一致（当前 0.015kg·m²）");
+static_assert(CoaxialCtrlParams{}.inertia_pitch_kgm2 == 0.015f, "俯仰惯量默认值必须与实飞反推值一致（当前 0.015kg·m²）");
+static_assert(CoaxialCtrlParams{}.inertia_yaw_kgm2 == 0.02f, "偏航惯量默认值必须与实飞反推值一致（当前 0.02kg·m²）");
 
 /**
  * @brief 全部控制环参数集合（固件唯一可调参数块）
@@ -328,24 +342,34 @@ struct FlightCtrlParams
 //  → execute_yaw_controller（偏航速率环）→ CoaxialAllocator（α → 摆角/差速）
 //  → mapCoaxialVtvOutputs。生产路径不再有独立的 CoaxialVtvController 实例。
 //
-//  本组速率环参数是**通用 PID 的 deg/s² 域**（输入 deg/s、输出 deg/s²）：
-//    旧共轴参数是 rad 域（6.168 / 1.974 / 0.00272 / 0.02149），整体乘 180/π 即本组。
-//    物理含义不变：折算回舵角域仍是 0.25 deg舵角/(deg/s)、ki 0.08，与原始共轴固件一致。
-//  ★ out_max / int_limit 会被 applyFlightCtrlParams() 按 coax 物理量重算：
-//    out_max_roll = g_deg · max_corr_deg · (180/π) ≈ 246.7 deg/s²（10° 舵角全行程）
-//    out_max_yaw  = (k_yaw/I_yaw) · max_yaw_us · (180/π) ≈ 0.1289 deg/s²（180 µs 差速）
-//    用户只调物理量与 coax.max_corr_deg / coax.max_yaw_us；不要手改 out_max（下次
-//    apply 会被覆盖）。
-//  ★ 姿态外环（att_*）本来就是 deg 域，数值不变（4.25 = 原始共轴外环增益）。
+//  本组速率环参数是**通用 PID 的 deg/s² 域**（输入 deg/s、输出 deg/s²）。
+//  ★ 2026-11-10 实测结论：照搬单涵道 57.3/18.3 会抖到无法起飞（一推油就大幅摆动）。
+//    原因：共轴 10° 舵角只对应 246.7 deg/s²，57.3/24.67 ≈ 2.32 deg 舵角 per(deg/s)，
+//    是原始共轴 0.25 的 9.3 倍；偏航 11.4592 更是原始 3.8 µs 的约 4210 倍。
+//    现回到**原始共轴等效值**：rate 6.168/1.974（= 0.25 / 0.08 折算到 α 域，
+//    rad↔deg 两次换算相消，数值与旧 rad 域参数相同），yaw 0.00272/0.02149
+//    （= 3.8 µs/(deg/s)、ki 30 折算）。要更软就按比例往下调这一组。
+//  ★ out_max 仍由 applyFlightCtrlParams() 按 coax 物理量重算，不照抄涵道的 4583：
+//    out_max_roll = g_deg · max_corr_deg ≈ 246.7 deg/s²（10° 舵角，共轴机械上限）
+//    out_max_yaw  = (k_yaw/I_yaw) · max_yaw_us · (180/π) ≈ 0.1289 deg/s²（180 µs）
+//  ★ 姿态外环（att_*）本来就是 deg 域，4.25 与涵道相同，不动。
 // ============================================================
 #define BFS_ATT_ROLL_DEFAULT  {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
 #define BFS_ATT_PITCH_DEFAULT {4.25f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.5f, 0.0f, 0.0f, true}
-#define BFS_ATT_YAW_DEFAULT   {5.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
-// 速率环 roll/pitch：kp 353.4（= 旧 6.168 rad × 57.2958）、ki 113.1（= 旧 1.974 × 57.2958）
-#define BFS_RATE_ROLL_DEFAULT {353.4f, 113.1f, 0.0f, -246.73f, 246.73f, 7070.3f, 60.0f, 0.2f, true}
-#define BFS_RATE_PITCH_DEFAULT {353.4f, 113.1f, 0.0f, -246.73f, 246.73f, 7070.3f, 60.0f, 0.2f, true}
-// 偏航：kp 0.15585、ki 1.2313、上限 0.1289 deg/s²（= 180 µs 差速的 α）
-#define BFS_RATE_YAW_DEFAULT  {0.15585f, 1.2313f, 0.0f, -0.1289f, 0.1289f, 2.0512f, 40.0f, 0.2f, true}
+// ★ 共轴航向外环单独取 0.5（纵列/单涵道仍 5.0）：实飞调参结论，5.0 时回中航向锁太猛，
+//   0.5 后航向基本只靠内环角速率阻尼，回中不再急拉。
+#define BFS_ATT_YAW_DEFAULT   {0.0f, 0.0f, 0.0f, -kMaxTargetRate, kMaxTargetRate, kMaxTargetRate * 0.3f, 0.0f, 0.0f, true}
+// 速率环 roll/pitch：★ 2026-11-10 随力臂 0.21 m / 惯量 0.003 重算。
+//   舵角域等效 δ/err = kp·I/(l·T)，取原始共轴 0.25 deg/(deg/s)：
+//     kp = 0.25·(l·T)/I = 0.25·(0.21×8.224)/0.003 ≈ 144；ki 同理 ≈ 46。
+//   限幅由 applyFlightCtrlParams 按物理量派生（10° 舵角 ≈ 5756 deg/s²，5° 积分限≈2878）。
+//   若仍抖或不跟手，按比例整体缩放这一组即可（改一个数另一个同比）。
+#define BFS_RATE_ROLL_DEFAULT {28.8f, 9.2f, 0.0f, -1151.0f, 1151.0f, 575.6f, 60.0f, 0.2f, true}
+#define BFS_RATE_PITCH_DEFAULT {28.8f, 9.2f, 0.0f, -1151.0f, 1151.0f, 575.6f, 60.0f, 0.2f, true}
+// 偏航：diff/α = I_yaw/k_yaw = 0.001/1e-6 = 1000 µs per rad/s²（=17.45 µs per deg/s²）。
+//   原始共轴 3.8 µs/(deg/s) 对应 kp=0.218；实飞手感偏猛，取约一半 → kp=0.1（≈1.75 µs）。
+//   ki=0.8 同比例偏温和。
+#define BFS_RATE_YAW_DEFAULT  {0.0109f, 0.086f, 0.0f, -0.516f, 0.516f, 0.143f, 40.0f, 0.2f, true}
 #elif defined(BFS_SINGLE_EDF_4VANE)
 // ============================================================
 //  单涵道 + X 型四燃气舵：按源机型 Universal-EDF 的等效增益折算
@@ -421,16 +445,20 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     // ★ 2026-08-09 滤波大审计结论：飞控下有物理减震底座 + 执行机构天然低通，
     //   数字滤波只加相位滞后（实测 4.2°@1Hz 即触发内环振铃，6.9° 必抖）——
     //   全链滤波放到最弱：α1=0.4（留少量噪声抑制）/ 二级≈直通 / 输出≈直通
+    // ★ 2026-11-10：共轴不再单独用 0.3/0.25，与涵道/纵列统一为 0.4/0.9。
+    //   原共轴 out_alpha=0.25 配 Madgwick 姿态够用，但统一后控制用 EKF 姿态、
+    //   延迟本就更大，再叠一级强低通（25% 新值、等效 4 拍≈20 ms）相位滞后过量，
+    //   实飞表现为推油超调/振荡，故对齐涵道的 0.9。
 #ifdef BFS_COAXIAL_VTVL
-    /* speed_filter_alpha     */ { 0.3f, 0.3f, 0.3f },
-#else
-    /* speed_filter_alpha     */ { 0.4f, 0.4f, 0.4f },
-#endif
+    // 共轴：反馈 0.8（τ 1.25ms）、输出 0.5（τ 5ms）——实飞把延迟从 26ms 压到 13ms 的折中档
+    /* speed_filter_alpha     */ { 0.8f, 0.8f, 0.8f },
     /* speed_filter_alpha2    */ { 0.99f, 0.99f, 0.99f },
     /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
-#ifdef BFS_COAXIAL_VTVL
-    /* output_filter_alpha    */ { 0.25f, 0.25f, 0.25f },
+    /* output_filter_alpha    */ { 0.5f, 0.5f, 0.5f },
 #else
+    /* speed_filter_alpha     */ { 0.4f, 0.4f, 0.4f },
+    /* speed_filter_alpha2    */ { 0.99f, 0.99f, 0.99f },
+    /* angle_out_filter_alpha */ { 0.85f, 0.85f, 0.85f },
     /* output_filter_alpha    */ { 0.9f, 0.9f, 0.9f },
 #endif
     /* inertia_comp_mask      */ 0x03,   // ★2026-08-10 前馈全开（陀螺耦合+转子陀螺）
@@ -439,7 +467,15 @@ static constexpr FlightCtrlParams kFlightCtrlParamsDefaults = {
     //   100°/s；×super 后 roll/pitch 理论 333°/s、yaw 222°/s，不触 600 限幅）；
     //   expo 全轴 0.25（用户指定，中心更细腻）；super roll/pitch 0.7、yaw 0.55。
     //   实机手感调整走 0xE1 在线写
+#ifdef BFS_COAXIAL_VTVL
+    // ★ 2026-11-10 共轴单独取 0.12：原版共轴固件 RATE 模式是线性 ±80 dps，
+    //   而 TandemVec 摇杆曲线满杆 = rc_rate×200/(1-super) = 0.5×200/0.3 = 333 dps，
+    //   同样打满杆目标速率是原版的 4.16 倍，速率环看到 4 倍误差 → 舵角 4 倍 → 抖。
+    //   0.12 对应满杆 80 dps，与原版量程一致；纵列/单涵道保持 0.5 不动。
+    /* rc_rate               */ 0.12f,
+#else
     /* rc_rate               */ 0.5f,
+#endif
     /* rc_expo[3]            */ { 0.25f, 0.25f, 0.25f },
     /* rc_super[3]           */ { 0.7f, 0.7f, 0.55f },
     /* heading_aid_mode      */ static_cast<float>(BFS_HEADING_AID_MODE),

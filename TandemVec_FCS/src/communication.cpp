@@ -1683,12 +1683,10 @@ void handleDataLogging()
       Serial3.println();
     }
 
-    // Flash 双写（非阻塞入 ring）
-    if (flash.isPresent())
-    {
-      s_flashPushCount++;
-      flashLog.logPush((const uint8_t *)d);
-    }
+    // ★ 2026-11-10 黑匣子禁用：不再往 Flash 缓冲入队。
+    //   地面站 Serial3 CSV 仍照常输出，黑匣子由地面站兜底。
+    //   原逻辑：if (flash.isPresent()) { s_flashPushCount++; flashLog.logPush(d); }
+    (void)s_flashPushCount;
   }
 
   // —— 检测结束：true → false（飞行段结束）——
@@ -2182,7 +2180,10 @@ void handleFlashService()
     s_dbgLogUntil = 0;
   }
 
-  s_flashServiceCount++;
+  // ★ 2026-11-10 用户指令：禁用黑匣子页写。任务保留在调度表里（删任务会扰动调度序列），
+  //   这里直接返回，不调用 flashLog.logService()，从而不产生任何 SPI NAND 擦除/编程。
+  (void)s_flashServiceCount;
+  return;
   // ★ Flash 写页互斥：写页 + 之后 50ms 跳过 CAN（MCP2515 需足够时间恢复，
   //   否则超时 reset → SPI2 OVR 卡死）。每 200ms 写 1 页，跳 50ms CAN 可接受。
   //   ★ 2026-09-01 修复（BLOCKER）：原实现每 tick（100Hz）无条件刷新互斥窗口

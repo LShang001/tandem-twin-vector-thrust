@@ -458,7 +458,7 @@ void setup()
   // 3.2kHz→0.3125ms(2 tick)。若强制 2kHz 轮询 3.2kHz 器件会漏 37.5% 样本。
   const float imu_task_ms = 1000.0f / static_cast<float>(imu_odr_hz);
   BFS_ADD_TASK(handleICM42688, imu_task_ms, "ICM42688");                  // IMU 数据采集 + 姿态解算（周期随实际 ODR）
-  BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz, 贴近128Hz压力输出且保留FIFO余量
+  BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz，贴近128Hz压力输出且保留FIFO余量
 #if BFS_ENABLE_OPTICAL_FLOW
   BFS_ADD_TASK(handleOpticalFlowSensor, 2.0f, "OpticalFlow");            // UART7 光流自动识别+采集 (500Hz, 2ms) - LQS48/MTF02P
 #endif
@@ -478,22 +478,17 @@ void setup()
   // --- 状态估计层 (中频) ---
   // EKF 组合导航排在垂向/水平 KF 之前, 同帧内 IMU delta 积累完毕后即刻预测,
   // 减少 EKF→遥测输出的延迟。AnoCom 紧邻 EKF 注册, 同一帧内 EKF 输出立即可用。
-  BFS_ADD_TASK(handleNavigationSystem, 5.0f, "Navigation"); // EKF 组合导航 (200Hz, 5ms) - 姿态/位置/速度主滤波器
-  BFS_ADD_TASK(handleAnoCom, 5.0f, "AnoCom");               // AnoCom 地面站 (200Hz, 5ms) - 紧邻 EKF, 同帧消费最新输出
-  BFS_ADD_TASK(handleDebugTask, 5.0f, "Debug");              // 调试模式任务 (200Hz) - Serial6 "DBG\n" 入口，与遥测解耦
-
-  // VerticalKF 与 EKF 并行运行，输出到独立的 vfk_height/vfk_velocity（不覆盖 EKF 输出），
-  // 仅供地面站遥测对比一致性，不参与控制律。
-  BFS_ADD_TASK(handleVerticalEstimation, 5.0f, "VerticalKF"); // 垂直卡尔曼滤波器 (200Hz, 5ms) - 气压/激光高度融合
-  // handleHorizontalEstimation 的输出已不再覆盖 relative/INS 速度 (由 EKF 接管),
-  // kf_north/kf_east 纯加速度积分无闭环校正, 注册已注释以节约 200Hz CPU.
-  // addTask(handleHorizontalEstimation, 5.0f); // 水平卡尔曼滤波器 - 保留为光流后备
-
-  // --- 控制执行层 (中频) ---
-  // GNC 排在 handleAnoCom 之后（AnoCom 是有意例外，见上方注释），但在
-  // ElrsBattery/PosVelTx 等其余串口发送任务之前，避免阻塞延迟控制环。
-  BFS_ADD_TASK(handleGuidanceCommands, 2.0f, "GuidanceRx"); // 制导指令接收 (500Hz, 2ms) - 上位机加速度指令
-  BFS_ADD_TASK(runGNCExecutive, 5.0f, "GNC");               // GNC 飞行控制 (200Hz, 5ms) - 制导+控制+混控输出
+  BFS_ADD_TASK(handleNavigationSystem, 5.0f, "Navigation"); // EKF 组合导航 (200Hz) - 姿态/位置/速度主滤波器
+  // ★ 2026-11-10 调度优化：GNC 紧跟 Navigation 执行。
+  //   实测 GNC 迟到约 20 次/s、间隔最坏 8.2ms（名义 5ms），根因是它排在
+  //   AnoCom/Debug(最坏 472us)/VerticalKF 之后，被这些非控制任务挤后。
+  //   GuidanceRx 耗时≈0us 且 GNC 消费其指令，保留在 GNC 之前。
+  BFS_ADD_TASK(handleGuidanceCommands, 2.0f, "GuidanceRx"); // 制导指令接收 (500Hz)
+  BFS_ADD_TASK(runGNCExecutive, 5.0f, "GNC");               // GNC 飞行控制 (200Hz) - 控制环最优先
+  BFS_ADD_TASK(handleAnoCom, 5.0f, "AnoCom");               // AnoCom 地面站 (200Hz) - 同帧消费 EKF 输出
+  // VerticalKF / Debug 不参与控制：排在控制环之后，避免阻塞 GNC。
+  BFS_ADD_TASK(handleVerticalEstimation, 5.0f, "VerticalKF"); // 垂直卡尔曼滤波器 (200Hz) - 仅遥测对比
+  BFS_ADD_TASK(handleDebugTask, 5.0f, "Debug");              // 调试模式任务 (200Hz) - Serial6 "DBG\\n"
 
   // --- 通信遥测层 (低频) ---
   // 串口发送任务排在 GNC 之后，即使偶发阻塞也不影响控制环实时性。
@@ -511,7 +506,13 @@ void setup()
   BFS_ADD_TASK(sendPositionVelocityData, 10.0f, "PosVelTx");    // 上位机数据发送 (100Hz, 10ms) - 18 字段 74B 制导机链路
   // addTask(handleMavlink, 5.0f);          // MAVLink 遥测 (200Hz, 5ms) - Mission Planner/QGC (与 AnoCom 二选一)
   BFS_ADD_TASK(handleStatusLedTask, 10.0f, "StatusLed");        // LED 状态指示 (100Hz, 10ms) - 呼吸灯/闪烁
-  BFS_ADD_TASK(handleFlashService, 10.0f, "FlashLog");         // Flash 黑匣子后台写 (100Hz, 每tick≤2帧=190B) - 低优先级
+  // ★ 2026-11-10 用户指令：彻底禁用 Flash 黑匣子。
+  //   实测黑匣子扇区擦除会把主循环整体卡住 14~28 ms（所有任务间隔 max 同步飙到 18~28 ms，
+  //   GNC 迟到从 0.8/s 暴涨到 8/s 以上），属于控制环不可接受的阻塞。
+  //   黑匣子由地面站 Serial3 CSV（DataLog）兜底，Flash 页写全部停止。
+  // ★ 2026-11-10 用户指令：禁用黑匣子任务——从调度表移除，不再占用任何 tick。
+  //   函数内也已在开头 return（双保险），不产生 SPI NAND 读写。
+  // BFS_ADD_TASK(handleFlashService, 10.0f, "FlashLog");   // 已禁用
   // 注：每页 1 帧（95B 传输 ~40µs + 编程 0.7ms），100Hz × 2 帧 = 200 帧/s 与产帧持平。
   //    CAN 互斥（s_flashWriting 50ms 窗口）防 SPI 冲突；IWDG 无压力（v2 实测）。
   // --- 可选任务 (按需启用) ---
@@ -537,6 +538,9 @@ void setup()
   setTaskDeferrable("StatusLed");
   setTaskDeferrable("FlashLog");
   setTaskDeferrable("DataLog");
+  // ★ 2026-11-10 实测回退：把 DPS310/VerticalKF/Debug 标记为可推迟后反而更差——
+  //   被推迟的任务会积压（DPS310 FIFO 积压后单次读 227us、间隔爆到 24ms），
+  //   造成比原先更大的阻塞脉冲，GNC 降到 183Hz。故不推迟这些任务，保持固定节拍。
   // addTask(handleMTF02PFlowTelemetry, 20.0f); // MTF02P 光流调试打印 (50Hz) - 调光流补偿时启用
 
   Serial8.println("VTVL_ElectricDualRotor_FC Initialized.");

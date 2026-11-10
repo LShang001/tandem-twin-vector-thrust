@@ -141,10 +141,16 @@ int initICM42688()
   // === 步骤 3: 用统一配置初始化（ODR/FSR/LPF 一次配齐）===
   // 默认配置 = 现役硬件参数（accel ±8g / gyro ±2000dps / ODR 目标 2000Hz /
   // LPF 陀螺 100Hz + 加速度 50Hz），与改造前逐项等价。
-  // ★ 换 ICM-45686 后 ODR 会落到 3200Hz（该芯片无 2000Hz 档），
-  //   actualAccelOdrHz() 回报真实生效值；调度任务的 IMU 周期与 Madgwick
-  //   更新率都由它反推（见 main.cpp），不再写死 2kHz。
+  // ★ ICM-45686 ODR 档位（手册 GYRO_CONFIG0）：6.4k / 3.2k / 1.6k / 800 是 LN 档，
+  //   400Hz 及以下是 LP/LN 可选档。实测 1600Hz 与 3200Hz 的 Navigation 耗时几乎相同
+  //   （2.45 vs 2.51ms），说明瓶颈在 EKF 计算本身、不在 IMU 帧数，故固定 1600Hz：
+  //   控制环 200Hz 有 8 倍过采样，每拍只积 8 帧，排空负担与正反馈风险都更低。
+  //   ★ 关键不变量：imu_cfg 的 ODR、kTargetRateHz、批量帧 dt 三者必须一致。
+  //   不一致会让 EKF 每帧积分时间错配——dt 偏小会让姿态/速度积分欠量，
+  //   表现就是"姿态响应变慢"，这是排查传感器驱动时最容易漏掉的一处。
   ImuConfig imu_cfg;
+  imu_cfg.accelOdrHz = 1600;
+  imu_cfg.gyroOdrHz = 1600;
   const int status = IMU->begin(imu_cfg);
   if (status != 0)
   {
@@ -364,18 +370,45 @@ bool readIMUData()
     const uint32_t elapsed_us = now_us - s_ring_last_us;
     // ★ 2026-11-09：按后端 ODR 算"这段时间该有多少帧"。
 #if defined(FCS_IMU_MODEL_ICM45686)
-    static constexpr uint64_t kTargetRateHz = 3200ULL;
+    static constexpr uint64_t kTargetRateHz = 1600ULL;   // 与 ODR 一致（实测 1601.3Hz）
 #else
     static constexpr uint64_t kTargetRateHz = 2000ULL;
 #endif
-    int allowed = 1 + static_cast<int>((static_cast<uint64_t>(elapsed_us) * kTargetRateHz) / 1000000ULL);
-    if (allowed > 64) { allowed = 64; }
+    // ★ 2026-11-10 实测根因：原式 `1 + elapsed*rate` 在排空频率略低于 200Hz 时是欠量的
+    //   （实测 ISR 取帧 1683Hz，排空 191Hz×8 帧=1528Hz），生产>消费导致 ring 积压到 123 帧、
+    //   开始 ring_drop 丢帧。ring 是 FIFO，积压 123 帧意味着控制环用的是 73ms 前的 IMU 数据，
+    //   这才是"姿态响应慢"的真凶。这里 +2 给每拍补足余量（多算的帧 pop 不到会自然 break）。
+    int allowed = 2 + static_cast<int>((static_cast<uint64_t>(elapsed_us) * kTargetRateHz) / 1000000ULL);
+    // ★ 2026-11-10 根因修复：单次排空上限 64→20，打断"卡顿→下次取更多帧→更卡"的正反馈。
+    //   3200Hz 正常每 5ms 只积 16 帧，20 帧留 25% 余量；原逻辑在长卡顿（如 DBG 输出 6KB
+    //   1600Hz 正常每 5ms 只积 8 帧，20 帧上限留足余量；原逻辑在长卡顿（如 DBG 输出 6KB
+    //   这是 ICM-45686(3200Hz，每拍 16 帧) 比 ICM-42688(2000Hz，每拍 10 帧) 更易恶化的直接原因。
+    static constexpr int kDrainMaxPerCall = 20;
+    if (allowed > kDrainMaxPerCall) { allowed = kDrainMaxPerCall; }
+    int processed = 0;
+    // ★ 2026-11-10 积压保护：ring 深度超过 24 帧（1600Hz 下约 15ms）就丢弃最旧的，
+    //   保证控制环拿到的是新鲜姿态。宁可丢一段历史，也不能拿几十毫秒前的数据去算修正——
+    //   那是纯相位滞后，表现为"响应慢一拍"，且会随积压量增大而恶化。
+    {
+      const size_t backlog = s_imu_ring.size();
+      static constexpr size_t kBacklogMax = 24;
+      static constexpr size_t kBacklogKeep = 16;
+      if (backlog > kBacklogMax)
+      {
+        for (size_t i = 0; i < (backlog - kBacklogKeep); ++i)
+        {
+          ImuRingSample stale{};
+          if (!s_imu_ring.pop(stale)) { break; }
+        }
+      }
+    }
     s_drain_calls++;
     s_drain_allowed_sum += static_cast<uint32_t>(allowed);
     for (int k = 0; k < allowed; ++k)
     {
       ImuRingSample rs{};
       if (!s_imu_ring.pop(rs)) { break; }
+      ++processed;
       ImuFifoSample one{};
       for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
       one.timestamp = rs.timestamp;
@@ -389,7 +422,7 @@ bool readIMUData()
       }
       // 按后端 ODR 给批量帧固定 dt（与 kTargetRateHz 同源）
 #if defined(FCS_IMU_MODEL_ICM45686)
-      s_fifo_frame_dt_s = 1.0 / 3200.0;
+      s_fifo_frame_dt_s = 1.0 / 1600.0;   // 与 ODR 一致（实测 1601.3Hz）
 #else
       s_fifo_frame_dt_s = 1.0 / 2000.0;
 #endif
@@ -403,7 +436,14 @@ bool readIMUData()
       if (dt_frame > s_frame_us_max) { s_frame_us_max = dt_frame; }
       s_drain_frames++;
     }
-    s_ring_last_us = now_us;
+    // ★ 2026-11-10 根因修复：时间基准按"实际处理帧数"推进，不再直接跳到 now_us。
+    //   原实现卡顿后把未处理帧的时间整段吞掉，EKF 的积分 dt 少算、姿态/速度欠量；
+    //   按消费量推进后，剩余帧下一轮自然补上，时间轴连续且不会放大卡顿。
+    {
+      const uint32_t consumed_us =
+          static_cast<uint32_t>((static_cast<uint64_t>(processed) * 1000000ULL) / kTargetRateHz);
+      s_ring_last_us += consumed_us;
+    }
     return any;
     }
   }
