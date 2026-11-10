@@ -111,6 +111,8 @@ static bool s_mav_active = false;
 
 // MAVLink 遥测发送（定义在 handleMavlink 处，handleAnoCom 的 proto 切换先调用）
 static void mavlinkSendTelemetry();
+// MAVLink 遥测发送调用次数（本文件定义，供 DBG proto 显示）
+uint32_t mavlinkTelemetryCallCount();
 // MAVLink 下行帧/字节累计（定义在 mavlink_bridge.cpp，供 DBG `proto` 显示）
 uint32_t mavlinkTxFrameCount();
 uint32_t mavlinkTxByteCount();
@@ -2230,9 +2232,14 @@ static void mavWriteNonBlocking(const uint8_t *buf, uint16_t len)
   }
 }
 
+// MAVLink 遥测发送调用次数（DBG proto 显示）：用来确认这条 Serial6 路径
+// 到底有没有在跑。若它有在跑而地面上看不到 HEARTBEAT，问题就在别处。
+static uint32_t call_count = 0; // uint32 防止 200Hz 下快速溢出
+
+uint32_t mavlinkTelemetryCallCount() { return call_count; }
+
 static void mavlinkSendTelemetry()
 {
-  static uint32_t call_count = 0; // uint32 防止 200Hz 下快速溢出
   call_count++;
 
   // ★ 2026-08-10 全面审查修复：TX 余量门控（与 AnoCom/mavSend 策略一致）——
@@ -3944,6 +3951,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(s_mav_active ? F("mavlink") : F("anocom"));
           // MAVLink 下行累计（不接数传也能证明帧真的发出去了：TX 计数与
           // 对端是否在线无关）。切到 mavlink 后等几秒再看，应持续增长。
+          serial.print(F(" call="));
+          serial.print(mavlinkTelemetryCallCount());
           serial.print(F(" tx_frames="));
           serial.print(mavlinkTxFrameCount());
           serial.print(F(" tx_bytes="));

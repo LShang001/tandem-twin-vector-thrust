@@ -1,5 +1,7 @@
 # 2026-10-24 PlatformIO 20 / Arduino Core 3.0 升级经验
 
+> **触发条件**：动 PlatformIO 工具链 / Arduino Core 升级 / 构建报错时（动手前先读，别重新踩坑）。
+
 ## 1. 升级范围
 
 - PlatformIO Core：6.1.19 → 6.2.0（SCons 4.11.1、Windows 单测修复、`pio run -p`）。
