@@ -251,20 +251,25 @@ const ImuRawChannel &imuRawChannel()
   return s_imu_raw_channel;
 }
 
-#ifdef BFS_IMU_ISR_RING
-static ImuSampleRing s_imu_ring;
-static volatile bool s_imu_ring_ready = false;
-static bool s_ring_processing = false;
-static bool s_fifo_fallback = false;
-static volatile uint32_t s_imu_isr_empty = 0;
-
 // ★ 2026-11-09：批量 FIFO 帧的固定时间增量（秒），0 表示不用。
 //   背景：readIMUData 原用 micros() 差分算 dt。单帧轮询时这没问题，
 //   但批量排空时 16 帧在同一拍内处理完，每帧差只有几微秒（实测 8µs），
 //   而真实帧间隔是 1/ODR（3.2kHz → 312.5µs），dt 小 39 倍会把
 //   角速度/加速度增量积分得严重偏小，EKF 直接发散（实测 vel=-139 m/s、
 //   pos_sig=529）。这里在排空循环里按后端 ODR 写入固定 dt。
+//
+// ★ 2026-11-10：声明必须留在宏外。使用点（readIMUData 的时间步选择）在宏外，
+//   而 [env:CoaxialVTVL] 用 -UBFS_IMU_ISR_RING 取消了该宏 → 声明若留在宏内，
+//   共轴直接编译失败（'s_fifo_frame_dt_s' was not declared）。共轴走单帧轮询，
+//   本值保持 0、时间步走 micros() 差分，正是期望行为。
 static double s_fifo_frame_dt_s = 0.0;
+
+#ifdef BFS_IMU_ISR_RING
+static ImuSampleRing s_imu_ring;
+static volatile bool s_imu_ring_ready = false;
+static bool s_ring_processing = false;
+static bool s_fifo_fallback = false;
+static volatile uint32_t s_imu_isr_empty = 0;
 
 
 // ── ★ 2026-11-09 探针：实测生产/消费两侧的真实速率，定位 3.2kHz 丢包瓶颈 ──
