@@ -235,6 +235,27 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 - **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `../docs/registers/固件调试工具链-2026-11-01.md`。
 - **性能 A/B 宏（常驻 env 已于 2026-11-10 清理）**：`BFS_TASK_PHASE_STAGGER`（错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）与 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）两个宏仍保留在代码里，但**不再有常驻 env**——当时的 A/B 一直没做完（2026-11-03 挂起），且 P1 架构已改变调度负载，旧基线不再可比。要做时按 `platformio.ini` §新增组合 加两行临时 env；A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论。详见 `../docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
 
+## IMU 数据链与延迟排查（2026-11-10 实飞结论）
+
+**不变量**：`imu_cfg` 的 ODR、`sensor_imu.cpp` 的 `kTargetRateHz`、批量帧 `s_fifo_frame_dt_s`
+三者必须一致。不一致时 EKF 每帧积分欠量，表现同样是"姿态响应慢"，且极难从现象反推。
+
+**排查判据（`health` 直接看）**：
+- `ring_size` 应长期为 0；持续非零＝排空欠量，控制用的就是旧数据
+- `drain_f` 必须等于 `isr_f`；不等＝有帧没被消费
+- `ring_drop` 必须为 0
+- `rate` 是实际帧率，与配置值可能差几个百分点（芯片 RC 时钟偏差；实测 45686 配 1600 实跑 1683）
+
+**已排空的误判方向（不要重走）**：EKF 姿态延迟、Madgwick 对照、EKF 零偏补偿、滤波器时间常数、
+惯量估计、PID 增益——2026-11-10 全部验证排除。真正根因是 IMU ring 积压导致控制吃 73ms 前的数据。
+完整过程与修复见 `docs/memory/2026-11-10-共轴控制延迟根因与调度优化.md`。
+
+**Flash 黑匣子**：扇区擦除会整体卡死主循环 14~28ms（所有任务间隔 max 同步飙高），飞行构型禁用页写。
+禁用时保留任务占位、函数内直接 `return`——删任务会改变调度序列，实测反而让 Navigation 恶化到 22~25ms。
+
+**偏航换算**：`diff = (I_yaw/k_yaw)·α_rad` 只用比值。改 `yaw_moment_nm_per_us` 必须同倍率改
+`rate_yaw` 的 kp/ki/out_max/int_limit 四项，否则差速输出瞬间变化数百倍。
+
 ## 仓库卫生
 
 - 改前后 `git status --short`；提交前 `git diff --check`。
