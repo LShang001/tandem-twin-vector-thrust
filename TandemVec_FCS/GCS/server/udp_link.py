@@ -152,6 +152,12 @@ def open_link(port: str, baud: int, on_data, read_size: int = 256):
     """
     if isinstance(port, str) and port.lower().startswith('udp:'):
         return UdpLink(port, baud, on_data, read_size=2048)
+    if isinstance(port, str) and port.lower().startswith('usb-unsupported:'):
+        # 列表里专门给"驱动不认的 USB 设备"用：连它是没有意义的，
+        # 这里直接抛出可读原因，避免落到串口分支后报一个莫名其妙的错。
+        raise ValueError(
+            '这个 USB 设备没有被识别为串口（芯片可能不在支持列表）。'
+            '把串口列表里显示的 VID/PID 发出来即可补支持。')
     if isinstance(port, str) and port.lower().startswith('usb:'):
         # Android（Chaquopy）：经 Java 的 USB Host API 打开 OTG 串口
         from .chaquopy_usb_link import ChaquopyUsbLink

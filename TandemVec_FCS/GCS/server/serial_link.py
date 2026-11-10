@@ -45,11 +45,24 @@ def list_ports():
             out = []
             for d in list_usb_devices():
                 granted = d.get('granted', False)
+                supported = d.get('supported', True)
+                vid = d.get('vid', -1)
+                pid = d.get('pid', -1)
+                if supported:
+                    desc = (f"{d.get('desc', 'USB 串口')}"
+                            + ('（已授权）' if granted
+                               else '（未授权，连接时会弹系统授权框）'))
+                    port = f"usb:{vid}:{pid}"
+                else:
+                    # 驱动不认的设备也列出来：用户能看见 VID/PID，才有下一步可查。
+                    # 端点取名 usb-unsupported 而不是 usb:，避免被当成可连接设备。
+                    desc = (f"未识别为串口（VID=0x{vid:04X} PID=0x{pid:04X}）"
+                            "—— 把这个数值发出来即可补支持")
+                    port = f"usb-unsupported:{vid}:{pid}"
                 out.append({
                     # vid/pid 直接编进端点，连接时不用再让用户选第二遍
-                    'port': f"usb:{d.get('vid', -1)}:{d.get('pid', -1)}",
-                    'desc': f"{d.get('desc', 'USB 串口')}"
-                            + ('（已授权）' if granted else '（未授权，连接时会弹授权框）'),
+                    'port': port,
+                    'desc': desc,
                     'hwid': d.get('name', ''),
                 })
             return out
