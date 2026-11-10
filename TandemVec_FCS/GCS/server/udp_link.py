@@ -145,13 +145,17 @@ class UdpLink:
 
 def open_link(port: str, baud: int, on_data, read_size: int = 256):
     """@brief 按端点描述建链路：`udp:` 前缀走 UDP，其余走串口
-    @param port 串口名（COM5）、`udp:14550` / `udp:14550@ip:port`，或 `fd:3`（Termux USB）
+    @param port 串口名（COM5）、`udp:14550`、`usb:<vid>:<pid>`（Android OTG）、`fd:3`（Termux）
     @return Link 对象（未 connect）
     @note 唯一的"协议选择"入口——加 TCP/蓝牙/WebSocket 链路时只改这里，
           上层不需要知道有哪些链路类型。
     """
     if isinstance(port, str) and port.lower().startswith('udp:'):
         return UdpLink(port, baud, on_data, read_size=2048)
+    if isinstance(port, str) and port.lower().startswith('usb:'):
+        # Android（Chaquopy）：经 Java 的 USB Host API 打开 OTG 串口
+        from .chaquopy_usb_link import ChaquopyUsbLink
+        return ChaquopyUsbLink(port, baud, on_data)
     if isinstance(port, str) and port.lower().startswith('fd:'):
         # Termux 平板场景：termux-usb 把授权的 USB 数传以 fd 形式交给本进程
         from .termux_usb_link import TermuxFdLink

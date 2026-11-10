@@ -32,7 +32,29 @@ except ImportError:  # 无 pyserial 环境（如文档服务器）下仍可 impo
 
 
 def list_ports():
-    """返回 [{port, desc, hwid}] 列表"""
+    """返回 [{port, desc, hwid}] 列表
+
+    @note Android（Chaquopy）下必须走 USB Host API：普通应用看不到
+          /dev/ttyUSB0，pyserial 的 comports() 只会返回空列表——这就是
+          APK 里"识别不到串口"的根本原因，不是驱动问题。
+          所以先问 Java 桥，拿不到再退回 pyserial。
+    """
+    try:
+        from .chaquopy_usb_link import is_android, list_usb_devices
+        if is_android():
+            out = []
+            for d in list_usb_devices():
+                granted = d.get('granted', False)
+                out.append({
+                    # vid/pid 直接编进端点，连接时不用再让用户选第二遍
+                    'port': f"usb:{d.get('vid', -1)}:{d.get('pid', -1)}",
+                    'desc': f"{d.get('desc', 'USB 串口')}"
+                            + ('（已授权）' if granted else '（未授权，连接时会弹授权框）'),
+                    'hwid': d.get('name', ''),
+                })
+            return out
+    except Exception:
+        pass
     if list_ports_mod is None:
         return []
     out = []

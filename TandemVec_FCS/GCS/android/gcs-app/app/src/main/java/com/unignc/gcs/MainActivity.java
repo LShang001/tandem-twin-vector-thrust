@@ -43,6 +43,9 @@ public class MainActivity extends Activity {
         status.setPadding(48, 96, 48, 48);
         setContentView(status);
 
+        // USB 桥必须先拿到 Context 才能枚举设备；Python 侧会通过 Chaquopy 调它
+        UsbSerialBridge.init(this);
+
         new Thread(this::bootBackend, "py-boot").start();
     }
 
