@@ -33,6 +33,21 @@
 <body><article><a class="back" href="../index.html">← 返回文档中心</a>
 <h1 id="mod-005-共轴双桨-vtvl-动力学模型rigorous">MOD-005 共轴双桨 VTVL
 动力学模型（rigorous）</h1>
+<blockquote>
+<h2 id="warning-参数现状2026-11-11-核对">⚠️ 参数现状（2026-11-11
+核对）</h2>
+<p>本文的 L1
+集总参数（<code>I=(0.05,0.05,0.08) kg·m²</code>、<code>l=0.15 m</code>、<code>k_yaw=1e-6 N·m/µs</code>）是
+<strong>2026-10-31 的 SIL
+存档基准</strong>，用于复现历史验收基线，<strong>不等于当前固件实参</strong>。
+固件现行值（<code>FlightCtrlParams.h::CoaxialCtrlParams</code>）已改为：
+<code>inertia_roll/pitch=0.015</code>、<code>inertia_yaw=0.02</code>
+kg·m²、<code>lever_m=0.21 m</code>、
+<code>yaw_moment_nm_per_us=2.0e-4</code>，且
+<code>CoaxialAllocatorParams</code> 的默认值已同步为该组数。 做 SIL
+与实机对比时必须用同一组参数，否则结论不可外推（分配器增益
+<code>g ∝ T_est/I</code>， 惯量差 3.3 倍会直接改变内环增益）。</p>
+</blockquote>
 <ul>
 <li>状态：研究模型（SIL 可选，默认关闭）</li>
 <li>日期：2026-10-31</li>
@@ -327,5 +342,5 @@ plant 口径改变了闭环历史。</li>
 <li>标定完成后，再决定是否把 <code>T_est</code> 改成 <code>T(u)</code>
 曲线并切换默认 plant 口径。</li>
 </ol>
-<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-005-共轴双桨VTVL动力学模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 19:03</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/MOD-005-共轴双桨VTVL动力学模型.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-11 19:25</footer></article></body>
 </html>

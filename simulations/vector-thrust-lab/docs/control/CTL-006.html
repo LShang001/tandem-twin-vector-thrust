@@ -154,24 +154,24 @@ Mz = -k·diff_us            （偏航，差速反向）</code></pre>
 </tr>
 <tr>
 <td><code>coax.lever_m</code></td>
-<td>0.15</td>
-<td>TVC 力臂 m</td>
+<td>0.21</td>
+<td>TVC 力臂 m（2026-11-10 用户实测 21 cm）</td>
 </tr>
 <tr>
 <td><code>coax.yaw_nm_per_us</code></td>
-<td>1.0e-6</td>
-<td>差速力矩系数，MODEL-DEFAULT（由 SIL 差分推力/力臂推导；任务书原稿
-0.0005 大 500 倍，已修正）</td>
+<td>2.0e-4</td>
+<td>差速力矩系数（2026-11-10 由电机差速力矩估算重标定，配套
+<code>rate_yaw</code> 增益 ×200 补偿）</td>
 </tr>
 <tr>
 <td><code>coax.inertia_roll/pitch</code></td>
-<td>0.05</td>
-<td>kg·m²</td>
+<td>0.015</td>
+<td>kg·m²（2026-11-10 由原版实飞响应反推）</td>
 </tr>
 <tr>
 <td><code>coax.inertia_yaw</code></td>
-<td>0.08</td>
-<td>kg·m²</td>
+<td>0.02</td>
+<td>kg·m²（绕推力轴，2026-11-10 反推）</td>
 </tr>
 </tbody>
 </table>
@@ -185,8 +185,8 @@ Mz = -k·diff_us            （偏航，差速反向）</code></pre>
 <code>α_max=(l·T_est/I)·sin(δ_max)</code>；</li>
 <li>偏航：<code>g_yaw = k_yaw/I_z</code>，<code>α_max_yaw = g_yaw·max_yaw_diff_us</code>；</li>
 <li><code>T_est = max(0.01·throttle·T_max, 0.35 N)</code>，与分配器同源；α
-经原 α0.25 输出滤波后交 <code>CoaxialAllocator</code> 逆解
-<code>δ=asin(α·I/(l·T))</code>；</li>
+经内环输出滤波（共轴 <code>out_alpha</code>=0.5）后交
+<code>CoaxialAllocator</code> 逆解 <code>δ=asin(α·I/(l·T))</code>；</li>
 <li>ATTITUDE 外环、积分门控、RATE 只复位外环、手动 TVC
 路径均不变；手动/未激活仍输出 δ，
 <code>alpha_valid=false</code>，分配器不接管；</li>
@@ -201,9 +201,12 @@ Mz = -k·diff_us            （偏航，差速反向）</code></pre>
 <li>惯量/推力估错会<strong>直接改变内环增益</strong>，不是只改变中间量；</li>
 <li>名义点 A/B
 与验收只能证明"在假设参数下响应与旧架构一致"，不能外推到实机；</li>
-<li>0.05/0.08 kg·m²、0.15 m、1e-6 N·m/µs 均为
-MODEL-DEFAULT，启用前需台架辨识惯量与推力，
-并做系留/限高测试；偏航同样依赖 <code>k_yaw/I_z</code>。</li>
+<li>当前取值（0.015/0.015/0.02 kg·m²、0.21 m、2e-4
+N·m/µs）已由原版实飞响应与电机差速 力矩反推得到，不再是纯
+MODEL-DEFAULT，但仍未做台架直接测量；首次自由飞前仍应做
+系留/限高验证。偏航增益依赖 <code>k_yaw/I_z</code>，改
+<code>coax.yaw_nm_per_us</code> 必须同倍率改 <code>rate_yaw</code> 的
+kp/ki/out_max/int_limit 四项，否则差速输出会成倍突变。</li>
 </ul>
 <h3 id="25-两层输出限幅2026-10-31-用户要求">2.5 两层输出限幅（2026-10-31
 用户要求）</h3>
@@ -541,12 +544,12 @@ throttle=0）时 TVC 归中并置
 尚未暴露分配器饱和位。</li>
 <li><strong>α-native 是唯一路径，增益依赖 T_est
 与假设惯量</strong>：<code>g ∝ T_est/I_assumed</code>，实机惯量/推力偏差会直接改变内环增益；名义点
-A/B 与验收不能外推到实机。0.05/0.08 kg·m²、0.15 m、1e-6 N·m/µs 均为
-MODEL-DEFAULT，飞行前需台架辨识惯量与推力并做系留/限高。</li>
+A/B 与验收不能外推到实机。当前 0.015/0.015/0.02 kg·m²、0.21 m、2e-4
+N·m/µs 系反推值，飞行前仍建议台架辨识惯量与推力并做系留/限高。</li>
 <li><strong>制导→动力分配纯函数已接线、结构体契约未接</strong>：AUTO_POSITION/GUIDED
 已改为调用
 <code>PowerAllocation.h</code>，并用网格证明与拆分前逐位一致；<code>GuidanceCommand/AttitudeSetpoint</code>
 结构体尚未替换现有函数签名，属于"函数已收口、类型未收口"的中间态。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 19:03</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-006-控制机型解耦契约与分配器.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-11 19:25</footer></article></body>
 </html>

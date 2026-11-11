@@ -935,12 +935,16 @@ static void handleIndoorOpticalFlowVelocityFusion()
 static InsGnssDelayAutoEstimator s_gnss_delay_auto;
 static uint32_t s_gnss_delay_auto_last_ms = 0;
 static InsInertialReference s_ins_ref;
+#endif
+// ★ 2026-11-11：零偏跳变/温度观测与延时估计无关——它们被 handleNavigationSystem
+//   尾部的「温度-零偏诊断」段无条件使用（4061 行起），以及 2486 行的跳变保持逻辑。
+//   原实现把它们一起包在 BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE 里，
+//   关闭该宏后编译期报"未声明"，所以定义必须放在宏外。
 static InsBiasJumpMonitor s_bias_jump_monitor;
 static uint32_t s_bias_jump_hold_until_ms = 0;
 static InsBiasTempObserver s_bias_temp_observer;
 static InsBiasTempTable s_bias_temp_table;
 static uint32_t s_bias_temp_table_last_ms = 0;
-#endif
 // 高频振动通道全局单例：定义放在编译条件之外，`sensor_imu.cpp`（生产 2 kHz 历元）
 // 与宿主 SIL（复刻软件低通处）都无条件更新，导航侧按 `BFS_VIB_HIGH_SOURCE_HF`
 // 或 SIL 运行时开关选择读哪个通道，避免两个编译分支下的链接不对称。

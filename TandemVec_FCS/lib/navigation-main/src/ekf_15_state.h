@@ -193,6 +193,18 @@
 #endif
 
 /*
+ * 量测外推（2026-11-11，默认 0 = 保持既有语义）
+ *
+ * 与 BFS_NAVIGATION_EMBEDDED_DISABLE_GNSS_DELAY_REPLAY 配合使用：关闭历史回放后，
+ * 带年龄的 GNSS 量测原本会被整帧拒绝（require_delayed_snapshot 路径）。开着本宏时
+ * 改为按 GNSS 速度把量测外推到当前时刻再融合，使 RTK 大延迟下既不回放（无正反馈
+ * 积压）也不丢帧。默认关，保证宿主回归与既有 SIL 行为逐位不变。
+ */
+#ifndef BFS_NAVIGATION_GNSS_MEAS_EXTRAPOLATE
+#define BFS_NAVIGATION_GNSS_MEAS_EXTRAPOLATE 0
+#endif
+
+/*
  * GNSS 观测相对当前 IMU/EKF 时刻的默认回溯延迟，单位 s。
  *
  * 估算依据：
@@ -964,12 +976,30 @@ namespace bfs
       const bool can_repropagate = GetDelayedSnapshotIndexByAge(measurement_age_s, &hist_idx);
 #endif
 
+      /* ★ 2026-11-11：带 RTK 大延迟的量测外推路径（替代历史回放）。
+       *
+       * 背景：室外 RTK 固定解后飞控出现"刚启动响应灵敏、放久延迟越来越大"。
+       * 根因是历史回放的正反馈：RTK 量测年龄大 → 按 age 回溯快照并重放 IMU
+       * （320 ms 缓冲最多 64 步）→ 单帧耗时随 age 线性增长 → GNSS 处理跟不上
+       * 8 Hz 到达率 → 队列积压 → age 进一步增大 → 回放更多步。室内无定位时
+       * 该路径根本不执行，所以只在室外复现。
+       *
+       * 处理：不回放历史时，把量测按 GNSS 速度外推到当前时刻再与当前状态比。
+       * 一阶外推的位置误差量级为 0.5·a·age²（age=0.12 s、a=2 m/s² 时约 1.4 cm），
+       * 远小于"把整段运动量当新息"造成的滞后。速度通道保持原量测（速度在
+       * age 内的变化量为 a·age，1e-1 m/s 量级）。
+       */
+      Eigen::Vector3d gnss_lla_meas = gnss_lla;
+      Eigen::Vector3f gnss_vel_meas = gnss_vel;
+
+#if !BFS_NAVIGATION_GNSS_MEAS_EXTRAPOLATE
       if (require_delayed_snapshot && measurement_age_s > 0.0f &&
           !can_repropagate)
       {
         // 带真实时间戳的旧量测若已超出历史窗口，不能静默退化成当前时刻融合。
         return result;
       }
+#endif
 
       if (can_repropagate)
       {
@@ -982,6 +1012,16 @@ namespace bfs
         // 启动阶段保护：缓冲区数据不足时降级为当前时刻更新。
         hist_lla = ins_lla_rad_m_;
         hist_vel = ins_ned_vel_mps_;
+#if BFS_NAVIGATION_GNSS_MEAS_EXTRAPOLATE
+        // 不回放时，把量测按 GNSS 速度外推到当前时刻：否则 age 时段内
+        // 真实运动量会被当成"新息"，滤波器反而把状态拉向旧位置 → 滞后。
+        if (measurement_age_s > 0.0f && IsFiniteVector(gnss_vel))
+        {
+          gnss_lla_meas = bfs::ned2lla(
+              gnss_vel.cast<double>() * static_cast<double>(measurement_age_s),
+              gnss_lla, bfs::AngPosUnit::RAD);
+        }
+#endif
       }
 
       // ----------------------------------------------------------------------
@@ -1014,14 +1054,14 @@ namespace bfs
             t_b2ned * omega.cross(gnss_lever_arm_body_m_);
       }
       y_.segment(0, 3) =
-          lla2ned(gnss_lla, hist_lla, bfs::AngPosUnit::RAD).cast<float>() -
+          lla2ned(gnss_lla_meas, hist_lla, bfs::AngPosUnit::RAD).cast<float>() -
           lever_ned;
 
       /*
        * 计算速度误差 (后3维):
        * 直接计算 GNSS 速度与 INS 估计速度的差值。
        */
-      y_.segment(3, 3) = gnss_vel - hist_vel - lever_vel_ned;
+      y_.segment(3, 3) = gnss_vel_meas - hist_vel - lever_vel_ned;
       result.innovation_norm = y_.norm();
 
       // 正常跟踪期的单帧大跳点显式拒绝。高振动/高延迟时 P 可能膨胀到让

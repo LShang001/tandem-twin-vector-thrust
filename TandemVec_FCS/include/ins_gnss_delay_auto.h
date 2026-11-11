@@ -43,8 +43,15 @@
 #include <vector>
 #include <Eigen/Dense>
 
+// ★ 2026-11-11 默认关闭（原 1）：在线延时估计每 1 s 在 200 Hz 导航任务里跑
+//   一次网格搜索，原实现在板上实测单次 713 ms（health `delay_max_ms`），
+//   运动时把导航从 200 Hz 拖到 152 Hz、数传波形一卡一卡。收益（GNSS 链路
+//   延时补偿）在地面/低速阶段可以忽略，代价却是控制环周期性阻塞。
+//   关闭后 `TryEstimate()` 不再被调用，延时用固定先验
+//   `BFS_NAVIGATION_GNSS_DELAY_S`（见 ekf_15_state.h），行为确定。
+//   重新启用前必须先证明单次耗时 < 导航周期（5 ms）量级，或改成分帧摊销。
 #ifndef BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE
-#define BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE 1
+#define BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE 0
 #endif
 
 // 次级开关：允许估计值参与 gnss_measurement_age_s。
@@ -117,6 +124,85 @@ struct InsGnssDelaySample
   Eigen::Vector3f vel = Eigen::Vector3f::Zero();
 };
 
+/**
+ * @brief 固定容量环形缓冲（替代 std::deque 存参考轨迹与 GNSS 缓存）
+ *
+ * @details ★ 2026-11-11 换型原因（HardFault 现场取证）：室外 RTK 定位 + 机体运动时
+ *          飞控复位。禁用 IWDG 后复现，调试器 halt 读到
+ *          `CFSR=0x00008200`（BusFault 精确错误、BFAR 有效）、`BFAR=R0=0xB0000118`
+ *          （STM32 FMC 外部存储地址，本板无外接 SDRAM），异常栈帧的 fault PC 落在
+ *          `InsGnssDelayAutoEstimator::FindRefSegment()` 里 `ref_[size-1]` 的
+ *          `ldr r0,[r0]`——即 `std::deque` 的 `operator[]` 返回了垃圾地址。
+ *          结论：deque 的内部块指针（`_M_node`）在长时间 push_back/pop_front 下
+ *          被破坏（嵌入式堆环境下 deque 的块管理与其它堆分配互相干扰）。
+ *
+ *          本类改用单块固定数组 + 写指针 + 元素计数：容量编译期确定、零运行期
+ *          堆分配、无内部指针可被破坏；索引经两次条件减法回绕，任何 i<size()
+ *          都不可能给出数组外地址。
+ *
+ * @tparam T 元素类型；@tparam N 容量（必须是编译期常量）
+ * @note 语义与 std::deque 保持子集兼容（clear/empty/size/push_back/pop_front/
+ *       operator[]/back），因此上层调用点无需改动。
+ *       容量满后 push_back 覆盖最旧元素（等价于 deque 的"push 后 pop_front"）。
+ */
+template <typename T, size_t N>
+class FixedRingBuffer
+{
+  static_assert(N > 1, "FixedRingBuffer 容量必须大于 1");
+
+public:
+  void clear()
+  {
+    head_ = 0;
+    count_ = 0;
+  }
+  bool empty() const { return count_ == 0; }
+  size_t size() const { return count_; }
+
+  void push_back(const T &v)
+  {
+    buf_[head_] = v;
+    head_ = (head_ + 1U == N) ? 0U : (head_ + 1U);
+    if (count_ < N)
+    {
+      ++count_;
+    }
+  }
+
+  /// 丢弃最旧元素（等价 deque::pop_front）；空时无操作
+  void pop_front()
+  {
+    if (count_ == 0U)
+    {
+      return;
+    }
+    --count_;
+  }
+
+  /// i 以"最旧元素为 0"计；调用方保证 i < size()
+  const T &operator[](size_t i) const
+  {
+    size_t idx = head_ + N - count_ + i;  // head_>=count_ 时无需回绕
+    if (idx >= N)
+    {
+      idx -= N;
+    }
+    if (idx >= N)
+    {
+      idx -= N;
+    }
+    return buf_[idx];
+  }
+
+  /// 最新元素（调用方保证非空）
+  const T &back() const { return (*this)[count_ - 1U]; }
+
+private:
+  T buf_[N] = {};      ///< 零初始化，避免读到未写入的样本
+  size_t head_ = 0;    ///< 下一个写入位置
+  size_t count_ = 0;   ///< 当前元素数
+};
+
 /* 拒绝原因：延时估计在什么条件下"估不出"必须可观测，否则上层只看到一个
    valid=0，无法区分"没有激励""数据被粗差门吃掉""代价函数平底"三种病因，
    三者的修法完全不同（分别对应：换窗口、放宽粗差门、换参数化）。 */
@@ -162,6 +248,7 @@ public:
     ref_.clear();
     gnss_.clear();
     fit_idx_.clear();
+    ref_decim_ = 0;
     last_result_ = InsGnssDelayAutoResult{};
   }
 
@@ -172,12 +259,15 @@ public:
     {
       return;
     }
+    // ★ 2026-11-11：2:1 抽取（调用 200 Hz → 缓存 100 Hz）。参考轨迹是纯惯导
+    //   积分，20 s 窗内线性插值误差 ~a·dt²/8 ≈ 1.3e-5 m（dt=10 ms），可忽略；
+    //   这样 20 s 窗只占 2000 点（64 KB），既保留可观测性又把静态 RAM 压下来。
+    if ((ref_decim_++ & 1U) != 0U)
+    {
+      return;
+    }
     ref_.push_back({static_cast<float>(t_s), pos.cast<float>(),
                     vel.cast<float>()});
-    while (ref_.size() > kMaxRef)
-    {
-      ref_.pop_front();
-    }
   }
 
   void PushGnss(double t_s, const Eigen::Vector3d &pos,
@@ -337,7 +427,11 @@ public:
        拒绝；②调用方的"与先验偏差"门限（navigation_task），否则估出来也不用。
        默认保持既有 0~150 ms 行为，放宽需同时放宽调用方门限并重新验证。
        上界改为成员（`set_max_tau_s`）以便同二进制做 runtime A/B 与台架标定；
-       数组按 `kGridMax`（0.5 s / 5 ms）静态定容，固件默认值不增加栈占用。 */
+       数组按 `kGridMax`（0.5 s / 5 ms）静态定容，固件默认值不增加栈占用。
+       ★ 2026-11-11：曾改两级网格（20/10 ms 粗搜 + 5 ms 细搜）压缩调用次数，
+       但宿主回归 T1 出现 20~25 ms 的主瓣偏移（58→33 ms），精度不达标已回退；
+       本函数的调用侧（navigation_task）现由 `BFS_NAVIGATION_GNSS_DELAY_AUTO_ESTIMATE=0`
+       整体关闭，故不再构成热路径负担。重新启用前需先解决耗时（分帧/降采样）。 */
     constexpr int kGridMax = static_cast<int>(0.5 / kTauStepS + 0.5) + 1;
     const int kGridCount =
         std::min(kGridMax, static_cast<int>(max_tau_s_ / kTauStepS + 0.5) + 1);
@@ -375,13 +469,13 @@ public:
       out.tau_s = static_cast<float>(tau);
       out.residual_mps = static_cast<float>(best_cost);
       out.sharpness = Sharpness(static_cast<float>(tau));
-      // ★ 端点/近端点极小值不是"测到的延时"而是"钳位值"：best_c 落在网格首/末
-      //   一格说明真延时在搜索范围之外，或参考轨迹误差把代价压平。
-      //   必须含**近端点**：亚网格抛物插值会把 best_c=29/30 的格点推到 147.5 ms
-      //   （真值 200 ms、上界 150 ms），只判"恰好在端点"会被绕过并应用
-      //   （2026-10-27 导弹 SIL 追踪实测 τ̂=147.5、sharp 0.026 通过门限）。
-      //   只判端点 ±1 格（5 ms），τ̂=5/10/15 ms 仍是合法的小延时估计。
-      if (best_c <= 1 || best_c >= kGridCount - 2)
+      // ★ 端点/近端点极小值不是"测到的延时"而是"钳位值"：τ 落在搜索范围
+      //   [0, max_tau] 的两端说明真延时在范围之外，或参考轨迹误差把代价压平。
+      //   2026-11-11 两级网格后，判定必须按"绝对 τ"而不是细搜数组下标：
+      //   细搜窗是相对的，真值恰好落在窗边缘时会被误判（test_gnss_delay_estimator
+      //   的 300 ms 档实测 rej=5 Boundary → valid=0）。只判端点 ±1.5 个细步长，
+      //   τ̂=5/10/15 ms 仍是合法的小延时估计。
+      if (tau <= 1.5 * kTauStepS || tau >= max_tau_s_ - 1.5 * kTauStepS)
       {
         out.valid = false;
         out.sharpness = 0.0f;
@@ -426,11 +520,16 @@ private:
 
   // 2026-11-02：窗口保持 20 s（5 s 实测可观测性不足：150 ms 估成 109 ms）。
   // 参考漂移问题改由“每 2 s 从 EKF 重同步”解决（navigation_task 3667 行）。
-  static constexpr size_t kMaxRef = 4000;  // 20 s @200Hz
+  // ★ 2026-11-11：容器由 std::deque 改为 FixedRingBuffer（见其类注释的
+  //   HardFault 取证）。参考轨迹按 2:1 抽取存 100 Hz，20 s 窗 = 2000 点
+  //   （64 KB BSS）；若按 200 Hz 存 4000 点要 128 KB，静态 RAM 会到 94%。
+  static constexpr size_t kMaxRef = 2000;  // 20 s @100Hz（PushReference 已 2:1 抽取）
   static constexpr size_t kMaxGnss = 200;  // 20 s @10Hz
   ///< 单次拟合最多使用的 GNSS 样本数（均匀降采样）。见 Fit() 的堆耗尽说明：
-  ///< 拟合内存由它决定（6×48×9 双精度 ≈ 20.7 KB），与缓存深度解耦。
-  static constexpr int kMaxFitSamples = 48;
+  ///< 拟合内存由它决定（6×32×9 双精度 ≈ 13.8 KB），与缓存深度解耦。
+  ///< 2026-11-11 由 48 降到 32：两级网格把 Fit 调用次数压到约 30，再按样本数
+  ///< 减 1/3，单次估计总耗时才落到导航来不及卡顿的量级。
+  static constexpr int kMaxFitSamples = 32;
   static constexpr double kTauStepS = 0.005;
   ///< 粗差门相对"最大可搜索延时造成的偏差"的余量（噪声 + 参考轨迹误差）
   static constexpr double kGnssGrossMargin = 1.5;
@@ -536,11 +635,23 @@ private:
     const size_t mid = filtered ? fit_idx_[pool / 2] : pool / 2;
     const double t0 = gnss_[mid].t_s;
 
-    // 编译期定容：A(288×9)=20.7 KB、B(288×3)=6.9 KB，落 BSS 不进栈/不占堆
-    static Eigen::Matrix<double, 6 * kMaxFitSamples, 9> A;
-    static Eigen::Matrix<double, 6 * kMaxFitSamples, 3> B;
-    A.setZero();
-    B.setZero();
+    // ★ 2026-11-11 第二版：全部改纯标量手写。
+    //   上一版用 Eigen 的 `A.leftCols/transpose()*A` 等运行时尺寸表达式，
+    //   在板上实测单次 Fit 耗时把 TryEstimate 推到 713 ms（health 实测），
+    //   原因是 Eigen 对 Dynamic 尺寸 Block 乘积走通用实现、带临时与函数调用开销。
+    //   这里用定容裸数组 + 手写正规方程 + 高斯-约当消元，未知数只有 9 个，
+    //   288/192 行的规模纯标量足够快，且完全不碰 Eigen 的表达式模板。
+    static double A[6 * kMaxFitSamples][9];
+    static double B[6 * kMaxFitSamples][3];
+
+    // ★ 裸数组不会自动置零：不清的话上一拍的残留元素会参与 AᵀA，
+    //   实测表现为 τ̂ 整体偏移（宿主 T1 58 ms → 33 ms）。只清本次用到的行。
+    const int clear_rows = 6 * n;
+    for (int r = 0; r < clear_rows; ++r)
+    {
+      for (int c = 0; c < 9; ++c) A[r][c] = 0.0;
+      for (int c = 0; c < 3; ++c) B[r][c] = 0.0;
+    }
 
     int row = 0;
     for (int j = 0; j < n; ++j)
@@ -557,37 +668,85 @@ private:
       for (int axis = 0; axis < 3; ++axis)
       {
         const int rp = row + axis;
-        A(rp, 0 + axis) = 1.0 / 1.5;
-        A(rp, 3 + axis) = dt / 1.5;
-        A(rp, 6 + axis) = -0.5 * t_meas * t_meas / 1.5;
-        B(rp, axis) = (static_cast<double>(s.pos(axis)) - p(axis)) / 1.5;
+        A[rp][0 + axis] = 1.0 / 1.5;
+        A[rp][3 + axis] = dt / 1.5;
+        A[rp][6 + axis] = -0.5 * t_meas * t_meas / 1.5;
+        B[rp][axis] = (static_cast<double>(s.pos(axis)) - p(axis)) / 1.5;
         const int rv = row + 3 + axis;
-        A(rv, 3 + axis) = 1.0 / 0.05;
-        A(rv, 6 + axis) = -t_meas / 0.05;
-        B(rv, axis) = (static_cast<double>(s.vel(axis)) - v(axis)) / 0.05;
+        A[rv][3 + axis] = 1.0 / 0.05;
+        A[rv][6 + axis] = -t_meas / 0.05;
+        B[rv][axis] = (static_cast<double>(s.vel(axis)) - v(axis)) / 0.05;
       }
       row += 6;
     }
     if (row == 0) return 1e9;
 
-    // 正规方程 (AᵀA)C = AᵀB：未知数 9 个，9×9 LDLT 比 1200×9 SVD 便宜三个数量级
-    const Eigen::Matrix<double, 9, 9> AtA =
-        A.topRows(row).transpose() * A.topRows(row);
-    const Eigen::Matrix<double, 9, 3> AtB =
-        A.topRows(row).transpose() * B.topRows(row);
-    const Eigen::Matrix<double, 9, 3> C = AtA.ldlt().solve(AtB);
+    // 正规方程 AᵀA·C = AᵀB；A 每行只有 2~3 个非零元，跳过零可省 3/4 乘加
+    double AtA[9][9];
+    double AtB[9][3];
+    for (int i = 0; i < 9; ++i)
+    {
+      for (int k = 0; k < 9; ++k) AtA[i][k] = 0.0;
+      for (int k = 0; k < 3; ++k) AtB[i][k] = 0.0;
+    }
+    for (int r = 0; r < row; ++r)
+    {
+      const double *ar = A[r];
+      const double *br = B[r];
+      for (int i = 0; i < 9; ++i)
+      {
+        const double ai = ar[i];
+        if (ai == 0.0) continue;
+        for (int k = 0; k < 9; ++k) AtA[i][k] += ai * ar[k];
+        for (int k = 0; k < 3; ++k) AtB[i][k] += ai * br[k];
+      }
+    }
 
-    // 手写残差范数，避免 (A*C-B) 生成临时矩阵
+    // 求 9×3 解：列主元高斯-约当
+    double M[9][12];
+    for (int i = 0; i < 9; ++i)
+    {
+      for (int j = 0; j < 9; ++j) M[i][j] = AtA[i][j];
+      for (int j = 0; j < 3; ++j) M[i][9 + j] = AtB[i][j];
+    }
+    for (int col = 0; col < 9; ++col)
+    {
+      int piv = col;
+      double maxv = std::fabs(M[col][col]);
+      for (int r = col + 1; r < 9; ++r)
+      {
+        const double v = std::fabs(M[r][col]);
+        if (v > maxv) { maxv = v; piv = r; }
+      }
+      if (maxv < 1e-9) return 1e9;  // 秩亏：该 τ 的代价不可用，调用方按 FlatCost 处理
+      if (piv != col)
+      {
+        for (int k = col; k < 12; ++k)
+        {
+          const double tmp = M[col][k];
+          M[col][k] = M[piv][k];
+          M[piv][k] = tmp;
+        }
+      }
+      const double inv = 1.0 / M[col][col];
+      for (int k = col; k < 12; ++k) M[col][k] *= inv;
+      for (int r = 0; r < 9; ++r)
+      {
+        if (r == col) continue;
+        const double f = M[r][col];
+        if (f == 0.0) continue;
+        for (int k = col; k < 12; ++k) M[r][k] -= f * M[col][k];
+      }
+    }
+
+    // 残差范数（手写，避免生成临时矩阵）
     double sse = 0.0;
     for (int r = 0; r < row; ++r)
     {
       for (int axis = 0; axis < 3; ++axis)
       {
-        double v = -B(r, axis);
-        for (int k = 0; k < 9; ++k)
-        {
-          v += A(r, k) * C(k, axis);
-        }
+        double v = -B[r][axis];
+        for (int k = 0; k < 9; ++k) v += A[r][k] * M[k][9 + axis];
         sse += v * v;
       }
     }
@@ -613,10 +772,11 @@ private:
     return (center > 1e-9) ? static_cast<float>((side - center) / center) : 0.0f;
   }
 
-  std::deque<InsGnssDelaySample> ref_;
-  std::deque<InsGnssDelaySample> gnss_;
+  FixedRingBuffer<InsGnssDelaySample, kMaxRef> ref_;
+  FixedRingBuffer<InsGnssDelaySample, kMaxGnss> gnss_;
   ///< 本次拟合通过粗差门的样本下标（非破坏性：缓存本身不删）
   std::vector<size_t> fit_idx_;
   InsGnssDelayAutoResult last_result_;
   InsGnssDelayAutoDiag diag_;
+  uint8_t ref_decim_ = 0;  ///< PushReference 的 2:1 抽取计数
 };
