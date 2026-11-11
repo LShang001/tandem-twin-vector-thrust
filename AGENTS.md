@@ -111,6 +111,7 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 
 | 文件 | 内容 | 何时读 |
 |------|------|--------|
+| `2026-11-11-IMU延迟根因-FIFO速率失配.md` | **延迟随时间增长的唯一根因**：芯片 ODR 由 RC 晶振决定（标称 1600 实测 1600~1685，随温度漂移），ISR 取数按标称值派生 ⇒ FIFO 稳态积压，而 FIFO 先进先出 ⇒ 控制读几十包前的旧样本（实测 38/75 包 ≈ 22~44ms，且 `isr_f==drain_f`/`ring_drop=0` 全绿看不出）。修复五处必须配合：dt 由芯片时间戳差分驱动 / readFifo 读到空只留最新 / ring 窗口收紧 / 时间基准按真实 dt 累加 / 空 drain 对齐当前。**ISR 必须 ≥2×ODR**（降到 1600 会 ring 积压、CPU 反升）。已否决：只排空不改 dt（EKF 发散 rpy 145°） | 改 IMU 采样/取数/排空、调 `kOdrHz`/`kIsrPollHz`、排查"延迟越放越大"或"控制吃旧数据"时 |
 | `2026-11-10-openocd烧录Tcl路径转义.md` | openocd `-c` 的字符串由 **Tcl** 解析，**反斜杠是转义符**：`C:\Users\12631\fw42688.elf` 被吃成 `C:UsersV31<FF>w42688.elf`（`\U`→U、`\126`→八进制V、`\f`→换页符）→ 报 `couldn't open` / `Programming Failed`。**传路径一律用正斜杠**。附：`Start-Process` 的 `-NoNewWindow` 与 `-WindowStyle` 互斥（同给则返回 `$null`）；内联多层引号必出事，写 `.ps1` 走 `-File` | 跨机烧录 / 用 openocd `-c` 传绝对路径 / 写 PowerShell 启动子进程脚本时 |
 | `2026-11-10-GCS仪表盘重做.md` | 「丑」多半是**大面积空数据**不是配色：换协议后 AnoCom 专有字段（0xF1/0xF2/DETA100）全缺 → 满屏 `--`；同物理量两协议字段名/单位不同（模式编号、油门、精度）不能共表；**几何只认像素测量不认缩略图**（量天地分界左右高度差）；`drawAttitude` 横滚指针数学角≠屏幕角；内联 `display=''` 会回落 CSS 而非恢复显示 | 改 GCS 仪表盘 / 面板布局 / 任何 canvas 仪表绘制 / 判界面丑不丑时 |
 | `2026-11-10-GCS平板可点性验收.md` | 平板可点性实测：导航 31px / 按钮 28px / 选择器 24px 全部低于 40px 下限；**Playwright 必须开 `has_touch=True`** 否则 `pointer: coarse` 不生效、量出来仍是桌面尺寸；触控放大用 `pointer: coarse` 而非宽度断点 | 改 GCS 前端 CSS / 布局 / 控件尺寸 / 做平板适配验收时 |
