@@ -1,5 +1,6 @@
 /**
  * @file    imu_odr_config.h
+ * @module  sensor-imu
  * @brief   IMU 采样率的唯一真源 + 型号支持列表 + 编译期严格校验
  *
  * @note    ★ 2026-11-10 立此文件的原因：
@@ -82,5 +83,32 @@ static_assert(supported(kOdrHz),
  */
 static_assert(kOdrHz <= 6400U,
               "所选采样率超过调度时基 6400Hz：需先提高 kSchedulerTickHz 才能使用该档");
+
+/**
+ * @brief ISR 取数轮询频率（≠ 芯片 ODR）。
+ *
+ * 取 2 × kOdrHz。**必须大于芯片实际 ODR**（标称 1600 的 ICM-45686 受 RC 晶振
+ * 偏差影响实测 1600~1685，且随温度变化），原因如下：
+ *
+ * readFifo 每次最多交出一包（最新），所以"每拍交出 1 帧"⇒ 帧率上限 = ISR 频率。
+ * 2026-11-11 实测 ISR=1600 时：芯片产 1656 帧/s、ISR 只能交 1600 帧/s，
+ * 差的 56 帧变成 ring 积压（ring_size=4、imu_age 从 412µs 恶化到 2650µs），
+ * 而 readIMUData 每拍要多补帧，CPU 反而从 34.9% 升到 45.1%。
+ * 结论：**排空只解决 FIFO 深度，解决不了取数次数不足**。
+ *
+ * 取 2× 后每拍有包概率约 50%，空读只做一次 2 字节水位数查询；实测
+ * isr_c≈2×isr_f、fifo_q=1/1、ring_size=0、imu_age≈400µs、CPU≈35%。
+ *
+ * 时间轴由芯片 FIFO 时间戳差分驱动（P0），与 ISR 频率无关。
+ * 约束：必须整除调度时基（6400 / 3200 = 2），否则相位累加出现长周期抖动。
+ */
+constexpr uint16_t kIsrPollHz = static_cast<uint16_t>(2U * kOdrHz);
+static_assert(kIsrPollHz <= 6400U,
+              "ISR 轮询频率超过调度时基 6400Hz：相位累加会丢拍、持续积压");
+static_assert(6400U % kIsrPollHz == 0U,
+              "ISR 轮询频率必须整除调度时基 6400Hz（当前要求 3200/1600/800、6400）");
+static_assert(kIsrPollHz >= 2U * kOdrHz,
+              "ISR 轮询频率不得低于 2×ODR：芯片实际 ODR 有 +5% 晶振偏差，"
+              "低于它会因取数次数不足导致 ring 积压（2026-11-11 实测）");
 
 } // namespace bfs_imu_odr

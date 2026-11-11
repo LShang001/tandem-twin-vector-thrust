@@ -161,6 +161,10 @@ public:
   virtual int disableFifo() { return -1; }
   /// 批量读取 FIFO，返回包数（>=0）；负数表示错误。
   virtual int readFifo(ImuFifoSample *out, size_t max) { (void)out; (void)max; return -1; }
+  /// 最近一次 readFifo 时芯片 FIFO 里待取的包数（水位）。
+  /// 每次只取 1 包的后端：该值长期 >1 表示取数赶不上采样、FIFO 在积压，
+  /// 而 FIFO 先进先出 → 控制拿到的是旧包，延迟会随时间增长。
+  virtual uint16_t lastFifoFrameCount() const { return 0; }
   virtual int injectFifo(const ImuFifoSample &sample) { (void)sample; return -1; }
 
   virtual int dataReady() = 0;

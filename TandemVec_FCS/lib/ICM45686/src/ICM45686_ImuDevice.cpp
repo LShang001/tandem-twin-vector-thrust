@@ -222,39 +222,39 @@ int ICM45686_ImuDevice::readFifo(ImuFifoSample *out, size_t max)
   {
     return -1;
   }
+  // 诊断：记录水位（health 的 fifo_q 判据）
+  last_fifo_count_ = count;
   if (count == 0U)
   {
     return 0;
   }
+  // ★ 2026-11-11 P1：FIFO 排空到最新——只交出最后一包（最新样本），旧包丢弃。
+  //   硬件 FIFO 的先进先出语义改不了，堆积时读到的必然是旧样本；唯一正确用法是
+  //   每次读到空、只保留最新一包，把等效深度压到 1，延迟恒定为 1 个采样周期。
+  //   ★ 前置条件：dt 必须由芯片时间戳差分驱动（sensor_imu.cpp 的 P0），
+  //   否则丢帧后固定 dt 会让时间轴压缩数倍、EKF 当场发散（2026-11-11 实测
+  //   rpy 145°、vel 782 m/s、pos 31 km）。P0 已到位，丢帧安全。
+  //   每拍最多清 kDrainMax 包，避免单次 ISR 超时；残余积压由后续 ISR 逐拍清完。
   static constexpr size_t kBatchMax = 16U;
+  static constexpr uint16_t kDrainMax = 8U;
   static inv_imu_fifo_data_t s_batch[kBatchMax];
-  size_t n = (count > max) ? max : count;
-  if (n > kBatchMax)
-  {
-    n = kBatchMax;
-  }
-  if (imu_.getDataFromFifoBatch(s_batch, static_cast<uint16_t>(n)) != 0)
+
+  const uint16_t to_take = (count > kDrainMax) ? kDrainMax : count;
+  const uint16_t chunk = (to_take > kBatchMax) ? static_cast<uint16_t>(kBatchMax) : to_take;
+  if (imu_.getDataFromFifoBatch(s_batch, chunk) != 0)
   {
     return -1;
   }
-  // ★ 2026-11-09：不做 header 过滤。
-  //   曾按 fifo_header_t 的 accel_bit/gyro_bit 丢弃"无效包"，实机在单包读
-  //   路径下丢了约 10% 的样本（isr_empty 占比），导致帧间 dt 不一致、
-  //   EKF 速度不确定度从 0.37 涨到 1.94、收敛标志 conv 一直为 0。
-  //   P1 架构不变量（docs/memory/2026-11-04-IMU-2kHz攻关.md §6）验证过的
-  //   路径就是 readFifo(1包) 直接 push，不在这里做筛选。
-  for (size_t i = 0; i < n; ++i)
+  const size_t newest = static_cast<size_t>(chunk) - 1U;
+  for (int a = 0; a < 3; ++a)
   {
-    for (int a = 0; a < 3; ++a)
-    {
-      out[i].acc[a] =
-          ICM456xx::rawRegisterAccelToG(s_batch[i].byte_16.accel_data[a], accelFsr_);
-      out[i].gyr[a] =
-          ICM456xx::rawRegisterGyroToDps(s_batch[i].byte_16.gyro_data[a], gyroFsr_);
-    }
-    out[i].timestamp = s_batch[i].byte_16.timestamp;
+    out[0].acc[a] =
+        ICM456xx::rawRegisterAccelToG(s_batch[newest].byte_16.accel_data[a], accelFsr_);
+    out[0].gyr[a] =
+        ICM456xx::rawRegisterGyroToDps(s_batch[newest].byte_16.gyro_data[a], gyroFsr_);
   }
-  return static_cast<int>(n);
+  out[0].timestamp = s_batch[newest].byte_16.timestamp;
+  return 1;
 }
 
 float ICM45686_ImuDevice::dieTempC()

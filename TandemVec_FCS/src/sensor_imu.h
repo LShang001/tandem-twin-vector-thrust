@@ -93,6 +93,18 @@ void imuSampleIsr();
 uint32_t imuRingDropCount();
 uint32_t imuIsrEmptyCount();
 uint32_t imuRingSize();
+/// 最近一次被消费的 IMU 样本距今多少 µs = 采样→控制可用 的真实延迟。
+/// 判据：正常应 < 2 个采样周期（<1.3 ms@1600Hz）+ 一拍调度（5 ms）；
+/// 持续 >10 ms 说明排空欠量、控制正在吃旧陀螺数据。
+uint32_t imuLastSampleAgeUs();
+/// ISR 取数时芯片 FIFO 的平均/最大水位（包数）。
+/// 判据：均衡状态下应恒为 1（每拍恰好一包）。持续 >1 说明取数欠量，
+/// FIFO 在积压，读到的会是最旧包 → 控制延迟随时间增长。
+uint32_t imuFifoPendingAvg();
+uint32_t imuFifoPendingMax();
+uint32_t imuFifoPendingSamples();
+/// 最近一次帧间芯片时间戳差分（µs）。用于核对 TMST_RESOL 与真实采样间隔。
+uint32_t imuLastTsDeltaUs();
 #endif
 #ifdef BFS_IMU_PROF
 extern float g_imu_prof_total_us;

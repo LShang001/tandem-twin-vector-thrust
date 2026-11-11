@@ -129,6 +129,14 @@ START_TS = time.time()      # 后端启动时间（/api/status 用）
 HEX_FLUSH_PERIOD = 0.35     # hex 监听推送节流
 HEX_FLUSH_MAX = 512         # 单次 hex 推送最大字节
 
+# ★ 2026-11-11 上行背压两处上限（治"上位机显示延迟随时间增长"）：
+#  RX_QUEUE_MAX：读线程以实测 15.6 KB/s 入队，消费端若短暂落后，无界队列会
+#   无限变长；有界后满则丢最旧，保证队首始终接近实时。
+#  TELE_PUSH_MIN_INTERVAL_S：遥测只按 50 Hz 推送（0x01/0x03 固件发 200 Hz），
+#   剩余带宽留给参数读写响应，事件循环不再堆积 ws.send_text 任务。
+RX_QUEUE_MAX = 512
+TELE_PUSH_MIN_INTERVAL_S = 1.0 / 50.0
+
 # PWA 清单的 MIME 类型：Python 的 mimetypes 不认 .webmanifest，
 # 不注册的话 StaticFiles 会按 application/octet-stream 返回，
 # 部分浏览器会因此拒绝把页面识别为可安装的 PWA。
@@ -176,7 +184,9 @@ class GCS:
         self.vars_meta_ready = False     # 清单是否已拉全
         self.vars_count_seen = None      # 固件回传的变量个数（0xF3 CMD 0x01）
         self.vars_samples = {}           # 变量名 → 最近值环形样本（watch 统计用）
-        self.rx_q = queue.Queue()
+        self.rx_q = queue.Queue(maxsize=RX_QUEUE_MAX)
+        self._last_tele_push = 0.0        # 演示/馈送链路 20Hz 节流（既有语义，勿与 WS 节流混用）
+        self._last_ws_tele_push = 0.0     # WS 广播 50Hz 节流（send_all 专用）
         self.ws_clients = set()
         self._loop = None
         self._stat_buf = []
@@ -340,7 +350,19 @@ class GCS:
     # ---------------- 串口读线程 → 队列 ----------------
     def _on_rx(self, chunk):
         if chunk:
-            self.rx_q.put(('rx', chunk))
+            # 有界队列：满则丢最旧一块，保证队首（也就是显示用的最新数据）不被
+            # 历史字节拖住——延迟优先于完整性，参数帧另有独立响应通道。
+            try:
+                self.rx_q.put_nowait(('rx', chunk))
+            except queue.Full:
+                try:
+                    self.rx_q.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    self.rx_q.put_nowait(('rx', chunk))
+                except queue.Full:
+                    pass
         else:
             self.rx_q.put(('link_down', None))
 
@@ -384,6 +406,21 @@ class GCS:
     def send_all(self, obj: dict):
         if not self.ws_clients:
             return
+        # ★ 2026-11-11：遥测推送节流。原实现每收到一块串口数据就
+        #   run_coroutine_threadsafe 一个 ws.send_text 任务，而遥测是 200 Hz
+        #   （0x01/0x03 各 199 Hz，实测 15.6 KB/s）。任务在事件循环里排队，
+        #   发送时刻越来越落后于数据产生时刻——上位机表现为"刚启动灵敏、
+        #   放久延迟越来越大"，而飞控侧 ring_size=0、调度 198 Hz、gnss 0.93 ms
+        #   全部正常。前端 handleMsg 只保留最新快照（state.snap），丢中间帧不影响显示。
+        if obj.get('type') == 'telemetry':
+            now = time.time()
+            # ★ 必须用独立字段：演示链路（_demo_feed / 串口馈送）已用
+            #   `_last_tele_push` 做 20Hz 节流，且是先写该字段再调 send_all。
+            #   若这里复用同一字段，差值为 0 会把自己刚放行的帧又拦掉，
+            #   表现为"WS 完全不推 telemetry"（2026-11-11 实测 GCS 冒烟失败）。
+            if now - self._last_ws_tele_push < TELE_PUSH_MIN_INTERVAL_S:
+                return
+            self._last_ws_tele_push = now
         text = json.dumps(obj, ensure_ascii=False)
         for ws in list(self.ws_clients):
             try:

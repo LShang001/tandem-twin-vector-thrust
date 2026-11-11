@@ -3317,6 +3317,21 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
 #ifdef BFS_IMU_ISR_RING
         serial.print(F("[DBG] p1 ring_size="));
         serial.print(imuRingSize());
+        // ★ 2026-11-11：IMU 采样→被消费的真实年龄（µs）。这是"控制用的陀螺
+        //   数据有多旧"的直接度量——ring_size 只是瞬时长度，排空后会归零，
+        //   看不出控制是否一直在吃落后一拍的旧样本。
+        serial.print(F(" imu_age_us="));
+        serial.print(imuLastSampleAgeUs());
+        // FIFO 水位：均衡时应恒为 1；持续 >1 = 取数欠量、FIFO 积压（读到旧包）
+        serial.print(F(" fifo_q="));
+        serial.print(imuFifoPendingAvg());
+        serial.print(F("/"));
+        serial.print(imuFifoPendingMax());
+        serial.print(F(" n="));
+        serial.print(imuFifoPendingSamples());
+        // 芯片时间戳帧间差分：核对 TMST_RESOL 与真实采样间隔（应≈1e6/实际ODR）
+        serial.print(F(" dt_us="));
+        serial.print(imuLastTsDeltaUs());
         serial.print(F(" ring_drop="));
         serial.print(imuRingDropCount());
         serial.print(F(" isr_empty="));

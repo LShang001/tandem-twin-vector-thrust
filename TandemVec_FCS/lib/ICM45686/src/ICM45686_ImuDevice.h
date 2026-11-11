@@ -88,6 +88,11 @@ public:
   int enableFifo() override;
   int readFifo(ImuFifoSample *out, size_t max) override;
 
+  /// 最近一次 readFifo 时 FIFO 里待取的包数（水位）。
+  /// ISR 每次只取 1 包；若该值长期 >1，说明取数速度赶不上采样速度，
+  /// FIFO 正在积压，而 FIFO 是先进先出 → 控制读到的是旧包。
+  uint16_t lastFifoFrameCount() const override { return last_fifo_count_; }
+
   /// 被 header 丢弃的无效 FIFO 包累计数（accel_bit 或 gyro_bit 为 0）。
   uint32_t fifoBadHeaderCount() const { return fifo_bad_header_count_; }
 
@@ -183,6 +188,7 @@ private:
   float actualGyroLpfHz_ = 0.0f;
   bool started_ = false;
   bool fifo_enabled_ = false;
+  uint16_t last_fifo_count_ = 0;   ///< 最近一次读到的 FIFO 水位（用于诊断积压）
   float inj_acc_[3] = {0.0f, 0.0f, 0.0f};   // ISR 注入的加速度（g）
   float inj_gyr_[3] = {0.0f, 0.0f, 0.0f};   // ISR 注入的角速度（dps）
   bool inj_valid_ = false;

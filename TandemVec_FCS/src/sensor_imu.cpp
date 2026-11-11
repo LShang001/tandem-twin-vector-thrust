@@ -286,6 +286,12 @@ static volatile uint32_t s_isr_calls = 0;      // ISR 调用次数
 static volatile uint32_t s_isr_frames = 0;     // ISR 累计取到帧数
 static volatile uint32_t s_isr_batch_max = 0;  // 单次 ISR 最多取到几帧
 static uint32_t s_drain_calls = 0;             // readIMUData 排空入口次数
+static uint32_t s_imu_last_sample_us = 0;      // 最近一次被消费样本的 ISR 采样时刻
+static uint16_t s_imu_prev_ts = 0;             // 上一帧芯片时间戳（算真实 dt 用）
+static uint16_t s_imu_last_dts_us = 0;         // 最近一次帧间时间戳差分（µs，诊断用）
+static uint32_t s_fifo_pending_sum = 0;        // FIFO 水位累计（诊断积压）
+static uint32_t s_fifo_pending_n = 0;          // FIFO 水位采样次数
+static uint16_t s_fifo_pending_max = 0;        // FIFO 水位历史最大值
 static uint32_t s_drain_frames = 0;            // 排空累计处理帧数
 static uint32_t s_drain_allowed_sum = 0;       // allowed 累计（算平均每拍允许几帧）
 static uint32_t s_frame_us_max = 0;            // 单帧处理最大耗时
@@ -322,6 +328,27 @@ uint32_t imuRingSize()
   return static_cast<uint32_t>(s_imu_ring.size());
 }
 
+/// 最近一次被消费的 IMU 样本距今多少微秒 = IMU 采样→控制可用 的真实延迟。
+uint32_t imuLastSampleAgeUs()
+{
+  if (s_imu_last_sample_us == 0U) { return 0U; }
+  return micros() - s_imu_last_sample_us;
+}
+
+/// ISR 取数时芯片 FIFO 的平均水位（包数）。持续 >1 = 取数欠量、FIFO 积压。
+uint32_t imuFifoPendingAvg()
+{
+  return (s_fifo_pending_n == 0U) ? 0U : (s_fifo_pending_sum / s_fifo_pending_n);
+}
+
+uint32_t imuFifoPendingMax() { return s_fifo_pending_max; }
+
+uint32_t imuFifoPendingSamples() { return s_fifo_pending_n; }
+
+/// 最近一次帧间时间戳差分（µs）。判据：应稳定在 1e6/实际ODR 附近（≈594~605µs）；
+/// 若恒为 16 的倍数，说明芯片 TMST_RESOL=1（16µs 分辨率），dt 需改乘 16。
+uint32_t imuLastTsDeltaUs() { return s_imu_last_dts_us; }
+
 void imuSampleIsr()
 {
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
@@ -339,6 +366,15 @@ void imuSampleIsr()
     s_imu_isr_empty++;
     return;
   }
+  // ★ 2026-11-11：采样 FIFO 水位。ISR 每次只取 1 包，若水位持续 >1，
+  //   说明取数节奏落后于芯片采样，FIFO 在积压；FIFO 先进先出 → 读到的是
+  //   旧包，控制看到的角速度越来越旧（"节拍差别越来越大"）。
+  {
+    const uint16_t pending = IMU->lastFifoFrameCount();
+    s_fifo_pending_sum += pending;
+    s_fifo_pending_n++;
+    if (pending > s_fifo_pending_max) { s_fifo_pending_max = pending; }
+  }
   s_isr_frames += 1U;
   if (s_isr_batch_max < 1U) { s_isr_batch_max = 1U; }
   ImuRingSample s{};
@@ -348,6 +384,7 @@ void imuSampleIsr()
     s.gyr[i] = one.gyr[i];
   }
   s.timestamp = one.timestamp;
+  s.t_us = micros();      // 采样时刻戳：health 的 imu_age_ms 由此算出读取链路延迟
   s_imu_ring.push(s);
 }
 #endif
@@ -384,13 +421,17 @@ bool readIMUData()
     static constexpr int kDrainMaxPerCall = 20;
     if (allowed > kDrainMaxPerCall) { allowed = kDrainMaxPerCall; }
     int processed = 0;
-    // ★ 2026-11-10 积压保护：ring 深度超过 24 帧（1600Hz 下约 15ms）就丢弃最旧的，
-    //   保证控制环拿到的是新鲜姿态。宁可丢一段历史，也不能拿几十毫秒前的数据去算修正——
-    //   那是纯相位滞后，表现为"响应慢一拍"，且会随积压量增大而恶化。
+    uint32_t consumed_real_us = 0;   // 本拍实际消费掉的芯片时间（按每帧真实 dt 累加）
+    // ★ 2026-11-10 积压保护：ring 深度超过阈值就丢弃最旧的，保证控制环拿到的是
+    //   新鲜姿态。宁可丢一段历史，也不能拿几十毫秒前的数据去算修正——那是纯相位
+    //   滞后，表现为"响应慢一拍"，且会随积压量增大而恶化。
+    // ★ 2026-11-11 P2：阈值收紧到"一拍"。控制环 200Hz、IMU 实测 1600~1685Hz，
+    //   每拍约 8~8.5 帧；保留 8 帧即一拍，超出的都是本拍用不到的旧数据。
+    //   有了 P0（dt 由芯片时间戳差分）后，丢帧不再破坏积分时间轴。
     {
       const size_t backlog = s_imu_ring.size();
-      static constexpr size_t kBacklogMax = 24;
-      static constexpr size_t kBacklogKeep = 16;
+      static constexpr size_t kBacklogMax = 16;
+      static constexpr size_t kBacklogKeep = 8;
       if (backlog > kBacklogMax)
       {
         for (size_t i = 0; i < (backlog - kBacklogKeep); ++i)
@@ -407,6 +448,9 @@ bool readIMUData()
       ImuRingSample rs{};
       if (!s_imu_ring.pop(rs)) { break; }
       ++processed;
+      // 记录本帧采样时刻：排空是从旧到新顺序消费，故循环结束后这里就是
+      // 最新已消费样本的采样时刻，可用于量"采样→消费"的真实延迟。
+      s_imu_last_sample_us = rs.t_us;
       ImuFifoSample one{};
       for (int i = 0; i < 3; ++i) { one.acc[i] = rs.acc[i]; one.gyr[i] = rs.gyr[i]; }
       one.timestamp = rs.timestamp;
@@ -421,6 +465,31 @@ bool readIMUData()
       // 按后端 ODR 给批量帧固定 dt（与 kTargetRateHz 同源）
       // ★ 同上：帧 dt 由唯一真源派生，避免与 ODR 失配导致 EKF 每帧积分欠量
       s_fifo_frame_dt_s = 1.0 / static_cast<double>(bfs_imu_odr::kOdrHz);
+      // ★ 2026-11-11 P0：dt 改由芯片 FIFO 时间戳差分驱动（根治时间轴失配）。
+      //   芯片时间戳 16 位、TMST_RESOL=0 时分辨率 1µs，回绕周期 65536µs；
+      //   帧间隔约 600µs 远小于回绕周期，16 位无符号减法自动处理回绕。
+      //   背景：标称 ODR 1600 但实测 1656~1685（RC 晶振 ±5%），原固定 dt
+      //   有 3.5% 系统误差；一旦按"最新优先"丢帧，误差会放大数倍并让 EKF 发散
+      //   （2026-11-11 实测 rpy 145°、vel 782 m/s）。用芯片自己的时钟做时间轴后，
+      //   丢帧与否都不影响积分正确性。
+      //   异常保护：首帧 / 差分为 0 / 差分 >10ms（明显异常）一律回退固定值。
+      uint32_t frame_us = static_cast<uint32_t>(1000000U / bfs_imu_odr::kOdrHz);
+      {
+        const uint16_t ts_now = rs.timestamp;
+        const uint16_t dts_us = static_cast<uint16_t>(ts_now - s_imu_prev_ts);
+        s_imu_last_dts_us = dts_us;
+        if (s_imu_prev_ts != 0U && dts_us != 0U && dts_us <= 10000U)
+        {
+          s_fifo_frame_dt_s = static_cast<double>(dts_us) * 1e-6;
+          frame_us = dts_us;
+        }
+        s_imu_prev_ts = ts_now;
+      }
+      // ★ 2026-11-11：时间基准必须按"真实帧间隔"推进，不能用标称 1/kOdrHz。
+      //   标称 1600 而实测 1656~1685，每帧少推进十几微秒；误差持续累积会让
+      //   elapsed_us 虚高、allowed 被顶到上限（实测 allow_avg=19/20），
+      //   系统长期处于"追赶"状态而 ring 却是空的。
+      consumed_real_us += frame_us;
       const uint32_t t_frame0 = micros();
       s_ring_processing = true;
       any = readIMUData() || any;
@@ -431,13 +500,24 @@ bool readIMUData()
       if (dt_frame > s_frame_us_max) { s_frame_us_max = dt_frame; }
       s_drain_frames++;
     }
-    // ★ 2026-11-10 根因修复：时间基准按"实际处理帧数"推进，不再直接跳到 now_us。
+    // ★ 2026-11-10 根因修复：时间基准按"实际消费的时间"推进，不再直接跳到 now_us。
     //   原实现卡顿后把未处理帧的时间整段吞掉，EKF 的积分 dt 少算、姿态/速度欠量；
     //   按消费量推进后，剩余帧下一轮自然补上，时间轴连续且不会放大卡顿。
+    // ★ 2026-11-11：consumed_us 由每帧真实 dt 累加（见 consumed_real_us），
+    //   不再用 processed × 1/标称ODR —— 后者每帧少推进十几µs，误差累积会让
+    //   elapsed 虚高、allowed 顶到上限。
+    // ★ 2026-11-11（补）：ring 取空时必须把时间基准对齐到当前时刻。
+    //   否则"空 drain"（如 GNC 紧跟 Navigation 调用时 ring 已空）不推进基准，
+    //   但真实时间在走，elapsed 会虚拟膨胀到十几毫秒、allowed 被顶到上限 20
+    //   （实测 allow_avg=19/20），系统长期处于"追赶"状态，一旦真积压就没余量了。
+    //   这不是"吞时间"：processed==0 意味着确实没有待处理数据，谈不上少算积分。
+    if (processed == 0)
     {
-      const uint32_t consumed_us =
-          static_cast<uint32_t>((static_cast<uint64_t>(processed) * 1000000ULL) / kTargetRateHz);
-      s_ring_last_us += consumed_us;
+      s_ring_last_us = now_us;
+    }
+    else
+    {
+      s_ring_last_us += consumed_real_us;
     }
     return any;
     }

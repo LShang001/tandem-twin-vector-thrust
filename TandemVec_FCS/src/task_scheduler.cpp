@@ -216,7 +216,7 @@ void timerCallback()
   //   原来这里按型号手写 3200/2000，与 ODR 分开维护：45686 改到 1600Hz 后 ISR 仍跑
   //   3200Hz，一半中断是空转（实测 isr_empty 约等于 isr_f），既浪费又容易掩盖失配。
   //   现在 ISR 频率 == ODR，一拍一包；若两侧不等，health 的 isr_empty 会立刻暴露。
-  s_imu_phase += bfs_imu_odr::kOdrHz;
+  s_imu_phase += bfs_imu_odr::kIsrPollHz;
   if (s_imu_phase >= scheduler::kSchedulerTickHz)
   {
     s_imu_phase = static_cast<uint16_t>(s_imu_phase - scheduler::kSchedulerTickHz);

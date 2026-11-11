@@ -20,6 +20,10 @@ struct ImuRingSample
   float acc[3] = {0.0f, 0.0f, 0.0f};
   float gyr[3] = {0.0f, 0.0f, 0.0f};
   uint16_t timestamp = 0;
+  ///< ISR 采样时刻（MCU micros()）。用于量"采样→被消费"的真实延迟：
+  ///< 芯片自带的 16 位 timestamp 只能算相对间隔，无法换算绝对年龄。
+  ///< 2026-11-11 加：定位"角速度模式仍慢"是否来自 IMU 读取链路。
+  uint32_t t_us = 0;
 };
 
 class ImuSampleRing
