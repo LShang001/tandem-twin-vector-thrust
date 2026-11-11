@@ -47,6 +47,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "QuaternionMath.h"
 
 #include "ins_gnss_dynamic_weight.h"
+#include "ins_rtk_vertical_trust.h"
 #include "ins_gnss_epoch_timing.h"
 #include "ins_gnss_delay_auto.h"
 #include "ins_vibration_adaptive.h"
@@ -1015,6 +1016,28 @@ static uint32_t s_baro_health_last_ms = 0;
 static uint32_t s_baro_health_start_ms = 0;
 // 起飞前后气压计可能仍在热稳定/建立参考，前 5 s 只采集不动作。
 static constexpr float kBaroHealthBlankingS = 5.0f;
+
+#ifdef BFS_BARO_OFF_ON_RTK_FIXED
+// 高精度 RTK 固定解接管高度（用户 2026-11-11 要求，2026-11-12 完善）：
+// 「fix==RTK_FIXED(6) + vAcc≤门限 + GNSS 新鲜 + 无垂直 spoof」连续确认 1 s 后，
+// 停用气压高度观测，同时取消 GNSS 垂直位置/速度噪声地板（vAcc/s_acc 原样进 R），
+// 让 EKF 真正利用 F9P 厘米级高度与垂速；任一条件破坏立即恢复气压、地板回升。停气压与降地板
+// 共用同一确认态（ins_rtk_vertical_trust.h），地板 3 s 渐降防 NIS 门拒收。
+// fix 枚举锚点：FIX_RTK_FIXED=6（lib/ublox-main/src/ubx.h，carr_soln==2 映射）。
+static constexpr float kRtkFixedBaroOffFixType = 6.0f;
+static constexpr bfs::RtkVerticalTrustConfig kRtkVertTrustCfg{
+    0.1f,   // max_v_acc_m：高精度门限（F9P 好条件 vAcc≈0.02 m）
+    1.0f,   // confirm_s：进入迟滞
+    3.0f,   // floor_default_m：与 kGnssDwCfg.floor_pos_d_m 一致
+    0.0f,   // floor_rtk_m：0=取消位置地板，vAcc 原样进 R
+    0.25f,  // floor_vel_default_mps：与 kGnssDwCfg.floor_vel_d_mps 一致
+    0.0f,   // floor_vel_rtk_mps：0=取消速度地板，s_acc 原样进 R
+    3.0f,   // ramp_s：地板渐降时长
+    0.25f,  // max_dt_s：单周期 dt 上限
+};
+static bfs::RtkVerticalTrustState s_rtk_vert_trust =
+    bfs::RtkVerticalTrustMakeState(kRtkVertTrustCfg);
+#endif
 
 static void publishImuHealth(const bfs::ImuHealthStatus &status)
 {
@@ -3269,10 +3292,19 @@ void handleNavigationSystem()
       }
 
       // 动态权重：接收机精度经 clamp→pDOP 缩放后直接作为 EKF R 矩阵噪声
+      auto gnss_dw_cfg = kGnssDwCfg;
+#ifdef BFS_BARO_OFF_ON_RTK_FIXED
+      // RTK 垂直可信态期间用渐降后的地板（终态 0=取消地板，vAcc/s_acc 原样进 R）；
+      // 非可信态位置地板回落 3 m、速度地板回落 0.25 m/s。与停气压判据共用
+      // s_rtk_vert_trust（气压块更新，本块读上一气压周期结果，滞后 ≤40 ms 可忽略）。
+      // 只影响全质量融合路径，降级路径 applyDowngradedGnssUpdate 自带 R，不受覆盖。
+      gnss_dw_cfg.floor_pos_d_m = s_rtk_vert_trust.floor_m;
+      gnss_dw_cfg.floor_vel_d_mps = s_rtk_vert_trust.floor_vel_mps;
+#endif
       const auto meas_dw = Icm45686ComputeGnssDynamicWeights(
           static_cast<int8_t>(gnss_epoch.fix), gnss_epoch.num_sv,
           gnss_epoch.horz_acc_m, gnss_epoch.vert_acc_m, gnss_epoch.spd_acc_mps,
-          gnss_epoch.pvt_pdop, kGnssDwCfg);
+          gnss_epoch.pvt_pdop, gnss_dw_cfg);
       nav_ekf.gnss_pos_ne_std_m(meas_dw.eff_pos_ne_std_m);
       nav_ekf.gnss_pos_d_std_m(meas_dw.eff_pos_d_std_m);
       nav_ekf.gnss_vel_ne_std_mps(meas_dw.eff_vel_ne_std_mps);
@@ -3572,8 +3604,30 @@ void handleNavigationSystem()
       const bool baro_gated =
           g_baro_health_gate_enable && g_baro_health_suspect;
 
+#ifdef BFS_BARO_OFF_ON_RTK_FIXED
+      // ★ 高精度 RTK 固定解接管高度（2026-11-12 完善）：四条件全满足连续 1 s
+      //   才停气压——fix==6（精确匹配，防枚举扩展误纳）、vAcc>0 且≤0.1 m
+      //   （高精度门；vAcc=0 是 NMEA 兜底的「未知」不算）、GNSS 新鲜（断流即
+      //   恢复气压，防快照停 6 导致高度纯 IMU 递推）、无垂直 spoof（与
+      //   BFS_GNSS_VERTICAL_REANCHOR_GATE 互锁：该门把 GNSS z 换成气压并 R=1e4，
+      //   此时若再停气压则垂直两路全空）。任一条件破坏立即恢复气压。
+      //   同一确认态还驱动 GNSS 垂直位置/速度地板渐降（见 GNSS 动态权重块），终态
+      //   取消地板让 vAcc/s_acc 原样进 R，兑现 F9P 厘米级高度与垂速。g_gnss_vert_suspect 恒声明
+      //   （state_data.cpp），重锚门宏关闭时恒 false，故可无条件引用。
+      const bool rtk_fixed_now =
+          gnss_status.last_obs_fix_type == kRtkFixedBaroOffFixType;
+      bfs::RtkVerticalTrustUpdate(
+          s_rtk_vert_trust, kRtkVertTrustCfg, isGnssDataFreshForNav(),
+          rtk_fixed_now, gnss_status.last_obs_v_acc_m, g_gnss_vert_suspect,
+          health_dt_s);
+      const bool baro_off_by_rtk = s_rtk_vert_trust.trusted;
+      baro_off_rtk_active = baro_off_by_rtk;
+#else
+      const bool baro_off_by_rtk = false;
+#endif
+
       double baro_absolute_altitude_m = 0.0;
-      if (!baro_gated &&
+      if (!baro_gated && !baro_off_by_rtk &&
           InsComputeAbsoluteBaroAltitude(
               origin_alt_m, baro_altitude, &baro_absolute_altitude_m))
       {
@@ -3974,9 +4028,10 @@ void handleNavigationSystem()
   }
 
   // [A] 映射 GPS 定位状态 (Fix Type)
-  // BFS UBX Fix: 0=None, 1=2D, 2=3D, 3=DGNSS, 4=RTK-Float, 5=RTK-Fixed
-  // DETA100 Enum: 1=NoFix, 2=2D, 3=3D, 4=DGPS, 5=RTK_Float, 6=RTK_Fixed
-  // 注意：DETA100 的枚举值比 BFS 的通常大 1 (因为 0 是 No Module)
+  // BFS UBX Fix: 0=None, 2=2D, 3=3D, 4=DGNSS, 5=RTK-Float, 6=RTK-Fixed
+  // DETA100 Enum: 0=NoModule, 1=NoFix, 2=2D, 3=3D, 4=DGPS, 5=RTK_Float, 6=RTK_Fixed
+  // 注意：DETA100 用 0=无模块/1=无定位，2~6 与 UBX Fix 逐项相同（仅无定位档差 1）；
+  //       mapUbxFixToDeta100FixType 只做 None(0)→NoFix(1) 搬移，其余恒等。
 
   bfs::Ubx::Fix ubx_fix = (gnss_data_fresh_for_nav && gnss_status.has_obs)
                              ? static_cast<bfs::Ubx::Fix>(static_cast<int>(gnss_status.last_obs_fix_type))

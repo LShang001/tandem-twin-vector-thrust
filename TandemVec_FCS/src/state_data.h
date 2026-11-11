@@ -700,6 +700,9 @@ extern float baro_altitude_offset;
 extern float baro_ekf_innovation_m;   // 最新创新项 (NED-D 方向, m)
 extern float baro_ekf_test_ratio;      // NIS/门限比值 (>1 表示被拒绝)
 extern bool baro_ekf_fused;           // 本帧是否融合成功
+// RTK 固定解期间气压高度观测是否被停用（BFS_BARO_OFF_ON_RTK_FIXED）。
+// 真值仅表示"本帧没喂气压"，不含健康门控（那个是 g_baro_health_suspect）。
+extern bool baro_off_rtk_active;
 extern float ekf_accel_bias_z_mps2;  // EKF 估计 Z 轴加表零偏 (机体系 FRD, 下为正, m/s^2)
 
 // 气压健康门控（opt-in BFS_BARO_HEALTH_GATE）：检测 Drift/Spike/Stuck 后

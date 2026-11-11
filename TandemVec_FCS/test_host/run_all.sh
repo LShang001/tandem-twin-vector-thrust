@@ -57,6 +57,7 @@ run_one() {
 
 # 平台无关算法（include/ins_*.h，不依赖 Arduino）：
 run_one "$NROOT/test_host/test_gnss_dynamic_weight.cpp" gdw ""
+run_one "$NROOT/test_host/test_rtk_vertical_trust.cpp" rvt ""
 run_one "$NROOT/test_host/test_static_aid_profile.cpp"  sap ""
 # IMU 原始值诊断通道（include/ImuRawChannel.h，纯头文件，2026-11-07）
 run_one "$NROOT/test_host/test_imu_raw_channel.cpp"     imraw ""

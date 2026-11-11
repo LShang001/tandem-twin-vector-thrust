@@ -898,18 +898,20 @@ void handleAnoCom()
   // ★ 2026-11-06 榨干 20K 档余量（实测 558 帧/s 只占 58%，还有 42% 没用）：
   //   原则——核心状态（IMU 原始/姿态/位置/速度/控制）应尽量贴近控制环频率，
   //   辅助量（PWM/角速度副本/状态字）降频腾带宽。
-  //   估算：IMU 200Hz(4.2KB/s) + 欧拉 100Hz(1.5) + 位置/控制/执行器/目标 50Hz(4.2)
-  //        + 模式速度高度 50Hz(0.6) + 其余 ≤10Hz(1.0) ≈ 11.6 KB/s = 58% 占用。
-  const bool fast_tick = true;               // 200Hz 0x01 IMU 原始（与控制环同频）
-  const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制 / 0xF1 执行器
-  const bool state_tick = (t % 4 == 3);      //  50Hz 0x06 速度 / 0x07 高度
-  const bool mode_tick  = (t % 2 == 0);       // 100Hz 0x05 模式解锁（飞行状态判断最关键）
+  //   负载大头：IMU 200Hz（振动分析）+ 欧拉 100Hz + 位置/控制 50Hz；
+  //   2026-11-12 模式 100→5Hz、欧拉 200→100Hz、位置 100→50Hz、GPS 由 2Hz 改跟随定位率。
+  //   无线侧容量有限，过载会均匀丢帧（见上 21.24Hz 现象），故辅助量保持低频。
+  const bool fast_tick = true;               // 200Hz 0x01 IMU 原始（与控制环同频，振动分析需要）
+  const bool att_tick  = (t % 2 == 1);       // 100Hz 0x03 姿态欧拉（2026-11-12 由 200Hz 降，显示足够平滑）
+  const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制量 / 0xF1 执行器
+  const bool state_tick = (t % 4 == 3);      //  50Hz 0x07 飞行速度 / 0x05 高度数据
+  const bool mode_tick  = (t % 40 == 0);     //   5Hz 0x06 模式解锁（离散状态字，2026-11-12 由 100Hz 降）
 
-  const bool pos_tick  = (t % 2 == 0);       // 100Hz 0x08 位置（与 EKF 输出同步）
+  const bool pos_tick  = (t % 4 == 0);       //  50Hz 0x08 位置偏移（2026-11-12 由 100Hz 降，轨迹分析足够）
   const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压
-  const bool rc_tick   = (t % 20 == 6);      //  10Hz 0x40 遥控（观察摇杆，无需 25Hz）
-  const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x30 目标速度 / 0x0B 角速度
-  const bool gps_tick  = (t % 100 == 10);    //   2Hz GPS（数据源本身 10Hz，高频只是重复）
+  const bool rc_tick   = (t % 20 == 6);      //  10Hz 0x40 遥控（观察摇杆）
+  const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x0B 目标速度
+  const bool gps_tick  = (t % 10 == 2);      //  20Hz 轮询；块内按新 PVT 去重→实际跟随 GNSS 定位率（F9P 8Hz/F10N 10Hz）
 
   if (fast_tick || mode_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
   {
@@ -925,7 +927,7 @@ void handleAnoCom()
     {
       AnoCom.beginGroup();   // 组模式：同 tick 多帧合并单次 write（COMM-001 A3）
 
-      // ---- 快环 100Hz：IMU + 欧拉 + 目标姿态 + 控制量 + 执行器 ----
+      // ---- 快环：IMU 200Hz（每拍）；欧拉 100Hz；目标姿态 + 控制量 + 执行器（50Hz）----
       if (fast_tick)
       {
         // 0x01 惯性传感器数据（13B）：ACC int16×3 [cm/s²] + GYR int16×3
@@ -934,11 +936,12 @@ void handleAnoCom()
         // 0x03 飞控姿态欧拉角（7B）：ROL/PIT/YAW int16 ×100 [deg] + FUSION_STA u8。
         // FUSION_STA 为固件自定义位域：bit7=DETA100 在线、bit6=数据源=DETA100、
         // 低 6 位=nav_system_initialized（EKF 融合状态）。@ref PROTOCOL-001 §二.1.3
-        // ★ 2026-11-06：0x01 提到 200Hz 后，欧拉角单独按 100Hz 发——地面站显示
-        //   100Hz 已足够平滑，把省下的带宽让给 IMU 原始量与位置。
-        // ★ 2026-11-06 提到 200Hz（与 IMU 同拍）：欧拉角是姿态主显示，
-        //   200Hz 下地面站曲线在任何缩放级别都不会出现台阶。
-        AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
+        // ★ 2026-11-12 由 200Hz 降到 100Hz：姿态主显示 100Hz 已足够平滑（曲线无台阶），
+        //   省下带宽给 GNSS 等有效载荷。IMU 原始量仍 200Hz（振动分析需要）。
+        if (att_tick)
+        {
+          AnoCom.sendAttitudeEuler(roll_ano, pitch_ano, yaw_ano, fusionSta); // `system_id` = 1
+        }
         // 0x0A 目标姿态（6B）：3×int16 ×100。★ 第 3 字段在官方手册是目标航向角，
         // 本工程承载的是目标航向**角速率** [deg/s]（航向为纯速率指令，无角度回中），
         // GCS 侧 decode_target_attitude 同口径；字节/缩放不变。@ref PROTOCOL-001 §二.1.9
@@ -1059,7 +1062,7 @@ void handleAnoCom()
         }
       }
 
-      // ---- 位置 50Hz（快速飞行轨迹分析）----
+      // ---- 位置 50Hz（飞行轨迹分析，2026-11-12 由 100Hz 降）----
       if (pos_tick)
       {
         AnoCom.sendPosOffset(relative_north * 100.0f, relative_east * 100.0f,
@@ -1072,11 +1075,11 @@ void handleAnoCom()
         AnoCom.sendRCData(raw_rc_values);
       }
 
-      // ---- 核心飞行状态 20Hz：模式解锁 + 速度 + 高度 ----
-      // ★ 2026-11-06 从原 disp_tick(2Hz) 拆出：这三项是判断"现在飞什么状态、
-      //   有没有在动、掉没掉高度"的直接依据，2Hz 在地面站上看不出起飞瞬间变化。
-      // ★ 2026-11-06 0x05 模式/解锁独立提到 100Hz：它是判断"当前能不能起飞/
-      //   有没有解锁"的第一手信息，比速度和高度更关键，不该和它们绑在同一档。
+      // ---- 核心飞行状态：速度/高度 50Hz（state_tick）；模式解锁独立 5Hz（mode_tick）----
+      // ★ 2026-11-06 从原 disp_tick 拆出：速度/高度是判断“有没有在动、掉没掉高度”的
+      //   直接依据，低频看不出起飞瞬间变化。
+      // ★ 2026-11-12 0x06 模式/解锁由 100Hz 降到 5Hz：它是离散状态字，5Hz（200ms）
+      //   足够反映模式/解锁变化，省下带宽给 GNSS 等有效载荷。
       if (mode_tick)
       {
         AnoCom.sendFlightMode(static_cast<uint8_t>(g_current_flight_mode),
@@ -1093,7 +1096,7 @@ void handleAnoCom()
         AnoCom.sendAltitudeData(baro_altitude, vfk_height, estimated_height, 1);
       }
 
-      // ---- 辅助显示帧 2Hz：PWM + 目标速度（调参观察用，无需高频）----
+      // ---- 辅助显示帧 10Hz：PWM + 目标速度（调参观察用，无需高频）----
       if (disp_tick)
       {
         // 0x20 手册语义 = PWM 控制量（0.01% 油门）：mix 输出级电机指令 % → ×100
@@ -1103,14 +1106,20 @@ void handleAnoCom()
         AnoCom.sendTargetSpeed(target_speed_x_ano, target_speed_y_ano, target_speed_z_ano);
       }
 
-      // ---- GPS/氧压 10Hz（数据源本身 10Hz，发高频是重复旧值）----
-      if (gps_tick)
+      // ---- GPS：20Hz 轮询 + 新历元去重，实际帧率跟随 GNSS 定位率（F9P 8Hz / F10N 10Hz）----
+      //   2026-11-12 由固定 2Hz 改为跟随接收机：2Hz 远低于定位率，GCS 会漏掉多数 GNSS
+      //   更新；按新 PVT 去重后既不漏也不重复旧值。DETA100 模式 ubx PVT 计数不增，
+      //   按其输出率约 10Hz（t%20）发送。
+      const bool gps_deta100 = (nav_data_source == NavDataSource::DETA100) && deta100_online;
+      static uint32_t s_gps_last_pvt = 0;
+      const uint32_t gps_cur_pvt = ubx.nav_pvt_count();
+      const bool gps_send = gps_deta100 ? (t % 20 == 2) : (gps_cur_pvt != s_gps_last_pvt);
+      if (gps_tick && gps_send)
       {
+        s_gps_last_pvt = gps_cur_pvt;
         // ★ 2026-08-10 全面审查修复：GPS 遥测数据源按 nav_data_source 分流——
-        //   原实现两模式共用 DETA100 包（Status/Geodetic）+ ubx 缓存：
-        //   INTERNAL 模式 fix/h_msl/vacc 恒 0（DETA100 包不写），
-        //   DETA100 模式 isGnssDataFreshForNav 恒 false（ubx.Pump 停）→ 全 0
-        const bool deta100_gnss = (nav_data_source == NavDataSource::DETA100) && deta100_online;
+        //   INTERNAL 取 ubx 缓存，DETA100 取 Status/Geodetic 包（两模式不可混用）。
+        const bool deta100_gnss = gps_deta100;
         const bool gnss_data_fresh = deta100_gnss ? deta100_online : isGnssDataFreshForNav();
         // GNSS 信息（按数据源取字段）
         int8_t fix_type = 0;
@@ -1166,12 +1175,11 @@ void handleAnoCom()
         // 0x0D 电压电流（10B）：5×u16 = bat_V×100、bat_A×100、fc_V×100、fc_A×100、flags。
         // ★ 本工程 fc 两字段被占用为发动机氧压 P1/P2（`receivedP1/P2`，官方上位机忽略），
         // 电池侧为真实 ADC 采样值。@ref PROTOCOL-001 §二.1.13 + 差异对照表（0x0D 行）
-        // ★ 2026-11-06：0x0D 已拆到下方 bat_tick(5Hz) 单独发，此处不再重复发送。
+        // ★ 2026-11-06：0x0D 已拆到下方 bat_tick(10Hz) 单独发，此处不再重复发送。
       }
 
-      // ---- 电池/氧压 5Hz（★ 2026-11-06 从 gps_tick 的 1Hz 档拆出）----
+      // ---- 电池/氧压 10Hz（★ 2026-11-06 从 gps_tick 拆出，bat_tick=t%20）----
       //   低压告警与氧压监控不该等 1 秒——起飞前电池掉压要立刻看见。
-      //   与 GPS 解耦后，GPS 数据源本身 10Hz，仍按 1Hz 发（高频只是重复旧值）。
       if (bat_tick)
       {
         AnoCom.sendVoltCurr(bat_voltage_mv / 1000.0f, bat_current_ca / 10.0f,
@@ -3372,7 +3380,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(F(" t_c="));
         serial.print(temperature, 2);
         serial.print(F(" flags=0x"));
-        serial.println(g_baro_health_flags, HEX);
+        serial.print(g_baro_health_flags, HEX);
+        // RTK 固定解期间气压高度观测被停用（BFS_BARO_OFF_ON_RTK_FIXED）。
+        // 室外看到 fix=6 后此值为 1 即生效；室内/无差分时应为 0（气压在工作）。
+        serial.print(F(" off_rtk="));
+        serial.println(baro_off_rtk_active ? 1 : 0);
 
         serial.print(F("[DBG] gnss fix="));
         serial.print(gnss_status.last_obs_fix_type, 0);

@@ -12,6 +12,7 @@
 | `flash_elf.ps1` | 用 openocd 烧 elf（已在 Flash 节点上执行）。路径自动转正斜杠。 |
 | `capture_boot.ps1` | 先起串口读取、再 openocd 复位，抓完整启动日志。 |
 | `read_serial.py` | 读某串口 N 秒原始字节（抓日志 / 确认数口有流）。 |
+| `ano_rate.py` | 统计数传口各功能码帧率（核对分频生效 / 无线侧丢帧）。`python ano_rate.py COM14 6`。 |
 
 典型用法（在 Flash 节点上，脚本与 elf 都在用户目录）：
 

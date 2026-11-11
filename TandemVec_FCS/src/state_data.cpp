@@ -480,6 +480,7 @@ float baro_ekf_innovation_m = 0.0f;
 float ekf_accel_bias_z_mps2 = 0.0f;  // EKF Z轴加速度零偏遥测 (m/s^2)
 float baro_ekf_test_ratio = 0.0f;
 bool baro_ekf_fused = false;
+bool baro_off_rtk_active = false;
 
 // 气压健康门控（opt-in）：默认关闭；定义宏后默认开启，SIL 用 --baro-health-gate 覆盖。
 #ifdef BFS_BARO_HEALTH_GATE

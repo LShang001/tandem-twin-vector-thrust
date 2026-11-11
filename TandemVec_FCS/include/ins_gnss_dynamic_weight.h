@@ -12,8 +12,11 @@
  * @units   m、m/s、无量纲（pDOP）
  * @note    本工程 R 地板（2/3/0.15/0.25 m）**不可收紧**——实测收紧后接受率暴跌
  *          （见 TandemVec_FCS/AGENTS.md EKF 踩坑记录）；v_acc/s_acc 未报告时
- *          用 h_acc×1.5 回退，避免误伤。
- * @see     `kGnssDwCfg`、`gnssEpochPassesFullQuality()`、`applyDowngradedGnssUpdate()`
+ *          用 h_acc×1.5 回退，避免误伤。例外：RTK 固定解经 ins_rtk_vertical_trust.h
+ *          仲裁（fix==6+vAcc门+新鲜+迟滞）后可外部覆盖 floor_pos_d_m / floor_vel_d_mps
+ *          至 0，仅限该 gated regime，不改本函数默认配置。
+ * @see     `kGnssDwCfg`、`gnssEpochPassesFullQuality()`、`applyDowngradedGnssUpdate()`、
+ *          `ins_rtk_vertical_trust.h`（RTK 垂直地板覆盖）
  */
 
 #pragma once
