@@ -428,68 +428,128 @@ private:
   // 参考漂移问题改由“每 2 s 从 EKF 重同步”解决（navigation_task 3667 行）。
   static constexpr size_t kMaxRef = 4000;  // 20 s @200Hz
   static constexpr size_t kMaxGnss = 200;  // 20 s @10Hz
+  ///< 单次拟合最多使用的 GNSS 样本数（均匀降采样）。见 Fit() 的堆耗尽说明：
+  ///< 拟合内存由它决定（6×48×9 双精度 ≈ 20.7 KB），与缓存深度解耦。
+  static constexpr int kMaxFitSamples = 48;
   static constexpr double kTauStepS = 0.005;
   ///< 粗差门相对"最大可搜索延时造成的偏差"的余量（噪声 + 参考轨迹误差）
   static constexpr double kGnssGrossMargin = 1.5;
   ///< 锐度差分半窗 [s]；同时用作"端点不可信"的判定带宽
   static constexpr float kSharpHalfWindowS = 0.02f;
 
+  /**
+   * @brief 在参考轨迹里按时间定位相邻两样本（二分查找，O(log n)）
+   * @details 2026-11-11 修复：原实现是线性扫描（每次最多 4000 步），
+   *          而 `TryEstimate()` 每次网格搜索要调用 81×2×200 次插值 →
+   *          约 130 万次 deque 遍历，是单次 225~302 ms 耗时的主因之一。
+   *          改成二分后同一次搜索约 1.5 万步，快两个数量级。
+   * @param[in] t_s 目标时刻 [s]
+   * @param[out] lo 相邻样本左下标（ref_[lo].t_s <= t_s <= ref_[hi].t_s）
+   * @return false = 轨迹为空，调用方须自行返回
+   */
+  bool FindRefSegment(double t_s, size_t &lo) const
+  {
+    if (ref_.empty()) return false;
+    size_t a = 0;
+    size_t b = ref_.size() - 1;
+    if (t_s <= ref_[a].t_s) { lo = 0; return true; }
+    if (t_s >= ref_[b].t_s) { lo = (b > 0) ? (b - 1) : 0; return true; }
+    while (b - a > 1)
+    {
+      const size_t m = a + (b - a) / 2;
+      if (static_cast<double>(ref_[m].t_s) >= t_s) b = m;
+      else a = m;
+    }
+    lo = a;
+    return true;
+  }
+
+  /// 插值系数：t_s 在 ref_[lo]..ref_[lo+1] 区间的归一化位置 [0,1]
+  double RefAlpha(double t_s, size_t lo) const
+  {
+    const size_t hi = (lo + 1 < ref_.size()) ? (lo + 1) : lo;
+    const double t0 = static_cast<double>(ref_[lo].t_s);
+    const double t1 = static_cast<double>(ref_[hi].t_s);
+    const double f = (t_s - t0) / std::max(1e-9, t1 - t0);
+    return (f < 0.0) ? 0.0 : ((f > 1.0) ? 1.0 : f);
+  }
+
   Eigen::Vector3d InterpRefPos(double t_s) const
   {
-    if (ref_.empty()) return Eigen::Vector3d::Zero();
-    if (t_s <= ref_.front().t_s) return ref_.front().pos.cast<double>();
-    if (t_s >= ref_.back().t_s) return ref_.back().pos.cast<double>();
-    for (size_t i = 1; i < ref_.size(); ++i)
-    {
-      if (ref_[i].t_s >= t_s)
-      {
-        const auto &a = ref_[i - 1];
-        const auto &b = ref_[i];
-        const double f = (t_s - static_cast<double>(a.t_s)) /
-                         std::max(1e-9, static_cast<double>(b.t_s - a.t_s));
-        return ((1.0 - f) * a.pos.cast<double>() +
-                f * b.pos.cast<double>());
-      }
-    }
-    return ref_.back().pos.cast<double>();
+    size_t lo = 0;
+    if (!FindRefSegment(t_s, lo)) return Eigen::Vector3d::Zero();
+    if (lo + 1 >= ref_.size()) return ref_[lo].pos.cast<double>();
+    const double f = RefAlpha(t_s, lo);
+    const auto &a = ref_[lo];
+    const auto &b = ref_[lo + 1];
+    return ((1.0 - f) * a.pos.cast<double>() + f * b.pos.cast<double>());
   }
 
   Eigen::Vector3d InterpRefVel(double t_s) const
   {
-    if (ref_.empty()) return Eigen::Vector3d::Zero();
-    if (t_s <= ref_.front().t_s) return ref_.front().vel.cast<double>();
-    if (t_s >= ref_.back().t_s) return ref_.back().vel.cast<double>();
-    for (size_t i = 1; i < ref_.size(); ++i)
-    {
-      if (ref_[i].t_s >= t_s)
-      {
-        const auto &a = ref_[i - 1];
-        const auto &b = ref_[i];
-        const double f = (t_s - static_cast<double>(a.t_s)) /
-                         std::max(1e-9, static_cast<double>(b.t_s - a.t_s));
-        return ((1.0 - f) * a.vel.cast<double>() +
-                f * b.vel.cast<double>());
-      }
-    }
-    return ref_.back().vel.cast<double>();
+    size_t lo = 0;
+    if (!FindRefSegment(t_s, lo)) return Eigen::Vector3d::Zero();
+    if (lo + 1 >= ref_.size()) return ref_[lo].vel.cast<double>();
+    const double f = RefAlpha(t_s, lo);
+    const auto &a = ref_[lo];
+    const auto &b = ref_[lo + 1];
+    return ((1.0 - f) * a.vel.cast<double>() + f * b.vel.cast<double>());
   }
 
+  /**
+   * @brief 单次候选延时的批处理最小二乘代价（残差范数）
+   *
+   * @details ★ 2026-11-11 修复堆耗尽死机：原实现每格网格都构造动态矩阵
+   *          `MatrixXd A(6n,9)` + `MatrixXd B(6n,3)` + `JacobiSVD(ComputeThinU|V)`。
+   *          n 取满 200 时单次需要 A 86.4 KB + B 28.8 KB + U 86.4 KB ≈ 197.5 KB，
+   *          而本固件静态 RAM 已占 64.7%（剩余约 180 KB）——`TryEstimate()`
+   *          在网格上要调用本函数 81 次（再加 Sharpness 3 次），第一次分配就必然
+   *          失败；Eigen 在 `-fno-exceptions` 下走 abort 路径，表现为 HardFault /
+   *          看门狗复位。触发条件正是「室外有 RTK 定位 + 机体运动」：静止时
+   *          `TryEstimate()` 被速度门/静态门提前返回，从不进入本函数。
+   *
+   *          现改为：① 拟合样本固定上限 `kMaxFitSamples`（均匀降采样，20 s 窗内
+   *          48 点对 9 参数足够）；② 矩阵尺寸编译期固定、落 BSS（不反复 new/delete，
+   *          无堆碎片）；③ SVD 换成正规方程 9×9 求解（未知数只有 9 个，条件数由
+   *          位置/速度量纲归一化后的 1/1.5、1/0.05 权重保证）；④ 残差范数手写循环，
+   *          避免 `(A*C-B)` 产生 288×3 的临时矩阵。
+   *          改造后单次内存约 28 KB 静态 + 数 KB 栈，与 n 无关。
+   *
+   * @param[in] tau 候选 GNSS 延时 [s]（量测时刻 = s.t_s - tau）
+   * @return 残差范数；gnss_ 为空或有效样本不足时返回 1e9
+   * @units m（位置）与 m/s（速度）按 1/1.5、1/0.05 加权后的混合范数
+   * @frame NED（位置/速度均为 NED 分量）
+   */
   double Fit(double tau) const
   {
     if (gnss_.empty()) return 1e9;
     // fit_idx_ 非空 ⇒ 只用通过粗差门的样本（不销毁缓存，见 TryEstimate 注释）
     const bool filtered = !fit_idx_.empty();
-    const size_t n_used = filtered ? fit_idx_.size() : gnss_.size();
-    if (n_used == 0) return 1e9;
-    const size_t mid = filtered ? fit_idx_[n_used / 2] : n_used / 2;
+    const size_t pool = filtered ? fit_idx_.size() : gnss_.size();
+    if (pool == 0) return 1e9;
+    // 均匀降采样到 kMaxFitSamples：窗口内时间分布均衡，拟合参数不丢可观测性
+    const int n = static_cast<int>(
+        (pool > static_cast<size_t>(kMaxFitSamples)) ? kMaxFitSamples : pool);
+    const size_t step = (n > 0) ? (pool / static_cast<size_t>(n)) : 1;
+
+    // mid 取中心样本作时间原点（与原实现一致，仅影响数值尺度）
+    const size_t mid = filtered ? fit_idx_[pool / 2] : pool / 2;
     const double t0 = gnss_[mid].t_s;
-    const int n = static_cast<int>(n_used);
-    Eigen::MatrixXd A = Eigen::MatrixXd::Zero(6 * n, 9);
-    Eigen::MatrixXd B = Eigen::MatrixXd::Zero(6 * n, 3);
+
+    // 编译期定容：A(288×9)=20.7 KB、B(288×3)=6.9 KB，落 BSS 不进栈/不占堆
+    static Eigen::Matrix<double, 6 * kMaxFitSamples, 9> A;
+    static Eigen::Matrix<double, 6 * kMaxFitSamples, 3> B;
+    A.setZero();
+    B.setZero();
+
     int row = 0;
-    for (size_t j = 0; j < n_used; ++j)
+    for (int j = 0; j < n; ++j)
     {
-      const InsGnssDelaySample &s = gnss_[filtered ? fit_idx_[j] : j];
+      const size_t idx = filtered
+                             ? fit_idx_[static_cast<size_t>(j) * step]
+                             : (static_cast<size_t>(j) * step);
+      if (idx >= gnss_.size()) break;
+      const InsGnssDelaySample &s = gnss_[idx];
       const double t_meas = s.t_s - tau;
       const double dt = s.t_s - t0;
       const Eigen::Vector3d p = InterpRefPos(t_meas);
@@ -508,9 +568,30 @@ private:
       }
       row += 6;
     }
-    Eigen::JacobiSVD<Eigen::MatrixXd> svd(A, Eigen::ComputeThinU | Eigen::ComputeThinV);
-    const Eigen::MatrixXd C = svd.solve(B);
-    return (A * C - B).norm();
+    if (row == 0) return 1e9;
+
+    // 正规方程 (AᵀA)C = AᵀB：未知数 9 个，9×9 LDLT 比 1200×9 SVD 便宜三个数量级
+    const Eigen::Matrix<double, 9, 9> AtA =
+        A.topRows(row).transpose() * A.topRows(row);
+    const Eigen::Matrix<double, 9, 3> AtB =
+        A.topRows(row).transpose() * B.topRows(row);
+    const Eigen::Matrix<double, 9, 3> C = AtA.ldlt().solve(AtB);
+
+    // 手写残差范数，避免 (A*C-B) 生成临时矩阵
+    double sse = 0.0;
+    for (int r = 0; r < row; ++r)
+    {
+      for (int axis = 0; axis < 3; ++axis)
+      {
+        double v = -B(r, axis);
+        for (int k = 0; k < 9; ++k)
+        {
+          v += A(r, k) * C(k, axis);
+        }
+        sse += v * v;
+      }
+    }
+    return std::sqrt(sse);
   }
 
   float Sharpness(float tau) const
