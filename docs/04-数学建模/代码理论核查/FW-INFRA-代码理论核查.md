@@ -59,7 +59,7 @@
 
 | ID | 模块/符号 | 核对对象 | 依据 | 结论 | 证据 | 处置 |
 |----|-----------|----------|------|------|------|------|
-| A-01 | `handleAnoCom` | 200Hz tick 双环：快环 100Hz `t%2==1`（0x01/0x03/0x0A/0x21/0xF1）；位置 50Hz `t%4==2`；RC 25Hz `t%8==4`；显示 25Hz `t%8==6`；GPS·氧压 10Hz `t%20==10` | COMM-001 §3、AGENTS.md 踩坑记录（遥测双环） | 一致 | 代码取模表达式；慢环余数 2/4/6/10 互不相同；快环占奇数 tick | 补 L1 频率表 |
+| A-01 | `handleAnoCom` | 200Hz tick 分频（2026-11-12）：IMU 0x01 200Hz（每拍）；欧拉 0x03 100Hz `t%2==1`；目标姿态/控制/执行器 0x0A/0x21/0xF1 50Hz `t%4==1`；速度/高度 0x07/0x05 50Hz `t%4==3`；位置 0x08 50Hz `t%4==0`；模式 0x06 5Hz `t%40==0`；电池 0x0D 10Hz `t%20==4`；RC 0x40 10Hz `t%20==6`；PWM/目标速度 0x20/0x0B 10Hz `t%20==8`；GPS 0x30 跟随定位率 `t%10==2` 轮询+新PVT去重 | COMM-001「当前遥测频率」、AGENTS.md 踩坑记录（遥测分频） | 一致 | 代码取模表达式；2026-11-12 荣耀板实测 IMU 199.8/欧拉 99.9/位置 49.9/模式 5.1/GPS 8.5Hz | 频率表已同步 |
 | A-02 | `handleAnoCom` / `AnoComProtocol` | 组模式 `beginGroup/endGroup` 同 tick 多帧合并**单次 write** | COMM-001 §4 A3 | 一致 | `lib/AnoComProtocol/AnoComProtocol.cpp` `endGroup()`；`test_host/test_anocom_packing.cpp` A3（3 帧 → 1 次 write，字节流与逐帧一致，44B） | 补注释 |
 | A-03 | `handleAnoCom` | TX 余量守卫 `availableForWrite() < 190`（最坏同拍组 ≈175B） | 代码内 2026-08-10 审查记录 | 一致 | 守卫值与 RC20+disp86+pos20+gps31+volt18=175B 自洽 | 补 L2 |
 | A-04 | `SERIAL6_BAUDRATE`（`state_data.h`） | 地面站波特率 921600，唯一事实源；无 2000000 硬编码 | COMM-001 §2 决策 D1、§3（利用率 ~12.5%） | 一致 | `main.cpp` `Serial6.begin(SERIAL6_BAUDRATE)`；`grep 2000000` 固件 src/include 无命中 | 补 @ref；工具脚本见 P1-2 |

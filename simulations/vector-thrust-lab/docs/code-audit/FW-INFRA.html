@@ -394,14 +394,19 @@ P0-1），已恢复并加拒帧计数</td>
 <tr>
 <td>A-01</td>
 <td><code>handleAnoCom</code></td>
-<td>200Hz tick 双环：快环 100Hz
-<code>t%2==1</code>（0x01/0x03/0x0A/0x21/0xF1）；位置 50Hz
-<code>t%4==2</code>；RC 25Hz <code>t%8==4</code>；显示 25Hz
-<code>t%8==6</code>；GPS·氧压 10Hz <code>t%20==10</code></td>
-<td>COMM-001 §3、AGENTS.md 踩坑记录（遥测双环）</td>
+<td>200Hz tick 分频（2026-11-12）：IMU 0x01 200Hz（每拍）；欧拉 0x03
+100Hz <code>t%2==1</code>；目标姿态/控制/执行器 0x0A/0x21/0xF1 50Hz
+<code>t%4==1</code>；速度/高度 0x07/0x05 50Hz <code>t%4==3</code>；位置
+0x08 50Hz <code>t%4==0</code>；模式 0x06 5Hz <code>t%40==0</code>；电池
+0x0D 10Hz <code>t%20==4</code>；RC 0x40 10Hz
+<code>t%20==6</code>；PWM/目标速度 0x20/0x0B 10Hz
+<code>t%20==8</code>；GPS 0x30 跟随定位率 <code>t%10==2</code>
+轮询+新PVT去重</td>
+<td>COMM-001「当前遥测频率」、AGENTS.md 踩坑记录（遥测分频）</td>
 <td>一致</td>
-<td>代码取模表达式；慢环余数 2/4/6/10 互不相同；快环占奇数 tick</td>
-<td>补 L1 频率表</td>
+<td>代码取模表达式；2026-11-12 荣耀板实测 IMU 199.8/欧拉 99.9/位置
+49.9/模式 5.1/GPS 8.5Hz</td>
+<td>频率表已同步</td>
 </tr>
 <tr>
 <td>A-02</td>
@@ -1295,5 +1300,5 @@ CRLF；<code>main.cpp</code> 去 BOM（见 P2-4）。</li>
 <li><code>git diff</code>
 自查：无帧格式、字节序、缩放系数、频率、缓冲区尺寸、逻辑改动。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-10 19:03</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-12 02:57</footer></article></body>
 </html>
