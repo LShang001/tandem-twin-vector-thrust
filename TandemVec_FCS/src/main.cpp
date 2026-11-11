@@ -166,6 +166,15 @@ void setup()
   // 921600 高速下把 UART4 RX 中断提到最高优先级，避免被 TIM8/SPI/串口其他
   // 中断延迟导致 RDR 溢出（实测 921600 PVT 长帧 bad_pvt 约 25%）。
   NVIC_SetPriority(UART4_IRQn, 0);
+  // ★ 2026-11-11：启用 UART4 的 16 字节硬件 FIFO。
+  //   框架 uart.c 用 HAL_UART_Receive_IT(...,1) 逐字节中断接收，921600 下每字节
+  //   只有 10.85µs；任何一次 ISR（TIM8/SPI）排队等待都会让 1 字节 RDR 溢出，
+  //   实测 8.4% 的历元 EOE 没有配到有效 PVT（ubxstat 的 eoe_no_pvt），
+  //   且关掉接收机冗余消息（带宽 1822→1555 B/s）也不改善 —— 瓶颈是 RDR 深度。
+  //   H7 的 USART 带 16 字节 RX FIFO，打开后同样情况下可容忍约 174µs 延迟。
+  //   HAL 在 FIFO 模式下用 RXFNE（=RXNE）判据，逐字节读取逻辑不受影响，
+  //   因此这里只置 FIFOEN 位，不改 HAL 句柄（避免二次 HAL_UART_Init 打断接收）。
+  UART4->CR1 |= USART_CR1_FIFOEN;
   Serial6.begin(SERIAL6_BAUDRATE);  // USART6: AnoCom/MAVLink 地面站通信 (波特率见 state_data.h SERIAL6_BAUDRATE)
   Serial5.begin(921600);           // UART5:  上位机轨迹规划接口 (921600 baud)
   // 与 UART4 同理：921600 下把上行串口 RX 中断提到最高优先级，避免高负载丢字节。

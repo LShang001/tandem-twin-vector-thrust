@@ -517,6 +517,35 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   r.msg_eoe_ok = _ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
   if (r.msg_eoe_ok) r.cfg_acks_received++;
 
+  // 4.5 关闭接收机出厂默认的其余 UBX 消息（只留 NAV-PVT + NAV-EOE）。
+  // ★ 2026-11-11 实测：不关时 Serial4 收 1822 B/s，而 PVT(92B)+EOE(8B)@8Hz 只需
+  //   800 B/s —— 多出的约 56% 流量来自接收机默认开启的 NAV-* 系列。
+  //   框架 uart.c 是 HANDLE 逐字节中断接收（每次 HAL_UART_Receive_IT(...,1)），
+  //   921600 下每秒 9 万次中断，多余消息会持续抢占 UART 处理窗口，实测约 8.4%
+  //   的历元 EOE 没有配到有效 PVT（ubxstat 的 eoe_no_pvt）。
+  //   关掉后带宽减半，丢帧率随之下降；PVT 的 numSV 字段已含卫星数，不需要 NAV-SAT。
+  //   注意：未开启的消息接收机可能直接 NAK/不回，超时只记录不阻断。
+  {
+    static const uint8_t kOffMsgs[][2] = {
+        {0x01, 0x02}, // NAV-POSLLH
+        {0x01, 0x03}, // NAV-STATUS
+        {0x01, 0x04}, // NAV-DOP
+        {0x01, 0x06}, // NAV-SOL
+        {0x01, 0x12}, // NAV-VELNED
+        {0x01, 0x21}, // NAV-TIMEUTC
+        {0x01, 0x22}, // NAV-CLOCK
+        {0x01, 0x30}, // NAV-SVINFO
+        {0x01, 0x35}, // NAV-SAT
+        {0x01, 0x43}, // NAV-SIG
+    };
+    for (size_t i = 0; i < sizeof(kOffMsgs) / sizeof(kOffMsgs[0]); ++i)
+    {
+      _cfg_msg(serial, kOffMsgs[i][0], kOffMsgs[i][1], 0);
+      r.cfg_frames_sent++;
+      (void)_ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
+    }
+  }
+
   // 5. CFG-VALSET（F10 SPG 6.00 / protocol 40）：CFG-MSG 已 deprecated，
   //    官方推荐按键配置。老接收机（M8N）不认此消息会 NAK/超时，不影响前面的
   //    CFG-MSG 兼容路径，因此失败只记录不阻断。
