@@ -18,11 +18,16 @@ case "$(uname -s)" in
 esac
 # 输出目录：英文根路径默认 $NROOT/tmp/host_bin；根路径含非 ASCII（如中文仓库名）时
 # MinGW g++/ld 会以 "Invalid argument" 拒绝写输出，自动退回 /tmp 的 ASCII 目录。
+# ★ 2026-11-12 修：原判断用 `case "$NROOT" in *[![:print:]]*)`，在 UTF-8 locale 下
+#   中文字符属于 [:print:]，判断恒为假 ⇒ 仍写中文目录 ⇒ 全量回归全部 BUILD FAIL
+#   （`cannot open output file .../tmp/host_bin/xxx.exe: No such file or directory`）。
+#   改为按字节判非 ASCII（LC_ALL=C 下 grep），不依赖 locale。
 if [ -z "${BIN_DIR:-}" ]; then
-  case "$NROOT" in
-    *[![:print:]]*) BIN_DIR="/tmp/tv_fcs_host_bin" ;;
-    *)              BIN_DIR="$NROOT/tmp/host_bin" ;;
-  esac
+  if printf '%s' "$NROOT" | LC_ALL=C grep -q '[^ -~]'; then
+    BIN_DIR="/tmp/tv_fcs_host_bin"
+  else
+    BIN_DIR="$NROOT/tmp/host_bin"
+  fi
 fi
 mkdir -p "$BIN_DIR"
 

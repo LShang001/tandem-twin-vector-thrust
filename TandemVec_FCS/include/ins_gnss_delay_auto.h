@@ -526,10 +526,13 @@ private:
   static constexpr size_t kMaxRef = 2000;  // 20 s @100Hz（PushReference 已 2:1 抽取）
   static constexpr size_t kMaxGnss = 200;  // 20 s @10Hz
   ///< 单次拟合最多使用的 GNSS 样本数（均匀降采样）。见 Fit() 的堆耗尽说明：
-  ///< 拟合内存由它决定（6×32×9 双精度 ≈ 13.8 KB），与缓存深度解耦。
-  ///< 2026-11-11 由 48 降到 32：两级网格把 Fit 调用次数压到约 30，再按样本数
-  ///< 减 1/3，单次估计总耗时才落到导航来不及卡顿的量级。
-  static constexpr int kMaxFitSamples = 32;
+  ///< 拟合内存由它决定（6×48×9 双精度 ≈ 20.7 KB + 6×48×3 ≈ 6.9 KB），与缓存深度解耦。
+  ///< ★ 不能降到 32（2026-11-12 实测）：32 样本时 sharpness 从 0.00324 掉到 0.00295，
+  ///<   低于「才允许覆盖固定先验」的 0.003 门槛，test_gnss_delay_auto 直接 FAIL；
+  ///<   τ 估计偏差也从 8 ms 涨到 17 ms。耗时由两级网格的 Fit 调用次数（约 30 次）主导，
+  ///<   48 样本单次约几十微秒；上板复核 health 的 delay_max_ms / nav_gap_max_ms，
+  ///<   若真卡顿优先压 Fit 次数，不要牺牲拟合点数。
+  static constexpr int kMaxFitSamples = 48;
   static constexpr double kTauStepS = 0.005;
   ///< 粗差门相对"最大可搜索延时造成的偏差"的余量（噪声 + 参考轨迹误差）
   static constexpr double kGnssGrossMargin = 1.5;

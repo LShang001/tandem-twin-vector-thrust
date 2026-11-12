@@ -382,3 +382,23 @@ if "08-参考资料" in md.parts and ({"books", "papers"} & set(md.parts)):
 
 **教训**：判断"烧的是哪一型固件"看 ODR 支持表与后端字符串，别看任务名/函数名/日志标签——
 它们恰恰是最容易保留旧名字的地方。
+
+## 2026-11-12 42688 的四个 env 全部编不过：ISR 频率 2×ODR 撞上整除时基
+
+**现象**：`TandemVec_FCS` / `CoaxialVTVL` / `SingleEdf4Vane` / `SingleEdf4Vane_Flight`
+四个 42688 env 编译报 `static assertion failed: ISR 轮询频率必须整除调度时基 6400Hz`，
+只有 `_ICM45686` 的 env 能出固件。单涵道实飞固件也在其中，等于 11-11 之后没法复飞。
+
+**根因**：2026-11-11 把 `kIsrPollHz` 写死成 `2 × kOdrHz` 并加整除断言。该写法只对
+45686 的 1600 档成立（1600→3200，6400÷3200=2）；42688 无 1600 档、只能取 2000，
+2×2000=4000，`6400 % 4000 = 2400` 直接失败。**2× 是照 45686 凑的系数，不是物理需求。**
+
+**修法**：改为「整除 6400Hz 时基且 ≥1.5×ODR 的最小候选档」：
+45686@1600→3200（2.0×）、42688@2000→3200（1.6×）、3200→6400、6400 无解编译报错。
+
+**为什么没被发现**：`default_envs` 指向 `CoaxialVTVL_ICM45686`，日常只编那一个；
+`verify-all` 与 SIL 都不编译 42688 env。已加守卫 `tools/check-env-matrix.py`
+（快档第 28 项）：解析 platformio.ini 的 `extends` 链与 `-D/-U`，对每个 env 复算
+ISR 可解性，几十毫秒，不需要编译固件。
+
+**关联**：`docs/memory/2026-11-12-IMU-ISR轮询频率选档.md`、`TandemVec_FCS/src/imu_odr_config.h`。

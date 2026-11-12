@@ -1506,14 +1506,14 @@ SIL 里 plant
 次野值拒绝）， <code>resets=0</code>、<code>imu_det=0</code>。</li>
 </ul>
 </blockquote>
-<h2 id="216-守卫全景2026-11-10全量-29-项全绿">2.16
-守卫全景（2026-11-10，全量 29 项全绿）</h2>
+<h2 id="216-守卫全景2026-11-12全量-30-项全绿">2.16
+守卫全景（2026-11-12，全量 30 项全绿）</h2>
 <p><code>verify-all.py --include-sil --include-host</code>
 的完整清单。<strong>这是项目的验证全景</strong>——
 想知道「这个仓现在被哪些手段守着」，看这张表就够。表内顺序即执行顺序，
 与 <code>tools/verify-all.py</code> 的 <code>build_checks()</code>
 一一对应（新增守卫必须同时改两处）。</p>
-<h3 id="快档27-项约-50-s">快档（27 项，约 50 s）</h3>
+<h3 id="快档28-项约-50-s">快档（28 项，约 50 s）</h3>
 <table>
 <thead>
 <tr>
@@ -1703,8 +1703,8 @@ SIL 里 plant
 <h3 id="能失败验证情况">能失败验证情况</h3>
 <p>判据：<strong>这个守卫真的报错过吗？</strong>
 「文档里提过这个名字」不算证据， 「造过违规输入、亲眼见过它
-FAIL」才算。当前 <strong>23/29 项做过违规实验</strong>
-（新增的「文档可达性」用「造一个孤儿文档 → FAIL」验证过）。</p>
+FAIL」才算。当前 <strong>24/30 项做过违规实验</strong> （2026-11-12
+新增的「构建矩阵可解性」用「假 ODR=6400/8000 → FAIL」验证过）。</p>
 <p>有意不做违规实验的：<strong>坐标系 @frame
 标注</strong>——它有意宽松，详见 §2.25，已量化验证。</p>
 <blockquote>
@@ -2753,7 +2753,7 @@ Node），改公式风险高，未构造违规；机制上比静态检查更可�
 </tr>
 </tbody>
 </table>
-<p><strong>当前基线（2026-11-10）</strong>：27 项快档守卫 + 三机型 SIL
+<p><strong>当前基线（2026-11-12）</strong>：28 项快档守卫 + 三机型 SIL
 跑批 + 完整宿主回归</p>
 <ul>
 <li>完整宿主回归（324.6 s）。</li>
@@ -2892,5 +2892,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb12-1"><a href=
 架构与场景参数）</li>
 <li><code>docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md</code>（上板验证项）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-12 02:57</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-009-SIL验收脚本判据表-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-12 18:59</footer></article></body>
 </html>

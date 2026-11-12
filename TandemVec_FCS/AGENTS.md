@@ -243,7 +243,7 @@ ODR 配置、排空 `kTargetRateHz`、批量帧 `s_fifo_frame_dt_s`、ISR 抽点
 不在型号支持列表内会触发 `static_assert` 编译失败，不会烧出跑错档位的固件。
 后端的 ODR 映射已改**严格匹配、禁止吸附**——不支持就直接 `begin()` 失败而不是跑到相邻档，
 因为静默吸附会让"请求值"与"实际生效值"不同，正是 2026-11-10 延迟事故的成因之一。
-ISR 轮询取 2×ODR：`readFifo` 每次最多交一帧，轮询不足会 ring 积压，所以 `isr_c≈2×isr_f`、`isr_empty≈isr_f` 是正常形态；若取数节奏与 ODR 失配，`health` 的 `ring_size`/`imu_age` 会立刻暴露。
+ISR 轮询频率**不是 2×ODR 硬编码**，而是按「整除 6400Hz 时基且 ≥1.5×ODR」从候选表 {100,200,400,800,1600,3200,6400} 取最小档：45686@1600→3200（2.0×）、42688@2000→3200（1.6×）。`readFifo` 每次最多交一帧，轮询不足必然 ring 积压；因此 `isr_c≈(kIsrPollHz/kOdrHz)×isr_f`、`isr_empty≈isr_f×(1−ODR/ISR)` 是正常形态。若取数节奏与 ODR 失配，`health` 的 `ring_size`/`imu_age` 会立刻暴露。
 
 **排查判据（`health` 直接看）**：
 - `ring_size` 应长期为 0；持续非零＝排空欠量，控制用的就是旧数据

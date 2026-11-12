@@ -62,6 +62,11 @@ def build_checks(include_sil: bool, include_host: bool = False) -> list[tuple[st
         # ICM-45686 采样率上重走了文档里明写的「无效路线」，耗掉大半天。
         ("沉淀索引完整性", [PY, "tools/check-memory-index.py"], ROOT),
         ("头文件接线审计", [PY, "tools/check-module-wiring.py"], ROOT),
+        # 2026-11-12 加：构建矩阵可解性。此前 IMU 采样率重构把 ISR 轮询硬编码成
+        # 2×ODR 并断言整除 6400Hz 时基，只对 45686 成立；42688 的 2000→4000 不整除，
+        # 四个 42688 env（含单涵道实飞）静默编不过两天——default_envs 是 45686，
+        # 日常没人编到它们。本项按 platformio.ini 的宏组合复算 ISR 可解性，几十毫秒。
+        ("构建矩阵可解性", [PY, "tools/check-env-matrix.py"], ROOT),
         ("角度单位审计", [PY, "tools/check-angle-units.py"], ROOT),
         ("文档站点收录", [PY, "tools/check-doc-site-coverage.py"], ROOT),
         ("告警判据 NaN 防护", [PY, "tools/check-nan-guards.py"], ROOT),

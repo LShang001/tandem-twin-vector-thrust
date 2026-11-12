@@ -37,15 +37,15 @@ NED 右手系（x 前 / y 右 / z 下），四元数RK4积分。**新增机型�
 ## 命令
 
 ```bash
-# ★ 总守卫（改完代码先跑这条，~50 s；27 项全绿再提交；全景见 VER-009 §2.16）
+# ★ 总守卫（改完代码先跑这条，~50 s；28 项全绿再提交；全景见 VER-009 §2.16）
 #   参数层一致性/生成物同步 · 推进六维对拍 · 分配 3×3 对拍 · 坐标系 @frame 标注
-#   SIL 覆盖审计 · 头文件接线审计 · 角度单位审计 · 注释门禁 GOV-004
+#   SIL 覆盖审计 · 构建矩阵可解性 · 头文件接线审计 · 角度单位审计 · 注释门禁 GOV-004
 #   文档链接/产物同步/统计数字/编号引用/代码块路径/可达性 · IMU 轴映射 · 解锁门判据
 #   仿真域单测(92 项) · 坐标系实现自检 · GCS 单测
-py -3.12 tools/verify-all.py                 # 27 项快档
-py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 28 项
-py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 28 项
-py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 29 项，~920 s
+py -3.12 tools/verify-all.py                 # 28 项快档
+py -3.12 tools/verify-all.py --include-sil   # +三机型 SIL 跑批（410 s）→ 29 项
+py -3.12 tools/verify-all.py --include-host  # +完整宿主回归（329 s）→ 29 项
+py -3.12 tools/verify-all.py --include-sil --include-host   # 全量 30 项，~920 s
 # ★ 改共享结构体默认值 / 混控 / 分配 / 估计等「行为可能变」的代码时，
 #   只跑快档不够——2026-11-08 就因只跑 pio run 编过、没跑 run_all.sh，
 #   把 test_single_edf_4vane 的 6 项解析值断言弄坏了两周才发现。
@@ -111,8 +111,9 @@ py -3.12 -m pytest tools/tests/ -q                # 工具脚本回归（注释�
 
 | 文件 | 内容 | 何时读 |
 |------|------|--------|
+| `2026-11-12-IMU-ISR轮询频率选档.md` | ISR 频率不是 2×ODR 硬编码：必须「整除 6400Hz 时基且 ≥1.5×ODR」，在候选表 {100…6400} 取最小档（45686@1600→3200、42688@2000→3200）。2× 硬编码让 42688 的 4000 撞整除约束，**四个 42688 env（含单涵道实飞固件）静默编不过两天**。防复发守卫 `tools/check-env-matrix.py` 已进快档 | 改 `kOdrHz`/`kIsrPollHz`/`BFS_IMU_ODR_HZ`、加 env、或某 env 编不过时 |
 | `2026-11-11-GNSS串口逐字节中断丢帧.md` | **GNSS 丢历元的根因**：框架 `uart.c` 用 `HAL_UART_Receive_IT(...,1)` 逐字节中断，921600 下每字节仅 10.85µs，RDR 只有 1 字节深 ⇒ 任何 ISR 排队就溢出丢字节；表现为 `ubxstat` 的 `eoe_no_pvt`/`bad_pvt`/`cksum_fail` 同时升高。修复：`UART4->CR1 \|= USART_CR1_FIFOEN`（16 字节 FIFO，容忍 174µs）+ 关闭接收机冗余 NAV 消息。实测 9.8%→5.3%、cksum_fail −74%。剩余需 DMA。**注意 UART4 优先级已是 0、TIM8 是 3，与抢占无关** | 排查 GNSS 丢历元/定位跳变、看 `ubxstat`、改 GPS 串口波特率或接收方式时 |
-| `2026-11-11-IMU延迟根因-FIFO速率失配.md` | **延迟随时间增长的唯一根因**：芯片 ODR 由 RC 晶振决定（标称 1600 实测 1600~1685，随温度漂移），ISR 取数按标称值派生 ⇒ FIFO 稳态积压，而 FIFO 先进先出 ⇒ 控制读几十包前的旧样本（实测 38/75 包 ≈ 22~44ms，且 `isr_f==drain_f`/`ring_drop=0` 全绿看不出）。修复五处必须配合：dt 由芯片时间戳差分驱动 / readFifo 读到空只留最新 / ring 窗口收紧 / 时间基准按真实 dt 累加 / 空 drain 对齐当前。**ISR 必须 ≥2×ODR**（降到 1600 会 ring 积压、CPU 反升）。已否决：只排空不改 dt（EKF 发散 rpy 145°） | 改 IMU 采样/取数/排空、调 `kOdrHz`/`kIsrPollHz`、排查"延迟越放越大"或"控制吃旧数据"时 |
+| `2026-11-11-IMU延迟根因-FIFO速率失配.md` | **延迟随时间增长的唯一根因**：芯片 ODR 由 RC 晶振决定（标称 1600 实测 1600~1685，随温度漂移），ISR 取数按标称值派生 ⇒ FIFO 稳态积压，而 FIFO 先进先出 ⇒ 控制读几十包前的旧样本（实测 38/75 包 ≈ 22~44ms，且 `isr_f==drain_f`/`ring_drop=0` 全绿看不出）。修复五处必须配合：dt 由芯片时间戳差分驱动 / readFifo 读到空只留最新 / ring 窗口收紧 / 时间基准按真实 dt 累加 / 空 drain 对齐当前。**ISR 轮询取「整除 6400Hz 时基且 ≥1.5×ODR」的最小档**（45686@1600→3200、42688@2000→3200；只降到 1×ODR 会 ring 积压、CPU 反升；2× 硬编码会让 42688 的 4000 撞上整除约束）。已否决：只排空不改 dt（EKF 发散 rpy 145°） | 改 IMU 采样/取数/排空、调 `kOdrHz`/`kIsrPollHz`、排查"延迟越放越大"或"控制吃旧数据"时 |
 | `2026-11-10-openocd烧录Tcl路径转义.md` | openocd `-c` 的字符串由 **Tcl** 解析，**反斜杠是转义符**：`C:\Users\12631\fw42688.elf` 被吃成 `C:UsersV31<FF>w42688.elf`（`\U`→U、`\126`→八进制V、`\f`→换页符）→ 报 `couldn't open` / `Programming Failed`。**传路径一律用正斜杠**。附：`Start-Process` 的 `-NoNewWindow` 与 `-WindowStyle` 互斥（同给则返回 `$null`）；内联多层引号必出事，写 `.ps1` 走 `-File` | 跨机烧录 / 用 openocd `-c` 传绝对路径 / 写 PowerShell 启动子进程脚本时 |
 | `2026-11-10-GCS仪表盘重做.md` | 「丑」多半是**大面积空数据**不是配色：换协议后 AnoCom 专有字段（0xF1/0xF2/DETA100）全缺 → 满屏 `--`；同物理量两协议字段名/单位不同（模式编号、油门、精度）不能共表；**几何只认像素测量不认缩略图**（量天地分界左右高度差）；`drawAttitude` 横滚指针数学角≠屏幕角；内联 `display=''` 会回落 CSS 而非恢复显示 | 改 GCS 仪表盘 / 面板布局 / 任何 canvas 仪表绘制 / 判界面丑不丑时 |
 | `2026-11-10-GCS平板可点性验收.md` | 平板可点性实测：导航 31px / 按钮 28px / 选择器 24px 全部低于 40px 下限；**Playwright 必须开 `has_touch=True`** 否则 `pointer: coarse` 不生效、量出来仍是桌面尺寸；触控放大用 `pointer: coarse` 而非宽度断点 | 改 GCS 前端 CSS / 布局 / 控件尺寸 / 做平板适配验收时 |
