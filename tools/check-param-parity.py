@@ -77,7 +77,7 @@ def check_coax_parity() -> list[str]:
     # 2026-11-08 补 lever_m：此前只比三项，力臂三处都定义了却没被守护。
     # ★ inertia 没进来：SIL plant 写成数组 `inertia_kgm2[3] = {..}`，
     #   而 grab() 只认 `name = value` 形式，抓不到数组；强行解析会增加
-    #   误报风险，暂留在人工核对（三处当前都是 0.05/0.05/0.08）。
+    #   误报风险，暂留在人工核对（三处当前都是 0.015/0.015/0.02，2026-11-12 对齐实机）。
     keys = ["mass_kg", "max_total_thrust_n", "servo_half_angle_deg", "lever_m"]
 
     def grab(path: Path, start_marker: str, stop_marker: str) -> dict[str, float]:

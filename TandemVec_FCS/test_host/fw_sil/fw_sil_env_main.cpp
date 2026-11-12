@@ -230,9 +230,9 @@ static float g_fault4_deg = 8.0f;
 #ifdef FW_SIL_COAXIAL
 // 共轴 L1 plant 参数（CLI 可覆盖）；默认值见 CTL-003/VER-002。
 static float g_coax_mass_kg = 0.84f;
-static float g_coax_ix = 0.05f;
-static float g_coax_iy = 0.05f;
-static float g_coax_iz = 0.08f;
+static float g_coax_ix = 0.015f;  // 共轴实机惯量（2026-11-12 对齐 FlightCtrlParams）
+static float g_coax_iy = 0.015f;
+static float g_coax_iz = 0.02f;
 static float g_coax_max_thrust_n = 14.0f;
 static float g_coax_lever_m = 0.21f;  // 共轴实机实测力臂（2026-11-12 用户确认，与 FlightCtrlParams/plant 一致）
 static float g_coax_yaw_nm_per_norm = 0.0005f;

@@ -37,6 +37,12 @@ void setNavigationOriginFromLlaRad(double, double, double) {}
 #endif
 void resetBaroAltitudeReference() {}
 
+// ★2026-11-12：flight_control.cpp GNC 前无条件调用 readIMUData() 排空 IMU ring
+//   （2026-11-10 控制延迟修复新增）。SIL 不链接 sensor_imu.cpp，IMU 数据由
+//   fw_sil_env_main 直接注入 IMU_Packet/icm_*，故此处为空操作替身（返回 true
+//   表示数据就绪）。不补此桩则全机型 SIL 链接报 undefined reference to readIMUData()。
+bool readIMUData() { return true; }
+
 // SIL 不链接 communication.cpp（其遥测/CRSF 依赖过重），这里提供链接替身。
 // ★2026-10-31：断链/复链判据改为直接调用固件同一份实现
 //   `include/FailsafeLinkLossPlan.h`（`communication.cpp::linkDownCallback` 也调用它）。
