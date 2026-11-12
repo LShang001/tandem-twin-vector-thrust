@@ -234,7 +234,7 @@ static float g_coax_ix = 0.05f;
 static float g_coax_iy = 0.05f;
 static float g_coax_iz = 0.08f;
 static float g_coax_max_thrust_n = 14.0f;
-static float g_coax_lever_m = 0.15f;
+static float g_coax_lever_m = 0.21f;  // 共轴实机实测力臂（2026-11-12 用户确认，与 FlightCtrlParams/plant 一致）
 static float g_coax_yaw_nm_per_norm = 0.0005f;
 static float g_coax_motor_loss1 = 1.0f;
 static float g_coax_motor_loss2 = 1.0f;
@@ -3416,9 +3416,11 @@ int main(int argc, char** argv) {
     scale_pid(kFlightCtrlParams.rate_pitch, rate_scale);
     scale_pid(kFlightCtrlParams.rate_yaw, rate_scale);
 #ifdef BFS_COAXIAL_VTVL
-    // 共轴控制器参数由通用 PID 派生；缩放后必须重新 apply，
-    // 否则 --att/--rate-gain-scale 对共轴完全无效（2026-11-04 发现）。
-    applyCoaxialCtrlFlightParams(kFlightCtrlParams.coax);
+    // 共轴控制链 2026-11-10 已统一到通用层：控制器直接消费 att_*/rate_*，
+    // 缩放后经 applyFlightCtrlParams() 无扰同步到 PID 实例并按 coax 物理量重算
+    // out_max。旧 applyCoaxialCtrlFlightParams 已随统一删除，此处原为悬空调用
+    // 导致共轴 SIL 构建断裂（2026-11-12 修复）。
+    applyFlightCtrlParams();
 #endif
   }
   kFlightCtrlParams.gnss_lever_x_m = g_gnss_lever_param[0];

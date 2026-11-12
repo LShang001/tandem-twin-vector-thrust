@@ -24,10 +24,12 @@
  *          SIL/固件已标定的通道方向（δf→Mx、δt→My、差速→−Mz），并附
  *          物理来源注释，避免"公式对了符号反了"的假验证。
  *
- * @warning 参数默认值来自 TandemVec 存档 L1（mass 0.84 kg、maxT 14 N、
- *          wMax 1150 rad/s、lever 0.15 m、I=(0.05,0.05,0.08) kg·m²），
- *          **不是共轴实机辨识值**。kQ/kT=0.027 沿用纵列实机经验值；
- *          Jp=2e-4 kg·m² 为同量级估计。上机前必须台架辨识 kT/kQ/Jp/τ_m。
+ * @warning 力臂 lever_m=0.21 m 为共轴实机实测值（2026-11-12 用户确认，与
+ *          FlightCtrlParams/CoaxialAllocator 一致）；其余默认值仍来自 TandemVec
+ *          存档 L1 名义值（mass 0.84 kg、maxT 14 N、wMax 1150 rad/s、
+ *          I=(0.05,0.05,0.08) kg·m²），**不是共轴实机辨识值**。kQ/kT=0.027 沿用
+ *          纵列实机经验值；Jp=2e-4 kg·m² 为同量级估计。上机前必须台架辨识
+ *          kT/kQ/Jp/τ_m 与惯量。
  *
  * @ref THY-002 §3–§6（反扭、电机一阶滞后、陀螺力矩）、MOD-005（待建）
  * @test test_host/test_coaxial_dynamics_model.cpp
@@ -118,7 +120,7 @@ struct Params
 {
     float mass_kg = 0.84f;
     float inertia_kgm2[3] = {0.05f, 0.05f, 0.08f}; // Ix, Iy, Iz
-    float lever_m = 0.15f;                          // CG → 推力作用点（沿 z_b）
+    float lever_m = 0.21f;                          // CG → 推力作用点（沿 z_b）；共轴实机实测（2026-11-12）
     float kT_n_per_radps2 = 5.2930e-6f;             // 单旋翼 T = kT·ω²
     float kQ_nm_per_radps2 = 1.4291e-7f;            // 单旋翼 Q = kQ·ω²
     float rotor_inertia_kgm2 = 2.0e-4f;             // Jp（转子+桨）
