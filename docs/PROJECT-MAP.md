@@ -237,7 +237,7 @@ pio run                                  # 编译 TandemVec_FCS（默认 env）
 pio run -e CoaxialVTVL                   # 共轴机型
 pio test -e test                         # PlatformIO 单元测试
 
-# 宿主回归（116 个测试程序 / 74 段）
+# 宿主回归（116 个测试程序 / 75 段）
 bash TandemVec_FCS/test_host/run_all.sh
 
 # 真实固件 SIL
@@ -287,7 +287,7 @@ find docs -name '*.md' | wc -l                         # 文档篇数
 | 提交数 | 1 302 |
 | 固件源码（src） | 23 208 行 |
 | 固件平台无关头（include） | 15 523 行 |
-| 宿主测试（test_host） | 37 063 行 / 116 个测试程序 / `run_all.sh` 74 段回归 |
+| 宿主测试（test_host） | 37 063 行 / 116 个测试程序 / `run_all.sh` 75 段回归 |
 | SIL 跑批脚本 | 15（`test_host/fw_sil/*.sh`，判据见 VER-009） |
 | 文档正文（docs 全域 md） | 192 篇 |
 | 参考资料 | books 6 333 / papers 1 848 文件 |
