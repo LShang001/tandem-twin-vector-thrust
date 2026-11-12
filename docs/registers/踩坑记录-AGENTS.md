@@ -361,3 +361,23 @@ if "08-参考资料" in md.parts and ({"books", "papers"} & set(md.parts)):
 **这片区域里有没有人写的东西？** 有就细化到文件名，不要细化到目录。
 
 **关联**：`docs/README.md` §4「维护规则」、`AGENTS.md` 原则 11（守卫要有证明力）。
+
+## 2026-11-12 `tasks`/`health` 里的 `ICM42688` 是写死任务标签，不是芯片型号
+
+**现象**：荣耀节点读 `health` 看到 `[TASK 0 ICM42688]`、`imu rate=1604.5Hz`，据此判断
+"这块板烧的是 42688 版固件"——判断错了，它跑的是 `CoaxialVTVL_ICM45686`。
+
+**真相**：`main.cpp` 里 `BFS_ADD_TASK(handleICM42688, imu_task_ms, "ICM42688")` 的任务名和
+函数名是历史遗留，ICM-45686 后端同样走这一个 handle，标签不变；`initICM42688()` 也是装配层
+老名字（内部按 `FCS_IMU_MODEL_ICM45686` 选后端）。改名要重烧验证，收益不抵风险，先按判据绕开。
+
+**判据**（按可靠性排序）：
+
+1. `imu rate` 对照 `src/imu_odr_config.h` 的型号支持列表——42688 的 `kSupportedHz` 没有
+   1600 档，且该分支默认 `kOdrHz=2000`；实测 1604.5 Hz 只可能来自 45686 分支（默认 1600）。
+2. `strings firmware.elf | grep -E "ICM45686|ICM-42688-P"`——本次 elf 命中 45686 驱动字符串
+   57 处、42688 后端字符串 0 处。
+3. 复位时抓启动日志 `[Init] IMU: <modelName> accelODR=...Hz gyroODR=...Hz`（`sensor_imu.cpp`）。
+
+**教训**：判断"烧的是哪一型固件"看 ODR 支持表与后端字符串，别看任务名/函数名/日志标签——
+它们恰恰是最容易保留旧名字的地方。
