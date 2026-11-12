@@ -20,7 +20,7 @@
  * @units   float32 物理量直传（rad/s、m/s²、m、m/s、%、rad/s²），无定点缩放
  * @note    arduino-CAN 库已修改: MCP2515.cpp 新增 setSPI() 支持自定义 SPI 实例,
  *          所有 SPI.begin/transfer/transaction 改为 _spi->xxx, 默认指向全局 SPI。
- *          SPI2 通过 setSPI(CAN_SPI) 注入, 与 SPI1 (ICM42688 IMU) 完全隔离。
+ *          SPI2 通过 setSPI(CAN_SPI) 注入, 与 SPI1 (IMU) 完全隔离。
  */
 
 #include "can_bus.h"
@@ -28,7 +28,7 @@
 #include <SPI.h>
 #include <CAN.h>  // arduino-CAN: MCP2515Class CAN 全局实例
 
-// --- 独立 SPI2 实例 (与 SPI1/ICM42688 完全隔离) ---
+// --- 独立 SPI2 实例 (与 SPI1/IMU 完全隔离) ---
 // STM32duino SPIClass 构造: SPIClass(mosi, miso, sclk, ssel)
 // PB15=SPI2_MOSI, PB14=SPI2_MISO, PB13=SPI2_SCK
 static SPIClass CAN_SPI(CAN_SPI_MOSI, CAN_SPI_MISO, CAN_SPI_SCK);
@@ -84,7 +84,7 @@ static bool sendFloatPair(int id, float a, float b) {
 int initCAN(void) {
   Serial8.println("[CAN] 正在初始化 MCP2515 (SPI2, PB12/PB13/PB14/PB15, INT=PD10)...");
 
-  // 注入独立 SPI2 实例到 MCP2515 (与 SPI1/ICM42688 完全隔离)
+  // 注入独立 SPI2 实例到 MCP2515 (与 SPI1/IMU 完全隔离)
   CAN.setSPI(CAN_SPI);
 
   // 配置 MCP2515 参数 (必须在 begin() 前调用)

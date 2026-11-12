@@ -367,9 +367,10 @@ if "08-参考资料" in md.parts and ({"books", "papers"} & set(md.parts)):
 **现象**：荣耀节点读 `health` 看到 `[TASK 0 ICM42688]`、`imu rate=1604.5Hz`，据此判断
 "这块板烧的是 42688 版固件"——判断错了，它跑的是 `CoaxialVTVL_ICM45686`。
 
-**真相**：`main.cpp` 里 `BFS_ADD_TASK(handleICM42688, imu_task_ms, "ICM42688")` 的任务名和
-函数名是历史遗留，ICM-45686 后端同样走这一个 handle，标签不变；`initICM42688()` 也是装配层
-老名字（内部按 `FCS_IMU_MODEL_ICM45686` 选后端）。改名要重烧验证，收益不抵风险，先按判据绕开。
+**真相**：2026-11-12 之前任务名写死为 `"ICM42688"`、函数名也叫 `handleICM42688` / `initICM42688`，
+与芯片型号无关。现已改为 `BFS_ADD_TASK(handleImuTask, imu_task_ms, compiledImuModelName())`，
+`health` / `tasks` 直接显示编译期型号（`ICM-45686` / `ICM-42688-P`），初始化失败日志同样带型号。
+历史固件仍可能打印 `ICM42688`，判型号仍按下面的判据。
 
 **判据**（按可靠性排序）：
 

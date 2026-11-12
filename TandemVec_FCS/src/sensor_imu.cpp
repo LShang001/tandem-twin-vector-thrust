@@ -1,9 +1,9 @@
 /**
  * @file    sensor_imu.cpp
- * @module  固件/传感器（ICM42688 与磁力计采集）
+ * @module  固件/传感器（IMU: ICM-42688-P / ICM-45686，与磁力计采集）
  * @brief   初始化 IMU/磁力计，逐帧完成校准、滤波、轴变换、Madgwick 姿态与数据打包
  * @details 输入：SPI 原始加速度(g)/角速度(dps)/温度、I2C 磁力计样本；
- *          处理：`initICM42688()` 配滤波与量程并用 100 样本静止均值初始化滤波器；
+ *          处理：`initImu()` 按编译期选定型号配滤波与量程，并用 100 样本静止均值初始化滤波器；
  *          `readIMUData()` 每帧：自动校准 → 一阶互补滤波 → RUB→FRD 轴映射 →
  *          累加双子样增量（关中断）→ FRD→FLU 适配 → Madgwick → 四元数修正 →
  *          欧拉角 → 写 `IMU_Packet` 与后台 AHRS 变量；
@@ -108,13 +108,13 @@ bool initMagnetometer()
 }
 
 /**
- * @brief 初始化 ICM42688 六轴惯性测量单元
+ * @brief 初始化 IMU 六轴惯性测量单元（型号由 imu_factory 按编译期宏选定）
  *
  * 完整初始化流程：
  * 1. 配置 SPI 总线 (PA5-SCLK, PA6-MISO, PA7-MOSI, PA4-CS, 10MHz, Mode3)
- * 2. 初始化 ICM42688 驱动
+ * 2. 创建型号无关 IMU 实例（编译期选定后端，见 imu_factory）
  * 3. 配置数字低通滤波器 (陀螺仪100Hz, 加速度计50Hz)
- * 4. 配置量程和采样率 (加速度±8G/2kHz, 陀螺仪±2000dps/2kHz)
+ * 4. 配置量程和采样率 (加速度±8G，陀螺仪±2000dps，ODR 见 imu_odr_config.h)
  * 5. 采集 100 个样本计算加速度平均值
  * 6. 初始化互补滤波器 (使用原始 RUB 坐标系数据)
  * 7. 坐标系适配 (RUB -> FLU) 后初始化 Madgwick 姿态滤波器
@@ -122,7 +122,7 @@ bool initMagnetometer()
  * @return 0 初始化成功
  * @return 负值 错误码 (-1001: 数据读取超时, 其他: IMU.begin() 错误)
  */
-int initICM42688()
+int initImu()
 {
   // === 步骤 1: 配置 SPI 总线 ===
   // ICM42688 使用 SPI Mode3 (CPOL=1, CPHA=1): 时钟空闲高电平，第二个边沿采样
@@ -1017,14 +1017,14 @@ bool readIMUData()
   return false;
 }
 
-void handleICM42688()
+void handleImuTask()
 {
 #ifdef BFS_IMU_ISR_RING
   // 采样/处理由 2k ISR 捕获、Navigation 每5ms排空；本任务不再抢消费。
   imu_read_success = true;
   return;
 #else
-  imu_read_success = readIMUData(); // 读取并处理ICM42688数据
+  imu_read_success = readIMUData(); // 读取并处理 IMU 数据
 #endif
 
   // 如果IMU读取失败，点亮黄灯作为指示；成功则熄灭 (或根据其他传感器状态决定)

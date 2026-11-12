@@ -35,12 +35,12 @@
   | 用途 | 调试（缺省，带 DBG 控制台）/ 实飞 | — / `-UBFS_TASK_PROFILE -UBFS_NAV_PROFILE -UBFS_PROFILE_TO_ANOCOM_SERIAL` |
 
   ★ **上层全共用**：板级/CPU-FPU/编译优化/调度时基/IMU 采样架构/导航与 EKF 宏/看门狗全部收在 `[env:unignc]`；三个机型 env 各自只差一个机型宏。**新增机型或组合 = 两行**，不许复制基座里的宏（照 `platformio.ini` 末尾「新增组合」抄）。
-  ★ **采样率**：42688 = 2000 Hz（硬件 FIFO）；45686 = 3200 Hz（FIFO 单包 + ISR 每 2 拍取一包）。
+  ★ **采样率**：42688 = 2000 Hz（硬件 FIFO）；45686 = 1600 Hz（FIFO 单包，ISR 3200 Hz 每拍取一包）。两档都由 `src/imu_odr_config.h` 的 `kOdrHz` 派生，可用 `-DBFS_IMU_ODR_HZ` 覆盖。
   ★ `default_envs` 指向当前实机（现为 `CoaxialVTVL_ICM45686`）；**换板/换机型必须同步改这一行**，否则 `pio run -t upload` 会刷错机型。
   ★ 编译产物按 env 各自独立（`.pio/build/<env>/`），换 env 不需要 clean。
 
-  ★ **45686 = 3.2 kHz FIFO 单包，ISR 每 2 拍取一包**（2026-11-10 定稿），不是 200 Hz 轮询。ODR 取 3200，一个 FIFO 包即一次满量程样本，2 kHz ISR 每隔一拍取一包——这就是「3.2k 采样率」的落地方式。
-  ★ **绝不给 45686 构建加 `-UBFS_IMU_ISR_RING`**：该宏关掉 ISR ring、退回 200 Hz 轮询寄存器，是用户 2026-11-10 明确拒绝的方案。判断有没有被误加：看 `pio run -e <env> -v` 的 `-U` 列表，或启动日志 `[Init] IMU: ICM-45686 ... 3200Hz` 后 `isr_f≈3200`。详见 `../docs/memory/2026-11-09-ICM45686换型适配.md`。
+  ★ **45686 = 1.6 kHz ODR + 3.2 kHz ISR**（2026-11-11 定稿），不是 200 Hz 轮询。ODR 默认 1600（2026-11-10 实飞确认，实测 1683），一个 FIFO 包即一次满量程样本；ISR 取 2×ODR=3200 Hz，每拍约一半是空读（应对应 `isr_c≈2×isr_f`、`isr_empty≈isr_f`）。
+  ★ **绝不给 45686 构建加 `-UBFS_IMU_ISR_RING`**：该宏关掉 ISR ring、退回 200 Hz 轮询寄存器，是用户 2026-11-10 明确拒绝的方案。判断有没有被误加：看 `pio run -e <env> -v` 的 `-U` 列表，或启动日志 `[Init] IMU: ICM-45686 ... 1600Hz` 后 `isr_f≈1600`、`isr_c≈3200`。详见 `../docs/memory/2026-11-09-ICM45686换型适配.md`。
 - **单涵道实飞用 `[env:SingleEdf4Vane_Flight]`**：不带 `BFS_DBG_USB_SERIAL8`、`-U BFS_TASK_PROFILE`/`BFS_NAV_PROFILE`/`BFS_PROFILE_TO_ANOCOM_SERIAL`；保留 2kHz ISR ring、AnoCom USB 参数链路、0xF4/0xF5 遥测、全部联锁限幅。烧前六项自查见 CTL-008。
 - **0xF4/0xF5 诊断帧只在调试 env 编译**：这两个帧包在 `#ifdef BFS_ANOCOM_DIAG` 里（`communication.cpp:945–1028`）。调试 env（`[env:SingleEdf4Vane]` 等）带 `-DBFS_ANOCOM_DIAG`，实飞 env（`[env:SingleEdf4Vane_Flight]`）不带。所以烧实飞固件时 GCS 看不到 0xF4/0xF5 是**正常降载**，不是链路故障——实飞靠 0xF1/0x0A/0x21 等标准帧。
 - **共轴 SIL 必须 `--coax-plant-model rigorous`**：L1 集总 plant 的俯仰/姿态约定有误，会误报 max_pitch≈23°，不要用 L1 结果判共轴。
@@ -243,7 +243,7 @@ ODR 配置、排空 `kTargetRateHz`、批量帧 `s_fifo_frame_dt_s`、ISR 抽点
 不在型号支持列表内会触发 `static_assert` 编译失败，不会烧出跑错档位的固件。
 后端的 ODR 映射已改**严格匹配、禁止吸附**——不支持就直接 `begin()` 失败而不是跑到相邻档，
 因为静默吸附会让"请求值"与"实际生效值"不同，正是 2026-11-10 延迟事故的成因之一。
-ISR 抽点频率 == ODR：若两者不等，`health` 的 `isr_empty` 会立刻暴露（对齐后应为 0）。
+ISR 轮询取 2×ODR：`readFifo` 每次最多交一帧，轮询不足会 ring 积压，所以 `isr_c≈2×isr_f`、`isr_empty≈isr_f` 是正常形态；若取数节奏与 ODR 失配，`health` 的 `ring_size`/`imu_age` 会立刻暴露。
 
 **排查判据（`health` 直接看）**：
 - `ring_size` 应长期为 0；持续非零＝排空欠量，控制用的就是旧数据

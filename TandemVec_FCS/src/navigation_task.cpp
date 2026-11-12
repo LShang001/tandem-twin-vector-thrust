@@ -114,7 +114,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #ifndef BFS_NAV_IMU_OUTAGE_COAST_MAX_S
 #define BFS_NAV_IMU_OUTAGE_COAST_MAX_S 2.0f
 #endif
-// 大过载饱和自适应（opt-in）：生产 ICM42688 为 ±8 g，超量程时比力被削顶，
+// 大过载饱和自适应（opt-in）：生产 IMU 为 ±8 g，超量程时比力被削顶，
 // 幅值不可信但方向仍可用。锁存期间膨胀加计过程噪声，让 GNSS 主导速度/位置，
 // 避免削顶误差被当成“真实比力”后在 NIS 拒帧中退化为纯惯导。
 // 2026-10-27 导弹 SIL 10.1 g 验证见报告 §4.11；默认关闭。

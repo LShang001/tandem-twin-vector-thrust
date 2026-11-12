@@ -1,9 +1,9 @@
 /**
  * @file    sensor_imu.h
  * @module  固件/传感器（IMU 与磁力计）
- * @brief   声明 ICM42688 六轴 IMU、磁力计的初始化与高频数据采集接口
- * @details 输入：SPI/I2C 原始寄存器数据；处理：`initICM42688()` 配置滤波/量程并
- *          采集静止均值初始化滤波器，`readIMUData()` 完成校准→低通→RUB→FRD→
+ * @brief   声明 IMU（ICM-42688-P / ICM-45686，编译期选定）与磁力计的初始化与高频采集接口
+ * @details 输入：SPI/I2C 原始寄存器数据；处理：`initImu()` 按编译期选定型号配置滤波/量程并用
+ *          静止均值初始化滤波器，`readIMUData()` 完成校准→低通→RUB→FRD→
  *          增量累加→FLU 适配→Madgwick→四元数修正→打包；
  *          输出：`IMU_Packet`（FRD, rad/s, m/s²）、`backup_ahrs_*`、
  *          `imu_delta_*` 双子样增量缓冲。磁力计经 MagSensor 统一探测并对齐 FRD。
@@ -36,19 +36,19 @@
 bool initMagnetometer();
 
 /**
- * @brief 初始化 ICM42688 六轴 IMU
+ * @brief 初始化 IMU（型号由 imu_factory 按编译期宏选定）
  *
- * 配置 SPI 总线并初始化 ICM42688，设置：
- * - 加速度计: ±8G 量程, 2kHz 采样率, 50Hz 低通滤波
- * - 陀螺仪: ±2000°/s 量程, 2kHz 采样率, 100Hz 低通滤波
+ * 配置 SPI 总线并创建型号无关实例，设置：
+ * - 加速度计: ±8G 量程，ODR 见 `imu_odr_config.h`（42688=2000 / 45686=1600 Hz 默认），50Hz 低通滤波
+ * - 陀螺仪: ±2000°/s 量程，同上 ODR，100Hz 低通滤波
  * - 使用 100 个加速度样本初始化 Madgwick 滤波器
  *
  * @return 0 成功, 负值为错误码 (-1001: 数据读取超时)
  */
-int initICM42688();
+int initImu();
 
 /**
- * @brief 读取并处理 ICM42688 数据 (核心数据处理函数)
+ * @brief 读取并处理 IMU 数据 (核心数据处理函数)
  *
  * 完整数据处理流水线：
  * 1. 计算采样时间差 (dt)
@@ -116,9 +116,9 @@ extern float g_imu_prof_spi_us;
 #endif
 
 /**
- * @brief ICM42688 任务调度入口 (2kHz)
+ * @brief IMU 任务调度入口（周期 = 1/实际 ODR）
  *
  * 被任务调度器调用，执行 readIMUData() 并根据结果控制黄灯状态。
  * IMU 读取失败时点亮黄灯作为告警指示。
  */
-void handleICM42688();
+void handleImuTask();

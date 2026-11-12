@@ -3117,7 +3117,7 @@ static bfs::ActuatorFaultMonitor s_actuator_fault_monitor;
 void runGNCExecutive()
 {
   // ★ 2026-11-10 延迟优化（用户要求"控制必须使用新传感器数据"）：
-  //   handleICM42688 完成排空后到本函数执行之间，IMU 的 ISR 仍会往 ring 里 push
+  //   handleImuTask 完成排空后到本函数执行之间，IMU 的 ISR 仍会往 ring 里 push
   //   1~2 帧（1600Hz 下 0.6~1.2ms）。不取走这些帧，控制律用的就是上一时刻的数据。
   //   这里补一次排空，把这段时间新到的帧全部消费掉，确保控制环用的是最新采样。
   //   代价：每次多处理 1~2 帧（约 30us），远小于换来的一拍新鲜度。

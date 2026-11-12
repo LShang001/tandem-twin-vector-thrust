@@ -11,8 +11,8 @@
  * @frame   N/A（标量通道，无坐标系）
  * @units   无量纲（输入输出同单位；本工程加速度 g、角速度 dps）
  * @note    α 越接近 1 越信任新值（响应快、抑制弱）；本工程在
- *          `initICM42688()` 用静止均值初始化，避免上电阶跃。
- * @see     `sensor_imu.cpp` 的 `accelXFilter` 等、`initICM42688()`
+ *          `initImu()` 用静止均值初始化，避免上电阶跃。
+ * @see     `sensor_imu.cpp` 的 `accelXFilter` 等、`initImu()`
  */
 
 #ifndef ComplementaryFilter_h

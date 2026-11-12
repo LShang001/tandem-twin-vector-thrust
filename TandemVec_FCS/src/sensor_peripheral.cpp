@@ -1664,7 +1664,7 @@ void handleMTF02PFlowTelemetry()
 
   // --- 4. 计算旋转补偿的中间量 (用于调试验证) ---
   // 获取IMU的滚转和俯仰角速度 (来自IMU_Packet，单位为 rad/s)
-  // 注意：这里直接使用了 icm_gyro_x 和 icm_gyro_y，它们在 handleICM42688 中被更新
+  // 注意：这里直接使用了 icm_gyro_x 和 icm_gyro_y，它们在 handleImuTask 中被更新
   // 并且是机体坐标系下的角速度，单位为 rad/s。
   float w_x = icm_gyro_x; // IMU滚转角速度 (rad/s)
   float w_y = icm_gyro_y; // IMU俯仰角速度 (rad/s)

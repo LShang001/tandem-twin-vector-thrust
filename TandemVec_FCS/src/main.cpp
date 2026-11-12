@@ -41,6 +41,7 @@
 #include "math_utils.h"        // 纯数学工具函数 (inline header-only)
 #include "task_scheduler.h"    // 任务调度器
 #include "sensor_imu.h"        // IMU 传感器
+#include "imu_factory.h"       // IMU 型号装配层（任务名/日志用编译期型号名）
 #include "sensor_peripheral.h" // 外设传感器
 #include "navigation_task.h"   // 导航与状态估计
 #include "ubx_config.h"        // UBX 接收机自动配置（2026-08-09）
@@ -376,9 +377,11 @@ void setup()
     // LED_yellow已在下面处理，此处仅记录错误
   }
 
-  if (initICM42688() != 0)
+  if (initImu() != 0)
   {
-    Serial8.println("Onboard ICM42688 initialization FAILED!");
+    Serial8.print("Onboard ");
+    Serial8.print(compiledImuModelName());
+    Serial8.println(" initialization FAILED!");
     while (1)
     {
       digitalToggle(LED_yellow);
@@ -392,7 +395,7 @@ void setup()
   Serial8.println("Hz");
 
   // ★2026-11-01 IMU 型号无关：Madgwick 更新率跟随后端回报的真实 ODR
-  //   （ICM42688=2000Hz，ICM45686=3200Hz），不再写死 2000。
+  //   （默认 42688=2000Hz、45686=1600Hz，见 imu_odr_config.h），不再写死 2000。
   const uint16_t imu_odr_hz = IMU->actualAccelOdrHz();
   madgwick.begin(imu_odr_hz);
 
@@ -415,7 +418,7 @@ void setup()
   // ====================================================================
   // 5.5 CAN 总线初始化 (MCP2515 on SPI2)
   // ====================================================================
-  // 独立 SPI2 实例, 与 SPI1 (ICM42688) 完全隔离。
+  // 独立 SPI2 实例, 与 SPI1 (IMU) 完全隔离。
   // 初始化失败不阻塞系统, CAN 通信功能不可用但飞控正常运行。
 #if BFS_ENABLE_CAN
   initCAN();
@@ -450,8 +453,8 @@ void setup()
   // 注释掉的任务为可选功能，按需启用。
   //
   // 频率总表（名义周期 → 与调度器/COMM-001 对照）：
-  //   IMU ODR（运行时决定）handleICM42688：42688→2000Hz(0.5ms,3.2 tick)、
-  //                   45686→3200Hz(0.3125ms,2 tick)；周期由 actualAccelOdrHz() 反推
+  //   IMU ODR（运行时决定）handleImuTask：默认 42688→2000Hz(0.5ms,3.2 tick)、
+  //                   45686→1600Hz(0.625ms,4 tick)；周期由 actualAccelOdrHz() 反推
   //   ~129 Hz = 7.735ms handleDPS310（分数 tick，见 task_scheduler_interval.h）
   //   500 Hz = 2ms    handleOpticalFlowSensor、handleGuidanceCommands
   //   200 Hz = 5ms    handleDeta100 / handleNavigationSystem / handleAnoCom /
@@ -464,9 +467,9 @@ void setup()
 
   // --- 传感器采集层 (高频) ---
   // IMU 采样周期 = 1/实际 ODR（不写死 0.5ms）：2kHz→0.5ms(3.2 tick)，
-  // 3.2kHz→0.3125ms(2 tick)。若强制 2kHz 轮询 3.2kHz 器件会漏 37.5% 样本。
+  // 1.6kHz→0.625ms(4 tick)。若强制低速率轮询高速率器件会漏采样。
   const float imu_task_ms = 1000.0f / static_cast<float>(imu_odr_hz);
-  BFS_ADD_TASK(handleICM42688, imu_task_ms, "ICM42688");                  // IMU 数据采集 + 姿态解算（周期随实际 ODR）
+  BFS_ADD_TASK(handleImuTask, imu_task_ms, compiledImuModelName());      // IMU 数据采集 + 姿态解算（周期随实际 ODR；任务名即编译期型号）
   BFS_ADD_TASK(handleDPS310, BFS_DPS310_TASK_INTERVAL_MS, "DPS310");      // 气压计读取 - 默认约129Hz，贴近128Hz压力输出且保留FIFO余量
 #if BFS_ENABLE_OPTICAL_FLOW
   BFS_ADD_TASK(handleOpticalFlowSensor, 2.0f, "OpticalFlow");            // UART7 光流自动识别+采集 (500Hz, 2ms) - LQS48/MTF02P
