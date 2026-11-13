@@ -69,7 +69,22 @@ if [ ! -f "$bin_path" ]; then
   exit 2
 fi
 
-args=(py -3.12 "$ROOT/test_host/fw_sil/run_real_acceptance.py"
+# Python 解释器选择（与 run_failsafe_matrix.sh 同口径）：
+# Windows 上优先 py -3.12（项目约定），WSL/Git Bash 回退 python3/python。
+PYTHON_BIN="${PYTHON_BIN:-}"
+if [ -z "$PYTHON_BIN" ]; then
+  if command -v py >/dev/null 2>&1; then
+    PYTHON_BIN="py -3.12"
+  elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+  elif command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+  else
+    echo "[coax-acceptance] 需要 python（或设置 PYTHON_BIN=...）" >&2
+    exit 1
+  fi
+fi
+args=($PYTHON_BIN "$ROOT/test_host/fw_sil/run_real_acceptance.py"
       --bin "$bin_path"
       --profiles "$PROFILES_DEFAULT"
       --seeds "1,2,3")
