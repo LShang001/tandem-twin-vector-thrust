@@ -356,6 +356,10 @@ static constexpr Icm45686GnssDynamicWeightConfig kGnssDwCfg{
     .pdop_ref         = 2.0f,
     .min_sv           = 3,
 };
+// ★ 2026-11-13：降级门不得严于全质量门——否则低星数帧以全质量身份融合位置
+//   （h_acc 直接进 R），降级路径（只融速度）永远进不去。实测 sv=7 正落在倒挂区。
+static_assert(GNSS_MIN_SV <= kGnssDwCfg.min_sv,
+              "GNSS 降级路径的星数门限不得严于全质量门限（门限倒挂）");
 // 统一静止检测器（ins_static_detector.h，平台无关纯算法）
 static Icm45686StaticDetector static_det;
 #ifdef BFS_PRELAUNCH_ALIGN_STABILITY_GATE
@@ -456,6 +460,10 @@ static bool gnssEpochQualifiesForDowngrade(const bfs::UbxEpoch &epoch)
   }
 
   const auto fix = static_cast<bfs::Ubx::Fix>(epoch.fix);
+  // ★ 2026-11-13：星数门与全质量对齐（GNSS_MIN_SV == kGnssDwCfg.min_sv）。
+  //   降级的本意是「位置精度不可信时只融速度」，与星数无关；原先写 9 会让
+  //   3–8 星帧以全质量身份融合位置（h_acc 直接进 R），而降级路径永远进不去。
+  //   本路径真正兜底的场景是 h_acc 无效/缺失但速度精度可信的帧。
   return (fix >= bfs::Ubx::FIX_3D) &&
          (epoch.num_sv >= GNSS_MIN_SV) &&
          (epoch.spd_acc_mps > 0.0f && epoch.spd_acc_mps < GNSS_DOWNGRADE_MAX_SPD_ACC_MPS) &&

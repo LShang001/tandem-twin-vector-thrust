@@ -844,7 +844,11 @@ extern const float GNSS_MAX_HORZ_ACC_M;
 extern const float GNSS_MAX_VERT_ACC_M;
 extern const float GNSS_MAX_SPD_ACC_MPS;
 extern const float GNSS_MAX_PDOP;
-extern const int8_t GNSS_MIN_SV;
+// ★ 2026-11-13：降级路径（只融速度、位置降权）的星数下限，必须不严于全质量门
+//   （`kGnssDwCfg.min_sv`），否则低星数帧会以全质量身份融合位置、而降级路径永远
+//   进不去。实测 sv=7 时正是倒挂区，故与全质量门对齐为 3。改这里必须同步
+//   navigation_task.cpp 的 static_assert。
+constexpr int8_t GNSS_MIN_SV = 3;
 extern const float GNSS_DOWNGRADE_MAX_SPD_ACC_MPS;
 extern const uint32_t GNSS_PUMP_MAX_BYTES;
 

@@ -601,7 +601,7 @@ const float GNSS_MAX_HORZ_ACC_M = 6.0f;
 const float GNSS_MAX_VERT_ACC_M = 12.0f;
 const float GNSS_MAX_SPD_ACC_MPS = 1.0f;
 const float GNSS_MAX_PDOP = 3.0f;
-const int8_t GNSS_MIN_SV = 9;
+// GNSS_MIN_SV 已改为 state_data.h 的 constexpr（需编译期断言防门限倒挂）
 const float GNSS_DOWNGRADE_MAX_SPD_ACC_MPS = 0.5f;
 const uint32_t GNSS_PUMP_MAX_BYTES = 512U;
 GnssRuntimeStatus gnss_status;
