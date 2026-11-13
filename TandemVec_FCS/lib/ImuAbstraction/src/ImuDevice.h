@@ -165,6 +165,9 @@ public:
   /// 每次只取 1 包的后端：该值长期 >1 表示取数赶不上采样、FIFO 在积压，
   /// 而 FIFO 先进先出 → 控制拿到的是旧包，延迟会随时间增长。
   virtual uint16_t lastFifoFrameCount() const { return 0; }
+  /// 后端在单次 readFifo 内部丢弃的样本数（批量排空到最新时为 chunk-1）；默认 0。
+  /// 计入上层 ring_drop 总量，避免「批量排空丢帧」在健康统计里不可见。
+  virtual uint32_t batchDroppedCount() const { return 0U; }
   virtual int injectFifo(const ImuFifoSample &sample) { (void)sample; return -1; }
 
   virtual int dataReady() = 0;

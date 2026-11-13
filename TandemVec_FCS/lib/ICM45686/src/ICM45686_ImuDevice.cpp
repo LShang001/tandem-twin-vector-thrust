@@ -253,6 +253,9 @@ int ICM45686_ImuDevice::readFifo(ImuFifoSample *out, size_t max)
     out[0].gyr[a] =
         ICM456xx::rawRegisterGyroToDps(s_batch[newest].byte_16.gyro_data[a], gyroFsr_);
   }
+  // 只交出最新一包，其余 chunk-1 包被丢弃——计入丢弃统计，
+  // 否则批量排空的丢帧在 health/ring_drop 里完全不可见。
+  batch_dropped_ += static_cast<uint32_t>(chunk - 1U);
   out[0].timestamp = s_batch[newest].byte_16.timestamp;
   return 1;
 }

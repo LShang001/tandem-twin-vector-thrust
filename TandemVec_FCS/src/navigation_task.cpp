@@ -45,6 +45,7 @@ void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us);
 #include "navigation_task.h"
 #include "math_utils.h"
 #include "QuaternionMath.h"
+#include "imu_odr_config.h"   // IMU 采样率唯一真源（健康判据的期望速率由它派生）
 
 #include "ins_gnss_dynamic_weight.h"
 #include "ins_rtk_vertical_trust.h"
@@ -980,6 +981,9 @@ static bfs::ImuHealthMonitor s_imu_health = []() {
   bfs::ImuHealthConfig cfg;
   cfg.accel_range_mps2 = bfs::kIcm42688AccelRangeMps2;
   cfg.gyro_range_radps = bfs::kIcm42688GyroRangeRadps;
+  // 期望采样率跟编译期真源，不再写死 2000：45686@1600 档下否则要掉到 1000 Hz
+  // 才报 LowSampleRate，诊断灵敏度减半。
+  cfg.expected_sample_rate_hz = static_cast<float>(bfs_imu_odr::kOdrHz);
   return bfs::ImuHealthMonitor(cfg);
 }();
 #ifdef BFS_IMU_SATURATION_Q_INFLATE

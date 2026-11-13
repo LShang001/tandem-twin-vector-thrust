@@ -315,7 +315,11 @@ uint32_t imuFrameUsAvg()
 
 uint32_t imuRingDropCount()
 {
-  return s_imu_ring.drop_count();
+  // 丢弃总数 = ring 满丢弃 + 积压裁剪丢弃 + 后端批量排空丢弃。
+  // 45686 的排空策略只交出最新一包，若不计入后端计数，健康判据会漏掉主丢帧路径。
+  const uint32_t ring_drop = s_imu_ring.drop_count();
+  const uint32_t batch_drop = (IMU != nullptr) ? IMU->batchDroppedCount() : 0U;
+  return ring_drop + batch_drop;
 }
 
 uint32_t imuIsrEmptyCount()
@@ -354,12 +358,12 @@ void imuSampleIsr()
   if (!s_imu_ring_ready || IMU == nullptr) { return; }
 
   s_isr_calls++;
-  // ★ 2026-11-09：恢复「单包读」——这是 P1 架构不变量（见
-  //   docs/memory/2026-11-04-IMU-2kHz攻关.md §6：ISR 只 readFifo(1包) + push，
-  //   只搬运不做浮点）。该文档的「无效路线」第一条明确记录：
-  //   FIFO 批量一次读 8 包 → 4218 Hz 但 EKF 退化、批量消费/重复计数不可靠。
-  //   正确做法是把 ISR 频率提到 ODR 水平（TIM8 6400 / 步进 2000 = 3200 Hz），
-  //   一拍取一包，而不是降低 ISR 频率去批量取。
+  // ISR 取数策略按后端区分，两者都只做「搬运 + 反量化」，不做滤波/积分：
+  //   · ICM-42688：readFifo(&one, 1) 每次真取 1 包（硬件 FIFO 单包读）；
+  //   · ICM-45686：驱动内部「FIFO 排空到最新」——一次最多读 kDrainMax=8 包，
+  //     只交出最新一包，其余计入 batchDroppedCount()。硬件 FIFO 先进先出，
+  //     积压时读到的必然是旧样本，唯一正确用法是读到空、只保留最新；前提是
+  //     dt 由芯片时间戳差分驱动（下方 P0），否则丢帧会让时间轴压缩。
   ImuFifoSample one{};
   if (IMU->readFifo(&one, 1U) <= 0)
   {
@@ -434,10 +438,13 @@ bool readIMUData()
       static constexpr size_t kBacklogKeep = 8;
       if (backlog > kBacklogMax)
       {
+        // 积压裁剪同样计入 ring_drop：health 的 ring_drop 语义是「IMU 帧丢弃总数」，
+        // 只统计 push 满会漏掉这条主路径（2026-11-10 延迟事故的假绿同型）。
         for (size_t i = 0; i < (backlog - kBacklogKeep); ++i)
         {
           ImuRingSample stale{};
           if (!s_imu_ring.pop(stale)) { break; }
+          s_imu_ring.noteDropped(1U);
         }
       }
     }

@@ -3455,7 +3455,14 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         //   ubxcfg          — 重跑配置（921600, 10Hz, 不固化）
         //   ubxcfg save     — 重跑并固化到接收机闪存
         //   ubxcfg status   — 打印上次配置结果
-        if (strcmp(line, "ubxcfg status") == 0)
+        // 飞行中禁止重跑接收机配置：ubxAutoConfig 含多轮波特率探测与 delay，
+        // 最坏累计超过 IWDG 窗口（2.99 s），误发一条 DBG 命令即硬复位。
+        // 只读的 status 放行；与同文件 flowdump / flash 分支的解锁门一致。
+        if (g_is_unlocked && strcmp(line, "ubxcfg status") != 0)
+        {
+          serial.println(F("[DBG] ubxcfg refused while UNLOCKED (config blocks scheduler > IWDG window)"));
+        }
+        else if (strcmp(line, "ubxcfg status") == 0)
         {
           const UbxCfgResult &r = ubxLastCfgResult();
           serial.println(F("[DBG] == UBX 配置结果 =="));

@@ -71,6 +71,8 @@ public:
   }
 
   uint32_t drop_count() const { return drop_count_; }
+  /// 消费端主动丢弃（积压裁剪）时也计入 drop_count_，保证 ring_drop 语义 = 丢弃总数
+  void noteDropped(uint32_t n = 1U) { drop_count_ += n; }
   void clear()
   {
     head_ = 0U;
