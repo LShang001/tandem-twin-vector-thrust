@@ -29,6 +29,7 @@
 #include "math_utils.h"
 #include "QuaternionMath.h"
 #include "MagCalStore.h" // 标定参数内部 Flash 持久化（上电加载）
+#include "mag_cal_defaults.h" // 编译期默认标定（Flash 无效时的兜底，默认 kValid=false）
 #include "imu_factory.h" // IMU 型号无关实例创建（编译期选定后端，见 imu_factory.cpp）
 #include "imu_range.h"   // 量程常量：换 FS 时必须同步改这里
 #include "imu_odr_config.h" // 采样率唯一真源：ODR/排空速率/帧 dt/ISR 频率全部由它派生
@@ -97,6 +98,32 @@ bool initMagnetometer()
     Serial8.print(", ");
     Serial8.print(storedCal.hardIron[2], 1);
     Serial8.println(") uT");
+  }
+  else if (magcal_defaults::kValid)
+  {
+    // 3b. Flash 无有效标定 → 尝试编译期固化的默认参数（mag_cal_defaults.h）。
+    //     换板、擦除 Flash 或重新烧录后无需重新做两圈标定；参数须为本机型
+    //     标定结果（机型/安装/磁环境专属，见该文件头 note）。
+    magcal::MagCalParams d;
+    d.identity();
+    d.valid = true;
+    d.scale = magcal_defaults::kScale;
+    for (int i = 0; i < 3; ++i)
+    {
+      d.hardIron[i] = magcal_defaults::kHardIron[i];
+      for (int j = 0; j < 3; ++j)
+        d.softIron[i][j] = magcal_defaults::kSoftIron[i][j];
+    }
+    if (magSensor.setCal(d)) // 内部 paramsSanity 校验（scale 5–200 µT 等）
+    {
+      // 写回内部 Flash；失败只影响持久化，不影响本次运行。
+      magcal::storeSave(d, 0, 0.0f);
+      Serial8.println("[Init] MagCal loaded from compiled defaults (flash write-back attempted).");
+    }
+    else
+    {
+      Serial8.println("[Init] MagCal: compiled defaults rejected by sanity check (uncalibrated pass-through).");
+    }
   }
   else
   {
@@ -828,8 +855,15 @@ bool readIMUData()
     // 7.1b 大疆式两圈引导校准状态机（DBG `magcal guided`；判定帧率 = IMU 帧率）
     if (magSensor.guideActive())
     {
-      // SI 单位转换：g → m/s²、dps → rad/s（axBody/gxBody 为机体系 FRD）
-      const float accFrd[3] = {axBody * G_TO_MS2, ayBody * G_TO_MS2, azBody * G_TO_MS2};
+      // SI 单位转换：g → m/s²、dps → rad/s（axBody/gxBody 为机体系 FRD）。
+      // ★ 符号约定：MagCalGuide 的姿态门期望「重力方向」（水平阶段 az≈+g、
+      //   机头朝下阶段 ax≈+g，见 MagCalGuide.h 姿态门）；而 axBody/ayBody/azBody
+      //   是比力（支撑力，静止机头朝天时 az≈−g）。必须取反后再喂入，否则两个
+      //   阶段的姿态门永远不通过，引导校准一帧都采不到、无法推进。
+      //   同源共轴 VTVL 固件 2026-11-15 户外标定实测确认此约定（其 main.cpp
+      //   显式取反并注释「否则姿态门都会永远不通过」）；本调用点此前漏了取反。
+      //   回归锚点：test_host/test_mag_guide.cpp S9（比力直接喂入必须被拒绝）。
+      const float accFrd[3] = {-axBody * G_TO_MS2, -ayBody * G_TO_MS2, -azBody * G_TO_MS2};
       const float gyrFrd[3] = {gxBody * DEG_TO_RAD, gyBody * DEG_TO_RAD, gzBody * DEG_TO_RAD};
       magSensor.guideUpdate(accFrd, gyrFrd, micros());
     }

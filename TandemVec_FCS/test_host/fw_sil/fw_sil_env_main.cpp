@@ -2880,7 +2880,7 @@ int main(int argc, char** argv) {
   float rate_gain_scale=1.0f; // 测试用：仅 rate kp 缩放（覆盖 gain_scale）
   float att_gain_scale=1.0f;  // 测试用：仅 att kp 缩放（覆盖 gain_scale）
   float ang_alpha=-1.0f;      // 测试用：姿态外环输出滤波 alpha（<0 用参数默认）
-  int heading_aid_mode=0;     // 0=磁连续；1=磁仅初始对准；2=无磁手动对准
+  int heading_aid_mode=1;     // 0=磁连续；1=磁仅初始对准（默认，与固件出厂一致）；2=无磁手动对准
   int att_aid_mode=-1;        // 运动段姿态辅助：-1=编译期默认；0=AHRS；1=重力直连；2=重力优先+AHRS 回退
   float heading_align_deg=0.0f; // 无磁/初始对准的机头真北航向 [deg]
   float pos_leg_n_m=0.0f;     // SIL 前飞段目标北向偏移 [m]
@@ -3536,8 +3536,12 @@ int main(int argc, char** argv) {
           Eigen::Vector3f(s.gnss_vn, s.gnss_ve, s.gnss_vd), gnss_lla, dt);
     }
     const int ft = int(t * 10.0f + 0.5f);
-    if (g_use_ekf && g_use_mag_yaw && ft != last_flow_update) {
-      // 磁航向（真实 EKF yaw 观测；默认关闭，见 README：多 seed 会失稳）
+    if (g_use_ekf && g_use_mag_yaw && heading_aid_mode == 0 &&
+        ft != last_flow_update) {
+      // 磁航向连续观测只在 mode 0（磁连续）启用；默认 mode 1（磁仅初始）
+      // 与固件生产语义一致：初始化后不再喂磁航向，防磁干扰污染姿态解算
+      // （2026-11-16 用户指令）。历史教训：本路径 0.02 rad 噪声多 seed 失稳
+      // （2026-11-01 记录），mode 0 保留作实验对照臂，不作默认。
       g_ekf.MeasurementUpdateYaw(s.mag_yaw, 0.02f);
     }
     if (g_use_ekf && flow && s.flow_valid && s.flow_quality >= 50 &&

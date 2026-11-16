@@ -19,7 +19,9 @@
  * @units   磁场 µT，角度 rad，时间 µs，速度 m/s，油门 %
  * @note    门限是仿真/台架保守值；真实硬铁/软铁残差、电机电流干扰和安装
  *          方向必须在实机重新标定后再调。`heading_error_rad` 是“参考场方位
- *          与量测方位之差”，不是 EKF 最终航向误差。
+ *          与量测方位之差”，不是 EKF 最终航向误差。模长偏差门参考优先取
+ *          标定拟合场强 `cal_scale_ut`（无效时回退站点总场），避免拟合场强
+ *          偏低时固定参考把观测永久拒收（共轴 VTVL 2026-11-15 实测教训）。
  * @test    test_host/test_mag_gate.cpp
  * @see     mag_reference.h、lib/MagSensor/MagSensor.h、
  *          src/navigation_task.cpp、lib/navigation-main/src/ekf_15_state.h
@@ -127,6 +129,9 @@ struct MagGateInput
     uint32_t sample_seq = 0;
     uint32_t last_consumed_seq = 0;
     bool cal_valid = false;
+    // 本次标定拟合出的总场强 [µT]（MagCalParams.scale）。>5 且 cal_valid 时
+    // 作为模长偏差门的参考；0/无效则回退站点参考场 total_ut。
+    float cal_scale_ut = 0.0f;
     const MagReferenceNed *ref = nullptr;
     Eigen::Matrix3f c_n_b = Eigen::Matrix3f::Identity(); // NED -> body
     bool gnss_course_valid = false;
@@ -142,6 +147,7 @@ struct MagGateResult
     bool pass = false;
     MagGateReason reason = MagGateReason::None;
     float norm_ut = 0.0f;
+    float norm_ref_ut = 0.0f; //< 模长偏差门实际采用的参考（标定 scale 或站点总场）
     float norm_dev_ut = 0.0f;
     float dip_rad = 0.0f;
     float dip_dev_rad = 0.0f;
@@ -222,7 +228,18 @@ class MagMeasurementGate
 
         const float norm = in.mag_body_ut.norm();
         out.norm_ut = norm;
-        out.norm_dev_ut = std::fabs(norm - in.ref->total_ut);
+        // 模长偏差门参考：优先本次标定拟合场强（标定后 |m| 应≈scale，这是
+        // 标定的定义）。同源共轴 VTVL 实测教训：拟合场强偏低（如 41.8 µT）时
+        // 若固定用站点总场（长沙 48.97 µT）做参考，偏差门会把航向观测永久拒收；
+        // scale 无效（≤5 µT 或非有限）时才回退站点参考场。绝对模长门
+        // （15–100 µT）与倾角/方位门不受影响，仍用站点参考场。
+        const float norm_ref_ut =
+            (in.cal_valid && std::isfinite(in.cal_scale_ut) &&
+             in.cal_scale_ut > 5.0f)
+                ? in.cal_scale_ut
+                : in.ref->total_ut;
+        out.norm_ref_ut = norm_ref_ut;
+        out.norm_dev_ut = std::fabs(norm - norm_ref_ut);
         if (norm < config_.min_norm_ut)
         {
             out.reason = MagGateReason::NormLow;

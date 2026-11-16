@@ -87,6 +87,21 @@ public:
     bool fresh() const { return _last.seq != 0; }
     uint32_t lastUpdateUs() const { return _last.timestamp_us; }
 
+    /**
+     * @brief 最近一次芯片系原始样本（uT，未标定；DBG `magraw` 轴向验证用）
+     * @param out 输出芯片系 x/y/z
+     * @return false 表示尚未采到任何样本
+     */
+    bool lastChipSample(float out[3]) const
+    {
+        if (!_lastChipValid)
+            return false;
+        out[0] = _lastChip[0];
+        out[1] = _lastChip[1];
+        out[2] = _lastChip[2];
+        return true;
+    }
+
 #ifdef FW_SIL_REAL_NAV
     /**
      * @brief SIL 专用：注入已标定/已轴对齐的 FRD 样本（生产路径不调用）

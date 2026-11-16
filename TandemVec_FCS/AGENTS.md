@@ -171,7 +171,9 @@
 - **DBG 调试**：Serial6 收 `"DBG\n"` 进调试（`handleDebugConsole`），`exit` 退出；命令表与工具链见 `../docs/registers/固件调试工具链-2026-11-01.md`。
 - **站点磁偏（2026-11-07）**：磁偏默认取长沙 IGRF-14 常数 −4.114°（`include/mag_reference.h` 的 `kDefaultMagReference`）。异地飞行前用 DBG `magdec <deg>` 现场修正（改 `bfs::g_mag_reference` 运行时副本的 `declination_rad`，场强/倾角仍用长沙表）；**未执行 `magdec` 时行为与改前逐位一致**。判据：跨纬度转场仍用长沙值，航向会带等量的系统偏差。
 - **IMU 原始值（2026-11-07）**：`DBG imuraw [n]` 打印未校准/未滤波六轴（原始轴序 RUB，g/dps）与当前处理值（FRD）并排；判据是"差异只在频段高端 → 滤波/校准所为；raw 本身就抖 → 传感器/供电/机械问题，调滤波器无效"。对应 AnoVars `imu_raw_*`；另 `sat_cnt_f/t/w` 是分配层饱和**次数**（`gnc_tel.alloc_sat[]` 只是当拍 bool）。
-- **磁标定（DBG `magcal`）**：`start`/`fit`/`save`（写内部 Flash bank2 末扇区 0x081E0000）；★ 禁止 EEPROM 仿真（同用末扇区）；引导校准 `magcal guided`。
+- **磁标定（DBG `magcal`）**：`start`/`fit`/`save`（写内部 Flash bank2 末扇区 0x081E0000）；★ 禁止 EEPROM 仿真（同用末扇区）；引导校准 `magcal guided`（姿态门期望重力方向，调用点已取反比力，见踩坑记录 2026-11-16）。Flash 无效时兜底 `include/mag_cal_defaults.h`（kValid=false，本机型标定完成后填入，不得抄共轴值）。
+- **磁轴向验证（DBG `magraw`）**：打印 chip 原始/FRD/参考场/模长/倾角补偿航向；机头朝北水平放置时 yaw_est≈0°、FRD≈参考场。★ 换标定参数后必须重新核对（软铁白化矩阵含不可观旋转，共轴实测曾多转 +90°）。
+- **默认航向源 mode 1（磁仅初始，2026-11-16 用户指令）**：`BFS_HEADING_AID_MODE` 默认 1——磁只做初始化对准，飞行中不连续融合磁矢量（防实机磁干扰污染姿态）；需要磁连续时 GCS `hdg_mode=0`（生产路径 SIL 实测稳定，yaw rmse 0.27°）。mode 1/2 位置保持受离地后 20 s 窗口限制（CTL-005 §3）。
 
 - **DAPLink 烧录（2026-11-03）**：adapter speed 需降到 **20–100 kHz** 才稳定 `Verified OK`；高速下偶发 checksum mismatch（diff 为孤立位翻转）不是固件坏。OpenOCD `program` 后必须 `reset run`，否则板子停住。命令见 `../docs/registers/踩坑记录-AGENTS.md` 2026-11-03 条。
 - **GNSS（NEO-F10N，protocol 40.00）**：F10 接口说明只收录 **CFG-VALSET/VALGET/VALDEL + CFG-MSGOUT**（PVT UART1 `0x20910007` p.143、EOE UART1 `0x20910160` p.142），**没有 CFG-MSG/CFG-PRT 章节**；固件保留 CFG-MSG 是实测兼容层（F10 仍 ACK）。CFG-MSG 8 字节 payload 的 rate 必须同时写 UART1/UART2。**配置 ACK 不等于有输出**，验收看 `ubxstat` 的 `pvt/eoe` 是否增长。详见 `../docs/04-数学建模/代码理论核查/F10N-GNSS配置与调试-2026-11-03.md`。

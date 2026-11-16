@@ -51,13 +51,13 @@
 <tbody>
 <tr>
 <td>0</td>
-<td>MAG_ONLY（默认，保持原行为）</td>
+<td>MAG_ONLY</td>
 <td>连续</td>
 <td>真实磁（含磁偏角）或伪磁</td>
 </tr>
 <tr>
 <td>1</td>
-<td>MAG_INIT_ONLY</td>
+<td>MAG_INIT_ONLY（默认）</td>
 <td>仅初始化，之后停止</td>
 <td>真实磁（含磁偏角）；无磁时手动</td>
 </tr>
@@ -69,6 +69,55 @@
 </tr>
 </tbody>
 </table>
+<p><strong>默认模式 1（2026-11-16 用户指令，由 0 改为
+1）</strong>：磁力计只做初始化航向
+对准，飞行中不连续融合磁矢量，防止实机磁干扰（电机电流/铁磁构件）污染
+姿态解算。需要磁连续时 GCS 设
+<code>hdg_mode=0</code>（代码路径保留）。代价：位置 保持受 §3 的 20 s
+短时窗口限制，航向随陀螺积分漂移。</p>
+<p><strong>生产路径 SIL
+证据（2026-11-16，<code>--real-nav</code>，seed3，40
+s，理想磁注入）</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>mag_fused</th>
+<th>nav_yaw_rmse</th>
+<th>nav_yaw_max</th>
+<th>pos_rms</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mode 1 + <code>--mag</code>（默认）</td>
+<td>0</td>
+<td>2.49°</td>
+<td>5.54°</td>
+<td>0.92 m</td>
+</tr>
+<tr>
+<td>mode 0 + <code>--mag</code>（磁连续）</td>
+<td>390</td>
+<td>0.27°</td>
+<td>0.53°</td>
+<td>0.86 m</td>
+</tr>
+<tr>
+<td>无磁基线</td>
+<td>0</td>
+<td>1.18°</td>
+<td>3.17°</td>
+<td>1.00 m</td>
+</tr>
+</tbody>
+</table>
+<p>三组均稳定（final_alt≈10.3 m，max_roll≈11°）。理想磁注入下 mode 0
+航向 精度最好；默认取 mode 1
+是实机磁干扰风险的保守决策，不是算法能力边界。 注意区分：不带
+<code>--real-nav</code> 的 legacy 实验环（<code>g_ekf</code>）标量 yaw
+观测路径 历史上多 seed 发散，2026-11-16 起该路径也只在 mode 0 启用（见
+<code>docs/memory/2026-11-01-固件模块与SIL进展.md</code>）。</p>
 <p>手动对准角 <code>g_heading_align_deg</code>（默认
 0°，机头真北顺时针）。模式 1/2 在无真实磁时，EKF 初始航向不确定度取 0.05
 rad（约 3°）；模式 1 有真实 磁时取 0.1 rad。</p>
@@ -604,5 +653,5 @@ NIS/重锚有界响应。</strong> 420 次幅度/速率矩阵：20 m 台阶
 次，已回退）：正常/20 m 无触发；30/50/100 m 中位真值位移
 24/30/31→16/16/16 m，但 p95/max 变差、pos_rms 不变，不采用。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-005-无磁航向与运动EKF.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-12 18:59</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-005-无磁航向与运动EKF.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-16 18:52</footer></article></body>
 </html>

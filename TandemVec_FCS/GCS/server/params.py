@@ -262,7 +262,7 @@ def build_meta():
     # 2026-10-25 航向源（无磁/磁仅初始对准）
     meta['hdg_mode'] = dict(name='hdg_mode', group='航向源', loop='', field='',
                             unit='', min=0, max=2, step=1, type='float',
-                            desc='航向源：0=磁连续 1=磁仅初始对准 2=无磁手动')
+                            desc='航向源：0=磁连续 1=磁仅初始对准（默认） 2=无磁手动')
     meta['hdg_align'] = dict(name='hdg_align', group='航向源', loop='', field='',
                              unit='deg', min=0, max=360, step=1, type='float',
                              desc='手动对准航向（真北顺时针；下一次导航初始化前生效）')

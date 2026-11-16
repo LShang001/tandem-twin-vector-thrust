@@ -87,10 +87,30 @@ void lockBank2()
 }
 
 /**
+ * @brief 清除 bank2 的 EOP/错误标志（写 1 清零）
+ * @note  H7 的 SR2 错误位是粘滞的：上一次擦除/编程（包括 J-Link/OpenOCD 烧录）
+ *        留下的 WRPERR/PGSERR 等标志不会自动消失。若直接检查 SR2，一次失败后
+ *        后续所有 storeSave 都会误判为失败（表现为标定能拟合出来但 saved=0）。
+ *        每次擦除/编程前必须先清标志。来源：同源共轴 VTVL 固件实测修复。
+ */
+void clearBank2Status()
+{
+    FLASH->CCR2 = FLASH_CCR_CLR_EOP | FLASH_CCR_CLR_WRPERR | FLASH_CCR_CLR_PGSERR |
+                  FLASH_CCR_CLR_STRBERR | FLASH_CCR_CLR_INCERR | FLASH_CCR_CLR_OPERR |
+                  FLASH_CCR_CLR_RDPERR | FLASH_CCR_CLR_RDSERR |
+                  FLASH_CCR_CLR_SNECCERR | FLASH_CCR_CLR_DBECCERR;
+    __DSB();
+    __ISB();
+}
+
+/**
  * @brief 寄存器级 bank2 扇区擦除（喂狗轮询，超时 8s 兜底）
  */
 bool eraseSectorWithKick()
 {
+    // 先清掉上一次操作（含烧录器写 Flash）遗留的粘滞错误标志
+    clearBank2Status();
+
     // 清 PG，配置 SER + SNB（bank2 内扇区号 7）
     FLASH->CR2 &= ~(FLASH_CR_PG);
     FLASH->CR2 = (FLASH->CR2 & ~(FLASH_CR_SER | FLASH_CR_SNB)) |
@@ -123,6 +143,9 @@ bool eraseSectorWithKick()
  */
 bool programWithKick(const uint8_t *buf)
 {
+    // 擦除后立即编程，同样先清掉擦除阶段可能留下的 EOP/错误标志
+    clearBank2Status();
+
     FLASH->CR2 |= FLASH_CR_PG;
     __ISB();
     __DSB();
@@ -167,6 +190,25 @@ bool storeSave(const MagCalParams &p, uint16_t sampleCount, float residualRms)
     if (!p.valid)
         return false;
 
+    // 擦除前保护：目标扇区必须为空（0xFF）或已存有本模块的 MAGC 记录，
+    // 防止未来固件增长/地址布局变化时误擦仍在使用的 Flash 内容。
+    // 先失效 D-Cache，确保探针读到 Flash 真值而非缓存脏数据。
+    invalidateRegion();
+    const uint8_t *probe = reinterpret_cast<const uint8_t *>(MAGCAL_FLASH_ADDR);
+    bool blank = true;
+    for (int i = 0; i < 16; ++i)
+    {
+        if (probe[i] != 0xFFu)
+        {
+            blank = false;
+            break;
+        }
+    }
+    const bool magic_ok = (probe[0] == 'M' && probe[1] == 'A' &&
+                           probe[2] == 'G' && probe[3] == 'C');
+    if (!blank && !magic_ok)
+        return false;
+
     FlashRecord rec;
     fillRecord(rec, p, sampleCount, residualRms);
 
@@ -174,6 +216,10 @@ bool storeSave(const MagCalParams &p, uint16_t sampleCount, float residualRms)
     alignas(32) uint8_t buf[96];
     memset(buf, 0xFF, sizeof(buf));
     memcpy(buf, &rec, sizeof(rec));
+
+    // 解锁前先清粘滞标志，避免上一次失败（或烧录器写 Flash）遗留的
+    // WRPERR/PGSERR 让本次操作一开始就被误判为失败。
+    clearBank2Status();
 
     if (!unlockBank2())
         return false;

@@ -1763,8 +1763,14 @@ void handleNavigationSystem()
   mag_status.ref_valid = mag_ref_valid;
   mag_status.seq = mag_sample.seq;
   mag_status.norm_ut = mag_norm_ut;
-  mag_status.norm_dev_ut =
-      std::fabs(mag_norm_ut - bfs::kDefaultMagReference.total_ut);
+  // 显示口径与模长偏差门一致：优先标定拟合场强，无效时回退站点总场
+  // （见 mag_measurement_gate.h note；避免 ndev 显示与门控判据两套参考）。
+  const float mag_cal_scale_ut = magSensor.calParams().scale;
+  const float mag_norm_ref_ut =
+      (mag_cal_valid && std::isfinite(mag_cal_scale_ut) && mag_cal_scale_ut > 5.0f)
+          ? mag_cal_scale_ut
+          : bfs::g_mag_reference.total_ut;
+  mag_status.norm_dev_ut = std::fabs(mag_norm_ut - mag_norm_ref_ut);
   mag_status.age_ms = (mag_sample.seq == 0U || mag_sample.timestamp_us == 0U)
                           ? 0xFFFFFFFFu
                           : (mag_now_us - mag_sample.timestamp_us) / 1000U;
@@ -3076,6 +3082,8 @@ void handleNavigationSystem()
         gate_input.sample_seq = mag_sample.seq;
         gate_input.last_consumed_seq = s_mag_last_consumed_seq;
         gate_input.cal_valid = mag_cal_valid;
+        // 模长偏差门参考优先用标定拟合场强（见 mag_measurement_gate.h note）
+        gate_input.cal_scale_ut = magSensor.calParams().scale;
         gate_input.ref = &bfs::g_mag_reference;
         gate_input.c_n_b = bfs::quat2dcm(nav_ekf.quat());
         gate_input.gnss_course_valid = gnss_course_valid;

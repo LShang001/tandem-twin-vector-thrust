@@ -19,7 +19,7 @@
  *          扇区跨 ±π 的用例来自现场“从 -175° 起转”的真实操作习惯。
  * @test    S1 完整两圈流程；S2 加速度模长门；S3 姿态门；S4 次轴旋转门；
  *          S5 转速过快/过慢拒绝；S6 magFresh=false 语义；S7 扇区跨 ±π；
- *          S8 reset / FAILED 终态
+ *          S8 reset / FAILED 终态；S9 固件调用符号约定（比力须取反成重力方向）
  * @see     TandemVec_FCS/lib/MagCal/MagCalGuide.h、test_mag_cal.cpp
  */
 // ============================================================
@@ -153,6 +153,24 @@ int main()
         guide.setFailed();
         CHECK(guide.stage() == magcal::GuideStage::FAILED, "setFailed");
         CHECK(!guide.update(accHoriz, gyrZ, magN, true), "FAILED 后停止动作");
+    }
+
+    // ---- 9. 固件调用符号约定：姿态门期望重力方向，比力必须取反 ----
+    // 锚定 sensor_imu.cpp 步骤 7.1b 的调用约定：axBody/ayBody/azBody 是比力
+    // （静止机头朝天 az≈−g），喂入 guideUpdate 前必须取反成重力方向。
+    // 若有人把姿态门改成接受比力（或调用点漏取反），本项与 S1 会同时暴露。
+    // 来源：同源共轴 VTVL 固件 2026-11-15 户外标定实测（漏取反 → 两阶段
+    // 姿态门永远不通过，引导校准无法推进）。
+    {
+        magcal::MagCalGuide guide;
+        guide.start();
+        const float accSpecificForce[3] = {0.0f, 0.0f, -G}; // 比力：静止水平 az≈−g
+        CHECK(!guide.update(accSpecificForce, gyrZ, magN, true),
+              "S9 比力直接喂入必须被姿态门拒绝（调用点须取反）");
+        const float accGravity[3] = {-accSpecificForce[0], -accSpecificForce[1],
+                                     -accSpecificForce[2]};
+        CHECK(guide.update(accGravity, gyrZ, magN, true),
+              "S9 取反成重力方向后姿态门通过");
     }
 
     if (g_fail == 0)

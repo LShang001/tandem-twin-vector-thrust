@@ -18,7 +18,8 @@
  * @note    本测试只锁门控逻辑，不代表真实磁干扰/标定质量。
  * @test    G1 正常样本；G2 参考/标定/非有限/序号/过期；G3 模长；
  *          G4 倾角；G5 方位残差；G6 GNSS 航迹；G7 姿态不确定度/油门；
- *          G8 micros 回绕；G9 拒绝原因名称
+ *          G8 micros 回绕；G9 拒绝原因名称；G10 倾斜补偿航向回解；
+ *          G11 模长偏差门参考优先标定 scale（无效回退站点总场）
  * @see     TandemVec_FCS/include/mag_measurement_gate.h
  */
 #include <cmath>
@@ -245,6 +246,58 @@ int main()
       CHECK(std::fabs(bfs::magWrapPi(heading - yaw)) < 1e-3f,
             "G10 倾斜补偿航向回解");
     }
+  }
+
+  // G11 模长偏差门参考优先标定 scale（共轴 VTVL 2026-11-15 实测教训：
+  // 拟合场强偏低时固定站点总场参考会把观测永久拒收）。
+  {
+    // 拟合 scale=40 µT（低于长沙总场 48.97，偏差 8.97 > 8 旧门限）：
+    // 样本模长=40 → 以 scale 为参考偏差 0，应通过；旧固定参考行为会拒收。
+    bfs::MagGateInput in = baseInput();
+    in.cal_scale_ut = 40.0f;
+    in.mag_body_ut = refField().normalized() * 40.0f;
+    bfs::MagGateResult r = gate.Evaluate(in);
+    CHECK(r.pass, "G11 模长=标定scale 通过（固定站点参考会误拒）");
+    CHECK(std::fabs(r.norm_ref_ut - 40.0f) < 1e-4f, "G11 参考取标定scale");
+    CHECK(r.norm_dev_ut < 0.1f, "G11 模长偏差≈0");
+
+    // 偏离标定 scale 10 µT 的干扰仍须拒收（参考换了，门限没松）。
+    in = baseInput();
+    in.cal_scale_ut = 40.0f;
+    in.mag_body_ut = refField().normalized() * 50.0f;
+    CHECK(gate.Evaluate(in).reason == bfs::MagGateReason::NormDeviation,
+          "G11 偏离标定scale 10uT 拒绝");
+
+    // scale 无效（0 / ≤5 / NaN）→ 回退站点总场参考（与旧行为一致）。
+    in = baseInput();
+    in.cal_scale_ut = 0.0f;
+    in.mag_body_ut = refField().normalized() *
+                     (bfs::kDefaultMagReference.total_ut + 10.0f);
+    r = gate.Evaluate(in);
+    CHECK(r.reason == bfs::MagGateReason::NormDeviation, "G11 scale=0 回退站点参考");
+    CHECK(std::fabs(r.norm_ref_ut - bfs::kDefaultMagReference.total_ut) < 1e-4f,
+          "G11 scale=0 参考=站点总场");
+
+    in = baseInput();
+    in.cal_scale_ut = 3.0f; // ≤5 µT 视为无效
+    in.mag_body_ut = refField();
+    r = gate.Evaluate(in);
+    CHECK(r.pass && std::fabs(r.norm_ref_ut - bfs::kDefaultMagReference.total_ut) < 1e-4f,
+          "G11 scale≤5 回退站点参考");
+
+    in = baseInput();
+    in.cal_scale_ut = std::nanf("");
+    in.mag_body_ut = refField();
+    r = gate.Evaluate(in);
+    CHECK(r.pass && std::fabs(r.norm_ref_ut - bfs::kDefaultMagReference.total_ut) < 1e-4f,
+          "G11 scale=NaN 回退站点参考");
+
+    // 未标定时即使给了 scale 也不得采用（标定门在前）。
+    in = baseInput();
+    in.cal_valid = false;
+    in.cal_scale_ut = 40.0f;
+    CHECK(gate.Evaluate(in).reason == bfs::MagGateReason::CalInvalid,
+          "G11 未标定拒绝（scale 不生效）");
   }
 
   if (g_fail == 0)

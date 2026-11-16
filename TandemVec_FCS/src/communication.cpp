@@ -2851,6 +2851,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   nmea              - NMEA 备用链路状态（fix/sv/pdop/句统计）"));
         serial.println(F("[DBG]   ubxcfg            - UBX 接收机自动配置（重跑）"));
         serial.println(F("[DBG]   imuraw [n]        - IMU 原始值 vs 处理值对比（未校准/未滤波, RUB g/dps）"));
+        serial.println(F("[DBG]   magraw            - 磁力计轴向验证（chip/FRD/参考场/倾角补偿航向; 机头朝北水平应≈0°）"));
         serial.println(F("[DBG]   magdec [deg]      - 站点磁偏查看/设置（东偏为正, 默认 -4.114° 长沙）"));
         serial.println(F("[DBG]   health            - 一屏汇总：IMU/气压/GNSS/EKF/Serial5 上行"));
         serial.println(F("[DBG]   ubxstat           - UBX 解析器统计（rx/校验/超长/pvt/eoe/队列）"));
@@ -3215,6 +3216,79 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print('/');
         serial.print(IMU_Packet.gyroscope_z * 57.2957795f, 3);
         serial.println(F(" dps (FRD)"));
+      }
+      else if (strcmp(line, "magraw") == 0)
+      {
+        // 磁力计轴向验证（移植自同源共轴 VTVL 2026-11-15 户外标定的
+        // MAG_DEBUG_RAW 实践）：机头朝北、水平放置时读本行——
+        //   判据① FRD ≈ 站点参考场（x 北主导、z 下主导，y≈H·sin(磁偏)）；
+        //   判据② 倾角补偿航向 ≈ 0°（真北，含磁偏角补偿后）。
+        // 若存在固定角度偏差 → MagMath.h 轴对齐表需修正；注意椭球拟合的软铁
+        // 白化矩阵含不可观旋转（V^T），**更换标定参数后必须重新核对本判据**
+        // （共轴实测曾因此多转 +90°）。只读命令，不改任何状态。
+        float chip[3];
+        const bool has_chip = magSensor.lastChipSample(chip);
+        const MagSample mag_smp = magSensor.sampleFRD();
+        serial.print(F("[DBG] == MAG raw == chip="));
+        serial.print(magSensor.chipName());
+        serial.print(F(" cal="));
+        serial.print(magSensor.calValid() ? F("VALID") : F("NONE"));
+        serial.print(F(" scale="));
+        serial.print(magSensor.calParams().scale, 2);
+        serial.println(F(" uT"));
+        if (has_chip)
+        {
+          serial.print(F("[DBG] chip(uT) = "));
+          serial.print(chip[0], 2);
+          serial.print(F(", "));
+          serial.print(chip[1], 2);
+          serial.print(F(", "));
+          serial.println(chip[2], 2);
+        }
+        else
+        {
+          serial.println(F("[DBG] chip: no sample yet"));
+        }
+        const float mag_norm = sqrtf(mag_smp.x * mag_smp.x + mag_smp.y * mag_smp.y +
+                                     mag_smp.z * mag_smp.z);
+        serial.print(F("[DBG] FRD(uT)  = "));
+        serial.print(mag_smp.x, 2);
+        serial.print(F(", "));
+        serial.print(mag_smp.y, 2);
+        serial.print(F(", "));
+        serial.print(mag_smp.z, 2);
+        serial.print(F("  |B|="));
+        serial.print(mag_norm, 2);
+        serial.print(F(" uT  seq="));
+        serial.println(static_cast<unsigned long>(mag_smp.seq));
+        serial.print(F("[DBG] ref(uT)  = "));
+        serial.print(bfs::g_mag_reference.field_ut[0], 2);
+        serial.print(F(", "));
+        serial.print(bfs::g_mag_reference.field_ut[1], 2);
+        serial.print(F(", "));
+        serial.print(bfs::g_mag_reference.field_ut[2], 2);
+        serial.print(F("  dec="));
+        serial.print(bfs::g_mag_reference.declination_rad * 57.29577951308232f, 2);
+        serial.println(F(" deg"));
+        if (magSensor.calValid() && mag_smp.seq != 0U)
+        {
+          // 倾角补偿航向：只用 EKF roll/pitch，不依赖 EKF yaw（见 gate 头注）
+          const Eigen::Vector3f mag_body(mag_smp.x, mag_smp.y, mag_smp.z);
+          const Eigen::Vector3f mag_ref(bfs::g_mag_reference.field_ut[0],
+                                        bfs::g_mag_reference.field_ut[1],
+                                        bfs::g_mag_reference.field_ut[2]);
+          const float yaw_est = bfs::magTiltCompensatedHeadingRad(
+              mag_body, nav_ekf.roll_rad(), nav_ekf.pitch_rad(), mag_ref);
+          serial.print(F("[DBG] yaw_est="));
+          serial.print(yaw_est * 57.29577951308232f, 1);
+          serial.print(F(" deg (真北; 机头朝北水平应≈0)  gate="));
+          serial.println(bfs::magGateReasonName(
+              static_cast<bfs::MagGateReason>(mag_status.last_gate_reason)));
+        }
+        else
+        {
+          serial.println(F("[DBG] yaw_est: n/a (未标定或无样本; 标定后复核轴向)"));
+        }
       }
       else if (strncmp(line, "magdec", 6) == 0)
       {

@@ -323,8 +323,14 @@ struct FlightCtrlParams
 //      出厂值漂移。
 // ============================================================
 // 航向源编译期默认（0=磁连续/1=磁仅初始/2=无磁手动；GCS 0xE1 可在线覆盖）
+// ★ 2026-11-16 默认 0→1（用户指令）：磁力计只做初始化航向对准，飞行中不再
+//   连续融合磁矢量，防止磁干扰污染姿态解算。依据：SIL 磁连续融合（mode 0
+//   + --mag）多 seed 发散（ekf_alt NaN，改动前后基线一致，属既有问题）；
+//   初始对准后航向由陀螺积分维持，GNSS/光流航迹辅助（YawGsf）不受影响。
+//   边界：mode 1/2 位置保持只有离地后 20 s 短时窗口（HeadingAidingGate，
+//   见 CTL-005 §3），窗口结束降级定高。需要磁连续时 GCS 设 hdg_mode=0。
 #ifndef BFS_HEADING_AID_MODE
-#define BFS_HEADING_AID_MODE 0
+#define BFS_HEADING_AID_MODE 1
 #endif
 #ifndef BFS_HEADING_ALIGN_DEG
 #define BFS_HEADING_ALIGN_DEG 0.0f
