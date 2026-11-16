@@ -190,6 +190,9 @@ fi
 # 磁力计解析/轴对齐数学层（lib/MagSensor/MagMath.h 纯平台无关——
 # IST8310/QMC5883L 灵敏度与解码、芯片系→FRD 旋转矩阵、TiltCompass 北向判据）：
 run_one "$NROOT/test_host/test_mag_parse.cpp"           mp  "-I$NROOT/lib/MagSensor -I$NROOT/lib/navigation-main/src"
+# 共轴机型磁轴对齐实测表 + 编译期标定参数（文件内自定义 BFS_COAXIAL_VTVL；
+# 2026-11-15 户外重标移植组合，防参数/轴表转录错与机型分支漂移）：
+run_one "$NROOT/test_host/test_mag_axis_coax.cpp"       mgcoax "-I$NROOT/lib/MagSensor -I$NROOT/lib/MagCal -I$NROOT/lib/navigation-main/src"
 
 # 磁力计椭球标定数学层（lib/MagCal/MagCalMath.h 纯平台无关——
 # CRC32/Jacobi/线性代数工具/合成椭球拟合恢复精度/质量门拒绝路径）：

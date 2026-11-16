@@ -109,15 +109,36 @@ inline void magAlignToBody(const float chip[3], const int8_t rot[3][3],
 /*
  * ★ 芯片安装方向常量表（换磁力计型号/改安装方向时只改这里）
  *
- * IST8310（本机实测安装约定，与 sensor_imu.cpp 历史 FLU 映射 (-y,-x,+z) 严格一致）：
+ * IST8310 按机型分两套：
+ *
+ * 共轴双桨（BFS_COAXIAL_VTVL）——2026-11-15 户外实测最终表，作用在**标定后**
+ * 芯片系矢量上（MagSensor 管线：先 applyCal 再轴对齐）：
+ *   => body_x = +chip_x, body_y = -chip_y, body_z = -chip_z
+ * 来源：同源 VTVL 固件包 main.cpp kMagAxisToBody（同一架共轴实机，仅运行代码
+ * 不同）。椭球拟合的软铁白化矩阵含不可观旋转（约 +90°），安装推导表（#else
+ * 分支）配 mag_cal_defaults.h 的共轴标定参数会多转 90°；本表是户外实测修正
+ * （机头朝北→约 0°、朝东→约 +90°，含长沙磁偏 −4.114°）。
+ * ★ 本表与共轴标定参数是实测组合，换任一项必须用 DBG magraw 复核轴向。
+ *
+ * 其它机型/宿主测试——安装推导表（与 sensor_imu.cpp 历史 FLU 映射一致）：
  *   芯片 X -> 机体右(+Y)；芯片 Y -> 机尾(-X)；芯片 Z -> 上(-Z)
  *   => body_x = -chip_y, body_y = +chip_x, body_z = -chip_z
+ * 纵列/单涵道磁力计安装方向未经户外标定验证，沿用此表；上板 magraw 核对后
+ * 若需修正，按机型加分支，不要直接改共轴实测表。
  */
+#if defined(BFS_COAXIAL_VTVL)
+static constexpr int8_t kAxisIst8310ToFrd[3][3] = {
+    {1, 0, 0},
+    {0, -1, 0},
+    {0, 0, -1},
+};
+#else
 static constexpr int8_t kAxisIst8310ToFrd[3][3] = {
     {0, -1, 0},
     {1, 0, 0},
     {0, 0, -1},
 };
+#endif
 
 /*
  * QMC5883L 默认（★ 待上板标定，硬件未接）：
