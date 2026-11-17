@@ -978,6 +978,12 @@ extern float g_ekf_pos_sigma_m;
 extern float g_ekf_vel_sigma_mps;
 extern float g_ekf_tilt_sigma_deg;
 extern float g_nav_gyro_bias_norm_dps;
+// EKF 三轴陀螺零偏估计（dps，DBG `ekfbias` 读）与静止零角速度量测统计
+extern float g_nav_gyro_bias_dps[3];
+extern uint32_t g_nav_sg_attempt;      // 静止零角速度量测：尝试次数
+extern uint32_t g_nav_sg_fused;        // 静止零角速度量测：实际融合次数
+extern uint32_t g_nav_static_frames;   // 静止检测器连续确认帧数
+extern uint8_t g_nav_static_flag;      // bit0=confirmed_static bit1=is_static_confirmed bit2=static_gyro_consistent
 // mode 5 有界兜底当前是否处于激活态（倾斜 1σ 超门限）
 extern bool g_nav_tilt_fb_active;
 // 无外部参考时的倾斜漂移预算（deg）与降级标志：预算 = max(bg, 0.12°/s)×无参考时长。

@@ -1378,7 +1378,7 @@ void handleNavigationSystem()
   auto nav_stage = [](int i, uint32_t us) {
     if (i >= 0 && i < 4 && us > g_nav_stage_max_us[i]) { g_nav_stage_max_us[i] = us; }
   };
-  static uint32_t _sg_attempt = 0, _sg_fused = 0;
+  // 静止零角速度量测计数（全局，供 DBG `ekfbias` 观测）
 
   // 1. 获取当前时间与 dt
   unsigned long now_us = micros();
@@ -1902,6 +1902,10 @@ void handleNavigationSystem()
   bool is_static_confirmed =
       (static_det.confirmed_static || prelaunch_align_ok) &&
       s_imu_health.staticAidsAllowed();
+  // 诊断镜像：静止检测状态（DBG `ekfbias` 读，判「静止校准有没有真正触发」）
+  g_nav_static_frames = static_det.confirmed_static_frames;
+  g_nav_static_flag = static_cast<uint8_t>((static_det.confirmed_static ? 1U : 0U) |
+                                           (is_static_confirmed ? 2U : 0U));
 
 #if BFS_NAVIGATION_PARAM_ALIGN
   {
@@ -2774,6 +2778,7 @@ void handleNavigationSystem()
           (imu_gyro_radps.norm() < 0.15f) &&
           (static_det.confirmed_static_frames >= 200U);
 
+      if (static_gyro_consistent) { g_nav_static_flag |= 4U; }
       const Icm45686StaticAidAction static_aid_action =
           Icm45686SelectStaticAidAction(
               zupt_due, gravity_due, static_gyro_due,
@@ -2847,7 +2852,7 @@ void handleNavigationSystem()
             nav_ekf.MeasurementUpdateStaticGyroDetailed(
                 imu_gyro_radps, static_gyro_noise);
         aid_tracker.RecordAttempt(bfs::AidSource::StaticGyro, result);
-        _sg_attempt++; if (result.fused) _sg_fused++;
+        g_nav_sg_attempt++; if (result.fused) { g_nav_sg_fused++; }
       }
     }
     // 退出静止后重力累加器在下一次进入静止时由 static_gravity_acc=0,count=0 自然重置
@@ -4194,9 +4199,9 @@ void handleNavigationSystem()
     Serial8.print("us cnt=");
     Serial8.print(_ekf_time_cnt);
     Serial8.print(" SG=");
-    Serial8.print(_sg_fused);
+    Serial8.print(g_nav_sg_fused);
     Serial8.print("/");
-    Serial8.print(_sg_attempt);
+    Serial8.print(g_nav_sg_attempt);
     const Eigen::Vector3f gb = nav_ekf.gyro_bias_radps();
     Serial8.print(" gbias=[");
     Serial8.print(gb(0)*57.2958f, 4); Serial8.print(",");
@@ -4205,9 +4210,17 @@ void handleNavigationSystem()
     Serial8.print("]dps");
     Serial8.println();
     _ekf_time_sum = _ekf_time_cnt = 0;
-    _sg_attempt = _sg_fused = 0;
+    g_nav_sg_attempt = g_nav_sg_fused = 0U;
   }
 #endif // BFS_NAV_EKF_VERBOSE
+
+  // EKF 三轴陀螺零偏镜像（dps，供 DBG `ekfbias` 观测漂移根因；开销为一次向量拷贝）
+  {
+    const Eigen::Vector3f gb_now = nav_ekf.gyro_bias_radps();
+    g_nav_gyro_bias_dps[0] = gb_now(0) * 57.2958f;
+    g_nav_gyro_bias_dps[1] = gb_now(1) * 57.2958f;
+    g_nav_gyro_bias_dps[2] = gb_now(2) * 57.2958f;
+  }
 
   // GNSS 失联 → 重捕获：请求位置保持把当前点重设为目标，避免失联期间
   // 累积的位置误差在重捕获后变成大姿态指令（seed7 的 runaway 触发条件）。

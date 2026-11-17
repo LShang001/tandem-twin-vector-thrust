@@ -2877,7 +2877,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   magcal start|stop - 自由采集：开始/停止采样（绕三轴缓慢旋转 ≥30 样本）"));
         serial.println(F("[DBG]   magcal fit        - 椭球拟合（硬铁+软铁），质量门通过自动应用"));
         serial.println(F("[DBG]   magcal save|load|clear|erase - 标定持久化（内部Flash）/加载/清空"));
-        serial.println(F("[DBG]   i2cscan           - I2C 总线诊断：扫 I2C2(PB11/PB10) 地址应答 + I2C1 空闲电平"));
+        serial.println(F("[DBG]   i2cscan           - I2C 双总线诊断（地址应答 + 空闲电平 + WHO_AM_I）"));
+  serial.println(F("[DBG]   ekfbias           - 陀螺零偏估计与静止零角速度量测统计（漂移根因）"));
         serial.println(F("[DBG]   vars              - 变量上报状态（通用变量注册表，2026-08-10）"));
         serial.println(F("[DBG]   vars list         - 全部注册变量（名称/类型/ID）"));
         serial.println(F("[DBG]   vars add <name>   - 加入上报集合（≤16；0xF2 帧 + MAVLink 曲线）"));
@@ -3028,6 +3029,30 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(ok ? 1 : 0);
         serial.print(F(" chip="));
         serial.println(magSensor.chipName());
+      }
+      else if (strcmp(line, "ekfbias") == 0) {
+        // 陀螺零偏与静止辅助诊断：判「静止零角速度量测有没有真正在工作」。
+        // 判据：fused/attempt 应随静置持续增长（Z 轴高信任）；gbias 模长应逐步收敛；
+        //       gyro_consistent=0 说明门控没过（速度/重力模长/角速率/静止帧数任一条不满足）。
+        serial.print(F("[DBG] gbias(dps) = ["));
+        serial.print(g_nav_gyro_bias_dps[0], 4);
+        serial.print(F(", "));
+        serial.print(g_nav_gyro_bias_dps[1], 4);
+        serial.print(F(", "));
+        serial.print(g_nav_gyro_bias_dps[2], 4);
+        serial.println(F("]  (EKF 在线估计)"));
+        serial.print(F("[DBG] static: confirmed="));
+        serial.print((g_nav_static_flag & 1U) ? 1 : 0);
+        serial.print(F(" aids_allowed="));
+        serial.print((g_nav_static_flag & 2U) ? 1 : 0);
+        serial.print(F(" gyro_consistent="));
+        serial.print((g_nav_static_flag & 4U) ? 1 : 0);
+        serial.print(F(" frames="));
+        serial.println(g_nav_static_frames);
+        serial.print(F("[DBG] static_gyro fused/attempt = "));
+        serial.print(g_nav_sg_fused);
+        serial.print('/');
+        serial.println(g_nav_sg_attempt);
       }
       else if (strncmp(line, "datalog", 7) == 0) {
         // 强制黑匣子记录 N 秒（异步：置位调试标志后返回，超时自动复位）。
