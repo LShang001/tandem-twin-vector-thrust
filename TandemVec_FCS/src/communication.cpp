@@ -86,6 +86,8 @@ static uint32_t s_flashServiceCount = 0;
 static uint32_t s_flashPushCount = 0;
 // 调试模式标志（文件级，handleDebugTask 置位，handleAnoCom 读取跳过遥测）
 static bool s_dbg_mode = false;
+// I2C 总线诊断（DBG `i2cscan`）：定义在文件后部，命令分发处先用前向声明
+static void debugI2cScan(Uart &serial);
 // ★ 2026-11-05：DBG 控制台的当前串口。默认 Serial6（数传）；编译期开启
 //   BFS_DBG_USB_SERIAL8 时，USB 调试口（Serial8）收到 "DBG\n" 也能进控制台，
 //   命令回显与打印走进入时的那个口——没有数传接线时也能做参数/健康检查。
@@ -2875,6 +2877,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   magcal start|stop - 自由采集：开始/停止采样（绕三轴缓慢旋转 ≥30 样本）"));
         serial.println(F("[DBG]   magcal fit        - 椭球拟合（硬铁+软铁），质量门通过自动应用"));
         serial.println(F("[DBG]   magcal save|load|clear|erase - 标定持久化（内部Flash）/加载/清空"));
+        serial.println(F("[DBG]   i2cscan           - I2C 总线诊断：扫 I2C2(PB11/PB10) 地址应答 + I2C1 空闲电平"));
         serial.println(F("[DBG]   vars              - 变量上报状态（通用变量注册表，2026-08-10）"));
         serial.println(F("[DBG]   vars list         - 全部注册变量（名称/类型/ID）"));
         serial.println(F("[DBG]   vars add <name>   - 加入上报集合（≤16；0xF2 帧 + MAVLink 曲线）"));
@@ -3013,6 +3016,18 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       }
       else if (strncmp(line, "magcal", 6) == 0) {
         debugMagCalCommand(serial, line + 6);
+      }
+      else if (strcmp(line, "i2cscan") == 0) {
+        // I2C 总线在线诊断：逐地址探测 + 空闲电平 + 芯片身份
+        debugI2cScan(serial);
+      }
+      else if (strcmp(line, "magprobe") == 0) {
+        // 运行期重新探测磁力计：用于区分「上电时序问题」与「驱动/器件问题」
+        const bool ok = magSensor.begin(&IIC2);
+        serial.print(F("[DBG] magprobe ret="));
+        serial.print(ok ? 1 : 0);
+        serial.print(F(" chip="));
+        serial.println(magSensor.chipName());
       }
       else if (strncmp(line, "datalog", 7) == 0) {
         // 强制黑匣子记录 N 秒（异步：置位调试标志后返回，超时自动复位）。
@@ -4475,6 +4490,114 @@ static void magCalPrintStats(Uart &serial, const magcal::MagCalStats &st)
     serial.print(F("[DBG]   fieldMag (raw) = "));
     serial.print(st.fieldMagUt, 1);
     serial.println(F(" uT"));
+}
+
+/**
+ * @brief I2C 总线在线诊断（DBG `i2cscan`）
+ * @details 磁力计与气压计共用 I2C2（SDA=PB11 / SCL=PB10），逐个探测 0x08..0x77
+ *          是否有应答，并直接读 GPIOB->IDR 报告空闲电平（不改引脚模式，
+ *          避免打断已初始化的 I2C 外设）；另打印 I2C1（PB7/PB6）空闲电平，
+ *          用于确认该组引脚上确实没有器件（浮空/无上拉则为 0）。
+ * @note 判据：正常应答应含 0x0E（IST8310）与 0x77（DPS310）；只有 0x77 说明
+ *          磁力计未接或不在该总线；SDA/SCL 空闲恒低说明总线被拉住（供电缺失/
+ *          线序错/器件损坏）。
+ * @note 只读诊断：仅发起地址探测与 GPIO 电平读取，不写任何寄存器、不改配置。
+ */
+static void debugI2cScan(Uart &serial)
+{
+    struct BusProbe
+    {
+        const char *tag;
+        TwoWire *bus;
+        uint8_t sda_bit;  //< 所在 GPIO 端口（I2C2 在 GPIOB）内的位号
+        uint8_t scl_bit;
+    };
+    const BusProbe buses[1] = {
+        {"IIC2 (SDA=PB11 SCL=PB10)", &IIC2, 11, 10},
+    };
+
+    for (const BusProbe &b : buses)
+    {
+        // 空闲电平：I2C 传输间隙总线释放，外部上拉正常时应为高。
+        const uint32_t idr = GPIOB->IDR;
+        const uint8_t sda_high = (uint8_t)((idr >> b.sda_bit) & 0x1U);
+        const uint8_t scl_high = (uint8_t)((idr >> b.scl_bit) & 0x1U);
+
+        serial.print(F("[DBG] scan "));
+        serial.print(b.tag);
+        serial.print(F(" idle_sda="));
+        serial.print(sda_high);
+        serial.print(F(" idle_scl="));
+        serial.print(scl_high);
+        serial.print(F(" ack:"));
+
+        uint8_t found = 0;
+        for (uint8_t addr = 0x08; addr <= 0x77; ++addr)
+        {
+            b.bus->beginTransmission(addr);
+            if (b.bus->endTransmission() == 0U)
+            {
+                serial.print(F(" 0x"));
+                if (addr < 0x10U)
+                {
+                    serial.print('0');
+                }
+                serial.print(addr, HEX);
+                ++found;
+            }
+        }
+        serial.print(F(" (n="));
+        serial.print(found);
+        serial.println(')');
+    }
+
+    // I2C1（PB7/PB6）已不承载任何器件，只报空闲电平供交叉核对
+    const uint32_t idr1 = GPIOB->IDR;
+    serial.print(F("[DBG] scan I2C1 (SDA=PB7 SCL=PB6) idle_sda="));
+    serial.print((uint8_t)((idr1 >> 7) & 0x1U));
+    serial.print(F(" idle_scl="));
+    serial.println((uint8_t)((idr1 >> 6) & 0x1U));
+
+    // 芯片身份判据：IST8310 的 WHO_AM_I(0x00) 应为 0x10；QMC5883L 的 ChipID(0x0D) 应为 0xFF。
+    // 负值表示 I2C 事务失败（-1 写地址 NAK / -2 读长度不符），用于区分「器件不存在」与「寄存器读失败」。
+    auto read_reg = [](uint8_t addr, uint8_t reg) -> int
+    {
+        IIC2.beginTransmission(addr);
+        IIC2.write(reg);
+        if (IIC2.endTransmission(false) != 0U)
+        {
+            return -1;
+        }
+        if (IIC2.requestFrom(addr, (uint8_t)1) != 1U)
+        {
+            return -2;
+        }
+        return (int)IIC2.read();
+    };
+    const int ist_id = read_reg(0x0E, 0x00);
+    const int qmc_id = read_reg(0x0D, 0x0D);
+    serial.print(F("[DBG] whoami IST8310[0x0E:0x00]="));
+    if (ist_id < 0)
+    {
+        serial.print(ist_id);
+    }
+    else
+    {
+        serial.print(F("0x"));
+        serial.print((uint8_t)ist_id, HEX);
+    }
+    serial.print(F(" (expect 0x10)  QMC5883L[0x0D:0x0D]="));
+    if (qmc_id < 0)
+    {
+        serial.print(qmc_id);
+    }
+    else
+    {
+        serial.print(F("0x"));
+        serial.print((uint8_t)qmc_id, HEX);
+    }
+    serial.println(F(" (expect 0xFF)"));
+    serial.println(F("[DBG] i2cscan done. 0x0E=IST8310 0x0D=QMC5883L 0x77=DPS310"));
 }
 
 void debugMagCalCommand(Uart &serial, char *args)

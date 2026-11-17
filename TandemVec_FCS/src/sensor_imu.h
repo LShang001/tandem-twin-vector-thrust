@@ -27,9 +27,9 @@
 /**
  * @brief 初始化磁力计（IST8310 / QMC5883L 自动探测）
  *
- * 启动 I2C 总线 (Wire1, 400kHz) 并通过 MagSensor 自动探测磁力计型号：
+ * 启动 I2C2 总线 (400kHz，与气压计共用) 并通过 MagSensor 自动探测磁力计型号：
  * 优先 IST8310 (0x0E，本机默认硬件)，未命中则尝试 QMC5883L (0x0D)。
- * 磁力计通过 I2C 总线 (PB7-SDA, PB6-SCL) 连接。
+ * 磁力计通过 I2C2 总线 (PB11-SDA, PB10-SCL) 连接（2026-11-17 i2cscan 实测）。
  *
  * @return true 初始化成功, false 未检测到任何受支持的磁力计
  */

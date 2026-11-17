@@ -66,16 +66,33 @@ bool initMagnetometer()
   Serial8.println("[Init] Starting Magnetometer Setup...");
 
   // 1. 启动 I2C 总线硬件
-  //    在 STM32Duino 中，这一步会配置 GPIO 复用功能
-  Wire1.begin();
-  Wire1.setClock(400000); // 400kHz Fast Mode
-  Serial8.println("[Init] I2C Bus (Wire1) Started at 400kHz");
+  //    磁力计与气压计共用 I2C2（SDA=PB11 / SCL=PB10，2026-11-17 `i2cscan` 实测），
+  //    400kHz 同时满足 IST8310（上限 400kHz）与 DPS310（支持 Fm+）的时序要求。
+  IIC2.begin();
+  IIC2.setClock(400000); // 400kHz Fast Mode
+  Serial8.println("[Init] I2C Bus (IIC2 PB11/PB10) Started at 400kHz");
 
   // 2. 自动探测磁力计（IST8310@0x0E 优先，其次 QMC5883L@0x0D）
   //    轴对齐与硬铁偏置统一在 MagSensor 层完成，上层只看到机体 FRD 数据。
-  if (!magSensor.begin(&Wire1))
+  //    ★ 2026-11-17 实测：同一块板上电后立刻探测会失败（芯片尚未就绪/总线上气压计
+  //      还处于未配置状态），而运行期重新探测必然成功（DBG magprobe ret=1）。
+  //      因此这里做有限次重试，而不是一次失败就判「无磁力计」。
+  bool mag_ok = false;
+  uint8_t mag_attempts = 0;
+  for (; mag_attempts < 5 && !mag_ok; ++mag_attempts)
   {
-    Serial8.println("[Error] Magnetometer Not Found!");
+    if (mag_attempts > 0)
+    {
+      delay(50); // 给 IST8310 上电稳定与总线空闲留时间
+    }
+    mag_ok = magSensor.begin(&IIC2);
+  }
+
+  if (!mag_ok)
+  {
+    Serial8.print("[Error] Magnetometer Not Found! (attempts=");
+    Serial8.print(mag_attempts);
+    Serial8.println(")");
     Serial8.println("[Error] Probed: IST8310 (0x0E), QMC5883L (0x0D).");
     Serial8.println("[Error] Please check wiring (SDA/SCL) and Power.");
     return false;
@@ -83,7 +100,9 @@ bool initMagnetometer()
 
   Serial8.print("[Init] Magnetometer: ");
   Serial8.print(magSensor.chipName());
-  Serial8.println(" Setup Finished Successfully.");
+  Serial8.print(" (attempts=");
+  Serial8.print(mag_attempts);
+  Serial8.println(")");
 
   // 3. 从内部 Flash 加载上次椭球标定（magic/版本/CRC 校验通过才应用；
   //    失败静默保持未标定直通，不影响飞行）

@@ -313,14 +313,17 @@ extern const int LED_green;  // 绿色LED: 系统运行/任务心跳
 extern const int ignition;   // 点火控制: MOS管高电平触发
 
 // --- 2.5 总线引脚与对象 (I2C/SPI) ---
-#define MAG_SDA_PIN PB7
-#define MAG_SCL_PIN PB6
-extern TwoWire Wire1; // 自定义I2C总线1 (磁力计)
+// ★ 2026-11-17 实测（DBG `i2cscan`）：外挂磁力计实际挂在 I2C2（SDA=PB11 / SCL=PB10）
+//   上，与板载 DPS310（0x77）共用同一条总线；I2C1（PB6/PB7）空闲电平恒低、0 个地址应答。
+//   因此磁力计与气压计共用 IIC2 对象，速率统一 400kHz
+//   （IST8310 上限 400kHz；DPS310 支持 1MHz，降到 400kHz 不影响 128Hz 采样）。
+#define MAG_SDA_PIN PB11
+#define MAG_SCL_PIN PB10
 
 #define BARO_SDA_PIN PB11
 #define BARO_SCL_PIN PB10
 #define DPS310_ADDR_SEL PE15
-extern TwoWire IIC2; // 自定义I2C总线2 (气压计)
+extern TwoWire IIC2; // 自定义 I2C 总线（磁力计 + 气压计共用 I2C2: PB11/PB10）
 
 // SPI引脚定义 (板载IMU)
 extern const int SPI_MOSI;

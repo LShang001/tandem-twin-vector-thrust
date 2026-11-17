@@ -452,3 +452,26 @@ MagMeasurementGate 全门控 + MagVectorDetailed + 跳变/多帧门）全面领�
   （run_all mgcoax 段，文件内自定义机型宏，锁轴表+参数转录+paramsSanity）。
   不引入共轴包的 MAG_CAL_MODE 三态（本项目标定由 DBG 命令触发，无上电自动进入，
   三态语义冗余）。
+
+## 2026-11-17 磁力计接线实测：在 I2C2 与气压计共用（不是文档写的 I2C1）
+
+- **现象**：共轴固件烧到实机后 `magcal` 恒为 `chip=NONE`、`magraw` 无样本，
+  而这块板明确装了 IST8310 外挂模块。
+- **根因（实测，非推测）**：新增 DBG `i2cscan` 扫两条总线 → I2C2（PB11/PB10）
+  应答 `0x0E` + `0x77`，且 `0x0E` 的 `WHO_AM_I`(0x00)=0x10 证明就是 IST8310；
+  I2C1（PB6/PB7）空闲电平恒 0、0 个地址应答。即磁力计与 DPS310 共用 I2C2，
+  而固件按参考工程文档把磁力计配在 Wire1 = I2C1(PB7/PB6) 上。
+  参考工程 `docs/电路拓扑参考.md` 写的「I2C1 → 磁力计(外部) PB7/PB6」是 EDA 推测，
+  本机装配下不成立。
+- **修法**：`MAG_SDA/SCL_PIN` 改 PB11/PB10；删除独立 `TwoWire Wire1`，
+  磁力计与气压计共用 `IIC2`；总线速率统一 400 kHz（IST8310 上限 400kHz，
+  DPS310 由 1MHz 降到 400kHz，实测 TASK 1 单次耗时 197µs→465µs，仍远小于 7.7ms 周期）。
+- **第二个坑：上电首探失败**。修好总线后 `i2cscan` 能扫到芯片，但 setup 里
+  `magSensor.begin()` 仍失败；新增 DBG `magprobe` 在运行期重探却必然成功
+  （`ret=1 chip=IST8310`）→ IST8310 上电需要短暂稳定时间。
+  修法：`initMagnetometer()` 内最多 5 次探测重试（每次 delay 50ms）。
+- **验证**：冷启动后 `magcal` 直接 `chip=IST8310 cal=VALID`（用了编译期共轴标定
+  参数 scale=41.83）、`magraw` 有连续样本（`|B|≈44.2µT`）、I2C2 双器件共存
+  DPS310 气压正常。轴向复核仍需上板把机头摆正北（`magraw` 的 `yaw_est≈0°`）。
+- **判据沉淀**：外设不通先用 `i2cscan` 分「总线/地址/身份」三层，再用 `magprobe`
+  分「上电时序 vs 驱动」——不要凭文档接线图下结论。

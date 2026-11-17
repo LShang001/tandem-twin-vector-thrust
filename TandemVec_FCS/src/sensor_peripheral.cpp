@@ -1093,10 +1093,11 @@ int initDPS310()
   // 初始化 DPS310
   Dps310Sensor.begin(IIC2, 0x77); // 设置 DPS310 I2C 地址
   //  注意: Dps310Sensor.begin() 是 void 函数，没有返回值
-  // DPS310 支持 HS-mode，但当前 STM32duino Wire 仅实现到 1MHz Fm+ timing；
+  // DPS310 支持 HS-mode，但磁力计 IST8310 上限 400kHz 且与本气压计共用 I2C2，
+  // 总线速率必须按两颗器件的下限取 400kHz（128Hz 采样下带宽余量充足）。
   // 驱动 begin() 会重新 begin 总线，时钟必须在其后设置。
   HAL_I2CEx_EnableFastModePlus(I2C_FASTMODEPLUS_I2C2);
-  IIC2.setClock(1000000);
+  IIC2.setClock(400000);
 #ifdef BFS_DPS310_DIAG
   BFS_PROFILE_SERIAL.print("[DPS310_RESET] status=");
   BFS_PROFILE_SERIAL.println(reset_status);
