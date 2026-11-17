@@ -313,10 +313,27 @@ float kf_h_outlier_gate = 4.0f;
 // --- 5.2 组合导航系统 ---
 Uart &gpsSerialPort = Serial4;
 bfs::Ubx ubx(&gpsSerialPort);
-// 可选：EKF 全状态放 DTCM（0 等待、不经 D-Cache），仅 [env:TandemVec_FCS_DTCM]
-// 构建启用；默认留在 RAM_D1，避免未验证的内存布局改变生产固件。
+// 可选：EKF 全状态放 DTCM（0 等待、不经 D-Cache），仅 *_DTCM 构建启用；
+// 默认留在 RAM_D1（.bss），避免未验证的内存布局改变生产固件。
 #ifdef BFS_NAV_EKF_DTCM
 __attribute__((section(".dtcmram"))) bfs::Ekf15State nav_ekf;
+// ★ DTCM 段为 NOLOAD，startup 不拷贝也不清零，必须手动清零；且清零必须发生在
+//   「nav_ekf 构造函数之前」，才能复刻 .bss 语义（先清零、再由构造函数赋默认成员初值）。
+//   constructor(100) 早于 premain(101) 与 nav_ekf 的默认优先级(65535)构造函数。
+// ★ 教训（2026-11-17 实机发散根因）：曾在 setup() 里 memset，那发生在构造函数「之后」，
+//   会把构造函数刚赋好的非零默认值清掉——尤其 accel_tau_s_（默认 100，setup 从不重设）
+//   被清成 0，Initialize 里 rw_(6,6)=2σ²/accel_tau_s_ 与 accel_markov_bias_=-1/accel_tau_s_·I
+//   除以 0 → Inf 注入协方差 → EKF 确定性发散（静止 ~20s 后 conv=0、速度/位置 runaway）。
+//   改为构造函数之前清零后，默认初值保留，与 AXI .bss 行为逐位一致。
+__attribute__((constructor(100))) static void bfsZeroDtcmSectionBeforeCtors()
+{
+  extern uint8_t __dtcmram_start__[];
+  extern uint8_t __dtcmram_end__[];
+  for (uint8_t *p = __dtcmram_start__; p < __dtcmram_end__; ++p)
+  {
+    *p = 0U;
+  }
+}
 #else
 bfs::Ekf15State nav_ekf;
 #endif

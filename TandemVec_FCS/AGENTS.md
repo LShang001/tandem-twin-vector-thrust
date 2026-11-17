@@ -243,7 +243,7 @@ bash test_host/fw_sil/build_and_run_failsafe.sh  # SIL 失效保护/模式重入
 - **算法测试两阶段**：先理想模型（零噪声/零偏、WGS84 重力 `ins_test::GravityWgs84()`、解析真值）验证正确性，再真实噪声/零偏/振动/失锁评估工程效果；理想阶段失败修算法，真实阶段不达标先归因。
 - **不声称未执行的构建/测试/上板验证通过。**
 - **宿主 UBSan**：MinGW 没带 libubsan，用 `-fsanitize=undefined -fsanitize-undefined-trap-on-error`（命中 UB 直接 trap，不需要运行时库）。2026-11-03 ekf15 在 UBSan 下 116/0、无陷阱；命令模板见 `../docs/registers/固件调试工具链-2026-11-01.md`。
-- **性能 A/B 宏（常驻 env 已于 2026-11-10 清理）**：`BFS_TASK_PHASE_STAGGER`（错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）与 `BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）两个宏仍保留在代码里，但**不再有常驻 env**——当时的 A/B 一直没做完（2026-11-03 挂起），且 P1 架构已改变调度负载，旧基线不再可比。要做时按 `platformio.ini` §新增组合 加两行临时 env；A/B 只看 `tasks` 的 avg/max/迟到 + `health`，不以单次 CPU 平均下结论。详见 `../docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
+- **性能 A/B 宏**：`BFS_TASK_PHASE_STAGGER`（错开 ≥5ms 任务首次相位，治 200Hz 实跑约 155Hz 的 flag 合并）仍保留在代码里、无常驻 env（2026-11-03 挂起，P1 架构已改调度负载，旧基线不可比）。`BFS_NAV_EKF_DTCM`（`nav_ekf` 落 DTCM 0x20000000）**2026-11-17 已做完 A/B 并修复发散**：现有可选 env `[env:CoaxialVTVL_ICM45686_DTCM]`（自定义 `ld/weact_h743_dtcm.ld` 加 `.dtcmram(NOLOAD)` 段）。★ **NOLOAD 段必须在构造函数之前清零**（`state_data.cpp` 的 `constructor(100)`），绝不能在 setup() memset——那会抹掉 `accel_tau_s_=100` 等默认初值，Initialize 除以 0 → Inf → EKF ~20s 确定性发散（根因与修复见 `../docs/registers/踩坑记录-AGENTS.md` 2026-11-17 条）。**实测收益仅 ~2–3%**（D-Cache 已缓存 EKF 工作集；同条件收敛 A/B：Navigation 2361→2297µs），现有 ~50% CPU 余量下不值得启用，**AXI 仍为默认**；该 env 仅作已验证备选。A/B 只看 `tasks` avg/max/迟到 + `health`，且必须滤波收敛、等量测负载下测，不以单次 CPU 平均下结论。详见 `../docs/04-数学建模/代码理论核查/飞控实时性能基线-2026-11-03.md`。
 
 ## IMU 数据链与延迟排查（2026-11-10 实飞结论）
 

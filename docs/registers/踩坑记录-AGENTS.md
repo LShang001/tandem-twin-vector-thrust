@@ -495,3 +495,31 @@ MagMeasurementGate 全门控 + MagVectorDetailed + 跳变/多帧门）全面领�
   两条总线独立；`initMagnetometer()` 保留 5 次上电重试。
 - **判据**：冷启动 `i2cscan` 应显示 I2C1=`0x0E`（WHO_AM_I=0x10）、I2C2=`0x77`；
   `magcal` 的 `chip=IST8310`、`cal=VALID`；`magraw` 的 `seq` 递增、`age`=0。
+
+## 2026-11-17 EKF 放 DTCM 优化：发散根因＝NOLOAD 段在构造函数「之后」清零，除零注入协方差
+
+- **目标**：把 nav_ekf（7776B）从 AXI SRAM(.bss, 经 D-Cache) 挪到 DTCM(0x20000000, 零等待)，
+  用自定义 ld 加 `.dtcmram (NOLOAD)` 段 + `[env:CoaxialVTVL_ICM45686_DTCM]`。
+- **现象**：上电 conv=1 正常，~20s 后 conv=0，roll/pitch/yaw 匀速漂、速度线性增、位置二次增
+  （静止板 vel 冲到 ~2000 m/s、pos ~200km），确定性可复现。openocd 读 nav_ekf 内存是
+  「巨大但有限」浮点（1e36 量级）而非 NaN → 数值爆掉，不是随机踩踏。
+- **根因（已证实）**：NOLOAD 段 startup 不清零，我在 setup() 里 memset。但 memset 发生在
+  「全局构造函数之后」，把构造函数刚赋好的非零默认成员初值清掉了。致命的是 `accel_tau_s_`
+  （默认 100，setup 全仓从不重设它）被清成 0，而 Initialize 里
+  `rw_(6,6)=2σ²/accel_tau_s_`、`accel_markov_bias_=-1/accel_tau_s_·I` 直接除以它 →
+  除零 → Inf 注入过程噪声/Markov 阵 → 协方差传播崩坏 → 确定性发散。
+  AXI .bss 在构造函数「之前」清零，默认值保留，故正常。
+- **修复**：清零挪到构造函数「之前」——`__attribute__((constructor(100)))` 清
+  `__dtcmram_start__..__dtcmram_end__`（早于 premain(101) 与 nav_ekf 默认优先级构造），
+  逐位复刻 .bss 语义。`.init_array` 首项即该清零函数（已用 objdump 核实）。
+  修复后长静止 6min 全程 conv=1、姿态/速度/位置稳定，无发散。
+- **真实收益（同条件 A/B，均 GNSS 活跃、滤波收敛）**：Navigation avg AXI≈2361µs vs
+  DTCM≈2297µs，**仅 ~2–3%**；CPU 51% vs 53%（噪声内）。D-Cache 本就缓存住 EKF 工作集，
+  DTCM 零等待优势很小。★ 之前误报"12%"是 bug 假象：发散滤波把量测全 NIS 拒绝、干的活变少
+  才显得快。**测加速必须在滤波收敛、同等量测负载下，否则坏滤波会"假装更快"。**
+- **结论**：收益边际（现有 ~50% CPU 余量），不值得为此承担自定义 ld+清零时序的复杂度/风险。
+  保留为已验证的可选 env（AXI 仍为默认、实飞验证过的基线），需要时再启用；不提升为默认。
+- **通用教训**：① NOLOAD 的 DTCM/CCM 段必须在 C++ 构造函数「之前」清零（constructor 优先级
+  数字小于默认 65535），绝不能在 setup() 里清——那会抹掉默认成员初值；② 依赖默认初值、
+  又参与除法的参数（如 accel_tau_s_）是隐藏雷，清零时序错了就除零；③ 性能 A/B 要在
+  收敛+等负载下测，防"坏系统显得快"。
