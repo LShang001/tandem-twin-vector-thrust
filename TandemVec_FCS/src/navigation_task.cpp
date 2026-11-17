@@ -1941,9 +1941,12 @@ void handleNavigationSystem()
     }
   }
 #endif
-  // 地面静止校准：EKF 已初始化、油门未上量且检测器确认静止才累计。
-  // 默认 30 s 后才允许无磁位置保持；陀螺零偏/水平初值需要长静置收敛，
-  // 2 s 级静置不够（用户 2026-10-25 明确要求几十秒量级）。
+  // 地面静止门：EKF 已初始化、油门未上量且检测器确认静止才累计。
+  // ★ 它只置「静止已确认」标志（供无磁位置保持放行），**不估计也不修正任何
+  //   零偏或航向**。静止时没有绝对航向源（磁矢量在 mode>=1 被关闭，GNSS 速度为 0），
+  //   yaw 与 gyro_bias_z 均不可观，姿态只随陀螺积分漂移——见 L2270 附近的对准语义。
+  // g_static_calib_required_s 当前无赋值点（默认 0 s），即「确认静止当帧置位」；
+  // 若要按 30 s 静置才放行无磁保持，需显式给它赋值。
   if (!g_imu_static_calibrated && nav_system_initialized &&
       throttlePercent < 3.0f && is_static_confirmed &&
       std::isfinite(nav_update_dt_s) && nav_update_dt_s > 0.0f)
