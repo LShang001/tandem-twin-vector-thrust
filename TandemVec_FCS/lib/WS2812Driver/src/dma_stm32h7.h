@@ -239,7 +239,9 @@ inline void WS2812Driver::showDmaPlatform()
   // that stm32duino's startup file does NOT provide (weak alias to
   // Default_Handler -> hardfault/hang or stuck-BUSY state). Polling is
   // fully self-contained: ~130us for a 1-LED frame, called at 100Hz.
-  noInterrupts();
+  // ★ 整帧等待期间保持全局中断开启：旧实现 noInterrupts() 包住约 130µs
+  //   的 PollForTransfer，会同时屏蔽最高优先级的 UART4，造成 GNSS 字节溢出。
+  //   本函数只在主循环上下文调用，DMA 句柄由本实例独占，无需全局屏蔽。
   __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
   if (HAL_DMA_GetState(&_hdma) != HAL_DMA_STATE_READY) {
     HAL_DMA_Abort(&_hdma);
@@ -251,7 +253,6 @@ inline void WS2812Driver::showDmaPlatform()
     HAL_DMA_PollForTransfer(&_hdma, HAL_DMA_FULL_TRANSFER, 50U);
     __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
   }
-  interrupts();
 }
 
 #endif // WS2812_HAVE_H7_DMA

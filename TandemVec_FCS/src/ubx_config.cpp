@@ -26,8 +26,59 @@ static const uint32_t kDetectWindowMs = 300;   // 每档探测窗口
 static const uint32_t kAckTimeoutMs = 500;     // ACK 等待超时
 
 static UbxCfgResult s_last_cfg = {};
+static uint32_t s_gnss_serial_config_fail_count = 0U;
 
 const UbxCfgResult &ubxLastCfgResult() { return s_last_cfg; }
+
+uint32_t ubxGnssSerialConfigFailCount() { return s_gnss_serial_config_fail_count; }
+
+// ---------------- GNSS 串口初始化收口 ----------------
+// Uart::begin() 会重跑 uart_init：NVIC 恢复默认优先级，UART_SetConfig 也清 FIFOEN。
+// 必须在每次 begin 之后恢复，不能只在上电 setup() 前段设一次。
+bool ubxGnssSerialBegin(Uart &serial, uint32_t baud)
+{
+  serial.begin(baud);
+
+  UART_HandleTypeDef *huart = serial.getHandle();
+  if (huart == nullptr || huart->Instance != UART4)
+  {
+    ++s_gnss_serial_config_fail_count;
+    return false;
+  }
+
+  // begin() 已给 Arduino 的 recv 字节启动 1 字节 IT 接收。先保存其目标地址，
+  // 停止旧事务后用 HAL 正式配置 FIFO，再以原地址重启；不直接访问 Uart 私有成员。
+  uint8_t *rx_target = huart->pRxBuffPtr;
+  if (rx_target == nullptr || huart->RxState != HAL_UART_STATE_BUSY_RX)
+  {
+    ++s_gnss_serial_config_fail_count;
+    return false;
+  }
+
+  HAL_NVIC_DisableIRQ(UART4_IRQn);
+  HAL_StatusTypeDef st = HAL_UART_AbortReceive(huart);
+  if (st == HAL_OK) st = HAL_UARTEx_EnableFifoMode(huart);
+  if (st == HAL_OK) st = HAL_UARTEx_SetRxFifoThreshold(huart, UART_RXFIFO_THRESHOLD_1_2);
+  if (st == HAL_OK) st = HAL_UART_Receive_IT(huart, rx_target, 1U);
+  if (st != HAL_OK)
+  {
+    // FIFO 任一步失败不能留下关闭的接收通道；尽力恢复原逐字节接收。
+    (void)HAL_UART_Receive_IT(huart, rx_target, 1U);
+  }
+  NVIC_SetPriority(UART4_IRQn, 0);
+  HAL_NVIC_EnableIRQ(UART4_IRQn);
+
+  const bool ok = (st == HAL_OK) &&
+                  ((UART4->CR1 & USART_CR1_FIFOEN) != 0U) &&
+                  (huart->FifoMode == UART_FIFOMODE_ENABLE) &&
+                  (huart->RxState == HAL_UART_STATE_BUSY_RX) &&
+                  (NVIC_GetPriority(UART4_IRQn) == 0U);
+  if (!ok)
+  {
+    ++s_gnss_serial_config_fail_count;
+  }
+  return ok;
+}
 
 // ---------------- 帧构建与校验 ----------------
 // UBX 帧: B5 62 | cls | id | lenL | lenH | payload | CK_A | CK_B（标准 sum0/sum1）
@@ -164,7 +215,7 @@ enum DetectKind { DETECT_NONE, DETECT_UBX, DETECT_NMEA };
 
 static DetectKind _probe_baud(Uart &serial, uint32_t baud, uint32_t window_ms)
 {
-  serial.begin(baud);
+  (void)ubxGnssSerialBegin(serial, baud);
   const uint32_t t0 = millis();
   uint8_t state = 0;
   uint16_t f_len = 0, got = 0;
@@ -480,11 +531,11 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     {
       // F10 手册：改波特率后至少等约 100 ms，再按新速率通信。
       delay(120);
-      serial.begin(o.target_baud);
+      (void)ubxGnssSerialBegin(serial, o.target_baud);
     }
     else
     {
-      serial.begin(r.found_baud);
+      (void)ubxGnssSerialBegin(serial, r.found_baud);
     }
     while (serial.available() > 0)
     {

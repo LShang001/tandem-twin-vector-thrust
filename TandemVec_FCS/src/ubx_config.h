@@ -85,6 +85,17 @@ static const UbxConfigOptions kUbxDefaultCfg = {
  */
 UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt);
 
+/**
+ * @brief GNSS 串口统一起始入口：设置波特率后恢复接收 FIFO 与 UART4 高优先级。
+ * @details `Uart::begin()` 会重新配置外设并清除 FIFOEN，还会恢复框架默认 IRQ 优先级；
+ *          所有 GNSS 探测/切速都必须经此入口，不能只在上电开头配置一次。
+ * @return true=HAL FIFO 配置、接收重启与读回核对均成功；false=至少一步失败。
+ */
+bool ubxGnssSerialBegin(Uart &serial, uint32_t baud);
+
+/** @brief GNSS 串口接收配置失败累计次数（DBG `ubxstat` 显示）。 */
+uint32_t ubxGnssSerialConfigFailCount();
+
 /** @brief 上次配置结果（DBG `ubxcfg status` 读取） */
 const UbxCfgResult &ubxLastCfgResult();
 

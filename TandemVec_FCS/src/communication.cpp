@@ -3217,6 +3217,16 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(ubx.queued_epoch_count());
         serial.print(F(" queue_overflow="));
         serial.println(ubx.queue_overflow_count());
+        // 串口实际配置读回：不能只依据启动代码声称 FIFO/高优先级仍有效。
+        UART_HandleTypeDef *gnss_uart = gpsSerialPort.getHandle();
+        serial.print(F("[DBG] uart4 fifo_hw="));
+        serial.print((UART4->CR1 & USART_CR1_FIFOEN) ? 1 : 0);
+        serial.print(F(" fifo_hal="));
+        serial.print((gnss_uart != nullptr && gnss_uart->FifoMode == UART_FIFOMODE_ENABLE) ? 1 : 0);
+        serial.print(F(" irq="));
+        serial.print(NVIC_GetPriority(UART4_IRQn));
+        serial.print(F(" cfg_fail="));
+        serial.println(ubxGnssSerialConfigFailCount());
       }
       else if (strncmp(line, "imuraw", 6) == 0)
       {
@@ -3927,7 +3937,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           }
           else if (n == 2 && baud > 0)
           {
-            ubx.SwitchProtocol(p, baud);
+            // 协议库 SwitchProtocol 只负责 begin+flush；GNSS 必须经统一入口，
+            // 否则这次 begin 会再次清掉 FIFO 并恢复默认中断优先级。
+            ubx.SetProtocol(p);
+            (void)ubxGnssSerialBegin(gpsSerialPort, static_cast<uint32_t>(baud));
+            gpsSerialPort.flush();
             serial.print(F("[DBG] protocol="));
             serial.print(proto);
             serial.print(F(" baud="));
