@@ -3053,6 +3053,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(g_nav_sg_fused);
         serial.print('/');
         serial.println(g_nav_sg_attempt);
+        serial.print(F("[DBG] static_mag_realign: state="));
+        serial.print(g_nav_mag_realign_state);
+        serial.print(F(" (0未执行/1融合/2拒绝) dyaw="));
+        serial.print(g_nav_mag_realign_deg, 2);
+        serial.println(F(" deg"));
       }
       else if (strncmp(line, "datalog", 7) == 0) {
         // 强制黑匣子记录 N 秒（异步：置位调试标志后返回，超时自动复位）。

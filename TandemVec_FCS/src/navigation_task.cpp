@@ -2414,6 +2414,10 @@ void handleNavigationSystem()
       // 重新初始化会重置零偏估计，静止校准必须重新累积。
       g_imu_static_calibrated = false;
       g_static_calib_s = 0.0f;
+      // 静止磁重对准是一次性动作，EKF 重初始化后必须重新允许一次
+      g_nav_mag_realign_state = 0U;
+      g_nav_mag_realign_deg = 0.0f;
+      g_nav_mag_realign_done = false;
       nav_ekf.set_q_accel_scale(g_ekf_q_accel_scale);
       // 发射振动下用对准窗口的平均矢量初始化；默认宏未定义时行为不变。
       Eigen::Vector3f init_accel_mps2 = imu_accel_mps2;
@@ -2855,6 +2859,7 @@ void handleNavigationSystem()
         g_nav_sg_attempt++; if (result.fused) { g_nav_sg_fused++; }
       }
     }
+
     // 退出静止后重力累加器在下一次进入静止时由 static_gravity_acc=0,count=0 自然重置
     // ========================================================================
     // 无 GNSS + 运动时：姿态辅助（模式可切，默认重力方向直连）
@@ -3056,6 +3061,66 @@ void handleNavigationSystem()
       _nav_profile_stage_start = now_stage_us;
     }
 #endif
+
+    // ── 静止磁重对准（一次性）：零偏收敛后用磁把绝对航向拉正 ────────────
+    // 为什么需要：mode>=1 时磁不参与连续融合，初始化那一刻的航向误差（伪磁初始化，
+    //   或初始时磁受扰）会被一直带着；静止且零偏收敛后姿态已不再漂，此时注入一次
+    //   纯航向观测量，就能消掉该残差，又不必承担飞行中磁干扰污染姿态的风险。
+    // 门控（全部满足才执行）：静止确认累计 ≥10 s、零偏模长 <0.05 dps（已收敛）、
+    //   未解锁、油门 <3%、无零偏跳变保持、磁标定有效、模长偏差 <8 uT。
+    // 观测值用「静止窗口磁航向均值」而非单帧：实测单帧磁航向 60 s 内自身波动 1.4°，
+    //   用 sin/cos 单位向量累加（避免 ±180° 环绕），窗口上限 2000 帧（10 s）后冻结。
+    // 一次性语义：每轮 EKF 生命周期只尝试一次（EKF 重新初始化时清零），
+    //   避免磁受扰时逐帧反复拉扯航向；修正量本身由 EKF 的残差门（1.0 rad）+ NIS 兜底。
+    {
+      // 静止窗口磁航向累积器（sin/cos 求和，除以帧数即均值方向）
+      static float s_mag_yaw_sin_sum = 0.0f;
+      static float s_mag_yaw_cos_sum = 0.0f;
+      static uint16_t s_mag_yaw_n = 0;
+
+      float mag_yaw_mean_rad = NAN;
+      const bool mag_sample_usable =
+          is_static_confirmed && mag_present && mag_cal_valid &&
+          mag_sample.seq != 0U && mag_status.norm_dev_ut < 8.0f;
+      if (mag_sample_usable) {
+        const Eigen::Vector3f mag_body(mag_sample.x, mag_sample.y, mag_sample.z);
+        const Eigen::Vector3f mag_ref(bfs::g_mag_reference.field_ut[0],
+                                      bfs::g_mag_reference.field_ut[1],
+                                      bfs::g_mag_reference.field_ut[2]);
+        // 倾角补偿航向：只用 roll/pitch，不依赖 EKF yaw（否则残差被自身吸收）
+        const float yaw_inst_rad = bfs::magTiltCompensatedHeadingRad(
+            mag_body, nav_ekf.roll_rad(), nav_ekf.pitch_rad(), mag_ref);
+        if (s_mag_yaw_n < 2000U) {
+          s_mag_yaw_sin_sum += sinf(yaw_inst_rad);
+          s_mag_yaw_cos_sum += cosf(yaw_inst_rad);
+          ++s_mag_yaw_n;
+        }
+        if (s_mag_yaw_n > 0U) {
+          mag_yaw_mean_rad = atan2f(s_mag_yaw_sin_sum, s_mag_yaw_cos_sum);
+        }
+      } else {
+        s_mag_yaw_sin_sum = 0.0f;
+        s_mag_yaw_cos_sum = 0.0f;
+        s_mag_yaw_n = 0;
+      }
+
+      const float gb_norm_dps = nav_ekf.gyro_bias_radps().norm() * 57.2957795f;
+      if (!g_nav_mag_realign_done && is_static_confirmed && !g_is_unlocked &&
+          throttlePercent < 3.0f && !bias_jump_hold &&
+          mag_status.norm_dev_ut < 8.0f && g_nav_static_frames >= 2000U &&
+          gb_norm_dps < 0.05f && std::isfinite(mag_yaw_mean_rad) &&
+          s_mag_yaw_n >= 200U) {
+        const float yaw_before_rad = nav_ekf.yaw_rad();
+        const bfs::MeasurementUpdateResult mr =
+            nav_ekf.MeasurementUpdateYawDetailed(mag_yaw_mean_rad, 0.0349066f); // 2°
+        float dyaw_rad = mag_yaw_mean_rad - yaw_before_rad;
+        while (dyaw_rad > 3.14159265f) { dyaw_rad -= 6.28318531f; }
+        while (dyaw_rad < -3.14159265f) { dyaw_rad += 6.28318531f; }
+        g_nav_mag_realign_deg = dyaw_rad * 57.2957795f;
+        g_nav_mag_realign_state = mr.fused ? 1U : 2U;
+        g_nav_mag_realign_done = true; // 成败都只做一次，避免逐帧重试
+      }
+    }
 
     // [B3] 磁矢量量测（20 Hz）：真实磁传感器路径，门控通过才进 EKF。
     // 不改变位置/速度；只约束绝对航向。磁默认不存在时 MarkUnavailable，

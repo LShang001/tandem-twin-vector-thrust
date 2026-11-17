@@ -630,7 +630,10 @@ float g_nav_gyro_bias_dps[3] = {0.0f, 0.0f, 0.0f};
 uint32_t g_nav_sg_attempt = 0;
 uint32_t g_nav_sg_fused = 0;
 uint32_t g_nav_static_frames = 0;
-uint8_t g_nav_static_flag = 0;  // 陀螺零偏模长（EKF 估计，deg/s）
+uint8_t g_nav_static_flag = 0;
+float g_nav_mag_realign_deg = 0.0f;
+uint8_t g_nav_mag_realign_state = 0;  // 0=未执行 1=融合成功 2=被门控或 NIS 拒绝
+bool g_nav_mag_realign_done = false;  // 本轮 EKF 生命周期是否已尝试（重初始化清零）
 bool g_nav_tilt_fb_active = false;      // mode 5 有界兜底激活标志
 float g_nav_tilt_drift_deg = 0.0f;      // 无参考倾斜漂移预算（deg）
 bool g_nav_tilt_degraded = false;       // 漂移预算超限（3°，告警）
