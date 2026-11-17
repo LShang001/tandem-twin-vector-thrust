@@ -66,11 +66,11 @@ bool initMagnetometer()
   Serial8.println("[Init] Starting Magnetometer Setup...");
 
   // 1. 启动 I2C 总线硬件
-  //    磁力计与气压计共用 I2C2（SDA=PB11 / SCL=PB10，2026-11-17 `i2cscan` 实测），
-  //    400kHz 同时满足 IST8310（上限 400kHz）与 DPS310（支持 Fm+）的时序要求。
-  IIC2.begin();
-  IIC2.setClock(400000); // 400kHz Fast Mode
-  Serial8.println("[Init] I2C Bus (IIC2 PB11/PB10) Started at 400kHz");
+  //    磁力计独占 I2C1（SDA=PB7 / SCL=PB6，2026-11-17 二次实测），400kHz 为 IST8310 上限；
+  //    气压计在 I2C2 上独立跑 1MHz，两条总线互不影响。
+  MagWire.begin();
+  MagWire.setClock(400000); // 400kHz Fast Mode
+  Serial8.println("[Init] I2C Bus (MagWire PB7/PB6) Started at 400kHz");
 
   // 2. 自动探测磁力计（IST8310@0x0E 优先，其次 QMC5883L@0x0D）
   //    轴对齐与硬铁偏置统一在 MagSensor 层完成，上层只看到机体 FRD 数据。
@@ -85,7 +85,7 @@ bool initMagnetometer()
     {
       delay(50); // 给 IST8310 上电稳定与总线空闲留时间
     }
-    mag_ok = magSensor.begin(&IIC2);
+    mag_ok = magSensor.begin(&MagWire);
   }
 
   if (!mag_ok)
@@ -208,6 +208,15 @@ int initImu()
     Serial8.print(" (");
     Serial8.print(IMU->lastError());
     Serial8.println(")");
+    // ★ 诊断：IMU 失败会让 setup 进 while(1)，Serial8（USB 调试口）未接时看不到原因，
+    //   因此同一份信息再送 Serial6（数传口），串口侧可直接定位。
+    Serial6.print("[FATAL] IMU init failed: ");
+    Serial6.print(IMU->modelName());
+    Serial6.print(" code=");
+    Serial6.print(status);
+    Serial6.print(" (");
+    Serial6.print(IMU->lastError());
+    Serial6.println(")");
     return status;
   }
 

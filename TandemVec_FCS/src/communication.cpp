@@ -3023,7 +3023,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       }
       else if (strcmp(line, "magprobe") == 0) {
         // 运行期重新探测磁力计：用于区分「上电时序问题」与「驱动/器件问题」
-        const bool ok = magSensor.begin(&IIC2);
+        const bool ok = magSensor.begin(&MagWire);
         serial.print(F("[DBG] magprobe ret="));
         serial.print(ok ? 1 : 0);
         serial.print(F(" chip="));
@@ -4494,26 +4494,32 @@ static void magCalPrintStats(Uart &serial, const magcal::MagCalStats &st)
 
 /**
  * @brief I2C 总线在线诊断（DBG `i2cscan`）
- * @details 磁力计与气压计共用 I2C2（SDA=PB11 / SCL=PB10），逐个探测 0x08..0x77
- *          是否有应答，并直接读 GPIOB->IDR 报告空闲电平（不改引脚模式，
- *          避免打断已初始化的 I2C 外设）；另打印 I2C1（PB7/PB6）空闲电平，
- *          用于确认该组引脚上确实没有器件（浮空/无上拉则为 0）。
- * @note 判据：正常应答应含 0x0E（IST8310）与 0x77（DPS310）；只有 0x77 说明
- *          磁力计未接或不在该总线；SDA/SCL 空闲恒低说明总线被拉住（供电缺失/
- *          线序错/器件损坏）。
+ * @details 两条总线分别探测 0x08..0x77 的应答，并直接读 GPIOB->IDR 报告空闲电平
+ *          （不改引脚模式，避免打断已初始化的 I2C 外设）：
+ *            - 磁力计总线 Wire1（SDA=PB7 / SCL=PB6，I2C1）
+ *            - 气压计总线 IIC2（SDA=PB11 / SCL=PB10，I2C2）
+ *          并对磁力计总线上的 0x0E 读 WHO_AM_I(0x00) 确认芯片身份。
+ * @note 判据：磁力计接在 I2C1 时，I2C1 应出现 0x0E 且 WHO_AM_I=0x10，
+ *          同时 I2C2 只应出现 0x77（DPS310）；两处都有则说明模块仍在 I2C2 上。
+ *          SDA/SCL 空闲恒低说明总线被拉住（供电缺失/线序错/器件损坏）。
  * @note 只读诊断：仅发起地址探测与 GPIO 电平读取，不写任何寄存器、不改配置。
  */
 static void debugI2cScan(Uart &serial)
 {
+    // I2C1（PB7/PB6）为待测总线：用临时 TwoWire 对象探测，扫描完 end() 释放，
+    // 不改动磁力计/气压计正在使用的 IIC2，也不会把 I2C1 长期占为固件总线。
+    // 磁力计总线由 MagWire 常驻持有（I2C1），直接扫描，无需临时对象
+
     struct BusProbe
     {
         const char *tag;
         TwoWire *bus;
-        uint8_t sda_bit;  //< 所在 GPIO 端口（I2C2 在 GPIOB）内的位号
+        uint8_t sda_bit;  //< GPIOB 内的位号（两条总线都在 GPIOB）
         uint8_t scl_bit;
     };
-    const BusProbe buses[1] = {
-        {"IIC2 (SDA=PB11 SCL=PB10)", &IIC2, 11, 10},
+    const BusProbe buses[2] = {
+        {"I2C1 (SDA=PB7 SCL=PB6)  [probe]", &MagWire, 7, 6},
+        {"I2C2 (SDA=PB11 SCL=PB10)", &IIC2, 11, 10},
     };
 
     for (const BusProbe &b : buses)
@@ -4551,32 +4557,24 @@ static void debugI2cScan(Uart &serial)
         serial.println(')');
     }
 
-    // I2C1（PB7/PB6）已不承载任何器件，只报空闲电平供交叉核对
-    const uint32_t idr1 = GPIOB->IDR;
-    serial.print(F("[DBG] scan I2C1 (SDA=PB7 SCL=PB6) idle_sda="));
-    serial.print((uint8_t)((idr1 >> 7) & 0x1U));
-    serial.print(F(" idle_scl="));
-    serial.println((uint8_t)((idr1 >> 6) & 0x1U));
-
-    // 芯片身份判据：IST8310 的 WHO_AM_I(0x00) 应为 0x10；QMC5883L 的 ChipID(0x0D) 应为 0xFF。
-    // 负值表示 I2C 事务失败（-1 写地址 NAK / -2 读长度不符），用于区分「器件不存在」与「寄存器读失败」。
-    auto read_reg = [](uint8_t addr, uint8_t reg) -> int
+    // 磁力计身份判据：I2C1 上的 0x0E 读 WHO_AM_I(0x00) 期望 0x10。
+    // 负值表示 I2C 事务失败（-1 写地址 NAK / -2 读长度不符）。
+    auto read_reg = [](TwoWire &bus, uint8_t addr, uint8_t reg) -> int
     {
-        IIC2.beginTransmission(addr);
-        IIC2.write(reg);
-        if (IIC2.endTransmission(false) != 0U)
+        bus.beginTransmission(addr);
+        bus.write(reg);
+        if (bus.endTransmission(false) != 0U)
         {
             return -1;
         }
-        if (IIC2.requestFrom(addr, (uint8_t)1) != 1U)
+        if (bus.requestFrom(addr, (uint8_t)1) != 1U)
         {
             return -2;
         }
-        return (int)IIC2.read();
+        return (int)bus.read();
     };
-    const int ist_id = read_reg(0x0E, 0x00);
-    const int qmc_id = read_reg(0x0D, 0x0D);
-    serial.print(F("[DBG] whoami IST8310[0x0E:0x00]="));
+    const int ist_id = read_reg(MagWire, 0x0E, 0x00);
+    serial.print(F("[DBG] whoami IST8310[I2C1 0x0E:0x00]="));
     if (ist_id < 0)
     {
         serial.print(ist_id);
@@ -4586,17 +4584,7 @@ static void debugI2cScan(Uart &serial)
         serial.print(F("0x"));
         serial.print((uint8_t)ist_id, HEX);
     }
-    serial.print(F(" (expect 0x10)  QMC5883L[0x0D:0x0D]="));
-    if (qmc_id < 0)
-    {
-        serial.print(qmc_id);
-    }
-    else
-    {
-        serial.print(F("0x"));
-        serial.print((uint8_t)qmc_id, HEX);
-    }
-    serial.println(F(" (expect 0xFF)"));
+    serial.println(F(" (expect 0x10)"));
     serial.println(F("[DBG] i2cscan done. 0x0E=IST8310 0x0D=QMC5883L 0x77=DPS310"));
 }
 

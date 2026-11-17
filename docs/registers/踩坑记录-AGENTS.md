@@ -475,3 +475,23 @@ MagMeasurementGate 全门控 + MagVectorDetailed + 跳变/多帧门）全面领�
   DPS310 气压正常。轴向复核仍需上板把机头摆正北（`magraw` 的 `yaw_est≈0°`）。
 - **判据沉淀**：外设不通先用 `i2cscan` 分「总线/地址/身份」三层，再用 `magprobe`
   分「上电时序 vs 驱动」——不要凭文档接线图下结论。
+
+## 2026-11-17（补）磁力计改接 I2C1：通信正常，但全局对象名 `Wire1` 会让 IMU 初始化失败
+
+- **接线变更**：外挂 IST8310 从 I2C2 挪到 **I2C1（SDA=PB7 / SCL=PB6）**。
+  `i2cscan` 实测：I2C1 应答 `0x0E`、`WHO_AM_I(0x00)=0x10`、空闲电平 SDA/SCL 均高；
+  I2C2 只剩 `0x77`（DPS310）。**接线本身完全正常，两条总线互不干扰。**
+- **踩到的坑（新）**：把磁力计总线对象命名为全局 `TwoWire Wire1(PB7, PB6)` 的版本，
+  烧进去后**启动即 IMU 初始化失败**，卡进 `main.cpp` L385 的 `while(1){digitalToggle;delay(200);}`，
+  表现为串口零输出、DBG 也进不去（复位后 PC 反复落在 `delay`/`HAL_GetTick`）。
+  同一份逻辑只把对象改名为 **`MagWire`** 后冷启动正常，磁力计 `chip=IST8310`、
+  `magraw` 有连续样本。**机理未定位**（框架内未 grep 到 `Wire1` 定义，疑似与核心/库的
+  隐式符号冲突）；按实测规避，不要再用 `Wire1` 作为自定义总线对象名。
+- **诊断手法（可复用）**：固件进 `while(1)` 时串口无输出 → `openocd -c "halt" -c "reg pc"`
+  取 PC → `arm-none-eabi-addr2line -e firmware.elf -f -p <pc>` 直接落到函数名；
+  再 `mdw` 读 `uwTick` 判断 SysTick 是否在走（走得动=不是死锁，是带 delay 的错误循环）。
+  ★ 另外 `initImu` 失败分支现在同时把 `code/lastError` 打到 Serial6，Serial8 没接也能定位。
+- **当前固件配置**：磁力计 `MagWire`（I2C1，400kHz）、气压计 `IIC2`（I2C2，1MHz），
+  两条总线独立；`initMagnetometer()` 保留 5 次上电重试。
+- **判据**：冷启动 `i2cscan` 应显示 I2C1=`0x0E`（WHO_AM_I=0x10）、I2C2=`0x77`；
+  `magcal` 的 `chip=IST8310`、`cal=VALID`；`magraw` 的 `seq` 递增、`age`=0。

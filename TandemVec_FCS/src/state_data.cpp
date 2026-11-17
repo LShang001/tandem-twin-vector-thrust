@@ -59,8 +59,9 @@ const int LED_green = PE5;  // 绿色LED: 系统运行/任务心跳
 const int ignition = PE6;   // 点火控制: MOS管高电平触发
 
 // --- 2.5 总线引脚与对象 ---
-// 磁力计与气压计共用 I2C2（PB11/PB10）：2026-11-17 `i2cscan` 实测两者同总线应答。
-TwoWire IIC2(BARO_SDA_PIN, BARO_SCL_PIN); // 自定义 I2C 总线（磁力计 0x0E + 气压计 0x77）
+// 磁力计 I2C1（PB7/PB6）、气压计 I2C2（PB11/PB10），两条总线独立（2026-11-17 实测）。
+TwoWire MagWire(MAG_SDA_PIN, MAG_SCL_PIN); // 自定义 I2C 总线（磁力计）
+TwoWire IIC2(BARO_SDA_PIN, BARO_SCL_PIN);  // 自定义 I2C 总线（气压计）
 
 // SPI引脚定义 (板载IMU)
 const int SPI_MOSI = PA7;

@@ -377,11 +377,14 @@ void setup()
     // LED_yellow已在下面处理，此处仅记录错误
   }
 
-  if (initImu() != 0)
+  const int imu_init_status = initImu();
+  if (imu_init_status != 0)
   {
     Serial8.print("Onboard ");
     Serial8.print(compiledImuModelName());
     Serial8.println(" initialization FAILED!");
+    Serial6.print("[FATAL] IMU init status=");
+    Serial6.println(imu_init_status);
     while (1)
     {
       digitalToggle(LED_yellow);
