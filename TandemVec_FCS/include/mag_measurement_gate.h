@@ -111,7 +111,15 @@ struct MagGateConfig
     float max_dip_dev_rad = 10.0f * bfs::kMagReferenceDegToRad;
     float max_residual_rad = 45.0f * bfs::kMagReferenceDegToRad;
     float max_track_dev_rad = 20.0f * bfs::kMagReferenceDegToRad;
-    float max_tilt_sigma_rad = 8.0f * bfs::kMagReferenceDegToRad;
+    // 磁矢量倾角补偿的可信度门：姿态 1σ 超过此值就不做三轴矢量更新。
+    // 8° 是按理想重力观测收敛设定的，实机达不到——本机静止实测 tilt_sigma
+    // 稳定在 0.44–0.52 rad（25–30°），8° 会让每一条磁更新都在这一条被拒
+    // （`magcal` 的 fused=0 / rej 每秒+10 就是这么来的），磁连续模式形同虚设。
+    // 放到 30° 覆盖实机常驻值；倾角补偿的误差由模长、磁倾角偏差、航向残差、
+    // 航迹偏差四道门兜底，且磁矢量的主作用是修正航向而非 roll/pitch。
+    // 遗留问题：tilt_sigma 为什么不随重力观测收敛（静止 60 s 仍 25°）待查，
+    // 收敛后应把此门收回 8° 量级。
+    float max_tilt_sigma_rad = 30.0f * bfs::kMagReferenceDegToRad;
     float max_throttle_pct = 85.0f;
     float base_noise_ut = 8.0f;
     float max_noise_ut = 20.0f;

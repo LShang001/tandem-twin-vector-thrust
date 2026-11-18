@@ -82,7 +82,14 @@ public:
     static constexpr float kYawGsfMinSpeedMps = 2.0f;
     static constexpr float kReenableHoldS = 3.0f;
     static constexpr float kMotionCoastS = 3.0f;
-    static constexpr float kNoMagHoldMaxS = 20.0f;
+    // 2026-11-18 取消无磁保持的 20 s 时间窗：定点只要遥控器模式开关在定点档
+    // 就一直保持，不再到点降级定高（用户明确要求）。
+    // 依据：本机实测陀螺零偏 gbias=[0.002,-0.011,-0.018] dps，航向漂移约
+    // 1.2°/min；原 20 s 窗按「无绝对航向必然快速漂」的保守假设设定，实测
+    // 零偏比该假设小一个量级，短时窗口过于保守。
+    // 保留两道质量门而非时间窗：calibrated（先静后动）与航向 1σ≤20°——
+    // 航向真的不确定时仍需降级，那是估计可信度而不是计时。
+    static constexpr float kNoMagHoldMaxS = 0.0f; // 0=不启用时间窗（保留常量供测试引用）
 
     void reset()
     {
@@ -196,9 +203,9 @@ public:
         // hold，只保留定高/手动姿态；位置保持必须等绝对航向源可用。
         if (in.heading_mode >= 1U)
         {
-            // 无磁/磁仅初始：短时允许位置保持与 heading hold。陀螺零偏在
-            // 数十秒内有限；时间窗结束或航向 1σ 过大时必须降级定高。
-            // 窗口只在离地后计时：上电/地面等待不消耗保持时间，落地复位。
+            // 无磁/磁仅初始：不设时间窗，定点一直可用。只保留两道质量门——
+            // 静止校准完成（先静后动）与航向 1σ≤20°（航向真的不确定时降级）。
+            // no_mag_hold_s_ 仍继续累计，仅用于遥测显示已保持时长，不再参与判定。
             if (in.airborne)
             {
                 no_mag_hold_s_ += dt_s;
@@ -207,7 +214,7 @@ public:
             {
                 no_mag_hold_s_ = 0.0f;
             }
-            const bool time_ok = no_mag_hold_s_ <= kNoMagHoldMaxS;
+            const bool time_ok = (kNoMagHoldMaxS <= 0.0f) || (no_mag_hold_s_ <= kNoMagHoldMaxS);
             const bool sigma_ok20 =
                 std::isfinite(in.yaw_sigma_deg) && in.yaw_sigma_deg <= 20.0f;
             // 静止校准（陀螺零偏/水平）未完成前不得进入位置保持：否则
@@ -216,7 +223,9 @@ public:
             out.source_fresh = hold_ok;
             out.heading_hold_allowed = hold_ok;
             out.position_hold_degraded = !hold_ok;
-            out.valid_for_s = kNoMagHoldMaxS - no_mag_hold_s_;
+            // -1 表示无时限（遥测 hdg_win 显示 -1 即「无窗口」）
+            out.valid_for_s = (kNoMagHoldMaxS <= 0.0f) ? -1.0f
+                                                       : (kNoMagHoldMaxS - no_mag_hold_s_);
             return out;
         }
 

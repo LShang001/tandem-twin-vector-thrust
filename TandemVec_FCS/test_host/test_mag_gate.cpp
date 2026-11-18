@@ -187,10 +187,17 @@ int main()
 
   // G7 姿态不确定度与高油门。
   {
+    // 门限 2026-11-18 放到 30°（实机 tilt_sigma 常驻 25–30°，8° 会把磁更新
+    // 永久拒掉）。35° 才应被拒。
     bfs::MagGateInput in = baseInput();
-    in.tilt_sigma_rad = 10.0f * bfs::kMagReferenceDegToRad;
+    in.tilt_sigma_rad = 35.0f * bfs::kMagReferenceDegToRad;
     CHECK(gate.Evaluate(in).reason == bfs::MagGateReason::TiltUncertain,
-          "G7 姿态 1σ>8°拒绝");
+          "G7 姿态 1σ>30°拒绝");
+
+    // 30° 以内应当放行（覆盖实机常驻量级）。
+    in = baseInput();
+    in.tilt_sigma_rad = 28.0f * bfs::kMagReferenceDegToRad;
+    CHECK(gate.Evaluate(in).pass, "G7 姿态 1σ=28° 放行");
 
     in = baseInput();
     in.throttle_pct = 90.0f;

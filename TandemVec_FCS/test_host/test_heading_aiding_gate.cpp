@@ -177,10 +177,17 @@ int main()
     CHECK(!out.position_hold_degraded, "T9 短时窗口内允许位置保持");
     CHECK(out.heading_hold_allowed, "T9 短时窗口内允许 heading hold");
     CHECK(out.source_fresh, "T9 短时窗口内航向源可用");
+    // 2026-11-18：取消无磁 20 s 时间窗。长时间保持后仍应允许定点（用户要求
+    // 「一直可以定点，不要窗口」），只保留航向 1σ 质量门。
     for (int i = 0; i < 4000; ++i) (void)gate.update(in);
     out = gate.update(in);
-    CHECK(out.position_hold_degraded, "T9 超过 20 s 降级");
-    CHECK(!out.heading_hold_allowed, "T9 超过 20 s 禁 heading hold");
+    CHECK(!out.position_hold_degraded, "T9 取消窗口后长时仍保持");
+    CHECK(out.heading_hold_allowed, "T9 取消窗口后长时仍允许 heading hold");
+    CHECK(out.valid_for_s < 0.0f, "T9 无窗口时 valid_for_s=-1");
+    // 质量门仍在：航向 1σ 超 20° 必须降级。
+    in.yaw_sigma_deg = 25.0f;
+    out = gate.update(in);
+    CHECK(out.position_hold_degraded, "T9 航向 1σ>20° 仍降级");
   }
 
   // T9b 无磁窗口只从离地起算：地面等待 60 s 不消耗保持时间。
@@ -216,7 +223,7 @@ int main()
     CHECK(out.heading_hold_allowed, "T9d 校准完成后允许 heading hold");
   }
 
-  // T9c 落地复位窗口：离地超时降级后，落地再起飞重新获得 20 s。
+  // T9c 落地不复位保持能力（窗口已取消）：离地 30 s 后仍保持，落地再起飞也保持。
   {
     bfs::HeadingAidingGate gate;
     bfs::HeadingAidingInput in = input(1.0e9f);
@@ -225,12 +232,12 @@ int main()
     in.airborne = true;
     for (int i = 0; i < 6000; ++i) (void)gate.update(in);
     auto out = gate.update(in);
-    CHECK(out.position_hold_degraded, "T9c 离地 30 s 后降级");
+    CHECK(!out.position_hold_degraded, "T9c 离地 30 s 后仍保持");
     in.airborne = false;
     (void)gate.update(in);
     in.airborne = true;
     out = gate.update(in);
-    CHECK(!out.position_hold_degraded, "T9c 落地复位后重新允许短时保持");
+    CHECK(!out.position_hold_degraded, "T9c 落地再起飞仍保持");
   }
 
   if (g_fail == 0)
