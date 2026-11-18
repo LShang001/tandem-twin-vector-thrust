@@ -20,7 +20,7 @@ metadata:
 
 ## Prerequisites
 
-- 双项目结构认知：**根 AGENTS.md**（仿真，106 行达标，一般不动）+ **TandemVec_FCS/AGENTS.md**（固件，重点优化对象）
+- 两级指令：**根 AGENTS.md** 管全仓约定，**TandemVec_FCS/AGENTS.md** 管固件规则。审查前实测两份文件行数并分别评分；不根据旧行数跳过任何一份。
 - 引用文件 `.agents/docs/hardware-reference.md` 已存在（串口/硬件事实表，勿重复内联回 AGENTS.md）
 - 校验脚本（可选）：`python C:\Users\12631\.agents\skills\learn-skill\scripts\validate_skill.py`
 
