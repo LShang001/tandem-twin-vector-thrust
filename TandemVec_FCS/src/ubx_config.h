@@ -283,6 +283,35 @@ struct UbxNav5Status
 bool ubxQueryNav5Config(Uart &serial, UbxNav5Status *status);
 
 /**
+ * @brief 用 CFG-VALGET 读回单个配置项（L/U1 单字节型）
+ * @param[in]  key   配置键 ID（如 CFG-NAVSPG-DYNMODEL 0x20110021）
+ * @param[out] value 读回值
+ * @return true=读回成功
+ * @note 用于交叉验证 legacy CFG-* 消息写入的值与新接口读回是否一致。
+ *       F9P 的 PROTVER=34.00，legacy CFG-PRT/RATE/MSG/NAV5/GNSS/SBAS 官方
+ *       均已废弃（>23.01），实测仍向后兼容，但存在字段部分失效的先例
+ *       （CFG-GNSS 的使能位就是这样）。
+ */
+bool ubxValGetByte(Uart &serial, uint32_t key, uint8_t *value);
+
+/**
+ * @brief 用 CFG-VALGET 读回单个 U2 型配置项
+ * @param[in]  key   配置键 ID（如 CFG-RATE-MEAS 0x30210001）
+ * @param[out] value 读回值
+ * @return true=读回成功
+ */
+bool ubxValGetU2(Uart &serial, uint32_t key, uint16_t *value);
+
+/**
+ * @brief 用 CFG-VALSET 写入单个 L 型（单字节）配置项
+ * @param[in] key   配置键 ID
+ * @param[in] value 目标值
+ * @return true=接收机回 ACK（是否被采纳须用读回验证）
+ * @note layers=RAM，掉电需 CFG-CFG 固化。
+ */
+bool ubxValSetByte(Uart &serial, uint32_t key, uint8_t value);
+
+/**
  * @brief 轮询 UBX-MON-VER 并解析 SW/HW/PROTVER/ANTSUPERV
  * @return true=收到 ≥40B 的 MON-VER；各输出缓冲区允许为 nullptr/0
  */

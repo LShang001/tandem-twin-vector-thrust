@@ -4066,6 +4066,80 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
             serial.println(F("[DBG] usage: ubxcfg gnssen <id 0-7> <on|off>"));
           }
         }
+        else if (strncmp(line, "ubxcfg valget", 13) == 0) {
+          // ubxcfg valget <hexkey> [u2]：用 CFG-VALGET 读任意配置项，
+          // 用于交叉验证 legacy CFG-* 写入是否与新接口读回一致
+          unsigned int key = 0;
+          char kind[4] = {0};
+          const int cnt = sscanf(line + 13, "%x %3s", &key, kind);
+          if (cnt >= 1 && key != 0)
+          {
+            if (cnt == 2 && strcmp(kind, "u2") == 0)
+            {
+              uint16_t u2 = 0;
+              if (ubxValGetU2(gpsSerialPort, (uint32_t)key, &u2))
+              {
+                serial.print(F("[DBG] valget key=0x"));
+                serial.print((uint32_t)key, HEX);
+                serial.print(F(" u2="));
+                serial.println(u2);
+              }
+              else
+              {
+                serial.println(F("[DBG] valget FAIL"));
+              }
+            }
+            else
+            {
+              uint8_t b = 0;
+              if (ubxValGetByte(gpsSerialPort, (uint32_t)key, &b))
+              {
+                serial.print(F("[DBG] valget key=0x"));
+                serial.print((uint32_t)key, HEX);
+                serial.print(F(" u1="));
+                serial.println(b);
+              }
+              else
+              {
+                serial.println(F("[DBG] valget FAIL"));
+              }
+            }
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg valget <hexkey> [u2]"));
+          }
+        }
+        else if (strncmp(line, "ubxcfg valset", 13) == 0) {
+          // ubxcfg valset <hexkey> <value>：用 CFG-VALSET 写任意 L 型配置项，
+          // 写后立即 VALGET 回读确认（ACK 不等于采纳）
+          unsigned int key = 0;
+          int val = -1;
+          if (sscanf(line + 13, "%x %d", &key, &val) == 2 && key != 0 && val >= 0 && val <= 255)
+          {
+            const bool ok = ubxValSetByte(gpsSerialPort, (uint32_t)key, (uint8_t)val);
+            serial.print(F("[DBG] valset key=0x"));
+            serial.print((uint32_t)key, HEX);
+            serial.print(F(" want="));
+            serial.print(val);
+            serial.print(F(" ack="));
+            serial.print(ok ? F("OK") : F("NG"));
+            uint8_t rb = 0xFF;
+            if (ubxValGetByte(gpsSerialPort, (uint32_t)key, &rb))
+            {
+              serial.print(F(" readback="));
+              serial.println(rb);
+            }
+            else
+            {
+              serial.println(F(" readback=FAIL"));
+            }
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg valset <hexkey> <0-255>"));
+          }
+        }
         else if (strncmp(line, "ubxcfg proto ", 13) == 0) {
           // 串口输出协议掩码（CFG-PRT）：ubx=UBX-only, nmea=NMEA-only, both=UBX+NMEA
           const char *p = line + 13;

@@ -387,11 +387,17 @@ static DetectKind _probe_baud(Uart &serial, uint32_t baud, uint32_t window_ms)
 
 // CFG-PRT（20B）：UART1 → 目标波特率 + 协议掩码（nmea_out=false 时 UBX-only）
 /**
- * @brief 下发 CFG-PRT：UART1 设为指定波特率与输出协议掩码
+ * @brief 下发 CFG-PRT + CFG-VALSET 补写输出协议掩码
  * @param[in] baud     目标波特率
  * @param[in] nmea_out true=UBX+NMEA 输出，false=UBX-only
- * @note 只写不校验；确认真的生效要用 _ubx_verify_prt 回读波特率，
- *       或以 NAV-PVT 计数增量作为旁证。
+ * @note ★2026-11-19：CFG-PRT 在协议版本 >23.01 已废弃（F9P PROTVER=34.00）。
+ *       实测它的 outProtoMask 写入不生效——配的是 UBX-only，用 CFG-VALGET 读
+ *       CFG-UART1OUTPROT-NMEA 仍是 1，接收机一直在输出 NMEA。因此这里先发
+ *       CFG-PRT（兼容老机型、且波特率那项实测有效），再用 CFG-VALSET 显式
+ *       写 CFG-UART1OUTPROT-NMEA，把输出协议真正定死。
+ *       配置项键值（同手册配置项表）：
+ *         CFG-UART1OUTPROT-UBX  = 0x10740001（保持 1）
+ *         CFG-UART1OUTPROT-NMEA = 0x10740002（按 nmea_out 置 0/1）
  */
 static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
 {
@@ -403,6 +409,24 @@ static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
   putU2(p, prt::kInProtoMask, 0x0001);                  // 只收 UBX（含 RTCM 的走 inRtcm3）
   putU2(p, prt::kOutProtoMask, nmea_out ? 0x0003 : 0x0001);  // 只发 UBX，可选加 NMEA
   _ubx_send(serial, 0x06, 0x00, p, prt::kPayloadBytes);
+}
+
+/**
+ * @brief 用 CFG-VALSET 定死 UART1 的输出协议掩码
+ * @param[in] nmea_out true=允许 NMEA 输出，false=只输出 UBX
+ * @return true=接收机回 ACK（是否采纳需回读 CFG-UART1OUTPROT-NMEA）
+ * @note ★2026-11-19：CFG-PRT 的 outProtoMask 在 F9P(PROTVER=34.00) 上不生效
+ *       ——配 UBX-only 后回读 CFG-UART1OUTPROT-NMEA 仍是 1，接收机一直在输出
+ *       NMEA。改用配置项接口写该键。
+ *       注意时序：不能在 _cfg_prt 里紧跟着发，CFG-PRT 会让接收机重配 UART，
+ *       紧随其后的 VALSET 会被丢掉（实测 readback 仍为 1）。所以单独成步，
+ *       放在 CFG-RATE 之后，中间已有几帧自然间隔。
+ */
+static void _cfg_uart1_outproto(Uart &serial, bool nmea_out)
+{
+  const uint32_t key_nmea = 0x10740002U;   // CFG-UART1OUTPROT-NMEA
+  const uint8_t v_nmea = nmea_out ? 1 : 0;
+  (void)_valset_l(serial, &key_nmea, &v_nmea, 1);
 }
 
 // CFG-RATE（6B）：测量周期 / 导航频率 / 时间基准
@@ -741,19 +765,24 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
   {
     return false;
   }
-  // 星座使能校验（★2026-11-19）：SBAS 必须处于关闭状态。不验这一项时，
-  // 关掉 SBAS 这类星座改动会被快路径整段跳过——配置永远下发不下去。
-  // 走 CFG-VALGET 读 CFG-SIGNAL-SBAS_ENA（CFG-GNSS 已废弃，见 _cfg_gnss_optimize）。
+  // 星座与输出协议校验（★2026-11-19）：SBAS 必须关闭、UART1 必须不输出 NMEA。
+  // 不验这两项时，这类改动会被快路径整段跳过——配置永远下发不下去
+  // （CFG-PRT 的 outProtoMask 实测不生效，NMEA 一直在输出，就是这里的证据）。
+  // 两项都是 L 型，一次 CFG-VALGET 读完，约 50–80 ms。
   if (require_sbas_off)
   {
-    uint8_t sbas_en = 0xFF;
-    if (!_valget_l(serial, &kSignalEnableKeys[1], 1, &sbas_en))
+    const uint32_t keys[2] = {
+        0x10310020U,  // CFG-SIGNAL-SBAS_ENA
+        0x10740002U,  // CFG-UART1OUTPROT-NMEA
+    };
+    uint8_t vals[2] = {0xFF, 0xFF};
+    if (!_valget_l(serial, keys, 2, vals))
     {
-      return false;                  // 读不到星座配置就别跳过配置
+      return false;                  // 读不到配置就别跳过
     }
-    if (sbas_en != 0)
+    if (vals[0] != 0 || vals[1] != 0)
     {
-      return false;                  // SBAS 还开着 → 需要全量配置去关掉
+      return false;                  // SBAS 还开着 或 NMEA 还在输出 → 需全量配置
     }
   }
   if (expect_dyn == 0)
@@ -887,6 +916,54 @@ bool ubxQueryNav5Config(Uart &serial, UbxNav5Status *status)
   status->pdop = ubxLayout::getU2(rb, ubxLayout::nav5::kPDop);
   status->valid = true;
   return true;
+}
+
+/**
+ * @brief 用 CFG-VALGET 读回单个配置项（L/U1 单字节型）
+ */
+bool ubxValGetByte(Uart &serial, uint32_t key, uint8_t *value)
+{
+  if (value == nullptr)
+  {
+    return false;
+  }
+  return _valget_l(serial, &key, 1, value);
+}
+
+/**
+ * @brief 用 CFG-VALGET 读回单个 U2 型配置项
+ * @note VALGET 响应里的值宽度由键的类型决定，U2 占 2 字节，所以响应长度是
+ *       4（头部）+ 4（键）+ 2（值）= 10，不能复用 _valget_l（它按 1 字节取）。
+ */
+bool ubxValGetU2(Uart &serial, uint32_t key, uint16_t *value)
+{
+  if (value == nullptr)
+  {
+    return false;
+  }
+  uint8_t req[4 + 4];
+  req[0] = 0x00;
+  req[1] = 0x00;                 // RAM
+  req[2] = 0x00;
+  req[3] = 0x00;
+  ubxLayout::putU4(req, 4, key);
+  uint8_t resp[16];
+  const uint16_t n = _ubx_request_payload(serial, 0x06, 0x8B, req, sizeof(req),
+                                          resp, sizeof(resp), 500);
+  if (n < 10 || ubxLayout::getU4(resp, 4) != key)
+  {
+    return false;
+  }
+  *value = ubxLayout::getU2(resp, 8);
+  return true;
+}
+
+/**
+ * @brief 用 CFG-VALSET 写入单个 L 型配置项
+ */
+bool ubxValSetByte(Uart &serial, uint32_t key, uint8_t value)
+{
+  return _valset_l(serial, &key, &value, 1);
 }
 
 // ============================================================
@@ -1034,6 +1111,12 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   {
     r.rate_ok = true;
   }
+
+  // 3b. UART1 输出协议掩码（只能走 VALSET，见 _cfg_uart1_outproto 的说明）。
+  //     放在 CFG-PRT 之后隔一步发：紧跟 CFG-PRT 的 VALSET 会被接收机重配
+  //     UART 的动作丢掉（实测 readback 仍为 1）。
+  _cfg_uart1_outproto(serial, o.nmea_out);
+  r.cfg_frames_sent++;
 
   // 4. CFG-MSG：NAV-PVT + NAV-EOE
   _cfg_msg(serial, 0x01, 0x07, 1);
