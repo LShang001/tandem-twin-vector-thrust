@@ -4682,6 +4682,45 @@ void debugMagCalCommand(Uart &serial, char *args)
         serial.println(bfs::magGateReasonName(
             static_cast<bfs::MagGateReason>(mag_status.last_gate_reason)));
 
+        // 逐条门拒绝计数：只打印非零桶，直接回答「哪一条在拒」。
+        // unknown 桶非零 = 门控返回 pass=false 但没有设置 reason（漏设路径）。
+        {
+            bool any = false;
+            for (uint8_t i = 0; i < MagRuntimeStatus::kRejectHistSize; ++i)
+            {
+                const uint32_t c = mag_status.reject_hist[i];
+                if (c == 0U)
+                {
+                    continue;
+                }
+                if (!any)
+                {
+                    serial.print(F("[DBG]   rej_by_gate:"));
+                    any = true;
+                }
+                serial.print(F(" "));
+                if (i == MagRuntimeStatus::kRejectHistUnknown)
+                {
+                    serial.print(F("unknown="));
+                }
+                else
+                {
+                    serial.print(bfs::magGateReasonName(
+                        static_cast<bfs::MagGateReason>(i)));
+                    serial.print(F("="));
+                }
+                serial.print(static_cast<unsigned long>(c));
+            }
+            if (any)
+            {
+                serial.println();
+            }
+            else
+            {
+                serial.println(F("[DBG]   rej_by_gate: (none)"));
+            }
+        }
+
         // 引导校准进度
         if (magSensor.guideActive() || magSensor.guideStage() != magcal::GuideStage::IDLE)
         {

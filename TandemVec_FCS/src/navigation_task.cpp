@@ -3179,6 +3179,15 @@ void handleNavigationSystem()
         {
           mag_status.last_gate_reason = static_cast<uint8_t>(gate.reason);
           ++mag_status.gate_rejected;
+          // 逐条门计数：直接回答「哪一条在拒」。reason 落在 0..14 归本桶，
+          // 越界或 Count 值归 unknown 桶（配合 reason=none 场景定位漏设路径）。
+          {
+            const uint8_t rej_idx = static_cast<uint8_t>(gate.reason);
+            ++mag_status.reject_hist[
+                (rej_idx < MagRuntimeStatus::kRejectHistUnknown)
+                    ? rej_idx
+                    : MagRuntimeStatus::kRejectHistUnknown];
+          }
           aid_tracker.MarkAvailable(bfs::AidSource::Mag, false);
         }
         else

@@ -945,6 +945,12 @@ struct MagRuntimeStatus
   uint32_t fused = 0;
   uint32_t gate_rejected = 0;
   uint32_t ekf_rejected = 0;
+  // 逐条门的拒绝计数（2026-11-18）：下标 = bfs::MagGateReason 整数值（0..14），
+  // 第 15 桶记录「pass=false 但 reason=None」的异常收敛点——用来定位
+  // `magcal` 只报 reason=none 却持续拒绝的漏设路径。
+  static constexpr uint8_t kRejectHistSize = 16;
+  static constexpr uint8_t kRejectHistUnknown = 15;
+  uint32_t reject_hist[kRejectHistSize] = {};
 };
 extern MagRuntimeStatus mag_status;
 
