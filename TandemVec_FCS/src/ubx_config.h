@@ -65,6 +65,11 @@ struct UbxConfigOptions
   bool     sbas_enable;      // 使能 SBAS 差分增强（EGNOS/WAAS）
   bool     nmea_out;         // false=UBX-only 输出；true=UBX+NMEA
   bool     persist;          // CFG-CFG 固化到接收机闪存
+  // ★2026-11-19：星座通道重排（关 SBAS、扩北斗）。
+  // SBAS 在国内无覆盖（EGNOS/WAAS/MSAS/GAGAN 都不覆盖中国），实测占 3 个跟踪通道；
+  // 北斗在国内可用卫星最多而只分到 5 个通道。开启后按
+  // GPS14 + GAL16 + BDS12 + QZSS4 + GLO12 = 58（trkUse=60）重排。
+  bool     gnss_optimize;
 };
 
 // 默认配置选项（main.cpp / DBG 使用）
@@ -76,6 +81,7 @@ static const UbxConfigOptions kUbxDefaultCfg = {
   /* sbas_enable: SBAS 差分增强 */ false,
   /* nmea_out:    false=仅 UBX 输出 */ false,
   /* persist:     CFG-CFG 固化到接收机闪存 */ false,
+  /* gnss_optimize: 关 SBAS + 扩北斗通道（国内 SBAS 无覆盖） */ true,
 };
 
 /**
@@ -102,6 +108,124 @@ bool ubxGnssSerialBegin(Uart &serial, uint32_t baud);
 /** @brief GNSS 串口接收配置失败累计次数（DBG `ubxstat` 显示）。 */
 uint32_t ubxGnssSerialConfigFailCount();
 
+/**
+ * @brief UBX 配置消息的 payload 字段偏移（一手来源：u-blox F9 HPG 1.32
+ *        Interface Description UBX-22008968 §UBX-CFG-*）
+ * @details 全部按官方 "Byte offset" 列抄录。任何 CFG-* 组帧/解析都必须用
+ *          这里的常量，禁止在调用点手写整数偏移——2026-11-19 曾出现
+ *          CFG-PRT in/outProtoMask、CFG-RATE timeRef、CFG-NAV5 minElev/pDop
+ *          三处偏移写错，功能"看似正常"但配置根本没落到目标字段。
+ */
+namespace ubxLayout
+{
+/** @brief 小端 U2 写入 */
+inline void putU2(uint8_t *p, uint16_t off, uint16_t v)
+{
+  p[off] = static_cast<uint8_t>(v & 0xFFU);
+  p[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFFU);
+}
+/** @brief 小端 U4 写入 */
+inline void putU4(uint8_t *p, uint16_t off, uint32_t v)
+{
+  p[off] = static_cast<uint8_t>(v & 0xFFU);
+  p[off + 1] = static_cast<uint8_t>((v >> 8) & 0xFFU);
+  p[off + 2] = static_cast<uint8_t>((v >> 16) & 0xFFU);
+  p[off + 3] = static_cast<uint8_t>((v >> 24) & 0xFFU);
+}
+/** @brief 小端 U2 读取 */
+inline uint16_t getU2(const uint8_t *p, uint16_t off)
+{
+  return static_cast<uint16_t>(p[off] | (static_cast<uint16_t>(p[off + 1]) << 8));
+}
+/** @brief 小端 U4 读取 */
+inline uint32_t getU4(const uint8_t *p, uint16_t off)
+{
+  return static_cast<uint32_t>(p[off]) |
+         (static_cast<uint32_t>(p[off + 1]) << 8) |
+         (static_cast<uint32_t>(p[off + 2]) << 16) |
+         (static_cast<uint32_t>(p[off + 3]) << 24);
+}
+
+/** @brief UBX-CFG-PRT（UART 口，payload 20 字节） */
+namespace prt
+{
+constexpr uint16_t kPortId = 0;        // U1
+constexpr uint16_t kTxReady = 2;       // X2
+constexpr uint16_t kMode = 4;          // X4
+constexpr uint16_t kBaudRate = 8;      // U4
+constexpr uint16_t kInProtoMask = 12;  // X2
+constexpr uint16_t kOutProtoMask = 14; // X2
+constexpr uint16_t kFlags = 16;        // X2
+constexpr uint16_t kPayloadBytes = 20;
+constexpr uint32_t kMode8N1 = 0x000008D0UL;
+}  // namespace prt
+
+/** @brief UBX-CFG-RATE（payload 6 字节） */
+namespace rate
+{
+constexpr uint16_t kMeasRate = 0;  // U2，ms
+constexpr uint16_t kNavRate = 2;   // U2，cycles
+constexpr uint16_t kTimeRef = 4;   // U2，0=UTC 1=GPS 2=GLO 3=BDS 4=GAL
+constexpr uint16_t kPayloadBytes = 6;
+constexpr uint16_t kTimeRefGps = 1;
+}  // namespace rate
+
+/** @brief UBX-CFG-NAV5（payload 36 字节） */
+namespace nav5
+{
+constexpr uint16_t kMask = 0;       // X2，bit0=dyn  bit1=fixMode  bit4=minElev  bit2=pDop
+constexpr uint16_t kDynModel = 2;   // E1
+constexpr uint16_t kFixMode = 3;    // E1
+constexpr uint16_t kMinElev = 12;   // I1，deg
+constexpr uint16_t kPDop = 14;      // U2，0.1
+constexpr uint16_t kPayloadBytes = 36;
+constexpr uint16_t kMaskDyn = 0x0001;      // bit0 dyn
+constexpr uint16_t kMaskMinElev = 0x0002;  // bit1 minEl
+constexpr uint16_t kMaskFixMode = 0x0004;  // bit2 posFixMode
+constexpr uint16_t kMaskPDop = 0x0010;     // bit4 posMask
+}  // namespace nav5
+
+/** @brief UBX-CFG-MSG（payload 8 字节） */
+namespace msg
+{
+constexpr uint16_t kMsgClass = 0;
+constexpr uint16_t kMsgId = 1;
+constexpr uint16_t kRateUart1 = 3;
+constexpr uint16_t kPayloadBytes = 8;
+}  // namespace msg
+}  // namespace ubxLayout
+
+/**
+ * @brief CFG-GNSS payload 字节布局（UBX 接口描述 UBX-CFG-GNSS）
+ * @details 前 4 字节是 version/numTrkChHw/numTrkChUse/numConfigBlocks，
+ *          配置块从偏移 4 开始，每块 8 字节：
+ *          gnssId(0) resTrkCh(1) maxTrkCh(2) reserved(3) flags[4](4..7)，
+ *          flags 的 bit0 是使能位。
+ * @note 所有 CFG-GNSS 解析必须经由这里的常量与函数，不要在调用点手写裸偏移。
+ *       2026-11-19 曾两次把块起点写成 8（应为 4），导致星座配置从未落到接收机。
+ */
+namespace ubxCfgGnss
+{
+constexpr uint16_t kHeaderBytes = 4;   // version + numTrkChHw + numTrkChUse + numConfigBlocks
+constexpr uint16_t kBlockBytes = 8;    // 每个星座配置块
+constexpr uint16_t kFlagEnableBit = 0x01U;
+
+/** @brief 第 i 个配置块在 payload 内的起始偏移 */
+constexpr uint16_t blockOffset(uint16_t i) { return kHeaderBytes + i * kBlockBytes; }
+
+/** @brief 长度为 len 的 payload 是否完整包含第 i 个配置块 */
+constexpr bool blockFits(uint16_t i, uint16_t len)
+{
+  return static_cast<uint32_t>(blockOffset(i)) + kBlockBytes <= len;
+}
+
+/** @brief 配置块内各字段相对块起点的偏移 */
+constexpr uint16_t kOffGnssId = 0;
+constexpr uint16_t kOffResTrkCh = 1;
+constexpr uint16_t kOffMaxTrkCh = 2;
+constexpr uint16_t kOffFlags = 4;
+}  // namespace ubxCfgGnss
+
 /** @brief 上次配置结果（DBG `ubxcfg status` 读取） */
 const UbxCfgResult &ubxLastCfgResult();
 
@@ -119,6 +243,16 @@ const UbxCfgResult &ubxLastCfgResult();
  *       以及定位几何/收敛速度。
  */
 bool ubxQueryGnssConfig(Uart &serial, uint8_t *payload, uint16_t cap, uint16_t *len);
+
+/**
+ * @brief 单独设置某个星座的最大跟踪通道数（CFG-GNSS 读改写）
+ * @param[in] gnss_id 星座 id：0=GPS 1=SBAS 2=GAL 3=BDS 5=QZSS 6=GLO
+ * @param[in] max_trk 目标 maxTrkCh（1..32）
+ * @return true=接收机回 ACK；false=读回失败或 NAK
+ * @note ACK 只证明帧被接受，不代表数值被采纳——F9P 可能按内部通道预算
+ *       钳制 maxTrkCh，调用后必须用 ubxQueryGnssConfig 回读确认。
+ */
+bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk);
 
 /**
  * @brief 轮询 UBX-MON-VER 并解析 SW/HW/PROTVER/ANTSUPERV

@@ -27,7 +27,7 @@
  * @see     lib/MagCal/MagCalStore.h（Flash 持久化）、lib/MagCal/MagCalMath.h
  *          （paramsSanity：scale 必须 5–200 µT）、src/sensor_imu.cpp initMagnetometer、
  *          lib/MagSensor/MagMath.h（共轴轴对齐实测表）
- * @frame  磁力计芯片系（标定与轴对齐均在芯片系完成）；机头朝北水平时
+ * @frame  传感器原始（磁力计芯片系，标定与轴对齐均在芯片系完成）；机头朝北水平时
  *         补偿后航向应为 0°（含长沙磁偏 −4.114°）
  * @units  硬铁偏移 b、拟合场强 scale、总场强：µT；软铁矩阵 M 无量纲；
  *         航向/磁偏：deg

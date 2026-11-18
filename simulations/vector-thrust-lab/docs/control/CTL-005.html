@@ -51,13 +51,13 @@
 <tbody>
 <tr>
 <td>0</td>
-<td>MAG_ONLY</td>
+<td>MAG_ONLY（默认）</td>
 <td>连续</td>
 <td>真实磁（含磁偏角）或伪磁</td>
 </tr>
 <tr>
 <td>1</td>
-<td>MAG_INIT_ONLY（默认）</td>
+<td>MAG_INIT_ONLY</td>
 <td>仅初始化，之后停止</td>
 <td>真实磁（含磁偏角）；无磁时手动</td>
 </tr>
@@ -69,12 +69,17 @@
 </tr>
 </tbody>
 </table>
-<p><strong>默认模式 1（2026-11-16 用户指令，由 0 改为
-1）</strong>：磁力计只做初始化航向
-对准，飞行中不连续融合磁矢量，防止实机磁干扰（电机电流/铁磁构件）污染
-姿态解算。需要磁连续时 GCS 设
-<code>hdg_mode=0</code>（代码路径保留）。代价：位置 保持受 §3 的 20 s
-短时窗口限制，航向随陀螺积分漂移。</p>
+<p><strong>默认模式
+0（磁连续）</strong>：地面静止上电即用磁力计完成初始航向对准，起飞
+后继续用磁矢量修正航向；位置保持不设时间窗口，遥控器 CH7 打到定点档就
+可以长期悬停保持。这是实机唯一可用于长时定点的配置——模式 1/2 的航向只
+靠陀螺积分，1σ 随时间增长，位置环的 N/E 分解会跟着偏转（§2），所以只能
+撑 §3 的 20 s。磁干扰样本由 <code>MagMeasurementGate</code>
+逐样本拒绝（NIS、模长、 新鲜度），不是裸用磁。需要临时关掉连续磁时 GCS
+设 <code>hdg_mode=1</code>，代价是 位置保持退回 20 s 窗口。</p>
+<p>早期「mode 0 + <code>--mag</code> 多 seed 发散（ekf_alt
+NaN）」的证据来自 legacy <code>g_ekf</code> 实验环；生产
+<code>nav_ekf</code> 路径下 mode 0 是精度最高的一组（下表）。</p>
 <p><strong>生产路径 SIL
 证据（2026-11-16，<code>--real-nav</code>，seed3，40
 s，理想磁注入）</strong>：</p>
@@ -132,14 +137,28 @@ s）。<strong>不能把 GNSS 速度方向直接当航向。</strong></li>
 <li><strong>速度 + 倾斜运动</strong>：前飞时推力方向随姿态倾斜，GNSS
 速度/加速度与 机体系比力联合可观测航向；EKF 才会收敛。</li>
 </ul>
-<h2 id="3-位置保持门控20-s-短时窗口">3. 位置保持门控（20 s
-短时窗口）</h2>
-<p>模式 1/2 下 <code>HeadingAidingGate</code> 允许 <strong>20 s
-内的位置保持与 heading hold</strong>， 前提是 EKF 航向 1σ
-≤20°；窗口结束或σ超限立即降级 <code>AUTO_ALTITUDE</code>，
-回中只做零角速率阻尼。依据：短时陀螺零偏有限，用户接受短时定点； SIL
-也显示窗口内可完成 15 m 前飞并保持在 ~16.5 m，窗口后（21 s 起）
-航向与位置开始漂移。</p>
+<h2 id="3-位置保持门控无时间窗只保留质量门">3.
+位置保持门控（无时间窗，只保留质量门）</h2>
+<p><strong>2026-11-18 取消 20 s
+时间窗</strong>（用户要求「一直可以定点，不要窗口」）： 遥控器 CH7
+在定点档（&gt;1650）就一直保持位置，不再到点降级定高。依据是
+本机实测陀螺零偏
+<code>gbias=[0.002,-0.011,-0.018] dps</code>，航向漂移约 1.2°/min，
+原窗口按「无绝对航向必然快速漂」的保守假设设定，实测零偏比该假设小一个
+量级。</p>
+<p>保留两道<strong>质量门</strong>（是估计可信度判据，不是计时）：</p>
+<ul>
+<li><code>calibrated</code>：静止校准（陀螺零偏/水平）未完成前不得进入位置保持，先静后动。</li>
+<li>航向 1σ ≤ 20°：航向真的不确定时仍降级
+<code>AUTO_ALTITUDE</code>。</li>
+</ul>
+<p>遥测 <code>hdg_win=-1</code> 即「无窗口」；<code>pos_deg=1</code>
+表示本拍发生了航向不可观降级。</p>
+<p><strong>边界（如实）</strong>：航向仍靠陀螺积分，按实测零偏约每 10
+分钟漂 12°。长时间 悬停后位置环的 N/E
+分解会偏转，表现为缓慢的单向漂移而非抖动；需要长时
+高精度保持时，应在磁门控诊断修复后切
+<code>hdg_mode=0</code>（磁连续）或用地面站 的航向重对准。</p>
 <p><strong>窗口只在离地后计时</strong>（<code>airborne = 解锁 &amp;&amp; throttlePercent ≥3%</code>）：上电、
 地面等待、磁标定不消耗 20 s；落地（油门回到 0）清零，再次起飞重新计 20
 s。 <strong>窗口从离地起算，不从进入 AUTO_POSITION
@@ -653,5 +672,5 @@ NIS/重锚有界响应。</strong> 420 次幅度/速率矩阵：20 m 台阶
 次，已回退）：正常/20 m 无触发；30/50/100 m 中位真值位移
 24/30/31→16/16/16 m，但 p95/max 变差、pos_rms 不变，不采用。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-005-无磁航向与运动EKF.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-16 19:17</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-005-无磁航向与运动EKF.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-19 01:45</footer></article></body>
 </html>

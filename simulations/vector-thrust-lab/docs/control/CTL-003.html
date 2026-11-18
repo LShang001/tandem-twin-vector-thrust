@@ -188,9 +188,9 @@ plant：旧传感器口径（AHRS 空桩）3×5 = 15/15；2026-10-29
 <li>18 组 plant 参数/故障扫描 15/18 通过，边界为低力臂/高
 Iy/组合低边界（低质量 mass=0.70 在 2026-10-30 复跑中通过）；随机 MC 100
 例 56/100，俯仰超调是最差 8 例的共同特征；双发损失/舵机卡死可触发 F3/F4
-检测但没有重构/安全降落。<strong>仍无共轴台架/HIL/实机；plant
-惯量/力臂/差速力矩是 L1
-假设，没有外部实飞日志做逐波形回放。</strong></li>
+检测但没有重构/安全降落。<strong>共轴机已于 2026-11-19
+由用户确认飞行正常；台架/HIL 对比与逐波形回放仍未做，plant
+惯量/力臂/差速力矩仍是 L1 假设。</strong></li>
 </ul></li>
 <li><code>include/CoaxialVtvControl.h</code>
 的共轴参数与遥测（2026-10-30）：新增 25 项 <code>coax.*</code>
@@ -254,9 +254,10 @@ Arduino。自动分配路径走 <code>TandemVecAllocator</code>，manual/locked
 </tr>
 <tr>
 <td>TVC</td>
-<td>上摆=滚转、下摆=俯仰；齿轮 40/30、半行程 45°、dMax 15°</td>
-<td>喷管两轴 TVC；舵机 33.33–66.67% 对应
-±15°，<code>MAX_CORRECTION=10°</code></td>
+<td>前后两个单轴摆座：上摆=滚转、下摆=俯仰；齿轮 40/30、半行程 45°、dMax
+15°</td>
+<td><strong>单一底部两轴摆座</strong>（与火箭推力矢量同原理，两轴可同时摆动，<strong>无上/下摆</strong>）；舵机
+33.33–66.67% 对应 ±15°，<code>MAX_CORRECTION=10°</code>，力臂 21 cm</td>
 </tr>
 <tr>
 <td>偏航</td>
@@ -297,8 +298,9 @@ TVC）、增益/限幅/保护门限、参数表/遥测字段。</p>
 的逐行对照审计（VER-004）确认：RATE_MODE
 复位/积分/目标量级、姿态环油门门控、手动 TVC
 输出滤波、偏航积分门均已按原始语义修复（§10）；空中断链策略、45°
-锁电机、姿态误差精确化与陀螺双级滤波仍是未处置差异，<strong>在台架/HIL
-与剩余差异评审前不得把当前固件直接飞共轴机型</strong>。外部工程中的几何/三阶多项式
+锁电机、姿态误差精确化与陀螺双级滤波仍是未处置差异；<strong>该机
+2026-11-19
+已经用户确认飞行正常，但上述差异未逐项复核——动共轴控制链（分配器/限幅/门控/滤波）前仍须按本清单回归，不以"能飞"代替差异闭环</strong>。外部工程中的几何/三阶多项式
 TVC 映射目前未被其实际 mix
 调用，暂作为可选运动学表保留，不冒充当前实现。燃料阀门/点火是独立安全输出，未纳入
 4 路姿态 mix；接入共轴整机时需把阀门/点火增加到 profile 或复用现有 fuel
@@ -430,5 +432,5 @@ href="../verification/VER-002.html">VER-002
 为唯一控制路径（<code>coax.alloc_mode</code> 已废弃、固件忽略）
 仍为默认，旧输出表与 legacy 路径保持不变。</p>
 </blockquote>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-16 19:17</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-003-多机型与执行器抽象.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-19 01:45</footer></article></body>
 </html>

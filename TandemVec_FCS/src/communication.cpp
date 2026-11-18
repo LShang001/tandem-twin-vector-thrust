@@ -3954,11 +3954,14 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
             serial.print(buf[1]);
             serial.print(F(" trkUse="));
             serial.println(buf[2]);
-            for (uint8_t i = 0; i < blocks && (4U + (uint32_t)i * 8U + 8U) <= n; ++i)
+            for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, n); ++i)
             {
-              const uint8_t *b = buf + 4 + (uint32_t)i * 8U;
+              const uint8_t *b = buf + ubxCfgGnss::blockOffset(i);
+              const uint8_t gnss_id = b[ubxCfgGnss::kOffGnssId];
+              const bool enabled =
+                  (b[ubxCfgGnss::kOffFlags] & ubxCfgGnss::kFlagEnableBit) != 0;
               const char *name = "?";
-              switch (b[0])
+              switch (gnss_id)
               {
                 case 0: name = "GPS"; break;
                 case 1: name = "SBAS"; break;
@@ -3973,14 +3976,55 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
               serial.print(F("[DBG]   "));
               serial.print(name);
               serial.print(F(" id="));
-              serial.print(b[0]);
+              serial.print(gnss_id);
               serial.print(F(" en="));
-              serial.print((b[4] & 0x01U) ? 1 : 0);
+              serial.print(enabled ? 1 : 0);
               serial.print(F(" res="));
-              serial.print(b[1]);
+              serial.print(b[ubxCfgGnss::kOffResTrkCh]);
               serial.print(F(" max="));
-              serial.println(b[2]);
+              serial.println(b[ubxCfgGnss::kOffMaxTrkCh]);
             }
+          }
+        }
+        else if (strncmp(line, "ubxcfg gnssmax", 14) == 0) {
+          // ubxcfg gnssmax <id> <max>：实测接收机对 maxTrkCh 的钳制规则
+          int id = -1;
+          int mx = -1;
+          if (sscanf(line + 14, "%d %d", &id, &mx) == 2 && id >= 0 && id <= 7 &&
+              mx > 0 && mx <= 32)
+          {
+            const bool ack = ubxSetGnssMaxChannel(gpsSerialPort, (uint8_t)id, (uint8_t)mx);
+            serial.print(F("[DBG] gnssmax id="));
+            serial.print(id);
+            serial.print(F(" want="));
+            serial.print(mx);
+            serial.print(F(" ack="));
+            serial.print(ack ? F("OK") : F("NG"));
+            // ACK 不等于采纳，立刻回读
+            uint8_t buf[64];
+            uint16_t n = 0;
+            if (ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n))
+            {
+              const uint8_t blocks = buf[3];
+              for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, n); ++i)
+              {
+                const uint8_t *b = buf + ubxCfgGnss::blockOffset(i);
+                if (b[ubxCfgGnss::kOffGnssId] == (uint8_t)id)
+                {
+                  serial.print(F(" readback="));
+                  serial.println(b[ubxCfgGnss::kOffMaxTrkCh]);
+                  break;
+                }
+              }
+            }
+            else
+            {
+              serial.println(F(" readback=FAIL"));
+            }
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg gnssmax <id 0-7> <max 1-32>"));
           }
         }
         else if (strncmp(line, "ubxcfg proto ", 13) == 0) {

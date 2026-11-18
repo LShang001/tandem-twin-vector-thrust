@@ -297,16 +297,14 @@ static DetectKind _probe_baud(Uart &serial, uint32_t baud, uint32_t window_ms)
  */
 static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
 {
-  uint8_t p[20] = {0};
-  p[0] = 1;                          // portID = UART1
-  p[4] = 0xD0; p[5] = 0x08;          // mode = 0x000008D0 (8N1)
-  p[8]  = (uint8_t)(baud & 0xFF);
-  p[9]  = (uint8_t)((baud >> 8) & 0xFF);
-  p[10] = (uint8_t)((baud >> 16) & 0xFF);
-  p[11] = (uint8_t)((baud >> 24) & 0xFF);
-  p[14] = 0x01;                      // inProtoMask = UBX
-  p[16] = nmea_out ? 0x03 : 0x01;    // outProtoMask = UBX(+NMEA)
-  _ubx_send(serial, 0x06, 0x00, p, 20);
+  using namespace ubxLayout;
+  uint8_t p[prt::kPayloadBytes] = {0};
+  p[prt::kPortId] = 1;                                  // UART1
+  putU4(p, prt::kMode, prt::kMode8N1);                  // 8N1
+  putU4(p, prt::kBaudRate, baud);
+  putU2(p, prt::kInProtoMask, 0x0001);                  // 只收 UBX（含 RTCM 的走 inRtcm3）
+  putU2(p, prt::kOutProtoMask, nmea_out ? 0x0003 : 0x0001);  // 只发 UBX，可选加 NMEA
+  _ubx_send(serial, 0x06, 0x00, p, prt::kPayloadBytes);
 }
 
 // CFG-RATE（6B）：测量周期 / 导航频率 / 时间基准
@@ -318,12 +316,12 @@ static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
  */
 static void _cfg_rate(Uart &serial, uint16_t meas_rate_ms)
 {
-  uint8_t p[6] = {0};
-  p[0] = (uint8_t)(meas_rate_ms & 0xFF);
-  p[1] = (uint8_t)(meas_rate_ms >> 8);
-  p[2] = 1;                          // navRate
-  p[5] = 1;                          // timeRef = GPS
-  _ubx_send(serial, 0x06, 0x08, p, 6);
+  using namespace ubxLayout;
+  uint8_t p[rate::kPayloadBytes] = {0};
+  putU2(p, rate::kMeasRate, meas_rate_ms);
+  putU2(p, rate::kNavRate, 1);
+  putU2(p, rate::kTimeRef, rate::kTimeRefGps);
+  _ubx_send(serial, 0x06, 0x08, p, rate::kPayloadBytes);
 }
 
 // CFG-MSG（8B）：UART1 上使能指定消息
@@ -409,42 +407,39 @@ static void _cfg_valset_baud_uart1(Uart &serial, uint32_t baud)
 static bool _cfg_nav5_rw(Uart &serial, int dyn_model, int fix_mode,
                          int min_elev, int pdop_thresh)
 {
-  uint8_t cur[36];
+  using namespace ubxLayout;
+  uint8_t cur[nav5::kPayloadBytes];
   const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x24, cur, sizeof(cur), 500);
-  if (n != 36)
+  if (n != nav5::kPayloadBytes)
   {
     return false;
   }
-  uint16_t mask = (uint16_t)(cur[0] | ((uint16_t)cur[1] << 8));
+  // 字段偏移与 mask 位一律取自 ubxLayout::nav5（官方 Byte offset 列）。
+  // 历史实现把 fixMode 写到 cur[4]、minElev 写到 cur[3]、pDop 写到 cur[16]
+  // 且用了 bit14，三项全部落空——ACK 正常但接收机侧没变。
+  uint16_t mask = getU2(cur, nav5::kMask);
   if (dyn_model > 0)
   {
-    mask |= 0x0001;                    // bit0 = dynModel
-    cur[2] = (uint8_t)((dyn_model == 2) ? 7 : 8);  // 7=Airborne<2g, 8=Airborne<4g
+    mask |= nav5::kMaskDyn;                                  // bit0
+    cur[nav5::kDynModel] = (uint8_t)((dyn_model == 2) ? 7 : 8);  // 7=<2g, 8=<4g
   }
   if (fix_mode >= 0)
   {
-    // ★ 2026-08-10 全面审查修复（M8 协议 UBX-13003221）：fixMode 在 bit2/byte4
-    //   （原 bit1/byte3 实为 minElev 位，配置静默无效）
-    mask |= 0x0004;                    // bit2 = fixMode
-    cur[4] = (uint8_t)fix_mode;
+    mask |= nav5::kMaskFixMode;                              // bit2 posFixMode
+    cur[nav5::kFixMode] = (uint8_t)fix_mode;
   }
   if (min_elev >= 0)
   {
-    // ★ 2026-08-10 全面审查修复：minElev 在 bit1/byte3（原 bit4/byte12 实为 cnoThreshold 位）
-    mask |= 0x0002;                    // bit1 = minElev
-    cur[3] = (uint8_t)min_elev;
+    mask |= nav5::kMaskMinElev;                              // bit1 minEl
+    cur[nav5::kMinElev] = (uint8_t)min_elev;
   }
   if (pdop_thresh >= 0)
   {
-    // ★ 2026-08-10 全面审查修复：pDOP 在 bit14/byte16-17 u16 LE（原 bit5/byte13
-    //   实为 minPosTimeout 位；单位 0.1）
-    mask |= 0x4000;                    // bit14 = pDOP
-    cur[16] = (uint8_t)(pdop_thresh & 0xFF);
-    cur[17] = (uint8_t)((pdop_thresh >> 8) & 0xFF);
+    mask |= nav5::kMaskPDop;                                 // bit4 posMask
+    putU2(cur, nav5::kPDop, (uint16_t)pdop_thresh);          // 单位 0.1
   }
-  cur[0] = (uint8_t)(mask & 0xFF);
-  cur[1] = (uint8_t)(mask >> 8);
-  _ubx_send(serial, 0x06, 0x24, cur, 36);
+  putU2(cur, nav5::kMask, mask);
+  _ubx_send(serial, 0x06, 0x24, cur, nav5::kPayloadBytes);
   return _ubx_wait_ack(serial, 0x06, 0x24, kAckTimeoutMs);
 }
 
@@ -468,23 +463,25 @@ static bool _cfg_gnss(Uart &serial, uint8_t gnss_mask)
     return false;                      // 接收机不支持 CFG-GNSS（老型号）
   }
   const uint8_t num_blocks = cur[3];
-  const uint8_t block_size = 8;        // 每块 8B: gnssId,resTrkCh,maxTrkCh,res,flags[4]
+  // 布局走 ubxCfgGnss 常量，不手写裸偏移（2026-11-19 曾两次写成 8）
   bool any_patched = false;
-  for (uint8_t i = 0; i < num_blocks && 8U + (uint32_t)i * block_size + 8U <= n; i++)
+  for (uint8_t i = 0; i < num_blocks && ubxCfgGnss::blockFits(i, n); i++)
   {
-    uint8_t *blk = cur + 8 + (uint32_t)i * block_size;
-    const uint8_t gnss_id = blk[0];
+    uint8_t *blk = cur + ubxCfgGnss::blockOffset(i);
+    const uint8_t gnss_id = blk[ubxCfgGnss::kOffGnssId];
     const bool want = (gnss_id == 0 && (gnss_mask & 0x01)) ||
                       (gnss_id == 6 && (gnss_mask & 0x02)) ||
                       (gnss_id == 2 && (gnss_mask & 0x04)) ||
                       (gnss_id == 3 && (gnss_mask & 0x08));
     if (gnss_id == 0 || gnss_id == 6 || gnss_id == 2 || gnss_id == 3)
     {
-      const uint8_t flags0 = blk[4];
-      const uint8_t new_flags0 = want ? (uint8_t)(flags0 | 0x01) : (uint8_t)(flags0 & ~0x01U);
+      const uint8_t flags0 = blk[ubxCfgGnss::kOffFlags];
+      const uint8_t new_flags0 =
+          want ? (uint8_t)(flags0 | ubxCfgGnss::kFlagEnableBit)
+               : (uint8_t)(flags0 & ~ubxCfgGnss::kFlagEnableBit);
       if (new_flags0 != flags0)
       {
-        blk[4] = new_flags0;
+        blk[ubxCfgGnss::kOffFlags] = new_flags0;
         any_patched = true;
       }
     }
@@ -498,6 +495,52 @@ static bool _cfg_gnss(Uart &serial, uint8_t gnss_mask)
 }
 
 // CFG-SBAS（8B）：差分增强使能
+/**
+ * @brief CFG-GNSS 通道重排：关掉 SBAS（国内无覆盖）
+ * @return true=已生效或无需改动
+ * @note 实测本机分配：GPS 8/16、SBAS 3/3、GAL 10/18、BDS 2/5、QZSS 0/4、
+ *       GLO 8/12，硬件总通道 trkUse=60。
+ *       SBAS 的四套系统（EGNOS 欧洲、WAAS 美国、MSAS 日本、GAGAN 印度）都不
+ *       覆盖中国，3 个跟踪通道白占；关掉后这 3 个通道回到总预算供其他星座
+ *       动态调度。
+ *       ★2026-11-19 实测：F9P 的 maxTrkCh 是只读的——对 BDS 依次写
+ *       8/10/12、对 GPS 写 18/20、对 GAL 写 20/22，接收机全部回 ACK，
+ *       但回读仍是出厂值 5/16/18。所以这里只改使能位，不再尝试改通道数：
+ *       写了也不生效，只会让日志看起来像改过。
+ */
+static bool _cfg_gnss_optimize(Uart &serial)
+{
+  uint8_t cur[64];
+  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, cur, sizeof(cur), 500);
+  if (n < 8)
+  {
+    return false;                      // 接收机不支持 CFG-GNSS（老型号）
+  }
+  const uint8_t num_blocks = cur[3];
+  bool patched = false;
+  for (uint8_t i = 0; i < num_blocks && ubxCfgGnss::blockFits(i, n); ++i)
+  {
+    uint8_t *blk = cur + ubxCfgGnss::blockOffset(i);
+    if (blk[ubxCfgGnss::kOffGnssId] != 1)
+    {
+      continue;                        // 只处理 SBAS(id=1)，其余星座不动
+    }
+    const uint8_t cur_flags = blk[ubxCfgGnss::kOffFlags];
+    const uint8_t new_flags = (uint8_t)(cur_flags & ~ubxCfgGnss::kFlagEnableBit);
+    if (new_flags != cur_flags)
+    {
+      blk[ubxCfgGnss::kOffFlags] = new_flags;
+      patched = true;
+    }
+  }
+  if (!patched)
+  {
+    return true;                       // SBAS 已是关闭状态
+  }
+  _ubx_send(serial, 0x06, 0x3E, cur, n);
+  return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
+}
+
 /**
  * @brief 使能 CFG-SBAS（星基增强系统）
  * @return true=接收机回 ACK
@@ -647,6 +690,39 @@ bool ubxQueryGnssConfig(Uart &serial, uint8_t *payload, uint16_t cap, uint16_t *
   }
   *len = n;
   return true;
+}
+
+/**
+ * @brief 单独设置某个星座的 maxTrkCh（CFG-GNSS 读改写）
+ * @note 用于实测 F9P 对通道预算的钳制规则：ACK 只证明帧合法，
+ *       是否被采纳要用 ubxQueryGnssConfig 回读确认。
+ */
+bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk)
+{
+  uint8_t cur[64];
+  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, cur, sizeof(cur), 500);
+  if (n < 8)
+  {
+    return false;
+  }
+  const uint8_t num_blocks = cur[3];
+  bool found = false;
+  for (uint8_t i = 0; i < num_blocks && ubxCfgGnss::blockFits(i, n); ++i)
+  {
+    uint8_t *blk = cur + ubxCfgGnss::blockOffset(i);
+    if (blk[ubxCfgGnss::kOffGnssId] == gnss_id)
+    {
+      blk[ubxCfgGnss::kOffMaxTrkCh] = max_trk;
+      found = true;
+      break;
+    }
+  }
+  if (!found)
+  {
+    return false;
+  }
+  _ubx_send(serial, 0x06, 0x3E, cur, n);
+  return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
 }
 
 // ============================================================
@@ -879,6 +955,13 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   else
   {
     r.gnss_ok = true;
+  }
+  // 6b. 通道重排：关 SBAS、扩北斗（国内 SBAS 无覆盖，北斗通道偏少）
+  if (o.gnss_optimize)
+  {
+    r.cfg_frames_sent += 2;
+    r.gnss_ok = _cfg_gnss_optimize(serial) && r.gnss_ok;
+    if (r.gnss_ok) r.cfg_acks_received++;
   }
 
   // 7. CFG-SBAS
