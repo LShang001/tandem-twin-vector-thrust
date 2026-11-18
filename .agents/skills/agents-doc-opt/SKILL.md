@@ -51,7 +51,7 @@ metadata:
 5. **实施**：
    - 表格外移目标：`TandemVec_FCS/.agents/docs/hardware-reference.md`（文件头注明触发条件）
    - `TandemVec_FCS/CLAUDE.md` 必须是单行 `@AGENTS.md`——**绝不维护第二份独立文档**
-   - 抢救 CLAUDE.md 独有且有文件实证的信息（glob 验证文件存在）并入 AGENTS.md，再删 CLAUDE.md
+   - 抢救 CLAUDE.md 独有且有文件实证的信息（用 glob 验证路径）；随后保留 CLAUDE.md 文件，将其正文改为单行 `@AGENTS.md`。
    - 安全硬约束**必须保留**：坐标钉死约定、执行器映射、硬性代码边界、安全关键修改规则、实机分阶段验证、COM 口独占规则
 6. **验证**：
    - 残留检查（见快速参考）输出为空

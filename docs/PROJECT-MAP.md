@@ -1,6 +1,6 @@
 # 项目总览：架构与文件树
 
-> 本文由实际目录扫描生成（初版 2026-11-01，规模数字 2026-11-10 重采）。
+> 本文由实际目录扫描生成（初版 2026-11-01，历史规模快照见 §11）。
 > 用途：快速定位"东西在哪、哪些能改、哪些是生成物"。
 > 维护：结构变动（新增顶层目录、改变构建产物流向）时同步更新本文。
 
@@ -37,7 +37,7 @@ flowchart TB
 
   subgraph SIM["仿真与分析"]
     SIL["test_host/fw_sil<br/>真实固件源码 + 6DOF plant + 真实 EKF"]
-    UNIT["test_host/test_*.cpp<br/>83 个宿主单元/闭环测试"]
+    UNIT["test_host/test_*.cpp<br/>宿主单元与闭环测试"]
     VSIM["simulations/<br/>py-web-lab·vector-thrust-lab·three_vehicle_mc·high-fidelity-analysis"]
   end
 
@@ -63,37 +63,36 @@ flowchart TB
 
 ## 3. 顶层目录
 
-| 目录 | 规模 | 职责 | 性质 |
-|---|---|---|---|
-| `TandemVec_FCS/` | 2304 文件 / 174 MB | 飞控固件、地面站、宿主测试、固件侧文档 | 源码 |
-| `docs/` | 8394 文件 / 548 MB | 编号文档体系（正文 61 篇）+ 参考资料（books 6333 / papers 1834） | 文档 |
-| `simulations/` | 551 文件 / 698 MB | 四套仿真：网页实验站、py-web-lab、三机型 MC、高保真分析 | 仿真/产物 |
-| `TandemVec-EKF-Report/` | 1668 文件 / 488 MB | 导航/EKF 报告线（章节、图、sim-data） | 文档/证据 |
-| `TandemVec-Paper/` | 94 文件 / 76 MB | 17 章 LaTeX 论文与图 | 文档 |
-| `models/` | 3 文件 | `aircraft-model.json` + schema：参数单一事实源 | 配置 |
-| `tools/` | 13 文件 | 文档构建、参数同步、注释/链接检查、ASCII 盘符包装器 | 工具 |
-| `scripts/` | 35 文件 | 自适应/MPC/辨识/配平/论文图脚本 | 研究脚本 |
-| `matlab/analysis/` | 1 文件 | `rate_loop_margins.m`：速率环频域裕度复核 | 分析 |
-| `assets/` | 19 文件 / 17 MB | AI 生成图与候选插图 | 素材 |
-| `blender-test/` | 13 文件 / 25 MB | Blender 渲染试验（动画/静帧） | 素材 |
-| `output/` | 32 文件 / 3.6 MB | Playwright 截图、原始 VTVL 参考 | 产物 |
-| `视频/` | 1 文件 / 60 MB | 试飞视频 | 素材 |
-| `零件打印/` | 9 文件 / 13 MB | 3D 打印 STL（电机座、齿轮、着陆腿等） | 素材 |
-| `tmp/` | 82 MB | 临时构建/验证证据（`.gitignore` 忽略） | 临时 |
-| `.agents/` `.claude/` `.dsh-ops/` `.reasonix/` `.zcode/` `.playwright-cli/` | — | Agent 工具配置与会话数据 | 环境 |
+| 目录 | 职责 | 性质 |
+|---|---|---|
+| `TandemVec_FCS/` | 飞控固件、地面站、宿主测试、固件侧文档 | 源码 |
+| `docs/` | 项目文档、登记册与参考资料 | 文档 |
+| `simulations/` | 网页实验站、py-web-lab、多机型跑批、高保真分析 | 源码与生成物 |
+| `TandemVec-EKF-Report/` | 导航专题与证据 | 文档与证据 |
+| `TandemVec-Paper/` | LaTeX 论文与插图 | 文档 |
+| `models/` | 仿真参数正本与结构约束 | 配置 |
+| `tools/` | 构建、参数同步、校验、ASCII 输出路径包装 | 工具 |
+| `scripts/` | 自适应、辨识、配平、作图等脚本 | 研究脚本 |
+| `matlab/` | MATLAB 分析 | 研究脚本 |
+| `assets/`、`blender-test/` | 图像素材与渲染试验 | 素材与生成物 |
+| `视频/`、`零件打印/` | 试验素材与 3D 打印模型 | 素材 |
+| `blobs/`、`output/` | 附件、分析输出与截图 | 资产与生成物 |
+| `tmp/` | 临时构建和验证证据 | 本地临时，不提交 |
+| `.agents/`、`.claude/` | 项目技能与工具入口 | 配置 |
+| `.git/`、`.dsh-ops/`、`.reasonix/`、`.zcode/`、`.playwright-cli/`、`.pytest_cache/` | 版本元数据与工具运行状态 | 不作为项目源码编辑 |
 
 ## 4. 固件 `TandemVec_FCS/`
 
 ```text
 TandemVec_FCS/
-├── platformio.ini              # 三个 env：TandemVec_FCS（飞行）/ CoaxialVTVL（共轴）/ test
-├── src/                        # 固件主源码（23 208 行）
+├── platformio.ini              # 机型、IMU、协议、用途组合和板载自检
+├── src/                        # 固件主源码
 │   ├── main.cpp                # setup/loop、任务注册、上电 DETA100/UBX 探测、IWDG
-│   ├── task_scheduler.cpp/.h   # TIM8 6.4 kHz 调度（支持 3.2kHz IMU）、分数 tick、[TASK]/[LOOP] 统计
+│   ├── task_scheduler.cpp/.h   # TIM8 6.4 kHz 调度、分数 tick、[TASK]/[LOOP] 统计
 │   ├── task_scheduler_interval.h
 │   ├── communication.cpp/.h    # AnoCom 遥测、CRSF、MAVLink 切换、黑匣子、DBG 控制台、断链回调
 │   ├── mavlink_bridge.cpp/.h   # MAVLink 参数/命令/STATUSTEXT
-│   ├── ano_params.cpp/.h       # 164 参数注册表与在线读写
+│   ├── ano_params.cpp/.h       # 参数注册表与在线读写
 │   ├── ano_vars.cpp/.h         # AnoVars 通用变量上报（0xF2/0xF3/NAMED_VALUE_FLOAT）
 │   ├── can_bus.cpp/.h          # MCP2515 CAN（发动机/遥测）
 │   ├── flight_control.cpp/.h   # 模式判定、姿态/速率环、控制分配、执行器 mix、故障监测、在线辨识
@@ -185,7 +184,7 @@ docs/
 ├── 07-验证与确认/ (6)    SAFE-001 安全计划 · VER-001 验证确认与可信度 · VER-002 三机型兼容性 ·
 │                         VER-003 三机型 MC · VER-004/005 共轴原始固件对照（控制/导航）
 ├── 08-参考资料/ (8185)   README · 参考资料注册表 · **器件手册与驱动资产索引** · books/6333 · papers/1834 · notes/9 · index/4 · scripts/3
-├── 09-决策记录/ (3)      DEC-001 参数单一事实源 · DEC-002 六项 P0 修复决策 · 模板
+├── 09-决策记录/ (3)      DEC-001 仿真参数正本 · DEC-002 六项 P0 修复决策 · 模板
 ├── memory/ (3)           级联 LMI · 相位裕度 · PIO20/ArduinoCore3 迁移
 ├── reference/ (155)      外部参考摘录
 └── registers/ (9)        templates/ · 假设与局限 · 危害与失效模式 · 参数数据手册 · 模型-代码追溯 ·
@@ -220,9 +219,9 @@ TandemVec-EKF-Report/     ch/、fig/、figs/153、sim/269、sim-data/1194、
 ## 8. 模型、工具与研究脚本
 
 ```text
-models/          aircraft-model.json（参数单一事实源）· aircraft-model.schema.json · README
+models/          aircraft-model.json（仿真参数正本）· aircraft-model.schema.json · README
 tools/           build-docs.py（docs→HTML 站）· build-standalone.py · check-code-comments.py ·
-                 check-links.py · sync-params.py（模型→固件参数）· with-ascii-bin.sh（ASCII 盘符包装器）·
+                 check-links.py · sync-params.py（模型→网页仿真参数）· with-ascii-bin.sh（ASCII 盘符包装器）·
                  shell-env.cmd · tvc-cli.cmd
 scripts/         adaptive_full/mpc/nmpc · ident_phys/ident_probe · mpc_adv/mpc_proto ·
                  paper_fgm_fig/paper_mpc_figs · trim_solve · verify_att_target
@@ -233,11 +232,11 @@ matlab/analysis/ rate_loop_margins.m（速率环频域裕度）
 
 ```powershell
 # 固件
-pio run                                  # 编译 TandemVec_FCS（默认 env）
+pio run                                   # 从 TandemVec_FCS/ 编译默认环境（见 platformio.ini）
 pio run -e CoaxialVTVL                   # 共轴机型
-pio test -e test                         # PlatformIO 单元测试
+pio run -e test                           # 编译板载自检；不是宿主回归
 
-# 宿主回归（116 个测试程序 / 75 段）
+# 以下宿主回归、SIL、文档生成从仓库根执行
 bash TandemVec_FCS/test_host/run_all.sh
 
 # 真实固件 SIL
@@ -246,9 +245,9 @@ bash TandemVec_FCS/test_host/fw_sil/build_and_run_real.sh --real-nav --ekf
 bash TandemVec_FCS/test_host/fw_sil/run_failsafe_matrix.sh    # 断链矩阵
 
 # 地面站
-python TandemVec_FCS/GCS/server/main.py
+cd TandemVec_FCS/GCS; py -3.12 app.py
 
-# 文档站
+# 文档站（从仓库根另起命令）
 py -3.12 tools/build-docs.py
 ```
 
@@ -267,7 +266,7 @@ py -3.12 tools/build-docs.py
 | `TandemVec-Paper/output/`、`tmp/` | 论文编译产物、临时目录 |
 | `tmp/`（根） | 临时构建与验证证据，`.gitignore` 忽略 |
 
-## 11. 规模速览
+## 11. 规模统计与历史快照
 
 > 数字会漂移。**维护方式：改结构后重跑下面这段命令，直接抄结果**，不要凭印象改。
 
@@ -297,7 +296,7 @@ find docs -name '*.md' | wc -l                         # 文档篇数
 
 ## 12 命名澄清：`icm45686` 前缀不是传感器驱动
 
-实机飞控板有 **ICM-42688-P** 与 **ICM-45686** 两个版本（都是自有板），共用 `lib/ImuAbstraction/src/ImuDevice.h` 抽象层，由编译期宏 `-DFCS_IMU_MODEL_ICM45686` 切换；默认构建面向 45686（3.2 kHz FIFO 单包 + ISR 每 2 拍取一包），42688 走 2 kHz 硬件 FIFO。6.4 kHz 时基下 IMU 任务周期按 `actualAccelOdrHz()` 反推（2k→0.5ms、3.2k→0.3125ms），Madgwick 同步跟随。换硬件仍需确认引脚/SPI/CS/中断/量程并上板验证。
+实机有 **ICM-42688-P** 与 **ICM-45686** 两个版本，共用 `ImuDevice` 抽象，由构建宏 `FCS_IMU_MODEL_ICM45686` 选择。芯片出帧和 ISR 轮询分别看 [imu_odr_config.h](../TandemVec_FCS/src/imu_odr_config.h)；当前构建与测量口径见 [固件调试工具链](registers/固件调试工具链-2026-11-01.md#上板验收口径)。
 
 `Icm45686*` 是 2026-07-29 移植提交 `62124e9` 保留下来的**参考实现前缀**（来自某份 ICM45686 参考工程/文献实现），落在导航/INS 辅助模块里，与上述两个传感器驱动库都不互相引用：
 

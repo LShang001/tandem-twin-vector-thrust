@@ -883,6 +883,9 @@ MODEL-DEFAULT，未标定）</h2>
 </tbody>
 </table>
 <h3 id="标定与验证阶梯不可跳步">标定与验证阶梯（不可跳步）</h3>
+<p>实飞构建不发送
+<code>0xF4/0xF5</code>，缺这两帧不代表链路故障。仓库内的完整验收口径见
+<code>docs/registers/固件调试工具链-2026-11-01.md</code>「上板验收口径」。</p>
 <ol type="1">
 <li><strong>断动力静态标定</strong>：解锁 + CH8
 推到高位（&gt;1750，进手动
@@ -988,5 +991,5 @@ TVC），三轴摇杆逐个给指令，核对四舵动作分组与方向； 不�
 §坐标系与执行器</li>
 <li>验证：<code>test_host/test_single_edf_4vane.cpp</code>、<code>test_host/run_all.sh</code></li>
 </ul>
-<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-16 19:17</footer></article></body>
+<footer class="provenance">源文件 <code>docs/05-控制与分配/CTL-008-单涵道四燃气舵机型移植-2026-11-05.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-18 11:41</footer></article></body>
 </html>
