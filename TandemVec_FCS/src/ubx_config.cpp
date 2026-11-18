@@ -796,6 +796,32 @@ bool ubxSetGnssEnable(Uart &serial, uint8_t gnss_id, bool enable)
   return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
 }
 
+/**
+ * @brief 读回 CFG-NAV5 的关键字段（只读）
+ * @note 字段偏移全部取自 ubxLayout::nav5，与写入路径共用同一份常量，
+ *       避免"写得对、读得错"或反过来的错配。
+ */
+bool ubxQueryNav5Config(Uart &serial, UbxNav5Status *status)
+{
+  if (status == nullptr)
+  {
+    return false;
+  }
+  status->valid = false;
+  uint8_t rb[ubxLayout::nav5::kPayloadBytes];
+  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x24, rb, sizeof(rb), 500);
+  if (n != ubxLayout::nav5::kPayloadBytes)
+  {
+    return false;
+  }
+  status->dyn_model = rb[ubxLayout::nav5::kDynModel];
+  status->fix_mode = rb[ubxLayout::nav5::kFixMode];
+  status->min_elev = rb[ubxLayout::nav5::kMinElev];
+  status->pdop = ubxLayout::getU2(rb, ubxLayout::nav5::kPDop);
+  status->valid = true;
+  return true;
+}
+
 // ============================================================
 //  主入口
 // ============================================================

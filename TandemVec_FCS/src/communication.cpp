@@ -3868,7 +3868,34 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           {
             ++nav5_args;
           }
-          if (sscanf(nav5_args, "dyn %d", &v) == 1 && (v == 2 || v == 4))
+          if (strcmp(nav5_args, "show") == 0)
+          {
+            // 读回 NAV5 关键字段：证明写入真的落到目标字节，而不是只看 ACK
+            UbxNav5Status st = {};
+            if (!ubxQueryNav5Config(gpsSerialPort, &st))
+            {
+              serial.println(F("[DBG] CFG-NAV5 readback FAIL"));
+            }
+            else
+            {
+              serial.print(F("[DBG] NAV5 dyn="));
+              serial.print(st.dyn_model);
+              serial.print(F(" fix="));
+              serial.print(st.fix_mode);
+              serial.print(F(" minElev="));
+              serial.print(st.min_elev);
+              serial.print(F(" pdop="));
+              serial.print(st.pdop / 10.0f, 1);
+              serial.print(F(" trk="));
+              serial.println(st.dyn_model == 6   ? F("Airborne<1g")
+                              : st.dyn_model == 7 ? F("Airborne<2g")
+                              : st.dyn_model == 8 ? F("Airborne<4g")
+                              : st.dyn_model == 4 ? F("Automotive")
+                              : st.dyn_model == 3 ? F("Pedestrian")
+                                                  : F("Other"));
+            }
+          }
+          else if (sscanf(nav5_args, "dyn %d", &v) == 1 && (v == 2 || v == 4))
           {
             serial.print(F("[DBG] NAV5 dynModel=Airborne<"));
             serial.print(v);

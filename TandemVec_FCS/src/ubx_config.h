@@ -264,6 +264,24 @@ bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk);
  */
 bool ubxSetGnssEnable(Uart &serial, uint8_t gnss_id, bool enable);
 
+/** @brief CFG-NAV5 关键字段读回结果（DBG `ubxcfg nav5 show`） */
+struct UbxNav5Status
+{
+  uint8_t  dyn_model;   // 动态平台模型（6=<1g 7=<2g 8=<4g 等）
+  uint8_t  fix_mode;    // 定位模式（1=2D 2=3D 3=auto）
+  uint8_t  min_elev;    // 最低仰角 [deg]
+  uint16_t pdop;        // pDOP 门限（单位 0.1）
+  bool     valid;       // true=读回成功
+};
+
+/**
+ * @brief 读回 CFG-NAV5 的关键字段（只读）
+ * @return true=读回成功（status.valid 同步置位）
+ * @note 用于证明 NAV5 写入真的落到目标字段，而不是只看 ACK。
+ *       字段偏移全部取自 ubxLayout::nav5。
+ */
+bool ubxQueryNav5Config(Uart &serial, UbxNav5Status *status);
+
 /**
  * @brief 轮询 UBX-MON-VER 并解析 SW/HW/PROTVER/ANTSUPERV
  * @return true=收到 ≥40B 的 MON-VER；各输出缓冲区允许为 nullptr/0
