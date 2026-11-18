@@ -3965,138 +3965,105 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           }
         }
         else if (strcmp(line, "ubxcfg gnss") == 0) {
-          // 读回 CFG-GNSS 星座使能：决定 PVT 更新率上限（F9P 数据手册 Table 1）
-          uint8_t buf[64];
-          uint16_t n = 0;
-          if (!ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n))
+          // 读回六星座使能（CFG-VALGET/CFG-SIGNAL-*_ENA，非废弃的 CFG-GNSS）
+          static const char *const kNames[6] = {"GPS", "SBAS", "GAL", "BDS", "QZSS", "GLO"};
+          uint8_t en[6] = {0};
+          if (!ubxQuerySignalEnable(gpsSerialPort, en))
           {
-            serial.println(F("[DBG] CFG-GNSS readback FAIL"));
+            serial.println(F("[DBG] CFG-SIGNAL readback FAIL"));
           }
           else
           {
-            const uint8_t blocks = buf[3];
-            serial.print(F("[DBG] CFG-GNSS blocks="));
-            serial.print(blocks);
-            serial.print(F(" trkHw="));
-            serial.print(buf[1]);
-            serial.print(F(" trkUse="));
-            serial.println(buf[2]);
-            for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, n); ++i)
+            serial.println(F("[DBG] CFG-SIGNAL (CFG-VALGET, RAM):"));
+            for (uint8_t i = 0; i < 6; ++i)
             {
-              const uint8_t *b = buf + ubxCfgGnss::blockOffset(i);
-              const uint8_t gnss_id = b[ubxCfgGnss::kOffGnssId];
-              const bool enabled =
-                  (b[ubxCfgGnss::kOffFlags] & ubxCfgGnss::kFlagEnableBit) != 0;
-              const char *name = "?";
-              switch (gnss_id)
-              {
-                case 0: name = "GPS"; break;
-                case 1: name = "SBAS"; break;
-                case 2: name = "GAL"; break;
-                case 3: name = "BDS"; break;
-                case 4: name = "IMES"; break;
-                case 5: name = "QZSS"; break;
-                case 6: name = "GLO"; break;
-                case 7: name = "NavIC"; break;
-                default: break;
-              }
               serial.print(F("[DBG]   "));
-              serial.print(name);
-              serial.print(F(" id="));
-              serial.print(gnss_id);
+              serial.print(kNames[i]);
               serial.print(F(" en="));
-              serial.print(enabled ? 1 : 0);
-              serial.print(F(" res="));
-              serial.print(b[ubxCfgGnss::kOffResTrkCh]);
-              serial.print(F(" max="));
-              serial.println(b[ubxCfgGnss::kOffMaxTrkCh]);
+              serial.println(en[i]);
             }
-          }
-        }
-        else if (strncmp(line, "ubxcfg gnssmax", 14) == 0) {
-          // ubxcfg gnssmax <id> <max>：实测接收机对 maxTrkCh 的钳制规则
-          int id = -1;
-          int mx = -1;
-          if (sscanf(line + 14, "%d %d", &id, &mx) == 2 && id >= 0 && id <= 7 &&
-              mx > 0 && mx <= 32)
-          {
-            const bool ack = ubxSetGnssMaxChannel(gpsSerialPort, (uint8_t)id, (uint8_t)mx);
-            serial.print(F("[DBG] gnssmax id="));
-            serial.print(id);
-            serial.print(F(" want="));
-            serial.print(mx);
-            serial.print(F(" ack="));
-            serial.print(ack ? F("OK") : F("NG"));
-            // ACK 不等于采纳，立刻回读
+            // 附带 CFG-GNSS 的通道分配（legacy 只读诊断）
             uint8_t buf[64];
             uint16_t n = 0;
-            if (ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n))
+            if (ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n) && n >= 8)
             {
+              serial.print(F("[DBG] legacy CFG-GNSS trkUse="));
+              serial.println(buf[2]);
               const uint8_t blocks = buf[3];
               for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, n); ++i)
               {
                 const uint8_t *b = buf + ubxCfgGnss::blockOffset(i);
-                if (b[ubxCfgGnss::kOffGnssId] == (uint8_t)id)
+                const uint8_t gid = b[ubxCfgGnss::kOffGnssId];
+                const char *nm = "?";
+                switch (gid)
                 {
-                  serial.print(F(" readback="));
-                  serial.println(b[ubxCfgGnss::kOffMaxTrkCh]);
-                  break;
+                  case 0: nm = "GPS"; break;
+                  case 1: nm = "SBAS"; break;
+                  case 2: nm = "GAL"; break;
+                  case 3: nm = "BDS"; break;
+                  case 5: nm = "QZSS"; break;
+                  case 6: nm = "GLO"; break;
+                  default: break;
                 }
+                serial.print(F("[DBG]   "));
+                serial.print(nm);
+                serial.print(F(" res="));
+                serial.print(b[ubxCfgGnss::kOffResTrkCh]);
+                serial.print(F(" max="));
+                serial.println(b[ubxCfgGnss::kOffMaxTrkCh]);
               }
+            }
+          }
+        }
+        else if (strncmp(line, "ubxcfg gnssen", 13) == 0) {
+          // ubxcfg gnssen <id> <on|off>：开关某个星座的跟踪使能（CFG-GNSS）
+          int id = -1;
+          char st[8] = {0};
+          if (sscanf(line + 13, "%d %7s", &id, st) == 2 && id >= 0 && id <= 7)
+          {
+            bool want = false;
+            bool valid = true;
+            if (strcmp(st, "on") == 0) want = true;
+            else if (strcmp(st, "off") == 0) want = false;
+            else valid = false;
+            if (!valid)
+            {
+              serial.println(F("[DBG] usage: ubxcfg gnssen <id> <on|off>"));
             }
             else
             {
-              serial.println(F(" readback=FAIL"));
-            }
-          }
-          else
-          {
-            serial.println(F("[DBG] usage: ubxcfg gnssmax <id 0-7> <max 1-32>"));
-          }
-        }
-        else if (strncmp(line, "ubxcfg sbas", 11) == 0) {
-          // ubxcfg sbas <on|off>：现场开关 SBAS（国内无覆盖，默认关）
-          const char *p = line + 11;
-          while (*p == ' ')
-          {
-            ++p;
-          }
-          bool want = false;
-          bool valid = true;
-          if (strcmp(p, "on") == 0) want = true;
-          else if (strcmp(p, "off") == 0) want = false;
-          else valid = false;
-          if (!valid)
-          {
-            serial.println(F("[DBG] usage: ubxcfg sbas <on|off>"));
-          }
-          else
-          {
-            const bool ok = ubxSetGnssEnable(gpsSerialPort, 1, want);
-            serial.print(F("[DBG] SBAS -> "));
-            serial.print(want ? F("on") : F("off"));
-            serial.print(F(" ack="));
-            // ACK 不等于采纳，回读确认
-            uint8_t buf[64];
-            uint16_t n = 0;
-            uint8_t rb_en = 0xFF;
-            if (ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n))
-            {
-              const uint8_t blocks = buf[3];
-              for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, n); ++i)
+              const bool ok = ubxSetGnssEnable(gpsSerialPort, (uint8_t)id, want);
+              serial.print(F("[DBG] gnssen id="));
+              serial.print(id);
+              serial.print(F(" want="));
+              serial.print(want ? 1 : 0);
+              serial.print(F(" ack="));
+              serial.print(ok ? F("OK") : F("NG"));
+              uint8_t en[6] = {0};
+              uint8_t rb_en = 0xFF;
+              int slot = -1;
+              switch (id)
               {
-                const uint8_t *b = buf + ubxCfgGnss::blockOffset(i);
-                if (b[ubxCfgGnss::kOffGnssId] == 1)
-                {
-                  rb_en = (b[ubxCfgGnss::kOffFlags] & ubxCfgGnss::kFlagEnableBit) ? 1 : 0;
-                  break;
-                }
+                case 0: slot = 0; break;
+                case 1: slot = 1; break;
+                case 2: slot = 2; break;
+                case 3: slot = 3; break;
+                case 5: slot = 4; break;
+                case 6: slot = 5; break;
+                default: break;
               }
+              if (slot >= 0 && ubxQuerySignalEnable(gpsSerialPort, en))
+              {
+                rb_en = en[slot];
+              }
+              serial.print(F(" readback="));
+              if (rb_en == 0xFF) serial.println(F("NA"));
+              else serial.println(rb_en);
             }
-            serial.print(ok ? F("OK") : F("NG"));
-            serial.print(F(" readback="));
-            if (rb_en == 0xFF) serial.println(F("NA"));
-            else serial.println(rb_en);
+          }
+          else
+          {
+            serial.println(F("[DBG] usage: ubxcfg gnssen <id 0-7> <on|off>"));
           }
         }
         else if (strncmp(line, "ubxcfg proto ", 13) == 0) {

@@ -245,22 +245,22 @@ const UbxCfgResult &ubxLastCfgResult();
 bool ubxQueryGnssConfig(Uart &serial, uint8_t *payload, uint16_t cap, uint16_t *len);
 
 /**
- * @brief 单独设置某个星座的最大跟踪通道数（CFG-GNSS 读改写）
- * @param[in] gnss_id 星座 id：0=GPS 1=SBAS 2=GAL 3=BDS 5=QZSS 6=GLO
- * @param[in] max_trk 目标 maxTrkCh（1..32）
- * @return true=接收机回 ACK；false=读回失败或 NAK
- * @note ACK 只证明帧被接受，不代表数值被采纳——F9P 可能按内部通道预算
- *       钳制 maxTrkCh，调用后必须用 ubxQueryGnssConfig 回读确认。
+ * @brief 读回六星座使能状态（走 CFG-VALGET 读 CFG-SIGNAL-*_ENA）
+ * @param[out] enabled 长度 6：0=GPS 1=SBAS 2=Galileo 3=BeiDou 4=QZSS 5=GLONASS
+ * @return true=全部读回成功
+ * @note 这是新协议下的正确读法。CFG-GNSS(0x06 0x3E) 在协议版本 >23.01 已废弃，
+ *       官方要求改用 CFG-VALGET/VALSET；F9P HPG 1.32 属此列。
  */
-bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk);
+bool ubxQuerySignalEnable(Uart &serial, uint8_t enabled[6]);
 
 /**
- * @brief 单独设置某个星座的使能位（CFG-GNSS 读改写）
+ * @brief 设置某个星座的使能（走 CFG-VALSET 写 CFG-SIGNAL-*_ENA）
  * @param[in] gnss_id 星座 id：0=GPS 1=SBAS 2=GAL 3=BDS 5=QZSS 6=GLO
  * @param[in] enable  目标使能状态
- * @return true=已下发或无需改动；false=读回失败或 NAK
- * @note 用于现场开关某个星座（如关闭国内无覆盖的 SBAS），也用于验证
- *       开机快路径的星座判据。
+ * @return true=接收机回 ACK（是否被采纳须用 ubxQuerySignalEnable 回读）
+ * @note 沿用 CFG-GNSS 的约束：至少一个主星座必须启用；每个启用的主星座
+ *       maxTrkCh 不得低于 4；GPS 与 QZSS 建议同开同关（避免互相关）。
+ *       ACK 不等于采纳——实测 SBAS 使能位写入会回 ACK 但不生效。
  */
 bool ubxSetGnssEnable(Uart &serial, uint8_t gnss_id, bool enable);
 

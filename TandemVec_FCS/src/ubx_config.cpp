@@ -168,12 +168,13 @@ static bool _ubx_wait_ack(Uart &serial, uint8_t cls, uint8_t id, uint32_t timeou
   return false;
 }
 
-// ---------------- 通用"轮询读取"：发 len=0 的 CFG-* → 收同 cls/id 响应 payload ----------------
+// ---------------- 通用"请求-响应"：发一帧 cls/id（可带请求 payload）→ 收同 cls/id 响应 ----------------
 // 返回实际收到的 payload 长度（0 = 超时/失败）；校验通过才返回
-static uint16_t _ubx_poll_payload(Uart &serial, uint8_t cls, uint8_t id,
-                                  uint8_t *out, uint16_t out_max, uint32_t timeout_ms)
+static uint16_t _ubx_request_payload(Uart &serial, uint8_t cls, uint8_t id,
+                                     const uint8_t *req, uint16_t req_len,
+                                     uint8_t *out, uint16_t out_max, uint32_t timeout_ms)
 {
-  _ubx_send(serial, cls, id, nullptr, 0);
+  _ubx_send(serial, cls, id, req, req_len);
   const uint32_t t0 = millis();
   uint8_t state = 0;
   uint16_t r_len = 0, got = 0;
@@ -222,6 +223,103 @@ static uint16_t _ubx_poll_payload(Uart &serial, uint8_t cls, uint8_t id,
   }
   return 0;
 }
+
+// ---------------- 空 payload 轮询（CFG-PRT/NAV5/GNSS 这类 Get 请求） ----------------
+static uint16_t _ubx_poll_payload(Uart &serial, uint8_t cls, uint8_t id,
+                                  uint8_t *out, uint16_t out_max, uint32_t timeout_ms)
+{
+  return _ubx_request_payload(serial, cls, id, nullptr, 0, out, out_max, timeout_ms);
+}
+
+// ---------------- CFG-VALGET / CFG-VALSET：新协议下的配置数据库访问 ----------------
+// ★2026-11-19：CFG-GNSS(0x06 0x3E) 在协议版本 >23.01 已废弃（F9P HPG 1.32 即属此列），
+//   官方要求改用 CFG-VALGET/VALSET 操作配置项。实测废弃接口对星座使能位只有部分
+//   生效（能关不能开、GPS 关不掉），正是走错接口的表现。
+//   VALGET 请求：version(0) layer(1) position(2-3 U2) keys(4+，每项 U4)
+//   VALGET 响应：version(0) layer(1) position(2-3) 然后 key(U4)+value 依次拼接
+//   VALSET 请求：version(0) layers(1) transaction(2-3) 然后 key(U4)+value 依次拼接
+
+/**
+ * @brief 用 CFG-VALGET 读取若干 L 型（单字节）配置项
+ * @param[in]  keys    键 ID 数组
+ * @param[in]  count   键数量（≤16）
+ * @param[out] values  对应值（每项 1 字节）
+ * @return true=全部读回成功
+ * @note layer 固定 0（RAM，即当前生效值）；请求键数受限，超出返回 false。
+ */
+static bool _valget_l(Uart &serial, const uint32_t *keys, uint8_t count, uint8_t *values)
+{
+  if (keys == nullptr || values == nullptr || count == 0 || count > 16)
+  {
+    return false;
+  }
+  uint8_t req[4 + 16 * 4];
+  req[0] = 0x00;                 // version
+  req[1] = 0x00;                 // layer = RAM（当前生效值）
+  req[2] = 0x00;                 // position
+  req[3] = 0x00;
+  for (uint8_t i = 0; i < count; ++i)
+  {
+    ubxLayout::putU4(req, (uint16_t)(4 + i * 4), keys[i]);
+  }
+  uint8_t resp[4 + 16 * 5];
+  const uint16_t n = _ubx_request_payload(serial, 0x06, 0x8B, req,
+                                          (uint16_t)(4 + count * 4), resp,
+                                          sizeof(resp), 500);
+  if (n < 4 + count * 5)
+  {
+    return false;
+  }
+  // 响应按请求顺序返回 key+value，逐项比对 key 后取值
+  for (uint8_t i = 0; i < count; ++i)
+  {
+    const uint16_t off = (uint16_t)(4 + i * 5);
+    if (ubxLayout::getU4(resp, off) != keys[i])
+    {
+      return false;
+    }
+    values[i] = resp[off + 4];
+  }
+  return true;
+}
+
+/**
+ * @brief 用 CFG-VALSET 写入若干 L 型（单字节）配置项
+ * @param[in] keys   键 ID 数组
+ * @param[in] values 对应值
+ * @param[in] count  键数量（≤16）
+ * @return true=接收机回 ACK
+ * @note layers=0x01 只写 RAM，掉电不保留，需 _cfg_save 固化。
+ */
+static bool _valset_l(Uart &serial, const uint32_t *keys, const uint8_t *values, uint8_t count)
+{
+  if (keys == nullptr || values == nullptr || count == 0 || count > 16)
+  {
+    return false;
+  }
+  uint8_t req[4 + 16 * 5];
+  req[0] = 0x00;                 // version
+  req[1] = 0x01;                 // layers = RAM
+  req[2] = 0x00;                 // transaction
+  req[3] = 0x00;
+  for (uint8_t i = 0; i < count; ++i)
+  {
+    ubxLayout::putU4(req, (uint16_t)(4 + i * 5), keys[i]);
+    req[4 + i * 5 + 4] = values[i];
+  }
+  _ubx_send(serial, 0x06, 0x8A, req, (uint16_t)(4 + count * 5));
+  return _ubx_wait_ack(serial, 0x06, 0x8A, kAckTimeoutMs);
+}
+
+/** @brief 六星座使能位打包（bit0 GPS, bit1 SBAS, bit2 GAL, bit3 BDS, bit4 QZSS, bit5 GLO） */
+static const uint32_t kSignalEnableKeys[6] = {
+    0x1031001FU,  // CFG-SIGNAL-GPS_ENA
+    0x10310020U,  // CFG-SIGNAL-SBAS_ENA
+    0x10310021U,  // CFG-SIGNAL-GAL_ENA
+    0x10310022U,  // CFG-SIGNAL-BDS_ENA
+    0x10310024U,  // CFG-SIGNAL-QZSS_ENA
+    0x10310025U,  // CFG-SIGNAL-GLO_ENA
+};
 
 // ---------------- 波特率探测 ----------------
 enum DetectKind { DETECT_NONE, DETECT_UBX, DETECT_NMEA };
@@ -494,51 +592,39 @@ static bool _cfg_gnss(Uart &serial, uint8_t gnss_mask)
   return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
 }
 
-// CFG-SBAS（8B）：差分增强使能
 /**
- * @brief CFG-GNSS 通道重排：关掉 SBAS（国内无覆盖）
+ * @brief 关闭 SBAS 星座（国内无覆盖）
  * @return true=已生效或无需改动
- * @note 实测本机分配：GPS 8/16、SBAS 3/3、GAL 10/18、BDS 2/5、QZSS 0/4、
- *       GLO 8/12，硬件总通道 trkUse=60。
- *       SBAS 的四套系统（EGNOS 欧洲、WAAS 美国、MSAS 日本、GAGAN 印度）都不
- *       覆盖中国，3 个跟踪通道白占；关掉后这 3 个通道回到总预算供其他星座
- *       动态调度。
- *       ★2026-11-19 实测：F9P 的 maxTrkCh 是只读的——对 BDS 依次写
- *       8/10/12、对 GPS 写 18/20、对 GAL 写 20/22，接收机全部回 ACK，
- *       但回读仍是出厂值 5/16/18。所以这里只改使能位，不再尝试改通道数：
- *       写了也不生效，只会让日志看起来像改过。
+ * @note ★2026-11-19 改正：原来走 CFG-GNSS(0x06 0x3E) 改 flags。官方手册明确
+ *       CFG-GNSS 在协议版本 >23.01 已废弃，要求改用 CFG-VALSET 操作配置项；
+ *       F9P HPG 1.32 正属此列。实测废弃接口对使能位只有部分生效（BDS 能关
+ *       不能开、GPS 关不掉），就是走错接口的表现。现改用
+ *       CFG-SIGNAL-SBAS_ENA(0x10310020) 走 VALSET/VALGET。
+ *
+ *       依据（F9 HP 1.32 Interface Description）：
+ *       - CFG-GNSS Comment：「deprecated in protocol versions greater than
+ *         23.01. Use UBX-CFG-VALSET/VALGET/VALDEL instead」；
+ *       - 字段映射表：UBX-CFG-GNSS.gnssId → CFG-SIGNAL-GPS_ENA / SBAS_ENA /
+ *         BDS_ENA / QZSS_ENA / GLO_ENA；
+ *       - CFG-GNSS 的配置约束同样适用于新接口：至少一个主星座启用、每个启用
+ *         的主星座 maxTrkCh ≥ 4、通道总和不超硬件——所以只动 SBAS 这一路。
+ *
+ *       SBAS 的四套系统（EGNOS 欧洲、WAAS 美国、MSAS 日本、GAGAN 印度）都
+ *       不覆盖中国，3 个跟踪通道白占；关掉后这 3 个通道回到总预算供其他星座
+ *       动态调度。SBAS 非"主星座"，不受"至少启用一个主星座"约束。
  */
 static bool _cfg_gnss_optimize(Uart &serial)
 {
-  uint8_t cur[64];
-  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, cur, sizeof(cur), 500);
-  if (n < 8)
+  uint8_t en = 0xFF;
+  if (_valget_l(serial, &kSignalEnableKeys[1], 1, &en))
   {
-    return false;                      // 接收机不支持 CFG-GNSS（老型号）
-  }
-  const uint8_t num_blocks = cur[3];
-  bool patched = false;
-  for (uint8_t i = 0; i < num_blocks && ubxCfgGnss::blockFits(i, n); ++i)
-  {
-    uint8_t *blk = cur + ubxCfgGnss::blockOffset(i);
-    if (blk[ubxCfgGnss::kOffGnssId] != 1)
+    if (en == 0)
     {
-      continue;                        // 只处理 SBAS(id=1)，其余星座不动
-    }
-    const uint8_t cur_flags = blk[ubxCfgGnss::kOffFlags];
-    const uint8_t new_flags = (uint8_t)(cur_flags & ~ubxCfgGnss::kFlagEnableBit);
-    if (new_flags != cur_flags)
-    {
-      blk[ubxCfgGnss::kOffFlags] = new_flags;
-      patched = true;
+      return true;                     // SBAS 已是关闭状态
     }
   }
-  if (!patched)
-  {
-    return true;                       // SBAS 已是关闭状态
-  }
-  _ubx_send(serial, 0x06, 0x3E, cur, n);
-  return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
+  const uint8_t want = 0;
+  return _valset_l(serial, &kSignalEnableKeys[1], &want, 1);
 }
 
 /**
@@ -657,24 +743,17 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
   }
   // 星座使能校验（★2026-11-19）：SBAS 必须处于关闭状态。不验这一项时，
   // 关掉 SBAS 这类星座改动会被快路径整段跳过——配置永远下发不下去。
-  // 只读一次 CFG-GNSS，约 50–80 ms，远低于全量配置的 1.5 s。
+  // 走 CFG-VALGET 读 CFG-SIGNAL-SBAS_ENA（CFG-GNSS 已废弃，见 _cfg_gnss_optimize）。
   if (require_sbas_off)
   {
-    uint8_t g[64];
-    const uint16_t gn = _ubx_poll_payload(serial, 0x06, 0x3E, g, sizeof(g), 500);
-    if (gn < 8)
+    uint8_t sbas_en = 0xFF;
+    if (!_valget_l(serial, &kSignalEnableKeys[1], 1, &sbas_en))
     {
-      return false;                  // 读不到星座就别跳过配置
+      return false;                  // 读不到星座配置就别跳过配置
     }
-    const uint8_t blocks = g[3];
-    for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, gn); ++i)
+    if (sbas_en != 0)
     {
-      const uint8_t *blk = g + ubxCfgGnss::blockOffset(i);
-      if (blk[ubxCfgGnss::kOffGnssId] == 1 &&
-          (blk[ubxCfgGnss::kOffFlags] & ubxCfgGnss::kFlagEnableBit) != 0)
-      {
-        return false;                // SBAS 还开着 → 需要全量配置去关掉
-      }
+      return false;                  // SBAS 还开着 → 需要全量配置去关掉
     }
   }
   if (expect_dyn == 0)
@@ -751,49 +830,37 @@ bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk)
 }
 
 /**
- * @brief 单独设置某个星座的使能位（CFG-GNSS 读改写）
- * @note 使能位可写（已实测），通道数不可写——两者不要混为一谈。
+ * @brief 读回六星座使能状态（走 CFG-VALGET 读 CFG-SIGNAL-*_ENA）
+ */
+bool ubxQuerySignalEnable(Uart &serial, uint8_t enabled[6])
+{
+  if (enabled == nullptr)
+  {
+    return false;
+  }
+  return _valget_l(serial, kSignalEnableKeys, 6, enabled);
+}
+
+/**
+ * @brief 设置某个星座的使能（走 CFG-VALSET 写 CFG-SIGNAL-*_ENA）
+ * @note ★2026-11-19：改用配置数据库接口。CFG-GNSS 已废弃，且实测对使能位
+ *       只有部分生效（BDS 能关不能开、GPS 关不掉）。
  */
 bool ubxSetGnssEnable(Uart &serial, uint8_t gnss_id, bool enable)
 {
-  uint8_t cur[64];
-  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, cur, sizeof(cur), 500);
-  if (n < 8)
+  int idx = -1;
+  switch (gnss_id)
   {
-    return false;
+    case 0: idx = 0; break;   // GPS
+    case 1: idx = 1; break;   // SBAS
+    case 2: idx = 2; break;   // Galilean
+    case 3: idx = 3; break;   // BeiDou
+    case 5: idx = 4; break;   // QZSS
+    case 6: idx = 5; break;   // GLONASS
+    default: return false;    // IMES/NavIC 无对应 CFG-SIGNAL 键
   }
-  const uint8_t num_blocks = cur[3];
-  bool found = false;
-  bool changed = false;
-  for (uint8_t i = 0; i < num_blocks && ubxCfgGnss::blockFits(i, n); ++i)
-  {
-    uint8_t *blk = cur + ubxCfgGnss::blockOffset(i);
-    if (blk[ubxCfgGnss::kOffGnssId] != gnss_id)
-    {
-      continue;
-    }
-    found = true;
-    const uint8_t cur_flags = blk[ubxCfgGnss::kOffFlags];
-    const uint8_t new_flags =
-        enable ? (uint8_t)(cur_flags | ubxCfgGnss::kFlagEnableBit)
-               : (uint8_t)(cur_flags & ~ubxCfgGnss::kFlagEnableBit);
-    if (new_flags != cur_flags)
-    {
-      blk[ubxCfgGnss::kOffFlags] = new_flags;
-      changed = true;
-    }
-    break;
-  }
-  if (!found)
-  {
-    return false;
-  }
-  if (!changed)
-  {
-    return true;                       // 已是目标状态
-  }
-  _ubx_send(serial, 0x06, 0x3E, cur, n);
-  return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
+  const uint8_t value = enable ? 1 : 0;
+  return _valset_l(serial, &kSignalEnableKeys[idx], &value, 1);
 }
 
 /**
