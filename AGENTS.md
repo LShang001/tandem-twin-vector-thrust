@@ -71,3 +71,9 @@ py -3.12 tools/check-code-comments.py --check
 - **P1**：「记住/记下来/沉淀」或确证踩坑时，在 `docs/memory/` 写 3–5 个要点，首屏标「触发条件」，登记在本页索引并运行 `py -3.12 tools/check-memory-index.py`。
 - **P2**：收到纠正后更新 [踩坑正本](docs/registers/踩坑记录-AGENTS.md) 或对应专题；**P3**：发现非显然约定先查重，稳定全仓规则才放本页。
 - **P4**：同一流程被指导三次，提议封装技能；创建或改技能走 `skill-creator-plus`，项目技能统一放 `.agents/skills/`。**P5**：完工反思；没有值得沉淀的事实就不写。
+
+## 记忆下沉归档（自动迁移）
+
+- SIL 跑批与覆盖判据（2026-11-19 自记忆下沉）：`bash test_host/fw_sil/run_all_airframes.sh` 一键跑纵列/共轴/单涵道并逐项判据——纵列姿态 10.00m 阶跃 + roll 峰值 5.86°、共轴 24 cases 0 failed、单涵道 10.00m + 5.86°；纵列 run_acceptance.sh（真实固件+EKF、3 seeds 定高闭环、约 81s）已并入第 1/3 阶段。液体火箭无固件 env（fw_sil_env_main 零引用，用 LiquidRocketModel.h + 简化 6DOF plant），走宿主回归 run_all.sh 的 test_liquid_rocket_sil，故「三机型 SIL」准确说法须同时 --include-sil --include-host。**覆盖判据＝跑批最终汇总里有该项输出**，脚本存在且单独跑绿不等于已覆盖。**纵列手动模式油门直通不控高**：alt=-458m 是设计行为不是发散，判据只判姿态峰值+解锁，不加高度/发散断言。防重复造轮子：纵列已有 test_roundtrip（20% 容限）、共轴已有独立 dynamics 与控制测试。
+- 推进层三端同构守卫（2026-11-19 自记忆下沉）：`tools/check-propulsion-parity.py`（仿真 control-allocation.mjs vs 固件 computeWrench，9 组工况×6 分量＝54 项对拍，退出码即结论）：容差用「绝对+相对」混合（纯相对会把 Mx≈-3.5e-4 类小分量的 4.9e-9 差值放大成 FAIL）。MinGW ld 写不了中文绝对路径→cwd 到仓库根用相对路径。覆盖仅稳态，Qf 的 Jp·dω/dt 瞬态项未对拍（已知空白非已证等价）。
+- 参考固件 VTVL_ElectricDualRotor_FCS（2026-11-19 自记忆下沉）：位于 `D:\PIO_Projects\VTVL_ElectricDualRotor_FCS`（master，HEAD `c322f64`，2026-10-31），是「共轴双桨单机型完整固件」，被 TANDEMVEC 三机型平台在功能面完全覆盖；桌面已无对应 zip。其磁力计链路（MagSensor/MagCal 标定+Flash 持久化）已接硬件但未融合：`navigation_task.cpp:811-819` 真实磁路径整段注释，EKF 航向用伪磁矢量 (30,0,40) 初始化，飞行中靠 GNSS 航迹角−侧滑角，无可回收的连续融合策略。桌面 `TandemVec_FCS` 目录是当前工程 2026-11-06 旧快照（非 git 仓库），缺磁力计改接 I2C1、DTCM 可选 env、GNSS 统一入口修复、静止磁重对准、航向模式默认值等后续改动。
