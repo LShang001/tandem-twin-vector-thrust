@@ -76,6 +76,7 @@ enum class CapabilityFlag : uint16_t
     VariableMass = 1U << 7,    // 变质量/变惯量
 };
 
+/** @brief 能力标志枚举 → 位掩码 */
 inline uint16_t capabilityBit(const CapabilityFlag flag)
 {
     return static_cast<uint16_t>(flag);

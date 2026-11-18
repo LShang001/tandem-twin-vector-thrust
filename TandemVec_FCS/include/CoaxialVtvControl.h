@@ -106,6 +106,7 @@ struct CoaxialVtvOutput
     float alpha_yaw_radps2 = 0.0f;
 };
 
+/** @brief 共轴垂直推力控制量限幅 */
 inline float coaxialVtvClamp(const float v, const float lo, const float hi)
 {
     return v < lo ? lo : (v > hi ? hi : v);

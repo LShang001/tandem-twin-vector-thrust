@@ -170,6 +170,7 @@ struct MagGateResult
     float noise_ut = 0.0f;
 };
 
+/** @brief 角度归一到 (-π, π]，供残差/航向差计算前归一 */
 inline float magWrapPi(float angle_rad)
 {
     constexpr float kTwoPi = 6.28318530717958647692f;

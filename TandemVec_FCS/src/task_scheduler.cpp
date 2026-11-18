@@ -81,6 +81,12 @@ static uint32_t s_stats_window_start_ms = 0;  // 观测窗口起点（毫秒）
 #endif
 static uint32_t s_loop_max_pass_us = 0;       // taskExecutor 单轮最大耗时
 
+/**
+ * @brief 清零调度统计窗口并重算各任务的名义周期
+ * @note 名义周期按 interval tick × kTickUs 定点换算（×16 避免整数截断），
+ *       6400 Hz tick 时为 156.25 µs。`tasks` 打印完会自动调用本函数，
+ *       所以连续两次 `tasks` 输出是两个独立窗口，不能直接相加。
+ */
 void schedulerStatsReset()
 {
   memset(s_stats, 0, sizeof(s_stats));
@@ -96,6 +102,15 @@ void schedulerStatsReset()
   s_loop_max_pass_us = 0;
 }
 
+/**
+ * @brief 打印任务调度统计表并复位窗口（DBG `tasks` 命令的实现）
+ * @param[out] out 输出流（DBG 串口或测试用 Print）
+ * @note ① 列含义：名义Hz（注册值）、实际Hz（窗口内实测）、平均/最大执行 us、
+ *         间隔 min/avg/max、迟到次数、丢执行次数、负荷%。
+ *       ② 打印完立即 schedulerStatsReset()——DBG 输出本身耗时几百 us，
+ *         不关闭打印就做实时性定量验收会被测量伪影污染。
+ *       ③ `taskCount` 里 run_count=0 的任务被跳过（注册了但从未跑到）。
+ */
 void schedulerStatsPrint(arduino::Print &out)
 {
   const uint32_t window_ms = millis() - s_stats_window_start_ms;
@@ -165,16 +180,29 @@ void schedulerStatsPrint(arduino::Print &out)
   schedulerStatsReset();
 }
 
+/**
+ * @brief 当前统计窗口长度 [ms]（距上次 schedulerStatsReset 的时间）
+ */
 uint32_t schedulerWindowMs()
 {
   return millis() - s_stats_window_start_ms;
 }
 
+/**
+ * @brief 单轮 taskExecutor 的最大耗时 [us]（窗口内峰值，复位时清零）
+ * @note 与 BFS_TASK_PASS_BUDGET_US（默认 1200 µs）对照：超预算时只推迟
+ *       deferrable 任务，控制/导航/IMU 任务不受影响。
+ */
 uint32_t schedulerLoopMaxPassUs()
 {
   return s_loop_max_pass_us;
 }
 
+/**
+ * @brief 窗口内 CPU 占用率，单位千分比（0–1000，即 health 里 CPU 的 0.1% 粒度）
+ * @note 分子是所有任务执行时间之和，不含中断与调度器自身开销，所以实测值
+ *       略低于真实占用；本机收敛态约 410–520（41–52%）。
+ */
 uint32_t schedulerCpuPermille()
 {
   const uint64_t window_us = static_cast<uint64_t>(millis() - s_stats_window_start_ms) * 1000ULL;
@@ -334,6 +362,13 @@ bool addTaskNamed(void (*function)(), float interval, const char *name)
   return true; // 任务添加成功
 }
 
+/**
+ * @brief 按名字设置任务是否可延后（deferrable）
+ * @param[in] name       任务名（addTaskNamed 注册时给的那个）
+ * @param[in] deferrable true=允许本任务在忙拍被跳过；false=每拍必须执行
+ * @return true=找到并设置；false=名字为空或未注册
+ * @note 只改调度策略，不影响任务函数本身；实时性关键任务不要设为可延后。
+ */
 bool setTaskDeferrable(const char *name, bool deferrable)
 {
   if (name == nullptr)
@@ -351,6 +386,14 @@ bool setTaskDeferrable(const char *name, bool deferrable)
   return false;
 }
 
+/**
+ * @brief 注册周期任务（无名字版本，等价 addTaskNamed(function, interval, nullptr)）
+ * @param[in] function 任务函数指针
+ * @param[in] interval 调度间隔 [ms]
+ * @return true=注册成功；false=任务表已满或参数非法
+ * @note 无名任务在 tasks 统计里显示为空名字，按名字设置延后/停用会找不到它；
+ *       需要被在线管理的任务一律用 addTaskNamed。
+ */
 bool addTask(void (*function)(), float interval)
 {
   return addTaskNamed(function, interval, nullptr);

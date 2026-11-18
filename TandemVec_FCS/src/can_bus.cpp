@@ -198,6 +198,7 @@ uint32_t getCanSendSuccessCount(void) {
   return can_send_success_count;
 }
 
+/// CAN 总线是否已成功初始化（发送前必须为 true，否则直接丢弃帧）
 bool isCanInitialized(void) {
   return can_initialized;
 }

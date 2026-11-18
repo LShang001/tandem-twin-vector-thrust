@@ -133,16 +133,19 @@ struct ActuatorCommand
     bool valid = false;
 };
 
+/** @brief 标量有限值检查（NaN/Inf 一律判非法） */
 inline bool controlFinite(const float v)
 {
     return std::isfinite(v);
 }
 
+/** @brief 三分量有限值检查 */
 inline bool controlFinite3(const float v[3])
 {
     return std::isfinite(v[0]) && std::isfinite(v[1]) && std::isfinite(v[2]);
 }
 
+/** @brief 控制契约统一限幅 */
 inline float controlClamp(const float v, const float lo, const float hi)
 {
     return (v < lo) ? lo : ((v > hi) ? hi : v);

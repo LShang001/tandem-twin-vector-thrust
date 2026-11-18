@@ -105,6 +105,16 @@ static void _ubx_send(Uart &serial, uint8_t cls, uint8_t id,
 }
 
 // ---------------- ACK-ACK 等待（带回显校验）----------------
+/**
+ * @brief 等待 UBX ACK-ACK 并校验 cls/id 匹配
+ * @param[in] cls        期望被确认的 class（ACK 载荷里的 clsID）
+ * @param[in] id         期望被确认的 id（ACK 载荷里的 msgID）
+ * @param[in] timeout_ms 超时 [ms]
+ * @return true=收到匹配的 ACK；false=超时，或只收到 NAK/其他帧
+ * @note ① 自带逐字节状态机解析，不复用库内解析器——那段数据还要喂给上层。
+ *       ② 只认 ACK-ACK（0x05/0x01）；ACK-NAK（0x05/0x00）不单独区分，
+ *         一律按"未确认"返回 false。
+ */
 static bool _ubx_wait_ack(Uart &serial, uint8_t cls, uint8_t id, uint32_t timeout_ms)
 {
   const uint32_t t0 = millis();
@@ -213,6 +223,16 @@ static uint16_t _ubx_poll_payload(Uart &serial, uint8_t cls, uint8_t id,
 // ---------------- 波特率探测 ----------------
 enum DetectKind { DETECT_NONE, DETECT_UBX, DETECT_NMEA };
 
+/**
+ * @brief 在指定波特率下探测接收机输出类型
+ * @param[in] baud      待探测波特率
+ * @param[in] window_ms 监听窗口 [ms]
+ * @return DETECT_UBX=收到校验通过的 UBX 帧；DETECT_NMEA=收到 '$' 起始的
+ *         NMEA 句；DETECT_NONE=窗口内没有有效数据
+ * @note ① 探测前统一走 ubxGnssSerialBegin() 重开串口——直接 begin() 会清掉
+ *         FIFOEN 并复位中断优先级（见 GNSS 串口丢帧记录）。
+ *       ② NMEA 判据只看首字节 '$'，不校验整句校验和，噪声大时可能误判。
+ */
 static DetectKind _probe_baud(Uart &serial, uint32_t baud, uint32_t window_ms)
 {
   (void)ubxGnssSerialBegin(serial, baud);
@@ -265,6 +285,13 @@ static DetectKind _probe_baud(Uart &serial, uint32_t baud, uint32_t window_ms)
 // ---------------- 配置帧构造 ----------------
 
 // CFG-PRT（20B）：UART1 → 目标波特率 + 协议掩码（nmea_out=false 时 UBX-only）
+/**
+ * @brief 下发 CFG-PRT：UART1 设为指定波特率与输出协议掩码
+ * @param[in] baud     目标波特率
+ * @param[in] nmea_out true=UBX+NMEA 输出，false=UBX-only
+ * @note 只写不校验；确认真的生效要用 _ubx_verify_prt 回读波特率，
+ *       或以 NAV-PVT 计数增量作为旁证。
+ */
 static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
 {
   uint8_t p[20] = {0};
@@ -280,6 +307,12 @@ static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
 }
 
 // CFG-RATE（6B）：测量周期 / 导航频率 / 时间基准
+/**
+ * @brief 下发 CFG-RATE：设置测量周期与导航频率
+ * @param[in] meas_rate_ms 测量周期 [ms]（100 → 10 Hz）
+ * @note navRate 固定 1、timeRef 固定 GPS，即"测量周期 = 导航解算周期"；
+ *       要改导航频率必须同时改 meas_rate，不存在单独的导航率。
+ */
 static void _cfg_rate(Uart &serial, uint16_t meas_rate_ms)
 {
   uint8_t p[6] = {0};
@@ -296,6 +329,15 @@ static void _cfg_rate(Uart &serial, uint16_t meas_rate_ms)
 // ★2026-11-03 修复：旧实现把 rate 放在 rateDDC、UART1/UART2 全 0，接收机
 //   仍回 ACK，但串口（UART1/UART2）上根本不输出 NAV-PVT；现场表现为
 //   ubxcfg status 全 OK 而 ubxstat 的 pvt 恒为 0。这里对全部端口同速率。
+/**
+ * @brief 下发 CFG-MSG（8 字节版）：设置某消息在全部端口上的输出速率
+ * @param[in] cls  消息 class（0x01=UBX NAV，0xF0=NMEA 句）
+ * @param[in] id   消息 id
+ * @param[in] rate 0=关闭；1..127=每 n 个历元输出一次
+ * @note 旧实现只填 rateDDC，UART1/UART2 留 0——接收机照样回 ACK，但串口上
+ *       根本不输出 NAV-PVT，现场表现为 ubxcfg status 全 OK 而 ubxstat 的
+ *       pvt 恒为 0（2026-11-03 修）。现在四个端口写同一速率。
+ */
 static void _cfg_msg(Uart &serial, uint8_t cls, uint8_t id, uint8_t rate)
 {
   uint8_t p[8] = {cls, id, rate, rate, rate, rate, 0, 0};
@@ -306,6 +348,14 @@ static void _cfg_msg(Uart &serial, uint8_t cls, uint8_t id, uint8_t rate)
 // payload = version(1B)=0, layers(1B)=RAM(0x01), reserved(2B), 然后重复
 // [key(4B LE) + value(1B)]。按键 CFG_MSGOUT-UBX_NAV_PVT_UART1=0x20910007、
 // CFG_MSGOUT-UBX_NAV_EOE_UART1=0x20910160（F10 SPG 6.00 ID §4.9.10）。
+/**
+ * @brief 用 CFG-VALSET 配置 NAV-PVT / NAV-EOE 在 UART1 的输出速率
+ * @param[in] rate 输出速率（0=关闭）
+ * @note ① F10 SPG 6.00 / protocol 40 的推荐路径，键值见 ID §4.9.10：
+ *         CFG_MSGOUT_UBX_NAV_PVT_UART1=0x20910007、
+ *         CFG_MSGOUT_UBX_NAV_EOE_UART1=0x20910160。
+ *       ② layers=0x01 只写 RAM，掉电不保留，需 _cfg_save 固化。
+ */
 static void _cfg_valset_pvt_eoe_uart1(Uart &serial, uint8_t rate)
 {
   uint8_t p[14] = {0x00, 0x01, 0x00, 0x00};
@@ -324,6 +374,13 @@ static void _cfg_valset_pvt_eoe_uart1(Uart &serial, uint8_t rate)
 // CFG-VALSET 改 UART1 波特率（F10 文档路径）：key=CFG-UART1-BAUDRATE
 // (0x40520001, U4)，value 为 baud（4B LE）。F10 接口说明没有 CFG-PRT，
 // legacy CFG-PRT 虽回 ACK 但不改波特率；实测从 460800 切 921600 会断链。
+/**
+ * @brief 用 CFG-VALSET 改 UART1 波特率（F10 的推荐路径）
+ * @param[in] baud 目标波特率
+ * @note ① key=CFG-UART1-BAUDRATE 0x40520001（U4，小端 4 字节值）。
+ *       ② F10 接口说明里没有 CFG-PRT；legacy CFG-PRT 虽回 ACK 但不改波特率，
+ *         实测从 460800 切到 921600 会直接断链。
+ */
 static void _cfg_valset_baud_uart1(Uart &serial, uint32_t baud)
 {
   uint8_t p[12] = {0x00, 0x01, 0x00, 0x00,
@@ -390,6 +447,15 @@ static bool _cfg_nav5_rw(Uart &serial, int dyn_model, int fix_mode,
 
 // CFG-GNSS（星座配置）——读改写：轮询当前 → 按掩码改各星座使能位 → 回写
 // gnss_mask: bit0 GPS(0) bit1 GLONASS(6) bit2 Galileo(2) bit3 BeiDou(3)
+/**
+ * @brief 读改写 CFG-GNSS：按掩码启停各导航星座
+ * @param[in] gnss_mask bit0 GPS、bit1 GLONASS、bit2 Galileo、bit3 BeiDou
+ * @return true=已生效或本来就是目标配置；false=接收机不支持 CFG-GNSS
+ * @note ① 必须先轮询原配置再回写——直接构造 payload 会把未列入掩码的星座
+ *         及其跟踪通道数清零。
+ *       ② 未列入掩码的星座是显式关闭使能位，不是"保持原样"。
+ *       ③ 已是目标配置时直接返回，不发冗余写入。
+ */
 static bool _cfg_gnss(Uart &serial, uint8_t gnss_mask)
 {
   uint8_t cur[40];
@@ -429,6 +495,12 @@ static bool _cfg_gnss(Uart &serial, uint8_t gnss_mask)
 }
 
 // CFG-SBAS（8B）：差分增强使能
+/**
+ * @brief 使能 CFG-SBAS（星基增强系统）
+ * @return true=接收机回 ACK
+ * @note 国内 SBAS 几何覆盖有限，本条主要为兼容多星座接收机的默认行为，
+ *       不代表定位精度会因此提升。
+ */
 static bool _cfg_sbas(Uart &serial)
 {
   uint8_t p[8] = {1, 0, 0, 0, 0, 0, 0, 0};   // enabled=1
@@ -437,6 +509,12 @@ static bool _cfg_sbas(Uart &serial)
 }
 
 // CFG-CFG（13B）：固化当前配置到接收机非易失存储
+/**
+ * @brief 下发 CFG-CFG 把 RAM 配置固化进接收机非易失存储
+ * @note ★2026-08-10：掩码 0x1F→0x3F 补上 senConf(bit5)。原来的 0x1F 不含
+ *       senConf，CFG-GNSS 的星座配置固化不进去；而"已固化"快路径又不再重配，
+ *       于是掉电后星座配置丢失且再也回不来。
+ */
 static void _cfg_save(Uart &serial)
 {
   uint8_t p[13] = {0};
@@ -447,6 +525,13 @@ static void _cfg_save(Uart &serial)
 }
 
 // ---------------- 回读校验：CFG-PRT 轮询 ----------------
+/**
+ * @brief 回读 CFG-PRT 并比对波特率
+ * @param[in] expected_baud 期望波特率
+ * @return true=回读值与期望一致
+ * @note ACK 只证明"命令被接收"，不证明"配置生效"；本函数才是配置落地的判据，
+ *       ubxcfg status 的 cfg_ok 就取自这里。
+ */
 static bool _ubx_verify_prt(Uart &serial, uint32_t expected_baud)
 {
   uint8_t payload[20];
@@ -463,6 +548,21 @@ static bool _ubx_verify_prt(Uart &serial, uint32_t expected_baud)
 // ============================================================
 //  主入口
 // ============================================================
+/**
+ * @brief 接收机自动配置主入口：探测波特率 → 逐项下发配置 → 回读校验
+ * @param[in] opt 配置选项；nullptr 用 kUbxDefaultCfg
+ * @return 各项结果与人读诊断（字段见 UbxCfgResult；nav5_dyn_readback 为 0xFF
+ *         表示 CFG-NAV5 回读失败）
+ * @pre  GNSS 串口已由 ubxGnssSerialBegin() 打开；本函数内部会按探测结果重开
+ * @note ① 波特率扫描顺序：目标波特率优先，命中已固化接收机 300 ms 快路径；
+ *         其余按 921600→9600 降序试，命中即停。
+ *       ② 探测阶段用错波特率会产生大量帧错误，F10 手册 §3.2 p.21 规定
+ *         1 s 内 >100 个帧错误会关闭 UART RX 约 1 s；这里探测后固定等待
+ *         1200 ms 并清积压，否则后续配置会被整体丢弃（实测 ack=0、
+ *         rate/msg/val 全 FAIL）。
+ *       ③ 配置成功不等于生效——写后一律回读（PRT 波特率、NAV5 dynModel），
+ *         回读值才是判据。
+ */
 UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
 {
   const UbxConfigOptions &o = (opt != nullptr) ? *opt : kUbxDefaultCfg;
@@ -680,6 +780,11 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
 }
 
 // CFG-RST：GNSS 仅软件复位（navBbrMask=0x02, resetMode=0x02）
+/**
+ * @brief 下发 CFG-RST 让接收机做软件复位（不清非易失配置）
+ * @note navBbrMask=0x02（保留 BBR 热启动数据）、resetMode=0x02（受控软件复位）。
+ *       配置刚写完但没生效时，复位接收机比反复重写更可靠。
+ */
 void ubxResetReceiver(Uart &serial)
 {
   uint8_t p[4] = {0x02, 0x02, 0, 0};
@@ -695,7 +800,13 @@ void ubxResetReceiver(Uart &serial)
 
 // 消息输出速率（CFG-MSG；rate=0 关闭，1-127 为 1/n 秒）。
 // cls=0xF0 为 NMEA 句、cls=0x01 为 UBX 消息（NAV-PVT/EOE/DOP/SAT...）。
-// 从 MON-VER 固定/扩展字段复制并去尾部空格/NUL。
+/**
+ * @brief 从 MON-VER 的定长字段复制字符串并去掉尾部空格/CR
+ * @param[in]  src 源字段起始地址
+ * @param[in] n   源字段长度（定长，不以 NUL 结尾也可能）
+ * @param[out] dst 目标缓冲（保证以 NUL 结尾）
+ * @param[in]  cap 目标缓冲容量（含结尾 NUL）
+ */
 static void _copy_trim_monver(const uint8_t *src, size_t n, char *dst, size_t cap)
 {
   if (dst == nullptr || cap == 0) return;
@@ -753,6 +864,14 @@ bool ubxMsgRateConfig(Uart &serial, uint8_t cls, uint8_t msg_id,
 }
 
 // CFG-NMEA（0x06 0x17，20B V1）读改写公共骨架：轮询当前 → 改 offset → 回写 → 等 ACK
+/**
+ * @brief 读改写 CFG-NMEA 的单个字节字段（先轮询 20B 原值再回写）
+ * @param[in] offset CFG-NMEA payload 内的字节偏移
+ * @param[in] value  目标值
+ * @return true=接收机回 ACK；false=未收到完整原配置（老固件/无响应）
+ * @note 必须读改写：CFG-NMEA 的其余字段（版本、talker、滤波、兼容标志）
+ *       直接构造 payload 会被清零。
+ */
 static bool _cfg_nmea_read_modify_write(Uart &serial, uint8_t offset,
                                         uint8_t value)
 {
@@ -768,7 +887,11 @@ static bool _cfg_nmea_read_modify_write(Uart &serial, uint8_t offset,
   return _ubx_wait_ack(serial, 0x06, 0x17, kAckTimeoutMs);
 }
 
-// NMEA 版本（offset 1）：编码 = (主<<4)|次，如 0x23=2.3 / 0x41=4.1 / 0x4A=4.10 / 0x4B=4.11
+/**
+ * @brief 设置 NMEA 协议版本（CFG-NMEA offset 1）
+ * @param[in] version 编码=(主<<4)|次，如 0x23=2.3、0x41=4.1、0x4A=4.10；0=不改
+ * @return true=已生效或 version=0；false=读取/写入失败
+ */
 bool ubxNmeaVersionConfig(Uart &serial, uint8_t version)
 {
   if (version == 0)
@@ -779,6 +902,11 @@ bool ubxNmeaVersionConfig(Uart &serial, uint8_t version)
 }
 
 // 主 talker ID（offset 8）：NMEA_TALKER_*（0=不覆盖接收机默认）
+/**
+ * @brief 设置 NMEA 主 talker ID（CFG-NMEA offset 8）
+ * @param[in] talker_id NMEA_TALKER_*；0=不覆盖接收机默认
+ * @return true=已生效或 talker_id=0；false=读取/写入失败
+ */
 bool ubxNmeaTalkerConfig(Uart &serial, uint8_t talker_id)
 {
   if (talker_id == 0)
@@ -789,12 +917,22 @@ bool ubxNmeaTalkerConfig(Uart &serial, uint8_t talker_id)
 }
 
 // NMEA 输出滤波掩码（offset 0）：NMEA_FILTER_*（0=不过滤，全量输出）
+/**
+ * @brief 设置 NMEA 输出滤波掩码（CFG-NMEA offset 0）
+ * @param[in] filter_mask NMEA_FILTER_*；0=不过滤，全量输出
+ * @return true=已生效；false=读取/写入失败
+ */
 bool ubxNmeaFilterConfig(Uart &serial, uint8_t filter_mask)
 {
   return _cfg_nmea_read_modify_write(serial, 0, filter_mask);
 }
 
-// 串口输出协议掩码（CFG-PRT outProtoMask，读改写——不动波特率/模式）
+/**
+ * @brief 读改写 CFG-PRT 的输出协议掩码（不动波特率与串口模式）
+ * @param[in] out_mask 1=UBX-only、2=NMEA-only、3=UBX+NMEA
+ * @return true=接收机回 ACK；false=掩码非法或读取失败
+ * @note 这里只改 outProtoMask；要改波特率用 _cfg_prt（它会重写整个 20B）。
+ */
 bool ubxProtoOutputConfig(Uart &serial, uint8_t out_mask)
 {
   if (out_mask == 0 || out_mask > 3)
@@ -820,7 +958,11 @@ bool ubxNav5Config(Uart &serial, int dyn_model, int fix_mode,
   return _cfg_nav5_rw(serial, dyn_model, fix_mode, min_elev, pdop_thresh);
 }
 
-// CFG-ITFM（0x06 0x39，8B）：CW 干扰检测开关（读改写 bit0）
+/**
+ * @brief 读改写 CFG-ITFM 的 CW 干扰检测开关
+ * @param[in] enable true=开干扰检测（bit0），false=关
+ * @return true=接收机回 ACK；false=读取的 payload 长度不对
+ */
 bool ubxItfmConfig(Uart &serial, bool enable)
 {
   uint8_t cur[8];
@@ -842,9 +984,14 @@ bool ubxItfmConfig(Uart &serial, bool enable)
   return _ubx_wait_ack(serial, 0x06, 0x39, kAckTimeoutMs);
 }
 
-// CFG-ANT（0x06 0x13，4B）：天线状态查询（纯读，不改配置）
-//   返回 true 且 out[0..1]=config、out[2..3]=status；
-//   status 低 2 位：0=INIT 1=UNKNOWN 2=OK 3=SHORT/OPEN（短路或开路，看 config 启用了哪个检测）
+/**
+ * @brief 查询天线状态（CFG-ANT，纯读不改配置）
+ * @param[out] out 4 字节：out[0..1]=config、out[2..3]=status
+ * @return true=读到完整 4 字节；false=超时
+ * @note status 低 2 位：0=INIT、1=UNKNOWN、2=OK、3=SHORT/OPEN
+ *       （短路还是开路取决于 config 里启用了哪个检测）。
+ *       没有源天线的大多数接收机恒回 UNKNOWN，不能据此判断天线好坏。
+ */
 bool ubxAntStatusQuery(Uart &serial, uint8_t out[4])
 {
   const uint16_t n =

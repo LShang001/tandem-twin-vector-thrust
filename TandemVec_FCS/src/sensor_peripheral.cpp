@@ -956,31 +956,37 @@ uint32_t flowSensorGetDetectLoopCount()
   return s_detect_loop_count;
 }
 
+/// MAVLink 协议光流帧累计计数（DBG `flow` 诊断用）
 uint32_t flowSensorGetMavFlowFrames()
 {
   return s_mav_flow_frames;
 }
 
+/// MAVLink 协议测距帧累计计数
 uint32_t flowSensorGetMavDistFrames()
 {
   return s_mav_dist_frames;
 }
 
+/// MSP 协议光流帧累计计数
 uint32_t flowSensorGetMspFlowFrames()
 {
   return s_msp_flow_frame_count;
 }
 
+/// MSP 协议测距帧累计计数
 uint32_t flowSensorGetMspRangeFrames()
 {
   return s_msp_range_frame_count;
 }
 
+/// 光流串口累计可读字节数（与 read 数对照可看出解析是否跟得上收包）
 uint32_t flowSensorGetUartRxAvailSum()
 {
   return s_uart_rx_avail_sum;
 }
 
+/// 光流串口累计已读取字节数
 uint32_t flowSensorGetUartRxReadSum()
 {
   return s_uart_rx_read_sum;
@@ -990,6 +996,13 @@ uint32_t flowSensorGetUartRxReadSum()
 // DBG `flowdump`：暂停自动识别，独占读取 UART7 指定时长并统计帧头/字节样本。
 // 用于没有示波器时判断“模块到底有没有出数据、出的是哪种协议”。
 // ------------------------------------------------------------------
+/**
+ * @brief DBG `flowdump`：暂停自动识别，独占读取 UART7 并统计帧头/字节样本
+ * @param[out] out         输出流
+ * @param[in]  duration_ms 采样时长，钳在 50–2000 ms
+ * @note 没有示波器时用来判断"模块到底有没有出数据、出的是哪种协议"；
+ *       执行期间自动协议识别被暂停，结束后状态机需要重新锁定帧头。
+ */
 void flowSensorDebugDump(Uart &out, uint32_t duration_ms)
 {
   if (duration_ms > 2000)
@@ -1457,6 +1470,11 @@ void handleMTF02PFlow()
   }
 }
 
+/**
+ * @brief LQS48 光流任务：驱动状态机解析 + 换算 → 写共享光流数据
+ * @note 必须先调 lqs48Sensor.update() 推进驱动状态机，再取 getData()；
+ *       解析成功后写 flow_data.last_update_ms，光流超时失效判据依赖它。
+ */
 void handleLQS48Flow()
 {
   // 1. 驱动层解析
@@ -1645,6 +1663,11 @@ void handleOpticalFlowSensor()
   }
 }
 
+/**
+ * @brief MTF02P 光流遥测：把原始斜距/光流速度与补偿后的量写入下行帧
+ * @note 原始量单位是 cm/s @1m 高度，补偿后的 vx/vy 才有物理意义（m/s）；
+ *       调试时同时看原始值与补偿值，可区分"模块输出异常"与"补偿算错"。
+ */
 void handleMTF02PFlowTelemetry()
 {
   // 安全检查：如果光流传感器串口未初始化或不可用，则不执行打印，避免程序崩溃
@@ -1733,6 +1756,11 @@ void handleMTF02PFlowTelemetry()
   Serial8.println();
 }
 
+/**
+ * @brief LQS48 光流遥测：同样的原始量 + 倾斜补偿中间量下行
+ * @note cos_tilt 由 AHRS 四元数的 Qx/Qy 直接算（1-2(qx²+qy²)），不经过欧拉角，
+ *       避开roll/pitch在±90°附近的奇异。
+ */
 void handleLQS48FlowTelemetry()
 {
   // 安全检查：如果光流传感器串口未初始化或不可用，则不执行打印，避免程序崩溃

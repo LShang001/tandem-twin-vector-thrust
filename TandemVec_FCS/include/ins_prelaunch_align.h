@@ -46,6 +46,7 @@ struct InsPreLaunchAlign {
   float accel_std_mps2 = 0.0f;
 };
 
+/** @brief 复位预发射对准状态（解锁前重新开始静止对准统计） */
 inline void InsPreLaunchAlignReset(InsPreLaunchAlign &s)
 {
   s.count = 0;

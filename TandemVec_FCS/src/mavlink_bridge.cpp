@@ -113,6 +113,14 @@ static uint32_t s_mav_tx_bytes = 0;
 uint32_t mavlinkTxFrameCount() { return s_mav_tx_frames; }
 uint32_t mavlinkTxByteCount() { return s_mav_tx_bytes; }
 
+/**
+ * @brief MAVLink 下行发送的唯一出口（含发送间隔门控与 TX 计数）
+ * @param[in] msg 已打包好的 MAVLink 消息
+ * @note ① 先过 mavIntervalOk(msgid)：地面站可用命令把某类消息调停或降频，
+ *         被调停的消息在这里静默丢弃，不占串口带宽。
+ *       ② Serial6 可用空间不足 len+4 时整帧丢弃（不阻塞写），计数仍会增加
+ *         ——DBG `proto` 的 tx 帧数反映"尝试发送"而非"对端收到"。
+ */
 static void mavSend(const mavlink_message_t &msg)
 {
     if (!mavIntervalOk(msg.msgid))
@@ -333,6 +341,10 @@ static void mavHandleCommand(const mavlink_command_long_t &cmd)
     }
 }
 
+/**
+ * @brief 处理 COMMAND_LONG（#76）：解码后交给统一的 mavHandleCommand 分发
+ * @param[in] msg 原始 MAVLink 消息
+ */
 static void mavHandleCommandLong(const mavlink_message_t &msg)
 {
     mavlink_command_long_t cmd;
@@ -340,6 +352,13 @@ static void mavHandleCommandLong(const mavlink_message_t &msg)
     mavHandleCommand(cmd);
 }
 
+/**
+ * @brief 处理 COMMAND_INT（#75）：转成 command_long 结构后走同一分发
+ * @param[in] msg 原始 MAVLink 消息
+ * @note COMMAND_INT 的 x/y 是 int32 经纬度缩放值，这里直接按标量转 float
+ *       交给下游；当前实现的命令只用 param1/param2/command，不解析坐标语义，
+ *       接航点类命令前必须先按 MAVLink 约定还原经纬度。
+ */
 static void mavHandleCommandInt(const mavlink_message_t &msg)
 {
     mavlink_command_int_t ci;
@@ -368,6 +387,10 @@ static void mavSendMissionAck(const mavlink_message_t &src, uint8_t type)
     mavSend(msg);
 }
 
+/**
+ * @brief 应答任务数为 0（本机不保存航点，地面站据此结束任务上传握手）
+ * @param[in] src 触发本次应答的请求方地址（sysid/compid）
+ */
 static void mavSendMissionCountZero(const mavlink_message_t &src)
 {
     mavlink_message_t msg;
@@ -376,6 +399,10 @@ static void mavSendMissionCountZero(const mavlink_message_t &src)
     mavSend(msg);
 }
 
+/**
+ * @brief 回 PING（#4）：把 time_usec/seq 原样带回，供地面站测往返延迟
+ * @param[in] src 原始 PING 消息（携带请求方的 time_usec 与 seq）
+ */
 static void mavSendPingReply(const mavlink_message_t &src)
 {
     mavlink_ping_t ping;
@@ -386,6 +413,11 @@ static void mavSendPingReply(const mavlink_message_t &src)
     mavSend(msg);
 }
 
+/**
+ * @brief 回 TIMESYNC（#111）：tc1 原样回送、ts1 置 0，地面站据 tc1 差算时钟偏差
+ * @param[in] src 原始 TIMESYNC 消息
+ * @note 本机不维护 UTC 时基，只做纯回环；不要据此认为固件已对齐 PPS/UTC。
+ */
 static void mavSendTimesyncReply(const mavlink_message_t &src)
 {
     mavlink_timesync_t ts;
@@ -396,6 +428,13 @@ static void mavSendTimesyncReply(const mavlink_message_t &src)
     mavSend(msg);
 }
 
+/**
+ * @brief MAVLink 上行消息总分发（按 msgid 分派到参数/任务/命令/心跳应答）
+ * @param[in] msg 已通过解析与校验的完整消息
+ * @note ① 未识别的 msgid 静默忽略，不回 NAK——地面站不会因此重发。
+ *       ② 参数广播（PARAM_REQUEST_LIST）是分片进行：这里只置状态位，
+ *         实际按拍发送在 mavlinkTelemetry 里推进，避免单拍长时间独占串口。
+ */
 void mavlinkHandleRx(const mavlink_message_t &msg)
 {
     switch (msg.msgid)

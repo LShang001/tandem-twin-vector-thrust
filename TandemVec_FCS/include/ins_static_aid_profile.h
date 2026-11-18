@@ -55,6 +55,7 @@ struct Icm45686ZuptNoiseSelection {
   bool allow_fusion;
 };
 
+/** @brief 静止辅助分频值归一化（0 视为关闭并按 1 处理，避免除零） */
 constexpr uint32_t Icm45686NormalizeStaticAidDivider(uint32_t divider)
 {
   // divider=0 在主程序中按“每帧都允许”处理；这里统一归一化，避免后续取模除零。
@@ -91,6 +92,7 @@ constexpr bool Icm45686StaticAidPhasesCanCollide(uint32_t zupt_divider,
   return (phase_delta % Icm45686StaticAidGcd(z_div, g_div)) == 0U;
 }
 
+/** @brief 钳到 [0, 1]（静止检测置信度用的比例量） */
 constexpr float Icm45686Clamp01(float value)
 {
   // 静止置信度只允许在 [0, 1] 内参与档位判断，异常输入按边界处理。

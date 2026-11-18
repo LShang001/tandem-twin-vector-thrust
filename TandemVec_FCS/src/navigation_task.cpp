@@ -245,6 +245,12 @@ void recordNavProfileZupt(const bool fused,
   }
 }
 
+/**
+ * @brief 打印单个 navprof 分段桶（avg/max/计数）到 Serial8
+ * @param[in] name   桶名（tu/pos/gnss/baro 等，打印成 <name>_avg 等键）
+ * @param[in] bucket 统计桶
+ * @note 供 `navprof` 机器可读输出用，格式固定为 " 名_avg=N 名_max=N 名_cnt=N"。
+ */
 void printNavProfileBucket(const char *name, const NavProfileBucket &bucket)
 {
   const uint32_t avg_us = bucket.count > 0 ? bucket.sum_us / bucket.count : 0;
@@ -262,6 +268,10 @@ void printNavProfileBucket(const char *name, const NavProfileBucket &bucket)
   Serial8.print(bucket.count);
 }
 
+/**
+ * @brief 清零全部 navprof 分段桶
+ * @note 由 `navprof reset` 与打印后自动调用；清零后 avg/max/cnt 全部重新累计。
+ */
 void clearNavProfileBuckets()
 {
   for (uint8_t idx = 0; idx < NAV_PROFILE_STAGE_COUNT; ++idx)
@@ -270,6 +280,11 @@ void clearNavProfileBuckets()
   }
 }
 
+/**
+ * @brief 到周期就打印一次 navprof 分段耗时（Serial8，含零偏/ZUPT 诊断计数）
+ * @note 打印本身耗时数百 µs，会污染正在测量的导航节拍；定量验收时应先关闭
+ *       navprof 周期打印，或改用 `navprof` 单次主动查询。
+ */
 void printNavProfileIfDue()
 {
   static uint32_t last_print_ms = 0;
@@ -328,6 +343,12 @@ void printNavProfileIfDue()
   nav_profile_zupt_residual_max_mps = 0.0f;
 }
 } // namespace
+/**
+ * @brief 记录一个 navprof 分段的耗时到对应桶
+ * @param[in] stage      分段编号（tu/pos/gnss/baro/mag 等，见 NavProfileStage）
+ * @param[in] elapsed_us 该段耗时 [µs]
+ * @note 只累加 sum/max/count，不算方差；stage 超界时忽略，不覆盖已有桶。
+ */
 void recordNavProfileStage(uint8_t stage, uint32_t elapsed_us)
 {
   if (stage >= NAV_PROFILE_STAGE_COUNT)
@@ -588,6 +609,11 @@ static bool applyDowngradedGnssUpdate(const bfs::UbxEpoch &epoch,
 }
 
 
+/**
+ * @brief 判定 GNSS 数据是否新鲜（最近一帧导航数据未超时）
+ * @return true=有新数据且在 GNSS_NAV_DATA_TIMEOUT_MS 窗口内
+ * @note 只看"数据到达时间"，不看定位质量；质量判据见 isGnssInstantValidForNav。
+ */
 bool isGnssDataFreshForNav()
 {
   if (last_gnss_data_ms == 0)
@@ -595,11 +621,22 @@ bool isGnssDataFreshForNav()
   return (millis() - last_gnss_data_ms) <= GNSS_NAV_DATA_TIMEOUT_MS;
 }
 
+/**
+ * @brief 判定本拍 GNSS 是否可直接用于量测更新
+ * @return true=定位等级 ≥ FIX_3D 且数据新鲜
+ */
 bool isGnssInstantValidForNav()
 {
   return (ubx.fix() >= bfs::Ubx::FIX_3D) && isGnssDataFreshForNav();
 }
 
+/**
+ * @brief 判定 GNSS 是否可用于对外发布（允许短时保持最近一次有效状态）
+ * @return true=本拍即时有效，或失锁未超过 GNSS_NAV_DROPOUT_HOLD_MS
+ * @note ① 引入保持窗口是为了避免瞬时失锁导致下游（控制层/遥测）状态抖变。
+ *       ② 保持期内不得把 EKF 的假原点 LLA 当成真实 GNSS 输出——即本函数只
+ *         回答"能否继续用旧值"，不回答"当前有定位"。
+ */
 bool isGnssOutputValidForNav()
 {
   // 导航输出允许短时间保持最近一次有效GNSS状态，但不能把EKF假原点LLA误判为真实GNSS。
@@ -614,6 +651,12 @@ bool isGnssOutputValidForNav()
   return (millis() - last_gnss_nav_valid_ms) <= GNSS_NAV_DROPOUT_HOLD_MS;
 }
 
+/**
+ * @brief UBX 定位等级 → DETA100 协议定位类型枚举
+ * @param[in] ubx_fix UBX NAV-PVT 的 fixType（0–5 + RTK）
+ * @return DETA100_GPS_FIX_TYPE_*（NO_FIX/2D/3D/DGPS/RTK_FLOAT/RTK_FIXED）
+ * @note 未知取值一律降级为 NO_FIX，不猜测。
+ */
 GPSFixType mapUbxFixToDeta100FixType(bfs::Ubx::Fix ubx_fix)
 {
   switch (ubx_fix)
@@ -634,6 +677,14 @@ GPSFixType mapUbxFixToDeta100FixType(bfs::Ubx::Fix ubx_fix)
     return DETA100_GPS_FIX_TYPE_NO_FIX;
   }
 }
+/**
+ * @brief 用 LLA（弧度）重设本地导航原点
+ * @param[in] lat_rad 纬度 [rad]
+ * @param[in] lon_rad 经度 [rad]
+ * @param[in] alt_m   海拔 [m]
+ * @note 重设原点会让已算出的 NED 相对位置全部平移，只在首次定位或显式重锚时
+ *       调用；飞行中随意调用会造成位置跳变。
+ */
 void setNavigationOriginFromLlaRad(const double lat_rad, const double lon_rad, const double alt_m)
 {
   origin_lat_rad = lat_rad;

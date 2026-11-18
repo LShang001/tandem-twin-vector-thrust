@@ -60,6 +60,15 @@ float g_imu_prof_delta_us = 0.0f;
 float g_imu_prof_spi_us = 0.0f;
 #endif
 
+/**
+ * @brief 初始化磁力计：开 I2C1 总线、探测芯片、加载 Flash 标定、启动采样
+ * @return true=找到并初始化成功；false=总线无应答或芯片未识别
+ * @note ① 磁力计独占 I2C1（SDA=PB7 / SCL=PB6，2026-11-17 二次实测），
+ *         400 kHz 是 IST8310 上限；气压计在 I2C2 独立跑 1 MHz，互不影响。
+ *       ② 探测顺序 IST8310@0x0E 优先，其次 QMC5883L@0x0D。
+ *       ③ 标定数据从 Flash 保留区（0x081E0000）载入，烧录固件不会擦除它；
+ *         但 magprobe 类命令会用 begin() 冲掉 RAM 副本，之后必须复位 MCU。
+ */
 bool initMagnetometer()
 {
   Serial8.println("----------------------------------------");
@@ -358,16 +367,32 @@ uint32_t imuIsrFrameCount() { return s_isr_frames; }
 uint32_t imuIsrBatchMax() { return s_isr_batch_max; }
 uint32_t imuDrainCallCount() { return s_drain_calls; }
 uint32_t imuDrainFrameCount() { return s_drain_frames; }
+/**
+ * @brief 每次排空调用平均允许读取的帧数（排空激进度指标）
+ * @return 平均值；无调用记录时返回 0
+ * @note 突然接近上限说明 FIFO 在积压（取数跟不上出帧），配合 imuRingDropCount
+ *       一起看才能区分"硬件 FIFO 积压"与"候选帧被丢弃"。
+ */
 uint32_t imuDrainAllowedAvg()
 {
   return (s_drain_calls == 0U) ? 0U : (s_drain_allowed_sum / s_drain_calls);
 }
 uint32_t imuFrameUsMax() { return s_frame_us_max; }
+/**
+ * @brief 每帧 SPI 读取的平均耗时 [us]
+ * @return 平均值；无记录时返回 0
+ */
 uint32_t imuFrameUsAvg()
 {
   return (s_frame_cycles == 0U) ? 0U : (s_frame_us_sum / s_frame_cycles);
 }
 
+/**
+ * @brief IMU 累计丢帧总数（环形缓冲满 + 积压裁剪 + 后端批量排空三路之和）
+ * @return 丢帧累计值
+ * @note 必须把后端 batchDroppedCount 算进来：45686 的排空策略只交出最新一包，
+ *       漏掉这一路会低估主丢帧路径，健康判据看上去正常而实际在丢数据。
+ */
 uint32_t imuRingDropCount()
 {
   // 丢弃总数 = ring 满丢弃 + 积压裁剪丢弃 + 后端批量排空丢弃。
@@ -382,6 +407,11 @@ uint32_t imuIsrEmptyCount()
   return s_imu_isr_empty;
 }
 
+/**
+ * @brief 当前 IMU 环形缓冲中的待消费样本数
+ * @note 与 imuIsrFrameCount/imuDrainFrameCount 配合判断积压：队列长期非空且
+ *       深度上涨说明消费端（导航任务）跟不上采样率。
+ */
 uint32_t imuRingSize()
 {
   return static_cast<uint32_t>(s_imu_ring.size());

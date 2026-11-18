@@ -133,6 +133,7 @@ inline bool singleEdfVaneFinite(const float v)
     return std::isfinite(v);
 }
 
+/** @brief 单涵道燃气舵控制量限幅 */
 inline float singleEdfVaneClamp(const float v, const float lo, const float hi)
 {
     return (v < lo) ? lo : ((v > hi) ? hi : v);

@@ -229,6 +229,10 @@ uint32_t anoTelemetryTxSkipCount()
 {
   return ano_tx_skipped;
 }
+/**
+ * @brief MAVLink 遥测因串口无空间而丢弃的帧数
+ * @note 与 mavlinkTxFrameCount() 对照：丢弃数上涨说明下行带宽不足或对端读得慢。
+ */
 uint32_t mavTelemetryTxSkipCount()
 {
   return s_mav_tx_skipped;
@@ -279,6 +283,12 @@ void elrsLinkStatsCallback(crsfLinkStatistics_t *ls)
   }
 }
 
+/**
+ * @brief CRSF 链路恢复回调：置链路正常、清失控保护、记录"曾建立链路"
+ * @note `isLinkUp` 是所有"raw_rc[x] < 阈值"类开关判定的必要门控——上电无信号
+ *       时 raw_rc_values 全 0，任何阈值判定都会误触发低档分支。
+ *       `failsafe_in_flight` 在这里清零，否则链路恢复后灯效仍停在 FAILSAFE。
+ */
 void linkUpCallback()
 {
   Serial8.println("Link is up!");
@@ -1854,6 +1864,15 @@ static void handleGuidanceCommandsMavlink()
   }
 }
 
+/**
+ * @brief 机载链路下行位置/速度帧（AnoCom float 帧，或按配置改发 MAVLink）
+ * @note ① 协议选择由全局 `g_onboard_link_proto` 决定（DBG `onboard mavlink`
+ *         切换）：0=AnoCom 定长 float 帧，1=MAVLink 标准消息。
+ *       ② `auto_intent` 取"意图位"而非模式通道判决——模式通道无中值滤波，
+ *         档位切换抖动会让制导机反复 _reset_guidance()。
+ *       ③ 帧长受 UPLINK_18FLOAT 控制（18 字段/34B 旧帧），两种布局的 [0]
+ *         语义不同：18 字段是意图位，34B 必须保持 trajectoryPlanningStarted。
+ */
 void sendPositionVelocityData()
 {
   // 机载电脑链路走 MAVLink 时改发标准消息（DBG `onboard mavlink` 切换）
@@ -2667,6 +2686,14 @@ static int16_t dbgParamIdOf(const char *tok)
   return -1;
 }
 
+/**
+ * @brief DBG `param` 命令入口：`param get/set/list <名字或ID> <值>`
+ * @param[in] args 子命令与参数串（本函数原地切分，会写入 '\0'）
+ * @note ① 走的是与 AnoCom 0xE1、MAVLink PARAM_SET 相同的 anoParamWriteFloat
+ *         入口，所以 DBG 改的参数和地面站改的完全等价（含 NaN 拒绝）。
+ *       ② 写入后触发 applyFlightCtrlParams()，当拍生效；掉电不保留，重启回
+ *         编译期默认值（要持久化必须改 FlightCtrlParams.h 重烧）。
+ */
 static void debugParamCmd(Uart &serial, char *args)
 {
   while (*args == ' ')
@@ -4540,6 +4567,13 @@ static void magCalPrintParams(Uart &serial, const magcal::MagCalParams &p)
     serial.println(p.scale, 2);
 }
 
+/**
+ * @brief 打印磁标定椭球拟合的质量指标（供判断标定是否可用）
+ * @param[in] st 拟合统计（样本数、残差、椭球圆度、3D 覆盖度、原始场强）
+ * @note 判读口径：residualRms 应 <0.03；coverageRatio 太低说明只做了平面旋转、
+ *       Z 轴不可观，拟合出的软铁矩阵会病态——此时 scale 与实测 |B| 对不上，
+ *       倾角也会偏（2026-11-19 实机就卡在这里：矩阵对角仅 [2][2] 正常）。
+ */
 static void magCalPrintStats(Uart &serial, const magcal::MagCalStats &st)
 {
     serial.print(F("[DBG]   samples = "));
@@ -4651,6 +4685,15 @@ static void debugI2cScan(Uart &serial)
     serial.println(F("[DBG] i2cscan done. 0x0E=IST8310 0x0D=QMC5883L 0x77=DPS310"));
 }
 
+/**
+ * @brief DBG `magcal` 命令入口：status/params/guided/start/stop/fit/save/load/clear/erase
+ * @param[in] args 子命令（调用方已跳过命令名与前导空格）
+ * @note ① 采样与写 Flash 在地面未解锁时才允许，armed 状态下直接拒绝。
+ *       ② `params` 回读 Flash 里当前生效的标定矩阵——判断"标定数据与当前
+ *         传感器是否匹配"的唯一入口（矩阵病态时 cal=VALID 也会骗人）。
+ *       ③ `magprobe` 会调用 magSensor.begin() 丢掉 RAM 里的标定副本，之后必须
+ *         复位 MCU 才会重新从 Flash 载入；否则 magcal 会报 cal=NONE。
+ */
 void debugMagCalCommand(Uart &serial, char *args)
 {
     // 解锁态保护：采样/写入只允许在地面未解锁时进行

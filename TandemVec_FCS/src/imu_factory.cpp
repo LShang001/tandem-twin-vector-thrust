@@ -29,6 +29,7 @@
 #include "ICM42688_ImuDevice.h"
 #endif
 
+/// 编译期选定的 IMU 型号（由 FCS_IMU_MODEL_ICM45686 宏决定，运行期不可变）
 ImuModel compiledImuModel()
 {
 #if defined(FCS_IMU_MODEL_ICM45686)

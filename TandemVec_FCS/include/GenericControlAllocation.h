@@ -53,6 +53,7 @@ struct GenericAllocationResult
     float residual_norm = 0.0f;
 };
 
+/** @brief 3x3 矩阵求逆（伴随矩阵法），det_out 回传行列式供近奇异判据使用 */
 inline bool invert3x3(const float a[3][3], float inv[3][3], float *det_out)
 {
     const float det =

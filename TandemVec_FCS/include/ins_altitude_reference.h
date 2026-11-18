@@ -46,11 +46,13 @@ inline bool InsComputeAbsoluteBaroAltitude(
   return std::isfinite(*absolute_altitude_m);
 }
 
+/** @brief NED 向下相对高度 → 向上高度（取负，导航内部统一用 up 为正） */
 inline float InsRelativeHeightUpFromNedDown(const float relative_down_m)
 {
   return -relative_down_m;
 }
 
+/** @brief NED 向下垂速 → 向上垂速（取负） */
 inline float InsVerticalVelocityUpFromNedDown(const float velocity_down_mps)
 {
   return -velocity_down_mps;

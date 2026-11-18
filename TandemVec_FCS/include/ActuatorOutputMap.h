@@ -44,6 +44,7 @@ struct OutputCommandSet
     OutputCommand commands[kMaxVehicleOutputs] = {};
 };
 
+/** @brief 执行器输出限幅：把 value 钳到 [lo, hi] */
 inline float clampOutput(const float value, const float lo, const float hi)
 {
     return value < lo ? lo : (value > hi ? hi : value);

@@ -46,6 +46,7 @@ enum class BaroHealthFlag : uint16_t
     Stuck = 1U << 2,
 };
 
+/** @brief 气压健康枚举 → 位掩码 */
 inline uint16_t baroHealthFlagBit(const BaroHealthFlag flag)
 {
     return static_cast<uint16_t>(flag);

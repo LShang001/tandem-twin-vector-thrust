@@ -85,11 +85,13 @@ struct NozzleGimbalOutput
     bool saturated = false;
 };
 
+/** @brief 液体火箭模型量限幅 */
 inline float liquidRocketClamp(const float v, const float lo, const float hi)
 {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+/** @brief 液体火箭模型参数有效性校验 */
 inline bool liquidRocketParamsValid(const LiquidRocketParams &p)
 {
     return std::isfinite(p.dry_mass_kg) && p.dry_mass_kg > 0.0f &&

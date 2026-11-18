@@ -148,6 +148,7 @@ constexpr float det3(const float m[3][3])
          m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
 }
 
+/** @brief 取 3x3 矩阵第 i 行第 j 个元素（行优先布局的索引习惯保持与公式表一致） */
 constexpr float dotRow(const float m[3][3], int i, int j)
 {
   return m[i][0] * m[j][0] + m[i][1] * m[j][1] + m[i][2] * m[j][2];

@@ -80,11 +80,13 @@ extern MagReferenceNed g_mag_reference;
 namespace magref
 {
 
+/** @brief 角度制转弧度 */
 inline float degToRad(const float deg)
 {
     return deg * kMagReferenceDegToRad;
 }
 
+/** @brief 弧度转角度制 */
 inline float radToDeg(const float rad)
 {
     return rad / kMagReferenceDegToRad;

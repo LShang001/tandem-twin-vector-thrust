@@ -254,6 +254,13 @@ const char *anoParamNameAt(uint16_t id)
     return e ? e->name : nullptr;
 }
 
+/**
+ * @brief 按名称查参数 ID（AnoCom 与 MAVLink 的参数名寻址共用）
+ * @param[in] name 参数名（如 "hdg_mode"），区分大小写、必须精确匹配
+ * @return 参数表下标（>=0）；未知名称或空串返回 -1
+ * @note 线性查表，ANO_PARAMS_COUNT 约百条；调用来自地面站交互，频率低，
+ *       不引入哈希表。
+ */
 int16_t anoParamIdByName(const char *name)
 {
     if (!name || !name[0])
@@ -267,6 +274,12 @@ int16_t anoParamIdByName(const char *name)
     return -1;
 }
 
+/**
+ * @brief 按 ID 读参数并统一转成 float（遥测上行与参数回读共用）
+ * @param[in]  id  参数表下标
+ * @param[out] out 读出的值；ANO_UINT8 按数值直转，ANO_BOOL 转 0/1
+ * @return true=成功；false=ID 越界或 out 为空
+ */
 bool anoParamReadFloat(uint16_t id, float *out)
 {
     const AnoParamEntry *e = anoParamAt(id);
@@ -281,6 +294,16 @@ bool anoParamReadFloat(uint16_t id, float *out)
     return true;
 }
 
+/**
+ * @brief 按 ID 写参数（AnoCom 0xE1 与 MAVLink PARAM_SET 的唯一写入口）
+ * @param[in] id    参数表下标
+ * @param[in] value 目标值；BOOLEAN 转 1/0，UINT8 钳到 0–255
+ * @return true=已写入；false=ID 越界或 value 为 NaN/Inf
+ * @note ① 拒绝 NaN/Inf——PARAM_SET 路径曾把 NaN 写进增益，控制输出直接发散。
+ *       ② UINT8 按 0–255 数值写入而非钳 0/1，否则掩码类参数（如 0x03）一旦被
+ *         写成 1 就再也恢复不了原掩码。
+ *       ③ 写完由调用方触发 applyFlightCtrlParams()，本函数不改运行态参数实例。
+ */
 bool anoParamWriteFloat(uint16_t id, float value)
 {
     const AnoParamEntry *e = anoParamAt(id);

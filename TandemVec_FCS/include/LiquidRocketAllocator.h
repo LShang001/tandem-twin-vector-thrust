@@ -75,6 +75,7 @@ struct LiquidRocketAllocatorOutput
     uint16_t sat_mask = control::kSatNone;
 };
 
+/** @brief 液体火箭分配参数有效性校验 */
 inline bool liquidRocketAllocParamsValid(const LiquidRocketAllocatorParams &p)
 {
     return std::isfinite(p.lever_m) && p.lever_m > 0.0f &&

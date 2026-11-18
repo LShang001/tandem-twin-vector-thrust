@@ -50,6 +50,7 @@ enum class ImuHealthFlag : uint16_t
     BiasJump = 1U << 6,
 };
 
+/** @brief IMU 健康枚举 → 位掩码 */
 inline uint16_t imuHealthFlagBit(const ImuHealthFlag flag)
 {
     return static_cast<uint16_t>(flag);
