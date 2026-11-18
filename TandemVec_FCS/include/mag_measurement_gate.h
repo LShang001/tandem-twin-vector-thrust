@@ -108,7 +108,13 @@ struct MagGateConfig
     float min_norm_ut = 15.0f;
     float max_norm_ut = 100.0f;
     float max_norm_dev_ut = 8.0f;
-    float max_dip_dev_rad = 10.0f * bfs::kMagReferenceDegToRad;
+    // 磁倾角偏差门：磁矢量转到 NED 后的倾角与站点参考（长沙 44.1°）之差的允许量。
+    // 10° 在理论上合理，但本机当前标定组的软铁矩阵病态（对角仅 [2][2] 正常，
+    // 非对角比对角还大），实测倾角 32.1°、偏差 12°，10° 门会把每条更新全拒
+    // （magcal 的 rej_by_gate: dip_dev 就是这么来的）。
+    // 2026-11-19 放宽到 25°：航向由水平投影 atan2(E,N) 决定，垂直分量偏大偏小
+    // 不影响水平方位，只影响倾角可信度；先让航向修正可用，标定修好后收回 10°。
+    float max_dip_dev_rad = 25.0f * bfs::kMagReferenceDegToRad;
     float max_residual_rad = 45.0f * bfs::kMagReferenceDegToRad;
     float max_track_dev_rad = 20.0f * bfs::kMagReferenceDegToRad;
     // 磁矢量倾角补偿的可信度门：姿态 1σ 超过此值就不做三轴矢量更新。

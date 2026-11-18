@@ -3016,7 +3016,15 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         debugFlashCommand(serial, line + 6);
       }
       else if (strncmp(line, "magcal", 6) == 0) {
-        debugMagCalCommand(serial, line + 6);
+        // ★ 2026-11-19 修复：`magcal <子命令>` 的参数带前导空格（" params"），
+        //   而 debugMagCalCommand 内部是按精确 strcmp 匹配子命令的，导致除不带
+        //   参数的 `magcal` 以外，start/stop/save/guided/params 全部落到
+        //   "subcommands" 提示分支、从未真正执行。这里先跳过空格再传下去。
+        char *magArgs = line + 6;
+        while (*magArgs == ' ' || *magArgs == '\t') {
+          ++magArgs;
+        }
+        debugMagCalCommand(serial, magArgs);
       }
       else if (strcmp(line, "i2cscan") == 0) {
         // I2C 总线在线诊断：逐地址探测 + 空闲电平 + 芯片身份
@@ -4791,6 +4799,16 @@ void debugMagCalCommand(Uart &serial, char *args)
         serial.print(magSensor.dorCount());
         serial.print(F("/"));
         serial.println(magSensor.reinitCount());
+    }
+    else if (strcmp(args, "params") == 0)
+    {
+        // 打印 Flash 里当前生效的标定参数：判别「标定数据与当前传感器是否匹配」。
+        // 判据：软铁矩阵接近单位阵 = 基本没做软铁；对角明显不等/有非对角项 =
+        // 做过完整椭球拟合；含约 12° 量级的旋转 = 安装倾斜被拟合吸收。
+        const magcal::MagCalParams &cp = magSensor.calParams();
+        serial.print(F("[DBG] MagCal params(active): valid="));
+        serial.println(cp.valid ? F("YES") : F("NO"));
+        magCalPrintParams(serial, cp);
     }
     else if (strcmp(args, "guided") == 0)
     {
