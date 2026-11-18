@@ -337,12 +337,15 @@ static void _cfg_valset_baud_uart1(Uart &serial, uint32_t baud)
 }
 
 // CFG-NAV5（36B）读改写：mask 按需置位，只改指定字段（-1/0 表示不改）
-//   dyn_model  动态模型：2=Airborne<2g(6)，4=Airborne<4g(7)；0=不改
+//   dyn_model  动态模型：2=Airborne<2g(7)，4=Airborne<4g(8)；0=不改
 //   fix_mode   定位模式：-1 不改，0=2D，1=3D，2=auto
 //   min_elev   最低仰角：-1 不改（0-90°）
 //   pdop_thresh pDOP 定位门限：-1 不改（单位 0.1，如 50=5.0）
 // ★ 2026-08-09 修复：dynModel 在 payload[2]、mask 位在 payload[0]（bit0）——
 //   旧实现把 dynModel 枚举值写进 mask 字节，Airborne 配置从未生效过。
+// ★ 2026-11-18 修复：u-blox dynModel 枚举是 6=airborne<1g、7=airborne<2g、
+//   8=airborne<4g；旧实现写 (dyn_model==2)?6:7，实际选到的是 <1g>/<2g>，
+//   比目标低一档。高机动必须落到 8，否则接收机内部平滑延迟偏大。
 static bool _cfg_nav5_rw(Uart &serial, int dyn_model, int fix_mode,
                          int min_elev, int pdop_thresh)
 {
@@ -356,7 +359,7 @@ static bool _cfg_nav5_rw(Uart &serial, int dyn_model, int fix_mode,
   if (dyn_model > 0)
   {
     mask |= 0x0001;                    // bit0 = dynModel
-    cur[2] = (uint8_t)((dyn_model == 2) ? 6 : 7);  // 6=Airborne<2g, 7=Airborne<4g
+    cur[2] = (uint8_t)((dyn_model == 2) ? 7 : 8);  // 7=Airborne<2g, 8=Airborne<4g
   }
   if (fix_mode >= 0)
   {
@@ -464,6 +467,7 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
 {
   const UbxConfigOptions &o = (opt != nullptr) ? *opt : kUbxDefaultCfg;
   UbxCfgResult r = {};
+  r.nav5_dyn_readback = 0xFF;   // 未读到的哨兵值（0 是合法的 portable 档位）
   memset(&s_last_cfg, 0, sizeof(s_last_cfg));
 
   // 1. 波特率探测：目标波特率优先（已固化接收机 300ms 快路径）
@@ -568,6 +572,14 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   r.msg_eoe_ok = _ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
   if (r.msg_eoe_ok) r.cfg_acks_received++;
 
+  // 4.2 RXM-RTCM：接收机把收到的差分改正数状态上报（0x02 0x32）。
+  // 无 RTK 差分输入时接收机可能不回复，超时按 NA 处理、不阻断配置——
+  // 一旦接入 RTK，这条是判断改正数是否真正到达的唯一通道。
+  _cfg_msg(serial, 0x02, 0x32, 1);
+  r.cfg_frames_sent++;
+  r.msg_rtcm_ok = _ubx_wait_ack(serial, 0x06, 0x01, kAckTimeoutMs);
+  if (r.msg_rtcm_ok) r.cfg_acks_received++;
+
   // 4.5 关闭接收机出厂默认的其余 UBX 消息（只留 NAV-PVT + NAV-EOE）。
   // ★ 2026-11-11 实测：不关时 Serial4 收 1822 B/s，而 PVT(92B)+EOE(8B)@8Hz 只需
   //   800 B/s —— 多出的约 56% 流量来自接收机默认开启的 NAV-* 系列。
@@ -611,6 +623,12 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     r.cfg_frames_sent += 2;
     r.nav5_ok = _cfg_nav5_rw(serial, o.airborne_g, -1, -1, -1);
     if (r.nav5_ok) r.cfg_acks_received++;
+    // ACK 只证明接收机收下了帧，不证明 dynModel 落到目标档位；写后回读 payload[2]。
+    uint8_t nav5_rb[36];
+    if (_ubx_poll_payload(serial, 0x06, 0x24, nav5_rb, sizeof(nav5_rb), 500) == 36)
+    {
+      r.nav5_dyn_readback = nav5_rb[2];
+    }
   }
   else
   {

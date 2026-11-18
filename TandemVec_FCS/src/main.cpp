@@ -245,7 +245,7 @@ void setup()
     // Serial4 RX 缓冲溢出），静默窗口内测试才反映真实链路质量。
     const uint32_t GPS_TARGET_BAUD = 921600UL;
     const uint16_t GPS_NAV_RATE_MS = 100;    // 10Hz
-    const uint8_t  GPS_AIRBORNE_G = 0;       // 0=不改动态模型（如需: 2/4 = Airborne<2g/<4g）
+    const uint8_t  GPS_AIRBORNE_G = 4;       // Airborne<4g> 高机动，减接收机内部平滑延迟。
     Serial8.println("[UBXCFG] Auto-configuring GNSS receiver...");
     UbxConfigOptions cfg_opt = kUbxDefaultCfg;
     cfg_opt.target_baud = GPS_TARGET_BAUD;

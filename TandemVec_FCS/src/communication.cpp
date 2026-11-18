@@ -3607,10 +3607,21 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(r.msg_pvt_ok ? F("OK") : F("FAIL"));
           serial.print(F("/"));
           serial.print(r.msg_eoe_ok ? F("OK") : F("FAIL"));
+          serial.print(F("/rtcm="));
+          serial.print(r.msg_rtcm_ok ? F("OK") : F("NA"));
           serial.print(F(" val="));
           serial.print(r.valset_ok ? F("OK") : F("NA"));
           serial.print(F(" nav5="));
           serial.print(r.nav5_ok ? F("OK") : F("FAIL"));
+          serial.print(F(" dyn="));
+          if (r.nav5_dyn_readback == 0xFFU)
+          {
+            serial.print(F("NA"));
+          }
+          else
+          {
+            serial.print(r.nav5_dyn_readback);
+          }
           serial.print(F(" gnss="));
           serial.print(r.gnss_ok ? F("OK") : F("FAIL"));
           serial.print(F(" sbas="));

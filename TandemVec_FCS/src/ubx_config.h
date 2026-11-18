@@ -39,8 +39,10 @@ struct UbxCfgResult
   bool     rate_ok;           // CFG-RATE（导航频率）成功
   bool     msg_pvt_ok;        // CFG-MSG NAV-PVT 成功
   bool     msg_eoe_ok;        // CFG-MSG NAV-EOE 成功
+  bool     msg_rtcm_ok;       // CFG-MSG RXM-RTCM 成功（改正数到达监视；无差分输入时超时不算失败）
   bool     valset_ok;         // CFG-VALSET（F10/M10 推荐路径，UART1 PVT+EOE）成功
   bool     nav5_ok;           // CFG-NAV5（动态模型，读改写）成功
+  uint8_t  nav5_dyn_readback; // CFG-NAV5 写后回读的 dynModel（0xFF=未读到；7=<2g> 8=<4g>）
   bool     gnss_ok;           // CFG-GNSS（星座使能，读改写）成功
   bool     sbas_ok;           // CFG-SBAS（差分增强）成功
   bool     save_ok;           // CFG-CFG 固化闪存成功（未请求时 true）
@@ -54,7 +56,7 @@ struct UbxConfigOptions
 {
   uint32_t target_baud;      // 目标波特率（默认 921600）
   uint16_t nav_rate_ms;      // 导航测量周期 ms（100=10Hz；0=不改）
-  uint8_t  airborne_g;       // 动态模型：0=不改，2=Airborne<2g，4=Airborne<4g
+  uint8_t  airborne_g;       // 动态模型：0=不改，2=Airborne<2g（dynModel=7），4=Airborne<4g>（dynModel=8）
   uint8_t  gnss_mask;        // 星座使能掩码：bit0 GPS, bit1 GLONASS, bit2 Galileo, bit3 BeiDou（0=不改）
   bool     sbas_enable;      // 使能 SBAS 差分增强（EGNOS/WAAS）
   bool     nmea_out;         // false=UBX-only 输出；true=UBX+NMEA
@@ -65,7 +67,7 @@ struct UbxConfigOptions
 static const UbxConfigOptions kUbxDefaultCfg = {
   /* target_baud: 目标波特率 */ 921600UL,
   /* nav_rate_ms: 导航周期 100ms=10Hz */ 100,
-  /* airborne_g:  动态模型 0=不改 */ 0,
+  /* airborne_g:  动态模型 4=Airborne<4g>（高机动，减少接收机内部位置/速度平滑延迟） */ 4,
   /* gnss_mask:   星座掩码 0=不改 */ 0,
   /* sbas_enable: SBAS 差分增强 */ false,
   /* nmea_out:    false=仅 UBX 输出 */ false,
