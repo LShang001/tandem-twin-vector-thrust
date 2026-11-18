@@ -73,10 +73,18 @@ struct UbxConfigOptions
   // ★2026-11-19：接收机输出滤波的 pDOP 门限（单位 0.1，0=不改）。
   // 手册（Integration Manual §4.9.3）：「A fix is only valid if it passes the
   // navigation output filters. In particular, both PDOP and accuracy values must
-  // lie below the respective limits.」——超门限时定位解直接判无效，这是硬截断。
-  // 飞控侧还有一层 GNSS_MAX_PDOP=3.0（只用于降级路径判定），主融合路径按
-  // PDOP 动态缩放权重、不硬拒。本机实测接收机里残留 2.5，比飞控更严，
-  // PDOP 2.5–3.0 的可用解被接收机先丢掉。改为 5.0，把判断权交给飞控。
+  // lie below the respective limits.」——超门限时定位解直接判无效，是硬截断。
+  //
+  // 取值依据（按飞控侧动态权重反推，见 ins_gnss_dynamic_weight.h）：
+  //   R 的 σ = pdop_scale × clamp(h_acc, 2.0, 30.0)，pdop_scale = PDOP/2（PDOP>2 时）。
+  //   PDOP 3  → σ ≈ 3 m      （可用，权重中等）
+  //   PDOP 5  → σ ≈ 5 m      （可用，权重低）
+  //   PDOP 10 → σ 触顶 30 m  （权重极低）
+  //   PDOP ≥15→ 必然触顶     （等价于丢弃）
+  // 所以接收机在 25（默认）截断时，飞控早已把这类解压到天花板，截断没有额外
+  // 保护作用；而截断在 2.5/5.0 反而丢掉 PDOP 2.5–5 这些权重仍有意义的解。
+  // 结论：显式写回默认 25.0 —— 不是"不管"，而是防止接收机里残留别的值
+  // （本机曾残留 2.5，比飞控的 GNSS_MAX_PDOP=3.0 还严，判断权被抢走）。
   uint16_t pdop_thresh;
 };
 
@@ -90,7 +98,7 @@ static const UbxConfigOptions kUbxDefaultCfg = {
   /* nmea_out:    false=仅 UBX 输出 */ false,
   /* persist:     CFG-CFG 固化到接收机闪存 */ false,
   /* gnss_optimize: 关 SBAS + 扩北斗通道（国内 SBAS 无覆盖） */ true,
-  /* pdop_thresh: 接收机输出滤波 pDOP 门限，50=5.0（放宽，交给飞控判断） */ 50,
+  /* pdop_thresh: 接收机输出滤波 pDOP 门限，250=25.0（默认值，不抢飞控的判断权） */ 250,
 };
 
 /**
