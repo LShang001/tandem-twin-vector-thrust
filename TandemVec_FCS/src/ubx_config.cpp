@@ -625,6 +625,30 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
   return rb[2] == expect_dyn;
 }
 
+/**
+ * @brief 读回接收机 CFG-GNSS 星座配置（只读，不改任何配置）
+ * @param[out] payload 原始 payload（布局见 ubx_config.h 声明）
+ * @param[in]  cap     缓冲容量
+ * @param[out] len     实际长度（0 = 失败）
+ * @return true=读回成功
+ * @note 只解析到"能打印"的程度，不改 constellation；要改走 _cfg_gnss。
+ */
+bool ubxQueryGnssConfig(Uart &serial, uint8_t *payload, uint16_t cap, uint16_t *len)
+{
+  if (payload == nullptr || len == nullptr || cap < 8)
+  {
+    return false;
+  }
+  *len = 0;
+  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, payload, cap, 500);
+  if (n < 8)
+  {
+    return false;
+  }
+  *len = n;
+  return true;
+}
+
 // ============================================================
 //  主入口
 // ============================================================

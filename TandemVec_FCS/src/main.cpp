@@ -251,6 +251,11 @@ void setup()
     cfg_opt.target_baud = GPS_TARGET_BAUD;
     cfg_opt.nav_rate_ms = GPS_NAV_RATE_MS;
     cfg_opt.airborne_g = GPS_AIRBORNE_G;
+    // ★2026-11-19：全量配置后固化到接收机 NVRAM。以前 persist=false，配置从不落盘，
+    //   接收机靠"上次被 u-center 配过"的状态凑合；换接收机/擦除后每次上电都要全量
+    //   重配（约 1.5 s），且开机快路径的"已验证"前提不牢。固化后：首次上电全量配置
+    //   并写 NVRAM，之后每次上电走快路径（仅 400 ms 验证），稳态零 NVRAM 写入。
+    cfg_opt.persist = true;
     const UbxCfgResult cfg = ubxAutoConfig(gpsSerialPort, &cfg_opt);
     Serial8.print("[UBXCFG] detect=");
     Serial8.print(cfg.detected ? "YES" : "NO");

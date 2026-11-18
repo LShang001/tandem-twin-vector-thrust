@@ -106,6 +106,21 @@ uint32_t ubxGnssSerialConfigFailCount();
 const UbxCfgResult &ubxLastCfgResult();
 
 /**
+ * @brief 读回接收机 CFG-GNSS（星座使能与通道配置），不改任何配置
+ * @param[out] payload 原始 CFG-GNSS payload：前 4 字节为
+ *             version/numTrkChHw/numTrkChUse/numConfigBlocks，
+ *             之后每 8 字节一块（gnssId/resTrkCh/maxTrkCh/reserved/flags[4]，
+ *             flags bit0 = 使能）
+ * @param[in]  cap     payload 缓冲容量
+ * @param[out] len     实际读回长度（0 = 失败）
+ * @return true=读回成功
+ * @note 用于确认接收机实际启用哪些星座——它决定 PVT 更新率上限
+ *       （F9P 数据手册 Table 1：四星座 8 Hz、三星座 10 Hz、双星座 15 Hz）
+ *       以及定位几何/收敛速度。
+ */
+bool ubxQueryGnssConfig(Uart &serial, uint8_t *payload, uint16_t cap, uint16_t *len);
+
+/**
  * @brief 轮询 UBX-MON-VER 并解析 SW/HW/PROTVER/ANTSUPERV
  * @return true=收到 ≥40B 的 MON-VER；各输出缓冲区允许为 nullptr/0
  */

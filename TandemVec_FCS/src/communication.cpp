@@ -3937,6 +3937,52 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
             serial.println(F("[DBG] antenna: no CFG-ANT response (unsupported?)"));
           }
         }
+        else if (strcmp(line, "ubxcfg gnss") == 0) {
+          // 读回 CFG-GNSS 星座使能：决定 PVT 更新率上限（F9P 数据手册 Table 1）
+          uint8_t buf[64];
+          uint16_t n = 0;
+          if (!ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n))
+          {
+            serial.println(F("[DBG] CFG-GNSS readback FAIL"));
+          }
+          else
+          {
+            const uint8_t blocks = buf[3];
+            serial.print(F("[DBG] CFG-GNSS blocks="));
+            serial.print(blocks);
+            serial.print(F(" trkHw="));
+            serial.print(buf[1]);
+            serial.print(F(" trkUse="));
+            serial.println(buf[2]);
+            for (uint8_t i = 0; i < blocks && (4U + (uint32_t)i * 8U + 8U) <= n; ++i)
+            {
+              const uint8_t *b = buf + 4 + (uint32_t)i * 8U;
+              const char *name = "?";
+              switch (b[0])
+              {
+                case 0: name = "GPS"; break;
+                case 1: name = "SBAS"; break;
+                case 2: name = "GAL"; break;
+                case 3: name = "BDS"; break;
+                case 4: name = "IMES"; break;
+                case 5: name = "QZSS"; break;
+                case 6: name = "GLO"; break;
+                case 7: name = "NavIC"; break;
+                default: break;
+              }
+              serial.print(F("[DBG]   "));
+              serial.print(name);
+              serial.print(F(" id="));
+              serial.print(b[0]);
+              serial.print(F(" en="));
+              serial.print((b[4] & 0x01U) ? 1 : 0);
+              serial.print(F(" res="));
+              serial.print(b[1]);
+              serial.print(F(" max="));
+              serial.println(b[2]);
+            }
+          }
+        }
         else if (strncmp(line, "ubxcfg proto ", 13) == 0) {
           // 串口输出协议掩码（CFG-PRT）：ubx=UBX-only, nmea=NMEA-only, both=UBX+NMEA
           const char *p = line + 13;
