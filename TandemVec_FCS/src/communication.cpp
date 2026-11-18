@@ -4027,6 +4027,51 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
             serial.println(F("[DBG] usage: ubxcfg gnssmax <id 0-7> <max 1-32>"));
           }
         }
+        else if (strncmp(line, "ubxcfg sbas", 11) == 0) {
+          // ubxcfg sbas <on|off>：现场开关 SBAS（国内无覆盖，默认关）
+          const char *p = line + 11;
+          while (*p == ' ')
+          {
+            ++p;
+          }
+          bool want = false;
+          bool valid = true;
+          if (strcmp(p, "on") == 0) want = true;
+          else if (strcmp(p, "off") == 0) want = false;
+          else valid = false;
+          if (!valid)
+          {
+            serial.println(F("[DBG] usage: ubxcfg sbas <on|off>"));
+          }
+          else
+          {
+            const bool ok = ubxSetGnssEnable(gpsSerialPort, 1, want);
+            serial.print(F("[DBG] SBAS -> "));
+            serial.print(want ? F("on") : F("off"));
+            serial.print(F(" ack="));
+            // ACK 不等于采纳，回读确认
+            uint8_t buf[64];
+            uint16_t n = 0;
+            uint8_t rb_en = 0xFF;
+            if (ubxQueryGnssConfig(gpsSerialPort, buf, sizeof(buf), &n))
+            {
+              const uint8_t blocks = buf[3];
+              for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, n); ++i)
+              {
+                const uint8_t *b = buf + ubxCfgGnss::blockOffset(i);
+                if (b[ubxCfgGnss::kOffGnssId] == 1)
+                {
+                  rb_en = (b[ubxCfgGnss::kOffFlags] & ubxCfgGnss::kFlagEnableBit) ? 1 : 0;
+                  break;
+                }
+              }
+            }
+            serial.print(ok ? F("OK") : F("NG"));
+            serial.print(F(" readback="));
+            if (rb_en == 0xFF) serial.println(F("NA"));
+            else serial.println(rb_en);
+          }
+        }
         else if (strncmp(line, "ubxcfg proto ", 13) == 0) {
           // 串口输出协议掩码（CFG-PRT）：ubx=UBX-only, nmea=NMEA-only, both=UBX+NMEA
           const char *p = line + 13;

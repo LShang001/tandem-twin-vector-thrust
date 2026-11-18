@@ -593,21 +593,24 @@ static bool _ubx_verify_prt(Uart &serial, uint32_t expected_baud)
 
 /**
  * @brief 开机快路径：验证接收机是否已是目标配置（不回写任何配置）
- * @param[in]  baud         期望波特率
- * @param[in]  expect_dyn   期望 dynModel（7=<2g>、8=<4g>；0=不检查）
- * @param[out] dyn_readback 回读的 dynModel（0xFF=未读到；可为 nullptr）
- * @return true=PVT/EOE 都在出且 dynModel 匹配 → 可跳过全量配置
+ * @param[in]  baud             期望波特率
+ * @param[in]  expect_dyn       期望 dynModel（7=<2g>、8=<4g>；0=不检查）
+ * @param[in]  require_sbas_off true=要求 SBAS 星座处于关闭状态
+ * @param[out] dyn_readback     回读的 dynModel（0xFF=未读到；可为 nullptr）
+ * @return true=PVT/EOE 都在出、星座与 dynModel 都匹配 → 可跳过全量配置
  * @note 判据只验现象、不逐项验配置：
  *       ① 目标波特率下 400 ms 内见到 ≥3 个 NAV-PVT 与 ≥3 个 NAV-EOE
  *          —— 波特率、CFG-RATE、CFG-MSG、VALSET 只要有一项错都不会有这个现象；
- *       ② CFG-NAV5 回读 payload[2] 与期望 dynModel 一致 —— 动态模型没被改过。
+ *       ② CFG-NAV5 回读 payload[2] 与期望 dynModel 一致 —— 动态模型没被改过；
+ *       ③ CFG-GNSS 回读里 SBAS 使能位为 0 —— 星座改动也纳入校验，否则
+ *          「关 SBAS」这类改动会被快路径整段跳过、永远下发不下去。
  *       帧头计数不校验 payload/checksum：目的只是确认"这类消息在持续输出"，
  *       10 Hz 下连续 3 帧都校验失败的概率可忽略。
  *       任一项不过即返回 false，由调用方走全量配置（换接收机/被擦除/被改配置
  *       都会落到这条路，无需人工干预）。
  */
 static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect_dyn,
-                                     uint8_t *dyn_readback)
+                                     bool require_sbas_off, uint8_t *dyn_readback)
 {
   (void)ubxGnssSerialBegin(serial, baud);
   const uint32_t t0 = millis();
@@ -652,6 +655,28 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
   {
     return false;
   }
+  // 星座使能校验（★2026-11-19）：SBAS 必须处于关闭状态。不验这一项时，
+  // 关掉 SBAS 这类星座改动会被快路径整段跳过——配置永远下发不下去。
+  // 只读一次 CFG-GNSS，约 50–80 ms，远低于全量配置的 1.5 s。
+  if (require_sbas_off)
+  {
+    uint8_t g[64];
+    const uint16_t gn = _ubx_poll_payload(serial, 0x06, 0x3E, g, sizeof(g), 500);
+    if (gn < 8)
+    {
+      return false;                  // 读不到星座就别跳过配置
+    }
+    const uint8_t blocks = g[3];
+    for (uint8_t i = 0; i < blocks && ubxCfgGnss::blockFits(i, gn); ++i)
+    {
+      const uint8_t *blk = g + ubxCfgGnss::blockOffset(i);
+      if (blk[ubxCfgGnss::kOffGnssId] == 1 &&
+          (blk[ubxCfgGnss::kOffFlags] & ubxCfgGnss::kFlagEnableBit) != 0)
+      {
+        return false;                // SBAS 还开着 → 需要全量配置去关掉
+      }
+    }
+  }
   if (expect_dyn == 0)
   {
     return true;                     // 不检查动态模型
@@ -663,9 +688,9 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
   }
   if (dyn_readback != nullptr)
   {
-    *dyn_readback = rb[2];
+    *dyn_readback = rb[ubxLayout::nav5::kDynModel];
   }
-  return rb[2] == expect_dyn;
+  return rb[ubxLayout::nav5::kDynModel] == expect_dyn;
 }
 
 /**
@@ -725,6 +750,52 @@ bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk)
   return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
 }
 
+/**
+ * @brief 单独设置某个星座的使能位（CFG-GNSS 读改写）
+ * @note 使能位可写（已实测），通道数不可写——两者不要混为一谈。
+ */
+bool ubxSetGnssEnable(Uart &serial, uint8_t gnss_id, bool enable)
+{
+  uint8_t cur[64];
+  const uint16_t n = _ubx_poll_payload(serial, 0x06, 0x3E, cur, sizeof(cur), 500);
+  if (n < 8)
+  {
+    return false;
+  }
+  const uint8_t num_blocks = cur[3];
+  bool found = false;
+  bool changed = false;
+  for (uint8_t i = 0; i < num_blocks && ubxCfgGnss::blockFits(i, n); ++i)
+  {
+    uint8_t *blk = cur + ubxCfgGnss::blockOffset(i);
+    if (blk[ubxCfgGnss::kOffGnssId] != gnss_id)
+    {
+      continue;
+    }
+    found = true;
+    const uint8_t cur_flags = blk[ubxCfgGnss::kOffFlags];
+    const uint8_t new_flags =
+        enable ? (uint8_t)(cur_flags | ubxCfgGnss::kFlagEnableBit)
+               : (uint8_t)(cur_flags & ~ubxCfgGnss::kFlagEnableBit);
+    if (new_flags != cur_flags)
+    {
+      blk[ubxCfgGnss::kOffFlags] = new_flags;
+      changed = true;
+    }
+    break;
+  }
+  if (!found)
+  {
+    return false;
+  }
+  if (!changed)
+  {
+    return true;                       // 已是目标状态
+  }
+  _ubx_send(serial, 0x06, 0x3E, cur, n);
+  return _ubx_wait_ack(serial, 0x06, 0x3E, kAckTimeoutMs);
+}
+
 // ============================================================
 //  主入口
 // ============================================================
@@ -759,7 +830,7 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     const uint8_t expect_dyn =
         (o.airborne_g == 2) ? 7 : ((o.airborne_g == 4) ? 8 : 0);
     if (_quick_verify_configured(serial, o.target_baud, expect_dyn,
-                                 &r.nav5_dyn_readback))
+                                 o.gnss_optimize, &r.nav5_dyn_readback))
     {
       r.detected = true;
       r.found_baud = o.target_baud;

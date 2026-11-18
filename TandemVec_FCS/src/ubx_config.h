@@ -255,6 +255,16 @@ bool ubxQueryGnssConfig(Uart &serial, uint8_t *payload, uint16_t cap, uint16_t *
 bool ubxSetGnssMaxChannel(Uart &serial, uint8_t gnss_id, uint8_t max_trk);
 
 /**
+ * @brief 单独设置某个星座的使能位（CFG-GNSS 读改写）
+ * @param[in] gnss_id 星座 id：0=GPS 1=SBAS 2=GAL 3=BDS 5=QZSS 6=GLO
+ * @param[in] enable  目标使能状态
+ * @return true=已下发或无需改动；false=读回失败或 NAK
+ * @note 用于现场开关某个星座（如关闭国内无覆盖的 SBAS），也用于验证
+ *       开机快路径的星座判据。
+ */
+bool ubxSetGnssEnable(Uart &serial, uint8_t gnss_id, bool enable);
+
+/**
  * @brief 轮询 UBX-MON-VER 并解析 SW/HW/PROTVER/ANTSUPERV
  * @return true=收到 ≥40B 的 MON-VER；各输出缓冲区允许为 nullptr/0
  */
