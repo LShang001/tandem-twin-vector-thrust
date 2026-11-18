@@ -1357,6 +1357,19 @@ static void updateEkfConvergence(const float dt_s)
   }
 }
 
+/**
+ * @brief 导航主任务：单拍完成惯性传播、量测更新与状态发布
+ * @param 无
+ * @return 无
+ * @pre  IMU 采样环形缓冲已有新样本；GNSS/气压/磁/光流数据由各自任务写入
+ *       全局量，本函数只消费
+ * @note ① 单拍顺序：IMU 传播 → GNSS 位置/速度更新 → 气压高度更新 →
+ *         静止辅助（ZARU/零偏）→ 磁矢量更新 → 收敛判定 → 向控制层发布。
+ *       ② 各观测源独立门控：单个源被拒（磁、气压、GNSS 质量）不阻塞其余
+ *         更新，降级由 HeadingAidingGate / MagMeasurementGate 各自决定。
+ *       ③ 耗时用 navprof 分段打点（tu/pos/gnss 等），health 与 navprof 读取；
+ *         DBG 输出本身会扰动调度，定量验收不要开着 DBG 跑。
+ */
 void handleNavigationSystem()
 {
   // EKF 总耗时测量 + 零偏诊断

@@ -1465,6 +1465,22 @@ void resetPositionModeEntryLatch()
 #endif
 }
 
+/**
+ * @brief 按飞行模式生成姿态目标四元数
+ * @param[in]  inputs   控制输入（摇杆杆量、解锁状态、手动 TVC 标志）
+ * @param[in]  mode     本拍控制模式（MANUAL/AUTO_ALTITUDE/AUTO_POSITION/GUIDED）
+ * @param[out] q_target 目标姿态四元数（FRD 机体系 → NED）
+ * @return 无
+ * @pre  updateControlInputs 已完成本拍输入采集；AUTO_POSITION 下依赖
+ *       handlePositionControl 写出的 thrust_comp_N/E
+ * @note ① `s_prev_auto_position_mode` 必须每拍更新——只写在 AUTO_POSITION
+ *         分支内会让进入沿检测恒为假，切回定点时目标点沿用上一段悬停点，
+ *         飞行器会无操纵自主飞回旧点（位置环限幅 ±1.5 m/s）。
+ *       ② 进入定点首拍清 positionHoldEnabled，强制 handlePositionControl
+ *         重新初始化并锁当前点。
+ *       ③ 存档系 z_b 即推力轴，悬停静止 roll=pitch=0，直接叠 Rz(heading)，
+ *         不引入"悬停基态补偿"，也不用欧拉角组装（避开奇异点）。
+ */
 void generate_attitude_target(const ControlInputs_t &inputs, ControlMode mode, Quaternion &q_target)
 {
   // ★2026-10-31 审计 P1-1：模式记录必须每拍更新，不能只在 AUTO_POSITION 分支内赋值。
@@ -1763,6 +1779,20 @@ static Vector3 getSanitizedBodyGyro();
   error_pitch_deg = sign_qw * q_error.y * precise_scale;
 }
 
+/**
+ * @brief 姿态外环 + 角速率内环解算，输出三轴角加速度指令
+ * @param[in]  inputs   控制输入（角度/速率子模式、手动 TVC、摇杆量）
+ * @param[in]  q_target 目标姿态四元数（由 generate_attitude_target 给出）
+ * @param[out] outputs  alpha_roll / alpha_pitch / alpha_yaw [rad/s²]
+ * @return 无
+ * @pre  q_target 已生成；导航系统可用时本函数扣除 EKF 在线陀螺零偏估计
+ * @note ① 陀螺零偏扣除缺省开启，定义 -DBFS_NO_EKF_GYRO_BIAS 可退回"只用
+ *         上电校准零偏"的旧行为；EKF 每次更新零偏都会在速率反馈里产生台阶，
+ *         机动时零偏被观测推动，等于持续往内环注入扰动。
+ *       ② 姿态误差取四元数向量部分换算短弧角；q_vec_norm < 0.25 时退化为
+ *         常系数换算，避免小误差噪声经 atan2 放大后抖动。
+ *       ③ 角速率反馈一律走 getSanitizedBodyGyro()，NaN 时保持上一有效值。
+ */
 void execute_attitude_controller(const ControlInputs_t &inputs, const Quaternion &q_target, ControlOutputs_t &outputs)
 {
   // 获取当前角速率
@@ -2108,6 +2138,24 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
   gnc_tel.alpha_ref_radps2[2] = outputs.alpha_yaw_radps2;
 }
 
+// ★ 2026-08-07：差速回路增益调度系数，供在线辨识修正命令量使用。
+// mix 层（步骤8）写入 → update_online_identification（步骤9）读取，
+// 同一 GNC 拍内顺序执行，数据一致。
+static float s_yaw_gain_sched = 1.0f;
+
+/*
+ * 控制侧陀螺有限值守卫：传感器故障/NaN 时保持上一有效值，避免 NaN 进入
+ * 姿态/速率环和混控。只做安全兜底，不替代 IMU 驱动层的健康检查。
+ */
+static Vector3 getSanitizedBodyGyro()
+{
+  static float last_x = 0.0f, last_y = 0.0f, last_z = 0.0f;
+  if (std::isfinite(icm_gyro_x)) last_x = icm_gyro_x;
+  if (std::isfinite(icm_gyro_y)) last_y = icm_gyro_y;
+  if (std::isfinite(icm_gyro_z)) last_z = icm_gyro_z;
+  return Vector3{last_x, last_y, last_z};
+}
+
 /**
  * @brief 垂直推力机型映射 + 控制分配（层1–2）+ 执行器 mix（层3）+ 限幅/安全门控
  * @param[in] inputs  控制输入（解锁、手动TVC、四通道摇杆）
@@ -2128,7 +2176,7 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  *       CTL-003 §2（垂直推力属于机型推进层）
  * @units α [rad/s²]、比力 [m/s²]、M [N·m]、摆角 [rad]（转 deg 后进舵机映射）、
  *        Δω 无量纲、转速 [rad/s]、PWM 0–100%
- * @note  本层三条硬性安全边界（删任一条都会改变实机行为）：
+ * @note  本层四条硬性安全边界（删任一条都会改变实机行为）：
  *        ① 锁定态电机强制 0%（只有舵机允许随摇杆摆动做地面标定）；
  *        ② 零油门门控（throttle < 5%）把 δf/δt/Δω 一并归零，保持"零油门→执行器归中"；
  *        ③ allocateDifferential 必须用**真实指令油门 w0**（它决定实际转速），
@@ -2136,24 +2184,6 @@ void execute_yaw_controller(const ControlInputs_t &inputs,
  *        ④ 垂直映射只在自动模式执行（throttle_direct=false）；手动 RC 直通不得
  *           再乘质量/除 cos_tilt，否则零油门/地面模式油门会被改写。
  */
-// ★ 2026-08-07：差速回路增益调度系数，供在线辨识修正命令量使用。
-// mix 层（步骤8）写入 → update_online_identification（步骤9）读取，
-// 同一 GNC 拍内顺序执行，数据一致。
-static float s_yaw_gain_sched = 1.0f;
-
-/*
- * 控制侧陀螺有限值守卫：传感器故障/NaN 时保持上一有效值，避免 NaN 进入
- * 姿态/速率环和混控。只做安全兜底，不替代 IMU 驱动层的健康检查。
- */
-static Vector3 getSanitizedBodyGyro()
-{
-  static float last_x = 0.0f, last_y = 0.0f, last_z = 0.0f;
-  if (std::isfinite(icm_gyro_x)) last_x = icm_gyro_x;
-  if (std::isfinite(icm_gyro_y)) last_y = icm_gyro_y;
-  if (std::isfinite(icm_gyro_z)) last_z = icm_gyro_z;
-  return Vector3{last_x, last_y, last_z};
-}
-
 void mix_and_output_commands(const ControlInputs_t &inputs, ControlOutputs_t &outputs)
 {
   const TandemVecParams &P = kDefaultTandemVecParams;
