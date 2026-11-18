@@ -412,21 +412,36 @@ static void _cfg_prt(Uart &serial, uint32_t baud, bool nmea_out)
 }
 
 /**
- * @brief 用 CFG-VALSET 定死 UART1 的输出协议掩码
+ * @brief 用 CFG-VALSET 定死 UART1 的输入/输出协议掩码（NMEA 侧）
  * @param[in] nmea_out true=允许 NMEA 输出，false=只输出 UBX
- * @return true=接收机回 ACK（是否采纳需回读 CFG-UART1OUTPROT-NMEA）
- * @note ★2026-11-19：CFG-PRT 的 outProtoMask 在 F9P(PROTVER=34.00) 上不生效
- *       ——配 UBX-only 后回读 CFG-UART1OUTPROT-NMEA 仍是 1，接收机一直在输出
- *       NMEA。改用配置项接口写该键。
- *       注意时序：不能在 _cfg_prt 里紧跟着发，CFG-PRT 会让接收机重配 UART，
- *       紧随其后的 VALSET 会被丢掉（实测 readback 仍为 1）。所以单独成步，
- *       放在 CFG-RATE 之后，中间已有几帧自然间隔。
+ * @return 无（调用方按需回读验证）
+ * @note ★2026-11-19：CFG-PRT 的 inProtoMask/outProtoMask 在 F9P(PROTVER=34.00)
+ *       上都不生效。实测回读：
+ *         CFG-UART1INPROT-NMEA   = 1  （配的是 0x0001，不含 NMEA）
+ *         CFG-UART1INPROT-RTCM3X = 1  （配的是 0x0001，不含 RTCM3）
+ *         CFG-UART1OUTPROT-NMEA  = 1  （配的是 UBX-only）
+ *       inProtoMask 失效反而救了 RTK——若它真生效，RTCM3 差分就收不到。
+ *       现改用配置项接口逐项写：
+ *         CFG-UART1INPROT-NMEA  0x10730002 -> 0（不收 NMEA，只需要 UBX+RTCM3）
+ *         CFG-UART1OUTPROT-NMEA 0x10740002 -> 按 nmea_out
+ *       注意 RTCM3X 输入必须保持 1（RTK 差分改正数走它），不在此处改动。
+ *
+ *       失效规律（本轮实测归纳）：legacy 字段与配置项严格 1:1 的仍然有效
+ *       （CFG-MSG.rate→CFG-MSGOUT、CFG-RATE.measRate→CFG-RATE-MEAS、
+ *       CFG-NAV5 的 dynModel/fixMode/minElev/pDop），而一个字段要拆成多个
+ *       配置项的（CFG-GNSS.gnssId→5 个 CFG-SIGNAL、CFG-PRT.mask→3 个
+ *       CFG-UART1*PROT）在新协议下不落地。
+ *       时序：不能在 _cfg_prt 里紧跟着发，CFG-PRT 会让接收机重配 UART，
+ *       紧随其后的 VALSET 会被丢掉（实测 readback 仍为 1）。所以单独成步。
  */
-static void _cfg_uart1_outproto(Uart &serial, bool nmea_out)
+static void _cfg_uart1_proto_masks(Uart &serial, bool nmea_out)
 {
-  const uint32_t key_nmea = 0x10740002U;   // CFG-UART1OUTPROT-NMEA
-  const uint8_t v_nmea = nmea_out ? 1 : 0;
-  (void)_valset_l(serial, &key_nmea, &v_nmea, 1);
+  const uint32_t keys[2] = {
+      0x10730002U,   // CFG-UART1INPROT-NMEA
+      0x10740002U,   // CFG-UART1OUTPROT-NMEA
+  };
+  const uint8_t vals[2] = {0, (uint8_t)(nmea_out ? 1 : 0)};
+  (void)_valset_l(serial, keys, vals, 2);
 }
 
 // CFG-RATE（6B）：测量周期 / 导航频率 / 时间基准
@@ -765,24 +780,25 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
   {
     return false;
   }
-  // 星座与输出协议校验（★2026-11-19）：SBAS 必须关闭、UART1 必须不输出 NMEA。
-  // 不验这两项时，这类改动会被快路径整段跳过——配置永远下发不下去
-  // （CFG-PRT 的 outProtoMask 实测不生效，NMEA 一直在输出，就是这里的证据）。
-  // 两项都是 L 型，一次 CFG-VALGET 读完，约 50–80 ms。
+  // 星座与协议掩码校验（★2026-11-19）：SBAS 关闭、UART1 不收发 NMEA。
+  // 不验这几项时，这类改动会被快路径整段跳过——配置永远下发不下去
+  // （CFG-PRT 的 in/outProtoMask 实测都不生效，就是这里的证据）。
+  // 三项都是 L 型，一次 CFG-VALGET 读完，约 50–80 ms。
   if (require_sbas_off)
   {
-    const uint32_t keys[2] = {
+    const uint32_t keys[3] = {
         0x10310020U,  // CFG-SIGNAL-SBAS_ENA
+        0x10730002U,  // CFG-UART1INPROT-NMEA
         0x10740002U,  // CFG-UART1OUTPROT-NMEA
     };
-    uint8_t vals[2] = {0xFF, 0xFF};
-    if (!_valget_l(serial, keys, 2, vals))
+    uint8_t vals[3] = {0xFF, 0xFF, 0xFF};
+    if (!_valget_l(serial, keys, 3, vals))
     {
       return false;                  // 读不到配置就别跳过
     }
-    if (vals[0] != 0 || vals[1] != 0)
+    if (vals[0] != 0 || vals[1] != 0 || vals[2] != 0)
     {
-      return false;                  // SBAS 还开着 或 NMEA 还在输出 → 需全量配置
+      return false;                  // 有任一项不符 → 需全量配置
     }
   }
   if (expect_dyn == 0)
@@ -1112,10 +1128,10 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     r.rate_ok = true;
   }
 
-  // 3b. UART1 输出协议掩码（只能走 VALSET，见 _cfg_uart1_outproto 的说明）。
+  // 3b. UART1 协议掩码（只能走 VALSET，见 _cfg_uart1_proto_masks 的说明）。
   //     放在 CFG-PRT 之后隔一步发：紧跟 CFG-PRT 的 VALSET 会被接收机重配
   //     UART 的动作丢掉（实测 readback 仍为 1）。
-  _cfg_uart1_outproto(serial, o.nmea_out);
+  _cfg_uart1_proto_masks(serial, o.nmea_out);
   r.cfg_frames_sent++;
 
   // 4. CFG-MSG：NAV-PVT + NAV-EOE
