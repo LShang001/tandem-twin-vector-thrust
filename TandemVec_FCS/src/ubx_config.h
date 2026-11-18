@@ -70,6 +70,14 @@ struct UbxConfigOptions
   // 北斗在国内可用卫星最多而只分到 5 个通道。开启后按
   // GPS14 + GAL16 + BDS12 + QZSS4 + GLO12 = 58（trkUse=60）重排。
   bool     gnss_optimize;
+  // ★2026-11-19：接收机输出滤波的 pDOP 门限（单位 0.1，0=不改）。
+  // 手册（Integration Manual §4.9.3）：「A fix is only valid if it passes the
+  // navigation output filters. In particular, both PDOP and accuracy values must
+  // lie below the respective limits.」——超门限时定位解直接判无效，这是硬截断。
+  // 飞控侧还有一层 GNSS_MAX_PDOP=3.0（只用于降级路径判定），主融合路径按
+  // PDOP 动态缩放权重、不硬拒。本机实测接收机里残留 2.5，比飞控更严，
+  // PDOP 2.5–3.0 的可用解被接收机先丢掉。改为 5.0，把判断权交给飞控。
+  uint16_t pdop_thresh;
 };
 
 // 默认配置选项（main.cpp / DBG 使用）
@@ -82,6 +90,7 @@ static const UbxConfigOptions kUbxDefaultCfg = {
   /* nmea_out:    false=仅 UBX 输出 */ false,
   /* persist:     CFG-CFG 固化到接收机闪存 */ false,
   /* gnss_optimize: 关 SBAS + 扩北斗通道（国内 SBAS 无覆盖） */ true,
+  /* pdop_thresh: 接收机输出滤波 pDOP 门限，50=5.0（放宽，交给飞控判断） */ 50,
 };
 
 /**

@@ -735,7 +735,8 @@ static bool _ubx_verify_prt(Uart &serial, uint32_t expected_baud)
  *       都会落到这条路，无需人工干预）。
  */
 static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect_dyn,
-                                     bool require_sbas_off, uint8_t *dyn_readback)
+                                     bool require_sbas_off, uint16_t expect_pdop,
+                                     uint8_t *dyn_readback)
 {
   (void)ubxGnssSerialBegin(serial, baud);
   const uint32_t t0 = millis();
@@ -799,6 +800,16 @@ static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect
     if (vals[0] != 0 || vals[1] != 0 || vals[2] != 0)
     {
       return false;                  // 有任一项不符 → 需全量配置
+    }
+  }
+  // pDOP 输出滤波门限：飞行安全相关，超限接收机直接判 fix 无效。
+  // 走 CFG-VALGET 读 CFG-NAVSPG-OUTFIL_PDOP（0x301100b1，U2，单位 0.1）。
+  if (expect_pdop > 0)
+  {
+    uint16_t pdop = 0;
+    if (!ubxValGetU2(serial, 0x301100B1U, &pdop) || pdop != expect_pdop)
+    {
+      return false;
     }
   }
   if (expect_dyn == 0)
@@ -1016,7 +1027,7 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
     const uint8_t expect_dyn =
         (o.airborne_g == 2) ? 7 : ((o.airborne_g == 4) ? 8 : 0);
     if (_quick_verify_configured(serial, o.target_baud, expect_dyn,
-                                 o.gnss_optimize, &r.nav5_dyn_readback))
+                                 o.gnss_optimize, o.pdop_thresh, &r.nav5_dyn_readback))
     {
       r.detected = true;
       r.found_baud = o.target_baud;
@@ -1190,17 +1201,23 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   r.valset_ok = _ubx_wait_ack(serial, 0x06, 0x8A, kAckTimeoutMs);
   if (r.valset_ok) r.cfg_acks_received++;
 
-  // 5. CFG-NAV5 动态模型（读改写；2026-08-09 修复 mask/dynModel 错位）
-  if (o.airborne_g == 2 || o.airborne_g == 4)
+  // 5. CFG-NAV5：动态模型 + 输出滤波 pDOP 门限（读改写）
+  //    任一项要求就下发：airborne_g 选档、pdop_thresh>0 设门限。
+  //    pDOP 是飞行安全相关门限（超限接收机直接判 fix 无效），必须显式接管，
+  //    不能依赖接收机里残留的旧值。
+  if (o.airborne_g == 2 || o.airborne_g == 4 || o.pdop_thresh > 0)
   {
     r.cfg_frames_sent += 2;
-    r.nav5_ok = _cfg_nav5_rw(serial, o.airborne_g, -1, -1, -1);
+    r.nav5_ok = _cfg_nav5_rw(serial,
+                             (o.airborne_g == 2 || o.airborne_g == 4) ? o.airborne_g : 0,
+                             -1, -1,
+                             o.pdop_thresh > 0 ? (int)o.pdop_thresh : -1);
     if (r.nav5_ok) r.cfg_acks_received++;
     // ACK 只证明接收机收下了帧，不证明 dynModel 落到目标档位；写后回读 payload[2]。
     uint8_t nav5_rb[36];
     if (_ubx_poll_payload(serial, 0x06, 0x24, nav5_rb, sizeof(nav5_rb), 500) == 36)
     {
-      r.nav5_dyn_readback = nav5_rb[2];
+      r.nav5_dyn_readback = nav5_rb[ubxLayout::nav5::kDynModel];
     }
   }
   else
