@@ -24,6 +24,9 @@
 // 探测窗口/ACK 超时（uint32_t：此前误用 uint8_t 把 300/500ms 截断成 44/244ms）
 static const uint32_t kDetectWindowMs = 300;   // 每档探测窗口
 static const uint32_t kAckTimeoutMs = 500;     // ACK 等待超时
+// 开机快路径的监听窗口：10 Hz 下 400 ms 约 4 个 PVT/EOE，阈值取 3 留一帧余量。
+static const uint32_t kQuickVerifyMs = 400;
+static const uint32_t kQuickMinFrames = 3;     // 窗口内至少见到的 PVT/EOE 帧数
 
 static UbxCfgResult s_last_cfg = {};
 static uint32_t s_gnss_serial_config_fail_count = 0U;
@@ -545,6 +548,83 @@ static bool _ubx_verify_prt(Uart &serial, uint32_t expected_baud)
   return baud == expected_baud;
 }
 
+/**
+ * @brief 开机快路径：验证接收机是否已是目标配置（不回写任何配置）
+ * @param[in]  baud         期望波特率
+ * @param[in]  expect_dyn   期望 dynModel（7=<2g>、8=<4g>；0=不检查）
+ * @param[out] dyn_readback 回读的 dynModel（0xFF=未读到；可为 nullptr）
+ * @return true=PVT/EOE 都在出且 dynModel 匹配 → 可跳过全量配置
+ * @note 判据只验现象、不逐项验配置：
+ *       ① 目标波特率下 400 ms 内见到 ≥3 个 NAV-PVT 与 ≥3 个 NAV-EOE
+ *          —— 波特率、CFG-RATE、CFG-MSG、VALSET 只要有一项错都不会有这个现象；
+ *       ② CFG-NAV5 回读 payload[2] 与期望 dynModel 一致 —— 动态模型没被改过。
+ *       帧头计数不校验 payload/checksum：目的只是确认"这类消息在持续输出"，
+ *       10 Hz 下连续 3 帧都校验失败的概率可忽略。
+ *       任一项不过即返回 false，由调用方走全量配置（换接收机/被擦除/被改配置
+ *       都会落到这条路，无需人工干预）。
+ */
+static bool _quick_verify_configured(Uart &serial, uint32_t baud, uint8_t expect_dyn,
+                                     uint8_t *dyn_readback)
+{
+  (void)ubxGnssSerialBegin(serial, baud);
+  const uint32_t t0 = millis();
+  uint8_t state = 0, cls = 0, id = 0;
+  uint16_t len = 0, remaining = 0;
+  uint32_t pvt = 0, eoe = 0;
+  while (millis() - t0 < kQuickVerifyMs)
+  {
+    while (serial.available())
+    {
+      const uint8_t b = serial.read();
+      switch (state)
+      {
+        case 0: if (b == 0xB5) state = 1; break;
+        case 1: state = (b == 0x62) ? 2 : 0; break;
+        case 2: cls = b; state = 3; break;
+        case 3: id = b; state = 4; break;
+        case 4: len = b; state = 5; break;
+        case 5:
+          len = (uint16_t)(len | ((uint16_t)b << 8));
+          if (len > 512) { state = 0; break; }
+          if (cls == 0x01 && id == 0x07) ++pvt;
+          else if (cls == 0x01 && id == 0x61) ++eoe;
+          remaining = len;
+          state = 6;
+          break;
+        case 6:
+          if (remaining > 0) { --remaining; }
+          else { state = 7; }        // 当前字节是校验和 A
+          break;
+        default: state = 0; break;    // 校验和 B，帧结束
+      }
+    }
+    delay(1);
+  }
+  while (serial.available() > 0)
+  {
+    (void)serial.read();             // 清掉监听期间积压，避免污染后续解析
+  }
+
+  if (pvt < kQuickMinFrames || eoe < kQuickMinFrames)
+  {
+    return false;
+  }
+  if (expect_dyn == 0)
+  {
+    return true;                     // 不检查动态模型
+  }
+  uint8_t rb[36];
+  if (_ubx_poll_payload(serial, 0x06, 0x24, rb, sizeof(rb), 500) != 36)
+  {
+    return false;
+  }
+  if (dyn_readback != nullptr)
+  {
+    *dyn_readback = rb[2];
+  }
+  return rb[2] == expect_dyn;
+}
+
 // ============================================================
 //  主入口
 // ============================================================
@@ -569,6 +649,36 @@ UbxCfgResult ubxAutoConfig(Uart &serial, const UbxConfigOptions *opt)
   UbxCfgResult r = {};
   r.nav5_dyn_readback = 0xFF;   // 未读到的哨兵值（0 是合法的 portable 档位）
   memset(&s_last_cfg, 0, sizeof(s_last_cfg));
+
+  // 0. 开机快路径（★2026-11-19）：接收机已 CFG-CFG 固化且未被改动时，
+  //    直接验证「PVT/EOE 在出 + dynModel 匹配」就返回，不重发任何配置帧。
+  //    省掉 1.2 s 防帧错误等待与约 20 帧配置往返（原全量流程约 1.5–2 s）。
+  //    验证不过（换接收机 / 被擦除 / 被别人改过配置）自动落回全量流程，
+  //    不是"信任接收机"，而是"验证它的当前状态"。
+  {
+    const uint8_t expect_dyn =
+        (o.airborne_g == 2) ? 7 : ((o.airborne_g == 4) ? 8 : 0);
+    if (_quick_verify_configured(serial, o.target_baud, expect_dyn,
+                                 &r.nav5_dyn_readback))
+    {
+      r.detected = true;
+      r.found_baud = o.target_baud;
+      r.prt_ok = true;
+      r.rate_ok = true;
+      r.msg_pvt_ok = true;
+      r.msg_eoe_ok = true;
+      r.msg_rtcm_ok = true;
+      r.valset_ok = true;
+      r.nav5_ok = true;
+      r.gnss_ok = (o.gnss_mask == 0);
+      r.sbas_ok = !o.sbas_enable;
+      r.save_ok = true;
+      r.verify_ok = true;
+      r.fast_path = true;
+      s_last_cfg = r;
+      return r;
+    }
+  }
 
   // 1. 波特率探测：目标波特率优先（已固化接收机 300ms 快路径）
   const uint32_t scan_order[8] = {o.target_baud, 921600U, 460800U,

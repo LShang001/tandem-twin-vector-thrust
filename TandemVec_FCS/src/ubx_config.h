@@ -49,6 +49,10 @@ struct UbxCfgResult
   bool     verify_ok;         // 回读 CFG-PRT 校验成功
   uint32_t cfg_frames_sent;   // 发送的配置帧数
   uint32_t cfg_acks_received; // 收到的 ACK-ACK 数
+  // ★2026-11-19：开机快路径命中标志。true=接收机已是目标配置，
+  // 只跑了「测 PVT/EOE 是否在出 + 回读 dynModel」，未重发任何配置帧。
+  // 此时上述 * _ok 字段全部置 true（那是"已验证"而非"刚配置成功"）。
+  bool     fast_path;
 };
 
 // 配置选项（ubxAutoConfig 参数）

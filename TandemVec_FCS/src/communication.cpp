@@ -3634,6 +3634,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(r.detected ? F("YES") : F("NO"));
           serial.print(F(" baud="));
           serial.println(r.detected ? r.found_baud : 0);
+          serial.print(F("[DBG] fast="));
+          serial.print(r.fast_path ? F("YES") : F("NO"));
+          serial.println(r.fast_path
+                             ? F("（已是目标配置，本次未重发配置帧）")
+                             : F("（走了全量配置）"));
           serial.print(F("[DBG] prt="));
           serial.print(r.prt_ok ? F("OK") : F("FAIL"));
           serial.print(F(" rate="));
@@ -3855,26 +3860,34 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           //   ubxcfg nav5 pdop <0-100>  — pDOP 定位门限（单位 0.1，如 50=5.0）
           int v = -1;
           int arg = -1;
-          if (sscanf(line + 11, "dyn %d", &v) == 1 && (v == 2 || v == 4))
+          // ★2026-11-19 修复：line+11 指向 " dyn 2"（带前导空格），而 sscanf 的
+          //   格式串以字面量 'dyn' 开头——字面量不跳前导空白，所以四个子命令
+          //   以前全部落到 usage 分支、从未生效过。先跳过空格再解析。
+          const char *nav5_args = line + 11;
+          while (*nav5_args == ' ')
+          {
+            ++nav5_args;
+          }
+          if (sscanf(nav5_args, "dyn %d", &v) == 1 && (v == 2 || v == 4))
           {
             serial.print(F("[DBG] NAV5 dynModel=Airborne<"));
             serial.print(v);
             serial.println(F("g"));
             ubxNav5Config(gpsSerialPort, v, -1, -1, -1);
           }
-          else if (sscanf(line + 11, "fix %d", &v) == 1 && v >= 0 && v <= 2)
+          else if (sscanf(nav5_args, "fix %d", &v) == 1 && v >= 0 && v <= 2)
           {
             serial.print(F("[DBG] NAV5 fixMode="));
             serial.println(v);
             ubxNav5Config(gpsSerialPort, 0, v, -1, -1);
           }
-          else if (sscanf(line + 11, "elev %d", &v) == 1 && v >= 0 && v <= 90)
+          else if (sscanf(nav5_args, "elev %d", &v) == 1 && v >= 0 && v <= 90)
           {
             serial.print(F("[DBG] NAV5 minElev="));
             serial.println(v);
             ubxNav5Config(gpsSerialPort, 0, -1, v, -1);
           }
-          else if (sscanf(line + 11, "pdop %d", &arg) == 1 && arg >= 0 && arg <= 100)
+          else if (sscanf(nav5_args, "pdop %d", &arg) == 1 && arg >= 0 && arg <= 100)
           {
             serial.print(F("[DBG] NAV5 pDOP thresh="));
             serial.print(arg);

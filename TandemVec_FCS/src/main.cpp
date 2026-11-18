@@ -256,6 +256,8 @@ void setup()
     Serial8.print(cfg.detected ? "YES" : "NO");
     Serial8.print(" baud=");
     Serial8.print(cfg.detected ? cfg.found_baud : 0);
+    Serial8.print(" fast=");
+    Serial8.print(cfg.fast_path ? "YES" : "NO");
     Serial8.print(" prt=");
     Serial8.print(cfg.prt_ok ? "OK" : "FAIL");
     Serial8.print(" rate=");
