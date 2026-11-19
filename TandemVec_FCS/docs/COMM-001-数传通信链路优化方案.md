@@ -5,26 +5,28 @@
 > 硬约束：**官方 Ano 上位机在用——帧格式/功能码/字段缩放严格不变，只改发送频率与内部实现**。
 > 随附改动（当时口径）：ano_vars.cpp tx[19]→tx[20] 越界修复（-Warray-bounds 消除）；PID 固化 att 2.8/2.8/5.0 + rate_yaw 0.20（迁移前混合域实机稳定值）。2026-08-11 行为保持迁移后，等价值为 rate_yaw `11.459156 s⁻¹`，0x21 帧仍发送 `rad/s²`，协议不变。
 
-## 当前遥测频率（2026-11-12 更新 · 权威）
+## 当前遥测频率（2026-11-19 更新 · 权威）
 
-> 本节为当前实码口径（`communication.cpp handleAnoCom`，200Hz tick 分频）。下方 §3 是 2026-08-10 原始设计基线，已被演进覆盖，仅作历史保留。实测帧率用 `tools/fw_flash` 烧录后 `ano_rate.py` 统计。
+> 本节为当前实码口径（`communication.cpp handleAnoCom`，200Hz tick 分频）。下方 §3 是 2026-08-10 原始设计基线，已被演进覆盖，仅作历史保留。实测帧率用 `tools/measure_link.py <COM> --seconds 30` 统计。
 
 | 帧 | 内容 | 频率 | tick 判据 |
 |----|------|------|-----------|
-| 0x01 | IMU 原始 | 200Hz | fast_tick（每拍，振动分析需要） |
-| 0x03 | 姿态欧拉 | 100Hz | att_tick t%2==1 |
+| 0x01 | IMU 原始 | 100Hz | imu_tick t%2==0 |
+| 0x03 | 姿态欧拉 | 50Hz | att_tick t%4==2 |
 | 0x0A / 0x21 / 0xF1 | 目标姿态 / 控制量 / 执行器 | 50Hz | fast_aux_tick t%4==1 |
 | 0x07 / 0x05 | 飞行速度 / 高度数据 | 50Hz | state_tick t%4==3 |
 | 0x08 | 位置偏移 | 50Hz | pos_tick t%4==0 |
 | 0x06 | 模式解锁 | 5Hz | mode_tick t%40==0 |
 | 0x0D | 电压/氧压 | 10Hz | bat_tick t%20==4 |
 | 0x40 | 遥控 | 10Hz | rc_tick t%20==6 |
-| 0x20 / 0x0B | PWM / 目标速度 | 10Hz | disp_tick t%20==8 |
+| 0x20 | PWM 控制量 | 2Hz | pwm_tick t%100==8 |
+| 0x0B | 目标速度 | 5Hz | tspeed_tick t%40==8 |
 | 0x30 | GPS 信息 | 跟随 GNSS 定位率（F9P 8Hz / F10N 10Hz） | gps_tick t%10==2 轮询 + 新 PVT 去重 |
+| 0x02 | 磁力计/温度 | 5Hz | mag_tick t%40==27 |
 | 0xF2 | 变量值 | ~50Hz 总（watch 轮转，每变量 ~3Hz） | 独立节流 |
 | 0xF4 / 0xF5 | 运行时健康 / 链路诊断 | 5Hz / 1Hz | 仅调试 env（`BFS_ANOCOM_DIAG`） |
 
-实测总流量 ≈ 12.1 KB/s（2026-11-12 荣耀板 6s 统计），约占 20 KB/s 空口容量 60%。演进要点：2026-11-12 模式 100→5Hz、欧拉 200→100Hz、位置 100→50Hz、GPS 由 2Hz 改跟随定位率（新历元去重，不重不漏）；IMU 原始量保 200Hz 供振动分析。
+实测总流量 **8.94 KB/s、497.5 帧/s、校验 100%**（2026-11-19 荣耀板 30s，20K 档占 45%）。降载动作（commit 4640d4aa）：0x01 200→100Hz、0x03 100→50Hz、0x20 10→2Hz、0x0B 10→5Hz；核心 50Hz 帧全部保留。200Hz 原始振动分析改走 AnoVars 按需拉（`vars add` + `vars rate`），不再全时广播。降载前基线为 12.27 KB/s / 659 帧/s / 60 分钟长测丢 0.11%；降载后 30 秒零丢帧。
 
 ## 1. 背景与现状问题
 
