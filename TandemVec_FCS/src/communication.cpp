@@ -655,7 +655,7 @@ void handleDebugTask()
  *          | 档位 | 频率 | 判定 | 功能码 |
  *          |------|------|------|--------|
  *          | IMU | 100Hz | t%2==0（imu_tick） | 0x01 |
- *          | 姿态 | 50Hz | t%4==2（att_tick） | 0x03 |
+ *          | 姿态 | 100Hz | t%2==1（att_tick，与 IMU 错拍） | 0x03 |
  *          | 辅环 | 50Hz | t%4==1（fast_aux_tick） | 0x0A 0x21 0xF1 |
  *          | 位置 | 50Hz | t%4==0（pos_tick） | 0x08 |
  *          | 状态 | 50Hz | t%4==3（state_tick） | 0x05 0x07 |
@@ -924,7 +924,7 @@ void handleAnoCom()
   //   0x01 由 200Hz 降到 100Hz——振动分析改走 AnoVars 按需拉（`vars add` + `vars rate`），
   //   不再全时广播 4.2 KB/s；遥测显示 100Hz 对地面站无差别。
   const bool imu_tick  = (t % 2 == 0);       // 100Hz 0x01 IMU 原始
-  const bool att_tick  = (t % 4 == 2);       //  50Hz 0x03 姿态欧拉（2026-11-19 由 100Hz 降；与 imu/state/pos 全部错拍）
+  const bool att_tick  = (t % 2 == 1);       // 100Hz 0x03 姿态欧拉（2026-11-19 按用户要求保留 100Hz 供数据分析；奇数拍，与 imu_tick 完全错开）
   const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制量 / 0xF1 执行器
   const bool state_tick = (t % 4 == 3);      //  50Hz 0x07 飞行速度 / 0x05 高度数据
   const bool mode_tick  = (t % 40 == 0);     //   5Hz 0x06 模式解锁（离散状态字）
