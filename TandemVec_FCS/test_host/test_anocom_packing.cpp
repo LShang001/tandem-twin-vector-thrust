@@ -19,7 +19,8 @@
  *          超过必须截断而不是写爆。A3 的“单次 write”是 COMM-001 的收益来源，
  *          断言 write 次数为 1 而不是只看字节流，否则会漏掉回归。
  * @test    A1 len>256 截断；A2 帧结构与校验逐字节；A3 组模式单次 write 且字节流等价；
- *          A3b 组缓冲超 256B 自动 flush；A3c 高层 sendXxx 在组模式下同样走组缓冲
+ *          A3b 组缓冲超 256B 自动 flush；A3c 高层 sendXxx 在组模式下同样走组缓冲；
+ *          A4 0x02 磁/温帧 9B 字节锚点（与 GCS decode_mag 对拍）
  * @see     TandemVec_FCS/docs/PROTOCOL-001-AnoCom官方通信协议.md、
  *          TandemVec_FCS/docs/COMM-001-数传通信链路优化方案.md
  */
@@ -170,6 +171,24 @@ int main()
                     std::vector<uint8_t>({0xE8, 0x03, 0xD0, 0x07, 0xB8, 0x0B, 0x80}));
         passed++;
         printf("  ✓ 高层 sendXxx 组模式兼容（欧拉+模式合并 1 次 write）\n");
+    }
+
+    // ---- A4：0x02 磁力计/温度帧字节锚点（与 GCS anocom.py decode_mag 对拍） ----
+    // 三轴 0.1 µT / 温度 0.1 °C 的小端编码；负值走补码。任何一端改缩放，
+    // 这组字节或 GCS test_decode_mag_frame 必然先红。
+    {
+        MockSerial s;
+        AnoComProtocol ano(&s);
+        ano.sendMagPressTempData(253, -325, 270, 23.0f, 0x3F);
+        assert(s.tx.size() == 9 + 8);          // 9B DATA + 8B 帧开销
+        expectFrame(s.tx, 0x02, std::vector<uint8_t>({
+            0xFD, 0x00,     // +253 → +25.3 µT
+            0xBB, 0xFE,     // -325 → -32.5 µT（补码）
+            0x0E, 0x01,     // +270 → +27.0 µT
+            0xE6, 0x00,     // 23.0 °C → 230
+            0x3F}));        // MAG_STA 六位全开
+        passed++;
+        printf("  ✓ A4 0x02 磁/温帧 9B 字节序与缩放（含负值补码）\n");
     }
 
     printf("\n==== test_anocom_packing: %d 组断言全部通过 ====\n", passed);

@@ -918,6 +918,11 @@ void handleAnoCom()
   const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制量 / 0xF1 执行器
   const bool state_tick = (t % 4 == 3);      //  50Hz 0x07 飞行速度 / 0x05 高度数据
   const bool mode_tick  = (t % 40 == 0);     //   5Hz 0x06 模式解锁（离散状态字，2026-11-12 由 100Hz 降）
+  // 5Hz 0x02 磁力计/温度（2026-11-19 新增）：磁链路是当前标定与门控攻坚点，但
+  // CSV DataLog 13 通道不含磁、0xF2 又是单变量轮发，现场拿不到三轴连续量。
+  // 相位取 27（t%20=7，奇数拍），与 mode(0)/bat(4)/rc(6)/disp(8)/gps(2) 全部错开；
+  // 只与 state_tick(0x07/0x05，约 25B) 同拍，合计仍远低于 190B 发送守卫。
+  const bool mag_tick   = (t % 40 == 27);
 
   const bool pos_tick  = (t % 4 == 0);       //  50Hz 0x08 位置偏移（2026-11-12 由 100Hz 降，轨迹分析足够）
   const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压
@@ -925,7 +930,7 @@ void handleAnoCom()
   const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x0B 目标速度
   const bool gps_tick  = (t % 10 == 2);      //  20Hz 轮询；块内按新 PVT 去重→实际跟随 GNSS 定位率（F9P 8Hz/F10N 10Hz）
 
-  if (fast_tick || mode_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick)
+  if (fast_tick || mode_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick || mag_tick)
   {
     // 非阻塞保护：按本 tick 最大组需求检查 TX 缓冲，不足跳过本 tick 发送。
     // ★ 2026-08-10 全面审查修复：最坏组（t≡30 同拍）= RC(20) + disp(86) +
@@ -1071,6 +1076,42 @@ void handleAnoCom()
           act[10] = act_sat_ano;
           act[11] = 0;
           AnoCom.sendData(ANO_GND_STATION_ADDR, ANO_FUNC_FLEX_DATA_START, act, 12);
+        }
+
+        // 0x02 磁力计/温度帧（9B，官方定义 §二.1.2）：MAG_X/Y/Z int16 + TMP int16 + MAG_STA u8。
+        // 5Hz 低频快照，用途是现场判断「磁矢量本身对不对」——椭球标定后三轴是否
+        // 仍在参考场附近、倾角是否合理；融合是否生效继续看 AnoVars 的 mag_fused/mag_rej。
+        // 单位：0.1 µT（int16 = µT×10，量程 ±3276.7 µT，覆盖 IST8310 满量程），
+        //   对应 50 µT 场下约 0.11°/LSB，足够看标定偏差，不追求罗盘显示精度。
+        // 数据源：与 EKF 完全同一份 sampleFRD()（椭球标定后、FRD 系，纯缓存读取零 I2C 开销）。
+        // 温度：IST8310 无温度通道，填 IMU 芯片温度（1 Hz 更新），仅作环境记录。
+        // MAG_STA 位：bit0 样本有效｜bit1 标定有效｜bit2 站点磁参考有效｜
+        //   bit3 数据新鲜(<500 ms)｜bit4 自上帧以来有融合成功｜bit5 航向已初始对准。
+        // ★ 不在这里放 last_gate_reason：该字段会被后续通过分支清空（2026-11-18 已定位），
+        //   直接发会把「拒绝」显示成 none，重复踩坑；门控诊断仍走 AnoVars mag_gate。
+        if (mag_tick)
+        {
+          const MagSample mag_smp = magSensor.sampleFRD();
+          const uint32_t mag_age_ms = (mag_smp.seq != 0U)
+                                          ? (uint32_t)((micros() - mag_smp.timestamp_us) / 1000U)
+                                          : 0xFFFFFFFFU;
+          uint8_t mag_sta = 0;
+          if (mag_smp.seq != 0U) { mag_sta |= 0x01; }
+          if (magSensor.calValid()) { mag_sta |= 0x02; }
+          if (mag_status.ref_valid) { mag_sta |= 0x04; }
+          if (mag_smp.seq != 0U && mag_age_ms < 500U) { mag_sta |= 0x08; }
+          static uint32_t s_mag_fused_prev = 0;
+          if (mag_status.fused != s_mag_fused_prev) { mag_sta |= 0x10; }
+          s_mag_fused_prev = mag_status.fused;
+          if (mag_status.init_source != 0U) { mag_sta |= 0x20; }
+          auto mag_i16 = [](float ut) -> int16_t {
+            const float scaled = ut * 10.0f;
+            return isfinite(scaled)
+                       ? static_cast<int16_t>(constrain(scaled, -32767.0f, 32767.0f))
+                       : static_cast<int16_t>(0);
+          };
+          AnoCom.sendMagPressTempData(mag_i16(mag_smp.x), mag_i16(mag_smp.y),
+                                      mag_i16(mag_smp.z), imu_die_temp_c, mag_sta);
         }
       }
 

@@ -14,6 +14,7 @@
 import struct
 import sys
 import os
+import math
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'server'))
 
@@ -71,6 +72,37 @@ def test_decode_imu_gyro_scale():
     assert dec['acc_y_ms2'] == -0.98
     assert dec['gyro_x_dps'] == 1638 / 16.384
     assert abs(dec['gyro_z_dps'] - 32767 / 16.384) < 1e-6   # 32767 为固件限幅上界
+
+
+def test_decode_mag_frame():
+    """0x02 磁力计/温度：三轴 ÷10 → µT，温度 ÷10 → °C，MAG_STA 位域全部展开"""
+    # 三轴 25.3 / -32.5 / 27.0 µT（模长约 49.2 µT，量级符合地磁），温度 23.1 °C，
+    # 状态位 0x3F = present|cal|ref|fresh|fused_recent|init 全开。
+    payload = struct.pack('<4hB', 253, -325, 270, 231, 0x3F)
+    f = anocom.encode_frame(anocom.FUNC_MAG_PRESS_TEMP, payload)
+    dec = anocom.decode_frame(anocom.find_frames(f)[0])
+    assert dec['mag_x_ut'] == 25.3
+    assert dec['mag_y_ut'] == -32.5
+    assert dec['mag_z_ut'] == 27.0
+    assert abs(dec['mag_norm_ut'] - math.sqrt(25.3 ** 2 + 32.5 ** 2 + 27.0 ** 2)) < 1e-9
+    assert dec['temp_c'] == 23.1
+    assert dec['mag_present'] is True
+    assert dec['mag_cal_valid'] is True
+    assert dec['mag_ref_valid'] is True
+    assert dec['mag_data_fresh'] is True
+    assert dec['mag_fused_recent'] is True
+    assert dec['mag_init_done'] is True
+    assert dec['mag_sta'] == 0x3F
+
+    # 未标定冷启动：只有 present，其余位全 0
+    payload = struct.pack('<4hB', 0, 0, 0, 0, 0x01)
+    f = anocom.encode_frame(anocom.FUNC_MAG_PRESS_TEMP, payload)
+    dec = anocom.decode_frame(anocom.find_frames(f)[0])
+    assert dec['mag_present'] is True and dec['mag_cal_valid'] is False
+    assert dec['mag_norm_ut'] == 0.0
+
+    # 长度不足的残缺帧必须被拒，不能返回半截数据
+    assert anocom.decode_mag(bytes([0x01, 0x02, 0x03])) == {}
 
 
 def test_decode_volt_curr_pressure_occupation():

@@ -16,7 +16,8 @@ anocom.py — AnoCom（匿名地面站协议）编解码
 @frame   N/A（协议字段语义见各解码函数；速度/位置由固件取反后以"向上为正"发送）
 @units   线缆单位：加速度 cm/s²、陀螺 int16/16.384、角度 0.01deg、高度/位置 cm、
          速度 cm/s、GPS 经纬度 1e-7deg、PDOP/SACC/VACC 0.1、0x21 角加速度 0.1rad/s²、
-         0x0D 电压电流 0.01、0xF1 摆角 0.01deg·电机 0.1%·差速 0.001
+         0x0D 电压电流 0.01、0x02 磁三轴 0.1µT/温度 0.1°C、
+         0xF1 摆角 0.01deg·电机 0.1%·差速 0.001
 @note    本工程对官方手册的占用约定：0x0D 的 fc 字段承载 P1/P2 氧压、0xF1 承载执行器帧
          （2026-08-10 由 0x40 迁入）、0x40 恢复手册遥控语义；0x21 线缆保持 rad/s² 并派生 deg/s²。
 @see     PROTOCOL-001「本工程与官方手册差异对照」、tests/test_anocom.py
@@ -173,6 +174,34 @@ def decode_imu(p: bytes) -> dict:
         'acc_x_ms2': ax / 100.0, 'acc_y_ms2': ay / 100.0, 'acc_z_ms2': az / 100.0,
         'gyro_x_dps': gx / 16.384, 'gyro_y_dps': gy / 16.384, 'gyro_z_dps': gz / 16.384,
         'shock': p[12],
+    }
+
+
+def decode_mag(p: bytes) -> dict:
+    """0x02: 磁力计/温度帧（9B）——MAG_X/Y/Z int16 (÷10 → µT), TMP int16 (÷10 → °C), MAG_STA u8
+
+    @note 固件 2026-11-19 起 5Hz 发送。三轴为椭球标定后的机体系 FRD 量（µT），
+          与 EKF 消费同一份 sampleFRD()；模长由三轴派生，便于直接判"场强对不对"。
+          MAG_STA 位：bit0 样本有效｜bit1 标定有效｜bit2 站点磁参考有效｜
+          bit3 数据新鲜(<500 ms)｜bit4 自上帧以来有融合成功｜bit5 航向已初始对准。
+          bit4 是"自上一帧是否增长"的窗口标志，不是累计值；累计融合/拒绝看 AnoVars。
+    """
+    if len(p) < 9:
+        return {}
+    mx, my, mz, tmp = struct.unpack('<4h', p[0:8])
+    sta = p[8]
+    x, y, z = mx / 10.0, my / 10.0, mz / 10.0
+    return {
+        'mag_x_ut': x, 'mag_y_ut': y, 'mag_z_ut': z,
+        'mag_norm_ut': math.sqrt(x * x + y * y + z * z),
+        'temp_c': tmp / 10.0,
+        'mag_present': bool(sta & 0x01),
+        'mag_cal_valid': bool(sta & 0x02),
+        'mag_ref_valid': bool(sta & 0x04),
+        'mag_data_fresh': bool(sta & 0x08),
+        'mag_fused_recent': bool(sta & 0x10),
+        'mag_init_done': bool(sta & 0x20),
+        'mag_sta': sta,
     }
 
 
@@ -375,6 +404,7 @@ def decode_device_info(p: bytes) -> dict:
 
 DECODERS = {
     FUNC_IMU_DATA: decode_imu,
+    FUNC_MAG_PRESS_TEMP: decode_mag,
     FUNC_ATTITUDE_EULER: decode_euler,
     FUNC_ALTITUDE_DATA: decode_altitude,
     FUNC_FLIGHT_MODE: decode_flight_mode,
