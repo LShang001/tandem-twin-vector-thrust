@@ -975,6 +975,7 @@ def cmd_sniff(a):
       att   0x03 欧拉 + 0x21 控制输出
       axes  0x01 IMU 加速度/陀螺 + 0x03 欧拉（轴方向测试）
       euler 0x03 欧拉角统计（均值/标准差/范围——欧拉奇异检验）
+      mag   0x02 磁力计三轴/模长/温度/MAG_STA 状态位（磁标定与门控现场取证）
       raw   原始字节统计（高频字节/帧头候选）
       all   全部遥测帧计数 + 最新值
     """
@@ -985,6 +986,7 @@ def cmd_sniff(a):
     samples = {}
     raw_data = b''
     euler_vals = []
+    mag_vals = []
     t_end = time.time() + a.t
     while time.time() < t_end:
         try:
@@ -1010,10 +1012,12 @@ def cmd_sniff(a):
                 samples[f.func] = d
                 if a.theme == 'euler' and f.func == anocom.FUNC_ATTITUDE_EULER:
                     euler_vals.append((d['roll_deg'], d['pitch_deg'], d['heading_deg']))
-    _sniff_report(a.theme, counters, samples, raw_data, euler_vals)
+                if a.theme == 'mag' and f.func == anocom.FUNC_MAG_PRESS_TEMP:
+                    mag_vals.append(d)
+    _sniff_report(a.theme, counters, samples, raw_data, euler_vals, mag_vals)
 
 
-def _sniff_report(theme, counters, samples, raw_data, euler_vals):
+def _sniff_report(theme, counters, samples, raw_data, euler_vals, mag_vals):
     if theme == 'raw':
         if not raw_data:
             print('未收到任何字节（检查波特率/接线）')
@@ -1039,6 +1043,28 @@ def _sniff_report(theme, counters, samples, raw_data, euler_vals):
             print(f'{name:8s}: 均值={st.mean(col):+8.2f}  标准差={st.pstdev(col):6.2f}  '
                   f'范围=[{min(col):+.2f}, {max(col):+.2f}]')
         print(f'样本数 {len(euler_vals)}')
+        return
+    if theme == 'mag':
+        if not mag_vals:
+            print('未收到 0x02 磁力计帧（需 2026-11-19 之后的固件；也检查是否停在 DBG 模式）')
+            return
+        import statistics as st
+        last = mag_vals[-1]
+        sta = last['mag_sta']
+        bits = ''.join('1' if sta & (1 << i) else '0' for i in range(5, -1, -1))
+        print(f'样本数 {len(mag_vals)}')
+        print(f'三轴(uT): x={last["mag_x_ut"]:+.1f} y={last["mag_y_ut"]:+.1f} '
+              f'z={last["mag_z_ut"]:+.1f} |B|={last["mag_norm_ut"]:.1f}')
+        print(f'温度 {last["temp_c"]:.1f}C  MAG_STA=0x{sta:02X} 位[5..0]={bits}')
+        print(f'  样本有效={last["mag_present"]} 标定有效={last["mag_cal_valid"]} '
+              f'参考有效={last["mag_ref_valid"]} 新鲜={last["mag_data_fresh"]} '
+              f'有融合={last["mag_fused_recent"]} 已对准={last["mag_init_done"]}')
+        if len(mag_vals) >= 2:
+            norms = [v['mag_norm_ut'] for v in mag_vals]
+            fused = sum(1 for v in mag_vals if v['mag_fused_recent'])
+            print(f'模长: 均值={st.mean(norms):.1f} 标准差={st.pstdev(norms):.2f} '
+                  f'范围=[{min(norms):.1f}, {max(norms):.1f}] uT')
+            print(f'融合窗口命中 {fused}/{len(mag_vals)} 帧（bit4；mode1 磁仅初始时恒 0 属设计行为）')
         return
     if theme == 'rc':
         if anocom.FUNC_FLIGHT_MODE in samples:
@@ -1211,9 +1237,9 @@ def main():
     p.add_argument('-t', type=float, default=5.0, help='watch 收集秒数（默认 5）')
     p.set_defaults(fn=cmd_vars)
 
-    p = sub.add_parser('sniff', help='帧监控（主题: rc/att/axes/euler/raw/all）')
+    p = sub.add_parser('sniff', help='帧监控（主题: rc/att/axes/euler/mag/raw/all）')
     p.add_argument('theme', nargs='?', default='all',
-                   choices=['all', 'rc', 'att', 'axes', 'euler', 'raw'],
+                   choices=['all', 'rc', 'att', 'axes', 'euler', 'mag', 'raw'],
                    help='监控主题（默认 all 全部帧计数）')
     p.add_argument('-t', type=float, default=3.0)
     p.set_defaults(fn=cmd_sniff)
