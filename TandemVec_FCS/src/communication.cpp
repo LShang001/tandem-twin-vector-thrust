@@ -654,14 +654,20 @@ void handleDebugTask()
  *          频率表（t = 200Hz tick 计数器，COMM-001 §3 与本实现的唯一对照）：
  *          | 档位 | 频率 | 判定 | 功能码 |
  *          |------|------|------|--------|
- *          | 快环 | 100Hz | t%2==1（奇数 tick） | 0x01 0x03 |
- *          | 辅环 | 50Hz  | t%4==1（fast_aux_tick） | 0x0A 0x21 0xF1 |
- *          | 位置 | 50Hz  | t%4==2 | 0x08 |
- *          | 遥控 | 25Hz  | t%8==4 | 0x40 |
- *          | 显示 | 25Hz  | t%8==6 | 0x05 0x06 0x07 0x20 0x0B |
- *          | GNSS/氧压 | 10Hz | t%20==10 | 0x30 0x0D |
- *          偶数 tick 的余数 2/4/6/10 互不相等 → 慢环各档永不碰撞；快环占奇数 tick，
- *          与全部偶数档天然错开。0xF2 AnoVars 值帧在双环之外独立节流。
+ *          | IMU | 100Hz | t%2==0（imu_tick） | 0x01 |
+ *          | 姿态 | 50Hz | t%4==2（att_tick） | 0x03 |
+ *          | 辅环 | 50Hz | t%4==1（fast_aux_tick） | 0x0A 0x21 0xF1 |
+ *          | 位置 | 50Hz | t%4==0（pos_tick） | 0x08 |
+ *          | 状态 | 50Hz | t%4==3（state_tick） | 0x05 0x07 |
+ *          | 模式 | 5Hz | t%40==0（mode_tick） | 0x06 |
+ *          | 电池 | 10Hz | t%20==4（bat_tick） | 0x0D |
+ *          | 遥控 | 10Hz | t%20==6（rc_tick） | 0x40 |
+ *          | PWM | 2Hz | t%100==8（pwm_tick） | 0x20 |
+ *          | 目标速度 | 5Hz | t%40==8（tspeed_tick） | 0x0B |
+ *          | GNSS | ~10Hz | t%10==2 + 新 PVT 去重 | 0x30 |
+ *          | 磁力/温度 | 5Hz | t%40==27（mag_tick） | 0x02 |
+ *          各档余数全部互不相等 → 同拍最多叠 2 档；0xF2 AnoVars 值帧在双环之外独立节流。
+ *          2026-11-19 降载后总量约 9.1 KB/s（20K 档占 46%）。
  * @note   ① 快变字段（IMU/姿态/控制量/执行器）在函数开头**每 tick 采集**，陈旧度 ≤5ms；
  *            慢变字段在各档位分支内读取（GNSS 数据源本身 10Hz，提频只是重复旧值）。
  *         ② 发送前查 `Serial6.availableForWrite() < 190`（最坏同拍组 ≈175B）——
@@ -913,11 +919,15 @@ void handleAnoCom()
   //   负载大头：IMU 200Hz（振动分析）+ 欧拉 100Hz + 位置/控制 50Hz；
   //   2026-11-12 模式 100→5Hz、欧拉 200→100Hz、位置 100→50Hz、GPS 由 2Hz 改跟随定位率。
   //   无线侧容量有限，过载会均匀丢帧（见上 21.24Hz 现象），故辅助量保持低频。
-  const bool fast_tick = true;               // 200Hz 0x01 IMU 原始（与控制环同频，振动分析需要）
-  const bool att_tick  = (t % 2 == 1);       // 100Hz 0x03 姿态欧拉（2026-11-12 由 200Hz 降，显示足够平滑）
+  const bool fast_tick = true;               // 每拍 200Hz 组帧节拍（0x01 自身降到 100Hz，见 imu_tick）
+  // ★ 2026-11-19 降载（20K 档 12.27→约 9.1 KB/s，占用 61%→46%）：
+  //   0x01 由 200Hz 降到 100Hz——振动分析改走 AnoVars 按需拉（`vars add` + `vars rate`），
+  //   不再全时广播 4.2 KB/s；遥测显示 100Hz 对地面站无差别。
+  const bool imu_tick  = (t % 2 == 0);       // 100Hz 0x01 IMU 原始
+  const bool att_tick  = (t % 4 == 2);       //  50Hz 0x03 姿态欧拉（2026-11-19 由 100Hz 降；与 imu/state/pos 全部错拍）
   const bool fast_aux_tick = (t % 4 == 1);   //  50Hz 0x0A 目标姿态 / 0x21 控制量 / 0xF1 执行器
   const bool state_tick = (t % 4 == 3);      //  50Hz 0x07 飞行速度 / 0x05 高度数据
-  const bool mode_tick  = (t % 40 == 0);     //   5Hz 0x06 模式解锁（离散状态字，2026-11-12 由 100Hz 降）
+  const bool mode_tick  = (t % 40 == 0);     //   5Hz 0x06 模式解锁（离散状态字）
   // 5Hz 0x02 磁力计/温度（2026-11-19 新增）：磁链路是当前标定与门控攻坚点，但
   // CSV DataLog 13 通道不含磁、0xF2 又是单变量轮发，现场拿不到三轴连续量。
   // 相位取 27（t%20=7，奇数拍），与 mode(0)/bat(4)/rc(6)/disp(8)/gps(2) 全部错开；
@@ -927,10 +937,13 @@ void handleAnoCom()
   const bool pos_tick  = (t % 4 == 0);       //  50Hz 0x08 位置偏移（2026-11-12 由 100Hz 降，轨迹分析足够）
   const bool bat_tick  = (t % 20 == 4);      //  10Hz 0x0D 电池/氧压
   const bool rc_tick   = (t % 20 == 6);      //  10Hz 0x40 遥控（观察摇杆）
-  const bool disp_tick = (t % 20 == 8);      //  10Hz 0x20 PWM / 0x0B 目标速度
+  // 0x20 PWM 与 0xF1 执行器帧信息重叠（0xF1 已含摆角/电机%/差速），只留低频观察；
+  // 0x0B 目标速度是调参观察量，与 0x21/0x0A 同属控制目标，5Hz 足够。
+  const bool pwm_tick    = (t % 100 == 8);   //   2Hz 0x20 PWM
+  const bool tspeed_tick = (t % 40 == 8);    //   5Hz 0x0B 目标速度
   const bool gps_tick  = (t % 10 == 2);      //  20Hz 轮询；块内按新 PVT 去重→实际跟随 GNSS 定位率（F9P 8Hz/F10N 10Hz）
 
-  if (fast_tick || mode_tick || state_tick || pos_tick || bat_tick || rc_tick || disp_tick || gps_tick || mag_tick)
+  if (fast_tick || mode_tick || state_tick || pos_tick || bat_tick || rc_tick || pwm_tick || tspeed_tick || gps_tick || mag_tick)
   {
     // 非阻塞保护：按本 tick 最大组需求检查 TX 缓冲，不足跳过本 tick 发送。
     // ★ 2026-08-10 全面审查修复：最坏组（t≡30 同拍）= RC(20) + disp(86) +
@@ -949,7 +962,12 @@ void handleAnoCom()
       {
         // 0x01 惯性传感器数据（13B）：ACC int16×3 [cm/s²] + GYR int16×3
         // （32768↔2000 deg/s，组包处 ×16.384）+ SHOCK u8。@ref PROTOCOL-001 §二.1.1
-        AnoCom.sendIMUData(acc_x_ano, acc_y_ano, acc_z_ano, gyr_x_ano, gyr_y_ano, gyr_z_ano, 0);
+        // ★ 2026-11-19 降载：100Hz（imu_tick）。200Hz 振动分析改走 AnoVars 按需上报，
+        //   需要 2kHz 原始波形时用 `vars add imu_*` + `vars rate 200`，不再全时占 4.2 KB/s。
+        if (imu_tick)
+        {
+          AnoCom.sendIMUData(acc_x_ano, acc_y_ano, acc_z_ano, gyr_x_ano, gyr_y_ano, gyr_z_ano, 0);
+        }
         // 0x03 飞控姿态欧拉角（7B）：ROL/PIT/YAW int16 ×100 [deg] + FUSION_STA u8。
         // FUSION_STA 为固件自定义位域：bit7=DETA100 在线、bit6=数据源=DETA100、
         // 低 6 位=nav_system_initialized（EKF 融合状态）。@ref PROTOCOL-001 §二.1.3
@@ -1149,13 +1167,16 @@ void handleAnoCom()
         AnoCom.sendAltitudeData(baro_altitude, vfk_height, estimated_height, 1);
       }
 
-      // ---- 辅助显示帧 10Hz：PWM + 目标速度（调参观察用，无需高频）----
-      if (disp_tick)
+      // ---- 辅助显示帧：PWM 2Hz + 目标速度 5Hz（调参观察量，无需高频）----
+      if (pwm_tick)
       {
         // 0x20 手册语义 = PWM 控制量（0.01% 油门）：mix 输出级电机指令 % → ×100
         AnoCom.sendPWMOutput((uint16_t)constrain(ch3_output * 100.0f, 0.0f, 10000.0f),
                              (uint16_t)constrain(ch4_output * 100.0f, 0.0f, 10000.0f),
                              0, 0, 0, 0, 0, 0);
+      }
+      if (tspeed_tick)
+      {
         AnoCom.sendTargetSpeed(target_speed_x_ano, target_speed_y_ano, target_speed_z_ano);
       }
 
