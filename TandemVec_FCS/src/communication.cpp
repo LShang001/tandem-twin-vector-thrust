@@ -962,8 +962,10 @@ void handleAnoCom()
       {
         // 0x01 惯性传感器数据（13B）：ACC int16×3 [cm/s²] + GYR int16×3
         // （32768↔2000 deg/s，组包处 ×16.384）+ SHOCK u8。@ref PROTOCOL-001 §二.1.1
-        // ★ 2026-11-19 降载：100Hz（imu_tick）。200Hz 振动分析改走 AnoVars 按需上报，
-        //   需要 2kHz 原始波形时用 `vars add imu_*` + `vars rate 200`，不再全时占 4.2 KB/s。
+        // ★ 2026-11-19 降载：100Hz（imu_tick）。振动分析按需拉：
+        //   单变量可 `vars add imu_raw_gz` + `vars rate 200` 稳定 200Hz；
+        //   六轴同时高速受 0xF2 轮转发限制（每变量 ≈ 帧率/变量数），需要全六轴
+        //   200Hz 原始波形时回退本分频或烧调试版，不要指望 0xF2 轮转凑频谱。
         if (imu_tick)
         {
           AnoCom.sendIMUData(acc_x_ano, acc_y_ano, acc_z_ano, gyr_x_ano, gyr_y_ano, gyr_z_ano, 0);
