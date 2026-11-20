@@ -265,14 +265,63 @@ public:
 // Arduino Core 3.0 将串口具体类命名为 Uart；宿主替身沿用 HardwareSerial 实现。
 namespace arduino { using ::Print; }
 
+// Arduino STM32 HardwareTimer 的格式选择常量（真实核里来自 HardwareTimer.h）。
+// 全链路数字孪生要链接真实 src/task_scheduler.cpp，其 setupTimer() 与统计打印
+// 都按这两个常量解释 overflow，故宿主必须提供同值定义。
+#ifndef HERTZ_FORMAT
+#define HERTZ_FORMAT 1
+#endif
+#ifndef TICK_FORMAT
+#define TICK_FORMAT 0
+#endif
+
+// Arduino 的 F() 把字面量放进 Flash；宿主没有 Harvard 架构，直接退化为指针。
+// 真实 src/task_scheduler.cpp 的统计打印用 out.println(F("[DBG] ..."))，
+// 缺此宏会编译失败（错误信息会误导成 units.h 里的 TempUnit::F）。
+#ifndef F
+#define F(literal) (literal)
+#endif
+
+/**
+ * @brief 定时器替身：记录配置与溢出回调，由全链路主程序按仿真时间手动触发
+ * @details 真实固件 setupTimer() 只做三件事——设频率、挂中断、启动；
+ *          宿主侧把这三项记下来，`silTick()` 等价于 TIM8 溢出中断触发一次。
+ *          这样 task_scheduler.cpp 本体（tick 累加、到期判定、相位、丢拍统计）
+ *          一行不改地运行，被替换的只有「谁按 156.25 µs 触发」这一层。
+ * @note    `silRunning()` 用于断言 setupTimer() 确实启动过；未启动时 silTick() 不回调。
+ */
 class HardwareTimer {
 public:
   HardwareTimer() {}
   HardwareTimer(int) {}
-  void pause() {}
-  void resume() {}
-  void setOverflow(unsigned long, int) {}
-  void attachInterrupt(void (*)()) {}
+  void pause() { running_ = false; }
+  void resume() { running_ = true; }
+  void setOverflow(unsigned long value, int format) {
+    overflow_ = value;
+    hertz_format_ = (format == HERTZ_FORMAT);
+  }
+  void attachInterrupt(void (*cb)()) { cb_ = cb; }
+
+  uint32_t getTimerClkFreq() { return 64000000UL; }
+  uint32_t getPrescaleFactor() { return 0; }
+  uint32_t getOverflow(int format) {
+    if (format != HERTZ_FORMAT) return 0;
+    return hertz_format_ ? static_cast<uint32_t>(overflow_) : 0;
+  }
+
+  /// 仿真时基推进一拍（等价真实 TIM8 溢出中断）；未 resume 时不触发。
+  void silTick() {
+    if (running_ && cb_ != nullptr) cb_();
+  }
+  bool silRunning() const { return running_; }
+  bool silHertzFormat() const { return hertz_format_; }
+  unsigned long silOverflow() const { return overflow_; }
+
+private:
+  void (*cb_)() = nullptr;
+  unsigned long overflow_ = 0;
+  bool running_ = false;
+  bool hertz_format_ = true;
 };
 // 仿真虚拟时钟：由 SIL 主循环按仿真时间推进；未设置时保持 0，兼容旧 SIL。
 extern uint32_t g_sil_time_us;
