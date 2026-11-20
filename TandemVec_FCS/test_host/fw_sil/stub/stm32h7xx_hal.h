@@ -84,7 +84,53 @@ typedef struct
   USART_TypeDef *Instance;
   uint32_t ErrorCode;
   uint32_t FifoMode;  ///< 固件回读 FIFO 配置时读取
+  uint32_t RxState;   ///< ubx_config 检查接收状态是否为 BUSY_RX
+  uint8_t *pRxBuffPtr; ///< 当前单字节接收目标缓冲
+  uint16_t RxXferSize; ///< 本次接收长度
 } UART_HandleTypeDef;
+
+// HAL 状态码：真实 HAL 用枚举表达，宿主给同名同值的枚举（不是宏，
+// 因为 ubx_config.cpp 会声明 `HAL_StatusTypeDef st = ...`）。
+typedef enum
+{
+  HAL_OK = 0U,
+  HAL_ERROR = 1U,
+  HAL_BUSY = 2U,
+  HAL_TIMEOUT = 3U
+} HAL_StatusTypeDef;
+
+#ifndef HAL_UART_STATE_BUSY_RX
+#define HAL_UART_STATE_BUSY_RX 0x00000022U
+#endif
+#ifndef UART_RXFIFO_THRESHOLD_1_2
+#define UART_RXFIFO_THRESHOLD_1_2 0U
+#endif
+
+/// 启动单字节中断接收。宿主没有真实中断：永远"接收未启动"，
+/// 因此 ubx_config 的读回核对会如实失败（这正是宿主该有的结论）。
+inline HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *h, uint8_t *, uint16_t)
+{
+  if (h != nullptr) h->RxState = 0U;  // 未进入 BUSY_RX
+  return HAL_ERROR;
+}
+inline HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *) { return HAL_OK; }
+inline HAL_StatusTypeDef HAL_UARTEx_EnableFifoMode(UART_HandleTypeDef *) { return HAL_ERROR; }
+inline HAL_StatusTypeDef HAL_UARTEx_SetRxFifoThreshold(UART_HandleTypeDef *, uint32_t)
+{
+  return HAL_ERROR;
+}
+inline void HAL_NVIC_EnableIRQ(int) {}
+inline void HAL_NVIC_DisableIRQ(int) {}
+inline void HAL_NVIC_SetPriority(int, uint32_t, uint32_t) {}
+
+// ---- I2C ----
+// Fast-mode+ 提升总线边沿速率。宿主无 GPIO 电气特性，空实现。
+// ★这意味着「I2C 速率是否真的提到 1 MHz」在宿主不可证，只能上板量波形。
+#ifndef I2C_FASTMODEPLUS_I2C2
+#define I2C_FASTMODEPLUS_I2C2 0x00000002U
+#endif
+inline void HAL_I2CEx_EnableFastModePlus(uint32_t) {}
+inline void HAL_I2CEx_DisableFastModePlus(uint32_t) {}
 
 // ---- DMA / RCC ----
 typedef struct
@@ -129,6 +175,12 @@ inline USART_TypeDef sil_usart[8] = {};
 #endif
 
 // ---- 内核/NVIC ----
+// Cortex-M7 D-cache 维护：宿主机没有 D-cache，空实现即可。
+// ★注意这让「DMA 与 CPU 缓存一致性」这类问题在宿主完全不可见——
+//   真机上 Flash/DMA 缓冲未清理缓存会导致读到旧数据，这只能靠上板验证。
+inline void SCB_CleanDCache_by_Addr(uint32_t *, int32_t) {}
+inline void SCB_InvalidateDCache_by_Addr(uint32_t *, int32_t) {}
+inline void SCB_CleanInvalidateDCache_by_Addr(uint32_t *, int32_t) {}
 #ifndef UART4_IRQn
 #define UART4_IRQn 52
 #endif

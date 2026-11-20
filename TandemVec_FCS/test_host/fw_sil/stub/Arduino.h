@@ -408,7 +408,24 @@ public:
   /// 固件里 `Serial4.getHandle()` 用于读回 UART 寄存器（FIFO/IRQ 配置）。
   /// 宿主返回一个静态句柄，寄存器访问落在 stm32h7xx_hal.h 的内存实例上。
   UART_HandleTypeDef *getHandle() { static UART_HandleTypeDef h{}; h.Instance = nullptr; return &h; }
-  size_t write(uint8_t v) { (void)v; return 1; }
+
+  // ---- 发送字节捕获（全链路数字孪生：遥测帧契约验证）----
+  // 默认行为不变（仍然返回 1/n），只是把写出的字节同时记进缓冲。
+  // 这样"固件真实构造出来的帧"可以直接导出，再按协议解析回原值——
+  // 比读源码推断字段偏移可靠得多。
+  void silClearTx() { txLen_ = 0; }
+  size_t silTxLen() const { return txLen_; }
+  const uint8_t *silTxBuf() const { return txBuf_; }
+  static constexpr size_t kSilTxCap = 8192;
+
+  size_t write(uint8_t v) override {
+    if (txLen_ < kSilTxCap) txBuf_[txLen_++] = v;
+    return 1;
+  }
+  size_t write(const uint8_t *b, size_t n) override {
+    for (size_t i = 0; i < n && txLen_ < kSilTxCap; ++i) txBuf_[txLen_++] = b[i];
+    return n;
+  }
   using Print::write;
 
   int available() override { return static_cast<int>(count_); }
@@ -436,6 +453,9 @@ private:
   size_t head_ = 0;
   size_t tail_ = 0;
   size_t count_ = 0;
+  // 发送字节捕获缓冲（见上方 silTx* 接口）。默认行为不变，仅记录。
+  uint8_t txBuf_[kSilTxCap] = {};
+  size_t txLen_ = 0;
 };
 
 using Uart = HardwareSerial;

@@ -136,6 +136,16 @@ public:
   void write(uint8_t) {}
   void write(const uint8_t *, size_t) {}
 
+  /// Arduino STM32 Core 的全双工批量传输（同时收发）。
+  /// W25N01GV 用 `transfer(nullptr, data, len)` 只收不发。宿主不回任何数据：
+  /// 黑匣子内容与 Flash 状态永远不成立，只能验证"代码路径通"。
+  void transfer(const void * /*tx*/, void *rx, size_t n) {
+    if (rx != nullptr) {
+      uint8_t *p = static_cast<uint8_t *>(rx);
+      for (size_t i = 0; i < n; ++i) p[i] = 0;
+    }
+  }
+
 private:
   uint8_t regs_[128] = {};
   uint8_t fifo_[512] = {};
