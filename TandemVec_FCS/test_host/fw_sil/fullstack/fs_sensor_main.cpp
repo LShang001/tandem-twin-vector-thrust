@@ -29,6 +29,7 @@
 #include "MagCalStore.h"
 
 #include <cstdio>
+#include <cmath>
 #include <unistd.h>
 
 // 段在 main 之前崩（全局对象构造顺序）还是之后崩：用不经 stdio 的 write(2) 打点。
@@ -123,6 +124,53 @@ int main()
 
   std::printf("  SPI 写寄存器次数 = %u\n", static_cast<unsigned>(SPI.silWriteCount()));
   check(SPI.silWriteCount() > 0, "配置过程确实写了寄存器");
+
+  // ---------- FIFO 数值闭环：注入原始 LSB，经真实驱动换算后比对物理量 ----------
+  // Packet3（16 B）：header + accel XYZ + gyro XYZ + temp + timestamp，全部大端。
+  // header 判据见 lib/ICM42688/src/icm42688_fifo_packet.h::isPacket3Header。
+  if (model == ImuModel::ICM42688P && IMU != nullptr)
+  {
+    constexpr int16_t kAccYRaw = 2048;   // ±8g 量程下 2048 LSB = 0.5 g
+    constexpr int16_t kGyrXRaw = 820;    // ±2000dps 量程下 820 LSB ≈ 50 dps
+    const uint8_t frame[16] = {
+        0x68,                                  // header: 0x60 | bit3(timestamp) 合法
+        static_cast<uint8_t>(0x00), static_cast<uint8_t>(0x00),  // accel X
+        static_cast<uint8_t>((kAccYRaw >> 8) & 0xFF),
+        static_cast<uint8_t>(kAccYRaw & 0xFF),                   // accel Y
+        static_cast<uint8_t>(0x00), static_cast<uint8_t>(0x00),  // accel Z
+        static_cast<uint8_t>((kGyrXRaw >> 8) & 0xFF),
+        static_cast<uint8_t>(kGyrXRaw & 0xFF),                   // gyro X
+        static_cast<uint8_t>(0x00), static_cast<uint8_t>(0x00),  // gyro Y
+        static_cast<uint8_t>(0x00), static_cast<uint8_t>(0x00),  // gyro Z
+        0x00,                                                    // temp
+        0x00, 0x2A                                               // timestamp
+    };
+    SPI.silFifoClear();
+    SPI.silFifoPush(frame, sizeof(frame));
+    check(SPI.silFifoCount() == 16, "FIFO 替身已装入 1 帧（16 B）");
+
+    ImuFifoSample sample{};
+    const int n = IMU->readFifo(&sample, 1);
+    std::printf("  readFifo 返回 %d 帧\n", n);
+    check(n == 1, "真实 readFifo 读到 1 帧");
+
+    std::printf("  acc = (%.4f, %.4f, %.4f) g\n", static_cast<double>(sample.acc[0]),
+                static_cast<double>(sample.acc[1]), static_cast<double>(sample.acc[2]));
+    std::printf("  gyr = (%.4f, %.4f, %.4f) dps\n", static_cast<double>(sample.gyr[0]),
+                static_cast<double>(sample.gyr[1]), static_cast<double>(sample.gyr[2]));
+    std::printf("  timestamp = %u\n", static_cast<unsigned>(sample.timestamp));
+
+    // ±8g: 1/4096 g/LSB → 2048 LSB = 0.5 g
+    // ±2000dps: 驱动用 32768/2000 = 16.384 LSB/dps（不是手册常见的 16.4 取整），
+    //           所以 820 LSB = 50.048828 dps。期望值按驱动实际标度算，别按手册估。
+    constexpr float kGyrLsbPerDps = 32768.0f / 2000.0f;
+    check(std::fabs(sample.acc[1] - 0.5f) < 1e-3f, "accel Y 换算正确（2048 LSB → 0.5 g）");
+    check(std::fabs(sample.acc[0]) < 1e-4f && std::fabs(sample.acc[2]) < 1e-4f,
+          "accel X/Z 为零值");
+    check(std::fabs(sample.gyr[0] - (820.0f / kGyrLsbPerDps)) < 5e-3f,
+          "gyro X 换算正确（820 LSB → 50.0488 dps）");
+    check(sample.timestamp == 0x002A, "timestamp 大端解析正确（0x002A）");
+  }
 
   std::printf("\n%s（失败 %d 项）\n", g_fail == 0 ? "=== 全部通过 ===" : "=== 存在失败 ===",
               g_fail);

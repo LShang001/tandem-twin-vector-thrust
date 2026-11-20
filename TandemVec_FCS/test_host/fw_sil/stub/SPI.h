@@ -54,14 +54,37 @@ public:
   void silEnableRegMode(bool on) { reg_mode_ = on; awaiting_addr_ = true; reading_ = false; }
   void silSetReg(uint8_t addr, uint8_t value) { regs_[addr & 0x7FU] = value; }
   uint8_t silGetReg(uint8_t addr) const { return regs_[addr & 0x7FU]; }
+
+  // ---- FIFO 队列替身（ICM-42688 FIFO 数据口）----
+  // 真实驱动 readFifoPackets() 先读 FIFO_COUNTH/L(0x2E/0x2F) 取字节数，
+  // 再从 FIFO_DATA(0x30) 连续 burst 读。桩必须如实回答这两个地址，
+  // 否则驱动永远认为 FIFO 是空的（injectFifo 不参与该路径）。
+  void silFifoClear() { fifo_len_ = 0; fifo_pos_ = 0; }
+  void silFifoPush(const uint8_t *data, size_t n) {
+    for (size_t i = 0; i < n && fifo_len_ < sizeof(fifo_); ++i) fifo_[fifo_len_++] = data[i];
+  }
+  size_t silFifoCount() const { return fifo_len_ - fifo_pos_; }
+
   void silResetRegs() {
     for (auto &r : regs_) r = 0;
     addr_ = 0;
     reading_ = false;
     awaiting_addr_ = true;
     writes_ = 0;
+    silFifoClear();
   }
   uint32_t silWriteCount() const { return writes_; }
+
+  /// 读一个地址：FIFO 三个特殊地址走队列，其余走寄存器文件。
+  uint8_t silReadAddr(uint8_t a) {
+    if (a == 0x2EU) return static_cast<uint8_t>((silFifoCount() >> 8) & 0x0FU);
+    if (a == 0x2FU) return static_cast<uint8_t>(silFifoCount() & 0xFFU);
+    if (a == 0x30U) {
+      if (fifo_pos_ < fifo_len_) return fifo_[fifo_pos_++];
+      return 0;
+    }
+    return regs_[a & 0x7FU];
+  }
 
   uint8_t transfer(uint8_t v) {
     if (!reg_mode_) return v;  // 旧行为：原样回传
@@ -72,7 +95,7 @@ public:
       return 0;
     }
     if (reading_) {
-      const uint8_t r = regs_[addr_ & 0x7FU];
+      const uint8_t r = silReadAddr(addr_);
       addr_ = static_cast<uint8_t>((addr_ + 1U) & 0x7FU);
       // ★真实 SPI 由片选界定事务；桩没有 CS 信号，只能约定"每次事务都以地址字节
       //   开头"。因此单字节读/写完成后立刻回到等地址，否则下一次读的地址字节会被
@@ -90,8 +113,17 @@ public:
     if (!reg_mode_) return;  // 旧行为：空操作
     uint8_t *p = static_cast<uint8_t *>(buf);
     if (reading_) {
-      for (size_t i = 0; i < n; ++i) p[i] = regs_[(addr_ + i) & 0x7FU];
-      addr_ = static_cast<uint8_t>((addr_ + n) & 0x7FU);
+      // ★FIFO_DATA(0x30) 是数据口：硬件连续读会自动前进，不按寄存器地址递增。
+      //   若沿用"地址+i"的普通路径，只有第一个字节从队列弹出、其余读到寄存器文件
+      //   的 0，表现为 readFifo 已拿到帧数却解析出全 0。
+      if (addr_ == 0x30U) {
+        for (size_t i = 0; i < n; ++i) {
+          p[i] = (fifo_pos_ < fifo_len_) ? fifo_[fifo_pos_++] : 0U;
+        }
+      } else {
+        for (size_t i = 0; i < n; ++i) p[i] = silReadAddr(static_cast<uint8_t>((addr_ + i) & 0x7FU));
+        addr_ = static_cast<uint8_t>((addr_ + n) & 0x7FU);
+      }
     } else {
       for (size_t i = 0; i < n; ++i) {
         regs_[(addr_ + i) & 0x7FU] = p[i];
@@ -106,6 +138,9 @@ public:
 
 private:
   uint8_t regs_[128] = {};
+  uint8_t fifo_[512] = {};
+  size_t fifo_len_ = 0;
+  size_t fifo_pos_ = 0;
   uint8_t addr_ = 0;
   bool reading_ = false;
   bool awaiting_addr_ = true;
