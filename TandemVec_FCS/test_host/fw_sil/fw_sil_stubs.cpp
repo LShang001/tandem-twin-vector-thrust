@@ -29,17 +29,20 @@ extern "C" time_t timegm(struct tm *tm) { return _mkgmtime(tm); }
 uint32_t g_sil_time_us = 0;  // 仿真虚拟时钟（由 SIL 主循环推进）
 // delay() 时间推进钩子：默认空，保持既有 SIL 行为不变；全链路模式由主程序安装。
 SilDelayHook g_sil_delay_hook = nullptr;
-// 高频振动监测全局实例。固件里定义在 src/navigation_task.cpp:1012；
+// ★全链路目标链接真实 navigation_task.cpp / main.cpp 时，以下三个符号由其提供。// 高频振动监测全局实例。固件里定义在 src/navigation_task.cpp:1012；
 // 全链路目标若只链接 sensor_imu.cpp（不接导航任务），需要在这里补定义。
-#ifndef FW_SIL_REAL_NAV
+#ifndef FW_SIL_REAL_IMU
 InsHfVibrationMonitor g_ins_hf_vibration;
 #endif
 HardwareSerial Serial;
 SPIClass SPI;
 TwoWire Wire;
+#ifndef FW_SIL_REAL_IMU
+// 真实 main.cpp 参与链接时该全局由其提供（src/main.cpp:103）。
 Vector3 current_omega_dps_body_filtered(0.0, 0.0, 0.0);
+#endif
 
-#ifndef FW_SIL_REAL_NAV
+#ifndef FW_SIL_REAL_IMU
 // 真实导航任务参与链接时，该函数由 navigation_task.cpp 提供，避免重复定义。
 void setNavigationOriginFromLlaRad(double, double, double) {}
 #endif

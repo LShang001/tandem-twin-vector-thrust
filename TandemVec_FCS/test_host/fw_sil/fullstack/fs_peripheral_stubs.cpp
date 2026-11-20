@@ -38,15 +38,16 @@ bool storeSave(const MagCalParams & /*p*/, uint16_t /*sampleCount*/, float /*res
 bool storeLoad(MagCalParams & /*p*/) { return false; }
 bool storeErase() { return true; }
 }  // namespace magcal
-// 磁参考场：固件定义在 navigation_task.cpp:1019（= kDefaultMagReference）。
-// 本目标不链接 navigation_task，但必须用**同一个默认值**，不能另编一个数，
-// 否则调试台打印的磁倾角/总场与真机不一致。
+// 磁参考场与 GNSS 新鲜度查询：链接真实 navigation_task.cpp 时由其提供
+// （g_mag_reference 在 navigation_task.cpp:1019 = kDefaultMagReference，
+//  isGnssDataFreshForNav 在 navigation_task.cpp:618）。保留本桩会重复定义。
+#ifndef FW_SIL_REAL_IMU
 namespace bfs
 {
 MagReferenceNed g_mag_reference = kDefaultMagReference;
 }  // namespace bfs
-// GNSS 数据是否新鲜：固件实现依赖导航任务内部的接收时刻与超时判据。
-// 本目标不链接 navigation_task（会拖入 EKF 全链），故按**契约**返回 false：
-// 宿主没有真实 GNSS 接收，数据必然不新鲜。上层因此走"GNSS 不可用"分支，
-// 与真实环境一致，不会让遥测错误地报告一个假的新鲜定位。
+
+// GNSS 数据是否新鲜：宿主没有真实 GNSS 接收，按契约返回 false，
+// 上层因此走"GNSS 不可用"分支，不会伪造出假的新鲜定位。
 bool isGnssDataFreshForNav() { return false; }
+#endif
