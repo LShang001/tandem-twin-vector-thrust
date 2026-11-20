@@ -28,6 +28,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+# 持续磁融合及其失效用例显式选模式，避免跟随固件出厂默认值漂移。
+MAG_CONTINUOUS_ARGS = ["--heading-aid-mode", "0"]
+
 PROFILES = {
     # profile: (extra args, gates)
     "clean": (
@@ -193,6 +196,8 @@ def main() -> int:
                 "--pos-hold", "--seconds", str(args.seconds),
                 "--seed", str(seed), *extra,
             ]
+            if "mag_fused_min" in gates or "mag_gate_min" in gates or gates.get("require_pos_degraded"):
+                cmd += MAG_CONTINUOUS_ARGS
             if args.gain_scale != 1.0:
                 cmd += ["--gain-scale", str(args.gain_scale)]
             if args.append_args:

@@ -31,6 +31,7 @@
  * @see     src/sensor_peripheral.cpp、src/state_data.h（OpticalFlowData/flow_data）
  */
 #pragma once
+#include "BaroSampleStatus.h"
 #include "state_data.h"
 
 /**
@@ -56,6 +57,9 @@ int initDPS310();
  * @return true 数据读取成功, false 读取失败
  */
 bool readDPS310Data();
+
+/** @brief 查询运行期气压读取状态，独立于 EKF 是否融合。 */
+bfs::BaroSampleStatus baroSampleStatus();
 
 /**
  * @brief 将当前气压高度设为新的相对高度零点

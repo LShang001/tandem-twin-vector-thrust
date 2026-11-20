@@ -27,8 +27,9 @@
 | `test_ekf_aiding_velocity.cpp` | `ekf_15_state.h` — 测速源辅助接口（aiding 速度更新豁免零速守卫、失锁重锚 ResetVelocityToExternal、D 通道大噪声不压垂直协方差；2026-08-21 室内光流融合配套） | units/eigen | 16 |
 | `test_fw_ctrl_api.cpp` | `fw_algo/fw_ctrl_api.cpp` — 控制/分配层 C ABI：默认机型参数、悬停状态、`allocateTandemVec` 11 319 例、`allocateLinearThrustThrottle` 231 例与直接调用逐位一致 | units/eigen | 11 |
 | `test_fw_algo_api.cpp` | `fw_algo/fw_algo_api.cpp` — 固件 EKF 的 C ABI 直调接口：ABI 路径与直接 `Ekf15State` 逐位一致（初始化/单双子样/GNSS/磁/气压/重力/静止陀螺/航向/复位），供 Python ctypes 复用固件算法 | units/eigen | 468 |
-| `test_mag_reference.cpp` | `mag_reference.h` + `tilt_compass.h` — 站点参考场 NED 符号/总场/倾角/磁偏角与磁北→真北航向偏移（2026-10 磁链路） | Eigen + navigation | 13 |
-| `test_mag_gate.cpp` | `mag_measurement_gate.h` — 磁矢量模长/倾角/方位/航迹/新鲜度/标定/油门门控与自适应噪声（2026-10 磁链路） | Eigen | 24 |
+| `test_mag_reference.cpp` | `mag_reference.h` + `tilt_compass.h` — 站点参考场、磁北到真北、运行时磁偏覆盖与非法输入 | Eigen + navigation | S1–S6 |
+| `test_mag_gate.cpp` | `mag_measurement_gate.h` — 磁矢量门控、自适应噪声、覆盖参考场后的门控与航向一致性 | Eigen | G1–G12 |
+| `test_ins_baro_health.cpp` | `ins_baro_health.h` + `BaroSampleStatus.h` — 气压健康检测、采集断流与同值样本区分、读取恢复、时钟回卷 | 无 | T1–T9 |
 | `test_imu_health_monitor.cpp` | `ins_imu_health.h` — 非有限/无样本/低样本/冻结/饱和/高振动/零偏跳变状态机与复位（2026-10） | Eigen | 28 |
 | `test_gnss_consistency.cpp` | `ins_gnss_consistency.h` — GNSS 加速度一致性/位置自洽/光流/气压交叉、Suspect 锁存与 reset（2026-10） | Eigen | 16 |
 | `test_vehicle_profile.cpp` | `VehicleProfile.h` + `ActuatorOutputMap.h` — 机型输出表校验、纵列双发旧 mix 等价、共轴 VTVL 舵机/差速/大倾角保护、多旋翼/液体火箭输出表扩展 | 无 | 38 |

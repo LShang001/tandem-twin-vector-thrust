@@ -24,8 +24,10 @@
 #ifndef TANDEMVEC_MAG_REFERENCE_H
 #define TANDEMVEC_MAG_REFERENCE_H
 
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 
 namespace bfs
 {
@@ -70,8 +72,8 @@ static constexpr MagReferenceNed kDefaultMagReference = {
  * 而不必重新跑 tools/gen_mag_reference.py 再生表。
  *
  * 口径：默认值 = kDefaultMagReference，**默认行为与改前逐位一致**；只有显式执行
- * DBG `magdec <deg>` 才会改变。改的只有 declination_rad，场强/倾角/站点坐标
- * 仍取长沙表（磁偏是航向解算唯一用到的位置相关量）。
+ * DBG `magdec <deg>` 才会设置新磁偏并旋转 N/E 分量。总场、倾角和站点坐标
+ * 仍取长沙表，超出参考站点适用范围仍需重新生成站点表。
  *
  * @note 定义在 src/navigation_task.cpp（该 TU 已包含本头文件）。
  */
@@ -84,6 +86,41 @@ namespace magref
 inline float degToRad(const float deg)
 {
     return deg * kMagReferenceDegToRad;
+}
+
+/**
+ * @brief 设置站点磁偏角（度，东偏为正），同步 NED 水平参考矢量。
+ * @formula N=H cos(D), E=H sin(D)，D 为磁偏角、H 为水平场强。
+ * @ref MOD-002 §0（NED 定义）；REF-120 §9.9.1（磁矢量定方位）。
+ * @return 输入有效时更新参考，失败时保留原参考。
+ */
+inline bool setDeclinationDeg(MagReferenceNed &ref, const float deg)
+{
+    if (!(deg > -90.0f && deg < 90.0f))
+    {
+        return false;
+    }
+    const float declination_rad = degToRad(deg);
+    ref.field_ut[0] = ref.horizontal_ut * std::cos(declination_rad);
+    ref.field_ut[1] = ref.horizontal_ut * std::sin(declination_rad);
+    ref.declination_rad = declination_rad;
+    return true;
+}
+
+/** @brief 解析 DBG 磁偏参数，要求完整的单个数值。 */
+inline bool setDeclinationFromText(MagReferenceNed &ref, const char *text)
+{
+    char *end = nullptr;
+    const float deg = std::strtof(text, &end);
+    if (end == text)
+    {
+        return false;
+    }
+    while (std::isspace(static_cast<unsigned char>(*end)))
+    {
+        ++end;
+    }
+    return *end == '\0' && setDeclinationDeg(ref, deg);
 }
 
 /** @brief 弧度转角度制 */

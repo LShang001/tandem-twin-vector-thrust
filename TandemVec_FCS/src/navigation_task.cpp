@@ -3284,10 +3284,8 @@ void handleNavigationSystem()
 
           // 无论 EKF 是否融合，本样本只尝试一次，避免 NIS 拒绝后逐帧重试。
           s_mag_last_consumed_seq = mag_sample.seq;
-          const Eigen::Vector3f mag_ref_field(
-              bfs::kDefaultMagReference.field_ut[0],
-              bfs::kDefaultMagReference.field_ut[1],
-              bfs::kDefaultMagReference.field_ut[2]);
+          // 复用本拍通过门控的参考场，现场磁偏覆盖同时作用于门控与融合。
+          const Eigen::Vector3f mag_ref_field(gate_input.ref->field_ut);
           const float yaw_before_rad = nav_ekf.yaw_rad();
           const float roll_before_rad = nav_ekf.roll_rad();
           const float pitch_before_rad = nav_ekf.pitch_rad();

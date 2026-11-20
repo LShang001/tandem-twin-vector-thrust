@@ -58,6 +58,7 @@ namespace
   constexpr int DPS310_INIT_MAX_ATTEMPTS = 150;         // 10ms一次, 约1.5s内等待首次数据
   constexpr int DPS310_INIT_DATA_TIMEOUT_ERROR = -1002; // 自定义错误码：初始化阶段等待气压数据超时
   int16_t dps310_last_read_status = DPS__FAIL_UNFINISHED;
+  bfs::BaroSampleStatus s_baro_sample_status;
 
   int resetDps310OnBus()
   {
@@ -1214,6 +1215,8 @@ bool readDPS310Data()
 #endif
   int16_t result = Dps310Sensor.getLatestResults(temperature_raw, pressure_raw);
   dps310_last_read_status = result;
+  const bool received = result == DPS__SUCCEEDED;
+  s_baro_sample_status.recordRead(result, received, received ? millis() : 0U);
 #ifdef BFS_DPS310_DIAG
   const uint32_t elapsed_us = micros() - read_start_us;
   recordDps310Read(result, elapsed_us);
@@ -1239,6 +1242,12 @@ bool readDPS310Data()
     // Serial8.print("Failed to get latest DPS310 results, code: "); Serial8.println(result); // 可选调试
     return false; // 读取失败
   }
+}
+
+/** @brief 返回气压读数诊断快照，供 DBG 查询。 */
+bfs::BaroSampleStatus baroSampleStatus()
+{
+  return s_baro_sample_status;
 }
 
 /**

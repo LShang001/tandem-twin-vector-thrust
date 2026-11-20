@@ -84,7 +84,12 @@ if [ -z "$PYTHON_BIN" ]; then
     exit 1
   fi
 fi
-args=($PYTHON_BIN "$ROOT/test_host/fw_sil/run_real_acceptance.py"
+# Windows 的 py 启动器需要原生路径，不能依赖 Bash 转换其转发参数。
+runner_path="$ROOT/test_host/fw_sil/run_real_acceptance.py"
+if command -v cygpath >/dev/null 2>&1; then
+  runner_path="$(cygpath -m "$runner_path")"
+fi
+args=($PYTHON_BIN "$runner_path"
       --bin "$bin_path"
       --profiles "$PROFILES_DEFAULT"
       --seeds "1,2,3")

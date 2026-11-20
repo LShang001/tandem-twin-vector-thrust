@@ -19,7 +19,8 @@
  * @test    G1 正常样本；G2 参考/标定/非有限/序号/过期；G3 模长；
  *          G4 倾角；G5 方位残差；G6 GNSS 航迹；G7 姿态不确定度/油门；
  *          G8 micros 回绕；G9 拒绝原因名称；G10 倾斜补偿航向回解；
- *          G11 模长偏差门参考优先标定 scale（无效回退站点总场）
+ *          G11 模长偏差门参考优先标定 scale（无效回退站点总场）；
+ *          G12 变更磁偏时，更新后的参考同时解释门控新息和航向。
  * @see     TandemVec_FCS/include/mag_measurement_gate.h
  */
 #include <cmath>
@@ -305,6 +306,27 @@ int main()
     in.cal_scale_ut = 40.0f;
     CHECK(gate.Evaluate(in).reason == bfs::MagGateReason::CalInvalid,
           "G11 未标定拒绝（scale 不生效）");
+  }
+
+  // G12 用同一条合成量测比较站点覆盖前后的门控结果。
+  {
+    bfs::MagGateInput in = baseInput();
+    // 真值为水平朝北，磁偏为 60°，水平场由 30°–60° 直角三角形给出。
+    constexpr float kHorizontalUt = 35.166f;
+    in.mag_body_ut = Eigen::Vector3f(kHorizontalUt * 0.5f,
+                                    kHorizontalUt * 0.8660254f, 34.079f);
+    CHECK(gate.Evaluate(in).reason == bfs::MagGateReason::Residual,
+          "G12 旧站点方位拒绝不一致的磁观测");
+    bfs::MagReferenceNed active = bfs::kDefaultMagReference;
+    CHECK(bfs::magref::setDeclinationDeg(active, 60.0f), "G12 接受合法磁偏");
+    in.ref = &active;
+    const auto r = gate.Evaluate(in);
+    CHECK(r.pass && std::fabs(r.heading_error_rad) < 1e-6f,
+          "G12 参考场覆盖后正确接受同一观测");
+    const Eigen::Vector3f ref_ned(in.ref->field_ut);
+    CHECK(std::fabs(bfs::magTiltCompensatedHeadingRad(in.mag_body_ut, 0.0f, 0.0f,
+                                                     ref_ned)) < 1e-6f,
+          "G12 同一参考场解出真北航向");
   }
 
   if (g_fail == 0)

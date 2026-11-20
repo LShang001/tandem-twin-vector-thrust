@@ -16,7 +16,8 @@
  * @units   µT、rad、deg、km
  * @note    这是符号/量纲回归，不是 WMM 精度验证；真实磁环境仍需上板标定。
  * @test    S1 站点参考场自洽；S2 D 向下为正；S3 TiltCompass 北/东航向与
- *          磁偏角偏移符号；S4 站点距离门
+ *          磁偏角偏移符号；S4 站点距离门；S5 运行时覆盖的几何一致性；
+ *          S6 输入有效性与失败时保持旧参考。
  * @see     TandemVec_FCS/include/mag_reference.h、tools/gen_mag_reference.py
  */
 #include <cmath>
@@ -94,6 +95,51 @@ int main()
         ref.site_lon_deg);
     CHECK(same < 1e-3f, "同站点距离≈0");
     CHECK(one_deg > 100.0f && one_deg < 120.0f, "1°纬度≈111km");
+  }
+
+  // S5 同时验证磁偏、矢量方位和不变量。30° 的东分量应为水平场的一半。
+  {
+    bfs::MagReferenceNed active = ref;
+    CHECK(bfs::magref::setDeclinationDeg(active, 30.0f), "接受有效东偏");
+    CHECK(std::fabs(active.field_ut[1] - 0.5f * ref.horizontal_ut) < 1e-4f,
+          "+30° 东偏时 E=H/2");
+    CHECK(std::fabs(std::atan2(active.field_ut[1], active.field_ut[0]) -
+                    active.declination_rad) < 1e-6f, "方位与磁偏一致");
+    CHECK(active.field_ut[2] == ref.field_ut[2] &&
+              active.horizontal_ut == ref.horizontal_ut &&
+              active.total_ut == ref.total_ut && active.dip_rad == ref.dip_rad &&
+              active.site_lat_deg == ref.site_lat_deg &&
+              active.site_lon_deg == ref.site_lon_deg && active.valid == ref.valid,
+          "磁偏覆盖保持场强、倾角和站点属性");
+    CHECK(bfs::magref::setDeclinationDeg(active, -30.0f) &&
+              std::fabs(active.field_ut[1] + 0.5f * ref.horizontal_ut) < 1e-4f,
+          "覆盖是绝对磁偏，不累积旋转");
+    CHECK(bfs::magref::setDeclinationDeg(active, 0.0f) &&
+              active.field_ut[0] == ref.horizontal_ut && active.field_ut[1] == 0.0f,
+          "零磁偏将水平场指向真北");
+    CHECK(!bfs::magref::setDeclinationDeg(active, 90.0f) &&
+              !bfs::magref::setDeclinationDeg(active, -90.0f) &&
+              !bfs::magref::setDeclinationDeg(active, std::nanf("")) &&
+              active.declination_rad == 0.0f && active.field_ut[1] == 0.0f,
+          "非法覆盖保留有效参考");
+  }
+
+  // S6 串口参数必须完整，无法解析的参数不能被当作零磁偏。
+  {
+    bfs::MagReferenceNed active = ref;
+    CHECK(!bfs::magref::setDeclinationFromText(active, "") &&
+              !bfs::magref::setDeclinationFromText(active, "  ") &&
+              !bfs::magref::setDeclinationFromText(active, "garbage") &&
+              !bfs::magref::setDeclinationFromText(active, "15junk") &&
+              !bfs::magref::setDeclinationFromText(active, "15 20") &&
+              !bfs::magref::setDeclinationFromText(active, "nan") &&
+              !bfs::magref::setDeclinationFromText(active, "inf") &&
+              active.declination_rad == ref.declination_rad &&
+              active.field_ut[1] == ref.field_ut[1],
+          "无效文本不改变站点参考");
+    CHECK(bfs::magref::setDeclinationFromText(active, " +30.0  ") &&
+              std::fabs(active.field_ut[1] - 0.5f * ref.horizontal_ut) < 1e-4f,
+          "合法文本提交完整参考场");
   }
 
   if (g_fail == 0)

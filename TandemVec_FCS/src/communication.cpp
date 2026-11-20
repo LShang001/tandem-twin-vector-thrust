@@ -3444,24 +3444,21 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.println(F("[DBG] yaw_est: n/a (未标定或无样本; 标定后复核轴向)"));
         }
       }
-      else if (strncmp(line, "magdec", 6) == 0)
+      else if (strcmp(line, "magdec") == 0 || strncmp(line, "magdec ", 7) == 0)
       {
-        // 站点磁偏角查看/设置（2026-11-07）：deg，东偏为正。
-        // 默认 -4.114°（长沙 IGRF-14）。异地飞行先查当地磁偏再现场设置，
-        // 免去重新跑 tools/gen_mag_reference.py 生成站点表。
-        // ★ 只影响航向初始化与磁门控参考；未设置时行为与改前一致。
+        // 磁偏覆盖会改变三轴观测的参考方位，只允许上锁时设置。
         bool magdec_ok = true;
         if (line[6] == ' ')
         {
-          const float deg = atof(line + 7);
-          if (deg > -90.0f && deg < 90.0f)
-          {
-            bfs::g_mag_reference.declination_rad = deg * 0.017453292519943295f;
-          }
-          else
+          if (g_is_unlocked)
           {
             magdec_ok = false;
-            serial.println(F("[DBG] magdec: 超范围，允许 -90..90 deg（东偏为正）"));
+            serial.println(F("[DBG] magdec: 请上锁后设置"));
+          }
+          else if (!bfs::magref::setDeclinationFromText(bfs::g_mag_reference, line + 7))
+          {
+            magdec_ok = false;
+            serial.println(F("[DBG] magdec: 请输入 -90..90 deg 之间的有效角度（东偏为正）"));
           }
         }
         if (magdec_ok)
@@ -3613,6 +3610,27 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         // 室外看到 fix=6 后此值为 1 即生效；室内/无差分时应为 0（气压在工作）。
         serial.print(F(" off_rtk="));
         serial.println(baro_off_rtk_active ? 1 : 0);
+
+        const bfs::BaroSampleStatus baro_sample = baroSampleStatus();
+        const bfs::AidSourceStatus &baro_aid = aid_tracker.status(bfs::AidSource::Baro);
+        serial.print(F("[DBG] baro_obs samples="));
+        serial.print(baro_sample.samples);
+        serial.print(F(" sample_age_ms="));
+        if (baro_sample.has_sample)
+          serial.print(baro_sample.sampleAgeMs(millis()));
+        else
+          serial.print(F("n/a"));
+        serial.print(F(" read="));
+        if (baro_sample.attempted)
+          serial.print(baro_sample.read_status);
+        else
+          serial.print(F("n/a"));
+        serial.print(F(" attempts="));
+        serial.print(baro_aid.attempt_count);
+        serial.print(F(" fused="));
+        serial.print(baro_aid.fuse_count);
+        serial.print(F(" rejected="));
+        serial.println(baro_aid.reject_count);
 
         serial.print(F("[DBG] gnss fix="));
         serial.print(gnss_status.last_obs_fix_type, 0);

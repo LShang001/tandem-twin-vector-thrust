@@ -12,12 +12,14 @@
  * @units   m、m/s、s
  * @note    这是逻辑/边界测试；真实气压噪声谱、温度漂移与 GNSS 高度质量需实机。
  * @test    T1 标称不误报；T2 0.5 m/s 漂移在 3.5 s 内识别；T3 50 m 台阶；
- *          T4 单帧尖峰；T5 卡死（垂速非零）；T6 GNSS 无效不判漂移；T7 reset
+ *          T4 单帧尖峰；T5 卡死；T6 无 GNSS 暂停漂移判定；T7 迟滞；
+ *          T8 复位；T9 取数与年龄诊断（空读、总线错误、恢复及时钟回卷）。
  * @see     TandemVec_FCS/include/ins_baro_health.h
  */
 #include <cmath>
 #include <cstdio>
 
+#include "BaroSampleStatus.h"
 #include "ins_baro_health.h"
 
 static int g_fail = 0;
@@ -167,9 +169,31 @@ int main()
     CHECK(m.status().drift_s == 0.0f, "T8 reset clears timers");
   }
 
+  // T9 成功取到同值样本仍刷新年龄，空读和错误只更新读取状态。
+  {
+    bfs::BaroSampleStatus samples;
+    CHECK(!samples.attempted && !samples.has_sample, "T9 启动时无读取记录");
+    samples.recordRead(-4, false, 1U);
+    CHECK(samples.attempted && !samples.has_sample && samples.samples == 0U,
+          "T9 首次空读不产生气压样本");
+    samples.recordRead(0, true, 10U);
+    samples.recordRead(0, true, 20U);
+    CHECK(samples.has_sample && samples.samples == 2U && samples.sampleAgeMs(21U) == 1U,
+          "T9 每次成功独立计数");
+    samples.recordRead(-4, false, 25U);
+    CHECK(samples.read_status == -4 && samples.samples == 2U && samples.sampleAgeMs(25U) == 5U,
+          "T9 空读不刷新样本时间");
+    samples.recordRead(-1, false, 50U);
+    CHECK(samples.read_status == -1 && samples.samples == 2U && samples.sampleAgeMs(50U) == 30U,
+          "T9 总线错误与空读可区分，样本年龄继续增长");
+    samples.recordRead(0, true, 0xfffffff0U);
+    CHECK(samples.read_status == 0 && samples.samples == 3U && samples.sampleAgeMs(0x10U) == 32U,
+          "T9 恢复成功取样，时钟回卷时年龄正确");
+  }
+
   if (g_fail == 0)
   {
-    std::printf("PASS: ins_baro_health (T1-T8)\n");
+    std::printf("PASS: ins_baro_health (T1-T9)\n");
     return 0;
   }
   std::printf("FAILED: %d check(s)\n", g_fail);

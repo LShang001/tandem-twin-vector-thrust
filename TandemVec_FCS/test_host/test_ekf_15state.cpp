@@ -30,7 +30,7 @@
  *          T9 速度子集坏/位置健康；T10 位置子集坏/速度健康；T11 双坏软重锚（P0-1）；
  *          T12 sub-frame 延迟量测；T13 长时间失联后连续不可信 GNSS 的硬重锚；
  *          T14 正常跟踪期 50 m GNSS 跳点的显式野值门；T15 机体系磁矢量更新；
- *          T16 真实磁初始化磁偏角偏置与 tilt_sigma 可用性；
+ *          T16 真实磁初始化磁偏角偏置与 tilt_sigma；T16b 现场覆盖后磁矢量更新；
  *          T17 无磁离地零偏 z 限幅（ClampGyroBiasZ）；
  *          T18 F 矩阵必须用去偏后的 IMU（单/双子样，防 IEKF/TFG 混用坑）；
  *          T19 垂直基准不可信时只重锚水平、保留高度（防垂直 spoof）；
@@ -475,6 +475,24 @@ int main()
     CHECK("T16 tilt_sigma 有限且非负",
           std::isfinite(with_offset.tilt_sigma_rad()) &&
               with_offset.tilt_sigma_rad() >= 0.0f);
+  }
+
+  // ---- T16b 现场磁偏覆盖：初始化与三轴融合共用真北基准 ----
+  {
+    bfs::MagReferenceNed active = bfs::kDefaultMagReference;
+    CHECK("T16b 接受现场磁偏", bfs::magref::setDeclinationFromText(active, "30"));
+    // 解析真值为 +30° 东偏，静止机身朝真北。
+    const Eigen::Vector3f mag_body(30.454652f, 17.583f, 34.079f);
+    Ekf15State ekf;
+    ekf.Initialize(kGravity, Eigen::Vector3f::Zero(), mag_body,
+                   Eigen::Vector3f::Zero(), kLla, active.declination_rad);
+    const auto good = ekf.MeasurementUpdateMagVectorDetailed(
+        mag_body, Eigen::Vector3f(active.field_ut), 8.0f);
+    CHECK("T16b 正确参考融合且新息近零", good.fused && good.innovation_norm < 1e-3f);
+    CHECK("T16b 融合后真北航向连续", std::fabs(ekf.yaw_rad()) < 1e-4f);
+    const auto old = ekf.MeasurementUpdateMagVectorDetailed(
+        mag_body, Eigen::Vector3f(bfs::kDefaultMagReference.field_ut), 8.0f);
+    CHECK("T16b 旧参考存在明显新息", old.innovation_norm > 15.0f);
   }
 
   // ---- T17 无磁离地零偏 z 限幅：初始化吸收的偏航率可被投影回小值 ----
