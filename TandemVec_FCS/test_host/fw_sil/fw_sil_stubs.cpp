@@ -18,6 +18,7 @@
 #include "state_data.h"
 #include "flight_control.h"
 #include "FailsafeLinkLossPlan.h"  // 断链判据与固件共用同一份实现（勿在本文件重写）
+#include "ins_vibration_hf.h"      // InsHfVibrationMonitor（g_ins_hf_vibration 的定义需要完整类型）
 #include <cstdio>
 #include <ctime>
 
@@ -28,6 +29,11 @@ extern "C" time_t timegm(struct tm *tm) { return _mkgmtime(tm); }
 uint32_t g_sil_time_us = 0;  // 仿真虚拟时钟（由 SIL 主循环推进）
 // delay() 时间推进钩子：默认空，保持既有 SIL 行为不变；全链路模式由主程序安装。
 SilDelayHook g_sil_delay_hook = nullptr;
+// 高频振动监测全局实例。固件里定义在 src/navigation_task.cpp:1012；
+// 全链路目标若只链接 sensor_imu.cpp（不接导航任务），需要在这里补定义。
+#ifndef FW_SIL_REAL_NAV
+InsHfVibrationMonitor g_ins_hf_vibration;
+#endif
 HardwareSerial Serial;
 SPIClass SPI;
 TwoWire Wire;
@@ -43,7 +49,11 @@ void resetBaroAltitudeReference() {}
 //   （2026-11-10 控制延迟修复新增）。SIL 不链接 sensor_imu.cpp，IMU 数据由
 //   fw_sil_env_main 直接注入 IMU_Packet/icm_*，故此处为空操作替身（返回 true
 //   表示数据就绪）。不补此桩则全机型 SIL 链接报 undefined reference to readIMUData()。
+// ★全链路数字孪生：链接真实 src/sensor_imu.cpp 时必须定义 FW_SIL_REAL_IMU，
+//   否则会与该文件里的真实实现重复定义。
+#ifndef FW_SIL_REAL_IMU
 bool readIMUData() { return true; }
+#endif
 
 // SIL 不链接 communication.cpp（其遥测/CRSF 依赖过重），这里提供链接替身。
 // ★2026-10-31：断链/复链判据改为直接调用固件同一份实现
@@ -75,7 +85,10 @@ void linkDownCallback()
 }
 void mavlinkSendStatustext(unsigned char, const char*) {}
 
+// 全链路目标链接真实 lib/MagSensor/MagSensor.cpp 时，构造函数由其提供。
+#ifndef FW_SIL_REAL_IMU
 MagSensor::MagSensor() {}
+#endif
 // ★2026-11-01：state_data 的 IMU 已改为型号无关指针（ImuDevice*），SIL 不再
 //   构造 ICM42688 对象，故删除该构造函数桩；保留会导致“ICM42688 未定义类型”
 //   （头文件已不再被 state_data.h 引入）。
@@ -96,6 +109,9 @@ CrsfSerial::CrsfSerial(HardwareSerial& port, uint32_t baud)
     : _port(port), _crc(0xd5), _baud(baud), _lastReceive(0),
       _lastChannelsPacket(0), _linkIsUp(false), _passthroughBaud(0) {}
 Crc8::Crc8(uint8_t) {}
+// 全链路目标链接真实磁芯片驱动（lib/IST8310、lib/QMC5883L）时，构造函数由其提供。
+#ifndef FW_SIL_REAL_IMU
 IST8310::IST8310() {}
 QMC5883L::QMC5883L() {}
+#endif
 uint8_t Crc8::calc(uint8_t*, uint8_t) { return 0; }

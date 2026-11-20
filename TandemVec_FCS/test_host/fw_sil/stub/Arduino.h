@@ -31,6 +31,21 @@
 #define M_PI 3.14159265358979323846
 #endif
 
+// Arduino 的 Print 进制常量：固件用 Serial8.print(v, HEX) 打印寄存器值。
+// 宿主沿用 Arduino 的取值，避免源码里出现条件分支。
+#ifndef DEC
+#define DEC 10
+#endif
+#ifndef HEX
+#define HEX 16
+#endif
+#ifndef OCT
+#define OCT 8
+#endif
+#ifndef BIN
+#define BIN 2
+#endif
+
 #ifndef PI
 #define PI 3.14159265358979323846f
 #endif
@@ -246,7 +261,17 @@ public:
   size_t print(double) { return 0; }
   size_t print(float, int) { return 0; }
   size_t print(double, int) { return 0; }
+  // 显式整数+进制重载：固件用 print(reg, HEX) 打印寄存器，缺整数版本时
+  // 只有 (float,int)/(double,int) 可选，会导致 overloaded 'print(uint32_t, int)' ambiguous。
+  size_t print(int, int) { return 0; }
+  size_t print(unsigned int, int) { return 0; }
+  size_t print(long, int) { return 0; }
+  size_t print(unsigned long, int) { return 0; }
+  size_t println(unsigned long, int) { return 0; }
   size_t println() { return 0; }
+  size_t println(int, int) { return 0; }
+  size_t println(unsigned int, int) { return 0; }
+  size_t println(long, int) { return 0; }
   template <typename T> size_t println(T) { return 0; }
   template <typename T> size_t print(const T&) { return 0; }
 };

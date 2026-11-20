@@ -35,6 +35,13 @@ public:
   void setBitOrder(uint8_t) {}
   void setFrequency(uint32_t) {}
   void endTransaction() {}
+  // Arduino STM32 Core 的引脚重映射接口（sensor_imu.cpp 的 initImu 会调用）。
+  // 宿主无物理引脚，吞掉即可；引脚正确性只能靠上板验证。
+  void setMISO(unsigned long) {}
+  void setMOSI(unsigned long) {}
+  void setSCLK(unsigned long) {}
+  void setSS(unsigned long) {}
+  void setSSEL(unsigned long) {}
 
   // ---- 寄存器级替身（全链路数字孪生）----
   // 默认**关闭**：transfer() 原样回传入参，保持既有 SIL 行为完全不变。
