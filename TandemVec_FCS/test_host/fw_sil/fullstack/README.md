@@ -203,6 +203,30 @@ Get-Process -Name 'g++','cc1plus','bash','wsl' -ErrorAction SilentlyContinue
 
 有残留就按 PID 从叶子往根 `kill -9`，再复查一次为空。
 
+### 6.4 参数页运行期验证（P4 第一块）
+
+```bash
+bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_params.sh
+```
+
+链接真实 `src/ano_params.cpp` + `src/state_data.cpp` + `src/flight_control.cpp`
+（参数写入后的 `applyFlightCtrlParams()` 同步链），实测：
+
+| 项 | 结果 |
+|---|---|
+| 参数总数 | **169**（133 + 15 共轴 + 21 单涵道） |
+| `att_roll.kp` 按名查找 | id=0，反查名字一致 |
+| 默认值 | 2.800000，与 `kFlightCtrlParamsDefaults` 一致 |
+| 写 3.25 后 | 读回 3.25，且 `kFlightCtrlParams` 实例真实改写 |
+| NaN / +Inf / -Inf | 全部拒绝，原值未被污染 |
+| 越界 ID(169) | 读写均拒绝 |
+| bool 参数 | 写 0/1 读回 0/1 |
+
+**同时得到一个可执行的状态判据**：写 `att_roll.kp = 1e6` 会被**接受** ——
+当前实现只判 `isfinite`，没有 min/max 包线，即 GOV-006 的 FIX-02（P0）**尚未落地**。
+这条不再靠读代码推断，测试会持续打印 `[NOTE] 当前无 min/max 包线`，等真正实现时
+该行消失、断言改为「拒绝」即可。
+
 ## 7 后续阶段
 
 | 阶段 | 接入内容 | 判据 |
