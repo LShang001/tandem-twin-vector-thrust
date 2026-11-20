@@ -18,9 +18,19 @@ class Ubx {
 public:
   enum Fix { FIX_NONE = 0, FIX_DEAD_RECKONING = 1, FIX_2D = 2, FIX_3D = 3,
              FIX_GNSS_DEAD_RECKONING = 4, FIX_TIME_ONLY = 5 };
+  /// 接收机协议选择（真实库在 lib/ublox-main/src/ubx.h）。
+  /// ★本桩会遮蔽真实库：接全链路遥测/GNSS 配置（P4/P5）时必须改指真实头，
+  ///   否则 main.cpp 里的 Config/SetProtocol/Pump 走的是空实现。
+  enum class GpsProtocol { kAuto = 0, kUbx = 1, kNmea = 2 };
   Ubx() {}
   Ubx(void*) {}
   void begin() {}
   void update() {}
+  void Config(void*) {}
+  void SetProtocol(GpsProtocol) {}
+  /// @return 是否解析到新历元——桩恒 false（无真实帧同步/校验/PVT 解码）。
+  bool Pump(uint32_t, uint32_t) { return false; }
+  void Reset() {}
+  void ClearEpochQueue() {}
 };
 }

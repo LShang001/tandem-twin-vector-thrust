@@ -326,6 +326,20 @@ private:
 // 仿真虚拟时钟：由 SIL 主循环按仿真时间推进；未设置时保持 0，兼容旧 SIL。
 extern uint32_t g_sil_time_us;
 
+/**
+ * @brief `delay()` 的时间推进钩子（全链路数字孪生专用）
+ *
+ * @details 真实固件在 setup 阶段用 `delay()` 等超时窗口，例如 DETA100 探测：
+ *          `while (millis() - t0 < TIMEOUT) { ...; delay(1); }`。
+ *          宿主的 `millis()` 由虚拟时钟给值，若 `delay()` 不推进时钟，该循环永不退出。
+ *          因此把"推进多少时间"外置成钩子：默认 nullptr（既有 SIL 行为完全不变），
+ *          全链路主程序安装后按 156.25 µs 步进虚拟时间并触发调度器 tick。
+ * @note    固件里 `delay()` 期间 TIM8 中断照常运行，所以推进时也必须触发 tick，
+ *          否则 setup 阶段的定时器语义与固件不同。
+ */
+using SilDelayHook = void (*)(uint32_t us);
+extern SilDelayHook g_sil_delay_hook;
+
 class HardwareSerial : public Stream {
 public:
   HardwareSerial() {}
@@ -383,8 +397,33 @@ inline int analogRead(uint8_t) { return 0; }
 // micros() 71.6 min 回绕与 dt_s 模运算路径。
 inline uint32_t millis() { return g_sil_time_us / 1000U; }
 inline uint32_t micros() { return g_sil_time_us; }
-inline void delay(unsigned long) {}
+// delay() 默认不动虚拟时钟（既有 SIL 依赖这一点）；安装 g_sil_delay_hook 后
+// 才推进时间，供全链路模式让 setup() 里的超时等待自然到期。
+inline void delay(unsigned long ms) {
+  if (g_sil_delay_hook != nullptr) {
+    g_sil_delay_hook(static_cast<uint32_t>(ms) * 1000U);
+  }
+}
 inline void delayMicroseconds(unsigned int) {}
+
+// ---- setup() 用到的 CMSIS/STM32 符号（全链路 main.cpp 编译所需）----
+// 只保证固件源码在宿主通过编译；不产生任何寄存器或引脚效果。
+// 名称与真实 CMSIS/HAL 保持一致，避免源码里出现条件分支。
+#ifndef TIM4
+#define TIM4 4
+#endif
+#ifndef TIM_CHANNEL_4
+#define TIM_CHANNEL_4 0x00000004U
+#endif
+#ifndef UART5_IRQn
+#define UART5_IRQn 54
+#endif
+inline void NVIC_SetPriority(int, int) {}
+inline void digitalToggle(int) {}
+inline void analogWriteFrequency(unsigned long) {}
+inline void analogWriteFrequency(int, unsigned long) {}
+inline void analogWriteResolution(int) {}
+inline void analogReadResolution(int) {}
 inline void yield() {}
 // 宿主单线程：临界区为空实现；真实中断并发不在 SIL 覆盖范围。
 inline void noInterrupts() {}

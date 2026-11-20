@@ -26,6 +26,8 @@
 extern "C" time_t timegm(struct tm *tm) { return _mkgmtime(tm); }
 #endif
 uint32_t g_sil_time_us = 0;  // 仿真虚拟时钟（由 SIL 主循环推进）
+// delay() 时间推进钩子：默认空，保持既有 SIL 行为不变；全链路模式由主程序安装。
+SilDelayHook g_sil_delay_hook = nullptr;
 HardwareSerial Serial;
 SPIClass SPI;
 TwoWire Wire;

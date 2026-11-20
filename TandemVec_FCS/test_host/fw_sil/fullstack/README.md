@@ -52,11 +52,43 @@ bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_scheduler.sh
 这证明：**固件的任务调度、相位、到期判定、统计口径能在宿主上原样运行**，
 被替换的只有"谁触发中断"。
 
-## 4 后续阶段
+## 4 阶段 P2：`main.cpp` 编译级接入（2026-11-20，进行中）
+
+目标是把最重的源文件接进来：`src/main.cpp`（589 行）含完整 `setup()` 顺序、
+**真实任务注册表**、`loop()` 主循环。
+
+**已完成**：`src/main.cpp` 在宿主桩下 `-fsyntax-only` **零错误**通过。
+验证命令（仓库根）：
+
+```bash
+bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_scheduler.sh
+```
+
+补桩过程中确认的三件事：
+
+1. **`setup()` 的超时等待需要虚拟时钟**。DETA100 探测是
+   `while (millis() - t0 < TIMEOUT) { ...; delay(1); }`，而宿主 `millis()` 由虚拟时钟给值。
+   若 `delay()` 不推进时钟，该循环永不退出。因此桩层新增 `g_sil_delay_hook`：
+   默认 `nullptr`（既有 SIL 行为完全不变），全链路模式安装后按 156.25 µs 步进并触发 tick。
+   语义已冻结为测试断言：`delay(1000)` 推进 1000 ms、期间**不执行**任务、
+   之后单次 `taskExecutor()` 只消费一帧（到期标志被合并）——与固件"中断置位、主循环执行"一致。
+2. **宿主 `ubx.h` 桩会遮蔽真实 UBX 库**（`-Itest_host/fw_sil/stub` 优先于
+   `lib/ublox-main/src`）。P4/P5 接真实遥测与 GNSS 配置时必须先换掉这层，
+   否则 `Config/SetProtocol/Pump` 全是空实现，接出来的"链路"是假的。
+3. **`WS2812Driver::beginDma()` 在宿主不存在**：真实头只在
+   `ARDUINO_ARCH_STM32 && STM32H7xx && HAL_DMA_MODULE_ENABLED` 时声明该成员。
+   用同名桩头覆盖（`stub/WS2812Driver.h`），只保证能编译，不代表灯效可验证。
+
+**剩余（P2 收尾）**：链接期桩。`setup()` 要真正跑起来还差：`initImu()` 失败会进
+`while(1)` 闪灯（`ImuDevice` 有 200+ 行纯虚接口，需寄存器级 SPI 模拟或专用桩后端）、
+`initMagnetometer/initDPS310/ubxAutoConfig` 的返回值、约 20 个任务函数与
+`CrsfSerial`/`StatusLED`/`N25N01GV` 等对象方法的空实现。
+
+## 5 后续阶段
 
 | 阶段 | 接入内容 | 判据 |
 |---|---|---|
-| P2 | `main.cpp` 的 `setup()` 流程与**真实任务注册表** | 任务名/间隔/顺序与固件一致，个数可核对 |
+| P2 | `main.cpp` 链接期桩补齐 | 任务名/间隔/顺序与固件一致，个数可核对 |
 | P3 | `sensor_imu.cpp`、`sensor_peripheral.cpp` | 仿真数据走真实驱动解析路径，`IMU_Packet` 由驱动产出 |
 | P4 | `communication.cpp`、`mavlink_bridge.cpp`、`ano_params.cpp`、`ano_vars.cpp` | 真实遥测帧字节可从宿主导出并解析回原值 |
 | P5 | `ubx_config.cpp` | 替身接收机对 CFG 命令回 ACK，快路径/全量路径均可复现 |

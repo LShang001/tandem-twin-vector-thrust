@@ -64,6 +64,26 @@ void task10()
   ++g_n10;
 }
 
+// ---- 仿真时基：绝对虚拟时间 ×4 定点（1 tick = 156.25 µs = 625/4）----
+uint64_t g_abs_q4 = 0;
+uint64_t g_next_tick_q4 = 625;
+
+/// 推进 dq4（时间 ×4），跨过的每个 tick 边界都触发一次真实 timerCallback。
+/// 与固件一致：中断只置任务标志，任务体要等主循环 taskExecutor() 才执行。
+void advanceQ4(uint64_t dq4)
+{
+  g_abs_q4 += dq4;
+  while (g_next_tick_q4 <= g_abs_q4)
+  {
+    g_sil_time_us = static_cast<uint32_t>(g_next_tick_q4 / 4ULL);
+    g_next_tick_q4 += 625ULL;
+    TaskTimer->silTick();
+  }
+}
+
+/// `delay()` 钩子：固件里 delay 期间 TIM8 中断照常跑，故这里也照常触发 tick。
+void delayHook(uint32_t us) { advanceQ4(static_cast<uint64_t>(us) * 4ULL); }
+
 }  // namespace
 
 int main()
@@ -95,14 +115,11 @@ int main()
 
   // ---------- 3) 仿真 10 s：每 tick 触发一次真实 timerCallback ----------
   const uint32_t total_ticks = 10u * scheduler::kSchedulerTickHz;  // 64000
-  uint64_t t_us_x4 = 0;  // 虚拟时钟 ×4 定点：1 tick = 156.25 µs = 625/4
 
   for (g_tick = 0; g_tick < total_ticks; ++g_tick)
   {
-    t_us_x4 += 625u;
-    g_sil_time_us = static_cast<uint32_t>(t_us_x4 / 4u);
-    TaskTimer->silTick();   // ← 真实 timerCallback()：tick 累加 + 到期置位
-    taskExecutor();         // ← 真实 taskExecutor()：清标志 + 执行 + 统计
+    advanceQ4(625u);   // ← 真实 timerCallback()：tick 累加 + 到期置位
+    taskExecutor();    // ← 真实 taskExecutor()：清标志 + 执行 + 统计
   }
 
   const double elapsed_s = static_cast<double>(g_sil_time_us) * 1e-6;
@@ -127,6 +144,20 @@ int main()
   std::printf("\n-- 真实调度统计（schedulerStatsPrint）--\n");
   schedulerStatsPrint(Serial8);
   check(schedulerCpuPermille() < 1000, "CPU 负荷统计 < 100%");
+
+  // ---------- 6) delay() 钩子语义：中断照跑、主循环不跑（冻结为固件行为） ----------
+  // 固件 setup 阶段的超时等待就靠这个语义：`while (millis()-t0 < TIMEOUT) { ...; delay(1); }`
+  // 若 delay 不推进虚拟时钟，这些循环永不退出（全链路接 main.cpp 时的第一个坑）。
+  g_sil_delay_hook = &delayHook;
+  const uint32_t n200_before = g_n200;
+  const uint32_t t_before = g_sil_time_us;
+  delay(1000);  // 1000 ms
+
+  check(g_sil_time_us - t_before == 1000000u, "delay(1000) 推进虚拟时钟 1000 ms");
+  check(g_n200 == n200_before, "delay 期间不执行任务（主循环未运行）");
+
+  taskExecutor();
+  check(g_n200 == n200_before + 1, "delay 后单次 taskExecutor 只消费一帧（到期标志被合并）");
 
   std::printf("\n%s（失败 %d 项）\n", g_fail == 0 ? "=== 全部通过 ===" : "=== 存在失败 ===",
               g_fail);
