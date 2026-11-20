@@ -31,7 +31,7 @@ uint32_t g_sil_time_us = 0;  // 仿真虚拟时钟（由 SIL 主循环推进）
 SilDelayHook g_sil_delay_hook = nullptr;
 // ★全链路目标链接真实 navigation_task.cpp / main.cpp 时，以下三个符号由其提供。// 高频振动监测全局实例。固件里定义在 src/navigation_task.cpp:1012；
 // 全链路目标若只链接 sensor_imu.cpp（不接导航任务），需要在这里补定义。
-#ifndef FW_SIL_REAL_IMU
+#ifndef FW_SIL_REAL_LIBS
 InsHfVibrationMonitor g_ins_hf_vibration;
 #endif
 HardwareSerial Serial;
@@ -92,9 +92,9 @@ void linkDownCallback()
     raw_rc_values[i] = plan.channels[i];
   }
 }
-#endif  // FW_SIL_REAL_IMU
+#endif  // FW_SIL_REAL_LIBS
 // 真实 src/mavlink_bridge.cpp 提供该实现时不再保留本桩。
-#ifndef FW_SIL_REAL_IMU
+#ifndef FW_SIL_REAL_LIBS
 void mavlinkSendStatustext(unsigned char, const char*) {}
 #endif
 
@@ -107,7 +107,7 @@ MagSensor::MagSensor() {}
 //   （头文件已不再被 state_data.h 引入）。
 // Madgwick 由真实 lib/MadgwickAHRS-master 提供（SIL 需复现生产 AHRS，
 // 不能再用空构造桩；否则 backup_ahrs_* 恒为 0，会伪造“姿态被拉平”）。
-#ifndef FW_SIL_REAL_IMU
+#ifndef FW_SIL_REAL_LIBS
 W25N01GV::W25N01GV(SPIClass& bus, uint8_t cs)
     : _bus(bus), _cs(cs), _manId(0), _devId(0), _devId2(0), _present(false),
       _lastEcc(0), _lastProgErr(0) {}
@@ -115,20 +115,21 @@ W25N01GV::W25N01GV(SPIClass& bus, uint8_t cs)
 // 全链路目标链接真实 lib/W25N01GV、lib/AnoComProtocol 时由其提供实现。
 // FW_SIL_REAL_IMU 是"链接真实驱动/库"的统一开关（含 IMU、磁芯片、CRSF、NAND、
 // 协议库、流量计），因为全链路目标一次性把这一层真实源码全部接进来。
-#ifndef FW_SIL_REAL_IMU
+#ifndef FW_SIL_REAL_LIBS
 MTF02P::MTF02P() {}
 LQS48_Flow::LQS48_Flow() {}
 W25N01GVLog::W25N01GVLog(W25N01GV& f) : _flash(f) {}
 AnoComProtocol::AnoComProtocol(Stream*) {}
 #endif
 // 全链路目标链接真实 lib/CrsfSerial 时由其提供构造。
-#ifndef FW_SIL_REAL_IMU
+#ifndef FW_SIL_REAL_LIBS
 CrsfSerial::CrsfSerial(HardwareSerial& port, uint32_t baud)
     : _port(port), _crc(0xd5), _baud(baud), _lastReceive(0),
       _lastChannelsPacket(0), _linkIsUp(false), _passthroughBaud(0) {}
 #endif
 Crc8::Crc8(uint8_t) {}
 // 全链路目标链接真实磁芯片驱动（lib/IST8310、lib/QMC5883L）时，构造函数由其提供。
+// ★这里用 IMU 级开关而不是 LIBS 级：fs_sensor 目标会链接真实磁库但不接 NAND/协议库。
 #ifndef FW_SIL_REAL_IMU
 IST8310::IST8310() {}
 QMC5883L::QMC5883L() {}
@@ -138,6 +139,6 @@ uint8_t Crc8::calc(uint8_t*, uint8_t) { return 0; }
 // 参数注册表（ano_params.cpp）引用 sendData 回传 0xE1 应答；宿主直调库只读写
 // 参数值、不跑协议收发，因此这里给空实现满足链接。
 // ★链接真实 lib/AnoComProtocol 时不能保留本桩，否则与库实现重复定义。
-#ifndef FW_SIL_REAL_IMU
+#ifndef FW_SIL_REAL_LIBS
 void AnoComProtocol::sendData(uint8_t, uint8_t, uint8_t *, uint16_t) {}
 #endif
