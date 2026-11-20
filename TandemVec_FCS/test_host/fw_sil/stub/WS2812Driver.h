@@ -26,12 +26,16 @@
 class WS2812Driver
 {
 public:
+  /// 传输模式（真实驱动同名枚举；通信层的 DBG 命令会读写它）
+  enum Mode { MODE_BITBANG = 0, MODE_TIM_DMA = 1 };
+
   /// 真实驱动构造：(数据引脚, 灯珠数量)
   WS2812Driver(int /*pin*/, int /*count*/) {}
   WS2812Driver() {}
 
-  /// 真实签名 `beginDma(TIM_TypeDef*, uint32_t)`；宿主无 CMSIS 类型，用整型接收。
-  bool beginDma(unsigned /*tim*/, unsigned /*channel*/) { return false; }
+  /// 真实签名 `beginDma(TIM_TypeDef*, uint32_t)`。HAL 桩已提供 TIM_TypeDef，
+/// 这里保持同形参，避免把指针强转成整型（main.cpp 直接传 TIM4 定时器实例）。
+  bool beginDma(TIM_TypeDef * /*tim*/, unsigned /*channel*/) { return false; }
 
   bool begin() { return true; }
   bool isDmaActive() const { return false; }
@@ -43,4 +47,21 @@ public:
   // 真实驱动的像素接口名（Ws2812AppStatus 直接调用）
   void setPixelColor(int /*index*/, uint8_t /*r*/, uint8_t /*g*/, uint8_t /*b*/) {}
   void setPixelColor(int /*index*/, unsigned long /*rgb*/) {}
+
+  // ---- DBG/状态灯命令用到的接口（communication.cpp）----
+  void fill(uint8_t /*r*/, uint8_t /*g*/, uint8_t /*b*/) {}
+  void fill(unsigned long /*rgb*/) {}
+  int numPixels() const { return 1; }
+  uint8_t getBrightness() const { return 255; }
+  void setBrightness(uint8_t /*b*/) {}
+  Mode getMode() const { return MODE_BITBANG; }
+  void setMode(Mode /*m*/) {}
+  // ---- DMA 诊断（communication.cpp 的 wsdbg 命令 dump 这些值）----
+  uint32_t dmaBufAddr() const { return 0; }
+  uint32_t dmaBufLen() const { return 0; }
+  uint32_t dmaDstAddr() const { return 0; }
+  uint32_t dmaBufAt(size_t /*i*/) const { return 0; }
+
+  /// 静态电平测试（绕过协议直接拉高/拉低数据脚）
+  void setStaticLevel(int /*level*/) {}
 };

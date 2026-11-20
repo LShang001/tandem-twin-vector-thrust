@@ -180,6 +180,29 @@ burst 读数据口 → `parsePacket3()` 校验 header → 按 `_accelScale/_gyro
 标度口径也记一笔：陀螺 ±2000dps 驱动用 **32768/2000 = 16.384** LSB/dps，
 不是手册常见的 16.4 取整；按 16.4 算期望值会差 0.05 dps 而误判成失败。
 
+### 6.3 迭代过程中的进程卫生（踩过）
+
+`job_kill` **只断最外层**。本目标的进程树是 `bash → bash → fs_sensor` 三层，
+杀掉 job 后中间层消失，`fs_sensor` 会被 reparent 到 PID 1 继续空转——
+实测残留 4 个，最久的空转 1 小时 16 分仍在 R 状态吃 CPU，而且它们持有的是
+**旧二进制**的内存映像，表现与当前源码完全对不上，排障时极易误判。
+
+两条规范：
+
+1. 任何会跑被测二进制的脚本都必须带超时（本目录的 `build_and_run_sensor.sh`
+   已用 `timeout 30`，超时判定为 `[FAIL] 疑似外设重试循环不退出`）。
+2. 收尾按命令行复查两侧进程，而不是只看 job 状态：
+
+```bash
+# WSL 侧（编译与仿真实际在这里跑）
+wsl -e bash -c "ps -eo pid,ppid,etime,stat,args --no-headers \
+  | grep -E 'fs_sensor|fs_sched|fs_imu|fullstack/build_and_run' | grep -v grep"
+# Windows 侧
+Get-Process -Name 'g++','cc1plus','bash','wsl' -ErrorAction SilentlyContinue
+```
+
+有残留就按 PID 从叶子往根 `kill -9`，再复查一次为空。
+
 ## 7 后续阶段
 
 | 阶段 | 接入内容 | 判据 |

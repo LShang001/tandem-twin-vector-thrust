@@ -44,6 +44,13 @@
 #endif
 #ifndef BIN
 #define BIN 2
+#ifndef SERIAL_8N1
+#define SERIAL_8N1 0x06
+#endif
+
+// HAL/CMSIS 类型与寄存器替身：通信层/主程序会直接访问 GPIOD->BSRR、UART4->CR1、
+// NVIC_* 与 F_CPU。详见同目录 stm32h7xx_hal.h；那里是纯内存实例，不做硬件访问。
+#include "stm32h7xx_hal.h"
 #endif
 
 #ifndef PI
@@ -268,6 +275,8 @@ public:
   size_t print(long, int) { return 0; }
   size_t print(unsigned long, int) { return 0; }
   size_t println(unsigned long, int) { return 0; }
+  size_t println(float, int) { return 0; }
+  size_t println(double, int) { return 0; }
   size_t println() { return 0; }
   size_t println(int, int) { return 0; }
   size_t println(unsigned int, int) { return 0; }
@@ -282,9 +291,28 @@ public:
   virtual int read() { return -1; }
   virtual int peek() { return -1; }
   virtual void flush() {}
+  /// 通信层用 `Stream*` 做非阻塞发送判据（AnoComProtocol.h 直接调用）。
+  /// 宿主"串口"是内存缓冲，返回足够大的常量即可。
+  virtual int availableForWrite() { return 4096; }
   using Print::write;
   virtual size_t write(uint8_t b) { return Print::write(b); }
   size_t write(const uint8_t* b, size_t n) override { return Print::write(b, n); }
+
+  /// 按字节读满 len 或耗尽缓存（通信层读 GCS/上位机命令时使用）。
+  /// 走虚函数 available/read，因此对 HardwareSerial 的环形缓冲同样有效。
+  size_t readBytes(uint8_t* buf, size_t len) {
+    size_t n = 0;
+    while (n < len) {
+      if (available() <= 0) break;
+      const int c = read();
+      if (c < 0) break;
+      buf[n++] = static_cast<uint8_t>(c);
+    }
+    return n;
+  }
+  size_t readBytes(char* buf, size_t len) {
+    return readBytes(reinterpret_cast<uint8_t*>(buf), len);
+  }
 };
 
 // Arduino Core 3.0 将串口具体类命名为 Uart；宿主替身沿用 HardwareSerial 实现。
@@ -371,8 +399,17 @@ public:
   HardwareSerial(int, int) {}
   void begin(unsigned long) {}
   void begin(unsigned long, int) {}
+  void begin(unsigned long, uint32_t /*config*/) {}
   void end() {}
   operator bool() const { return true; }
+  /// 发送缓冲剩余空间。宿主的"串口"是内存环形缓冲，几乎无限，
+  /// 因此返回一个足够大的常量——通信层用它做非阻塞发送判据。
+  int availableForWrite() { return 4096; }
+  /// 固件里 `Serial4.getHandle()` 用于读回 UART 寄存器（FIFO/IRQ 配置）。
+  /// 宿主返回一个静态句柄，寄存器访问落在 stm32h7xx_hal.h 的内存实例上。
+  UART_HandleTypeDef *getHandle() { static UART_HandleTypeDef h{}; h.Instance = nullptr; return &h; }
+  size_t write(uint8_t v) { (void)v; return 1; }
+  using Print::write;
 
   int available() override { return static_cast<int>(count_); }
   int read() override {
@@ -434,16 +471,11 @@ inline void delayMicroseconds(unsigned int) {}
 // ---- setup() 用到的 CMSIS/STM32 符号（全链路 main.cpp 编译所需）----
 // 只保证固件源码在宿主通过编译；不产生任何寄存器或引脚效果。
 // 名称与真实 CMSIS/HAL 保持一致，避免源码里出现条件分支。
-#ifndef TIM4
-#define TIM4 4
-#endif
+
 #ifndef TIM_CHANNEL_4
 #define TIM_CHANNEL_4 0x00000004U
 #endif
-#ifndef UART5_IRQn
-#define UART5_IRQn 54
-#endif
-inline void NVIC_SetPriority(int, int) {}
+
 inline void digitalToggle(int) {}
 inline void analogWriteFrequency(unsigned long) {}
 inline void analogWriteFrequency(int, unsigned long) {}
