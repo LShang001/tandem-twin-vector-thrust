@@ -115,15 +115,59 @@ FSR → ODR → LPF 的完整流程。只有寄存器文件真的保存了写入
 寄存器模拟**默认关闭**（`silEnableRegMode(false)`），既有 SIL 的 `transfer()`
 仍原样回传入参，行为一字未变。
 
-## 6 后续阶段
+## 6 阶段 P3：真实传感器模块 `initImu()` 上链路（已完成，2026-11-20）
+
+```bash
+bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_sensor.sh
+```
+
+链接真实 `src/sensor_imu.cpp`（1139 行）+ `imu_factory` + ICM 驱动 + 磁芯片驱动 + Madgwick。
+
+实测：
+
+| 项 | 值 |
+|---|---|
+| `initImu()` 返回码 | **0** |
+| IMU 全局指针 | 已装配 |
+| 型号 / 实际 ODR | ICM-42688-P / **2000 Hz** |
+| SPI 写寄存器次数 | 12 |
+
+**踩到的死等**：`initImu()` 采集 100 个样本时 `while (IMU->dataReady() != 1)`，
+判据是 INT_STATUS(0x2D) 的 bit3(DRDY)。寄存器文件若恒 0，这个循环永不退出 ——
+现场表现是"编译成功、运行无任何输出、30 s 超时"，很容易被误判成崩溃。
+解决办法是**让替身如实回答硬件状态**：预置 DRDY 位，并按 TEMP_DATA1(0x1F) 起
+14 字节突发格式填一帧静止数据（RUB 系 Y 轴朝上，±16g 下 2048 LSB/g）。
+这条经验同样适用于后续任何"驱动轮询硬件状态位"的场景。
+
+### 6.1 增量构建（解决迭代成本）
+
+首次全量编译 10+ 个源文件（含 Eigen 重度实例化）超过 5 分钟，每改一行桩都要等回来，
+迭代不可接受。现在新增 `build_incremental.sh`：
+
+- 每个源文件独立编译成 `.o`，带 `-MMD` 依赖文件
+- 下次按"源文件或任一依赖头比 `.o` 新"判断，只重编受影响单元
+- 实测改动一个测试文件：**重编 1 个、复用 12 个**，秒级完成
+
+配合 `-O0`（接线验证不评估性能），把单次全量压到 1 分钟内。
+**注意**：若将来做逐拍对拍，两条构建必须用同一优化级别，否则浮点结果不可比。
+
+## 7 后续阶段
 
 | 阶段 | 接入内容 | 判据 |
 |---|---|---|
 | P2 | `main.cpp` 链接期桩补齐 | 任务名/间隔/顺序与固件一致，个数可核对 |
-| P3 | `sensor_imu.cpp`、`sensor_peripheral.cpp` | 仿真数据走真实驱动解析路径，`IMU_Packet` 由驱动产出 |
+| P3 | FIFO 取帧 → `imuSampleIsr` → `IMU_Packet` 数值 | 注入的寄存器值经真实换算后与 `IMU_Packet` 一致 |
 | P4 | `communication.cpp`、`mavlink_bridge.cpp`、`ano_params.cpp`、`ano_vars.cpp` | 真实遥测帧字节可从宿主导出并解析回原值 |
 | P5 | `ubx_config.cpp` | 替身接收机对 CFG 命令回 ACK，快路径/全量路径均可复现 |
 | P6 | 一致性对拍 | 同一输入 trace 下与既有 SIL 逐拍比对，给出最大偏差 |
+
+## 8 明确不在覆盖范围
+
+- **磁标定 Flash 持久化**：真实 `lib/MagCal/MagCalStore.cpp` 直接操作 `FLASH->CR2`、
+  等 `FLASH_SR_BSY`，宿主无此控制器，用替身（读恒失败、写恒成功）替代。
+  "标定参数掉电保存"这条路径永远不能由宿主证明。
+- **中断延迟、Cortex-M7 浮点时序、总线竞争**：宿主无法复刻，只能靠上板（L4）。
+- **灯效**：`WS2812Driver` 是桩，不产生任何时序。
 
 ## 5 环境注意
 

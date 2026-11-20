@@ -79,6 +79,22 @@ int main()
   if (model == ImuModel::ICM42688P)
   {
     SPI.silSetReg(0x75, 0x47);
+    // ---- 模拟传感器"有数据就绪" ----
+    // initImu() 采集 100 个样本时 `while (IMU->dataReady() != 1)`，判据是
+    // INT_STATUS(0x2D) 的 bit3(DRDY)。寄存器文件若恒 0，这个循环永不退出
+    // ——实测表现为 setup 卡死、30 s 超时。这里让 DRDY 常置位。
+    SPI.silSetReg(0x2D, 0x08);
+    // 14 字节突发数据（TEMP_DATA1=0x1F 起）：温度 2B + accel XYZ 各 2B + gyro XYZ 各 2B。
+    // 静止姿态：RUB 坐标系 Y 轴朝上，故 accel Y ≈ +1g。±16g 量程下 2048 LSB/g。
+    const uint8_t kFrame[14] = {
+        0x00, 0x00,              // 温度
+        0x00, 0x00,              // accel X
+        0x08, 0x00,              // accel Y = 2048 → 1g
+        0x00, 0x00,              // accel Z
+        0x00, 0x00, 0x00, 0x00,  // gyro X/Y
+        0x00, 0x00               // gyro Z
+    };
+    for (uint8_t i = 0; i < 14; ++i) SPI.silSetReg(static_cast<uint8_t>(0x1F + i), kFrame[i]);
   }
   else if (model == ImuModel::Icm45686)
   {
