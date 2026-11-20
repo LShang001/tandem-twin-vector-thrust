@@ -26,5 +26,7 @@ public:
   int requestFrom(uint8_t, uint8_t, uint8_t) { return 0; }
   int read() { return 0; }
   void write(int) {}
+  /// Arduino STM32 Core 的总线速率设置；宿主不产生时钟，仅吞掉调用。
+  void setClock(uint32_t) {}
 };
 extern TwoWire Wire;

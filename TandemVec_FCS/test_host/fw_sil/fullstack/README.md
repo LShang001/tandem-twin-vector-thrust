@@ -84,7 +84,38 @@ bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_scheduler.sh
 `initMagnetometer/initDPS310/ubxAutoConfig` 的返回值、约 20 个任务函数与
 `CrsfSerial`/`StatusLED`/`N25N01GV` 等对象方法的空实现。
 
-## 5 后续阶段
+## 5 阶段 P3 入口：真实 IMU 驱动跑通 `begin()`（已完成，2026-11-20）
+
+```bash
+bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_imu.sh
+```
+
+链接真实 `src/imu_factory.cpp` + `lib/ICM42688/src/*.cpp`，宿主只替身 SPI 总线。
+
+实测（ICM-42688-P 后端）：
+
+| 项 | 值 |
+|---|---|
+| `begin()` 返回码 | **0** |
+| 上报型号 | ICM-42688-P |
+| 实际 accel ODR | **2000 Hz** |
+| SPI 写寄存器次数 | 12 |
+| 回读 `PWR_MGMT0`(0x4E) | **0x0F**（与驱动写入值一致） |
+
+**这条比"假 IMU 后端"强在哪**：`ICM42688::writeRegister()` 每次写完都 `delay(10)`
+再**回读校验**，`begin()` 内部还要走 reset → WHO_AM_I(0x75=0x47) → PWR_MGMT0 →
+FSR → ODR → LPF 的完整流程。只有寄存器文件真的保存了写入值，这 12 次写才过得去。
+用假后端永远测不到这段真实驱动逻辑。
+
+**实现要点（踩过的坑）**：真实 SPI 由**片选**界定事务，宿主桩拿不到 CS 信号，
+只能约定"每次事务以地址字节开头"。第一版没在读结束后回到等地址状态，
+驱动第二次读把地址字节当数据取走，`whoAmI()` 读到错值、`begin()` 返回 -3。
+修正后单字节读/写与批量读结束时都把状态机复位到"等地址"。
+
+寄存器模拟**默认关闭**（`silEnableRegMode(false)`），既有 SIL 的 `transfer()`
+仍原样回传入参，行为一字未变。
+
+## 6 后续阶段
 
 | 阶段 | 接入内容 | 判据 |
 |---|---|---|
