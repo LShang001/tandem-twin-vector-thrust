@@ -27,10 +27,7 @@
 void kickIwdg() {}
 
 // GNSS 配置相关符号由真实 src/ubx_config.cpp 提供，本文件不再重复定义。
-// MAVLink 发送计数：宿主不统计（本目标只验证固件自有帧）。
-uint32_t mavlinkTxFrameCount() { return 0U; }
-uint32_t mavlinkTxByteCount() { return 0U; }
-
+// MAVLink 发送计数由真实 src/mavlink_bridge.cpp 提供。\n
 // 磁标定 Flash 持久化：宿主无 Flash 控制器，读恒失败、写恒"成功"。
 namespace magcal
 {
@@ -48,3 +45,8 @@ namespace bfs
 {
 MagReferenceNed g_mag_reference = kDefaultMagReference;
 }  // namespace bfs
+// GNSS 数据是否新鲜：固件实现依赖导航任务内部的接收时刻与超时判据。
+// 本目标不链接 navigation_task（会拖入 EKF 全链），故按**契约**返回 false：
+// 宿主没有真实 GNSS 接收，数据必然不新鲜。上层因此走"GNSS 不可用"分支，
+// 与真实环境一致，不会让遥测错误地报告一个假的新鲜定位。
+bool isGnssDataFreshForNav() { return false; }

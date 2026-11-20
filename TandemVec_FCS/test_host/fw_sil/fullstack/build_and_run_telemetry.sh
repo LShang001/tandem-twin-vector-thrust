@@ -23,7 +23,7 @@ done
 export INC
 
 CXX="${CXX:-g++}"
-CXXFLAGS="-std=c++17 -O0 -g -DTANDEMVEC_FIRMWARE -DBFS_REAL_UBX -DARDUINO=10819 \
+CXXFLAGS="-std=c++17 -O0 -g -DTANDEMVEC_FIRMWARE -DBFS_REAL_UBX -DFW_SIL_REAL_IMU -DARDUINO=10819 \
  -Wno-address-of-packed-member -Wno-psabi \
  -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE \
  -DBFS_TASK_FRACTIONAL_INTERVALS"
@@ -52,6 +52,9 @@ OUT="$(bash test_host/fw_sil/fullstack/build_incremental.sh fs_telemetry \
   lib/W25N01GV/src/W25N01GV_log.cpp \
   lib/DPS310-Pressure-Sensor/src/Dps310.cpp \
   lib/DPS310-Pressure-Sensor/src/DpsClass.cpp \
+  lib/CrsfSerial/CrsfSerial.cpp \
+  lib/crsf/crsf.cpp \
+  lib/crsf/common_rc.cpp \
   lib/LQS48_Flow/LQS48_Flow.cpp \
   lib/MTF02P/MTF02P.cpp \
   lib/MadgwickAHRS-master/src/MadgwickAHRS.cpp \

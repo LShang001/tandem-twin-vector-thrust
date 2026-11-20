@@ -227,6 +227,44 @@ bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_params.sh
 这条不再靠读代码推断，测试会持续打印 `[NOTE] 当前无 min/max 包线`，等真正实现时
 该行消失、断言改为「拒绝」即可。
 
+### 6.5 遥测帧字节级验证（P4 核心，2026-11-20 完成）
+
+```bash
+bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_telemetry.sh
+```
+
+链接真实 `src/communication.cpp`（5291 行）+ `ubx_config.cpp` + `mavlink_bridge.cpp`
++ `sensor_imu.cpp` + `sensor_peripheral.cpp` + 各驱动库，调用真实
+`sendPositionVelocityData()`，从串口桩捕获字节再解析回原值。
+
+实测（机载链路 74 字节帧：`0xAA | 18×float32 小端 | 0x55`）：
+
+| 字段 | 注入值 | 帧内解析值 |
+|---|---|---|
+| [2] 时间戳 | millis()=12345 ms | 12.345 s |
+| [3][4][5] p_n/p_e/p_u | 12.5 / −3.25 / 7.75 | 完全一致 |
+| [6][7][8] v_n/v_e/v_u | 1.25 / −1.5 / 0.5 | 完全一致 |
+| [9][10][11] roll/pitch/heading | 0.25 / −0.5 / 1.5 | 完全一致 |
+| [12][13][14] gx/gy/gz | 0.01 / −0.02 / 0.03 | 完全一致 |
+| [15][16][17] acc_u/e/n | 0.11 / 0.22 / 0.33 | 完全一致 |
+
+**为什么值得做**：帧字段偏移写错、字节序写反、单位漏换算，这些读源码都难发现
+（5000 行里找一个 `memcpy` 的位移），但把真实构造出来的字节解析回来一比就立刻暴露。
+
+**这条链的边界**：只证明"固件写出的字节符合它自己声明的布局"，**不证明上位机按同一
+布局解析**。后者要在 GCS 侧另做一次解析对拍。字节序是小端（`memcpy` 直拷 STM32
+内存），不是网络序。
+
+**踩到的两个坑**：
+
+1. **依赖链会一直延伸，不要逐个补**。`communication.cpp` 是 5000 行汇聚层，依次
+   暴露 W25N01GV → magcal → ubx_config → CrsfSerial → `isGnssDataFreshForNav`。
+   正确做法是**先一次性列出全部未定义符号**（`grep 'undefined reference'` 去重），
+   再分两类处理：库里有实现就链接，语义明确的查询函数就做契约桩。
+2. **`isGnssDataFreshForNav()` 用契约桩而不是链接 `navigation_task.cpp`**。
+   后者会拖进整个 EKF 链；该函数语义单一（数据是否新鲜），桩返回 `false`
+   表示"宿主没有真实 GNSS 接收"，上层因此走真实失败分支，不会伪造出假定位。
+
 ## 7 后续阶段
 
 | 阶段 | 接入内容 | 判据 |

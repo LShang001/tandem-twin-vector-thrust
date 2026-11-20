@@ -96,7 +96,7 @@ int main()
 
   // ---------- 逐字段回读 ----------
   struct { int idx; float expect; const char *name; } cases[] = {
-      {2, 12345.0f, "时间戳 = millis()/1000"},
+      {2, 12.345f, "时间戳 = millis()/1000（12345 ms → 12.345 s）"},
       {3, 12.5f, "p_n = relative_north"},
       {4, -3.25f, "p_e = relative_east"},
       {5, 7.75f, "p_u = estimated_height"},

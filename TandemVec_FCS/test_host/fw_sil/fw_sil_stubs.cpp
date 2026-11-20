@@ -43,7 +43,10 @@ Vector3 current_omega_dps_body_filtered(0.0, 0.0, 0.0);
 // 真实导航任务参与链接时，该函数由 navigation_task.cpp 提供，避免重复定义。
 void setNavigationOriginFromLlaRad(double, double, double) {}
 #endif
+// 全链路目标链接真实 src/sensor_peripheral.cpp 时由其提供该实现。
+#ifndef FW_SIL_REAL_IMU
 void resetBaroAltitudeReference() {}
+#endif
 
 // ★2026-11-12：flight_control.cpp GNC 前无条件调用 readIMUData() 排空 IMU ring
 //   （2026-11-10 控制延迟修复新增）。SIL 不链接 sensor_imu.cpp，IMU 数据由
@@ -61,6 +64,9 @@ bool readIMUData() { return true; }
 //   此前这里手抄旧判据（CH5>1500 && CH3>1100、CH3 落 988），与固件不同源 ——
 //   真实导航 SIL 实际测到的是桩而不是固件行为，P1-2/P1-3 的修复在该 SIL 中不可见。
 //   现在两边共用同一纯函数，编译器保证不会再次漂移。
+// ★全链路目标链接真实 src/communication.cpp 时，这两个回调由其提供
+//   （唯一真实实现），本桩必须让路，否则重复定义。
+#ifndef FW_SIL_REAL_IMU
 void linkUpCallback()
 {
   isLinkUp = true;
@@ -83,7 +89,11 @@ void linkDownCallback()
     raw_rc_values[i] = plan.channels[i];
   }
 }
+#endif  // FW_SIL_REAL_IMU
+// 真实 src/mavlink_bridge.cpp 提供该实现时不再保留本桩。
+#ifndef FW_SIL_REAL_IMU
 void mavlinkSendStatustext(unsigned char, const char*) {}
+#endif
 
 // 全链路目标链接真实 lib/MagSensor/MagSensor.cpp 时，构造函数由其提供。
 #ifndef FW_SIL_REAL_IMU
@@ -92,22 +102,28 @@ MagSensor::MagSensor() {}
 // ★2026-11-01：state_data 的 IMU 已改为型号无关指针（ImuDevice*），SIL 不再
 //   构造 ICM42688 对象，故删除该构造函数桩；保留会导致“ICM42688 未定义类型”
 //   （头文件已不再被 state_data.h 引入）。
-MTF02P::MTF02P() {}
-LQS48_Flow::LQS48_Flow() {}
 // Madgwick 由真实 lib/MadgwickAHRS-master 提供（SIL 需复现生产 AHRS，
 // 不能再用空构造桩；否则 backup_ahrs_* 恒为 0，会伪造“姿态被拉平”）。
+#ifndef FW_SIL_REAL_IMU
 W25N01GV::W25N01GV(SPIClass& bus, uint8_t cs)
     : _bus(bus), _cs(cs), _manId(0), _devId(0), _devId2(0), _present(false),
       _lastEcc(0), _lastProgErr(0) {}
+#endif
+// 全链路目标链接真实 lib/W25N01GV、lib/AnoComProtocol 时由其提供实现。
+// FW_SIL_REAL_IMU 是"链接真实驱动/库"的统一开关（含 IMU、磁芯片、CRSF、NAND、
+// 协议库、流量计），因为全链路目标一次性把这一层真实源码全部接进来。
+#ifndef FW_SIL_REAL_IMU
+MTF02P::MTF02P() {}
+LQS48_Flow::LQS48_Flow() {}
 W25N01GVLog::W25N01GVLog(W25N01GV& f) : _flash(f) {}
 AnoComProtocol::AnoComProtocol(Stream*) {}
-// 参数注册表（ano_params.cpp）引用 sendData 回传 0xE1 应答；宿主直调库只读写
-// 参数值、不跑协议收发，因此这里给空实现满足链接。SIL/固件侧的协议行为
-// 由 communication.cpp + 真实 AnoComProtocol 覆盖，不落在这个桩上。
-void AnoComProtocol::sendData(uint8_t, uint8_t, uint8_t *, uint16_t) {}
+#endif
+// 全链路目标链接真实 lib/CrsfSerial 时由其提供构造。
+#ifndef FW_SIL_REAL_IMU
 CrsfSerial::CrsfSerial(HardwareSerial& port, uint32_t baud)
     : _port(port), _crc(0xd5), _baud(baud), _lastReceive(0),
       _lastChannelsPacket(0), _linkIsUp(false), _passthroughBaud(0) {}
+#endif
 Crc8::Crc8(uint8_t) {}
 // 全链路目标链接真实磁芯片驱动（lib/IST8310、lib/QMC5883L）时，构造函数由其提供。
 #ifndef FW_SIL_REAL_IMU
@@ -115,3 +131,10 @@ IST8310::IST8310() {}
 QMC5883L::QMC5883L() {}
 #endif
 uint8_t Crc8::calc(uint8_t*, uint8_t) { return 0; }
+
+// 参数注册表（ano_params.cpp）引用 sendData 回传 0xE1 应答；宿主直调库只读写
+// 参数值、不跑协议收发，因此这里给空实现满足链接。
+// ★链接真实 lib/AnoComProtocol 时不能保留本桩，否则与库实现重复定义。
+#ifndef FW_SIL_REAL_IMU
+void AnoComProtocol::sendData(uint8_t, uint8_t, uint8_t *, uint16_t) {}
+#endif
