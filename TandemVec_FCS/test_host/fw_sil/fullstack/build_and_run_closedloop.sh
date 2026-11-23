@@ -23,6 +23,13 @@ export CXXFLAGS="-std=c++17 -O0 -g -DTANDEMVEC_FIRMWARE -DBFS_REAL_UBX -DFW_SIL_
  -DARDUINO=10819 -Wno-address-of-packed-member -Wno-psabi \
  -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE \
  -DBFS_TASK_FRACTIONAL_INTERVALS -DBFS_DISABLE_IWDG -Itest_host/fw_sil"
+# 实验开关：EXTRA_FLAGS 追加到编译选项，用于消毒器编译等一次性实验。
+#   EXTRA_FLAGS="-fsanitize=address -fno-omit-frame-pointer" bash build_and_run_closedloop.sh ...
+# 注意消毒器构建必须换 BIN_DIR，否则会和常规构建的 .o 混在一起
+# （build_incremental.sh 的哈希已含 CXXFLAGS，但仍分开更干净）。
+if [ -n "${EXTRA_FLAGS:-}" ]; then
+  export CXXFLAGS="$CXXFLAGS $EXTRA_FLAGS"
+fi
 
 OUTPUT=$(bash test_host/fw_sil/fullstack/build_incremental.sh fs_closedloop \
   src/main.cpp \
