@@ -39,6 +39,7 @@
 #include "task_scheduler_interval.h"
 #include "sensor_imu.h"
 #include "navigation_task.h"
+#include "Wire.h"
 #include "ImuDevice.h"
 
 // 诊断用：手动排空一次 IMU，看 ring 里到底有没有数据
@@ -380,6 +381,41 @@ int main(int argc, char **argv)
   }
 
   primeImuIdentity();
+
+  // ------------------------------------------------------------
+  // DPS310 寄存器预置：让**真实驱动**完成初始化并算出可达的气压。
+  //
+  // 地址取自驱动自己的表（不是手册直译，驱动的地址相对手册有偏移）：
+  //   PROD_ID  = 0x0D（mask 0x0F）      —— dps310_config.h Registers_e
+  //   FIFO_EMPTY = 0x0B bit0            —— 0 表示 FIFO 非空
+  //   PRS 数据块 = 0x00 起 3 字节       —— buffer[2] 最低位 0 表示"这是压力样本"
+  //   TMP 数据块 = 0x03 起 3 字节
+  //   COEF 块   = 0x10 起 18 字节
+  //
+  // 系数设计：calcPressure 是
+  //   P = c00 + prs*(c10 + prs*(c20 + prs*c30)) + lastTempScal*(c01 + prs*(c11 + prs*c21))
+  // 取 c10..c30 与全部温度相关系数为 0，则 P ≡ c00，与 raw 无关。
+  // c00 是 20 位补码，装得下 101325；编码为
+  //   c00 = buffer[3]<<12 | buffer[4]<<4 | (buffer[5]>>4)
+  //   101325 = 0x18BC5 → buffer[3]=0x18, buffer[4]=0xBC, buffer[5] 高四位=0xD
+  // ------------------------------------------------------------
+  Wire.silEnable();
+  Wire.silSetReg(0x0D, 0x01);   // PROD_ID 低四位 = 1（DPS310）
+  {
+    uint8_t coef[18] = {0};
+    coef[3] = 0x18;             // → 0x13
+    coef[4] = 0xBC;             // → 0x14
+    coef[5] = 0xD0;             // → 0x15（高四位 0xD 属 c00 → c00=101325 Pa ≈ 0 m）
+    Wire.silSetBlock(0x10, coef, sizeof(coef));
+  }
+  Wire.silSetReg(0x00, 0x00);   // PRS_B2
+  Wire.silSetReg(0x01, 0x00);   // PRS_B1
+  Wire.silSetReg(0x02, 0x00);   // PRS_B0，bit0=0 → 压力样本
+  Wire.silSetReg(0x03, 0x00);   // TMP_B2
+  Wire.silSetReg(0x04, 0x00);   // TMP_B1
+  Wire.silSetReg(0x05, 0x00);   // TMP_B0
+  Wire.silSetReg(0x0B, 0x00);   // FIFO_EMPTY=0，表示有样本可读
+
   g_sil_delay_hook = &delayHook;
   setup();
   std::printf("  setup() 完成，SPI 写寄存器 %u 次\n", static_cast<unsigned>(SPI.silWriteCount()));
@@ -484,7 +520,11 @@ int main(int argc, char **argv)
       vd_p = body.vel_d;
       updateSensorModel(body, a_n, a_e, a_d);
 
-      // ★观测注入必须在 loop() 之前：导航任务在本拍消费气压高度
+      // ★观测注入：气压高度用一行直接写（等价完美气压计）。
+      //   已试过改走真实 DPS310 驱动（Wire.silEnable + 预置寄存器 + c00 换算），
+      //   但驱动没有更新 baro_altitude（预置后仍恒为 0，EKF 随后 NaN），
+      //   说明 FIFO 状态机/初始化链路还有未打通的环节。按时间盒回退到注入，
+      //   预置代码保留在上方作为后续接入的基础。
       baro_altitude = -body.pos_d;
 
       // ★注入节拍要按 EKF 的"消费节拍"设计，不能全局一个频率：
