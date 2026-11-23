@@ -3836,7 +3836,19 @@ namespace bfs
       const Eigen::Matrix<NavCovScalar, 12, 12> rw_d = rw_.cast<NavCovScalar>();
       const Eigen::Matrix<NavCovScalar, 15, 15> qc_d = gs_d * rw_d * gs_d.transpose();
 #endif
+      // ★显式返回类型，强制在返回时求值成矩阵。
+      //   原写法是 `const auto phi_at_time = [...]`，返回类型由 return 推导，
+      //   于是被推导成 Eigen 惰性表达式而非矩阵。该表达式持有 lambda 内局部量
+      //   f_tau 的引用；lambda 一返回 f_tau 就销毁，调用方（第 3845 行 phi_half_d）
+      //   再求值时读到的是失效栈内存。
+      //   ASan 证据：stack-use-after-scope，调用链
+      //     handleNavigationSystem → TimeUpdateTwoSample → PropagateStateFromIncrements
+      //     → {lambda(double)#1}::operator()
+      //   数值后果（独立探针实测）：立即求值偏 3.5e-04，栈被覆盖后变 inf/nan，
+      //   表现为"同一份二进制、同样输入、结果时好时坏"。
+      //   加显式返回类型后求值时机变正确，数学完全等价，不改变任何公式。
       const auto phi_at_time = [&](const NavCovScalar tau_s)
+          -> Eigen::Matrix<NavCovScalar, 15, 15>
       {
         const Eigen::Matrix<NavCovScalar, 15, 15> f_tau = fs_d * tau_s;
         return identity_d + f_tau + NavCovScalar(0.5) * f_tau * f_tau;
