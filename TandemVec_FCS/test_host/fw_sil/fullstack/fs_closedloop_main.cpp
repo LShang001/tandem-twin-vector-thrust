@@ -226,6 +226,29 @@ struct UbxNavPvt
     out[7 + kPayload] = ck_b;
     return 8 + kPayload;
   }
+
+  /// NAV-EOE（0x01 0x61）逐历元结束标志。
+  /// ★这是本层的关键一环：ubx 解析器把 NAV-PVT 等消息组装成"历元"，
+  ///   但要收到 NAV-EOE 才认为历元完整并**入队**（PopEpoch 才有得取）。
+  ///   只发 NAV-PVT 时，帧被逐字节解析、fix 都更新了，可 epoch 队列始终是空的，
+  ///   导航任务每拍 PopEpoch 都返回 false → gps_available=false → 假原点永久为真。
+  ///   实测证据：日志里 `fix=1` 却 `fake_origin=1` 且 `est_height` 恒 0。
+  static size_t buildEoe(uint8_t *out, uint32_t itow_ms)
+  {
+    out[0] = 0xB5; out[1] = 0x62;
+    out[2] = 0x01; out[3] = 0x61;
+    put_u2(out + 4, 4U);
+    put_u4(out + 6, itow_ms);
+    uint8_t ck_a = 0, ck_b = 0;
+    for (size_t i = 2; i < 10; ++i)
+    {
+      ck_a = uint8_t(ck_a + out[i]);
+      ck_b = uint8_t(ck_b + ck_a);
+    }
+    out[10] = ck_a;
+    out[11] = ck_b;
+    return 12;
+  }
 };
 
 void primeImuIdentity()
@@ -323,6 +346,7 @@ int main(int argc, char **argv)
   bool arg_pitch_only = false;
   bool arg_noise = false;
   bool arg_hover = false;
+  bool arg_no_thrust = false;
   for (int i = 1; i < argc; ++i)
   {
     if (std::strcmp(argv[i], "--freq") == 0 && i + 1 < argc)
@@ -335,6 +359,8 @@ int main(int argc, char **argv)
       arg_noise = true;
     else if (std::strcmp(argv[i], "--hover") == 0)
       arg_hover = true;
+    else if (std::strcmp(argv[i], "--no-thrust") == 0)
+      arg_no_thrust = true;
   }
   g_noise_enable = arg_noise;
   std::setvbuf(stdout, nullptr, _IONBF, 0);
@@ -461,22 +487,26 @@ int main(int argc, char **argv)
       // ★观测注入必须在 loop() 之前：导航任务在本拍消费气压高度
       baro_altitude = -body.pos_d;
 
-      // ★GNSS 注入：没有它飞控不会把相对高度交给控制环
-      //   （nav_initialized_with_fake_origin 恒为 true → relative_down 被清零）。
-      // ★注入频率 10 Hz：实测每拍都喂（等价 200 Hz）会把 EKF 打崩——
-      //   pos σ 从 0.33 m 一路涨到 87 m、收敛标志 1→0。GNSS 是低频观测，
-      //   过密喂入破坏时间映射与创新序列。10 Hz 下 EKF 能稳定收敛。
-      // ★遗留问题：`has_gnss_epoch` 每拍只 pop 一帧，EKF 初始化只发生在
-      //   特定一拍，10 Hz 注入时有 1/2 概率初始化那拍取不到 epoch →
+      // ★注入节拍要按 EKF 的"消费节拍"设计，不能全局一个频率：
+      //   `has_gnss_epoch = ubx.PopEpoch(...)` 是**每拍**调用一次（200 Hz），
+      //   而 EKF 初始化只发生在 is_static_confirmed 的那一拍（实测 3.1–3.4 s）。
+      //   全程 10 Hz 注入时，初始化那拍取到 epoch 的概率约 1/20 →
       //   gps_available=false → fake_origin 永久为真 → relative_down 恒 0 →
-      //   estimated_height 不进控制环。**定高闭环因此仍未成立**，详见 README。
-      if ((k % 20) == 0)
+      //   estimated_height 不进控制环。
+      //   ★但全程 200 Hz 也**不行**：实测把 EKF 打崩（pos_sig 涨到 2 万）。
+      //   所以只在初始化窗口（2.5–4.5 s）内逐拍注入，其余时间 10 Hz。
+      const bool gnss_init_window = (t >= 2.5f && t <= 4.5f);
+      if (gnss_init_window || (k % 20) == 0)
       {
+        const uint32_t itow = static_cast<uint32_t>(k) * 5U;
         uint8_t frame[100];
-        const size_t n = UbxNavPvt::build(
-            frame, static_cast<uint32_t>(k) * 5U, body.pos_n, body.pos_e, body.pos_d,
-            body.vel_n, body.vel_e, body.vel_d, 28.2, 112.9, 50.0);
+        size_t n = UbxNavPvt::build(frame, itow, body.pos_n, body.pos_e, body.pos_d,
+                                    body.vel_n, body.vel_e, body.vel_d, 28.2, 112.9, 50.0);
         gpsSerialPort.feed(frame, n);
+        // ★NAV-EOE：没有它 epoch 不入队，PopEpoch 恒 false（详见 buildEoe 注释）
+        uint8_t eoe[12];
+        n = UbxNavPvt::buildEoe(eoe, itow);
+        gpsSerialPort.feed(eoe, n);
       }
 
       for (int i = 0; i < ticks_per_step; ++i)
@@ -486,7 +516,13 @@ int main(int argc, char **argv)
       }
 
       if (converged_at < 0 && g_ekf_converged) converged_at = k;
-      if (!alt_cmd && t >= t_alt_cmd && g_is_unlocked)
+      // ★定高指令的时序必须晚于"模式首次激活"：
+      //   flight_control.cpp 在首次进入 AUTO_ALTITUDE 时会执行
+      //     target_altitude = current_altitude_for_control;   // 进模式先保持当前高度
+      //   若在模式还没切过来时就设 10 m，这一句会把目标**覆盖回当前高度**，
+      //   之后定高环就以"当前高度"为目标，永远不爬升（本轮实测 tgt_alt 恒 0）。
+      //   所以要等 g_current_flight_mode 真的是 AUTO_ALTITUDE 之后再设目标。
+      if (!alt_cmd && g_is_unlocked && g_current_flight_mode == AUTO_ALTITUDE && t >= 14.0f)
       {
         target_altitude = 10.0f;
         alt_cmd = true;
@@ -502,8 +538,12 @@ int main(int argc, char **argv)
                           0.017453292f;
       if (g_is_unlocked)
       {
-        const float wf_target = (ch3_output / 100.0f) * P.wMax;
-        const float wt_target = (ch4_output / 100.0f) * P.wMax;
+        // ★对照实验开关（--no-thrust）：解锁但油门恒 0，机体不起飞。
+        //   用途：把"解锁动作本身"与"机体运动"分开——若解后 EKF 仍发散，
+        //   说明是解锁路径改了观测门；若解后稳定，说明是运动引入的
+        //   模型/GNSS 一致性问题。这一步能省掉大量盲猜。
+        const float wf_target = arg_no_thrust ? 0.0f : (ch3_output / 100.0f) * P.wMax;
+        const float wt_target = arg_no_thrust ? 0.0f : (ch4_output / 100.0f) * P.wMax;
         mf_w += (wf_target - mf_w) * std::fmin(dt / 0.28f, 1.0f);
         mt_w += (wt_target - mt_w) * std::fmin(dt / 0.28f, 1.0f);
         PropulsionState ps{mf_w, mt_w, upper, lower};
@@ -547,6 +587,11 @@ int main(int argc, char **argv)
                     static_cast<double>(baro_altitude), baro_ekf_fused ? 1 : 0,
                     static_cast<double>(baro_ekf_innovation_m),
                     g_baro_health_suspect ? 1 : 0, nav_system_initialized ? 1 : 0);
+        std::printf("       tgt_alt=%7.2f est_h=%7.2f ch3=%.1f ch2=%.1f mode=%d\n",
+                    static_cast<double>(target_altitude),
+                    static_cast<double>(estimated_height),
+                    static_cast<double>(ch3_output), static_cast<double>(ch2_output),
+                    static_cast<int>(g_current_flight_mode));
         std::printf("       gps_rx_pending=%d nav_src=%d fake_origin=%d fix=%d\n",
                     gpsSerialPort.available(), static_cast<int>(nav_data_source),
                     nav_initialized_with_fake_origin ? 1 : 0, static_cast<int>(ubx.fix()));
