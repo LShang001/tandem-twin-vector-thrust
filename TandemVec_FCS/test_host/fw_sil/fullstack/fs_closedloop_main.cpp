@@ -495,7 +495,7 @@ int main(int argc, char **argv)
       //   estimated_height 不进控制环。
       //   ★但全程 200 Hz 也**不行**：实测把 EKF 打崩（pos_sig 涨到 2 万）。
       //   所以只在初始化窗口（2.5–4.5 s）内逐拍注入，其余时间 10 Hz。
-      const bool gnss_init_window = (t >= 2.5f && t <= 4.5f);
+      const bool gnss_init_window = (t <= 0.6f);
       if (gnss_init_window || (k % 20) == 0)
       {
         const uint32_t itow = static_cast<uint32_t>(k) * 5U;
@@ -528,6 +528,33 @@ int main(int argc, char **argv)
       }
 
       if (converged_at < 0 && g_ekf_converged) converged_at = k;
+
+      // ★初始化瞬间快照：定位"conv_t=3.32 成功、3.12 失败"的分叉点。
+      //   nav_system_initialized 由固件在 is_static_confirmed 那一拍置位，
+      //   同时 nav_ekf.Initialize() 用当拍的 imu_accel_mps2 做倾角对准。
+      //   把那一刻的静止判据与 IMU 值记下来，才能判断差的是"时机"还是"数据"。
+      {
+        static bool s_prev_nav_init = false;
+        static int s_init_print_guard = 0;
+        if (!s_prev_nav_init && nav_system_initialized && s_init_print_guard < 1)
+        {
+          ++s_init_print_guard;
+          std::printf("  [INIT] t=%.3f k=%d static_frames=%u static_flag=%u "
+                      "accel_body=(%.3f,%.3f,%.3f) |a|=%.3f\n",
+                      static_cast<double>(t), k,
+                      static_cast<unsigned>(g_nav_static_frames),
+                      static_cast<unsigned>(g_nav_static_flag),
+                      static_cast<double>(g_sil_nav_debug_accel[0]),
+                      static_cast<double>(g_sil_nav_debug_accel[1]),
+                      static_cast<double>(g_sil_nav_debug_accel[2]),
+                      static_cast<double>(std::sqrt(
+                          g_sil_nav_debug_accel[0] * g_sil_nav_debug_accel[0] +
+                          g_sil_nav_debug_accel[1] * g_sil_nav_debug_accel[1] +
+                          g_sil_nav_debug_accel[2] * g_sil_nav_debug_accel[2])));
+          s_prev_nav_init = true;
+        }
+        if (nav_system_initialized) s_prev_nav_init = true;
+      }
       // ★定高指令的时序必须晚于"模式首次激活"：
       //   flight_control.cpp 在首次进入 AUTO_ALTITUDE 时会执行
       //     target_altitude = current_altitude_for_control;   // 进模式先保持当前高度
@@ -604,6 +631,13 @@ int main(int argc, char **argv)
                     static_cast<double>(estimated_height),
                     static_cast<double>(ch3_output), static_cast<double>(ch2_output),
                     static_cast<int>(g_current_flight_mode));
+        // 原点与原始 EKF 高度：est_h = origin_alt_m − nav_ekf.alt_m()，
+        // 只有把两个量都打出来，才知道跳动是"原点被重锚"还是"EKF 位置被拉走"。
+        std::printf("       origin_alt=%9.3f ins_down=%9.3f baro=%7.3f fake_orig=%d\n",
+                    static_cast<double>(origin_alt_m),
+                    static_cast<double>(INS_GNSS_Packet.location_down),
+                    static_cast<double>(baro_altitude),
+                    nav_initialized_with_fake_origin ? 1 : 0);
         std::printf("       gps_rx_pending=%d nav_src=%d fake_origin=%d fix=%d\n",
                     gpsSerialPort.available(), static_cast<int>(nav_data_source),
                     nav_initialized_with_fake_origin ? 1 : 0, static_cast<int>(ubx.fix()));

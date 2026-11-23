@@ -65,9 +65,15 @@ for src in "${SOURCES[@]}"; do
   hfile="$(hash_for "$src")"
   objects+=("$obj")
 
-  # 组合哈希 = 源文件 + 全部依赖头（从上次生成的 .d 里取）
+  # 组合哈希 = 编译选项 + 源文件 + 全部依赖头（从上次生成的 .d 里取）
+  # ★必须把 CXXFLAGS 算进去：多个构建脚本共用同一个 OBJ_DIR，但宏不同
+  #   （-DFW_SIL_REAL_NAV / -DBFS_EKF_BARO_ALTITUDE_UPDATE / -DFW_SIL_REAL_IMU…）。
+  #   只哈希源文件时，切换配置会复用按另一套宏编出来的 .o——编译不报错，
+  #   运行时行为却对不上，表现为"同样的输入、同样的代码，结果时好时坏"。
+  #   这类假绿/假失败比编译错误难查得多，因此编译选项必须进哈希。
   cur_hash="$(
     {
+      printf 'CXXFLAGS:%s\n' "$CXXFLAGS"
       md5sum "$src" 2>/dev/null
       if [ -f "$dep" ]; then
         # shellcheck disable=SC2046
