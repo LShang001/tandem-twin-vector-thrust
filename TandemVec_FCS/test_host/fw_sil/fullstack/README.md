@@ -392,15 +392,33 @@ gyr σ=0.12 dps、零偏 (0.15,−0.12,0.10) dps。量级取自 ICM-42688-P 手�
 bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_closedloop.sh --hover --dur 50
 ```
 
-从"姿态开环对拍"推到"控制律闭环"。**实测定高并稳定在 10.00 m**
-（稳态区间 [9.997, 9.999]，悬停垂直速度 −0.00 m/s，`estimated_height` 与真实高度
-逐拍一致，`ekf_converged=1`）。
+从"姿态开环对拍"推到"控制律闭环"。**成功时**定高稳定在 10.00 m（稳态区间
+[9.997, 9.999]，悬停垂直速度 −0.00 m/s，`estimated_height` 与真实高度逐拍一致，
+`ekf_converged=1`）。链路：plant → 真实 ICM-42688 驱动 → Madgwick → 真实 EKF →
+真实控制律 → plant，`navigation_task.cpp` / `flight_control.cpp` / `sensor_imu.cpp`
+一行未改。
 
-链路：plant → 真实 ICM-42688 驱动 → Madgwick → 真实 EKF → 真实控制律 → plant，
-`navigation_task.cpp` / `flight_control.cpp` / `sensor_imu.cpp` 一行未改。
-观测注入两处：气压高度（一行写 `baro_altitude`）、GNSS（真实 UBX 帧）。
+**但不可靠**：6 次连跑是 5 成功 1 失败，失败时一路下坠（`alt_mean` 出现过
+−327 m、−1673 m、−2132 m、−6174 m，以及 NaN）。
 
-**一共挖出五个根因，前四个都"看起来像 EKF 坏了、其实不是"**：
+**发散机制已定位**（成功与失败在 28 s 之前完全一致，分叉只发生在"接近目标"那一刻）：
+
+| 时刻 | 成功案例 | 失败案例 |
+|---|---|---|
+| t=30 | `alt=9.69` `v_d=−0.38` `motor=48.8%` | `alt=9.74` `v_d=−0.07` `motor=48.0%` |
+| t=32 | `alt=9.94` `v_d=−0.02`（稳住） | `alt=6.92` `est_h=9.21` `v_d=+4.20`（掉下去） |
+| t=36 | 稳定 10.00 m | `alt=−98` 彻底失控 |
+
+两例在 t=30 都把油门降到 **48–49%**，低于悬停所需的约 50%。成功案例那一刻
+`v_d=−0.38`，还有上升动量，惯性把高度带过 9.94 m 并稳住；失败案例 `v_d=−0.07`
+已近零，没有缓冲动量，推力略小于重力就直接下坠。下坠后定高环响应慢
+（t=36 才回到 57%），来不及拉回。失败时 EKF 高度还比真实滞后两米多
+（`est_h=9.21` 对 `alt=6.92`）。
+
+**结论**：这不是测试的错，是定高环在目标附近**稳定裕度不足**——油门会降到略低于
+悬停值，能否稳住取决于接近目标时的残余速度。对实机调参有直接参考价值。
+
+**五个根因**（前四个都"看起来像 EKF 坏了、其实不是"）：
 
 | # | 根因 | 症状 | 性质 |
 |---|---|---|---|
@@ -410,24 +428,25 @@ bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_closedloop.sh --hove
 | 4 | 只发 NAV-PVT、不发 NAV-EOE | `fix=3` 但 epoch 从不入队，`PopEpoch` 恒 false | 协议理解错 |
 | 5 | 先设目标高度、后切模式 | 首次进 AUTO_ALTITUDE 时 `target_altitude = 当前高度` 覆盖回 0 | 时序错 |
 
-**关键实现点**（每条都有实测代价）：
+**三个关键实现点**：
 
 1. **NAV-EOE 是 epoch 入队的开关**。ubx 解析器把 NAV-PVT 组装成"历元"，但要收到
-   NAV-EOE（`0x01 0x61`）才认为历元完整并**入队**。只发 PVT 时帧被解析、`fix` 都变 3 了，
-   可 epoch 队列始终空——`fix=3` 与 `fake_origin=1` 并存就是铁证。
+   NAV-EOE（`0x01 0x61`）才认为历元完整并**入队**。只发 PVT 时帧被解析、`fix` 都
+   变 3 了，可 epoch 队列始终空——`fix=3` 与 `fake_origin=1` 并存就是铁证。
 2. **注入节拍要按消费节拍设计**。`has_gnss_epoch = ubx.PopEpoch()` 每拍调一次（200 Hz），
-   而 EKF 初始化只发生在 `is_static_confirmed` 那一拍（3.1–3.4 s）。全程 10 Hz 注入时
-   初始化那拍取到数据的概率约 1/20；全程 200 Hz 又把 EKF 打崩（`pos σ` 涨到 2 万）。
-   最终方案：**只在 2.5–4.5 s 初始化窗口内逐拍注入，其余时间 10 Hz**。
-3. **定高指令必须晚于模式激活**。`flight_control.cpp:615` 在首次进入 `AUTO_ALTITUDE` 时
-   执行 `target_altitude = current_altitude_for_control`（先保持当前高度）。测试若早于
-   这一刻设 10 m，会被覆盖回 0，之后定高环以"当前高度"为目标、永不爬升。
-4. **解锁要等 GNSS 重锚完成**。`defer_reanchor_while_armed = g_is_unlocked && fake_origin`
-   ——已解锁时首次 GNSS 硬重锚被推迟，所以解锁从 8 s 推到 12 s。
+   而 EKF 初始化实测在 **0.18 s** 就发生。全程 10 Hz 注入时初始化那拍取不到数据的
+   概率约 1/20；全程 200 Hz 又把 EKF 打崩（`pos σ` 涨到 2 万）。最终只在
+   **0–0.6 s** 初始化窗口内逐拍注入，其余时间 10 Hz。
+3. **定高指令必须晚于模式激活**。`flight_control.cpp:615` 在首次进入 `AUTO_ALTITUDE`
+   时执行 `target_altitude = current_altitude_for_control`。测试若早于这一刻设 10 m，
+   会被覆盖回 0。
+
+**同时修掉一个构建隐患**：`build_incremental.sh` 的重编判据原先只哈希源文件与依赖头，
+不含 `CXXFLAGS`，导致多个共用 `OBJ_DIR` 但宏不同的构建会复用错误 `.o`。已把编译
+选项纳入组合哈希。
 
 **边界**：气压高度仍是一行注入（等价完美气压计），DPS310 的 I2C 寄存器协议没做成替身；
-GNSS 是构造的 NAV-PVT 帧（位置由 plant 真值换算）。结论口径是
-"控制链与导航链在宿主闭环成立"，不是"全部传感器都真实"。
+GNSS 是构造的 NAV-PVT 帧（位置由 plant 真值换算）。
 
 **加噪声后的鲁棒性**（`--hover --noise`，含 IMU 噪声/零偏 + GNSS 位置 1.5 m /
 垂直 3 m / 速度 0.1 m/s 误差）：
@@ -437,8 +456,7 @@ GNSS 是构造的 NAV-PVT 帧（位置由 plant 真值换算）。结论口径�
 | 理想传感器 | 10.00 m | [9.997, 9.999]（±0.2 cm） |
 | 带噪声 | 10.00 m | [9.98, 10.02]（±2 cm） |
 
-闭环在噪声下仍稳定，波动放大约一个数量级但未发散——说明这条链路不是靠"完美传感器"
-才成立的。
+噪声下闭环仍稳定，波动放大约一个数量级但未发散。
 ### 7.7 明确不可比的层
 
 - **L5 硬件时序**：中断延迟、Cortex-M7 浮点时序、总线竞争、D-Cache 一致性，
