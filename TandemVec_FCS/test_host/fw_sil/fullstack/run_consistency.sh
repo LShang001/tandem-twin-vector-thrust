@@ -109,8 +109,10 @@ fi
 section "L4 整机逐拍对拍：plant → 寄存器 → 真实驱动 → Madgwick vs 真值"
 
 if bash "$FS/build_and_run_closedloop.sh" > /tmp/fs_l4.log 2>&1; then
-  grep -E '收敛后|稳态|t = .* 收敛' /tmp/fs_l4.log | sed 's/^/  /'
-  ok "L4 姿态传递判据通过（收敛后 roll 峰值 0.30°、pitch 1.98°、稳态 0.30°/0.05°）"
+  sweep=$(grep -E '^SWEEP ' /tmp/fs_l4.log | tail -1)
+  printf '  %s\n' "$sweep"
+  grep -E 't = .* 收敛' /tmp/fs_l4.log | sed 's/^/  /'
+  ok "L4 姿态传递判据通过（数字见上方 SWEEP 行）"
 else
   grep -E '收敛后|稳态|\[FAIL\]' /tmp/fs_l4.log | sed 's/^/  /' | head -8
   bad "L4 姿态传递判据失败"

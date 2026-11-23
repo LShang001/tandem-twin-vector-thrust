@@ -46,6 +46,7 @@ bool readIMUData();
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 
 void setup();
 void loop();
@@ -181,8 +182,21 @@ void quatToEuler(float w, float x, float y, float z, float &roll, float &pitch, 
 }
 }  // namespace
 
-int main()
+int main(int argc, char **argv)
 {
+  // --freq <Hz>  激励频率；--dur <s> 仿真时长；--pitch-only 只给俯仰激励
+  float arg_freq = 0.2f;
+  float arg_dur = 20.0f;
+  bool arg_pitch_only = false;
+  for (int i = 1; i < argc; ++i)
+  {
+    if (std::strcmp(argv[i], "--freq") == 0 && i + 1 < argc)
+      arg_freq = std::strtof(argv[i + 1], nullptr);
+    else if (std::strcmp(argv[i], "--dur") == 0 && i + 1 < argc)
+      arg_dur = std::strtof(argv[i + 1], nullptr);
+    else if (std::strcmp(argv[i], "--pitch-only") == 0)
+      arg_pitch_only = true;
+  }
   std::setvbuf(stdout, nullptr, _IONBF, 0);
   std::printf("== L4 逐拍对拍：plant 真值 vs 驱动+Madgwick ==\n");
 
@@ -215,7 +229,7 @@ int main()
 
   const float dt = 0.005f;
   const int ticks_per_step = 32;  // 5 ms × 6400 Hz
-  const int steps = static_cast<int>(20.0f / dt);
+  const int steps = static_cast<int>(arg_dur / dt);
 
   float vn_prev = 0.0f, ve_prev = 0.0f, vd_prev = 0.0f;
 
@@ -227,7 +241,7 @@ int main()
   float max_roll_steady = 0.0f, max_pitch_steady = 0.0f;
   int n_steady = 0;
   int n_conv = 0;              // 收敛期拍数（前 3 s，不计入峰值）
-  float converged_at = -1.0f;  // 首次同时满足 |roll|<2° 且 |pitch|<2° 的时刻
+  float converged_at = -1.0f;  // 首次同时满足 |roll|<1° 且 |pitch|<1° 的时刻
 
   std::printf("  [diag] steps=%d dt=%.4f ticks_per_step=%d\n", steps, static_cast<double>(dt), ticks_per_step);
 
@@ -240,14 +254,16 @@ int main()
     // ---- 开环姿态轨迹（不经过 plant 与控制律，直接定义姿态）----
     // 选 0.2 Hz 慢变正弦：远低于 Madgwick 的跟踪带宽，误差应只剩量化与相位滞后。
     const float kTwoPi = 6.28318530718f;
-    const float kAmpRoll = 12.0f * 0.017453292f;   // 12°
+    const float kAmpRoll = (arg_pitch_only ? 0.0f : 12.0f) * 0.017453292f;  // 纯 pitch 工况置 0
     const float kAmpPitch = 7.0f * 0.017453292f;   // 7°
-    const float kFreq = 0.2f;                      // Hz
+    const float kFreq = arg_freq;                  // Hz（命令行可调）
     const float w = kTwoPi * kFreq;
+    // 纯 pitch 工况去掉 0.5 rad 相位偏移，避免静态偏置混进误差统计
+    const float pitch_phase = arg_pitch_only ? 0.0f : 0.5f;
     const float roll_cmd = kAmpRoll * std::sin(w * t);
-    const float pitch_cmd = kAmpPitch * std::sin(0.7f * w * t + 0.5f);
+    const float pitch_cmd = kAmpPitch * std::sin(0.7f * w * t + pitch_phase);
     const float wx_cmd = kAmpRoll * w * std::cos(w * t);
-    const float wy_cmd = kAmpPitch * 0.7f * w * std::cos(0.7f * w * t + 0.5f);
+    const float wy_cmd = kAmpPitch * 0.7f * w * std::cos(0.7f * w * t + pitch_phase);
     {
       const float cr = std::cos(roll_cmd * 0.5f), sr = std::sin(roll_cmd * 0.5f);
       const float cp = std::cos(pitch_cmd * 0.5f), sp = std::sin(pitch_cmd * 0.5f);
@@ -283,11 +299,11 @@ int main()
     // ★Madgwick 从初始四元数 (1,0,0,0) 起步，收敛需要一段时间。收敛前的大偏差
     //   不属于"驱动与滤波的稳态一致性"，单独统计、不计入峰值——否则收敛过程
     //   会把稳态 0.3° 的一致性掩盖成 80° 的"全程误差"。
-    if (std::fabs(dr) < 2.0f && std::fabs(dp) < 2.0f && converged_at < 0.0f)
+    if (std::fabs(dr) < 1.0f && std::fabs(dp) < 1.0f && converged_at < 0.0f)
     {
       converged_at = t;
     }
-    const bool in_converged = (converged_at >= 0.0f) && (t >= converged_at);
+    const bool in_converged = (converged_at >= 0.0f) && (t >= converged_at + 1.0f);
     if (!in_converged)
     {
       ++n_conv;
@@ -332,8 +348,14 @@ int main()
 
   // 判据：理想传感器 + 20 s 慢激励下，滤波滞后与量化误差应远小于 1°
   // ★先判样本数：n==0 说明根本没采样，此时误差恒 0 是假绿而非完美一致。
-  const int kExpected = steps / 2;  // 收敛后至少应覆盖一半以上的拍
-  check(n_stat >= kExpected - 10, "样本数达到期望拍数（防假绿）");
+  // 期望参与统计的拍数 = 总拍数 − 收敛期 − 1 s 沉降期。
+  // ★不能用固定的 steps/2：收敛时间随激励与阈值变化（实测 9.9–10.4 s），
+  //   固定阈值会在收紧收敛判据后误报"样本数不足"（1803 < 2000）。
+  const int kExpected =
+      (converged_at >= 0.0f)
+          ? steps - static_cast<int>((converged_at + 1.0f) / dt) - 10
+          : steps / 2;
+  check(n_stat >= kExpected, "样本数达到期望拍数（防假绿）");
   check(n_stat > 0, "至少采到一拍（n_stat > 0）");
   if (n_stat == 0)
   {
@@ -341,19 +363,24 @@ int main()
     std::printf("\n=== 未达成（假绿已拦截）===\n");
     return 1;
   }
-  std::printf("  收敛  收敛前 %d 拍；首次进入 ±2° 的时刻 %s\n", n_conv,
+  std::printf("  收敛  收敛前 %d 拍；首次进入 ±1° 的时刻 %s\n", n_conv,
               converged_at < 0.0f ? "未收敛" : "见下");
   if (converged_at >= 0.0f)
   {
     std::printf("        t = %.2f s 收敛，之后 %d 拍参与统计\n",
                 static_cast<double>(converged_at), n_stat);
   }
-  check(converged_at >= 0.0f, "在仿真时长内收敛到 ±2°");
+  check(converged_at >= 0.0f, "在仿真时长内收敛到 ±1°");
   check(max_roll_err < 3.0f, "收敛后 roll 误差峰值 < 3°");
   check(max_pitch_err < 3.0f, "收敛后 pitch 误差峰值 < 3°");
   check(max_roll_steady < 1.0f, "稳态 roll 残差 < 1°");
   check(max_pitch_steady < 1.0f, "稳态 pitch 残差 < 1°");
 
-  std::printf("\n%s（失败 %d 项）\n", g_fail == 0 ? "=== 全部通过 ===" : "=== 存在失败 ===", g_fail);
+  std::printf("SWEEP freq=%.3f roll_peak=%.3f pitch_peak=%.3f steady_r=%.3f steady_p=%.3f conv=%.2f\n",
+              static_cast<double>(arg_freq), static_cast<double>(max_roll_err),
+              static_cast<double>(max_pitch_err), static_cast<double>(max_roll_steady),
+              static_cast<double>(max_pitch_steady), static_cast<double>(converged_at));
+  std::printf("\n%s（失败 %d 项）\n",
+              g_fail == 0 ? "=== 全部通过 ===" : "=== 存在失败 ===", g_fail);
   return g_fail == 0 ? 0 : 1;
 }
