@@ -499,9 +499,21 @@ int main(int argc, char **argv)
       if (gnss_init_window || (k % 20) == 0)
       {
         const uint32_t itow = static_cast<uint32_t>(k) * 5U;
+        // 噪声模式下给 GNSS 也加误差（水平/垂直位置、速度），检验闭环鲁棒性：
+        // 水平 1.5 m、垂直 3 m、速度 0.1 m/s（民用单点 GPS 的量级，假设值）。
+        float gn = body.pos_n, ge = body.pos_e, gd = body.pos_d;
+        float vn = body.vel_n, ve = body.vel_e, vd = body.vel_d;
+        if (g_noise_enable)
+        {
+          gn += 1.5f * g_n01(g_rng);
+          ge += 1.5f * g_n01(g_rng);
+          gd += 3.0f * g_n01(g_rng);
+          vn += 0.1f * g_n01(g_rng);
+          ve += 0.1f * g_n01(g_rng);
+          vd += 0.1f * g_n01(g_rng);
+        }
         uint8_t frame[100];
-        size_t n = UbxNavPvt::build(frame, itow, body.pos_n, body.pos_e, body.pos_d,
-                                    body.vel_n, body.vel_e, body.vel_d, 28.2, 112.9, 50.0);
+        size_t n = UbxNavPvt::build(frame, itow, gn, ge, gd, vn, ve, vd, 28.2, 112.9, 50.0);
         gpsSerialPort.feed(frame, n);
         // ★NAV-EOE：没有它 epoch 不入队，PopEpoch 恒 false（详见 buildEoe 注释）
         uint8_t eoe[12];
