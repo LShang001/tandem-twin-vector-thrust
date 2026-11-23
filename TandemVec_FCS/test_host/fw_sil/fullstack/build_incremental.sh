@@ -46,43 +46,96 @@ obj_for() {
 built=0
 cached=0
 objects=()
+to_build=()          # 待编源文件
+to_build_obj=()      # 对应对象路径
+to_build_hash=()     # 对应组合哈希
+
+# ★重编判据用内容哈希，不用 `-nt` 时间戳比较。
+# 原因（实测）：源文件在 /mnt/d（Windows 文件系统）、对象在 ext4 /tmp，
+# 跨文件系统的时间戳精度与时区不一致，`[ "$src" -nt "$obj" ]` 会恒为真，
+# 导致每次调用都全量重编（单轮 5–10 分钟），改一行也等这么久。
+# 现象上还更隐蔽：有时又恒为假，改了代码却复用旧对象、测的是旧二进制。
+hash_for() {
+  printf '%s/.hash_%s' "$OBJ_DIR" "$(printf '%s' "$1" | tr '/\\.' '___')"
+}
 
 for src in "${SOURCES[@]}"; do
   obj="$(obj_for "$src")"
   dep="${obj%.o}.d"
+  hfile="$(hash_for "$src")"
   objects+=("$obj")
 
-  need=1
-  if [ -f "$obj" ]; then
-    need=0
-    # 源文件比对象新 → 重编
-    if [ "$src" -nt "$obj" ]; then
-      need=1
-    # 任一依赖头比对象新 → 重编
-    elif [ -f "$dep" ]; then
-      # .d 内容形如：obj: src.h1 src.h2 ...
-      # shellcheck disable=SC2046
-      for d in $(sed -e 's/^[^:]*://' -e 's/\\$//' -e 's/\\ /\x01/g' "$dep" | tr ' ' '\n' | tr '\001' ' '); do
-        if [ -f "$d" ] && [ "$d" -nt "$obj" ]; then
-          need=1
-          break
-        fi
-      done
-    fi
-  fi
+  # 组合哈希 = 源文件 + 全部依赖头（从上次生成的 .d 里取）
+  cur_hash="$(
+    {
+      md5sum "$src" 2>/dev/null
+      if [ -f "$dep" ]; then
+        # shellcheck disable=SC2046
+        for d in $(sed -e 's/^[^:]*://' -e 's/\\$//' -e 's/\\ /\x01/g' "$dep" | tr ' ' '\n' | tr '\001' ' '); do
+          [ -f "$d" ] && md5sum "$d" 2>/dev/null
+        done
+      fi
+    } | md5sum | cut -d' ' -f1
+  )"
 
-  if [ "$need" -eq 1 ]; then
-    echo "  [compile] $src" >&2
-    # shellcheck disable=SC2086
-    if ! $CXX $CXXFLAGS $INC -MMD -MP -c "$src" -o "$obj"; then
-      echo "编译失败：$src" >&2
-      exit 1
-    fi
-    built=$((built + 1))
-  else
+  if [ -f "$obj" ] && [ -f "$hfile" ] && [ "$(cat "$hfile")" = "$cur_hash" ]; then
     cached=$((cached + 1))
+  else
+    to_build+=("$src")
+    to_build_obj+=("$obj")
+    to_build_hash+=("$cur_hash")
   fi
 done
+
+# ---- 并行编译（单核串行编 35 个文件要 13 分钟，24 核并行约 1–2 分钟）----
+if [ ${#to_build[@]} -gt 0 ]; then
+  JOBS="${BUILD_JOBS:-8}"
+  log_dir="$OBJ_DIR/.logs"
+  mkdir -p "$log_dir"
+
+  compile_one() {
+    local idx="$1"
+    local src="${to_build[$idx]}"
+    local obj="${to_build_obj[$idx]}"
+    echo "  [compile] $src" >&2
+    # shellcheck disable=SC2086
+    $CXX $CXXFLAGS $INC -MMD -MP -c "$src" -o "$obj" \
+      > "$log_dir/$idx.log" 2>&1
+  }
+
+  running=0
+  pids=()
+  failed=0
+  for i in "${!to_build[@]}"; do
+    compile_one "$i" &
+    pids+=($!)
+    running=$((running + 1))
+    if [ "$running" -ge "$JOBS" ]; then
+      if ! wait "${pids[0]}"; then failed=1; fi
+      pids=("${pids[@]:1}")
+      running=$((running - 1))
+    fi
+  done
+  for p in "${pids[@]}"; do
+    if ! wait "$p"; then failed=1; fi
+  done
+
+  if [ "$failed" -ne 0 ]; then
+    echo "编译失败：详情见 $log_dir/*.log" >&2
+    for i in "${!to_build[@]}"; do
+      if [ -s "$log_dir/$i.log" ]; then
+        echo "--- ${to_build[$i]} ---" >&2
+        tail -20 "$log_dir/$i.log" >&2
+      fi
+    done
+    exit 1
+  fi
+
+  for i in "${!to_build[@]}"; do
+    printf '%s' "${to_build_hash[$i]}" > "$(hash_for "${to_build[$i]}")"
+  done
+  built=${#to_build[@]}
+fi
 
 echo "  [objects] 重编 $built 个，复用 $cached 个" >&2
 
