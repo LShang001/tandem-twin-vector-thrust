@@ -399,22 +399,22 @@ int main(int argc, char **argv)
   //   c00 = buffer[3]<<12 | buffer[4]<<4 | (buffer[5]>>4)
   //   101325 = 0x18BC5 → buffer[3]=0x18, buffer[4]=0xBC, buffer[5] 高四位=0xD
   // ------------------------------------------------------------
-  Wire.silEnable();
-  Wire.silSetReg(0x0D, 0x01);   // PROD_ID 低四位 = 1（DPS310）
+  IIC2.silEnable();
+  IIC2.silSetReg(0x0D, 0x01);   // PROD_ID 低四位 = 1（DPS310）
   {
     uint8_t coef[18] = {0};
     coef[3] = 0x18;             // → 0x13
-    coef[4] = 0xBC;             // → 0x14
-    coef[5] = 0xD0;             // → 0x15（高四位 0xD 属 c00 → c00=101325 Pa ≈ 0 m）
-    Wire.silSetBlock(0x10, coef, sizeof(coef));
+    coef[4] = 0x72;             // → 0x14
+    coef[5] = 0x10;             // → 0x15（高四位 0x1 属 c00 → c00=100129 Pa ≈ 100 m）
+    IIC2.silSetBlock(0x10, coef, sizeof(coef));
   }
-  Wire.silSetReg(0x00, 0x00);   // PRS_B2
-  Wire.silSetReg(0x01, 0x00);   // PRS_B1
-  Wire.silSetReg(0x02, 0x00);   // PRS_B0，bit0=0 → 压力样本
-  Wire.silSetReg(0x03, 0x00);   // TMP_B2
-  Wire.silSetReg(0x04, 0x00);   // TMP_B1
-  Wire.silSetReg(0x05, 0x00);   // TMP_B0
-  Wire.silSetReg(0x0B, 0x00);   // FIFO_EMPTY=0，表示有样本可读
+  IIC2.silSetReg(0x00, 0x00);   // PRS_B2
+  IIC2.silSetReg(0x01, 0x00);   // PRS_B1
+  IIC2.silSetReg(0x02, 0x00);   // PRS_B0，bit0=0 → 压力样本
+  IIC2.silSetReg(0x03, 0x00);   // TMP_B2
+  IIC2.silSetReg(0x04, 0x00);   // TMP_B1
+  IIC2.silSetReg(0x05, 0x00);   // TMP_B0
+  IIC2.silSetReg(0x0B, 0x00);   // FIFO_EMPTY=0，表示有样本可读
 
   g_sil_delay_hook = &delayHook;
   setup();
@@ -673,11 +673,11 @@ int main(int argc, char **argv)
                     static_cast<int>(g_current_flight_mode));
         // 原点与原始 EKF 高度：est_h = origin_alt_m − nav_ekf.alt_m()，
         // 只有把两个量都打出来，才知道跳动是"原点被重锚"还是"EKF 位置被拉走"。
-        std::printf("       origin_alt=%9.3f ins_down=%9.3f baro=%7.3f fake_orig=%d\n",
+        std::printf("       origin_alt=%9.3f ins_down=%9.3f baro=%7.3f fake_orig=%d dps_ok=%d\n",
                     static_cast<double>(origin_alt_m),
                     static_cast<double>(INS_GNSS_Packet.location_down),
                     static_cast<double>(baro_altitude),
-                    nav_initialized_with_fake_origin ? 1 : 0);
+                    nav_initialized_with_fake_origin ? 1 : 0, dps310_read_success ? 1 : 0);
         std::printf("       gps_rx_pending=%d nav_src=%d fake_origin=%d fix=%d\n",
                     gpsSerialPort.available(), static_cast<int>(nav_data_source),
                     nav_initialized_with_fake_origin ? 1 : 0, static_cast<int>(ubx.fix()));
