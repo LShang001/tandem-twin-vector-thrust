@@ -445,8 +445,17 @@ bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_closedloop.sh --hove
 不含 `CXXFLAGS`，导致多个共用 `OBJ_DIR` 但宏不同的构建会复用错误 `.o`。已把编译
 选项纳入组合哈希。
 
-**边界**：气压高度仍是一行注入（等价完美气压计），DPS310 的 I2C 寄存器协议没做成替身；
-GNSS 是构造的 NAV-PVT 帧（位置由 plant 真值换算）。
+**边界**：GNSS 仍是构造的 NAV-PVT 帧（位置由 plant 真值换算）；气压已走**真实 DPS310
+驱动**——测试按高度算标准大气压、反推 raw 写进 FIFO 数据寄存器，由驱动自己做
+getFIFOvalue → calcPressure → calculateAltitude → 滤波 → `baro_altitude`。
+
+打通这条链路踩了三个坑，全是宿主侧模拟写错：①预置到了 `Wire`，而驱动用的是独立
+实例 `IIC2`；②样本类型位反了（`getFIFOvalue` 返回 `buffer[2]&0x01`，**1 才是压力**、
+0 是温度，写反会让每个样本都被当成温度，驱动返回 `DPS__FAIL_UNFINISHED`）；
+③`FIFO_EMPTY`（0x0B bit0）初始值必须是 0 才表示有样本。
+
+排查捷径：直接调 `Dps310Sensor.getLatestResults()` 取返回码，按 dps_config.h 对照
+（0=成功、-2=初始化失败、-4=未完成、-5=溢出），一个数字就能把范围砍到具体那一层。
 
 **加噪声后的鲁棒性**（`--hover --noise`，含 IMU 噪声/零偏 + GNSS 位置 1.5 m /
 垂直 3 m / 速度 0.1 m/s 误差）：
