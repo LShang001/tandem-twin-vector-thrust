@@ -404,13 +404,15 @@ int main(int argc, char **argv)
   {
     uint8_t coef[18] = {0};
     coef[3] = 0x18;             // → 0x13
-    coef[4] = 0x72;             // → 0x14
-    coef[5] = 0x10;             // → 0x15（高四位 0x1 属 c00 → c00=100129 Pa ≈ 100 m）
+    coef[4] = 0xBC;             // → 0x14  c00=101325 Pa（海平面标准气压）
+    coef[5] = 0xD7;             // → 0x15  高四位 0xD 属 c00，低四位 0x7 属 c10
+    coef[6] = 0xFF;             // → 0x16  c10=524287（20 位最大正数，灵敏度 0.33 Pa/raw）
+    coef[7] = 0xFF;             // → 0x17
     IIC2.silSetBlock(0x10, coef, sizeof(coef));
   }
   IIC2.silSetReg(0x00, 0x00);   // PRS_B2
   IIC2.silSetReg(0x01, 0x00);   // PRS_B1
-  IIC2.silSetReg(0x02, 0x00);   // PRS_B0，bit0=0 → 压力样本
+  IIC2.silSetReg(0x02, 0x01);   // PRS_B0：bit0 是样本类型判别位，1=压力、0=温度
   IIC2.silSetReg(0x03, 0x00);   // TMP_B2
   IIC2.silSetReg(0x04, 0x00);   // TMP_B1
   IIC2.silSetReg(0x05, 0x00);   // TMP_B0
@@ -419,6 +421,21 @@ int main(int argc, char **argv)
   g_sil_delay_hook = &delayHook;
   setup();
   std::printf("  setup() 完成，SPI 写寄存器 %u 次\n", static_cast<unsigned>(SPI.silWriteCount()));
+
+  // ------------------------------------------------------------
+  // DPS310 直接诊断：setup() 里已经跑过 begin()+startMeasure+首帧等待，
+  // 这里再直接调一次驱动取返回码，判断失败发生在哪一层：
+  //   DPS__FAIL_INIT_FAILED  → begin()/init() 就没过（PROD_ID、系数块、配置写）
+  //   DPS__FAIL_UNFINISHED   → 初始化过了，是 FIFO 里没有可用样本
+  //   DPS__SUCCEEDED(0)      → 驱动通了，那问题在下游（baro 更新条件/调度）
+  // 前几轮一直在猜寄存器值，这一条能直接把范围砍掉三分之二。
+  // ------------------------------------------------------------
+  {
+    float dtemp = 0.0f, dpres = 0.0f;
+    const int16_t rc = Dps310Sensor.getLatestResults(dtemp, dpres);
+    std::printf("  [dps] rc=%d temp=%.2f pres=%.1f (0=SUCCEEDED, -1=INIT_FAILED, -2=UNFINISHED?)\n",
+                static_cast<int>(rc), static_cast<double>(dtemp), static_cast<double>(dpres));
+  }
 
   // ---- 诊断：驱动层能否读到 FIFO 帧 ----
   {
@@ -520,12 +537,19 @@ int main(int argc, char **argv)
       vd_p = body.vel_d;
       updateSensorModel(body, a_n, a_e, a_d);
 
-      // ★观测注入：气压高度用一行直接写（等价完美气压计）。
-      //   已试过改走真实 DPS310 驱动（Wire.silEnable + 预置寄存器 + c00 换算），
-      //   但驱动没有更新 baro_altitude（预置后仍恒为 0，EKF 随后 NaN），
-      //   说明 FIFO 状态机/初始化链路还有未打通的环节。按时间盒回退到注入，
-      //   预置代码保留在上方作为后续接入的基础。
-      baro_altitude = -body.pos_d;
+      // ★气压现在走真实 DPS310 驱动：按高度算标准大气压，反推 raw 写进 FIFO 数据寄存器，
+      //   由驱动自己 getFIFOvalue → calcPressure → calculateAltitude → 滤波 → baro_altitude。
+      //   raw 的 bit0 是样本类型位（1=压力、0=温度），所以写回时要保住它。
+      {
+        const float alt_now = -body.pos_d;
+        const float p_pa = 101325.0f * std::pow(1.0f - 0.0065f * alt_now / 288.15f, 5.2559f);
+        const float rawf = (p_pa - 101325.0f) * 1572864.0f / 524287.0f;
+        int32_t raw = static_cast<int32_t>(rawf);
+        raw |= 1;                                   // 奇数 → bit0=1 → 压力类型
+        IIC2.silSetReg(0x00, static_cast<uint8_t>((raw >> 16) & 0xFF));
+        IIC2.silSetReg(0x01, static_cast<uint8_t>((raw >> 8) & 0xFF));
+        IIC2.silSetReg(0x02, static_cast<uint8_t>(raw & 0xFF));
+      }
 
       // ★注入节拍要按 EKF 的"消费节拍"设计，不能全局一个频率：
       //   `has_gnss_epoch = ubx.PopEpoch(...)` 是**每拍**调用一次（200 Hz），
