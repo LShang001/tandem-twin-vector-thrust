@@ -386,7 +386,7 @@ gyr σ=0.12 dps、零偏 (0.15,−0.12,0.10) dps。量级取自 ICM-42688-P 手�
 2. 因此这个孪生**不能替代实机做亚度级精度验证**；1 Hz 以下做功能级/趋势级验证
    仍然有效（误差 ~1–2°），2 Hz 以上要带误差棒。
 
-### 7.6 整机闭环：已成立（`--hover`）
+### 7.6 整机闭环：能成立，但不稳定（`--hover`）
 
 ```bash
 bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_closedloop.sh --hover --dur 50
