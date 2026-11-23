@@ -40,6 +40,7 @@
 #include "sensor_imu.h"
 #include "navigation_task.h"
 #include "Wire.h"
+#include "flight_control.h"
 #include "ImuDevice.h"
 
 // 诊断用：手动排空一次 IMU，看 ring 里到底有没有数据
@@ -695,8 +696,14 @@ int main(int argc, char **argv)
                     static_cast<double>(estimated_height),
                     static_cast<double>(ch3_output), static_cast<double>(ch2_output),
                     static_cast<int>(g_current_flight_mode));
-        // 原点与原始 EKF 高度：est_h = origin_alt_m − nav_ekf.alt_m()，
-        // 只有把两个量都打出来，才知道跳动是"原点被重锚"还是"EKF 位置被拉走"。
+        // 控制环用的是 EKF 的 estimated_velocity（向上为正），而日志里的 v_d 是 plant 真值
+        // （NED 向下为正）。t=30~32 区间两者是否同步，决定了"刹车过猛"是不是因为
+        // 控制器看不到机体已经开始下坠。上一行 est_h 对 alt 已经显示高度滞后两米多。
+        std::printf("       v_true_up=%7.3f v_ekf_up=%7.3f lag_v=%7.3f tgt_vz=%7.3f\n",
+                    static_cast<double>(-body.vel_d),
+                    static_cast<double>(estimated_velocity),
+                    static_cast<double>(-body.vel_d - estimated_velocity),
+                    static_cast<double>(gnc_tel.target_vz_mps));
         std::printf("       origin_alt=%9.3f ins_down=%9.3f baro=%7.3f fake_orig=%d dps_ok=%d\n",
                     static_cast<double>(origin_alt_m),
                     static_cast<double>(INS_GNSS_Packet.location_down),
