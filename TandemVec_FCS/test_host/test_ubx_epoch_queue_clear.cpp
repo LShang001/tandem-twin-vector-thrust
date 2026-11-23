@@ -20,6 +20,12 @@
 #include "Arduino.h"
 #include "ubx.h"
 
+// ubx.cpp 的 delay() 路径会引用 g_sil_delay_hook（stub/Arduino.h 声明为 extern），
+// 而本测试不链接 fw_sil_stubs.cpp，所以需要在这里补一个定义，否则链接报
+// `undefined reference to g_sil_delay_hook`。空实现即可——本测试不依赖
+// delay() 推进虚拟时钟。
+SilDelayHook g_sil_delay_hook = nullptr;
+
 uint32_t g_sil_time_us = 0;
 
 static void append_u8(std::vector<uint8_t> &v, uint8_t b) { v.push_back(b); }
