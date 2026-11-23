@@ -386,35 +386,59 @@ gyr σ=0.12 dps、零偏 (0.15,−0.12,0.10) dps。量级取自 ICM-42688-P 手�
 2. 因此这个孪生**不能替代实机做亚度级精度验证**；1 Hz 以下做功能级/趋势级验证
    仍然有效（误差 ~1–2°），2 Hz 以上要带误差棒。
 
-### 7.6 整机闭环：尝试过，未成立（`--hover`）
-
-目标是把 L4 从"姿态开环对拍"推到"控制律闭环"。现状：
+### 7.6 整机闭环：三次根因定位，仍未成立（`--hover`）
 
 ```bash
 bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_closedloop.sh --hover --dur 40
 ```
 
-建成部分：RC 输入、定高指令、控制输出到 plant、IMU 走真实驱动、气压高度用一行
-注入 `baro_altitude`（等价完美气压计）。**解锁成功**（`unlock=1, mode=2`）。
+目标是把 L4 从"姿态开环对拍"推到"控制律闭环"。本轮挖出**三个真根因**，闭环本身仍未成立。
 
-**但闭环不成立**：EKF 高度估计不收敛。
+**根因 1：测试预设了 `nav_system_initialized = true`**
 
-| 时刻 | plant 高度 | 注入的气压 | EKF `estimated_height` | 收敛标志 |
-|---|---|---|---|---|
-| 20 s | 377 m | 377 m | −168 m | 0 |
-| 40 s | 1889 m | 1887 m | −225 m | 0 |
-| 120 s | 19338 m | 19321 m | −290 m | 0 |
+EKF 初始化分支是 `if (!nav_system_initialized) { if (is_static_confirmed) Initialize(...) }`。
+预设 true 让该分支永不进入，`nav_ekf` 四元数保持全零；零四元数旋转把比力投影成 0，
+EKF 认为机体以 1 g 自由落体——实测机体钉在地面、`estimated_height` 从 −50 掉到 −708 m。
+既有 SIL 敢预设是因为它绕过真实 EKF 直接写 `AHRS_Packet`；走真实 EKF 必须让固件自己
+在"静止确认"后初始化。改为不预设后：**EKF 3.12 s 收敛、四元数正常、解锁成功**。
 
-`estimated_height` 与真实高度差三个数量级，定高环拿不到可信高度，油门恒定 56.7%
-一路爬升。延长到 120 s 不改善，**不是收敛慢，是不收敛**。
+**根因 2：全链路构建漏了 `BFS_EKF_BARO_ALTITUDE_UPDATE`**
 
-根因方向（未验证）：这套 EKF 的收敛判据很可能需要 GNSS 位置观测参与，只给
-IMU + 气压时高度通道仍不可观或观测被门限拒绝。要接着做，得先读
-`navigation_task.cpp` 里 `g_ekf_converged` 的置位条件与气压观测的门限，
-再决定补 GNSS 观测注入（UBX epoch 或 `INS_GNSS_Packet`）还是调气压 sigma。
+气压高度进 EKF 的整段代码（`navigation_task.cpp:3677` 起）都在这个宏下。
+真机构建（`platformio.ini:114`）与既有 SIL 的 `build_incremental.sh` 都带，
+只有全链路目标漏了——是它自己的构建缺陷，不是 EKF 的问题。补上后 `baro_ekf_fused=1`、
+创新项 0.00，气压确实在融合。
 
-**边界**：这一节记录的是**失败的尝试与证据**，不是成果。`--hover` 模式保留在
-代码里只作为复现入口。
+**根因 3：没有 GNSS 时飞控设计上就不提供相对高度**
+
+```cpp
+// navigation_task.cpp:4122
+if (is_origin_lla_set && nav_initialized_with_fake_origin)
+    relative_down = 0.0f;   // 假原点下不把相对位置交给控制环
+```
+
+`nav_initialized_with_fake_origin` 只由 `gps_available` 决定。所以无 GNSS 时
+`estimated_height` 恒为 0，定高环拿到的永远是个死值。这是**安全设计**，不是缺陷。
+
+**当前卡点（已打通 GNSS 注入，差最后一步时序）**
+
+UBX NAV-PVT 注入链路已建成：构造 100 字节帧 → `gpsSerialPort.feed()` → `ubx.Pump()`
+→ `ubx.fix()=1`。剩三处实测现象：
+
+| 注入策略 | 现象 |
+|---|---|
+| 10 Hz | EKF 稳定收敛（3.12 s），但 `has_gnss_epoch` 每拍只 pop 一帧，初始化那拍常取不到 epoch → `gps_available=false` → `fake_origin` 永久为真 |
+| 每拍（200 Hz） | EKF 被打崩：`pos σ` 0.33 → 87 m、收敛标志 1 → 0 |
+| 10 Hz + 解锁推迟到 12 s | 静止 12 s 内 `pos_sig=0.51` 稳定、`ekf=1`；**解锁后再次发散**（pos σ → 155 m），`est_height` 仍为 0 |
+
+下一步查"解锁瞬间什么破坏了 EKF"（姿态环激励、`g_is_unlocked` 影响到的观测门），
+而不是继续调注入频率或 sigma。
+
+**边界**：本节记录的是**失败的尝试与定位过程**，不是成果。`--hover` 保留在代码里只作
+复现入口。相比上一轮，"EKF 从完全不收敛到 3.12 s 收敛"和三个根因是实质进展，
+但定高闭环仍未成立。
+
+### 7.7 明确不可比的层
 
 - **L5 硬件时序**：中断延迟、Cortex-M7 浮点时序、总线竞争、D-Cache 一致性，
   宿主一律不成立，只能上板（VER-009 的 L4 层）。

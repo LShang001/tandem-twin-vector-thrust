@@ -38,6 +38,7 @@
 #include "imu_odr_config.h"
 #include "task_scheduler_interval.h"
 #include "sensor_imu.h"
+#include "navigation_task.h"
 #include "ImuDevice.h"
 
 // 诊断用：手动排空一次 IMU，看 ring 里到底有没有数据
@@ -139,6 +140,93 @@ void advanceQ4(uint64_t dq4)
 }
 
 void delayHook(uint32_t us) { advanceQ4(static_cast<uint64_t>(us) * 4ULL); }
+
+// ------------------------------------------------------------
+// UBX NAV-PVT 帧构造（真机 GNSS 链路的真实输入格式）
+//
+// 为什么必须给 GNSS：`navigation_task.cpp` 里相对高度有这段分支——
+//    if (is_origin_lla_set && nav_initialized_with_fake_origin)
+//        relative_down = 0.0f;      // 假原点下不把相对位置交给控制环
+// 而 `nav_initialized_with_fake_origin` 只由 `gps_available` 决定（无 GNSS 即为 true）。
+// 也就是说：**没有 GNSS 时飞控设计上就不提供相对高度**，定高环拿到的 estimated_height
+// 恒为 0。这是安全设计（防假原点下的位置误差进控制），不是仿真缺陷。
+// 所以要让定高闭环成立，必须把 GNSS 观测也接进来。
+// ------------------------------------------------------------
+struct UbxNavPvt
+{
+  static constexpr size_t kPayload = 92;
+
+  static void put_u2(uint8_t *p, uint16_t v) { p[0] = uint8_t(v & 0xFF); p[1] = uint8_t(v >> 8); }
+  static void put_u4(uint8_t *p, uint32_t v)
+  {
+    p[0] = uint8_t(v & 0xFF); p[1] = uint8_t((v >> 8) & 0xFF);
+    p[2] = uint8_t((v >> 16) & 0xFF); p[3] = uint8_t((v >> 24) & 0xFF);
+  }
+  static void put_i4(uint8_t *p, int32_t v) { put_u4(p, static_cast<uint32_t>(v)); }
+
+  /// 按 plant 的 NED 相对位置/速度拼一帧 NAV-PVT，返回帧长（100 字节）。
+  /// 位置用小平面前近似换算到 LLA —— 本层只验证"GNSS 参与后高度是否可观"，
+  /// 不做 WGS-84 大地测量精度比较（那是 GNSS 解析层的事）。
+  static size_t build(uint8_t *out, uint32_t itow_ms, float pos_n, float pos_e, float pos_d,
+                      float vel_n, float vel_e, float vel_d, double lat0_deg, double lon0_deg,
+                      double alt0_m)
+  {
+    constexpr double kMetersPerDegLat = 111320.0;
+    const double lat_deg = lat0_deg + pos_n / kMetersPerDegLat;
+    const double coslat = std::cos(lat0_deg * 0.017453292519943295);
+    const double lon_deg = lon0_deg + (coslat > 1e-6 ? pos_e / (kMetersPerDegLat * coslat) : 0.0);
+    const double h_msl = alt0_m - pos_d;
+
+    uint8_t *p = out + 6;  // payload 起点
+    for (size_t i = 0; i < kPayload; ++i) p[i] = 0;
+    put_u4(p + 0, itow_ms);
+    put_u2(p + 4, 2026U); put_u2(p + 6, 0);  // year / month(高位 padding 占位)
+    p[6] = 11; p[7] = 23;                     // month / day
+    p[8] = 10; p[9] = 0; p[10] = 0;
+    p[11] = 0x03;                              // valid: date+time
+    put_u4(p + 12, 20U);                        // tAcc ns
+    put_i4(p + 16, 0);                          // nano
+    p[20] = 3;                                  // fixType = 3D
+    p[21] = 0x01;                               // flags
+    p[22] = 0x00;
+    p[23] = 20;                                 // numSV
+    put_i4(p + 24, static_cast<int32_t>(lon_deg * 1e7));
+    put_i4(p + 28, static_cast<int32_t>(lat_deg * 1e7));
+    put_i4(p + 32, static_cast<int32_t>(h_msl * 1000.0));        // height (ellipsoid, mm)
+    put_i4(p + 36, static_cast<int32_t>(h_msl * 1000.0));        // hMSL (mm)
+    put_u4(p + 40, 50U);                                        // hAcc 5 cm
+    put_u4(p + 44, 80U);                                        // vAcc 8 cm
+    put_i4(p + 48, static_cast<int32_t>(vel_n * 1000.0f));
+    put_i4(p + 52, static_cast<int32_t>(vel_e * 1000.0f));
+    put_i4(p + 56, static_cast<int32_t>(vel_d * 1000.0f));
+    put_i4(p + 60, static_cast<int32_t>(std::sqrt(vel_n * vel_n + vel_e * vel_e) * 1000.0f));
+    put_i4(p + 64, 0);
+    put_u4(p + 68, 50U);                                        // sAcc
+    put_u4(p + 72, 100000U);                                    // headAcc
+    put_u2(p + 76, 100U);                                       // pDOP 1.0
+    put_u2(p + 78, 0U);
+    for (int i = 0; i < 4; ++i) p[80 + i] = 0;
+    put_i4(p + 84, 0);
+    put_u2(p + 88, 0);
+    put_u2(p + 90, 0);
+
+    // 同步头 + class/id + 长度
+    out[0] = 0xB5; out[1] = 0x62;
+    out[2] = 0x01; out[3] = 0x07;
+    put_u2(out + 4, static_cast<uint16_t>(kPayload));
+
+    // Fletcher 校验覆盖 class..payload 末字节
+    uint8_t ck_a = 0, ck_b = 0;
+    for (size_t i = 2; i < 6 + kPayload; ++i)
+    {
+      ck_a = uint8_t(ck_a + out[i]);
+      ck_b = uint8_t(ck_b + ck_a);
+    }
+    out[6 + kPayload] = ck_a;
+    out[7 + kPayload] = ck_b;
+    return 8 + kPayload;
+  }
+};
 
 void primeImuIdentity()
 {
@@ -290,35 +378,76 @@ int main(int argc, char **argv)
   SilBody6Dof body;
   isLinkUp = true;
   failsafe_in_flight = false;
-  nav_system_initialized = true;
+  // ★nav_system_initialized 不能预设为 true！
+  //   EKF 初始化分支是 `if (!nav_system_initialized) { if (is_static_confirmed) Initialize(...) }`。
+  //   预设 true 会让这个分支永远不进，nav_ekf 四元数保持全零 → 旋转把比力投影成 0 →
+  //   EKF 认为机体以 1 g 自由落体：实测机体钉在地面，est_h 却从 -50 掉到 -708 m/s。
+  //   既有 SIL 敢预设是因为它绕过真实 EKF 直接写 AHRS_Packet；走真实 EKF 必须让
+  //   固件自己在"静止确认"后初始化。
+  nav_system_initialized = false;
+  // ★气压观测入口的门是 `nav_system_initialized && is_origin_lla_set`
+  //   （navigation_task.cpp 气压量测更新段）。不设原点时整段融合被跳过，
+  //   表现为协方差只预测不更新：静止 8 s 内 vel σ 从 0.04 单调涨到 2.46、
+  //   pos σ 涨到 7.20，EKF 永不收敛。数值与既有 SIL 取同一组。
+  is_origin_lla_set = true;
+  origin_lat_deg = 28.2;
+  origin_lon_deg = 112.9;
+  origin_alt_m = 50.0;
 
   const float dt = 0.005f;
   const int ticks_per_step = 32;  // 5 ms × 6400 Hz
   const int steps = static_cast<int>(arg_dur / dt);
 
   // ============================================================
-  // 定高闭环模式（--hover）：验证"真实 IMU 驱动 + 真实控制律 + plant"能否闭环
+  // 定高闭环模式（--hover）：验证"真实 IMU 驱动 + 真实 EKF + 真实控制律 + plant"
   //
-  // 观测注入说明：气压高度用一行直接写 `baro_altitude`（等价于完美气压计），
-  // GNSS 位置不注入。这是一次**可行性验证**：先回答"补上高度观测后 EKF 能否
-  // 收敛、能否解锁"，再决定是否值得把 DPS310 的 I2C 寄存器协议也做成替身。
-  // 因此本模式若跑通，结论只能写"控制链闭环成立"，不能写"全链路传感器都真实"。
+  // 时序（照实机流程走，不能一上来就解锁）：
+  //   0 ~ 8 s   地面静止，EKF 用 IMU+气压收敛（g_ekf_converged 需连续 3 s 满足
+  //             速度<0.5 m/s、位置σ<10 m、速度σ<1 m/s、倾斜σ<3°）
+  //   8 s        解锁（RC CH5 拉到 1800）
+  //   9 s        给定高目标 10 m
+  //
+  // ★教训（第一版失败原因）：一上来就解锁给定高，plant 立刻加速，速度条件
+  //   永远不满足，g_ekf_converged 恒为 0。另外首次解锁门在 FW_SIL_REAL_NAV 下
+  //   被旁路，"unlock=1"不代表 EKF 真收敛——必须自己盯收敛标志。
+  // ★教训（第二版失败原因）：全链路构建漏了 BFS_EKF_BARO_ALTITUDE_UPDATE 宏，
+  //   气压高度根本不进 EKF（整段融合代码都在该宏下），高度通道不可观。
+  //   真机构建与既有 SIL 都带此宏，是全链路目标自己的构建缺陷。
+  //
+  // 观测注入说明：气压高度用一行直接写 `baro_altitude`（等价完美气压计），
+  // GNSS 位置不注入。结论口径是"控制链闭环成立"，不是"全部传感器都真实"。
   // ============================================================
   if (arg_hover)
   {
-    std::printf("\n-- 定高闭环模式：气压高度注入，其余走真实链路 --\n");
+    std::printf("\n-- 定高闭环模式：气压高度注入，IMU/EKF/控制律走真实链路 --\n");
     const float w_hover = P.wMax * 0.5f;
-    float mf_w = w_hover, mt_w = w_hover;
+    float mf_w = 0.0f, mt_w = 0.0f;   // 电机从静止起步（未解锁时 ch3=0%）
     float vn_p = 0.0f, ve_p = 0.0f, vd_p = 0.0f;
     bool alt_cmd = false;
     float max_alt = -1e9f, min_alt = 1e9f;
     int unlocked_at = -1;
+    int converged_at = -1;
+    float t_unlock = 12.0f, t_alt_cmd = 13.0f;
+    // ★为什么解锁要等到 12 s 而不是 8 s：
+    //   navigation_task.cpp 里
+    //     const bool defer_reanchor_while_armed = g_is_unlocked && nav_initialized_with_fake_origin;
+    //   **已解锁**且还没真实 GNSS 锚点时，首次 GNSS 硬重锚被**推迟**到上锁之后
+    //   （注释：防重锚重置位置/速度干扰在飞的机体）。若 8 s 就解锁，
+    //   fake_origin 会被永久保留 → relative_down 恒 0 → estimated_height 不进控制环。
+    //   正确时序是：静止 → EKF 初始化（3 s）→ **未解锁状态下**让 GNSS 完成首次重锚
+    //   → fake_origin=false → 再解锁给定高。
+    // 稳态统计窗口：最后 5 s
+    double alt_sum = 0.0;
+    int n_alt = 0;
+    float alt_min_ss = 1e9f, alt_max_ss = -1e9f;
 
     for (int k = 0; k < steps; ++k)
     {
       const float t = k * dt;
-      // 与既有 SIL 完全相同的 RC 时序
-      set_rc((t < 1.0f) ? 1000 : 1500, (t < 2.0f) ? 1300 : 1500, t >= 0.5f);
+      const bool want_unlock = (t >= t_unlock);
+
+      // RC：油门中位、模式 AUTO_ALTITUDE(1500)、CH5 按时序解锁
+      set_rc(want_unlock ? 1500 : 1000, 1500, want_unlock);
 
       // 传感器模型（含噪声开关），加速度用速度差分
       const float a_n = (k == 0) ? 0.0f : (body.vel_n - vn_p) / dt;
@@ -329,65 +458,124 @@ int main(int argc, char **argv)
       vd_p = body.vel_d;
       updateSensorModel(body, a_n, a_e, a_d);
 
+      // ★观测注入必须在 loop() 之前：导航任务在本拍消费气压高度
+      baro_altitude = -body.pos_d;
+
+      // ★GNSS 注入：没有它飞控不会把相对高度交给控制环
+      //   （nav_initialized_with_fake_origin 恒为 true → relative_down 被清零）。
+      // ★注入频率 10 Hz：实测每拍都喂（等价 200 Hz）会把 EKF 打崩——
+      //   pos σ 从 0.33 m 一路涨到 87 m、收敛标志 1→0。GNSS 是低频观测，
+      //   过密喂入破坏时间映射与创新序列。10 Hz 下 EKF 能稳定收敛。
+      // ★遗留问题：`has_gnss_epoch` 每拍只 pop 一帧，EKF 初始化只发生在
+      //   特定一拍，10 Hz 注入时有 1/2 概率初始化那拍取不到 epoch →
+      //   gps_available=false → fake_origin 永久为真 → relative_down 恒 0 →
+      //   estimated_height 不进控制环。**定高闭环因此仍未成立**，详见 README。
+      if ((k % 20) == 0)
+      {
+        uint8_t frame[100];
+        const size_t n = UbxNavPvt::build(
+            frame, static_cast<uint32_t>(k) * 5U, body.pos_n, body.pos_e, body.pos_d,
+            body.vel_n, body.vel_e, body.vel_d, 28.2, 112.9, 50.0);
+        gpsSerialPort.feed(frame, n);
+      }
+
       for (int i = 0; i < ticks_per_step; ++i)
       {
         advanceQ4(625u);
         loop();
       }
 
-      // ★观测注入：气压高度直接给 plant 真值（相对起飞点）
-      baro_altitude = -body.pos_d;
-
-      if (!alt_cmd && t >= 2.0f)
+      if (converged_at < 0 && g_ekf_converged) converged_at = k;
+      if (!alt_cmd && t >= t_alt_cmd && g_is_unlocked)
       {
         target_altitude = 10.0f;
         alt_cmd = true;
       }
       if (unlocked_at < 0 && g_is_unlocked) unlocked_at = k;
 
-      // 控制输出 → plant
+      // 控制输出 → plant（未解锁时电机不出力，机体钉在地面）
       const float upper = (ch1_output - (50.0f + SC.zero_roll_pct)) * SC.half_travel_deg /
                           (50.0f * (SC.teeth_gimbal / SC.teeth_servo) * SC.dir_roll) *
                           0.017453292f;
       const float lower = (ch2_output - (50.0f + SC.zero_pitch_pct)) * SC.half_travel_deg /
                           (50.0f * (SC.teeth_gimbal / SC.teeth_servo) * SC.dir_pitch) *
                           0.017453292f;
-      const float wf_target = (ch3_output / 100.0f) * P.wMax;
-      const float wt_target = (ch4_output / 100.0f) * P.wMax;
-      mf_w += (wf_target - mf_w) * std::fmin(dt / 0.28f, 1.0f);
-      mt_w += (wt_target - mt_w) * std::fmin(dt / 0.28f, 1.0f);
-      PropulsionState ps{mf_w, mt_w, upper, lower};
-      SixDOFWrench wr = computeWrench(ps, P);
-      body.step(wr, dt);
+      if (g_is_unlocked)
+      {
+        const float wf_target = (ch3_output / 100.0f) * P.wMax;
+        const float wt_target = (ch4_output / 100.0f) * P.wMax;
+        mf_w += (wf_target - mf_w) * std::fmin(dt / 0.28f, 1.0f);
+        mt_w += (wt_target - mt_w) * std::fmin(dt / 0.28f, 1.0f);
+        PropulsionState ps{mf_w, mt_w, upper, lower};
+        SixDOFWrench wr = computeWrench(ps, P);
+        body.step(wr, dt);
+      }
 
       const float alt = -body.pos_d;
-      if (t > 3.0f) { max_alt = std::fmax(max_alt, alt); min_alt = std::fmin(min_alt, alt); }
-
-      if ((k % 400) == 0)
+      if (alt_cmd) { max_alt = std::fmax(max_alt, alt); min_alt = std::fmin(min_alt, alt); }
+      const float t_ss = steps * dt - 5.0f;
+      if (t >= t_ss)
       {
-        std::printf("t=%5.1f alt=%7.2f baro=%7.2f est_h=%7.2f "
-                    "servo=(%.1f,%.1f) motor=(%.1f,%.1f) mode=%d unlock=%d ekf=%d\n",
+        alt_sum += alt;
+        ++n_alt;
+        alt_min_ss = std::fmin(alt_min_ss, alt);
+        alt_max_ss = std::fmax(alt_max_ss, alt);
+      }
+
+      if ((k % 400) == 0 || (k >= 1596 && k <= 1604))
+      {
+        // g_sil_nav_debug_accel 是固件自带的 SIL 观察点：EKF 实际收到的机体系比力。
+        // 静止时应为 (0,0,-9.8)（FRD 比力，支撑力朝上）。
+        std::printf("t=%5.1f alt=%7.2f est_h=%7.2f v_d=%6.2f "
+                    "motor=(%.1f,%.1f) unlock=%d ekf=%d pos_sig=%.2f vel_sig=%.2f\n",
                     static_cast<double>(t), static_cast<double>(alt),
-                    static_cast<double>(baro_altitude), static_cast<double>(estimated_height),
-                    static_cast<double>(ch1_output), static_cast<double>(ch2_output),
+                    static_cast<double>(estimated_height), static_cast<double>(body.vel_d),
                     static_cast<double>(ch3_output), static_cast<double>(ch4_output),
-                    static_cast<int>(g_current_flight_mode), static_cast<int>(g_is_unlocked),
-                    static_cast<int>(g_ekf_converged));
+                    static_cast<int>(g_is_unlocked), static_cast<int>(g_ekf_converged),
+                    static_cast<double>(g_ekf_pos_sigma_m),
+                    static_cast<double>(g_ekf_vel_sigma_mps));
+        std::printf("       ekf_accel=(%6.2f,%6.2f,%6.2f) ekf_q=(%.3f,%.3f,%.3f,%.3f) "
+                    "imu_count=%d\n",
+                    static_cast<double>(g_sil_nav_debug_accel[0]),
+                    static_cast<double>(g_sil_nav_debug_accel[1]),
+                    static_cast<double>(g_sil_nav_debug_accel[2]),
+                    static_cast<double>(AHRS_Packet.Qw), static_cast<double>(AHRS_Packet.Qx),
+                    static_cast<double>(AHRS_Packet.Qy), static_cast<double>(AHRS_Packet.Qz),
+                    static_cast<int>(g_sil_nav_debug_imu_count));
+        // 气压融合诊断：baro 我注入的值 / 固件是否真的融合 / 创新项 / 健康门是否拦
+        std::printf("       baro_in=%7.2f fused=%d innov=%7.2f suspect=%d nav_init=%d\n",
+                    static_cast<double>(baro_altitude), baro_ekf_fused ? 1 : 0,
+                    static_cast<double>(baro_ekf_innovation_m),
+                    g_baro_health_suspect ? 1 : 0, nav_system_initialized ? 1 : 0);
+        std::printf("       gps_rx_pending=%d nav_src=%d fake_origin=%d fix=%d\n",
+                    gpsSerialPort.available(), static_cast<int>(nav_data_source),
+                    nav_initialized_with_fake_origin ? 1 : 0, static_cast<int>(ubx.fix()));
       }
     }
 
+    const float alt_mean = n_alt > 0 ? static_cast<float>(alt_sum / n_alt) : 0.0f;
     std::printf("\n-- 定高结果 --\n");
-    std::printf("  解锁时刻：%s\n",
-                unlocked_at < 0 ? "从未解锁" : "见下（拍号）");
+    std::printf("  EKF 首次收敛：%s\n", converged_at < 0 ? "从未收敛" : "");
+    if (converged_at >= 0)
+      std::printf("                    t = %.2f s\n", static_cast<double>(converged_at * dt));
+    std::printf("  解锁：%s\n", unlocked_at < 0 ? "从未解锁" : "");
     if (unlocked_at >= 0)
-      std::printf("            t = %.2f s\n", static_cast<double>(unlocked_at * dt));
-    std::printf("  最终高度 %.2f m，区间 [%.2f, %.2f] m（3 s 后）\n",
-                static_cast<double>(-body.pos_d), static_cast<double>(min_alt),
+      std::printf("                    t = %.2f s\n", static_cast<double>(unlocked_at * dt));
+    std::printf("  稳态（最后 5 s）高度均值 %.2f m，区间 [%.2f, %.2f] m\n",
+                static_cast<double>(alt_mean), static_cast<double>(alt_min_ss),
+                static_cast<double>(alt_max_ss));
+    std::printf("  爬升段高度区间 [%.2f, %.2f] m\n", static_cast<double>(min_alt),
                 static_cast<double>(max_alt));
-    std::printf("  EKF 收敛标志 %d，解锁 %d\n", static_cast<int>(g_ekf_converged),
-                static_cast<int>(g_is_unlocked));
-    const bool ok = (unlocked_at >= 0) && (std::fabs(-body.pos_d - 10.0f) < 2.0f);
-    std::printf("\n%s\n", ok ? "=== 定高闭环成立（最终高度偏差 < 2 m）==="
+    std::printf("  HOVER conv_t=%.2f unlock_t=%.2f alt_mean=%.3f alt_min=%.3f alt_max=%.3f\n",
+                converged_at < 0 ? -1.0 : static_cast<double>(converged_at * dt),
+                unlocked_at < 0 ? -1.0 : static_cast<double>(unlocked_at * dt),
+                static_cast<double>(alt_mean), static_cast<double>(alt_min_ss),
+                static_cast<double>(alt_max_ss));
+
+    // 判据：EKF 真收敛过 + 解锁 + 稳态高度贴近 10 m
+    const bool ok = (converged_at >= 0) && (unlocked_at >= 0) &&
+                    std::fabs(alt_mean - 10.0f) < 1.0f;
+    std::printf("\n%s\n", ok ? "=== 定高闭环成立（EKF 收敛 + 解锁 + 稳态 10±1 m）==="
                              : "=== 定高闭环未成立 ===");
     return ok ? 0 : 1;
   }
