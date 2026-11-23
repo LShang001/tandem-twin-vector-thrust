@@ -47,6 +47,7 @@ bool readIMUData();
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <random>
 
 void setup();
 void loop();
@@ -59,12 +60,39 @@ constexpr float kAccLsbPerG = 4096.0f;               // ±8g
 constexpr float kGyrLsbPerDps = 32768.0f / 2000.0f;  // ±2000dps
 constexpr float kStdG = 9.80665f;
 
+// 舵机/电机换算参数与 RC 注入（照搬既有 SIL 的闭环口径，保持两条路径可比）
+const ServoConfig &SC = kDefaultServoConfig;
+
+void set_rc(uint16_t throttle, uint16_t mode, bool unlock, uint16_t roll = 1500,
+            uint16_t pitch = 1500)
+{
+  for (int i = 0; i < 9; ++i) raw_rc_values[i] = 1500;
+  raw_rc_values[0] = roll;
+  raw_rc_values[1] = pitch;
+  raw_rc_values[2] = throttle;
+  raw_rc_values[3] = 1500;
+  raw_rc_values[4] = unlock ? 1800 : 1000;
+  raw_rc_values[5] = 1800;
+  raw_rc_values[6] = mode;
+  raw_rc_values[7] = 1000;
+  raw_rc_values[8] = 1000;
+}
+
 uint64_t g_abs_q4 = 0;
 uint64_t g_next_tick_q4 = 625;
 uint32_t g_sensor_phase = 0;
 
 float g_acc_body_g[3] = {0.0f, 0.0f, -1.0f};
 float g_gyr_dps[3] = {0.0f, 0.0f, 0.0f};
+
+// ---- 传感器误差模型（--noise 开启后才生效）----
+bool g_noise_enable = false;
+float g_noise_acc_sigma = 0.004f;              // g
+float g_noise_gyr_sigma = 0.12f;               // dps
+float g_noise_acc_bias[3] = {0.010f, -0.012f, 0.008f};   // g，三轴不同以便暴露航向/倾斜耦合
+float g_noise_gyr_bias[3] = {0.15f, -0.12f, 0.10f};      // dps
+std::mt19937 g_rng(20261123u);                 // 固定种子，保证可复现
+std::normal_distribution<float> g_n01(0.0f, 1.0f);
 
 int g_fail = 0;
 void check(bool cond, const char *name)
@@ -156,6 +184,22 @@ void updateSensorModel(const SilBody6Dof &b, float a_n, float a_e, float a_d)
   g_gyr_dps[1] = -b.omega[2] * 57.29578f;
   g_gyr_dps[2] = -b.omega[0] * 57.29578f;
 
+  // ★传感器误差注入（--noise 开启）。默认关，保持"纯机理传递误差"可单独复现。
+  //   量级取自 ICM-42688-P 手册噪声密度按 2 kHz 带宽折算：
+  //     加速度 70 µg/√Hz × √2000 Hz ≈ 0.003 g（取 0.004 g 留余量）
+  //     陀螺 0.0028 dps/√Hz × √2000 Hz ≈ 0.13 dps（取 0.12 dps）
+  //   零偏按实机器件级典型值给：加计 0.01 g、陀螺 0.15 dps（含温漂前的常温值）。
+  //   这些是**量级合理的假设**，不是本机实测标定值；结论要按"假设值"表述。
+  if (g_noise_enable)
+  {
+    g_acc_body_g[0] += g_noise_acc_bias[0] + g_noise_acc_sigma * g_n01(g_rng);
+    g_acc_body_g[1] += g_noise_acc_bias[1] + g_noise_acc_sigma * g_n01(g_rng);
+    g_acc_body_g[2] += g_noise_acc_bias[2] + g_noise_acc_sigma * g_n01(g_rng);
+    g_gyr_dps[0] += g_noise_gyr_bias[0] + g_noise_gyr_sigma * g_n01(g_rng);
+    g_gyr_dps[1] += g_noise_gyr_bias[1] + g_noise_gyr_sigma * g_n01(g_rng);
+    g_gyr_dps[2] += g_noise_gyr_bias[2] + g_noise_gyr_sigma * g_n01(g_rng);
+  }
+
   // ★磁观测：纯 IMU 的 Madgwick 里 yaw 不可观，重力只能定 roll/pitch；
   //   缺航向基准时估计姿态会整体绕 z 漂移（实测 roll 差 −90°、pitch 却只差 8°）。
   //   注入与 plant 姿态一致的磁场，给 Madgwick 一个航向锚点。
@@ -184,10 +228,13 @@ void quatToEuler(float w, float x, float y, float z, float &roll, float &pitch, 
 
 int main(int argc, char **argv)
 {
-  // --freq <Hz>  激励频率；--dur <s> 仿真时长；--pitch-only 只给俯仰激励
+  // --freq <Hz>  激励频率；--dur <s> 仿真时长；--pitch-only 只给俯仰激励；
+  // --noise      开启传感器噪声与零偏（默认关，纯机理模式）
   float arg_freq = 0.2f;
   float arg_dur = 20.0f;
   bool arg_pitch_only = false;
+  bool arg_noise = false;
+  bool arg_hover = false;
   for (int i = 1; i < argc; ++i)
   {
     if (std::strcmp(argv[i], "--freq") == 0 && i + 1 < argc)
@@ -196,9 +243,27 @@ int main(int argc, char **argv)
       arg_dur = std::strtof(argv[i + 1], nullptr);
     else if (std::strcmp(argv[i], "--pitch-only") == 0)
       arg_pitch_only = true;
+    else if (std::strcmp(argv[i], "--noise") == 0)
+      arg_noise = true;
+    else if (std::strcmp(argv[i], "--hover") == 0)
+      arg_hover = true;
   }
+  g_noise_enable = arg_noise;
   std::setvbuf(stdout, nullptr, _IONBF, 0);
   std::printf("== L4 逐拍对拍：plant 真值 vs 驱动+Madgwick ==\n");
+  if (arg_noise)
+  {
+    std::printf("  传感器误差：acc σ=%.3f g 零偏(%+.3f,%+.3f,%+.3f) g；"
+                "gyr σ=%.2f dps 零偏(%+.2f,%+.2f,%+.2f) dps（假设值，非本机标定）\n",
+                static_cast<double>(g_noise_acc_sigma),
+                static_cast<double>(g_noise_acc_bias[0]),
+                static_cast<double>(g_noise_acc_bias[1]),
+                static_cast<double>(g_noise_acc_bias[2]),
+                static_cast<double>(g_noise_gyr_sigma),
+                static_cast<double>(g_noise_gyr_bias[0]),
+                static_cast<double>(g_noise_gyr_bias[1]),
+                static_cast<double>(g_noise_gyr_bias[2]));
+  }
 
   primeImuIdentity();
   g_sil_delay_hook = &delayHook;
@@ -230,6 +295,102 @@ int main(int argc, char **argv)
   const float dt = 0.005f;
   const int ticks_per_step = 32;  // 5 ms × 6400 Hz
   const int steps = static_cast<int>(arg_dur / dt);
+
+  // ============================================================
+  // 定高闭环模式（--hover）：验证"真实 IMU 驱动 + 真实控制律 + plant"能否闭环
+  //
+  // 观测注入说明：气压高度用一行直接写 `baro_altitude`（等价于完美气压计），
+  // GNSS 位置不注入。这是一次**可行性验证**：先回答"补上高度观测后 EKF 能否
+  // 收敛、能否解锁"，再决定是否值得把 DPS310 的 I2C 寄存器协议也做成替身。
+  // 因此本模式若跑通，结论只能写"控制链闭环成立"，不能写"全链路传感器都真实"。
+  // ============================================================
+  if (arg_hover)
+  {
+    std::printf("\n-- 定高闭环模式：气压高度注入，其余走真实链路 --\n");
+    const float w_hover = P.wMax * 0.5f;
+    float mf_w = w_hover, mt_w = w_hover;
+    float vn_p = 0.0f, ve_p = 0.0f, vd_p = 0.0f;
+    bool alt_cmd = false;
+    float max_alt = -1e9f, min_alt = 1e9f;
+    int unlocked_at = -1;
+
+    for (int k = 0; k < steps; ++k)
+    {
+      const float t = k * dt;
+      // 与既有 SIL 完全相同的 RC 时序
+      set_rc((t < 1.0f) ? 1000 : 1500, (t < 2.0f) ? 1300 : 1500, t >= 0.5f);
+
+      // 传感器模型（含噪声开关），加速度用速度差分
+      const float a_n = (k == 0) ? 0.0f : (body.vel_n - vn_p) / dt;
+      const float a_e = (k == 0) ? 0.0f : (body.vel_e - ve_p) / dt;
+      const float a_d = (k == 0) ? 0.0f : (body.vel_d - vd_p) / dt;
+      vn_p = body.vel_n;
+      ve_p = body.vel_e;
+      vd_p = body.vel_d;
+      updateSensorModel(body, a_n, a_e, a_d);
+
+      for (int i = 0; i < ticks_per_step; ++i)
+      {
+        advanceQ4(625u);
+        loop();
+      }
+
+      // ★观测注入：气压高度直接给 plant 真值（相对起飞点）
+      baro_altitude = -body.pos_d;
+
+      if (!alt_cmd && t >= 2.0f)
+      {
+        target_altitude = 10.0f;
+        alt_cmd = true;
+      }
+      if (unlocked_at < 0 && g_is_unlocked) unlocked_at = k;
+
+      // 控制输出 → plant
+      const float upper = (ch1_output - (50.0f + SC.zero_roll_pct)) * SC.half_travel_deg /
+                          (50.0f * (SC.teeth_gimbal / SC.teeth_servo) * SC.dir_roll) *
+                          0.017453292f;
+      const float lower = (ch2_output - (50.0f + SC.zero_pitch_pct)) * SC.half_travel_deg /
+                          (50.0f * (SC.teeth_gimbal / SC.teeth_servo) * SC.dir_pitch) *
+                          0.017453292f;
+      const float wf_target = (ch3_output / 100.0f) * P.wMax;
+      const float wt_target = (ch4_output / 100.0f) * P.wMax;
+      mf_w += (wf_target - mf_w) * std::fmin(dt / 0.28f, 1.0f);
+      mt_w += (wt_target - mt_w) * std::fmin(dt / 0.28f, 1.0f);
+      PropulsionState ps{mf_w, mt_w, upper, lower};
+      SixDOFWrench wr = computeWrench(ps, P);
+      body.step(wr, dt);
+
+      const float alt = -body.pos_d;
+      if (t > 3.0f) { max_alt = std::fmax(max_alt, alt); min_alt = std::fmin(min_alt, alt); }
+
+      if ((k % 400) == 0)
+      {
+        std::printf("t=%5.1f alt=%7.2f baro=%7.2f est_h=%7.2f "
+                    "servo=(%.1f,%.1f) motor=(%.1f,%.1f) mode=%d unlock=%d ekf=%d\n",
+                    static_cast<double>(t), static_cast<double>(alt),
+                    static_cast<double>(baro_altitude), static_cast<double>(estimated_height),
+                    static_cast<double>(ch1_output), static_cast<double>(ch2_output),
+                    static_cast<double>(ch3_output), static_cast<double>(ch4_output),
+                    static_cast<int>(g_current_flight_mode), static_cast<int>(g_is_unlocked),
+                    static_cast<int>(g_ekf_converged));
+      }
+    }
+
+    std::printf("\n-- 定高结果 --\n");
+    std::printf("  解锁时刻：%s\n",
+                unlocked_at < 0 ? "从未解锁" : "见下（拍号）");
+    if (unlocked_at >= 0)
+      std::printf("            t = %.2f s\n", static_cast<double>(unlocked_at * dt));
+    std::printf("  最终高度 %.2f m，区间 [%.2f, %.2f] m（3 s 后）\n",
+                static_cast<double>(-body.pos_d), static_cast<double>(min_alt),
+                static_cast<double>(max_alt));
+    std::printf("  EKF 收敛标志 %d，解锁 %d\n", static_cast<int>(g_ekf_converged),
+                static_cast<int>(g_is_unlocked));
+    const bool ok = (unlocked_at >= 0) && (std::fabs(-body.pos_d - 10.0f) < 2.0f);
+    std::printf("\n%s\n", ok ? "=== 定高闭环成立（最终高度偏差 < 2 m）==="
+                             : "=== 定高闭环未成立 ===");
+    return ok ? 0 : 1;
+  }
 
   float vn_prev = 0.0f, ve_prev = 0.0f, vd_prev = 0.0f;
 

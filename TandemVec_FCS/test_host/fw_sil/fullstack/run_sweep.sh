@@ -31,6 +31,13 @@ CASES=(
 )
 
 fail=0
+# NOISE=1 时开启传感器噪声与零偏（默认关＝纯机理传递误差）
+EXTRA_ARGS=""
+if [ "${NOISE:-0}" = "1" ]; then
+  EXTRA_ARGS="--noise"
+  printf '传感器误差：已开启（acc σ=0.004 g / gyr σ=0.12 dps + 三轴零偏，假设值）\n\n'
+fi
+
 printf '%-8s %-10s %-10s %-10s %-10s %-8s %-6s\n' \
   "freq(Hz)" "roll峰(°)" "pitch峰(°)" "稳态roll(°)" "稳态pitch(°)" "收敛(s)" "判据"
 printf '%s\n' "-------------------------------------------------------------------------------"
@@ -43,7 +50,7 @@ for c in "${CASES[@]}"; do
   log="/tmp/sweep_${freq}.log"
   # ★不看退出码：高频下判据本就该 FAIL（误差随频率增长），但那是**要的数据**，
   #   不是"运行失败"。只有跑不出 SWEEP 行才算真失败。
-  bash "$FS/build_and_run_closedloop.sh" --freq "$freq" --dur "$dur" > "$log" 2>&1
+  bash "$FS/build_and_run_closedloop.sh" --freq "$freq" --dur "$dur" $EXTRA_ARGS > "$log" 2>&1
   rc=$?
   line=$(grep -E '^SWEEP ' "$log" | tail -1)
   if [ -z "$line" ]; then
