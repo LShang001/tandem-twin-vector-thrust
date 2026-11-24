@@ -67,8 +67,42 @@ CRSF 侧的对应判据在 `health`：`rc_frames` 几乎不涨而 `rc_crc`/`rc_l
 - 切换自动带波特率且自动重建链路，`frames` 继续增长、`dropped=0`、`lq=98~100`。
 - 通道值：CH1-4 = 1500/1500/988/1500，CH5-9 = 1000（开关下位，未解锁），CH11-12 = 1500/1533，CH13-16 = 881（ELRS 未映射通道填充值）。
 
-## 7. 遗留与边界
+## 7. 回传也必须换协议（否则遥控器无数据）
+
+ELRS 的 RX↔飞控是**一根 UART 双向、协议二选一**：
+
+- CRSF 模式：飞控发 CRSF 遥测帧（0xC8/0xEE），RX 转发 → TX → 遥控器
+- MAVLink 模式：RX 只认 MAVLink（`SerialMavlink::processBytes`），CRSF 帧被丢弃
+
+链路机制（源码）：RX 把飞控上行字节收进 `mavlinkInputBuffer`，`GetNextPayload()` 打包成
+`[CRSF_ADDRESS_USB][len][raw mavlink]` 走 OTA；TX 侧 `tx_main.cpp:1538` 看到该地址且
+Link Mode=MAVLink 时调 `convert_mavlink_to_crsf_telem()` 翻译成 CRSF 传感器给遥控器。
+
+**白名单**（`lib/MAVLink/MAVLink.cpp`，发别的遥控器不显示）：HEARTBEAT / SYSTEM_TIME /
+GPS_RAW_INT / SCALED_PRESSURE / ATTITUDE / GLOBAL_POSITION_INT / VFR_HUD / ALTITUDE /
+BATTERY_STATUS / HOME_POSITION / STATUSTEXT / HIGH_LATENCY2。且 TX 有硬过滤
+`msg.compid != MAV_COMP_ID_AUTOPILOT1` 直接跳过。
+
+固件实现 `src/rc_mav_telem.{h,cpp}`（RC=MAVLink 时由 `rcInputPoll()` 调用）：
+
+| 消息 | 频率 | 用途 |
+|---|---|---|
+| HEARTBEAT | 1 Hz | 模式名（ArduPilot Copter custom_mode）+ 未解锁加 `*` |
+| ATTITUDE | 20 Hz | 姿态页 |
+| GPS_RAW_INT | 2 Hz | 坐标/星数/地速 |
+| GLOBAL_POSITION_INT | 5 Hz | 相对高度 → VARIO |
+| BATTERY_STATUS | 1 Hz | 电压（`id` 必须 0） |
+| VFR_HUD | 5 Hz | 油门/地速/升降率 |
+
+合计约 1.3 kB/s；F1000 + Telem 1:2 回传上限约 2.5 kB/s（占用约 52%）。
+
+**协议互斥**：MAVLink 模式下 7 处 CRSF 遥测（`sendElrsBattery/Attitude/BaroAltitude/
+FlightMode/Gps/Temp` 与通道回显）全部门控让位，避免混发污染 MAVLink 帧流。
+
+## 8. 遗留与边界
 
 - ELRS 侧 MAVLink 的 RC 更新率上限 100 Hz（`MAVLINK_RC_PACKET_INTERVAL = 10`），实测 145 Hz 是计数窗口误差，不外推。
+- 回传实测：`telem_tx` 3 秒 +134 帧（约 45 帧/秒），RC 输入同时 `frames` 继续增长、`link=up` —— 收发两个方向互不干扰。
+- **待确认**：遥控器（EdgeTX）上是否真出现姿态/GPS/电池/模式传感器。固件侧只证明帧已发出，最终显示要人工看一眼。
 - 未验证：CH5 拨到解锁位后的端到端解锁动作（需断动力台架拨杆）、长时间运行下 100 Hz RC 对控制环的跟随质量。
 - 默认 env（`CoaxialVTVL_ICM45686`）的 RC 输入仍是 CRSF + 420000，实机飞行不要烧 `_RcMav` 验证 env。
