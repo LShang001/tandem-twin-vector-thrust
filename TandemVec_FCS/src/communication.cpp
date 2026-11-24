@@ -628,23 +628,27 @@ bool send_crsf_frame(uint16_t channels[RC_INPUT_MAX_CHANNELS])
   return bytesSent == static_cast<size_t>(offset);
 }
 
-void setup_crsf_uart()
-{
-  // RC 串口波特率。依据 ELRS 官方源码 rx_main.cpp setupSerial()：
-  //   PROTOCOL_CRSF    → serialBaud = firmwareOptions.uart_baud（Lua 可配，默认 420000）
-  //   PROTOCOL_MAVLINK → serialBaud = 460800（硬编码，与 uart_baud 配置无关）
-  // 因此切协议时必须同步改这里的波特率，否则收到的全是乱码。
-  // 默认 420000 对应 CRSF；验证 MAVLink 用 -DBFS_RC_UART_BAUD=460800。
+// RC 串口波特率。依据 ELRS 官方源码 rx_main.cpp setupSerial()：
+//   PROTOCOL_CRSF    → serialBaud = firmwareOptions.uart_baud（Lua 可配，默认 420000）
+//   PROTOCOL_MAVLINK → serialBaud = 460800（硬编码，与 uart_baud 配置无关）
+// 因此切协议时必须同步改这里的波特率，否则收到的全是乱码。
+// 运行时可用 DBG `rcbaud <n>` 切换，用于扫档定位接收机真实配置。
 #ifndef BFS_RC_UART_BAUD
 #define BFS_RC_UART_BAUD 420000
 #endif
-  receiverSerial.begin(BFS_RC_UART_BAUD, SERIAL_8N1);
+
+/// 当前 RC 串口波特率（DBG `rcbaud` 可改；重开 Serial1 后 CRSF 与 MAVLink 解析器同时生效）
+static uint32_t s_rc_baud = BFS_RC_UART_BAUD;
+
+void setup_crsf_uart()
+{
+  receiverSerial.begin(s_rc_baud, SERIAL_8N1);
   while (!receiverSerial)
   {
     ; // 等待串口初始化完成
   }
   Serial8.print("Receiver Serial1 (ELRS) Initialized at ");
-  Serial8.print(BFS_RC_UART_BAUD);
+  Serial8.print(s_rc_baud);
   Serial8.println(" baud.");
 }
 
@@ -4684,6 +4688,29 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.println(F("[DBG] proto: 用法 proto mavlink|anocom"));
         }
       }
+      else if (strncmp(line, "rcbaud", 6) == 0) {
+        // 运行时改 RC 串口波特率：扫档定位接收机实际配置（ELRS CRSF 默认 420000，
+        // MAVLink 模式源码硬编码 460800）。切换会重开 Serial1 并清两个解析器状态。
+        const char *arg = line + 6;
+        while (*arg == ' ') arg++;
+        if (*arg != '\0') {
+          const unsigned long b = strtoul(arg, nullptr, 10);
+          if (b >= 9600UL && b <= 3000000UL) {
+            s_rc_baud = static_cast<uint32_t>(b);
+            crsf.begin(s_rc_baud);
+            mavlinkRc.reset();
+            serial.print(F("[DBG] rcbaud: "));
+            serial.print(s_rc_baud);
+            serial.println(F(" (Serial1 已重开)"));
+          } else {
+            serial.println(F("[DBG] rcbaud: 非法值，范围 9600..3000000"));
+          }
+        } else {
+          serial.print(F("[DBG] rcbaud: 当前="));
+          serial.println(s_rc_baud);
+          serial.println(F("[DBG] rcbaud: 用法 rcbaud <baud>"));
+        }
+      }
       else if (strncmp(line, "rcproto", 7) == 0) {
         // RC 输入协议切换（CRSF ↔ MAVLink）。只切串口解析路径，
         // 不改波特率/引脚；切换后立即按断链处理，等新协议首帧重建链路。
@@ -4707,7 +4734,9 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(F(" link="));
           serial.println(mavlinkRc.linkUp() ? F("up") : F("down"));
           // 诊断：串口到底有没有数据、首字节是哪种协议（0xFD=MAVLink v2 / 0xC8=CRSF）
-          serial.print(F("[DBG]   bytes="));
+          serial.print(F("[DBG]   baud="));
+          serial.print(s_rc_baud);
+          serial.print(F(" bytes="));
           serial.print(mavlinkRc.bytesIn());
           serial.print(F(" hex="));
           for (uint8_t i = 0; i < mavlinkRc.sniffLen(); ++i) {
