@@ -38,10 +38,16 @@ CrsfSerial::CrsfSerial(HardwareSerial &port, uint32_t baud) :
 
 void CrsfSerial::begin(uint32_t baud)
 {
+    // ★ 2026-11-25：显式传参时必须同步 _baud。
+    //   原实现的缺陷：begin(460800) 只重开串口、不更新 _baud，导致
+    //   ① getBaud() 与实际速率不一致；② 之后任何无参 begin() 会用旧的
+    //   _baud（出厂 420000）重开串口，静默把调用方设的速率覆盖掉
+    //   （实测症状：ELRS MAVLink 模式 460800 被覆盖回 420000，frames 恒 0）。
     if (baud != 0)
-        _port.begin(baud);
-    else
-        _port.begin(_baud);
+    {
+        _baud = baud;
+    }
+    _port.begin(_baud);
 }
 
 // Call from main loop to update
