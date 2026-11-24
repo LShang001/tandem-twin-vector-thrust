@@ -166,5 +166,11 @@ def open_link(port: str, baud: int, on_data, read_size: int = 256):
         # Termux 平板场景：termux-usb 把授权的 USB 数传以 fd 形式交给本进程
         from .termux_usb_link import TermuxFdLink
         return TermuxFdLink(int(port[3:]), baud, on_data)
-    from .serial_link import SerialLink
+    # cli.py 以「脚本方式」直接运行（python server/cli.py）时，本模块没有包上下文，
+    # 相对导入会炸（attempted relative import with no known parent package）。
+    # 2026-11-24 烧录验证时发现，兼容两种运行方式。
+    try:
+        from .serial_link import SerialLink
+    except ImportError:  # 脚本直跑：server/ 目录在 sys.path[0]，直接按顶层模块导入
+        from serial_link import SerialLink
     return SerialLink(port, baud, on_data, read_size=read_size)

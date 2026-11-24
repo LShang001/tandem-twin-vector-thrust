@@ -62,3 +62,32 @@ $cmd = 'program "' + $elfTcl + '" verify reset exit'
 3. 报 `program_error` 但无 `couldn't open` → 才去看 elf 是否存在、是否被 `Move-Item` 挪走。
 4. 烧完必须抓一次启动日志（`[Init] IMU:` / `System Setup Complete`）才算完成——
    `Verified OK` 只证明字节写进了 Flash，不证明固件是新的、更不证明它能启动。
+
+## 5. 擦除 sector 0 超时 → 先试 mass_erase（2026-11-24 共轴板实测）
+
+症状：SWD 正常（DPIDR 读到、target halted），`program` 卡在
+`Error: erase time-out or operation error sector 0` → `Programming Failed`；
+失败后目标可能留 double-fault lockup（msp=0xfffffffc），下次 `reset halt` 读到垃圾 PC。
+降 `adapter speed`（100/50 kHz）**不解决**——这不是链路速度问题。
+
+有效做法：`program` 前显式 `stm32h7x mass_erase 0`（全片擦）：
+
+```
+openocd -f interface/cmsis-dap.cfg -f target/stm32h7x.cfg \
+  -c "adapter speed 100" -c "init" -c "halt" \
+  -c "stm32h7x mass_erase 0" \
+  -c "program <elf正斜杠> verify reset exit"
+```
+
+推测机理：上一次失败的逐 sector 擦除把 Flash 控制器留在了坏状态
+（半擦 sector + 控制器寄存器残留），后续逐 sector 擦一律超时；全片擦绕过
+per-sector 流程并把控制器拉回干净态。**同一块板第一次烧失败后，直接上 mass_erase，
+不要在降速上浪费时间。**
+
+两个伴生坑（同日实测）：
+- 失败的烧录会把 DAP 从 Windows 上整个拔掉（所有 0D28 设备 Code 45 phantom），
+  openocd 报 `unable to find a matching CMSIS-DAP device`——**重新插拔 DAP 的 USB**
+  即恢复，软件 Enable-PnpDevice 救不回（General Failure）。
+- 荣耀本的调试串口是 **COM13（CH343）**，不是 DAP CDC（COM10，VID_0D28 桥的是
+  DAP 自己的口，抓不到板子 UART）；数传口是 COM9（CH340）。`capture_boot.ps1 COM10`
+  抓不到数据不是固件没起来。

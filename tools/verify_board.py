@@ -38,10 +38,13 @@ EXPECT_PARAM_COUNT = 169
 #   42688 走硬件 FIFO + 2kHz 定时器 ISR；45686 目前是轮询后端（每 5ms 读寄存器），
 #   2kHz 定时器 ISR 拿不到 FIFO 就回退，实测稳定在 200Hz。
 #   两个区间都是设计内状态，不是故障；落在别处才算异常。
+# ★ 2026-11-24：45686 已切 1600Hz ODR 档（imu_odr_config.h，无 2kHz 档），补一档。
+#   共轴板实测 1600.3/1604.9 Hz，落在旧两档之外被判"越界"，是判据过期不是板子问题。
 IMU_RATE_FIFO_32K = (2900.0, 3500.0)  # 硬件 FIFO 后端 3.2kHz（ICM-45686）
+IMU_RATE_FIFO_16K = (1500.0, 1700.0)  # 硬件 FIFO 后端 1.6kHz（ICM-45686 @1600 ODR）
 IMU_RATE_FIFO = (1800.0, 2200.0)   # 硬件 FIFO 后端 2kHz（ICM-42688-P）
 IMU_RATE_POLL = (150.0, 260.0)     # 轮询后端（ICM-45686）
-IMU_RATE_MIN, IMU_RATE_MAX = IMU_RATE_FIFO
+IMU_RATE_MIN, IMU_RATE_MAX = IMU_RATE_FIFO_16K
 # 判据：CPU 占空比上限（%）
 CPU_MAX_PCT = 85.0
 
@@ -99,7 +102,9 @@ def main() -> int:
     veh_m = re.search(r"veh=(\w+)", out)
     veh = veh_m.group(1) if veh_m else "?"
     if expect_veh:
-        check("机型匹配", veh == expect_veh, f"{veh}（期望 {expect_veh}）", results)
+        # 2026-11-24：改前缀匹配。固件上报的机型标识带完整枚举名（如 CoaxialVTVL），
+        # 调用方传短名（Coaxial）时全等比较会误判 FAIL。
+        check("机型匹配", veh.startswith(expect_veh), f"{veh}（期望 {expect_veh}）", results)
     else:
         check("机型可读", veh != "?", f"{veh}", results)
 
@@ -133,9 +138,12 @@ def main() -> int:
     # ★ 2026-11-08 加复测：ISR 读数实测有 ±7% 抖动（同一块板连测三次得
     #   1887 / 2000 / 2033 Hz，而 CPU 恒定 48.6%）。单次偏低不代表性能下降。
     #   判据外时再测最多 2 次，取其中位数，避免把抖动误报成故障。
+    # ★ 2026-11-24：45686@1600 板上复测发现 2 次复测不够——短窗口差分叠加 CLI
+    #   每次重建链路的开销，单次读数可抖到 1450–1760 Hz（5 连测差分反推真实约
+    #   1552 Hz，±2%）。复测加到 4 次；仍越界才判 FAIL。
     if not (IMU_RATE_MIN <= hz <= IMU_RATE_MAX):
         samples = [hz]
-        for _ in range(2):
+        for _ in range(4):
             time.sleep(1.0)
             out2 = cli(port, "device")
             m2 = re.search(r"real_hz=(\d+)", out2) or re.search(r"rate=([\d.]+)Hz", out2)
@@ -148,6 +156,9 @@ def main() -> int:
         hz = med
     if IMU_RATE_FIFO_32K[0] <= hz <= IMU_RATE_FIFO_32K[1]:
         tier = "FIFO 后端 3.2k"
+        rate_ok = True
+    elif IMU_RATE_FIFO_16K[0] <= hz <= IMU_RATE_FIFO_16K[1]:
+        tier = "FIFO 后端 1.6k"
         rate_ok = True
     elif IMU_RATE_FIFO[0] <= hz <= IMU_RATE_FIFO[1]:
         tier = "FIFO 后端 2k"
@@ -193,11 +204,32 @@ def main() -> int:
     real_hz = float(rate_m.group(1)) if rate_m else -1.0
     # ★ 2026-11-09：该判据依赖 vars watch（0xF2 帧走数传 Serial6）。
     #   没接数传时读不到，属于「测不了」而不是「坏了」——只报告，不计入失败。
+    # ★ 2026-11-24：判据接档位表（45686@1600 落在旧两档之外）；5s 窗口抖动实测
+    #   ±9%（同板两次 1600.3/1738.8），越界时复测 3 次取中位数再判。
     if real_hz < 0:
         print("       [信息] IMU 真实速率：未测（vars watch 需数传口，当前未接线）")
     else:
-        real_ok = (IMU_RATE_FIFO[0] <= real_hz <= IMU_RATE_FIFO[1]) or (
-            IMU_RATE_POLL[0] <= real_hz <= IMU_RATE_POLL[1]
+        if not (
+            (IMU_RATE_FIFO_32K[0] <= real_hz <= IMU_RATE_FIFO_32K[1])
+            or (IMU_RATE_FIFO_16K[0] <= real_hz <= IMU_RATE_FIFO_16K[1])
+            or (IMU_RATE_FIFO[0] <= real_hz <= IMU_RATE_FIFO[1])
+            or (IMU_RATE_POLL[0] <= real_hz <= IMU_RATE_POLL[1])
+        ):
+            samples = [real_hz]
+            for _ in range(3):
+                time.sleep(1.0)
+                out2 = cli(port, "vars", "watch", "imu_rate", "-t", "5", timeout=90)
+                m2 = re.search(r"imu_rate\s*=\s*\+?([\d.]+)", out2)
+                if m2:
+                    samples.append(float(m2.group(1)))
+            samples.sort()
+            real_hz = samples[len(samples) // 2]
+            print(f"  [信息] 真实速率复测：{samples} → 取中位数 {real_hz:.1f} Hz")
+        real_ok = (
+            (IMU_RATE_FIFO_32K[0] <= real_hz <= IMU_RATE_FIFO_32K[1])
+            or (IMU_RATE_FIFO_16K[0] <= real_hz <= IMU_RATE_FIFO_16K[1])
+            or (IMU_RATE_FIFO[0] <= real_hz <= IMU_RATE_FIFO[1])
+            or (IMU_RATE_POLL[0] <= real_hz <= IMU_RATE_POLL[1])
         )
         check("IMU 真实速率", real_ok, f"{real_hz:.1f} Hz（非 DBG 路径）", results)
 
