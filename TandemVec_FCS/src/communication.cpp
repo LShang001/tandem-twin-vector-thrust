@@ -630,9 +630,11 @@ bool send_crsf_frame(uint16_t channels[RC_INPUT_MAX_CHANNELS])
 
 void setup_crsf_uart()
 {
-  // RC 串口波特率：ELRS CRSF 标准 420000；切到 MAVLink 模式时接收机侧常配 460800，
-  // 可用 -DBFS_RC_UART_BAUD=460800 覆盖（见 env:CoaxialVTVL_ICM45686_RcMav）。
-  // 默认仍是 420000，实机行为不变。
+  // RC 串口波特率。依据 ELRS 官方源码 rx_main.cpp setupSerial()：
+  //   PROTOCOL_CRSF    → serialBaud = firmwareOptions.uart_baud（Lua 可配，默认 420000）
+  //   PROTOCOL_MAVLINK → serialBaud = 460800（硬编码，与 uart_baud 配置无关）
+  // 因此切协议时必须同步改这里的波特率，否则收到的全是乱码。
+  // 默认 420000 对应 CRSF；验证 MAVLink 用 -DBFS_RC_UART_BAUD=460800。
 #ifndef BFS_RC_UART_BAUD
 #define BFS_RC_UART_BAUD 420000
 #endif
