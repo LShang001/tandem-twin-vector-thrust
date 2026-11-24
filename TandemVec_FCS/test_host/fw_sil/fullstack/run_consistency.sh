@@ -136,6 +136,18 @@ else
 fi
 
 # ------------------------------------------------------------
+section "P5 UBX 配置：开机快路径与全量配置路径（替身接收机）"
+
+if bash "$FS/build_and_run_ubxcfg.sh" > /tmp/fs_p5.log 2>&1; then
+  grep -E '^=== ' /tmp/fs_p5.log | tail -1 | sed 's/^/  /'
+  grep -E '^\[FAIL\]' /tmp/fs_p5.log | sed 's/^/  /' | head -8
+  ok "UBX 配置判据通过（冷机全量 / 已配置快路径 / 半配置回落三类场景）"
+else
+  grep -E '^\[FAIL\]' /tmp/fs_p5.log | sed 's/^/  /' | head -8
+  bad "UBX 配置判据失败"
+fi
+
+# ------------------------------------------------------------
 section "不可比层（明确声明，不假装覆盖）"
 cat <<'EOF'
   L5 硬件时序：
@@ -150,7 +162,7 @@ EOF
 # ------------------------------------------------------------
 printf '\n'
 if [ "$fail" -eq 0 ]; then
-  printf '=== 一致性判据：L1/L2/L3/L4 全部通过；L5 不可比已声明 ===\n'
+  printf '=== 一致性判据：L1/L2/L3/L4 + P5 全部通过；L5 不可比已声明 ===\n'
   exit 0
 else
   printf '=== 一致性判据存在失败：%d 项 ===\n' "$fail"

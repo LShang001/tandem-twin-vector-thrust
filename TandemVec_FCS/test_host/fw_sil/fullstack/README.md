@@ -508,6 +508,49 @@ getFIFOvalue → calcPressure → calculateAltitude → 滤波 → `baro_altitud
   「驱动轴映射 + 姿态滤波」的纯机理传递误差，不含实机噪声传播。收敛时间 9.9 s
   是冷启动过程，实机有初始对准，不代表上电收敛指标。
 
+## 7.8 P5：UBX 配置的快路径与全量路径（2026-11-24 完成）
+
+```bash
+bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_ubxcfg.sh
+```
+
+链接真实 `src/ubx_config.cpp`（1500 行，一行未改），串口对端换成**替身接收机**：
+它按 UBX 协议解析固件发出的每一帧，回 ACK-ACK / poll 响应，维护 CFG 配置数据库
+（CFG-VALSET 写入、CFG-VALGET 键值回读），并按自身配置状态决定是否输出
+NAV-PVT/NAV-EOE——这正是开机快路径要看的现象。
+
+三个场景，对应真机上电的三类情况：
+
+| 场景 | 接收机初态 | 期望 | 实测 |
+|---|---|---|---|
+| S1 冷机 | 9600、只出 NMEA、出厂配置库 | 走全量：探测 9600 → VALSET 切 921600 → RATE/MSG/NAV5/GNSS/SBAS/PDOP → 回读校验 | 20/20 断言通过；替身收到 22 帧、回 18 个 ACK；接收机侧 baud=921600、dynModel=8、pDOP=250、MSGOUT PVT/EOE=1 |
+| S2 已配置 | 921600、PVT/EOE 在出、键值全对 | **命中快路径且发送配置帧 = 0** | 6/6 通过；仅 2 个只读 VALGET，无任何写命令 |
+| S3 半配置 | 921600、PVT/EOE 在出，但 `UART1OUTPROT-NMEA=1`、dynModel=7 | 快路径必须拒绝，落回全量并改正 | 5/5 通过；`OUTPROT-NMEA` 被改回 0、dynModel 修正为 8 |
+
+合计 31 条断言全 PASS（`run_consistency.sh` 已并入该段）。S3 是这一层最有价值的
+场景：它证明快路径不是「信任接收机」，而是「验证接收机当前状态」——半配置、
+被别人改过、换过接收机都会自动落回全量。
+
+**替身要实现对，有四个点必须真实，否则测出来的结论是假的**：
+
+1. **波特率失配必须一个字节都收不到**。最初替身在任何波特率上都回 NMEA，结果
+   921600 档第一次探测就"命中"，`found_baud` 直接是 921600，整条「9600 → 921600
+   切速」路径被跳过，而表面上全绿。实现方式是让 `HardwareSerial::begin()` 变成
+   `virtual`，替身记录固件当前请求的波特率，只有与自身波特率一致时才应答。
+2. **NMEA 要持续输出，不能只发一句**。快路径监听（400 ms）会先把出厂流读掉；
+   只发一次会让随后的波特率探测误判"没有接收机"。
+3. **配置项的类型宽度要遵守**。pDOP(`0x301100B1`) 是 U2，替身若按 1 字节存，
+   VALGET 回包长度与 `ubxValGetU2` 期望的 10 字节不符，快路径永远失败——排查时
+   看到的是"已配置却不走快路径"，很容易误判成固件判据问题。
+4. **虚拟时间 0 不能用 `last==0` 当"还没发过"的哨兵**。否则每次 `available()`
+   都判为"该发了"，固件内层读循环永不结束（实测表现为整个 harness 卡死）。
+
+`run_consistency.sh` 的一节输出示例：
+
+```
+=== ubx_config 快路径/全量路径：PASS 31, FAIL 0 ===
+```
+
 ## 8 后续阶段
 
 | 阶段 | 接入内容 | 判据 |
@@ -515,7 +558,7 @@ getFIFOvalue → calcPressure → calculateAltitude → 滤波 → `baro_altitud
 | P2 | `main.cpp` 链接期桩补齐 | 任务名/间隔/顺序与固件一致，个数可核对 |
 | P3 | FIFO 取帧 → `imuSampleIsr` → `IMU_Packet` 数值 | 注入的寄存器值经真实换算后与 `IMU_Packet` 一致 |
 | P4 | `communication.cpp`、`mavlink_bridge.cpp`、`ano_params.cpp`、`ano_vars.cpp` | 真实遥测帧字节可从宿主导出并解析回原值 |
-| P5 | `ubx_config.cpp` | 替身接收机对 CFG 命令回 ACK，快路径/全量路径均可复现 |
+| P5 | `ubx_config.cpp` | 替身接收机对 CFG 命令回 ACK，快路径/全量路径均可复现（**已完成，见 §7.8**） |
 | P6 | 一致性对拍 | 同一输入 trace 下与既有 SIL 逐拍比对，给出最大偏差 |
 
 ## 8 明确不在覆盖范围

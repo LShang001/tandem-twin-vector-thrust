@@ -397,7 +397,9 @@ class HardwareSerial : public Stream {
 public:
   HardwareSerial() {}
   HardwareSerial(int, int) {}
-  void begin(unsigned long) {}
+  // begin 声明为 virtual：全链路数字孪生要模拟"接收机只在自己那个波特率上
+  // 应答"，需要子类记录固件当前请求的波特率。默认实现不变。
+  virtual void begin(unsigned long) {}
   void begin(unsigned long, int) {}
   void begin(unsigned long, uint32_t /*config*/) {}
   void end() {}
