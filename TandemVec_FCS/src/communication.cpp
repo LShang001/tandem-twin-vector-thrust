@@ -4696,6 +4696,18 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(mavlinkRc.lqPercent());
           serial.print(F(" link="));
           serial.println(mavlinkRc.linkUp() ? F("up") : F("down"));
+          // 诊断：串口到底有没有数据、首字节是哪种协议（0xFD=MAVLink v2 / 0xC8=CRSF）
+          serial.print(F("[DBG]   bytes="));
+          serial.print(mavlinkRc.bytesIn());
+          serial.print(F(" hex="));
+          for (uint8_t i = 0; i < mavlinkRc.sniffLen(); ++i) {
+            if (mavlinkRc.sniff()[i] < 0x10) {
+              serial.print('0');
+            }
+            serial.print(mavlinkRc.sniff()[i], HEX);
+            serial.print(' ');
+          }
+          serial.println();
           serial.println(F("[DBG] rcproto: 用法 rcproto mavlink|crsf"));
         }
       }

@@ -90,6 +90,11 @@ public:
   uint32_t channelFrames() const { return _ch_frames; }  ///< 有效通道帧计数
   uint32_t droppedFrames() const { return _dropped; }    ///< 被过滤的帧计数
   uint32_t lastChannelsMs() const { return _last_ch_ms; }
+  /// 串口累计收到字节数：区分"串口无数据"与"有数据但不是合法 MAVLink"
+  uint32_t bytesIn() const { return _bytes_in; }
+  /// 最近 16 个原始字节（诊断用，看首字节是 0xFD(MAVLink v2) 还是 0xC8(CRSF)）
+  const uint8_t* sniff() const { return _sniff; }
+  uint8_t sniffLen() const { return _sniff_len; }
 
 private:
   /// 处理一条已通过 CRC 的 MAVLink 帧（仅 RC_CHANNELS_OVERRIDE / RADIO_STATUS 被采纳）
@@ -109,6 +114,9 @@ private:
   uint32_t _dropped = 0;
   uint32_t _last_ch_ms = 0;
   uint32_t _now_ms = 0;  ///< 本轮注入时间（宿主测试用虚拟时间，不能用 millis()）
+  uint32_t _bytes_in = 0;
+  uint8_t _sniff[16] = {};   ///< 最近 16 字节环形快照
+  uint8_t _sniff_len = 0;
 };
 
 /// 全局实例（协议切换由 communication.cpp 的 rcInputSetProto() 驱动）

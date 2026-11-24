@@ -60,6 +60,16 @@ void MavlinkRc::loop(uint32_t now_ms) {
     int budget = kMaxBytesPerLoop;
     while (budget-- > 0 && _serial->available() > 0) {
       const uint8_t c = static_cast<uint8_t>(_serial->read());
+      ++_bytes_in;
+      // 环形快照：始终保留最近 16 字节，用于判断串口上到底是哪种协议
+      if (_sniff_len < sizeof(_sniff)) {
+        _sniff[_sniff_len++] = c;
+      } else {
+        for (uint8_t i = 1; i < sizeof(_sniff); ++i) {
+          _sniff[i - 1] = _sniff[i];
+        }
+        _sniff[sizeof(_sniff) - 1] = c;
+      }
       mavlink_message_t msg;
       mavlink_status_t status;
       if (mavlink_parse_char(kChannel, c, &msg, &status)) {
