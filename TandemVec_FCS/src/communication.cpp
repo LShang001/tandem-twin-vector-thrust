@@ -630,12 +630,20 @@ bool send_crsf_frame(uint16_t channels[RC_INPUT_MAX_CHANNELS])
 
 void setup_crsf_uart()
 {
-  receiverSerial.begin(420000, SERIAL_8N1); // 420000波特率，8数据位，无校验，1停止位
+  // RC 串口波特率：ELRS CRSF 标准 420000；切到 MAVLink 模式时接收机侧常配 460800，
+  // 可用 -DBFS_RC_UART_BAUD=460800 覆盖（见 env:CoaxialVTVL_ICM45686_RcMav）。
+  // 默认仍是 420000，实机行为不变。
+#ifndef BFS_RC_UART_BAUD
+#define BFS_RC_UART_BAUD 420000
+#endif
+  receiverSerial.begin(BFS_RC_UART_BAUD, SERIAL_8N1);
   while (!receiverSerial)
   {
     ; // 等待串口初始化完成
   }
-  Serial8.println("Receiver Serial1 (ELRS) Initialized at 420000 baud.");
+  Serial8.print("Receiver Serial1 (ELRS) Initialized at ");
+  Serial8.print(BFS_RC_UART_BAUD);
+  Serial8.println(" baud.");
 }
 
 void setup_transmitter_uart()
