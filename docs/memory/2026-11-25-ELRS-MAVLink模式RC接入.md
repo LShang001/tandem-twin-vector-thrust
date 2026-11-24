@@ -42,7 +42,33 @@ CRSF 侧的对应判据在 `health`：`rc_frames` 几乎不涨而 `rc_crc`/`rc_l
 - 稳定后：2 秒 `frames` +291（≈145 Hz）、`dropped=0`、`lq=98→99`、`link=up`
 - 通道值合理：CH1-4 = 1500/1500/988/1500，CH5-9 = 1000（开关在下位，未解锁），CH13-16 = 881（ELRS 未映射通道的填充值）
 
-## 5. 遗留与边界
+## 5. 库层缺陷：CrsfSerial::begin(baud) 不同步 _baud
+
+`lib/CrsfSerial/CrsfSerial.cpp` 原实现只重开串口、**不更新 `_baud`**：
+
+- `getBaud()` 返回的仍是构造时的出厂值，与实际速率不一致；
+- 之后任何无参 `begin()` 都会用旧 `_baud`（420000）重开串口，**静默覆盖**调用方设的速率。
+
+本次就是这样踩到的：`rcInputBegin()` 设好 460800，`main.cpp` 里遗留一句无参 `crsf.begin()` 又把它改回 420000，症状是"波特率读数对、frames 恒 0、hex 乱码"。
+
+已修（2026-11-25）：显式传参时同步 `_baud`。配套规则：**重开 RC 串口只走 `rcInputBegin()` 或 DBG `rcbaud`，不要裸调 `crsf.begin()`**。
+
+## 6. 验收数据（共轴 CoaxialVTVL_ICM45686 台架，最终版）
+
+三段一次跑完（`env:CoaxialVTVL_ICM45686_RcMav`）：
+
+| 阶段 | proto | baud | frames | link |
+|---|---|---|---|---|
+| 冷启动（不切换） | mavlink | 460800 | 1063 | **up** |
+| `rcproto crsf` | crsf | 420000 | 冻结 | down（RX 在发 MAVLink，属预期） |
+| `rcproto mavlink` | mavlink | 460800 | 1666 | **up** |
+
+- 冷启动直接可用：不需要先切一次协议才纠正波特率。
+- 切换自动带波特率且自动重建链路，`frames` 继续增长、`dropped=0`、`lq=98~100`。
+- 通道值：CH1-4 = 1500/1500/988/1500，CH5-9 = 1000（开关下位，未解锁），CH11-12 = 1500/1533，CH13-16 = 881（ELRS 未映射通道填充值）。
+
+## 7. 遗留与边界
 
 - ELRS 侧 MAVLink 的 RC 更新率上限 100 Hz（`MAVLINK_RC_PACKET_INTERVAL = 10`），实测 145 Hz 是计数窗口误差，不外推。
-- 未验证：CH5 拨动到解锁位后的端到端解锁动作（需断动力台架拨杆）、飞控长时间运行下 100 Hz RC 对控制环的跟随质量。
+- 未验证：CH5 拨到解锁位后的端到端解锁动作（需断动力台架拨杆）、长时间运行下 100 Hz RC 对控制环的跟随质量。
+- 默认 env（`CoaxialVTVL_ICM45686`）的 RC 输入仍是 CRSF + 420000，实机飞行不要烧 `_RcMav` 验证 env。
