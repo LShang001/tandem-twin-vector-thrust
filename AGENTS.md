@@ -41,6 +41,7 @@ py -3.12 tools/check-code-comments.py --check
 
 | 文件 | 何时读 |
 |---|---|
+| [`2026-11-25-ELRS-MAVLink模式RC接入.md`](docs/memory/2026-11-25-ELRS-MAVLink模式RC接入.md) | 接 ELRS 的 MAVLink RC；串口有字节但 CRSF/MAVLink 都解不出帧；切 RC 输入协议 |
 | [`2026-11-24-EKF惰性表达式悬垂与全链路SIL口径.md`](docs/memory/2026-11-24-EKF惰性表达式悬垂与全链路SIL口径.md) | 写返回 Eigen 表达式的 lambda；排查 SIL 时好时坏、定高读数 10.52 m 或退出码 134；用 SIL 推断实飞协方差行为；用 WSL 跑 SIL |
 | [`2026-11-12-IMU-ISR轮询频率选档.md`](docs/memory/2026-11-12-IMU-ISR轮询频率选档.md) | 改 ODR／ISR、增构建环境或排查环境编译失败 |
 | [`2026-11-11-GNSS串口逐字节中断丢帧.md`](docs/memory/2026-11-11-GNSS串口逐字节中断丢帧.md) | 丢历元、校验失败、定位跳变或串口重配 |

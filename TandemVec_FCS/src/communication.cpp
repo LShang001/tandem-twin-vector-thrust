@@ -317,8 +317,11 @@ static constexpr uint32_t kRcBaudCrsf = 420000;
 /// MAVLink 模式波特率（ELRS 源码硬编码，不能靠 uart_baud 覆盖）
 static constexpr uint32_t kRcBaudMavlink = 460800;
 
-/// 当前 RC 串口波特率（DBG `rcbaud` 可改；切协议时自动跟随）
-static uint32_t s_rc_baud = BFS_RC_UART_BAUD;
+/// 当前 RC 串口波特率（DBG `rcbaud` 可改；切协议时自动跟随）。
+/// 初值按编译期协议选：MAVLink env 上电即 460800，否则上电后第一次切换才会纠正，
+/// 而 ELRS 侧只认固定值——漏了这一步会表现为"上电就有字节但解不出帧"。
+static uint32_t s_rc_baud =
+    (BFS_RC_PROTO_MAVLINK != 0) ? kRcBaudMavlink : BFS_RC_UART_BAUD;
 
 // 前置声明：回调定义在下方（linkUpCallback/linkDownCallback）
 void linkUpCallback();
