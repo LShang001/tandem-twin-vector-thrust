@@ -242,7 +242,7 @@ inline OutputCommandSet mapCoaxialVtvOutputs(
     const float motor2_pct = (motor2_us - cal.motor_min_us) / safe_span * 100.0f;
 
     float normalized[4] = {
-        roll_deg / half,   // 上摆方向：roll 正 → 舵机百分比增大
+        roll_deg / half,   // TVC roll 轴（共轴为单一底部两轴摆座，无上/下摆）：roll 正 → 舵机百分比增大
         -pitch_deg / half, // 外部工程 pitch 映射方向相反
         motor1_pct / 100.0f,
         motor2_pct / 100.0f,
