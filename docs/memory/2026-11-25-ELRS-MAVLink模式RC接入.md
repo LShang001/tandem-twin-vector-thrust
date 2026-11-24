@@ -39,7 +39,7 @@ CRSF 侧的对应判据在 `health`：`rc_frames` 几乎不涨而 `rc_crc`/`rc_l
 ## 4. 实测数据（共轴 CoaxialVTVL_ICM45686 台架）
 
 - 波特率扫描（每档 1.5 s）：460800 收 195 帧，420000 / 115200 / 400000 / 921600 全部 0 帧
-- 稳定后：2 秒 `frames` +291（≈145 Hz）、`dropped=0`、`lq=98→99`、`link=up`
+- 稳定后：`frames` 3 秒 +134（约 45 帧/秒，短窗口误差大）、`dropped=0`、`lq=98→99`、`link=up`
 - 通道值合理：CH1-4 = 1500/1500/988/1500，CH5-9 = 1000（开关在下位，未解锁），CH13-16 = 881（ELRS 未映射通道的填充值）
 
 ## 5. 库层缺陷：CrsfSerial::begin(baud) 不同步 _baud
@@ -99,10 +99,22 @@ BATTERY_STATUS / HOME_POSITION / STATUSTEXT / HIGH_LATENCY2。且 TX 有硬过�
 **协议互斥**：MAVLink 模式下 7 处 CRSF 遥测（`sendElrsBattery/Attitude/BaroAltitude/
 FlightMode/Gps/Temp` 与通道回显）全部门控让位，避免混发污染 MAVLink 帧流。
 
-## 8. 遗留与边界
+## 8. RC 帧率：MAVLink 死限 100 Hz，与包率无关
 
-- ELRS 侧 MAVLink 的 RC 更新率上限 100 Hz（`MAVLINK_RC_PACKET_INTERVAL = 10`），实测 145 Hz 是计数窗口误差，不外推。
-- 回传实测：`telem_tx` 3 秒 +134 帧（约 45 帧/秒），RC 输入同时 `frames` 继续增长、`link=up` —— 收发两个方向互不干扰。
-- **待确认**：遥控器（EdgeTX）上是否真出现姿态/GPS/电池/模式传感器。固件侧只证明帧已发出，最终显示要人工看一眼。
+10 秒窗口实测 **99.9 Hz**（39430 → 40501 帧 / 10.72 s），与源码常量完全吻合：
+
+| 实现 | `sendRCFrame` 返回值 | 语义 | F1000 下 RC 帧率 |
+|---|---|---|---|
+| `SerialMavlink` | `MAVLINK_RC_PACKET_INTERVAL = 10` | 10 ms 后再次调用 | **100 Hz（死限，与包率无关）** |
+| `SerialCRSF` | `DURATION_IMMEDIATELY`（0） | 每 loop 都发 | 跟随包率，F1000 下约 **250 Hz** |
+
+返回值语义见 `device.h`：返回的是"多久后再调 `timeout()`"的毫秒数。
+
+**F1000 的 1000 包/s 去哪了**：`OTA4_PACKET_SIZE = 8`、载荷 5 B = 4 通道 × 10 bit，16 通道需 4 个包拼一帧 → 空口完整 RC 上限 = 1000 ÷ 4 = **250 Hz**。MAVLink 固定在 100 Hz 只用掉 40%。
+
+**改 `MAVLINK_RC_PACKET_INTERVAL` 的带宽影响**（评估结论，未实施）：RC 帧是 RX→FC 方向、且 RC 数据本来就在空口包固定字段里，**不占遥测 payload**。改 10→5（200 Hz）后 FC→RX 串口占用从 6.6 涨到 11.9 kB/s（460800 的 14%→26%），无线回传 2.5 kB/s 占用不变（仍 52%）。收益是 RC 更新率 100→200 Hz、延迟 10–13→5–8 ms，逼近空口 250 Hz 上限。
+
+## 9. 遗留与边界
+
 - 未验证：CH5 拨到解锁位后的端到端解锁动作（需断动力台架拨杆）、长时间运行下 100 Hz RC 对控制环的跟随质量。
-- 默认 env（`CoaxialVTVL_ICM45686`）的 RC 输入仍是 CRSF + 420000，实机飞行不要烧 `_RcMav` 验证 env。
+- 未做：把 `MAVLINK_RC_PACKET_INTERVAL` 改 5 需要改 ELRS RX 固件并重刷接收机，属上游改动、无官方背书，未实施。
