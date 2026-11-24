@@ -261,9 +261,15 @@ bash TandemVec_FCS/test_host/fw_sil/fullstack/build_and_run_telemetry.sh
    暴露 W25N01GV → magcal → ubx_config → CrsfSerial → `isGnssDataFreshForNav`。
    正确做法是**先一次性列出全部未定义符号**（`grep 'undefined reference'` 去重），
    再分两类处理：库里有实现就链接，语义明确的查询函数就做契约桩。
-2. **`isGnssDataFreshForNav()` 用契约桩而不是链接 `navigation_task.cpp`**。
-   后者会拖进整个 EKF 链；该函数语义单一（数据是否新鲜），桩返回 `false`
-   表示"宿主没有真实 GNSS 接收"，上层因此走真实失败分支，不会伪造出假定位。
+2. **`isGnssDataFreshForNav()` 早期用契约桩，2026-11-24 起改为链接真实
+   `src/navigation_task.cpp` + `src/main.cpp`**。起因是 `flight_control.cpp` 后来进了
+   链接清单，它引用 `main.cpp` 定义的 `current_omega_dps_body_filtered`，
+   `communication.cpp` 的 DBG 分支引用 `navigation_task.cpp` 的
+   `bfs::g_mag_reference`，桩方案无法再满足——链接这两个文件后 18 项断言仍全 PASS。
+   代价：拖进整个 EKF 链，增量构建更重。若日后要回到轻量桩，需要在这两个全局量上
+   补契约桩并确认 `flight_control.cpp` 的其它依赖。另：编译选项必须与 closedloop 对齐
+   带 `-DBFS_DISABLE_IWDG -Itest_host/fw_sil`，否则 `main.cpp` 找不到
+   `stm32h7xx_hal_iwdg.h`（缺了会以 `fatal error` 停在编译阶段，不是链接阶段）。
 
 ## 7 一致性判据（一键入口，2026-11-20 完成）
 
@@ -331,6 +337,13 @@ plant 姿态 → 机体比力/角速度 → **ICM-42688 原始寄存器值** →
 所以判据先要求"在仿真时长内收敛到 ±1°"，再对收敛后的拍统计。
 收敛后再留 1 s 沉降期——收敛判定那一拍的误差本身就贴着阈值，从该拍开始统计
 会让峰值恒等于阈值（实测 ±1° 阈值下 pitch 峰值恒为 0.95°，掩盖真实动态误差）。
+
+**一键判据不能拿 harness 退出码当结论**（2026-11-24 修）：harness 每次正常结束都会
+因全局 `Dps310Sensor` 析构 abort（rc=134，见 §7.6 口径），`run_consistency.sh` 原先
+用退出码判 L4，于是四条断言全 PASS 也会报 `[FAIL]`。现改为检查四条收敛/稳态断言
+文本是否齐全 + 不得出现 `[FAIL]`，退出码只作诊断打印。2026-11-24 复测：
+`conv=9.98 s`、`roll 0.301°`、`pitch 0.045°`，一键入口 exit 0（9.90 s 是 11-23 单次实测，
+收敛时间随轨迹相位有几个百分点浮动，两值都属正常）。
 
 ### 7.4 频率扫描：这个孪生在多快动态下还准
 

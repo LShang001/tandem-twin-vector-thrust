@@ -108,14 +108,31 @@ fi
 # ------------------------------------------------------------
 section "L4 整机逐拍对拍：plant → 寄存器 → 真实驱动 → Madgwick vs 真值"
 
-if bash "$FS/build_and_run_closedloop.sh" > /tmp/fs_l4.log 2>&1; then
-  sweep=$(grep -E '^SWEEP ' /tmp/fs_l4.log | tail -1)
-  printf '  %s\n' "$sweep"
-  grep -E 't = .* 收敛' /tmp/fs_l4.log | sed 's/^/  /'
-  ok "L4 姿态传递判据通过（数字见上方 SWEEP 行）"
+# 注意：harness 成功结束时也会 abort（退出码 134）——全局 Dps310Sensor 的析构链
+# 最后一步落到基类纯虚函数。MCU 上全局对象不析构、飞行无害，因此**退出码不能当判据**
+# （README §7.6 口径第 3 条）。这里改用断言文本判定：四条收敛/稳态断言必须全在，
+# 且不得出现任何 [FAIL]。退出码只作为诊断信息打印。
+bash "$FS/build_and_run_closedloop.sh" > /tmp/fs_l4.log 2>&1
+l4_rc=$?
+
+sweep=$(grep -E '^SWEEP ' /tmp/fs_l4.log | tail -1)
+[ -n "$sweep" ] && printf '  %s\n' "$sweep"
+
+l4_assert_ok=0
+for pat in '收敛后 roll 误差峰值' '收敛后 pitch 误差峰值' '稳态 roll 残差' '稳态 pitch 残差'; do
+  if grep -qE "^ *\[PASS\] ${pat}" /tmp/fs_l4.log; then
+    l4_assert_ok=$((l4_assert_ok + 1))
+  fi
+done
+
+grep -E '收敛后|稳态' /tmp/fs_l4.log | sed 's/^/  /'
+
+if [ "$l4_assert_ok" -eq 4 ] && ! grep -q '\[FAIL\]' /tmp/fs_l4.log; then
+  # 退出码 134 是已知宿主析构 abort，带其它退出码也一并报出来方便排查
+  ok "L4 姿态传递判据通过（4/4 断言，harness rc=$l4_rc）"
 else
-  grep -E '收敛后|稳态|\[FAIL\]' /tmp/fs_l4.log | sed 's/^/  /' | head -8
-  bad "L4 姿态传递判据失败"
+  grep -E '\[FAIL\]' /tmp/fs_l4.log | sed 's/^/  /' | head -8
+  bad "L4 姿态传递判据失败（$l4_assert_ok/4 断言通过，harness rc=$l4_rc）"
 fi
 
 # ------------------------------------------------------------

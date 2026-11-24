@@ -26,13 +26,15 @@ CXX="${CXX:-g++}"
 CXXFLAGS="-std=c++17 -O0 -g -DTANDEMVEC_FIRMWARE -DBFS_REAL_UBX -DFW_SIL_REAL_IMU -DFW_SIL_REAL_LIBS -DARDUINO=10819 \
  -Wno-address-of-packed-member -Wno-psabi \
  -DEIGEN_DONT_VECTORIZE -DEIGEN_DONT_PARALLELIZE \
- -DBFS_TASK_FRACTIONAL_INTERVALS"
+ -DBFS_TASK_FRACTIONAL_INTERVALS -DBFS_DISABLE_IWDG -Itest_host/fw_sil"
 export CXXFLAGS
 
 echo "== 编译遥测帧验证（增量）=="
 OUT="$(bash test_host/fw_sil/fullstack/build_incremental.sh fs_telemetry \
+  src/main.cpp \
   src/state_data.cpp \
   src/communication.cpp \
+  src/navigation_task.cpp \
   src/ano_params.cpp \
   src/ano_vars.cpp \
   src/flight_control.cpp \
