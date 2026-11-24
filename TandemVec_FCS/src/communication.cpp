@@ -303,6 +303,23 @@ void packetChannels()
 #define BFS_RC_PROTO_MAVLINK 0
 #endif
 
+// RC 串口波特率。依据 ELRS 官方源码 rx_main.cpp setupSerial()：
+//   PROTOCOL_CRSF    → serialBaud = firmwareOptions.uart_baud（Lua 可配，默认 420000）
+//   PROTOCOL_MAVLINK → serialBaud = 460800（硬编码，与 uart_baud 配置无关）
+// 所以切协议必须同步改波特率，否则收到的全是乱码（实测：波特率错时 CRSF 侧
+// rc_crc/rc_len 疯涨、MAVLink 侧 frames 恒 0）。
+#ifndef BFS_RC_UART_BAUD
+#define BFS_RC_UART_BAUD 420000
+#endif
+
+/// CRSF 默认波特率（ELRS uart_baud 出厂值）
+static constexpr uint32_t kRcBaudCrsf = 420000;
+/// MAVLink 模式波特率（ELRS 源码硬编码，不能靠 uart_baud 覆盖）
+static constexpr uint32_t kRcBaudMavlink = 460800;
+
+/// 当前 RC 串口波特率（DBG `rcbaud` 可改；切协议时自动跟随）
+static uint32_t s_rc_baud = BFS_RC_UART_BAUD;
+
 // 前置声明：回调定义在下方（linkUpCallback/linkDownCallback）
 void linkUpCallback();
 void linkDownCallback();
@@ -381,6 +398,10 @@ void rcInputSetProto(uint8_t proto)
     return;
   }
   s_rc_proto = target;
+  // 波特率必须跟着协议走（ELRS 源码：CRSF 用 uart_baud=420000，MAVLink 硬编码 460800）。
+  // 漏改这一步的典型症状：串口有字节但两种解析器都解不出帧。
+  s_rc_baud = (target == RcProto::Mavlink) ? kRcBaudMavlink : kRcBaudCrsf;
+  crsf.begin(s_rc_baud);
   mavlinkRc.reset();
   linkDownCallback();
 }
@@ -627,18 +648,6 @@ bool send_crsf_frame(uint16_t channels[RC_INPUT_MAX_CHANNELS])
   // 返回发送是否成功 (发送的字节数是否等于期望的帧大小)
   return bytesSent == static_cast<size_t>(offset);
 }
-
-// RC 串口波特率。依据 ELRS 官方源码 rx_main.cpp setupSerial()：
-//   PROTOCOL_CRSF    → serialBaud = firmwareOptions.uart_baud（Lua 可配，默认 420000）
-//   PROTOCOL_MAVLINK → serialBaud = 460800（硬编码，与 uart_baud 配置无关）
-// 因此切协议时必须同步改这里的波特率，否则收到的全是乱码。
-// 运行时可用 DBG `rcbaud <n>` 切换，用于扫档定位接收机真实配置。
-#ifndef BFS_RC_UART_BAUD
-#define BFS_RC_UART_BAUD 420000
-#endif
-
-/// 当前 RC 串口波特率（DBG `rcbaud` 可改；重开 Serial1 后 CRSF 与 MAVLink 解析器同时生效）
-static uint32_t s_rc_baud = BFS_RC_UART_BAUD;
 
 void setup_crsf_uart()
 {
@@ -4709,6 +4718,26 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(F("[DBG] rcbaud: 当前="));
           serial.println(s_rc_baud);
           serial.println(F("[DBG] rcbaud: 用法 rcbaud <baud>"));
+        }
+      }
+      else if (line[0] == 'r' && line[1] == 'c' && (line[2] == '\0' || line[2] == ' ')) {
+        // 打印 16 通道与链路状态：验证 CRSF/MAVLink 两条路径最终落到的通道值是否合理
+        serial.print(F("[DBG] rc: link="));
+        serial.print(isLinkUp ? F("up") : F("down"));
+        serial.print(F(" proto="));
+        serial.print(rcInputProto() == 1 ? F("mavlink") : F("crsf"));
+        serial.print(F(" baud="));
+        serial.println(s_rc_baud);
+        for (int i = 0; i < RC_INPUT_MAX_CHANNELS; ++i) {
+          serial.print(F("  CH"));
+          serial.print(i + 1);
+          serial.print('=');
+          serial.print(raw_rc_values[i]);
+          if ((i + 1) % 4 == 0) {
+            serial.println();
+          } else {
+            serial.print(' ');
+          }
         }
       }
       else if (strncmp(line, "rcproto", 7) == 0) {
