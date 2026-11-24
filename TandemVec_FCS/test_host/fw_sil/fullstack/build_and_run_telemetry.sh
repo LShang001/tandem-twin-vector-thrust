@@ -42,6 +42,7 @@ OUT="$(bash test_host/fw_sil/fullstack/build_incremental.sh fs_telemetry \
   src/sensor_peripheral.cpp \
   src/ubx_config.cpp \
   src/mavlink_bridge.cpp \
+  src/mavlink_rc.cpp \
   src/sensor_imu.cpp \
   src/imu_factory.cpp \
   lib/ICM42688/src/ICM42688.cpp \

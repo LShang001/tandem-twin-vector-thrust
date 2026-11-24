@@ -161,6 +161,8 @@ run_one "$NROOT/test_host/test_bias_temp_pipeline.cpp" btpipe ""
 # 通用变量注册表 AnoVars（include/AnoVars.h，纯平台无关——注册表遍历/
 # 各类型→float 序列化/名称截断/watch 集合上限/rate 钳制/越界容错）：
 run_one "$NROOT/test_host/test_ano_vars.cpp"            av  ""
+# MAVLink RC 输入（0 值不覆盖 / target 与来源过滤 / 超时 / reset）：与 CRSF 并存的第二条 RC 路径
+run_one "$NROOT/test_host/test_mavlink_rc.cpp"          mavrc "-I$NROOT/test_host/stub -I$NROOT/lib/MAVLink -I$NROOT/src" "$NROOT/src/mavlink_rc.cpp"
 
 # FPV 摇杆曲线 RcCurve（include/RcCurve.h，纯平台无关——expo 中心压低/super 边缘
 # 双曲放大/rc_rate 线性缩放/死区/限幅/极点保护，Betaflight 三参数模型）：

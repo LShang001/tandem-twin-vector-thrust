@@ -31,6 +31,7 @@
 #include "sensor_imu.h"
 #include "mag_reference.h" // 站点磁偏运行时副本（DBG magdec，2026-11-07）
 #include "MAVLink.h"
+#include "mavlink_rc.h"   // MAVLink RC 输入解析（与 CRSF 二选一，DBG `rcproto` 切换）
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
 #include "ano_vars.h"     // 通用变量上报（0xF2 值帧 / 0xF3 清单 / DBG vars）
 #include "mavlink_bridge.h" // MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）
@@ -285,6 +286,103 @@ void packetChannels()
   {
     raw_rc_values[i] = crsf.getChannel(i + 1); // 获取通道的值
   }
+}
+
+// ============================================================================
+// RC 输入协议分发（CRSF / MAVLink 二选一）
+// ============================================================================
+// 目的：ELRS 接收机切到 MAVLink 模式后，串口上不再输出 CRSF 帧，改为
+// MAVLink RC_CHANNELS_OVERRIDE。两条解析路径写同一组全局量
+// （raw_rc_values / isLinkUp），flight_control.cpp 无需感知协议差异。
+//
+// 切换方式：编译期 BFS_RC_PROTO_MAVLINK=1，或运行时 DBG `rcproto mavlink|crsf`。
+// 两者互斥——同一串口同时挂两个解析器会让链路状态机互相打断。
+// ============================================================================
+
+#ifndef BFS_RC_PROTO_MAVLINK
+#define BFS_RC_PROTO_MAVLINK 0
+#endif
+
+// 前置声明：回调定义在下方（linkUpCallback/linkDownCallback）
+void linkUpCallback();
+void linkDownCallback();
+
+static RcProto s_rc_proto =
+    (BFS_RC_PROTO_MAVLINK != 0) ? RcProto::Mavlink : RcProto::Crsf;
+
+/**
+ * @brief MAVLink 通道帧回调：与 packetChannels() 同构，写同一组全局量
+ */
+static void mavlinkRcChannels(const uint16_t us[16])
+{
+  for (int i = 0; i < RC_INPUT_MAX_CHANNELS; ++i)
+  {
+    raw_rc_values[i] = us[i];
+  }
+}
+
+/**
+ * @brief MAVLink 链路状态回调：复用 CRSF 的建链/失控流程，语义完全一致
+ */
+static void mavlinkRcLink(bool up)
+{
+  if (up)
+  {
+    linkUpCallback();
+  }
+  else
+  {
+    linkDownCallback();
+  }
+}
+
+/**
+ * @brief RC 输入层初始化：绑定 MAVLink 解析器（Serial1 已由 crsf.begin() 配好）
+ */
+void rcInputBegin()
+{
+  mavlinkRc.setHandlers(mavlinkRcChannels, mavlinkRcLink);
+  mavlinkRc.begin(Serial1);
+}
+
+/**
+ * @brief RC 输入轮询：按当前协议把 Serial1 字节流交给对应解析器
+ */
+void rcInputPoll()
+{
+  if (s_rc_proto == RcProto::Mavlink)
+  {
+    mavlinkRc.loop(millis());
+  }
+  else
+  {
+    crsf.loop();
+  }
+}
+
+/// @brief 当前 RC 输入协议（0=CRSF，1=MAVLink），供 DBG 与日志显示
+uint8_t rcInputProto()
+{
+  return static_cast<uint8_t>(s_rc_proto);
+}
+
+/**
+ * @brief 运行时切换 RC 输入协议（DBG `rcproto`）
+ *
+ * @note 切换即视为断链：新协议收到第一帧之前不允许沿用旧协议的通道值。
+ *       走一遍 linkDownCallback() 触发 failsafe 通道表（地面全 988 → 电机锁定），
+ *       避免切换瞬间用旧数据继续输出。
+ */
+void rcInputSetProto(uint8_t proto)
+{
+  const RcProto target = (proto == 1) ? RcProto::Mavlink : RcProto::Crsf;
+  if (target == s_rc_proto)
+  {
+    return;
+  }
+  s_rc_proto = target;
+  mavlinkRc.reset();
+  linkDownCallback();
 }
 
 /**
@@ -4574,6 +4672,31 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(F(" tx_bytes="));
           serial.println(mavlinkTxByteCount());
           serial.println(F("[DBG] proto: 用法 proto mavlink|anocom"));
+        }
+      }
+      else if (strncmp(line, "rcproto", 7) == 0) {
+        // RC 输入协议切换（CRSF ↔ MAVLink）。只切串口解析路径，
+        // 不改波特率/引脚；切换后立即按断链处理，等新协议首帧重建链路。
+        const char *arg = line + 7;
+        while (*arg == ' ') arg++;
+        if (strncmp(arg, "mavlink", 7) == 0) {
+          rcInputSetProto(1);
+          serial.println(F("[DBG] rcproto: MAVLink RC_CHANNELS_OVERRIDE（更新率上限 100Hz）"));
+        } else if (strncmp(arg, "crsf", 4) == 0) {
+          rcInputSetProto(0);
+          serial.println(F("[DBG] rcproto: CRSF（逐包输出）"));
+        } else {
+          serial.print(F("[DBG] rcproto: 当前="));
+          serial.println(rcInputProto() == 1 ? F("mavlink") : F("crsf"));
+          serial.print(F("[DBG]   frames="));
+          serial.print(mavlinkRc.channelFrames());
+          serial.print(F(" dropped="));
+          serial.print(mavlinkRc.droppedFrames());
+          serial.print(F(" lq="));
+          serial.print(mavlinkRc.lqPercent());
+          serial.print(F(" link="));
+          serial.println(mavlinkRc.linkUp() ? F("up") : F("down"));
+          serial.println(F("[DBG] rcproto: 用法 rcproto mavlink|crsf"));
         }
       }
       else if (*line == '\0') {

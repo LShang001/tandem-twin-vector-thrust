@@ -288,6 +288,7 @@ void setup()
   // 2. CRSF 遥控协议初始化
   // ====================================================================
   crsf.begin();                            // 初始化 CRSF 协议驱动 (Serial1, 420kbaud)
+  rcInputBegin();                          // 绑定 MAVLink RC 解析器到同一串口（协议互斥，见 rcInputPoll）
   crsf.onPacketChannels = &packetChannels; // 注册通道数据回调 (接收到通道值时调用)
   crsf.onLinkUp = &linkUpCallback;         // 注册链路建立回调
   crsf.onLinkDown = &linkDownCallback;     // 注册链路断开回调 (触发失控保护)
@@ -610,7 +611,9 @@ void loop()
   // 驱动 CrsfSerial 库的内部状态机，从 Serial1 读取字节并解析 CRSF 帧。
   // 解析成功后会调用 packetChannels() 回调更新 raw_rc_values。
   // 链路状态变化时会调用 linkUpCallback/linkDownCallback。
-  crsf.loop();
+  // 2026-11-25：改为 rcInputPoll()，按 rc_proto 分发到 CRSF 或 MAVLink 解析器
+  // （两条路径写同一组全局量；默认仍是 CRSF，行为不变）。
+  rcInputPoll();
 
   // ====================================================================
   // 2. UBX GNSS 协议轮询

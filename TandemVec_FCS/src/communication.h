@@ -106,6 +106,25 @@ bool send_crsf_frame(uint16_t channels[RC_INPUT_MAX_CHANNELS]);
 void setup_crsf_uart();
 
 /**
+ * @brief RC 输入协议分发（CRSF / MAVLink 二选一）
+ *
+ * 两条解析路径写同一组全局量（raw_rc_values / isLinkUp），控制层无感知。
+ * 协议由编译期 BFS_RC_PROTO_MAVLINK 或 DBG `rcproto` 决定，二者互斥。
+ *
+ * 调用顺序：setup_crsf_uart()（配 Serial1 波特率）→ rcInputBegin() → 主循环 rcInputPoll()。
+ */
+void rcInputBegin();
+
+/// @brief 主循环轮询：按当前协议把 Serial1 字节流交给 CRSF 或 MAVLink 解析器
+void rcInputPoll();
+
+/// @brief 当前 RC 输入协议（0=CRSF，1=MAVLink）
+uint8_t rcInputProto();
+
+/// @brief 运行时切换 RC 输入协议（切换后立即按断链处理，等新协议首帧重建链路）
+void rcInputSetProto(uint8_t proto);
+
+/**
  * @brief 初始化发动机/数据转发串口
  *
  * 配置 Serial2 (发动机控制器): 921600 波特率

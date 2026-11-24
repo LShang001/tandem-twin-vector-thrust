@@ -38,6 +38,7 @@ OUTPUT=$(bash test_host/fw_sil/fullstack/build_incremental.sh fs_main \
   src/flight_control.cpp \
   src/ubx_config.cpp \
   src/mavlink_bridge.cpp \
+  src/mavlink_rc.cpp \
   lib/ublox-main/src/ubx.cpp \
   lib/ublox-main/src/minmea.c \
   lib/AnoComProtocol/AnoComProtocol.cpp \
