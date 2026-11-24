@@ -247,6 +247,10 @@ run_one "$NROOT/test_host/test_flight_control_axis.cpp"  fca ""
 # 穷举/通道合成不变量/旧判据差异点；固件 linkDownCallback 与本测试共用同一份实现）：
 run_one "$NROOT/test_host/test_failsafe_plan.cpp"       fsplan ""
 
+# ELRS 飞行模式回传文本（ElrsFlightModeText.h，纯平台无关——未解锁/实际模式/降级标记
+# 穷举 + 13 字符显示上限 + 缓冲边界；固件 sendElrsFlightModeData 与本测试共用同一份实现）：
+run_one "$NROOT/test_host/test_elrs_flight_mode_text.cpp" elrsfmt ""
+
 # DETA100 帧校验防回退（源码守卫：CRC16 比较不得再被注释、失败必须计入拒帧计数；
 # 该模块只能在 main.cpp 中包含，运行时行为由上板联调覆盖）：
 run_one "$NROOT/test_host/test_deta100_crc_guard.cpp"  deta100g ""

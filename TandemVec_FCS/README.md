@@ -225,7 +225,7 @@ loop()
 | `handleVerticalEstimation` | 200Hz | 5ms | 状态估计 |
 | `handleGuidanceCommands` | 500Hz | 2ms | 控制执行 |
 | `runGNCExecutive` | 200Hz | 5ms | 控制执行 |
-| `sendElrsBatteryData` | 25Hz | 40ms | 通信遥测 |
+| `sendElrsBatteryData` | 25Hz | 40ms | 通信遥测（ELRS：另有 Attitude/Baro 25Hz、Mode 10Hz 变化即发、Gps 10Hz、Temp 1Hz；2026-11-24 删独立 VARIO 帧并降载） |
 | `sendPositionVelocityData` | 100Hz | 10ms | 通信遥测 |
 | `handleStatusLedTask` | 100Hz | 10ms | 系统指示 |
 

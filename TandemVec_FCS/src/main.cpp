@@ -461,8 +461,8 @@ void setup()
   //                   handleDebugTask / handleVerticalEstimation / runGNCExecutive /
   //                   handleCANBus / handleDataLogging
   //   100 Hz = 10ms   handleStatusLedTask、handleFlashService、sendPositionVelocityData
-  //   25 Hz  = 40ms   sendElrsBattery/Attitude/BaroAltitude/Vario
-  //   10 Hz  = 100ms  sendElrsFlightMode/Gps/Temp、updateBatteryMonitor
+  //   25 Hz  = 40ms   sendElrsBattery/Attitude/BaroAltitude
+  //   10 Hz  = 100ms  sendElrsFlightMode(变化即发+1Hz保活)/Gps(无定位1Hz)/Temp(1Hz净荷3B)、updateBatteryMonitor
   // 注：AnoCom 内部再按 tick 取模分成 100/50/25/10Hz 多档（COMM-001 双环）。
 
   // --- 传感器采集层 (高频) ---
@@ -507,13 +507,17 @@ void setup()
 #if BFS_ENABLE_CAN
   BFS_ADD_TASK(handleCANBus, 5.0f, "CANBus");                       // CAN 总线发送 (200Hz, 5ms) - 飞控状态广播
 #endif
-  BFS_ADD_TASK(sendElrsBatteryData, 40.0f, "ElrsBattery");      // ELRS 电量回传 (25Hz, 40ms) - 遥控器显示氧压
+  // ELRS 回传（2026-11-24 降载：ELRS 接收端每种帧只留最新一帧、轮转出队，
+  // 每帧拆 5/10B 空中遥测包发送——低价值帧常发会拖慢高度/姿态在遥控器上的刷新）：
+  //   25Hz：Battery / Attitude / Baro（高度+垂直速度；垂直速度不再单独发 VARIO）
+  //   10Hz 轮询：FlightMode（文本变化即发 + 1Hz 保活）、GPS（有定位 10Hz / 无定位 1Hz）
+  //   1Hz 轮询：Temp（净荷缩到 3 字节）
+  BFS_ADD_TASK(sendElrsBatteryData, 40.0f, "ElrsBattery");      // ELRS 电量回传 (25Hz, 40ms) - 遥控器电量显示
   BFS_ADD_TASK(sendElrsAttitudeData, 40.0f, "ElrsAttitude");    // ELRS 姿态回传 (25Hz) - 遥控器姿态球
-  BFS_ADD_TASK(sendElrsBaroAltitudeData, 40.0f, "ElrsBaro");    // ELRS 高度+垂直速度回传 (25Hz) - 遥控器高度显示
-  BFS_ADD_TASK(sendElrsFlightModeData, 100.0f, "ElrsMode");     // ELRS 飞行模式回传 (10Hz) - 遥控器模式名
-  BFS_ADD_TASK(sendElrsGpsData, 100.0f, "ElrsGps");              // ELRS GNSS 位置回传 (10Hz) - 遥控器地图
-  BFS_ADD_TASK(sendElrsVarioData, 40.0f, "ElrsVario");           // ELRS 垂直速度回传 (25Hz) - 遥控器变率计
-  BFS_ADD_TASK(sendElrsTempData, 100.0f, "ElrsTemp");            // ELRS 温度回传 (10Hz) - 遥控器温度
+  BFS_ADD_TASK(sendElrsBaroAltitudeData, 40.0f, "ElrsBaro");    // ELRS 高度+垂直速度回传 (25Hz) - 遥控器高度/变率计
+  BFS_ADD_TASK(sendElrsFlightModeData, 100.0f, "ElrsMode");     // ELRS 模式回传 (10Hz 轮询, 变化即发+1Hz 保活)
+  BFS_ADD_TASK(sendElrsGpsData, 100.0f, "ElrsGps");              // ELRS GNSS 回传 (10Hz, 无定位 1Hz) - 遥控器地图
+  BFS_ADD_TASK(sendElrsTempData, 1000.0f, "ElrsTemp");           // ELRS 温度回传 (1Hz, 3 字节净荷)
   BFS_ADD_TASK(updateBatteryMonitor, 100.0f, "BattMon");          // 电池电压采样 (10Hz) - ADC_BATT PC5
   BFS_ADD_TASK(sendPositionVelocityData, 10.0f, "PosVelTx");    // 上位机数据发送 (100Hz, 10ms) - 18 字段 74B 制导机链路
   // addTask(handleMavlink, 5.0f);          // MAVLink 遥测 (200Hz, 5ms) - Mission Planner/QGC (与 AnoCom 二选一)
@@ -543,7 +547,6 @@ void setup()
   setTaskDeferrable("ElrsBaro");
   setTaskDeferrable("ElrsMode");
   setTaskDeferrable("ElrsGps");
-  setTaskDeferrable("ElrsVario");
   setTaskDeferrable("ElrsTemp");
   setTaskDeferrable("BattMon");
   setTaskDeferrable("PosVelTx");

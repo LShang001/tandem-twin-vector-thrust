@@ -25,6 +25,7 @@
 ## 硬件与串口
 
 - 改引脚、串口或传感器驱动，先对照 [硬件参考](.agents/docs/hardware-reference.md)、[电路拓扑](docs/电路拓扑参考.md) 和 [器件资产索引](../docs/08-参考资料/器件手册与驱动资产索引.md)。硬件参考包含遥控通道语义与共轴 CH8 反相规则。未解锁仍可能有手动舵输出，不能用上锁替代断动力。
+- 改 ELRS/CRSF 回传前先读 [ELRS 回传降载与模式帧纠错](docs/memory/2026-11-24-ELRS回传降载与模式帧纠错.md)：RX 端每种帧只留最新一帧、轮转出队、每帧拆 5/10B 空中包——新增回传帧先算它拆几个包；模式帧必须报实际模式（ElrsFlightModeText.h，宿主测试 elrsfmt）。
 - `DETA100_module.h` 只由 `main.cpp` 包含；DETA100/UBX 的数据源在 `setup()` 锁定，DETA100 任务先于状态估计；GNSS 串口重开或切速只走 `ubxGnssSerialBegin()`，不绕过 FIFO/IRQ 恢复。MAVLink 和 AnoCom 在 Serial6 互斥；Serial8 也只允许一个上行协议消费者。
 - 不改 `lib/MAVLink` 供应商树。`QuaternionMath.h` / `GeoDisplacement.h` 工具函数保持 `inline`；`Vector3` 使用 `VECTOR3_TYPE_GUARD`。新增 AnoVars 在 `kAnoVars` 注册，MAVLink 截短名仍须唯一。
 - 更改导航宏、查无 GNSS 退化或位置重锚边界，先读 [上板标定与验证清单](../docs/04-数学建模/代码理论核查/上板标定与验证清单-2026-11-01.md) 和 [CTL-005](../docs/05-控制与分配/CTL-005-无磁航向与运动EKF.md)。断电后运行时控制参数不视为已保存；磁标定 Flash 保留区不可供其他持久化工具复用。

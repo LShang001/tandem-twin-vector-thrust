@@ -25,6 +25,7 @@
 #include "communication.h"
 #include "math_utils.h"
 #include "FailsafeLinkLossPlan.h"  // 断链通道合成（纯函数，宿主测试共用同一份判据）
+#include "ElrsFlightModeText.h"    // ELRS 飞行模式回传文本（纯函数，宿主测试共用同一份实现）
 #include "navigation_task.h"
 #include "sensor_peripheral.h"
 #include "sensor_imu.h"
@@ -237,6 +238,23 @@ uint32_t mavTelemetryTxSkipCount()
 {
   return s_mav_tx_skipped;
 }
+/**
+ * @brief ELRS 回传因串口无空间而跳过的帧数
+ * @note 应恒为 0：全部 ELRS 回传合计不足 1 KB/s，Serial1 (420k) 占用约 2%。
+ *       上涨说明 Serial1 下行持续被堵（对端不读或线接错），DBG `health` 的 `elrs_skip` 可见。
+ */
+uint32_t elrsTelemetryTxSkipCount()
+{
+  return elrs_tx_skipped;
+}
+// ELRS 接收端每种帧只留最新一帧、按到达顺序轮转出队，每帧拆成若干空中遥测包发送。
+// 低价值帧常发会拖慢高度/姿态在遥控器上的刷新，所以这两类帧降频或只在变化时发。
+/** FLIGHT_MODE 文本不变时的保活周期 */
+static const uint32_t kElrsModeKeepaliveMs = 1000;
+/** 无 3D 定位时 GPS 全零帧的发送周期 */
+static const uint32_t kElrsGpsInvalidIntervalMs = 1000;
+/** 电池电压一阶低通系数（10Hz 采样，时间常数约 0.3 s） */
+static const float kBatteryVoltageLpfAlpha = 0.25f;
 // g_posvel_tx_skipped 定义在 state_data.cpp，供 DBG health 观测
 
 // ===== ELRS 链路状态（2026-08-08 灯效扩展）=====
@@ -1443,14 +1461,17 @@ void sendElrsBatteryData()
  * @brief ELRS 姿态回传任务 (25Hz)
  *
  * 将飞控姿态欧拉角映射到 CRSF ATTITUDE 协议字段，遥控器姿态球显示。
- * - pitch = AHRS_Packet.Pitch (rad) → 度 × 100（0.01° 粒度，int16 不溢出）
- * - roll  = AHRS_Packet.Roll  (rad) → 度 × 100
- * - yaw   = AHRS_Packet.Heading (rad) → 度 × 100
+ * - pitch = AHRS_Packet.Pitch (rad) → rad × 10000（CRSF 标准编码）
+ * - roll  = AHRS_Packet.Roll  (rad) → rad × 10000
+ * - yaw   = AHRS_Packet.Heading (rad) → 先绕 [-π,π) 再 × 10000
  *
- * 2026-08-08 修改：原发送"弧度×10000"在部分遥控器显示层不做 rad→deg
- * 转换，屏幕显示弧度数值却标 °。改为直接发送度值（×100）。
- * 注：EdgeTX 标准解析为 value/10 后按 precision=3 显示（即 ÷10000），
- *     若遥控器显示数值差 100 倍，需把该传感器精度(precision)改为 2 位。
+ * ★ 2026-11-24 改回标准编码 rad×10000：2026-08-08 改成的"度×100"是非标准线格式，
+ *   EdgeTX 主线按标准解析（value/10 后按 UNIT_RADIANS precision=3 显示），度×100
+ *   在遥控器上显示为 rad 标签配错误数值（用户 2026-11-24 实测确认）。
+ *   标准编码下 int16 量程 ±32767 = ±3.2767 rad > ±π，三个轴都不溢出；
+ *   三轴统一先 wrapAnglePi 是为了覆盖 AHRS 输出跨 ±π 边界的瞬间。
+ *   Betaflight/INAV/ArduPilot 均按此标准发送；遥控器上若之前按旧注释手动改过
+ *   PITCH/ROLL/YAW 传感器的精度，重新"发现传感器"后会自动回到 precision=3。
  */
 void sendElrsAttitudeData()
 {
@@ -1462,10 +1483,9 @@ void sendElrsAttitudeData()
   }
 
   crsf_sensor_attitude_t attitudeData;
-  attitudeData.pitch = htobe16((int16_t)(AHRS_Packet.Pitch * RAD_TO_DEG * 100.0f));
-  attitudeData.roll  = htobe16((int16_t)(AHRS_Packet.Roll * RAD_TO_DEG * 100.0f));
-  // ★ 2026-09-01 修复：航向先绕 [-180,180) 再 ×100（0..2π×100=36000 超 int16 溢出）
-  attitudeData.yaw   = htobe16((int16_t)(wrapAnglePi(AHRS_Packet.Heading) * RAD_TO_DEG * 100.0f));
+  attitudeData.pitch = htobe16((int16_t)(wrapAnglePi(AHRS_Packet.Pitch) * 10000.0f));
+  attitudeData.roll  = htobe16((int16_t)(wrapAnglePi(AHRS_Packet.Roll) * 10000.0f));
+  attitudeData.yaw   = htobe16((int16_t)(wrapAnglePi(AHRS_Packet.Heading) * 10000.0f));
 
   crsf.queuePacket(CRSF_FRAMETYPE_ATTITUDE, &attitudeData, sizeof(attitudeData));
 }
@@ -1476,6 +1496,10 @@ void sendElrsAttitudeData()
  * 将 DPS310 气压高度和 EKF 垂直速度映射到 CRSF BARO_ALTITUDE 字段：
  * - altitude    = baro_altitude (m) × 10 + 10000dm 基准（高比特位=0 表示分米）
  * - verticalspd = estimated_velocity (m/s) × 100 (cm/s)
+ *
+ * @note 垂直速度只经本帧回传，不另发 VARIO 帧（2026-11-24 移除原 25Hz 的独立 VARIO
+ *       回传）：EdgeTX 在本帧净荷不少于 4 字节时直接从中取垂直速度，与 VARIO 帧写进
+ *       同一个 VSpd 传感器；两帧同发只是让接收端多排一帧、挤占高度/姿态的刷新。
  */
 void sendElrsBaroAltitudeData()
 {
@@ -1496,43 +1520,82 @@ void sendElrsBaroAltitudeData()
   crsf.queuePacket(CRSF_FRAMETYPE_BARO_ALTITUDE, &baroData, sizeof(baroData));
 }
 
+// ElrsFlightModeText.h 的 Mode 与 ControlMode 之间只做 static_cast，两者必须同序
+static_assert(static_cast<int>(bfs::elrs::Mode::kManual) == static_cast<int>(MANUAL) &&
+                  static_cast<int>(bfs::elrs::Mode::kAutoPosition) ==
+                      static_cast<int>(AUTO_POSITION) &&
+                  static_cast<int>(bfs::elrs::Mode::kAutoAltitude) ==
+                      static_cast<int>(AUTO_ALTITUDE) &&
+                  static_cast<int>(bfs::elrs::Mode::kGuided) == static_cast<int>(GUIDED),
+              "bfs::elrs::Mode must mirror ControlMode");
+
 /**
- * @brief ELRS 飞行模式回传任务 (10Hz)
+ * @brief ELRS 飞行模式回传任务（100ms 轮询；文本变化即发，不变时 1Hz 保活）
  *
- * 将当前控制模式名映射到 CRSF FLIGHT_MODE 字段（16 字符）。
+ * 把飞控【实际生效】的模式、解锁状态和降级标记写成文本，经 CRSF FLIGHT_MODE
+ * 字段（16 字符净荷）回传，遥控器 FM 传感器显示：
+ * - 未解锁：`DISARM`
+ * - 已解锁：`MANUAL` / `ALTHOLD` / `POSHOLD` / `GUIDED`，取 g_current_flight_mode
+ * - 本拍发生模式降级（航向不可观 / GNSS 长失联 / 制导超时回落手动）：追加 `-DEG`
+ * 文本生成规则与不变量见 ElrsFlightModeText.h（宿主回归 test_elrs_flight_mode_text.cpp）。
+ *
+ * 2026-11-24 修改：原实现按 CH7 通道值用 getControlMode() 推算模式且固定 10Hz 发送。
+ * 按通道推算在 determine_control_mode() 改写模式（制导超时→MANUAL、航向不可观→ALTHOLD）
+ * 时会报出并未生效的模式，且未解锁也显示 MANUAL；AnoCom 0x06 帧一直用实际模式。
+ * 改成变化即发，是因为 ELRS 接收端每种帧只留最新一帧并按到达顺序轮转出队，
+ * FLIGHT_MODE 帧要拆 4 个空中遥测包，常发会拖慢高度/姿态在遥控器上的刷新。
+ * @note EdgeTX 对该帧只显示前 13 个字符。
  */
 void sendElrsFlightModeData()
 {
-  // 非阻塞保护：FLIGHT_MODE 帧净荷 16 字节 + 帧头/CRC 共 20 字节
+  // 取实际模式而非通道推算；三个降级原因与 determine_control_mode() 的改写分支一一对应
+  bfs::elrs::FlightModeInput modeInput{};
+  modeInput.armed = g_is_unlocked;
+  modeInput.actual_mode = static_cast<bfs::elrs::Mode>(g_current_flight_mode);
+  modeInput.degraded_heading = g_mode_degraded_heading;
+  modeInput.degraded_gnss = g_mode_degraded_gnss;
+  // 制导超时：通道请求 GUIDED、实际回落 MANUAL，且制导指令已超过超时窗。
+  // 带上超时判据是为了排除“刚切到 GUIDED、实际模式还差一拍才更新”的瞬态。
+  modeInput.degraded_guidance =
+      g_is_unlocked && (g_current_flight_mode == MANUAL) &&
+      (getControlMode(static_cast<float>(raw_rc_values[6])) == GUIDED) &&
+      (millis() - last_guidance_command_millis > GUIDANCE_CMD_TIMEOUT_MS);
+
+  char modeText[bfs::elrs::kFlightModeFieldChars + 1U];
+  bfs::elrs::buildFlightModeText(modeInput, modeText, sizeof(modeText));
+
+  // 文本没变且距上次发送不足保活周期时不发
+  static char s_sentText[sizeof(modeText)] = {0};
+  static uint32_t s_last_tx_ms = 0;
+  static bool s_has_sent = false;
+  const uint32_t now = millis();
+  if (s_has_sent && (memcmp(modeText, s_sentText, sizeof(modeText)) == 0) &&
+      ((now - s_last_tx_ms) < kElrsModeKeepaliveMs))
+  {
+    return;
+  }
+
+  // 非阻塞保护：FLIGHT_MODE 帧净荷 16 字节 + 帧头/CRC 共 20 字节。
+  // 放在变化判定之后：因无缓冲而跳过的那一拍不记为已发，下一拍重试，变化不会丢。
   if (Serial1.availableForWrite() < 24)
   {
     elrs_tx_skipped++;
     return;
   }
 
-  // 从遥控器通道6获取当前控制模式
-  ControlMode mode = getControlMode((float)raw_rc_values[6]);
-
   crsf_flight_mode_t modeData;
   memset(&modeData, 0, sizeof(modeData));
-
-  // 模式名映射（对应 getControlMode 的枚举）
-  const char *modeName;
-  switch (mode)
-  {
-    case MANUAL:         modeName = "MANUAL"; break;
-    case AUTO_POSITION:  modeName = "POSHOLD"; break;
-    case AUTO_ALTITUDE:  modeName = "ALTHOLD"; break;
-    case GUIDED:         modeName = "GUIDED"; break;
-    default:             modeName = "AUTO"; break;
-  }
-  strncpy(modeData.flight_mode, modeName, sizeof(modeData.flight_mode) - 1);
+  strncpy(modeData.flight_mode, modeText, sizeof(modeData.flight_mode) - 1);
 
   crsf.queuePacket(CRSF_FRAMETYPE_FLIGHT_MODE, &modeData, sizeof(modeData));
+
+  memcpy(s_sentText, modeText, sizeof(s_sentText));
+  s_last_tx_ms = now;
+  s_has_sent = true;
 }
 
 /**
- * @brief ELRS GNSS 位置回传任务 (10Hz)
+ * @brief ELRS GNSS 位置回传任务（100ms 轮询；有 3D 定位 10Hz，否则 1Hz）
  *
  * 将 UBX GNSS 定位数据映射到 CRSF GPS 协议字段，遥控器地图/位置显示：
  * - latitude/longitude   = 经纬度 × 1e7（1e-7 度分辨率）
@@ -1542,9 +1605,26 @@ void sendElrsFlightModeData()
  * - satellites           = 参与解算卫星数
  *
  * 数据新鲜度：仅当 GNSS 数据新鲜且 3D 定位时发送真实数据，否则发零值。
+ *
+ * 2026-11-24 修改：无有效定位时全零帧从 10Hz 降到 1Hz（任务周期仍是 100ms）。
+ * 全零帧的作用只是让遥控器知道定位丢失（Sats=0），10Hz 重复发没有信息量；
+ * ELRS 接收端每种帧只留最新一帧并按到达顺序轮转出队，GPS 帧要拆 4 个空中遥测包。
  */
 void sendElrsGpsData()
 {
+  // 复用遥测层同一判定逻辑
+  const bool gnss_data_fresh = isGnssDataFreshForNav();
+  const bool gnss_valid = gnss_data_fresh && (ubx.fix() >= bfs::Ubx::FIX_3D);
+
+  // 无有效定位时降到 1Hz。先判频率再看缓冲：因无缓冲而跳过的那一拍下一拍重试。
+  static uint32_t s_last_invalid_tx_ms = 0;
+  static bool s_has_sent_invalid = false;
+  if (!gnss_valid && s_has_sent_invalid &&
+      ((millis() - s_last_invalid_tx_ms) < kElrsGpsInvalidIntervalMs))
+  {
+    return;
+  }
+
   // 非阻塞保护：GPS 帧净荷 15 字节 + 帧头/CRC 共 19 字节
   if (Serial1.availableForWrite() < 24)
   {
@@ -1553,10 +1633,7 @@ void sendElrsGpsData()
   }
 
   crsf_sensor_gps_t gpsData = {0};
-
-  // 检查 GNSS 数据新鲜度（复用遥测层同一判定逻辑）
-  const bool gnss_data_fresh = isGnssDataFreshForNav();
-  if (gnss_data_fresh && ubx.fix() >= bfs::Ubx::FIX_3D)
+  if (gnss_valid)
   {
     // 经纬度 (度 → 1e-7 度)
     gpsData.latitude = htobe32((int32_t)(ubx.lat_deg() * 1e7));
@@ -1579,53 +1656,44 @@ void sendElrsGpsData()
     gpsData.satellites = (uint8_t)ubx.num_sv();
   }
   // 数据不新鲜或无 3D 定位时保持全零，遥控器显示无效
+  if (!gnss_valid)
+  {
+    s_last_invalid_tx_ms = millis();
+    s_has_sent_invalid = true;
+  }
 
   crsf.queuePacket(CRSF_FRAMETYPE_GPS, &gpsData, sizeof(gpsData));
 }
 
 /**
- * @brief ELRS 垂直速度回传任务 (25Hz)
+ * @brief ELRS 温度回传任务 (1Hz)
  *
- * 将 EKF 垂直速度映射到 CRSF VARIO 协议字段，遥控器变率计显示。
- * - verticalspd = estimated_velocity (m/s, 向上为正) × 100 (cm/s)
+ * 将 DPS310 气压计温度映射到 CRSF TEMP 协议字段，遥控器温度显示。
+ * - source_id       = 0 (FC 本体)
+ * - temperature[0]  = temperature × 10 (0.1°C)
+ *
+ * 2026-11-24 修改：净荷从固定 41 字节（source_id + 20 槽）缩为 3 字节（source_id + 1 槽），
+ * 周期从 10Hz 降到 1Hz。CRSF TEMP 帧的槽数由帧长决定（EdgeTX：i*2 < 帧长字节 - 4），
+ * 本机只有 1 路温度，其余 19 槽恒 0；原写法整帧 45 字节要拆 9 个空中遥测包，
+ * 占一轮的 35%，还会在遥控器上带出一串恒为 0 的温度传感器。
  */
-void sendElrsVarioData()
+void sendElrsTempData()
 {
-  // 非阻塞保护：VARIO 帧净荷 2 字节 + 帧头/CRC 共 6 字节
+  // 非阻塞保护：净荷 3 字节 + 帧头/CRC 共 7 字节
   if (Serial1.availableForWrite() < 12)
   {
     elrs_tx_skipped++;
     return;
   }
 
-  crsf_sensor_vario_t varioData;
-  varioData.verticalspd = htobe16((int16_t)(estimated_velocity * 100));
+  // 只带实际用到的 1 个温度槽；source_id 在前，温度为大端 int16
+  uint8_t tempPayload[3];
+  const int16_t temp_deci = static_cast<int16_t>(temperature * 10.0f);
+  tempPayload[0] = 0U;  // source_id：0 = FC（含所有 ESC）
+  tempPayload[1] = static_cast<uint8_t>((temp_deci >> 8) & 0xFF);
+  tempPayload[2] = static_cast<uint8_t>(temp_deci & 0xFF);
 
-  crsf.queuePacket(CRSF_FRAMETYPE_VARIO, &varioData, sizeof(varioData));
-}
-
-/**
- * @brief ELRS 温度回传任务 (10Hz)
- *
- * 将 DPS310 气压计温度映射到 CRSF TEMP 协议字段，遥控器温度显示。
- * - source_id    = 0 (FC 本体)
- * - temperature[0] = temperature × 10 (0.1°C)
- */
-void sendElrsTempData()
-{
-  // 非阻塞保护：TEMP 帧净荷 41 字节 (1+20×2) + 帧头/CRC 共 45 字节
-  if (Serial1.availableForWrite() < 48)
-  {
-    elrs_tx_skipped++;
-    return;
-  }
-
-  crsf_sensor_temp_t tempData;
-  memset(&tempData, 0, sizeof(tempData));
-  tempData.source_id = 0;  // 0 = FC 包括所有 ESC
-  tempData.temperature[0] = htobe16((int16_t)(temperature * 10.0f));
-
-  crsf.queuePacket(CRSF_FRAMETYPE_TEMP, &tempData, sizeof(tempData));
+  crsf.queuePacket(CRSF_FRAMETYPE_TEMP, tempPayload, sizeof(tempPayload));
 }
 
 /**
@@ -1637,13 +1705,34 @@ void sendElrsTempData()
  * - 未标定前输出 = ADC 原始电压，量程 0-3.3V
  *
  * 输出全局量 bat_voltage_mv，供 ELRS / AnoCom 遥测共用。
+ *
+ * 2026-11-24 修改：加一阶低通（α=0.25，10Hz 采样，时间常数约 0.3 s）。首个非零采样
+ * 直接装载，之前保持直通，启动阶段与原行为一致。bat_voltage_mv 的消费者都是显示类：
+ * ELRS/AnoCom/MAVLink 遥测与低电压灯效，不参与解锁或控制。
  */
 void updateBatteryMonitor()
 {
   // ADC 16位采样 → 分压点电压 (V) → 分压比换算 → 电池电压 (mV)
   int adcValue = analogRead(ADC_BATT_PIN);
   float dividerVoltage = static_cast<float>(adcValue) * (3.3f / 65535.0f);
-  bat_voltage_mv = dividerVoltage * BATTERY_DIVIDER_RATIO * 1000.0f;
+  const float sample_mv = dividerVoltage * BATTERY_DIVIDER_RATIO * 1000.0f;
+
+  // 一阶低通：y += α·(x − y)。读到 0 视为无效采样，不拿它初始化滤波器。
+  static bool s_filter_ready = false;
+  static float s_voltage_mv = 0.0f;
+  if (!s_filter_ready)
+  {
+    s_voltage_mv = sample_mv;
+    if (sample_mv > 0.0f)
+    {
+      s_filter_ready = true;
+    }
+  }
+  else
+  {
+    s_voltage_mv += kBatteryVoltageLpfAlpha * (sample_mv - s_voltage_mv);
+  }
+  bat_voltage_mv = s_voltage_mv;
 
   // 电流采样未接入（ADC_CURR 无传感器），保持 0
   bat_current_ca = 0.0f;
@@ -3532,6 +3621,21 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(AnoCom.txDropped());
         serial.print(F(" mav_skip="));
         serial.print(mavTelemetryTxSkipCount());
+        serial.print(F(" elrs_skip="));
+        serial.print(elrsTelemetryTxSkipCount());
+        // 上行（遥控接收）字节层质量：帧数应随遥控包率线性增长；
+        // rc_crc/rc_len/rc_ovf 非零说明无线丢包或 420k 串口溢出，
+        // 这些是 `elrs_skip`（下行）之外唯一能看见「接收方向坏了没」的指标。
+        serial.print(F(" rc_frames="));
+        serial.print(crsf.packetsIn());
+        serial.print(F(" rc_ch="));
+        serial.print(crsf.channelPackets());
+        serial.print(F(" rc_crc="));
+        serial.print(crsf.crcErrors());
+        serial.print(F(" rc_len="));
+        serial.print(crsf.lenErrors());
+        serial.print(F(" rc_ovf="));
+        serial.print(crsf.bufferResyncs());
         serial.print(F(" nav_gap_max_ms="));
         serial.println(g_nav_gap_max_us / 1000.0f, 1);
         serial.print(F("[DBG] navstage pre/post/static/tail max_ms="));

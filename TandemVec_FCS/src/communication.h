@@ -189,30 +189,25 @@ void sendElrsAttitudeData();
 void sendElrsBaroAltitudeData();
 
 /**
- * @brief ELRS 飞行模式回传任务 (10Hz)
+ * @brief ELRS 飞行模式回传任务（100ms 轮询；文本变化即发，不变时 1Hz 保活）
  *
- * 将当前控制模式名映射到 CRSF FLIGHT_MODE 字段（16 字符）。
+ * 把飞控实际生效的模式、解锁状态和降级标记写成文本，经 CRSF FLIGHT_MODE
+ * 字段回传。文本规则见 include/ElrsFlightModeText.h。
  */
 void sendElrsFlightModeData();
 
 /**
- * @brief ELRS GNSS 位置回传任务 (10Hz)
+ * @brief ELRS GNSS 位置回传任务（100ms 轮询；有 3D 定位 10Hz，否则 1Hz）
  *
  * 将 UBX GNSS 定位数据映射到 CRSF GPS 协议字段，遥控器地图/位置显示。
  */
 void sendElrsGpsData();
 
 /**
- * @brief ELRS 垂直速度回传任务 (25Hz)
+ * @brief ELRS 温度回传任务 (1Hz)
  *
- * 将 EKF 垂直速度映射到 CRSF VARIO 协议字段，遥控器变率计显示。
- */
-void sendElrsVarioData();
-
-/**
- * @brief ELRS 温度回传任务 (10Hz)
- *
- * 将 DPS310 气压计温度映射到 CRSF TEMP 协议字段，遥控器温度显示。
+ * 将 DPS310 气压计温度映射到 CRSF TEMP 协议字段（净荷只带 1 个温度槽）。
+ * 垂直速度不单独发 VARIO 帧——BARO_ALTITUDE 帧已带，EdgeTX 两者同写一个传感器。
  */
 void sendElrsTempData();
 

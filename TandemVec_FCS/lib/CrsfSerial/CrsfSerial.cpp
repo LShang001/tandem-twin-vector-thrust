@@ -70,6 +70,7 @@ void CrsfSerial::handleSerialIn()
         if (_rxBufPos == (sizeof(_rxBuf)/sizeof(_rxBuf[0])))
         {
             // Packet buffer filled and no valid packet found, dump the whole thing
+            _bufferResyncs++;
             _rxBufPos = 0;
         }
     }
@@ -91,6 +92,7 @@ void CrsfSerial::handleByteReceived()
             // assumes there never will be a CRSF message that just has a type and no data (X)
             if (len < 3 || len > (CRSF_MAX_PAYLOAD_LEN + 2))
             {
+                _lenErrors++;
                 shiftRxBuffer(1);
                 reprocess = true;
             }
@@ -101,12 +103,14 @@ void CrsfSerial::handleByteReceived()
                 uint8_t crc = _crc.calc(&_rxBuf[2], len - 1);
                 if (crc == inCrc)
                 {
+                    _packetsIn++;
                     processPacketIn(len);
                     shiftRxBuffer(len + 2);
                     reprocess = true;
                 }
                 else
                 {
+                    _crcErrors++;
                     shiftRxBuffer(1);
                     reprocess = true;
                 }
@@ -197,6 +201,7 @@ void CrsfSerial::packetChannelsPacked(const crsf_header_t *p)
         onLinkUp();
     _linkIsUp = true;
     _lastChannelsPacket = millis();
+    _channelPackets++;
 
     if (onPacketChannels)
         onPacketChannels();

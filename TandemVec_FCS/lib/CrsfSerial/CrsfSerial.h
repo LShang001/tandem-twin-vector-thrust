@@ -28,6 +28,15 @@ public:
     const crsfLinkStatistics_t *getLinkStatistics() const { return &_linkStatistics; }
     const crsf_sensor_gps_t *getGpsSensor() const { return &_gpsSensor; }
     bool isLinkUp() const { return _linkIsUp; }
+
+    // ---- 上行字节层统计（诊断用，DBG `health` 的 rc_* 字段）----
+    // 只加计数、不改解析行为：链路「能飞」与「字节全到了」是两件事，
+    // 420k 下若有串口溢出或无线丢包，只有这些计数看得出来。
+    uint32_t packetsIn() const { return _packetsIn; }         ///< 校验通过的帧总数
+    uint32_t channelPackets() const { return _channelPackets; } ///< 其中通道帧（0x16）数
+    uint32_t crcErrors() const { return _crcErrors; }         ///< CRC 失败次数
+    uint32_t lenErrors() const { return _lenErrors; }         ///< 声明长度非法的次数
+    uint32_t bufferResyncs() const { return _bufferResyncs; } ///< 缓冲填满强制的重同步次数
     bool getPassthroughMode() const { return _passthroughBaud != 0; }
     void setPassthroughMode(bool val, uint32_t passthroughBaud = 0);
 
@@ -54,6 +63,12 @@ private:
     bool _linkIsUp;
     uint32_t _passthroughBaud;
     int _channels[CRSF_NUM_CHANNELS];
+    // 诊断计数：默认成员初始化，构造函数（含 SIL 桩）不写也不会留垃圾值
+    uint32_t _packetsIn = 0;
+    uint32_t _channelPackets = 0;
+    uint32_t _crcErrors = 0;
+    uint32_t _lenErrors = 0;
+    uint32_t _bufferResyncs = 0;
 
     void handleSerialIn();
     void handleByteReceived();

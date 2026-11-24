@@ -30,7 +30,15 @@
   并把 **LQ 映射到 CH14、RSSI dBm 映射到 CH15**（非 16 通道模式时）。
 - **`forwardMessage()`**：teamrace 模式下原样转发 MSP 数据。
 
-**关键结论：ELRS RX 对 FC 遥测帧是"透明转发"**——不挑帧类型，只要 FC 发标准 CRSF 帧就回传。唯一的类型检测只是用于某些模式自动切换。
+**关键结论（2026-11-24 修正）**：`processBytes` 这一层确实不挑帧类型，但**"透明转发"
+的说法只对了一半**——RX 端把 FC 帧经 `crsfRouter.processMessage` 交给
+`RXOTAConnector::forwardMessage`，进入遥测 FIFO 后：①**每种帧只留最新一帧**
+（`comparators` 表：TEMP/RPM/CELLS 按 source_id 覆盖，其余广播类型同类型即覆盖）；
+②**每次空中遥测机会只出队一帧**（LINKSTATS 与数据帧交替，`telemetryBurstMax`
+由包率×遥测比决定，`TLMBurstMaxForRateRatio`）；③帧拆成每包 5 B（ELRS4）/
+10 B（ELRS8）**逐包确认**（`StubbornSender`）。
+⇒ FC 端发得比空中链路快只是互相覆盖；**决定遥控器刷新率的是"轮一圈要几个包"**，
+低价值帧（如 41 B 的 TEMP）常发会拖慢高度/姿态的刷新。
 
 ### 3. 遥测传输的两种封装（与协议选择相关）
 
@@ -113,14 +121,20 @@ ELRS_STATUS 0x2E, HANDSET 0x3A, KISS_REQ 0x78, KISS_RESP 0x79, ARDUPILOT_RESP 0x
 
 ## 四、本机现状与扩展建议
 
-### 现状（`communication.cpp:700-733`）
-- 仅 `sendElrsBatteryData`（25Hz）：借用 BATTERY_SENSOR 帧传氧压 P1/P2
+### 现状（2026-11-24 更新；发送实现见 `communication.cpp` 的 sendElrs* 系列）
+
+调研时（2026-08-08）仅 BATTERY 一帧。此后按本节建议扩展到 7 帧；2026-11-24 降载后
+为 6 帧：Battery/Attitude/Baro 25Hz，Gps 10Hz（无定位 1Hz），Temp 1Hz（净荷 3 B），
+FlightMode 变化即发+1Hz 保活；**VARIO 帧已删**（EdgeTX 把 BARO_ALTITUDE 里的
+垂直速度与 VARIO 帧写进同一个 VSpd 传感器）；模式帧改为上报**实际模式**+解锁+
+降级状态（`include/ElrsFlightModeText.h`，宿主回归 `test_elrs_flight_mode_text.cpp`）。
+任务全景表见 `docs/memory/2026-08-08-ELRS遥测扩展与电池电压采样.md` §4。
 
 ### 建议扩展（按价值排序）
-1. **ATTITUDE 回传**（0x1E）：`AHRS_Packet.Roll/Pitch/Heading` → 遥控器姿态球
-2. **BARO_ALTITUDE 回传**（0x09）：DPS310 高度 → 遥控器高度显示
-3. **VARIO 回传**（0x07）：垂直速度 → 变率计
-4. **FLIGHT_MODE 回传**（0x21）：飞行模式名
+1. ~~ATTITUDE 回传~~（已实现，注意标度：当前发度×100，非标准 rad×10000）
+2. ~~BARO_ALTITUDE 回传~~（已实现）
+3. ~~VARIO 回传~~（已实现后于 2026-11-24 删除：与 BARO_ALTITUDE 的垂直速度重复）
+4. ~~FLIGHT_MODE 回传~~（已实现，2026-11-24 改为实际模式+解锁+降级状态）
 
 ### 实现要点
 - 结构体 `crsf_sensor_attitude_t` / `crsf_sensor_baro_vario_t` 本机已有
