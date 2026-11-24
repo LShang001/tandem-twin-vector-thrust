@@ -32,6 +32,7 @@
 #include "mag_reference.h" // 站点磁偏运行时副本（DBG magdec，2026-11-07）
 #include "MAVLink.h"
 #include "mavlink_rc.h"   // MAVLink RC 输入解析（与 CRSF 二选一，DBG `rcproto` 切换）
+#include "rc_mav_telem.h" // RC=MAVLink 时的遥测下行（ELRS 翻译白名单消息）
 #include "ano_params.h"   // AnoCom 参数在线读写（0xE0/0xE1 完整实现）
 #include "ano_vars.h"     // 通用变量上报（0xF2 值帧 / 0xF3 清单 / DBG vars）
 #include "mavlink_bridge.h" // MAVLink 双向（QGC 参数读写/命令/STATUSTEXT）
@@ -366,6 +367,7 @@ void rcInputBegin()
   crsf.begin(s_rc_baud);
   mavlinkRc.setHandlers(mavlinkRcChannels, mavlinkRcLink);
   mavlinkRc.begin(Serial1);
+  rcMavTelemBegin(Serial1);
 }
 
 /**
@@ -373,9 +375,13 @@ void rcInputBegin()
  */
 void rcInputPoll()
 {
+  const uint32_t now = millis();
   if (s_rc_proto == RcProto::Mavlink)
   {
-    mavlinkRc.loop(millis());
+    mavlinkRc.loop(now);
+    // ★ 回传必须同协议：ELRS RX 在 MAVLink 模式下只转发 MAVLink 帧，
+    //   飞控若继续发 CRSF 遥测帧会被 RX 直接丢弃（遥控器上无数据）。
+    rcMavTelemLoop(now);
   }
   else
   {
@@ -387,6 +393,17 @@ void rcInputPoll()
 uint8_t rcInputProto()
 {
   return static_cast<uint8_t>(s_rc_proto);
+}
+
+/**
+ * @brief CRSF 遥测是否允许发送
+ *
+ * @note MAVLink 模式下必须让位：ELRS RX 的 MAVLink 解析器会把 0xC8/0xEE 开头的
+ *       CRSF 遥测帧当噪声丢弃，混发只会浪费串口带宽、还可能干扰帧同步。
+ */
+bool crsfTelemetryAllowed()
+{
+  return s_rc_proto == RcProto::Crsf;
 }
 
 /**
@@ -409,6 +426,7 @@ void rcInputSetProto(uint8_t proto)
   s_rc_baud = (target == RcProto::Mavlink) ? kRcBaudMavlink : kRcBaudCrsf;
   crsf.begin(s_rc_baud);
   mavlinkRc.reset();
+  rcMavTelemReset();
   linkDownCallback();
 }
 
@@ -1541,7 +1559,10 @@ void handleCrsf()
   }
 
   // 将构建好的16通道数据通过CRSF协议发送出去
-  send_crsf_frame(send_values);
+  // MAVLink 模式下让位：RX 只认 MAVLink 帧，CRSF 通道回显会被丢弃且干扰帧同步
+  if (crsfTelemetryAllowed()) {
+    send_crsf_frame(send_values);
+  }
 }
 
 /**
@@ -1559,6 +1580,7 @@ void handleCrsf()
  */
 void sendElrsBatteryData()
 {
+  if (!crsfTelemetryAllowed()) { return; }  // MAVLink 模式下 CRSF 遥测让位（见 rcMavTelemLoop）
   // 非阻塞保护：Serial1 (ELRS) TX 缓冲不足时跳过本帧，避免阻塞控制环。
   // CRSF BATTERY_SENSOR 帧净荷 8 字节 + 帧头/CRC 共 12 字节，保守上限 20 字节。
   if (Serial1.availableForWrite() < 20)
@@ -1602,6 +1624,7 @@ void sendElrsBatteryData()
  */
 void sendElrsAttitudeData()
 {
+  if (!crsfTelemetryAllowed()) { return; }  // MAVLink 模式下 CRSF 遥测让位（见 rcMavTelemLoop）
   // 非阻塞保护：ATTITUDE 帧净荷 6 字节 + 帧头/CRC 共 10 字节
   if (Serial1.availableForWrite() < 16)
   {
@@ -1630,6 +1653,7 @@ void sendElrsAttitudeData()
  */
 void sendElrsBaroAltitudeData()
 {
+  if (!crsfTelemetryAllowed()) { return; }  // MAVLink 模式下 CRSF 遥测让位（见 rcMavTelemLoop）
   // 非阻塞保护：BARO_ALTITUDE 帧净荷 4 字节 + 帧头/CRC 共 8 字节
   if (Serial1.availableForWrite() < 12)
   {
@@ -1675,6 +1699,7 @@ static_assert(static_cast<int>(bfs::elrs::Mode::kManual) == static_cast<int>(MAN
  */
 void sendElrsFlightModeData()
 {
+  if (!crsfTelemetryAllowed()) { return; }  // MAVLink 模式下 CRSF 遥测让位（见 rcMavTelemLoop）
   // 取实际模式而非通道推算；三个降级原因与 determine_control_mode() 的改写分支一一对应
   bfs::elrs::FlightModeInput modeInput{};
   modeInput.armed = g_is_unlocked;
@@ -1739,6 +1764,7 @@ void sendElrsFlightModeData()
  */
 void sendElrsGpsData()
 {
+  if (!crsfTelemetryAllowed()) { return; }  // MAVLink 模式下 CRSF 遥测让位（见 rcMavTelemLoop）
   // 复用遥测层同一判定逻辑
   const bool gnss_data_fresh = isGnssDataFreshForNav();
   const bool gnss_valid = gnss_data_fresh && (ubx.fix() >= bfs::Ubx::FIX_3D);
@@ -1806,6 +1832,7 @@ void sendElrsGpsData()
  */
 void sendElrsTempData()
 {
+  if (!crsfTelemetryAllowed()) { return; }  // MAVLink 模式下 CRSF 遥测让位（见 rcMavTelemLoop）
   // 非阻塞保护：净荷 3 字节 + 帧头/CRC 共 7 字节
   if (Serial1.availableForWrite() < 12)
   {
@@ -4768,6 +4795,10 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
           serial.print(mavlinkRc.lqPercent());
           serial.print(F(" link="));
           serial.println(mavlinkRc.linkUp() ? F("up") : F("down"));
+          // 回传方向：MAVLink 模式下本条应持续增长（证明飞控在往 RX 发遥测）
+          serial.print(F("[DBG]   telem_tx="));
+          serial.print(rcMavTelemFrames());
+          serial.println();
           // 诊断：串口到底有没有数据、首字节是哪种协议（0xFD=MAVLink v2 / 0xC8=CRSF）
           serial.print(F("[DBG]   baud="));
           serial.print(s_rc_baud);
