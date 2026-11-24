@@ -361,6 +361,9 @@ static void mavlinkRcLink(bool up)
  */
 void rcInputBegin()
 {
+  // 串口与波特率统一在这里打开：CrsfSerial 的无参 begin() 会用库默认 420000 重开，
+  // 会把 MAVLink 模式要求的 460800 覆盖掉（实测症状：波特率读数对，但 frames 恒 0）。
+  crsf.begin(s_rc_baud);
   mavlinkRc.setHandlers(mavlinkRcChannels, mavlinkRcLink);
   mavlinkRc.begin(Serial1);
 }

@@ -287,8 +287,9 @@ void setup()
   // ====================================================================
   // 2. CRSF 遥控协议初始化
   // ====================================================================
-  crsf.begin();                            // 初始化 CRSF 协议驱动 (Serial1, 420kbaud)
-  rcInputBegin();                          // 绑定 MAVLink RC 解析器到同一串口（协议互斥，见 rcInputPoll）
+  // ★ 2026-11-25：不再直接 crsf.begin()——该库无参调用会用默认 420000 重开 Serial1，
+  //   把 MAVLink 模式要求的 460800 覆盖掉。串口与波特率统一由 rcInputBegin() 负责。
+  rcInputBegin();                          // 初始化 RC 输入（按 rc_proto 选波特率，并绑定 MAVLink 解析器）
   crsf.onPacketChannels = &packetChannels; // 注册通道数据回调 (接收到通道值时调用)
   crsf.onLinkUp = &linkUpCallback;         // 注册链路建立回调
   crsf.onLinkDown = &linkDownCallback;     // 注册链路断开回调 (触发失控保护)
