@@ -1,5 +1,14 @@
 #include "CrsfSerial.h"
 
+// 通道帧 payload 的线宽由 16 通道 × 11 bit 决定，必须恰好 22 字节。
+// 长度校验与解包循环都依赖这个常量，改结构体时必须同步（见 processPacketIn）。
+static_assert(sizeof(crsf_channels_t) == 22,
+              "CRSF 通道帧 payload 必须是 16×11bit = 22 字节");
+static_assert(sizeof(crsfLinkStatistics_t) == 10,
+              "CRSF 链路统计帧 payload 必须是 10 字节");
+static_assert(sizeof(crsf_sensor_gps_t) == 15,
+              "CRSF GPS 帧 payload 必须是 15 字节");
+
 // static void hexdump(void *p, size_t len)
 // {
 //     char *data = (char *)p;
@@ -146,6 +155,35 @@ void CrsfSerial::checkLinkDown()
 void CrsfSerial::processPacketIn(uint8_t len)
 {
     const crsf_header_t *hdr = (crsf_header_t *)_rxBuf;
+
+    // ★ 2026-11-26：按帧类型校验声明长度，不足则丢弃并计长度错。
+    //   原实现只在外层检查 3 ≤ len ≤ 62，三个 packetXxx 处理函数都按"payload
+    //   一定够长"直接读固定字节数（通道帧要读满 16×11bit = 22 字节）。一旦干扰
+    //   凑出 type 匹配 + 声明长度偏短 + CRC 恰好通过（1/256），就会越过 _rxBuf
+    //   尾部去读相邻成员，把垃圾当通道值喂进控制层。长度校验放在解析之前，
+    //   命中时直接返回、由调用方的 shiftRxBuffer 继续滑窗重同步。
+    uint8_t payload_min = 0;
+    switch (hdr->type)
+    {
+    case CRSF_FRAMETYPE_RC_CHANNELS_PACKED:
+        payload_min = static_cast<uint8_t>(sizeof(crsf_channels_t));
+        break;
+    case CRSF_FRAMETYPE_GPS:
+        payload_min = static_cast<uint8_t>(sizeof(crsf_sensor_gps_t));
+        break;
+    case CRSF_FRAMETYPE_LINK_STATISTICS:
+        payload_min = static_cast<uint8_t>(sizeof(crsfLinkStatistics_t));
+        break;
+    default:
+        break;
+    }
+    // len 统计的是 type + payload + crc，payload 实际长度 = len - 2
+    if (payload_min != 0 && len < static_cast<uint8_t>(payload_min + 2))
+    {
+        _lenErrors++;
+        return;
+    }
+
     switch (hdr->type)
     {
     case CRSF_FRAMETYPE_GPS:
@@ -156,6 +194,8 @@ void CrsfSerial::processPacketIn(uint8_t len)
         break;
     case CRSF_FRAMETYPE_LINK_STATISTICS:
         packetLinkStatistics(hdr);
+        break;
+    default:
         break;
     }
 }

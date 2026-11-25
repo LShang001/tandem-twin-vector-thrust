@@ -461,6 +461,25 @@ echo
 #   是 test_host/ 下唯一「有 PASS/FAIL 断言却没进回归」的文件。
 run_one "$NROOT/test_host/test_liquid_rocket_sil.cpp" lrsil ""
 
+# ★ 2026-11-26 补入：CRSF 上行解析回归（正常帧/短帧拒收/CRC 重同步/半帧超时）。
+#   此前 lib/CrsfSerial 在 test_host 下零覆盖，长度校验缺失这类缺口无法被发现。
+#   用 fw_sil/stub 的 HardwareSerial 注入合成字节流，时钟走 g_sil_time_us 虚拟推进。
+echo "---- 编译/运行 crsf_parse ----"
+if $CXX -std=$STD -O2 -DARDUINO \
+  -I$NROOT/lib/CrsfSerial -I$NROOT/lib/crc8 -I$NROOT/test_host/fw_sil/stub \
+  "$NROOT/test_host/test_crsf_parse.cpp" \
+  "$NROOT/lib/CrsfSerial/CrsfSerial.cpp" "$NROOT/lib/crc8/crc8.cpp" \
+  -o "$BIN_DIR/crsf_parse$EXE_SUFFIX"; then
+  if ! "$BIN_DIR/crsf_parse$EXE_SUFFIX"; then
+    echo "[RUN FAIL] crsf_parse"
+    fail=1
+  fi
+else
+  echo "[BUILD FAIL] crsf_parse"
+  fail=1
+fi
+echo
+
 if [ "$fail" -eq 0 ]; then
   echo "=== 全部宿主机回归测试通过 ==="
   exit 0
