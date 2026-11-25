@@ -2690,7 +2690,9 @@ static void run_coaxial_control(const ControlInputs_t &inputs,
   uint8_t alloc_sat_mask = 0u;
   float alloc_torque_residual = 0.0f;
 
-  // 手动直通的一阶滤波：与旧 CoaxialVtvController 手动分支同系数（输出滤波 α0.25）。
+  // 手动直通的一阶滤波：复用内环输出滤波系数 output_filter_alpha[1]（共轴当前 0.5，
+  // 200 Hz 下 τ≈5 ms；旧 CoaxialVtvController 手动分支用的是 0.25，已随 2026-11-10
+  // 滤波统一调整，两者不再同系数）。
   static bfs::CoaxialFirstOrderFilter s_manual_roll_filter;
   static bfs::CoaxialFirstOrderFilter s_manual_pitch_filter;
 
