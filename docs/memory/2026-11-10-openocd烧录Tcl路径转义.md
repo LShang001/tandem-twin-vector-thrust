@@ -88,6 +88,7 @@ per-sector 流程并把控制器拉回干净态。**同一块板第一次烧失�
 - 失败的烧录会把 DAP 从 Windows 上整个拔掉（所有 0D28 设备 Code 45 phantom），
   openocd 报 `unable to find a matching CMSIS-DAP device`——**重新插拔 DAP 的 USB**
   即恢复，软件 Enable-PnpDevice 救不回（General Failure）。
-- 荣耀本的调试串口是 **COM13（CH343）**，不是 DAP CDC（COM10，VID_0D28 桥的是
-  DAP 自己的口，抓不到板子 UART）；数传口是 COM9（CH340）。`capture_boot.ps1 COM10`
-  抓不到数据不是固件没起来。
+- 荣耀本的串口号随插拔变，**按 PnP 名称认、不要照抄上一次的数字**：CH343（VID_1A86
+  PID_55D3）= Serial8 调试打印口；CH340（VID_1A86 PID_7523）= Serial6 数传口（DBG
+  控制台也在这条）；DAP CDC（VID_0D28 MI_00）= DAP 自己的虚拟串口，抓不到板子 UART。
+  2026-11-24 实测是 COM13/COM9/COM10，2026-11-25 复插后变成 **COM12/COM9/COM16**。

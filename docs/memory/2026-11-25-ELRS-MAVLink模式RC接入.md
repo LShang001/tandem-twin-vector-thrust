@@ -118,3 +118,11 @@ FlightMode/Gps/Temp` 与通道回显）全部门控让位，避免混发污染 M
 
 - 未验证：CH5 拨到解锁位后的端到端解锁动作（需断动力台架拨杆）、长时间运行下 100 Hz RC 对控制环的跟随质量。
 - 未做：把 `MAVLINK_RC_PACKET_INTERVAL` 改 5 需要改 ELRS RX 固件并重刷接收机，属上游改动、无官方背书，未实施。
+
+## 10. 2026-11-25 复测：接收机已回 CRSF，烧实机走默认 env
+
+复测 `env:CoaxialVTVL_ICM45686_RcMav`（板上 460800 初值）时的实测：
+
+- `rcproto`：`当前=mavlink baud=460800 frames=0 dropped=0 link=down`，`bytes` 持续增长，`hex` 首字节既不是 `FD` 也不是 `C8/EE` → 按 §3 判据属"有数据但不是这协议/波特率错"，不是没接线。
+- 切 `rcproto crsf`（自动 420000）后 `health` 的 CRSF 计数立刻前进：8 s 内 `rc_frames` 5383→7557（约 272 Hz）、`rc_crc=13 rc_len=16` 累计极小；默认 env 冷启动日志直接出现 `Link is up!`。
+- 结论：接收机现在工作在 **CRSF 420000**，MAVLink 模式是上一轮台架临时配置。烧录前先用 §3 的判据确认当前协议，不要默认还在 MAVLink；台架/实机常规烧 `CoaxialVTVL_ICM45686`，`_RcMav` 只在确认接收机是 MAVLink 模式时用。
