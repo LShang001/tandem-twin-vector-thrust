@@ -37,6 +37,8 @@ public:
     uint32_t crcErrors() const { return _crcErrors; }         ///< CRC 失败次数
     uint32_t lenErrors() const { return _lenErrors; }         ///< 声明长度非法的次数
     uint32_t bufferResyncs() const { return _bufferResyncs; } ///< 缓冲填满强制的重同步次数
+    uint32_t addrErrors() const { return _addrErrors; }       ///< 帧首地址不在 CRSF 设备表内的字节数
+    uint8_t lastFrameAddr() const { return _lastFrameAddr; }  ///< 最后通过校验的帧首地址（接线/配置诊断）
     bool getPassthroughMode() const { return _passthroughBaud != 0; }
     void setPassthroughMode(bool val, uint32_t passthroughBaud = 0);
 
@@ -69,6 +71,8 @@ private:
     uint32_t _crcErrors = 0;
     uint32_t _lenErrors = 0;
     uint32_t _bufferResyncs = 0;
+    uint32_t _addrErrors = 0;
+    uint8_t _lastFrameAddr = 0;
 
     void handleSerialIn();
     void handleByteReceived();

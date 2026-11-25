@@ -263,6 +263,12 @@ static const float kBatteryVoltageLpfAlpha = 0.25f;
 // ELRS 链路质量 LQ (0-100)：onPacketLinkStatistics 回调更新，
 // 供 100Hz 灯效任务做弱信号渐进预警（早于库内 300ms 断链判定）。
 static volatile float s_elrs_lq = 100.0f;
+// ★ 2026-11-26：链路统计帧（0x14）计数与到达时刻。LQ 只由这类帧更新，
+//   ELRS 在低 Telem Ratio / Race 档下可能根本不发统计帧，此时 s_elrs_lq
+//   会永久停在最后值（甚至初值 100），LOW_LQ 橙灯分支静默失效。
+//   把计数与年龄打进 health，冻结与否一眼可判，不再靠猜。
+static volatile uint32_t s_elrs_ls_frames = 0;
+static volatile uint32_t s_elrs_ls_last_ms = 0;
 // 是否曾经建立过遥控链路：区分"上电无信号"(NO_RECEIVER) 与
 // "地面断链"(LINK_DOWN) 两种灯效。链路恢复后保持 true。
 static bool s_ever_linked = false;
@@ -441,6 +447,8 @@ void elrsLinkStatsCallback(crsfLinkStatistics_t *ls)
   if (ls)
   {
     s_elrs_lq = ls->uplink_Link_quality;
+    ++s_elrs_ls_frames;
+    s_elrs_ls_last_ms = millis();
   }
 }
 
@@ -3778,8 +3786,11 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(F(" elrs_skip="));
         serial.print(elrsTelemetryTxSkipCount());
         // 上行（遥控接收）字节层质量：帧数应随遥控包率线性增长；
-        // rc_crc/rc_len/rc_ovf 非零说明无线丢包或 420k 串口溢出，
-        // 这些是 `elrs_skip`（下行）之外唯一能看见「接收方向坏了没」的指标。
+        // rc_crc/rc_len/rc_ovf/rc_addr_err 非零说明无线丢包、420k 串口溢出或
+        // 首字节地址不在 CRSF 设备表内；这些是 `elrs_skip`（下行）之外唯一能看见
+        // 「接收方向坏了没」的指标。
+        // rc_addr = 最后一条合法帧的首地址，用来核对地址白名单是否覆盖真实接收机；
+        // ls_frames/ls_age_ms = 0x14 链路统计帧计数与年龄，LQ 冻结时 age 会一直涨。
         serial.print(F(" rc_frames="));
         serial.print(crsf.packetsIn());
         serial.print(F(" rc_ch="));
@@ -3790,6 +3801,23 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(crsf.lenErrors());
         serial.print(F(" rc_ovf="));
         serial.print(crsf.bufferResyncs());
+        serial.print(F(" rc_addr=0x"));
+        serial.print(crsf.lastFrameAddr(), HEX);
+        serial.print(F(" rc_addr_err="));
+        serial.print(crsf.addrErrors());
+        serial.print(F(" lq="));
+        serial.print(s_elrs_lq, 0);
+        serial.print(F(" ls_frames="));
+        serial.print(s_elrs_ls_frames);
+        serial.print(F(" ls_age_ms="));
+        if (s_elrs_ls_last_ms == 0)
+        {
+          serial.print(-1);
+        }
+        else
+        {
+          serial.print(millis() - s_elrs_ls_last_ms);
+        }
         serial.print(F(" nav_gap_max_ms="));
         serial.println(g_nav_gap_max_us / 1000.0f, 1);
         serial.print(F("[DBG] navstage pre/post/static/tail max_ms="));

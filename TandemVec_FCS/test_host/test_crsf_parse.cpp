@@ -121,10 +121,9 @@ int main()
     check(crsf.getChannel(2) == ch2_before, "短通道帧不污染既有通道值");
 
     // ---- 3) CRC 错帧后仍能重同步 ----
-    //    注：CRSF 解析不校验帧首地址字节，坏帧后只能靠"长度合理 + CRC 通过"
-    //    逐字节滑窗重新对齐，实测要滑过约一整帧，紧随其后的第一帧好帧会被
-    //    残留错位吞掉；连续流里由后续帧补齐。所以这里喂 3 帧、断言至少解出 1 帧，
-    //    而不是断言"下一帧必然解出"。
+    //    注：CRSF 不校验帧内任何固定魔数，坏帧后只能靠"首字节命中地址表 +
+    //    长度合理 + CRC 通过"重新对齐；地址白名单让绝大多数错位字节在一步内被
+    //    淘汰，实测坏帧之后紧随的第一帧好帧即可恢复（修复前要吞掉一整帧）。
     std::vector<uint8_t> bad = makeFrame(0x16, payload, 22);
     bad[bad.size() - 1] = static_cast<uint8_t>(bad[bad.size() - 1] ^ 0xFFu);
     const uint32_t crc_before = crsf.crcErrors();
@@ -133,11 +132,8 @@ int main()
     check(crsf.crcErrors() > crc_before, "CRC 错帧被计错");
 
     const uint32_t ch_after_bad = crsf.channelPackets();
-    for (int k = 0; k < 3; ++k)
-    {
-        feed(crsf, port, makeFrame(0x16, payload, 22));
-    }
-    check(crsf.channelPackets() > ch_after_bad, "CRC 错后连续帧仍能重同步");
+    feed(crsf, port, makeFrame(0x16, payload, 22));
+    check(crsf.channelPackets() == ch_after_bad + 1, "CRC 错后下一帧即恢复");
 
     // ---- 4) 半帧超时清理 ----
     std::vector<uint8_t> half = makeFrame(0x16, payload, 22);
@@ -149,6 +145,18 @@ int main()
     const uint32_t ch_after_half = crsf.channelPackets();
     feed(crsf, port, makeFrame(0x16, payload, 22));
     check(crsf.channelPackets() == ch_after_half + 1, "半帧超时被清、后续帧可解");
+
+    // ---- 5) 帧首地址白名单：非法首字节立即淘汰 ----
+    const uint32_t addr_before = crsf.addrErrors();
+    const uint8_t junk[4] = {0x01, 0x02, 0x03, 0x04}; // 都不在 crsf_addr_e 内
+    port.feed(junk, sizeof junk);
+    crsf.loop();
+    check(crsf.addrErrors() == addr_before + 4, "非法首字节逐字节计入 addr_err");
+
+    const uint32_t ch_after_junk = crsf.channelPackets();
+    feed(crsf, port, makeFrame(0x16, payload, 22));
+    check(crsf.channelPackets() == ch_after_junk + 1, "非法首字节后正常帧直接可解");
+    check(crsf.lastFrameAddr() == 0xC8, "lastFrameAddr 记录真实帧首地址");
 
     std::printf("\nCRSF 解析回归：%s\n", g_fail == 0 ? "全部通过" : "存在失败");
     return g_fail == 0 ? 0 : 1;
