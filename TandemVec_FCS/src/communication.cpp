@@ -3295,7 +3295,13 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.print(F(" ws_hint=")); serial.println(fcsLedStateName(s_led_indication.advisory));
         serial.print(F("[DBG] ws_test=")); serial.print(static_cast<int>(s_led_debug.effect));
         serial.print(F(" ws_frame=")); serial.print(ws2812AppStatus.frameValid());
-        serial.print(F(" ws_rgb=0x")); serial.println(ws2812AppStatus.lastRgb(), HEX);
+        // 定宽 6 位，避免 0x00FF00 打成 0xFF00 后与 0x0FF00 混淆。
+        serial.print(F(" ws_rgb=0x"));
+        const uint32_t rgb_now = ws2812AppStatus.lastRgb();
+        for (int shift = 20; shift >= 0; shift -= 4) {
+          serial.print(static_cast<uint8_t>((rgb_now >> shift) & 0xFU), HEX);
+        }
+        serial.println();
         serial.print(F("[DBG] ws_cells=")); serial.print(BFS_LED_BATTERY_CELLS);
         serial.print(F(" ws_batt=")); serial.println(fcsLedStateName(s_led_policy.batteryState()));
       }
