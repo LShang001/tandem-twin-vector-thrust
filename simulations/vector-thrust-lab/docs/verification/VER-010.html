@@ -1235,6 +1235,161 @@ FAIL。本轮验证它真会重试：</p>
 </table>
 <p>新固件从 0 开始稳定计数，行为与旧固件一致（除 F4 的 NaN
 修复外无其他改动）。</p>
+<h2 id="520-状态灯改造上板验收2026-11-26">5.20
+状态灯改造上板验收（2026-11-26）</h2>
+<blockquote>
+<p>对象：UniGNC 灯效改造（DEC-003），commit <code>e66a1152</code>，env
+<code>CoaxialVTVL_ICM45686_Dbg</code>（台架变体，仅多一个 Serial8 DBG
+入口，灯效代码与 默认 env 相同）。烧录机：荣耀本 MagicBook-X14P；板载
+CH343 = COM12。</p>
+</blockquote>
+<p><strong>烧录</strong>：<code>mass_erase</code>
+失败（<code>stm32h7x mass erase failed</code>），改用
+<code>reset halt</code> + <code>program</code>（扇区擦）后
+<code>Programming Finished</code> / <code>Verified OK</code> /
+<code>Resetting Target</code>
+齐备。同型号首次擦除失败不罕见，不要在降速上耗时间。</p>
+<p><strong>运行态判据</strong>（连续 55 s，无复位）：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>实测</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>机型</td>
+<td><code>veh=CoaxialVTVL</code></td>
+<td>与烧录 env 一致</td>
+</tr>
+<tr>
+<td>解锁</td>
+<td><code>unlock=0</code></td>
+<td>台架锁定</td>
+</tr>
+<tr>
+<td>新增诊断字段</td>
+<td><code>ws_tx=273 ws_fail=0 ws_test=0 ws_frame=1 ws_rgb=0x7F0000 ws_cells=3 ws_batt=NONE</code></td>
+<td>字段齐全</td>
+</tr>
+<tr>
+<td>灯效主状态</td>
+<td><code>ws_primary=NO_RECEIVER</code></td>
+<td>无遥控（<code>rc_frames=0</code>）应报无接收机</td>
+</tr>
+<tr>
+<td>电池</td>
+<td><code>ws_batt=NONE</code></td>
+<td>台架无电池采样，不得误报低压</td>
+</tr>
+<tr>
+<td>驱动</td>
+<td><code>driver=1 dmaActive=1</code></td>
+<td>TIM4 DMA</td>
+</tr>
+<tr>
+<td>发送</td>
+<td><code>ws_tx</code> 持续增长、<code>ws_fail=0</code></td>
+<td>DMA 无失败帧</td>
+</tr>
+<tr>
+<td>实时性</td>
+<td><code>cpu_permille=500</code>、<code>max_pass_us=3677</code></td>
+<td>与基线（约 50%、3388 µs）同量级</td>
+</tr>
+<tr>
+<td>IMU</td>
+<td><code>rate=1600.0Hz ring_drop=0</code></td>
+<td>无丢帧</td>
+</tr>
+<tr>
+<td>EKF</td>
+<td><code>conv=1</code></td>
+<td>收敛</td>
+</tr>
+</tbody>
+</table>
+<p><strong>调试命令实测</strong>（<code>tools/led_probe.py COM12</code>，单会话按时序，ALL
+PASS）：</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>实测</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线</td>
+<td><code>ws_test=0 ws_frame=1</code></td>
+<td>自动灯效</td>
+</tr>
+<tr>
+<td><code>ws 0 255 0</code></td>
+<td><code>ws_test=2 ws_rgb=0x00FF00</code></td>
+<td>颜色生效，定宽打印无歧义</td>
+</tr>
+<tr>
+<td>等 3.4 s</td>
+<td><code>ws_test=0 ws_rgb=0x7F0000</code></td>
+<td>3 s 限时到点恢复自动</td>
+</tr>
+<tr>
+<td><code>wsseq 100</code></td>
+<td><code>ms/color=100</code>、<code>ws_test=3 ws_rgb=0xFFFFFF</code></td>
+<td><strong>参数已生效</strong>（旧实现恒 500）</td>
+</tr>
+<tr>
+<td>等 0.9 s</td>
+<td><code>ws_test=0</code></td>
+<td>5 段 ×100 ms 正常结束</td>
+</tr>
+<tr>
+<td><code>wsstatic 1</code></td>
+<td><code>ws_test=4 driver=0</code>、<code>GPIOD ODR=0x8000</code></td>
+<td>PD15 真实拉高</td>
+</tr>
+<tr>
+<td>等 2.6 s</td>
+<td><code>ws_test=0 driver=1 ws_frame=1</code></td>
+<td><strong>驱动自动恢复 DMA 并重发帧</strong></td>
+</tr>
+<tr>
+<td><code>wsfault 1</code></td>
+<td><code>ws_test=5</code>，3.4 s 后
+<code>ws_test=0 ws_primary=NO_RECEIVER</code></td>
+<td>故障测试不残留</td>
+</tr>
+<tr>
+<td>2 s 计数</td>
+<td><code>ws_tx 228→239 (+11)</code>、<code>ws_fail 0→0</code></td>
+<td>持续发送且无失败</td>
+</tr>
+</tbody>
+</table>
+<p><strong>本板无法验证的项</strong>：</p>
+<ul>
+<li><strong>模式色相（手动/定高/定点/制导）</strong>：台架无遥控器（<code>rc_frames=0</code>）无法解锁，
+只能由宿主回归 <code>test_led_status.cpp</code>
+覆盖四种模式的映射与提示穿插。</li>
+<li><strong>告警抢占</strong>：失控与电池危险需要真实断链/低压条件，本板无电池、无
+RC。</li>
+<li><strong>实际亮度与灯珠时序</strong>：只读
+<code>ws_rgb</code>（想显示的 24 位色值与 <code>ws_fail</code>），
+未用示波器/色度计量测波形；<code>ws_fail=0</code>
+说明驱动报告每帧完成，但不等于 灯珠接收正确。</li>
+<li><strong>实机默认 env</strong>：本次烧的是 <code>_Dbg</code>
+变体（Serial6 上行历史上不通，DBG 走 UART8）。</li>
+</ul>
+<blockquote>
+<p>★ 结论范围：灯效状态组装、调试命令自恢复、DMA
+发送链路在本板上<strong>已实测通过</strong>；
+模式映射与告警优先级是<strong>宿主回归 +
+代码审查</strong>层面的证据，不外推为实机已验证。</p>
+</blockquote>
 <blockquote>
 <p>★ 新固件的连续运行时长是<strong>重新开始累积</strong>的。旧固件创下的
 49640 s（11.7 倍回绕点）
@@ -1318,5 +1473,5 @@ class="sourceCode bash"><code class="sourceCode bash"><span id="cb8-1"><a href="
 <li><code>docs/04-数学建模/代码理论核查/IMU采样调试经验-2026-11-04.md</code>（P1
 架构与 2 kHz 实测方法）</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-19 01:45</footer></article></body>
+<footer class="provenance">源文件 <code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-26 12:37</footer></article></body>
 </html>
