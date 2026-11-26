@@ -276,12 +276,14 @@ void sendPositionVelocityData();
 void handleGuidanceCommands();
 
 /**
- * @brief 状态 LED 控制任务 (100Hz)
+ * @brief 状态灯任务 (100Hz)
  *
- * 根据 IMU 校准状态和解锁状态控制 LED 闪烁模式：
- * - 校准中: 快闪 (10Hz)
- * - 已解锁: 慢闪 (5Hz)
- * - 待机: 呼吸灯效果
+ * 采集同一拍的业务快照，交给灯效策略决定主色与提示：
+ * - 空中失控 > 电池危险 > 校准 > 无接收机 / 地面断链
+ * - 已解锁：主色 = GNC 实际生效模式（手动绿 / 定高青 / 定点白 / 制导紫），
+ *   普通提示（弱链 / 待收敛 / 无定位）以短闪穿插，不覆盖模式色
+ * - 地面：待机蓝，或直接显示待收敛 / 无定位提示
+ * 调试台架灯效由同一任务推进并自动恢复，见 handleDebugConsole 的 ws 系列命令。
  */
 void handleStatusLedTask();
 

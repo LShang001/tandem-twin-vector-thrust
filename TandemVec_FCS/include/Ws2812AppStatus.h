@@ -1,254 +1,283 @@
 /**
  * @file    Ws2812AppStatus.h
- * @module  固件/基础设施（RGB 状态灯应用层状态机，PD15 WS2812）
- * @brief   把飞控业务状态映射为 RGB 颜色与节奏（效果渲染层）
- * @details 输入：`FcsLedState`（由 communication.cpp handleStatusLedTask 按业务优先级
- *          组装）+ 周期节拍；
- *          处理：状态 → 颜色/呼吸/闪烁相位累加；
- *          输出：WS2812 像素缓冲（真正刷新由 WS2812Driver 负责）。
- *          覆盖状态：BOOT / FAULT / FAILSAFE / CALIBRATING / NO_RECEIVER / LINK_DOWN /
- *          LOW_LQ / LOW_VOLTAGE / ARMED_* / STANDBY。
- *          不变量：本类不做状态判定，只做渲染；像素驱动 bitbang 与 H7 DMA 两套方案共用本层。
- * @theory  N/A（灯效渲染）
- * @ref     docs/memory/2026-08-08-WS2812驱动调试.md（DMA/ARR 踩坑）、AGENTS.md 硬件踩坑记录
+ * @module  固件/基础设施（PD15 RGB 状态灯）
+ * @brief   选择状态灯主色与提示，按切入时间渲染并提交变化帧。
+ * @details 输入为已生效的飞行模式色、链路/导航标志和电池采样；渲染层独立计时，
+ *          发送失败后保留重试机会。所有判定仅供显示。
+ * @theory  N/A（状态显示）
+ * @ref     docs/registers/固件调试工具链-2026-11-01.md
  * @frame   N/A
- * @units   RGB 0-255；节奏单位 ms/Hz
- * @note    与 StatusLED（PE5 单色）并行运行；`setFault()` 可覆盖为故障态（DBG `wsfault`）。
- *          上电无信号（NO_RECEIVER）与地面断链（LINK_DOWN）必须区分——判据是
- *          “是否曾经建立过链路”（communication.cpp `s_ever_linked`）。
- * @see     include/StatusLED.h、lib/WS2812Driver、src/communication.cpp（handleStatusLedTask）
+ * @units   时间 ms、电压 mV、RGB 0–255
+ * @see     src/communication.cpp::handleStatusLedTask
  */
-
-#ifndef WS2812_APP_STATUS_H
-#define WS2812_APP_STATUS_H
+#pragma once
 
 #include <Arduino.h>
 #include <WS2812Driver.h>
+#include <cmath>
+#include <cstdint>
 
-/**
- * @brief 飞控状态 → LED 效果枚举（按业务优先级由 handleStatusLedTask 组装）
- *
- * 优先级（高→低）：
- *   FAULT > FAILSAFE > CALIBRATING > NO_RECEIVER > LINK_DOWN
- *   > BAT_CRITICAL > LOW_LQ > LOW_VOLTAGE
- *   > EKF_NOT_CONVERGED > GNSS_NO_FIX > ARMED_*(模式) > STANDBY
- */
 enum class FcsLedState {
-    BOOT,          // 上电自检：白→蓝→绿 渐变 1.2s（首次 update 自动播放）
-    FAULT,         // 故障：红快闪 10Hz（setFault 触发）
-    FAILSAFE,      // 空中失控：红 SOS 双闪（100亮/100灭/100亮/600灭 ms）
-    CALIBRATING,   // IMU 校准：黄快闪 10Hz
-    NO_RECEIVER,   // 上电无信号（从未建链）：红慢闪 1Hz
-    LINK_DOWN,     // 地面断链（曾建链）：品红慢闪 ~0.8Hz
-    LOW_LQ,        // 弱信号（LQ<40%）：橙慢闪 1Hz
-    LOW_VOLTAGE,   // 低压：红慢呼吸 2s
-    BAT_CRITICAL,  // 电池危险（<10.5V）：红极快闪 20Hz（比低压更急）
-    EKF_NOT_CONVERGED, // EKF 未收敛（导航未初始化）：紫慢脉冲 1.2s
-    GNSS_NO_FIX,   // 无 GNSS 定位：蓝紫交替 0.6s
-    ARMED_MANUAL,  // 解锁+手动模式：绿呼吸 2s
-    ARMED_ALT,     // 解锁+高度保持：青呼吸 2s
-    ARMED_POS,     // 解锁+定点：白呼吸 2s
-    ARMED_GUIDED,  // 解锁+制导（上位机）：紫呼吸 2s
-    STANDBY        // 待机（链路正常未解锁）：蓝呼吸 2.5s
+    BOOT, FAULT, FAILSAFE, CALIBRATING, NO_RECEIVER, LINK_DOWN, LOW_LQ,
+    LOW_VOLTAGE, BAT_CRITICAL, EKF_NOT_CONVERGED, GNSS_NO_FIX,
+    ARMED_MANUAL, ARMED_ALT, ARMED_POS, ARMED_GUIDED, STANDBY, NONE
+};
+
+/// 稳定的 DBG 名称，主状态与普通提示共用。
+inline const char *fcsLedStateName(FcsLedState state) {
+    switch (state) {
+        case FcsLedState::BOOT: return "BOOT";
+        case FcsLedState::FAULT: return "FAULT";
+        case FcsLedState::FAILSAFE: return "FAILSAFE";
+        case FcsLedState::CALIBRATING: return "CALIBRATING";
+        case FcsLedState::NO_RECEIVER: return "NO_RECEIVER";
+        case FcsLedState::LINK_DOWN: return "LINK_DOWN";
+        case FcsLedState::LOW_LQ: return "LOW_LQ";
+        case FcsLedState::LOW_VOLTAGE: return "LOW_VOLTAGE";
+        case FcsLedState::BAT_CRITICAL: return "BAT_CRITICAL";
+        case FcsLedState::EKF_NOT_CONVERGED: return "EKF_NOT_CONVERGED";
+        case FcsLedState::GNSS_NO_FIX: return "GNSS_NO_FIX";
+        case FcsLedState::ARMED_MANUAL: return "ARMED_MANUAL";
+        case FcsLedState::ARMED_ALT: return "ARMED_ALT";
+        case FcsLedState::ARMED_POS: return "ARMED_POS";
+        case FcsLedState::ARMED_GUIDED: return "ARMED_GUIDED";
+        case FcsLedState::STANDBY: return "STANDBY";
+        default: return "NONE";
+    }
+}
+
+/// 单灯显示同时携带主状态和可短时叠加的提示。
+struct FcsLedIndication {
+    FcsLedState primary = FcsLedState::STANDBY;
+    FcsLedState advisory = FcsLedState::NONE;
+};
+
+/// 显示输入由通信任务在同一拍采集，电池与 LQ 的有效性各自判断。
+struct FcsLedInputs {
+    bool armed = false;
+    bool calibrating = false;
+    bool link_up = false;
+    bool ever_linked = false;
+    bool failsafe = false;
+    bool crsf_link_stats_seen = false;
+    bool nav_ready_on_ground = false;
+    bool gnss_fix = false;
+    uint8_t link_quality = 100;
+    uint32_t link_stats_ms = 0;
+    float battery_mv = 0.0f;
+    FcsLedState actual_mode = FcsLedState::ARMED_MANUAL;
+};
+
+class FcsLedPolicy {
+public:
+    static constexpr uint32_t kLinkStatsMaxAgeMs = 1000;
+    static constexpr unsigned kLowMvPerCell = 3700;
+    static constexpr unsigned kCriticalMvPerCell = 3500;
+    static constexpr unsigned kRecoveryMvPerCell = 100;
+
+    /// 串数由机型构建提供，0 表示没有可用的电池告警配置。
+    explicit FcsLedPolicy(unsigned battery_cells) : _battery_cells(battery_cells) {}
+
+    /// 处理电池迟滞并按现场优先级输出主状态，再挑选一个普通提示。
+    FcsLedIndication select(const FcsLedInputs &in, uint32_t now_ms) {
+        updateBattery(in.battery_mv);
+        if (in.failsafe) return {FcsLedState::FAILSAFE};
+        if (_battery == FcsLedState::BAT_CRITICAL) return {_battery};
+        if (in.calibrating) return {FcsLedState::CALIBRATING};
+        if (!in.link_up) {
+            return {in.ever_linked ? FcsLedState::LINK_DOWN : FcsLedState::NO_RECEIVER};
+        }
+
+        FcsLedState advisory = _battery;
+        if (in.crsf_link_stats_seen && now_ms - in.link_stats_ms <= kLinkStatsMaxAgeMs &&
+            in.link_quality < 40 && advisory == FcsLedState::NONE) {
+            advisory = FcsLedState::LOW_LQ;
+        }
+        if (advisory == FcsLedState::NONE && !in.armed && !in.nav_ready_on_ground) {
+            advisory = FcsLedState::EKF_NOT_CONVERGED;
+        }
+        if (advisory == FcsLedState::NONE && !in.gnss_fix) {
+            advisory = FcsLedState::GNSS_NO_FIX;
+        }
+        if (in.armed) return {in.actual_mode, advisory};
+        return {advisory == FcsLedState::NONE ? FcsLedState::STANDBY : advisory};
+    }
+
+    FcsLedState batteryState() const { return _battery; }
+
+private:
+    unsigned _battery_cells;
+    FcsLedState _battery = FcsLedState::NONE;
+
+    /// 进入阈值立即生效，恢复多留每芯 100 mV，跨级恢复仍按低压阈值判定。
+    void updateBattery(float mv) {
+        if (_battery_cells == 0 || !std::isfinite(mv) || mv <= 0.0f) {
+            _battery = FcsLedState::NONE;
+            return;
+        }
+        const float critical = kCriticalMvPerCell * _battery_cells;
+        const float low = kLowMvPerCell * _battery_cells;
+        const float hysteresis = kRecoveryMvPerCell * _battery_cells;
+        if (mv < critical || (_battery == FcsLedState::BAT_CRITICAL && mv < critical + hysteresis)) {
+            _battery = FcsLedState::BAT_CRITICAL;
+        } else if (mv < low || (_battery != FcsLedState::NONE && mv < low + hysteresis)) {
+            _battery = FcsLedState::LOW_VOLTAGE;
+        } else {
+            _battery = FcsLedState::NONE;
+        }
+    }
 };
 
 class Ws2812AppStatus {
-private:
-    WS2812Driver &_strip;    // 引用通用驱动（由外部持有）
-
-    // 调试故障标志（wsfault 命令触发，优先级最高，覆盖组装的状态）
-    bool _fault;
-
-    // BOOT 序列状态（一次性，上电首次 update 自动播放）
-    unsigned long _boot_remaining_ms;  // 剩余时长；0 = 已播完
-    unsigned long _boot_start_ms;      // BOOT 起点（绝对时间，防任务抖动漂移）
-    bool _boot_started;
-
-    // ===== 状态颜色定义 (R, G, B) =====
-    static const uint8_t RED_R   = 255, RED_G   = 0,   RED_B   = 0;    // 红：故障/失控/无信号/低压
-    static const uint8_t YEL_R   = 255, YEL_G   = 255, YEL_B   = 0;    // 黄：校准
-    static const uint8_t ORG_R   = 255, ORG_G   = 120, ORG_B   = 0;    // 橙：弱信号
-    static const uint8_t GRN_R   = 0,   GRN_G   = 255, GRN_B   = 0;    // 绿：手动/上电自检
-    static const uint8_t CYN_R   = 0,   CYN_G   = 255, CYN_B   = 255;  // 青：高度保持
-    static const uint8_t WHT_R   = 255, WHT_G   = 255, WHT_B   = 255;  // 白：定点
-    static const uint8_t PPL_R   = 170, PPL_G   = 0,   PPL_B   = 255;  // 紫：制导
-    static const uint8_t MAG_R   = 255, MAG_G   = 0,   MAG_B   = 180;  // 品红：地面断链
-    static const uint8_t BLU_R   = 0,   BLU_G   = 0,   BLU_B   = 255;  // 蓝：待机
-
 public:
-    // 构造函数：绑定驱动引用（单颗 LED，像素 0）；BOOT 序列 1.2s
-    Ws2812AppStatus(WS2812Driver &strip)
-        : _strip(strip), _fault(false),
-          _boot_remaining_ms(BOOT_DURATION_MS), _boot_start_ms(0), _boot_started(false) {}
+    explicit Ws2812AppStatus(WS2812Driver &strip) : _strip(strip) {}
 
-    // 设置故障状态（调试命令 wsfault；优先级最高，覆盖一切）
-    void setFault(bool fault) { _fault = fault; }
-
-    /**
-     * @brief 更新LED状态（每 10ms 调用一次）
-     * @param state 业务状态（handleStatusLedTask 按优先级组装）
-     * @param now_ms 当前毫秒时间戳（单测可注入，防任务抖动漂移）
-     *
-     * BOOT 序列在首次调用时自动播放并屏蔽正常状态机；
-     * setFault 覆盖 state（调试命令语义）。
-     */
-    void update(FcsLedState state, unsigned long now_ms) {
-        // --- 0. 上电自检序列（一次性 1.2s） ---
-        if (_boot_remaining_ms > 0)
-        {
-            if (!_boot_started)
-            {
+    /// 首拍采用新状态的相位零点。紧急告警、校准和已解锁模式可结束上电演示。
+    void update(FcsLedIndication indication, uint32_t now_ms) {
+        const FcsLedState state = indication.primary;
+        if (_boot_pending) {
+            if (!_boot_started) {
                 _boot_started = true;
                 _boot_start_ms = now_ms;
             }
-            renderBoot(now_ms - _boot_start_ms);
-            if (now_ms - _boot_start_ms >= BOOT_DURATION_MS)
-            {
-                _boot_remaining_ms = 0;   // 播完，进入正常状态机
-                _boot_started = false;
+            const uint32_t elapsed = now_ms - _boot_start_ms;
+            if (elapsed < kBootMs && !interruptsBoot(state)) {
+                const uint32_t section = elapsed / kBootSegmentMs;
+                const uint32_t color = section == 0 ? kWhite : (section == 1 ? kBlue : kGreen);
+                _rendered = FcsLedState::BOOT;
+                present(scale(color, bootBreath(elapsed % kBootSegmentMs)));
+                return;
             }
+            _boot_pending = false;
+        }
+
+        if (state != _primary) {
+            _primary = state;
+            _primary_start_ms = now_ms;
+        }
+        if (indication.advisory != _advisory) {
+            _advisory = indication.advisory;
+            _advisory_start_ms = now_ms;
+        }
+        const uint32_t phase = now_ms - _primary_start_ms;
+        _rendered = _primary;
+        if (isArmedMode(_primary) && _advisory != FcsLedState::NONE &&
+            (now_ms - _advisory_start_ms) % 2000U < 150U) {
+            _rendered = _advisory;
+            present(_advisory == FcsLedState::GNSS_NO_FIX ? kBlue : scale(colorFor(_advisory), 0.5f));
             return;
         }
+        present(render(_primary, phase));
+    }
 
-        // --- 1. 调试故障覆盖 ---
-        if (_fault)
-        {
-            state = FcsLedState::FAULT;
-        }
+    /// 调试和自动灯效共用同一提交缓存，失败后下一拍重试当前目标。
+    bool present(uint32_t rgb) {
+        if (_sent_valid && _last_rgb == rgb) return true;
+        _strip.setPixelColor(0, static_cast<uint8_t>(rgb >> 16),
+                               static_cast<uint8_t>(rgb >> 8), static_cast<uint8_t>(rgb));
+        _sent_valid = _strip.show();
+        if (_sent_valid) _last_rgb = rgb;
+        return _sent_valid;
+    }
 
-        // --- 2. 按状态渲染对应效果 ---
-        switch (state)
-        {
-            case FcsLedState::FAULT:
-                renderBlinking(RED_R, RED_G, RED_B, now_ms, 50);      // 红快闪 10Hz
-                break;
-            case FcsLedState::FAILSAFE:
-                renderSosBlink(now_ms);                                // 红 SOS 双闪
-                break;
-            case FcsLedState::CALIBRATING:
-                renderBlinking(YEL_R, YEL_G, YEL_B, now_ms, 50);      // 黄快闪 10Hz
-                break;
-            case FcsLedState::NO_RECEIVER:
-                renderBlinking(RED_R, RED_G, RED_B, now_ms, 500);     // 红慢闪 1Hz
-                break;
-            case FcsLedState::LINK_DOWN:
-                renderBlinking(MAG_R, MAG_G, MAG_B, now_ms, 600);     // 品红慢闪
-                break;
-            case FcsLedState::LOW_LQ:
-                renderBlinking(ORG_R, ORG_G, ORG_B, now_ms, 500);     // 橙慢闪 1Hz
-                break;
-            case FcsLedState::LOW_VOLTAGE:
-                renderBreathing(RED_R, RED_G, RED_B, now_ms, 2000, 0.40f);  // 红慢呼吸
-                break;
-            case FcsLedState::BAT_CRITICAL:
-                renderBlinking(RED_R, RED_G, RED_B, now_ms, 25);      // 红极快闪 20Hz
-                break;
-            case FcsLedState::EKF_NOT_CONVERGED:
-                renderBreathing(PPL_R, PPL_G, PPL_B, now_ms, 1200, 0.30f);  // 紫慢脉冲
-                break;
-            case FcsLedState::GNSS_NO_FIX:
-                renderAlternate(BLU_R, BLU_G, BLU_B,
-                                PPL_R, PPL_G, PPL_B, now_ms, 300);    // 蓝紫交替
-                break;
-            case FcsLedState::ARMED_MANUAL:
-                renderBreathing(GRN_R, GRN_G, GRN_B, now_ms, 2000, 0.50f);  // 绿呼吸
-                break;
-            case FcsLedState::ARMED_ALT:
-                renderBreathing(CYN_R, CYN_G, CYN_B, now_ms, 2000, 0.50f);  // 青呼吸
-                break;
-            case FcsLedState::ARMED_POS:
-                renderBreathing(WHT_R, WHT_G, WHT_B, now_ms, 2000, 0.50f);  // 白呼吸
-                break;
-            case FcsLedState::ARMED_GUIDED:
-                renderBreathing(PPL_R, PPL_G, PPL_B, now_ms, 2000, 0.50f);  // 紫呼吸
-                break;
-            case FcsLedState::STANDBY:
-            default:
-                renderBreathing(BLU_R, BLU_G, BLU_B, now_ms, 2500, 0.35f);  // 蓝呼吸
-                break;
-        }
+    /// GPIO 或驱动模式改变后重发一次，保证恢复自动灯效时不会跳过同色帧。
+    void invalidateFrame() { _sent_valid = false; }
+    FcsLedState renderedState() const { return _rendered; }
+    uint32_t lastRgb() const { return _last_rgb; }
+    bool frameValid() const { return _sent_valid; }
+
+    /// 高优先级状态可抢占调试输出。
+    static bool isEmergency(FcsLedState state) {
+        return state == FcsLedState::FAILSAFE || state == FcsLedState::BAT_CRITICAL;
     }
 
 private:
-    static const unsigned long BOOT_DURATION_MS = 1200;   // 上电自检总时长
-    static const unsigned long BOOT_SEGMENT_MS  = 400;    // 单色段时长（白→蓝→绿）
+    static constexpr uint32_t kBootMs = 1200, kBootSegmentMs = 400;
+    static constexpr uint32_t kRed = 0xFF0000, kYellow = 0xFFFF00, kOrange = 0xFF7800;
+    static constexpr uint32_t kGreen = 0x00FF00, kCyan = 0x00FFFF, kWhite = 0xFFFFFF;
+    static constexpr uint32_t kPurple = 0xAA00FF, kMagenta = 0xFF00B4, kBlue = 0x0000FF;
+    WS2812Driver &_strip;
+    bool _boot_pending = true, _boot_started = false, _sent_valid = false;
+    uint32_t _boot_start_ms = 0, _primary_start_ms = 0, _advisory_start_ms = 0;
+    uint32_t _last_rgb = 0;
+    FcsLedState _primary = FcsLedState::NONE, _advisory = FcsLedState::NONE;
+    FcsLedState _rendered = FcsLedState::BOOT;
 
-    // 处理呼吸效果（正弦波 gamma 2.0；参数化颜色/周期/亮度上限）
-    void renderBreathing(uint8_t r, uint8_t g, uint8_t b,
-                         unsigned long t, unsigned long period, float max_brightness) {
-        float phase = (t % period) / (float)period * 2 * PI;
-        float brightness = pow((sin(phase) + 1.0f) / 2.0f, 2.0f);
-        brightness *= max_brightness;
-
-        _strip.setPixelColor(0, (uint8_t)(r * brightness),
-                                (uint8_t)(g * brightness),
-                                (uint8_t)(b * brightness));
-        _strip.show();
+    /// 连续枚举段包含四个已生效模式，辅助提示不得进入此段。
+    static bool isArmedMode(FcsLedState state) {
+        return state >= FcsLedState::ARMED_MANUAL && state <= FcsLedState::ARMED_GUIDED;
     }
 
-    // 双色交替：half_period 内显示颜色 A，下一个 half_period 显示颜色 B。
-    // 用于表达"不满足但也不到告警"的中间态（如无 GNSS 定位、EKF 未收敛），
-    // 单色无法与"待机/正常"区分时用双色。亮度统一减半，与 renderBlinking 一致。
-    void renderAlternate(uint8_t r1, uint8_t g1, uint8_t b1,
-                         uint8_t r2, uint8_t g2, uint8_t b2,
-                         unsigned long t, unsigned long half_period) {
-        if ((t / half_period) % 2 == 0)
-        {
-            _strip.setPixelColor(0, r1 >> 1, g1 >> 1, b1 >> 1);
-        }
-        else
-        {
-            _strip.setPixelColor(0, r2 >> 1, g2 >> 1, b2 >> 1);
-        }
-        _strip.show();
+    static bool interruptsBoot(FcsLedState state) {
+        return isEmergency(state) || state == FcsLedState::FAULT ||
+               state == FcsLedState::CALIBRATING || isArmedMode(state);
     }
 
-    // 处理闪烁效果（方波：亮/灭各 half_period；亮度减半防刺眼）
-    void renderBlinking(uint8_t r, uint8_t g, uint8_t b,
-                        unsigned long t, unsigned long half_period) {
-        if ((t / half_period) % 2 == 0)
-        {
-            _strip.setPixelColor(0, r >> 1, g >> 1, b >> 1);   // 亮
+    /// 由色相和节奏共同区分状态。
+    static uint32_t colorFor(FcsLedState state) {
+        switch (state) {
+            case FcsLedState::FAILSAFE:
+            case FcsLedState::FAULT:
+            case FcsLedState::NO_RECEIVER:
+            case FcsLedState::LOW_VOLTAGE:
+            case FcsLedState::BAT_CRITICAL: return kRed;
+            case FcsLedState::CALIBRATING: return kYellow;
+            case FcsLedState::LINK_DOWN: return kMagenta;
+            case FcsLedState::LOW_LQ: return kOrange;
+            case FcsLedState::ARMED_MANUAL: return kGreen;
+            case FcsLedState::ARMED_ALT: return kCyan;
+            case FcsLedState::ARMED_POS: return kWhite;
+            case FcsLedState::ARMED_GUIDED:
+            case FcsLedState::EKF_NOT_CONVERGED: return kPurple;
+            default: return kBlue;
         }
-        else
-        {
-            _strip.setPixelColor(0, 0, 0, 0);                  // 灭
-        }
-        _strip.show();
     }
 
-    // 空中失控 SOS 双闪：亮100/灭100/亮100/灭600 ms（周期 900ms，全亮突出紧急）
-    void renderSosBlink(unsigned long t) {
-        const unsigned long CYCLE_MS = 900;
-        unsigned long phase = t % CYCLE_MS;
-        bool on = (phase < 100) || (phase >= 200 && phase < 300);
-        _strip.setPixelColor(0, on ? RED_R : 0, on ? RED_G : 0, on ? RED_B : 0);
-        _strip.show();
+    /// 非线性亮度曲线，相位零点为峰值：告警切入当拍即亮，不从暗相开始。
+    static float breath(uint32_t t, uint32_t period, float minimum, float maximum) {
+        const float wave = 0.5f + 0.5f * std::cos(2.0f * static_cast<float>(PI) *
+                                                   static_cast<float>(t % period) / period);
+        return minimum + (maximum - minimum) * wave * wave;
     }
 
-    // 上电自检：白→蓝→绿 三段，每段 400ms 内呼吸一次（确认驱动与像素正常）
-    void renderBoot(unsigned long t) {
-        if (t >= BOOT_DURATION_MS)
-        {
-            _strip.setPixelColor(0, 0, 0, 0);
-            _strip.show();
-            return;
-        }
-        unsigned seg = t / BOOT_SEGMENT_MS;          // 0 白 / 1 蓝 / 2 绿
-        unsigned long seg_t = t % BOOT_SEGMENT_MS;   // 段内时间
+    /// 上电演示每段两端暗、中间亮，避免换色时亮度阶跃。
+    static float bootBreath(uint32_t t) {
+        const float wave = std::sin(static_cast<float>(PI) *
+                                    static_cast<float>(t) / static_cast<float>(kBootSegmentMs));
+        return 0.5f * wave * wave;
+    }
 
-        float phase = (seg_t / (float)BOOT_SEGMENT_MS) * 2 * PI;
-        float br = pow((sin(phase) + 1.0f) / 2.0f, 2.0f);
-        br *= 0.5f;  // 50% 亮度上限
+    /// 分通道缩放，保持色相。
+    static uint32_t scale(uint32_t rgb, float brightness) {
+        const auto r = static_cast<uint32_t>(((rgb >> 16) & 255U) * brightness);
+        const auto g = static_cast<uint32_t>(((rgb >> 8) & 255U) * brightness);
+        const auto b = static_cast<uint32_t>((rgb & 255U) * brightness);
+        return (r << 16) | (g << 8) | b;
+    }
 
-        switch (seg)
-        {
-            case 0:  _strip.setPixelColor(0, (uint8_t)(WHT_R * br), (uint8_t)(WHT_G * br), (uint8_t)(WHT_B * br)); break;
-            case 1:  _strip.setPixelColor(0, (uint8_t)(BLU_R * br), (uint8_t)(BLU_G * br), (uint8_t)(BLU_B * br)); break;
-            default: _strip.setPixelColor(0, (uint8_t)(GRN_R * br), (uint8_t)(GRN_G * br), (uint8_t)(GRN_B * br)); break;
+    static uint32_t blink(uint32_t rgb, uint32_t t, uint32_t half_period) {
+        return (t / half_period) % 2U == 0 ? scale(rgb, 0.5f) : 0U;
+    }
+
+    /// 失控双闪与其他告警保持各自节奏，正常模式以连续呼吸显示。
+    static uint32_t render(FcsLedState state, uint32_t t) {
+        const uint32_t color = colorFor(state);
+        if (isArmedMode(state)) return scale(color, breath(t, 2000, 0.15f, 0.5f));
+        switch (state) {
+            case FcsLedState::FAILSAFE: {
+                const uint32_t phase = t % 900U;
+                return (phase < 100U || (phase >= 200U && phase < 300U)) ? kRed : 0U;
+            }
+            case FcsLedState::FAULT:
+            case FcsLedState::CALIBRATING: return blink(color, t, 50);
+            case FcsLedState::NO_RECEIVER:
+            case FcsLedState::LOW_LQ: return blink(color, t, 500);
+            case FcsLedState::LINK_DOWN: return blink(color, t, 600);
+            case FcsLedState::BAT_CRITICAL: return blink(color, t, 25);
+            case FcsLedState::LOW_VOLTAGE: return scale(color, breath(t, 2000, 0.0f, 0.4f));
+            case FcsLedState::EKF_NOT_CONVERGED: return scale(color, breath(t, 1200, 0.05f, 0.3f));
+            case FcsLedState::GNSS_NO_FIX: return scale((t / 300U) % 2U == 0 ? kBlue : kPurple, 0.5f);
+            default: return scale(kBlue, breath(t, 2500, 0.0f, 0.35f));
         }
-        _strip.show();
     }
 };
-
-#endif

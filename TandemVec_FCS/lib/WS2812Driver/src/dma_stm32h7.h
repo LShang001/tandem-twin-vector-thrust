@@ -25,10 +25,8 @@
  * == Key details ==
  * - Frame encoded into a 32-byte-aligned buffer; D-Cache flushed with
  *   SCB_CleanDCache_by_Addr before each transfer (H7 has D-Cache).
- * - A transfer-complete IRQ callback disables DIER.UDE immediately;
- *   leaving it set causes stray DMA requests that wedge the DMA state
- *   machine (observed: next HAL_DMA_Start_IT returns HAL_BUSY and the
- *   LED flickers).
+ * - 轮询 DMA 完成与错误标志，不依赖 DMA 中断。
+ * - 返回前关闭 TIM 更新 DMA 请求。发帧失败时切回 GPIO 低电平，等待下次调用恢复。
  *
  * License: MIT
  */
@@ -38,8 +36,9 @@
 
 #if WS2812_HAVE_H7_DMA
 
-// Frame layout: [40 reset words][24 words per pixel][40 reset words]
-#define WS2812_DMA_RESET_WORDS  40U
+// 帧首低电平保留 40 个周期。帧尾多留两个周期，覆盖 CCR 预装载及完成标志的边界。
+static constexpr uint32_t kWs2812ResetWords = 40U;
+static constexpr uint32_t kWs2812TailWords = kWs2812ResetWords + 2U;
 
 // Enable the clock gate for the given timer instance (H7 RCC)
 static inline void ws2812_tim_clk_enable(TIM_TypeDef *tim)
@@ -95,8 +94,8 @@ inline void WS2812Driver::configurePinGpio()
   g.Mode = GPIO_MODE_OUTPUT_PP;
   g.Pull = GPIO_NOPULL;
   g.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
+  _port->BSRR = _resetMask;   // 切到 GPIO 输出前先锁存低电平
   HAL_GPIO_Init(get_GPIO_Port(STM_PORT(pn)), &g);
-  _port->BSRR = _resetMask;   // start low
 }
 
 // Pin -> timer alternate function (DMA back-end)
@@ -164,40 +163,46 @@ inline bool WS2812Driver::beginDmaPlatform(TIM_TypeDef *tim, uint32_t channel)
   if (_ccr1 > period) _ccr1 = period;
   if (_ccr0 > period) _ccr0 = period;
 
-  // 5. DMA buffer: [reset][pixels][reset], 32-byte aligned for D-Cache
-  uint32_t words = 2U * WS2812_DMA_RESET_WORDS + 24U * (uint32_t)_numPixels;
-  _dmaBuf = (uint32_t*)aligned_alloc(32, (size_t)words * sizeof(uint32_t));
+  const uint32_t words = kWs2812ResetWords + 24U * static_cast<uint32_t>(_numPixels) + kWs2812TailWords;
+  if (words > UINT16_MAX) {
+    return false;  // DMA 的 NDTR 只有 16 位
+  }
   if (_dmaBuf == nullptr) {
-    return false;
+    const size_t bytes = (words * sizeof(uint32_t) + 31U) & ~size_t{31U};
+    _dmaBuf = static_cast<uint32_t*>(aligned_alloc(32U, bytes));
+    if (_dmaBuf == nullptr) {
+      return false;
+    }
   }
   _dmaBufLen = words;
 
-  // 6. DMA stream via DMAMUX1 (any stream can carry any request on H7)
-  _hdma.Instance = DMA1_Stream6;
-  _hdma.Init.Request = ws2812_tim_up_request(tim);
-  _hdma.Init.Direction = DMA_MEMORY_TO_PERIPH;
-  _hdma.Init.PeriphInc = DMA_PINC_DISABLE;
-  _hdma.Init.MemInc = DMA_MINC_ENABLE;
-  _hdma.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
-  _hdma.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
-  _hdma.Init.Mode = DMA_NORMAL;
-  _hdma.Init.Priority = DMA_PRIORITY_HIGH;
-  _hdma.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
-  if (_hdma.Init.Request == 0 || HAL_DMA_Init(&_hdma) != HAL_OK) {
+  // 6. DMA stream via DMAMUX1（由本驱动独占 DMA1_Stream6）
+  __HAL_RCC_DMA1_CLK_ENABLE();
+  __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
+  DMA1_Stream6->CR &= ~DMA_SxCR_EN;
+  DMA1->HIFCR = DMA_HIFCR_CFEIF6 | DMA_HIFCR_CDMEIF6 | DMA_HIFCR_CTEIF6 |
+                DMA_HIFCR_CHTIF6 | DMA_HIFCR_CTCIF6;
+
+  // HAL 仅负责配置请求路由和数据宽度，发送阶段直接使用硬件寄存器。
+  DMA_HandleTypeDef dma{};
+  dma.Instance = DMA1_Stream6;
+  dma.Init.Request = ws2812_tim_up_request(tim);
+  dma.Init.Direction = DMA_MEMORY_TO_PERIPH;
+  dma.Init.PeriphInc = DMA_PINC_DISABLE;
+  dma.Init.MemInc = DMA_MINC_ENABLE;
+  dma.Init.PeriphDataAlignment = DMA_PDATAALIGN_WORD;
+  dma.Init.MemDataAlignment = DMA_MDATAALIGN_WORD;
+  dma.Init.Mode = DMA_NORMAL;
+  dma.Init.Priority = DMA_PRIORITY_HIGH;
+  dma.Init.FIFOMode = DMA_FIFOMODE_DISABLE;
+  if (dma.Init.Request == 0 || HAL_DMA_Init(&dma) != HAL_OK) {
     return false;
   }
+  // HAL_DMA_Init 已写入流和 DMAMUX 配置，DMA 句柄本身无需保留。
 
-  // 7. link DMA into the timer handle's UPDATE slot (HAL looks it up there)
-  __HAL_LINKDMA(_htim, hdma[TIM_DMA_ID_UPDATE], _hdma);
-
-  // 8. transfer-complete IRQ: disable DIER.UDE to avoid stray-request wedging
-  _hdma.XferCpltCallback = &WS2812Driver::dmaXferComplete;
-
-  // 8b. switch the pin to timer AF so the PWM signal actually reaches it
   configurePinAf(tim);
-
-  // 9. start PWM output (CCR=0 -> low)
   if (HAL_TIM_PWM_Start(_htim, channel) != HAL_OK) {
+    configurePinGpio();
     return false;
   }
 
@@ -205,54 +210,78 @@ inline bool WS2812Driver::beginDmaPlatform(TIM_TypeDef *tim, uint32_t channel)
   return true;
 }
 
-inline void WS2812Driver::dmaXferComplete(DMA_HandleTypeDef *)
+inline void WS2812Driver::stopDmaOutput()
 {
-  // Disable the UDE request bit immediately; leaving it set wedges the
-  // DMA state machine (the "flicker" bug).
-  if (_self != nullptr && _self->_htim != nullptr) {
-    __HAL_TIM_DISABLE_DMA(_self->_htim, TIM_DMA_UPDATE);
-  }
+  // 先停请求源，再请求停流。流可能仍在收尾，下次确认 EN 已清才可改写缓冲。
+  __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
+  CLEAR_BIT(DMA1_Stream6->CR, DMA_SxCR_EN);
+  configurePinGpio();
+  _dmaNeedsRecovery = true;
 }
 
-inline void WS2812Driver::showDmaPlatform()
+inline bool WS2812Driver::showDmaPlatform()
 {
-  // 1. encode frame: [reset][pixels][reset]
-  uint32_t *p = _dmaBuf;
-  uint32_t idx = 0;
-  for (uint32_t i = 0; i < WS2812_DMA_RESET_WORDS; i++) p[idx++] = 0;
-  for (uint32_t i = 0; i < (uint32_t)_numPixels * 3; i++) {
-    uint8_t pix = _pixels[i];
-    for (int8_t bit = 7; bit >= 0; bit--) {
-      p[idx++] = (pix & (1 << bit)) ? _ccr1 : _ccr0;
+  auto *const stream = DMA1_Stream6;
+  __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
+  if (stream->CR & DMA_SxCR_EN) {
+    stopDmaOutput();
+    return false;
+  }
+
+  auto *const ccr = &_htim->Instance->CCR1 + ws2812_ccr_offset(_dmaChannel) / sizeof(uint32_t);
+  if (_dmaNeedsRecovery) {
+    // 引脚仍为 GPIO 低电平。先装载 CCR=0，再切回复用，避免残留占空比打出脉冲。
+    *ccr = 0;
+    _htim->Instance->EGR = TIM_EGR_UG;
+    configurePinAf(_htim->Instance);
+    _dmaNeedsRecovery = false;
+  }
+
+  // 编码帧首复位、像素数据和帧尾复位，再将缓冲写回内存供 DMA 读取。
+  uint32_t *const buffer = _dmaBuf;
+  uint32_t words = 0;
+  for (uint32_t i = 0; i < kWs2812ResetWords; ++i) {
+    buffer[words++] = 0;
+  }
+  for (uint32_t i = 0; i < static_cast<uint32_t>(_numPixels) * 3U; ++i) {
+    const uint8_t pixel = _pixels[i];
+    for (int8_t bit = 7; bit >= 0; --bit) {
+      buffer[words++] = (pixel & (1U << bit)) ? _ccr1 : _ccr0;
     }
   }
-  for (uint32_t i = 0; i < WS2812_DMA_RESET_WORDS; i++) p[idx++] = 0;
-
-  // 2. D-Cache: DMA reads this buffer, flush it first
-  SCB_CleanDCache_by_Addr((uint32_t*)_dmaBuf, (uint32_t)idx * sizeof(uint32_t));
-
-  // 3. safe start: disable UDE + abort stale DMA, then start and poll
-  //    (destination = CCR1 + channel offset; source = encoded buffer)
-  //
-  // NOTE: we intentionally use HAL_DMA_Start() + PollForTransfer instead
-  // of HAL_DMA_Start_IT(). The IT path requires a DMA1_Stream6_IRQHandler
-  // that stm32duino's startup file does NOT provide (weak alias to
-  // Default_Handler -> hardfault/hang or stuck-BUSY state). Polling is
-  // fully self-contained: ~130us for a 1-LED frame, called at 100Hz.
-  // ★ 整帧等待期间保持全局中断开启：旧实现 noInterrupts() 包住约 130µs
-  //   的 PollForTransfer，会同时屏蔽最高优先级的 UART4，造成 GNSS 字节溢出。
-  //   本函数只在主循环上下文调用，DMA 句柄由本实例独占，无需全局屏蔽。
-  __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
-  if (HAL_DMA_GetState(&_hdma) != HAL_DMA_STATE_READY) {
-    HAL_DMA_Abort(&_hdma);
+  for (uint32_t i = 0; i < kWs2812TailWords; ++i) {
+    buffer[words++] = 0;
   }
-  uint32_t dst = (uint32_t)&_htim->Instance->CCR1 + ws2812_ccr_offset(_dmaChannel);
-  if (HAL_DMA_Start(&_hdma, (uint32_t)_dmaBuf, dst, idx) == HAL_OK) {
-    __HAL_TIM_ENABLE_DMA(_htim, TIM_DMA_UPDATE);
-    // wait for the frame to be shifted out (max 50ms guard)
-    HAL_DMA_PollForTransfer(&_hdma, HAL_DMA_FULL_TRANSFER, 50U);
-    __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
-  }
+  SCB_CleanDCache_by_Addr(buffer, words * sizeof(uint32_t));
+
+  constexpr uint32_t errorFlags = DMA_HISR_FEIF6 | DMA_HISR_DMEIF6 | DMA_HISR_TEIF6;
+  constexpr uint32_t clearFlags = DMA_HIFCR_CFEIF6 | DMA_HIFCR_CDMEIF6 | DMA_HIFCR_CTEIF6 |
+                                  DMA_HIFCR_CHTIF6 | DMA_HIFCR_CTCIF6;
+  DMA1->HIFCR = clearFlags;
+  stream->PAR = reinterpret_cast<uintptr_t>(ccr);
+  stream->M0AR = reinterpret_cast<uintptr_t>(buffer);
+  stream->NDTR = words;
+
+  // 每字至多 1.25 µs，另留 50 µs 启动及总线余量。单像素的轮询预算为 183 µs。
+  // micros() 使用 SysTick，全程保持全局中断开启。减法兼容 32 位时间戳回绕。
+  const uint32_t timeoutUs = (words * 5U + 3U) / 4U + 50U;
+  const uint32_t startUs = micros();
+  SET_BIT(stream->CR, DMA_SxCR_EN);
+  __HAL_TIM_ENABLE_DMA(_htim, TIM_DMA_UPDATE);
+  do {
+    const uint32_t status = DMA1->HISR;
+    if (status & errorFlags) {
+      break;
+    }
+    if ((status & DMA_HISR_TCIF6) && !(stream->CR & DMA_SxCR_EN)) {
+      __HAL_TIM_DISABLE_DMA(_htim, TIM_DMA_UPDATE);
+      DMA1->HIFCR = clearFlags;
+      return true;
+    }
+  } while (static_cast<int32_t>(micros() - startUs) < static_cast<int32_t>(timeoutUs));
+
+  stopDmaOutput();
+  return false;
 }
 
 #endif // WS2812_HAVE_H7_DMA

@@ -160,6 +160,8 @@ SECTIONS: list[tuple[str, list[tuple[str, str, str, str]]]] = [
          "DEC-001 参数单一事实源", "ADR：aircraft-model.json + 代码生成 + 漂移检测的决策与备选方案"),
         ("docs/09-决策记录/DEC-002-六项P0修复决策.md", "decisions/DEC-002.html",
          "DEC-002 六项 P0 修复决策", "F3 符号、惯量前馈跨系、仿真旋转项/P0 航向/home_lla、15° 巡航包线的决策与验证"),
+        ("docs/09-决策记录/DEC-003-状态灯以实际生效模式为准.md", "decisions/DEC-003.html",
+         "DEC-003 状态灯以实际生效模式为准", "ADR：主色取实际模式、告警分级、调试自恢复与发送结果语义"),
         ("docs/09-决策记录/模板-决策记录.md", "decisions/adr-template.html",
          "决策记录模板（ADR）", "新增决策记录使用的空白模板"),
     ]),

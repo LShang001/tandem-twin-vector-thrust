@@ -269,16 +269,20 @@ static volatile float s_elrs_lq = 100.0f;
 //   把计数与年龄打进 health，冻结与否一眼可判，不再靠猜。
 static volatile uint32_t s_elrs_ls_frames = 0;
 static volatile uint32_t s_elrs_ls_last_ms = 0;
+// 断链或切协议后，灯效必须等本轮的新统计帧，健康计数仍累计。
+static bool s_led_crsf_stats_seen = false;
 // 是否曾经建立过遥控链路：区分"上电无信号"(NO_RECEIVER) 与
 // "地面断链"(LINK_DOWN) 两种灯效。链路恢复后保持 true。
 static bool s_ever_linked = false;
-// LQ 弱信号预警阈值：低于此值亮橙色慢闪（ELRS 500Hz 包率下 LQ 掉得快）
-static const float ELRS_LQ_WARN_THRESHOLD = 40.0f;
-// 低压告警阈值 (mV)：3S LiPo 满电 12.6V，11.1V 以下提示（按电池配置可调）
-static const float LED_LOW_VOLTAGE_MV = 11100.0f;
-// ★ 2026-11-06 电池危险阈值（低于低压告警一档，用极快闪区分紧急程度）：
-//   4S 电池 3.0V/cell 已接近放电终止，此时必须立即降落。
-static const float LED_CRIT_VOLTAGE_MV = 10500.0f;
+// 未提供机型配置时沿用现有 3S 显示阈值。无告警电压源的构建可设为 0。
+#ifndef BFS_LED_BATTERY_CELLS
+#define BFS_LED_BATTERY_CELLS 3
+#endif
+static_assert(BFS_LED_BATTERY_CELLS >= 0 && BFS_LED_BATTERY_CELLS <= 8,
+              "WS2812 电池串数须在 0–8 范围内");
+static FcsLedPolicy s_led_policy(BFS_LED_BATTERY_CELLS);
+static FcsLedIndication s_led_indication;
+static bool s_led_battery_sample_valid = false;
 
 /**
  * @brief CRSF 通道回调：把 16 通道 PWM(988-2012) 拷入 `raw_rc_values`
@@ -449,6 +453,7 @@ void elrsLinkStatsCallback(crsfLinkStatistics_t *ls)
     s_elrs_lq = ls->uplink_Link_quality;
     ++s_elrs_ls_frames;
     s_elrs_ls_last_ms = millis();
+    s_led_crsf_stats_seen = true;
   }
 }
 
@@ -494,6 +499,7 @@ void linkDownCallback()
 
   Serial8.println("Link is down! Failsafe activated.");
   isLinkUp = false;
+  s_led_crsf_stats_seen = false;
 
   bfs::failsafe::Inputs in;
   in.arm_us = raw_rc_values[bfs::failsafe::kChArm];
@@ -1863,8 +1869,7 @@ void sendElrsTempData()
  *
  * 从 ADC_BATT (PC5) 读取电池分压电压，换算为电池真实电压 (mV)。
  * - ADC 16位 (0-65535)，参考 3.3V
- * - 分压比 BATTERY_DIVIDER_RATIO 需按 PCB 实测标定（默认 1.0）
- * - 未标定前输出 = ADC 原始电压，量程 0-3.3V
+ * - 分压比由 `BATTERY_DIVIDER_RATIO` 给出，默认 11.0；按板上分压实测核对。
  *
  * 输出全局量 bat_voltage_mv，供 ELRS / AnoCom 遥测共用。
  *
@@ -1878,6 +1883,7 @@ void updateBatteryMonitor()
   int adcValue = analogRead(ADC_BATT_PIN);
   float dividerVoltage = static_cast<float>(adcValue) * (3.3f / 65535.0f);
   const float sample_mv = dividerVoltage * BATTERY_DIVIDER_RATIO * 1000.0f;
+  s_led_battery_sample_valid = sample_mv > 0.0f;
 
   // 一阶低通：y += α·(x − y)。读到 0 视为无效采样，不拿它初始化滤波器。
   static bool s_filter_ready = false;
@@ -2405,99 +2411,114 @@ void handleGuidanceCommands()
   }
 }
 
+// 调试灯效由 100 Hz 状态灯任务推进，退出、超时和紧急状态统一接管并恢复驱动。
+enum class LedDebugEffect { Auto, Driver, Color, Sequence, StaticLevel, Fault };
+static struct {
+  LedDebugEffect effect = LedDebugEffect::Auto;
+  WS2812Driver::Mode saved_mode = WS2812Driver::MODE_BITBANG;
+  uint32_t start_ms = 0;
+  uint32_t duration_ms = 0;
+  uint32_t step_ms = 0;
+  uint32_t rgb = 0;
+} s_led_debug;
+
+/** @brief 结束调试覆盖，恢复进入覆盖前的驱动。 */
+static void stopLedDebug()
+{
+  if (s_led_debug.effect == LedDebugEffect::Auto) return;
+  if (ws2812Led.getMode() != s_led_debug.saved_mode) {
+    ws2812Led.setMode(s_led_debug.saved_mode);
+  }
+  s_led_debug.effect = LedDebugEffect::Auto;
+  ws2812AppStatus.invalidateFrame();
+}
+
+/** @brief 启动台架显示；已解锁、失控或电池危险时拒绝。duration_ms=0 表示不按时间结束。 */
+static bool startLedDebug(Uart &serial, LedDebugEffect effect, uint32_t duration_ms)
+{
+  if (g_is_unlocked || failsafe_in_flight ||
+      s_led_policy.batteryState() == FcsLedState::BAT_CRITICAL) {
+    serial.println(F("[DBG] WS2812 test refused: armed or emergency"));
+    return false;
+  }
+  if (s_led_debug.effect == LedDebugEffect::Auto) {
+    s_led_debug.saved_mode = ws2812Led.getMode();
+  }
+  s_led_debug.effect = effect;
+  s_led_debug.start_ms = millis();
+  s_led_debug.duration_ms = duration_ms;
+  return true;
+}
+
 /**
- * @brief 状态灯任务（100Hz）：把业务状态映射为 LED 效果
- *
- * 判定优先级（高→低）：FAILSAFE（空中失控）> CALIBRATING（IMU/磁力计校准）
- * > NO_RECEIVER（上电无信号）> LINK_DOWN（地面断链）> LOW_LQ（弱信号）
- * > LOW_VOLTAGE（低压）> ARMED_*（解锁按飞行模式）> STANDBY。
- * 故障态（FAULT）由 `Ws2812AppStatus.setFault` 内部覆盖，不在此判定。
- * @note 解锁判定用 GNC 真实状态 `g_is_unlocked`（与电机行为一致），不用遥控通道，
- *       避免上电通道抖动导致灯色与实际旋翼状态不符。
+ * @brief 在当前节拍输出调试颜色，返回 false 时交给自动灯效。
+ * @note 驱动切换不受时间限制（0 = 不超时），只在退出 DBG、解锁或紧急状态下恢复，
+ *       否则 `wsmode` 会在几秒后自己切回去，与“手动选驱动”的语义矛盾。
  */
+static bool renderLedDebug(uint32_t now_ms)
+{
+  const uint32_t elapsed = now_ms - s_led_debug.start_ms;
+  if (s_led_debug.effect == LedDebugEffect::Auto) {
+    return false;
+  }
+  const bool timed_out = s_led_debug.duration_ms != 0 && elapsed >= s_led_debug.duration_ms;
+  if (!s_dbg_mode || g_is_unlocked || timed_out ||
+      Ws2812AppStatus::isEmergency(s_led_indication.primary)) {
+    stopLedDebug();
+    return false;
+  }
+  switch (s_led_debug.effect) {
+    case LedDebugEffect::Color:
+      ws2812AppStatus.present(s_led_debug.rgb);
+      return true;
+    case LedDebugEffect::Sequence: {
+      static constexpr uint32_t colors[] = {0xFF0000, 0x00FF00, 0x0000FF, 0xFFFFFF, 0};
+      ws2812AppStatus.present(colors[elapsed / s_led_debug.step_ms]);
+      return true;
+    }
+    case LedDebugEffect::StaticLevel:
+      return true;
+    case LedDebugEffect::Fault:
+      ws2812AppStatus.present((elapsed / 50U) % 2U == 0 ? 0x7F0000 : 0);
+      return true;
+    default:
+      return false;
+  }
+}
+
+/** @brief 直接把 GNC 发布的实际生效模式映射为指示灯主色。 */
+static FcsLedState activeModeLedState(ControlMode mode)
+{
+  switch (mode) {
+    case AUTO_ALTITUDE: return FcsLedState::ARMED_ALT;
+    case AUTO_POSITION: return FcsLedState::ARMED_POS;
+    case GUIDED: return FcsLedState::ARMED_GUIDED;
+    default: return FcsLedState::ARMED_MANUAL;
+  }
+}
+
+/** @brief 100 Hz 采集业务快照，驱动 PE5 和 PD15 状态灯。 */
 void handleStatusLedTask()
 {
-  // ========================================================================
-  // 业务状态组装（2026-08-08 扩展）— 优先级（高→低）：
-  //   FAILSAFE(空中失控) > CALIBRATING > NO_RECEIVER(上电无信号)
-  //   > LINK_DOWN(地面断链) > LOW_LQ(弱信号) > LOW_VOLTAGE(低压)
-  //   > ARMED_*(解锁+飞行模式) > STANDBY(待机)
-  // 故障(FAULT)由 Ws2812AppStatus.setFault 内部覆盖（wsfault 调试命令），
-  // 不在此判定。判定用 GNC 真实解锁状态 g_is_unlocked（与电机行为一致）。
-  // ========================================================================
-  FcsLedState state;
-
-  bool is_armed = g_is_unlocked;
-  // IMU 自动校准 或 磁力计引导校准 进行中 → 黄快闪（CALIBRATING）
-  bool is_calibrating = imuCalibrator.isCalibrating() || magSensor.guideActive();
-
-  if (!isLinkUp && failsafe_in_flight)
-  {
-    state = FcsLedState::FAILSAFE;        // 空中失控：红 SOS 双闪
+  const uint32_t now_ms = millis();
+  FcsLedInputs inputs;
+  inputs.armed = g_is_unlocked;
+  inputs.calibrating = imuCalibrator.isCalibrating() || magSensor.guideActive();
+  inputs.link_up = isLinkUp;
+  inputs.ever_linked = s_ever_linked;
+  inputs.failsafe = failsafe_in_flight;
+  inputs.crsf_link_stats_seen = s_rc_proto == RcProto::Crsf && s_led_crsf_stats_seen;
+  inputs.link_quality = static_cast<uint8_t>(s_elrs_lq);
+  inputs.link_stats_ms = s_elrs_ls_last_ms;
+  inputs.battery_mv = s_led_battery_sample_valid ? static_cast<float>(bat_voltage_mv) : 0.0f;
+  inputs.nav_ready_on_ground = nav_system_initialized && g_ekf_converged;
+  inputs.gnss_fix = Status_Packet.filter_status.gnss_fix_status >= DETA100_GPS_FIX_TYPE_3D_FIX;
+  inputs.actual_mode = activeModeLedState(g_current_flight_mode);
+  s_led_indication = s_led_policy.select(inputs, now_ms);
+  statusLed.update(inputs.calibrating, inputs.armed);
+  if (!renderLedDebug(now_ms)) {
+    ws2812AppStatus.update(s_led_indication, now_ms);
   }
-  else if (is_calibrating)
-  {
-    state = FcsLedState::CALIBRATING;     // IMU 校准：黄快闪
-  }
-  else if (!isLinkUp && !s_ever_linked)
-  {
-    state = FcsLedState::NO_RECEIVER;     // 上电无信号/未对频：红慢闪
-  }
-  else if (!isLinkUp)
-  {
-    state = FcsLedState::LINK_DOWN;       // 地面断链：品红慢闪
-  }
-  else if (bat_voltage_mv > 0 && bat_voltage_mv < LED_CRIT_VOLTAGE_MV)
-  {
-    state = FcsLedState::BAT_CRITICAL;    // 电池危险：红极快闪（比低压更急）
-  }
-  else if (s_elrs_lq < ELRS_LQ_WARN_THRESHOLD)
-  {
-    state = FcsLedState::LOW_LQ;          // 弱信号：橙慢闪
-  }
-  else if (bat_voltage_mv > 0 && bat_voltage_mv < LED_LOW_VOLTAGE_MV)
-  {
-    state = FcsLedState::LOW_VOLTAGE;     // 低压：红慢呼吸
-  }
-  else if (!nav_system_initialized)
-  {
-    // 导航未收敛：紫慢脉冲。与 GNSS_NO_FIX 的区别在于——EKF 已建但尚未收敛
-    // （传感器在跑但状态不可信），此时解锁飞行风险更高，优先于 GNSS 指示。
-    state = FcsLedState::EKF_NOT_CONVERGED;
-  }
-  else if (Status_Packet.filter_status.gnss_fix_status < DETA100_GPS_FIX_TYPE_3D_FIX)
-  {
-    // 无 3D 定位：蓝紫交替。已收敛但只有 2D/无定位，定位相关功能不可用。
-    // 数据源与 flight_control.cpp 的定位使能判据同源，避免两处口径不一。
-    state = FcsLedState::GNSS_NO_FIX;
-  }
-  else if (is_armed)
-  {
-    // 解锁：按飞行模式区分色相（分档与 math_utils.h::getControlMode 一致）
-    const float mode_ch = raw_rc_values[6];
-    if (mode_ch < 1300)
-    {
-      state = FcsLedState::ARMED_MANUAL;  // 手动：绿呼吸
-    }
-    else if (mode_ch < 1650)
-    {
-      state = FcsLedState::ARMED_ALT;     // 高度保持：青呼吸
-    }
-    else
-    {
-      // 高档：轨迹规划(点火+>1750) = 制导，否则定点
-      state = trajectoryPlanningStarted ? FcsLedState::ARMED_GUIDED  // 制导：紫呼吸
-                                        : FcsLedState::ARMED_POS;     // 定点：白呼吸
-    }
-  }
-  else
-  {
-    state = FcsLedState::STANDBY;         // 待机：蓝呼吸
-  }
-
-  // 更新LED
-  statusLed.update(is_calibrating, is_armed);   // 单色绿灯（与 RGB 并行）
-  ws2812AppStatus.update(state, millis());      // WS2812 RGB 模式状态灯
 }
 
 /**
@@ -3183,7 +3204,8 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         serial.println(F("[DBG]   wsseq [ms]        - auto test sequence (default 500)"));
         serial.println(F("[DBG]   wsstat            - show WS2812 status"));
         serial.println(F("[DBG]   wsmode <0|1>      - switch driver (0=bitbang 1=tim4_dma)"));
-        serial.println(F("[DBG]   wsfault <0|1>     - fault LED mode (red blink)"));
+        serial.println(F("[DBG]   wsfault <0|1>     - auto / test red blink for 3s"));
+        serial.println(F("[DBG]   wsstatic <0|1>    - hold PD15 for 2s, then restore driver"));
         serial.println(F("[DBG]   gpio              - dump GPIO registers"));
         serial.println(F("[DBG]   tim4              - dump TIM4 DMA status"));
         serial.println(F("[DBG]   tasks             - task schedule stats (Hz/抖动/迟到/负荷, 打印后清零)"));
@@ -3231,77 +3253,75 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       }
       else if (strncmp(line, "ws ", 3) == 0) {
         int r, g, b;
-        if (sscanf(line + 3, "%d %d %d", &r, &g, &b) == 3) {
-          ws2812Led.setPixelColor(0,
-                                  (uint8_t)constrain(r, 0, 255),
-                                  (uint8_t)constrain(g, 0, 255),
-                                  (uint8_t)constrain(b, 0, 255));
-          ws2812Led.show();
-          serial.print(F("[DBG] WS2812 <- R"));
-          serial.print(r); serial.print(F(" G")); serial.print(g);
-          serial.print(F(" B")); serial.println(b);
-        } else {
+        if (sscanf(line + 3, "%d %d %d", &r, &g, &b) != 3) {
           serial.println(F("[DBG] usage: ws <r> <g> <b>"));
+        } else if (startLedDebug(serial, LedDebugEffect::Color, 3000U)) {
+          s_led_debug.rgb = (static_cast<uint32_t>(constrain(r, 0, 255)) << 16) |
+                            (static_cast<uint32_t>(constrain(g, 0, 255)) << 8) |
+                             static_cast<uint32_t>(constrain(b, 0, 255));
+          serial.println(F("[DBG] WS2812 color for 3000 ms"));
         }
       }
-      else if (strncmp(line, "wsoff", 5) == 0) {
-        ws2812Led.clear();
-        ws2812Led.show();
-        serial.println(F("[DBG] WS2812 off"));
+      else if (strcmp(line, "wsoff") == 0) {
+        if (startLedDebug(serial, LedDebugEffect::Color, 3000U)) {
+          s_led_debug.rgb = 0;
+          serial.println(F("[DBG] WS2812 off for 3000 ms"));
+        }
       }
-      else if (strncmp(line, "wsseq", 5) == 0) {
-        uint32_t ms = 500;
-        int ms_arg;
-        // ★ 2026-08-10 全面审查修复：上限 5000 → 150——4×delay 串行阻塞主循环，
-        //   ms≥800 时总阻塞 >IWDG 2.99s 触发硬件复位（默认 500ms 也逼近窗口）
-        // ※ 现状（2026-10-23 核查登记）：参数解析行被一次历史编辑并入了本注释，
-        //   `ms` 恒为 500（4×500ms = 2s，仍在 IWDG 3.0s 窗口内），`wsseq <ms>` 无效。
-        //   恢复方式：把该行（sscanf + constrain 到 50-150ms）拆回语句，原表达式见 git 历史。
-        serial.print(F("[DBG] sequence, "));
-        serial.print(ms); serial.println(F("ms/color..."));
-        // 自动测试序列：红 → 绿 → 蓝 → 白 → 灭
-        ws2812Led.fill(255, 0, 0); ws2812Led.show(); delay(ms);
-        ws2812Led.fill(0, 255, 0); ws2812Led.show(); delay(ms);
-        ws2812Led.fill(0, 0, 255); ws2812Led.show(); delay(ms);
-        ws2812Led.fill(255, 255, 255); ws2812Led.show(); delay(ms);
-        ws2812Led.clear(); ws2812Led.show();
-        serial.println(F("[DBG] sequence done"));
+      else if (strncmp(line, "wsseq", 5) == 0 && (line[5] == '\0' || line[5] == ' ')) {
+        int ms = 500;
+        int parsed;
+        char extra;
+        if (line[5] != '\0' && sscanf(line + 5, "%d %c", &parsed, &extra) != 1) {
+          serial.println(F("[DBG] usage: wsseq [50..1000 ms]"));
+        } else {
+          if (line[5] != '\0') ms = constrain(parsed, 50, 1000);
+          if (startLedDebug(serial, LedDebugEffect::Sequence, 5U * ms)) {
+            s_led_debug.step_ms = static_cast<uint32_t>(ms);
+            serial.print(F("[DBG] WS2812 sequence ms/color="));
+            serial.println(ms);
+          }
+        }
       }
-      else if (strcmp(line, "wsstat") == 0) {  // 精确匹配，避免抢 wsstatic 前缀
-        serial.print(F("[DBG] pin="));
-        serial.println(WS2812_PIN);
-        serial.print(F("[DBG] pixels="));
-        serial.println(ws2812Led.numPixels());
-        serial.print(F("[DBG] brightness="));
-        serial.println(ws2812Led.getBrightness());
-        serial.print(F("[DBG] driver="));
-        serial.println((int)ws2812Led.getMode());   // 0=bitbang 1=TIM4_DMA
-        serial.print(F("[DBG] dmaActive="));
-        serial.println(ws2812Led.isDmaActive());
+      else if (strcmp(line, "wsstat") == 0) {
+        serial.print(F("[DBG] pin=")); serial.println(WS2812_PIN);
+        serial.print(F("[DBG] pixels=")); serial.println(ws2812Led.numPixels());
+        serial.print(F("[DBG] brightness=")); serial.println(ws2812Led.getBrightness());
+        serial.print(F("[DBG] driver=")); serial.println(static_cast<int>(ws2812Led.getMode()));
+        serial.print(F("[DBG] dmaActive=")); serial.println(ws2812Led.isDmaActive());
+        serial.print(F("[DBG] ws_tx=")); serial.print(ws2812Led.framesSent());
+        serial.print(F(" ws_fail=")); serial.println(ws2812Led.sendFailures());
+        serial.print(F("[DBG] ws_primary=")); serial.print(fcsLedStateName(s_led_indication.primary));
+        serial.print(F(" ws_hint=")); serial.println(fcsLedStateName(s_led_indication.advisory));
+        serial.print(F("[DBG] ws_test=")); serial.print(static_cast<int>(s_led_debug.effect));
+        serial.print(F(" ws_frame=")); serial.print(ws2812AppStatus.frameValid());
+        serial.print(F(" ws_rgb=0x")); serial.println(ws2812AppStatus.lastRgb(), HEX);
+        serial.print(F("[DBG] ws_cells=")); serial.print(BFS_LED_BATTERY_CELLS);
+        serial.print(F(" ws_batt=")); serial.println(fcsLedStateName(s_led_policy.batteryState()));
       }
       else if (strncmp(line, "wsmode", 6) == 0) {
-        int m;
-        if (sscanf(line + 6, "%d", &m) == 1) {
-          if (m == 0 || m == 1) {
-            ws2812Led.setMode((WS2812Driver::Mode)m);
-            serial.print(F("[DBG] driver switched to "));
-            serial.println(m == 0 ? F("BITBANG") : F("TIM4_DMA"));
-          } else {
-            serial.println(F("[DBG] usage: wsmode <0|1> (0=bitbang 1=tim4_dma)"));
-          }
-        } else {
+        int mode;
+        if (sscanf(line + 6, "%d", &mode) != 1) {
           serial.print(F("[DBG] current driver="));
-          serial.println((int)ws2812Led.getMode());
+          serial.println(static_cast<int>(ws2812Led.getMode()));
+        } else if (mode != 0 && mode != 1) {
+          serial.println(F("[DBG] usage: wsmode <0|1>"));
+        } else if (startLedDebug(serial, LedDebugEffect::Driver, 0U)) {
+          ws2812Led.setMode(static_cast<WS2812Driver::Mode>(mode));
+          ws2812AppStatus.invalidateFrame();
+          serial.print(F("[DBG] selected driver="));
+          serial.println(static_cast<int>(ws2812Led.getMode()));
         }
       }
       else if (strncmp(line, "wsfault", 7) == 0) {
-        int f;
-        if (sscanf(line + 7, "%d", &f) == 1) {
-          ws2812AppStatus.setFault(f != 0);
-          serial.print(F("[DBG] fault="));
-          serial.println(f != 0 ? F("ON (red blink)") : F("OFF"));
-        } else {
+        int fault;
+        if (sscanf(line + 7, "%d", &fault) != 1 || (fault != 0 && fault != 1)) {
           serial.println(F("[DBG] usage: wsfault <0|1>"));
+        } else if (fault == 0) {
+          stopLedDebug();
+          serial.println(F("[DBG] WS2812 auto"));
+        } else if (startLedDebug(serial, LedDebugEffect::Fault, 3000U)) {
+          serial.println(F("[DBG] WS2812 fault test for 3000 ms"));
         }
       }
       else if (strncmp(line, "flowdump", 8) == 0) {
@@ -3425,29 +3445,17 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
         }
       }
       else if (strncmp(line, "wsstatic", 8) == 0) {
-        // ★2026-08-10 静态电平测试：绕过 WS2812 协议强制引脚电平，
-        // 区分 GPIO 输出故障 vs LED/接线硬件故障（协议故障灯无反应，
-        // 静态电平可验证引脚驱动能力）
-        int lvl;
-        if (sscanf(line + 8, "%d", &lvl) == 1) {
-          ws2812Led.setStaticLevel(lvl != 0);
-          serial.print(F("[DBG] PD15 static level="));
-          serial.println(lvl != 0 ? F("HIGH") : F("LOW"));
-          // ★寄存器级验证：读回 GPIOD ODR/IDR/MODER——确认输出电平真实写入
-          //   ODR bit15=1 → 输出已拉高；IDR bit15 反映引脚实际电平
-          //   （外部短路/断开时 IDR 与 ODR 不一致 → 硬件问题实锤）
-          GPIO_TypeDef *gpd = GPIOD;
-          serial.print(F("[DBG] GPIOD ODR=0x"));
-          serial.println(gpd->ODR, HEX);
-          serial.print(F("[DBG] GPIOD IDR=0x"));
-          serial.println(gpd->IDR, HEX);
-          serial.print(F("[DBG] GPIOD MODER=0x"));
-          serial.println(gpd->MODER, HEX);
-          serial.print(F("[DBG] PD15 mask=0x"));
-          serial.println(0x8000, HEX);
-          serial.println(F("[DBG] 期望 ODR/IDR bit15=1（HIGH）/0（LOW）。恢复: wsmode 1 或 ws <r> <g> <b>"));
-        } else {
+        // 持续静态电平供量测，超时/退出恢复原驱动和自动灯效。
+        int level;
+        if (sscanf(line + 8, "%d", &level) != 1 || (level != 0 && level != 1)) {
           serial.println(F("[DBG] usage: wsstatic <0|1>"));
+        } else if (startLedDebug(serial, LedDebugEffect::StaticLevel, 2000U)) {
+          ws2812Led.setStaticLevel(level != 0);
+          serial.print(F("[DBG] PD15 static level="));
+          serial.println(level);
+          serial.print(F("[DBG] GPIOD ODR=0x")); serial.println(GPIOD->ODR, HEX);
+          serial.print(F("[DBG] GPIOD IDR=0x")); serial.println(GPIOD->IDR, HEX);
+          serial.print(F("[DBG] GPIOD MODER=0x")); serial.println(GPIOD->MODER, HEX);
         }
       }
       else if (strcmp(line, "imufifo") == 0) {
@@ -4701,6 +4709,7 @@ void handleDebugConsole(Uart &serial, char *line, uint8_t *lineLen,
       }
       else if (strncmp(line, "exit", 4) == 0) {
         serial.println(F("[DBG] Debug mode OFF. Back to telemetry."));
+        stopLedDebug();
         dbgMode = false;
       }
       else if (strncmp(line, "reset", 5) == 0) {

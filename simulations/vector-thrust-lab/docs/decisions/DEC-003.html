@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc 3.12.1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>DEC-003 状态灯以实际生效模式为准 ·
+纵列双发矢量推力飞行器</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: 1.5em;}
+    div.column{flex: auto;}
+    @media screen {
+    div.columns{gap: min(4vw, 1.5em);}
+    div.column{overflow-x: auto;}
+    }
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+  </style>
+  <link rel="stylesheet" href="../docstyle.css" />
+<style>.provenance{margin-top:36px;padding-top:10px;border-top:1px solid var(--line,#333);font-size:11px;color:var(--dim,#888);letter-spacing:.05em}</style></head>
+<body><article><a class="back" href="../index.html">← 返回文档中心</a>
+<h1
+id="dec-003-状态灯以实际生效模式为准">DEC-003-状态灯以实际生效模式为准</h1>
+<h2 id="状态">状态</h2>
+<p>已接受</p>
+<h2 id="日期">日期</h2>
+<p>2026-11-26</p>
+<h2 id="背景">背景</h2>
+<p>单颗 WS2812（PD15）承担启动自检、告警与飞行模式的全部指示。原实现按
+CH7
+档位值和轨迹标志推算模式，而飞控会在多种情况下改写实际模式：制导指令超时回落手动、航向不可观降为定高、GNSS
+长失联降高度保持。此时灯显示的颜色与飞控真正执行的模式不一致——ELRS
+模式回传和 AnoCom 0x06 帧早已改用实际模式，只有灯还停在推算值。</p>
+<p>另外三个可复现问题：</p>
+<ul>
+<li>上电自检固定占 1.2
+s，期间任何状态都被遮住；失控双闪按周期相位继承，切入时可能先进入 600 ms
+的长灭相。</li>
+<li>弱链路指示直接读最后一次 CRSF 统计值：统计帧停发（低 Telem Ratio
+或切到 MAVLink）后旧值长期有效；导航指示只看初始化标志，未看收敛。</li>
+<li>灯效调试命令会阻塞主循环（<code>wsseq</code> 固定 2 s）且把驱动留在
+bitbang 不恢复，历史上因此误判过“新板灯坏”。</li>
+</ul>
+<h2 id="决策">决策</h2>
+<ol type="1">
+<li><strong>主色取实际生效模式</strong>：已解锁时由
+<code>g_current_flight_mode</code>
+映射，手动绿、定高青、定点白、制导紫，与 ELRS/AnoCom 同一权威量。</li>
+<li><strong>区分主色与提示</strong>：<code>FcsLedPolicy</code> 输出
+<code>{primary, advisory}</code>。失控与电池危险占满全灯；其余告警在地面直接作为主色，在已解锁时降为
+2 s 一次的短闪穿插，保证模式色始终可辨。</li>
+<li><strong>相位自状态切入点起算</strong>，<code>breath()</code>
+零点取峰值；失控/电池危险可打断上电自检。上电演示改为每段两端暗、中间亮，避免换色阶跃。</li>
+<li><strong>告警输入各自判有效性</strong>：弱链路要求 CRSF 协议且统计帧
+1 s 内新鲜；地面就绪要求
+<code>nav_system_initialized &amp;&amp; g_ekf_converged</code>，与首次解锁门同源；电池告警按
+<code>BFS_LED_BATTERY_CELLS</code> 每芯 3.70/3.50 V 判定并留 0.10 V
+恢复迟滞，采样为零视为无数据。</li>
+<li><strong>调试效果限时自恢复</strong>：<code>ws</code>/<code>wsoff</code>
+3 s、<code>wsseq</code> 5 段、<code>wsfault</code> 3
+s、<code>wsstatic</code> 2
+s，到期/退出/解锁/紧急状态恢复原驱动与自动灯效，已解锁拒绝执行。</li>
+<li><strong>发送如实报告结果</strong>：<code>show()</code> 返回布尔，H7
+DMA 用有界轮询（单灯约 183
+µs）判完成/错误，全程不关全局中断；失败时停请求与流并把引脚拉回 GPIO
+低，下一拍重试同色帧。同色帧不重复提交。</li>
+</ol>
+<h2 id="备选方案">备选方案</h2>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>说明</th>
+<th>采纳/否决理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>保留 CH7 推算，另加降级标记色</td>
+<td>灯上叠加一个“已降级”提示</td>
+<td>已解锁时无法同时表达模式和降级，且推算值本身就是错的来源</td>
+</tr>
+<tr>
+<td>告警一律抢占全灯</td>
+<td>任何告警都覆盖模式色</td>
+<td>飞行中最需要的恰是“现在是什么模式”，频繁占灯会让模式不可辨</td>
+</tr>
+<tr>
+<td>电池告警按整机电压硬编码</td>
+<td>沿用 11100/10500 mV</td>
+<td>无法覆盖 6S 机型，改机型就得改代码</td>
+</tr>
+<tr>
+<td>保留 <code>wsstatic</code> 不恢复的语义</td>
+<td>与历史行为一致</td>
+<td>已有一次真实误判记录，且阻塞窗口逼近看门狗</td>
+</tr>
+<tr>
+<td>呼吸灯每拍都发一帧</td>
+<td>实现最简单</td>
+<td>100 Hz 全发无收益；按颜色去重后 2.5 s 内从 250 帧降到 151 帧</td>
+</tr>
+</tbody>
+</table>
+<h2 id="后果">后果</h2>
+<h3 id="正面影响">正面影响</h3>
+<ul>
+<li>灯与飞控行为一致，模式降级时不再误报。</li>
+<li>紧急告警切入即亮，不再等自检或相位；最长可见延迟由 600 ms
+量级降到一帧（10 ms）。</li>
+<li>链路、导航、电池三类告警不再被陈旧值或初值驱动。</li>
+<li>灯效调试不再阻塞主循环、不再留下错误驱动状态。</li>
+<li>呼吸态发送量下降约 40%，DMA 等待有上界且不屏蔽 UART4。</li>
+</ul>
+<h3 id="代价与风险">代价与风险</h3>
+<ul>
+<li>电池串数在共轴机型上尚未记录，代码按 3
+保持旧阈值：只会漏报、不会误报，需按实机电池确认后改宏。</li>
+<li><code>fcsLedStateName()</code> 等名称字符串增加约 200 B Flash，已在
+381788 B 内。</li>
+<li>宿主测试只证明“想显示什么”，灯珠电气时序与 DMA
+实际波形仍需上板观察。</li>
+<li><code>wsstatic</code>
+等命令从“保持”改为“限时”，旧操作习惯需更新。</li>
+</ul>
+<h2 id="关联文档">关联文档</h2>
+<ul>
+<li>相关决策：DEC-002（六项 P0 修复决策）</li>
+<li>相关规范/需求：CTL-001 §8、COMM-001、CTL-008（单涵道 6S 电池）</li>
+<li>相关代码/文件：<code>TandemVec_FCS/include/Ws2812AppStatus.h</code>、
+<code>TandemVec_FCS/src/communication.cpp</code>（handleStatusLedTask /
+handleDebugConsole）、
+<code>TandemVec_FCS/lib/WS2812Driver/src/</code>、<code>TandemVec_FCS/test_host/test_led_status.cpp</code></li>
+<li>实测记录：<code>docs/07-验证与确认/VER-010-实机烧录验证记录-2026-11-07.md</code></li>
+</ul>
+<footer class="provenance">源文件 <code>docs/09-决策记录/DEC-003-状态灯以实际生效模式为准.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-26 12:15</footer></article></body>
+</html>

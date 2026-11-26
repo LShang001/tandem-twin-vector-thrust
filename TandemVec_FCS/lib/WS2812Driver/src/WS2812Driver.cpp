@@ -8,13 +8,6 @@
 #include <cstdlib>   // aligned_alloc / free (DMA buffer)
 
 // ------------------------------------------------------------------
-// static member definition (only when H7 DMA compiled in)
-// ------------------------------------------------------------------
-#if WS2812_HAVE_H7_DMA
-WS2812Driver *WS2812Driver::_self = nullptr;
-#endif
-
-// ------------------------------------------------------------------
 // construction / destruction
 // ------------------------------------------------------------------
 WS2812Driver::WS2812Driver(uint32_t pin, uint16_t numPixels, ColorOrder order)
@@ -53,10 +46,6 @@ WS2812Driver::WS2812Driver(uint32_t pin, uint16_t numPixels, ColorOrder order)
   _setMask   = pinMask;                    // BSRR low 16 bits = SET
   _resetMask = pinMask << 16;              // BSRR high 16 bits = RESET
 #endif
-
-#if WS2812_HAVE_H7_DMA
-  _self = this;      // for DMA IRQ callback
-#endif
 }
 
 WS2812Driver::~WS2812Driver()
@@ -66,9 +55,12 @@ WS2812Driver::~WS2812Driver()
     _pixels = nullptr;
   }
 #if WS2812_HAVE_H7_DMA
-  if (_dmaBuf != nullptr) {
+  if (_dmaReady) {
+    stopDmaOutput();
+  }
+  // 停流未完成时 DMA 仍可能读源缓冲，保留分配以避免访问已释放的内存。
+  if (_dmaBuf != nullptr && (!_dmaReady || !(DMA1_Stream6->CR & DMA_SxCR_EN))) {
     free(_dmaBuf);
-    _dmaBuf = nullptr;
   }
   if (_htim != nullptr) {
     delete _htim;
@@ -104,8 +96,7 @@ bool WS2812Driver::begin()
   }
 #endif
 
-  show();   // all off
-  return true;
+  return show();  // 发送全灭帧
 }
 
 // ------------------------------------------------------------------
@@ -197,20 +188,43 @@ uint16_t WS2812Driver::numPixels() const
 // ------------------------------------------------------------------
 // transmission dispatch
 // ------------------------------------------------------------------
-void WS2812Driver::show()
+bool WS2812Driver::show()
 {
-  transmitFrame();
+  if (transmitFrame()) {
+    ++_framesSent;
+    return true;
+  }
+  ++_sendFailures;
+  return false;
 }
 
-void WS2812Driver::transmitFrame()
+uint32_t WS2812Driver::framesSent() const
 {
+  return _framesSent;
+}
+
+uint32_t WS2812Driver::sendFailures() const
+{
+  return _sendFailures;
+}
+
+bool WS2812Driver::transmitFrame()
+{
+  if (_pixels == nullptr) {
+    return false;
+  }
+#if WS2812_HAVE_STM32_BSRR
+  if (_port == nullptr) {
+    return false;
+  }
+#endif
 #if WS2812_HAVE_H7_DMA
   if (_mode == MODE_TIM_DMA && _dmaActive) {
-    showDmaPlatform();
-    return;
+    return showDmaPlatform();
   }
 #endif
   showBitbang();
+  return true;
 }
 
 // ------------------------------------------------------------------
@@ -252,7 +266,9 @@ void WS2812Driver::setMode(Mode m)
     if (_dmaReady) {
       _mode = MODE_TIM_DMA;
       _dmaActive = true;
-      configurePinAf(_htim->Instance);   // GPIO -> AF (PWM to pin)
+      if (!_dmaNeedsRecovery) {
+        configurePinAf(_htim->Instance);
+      }
     }
 #else
     (void)m;  // TIM_DMA not available
@@ -274,7 +290,12 @@ void WS2812Driver::setStaticLevel(bool high)
   {
     setMode(MODE_BITBANG);
   }
+#if WS2812_HAVE_STM32_BSRR
   _port->BSRR = high ? _setMask : _resetMask;
+#else
+  pinMode(_pin, OUTPUT);
+  digitalWrite(_pin, high ? HIGH : LOW);
+#endif
 }
 
 WS2812Driver::Mode WS2812Driver::getMode() const

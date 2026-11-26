@@ -25,6 +25,8 @@ public:
     // 记录最近一次 setPixelColor 的像素值 / show 次数（测试断言用）
     static uint8_t last_r, last_g, last_b;
     static int show_count;
+    // 注入发送失败，验证上层保留重试而不是丢弃该帧
+    static bool send_failed;
 
     WS2812Driver(uint32_t pin, uint16_t numPixels, ColorOrder order = ORDER_GRB)
         : _numPixels(numPixels) { (void)pin; (void)order; }
@@ -33,7 +35,7 @@ public:
         (void)i;
         last_r = r; last_g = g; last_b = b;
     }
-    void show() { ++show_count; }
+    bool show() { ++show_count; return !send_failed; }
     void clear() { last_r = last_g = last_b = 0; }
     uint16_t numPixels() const { return _numPixels; }
 

@@ -58,6 +58,10 @@
 #define WS2812_HAVE_H7_DMA 0
 #endif
 
+#if !WS2812_HAVE_STM32_BSRR
+struct TIM_TypeDef;  // 通用后端仅保留 beginDma 的接口签名
+#endif
+
 class WS2812Driver {
 public:
   // WS2812 pixel byte order (GRB is the standard for WS2812B)
@@ -96,13 +100,14 @@ public:
   bool begin();
 
   /**
-   * @brief Send the current pixel buffer to the strip
-   *
-   * Blocks until the frame has been fully transmitted.
-   * On MODE_BITBANG this disables interrupts for the frame duration
-   * (numPixels * 24 * 1.25us, e.g. ~30us for 1 LED).
+   * @brief 在主循环上下文发送当前像素缓冲。
+   * @return 帧已输出时返回 true，未完成时返回 false，可重试当前缓冲。
+   * @note DMA 等待有界且保持全局中断开启。软件模拟发送保留原有中断策略。
+   *       成功仅表示驱动完成输出，灯珠不提供接收确认。
    */
-  void show();
+  bool show();
+  uint32_t framesSent() const;   // 累计成功发送次数，含初始化清屏
+  uint32_t sendFailures() const; // 累计失败发送次数
 
   // ---- pixel API (Adafruit NeoPixel compatible) ----
 
@@ -169,9 +174,11 @@ private:
   uint8_t *_pixels;       // raw buffer, _numPixels*3 bytes (order-encoded)
   uint8_t _brightness;    // 0-255 global brightness
   Mode _mode;
+  uint32_t _framesSent = 0;
+  uint32_t _sendFailures = 0;
 
-  // ---- internal helpers ----
-  void transmitFrame();
+  // 发送当前缓冲，不修改统计。
+  bool transmitFrame();
   void colorToRaw(uint8_t r, uint8_t g, uint8_t b,
                   uint8_t &b0, uint8_t &b1, uint8_t &b2) const;
 
@@ -186,14 +193,12 @@ private:
 #if WS2812_HAVE_H7_DMA
   bool _dmaReady;             // DMA back-end initialized
   bool _dmaActive;            // DMA back-end currently selected
+  bool _dmaNeedsRecovery = false; // 失败后保持 GPIO 低，重试时再恢复复用
   TIM_HandleTypeDef *_htim;   // timer handle (owned by lib)
-  DMA_HandleTypeDef _hdma;    // DMA handle (owned by lib)
   uint32_t *_dmaBuf;          // pre-encoded CCR values (aligned 32)
-  uint16_t _dmaBufLen;        // capacity in uint32 words
+  uint32_t _dmaBufLen;        // 待传输的 32 位字数
   uint32_t _ccr1, _ccr0;      // CCR values for bit 1 / bit 0
   uint32_t _dmaChannel;       // TIM_CHANNEL_x used for DMA mode
-  static WS2812Driver *_self; // DMA IRQ callback -> instance
-  static void dmaXferComplete(DMA_HandleTypeDef *hdma);  // IRQ callback
 #endif
 
   // ---- platform back-end declarations (implemented in platform .h) ----
@@ -202,7 +207,8 @@ private:
 
 #if WS2812_HAVE_H7_DMA
   bool beginDmaPlatform(TIM_TypeDef *tim, uint32_t channel);
-  void showDmaPlatform();
+  bool showDmaPlatform();
+  void stopDmaOutput();
   // switch the pin between GPIO output (bit-bang) and timer AF (DMA)
   void configurePinGpio();
   void configurePinAf(TIM_TypeDef *tim);

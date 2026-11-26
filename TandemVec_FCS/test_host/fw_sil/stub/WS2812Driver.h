@@ -41,7 +41,9 @@ public:
   bool isDmaActive() const { return false; }
 
   // 供 `Ws2812AppStatus` 等上层使用的最小面
-  void show() {}
+  bool show() { return true; }
+  uint32_t framesSent() const { return 0; }
+  uint32_t sendFailures() const { return 0; }
   void clear() {}
   void setPixel(int /*index*/, uint8_t /*r*/, uint8_t /*g*/, uint8_t /*b*/) {}
   // 真实驱动的像素接口名（Ws2812AppStatus 直接调用）

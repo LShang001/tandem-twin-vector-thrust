@@ -1075,15 +1075,18 @@ DETA100 联调覆盖）</td>
 </tr>
 <tr>
 <td>P1-1</td>
-<td><code>handleDebugConsole</code> 的 <code>wsseq</code> 分支</td>
-<td>参数解析语句被一次历史编辑并入了注释行（物理行内含字面
-<code>\n</code>），<code>ms</code> 恒 500，<code>wsseq &lt;ms&gt;</code>
-无效；整行还触发 R05 超长</td>
-<td>仅 DBG 灯效诊断：4×500ms=2s 阻塞，逼近 IWDG 3.0s
-窗口；不影响飞行</td>
-<td>已在注释中登记现状；<strong>未修</strong>（本次红线：只改注释）。修复方式：把被并入的
-<code>sscanf</code>+<code>constrain</code> 拆回语句（原表达式见 git
-历史），并入 fw-infra 后续修复任务</td>
+<td><code>handleDebugConsole</code> 的 <code>wsseq</code> /
+<code>wsstatic</code> 分支</td>
+<td>① <code>wsseq</code> 参数解析曾被并入注释，<code>ms</code> 恒
+500、整行触发 R05 超长；② <code>wsstatic</code> 把驱动强制切到 BITBANG
+且不恢复，后续测试全跑在时序不准的软件路径上，会被误判成“灯坏了”；③
+<code>wsseq</code> 阻塞主循环 2 s、无解锁检查</td>
+<td>①②均已复现过误判；③逼近 IWDG 3.0 s 窗口</td>
+<td><strong>已修复（2026-11-26）</strong>：灯效调试改为 100 Hz
+任务内推进的限时效果，参数解析拆回语句（<code>wsseq [50..1000]</code>
+生效），到期/退出/解锁/紧急状态自动恢复驱动与自动灯效，已解锁时拒绝执行；<code>wsstat</code>
+增加发送计数与主色/提示字段。宿主回归 <code>test_led_status.cpp</code>
+覆盖切换与失败重试</td>
 </tr>
 <tr>
 <td>P1-2</td>
@@ -1300,5 +1303,5 @@ CRLF；<code>main.cpp</code> 去 BOM（见 P2-4）。</li>
 <li><code>git diff</code>
 自查：无帧格式、字节序、缩放系数、频率、缓冲区尺寸、逻辑改动。</li>
 </ul>
-<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-19 01:45</footer></article></body>
+<footer class="provenance">源文件 <code>docs/04-数学建模/代码理论核查/FW-INFRA-代码理论核查.md</code> · 由 <code>tools/build-docs.py</code> 生成 · pandoc 3.12.1 · 2026-11-26 12:15</footer></article></body>
 </html>
