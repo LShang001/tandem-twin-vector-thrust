@@ -1,5 +1,6 @@
 /**
  * @file    fs_ubxcfg_main.cpp
+ * @module  固件/宿主 SIL 全链路（fw-tests：ubx_config 快路径与全量配置）
  * @brief   全链路数字孪生 P5：ubx_config 的开机快路径与全量配置路径验证
  *
  * @details 被测对象是真实 `src/ubx_config.cpp`（一行未改）。串口两侧角色对调：
